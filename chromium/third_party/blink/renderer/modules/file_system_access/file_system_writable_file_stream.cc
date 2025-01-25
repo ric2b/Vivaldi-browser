@@ -43,9 +43,8 @@ FileSystemWritableFileStream* FileSystemWritableFileStream::Create(
   ScriptValue strategy_value = ScriptValue::From(script_state, strategy);
 
   v8::Isolate* isolate = script_state->GetIsolate();
-  ExceptionState exception_state(
-      isolate, ExceptionContextType::kConstructorOperationInvoke,
-      "FileSystemWritableFileStream");
+  ExceptionState exception_state(isolate, v8::ExceptionContext::kConstructor,
+                                 "FileSystemWritableFileStream");
   v8::MicrotasksScope microtasks_scope(
       isolate, ToMicrotaskQueue(script_state),
       v8::MicrotasksScope::kDoNotRunMicrotasks);
@@ -131,8 +130,8 @@ void FileSystemWritableFileStream::Trace(Visitor* visitor) const {
   visitor->Trace(underlying_sink_);
 }
 
-const char* FileSystemWritableFileStream::mode() const {
-  return lock_mode_.AsCStr();
+String FileSystemWritableFileStream::mode() const {
+  return lock_mode_.AsString();
 }
 
 }  // namespace blink

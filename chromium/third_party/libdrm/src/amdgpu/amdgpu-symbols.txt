@@ -56,6 +56,7 @@ amdgpu_cs_wait_semaphore
 amdgpu_device_deinitialize
 amdgpu_device_get_fd
 amdgpu_device_initialize
+amdgpu_device_initialize2
 amdgpu_find_bo_by_cpu_mapping
 amdgpu_get_marketing_name
 amdgpu_query_buffer_size_alignment
@@ -63,6 +64,7 @@ amdgpu_query_crtc_from_id
 amdgpu_query_firmware_version
 amdgpu_query_gds_info
 amdgpu_query_gpu_info
+amdgpu_query_gpuvm_fault_info
 amdgpu_query_heap_info
 amdgpu_query_hw_ip_count
 amdgpu_query_hw_ip_info
@@ -70,8 +72,13 @@ amdgpu_query_info
 amdgpu_query_sensor_info
 amdgpu_query_video_caps_info
 amdgpu_read_mm_registers
+amdgpu_va_manager_alloc
+amdgpu_va_manager_init
+amdgpu_va_manager_deinit
 amdgpu_va_range_alloc
+amdgpu_va_range_alloc2
 amdgpu_va_range_free
+amdgpu_va_get_start_addr
 amdgpu_va_range_query
 amdgpu_vm_reserve_vmid
 amdgpu_vm_unreserve_vmid

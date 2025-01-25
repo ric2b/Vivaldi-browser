@@ -37,16 +37,16 @@ class ASH_EXPORT PickerPreviewBubbleView
   ui::ImageModel GetPreviewImage() const;
   void SetPreviewImage(ui::ImageModel image);
 
-  bool GetLabelsVisibleForTesting() const;
-  std::u16string_view GetEyebrowTextForTesting() const;
+  bool GetLabelVisibleForTesting() const;
   std::u16string_view GetMainTextForTesting() const;
 
-  // Sets the text of the labels and makes them visible.
-  void SetText(const std::u16string& eyebrow_text,
-               const std::u16string& main_text);
+  // Sets the text of the label and makes them visible.
+  void SetText(const std::u16string& main_text);
+  void ClearText();
 
   // BubbleDialogDelegateView overrides
   void OnThemeChanged() override;
+  gfx::Rect GetAnchorRect() const override;
 
   void Close();
 
@@ -54,7 +54,6 @@ class ASH_EXPORT PickerPreviewBubbleView
   raw_ptr<views::ImageView> image_view_;
 
   raw_ptr<views::BoxLayoutView> box_layout_view_;
-  raw_ptr<views::Label> eyebrow_label_;
   raw_ptr<views::Label> main_label_;
 };
 

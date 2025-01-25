@@ -4,9 +4,10 @@
 <translation id="1089894737218087497">Инсталирай самостоятелно</translation>
 <translation id="1682285232070778125">Задай Vivaldi като водещ браузър</translation>
 <translation id="1974060860693918893">Разширено</translation>
+<translation id="2053560788696003312">Vivaldi изисква Windows 10 или по‐нова.</translation>
 <translation id="2134216661302048561">Инсталаторът на Vivaldi не е приключил работа. Сигурен ли сте, че затваряте?</translation>
 <translation id="2286454467119466181">Опростено</translation>
-<translation id="237789874664518125">Авторски права Vivaldi Technologies AS, <ph name="YEAR" /> г. Всички права запазени. &lt;a&gt;Политика на поверителност&lt;/a&gt;</translation>
+<translation id="237789874664518125">Авторски права Vivaldi Technologies AS, <ph name="YEAR" /> г. Всички права запазени. &lt;a&gt;Политика на поверителност&lt;/a&gt;</translation>
 <translation id="3004507951429848293">С натискане на „Приемам — обнови“ вие приемате &lt;a&gt;Общи условия&lt;/a&gt; на Vivaldi.</translation>
 <translation id="335985608243443814">Прелисти…</translation>
 <translation id="3485073444286678268">Целевата папка е недействителна. Моля, посочете друга.</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Приемам — обнови</translation>
 <translation id="5302048478445481009">Език</translation>
 <translation id="694714344624446243">Инсталатор на Vivaldi</translation>
+<translation id="7467493612551448880">Инсталираната версия на Vivaldi не е оптимизирана за изпълняваната версия на Windows.
+
+Посетете vivaldi.com/download и изтеглете версия за Windows под Arm.</translation>
 <translation id="7658239707568436148">Отказ</translation>
 <translation id="8773751185824654197">Забележка: при обновяване на работещ браузър това копие ще бъде затворено и презаредено.</translation>
 <translation id="933060950687965486">Вид инсталиране</translation>

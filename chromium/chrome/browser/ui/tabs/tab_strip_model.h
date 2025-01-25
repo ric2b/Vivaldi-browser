@@ -423,9 +423,6 @@ class TabStripModel : public TabGroupController {
   // Returns true if the tab at |index| is selected.
   bool IsTabSelected(int index) const;
 
-  // Returns the timestamp at which the tab was last accessed.
-  std::optional<base::Time> GetLastAccessed(int index) const;
-
   // Sets the selection to match that of |source|.
   void SetSelectionFromModel(ui::ListSelectionModel source);
 
@@ -437,6 +434,7 @@ class TabStripModel : public TabGroupController {
   // features from showing tabstrip-modal UI.
   bool CanShowModalUI() const;
   std::unique_ptr<ScopedTabStripModalUI> ShowModalUI();
+  void ForceShowingModalUIForTesting(bool showing);
 
   // Command level API /////////////////////////////////////////////////////////
 
@@ -880,7 +878,7 @@ class TabStripModel : public TabGroupController {
   // and `final_group` and updates the `group_model_`.
   void TabGroupStateChanged(
       int index,
-      content::WebContents* web_contents,
+      tabs::TabModel* tab,
       const std::optional<tab_groups::TabGroupId> initial_group,
       const std::optional<tab_groups::TabGroupId> new_group);
 

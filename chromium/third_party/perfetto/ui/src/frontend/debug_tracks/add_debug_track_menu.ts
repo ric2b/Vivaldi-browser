@@ -13,19 +13,19 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {findRef} from '../../base/dom_utils';
 import {raf} from '../../core/raf_scheduler';
 import {Engine} from '../../trace_processor/engine';
 import {Form, FormLabel} from '../../widgets/form';
 import {Select} from '../../widgets/select';
 import {TextInput} from '../../widgets/text_input';
-
 import {
+  CounterColumns,
+  SliceColumns,
   SqlDataSource,
   addDebugCounterTrack,
   addDebugSliceTrack,
-  addPivotDebugSliceTracks,
+  addPivotedTracks,
 } from './debug_tracks';
 import {globals} from '../globals';
 
@@ -183,58 +183,89 @@ export class AddDebugTrackMenu
         onSubmit: () => {
           switch (this.trackType) {
             case 'slice':
-              if (this.renderParams.pivot === '') {
+              const sliceColumns: SliceColumns = {
+                ts: this.renderParams.ts,
+                dur: this.renderParams.dur,
+                name: this.renderParams.name,
+              };
+              if (this.renderParams.pivot) {
+                addPivotedTracks(
+                  {
+                    engine: vnode.attrs.engine,
+                    tracks: {
+                      registerTrack: (x) =>
+                        globals.trackManager.registerTrack(x),
+                    },
+                  },
+                  vnode.attrs.dataSource,
+                  this.name,
+                  this.renderParams.pivot,
+                  async (ctx, data, trackName) =>
+                    addDebugSliceTrack(
+                      ctx,
+                      data,
+                      trackName,
+                      sliceColumns,
+                      this.columns,
+                    ),
+                );
+              } else {
                 addDebugSliceTrack(
-                  // NOTE(stevegolton): This is a temporary patch, this menu
+                  // TODO(stevegolton): This is a temporary patch, this menu
                   // should become part of the debug tracks plugin, at which
                   // point we can just use the plugin's context object.
                   {
                     engine: vnode.attrs.engine,
-                    registerTrack: (x) => globals.trackManager.registerTrack(x),
+                    tracks: {
+                      registerTrack: (x) =>
+                        globals.trackManager.registerTrack(x),
+                    },
                   },
                   vnode.attrs.dataSource,
                   this.name,
-                  {
-                    ts: this.renderParams.ts,
-                    dur: this.renderParams.dur,
-                    name: this.renderParams.name,
-                  },
-                  this.columns,
-                );
-              } else {
-                addPivotDebugSliceTracks(
-                  {
-                    engine: vnode.attrs.engine,
-                    registerTrack: (x) => globals.trackManager.registerTrack(x),
-                  },
-                  vnode.attrs.dataSource,
-                  this.name,
-                  {
-                    ts: this.renderParams.ts,
-                    dur: this.renderParams.dur,
-                    name: this.renderParams.name,
-                    pivot: this.renderParams.pivot,
-                  },
+                  sliceColumns,
                   this.columns,
                 );
               }
               break;
             case 'counter':
-              addDebugCounterTrack(
-                // TODO(stevegolton): This is a temporary patch, this menu
-                // should become part of the debug tracks plugin, at which
-                // point we can just use the plugin's context object.
-                {
-                  engine: vnode.attrs.engine,
-                  registerTrack: (x) => globals.trackManager.registerTrack(x),
-                },
-                vnode.attrs.dataSource,
-                this.name,
-                {
-                  ts: this.renderParams.ts,
-                  value: this.renderParams.value,
-                },
-              );
+              const counterColumns: CounterColumns = {
+                ts: this.renderParams.ts,
+                value: this.renderParams.value,
+              };
+
+              if (this.renderParams.pivot) {
+                addPivotedTracks(
+                  {
+                    engine: vnode.attrs.engine,
+                    tracks: {
+                      registerTrack: (x) =>
+                        globals.trackManager.registerTrack(x),
+                    },
+                  },
+                  vnode.attrs.dataSource,
+                  this.name,
+                  this.renderParams.pivot,
+                  async (ctx, data, trackName) =>
+                    addDebugCounterTrack(ctx, data, trackName, counterColumns),
+                );
+              } else {
+                addDebugCounterTrack(
+                  // TODO(stevegolton): This is a temporary patch, this menu
+                  // should become part of the debug tracks plugin, at which
+                  // point we can just use the plugin's context object.
+                  {
+                    engine: vnode.attrs.engine,
+                    tracks: {
+                      registerTrack: (x) =>
+                        globals.trackManager.registerTrack(x),
+                    },
+                  },
+                  vnode.attrs.dataSource,
+                  this.name,
+                  counterColumns,
+                );
+              }
               break;
           }
         },
@@ -258,8 +289,8 @@ export class AddDebugTrackMenu
       renderSelect('ts'),
       this.trackType === 'slice' && renderSelect('dur'),
       this.trackType === 'slice' && renderSelect('name'),
-      this.trackType === 'slice' && renderSelect('pivot'),
       this.trackType === 'counter' && renderSelect('value'),
+      renderSelect('pivot'),
     );
   }
 }

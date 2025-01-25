@@ -15,6 +15,10 @@
 @property (assign, nonatomic) VivaldiStartPageLayoutStyle layoutStyle;
 @property (assign, nonatomic) VivaldiStartPageLayoutColumn numberOfColumns;
 @property (assign, nonatomic) VivaldiStartPageLayoutState layoutState;
+// When only one group is visible on start page, either top sites or a single
+// SD folder/group. We remove top inset for the collection view in that case.
+@property (assign, nonatomic) BOOL topToolbarHidden;
+
 // Maximum number of rows the flowlayout should have. Minimum bound is
 // determined based on the actual number of items of the collection view.
 @property (assign, nonatomic) NSInteger maxNumberOfRows;

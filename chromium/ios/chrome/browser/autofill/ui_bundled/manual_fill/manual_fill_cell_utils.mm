@@ -6,12 +6,14 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/chip_button.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_constants.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_labeled_chip.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_cell.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/chip_button.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_labeled_chip.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/button_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -35,6 +37,9 @@ constexpr CGFloat kHeaderAttributedStringLineSpacing = 2;
 
 // Font size for the cell's header title.
 constexpr CGFloat kHeaderAttributedStringTitleFontSize = 15;
+
+// Top and bottom padding for the header view label.
+constexpr CGFloat kHeaderViewLabelVerticalPadding = 6;
 
 // Minimum height for the header view.
 constexpr CGFloat kHeaderViewMinHeight = 44;
@@ -83,9 +88,17 @@ void AppendEqualBaselinesConstraints(
     if (view == leadingView) {
       continue;
     }
-    [constraints
-        addObject:[view.lastBaselineAnchor
-                      constraintEqualToAnchor:leadingView.lastBaselineAnchor]];
+
+    if (IsKeyboardAccessoryUpgradeEnabled()) {
+      [constraints
+          addObject:[view.centerYAnchor
+                        constraintEqualToAnchor:leadingView.centerYAnchor]];
+    } else {
+      [constraints
+          addObject:[view.lastBaselineAnchor
+                        constraintEqualToAnchor:leadingView
+                                                    .lastBaselineAnchor]];
+    }
   }
 }
 
@@ -273,14 +286,27 @@ void AppendHorizontalConstraintsForViews(
   for (UIView* view in views) {
     CGFloat spacing =
         is_first_view ? margin : GetHorizontalSpacingBetweenChips();
-    [constraints
-        addObject:[view.leadingAnchor constraintEqualToAnchor:previous_anchor
-                                                     constant:spacing]];
-    [view setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+
+    NSLayoutConstraint* constraint =
+        [view.leadingAnchor constraintEqualToAnchor:previous_anchor
+                                           constant:spacing];
+
+    if (!is_first_view && IsKeyboardAccessoryUpgradeEnabled()) {
+      // Set the in-between view constraints to a low priority so that the views
+      // can be easily reorganized when the width of the `layout_guide` changes.
+      constraint.priority = UILayoutPriorityDefaultLow;
+    }
+    [constraints addObject:constraint];
+
+    if (!IsKeyboardAccessoryUpgradeEnabled()) {
+      [view
+          setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
                                           forAxis:
                                               UILayoutConstraintAxisHorizontal];
-    [view setContentHuggingPriority:UILayoutPriorityDefaultHigh
-                            forAxis:UILayoutConstraintAxisHorizontal];
+      [view setContentHuggingPriority:UILayoutPriorityDefaultHigh
+                              forAxis:UILayoutConstraintAxisHorizontal];
+    }
+
     previous_anchor = view.trailingAnchor;
     is_first_view = NO;
   }
@@ -312,13 +338,15 @@ void AppendHorizontalConstraintsForViews(
         addObject:[last_view.trailingAnchor
                       constraintEqualToAnchor:layout_guide.trailingAnchor
                                      constant:-margin]];
-    // Give all remaining space to the last button, minus margin, as per UX.
-    [last_view
-        setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh
-                                        forAxis:
-                                            UILayoutConstraintAxisHorizontal];
-    [last_view setContentHuggingPriority:UILayoutPriorityDefaultLow
-                                 forAxis:UILayoutConstraintAxisHorizontal];
+    if (!IsKeyboardAccessoryUpgradeEnabled()) {
+      // Give all remaining space to the last button, minus margin, as per UX.
+      [last_view
+          setContentCompressionResistancePriority:UILayoutPriorityDefaultHigh
+                                          forAxis:
+                                              UILayoutConstraintAxisHorizontal];
+      [last_view setContentHuggingPriority:UILayoutPriorityDefaultLow
+                                   forAxis:UILayoutConstraintAxisHorizontal];
+    }
   }
 
   if (options & AppendConstraintsHorizontalSyncBaselines) {
@@ -465,6 +493,11 @@ UIStackView* CreateHeaderView(UIView* icon,
     [NSLayoutConstraint activateConstraints:@[
       [header_view.heightAnchor
           constraintGreaterThanOrEqualToConstant:kHeaderViewMinHeight],
+      [label.topAnchor constraintEqualToAnchor:header_view.topAnchor
+                                      constant:kHeaderViewLabelVerticalPadding],
+      [label.bottomAnchor
+          constraintEqualToAnchor:header_view.bottomAnchor
+                         constant:-kHeaderViewLabelVerticalPadding],
     ]];
   }
 
@@ -475,8 +508,9 @@ UIButton* CreateOverflowMenuButton() {
   ExtendedTouchTargetButton* menu_button =
       [ExtendedTouchTargetButton buttonWithType:UIButtonTypeSystem];
   menu_button.translatesAutoresizingMaskIntoConstraints = NO;
-  menu_button.accessibilityLabel = l10n_util::GetNSString(
-      IDS_IOS_MANUAL_FALLBACK_THREE_DOT_MENU_BUTTON_ACCESSIBILITY_LABEL);
+  menu_button.contentMode = UIViewContentModeCenter;
+  menu_button.accessibilityIdentifier =
+      manual_fill::kExpandedManualFillOverflowMenuID;
 
   UIImage* menu_image = SymbolWithPalette(
       DefaultSymbolWithPointSize(kEllipsisCircleFillSymbol,
@@ -486,14 +520,11 @@ UIButton* CreateOverflowMenuButton() {
       ]);
   [menu_button setImage:menu_image forState:UIControlStateNormal];
 
-  [menu_button setContentHuggingPriority:UILayoutPriorityDefaultHigh
+  [menu_button setContentHuggingPriority:UILayoutPriorityRequired
                                  forAxis:UILayoutConstraintAxisHorizontal];
-
-  [NSLayoutConstraint activateConstraints:@[
-    [menu_button.heightAnchor
-        constraintEqualToConstant:kOverflowMenuButtonSize],
-    [menu_button.widthAnchor constraintEqualToConstant:kOverflowMenuButtonSize],
-  ]];
+  [menu_button
+      setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                      forAxis:UILayoutConstraintAxisHorizontal];
 
   menu_button.showsMenuAsPrimaryAction = YES;
 
@@ -533,12 +564,10 @@ UIView* CreateGraySeparatorForContainer(UIView* container) {
   return gray_line;
 }
 
-BOOL ShouldCreateAutofillFormButton(BOOL show_button) {
-  return IsKeyboardAccessoryUpgradeEnabled() && show_button;
-}
-
 UIButton* CreateAutofillFormButton() {
   UIButton* button = PrimaryActionButton(/*pointer_interaction_enabled=*/YES);
+  button.accessibilityIdentifier =
+      manual_fill::kExpandedManualFillAutofillFormButtonID;
   UIButtonConfiguration* buttonConfiguration = button.configuration;
   buttonConfiguration.contentInsets =
       NSDirectionalEdgeInsetsMake(kAutofillFormButtonVerticalInsets, 0,
@@ -580,4 +609,72 @@ UILayoutGuide* AddLayoutGuideToContentView(UIView* content_view,
   ]];
 
   return layout_guide;
+}
+
+NSMutableAttributedString* CreateSiteNameLabelAttributedText(
+    ManualFillSiteInfo* site_info,
+    BOOL should_show_host) {
+  NSString* siteName = site_info.siteName ? site_info.siteName : @"";
+  NSString* host;
+  NSMutableAttributedString* attributedString;
+
+  if (should_show_host) {
+    if (IsKeyboardAccessoryUpgradeEnabled()) {
+      host = site_info.host;
+    }
+    // If the Keyboard Accessory Upgrade feature is disabled, `host` will be
+    // `nil` here, and so it won't be added to `attributedString` right away.
+    attributedString = CreateHeaderAttributedString(siteName, host);
+
+    if (!IsKeyboardAccessoryUpgradeEnabled()) {
+      host = [NSString stringWithFormat:@" –– %@", site_info.host];
+      NSDictionary* attributes = @{
+        NSForegroundColorAttributeName :
+            [UIColor colorNamed:kTextSecondaryColor],
+        NSFontAttributeName :
+            [UIFont preferredFontForTextStyle:UIFontTextStyleBody]
+      };
+      NSAttributedString* hostAttributedString =
+          [[NSAttributedString alloc] initWithString:host
+                                          attributes:attributes];
+      [attributedString appendAttributedString:hostAttributedString];
+    }
+  } else {
+    attributedString = CreateHeaderAttributedString(siteName, nil);
+  }
+
+  return attributedString;
+}
+
+void GiveAccessibilityContextToCellAndButton(UIView* cell_container,
+                                             UIButton* overflow_menu_button,
+                                             UIButton* autofill_form_button,
+                                             NSString* accessibility_context) {
+  CHECK(cell_container);
+  CHECK(overflow_menu_button);
+  CHECK(autofill_form_button);
+
+  cell_container.accessibilityLabel = accessibility_context;
+  overflow_menu_button.accessibilityLabel = l10n_util::GetNSStringF(
+      IDS_IOS_MANUAL_FALLBACK_THREE_DOT_MENU_BUTTON_ACCESSIBILITY_LABEL,
+      base::SysNSStringToUTF16(accessibility_context));
+  autofill_form_button.accessibilityLabel = l10n_util::GetNSStringF(
+      IDS_IOS_MANUAL_FALLBACK_AUTOFILL_FORM_BUTTON_ACCESSIBILITY_LABEL,
+      base::SysNSStringToUTF16(accessibility_context));
+}
+
+void SetUpCellAccessibilityElements(TableViewCell* cell,
+                                    NSArray<UIView*>* accessibilityElements) {
+  // If the Keyboard Accessory Upgrade feature is disabled, keep the default
+  // accessibility behaviour.
+  if (!IsKeyboardAccessoryUpgradeEnabled()) {
+    return;
+  }
+
+  // The following two lines are needed to make the cell as a container, as well
+  // as its content, accessible.
+  cell.isAccessibilityElement = NO;
+  cell.contentView.isAccessibilityElement = YES;
+
+  cell.accessibilityElements = accessibilityElements;
 }

@@ -69,6 +69,17 @@ bool IsPDFWebContents(content::WebContents* web_contents) {
   return web_contents->GetContentsMimeType() == pdf::kPDFMimeType;
 }
 
+// Check if |web_contents| is from a incognito profile
+bool IsFromIncognito(content::WebContents* web_contents) {
+  auto* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  if (!profile) {
+    return false;
+  }
+
+  return profile->IsIncognitoProfile();
+}
+
 // Get the RenderFrameHost that contains the PDF content.
 content::RenderFrameHost* GetPDFRenderFrameHost(
     content::WebContents* contents) {
@@ -196,6 +207,8 @@ void MahiWebContentsManager::OnFocusedPageLoadComplete(
   focused_web_content_state_.favicon = GetFavicon(focused_web_contents_);
   focused_web_content_state_.top_level_native_window =
       web_contents->GetTopLevelNativeWindow();
+  focused_web_content_state_.is_incognito =
+      IsFromIncognito(focused_web_contents_);
 
   // Skip the distillable check for PDF content.
   if (IsPDFWebContents(web_contents)) {
@@ -318,7 +331,7 @@ void MahiWebContentsManager::OnGetSnapshot(
     content::WebContents* web_contents,
     const base::Time& start_time,
     GetContentCallback callback,
-    const ui::AXTreeUpdate& snapshot) {
+    ui::AXTreeUpdate& snapshot) {
   if (focused_web_content_state_.page_id != page_id) {
     // TODO(b:336438243): Add UMA to track this.
     std::move(callback).Run(nullptr);

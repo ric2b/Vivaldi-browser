@@ -49,17 +49,29 @@ class Return final : public Castable<Return, Terminator> {
     /// The offset in Operands() for the return argument
     static constexpr size_t kArgsOperandOffset = 1;
 
+    /// The fixed number of results returned by return instructions
+    static constexpr size_t kNumResults = 0;
+
+    /// The minimum number of operands accepted by return instructions
+    static constexpr size_t kMinOperands = 1;
+
+    /// The maximum number of operands accepted by return instructions
+    static constexpr size_t kMaxOperands = 2;
+
     /// Constructor (no operands)
-    Return();
+    /// @param id the instruction id
+    explicit Return(Id id);
 
     /// Constructor (no return value)
+    /// @param id the instruction id
     /// @param func the function being returned
-    explicit Return(Function* func);
+    Return(Id id, Function* func);
 
     /// Constructor
+    /// @param id the instruction id
     /// @param func the function being returned
     /// @param arg the return value
-    Return(Function* func, ir::Value* arg);
+    Return(Id id, Function* func, ir::Value* arg);
 
     ~Return() override;
 

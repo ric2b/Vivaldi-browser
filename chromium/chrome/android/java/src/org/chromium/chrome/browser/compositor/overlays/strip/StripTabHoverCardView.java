@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.compositor.overlays.strip;
 
 import android.content.Context;
+import android.graphics.drawable.BitmapDrawable;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Size;
@@ -16,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.view.ViewCompat;
 
+import org.chromium.base.Callback;
 import org.chromium.base.MathUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -26,7 +28,6 @@ import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tab_ui.TabThumbnailView;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeProvider;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.ui.base.LocalizationUtils;
@@ -41,7 +42,7 @@ public class StripTabHoverCardView extends FrameLayout {
     private TextView mUrlView;
     private TabThumbnailView mThumbnailView;
     private TabModelSelector mTabModelSelector;
-    private TabModelSelectorObserver mTabModelSelectorObserver;
+    private Callback<TabModel> mCurrentTabModelObserver;
     private TabContentManager mTabContentManager;
 
     private int mLastHoveredTabId = INVALID_TAB_ID;
@@ -106,7 +107,8 @@ public class StripTabHoverCardView extends FrameLayout {
 
     /**
      * Perform tasks after the view is inflated: update the hover card colors, and add a {@link
-     * TabModelSelectorObserver} to update the view when a tab model is selected.
+     * Callback<TabModel>} to tab model supplier to update the view when a tab model is selected.
+     *
      * @param tabModelSelector The {@link TabModelSelector} to observe.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      */
@@ -115,14 +117,11 @@ public class StripTabHoverCardView extends FrameLayout {
             ObservableSupplier<TabContentManager> tabContentManagerSupplier) {
         mTabModelSelector = tabModelSelector;
         mTabContentManager = tabContentManagerSupplier.get();
-        mTabModelSelectorObserver =
-                new TabModelSelectorObserver() {
-                    @Override
-                    public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                        updateHoverCardColors(newModel.isIncognito());
-                    }
+        mCurrentTabModelObserver =
+                (tabModel) -> {
+                    updateHoverCardColors(tabModel.isIncognitoBranded());
                 };
-        mTabModelSelector.addObserver(mTabModelSelectorObserver);
+        mTabModelSelector.getCurrentTabModelSupplier().addObserver(mCurrentTabModelObserver);
         updateHoverCardColors(mTabModelSelector.isIncognitoSelected());
     }
 
@@ -145,7 +144,7 @@ public class StripTabHoverCardView extends FrameLayout {
 
     public void destroy() {
         if (mTabModelSelector != null) {
-            mTabModelSelector.removeObserver(mTabModelSelectorObserver);
+            mTabModelSelector.getCurrentTabModelSupplier().removeObserver(mCurrentTabModelObserver);
             mTabModelSelector = null;
         }
     }
@@ -260,8 +259,8 @@ public class StripTabHoverCardView extends FrameLayout {
                     // View is not visible any more.
                     if (!mIsShowing) return;
                     if (thumbnail != null) {
-                        TabUtils.setBitmapAndUpdateImageMatrix(
-                                mThumbnailView, thumbnail, thumbnailSize);
+                        TabUtils.setDrawableAndUpdateImageMatrix(
+                                mThumbnailView, new BitmapDrawable(thumbnail), thumbnailSize);
                     } else {
                         // Always use the unselected tab version of the thumbnail placeholder.
                         mThumbnailView.updateThumbnailPlaceholder(
@@ -271,8 +270,8 @@ public class StripTabHoverCardView extends FrameLayout {
                 });
     }
 
-    TabModelSelectorObserver getTabModelSelectorObserverForTesting() {
-        return mTabModelSelectorObserver;
+    Callback<TabModel> getCurrentTabModelObserverForTesting() {
+        return mCurrentTabModelObserver;
     }
 
     int getLastHoveredTabIdForTesting() {

@@ -206,17 +206,6 @@ class SyncClearDataFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 };
-
-class SyncSetTabsExtDataFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("sync.setTabsExtData", SYNC_SET_TABS_EXT_DATA)
-  SyncSetTabsExtDataFunction() = default;
-
- private:
-  ~SyncSetTabsExtDataFunction() override = default;
-  ResponseAction Run() override;
-};
-
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SYNC_SYNC_API_H_

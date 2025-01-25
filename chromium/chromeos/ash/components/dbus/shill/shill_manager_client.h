@@ -142,6 +142,10 @@ class COMPONENT_EXPORT(SHILL_CLIENT) ShillManagerClient {
     // Returns all enabled services in the given property.
     virtual base::Value::List GetEnabledServiceList() const = 0;
 
+    // Restarts hotspot by disabling and enabling after configured interactive
+    // delay.
+    virtual void RestartTethering() = 0;
+
     // Called by ShillServiceClient when a service's State property changes,
     // before notifying observers. Sets the DefaultService property to empty
     // if the state changes to a non-connected state.
@@ -176,6 +180,12 @@ class COMPONENT_EXPORT(SHILL_CLIENT) ShillManagerClient {
     // Makes ConfigureService succeed, fail, or timeout.
     virtual void SetSimulateConfigurationResult(
         FakeShillSimulatedResult configuration_result) = 0;
+
+    // Defines the error message which will be returned if configuration result
+    // is set to failure with `SetSimulateConfigurationResult`.
+    virtual void SetSimulateConfigurationError(
+        std::string_view error_name,
+        std::string_view error_message) = 0;
 
     // Makes SetTetheringEnabled succeed, fail, or timeout and the enable
     // tethering error string when it failed.

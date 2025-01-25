@@ -125,8 +125,11 @@ void InfoBarContainerWebProxy::PlatformSpecificAddInfoBar(
 void InfoBarContainerWebProxy::PlatformSpecificRemoveInfoBar(
     infobars::InfoBar* infobar) {
   if (infobar->delegate()->GetIdentifier() ==
-      infobars::InfoBarDelegate::INVALID) {
-    // This infobar was handled elsewere. Ie. a devtools window.
+          infobars::InfoBarDelegate::DEV_TOOLS_INFOBAR_DELEGATE ||
+      infobar->delegate()->GetIdentifier() ==
+          infobars::InfoBarDelegate::
+              EXTENSIONS_WEB_AUTH_FLOW_INFOBAR_DELEGATE) {
+    // This infobar is handled in a devtools- or a web_auth-window.
     return;
   }
   ConfirmInfoBarWebProxy* infobar_proxy =

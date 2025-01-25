@@ -56,14 +56,6 @@ base::flat_map<ui::ElementIdentifier, int> CalculateFlexOrder(
 
   return id_to_order_map;
 }
-
-void AddModelToParent(ui::MenuModel* model, views::MenuItemView* parent) {
-  for (size_t i = 0, max = model->GetItemCount(); i < max; ++i) {
-    views::MenuModelAdapter::AppendMenuItemFromModel(model, i, parent,
-                                                     model->GetCommandIdAt(i));
-  }
-}
-
 }  // namespace
 
 ToolbarController::PopOutState::PopOutState() = default;
@@ -303,6 +295,7 @@ std::string ToolbarController::GetActionNameFromElementIdentifier(
           {kActionNewIncognitoWindow, "PinnedNewIncognitoWindowButton"},
           {kActionPrint, "PinnedPrintButton"},
           {kActionQrCodeGenerator, "PinnedQrCodeGeneratorButton"},
+          {kActionRouteMedia, "PinnedCastButton"},
           {kActionSendTabToSelf, "PinnedSendTabToSelfButton"},
           {kActionShowAddressesBubbleOrPage,
            "PinnedShowAddressesBubbleOrPageButton"},
@@ -388,14 +381,18 @@ bool ToolbarController::EndPopOut(ui::ElementIdentifier identifier) {
   return true;
 }
 
-bool ToolbarController::ShouldShowOverflowButton(
-    gfx::Size available_size) const {
+bool ToolbarController::ShouldShowOverflowButton(gfx::Size available_size) {
   if (ToolbarControllerUtil::PreventOverflow()) {
     return false;
   }
 
   // Once at least one button has been dropped by layout manager show overflow
-  // button.
+  // button. Be sure to exclude the overflow button from the calculation.
+  views::ManualLayoutUtil manual_layout_util(
+      static_cast<views::LayoutManagerBase*>(
+          toolbar_container_view_->GetLayoutManager()));
+  const auto exclusion =
+      manual_layout_util.TemporarilyExcludeFromLayout(overflow_button());
   views::ProposedLayout proposed_layout =
       static_cast<views::LayoutManagerBase*>(
           toolbar_container_view_->GetLayoutManager())
@@ -690,7 +687,7 @@ void ToolbarController::ActionItemChanged(actions::ActionItem* action_item) {
   views::MenuItemView* menu_item =
       root_menu_item_->GetMenuItemByID(command_id.value());
 
-  if (!menu_item->icon_view()) {
+  if (!menu_item || !menu_item->icon_view()) {
     return;
   }
 
@@ -741,7 +738,18 @@ void ToolbarController::PopulateMenu(views::MenuItemView* parent) {
   menu_model_ = CreateOverflowMenuModel();
   CHECK(menu_model_);
 
-  AddModelToParent(menu_model_.get(), parent);
+  for (size_t i = 0; i < menu_model_->GetItemCount(); ++i) {
+    views::MenuItemView* menu_item =
+        views::MenuModelAdapter::AppendMenuItemFromModel(
+            menu_model_.get(), i, parent, menu_model_->GetCommandIdAt(i));
+
+    // `menu_item` can be nullptr if it is a separator.
+    if (menu_item &&
+        menu_item->GetType() == views::MenuItemView::Type::kNormal) {
+      menu_item->SetEnabled(IsCommandIdEnabled(menu_item->GetCommand()));
+    }
+  }
+
   parent->GetSubmenu()->InvalidateLayout();
 }
 

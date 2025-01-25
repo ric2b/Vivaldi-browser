@@ -16,6 +16,7 @@ import android.view.ViewGroup;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -55,7 +56,6 @@ import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.theme.ThemeUtils;
@@ -117,7 +117,10 @@ public class LayoutManagerImpl
     // External Dependencies
     private TabModelSelector mTabModelSelector;
 
-    private TabModelSelectorObserver mTabModelSelectorObserver;
+    private final Callback<TabModel> mCurrentTabModelObserver =
+            (tabModel) -> {
+                tabModelSwitched(tabModel.isIncognitoBranded());
+            };
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
 
     // An observer for watching TabModelFilters changes events.
@@ -347,14 +350,14 @@ public class LayoutManagerImpl
                     // transition, the toolbar will move up and cover the tab strip.
                     StripLayoutHelperManager.class,
                     TopToolbarOverlayCoordinator.class,
+                    EdgeToEdgeBottomChinSceneLayer.class,
                     // StripLayoutHelperManager should be updated before
                     // ScrollingBottomViewSceneLayer Since ScrollingBottomViewSceneLayer change
                     // the container size, it causes relocation tab strip scene layer.
                     ScrollingBottomViewSceneLayer.class,
                     StatusIndicatorCoordinator.getSceneOverlayClass(),
                     ContextualSearchPanel.class,
-                    ReadAloudMiniPlayerSceneLayer.class,
-                    EdgeToEdgeBottomChinSceneLayer.class
+                    ReadAloudMiniPlayerSceneLayer.class
                 };
 
         // Note(david@vivaldi.com): When toolbar is at the bottom we need to change the rendering
@@ -695,14 +698,7 @@ public class LayoutManagerImpl
 
         if (mNextActiveLayout != null) startShowing(mNextActiveLayout, true);
 
-        mTabModelSelectorObserver =
-                new TabModelSelectorObserver() {
-                    @Override
-                    public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                        tabModelSwitched(newModel.isIncognito());
-                    }
-                };
-        selector.addObserver(mTabModelSelectorObserver);
+        selector.getCurrentTabModelSupplier().addObserver(mCurrentTabModelObserver);
 
         mTabModelFilterObserver = createTabModelObserver();
         getTabModelSelector()
@@ -717,8 +713,10 @@ public class LayoutManagerImpl
         if (mStaticLayout != null) mStaticLayout.destroy();
         if (mOverlayPanelManager != null) mOverlayPanelManager.destroy();
         if (mTabModelSelectorTabObserver != null) mTabModelSelectorTabObserver.destroy();
-        if (mTabModelSelectorObserver != null) {
-            getTabModelSelector().removeObserver(mTabModelSelectorObserver);
+        if (getTabModelSelector() != null) {
+            getTabModelSelector()
+                    .getCurrentTabModelSupplier()
+                    .removeObserver(mCurrentTabModelObserver);
         }
         if (mTabModelFilterObserver != null) {
             getTabModelSelector()

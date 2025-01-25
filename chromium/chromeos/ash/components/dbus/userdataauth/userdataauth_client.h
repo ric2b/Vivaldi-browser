@@ -62,6 +62,13 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
         const ::user_data_auth::AuthEnrollmentProgress& result) {}
   };
 
+  class AuthFactorStatusUpdateObserver : public base::CheckedObserver {
+   public:
+    // Called when AuthFactorStatusUpdate signal is received.
+    virtual void OnAuthFactorStatusUpdate(
+        const ::user_data_auth::AuthFactorStatusUpdate& update) {}
+  };
+
   using IsMountedCallback =
       chromeos::DBusMethodCallback<::user_data_auth::IsMountedReply>;
   using GetVaultPropertiesCallback =
@@ -131,6 +138,9 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   using GetRecoverableKeyStoresCallback = chromeos::DBusMethodCallback<
       ::user_data_auth::GetRecoverableKeyStoresReply>;
 
+  using SetUserDataStorageWriteEnabledCallback = chromeos::DBusMethodCallback<
+      ::user_data_auth::SetUserDataStorageWriteEnabledReply>;
+
   // Not copyable or movable.
   UserDataAuthClient(const UserDataAuthClient&) = delete;
   UserDataAuthClient& operator=(const UserDataAuthClient&) = delete;
@@ -178,6 +188,12 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   // Removes a PrepareAuthFactorProgress observer if added.
   virtual void RemovePrepareAuthFactorProgressObserver(
       PrepareAuthFactorProgressObserver* observer) = 0;
+
+  virtual void AddAuthFactorStatusUpdateObserver(
+      AuthFactorStatusUpdateObserver* observer) = 0;
+
+  virtual void RemoveAuthFactorStatusUpdateObserver(
+      AuthFactorStatusUpdateObserver* observer) = 0;
 
   // Actual DBus Methods:
 
@@ -349,6 +365,11 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   virtual void GetRecoverableKeyStores(
       const ::user_data_auth::GetRecoverableKeyStoresRequest& request,
       GetRecoverableKeyStoresCallback callback) = 0;
+
+  // Enable/disable write access permissions to MyFiles directory.
+  virtual void SetUserDataStorageWriteEnabled(
+      const ::user_data_auth::SetUserDataStorageWriteEnabledRequest& request,
+      SetUserDataStorageWriteEnabledCallback callback) = 0;
 
  protected:
   // Initialize/Shutdown should be used instead.

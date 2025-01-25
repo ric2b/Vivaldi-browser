@@ -35,8 +35,8 @@
 #include "chrome/browser/ui/sad_tab_helper.h"
 #include "chrome/browser/ui/tabs/features.h"
 #include "chrome/browser/ui/tabs/organization/metrics.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_service_proxy.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
@@ -96,10 +96,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/remote_cocoa/browser/window.h"
-#endif
-
-#if BUILDFLAG(IS_LINUX)
-#include "ui/aura/client/drag_drop_client.h"
 #endif
 
 #if defined(USE_AURA)
@@ -408,7 +404,9 @@ TabDragController::Liveness TabDragController::Init(
       ui::CreatePresentationTimeHistogramRecorder(
           source_context->GetWidget()->GetCompositor(),
           kTabDraggingPresentationTimeHistogram,
-          kTabDraggingPresentationTimeMaxHistogram, base::Seconds(10));
+          kTabDraggingPresentationTimeMaxHistogram,
+          ui::PresentationTimeRecorder::BucketParams::CreateWithMaximum(
+              base::Seconds(10)));
   // Do not release capture when transferring capture between widgets on:
   // - Desktop Linux
   //     Mouse capture is not synchronous on desktop Linux. Chrome makes
@@ -436,12 +434,20 @@ TabDragController::Liveness TabDragController::Init(
     ref->detach_behavior_ = NOT_DETACHABLE;
   }
 #else
-  // If the dragged tabstrip exists in a PWA, and any of the dragged views
-  // are the Pinned Home tab, then the tabs should not be detachable from
-  // the window.
+  // Tabs should not be detachable from the window if any of the following are
+  // true:
+  // 1. The app window is locked for OnTask. Not applicable for web browser
+  //    scenarios.
+  // 2. The dragged tab strip exists in a PWA, and any of the dragged views
+  //    are the Pinned Home tab.
   Browser* source_browser = BrowserView::GetBrowserViewForNativeWindow(
                                 source_context->GetWidget()->GetNativeWindow())
                                 ->browser();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (source_browser->IsLockedForOnTask()) {
+    ref->detach_behavior_ = NOT_DETACHABLE;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   if (source_browser->app_controller() &&
       source_browser->app_controller()->has_tab_strip() &&
       web_app::HasPinnedHomeTab(source_browser->tab_strip_model())) {
@@ -451,7 +457,7 @@ TabDragController::Liveness TabDragController::Init(
       }
     }
   }
-#endif
+#endif  // BUILDFLAG(IS_MAC)
 
   const gfx::Point start_point_in_source_context =
       views::View::ConvertPointFromScreen(source_context,
@@ -516,7 +522,7 @@ TabDragController::Liveness TabDragController::Init(
                            kVariableTimer);
         break;
       default:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
   }
 
@@ -662,11 +668,6 @@ void TabDragController::Drag(const gfx::Point& point_in_screen) {
 
   bring_to_front_timer_.Stop();
 
-  // TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  DragState old_state = current_state_;
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
   if (current_state_ == DragState::kNotStarted) {
     if (!CanStartDrag(point_in_screen))
       return;  // User hasn't dragged far enough yet.
@@ -692,12 +693,6 @@ void TabDragController::Drag(const gfx::Point& point_in_screen) {
     Attach(source_context_, gfx::Point(), nullptr);
     if (num_dragging_tabs() == source_context_->GetTabStripModel()->count()) {
       if (ShouldDragWindowUsingSystemDnD()) {
-        // When dragging all of a window's tabs, just hide that window instead
-        // of creating a new hidden one.
-        // We don't actually hide the window yet, because on some platforms
-        // (e.g. Wayland) the drag and drop session must be started before
-        // hiding the window. The next ContinueDragging() call will take care of
-        // hiding the window.
         StartSystemDnDSessionIfNecessary(attached_context_, point_in_screen);
         return;
       }
@@ -735,18 +730,6 @@ void TabDragController::Drag(const gfx::Point& point_in_screen) {
         drag_offset = GetWindowOffset(point_in_screen);
       }
 
-      // TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-      static bool reported = false;
-      if (in_move_loop_ && !reported) {
-        reported = true;
-        LOG(ERROR) << "Before the move loop is nested, Drag() is called with a "
-                      "DraggingState that equals "
-                   << static_cast<std::underlying_type<DragState>::type>(
-                          old_state)
-                   << ".";
-      }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
       RunMoveLoop(drag_offset);
       return;
     }
@@ -967,26 +950,7 @@ TabDragController::Liveness TabDragController::ContinueDragging(
   }
 
   const bool tab_strip_changed = (target_context != attached_context_);
-  // TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  static bool reported = false;
-  if (in_move_loop_ && tab_strip_changed && !reported) {
-    reported = true;
-    LOG(ERROR) << "Before the move loop is nested, tab strip change is "
-                  "detected. (target_context == nullptr) is "
-               << (target_context == nullptr)
-               << ", and (attached_context_ == nullptr) is "
-               << (attached_context_ == nullptr);
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
   last_point_in_screen_ = point_in_screen;
-
-  if (current_state_ == DragState::kDraggingUsingSystemDragAndDrop &&
-      GetAttachedBrowserWidget()->IsVisible()) {
-    // See the comment in Drag() where we start the drag session.
-    GetAttachedBrowserWidget()->Hide();
-  }
 
   if (tab_strip_changed) {
     is_dragging_new_browser_ = false;
@@ -1025,15 +989,6 @@ TabDragController::DragBrowserToNewTabStrip(TabDragContext* target_context,
                "point_in_screen", point_in_screen.ToString());
 
   if (!target_context) {
-// TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    static bool reported = false;
-    if (in_move_loop_ && !reported) {
-      reported = true;
-      LOG(ERROR)
-          << "Before the move loop is nested, target context is nullified.";
-    }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
     DetachIntoNewBrowserAndRunMoveLoop(point_in_screen);
     return DRAG_BROWSER_RESULT_STOP;
   }
@@ -1157,6 +1112,16 @@ TabDragController::Liveness TabDragController::StartSystemDnDSessionIfNecessary(
 
   system_drag_and_drop_session_running_ = true;
 
+  if (attached_context_ == source_context_ &&
+      num_dragging_tabs() == source_context_->GetTabStripModel()->count()) {
+    // When dragging all of a window's tabs, we just hide that window instead of
+    // creating a new hidden one. On some platforms (e.g. Wayland) the drag and
+    // drop session must be started before hiding the window, so defer until the
+    // drag has started.
+    drag_started_callback_ = base::BindOnce(
+        &TabDragController::HideAttachedContext, weak_factory_.GetWeakPtr());
+  }
+
   auto data_provider = ui::OSExchangeDataProviderFactory::CreateProvider();
   // Set data in a format that is accepted by TabStrip so that a drop can
   // happen.
@@ -1174,6 +1139,16 @@ TabDragController::Liveness TabDragController::StartSystemDnDSessionIfNecessary(
       std::move(drag_loop_done_callback_);
 
   VLOG(1) << __func__ << " Starting system DnD session";
+
+#if defined(USE_AURA)
+  aura::Window* root_window =
+      context->GetWidget()->GetNativeWindow()->GetRootWindow();
+  aura::client::DragDropClient* client =
+      aura::client::GetDragDropClient(root_window);
+  if (client) {
+    drag_drop_client_observation_.Observe(client);
+  }
+#endif  // defined(USE_AURA)
 
   base::WeakPtr<TabDragController> ref(weak_factory_.GetWeakPtr());
   context->GetWidget()->RunShellDrag(
@@ -1200,6 +1175,20 @@ TabDragController::Liveness TabDragController::StartSystemDnDSessionIfNecessary(
   }
 
   return ref ? Liveness::ALIVE : Liveness::DELETED;
+}
+
+void TabDragController::HideAttachedContext() {
+  CHECK_EQ(current_state_, DragState::kDraggingUsingSystemDragAndDrop);
+  CHECK(GetAttachedBrowserWidget()->IsVisible());
+
+  // See the comment in StartSystemDnDSessionIfNecessary() where we start the
+  // drag session.
+  GetAttachedBrowserWidget()->Hide();
+
+  // Stop observing, as we're only interested in knowing when the drag started.
+#if defined(USE_AURA)
+  drag_drop_client_observation_.Reset();
+#endif  // defined(USE_AURA)
 }
 
 gfx::Rect TabDragController::GetEnclosingRectForDraggedTabs() {
@@ -1389,23 +1378,6 @@ TabDragController::Liveness TabDragController::GetTargetTabStripForPoint(
   *context = current_state_ == DragState::kDraggingWindow
                  ? attached_context_.get()
                  : nullptr;
-// TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  static bool reported = false;
-  if (in_move_loop_ && !context && !reported) {
-    reported = true;
-    if (current_state_ != DragState::kDraggingWindow) {
-      LOG(ERROR) << "Before the move loop is nested, context is nullified "
-                    "because current_state_ is "
-                 << static_cast<std::underlying_type<DragState>::type>(
-                        current_state_)
-                 << " instead of kDraggingWindow.";
-    } else {
-      LOG(ERROR) << "Before the move loop is nested, context is nullified "
-                    "because attached context is nullified.";
-    }
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   return Liveness::ALIVE;
 }
 
@@ -1611,15 +1583,6 @@ void TabDragController::DetachIntoNewBrowserAndRunMoveLoop(
       return;
     }
 
-    // TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    static bool reported = false;
-    if (in_move_loop_ && !reported) {
-      reported = true;
-      LOG(ERROR) << "Before the move loop is nested, all the tabs in a browser "
-                    "are being dragged.";
-    }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
     RunMoveLoop(GetWindowOffset(point_in_screen));
     return;
   }
@@ -1699,15 +1662,6 @@ void TabDragController::DetachIntoNewBrowserAndRunMoveLoop(
       return;
     }
   }
-  // TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  static bool reported = false;
-  if (in_move_loop_ && !reported) {
-    reported = true;
-    LOG(ERROR) << "Before the move loop is nested, not all the tabs in a "
-                  "browser are being dragged.";
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   RunMoveLoop(drag_offset);
 }
 
@@ -1721,10 +1675,6 @@ void TabDragController::RunMoveLoop(const gfx::Vector2d& drag_offset) {
   // in which case the observation is already established.
   widget_observation_.Reset();
   widget_observation_.Observe(move_loop_widget_.get());
-  // TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  DragState old_state = current_state_;
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   current_state_ = DragState::kDraggingWindow;
   base::WeakPtr<TabDragController> ref(weak_factory_.GetWeakPtr());
   if (can_release_capture_) {
@@ -1755,23 +1705,6 @@ void TabDragController::RunMoveLoop(const gfx::Vector2d& drag_offset) {
   // lower in the stack. This is a CHECK() as there may be security
   // implications to attempting a nested run loop.
 
-  // TODO:(crbug.com/1411147) Remove debug log in tab_drag_controller.cc
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  static bool reported = false;
-  if (in_move_loop_ && !reported) {
-    reported = true;
-    if (!ref) {
-      LOG(ERROR) << "The enclosing tab drag controller is already gone during "
-                    "a nested move loop.";
-    } else {
-      LOG(ERROR) << "The enclosing tab drag controller is still alive during a "
-                    "nested move loop.";
-    }
-    LOG(ERROR) << "Before the move loop is nested, the previous DragState is "
-               << static_cast<std::underlying_type<DragState>::type>(old_state)
-               << ".";
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   CHECK(!in_move_loop_);
   in_move_loop_ = true;
   views::Widget::MoveLoopResult result = move_loop_widget_->RunMoveLoop(
@@ -2886,23 +2819,19 @@ void TabDragController::MaybePauseTrackingSavedTabGroup() {
       BrowserView::GetBrowserViewForNativeWindow(
           GetAttachedBrowserWidget()->GetNativeWindow())
           ->browser();
-  tab_groups::SavedTabGroupKeyedService* const saved_tab_group_service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
-          browser->profile());
 
-  if (!saved_tab_group_service ||
-      !saved_tab_group_service->model()->Contains(group_.value())) {
+  tab_groups::TabGroupSyncService* tab_group_service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser->profile());
+
+  if (!tab_group_service || !tab_group_service->GetGroup(group_.value())) {
     return;
   }
 
-  paused_saved_group_id_ =
-      saved_tab_group_service->model()->Get(group_.value())->saved_guid();
-  saved_tab_group_service->PauseTrackingLocalTabGroup(group_.value());
+  observation_pauser_ = tab_group_service->CreateScopedLocalObserverPauser();
 }
 
 void TabDragController::MaybeResumeTrackingSavedTabGroup() {
-  if (!header_drag_ ||
-      !paused_saved_group_id_.has_value()) {
+  if (!header_drag_ || !observation_pauser_) {
     return;
   }
 
@@ -2910,15 +2839,26 @@ void TabDragController::MaybeResumeTrackingSavedTabGroup() {
       BrowserView::GetBrowserViewForNativeWindow(
           GetAttachedBrowserWidget()->GetNativeWindow())
           ->browser();
-  tab_groups::SavedTabGroupKeyedService* const saved_tab_group_service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
-          browser->profile());
 
-  if (!saved_tab_group_service) {
+  tab_groups::TabGroupSyncService* tab_group_service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser->profile());
+
+  if (!tab_group_service) {
     return;
   }
 
-  saved_tab_group_service->ResumeTrackingLocalTabGroup(
-      paused_saved_group_id_.value(), group_.value());
-  paused_saved_group_id_ = std::nullopt;
+  observation_pauser_.reset();
 }
+
+#if defined(USE_AURA)
+void TabDragController::OnDragStarted() {
+  VLOG(1) << __func__;
+  if (drag_started_callback_) {
+    std::move(drag_started_callback_).Run();
+  }
+}
+
+void TabDragController::OnDragDropClientDestroying() {
+  drag_drop_client_observation_.Reset();
+}
+#endif  // defined(USE_AURA)

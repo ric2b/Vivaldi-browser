@@ -166,6 +166,6 @@ TEST_F(NpCppTest, V0PrivateIdentityMultipleCredentials) {
   // Make sure the correct credential matches
   auto identity_details = payload.TryGetIdentityDetails();
   ASSERT_TRUE(identity_details.ok());
-  ASSERT_EQ(identity_details->cred_id, 456u);
+  ASSERT_EQ(identity_details->cred_id, 456);
 }
 // NOLINTEND(readability-magic-numbers)

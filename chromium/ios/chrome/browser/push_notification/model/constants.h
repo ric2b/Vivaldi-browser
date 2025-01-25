@@ -46,17 +46,27 @@ typedef NS_ENUM(NSInteger, SettingsToggleType) {
 };
 
 // Key of commerce notification used in pref
-// kFeaturePushNotificationPermissions.
+// `kFeaturePushNotificationPermissions`.
 extern const char kCommerceNotificationKey[];
 
-// Key of content notification used in pref kFeaturePushNotificationPermissions.
+// Key of content notification used in pref
+// `kFeaturePushNotificationPermissions`.
 extern const char kContentNotificationKey[];
 
-// Key of sports notification used in pref kFeaturePushNotificationPermissions.
+// Key of sports notification used in pref
+// `kFeaturePushNotificationPermissions`.
 extern const char kSportsNotificationKey[];
 
-// Key of tips notification used in pref kFeaturePushNotificationPermissions.
+// Key of tips notification used in pref `kFeaturePushNotificationPermissions`.
 extern const char kTipsNotificationKey[];
+
+// Key of send tab notification used in pref
+// `kFeaturePushNotificationPermissions`.
+extern const char kSendTabNotificationKey[];
+
+// Key of Safety Check notification used in pref
+// `kFeaturePushNotificationPermissions`.
+extern const char kSafetyCheckNotificationKey[];
 
 // Action identifier for the Content Notifications Feedback action.
 extern NSString* const kContentNotificationFeedbackActionIdentifier;
@@ -81,5 +91,9 @@ extern const char kContentNotificationActionHistogramName[];
 
 // The max amount of NAU sends per session.
 extern const int kDeliveredNAUMaxSendsPerSession;
+
+// Key for the Push Notification Client Id type in notification payload. Used
+// for Send Tab notifications.
+extern NSString* const kPushNotificationClientIdKey;
 
 #endif  // IOS_CHROME_BROWSER_PUSH_NOTIFICATION_MODEL_CONSTANTS_H_

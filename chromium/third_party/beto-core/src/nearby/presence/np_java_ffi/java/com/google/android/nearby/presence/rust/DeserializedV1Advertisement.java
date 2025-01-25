@@ -20,7 +20,7 @@ import com.google.android.nearby.presence.rust.credential.CredentialBook;
 import java.util.Iterator;
 
 /**
- * A deserialized V0 advertisement. This class is backed by native data behind the {@link
+ * A deserialized V1 advertisement. This class is backed by native data behind the {@link
  * LegibleV1Sections} handle. If this class is closed then the underlying handle will be closed too.
  * Methods on this class should not be called if {@link #close()} has already been called.
  */
@@ -67,13 +67,13 @@ public final class DeserializedV1Advertisement<M extends CredentialBook.MatchedM
   }
 
   /** Get an iterable of this advertisement's legible sections. */
-  public Iterable<DeserializedV1Section> getSections() {
-    return () -> new SectionIterator(numLegibleSections, legibleSections, credentialBook);
+  public Iterable<DeserializedV1Section<M>> getSections() {
+    return () -> new SectionIterator<>(numLegibleSections, legibleSections, credentialBook);
   }
 
   /** Iterator instance for sections in DeserializedV1Advertisement. */
   private static final class SectionIterator<M extends CredentialBook.MatchedMetadata>
-      implements Iterator<DeserializedV1Section> {
+      implements Iterator<DeserializedV1Section<M>> {
     private final LegibleV1Sections legibleSections;
     private final int numSections;
     private final CredentialBook<M> credentialBook;
@@ -89,11 +89,11 @@ public final class DeserializedV1Advertisement<M extends CredentialBook.MatchedM
 
     @Override
     public boolean hasNext() {
-      return position < (numSections - 1);
+      return position < numSections;
     }
 
     @Override
-    public DeserializedV1Section next() {
+    public DeserializedV1Section<M> next() {
       return legibleSections.getSection(position++, credentialBook);
     }
   }

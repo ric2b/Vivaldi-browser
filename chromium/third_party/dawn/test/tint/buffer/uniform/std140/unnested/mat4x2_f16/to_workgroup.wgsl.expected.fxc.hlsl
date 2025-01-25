@@ -1,9 +1,17 @@
-SKIP: FAILED
+SKIP: INVALID
+
+groupshared matrix<float16_t, 4, 2> w;
+
+void tint_zero_workgroup_memory(uint local_idx) {
+  if ((local_idx < 1u)) {
+    w = matrix<float16_t, 4, 2>((float16_t(0.0h)).xx, (float16_t(0.0h)).xx, (float16_t(0.0h)).xx, (float16_t(0.0h)).xx);
+  }
+  GroupMemoryBarrierWithGroupSync();
+}
 
 cbuffer cbuffer_u : register(b0) {
   uint4 u[1];
 };
-groupshared matrix<float16_t, 4, 2> w;
 
 struct tint_symbol_1 {
   uint local_invocation_index : SV_GroupIndex;
@@ -22,10 +30,7 @@ matrix<float16_t, 4, 2> u_load(uint offset) {
 }
 
 void f_inner(uint local_invocation_index) {
-  {
-    w = matrix<float16_t, 4, 2>((float16_t(0.0h)).xx, (float16_t(0.0h)).xx, (float16_t(0.0h)).xx, (float16_t(0.0h)).xx);
-  }
-  GroupMemoryBarrierWithGroupSync();
+  tint_zero_workgroup_memory(local_invocation_index);
   w = u_load(0u);
   uint ubo_load_4 = u[0].x;
   w[1] = vector<float16_t, 2>(float16_t(f16tof32(ubo_load_4 & 0xFFFF)), float16_t(f16tof32(ubo_load_4 >> 16)));
@@ -39,3 +44,8 @@ void f(tint_symbol_1 tint_symbol) {
   f_inner(tint_symbol.local_invocation_index);
   return;
 }
+FXC validation failure:
+<scrubbed_path>(1,20-28): error X3000: syntax error: unexpected token 'float16_t'
+
+
+tint executable returned error: exit status 1

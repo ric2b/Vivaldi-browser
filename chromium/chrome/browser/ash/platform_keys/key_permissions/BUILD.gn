@@ -27,15 +27,18 @@ static_library("key_permissions") {
     "user_private_token_kpm_service_factory.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
+    "//ash/components/kcer:chaps_proto",
     "//base",
     "//chrome/browser:browser_process",
     "//chrome/browser/ash/app_list/arc",
     "//chrome/browser/ash/platform_keys",
     "//chrome/browser/ash/profiles",
+    "//chrome/browser/chromeos/platform_keys",
     "//chrome/browser/profiles:profile",
     "//chrome/common",
-    "//chromeos/components/kcer:chaps_proto",
     "//components/keyed_service/content",
     "//components/keyed_service/core",
     "//components/policy/core/browser",
@@ -43,6 +46,8 @@ static_library("key_permissions") {
     "//components/pref_registry",
     "//components/prefs",
   ]
+
+  allow_circular_includes_from = [ "//chrome/browser/chromeos/platform_keys" ]
 }
 
 static_library("test_support") {
@@ -60,7 +65,7 @@ static_library("test_support") {
   deps = [
     ":key_permissions",
     "//base",
-    "//chrome/browser/chromeos",
+    "//chrome/browser/chromeos/platform_keys",
     "//components/keyed_service/core",
     "//content/public/browser",
     "//testing/gmock",
@@ -76,16 +81,15 @@ source_set("browser_tests") {
 
   deps = [
     ":key_permissions",
+    "//ash/components/kcer:chaps_proto",
     "//base/test:test_support",
     "//chrome/browser:browser_process",
-    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/platform_keys",
     "//chrome/browser/ash/platform_keys:test_support",
-    "//chrome/browser/chromeos",
+    "//chrome/browser/chromeos/platform_keys",
     "//chrome/browser/profiles:profile",
     "//chrome/common",
     "//chrome/test:test_support",
-    "//chromeos/components/kcer:chaps_proto",
     "//components/prefs",
     "//content/test:test_support",
     "//testing/gtest",
@@ -97,6 +101,7 @@ source_set("unit_tests") {
 
   sources = [
     "arc_key_permissions_manager_delegate_unittest.cc",
+    "key_permissions_manager_unittest.cc",
     "key_permissions_service_impl_unittest.cc",
   ]
 
@@ -105,11 +110,12 @@ source_set("unit_tests") {
     ":test_support",
     "//ash/components/arc",
     "//ash/components/arc:arc_test_support",
+    "//ash/components/kcer:chaps_proto",
     "//base/test:test_support",
-    "//chrome/browser/ash:test_support",
+    "//chrome/browser/ash/app_list/arc:test_support",
     "//chrome/browser/ash/platform_keys",
     "//chrome/browser/ash/platform_keys:test_support",
-    "//chrome/browser/chromeos",
+    "//chrome/browser/chromeos/platform_keys",
     "//chrome/test:test_support",
     "//components/policy/core/common",
     "//content/test:test_support",

@@ -2,10 +2,12 @@ Name: zlib
 Short Name: zlib
 URL: http://zlib.net/
 Security Critical: yes
-Shipped: yes
+Shipped: no
 License: Custom license
 License File: LICENSE
 License Android Compatible: yes
+Version: 1.2.13
+Revision: 04f42ceca40f73e2978b50e93806c2a18c1281fc
 
 Description:
 "A massively spiffy yet delicately unobtrusive compression library."

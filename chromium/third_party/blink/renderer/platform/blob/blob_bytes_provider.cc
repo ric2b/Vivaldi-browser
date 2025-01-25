@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/platform/blob/blob_bytes_provider.h"
 
 #include <utility>
@@ -134,8 +129,7 @@ void BlobBytesProvider::AppendData(base::span<const char> data) {
       data_.back()->size() + data.size() > kMaxConsolidatedItemSizeInBytes) {
     AppendData(RawData::Create());
   }
-  data_.back()->MutableData()->Append(
-      data.data(), base::checked_cast<wtf_size_t>(data.size()));
+  data_.back()->MutableData()->AppendSpan(data);
 }
 
 // static
@@ -168,7 +162,7 @@ void BlobBytesProvider::RequestAsReply(RequestAsReplyCallback callback) {
   // to reduce the number of copies of data that are made here.
   Vector<uint8_t> result;
   for (const auto& d : data_)
-    result.Append(d->data(), base::checked_cast<wtf_size_t>(d->size()));
+    result.AppendSpan(base::span(*d));
   std::move(callback).Run(result);
 }
 
@@ -222,17 +216,17 @@ void BlobBytesProvider::RequestAsFile(uint64_t source_offset,
     uint64_t data_size =
         std::min(data->size() - data_offset,
                  source_offset + source_size - offset - data_offset);
-    size_t written = 0;
-    while (written < data_size) {
-      int writing_size = base::saturated_cast<int>(data_size - written);
-      int actual_written = file.WriteAtCurrentPos(
-          data->data() + data_offset + written, writing_size);
-      bool write_failed = actual_written < 0;
-      if (write_failed) {
+    auto partial_data = base::as_byte_span(*data).subspan(
+        base::checked_cast<size_t>(data_offset),
+        base::checked_cast<size_t>(data_size));
+    while (!partial_data.empty()) {
+      std::optional<size_t> actual_written =
+          file.WriteAtCurrentPos(partial_data);
+      if (!actual_written.has_value()) {
         std::move(callback).Run(std::nullopt);
         return;
       }
-      written += actual_written;
+      partial_data = partial_data.subspan(*actual_written);
     }
 
     offset += data->size();

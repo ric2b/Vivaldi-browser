@@ -41,6 +41,8 @@ using ToolbarButtonImageLoader = UIImage* (^)(void);
 @property(nonatomic, assign) BOOL iphHighlighted;
 // View used to display the view used for the spotlight effect.
 @property(nonatomic, strong) UIView* spotlightView;
+// Whether this button has blue dot promo.
+@property(nonatomic, assign) BOOL hasBlueDot;
 
 // Returns a ToolbarButton with a type system, using the `imageLoader` to load
 // the image for normal state. Can only be used when
@@ -56,6 +58,11 @@ using ToolbarButtonImageLoader = UIImage* (^)(void);
 // Checks if the ToolbarButton should be visible in the current SizeClass,
 // afterwards it calls setHiddenForCurrentStateAndSizeClass if needed.
 - (void)updateHiddenInCurrentSizeClass;
+
+// Sets a new image loader. If the image was previously loaded, it reloads it.
+// Otherwise, it stores the image loader block and wait for the image to be
+// lazily loaded.
+- (void)setImageLoader:(ToolbarButtonImageLoader)imageLoader;
 
 // Vivaldi
 - (void)checkImageVisibility;

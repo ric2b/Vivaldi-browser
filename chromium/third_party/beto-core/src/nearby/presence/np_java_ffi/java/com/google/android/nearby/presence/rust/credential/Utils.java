@@ -21,6 +21,8 @@ import java.util.Arrays;
 /** Util functions used by multiple files. */
 final class Utils {
 
+  private Utils() {}
+
   /**
    * Create a copy of a {@code n}-byte array of data. Will throw {@code IllegalArgumentException} if
    * the array is not exactly {@code n} bytes.

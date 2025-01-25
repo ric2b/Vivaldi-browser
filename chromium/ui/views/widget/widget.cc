@@ -28,6 +28,7 @@
 #include "ui/base/l10n/l10n_font_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/color/color_provider_manager.h"
 #include "ui/compositor/compositor.h"
@@ -220,7 +221,15 @@ Widget::~Widget() {
   // is unnecessary.
   widget_closed_ = true;
 
-  if (widget_delegate_) {
+  // The following Notification order is preserved here:
+  //   1. WidgetObserver::OnWidgetDestroying
+  //   2. WidgetObserver::OnWidgetDestroyed
+  //   3. WidgetDelegate::WidgetDestroying
+  // Under WIDGET_OWNS_NATIVE_WIDGET and NATIVE_WIDGET_OWNS_WIDGET, the observer
+  // notifications are initiated by native widget prior to ~Widget. In
+  // CLIENT_OWNS_WIDGET, all events are emitted in ~Widget.
+
+  if (widget_delegate_ && ownership_ != InitParams::CLIENT_OWNS_WIDGET) {
     widget_delegate_->WidgetDestroying();
   }
   if (ownership_ == InitParams::WIDGET_OWNS_NATIVE_WIDGET) {
@@ -238,6 +247,9 @@ Widget::~Widget() {
     }
     HandleWidgetDestroying();
     HandleWidgetDestroyed();
+    if (widget_delegate_) {
+      widget_delegate_->WidgetDestroying();
+    }
   }
 
   RemoveObserver(&root_view_->GetViewAccessibility());
@@ -377,12 +389,10 @@ bool Widget::RequiresNonClientView(InitParams::Type type) {
 
 // static
 bool Widget::IsWindowCompositingSupported() {
-#if BUILDFLAG(IS_WIN)
-  return true;
-#elif BUILDFLAG(IS_OZONE)
+#if BUILDFLAG(IS_OZONE)
   return ui::OzonePlatform::GetInstance()->IsWindowCompositingSupported();
 #else
-  return false;
+  return true;
 #endif
 }
 
@@ -427,11 +437,13 @@ void Widget::Init(InitParams params) {
   ViewsDelegate::GetInstance()->OnBeforeWidgetInit(&params, this);
 
   if (params.delegate) {
-    widget_delegate_ = params.delegate->AsWeakPtr();
+    widget_delegate_ = params.delegate->AttachWidgetAndGetHandle(this);
   } else {
     auto default_delegate = std::make_unique<DefaultWidgetDelegate>();
-    widget_delegate_ = default_delegate.release()->AsWeakPtr();
+    widget_delegate_ =
+        default_delegate.release()->AttachWidgetAndGetHandle(this);
   }
+
   DCHECK(widget_delegate_);
 
   if (params.opacity == views::Widget::InitParams::WindowOpacity::kInferred)
@@ -442,8 +454,6 @@ void Widget::Init(InitParams params) {
                                     : InitParams::Activatable::kNo;
 
   widget_delegate_->SetCanActivate(can_activate);
-
-  widget_delegate_->WidgetInitializing(this);
 
   ownership_ = params.ownership;
 
@@ -460,6 +470,17 @@ void Widget::Init(InitParams params) {
     owned_native_widget_ = base::WrapUnique(native_widget_raw_ptr);
   }
   root_view_.reset(CreateRootView());
+
+  // The root view must always be fully initialized so we at least expose one
+  // accessible element to the platform APIs. This is necessary for us to detect
+  // accessibility API usage and fully enable accessibility support for all
+  // views.
+  root_view_->GetViewAccessibility().CompleteCacheInitialization();
+
+  // Once the root view is added to the widget, it should be marked as ready to
+  // send accessible event notifications. From that point on, any view that is
+  // connected to the RootView will be able to send accessible events.
+  root_view_->GetViewAccessibility().SetRootViewIsReadyToNotifyEvents();
   // We need to add the RootView's ViewAccessibility as an observer of the
   // widget, so that when the widget is closed, the accessible data is set
   // accordingly.
@@ -1582,7 +1603,7 @@ bool Widget::IsModal() const {
   if (!widget_delegate_)
     return false;
 
-  return widget_delegate_->GetModalType() != ui::MODAL_TYPE_NONE;
+  return widget_delegate_->GetModalType() != ui::mojom::ModalType::kNone;
 }
 
 bool Widget::IsDialogBox() const {
@@ -2074,13 +2095,13 @@ FocusSearch* Widget::GetFocusSearch() {
 FocusTraversable* Widget::GetFocusTraversableParent() {
   // We are a proxy to the root view, so we should be bypassed when traversing
   // up and as a result this should not be called.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 View* Widget::GetFocusTraversableParentView() {
   // We are a proxy to the root view, so we should be bypassed when traversing
   // up and as a result this should not be called.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

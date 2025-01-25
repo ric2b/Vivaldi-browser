@@ -21,7 +21,7 @@
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/instance.h"
 #include "components/services/app_service/public/cpp/package_id.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/service/sync_service.h"
 #include "components/ukm/app_source_url_recorder.h"
 
@@ -101,6 +101,7 @@ std::optional<std::string> AppDiscoveryMetrics::GetAppStringToRecordForPackage(
           GURL(package_id.identifier()));
     case apps::PackageType::kGeForceNow:
       // GFN is not currently supported by the metrics system.
+    case apps::PackageType::kWebsite:
     case apps::PackageType::kSystem:
     case apps::PackageType::kUnknown:
       return std::nullopt;

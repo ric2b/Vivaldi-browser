@@ -4,6 +4,9 @@
 
 #include "content/browser/attribution_reporting/attribution_storage_sql_migrations.h"
 
+#include <string>
+#include <string_view>
+
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -41,7 +44,7 @@ using ::testing::ElementsAre;
 // - Replaces ", " with "," as CREATE TABLE in schema will be represented with
 //   or without a space depending if it got there by calling CREATE TABLE
 //   directly or with an ALTER TABLE.
-std::string NormalizeSchema(std::string input) {
+std::string NormalizeSchema(std::string_view input) {
   std::string output;
   base::RemoveChars(input, "\"", &output);
   base::ReplaceSubstringsAfterOffset(&output, 0, ", ", ",");
@@ -267,7 +270,7 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion53ToCurrent) {
     sql::Statement s(
         db.GetUniqueStatement("SELECT reporting_origin FROM rate_limits"));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
   }
   MigrateDatabase();
 
@@ -287,10 +290,10 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion53ToCurrent) {
         db.GetUniqueStatement("SELECT reporting_site,scope FROM "
                               "rate_limits ORDER BY id"));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://r.test", s.ColumnString(0));
+    ASSERT_EQ("https://r.test", s.ColumnStringView(0));
     ASSERT_EQ(1, s.ColumnInt(1));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://r.test", s.ColumnString(0));
+    ASSERT_EQ("https://r.test", s.ColumnStringView(0));
     ASSERT_EQ(2, s.ColumnInt(1));
     ASSERT_FALSE(s.Step());
   }
@@ -312,7 +315,7 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion54ToCurrent) {
     sql::Statement s(
         db.GetUniqueStatement("SELECT reporting_origin FROM rate_limits"));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
   }
   MigrateDatabase();
 
@@ -332,10 +335,10 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion54ToCurrent) {
         db.GetUniqueStatement("SELECT reporting_origin,scope FROM "
                               "rate_limits ORDER BY id"));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
     ASSERT_EQ(1, s.ColumnInt(1));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
     ASSERT_EQ(2, s.ColumnInt(1));
     ASSERT_FALSE(s.Step());
   }
@@ -459,10 +462,10 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion58ToCurrent) {
     sql::Statement s(db.GetUniqueStatement(
         "SELECT reporting_origin,scope FROM rate_limits ORDER BY id"));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
     ASSERT_EQ(0, s.ColumnInt(1));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://b.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://b.r.test", s.ColumnStringView(0));
     ASSERT_EQ(1, s.ColumnInt(1));
     ASSERT_FALSE(s.Step());
   }
@@ -484,15 +487,15 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion58ToCurrent) {
         db.GetUniqueStatement("SELECT reporting_origin,scope,report_id FROM "
                               "rate_limits ORDER BY id"));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
     ASSERT_EQ(0, s.ColumnInt(1));
     ASSERT_EQ(-1, s.ColumnInt(2));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://b.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://b.r.test", s.ColumnStringView(0));
     ASSERT_EQ(1, s.ColumnInt(1));
     ASSERT_EQ(-1, s.ColumnInt(2));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://b.r.test", s.ColumnString(0));
+    ASSERT_EQ("https://b.r.test", s.ColumnStringView(0));
     ASSERT_EQ(2, s.ColumnInt(1));
     ASSERT_EQ(-1, s.ColumnInt(2));
     ASSERT_FALSE(s.Step());
@@ -658,6 +661,40 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion62ToCurrent) {
     ASSERT_TRUE(s.Step());
     ASSERT_EQ(0, s.ColumnInt(0));
     ASSERT_EQ(0, s.ColumnInt(1));
+    ASSERT_FALSE(s.Step());
+  }
+
+  // DB creation histograms should be recorded.
+  histograms.ExpectTotalCount("Conversions.Storage.CreationTime", 0);
+  histograms.ExpectTotalCount("Conversions.Storage.MigrationTime", 1);
+}
+
+TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion63ToCurrent) {
+  base::HistogramTester histograms;
+  LoadDatabase(GetVersionFilePath(63), DbPath());
+
+  // Verify pre-conditions.
+  {
+    sql::Database db;
+    ASSERT_TRUE(db.Open(DbPath()));
+    ASSERT_FALSE(db.DoesColumnExist("sources", "attribution_scopes_data"));
+  }
+  MigrateDatabase();
+
+  // Verify schema is current.
+  {
+    sql::Database db;
+    ASSERT_TRUE(db.Open(DbPath()));
+
+    CheckVersionNumbers(&db);
+
+    // Compare normalized schemas
+    EXPECT_EQ(NormalizeSchema(GetCurrentSchema()),
+              NormalizeSchema(db.GetSchema()));
+    sql::Statement s(
+        db.GetUniqueStatement("SELECT attribution_scopes_data FROM sources"));
+    ASSERT_TRUE(s.Step());
+    EXPECT_EQ(sql::ColumnType::kNull, s.GetColumnType(0));
     ASSERT_FALSE(s.Step());
   }
 

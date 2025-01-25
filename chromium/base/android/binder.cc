@@ -430,7 +430,7 @@ BinderStatusOr<Parcel> BinderRef::TransactImpl(transaction_code_t code,
       AParcel* in = parcel.release();
       AParcel* out;
       const auto status =
-          api.AIBinder_transact(binder_.get(), code, &in, &out, 0);
+          api.AIBinder_transact(binder_.get(), code, &in, &out, flags);
       if (status != STATUS_OK) {
         return unexpected(status);
       }
@@ -529,7 +529,7 @@ binder_status_t SupportsBinderBase::OnIBinderTransact(AIBinder* binder,
   }
 
   // If binder NDK is unsupported, nobody will be calling this method.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace internal

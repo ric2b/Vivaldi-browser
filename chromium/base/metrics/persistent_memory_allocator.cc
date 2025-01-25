@@ -194,8 +194,7 @@ void PersistentMemoryAllocator::Iterator::Reset(Reference starting_after) {
   const volatile BlockHeader* block =
       allocator_->GetBlock(starting_after, 0, 0, false, false);
   if (!block || block->next.load(std::memory_order_relaxed) == 0) {
-    NOTREACHED_IN_MIGRATION();
-    last_record_.store(kReferenceQueue, std::memory_order_release);
+    NOTREACHED();
   }
 }
 
@@ -482,9 +481,7 @@ const char* PersistentMemoryAllocator::Name() const {
 
   size_t name_length = GetAllocSize(name_ref);
   if (name_cstr[name_length - 1] != '\0') {
-    NOTREACHED_IN_MIGRATION();
-    SetCorrupt();
-    return "";
+    NOTREACHED();
   }
 
   return name_cstr;
@@ -497,25 +494,9 @@ void PersistentMemoryAllocator::CreateTrackingHistograms(
   }
   std::string name_string(name);
 
-#if 0
-  // This histogram wasn't being used so has been disabled. It is left here
-  // in case development of a new use of the allocator could benefit from
-  // recording (temporarily and locally) the allocation sizes.
-  DCHECK(!allocs_histogram_);
-  allocs_histogram_ = Histogram::FactoryGet(
-      "UMA.PersistentAllocator." + name_string + ".Allocs", 1, 10000, 50,
-      HistogramBase::kUmaTargetedHistogramFlag);
-#endif
-
   DCHECK(!used_histogram_);
   used_histogram_ = LinearHistogram::FactoryGet(
       "UMA.PersistentAllocator." + name_string + ".UsedPct", 1, 101, 21,
-      HistogramBase::kUmaTargetedHistogramFlag);
-
-  DCHECK(!errors_histogram_);
-  errors_histogram_ = LinearHistogram::FactoryGet(
-      "UMA.PersistentAllocator." + name_string + ".Errors", 1,
-      AllocatorError::kMaxValue + 1, AllocatorError::kMaxValue + 2,
       HistogramBase::kUmaTargetedHistogramFlag);
 }
 
@@ -642,17 +623,7 @@ bool PersistentMemoryAllocator::ChangeType(Reference ref,
 PersistentMemoryAllocator::Reference PersistentMemoryAllocator::Allocate(
     size_t req_size,
     uint32_t type_id) {
-  Reference ref = AllocateImpl(req_size, type_id);
-  if (ref) {
-    // Success: Record this allocation in usage stats (if active).
-    if (allocs_histogram_)
-      allocs_histogram_->Add(static_cast<HistogramBase::Sample>(req_size));
-  } else {
-    // Failure: Record an allocation of zero for tracking.
-    if (allocs_histogram_)
-      allocs_histogram_->Add(0);
-  }
-  return ref;
+  return AllocateImpl(req_size, type_id);
 }
 
 PersistentMemoryAllocator::Reference PersistentMemoryAllocator::AllocateImpl(
@@ -662,8 +633,7 @@ PersistentMemoryAllocator::Reference PersistentMemoryAllocator::AllocateImpl(
 
   // Validate req_size to ensure it won't overflow when used as 32-bit value.
   if (req_size > kSegmentMaxSize - sizeof(BlockHeader)) {
-    NOTREACHED_IN_MIGRATION();
-    return kReferenceNull;
+    NOTREACHED();
   }
 
   // Round up the requested size, plus header, to the next allocation alignment.
@@ -906,7 +876,6 @@ void PersistentMemoryAllocator::SetCorrupt(bool allow_write) const {
           const_cast<volatile std::atomic<uint32_t>*>(&shared_meta()->flags),
           kFlagCorrupt)) {
     LOG(ERROR) << "Corruption detected in shared-memory segment.";
-    RecordError(kMemoryIsCorrupt);
   }
 
   corrupt_.store(true, std::memory_order_relaxed);
@@ -991,11 +960,6 @@ void PersistentMemoryAllocator::FlushPartial(size_t length, bool sync) {
   // memory with atomic instructions to guarantee consistency. This (virtual)
   // method exists so that derived classes can do special things, such as tell
   // the OS to write changes to disk now rather than when convenient.
-}
-
-void PersistentMemoryAllocator::RecordError(int error) const {
-  if (errors_histogram_)
-    errors_histogram_->Add(error);
 }
 
 uint32_t PersistentMemoryAllocator::freeptr() const {

@@ -12,6 +12,7 @@
 
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -26,6 +27,7 @@
 #include "device/fido/fido_types.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
+class AuthenticatorRequestDialogController;
 class GPMEnclaveController;
 class PrefService;
 class Profile;
@@ -96,9 +98,20 @@ class ChromeWebAuthenticationDelegate final
   content::WebAuthenticationRequestProxy* MaybeGetRequestProxy(
       content::BrowserContext* browser_context,
       const url::Origin& caller_origin) override;
-  void DeletePasskey(content::BrowserContext* browser_context,
+  void DeletePasskey(content::WebContents* web_contents,
                      const std::vector<uint8_t>& passkey_credential_id,
                      const std::string& relying_party_id) override;
+  void DeleteUnacceptedPasskeys(content::WebContents* web_contents,
+                                const std::string& relying_party_id,
+                                const std::vector<uint8_t>& user_id,
+                                const std::vector<std::vector<uint8_t>>&
+                                    all_accepted_credentials_ids) override;
+  void UpdateUserPasskeys(content::WebContents* web_contents,
+                          const url::Origin& origin,
+                          const std::string& relying_party_id,
+                          std::vector<uint8_t>& user_id,
+                          const std::string& name,
+                          const std::string& display_name) override;
   void BrowserProvidedPasskeysAvailable(
       content::BrowserContext* browser_context,
       base::OnceCallback<void(bool)> callback) override;
@@ -203,11 +216,6 @@ class ChromeAuthenticatorRequestDelegate
   void OnTransactionSuccessful(RequestSource request_source,
                                device::FidoRequestType,
                                device::AuthenticatorType) override;
-  void ShouldReturnAttestation(
-      const std::string& relying_party_id,
-      const device::FidoAuthenticator* authenticator,
-      bool is_enterprise_attestation,
-      base::OnceCallback<void(bool)> callback) override;
   void ConfigureDiscoveries(
       const url::Origin& origin,
       const std::string& rp_id,
@@ -343,6 +351,10 @@ class ChromeAuthenticatorRequestDelegate
       bool request_is_for_google_com,
       std::optional<bool> preference);
 
+  // Configure the NSWindow* for the current RenderFrameHost. This is used by
+  // some macOS system APIs to center dialogs on the pertinent Chrome window.
+  void ConfigureNSWindow(device::FidoDiscoveryFactory* discovery_factory);
+
   // ConfigureICloudKeychain is called by `ConfigureDiscoveries` to configure
   // the `AuthenticatorRequestDialogController` with iCloud Keychain-related
   // values.
@@ -351,7 +363,7 @@ class ChromeAuthenticatorRequestDelegate
 #endif
 
   const content::GlobalRenderFrameHostId render_frame_host_id_;
-  const std::unique_ptr<AuthenticatorRequestDialogModel> dialog_model_;
+  const scoped_refptr<AuthenticatorRequestDialogModel> dialog_model_;
   const std::unique_ptr<AuthenticatorRequestDialogController>
       dialog_controller_;
   base::OnceClosure cancel_callback_;

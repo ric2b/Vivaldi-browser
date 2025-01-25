@@ -22,8 +22,6 @@ namespace {
 std::vector<std::unique_ptr<BirchItem>> CreateItems(BirchItemType type) {
   static const GURL kTestURL("https://www.example.com");
   static const GURL kTestFaviconURL("https://www.favicon.com");
-  static const ui::ImageModel kTestIcon =
-      ui::ImageModel::FromImageSkia(gfx::test::CreateImageSkia(20));
 
   std::vector<std::unique_ptr<BirchItem>> items;
   switch (type) {
@@ -56,7 +54,7 @@ std::vector<std::unique_ptr<BirchItem>> CreateItems(BirchItemType type) {
       break;
     case BirchItemType::kFile:
       items.push_back(std::make_unique<BirchFileItem>(
-          /*file_path=*/base::FilePath("test path"),
+          /*file_path=*/base::FilePath("test path"), /*title=*/std::nullopt,
           /*justification=*/u"suggestion",
           /*timestamp=*/base::Time(),
           /*file_id=*/"file_id_0",
@@ -68,13 +66,13 @@ std::vector<std::unique_ptr<BirchItem>> CreateItems(BirchItemType type) {
           /*timestamp=*/base::Time(),
           /*favicon_url=*/kTestFaviconURL,
           /*session_name=*/"session",
-          /*form_factor=*/BirchTabItem::DeviceFormFactor::kDesktop, kTestIcon));
+          /*form_factor=*/BirchTabItem::DeviceFormFactor::kDesktop));
       break;
     case BirchItemType::kWeather:
       items.push_back(std::make_unique<BirchWeatherItem>(
           /*weather_description=*/u"cloudy",
           /*temperature=*/72.f,
-          /*icon=*/kTestIcon));
+          /*icon_url=*/GURL("http://icon.com/")));
       break;
     case BirchItemType::kReleaseNotes:
       items.push_back(std::make_unique<BirchReleaseNotesItem>(
@@ -88,36 +86,45 @@ std::vector<std::unique_ptr<BirchItem>> CreateItems(BirchItemType type) {
           /*guid=*/u"self share guid", /*title*/ u"self share tab",
           /*url=*/kTestURL,
           /*shared_time=*/base::Time(), /*device_name=*/u"my device",
-          /*backup_icon=*/kTestIcon,
+          /*secondary_icon_type=*/SecondaryIconType::kTabFromDesktop,
           /*activation_callback=*/base::DoNothing()));
       break;
     case BirchItemType::kMostVisited:
       items.push_back(std::make_unique<BirchMostVisitedItem>(
           /*title=*/u"Most Visited",
-          /*url=*/kTestURL,
-          /*icon=*/kTestIcon));
+          /*url=*/kTestURL));
       break;
     case BirchItemType::kLastActive:
       items.push_back(std::make_unique<BirchLastActiveItem>(
           /*title=*/u"Last Active",
           /*url=*/kTestURL,
-          /*last_visit=*/base::Time(),
-          /*icon=*/kTestIcon));
+          /*last_visit=*/base::Time()));
       break;
     case BirchItemType::kLostMedia:
       items.push_back(std::make_unique<BirchLostMediaItem>(
           /*source_url=*/kTestURL,
           /*media_title=*/u"lost media",
-          /*is_video_conference_tab=*/true,
-          /*backup_icon=*/kTestIcon,
+          /*backup_icon=*/std::nullopt,
+          /*secondary_icon_type=*/SecondaryIconType::kLostMediaVideoConference,
           /*activation_callback=*/base::DoNothing()));
       items.push_back(std::make_unique<BirchLostMediaItem>(
           /*source_url=*/kTestURL,
           /*media_title=*/u"lost media",
-          /*is_video_conference_tab=*/false,
-          /**backup_icon=*/kTestIcon,
+          /*backup_icon=*/std::nullopt,
+          /*secondary_icon_type=*/SecondaryIconType::kLostMediaVideo,
           /*activation_callback=*/base::DoNothing()));
       break;
+    case BirchItemType::kCoral: {
+      std::vector<GURL> page_urls;
+      page_urls.emplace_back(("https://www.reddit.com/"));
+      page_urls.emplace_back(("https://www.figma.com/"));
+      page_urls.emplace_back(("https://www.notion.so/"));
+      items.push_back(std::make_unique<BirchCoralItem>(
+          /*coral_title=*/u"coral_title",
+          /*coral_text=*/u"coral_text",
+          /*page_urls=*/page_urls));
+      break;
+    }
     case BirchItemType::kTest:
       break;
   }
@@ -203,7 +210,7 @@ TEST_P(BirchBarPixelTest, DISABLED_VerifyBirchChips) {
   }
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      param.name, /*revision_number=*/0, birch_bar_view));
+      param.name, /*revision_number=*/1, birch_bar_view));
 
   // Manually shut down chips of birch bar to avoid dangling ptrs of the fake
   // birch items.

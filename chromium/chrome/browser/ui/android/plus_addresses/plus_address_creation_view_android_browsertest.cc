@@ -22,6 +22,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace plus_addresses {
+namespace {
 
 // TODO(crbug.com/40276862): Consolidate android/desktop controllers, and
 // presumably switch to the `PlatformBrowserTest` pattern.
@@ -41,7 +42,8 @@ class PlusAddressCreationViewAndroidBrowserTest : public AndroidBrowserTest {
   std::unique_ptr<KeyedService> PlusAddressServiceTestFactory(
       content::BrowserContext* context) {
     return std::make_unique<FakePlusAddressService>(
-        IdentityManagerFactory::GetForProfile(profile()), &setting_service_);
+        profile()->GetPrefs(), IdentityManagerFactory::GetForProfile(profile()),
+        &setting_service_);
   }
 
  protected:
@@ -192,4 +194,5 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationViewAndroidBrowserTest,
   EXPECT_FALSE(future.IsReady());
 }
 
+}  // namespace
 }  //  namespace plus_addresses

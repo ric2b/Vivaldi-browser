@@ -45,6 +45,7 @@ import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionUtil;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
@@ -54,6 +55,8 @@ import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.adaptive.settings.AdaptiveToolbarSettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.ui.permissions.AndroidPermissionDelegate;
+
+import java.util.List;
 
 /** Unit tests for the {@link AdaptiveToolbarButtonController} */
 @Config(manifest = Config.NONE)
@@ -66,6 +69,7 @@ public class AdaptiveToolbarButtonControllerTest {
     @Mock private ButtonDataProvider mVoiceToolbarButtonController;
     @Mock private ButtonDataProvider mNewTabButtonController;
     @Mock private ButtonDataProvider mPriceTrackingButtonController;
+    @Mock private SettingsLauncher mSettingsLauncher;
     @Mock private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     @Mock private Profile mProfile;
     @Mock private Tab mTab;
@@ -79,6 +83,7 @@ public class AdaptiveToolbarButtonControllerTest {
         MockitoAnnotations.initMocks(this);
         VoiceRecognitionUtil.setIsVoiceSearchEnabledForTesting(true);
         AdaptiveToolbarFeatures.clearParsedParamsForTesting();
+        SettingsLauncherFactory.setInstanceForTesting(mSettingsLauncher);
         mButtonData =
                 new ButtonDataImpl(
                         /* canShow= */ true,
@@ -109,7 +114,7 @@ public class AdaptiveToolbarButtonControllerTest {
     public void testCustomization_newTab() {
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.NEW_TAB));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.NEW_TAB)));
 
         AdaptiveToolbarButtonController adaptiveToolbarButtonController = buildController();
 
@@ -131,7 +136,7 @@ public class AdaptiveToolbarButtonControllerTest {
     public void testCustomization_share() {
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.SHARE));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.SHARE)));
 
         AdaptiveToolbarButtonController adaptiveToolbarButtonController = buildController();
 
@@ -153,7 +158,7 @@ public class AdaptiveToolbarButtonControllerTest {
     public void testCustomization_voice() {
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.VOICE));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.VOICE)));
 
         AdaptiveToolbarButtonController adaptiveToolbarButtonController = buildController();
 
@@ -175,7 +180,7 @@ public class AdaptiveToolbarButtonControllerTest {
     public void testCustomization_prefChangeTriggersButtonChange() {
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.VOICE));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.VOICE)));
 
         AdaptiveToolbarButtonController adaptiveToolbarButtonController = buildController();
 
@@ -207,9 +212,8 @@ public class AdaptiveToolbarButtonControllerTest {
     public void testLongPress() {
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.NEW_TAB));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.NEW_TAB)));
         Activity activity = Robolectric.setupActivity(Activity.class);
-        SettingsLauncher settingsLauncher = mock(SettingsLauncher.class);
 
         AdaptiveButtonActionMenuCoordinator menuCoordinator =
                 mock(AdaptiveButtonActionMenuCoordinator.class);
@@ -228,7 +232,6 @@ public class AdaptiveToolbarButtonControllerTest {
         AdaptiveToolbarButtonController adaptiveToolbarButtonController =
                 new AdaptiveToolbarButtonController(
                         activity,
-                        settingsLauncher,
                         mActivityLifecycleDispatcher,
                         mProfileSupplier,
                         menuCoordinator,
@@ -250,7 +253,7 @@ public class AdaptiveToolbarButtonControllerTest {
         longClickListener.onLongClick(view);
         adaptiveToolbarButtonController.destroy();
 
-        verify(settingsLauncher)
+        verify(mSettingsLauncher)
                 .launchSettingsActivity(activity, AdaptiveToolbarSettingsFragment.class);
     }
 
@@ -259,10 +262,9 @@ public class AdaptiveToolbarButtonControllerTest {
     @EnableFeatures(ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_V2)
     public void testShowDynamicAction() {
         Activity activity = Robolectric.setupActivity(Activity.class);
-        SettingsLauncher settingsLauncher = mock(SettingsLauncher.class);
 
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.NEW_TAB));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.NEW_TAB)));
 
         AdaptiveButtonActionMenuCoordinator menuCoordinator =
                 mock(AdaptiveButtonActionMenuCoordinator.class);
@@ -281,7 +283,6 @@ public class AdaptiveToolbarButtonControllerTest {
         AdaptiveToolbarButtonController adaptiveToolbarButtonController =
                 new AdaptiveToolbarButtonController(
                         activity,
-                        settingsLauncher,
                         mActivityLifecycleDispatcher,
                         mProfileSupplier,
                         menuCoordinator,
@@ -331,7 +332,7 @@ public class AdaptiveToolbarButtonControllerTest {
 
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.VOICE));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.VOICE)));
 
         AdaptiveToolbarButtonController adaptiveToolbarButtonController = buildController();
 
@@ -359,7 +360,7 @@ public class AdaptiveToolbarButtonControllerTest {
 
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.VOICE));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.VOICE)));
 
         AdaptiveToolbarButtonController adaptiveToolbarButtonController = buildController();
 
@@ -388,7 +389,7 @@ public class AdaptiveToolbarButtonControllerTest {
 
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.VOICE));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.VOICE)));
 
         AdaptiveToolbarButtonController adaptiveToolbarButtonController = buildController();
 
@@ -418,7 +419,7 @@ public class AdaptiveToolbarButtonControllerTest {
     public void testConfigurationChangeIgnoredWhenNativeNotReady() {
         AdaptiveToolbarPrefs.saveToolbarSettingsToggleState(true);
         AdaptiveToolbarStatePredictor.setSegmentationResultsForTesting(
-                new Pair<>(true, AdaptiveToolbarButtonVariant.VOICE));
+                new Pair<>(true, List.of(AdaptiveToolbarButtonVariant.VOICE)));
         // If native is not done initializing then ignore all configuration changes.
         doReturn(false).when(mActivityLifecycleDispatcher).isNativeInitializationFinished();
 
@@ -443,7 +444,6 @@ public class AdaptiveToolbarButtonControllerTest {
         AdaptiveToolbarButtonController adaptiveToolbarButtonController =
                 new AdaptiveToolbarButtonController(
                         mockActivity,
-                        mock(SettingsLauncher.class),
                         mActivityLifecycleDispatcher,
                         mProfileSupplier,
                         mock(AdaptiveButtonActionMenuCoordinator.class),

@@ -9,7 +9,7 @@
 #import "components/send_tab_to_self/entry_point_display_reason.h"
 #import "components/send_tab_to_self/send_tab_to_self_sync_service.h"
 #import "ios/chrome/browser/find_in_page/model/abstract_find_tab_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
@@ -22,6 +22,10 @@
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state.h"
 #import "url/gurl.h"
+
+// Vivaldi
+#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
+// End Vivaldi
 
 namespace activity_services {
 
@@ -68,6 +72,18 @@ ShareToData* ShareToDataForWebState(web::WebState* web_state,
 
   ChromeBrowserState* browser_state =
       ChromeBrowserState::FromBrowserState(web_state->GetBrowserState());
+
+#if defined(VIVALDI_BUILD)
+  VivaldiAccountSyncManager* sync_account_manager =
+      [[VivaldiAccountSyncManager alloc] initWithBrowserState:browser_state];
+  send_tab_to_self::SendTabToSelfSyncService* send_tab_to_self_service =
+      SendTabToSelfSyncServiceFactory::GetForBrowserState(browser_state);
+  BOOL can_send_tab_to_self =
+      sync_account_manager &&
+      [sync_account_manager hasSyncConsent] &&
+      send_tab_to_self_service &&
+      send_tab_to_self_service->GetEntryPointDisplayReason(final_url_to_share);
+#else
   ChromeAccountManagerService* account_manager_service =
       ChromeAccountManagerServiceFactory::GetForBrowserState(browser_state);
   send_tab_to_self::SendTabToSelfSyncService* send_tab_to_self_service =
@@ -76,6 +92,7 @@ ShareToData* ShareToDataForWebState(web::WebState* web_state,
       account_manager_service &&
       send_tab_to_self_service &&
       send_tab_to_self_service->GetEntryPointDisplayReason(final_url_to_share);
+#endif // End Vivaldi
 
   return [[ShareToData alloc] initWithShareURL:final_url_to_share
                                     visibleURL:web_state->GetVisibleURL()

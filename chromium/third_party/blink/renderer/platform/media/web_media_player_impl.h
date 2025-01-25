@@ -185,8 +185,8 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   void SetVolume(double volume) override;
   void SetLatencyHint(double seconds) override;
   void SetPreservesPitch(bool preserves_pitch) override;
-  void SetWasPlayedWithUserActivation(
-      bool was_played_with_user_activation) override;
+  void SetWasPlayedWithUserActivationAndHighMediaEngagement(
+      bool was_played_with_user_activation_and_high_media_engagement) override;
   void OnRequestPictureInPicture() override;
   void OnTimeUpdate() override;
   bool SetSinkId(const WebString& sink_id,
@@ -213,9 +213,12 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   bool HasAudio() const override;
 
   void EnabledAudioTracksChanged(
-      const WebVector<WebMediaPlayer::TrackId>& enabledTrackIds) override;
+      const WebVector<WebMediaPlayer::TrackId>& enabled_track_ids) override;
   void SelectedVideoTrackChanged(
-      WebMediaPlayer::TrackId* selectedTrackId) override;
+      std::optional<WebMediaPlayer::TrackId> selected_track_id) override;
+
+  void OnEnabledAudioTracksChanged(std::vector<media::MediaTrack::Id>);
+  void OnSelectedVideoTrackChanged(std::optional<media::MediaTrack::Id>);
 
   // Dimensions of the video.
   gfx::Size NaturalSize() const override;
@@ -258,6 +261,10 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   void SetPowerExperimentState(bool state) override;
   void SuspendForFrameClosed() override;
 
+  void SetShouldPauseWhenFrameIsHidden(
+      bool should_pause_when_frame_is_hidden) override;
+  bool GetShouldPauseWhenFrameIsHidden() override;
+
   bool HasAvailableVideoFrame() const override;
   bool HasReadableVideoFrame() const override;
 
@@ -278,6 +285,8 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   // WebMediaPlayerDelegate::Observer implementation.
   void OnPageHidden() override;
   void OnPageShown() override;
+  void OnFrameHidden() override;
+  void OnFrameShown() override;
   void OnIdleTimeout() override;
 
   void RequestRemotePlaybackDisabled(bool disabled) override;
@@ -443,18 +452,12 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   void DemuxerRequestsSeek(base::TimeDelta seek_time) override;
 
 #if BUILDFLAG(ENABLE_FFMPEG)
-  void AddAudioTrack(const std::string& id,
-                     const std::string& label,
-                     const std::string& language,
-                     bool is_first_track) override;
-  void AddVideoTrack(const std::string& id,
-                     const std::string& label,
-                     const std::string& language,
-                     bool is_first_track) override;
+  void AddMediaTrack(const media::MediaTrack&) override;
 #endif  // BUILDFLAG(ENABLE_FFMPEG)
 
 #if BUILDFLAG(ENABLE_HLS_DEMUXER)
   void GetUrlData(const GURL& gurl,
+                  bool ignore_cache,
                   base::OnceCallback<void(scoped_refptr<UrlData>)> cb);
   base::SequenceBound<media::HlsDataSourceProvider> GetHlsDataSourceProvider()
       override;
@@ -593,6 +596,10 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
 
   // // Returns true if the player's hosting page (WebView) is hidden or closed.
   bool IsPageHidden() const;
+
+  // Returns true if the player's host frame is hidden or closed in the host
+  // page.
+  bool IsFrameHidden() const;
 
   // Returns true if the player is in streaming mode, meaning that the source
   // or the demuxer doesn't support timeline or seeking.
@@ -1121,6 +1128,8 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   // Request pipeline to suspend. It should not block other signals after
   // suspended.
   bool pending_oneshot_suspend_ = false;
+
+  bool should_pause_when_frame_is_hidden_ = false;
 
   base::CancelableOnceClosure have_enough_after_lazy_load_cb_;
 

@@ -15,7 +15,7 @@ BASE_FEATURE(kConvertTrackpadEventsToMouse,
 
 BASE_FEATURE(kDeprecatedExternalPickerFunction,
              "DeprecatedExternalPickerFunction",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kMirrorBackForwardGesturesInRTL,
              "MirrorBackForwardGesturesInRTL",
@@ -25,8 +25,16 @@ BASE_FEATURE(kReportAllAvailablePointerTypes,
              "ReportAllAvailablePointerTypes",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kReportBottomOverscrolls,
+             "ReportBottomOverscrolls",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(kRequireLeadingInTextViewWithLeading,
              "RequireLeadingInTextViewWithLeading",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSelectFileOpenDocument,
+             "SelectFileOpenDocument",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSendTouchMovesToEventForwarderObservers,

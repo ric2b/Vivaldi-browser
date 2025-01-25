@@ -1,38 +1,68 @@
-<style>
+<style include="searchbox-shared-style">
+  :host {
+    --cr-searchbox-height: 48px;
+    --cr-searchbox-shadow: 0 1px 6px 0 var(--color-searchbox-shadow);
+  }
+
   .app-container {
     height: 100%;
     width: 100%;
   }
 
-  .hidden {
-    display: none;
-  }
-
   #backgroundScrim {
     background-color: rgba(0, 0 ,0, 0.3);
+    cursor: default;
     inset: 0;
     position: absolute;
   }
 
-  #buttonContainer {
+  .button-container {
     display: flex;
-    gap: 12px;
-    inset-block-start: 28px;
-    inset-inline-end: 30px;
     pointer-events: none;
     position: absolute;
+    z-index: 6; /* Keep aligned with cursor and context menu. */
   }
 
-  :host(:not([initial-flash-animation-has-ended])) #buttonContainer {
+  .button-container.button-container {
+    transition: opacity 150ms, visibility 150ms;
+  }
+
+  :host([should-fade-out-buttons]) .button-container,
+  :host(:not([initial-flash-animation-has-ended])) .button-container {
     opacity: 0;
     visibility: hidden;
   }
 
+  #optionsButtonContainer {
+    gap: 12px;
+    inset-block-start: 34px;
+    inset-inline-end: 28px;
+  }
+
+  :host([is-lens-overlay-contextual-searchbox-enabled]) #optionsButtonContainer {
+    inset-block-start: 36px;
+  }
+
+  :host([close-button-hidden]) #optionsButtonContainer {
+    inset-inline-end: 24px;
+  }
+
+  #translateButtonContainer {
+    inset-block-start: 28px;
+    inset-inline-end: 135px;
+  }
+
+  :host([close-button-hidden]) #translateButtonContainer {
+    inset-inline-end: 84px;
+  }
+
   .action-button {
-    --cr-icon-button-icon-size: 20px;
+    --cr-icon-button-icon-size: 24px;
     --cr-icon-button-size: 36px;
-    --cr-icon-button-fill-color: white;
+    --cr-icon-button-fill-color: var(--color-overlay-icon);
     background-color: rgba(var(--color-scrim-rgb), 0.6);
+    margin-inline-end: 0;
+    margin-inline-start: 0;
     pointer-events: all;
   }
 
@@ -40,11 +70,12 @@
     --cr-icon-image: url("icon_clear.svg");
   }
 
-  :host([close-button-hidden]) #closeButton {
+  :host([close-button-hidden]) #closeButton,
+  :host([search-box-hidden]) #searchboxContainer {
     display: none;
   }
 
-  #copyToast {
+  #toast {
     justify-content: space-between;
   }
 
@@ -117,6 +148,10 @@
     mask-image: url("learn_more.svg");
   }
 
+  :host(:not([is-image-rendered])) lens-selection-overlay {
+    display: none;
+  }
+
   .app-container :not(lens-selection-overlay) {
     transition: opacity 150ms linear;
   }
@@ -143,13 +178,24 @@
   initial-gradient {
     pointer-events: none;
   }
+
+  #searchboxContainer {
+    --color-searchbox-results-background: #ffffffff;
+    position: absolute;
+    inset-block-start: 36px;
+    inset-inline-end: 140px;
+    width: 300px;
+  }
+
+  :host([dark-mode]) #searchboxContainer {
+    --color-searchbox-results-background: #3c3c3cff;
+  }
 </style>
 <div class="app-container"
     on-initial-flash-animation-end="onInitialFlashAnimationEnd"
     on-screenshot-rendered="onScreenshotRendered"
     on-selection-overlay-clicked="handleSelectionOverlayClicked"
     on-pointer-released="handlePointerReleased"
-    on-text-copied="showTextCopiedToast"
     on-pointerenter="handlePointerEnter"
     on-pointerleave="handlePointerLeave"
     style="
@@ -163,9 +209,11 @@
     --color-scrim-rgb: [[skColorToRgb_(theme.scrim)]];
     --color-surface-container-highest-light: [[skColorToHex_(theme.surfaceContainerHighestLight)]];
     --color-surface-container-highest-dark: [[skColorToHex_(theme.surfaceContainerHighestDark)]];
-    --color-selection-element: [[skColorToHex_(theme.selectionElement)]];">
-  <cr-toast id="copyToast" duration="4000">
-    <div>$i18n{copyToastMessage}</div>
+    --color-selection-element: [[skColorToHex_(theme.selectionElement)]];
+    --color-overlay-icon: white;
+    --color-overlay-button-label: white;">
+  <cr-toast id="toast" duration="4000">
+    <div>[[toastMessage]]</div>
     <cr-button on-click="onHideToastClick">
       $i18n{dismiss}
     </cr-button>
@@ -175,13 +223,21 @@
       on-pointerenter="handlePointerEnterBackgroundScrim"
       on-pointerleave="handlePointerLeaveBackgroundScrim"></div>
   <lens-selection-overlay id="selectionOverlay" theme="[[theme]]"
-      screenshot-data-uri="[[screenshotDataUri]]"
-      class$="[[getSelectionOverlayClass(screenshotDataUri)]]"
       on-pointerenter="handlePointerEnterSelectionOverlay"
       on-pointerleave="handlePointerLeaveSelectionOverlay">
   </lens-selection-overlay>
   <initial-gradient id="initialGradient"></initial-gradient>
-  <div id="buttonContainer">
+  <template is="dom-if" if="[[isLensOverlayContextualSearchboxEnabled]]">
+    <div id="searchboxContainer">
+      <cr-searchbox id="searchbox"></cr-searchbox>
+    </div>
+  </template>
+  <template is="dom-if" if="[[isTranslateButtonVisible]]">
+    <div id="translateButtonContainer" class="button-container">
+      <translate-button></translate-button>
+    </div>
+  </template>
+  <div id="optionsButtonContainer" class="button-container">
     <div id="moreOptions">
       <cr-icon-button iron-icon="cr:more-vert" id="moreOptionsButton"
           class="action-button" on-click="onMoreOptionsButtonClick"

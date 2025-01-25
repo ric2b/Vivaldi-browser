@@ -21,7 +21,7 @@ IOSTrustedVaultClient::IOSTrustedVaultClient(
     scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory)
     : account_manager_service_(account_manager_service),
       backend_(trusted_vault_client_backend),
-      security_domain_path_(trusted_vault::SecurityDomainId::kChromeSync) {
+      security_domain_id_(trusted_vault::SecurityDomainId::kChromeSync) {
   DCHECK(account_manager_service_);
   DCHECK(backend_);
 }
@@ -29,34 +29,19 @@ IOSTrustedVaultClient::IOSTrustedVaultClient(
 IOSTrustedVaultClient::~IOSTrustedVaultClient() = default;
 
 void IOSTrustedVaultClient::AddObserver(Observer* observer) {
-  std::string security_domain_path_string =
-      GetSecurityDomainPath(security_domain_path_);
-  if (!base::FeatureList::IsEnabled(kTrustedVaultSecurityDomainKillSwitch)) {
-    security_domain_path_string = trusted_vault::kSyncSecurityDomainName;
-  }
-  backend_->AddObserver(observer, security_domain_path_string);
+  backend_->AddObserver(observer, security_domain_id_);
 }
 
 void IOSTrustedVaultClient::RemoveObserver(Observer* observer) {
-  std::string security_domain_path_string =
-      GetSecurityDomainPath(security_domain_path_);
-  if (!base::FeatureList::IsEnabled(kTrustedVaultSecurityDomainKillSwitch)) {
-    security_domain_path_string = trusted_vault::kSyncSecurityDomainName;
-  }
-  backend_->RemoveObserver(observer, security_domain_path_string);
+  backend_->RemoveObserver(observer, security_domain_id_);
 }
 
 void IOSTrustedVaultClient::FetchKeys(
     const CoreAccountInfo& account_info,
     base::OnceCallback<void(const std::vector<std::vector<uint8_t>>&)>
         callback) {
-  std::string security_domain_path_string =
-      GetSecurityDomainPath(security_domain_path_);
-  if (!base::FeatureList::IsEnabled(kTrustedVaultSecurityDomainKillSwitch)) {
-    security_domain_path_string = trusted_vault::kSyncSecurityDomainName;
-  }
-  backend_->FetchKeys(IdentityForAccount(account_info),
-                      security_domain_path_string, std::move(callback));
+  backend_->FetchKeys(IdentityForAccount(account_info), security_domain_id_,
+                      std::move(callback));
 }
 
 void IOSTrustedVaultClient::StoreKeys(
@@ -70,13 +55,8 @@ void IOSTrustedVaultClient::StoreKeys(
 void IOSTrustedVaultClient::MarkLocalKeysAsStale(
     const CoreAccountInfo& account_info,
     base::OnceCallback<void(bool)> callback) {
-  std::string security_domain_path_string =
-      GetSecurityDomainPath(security_domain_path_);
-  if (!base::FeatureList::IsEnabled(kTrustedVaultSecurityDomainKillSwitch)) {
-    security_domain_path_string = trusted_vault::kSyncSecurityDomainName;
-  }
   backend_->MarkLocalKeysAsStale(
-      IdentityForAccount(account_info), security_domain_path_string,
+      IdentityForAccount(account_info), security_domain_id_,
       // Since false positives are allowed in the API, always invoke `callback`
       // with true, indicating that something may have changed.
       base::BindOnce(std::move(callback), true));
@@ -85,13 +65,8 @@ void IOSTrustedVaultClient::MarkLocalKeysAsStale(
 void IOSTrustedVaultClient::GetIsRecoverabilityDegraded(
     const CoreAccountInfo& account_info,
     base::OnceCallback<void(bool)> callback) {
-  std::string security_domain_path_string =
-      GetSecurityDomainPath(security_domain_path_);
-  if (!base::FeatureList::IsEnabled(kTrustedVaultSecurityDomainKillSwitch)) {
-    security_domain_path_string = trusted_vault::kSyncSecurityDomainName;
-  }
   backend_->GetDegradedRecoverabilityStatus(IdentityForAccount(account_info),
-                                            security_domain_path_string,
+                                            security_domain_id_,
                                             std::move(callback));
 }
 
@@ -106,13 +81,8 @@ void IOSTrustedVaultClient::AddTrustedRecoveryMethod(
 
 void IOSTrustedVaultClient::ClearLocalDataForAccount(
     const CoreAccountInfo& account_info) {
-  std::string security_domain_path_string =
-      GetSecurityDomainPath(security_domain_path_);
-  if (!base::FeatureList::IsEnabled(kTrustedVaultSecurityDomainKillSwitch)) {
-    security_domain_path_string = trusted_vault::kSyncSecurityDomainName;
-  }
   backend_->ClearLocalData(IdentityForAccount(account_info),
-                           security_domain_path_string, base::DoNothing());
+                           security_domain_id_, base::DoNothing());
 }
 
 id<SystemIdentity> IOSTrustedVaultClient::IdentityForAccount(

@@ -8,6 +8,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.ColorPickerItemVi
 
 import android.app.Activity;
 import android.graphics.drawable.LayerDrawable;
+import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -58,7 +59,7 @@ public class TabGroupColorPickerTest {
     public final ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(RenderTestRule.Component.UI_BROWSER_MOBILE_TAB_GROUPS)
-                    .setRevision(1)
+                    .setRevision(2)
                     .build();
 
     @Rule
@@ -95,7 +96,10 @@ public class TabGroupColorPickerTest {
                             new ColorPickerCoordinator(
                                     mActivityTestRule.getActivity(),
                                     colors,
-                                    R.layout.tab_group_color_picker_container,
+                                    LayoutInflater.from(mActivityTestRule.getActivity())
+                                            .inflate(
+                                                    R.layout.tab_group_color_picker_container,
+                                                    /* root= */ null),
                                     ColorPickerType.TAB_GROUP,
                                     false,
                                     ColorPickerLayoutType.DYNAMIC,

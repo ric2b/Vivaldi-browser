@@ -13,15 +13,20 @@
 #import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 
 // static
 safe_browsing::VerdictCacheManager*
-VerdictCacheManagerFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+VerdictCacheManagerFactory::GetForBrowserState(ProfileIOS* profile) {
+  return GetForProfile(profile);
+}
+
+// static
+safe_browsing::VerdictCacheManager* VerdictCacheManagerFactory::GetForProfile(
+    ProfileIOS* profile) {
   return static_cast<safe_browsing::VerdictCacheManager*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, /*create=*/true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static

@@ -61,7 +61,8 @@ class LocalSessionEventHandlerImpl : public LocalSessionEventHandler {
   // changes).
   LocalSessionEventHandlerImpl(Delegate* delegate,
                                SyncSessionsClient* sessions_client,
-                               SyncedSessionTracker* session_tracker);
+                               SyncedSessionTracker* session_tracker,
+                               bool is_new_session);
 
   LocalSessionEventHandlerImpl(const LocalSessionEventHandlerImpl&) = delete;
   LocalSessionEventHandlerImpl& operator=(const LocalSessionEventHandlerImpl&) =
@@ -77,7 +78,7 @@ class LocalSessionEventHandlerImpl : public LocalSessionEventHandler {
   sync_pb::SessionTab GetTabSpecificsFromDelegateForTest(
       SyncedTabDelegate& tab_delegate) const;
 
-  void OnVivDataModified(const std::string &) override;
+  void OnVivDataModified(const VivaldiSpecific &) override;
 
  private:
   enum ReloadTabsOption { RELOAD_TABS, DONT_RELOAD_TABS };

@@ -58,6 +58,9 @@ message Type {
         TypeExternalTexture external_texture = 13;
         TypeSampler sampler = 14;
         TypeInputAttachment input_attachment = 15;
+        TypeSubgroupMatrix subgroup_matrix_left = 16;
+        TypeSubgroupMatrix subgroup_matrix_right = 17;
+        TypeSubgroupMatrix subgroup_matrix_result = 18;
     }
 }
 
@@ -143,6 +146,12 @@ message TypeSampler {
 
 message TypeInputAttachment {
     uint32 sub_type = 1;  // Module.types
+}
+
+message TypeSubgroupMatrix {
+    uint32 sub_type = 1;  // Module.types
+    uint32 rows = 2;
+    uint32 columns = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -507,6 +516,7 @@ enum BuiltinValue {
     subgroup_size = 12;
     vertex_index = 13;
     workgroup_id = 14;
+    clip_distances = 15;
 }
 
 enum BuiltinFn {
@@ -632,4 +642,25 @@ enum BuiltinFn {
     subgroup_ballot = 119;
     subgroup_broadcast = 120;
     input_attachment_load = 121;
+    subgroup_add = 122;
+    subgroup_exclusive_add = 123;
+    subgroup_mul = 124;
+    subgroup_exclusive_mul = 125;
+    subgroup_and = 126;
+    subgroup_or = 127;
+    subgroup_xor = 128;
+    subgroup_min = 129;
+    subgroup_max = 130;
+    subgroup_any = 131;
+    subgroup_all = 132;
+    subgroup_elect = 133;
+    subgroup_broadcast_first = 134;
+    subgroup_shuffle = 135;
+    subgroup_shuffle_xor = 136;
+    subgroup_shuffle_up = 137;
+    subgroup_shuffle_down = 138;
+    quad_broadcast = 139;
+    quad_swap_x = 140;
+    quad_swap_y = 141;
+    quad_swap_diagonal = 142;
 }

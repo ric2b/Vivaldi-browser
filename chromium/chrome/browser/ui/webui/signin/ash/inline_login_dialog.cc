@@ -13,7 +13,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/ash/system_web_dialog_delegate.h"
+#include "chrome/browser/ui/webui/ash/system_web_dialog/system_web_dialog_delegate.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/account_manager_core/account_addition_options.h"
 #include "components/account_manager_core/pref_names.h"
@@ -26,6 +26,7 @@
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/url_util.h"
 #include "ui/aura/window.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -202,8 +203,8 @@ void InlineLoginDialog::GetDialogSize(gfx::Size* size) const {
                 std::min(kSigninDialogHeight, display.work_area().height()));
 }
 
-ui::ModalType InlineLoginDialog::GetDialogModalType() const {
-  return ui::MODAL_TYPE_SYSTEM;
+ui::mojom::ModalType InlineLoginDialog::GetDialogModalType() const {
+  return ui::mojom::ModalType::kSystem;
 }
 
 bool InlineLoginDialog::ShouldShowDialogTitle() const {

@@ -47,8 +47,8 @@ source_set("test_support") {
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
     "//chrome/test:test_support",
-    "//components/enterprise/connectors",
-    "//components/enterprise/data_controls/core",
+    "//components/enterprise/connectors/core",
+    "//components/enterprise/data_controls/core/browser",
     "//components/policy/core/browser",
     "//components/policy/core/common",
     "//components/prefs",
@@ -91,8 +91,6 @@ source_set("test_support") {
     sources += [ "ash/management_context_mixin_ash.cc" ]
 
     deps += [
-      "//chrome/browser/ash",
-      "//chrome/browser/ash:test_support",
       "//chrome/browser/ash/policy/core",
       "//chrome/browser/ash/policy/core:test_support",
     ]

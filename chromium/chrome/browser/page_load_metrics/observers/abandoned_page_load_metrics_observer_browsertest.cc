@@ -115,6 +115,15 @@ class AbandonedPageLoadMetricsObserverBrowserTest
            suffix;
   }
 
+  std::string GetTimeToAbandonFromNavigationStart(NavigationMilestone milestone,
+                                                  std::string suffix = "") {
+    return internal::kAbandonedPageLoadMetricsHistogramPrefix +
+           AbandonedPageLoadMetricsObserver::
+               GetTimeToAbandonFromNavigationStartWithoutPrefixSuffix(
+                   milestone) +
+           suffix;
+  }
+
   void ExpectTotalCountForAllNavigationMilestones(
       bool include_redirect,
       int count,
@@ -241,6 +250,7 @@ IN_PROC_BROWSER_TEST_F(AbandonedPageLoadMetricsObserverBrowserTest,
   web_contents()->GetController().GoBack();
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   waiter3->Wait();
+
   ExpectTotalCountForAllNavigationMilestones(/*include_redirect=*/false, 3);
 
   // 4) Navigate forward to B, potentially restoring from BFCache.
@@ -329,22 +339,27 @@ IN_PROC_BROWSER_TEST_F(AbandonedPageLoadMetricsObserverBrowserTest,
     // There should be a new entry for exactly one of the abandonment
     // histograms, indicating that the navigation is abandoned just after
     // `abandon_milestone` because of the `WebContents::Stop()` call.
-    EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
-                    GetLastMilestoneBeforeAbandonHistogramName()),
-                testing::ElementsAre(
-                    testing::Pair(GetLastMilestoneBeforeAbandonHistogramName(
-                                      AbandonReason::kExplicitCancellation),
-                                  1)));
+    EXPECT_THAT(
+        histogram_tester.GetTotalCountsForPrefix(
+            GetLastMilestoneBeforeAbandonHistogramName()),
+        testing::ElementsAre(
+            testing::Pair(GetLastMilestoneBeforeAbandonHistogramName(), 1),
+            testing::Pair(GetLastMilestoneBeforeAbandonHistogramName(
+                              AbandonReason::kExplicitCancellation),
+                          1)));
 
     for (auto milestone : all_milestones()) {
       if (abandon_milestone == milestone) {
         // Check that the milestone to abandonment time is recorded.
-        EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
-                        GetMilestoneToAbandonHistogramName(milestone)),
-                    testing::ElementsAre(testing::Pair(
-                        GetMilestoneToAbandonHistogramName(
-                            milestone, AbandonReason::kExplicitCancellation),
-                        1)));
+        EXPECT_THAT(
+            histogram_tester.GetTotalCountsForPrefix(
+                GetMilestoneToAbandonHistogramName(milestone)),
+            testing::ElementsAre(
+                testing::Pair(GetMilestoneToAbandonHistogramName(milestone), 1),
+                testing::Pair(
+                    GetMilestoneToAbandonHistogramName(
+                        milestone, AbandonReason::kExplicitCancellation),
+                    1)));
         // Check that the abandonment reason at the milestone is recorded.
         EXPECT_THAT(
             histogram_tester.GetTotalCountsForPrefix(
@@ -356,6 +371,9 @@ IN_PROC_BROWSER_TEST_F(AbandonedPageLoadMetricsObserverBrowserTest,
             GetAbandonReasonAtMilestoneHistogramName(milestone),
             AbandonReason::kExplicitCancellation, 1);
 
+        // Check that the abandonment time from navigation start is recorded.
+        histogram_tester.ExpectTotalCount(
+            GetTimeToAbandonFromNavigationStart(milestone), 1);
       } else {
         EXPECT_TRUE(histogram_tester
                         .GetTotalCountsForPrefix(
@@ -370,7 +388,37 @@ IN_PROC_BROWSER_TEST_F(AbandonedPageLoadMetricsObserverBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_F(AbandonedPageLoadMetricsObserverBrowserTest, TabHidden) {
+IN_PROC_BROWSER_TEST_F(AbandonedPageLoadMetricsObserverBrowserTest,
+                       AbandonedByTabHidden) {
+  GURL url_a(embedded_test_server()->GetURL("a.test", "/title1.html"));
+  base::HistogramTester histogram_tester;
+
+  // Navigate to `url_a`, but pause it just after we reach the desired
+  // milestone.
+  content::TestNavigationManager navigation(web_contents(), url_a);
+  web_contents()->GetController().LoadURL(
+      url_a, content::Referrer(), ui::PAGE_TRANSITION_LINK, std::string());
+  EXPECT_TRUE(navigation.WaitForLoaderStart());
+
+  // Hide the tab during navigation (non-terminal).
+  web_contents()->WasHidden();
+  EXPECT_TRUE(navigation.WaitForResponse());
+
+  // Stop the navigation to SRP (terminal), wait until the navigation finishes.
+  web_contents()->Stop();
+  EXPECT_TRUE(navigation.WaitForNavigationFinished());
+
+  // Ensure the record containing the hidden suffix.
+  histogram_tester.ExpectTotalCount(
+      GetTimeToAbandonFromNavigationStart(
+          NavigationMilestone::kNonRedirectResponseLoaderCallback,
+          internal::kSuffixTabWasHiddenStaysHidden),
+      1);
+}
+
+// crbug.com/355352905: The test is flaky on all platforms.
+IN_PROC_BROWSER_TEST_F(AbandonedPageLoadMetricsObserverBrowserTest,
+                       DISABLED_TabHidden) {
   base::HistogramTester histogram_tester;
   GURL url_a(embedded_test_server()->GetURL("a.test", "/title1.html"));
 

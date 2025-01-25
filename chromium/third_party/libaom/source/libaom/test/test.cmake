@@ -282,6 +282,7 @@ if(NOT BUILD_SHARED_LIBS)
                      "${AOM_ROOT}/test/altref_test.cc"
                      "${AOM_ROOT}/test/av1_encoder_parms_get_to_decoder.cc"
                      "${AOM_ROOT}/test/av1_ext_tile_test.cc"
+                     "${AOM_ROOT}/test/binary_codes_test.cc"
                      "${AOM_ROOT}/test/cnn_test.cc"
                      "${AOM_ROOT}/test/decode_multithreaded_test.cc"
                      "${AOM_ROOT}/test/error_resilience_test.cc"
@@ -405,8 +406,11 @@ if(ENABLE_TESTS)
     aom_gtest STATIC
     "${AOM_ROOT}/third_party/googletest/src/googletest/src/gtest-all.cc")
   set_property(TARGET aom_gtest PROPERTY FOLDER ${AOM_IDE_TEST_FOLDER})
+  # There are -Wundef warnings in the gtest headers. Tell the compiler to treat
+  # the gtest include directories as system include directories and suppress
+  # compiler warnings in the gtest headers.
   target_include_directories(
-    aom_gtest
+    aom_gtest SYSTEM
     PUBLIC "${AOM_ROOT}/third_party/googletest/src/googletest/include"
     PRIVATE "${AOM_ROOT}/third_party/googletest/src/googletest")
 
@@ -419,16 +423,6 @@ if(ENABLE_TESTS)
       target_compile_definitions(aom_gtest PUBLIC GTEST_HAS_PTHREAD=0)
     endif()
   endif()
-
-  add_library(
-    aom_gmock STATIC
-    "${AOM_ROOT}/third_party/googletest/src/googlemock/src/gmock-all.cc")
-  set_property(TARGET aom_gmock PROPERTY FOLDER ${AOM_IDE_TEST_FOLDER})
-  target_include_directories(
-    aom_gmock
-    PUBLIC "${AOM_ROOT}/third_party/googletest/src/googlemock/include"
-    PRIVATE "${AOM_ROOT}/third_party/googletest/src/googlemock")
-  target_link_libraries(aom_gmock ${AOM_LIB_LINK_TYPE} aom_gtest)
 endif()
 
 # Setup testdata download targets, test build targets, and test run targets. The

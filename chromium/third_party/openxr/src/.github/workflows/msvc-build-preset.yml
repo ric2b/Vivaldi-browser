@@ -30,9 +30,11 @@ jobs:
       INSTALL_DIR: "${{ github.workspace }}/install"
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - name: Get modern CMake and Ninja
-        uses: lukka/get-cmake@v3.27.7
+        uses: lukka/get-cmake@v3.28.3
 
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.3

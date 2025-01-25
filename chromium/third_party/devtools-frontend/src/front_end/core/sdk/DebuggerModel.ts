@@ -151,9 +151,9 @@ export function sortAndMergeRanges(locationRanges: Protocol.Debugger.LocationRan
 }
 
 export const enum StepMode {
-  StepInto = 'StepInto',
-  StepOut = 'StepOut',
-  StepOver = 'StepOver',
+  STEP_INTO = 'StepInto',
+  STEP_OUT = 'StepOut',
+  STEP_OVER = 'StepOver',
 }
 
 export class DebuggerModel extends SDKModel<EventTypes> {
@@ -422,18 +422,18 @@ export class DebuggerModel extends SDKModel<EventTypes> {
   }
 
   async stepInto(): Promise<void> {
-    const skipList = await this.computeAutoStepSkipList(StepMode.StepInto);
+    const skipList = await this.computeAutoStepSkipList(StepMode.STEP_INTO);
     void this.agent.invoke_stepInto({breakOnAsyncCall: false, skipList});
   }
 
   async stepOver(): Promise<void> {
     this.#autoSteppingContext = this.#debuggerPausedDetailsInternal?.callFrames[0]?.functionLocation() ?? null;
-    const skipList = await this.computeAutoStepSkipList(StepMode.StepOver);
+    const skipList = await this.computeAutoStepSkipList(StepMode.STEP_OVER);
     void this.agent.invoke_stepOver({skipList});
   }
 
   async stepOut(): Promise<void> {
-    const skipList = await this.computeAutoStepSkipList(StepMode.StepOut);
+    const skipList = await this.computeAutoStepSkipList(StepMode.STEP_OUT);
     if (skipList.length !== 0) {
       void this.agent.invoke_stepOver({skipList});
     } else {
@@ -442,7 +442,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
   }
 
   scheduleStepIntoAsync(): void {
-    void this.computeAutoStepSkipList(StepMode.StepInto).then(skipList => {
+    void this.computeAutoStepSkipList(StepMode.STEP_INTO).then(skipList => {
       void this.agent.invoke_stepInto({breakOnAsyncCall: true, skipList});
     });
   }
@@ -463,7 +463,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
       condition?: BackendCondition): Promise<SetBreakpointResult> {
     // Convert file url to node-js path.
     let urlRegex;
-    if (this.target().type() === Type.Node && Common.ParsedURL.schemeIs(url, 'file:')) {
+    if (this.target().type() === Type.NODE && Common.ParsedURL.schemeIs(url, 'file:')) {
       const platformPath = Common.ParsedURL.ParsedURL.urlToRawPathString(url, Host.Platform.isWin());
       urlRegex =
           `${Platform.StringUtilities.escapeForRegExp(platformPath)}|${Platform.StringUtilities.escapeForRegExp(url)}`;
@@ -483,11 +483,11 @@ export class DebuggerModel extends SDKModel<EventTypes> {
     }
     columnNumber = Math.max(columnNumber || 0, minColumnNumber);
     const response = await this.agent.invoke_setBreakpointByUrl({
-      lineNumber: lineNumber,
+      lineNumber,
       url: urlRegex ? undefined : url,
-      urlRegex: urlRegex,
-      columnNumber: columnNumber,
-      condition: condition,
+      urlRegex,
+      columnNumber,
+      condition,
     });
     if (response.getError()) {
       return {locations: [], breakpointId: null};
@@ -502,8 +502,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
   async setBreakpointInAnonymousScript(
       scriptHash: string, lineNumber: number, columnNumber?: number,
       condition?: BackendCondition): Promise<SetBreakpointResult> {
-    const response = await this.agent.invoke_setBreakpointByUrl(
-        {lineNumber: lineNumber, scriptHash: scriptHash, columnNumber: columnNumber, condition: condition});
+    const response = await this.agent.invoke_setBreakpointByUrl({lineNumber, scriptHash, columnNumber, condition});
     if (response.getError()) {
       return {locations: [], breakpointId: null};
     }
@@ -523,7 +522,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
     const response = await this.agent.invoke_getPossibleBreakpoints({
       start: startLocation.payload(),
       end: endLocation ? endLocation.payload() : undefined,
-      restrictToFunction: restrictToFunction,
+      restrictToFunction,
     });
     if (response.getError() || !response.locations) {
       return [];
@@ -918,7 +917,6 @@ export class DebuggerModel extends SDKModel<EventTypes> {
   }
 
   override dispose(): void {
-    this.#sourceMapManagerInternal.dispose();
     if (this.#debuggerId) {
       debuggerIdToModel.delete(this.#debuggerId);
     }
@@ -959,13 +957,16 @@ const debuggerIdToModel = new Map<string, DebuggerModel>();
  * Keep these in sync with WebCore::V8Debugger
  */
 export enum PauseOnExceptionsState {
+  /* eslint-disable @typescript-eslint/naming-convention -- Used by web_tests. */
   DontPauseOnExceptions = 'none',
   PauseOnAllExceptions = 'all',
   PauseOnCaughtExceptions = 'caught',
   PauseOnUncaughtExceptions = 'uncaught',
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 export enum Events {
+  /* eslint-disable @typescript-eslint/naming-convention -- Used by web_tests. */
   DebuggerWasEnabled = 'DebuggerWasEnabled',
   DebuggerWasDisabled = 'DebuggerWasDisabled',
   DebuggerPaused = 'DebuggerPaused',
@@ -977,6 +978,7 @@ export enum Events {
   CallFrameSelected = 'CallFrameSelected',
   DebuggerIsReadyToPause = 'DebuggerIsReadyToPause',
   ScriptSourceWasEdited = 'ScriptSourceWasEdited',
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 export type EventTypes = {
@@ -1262,7 +1264,7 @@ export class CallFrame {
     }
 
     const evaluateResponse = await this.debuggerModel.agent.invoke_evaluateOnCallFrame(
-        {callFrameId: this.id, expression: expression, silent: true, objectGroup: 'backtrace'});
+        {callFrameId: this.id, expression, silent: true, objectGroup: 'backtrace'});
     if (evaluateResponse.getError() || evaluateResponse.exceptionDetails) {
       return null;
     }
@@ -1307,7 +1309,7 @@ export class CallFrame {
     });
     const error = response.getError();
     if (error) {
-      return {error: error};
+      return {error};
     }
     return {object: runtimeModel.createRemoteObject(response.result), exceptionDetails: response.exceptionDetails};
   }

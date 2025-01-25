@@ -28,6 +28,7 @@
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/snap_group/snap_group.h"
 #include "ash/wm/snap_group/snap_group_controller.h"
+#include "ash/wm/snap_group/snap_group_test_util.h"
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_divider.h"
@@ -54,6 +55,7 @@
 #include "chromeos/ui/wm/constants.h"
 #include "chromeos/ui/wm/window_util.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -500,8 +502,9 @@ TEST_F(ClientControlledStateTest, Minimize) {
 
   ::wm::Unminimize(widget()->GetNativeWindow());
   EXPECT_TRUE(widget()->IsMinimized());
-  EXPECT_EQ(ui::SHOW_STATE_NORMAL, widget()->GetNativeWindow()->GetProperty(
-                                       aura::client::kRestoreShowStateKey));
+  EXPECT_EQ(ui::mojom::WindowShowState::kNormal,
+            widget()->GetNativeWindow()->GetProperty(
+                aura::client::kRestoreShowStateKey));
   EXPECT_EQ(kInitialBounds, widget()->GetWindowBoundsInScreen());
   EXPECT_EQ(WindowStateType::kMinimized, delegate()->old_state());
   EXPECT_EQ(WindowStateType::kNormal, delegate()->new_state());

@@ -430,7 +430,7 @@ static bool init_arrays(const aom_film_grain_t *params, int luma_stride,
 }
 
 // get a number between 0 and 2^bits - 1
-static INLINE int get_random_number(int bits) {
+static inline int get_random_number(int bits) {
   uint16_t bit;
   bit = ((random_register >> 0) ^ (random_register >> 1) ^
          (random_register >> 3) ^ (random_register >> 12)) &

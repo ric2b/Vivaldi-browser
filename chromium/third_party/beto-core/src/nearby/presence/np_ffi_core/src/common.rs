@@ -219,7 +219,7 @@ impl<const N: usize> ByteBuffer<N> {
     /// ArrayView, which is assumed to be trusted to be
     /// properly initialized, and with a size-bound
     /// under 255 bytes.
-    pub(crate) fn from_array_view(array_view: ArrayView<u8, N>) -> Self {
+    pub fn from_array_view(array_view: ArrayView<u8, N>) -> Self {
         let (len, bytes) = array_view.into_raw_parts();
         let len = len as u8;
         Self { len, bytes }
@@ -267,22 +267,3 @@ pub(crate) fn get_global_crypto_rng() -> RwLockWriteGuard<'static, LazyInitCrypt
 /// in an entirely unexpected way.
 #[derive(Debug)]
 pub struct InvalidStackDataStructure;
-
-/// Error raised when attempting to cast an enum to
-/// one of its variants, but the value is actually
-/// of a different variant than the requested one.
-pub struct EnumCastError {
-    pub(crate) projection_method_name: String,
-    pub(crate) variant_enum_name: String,
-    pub(crate) variant_type_name: String,
-}
-
-impl core::fmt::Debug for EnumCastError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "Attempted to cast a non-{} to a {} via {}",
-            &self.variant_enum_name, &self.variant_type_name, &self.projection_method_name
-        )
-    }
-}

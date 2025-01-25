@@ -47,14 +47,6 @@ constexpr webtransport::StreamId kControlStreamId = 4;
 constexpr webtransport::StreamId kIncomingUniStreamId = 15;
 constexpr webtransport::StreamId kOutgoingUniStreamId = 14;
 
-constexpr MoqtSessionParameters default_parameters = {
-    /*version=*/MoqtVersion::kDraft05,
-    /*perspective=*/quic::Perspective::IS_CLIENT,
-    /*using_webtrans=*/true,
-    /*path=*/std::string(),
-    /*deliver_partial_objects=*/false,
-};
-
 // Returns nullopt if there is not enough in |message| to extract a type
 static std::optional<MoqtMessageType> ExtractMessageType(
     const absl::string_view message) {
@@ -138,10 +130,23 @@ class MoqtSessionPeer {
     subscribe.subscribe_id = subscribe_id;
     subscribe.start_group = start_group;
     subscribe.start_object = start_object;
+    subscribe.subscriber_priority = 0x80;
     session->published_subscriptions_.emplace(
         subscribe_id, std::make_unique<MoqtSession::PublishedSubscription>(
-                          session, std::move(publisher), subscribe));
+                          session, std::move(publisher), subscribe,
+                          /*monitoring_interface=*/nullptr));
     return session->published_subscriptions_[subscribe_id].get();
+  }
+
+  static void DeleteSubscription(MoqtSession* session, uint64_t subscribe_id) {
+    session->published_subscriptions_.erase(subscribe_id);
+  }
+
+  static void UpdateSubscriberPriority(MoqtSession* session,
+                                       uint64_t subscribe_id,
+                                       MoqtPriority priority) {
+    session->published_subscriptions_[subscribe_id]->set_subscriber_priority(
+        priority);
   }
 
   static void set_peer_role(MoqtSession* session, MoqtRole role) {
@@ -156,7 +161,8 @@ class MoqtSessionPeer {
 class MoqtSessionTest : public quic::test::QuicTest {
  public:
   MoqtSessionTest()
-      : session_(&mock_session_, default_parameters,
+      : session_(&mock_session_,
+                 MoqtSessionParameters(quic::Perspective::IS_CLIENT),
                  session_callbacks_.AsSessionCallbacks()) {
     session_.set_publisher(&publisher_);
   }
@@ -176,7 +182,7 @@ TEST_F(MoqtSessionTest, Queries) {
 
 // Verify the session sends CLIENT_SETUP on the control stream.
 TEST_F(MoqtSessionTest, OnSessionReady) {
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   EXPECT_CALL(mock_session_, OpenOutgoingBidirectionalStream())
       .WillOnce(Return(&mock_stream));
   std::unique_ptr<webtransport::StreamVisitor> visitor;
@@ -214,16 +220,10 @@ TEST_F(MoqtSessionTest, OnSessionReady) {
 }
 
 TEST_F(MoqtSessionTest, OnClientSetup) {
-  MoqtSessionParameters server_parameters = {
-      /*version=*/MoqtVersion::kDraft05,
-      /*perspective=*/quic::Perspective::IS_SERVER,
-      /*using_webtrans=*/true,
-      /*path=*/"",
-      /*deliver_partial_objects=*/false,
-  };
-  MoqtSession server_session(&mock_session_, server_parameters,
-                             session_callbacks_.AsSessionCallbacks());
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  MoqtSession server_session(
+      &mock_session_, MoqtSessionParameters(quic::Perspective::IS_SERVER),
+      session_callbacks_.AsSessionCallbacks());
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&server_session, &mock_stream);
   MoqtClientSetup setup = {
@@ -257,7 +257,7 @@ TEST_F(MoqtSessionTest, OnSessionClosed) {
 
 TEST_F(MoqtSessionTest, OnIncomingBidirectionalStream) {
   ::testing::InSequence seq;
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   StrictMock<webtransport::test::MockStreamVisitor> mock_stream_visitor;
   EXPECT_CALL(mock_session_, AcceptIncomingBidirectionalStream())
       .WillOnce(Return(&mock_stream));
@@ -271,7 +271,7 @@ TEST_F(MoqtSessionTest, OnIncomingBidirectionalStream) {
 
 TEST_F(MoqtSessionTest, OnIncomingUnidirectionalStream) {
   ::testing::InSequence seq;
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   StrictMock<webtransport::test::MockStreamVisitor> mock_stream_visitor;
   EXPECT_CALL(mock_session_, AcceptIncomingUnidirectionalStream())
       .WillOnce(Return(&mock_stream));
@@ -310,9 +310,9 @@ TEST_F(MoqtSessionTest, AddLocalTrack) {
       /*start_object=*/0,
       /*end_group=*/std::nullopt,
       /*end_object=*/std::nullopt,
-      /*authorization_info=*/std::nullopt,
+      /*parameters=*/MoqtSubscribeParameters(),
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   // Request for track returns SUBSCRIBE_ERROR.
@@ -351,7 +351,7 @@ TEST_F(MoqtSessionTest, AnnounceWithOk) {
       absl::string_view track_namespace,
       std::optional<MoqtAnnounceErrorReason> error_message)>
       announce_resolved_callback;
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   EXPECT_CALL(mock_session_, GetStreamById(_)).WillOnce(Return(&mock_stream));
@@ -386,7 +386,7 @@ TEST_F(MoqtSessionTest, AnnounceWithError) {
       absl::string_view track_namespace,
       std::optional<MoqtAnnounceErrorReason> error_message)>
       announce_resolved_callback;
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   EXPECT_CALL(mock_session_, GetStreamById(_)).WillOnce(Return(&mock_stream));
@@ -446,9 +446,9 @@ TEST_F(MoqtSessionTest, SubscribeForPast) {
       /*start_object=*/0,
       /*end_group=*/std::nullopt,
       /*end_object=*/std::nullopt,
-      /*authorization_info=*/std::nullopt,
+      /*parameters=*/MoqtSubscribeParameters(),
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   bool correct_message = true;
@@ -464,7 +464,7 @@ TEST_F(MoqtSessionTest, SubscribeForPast) {
 }
 
 TEST_F(MoqtSessionTest, SubscribeWithOk) {
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   MockRemoteTrackVisitor remote_track_visitor;
@@ -477,7 +477,7 @@ TEST_F(MoqtSessionTest, SubscribeWithOk) {
         EXPECT_EQ(*ExtractMessageType(data[0]), MoqtMessageType::kSubscribe);
         return absl::OkStatus();
       });
-  session_.SubscribeCurrentGroup("foo", "bar", &remote_track_visitor, "");
+  session_.SubscribeCurrentGroup("foo", "bar", &remote_track_visitor);
 
   MoqtSubscribeOk ok = {
       /*subscribe_id=*/0,
@@ -496,7 +496,7 @@ TEST_F(MoqtSessionTest, SubscribeWithOk) {
 }
 
 TEST_F(MoqtSessionTest, SubscribeWithError) {
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   MockRemoteTrackVisitor remote_track_visitor;
@@ -509,7 +509,7 @@ TEST_F(MoqtSessionTest, SubscribeWithError) {
         EXPECT_EQ(*ExtractMessageType(data[0]), MoqtMessageType::kSubscribe);
         return absl::OkStatus();
       });
-  session_.SubscribeCurrentGroup("foo", "bar", &remote_track_visitor, "");
+  session_.SubscribeCurrentGroup("foo", "bar", &remote_track_visitor);
 
   MoqtSubscribeError error = {
       /*subscribe_id=*/0,
@@ -530,7 +530,7 @@ TEST_F(MoqtSessionTest, SubscribeWithError) {
 }
 
 TEST_F(MoqtSessionTest, ReplyToAnnounce) {
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   MoqtAnnounce announce = {
@@ -565,7 +565,7 @@ TEST_F(MoqtSessionTest, IncomingObject) {
       /*forwarding_preference=*/MoqtForwardingPreference::kGroup,
       /*payload_length=*/8,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> object_stream =
       MoqtSessionPeer::CreateIncomingDataStream(&session_, &mock_stream);
 
@@ -590,7 +590,7 @@ TEST_F(MoqtSessionTest, IncomingPartialObject) {
       /*forwarding_preference=*/MoqtForwardingPreference::kGroup,
       /*payload_length=*/16,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> object_stream =
       MoqtSessionPeer::CreateIncomingDataStream(&session_, &mock_stream);
 
@@ -602,13 +602,8 @@ TEST_F(MoqtSessionTest, IncomingPartialObject) {
 }
 
 TEST_F(MoqtSessionTest, IncomingPartialObjectNoBuffer) {
-  MoqtSessionParameters parameters = {
-      /*version=*/MoqtVersion::kDraft05,
-      /*perspective=*/quic::Perspective::IS_CLIENT,
-      /*using_webtrans=*/true,
-      /*path=*/"",
-      /*deliver_partial_objects=*/true,
-  };
+  MoqtSessionParameters parameters(quic::Perspective::IS_CLIENT);
+  parameters.deliver_partial_objects = true;
   MoqtSession session(&mock_session_, parameters,
                       session_callbacks_.AsSessionCallbacks());
   MockRemoteTrackVisitor visitor_;
@@ -625,7 +620,7 @@ TEST_F(MoqtSessionTest, IncomingPartialObjectNoBuffer) {
       /*forwarding_preference=*/MoqtForwardingPreference::kGroup,
       /*payload_length=*/16,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> object_stream =
       MoqtSessionPeer::CreateIncomingDataStream(&session, &mock_stream);
 
@@ -663,7 +658,7 @@ TEST_F(MoqtSessionTest, ObjectBeforeSubscribeOk) {
       /*forwarding_preference=*/MoqtForwardingPreference::kGroup,
       /*payload_length=*/8,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> object_stream =
       MoqtSessionPeer::CreateIncomingDataStream(&session_, &mock_stream);
 
@@ -688,7 +683,7 @@ TEST_F(MoqtSessionTest, ObjectBeforeSubscribeOk) {
       /*group_order=*/MoqtDeliveryOrder::kAscending,
       /*largest_id=*/std::nullopt,
   };
-  StrictMock<webtransport::test::MockStream> mock_control_stream;
+  webtransport::test::MockStream mock_control_stream;
   std::unique_ptr<MoqtParserVisitor> control_stream =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_control_stream);
   EXPECT_CALL(visitor_, OnReply(_, _)).Times(1);
@@ -722,7 +717,7 @@ TEST_F(MoqtSessionTest, ObjectBeforeSubscribeError) {
       /*forwarding_preference=*/MoqtForwardingPreference::kGroup,
       /*payload_length=*/8,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> object_stream =
       MoqtSessionPeer::CreateIncomingDataStream(&session_, &mock_stream);
 
@@ -747,7 +742,7 @@ TEST_F(MoqtSessionTest, ObjectBeforeSubscribeError) {
       /*reason_phrase=*/"foo",
       /*track_alias =*/3,
   };
-  StrictMock<webtransport::test::MockStream> mock_control_stream;
+  webtransport::test::MockStream mock_control_stream;
   std::unique_ptr<MoqtParserVisitor> control_stream =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_control_stream);
   EXPECT_CALL(mock_session_,
@@ -784,7 +779,7 @@ TEST_F(MoqtSessionTest, TwoEarlyObjectsDifferentForwarding) {
       /*forwarding_preference=*/MoqtForwardingPreference::kGroup,
       /*payload_length=*/8,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> object_stream =
       MoqtSessionPeer::CreateIncomingDataStream(&session_, &mock_stream);
 
@@ -837,7 +832,7 @@ TEST_F(MoqtSessionTest, EarlyObjectForwardingDoesNotMatchTrack) {
       /*forwarding_preference=*/MoqtForwardingPreference::kGroup,
       /*payload_length=*/8,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> object_stream =
       MoqtSessionPeer::CreateIncomingDataStream(&session_, &mock_stream);
 
@@ -867,7 +862,7 @@ TEST_F(MoqtSessionTest, EarlyObjectForwardingDoesNotMatchTrack) {
       /*group_order=*/MoqtDeliveryOrder::kAscending,
       /*largest_id=*/std::nullopt,
   };
-  StrictMock<webtransport::test::MockStream> mock_control_stream;
+  webtransport::test::MockStream mock_control_stream;
   std::unique_ptr<MoqtParserVisitor> control_stream =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_control_stream);
   EXPECT_CALL(mock_session_,
@@ -887,7 +882,7 @@ TEST_F(MoqtSessionTest, CreateIncomingDataStreamAndSend) {
   EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
       .WillOnce(Return(true));
   bool fin = false;
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   EXPECT_CALL(mock_stream, CanWrite()).WillRepeatedly([&] { return !fin; });
   EXPECT_CALL(mock_session_, OpenOutgoingUnidirectionalStream())
       .WillOnce(Return(&mock_stream));
@@ -943,7 +938,7 @@ TEST_F(MoqtSessionTest, UnidirectionalStreamCannotBeOpened) {
   EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
       .WillOnce(Return(true));
   bool fin = false;
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   EXPECT_CALL(mock_stream, CanWrite()).WillRepeatedly([&] { return !fin; });
   EXPECT_CALL(mock_session_, OpenOutgoingUnidirectionalStream())
       .WillOnce(Return(&mock_stream));
@@ -980,7 +975,7 @@ TEST_F(MoqtSessionTest, OutgoingStreamDisappears) {
   // Set up an outgoing stream for a group.
   EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
       .WillOnce(Return(true));
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   EXPECT_CALL(mock_stream, CanWrite()).WillRepeatedly(Return(true));
   EXPECT_CALL(mock_session_, OpenOutgoingUnidirectionalStream())
       .WillOnce(Return(&mock_stream));
@@ -1016,7 +1011,7 @@ TEST_F(MoqtSessionTest, OutgoingStreamDisappears) {
 }
 
 TEST_F(MoqtSessionTest, OneBidirectionalStreamClient) {
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   EXPECT_CALL(mock_session_, OpenOutgoingBidirectionalStream())
       .WillOnce(Return(&mock_stream));
   std::unique_ptr<webtransport::StreamVisitor> visitor;
@@ -1057,16 +1052,10 @@ TEST_F(MoqtSessionTest, OneBidirectionalStreamClient) {
 }
 
 TEST_F(MoqtSessionTest, OneBidirectionalStreamServer) {
-  MoqtSessionParameters server_parameters = {
-      /*version=*/MoqtVersion::kDraft05,
-      /*perspective=*/quic::Perspective::IS_SERVER,
-      /*using_webtrans=*/true,
-      /*path=*/"",
-      /*deliver_partial_objects=*/false,
-  };
-  MoqtSession server_session(&mock_session_, server_parameters,
-                             session_callbacks_.AsSessionCallbacks());
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  MoqtSession server_session(
+      &mock_session_, MoqtSessionParameters(quic::Perspective::IS_SERVER),
+      session_callbacks_.AsSessionCallbacks());
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&server_session, &mock_stream);
   MoqtClientSetup setup = {
@@ -1107,7 +1096,7 @@ TEST_F(MoqtSessionTest, ReceiveUnsubscribe) {
   auto track =
       SetupPublisher(ftn, MoqtForwardingPreference::kTrack, FullSequence(4, 2));
   MoqtSessionPeer::AddSubscription(&session_, track, 0, 1, 3, 4);
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   MoqtUnsubscribe unsubscribe = {
@@ -1198,7 +1187,7 @@ TEST_F(MoqtSessionTest, ForwardingPreferenceMismatch) {
       /*forwarding_preference=*/MoqtForwardingPreference::kGroup,
       /*payload_length=*/8,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> object_stream =
       MoqtSessionPeer::CreateIncomingDataStream(&session_, &mock_stream);
 
@@ -1238,9 +1227,9 @@ TEST_F(MoqtSessionTest, SubscribeFromPublisher) {
       /*start_object=*/0,
       /*end_group=*/std::nullopt,
       /*end_object=*/std::nullopt,
-      /*authorization_info=*/std::nullopt,
+      /*parameters=*/MoqtSubscribeParameters(),
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   // Request for track returns Protocol Violation.
@@ -1254,7 +1243,7 @@ TEST_F(MoqtSessionTest, SubscribeFromPublisher) {
 
 TEST_F(MoqtSessionTest, AnnounceFromSubscriber) {
   MoqtSessionPeer::set_peer_role(&session_, MoqtRole::kSubscriber);
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   MoqtAnnounce announce = {
@@ -1266,6 +1255,221 @@ TEST_F(MoqtSessionTest, AnnounceFromSubscriber) {
       .Times(1);
   EXPECT_CALL(session_callbacks_.session_terminated_callback, Call(_)).Times(1);
   stream_input->OnAnnounceMessage(announce);
+}
+
+TEST_F(MoqtSessionTest, QueuedStreamsOpenedInOrder) {
+  FullTrackName ftn("foo", "bar");
+  auto track =
+      SetupPublisher(ftn, MoqtForwardingPreference::kGroup, FullSequence(0, 0));
+  EXPECT_CALL(*track, GetTrackStatus())
+      .WillRepeatedly(Return(MoqtTrackStatusCode::kNotYetBegun));
+  MoqtObjectListener* subscription =
+      MoqtSessionPeer::AddSubscription(&session_, track, 0, 14, 0, 0);
+  EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
+      .WillOnce(Return(false))
+      .WillOnce(Return(false))
+      .WillOnce(Return(false));
+  EXPECT_CALL(*track, GetTrackStatus())
+      .WillRepeatedly(Return(MoqtTrackStatusCode::kInProgress));
+  subscription->OnNewObjectAvailable(FullSequence(1, 0));
+  subscription->OnNewObjectAvailable(FullSequence(0, 0));
+  subscription->OnNewObjectAvailable(FullSequence(2, 0));
+  // These should be opened in the sequence (0, 0), (1, 0), (2, 0).
+  EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
+      .WillRepeatedly(Return(true));
+  webtransport::test::MockStream mock_stream0, mock_stream1, mock_stream2;
+  EXPECT_CALL(mock_session_, OpenOutgoingUnidirectionalStream())
+      .WillOnce(Return(&mock_stream0))
+      .WillOnce(Return(&mock_stream1))
+      .WillOnce(Return(&mock_stream2));
+  std::unique_ptr<webtransport::StreamVisitor> stream_visitor[3];
+  EXPECT_CALL(mock_stream0, SetVisitor(_))
+      .WillOnce([&](std::unique_ptr<webtransport::StreamVisitor> visitor) {
+        stream_visitor[0] = std::move(visitor);
+      });
+  EXPECT_CALL(mock_stream1, SetVisitor(_))
+      .WillOnce([&](std::unique_ptr<webtransport::StreamVisitor> visitor) {
+        stream_visitor[1] = std::move(visitor);
+      });
+  EXPECT_CALL(mock_stream2, SetVisitor(_))
+      .WillOnce([&](std::unique_ptr<webtransport::StreamVisitor> visitor) {
+        stream_visitor[2] = std::move(visitor);
+      });
+  EXPECT_CALL(mock_stream0, GetStreamId()).WillRepeatedly(Return(0));
+  EXPECT_CALL(mock_stream1, GetStreamId()).WillRepeatedly(Return(1));
+  EXPECT_CALL(mock_stream2, GetStreamId()).WillRepeatedly(Return(2));
+  EXPECT_CALL(mock_stream0, visitor()).WillOnce([&]() {
+    return stream_visitor[0].get();
+  });
+  EXPECT_CALL(mock_stream1, visitor()).WillOnce([&]() {
+    return stream_visitor[1].get();
+  });
+  EXPECT_CALL(mock_stream2, visitor()).WillOnce([&]() {
+    return stream_visitor[2].get();
+  });
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(0, 0)))
+      .WillOnce(
+          Return(PublishedObject{FullSequence(0, 0), MoqtObjectStatus::kNormal,
+                                 MemSliceFromString("deadbeef")}));
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(0, 1)))
+      .WillOnce(Return(std::nullopt));
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(1, 0)))
+      .WillOnce(
+          Return(PublishedObject{FullSequence(1, 0), MoqtObjectStatus::kNormal,
+                                 MemSliceFromString("deadbeef")}));
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(1, 1)))
+      .WillOnce(Return(std::nullopt));
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(2, 0)))
+      .WillOnce(
+          Return(PublishedObject{FullSequence(2, 0), MoqtObjectStatus::kNormal,
+                                 MemSliceFromString("deadbeef")}));
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(2, 1)))
+      .WillOnce(Return(std::nullopt));
+  EXPECT_CALL(mock_stream0, CanWrite()).WillRepeatedly(Return(true));
+  EXPECT_CALL(mock_stream1, CanWrite()).WillRepeatedly(Return(true));
+  EXPECT_CALL(mock_stream2, CanWrite()).WillRepeatedly(Return(true));
+  EXPECT_CALL(mock_stream0, Writev(_, _))
+      .WillOnce([&](absl::Span<const absl::string_view> data,
+                    const quiche::StreamWriteOptions& options) {
+        // The Group ID is the 5th byte of the stream.
+        EXPECT_EQ(static_cast<const uint8_t>(data[0][4]), 0);
+        return absl::OkStatus();
+      });
+  EXPECT_CALL(mock_stream1, Writev(_, _))
+      .WillOnce([&](absl::Span<const absl::string_view> data,
+                    const quiche::StreamWriteOptions& options) {
+        // The Group ID is the 5th byte of the stream.
+        EXPECT_EQ(static_cast<const uint8_t>(data[0][4]), 1);
+        return absl::OkStatus();
+      });
+  EXPECT_CALL(mock_stream2, Writev(_, _))
+      .WillOnce([&](absl::Span<const absl::string_view> data,
+                    const quiche::StreamWriteOptions& options) {
+        // The Group ID is the 5th byte of the stream.
+        EXPECT_EQ(static_cast<const uint8_t>(data[0][4]), 2);
+        return absl::OkStatus();
+      });
+  session_.OnCanCreateNewOutgoingUnidirectionalStream();
+}
+
+TEST_F(MoqtSessionTest, StreamQueuedForSubscriptionThatDoesntExist) {
+  FullTrackName ftn("foo", "bar");
+  auto track =
+      SetupPublisher(ftn, MoqtForwardingPreference::kGroup, FullSequence(0, 0));
+  EXPECT_CALL(*track, GetTrackStatus())
+      .WillRepeatedly(Return(MoqtTrackStatusCode::kNotYetBegun));
+  MoqtObjectListener* subscription =
+      MoqtSessionPeer::AddSubscription(&session_, track, 0, 14, 0, 0);
+  EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
+      .WillOnce(Return(false));
+  EXPECT_CALL(*track, GetTrackStatus())
+      .WillRepeatedly(Return(MoqtTrackStatusCode::kInProgress));
+  subscription->OnNewObjectAvailable(FullSequence(0, 0));
+
+  // Delete the subscription, then grant stream credit.
+  MoqtSessionPeer::DeleteSubscription(&session_, 0);
+  EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(mock_session_, OpenOutgoingUnidirectionalStream()).Times(0);
+  session_.OnCanCreateNewOutgoingUnidirectionalStream();
+}
+
+TEST_F(MoqtSessionTest, QueuedStreamPriorityChanged) {
+  FullTrackName ftn("foo", "bar");
+  auto track =
+      SetupPublisher(ftn, MoqtForwardingPreference::kGroup, FullSequence(0, 0));
+  EXPECT_CALL(*track, GetTrackStatus())
+      .WillRepeatedly(Return(MoqtTrackStatusCode::kNotYetBegun));
+  // Create two identical subscriptions with different priorities.
+  MoqtObjectListener* subscription0 =
+      MoqtSessionPeer::AddSubscription(&session_, track, 0, 14, 0, 0);
+  MoqtObjectListener* subscription1 =
+      MoqtSessionPeer::AddSubscription(&session_, track, 1, 14, 0, 0);
+  MoqtSessionPeer::UpdateSubscriberPriority(&session_, 0, 1);
+  MoqtSessionPeer::UpdateSubscriberPriority(&session_, 1, 2);
+
+  // Two arriving objects will queue four streams.
+  EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
+      .WillOnce(Return(false))
+      .WillOnce(Return(false))
+      .WillOnce(Return(false))
+      .WillOnce(Return(false));
+  EXPECT_CALL(*track, GetTrackStatus())
+      .WillRepeatedly(Return(MoqtTrackStatusCode::kInProgress));
+  subscription0->OnNewObjectAvailable(FullSequence(0, 0));
+  subscription1->OnNewObjectAvailable(FullSequence(0, 0));
+  subscription0->OnNewObjectAvailable(FullSequence(1, 0));
+  subscription1->OnNewObjectAvailable(FullSequence(1, 0));
+
+  // Allow one stream to be opened. It will be group 0, subscription 0.
+  EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
+      .WillOnce(Return(true))
+      .WillOnce(Return(false));
+  webtransport::test::MockStream mock_stream0;
+  EXPECT_CALL(mock_session_, OpenOutgoingUnidirectionalStream())
+      .WillOnce(Return(&mock_stream0));
+  std::unique_ptr<webtransport::StreamVisitor> stream_visitor0;
+  EXPECT_CALL(mock_stream0, SetVisitor(_))
+      .WillOnce([&](std::unique_ptr<webtransport::StreamVisitor> visitor) {
+        stream_visitor0 = std::move(visitor);
+      });
+  EXPECT_CALL(mock_stream0, GetStreamId()).WillRepeatedly(Return(0));
+  EXPECT_CALL(mock_stream0, visitor()).WillOnce([&]() {
+    return stream_visitor0.get();
+  });
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(0, 0)))
+      .WillOnce(
+          Return(PublishedObject{FullSequence(0, 0), MoqtObjectStatus::kNormal,
+                                 MemSliceFromString("deadbeef")}));
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(0, 1)))
+      .WillOnce(Return(std::nullopt));
+  EXPECT_CALL(mock_stream0, CanWrite()).WillRepeatedly(Return(true));
+  EXPECT_CALL(mock_stream0, Writev(_, _))
+      .WillOnce([&](absl::Span<const absl::string_view> data,
+                    const quiche::StreamWriteOptions& options) {
+        // Check subscribe ID is 0.
+        EXPECT_EQ(static_cast<const uint8_t>(data[0][2]), 0);
+        // Check Group ID is 0
+        EXPECT_EQ(static_cast<const uint8_t>(data[0][4]), 0);
+        return absl::OkStatus();
+      });
+  session_.OnCanCreateNewOutgoingUnidirectionalStream();
+
+  // Raise the priority of subscription 1 and allow another stream. It will be
+  // group 0, subscription 1.
+  MoqtSessionPeer::UpdateSubscriberPriority(&session_, 1, 0);
+  EXPECT_CALL(mock_session_, CanOpenNextOutgoingUnidirectionalStream())
+      .WillOnce(Return(true))
+      .WillRepeatedly(Return(false));
+  webtransport::test::MockStream mock_stream1;
+  EXPECT_CALL(mock_session_, OpenOutgoingUnidirectionalStream())
+      .WillOnce(Return(&mock_stream1));
+  std::unique_ptr<webtransport::StreamVisitor> stream_visitor1;
+  EXPECT_CALL(mock_stream1, SetVisitor(_))
+      .WillOnce([&](std::unique_ptr<webtransport::StreamVisitor> visitor) {
+        stream_visitor1 = std::move(visitor);
+      });
+  EXPECT_CALL(mock_stream1, GetStreamId()).WillRepeatedly(Return(1));
+  EXPECT_CALL(mock_stream1, visitor()).WillOnce([&]() {
+    return stream_visitor1.get();
+  });
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(0, 0)))
+      .WillOnce(
+          Return(PublishedObject{FullSequence(0, 0), MoqtObjectStatus::kNormal,
+                                 MemSliceFromString("deadbeef")}));
+  EXPECT_CALL(*track, GetCachedObject(FullSequence(0, 1)))
+      .WillOnce(Return(std::nullopt));
+  EXPECT_CALL(mock_stream1, CanWrite()).WillRepeatedly(Return(true));
+  EXPECT_CALL(mock_stream1, Writev(_, _))
+      .WillOnce([&](absl::Span<const absl::string_view> data,
+                    const quiche::StreamWriteOptions& options) {
+        // Check subscribe ID is 0.
+        EXPECT_EQ(static_cast<const uint8_t>(data[0][2]), 1);
+        // Check Group ID is 0
+        EXPECT_EQ(static_cast<const uint8_t>(data[0][4]), 0);
+        return absl::OkStatus();
+      });
+  session_.OnCanCreateNewOutgoingUnidirectionalStream();
 }
 
 // TODO: re-enable this test once this behavior is re-implemented.
@@ -1288,7 +1492,7 @@ TEST_F(MoqtSessionTest, SubscribeUpdateClosesSubscription) {
       /*end_group=*/7,
       /*end_object=*/3,
   };
-  StrictMock<webtransport::test::MockStream> mock_stream;
+  webtransport::test::MockStream mock_stream;
   std::unique_ptr<MoqtParserVisitor> stream_input =
       MoqtSessionPeer::CreateControlStream(&session_, &mock_stream);
   EXPECT_CALL(mock_session_, GetStreamById(4)).WillOnce(Return(&mock_stream));

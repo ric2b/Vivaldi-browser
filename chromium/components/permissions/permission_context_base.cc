@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -52,6 +53,11 @@
 #include "app/vivaldi_apptools.h"
 #include "extensions/buildflags/buildflags.h"
 
+// Vivaldi: Permission handling notifications...
+#if !BUILDFLAG(IS_ANDROID)
+#include "components/permissions/vivaldi_permission_handler.h"
+#endif
+
 namespace permissions {
 namespace {
 
@@ -76,14 +82,14 @@ const char kPermissionBlockedRepeatedIgnoresMessage[] =
 const char kPermissionBlockedRepeatedDismissalsMessage[] =
     "%s permission has been blocked as the user has dismissed the permission "
     "prompt several times. This can be reset in Page Info which can be "
-    "accessed by clicking the lock icon next to the URL. See "
+    "accessed by clicking the tune icon next to the URL. See "
     "https://www.chromestatus.com/feature/6443143280984064 for more "
     "information.";
 
 const char kPermissionBlockedRepeatedIgnoresMessage[] =
     "%s permission has been blocked as the user has ignored the permission "
     "prompt several times. This can be reset in Page Info which can be "
-    "accessed by clicking the lock icon next to the URL. See "
+    "accessed by clicking the tune icon next to the URL. See "
     "https://www.chromestatus.com/feature/6443143280984064 for more "
     "information.";
 #endif
@@ -241,30 +247,7 @@ void PermissionContextBase::RequestPermission(
   PermissionUmaUtil::RecordEmbargoPromptSuppression(
       PermissionEmbargoStatus::NOT_EMBARGOED);
 
-  // Vivaldi does the permission handling in WebViewPermissionHelper, not
-  // PermissionManager, except for geolocation, notifications and plugins which
-  // we do in |PermissionContextBase::DecidePermission|.
-
-  bool is_handled_in_webviewpermission_helper = false;
-  if (vivaldi::IsVivaldiRunning()) {
-    switch (content_settings_type_) {
-      case ContentSettingsType::MEDIASTREAM_MIC:
-      case ContentSettingsType::MEDIASTREAM_CAMERA:
-      case ContentSettingsType::NOTIFICATIONS:
-      case ContentSettingsType::GEOLOCATION:
-        is_handled_in_webviewpermission_helper = true;
-        break;
-      default:
-        // The rest is handled by the non-vivaldi path.
-        break;
-    }
-  }
-  if (is_handled_in_webviewpermission_helper) {
-    PermissionContextBase::DecidePermission(std::move(request_data),
-                                            std::move(callback));
-  } else {
   DecidePermission(std::move(request_data), std::move(callback));
-  }
 }
 
 bool PermissionContextBase::IsRestrictedToSecureOrigins() const {
@@ -342,20 +325,30 @@ content::PermissionResult PermissionContextBase::GetPermissionStatus(
   }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  // Some GuestViews are loaded in a separate StoragePartition. Given that
-  // permissions are scoped to a BrowserContext, not a StoragePartition, we may
-  // have a situation where a user has granted a permission to an origin in a
-  // tab and then visits the same origin in a guest. This would lead to
-  // inappropriate sharing of the permission with the guest. To mitigate this,
-  // we drop permission requests from guests for cases where it's not possible
-  // for the guest to have been granted the permission. Note that sharing of
-  // permissions that the guest could legitimately be granted is still possible.
-  // TODO(crbug.com/40068594): Scope granted permissions to a StoragePartition.
-  if (base::FeatureList::IsEnabled(
-          features::kMitigateUnpartitionedWebviewPermissions)) {
-    guest_view::GuestViewBase* guest =
-        guest_view::GuestViewBase::FromRenderFrameHost(render_frame_host);
-    if (guest && !guest->IsPermissionRequestable(content_settings_type_)) {
+  guest_view::GuestViewBase* guest =
+      guest_view::GuestViewBase::FromRenderFrameHost(render_frame_host);
+  if (guest) {
+    // Content inside GuestView instances may have different permission
+    // behavior.
+    std::optional<content::PermissionResult> maybe_result =
+        guest->OverridePermissionResult(content_settings_type_);
+    if (maybe_result.has_value()) {
+      return maybe_result.value();
+    }
+    // Some GuestViews are loaded in a separate StoragePartition. Given that
+    // permissions are scoped to a BrowserContext, not a StoragePartition, we
+    // may have a situation where a user has granted a permission to an origin
+    // in a tab and then visits the same origin in a guest. This would lead to
+    // inappropriate sharing of the permission with the guest. To mitigate this,
+    // we drop permission requests from guests for cases where it's not possible
+    // for the guest to have been granted the permission. Note that sharing of
+    // permissions that the guest could legitimately be granted is still
+    // possible.
+    // TODO(crbug.com/40068594): Scope granted permissions to a
+    // StoragePartition.
+    if (base::FeatureList::IsEnabled(
+            features::kMitigateUnpartitionedWebviewPermissions) &&
+        !guest->IsPermissionRequestable(content_settings_type_)) {
       return content::PermissionResult(
           PermissionStatus::DENIED,
           content::PermissionStatusSource::UNSPECIFIED);
@@ -638,6 +631,11 @@ void PermissionContextBase::NotifyPermissionSet(
 
   if (content_setting == CONTENT_SETTING_DEFAULT)
     content_setting = CONTENT_SETTING_ASK;
+
+  // Vivaldi: Notify the permission change happened.
+#if !BUILDFLAG(IS_ANDROID)
+  vivaldi::permissions::NotifyPermissionSet(id, content_settings_type_, content_setting);
+#endif
 
   std::move(callback).Run(content_setting);
 }

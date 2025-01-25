@@ -29,6 +29,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+// Vivaldi
+import android.graphics.BitmapFactory;
+import org.chromium.build.BuildConfig;
+import android.text.style.ImageSpan;
+import androidx.core.content.res.ResourcesCompat;
+import android.graphics.drawable.Drawable;
+import android.text.Spannable;
+import static org.chromium.components.omnibox.OmniboxSuggestionType.DIRECT_MATCH;
+import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
+import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
+
+
 /** A class that handles model and view creation for the basic omnibox suggestions. */
 public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
     /** Bookmarked state of a URL */
@@ -80,6 +92,11 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
     @Override
     protected @NonNull OmniboxDrawableState getFallbackIcon(@NonNull AutocompleteMatch suggestion) {
         int icon = 0;
+        if (BuildConfig.IS_VIVALDI &&
+                suggestion.getType() == OmniboxSuggestionType.DIRECT_MATCH) { // Vivaldi
+            return OmniboxDrawableState.forImage(
+                    mContext, BitmapFactory.decodeFile(suggestion.getLocalIconPath()), false);
+        } // End Vivaldi
 
         if (suggestion.isSearchSuggestion()) {
             switch (suggestion.getType()) {
@@ -132,6 +149,29 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
         final SuggestionSpannable textLine1 =
                 getSuggestedQuery(suggestion, !isSearchSuggestion, !urlHighlighted);
 
+        if (suggestion.getType() == DIRECT_MATCH && BuildConfig.IS_VIVALDI) { // Vivaldi VAB-10000
+            // Note(simonb@vivaldi.com) The Spannable text will be replaced with a Drawable
+            // with the same length as the text. Acting as a size placeholder.
+            textLine2 = new SuggestionSpannable("Direct Match");
+            Drawable hintBackground = ResourcesCompat.getDrawable(
+                    mContext.getResources(),
+                    model.get(SuggestionCommonProperties.COLOR_SCHEME) ==
+                            BrandedColorScheme.INCOGNITO ?
+                            R.drawable.direct_match_label_dark:
+                            R.drawable.direct_match_label_light, mContext.getTheme());
+            hintBackground.setBounds(
+                    /* left= */ 0,
+                    /* top= */ 0,
+                    /* right */ (int) mContext.getResources().getDimension(
+                            R.dimen.direct_match_hint_width),
+                    /* bottom */ (int) mContext.getResources().getDimension(
+                            R.dimen.direct_match_hint_height));
+            textLine2.setSpan(
+                    new ImageSpan(hintBackground, ImageSpan.ALIGN_CENTER),
+                    /* start= */ 0,
+                    /* end= */ textLine2.length(),
+                    /* flags= */ Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
         model.set(SuggestionViewProperties.IS_SEARCH_SUGGESTION, isSearchSuggestion);
         model.set(SuggestionViewProperties.ALLOW_WRAP_AROUND, isSearchSuggestion);
         model.set(SuggestionViewProperties.TEXT_LINE_1_TEXT, textLine1);

@@ -22,9 +22,9 @@
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/login/test/oobe_screen_exit_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/browser/ui/webui/ash/login/pin_setup_screen_handler.h"
 #include "chromeos/ash/components/cryptohome/constants.h"
 #include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
@@ -309,7 +309,7 @@ IN_PROC_BROWSER_TEST_F(PinSetupScreenTestLoginSupport, SkipInFlow) {
 
   EnterPin();
   test::OobeJS().TapOnPath(kNextButton);
-  test::OobeJS().CreateVisibilityWaiter(true, {kBackButton})->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kBackButton)->Wait();
 
   TapSkipButton();
 
@@ -332,13 +332,11 @@ IN_PROC_BROWSER_TEST_F(PinSetupScreenTestLoginSupport, FinishedFlow) {
 
   EnterPin();
   test::OobeJS().TapOnPath(kNextButton);
-  test::OobeJS().CreateVisibilityWaiter(true, {kBackButton})->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kBackButton)->Wait();
 
   EnterPin();
   test::OobeJS().TapOnPath(kNextButton);
-  test::OobeJS()
-      .CreateVisibilityWaiter(true, {kPinSetupScreenDoneStep})
-      ->Wait();
+  test::OobeJS().CreateVisibilityWaiter(true, kPinSetupScreenDoneStep)->Wait();
 
   test::OobeJS().TapOnPath(kDoneButton);
 

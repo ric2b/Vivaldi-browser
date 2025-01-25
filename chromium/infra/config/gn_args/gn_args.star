@@ -230,16 +230,60 @@ gn_args.config(
 
 gn_args.config(
     name = "cast_android",
+    args_file = "//chromecast/build/args/config/android.gni",
+    configs = [
+        "cast_receiver",
+        "android",
+        "minimal_symbols",
+        "static",
+    ],
+)
+
+gn_args.config(
+    name = "cast_linux",
+    args_file = "//chromecast/build/args/config/linux.gni",
+    configs = [
+        "cast_receiver",
+        "linux",
+        "minimal_symbols",
+        "static",
+    ],
+)
+
+gn_args.config(
+    name = "cast_debug",
     args = {
-        "is_cast_android": True,
+        "cast_is_debug": True,
+    },
+    configs = [
+        "debug",
+        "dcheck_always_on",
+    ],
+)
+
+gn_args.config(
+    name = "cast_java_debug",
+    args = {
+        "is_java_debug": True,
     },
 )
 
 gn_args.config(
-    name = "cast_os",
+    name = "cast_java_release",
     args = {
-        "is_castos": True,
+        "is_java_debug": False,
     },
+)
+
+gn_args.config(
+    name = "cast_release",
+    args = {
+        "cast_is_debug": False,
+    },
+    configs = [
+        "dcheck_off",
+        "release",
+    ],
 )
 
 gn_args.config(
@@ -590,6 +634,13 @@ gn_args.config(
 )
 
 gn_args.config(
+    name = "enterprise_companion",
+    args = {
+        "enable_enterprise_companion": True,
+    },
+)
+
+gn_args.config(
     name = "extended_tracing",
     args = {
         "extended_tracing_enabled": True,
@@ -825,6 +876,13 @@ gn_args.config(
 )
 
 gn_args.config(
+    name = "lld",
+    args = {
+        "use_lld": True,
+    },
+)
+
+gn_args.config(
     name = "lsan",
     args = {
         "is_lsan": True,
@@ -952,6 +1010,11 @@ gn_args.config(
     name = "no_secondary_abi",
     args = {
         "skip_secondary_abi_for_cq": True,
+        # A chromium build with "skip_secondary_abi_for_cq" enabled in a
+        # checkout that has src-internal fails if enable_chrome_android_internal
+        # is not set to false.
+        # TODO(crbug.com/361540497): Can remove this when the build is fixed.
+        "enable_chrome_android_internal": False,
     },
 )
 
@@ -1047,6 +1110,13 @@ gn_args.config(
     name = "perfetto_zlib",
     args = {
         "enable_perfetto_zlib": True,
+    },
+)
+
+gn_args.config(
+    name = "pgo_phase_0",
+    args = {
+        "chrome_pgo_phase": 0,
     },
 )
 
@@ -1365,13 +1435,6 @@ gn_args.config(
     name = "webview_google",
     args = {
         "system_webview_package_name": "com.google.android.webview",
-    },
-)
-
-gn_args.config(
-    name = "webview_instrumentation_tests_multi_process_only",
-    args = {
-        "webview_instrumentation_tests_process_mode": "multiple",
     },
 )
 

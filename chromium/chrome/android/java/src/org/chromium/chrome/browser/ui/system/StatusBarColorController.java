@@ -12,6 +12,7 @@ import android.view.Window;
 import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
 
+import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
@@ -30,7 +31,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator;
@@ -87,7 +87,7 @@ public class StatusBarColorController
     private @Nullable LayoutStateProvider mLayoutStateProvider;
     private final StatusBarColorProvider mStatusBarColorProvider;
     private final ActivityTabProvider.ActivityTabTabObserver mStatusBarColorTabObserver;
-    private final TabModelSelectorObserver mTabModelSelectorObserver;
+    private final Callback<TabModel> mCurrentTabModelObserver;
     private final TopUiThemeColorProvider mTopUiThemeColor;
     private final @ColorInt int mStandardPrimaryBgColor;
     private final @ColorInt int mIncognitoPrimaryBgColor;
@@ -122,6 +122,9 @@ public class StatusBarColorController
     private float mTabStripTransitionOverlayAlpha;
     private boolean mAllowToolbarColorOnTablets;
 
+    // Vivaldi
+    private boolean mAnimateTransition;
+
     private final LayoutStateObserver mLayoutStateObserver =
             new LayoutStateObserver() {
                 @Override
@@ -131,7 +134,8 @@ public class StatusBarColorController
                     }
                     mIsInOverviewMode = true;
                     // Note(david@vivaldi.com): We recalculate the status bar color when in overview
-                    // mode.
+                    // mode. Also indicating that we about to animate the color transition.
+                    mAnimateTransition = true;
                     updateStatusBarColor();
                 }
 
@@ -141,7 +145,29 @@ public class StatusBarColorController
                         return;
                     }
                     mIsInOverviewMode = false;
+                    // Note(david@vivaldi.com): After finish hiding turn off the animation.
+                    mAnimateTransition = false;
+                }
+
+                /** Vivaldi */
+                @Override
+                public void onStartedHiding(@LayoutType int layoutType) {
+                    if (layoutType != LayoutType.TAB_SWITCHER) {
+                        return;
+                    }
+                    mAnimateTransition = true;
+                    mIsInOverviewMode = false;
                     updateStatusBarColor();
+                }
+
+                /** Vivaldi */
+                @Override
+                public void onFinishedShowing(@LayoutType int layoutType) {
+                    if (layoutType != LayoutType.TAB_SWITCHER) {
+                        return;
+                    }
+                    // No more animation required once we are done showing the tab switcher.
+                    mAnimateTransition = false;
                 }
             };
 
@@ -249,17 +275,14 @@ public class StatusBarColorController
                     }
                 };
 
-        mTabModelSelectorObserver =
-                new TabModelSelectorObserver() {
-                    @Override
-                    public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                        mIsIncognitoBranded = newModel.isIncognitoBranded();
-                        // When opening a new Incognito Tab from a normal Tab (or vice versa), the
-                        // status bar color is updated. However, this update is triggered after the
-                        // animation, so we update here for the duration of the new Tab animation.
-                        // See https://crbug.com/917689.
-                        updateStatusBarColor();
-                    }
+        mCurrentTabModelObserver =
+                (tabModel) -> {
+                    mIsIncognitoBranded = tabModel.isIncognitoBranded();
+                    // When opening a new Incognito Tab from a normal Tab (or vice versa), the
+                    // status bar color is updated. However, this update is triggered after the
+                    // animation, so we update here for the duration of the new Tab animation.
+                    // See https://crbug.com/917689.
+                    updateStatusBarColor();
                 };
 
         if (layoutManagerSupplier != null) {
@@ -285,7 +308,7 @@ public class StatusBarColorController
             mLayoutStateProvider.removeObserver(mLayoutStateObserver);
         }
         if (mTabModelSelector != null) {
-            mTabModelSelector.removeObserver(mTabModelSelectorObserver);
+            mTabModelSelector.getCurrentTabModelSupplier().removeObserver(mCurrentTabModelObserver);
         }
         if (mCallbackController != null) {
             mCallbackController.destroy();
@@ -390,7 +413,7 @@ public class StatusBarColorController
         assert mTabModelSelector == null : "mTabModelSelector should only be set once.";
         mTabModelSelector = tabModelSelector;
         if (mTabModelSelector != null) {
-            mTabModelSelector.addObserver(mTabModelSelectorObserver);
+            mTabModelSelector.getCurrentTabModelSupplier().addObserver(mCurrentTabModelObserver);
             mIsIncognitoBranded = mTabModelSelector.isIncognitoBrandedModelSelected();
             updateStatusBarColor();
         }
@@ -403,10 +426,21 @@ public class StatusBarColorController
         int statusBarColor = applyStatusBarIndicatorColor(mStatusBarColorWithoutStatusIndicator);
         statusBarColor = applyTabStripOverlay(statusBarColor);
         statusBarColor = applyCurrentScrimToColor(statusBarColor);
+
+        // Note(david@vivaldi.com): Animate the color transition if applicable.
+        if (mAnimateTransition) {
+            android.animation.ValueAnimator colorAnimation =
+                    android.animation.ValueAnimator.ofObject(new android.animation.ArgbEvaluator(),
+                            mWindow.getStatusBarColor(), statusBarColor);
+            colorAnimation.addUpdateListener(
+                    animator -> setStatusBarColor(mWindow, (Integer) animator.getAnimatedValue()));
+            colorAnimation.start();
+        } else
         setStatusBarColor(mWindow, statusBarColor);
 
         // Note(david@vivaldi.com): We also apply color to the navigation bar.
-        VivaldiColorUtils.setNavigationBarColor(mWindow, mCurrentTab, mIsInOverviewMode);
+        VivaldiColorUtils.setNavigationBarColor(
+                mWindow, mCurrentTab, mIsInOverviewMode, mAnimateTransition);
     }
 
     /**

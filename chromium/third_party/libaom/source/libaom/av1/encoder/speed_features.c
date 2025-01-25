@@ -169,7 +169,7 @@ static int frame_is_boosted(const AV1_COMP *cpi) {
 }
 
 // Set transform rd gate level for all transform search cases.
-static AOM_INLINE void set_txfm_rd_gate_level(
+static inline void set_txfm_rd_gate_level(
     int txfm_rd_gate_level[TX_SEARCH_CASES], int level) {
   assert(level <= MAX_TX_RD_GATE_LEVEL);
   for (int idx = 0; idx < TX_SEARCH_CASES; idx++)
@@ -1959,7 +1959,7 @@ static void set_rt_speed_features_framesize_independent(AV1_COMP *cpi,
   }
 }
 
-static AOM_INLINE void init_hl_sf(HIGH_LEVEL_SPEED_FEATURES *hl_sf) {
+static inline void init_hl_sf(HIGH_LEVEL_SPEED_FEATURES *hl_sf) {
   // best quality defaults
   hl_sf->frame_parameter_update = 1;
   hl_sf->recode_loop = ALLOW_RECODE;
@@ -1975,14 +1975,14 @@ static AOM_INLINE void init_hl_sf(HIGH_LEVEL_SPEED_FEATURES *hl_sf) {
   hl_sf->allow_sub_blk_me_in_tf = 0;
 }
 
-static AOM_INLINE void init_fp_sf(FIRST_PASS_SPEED_FEATURES *fp_sf) {
+static inline void init_fp_sf(FIRST_PASS_SPEED_FEATURES *fp_sf) {
   fp_sf->reduce_mv_step_param = 3;
   fp_sf->skip_motion_search_threshold = 0;
   fp_sf->disable_recon = 0;
   fp_sf->skip_zeromv_motion_search = 0;
 }
 
-static AOM_INLINE void init_tpl_sf(TPL_SPEED_FEATURES *tpl_sf) {
+static inline void init_tpl_sf(TPL_SPEED_FEATURES *tpl_sf) {
   tpl_sf->gop_length_decision_method = 0;
   tpl_sf->prune_intra_modes = 0;
   tpl_sf->prune_starting_mv = 0;
@@ -1997,7 +1997,7 @@ static AOM_INLINE void init_tpl_sf(TPL_SPEED_FEATURES *tpl_sf) {
   tpl_sf->reduce_num_frames = 0;
 }
 
-static AOM_INLINE void init_gm_sf(GLOBAL_MOTION_SPEED_FEATURES *gm_sf) {
+static inline void init_gm_sf(GLOBAL_MOTION_SPEED_FEATURES *gm_sf) {
   gm_sf->gm_search_type = GM_FULL_SEARCH;
   gm_sf->prune_ref_frame_for_gm_search = 0;
   gm_sf->prune_zero_mv_with_sse = 0;
@@ -2006,7 +2006,7 @@ static AOM_INLINE void init_gm_sf(GLOBAL_MOTION_SPEED_FEATURES *gm_sf) {
   gm_sf->num_refinement_steps = GM_MAX_REFINEMENT_STEPS;
 }
 
-static AOM_INLINE void init_part_sf(PARTITION_SPEED_FEATURES *part_sf) {
+static inline void init_part_sf(PARTITION_SPEED_FEATURES *part_sf) {
   part_sf->partition_search_type = SEARCH_PARTITION;
   part_sf->less_rectangular_check_level = 0;
   part_sf->use_square_partition_only_threshold = BLOCK_128X128;
@@ -2053,7 +2053,7 @@ static AOM_INLINE void init_part_sf(PARTITION_SPEED_FEATURES *part_sf) {
   part_sf->disable_8x8_part_based_on_qidx = 0;
 }
 
-static AOM_INLINE void init_mv_sf(MV_SPEED_FEATURES *mv_sf) {
+static inline void init_mv_sf(MV_SPEED_FEATURES *mv_sf) {
   mv_sf->full_pixel_search_level = 0;
   mv_sf->auto_mv_step_size = 0;
   mv_sf->exhaustive_searches_thresh = 0;
@@ -2077,7 +2077,7 @@ static AOM_INLINE void init_mv_sf(MV_SPEED_FEATURES *mv_sf) {
   mv_sf->use_intrabc = 1;
 }
 
-static AOM_INLINE void init_inter_sf(INTER_MODE_SPEED_FEATURES *inter_sf) {
+static inline void init_inter_sf(INTER_MODE_SPEED_FEATURES *inter_sf) {
   inter_sf->adaptive_rd_thresh = 0;
   inter_sf->model_based_post_interp_filter_breakout = 0;
   inter_sf->reduce_inter_modes = 0;
@@ -2128,7 +2128,7 @@ static AOM_INLINE void init_inter_sf(INTER_MODE_SPEED_FEATURES *inter_sf) {
   set_txfm_rd_gate_level(inter_sf->txfm_rd_gate_level, 0);
 }
 
-static AOM_INLINE void init_interp_sf(INTERP_FILTER_SPEED_FEATURES *interp_sf) {
+static inline void init_interp_sf(INTERP_FILTER_SPEED_FEATURES *interp_sf) {
   interp_sf->adaptive_interp_filter_search = 0;
   interp_sf->cb_pred_filter_search = 0;
   interp_sf->disable_dual_filter = 0;
@@ -2138,7 +2138,7 @@ static AOM_INLINE void init_interp_sf(INTERP_FILTER_SPEED_FEATURES *interp_sf) {
   interp_sf->skip_interp_filter_search = 0;
 }
 
-static AOM_INLINE void init_intra_sf(INTRA_MODE_SPEED_FEATURES *intra_sf) {
+static inline void init_intra_sf(INTRA_MODE_SPEED_FEATURES *intra_sf) {
   intra_sf->dv_cost_upd_level = INTERNAL_COST_UPD_SB;
   intra_sf->skip_intra_in_interframe = 1;
   intra_sf->intra_pruning_with_hog = 0;
@@ -2162,7 +2162,7 @@ static AOM_INLINE void init_intra_sf(INTRA_MODE_SPEED_FEATURES *intra_sf) {
   intra_sf->prune_luma_odd_delta_angles_in_intra = 0;
 }
 
-static AOM_INLINE void init_tx_sf(TX_SPEED_FEATURES *tx_sf) {
+static inline void init_tx_sf(TX_SPEED_FEATURES *tx_sf) {
   tx_sf->inter_tx_size_search_init_depth_sqr = 0;
   tx_sf->inter_tx_size_search_init_depth_rect = 0;
   tx_sf->intra_tx_size_search_init_depth_rect = 0;
@@ -2187,8 +2187,8 @@ static AOM_INLINE void init_tx_sf(TX_SPEED_FEATURES *tx_sf) {
   tx_sf->use_rd_based_breakout_for_intra_tx_search = false;
 }
 
-static AOM_INLINE void init_rd_sf(RD_CALC_SPEED_FEATURES *rd_sf,
-                                  const AV1EncoderConfig *oxcf) {
+static inline void init_rd_sf(RD_CALC_SPEED_FEATURES *rd_sf,
+                              const AV1EncoderConfig *oxcf) {
   const int disable_trellis_quant = oxcf->algo_cfg.disable_trellis_quant;
   if (disable_trellis_quant == 3) {
     rd_sf->optimize_coefficients = !is_lossless_requested(&oxcf->rc_cfg)
@@ -2216,7 +2216,7 @@ static AOM_INLINE void init_rd_sf(RD_CALC_SPEED_FEATURES *rd_sf,
   rd_sf->perform_coeff_opt = 0;
 }
 
-static AOM_INLINE void init_winner_mode_sf(
+static inline void init_winner_mode_sf(
     WINNER_MODE_SPEED_FEATURES *winner_mode_sf) {
   winner_mode_sf->motion_mode_for_winner_cand = 0;
   // Set this at the appropriate speed levels
@@ -2230,7 +2230,7 @@ static AOM_INLINE void init_winner_mode_sf(
   winner_mode_sf->prune_winner_mode_eval_level = 0;
 }
 
-static AOM_INLINE void init_lpf_sf(LOOP_FILTER_SPEED_FEATURES *lpf_sf) {
+static inline void init_lpf_sf(LOOP_FILTER_SPEED_FEATURES *lpf_sf) {
   lpf_sf->disable_loop_restoration_chroma = 0;
   lpf_sf->disable_loop_restoration_luma = 0;
   lpf_sf->min_lr_unit_size = RESTORATION_PROC_UNIT_SIZE;
@@ -2251,7 +2251,7 @@ static AOM_INLINE void init_lpf_sf(LOOP_FILTER_SPEED_FEATURES *lpf_sf) {
   lpf_sf->use_downsampled_wiener_stats = 0;
 }
 
-static AOM_INLINE void init_rt_sf(REAL_TIME_SPEED_FEATURES *rt_sf) {
+static inline void init_rt_sf(REAL_TIME_SPEED_FEATURES *rt_sf) {
   rt_sf->check_intra_pred_nonrd = 0;
   rt_sf->skip_intra_pred = 0;
   rt_sf->estimate_motion_for_var_based_partition = 0;
@@ -2273,6 +2273,7 @@ static AOM_INLINE void init_rt_sf(REAL_TIME_SPEED_FEATURES *rt_sf) {
   rt_sf->source_metrics_sb_nonrd = 0;
   rt_sf->overshoot_detection_cbr = NO_DETECTION;
   rt_sf->check_scene_detection = 0;
+  rt_sf->rc_adjust_keyframe = 0;
   rt_sf->prefer_large_partition_blocks = 0;
   rt_sf->use_temporal_noise_estimate = 0;
   rt_sf->fullpel_search_step_param = 0;

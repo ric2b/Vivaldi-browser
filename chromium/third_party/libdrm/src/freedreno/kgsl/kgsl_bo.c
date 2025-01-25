@@ -28,8 +28,6 @@
 
 #include "kgsl_priv.h"
 
-#include <linux/fb.h>
-
 static int set_memtype(struct fd_device *dev, uint32_t handle, uint32_t flags)
 {
 	struct drm_kgsl_gem_memtype req = {

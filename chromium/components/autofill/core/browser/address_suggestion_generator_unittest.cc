@@ -18,6 +18,7 @@
 #include "components/autofill/core/browser/autofill_granular_filling_utils.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/autofill_profile_test_api.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
 #include "components/autofill/core/browser/test_address_data_manager.h"
@@ -37,7 +38,6 @@
 #include "ui/base/l10n/l10n_util.h"
 
 namespace autofill {
-
 namespace {
 
 using testing::Field;
@@ -116,8 +116,6 @@ MATCHER(ContainsAddressFooterSuggestions, "") {
   EXPECT_THAT(arg.back(), EqualsManageAddressesSuggestion());
   return true;
 }
-
-}  // namespace
 
 class AddressSuggestionGeneratorTest : public testing::Test {
  public:
@@ -524,15 +522,16 @@ TEST_F(AddressSuggestionGeneratorTest,
 // in case of a duplicate.
 TEST_F(AddressSuggestionGeneratorTest,
        GetProfilesToSuggest_kAccountPrecedence) {
-  // Create two profiles that only differ by their source.
+  // Create two profiles that only differ by their record type.
   AutofillProfile profile_1(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile_1.SetRawInfo(NAME_FULL, u"First Last");
-  profile_1.set_source_for_testing(AutofillProfile::Source::kAccount);
+  test_api(profile_1).set_record_type(AutofillProfile::RecordType::kAccount);
   address_data().AddProfile(profile_1);
 
   AutofillProfile profile_2(i18n_model_definition::kLegacyHierarchyCountryCode);
   profile_2.SetRawInfo(NAME_FULL, u"First Last");
-  profile_2.set_source_for_testing(AutofillProfile::Source::kLocalOrSyncable);
+  test_api(profile_2).set_record_type(
+      AutofillProfile::RecordType::kLocalOrSyncable);
   // Set high use count for profile 2 so that it has greater ranking than
   // profile_1
   profile_2.set_use_count(100);
@@ -545,8 +544,8 @@ TEST_F(AddressSuggestionGeneratorTest,
 
   ASSERT_EQ(1u, profiles_to_suggest.size());
   EXPECT_EQ(profile_1.guid(), profiles_to_suggest[0]->guid());
-  EXPECT_EQ(AutofillProfile::Source::kAccount,
-            profiles_to_suggest[0]->source());
+  EXPECT_EQ(AutofillProfile::RecordType::kAccount,
+            profiles_to_suggest[0]->record_type());
 }
 
 TEST_F(AddressSuggestionGeneratorTest,
@@ -1884,16 +1883,23 @@ TEST_F(AddressSuggestionGeneratorTest,
   EXPECT_EQ(suggestions[1].type, SuggestionType::kSeparator);
   EXPECT_EQ(suggestions[2].type, SuggestionType::kManageAddress);
 
-  EXPECT_EQ(suggestions[0].main_text.value, u"Devtools");
-  EXPECT_THAT(suggestions[0], EqualLabels({{u"Address test data"}}));
+  EXPECT_EQ(suggestions[0].main_text.value, u"Developer tools");
   EXPECT_EQ(suggestions[0].icon, Suggestion::Icon::kCode);
-  EXPECT_EQ(suggestions[0].children.size(), 1u);
+  EXPECT_EQ(suggestions[0].children.size(), 3u);
   EXPECT_FALSE(suggestions[0].is_acceptable);
 
-  const Suggestion& child = suggestions[0].children.back();
-  EXPECT_EQ(child.main_text.value, u"United States");
-  EXPECT_EQ(child.GetBackendId<Suggestion::Guid>().value(), profile.guid());
-  EXPECT_EQ(child.type, SuggestionType::kDevtoolsTestAddressEntry);
+  // The suggestion should have 3 children:
+  // 1. Gives users feedback about what the children suggestions mean.
+  // 2. Line separator.
+  // 3. The actual test address for the US.
+  EXPECT_EQ(suggestions[0].children[0].type,
+            SuggestionType::kDevtoolsTestAddressByCountry);
+  EXPECT_EQ(suggestions[0].children[1].type, SuggestionType::kSeparator);
+  const Suggestion& test_address_child = suggestions[0].children.back();
+  EXPECT_EQ(test_address_child.main_text.value, u"United States");
+  EXPECT_EQ(test_address_child.GetBackendId<Suggestion::Guid>().value(),
+            profile.guid());
+  EXPECT_EQ(test_address_child.type, SuggestionType::kDevtoolsTestAddressEntry);
 }
 
 TEST_F(AddressSuggestionGeneratorTest,
@@ -1910,4 +1916,5 @@ TEST_F(AddressSuggestionGeneratorTest,
   EXPECT_THAT(suggestions, IsEmpty());
 }
 
+}  // namespace
 }  // namespace autofill

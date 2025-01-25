@@ -3,11 +3,22 @@
 # found in the LICENSE file.
 
 import("//testing/test.gni")
+import("//third_party/libsrtp/options.gni")
 
 declare_args() {
   # Tests may not be appropriate for some build environments, e.g. Windows.
   # Rather than enumerate valid options, we just let clients ask for them.
   build_libsrtp_tests = false
+}
+
+config("external_ssl_library") {
+ if (libsrtp_ssl_root != "") {
+    include_dirs = [ libsrtp_ssl_root ]
+  }
+  libs = [
+    "crypto",
+    "ssl",
+  ]
 }
 
 config("libsrtp_config") {
@@ -133,9 +144,12 @@ static_library("libsrtp") {
     # "crypto/cipher/aes_icm_nss.c",
   ]
 
-  public_deps = [
-    "//third_party/boringssl:boringssl",
-  ]
+  deps = []
+  if (libsrtp_build_boringssl) {
+    deps += [ "//third_party/boringssl:boringssl" ]
+  } else {
+    configs += [ ":external_ssl_library" ]
+  }
 }
 
 if (build_libsrtp_tests) {

@@ -9,10 +9,11 @@
 #include "message_table.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
+
 #include "app/vivaldi_resources.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "message_type.h"
 #include "sql/statement.h"

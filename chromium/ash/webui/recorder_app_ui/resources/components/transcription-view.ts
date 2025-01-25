@@ -23,7 +23,7 @@ import {
 import {i18n} from '../core/i18n.js';
 import {ReactiveLitElement} from '../core/reactive/lit.js';
 import {signal} from '../core/reactive/signal.js';
-import {TextPart, TextToken} from '../core/soda/soda.js';
+import {TextPart, Transcription} from '../core/soda/soda.js';
 import {
   assert,
   assertExists,
@@ -31,6 +31,12 @@ import {
 } from '../core/utils/assert.js';
 import {formatDuration} from '../core/utils/datetime.js';
 import {clamp, parseNumber, sliceWhen} from '../core/utils/utils.js';
+
+import {
+  getNumSpeakerClass,
+  getSpeakerLabelClass,
+  SPEAKER_LABEL_COLORS,
+} from './styles/speaker_label.js';
 
 const SCROLL_MARGIN = 3;
 
@@ -44,118 +50,139 @@ function inBetween(x: number, [low, high]: [number, number]): boolean {
 }
 
 export class TranscriptionView extends ReactiveLitElement {
-  static override styles: CSSResultGroup = css`
-    :host {
-      display: block;
-      position: relative;
-    }
-
-    #container {
-      box-sizing: border-box;
-      display: flex;
-      flex-flow: column;
-      gap: 12px;
-      max-height: 100%;
-      overflow-y: auto;
-      padding: 12px 0 64px;
-      width: 100%;
-    }
-
-    #transcript {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: minmax(calc(12px + 40px + 10px), max-content) 1fr;
-    }
-
-    .row {
-      display: grid;
-      grid-column: 1 / 3;
-      grid-template-columns: subgrid;
-      padding: 0 12px 0 0;
-    }
-
-    .timestamp {
-      /*
-       * Note that this need to be 0px instead of 0, since it's used in calc().
-       */
-      --md-focus-ring-outward-offset: 0px;
-      --md-focus-ring-shape: 4px;
-
-      font: var(--cros-body-2-font);
-
-      /*
-       * Note that compared to the spec, 2px of left/right margin is moved to
-       * padding so it's included in the hover / focus ring.
-       */
-      margin: 12px 8px 12px 10px;
-      outline: none;
-      padding: 0 2px;
-      place-self: start;
-      position: relative;
-
-      .seekable & {
-        cursor: pointer;
+  static override styles: CSSResultGroup = [
+    SPEAKER_LABEL_COLORS,
+    css`
+      :host {
+        display: block;
+        position: relative;
       }
-    }
 
-    .paragraph {
-      font: var(--cros-body-2-font);
-      padding: 12px;
-    }
+      #container {
+        box-sizing: border-box;
+        display: flex;
+        flex-flow: column;
+        gap: 12px;
+        max-height: 100%;
+        overflow-y: auto;
+        padding: 12px 0 64px;
+        width: 100%;
+      }
 
-    .highlight-word {
-      text-decoration: underline;
-    }
+      #transcript {
+        display: grid;
+        grid-template-columns:
+          minmax(calc(12px + 40px + 10px), max-content)
+          1fr;
+      }
 
-    .sentence {
-      border-radius: 4px;
-      box-decoration-break: clone;
-      -webkit-box-decoration-break: clone;
+      .row {
+        display: grid;
+        grid-column: 1 / 3;
+        grid-template-columns: subgrid;
+        padding: 0 12px 0 0;
+      }
 
-      /* "Undo" the horizontal padding so the text aligns with the design. */
-      margin: 0 -2px;
+      .timestamp {
+        /*
+         * Note that this need to be 0px instead of 0, since it's used in
+         * calc().
+         */
+        --md-focus-ring-outward-offset: 0px;
+        --md-focus-ring-shape: 4px;
 
-      /*
-       * Note that while the font size is 13px, the background height without
-       * padding would be 16px. Make it full line height (20px) by adding a 2px
-       * vertical padding. (horizontal padding happens to also be 2px).
-       */
-      padding: 2px;
+        font: var(--cros-body-1-font);
 
-      .seekable & {
-        cursor: pointer;
+        /*
+         * Note that compared to the spec, 2px of left/right margin is moved to
+         * padding so it's included in the hover / focus ring.
+         */
+        margin: 12px 8px 12px 10px;
+        outline: none;
+        padding: 0 2px;
+        place-self: start;
+        position: relative;
 
-        &:hover {
+        .seekable & {
+          cursor: pointer;
+        }
+      }
+
+      .paragraph {
+        font: var(--cros-body-1-font);
+        padding: 12px;
+      }
+
+      .highlight-word {
+        text-decoration: underline 1.5px;
+        text-underline-offset: 3px;
+      }
+
+      .speaker-label {
+        color: var(--speaker-label-shapes-color);
+        font: var(--cros-button-1-font);
+        margin: 0 0 4px;
+
+        .speaker-single & {
+          display: none;
+        }
+      }
+
+      .speaker-pending {
+        --speaker-label-shapes-color: var(--cros-sys-on_surface_variant);
+      }
+
+      .sentence {
+        border-radius: 4px;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+
+        /* "Undo" the horizontal padding so the text aligns with the design. */
+        margin: 0 -2px;
+
+        /*
+         * Note that while the font size is 13px, the background height without
+         * padding would be 16px. Make it full line height (20px) by adding a
+         * 2px vertical padding. (horizontal padding happens to also be 2px).
+         */
+        padding: 2px;
+
+        .seekable & {
+          cursor: pointer;
+
+          &:hover, &:focus {
+            background: var(--cros-sys-highlight_shape);
+            outline: none;
+          }
+        }
+
+        .seekable .timestamp:hover + .paragraph > &:first-of-type {
           background: var(--cros-sys-highlight_shape);
         }
       }
 
-      .seekable .timestamp:hover + .paragraph > &:first-child {
-        background: var(--cros-sys-highlight_shape);
-      }
-    }
+      #autoscroll-button {
+        bottom: 16px;
+        left: 0;
+        margin: 0 auto;
+        position: absolute;
+        right: 0;
 
-    #autoscroll-button {
-      bottom: 16px;
-      left: 0;
-      margin: 0 auto;
-      position: absolute;
-      right: 0;
-
-      /* TODO(pihsun): Transition between shown/hide state */
-      #container.autoscroll + & {
-        display: none;
+        /* TODO(pihsun): Transition between shown/hide state */
+        #container.autoscroll + & {
+          display: none;
+        }
       }
-    }
-  `;
+    `,
+  ];
 
   static override properties: PropertyDeclarations = {
-    textTokens: {attribute: false},
+    transcription: {attribute: false},
     currentTime: {type: Number},
     seekable: {type: Boolean},
   };
 
-  textTokens: TextToken[] = [];
+  transcription: Transcription|null = null;
 
   currentTime: number|null = null;
 
@@ -305,7 +332,7 @@ export class TranscriptionView extends ReactiveLitElement {
         // For the first word, the leadingSpace is already added at the
         // sentence level. Otherwise we follows the leadingSpace for the part
         // and treat missing field as having a space.
-        const leadingSpace = i === 0 ? false : part?.leadingSpace ?? true;
+        const leadingSpace = i === 0 ? false : part.leadingSpace ?? true;
         if (!highlightWord) {
           return `${leadingSpace ? ' ' : ''}${part.text}`;
         }
@@ -316,7 +343,44 @@ export class TranscriptionView extends ReactiveLitElement {
     );
   }
 
-  private renderParagraph(parts: TextPart[]) {
+  private renderSpeakerLabel(
+    speakerLabels: string[],
+    speakerLabel: string|null,
+    partial: boolean,
+  ) {
+    if (speakerLabel === null) {
+      return nothing;
+    }
+
+    let speakerLabelClass: string;
+    let speakerLabelLabel: string;
+
+    if (partial) {
+      speakerLabelClass = 'speaker-pending';
+      speakerLabelLabel = i18n.transcriptionSpeakerLabelPendingLabel;
+    } else {
+      const speakerLabelIdx = speakerLabels.indexOf(speakerLabel);
+      assert(speakerLabelIdx !== -1);
+      speakerLabelClass = getSpeakerLabelClass(speakerLabelIdx);
+      speakerLabelLabel = i18n.transcriptionSpeakerLabelLabel(speakerLabel);
+    }
+
+    return html`<div class="speaker-label ${speakerLabelClass}">
+      ${speakerLabelLabel}
+    </div>`;
+  }
+
+  private renderParagraphContent(parts: TextPart[]) {
+    if (!this.seekable) {
+      // Don't render each sentence/word as separate DOM node when there's no
+      // need for seeking, so there would be fewer DOM nodes.
+      return parts
+        .map((part, i) => {
+          const leadingSpace = part.leadingSpace ?? i > 0;
+          return `${leadingSpace ? ' ' : ''}${part.text}`;
+        })
+        .join('');
+    }
     // TODO: b/341014241 - Better heuristic for cutting sentences.
     const sentences = sliceWhen(parts, ({text}) => {
       return text.endsWith('.') || text.endsWith('?') || text.endsWith('!');
@@ -325,16 +389,27 @@ export class TranscriptionView extends ReactiveLitElement {
       sentences,
       (_v, i) => i,
       (sentence, i) => {
-        // Use the leadingSpace field for the first word. If the leadingSpace
-        // field is missing, add space after the first sentence.
+        // Use the leadingSpace field for the first word. If the
+        // leadingSpace field is missing, add space after the first
+        // sentence.
         const leadingSpace = sentence[0]?.leadingSpace ?? i > 0;
         return html`${leadingSpace ? ' ' : ''}<span
             class="sentence"
             data-start-ms=${ifDefined(sentence[0]?.timeRange?.startMs)}
+            tabindex=${this.seekable ? 0 : -1}
+            role="button"
             >${this.renderSentence(sentence)}</span
           >`;
       },
     );
+  }
+
+  private renderParagraph(speakerLabels: string[], parts: TextPart[]) {
+    const {speakerLabel, partial} = assertExists(parts[0]);
+    return [
+      this.renderSpeakerLabel(speakerLabels, speakerLabel, partial ?? false),
+      this.renderParagraphContent(parts),
+    ];
   }
 
   private onTextClick(ev: MouseEvent) {
@@ -361,32 +436,17 @@ export class TranscriptionView extends ReactiveLitElement {
   }
 
   override render(): RenderResult {
-    const paragraphs = sliceWhen(this.textTokens, (a, b) => {
-      if (a.kind === 'textSeparator' || b.kind === 'textSeparator') {
-        return true;
-      }
-      if (a.timeRange === null && b.timeRange === null) {
-        return false;
-      }
-      if (a.timeRange?.endMs !== b.timeRange?.startMs) {
-        // TODO(pihsun): This currently is not used since we already split
-        // across result border, and within the same result the time ranges are
-        // always continuous.
-        return true;
-      }
-      return false;
-    });
+    if (this.transcription === null) {
+      return nothing;
+    }
+
+    const speakerLabels = this.transcription.getSpeakerLabels();
+    const paragraphs = this.transcription.getParagraphs();
 
     const content = repeat(
       paragraphs,
-      (_tokens, i) => i,
-      (tokens) => {
-        const parts = tokens.filter(
-          (token): token is TextPart => token.kind === 'textPart',
-        );
-        if (parts.length === 0) {
-          return nothing;
-        }
+      (_parts, i) => i,
+      (parts) => {
         const startTimeRange = assertExists(parts[0]).timeRange;
         const startTimeDisplay =
           startTimeRange === null ? '?' : formatDuration({
@@ -402,25 +462,30 @@ export class TranscriptionView extends ReactiveLitElement {
           <div class="row">
             <span
               class="timestamp"
-              tabindex="0"
+              tabindex=${this.seekable ? 0 : -1}
               data-start-ms=${ifDefined(startTimeRange?.startMs)}
+              role="button"
             >
               ${startTimeDisplay}
-              <md-focus-ring></md-focus-ring>
+              ${this.seekable ? html`<md-focus-ring></md-focus-ring>` : nothing}
             </span>
-            <div class="paragraph">${this.renderParagraph(parts)}</div>
+            <div class="paragraph">
+              ${this.renderParagraph(speakerLabels, parts)}
+            </div>
           </div>
         `;
       },
     );
+
     const classes = {
       seekable: this.seekable,
       autoscroll: this.autoscrollEnabled.value,
+      [getNumSpeakerClass(speakerLabels.length)]: true,
     };
     // TODO(pihsun): @click on #transcript is a performance optimization to
     // only have the click handler on the container. Need to adjust this
     // accordingly when we have other clickable things inside the container
-    // (speaker ID).
+    // (speaker label).
     return html`<div
         id="container"
         class=${classMap(classes)}

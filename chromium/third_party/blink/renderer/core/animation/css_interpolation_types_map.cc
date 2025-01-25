@@ -306,10 +306,8 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
                 used_property));
         break;
       case blink::CSSPropertyID::kFontPalette:
-        if (RuntimeEnabledFeatures::FontPaletteAnimationEnabled()) {
-          applicable_types->push_back(
-              std::make_unique<CSSFontPaletteInterpolationType>(used_property));
-        }
+        applicable_types->push_back(
+            std::make_unique<CSSFontPaletteInterpolationType>(used_property));
         break;
       case CSSPropertyID::kVisibility:
         applicable_types->push_back(
@@ -508,6 +506,10 @@ CreateInterpolationTypeForCSSSyntax(const CSSSyntaxComponent syntax,
     case CSSSyntaxType::kTokenStream:
     case CSSSyntaxType::kUrl:
       // Smooth interpolation not supported for these types.
+      return nullptr;
+    case CSSSyntaxType::kString:
+      // Smooth interpolation not supported for <string> type.
+      DCHECK(RuntimeEnabledFeatures::CSSAtPropertyStringSyntaxEnabled());
       return nullptr;
     default:
       NOTREACHED_IN_MIGRATION();

@@ -22,8 +22,7 @@
 //! [`jni::JNIEnv::define_class`].
 
 use pourover::desc::*;
-use std::error::Error;
-use std::process::Command;
+use std::{error::Error, process::Command};
 
 pub const CLASS_DESC: &str = "com/example/Foo";
 pub static FOO: ClassDesc = ClassDesc::new(CLASS_DESC);

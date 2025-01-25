@@ -32,6 +32,11 @@ class SurfaceWgpu : public SurfaceImpl
         webgpu::ImageHelper texture;
         RenderTargetWgpu renderTarget;
     };
+    angle::Result createDepthStencilAttachment(uint32_t width,
+                                               uint32_t height,
+                                               const webgpu::Format &webgpuFormat,
+                                               wgpu::Device &device,
+                                               AttachmentImage *outDepthStencilAttachment);
 };
 
 class OffscreenSurfaceWgpu : public SurfaceWgpu
@@ -46,7 +51,7 @@ class OffscreenSurfaceWgpu : public SurfaceWgpu
                             gl::Texture *texture,
                             EGLint buffer) override;
     egl::Error releaseTexImage(const gl::Context *context, EGLint buffer) override;
-    void setSwapInterval(EGLint interval) override;
+    void setSwapInterval(const egl::Display *display, EGLint interval) override;
 
     // width and height can change with client window resizing
     EGLint getWidth() const override;
@@ -92,7 +97,7 @@ class WindowSurfaceWgpu : public SurfaceWgpu
                             gl::Texture *texture,
                             EGLint buffer) override;
     egl::Error releaseTexImage(const gl::Context *context, EGLint buffer) override;
-    void setSwapInterval(EGLint interval) override;
+    void setSwapInterval(const egl::Display *display, EGLint interval) override;
 
     // width and height can change with client window resizing
     EGLint getWidth() const override;
@@ -121,7 +126,7 @@ class WindowSurfaceWgpu : public SurfaceWgpu
   private:
     angle::Result initializeImpl(const egl::Display *display);
 
-    angle::Result swapImpl(const egl::Display *display);
+    angle::Result swapImpl(const gl::Context *context);
 
     angle::Result updateCurrentTexture(const egl::Display *display);
 

@@ -11,10 +11,12 @@ if (!is_win) {
     visibility += [ "*" ]
     public = [
       "agent_certificate.h",
+      "connect_request.h",
       "instance_request_ids.h",
       "message_demuxer.h",
       "network_metrics.h",
       "network_service_manager.h",
+      "presentation/presentation_common.h",
       "presentation/presentation_connection.h",
       "presentation/presentation_controller.h",
       "presentation/presentation_receiver.h",
@@ -35,6 +37,7 @@ if (!is_win) {
     ]
     sources = [
       "agent_certificate.cc",
+      "connect_request.cc",
       "instance_request_ids.cc",
       "protocol_connection.cc",
       "protocol_connection_client.cc",

@@ -9,6 +9,8 @@
 
 #include <stdint.h>
 
+#include <optional>
+
 #include "core/fxcrt/bytestring.h"
 #include "core/fxcrt/span.h"
 
@@ -19,12 +21,28 @@ class CPDF_SimpleParser {
 
   ByteStringView GetWord();
 
-  void SetCurPos(uint32_t pos) { cur_pos_ = pos; }
-  uint32_t GetCurPos() const { return cur_pos_; }
+  void SetCurrentPosition(uint32_t position) { cur_position_ = position; }
+  uint32_t GetCurrentPosition() const { return cur_position_; }
 
  private:
+  // Returns the ByteStringView of the subspan of `data_` from `start_position`
+  // to `cur_position_`.
+  ByteStringView GetDataToCurrentPosition(uint32_t start_position) const;
+
+  // Skips whitespace and comment lines. Returns the first parseable character
+  // if `data_` can still be parsed, nullopt otherwise.
+  std::optional<uint8_t> SkipSpacesAndComments();
+
+  ByteStringView HandleName();
+  ByteStringView HandleBeginAngleBracket();
+  ByteStringView HandleEndAngleBracket();
+  ByteStringView HandleParentheses();
+  ByteStringView HandleNonDelimiter();
+
   const pdfium::span<const uint8_t> data_;
-  uint32_t cur_pos_ = 0;
+
+  // The current unread position.
+  uint32_t cur_position_ = 0;
 };
 
 #endif  // CORE_FPDFAPI_PARSER_CPDF_SIMPLE_PARSER_H_

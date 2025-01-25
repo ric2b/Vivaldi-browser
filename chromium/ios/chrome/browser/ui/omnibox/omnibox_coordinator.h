@@ -10,7 +10,6 @@
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
 class OmniboxClient;
-@class BubblePresenter;
 @protocol EditViewAnimatee;
 @class OmniboxPopupCoordinator;
 @protocol LocationBarOffsetProvider;
@@ -44,11 +43,13 @@ class OmniboxClient;
 /// Delegate for responding to focusing events.
 @property(nonatomic, weak) id<OmniboxFocusDelegate> focusDelegate;
 
-// Bubble presenter for displaying IPH bubbles relating to the omnibox.
-@property(nonatomic, strong) BubblePresenter* bubblePresenter;
-
-//// The edit view, which contains a text field.
+/// The edit view, which contains a text field.
 @property(nonatomic, readonly) UIView<TextFieldViewContaining>* editView;
+
+/// Controls the UI configuration of the omnibox to reflect search-only mode.
+/// Actual navigation limitations are managed by the `OmniboxClient`. Has to be
+/// configured before calling `start`. Defaults to `NO`.
+@property(nonatomic, assign) BOOL isSearchOnlyUI;
 
 // The view controller managed by this coordinator. The parent of this
 // coordinator is expected to add it to the responder chain.
@@ -82,8 +83,19 @@ class OmniboxClient;
 // Use this method to resign `textField` as the first responder.
 - (void)endEditing;
 
+/// Sets the thumbnail image used for image search. Set to`nil` to hide the
+/// thumbnail.
+- (void)setThumbnailImage:(UIImage*)image;
+
 // Returns the toolbar omnibox consumer.
 - (id<ToolbarOmniboxConsumer>)toolbarOmniboxConsumer;
+
+// Vivaldi
+// Give focus to the omnibox, but doesn't show the autocomplete suggestions
+// popup view.
+- (void)focusOmniboxWithoutAutocompletePopup;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_COORDINATOR_H_

@@ -329,7 +329,7 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
   for (ProfileAttributesEntry* entry : storage.GetAllProfilesAttributes()) {
     vivaldi::runtime_private::UserProfile user_profile;
 
-    if (entry->IsSupervised() || entry->IsChild()) {
+    if (entry->IsSupervised() /* || entry->IsChild() */) {
       // Skip supervised accounts.
       continue;
     }

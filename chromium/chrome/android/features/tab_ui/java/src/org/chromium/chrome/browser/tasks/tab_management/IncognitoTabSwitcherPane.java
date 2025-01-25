@@ -23,11 +23,13 @@ import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.hub.ResourceButtonData;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager.IncognitoReauthCallback;
+import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabModel;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.tab_ui.R;
 
 import java.util.function.DoubleConsumer;
@@ -98,20 +100,30 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
 
     /**
      * @param context The activity context.
+     * @param profileProviderSupplier The profile provider supplier.
      * @param factory The factory used to construct {@link TabSwitcherPaneCoordinator}s.
      * @param incognitoTabModelFilterSupplier The incognito tab model filter.
      * @param newTabButtonClickListener The {@link OnClickListener} for the new tab button.
      * @param incognitoReauthControllerSupplier Supplier for the incognito reauth controller.
      * @param onToolbarAlphaChange Observer to notify when alpha changes during animations.
+     * @param userEducationHelper Used for showing IPHs.
      */
     IncognitoTabSwitcherPane(
             @NonNull Context context,
+            @NonNull OneshotSupplier<ProfileProvider> profileProviderSupplier,
             @NonNull TabSwitcherPaneCoordinatorFactory factory,
             @NonNull Supplier<TabModelFilter> incognitoTabModelFilterSupplier,
             @NonNull OnClickListener newTabButtonClickListener,
             @Nullable OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
-            @NonNull DoubleConsumer onToolbarAlphaChange) {
-        super(context, factory, /* isIncognito= */ true, onToolbarAlphaChange);
+            @NonNull DoubleConsumer onToolbarAlphaChange,
+            @NonNull UserEducationHelper userEducationHelper) {
+        super(
+                context,
+                profileProviderSupplier,
+                factory,
+                /* isIncognito= */ true,
+                onToolbarAlphaChange,
+                userEducationHelper);
 
         mIncognitoTabModelFilterSupplier = incognitoTabModelFilterSupplier;
 
@@ -128,10 +140,14 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
                 new ResourceButtonData(
                         R.string.button_new_tab,
                         R.string.button_new_incognito_tab,
-                        R.drawable.new_tab_icon);
+                        R.drawable.tab_switcher_new_tab_56dp); // Vivaldi
         mEnabledNewTabButtonData =
                 new DelegateButtonData(
-                        newTabButtonData, () -> newTabButtonClickListener.onClick(null));
+                        newTabButtonData,
+                        () -> {
+                            notifyNewTabButtonClick();
+                            newTabButtonClickListener.onClick(null);
+                        });
         mDisabledNewTabButtonData = new DelegateButtonData(newTabButtonData, null);
 
         if (incognitoReauthControllerSupplier != null) {
@@ -257,6 +273,20 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
     @Override
     protected Runnable getOnTabGroupCreationRunnable() {
         return null;
+    }
+
+    @Override
+    protected void tryToTriggerOnShownIphs() {}
+
+    @Override
+    public void openInvitationModal(String invitationId) {
+        assert false : "Not reached.";
+    }
+
+    @Override
+    public boolean requestOpenTabGroupDialog(int tabId) {
+        assert false : "Not reached.";
+        return false;
     }
 
     private IncognitoTabModel getIncognitoTabModel() {

@@ -177,6 +177,7 @@ static uint32_t *ib_checksum;
 static uint32_t *ib_size_in_dw;
 
 static rvcn_decode_buffer_t *decode_buffer;
+struct amdgpu_vcn_bo session_ctx_buf;
 
 static amdgpu_bo_handle resources[MAX_RESOURCES];
 static unsigned num_resources;
@@ -561,7 +562,9 @@ static void amdgpu_cs_vcn_dec_create(void)
 
 	num_resources  = 0;
 	alloc_resource(&msg_buf, 4096, AMDGPU_GEM_DOMAIN_GTT);
+	alloc_resource(&session_ctx_buf, 32 * 4096, AMDGPU_GEM_DOMAIN_VRAM);
 	resources[num_resources++] = msg_buf.handle;
+	resources[num_resources++] = session_ctx_buf.handle;
 	resources[num_resources++] = ib_handle;
 
 	r = amdgpu_bo_cpu_map(msg_buf.handle, (void **)&msg_buf.ptr);
@@ -571,9 +574,11 @@ static void amdgpu_cs_vcn_dec_create(void)
 	memcpy(msg_buf.ptr, vcn_dec_create_msg, sizeof(vcn_dec_create_msg));
 
 	len = 0;
-	if (vcn_dec_sw_ring == true)
+
+	vcn_dec_cmd(session_ctx_buf.addr, 5, &len);
+	if (vcn_dec_sw_ring == true) {
 		vcn_dec_cmd(msg_buf.addr, 0, &len);
-	else {
+	} else {
 		ib_cpu[len++] = reg[vcn_reg_index].data0;
 		ib_cpu[len++] = msg_buf.addr;
 		ib_cpu[len++] = reg[vcn_reg_index].data1;
@@ -650,6 +655,7 @@ static void amdgpu_cs_vcn_dec_decode(void)
 	dt_addr = ALIGN(dpb_addr + dpb_size, 4*1024);
 
 	len = 0;
+	vcn_dec_cmd(session_ctx_buf.addr, 0x5, &len);
 	vcn_dec_cmd(msg_addr, 0x0, &len);
 	vcn_dec_cmd(dpb_addr, 0x1, &len);
 	vcn_dec_cmd(dt_addr, 0x2, &len);
@@ -702,9 +708,10 @@ static void amdgpu_cs_vcn_dec_destroy(void)
 	memcpy(msg_buf.ptr, vcn_dec_destroy_msg, sizeof(vcn_dec_destroy_msg));
 
 	len = 0;
-	if (vcn_dec_sw_ring == true)
+	vcn_dec_cmd(session_ctx_buf.addr, 5, &len);
+	if (vcn_dec_sw_ring == true) {
 		vcn_dec_cmd(msg_buf.addr, 0, &len);
-	else {
+	} else {
 		ib_cpu[len++] = reg[vcn_reg_index].data0;
 		ib_cpu[len++] = msg_buf.addr;
 		ib_cpu[len++] = reg[vcn_reg_index].data1;
@@ -727,6 +734,7 @@ static void amdgpu_cs_vcn_dec_destroy(void)
 	CU_ASSERT_EQUAL(r, 0);
 
 	free_resource(&msg_buf);
+	free_resource(&session_ctx_buf);
 }
 
 static void amdgpu_cs_vcn_enc_create(void)

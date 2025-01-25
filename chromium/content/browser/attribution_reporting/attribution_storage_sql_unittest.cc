@@ -115,6 +115,7 @@ struct AttributionSourceRecord {
   std::string read_only_source_data;
   int remaining_aggregatable_debug_budget;
   int num_aggregatable_debug_reports;
+  std::optional<std::string> attribution_scopes_data;
 };
 
 struct AttributionReportRecord {
@@ -342,7 +343,7 @@ class AttributionStorageSqlTest : public testing::Test {
 
     static constexpr char kStoreSourceSql[] =
         "INSERT INTO sources "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?)";
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,?,?)";
     sql::Statement statement(raw_db.GetUniqueStatement(kStoreSourceSql));
     statement.BindInt64(0, record.source_id);
     statement.BindInt64(1, record.source_event_id);
@@ -371,6 +372,11 @@ class AttributionStorageSqlTest : public testing::Test {
     statement.BindBlob(18, record.read_only_source_data);
     statement.BindInt(19, record.remaining_aggregatable_debug_budget);
     statement.BindInt(20, record.num_aggregatable_debug_reports);
+    if (record.attribution_scopes_data.has_value()) {
+      statement.BindBlob(21, *record.attribution_scopes_data);
+    } else {
+      statement.BindNull(21);
+    }
     ASSERT_TRUE(statement.Run());
   }
 
@@ -936,71 +942,6 @@ TEST_F(AttributionStorageSqlTest, DBinitializationSucceeds_HistogramsRecorded) {
   }
 }
 
-TEST_F(AttributionStorageSqlTest,
-       DBinitializationSucceeds_SourcesPerSourceOrginHistogramsRecorded) {
-  auto create_n_origins = [](size_t n) -> std::vector<SuitableOrigin> {
-    std::vector<SuitableOrigin> origins;
-    origins.reserve(n);
-    for (size_t i = 0; i < n; ++i) {
-      origins.push_back(
-          *SuitableOrigin::Create(url::Origin::Create(GURL(base::JoinString(
-              {"https://origin_", base::ToString(i), ".example"}, "")))));
-    }
-
-    return origins;
-  };
-  auto store_n_sources = [&](const SuitableOrigin& origin, size_t n) {
-    for (size_t i = 0; i < n; ++i) {
-      storage()->StoreSource(SourceBuilder().SetSourceOrigin(origin).Build());
-    }
-  };
-
-  {
-    base::HistogramTester histograms;
-
-    OpenDatabase();
-
-    std::vector<size_t> sizes = {8, 7, 6, 5, 5, 5, 4, 3, 3, 3, 3, 3, 3,
-                                 3, 3, 3, 3, 3, 3, 2, 1, 1, 1, 1, 1};
-    base::RandomShuffle(sizes.begin(), sizes.end());
-    std::vector<SuitableOrigin> origins = create_n_origins(sizes.size());
-    for (size_t i = 0; i < origins.size(); ++i) {
-      store_n_sources(origins.at(i), sizes.at(i));
-    }
-
-    CloseDatabase();
-
-    // The histograms should have been recorded even if there were no sources in
-    // the db when initialized.
-    histograms.ExpectUniqueSample("Conversions.SourcesPerSourceOrigin2.1st", 0,
-                                  1);
-    histograms.ExpectUniqueSample("Conversions.SourcesPerSourceOrigin2.3rd", 0,
-                                  1);
-    histograms.ExpectUniqueSample("Conversions.SourcesPerSourceOrigin2.7th", 0,
-                                  1);
-    histograms.ExpectUniqueSample("Conversions.SourcesPerSourceOrigin2.20th", 0,
-                                  1);
-  }
-  {
-    base::HistogramTester histograms;
-
-    OpenDatabase();
-    // Since the storage is initiated lazily, we need to execute an operation on
-    // the db for it to be initiated and histograms to be reported.
-    storage()->StoreSource(SourceBuilder().Build());
-    CloseDatabase();
-
-    EXPECT_EQ(histograms.GetTotalSum("Conversions.SourcesPerSourceOrigin2.1st"),
-              8u);
-    EXPECT_EQ(histograms.GetTotalSum("Conversions.SourcesPerSourceOrigin2.3rd"),
-              6u);
-    EXPECT_EQ(histograms.GetTotalSum("Conversions.SourcesPerSourceOrigin2.7th"),
-              4u);
-    EXPECT_EQ(
-        histograms.GetTotalSum("Conversions.SourcesPerSourceOrigin2.20th"), 2u);
-  }
-}
-
 TEST_F(AttributionStorageSqlTest, MaxUint64StorageSucceeds) {
   constexpr uint64_t kMaxUint64 = std::numeric_limits<uint64_t>::max();
 
@@ -1400,7 +1341,7 @@ TEST_F(AttributionStorageSqlTest, ReportTablesStoreDestinationOrigin) {
     sql::Statement s(
         raw_db.GetUniqueStatement("SELECT context_origin FROM reports"));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ(s.ColumnString(0), kDestinationOriginB);
+    ASSERT_EQ(s.ColumnStringView(0), kDestinationOriginB);
   }
 }
 
@@ -1428,7 +1369,7 @@ TEST_F(AttributionStorageSqlTest, FakeReportUsesSourceOriginAsContext) {
     sql::Statement s(
         raw_db.GetUniqueStatement("SELECT context_origin FROM reports"));
     ASSERT_TRUE(s.Step());
-    ASSERT_EQ(s.ColumnString(0), "https://a.s.test");
+    ASSERT_EQ(s.ColumnStringView(0), "https://a.s.test");
   }
 }
 
@@ -2422,7 +2363,8 @@ TEST_F(AttributionStorageSqlTest,
       .event_level_active = 2,
       .aggregation_keys = "foo",
       .filter_data = "bar",
-      .read_only_source_data = "baz"};
+      .read_only_source_data = "baz",
+      .attribution_scopes_data = "qux"};
   AttributionReportRecord report_record{
       .report_id = 1,
       .source_id = 2,
@@ -2511,7 +2453,11 @@ TEST_F(AttributionStorageSqlTest,
                                AttributionStorageSql::ReportCorruptionStatus::
                                    kSourceInvalidEventLevelEpsilon,
                                1);
-  histograms.ExpectTotalCount("Conversions.CorruptReportsInDatabase5", 27);
+  histograms.ExpectBucketCount("Conversions.CorruptReportsInDatabase5",
+                               AttributionStorageSql::ReportCorruptionStatus::
+                                   kSourceInvalidAttributionScopesData,
+                               2);
+  histograms.ExpectTotalCount("Conversions.CorruptReportsInDatabase5", 29);
 }
 
 TEST_F(AttributionStorageSqlTest, SourceRemainingAggregatableBudget) {

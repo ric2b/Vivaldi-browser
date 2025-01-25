@@ -45,7 +45,7 @@ export class ChangesSidebar extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.workspaceDiff = workspaceDiff;
     this.workspaceDiff.modifiedUISourceCodes().forEach(this.addUISourceCode.bind(this));
     this.workspaceDiff.addEventListener(
-        WorkspaceDiff.WorkspaceDiff.Events.ModifiedStatusChanged, this.uiSourceCodeMofiedStatusChanged, this);
+        WorkspaceDiff.WorkspaceDiff.Events.MODIFIED_STATUS_CHANGED, this.uiSourceCodeMofiedStatusChanged, this);
   }
 
   selectUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode, omitFocus?: boolean|undefined): void {
@@ -62,7 +62,7 @@ export class ChangesSidebar extends Common.ObjectWrapper.eventMixin<EventTypes, 
   }
 
   private selectionChanged(): void {
-    this.dispatchEventToListeners(Events.SelectedUISourceCodeChanged);
+    this.dispatchEventToListeners(Events.SELECTED_UI_SOURCE_CODE_CHANGED);
   }
 
   private uiSourceCodeMofiedStatusChanged(
@@ -111,11 +111,11 @@ export class ChangesSidebar extends Common.ObjectWrapper.eventMixin<EventTypes, 
 }
 
 export const enum Events {
-  SelectedUISourceCodeChanged = 'SelectedUISourceCodeChanged',
+  SELECTED_UI_SOURCE_CODE_CHANGED = 'SelectedUISourceCodeChanged',
 }
 
 export type EventTypes = {
-  [Events.SelectedUISourceCodeChanged]: void,
+  [Events.SELECTED_UI_SOURCE_CODE_CHANGED]: void,
 };
 
 export class UISourceCodeTreeElement extends UI.TreeOutline.TreeElement {

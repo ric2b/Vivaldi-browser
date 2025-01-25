@@ -38,10 +38,6 @@ BASE_FEATURE(kSynchronizedScrolling,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-BASE_FEATURE(kRemoveMobileViewportDoubleTap,
-             "RemoveMobileViewportDoubleTap",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kScrollSnapCoveringAvoidNestedSnapAreas,
              "ScrollSnapCoveringAvoidNestedSnapAreas",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -58,9 +54,6 @@ BASE_FEATURE(kMainRepaintScrollPrefersNewContent,
              "MainRepaintScrollPrefersNewContent",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kHudDisplayForPerformanceMetrics,
-             "HudDisplayForPerformanceMetrics",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRenderSurfaceCommonAncestorClip,
              "RenderSurfaceCommonAncestorClip",
@@ -207,6 +200,13 @@ BASE_FEATURE(kDontAlwaysPushPictureLayerImpls,
 BASE_FEATURE(kWarmUpCompositor,
              "WarmUpCompositor",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kCCSlimming, "CCSlimming", base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool IsCCSlimmingEnabled() {
+  static const bool enabled = base::FeatureList::IsEnabled(kCCSlimming);
+  return enabled;
+}
 
 const base::FeatureParam<std::string> kScrollEventDispatchMode(
     &kWaitForLateScrollEvents,

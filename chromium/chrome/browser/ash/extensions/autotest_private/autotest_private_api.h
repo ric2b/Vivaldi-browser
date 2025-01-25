@@ -17,6 +17,7 @@
 #include "ash/rotator/screen_rotation_animator_observer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "cc/metrics/frame_sequence_metrics.h"
 #include "chrome/browser/ash/arc/tracing/arc_app_performance_tracing.h"
@@ -34,6 +35,7 @@
 #include "extensions/browser/extension_function_histogram_value.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/viz/privileged/mojom/compositing/frame_sink_manager.mojom-forward.h"
+#include "services/viz/privileged/mojom/compositing/frame_sinks_metrics_recorder.mojom-forward.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_observer.h"
 #include "ui/display/display.h"
@@ -286,25 +288,6 @@ class AutotestPrivateGetArcStateFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateGetArcStateFunction() override;
-  ResponseAction Run() override;
-};
-
-class AutotestPrivateStartArcFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("autotestPrivate.startArc",
-                             AUTOTESTPRIVATE_STARTARC)
-
- private:
-  ~AutotestPrivateStartArcFunction() override;
-  ResponseAction Run() override;
-};
-
-class AutotestPrivateStopArcFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("autotestPrivate.stopArc", AUTOTESTPRIVATE_STOPARC)
-
- private:
-  ~AutotestPrivateStopArcFunction() override;
   ResponseAction Run() override;
 };
 
@@ -1517,6 +1500,7 @@ class AutotestPrivateStopSmoothnessTrackingFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   void OnReportData(
+      base::TimeTicks start_time,
       const cc::FrameSequenceMetrics::CustomReportData& frame_data,
       std::vector<int>&& throughput);
   void OnTimeOut(int64_t display_id);
@@ -1790,6 +1774,30 @@ class AutotestPrivateStopFrameCountingFunction : public ExtensionFunction {
   void OnDataReceived(viz::mojom::FrameCountingDataPtr data_ptr);
 };
 
+class AutotestPrivateStartOverdrawTrackingFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateStartOverdrawTrackingFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.startOverdrawTracking",
+                             AUTOTESTPRIVATE_STARTOVERDRAWTRACKING)
+
+ private:
+  ~AutotestPrivateStartOverdrawTrackingFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateStopOverdrawTrackingFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateStopOverdrawTrackingFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.stopOverdrawTracking",
+                             AUTOTESTPRIVATE_STOPOVERDRAWTRACKING)
+
+ private:
+  ~AutotestPrivateStopOverdrawTrackingFunction() override;
+  ResponseAction Run() override;
+
+  void OnDataReceived(viz::mojom::OverdrawDataPtr data_ptr);
+};
+
 class AutotestPrivateInstallBruschettaFunction : public ExtensionFunction {
  public:
   AutotestPrivateInstallBruschettaFunction();
@@ -1884,6 +1892,17 @@ class AutotestPrivateSetDeviceLanguageFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateSetDeviceLanguageFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateGetDeviceEventLogFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateGetDeviceEventLogFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getDeviceEventLog",
+                             AUTOTESTPRIVATE_GETDEVICEEVENTLOG)
+
+ private:
+  ~AutotestPrivateGetDeviceEventLogFunction() override;
   ResponseAction Run() override;
 };
 

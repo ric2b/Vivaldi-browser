@@ -396,26 +396,38 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
         if not self.enabled:
             return
         options = self.Options()
-        expected_file_list = [
-            join(self.base_path, x) for x in ['a', 'b', 'submodule']
-        ]
+        expected_file_list = [join(self.base_path, x) for x in ['a', 'b']]
         git_wrapper = gclient_scm.GitWrapper(self.url, self.root_dir,
                                              self.relpath)
         file_list = []
 
+        # Set diff.ignoreSubmodules to something other than 'dirty'
+        git_wrapper._Run(['config', 'diff.ignoreSubmodules', 'all'], options)
         git_wrapper.update(options, (), file_list)
+        expected_warning = "diff.ignoreSubmodules is not set to 'dirty'"
+        self.assertTrue(
+            any(expected_warning in w for w in gclient_utils._WARNINGS),
+            f"Expected warning not found. "
+            f"New warnings: {gclient_utils._WARNINGS}")
         self.assertEqual(file_list, expected_file_list)
         self.assertEqual(git_wrapper.revinfo(options, (), None),
                          '4091c7d010ca99d0f2dd416d4b70b758ae432187')
         self.assertEqual(
             git_wrapper._Capture(['config', '--get', 'diff.ignoreSubmodules']),
-            'dirty')
+            'all')
         self.assertEqual(
             git_wrapper._Capture(['config', '--get',
                                   'fetch.recurseSubmodules']), 'off')
         self.assertEqual(
             git_wrapper._Capture(['config', '--get', 'push.recurseSubmodules']),
             'off')
+        os.environ['GCLIENT_SUPPRESS_SUBMODULE_WARNING'] = '1'
+        gclient_utils._WARNINGS.clear()
+        git_wrapper.update(options, (), file_list)
+        self.assertEqual(len(gclient_utils._WARNINGS), 0,
+                         "Warning was added despite being suppressed")
+        # Clean up
+        del os.environ['GCLIENT_SUPPRESS_SUBMODULE_WARNING']
         sys.stdout.close()
 
     def testUpdateMerge(self):

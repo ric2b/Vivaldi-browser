@@ -6,7 +6,7 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
@@ -195,7 +195,7 @@ enum class SignInHistorySyncStep {
     case SignInHistorySyncStep::kCompleted:
       break;
   }
-  NOTREACHED_NORETURN() << base::SysNSStringToUTF8([self description]);
+  NOTREACHED() << base::SysNSStringToUTF8([self description]);
 }
 
 // Stops the child coordinator and prepares the next step to present.
@@ -228,7 +228,7 @@ enum class SignInHistorySyncStep {
     case SignInHistorySyncStep::kCompleted:
       break;
   }
-  NOTREACHED_NORETURN() << base::SysNSStringToUTF8([self description]);
+  NOTREACHED() << base::SysNSStringToUTF8([self description]);
 }
 
 #pragma mark - NSObject

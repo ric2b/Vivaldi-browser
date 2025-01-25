@@ -33,6 +33,7 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.chrome.browser.autofill.helpers.FaviconHelper;
 import org.chromium.chrome.browser.ui.plus_addresses.AllPlusAddressesBottomSheetProperties.ItemType;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.chips.ChipView;
@@ -48,10 +49,12 @@ public class AllPlusAddressesBottomSheetViewTest {
     private static final String BOTTOMSHEET_TITLE = "Bottom sheet title";
     private static final String BOTTOMSHEET_WARNING = "Bottom sheet warning";
     private static final String BOTTOMSHEET_QUERY_HINT = "Query hint";
-    private static final PlusProfile PROFILE_1 = new PlusProfile("google.com", "example@gmail.com");
+    private static final PlusProfile PROFILE_1 =
+            new PlusProfile("example@gmail.com", "google.com", "https://google.com");
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
+    @Mock private FaviconHelper mFaviconHelper;
     @Mock private BottomSheetController mBottomSheetController;
 
     private Activity mActivity;
@@ -126,14 +129,14 @@ public class AllPlusAddressesBottomSheetViewTest {
                                         .createPlusProfileModel(PROFILE_1, callback)));
         mView.setSheetItemListAdapter(
                 AllPlusAddressesBottomSheetCoordinator.createSheetItemListAdapter(
-                        model.get(PLUS_PROFILES)));
+                        model.get(PLUS_PROFILES), mFaviconHelper));
 
         // Robolectric runner doesn't layout recycler views.
         layoutPlusAddressView();
 
         TextView origin = mView.getContentView().findViewById(R.id.plus_profile_origin);
         assertNotNull(origin);
-        assertEquals(origin.getText(), PROFILE_1.getOrigin());
+        assertEquals(origin.getText(), PROFILE_1.getDisplayName());
 
         ChipView plusAddress = mView.getContentView().findViewById(R.id.plus_address);
         assertNotNull(plusAddress);

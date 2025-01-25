@@ -16,9 +16,13 @@ BASE_DECLARE_FEATURE(kLinkCapturingUiUpdate);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Returns true if the updated UX for link capturing needs to be shown. Only set
-// to true if kDesktopPWAsLinkCapturing is enabled on desktop platforms, and
+// to true if kPwaNavigationCapturing is enabled on desktop platforms, and
 // kLinkCapturingUiUpdate on CrOS platforms.
 bool ShouldShowLinkCapturingUX();
+
+// Returns true if the `kPwaNavigationCapturing` flag is enabled with the
+// reimplementation parameters set.
+bool IsNavigationCapturingReimplEnabled();
 
 }  // namespace apps::features
 

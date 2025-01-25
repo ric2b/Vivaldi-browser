@@ -72,13 +72,12 @@ class ProxyingSourceStream : public SourceStream {
 
 void AddAcceptEncoding(HttpRequestHeaders* request_headers,
                        std::string_view encoding_header) {
-  std::string accept_encoding;
+  std::optional<std::string> accept_encoding =
+      request_headers->GetHeader(HttpRequestHeaders::kAcceptEncoding);
   request_headers->SetHeader(
       HttpRequestHeaders::kAcceptEncoding,
-      request_headers->GetHeader(HttpRequestHeaders::kAcceptEncoding,
-                                 &accept_encoding)
-          ? base::StrCat({accept_encoding, ", ", encoding_header})
-          : std::string(encoding_header));
+      accept_encoding ? base::StrCat({*accept_encoding, ", ", encoding_header})
+                      : std::string(encoding_header));
 }
 
 }  // namespace
@@ -336,7 +335,7 @@ int SharedDictionaryNetworkTransaction::Read(IOBuffer* buf,
 
   switch (dictionary_status_) {
     case DictionaryStatus::kNoDictionary:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case DictionaryStatus::kReading:
       CHECK(!pending_read_task_);
       pending_read_task_ =
@@ -378,7 +377,7 @@ int SharedDictionaryNetworkTransaction::Read(IOBuffer* buf,
         UMA_HISTOGRAM_ENUMERATION("Network.SharedDictionary.EncodingType",
                                   shared_dictionary_encoding_type_);
       }
-      // When NET_DISABLE_ZSTD or NET_DISABLE_ZSTD is set,
+      // When NET_DISABLE_BROTLI or NET_DISABLE_ZSTD is set,
       // `shared_compression_stream_` can be null.
       if (!shared_compression_stream_) {
         return ERR_CONTENT_DECODING_FAILED;

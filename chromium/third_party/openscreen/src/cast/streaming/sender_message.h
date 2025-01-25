@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "absl/types/variant.h"
-#include "cast/streaming/offer_messages.h"
+#include "cast/streaming/public/offer_messages.h"
 #include "json/value.h"
 #include "platform/base/error.h"
 #include "util/osp_logging.h"

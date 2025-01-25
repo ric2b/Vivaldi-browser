@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2023, The Khronos Group Inc.
+# Copyright (c) 2019-2024, The Khronos Group Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 parameters:
@@ -17,6 +17,9 @@ parameters:
     default: "true"
 
 steps:
+  - checkout: self
+    lfs: true
+
   # - script: choco install -y ninja
   #   displayName: 'Install Ninja'
 

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Plugin, PluginContextTrace, PluginDescriptor} from '../../public';
-
+import {Trace} from '../../public/trace';
+import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
 import {addDebugCounterTrack} from '../../frontend/debug_tracks/debug_tracks';
 
-class PixelMemory implements Plugin {
-  async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
-    ctx.registerCommand({
+class PixelMemory implements PerfettoPlugin {
+  async onTraceLoad(ctx: Trace): Promise<void> {
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.PixelMemory#ShowTotalMemory',
       name: 'Add tracks: show a process total memory',
       callback: async (pid) => {

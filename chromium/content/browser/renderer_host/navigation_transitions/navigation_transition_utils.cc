@@ -12,7 +12,15 @@
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot.h"
 #include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot_cache.h"
+#include "content/browser/renderer_host/navigation_transitions/navigation_transition_config.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "ui/gfx/animation/animation.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "content/browser/renderer_host/compositor_impl_android.h"
+#include "ui/android/view_android.h"
+#include "ui/android/window_android.h"
+#endif
 
 namespace content {
 
@@ -62,6 +70,22 @@ void InvokeTestCallback(int index,
   GetTestScreenshotCallback().Run(index, test_copy, requested, override_bitmap);
 }
 
+bool SupportsETC1NonPowerOfTwo(const NavigationRequest& navigation_request) {
+#if BUILDFLAG(IS_ANDROID)
+  auto* rfh = navigation_request.frame_tree_node()->current_frame_host();
+  auto* rwhv = rfh->GetView();
+  auto* window_android = rwhv->GetNativeView()->GetWindowAndroid();
+  if (!window_android) {
+    // Can happen on x86 Android bots.
+    return false;
+  }
+  auto* compositor = window_android->GetCompositor();
+  return static_cast<CompositorImpl*>(compositor)->SupportsETC1NonPowerOfTwo();
+#else
+  return false;
+#endif
+}
+
 // Returns the first entry that matches `destination_token`. Returns null if no
 // match is found.
 NavigationEntryImpl* GetEntryForToken(
@@ -84,6 +108,7 @@ void CacheScreenshotImpl(base::WeakPtr<NavigationControllerImpl> controller,
                          int navigation_entry_id,
                          bool is_copied_from_embedder,
                          int copy_output_request_sequence,
+                         bool supports_etc_non_power_of_two,
                          const SkBitmap& bitmap) {
   if (!controller) {
     // The tab was destroyed by the time we receive the bitmap from the GPU.
@@ -125,7 +150,7 @@ void CacheScreenshotImpl(base::WeakPtr<NavigationControllerImpl> controller,
   bitmap_copy.setImmutable();
 
   auto screenshot = std::make_unique<NavigationEntryScreenshot>(
-      bitmap_copy, navigation_entry_id);
+      bitmap_copy, navigation_entry_id, supports_etc_non_power_of_two);
   NavigationEntryScreenshotCache* cache =
       controller->GetNavigationEntryScreenshotCache();
   cache->SetScreenshot(std::move(navigation_request), std::move(screenshot),
@@ -238,7 +263,7 @@ bool NavigationTransitionUtils::
     CaptureNavigationEntryScreenshotForCrossDocumentNavigations(
         NavigationRequest& navigation_request,
         bool did_receive_commit_ack) {
-  if (!AreBackForwardTransitionsEnabled()) {
+  if (!NavigationTransitionConfig::AreBackForwardTransitionsEnabled()) {
     return false;
   }
 
@@ -279,6 +304,13 @@ bool NavigationTransitionUtils::
   // the screenshot from the destination entry.
   RemoveScreenshotFromDestination(navigation_controller, destination_entry);
 
+  if (gfx::Animation::PrefersReducedMotion()) {
+    entry->navigation_transition_data().set_cache_hit_or_miss_reason(
+        CacheHitOrMissReason::kCacheMissPrefersReducedMotion);
+    InvokeTestCallbackForNoScreenshot(navigation_request);
+    return false;
+  }
+
   if (navigation_request.frame_tree_node()
           ->GetParentOrOuterDocumentOrEmbedder()) {
     // No support for embedded pages (including GuestView or fenced frames).
@@ -301,6 +333,15 @@ bool NavigationTransitionUtils::
     return false;
   }
 
+  if (navigation_request.frame_tree_node()
+          ->current_frame_host()
+          ->LoadedWithCacheControlNoStoreHeader()) {
+    entry->navigation_transition_data().set_cache_hit_or_miss_reason(
+        CacheHitOrMissReason::kCacheMissCCNS);
+    InvokeTestCallbackForNoScreenshot(navigation_request);
+    return false;
+  }
+
   if (!CanTraverseToPreviousEntryAfterNavigation(navigation_request)) {
     InvokeTestCallbackForNoScreenshot(navigation_request);
     return false;
@@ -314,6 +355,8 @@ bool NavigationTransitionUtils::
       // If we're navigating away from a crashed frame, it's not possible to
       // get a screenshot and fallback UI should be used instead.
       InvokeTestCallbackForNoScreenshot(navigation_request);
+      entry->navigation_transition_data().set_cache_hit_or_miss_reason(
+          CacheHitOrMissReason::kNavigateAwayFromCrashedPage);
       return false;
     case NavigationRequest::EarlyRenderFrameHostSwapType::kInitialFrame:
       // TODO(khushalsagar): Confirm whether this is needed for Chrome's NTP
@@ -321,7 +364,20 @@ bool NavigationTransitionUtils::
       only_use_embedder_screenshot = true;
       break;
     case NavigationRequest::EarlyRenderFrameHostSwapType::kNavigationTransition:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
+  }
+
+  RenderFrameHostImpl* current_rfh =
+      navigation_request.frame_tree_node()->current_frame_host();
+  RenderWidgetHostView* rwhv = current_rfh->GetView();
+  if (!rwhv) {
+    // The current frame is crashed but early swap didn't happen for this
+    // navigation.
+    CHECK(!current_rfh->IsRenderFrameLive());
+    InvokeTestCallbackForNoScreenshot(navigation_request);
+    entry->navigation_transition_data().set_cache_hit_or_miss_reason(
+        CacheHitOrMissReason::kNavigateAwayFromCrashedPageNoEarlySwap);
+    return false;
   }
 
   int request_sequence = navigation_controller.GetLastCommittedEntry()
@@ -333,7 +389,8 @@ bool NavigationTransitionUtils::
               &CacheScreenshotImpl, navigation_controller.GetWeakPtr(),
               navigation_request.GetWeakPtr(),
               navigation_controller.GetLastCommittedEntry()->GetUniqueID(),
-              /*is_copied_from_embedder=*/true, request_sequence));
+              /*is_copied_from_embedder=*/true, request_sequence,
+              SupportsETC1NonPowerOfTwo(navigation_request)));
 
   if (!copied_via_delegate && only_use_embedder_screenshot) {
     InvokeTestCallbackForNoScreenshot(navigation_request);
@@ -351,10 +408,6 @@ bool NavigationTransitionUtils::
   // meaning we will capture at full-size, unless specified by tests.
   const gfx::Size output_size = g_output_size_for_test;
 
-  RenderFrameHostImpl* current_rfh =
-      navigation_request.frame_tree_node()->current_frame_host();
-  RenderWidgetHostView* rwhv = current_rfh->GetView();
-  CHECK(rwhv);
   // Make sure the browser is actively embedding a surface.
   CHECK(rwhv->IsSurfaceAvailableForCopy());
 
@@ -364,7 +417,8 @@ bool NavigationTransitionUtils::
           &CacheScreenshotImpl, navigation_controller.GetWeakPtr(),
           navigation_request.GetWeakPtr(),
           navigation_controller.GetLastCommittedEntry()->GetUniqueID(),
-          /*is_copied_from_embedder=*/false, request_sequence));
+          /*is_copied_from_embedder=*/false, request_sequence,
+          SupportsETC1NonPowerOfTwo(navigation_request)));
 
   ++g_num_copy_requests_issued_for_testing;
 
@@ -376,22 +430,18 @@ bool NavigationTransitionUtils::
 
 void NavigationTransitionUtils::SetSameDocumentNavigationEntryScreenshotToken(
     NavigationRequest& navigation_request,
-    const blink::SameDocNavigationScreenshotDestinationToken&
+    std::optional<blink::SameDocNavigationScreenshotDestinationToken>
         destination_token) {
-  if (!AreBackForwardTransitionsEnabled()) {
+  if (!NavigationTransitionConfig::AreBackForwardTransitionsEnabled()) {
     // The source of this call is from the renderer. We can't always trust the
     // renderer thus fail safely.
-    return;
-  }
-  NavigationControllerImpl& nav_controller =
-      navigation_request.frame_tree_node()->navigator().controller();
-  if (GetEntryForToken(&nav_controller, destination_token)) {
-    // Again, can't always trust the renderer to send a non-duplicated token.
     return;
   }
 
   CHECK(navigation_request.IsSameDocument());
 
+  NavigationControllerImpl& nav_controller =
+      navigation_request.frame_tree_node()->navigator().controller();
   if (auto* destination_entry = navigation_request.GetNavigationEntry()) {
     RemoveScreenshotFromDestination(nav_controller, destination_entry);
   } else {
@@ -400,7 +450,29 @@ void NavigationTransitionUtils::SetSameDocumentNavigationEntryScreenshotToken(
     // `NavigationRequest::CreateForSynchronousRendererCommit`).
   }
 
+  // If the renderer sends a token, it implies it issued a copy request for the
+  // pre-navigation state.
+  if (destination_token) {
+    ++g_num_copy_requests_issued_for_testing;
+  }
+
   if (!CanTraverseToPreviousEntryAfterNavigation(navigation_request)) {
+    return;
+  }
+
+  if (gfx::Animation::PrefersReducedMotion()) {
+    auto* entry = nav_controller.GetLastCommittedEntry();
+    entry->navigation_transition_data().set_cache_hit_or_miss_reason(
+        CacheHitOrMissReason::kCacheMissPrefersReducedMotion);
+    return;
+  }
+
+  if (!destination_token) {
+    return;
+  }
+
+  if (GetEntryForToken(&nav_controller, *destination_token)) {
+    // Again, can't always trust the renderer to send a non-duplicated token.
     return;
   }
 
@@ -408,15 +480,11 @@ void NavigationTransitionUtils::SetSameDocumentNavigationEntryScreenshotToken(
   // screenshot's destination), instead of the destination entry of this
   // `navigation_request` (`navigation_request.GetNavigationEntry()`).
 
-  // We won't reach here if the renderer hasn't requested a CopyOutputRequest,
-  // since the token in the DidCommitSameDocNavigation message will be nullopt.
-  ++g_num_copy_requests_issued_for_testing;
-
   // `blink::SameDocNavigationScreenshotDestinationToken` is guaranteed
   // non-empty.
   nav_controller.GetLastCommittedEntry()
       ->navigation_transition_data()
-      .SetSameDocumentNavigationEntryScreenshotToken(destination_token);
+      .SetSameDocumentNavigationEntryScreenshotToken(*destination_token);
 
   CHECK(GetHostFrameSinkManager());
 
@@ -425,11 +493,12 @@ void NavigationTransitionUtils::SetSameDocumentNavigationEntryScreenshotToken(
                              .copy_output_request_sequence();
 
   GetHostFrameSinkManager()->SetOnCopyOutputReadyCallback(
-      destination_token,
+      *destination_token,
       base::BindOnce(&CacheScreenshotImpl, nav_controller.GetWeakPtr(),
                      navigation_request.GetWeakPtr(),
                      nav_controller.GetLastCommittedEntry()->GetUniqueID(),
-                     /*is_copied_from_embedder=*/false, request_sequence));
+                     /*is_copied_from_embedder=*/false, request_sequence,
+                     SupportsETC1NonPowerOfTwo(navigation_request)));
 }
 
 }  // namespace content

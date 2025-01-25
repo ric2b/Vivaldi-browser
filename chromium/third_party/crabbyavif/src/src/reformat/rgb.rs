@@ -32,6 +32,7 @@ pub enum Format {
     Bgra,
     Abgr,
     Rgb565,
+    Rgba1010102, // https://developer.android.com/reference/android/graphics/Bitmap.Config#RGBA_1010102
 }
 
 impl Format {
@@ -43,7 +44,7 @@ impl Format {
             Format::Bgr => [2, 1, 0, 0],
             Format::Bgra => [2, 1, 0, 3],
             Format::Abgr => [3, 2, 1, 0],
-            Format::Rgb565 => [0; 4],
+            Format::Rgb565 | Format::Rgba1010102 => [0; 4],
         }
     }
 
@@ -154,8 +155,8 @@ impl Image {
             return std::ptr::null_mut();
         }
         match self.pixels.unwrap_mut() {
-            Pixels::Pointer(ptr) => *ptr,
-            Pixels::Pointer16(ptr) => *ptr as *mut u8,
+            Pixels::Pointer(ptr) => ptr.ptr_mut(),
+            Pixels::Pointer16(ptr) => ptr.ptr_mut() as *mut u8,
             Pixels::Buffer(buffer) => buffer.as_mut_ptr(),
             Pixels::Buffer16(buffer) => buffer.as_mut_ptr() as *mut u8,
         }
@@ -216,7 +217,7 @@ impl Image {
 
     pub fn has_alpha(&self) -> bool {
         match self.format {
-            Format::Rgba | Format::Bgra | Format::Argb | Format::Abgr => true,
+            Format::Rgba | Format::Bgra | Format::Argb | Format::Abgr | Format::Rgba1010102 => true,
             Format::Rgb | Format::Bgr | Format::Rgb565 => false,
         }
     }
@@ -233,6 +234,7 @@ impl Image {
         match self.format {
             Format::Rgba | Format::Bgra | Format::Argb | Format::Abgr => 4,
             Format::Rgb | Format::Bgr | Format::Rgb565 => 3,
+            Format::Rgba1010102 => 0, // This is never used.
         }
     }
 
@@ -241,6 +243,7 @@ impl Image {
             Format::Rgba | Format::Bgra | Format::Argb | Format::Abgr => self.channel_size() * 4,
             Format::Rgb | Format::Bgr => self.channel_size() * 3,
             Format::Rgb565 => 2,
+            Format::Rgba1010102 => 4,
         }
     }
 
@@ -286,6 +289,19 @@ impl Image {
         {
             return Err(AvifError::NotImplemented);
         }
+        if matches!(
+            image.matrix_coefficients,
+            MatrixCoefficients::YcgcoRe | MatrixCoefficients::YcgcoRo
+        ) {
+            if image.yuv_range == YuvRange::Limited {
+                return Err(AvifError::NotImplemented);
+            }
+            let bit_offset =
+                if image.matrix_coefficients == MatrixCoefficients::YcgcoRe { 2 } else { 1 };
+            if image.depth - bit_offset != self.depth {
+                return Err(AvifError::NotImplemented);
+            }
+        }
         if image.matrix_coefficients == MatrixCoefficients::Identity
             && !matches!(image.yuv_format, PixelFormat::Yuv444 | PixelFormat::Yuv400)
         {
@@ -314,6 +330,15 @@ impl Image {
                         return Err(err);
                     }
                 }
+            }
+        }
+        if image.yuv_format == PixelFormat::AndroidP010 {
+            // P010 conversion is only supported via libyuv.
+            // TODO: b/362984605 - Handle alpha channel for P010.
+            if converted_with_libyuv {
+                return Ok(());
+            } else {
+                return Err(AvifError::NotImplemented);
             }
         }
         if self.has_alpha() && !alpha_reformatted_with_libyuv {

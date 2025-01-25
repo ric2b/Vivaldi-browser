@@ -23,6 +23,7 @@ openscreen_source_set("base") {
     "base/trace_logging_activation.h",
     "base/trace_logging_types.h",
     "base/trivial_clock_traits.h",
+    "base/type_util.h",
     "base/udp_packet.h",
   ]
 
@@ -84,7 +85,14 @@ openscreen_source_set("api") {
 if (!build_with_chromium) {
   openscreen_source_set("standalone_impl") {
     defines = []
-    visibility += [ "../*" ]
+    visibility += [
+      "../cast/common:discovery_e2e_test",
+      "../cast/standalone_receiver:cast_receiver",
+      "../cast/standalone_sender:cast_sender",
+      "../cast/test:e2e_tests",
+      "../osp:osp_demo",
+      "../test:test_main",
+    ]
     public = [
       "impl/logging.h",
       "impl/network_interface.h",

@@ -48,7 +48,8 @@ namespace {
 
 // This is a global map between frame_tree_node_ids and pointers to
 // FrameTreeNodes.
-typedef std::unordered_map<int, FrameTreeNode*> FrameTreeNodeIdMap;
+using FrameTreeNodeIdMap = std::
+    unordered_map<FrameTreeNodeId, FrameTreeNode*, FrameTreeNodeId::Hasher>;
 
 base::LazyInstance<FrameTreeNodeIdMap>::DestructorAtExit
     g_frame_tree_node_id_map = LAZY_INSTANCE_INITIALIZER;
@@ -114,16 +115,12 @@ class FrameTreeNode::OpenerDestroyedObserver : public FrameTreeNode::Observer {
   bool observing_original_opener_;
 };
 
-const int FrameTreeNode::kFrameTreeNodeInvalidId = -1;
-
-static_assert(FrameTreeNode::kFrameTreeNodeInvalidId ==
-                  RenderFrameHost::kNoFrameTreeNodeId,
-              "Have consistent sentinel values for an invalid FTN id.");
-
-int FrameTreeNode::next_frame_tree_node_id_ = 1;
+// static
+FrameTreeNodeId::Generator FrameTreeNode::frame_tree_node_id_generator_;
 
 // static
-FrameTreeNode* FrameTreeNode::GloballyFindByID(int frame_tree_node_id) {
+FrameTreeNode* FrameTreeNode::GloballyFindByID(
+    FrameTreeNodeId frame_tree_node_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   FrameTreeNodeIdMap* nodes = g_frame_tree_node_id_map.Pointer();
   auto it = nodes->find(frame_tree_node_id);
@@ -162,7 +159,7 @@ FrameTreeNode::FrameTreeNode(
     blink::FrameOwnerElementType owner_type,
     const blink::FramePolicy& frame_policy)
     : frame_tree_(frame_tree),
-      frame_tree_node_id_(next_frame_tree_node_id_++),
+      frame_tree_node_id_(frame_tree_node_id_generator_.GenerateNextId()),
       parent_(parent),
       frame_owner_element_type_(owner_type),
       tree_scope_type_(tree_scope_type),
@@ -192,8 +189,7 @@ void FrameTreeNode::DestroyInnerFrameTreeIfExists() {
   // lifetime and is dealt with separately.
   bool is_outer_dummy_node = false;
   if (current_frame_host() &&
-      current_frame_host()->inner_tree_main_frame_tree_node_id() !=
-          FrameTreeNode::kFrameTreeNodeInvalidId) {
+      current_frame_host()->inner_tree_main_frame_tree_node_id()) {
     is_outer_dummy_node = true;
   }
 
@@ -577,7 +573,8 @@ void FrameTreeNode::TakeNavigationRequest(
     }
     ResetNavigationRequestButKeepState(
         navigation_request->GetTypeForNavigationDiscardReason());
-  } else if (navigation_request_) {
+  } else if (navigation_request_ &&
+             !navigation_request_->GetNavigationDiscardReason().has_value()) {
     navigation_request_->set_navigation_discard_reason(
         navigation_request->GetTypeForNavigationDiscardReason());
   }
@@ -637,8 +634,9 @@ void FrameTreeNode::ResetNavigationRequestButKeepState(
   // accidentally complete a navigation that should be reset.
   CancelRestartingBackForwardCacheNavigation();
   devtools_instrumentation::OnResetNavigationRequest(navigation_request_.get());
-
-  navigation_request_->set_navigation_discard_reason(reason);
+  if (!navigation_request_->GetNavigationDiscardReason().has_value()) {
+    navigation_request_->set_navigation_discard_reason(reason);
+  }
   navigation_request_.reset();
 }
 
@@ -958,7 +956,7 @@ void FrameTreeNode::SetPopupCreatorOrigin(
 
 void FrameTreeNode::WriteIntoTrace(
     perfetto::TracedProto<TraceProto> proto) const {
-  proto->set_frame_tree_node_id(frame_tree_node_id());
+  proto->set_frame_tree_node_id(frame_tree_node_id().value());
   proto->set_is_main_frame(IsMainFrame());
   proto.Set(TraceProto::kCurrentFrameHost, current_frame_host());
   proto.Set(TraceProto::kSpeculativeFrameHost,
@@ -1030,47 +1028,6 @@ std::optional<FencedFrameProperties>& FrameTreeNode::GetFencedFrameProperties(
   FrameTreeNode* node = GetClosestAncestorWithFencedFrameProperties();
 
   return node ? node->fenced_frame_properties_ : fenced_frame_properties_;
-}
-
-void FrameTreeNode::MaybeResetFencedFrameAutomaticBeaconReportEventData(
-    blink::mojom::AutomaticBeaconType event_type) {
-  std::optional<FencedFrameProperties>& properties = GetFencedFrameProperties();
-  // `properties` will exist for both fenced frames as well as iframes loaded
-  // with a urn:uuid.
-  if (!properties) {
-    return;
-  }
-  properties->MaybeResetAutomaticBeaconData(event_type);
-}
-
-void FrameTreeNode::SetFencedFrameAutomaticBeaconReportEventData(
-    blink::mojom::AutomaticBeaconType event_type,
-    const std::string& event_data,
-    const std::vector<blink::FencedFrame::ReportingDestination>& destinations,
-    bool once,
-    bool cross_origin_exposed) {
-  std::optional<FencedFrameProperties>& properties = GetFencedFrameProperties();
-  // `properties` will exist for both fenced frames as well as iframes loaded
-  // with a urn:uuid. This allows URN iframes to call this function without
-  // getting bad-messaged.
-  if (!properties || !properties->fenced_frame_reporter()) {
-    mojo::ReportBadMessage(
-        "Automatic beacon data can only be set in fenced frames or iframes "
-        "loaded from a config with a fenced frame reporter.");
-    return;
-  }
-  // This metadata should only be present in the renderer in frames that are
-  // same-origin to the mapped url.
-  if (!properties->mapped_url().has_value() ||
-      !current_origin().IsSameOriginWith(url::Origin::Create(
-          properties->mapped_url()->GetValueIgnoringVisibility()))) {
-    mojo::ReportBadMessage(
-        "Automatic beacon data can only be set from documents that are same-"
-        "origin to the mapped url from the fenced frame config.");
-    return;
-  }
-  properties->UpdateAutomaticBeaconData(event_type, event_data, destinations,
-                                        once, cross_origin_exposed);
 }
 
 size_t FrameTreeNode::GetFencedFrameDepth(
@@ -1289,6 +1246,16 @@ void FrameTreeNode::CancelNavigation(NavigationDiscardReason reason) {
     navigation_request()->set_net_error(net::ERR_ABORTED);
   }
   ResetNavigationRequest(reason);
+}
+
+void FrameTreeNode::ResetNavigationsForDiscard() {
+  for (FrameTreeNode* frame : frame_tree().SubtreeNodes(this)) {
+    // TODO(crbug.com/365481515): Consider adding a separate discard reason for
+    // frame tree discarding.
+    frame->ResetNavigationRequest(NavigationDiscardReason::kWillRemoveFrame);
+    frame->current_frame_host()->ResetOwnedNavigationRequests(
+        NavigationDiscardReason::kWillRemoveFrame);
+  }
 }
 
 bool FrameTreeNode::Credentialless() const {

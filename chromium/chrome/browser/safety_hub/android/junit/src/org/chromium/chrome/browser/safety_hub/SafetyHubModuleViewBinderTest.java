@@ -41,7 +41,7 @@ public class SafetyHubModuleViewBinderTest {
     private static final @DrawableRes int SAFE_ICON = R.drawable.material_ic_check_24dp;
     private static final @DrawableRes int WARNING_ICON = R.drawable.ic_error;
     private static final @DrawableRes int INFO_ICON = R.drawable.btn_info;
-    private static final @DrawableRes int MANAGED_ICON = R.drawable.ic_business_small;
+    private static final @DrawableRes int MANAGED_ICON = R.drawable.ic_business;
     private static final String TEST_ACCOUNT_EMAIL = "test@gmail.com";
     private Activity mActivity;
     private PropertyModel mPasswordCheckPropertyModel;
@@ -151,7 +151,6 @@ public class SafetyHubModuleViewBinderTest {
         assertNull(mPasswordCheckPreference.getPrimaryButtonText());
         assertEquals(
                 expectedSecondaryButtonText, mPasswordCheckPreference.getSecondaryButtonText());
-        assertFalse(mPasswordCheckPreference.isExpanded());
 
         // Verify the managed state.
         mPasswordCheckPropertyModel.set(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY, true);
@@ -162,8 +161,8 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(expectedManagedSummary, mPasswordCheckPreference.getSummary().toString());
         assertEquals(SAFE_ICON, shadowOf(mPasswordCheckPreference.getIcon()).getCreatedFromResId());
         assertNull(mPasswordCheckPreference.getPrimaryButtonText());
-        assertNull(mPasswordCheckPreference.getSecondaryButtonText());
-        assertFalse(mPasswordCheckPreference.isExpanded());
+        assertEquals(
+                expectedSecondaryButtonText, mPasswordCheckPreference.getSecondaryButtonText());
     }
 
     @Test
@@ -199,9 +198,11 @@ public class SafetyHubModuleViewBinderTest {
                 WARNING_ICON, shadowOf(mPasswordCheckPreference.getIcon()).getCreatedFromResId());
         assertEquals(expectedPrimaryButtonText, mPasswordCheckPreference.getPrimaryButtonText());
         assertNull(mPasswordCheckPreference.getSecondaryButtonText());
-        assertTrue(mPasswordCheckPreference.isExpanded());
 
         // Verify the managed state.
+        String expectedSecondaryButtonText =
+                mActivity.getString(R.string.safety_hub_passwords_navigation_button);
+
         mPasswordCheckPropertyModel.set(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY, true);
         String expectedManagedSummary =
                 mActivity.getString(R.string.safety_hub_no_passwords_summary_managed);
@@ -210,9 +211,9 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(expectedManagedSummary, mPasswordCheckPreference.getSummary().toString());
         assertEquals(
                 MANAGED_ICON, shadowOf(mPasswordCheckPreference.getIcon()).getCreatedFromResId());
-        assertEquals(expectedPrimaryButtonText, mPasswordCheckPreference.getPrimaryButtonText());
-        assertNull(mPasswordCheckPreference.getSecondaryButtonText());
-        assertFalse(mPasswordCheckPreference.isExpanded());
+        assertNull(mPasswordCheckPreference.getPrimaryButtonText());
+        assertEquals(
+                expectedSecondaryButtonText, mPasswordCheckPreference.getSecondaryButtonText());
     }
 
     @Test
@@ -231,7 +232,6 @@ public class SafetyHubModuleViewBinderTest {
         assertNull(mPasswordCheckPreference.getPrimaryButtonText());
         assertEquals(
                 expectedSecondaryButtonText, mPasswordCheckPreference.getSecondaryButtonText());
-        assertFalse(mPasswordCheckPreference.isExpanded());
 
         // Verify the managed state.
         mPasswordCheckPropertyModel.set(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY, true);
@@ -243,8 +243,8 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(
                 MANAGED_ICON, shadowOf(mPasswordCheckPreference.getIcon()).getCreatedFromResId());
         assertNull(mPasswordCheckPreference.getPrimaryButtonText());
-        assertNull(mPasswordCheckPreference.getSecondaryButtonText());
-        assertFalse(mPasswordCheckPreference.isExpanded());
+        assertEquals(
+                expectedSecondaryButtonText, mPasswordCheckPreference.getSecondaryButtonText());
     }
 
     @Test
@@ -269,7 +269,6 @@ public class SafetyHubModuleViewBinderTest {
         assertNull(mPasswordCheckPreference.getPrimaryButtonText());
         assertEquals(
                 expectedSecondaryButtonText, mPasswordCheckPreference.getSecondaryButtonText());
-        assertFalse(mPasswordCheckPreference.isExpanded());
 
         // Verify the signed out state.
         mPasswordCheckPropertyModel.set(SafetyHubModuleProperties.IS_SIGNED_IN, false);
@@ -283,7 +282,6 @@ public class SafetyHubModuleViewBinderTest {
         assertNull(mPasswordCheckPreference.getPrimaryButtonText());
         assertEquals(
                 expectedSecondaryButtonText, mPasswordCheckPreference.getSecondaryButtonText());
-        assertFalse(mPasswordCheckPreference.isExpanded());
 
         // Verify the managed state.
         mPasswordCheckPropertyModel.set(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY, true);
@@ -295,8 +293,8 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(
                 MANAGED_ICON, shadowOf(mPasswordCheckPreference.getIcon()).getCreatedFromResId());
         assertNull(mPasswordCheckPreference.getPrimaryButtonText());
-        assertNull(mPasswordCheckPreference.getSecondaryButtonText());
-        assertFalse(mPasswordCheckPreference.isExpanded());
+        assertEquals(
+                expectedSecondaryButtonText, mPasswordCheckPreference.getSecondaryButtonText());
     }
 
     @Test
@@ -314,7 +312,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(SAFE_ICON, shadowOf(mUpdateCheckPreference.getIcon()).getCreatedFromResId());
         assertNull(mUpdateCheckPreference.getPrimaryButtonText());
         assertEquals(expectedSecondaryButtonText, mUpdateCheckPreference.getSecondaryButtonText());
-        assertFalse(mUpdateCheckPreference.isExpanded());
     }
 
     @Test
@@ -332,7 +329,6 @@ public class SafetyHubModuleViewBinderTest {
                 WARNING_ICON, shadowOf(mUpdateCheckPreference.getIcon()).getCreatedFromResId());
         assertEquals(expectedPrimaryButtonText, mUpdateCheckPreference.getPrimaryButtonText());
         assertNull(mUpdateCheckPreference.getSecondaryButtonText());
-        assertTrue(mUpdateCheckPreference.isExpanded());
     }
 
     @Test
@@ -350,7 +346,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(expectedTitle, mUpdateCheckPreference.getTitle().toString());
         assertEquals(expectedSummary, mUpdateCheckPreference.getSummary().toString());
         assertEquals(INFO_ICON, shadowOf(mUpdateCheckPreference.getIcon()).getCreatedFromResId());
-        assertFalse(mUpdateCheckPreference.isExpanded());
     }
 
     @Test
@@ -367,7 +362,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(INFO_ICON, shadowOf(mUpdateCheckPreference.getIcon()).getCreatedFromResId());
         assertNull(mUpdateCheckPreference.getPrimaryButtonText());
         assertEquals(expectedSecondaryButtonText, mUpdateCheckPreference.getSecondaryButtonText());
-        assertFalse(mUpdateCheckPreference.isExpanded());
     }
 
     @Test
@@ -385,7 +379,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(SAFE_ICON, shadowOf(mPermissionsPreference.getIcon()).getCreatedFromResId());
         assertNull(mPermissionsPreference.getPrimaryButtonText());
         assertEquals(expectedSecondaryButtonText, mPermissionsPreference.getSecondaryButtonText());
-        assertFalse(mPermissionsPreference.isExpanded());
     }
 
     @Test
@@ -412,7 +405,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(INFO_ICON, shadowOf(mPermissionsPreference.getIcon()).getCreatedFromResId());
         assertEquals(expectedPrimaryButtonText, mPermissionsPreference.getPrimaryButtonText());
         assertEquals(expectedSecondaryButtonText, mPermissionsPreference.getSecondaryButtonText());
-        assertFalse(mPermissionsPreference.isExpanded());
     }
 
     @Test
@@ -436,7 +428,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(
                 expectedSecondaryButtonText,
                 mNotificationsReviewPreference.getSecondaryButtonText());
-        assertFalse(mNotificationsReviewPreference.isExpanded());
     }
 
     @Test
@@ -469,7 +460,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(
                 expectedSecondaryButtonText,
                 mNotificationsReviewPreference.getSecondaryButtonText());
-        assertFalse(mNotificationsReviewPreference.isExpanded());
     }
 
     @Test
@@ -488,7 +478,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(SAFE_ICON, shadowOf(mSafeBrowsingPreference.getIcon()).getCreatedFromResId());
         assertNull(mSafeBrowsingPreference.getPrimaryButtonText());
         assertEquals(expectedSecondaryButtonText, mSafeBrowsingPreference.getSecondaryButtonText());
-        assertFalse(mSafeBrowsingPreference.isExpanded());
 
         // Verify the managed state.
         mSafeBrowsingPropertyModel.set(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY, true);
@@ -498,8 +487,7 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(expectedManagedSummary, mSafeBrowsingPreference.getSummary().toString());
         assertEquals(SAFE_ICON, shadowOf(mSafeBrowsingPreference.getIcon()).getCreatedFromResId());
         assertNull(mSafeBrowsingPreference.getPrimaryButtonText());
-        assertNull(mSafeBrowsingPreference.getSecondaryButtonText());
-        assertFalse(mSafeBrowsingPreference.isExpanded());
+        assertEquals(expectedSecondaryButtonText, mSafeBrowsingPreference.getSecondaryButtonText());
     }
 
     @Test
@@ -520,7 +508,6 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(SAFE_ICON, shadowOf(mSafeBrowsingPreference.getIcon()).getCreatedFromResId());
         assertNull(mSafeBrowsingPreference.getPrimaryButtonText());
         assertEquals(expectedSecondaryButtonText, mSafeBrowsingPreference.getSecondaryButtonText());
-        assertFalse(mSafeBrowsingPreference.isExpanded());
 
         // Verify the managed state.
         mSafeBrowsingPropertyModel.set(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY, true);
@@ -530,8 +517,7 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(expectedManagedSummary, mSafeBrowsingPreference.getSummary().toString());
         assertEquals(SAFE_ICON, shadowOf(mSafeBrowsingPreference.getIcon()).getCreatedFromResId());
         assertNull(mSafeBrowsingPreference.getPrimaryButtonText());
-        assertNull(mSafeBrowsingPreference.getSecondaryButtonText());
-        assertFalse(mSafeBrowsingPreference.isExpanded());
+        assertEquals(expectedSecondaryButtonText, mSafeBrowsingPreference.getSecondaryButtonText());
     }
 
     @Test
@@ -551,9 +537,11 @@ public class SafetyHubModuleViewBinderTest {
                 WARNING_ICON, shadowOf(mSafeBrowsingPreference.getIcon()).getCreatedFromResId());
         assertEquals(expectedPrimaryButtonText, mSafeBrowsingPreference.getPrimaryButtonText());
         assertNull(mSafeBrowsingPreference.getSecondaryButtonText());
-        assertTrue(mSafeBrowsingPreference.isExpanded());
 
         // Verify the managed state.
+        String expectedSecondaryButtonText =
+                mActivity.getString(R.string.safety_hub_go_to_security_settings_button);
+
         mSafeBrowsingPropertyModel.set(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY, true);
         String expectedManagedSummary =
                 mActivity.getString(R.string.safety_hub_safe_browsing_off_summary_managed);
@@ -562,8 +550,7 @@ public class SafetyHubModuleViewBinderTest {
         assertEquals(
                 MANAGED_ICON, shadowOf(mSafeBrowsingPreference.getIcon()).getCreatedFromResId());
         assertNull(mSafeBrowsingPreference.getPrimaryButtonText());
-        assertNull(mSafeBrowsingPreference.getSecondaryButtonText());
-        assertFalse(mSafeBrowsingPreference.isExpanded());
+        assertEquals(expectedSecondaryButtonText, mSafeBrowsingPreference.getSecondaryButtonText());
     }
 
     @Test

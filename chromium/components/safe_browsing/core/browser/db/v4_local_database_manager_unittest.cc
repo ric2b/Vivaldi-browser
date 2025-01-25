@@ -37,6 +37,8 @@
 
 namespace safe_browsing {
 
+using enum ExtendedReportingLevel;
+
 namespace {
 
 typedef std::vector<FullHashInfo> FullHashInfos;
@@ -185,14 +187,9 @@ class FakeV4Database : public V4Database {
         }
       }
     }
-    if (base::FeatureList::IsEnabled(kMmapSafeBrowsingDatabase) &&
-        kMmapSafeBrowsingDatabaseAsync.Get()) {
       // Simulate async behavior of real implementation.
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback), std::move(results)));
-    } else {
-      std::move(callback).Run(std::move(results));
-    }
   }
 
   // V4Database implementation
@@ -270,16 +267,6 @@ class TestClient : public SafeBrowsingDatabaseManager::Client {
     }
   }
 
-  void OnCheckResourceUrlResult(const GURL& url,
-                                SBThreatType threat_type,
-                                const std::string& threat_hash) override {
-    ASSERT_EQ(expected_urls_[0], url);
-    ASSERT_EQ(expected_sb_threat_type_, threat_type);
-    ASSERT_EQ(threat_type == SBThreatType::SB_THREAT_TYPE_SAFE,
-              threat_hash.empty());
-    on_check_resource_url_result_called_ = true;
-  }
-
   void OnCheckDownloadUrlResult(const std::vector<GURL>& url_chain,
                                 SBThreatType threat_type) override {
     ASSERT_EQ(expected_urls_, url_chain);
@@ -295,16 +282,12 @@ class TestClient : public SafeBrowsingDatabaseManager::Client {
   bool on_check_download_urls_result_called() {
     return on_check_download_urls_result_called_;
   }
-  bool on_check_resource_url_result_called() {
-    return on_check_resource_url_result_called_;
-  }
 
  private:
   const SBThreatType expected_sb_threat_type_;
   std::vector<GURL> expected_urls_;
   bool on_check_browse_url_result_called_ = false;
   bool on_check_download_urls_result_called_ = false;
-  bool on_check_resource_url_result_called_ = false;
   raw_ptr<V4LocalDatabaseManager> manager_to_cancel_;
 };
 
@@ -497,13 +480,13 @@ class V4LocalDatabaseManagerTest : public PlatformTest {
   void ResetV4Database() { v4_local_database_manager_->v4_database_.reset(); }
 
   void StartLocalDatabaseManager() {
-    v4_local_database_manager_->StartOnSBThread(test_shared_loader_factory_,
+    v4_local_database_manager_->StartOnUIThread(test_shared_loader_factory_,
                                                 GetTestV4ProtocolConfig());
   }
 
   void StopLocalDatabaseManager() {
     if (v4_local_database_manager_) {
-      v4_local_database_manager_->StopOnSBThread(/*shutdown=*/false);
+      v4_local_database_manager_->StopOnUIThread(/*shutdown=*/false);
     }
 
     // Force destruction of the database.
@@ -512,7 +495,7 @@ class V4LocalDatabaseManagerTest : public PlatformTest {
 
   void ShutdownLocalDatabaseManager() {
     if (v4_local_database_manager_) {
-      v4_local_database_manager_->StopOnSBThread(/*shutdown=*/true);
+      v4_local_database_manager_->StopOnUIThread(/*shutdown=*/true);
     }
 
     // Force destruction of the database.
@@ -596,15 +579,10 @@ TEST_F(V4LocalDatabaseManagerTest,
   bool result = v4_local_database_manager_->CheckBrowseUrl(
       url, usual_threat_types_, &client, CheckBrowseUrlType::kHashDatabase);
 
-  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
-    EXPECT_FALSE(result);
-    EXPECT_FALSE(client.on_check_browse_url_result_called());
-    WaitForTasksOnTaskRunner();
-    EXPECT_TRUE(client.on_check_browse_url_result_called());
-  } else {
-    // Both the stores are empty right now so CheckBrowseUrl should return true.
-    EXPECT_TRUE(result);
-  }
+  EXPECT_FALSE(result);
+  EXPECT_FALSE(client.on_check_browse_url_result_called());
+  WaitForTasksOnTaskRunner();
+  EXPECT_TRUE(client.on_check_browse_url_result_called());
 }
 
 TEST_F(V4LocalDatabaseManagerTest, TestCheckBrowseUrlWithFakeDbReturnsMatch) {
@@ -711,16 +689,10 @@ TEST_F(V4LocalDatabaseManagerTest, TestCheckCsdAllowlistWithFullMatch) {
   auto result =
       v4_local_database_manager_->CheckCsdAllowlistUrl(url_check, &client);
 
-  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
-    EXPECT_EQ(AsyncMatch::ASYNC, result);
-    EXPECT_FALSE(client.callback_called());
-    WaitForTasksOnTaskRunner();
-    EXPECT_TRUE(client.callback_called());
-  } else {
-    EXPECT_EQ(AsyncMatch::MATCH, result);
-    WaitForTasksOnTaskRunner();
-    EXPECT_FALSE(client.callback_called());
-  }
+  EXPECT_EQ(AsyncMatch::ASYNC, result);
+  EXPECT_FALSE(client.callback_called());
+  WaitForTasksOnTaskRunner();
+  EXPECT_TRUE(client.callback_called());
 }
 
 TEST_F(V4LocalDatabaseManagerTest, TestCheckCsdAllowlistWithNoMatch) {
@@ -743,16 +715,10 @@ TEST_F(V4LocalDatabaseManagerTest, TestCheckCsdAllowlistWithNoMatch) {
   auto result =
       v4_local_database_manager_->CheckCsdAllowlistUrl(url_check, &client);
 
-  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
-    EXPECT_EQ(AsyncMatch::ASYNC, result);
-    EXPECT_FALSE(client.callback_called());
-    WaitForTasksOnTaskRunner();
-    EXPECT_TRUE(client.callback_called());
-  } else {
-    EXPECT_EQ(AsyncMatch::NO_MATCH, result);
-    WaitForTasksOnTaskRunner();
-    EXPECT_FALSE(client.callback_called());
-  }
+  EXPECT_EQ(AsyncMatch::ASYNC, result);
+  EXPECT_FALSE(client.callback_called());
+  WaitForTasksOnTaskRunner();
+  EXPECT_TRUE(client.callback_called());
 }
 
 // When allowlist is unavailable, all URLS should be allowed.
@@ -906,10 +872,6 @@ TEST_F(V4LocalDatabaseManagerTest, TestCheckUrlForHCAllowlistUnavailable) {
 }
 
 TEST_F(V4LocalDatabaseManagerTest, TestCheckUrlForHCAllowlistAfterStopping) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeatureWithParameters(
-      kMmapSafeBrowsingDatabase, {{"MmapSafeBrowsingDatabaseAsync", "true"}});
-
   SetupFakeManager();
   std::string url_safe_no_scheme("example.com/safe/");
   FullHashStr safe_full_hash(crypto::SHA256HashString(url_safe_no_scheme));
@@ -1000,11 +962,9 @@ TEST_F(V4LocalDatabaseManagerTest, TestGetSeverestThreatTypeAndMetadata) {
 
   FullHashStr fh_malware("Malware");
   FullHashInfo fhi_malware(fh_malware, GetUrlMalwareId(), base::Time::Now());
-  fhi_malware.metadata.population_id = "malware_popid";
 
   FullHashStr fh_api("api");
   FullHashInfo fhi_api(fh_api, GetChromeUrlApiId(), base::Time::Now());
-  fhi_api.metadata.population_id = "api_popid";
 
   FullHashStr fh_example("example");
   std::vector<FullHashInfo> fhis({fhi_malware, fhi_api});
@@ -1014,7 +974,6 @@ TEST_F(V4LocalDatabaseManagerTest, TestGetSeverestThreatTypeAndMetadata) {
                                                    SB_THREAT_TYPE_SAFE);
   SBThreatType result_threat_type;
   ThreatMetadata metadata;
-  FullHashStr matching_full_hash;
 
   const std::vector<SBThreatType> expected_full_hash_threat_types(
       {SB_THREAT_TYPE_URL_MALWARE, SB_THREAT_TYPE_SAFE,
@@ -1022,12 +981,10 @@ TEST_F(V4LocalDatabaseManagerTest, TestGetSeverestThreatTypeAndMetadata) {
 
   v4_local_database_manager_->GetSeverestThreatTypeAndMetadata(
       fhis, full_hashes, &full_hash_threat_types, &result_threat_type,
-      &metadata, &matching_full_hash);
+      &metadata);
   EXPECT_EQ(expected_full_hash_threat_types, full_hash_threat_types);
 
   EXPECT_EQ(SB_THREAT_TYPE_URL_MALWARE, result_threat_type);
-  EXPECT_EQ("malware_popid", metadata.population_id);
-  EXPECT_EQ(fh_malware, matching_full_hash);
 
   // Reversing the list has no effect.
   std::reverse(std::begin(fhis), std::end(fhis));
@@ -1035,11 +992,9 @@ TEST_F(V4LocalDatabaseManagerTest, TestGetSeverestThreatTypeAndMetadata) {
 
   v4_local_database_manager_->GetSeverestThreatTypeAndMetadata(
       fhis, full_hashes, &full_hash_threat_types, &result_threat_type,
-      &metadata, &matching_full_hash);
+      &metadata);
   EXPECT_EQ(expected_full_hash_threat_types, full_hash_threat_types);
   EXPECT_EQ(SB_THREAT_TYPE_URL_MALWARE, result_threat_type);
-  EXPECT_EQ("malware_popid", metadata.population_id);
-  EXPECT_EQ(fh_malware, matching_full_hash);
 
   histogram_tester_.ExpectUniqueSample(
       "SafeBrowsing.V4LocalDatabaseManager.ThreatInfoSize",
@@ -1196,7 +1151,7 @@ TEST_F(V4LocalDatabaseManagerTest, QueuedCheckWithFullHash) {
   StoreAndHashPrefixes store_and_hash_prefixes;
   store_and_hash_prefixes.emplace_back(GetUrlMalwareId(), bad_hash_prefix);
 
-  FullHashInfo fhi(bad_full_hash, GetChromeUrlClientIncidentId(), base::Time());
+  FullHashInfo fhi(bad_full_hash, GetUrlMalwareId(), base::Time());
   ScopedFakeGetHashProtocolManagerFactory pin(FullHashInfos({fhi}));
 
   ReplaceV4Database(store_and_hash_prefixes, false,
@@ -1204,7 +1159,7 @@ TEST_F(V4LocalDatabaseManagerTest, QueuedCheckWithFullHash) {
   StartLocalDatabaseManager();
 
   // The fake database returns a matched hash prefix.
-  TestClient client(SB_THREAT_TYPE_BLOCKLISTED_RESOURCE, url_bad);
+  TestClient client(SB_THREAT_TYPE_URL_MALWARE, url_bad);
   EXPECT_FALSE(v4_local_database_manager_->CheckBrowseUrl(
       url_bad, usual_threat_types_, &client,
       CheckBrowseUrlType::kHashDatabase));
@@ -1261,7 +1216,7 @@ TEST_F(V4LocalDatabaseManagerTest, UsingWeakPtrDropsCallback) {
   EXPECT_FALSE(v4_local_database_manager_->CheckBrowseUrl(
       url_bad, usual_threat_types_, &client,
       CheckBrowseUrlType::kHashDatabase));
-  v4_local_database_manager_->StopOnSBThread(true);
+  v4_local_database_manager_->StopOnUIThread(true);
 
   // Release the V4LocalDatabaseManager object right away before the callback
   // gets called. When the callback gets called, without using a weak-ptr
@@ -1269,7 +1224,7 @@ TEST_F(V4LocalDatabaseManagerTest, UsingWeakPtrDropsCallback) {
   // that the callback is simply dropped.
   v4_local_database_manager_ = nullptr;
 
-  // Wait for the tasks scheduled by StopOnSBThread to complete.
+  // Wait for the tasks scheduled by StopOnUIThread to complete.
   WaitForTasksOnTaskRunner();
 }
 
@@ -1344,30 +1299,6 @@ TEST_F(V4LocalDatabaseManagerTest, TestCheckBrowseUrlWithSameClientAndCancel) {
   EXPECT_TRUE(client.on_check_browse_url_result_called());
 }
 
-TEST_F(V4LocalDatabaseManagerTest, TestCheckResourceUrl) {
-  // Setup to receive full-hash misses.
-  ScopedFakeGetHashProtocolManagerFactory pin(FullHashInfos({}));
-
-  // Reset the database manager so it picks up the replacement protocol manager.
-  ResetLocalDatabaseManager();
-  WaitForTasksOnTaskRunner();
-
-  std::string url_bad_no_scheme("example.com/bad/");
-  FullHashStr bad_full_hash(crypto::SHA256HashString(url_bad_no_scheme));
-  const HashPrefixStr bad_hash_prefix(bad_full_hash.substr(0, 5));
-  StoreAndHashPrefixes store_and_hash_prefixes;
-  store_and_hash_prefixes.emplace_back(GetChromeUrlClientIncidentId(),
-                                       bad_hash_prefix);
-  ReplaceV4Database(store_and_hash_prefixes, /* stores_available= */ true);
-
-  const GURL url_bad("https://" + url_bad_no_scheme);
-  TestClient client(SB_THREAT_TYPE_SAFE, url_bad);
-  EXPECT_FALSE(v4_local_database_manager_->CheckResourceUrl(url_bad, &client));
-  EXPECT_FALSE(client.on_check_resource_url_result_called());
-  WaitForTasksOnTaskRunner();
-  EXPECT_TRUE(client.on_check_resource_url_result_called());
-}
-
 TEST_F(V4LocalDatabaseManagerTest, TestSubresourceFilterCallback) {
   // Setup to receive full-hash misses.
   ScopedFakeGetHashProtocolManagerFactory pin(FullHashInfos({}));
@@ -1396,32 +1327,6 @@ TEST_F(V4LocalDatabaseManagerTest, TestSubresourceFilterCallback) {
     WaitForTasksOnTaskRunner();
     EXPECT_TRUE(client.on_check_browse_url_result_called());
   }
-}
-
-TEST_F(V4LocalDatabaseManagerTest, TestCheckResourceUrlReturnsBad) {
-  // Setup to receive full-hash hit.
-  std::string url_bad_no_scheme("example.com/bad/");
-  FullHashStr bad_full_hash(crypto::SHA256HashString(url_bad_no_scheme));
-  FullHashInfo fhi(bad_full_hash, GetChromeUrlClientIncidentId(), base::Time());
-  ScopedFakeGetHashProtocolManagerFactory pin(FullHashInfos({fhi}));
-
-  // Reset the database manager so it picks up the replacement protocol manager.
-  ResetLocalDatabaseManager();
-  WaitForTasksOnTaskRunner();
-
-  // Put a match in the db that will cause a protocol-manager request.
-  const HashPrefixStr bad_hash_prefix(bad_full_hash.substr(0, 5));
-  StoreAndHashPrefixes store_and_hash_prefixes;
-  store_and_hash_prefixes.emplace_back(GetChromeUrlClientIncidentId(),
-                                       bad_hash_prefix);
-  ReplaceV4Database(store_and_hash_prefixes, /* stores_available= */ true);
-
-  const GURL url_bad("https://" + url_bad_no_scheme);
-  TestClient client(SB_THREAT_TYPE_BLOCKLISTED_RESOURCE, url_bad);
-  EXPECT_FALSE(v4_local_database_manager_->CheckResourceUrl(url_bad, &client));
-  EXPECT_FALSE(client.on_check_resource_url_result_called());
-  WaitForTasksOnTaskRunner();
-  EXPECT_TRUE(client.on_check_resource_url_result_called());
 }
 
 TEST_F(V4LocalDatabaseManagerTest, TestCheckExtensionIDsNothingBlocklisted) {
@@ -1623,14 +1528,10 @@ TEST_F(V4LocalDatabaseManagerTest, FlagOneUrlAsPhishing) {
       url_good, usual_threat_types_, &client,
       CheckBrowseUrlType::kHashDatabase);
 
-  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
     EXPECT_FALSE(result);
     EXPECT_FALSE(client.on_check_browse_url_result_called());
     WaitForTasksOnTaskRunner();
     EXPECT_TRUE(client.on_check_browse_url_result_called());
-  } else {
-    EXPECT_TRUE(result);
-  }
 
   WaitForTasksOnTaskRunner();
   StopLocalDatabaseManager();
@@ -1658,14 +1559,10 @@ TEST_F(V4LocalDatabaseManagerTest, FlagOneUrlAsMalware) {
       url_good, usual_threat_types_, &client,
       CheckBrowseUrlType::kHashDatabase);
 
-  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
     EXPECT_FALSE(result);
     EXPECT_FALSE(client.on_check_browse_url_result_called());
     WaitForTasksOnTaskRunner();
     EXPECT_TRUE(client.on_check_browse_url_result_called());
-  } else {
-    EXPECT_TRUE(result);
-  }
 
   WaitForTasksOnTaskRunner();
   StopLocalDatabaseManager();
@@ -1693,14 +1590,10 @@ TEST_F(V4LocalDatabaseManagerTest, FlagOneUrlAsUWS) {
       url_good, usual_threat_types_, &client,
       CheckBrowseUrlType::kHashDatabase);
 
-  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
     EXPECT_FALSE(result);
     EXPECT_FALSE(client.on_check_browse_url_result_called());
     WaitForTasksOnTaskRunner();
     EXPECT_TRUE(client.on_check_browse_url_result_called());
-  } else {
-    EXPECT_TRUE(result);
-  }
 
   WaitForTasksOnTaskRunner();
   StopLocalDatabaseManager();
@@ -1743,14 +1636,10 @@ TEST_F(V4LocalDatabaseManagerTest, FlagMultipleUrls) {
       url_good, usual_threat_types_, &client_good,
       CheckBrowseUrlType::kHashDatabase);
 
-  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
     EXPECT_FALSE(result);
     EXPECT_FALSE(client_good.on_check_browse_url_result_called());
     WaitForTasksOnTaskRunner();
     EXPECT_TRUE(client_good.on_check_browse_url_result_called());
-  } else {
-    EXPECT_TRUE(result);
-  }
 
   StopLocalDatabaseManager();
 }
@@ -1771,7 +1660,6 @@ TEST_F(V4LocalDatabaseManagerTest, SyncedLists) {
                                              GetUrlUwsId(),
                                              GetUrlMalBinId(),
                                              GetChromeExtMalwareId(),
-                                             GetChromeUrlClientIncidentId(),
                                              GetUrlBillingId(),
                                              GetUrlCsdDownloadAllowlistId(),
                                              GetUrlCsdAllowlistId(),
@@ -1810,10 +1698,8 @@ TEST_F(V4LocalDatabaseManagerTest, TestQueuedChecksMatchArtificialPrefixes) {
       "mark_as_malware", "https://example.com/");
   WaitForTasksOnTaskRunner();
 
-  if (kMmapSafeBrowsingDatabaseAsync.Get()) {
-    EXPECT_FALSE(client.on_check_browse_url_result_called());
-    WaitForTasksOnTaskRunner();
-  }
+  EXPECT_FALSE(client.on_check_browse_url_result_called());
+  WaitForTasksOnTaskRunner();
 
   EXPECT_TRUE(client.on_check_browse_url_result_called());
   EXPECT_TRUE(GetQueuedChecks().empty());

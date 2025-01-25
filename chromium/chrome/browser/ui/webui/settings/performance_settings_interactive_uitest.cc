@@ -101,12 +101,6 @@ class PerformanceSettingsInteractiveTest
     : public MemorySaverInteractiveTestMixin<
           WebUiInteractiveTestMixin<InteractiveBrowserTest>> {
  public:
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        performance_manager::features::kDiscardRingImprovements);
-    InteractiveBrowserTest::SetUp();
-  }
-
   auto CheckDiscardRingTreatmentLogged(
       bool enabled,
       int expected_count,
@@ -117,9 +111,6 @@ class PerformanceSettingsInteractiveTest
           static_cast<int>(enabled), expected_count);
     }));
   }
-
- protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(PerformanceSettingsInteractiveTest,
@@ -346,13 +337,6 @@ IN_PROC_BROWSER_TEST_F(MemorySettingsCrosInteractiveTest,
 class MemorySaverAggressivenessSettingsInteractiveTest
     : public MemorySettingsInteractiveTest {
  public:
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        performance_manager::features::kMemorySaverModeAggressiveness);
-
-    InteractiveBrowserTest::SetUp();
-  }
-
   auto CheckMemorySaverModeAggressivenessPrefState(
       MemorySaverModeAggressiveness aggressiveness) {
     return CheckResult(
@@ -369,6 +353,7 @@ class MemorySaverAggressivenessSettingsInteractiveTest
       const DeepQuery& element,
       MemorySaverModeAggressiveness aggressiveness) {
     return Steps(
+        ScrollIntoView(kPerformanceSettingsPage, element),
         ClickElement(kPerformanceSettingsPage, element),
         WaitForButtonStateChange(kPerformanceSettingsPage, element, true),
         CheckMemorySaverModePrefState(MemorySaverModeState::kEnabled),
@@ -391,6 +376,7 @@ class MemorySaverAggressivenessSettingsInteractiveTest
       MemorySaverModeAggressiveness aggressiveness,
       const base::HistogramTester& histogram_tester) {
     return Steps(
+        ScrollIntoView(kPerformanceSettingsPage, element),
         ClickElement(kPerformanceSettingsPage, element),
         WaitForButtonStateChange(kPerformanceSettingsPage, element, true),
         CheckMemorySaverModeAggressivenessLogged(aggressiveness, 1,
@@ -777,7 +763,7 @@ IN_PROC_BROWSER_TEST_F(TabDiscardExceptionsSettingsInteractiveTest,
       WaitForElementToRender(kPerformanceSettingsPage, kExceptionDialogEntry),
 
       // Dialog entry should hide when its corresponding tab is closed
-      Do(base::BindLambdaForTesting([=]() {
+      Do(base::BindLambdaForTesting([=, this]() {
         browser()->tab_strip_model()->CloseWebContentsAt(
             1, TabCloseTypes::CLOSE_NONE);
       })),

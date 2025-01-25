@@ -40,7 +40,7 @@ class NavigationEmulator {
   private prerenderStatusUpdatedEvent: Protocol.Preload.PrerenderStatusUpdatedEvent|null = null;
 
   constructor() {
-    this.tabTarget = createTarget({type: SDK.Target.Type.Tab});
+    this.tabTarget = createTarget({type: SDK.Target.Type.TAB});
     // Fill fake ones here and fill real ones in async part.
     this.primaryTarget = createTarget();
     this.frameId = 'fakeFrameId' as Protocol.Page.FrameId;
@@ -136,7 +136,7 @@ class NavigationEmulator {
     // It's not so important and omitted.
     dispatchEvent(this.primaryTarget, 'Preload.prerenderStatusUpdated', {
       ...this.prerenderStatusUpdatedEvent,
-      status: SDK.PreloadingModel.PreloadingStatus.Success,
+      status: SDK.PreloadingModel.PreloadingStatus.SUCCESS,
     });
   }
 
@@ -185,7 +185,7 @@ class NavigationEmulator {
         },
         initiatingFrameId: this.frameId,
         prefetchUrl: url,
-        status: SDK.PreloadingModel.PreloadingStatus.Running,
+        status: SDK.PreloadingModel.PreloadingStatus.RUNNING,
       });
     }
 
@@ -776,7 +776,7 @@ describeWithMockConnection('PreloadingAttemptView', () => {
     const values = getCleanTextContentFromElements(report, 'devtools-report-value');
     assert.deepEqual(zip2(keys, values), [
       ['URL', 'https://example.com/prerendered.html'],
-      ['Action', 'PrerenderInspect'],
+      ['Action', 'Prerender Inspect'],
       ['Status', 'Speculative load is running.'],
     ]);
 
@@ -847,7 +847,7 @@ describeWithMockConnection('PreloadingAttemptView', () => {
     const values = getCleanTextContentFromElements(report, 'devtools-report-value');
     assert.deepEqual(zip2(keys, values), [
       ['URL', 'https://example.com/prerendered.html'],
-      ['Action', 'PrerenderInspect'],
+      ['Action', 'Prerender Inspect'],
       ['Status', 'Speculative load finished and the result is ready for the next navigation.'],
     ]);
 
@@ -926,7 +926,7 @@ describeWithMockConnection('PreloadingAttemptView', () => {
     const values = getCleanTextContentFromElements(report, 'devtools-report-value');
     assert.deepEqual(zip2(keys, values), [
       ['URL', 'https://example.com/prerendered.html'],
-      ['Action', 'PrerenderInspect'],
+      ['Action', 'Prerender Inspect'],
       ['Status', 'Speculative load failed.'],
       [
         'Failure reason',
@@ -936,7 +936,7 @@ describeWithMockConnection('PreloadingAttemptView', () => {
 
     const buttons = report.querySelectorAll('devtools-report-value:nth-of-type(2) devtools-button');
     assert.strictEqual(buttons[0].textContent?.trim(), 'Inspect');
-    assert.strictEqual(buttons[0].getAttribute('disabled'), '');
+    assert.strictEqual(buttons[0].shadowRoot?.querySelector('button')?.getAttribute('disabled'), '');
   });
 });
 
@@ -976,7 +976,7 @@ async function testWarnings(
   const warningsUpdatedPromise: Promise<void> = new Promise(resolve => {
     const model = target.model(SDK.PreloadingModel.PreloadingModel);
     assert.exists(model);
-    model.addEventListener(SDK.PreloadingModel.Events.WarningsUpdated, _ => resolve());
+    model.addEventListener(SDK.PreloadingModel.Events.WARNINGS_UPDATED, _ => resolve());
   });
 
   const view = createRuleSetView(target);

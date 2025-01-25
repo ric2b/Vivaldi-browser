@@ -246,7 +246,7 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllCalendars(
 base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendar(
     CalendarID calendar_id,
     Calendar calendar,
-    base::OnceCallback<void(bool)> callback,
+    base::OnceCallback<void(StatusCB)> callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
 

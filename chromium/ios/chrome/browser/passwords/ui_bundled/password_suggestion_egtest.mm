@@ -37,17 +37,7 @@ namespace {
 constexpr char kNewPasswordFieldID[] = "pw";
 constexpr char kConfirmationPasswordFieldID[] = "cpw";
 
-using base::test::ios::kWaitForActionTimeout;
 using password_manager_test_utils::DeleteCredential;
-
-BOOL WaitForKeyboardToAppear() {
-  GREYCondition* waitForKeyboard = [GREYCondition
-      conditionWithName:@"Wait for keyboard"
-                  block:^BOOL {
-                    return [EarlGrey isKeyboardShownWithError:nil];
-                  }];
-  return [waitForKeyboard waitWithTimeout:kWaitForActionTimeout.InSeconds()];
-}
 
 // Get the top presented view controller, in this case the bottom sheet view
 // controller.
@@ -96,11 +86,17 @@ id<GREYMatcher> ProactivePasswordGenerationUseKeyboardButton() {
   // enabled by default.
   [ChromeEarlGrey clearUserPrefWithName:
                       prefs::kIosPasswordGenerationBottomSheetDismissCount];
+
+  // Clear password store to make sure that the sheet can be displayed in the
+  // test.
+  [PasswordSettingsAppInterface clearPasswordStores];
 }
 
 - (void)tearDown {
   [ChromeEarlGrey clearUserPrefWithName:
                       prefs::kIosPasswordGenerationBottomSheetDismissCount];
+  // The test may leave stored crendentials behind so clear them.
+  [PasswordSettingsAppInterface clearPasswordStores];
   [super tearDown];
 }
 
@@ -171,7 +167,7 @@ id<GREYMatcher> ProactivePasswordGenerationUseKeyboardButton() {
       selectElementWithMatcher:ProactivePasswordGenerationUseKeyboardButton()]
       performAction:grey_tap()];
 
-  GREYAssert(WaitForKeyboardToAppear(), @"Keyboard didn't appear.");
+  [ChromeEarlGrey waitForKeyboardToAppear];
 }
 
 #pragma mark - Tests
@@ -216,7 +212,7 @@ id<GREYMatcher> ProactivePasswordGenerationUseKeyboardButton() {
       selectElementWithMatcher:ProactivePasswordGenerationUseKeyboardButton()]
       performAction:grey_tap()];
 
-  GREYAssert(WaitForKeyboardToAppear(), @"Keyboard didn't appear.");
+  [ChromeEarlGrey waitForKeyboardToAppear];
 }
 
 // Tests that the bottom sheet does not show after it has been
@@ -240,7 +236,7 @@ id<GREYMatcher> ProactivePasswordGenerationUseKeyboardButton() {
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:chrome_test_util::TapWebElementWithId(kNewPasswordFieldID)];
-  GREYAssert(WaitForKeyboardToAppear(), @"Keyboard didn't appear.");
+  [ChromeEarlGrey waitForKeyboardToAppear];
 
   // Re-enable proactive password generation bottom sheet by using the
   // suggested password from the keyboard accessory.
@@ -259,6 +255,9 @@ id<GREYMatcher> ProactivePasswordGenerationUseKeyboardButton() {
       performAction:grey_tap()];
 
   [self verifyNewPasswordFieldsHaveBeenFilled];
+
+  // Clear the saved password so the proactive sheet can be displayed again.
+  [PasswordSettingsAppInterface clearPasswordStores];
 
   // Verify that the bottom sheet is unsilenced when triggered again.
   [ChromeEarlGrey reload];
@@ -313,14 +312,39 @@ id<GREYMatcher> ProactivePasswordGenerationUseKeyboardButton() {
 
 // Tests that the bottom sheet does not show if the user isn't signed in.
 - (void)testUserSignedOut {
-  [ChromeEarlGrey signOutAndClearIdentitiesAndWaitForCompletion];
+  [ChromeEarlGrey signOutAndClearIdentities];
 
   [self loadSignupPage];
 
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:chrome_test_util::TapWebElementWithId(kNewPasswordFieldID)];
 
-  GREYAssert(WaitForKeyboardToAppear(), @"Keyboard didn't appear.");
+  [ChromeEarlGrey waitForKeyboardToAppear];
+}
+
+- (void)testProactiveBottomSheetNotShownWhenCredentialsAvailable {
+  [self loadSignupPage];
+
+  // Fill new password with bottom sheet.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:chrome_test_util::TapWebElementWithId(kNewPasswordFieldID)];
+  [ChromeEarlGrey
+      waitForUIElementToAppearWithMatcher:UseSuggestedPasswordButton()];
+  [[EarlGrey selectElementWithMatcher:UseSuggestedPasswordButton()]
+      performAction:grey_tap()];
+  [self verifyNewPasswordFieldsHaveBeenFilled];
+
+  // Reload page so new password is taken into consideration.
+  [ChromeEarlGrey reload];
+
+  // Focus on the new password and validate that the keyboard is shown instead
+  // of the bottom sheet because there is now a saved credential for the site.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:chrome_test_util::TapWebElementWithId(kNewPasswordFieldID)];
+  [ChromeEarlGrey waitForKeyboardToAppear];
+  id<GREYMatcher> suggest_password_chip =
+      grey_accessibilityLabel(@"Suggest Strong Password");
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:suggest_password_chip];
 }
 
 @end

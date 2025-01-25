@@ -27,6 +27,7 @@
 #include "content/browser/aggregation_service/aggregation_service_test_utils.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
 #include "content/browser/private_aggregation/private_aggregation_budgeter.h"
+#include "content/browser/private_aggregation/private_aggregation_caller_api.h"
 #include "content/browser/private_aggregation/private_aggregation_features.h"
 #include "content/browser/private_aggregation/private_aggregation_host.h"
 #include "content/browser/private_aggregation/private_aggregation_test_utils.h"
@@ -154,7 +155,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   AggregatableReportRequest expected_request =
@@ -171,13 +172,15 @@ TEST_F(PrivateAggregationManagerImplTest,
   {
     testing::InSequence seq;
     EXPECT_CALL(checkpoint, Call(0));
-    EXPECT_CALL(*budgeter_,
-                ConsumeBudget(
-                    expected_request.payload_contents().contributions[0].value,
-                    example_key, _))
+    EXPECT_CALL(
+        *budgeter_,
+        ConsumeBudget(
+            expected_request.payload_contents().contributions[0].value,
+            example_key,
+            expected_request.payload_contents().contributions[0].value, _))
         .WillOnce(Invoke(
             [&checkpoint](
-                int, const PrivateAggregationBudgetKey&,
+                int, const PrivateAggregationBudgetKey&, int,
                 base::OnceCallback<void(
                     PrivateAggregationBudgeter::RequestResult)> on_done) {
               checkpoint.Call(1);
@@ -218,7 +221,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   AggregatableReportRequest example_request =
@@ -249,10 +252,11 @@ TEST_F(PrivateAggregationManagerImplTest,
     testing::InSequence seq;
 
     EXPECT_CALL(checkpoint, Call(0));
-    EXPECT_CALL(*budgeter_, ConsumeBudget(/*budget=*/125, example_key, _))
+    EXPECT_CALL(*budgeter_, ConsumeBudget(/*budget=*/125, example_key,
+                                          /*minimum_histogram_value=*/5, _))
         .WillOnce(Invoke(
             [&checkpoint](
-                int, const PrivateAggregationBudgetKey&,
+                int, const PrivateAggregationBudgetKey&, int,
                 base::OnceCallback<void(
                     PrivateAggregationBudgeter::RequestResult)> on_done) {
               checkpoint.Call(1);
@@ -293,7 +297,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   AggregatableReportRequest expected_request =
@@ -305,13 +309,15 @@ TEST_F(PrivateAggregationManagerImplTest,
     testing::InSequence seq;
 
     EXPECT_CALL(checkpoint, Call(0));
-    EXPECT_CALL(*budgeter_,
-                ConsumeBudget(
-                    expected_request.payload_contents().contributions[0].value,
-                    example_key, _))
+    EXPECT_CALL(
+        *budgeter_,
+        ConsumeBudget(
+            expected_request.payload_contents().contributions[0].value,
+            example_key,
+            expected_request.payload_contents().contributions[0].value, _))
         .WillOnce(Invoke(
             [&checkpoint](
-                int, const PrivateAggregationBudgetKey&,
+                int, const PrivateAggregationBudgetKey&, int,
                 base::OnceCallback<void(
                     PrivateAggregationBudgeter::RequestResult)> on_done) {
               checkpoint.Call(1);
@@ -348,7 +354,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   AggregatableReportRequest example_request =
@@ -400,7 +406,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_request.shared_info().reporting_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   std::optional<AggregatableReportRequest> standard_request =
@@ -420,9 +426,11 @@ TEST_F(PrivateAggregationManagerImplTest,
   EXPECT_CALL(
       *budgeter_,
       ConsumeBudget(standard_request->payload_contents().contributions[0].value,
-                    example_key, _))
+                    example_key,
+                    standard_request->payload_contents().contributions[0].value,
+                    _))
       .WillOnce(Invoke(
-          [](int, const PrivateAggregationBudgetKey&,
+          [](int, const PrivateAggregationBudgetKey&, int,
              base::OnceCallback<void(PrivateAggregationBudgeter::RequestResult)>
                  on_done) {
             std::move(on_done).Run(
@@ -469,7 +477,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_request.shared_info().reporting_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   std::optional<AggregatableReportRequest> standard_request =
@@ -493,8 +501,10 @@ TEST_F(PrivateAggregationManagerImplTest,
   EXPECT_CALL(
       *budgeter_,
       ConsumeBudget(standard_request->payload_contents().contributions[0].value,
-                    example_key, _))
-      .WillOnce(base::test::RunOnceCallback<2>(
+                    example_key,
+                    standard_request->payload_contents().contributions[0].value,
+                    _))
+      .WillOnce(base::test::RunOnceCallback<3>(
           PrivateAggregationBudgeter::RequestResult::kApproved));
   EXPECT_CALL(*aggregation_service_, AssembleAndSendReport)
       .WillOnce(Invoke([&](AggregatableReportRequest report_request) {
@@ -543,21 +553,21 @@ TEST_F(PrivateAggregationManagerImplTest, DebugReportingPath) {
   PrivateAggregationBudgetKey protected_audience_key =
       PrivateAggregationBudgetKey::Create(
           example_request.shared_info().reporting_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
   PrivateAggregationBudgetKey shared_storage_key =
       PrivateAggregationBudgetKey::Create(
           example_request.shared_info().reporting_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kSharedStorage)
+          PrivateAggregationCallerApi::kSharedStorage)
           .value();
 
   Checkpoint checkpoint;
   {
     testing::InSequence seq;
 
-    EXPECT_CALL(*budgeter_, ConsumeBudget(_, protected_audience_key, _))
+    EXPECT_CALL(*budgeter_, ConsumeBudget(_, protected_audience_key, _, _))
         .WillOnce(
-            Invoke([](int, const PrivateAggregationBudgetKey&,
+            Invoke([](int, const PrivateAggregationBudgetKey&, int,
                       base::OnceCallback<void(
                           PrivateAggregationBudgeter::RequestResult)> on_done) {
               std::move(on_done).Run(
@@ -576,9 +586,9 @@ TEST_F(PrivateAggregationManagerImplTest, DebugReportingPath) {
 
     EXPECT_CALL(checkpoint, Call(1));
 
-    EXPECT_CALL(*budgeter_, ConsumeBudget(_, shared_storage_key, _))
+    EXPECT_CALL(*budgeter_, ConsumeBudget(_, shared_storage_key, _, _))
         .WillOnce(
-            Invoke([](int, const PrivateAggregationBudgetKey&,
+            Invoke([](int, const PrivateAggregationBudgetKey&, int,
                       base::OnceCallback<void(
                           PrivateAggregationBudgeter::RequestResult)> on_done) {
               std::move(on_done).Run(
@@ -633,7 +643,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_request.shared_info().reporting_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   std::optional<AggregatableReportRequest> standard_request =
@@ -646,9 +656,11 @@ TEST_F(PrivateAggregationManagerImplTest,
   EXPECT_CALL(
       *budgeter_,
       ConsumeBudget(standard_request->payload_contents().contributions[0].value,
-                    example_key, _))
+                    example_key,
+                    standard_request->payload_contents().contributions[0].value,
+                    _))
       .WillOnce(Invoke(
-          [](int, const PrivateAggregationBudgetKey&,
+          [](int, const PrivateAggregationBudgetKey&, int,
              base::OnceCallback<void(PrivateAggregationBudgeter::RequestResult)>
                  on_done) {
             std::move(on_done).Run(
@@ -684,7 +696,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_request.shared_info().reporting_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   AggregationServicePayloadContents null_payload =
@@ -709,12 +721,13 @@ TEST_F(PrivateAggregationManagerImplTest,
   ASSERT_TRUE(null_request.has_value());
   ASSERT_TRUE(expected_null_debug_request.has_value());
 
-  EXPECT_CALL(
-      *budgeter_,
-      ConsumeBudget(example_request.payload_contents().contributions[0].value,
-                    example_key, _))
+  EXPECT_CALL(*budgeter_,
+              ConsumeBudget(
+                  example_request.payload_contents().contributions[0].value,
+                  example_key,
+                  example_request.payload_contents().contributions[0].value, _))
       .WillOnce(Invoke(
-          [](int, const PrivateAggregationBudgetKey&,
+          [](int, const PrivateAggregationBudgetKey&, int,
              base::OnceCallback<void(PrivateAggregationBudgeter::RequestResult)>
                  on_done) {
             std::move(on_done).Run(PrivateAggregationBudgeter::RequestResult::
@@ -767,7 +780,7 @@ TEST_F(PrivateAggregationManagerImplTest,
   PrivateAggregationBudgetKey example_key =
       PrivateAggregationBudgetKey::Create(
           example_request.shared_info().reporting_origin, kExampleTime,
-          PrivateAggregationBudgetKey::Api::kProtectedAudience)
+          PrivateAggregationCallerApi::kProtectedAudience)
           .value();
 
   AggregationServicePayloadContents null_payload =
@@ -834,13 +847,13 @@ TEST_F(PrivateAggregationManagerImplTest,
 
   EXPECT_CALL(*host_, BindNewReceiver(
                           example_origin, example_main_frame_origin,
-                          PrivateAggregationBudgetKey::Api::kProtectedAudience,
+                          PrivateAggregationCallerApi::kProtectedAudience,
                           testing::Eq(std::nullopt), testing::Eq(std::nullopt),
                           testing::Eq(std::nullopt), 1, _))
       .WillOnce(Return(true));
   EXPECT_TRUE(manager_.BindNewReceiver(
       example_origin, example_main_frame_origin,
-      PrivateAggregationBudgetKey::Api::kProtectedAudience,
+      PrivateAggregationCallerApi::kProtectedAudience,
       /*context_id=*/std::nullopt, /*timeout=*/std::nullopt,
       /*aggregation_coordinator_origin=*/std::nullopt,
       /*filtering_id_max_bytes=*/1,
@@ -848,43 +861,43 @@ TEST_F(PrivateAggregationManagerImplTest,
 
   EXPECT_CALL(*host_, BindNewReceiver(
                           example_origin, example_main_frame_origin,
-                          PrivateAggregationBudgetKey::Api::kSharedStorage,
+                          PrivateAggregationCallerApi::kSharedStorage,
                           testing::Eq(std::nullopt), testing::Eq(std::nullopt),
                           testing::Eq(std::nullopt), 1, _))
       .WillOnce(Return(false));
   EXPECT_FALSE(manager_.BindNewReceiver(
       example_origin, example_main_frame_origin,
-      PrivateAggregationBudgetKey::Api::kSharedStorage,
+      PrivateAggregationCallerApi::kSharedStorage,
       /*context_id=*/std::nullopt, /*timeout=*/std::nullopt,
       /*aggregation_coordinator_origin=*/std::nullopt,
       /*filtering_id_max_bytes=*/1,
       mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>()));
 
   EXPECT_CALL(*host_,
-              BindNewReceiver(
-                  example_origin, example_main_frame_origin,
-                  PrivateAggregationBudgetKey::Api::kProtectedAudience,
-                  testing::Eq("example_context_id"), testing::Eq(std::nullopt),
-                  testing::Eq(std::nullopt), 1, _))
+              BindNewReceiver(example_origin, example_main_frame_origin,
+                              PrivateAggregationCallerApi::kProtectedAudience,
+                              testing::Eq("example_context_id"),
+                              testing::Eq(std::nullopt),
+                              testing::Eq(std::nullopt), 1, _))
       .WillOnce(Return(true));
   EXPECT_TRUE(manager_.BindNewReceiver(
       example_origin, example_main_frame_origin,
-      PrivateAggregationBudgetKey::Api::kProtectedAudience,
-      "example_context_id", /*timeout=*/std::nullopt,
+      PrivateAggregationCallerApi::kProtectedAudience, "example_context_id",
+      /*timeout=*/std::nullopt,
       /*aggregation_coordinator_origin=*/std::nullopt,
       /*filtering_id_max_bytes=*/1,
       mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>()));
 
   EXPECT_CALL(*host_,
               BindNewReceiver(example_origin, example_main_frame_origin,
-                              PrivateAggregationBudgetKey::Api::kSharedStorage,
+                              PrivateAggregationCallerApi::kSharedStorage,
                               testing::Eq("example_context_id"),
                               testing::Eq(base::Seconds(5)),
                               testing::Eq(std::nullopt), 1, _))
       .WillOnce(Return(true));
   EXPECT_TRUE(manager_.BindNewReceiver(
       example_origin, example_main_frame_origin,
-      PrivateAggregationBudgetKey::Api::kSharedStorage, "example_context_id",
+      PrivateAggregationCallerApi::kSharedStorage, "example_context_id",
       /*timeout=*/base::Seconds(5),
       /*aggregation_coordinator_origin=*/std::nullopt,
       /*filtering_id_max_bytes=*/1,
@@ -892,26 +905,26 @@ TEST_F(PrivateAggregationManagerImplTest,
 
   EXPECT_CALL(*host_, BindNewReceiver(
                           example_origin, example_main_frame_origin,
-                          PrivateAggregationBudgetKey::Api::kProtectedAudience,
+                          PrivateAggregationCallerApi::kProtectedAudience,
                           testing::Eq(std::nullopt), testing::Eq(std::nullopt),
                           testing::Eq(example_coordinator_origin), 1, _))
       .WillOnce(Return(true));
   EXPECT_TRUE(manager_.BindNewReceiver(
       example_origin, example_main_frame_origin,
-      PrivateAggregationBudgetKey::Api::kProtectedAudience,
+      PrivateAggregationCallerApi::kProtectedAudience,
       /*context_id=*/std::nullopt, /*timeout=*/std::nullopt,
       example_coordinator_origin, /*filtering_id_max_bytes=*/1,
       mojo::PendingReceiver<blink::mojom::PrivateAggregationHost>()));
 
   EXPECT_CALL(*host_, BindNewReceiver(
                           example_origin, example_main_frame_origin,
-                          PrivateAggregationBudgetKey::Api::kProtectedAudience,
+                          PrivateAggregationCallerApi::kProtectedAudience,
                           testing::Eq(std::nullopt), testing::Eq(std::nullopt),
                           testing::Eq(std::nullopt), 8, _))
       .WillOnce(Return(true));
   EXPECT_TRUE(manager_.BindNewReceiver(
       example_origin, example_main_frame_origin,
-      PrivateAggregationBudgetKey::Api::kProtectedAudience,
+      PrivateAggregationCallerApi::kProtectedAudience,
       /*context_id=*/std::nullopt, /*timeout=*/std::nullopt,
       /*aggregation_coordinator_origin=*/std::nullopt,
       /*filtering_id_max_bytes=*/8,

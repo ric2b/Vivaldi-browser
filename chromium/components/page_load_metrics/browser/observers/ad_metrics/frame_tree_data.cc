@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/page_load_metrics/browser/observers/ad_metrics/frame_tree_data.h"
 
 #include <algorithm>
@@ -47,7 +52,7 @@ unsigned int GetFullFrameDepth(content::RenderFrameHost* rfh) {
 
 }  // namespace
 
-FrameTreeData::FrameTreeData(FrameTreeNodeId root_frame_tree_node_id,
+FrameTreeData::FrameTreeData(content::FrameTreeNodeId root_frame_tree_node_id,
                              int heavy_ad_network_threshold_noise)
     : root_frame_tree_node_id_(root_frame_tree_node_id),
       frame_size_(gfx::Size()),

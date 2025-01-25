@@ -8,11 +8,13 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "osp/impl/presentation/presentation_utils.h"
 #include "osp/impl/presentation/testing/mock_connection_delegate.h"
 #include "osp/impl/quic/quic_client.h"
 #include "osp/impl/quic/quic_server.h"
 #include "osp/impl/quic/testing/fake_quic_connection_factory.h"
 #include "osp/impl/quic/testing/quic_test_support.h"
+#include "osp/public/connect_request.h"
 #include "osp/public/network_service_manager.h"
 #include "osp/public/protocol_connection_server.h"
 #include "osp/public/testing/message_demuxer_test_support.h"
@@ -28,15 +30,13 @@ using ::testing::_;
 using ::testing::Invoke;
 using ::testing::NiceMock;
 
-class MockConnectRequest final
-    : public ProtocolConnectionClient::ConnectionRequestCallback {
+class MockConnectRequestCallback final : public ConnectRequestCallback {
  public:
-  ~MockConnectRequest() override = default;
+  ~MockConnectRequestCallback() override = default;
 
-  MOCK_METHOD2(OnConnectionOpened,
-               void(uint64_t request_id,
-                    std::unique_ptr<ProtocolConnection> connection));
-  MOCK_METHOD1(OnConnectionFailed, void(uint64_t request_id));
+  MOCK_METHOD2(OnConnectSucceed,
+               void(uint64_t request_id, uint64_t instance_id));
+  MOCK_METHOD1(OnConnectFailed, void(uint64_t request_id));
 };
 
 class MockReceiverDelegate final : public ReceiverDelegate {
@@ -71,24 +71,22 @@ class PresentationReceiverTest : public ::testing::Test {
 
  protected:
   std::unique_ptr<ProtocolConnection> MakeClientStream() {
-    MockConnectRequest mock_connect_request;
-    NetworkServiceManager::Get()->GetProtocolConnectionClient()->Connect(
-        quic_bridge_.kInstanceName, connect_request_, &mock_connect_request);
+    MockConnectRequestCallback mock_connect_request_callback;
+    quic_bridge_.GetQuicClient()->Connect(quic_bridge_.kInstanceName,
+                                          connect_request_,
+                                          &mock_connect_request_callback);
     EXPECT_TRUE(connect_request_);
     std::unique_ptr<ProtocolConnection> stream;
-    EXPECT_CALL(mock_connect_request, OnConnectionOpened(_, _))
-        .WillOnce([&stream](uint64_t request_id,
-                            std::unique_ptr<ProtocolConnection> connection) {
-          stream = std::move(connection);
+    EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _))
+        .WillOnce([&stream](uint64_t request_id, uint64_t instance_id) {
+          stream = CreateClientProtocolConnection(instance_id);
         });
     quic_bridge_.RunTasksUntilIdle();
     return stream;
   }
 
   void SetUp() override {
-    NetworkServiceManager::Create(nullptr, nullptr,
-                                  std::move(quic_bridge_.quic_client),
-                                  std::move(quic_bridge_.quic_server));
+    quic_bridge_.CreateNetworkServiceManager(nullptr, nullptr);
     receiver_.Init();
     receiver_.SetReceiverDelegate(&mock_receiver_delegate_);
   }
@@ -97,10 +95,9 @@ class PresentationReceiverTest : public ::testing::Test {
     connect_request_.MarkComplete();
     receiver_.SetReceiverDelegate(nullptr);
     receiver_.Deinit();
-    NetworkServiceManager::Dispose();
   }
 
-  QuicClient::ConnectRequest connect_request_;
+  ConnectRequest connect_request_;
   Receiver receiver_;
   FakeClock fake_clock_;
   FakeTaskRunner task_runner_;
@@ -116,7 +113,7 @@ class PresentationReceiverTest : public ::testing::Test {
 TEST_F(PresentationReceiverTest, QueryAvailability) {
   MockMessageCallback mock_callback;
   MessageDemuxer::MessageWatch availability_watch =
-      quic_bridge_.controller_demuxer->SetDefaultMessageTypeWatch(
+      quic_bridge_.GetControllerDemuxer().SetDefaultMessageTypeWatch(
           msgs::Type::kPresentationUrlAvailabilityResponse, &mock_callback);
 
   std::unique_ptr<ProtocolConnection> stream = MakeClientStream();
@@ -156,7 +153,7 @@ TEST_F(PresentationReceiverTest, QueryAvailability) {
 TEST_F(PresentationReceiverTest, StartPresentation) {
   MockMessageCallback mock_callback;
   MessageDemuxer::MessageWatch initiation_watch =
-      quic_bridge_.controller_demuxer->SetDefaultMessageTypeWatch(
+      quic_bridge_.GetControllerDemuxer().SetDefaultMessageTypeWatch(
           msgs::Type::kPresentationStartResponse, &mock_callback);
 
   std::unique_ptr<ProtocolConnection> stream = MakeClientStream();

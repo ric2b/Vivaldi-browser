@@ -96,6 +96,12 @@ const CGFloat kOmniboxPopupCellMinimumHeight = 58;
   // Leading Icon.
   _leadingIcon = _suggestion.icon;
 
+  // Vivaldi
+  _leadingIconLocal =
+      [[UIImage alloc] initWithContentsOfFile:_suggestion.local_favicon_path];
+  _isDirectMatch = _suggestion.isDirectMatch;
+  // End Vivaldi
+
   // Primary Text.
   _primaryText = _suggestion.text;
   if (_suggestion.isWrapping) {

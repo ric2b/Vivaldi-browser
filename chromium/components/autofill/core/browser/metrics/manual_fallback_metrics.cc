@@ -39,15 +39,26 @@ void ManualFallbackEventLogger::OnDidFillSuggestion(
 }
 
 void ManualFallbackEventLogger::ContextMenuEntryShown(
-    bool address_fallback_present,
-    bool payments_fallback_present) {
-  if (address_fallback_present) {
-    UpdateContextMenuEntryState(ContextMenuEntryState::kShown,
-                                address_context_menu_state_);
-  }
-  if (payments_fallback_present) {
-    UpdateContextMenuEntryState(ContextMenuEntryState::kShown,
-                                credit_card_context_menu_state_);
+    FillingProduct target_filling_product) {
+  switch (target_filling_product) {
+    case FillingProduct::kAddress:
+      UpdateContextMenuEntryState(ContextMenuEntryState::kShown,
+                                  address_context_menu_state_);
+      break;
+    case FillingProduct::kCreditCard:
+      UpdateContextMenuEntryState(ContextMenuEntryState::kShown,
+                                  credit_card_context_menu_state_);
+      break;
+    case FillingProduct::kNone:
+    case FillingProduct::kMerchantPromoCode:
+    case FillingProduct::kIban:
+    case FillingProduct::kAutocomplete:
+    case FillingProduct::kPassword:
+    case FillingProduct::kCompose:
+    case FillingProduct::kPlusAddresses:
+    case FillingProduct::kPredictionImprovements:
+    case FillingProduct::kStandaloneCvc:
+      NOTREACHED();
   }
 }
 
@@ -69,6 +80,7 @@ void ManualFallbackEventLogger::ContextMenuEntryAccepted(
     case FillingProduct::kPassword:
     case FillingProduct::kCompose:
     case FillingProduct::kPlusAddresses:
+    case FillingProduct::kPredictionImprovements:
     case FillingProduct::kStandaloneCvc:
       NOTREACHED();
   }
@@ -129,6 +141,7 @@ void ManualFallbackEventLogger::UpdateSuggestionStateForFillingProduct(
     case FillingProduct::kPassword:
     case FillingProduct::kCompose:
     case FillingProduct::kPlusAddresses:
+    case FillingProduct::kPredictionImprovements:
     case FillingProduct::kStandaloneCvc:
       NOTREACHED();
   }

@@ -11,31 +11,32 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ALL_KEYS;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_BOTTOM_LEFT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_BOTTOM_RIGHT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_TOP_LEFT;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.ASYNC_FAVICON_TOP_RIGHT;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.CLUSTER_DATA;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.DELETE_RUNNABLE;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.DISPLAY_AS_SHARED;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.GET_IMAGE_TILE_CONTAINER_CALLBACK;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.LEAVE_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.OPEN_RUNNABLE;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.PLUS_COUNT;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.TITLE_DATA;
 
 import android.app.Activity;
 import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.core.util.Pair;
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
-import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -45,13 +46,22 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
+import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.chrome.browser.tasks.tab_management.TabGroupFaviconCluster.ClusterData;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.listmenu.ListMenuButton;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModel.ReadableObjectPropertyKey;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+import org.chromium.ui.test.util.MockitoHelper;
+import org.chromium.url.GURL;
+import org.chromium.url.JUnitTestGURLs;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /** Unit tests for {@link TabGroupRowView}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -65,27 +75,39 @@ public class TabGroupRowViewUnitTest {
     @Mock TabGroupTimeAgoResolver mTimeAgoResolver;
     @Mock Runnable mRunnable;
     @Mock Drawable mDrawable;
+    @Mock FaviconResolver mFaviconResolver;
+    @Mock Callback<FrameLayout> mFrameLayoutCallback;
 
     private Activity mActivity;
     private TabGroupRowView mTabGroupRowView;
-    private ViewGroup mTabGroupStartIconParent;
+    private ViewGroup mTabGroupFaviconCluster;
     private TextView mTitleTextView;
     private TextView mSubtitleTextView;
+    private FrameLayout mImageTilesContainer;
     private ListMenuButton mListMenuButton;
     private PropertyModel mPropertyModel;
 
     @Before
     public void setUp() {
         mActivityScenarioRule.getScenario().onActivity((activity -> mActivity = activity));
+        MockitoHelper.doCallback(1, (Callback<Drawable> callback) -> callback.onResult(mDrawable))
+                .when(mFaviconResolver)
+                .resolve(any(), any());
     }
 
     private void remakeWithModel(PropertyModel propertyModel) {
         mPropertyModel = propertyModel;
         LayoutInflater inflater = LayoutInflater.from(mActivity);
-        mTabGroupRowView = (TabGroupRowView) inflater.inflate(R.layout.tab_group_row, null, false);
-        mTabGroupStartIconParent = mTabGroupRowView.findViewById(R.id.tab_group_start_icon);
+        mTabGroupRowView =
+                (TabGroupRowView)
+                        inflater.inflate(
+                                R.layout.tab_group_row,
+                                /* root= */ null,
+                                /* attachToRoot= */ false);
+        mTabGroupFaviconCluster = mTabGroupRowView.findViewById(R.id.tab_group_favicon_cluster);
         mTitleTextView = mTabGroupRowView.findViewById(R.id.tab_group_title);
         mSubtitleTextView = mTabGroupRowView.findViewById(R.id.tab_group_subtitle);
+        mImageTilesContainer = mTabGroupRowView.findViewById(R.id.image_tiles_container);
         mListMenuButton = mTabGroupRowView.findViewById(R.id.more);
         mTabGroupRowView.setTimeAgoResolverForTesting(mTimeAgoResolver);
 
@@ -99,8 +121,27 @@ public class TabGroupRowViewUnitTest {
         remakeWithModel(new PropertyModel.Builder(ALL_KEYS).with(key, value).build());
     }
 
+    private ClusterData makeCornerData(GURL... urls) {
+        List<GURL> firstUrls =
+                Arrays.stream(urls)
+                        .limit(TabGroupFaviconCluster.CORNER_COUNT)
+                        .collect(Collectors.toList());
+        return new ClusterData(mFaviconResolver, urls.length, firstUrls);
+    }
+
+    private Drawable getImageForCorner(@Corner int corner) {
+        View quarter = mTabGroupFaviconCluster.getChildAt(corner);
+        ImageView imageView = quarter.findViewById(R.id.favicon_image);
+        return imageView.getDrawable();
+    }
+
+    private CharSequence getTextForCorner(@Corner int corner) {
+        View quarter = mTabGroupFaviconCluster.getChildAt(corner);
+        TextView textView = quarter.findViewById(R.id.hidden_tab_count);
+        return textView.getText();
+    }
+
     @Test
-    @SmallTest
     public void testSetTitleData() {
         remakeWithProperty(TITLE_DATA, new Pair<>("Title", 3));
         assertEquals("Title", mTitleTextView.getText());
@@ -119,7 +160,6 @@ public class TabGroupRowViewUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testSetCreationMillis() {
         long creationMillis = 123L;
         String timeAgo = "Created just now";
@@ -132,7 +172,6 @@ public class TabGroupRowViewUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testSetOpenRunnable() {
         remakeWithProperty(OPEN_RUNNABLE, mRunnable);
         mTabGroupRowView.performClick();
@@ -145,7 +184,6 @@ public class TabGroupRowViewUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testOpenRunnableFromMenu() {
         remakeWithProperty(OPEN_RUNNABLE, mRunnable);
         mListMenuButton.showMenu();
@@ -154,8 +192,7 @@ public class TabGroupRowViewUnitTest {
     }
 
     @Test
-    @SmallTest
-    public void testCloseRunnableFromMenu() {
+    public void testDeleteRunnableFromMenu() {
         remakeWithProperty(DELETE_RUNNABLE, mRunnable);
         mListMenuButton.showMenu();
         onView(withText("Delete")).perform(click());
@@ -163,79 +200,85 @@ public class TabGroupRowViewUnitTest {
     }
 
     @Test
-    @SmallTest
-    public void testSetFavicon_topLeft() {
-        remakeWithProperty(ASYNC_FAVICON_TOP_LEFT, (callback) -> callback.onResult(mDrawable));
-        ImageView imageView =
-                mTabGroupStartIconParent.getChildAt(0).findViewById(R.id.favicon_image);
-        assertEquals(mDrawable, imageView.getDrawable());
-
-        mPropertyModel.set(ASYNC_FAVICON_TOP_LEFT, null);
-        assertNull(imageView.getDrawable());
-
-        mPropertyModel.set(ASYNC_FAVICON_TOP_LEFT, (callback) -> callback.onResult(mDrawable));
-        assertEquals(mDrawable, imageView.getDrawable());
+    public void testLeaveRunnableFromMenu() {
+        remakeWithProperty(LEAVE_RUNNABLE, mRunnable);
+        mListMenuButton.showMenu();
+        onView(withText("Leave")).perform(click());
+        verify(mRunnable).run();
     }
 
     @Test
-    @SmallTest
-    public void testSetFavicon_topRight() {
-        remakeWithProperty(ASYNC_FAVICON_TOP_RIGHT, (callback) -> callback.onResult(mDrawable));
-        ImageView imageView =
-                mTabGroupStartIconParent.getChildAt(1).findViewById(R.id.favicon_image);
-        assertEquals(mDrawable, imageView.getDrawable());
+    public void setClusterData_one() {
+        remakeWithProperty(CLUSTER_DATA, makeCornerData(JUnitTestGURLs.URL_1));
+        assertEquals(mDrawable, getImageForCorner(Corner.TOP_LEFT));
+
+        remakeWithProperty(CLUSTER_DATA, makeCornerData());
+        assertNull(getImageForCorner(Corner.TOP_LEFT));
+
+        remakeWithProperty(CLUSTER_DATA, makeCornerData(JUnitTestGURLs.URL_1));
+        assertEquals(mDrawable, getImageForCorner(Corner.TOP_LEFT));
     }
 
     @Test
-    @SmallTest
-    public void testSetFavicon_bottomLeft() {
-        remakeWithProperty(ASYNC_FAVICON_BOTTOM_LEFT, (callback) -> callback.onResult(mDrawable));
-        ImageView imageView =
-                mTabGroupStartIconParent.getChildAt(3).findViewById(R.id.favicon_image);
-        assertEquals(mDrawable, imageView.getDrawable());
+    public void setClusterData_two() {
+        remakeWithProperty(
+                CLUSTER_DATA, makeCornerData(JUnitTestGURLs.URL_1, JUnitTestGURLs.URL_2));
+        assertEquals(mDrawable, getImageForCorner(Corner.TOP_RIGHT));
     }
 
     @Test
-    @SmallTest
-    public void testSetFavicon_bottomRightAndPlusCount() {
-        remakeWithProperty(ASYNC_FAVICON_BOTTOM_RIGHT, (callback) -> callback.onResult(mDrawable));
-        ImageView imageView =
-                mTabGroupStartIconParent.getChildAt(2).findViewById(R.id.favicon_image);
-        TextView textView =
-                mTabGroupStartIconParent.getChildAt(2).findViewById(R.id.hidden_tab_count);
-        assertEquals(mDrawable, imageView.getDrawable());
-        assertEquals("", textView.getText());
-
-        mPropertyModel.set(PLUS_COUNT, 321);
-        assertEquals(mDrawable, imageView.getDrawable());
-        assertEquals("", textView.getText());
-
-        mPropertyModel.set(ASYNC_FAVICON_BOTTOM_RIGHT, null);
-        assertNull(imageView.getDrawable());
-        assertTrue(textView.getText().toString().contains("321"));
-
-        mPropertyModel.set(PLUS_COUNT, 0);
-        assertNull(imageView.getDrawable());
-        assertEquals("", textView.getText());
+    public void setClusterData_three() {
+        remakeWithProperty(
+                CLUSTER_DATA,
+                makeCornerData(JUnitTestGURLs.URL_1, JUnitTestGURLs.URL_2, JUnitTestGURLs.URL_3));
+        assertEquals(mDrawable, getImageForCorner(Corner.BOTTOM_LEFT));
     }
 
     @Test
-    @SmallTest
-    public void testResetOnBind() {
-        remakeWithProperty(ASYNC_FAVICON_TOP_LEFT, (callback) -> callback.onResult(mDrawable));
-        ImageView imageView =
-                mTabGroupStartIconParent.getChildAt(0).findViewById(R.id.favicon_image);
-        assertEquals(mDrawable, imageView.getDrawable());
-
-        mTabGroupRowView.resetOnBind();
-        assertNull(imageView.getDrawable());
+    public void setClusterData_four() {
+        remakeWithProperty(
+                CLUSTER_DATA,
+                makeCornerData(
+                        JUnitTestGURLs.URL_1,
+                        JUnitTestGURLs.URL_2,
+                        JUnitTestGURLs.URL_3,
+                        JUnitTestGURLs.BLUE_1));
+        assertEquals(mDrawable, getImageForCorner(Corner.BOTTOM_RIGHT));
+        assertEquals("", getTextForCorner(Corner.BOTTOM_RIGHT));
     }
 
     @Test
-    @SmallTest
+    public void setClusterData_five() {
+        remakeWithProperty(
+                CLUSTER_DATA,
+                makeCornerData(
+                        JUnitTestGURLs.URL_1,
+                        JUnitTestGURLs.URL_2,
+                        JUnitTestGURLs.URL_3,
+                        JUnitTestGURLs.BLUE_1,
+                        JUnitTestGURLs.BLUE_2));
+        assertNull(getImageForCorner(Corner.BOTTOM_RIGHT));
+        assertTrue(getTextForCorner(Corner.BOTTOM_RIGHT).toString().contains("2"));
+    }
+
+    @Test
     public void testContentDescriptions() {
         remakeWithProperty(TITLE_DATA, new Pair<>("Title", 3));
         assertEquals("Open Title", mTitleTextView.getContentDescription());
         assertEquals("Title tab group options", mListMenuButton.getContentDescription());
+    }
+
+    @Test
+    public void testDisplayAsShared() {
+        remakeWithModel(new PropertyModel.Builder(ALL_KEYS).with(DISPLAY_AS_SHARED, true).build());
+        assertEquals(View.VISIBLE, mImageTilesContainer.getVisibility());
+        remakeWithModel(new PropertyModel.Builder(ALL_KEYS).with(DISPLAY_AS_SHARED, false).build());
+        assertEquals(View.GONE, mImageTilesContainer.getVisibility());
+    }
+
+    @Test
+    public void testImageTileContainerCallback() {
+        remakeWithProperty(GET_IMAGE_TILE_CONTAINER_CALLBACK, mFrameLayoutCallback);
+        verify(mFrameLayoutCallback).onResult(any());
     }
 }

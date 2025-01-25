@@ -176,6 +176,31 @@ TYPED_TEST(FileIDTest, ElfClass) {
   EXPECT_EQ(expected_identifier_string, identifier_string);
 }
 
+TYPED_TEST(FileIDTest, ZephyrTextSection) {
+  const char expected_identifier_string[] =
+      "80808080808000000000008080808080";
+  const size_t kTextSectionSize = 128;
+
+  ELF elf(EM_386, TypeParam::kClass, kLittleEndian);
+  Section text(kLittleEndian);
+  for (size_t i = 0; i < kTextSectionSize; ++i) {
+    text.D8(i * 3);
+  }
+  // Some binaries, namely Zephyr firmware binaries (https://www.zephyrproject.org/),
+  // refer to the `.text` section as `text`. They are logically identical however
+  // and should be handled the same.
+  elf.AddSection("text", text, SHT_PROGBITS);
+  elf.Finish();
+  this->GetElfContents(elf);
+
+  id_vector identifier(this->make_vector());
+  EXPECT_TRUE(FileID::ElfFileIdentifierFromMappedFile(this->elfdata,
+                                                      identifier));
+
+  string identifier_string = FileID::ConvertIdentifierToUUIDString(identifier);
+  EXPECT_EQ(expected_identifier_string, identifier_string);
+}
+
 TYPED_TEST(FileIDTest, BuildID) {
   const uint8_t kExpectedIdentifierBytes[] =
     {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,

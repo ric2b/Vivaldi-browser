@@ -12,6 +12,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -20,6 +21,7 @@
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "content/browser/in_memory_federated_permission_context.h"
 #include "content/browser/webid/fake_identity_request_dialog_controller.h"
 #include "content/browser/webid/identity_registry.h"
 #include "content/browser/webid/test/mock_digital_identity_provider.h"
@@ -37,7 +39,6 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "content/shell/browser/shell_federated_permission_context.h"
 #include "net/base/features.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_status_code.h"
@@ -135,11 +136,13 @@ class IdpTestServer {
   std::unique_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
     // RP files are fetched from the /test base directory. Assume anything
     // to other paths is directed to the IdP.
-    if (request.relative_url.rfind("/test", 0) == 0)
+    if (request.relative_url.rfind("/test", 0) == 0) {
       return nullptr;
+    }
 
-    if (request.relative_url.rfind("/header/", 0) == 0)
+    if (request.relative_url.rfind("/header/", 0) == 0) {
       return BuildIdpHeaderResponse(request);
+    }
 
     if (request.all_headers.find(kIdpForbiddenHeader) != std::string::npos) {
       EXPECT_EQ(request.headers.at(kIdpForbiddenHeader), "?1");
@@ -405,9 +408,9 @@ class WebIdIdpSigninStatusBrowserTest : public WebIdBrowserTest {
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
-  ShellFederatedPermissionContext* sharing_context() {
+  InMemoryFederatedPermissionContext* sharing_context() {
     BrowserContext* context = shell()->web_contents()->GetBrowserContext();
-    return static_cast<ShellFederatedPermissionContext*>(
+    return static_cast<InMemoryFederatedPermissionContext*>(
         context->GetFederatedIdentityPermissionContext());
   }
 };
@@ -423,9 +426,9 @@ class WebIdIdpSigninStatusForFetchKeepAliveBrowserTest
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
-  ShellFederatedPermissionContext* sharing_context() {
+  InMemoryFederatedPermissionContext* sharing_context() {
     BrowserContext* context = shell()->web_contents()->GetBrowserContext();
-    return static_cast<ShellFederatedPermissionContext*>(
+    return static_cast<InMemoryFederatedPermissionContext*>(
         context->GetFederatedIdentityPermissionContext());
   }
 };
@@ -444,9 +447,9 @@ class WebIdIdPRegistryBrowserTest : public WebIdBrowserTest {
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
-  ShellFederatedPermissionContext* sharing_context() {
+  InMemoryFederatedPermissionContext* sharing_context() {
     BrowserContext* context = shell()->web_contents()->GetBrowserContext();
-    return static_cast<ShellFederatedPermissionContext*>(
+    return static_cast<InMemoryFederatedPermissionContext*>(
         context->GetFederatedIdentityPermissionContext());
   }
 };
@@ -1165,9 +1168,9 @@ class WebIdDigitalCredentialsBrowserTest : public WebIdBrowserTest {
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
-  ShellFederatedPermissionContext* sharing_context() {
+  InMemoryFederatedPermissionContext* sharing_context() {
     BrowserContext* context = shell()->web_contents()->GetBrowserContext();
-    return static_cast<ShellFederatedPermissionContext*>(
+    return static_cast<InMemoryFederatedPermissionContext*>(
         context->GetFederatedIdentityPermissionContext());
   }
 
@@ -1195,7 +1198,7 @@ std::string BuildDigitalIdentityValidJsRequestDictionary() {
   return R"({
     digital: {
       providers: [{
-        protocol: "urn:openid.net:oid4vp",
+        protocol: "openid4vp",
         request: JSON.stringify({
           // Based on https://github.com/openid/OpenID4VP/issues/125
           client_id: "client.example.org",
@@ -1230,17 +1233,15 @@ EvalJsResult RunDigitalIdentityValidRequest(
   return EvalJsAndReturnToken(execution_target, script);
 }
 
-// Leniently parses string as JSON and compares parsed JSON.
-MATCHER_P(JsonMatchesLenient, ref, "") {
+// Leniently parses the input string as JSON and compares it to already-parsed
+// JSON.
+MATCHER_P(JsonMatches, ref, "") {
   int json_parsing_options =
       base::JSONParserOptions::JSON_PARSE_CHROMIUM_EXTENSIONS |
       base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS;
   auto ref_json =
       base::JSONReader::ReadAndReturnValueWithError(ref, json_parsing_options);
-  auto arg_json =
-      base::JSONReader::ReadAndReturnValueWithError(arg, json_parsing_options);
-  return ref_json.has_value() && arg_json.has_value() &&
-         (ref_json.value() == arg_json.value());
+  return ref_json.has_value() && (ref_json.value() == arg);
 }
 
 // Test that a Verifiable Credential can be requested via the navigator.identity
@@ -1258,7 +1259,7 @@ IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
   std::string_view request = R"(
   {
    "providers": [ {
-      "protocol": "urn:openid.net:oid4vp",
+      "protocol": "openid4vp",
       "request": "{
         \"client_id\": \"client.example.org\",
         \"client_id_scheme\": \"web-origin\",
@@ -1276,8 +1277,7 @@ IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
   // JSON comparison in IsJson below.
   base::RemoveChars(request, "\n ", &json);
 
-  EXPECT_CALL(*digital_identity_provider,
-              Request(_, _, JsonMatchesLenient(json), _))
+  EXPECT_CALL(*digital_identity_provider, Request(_, _, JsonMatches(json), _))
       .WillOnce(WithArg<3>(
           [kIdentityProviderResponse](
               DigitalIdentityProvider::DigitalIdentityCallback callback) {
@@ -1285,6 +1285,52 @@ IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
           }));
 
   EXPECT_EQ(kIdentityProviderResponse, RunDigitalIdentityValidRequest(shell()));
+}
+
+// Test that a Verifiable Credential can be requested via the
+// navigator.credentials JS API too.
+IN_PROC_BROWSER_TEST_F(WebIdDigitalCredentialsBrowserTest,
+                       NavigatorCredentialsApi) {
+  constexpr char kIdentityProviderResponse[] =
+      "&vp_token=token&presentation_submission=bar";
+
+  idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+  MockDigitalIdentityProvider* digital_identity_provider =
+      static_cast<MockDigitalIdentityProvider*>(
+          test_browser_client_->GetDigitalIdentityProviderForTests());
+
+  std::string_view request = R"(
+  {
+   "providers": [ {
+      "protocol": "openid4vp",
+      "request": "{
+        \"client_id\": \"client.example.org\",
+        \"client_id_scheme\": \"web-origin\",
+        \"nonce\": \"n-0S6_WzA2Mj\",
+        \"presentation_definition\": {
+        }
+      }",
+   } ]
+  }
+  )";
+
+  std::string json;
+  // Invalid whitespace and newlines are added to the request string to make it
+  // easier to read in this test, so we remove them before actually making the
+  // JSON comparison in IsJson below.
+  base::RemoveChars(request, "\n ", &json);
+
+  EXPECT_CALL(*digital_identity_provider, Request(_, _, JsonMatches(json), _))
+      .WillOnce(WithArg<3>(
+          [kIdentityProviderResponse](
+              DigitalIdentityProvider::DigitalIdentityCallback callback) {
+            std::move(callback).Run(kIdentityProviderResponse);
+          }));
+
+  std::string script = base::StringPrintf(
+      "const {data} = await navigator.credentials.get(%s);return data;",
+      BuildDigitalIdentityValidJsRequestDictionary().c_str());
+  EXPECT_EQ(kIdentityProviderResponse, EvalJsAndReturnToken(shell(), script));
 }
 
 // Test that when there's a pending mdoc request, a second `get` call should be
@@ -1530,7 +1576,7 @@ IN_PROC_BROWSER_TEST_F(WebIdAuthzBrowserTest, Authz_openPopUpWindow) {
 
   // Expects the account chooser to be opened. Selects the first account.
   EXPECT_CALL(*controller, ShowAccountsDialog)
-      .WillOnce(::testing::WithArg<5>([&config_url](auto on_selected) {
+      .WillOnce(::testing::WithArg<6>([&config_url](auto on_selected) {
         std::move(on_selected)
             .Run(config_url,
                  /* account_id=*/"not_real_account",
@@ -1640,7 +1686,7 @@ IN_PROC_BROWSER_TEST_F(WebIdBrowserTest,
   // The client id `client_id_1` is on the `approved_clients` list defined in
   // content/test/data/fedcm/accounts_endpoint.json so by exempting the IdP from
   // the check, auto re-authn can be triggered and a token can be returned.
-  static_cast<ShellFederatedPermissionContext*>(
+  static_cast<InMemoryFederatedPermissionContext*>(
       shell()
           ->web_contents()
           ->GetBrowserContext()
@@ -1650,6 +1696,65 @@ IN_PROC_BROWSER_TEST_F(WebIdBrowserTest,
   idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
 
   EXPECT_EQ(std::string(kToken), EvalJs(shell(), GetBasicRequestString()));
+}
+
+// Verify that using mediation in the wrong place adds log to console.
+IN_PROC_BROWSER_TEST_F(WebIdBrowserTest,
+                       MediationInIdentityCredentialRequestOptions) {
+  idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+
+  std::string script = R"(
+        (async () => {
+          var x = (await navigator.credentials.get({
+            identity: {
+              providers: [{
+                configURL: ')" +
+                       BaseIdpUrl() + R"(',
+                clientId: 'client_id_1',
+                nonce: '12345',
+              }],
+              mediation: 'required'
+            }
+          }));
+          return x.token;
+        }) ()
+    )";
+
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+  console_observer.SetPattern(
+      "The 'mediation' parameter should be used outside of 'identity' in the "
+      "FedCM API call.");
+  EXPECT_EQ(std::string(kToken), EvalJs(shell(), script));
+  EXPECT_TRUE(base::MatchPattern(console_observer.GetMessageAt(0u),
+                                 "*The 'mediation' parameter*"));
+  ASSERT_TRUE(console_observer.Wait());
+}
+
+// Verify that using mediation in the right place does not add log to console.
+IN_PROC_BROWSER_TEST_F(WebIdBrowserTest,
+                       NoConsoleWarningWithProperMediationCall) {
+  idp_server()->SetConfigResponseDetails(BuildValidConfigDetails());
+
+  std::string script = R"(
+        (async () => {
+          var x = (await navigator.credentials.get({
+            identity: {
+              providers: [{
+                configURL: ')" +
+                       BaseIdpUrl() + R"(',
+                clientId: 'client_id_1',
+                nonce: '12345',
+              }],
+            },
+            mediation: 'required'
+          }));
+          return x.token;
+        }) ()
+    )";
+
+  WebContentsConsoleObserver console_observer(shell()->web_contents());
+  EXPECT_EQ(std::string(kToken), EvalJs(shell(), script));
+  EXPECT_TRUE(console_observer.messages().empty());
 }
 
 }  // namespace content

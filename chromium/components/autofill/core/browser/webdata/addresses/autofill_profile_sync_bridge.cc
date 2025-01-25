@@ -19,10 +19,10 @@
 #include "components/autofill/core/browser/webdata/autofill_sync_metadata_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/sync/base/deletion_origin.h"
-#include "components/sync/model/client_tag_based_model_type_processor.h"
+#include "components/sync/model/client_tag_based_data_type_processor.h"
+#include "components/sync/model/data_type_local_change_processor.h"
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_error.h"
-#include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/model/sync_metadata_store_change_list.h"
 #include "components/sync/protocol/entity_data.h"
@@ -56,14 +56,14 @@ void AutofillProfileSyncBridge::CreateForWebDataServiceAndBackend(
   web_data_service->GetDBUserData()->SetUserData(
       &kAutofillProfileSyncBridgeUserDataKey,
       std::make_unique<AutofillProfileSyncBridge>(
-          std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
+          std::make_unique<syncer::ClientTagBasedDataTypeProcessor>(
               syncer::AUTOFILL_PROFILE,
               /*dump_stack=*/base::DoNothing()),
           app_locale, web_data_backend));
 }
 
 // static
-syncer::ModelTypeSyncBridge* AutofillProfileSyncBridge::FromWebDataService(
+syncer::DataTypeSyncBridge* AutofillProfileSyncBridge::FromWebDataService(
     AutofillWebDataService* web_data_service) {
   return static_cast<AutofillProfileSyncBridge*>(
       web_data_service->GetDBUserData()->GetUserData(
@@ -71,10 +71,10 @@ syncer::ModelTypeSyncBridge* AutofillProfileSyncBridge::FromWebDataService(
 }
 
 AutofillProfileSyncBridge::AutofillProfileSyncBridge(
-    std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor,
+    std::unique_ptr<syncer::DataTypeLocalChangeProcessor> change_processor,
     const std::string& app_locale,
     AutofillWebDataBackend* backend)
-    : syncer::ModelTypeSyncBridge(std::move(change_processor)),
+    : syncer::DataTypeSyncBridge(std::move(change_processor)),
       app_locale_(app_locale),
       web_data_backend_(backend) {
   DCHECK(web_data_backend_);
@@ -93,7 +93,7 @@ AutofillProfileSyncBridge::CreateMetadataChangeList() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return std::make_unique<syncer::SyncMetadataStoreChangeList>(
       GetSyncMetadataStore(), syncer::AUTOFILL_PROFILE,
-      base::BindRepeating(&syncer::ModelTypeChangeProcessor::ReportError,
+      base::BindRepeating(&syncer::DataTypeLocalChangeProcessor::ReportError,
                           change_processor()->GetWeakPtr()));
 }
 
@@ -107,9 +107,8 @@ std::optional<syncer::ModelError> AutofillProfileSyncBridge::MergeFullSyncData(
 
   for (const auto& change : entity_data) {
     DCHECK(change->data().specifics.has_autofill_profile());
-    std::unique_ptr<AutofillProfile> remote =
-        CreateAutofillProfileFromSpecifics(
-            change->data().specifics.autofill_profile());
+    std::optional<AutofillProfile> remote = CreateAutofillProfileFromSpecifics(
+        change->data().specifics.autofill_profile());
     if (!remote) {
       DVLOG(2)
           << "[AUTOFILL SYNC] Invalid remote specifics "
@@ -118,7 +117,7 @@ std::optional<syncer::ModelError> AutofillProfileSyncBridge::MergeFullSyncData(
       continue;
     }
     RETURN_IF_ERROR(
-        initial_sync_tracker.IncorporateRemoteProfile(std::move(remote)));
+        initial_sync_tracker.IncorporateRemoteProfile(std::move(*remote)));
   }
 
   RETURN_IF_ERROR(
@@ -142,7 +141,7 @@ AutofillProfileSyncBridge::ApplyIncrementalSyncChanges(
       RETURN_IF_ERROR(tracker.IncorporateRemoteDelete(change->storage_key()));
     } else {
       DCHECK(change->data().specifics.has_autofill_profile());
-      std::unique_ptr<AutofillProfile> remote =
+      std::optional<AutofillProfile> remote =
           CreateAutofillProfileFromSpecifics(
               change->data().specifics.autofill_profile());
       if (!remote) {
@@ -152,7 +151,7 @@ AutofillProfileSyncBridge::ApplyIncrementalSyncChanges(
             << " received from the server in an initial sync.";
         continue;
       }
-      RETURN_IF_ERROR(tracker.IncorporateRemoteProfile(std::move(remote)));
+      RETURN_IF_ERROR(tracker.IncorporateRemoteProfile(std::move(*remote)));
     }
   }
 
@@ -165,9 +164,9 @@ AutofillProfileSyncBridge::ApplyIncrementalSyncChanges(
 std::unique_ptr<syncer::DataBatch> AutofillProfileSyncBridge::GetDataForCommit(
     StorageKeyList storage_keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  std::vector<std::unique_ptr<AutofillProfile>> entries;
+  std::vector<AutofillProfile> entries;
   if (!GetAutofillTable()->GetAutofillProfiles(
-          AutofillProfile::Source::kLocalOrSyncable, &entries)) {
+          {AutofillProfile::RecordType::kLocalOrSyncable}, entries)) {
     change_processor()->ReportError(
         {FROM_HERE, "Failed to load entries from table."});
     return nullptr;
@@ -176,10 +175,10 @@ std::unique_ptr<syncer::DataBatch> AutofillProfileSyncBridge::GetDataForCommit(
   std::unordered_set<std::string> keys_set(storage_keys.begin(),
                                            storage_keys.end());
   auto batch = std::make_unique<syncer::MutableDataBatch>();
-  for (const std::unique_ptr<AutofillProfile>& entry : entries) {
-    std::string key = GetStorageKeyFromAutofillProfile(*entry);
+  for (const AutofillProfile& entry : entries) {
+    std::string key = GetStorageKeyFromAutofillProfile(entry);
     if (keys_set.contains(key)) {
-      batch->Put(key, CreateEntityDataFromAutofillProfile(*entry));
+      batch->Put(key, CreateEntityDataFromAutofillProfile(entry));
     }
   }
   return batch;
@@ -189,18 +188,18 @@ std::unique_ptr<syncer::DataBatch>
 AutofillProfileSyncBridge::GetAllDataForDebugging() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  std::vector<std::unique_ptr<AutofillProfile>> entries;
+  std::vector<AutofillProfile> entries;
   if (!GetAutofillTable()->GetAutofillProfiles(
-          AutofillProfile::Source::kLocalOrSyncable, &entries)) {
+          {AutofillProfile::RecordType::kLocalOrSyncable}, entries)) {
     change_processor()->ReportError(
         {FROM_HERE, "Failed to load entries from table."});
     return nullptr;
   }
 
   auto batch = std::make_unique<syncer::MutableDataBatch>();
-  for (const std::unique_ptr<AutofillProfile>& entry : entries) {
-    batch->Put(GetStorageKeyFromAutofillProfile(*entry),
-               CreateEntityDataFromAutofillProfile(*entry));
+  for (const AutofillProfile& entry : entries) {
+    batch->Put(GetStorageKeyFromAutofillProfile(entry),
+               CreateEntityDataFromAutofillProfile(entry));
   }
   return batch;
 }
@@ -208,8 +207,7 @@ AutofillProfileSyncBridge::GetAllDataForDebugging() {
 void AutofillProfileSyncBridge::ActOnLocalChange(
     const AutofillProfileChange& change) {
   if (!change_processor()->IsTrackingMetadata() ||
-      change.data_model().source() !=
-          AutofillProfile::Source::kLocalOrSyncable) {
+      change.data_model().IsAccountProfile()) {
     return;
   }
 
@@ -246,14 +244,13 @@ std::optional<syncer::ModelError> AutofillProfileSyncBridge::FlushSyncTracker(
       &AutofillWebDataBackend::NotifyOnAutofillChangedBySync,
       base::Unretained(web_data_backend_), syncer::AUTOFILL_PROFILE)));
 
-  std::vector<std::unique_ptr<AutofillProfile>> profiles_to_upload_to_sync;
+  std::vector<AutofillProfile> profiles_to_upload_to_sync;
   std::vector<std::string> profiles_to_delete_from_sync;
   RETURN_IF_ERROR(tracker->FlushToSync(&profiles_to_upload_to_sync,
                                        &profiles_to_delete_from_sync));
-  for (const std::unique_ptr<AutofillProfile>& entry :
-       profiles_to_upload_to_sync) {
-    change_processor()->Put(GetStorageKeyFromAutofillProfile(*entry),
-                            CreateEntityDataFromAutofillProfile(*entry),
+  for (const AutofillProfile& entry : profiles_to_upload_to_sync) {
+    change_processor()->Put(GetStorageKeyFromAutofillProfile(entry),
+                            CreateEntityDataFromAutofillProfile(entry),
                             metadata_change_list.get());
   }
   for (const std::string& storage_key : profiles_to_delete_from_sync) {

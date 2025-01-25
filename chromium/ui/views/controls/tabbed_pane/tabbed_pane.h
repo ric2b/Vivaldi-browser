@@ -181,7 +181,6 @@ class VIEWS_EXPORT TabbedPaneTab : public View {
   void OnGestureEvent(ui::GestureEvent* event) override;
   gfx::Size CalculatePreferredSize(
       const SizeBounds& available_size) const override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
   void OnFocus() override;
   void OnBlur() override;
@@ -207,6 +206,7 @@ class VIEWS_EXPORT TabbedPaneTab : public View {
   void UpdateTitleColor();
 
   void UpdateAccessibleName();
+  void UpdateAccessibleSelection();
 
   raw_ptr<TabbedPane> tabbed_pane_;
   raw_ptr<Label> title_ = nullptr;

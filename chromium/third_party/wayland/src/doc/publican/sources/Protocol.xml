@@ -151,7 +151,8 @@
 	    <para>
 	      Starts with an unsigned 32-bit length (including null terminator),
 	      followed by the string contents, including terminating null byte,
-	      then padding to a 32-bit boundary.
+	      then padding to a 32-bit boundary. A null value is represented
+	      with a length of 0.
 	    </para>
 	  </listitem>
 	</varlistentry>
@@ -159,7 +160,7 @@
 	  <term>object</term>
 	  <listitem>
 	    <para>
-	      32-bit object ID.
+	      32-bit object ID. A null value is represented with an ID of 0.
 	    </para>
 	  </listitem>
 	</varlistentry>
@@ -311,9 +312,10 @@
       reserved to represent a null or non-existent object.
 
       For efficiency purposes, the IDs are densely packed in the sense that
-      the ID N will not be used until N-1 has been used.  Any ID allocation
-      algorithm that does not maintain this property is incompatible with
-      the implementation in libwayland.
+      the ID N will not be used until N-1 has been used. This ordering is
+      not merely a guideline, but a strict requirement, and there are
+      implementations of the protocol that rigorously enforce this rule,
+      including the ubiquitous libwayland.
     </para>
   </section>
   <section id="sect-Protocol-Compositor">

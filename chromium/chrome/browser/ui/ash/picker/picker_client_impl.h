@@ -14,10 +14,13 @@
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/picker/picker_category.h"
 #include "ash/public/cpp/picker/picker_client.h"
+#include "ash/public/cpp/picker/picker_web_paste_target.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ash/app_list/search/ranking/ranker_manager.h"
+#include "chrome/browser/ash/input_method/editor_announcer.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
+#include "chrome/browser/ui/ash/picker/picker_link_suggester.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
@@ -65,19 +68,24 @@ class PickerClientImpl
                        std::optional<ash::PickerCategory> category,
                        CrosSearchResultsCallback callback) override;
   void StopCrosQuery() override;
+  bool IsEligibleForEditor() override;
   ShowEditorCallback CacheEditorContext() override;
   void GetSuggestedEditorResults(
       SuggestedEditorResultsCallback callback) override;
   void GetRecentLocalFileResults(size_t max_files,
+                                 base::TimeDelta now_delta,
                                  RecentFilesCallback callback) override;
   void GetRecentDriveFileResults(size_t max_files,
                                  RecentFilesCallback callback) override;
-  void GetSuggestedLinkResults(SuggestedLinksCallback callback) override;
+  void GetSuggestedLinkResults(size_t max_results,
+                               SuggestedLinksCallback callback) override;
   bool IsFeatureAllowedForDogfood() override;
   void FetchFileThumbnail(const base::FilePath& path,
                           const gfx::Size& size,
                           FetchFileThumbnailCallback callback) override;
   PrefService* GetPrefs() override;
+  std::optional<ash::PickerWebPasteTarget> GetWebPasteTarget() override;
+  void Announce(std::u16string_view message) override;
 
   // user_manager::UserManager::UserSessionStateObserver:
   void ActiveUserChanged(user_manager::User* active_user) override;
@@ -85,6 +93,10 @@ class PickerClientImpl
   void set_ranker_manager_for_test(
       std::unique_ptr<app_list::RankerManager> ranker_manager) {
     ranker_manager_ = std::move(ranker_manager);
+  }
+
+  PickerLinkSuggester* get_link_suggester_for_test() {
+    return link_suggester_.get();
   }
 
  private:
@@ -116,10 +128,6 @@ class PickerClientImpl
       CrosSearchResultsCallback callback,
       ash::AppListSearchResultType result_type,
       std::vector<std::unique_ptr<ChromeSearchResult>> results);
-  void OnZeroStateLinksSearchResultsUpdated(
-      SuggestedLinksCallback callback,
-      ash::AppListSearchResultType result_type,
-      std::vector<std::unique_ptr<ChromeSearchResult>> results);
   void SetProfileByUser(const user_manager::User* user);
   void SetProfile(Profile* profile);
 
@@ -130,6 +138,8 @@ class PickerClientImpl
 
   void ShowEditor(std::optional<std::string> preset_query_id,
                   std::optional<std::string> freeform_text);
+
+  ash::input_method::EditorLiveRegionAnnouncer announcer_;
 
   raw_ptr<ash::PickerController> controller_ = nullptr;
   raw_ptr<Profile> profile_ = nullptr;
@@ -145,11 +155,7 @@ class PickerClientImpl
   std::vector<app_list::CategoryMetadata> ranker_categories_;
 
   std::unique_ptr<PickerFileSuggester> file_suggester_;
-
-  // A dedicated cros search engine for zero state results for links.
-  // TODO: b/330938446 - Replace with proper zero-state logic.
-  std::unique_ptr<app_list::SearchEngine> zero_state_links_search_engine_;
-
+  std::unique_ptr<PickerLinkSuggester> link_suggester_;
   std::unique_ptr<PickerThumbnailLoader> thumbnail_loader_;
 
   base::ScopedObservation<user_manager::UserManager,

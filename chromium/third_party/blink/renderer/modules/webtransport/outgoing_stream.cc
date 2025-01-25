@@ -12,9 +12,9 @@
 #include <cstring>
 #include <utility>
 
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc.h"
 #include "base/numerics/safe_conversions.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
+#include "partition_alloc/partition_alloc.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
@@ -362,7 +362,8 @@ ScriptPromise<IDLUndefined> OutgoingStream::WriteOrCacheData(
     ScriptState* script_state,
     base::span<const uint8_t> data) {
   DVLOG(1) << "OutgoingStream::WriteOrCacheData() this=" << this << " data=("
-           << data.data() << ", " << data.size() << ")";
+           << static_cast<const void*>(data.data()) << ", " << data.size()
+           << ")";
   size_t written = WriteDataSynchronously(data);
 
   if (written == data.size())
@@ -424,7 +425,8 @@ void OutgoingStream::WriteCachedData() {
 // bytes written. May close |data_pipe_| as a side-effect on error.
 size_t OutgoingStream::WriteDataSynchronously(base::span<const uint8_t> data) {
   DVLOG(1) << "OutgoingStream::WriteDataSynchronously() this=" << this
-           << " data=(" << data.data() << ", " << data.size() << ")";
+           << " data=(" << static_cast<const void*>(data.data()) << ", "
+           << data.size() << ")";
   DCHECK(data_pipe_);
 
   size_t actually_written_bytes = 0;
@@ -432,8 +434,10 @@ size_t OutgoingStream::WriteDataSynchronously(base::span<const uint8_t> data) {
                                             actually_written_bytes);
   switch (result) {
     case MOJO_RESULT_OK:
-    case MOJO_RESULT_SHOULD_WAIT:
       return actually_written_bytes;
+
+    case MOJO_RESULT_SHOULD_WAIT:
+      return 0;
 
     case MOJO_RESULT_FAILED_PRECONDITION:
       HandlePipeClosed();

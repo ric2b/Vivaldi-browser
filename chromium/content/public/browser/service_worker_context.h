@@ -46,6 +46,8 @@ class GURL;
 namespace content {
 
 class ServiceWorkerContextObserver;
+
+struct ServiceWorkerRunningInfo;
 struct StorageUsageInfo;
 
 enum class ServiceWorkerCapability {
@@ -89,7 +91,8 @@ using ServiceWorkerScriptExecutionCallback =
 class ServiceWorkerContextObserverSynchronous : public base::CheckedObserver {
  public:
   // Called when the service worker with id `version_id` has stopped running.
-  virtual void OnStopped(int64_t version_id, const GURL& scope) {}
+  virtual void OnStopped(int64_t version_id,
+                         const ServiceWorkerRunningInfo& worker_info) {}
 
   // TODO(crbug.com/334940006): Add the rest of the extensions methods
   // (OnRegistrationStored(), OnReportConsoleMessage(), OnDestruct()) and adapt
@@ -170,15 +173,18 @@ class CONTENT_EXPORT ServiceWorkerContext {
       StatusCodeCallback callback) = 0;
 
   // Equivalent to calling ServiceWorkerRegistration#unregister on the
-  // registration for `scope`. `callback` is passed true when the JS promise is
-  // fulfilled or false when the JS promise is rejected.
+  // registration for `scope`.
   //
   // Unregistration can fail if:
   //  * No registration exists for `scope`.
   //  * Something unexpected goes wrong, like a renderer crash.
+  //
+  // `callback` provides the status code result of the unregistration.
+  // `blink::ServiceWorkerStatusCode::kOk` means the request to unregister was
+  // sent. It does not mean the worker has been fully unregistered though.
   virtual void UnregisterServiceWorker(const GURL& scope,
                                        const blink::StorageKey& key,
-                                       ResultCallback callback) = 0;
+                                       StatusCodeCallback callback) = 0;
   // As above, but clears the service worker registration immediately rather
   // than waiting if the service worker is active and has controllees.
   virtual void UnregisterServiceWorkerImmediately(

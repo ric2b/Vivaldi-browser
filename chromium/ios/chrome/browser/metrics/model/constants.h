@@ -23,4 +23,13 @@ extern const char kSportsNotifClientStatusByProviderHistogram[];
 // Histogram name for the Tips Notification Client Status filter.
 extern const char kTipsNotifClientStatusByProviderHistogram[];
 
+// Histogram name for the Safety Check Notification Client Status filter.
+extern const char kSafetyCheckNotifClientStatusByProviderHistogram[];
+
+// Histogram name for the Send Tab Notification Client Status filter.
+extern const char kSendTabNotifClientStatusByProviderHistogram[];
+
+// Histogram name for the feed enabled metric.
+extern const char kFeedEnabledHistogram[];
+
 #endif  // IOS_CHROME_BROWSER_METRICS_MODEL_CONSTANTS_H_

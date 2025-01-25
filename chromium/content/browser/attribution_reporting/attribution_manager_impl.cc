@@ -92,6 +92,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_change_manager.mojom-forward.h"
 #include "storage/browser/quota/special_storage_policy.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -111,6 +112,8 @@ using ::attribution_reporting::OsRegistrationItem;
 using ::attribution_reporting::mojom::OsRegistrationResult;
 using ::attribution_reporting::mojom::RegistrationType;
 
+constexpr size_t kMaxPendingEvents = 1000u;
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 //
@@ -122,7 +125,7 @@ enum class ConversionReportSendOutcome {
   kFailedToAssemble = 3,
   kMaxValue = kFailedToAssemble,
 };
-// LINT.ThenChange(//tools/metrics/histograms/enums.xml:ConversionReportSendOutcome)
+// LINT.ThenChange(//tools/metrics/histograms/metadata/attribution_reporting/enums.xml:ConversionReportSendOutcome)
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -135,9 +138,12 @@ enum class ConversionReportSendRetryCount {
   kFailed = 3,
   kMaxValue = kFailed,
 };
-// LINT.ThenChange(//tools/metrics/histograms/enums.xml:ConversionReportSendRetryCount)
+// LINT.ThenChange(//tools/metrics/histograms/metadata/attribution_reporting/enums.xml:ConversionReportSendRetryCount)
 
 const base::TimeDelta kPrivacySandboxAttestationsTimeout = base::Minutes(5);
+
+const base::TimeDelta kReportDeliveryFirstRetryDelay = base::Minutes(5);
+const base::TimeDelta kReportDeliverySecondRetryDelay = base::Minutes(15);
 
 }  // namespace
 
@@ -230,8 +236,8 @@ bool IsStorageKeySessionOnly(
 }
 
 const base::TimeDelta ReportRetryDelay(bool is_first_retry) {
-  return is_first_retry ? kAttributionReportDeliveryFirstRetryDelay.Get()
-                        : kAttributionReportDeliverySecondRetryDelay.Get();
+  return is_first_retry ? kReportDeliveryFirstRetryDelay
+                        : kReportDeliverySecondRetryDelay;
 }
 
 void RecordStoreSourceStatus(const StoreSourceResult& result) {
@@ -524,7 +530,7 @@ struct AttributionManagerImpl::PendingReportTimings {
 };
 
 struct AttributionManagerImpl::SourceOrTriggerRFH {
-  SourceOrTrigger source_or_trigger;
+  absl::variant<StorableSource, AttributionTrigger> source_or_trigger;
   GlobalRenderFrameHostId rfh_id;
 };
 
@@ -549,23 +555,10 @@ ScopedUseInMemoryStorageForTesting::~ScopedUseInMemoryStorageForTesting() {
 
 bool AttributionManagerImpl::IsReportAllowed(
     const AttributionReport& report) const {
-  const attribution_reporting::SuitableOrigin* source_origin = absl::visit(
-      base::Overloaded{
-          [](const AttributionReport::EventLevelData& data) {
-            return &data.source_origin;
-          },
-          [](const AttributionReport::AggregatableAttributionData& data) {
-            return &data.source_origin;
-          },
-          [&](const AttributionReport::NullAggregatableData&) {
-            return &report.attribution_info().context_origin;
-          },
-      },
-      report.data());
   return IsOperationAllowed(
       *storage_partition_,
       ContentBrowserClient::AttributionReportingOperation::kReport,
-      /*rfh=*/nullptr, &**source_origin,
+      /*rfh=*/nullptr, &*report.GetSourceOrigin(),
       &*report.attribution_info().context_origin, &*report.reporting_origin());
 }
 
@@ -598,7 +591,7 @@ AttributionManagerImpl::AttributionManagerImpl(
           user_data_directory,
           // TODO(crbug.com/40267739): consider reducing this number when
           // os registrations will include multiple items.
-          /*max_pending_events=*/1000,
+          kMaxPendingEvents,
           std::move(special_storage_policy),
           /*resolver_delegate=*/nullptr,
           std::make_unique<AttributionCookieCheckerImpl>(storage_partition),
@@ -1004,9 +997,7 @@ void AttributionManagerImpl::OnReportStored(
 }
 
 void AttributionManagerImpl::MaybeSendDebugReport(AttributionReport&& report) {
-  const AttributionInfo& attribution_info = report.attribution_info();
-  if (!attribution_info.debug_key || !report.GetSourceDebugKey() ||
-      !IsReportAllowed(report)) {
+  if (!report.CanDebuggingBeEnabled() || !IsReportAllowed(report)) {
     return;
   }
 
@@ -1417,9 +1408,7 @@ void AttributionManagerImpl::OnAggregatableReportAssembled(
 
   absl::visit(
       base::Overloaded{
-          [](const AttributionReport::EventLevelData&) {
-            NOTREACHED_NORETURN();
-          },
+          [](const AttributionReport::EventLevelData&) { NOTREACHED(); },
           [&](AttributionReport::AggregatableAttributionData& data) {
             data.common_data.assembled_report = std::move(assembled_report);
           },
@@ -1584,10 +1573,6 @@ void AttributionManagerImpl::NotifyAggregatableDebugReportSent(
 
 void AttributionManagerImpl::MaybeSendVerboseDebugReport(
     const StoreSourceResult& result) {
-  if (!base::FeatureList::IsEnabled(kAttributionVerboseDebugReporting)) {
-    return;
-  }
-
   const auto is_operation_allowed = [&]() {
     return IsOperationAllowed(
         *storage_partition_,
@@ -1610,10 +1595,6 @@ void AttributionManagerImpl::MaybeSendVerboseDebugReport(
 void AttributionManagerImpl::MaybeSendVerboseDebugReport(
     bool is_debug_cookie_set,
     const CreateReportResult& result) {
-  if (!base::FeatureList::IsEnabled(kAttributionVerboseDebugReporting)) {
-    return;
-  }
-
   const auto is_operation_allowed = [&]() {
     return IsOperationAllowed(
         *storage_partition_,
@@ -1872,10 +1853,6 @@ void AttributionManagerImpl::SetDebugMode(std::optional<bool> enabled,
 
 void AttributionManagerImpl::MaybeSendVerboseDebugReports(
     const OsRegistration& registration) {
-  if (!base::FeatureList::IsEnabled(kAttributionVerboseDebugReporting)) {
-    return;
-  }
-
   ContentBrowserClient::AttributionReportingOperation operation;
   const url::Origin* source_origin;
   const url::Origin* destination_origin;
@@ -1924,6 +1901,18 @@ void AttributionManagerImpl::OnAttestationsLoaded() {
                                 base::Milliseconds(1), base::Minutes(5),
                                 /*buckets=*/50);
 
+  static_assert(kMaxPendingEvents == 1000u);
+  if (!pending_events_.empty()) {
+    base::UmaHistogramCounts1000(
+        "Conversions.NumEventsQueuedOnAttestationsLoaded",
+        pending_events_.size());
+  }
+  if (!pending_os_events_.empty()) {
+    base::UmaHistogramCounts1000(
+        "Conversions.NumOsEventsQueuedOnAttestationsLoaded",
+        pending_os_events_.size());
+  }
+
   scheduler_timer_ = std::make_unique<ReportSchedulerTimer>(
       std::make_unique<ReportScheduler>(weak_factory_.GetWeakPtr()));
 
@@ -1941,10 +1930,6 @@ void AttributionManagerImpl::ReportRegistrationHeaderError(
     const attribution_reporting::SuitableOrigin& context_origin,
     bool is_within_fenced_frame,
     GlobalRenderFrameHostId render_frame_id) {
-  if (!base::FeatureList::IsEnabled(kAttributionVerboseDebugReporting)) {
-    return;
-  }
-
   const auto is_operation_allowed = [&](const url::Origin& reporting_origin) {
     return GetContentClient()
         ->browser()

@@ -6,6 +6,7 @@
 #define COMPONENTS_SAVED_TAB_GROUPS_MOCK_TAB_GROUP_SYNC_SERVICE_H_
 
 #include "components/saved_tab_groups/tab_group_sync_service.h"
+#include "components/saved_tab_groups/types.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace tab_groups {
@@ -22,6 +23,11 @@ class MockTabGroupSyncService : public TabGroupSyncService {
               UpdateVisualData,
               (const LocalTabGroupID, const tab_groups::TabGroupVisualData*));
   MOCK_METHOD(void,
+              UpdateGroupPosition,
+              (const base::Uuid& sync_id,
+               std::optional<bool> is_pinned,
+               std ::optional<int> new_index));
+  MOCK_METHOD(void,
               AddTab,
               (const LocalTabGroupID&,
                const LocalTabID&,
@@ -32,12 +38,13 @@ class MockTabGroupSyncService : public TabGroupSyncService {
               UpdateTab,
               (const LocalTabGroupID&,
                const LocalTabID&,
-               const std::u16string&,
-               GURL,
-               std::optional<size_t>));
+               const SavedTabGroupTabBuilder&));
   MOCK_METHOD(void, RemoveTab, (const LocalTabGroupID&, const LocalTabID&));
   MOCK_METHOD(void, MoveTab, (const LocalTabGroupID&, const LocalTabID&, int));
   MOCK_METHOD(void, OnTabSelected, (const LocalTabGroupID&, const LocalTabID&));
+  MOCK_METHOD(void,
+              MakeTabGroupShared,
+              (const LocalTabGroupID&, std::string_view));
 
   MOCK_METHOD(std::vector<SavedTabGroup>, GetAllGroups, ());
   MOCK_METHOD(std::optional<SavedTabGroup>, GetGroup, (const base::Uuid&));
@@ -54,17 +61,20 @@ class MockTabGroupSyncService : public TabGroupSyncService {
   MOCK_METHOD(void,
               UpdateLocalTabId,
               (const LocalTabGroupID&, const base::Uuid&, const LocalTabID&));
+  MOCK_METHOD(void,
+              ConnectLocalTabGroup,
+              (const base::Uuid&, const LocalTabGroupID&));
   MOCK_METHOD(bool,
               IsRemoteDevice,
               (const std::optional<std::string>&),
               (const));
   MOCK_METHOD(void, RecordTabGroupEvent, (const EventDetails&));
 
-  MOCK_METHOD(syncer::ModelTypeSyncBridge*, bridge, ());
-  MOCK_METHOD(base::WeakPtr<syncer::ModelTypeControllerDelegate>,
+  MOCK_METHOD(syncer::DataTypeSyncBridge*, bridge, ());
+  MOCK_METHOD(base::WeakPtr<syncer::DataTypeControllerDelegate>,
               GetSavedTabGroupControllerDelegate,
               ());
-  MOCK_METHOD(base::WeakPtr<syncer::ModelTypeControllerDelegate>,
+  MOCK_METHOD(base::WeakPtr<syncer::DataTypeControllerDelegate>,
               GetSharedTabGroupControllerDelegate,
               ());
   MOCK_METHOD(std::unique_ptr<ScopedLocalObservationPauser>,

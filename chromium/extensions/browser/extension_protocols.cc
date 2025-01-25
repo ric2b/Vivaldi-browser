@@ -67,8 +67,6 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/browser/process_map.h"
 #include "extensions/browser/process_map_factory.h"
 #include "extensions/browser/url_request_util.h"
@@ -110,6 +108,10 @@
 #include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "url/origin.h"
 #include "url/url_util.h"
+
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#endif
 
 #if BUILDFLAG(ENABLE_PDF)
 #include "pdf/pdf_features.h"
@@ -196,6 +198,15 @@ bool AllowExtensionResourceLoad(const network::ResourceRequest& request,
       is_incognito &&
       !ExtensionCanLoadInIncognito(is_main_frame, extension,
                                    extension_enabled_in_incognito)) {
+    return false;
+  }
+
+  // Prevent unexpected use of a dynamic url request. `chrome.runtime.getURL()`
+  // returns a dynamic url when using the extension feature and when
+  // `use_dynamic_url` is true for the resource.
+  if (extension && extension->guid() == request.url.host() &&
+      !base::FeatureList::IsEnabled(
+          extensions_features::kExtensionDynamicURLRedirection)) {
     return false;
   }
 
@@ -631,26 +642,6 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
     LoadExtension(extension, std::move(directory_path));
   }
 
-  static void StartVerifyJob(
-      network::ResourceRequest request,
-      mojo::PendingReceiver<network::mojom::URLLoader> loader,
-      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
-      scoped_refptr<ContentVerifier> content_verifier,
-      const ExtensionResource& resource,
-      scoped_refptr<net::HttpResponseHeaders> response_headers) {
-    scoped_refptr<ContentVerifyJob> verify_job;
-    if (content_verifier) {
-      verify_job = content_verifier->CreateAndStartJobFor(
-          resource.extension_id(), resource.extension_root(),
-          resource.relative_path());
-    }
-
-    content::CreateFileURLLoaderBypassingSecurityChecks(
-        request, std::move(loader), std::move(client),
-        std::make_unique<FileLoaderObserver>(std::move(verify_job)),
-        /* allow_directory_listing */ false, std::move(response_headers));
-  }
-
   void OnFilePathAndLastModifiedTimeRead(
       const extensions::ExtensionResource& resource,
       scoped_refptr<net::HttpResponseHeaders> headers,
@@ -662,11 +653,19 @@ class ExtensionURLLoader : public network::mojom::URLLoader {
     request_.url = net::FilePathToFileURL(read_file_path);
 
     AddCacheHeaders(*headers, last_modified_time);
-    content::GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&StartVerifyJob, std::move(request_), loader_.Unbind(),
-                       client_.Unbind(), std::move(content_verifier), resource,
-                       std::move(headers)));
+
+    scoped_refptr<ContentVerifyJob> verify_job;
+    if (content_verifier) {
+      verify_job = ContentVerifier::CreateAndStartJobFor(
+          resource.extension_id(), resource.extension_root(),
+          resource.relative_path(), content_verifier);
+    }
+
+    content::CreateFileURLLoaderBypassingSecurityChecks(
+        std::move(request_), loader_.Unbind(), client_.Unbind(),
+        std::make_unique<FileLoaderObserver>(std::move(verify_job)),
+        /*allow_directory_listing=*/false, std::move(headers));
+
     DeleteThis();
   }
 
@@ -1045,10 +1044,14 @@ CreateExtensionURLLoaderFactory(int render_process_id, int render_frame_id) {
   content::RenderProcessHost* process_host =
       content::RenderProcessHost::FromID(render_process_id);
   content::BrowserContext* browser_context = process_host->GetBrowserContext();
+  bool is_web_view_request = false;
+
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
   content::RenderFrameHost* render_frame_host =
       content::RenderFrameHost::FromID(render_process_id, render_frame_id);
-  bool is_web_view_request =
+  is_web_view_request =
       WebViewGuest::FromRenderFrameHost(render_frame_host) != nullptr;
+#endif
 
   return ExtensionURLLoaderFactory::Create(browser_context, is_web_view_request,
                                            render_process_id);

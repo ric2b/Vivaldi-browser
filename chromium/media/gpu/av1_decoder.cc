@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/gpu/av1_decoder.h"
 
 #include <bitset>
@@ -73,7 +78,7 @@ bool IsValidBitDepth(uint8_t bit_depth, VideoCodecProfile profile) {
     case AV1PROFILE_PROFILE_PRO:
       return bit_depth == 8u || bit_depth == 10u || bit_depth == 12u;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

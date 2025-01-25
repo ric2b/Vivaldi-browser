@@ -15,8 +15,10 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
+#import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/ui/menu/menu_action_type.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/context_menu/context_menu_api.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
 
@@ -39,7 +41,7 @@ using l10n_util::GetNSString;
 @implementation ActionFactory
 
 - (instancetype)initWithScenario:(MenuScenarioHistogram)scenario {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _histogram = GetActionsHistogramName(scenario);
   }
   return self;
@@ -76,6 +78,19 @@ using l10n_util::GetNSString;
                 block:^{
                   StoreURLInPasteboard(URL.gurl);
                 }];
+}
+
+- (UIAction*)actionToShowFullURL:(NSString*)URLString
+                           block:(ProceduralBlock)block {
+  UIAction* action = [self actionWithTitle:nil
+                                     image:nil
+                                      type:MenuActionType::ShowFullURL
+                                     block:block];
+  action.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_SHOW_FULL_URL_BUTTON_ACCESSIBILITY_LABEL);
+  action.attributes = UIMenuElementAttributesKeepsMenuPresented;
+  action.subtitle = ios::provider::StyledContextMenuStringForString(URLString);
+  return action;
 }
 
 - (UIAction*)actionToShareWithBlock:(ProceduralBlock)block {
@@ -536,7 +551,7 @@ using l10n_util::GetNSString;
          "outside the Tab Groups experiment.";
 
   if (groups.size() == 0) {
-    NOTREACHED_NORETURN() << "Groups cannot be empty.";
+    NOTREACHED() << "Groups cannot be empty.";
   }
 
   NSArray<UIMenuElement*>* groupsMenu = [self groupsMenuForGroups:groups
@@ -733,9 +748,10 @@ using l10n_util::GetNSString;
       [circleImage imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
   for (const TabGroup* group : groups) {
     NSString* title = group->GetTitle();
+    base::WeakPtr<const TabGroup> weakGroup = group->GetWeakPtr();
     ProceduralBlock actionBlock = ^{
       if (block) {
-        block(group);
+        block(weakGroup.get());
       }
     };
 
@@ -752,6 +768,85 @@ using l10n_util::GetNSString;
   }
   return groupsMenu;
 }
+
+- (UIAction*)actionToSortDriveItemsByNameWithBlock:(ProceduralBlock)block {
+  return
+      [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_DRIVE_SORT_BY_NAME)
+                      image:nil
+                       type:MenuActionType::SortDriveItemsByName
+                      block:block];
+}
+
+- (UIAction*)actionToSortDriveItemsByModificationTimeWithBlock:
+    (ProceduralBlock)block {
+  return [self
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_DRIVE_SORT_BY_MODIFICATION)
+                image:nil
+                 type:MenuActionType::SortDriveItemsByModificationTime
+                block:block];
+}
+
+- (UIAction*)actionToSortDriveItemsByOpeningTimeWithBlock:
+    (ProceduralBlock)block {
+  return [self
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_DRIVE_SORT_BY_OPENING)
+                image:nil
+                 type:MenuActionType::SortDriveItemsByOpeningTime
+                block:block];
+}
+
+- (UIMenuElement*)
+    menuToSelectDriveIdentityWithIdentities:
+        (NSArray<id<SystemIdentity>>*)identities
+                            currentIdentity:(id<SystemIdentity>)currentIdentity
+                                      block:(void (^)(const id<SystemIdentity>))
+                                                block {
+  NSMutableArray<UIMenuElement*>* identitiesMenuElements =
+      [[NSMutableArray alloc] init];
+  for (id<SystemIdentity> identity in identities) {
+    NSString* email = identity.userEmail;
+    ProceduralBlock actionBlock = ^{
+      if (block) {
+        block(identity);
+      }
+    };
+
+    UIAction* identityAction =
+        [self actionWithTitle:email
+                        image:nil
+                         type:MenuActionType::SelectDriveIdentity
+                        block:actionBlock];
+    if (identity == currentIdentity) {
+      identityAction.state = UIMenuElementStateOn;
+    }
+    [identitiesMenuElements addObject:identityAction];
+  }
+
+  return [UIMenu menuWithTitle:@""
+                         image:nil
+                    identifier:nil
+                       options:UIMenuOptionsDisplayInline
+                      children:identitiesMenuElements];
+}
+
+- (UIAction*)actionToAddAccountForDriveWithBlock:(ProceduralBlock)block {
+  return [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_DRIVE_ADD_ACCOUNT)
+                         image:nil
+                          type:MenuActionType::AddDriveAccount
+                         block:block];
+}
+
+- (UIAction*)actionToManageLinkInNewTabWithBlock:(ProceduralBlock)block {
+  UIImage* image =
+      DefaultSymbolWithPointSize(kExternalLinkSymbol, kSymbolActionPointSize);
+
+  return [self actionWithTitle:l10n_util::GetNSString(
+                                   IDS_IOS_CONTENT_CONTEXT_OPENMANAGEINNEWTAB)
+                         image:image
+                          type:MenuActionType::ManageInNewTab
+                         block:block];
+}
+
 
 #pragma mark - Vivaldi
 

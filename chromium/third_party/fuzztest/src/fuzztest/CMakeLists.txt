@@ -1,13 +1,22 @@
 function(_link_libfuzzer_in_compatibility_mode name)
   if (FUZZTEST_COMPATIBILITY_MODE STREQUAL "libfuzzer")
     EXECUTE_PROCESS (
-        COMMAND bash -c "command -v llvm-config || command -v llvm-config-16 || command -v llvm-config-15 || command -v llvm-config-14 || command -v llvm-config-13 || command -v llvm-config-12 || echo"
+        COMMAND bash -c "find \${PATH//:/ } -maxdepth 1 -executable -name 'llvm-config*'"
         OUTPUT_VARIABLE LLVM_CONFIG OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     EXECUTE_PROCESS(
-      COMMAND bash -c "find $(${LLVM_CONFIG} --libdir) -name libclang_rt.fuzzer_no_main-x86_64.a | head -1"
+      COMMAND bash -c "find $(${LLVM_CONFIG} --libdir) \
+      -name libclang_rt.fuzzer_no_main-x86_64.a"
       OUTPUT_VARIABLE FUZZER_NO_MAIN OUTPUT_STRIP_TRAILING_WHITESPACE
     )
+    if(NOT FUZZER_NO_MAIN)
+      # LLVM_ENABLE_PER_TARGET_RUNTIME_DIR was set to ON when building LLVM.
+      EXECUTE_PROCESS(
+        COMMAND bash -c "find / -regex \
+        \"$(${LLVM_CONFIG} --libdir).*$(${LLVM_CONFIG} --host-target).*libclang_rt.fuzzer_no_main.a\""
+        OUTPUT_VARIABLE FUZZER_NO_MAIN OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
+    endif()
     target_link_libraries(${name} PRIVATE ${FUZZER_NO_MAIN})
   endif ()
 endfunction()
@@ -264,6 +273,7 @@ fuzztest_cc_library(
     absl::random_bit_gen_ref
     absl::random_distributions
     absl::status
+    absl::statusor
     absl::strings
     absl::synchronization
     absl::span
@@ -291,6 +301,7 @@ fuzztest_cc_library(
     "internal/domains/optional_of_impl.h"
     "internal/domains/serialization_helpers.h"
     "internal/domains/smart_pointer_of_impl.h"
+    "internal/domains/special_values.h"
     "internal/domains/unique_elements_container_of_impl.h"
     "internal/domains/value_mutation_helpers.h"
     "internal/domains/variant_of_impl.h"
@@ -395,9 +406,16 @@ fuzztest_cc_library(
   SRCS
     "internal/io.cc"
   DEPS
+    fuzztest::blob_file
+    fuzztest::defs
     fuzztest::logging
+    fuzztest::remote_file
+    absl::function_ref
     absl::hash
+    absl::status
     absl::str_format
+    absl::string_view
+    absl::span
 )
 
 fuzztest_cc_test(
@@ -406,8 +424,12 @@ fuzztest_cc_test(
   SRCS
     "internal/io_test.cc"
   DEPS
+    fuzztest::blob_file
+    fuzztest::defs
     fuzztest::fuzztest_core
     fuzztest::io
+    absl::check
+    absl::status
     absl::strings
     GTest::gmock_main
 )
@@ -454,6 +476,9 @@ fuzztest_cc_library(
     absl::flat_hash_map
     absl::random_bit_gen_ref
     absl::random_distributions
+    absl::status
+    absl::statusor
+    absl::strings
     re2::re2
 )
 
@@ -505,19 +530,20 @@ fuzztest_cc_library(
     fuzztest::fixture_driver
     fuzztest::io
     fuzztest::logging
-    fuzztest::meta
     fuzztest::printer
     fuzztest::registration
     fuzztest::seed_seq
     fuzztest::serialization
-    fuzztest::type_support
+    fuzztest::status
     absl::any_invocable
+    absl::bind_front
     absl::function_ref
     absl::check
     absl::random_random
     absl::random_bit_gen_ref
     absl::random_distributions
     absl::status
+    absl::statusor
     absl::strings
     absl::str_format
     absl::time

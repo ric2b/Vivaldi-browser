@@ -12,18 +12,6 @@ if (is_android) {
   import("//build/config/android/config.gni")
 }
 
-static_library("url_constants") {
-  sources = [ "url_constants.h" ]
-
-  if (is_chrome_branded && is_official_build) {
-    sources += [ "internal/url_constants.cc" ]
-  } else {
-    sources += [ "url_constants.cc" ]
-  }
-
-  deps = [ "//build:branding_buildflags" ]
-}
-
 source_set("lib") {
   visibility = [ ":*" ]
 
@@ -33,8 +21,8 @@ source_set("lib") {
   ]
 
   deps = [
-    ":url_constants",
     "//base",
+    "//build:branding_buildflags",
   ]
 }
 
@@ -251,7 +239,7 @@ if (is_mac || is_android || is_linux || is_chromeos) {
       "//third_party/crashpad/crashpad/handler",
     ]
 
-    if (is_mac && (is_component_build || is_asan)) {
+    if (is_mac && (is_component_build || is_asan || is_ubsan_any)) {
       ldflags = [
         # The handler is in
         # Chromium.app/Contents/Frameworks/Chromium Framework.framework/Versions/A/Helpers/

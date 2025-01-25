@@ -146,12 +146,20 @@ PaintLayerType LayoutFlowThread::LayerTypeRequired() const {
   return kNoPaintLayer;
 }
 
-void LayoutFlowThread::AbsoluteQuadsForDescendant(const LayoutBox& descendant,
-                                                  Vector<gfx::QuadF>& quads,
-                                                  MapCoordinatesFlags mode) {
+void LayoutFlowThread::QuadsInAncestorForDescendant(
+    const LayoutBox& descendant,
+    Vector<gfx::QuadF>& quads,
+    const LayoutBoxModelObject* ancestor,
+    MapCoordinatesFlags mode) {
   NOT_DESTROYED();
   PhysicalOffset offset_from_flow_thread;
   for (const LayoutObject* object = &descendant; object != this;) {
+    // Based on current intended usage, it should be impossible to end up in a
+    // situation where the ancestor is inside the same fragmentation context as
+    // the descendant. If needed, though, it should be fairly trivial to add
+    // support for it.
+    DCHECK(object != ancestor);
+
     const LayoutObject* container = object->Container();
     offset_from_flow_thread += object->OffsetFromContainer(container);
     object = container;
@@ -169,7 +177,8 @@ void LayoutFlowThread::AbsoluteQuadsForDescendant(const LayoutBox& descendant,
     PhysicalRect clip_rect = iterator.ClipRectInFlowThread();
     fragment.InclusiveIntersect(clip_rect);
     fragment.offset -= offset_from_flow_thread;
-    quads.push_back(descendant.LocalRectToAbsoluteQuad(fragment, mode));
+    quads.push_back(
+        descendant.LocalRectToAncestorQuad(fragment, ancestor, mode));
   }
 }
 
@@ -199,7 +208,7 @@ void LayoutFlowThread::Paint(const PaintInfo& paint_info) const {
   NOT_DESTROYED();
   // NGBoxFragmentPainter traverses a physical fragment tree, and doesn't call
   // Paint() for LayoutFlowThread.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 bool LayoutFlowThread::NodeAtPoint(HitTestResult& result,
@@ -217,7 +226,7 @@ RecalcScrollableOverflowResult LayoutFlowThread::RecalcScrollableOverflow() {
   NOT_DESTROYED();
   // RecalcScrollableOverflow() traverses a physical fragment tree. So it's not
   // called for LayoutFlowThread, which has no physical fragments.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void LayoutFlowThread::GenerateColumnSetIntervalTree() {

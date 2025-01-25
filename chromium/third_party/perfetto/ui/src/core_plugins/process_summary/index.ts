@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Plugin, PluginContextTrace, PluginDescriptor} from '../../public';
+import {Trace} from '../../public/trace';
+import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
 import {getThreadOrProcUri} from '../../public/utils';
 import {NUM, NUM_NULL, STR} from '../../trace_processor/query_result';
-
 import {
   Config as ProcessSchedulingTrackConfig,
   PROCESS_SCHEDULING_TRACK_KIND,
@@ -27,15 +27,16 @@ import {
   ProcessSummaryTrack,
 } from './process_summary_track';
 
-// This plugin now manages both process "scheduling" and "summary" tracks.
-class ProcessSummaryPlugin implements Plugin {
-  async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
+// This plugin is responsible for adding summary tracks for process and thread
+// groups.
+class ProcessSummaryPlugin implements PerfettoPlugin {
+  async onTraceLoad(ctx: Trace): Promise<void> {
     await this.addProcessTrackGroups(ctx);
     await this.addKernelThreadSummary(ctx);
   }
 
-  private async addProcessTrackGroups(ctx: PluginContextTrace): Promise<void> {
-    const cpuCount = Math.max(...ctx.trace.cpus, -1) + 1;
+  private async addProcessTrackGroups(ctx: Trace): Promise<void> {
+    const cpuCount = Math.max(...ctx.traceInfo.cpus, -1) + 1;
 
     const result = await ctx.engine.query(`
       INCLUDE PERFETTO MODULE android.process_metadata;
@@ -114,16 +115,14 @@ class ProcessSummaryPlugin implements Plugin {
           utid,
         };
 
-        ctx.registerTrack({
+        ctx.tracks.registerTrack({
           uri,
           title: `${upid === null ? tid : pid} schedule`,
           tags: {
             kind: PROCESS_SCHEDULING_TRACK_KIND,
           },
           chips,
-          trackFactory: () => {
-            return new ProcessSchedulingTrack(ctx.engine, config, cpuCount);
-          },
+          track: new ProcessSchedulingTrack(ctx.engine, config, cpuCount),
           subtitle,
         });
       } else {
@@ -133,21 +132,21 @@ class ProcessSummaryPlugin implements Plugin {
           utid,
         };
 
-        ctx.registerTrack({
+        ctx.tracks.registerTrack({
           uri,
           title: `${upid === null ? tid : pid} summary`,
           tags: {
             kind: PROCESS_SUMMARY_TRACK,
           },
           chips,
-          trackFactory: () => new ProcessSummaryTrack(ctx.engine, config),
+          track: new ProcessSummaryTrack(ctx.engine, config),
           subtitle,
         });
       }
     }
   }
 
-  private async addKernelThreadSummary(ctx: PluginContextTrace): Promise<void> {
+  private async addKernelThreadSummary(ctx: Trace): Promise<void> {
     const {engine} = ctx;
 
     // Identify kernel threads if this is a linux system trace, and sufficient
@@ -192,13 +191,13 @@ class ProcessSummaryPlugin implements Plugin {
       utid: it.utid,
     };
 
-    ctx.registerTrack({
+    ctx.tracks.registerTrack({
       uri: '/kernel',
       title: `Kernel thread summary`,
       tags: {
         kind: PROCESS_SUMMARY_TRACK,
       },
-      trackFactory: () => new ProcessSummaryTrack(ctx.engine, config),
+      track: new ProcessSummaryTrack(ctx.engine, config),
     });
   }
 }

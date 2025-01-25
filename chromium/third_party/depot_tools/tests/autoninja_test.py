@@ -85,6 +85,10 @@ class AutoninjaTest(trial_dir.TestCase):
             write(os.path.join('buildtools', 'reclient_cfgs', 'reproxy.cfg'),
                   'RBE_v=2')
             write(os.path.join('buildtools', 'reclient', 'version.txt'), '0.0')
+            write(
+                os.path.join('buildtools', 'reclient_cfgs', 'reproxy.cfg'),
+                'instance=projects/rbe-chromium-untrusted-test/'
+                'instances/default_instance')
             autoninja.main(['autoninja.py', '-C', out_dir])
             run_ninja.assert_called_once()
             args = run_ninja.call_args.args[0]
@@ -104,6 +108,8 @@ class AutoninjaTest(trial_dir.TestCase):
         with mock.patch('siso.main', return_value=0) as siso_main:
             out_dir = os.path.join('out', 'dir')
             write(os.path.join(out_dir, 'args.gn'), 'use_siso=true')
+            write(os.path.join('build', 'config', 'siso', '.sisoenv'),
+                  'SISO_PROJECT=rbe-chromium-untrusted-test')
             autoninja.main(['autoninja.py', '-C', out_dir])
             siso_main.assert_called_once()
             args = siso_main.call_args.args[0]
@@ -129,6 +135,8 @@ class AutoninjaTest(trial_dir.TestCase):
                       'use_siso=true\nuse_remoteexec=true')
                 write(
                     os.path.join('buildtools', 'reclient_cfgs', 'reproxy.cfg'),
+                    'instance=projects/rbe-chromium-untrusted-test/'
+                    'instances/default_instance\n'
                     'RBE_v=2')
                 write(os.path.join('buildtools', 'reclient', 'version.txt'),
                       '0.0')
@@ -142,41 +150,6 @@ class AutoninjaTest(trial_dir.TestCase):
             reclient_helper_calls[0][0],
             ['siso', 'ninja', '-project=', '-reapi_instance=', '-C', out_dir])
         self.assertEqual(reclient_helper_calls[0][1], 'autosiso')
-
-    @parameterized.expand([
-        ("non corp machine", False, None, None, None, False),
-        ("non corp adc account", True, "foo@chromium.org", None, None, True),
-        ("corp adc account", True, "foo@google.com", None, None, False),
-        ("non corp gcloud auth account", True, None, "foo@chromium.org", None,
-         True),
-        ("corp gcloud auth account", True, None, "foo@google.com", None, False),
-        ("non corp luci auth account", True, None, None, "foo@chromium.org",
-         True),
-        ("corp luci auth account", True, None, None, "foo@google.com", False),
-    ])
-    def test_is_corp_machine_using_external_account(self, _, is_corp,
-                                                    adc_account,
-                                                    gcloud_auth_account,
-                                                    luci_auth_account,
-                                                    expected):
-        for shelve_file in glob.glob(
-                os.path.join(autoninja._SCRIPT_DIR, ".autoninja*")):
-            # Clear cache.
-            os.remove(shelve_file)
-
-        with mock.patch('autoninja._is_google_corp_machine',
-                        return_value=is_corp), mock.patch(
-                            'autoninja._adc_account',
-                            return_value=adc_account), mock.patch(
-                                'autoninja._gcloud_auth_account',
-                                return_value=gcloud_auth_account), mock.patch(
-                                    'autoninja._luci_auth_account',
-                                    return_value=luci_auth_account):
-            self.assertEqual(
-                bool(
-                    # pylint: disable=line-too-long
-                    autoninja._is_google_corp_machine_using_external_account()),
-                expected)
 
     @mock.patch('sys.platform', 'win32')
     def test_print_cmd_windows(self):

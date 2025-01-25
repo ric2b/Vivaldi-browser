@@ -58,16 +58,16 @@ bool av1_rd_pick_partition(AV1_COMP *const cpi, ThreadData *td,
                            SB_MULTI_PASS_MODE multi_pass_mode,
                            RD_RECT_PART_WIN_INFO *rect_part_win_info);
 
-static AOM_INLINE void set_cb_offsets(uint16_t *cb_offset,
-                                      const uint16_t cb_offset_y,
-                                      const uint16_t cb_offset_uv) {
+static inline void set_cb_offsets(uint16_t *cb_offset,
+                                  const uint16_t cb_offset_y,
+                                  const uint16_t cb_offset_uv) {
   cb_offset[PLANE_TYPE_Y] = cb_offset_y;
   cb_offset[PLANE_TYPE_UV] = cb_offset_uv;
 }
 
-static AOM_INLINE void update_cb_offsets(MACROBLOCK *x, const BLOCK_SIZE bsize,
-                                         const int subsampling_x,
-                                         const int subsampling_y) {
+static inline void update_cb_offsets(MACROBLOCK *x, const BLOCK_SIZE bsize,
+                                     const int subsampling_x,
+                                     const int subsampling_y) {
   x->cb_offset[PLANE_TYPE_Y] += block_size_wide[bsize] * block_size_high[bsize];
   if (x->e_mbd.is_chroma_ref) {
     const BLOCK_SIZE plane_bsize =

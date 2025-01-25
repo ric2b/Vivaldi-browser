@@ -8,10 +8,6 @@
 #import "ios/panel/panel_interaction_controller.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 // NAMESPACE
 namespace {
 // Cell Identifier for the top menu CV Cell.
@@ -35,7 +31,8 @@ CGFloat iconSize = 56.0;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithFrame:(CGRect)frame {
-  if (self = [super initWithFrame:frame]) {
+  self = [super initWithFrame:frame];
+  if (self) {
     [self setUpUI];
   }
   return self;

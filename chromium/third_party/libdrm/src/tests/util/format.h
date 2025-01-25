@@ -55,6 +55,7 @@ struct util_yuv_info {
 struct util_format_info {
 	uint32_t format;
 	const char *name;
+	unsigned int ncolors;
 	const struct util_rgb_info rgb;
 	const struct util_yuv_info yuv;
 };

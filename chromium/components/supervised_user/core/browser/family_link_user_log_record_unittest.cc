@@ -17,6 +17,7 @@
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/pref_names.h"
+#include "components/supervised_user/test_support/supervised_user_url_filter_test_utils.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -53,10 +54,10 @@ class FamilyLinkUserLogRecordTest : public ::testing::Test {
   }
 
   std::unique_ptr<FamilyLinkUserLogRecord> CreateFamilyLinkUserLogRecord() {
-    SupervisedUserURLFilter filter(
-        pref_service_,
-        std::make_unique<safe_search_api::FakeURLCheckerClient>(),
-        base::BindRepeating([](const GURL& url) { return false; }));
+    SupervisedUserURLFilter filter(pref_service_,
+                                   std::make_unique<FakeURLFilterDelegate>());
+    filter.SetURLCheckerClient(
+        std::make_unique<safe_search_api::FakeURLCheckerClient>());
 
     return std::make_unique<FamilyLinkUserLogRecord>(
         FamilyLinkUserLogRecord::Create(identity_test_env_.identity_manager(),
@@ -64,14 +65,16 @@ class FamilyLinkUserLogRecordTest : public ::testing::Test {
                                         *host_content_settings_map_, &filter));
   }
 
-  std::unique_ptr<FamilyLinkUserLogRecord> CreateSupervisedUserWithWebFilter(
-      WebFilterType web_filter_type) {
+  void CreateSupervisedUser(bool is_subject_to_parental_controls,
+                            bool is_opted_in_to_parental_supervision) {
     AccountInfo account_info =
         GetIdentityTestEnv()->MakePrimaryAccountAvailable(
             kChildEmail, signin::ConsentLevel::kSignin);
     AccountCapabilitiesTestMutator mutator(&account_info.capabilities);
-    mutator.set_is_subject_to_parental_controls(true);
-    mutator.set_is_opted_in_to_parental_supervision(false);
+    mutator.set_is_subject_to_parental_controls(
+        is_subject_to_parental_controls);
+    mutator.set_is_opted_in_to_parental_supervision(
+        is_opted_in_to_parental_supervision);
     GetIdentityTestEnv()->UpdateAccountInfoForAccount(account_info);
 
     supervised_user::EnableParentalControls(pref_service_);
@@ -79,11 +82,17 @@ class FamilyLinkUserLogRecordTest : public ::testing::Test {
     // as done by the SupervisedUserPrefStore.
     pref_service_.SetBoolean(
         prefs::kSupervisedUserExtensionsMayRequestPermissions, true);
+  }
 
-    SupervisedUserURLFilter filter(
-        pref_service_,
-        std::make_unique<safe_search_api::FakeURLCheckerClient>(),
-        base::BindRepeating([](const GURL& url) { return false; }));
+  std::unique_ptr<FamilyLinkUserLogRecord> CreateSupervisedUserWithWebFilter(
+      WebFilterType web_filter_type) {
+    CreateSupervisedUser(/*is_subject_to_parental_controls=*/true,
+                         /*is_opted_in_to_parental_supervision=*/false);
+
+    SupervisedUserURLFilter filter(pref_service_,
+                                   std::make_unique<FakeURLFilterDelegate>());
+    filter.SetURLCheckerClient(
+        std::make_unique<safe_search_api::FakeURLCheckerClient>());
 
     switch (web_filter_type) {
       case WebFilterType::kAllowAllSites:
@@ -132,12 +141,8 @@ TEST_F(FamilyLinkUserLogRecordTest, CapabilitiesUnknownDefault) {
 }
 
 TEST_F(FamilyLinkUserLogRecordTest, SupervisionEnabledByUser) {
-  AccountInfo account_info = GetIdentityTestEnv()->MakePrimaryAccountAvailable(
-      kChildEmail, signin::ConsentLevel::kSignin);
-  AccountCapabilitiesTestMutator mutator(&account_info.capabilities);
-  mutator.set_is_subject_to_parental_controls(true);
-  mutator.set_is_opted_in_to_parental_supervision(true);
-  GetIdentityTestEnv()->UpdateAccountInfoForAccount(account_info);
+  CreateSupervisedUser(/*is_subject_to_parental_controls=*/true,
+                       /*is_opted_in_to_parental_supervision=*/true);
 
   std::optional<FamilyLinkUserLogRecord::Segment> supervision_status =
       CreateFamilyLinkUserLogRecord()->GetSupervisionStatusForPrimaryAccount();
@@ -147,12 +152,8 @@ TEST_F(FamilyLinkUserLogRecordTest, SupervisionEnabledByUser) {
 }
 
 TEST_F(FamilyLinkUserLogRecordTest, SupervisionEnabledByPolicy) {
-  AccountInfo account_info = GetIdentityTestEnv()->MakePrimaryAccountAvailable(
-      kChildEmail, signin::ConsentLevel::kSignin);
-  AccountCapabilitiesTestMutator mutator(&account_info.capabilities);
-  mutator.set_is_subject_to_parental_controls(true);
-  mutator.set_is_opted_in_to_parental_supervision(false);
-  GetIdentityTestEnv()->UpdateAccountInfoForAccount(account_info);
+  CreateSupervisedUser(/*is_subject_to_parental_controls=*/true,
+                       /*is_opted_in_to_parental_supervision=*/false);
 
   std::optional<FamilyLinkUserLogRecord::Segment> supervision_status =
       CreateFamilyLinkUserLogRecord()->GetSupervisionStatusForPrimaryAccount();

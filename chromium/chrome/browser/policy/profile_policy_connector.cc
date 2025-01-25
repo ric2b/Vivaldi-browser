@@ -24,6 +24,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_switcher/browser_switcher_policy_migrator.h"
+#include "chrome/browser/enterprise/util/affiliation.h"
 #include "chrome/browser/infobars/simple_alert_infobar_creator.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "components/infobars/content/content_infobar_manager.h"
@@ -573,6 +574,9 @@ void ProfilePolicyConnector::TriggerProxiedPoliciesWaitTimeoutForTesting() {
 
 base::flat_set<std::string> ProfilePolicyConnector::user_affiliation_ids()
     const {
+  if (!user_affiliation_ids_for_testing_.empty()) {
+    return user_affiliation_ids_for_testing_;
+  }
   auto* store = GetActualPolicyStore();
   if (!store || !store->has_policy())
     return {};
@@ -580,33 +584,19 @@ base::flat_set<std::string> ProfilePolicyConnector::user_affiliation_ids()
   return {ids.begin(), ids.end()};
 }
 
+void ProfilePolicyConnector::SetUserAffiliationIdsForTesting(
+    const base::flat_set<std::string>& user_affiliation_ids) {
+  user_affiliation_ids_for_testing_ = user_affiliation_ids;
+}
+
 void ProfilePolicyConnector::OnPolicyServiceInitialized(PolicyDomain domain) {
   DCHECK_EQ(domain, POLICY_DOMAIN_CHROME);
-  ReportChromePolicyInitialized();
+  RecordAffiliationMetrics();
 }
 
 void ProfilePolicyConnector::DoPostInit() {
   DCHECK(policy_service_);
-  creation_time_for_metrics_ = base::TimeTicks::Now();
   policy_service_->AddObserver(POLICY_DOMAIN_CHROME, this);
-  if (policy_service_->IsInitializationComplete(POLICY_DOMAIN_CHROME)) {
-    ReportChromePolicyInitialized();
-  }
-}
-
-void ProfilePolicyConnector::ReportChromePolicyInitialized() {
-  // Protect against multiple notifications: we want to report the metric only
-  // once per profile session.
-  if (!creation_time_for_metrics_.has_value()) {
-    return;
-  }
-  std::string metric_suffix = GetTimeToFirstPolicyLoadMetricSuffix();
-  if (!metric_suffix.empty()) {
-    base::UmaHistogramMediumTimes(
-        "Enterprise.TimeToFirstPolicyLoad.Profile." + metric_suffix,
-        base::TimeTicks::Now() - creation_time_for_metrics_.value());
-  }
-  creation_time_for_metrics_.reset();
 }
 
 const CloudPolicyStore* ProfilePolicyConnector::GetActualPolicyStore() const {
@@ -713,6 +703,31 @@ void ProfilePolicyConnector::RevertUseLocalTestPolicyProvider() {
     local_test_infobar_visibility_manager_
         ->DismissInfobarsForActiveLocalTestPoliciesAllTabs();
   }
+}
+
+bool ProfilePolicyConnector::IsUsingLocalTestPolicyProvider() const {
+  return local_test_policy_provider_ &&
+         local_test_policy_provider_->is_active();
+}
+
+void ProfilePolicyConnector::RecordAffiliationMetrics() {
+  const PolicyMap& chrome_policies = policy_service()->GetPolicies(
+      policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME, std::string()));
+
+  base::UmaHistogramBoolean("Enterprise.ProfileAffiliation.IsAffiliated",
+                            chrome_policies.IsUserAffiliated());
+
+  if (!chrome_policies.IsUserAffiliated()) {
+    const auto reason = enterprise_util::GetUnaffiliatedReason(this);
+    base::UmaHistogramEnumeration(
+        "Enterprise.ProfileAffiliation.UnaffiliatedReason", reason);
+  }
+
+  // base::Unretained is safe because `this` owns the timer.
+  management_status_metrics_timer_.Start(
+      FROM_HERE, base::Days(7),
+      base::BindRepeating(&ProfilePolicyConnector::RecordAffiliationMetrics,
+                          base::Unretained(this)));
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

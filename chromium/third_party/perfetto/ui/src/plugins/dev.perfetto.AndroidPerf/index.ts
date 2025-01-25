@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  addDebugSliceTrack,
-  Plugin,
-  PluginContextTrace,
-  PluginDescriptor,
-} from '../../public';
+import {addDebugSliceTrack} from '../../public/debug_tracks';
+import {Trace} from '../../public/trace';
+import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
 
-class AndroidPerf implements Plugin {
+class AndroidPerf implements PerfettoPlugin {
   async addAppProcessStartsDebugTrack(
-    ctx: PluginContextTrace,
+    ctx: Trace,
     reason: string,
     sliceName: string,
   ): Promise<void> {
@@ -46,7 +43,7 @@ class AndroidPerf implements Plugin {
                       process_name,
                       intent,
                       'slice' AS table_name
-                    FROM _android_app_process_starts
+                    FROM android_app_process_starts
                     WHERE reason = '${reason}'
                  `,
         columns: sliceColumns,
@@ -57,52 +54,52 @@ class AndroidPerf implements Plugin {
     );
   }
 
-  async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
-    ctx.registerCommand({
+  async onTraceLoad(ctx: Trace): Promise<void> {
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.AndroidPerf#BinderSystemServerIncoming',
       name: 'Run query: system_server incoming binder graph',
       callback: () =>
-        ctx.tabs.openQuery(
+        ctx.addQueryResultsTab(
           `INCLUDE PERFETTO MODULE android.binder;
            SELECT * FROM android_binder_incoming_graph((SELECT upid FROM process WHERE name = 'system_server'))`,
           'system_server incoming binder graph',
         ),
     });
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.AndroidPerf#BinderSystemServerOutgoing',
       name: 'Run query: system_server outgoing binder graph',
       callback: () =>
-        ctx.tabs.openQuery(
+        ctx.addQueryResultsTab(
           `INCLUDE PERFETTO MODULE android.binder;
            SELECT * FROM android_binder_outgoing_graph((SELECT upid FROM process WHERE name = 'system_server'))`,
           'system_server outgoing binder graph',
         ),
     });
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.AndroidPerf#MonitorContentionSystemServer',
       name: 'Run query: system_server monitor_contention graph',
       callback: () =>
-        ctx.tabs.openQuery(
+        ctx.addQueryResultsTab(
           `INCLUDE PERFETTO MODULE android.monitor_contention;
            SELECT * FROM android_monitor_contention_graph((SELECT upid FROM process WHERE name = 'system_server'))`,
           'system_server monitor_contention graph',
         ),
     });
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.AndroidPerf#BinderAll',
       name: 'Run query: all process binder graph',
       callback: () =>
-        ctx.tabs.openQuery(
+        ctx.addQueryResultsTab(
           `INCLUDE PERFETTO MODULE android.binder;
            SELECT * FROM android_binder_graph(-1000, 1000, -1000, 1000)`,
           'all process binder graph',
         ),
     });
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.AndroidPerf#ThreadClusterDistribution',
       name: 'Run query: runtime cluster distribution for a thread',
       callback: async (tid) => {
@@ -110,9 +107,9 @@ class AndroidPerf implements Plugin {
           tid = prompt('Enter a thread tid', '');
           if (tid === null) return;
         }
-        ctx.tabs.openQuery(
+        ctx.addQueryResultsTab(
           `
-          INCLUDE PERFETTO MODULE viz.core_types;
+          INCLUDE PERFETTO MODULE android.cpu.cluster_type;
           WITH
             total_runtime AS (
               SELECT sum(dur) AS total_runtime
@@ -122,14 +119,14 @@ class AndroidPerf implements Plugin {
               WHERE t.tid = ${tid}
             )
             SELECT
-              c.size AS cluster,
+              c.cluster_type AS cluster,
               sum(dur)/1e6 AS total_dur_ms,
               sum(dur) * 1.0 / (SELECT * FROM total_runtime) AS percentage
             FROM sched s
             LEFT JOIN thread t
               USING (utid)
-            LEFT JOIN _guessed_core_types c
-              ON s.cpu = c.cpu_index
+            LEFT JOIN android_cpu_cluster_mapping c
+              USING (cpu)
             WHERE t.tid = ${tid}
             GROUP BY 1`,
           `runtime cluster distrubtion for tid ${tid}`,
@@ -137,7 +134,7 @@ class AndroidPerf implements Plugin {
       },
     });
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.AndroidPerf#SchedLatency',
       name: 'Run query: top 50 sched latency for a thread',
       callback: async (tid) => {
@@ -145,7 +142,7 @@ class AndroidPerf implements Plugin {
           tid = prompt('Enter a thread tid', '');
           if (tid === null) return;
         }
-        ctx.tabs.openQuery(
+        ctx.addQueryResultsTab(
           `
           SELECT ts.*, t.tid, t.name, tt.id AS track_id
           FROM thread_state ts
@@ -161,7 +158,7 @@ class AndroidPerf implements Plugin {
       },
     });
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.AndroidPerf#AppProcessStarts',
       name: 'Add tracks: app process starts',
       callback: async () => {
@@ -176,7 +173,7 @@ class AndroidPerf implements Plugin {
       },
     });
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.AndroidPerf#AppIntentStarts',
       name: 'Add tracks: app intent starts',
       callback: async () => {

@@ -1,15 +1,34 @@
 #include <metal_stdlib>
 using namespace metal;
 
-struct UniformBuffer {
-  float unknownInput_S1_c0;
-  float4 ucolorRed_S1_c0;
-  float4 ucolorGreen_S1_c0;
-  float3x3 umatrix_S1;
+template<typename T, size_t N>
+struct tint_array {
+  const constant T& operator[](size_t i) const constant { return elements[i]; }
+  device T& operator[](size_t i) device { return elements[i]; }
+  const device T& operator[](size_t i) const device { return elements[i]; }
+  thread T& operator[](size_t i) thread { return elements[i]; }
+  const thread T& operator[](size_t i) const thread { return elements[i]; }
+  threadgroup T& operator[](size_t i) threadgroup { return elements[i]; }
+  const threadgroup T& operator[](size_t i) const threadgroup { return elements[i]; }
+  T elements[N];
+};
+
+struct tint_packed_vec3_f32_array_element {
+  /* 0x0000 */ packed_float3 packed;
+  /* 0x000c */ tint_array<int8_t, 4> tint_pad_2;
+};
+
+struct UniformBuffer_packed_vec3 {
+  /* 0x0000 */ tint_array<int8_t, 16> tint_pad;
+  /* 0x0010 */ float unknownInput_S1_c0;
+  /* 0x0014 */ tint_array<int8_t, 12> tint_pad_1;
+  /* 0x0020 */ float4 ucolorRed_S1_c0;
+  /* 0x0030 */ float4 ucolorGreen_S1_c0;
+  /* 0x0040 */ tint_array<tint_packed_vec3_f32_array_element, 3> umatrix_S1;
 };
 
 struct tint_module_vars_struct {
-  const constant UniformBuffer* x_4;
+  const constant UniformBuffer_packed_vec3* x_4;
   thread float4* sk_FragColor;
   thread bool* sk_Clockwise;
   thread float4* vcolor_S0;
@@ -59,13 +78,13 @@ bool test_int_S1_c0_b(tint_module_vars_struct tint_module_vars) {
   ok = x_41;
   int4 const x_44 = int4(x_27);
   val = x_44;
-  int4 const x_47 = (x_44 + int4(1));
+  int4 const x_47 = as_type<int4>((as_type<uint4>(x_44) + as_type<uint4>(int4(1))));
   val = x_47;
-  int4 const x_48 = (x_47 - int4(1));
+  int4 const x_48 = as_type<int4>((as_type<uint4>(x_47) - as_type<uint4>(int4(1))));
   val = x_48;
-  int4 const x_49 = (x_48 + int4(1));
+  int4 const x_49 = as_type<int4>((as_type<uint4>(x_48) + as_type<uint4>(int4(1))));
   val = x_49;
-  int4 const x_50 = (x_49 - int4(1));
+  int4 const x_50 = as_type<int4>((as_type<uint4>(x_49) - as_type<uint4>(int4(1))));
   val = x_50;
   x_55 = false;
   if (x_41) {
@@ -73,11 +92,11 @@ bool test_int_S1_c0_b(tint_module_vars_struct tint_module_vars) {
     x_55 = x_54;
   }
   ok = x_55;
-  int4 const x_58 = (x_50 * int4(2));
+  int4 const x_58 = as_type<int4>((as_type<uint4>(x_50) * as_type<uint4>(int4(2))));
   val = x_58;
   int4 const x_59 = tint_div_v4i32(x_58, int4(2));
   val = x_59;
-  int4 const x_60 = (x_59 * int4(2));
+  int4 const x_60 = as_type<int4>((as_type<uint4>(x_59) * as_type<uint4>(int4(2))));
   val = x_60;
   int4 const x_61 = tint_div_v4i32(x_60, int4(2));
   val = x_61;
@@ -167,10 +186,12 @@ main_out tint_symbol_inner(bool sk_Clockwise_param, float4 vcolor_S0_param, tint
   return main_out{.sk_FragColor_1=(*tint_module_vars.sk_FragColor)};
 }
 
-fragment tint_symbol_outputs tint_symbol(bool sk_Clockwise_param [[front_facing]], tint_symbol_inputs inputs [[stage_in]], const constant UniformBuffer* x_4 [[buffer(0)]]) {
+fragment tint_symbol_outputs tint_symbol(bool sk_Clockwise_param [[front_facing]], tint_symbol_inputs inputs [[stage_in]], const constant UniformBuffer_packed_vec3* x_4 [[buffer(0)]]) {
   thread float4 sk_FragColor = 0.0f;
   thread bool sk_Clockwise = false;
   thread float4 vcolor_S0 = 0.0f;
   tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.x_4=x_4, .sk_FragColor=(&sk_FragColor), .sk_Clockwise=(&sk_Clockwise), .vcolor_S0=(&vcolor_S0)};
-  return tint_symbol_outputs{.main_out_sk_FragColor_1=tint_symbol_inner(sk_Clockwise_param, inputs.vcolor_S0_param, tint_module_vars).sk_FragColor_1};
+  tint_symbol_outputs tint_wrapper_result = {};
+  tint_wrapper_result.main_out_sk_FragColor_1 = tint_symbol_inner(sk_Clockwise_param, inputs.vcolor_S0_param, tint_module_vars).sk_FragColor_1;
+  return tint_wrapper_result;
 }

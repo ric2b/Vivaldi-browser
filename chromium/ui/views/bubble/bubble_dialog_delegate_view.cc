@@ -5,6 +5,7 @@
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -27,6 +28,7 @@
 #include "ui/base/class_property.h"
 #include "ui/base/default_style.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
@@ -164,11 +166,11 @@ class BubbleDialogFrameView : public BubbleFrameView {
 };
 
 // Create a widget to host the bubble.
-Widget* CreateBubbleWidget(BubbleDialogDelegate* bubble) {
-  Widget* bubble_widget = new BubbleWidget();
-  Widget::InitParams bubble_params(
-      Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
-      Widget::InitParams::TYPE_BUBBLE);
+Widget* CreateBubbleWidget(BubbleDialogDelegate* bubble,
+                           Widget::InitParams::Ownership ownership =
+                               Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET) {
+  auto bubble_widget = std::make_unique<BubbleWidget>();
+  Widget::InitParams bubble_params(ownership, Widget::InitParams::TYPE_BUBBLE);
   bubble_params.delegate = bubble;
   bubble_params.opacity = Widget::InitParams::WindowOpacity::kTranslucent;
   bubble_params.accept_events = bubble->accept_events();
@@ -197,10 +199,10 @@ Widget* CreateBubbleWidget(BubbleDialogDelegate* bubble) {
   bubble_params.activatable = bubble->CanActivate()
                                   ? Widget::InitParams::Activatable::kYes
                                   : Widget::InitParams::Activatable::kNo;
-  bubble->OnBeforeBubbleWidgetInit(&bubble_params, bubble_widget);
+  bubble->OnBeforeBubbleWidgetInit(&bubble_params, bubble_widget.get());
   DCHECK(bubble_params.parent || !bubble->has_parent());
   bubble_widget->Init(std::move(bubble_params));
-  return bubble_widget;
+  return bubble_widget.release();
 }
 
 }  // namespace
@@ -510,14 +512,15 @@ BubbleDialogDelegate::~BubbleDialogDelegate() {
 
 // static
 Widget* BubbleDialogDelegate::CreateBubble(
-    std::unique_ptr<BubbleDialogDelegate> bubble_delegate_unique) {
+    std::unique_ptr<BubbleDialogDelegate> bubble_delegate_unique,
+    Widget::InitParams::Ownership ownership) {
   BubbleDialogDelegate* const bubble_delegate = bubble_delegate_unique.get();
 
   // On Mac, MODAL_TYPE_WINDOW is implemented using sheets, which can't be
   // anchored at a specific point - they are always placed near the top center
   // of the window. To avoid unpleasant surprises, disallow setting an anchor
   // view or rectangle on these types of bubbles.
-  if (bubble_delegate->GetModalType() == ui::MODAL_TYPE_WINDOW) {
+  if (bubble_delegate->GetModalType() == ui::mojom::ModalType::kWindow) {
     DCHECK(!bubble_delegate->GetAnchorView());
     DCHECK_EQ(bubble_delegate->GetAnchorRect(), gfx::Rect());
   }
@@ -526,7 +529,7 @@ Widget* BubbleDialogDelegate::CreateBubble(
   // Get the latest anchor widget from the anchor view at bubble creation time.
   bubble_delegate->SetAnchorView(bubble_delegate->GetAnchorView());
   Widget* const bubble_widget =
-      CreateBubbleWidget(bubble_delegate_unique.release());
+      CreateBubbleWidget(bubble_delegate_unique.release(), ownership);
 
   if (vivaldi::IsVivaldiRunning()) {
     // In Vivaldi we use some of these bubbles at the bottom of the window, so
@@ -543,8 +546,10 @@ Widget* BubbleDialogDelegate::CreateBubble(
   return bubble_widget;
 }
 
-Widget* BubbleDialogDelegateView::CreateBubble(BubbleDialogDelegateView* view) {
-  return CreateBubble(base::WrapUnique(view));
+Widget* BubbleDialogDelegateView::CreateBubble(
+    BubbleDialogDelegateView* delegate_view,
+    Widget::InitParams::Ownership ownership) {
+  return CreateBubble(base::WrapUnique(delegate_view), ownership);
 }
 
 BubbleDialogDelegateView::BubbleDialogDelegateView()
@@ -676,6 +681,9 @@ void BubbleDialogDelegate::OnAnchorWidgetBoundsChanged() {
 
 
 BubbleBorder::Shadow BubbleDialogDelegate::GetShadow() const {
+  if (!Widget::IsWindowCompositingSupported()) {
+    return BubbleBorder::Shadow::NO_SHADOW;
+  }
   return shadow_;
 }
 
@@ -1184,9 +1192,9 @@ void BubbleDialogDelegate::UpdateHighlightedButton(bool highlighted) {
   button = button ? button : Button::AsButton(GetAnchorView());
   if (button && highlight_button_when_shown_) {
     if (highlighted) {
-      button_anchor_higlight_ = button->AddAnchorHighlight();
+      button_anchor_highlight_ = button->AddAnchorHighlight();
     } else {
-      button_anchor_higlight_.reset();
+      button_anchor_highlight_.reset();
     }
   }
 }

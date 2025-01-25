@@ -11,12 +11,13 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/time/time.h"
-#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/chrome_widget_sublevel.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
@@ -25,6 +26,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/insets.h"
@@ -73,7 +75,7 @@ PermissionPromptBubbleBaseView::~PermissionPromptBubbleBaseView() = default;
 void PermissionPromptBubbleBaseView::CreatePermissionButtons(
     const std::u16string& allow_always_text) {
   if (is_one_time_permission_) {
-    SetButtons(ui::DIALOG_BUTTON_NONE);
+    SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
 
     auto buttons_container = std::make_unique<views::View>();
     buttons_container->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -139,20 +141,20 @@ void PermissionPromptBubbleBaseView::CreatePermissionButtons(
         buttons_container->GetPreferredSize().height()));
     SetExtraView(std::move(buttons_container));
   } else {
-    SetButtonLabel(ui::DIALOG_BUTTON_OK,
+    SetButtonLabel(ui::mojom::DialogButton::kOk,
                    l10n_util::GetStringUTF16(IDS_PERMISSION_ALLOW));
     SetAcceptCallback(base::BindOnce(
         &PermissionPromptBubbleBaseView::RunButtonCallback,
         base::Unretained(this), GetViewId(PermissionDialogButton::kAccept)));
 
-    SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+    SetButtonLabel(ui::mojom::DialogButton::kCancel,
                    l10n_util::GetStringUTF16(IDS_PERMISSION_DENY));
     SetCancelCallback(base::BindOnce(
         &PermissionPromptBubbleBaseView::RunButtonCallback,
         base::Unretained(this), GetViewId(PermissionDialogButton::kDeny)));
 
-    SetButtonStyle(ui::DIALOG_BUTTON_OK, ui::ButtonStyle::kTonal);
-    SetButtonStyle(ui::DIALOG_BUTTON_CANCEL, ui::ButtonStyle::kTonal);
+    SetButtonStyle(ui::mojom::DialogButton::kOk, ui::ButtonStyle::kTonal);
+    SetButtonStyle(ui::mojom::DialogButton::kCancel, ui::ButtonStyle::kTonal);
   }
 }
 
@@ -236,6 +238,29 @@ void PermissionPromptBubbleBaseView::ClosingPermission() {
 
 void PermissionPromptBubbleBaseView::RunButtonCallback(int button_id) {
   PermissionDialogButton button = GetPermissionDialogButton(button_id);
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  if (browser_view && browser_view->GetLocationBarView()->GetChipController() &&
+      browser_view->GetLocationBarView()
+          ->GetChipController()
+          ->IsPermissionPromptChipVisible()) {
+    ChipController* chip_controller =
+        browser_view->GetLocationBarView()->GetChipController();
+    switch (button) {
+      case PermissionDialogButton::kAccept:
+        chip_controller->PromptDecided(permissions::PermissionAction::GRANTED);
+        return;
+
+      case PermissionDialogButton::kAcceptOnce:
+        chip_controller->PromptDecided(
+            permissions::PermissionAction::GRANTED_ONCE);
+        return;
+
+      case PermissionDialogButton::kDeny:
+        chip_controller->PromptDecided(permissions::PermissionAction::DENIED);
+        return;
+    }
+  }
+
   switch (button) {
     case PermissionDialogButton::kAccept:
       delegate_->Accept();

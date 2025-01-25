@@ -214,11 +214,13 @@ struct packet_traits<double> : default_packet_traits {
     HasDiv = 1,
     HasSin = EIGEN_FAST_MATH,
     HasCos = EIGEN_FAST_MATH,
+    HasTanh = EIGEN_FAST_MATH,
     HasLog = 1,
     HasExp = 1,
     HasSqrt = 1,
     HasRsqrt = 1,
     HasATan = 1,
+    HasATanh = 1,
     HasBlend = 1
   };
 };
@@ -1127,7 +1129,7 @@ EIGEN_STRONG_INLINE Packet pminmax_propagate_nan(const Packet& a, const Packet& 
   return pselect<Packet>(not_nan_mask_a, m, a);
 }
 
-// Add specializations for min/max with prescribed NaN progation.
+// Add specializations for min/max with prescribed NaN propagation.
 template <>
 EIGEN_STRONG_INLINE Packet4f pmin<PropagateNumbers, Packet4f>(const Packet4f& a, const Packet4f& b) {
   return pminmax_propagate_numbers(a, b, pmin<Packet4f>);

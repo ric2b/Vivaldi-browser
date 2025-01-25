@@ -1,4 +1,4 @@
-SKIP: FAILED
+SKIP: INVALID
 
 cbuffer cbuffer_u : register(b0) {
   uint4 u[32];
@@ -20,14 +20,19 @@ matrix<float16_t, 2, 4> u_load(uint offset) {
 
 [numthreads(1, 1, 1)]
 void f() {
-  const matrix<float16_t, 4, 2> t = transpose(u_load(264u));
+  matrix<float16_t, 4, 2> t = transpose(u_load(264u));
   uint2 ubo_load_4 = u[1].xy;
   vector<float16_t, 2> ubo_load_4_xz = vector<float16_t, 2>(f16tof32(ubo_load_4 & 0xFFFF));
   vector<float16_t, 2> ubo_load_4_yw = vector<float16_t, 2>(f16tof32(ubo_load_4 >> 16));
-  const float16_t l = length(vector<float16_t, 4>(ubo_load_4_xz[0], ubo_load_4_yw[0], ubo_load_4_xz[1], ubo_load_4_yw[1]).ywxz);
+  float16_t l = length(vector<float16_t, 4>(ubo_load_4_xz[0], ubo_load_4_yw[0], ubo_load_4_xz[1], ubo_load_4_yw[1]).ywxz);
   uint2 ubo_load_5 = u[1].xy;
   vector<float16_t, 2> ubo_load_5_xz = vector<float16_t, 2>(f16tof32(ubo_load_5 & 0xFFFF));
   vector<float16_t, 2> ubo_load_5_yw = vector<float16_t, 2>(f16tof32(ubo_load_5 >> 16));
-  const float16_t a = abs(vector<float16_t, 4>(ubo_load_5_xz[0], ubo_load_5_yw[0], ubo_load_5_xz[1], ubo_load_5_yw[1]).ywxz.x);
+  float16_t a = abs(vector<float16_t, 4>(ubo_load_5_xz[0], ubo_load_5_yw[0], ubo_load_5_xz[1], ubo_load_5_yw[1]).ywxz.x);
   return;
 }
+FXC validation failure:
+<scrubbed_path>(5,8-16): error X3000: syntax error: unexpected token 'float16_t'
+
+
+tint executable returned error: exit status 1

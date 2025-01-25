@@ -34,6 +34,14 @@ class PlatformKeysService;
 
 namespace cert_provisioning {
 
+// A feature to prevent Certificate Provisioning workers from attempting to
+// continue the provisioning process on timeout (without receiving an
+// invalidation). It is intended to be used for testing only to verify that new
+// invalidations actually work. Also see `ShouldOnlyUseInvalidations`.
+// TODO(b/336989561): Remove this after the migration to new invalidations is
+// done.
+BASE_DECLARE_FEATURE(kCertProvisioningUseOnlyInvalidationsForTesting);
+
 // Used for both DeleteVaKey and DeleteVaKeysByPrefix
 using DeleteVaKeyCallback = base::OnceCallback<void(bool)>;
 
@@ -168,6 +176,19 @@ enum class ProtocolVersion {
   kDynamic = 2,
 };
 
+// The type of key the device should generate.
+// TODO(b/364893005): After the client-side implementation is done, update the
+// values in YAML files and mention those files here (same as for
+// ProtocolVersion above). They are also used in serialization so they should
+// not be renumbered.
+enum class KeyType {
+  // 2048-bit RSA keys.
+  kRsa = 1,
+  // Elliptic-curve keys using the P-256 curve.
+  kEc = 2,
+  kMaxValue = KeyType::kEc
+};
+
 struct CertProfile {
   static std::optional<CertProfile> MakeFromValue(
       const base::Value::Dict& value);
@@ -177,6 +198,7 @@ struct CertProfile {
   CertProfile(CertProfileId profile_id,
               std::string name,
               std::string policy_version,
+              KeyType key_type,
               bool is_va_enabled,
               base::TimeDelta renewal_period,
               ProtocolVersion protocol_version);
@@ -190,6 +212,7 @@ struct CertProfile {
   // Human-readable name (UTF-8).
   std::string name;
   std::string policy_version;
+  KeyType key_type;
   bool is_va_enabled = true;
   // Default renewal period 0 means that a certificate will be renewed only
   // after the previous one has expired (0 seconds before it is expires).
@@ -199,7 +222,7 @@ struct CertProfile {
   // IMPORTANT:
   // Increment this when you add/change any member in CertProfile (and update
   // all functions that fail to compile because of it).
-  static constexpr int kVersion = 6;
+  static constexpr int kVersion = 7;
 
   bool operator==(const CertProfile& other) const;
   bool operator!=(const CertProfile& other) const;
@@ -273,6 +296,10 @@ std::string GenerateCertProvisioningId();
 // invalidations from the server-side.
 std::string MakeInvalidationListenerType(
     const std::string& cert_prov_process_id);
+
+// Returns true if workers should only progress when they receive an
+// invalidation (not on timeout).
+bool ShouldOnlyUseInvalidations();
 
 }  // namespace cert_provisioning
 }  // namespace ash

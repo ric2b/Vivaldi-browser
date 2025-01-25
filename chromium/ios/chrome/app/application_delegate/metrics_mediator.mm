@@ -68,7 +68,7 @@
 namespace {
 // The key to a NSUserDefaults entry logging the number of times classes are
 // loaded before a scene is attached.
-NSString* const kLoadTimePreferenceKey = @"LoadTimePreferenceKey";
+NSString* const kAppStartupCounterKey = @"LoadTimePreferenceKey";
 
 // The amount of time (in seconds) to wait for the user to start a new task.
 const NSTimeInterval kFirstUserActionTimeout = 30.0;
@@ -216,6 +216,18 @@ std::string WarmStartHistogramPrefix(bool version_mismatch) {
 }
 }  // namespace
 
+// A class to log the "load" count in uma.
+@interface AppStartupCounter : NSObject
+@end
+
+@implementation AppStartupCounter
++ (void)load {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setInteger:[defaults integerForKey:kAppStartupCounterKey] + 1
+                forKey:kAppStartupCounterKey];
+}
+@end
+
 namespace metrics_mediator {
 NSString* const kAppEnteredBackgroundDateKey = @"kAppEnteredBackgroundDate";
 NSString* const kAppDidFinishLaunchingConsecutiveCallsKey =
@@ -238,6 +250,10 @@ void RecordWidgetUsage(base::span<const HistogramNameCountPair> histograms) {
     kCredentialExtensionCopyURLCount : @"IOS.CredentialExtension.CopyURLCount",
     app_group::kCredentialExtensionCopyUsernameCount :
         @"IOS.CredentialExtension.CopyUsernameCount",
+    app_group::kCredentialExtensionCopyUserDisplayNameCount :
+        @"IOS.CredentialExtension.CopyUserDisplayNameCount",
+    app_group::kCredentialExtensionCopyCreationDateCount :
+        @"IOS.CredentialExtension.CopyCreationDateCount",
     app_group::kCredentialExtensionCopyPasswordCount :
         @"IOS.CredentialExtension.CopyPasswordCount",
     app_group::kCredentialExtensionShowPasswordCount :
@@ -246,8 +262,12 @@ void RecordWidgetUsage(base::span<const HistogramNameCountPair> histograms) {
     kCredentialExtensionSearchCount : @"IOS.CredentialExtension.SearchCount",
     app_group::kCredentialExtensionPasswordUseCount :
         @"IOS.CredentialExtension.PasswordUseCount",
+    app_group::kCredentialExtensionPasskeyUseCount :
+        @"IOS.CredentialExtension.PasskeyUseCount",
     app_group::kCredentialExtensionQuickPasswordUseCount :
         @"IOS.CredentialExtension.QuickPasswordUseCount",
+    app_group::kCredentialExtensionQuickPasskeyUseCount :
+        @"IOS.CredentialExtension.QuickPasskeyUseCount",
     app_group::kCredentialExtensionFetchPasswordFailureCount :
         @"IOS.CredentialExtension.FetchPasswordFailure",
     app_group::kCredentialExtensionFetchPasswordNilArgumentCount :
@@ -369,8 +389,8 @@ BOOL _credentialExtensionWasUsed = NO;
       now - [startupInformation firstSceneConnectionTime];
 
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-  int consecutiveLoads = [defaults integerForKey:kLoadTimePreferenceKey];
-  [defaults removeObjectForKey:kLoadTimePreferenceKey];
+  int consecutiveLoads = [defaults integerForKey:kAppStartupCounterKey];
+  [defaults removeObjectForKey:kAppStartupCounterKey];
   int consecutiveDidFinishLaunching =
       [defaults integerForKey:kAppDidFinishLaunchingConsecutiveCallsKey];
   [defaults removeObjectForKey:kAppDidFinishLaunchingConsecutiveCallsKey];
@@ -754,7 +774,12 @@ BOOL _credentialExtensionWasUsed = NO;
       integerForKey:app_group::kCredentialExtensionPasswordUseCount];
   int quick_password_use_count = [shared_defaults
       integerForKey:app_group::kCredentialExtensionQuickPasswordUseCount];
-  if (password_use_count != 0 || quick_password_use_count != 0) {
+  int passkey_use_count = [shared_defaults
+      integerForKey:app_group::kCredentialExtensionPasskeyUseCount];
+  int quick_passkey_use_count = [shared_defaults
+      integerForKey:app_group::kCredentialExtensionQuickPasskeyUseCount];
+  if (password_use_count != 0 || quick_password_use_count != 0 ||
+      passkey_use_count != 0 || quick_passkey_use_count != 0) {
     _credentialExtensionWasUsed = YES;
   }
 }

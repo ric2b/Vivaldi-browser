@@ -268,10 +268,19 @@ public abstract class TabModelSelectorBase
 
     @Override
     public boolean closeTab(Tab tab) {
+        boolean isClosing = tab.isClosing() && !tab.isDestroyed();
         for (int i = 0; i < getModels().size(); i++) {
             TabModel model = mTabModels.get(i);
-            if (model.indexOf(tab) >= 0) {
-                return model.closeTab(tab);
+            if (isClosing) {
+                // If the tab is closing and not destroyed it should be in the comprehensive model
+                // of one of the tab models. Find its model and commit the tab closure.
+                TabList comprehensiveModel = model.getComprehensiveModel();
+                if (comprehensiveModel.indexOf(tab) > TabList.INVALID_TAB_INDEX) {
+                    model.commitTabClosure(tab.getId());
+                    return true;
+                }
+            } else if (model.indexOf(tab) > TabList.INVALID_TAB_INDEX) {
+                return model.closeTabs(TabClosureParams.closeTab(tab).allowUndo(false).build());
             }
         }
 
@@ -324,8 +333,9 @@ public abstract class TabModelSelectorBase
 
     @Override
     public void closeAllTabs(boolean uponExit) {
+        TabClosureParams params = TabClosureParams.closeAllTabs().uponExit(uponExit).build();
         for (int i = 0; i < getModels().size(); i++) {
-            mTabModels.get(i).closeAllTabs(uponExit);
+            mTabModels.get(i).closeTabs(params);
         }
     }
 
@@ -362,6 +372,7 @@ public abstract class TabModelSelectorBase
 
     @Override
     public void destroy() {
+        for (TabModelSelectorObserver listener : mObservers) listener.onDestroyed();
         mTabModelSupplier.removeObserver(mIncognitoReauthDialogDelegateCallback);
         mTabModelFilterProvider.destroy();
 

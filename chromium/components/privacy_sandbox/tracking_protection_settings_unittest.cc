@@ -17,10 +17,8 @@
 #include "components/content_settings/core/test/content_settings_mock_provider.h"
 #include "components/content_settings/core/test/content_settings_test_utils.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/privacy_sandbox/mock_tracking_protection_onboarding_delegate.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
-#include "components/privacy_sandbox/tracking_protection_onboarding.h"
 #include "components/privacy_sandbox/tracking_protection_prefs.h"
 #include "components/privacy_sandbox/tracking_protection_settings_observer.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -35,7 +33,6 @@ class MockTrackingProtectionSettingsObserver
     : public TrackingProtectionSettingsObserver {
  public:
   MOCK_METHOD(void, OnDoNotTrackEnabledChanged, (), (override));
-  MOCK_METHOD(void, OnFingerprintingProtectionEnabledChanged, (), (override));
   MOCK_METHOD(void, OnIpProtectionEnabledChanged, (), (override));
   MOCK_METHOD(void, OnBlockAllThirdPartyCookiesChanged, (), (override));
   MOCK_METHOD(void, OnTrackingProtection3pcdChanged, (), (override));
@@ -48,11 +45,6 @@ class TrackingProtectionSettingsTest : public testing::Test {
     content_settings::CookieSettings::RegisterProfilePrefs(prefs()->registry());
     HostContentSettingsMap::RegisterProfilePrefs(prefs()->registry());
     RegisterProfilePrefs(prefs()->registry());
-    auto delegate =
-        std::make_unique<MockTrackingProtectionOnboardingDelegate>();
-
-    onboarding_service_ = std::make_unique<TrackingProtectionOnboarding>(
-        std::move(delegate), &prefs_, version_info::Channel::UNKNOWN);
   }
 
   GURL GetTestUrl() { return GURL("http://cool.things.com"); }
@@ -62,15 +54,11 @@ class TrackingProtectionSettingsTest : public testing::Test {
         prefs(), /*is_off_the_record=*/false, /*store_last_modified=*/false,
         /*restore_session=*/false,
         /*should_record_metrics=*/false);
-    feature_list_.InitWithFeatures(
-        {privacy_sandbox::kIpProtectionV1,
-         privacy_sandbox::kFingerprintingProtectionSetting,
-         privacy_sandbox::kTrackingProtectionSettingsLaunch},
-        {});
+    feature_list_.InitWithFeatures({privacy_sandbox::kIpProtectionV1}, {});
     tracking_protection_settings_ =
         std::make_unique<TrackingProtectionSettings>(
             prefs(), host_content_settings_map_.get(),
-            onboarding_service_.get(), /*is_incognito=*/false);
+            /*is_incognito=*/false);
   }
 
   void TearDown() override {
@@ -82,10 +70,6 @@ class TrackingProtectionSettingsTest : public testing::Test {
     return tracking_protection_settings_.get();
   }
 
-  TrackingProtectionOnboarding* onboarding_service() {
-    return onboarding_service_.get();
-  }
-
   HostContentSettingsMap* host_content_settings_map() {
     return host_content_settings_map_.get();
   }
@@ -95,7 +79,6 @@ class TrackingProtectionSettingsTest : public testing::Test {
  private:
   sync_preferences::TestingPrefServiceSyncable prefs_;
   base::test::ScopedFeatureList feature_list_;
-  std::unique_ptr<TrackingProtectionOnboarding> onboarding_service_;
   scoped_refptr<HostContentSettingsMap> host_content_settings_map_;
   std::unique_ptr<TrackingProtectionSettings> tracking_protection_settings_;
   base::test::SingleThreadTaskEnvironment task_environment_;
@@ -115,14 +98,6 @@ TEST_F(TrackingProtectionSettingsTest, ReturnsIpProtectionStatus) {
   EXPECT_TRUE(tracking_protection_settings()->IsIpProtectionEnabled());
 }
 
-TEST_F(TrackingProtectionSettingsTest, ReturnsFingerprintingProtectionStatus) {
-  EXPECT_FALSE(
-      tracking_protection_settings()->IsFingerprintingProtectionEnabled());
-  prefs()->SetBoolean(prefs::kFingerprintingProtectionEnabled, true);
-  EXPECT_TRUE(
-      tracking_protection_settings()->IsFingerprintingProtectionEnabled());
-}
-
 TEST_F(TrackingProtectionSettingsTest, ReturnsTrackingProtection3pcdStatus) {
   EXPECT_FALSE(
       tracking_protection_settings()->IsTrackingProtection3pcdEnabled());
@@ -134,11 +109,9 @@ TEST_F(TrackingProtectionSettingsTest, ReturnsTrackingProtection3pcdStatus) {
 TEST_F(TrackingProtectionSettingsTest, AreAll3pcBlockedTrueInIncognito) {
   prefs()->SetBoolean(prefs::kTrackingProtection3pcdEnabled, true);
   EXPECT_TRUE(TrackingProtectionSettings(prefs(), host_content_settings_map(),
-                                         nullptr,
                                          /*is_incognito=*/true)
                   .AreAllThirdPartyCookiesBlocked());
   EXPECT_FALSE(TrackingProtectionSettings(prefs(), host_content_settings_map(),
-                                          nullptr,
                                           /*is_incognito=*/false)
                    .AreAllThirdPartyCookiesBlocked());
 }
@@ -148,41 +121,6 @@ TEST_F(TrackingProtectionSettingsTest, AreAll3pcBlockedFalseOutside3pcd) {
   prefs()->SetBoolean(prefs::kBlockAll3pcToggleEnabled, true);
   EXPECT_FALSE(
       tracking_protection_settings()->AreAllThirdPartyCookiesBlocked());
-}
-
-TEST_F(TrackingProtectionSettingsTest,
-       AreAll3pcBlockedFalseWhen3pcAllowedPrefTrue) {
-  MockTrackingProtectionSettingsObserver observer;
-  tracking_protection_settings()->AddObserver(&observer);
-
-  prefs()->SetBoolean(prefs::kTrackingProtection3pcdEnabled, true);
-  EXPECT_CALL(observer, OnBlockAllThirdPartyCookiesChanged());
-  prefs()->SetBoolean(prefs::kBlockAll3pcToggleEnabled, true);
-  testing::Mock::VerifyAndClearExpectations(&observer);
-  EXPECT_TRUE(tracking_protection_settings()->AreAllThirdPartyCookiesBlocked());
-  EXPECT_CALL(observer, OnBlockAllThirdPartyCookiesChanged());
-  prefs()->SetBoolean(prefs::kAllowAll3pcToggleEnabled, true);
-  testing::Mock::VerifyAndClearExpectations(&observer);
-  EXPECT_FALSE(
-      tracking_protection_settings()->AreAllThirdPartyCookiesBlocked());
-}
-
-TEST_F(TrackingProtectionSettingsTest,
-       Are3pcAllowedByEnterpriseTrueWhenPrefTrueIn3pcd) {
-  MockTrackingProtectionSettingsObserver observer;
-  tracking_protection_settings()->AddObserver(&observer);
-
-  prefs()->SetBoolean(prefs::kTrackingProtection3pcdEnabled, true);
-  EXPECT_FALSE(tracking_protection_settings()
-                   ->AreThirdPartyCookiesAllowedByEnterprise());
-  EXPECT_CALL(observer, OnBlockAllThirdPartyCookiesChanged());
-  prefs()->SetBoolean(prefs::kAllowAll3pcToggleEnabled, true);
-  testing::Mock::VerifyAndClearExpectations(&observer);
-  EXPECT_TRUE(tracking_protection_settings()
-                  ->AreThirdPartyCookiesAllowedByEnterprise());
-  prefs()->SetBoolean(prefs::kTrackingProtection3pcdEnabled, false);
-  EXPECT_FALSE(tracking_protection_settings()
-                   ->AreThirdPartyCookiesAllowedByEnterprise());
 }
 
 TEST_F(TrackingProtectionSettingsTest,
@@ -236,7 +174,6 @@ TEST_F(TrackingProtectionSettingsTest,
                 GURL(), GetTestUrl(), ContentSettingsType::TRACKING_PROTECTION,
                 &info),
             CONTENT_SETTING_ALLOW);
-
   EXPECT_TRUE(info.metadata.expiration().is_null());
 }
 
@@ -292,29 +229,6 @@ TEST_F(TrackingProtectionSettingsTest,
 // Sets prefs
 
 TEST_F(TrackingProtectionSettingsTest,
-       SetsTrackingProtection3pcdStatusAndBlockAllPrefUsingOnboardingService) {
-  // The user has chosen to block all 3PC.
-  prefs()->SetInteger(prefs::kCookieControlsMode, 1 /* BlockThirdParty */);
-  MockTrackingProtectionSettingsObserver observer;
-  tracking_protection_settings()->AddObserver(&observer);
-
-  EXPECT_FALSE(
-      tracking_protection_settings()->IsTrackingProtection3pcdEnabled());
-  EXPECT_FALSE(
-      tracking_protection_settings()->AreAllThirdPartyCookiesBlocked());
-  EXPECT_CALL(observer, OnTrackingProtection3pcdChanged());
-  // Called on changes to TrackingProtection pref and BlockAll3pc pref.
-  EXPECT_CALL(observer, OnBlockAllThirdPartyCookiesChanged()).Times(2);
-
-  tracking_protection_settings()->OnTrackingProtectionOnboardingUpdated(
-      TrackingProtectionOnboarding::OnboardingStatus::kOnboarded);
-  testing::Mock::VerifyAndClearExpectations(&observer);
-  EXPECT_TRUE(
-      tracking_protection_settings()->IsTrackingProtection3pcdEnabled());
-  EXPECT_TRUE(tracking_protection_settings()->AreAllThirdPartyCookiesBlocked());
-}
-
-TEST_F(TrackingProtectionSettingsTest,
        DisablesTrackingProtection3pcdWhenEnterpriseControlEnabled) {
   prefs()->SetBoolean(prefs::kPrivacySandboxRelatedWebsiteSetsEnabled, false);
   prefs()->SetBoolean(prefs::kTrackingProtection3pcdEnabled, true);
@@ -342,20 +256,6 @@ TEST_F(TrackingProtectionSettingsTest, CorrectlyCallsObserversForDoNotTrack) {
   testing::Mock::VerifyAndClearExpectations(&observer);
 }
 
-TEST_F(TrackingProtectionSettingsTest,
-       CorrectlyCallsObserversForFingerprintingProtection) {
-  MockTrackingProtectionSettingsObserver observer;
-  tracking_protection_settings()->AddObserver(&observer);
-
-  EXPECT_CALL(observer, OnFingerprintingProtectionEnabledChanged());
-  prefs()->SetBoolean(prefs::kFingerprintingProtectionEnabled, true);
-  testing::Mock::VerifyAndClearExpectations(&observer);
-
-  EXPECT_CALL(observer, OnFingerprintingProtectionEnabledChanged());
-  prefs()->SetBoolean(prefs::kFingerprintingProtectionEnabled, false);
-  testing::Mock::VerifyAndClearExpectations(&observer);
-}
-
 TEST_F(TrackingProtectionSettingsTest, CorrectlyCallsObserversForIpProtection) {
   MockTrackingProtectionSettingsObserver observer;
   tracking_protection_settings()->AddObserver(&observer);
@@ -380,25 +280,6 @@ TEST_F(TrackingProtectionSettingsTest, CorrectlyCallsObserversForBlockAll3pc) {
   EXPECT_CALL(observer, OnBlockAllThirdPartyCookiesChanged());
   prefs()->SetBoolean(prefs::kBlockAll3pcToggleEnabled, false);
   testing::Mock::VerifyAndClearExpectations(&observer);
-}
-
-class TrackingProtectionSettingsStartupTest
-    : public TrackingProtectionSettingsTest {
- public:
-  void SetUp() override {
-    // Profiles gets onboarded before the settings service is started.
-    onboarding_service()->MaybeMarkModeBEligible();
-    onboarding_service()->NoticeShown(
-        TrackingProtectionOnboarding::SurfaceType::kDesktop,
-        TrackingProtectionOnboarding::NoticeType::kModeBOnboarding);
-    TrackingProtectionSettingsTest::SetUp();
-  }
-};
-
-TEST_F(TrackingProtectionSettingsStartupTest,
-       SetsTrackingProtection3pcdStatusUsingOnboardingServiceOnStartup) {
-  EXPECT_TRUE(
-      tracking_protection_settings()->IsTrackingProtection3pcdEnabled());
 }
 
 }  // namespace

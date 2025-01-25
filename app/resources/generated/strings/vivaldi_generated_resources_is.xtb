@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Villa</translation>
 <translation id="1175364870820465910">&amp;Prenta...</translation>
 <translation id="1181037720776840403">Fjarlægja</translation>
+<translation id="1184037892196730210">Get ekki varpað skjá</translation>
 <translation id="1187722533808055681">Vakning úr dvala</translation>
 <translation id="122082903575839559">Reiknirit vottorðsundirritunar</translation>
 <translation id="1221825588892235038">Aðeins valið</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Gildi reits</translation>
 <translation id="2662876636500006917">Chrome vefverslun</translation>
 <translation id="2678063897982469759">Endurvirkja</translation>
-<translation id="2678100101831051676">Mistókst að varpa.</translation>
 <translation id="2719936478972253983">Eftirfarandi kökur voru útilokaðar</translation>
 <translation id="2721037002783622288">&amp;Leita að mynd með <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Ekki eftir</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Þessi viðbót virðist hafa skemmst.</translation>
 <translation id="3387614642886316601">Nota stafsetningavilluleit Google</translation>
 <translation id="3390013585654699824">Upplýsingar um forrit</translation>
-<translation id="3393582007140394275">Get ekki varpað skjá.</translation>
 <translation id="345693547134384690">Opna &amp;mynd í nýjum flipa</translation>
 <translation id="3493881266323043047">Gildi</translation>
 <translation id="3511307672085573050">Afrita vef&amp;fang hlekks</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Geyma breytingar</translation>
 <translation id="6824564591481349393">Afrita n&amp;etfang</translation>
 <translation id="6840155290835956714">Spyrja áður en sent er</translation>
+<translation id="6878862640969460273">Lóðrétt</translation>
 <translation id="6886871292305414135">Opna hlekk í nýjum &amp;flipa</translation>
 <translation id="6892812721183419409">Opna hlekk sem <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrunnsforrit: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Aðgangi hafnað.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /><ph name="VERTICAL_DPI" />punktar á tommu</translation>
 <translation id="7339785458027436441">Athuga stafsetningu meðan á innslætti stendur</translation>
+<translation id="7359680654975233185">Ekki er hægt að varpa flipa</translation>
 <translation id="7385854874724088939">Mistókst að prenta. Athugið prentara og reynið aftur.</translation>
 <translation id="7412226954991670867">GPU mynni</translation>
 <translation id="7421925624202799674">&amp;Sýna frumgögn síðu</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Leyfa síðum að vista og lesa efni frá vefkökum</translation>
 <translation id="7663719505383602579">Viðtakandi: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Sett upp af kerfisstjóra</translation>
+<translation id="7685038817958445325">Mistókst að varpa</translation>
 <translation id="7685049629764448582">JavaScript minni</translation>
 <translation id="7701869757853594372">NOTENDA handtök</translation>
 <translation id="7704305437604973648">Verkefni</translation>
@@ -410,7 +412,6 @@ Lyklaskrá: <ph name="KEY_FILE" />
 Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að halda til þess að búa til nýja útgáfur af viðbótinni þinni.</translation>
 <translation id="8004582292198964060">Vafri</translation>
 <translation id="8018313076035239964">Hafðu stjórn á hvaða upplýsingar vefsíður geta notað og hvaða efni þær geta sýnt þér</translation>
-<translation id="8032244173881942855">Gat ekki varpað flipa.</translation>
 <translation id="8071432093239591881">Prenta sem mynd</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +467,6 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="9218430445555521422">Setja sem sjálfgefið</translation>
 <translation id="93766956588638423">Laga viðbót</translation>
 <translation id="961012016278832836">Microsoft Edge (gömul útgáfa)</translation>
-<translation id="98515147261107953">Lóðrétt</translation>
 <translation id="994289308992179865">&amp;Endurtaka</translation>
 <translation id="998747458861718449">Ra&amp;nnsaka</translation>
 </translationbundle>

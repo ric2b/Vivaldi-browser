@@ -9,7 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/ash/input_method/ui/announcement_view.h"
+#include "chrome/browser/ui/ash/input_method/announcement_view.h"
 #include "ui/views/widget/widget_observer.h"
 
 namespace ash::input_method {
@@ -22,13 +22,15 @@ class EditorAnnouncer {
 
 class EditorLiveRegionAnnouncer : public EditorAnnouncer {
  public:
+  explicit EditorLiveRegionAnnouncer(std::u16string_view name);
+
   // EditorAnnouncer overrides
   void Announce(const std::u16string& message) override;
 
  private:
   class LiveRegion : public views::WidgetObserver {
    public:
-    LiveRegion();
+    explicit LiveRegion(std::u16string_view name);
     ~LiveRegion() override;
 
     // Triggers a ChromeVox announcement via the live region view.
@@ -39,6 +41,8 @@ class EditorLiveRegionAnnouncer : public EditorAnnouncer {
 
    private:
     void CreateAnnouncementView();
+
+    std::u16string announcement_view_name_;
 
     // Holds the view used to trigger announcements with ChromeVox. This is
     // a raw_ptr due to the lifetime of the instance being handled by the

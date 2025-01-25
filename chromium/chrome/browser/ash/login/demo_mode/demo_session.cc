@@ -27,6 +27,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/syslog_logging.h"
@@ -37,6 +38,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/browser_app_launcher.h"
+#include "chrome/browser/apps/app_service/policy_util.h"
 #include "chrome/browser/apps/platform_apps/app_load_service.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/login/demo_mode/demo_components.h"
@@ -49,7 +51,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/ash/system_tray_client_impl.h"
+#include "chrome/browser/ui/ash/system/system_tray_client_impl.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -427,10 +429,42 @@ bool DemoSession::ShouldShowWebApp(const std::string& app_id) {
   if (IsDeviceInDemoMode() &&
       content::GetNetworkConnectionTracker()->IsOffline()) {
     GURL app_id_as_url(app_id);
+    // When offline, return false for web apps that are HTTP(S), return true
+    // otherwise (such as SWA, Android apps since they can work offline)
     return !app_id_as_url.SchemeIsHTTPOrHTTPS();
   }
-
   return true;
+}
+
+bool DemoSession::ShouldShowAppInShelf(const std::string& app_id_or_package) {
+  if (!g_demo_session->started()) {
+    return false;
+  }
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  CHECK(profile);
+
+  // Check if the app has been installed by checking `app_registry_cache_`.
+  std::vector<std::string> app_ids = apps_util::GetAppIdsFromPolicyId(
+      profile, apps_util::TransformRawPolicyId(app_id_or_package));
+  // If the app has not been installed, we should not pin app to the shelf at
+  // this moment.
+  if (app_ids.empty()) {
+    return false;
+  } else if (!installed_app_.count(app_id_or_package)) {
+    installed_app_.insert(app_id_or_package);
+    LOG(WARNING) << "The app " << app_id_or_package
+                 << " has been installed in demo mode";
+  }
+
+  // Ignore for specified chrome/android apps.
+  if (content::GetNetworkConnectionTracker()->IsOffline() &&
+      base::Contains(ignore_pin_policy_offline_apps_, app_id_or_package)) {
+    return false;
+  }
+
+  // TODO(b/356904504): Update shelf when network status changes.
+  // TODO(b/356910516): Also check for captive portal.
+  return ShouldShowWebApp(app_id_or_package);
 }
 
 // static
@@ -486,28 +520,8 @@ void DemoSession::EnsureResourcesLoaded(base::OnceClosure load_callback) {
 }
 
 // static
-void DemoSession::RecordAppLaunchSourceIfInDemoMode(AppLaunchSource source) {
-  if (IsDeviceInDemoMode())
-    UMA_HISTOGRAM_ENUMERATION("DemoMode.AppLaunchSource", source);
-}
-
-bool DemoSession::ShouldShowAndroidOrChromeAppInShelf(
-    const std::string& app_id_or_package) {
-  if (!g_demo_session || !g_demo_session->started())
-    return true;
-
-  // TODO(michaelpg): Update shelf when network status changes.
-  // TODO(michaelpg): Also check for captive portal.
-  if (!content::GetNetworkConnectionTracker()->IsOffline())
-    return true;
-
-  // Ignore for specified chrome/android apps.
-  return !base::Contains(ignore_pin_policy_offline_apps_, app_id_or_package);
-}
-
-void DemoSession::SetExtensionsExternalLoader(
-    scoped_refptr<DemoExtensionsExternalLoader> extensions_external_loader) {
-  extensions_external_loader_ = extensions_external_loader;
+void DemoSession::RecordAppLaunchSource(AppLaunchSource source) {
+  UMA_HISTOGRAM_ENUMERATION("DemoMode.AppLaunchSource", source);
 }
 
 void DemoSession::OverrideIgnorePinPolicyAppsForTesting(
@@ -708,6 +722,10 @@ void DemoSession::OnSessionStateChanged() {
         LOG(WARNING) << "Demo Mode domain: "
                      << InstallAttributes::Get()->GetDomain();
       }
+
+      // When the session successfully starts, we record the action
+      // DemoMode.DemoSessionStarts.
+      base::RecordAction(base::UserMetricsAction("DemoMode.DemoSessionStarts"));
 
       break;
     default:

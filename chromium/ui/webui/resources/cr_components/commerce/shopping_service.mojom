@@ -1,11 +1,13 @@
 // Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 module shopping_service.mojom;
 
-import "url/mojom/url.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/uuid.mojom";
+import "url/mojom/url.mojom";
+import "mojo/public/mojom/base/values.mojom";
 
 // This is a specialized version of shopping_specifics proto. The
 // struct here has most of the same information with the proto but
@@ -45,11 +47,11 @@ struct ProductInfo {
 };
 
 struct BookmarkProductInfo {
-    // The ID of the bookmark that owns this product info.
-    int64 bookmark_id;
+  // The ID of the bookmark that owns this product info.
+  int64 bookmark_id;
 
-    // The product information associated with 'bookmark_id'.
-    ProductInfo info;
+  // The product information associated with 'bookmark_id'.
+  ProductInfo info;
 };
 
 struct PricePoint {
@@ -73,7 +75,12 @@ struct UrlInfo {
 };
 
 struct PriceInsightsInfo {
-  enum PriceBucket { kUnknown, kLow, kTypical, kHigh };
+  enum PriceBucket {
+    kUnknown,
+    kLow,
+    kTypical,
+    kHigh,
+  };
 
   // The product cluster id.
   uint64 cluster_id;
@@ -119,6 +126,11 @@ struct ProductSpecificationsOption {
   array<ProductSpecificationsDescriptionText> descriptions;
 };
 
+enum ProductSpecificationsDisclosureVersion {
+  kUnknown = 0,
+  kV1 = 1,
+};
+
 struct ProductSpecificationsDescription {
   // The possible options for a feature of a product.
   array<ProductSpecificationsOption> options;
@@ -153,6 +165,20 @@ struct ProductSpecificationsProduct {
 
   // A list of summaries about the product.
   array<ProductSpecificationsDescriptionText> summary;
+
+  // The URL for buying options for the product (jackpot URL).
+  url.mojom.Url buying_options_url;
+};
+
+// Describes whether different parts of the Compare feature are enabled.
+struct ProductSpecificationsFeatureState {
+  bool is_syncing_tab_compare;
+  bool can_load_full_page_ui;
+  bool can_manage_sets;
+  bool can_fetch_data;
+  bool is_allowed_for_enterprise;
+  bool is_quality_logging_allowed;
+  bool is_signed_in;
 };
 
 // This struct represents information acquired from the product specifications
@@ -190,11 +216,13 @@ enum UserFeedback {
 // communication.
 interface ShoppingServiceHandlerFactory {
   // The WebUI calls this method when the page is first initialized.
-  CreateShoppingServiceHandler(pending_remote<Page> page,
+  CreateShoppingServiceHandler(
+      pending_remote<Page> page,
       pending_receiver<ShoppingServiceHandler> handler);
 };
 
 // Browser-side handler for requests from WebUI page.
+// TODO(b/359684506): Move feature-specific functions to separate handlers.
 interface ShoppingServiceHandler {
   // Returns all the tracked product info from bookmarks.
   GetAllPriceTrackedBookmarkProductInfo()
@@ -218,7 +246,12 @@ interface ShoppingServiceHandler {
       => (url.mojom.Url url, ProductInfo productInfo);
 
   // Returns the price insights info for current url.
-  GetPriceInsightsInfoForCurrentUrl() => (PriceInsightsInfo priceInsightsInfo);
+  GetPriceInsightsInfoForCurrentUrl()
+      => (PriceInsightsInfo priceInsightsInfo);
+
+  // Returns the price insights info for the provided URL.
+  GetPriceInsightsInfoForUrl(url.mojom.Url url)
+      => (url.mojom.Url url, PriceInsightsInfo priceInsightsInfo);
 
   // Returns the product specifications for the provided list of URLs.
   GetProductSpecificationsForUrls(array<url.mojom.Url> urls)
@@ -255,14 +288,18 @@ interface ShoppingServiceHandler {
 
   // Returns the name of the parent bookmark folder of the current URL. This
   // will only be called when the current page is bookmarked.
-  GetParentBookmarkFolderNameForCurrentUrl() => (mojo_base.mojom.String16 name);
+  GetParentBookmarkFolderNameForCurrentUrl()
+      => (mojo_base.mojom.String16 name);
 
   // Show the bookmark editor dialog for the current URL. This will only be
   // called when the current page is bookmarked.
   ShowBookmarkEditorForCurrentUrl();
 
-  // Show the product specifications set based on the uuid.
-  ShowProductSpecificationsSetForUuid(mojo_base.mojom.Uuid uuid);
+  // Show the product specifications set based on the uuid, `in_new_tab`
+  // indicates whether the browser should open the set in a new tab or
+  // current tab.
+  ShowProductSpecificationsSetForUuid(mojo_base.mojom.Uuid uuid,
+      bool in_new_tab);
 
   // Show feedback form for price insights.
   ShowFeedbackForPriceInsights();
@@ -293,6 +330,33 @@ interface ShoppingServiceHandler {
 
   // Store the user feedback for product specifications supplied by the user.
   SetProductSpecificationsUserFeedback(UserFeedback feedback);
+
+  // Updates the user's accepted disclosure version for product specifications.
+  SetProductSpecificationAcceptedDisclosureVersion(
+      ProductSpecificationsDisclosureVersion version);
+
+  // If eligible, show the product specifications disclosure. If accepting the
+  // disclosure will lead to creating a new set, `urls` are the member URLs of
+  // the new product specifications set, and `name` is the name of the new set.
+  // If accepting the disclosure will load an existing set, `set_id` is the ID
+  // for the set. `disclosure_shown` is returned to indicate whether this
+  // attempt succeeded (i.e. whether the disclosure is shown).
+  MaybeShowProductSpecificationDisclosure(array<url.mojom.Url> urls,
+      string name, string set_id) => (bool disclosure_shown);
+
+  // Gets called when user has explicitly declined the product specification
+  // disclosure.
+  DeclineProductSpecificationDisclosure();
+
+  // Sync user account for compare feature.
+  ShowSyncSetupFlow();
+
+  // Get access state for compare feature.
+  GetProductSpecificationsFeatureState()
+      => (ProductSpecificationsFeatureState state);
+
+  // Get the title of a page in history, if it exists.
+  GetPageTitleFromHistory(url.mojom.Url url) => (string title);
 };
 
 // WebUI-side handler for requests from the browser.
@@ -310,8 +374,8 @@ interface Page {
   // constructed from it. `attempted_track` is true when the failed
   // operation is to track price, false when the failed operation is to
   // untrack price.
-  OperationFailedForBookmark(BookmarkProductInfo bookmark_product,
-                             bool attempted_track);
+  OperationFailedForBookmark(
+      BookmarkProductInfo bookmark_product, bool attempted_track);
 
   // Callback when a product bookmark is observed to be moved and
   // pass along the BookmarkProductInfo of the product.

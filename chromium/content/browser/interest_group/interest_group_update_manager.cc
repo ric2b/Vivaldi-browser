@@ -51,6 +51,7 @@
 #include "third_party/boringssl/src/include/openssl/curve25519.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/url_constants.h"
 
 namespace content {
 
@@ -90,15 +91,15 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         semantics {
           sender: "Interest group periodic update fetcher"
           description:
-            "Fetches periodic updates of FLEDGE interest groups previously "
-            "joined by navigator.joinAdInterestGroup(). FLEDGE allow sites to "
-            "store persistent interest groups that are only accessible to "
-            "special on-device ad auction worklets run via "
-            "navigator.runAdAuction(). JavaScript running in the context of a "
-            "frame cannot read interest groups, but it can request that all "
-            "interest groups owned by the current frame's origin be updated by "
-            "fetching JSON from the registered update URL for each interest "
-            "group."
+            "Fetches periodic updates of Protected Audiences interest groups "
+            "previously joined by navigator.joinAdInterestGroup(). Protected "
+            "Audiences allow sites to store persistent interest groups that "
+            "are only accessible to special on-device ad auction worklets run "
+            "via navigator.runAdAuction(). JavaScript running in the context "
+            "of a frame cannot read interest groups, but it can request that "
+            "all interest groups owned by the current frame's origin be "
+            "updated by fetching JSON from the registered update URL for each "
+            "interest group."
             "See https://github.com/WICG/turtledove/blob/main/FLEDGE.md and "
             "https://developer.chrome.com/docs/privacy-sandbox/fledge/"
           trigger:
@@ -111,11 +112,13 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
         policy {
           cookies_allowed: NO
           setting:
-            "These requests are controlled by a feature flag that is off by "
-            "default now. When enabled, they can be disabled by the Privacy"
-            " Sandbox setting."
-          policy_exception_justification:
-            "These requests are triggered by a website."
+            "Users can disable this via Settings > Privacy and Security > Ads "
+            "privacy > Site-suggested ads."
+          chrome_policy {
+            PrivacySandboxSiteEnabledAdsEnabled {
+              PrivacySandboxSiteEnabledAdsEnabled: false
+            }
+          }
         })");
 
 // TODO(crbug.com/40172488): Report errors to devtools for the TryToCopy*().
@@ -375,6 +378,52 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
   return true;
 }
 
+// Copies the trustedBiddingSignalsCoordinator JSON field into
+// `trusted_bidding_signals_coordinator`.
+[[nodiscard]] bool TryToCopyTrustedBiddingSignalsCoordinator(
+    const base::Value::Dict& dict,
+    InterestGroupUpdate& interest_group_update) {
+  const base::Value* maybe_trusted_bidding_signals_coordinator =
+      dict.Find("trustedBiddingSignalsCoordinator");
+
+  // No `trustedBiddingSignalsCoordinator` field in the update JSON.
+  if (!maybe_trusted_bidding_signals_coordinator) {
+    return true;
+  }
+
+  // `trustedBiddingSignalsCoordinator` field is `null` in the update JSON.
+  if (maybe_trusted_bidding_signals_coordinator->is_none()) {
+    interest_group_update.trusted_bidding_signals_coordinator.emplace(
+        std::nullopt);
+    return true;
+  }
+
+  // If `trusted_bidding_signals_coordinator` is present and not null, it must
+  // be a valid URL origin string.
+  if (!maybe_trusted_bidding_signals_coordinator->is_string()) {
+    return false;
+  }
+
+  GURL trusted_bidding_signals_coordinator_url =
+      GURL(maybe_trusted_bidding_signals_coordinator->GetString());
+
+  if (!trusted_bidding_signals_coordinator_url.is_valid()) {
+    return false;
+  }
+
+  url::Origin trusted_bidding_signals_coordinator_url_origin =
+      url::Origin::Create(trusted_bidding_signals_coordinator_url);
+
+  if (trusted_bidding_signals_coordinator_url_origin.scheme() !=
+      url::kHttpsScheme) {
+    return false;
+  }
+
+  interest_group_update.trusted_bidding_signals_coordinator =
+      std::move(trusted_bidding_signals_coordinator_url_origin);
+  return true;
+}
+
 // Helper for TryToCopyAds() and TryToCopyAdComponents().
 [[nodiscard]] std::optional<std::vector<blink::InterestGroup::Ad>> ExtractAds(
     const base::Value::List& ads_list,
@@ -419,6 +468,19 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
           ads_dict->FindString("buyerAndSellerReportingId");
       if (maybe_buyer_and_seller_reporting_id) {
         ad.buyer_and_seller_reporting_id = *maybe_buyer_and_seller_reporting_id;
+      }
+      const base::Value::List* maybe_selectable_buyer_and_seller_reporting_ids =
+          ads_dict->FindList("selectableBuyerAndSellerReportingIds");
+      if (maybe_selectable_buyer_and_seller_reporting_ids &&
+          base::FeatureList::IsEnabled(
+              blink::features::kFledgeAuctionDealSupport)) {
+        std::vector<std::string> selectable_buyer_and_seller_reporting_ids;
+        for (const auto& id :
+             *maybe_selectable_buyer_and_seller_reporting_ids) {
+          selectable_buyer_and_seller_reporting_ids.push_back(id.GetString());
+        }
+        ad.selectable_buyer_and_seller_reporting_ids =
+            std::move(selectable_buyer_and_seller_reporting_ids);
       }
       const base::Value::List* maybe_allowed_reporting_origins =
           ads_dict->FindList("allowedReportingOrigins");
@@ -564,6 +626,9 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     } else if (flag == "include-full-ads") {
       auction_server_request_flags.Put(
           blink::AuctionServerRequestFlagsEnum::kIncludeFullAds);
+    } else if (flag == "omit-user-bidding-signals") {
+      auction_server_request_flags.Put(
+          blink::AuctionServerRequestFlagsEnum::kOmitUserBiddingSignals);
     }
   }
   interest_group_update.auction_server_request_flags =
@@ -706,6 +771,10 @@ std::optional<InterestGroupUpdate> ParseUpdateJson(
     return std::nullopt;
   }
   if (!TryToCopyTrustedBiddingSignalsKeys(*dict, interest_group_update)) {
+    return std::nullopt;
+  }
+  if (!TryToCopyTrustedBiddingSignalsCoordinator(*dict,
+                                                 interest_group_update)) {
     return std::nullopt;
   }
   if (!TryToCopyUserBiddingSignals(*dict, interest_group_update)) {

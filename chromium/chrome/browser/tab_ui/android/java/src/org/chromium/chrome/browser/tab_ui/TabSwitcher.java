@@ -48,9 +48,9 @@ public interface TabSwitcher {
     /**
      * Show the Close All Tabs animation on the tab list.
      *
-     * @param onAnimationEnd Runnable that is invoked when the animation is completed.
+     * @param closeTabs Runnable to trigger tab closure.
      */
-    void showCloseAllTabsAnimation(Runnable onAnimationEnd);
+    void showCloseAllTabsAnimation(Runnable closeTabs);
 
     /**
      * Open the invitation modal on top of the tab switcher view when an invitation intent is
@@ -59,4 +59,12 @@ public interface TabSwitcher {
      * @param invitationId The id of the invitation.
      */
     void openInvitationModal(String invitationId);
+
+    /**
+     * Requests to show a dialog for a tab group.
+     *
+     * @param tabId The id of any tab in the group.
+     * @return Whether the request to show was able to be handled.
+     */
+    boolean requestOpenTabGroupDialog(int tabId);
 }

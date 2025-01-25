@@ -13,20 +13,20 @@
 // limitations under the License.
 
 import {Time} from '../base/time';
-import {AreaSelection, getLegacySelection} from '../common/state';
 import {featureFlags} from '../core/feature_flags';
 import {Flow, globals} from '../frontend/globals';
 import {publishConnectedFlows, publishSelectedFlows} from '../frontend/publish';
-import {asSliceSqlId} from '../frontend/sql_types';
+import {asSliceSqlId} from '../trace_processor/sql_utils/core_types';
 import {Engine} from '../trace_processor/engine';
 import {LONG, NUM, STR_NULL} from '../trace_processor/query_result';
-
 import {Controller} from './controller';
 import {Monitor} from '../base/monitor';
 import {
   ACTUAL_FRAMES_SLICE_TRACK_KIND,
   THREAD_SLICE_TRACK_KIND,
-} from '../core/track_kinds';
+} from '../public/track_kinds';
+import {TrackDescriptor} from '../public/track';
+import {AreaSelection} from '../public/selection';
 
 export interface FlowEventsControllerArgs {
   engine: Engine;
@@ -42,7 +42,9 @@ const SHOW_INDIRECT_PRECEDING_FLOWS_FLAG = featureFlags.register({
 });
 
 export class FlowEventsController extends Controller<'main'> {
-  private readonly monitor = new Monitor([() => globals.state.selection]);
+  private readonly monitor = new Monitor([
+    () => globals.selectionManager.selection,
+  ]);
 
   constructor(private args: FlowEventsControllerArgs) {
     super('main');
@@ -190,7 +192,6 @@ export class FlowEventsController extends Controller<'main'> {
     // We end up with one Info POJOs for each UI async slice track
     // which has at least  one flow {begin,end}ing in one of its slices.
     interface Info {
-      uiTrackId: string;
       siblingTrackIds: number[];
       sliceIds: number[];
       nodes: Array<{
@@ -199,11 +200,17 @@ export class FlowEventsController extends Controller<'main'> {
       }>;
     }
 
-    const uiTrackIdToInfo = new Map<string, null | Info>();
+    const trackUriToInfo = new Map<string, null | Info>();
     const trackIdToInfo = new Map<number, null | Info>();
 
-    const trackIdToUiTrackId = globals.trackManager.trackKeyByTrackId;
-    const tracks = globals.state.tracks;
+    const trackIdToTrack = new Map<number, TrackDescriptor>();
+    globals.trackManager
+      .getAllTracks()
+      .forEach((trackDescriptor) =>
+        trackDescriptor.tags?.trackIds?.forEach((trackId) =>
+          trackIdToTrack.set(trackId, trackDescriptor),
+        ),
+      );
 
     const getInfo = (trackId: number): null | Info => {
       let info = trackIdToInfo.get(trackId);
@@ -211,19 +218,13 @@ export class FlowEventsController extends Controller<'main'> {
         return info;
       }
 
-      const uiTrackId = trackIdToUiTrackId.get(trackId);
-      if (uiTrackId === undefined) {
+      const trackDescriptor = trackIdToTrack.get(trackId);
+      if (trackDescriptor === undefined) {
         trackIdToInfo.set(trackId, null);
         return null;
       }
 
-      const track = tracks[uiTrackId];
-      if (track === undefined) {
-        trackIdToInfo.set(trackId, null);
-        return null;
-      }
-
-      info = uiTrackIdToInfo.get(uiTrackId);
+      info = trackUriToInfo.get(trackDescriptor.uri);
       if (info !== undefined) {
         return info;
       }
@@ -233,22 +234,20 @@ export class FlowEventsController extends Controller<'main'> {
       // anything if there is only one TP track in this async track. In
       // that case experimental_slice_layout is just an expensive way
       // to find out depth === layout_depth.
-      const trackInfo = globals.trackManager.resolveTrackInfo(track.uri);
-      const trackIds = trackInfo?.tags?.trackIds;
+      const trackIds = trackDescriptor?.tags?.trackIds;
       if (trackIds === undefined || trackIds.length <= 1) {
-        uiTrackIdToInfo.set(uiTrackId, null);
+        trackUriToInfo.set(trackDescriptor.uri, null);
         trackIdToInfo.set(trackId, null);
         return null;
       }
 
       const newInfo = {
-        uiTrackId,
         siblingTrackIds: [...trackIds],
         sliceIds: [],
         nodes: [],
       };
 
-      uiTrackIdToInfo.set(uiTrackId, newInfo);
+      trackUriToInfo.set(trackDescriptor.uri, newInfo);
       trackIdToInfo.set(trackId, newInfo);
 
       return newInfo;
@@ -268,7 +267,7 @@ export class FlowEventsController extends Controller<'main'> {
     // Second pass, for each async track:
     // - Query to find the layout_depth for each relevant sliceId
     // - Iterate through the nodes updating the depth in place
-    for (const info of uiTrackIdToInfo.values()) {
+    for (const info of trackUriToInfo.values()) {
       if (info === null) {
         continue;
       }
@@ -315,6 +314,9 @@ export class FlowEventsController extends Controller<'main'> {
       : `directly_connected_flow(${sliceId})`;
 
     const query = `
+    -- Include slices.flow to initialise indexes on 'flow.slice_in' and 'flow.slice_out'.
+    INCLUDE PERFETTO MODULE slices.flow;
+
     select
       f.slice_out as beginSliceId,
       t1.track_id as beginTrackId,
@@ -358,19 +360,16 @@ export class FlowEventsController extends Controller<'main'> {
   private areaSelected(area: AreaSelection) {
     const trackIds: number[] = [];
 
-    for (const uiTrackId of area.tracks) {
-      const track = globals.state.tracks[uiTrackId];
-      if (track?.uri !== undefined) {
-        const trackInfo = globals.trackManager.resolveTrackInfo(track.uri);
-        const kind = trackInfo?.tags?.kind;
-        if (
-          kind === THREAD_SLICE_TRACK_KIND ||
-          kind === ACTUAL_FRAMES_SLICE_TRACK_KIND
-        ) {
-          if (trackInfo?.tags?.trackIds) {
-            for (const trackId of trackInfo.tags.trackIds) {
-              trackIds.push(trackId);
-            }
+    for (const trackUri of area.trackUris) {
+      const trackInfo = globals.trackManager.getTrack(trackUri);
+      const kind = trackInfo?.tags?.kind;
+      if (
+        kind === THREAD_SLICE_TRACK_KIND ||
+        kind === ACTUAL_FRAMES_SLICE_TRACK_KIND
+      ) {
+        if (trackInfo?.tags?.trackIds) {
+          for (const trackId of trackInfo.tags.trackIds) {
+            trackIds.push(trackId);
           }
         }
       }
@@ -425,14 +424,14 @@ export class FlowEventsController extends Controller<'main'> {
       return;
     }
 
-    const selection = globals.state.selection;
+    const selection = globals.selectionManager.selection;
     if (selection.kind === 'empty') {
       publishConnectedFlows([]);
       publishSelectedFlows([]);
       return;
     }
 
-    const legacySelection = getLegacySelection(globals.state);
+    const legacySelection = globals.selectionManager.legacySelection;
     // TODO(b/155483804): This is a hack as annotation slices don't contain
     // flows. We should tidy this up when fixing this bug.
     if (

@@ -158,6 +158,15 @@ std::optional<size_t> GetWindowZOrderForDeskAndRoot(const aura::Window* window,
   return std::nullopt;
 }
 
+// Returns the total number of layers that are descendants of `root`.
+size_t GetNumDescendants(ui::Layer* root) {
+  size_t num_descendants = root->children().size();
+  for (const auto& child : root->children()) {
+    num_descendants += GetNumDescendants(child);
+  }
+  return num_descendants;
+}
+
 // Recursively mirrors `source_layer` and its children and adds them as children
 // of `parent`, taking into account the given |layers_data|. If the layer data
 // of `source_layer` has `should_clear_transform` set to true, the transforms of
@@ -538,7 +547,7 @@ void DeskPreviewView::RecreateDeskContentsMirrorLayers() {
       std::make_unique<ui::LayerTreeOwner>(
           std::move(mirrored_content_root_layer));
 
-  DeprecatedLayoutImmediately();
+  InvalidateLayout();
 }
 
 void DeskPreviewView::Close(bool primary_action) {
@@ -579,6 +588,18 @@ void DeskPreviewView::UpdateAccessibleName() {
     GetViewAccessibility().SetName(
         "", ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
   }
+}
+
+void DeskPreviewView::AcceptSelection() {
+  DesksController::Get()->ActivateDesk(
+      mini_view_->desk(),
+      mini_view_->owner_bar()->type() == DeskBarViewBase::Type::kDeskButton
+          ? DesksSwitchSource::kDeskButtonMiniViewButton
+          : DesksSwitchSource::kMiniViewButton);
+}
+
+size_t DeskPreviewView::GetNumLayersMirrored() const {
+  return GetNumDescendants(desk_mirrored_contents_layer_tree_owner_->root());
 }
 
 void DeskPreviewView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -672,10 +693,6 @@ void DeskPreviewView::OnThemeChanged() {
 }
 
 void DeskPreviewView::OnFocus() {
-  if (mini_view_->owner_bar()->type() == DeskBarViewBase::Type::kOverview) {
-    MoveFocusToView(this);
-  }
-
   mini_view_->UpdateDeskButtonVisibility();
   mini_view_->UpdateFocusColor();
   View::OnFocus();
@@ -713,43 +730,6 @@ bool DeskPreviewView::AcceleratorPressed(const ui::Accelerator& accelerator) {
 
 bool DeskPreviewView::CanHandleAccelerators() const {
   return HasFocus() && views::Button::CanHandleAccelerators();
-}
-
-views::View* DeskPreviewView::GetView() {
-  return this;
-}
-
-void DeskPreviewView::MaybeActivateFocusedView() {
-  DesksController::Get()->ActivateDesk(
-      mini_view_->desk(),
-      mini_view_->owner_bar()->type() == DeskBarViewBase::Type::kDeskButton
-          ? DesksSwitchSource::kDeskButtonMiniViewButton
-          : DesksSwitchSource::kMiniViewButton);
-}
-
-void DeskPreviewView::MaybeCloseFocusedView(bool primary_action) {
-  Close(primary_action);
-}
-
-void DeskPreviewView::MaybeSwapFocusedView(bool right) {
-  Swap(right);
-}
-
-bool DeskPreviewView::MaybeActivateFocusedViewOnOverviewExit(
-    OverviewSession* overview_session) {
-  MaybeActivateFocusedView();
-  return true;
-}
-
-void DeskPreviewView::OnFocusableViewFocused() {
-  mini_view_->UpdateDeskButtonVisibility();
-  mini_view_->UpdateFocusColor();
-  mini_view_->owner_bar()->ScrollToShowViewIfNecessary(mini_view_);
-}
-
-void DeskPreviewView::OnFocusableViewBlurred() {
-  mini_view_->UpdateDeskButtonVisibility();
-  mini_view_->UpdateFocusColor();
 }
 
 void DeskPreviewView::OnWindowOcclusionChanged(aura::Window* window) {

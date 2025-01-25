@@ -152,6 +152,13 @@ AppListSearchView::AppListSearchView(
 
   AppListModelProvider* const model_provider = AppListModelProvider::Get();
   model_provider->AddObserver(this);
+
+  // Set the role of AppListSearchView to ListBox.
+  GetViewAccessibility().SetRole(ax::mojom::Role::kListBox);
+  UpdateAccessibleValue();
+  search_box_view_->SetQueryChangedCallback(
+      base::BindRepeating(&AppListSearchView::UpdateAccessibleValue,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 AppListSearchView::~AppListSearchView() {
@@ -254,8 +261,6 @@ void AppListSearchView::OnSearchResultContainerResultsChanged() {
   last_search_result_count_ = result_count;
   last_result_metadata_.swap(search_result_metadata);
 
-  ScheduleResultsChangedA11yNotification();
-
   // Reset selection to first when things change. The first result is set as
   // as the default result.
   result_selection_controller_->set_block_selection_changes(false);
@@ -268,6 +273,8 @@ void AppListSearchView::OnSearchResultContainerResultsChanged() {
   } else {
     search_box_view_->ClearAutocompleteText();
   }
+
+  ScheduleResultsChangedA11yNotification();
 }
 
 void AppListSearchView::VisibilityChanged(View* starting_from,
@@ -278,38 +285,6 @@ void AppListSearchView::VisibilityChanged(View* starting_from,
       container->ResetAndHide();
     }
   }
-}
-
-void AppListSearchView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  if (!GetVisible()) {
-    return;
-  }
-
-  // Set the role of AppListSearchView to ListBox along with notifying value
-  // change to "interject" the node announcement before the search result is
-  // announced.
-  node_data->role = ax::mojom::Role::kListBox;
-
-  std::u16string value;
-  const std::u16string& query = search_box_view_->current_query();
-  if (!query.empty()) {
-    if (last_search_result_count_ == 1) {
-      value = l10n_util::GetStringFUTF16(
-          IDS_APP_LIST_SEARCHBOX_RESULTS_ACCESSIBILITY_ANNOUNCEMENT_SINGLE_RESULT,
-          query);
-    } else {
-      value = l10n_util::GetStringFUTF16(
-          IDS_APP_LIST_SEARCHBOX_RESULTS_ACCESSIBILITY_ANNOUNCEMENT,
-          base::NumberToString16(last_search_result_count_), query);
-    }
-  } else {
-    // TODO(crbug.com/40180065): New(?) accessibility announcement. We used to
-    // have a zero state A11Y announcement but zero state is removed for the
-    // bubble launcher.
-    value = std::u16string();
-  }
-
-  node_data->SetValue(value);
 }
 
 void AppListSearchView::OnActiveAppListModelsChanged(
@@ -384,7 +359,7 @@ void AppListSearchView::ScheduleResultsChangedA11yNotification() {
 void AppListSearchView::NotifyA11yResultsChanged() {
   SetIgnoreResultChangesForA11y(false);
 
-  NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
+  UpdateAccessibleValue();
   MaybeNotifySelectedResultChanged();
 }
 
@@ -428,6 +403,36 @@ ui::Layer* AppListSearchView::GetPageAnimationLayer() const {
   // The scroll view has a layer containing all the visible contents, so use
   // that for "whole page" animations.
   return scroll_view_->contents()->layer();
+}
+
+void AppListSearchView::UpdateAccessibleValue() {
+  if (!GetVisible()) {
+    GetViewAccessibility().RemoveValue();
+    return;
+  }
+
+  // Notify value change to "interject" the node announcement before the search
+  // result is announced.
+  std::u16string value;
+  const std::u16string& query = search_box_view_->current_query();
+  if (!query.empty()) {
+    if (last_search_result_count_ == 1) {
+      value = l10n_util::GetStringFUTF16(
+          IDS_APP_LIST_SEARCHBOX_RESULTS_ACCESSIBILITY_ANNOUNCEMENT_SINGLE_RESULT,
+          query);
+    } else {
+      value = l10n_util::GetStringFUTF16(
+          IDS_APP_LIST_SEARCHBOX_RESULTS_ACCESSIBILITY_ANNOUNCEMENT,
+          base::NumberToString16(last_search_result_count_), query);
+    }
+  } else {
+    // TODO(crbug.com/40180065): New(?) accessibility announcement. We used to
+    // have a zero state A11Y announcement but zero state is removed for the
+    // bubble launcher.
+    value = std::u16string();
+  }
+
+  GetViewAccessibility().SetValue(value);
 }
 
 BEGIN_METADATA(AppListSearchView)

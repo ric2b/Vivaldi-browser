@@ -19,3 +19,5 @@
 #![allow(clippy::needless_lifetimes)]
 
 pub mod class;
+#[cfg(feature = "testing")]
+pub mod testing;

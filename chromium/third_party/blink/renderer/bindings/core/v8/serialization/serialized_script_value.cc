@@ -292,7 +292,7 @@ String SerializedScriptValue::ToWireString() const {
   auto backing =
       // TODO(crbug.com/40284755): CreateUninitialized should return a span
       // pointing to the string backing, instead of a pointer.
-      UNSAFE_BUFFERS(base::span(backing_ptr, wire_string.length()));
+      UNSAFE_TODO(base::span(backing_ptr, wire_string.length()));
   auto [content, padding] =
       base::as_writable_bytes(backing).split_at(data_buffer_.size());
   content.copy_from(data_buffer_);
@@ -482,7 +482,7 @@ void SerializedScriptValue::CloneSharedArrayBuffers(
   HeapHashSet<Member<DOMArrayBufferBase>> visited;
   shared_array_buffers_contents_.Grow(array_buffers.size());
   wtf_size_t i = 0;
-  for (auto* it = array_buffers.begin(); it != array_buffers.end(); ++it) {
+  for (auto it = array_buffers.begin(); it != array_buffers.end(); ++it) {
     DOMSharedArrayBuffer* shared_array_buffer = *it;
     if (visited.Contains(shared_array_buffer))
       continue;
@@ -555,7 +555,7 @@ ArrayBufferArray SerializedScriptValue::ExtractNonSharedArrayBuffers(
   ArrayBufferArray result;
   // Partition array_buffers into [shared..., non_shared...], maintaining
   // relative ordering of elements with the same predicate value.
-  auto* non_shared_begin =
+  auto non_shared_begin =
       std::stable_partition(array_buffers.begin(), array_buffers.end(),
                             [](Member<DOMArrayBufferBase>& array_buffer) {
                               return array_buffer->IsShared();
@@ -579,7 +579,7 @@ SerializedScriptValue::TransferArrayBufferContents(
   if (!array_buffers.size())
     return ArrayBufferContentsArray();
 
-  for (auto* it = array_buffers.begin(); it != array_buffers.end(); ++it) {
+  for (auto it = array_buffers.begin(); it != array_buffers.end(); ++it) {
     DOMArrayBufferBase* array_buffer = *it;
     if (array_buffer->IsDetached()) {
       wtf_size_t index =
@@ -604,7 +604,7 @@ SerializedScriptValue::TransferArrayBufferContents(
       static_cast<HeapHashSet<Member<DOMArrayBufferBase>>*>(buffer)->clear();
     }
   } promptly_free_array_buffers{&visited};
-  for (auto* it = array_buffers.begin(); it != array_buffers.end(); ++it) {
+  for (auto it = array_buffers.begin(); it != array_buffers.end(); ++it) {
     DOMArrayBufferBase* array_buffer_base = *it;
     if (visited.Contains(array_buffer_base))
       continue;

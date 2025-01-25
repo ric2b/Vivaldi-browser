@@ -270,8 +270,7 @@ ScopedJavaLocalRef<jobject> NotesBridge::GetMainFolderId(
 }
 
 ScopedJavaLocalRef<jobject> NotesBridge::GetTrashFolderId(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
+    JNIEnv* env) {
   const NoteNode* trash_node = notes_model_->trash_node();
   ScopedJavaLocalRef<jobject> folder_id_obj =
       JavaNoteIdCreateNoteId(env, trash_node->id());

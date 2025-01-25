@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Virhe</translation>
 <translation id="1175364870820465910">Tulo&amp;sta...</translation>
 <translation id="1181037720776840403">Poista</translation>
+<translation id="1184037892196730210">Näytön suoratoisto ei onnistu</translation>
 <translation id="1187722533808055681">Joutotilasta palautumiset</translation>
 <translation id="122082903575839559">Varmenteen allekirjoitusalgoritmi</translation>
 <translation id="1221825588892235038">Vain valinta</translation>
@@ -97,9 +98,8 @@
 <translation id="26224892172169984">Älä anna sivustojen määrittää yhteyskäytäntöjen käsittelypalveluita</translation>
 <translation id="2653275834716714682">Tekstin korvaus</translation>
 <translation id="265390580714150011">Kentän arvo</translation>
-<translation id="2662876636500006917">Chrome Web Store</translation>
+<translation id="2662876636500006917">Chromen verkkokauppa</translation>
 <translation id="2678063897982469759">Ota käyttöön uudelleen</translation>
-<translation id="2678100101831051676">Median välitys ei onnistu.</translation>
 <translation id="2719936478972253983">Seuraavat evästeet estettiin</translation>
 <translation id="2721037002783622288">&amp;Etsi kuvaa hakukoneella <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Ei jälkeen</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Laajennus on mahdollisesti vioittunut.</translation>
 <translation id="3387614642886316601">Käytä parannettua oikolukua</translation>
 <translation id="3390013585654699824">Sovelluksen tiedot</translation>
-<translation id="3393582007140394275">Näytön välitys ei onnistu.</translation>
 <translation id="345693547134384690">Avaa &amp;kuva uuteen välilehteen</translation>
 <translation id="3493881266323043047">Voimassaolo</translation>
 <translation id="3511307672085573050">Kopioi linkin osoit&amp;e</translation>
@@ -347,6 +346,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="6812841287760418429">Säilytä muutokset</translation>
 <translation id="6824564591481349393">Kopioi sähköpostiosoit&amp;e</translation>
 <translation id="6840155290835956714">Kysy ennen lähetystä</translation>
+<translation id="6878862640969460273">Vaaka</translation>
 <translation id="6886871292305414135">Avaa linkki uuteen &amp;välilehteen</translation>
 <translation id="6892812721183419409">Avaa linkki käyttäjänä <ph name="USER" /></translation>
 <translation id="6900284862687837908">Taustasovellus: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="7287143125007575591">Käyttö estettiin.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Tarkista oikeinkirjoitus kirjoittaessa</translation>
+<translation id="7359680654975233185">Välilehden suoratoisto ei onnistu</translation>
 <translation id="7385854874724088939">Tulostuksessa meni jokin vikaan. Tarkista tulostimesi ja yritä uudelleen.</translation>
 <translation id="7412226954991670867">GPU-muisti</translation>
 <translation id="7421925624202799674">&amp;Näytä sivun lähdekoodi</translation>
@@ -380,6 +381,7 @@ Julkinen eksponentti (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bittiä):
 <translation id="7661259717474717992">Salli sivustojen tallentaa ja lukea evästetietoja</translation>
 <translation id="7663719505383602579">Vastaanottaja: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Ylläpidon asentama</translation>
+<translation id="7685038817958445325">Suoratoisto ei onnistu</translation>
 <translation id="7685049629764448582">JavaScript-muisti</translation>
 <translation id="7701869757853594372">KÄYTTÄJÄ-kahvat</translation>
 <translation id="7704305437604973648">Tehtävä</translation>
@@ -410,7 +412,6 @@ Avaintiedosto: <ph name="KEY_FILE" />
 Tallenna avaintiedosto turvalliseen pakkaan. Sitä tarvitaan uusien laajennusversioiden luontiin.</translation>
 <translation id="8004582292198964060">Selain</translation>
 <translation id="8018313076035239964">Hallitse mihin tietoihin verkkosivustoilla on pääsy ja mitä sisältöjä ne voivat näyttää</translation>
-<translation id="8032244173881942855">Välilehden välitys ei onnistu.</translation>
 <translation id="8071432093239591881">Tulosta kuvana</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kt</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -441,7 +442,7 @@ Tallenna avaintiedosto turvalliseen pakkaan. Sitä tarvitaan uusien laajennusver
 <translation id="8725066075913043281">Yritä uudelleen</translation>
 <translation id="8774934320277480003">Yläreunus</translation>
 <translation id="8798099450830957504">Oletus</translation>
-<translation id="8808478386290700967">Web Store</translation>
+<translation id="8808478386290700967">Verkkokauppa</translation>
 <translation id="8823514049557262177">Kopioi linkin &amp;teksti</translation>
 <translation id="8823704566850948458">Ehdota salasanaa…</translation>
 <translation id="883062543841130884">Korvaukset</translation>
@@ -466,7 +467,6 @@ Tallenna avaintiedosto turvalliseen pakkaan. Sitä tarvitaan uusien laajennusver
 <translation id="9218430445555521422">Aseta oletukseksi</translation>
 <translation id="93766956588638423">Korjaa laajennus</translation>
 <translation id="961012016278832836">Vanha Microsoft Edge</translation>
-<translation id="98515147261107953">Vaaka</translation>
 <translation id="994289308992179865">&amp;Jatkuva toisto</translation>
 <translation id="998747458861718449">&amp;Tarkastele</translation>
 </translationbundle>

@@ -40,7 +40,7 @@ std::string SerializeIntoKey(BuyerReportType report_type) {
     case BuyerReportType::kTotalSignalsFetchLatency:
       return "totalSignalsFetchLatency";
   };
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 using RealTimeReportingType =
@@ -50,7 +50,7 @@ std::string SerializeIntoValue(RealTimeReportingType report_type) {
     case RealTimeReportingType::kDefaultLocalReporting:
       return "default-local-reporting";
   };
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 template <typename T>
@@ -297,6 +297,8 @@ base::Value SerializeIntoValue(const InterestGroup::Ad& ad) {
   SerializeIntoDict("buyerReportingId", ad.buyer_reporting_id, result);
   SerializeIntoDict("buyerAndSellerReportingId",
                     ad.buyer_and_seller_reporting_id, result);
+  SerializeIntoDict("selectableBuyerAndSellerReportingIds",
+                    ad.selectable_buyer_and_seller_reporting_ids, result);
   SerializeIntoDict("adRenderId", ad.ad_render_id, result);
   SerializeIntoDict("allowedReportingOrigins", ad.allowed_reporting_origins,
                     result);
@@ -314,6 +316,9 @@ base::Value SerializeIntoValue(const AuctionServerRequestFlags& flags) {
 
       case AuctionServerRequestFlagsEnum::kIncludeFullAds:
         result.Append("include-full-ads");
+        break;
+      case AuctionServerRequestFlagsEnum::kOmitUserBiddingSignals:
+        result.Append("omit-user-bidding-signals");
         break;
     }
   }
@@ -431,6 +436,10 @@ base::Value::Dict SerializeAuctionConfigForDevtools(const AuctionConfig& conf) {
       "maxTrustedScoringSignalsURLLength",
       conf.non_shared_params.max_trusted_scoring_signals_url_length, result);
 
+  SerializeIntoDict("trustedScoringSignalsCoordinator",
+                    conf.non_shared_params.trusted_scoring_signals_coordinator,
+                    result);
+
   // direct_from_seller_signals --- skipped.
   SerializeIntoDict("expectsDirectFromSellerSignalsHeaderAdSlot",
                     conf.expects_direct_from_seller_signals_header_ad_slot,
@@ -488,6 +497,8 @@ base::Value::Dict SerializeInterestGroupForDevtools(const InterestGroup& ig) {
                     result);
   SerializeIntoDict("maxTrustedBiddingSignalsURLLength",
                     ig.max_trusted_bidding_signals_url_length, result);
+  SerializeIntoDict("trustedBiddingSignalsCoordinator",
+                    ig.trusted_bidding_signals_coordinator, result);
   SerializeIntoDict("userBiddingSignals", ig.user_bidding_signals, result);
   SerializeIntoDict("ads", ig.ads, result);
   SerializeIntoDict("adComponents", ig.ad_components, result);

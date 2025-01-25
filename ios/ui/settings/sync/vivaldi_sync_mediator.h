@@ -14,7 +14,10 @@ class PrefService;
 
 namespace vivaldi {
   class VivaldiAccountManager;
-  class VivaldiSyncServiceImpl;
+}
+
+namespace syncer {
+  class SyncService;
 }
 
 @interface VivaldiSyncMediator
@@ -23,7 +26,7 @@ namespace vivaldi {
 
 - (instancetype)initWithAccountManager:
       (vivaldi::VivaldiAccountManager*)vivaldiAccountManager
-      syncService:(vivaldi::VivaldiSyncServiceImpl*)syncService
+      syncService:(syncer::SyncService*)syncService
       prefService:(PrefService*)prefService
     NS_DESIGNATED_INITIALIZER;
 

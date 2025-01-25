@@ -32,20 +32,20 @@ public class TabModelUtils {
         Tab tab = model.getTabAt(index);
         if (tab == null) return false;
 
-        return model.closeTab(tab);
+        return model.closeTabs(TabClosureParams.closeTab(tab).allowUndo(false).build());
     }
 
     /**
      * @param model The {@link TabModel} to act on.
      * @param tabId The id of the {@link Tab} to close.
-     * @param canUndo Whether or not this closure can be undone.
+     * @param allowUndo Whether or not this closure is allowed to be undone.
      * @return {@code true} if the {@link Tab} was found.
      */
-    public static boolean closeTabById(TabModel model, int tabId, boolean canUndo) {
+    public static boolean closeTabById(TabModel model, int tabId, boolean allowUndo) {
         Tab tab = model.getTabById(tabId);
         if (tab == null || tab.isClosing()) return false;
 
-        return model.closeTab(tab, false, canUndo);
+        return model.closeTabs(TabClosureParams.closeTab(tab).allowUndo(allowUndo).build());
     }
 
     /**
@@ -56,15 +56,16 @@ public class TabModelUtils {
         Tab tab = TabModelUtils.getCurrentTab(model);
         if (tab == null) return false;
 
-        return model.closeTab(tab);
+        return model.closeTabs(TabClosureParams.closeTab(tab).allowUndo(false).build());
     }
 
     /**
      * Find the index of the {@link Tab} with the specified id.
+     *
      * @param model The {@link TabModel} to act on.
      * @param tabId The id of the {@link Tab} to find.
-     * @return      Specified {@link Tab} index or {@link TabList#INVALID_TAB_INDEX} if the
-     *              {@link Tab} is not found
+     * @return Specified {@link Tab} index or {@link TabList#INVALID_TAB_INDEX} if the {@link Tab}
+     *     is not found
      */
     public static int getTabIndexById(TabList model, int tabId) {
         int count = model.getCount();
@@ -217,6 +218,11 @@ public class TabModelUtils {
                             tabModelSelector.removeObserver(this);
                             callback.onResult(tabModelSelector);
                         }
+
+                        @Override
+                        public void onDestroyed() {
+                            tabModelSelector.removeObserver(this);
+                        }
                     };
 
             tabModelSelector.addObserver(observer);
@@ -248,6 +254,20 @@ public class TabModelUtils {
 
         for (int i = 0; i < tabList.getCount(); i++) {
             list.add(tabList.getTabAt(i));
+        }
+        return list;
+    }
+
+    /**
+     * Converts a {@link TabList} to a {@link List<Integer>} tab ids. A null input returns an empty
+     * list.
+     */
+    public static @Nullable List<Integer> convertTabListToListOfTabIds(@Nullable TabList tabList) {
+        ArrayList<Integer> list = new ArrayList<>();
+        if (tabList == null) return list;
+
+        for (int i = 0; i < tabList.getCount(); i++) {
+            list.add(tabList.getTabAt(i).getId());
         }
         return list;
     }

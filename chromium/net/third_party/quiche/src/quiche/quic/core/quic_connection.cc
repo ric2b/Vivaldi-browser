@@ -568,6 +568,33 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
   }
 }
 
+void QuicConnection::AddDispatcherSentPackets(
+    absl::Span<const DispatcherSentPacket> dispatcher_sent_packets) {
+  QUICHE_DCHECK_EQ(stats_.packets_sent, 0u);
+  QUICHE_DCHECK_EQ(stats_.packets_sent_by_dispatcher, 0u);
+  QUICHE_DCHECK(!sent_packet_manager_.GetLargestSentPacket().IsInitialized());
+  if (dispatcher_sent_packets.empty()) {
+    return;
+  }
+  stats_.packets_sent_by_dispatcher = dispatcher_sent_packets.size();
+
+  for (const DispatcherSentPacket& packet : dispatcher_sent_packets) {
+    const QuicTransmissionInfo& info =
+        sent_packet_manager_.AddDispatcherSentPacket(packet);
+    if (debug_visitor_ != nullptr) {
+      debug_visitor_->OnPacketSent(
+          packet.packet_number, info.bytes_sent, info.has_crypto_handshake,
+          info.transmission_type, info.encryption_level,
+          info.retransmittable_frames,
+          /*nonretransmittable_frames=*/{}, info.sent_time,
+          /*batch_id=*/0);
+    }
+  }
+
+  packet_creator_.set_packet_number(
+      dispatcher_sent_packets.back().packet_number);
+}
+
 bool QuicConnection::MaybeTestLiveness() {
   QUICHE_DCHECK_EQ(perspective_, Perspective::IS_CLIENT);
   if (liveness_testing_disabled_ ||
@@ -7340,6 +7367,18 @@ void QuicConnection::OnPingAlarm() { ping_manager_.OnAlarm(); }
 
 void QuicConnection::OnNetworkBlackholeDetectorAlarm() {
   blackhole_detector_.OnAlarm();
+}
+
+std::unique_ptr<SerializedPacket>
+QuicConnection::SerializeLargePacketNumberConnectionClosePacket(
+    QuicErrorCode error, const std::string& error_details) {
+  QUICHE_DCHECK(IsHandshakeConfirmed());
+  QUICHE_DCHECK(!error_details.empty());
+  if (!IsHandshakeConfirmed()) {
+    return nullptr;
+  }
+  return packet_creator_.SerializeLargePacketNumberConnectionClosePacket(
+      GetLargestAckedPacket(), error, error_details);
 }
 
 #undef ENDPOINT  // undef for jumbo builds

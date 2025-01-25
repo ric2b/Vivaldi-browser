@@ -38,7 +38,7 @@ use crate::{
             },
         },
         salt::MultiSalt,
-        V1IdentityToken, NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT,
+        V1IdentityToken, NP_V1_ADV_MAX_SECTION_COUNT,
     },
     header::V1AdvHeader,
     AdvDeserializationError, AdvDeserializationErrorDetailsHazmat,
@@ -94,9 +94,9 @@ where
 }
 
 /// A section deserialized from a V1 advertisement.
-pub trait Section<'adv, E: Debug> {
+pub trait Section<'adv> {
     /// The iterator type used to iterate over data elements
-    type Iterator: Iterator<Item = Result<DataElement<'adv>, E>>;
+    type Iterator: Iterator<Item = Result<DataElement<'adv>, DataElementParseError>>;
 
     /// Iterator over the data elements in a section, except for any DEs related to resolving the
     /// identity or otherwise validating the payload (e.g. MIC, Signature, any identity DEs like
@@ -106,7 +106,7 @@ pub trait Section<'adv, E: Debug> {
     /// Collects the data elements into a vector, eagerly catching and resolving any errors during
     /// parsing.
     #[cfg(any(test, feature = "alloc"))]
-    fn collect_data_elements(&self) -> Result<Vec<DataElement<'adv>>, E>
+    fn collect_data_elements(&self) -> Result<Vec<DataElement<'adv>>, DataElementParseError>
     where
         Self: Sized,
     {
@@ -162,7 +162,7 @@ impl<'adv> HasIdentityMatch for DecryptedSection<'adv> {
     }
 }
 
-impl<'adv> Section<'adv, DataElementParseError> for DecryptedSection<'adv> {
+impl<'adv> Section<'adv> for DecryptedSection<'adv> {
     type Iterator = DataElementParsingIterator<'adv>;
 
     fn iter_data_elements(&self) -> Self::Iterator {
@@ -225,14 +225,10 @@ struct ResolvableCiphertextSection<'a> {
 /// section ordering as they appeared within the original advertisement to ensure
 /// that the fully-deserialized advertisement may be correctly reconstructed.
 struct SectionsInProcessing<'adv, M: MatchedCredential> {
-    deserialized_sections: ArrayVecOption<
-        (usize, V1DeserializedSection<'adv, M>),
-        { NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT },
-    >,
-    encrypted_sections: ArrayVecOption<
-        (usize, ResolvableCiphertextSection<'adv>),
-        { NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT },
-    >,
+    deserialized_sections:
+        ArrayVecOption<(usize, V1DeserializedSection<'adv, M>), { NP_V1_ADV_MAX_SECTION_COUNT }>,
+    encrypted_sections:
+        ArrayVecOption<(usize, ResolvableCiphertextSection<'adv>), { NP_V1_ADV_MAX_SECTION_COUNT }>,
     malformed_sections_count: usize,
 }
 
@@ -387,16 +383,13 @@ impl<'adv, M: MatchedCredential> SectionsInProcessing<'adv, M> {
 /// The contents of a deserialized and decrypted V1 advertisement.
 #[derive(Debug, PartialEq, Eq)]
 pub struct V1AdvertisementContents<'adv, M: MatchedCredential> {
-    sections: ArrayVecOption<V1DeserializedSection<'adv, M>, NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT>,
+    sections: ArrayVecOption<V1DeserializedSection<'adv, M>, NP_V1_ADV_MAX_SECTION_COUNT>,
     invalid_sections: usize,
 }
 
 impl<'adv, M: MatchedCredential> V1AdvertisementContents<'adv, M> {
     fn new(
-        sections: ArrayVecOption<
-            V1DeserializedSection<'adv, M>,
-            NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT,
-        >,
+        sections: ArrayVecOption<V1DeserializedSection<'adv, M>, NP_V1_ADV_MAX_SECTION_COUNT>,
         invalid_sections: usize,
     ) -> Self {
         Self { sections, invalid_sections }
@@ -406,7 +399,7 @@ impl<'adv, M: MatchedCredential> V1AdvertisementContents<'adv, M> {
     /// which could be successfully deserialized and decrypted
     pub fn into_sections(
         self,
-    ) -> ArrayVecOption<V1DeserializedSection<'adv, M>, NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT> {
+    ) -> ArrayVecOption<V1DeserializedSection<'adv, M>, NP_V1_ADV_MAX_SECTION_COUNT> {
         self.sections
     }
 
@@ -429,6 +422,18 @@ pub enum V1DeserializedSection<'adv, M: MatchedCredential> {
     /// Section that was ciphertext in the original advertisement, and has been decrypted
     /// with the credential in the [MatchedCredential]
     Decrypted(WithMatchedCredential<M, DecryptedSection<'adv>>),
+}
+
+// Allow easy DE iteration if the user doesn't care which kind of section it is
+impl<'adv, M: MatchedCredential> Section<'adv> for V1DeserializedSection<'adv, M> {
+    type Iterator = DataElementParsingIterator<'adv>;
+
+    fn iter_data_elements(&self) -> Self::Iterator {
+        match self {
+            V1DeserializedSection::Plaintext(p) => p.iter_data_elements(),
+            V1DeserializedSection::Decrypted(d) => d.contents().iter_data_elements(),
+        }
+    }
 }
 
 /// The level of integrity protection in an encrypted section

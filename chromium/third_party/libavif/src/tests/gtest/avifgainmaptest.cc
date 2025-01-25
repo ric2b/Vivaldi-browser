@@ -576,9 +576,9 @@ TEST(GainMapTest, IgnoreGainMap) {
 
   // Verify that the input and decoded images are close.
   EXPECT_GT(testutil::GetPsnr(*image, *decoded), 40.0);
-  // Verify that the gain map was detected...
-  EXPECT_TRUE(decoder->gainMapPresent);
-  // ... but not decoded because enableDecodingGainMap is false by default.
+  // Verify that the gain map is not detected.
+  EXPECT_FALSE(decoder->gainMapPresent);
+  // And not decoded because enableDecodingGainMap is false by default.
   EXPECT_EQ(decoded->gainMap, nullptr);
 }
 
@@ -624,7 +624,7 @@ TEST(GainMapTest, IgnoreGainMapButReadMetadata) {
             image->gainMap->altMatrixCoefficients);
 }
 
-TEST(GainMapTest, DecodeGainMapButIgnoreMetadata) {
+TEST(GainMapTest, DecodeGainMapTrueParseMetadataFalse) {
   ImagePtr image = CreateTestImageWithGainMap(/*base_rendition_is_hdr=*/false);
   ASSERT_NE(image, nullptr);
 
@@ -643,27 +643,11 @@ TEST(GainMapTest, DecodeGainMapButIgnoreMetadata) {
   decoder->enableDecodingGainMap = AVIF_TRUE;
   result = avifDecoderReadMemory(decoder.get(), decoded.get(), encoded.data,
                                  encoded.size);
-  ASSERT_EQ(result, AVIF_RESULT_OK)
+  // Verify we get an error because the combination of
+  // enableDecodingGainMap=false and enableParsingGainMapMetadata=true
+  // is not allowed.
+  ASSERT_EQ(result, AVIF_RESULT_INVALID_ARGUMENT)
       << avifResultToString(result) << " " << decoder->diag.error;
-
-  // Verify that the gain map was detected...
-  EXPECT_TRUE(decoder->gainMapPresent);
-  ASSERT_NE(decoded->gainMap, nullptr);
-  ASSERT_NE(decoded->gainMap->image, nullptr);
-  EXPECT_GT(testutil::GetPsnr(*image->gainMap->image, *decoded->gainMap->image),
-            40.0);
-
-  // Check that the gain map metadata was not populated.
-  CheckGainMapMetadataMatches(decoded->gainMap->metadata,
-                              avifGainMapMetadata());
-  EXPECT_EQ(decoded->gainMap->altDepth, 0);
-  EXPECT_EQ(decoded->gainMap->altPlaneCount, 0);
-  EXPECT_EQ(decoded->gainMap->altColorPrimaries,
-            AVIF_COLOR_PRIMARIES_UNSPECIFIED);
-  EXPECT_EQ(decoded->gainMap->altTransferCharacteristics,
-            AVIF_TRANSFER_CHARACTERISTICS_UNSPECIFIED);
-  EXPECT_EQ(decoded->gainMap->altMatrixCoefficients,
-            AVIF_MATRIX_COEFFICIENTS_UNSPECIFIED);
 }
 
 TEST(GainMapTest, IgnoreColorAndAlpha) {
@@ -776,9 +760,7 @@ TEST(GainMapTest, NoGainMap) {
   EXPECT_EQ(decoded->gainMap, nullptr);
 }
 
-// TODO(https://github.com/AOMediaCodec/libavif/issues/2261): Regenerate test
-// files.
-TEST(GainMapTest, DISABLED_DecodeGainMapGrid) {
+TEST(GainMapTest, DecodeGainMapGrid) {
   const std::string path =
       std::string(data_path) + "color_grid_gainmap_different_grid.avif";
   DecoderPtr decoder(avifDecoderCreate());
@@ -809,8 +791,8 @@ TEST(GainMapTest, DISABLED_DecodeGainMapGrid) {
   EXPECT_EQ(decoded->gainMap->image->width, 64u * 2u);
   EXPECT_EQ(decoded->gainMap->image->height, 80u * 2u);
   EXPECT_EQ(decoded->gainMap->image->depth, 8u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomN, 6u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomD, 2u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomN, 6u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomD, 2u);
 
   // Decode the image.
   result = avifDecoderNextImage(decoder.get());
@@ -818,9 +800,7 @@ TEST(GainMapTest, DISABLED_DecodeGainMapGrid) {
       << avifResultToString(result) << " " << decoder->diag.error;
 }
 
-// TODO(https://github.com/AOMediaCodec/libavif/issues/2261): Regenerate test
-// files.
-TEST(GainMapTest, DISABLED_DecodeColorGridGainMapNoGrid) {
+TEST(GainMapTest, DecodeColorGridGainMapNoGrid) {
   const std::string path =
       std::string(data_path) + "color_grid_alpha_grid_gainmap_nogrid.avif";
   ImagePtr decoded(avifImageCreateEmpty());
@@ -840,13 +820,11 @@ TEST(GainMapTest, DISABLED_DecodeColorGridGainMapNoGrid) {
   // Gain map: single image of size 64x80.
   EXPECT_EQ(decoded->gainMap->image->width, 64u);
   EXPECT_EQ(decoded->gainMap->image->height, 80u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomN, 6u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomD, 2u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomN, 6u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomD, 2u);
 }
 
-// TODO(https://github.com/AOMediaCodec/libavif/issues/2261): Regenerate test
-// files.
-TEST(GainMapTest, DISABLED_DecodeColorNoGridGainMapGrid) {
+TEST(GainMapTest, DecodeColorNoGridGainMapGrid) {
   const std::string path =
       std::string(data_path) + "color_nogrid_alpha_nogrid_gainmap_grid.avif";
   ImagePtr decoded(avifImageCreateEmpty());
@@ -866,8 +844,114 @@ TEST(GainMapTest, DISABLED_DecodeColorNoGridGainMapGrid) {
   // Gain map: 2x2 grid of 64x80 tiles.
   EXPECT_EQ(decoded->gainMap->image->width, 64u * 2u);
   EXPECT_EQ(decoded->gainMap->image->height, 80u * 2u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomN, 6u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomD, 2u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomN, 6u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomD, 2u);
+}
+
+TEST(GainMapTest, DecodeUnsupportedVersion) {
+  // The two test files should produce the same results:
+  // One has an unsupported 'version' field, the other an unsupported
+  // 'minimum_version' field, but the behavior of these two fields is the same.
+  for (const std::string image : {"unsupported_gainmap_version.avif",
+                                  "unsupported_gainmap_minimum_version.avif"}) {
+    SCOPED_TRACE(image);
+    const std::string path = std::string(data_path) + image;
+    ImagePtr decoded(avifImageCreateEmpty());
+    ASSERT_NE(decoded, nullptr);
+    DecoderPtr decoder(avifDecoderCreate());
+    ASSERT_NE(decoder, nullptr);
+
+    // Parse with various enableDecodingGainMap and enableParsingGainMapMetadata
+    // settings.
+
+    decoder->enableDecodingGainMap = false;
+    decoder->enableParsingGainMapMetadata = false;
+    ASSERT_EQ(avifDecoderReadFile(decoder.get(), decoded.get(), path.c_str()),
+              AVIF_RESULT_OK);
+    // Gain map not found since enableParsingGainMapMetadata is false.
+    EXPECT_EQ(decoder->gainMapPresent, false);
+    ASSERT_EQ(decoded->gainMap, nullptr);
+
+    ASSERT_EQ(avifDecoderReset(decoder.get()), AVIF_RESULT_OK);
+    decoder->enableDecodingGainMap = false;
+    decoder->enableParsingGainMapMetadata = true;
+    ASSERT_EQ(avifDecoderReadFile(decoder.get(), decoded.get(), path.c_str()),
+              AVIF_RESULT_OK);
+    // Gain map marked as not present because the metadata is not supported.
+    EXPECT_EQ(decoder->gainMapPresent, false);
+    ASSERT_EQ(decoded->gainMap, nullptr);
+
+    ASSERT_EQ(avifDecoderReset(decoder.get()), AVIF_RESULT_OK);
+    decoder->enableDecodingGainMap = true;
+    decoder->enableParsingGainMapMetadata = false;
+    // Invalid enableDecodingGainMap=true and enableParsingGainMapMetadata
+    // combination.
+    ASSERT_EQ(avifDecoderReadFile(decoder.get(), decoded.get(), path.c_str()),
+              AVIF_RESULT_INVALID_ARGUMENT);
+
+    ASSERT_EQ(avifDecoderReset(decoder.get()), AVIF_RESULT_OK);
+    decoder->enableDecodingGainMap = true;
+    decoder->enableParsingGainMapMetadata = true;
+    ASSERT_EQ(avifDecoderReadFile(decoder.get(), decoded.get(), path.c_str()),
+              AVIF_RESULT_OK);
+    // Gain map marked as not present because the metadata is not supported.
+    EXPECT_EQ(decoder->gainMapPresent, false);
+    ASSERT_EQ(decoded->gainMap, nullptr);
+  }
+}
+
+TEST(GainMapTest, ExtraBytesAfterGainMapMetadataUnsupportedWriterVersion) {
+  const std::string path =
+      std::string(data_path) +
+      "unsupported_gainmap_writer_version_with_extra_bytes.avif";
+  ImagePtr decoded(avifImageCreateEmpty());
+  ASSERT_NE(decoded, nullptr);
+  DecoderPtr decoder(avifDecoderCreate());
+  ASSERT_NE(decoder, nullptr);
+
+  decoder->enableDecodingGainMap = false;
+  decoder->enableParsingGainMapMetadata = true;
+  ASSERT_EQ(avifDecoderReadFile(decoder.get(), decoded.get(), path.c_str()),
+            AVIF_RESULT_OK);
+  // Decodes successfully: there are extra bytes at the end of the gain map
+  // metadata but that's expected as the writer_version field is higher
+  // that supported.
+  EXPECT_EQ(decoder->gainMapPresent, true);
+  ASSERT_NE(decoded->gainMap, nullptr);
+}
+
+TEST(GainMapTest, ExtraBytesAfterGainMapMetadataSupporterWriterVersion) {
+  const std::string path =
+      std::string(data_path) +
+      "supported_gainmap_writer_version_with_extra_bytes.avif";
+  ImagePtr decoded(avifImageCreateEmpty());
+  ASSERT_NE(decoded, nullptr);
+  DecoderPtr decoder(avifDecoderCreate());
+  ASSERT_NE(decoder, nullptr);
+
+  decoder->enableDecodingGainMap = false;
+  decoder->enableParsingGainMapMetadata = true;
+  // Fails to decode: there are extra bytes at the end of the gain map metadata
+  // that shouldn't be there.
+  ASSERT_EQ(avifDecoderReadFile(decoder.get(), decoded.get(), path.c_str()),
+            AVIF_RESULT_INVALID_TONE_MAPPED_IMAGE);
+}
+
+TEST(GainMapTest, DecodeInvalidFtyp) {
+  const std::string path =
+      std::string(data_path) + "seine_sdr_gainmap_notmapbrand.avif";
+  ImagePtr decoded(avifImageCreateEmpty());
+  ASSERT_NE(decoded, nullptr);
+  DecoderPtr decoder(avifDecoderCreate());
+  ASSERT_NE(decoder, nullptr);
+  decoder->enableDecodingGainMap = true;
+  decoder->enableParsingGainMapMetadata = true;
+
+  ASSERT_EQ(avifDecoderReadFile(decoder.get(), decoded.get(), path.c_str()),
+            AVIF_RESULT_OK);
+  // The gain map is ignored because the 'tmap' brand is not present.
+  EXPECT_EQ(decoder->gainMapPresent, false);
+  ASSERT_EQ(decoded->gainMap, nullptr);
 }
 
 #define EXPECT_FRACTION_NEAR(numerator, denominator, expected)     \

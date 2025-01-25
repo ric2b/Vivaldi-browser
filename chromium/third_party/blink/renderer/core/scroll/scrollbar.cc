@@ -142,6 +142,9 @@ bool Scrollbar::IsLeftSideVerticalScrollbar() const {
 }
 
 int Scrollbar::Maximum() const {
+  if (!scrollable_area_) {
+    return 0;
+  }
   gfx::Vector2d max_offset = scrollable_area_->MaximumScrollOffsetInt() -
                              scrollable_area_->MinimumScrollOffsetInt();
   return orientation_ == kHorizontalScrollbar ? max_offset.x() : max_offset.y();
@@ -190,11 +193,6 @@ void Scrollbar::SetProportion(int visible_size, int total_size) {
   }
 
   SetNeedsPaintInvalidation(kAllParts);
-}
-
-void Scrollbar::Paint(GraphicsContext& context,
-                      const gfx::Vector2d& paint_offset) const {
-  GetTheme().Paint(*this, context, paint_offset);
 }
 
 void Scrollbar::AutoscrollTimerFired(TimerBase*) {
@@ -358,8 +356,9 @@ void Scrollbar::SetPressedPart(ScrollbarPart part, WebInputEvent::Type type) {
     SetNeedsPaintInvalidation(
         static_cast<ScrollbarPart>(pressed_part_ | hovered_part_ | part));
 
-  if (GetScrollableArea() && part != kNoPart)
-    GetScrollableArea()->DidScrollWithScrollbar(part, Orientation(), type);
+  if (scrollable_area_ && part != kNoPart) {
+    scrollable_area_->DidScrollWithScrollbar(part, Orientation(), type);
+  }
 
   pressed_part_ = part;
 }
@@ -710,6 +709,7 @@ void Scrollbar::InjectScrollGesture(WebInputEvent::Type gesture_type,
 }
 
 bool Scrollbar::DeltaWillScroll(ScrollOffset delta) const {
+  CHECK(scrollable_area_);
   ScrollOffset current_offset = scrollable_area_->GetScrollOffset();
   ScrollOffset target_offset = current_offset + delta;
   ScrollOffset clamped_offset =
@@ -775,6 +775,7 @@ bool Scrollbar::UsesNinePatchTrackAndCanSkipRepaint(
 }
 
 bool Scrollbar::ShouldParticipateInHitTesting() {
+  CHECK(scrollable_area_);
   // Non-overlay scrollbars should always participate in hit testing.
   if (!IsOverlayScrollbar())
     return true;
@@ -859,14 +860,18 @@ float Scrollbar::ScrollableAreaTargetPos() const {
 
 void Scrollbar::SetNeedsPaintInvalidation(ScrollbarPart invalid_parts) {
   needs_update_display_ = true;
-  if (theme_.ShouldRepaintAllPartsOnInvalidation())
+  if (theme_.ShouldRepaintAllPartsOnInvalidation()) {
     invalid_parts = kAllParts;
-  if (invalid_parts & ~kThumbPart)
-    track_needs_repaint_ = true;
-  if (invalid_parts & kThumbPart)
+  }
+  if (invalid_parts & ~kThumbPart) {
+    track_and_buttons_need_repaint_ = true;
+  }
+  if (invalid_parts & kThumbPart) {
     thumb_needs_repaint_ = true;
-  if (scrollable_area_)
+  }
+  if (scrollable_area_) {
     scrollable_area_->SetScrollbarNeedsPaintInvalidation(Orientation());
+  }
 }
 
 CompositorElementId Scrollbar::GetElementId() const {
@@ -938,9 +943,46 @@ bool Scrollbar::IsOpaque() const {
 }
 
 mojom::blink::ColorScheme Scrollbar::UsedColorScheme() const {
+  if (!scrollable_area_) {
+    return mojom::blink::ColorScheme::kLight;
+  }
   return IsOverlayScrollbar()
              ? scrollable_area_->GetOverlayScrollbarColorScheme()
              : scrollable_area_->UsedColorSchemeScrollbars();
+}
+
+LayoutBox* Scrollbar::GetLayoutBox() const {
+  return scrollable_area_ ? scrollable_area_->GetLayoutBox() : nullptr;
+}
+
+bool Scrollbar::IsScrollCornerVisible() const {
+  return scrollable_area_ && scrollable_area_->IsScrollCornerVisible();
+}
+
+bool Scrollbar::ShouldPaint() const {
+  // When the frame is throttled, the scrollbar will not be painted because
+  // the frame has not had its lifecycle updated.
+  return scrollable_area_ && !scrollable_area_->IsThrottled();
+}
+
+bool Scrollbar::LastKnownMousePositionInFrameRect() const {
+  return scrollable_area_ &&
+         FrameRect().Contains(scrollable_area_->LastKnownMousePosition());
+}
+
+const ui::ColorProvider* Scrollbar::GetColorProvider(
+    mojom::blink::ColorScheme color_scheme) const {
+  if (const auto* box = GetLayoutBox()) {
+    return box->GetDocument().GetColorProviderForPainting(color_scheme);
+  }
+  return nullptr;
+}
+
+bool Scrollbar::InForcedColorsMode() const {
+  if (const auto* box = GetLayoutBox()) {
+    return box->GetDocument().InForcedColorsMode();
+  }
+  return false;
 }
 
 }  // namespace blink

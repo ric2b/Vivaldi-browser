@@ -7,28 +7,37 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "osp/impl/quic/open_screen_session_base.h"
-#include "quiche/quic/core/quic_crypto_server_stream_base.h"
+#include "quiche/quic/core/tls_server_handshaker.h"
 
 namespace openscreen::osp {
 
-// A helper class used by the QuicCryptoServerStream.
-class OpenScreenCryptoServerStreamHelper
-    : public quic::QuicCryptoServerStreamBase::Helper {
+// This class is used to propagate client certificate to QuicServer.
+class TlsServerHandshakerImpl final : public quic::TlsServerHandshaker {
  public:
-  bool CanAcceptClientHello(const quic::CryptoHandshakeMessage& chlo,
-                            const quic::QuicSocketAddress& client_address,
-                            const quic::QuicSocketAddress& peer_address,
-                            const quic::QuicSocketAddress& self_address,
-                            std::string* error_details) const override;
+  TlsServerHandshakerImpl(quic::QuicSession* session,
+                          const quic::QuicCryptoServerConfig* crypto_config);
+  TlsServerHandshakerImpl(const TlsServerHandshakerImpl&) = delete;
+  TlsServerHandshakerImpl& operator=(const TlsServerHandshakerImpl&) = delete;
+  ~TlsServerHandshakerImpl() override;
+
+  // quic::TlsServerHandshaker overrides.
+  // This will propagate client certificate to QuicServer and the certificate is
+  // used in authentication.
+  quic::QuicAsyncStatus VerifyCertChain(
+      const std::vector<std::string>& certs,
+      std::string* error_details,
+      std::unique_ptr<quic::ProofVerifyDetails>* details,
+      uint8_t* out_alert,
+      std::unique_ptr<quic::ProofVerifierCallback> callback) override;
 };
 
 class OpenScreenServerSession : public OpenScreenSessionBase {
  public:
   OpenScreenServerSession(
       std::unique_ptr<quic::QuicConnection> connection,
-      std::unique_ptr<quic::QuicCompressedCertsCache> compressed_certs_cache,
       OpenScreenSessionBase::Visitor& visitor,
       const quic::QuicCryptoServerConfig& crypto_server_config,
       const quic::QuicConfig& config,
@@ -37,16 +46,16 @@ class OpenScreenServerSession : public OpenScreenSessionBase {
   OpenScreenServerSession& operator=(const OpenScreenServerSession&) = delete;
   ~OpenScreenServerSession() override;
 
+  // quic::Session overrides.
+  // This will request client to send agent certificate.
+  quic::QuicSSLConfig GetSSLConfig() const override;
+
  protected:
   // OpenScreenSessionBase interface implementation.
   std::unique_ptr<quic::QuicCryptoStream> CreateCryptoStream() override;
 
  private:
-  // Used by QUIC crypto server stream to track most recently compressed certs.
-  std::unique_ptr<quic::QuicCompressedCertsCache> compressed_certs_cache_;
   const quic::QuicCryptoServerConfig& crypto_server_config_;
-  // This helper is needed when create QuicCryptoServerStream.
-  OpenScreenCryptoServerStreamHelper stream_helper_;
 };
 
 }  // namespace openscreen::osp

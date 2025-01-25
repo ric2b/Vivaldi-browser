@@ -69,6 +69,7 @@ cc_library(
     "//src/tint/utils/rtti",
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
+    "//src/utils",
   ] + select({
     ":tint_build_spv_reader_or_tint_build_spv_writer": [
       "@spirv_headers//:spirv_cpp11_headers", "@spirv_headers//:spirv_c_headers",
@@ -112,6 +113,7 @@ cc_library(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@gtest",
+    "//src/utils",
   ] + select({
     ":tint_build_spv_reader_or_tint_build_spv_writer": [
       "@spirv_headers//:spirv_cpp11_headers", "@spirv_headers//:spirv_c_headers",
@@ -120,9 +122,8 @@ cc_library(
     "//conditions:default": [],
   }) + select({
     ":tint_build_spv_writer": [
+      "//src/tint/lang/spirv/writer",
       "//src/tint/lang/spirv/writer/common",
-      "//src/tint/lang/spirv/writer/printer",
-      "//src/tint/lang/spirv/writer/raise",
     ],
     "//conditions:default": [],
   }),

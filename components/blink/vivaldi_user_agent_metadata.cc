@@ -5,7 +5,7 @@
 
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 
-#include "base/strings/string_piece.h"
+#include <string_view>
 
 namespace blink {
 

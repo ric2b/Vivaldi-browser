@@ -32,6 +32,7 @@
 #include "ui/base/interaction/expect_call_in_scope.h"
 #include "ui/base/interaction/framework_specific_implementation.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -39,6 +40,7 @@
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/interaction/interaction_test_util_views.h"
+#include "ui/views/interaction/widget_focus_observer.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
@@ -63,7 +65,7 @@ class TestBubbleView : public views::BubbleDialogDelegateView {
  public:
   explicit TestBubbleView(views::View* anchor_view)
       : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT) {
-    SetButtons(ui::DIALOG_BUTTON_NONE);
+    SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
     SetPreferredSize(gfx::Size(100, 100));
     SetCanActivate(false);
     set_focus_traversable_from_anchor_view(false);
@@ -157,9 +159,7 @@ class HelpBubbleViewInteractiveUiTest : public InteractiveBrowserTest {
                           anchor, std::move(params)));
                     }),
         std::move(WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting)
-                      .SetTransitionOnlyOnEvent(true)),
-        // Prevent direct chaining off the show event.
-        FlushEvents());
+                      .SetTransitionOnlyOnEvent(true)));
   }
 
   // Closes the current help bubble and waits for it to hide.
@@ -168,9 +168,7 @@ class HelpBubbleViewInteractiveUiTest : public InteractiveBrowserTest {
         WithView(HelpBubbleView::kHelpBubbleElementIdForTesting,
                  [](HelpBubbleView* bubble) { bubble->GetWidget()->Close(); }),
         std::move(WaitForHide(HelpBubbleView::kHelpBubbleElementIdForTesting)
-                      .SetTransitionOnlyOnEvent(true)),
-        // Prevent direct chaining off the hide event.
-        FlushEvents());
+                      .SetTransitionOnlyOnEvent(true)));
   }
 
   user_education::HelpBubbleFactoryRegistry& factories() { return factories_; }
@@ -225,10 +223,14 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleViewInteractiveUiTest,
   HelpBubbleParams params;
   params.body_text = u"foo";
 
+  // gfx::NativeView help_bubble_native_view = gfx::NativeView();
+
   RunTestSequence(
       SetOnIncompatibleAction(
           OnIncompatibleAction::kSkipTest,
           "Programmatic window activation doesn't work on all platforms."),
+      ObserveState(views::test::kCurrentWidgetFocus),
+
       // Trigger the tab group editor.
       AfterShow(kTabGroupHeaderElementId,
                 [](ui::TrackedElement* element) {
@@ -239,19 +241,38 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleViewInteractiveUiTest,
                       ui::MenuSourceType::MENU_SOURCE_KEYBOARD);
                 }),
       WaitForShow(kTabGroupEditorBubbleId),
+
       // Display a help bubble attached to the tab group editor.
       ShowHelpBubble(kTabGroupEditorBubbleId, std::move(params)),
+      // WithView(HelpBubbleView::kHelpBubbleElementIdForTesting,
+      //          [&help_bubble_native_view](HelpBubbleView* bubble) {
+      //            help_bubble_native_view =
+      //            bubble->GetWidget()->GetNativeView();
+      //          }),
+
       // Activate the help bubble. This should not cause the editor to close.
       ActivateSurface(HelpBubbleView::kHelpBubbleElementIdForTesting),
+      EnsurePresent(kTabGroupEditorBubbleId),
+
       // Close the help bubble.
       CloseHelpBubble(),
+
+      // Wait for focus to get reset to a valid surface.
+      //
+      // There's a race condition on at least Linux where the focus update
+      // happens later than expected, on an OS message callback, which can kill
+      // the tab editor bubble while we're trying to reactivate it below.
+      // WaitForState(views::test::kCurrentWidgetFocus,
+      //              testing::Ne(std::ref(help_bubble_native_view))),
       // Re-Activate the dialog. It may or may not receive activation when the
       // help bubble closes.
       ActivateSurface(kTabGroupEditorBubbleId),
+
       // Now that the help bubble is gone, locate the editor again and transfer
       // activation to its primary window widget (the browser window) - this
       // should close the editor as it is no longer pinned by the help bubble.
       ActivateSurface(kToolbarAppMenuButtonElementId),
+
       // Verify that the editor bubble closes now that it has lost focus.
       WaitForHide(kTabGroupEditorBubbleId));
 }
@@ -350,7 +371,7 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleViewInteractiveUiTest, MAYBE_AnnotateMenu) {
       // There may be some shuffling and setting up on some platforms (looking
       // at you, Lacros) so make sure the menu is fully loaded before trying to
       // show the help bubble.
-      WaitForShow(AppMenuModel::kDownloadsMenuItem), FlushEvents(),
+      WaitForShow(AppMenuModel::kDownloadsMenuItem),
 
       // Show the help bubble attached to the menu.
       ShowHelpBubble(AppMenuModel::kDownloadsMenuItem, std::move(params)),
@@ -402,7 +423,7 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleViewInteractiveUiTest, TwoMenuHelpBubbles) {
       // There may be some shuffling and setting up on some platforms (looking
       // at you, Lacros) so make sure the menu is fully loaded before trying to
       // show the help bubble.
-      WaitForShow(AppMenuModel::kDownloadsMenuItem), FlushEvents(),
+      WaitForShow(AppMenuModel::kDownloadsMenuItem),
 
       ShowHelpBubble(AppMenuModel::kDownloadsMenuItem, std::move(params1)),
       ShowHelpBubble(AppMenuModel::kMoreToolsMenuItem, std::move(params2)),
@@ -415,7 +436,6 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleViewInteractiveUiTest, TwoMenuHelpBubbles) {
       MoveMouseTo(HelpBubbleView::kDefaultButtonIdForTesting), ClickMouse(),
       WaitForHide(HelpBubbleView::kHelpBubbleElementIdForTesting)
           .SetTransitionOnlyOnEvent(true),
-      FlushEvents(),
 
       // Close the remaining help bubble.
       CloseHelpBubble());
@@ -463,7 +483,6 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleViewInteractiveUiTest,
                  view->GetWidget()->SetBounds(
                      gfx::Rect({50, 50}, view->GetWidget()->GetSize()));
                }),
-      FlushEvents(),
 
       // Create the test bubble that cannot be activated.
       WithView(ContentsWebView::kContentsWebViewElementId,
@@ -472,7 +491,7 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleViewInteractiveUiTest,
                      std::make_unique<TestBubbleView>(view));
                  widget->ShowInactive();
                }),
-      WaitForShow(kTestBubbleElementId), FlushEvents(),
+      WaitForShow(kTestBubbleElementId),
 
       // Show a help bubble attached to the bubble.
       ShowHelpBubble(kTestBubbleElementId, std::move(params)),

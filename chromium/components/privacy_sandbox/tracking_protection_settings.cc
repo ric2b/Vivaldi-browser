@@ -5,6 +5,7 @@
 #include "components/privacy_sandbox/tracking_protection_settings.h"
 
 #include "base/check.h"
+#include "base/feature_list.h"
 #include "base/time/time.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -15,7 +16,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
-#include "components/privacy_sandbox/tracking_protection_onboarding.h"
 #include "components/privacy_sandbox/tracking_protection_prefs.h"
 #include "components/privacy_sandbox/tracking_protection_settings_observer.h"
 #include "url/gurl.h"
@@ -25,11 +25,9 @@ namespace privacy_sandbox {
 TrackingProtectionSettings::TrackingProtectionSettings(
     PrefService* pref_service,
     HostContentSettingsMap* host_content_settings_map,
-    TrackingProtectionOnboarding* onboarding_service,
     bool is_incognito)
     : pref_service_(pref_service),
       host_content_settings_map_(host_content_settings_map),
-      onboarding_service_(onboarding_service),
       is_incognito_(is_incognito) {
   CHECK(pref_service_);
   CHECK(host_content_settings_map_);
@@ -41,22 +39,12 @@ TrackingProtectionSettings::TrackingProtectionSettings(
           &TrackingProtectionSettings::OnDoNotTrackEnabledPrefChanged,
           base::Unretained(this)));
   pref_change_registrar_.Add(
-      prefs::kFingerprintingProtectionEnabled,
-      base::BindRepeating(
-          &TrackingProtectionSettings::OnFingerprintingProtectionPrefChanged,
-          base::Unretained(this)));
-  pref_change_registrar_.Add(
       prefs::kIpProtectionEnabled,
       base::BindRepeating(
           &TrackingProtectionSettings::OnIpProtectionPrefChanged,
           base::Unretained(this)));
   pref_change_registrar_.Add(
       prefs::kBlockAll3pcToggleEnabled,
-      base::BindRepeating(
-          &TrackingProtectionSettings::OnBlockAllThirdPartyCookiesPrefChanged,
-          base::Unretained(this)));
-  pref_change_registrar_.Add(
-      prefs::kAllowAll3pcToggleEnabled,
       base::BindRepeating(
           &TrackingProtectionSettings::OnBlockAllThirdPartyCookiesPrefChanged,
           base::Unretained(this)));
@@ -77,16 +65,10 @@ TrackingProtectionSettings::TrackingProtectionSettings(
           &TrackingProtectionSettings::OnEnterpriseControlForPrefsChanged,
           base::Unretained(this)));
 
-  if (onboarding_service_) {
-    // Onboarding status may change based on a flag before this service starts.
-    OnTrackingProtectionOnboardingUpdated(
-        onboarding_service_->GetOnboardingStatus());
-    onboarding_observation_.Observe(onboarding_service_);
-  }
-
   MaybeInitializeIppPref();
   // It's possible enterprise status changed while profile was shut down.
   OnEnterpriseControlForPrefsChanged();
+
   // If feature status changed then we need to migrate content settings.
   if (base::FeatureList::IsEnabled(kTrackingProtectionContentSettingFor3pcb) &&
       !pref_service_->GetBoolean(prefs::kUserBypass3pcExceptionsMigrated)) {
@@ -110,8 +92,6 @@ void TrackingProtectionSettings::Shutdown() {
   host_content_settings_map_ = nullptr;
   pref_change_registrar_.Reset();
   pref_service_ = nullptr;
-  onboarding_service_ = nullptr;
-  onboarding_observation_.Reset();
 }
 
 bool TrackingProtectionSettings::IsTrackingProtection3pcdEnabled() const {
@@ -122,24 +102,9 @@ bool TrackingProtectionSettings::IsTrackingProtection3pcdEnabled() const {
 }
 
 bool TrackingProtectionSettings::AreAllThirdPartyCookiesBlocked() const {
-  if (!IsTrackingProtection3pcdEnabled() ||
-      AreThirdPartyCookiesAllowedByEnterprise()) {
-    return false;
-  }
-  return pref_service_->GetBoolean(prefs::kBlockAll3pcToggleEnabled) ||
-         is_incognito_;
-}
-
-bool TrackingProtectionSettings::AreThirdPartyCookiesAllowedByEnterprise()
-    const {
   return IsTrackingProtection3pcdEnabled() &&
-         base::FeatureList::IsEnabled(kTrackingProtectionSettingsLaunch) &&
-         pref_service_->GetBoolean(prefs::kAllowAll3pcToggleEnabled);
-}
-
-bool TrackingProtectionSettings::IsFingerprintingProtectionEnabled() const {
-  return pref_service_->GetBoolean(prefs::kFingerprintingProtectionEnabled) &&
-         base::FeatureList::IsEnabled(kFingerprintingProtectionSetting);
+         (pref_service_->GetBoolean(prefs::kBlockAll3pcToggleEnabled) ||
+          is_incognito_);
 }
 
 bool TrackingProtectionSettings::IsIpProtectionEnabled() const {
@@ -200,6 +165,7 @@ void TrackingProtectionSettings::MaybeInitializeIppPref() {
   pref_service_->SetBoolean(prefs::kIpProtectionInitializedByDogfood, true);
 }
 
+// TODO(https://b/333527273): Delete with Mode B cleanup
 void TrackingProtectionSettings::OnEnterpriseControlForPrefsChanged() {
   if (!IsTrackingProtection3pcdEnabled()) {
     return;
@@ -209,25 +175,6 @@ void TrackingProtectionSettings::OnEnterpriseControlForPrefsChanged() {
       pref_service_->IsManagedPreference(
           prefs::kPrivacySandboxRelatedWebsiteSetsEnabled)) {
     pref_service_->SetBoolean(prefs::kTrackingProtection3pcdEnabled, false);
-  }
-}
-
-void TrackingProtectionSettings::OnTrackingProtectionOnboardingUpdated(
-    TrackingProtectionOnboarding::OnboardingStatus onboarding_status) {
-  switch (onboarding_status) {
-    case TrackingProtectionOnboarding::OnboardingStatus::kIneligible:
-    case TrackingProtectionOnboarding::OnboardingStatus::kEligible:
-      pref_service_->SetBoolean(prefs::kTrackingProtection3pcdEnabled, false);
-      return;
-    case TrackingProtectionOnboarding::OnboardingStatus::kOnboarded:
-      pref_service_->SetBoolean(prefs::kTrackingProtection3pcdEnabled, true);
-      // If the user chose to block all 3PC pre-3PCD, copy this over.
-      if (base::FeatureList::IsEnabled(kTrackingProtectionSettingsLaunch) &&
-          pref_service_->GetInteger(prefs::kCookieControlsMode) ==
-              1 /* BlockThirdParty */) {
-        pref_service_->SetBoolean(prefs::kBlockAll3pcToggleEnabled, true);
-      }
-      return;
   }
 }
 
@@ -270,12 +217,6 @@ void TrackingProtectionSettings::OnDoNotTrackEnabledPrefChanged() {
 void TrackingProtectionSettings::OnIpProtectionPrefChanged() {
   for (auto& observer : observers_) {
     observer.OnIpProtectionEnabledChanged();
-  }
-}
-
-void TrackingProtectionSettings::OnFingerprintingProtectionPrefChanged() {
-  for (auto& observer : observers_) {
-    observer.OnFingerprintingProtectionEnabledChanged();
   }
 }
 

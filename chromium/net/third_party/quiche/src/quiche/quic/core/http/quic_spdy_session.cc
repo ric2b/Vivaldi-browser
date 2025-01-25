@@ -143,6 +143,11 @@ class AlpsFrameDecoder : public HttpDecoder::Visitor {
     session_->OnAcceptChFrameReceivedViaAlps(frame);
     return true;
   }
+  bool OnOriginFrameStart(QuicByteCount /*header_length*/) override {
+    QUICHE_NOTREACHED();
+    return true;
+  }
+  bool OnOriginFrame(const OriginFrame& /*frame*/) override { return true; }
   void OnWebTransportStreamFrameType(
       QuicByteCount /*header_length*/,
       WebTransportSessionId /*session_id*/) override {
@@ -193,10 +198,62 @@ uint64_t GetDefaultQpackMaximumDynamicTableCapacity(Perspective perspective) {
   return kDefaultQpackMaxDynamicTableCapacity;
 }
 
+// This class is only used in gQUIC.
+class SizeLimitingHeaderList : public spdy::SpdyHeadersHandlerInterface {
+ public:
+  ~SizeLimitingHeaderList() override = default;
+
+  void OnHeaderBlockStart() override {
+    QUIC_BUG_IF(quic_bug_12518_1, current_header_list_size_ != 0)
+        << "OnHeaderBlockStart called more than once!";
+  }
+
+  void OnHeader(absl::string_view name, absl::string_view value) override {
+    if (current_header_list_size_ < max_header_list_size_) {
+      current_header_list_size_ += name.size();
+      current_header_list_size_ += value.size();
+      current_header_list_size_ += kQpackEntrySizeOverhead;
+      header_list_.OnHeader(name, value);
+    }
+  }
+
+  void OnHeaderBlockEnd(size_t uncompressed_header_bytes,
+                        size_t compressed_header_bytes) override {
+    header_list_.OnHeaderBlockEnd(uncompressed_header_bytes,
+                                  compressed_header_bytes);
+    if (current_header_list_size_ > max_header_list_size_) {
+      Clear();
+    }
+  }
+
+  void set_max_header_list_size(size_t max_header_list_size) {
+    max_header_list_size_ = max_header_list_size;
+  }
+
+  void Clear() {
+    header_list_.Clear();
+    current_header_list_size_ = 0;
+  }
+
+  const QuicHeaderList& header_list() const { return header_list_; }
+
+ private:
+  QuicHeaderList header_list_;
+
+  // The limit on the size of the header list (defined by spec as name + value +
+  // overhead for each header field). Headers over this limit will not be
+  // buffered, and the list will be cleared upon OnHeaderBlockEnd().
+  size_t max_header_list_size_ = std::numeric_limits<size_t>::max();
+
+  // The total size of headers so far, including overhead.
+  size_t current_header_list_size_ = 0;
+};
+
 }  // namespace
 
 // A SpdyFramerVisitor that passes HEADERS frames to the QuicSpdyStream, and
 // closes the connection if any unexpected frames are received.
+// This class is only used in gQUIC.
 class QuicSpdySession::SpdyFramerVisitor
     : public SpdyFramerVisitorInterface,
       public SpdyFramerDebugVisitorInterface {
@@ -216,12 +273,13 @@ class QuicSpdySession::SpdyFramerVisitor
 
     LogHeaderCompressionRatioHistogram(
         /* using_qpack = */ false,
-        /* is_sent = */ false, header_list_.compressed_header_bytes(),
-        header_list_.uncompressed_header_bytes());
+        /* is_sent = */ false,
+        header_list_.header_list().compressed_header_bytes(),
+        header_list_.header_list().uncompressed_header_bytes());
 
     // Ignore pushed request headers.
     if (session_->IsConnected() && !expecting_pushed_headers_) {
-      session_->OnHeaderList(header_list_);
+      session_->OnHeaderList(header_list_.header_list());
     }
     expecting_pushed_headers_ = false;
     header_list_.Clear();
@@ -459,7 +517,7 @@ class QuicSpdySession::SpdyFramerVisitor
   }
 
   QuicSpdySession* session_;
-  QuicHeaderList header_list_;
+  SizeLimitingHeaderList header_list_;
 
   // True if the next OnHeaderFrameEnd() call signals the end of pushed request
   // headers.
@@ -536,7 +594,8 @@ void QuicSpdySession::Initialize() {
     headers_stream_ = headers_stream.get();
     ActivateStream(std::move(headers_stream));
   } else {
-    qpack_encoder_ = std::make_unique<QpackEncoder>(this, huffman_encoding_);
+    qpack_encoder_ = std::make_unique<QpackEncoder>(this, huffman_encoding_,
+                                                    cookie_crumbling_);
     qpack_decoder_ =
         std::make_unique<QpackDecoder>(qpack_maximum_dynamic_table_capacity_,
                                        qpack_maximum_blocked_streams_, this);
@@ -776,7 +835,6 @@ void QuicSpdySession::OnHttp3GoAway(uint64_t id) {
   last_received_http3_goaway_id_ = id;
 
   if (perspective() == Perspective::IS_SERVER) {
-    // TODO(b/151749109): Cancel server pushes with push ID larger than |id|.
     return;
   }
 
@@ -864,6 +922,7 @@ void QuicSpdySession::SendInitialData() {
   }
   QuicConnection::ScopedPacketFlusher flusher(connection());
   send_control_stream_->MaybeSendSettingsFrame();
+  SendInitialDataAfterSettings();
 }
 
 bool QuicSpdySession::CheckStreamWriteBlocked(QuicStream* stream) const {
@@ -1702,9 +1761,18 @@ void QuicSpdySession::LogHeaderCompressionRatioHistogram(
 MessageStatus QuicSpdySession::SendHttp3Datagram(QuicStreamId stream_id,
                                                  absl::string_view payload) {
   if (!SupportsH3Datagram()) {
-    QUIC_BUG(send http datagram too early)
-        << "Refusing to send HTTP Datagram before SETTINGS received";
-    return MESSAGE_STATUS_INTERNAL_ERROR;
+    if (LocalHttpDatagramSupport() == HttpDatagramSupport::kNone) {
+      QUIC_BUG(http datagram disabled locally)
+          << "Cannot send HTTP Datagram when disabled locally";
+      return MESSAGE_STATUS_UNSUPPORTED;
+    } else if (!settings_received_) {
+      QUIC_DLOG(INFO)
+          << "Refusing to send HTTP Datagram before SETTINGS received";
+      return MESSAGE_STATUS_SETTINGS_NOT_RECEIVED;
+    } else {
+      QUIC_DLOG(INFO) << "Refusing to send HTTP Datagram without peer support";
+      return MESSAGE_STATUS_UNSUPPORTED;
+    }
   }
   // Stream ID is sent divided by four as per the specification.
   uint64_t stream_id_to_write = stream_id / kHttpDatagramStreamIdDivisor;

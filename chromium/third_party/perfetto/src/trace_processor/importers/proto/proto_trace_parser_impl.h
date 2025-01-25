@@ -17,11 +17,9 @@
 #ifndef SRC_TRACE_PROCESSOR_IMPORTERS_PROTO_PROTO_TRACE_PARSER_IMPL_H_
 #define SRC_TRACE_PROCESSOR_IMPORTERS_PROTO_PROTO_TRACE_PARSER_IMPL_H_
 
-#include <stdint.h>
+#include <cstdint>
 
-#include <array>
-#include <memory>
-
+#include "perfetto/ext/base/flat_hash_map.h"
 #include "perfetto/protozero/field.h"
 #include "src/trace_processor/importers/common/parser_types.h"
 #include "src/trace_processor/importers/common/trace_parser.h"
@@ -29,11 +27,9 @@
 
 namespace perfetto {
 
-namespace protos {
-namespace pbzero {
+namespace protos::pbzero {
 class TracePacket_Decoder;
-}  // namespace pbzero
-}  // namespace protos
+}  // namespace protos::pbzero
 
 namespace trace_processor {
 
@@ -65,11 +61,13 @@ class ProtoTraceParserImpl : public ProtoTraceParser {
                               int64_t /*ts*/,
                               InlineSchedWaking data) override;
 
-  void ParseChromeEvents(int64_t ts, ConstBytes);
-  void ParseMetatraceEvent(int64_t ts, ConstBytes);
+  void ParseLegacyV8ProfileEvent(int64_t ts, LegacyV8CpuProfileEvent) override;
 
  private:
   StringId GetMetatraceInternedString(uint64_t iid);
+
+  void ParseChromeEvents(int64_t ts, ConstBytes);
+  void ParseMetatraceEvent(int64_t ts, ConstBytes);
 
   TraceProcessorContext* context_;
 

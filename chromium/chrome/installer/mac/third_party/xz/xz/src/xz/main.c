@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       main.c
@@ -5,13 +7,11 @@
 //
 //  Author:     Lasse Collin
 //
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
-//
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "private.h"
 #include <ctype.h>
+
 
 /// Exit status to use. This can be changed with set_exit_status().
 static enum exit_status_type exit_status = E_SUCCESS;
@@ -119,8 +119,8 @@ read_name(const args_info *args)
 			// newlines.
 			message_error(_("%s: Null character found when "
 					"reading filenames; maybe you meant "
-					"to use `--files0' instead "
-					"of `--files'?"), args->files_name);
+					"to use '--files0' instead "
+					"of '--files'?"), args->files_name);
 			return NULL;
 		}
 
@@ -146,20 +146,37 @@ main(int argc, char **argv)
 	InitializeCriticalSection(&exit_status_cs);
 #endif
 
-	// Set up the progname variable.
+	// Set up the progname variable needed for messages.
 	tuklib_progname_init(argv);
 
 	// Initialize the file I/O. This makes sure that
 	// stdin, stdout, and stderr are something valid.
+	// This must be done before we might open any files
+	// even indirectly like locale and gettext initializations.
 	io_init();
+
+#ifdef ENABLE_SANDBOX
+	// Enable such sandboxing that can always be enabled.
+	// This requires that progname has been set up.
+	// It's also good that io_init() has been called because it
+	// might need to do things that the initial sandbox won't allow.
+	// Otherwise this should be called as early as possible.
+	//
+	// NOTE: Calling this before tuklib_gettext_init() means that
+	// translated error message won't be available if sandbox
+	// initialization fails. However, sandbox_init() shouldn't
+	// fail and this order simply feels better.
+	sandbox_init();
+#endif
 
 	// Set up the locale and message translations.
 	tuklib_gettext_init(PACKAGE, LOCALEDIR);
 
-	// Initialize handling of error/warning/other messages.
+	// Initialize progress message handling. It's not always needed
+	// but it's simpler to do this unconditionally.
 	message_init();
 
-	// Set hardware-dependent default values. These can be overriden
+	// Set hardware-dependent default values. These can be overridden
 	// on the command line, thus this must be done before args_parse().
 	hardware_init();
 
@@ -205,14 +222,55 @@ main(int argc, char **argv)
 	if (opt_mode != MODE_LIST)
 		signals_init();
 
+#ifdef ENABLE_SANDBOX
+	// Read-only sandbox can be enabled if we won't create or delete
+	// any files:
+	//
+	//   - --stdout, --test, or --list was used. Note that --test
+	//     implies opt_stdout = true but --list doesn't.
+	//
+	//   - Output goes to stdout because --files or --files0 wasn't used
+	//     and no arguments were given on the command line or the
+	//     arguments are all "-" (indicating standard input).
+	bool to_stdout_only = opt_stdout || opt_mode == MODE_LIST;
+	if (!to_stdout_only && args.files_name == NULL) {
+		// If all of the filenames provided are "-" (more than one
+		// "-" could be specified), then we are only going to be
+		// writing to standard output. Note that if no filename args
+		// were provided, args.c puts a single "-" in arg_names[0].
+		to_stdout_only = true;
+
+		for (unsigned i = 0; i < args.arg_count; ++i) {
+			if (strcmp("-", args.arg_names[i]) != 0) {
+				to_stdout_only = false;
+				break;
+			}
+		}
+	}
+
+	if (to_stdout_only) {
+		sandbox_enable_read_only();
+
+		// Allow strict sandboxing if we are processing exactly one
+		// file to standard output. This requires that --files or
+		// --files0 wasn't specified (an unknown number of filenames
+		// could be provided that way).
+		if (args.files_name == NULL && args.arg_count == 1)
+			sandbox_allow_strict();
+	}
+#endif
+
 	// coder_run() handles compression, decompression, and testing.
 	// list_file() is for --list.
-	void (*run)(const char *filename) = opt_mode == MODE_LIST
-			 ? &list_file : &coder_run;
+	void (*run)(const char *filename) = &coder_run;
+#ifdef HAVE_DECODERS
+	if (opt_mode == MODE_LIST)
+		run = &list_file;
+#endif
 
 	// Process the files given on the command line. Note that if no names
 	// were given, args_parse() gave us a fake "-" filename.
-	for (size_t i = 0; i < args.arg_count && !user_abort; ++i) {
+	for (unsigned i = 0; i < args.arg_count && !user_abort; ++i) {
 		if (strcmp("-", args.arg_names[i]) == 0) {
 			// Processing from stdin to stdout. Check that we
 			// aren't writing compressed data to a terminal or
@@ -267,6 +325,7 @@ main(int argc, char **argv)
 			(void)fclose(args.files_file);
 	}
 
+#ifdef HAVE_DECODERS
 	// All files have now been handled. If in --list mode, display
 	// the totals before exiting. We don't have signal handlers
 	// enabled in --list mode, so we don't need to check user_abort.
@@ -274,6 +333,12 @@ main(int argc, char **argv)
 		assert(!user_abort);
 		list_totals();
 	}
+#endif
+
+#ifndef NDEBUG
+	coder_free();
+	args_free();
+#endif
 
 	// If we have got a signal, raise it to kill the program instead
 	// of calling tuklib_exit().
@@ -298,5 +363,5 @@ main(int argc, char **argv)
 	if (es == E_WARNING && no_warn)
 		es = E_SUCCESS;
 
-	tuklib_exit(es, E_ERROR, message_verbosity_get() != V_SILENT);
+	tuklib_exit((int)es, E_ERROR, message_verbosity_get() != V_SILENT);
 }

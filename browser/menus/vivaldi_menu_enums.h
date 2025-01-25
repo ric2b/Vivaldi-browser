@@ -39,7 +39,11 @@
 #define IDC_VIV_INSPECT_PORTAL_DOCUMENT 56032
 // These two define a range
 #define IDC_VIV_OPEN_IMAGE_IN_PROFILE_FIRST 56050
-#define IDC_VIV_OPEN_IMAGE_IN_PROFILE_LAST 56150
+#define IDC_VIV_OPEN_IMAGE_IN_PROFILE_LAST 56100
+// These two define a range
+#define IDC_VIV_SEND_TO_DEVICE_FIRST 56101
+#define IDC_VIV_SEND_TO_DEVICE_LAST 56150
+
 // Menu ids starts from this base. Some may be overriden by those above.
 // For clarity: Items in a menu spec from JS have ids starting from 0. An id
 // number is added to IDC_VIV_MENU_FIRST when we prepare the menu.

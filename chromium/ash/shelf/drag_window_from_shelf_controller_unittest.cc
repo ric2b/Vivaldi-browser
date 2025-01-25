@@ -39,6 +39,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/window_parenting_client.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -154,7 +155,7 @@ class DragWindowFromShelfControllerTest : public AshTestBase {
                                           bounds, display::kInvalidDisplayId);
     child->Show();
 
-    child->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
+    child->SetProperty(aura::client::kModalKey, ui::mojom::ModalType::kWindow);
     wm::SetModalParent(child.get(), transient_parent);
     return child;
   }
@@ -461,6 +462,50 @@ TEST_F(DragWindowFromShelfControllerTest, RestoreWindowToOriginalBounds) {
   EXPECT_TRUE(window->layer()->GetTargetTransform().IsIdentity());
   EXPECT_FALSE(overview_controller->InOverviewSession());
   EXPECT_EQ(split_view_controller()->primary_window(), window.get());
+}
+
+// Test that sequence in b/368630347 doesn't crash.
+TEST_F(DragWindowFromShelfControllerTest,
+       RestoreWindowToOriginalBoundsInterruptedByHomeScreen) {
+  OverviewController* const overview_controller = OverviewController::Get();
+  UpdateDisplay("500x400");
+  const gfx::Rect shelf_bounds = GetShelfBounds();
+  auto window = CreateTestWindow();
+  const gfx::Rect display_bounds = display::Screen::GetScreen()
+                                       ->GetDisplayNearestWindow(window.get())
+                                       .bounds();
+
+  // Drag window enough distance to start overview, but not so much that it
+  // goes to its target location in the overview grid.
+  StartDrag(window.get(), shelf_bounds.CenterPoint());
+  Drag(gfx::Point(200, 200), 0.f, 1.f);
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+  DragWindowFromShelfControllerTestApi().WaitUntilOverviewIsShown(
+      window_drag_controller());
+
+  // End drag. Window should be restored to its original bounds via a
+  // `WindowScaleAnimation`.
+  ui::ScopedAnimationDurationScaleMode animation_scale(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  EndDrag(
+      gfx::Point(
+          200,
+          display_bounds.bottom() -
+              DragWindowFromShelfController::GetReturnToMaximizedThreshold() +
+              1),
+      std::nullopt);
+
+  // `WindowScaleAnimation` should be running, and while that's happening,
+  // user provides some input to go back to the home screen. This should
+  // immediately end the ongoing overview session.
+  ASSERT_TRUE(Shell::Get()->app_list_controller()->GoHome(
+      display::Screen::GetScreen()->GetPrimaryDisplay().id()));
+  ASSERT_FALSE(overview_controller->InOverviewSession());
+
+  // User then enters overview through some other method. This should destroy
+  // the ongoing `WindowScaleAnimation`.
+  ASSERT_TRUE(EnterOverview());
+  ASSERT_TRUE(overview_controller->InOverviewSession());
 }
 
 // Test if overview is active and splitview is not active, fling in overview may

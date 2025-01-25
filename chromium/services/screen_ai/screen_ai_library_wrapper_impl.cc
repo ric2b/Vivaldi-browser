@@ -5,6 +5,9 @@
 #include "services/screen_ai/screen_ai_library_wrapper_impl.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/strings/stringprintf.h"
+#include "components/crash/core/common/crash_key.h"
 #include "ui/accessibility/accessibility_features.h"
 
 namespace screen_ai {
@@ -131,12 +134,16 @@ void ScreenAILibraryWrapperImpl::EnableDebugMode() {
 
 NO_SANITIZE("cfi-icall")
 bool ScreenAILibraryWrapperImpl::InitOCR() {
+  SCOPED_UMA_HISTOGRAM_TIMER(
+      "Accessibility.ScreenAI.OCR.InitializationLatency");
   CHECK(init_ocr_);
   return init_ocr_();
 }
 
 NO_SANITIZE("cfi-icall")
 bool ScreenAILibraryWrapperImpl::InitMainContentExtraction() {
+  SCOPED_UMA_HISTOGRAM_TIMER(
+      "Accessibility.ScreenAI.MainContentExtraction.InitializationLatency");
   CHECK(init_main_content_extraction_);
   return init_main_content_extraction_();
 }
@@ -146,6 +153,13 @@ std::optional<chrome_screen_ai::VisualAnnotation>
 ScreenAILibraryWrapperImpl::PerformOcr(const SkBitmap& image) {
   CHECK(perform_ocr_);
   CHECK(free_library_allocated_char_array_);
+
+  // Report image specifications in case the call crashes.
+  static crash_reporter::CrashKeyString<50> image_info("ocr_image_info");
+  image_info.Set(base::StringPrintf(
+      "W:%5i, H:%5i, CT:%2i, BPP:%2i, RB:%5zu, DN:%i", image.width(),
+      image.height(), static_cast<int>(image.colorType()),
+      image.bytesPerPixel(), image.rowBytes(), image.drawsNothing()));
 
   std::optional<chrome_screen_ai::VisualAnnotation> annotation_proto;
 

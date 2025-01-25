@@ -18,9 +18,11 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.ScalableTimeout;
+import org.chromium.blink.mojom.RpContext;
 import org.chromium.blink.mojom.RpMode;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
 import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
+import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderData;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderMetadata;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -30,6 +32,9 @@ import org.chromium.components.image_fetcher.ImageFetcher;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
+import java.util.Arrays;
+import java.util.List;
+
 /** Common test fixtures for AccountSelectionIntegration Android Javatests. */
 public class AccountSelectionIntegrationTestBase {
     protected static final String EXAMPLE_ETLD_PLUS_ONE = "example.com";
@@ -38,9 +43,25 @@ public class AccountSelectionIntegrationTestBase {
     protected static final GURL TEST_URL = JUnitTestGURLs.URL_1;
 
     protected static final Account RETURNING_ANA =
-            new Account("Ana", "ana@one.test", "Ana Doe", "Ana", TEST_PROFILE_PIC, null, true);
+            new Account(
+                    "Ana",
+                    "ana@one.test",
+                    "Ana Doe",
+                    "Ana",
+                    TEST_PROFILE_PIC,
+                    null,
+                    /* isSignIn= */ true,
+                    /* isBrowserTrustedSignIn= */ true);
     protected static final Account NEW_BOB =
-            new Account("Bob", "", "Bob", "", TEST_PROFILE_PIC, null, false);
+            new Account(
+                    "Bob",
+                    "",
+                    "Bob",
+                    "",
+                    TEST_PROFILE_PIC,
+                    null,
+                    /* isSignIn= */ false,
+                    /* isBrowserTrustedSignIn= */ false);
 
     protected static final IdentityProviderMetadata IDP_METADATA =
             new IdentityProviderMetadata(
@@ -72,7 +93,11 @@ public class AccountSelectionIntegrationTestBase {
     String mTestUrlTermsOfService;
     String mTestUrlPrivacyPolicy;
     ClientIdMetadata mClientIdMetadata;
+    List<Account> mNewAccountsReturningAna;
+    List<Account> mNewAccountsNewBob;
     @RpMode.EnumType int mRpMode;
+    IdentityProviderData mIdpData;
+    IdentityProviderData mIdpDataWithAddAccount;
 
     @Before
     public void setUp() throws InterruptedException {
@@ -88,6 +113,25 @@ public class AccountSelectionIntegrationTestBase {
                         new GURL(mTestUrlTermsOfService),
                         new GURL(mTestUrlPrivacyPolicy),
                         EXAMPLE_ETLD_PLUS_ONE);
+        mNewAccountsReturningAna = Arrays.asList(RETURNING_ANA);
+        mNewAccountsNewBob = Arrays.asList(NEW_BOB);
+
+        mIdpData =
+                new IdentityProviderData(
+                        TEST_ETLD_PLUS_ONE_2,
+                        IDP_METADATA,
+                        mClientIdMetadata,
+                        RpContext.SIGN_IN,
+                        /* requestPermission= */ true,
+                        /* hasLoginStatusMismatch= */ false);
+        mIdpDataWithAddAccount =
+                new IdentityProviderData(
+                        TEST_ETLD_PLUS_ONE_2,
+                        IDP_METADATA_WITH_ADD_ACCOUNT,
+                        mClientIdMetadata,
+                        RpContext.SIGN_IN,
+                        /* requestPermission= */ true,
+                        /* hasLoginStatusMismatch= */ false);
 
         runOnUiThreadBlocking(
                 () -> {

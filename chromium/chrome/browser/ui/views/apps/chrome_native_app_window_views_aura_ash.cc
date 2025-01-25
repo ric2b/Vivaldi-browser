@@ -12,6 +12,7 @@
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_backdrop.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/utility/wm_util.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/scoped_observation.h"
@@ -19,9 +20,8 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/icon_standardizer.h"
-#include "chrome/browser/ash/note_taking_helper.h"
+#include "chrome/browser/ash/note_taking/note_taking_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -189,7 +189,7 @@ void ChromeNativeAppWindowViewsAuraAsh::InitializeWindow(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// ChromeNativeAppWindowViews implementation:
+// ChromeNativeAppWindowViewsAura implementation:
 void ChromeNativeAppWindowViewsAuraAsh::OnBeforeWidgetInit(
     const AppWindow::CreateParams& create_params,
     views::Widget::InitParams* init_params,
@@ -275,8 +275,16 @@ void ChromeNativeAppWindowViewsAuraAsh::EnsureAppIconCreated() {
   LoadAppIcon(true /* allow_placeholder_icon */);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// ui::BaseWindow implementation:
+gfx::RoundedCornersF ChromeNativeAppWindowViewsAuraAsh::GetWindowRadii() const {
+  if (!GetNativeWindow() || !chromeos::features::IsRoundedWindowsEnabled()) {
+    return gfx::RoundedCornersF();
+  }
+
+  const int corner_radius =
+      GetNativeWindow()->GetProperty(aura::client::kWindowCornerRadiusKey);
+  return gfx::RoundedCornersF(corner_radius);
+}
+
 gfx::Rect ChromeNativeAppWindowViewsAuraAsh::GetRestoredBounds() const {
   gfx::Rect* bounds =
       GetNativeWindow()->GetProperty(ash::kRestoreBoundsOverrideKey);
@@ -466,12 +474,12 @@ void ChromeNativeAppWindowViewsAuraAsh::EnterFullscreen(
     ExclusiveAccessBubbleType bubble_type,
     const int64_t display_id) {
   // This codepath is never hit for Chrome Apps.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void ChromeNativeAppWindowViewsAuraAsh::ExitFullscreen() {
   // This codepath is never hit for Chrome Apps.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void ChromeNativeAppWindowViewsAuraAsh::UpdateExclusiveAccessBubble(

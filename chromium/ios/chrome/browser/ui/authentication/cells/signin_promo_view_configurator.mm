@@ -7,12 +7,12 @@
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
 #import "build/branding_buildflags.h"
+#import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/signin/model/constants.h"
 #import "ios/chrome/browser/signin/model/signin_util.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/common/ui/util/image_util.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -143,7 +143,7 @@ using l10n_util::GetNSStringF;
     case SigninPromoViewStyleStandard:
     case SigninPromoViewStyleOnlyButton:
       // This function shouldn't be used for the non-compact promos.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case SigninPromoViewStyleCompactVertical:
     case SigninPromoViewStyleCompactHorizontal:
       [signinPromoView configurePrimaryButtonWithTitle:

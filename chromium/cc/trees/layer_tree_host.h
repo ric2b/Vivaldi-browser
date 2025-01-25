@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef CC_TREES_LAYER_TREE_HOST_H_
 #define CC_TREES_LAYER_TREE_HOST_H_
 
@@ -45,7 +50,6 @@
 #include "cc/metrics/begin_main_frame_metrics.h"
 #include "cc/metrics/events_metrics_manager.h"
 #include "cc/metrics/frame_sequence_tracker.h"
-#include "cc/metrics/web_vital_metrics.h"
 #include "cc/paint/node_id.h"
 #include "cc/resources/ui_resource_request.h"
 #include "cc/trees/browser_controls_params.h"
@@ -600,6 +604,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // frame's metadata.
   void SetPrimaryMainFrameItemSequenceNumber(
       int64_t primary_main_frame_item_sequence_number);
+
+  int64_t primary_main_frame_item_sequence_number_for_testing() const {
+    return pending_commit_state()->primary_main_frame_item_sequence_number;
+  }
 
   // Returns the current state of the new LocalSurfaceId request and resets
   // the state.

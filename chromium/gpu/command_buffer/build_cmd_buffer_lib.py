@@ -29,6 +29,28 @@ _DO_NOT_EDIT_WARNING = """// This file is auto-generated from
 
 """
 
+# TODO(crbug.com/40285824): Remove this and generate code using safer
+# constructs.
+_ALLOW_UNSAFE_BUFFERS = """
+
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
+"""
+_allow_unsafe_buffers_filenames = [
+    "gpu/command_buffer/client/gles2_implementation_impl_autogen.h",
+    "gpu/command_buffer/client/gles2_implementation_unittest_autogen.h",
+    "gpu/command_buffer/client/raster_implementation_impl_autogen.h",
+    "gpu/command_buffer/client/raster_implementation_unittest_autogen.h",
+    "gpu/command_buffer/common/gles2_cmd_format_autogen.h",
+    "gpu/command_buffer/service/context_state_impl_autogen.h",
+    "gpu/command_buffer/service/gles2_cmd_decoder_autogen.h",
+    "gpu/command_buffer/service/gles2_cmd_decoder_unittest_2_autogen.h",
+    "gpu/command_buffer/service/raster_decoder_autogen.h",
+]
+
 # This string is copied directly out of the gl2.h file from GLES2.0
 #
 # Edits:
@@ -794,8 +816,8 @@ class CWriter():
 
   To be used with the `with` statement. Returns a normal `file` type, open only
   for writing - any existing files with that name will be overwritten. It will
-  automatically write the contents of `_LICENSE` and `_DO_NOT_EDIT_WARNING`
-  at the beginning.
+  automatically write the contents of `_LICENSE`, `_DO_NOT_EDIT_WARNING` and
+  `_ALLOW_UNSAFE_BUFFERS` at the beginning.
 
   Example:
     with CWriter("file.cpp") as myfile:
@@ -805,6 +827,8 @@ class CWriter():
   def __init__(self, filename, year):
     self.filename = filename
     self._ENTER_MSG = _LICENSE % year + _DO_NOT_EDIT_WARNING % _lower_prefix
+    if (filename in _allow_unsafe_buffers_filenames):
+        self._ENTER_MSG += _ALLOW_UNSAFE_BUFFERS
     self._EXIT_MSG = ""
     try:
       os.makedirs(os.path.dirname(filename))
@@ -7242,43 +7266,7 @@ extern const NameToFunc g_gles2_function_table[] = {
 
   def WriteCommonUtilsImpl(self, filename):
     """Writes the gles2 common utility header."""
-    enum_re = re.compile(r'\#define\s+(GL_[a-zA-Z0-9_]+)\s+([0-9A-Fa-fx]+)')
-    define_dict = {}
-    for fname in ['third_party/khronos/GLES2/gl2.h',
-                  'third_party/khronos/GLES2/gl2ext.h',
-                  'third_party/khronos/GLES3/gl3.h',
-                  'third_party/khronos/GLES3/gl31.h',
-                  'gpu/GLES2/gl2chromium.h',
-                  'gpu/GLES2/gl2extchromium.h']:
-      fname = os.path.join(self.chromium_root_dir, fname)
-      lines = open(fname).readlines()
-      for line in lines:
-        m = enum_re.match(line)
-        if m:
-          name = m.group(1)
-          value = m.group(2)
-          if len(value) <= 10 and value.startswith('0x'):
-            if not value in define_dict:
-              define_dict[value] = name
-            # check our own _CHROMIUM macro conflicts with khronos GL headers.
-            elif EnumsConflict(define_dict[value], name):
-              self.Error("code collision: %s and %s have the same code %s" %
-                         (define_dict[value], name, value))
-
     with CHeaderWriter(filename, self.year) as f:
-      f.write("static const %sUtil::EnumToString "
-                 "enum_to_string_table[] = {\n" % _prefix)
-      for value in sorted(define_dict):
-        f.write('  { %s, "%s", },\n' % (value, define_dict[value]))
-      f.write("""};
-
-const %(p)sUtil::EnumToString* const %(p)sUtil::enum_to_string_table_ =
-    enum_to_string_table;
-const size_t %(p)sUtil::enum_to_string_table_len_ =
-    sizeof(enum_to_string_table) / sizeof(enum_to_string_table[0]);
-
-""" % { 'p' : _prefix})
-
       enums = sorted(self.named_type_info.keys())
       for enum in enums:
         if self.named_type_info[enum]['type'] == 'GLenum':

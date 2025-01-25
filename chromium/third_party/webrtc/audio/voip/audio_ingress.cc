@@ -41,18 +41,18 @@ acm2::AcmReceiver::Config CreateAcmConfig(
 }  // namespace
 
 AudioIngress::AudioIngress(
+    const Environment& env,
     RtpRtcpInterface* rtp_rtcp,
-    Clock* clock,
     ReceiveStatistics* receive_statistics,
     rtc::scoped_refptr<AudioDecoderFactory> decoder_factory)
-    : playing_(false),
+    : env_(env),
+      playing_(false),
       remote_ssrc_(0),
       first_rtp_timestamp_(-1),
       rtp_receive_statistics_(receive_statistics),
       rtp_rtcp_(rtp_rtcp),
-      acm_receiver_(CreateAcmConfig(decoder_factory)),
-      ntp_estimator_(clock),
-      clock_(clock) {}
+      acm_receiver_(env_, CreateAcmConfig(decoder_factory)),
+      ntp_estimator_(&env_.clock()) {}
 
 AudioIngress::~AudioIngress() = default;
 
@@ -103,7 +103,7 @@ AudioMixer::Source::AudioFrameInfo AudioIngress::GetAudioFrameWithInfo(
     }
     // For clock rate, default to the playout sampling rate if we haven't
     // received any packets yet.
-    absl::optional<std::pair<int, SdpAudioFormat>> decoder =
+    std::optional<std::pair<int, SdpAudioFormat>> decoder =
         acm_receiver_.LastDecoder();
     int clock_rate = decoder ? decoder->second.clockrate_hz
                              : acm_receiver_.last_output_sample_rate_hz();
@@ -186,8 +186,8 @@ void AudioIngress::ReceivedRTPPacket(rtc::ArrayView<const uint8_t> rtp_packet) {
   auto data_view = rtc::ArrayView<const uint8_t>(payload, payload_data_length);
 
   // Push the incoming payload (parsed and ready for decoding) into the ACM.
-  if (acm_receiver_.InsertPacket(header, data_view, clock_->CurrentTime()) !=
-      0) {
+  if (acm_receiver_.InsertPacket(header, data_view,
+                                 env_.clock().CurrentTime()) != 0) {
     RTC_DLOG(LS_ERROR) << "AudioIngress::ReceivedRTPPacket() unable to "
                           "push data to the ACM";
   }
@@ -215,13 +215,13 @@ void AudioIngress::ReceivedRTCPPacket(
   // Deliver RTCP packet to RTP/RTCP module for parsing and processing.
   rtp_rtcp_->IncomingRtcpPacket(rtcp_packet);
 
-  absl::optional<TimeDelta> rtt = rtp_rtcp_->LastRtt();
+  std::optional<TimeDelta> rtt = rtp_rtcp_->LastRtt();
   if (!rtt.has_value()) {
     // Waiting for valid RTT.
     return;
   }
 
-  absl::optional<RtpRtcpInterface::SenderReportStats> last_sr =
+  std::optional<RtpRtcpInterface::SenderReportStats> last_sr =
       rtp_rtcp_->GetSenderReportStats();
   if (!last_sr.has_value()) {
     // Waiting for RTCP.
@@ -240,7 +240,7 @@ ChannelStatistics AudioIngress::GetChannelStatistics() {
 
   // Get clockrate for current decoder ahead of jitter calculation.
   uint32_t clockrate_hz = 0;
-  absl::optional<std::pair<int, SdpAudioFormat>> decoder =
+  std::optional<std::pair<int, SdpAudioFormat>> decoder =
       acm_receiver_.LastDecoder();
   if (decoder) {
     clockrate_hz = decoder->second.clockrate_hz;

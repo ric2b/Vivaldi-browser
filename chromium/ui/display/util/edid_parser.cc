@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/display/util/edid_parser.h"
 
 #include <stddef.h>
@@ -723,7 +728,7 @@ void EdidParser::ParseEdid(const std::vector<uint8_t>& edid) {
           // shifted to the left to create a 16 bit long value that can be
           // passed to the bitset constructor.
           long cdb_bits = edid[data_offset + 2];
-          if (edid.size() >= data_offset + 3) {
+          if (edid.size() > data_offset + 3) {
             cdb_bits += edid[data_offset + 3] << 8;
           }
           const std::bitset<kMaxNumColorimetryEntries>

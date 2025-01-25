@@ -21,6 +21,7 @@ struct ServiceInfo {
 
   bool Update(const std::string& friendly_name,
               const std::string& fingerprint,
+              const std::string& auth_token,
               NetworkInterfaceIndex network_interface_index,
               const IPEndpoint& v4_endpoint,
               const IPEndpoint& v6_endpoint);
@@ -35,6 +36,9 @@ struct ServiceInfo {
 
   // Agent fingerprint.
   std::string fingerprint;
+
+  // Token for authentication.
+  std::string auth_token;
 
   // The index of the network interface that the screen was discovered on.
   NetworkInterfaceIndex network_interface_index = kInvalidNetworkInterfaceIndex;

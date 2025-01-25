@@ -595,10 +595,11 @@ export async function fileDisplayWithoutVolumesThenMountDrive() {
   const directoryTree = await DirectoryTreePageObject.create(appId);
   await directoryTree.selectGroupRootItemByType('drive');
 
-  // The fake Google Drive should be empty.
+  // The fake Google Drive should be empty and read only label should show.
   await remoteCall.waitForFiles(appId, []);
+  await remoteCall.waitForElement(appId, '#read-only-indicator:not([hidden])');
 
-  // Remount Drive. The curent directory should be changed from the Google
+  // Remount Drive. The current directory should be changed from the Google
   // Drive FakeItem to My Drive.
   await sendTestMessage({name: 'mountDrive'});
 
@@ -608,8 +609,11 @@ export async function fileDisplayWithoutVolumesThenMountDrive() {
   // Add an entry to Drive.
   await addEntries(['drive'], [ENTRIES.newlyAdded]);
 
-  // Wait for "My Drive" files to display in the file list.
+  // Wait for "My Drive" files to display in the file list and read only label
+  // should hide.
+  await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/My Drive');
   await remoteCall.waitForFiles(appId, [ENTRIES.newlyAdded.getExpectedRow()]);
+  await remoteCall.waitForElement(appId, '#read-only-indicator[hidden]');
 }
 
 /**
@@ -1128,4 +1132,48 @@ export async function fileDisplayFileSystemDisabled() {
 
   // Check: the empty folder should hide.
   await remoteCall.waitForElement(appId, '#empty-folder[hidden]');
+}
+
+/**
+ * Tests that the files migrating to cloud banner appears when MyFiles is opened
+ * while SkyVault migration is enabled.
+ */
+export async function fileDisplaySkyVaultMigrationToGoogleDrive() {
+  await remoteCall.setLocalFilesMigrationDestination('google_drive');
+
+  // Open Files app without specifying the initial directory/root.
+  const appId = await remoteCall.openNewWindow(null, null);
+  chrome.test.assertTrue(!!appId, 'failed to open new window');
+
+  await remoteCall.isolateBannerForTesting(
+      appId, 'files-migrating-to-cloud-banner');
+
+  // We should navigate to MyFiles.
+  await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/My files');
+
+  // Check: the migration banner should be visible.
+  await remoteCall.waitForElement(
+      appId, '#banners > files-migrating-to-cloud-banner');
+}
+
+/**
+ * Tests that the files migrating to cloud banner appears when MyFiles is opened
+ * while SkyVault migration is enabled.
+ */
+export async function fileDisplaySkyVaultMigrationToOneDrive() {
+  await remoteCall.setLocalFilesMigrationDestination('microsoft_onedrive');
+
+  // Open Files app without specifying the initial directory/root.
+  const appId = await remoteCall.openNewWindow(null, null);
+  chrome.test.assertTrue(!!appId, 'failed to open new window');
+
+  await remoteCall.isolateBannerForTesting(
+      appId, 'files-migrating-to-cloud-banner');
+
+  // We should navigate to MyFiles.
+  await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/My files');
+
+  // Check: the migration banner should be visible.
+  await remoteCall.waitForElement(
+      appId, '#banners > files-migrating-to-cloud-banner');
 }

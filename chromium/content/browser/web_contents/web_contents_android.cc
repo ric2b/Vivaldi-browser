@@ -15,6 +15,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_writer.h"
@@ -40,6 +41,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/isolated_world_ids.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-blink.h"
 #include "ui/accessibility/ax_assistant_structure.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -50,6 +52,7 @@
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/snapshot/snapshot.h"
 #include "url/android/gurl_android.h"
 #include "url/gurl.h"
 
@@ -257,6 +260,28 @@ WebContentsAndroid::~WebContentsAndroid() {
 base::android::ScopedJavaLocalRef<jobject>
 WebContentsAndroid::GetJavaObject() {
   return base::android::ScopedJavaLocalRef<jobject>(obj_);
+}
+
+void WebContentsAndroid::CaptureContentAsBitmapForTesting(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcallback) {
+  ui::GrabViewSnapshot(
+      web_contents_->GetNativeView(), gfx::Rect(web_contents_->GetSize()),
+      base::BindOnce(
+          &WebContentsAndroid::OnFinishGetContentBitmapForTesting,
+          weak_factory_.GetWeakPtr(),
+          base::android::ScopedJavaGlobalRef<jobject>(env, jcallback)));
+}
+
+void WebContentsAndroid::OnFinishGetContentBitmapForTesting(
+    const base::android::JavaRef<jobject>& callback,
+    gfx::Image snapshot) {
+  const SkBitmap bitmap = snapshot.AsBitmap();
+  CHECK(!bitmap.isNull());
+  CHECK(!bitmap.empty());
+  base::android::RunObjectCallbackAndroid(
+      callback,
+      gfx::ConvertToJavaBitmap(bitmap, gfx::OomBehavior::kReturnNullOnOom));
 }
 
 void WebContentsAndroid::Init() {
@@ -613,7 +638,8 @@ void WebContentsAndroid::EvaluateJavaScriptForTests(
   if (!callback) {
     // No callback requested.
     web_contents_->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
-        ConvertJavaStringToUTF16(env, script), base::NullCallback());
+        ConvertJavaStringToUTF16(env, script), base::NullCallback(),
+        ISOLATED_WORLD_ID_GLOBAL);
     return;
   }
 
@@ -624,7 +650,8 @@ void WebContentsAndroid::EvaluateJavaScriptForTests(
 
   web_contents_->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
       ConvertJavaStringToUTF16(env, script),
-      base::BindOnce(&JavaScriptResultCallback, j_callback));
+      base::BindOnce(&JavaScriptResultCallback, j_callback),
+      ISOLATED_WORLD_ID_GLOBAL);
 }
 
 void WebContentsAndroid::AddMessageToDevToolsConsole(
@@ -692,7 +719,7 @@ void WebContentsAndroid::AXTreeSnapshotCallback(
     const JavaRef<jobject>& view_structure_root,
     const JavaRef<jobject>& view_structure_builder,
     const JavaRef<jobject>& callback,
-    const ui::AXTreeUpdate& result) {
+    ui::AXTreeUpdate& result) {
   JNIEnv* env = base::android::AttachCurrentThread();
   if (result.nodes.empty()) {
     RunRunnableAndroid(callback);

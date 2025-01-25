@@ -60,7 +60,9 @@ class ASH_EXPORT BrightnessControllerChromeos
                             BrightnessChangeSource source) override;
   void GetBrightnessPercent(
       base::OnceCallback<void(std::optional<double>)> callback) override;
-  void SetAmbientLightSensorEnabled(bool enabled) override;
+  void SetAmbientLightSensorEnabled(
+      bool enabled,
+      AmbientLightSensorEnabledChangeSource source) override;
   void GetAmbientLightSensorEnabled(
       base::OnceCallback<void(std::optional<bool>)> callback) override;
   void HasAmbientLightSensor(
@@ -85,7 +87,9 @@ class ASH_EXPORT BrightnessControllerChromeos
   void OnGetBrightnessAfterLogin(std::optional<double> brightness_percent);
   void OnGetHasAmbientLightSensor(std::optional<bool> has_sensor);
   void RestoreBrightnessSettings(const AccountId& account_id);
+  void MaybeRestoreBrightnessSettings();
   void RestoreBrightnessSettingsOnFirstLogin();
+  bool IsInitialBrightnessSetByPolicy();
 
   raw_ptr<PrefService> local_state_;
   raw_ptr<SessionControllerImpl> session_controller_;
@@ -112,7 +116,7 @@ class ASH_EXPORT BrightnessControllerChromeos
   bool has_ambient_light_sensor_status_been_recorded_ = false;
 
   // True if device has an ambient light sensor.
-  bool has_sensor_ = false;
+  std::optional<bool> has_sensor_ = false;
 
   // This PrefChangeRegistrar is used to check when the synced profile pref for
   // the ambient light sensor value has finished syncing.

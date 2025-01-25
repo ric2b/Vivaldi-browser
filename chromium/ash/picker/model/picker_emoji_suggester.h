@@ -5,23 +5,32 @@
 #ifndef ASH_PICKER_MODEL_PICKER_EMOJI_SUGGESTER_H_
 #define ASH_PICKER_MODEL_PICKER_EMOJI_SUGGESTER_H_
 
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/picker/picker_search_result.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ref.h"
 
 namespace ash {
 
 class PickerEmojiHistoryModel;
-class PickerSearchResult;
 
 class ASH_EXPORT PickerEmojiSuggester {
  public:
-  explicit PickerEmojiSuggester(PickerEmojiHistoryModel* history_model);
+  using GetNameCallback =
+      base::RepeatingCallback<std::string(std::string_view emoji)>;
+  explicit PickerEmojiSuggester(PickerEmojiHistoryModel* history_model,
+                                GetNameCallback get_name);
+  ~PickerEmojiSuggester();
 
-  std::vector<PickerSearchResult> GetSuggestedEmoji() const;
+  std::vector<PickerEmojiResult> GetSuggestedEmoji() const;
 
  private:
+  GetNameCallback get_name_;
+
   raw_ref<PickerEmojiHistoryModel> history_model_;
 };
 

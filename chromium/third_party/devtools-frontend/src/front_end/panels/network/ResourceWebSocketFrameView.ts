@@ -176,7 +176,7 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
         id: 'length',
         title: i18nString(UIStrings.length),
         sortable: false,
-        align: DataGrid.DataGrid.Align.Right,
+        align: DataGrid.DataGrid.Align.RIGHT,
         weight: 5,
       },
       {id: 'time', title: i18nString(UIStrings.time), sortable: true, weight: 7},
@@ -198,18 +198,18 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
               arg1: DataGrid.SortableDataGrid.SortableDataGridNode<ResourceWebSocketFrameNode>) => number);
     this.dataGrid.sortNodes(this.timeComparator, false);
     this.dataGrid.markColumnAsSortedBy('time', DataGrid.DataGrid.Order.Ascending);
-    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SortingChanged, this.sortItems, this);
+    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SORTING_CHANGED, this.sortItems, this);
 
     this.dataGrid.setName('resource-web-socket-frame-view');
-    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SelectedNode, event => {
+    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SELECTED_NODE, event => {
       void this.onFrameSelected(event);
     }, this);
-    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.DeselectedNode, this.onFrameDeselected, this);
+    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.DESELECTED_NODE, this.onFrameDeselected, this);
 
     this.mainToolbar = new UI.Toolbar.Toolbar('');
 
     this.clearAllButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.clearAll), 'clear');
-    this.clearAllButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.clearFrames, this);
+    this.clearAllButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.clearFrames, this);
     this.mainToolbar.appendToolbarItem(this.clearAllButton);
 
     this.filterTypeCombobox =
@@ -223,7 +223,7 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
 
     const placeholder = i18nString(UIStrings.filterUsingRegex);
     this.filterTextInput = new UI.Toolbar.ToolbarFilter(placeholder, 0.4);
-    this.filterTextInput.addEventListener(UI.Toolbar.ToolbarInput.Event.TextChanged, this.updateFilterSetting, this);
+    this.filterTextInput.addEventListener(UI.Toolbar.ToolbarInput.Event.TEXT_CHANGED, this.updateFilterSetting, this);
     const filter = this.messageFilterSetting.get();
     if (filter) {
       this.filterTextInput.setValue(filter);
@@ -275,11 +275,11 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
   override wasShown(): void {
     this.refresh();
     this.registerCSSFiles([webSocketFrameViewStyles]);
-    this.request.addEventListener(SDK.NetworkRequest.Events.WebsocketFrameAdded, this.frameAdded, this);
+    this.request.addEventListener(SDK.NetworkRequest.Events.WEBSOCKET_FRAME_ADDED, this.frameAdded, this);
   }
 
   override willHide(): void {
-    this.request.removeEventListener(SDK.NetworkRequest.Events.WebsocketFrameAdded, this.frameAdded, this);
+    this.request.removeEventListener(SDK.NetworkRequest.Events.WEBSOCKET_FRAME_ADDED, this.frameAdded, this);
   }
 
   private frameAdded(event: Common.EventTarget.EventTargetEvent<SDK.NetworkRequest.WebSocketFrame>): void {
@@ -369,22 +369,22 @@ export class ResourceWebSocketFrameView extends UI.Widget.VBox {
 }
 
 const enum OpCodes {
-  ContinuationFrame = 0,
-  TextFrame = 1,
-  BinaryFrame = 2,
-  ConnectionCloseFrame = 8,
-  PingFrame = 9,
-  PongFrame = 10,
+  CONTINUATION_FRAME = 0,
+  TEXT_FRAME = 1,
+  BINARY_FRAME = 2,
+  CONNECTION_CLOSE_FRAME = 8,
+  PING_FRAME = 9,
+  PONG_FRAME = 10,
 }
 
 export const opCodeDescriptions: (() => string)[] = (function(): (() => Common.UIString.LocalizedString)[] {
   const map = [];
-  map[OpCodes.ContinuationFrame] = i18nLazyString(UIStrings.continuationFrame);
-  map[OpCodes.TextFrame] = i18nLazyString(UIStrings.textMessage);
-  map[OpCodes.BinaryFrame] = i18nLazyString(UIStrings.binaryMessage);
-  map[OpCodes.ConnectionCloseFrame] = i18nLazyString(UIStrings.connectionCloseMessage);
-  map[OpCodes.PingFrame] = i18nLazyString(UIStrings.pingMessage);
-  map[OpCodes.PongFrame] = i18nLazyString(UIStrings.pongMessage);
+  map[OpCodes.CONTINUATION_FRAME] = i18nLazyString(UIStrings.continuationFrame);
+  map[OpCodes.TEXT_FRAME] = i18nLazyString(UIStrings.textMessage);
+  map[OpCodes.BINARY_FRAME] = i18nLazyString(UIStrings.binaryMessage);
+  map[OpCodes.CONNECTION_CLOSE_FRAME] = i18nLazyString(UIStrings.connectionCloseMessage);
+  map[OpCodes.PING_FRAME] = i18nLazyString(UIStrings.pingMessage);
+  map[OpCodes.PONG_FRAME] = i18nLazyString(UIStrings.pongMessage);
   return map;
 })();
 
@@ -412,7 +412,7 @@ export class ResourceWebSocketFrameNode extends DataGrid.SortableDataGrid.Sortab
 
     let dataText: string = frame.text;
     let description = ResourceWebSocketFrameView.opCodeDescription(frame.opCode, frame.mask);
-    const isTextFrame = frame.opCode === OpCodes.TextFrame;
+    const isTextFrame = frame.opCode === OpCodes.TEXT_FRAME;
 
     if (frame.type === SDK.NetworkRequest.WebSocketFrameType.Error) {
       description = dataText;
@@ -421,7 +421,7 @@ export class ResourceWebSocketFrameNode extends DataGrid.SortableDataGrid.Sortab
     } else if (isTextFrame) {
       description = dataText;
 
-    } else if (frame.opCode === OpCodes.BinaryFrame) {
+    } else if (frame.opCode === OpCodes.BINARY_FRAME) {
       length = Platform.NumberUtilities.bytesToString(Platform.StringUtilities.base64ToSize(frame.text));
       description = opCodeDescriptions[frame.opCode]();
 
@@ -429,7 +429,7 @@ export class ResourceWebSocketFrameNode extends DataGrid.SortableDataGrid.Sortab
       dataText = description;
     }
 
-    super({data: description, length: length, time: timeNode});
+    super({data: description, length, time: timeNode});
 
     this.url = url;
     this.frame = frame;

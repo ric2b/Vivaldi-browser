@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "osp/public/presentation/presentation_common.h"
 #include "osp/public/presentation/presentation_connection.h"
 #include "osp/public/protocol_connection.h"
 #include "osp/public/service_listener.h"
@@ -24,7 +25,12 @@ class UrlAvailabilityRequester;
 
 class RequestDelegate {
  public:
-  virtual ~RequestDelegate() = default;
+  RequestDelegate();
+  RequestDelegate(const RequestDelegate&) = delete;
+  RequestDelegate& operator=(const RequestDelegate&) = delete;
+  RequestDelegate(RequestDelegate&&) noexcept = delete;
+  RequestDelegate& operator=(RequestDelegate&&) noexcept = delete;
+  virtual ~RequestDelegate();
 
   virtual void OnConnection(std::unique_ptr<Connection> connection) = 0;
   virtual void OnError(const Error& error) = 0;
@@ -32,7 +38,12 @@ class RequestDelegate {
 
 class ReceiverObserver {
  public:
-  virtual ~ReceiverObserver() = default;
+  ReceiverObserver();
+  ReceiverObserver(const ReceiverObserver&) = delete;
+  ReceiverObserver& operator=(const ReceiverObserver&) = delete;
+  ReceiverObserver(ReceiverObserver&&) noexcept = delete;
+  ReceiverObserver& operator=(ReceiverObserver&&) noexcept = delete;
+  virtual ~ReceiverObserver();
 
   // Called when there is an unrecoverable error in requesting availability.
   // This means the availability is unknown and there is no further response to
@@ -50,7 +61,7 @@ class ReceiverObserver {
 };
 
 class Controller final : public ServiceListener::Observer,
-                         public Connection::ParentDelegate {
+                         public Connection::Controller {
  public:
   class ReceiverWatch {
    public:
@@ -59,11 +70,10 @@ class Controller final : public ServiceListener::Observer,
                   const std::vector<std::string>& urls,
                   ReceiverObserver* observer);
     ReceiverWatch(const ReceiverWatch&) = delete;
-    ReceiverWatch(ReceiverWatch&&) noexcept;
-    ~ReceiverWatch();
-
     ReceiverWatch& operator=(const ReceiverWatch&) = delete;
-    ReceiverWatch& operator=(ReceiverWatch&&);
+    ReceiverWatch(ReceiverWatch&&) noexcept;
+    ReceiverWatch& operator=(ReceiverWatch&&) noexcept;
+    ~ReceiverWatch();
 
     explicit operator bool() const { return observer_; }
 
@@ -83,11 +93,10 @@ class Controller final : public ServiceListener::Observer,
                    bool is_reconnect,
                    std::optional<uint64_t> request_id);
     ConnectRequest(const ConnectRequest&) = delete;
-    ConnectRequest(ConnectRequest&&) noexcept;
-    ~ConnectRequest();
-
     ConnectRequest& operator=(const ConnectRequest&) = delete;
-    ConnectRequest& operator=(ConnectRequest&&);
+    ConnectRequest(ConnectRequest&&) noexcept;
+    ConnectRequest& operator=(ConnectRequest&&) noexcept;
+    ~ConnectRequest();
 
     explicit operator bool() const { return request_id_.has_value(); }
 
@@ -101,7 +110,19 @@ class Controller final : public ServiceListener::Observer,
   };
 
   explicit Controller(ClockNowFunctionPtr now_function);
+  Controller(const Controller&) = delete;
+  Controller& operator=(const Controller&) = delete;
+  Controller(Controller&&) noexcept = delete;
+  Controller& operator=(Controller&&) noexcept = delete;
   ~Controller();
+
+  // Connection::Controller overrides.
+  Error CloseConnection(Connection* connection,
+                        Connection::CloseReason reason) override;
+  Error OnPresentationTerminated(const std::string& presentation_id,
+                                 TerminationSource source,
+                                 TerminationReason reason) override;
+  void OnConnectionDestroyed(Connection* connection) override;
 
   // Requests receivers compatible with all urls in `urls` and registers
   // `observer` for availability changes.  The screens will be a subset of the
@@ -138,18 +159,6 @@ class Controller final : public ServiceListener::Observer,
   ConnectRequest ReconnectConnection(std::unique_ptr<Connection> connection,
                                      RequestDelegate* delegate);
 
-  // Connection::ParentDelegate overrides.
-  Error CloseConnection(Connection* connection,
-                        Connection::CloseReason reason) override;
-
-  // Also called by the embedder to report that a presentation has been
-  // terminated.
-  Error OnPresentationTerminated(const std::string& presentation_id,
-                                 TerminationSource source,
-                                 TerminationReason reason) override;
-
-  void OnConnectionDestroyed(Connection* connection) override;
-
   // Returns an empty string if no such presentation ID is found.
   std::string GetServiceIdForPresentationId(
       const std::string& presentation_id) const;
@@ -166,6 +175,18 @@ class Controller final : public ServiceListener::Observer,
     std::string url;
     std::vector<Connection*> connections;
   };
+
+  // ServiceListener::Observer overrides.
+  void OnStarted() override;
+  void OnStopped() override;
+  void OnSuspended() override;
+  void OnSearching() override;
+  void OnReceiverAdded(const ServiceInfo& info) override;
+  void OnReceiverChanged(const ServiceInfo& info) override;
+  void OnReceiverRemoved(const ServiceInfo& info) override;
+  void OnAllReceiversRemoved() override;
+  void OnError(const Error& error) override;
+  void OnMetrics(ServiceListener::Metrics) override;
 
   static std::string MakePresentationId(const std::string& url,
                                         const std::string& instance_name);
@@ -190,18 +211,6 @@ class Controller final : public ServiceListener::Observer,
   void CancelConnectRequest(const std::string& instance_name,
                             bool is_reconnect,
                             uint64_t request_id);
-
-  // ServiceListener::Observer overrides.
-  void OnStarted() override;
-  void OnStopped() override;
-  void OnSuspended() override;
-  void OnSearching() override;
-  void OnReceiverAdded(const ServiceInfo& info) override;
-  void OnReceiverChanged(const ServiceInfo& info) override;
-  void OnReceiverRemoved(const ServiceInfo& info) override;
-  void OnAllReceiversRemoved() override;
-  void OnError(const Error& error) override;
-  void OnMetrics(ServiceListener::Metrics) override;
 
   std::unique_ptr<ConnectionManager> connection_manager_;
   std::unique_ptr<UrlAvailabilityRequester> availability_requester_;

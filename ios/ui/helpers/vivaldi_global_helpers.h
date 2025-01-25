@@ -18,6 +18,8 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// state for iPad multitasking UI, also other common misc ones.
 @interface VivaldiGlobalHelpers: NSObject
 
+/// Returns whether vivaldi build is running.
++ (BOOL)isVivaldiRunning;
 /// Returns the key window of the application.
 + (nullable UIWindow*)keyWindow;
 /// Returns device screen size.

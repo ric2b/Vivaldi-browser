@@ -4,12 +4,14 @@
 
 #include "chrome/browser/ui/chromeos/magic_boost/magic_boost_card_controller.h"
 
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/ui/chromeos/magic_boost/magic_boost_constants.h"
 #include "chrome/browser/ui/chromeos/magic_boost/magic_boost_metrics.h"
 #include "chrome/browser/ui/chromeos/magic_boost/magic_boost_opt_in_card.h"
 #include "chromeos/components/magic_boost/public/cpp/magic_boost_state.h"
+#include "chromeos/components/mahi/public/cpp/mahi_media_app_events_proxy.h"
 #include "chromeos/crosapi/mojom/magic_boost.mojom.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/unique_widget_ptr.h"
@@ -53,9 +55,23 @@ MagicBoostCardController::MagicBoostCardController() {
   chromeos::LacrosService::Get()->BindMagicBoostController(
       remote_.BindNewPipeAndPassReceiver());
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // `MahiMediaAppEventsProxy` is initialized only in ash chrome, and might not
+  // be available in tests.
+  if (chromeos::MahiMediaAppEventsProxy::Get()) {
+    chromeos::MahiMediaAppEventsProxy::Get()->AddObserver(this);
+  }
+#endif
 }
 
-MagicBoostCardController::~MagicBoostCardController() = default;
+MagicBoostCardController::~MagicBoostCardController() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (chromeos::MahiMediaAppEventsProxy::Get()) {
+    chromeos::MahiMediaAppEventsProxy::Get()->RemoveObserver(this);
+  }
+#endif
+}
 
 void MagicBoostCardController::OnContextMenuShown(Profile* profile) {}
 
@@ -84,16 +100,38 @@ void MagicBoostCardController::OnDismiss(bool is_other_command_executed) {
   }
 }
 
+void MagicBoostCardController::OnPdfContextMenuShown(const gfx::Rect& anchor) {
+  auto* magic_boost_state = MagicBoostState::Get();
+
+  if (magic_boost_state->ShouldShowHmrCard()) {
+    return;
+  }
+
+  magic_boost_state->ShouldIncludeOrcaInOptIn(base::BindOnce(
+      [](base::WeakPtr<MagicBoostCardController> controller,
+         const gfx::Rect& anchor, bool should_include_orca) {
+        if (!controller) {
+          return;
+        }
+
+        controller->SetOptInFeature(should_include_orca
+                                        ? OptInFeatures::kOrcaAndHmr
+                                        : OptInFeatures::kHmrOnly);
+        controller->ShowOptInUi(/*anchor_view_bounds=*/anchor);
+      },
+      weak_factory_.GetWeakPtr(), anchor));
+}
+
+void MagicBoostCardController::OnPdfContextMenuHide() {
+  OnDismiss(/*is_other_command_executed=*/false);
+}
+
 void MagicBoostCardController::ShowOptInUi(
     const gfx::Rect& anchor_view_bounds) {
   CHECK(!opt_in_widget_);
 
   // If the disclaimer view is showing, close it.
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  remote_->CloseDisclaimerUi();
-#else   // BUILDFLAG(IS_CHROMEOS_ASH)
-  GetMagicBoostControllerAsh().CloseDisclaimerUi();
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+  CloseDisclaimerUi();
 
   opt_in_widget_ = MagicBoostOptInCard::CreateWidget(
       /*controller=*/this, anchor_view_bounds);
@@ -108,13 +146,19 @@ void MagicBoostCardController::CloseOptInUi() {
 }
 
 void MagicBoostCardController::ShowDisclaimerUi(int64_t display_id) {
-  // TODO(b/319735347): Add integration tests to make sure that this function
-  // always goes through the crosapi.
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   remote_->ShowDisclaimerUi(display_id, transition_action_, opt_in_features_);
 #else   // BUILDFLAG(IS_CHROMEOS_ASH)
   GetMagicBoostControllerAsh().ShowDisclaimerUi(display_id, transition_action_,
                                                 opt_in_features_);
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+}
+
+void MagicBoostCardController::CloseDisclaimerUi() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  remote_->CloseDisclaimerUi();
+#else   // BUILDFLAG(IS_CHROMEOS_ASH)
+  GetMagicBoostControllerAsh().CloseDisclaimerUi();
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 }
 

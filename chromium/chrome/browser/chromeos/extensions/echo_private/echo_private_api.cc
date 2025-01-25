@@ -9,6 +9,7 @@
 
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/i18n/time_formatting.h"
 #include "base/location.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -19,8 +20,6 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_navigator.h"
-#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/extensions/api/echo_private.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -32,6 +31,7 @@
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/mojom/view_type.mojom.h"
+#include "third_party/icu/source/i18n/unicode/timezone.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
@@ -188,12 +188,15 @@ ExtensionFunction::ResponseAction EchoPrivateGetOobeTimestampFunction::Run() {
 }
 
 void EchoPrivateGetOobeTimestampFunction::RespondWithResult(
-    base::expected<std::string, std::string> timestamp_or_error) {
-  if (timestamp_or_error.has_value()) {
-    Respond(WithArguments(std::move(timestamp_or_error.value())));
+    std::optional<base::Time> timestamp) {
+  if (!timestamp.has_value()) {
+    // Returns an empty string on error.
+    Respond(WithArguments(std::string()));
     return;
   }
-  Respond(Error(std::move(timestamp_or_error.error())));
+  std::string result = base::UnlocalizedTimeFormatWithPattern(
+      timestamp.value(), "y-M-d", icu::TimeZone::getGMT());
+  Respond(WithArguments(std::move(result)));
 }
 
 EchoPrivateGetUserConsentFunction::EchoPrivateGetUserConsentFunction() =

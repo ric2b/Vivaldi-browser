@@ -3575,6 +3575,42 @@ TEST_P(Texture2DTestES3, TexImageWithDepthStencilPBO)
     EXPECT_PIXEL_RECT_EQ(0, 0, kSize, kSize, GLColor::red);
 }
 
+// Test that it is possible to upload to a texture, upload a second texture and delete the first.
+TEST_P(Texture2DTestES3, Texture1UploadThenTexture2UploadThenTexture1Delete)
+{
+    constexpr size_t kMaxBufferToImageCopySize = 64 * 1024 * 1024;
+    constexpr size_t kTexSize                  = 4096;
+    constexpr uint32_t kPixelSizeRGBA          = 4;
+    static_assert(kTexSize * kTexSize * kPixelSizeRGBA == kMaxBufferToImageCopySize);
+
+    std::vector<GLColor> textureColors(kTexSize * kTexSize, GLColor::red);
+
+    // A mutable texture is defined here. The second texture is used to flush the first one when the
+    // relevant feature (mutableMipmapTextureUpload) is enabled. If flushed, the update on level 0
+    // is large enough to trigger one submission using Vulkan, but the rest of its updates will not
+    // trigger a second one. In that case, the texture should not be deleted until all updates are
+    // processed.
+    GLuint texture1;
+    glGenTextures(1, &texture1);
+    glBindTexture(GL_TEXTURE_2D, texture1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, kTexSize, kTexSize, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 textureColors.data());
+    glTexImage2D(GL_TEXTURE_2D, 1, GL_RGBA8, kTexSize / 2, kTexSize / 2, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, textureColors.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    ASSERT_GL_NO_ERROR();
+
+    GLTexture texture2;
+    glBindTexture(GL_TEXTURE_2D, texture2);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 4, 4, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 textureColors.data());
+    ASSERT_GL_NO_ERROR();
+
+    glDeleteTextures(1, &texture1);
+    ASSERT_GL_NO_ERROR();
+}
+
 // Test that the driver performs a flush when there is a large amount of image updates.
 TEST_P(Texture2DMemoryTestES3, TextureDataInLoopUntilFlush)
 {
@@ -12290,6 +12326,141 @@ TEST_P(Texture2DTestES3Foveation, DrawWithMsaaFramebuffer)
     EXPECT_PIXEL_COLOR_EQ(0, 0, angle::GLColor::green);
 }
 
+// QCOM framebuffer foveated rendering with multiple attachments
+TEST_P(Texture2DTestES3Foveation, DrawWithMultipleAttachments)
+{
+    ANGLE_SKIP_TEST_IF(!IsGLExtensionEnabled("GL_QCOM_framebuffer_foveated"));
+
+    const GLsizei kSizeW = getWindowWidth();
+    const GLsizei kSizeH = getWindowHeight();
+
+    // Setup sampling texture
+    glBindTexture(GL_TEXTURE_2D, mTexture2D);
+
+    std::vector<GLColor> data(kSizeW * kSizeH);
+    // Generate red / blue checkered pattern
+    for (int i = 0; i < kSizeH; i++)
+    {
+        for (int j = 0; j < kSizeW; j++)
+        {
+            data[(i * kSizeW) + j] = ((i + j) % 2 == 0) ? GLColor::red : GLColor::blue;
+        }
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kSizeW, kSizeH, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 data.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    EXPECT_GL_NO_ERROR();
+
+    // Draw without foveation
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, mTexture2D);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glUseProgram(mProgram);
+    drawQuad(mProgram, "position", 0.5f);
+    EXPECT_GL_NO_ERROR();
+
+    // Record original data
+    std::vector<GLColor> originalData(kSizeW * kSizeH, {0, 0, 0, 0});
+    glReadPixels(0, 0, kSizeW, kSizeH, GL_RGBA, GL_UNSIGNED_BYTE, originalData.data());
+
+    // Switch to foveated framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, mFramebuffer);
+
+    // Setup mutliple color attachments
+    std::array<GLTexture, 3> colorAttachments;
+    GLenum attachmentBase  = GL_COLOR_ATTACHMENT0;
+    GLuint attachmentIndex = 0;
+    for (GLTexture &attachment : colorAttachments)
+    {
+        glBindTexture(GL_TEXTURE_2D, attachment);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kSizeW, kSizeH, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        EXPECT_GL_NO_ERROR();
+
+        glFramebufferTexture2D(GL_FRAMEBUFFER, attachmentBase + attachmentIndex, GL_TEXTURE_2D,
+                               attachment, 0);
+        ASSERT_GL_NO_ERROR();
+        EXPECT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        attachmentIndex++;
+    }
+
+    // Setup foveation parameters, just need 1 focal point
+    GLuint providedFeatures = 0;
+    glFramebufferFoveationConfigQCOM(mFramebuffer, 1, 1, GL_FOVEATION_ENABLE_BIT_QCOM,
+                                     &providedFeatures);
+    ASSERT_NE(providedFeatures & GL_FOVEATION_ENABLE_BIT_QCOM, 0u);
+
+    glFramebufferFoveationParametersQCOM(mFramebuffer, 0, 0, 0.0f, 0.0f, 8.0f, 8.0f, 0.0f);
+    EXPECT_GL_NO_ERROR();
+
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+
+in vec2 texcoord;
+uniform sampler2D tex;
+
+layout(location = 0) out vec4 color0;
+layout(location = 1) out vec4 color1;
+layout(location = 2) out vec4 color2;
+
+void main()
+{
+    vec4 fragColor = texture(tex, texcoord);
+    color0 = fragColor;
+    color1 = fragColor;
+    color2 = fragColor;
+})";
+
+    ANGLE_GL_PROGRAM(program, getVertexShaderSource(), kFS);
+    glUseProgram(program);
+
+    std::array<GLenum, 3> drawBuffers = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
+                                         GL_COLOR_ATTACHMENT2};
+    glDrawBuffers(3, drawBuffers.data());
+
+    // Draw with foveation into multiple attachments
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, mTexture2D);
+    drawQuad(program, "position", 0.5f);
+    EXPECT_GL_NO_ERROR();
+
+    // Verify
+    GLFramebuffer readFBO;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFBO);
+
+    // Use colorAttachments[0]'s content as reference data
+    std::vector<GLColor> referenceData(kSizeW * kSizeH, {0, 0, 0, 0});
+    std::vector<GLColor> result(kSizeW * kSizeH, {0, 0, 0, 0});
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           colorAttachments[0], 0);
+    EXPECT_GL_FRAMEBUFFER_COMPLETE(GL_READ_FRAMEBUFFER);
+    glReadPixels(0, 0, kSizeW, kSizeH, GL_RGBA, GL_UNSIGNED_BYTE, referenceData.data());
+
+    // Foveated rendering should produce content that differs from original data
+    ASSERT(originalData != referenceData);
+
+    // Verify rest of the attachments
+    for (size_t index = 1; index < colorAttachments.size(); index++)
+    {
+        glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                               colorAttachments[index], 0);
+        EXPECT_GL_FRAMEBUFFER_COMPLETE(GL_READ_FRAMEBUFFER);
+
+        result.assign(result.size(), {0, 0, 0, 0});
+        glReadPixels(0, 0, kSizeW, kSizeH, GL_RGBA, GL_UNSIGNED_BYTE, result.data());
+
+        ASSERT(referenceData == result);
+    }
+}
+
 // QCOM texture foveated rendering, basic draw
 TEST_P(Texture2DTestES3Foveation, FoveatedTextureDraw)
 {
@@ -15217,10 +15388,14 @@ GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Texture2DTestES3RobustInit);
 ANGLE_INSTANTIATE_TEST_ES3(Texture2DTestES3RobustInit);
 
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Texture2DTestES3Foveation);
-ANGLE_INSTANTIATE_TEST_ES3(Texture2DTestES3Foveation);
+ANGLE_INSTANTIATE_TEST_ES3_AND(
+    Texture2DTestES3Foveation,
+    ES3_VULKAN().enable(Feature::GenerateFragmentShadingRateAttchementWithCpu));
 
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Texture2DTestES31Foveation);
-ANGLE_INSTANTIATE_TEST_ES31(Texture2DTestES31Foveation);
+ANGLE_INSTANTIATE_TEST_ES31_AND(
+    Texture2DTestES31Foveation,
+    ES31_VULKAN().enable(Feature::GenerateFragmentShadingRateAttchementWithCpu));
 
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Texture2DTestES31PPO);
 ANGLE_INSTANTIATE_TEST_ES31(Texture2DTestES31PPO);

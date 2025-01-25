@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef CC_TREES_LAYER_TREE_IMPL_H_
 #define CC_TREES_LAYER_TREE_IMPL_H_
 
@@ -53,6 +58,7 @@ enum class ActivelyScrollingType;
 class DebugRectHistory;
 class ViewTransitionRequest;
 class DroppedFrameCounter;
+class GlobalStateThatImpactsTilePriority;
 class HeadsUpDisplayLayerImpl;
 class ImageDecodeCache;
 class LayerTreeDebugState;
@@ -138,6 +144,9 @@ class CC_EXPORT LayerTreeImpl {
   DroppedFrameCounter* dropped_frame_counter() const;
   MemoryHistory* memory_history() const;
   DebugRectHistory* debug_rect_history() const;
+  const GlobalStateThatImpactsTilePriority& global_tile_state() const {
+    return host_impl_->global_tile_state();
+  }
   bool IsActiveTree() const;
   bool IsPendingTree() const;
   bool IsRecycleTree() const;
@@ -293,8 +302,8 @@ class CC_EXPORT LayerTreeImpl {
     source_frame_number_ = frame_number;
   }
 
-  uint64_t trace_id() const { return trace_id_; }
-  void set_trace_id(uint64_t val) { trace_id_ = val; }
+  BeginMainFrameTraceId trace_id() const { return trace_id_; }
+  void set_trace_id(BeginMainFrameTraceId val) { trace_id_ = val; }
 
   bool is_first_frame_after_commit() const {
     return source_frame_number_ != is_first_frame_after_commit_tracker_;
@@ -505,8 +514,13 @@ class CC_EXPORT LayerTreeImpl {
   // priorities. Returns false if it was unable to update.  Updating lcd
   // text may cause invalidations, so should only be done after a commit.
   bool UpdateDrawProperties(
-      bool update_image_animation_controller = true,
+      bool update_tiles,
+      bool update_image_animation_controller,
       LayerImplList* output_update_layer_list_for_testing = nullptr);
+
+  // Update picture layers' tiles. Return true if any layer's tile priority
+  // is updated.
+  bool UpdateTiles();
 
   void set_needs_update_draw_properties() {
     needs_update_draw_properties_ = true;
@@ -606,7 +620,7 @@ class CC_EXPORT LayerTreeImpl {
   void ClearSwapPromises();
   void BreakSwapPromises(SwapPromise::DidNotSwapReason reason);
 
-  void DidModifyTilePriorities();
+  void DidModifyTilePriorities(bool pending_update_tiles = false);
 
   viz::ResourceId ResourceIdForUIResource(UIResourceId uid) const;
   void ProcessUIResourceRequestQueue();
@@ -630,6 +644,7 @@ class CC_EXPORT LayerTreeImpl {
   void RegisterScrollbar(ScrollbarLayerImplBase* scrollbar_layer);
   void UnregisterScrollbar(ScrollbarLayerImplBase* scrollbar_layer);
   ScrollbarSet ScrollbarsFor(ElementId scroll_element_id) const;
+  void RequestShowScrollbars(ElementId scroll_element_id);
 
   LayerImpl* FindLayerThatIsHitByPoint(const gfx::PointF& screen_space_point);
 
@@ -646,8 +661,11 @@ class CC_EXPORT LayerTreeImpl {
   // scrollable layer or the first layer opaque to hit test, if one was hit.
   std::vector<const LayerImpl*> FindLayersUpToFirstScrollableOrOpaqueToHitTest(
       const gfx::PointF& screen_space_point);
-  bool PointHitsNonFastScrollableRegion(const gfx::PointF& scree_space_point,
-                                        const LayerImpl& layer) const;
+  bool PointHitsMainThreadScrollHitTestRegion(
+      const gfx::PointF& scree_space_point,
+      const LayerImpl& layer) const;
+  ElementId PointHitsNonCompositedScroll(const gfx::PointF& screen_space_point,
+                                         const LayerImpl& layer) const;
 
   // Returns the ElementId representing a frame's document at the given point.
   // In cases where cc doesn't have enough information to perform accurate
@@ -709,24 +727,8 @@ class CC_EXPORT LayerTreeImpl {
   void RequestForceSendMetadata() { force_send_metadata_request_ = true; }
   bool TakeForceSendMetadataRequest();
 
-  void DidUpdateScrollOffset(ElementId id);
-
-  // Mark the scrollbar geometries (e.g., thumb size and position) as needing an
-  // update.
-  void SetScrollbarGeometriesNeedUpdate() {
-    if (IsActiveTree()) {
-      scrollbar_geometries_need_update_ = true;
-      // Scrollbar geometries are updated in |UpdateDrawProperties|.
-      set_needs_update_draw_properties();
-    }
-  }
-  bool ScrollbarGeometriesNeedUpdate() const {
-    return scrollbar_geometries_need_update_;
-  }
-  // Update the geometries of all scrollbars (e.g., thumb size and position). An
-  // update only occurs if a scroll-related layer has changed (see:
-  // SetScrollbarGeometriesNeedUpdate).
-  void UpdateScrollbarGeometries();
+  void DidUpdateScrollOffset(ElementId id,
+                             bool pushed_from_main_or_pending_tree);
 
   // See LayerTreeHost.
   bool have_scroll_event_handlers() const {
@@ -821,19 +823,9 @@ class CC_EXPORT LayerTreeImpl {
   // output of the current frame.
   bool HasViewTransitionSaveRequest() const;
 
-  // Returns the set of layers that have been added or changed in some
-  // meaningful way since the last call to TakeUpdatedLayers() or
-  // ResetAllChangeTracking().
-  std::unordered_set<LayerImpl*> TakeUpdatedLayers();
-
-  // Returns a list of layer IDs for layers that have been unregistered from
-  // this tree since the last call to TakeUnregisteredLayers() or
-  // ResetAllChangeTracking().
-  std::vector<int> TakeUnregisteredLayers();
-
-  // Removes a set of layers from the tree. Returns the number of layers
-  // removed. Note that this method will never remove the root layer.
-  size_t RemoveLayers(base::span<int> layer_ids);
+  void UpdateAllScrollbarGeometriesForTesting() {
+    UpdateAllScrollbarGeometries();
+  }
 
  protected:
   float ClampPageScaleFactorToLimits(float page_scale_factor) const;
@@ -860,9 +852,14 @@ class CC_EXPORT LayerTreeImpl {
       const gfx::PointF& screen_space_point,
       const Functor& func);
 
+  // Update the geometries of all scrollbars (e.g., thumb size and position).
+  void UpdateAllScrollbarGeometries();
+  void UpdateViewportScrollbarGeometries();
+  void UpdateScrollbarGeometries(const ScrollNode& scroll_node);
+
   raw_ptr<LayerTreeHostImpl> host_impl_;
   int source_frame_number_;
-  uint64_t trace_id_ = 0;
+  BeginMainFrameTraceId trace_id_{0};
   int is_first_frame_after_commit_tracker_;
   raw_ptr<HeadsUpDisplayLayerImpl, DanglingUntriaged> hud_layer_;
   PropertyTrees property_trees_;
@@ -889,12 +886,12 @@ class CC_EXPORT LayerTreeImpl {
 
   bool needs_update_draw_properties_ : 1 = true;
 
-  // True if a scrollbar geometry value has changed. For example, if the scroll
-  // offset changes, scrollbar thumb positions need to be updated.
-  bool scrollbar_geometries_need_update_ : 1 = false;
+  bool needs_update_tiles_ : 1 = false;
 
-  // In impl-side painting mode, this is true when the tree may contain
-  // structural differences relative to the active tree.
+  // In impl-side painting mode, this is true when the pending tree may contain
+  // structural differences relative to the active tree. When using a
+  // LayerContext, this is also true on the active tree when it may contain
+  // structural differences relative to the display tree.
   bool needs_full_tree_sync_ : 1 = true;
 
   bool needs_surface_ranges_sync_ : 1 = false;
@@ -944,10 +941,15 @@ class CC_EXPORT LayerTreeImpl {
     int horizontal = Layer::INVALID_ID;
     int vertical = Layer::INVALID_ID;
   };
-  // Each scroll layer can have up to two scrollbar layers (vertical and
+  // Each scroller can have up to two scrollbar layers (vertical and/or
   // horizontal). This mapping is maintained as part of scrollbar registration.
   base::flat_map<ElementId, ScrollbarLayerIds>
       element_id_to_scrollbar_layer_ids_;
+
+  // Tracks a pending requests to show overlay scrollbars. It's set by the
+  // scrollbar layer and consumed by PushPropertiesTo() and
+  // HandleScrollbarShowRequests().
+  base::flat_set<ElementId> show_scrollbar_requests_;
 
   std::vector<raw_ptr<PictureLayerImpl, VectorExperimental>> picture_layers_;
 
@@ -1011,9 +1013,6 @@ class CC_EXPORT LayerTreeImpl {
   // The cumulative time spent performing visual updates for the current
   // Surface.
   base::TimeDelta visual_update_duration_;
-
-  std::unordered_set<LayerImpl*> updated_layers_;
-  std::vector<int> unregistered_layers_;
 
   // See `CommitState::screenshot_destination_token`.
   base::UnguessableToken screenshot_destination_;

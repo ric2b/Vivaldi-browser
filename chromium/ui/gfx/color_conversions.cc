@@ -8,6 +8,7 @@
 #include <numeric>
 #include <tuple>
 
+#include "base/compiler_specific.h"
 #include "base/numerics/angle_conversions.h"
 #include "skia/ext/skcolorspace_primaries.h"
 #include "skia/ext/skcolorspace_trfn.h"
@@ -135,11 +136,11 @@ const skcms_Matrix3x3* getLMSToOklabMatrix() {
 }
 
 typedef struct {
-  float vals[3];
+  std::array<float, 3> vals;
 } skcms_Vector3;
 
 typedef struct {
-  float vals[2];
+  std::array<float, 2> vals;
 } skcms_Vector2;
 
 float dot(const skcms_Vector2& a, const skcms_Vector2& b) {
@@ -150,8 +151,11 @@ static skcms_Vector3 skcms_Matrix3x3_apply(const skcms_Matrix3x3* m,
                                            const skcms_Vector3* v) {
   skcms_Vector3 dst = {{0, 0, 0}};
   for (int row = 0; row < 3; ++row) {
-    dst.vals[row] = m->vals[row][0] * v->vals[0] +
-                    m->vals[row][1] * v->vals[1] + m->vals[row][2] * v->vals[2];
+    // SAFETY: both row and col are >= 0 <= 2, and skcms_Matrix3x3 is a 3x3
+    // float array.
+    UNSAFE_BUFFERS(dst.vals[row] = m->vals[row][0] * v->vals[0] +
+                                   m->vals[row][1] * v->vals[1] +
+                                   m->vals[row][2] * v->vals[2]);
   }
   return dst;
 }

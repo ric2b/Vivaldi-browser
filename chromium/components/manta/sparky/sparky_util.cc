@@ -116,16 +116,29 @@ std::optional<base::Value> GetSettingsValue(proto::SettingsValue value,
 
 }  // namespace
 
-Action::Action(SettingsData updated_setting, bool all_done)
+FileAction::FileAction(std::string launch_file_path)
+    : launch_file_path(launch_file_path) {}
+FileAction::~FileAction() = default;
+
+FileAction::FileAction(const FileAction&) = default;
+FileAction& FileAction::operator=(const FileAction&) = default;
+
+ClickAction::ClickAction(int x_pos, int y_pos) : x_pos(x_pos), y_pos(y_pos) {}
+ClickAction::~ClickAction() = default;
+
+ClickAction::ClickAction(const ClickAction&) = default;
+ClickAction& ClickAction::operator=(const ClickAction&) = default;
+
+Action::Action(SettingsData updated_setting)
     : updated_setting(std::make_optional(updated_setting)),
-      type(ActionType::kSetting),
-      all_done(all_done) {}
-
-Action::Action(std::string launched_app, bool all_done)
-    : launched_app(launched_app),
-      type(ActionType::kLaunchApp),
-      all_done(all_done) {}
-
+      type(ActionType::kSetting) {}
+Action::Action(bool all_done)
+    : type(ActionType::kAllDone), all_done(all_done) {}
+Action::Action(ClickAction click)
+    : click(std::make_optional(click)), type(ActionType::kClick) {}
+Action::Action(ActionType type) : type(type) {}
+Action::Action(FileAction file_action, ActionType type)
+    : file_action(std::make_optional(file_action)), type(type) {}
 Action::~Action() = default;
 
 Action::Action(const Action&) = default;
@@ -155,14 +168,9 @@ proto::Role GetRole(Role role) {
 }
 
 void AddSettingProto(const SettingsData& setting,
-                     ::manta::proto::Setting* setting_proto) {
-  auto setting_type = VerifyValueAndConvertPrefTypeToSettingType(
-      setting.pref_type, setting.GetValue());
-  if (setting_type == std::nullopt) {
-    DVLOG(1) << "Invalid setting type for" << setting.pref_name;
-    return;
-  }
-  setting_proto->set_type(setting_type.value());
+                     ::manta::proto::Setting* setting_proto,
+                     SettingType setting_type) {
+  setting_proto->set_type(setting_type);
   setting_proto->set_settings_id(setting.pref_name);
   auto* settings_value = setting_proto->mutable_value();
   if (setting.pref_type == PrefType::kBoolean) {
@@ -179,8 +187,14 @@ void AddSettingProto(const SettingsData& setting,
 void AddSettingsProto(const SparkyDelegate::SettingsDataList& settings_list,
                       ::manta::proto::SettingsData* settings_data) {
   for (auto const& [pref_name, setting] : settings_list) {
+    auto setting_type = VerifyValueAndConvertPrefTypeToSettingType(
+        setting->pref_type, setting->GetValue());
+    if (setting_type == std::nullopt) {
+      DVLOG(1) << "Invalid setting type for" << setting->pref_name;
+      continue;
+    }
     auto* setting_data = settings_data->add_setting();
-    AddSettingProto(*setting, setting_data);
+    AddSettingProto(*setting, setting_data, setting_type.value());
   }
 }
 
@@ -237,6 +251,13 @@ void COMPONENT_EXPORT(MANTA)
       battery_proto->set_battery_time(
           diagnostics_data->battery_data->power_time);
     }
+    if (diagnostics_data->storage_data) {
+      auto* storage_proto = diagnostics_proto->mutable_storage();
+      storage_proto->set_free_storage(
+          diagnostics_data->storage_data->free_bytes);
+      storage_proto->set_total_storage(
+          diagnostics_data->storage_data->total_bytes);
+    }
   }
 }
 
@@ -248,6 +269,24 @@ void AddAppsData(base::span<const AppsData> apps_data,
     app_proto->set_name(app.name);
     app_proto->mutable_searchable_term()->Add(app.searchable_text.begin(),
                                               app.searchable_text.end());
+  }
+}
+
+void AddFilesData(base::span<const FileData> files_data,
+                  proto::FilesData* files_proto) {
+  for (const manta::FileData& file : files_data) {
+    proto::File* file_proto = files_proto->add_files();
+    file_proto->set_name(file.name);
+    file_proto->set_path(file.path);
+    file_proto->set_date_modified(file.date_modified);
+    file_proto->set_size_in_bytes(file.size_in_bytes);
+    if (file.bytes.has_value()) {
+      file_proto->set_serialized_bytes(
+          std::string(file.bytes->begin(), file.bytes->end()));
+    }
+    if (!file.summary.empty()) {
+      file_proto->set_summary(file.summary);
+    }
   }
 }
 
@@ -274,16 +313,11 @@ DialogTurn ConvertDialogToStruct(proto::Turn* turn_proto) {
 
   for (int position = 0; position < turn_proto->action_size(); ++position) {
     auto action_proto = turn_proto->action().at(position);
-    // The default all done value will be set to true if it is the last action
-    // to be returned in the list and set to false otherwise.
-    bool default_all_done =
-        position == turn_proto->action_size() - 1 ? true : false;
-    bool all_done = action_proto.has_all_done() ? action_proto.all_done()
-                                                : default_all_done;
     if (action_proto.has_launch_app_id()) {
-      dialog.AppendAction(Action(action_proto.launch_app_id(), all_done));
-    }
-    if (action_proto.has_update_setting()) {
+      auto action = Action(ActionType::kLaunchApp);
+      action.launched_app = action_proto.launch_app_id();
+      dialog.AppendAction(action);
+    } else if (action_proto.has_update_setting()) {
       auto setting_proto = action_proto.update_setting();
       std::unique_ptr<SettingsData> setting_data =
           ObtainSettingFromProto(setting_proto);
@@ -291,7 +325,24 @@ DialogTurn ConvertDialogToStruct(proto::Turn* turn_proto) {
         DVLOG(1) << "Invalid setting type for" << setting_proto.settings_id();
         continue;
       }
-      dialog.AppendAction(Action(*setting_data.get(), all_done));
+      dialog.AppendAction(Action(*setting_data.get()));
+    } else if (action_proto.has_all_done()) {
+      dialog.AppendAction(Action(action_proto.all_done()));
+    } else if (action_proto.has_click() && action_proto.click().has_x_pos() &&
+               action_proto.click().has_y_pos()) {
+      dialog.AppendAction(Action(ClickAction(action_proto.click().x_pos(),
+                                             action_proto.click().y_pos())));
+    } else if (action_proto.has_text_entry() &&
+               action_proto.text_entry().has_text()) {
+      auto action = Action(ActionType::kTextEntry);
+      action.text_entry = action_proto.text_entry().text();
+      dialog.AppendAction(action);
+    } else if (action_proto.has_file_action()) {
+      if (action_proto.file_action().has_launch_file_path()) {
+        dialog.AppendAction(
+            Action(FileAction(action_proto.file_action().launch_file_path()),
+                   ActionType::kLaunchFile));
+      }
     }
   }
   return dialog;
@@ -305,16 +356,81 @@ void AddDialogToSparkyContext(const std::vector<DialogTurn>& dialog,
     dialog_proto->set_role(GetRole(dialog_turn.role));
     for (const auto& action : dialog_turn.actions) {
       auto* action_proto = dialog_proto->add_action();
-      action_proto->set_all_done(action.all_done);
-      if (action.type == ActionType::kLaunchApp) {
+      if (action.type == ActionType::kLaunchApp &&
+          !action.launched_app.empty()) {
         action_proto->set_launch_app_id(action.launched_app);
       } else if (action.type == ActionType::kSetting &&
                  action.updated_setting.has_value()) {
+        auto setting_type = VerifyValueAndConvertPrefTypeToSettingType(
+            action.updated_setting.value().pref_type,
+            action.updated_setting.value().GetValue());
+        if (setting_type == std::nullopt) {
+          DVLOG(1) << "Invalid setting type for"
+                   << action.updated_setting.value().pref_name;
+          continue;
+        }
         auto* setting_proto = action_proto->mutable_update_setting();
-        AddSettingProto(action.updated_setting.value(), setting_proto);
+        AddSettingProto(action.updated_setting.value(), setting_proto,
+                        setting_type.value());
+      } else if (action.type == ActionType::kClick &&
+                 action.click.has_value()) {
+        auto* click_proto = action_proto->mutable_click();
+        click_proto->set_x_pos(action.click->x_pos);
+        click_proto->set_y_pos(action.click->y_pos);
+      } else if (action.type == ActionType::kLaunchFile &&
+                 action.file_action.has_value() &&
+                 !action.file_action->launch_file_path.empty()) {
+        auto* file_action = action_proto->mutable_file_action();
+        file_action->set_launch_file_path(action.file_action->launch_file_path);
+      } else if (action.type == ActionType::kAllDone) {
+        action_proto->set_all_done(action.all_done);
+      } else if (action.type == ActionType::kTextEntry &&
+                 !action.text_entry.empty()) {
+        auto* text_entry = action_proto->mutable_text_entry();
+        text_entry->set_text(action.text_entry);
       }
     }
   }
+}
+
+std::set<std::string> COMPONENT_EXPORT(MANTA)
+    GetSelectedFilePaths(const proto::FileRequest& file_request) {
+  std::set<std::string> set_file_paths;
+  int file_size = file_request.paths_size();
+  for (int index = 0; index < file_size; index++) {
+    set_file_paths.emplace(file_request.paths(index));
+  }
+  return set_file_paths;
+}
+
+std::optional<FileData> GetFileFromProto(const proto::File& file_proto) {
+  if (!file_proto.has_name() || !file_proto.has_path() ||
+      !file_proto.has_date_modified() || !file_proto.has_size_in_bytes() ||
+      !file_proto.has_summary()) {
+    return std::nullopt;
+  }
+  auto file = std::make_optional<FileData>(file_proto.path(), file_proto.name(),
+                                           file_proto.date_modified());
+  file->summary = file_proto.summary();
+  file->size_in_bytes = file_proto.size_in_bytes();
+  if (file_proto.has_serialized_bytes()) {
+    file->bytes = std::vector<uint8_t>(file_proto.serialized_bytes().begin(),
+                                       file_proto.serialized_bytes().end());
+  }
+  return file;
+}
+
+std::vector<FileData> GetFileDataFromProto(
+    const proto::FilesData& files_proto) {
+  std::vector<FileData> files_data;
+  int proto_file_count = files_proto.files_size();
+  for (int index = 0; index < proto_file_count; ++index) {
+    auto file = GetFileFromProto(files_proto.files(index));
+    if (file.has_value()) {
+      files_data.emplace_back(std::move(file.value()));
+    }
+  }
+  return files_data;
 }
 
 }  // namespace manta

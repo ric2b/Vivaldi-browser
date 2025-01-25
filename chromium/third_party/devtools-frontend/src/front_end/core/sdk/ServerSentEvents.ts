@@ -40,10 +40,11 @@ export class ServerSentEvents {
       void this.#request.requestStreamingContent().then(streamingContentData => {
         if (!TextUtils.StreamingContentData.isError(streamingContentData)) {
           void this.#parser?.addBase64Chunk(streamingContentData.content().base64);
-          streamingContentData.addEventListener(TextUtils.StreamingContentData.Events.ChunkAdded, ({data: {chunk}}) => {
-            this.#lastDataReceivedTime = request.pseudoWallTime(request.endTime);
-            void this.#parser?.addBase64Chunk(chunk);
-          });
+          streamingContentData.addEventListener(
+              TextUtils.StreamingContentData.Events.CHUNK_ADDED, ({data: {chunk}}) => {
+                this.#lastDataReceivedTime = request.pseudoWallTime(request.endTime);
+                void this.#parser?.addBase64Chunk(chunk);
+              });
         }
       });
     }
@@ -74,6 +75,6 @@ export class ServerSentEvents {
 
   #recordMessageAndDispatchEvent(message: EventSourceMessage): void {
     this.#eventSourceMessages.push(message);
-    this.#request.dispatchEventToListeners(Events.EventSourceMessageAdded, message);
+    this.#request.dispatchEventToListeners(Events.EVENT_SOURCE_MESSAGE_ADDED, message);
   }
 }

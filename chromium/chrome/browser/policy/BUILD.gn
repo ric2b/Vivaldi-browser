@@ -221,6 +221,8 @@ source_set("policy_specific_browser_tests") {
     "//base",
     "//chrome/app:command_ids",
     "//chrome/browser",
+    "//chrome/browser/media/webrtc",
+    "//chrome/browser/ui/autofill",
     "//chrome/common",
     "//chrome/test:test_support",
     "//components/policy/core/common",
@@ -248,6 +250,7 @@ source_set("policy_specific_browser_tests") {
       "//chrome/browser/ash/login/lock:test_support",
       "//chrome/browser/ash/login/saml:test_support",
       "//chrome/browser/ash/net",
+      "//chrome/browser/ash/note_taking",
       "//components/session_manager/core",
       "//components/user_manager",
     ]
@@ -260,6 +263,7 @@ source_set("policy_specific_browser_tests") {
       "test/autoplay_policy_browsertest.cc",
       "test/bookmark_bar_enabled_browsertest.cc",
       "test/component_updater_policy_browsertest.cc",
+      "test/data_url_policy_browsertest.cc",
       "test/developer_tools_policy_browsertest.cc",
       "test/download_directory_browsertest.cc",
       "test/ipv6_reachability_override_policy_browsertest.cc",
@@ -280,6 +284,7 @@ source_set("policy_specific_browser_tests") {
       "//chrome/browser/autofill",
       "//chrome/browser/devtools:test_support",
       "//chrome/browser/profiles:profile",
+      "//chrome/browser/task_manager",
       "//components/autofill/content/browser:test_support",
       "//components/bookmarks/common:common",
       "//components/enterprise",
@@ -328,11 +333,13 @@ source_set("browser_tests") {
     "//chrome/browser",
     "//chrome/browser:main_extra_parts",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/search",
     "//chrome/browser/ui:ui_features",
     "//chrome/common",
     "//chrome/test:test_support",
     "//components/enterprise",
     "//components/enterprise:test_support",
+    "//components/invalidation:test_support",
     "//components/invalidation/impl:test_support",
     "//components/invalidation/public:public",
     "//components/keyed_service/core",
@@ -356,6 +363,7 @@ source_set("browser_tests") {
 
   if (enable_dice_support) {
     sources += [ "cloud/user_policy_signin_service_browsertest.cc" ]
+    deps += [ "//chrome/browser/ui/webui/signin" ]
   }
 
   if (enable_extensions) {
@@ -400,8 +408,6 @@ source_set("browser_tests") {
       "//ash/components/arc:prefs",
       "//ash/components/arc/session:session",
       "//chrome/browser/apps/app_service/app_icon",
-      "//chrome/browser/ash",
-      "//chrome/browser/ash:test_support",
       "//chrome/browser/ash/accessibility",
       "//chrome/browser/ash/arc/session",
       "//chrome/browser/ash/crostini:test_support",
@@ -410,6 +416,7 @@ source_set("browser_tests") {
       "//chrome/browser/ash/login/users/avatar",
       "//chrome/browser/ash/login/users/avatar:test_support",
       "//chrome/browser/ash/login/users/default_user_image",
+      "//chrome/browser/ash/note_taking",
       "//chrome/browser/ash/policy/core",
       "//chrome/browser/ash/policy/handlers",
       "//chrome/browser/ash/system_web_apps/apps/personalization_app",
@@ -432,6 +439,7 @@ source_set("browser_tests") {
     sources += [
       "cloud/chrome_browser_cloud_management_browsertest_mac_util.h",
       "cloud/chrome_browser_cloud_management_browsertest_mac_util.mm",
+      "test/ad_hoc_code_signing_for_pwas_enabled_mac_browsertest.mm",
     ]
   }
 
@@ -485,7 +493,9 @@ source_set("browser_tests") {
   if (is_win || is_linux || is_chromeos) {
     sources += [ "test/full_screen_allowed_policy_browsertest.cc" ]
 
-    deps += [ "//chrome/browser/apps/app_service" ]
+    if (enable_extensions) {
+      deps += [ "//chrome/browser/apps/app_service" ]
+    }
   }
 
   if (!is_chromeos) {
@@ -529,8 +539,9 @@ source_set("unit_tests") {
 
   if (is_chromeos_ash) {
     deps += [
-      "//chrome/browser/ash",
-      "//chrome/browser/ash:test_support",
+      "//chrome/browser/ash/login/users:test_support",
+      "//chrome/browser/ash/settings",
+      "//chrome/browser/ash/settings:test_support",
       "//chromeos/ash/components/system",
     ]
   }

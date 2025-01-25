@@ -214,10 +214,9 @@ void LayerTreeImpl::SetVisible(bool visible) {
   }
 }
 
-void LayerTreeImpl::DidUpdateScrollOffset(ElementId id) {
-  // Scrollbar positions depend on the current scroll offset.
-  SetScrollbarGeometriesNeedUpdate();
-
+void LayerTreeImpl::DidUpdateScrollOffset(
+    ElementId id,
+    bool pushed_from_main_or_pending_tree) {
   DCHECK(lifecycle().AllowsPropertyTreeAccess());
   const ScrollTree& scroll_tree = property_trees()->scroll_tree();
   const auto* scroll_node = scroll_tree.FindNodeFromElementId(id);
@@ -266,90 +265,113 @@ void LayerTreeImpl::DidUpdateScrollOffset(ElementId id) {
 
   if (IsActiveTree()) {
     // Ensure the other trees are kept in sync.
-    if (host_impl_->pending_tree())
-      host_impl_->pending_tree()->DidUpdateScrollOffset(id);
-    if (host_impl_->recycle_tree())
-      host_impl_->recycle_tree()->DidUpdateScrollOffset(id);
+    if (host_impl_->pending_tree() && !pushed_from_main_or_pending_tree) {
+      host_impl_->pending_tree()->DidUpdateScrollOffset(
+          id, pushed_from_main_or_pending_tree);
+    }
+    if (host_impl_->recycle_tree()) {
+      host_impl_->recycle_tree()->DidUpdateScrollOffset(
+          id, pushed_from_main_or_pending_tree);
+    }
+
+    // If the scroll offset is pushed from main or pending tree, we'll call
+    // UpdateAllScrollbarGeometries() soon, so no need to update here. Also we
+    // can't do that here because the needed data may not be complete yet.
+    if (!pushed_from_main_or_pending_tree) {
+      if (scroll_node == InnerViewportScrollNode() ||
+          scroll_node == OuterViewportScrollNode()) {
+        UpdateViewportScrollbarGeometries();
+      } else {
+        UpdateScrollbarGeometries(*scroll_node);
+      }
+    }
   }
 }
 
-void LayerTreeImpl::UpdateScrollbarGeometries() {
+void LayerTreeImpl::UpdateAllScrollbarGeometries() {
   if (!IsActiveTree())
     return;
 
+  // Property tree and layer properties such should be up-to-date.
   DCHECK(lifecycle().AllowsPropertyTreeAccess());
-
-  // Layer properties such as bounds should be up-to-date.
   DCHECK(lifecycle().AllowsLayerPropertyAccess());
 
-  if (!scrollbar_geometries_need_update_)
-    return;
-
   for (auto& pair : element_id_to_scrollbar_layer_ids_) {
-    ElementId scrolling_element_id = pair.first;
-
-    const auto& scroll_tree = property_trees()->scroll_tree();
-    const auto* scroll_node =
-        scroll_tree.FindNodeFromElementId(scrolling_element_id);
-    if (!scroll_node)
-      continue;
-    gfx::PointF current_offset =
-        scroll_tree.current_scroll_offset(scrolling_element_id);
-    gfx::SizeF scrolling_size(scroll_node->bounds);
-    gfx::Size bounds_size(scroll_tree.container_bounds(scroll_node->id));
-
-    bool is_viewport_scrollbar = scroll_node == InnerViewportScrollNode() ||
-                                 scroll_node == OuterViewportScrollNode();
-    if (is_viewport_scrollbar) {
-      gfx::SizeF viewport_bounds(bounds_size);
-      if (scroll_node == InnerViewportScrollNode()) {
-        DCHECK_EQ(scroll_node, InnerViewportScrollNode());
-        auto* outer_scroll_node = OuterViewportScrollNode();
-        DCHECK(outer_scroll_node);
-
-        // Add offset and bounds contribution of outer viewport.
-        current_offset +=
-            scroll_tree.current_scroll_offset(outer_scroll_node->element_id)
-                .OffsetFromOrigin();
-        gfx::SizeF outer_viewport_bounds(
-            scroll_tree.container_bounds(outer_scroll_node->id));
-        viewport_bounds.SetToMin(outer_viewport_bounds);
-        // The scrolling size is only determined by the outer viewport.
-        scrolling_size = gfx::SizeF(outer_scroll_node->bounds);
-      } else {
-        DCHECK_EQ(scroll_node, OuterViewportScrollNode());
-        auto* inner_scroll_node = InnerViewportScrollNode();
-        DCHECK(inner_scroll_node);
-        // Add offset and bounds contribution of inner viewport.
-        current_offset +=
-            scroll_tree.current_scroll_offset(inner_scroll_node->element_id)
-                .OffsetFromOrigin();
-        gfx::SizeF inner_viewport_bounds(
-            scroll_tree.container_bounds(inner_scroll_node->id));
-        viewport_bounds.SetToMin(inner_viewport_bounds);
-      }
-      viewport_bounds.InvScale(current_page_scale_factor());
-      bounds_size = ToCeiledSize(viewport_bounds);
-    }
-
-    for (auto* scrollbar : ScrollbarsFor(scrolling_element_id)) {
-      if (scrollbar->orientation() == ScrollbarOrientation::kHorizontal) {
-        scrollbar->SetCurrentPos(current_offset.x());
-        scrollbar->SetClipLayerLength(bounds_size.width());
-        scrollbar->SetScrollLayerLength(scrolling_size.width());
-      } else {
-        scrollbar->SetCurrentPos(current_offset.y());
-        scrollbar->SetClipLayerLength(bounds_size.height());
-        scrollbar->SetScrollLayerLength(scrolling_size.height());
-      }
-      if (is_viewport_scrollbar) {
-        scrollbar->SetVerticalAdjust(
-            property_trees_.inner_viewport_container_bounds_delta().y());
-      }
+    if (const auto* scroll_node =
+            property_trees()->scroll_tree().FindNodeFromElementId(pair.first)) {
+      UpdateScrollbarGeometries(*scroll_node);
     }
   }
+}
 
-  scrollbar_geometries_need_update_ = false;
+void LayerTreeImpl::UpdateViewportScrollbarGeometries() {
+  if (!IsActiveTree()) {
+    return;
+  }
+  if (auto* inner_scroll = InnerViewportScrollNode()) {
+    UpdateScrollbarGeometries(*inner_scroll);
+  }
+  if (auto* outer_scroll = OuterViewportScrollNode()) {
+    UpdateScrollbarGeometries(*outer_scroll);
+  }
+}
+
+void LayerTreeImpl::UpdateScrollbarGeometries(const ScrollNode& scroll_node) {
+  DCHECK(IsActiveTree());
+  const auto& scroll_tree = property_trees()->scroll_tree();
+  gfx::PointF current_offset =
+      scroll_tree.current_scroll_offset(scroll_node.element_id);
+  gfx::SizeF scrolling_size(scroll_node.bounds);
+  gfx::Size bounds_size(scroll_tree.container_bounds(scroll_node.id));
+
+  bool is_viewport_scrollbar = &scroll_node == InnerViewportScrollNode() ||
+                               &scroll_node == OuterViewportScrollNode();
+  if (is_viewport_scrollbar) {
+    gfx::SizeF viewport_bounds(bounds_size);
+    if (&scroll_node == InnerViewportScrollNode()) {
+      auto* outer_scroll_node = OuterViewportScrollNode();
+      DCHECK(outer_scroll_node);
+
+      // Add offset and bounds contribution of outer viewport.
+      current_offset +=
+          scroll_tree.current_scroll_offset(outer_scroll_node->element_id)
+              .OffsetFromOrigin();
+      gfx::SizeF outer_viewport_bounds(
+          scroll_tree.container_bounds(outer_scroll_node->id));
+      viewport_bounds.SetToMin(outer_viewport_bounds);
+      // The scrolling size is only determined by the outer viewport.
+      scrolling_size = gfx::SizeF(outer_scroll_node->bounds);
+    } else {
+      DCHECK_EQ(&scroll_node, OuterViewportScrollNode());
+      auto* inner_scroll_node = InnerViewportScrollNode();
+      DCHECK(inner_scroll_node);
+      // Add offset and bounds contribution of inner viewport.
+      current_offset +=
+          scroll_tree.current_scroll_offset(inner_scroll_node->element_id)
+              .OffsetFromOrigin();
+      gfx::SizeF inner_viewport_bounds(
+          scroll_tree.container_bounds(inner_scroll_node->id));
+      viewport_bounds.SetToMin(inner_viewport_bounds);
+    }
+    viewport_bounds.InvScale(current_page_scale_factor());
+    bounds_size = ToCeiledSize(viewport_bounds);
+  }
+
+  for (auto* scrollbar : ScrollbarsFor(scroll_node.element_id)) {
+    if (scrollbar->orientation() == ScrollbarOrientation::kHorizontal) {
+      scrollbar->SetCurrentPos(current_offset.x());
+      scrollbar->SetClipLayerLength(bounds_size.width());
+      scrollbar->SetScrollLayerLength(scrolling_size.width());
+    } else {
+      scrollbar->SetCurrentPos(current_offset.y());
+      scrollbar->SetClipLayerLength(bounds_size.height());
+      scrollbar->SetScrollLayerLength(scrolling_size.height());
+    }
+    if (is_viewport_scrollbar) {
+      scrollbar->SetVerticalAdjust(
+          property_trees_.inner_viewport_container_bounds_delta().y());
+    }
+  }
 }
 
 const RenderSurfaceImpl* LayerTreeImpl::RootRenderSurface() const {
@@ -495,8 +517,7 @@ void LayerTreeImpl::UpdateViewportContainerSizes() {
 
   // Viewport scrollbar positions are determined using the viewport bounds
   // delta.
-  SetScrollbarGeometriesNeedUpdate();
-  set_needs_update_draw_properties();
+  UpdateViewportScrollbarGeometries();
 }
 
 bool LayerTreeImpl::IsRootLayer(const LayerImpl* layer) const {
@@ -688,6 +709,8 @@ void LayerTreeImpl::PullPropertiesFrom(
   // Make sure that property tree based changes are moved to layers
   // and draw properties are invalidated.
   MoveChangeTrackingToLayers();
+
+  UpdateAllScrollbarGeometries();
 
   lifecycle().AdvanceTo(LayerTreeLifecycle::kNotSyncing);
 }
@@ -905,6 +928,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
 
   // Note: this needs to happen after SetPropertyTrees.
   target_tree->HandleTickmarksVisibilityChange();
+  target_tree->UpdateAllScrollbarGeometries();
   target_tree->HandleScrollbarShowRequests();
   target_tree->AddPresentationCallbacks(std::move(presentation_callbacks_));
   presentation_callbacks_.clear();
@@ -956,18 +980,21 @@ void LayerTreeImpl::HandleTickmarksVisibilityChange() {
   }
 }
 
+void LayerTreeImpl::RequestShowScrollbars(ElementId scroll_element_id) {
+  if (IsActiveTree()) {
+    show_scrollbar_requests_.insert(scroll_element_id);
+  }
+}
+
 void LayerTreeImpl::HandleScrollbarShowRequests() {
-  for (auto* layer : *this) {
-    if (!layer->needs_show_scrollbars())
-      continue;
-    ScrollbarAnimationController* controller =
-        host_impl_->ScrollbarAnimationControllerForElementId(
-            layer->element_id());
-    if (controller) {
+  for (ElementId scroll_element_id : show_scrollbar_requests_) {
+    if (ScrollbarAnimationController* controller =
+            host_impl_->ScrollbarAnimationControllerForElementId(
+                scroll_element_id)) {
       controller->DidRequestShow();
-      layer->set_needs_show_scrollbars(false);
     }
   }
+  show_scrollbar_requests_.clear();
 }
 
 void LayerTreeImpl::MoveChangeTrackingToLayers() {
@@ -979,7 +1006,6 @@ void LayerTreeImpl::MoveChangeTrackingToLayers() {
       if (layer->LayerPropertyChangedFromPropertyTrees()) {
         layer->NoteLayerPropertyChangedFromPropertyTrees();
       }
-      updated_layers_.insert(layer);
     }
   }
   EffectTree& effect_tree = property_trees_.effect_tree_mutable();
@@ -1458,7 +1484,7 @@ void LayerTreeImpl::DidUpdatePageScale() {
   set_needs_update_draw_properties();
 
   // Viewport scrollbar sizes depend on the page scale factor.
-  SetScrollbarGeometriesNeedUpdate();
+  UpdateViewportScrollbarGeometries();
 }
 
 void LayerTreeImpl::SetDeviceScaleFactor(float device_scale_factor) {
@@ -1634,6 +1660,7 @@ void LayerTreeImpl::SetElementIdsForTesting() {
 }
 
 bool LayerTreeImpl::UpdateDrawProperties(
+    bool update_tiles,
     bool update_image_animation_controller,
     LayerImplList* output_update_layer_list_for_testing) {
   if (!needs_update_draw_properties_)
@@ -1641,14 +1668,10 @@ bool LayerTreeImpl::UpdateDrawProperties(
 
   TRACE_EVENT0("cc,benchmark", "LayerTreeImpl::UpdateDrawProperties");
 
-  // Ensure the scrollbar geometries are up-to-date for hit testing and quads
-  // generation. This may cause damage on the scrollbar layers which is why
-  // it occurs before we reset |needs_update_draw_properties_|.
-  UpdateScrollbarGeometries();
-
   // Calling UpdateDrawProperties must clear this flag, so there can be no
   // early outs before this.
   needs_update_draw_properties_ = false;
+  needs_update_tiles_ = false;
 
   // For max_texture_size. When a new output surface is received the needs
   // update draw properties flag is set again.
@@ -1740,29 +1763,14 @@ bool LayerTreeImpl::UpdateDrawProperties(
   // Resourceless draw do not need tiles and should not affect existing tile
   // priorities.
   if (!is_in_resourceless_software_draw_mode()) {
-    TRACE_EVENT_BEGIN2(
-        "cc,benchmark", "LayerTreeImpl::UpdateDrawProperties::UpdateTiles",
-        "IsActive", IsActiveTree(), "SourceFrameNumber", source_frame_number_);
-    size_t layers_updated_count = 0;
-    bool tile_priorities_updated = false;
-    const bool release_tile_resources_for_hidden_layers =
-        settings().release_tile_resources_for_hidden_layers;
-    for (PictureLayerImpl* layer : picture_layers_) {
-      if (!layer->HasValidTilePriorities()) {
-        if (release_tile_resources_for_hidden_layers)
-          layer->ReleaseResources();
-        continue;
-      }
-      ++layers_updated_count;
-      tile_priorities_updated |= layer->UpdateTiles();
+    needs_update_tiles_ = true;
+    bool tile_priorities_may_be_updated = true;
+    if (update_tiles) {
+      tile_priorities_may_be_updated = UpdateTiles();
     }
-
-    if (tile_priorities_updated)
-      DidModifyTilePriorities();
-
-    TRACE_EVENT_END1("cc,benchmark",
-                     "LayerTreeImpl::UpdateDrawProperties::UpdateTiles",
-                     "layers_updated_count", layers_updated_count);
+    if (tile_priorities_may_be_updated) {
+      DidModifyTilePriorities(/*pending_update_tiles=*/!update_tiles);
+    }
   }
 
   if (update_image_animation_controller && image_animation_controller()) {
@@ -1774,6 +1782,35 @@ bool LayerTreeImpl::UpdateDrawProperties(
   DCHECK(!needs_update_draw_properties_)
       << "CalcDrawProperties should not set_needs_update_draw_properties()";
   return true;
+}
+
+bool LayerTreeImpl::UpdateTiles() {
+  if (!needs_update_tiles_) {
+    return false;
+  }
+  needs_update_tiles_ = false;
+
+  TRACE_EVENT_BEGIN2("cc,benchmark", "LayerTreeImpl::UpdateTiles", "IsActive",
+                     IsActiveTree(), "SourceFrameNumber", source_frame_number_);
+  size_t layers_updated_count = 0;
+  bool tile_priorities_updated = false;
+  const bool release_tile_resources_for_hidden_layers =
+      settings().release_tile_resources_for_hidden_layers;
+  for (PictureLayerImpl* layer : picture_layers_) {
+    if (!layer->HasValidTilePriorities()) {
+      if (release_tile_resources_for_hidden_layers) {
+        layer->ReleaseResources();
+      }
+      continue;
+    }
+    ++layers_updated_count;
+    tile_priorities_updated |= layer->UpdateTiles();
+  }
+
+  TRACE_EVENT_END1("cc,benchmark",
+                   "LayerTreeImpl::UpdateDrawProperties::UpdateTiles",
+                   "layers_updated_count", layers_updated_count);
+  return tile_priorities_updated;
 }
 
 const RenderSurfaceList& LayerTreeImpl::GetRenderSurfaceList() const {
@@ -1833,11 +1870,11 @@ void LayerTreeImpl::ClearSurfaceRanges() {
 }
 
 void LayerTreeImpl::AddLayerShouldPushProperties(LayerImpl* layer) {
-  DCHECK(!IsActiveTree()) << "The active tree does not push layer properties";
-  // PictureLayerImpls should only go into this when
-  // always_push_properties_on_picture_layers() is disabled.
+  // When pushing from pending to active tree, PictureLayerImpls should only go
+  // into this set when always_push_properties_on_picture_layers() is disabled.
   DCHECK(!always_push_properties_on_picture_layers() ||
-         !base::Contains(picture_layers_, layer));
+         !base::Contains(picture_layers_, layer) ||
+         (IsActiveTree() && settings().UseLayerContextForDisplay()));
   layers_that_should_push_properties_.insert(layer);
 }
 
@@ -1848,15 +1885,12 @@ void LayerTreeImpl::ClearLayersThatShouldPushProperties() {
 void LayerTreeImpl::RegisterLayer(LayerImpl* layer) {
   DCHECK(!LayerById(layer->id()));
   layer_id_map_[layer->id()] = layer;
-  updated_layers_.insert(layer);
 }
 
 void LayerTreeImpl::UnregisterLayer(LayerImpl* layer) {
   DCHECK(LayerById(layer->id()));
   layers_that_should_push_properties_.erase(layer);
   layer_id_map_.erase(layer->id());
-  updated_layers_.erase(layer);
-  unregistered_layers_.push_back(layer->id());
 }
 
 void LayerTreeImpl::AddLayer(std::unique_ptr<LayerImpl> layer) {
@@ -2163,8 +2197,8 @@ void LayerTreeImpl::BreakSwapPromises(SwapPromise::DidNotSwapReason reason) {
   }
 }
 
-void LayerTreeImpl::DidModifyTilePriorities() {
-  host_impl_->DidModifyTilePriorities();
+void LayerTreeImpl::DidModifyTilePriorities(bool pending_update_tiles) {
+  host_impl_->DidModifyTilePriorities(pending_update_tiles);
 }
 
 void LayerTreeImpl::set_ui_resource_request_queue(
@@ -2271,14 +2305,12 @@ void LayerTreeImpl::RegisterScrollbar(ScrollbarLayerImplBase* scrollbar_layer) {
     // Fluent overlay scrollbars are invisible until the DidRequestShow gets
     // called.
     if (scrollbar_layer->IsFluentOverlayScrollbarEnabled()) {
-      scrollbar_layer->SetOverlayScrollbarLayerOpacityAnimated(0.f);
+      scrollbar_layer->SetOverlayScrollbarLayerOpacityAnimated(
+          0.f, /*fade_out_animation=*/false);
     }
     host_impl_->RegisterScrollbarAnimationController(
         scroll_element_id, scrollbar_layer->Opacity());
   }
-
-  // The new scrollbar's geometries need to be initialized.
-  SetScrollbarGeometriesNeedUpdate();
 }
 
 void LayerTreeImpl::UnregisterScrollbar(
@@ -2515,8 +2547,11 @@ LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPoint(
     const gfx::PointF& screen_space_point) {
   if (layer_list_.empty())
     return nullptr;
-  if (!UpdateDrawProperties())
+  bool update_tiles = !features::IsCCSlimmingEnabled();
+  if (!UpdateDrawProperties(update_tiles,
+                            /*update_image_animation_controller=*/true)) {
     return nullptr;
+  }
   FindClosestMatchingLayerState state;
   FindClosestMatchingLayer(screen_space_point, layer_list_[0].get(),
                            HitTestVisibleScrollableOrTouchableFunctor(),
@@ -2548,8 +2583,11 @@ LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPointInEventHandlerRegion(
     const Functor& func) {
   if (layer_list_.empty())
     return nullptr;
-  if (!UpdateDrawProperties())
+  bool update_tiles = !features::IsCCSlimmingEnabled();
+  if (!UpdateDrawProperties(update_tiles,
+                            /*update_image_animation_controller=*/true)) {
     return nullptr;
+  }
   FindClosestMatchingLayerState state;
   FindClosestMatchingLayer(screen_space_point, layer_list_[0].get(), func,
                            &state);
@@ -2576,8 +2614,11 @@ LayerTreeImpl::FindLayersUpToFirstScrollableOrOpaqueToHitTest(
   std::vector<const LayerImpl*> layers;
   if (layer_list_.empty())
     return layers;
-  if (!UpdateDrawProperties())
+  bool update_tiles = !features::IsCCSlimmingEnabled();
+  if (!UpdateDrawProperties(update_tiles,
+                            /*update_image_animation_controller=*/true)) {
     return layers;
+  }
 
   // If we hit a layer in a 3d context we can't rely on layer orders, we need
   // to sort the layers by distance to hit. This is used only if the first_hit
@@ -2674,17 +2715,35 @@ LayerTreeImpl::FindLayersUpToFirstScrollableOrOpaqueToHitTest(
   return layers;
 }
 
-bool LayerTreeImpl::PointHitsNonFastScrollableRegion(
+bool LayerTreeImpl::PointHitsMainThreadScrollHitTestRegion(
     const gfx::PointF& screen_space_point,
     const LayerImpl& layer) const {
   // We assume the layer has already been hit tested.
   DCHECK(PointHitsLayer(&layer, screen_space_point, nullptr));
 
-  if (layer.non_fast_scrollable_region().IsEmpty())
+  if (layer.main_thread_scroll_hit_test_region().IsEmpty()) {
     return false;
+  }
 
   return PointHitsRegion(screen_space_point, layer.ScreenSpaceTransform(),
-                         layer.non_fast_scrollable_region(), &layer);
+                         layer.main_thread_scroll_hit_test_region(), &layer);
+}
+
+ElementId LayerTreeImpl::PointHitsNonCompositedScroll(
+    const gfx::PointF& screen_space_point,
+    const LayerImpl& layer) const {
+  const std::vector<ScrollHitTestRect>* hit_test_rects =
+      layer.non_composited_scroll_hit_test_rects();
+  if (!hit_test_rects) {
+    return ElementId();
+  }
+  for (const ScrollHitTestRect& rect : base::Reversed(*hit_test_rects)) {
+    if (PointHitsRect(screen_space_point, layer.ScreenSpaceTransform(),
+                      rect.hit_test_rect, /*distance_to_camera=*/nullptr)) {
+      return rect.scroll_element_id;
+    }
+  }
+  return ElementId();
 }
 
 static ElementId GetFrameElementIdForLayer(const LayerImpl* layer) {
@@ -2764,8 +2823,11 @@ ElementId LayerTreeImpl::FindFrameElementIdAtPoint(
     const gfx::PointF& screen_space_point) {
   if (layer_list_.empty())
     return {};
-  if (!UpdateDrawProperties())
+  bool update_tiles = !features::IsCCSlimmingEnabled();
+  if (!UpdateDrawProperties(update_tiles,
+                            /*update_image_animation_controller=*/true)) {
     return {};
+  }
   FindClosestMatchingLayerState state;
   FindClosestMatchingLayerForAttribution(screen_space_point,
                                          layer_list_[0].get(), &state);
@@ -2952,8 +3014,6 @@ bool LayerTreeImpl::TakeForceSendMetadataRequest() {
 }
 
 void LayerTreeImpl::ResetAllChangeTracking() {
-  updated_layers_.clear();
-  unregistered_layers_.clear();
   layers_that_should_push_properties_.clear();
   // Iterate over all layers, including masks.
   for (auto* layer : *this)
@@ -3005,32 +3065,6 @@ bool LayerTreeImpl::HasViewTransitionSaveRequest() const {
   }
 
   return false;
-}
-
-std::unordered_set<LayerImpl*> LayerTreeImpl::TakeUpdatedLayers() {
-  std::unordered_set<LayerImpl*> layers;
-  layers.swap(updated_layers_);
-  return layers;
-}
-
-std::vector<int> LayerTreeImpl::TakeUnregisteredLayers() {
-  std::vector<int> layers;
-  layers.swap(unregistered_layers_);
-  return layers;
-}
-
-size_t LayerTreeImpl::RemoveLayers(base::span<int> layer_ids) {
-  if (layer_ids.empty() || LayerListIsEmpty()) {
-    return 0;
-  }
-
-  std::unordered_set<int> ids{layer_ids.begin(), layer_ids.end()};
-  const auto removed =
-      std::remove_if(std::next(layer_list_.begin()), layer_list_.end(),
-                     [&ids](auto& layer) { return ids.erase(layer->id()); });
-  const size_t num_removed = layer_list_.end() - removed;
-  layer_list_.erase(removed, layer_list_.end());
-  return num_removed;
 }
 
 bool LayerTreeImpl::IsReadyToActivate() const {

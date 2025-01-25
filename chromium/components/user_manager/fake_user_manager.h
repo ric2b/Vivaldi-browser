@@ -55,6 +55,11 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   void SetUserNonCryptohomeDataEphemeral(const AccountId& account_id,
                                          bool is_ephemeral);
 
+  // Subsequent calls to IsCurrentUserCryptohomeDataEphemeral for
+  // |account_id| will return |is_ephemeral|.
+  void SetUserCryptohomeDataEphemeral(const AccountId& account_id,
+                                      bool is_ephemeral);
+
   // UserManager overrides.
   const UserList& GetUsers() const override;
   UserList GetUsersAllowedForMultiProfile() const override;
@@ -79,11 +84,6 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   UserList GetUnlockUsers() const override;
   const AccountId& GetOwnerAccountId() const override;
   void OnSessionStarted() override {}
-  void RemoveUser(const AccountId& account_id,
-                  UserRemovalReason reason) override {}
-  void RemoveUserFromList(const AccountId& account_id) override;
-  void RemoveUserFromListForRecreation(const AccountId& account_id) override;
-  void CleanStaleUserInformationFor(const AccountId& account_id) override;
   bool IsKnownUser(const AccountId& account_id) const override;
   const User* FindUser(const AccountId& account_id) const override;
   User* FindUserAndModify(const AccountId& account_id) override;
@@ -105,6 +105,8 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   bool IsLoggedInAsAnyKioskApp() const override;
   bool IsLoggedInAsStub() const override;
   bool IsUserNonCryptohomeDataEphemeral(
+      const AccountId& account_id) const override;
+  bool IsUserCryptohomeDataEphemeral(
       const AccountId& account_id) const override;
   bool IsGuestSessionAllowed() const override;
   bool IsGaiaUserAllowed(const User& user) const override;
@@ -141,6 +143,10 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   // Contains AccountIds for which IsCurrentUserNonCryptohomeDataEphemeral will
   // return true.
   std::set<AccountId> accounts_with_ephemeral_non_cryptohome_data_;
+
+  // Contains AccountIds for which IsCurrentUserCryptohomeDataEphemeral will
+  // return the specific value.
+  base::flat_map<AccountId, bool> accounts_with_ephemeral_cryptohome_data_;
 };
 
 }  // namespace user_manager

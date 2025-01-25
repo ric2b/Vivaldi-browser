@@ -6,6 +6,7 @@ include_rules = [
   "+components/viz/service/display",
   "+components/viz/service/display_embedder",
   "+components/viz/service/hit_test",
+  "+components/viz/service/input",
   "+components/viz/service/layers",
   "+components/viz/service/performance_hint",
   "+components/viz/service/surfaces",
@@ -36,5 +37,8 @@ specific_include_rules = {
   ],
   "external_begin_frame_source_win.h": [
     "+ui/gl/vsync_thread_win.h",
+  ],
+  "video_detector_unittest.cc": [
+    "+gpu/command_buffer/service/scheduler.h",
   ],
 }

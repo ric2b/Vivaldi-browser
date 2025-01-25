@@ -4694,6 +4694,8 @@ void GL_APIENTRY glImportSemaphoreFdEXT(GLuint semaphore, GLenum handleType, GLi
     return GL_ImportSemaphoreFdEXT(semaphore, handleType, fd);
 }
 
+// GL_EXT_separate_depth_stencil
+
 // GL_EXT_separate_shader_objects
 void GL_APIENTRY glActiveShaderProgramEXT(GLuint pipeline, GLuint program)
 {
@@ -5110,6 +5112,8 @@ void GL_APIENTRY glTexBufferRangeEXT(GLenum target,
 // GL_EXT_texture_sRGB_RG8
 
 // GL_EXT_texture_sRGB_decode
+
+// GL_EXT_texture_shadow_lod
 
 // GL_EXT_texture_storage
 void GL_APIENTRY glTexStorage1DEXT(GLenum target,

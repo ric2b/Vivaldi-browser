@@ -153,7 +153,7 @@ pub struct V1MatchableCredential {
 /// A representation of a MatchedCredential which is passable across the FFI boundary
 #[repr(C)]
 pub struct FfiMatchedCredential {
-    cred_id: u32,
+    cred_id: i64,
     encrypted_metadata_bytes_buffer: *const u8,
     encrypted_metadata_bytes_len: usize,
 }

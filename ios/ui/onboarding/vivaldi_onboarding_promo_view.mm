@@ -45,7 +45,8 @@ NSTimeInterval const kAnimationDelay = 0.0;
 
 #pragma mark - Initializer
 - (instancetype)initWithModel:(VivaldiOnboardingDataModel*)model {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     _dataModel = model;
     self.backgroundColor = UIColor.clearColor;
     [self setUpUI];

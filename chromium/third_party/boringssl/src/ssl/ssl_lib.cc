@@ -2954,8 +2954,18 @@ int SSL_get_ivs(const SSL *ssl, const uint8_t **out_read_iv,
 
 uint64_t SSL_get_read_sequence(const SSL *ssl) {
   if (SSL_is_dtls(ssl)) {
-    // max_seq_num already includes the epoch.
-    assert(ssl->d1->r_epoch == (ssl->d1->bitmap.max_seq_num >> 48));
+    // TODO(crbug.com/42290608): The API for read sequences in DTLS 1.3 needs to
+    // reworked. In DTLS 1.3, the read epoch is updated once new keys are
+    // derived (before we receive a message encrypted with those keys), which
+    // results in the read epoch being ahead of the highest record received.
+    // Additionally, when we process a KeyUpdate, we will install new read keys
+    // for the new epoch, but we may receive messages from the old epoch for
+    // some time if the ACK gets lost or there is reordering.
+
+    // max_seq_num already includes the epoch. However, the current epoch may
+    // be one ahead of the highest record received, immediately after a key
+    // change.
+    assert(ssl->d1->r_epoch >= ssl->d1->bitmap.max_seq_num >> 48);
     return ssl->d1->bitmap.max_seq_num;
   }
   return ssl->s3->read_sequence;
@@ -3393,6 +3403,21 @@ static int Configure(SSL *ssl) {
 
 }  // namespace wpa202304
 
+namespace cnsa202407 {
+
+static int Configure(SSL_CTX *ctx) {
+  ctx->tls13_cipher_policy = ssl_compliance_policy_cnsa_202407;
+  return 1;
+}
+
+static int Configure(SSL *ssl) {
+  ssl->config->tls13_cipher_policy =
+      ssl_compliance_policy_cnsa_202407;
+  return 1;
+}
+
+}
+
 int SSL_CTX_set_compliance_policy(SSL_CTX *ctx,
                                   enum ssl_compliance_policy_t policy) {
   switch (policy) {
@@ -3400,6 +3425,8 @@ int SSL_CTX_set_compliance_policy(SSL_CTX *ctx,
       return fips202205::Configure(ctx);
     case ssl_compliance_policy_wpa3_192_202304:
       return wpa202304::Configure(ctx);
+    case ssl_compliance_policy_cnsa_202407:
+      return cnsa202407::Configure(ctx);
     default:
       return 0;
   }
@@ -3411,6 +3438,8 @@ int SSL_set_compliance_policy(SSL *ssl, enum ssl_compliance_policy_t policy) {
       return fips202205::Configure(ssl);
     case ssl_compliance_policy_wpa3_192_202304:
       return wpa202304::Configure(ssl);
+    case ssl_compliance_policy_cnsa_202407:
+      return cnsa202407::Configure(ssl);
     default:
       return 0;
   }

@@ -39,10 +39,6 @@ inline LayoutUnit FlipRtl(LayoutUnit value, TextDirection direction) {
   return IsLtr(direction) ? value : -value;
 }
 
-inline float FlipRtl(float value, TextDirection direction) {
-  return IsLtr(direction) ? value : -value;
-}
-
 inline bool IsBreakableSpace(UChar ch) {
   return LazyLineBreakIterator::IsBreakableSpace(ch) ||
          Character::IsOtherSpaceSeparator(ch);
@@ -102,8 +98,8 @@ inline ShapingLineBreaker::EdgeOffset ShapingLineBreaker::FirstSafeOffset(
     // When it's not at the start of a wrapped line, disable reshaping.
     return {start};
   }
-  if (UNLIKELY(ShouldTrimStartOfWrappedLine(text_spacing_trim_)) &&
-      UNLIKELY(Character::MaybeHanKerningOpen(GetText()[start]))) {
+  if (ShouldTrimStartOfWrappedLine(text_spacing_trim_) &&
+      Character::MaybeHanKerningOpen(GetText()[start])) [[unlikely]] {
     // `HanKerning` wants to apply kerning to `kOpen` characters at the start of
     // the line. Reshape it to resolve the `SimpleFontData` and apply
     // `HanKerning` if applicable. Note, it may not actually apply, if the font
@@ -182,8 +178,9 @@ ShapingLineBreaker::BreakOpportunity ShapingLineBreaker::Hyphenate(
 ShapingLineBreaker::BreakOpportunity
 ShapingLineBreaker::PreviousBreakOpportunity(unsigned offset,
                                              unsigned start) const {
-  if (UNLIKELY(hyphenation_))
+  if (hyphenation_) [[unlikely]] {
     return Hyphenate(offset, start, true);
+  }
 
   // If the break opportunity is preceded by trailing spaces, find the
   // end of non-hangable character (i.e., start of the space run).
@@ -200,8 +197,9 @@ ShapingLineBreaker::BreakOpportunity ShapingLineBreaker::NextBreakOpportunity(
     unsigned offset,
     unsigned start,
     unsigned len) const {
-  if (UNLIKELY(hyphenation_))
+  if (hyphenation_) [[unlikely]] {
     return Hyphenate(offset, start, false);
+  }
 
   // We should also find the beginning of the space run to find the
   // end of non-hangable character (i.e., start of the space run),
@@ -279,7 +277,7 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
       break_iterator_->BreakSpace() == BreakSpaceType::kAfterEverySpace;
 
   // The start position in the original shape results.
-  const float start_position =
+  const LayoutUnit start_position =
       result_->CachedPositionForOffset(start - range_start);
 
   // If the start offset is not at a safe-to-break boundary, the content between
@@ -288,15 +286,15 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
   const TextDirection direction = result_->Direction();
   const EdgeOffset first_safe = FirstSafeOffset(start);
   DCHECK_GE(first_safe.offset, start);
-  if (UNLIKELY(first_safe.offset != start)) {
-    const float first_safe_position =
+  if (first_safe.offset != start) [[unlikely]] {
+    const LayoutUnit first_safe_position =
         result_->CachedPositionForOffset(first_safe.offset - range_start);
     line_start_result = Shape(
         start, first_safe.offset,
         {.is_line_start = true, .han_kerning_start = first_safe.han_kerning});
     // Adjust the available space to take the reshaping into account.
-    const LayoutUnit old_width = LayoutUnit::FromFloatCeil(
-        FlipRtl(first_safe_position - start_position, direction));
+    const LayoutUnit old_width =
+        FlipRtl(first_safe_position - start_position, direction);
     if (const LayoutUnit diff = old_width - line_start_result->SnappedWidth()) {
       available_space = std::max(available_space + diff, LayoutUnit());
     }
@@ -305,15 +303,13 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
   // Find a candidate break opportunity by identifying the last offset before
   // exceeding the available space and the determine the closest valid break
   // preceding the candidate.
-  const float end_position =
+  const LayoutUnit end_position =
       start_position + FlipRtl(available_space, direction);
-  DCHECK_GE(FlipRtl(LayoutUnit::FromFloatCeil(end_position - start_position),
-                    direction),
-            LayoutUnit(0));
+  DCHECK_GE(FlipRtl(end_position - start_position, direction), LayoutUnit(0));
   unsigned candidate_break =
       result_->CachedOffsetForPosition(end_position) + range_start;
   if (candidate_break < range_end &&
-      UNLIKELY(result_->HasAutoSpacingAfter(candidate_break))) {
+      result_->HasAutoSpacingAfter(candidate_break)) [[unlikely]] {
     // If there's an auto-space after the `candidate_break`, check if it can fit
     // without the auto-space.
     candidate_break = result_->AdjustOffsetForAutoSpacing(
@@ -324,17 +320,16 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
   // `HanKerning` at the line end.
   unsigned last_safe;
   const ShapeResult* line_end_result = nullptr;
-  if (candidate_break < range_end &&
-      ShouldTrimEnd(text_spacing_trim_) &&
-      UNLIKELY(Character::MaybeHanKerningClose(text[candidate_break]))) {
+  if (candidate_break < range_end && ShouldTrimEnd(text_spacing_trim_) &&
+      Character::MaybeHanKerningClose(text[candidate_break])) [[unlikely]] {
     const unsigned adjusted_candidate_break = candidate_break + 1;
     if (break_iterator_->IsBreakable(adjusted_candidate_break)) {
       last_safe = result_->CachedPreviousSafeToBreakOffset(candidate_break);
       line_end_result =
           Shape(last_safe, adjusted_candidate_break, {.han_kerning_end = true});
-      const float last_safe_position =
+      const LayoutUnit last_safe_position =
           result_->CachedPositionForOffset(last_safe - range_start);
-      const float width_to_last_safe =
+      const LayoutUnit width_to_last_safe =
           FlipRtl(last_safe_position - start_position, direction);
       if (width_to_last_safe + line_end_result->Width() <= available_space) {
         candidate_break = adjusted_candidate_break;
@@ -472,7 +467,7 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
 
   // If there are no safe-to-break between the start and the break opportunity,
   // reshape the whole range.
-  if (UNLIKELY(first_safe.offset >= break_opportunity.offset)) {
+  if (first_safe.offset >= break_opportunity.offset) [[unlikely]] {
     DCHECK_NE(first_safe.offset, start);
     SetBreakOffset(break_opportunity, text, result_out);
     CheckBreakOffset(result_out->break_offset, start, range_end);
@@ -499,14 +494,14 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
       // No need to reshape the line end because this opportunity is safe.
       if (last_safe == break_opportunity.offset)
         break;
-      if (UNLIKELY(last_safe > break_opportunity.offset)) {
+      if (last_safe > break_opportunity.offset) [[unlikely]] {
         // TODO(crbug.com/1787026): This should not happen, but we see crashes.
         NOTREACHED_IN_MIGRATION();
         break;
       }
 
       // Moved the opportunity back enough to require reshaping the whole line.
-      if (UNLIKELY(last_safe < first_safe.offset)) {
+      if (last_safe < first_safe.offset) [[unlikely]] {
         DCHECK(last_safe == 0 || last_safe < start);
         last_safe = start;
         line_start_result = nullptr;
@@ -514,13 +509,13 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
 
       // If previously determined to let it overflow, reshape the line end.
       DCHECK_LE(break_opportunity.offset, range_end);
-      if (UNLIKELY(result_out->is_overflow)) {
+      if (result_out->is_overflow) [[unlikely]] {
         line_end_result = Shape(last_safe, break_opportunity.offset);
         break;
       }
 
       // Check if this opportunity can fit after reshaping the line end.
-      float safe_position =
+      const LayoutUnit safe_position =
           result_->CachedPositionForOffset(last_safe - range_start);
       line_end_result = Shape(last_safe, break_opportunity.offset);
       if (line_end_result->Width() <=
@@ -561,7 +556,7 @@ const ShapeResultView* ShapingLineBreaker::ShapeLine(
   if (!line_end_result) {
     last_safe = break_opportunity.offset;
     DCHECK_GT(last_safe, start);
-    if (UNLIKELY(result_->HasAutoSpacingBefore(last_safe))) {
+    if (result_->HasAutoSpacingBefore(last_safe)) [[unlikely]] {
       last_safe = result_->CachedPreviousSafeToBreakOffset(last_safe - 1);
       DCHECK_LT(last_safe, break_opportunity.offset);
       line_end_result =
@@ -637,7 +632,7 @@ const ShapeResultView* ShapingLineBreaker::ShapeToEnd(
   DCHECK_NE(first_safe, start);
 
   // If no safe-to-break offset is found in range, reshape the entire range.
-  if (UNLIKELY(first_safe >= range_end)) {
+  if (first_safe >= range_end) [[unlikely]] {
     return ShapeResultView::Create(line_start_result, start, range_end);
   }
 

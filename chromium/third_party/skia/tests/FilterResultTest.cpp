@@ -63,9 +63,9 @@
 
 
 #if defined(SK_GANESH)
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 struct GrContextOptions;
 #endif
 
@@ -2264,7 +2264,7 @@ DEF_TEST_SUITE(CroppedTransformedTransparencyAffectingColorFilter, r, CtsEnforce
 }
 
 DEF_TEST_SUITE(BackdropFilterRotated, r,
-               CtsEnforcement::kNextRelease, CtsEnforcement::kNextRelease) {
+               CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
     // These values are extracted from a cc_unittest that had a 200x200 image, with a 10-degree
     // rotated 100x200 layer over the right half of the base image, with a backdrop blur. The
     // rotation forces SkCanvas to crop and transform the base device's content to be aligned with
@@ -2292,7 +2292,7 @@ DEF_TEST_SUITE(BackdropFilterRotated, r,
 static constexpr SkSize kNearlyIdentity = {0.999f, 0.999f};
 
 DEF_TEST_SUITE(RescaleWithTileMode, r,
-               CtsEnforcement::kNextRelease, CtsEnforcement::kNextRelease) {
+               CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
     for (SkTileMode tm : kTileModes) {
         TestCase(r, "Identity rescale is a no-op")
                 .source({0, 0, 50, 50})
@@ -2336,7 +2336,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
 
         TestCase(r, "2-step rescale with near-identity elision",
-                 /*allowedPercentImageDiff=*/periodic ? 17.75f : 41.52f,
+                 /*allowedPercentImageDiff=*/periodic ? 17.75f : 41.83f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 8 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
@@ -2368,7 +2368,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
 
         TestCase(r, "Identity X axis, 1-step Y axis preserves tile mode",
-                 /*allowedPercentImageDiff=*/tm == SkTileMode::kMirror ? 1.21f : 1.f,
+                 /*allowedPercentImageDiff=*/tm == SkTileMode::kMirror ? 1.32f : 1.f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 1 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
@@ -2389,7 +2389,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
                 .rescale({1.f, 0.25f}, Expect::kNewImage, tm)
                 .run(/*requestedOutput=*/{0, 0, 80, 80});
         TestCase(r, "1-step X axis, 2-step Y axis preserves tile mode",
-                 /*allowedPercentImageDiff=*/periodic ? 23.1f : 17.22f,
+                 /*allowedPercentImageDiff=*/periodic ? 23.2f : 17.22f,
                  /*transparentCheckBorderTolerance=*/tm == SkTileMode::kDecal ? 5 : 0)
                 .source({16, 16, 64, 64})
                 .applyCrop({16, 16, 64, 64}, tm, Expect::kDeferredImage)
@@ -2442,7 +2442,7 @@ DEF_TEST_SUITE(RescaleWithTileMode, r,
 }
 
 DEF_TEST_SUITE(RescaleWithTransform, r,
-               CtsEnforcement::kNextRelease, CtsEnforcement::kNextRelease) {
+               CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
     for (SkTileMode tm : kTileModes) {
         TestCase(r, "Identity rescale defers integer translation")
                 .source({0, 0, 50, 50})
@@ -2534,7 +2534,7 @@ DEF_TEST_SUITE(RescaleWithTransform, r,
 }
 
 DEF_TEST_SUITE(RescaleWithColorFilter, r,
-               CtsEnforcement::kNextRelease, CtsEnforcement::kNextRelease) {
+               CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
     for (SkTileMode tm : kTileModes) {
         TestCase(r, "Identity rescale applies color filter but defers tile mode")
                 .source({0, 0, 50, 50})
@@ -2574,7 +2574,7 @@ DEF_TEST_SUITE(RescaleWithColorFilter, r,
     }
 }
 
-DEF_TEST_SUITE(MakeFromImage, r, CtsEnforcement::kNextRelease, CtsEnforcement::kNextRelease) {
+DEF_TEST_SUITE(MakeFromImage, r, CtsEnforcement::kApiLevel_V, CtsEnforcement::kNextRelease) {
     static constexpr SkISize kSrcSize = {128,128};
     static constexpr SkIRect kIdentitySrc = {0,0,128,128};
     static constexpr SkIRect kSubsetSrc = {16,16,112,112};

@@ -113,7 +113,7 @@ impl From<&GainMap> for avifGainMap {
             altColorPrimaries: gainmap.alt_color_primaries,
             altTransferCharacteristics: gainmap.alt_transfer_characteristics,
             altMatrixCoefficients: gainmap.alt_matrix_coefficients,
-            altYUVRange: gainmap.alt_yuv_range.into(),
+            altYUVRange: gainmap.alt_yuv_range,
             altDepth: u32::from(gainmap.alt_plane_depth),
             altPlaneCount: u32::from(gainmap.alt_plane_count),
             altCLLI: gainmap.alt_clli,

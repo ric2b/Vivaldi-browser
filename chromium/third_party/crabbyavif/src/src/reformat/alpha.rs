@@ -395,12 +395,14 @@ mod tests {
             let buffer_size = (width * height * 4 * pixel_size) as usize;
             buffer.reserve_exact(buffer_size);
             buffer.resize(buffer_size, 0);
+            rgb.row_bytes = width * 4 * pixel_size;
             // Use a pointer to mimic C API calls.
             rgb.pixels = Some(Pixels::from_raw_pointer(
                 buffer.as_mut_ptr(),
                 rgb.depth as u32,
-            ));
-            rgb.row_bytes = width * 4 * pixel_size;
+                height,
+                rgb.row_bytes,
+            )?);
         } else {
             rgb.allocate()?;
         }

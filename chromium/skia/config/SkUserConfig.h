@@ -237,6 +237,10 @@ SK_API void SkDebugf_FileLine(const char* file,
 
 #define SK_USE_LEGACY_BLUR_GRAPHITE
 
+#define SK_USE_LEGACY_CLIP_GRAPHITE
+
+#define SK_USE_SRCOVER_FOR_FILTERS
+
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
 
 /* In some places Skia can use static initializers for global initialization,
@@ -254,6 +258,8 @@ SK_API void SkDebugf_FileLine(const char* file,
 #define SK_USE_DISCARDABLE_SCALEDIMAGECACHE
 
 #define SK_ATTR_DEPRECATED          SK_NOTHING_ARG1
-#define GR_GL_CUSTOM_SETUP_HEADER   "GrGLConfig_chrome.h"
+
+// glGetError() forces a sync with gpu process on chrome
+#define GR_GL_CHECK_ERROR_START 0
 
 #endif  // SKIA_CONFIG_SKUSERCONFIG_H_

@@ -65,15 +65,6 @@ bool MatchesMagic(const uint8_t* data, size_t size, const char (&magic)[N]) {
   return memcmp(data, magic, N) == 0;
 }
 
-base::StringView FindLine(const uint8_t* data, size_t size) {
-  for (size_t i = 0; i < size; ++i) {
-    if (data[i] == '\n') {
-      return base::StringView(reinterpret_cast<const char*>(data), i);
-    }
-  }
-  return base::StringView();
-}
-
 bool IsProtoTraceWithSymbols(const uint8_t* ptr, size_t size) {
   const uint8_t* const end = ptr + size;
 
@@ -128,6 +119,8 @@ const char* TraceTypeToString(TraceType trace_type) {
       return "zip";
     case kPerfDataTraceType:
       return "perf";
+    case kInstrumentsXmlTraceType:
+      return "instruments_xml";
     case kAndroidLogcatTraceType:
       return "android_logcat";
     case kAndroidDumpstateTraceType:
@@ -181,6 +174,10 @@ TraceType GuessTraceType(const uint8_t* data, size_t size) {
       base::StartsWith(lower_start, "<html>"))
     return kSystraceTraceType;
 
+  // MacOS Instruments XML export.
+  if (base::StartsWith(start, "<?xml version=\"1.0\"?>\n<trace-query-result>"))
+    return kInstrumentsXmlTraceType;
+
   // Traces obtained from atrace -z (compress).
   // They all have the string "TRACE:" followed by 78 9C which is a zlib header
   // for "deflate, default compression, window size=32K" (see b/208691037)
@@ -195,7 +192,7 @@ TraceType GuessTraceType(const uint8_t* data, size_t size) {
   if (base::StartsWith(start, "# ninja log"))
     return kNinjaLogTraceType;
 
-  if (AndroidLogEvent::IsAndroidLogEvent(FindLine(data, size))) {
+  if (AndroidLogEvent::IsAndroidLogcat(data, size)) {
     return kAndroidLogcatTraceType;
   }
 

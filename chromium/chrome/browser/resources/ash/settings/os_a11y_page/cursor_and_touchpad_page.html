@@ -131,44 +131,15 @@
 </template>
 <!-- TODO(b/341770655): Add deep link focus ID -->
 <template is="dom-if" if="[[isAccessibilityFaceGazeEnabled_]]">
-  <div class="settings-box two-line start-padding">
-    <div id="faceGazeDescription"
-        class="flex layout horizontal center link-wrapper"
-        on-click="onFaceGazeSettingsClick_">
-      <div id="details" aria-hidden="true">
-        <span id="facegaze-icon" aria-hidden="true">
-          <iron-icon slot="icon" icon="os-settings:face-gaze">
-          </iron-icon>
-        </span>
-        <div class="flex settings-box-text">
-          <div id="faceGazeTitleText">
-            $i18n{accessibilityFaceGazeLabel}
-          </div>
-          <div id="faceGazeDescriptionText" class="cr-secondary-text label">
-            $i18n{accessibilityFaceGazeDescription}
-          </div>
-        </div>
-      </div>
-      <template is="dom-if"
-          if="[[prefs.settings.a11y.face_gaze.enabled.value]]">
-        <cr-icon-button \
-            id="faceGazeSubpageButton"
-            class="subpage-arrow"
-            label="$i18n{accessibilityFaceGazeLabel}"
-            on-click="onFaceGazeSettingsClick_"
-            class="sub-item">
-        </cr-icon-button>
-        <div class="separator"></div>
-      </template>
-      <cr-toggle
-          id="faceGazeToggle"
-          checked="{{prefs.settings.a11y.face_gaze.enabled.value}}"
-          aria-labeledby="faceGazeTitleText"
-          aria-describedby="faceGazeDescriptionText"
-          on-checked-changed="onFaceGazeToggleChange_">
-      </cr-toggle>
-    </div>
-  </div>
+  <cr-link-row
+      id="faceGazePageRow"
+      class="hr"
+      start-icon="os-settings:face-gaze"
+      label="$i18n{accessibilityFaceGazeLabel}"
+      sub-label="$i18n{accessibilityFaceGazeDescription}"
+      on-click="onFaceGazeSettingsClick_"
+      role-description="$i18n{subpageArrowRoleDescription}">
+  </cr-link-row>
 </template>
 <settings-toggle-button
     id="largeCursorEnabledControl"
@@ -218,6 +189,19 @@
       label="$i18n{overscrollHistoryNavigationTitle}"
       deep-link-focus-id$="[[Setting.kOverscrollEnabled]]">
   </settings-toggle-button>
+</template>
+<template is="dom-if" if="[[isAccessibilityDisableTrackpadEnabled_]]">
+  <div class="settings-box start-padding">
+      <div class="start settings-box-text" id="disableInternalTrackpadLabel">
+      $i18n{disableTrackpadLabel}
+    </div>
+    <settings-dropdown-menu id="disableInternalTrackpadDropdown"
+        aria-labeledby="disableInternalTrackpadLabel"
+        pref="{{prefs.settings.a11y.disable_trackpad_mode}}"
+        menu-options="[[disableTrackpadOptions_]]"
+        deep-link-focus-id$="[[Setting.kAccessibilityDisableTrackpad]]">
+    </settings-dropdown-menu>
+  </div>
 </template>
 <template is="dom-if" if="[[showShelfNavigationButtonsSettings_]]" restamp>
   <!-- If shelf navigation buttons are implicitly enabled by other a11y

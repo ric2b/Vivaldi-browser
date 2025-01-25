@@ -18,13 +18,13 @@ typedef NS_ENUM(NSInteger, SettingsSectionIdentifier) {
   SettingsSectionIdentifierInfo,
   SettingsSectionIdentifierDebug,
   SettingsSectionIdentifierDefaults,
+  SettingsSectionIdentifierESBPromo
 
   // Vivaldi
+  , // Comma needed as above line does not have it
   SettingsSectionIdentifierVivaldiAccount,
   SettingsSectionIdentifierVivaldiAppearance,
   // End Vivaldi
-
-  SettingsSectionIdentifierESBPromo
 };
 
 // Item types used per Setting section.
@@ -60,9 +60,12 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypeTabs,
   SettingsItemTypePlusAddresses,
   SettingsItemTypeSwitchProfile,
+  SettingsItemTypeESBPromo
 
   // Vivaldi
+  , // Comma needed as above line does not have it
   SettingsItemTypeVivaldiSyncSettings,
+  SettingsItemTypeVivaldiGeneralSettings,
   SettingsItemTypeAddressBarSettings,
   SettingsItemTypeVivaldiTabsSettings,
   SettingsItemTypeAppearanceSettings,
@@ -70,8 +73,6 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypeVivaldiATBSettings,
   SettingsItemTypeAppIconSettings,
   // End Vivaldi
-
-  SettingsItemTypeESBPromo
 };
 
 // The accessibility identifier of the settings TableView.

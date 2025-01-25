@@ -32,6 +32,8 @@
 #include "media/base/media_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/color_palette.h"
@@ -166,9 +168,9 @@ ShareThisTabDialogView::ShareThisTabDialogView(
     constrained_window::ShowWebModalDialogViews(this, params.web_contents);
   } else {
 #if BUILDFLAG(IS_MAC)
-    // On Mac, MODAL_TYPE_CHILD with a null parent isn't allowed - fall back to
-    // MODAL_TYPE_WINDOW.
-    SetModalType(ui::MODAL_TYPE_WINDOW);
+    // On Mac, ModalType::kChild with a null parent isn't allowed - fall back to
+    // ModalType::kWindow.
+    SetModalType(ui::mojom::ModalType::kWindow);
 #endif
     CreateDialogWidget(this, params.context, nullptr)->Show();
   }
@@ -176,15 +178,15 @@ ShareThisTabDialogView::ShareThisTabDialogView(
   source_view_->SetBorder(views::CreateThemedRoundedRectBorder(
       1, 4, ui::kColorSysPrimaryContainer));
 
-  SetButtonLabel(ui::DIALOG_BUTTON_OK,
+  SetButtonLabel(ui::mojom::DialogButton::kOk,
                  l10n_util::GetStringUTF16(IDS_SHARE_THIS_TAB_DIALOG_ALLOW));
-  SetButtonEnabled(ui::DIALOG_BUTTON_OK, false);
-  SetButtonStyle(ui::DIALOG_BUTTON_OK, ui::ButtonStyle::kTonal);
-  SetButtonStyle(ui::DIALOG_BUTTON_CANCEL, ui::ButtonStyle::kTonal);
+  SetButtonEnabled(ui::mojom::DialogButton::kOk, false);
+  SetButtonStyle(ui::mojom::DialogButton::kOk, ui::ButtonStyle::kTonal);
+  SetButtonStyle(ui::mojom::DialogButton::kCancel, ui::ButtonStyle::kTonal);
 
   // Simply pressing ENTER without tab-key navigating to the button
   // must not accept the dialog, or else that'd be a security issue.
-  SetDefaultButton(ui::DialogButton::DIALOG_BUTTON_NONE);
+  SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kNone));
 }
 
 ShareThisTabDialogView::~ShareThisTabDialogView() = default;
@@ -214,7 +216,7 @@ bool ShareThisTabDialogView::ShouldShowWindowTitle() const {
 bool ShareThisTabDialogView::Accept() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   CHECK(!activation_timer_.IsRunning());
-  CHECK(IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  CHECK(IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
 
   source_view_->StopRefreshing();
   if (parent_ && web_contents_) {
@@ -305,7 +307,7 @@ void ShareThisTabDialogView::Activate() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   source_view_->Activate();
-  SetButtonEnabled(ui::DIALOG_BUTTON_OK, true);
+  SetButtonEnabled(ui::mojom::DialogButton::kOk, true);
 
   // In tests.
   if (ShouldAutoAccept()) {

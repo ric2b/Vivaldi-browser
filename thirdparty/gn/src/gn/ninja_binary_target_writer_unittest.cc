@@ -108,8 +108,8 @@ TEST_F(NinjaBinaryTargetWriterTest, NoSourcesStaticLib) {
       "\n"
       "build obj/foo/libbar.a: alink\n"
       "  arflags =\n"
-      "  output_extension = \n"
-      "  output_dir = \n";
+      "  output_extension =\n"
+      "  output_dir =\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
 }

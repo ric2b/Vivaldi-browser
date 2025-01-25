@@ -10,6 +10,7 @@
 
 #include "base/time/time.h"
 #include "base/values.h"
+#include "google_apis/common/base_requests.h"
 
 namespace google_apis::youtube_music {
 
@@ -45,6 +46,15 @@ struct PlaybackQueuePrepareRequestPayload {
   std::optional<ShuffleMode> shuffle_mode;
 };
 
+// Payload for PlaybackQueueNextRequests. Currently, all fields are optional so
+// it's empty;.
+struct PlaybackQueueNextRequestPayload {
+  PlaybackQueueNextRequestPayload();
+  ~PlaybackQueueNextRequestPayload();
+
+  std::string ToJson() const;
+};
+
 // Payload used as a request body for the API request that reports the playback.
 struct ReportPlaybackRequestPayload {
   enum class PlaybackState {
@@ -71,7 +81,29 @@ struct ReportPlaybackRequestPayload {
     kInvalid,
   };
 
+  struct WatchTimeSegment {
+    base::TimeDelta media_time_start;
+
+    base::TimeDelta media_time_end;
+
+    base::Time client_start_time;
+  };
+
   struct Params {
+    Params(const bool initial_report,
+           const std::string& playback_reporting_token,
+           const base::Time client_current_time,
+           const base::TimeDelta playback_start_offset,
+           const base::TimeDelta media_time_current,
+           const ConnectionType connection_type,
+           const PlaybackState playback_state,
+           const std::vector<WatchTimeSegment>& watch_time_segments);
+    Params(const Params&);
+    Params& operator=(const Params&);
+    ~Params();
+
+    bool initial_report;
+
     std::string playback_reporting_token;
 
     base::Time client_current_time;
@@ -83,19 +115,11 @@ struct ReportPlaybackRequestPayload {
     ConnectionType connection_type;
 
     PlaybackState playback_state;
+
+    std::vector<WatchTimeSegment> watch_time_segments;
   };
 
-  struct WatchTimeSegment {
-    base::TimeDelta media_time_start;
-
-    base::TimeDelta media_time_end;
-
-    base::Time client_start_time;
-  };
-
-  ReportPlaybackRequestPayload(
-      const Params& params,
-      const std::optional<WatchTimeSegment>& watch_time_segment);
+  explicit ReportPlaybackRequestPayload(const Params& params);
   ReportPlaybackRequestPayload(const ReportPlaybackRequestPayload&);
   ReportPlaybackRequestPayload& operator=(const ReportPlaybackRequestPayload&);
   ~ReportPlaybackRequestPayload();
@@ -103,8 +127,24 @@ struct ReportPlaybackRequestPayload {
   std::string ToJson() const;
 
   Params params;
+};
 
-  std::optional<WatchTimeSegment> watch_time_segment;
+// Requests that can have their payload signed with a client certificate.
+// Signing is implemented as a series of headers that are computed
+// asynchronously so they must be set before the request begins.
+class SignedRequest : public UrlFetchRequestBase {
+ public:
+  SignedRequest(RequestSender* sender);
+  ~SignedRequest() override;
+
+  void SetSigningHeaders(std::vector<std::string>&& headers);
+
+ protected:
+  HttpRequestMethod GetRequestType() const final;
+  std::vector<std::string> GetExtraRequestHeaders() const override;
+
+ private:
+  std::vector<std::string> headers_;
 };
 
 }  // namespace google_apis::youtube_music

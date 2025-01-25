@@ -5,11 +5,11 @@
 
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builder_url.star", "linkify_builder")
 load("//lib/builders.star", "cpu", "os", "siso")
 load("//lib/try.star", "try_")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
+load("//lib/html.star", "linkify_builder")
 load("//lib/xcode.star", "xcode")
 
 try_.defaults.set(
@@ -209,6 +209,8 @@ try_.builder(
         ],
     ),
     builderless = True,
+    cores = None,
+    cpu = cpu.ARM64,
 )
 
 try_.builder(
@@ -318,24 +320,6 @@ try_.compilator_builder(
 # they are built, hence no additional dimension is specified.
 # The 10.xx version translates to which bots will run isolated tests.
 try_.builder(
-    name = "mac_chromium_10.15_rel_ng",
-    branch_selector = branches.selector.MAC_BRANCHES,
-    mirrors = [
-        "ci/Mac Builder",
-        "ci/Mac10.15 Tests",
-    ],
-    gn_args = gn_args.config(
-        configs = [
-            "release_try_builder",
-            "remoteexec",
-            "mac",
-            "x64",
-        ],
-    ),
-    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
-)
-
-try_.builder(
     name = "mac_chromium_11.0_rel_ng",
     branch_selector = branches.selector.MAC_BRANCHES,
     mirrors = [
@@ -368,6 +352,8 @@ try_.builder(
             "x64",
         ],
     ),
+    cores = None,
+    cpu = cpu.ARM64,
 )
 
 try_.builder(
@@ -496,6 +482,7 @@ try_.builder(
     name = "mac_upload_clang_arm",
     executable = "recipe:chromium_toolchain/package_clang",
     builderless = False,
+    cpu = cpu.ARM64,
     execution_timeout = 8 * time.hour,
 )
 
@@ -528,6 +515,7 @@ ios_builder(
         "ci/ios-asan",
     ],
     gn_args = "ci/ios-asan",
+    cpu = cpu.ARM64,
 )
 
 ios_builder(
@@ -672,13 +660,6 @@ ios_builder(
 )
 
 ios_builder(
-    name = "ios-simulator-multi-window",
-    mirrors = ["ci/ios-simulator-multi-window"],
-    gn_args = "ci/ios-simulator-multi-window",
-    cpu = cpu.ARM64,
-)
-
-ios_builder(
     name = "ios-simulator-noncq",
     mirrors = [
         "ci/ios-simulator-noncq",
@@ -717,7 +698,7 @@ ios_builder(
     mirrors = ["ci/ios17-sdk-simulator"],
     gn_args = "ci/ios17-sdk-simulator",
     cpu = cpu.ARM64,
-    xcode = xcode.x15betabots,
+    xcode = xcode.x16_1betabots,
 )
 
 ios_builder(
@@ -792,6 +773,7 @@ try_.gpu.optional_tests_builder(
             # Inclusion filters.
             cq.location_filter(path_regexp = "chrome/browser/vr/.+"),
             cq.location_filter(path_regexp = "content/browser/xr/.+"),
+            cq.location_filter(path_regexp = "content/test/data/gpu/.+"),
             cq.location_filter(path_regexp = "content/test/gpu/.+"),
             cq.location_filter(path_regexp = "gpu/.+"),
             cq.location_filter(path_regexp = "media/audio/.+"),

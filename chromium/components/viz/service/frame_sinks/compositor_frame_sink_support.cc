@@ -21,6 +21,7 @@
 #include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "cc/base/features.h"
+#include "components/input/utils.h"
 #include "components/viz/common/constants.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
@@ -470,6 +471,12 @@ void CompositorFrameSinkSupport::ReturnResources(
   if (resources.empty())
     return;
 
+  if (layer_context_) {
+    // Resource management is delegated to LayerContext when it's in use.
+    layer_context_->ReturnResources(std::move(resources));
+    return;
+  }
+
   // When features::OnBeginFrameAcks is disabled we attempt to return resources
   // in DidReceiveCompositorFrameAck. However if there are no pending frames
   // then we don't expect that signal soon. In which case we return the
@@ -657,6 +664,7 @@ void CompositorFrameSinkSupport::DidNotProduceFrame(const BeginFrameAck& ack) {
         data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
                            StepName::STEP_DID_NOT_PRODUCE_FRAME);
         frame_sink_id_.WriteIntoTrace(ctx.Wrap(data->set_frame_sink_id()));
+        data->set_display_trace_id(ack.trace_id);
       });
   DCHECK(ack.frame_id.IsSequenceValid());
 
@@ -778,6 +786,7 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
         data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
                            StepName::STEP_RECEIVE_COMPOSITOR_FRAME);
         frame_sink_id_.WriteIntoTrace(ctx.Wrap(data->set_frame_sink_id()));
+        data->set_display_trace_id(frame.metadata.begin_frame_ack.trace_id);
       });
 
   DCHECK(local_surface_id.is_valid());
@@ -939,7 +948,7 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
       if (const auto& size_for_testing =
               frame_sink_manager_
                   ->copy_output_request_result_size_for_testing();  // IN-TEST
-          UNLIKELY(!size_for_testing.IsEmpty())) {
+          !size_for_testing.IsEmpty()) [[unlikely]] {
         SetCopyOutoutRequestResultSize(copy_request.get(), gfx::Rect(),
                                        size_for_testing,
                                        prev_surface->size_in_pixels());
@@ -1157,6 +1166,17 @@ void CompositorFrameSinkSupport::UpdateDisplayRootReference(
 }
 
 void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
+  int64_t trace_id = ComputeTraceId();
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::Flow::Global(trace_id), [trace_id](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_ISSUE_BEGIN_FRAME);
+        data->set_display_trace_id(trace_id);
+      });
+
   if (compositor_frame_callback_) {
     callback_received_begin_frame_ = true;
     UpdateNeedsBeginFramesInternal();
@@ -1191,16 +1211,7 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
     if (!last_activated_surface_id_.is_valid())
       adjusted_args.animate_only = false;
 
-    adjusted_args.trace_id = ComputeTraceId();
-    TRACE_EVENT(
-        "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
-        perfetto::Flow::Global((adjusted_args.trace_id)),
-        [&](perfetto::EventContext ctx) {
-          auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
-          auto* data = event->set_chrome_graphics_pipeline();
-          data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
-                             StepName::STEP_ISSUE_BEGIN_FRAME);
-        });
+    adjusted_args.trace_id = trace_id;
     adjusted_args.frames_throttled_since_last = frames_throttled_since_last_;
     frames_throttled_since_last_ = 0;
 
@@ -1612,13 +1623,13 @@ void CompositorFrameSinkSupport::ProcessCompositorFrameTransitionDirective(
     case CompositorFrameTransitionDirective::Type::kSave:
       // The save directive is used to start a new transition sequence. Ensure
       // we don't have any existing state for this transition.
-      if (UNLIKELY(frame_sink_manager_->ClearSurfaceAnimationManager(
-              transition_token))) {
+      if (frame_sink_manager_->ClearSurfaceAnimationManager(transition_token))
+          [[unlikely]] {
         view_transition_token_to_animation_manager_.erase(transition_token);
         return;
       }
-      if (UNLIKELY(view_transition_token_to_animation_manager_.erase(
-              transition_token))) {
+      if (view_transition_token_to_animation_manager_.erase(transition_token))
+          [[unlikely]] {
         return;
       }
 

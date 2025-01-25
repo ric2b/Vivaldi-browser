@@ -158,10 +158,6 @@ BASE_DECLARE_FEATURE(kVisibilityAwareResourceScheduler);
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kSharedZstd);
 
-// Enables de-duping of cookie access details sent to observers.
-COMPONENT_EXPORT(NETWORK_CPP)
-BASE_DECLARE_FEATURE(kCookieAccessDetailsNotificationDeDuping);
-
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kReduceTransferSizeUpdatedIPC);
 
@@ -186,6 +182,18 @@ BASE_DECLARE_FEATURE(kNetworkContextPrefetch);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<int> kNetworkContextPrefetchMaxLoaders;
+
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kTreatNullIPAsPublicAddressSpace);
+
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kCloneDevToolsConnectionOnlyIfRequested);
+
+// Enables the Storage Access Headers semantics.
+COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kStorageAccessHeaders);
+
+// Enables the Storage Access Headers Origin Trial.
+COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kStorageAccessHeadersTrial);
 
 }  // namespace network::features
 

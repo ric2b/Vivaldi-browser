@@ -20,6 +20,8 @@ static_library("policy") {
     "managed_configuration_variables.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash/components/arc",
     "//ash/components/arc:prefs",
@@ -33,10 +35,12 @@ static_library("policy") {
     "//chrome/browser/ash/arc/auth",
     "//chrome/browser/ash/arc/enterprise/cert_store",
     "//chrome/browser/ash/arc/intent_helper",
+    "//chrome/browser/ash/policy/arc",
     "//chrome/browser/ash/policy/core",
     "//chrome/browser/ash/policy/handlers",
     "//chrome/browser/ash/policy/remote_commands",
     "//chrome/browser/ash/profiles",
+    "//chrome/browser/chromeos/platform_keys",
     "//chrome/browser/profiles:profile",
     "//chrome/common:constants",
     "//chromeos/ash/components/system",
@@ -80,10 +84,11 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//chrome/browser",
-    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/arc/enterprise/cert_store",
     "//chrome/browser/ash/arc/session",
     "//chrome/browser/ash/arc/test:arc_test_support",
+    "//chrome/browser/ash/login/users:test_support",
+    "//chrome/browser/ash/policy/arc:test_support",
     "//chrome/browser/ash/policy/core",
     "//chrome/browser/profiles:profile",
     "//chrome/test:test_support",

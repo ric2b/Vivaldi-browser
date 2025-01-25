@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
 
 #include <memory>
@@ -12,21 +17,19 @@
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_features.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/new_tab_page/feature_promo_helper/new_tab_page_feature_promo_helper.h"
 #include "chrome/browser/new_tab_page/modules/file_suggestion/file_suggestion_handler.h"
 #include "chrome/browser/new_tab_page/modules/new_tab_page_modules.h"
 #include "chrome/browser/new_tab_page/modules/v2/calendar/google_calendar_page_handler.h"
 #include "chrome/browser/new_tab_page/modules/v2/most_relevant_tab_resumption/most_relevant_tab_resumption_page_handler.h"
-#include "chrome/browser/new_tab_page/modules/v2/tab_resumption/tab_resumption_page_handler.h"
-#include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/page_image_service/image_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
@@ -64,7 +67,6 @@
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/favicon_base/favicon_url_parser.h"
-#include "components/feed/feed_feature_list.h"
 #include "components/google/core/common/google_util.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/history_clusters/core/features.h"
@@ -101,10 +103,6 @@
 #include "chrome/browser/ui/webui/new_tab_page/foo/foo_handler.h"
 #endif
 
-#if BUILDFLAG(ENABLE_FEED_V2)
-#include "chrome/browser/new_tab_page/modules/feed/feed_handler.h"
-#endif  // BUILDFLAG(ENABLE_FEED_V2)
-
 using content::BrowserContext;
 using content::WebContents;
 
@@ -139,11 +137,6 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
                              .GoogleBaseURLValue())
                         .spec());
 
-  source->AddBoolean(
-      "handleMostVisitedNavigationExplicitly",
-      base::FeatureList::IsEnabled(
-          ntp_features::kNtpHandleMostVisitedNavigationExplicitly));
-
   source->AddInteger(
       "prerenderStartTimeThreshold",
       features::kNewTabPagePrerenderStartDelayOnMouseHoverByMiliSeconds.Get());
@@ -164,9 +157,8 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       base::FeatureList::IsEnabled(ntp_features::kNtpOneGoogleBar));
   source->AddBoolean("shortcutsEnabled",
                      base::FeatureList::IsEnabled(ntp_features::kNtpShortcuts));
-  bool redesigned_modules_enabled = ntp_features::IsNtpModulesRedesignedEnabled(
-      g_browser_process->GetApplicationLocale(),
-      GetVariationsServiceCountryCode(g_browser_process->variations_service()));
+  bool redesigned_modules_enabled =
+      base::FeatureList::IsEnabled(ntp_features::kNtpModulesRedesigned);
   source->AddBoolean("singleRowShortcutsEnabled", redesigned_modules_enabled);
   source->AddBoolean("logoEnabled",
                      base::FeatureList::IsEnabled(ntp_features::kNtpLogo));
@@ -311,6 +303,7 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       // Modules.
       {"dismissModuleToastMessage", IDS_NTP_MODULES_DISMISS_TOAST_MESSAGE},
       {"disableModuleToastMessage", IDS_NTP_MODULES_DISABLE_TOAST_MESSAGE},
+      {"moduleHeaderMoreActionsMenu", IDS_NTP_MODULE_HEADER_MORE_ACTIONS_MENU},
       {"moduleInfoButtonTitle", IDS_NTP_MODULES_INFO_BUTTON_TITLE},
       {"modulesDismissButtonText", IDS_NTP_MODULES_DISMISS_BUTTON_TEXT},
       {"modulesDisableButtonText", IDS_NTP_MODULES_DISABLE_BUTTON_TEXT},
@@ -335,9 +328,8 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesDriveTitleV2", IDS_NTP_MODULES_DRIVE_TITLE_V2},
       {"modulesDriveInfo", IDS_NTP_MODULES_DRIVE_INFO},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
-      {"modulesFeedTitle", IDS_NTP_MODULES_FEED_TITLE},
-      {"modulesGoogleCalendarDismissButtonText",
-       IDS_NTP_MODULES_GOOGLE_CALENDAR_DISMISS_BUTTON_TEXT},
+      {"modulesDismissForHoursButtonText",
+       IDS_NTP_MODULES_DISMISS_FOR_HOURS_BUTTON_TEXT},
       {"modulesGoogleCalendarDismissToastMessage",
        IDS_NTP_MODULES_GOOGLE_CALENDAR_DISMISS_TOAST_MESSAGE},
       {"modulesGoogleCalendarDisableToastMessage",
@@ -398,6 +390,12 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
        IDS_NTP_MODULES_MOST_RELEVANT_TAB_RESUMPTION_TITLE},
       {"modulesMostRelevantTabResumptionSeeMore",
        IDS_NTP_MODULES_MOST_RELEVANT_TAB_RESUMPTION_SEE_MORE},
+      {"modulesMostRelevantTabResumptionMostRecent",
+       IDS_TAB_RESUME_DECORATORS_MOST_RECENT},
+      {"modulesMostRelevantTabResumptionFrequentlyVisited",
+       IDS_TAB_RESUME_DECORATORS_FREQUENTLY_VISITED},
+      {"modulesMostRelevantTabResumptionVisitedXAgo",
+       IDS_TAB_RESUME_DECORATORS_VISITED_X_AGO},
 
       // Middle slot promo.
       {"undoDismissPromoButtonToast", IDS_NTP_UNDO_DISMISS_PROMO_BUTTON_TOAST},
@@ -420,6 +418,11 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       base::FeatureList::IsEnabled(ntp_features::kNtpModulesOverflowScrollbar));
 
   source->AddBoolean("modulesRedesignedEnabled", redesigned_modules_enabled);
+
+  source->AddString(
+      "calendarModuleDismissHours",
+      base::NumberToString(
+          ntp_features::kNtpCalendarModuleWindowEndDeltaParam.Get().InHours()));
 
   SearchboxHandler::SetupWebUIDataSource(
       source, profile,
@@ -461,9 +464,9 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
       // for the unlikely case where the NewTabPageHandler is created before we
       // received the DidStartNavigation event.
       navigation_start_time_(base::Time::Now()),
-      module_id_names_(ntp::MakeModuleIdNames(
-          NewTabPageUI::IsDriveModuleEnabledForProfile(profile_),
-          NewTabPageUI::IsManagedProfile(profile_))) {
+      module_id_names_(
+          ntp::MakeModuleIdNames(NewTabPageUI::IsManagedProfile(profile_),
+                                 profile_)) {
   auto* source = CreateAndAddNewTabPageUiHtmlSource(profile_);
   bool wallpaper_search_button_enabled =
       base::FeatureList::IsEnabled(ntp_features::kNtpWallpaperSearchButton) &&
@@ -485,6 +488,8 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
           base::FeatureList::IsEnabled(
               ntp_features::kNtpWallpaperSearchButtonAnimation) &&
           should_animate_wallpaper_search_button);
+  source->AddInteger("wallpaperSearchButtonHideCondition",
+                     ntp_features::GetWallpaperSearchButtonHideCondition());
 
   content::URLDataSource::Add(profile_,
                               std::make_unique<SanitizedImageSource>(profile_));
@@ -571,24 +576,6 @@ void NewTabPageUI::ResetProfilePrefs(PrefService* prefs) {
 }
 
 // static
-bool NewTabPageUI::IsDriveModuleEnabledForProfile(Profile* profile) {
-  // TODO(crbug.com/40837656): Explore not requiring sync for the drive
-  // module to be enabled.
-  auto* sync_service = SyncServiceFactory::GetForProfile(profile);
-  if (!IsDriveModuleEnabled() || !sync_service ||
-      !sync_service->IsSyncFeatureEnabled()) {
-    return false;
-  }
-  if (!base::GetFieldTrialParamByFeatureAsBool(
-          ntp_features::kNtpDriveModule,
-          ntp_features::kNtpDriveModuleManagedUsersOnlyParam, true)) {
-    return true;
-  }
-
-  return NewTabPageUI::IsManagedProfile(profile);
-}
-
-// static
 bool NewTabPageUI::IsManagedProfile(Profile* profile) {
   // TODO(crbug.com/40183609): Stop calling the private method
   // FindExtendedPrimaryAccountInfo().
@@ -653,14 +640,6 @@ void NewTabPageUI::BindInterface(
       std::move(pending_receiver), profile_);
 }
 
-void NewTabPageUI::BindInterface(
-    mojo::PendingReceiver<ntp::feed::mojom::FeedHandler> pending_receiver) {
-#if BUILDFLAG(ENABLE_FEED_V2)
-  feed_handler_ =
-      ntp::FeedHandler::Create(std::move(pending_receiver), profile_);
-#endif  // BUILDFLAG(ENABLE_FEED_V2)
-}
-
 #if !defined(OFFICIAL_BUILD)
 void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<foo::mojom::FooHandler> pending_page_handler) {
@@ -674,13 +653,6 @@ void NewTabPageUI::BindInterface(
   most_relevant_tab_resumption_handler_ =
       std::make_unique<MostRelevantTabResumptionPageHandler>(
           std::move(pending_page_handler), web_contents());
-}
-
-void NewTabPageUI::BindInterface(
-    mojo::PendingReceiver<ntp::tab_resumption::mojom::PageHandler>
-        pending_page_handler) {
-  tab_resumption_handler_ = std::make_unique<TabResumptionPageHandler>(
-      std::move(pending_page_handler), web_contents());
 }
 
 void NewTabPageUI::BindInterface(

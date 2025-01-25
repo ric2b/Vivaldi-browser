@@ -35,32 +35,10 @@
 #include "xfa/fxfa/parser/cxfa_margin.h"
 #include "xfa/fxfa/parser/cxfa_node.h"
 
-namespace {
-
-FXDIB_Format XFA_GetDIBFormat(FXCODEC_IMAGE_TYPE type, int32_t bpp) {
-  switch (type) {
-    case FXCODEC_IMAGE_JPG:
-#ifdef PDF_ENABLE_XFA_BMP
-    case FXCODEC_IMAGE_BMP:
-#endif  // PDF_ENABLE_XFA_BMP
-#ifdef PDF_ENABLE_XFA_TIFF
-    case FXCODEC_IMAGE_TIFF:
-#endif  // PDF_ENABLE_XFA_TIFF
-      return bpp <= 24 ? FXDIB_Format::kRgb : FXDIB_Format::kRgb32;
-#ifdef PDF_ENABLE_XFA_PNG
-    case FXCODEC_IMAGE_PNG:
-#endif  // PDF_ENABLE_XFA_PNG
-    default:
-      return FXDIB_Format::kArgb;
-  }
-}
-
-}  // namespace
-
 void XFA_DrawImage(CFGAS_GEGraphics* pGS,
                    const CFX_RectF& rtImage,
                    const CFX_Matrix& matrix,
-                   RetainPtr<CFX_DIBitmap> pDIBitmap,
+                   RetainPtr<CFX_DIBitmap> bitmap,
                    XFA_AttributeValue iAspect,
                    const CFX_Size& dpi,
                    XFA_AttributeValue iHorzAlign,
@@ -68,14 +46,14 @@ void XFA_DrawImage(CFGAS_GEGraphics* pGS,
   if (rtImage.IsEmpty())
     return;
 
-  CHECK(pDIBitmap);
-  if (pDIBitmap->GetBuffer().empty()) {
+  CHECK(bitmap);
+  if (bitmap->GetBuffer().empty()) {
     return;
   }
 
   CFX_RectF rtFit(rtImage.TopLeft(),
-                  XFA_UnitPx2Pt(pDIBitmap->GetWidth(), dpi.width),
-                  XFA_UnitPx2Pt(pDIBitmap->GetHeight(), dpi.height));
+                  XFA_UnitPx2Pt(bitmap->GetWidth(), dpi.width),
+                  XFA_UnitPx2Pt(bitmap->GetHeight(), dpi.height));
   switch (iAspect) {
     case XFA_AttributeValue::Fit: {
       float f1 = rtImage.height / rtFit.height;
@@ -116,24 +94,26 @@ void XFA_DrawImage(CFGAS_GEGraphics* pGS,
   else if (iVertAlign == XFA_AttributeValue::Bottom)
     rtFit.top = rtImage.bottom() - rtImage.height;
 
-  CFX_RenderDevice* pRenderDevice = pGS->GetRenderDevice();
-  CFX_RenderDevice::StateRestorer restorer(pRenderDevice);
+  CFX_RenderDevice* device = pGS->GetRenderDevice();
+  CFX_RenderDevice::StateRestorer restorer(device);
   CFX_Path path;
   path.AppendRect(rtImage.left, rtImage.bottom(), rtImage.right(), rtImage.top);
-  pRenderDevice->SetClip_PathFill(path, &matrix,
-                                  CFX_FillRenderOptions::WindingOptions());
+  device->SetClip_PathFill(path, &matrix,
+                           CFX_FillRenderOptions::WindingOptions());
 
-  CFX_Matrix mtImage(1, 0, 0, -1, 0, 1);
-  mtImage.Concat(
+  CFX_Matrix image_to_device(1, 0, 0, -1, 0, 1);
+  image_to_device.Concat(
       CFX_Matrix(rtFit.width, 0, 0, rtFit.height, rtFit.left, rtFit.top));
-  mtImage.Concat(matrix);
+  image_to_device.Concat(matrix);
 
-  CXFA_ImageRenderer imageRender(pRenderDevice, std::move(pDIBitmap), mtImage);
-  if (!imageRender.Start())
+  CXFA_ImageRenderer image_renderer(device, std::move(bitmap), image_to_device);
+  if (!image_renderer.Start()) {
     return;
+  }
 
-  while (imageRender.Continue())
+  while (image_renderer.Continue()) {
     continue;
+  }
 }
 
 RetainPtr<CFX_DIBitmap> XFA_LoadImageFromBuffer(
@@ -167,32 +147,30 @@ RetainPtr<CFX_DIBitmap> XFA_LoadImageFromBuffer(
     return nullptr;
   }
 
-  type = pProgressiveDecoder->GetType();
-  FXDIB_Format format =
-      XFA_GetDIBFormat(type, pProgressiveDecoder->GetBitsPerPixel());
   RetainPtr<CFX_DIBitmap> pBitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   if (!pBitmap->Create(pProgressiveDecoder->GetWidth(),
-                       pProgressiveDecoder->GetHeight(), format)) {
+                       pProgressiveDecoder->GetHeight(),
+                       pProgressiveDecoder->GetBitmapFormat())) {
     return nullptr;
   }
 
   pBitmap->Clear(0xffffffff);
 
-  size_t nFrames;
-  FXCODEC_STATUS status;
-  std::tie(status, nFrames) = pProgressiveDecoder->GetFrames();
-  if (status != FXCODEC_STATUS::kDecodeReady || nFrames == 0)
+  auto [status, nFrames] = pProgressiveDecoder->GetFrames();
+  if (status != FXCODEC_STATUS::kDecodeReady || nFrames == 0) {
     return nullptr;
+  }
 
-  status = pProgressiveDecoder->StartDecode(pBitmap, 0, 0, pBitmap->GetWidth(),
-                                            pBitmap->GetHeight());
-  if (status == FXCODEC_STATUS::kError)
+  status = pProgressiveDecoder->StartDecode(pBitmap);
+  if (status == FXCODEC_STATUS::kError) {
     return nullptr;
+  }
 
   while (status == FXCODEC_STATUS::kDecodeToBeContinued) {
     status = pProgressiveDecoder->ContinueDecode();
-    if (status == FXCODEC_STATUS::kError)
+    if (status == FXCODEC_STATUS::kError) {
       return nullptr;
+    }
   }
 
   return pBitmap;

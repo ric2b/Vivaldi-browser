@@ -16,7 +16,7 @@
 mod tests;
 
 use crabby_avif::reformat::rgb::*;
-use image::io::Reader as ImageReader;
+use image::ImageReader;
 use tests::*;
 
 #[test]

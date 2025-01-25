@@ -149,10 +149,13 @@ Note: The VT2 prompt suggests that you change the chronos password, but do not
 do this.
 
 Note: When development mode is enabled, you can also access a prettier-terminal
-in ChromeOS by logging in (or pressing “Browse as Guest”), pressing `ctrl + alt
-+ T`, and then typing shell. This provides you the same access that the VT2
-terminal does, but is less convenient because it requires sign in first. You
-will also need to run “sudo su” to get a root shell before proceeding.
+in ChromeOS by logging in (or pressing “Browse as Guest”), pressing
+
+`ctrl + alt + T`, and then typing `shell`.
+
+This provides you the same access that the VT2 terminal does, but is less
+convenient because it requires sign in first. You will also need to run
+`sudo su` to get a root shell before proceeding.
 
 Note: If you are using a tablet without an attached keyboard, you will need to
 use crosh (see above) instead of VT2.

@@ -12,6 +12,7 @@
 #import "components/variations/service/variations_service_client.h"
 #import "components/variations/synthetic_trial_registry.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/browser/app_store_rating/ui_bundled/features.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/default_browser/model/utils_test_support.h"
 #import "ios/chrome/browser/promos_manager/model/constants.h"
@@ -21,10 +22,9 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
-#import "ios/chrome/browser/app_store_rating/ui_bundled/features.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/chrome/test/testing_application_context.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -126,12 +126,16 @@ class AppStoreRatingSceneAgentTest : public PlatformTest {
 
   ~AppStoreRatingSceneAgentTest() override {
     ClearDefaultBrowserPromoData();
-    local_state_.Get()->ClearPref(prefs::kAppStoreRatingPolicyEnabled);
+    local_state()->ClearPref(prefs::kAppStoreRatingPolicyEnabled);
+  }
+
+  PrefService* local_state() {
+    return GetApplicationContext()->GetLocalState();
   }
 
  protected:
-  IOSChromeScopedTestingLocalState local_state_;
-  std::unique_ptr<TestChromeBrowserState> browser_state_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
+  std::unique_ptr<TestProfileIOS> profile_;
   web::WebTaskEnvironment task_environment_;
   AppStoreRatingSceneAgent* test_scene_agent_;
   std::unique_ptr<MockPromosManager> promos_manager_;
@@ -145,11 +149,11 @@ class AppStoreRatingSceneAgentTest : public PlatformTest {
   // Create a FakeSceneState.
   void CreateFakeSceneState() {
     id mockAppState = OCMClassMock([AppState class]);
-    TestChromeBrowserState::Builder builder;
-    browser_state_ = builder.Build();
+    TestProfileIOS::Builder builder;
+    profile_ = std::move(builder).Build();
     fake_scene_state_ =
         [[FakeSceneState alloc] initWithAppState:mockAppState
-                                    browserState:browser_state_.get()];
+                                         profile:profile_.get()];
   }
 
   // Create an AppStoreRatingSceneAgent to test.
@@ -167,13 +171,13 @@ class AppStoreRatingSceneAgentTest : public PlatformTest {
 
   // Enable Credentials Provider.
   void EnableCPE() {
-    browser_state_->GetPrefs()->SetBoolean(
+    profile_->GetPrefs()->SetBoolean(
         password_manager::prefs::kCredentialProviderEnabledOnStartup, true);
   }
 
   // Disable Credentials Provider.
   void DisableCPE() {
-    browser_state_->GetPrefs()->SetBoolean(
+    profile_->GetPrefs()->SetBoolean(
         password_manager::prefs::kCredentialProviderEnabledOnStartup, false);
   }
 };
@@ -183,9 +187,6 @@ class AppStoreRatingSceneAgentTest : public PlatformTest {
 // Tests that promo display is not requested when all the conditions are met,
 // but the App Store Rating policy is disabled.
 TEST_F(AppStoreRatingSceneAgentTest, TestDisabledByPolicy) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kAppStoreRatingDBExclusionJan2024);
-
   EXPECT_CALL(*promos_manager_.get(), RegisterPromoForSingleDisplay(_))
       .Times(0);
 
@@ -195,30 +196,7 @@ TEST_F(AppStoreRatingSceneAgentTest, TestDisabledByPolicy) {
   SetTrueChromeLikelyDefaultBrowser();
 
   // Disabling the policy.
-  local_state_.Get()->SetBoolean(prefs::kAppStoreRatingPolicyEnabled, false);
-
-  // Simulating the user launching or resuming the app.
-  [test_scene_agent_ sceneState:fake_scene_state_
-      transitionedToActivationLevel:SceneActivationLevelForegroundActive];
-}
-
-// Tests that promo display is not requested when all the conditions are met,
-// but the App Store Rating policy is disabled. Enables the DB exclusion
-// feature.
-TEST_F(AppStoreRatingSceneAgentTest, TestDisabledByPolicyDBExclusionEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAppStoreRatingDBExclusionJan2024);
-
-  EXPECT_CALL(*promos_manager_.get(), RegisterPromoForSingleDisplay(_))
-      .Times(0);
-
-  ScopedVariationsService scoped_variations_service;
-  scoped_variations_service.SimulateCountryWhereDBUsed();
-  EnableCPE();
-  SetTrueChromeLikelyDefaultBrowser();
-
-  // Disabling the policy.
-  local_state_.Get()->SetBoolean(prefs::kAppStoreRatingPolicyEnabled, false);
+  local_state()->SetBoolean(prefs::kAppStoreRatingPolicyEnabled, false);
 
   // Simulating the user launching or resuming the app.
   [test_scene_agent_ sceneState:fake_scene_state_
@@ -228,30 +206,6 @@ TEST_F(AppStoreRatingSceneAgentTest, TestDisabledByPolicyDBExclusionEnabled) {
 // Tests that promo display is requested when the user meets all eligibility
 // conditions.
 TEST_F(AppStoreRatingSceneAgentTest, TestAllConditionsMet) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kAppStoreRatingDBExclusionJan2024);
-
-  EXPECT_CALL(
-      *promos_manager_.get(),
-      RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
-      .Times(1);
-
-  ScopedVariationsService scoped_variations_service;
-  scoped_variations_service.SimulateCountryWhereDBUsed();
-  EnableCPE();
-  SetTrueChromeLikelyDefaultBrowser();
-
-  // Simulating the user launching or resuming the app.
-  [test_scene_agent_ sceneState:fake_scene_state_
-      transitionedToActivationLevel:SceneActivationLevelForegroundActive];
-}
-
-// Tests that promo display is requested when the user meets all eligibility
-// conditions. Enables the DB exclusion feature.
-TEST_F(AppStoreRatingSceneAgentTest, TestAllConditionsMetDBExclusionEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAppStoreRatingDBExclusionJan2024);
-
   EXPECT_CALL(
       *promos_manager_.get(),
       RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
@@ -268,12 +222,8 @@ TEST_F(AppStoreRatingSceneAgentTest, TestAllConditionsMetDBExclusionEnabled) {
 }
 
 // Tests that promo display is requested when both the CPE and DB conditions
-// are met, but the user is in a country where the DB condition is ignored.
-TEST_F(AppStoreRatingSceneAgentTest,
-       TestAllConditionsDBExclusionEnabledCountryIgnored) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAppStoreRatingDBExclusionJan2024);
-
+// are met, and the user is in a country where the DB condition is ignored.
+TEST_F(AppStoreRatingSceneAgentTest, TestAllConditionsDBIgnored) {
   EXPECT_CALL(
       *promos_manager_.get(),
       RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
@@ -291,9 +241,6 @@ TEST_F(AppStoreRatingSceneAgentTest,
 
 // Tests that promo display is requested when only the CPE condition is met.
 TEST_F(AppStoreRatingSceneAgentTest, TestOnlyCPEMet) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kAppStoreRatingDBExclusionJan2024);
-
   EXPECT_CALL(
       *promos_manager_.get(),
       RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
@@ -301,46 +248,6 @@ TEST_F(AppStoreRatingSceneAgentTest, TestOnlyCPEMet) {
 
   EnableCPE();
   SetFalseChromeLikelyDefaultBrowser();
-
-  // Simulating the user launching or resuming the app.
-  [test_scene_agent_ sceneState:fake_scene_state_
-      transitionedToActivationLevel:SceneActivationLevelForegroundActive];
-}
-
-// Tests that promo display is requested when only the CPE condition is met.
-// Enables the exclusion feature.
-TEST_F(AppStoreRatingSceneAgentTest, TestOnlyCPEMetDBExclusionEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAppStoreRatingDBExclusionJan2024);
-
-  EXPECT_CALL(
-      *promos_manager_.get(),
-      RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
-      .Times(1);
-
-  EnableCPE();
-  SetFalseChromeLikelyDefaultBrowser();
-
-  // Simulating the user launching or resuming the app.
-  [test_scene_agent_ sceneState:fake_scene_state_
-      transitionedToActivationLevel:SceneActivationLevelForegroundActive];
-}
-
-// Tests that promo display is requested when only the default browser condition
-// is met.
-TEST_F(AppStoreRatingSceneAgentTest, TestOnlyDBMet) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kAppStoreRatingDBExclusionJan2024);
-
-  EXPECT_CALL(
-      *promos_manager_.get(),
-      RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
-      .Times(1);
-
-  ScopedVariationsService scoped_variations_service;
-  scoped_variations_service.SimulateCountryWhereDBUsed();
-  DisableCPE();
-  SetTrueChromeLikelyDefaultBrowser();
 
   // Simulating the user launching or resuming the app.
   [test_scene_agent_ sceneState:fake_scene_state_
@@ -350,9 +257,6 @@ TEST_F(AppStoreRatingSceneAgentTest, TestOnlyDBMet) {
 // Tests that promo display is requested when only the default browser condition
 // is met and the user is in a country where the DB condition is in use.
 TEST_F(AppStoreRatingSceneAgentTest, TestOnlyDBMetAndDBInUse) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAppStoreRatingDBExclusionJan2024);
-
   EXPECT_CALL(
       *promos_manager_.get(),
       RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
@@ -372,9 +276,6 @@ TEST_F(AppStoreRatingSceneAgentTest, TestOnlyDBMetAndDBInUse) {
 // condition is met and the user is in a country where the DB condition is
 // ignored.
 TEST_F(AppStoreRatingSceneAgentTest, TestOnlyDBMetAndDBIgnored) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAppStoreRatingDBExclusionJan2024);
-
   EXPECT_CALL(
       *promos_manager_.get(),
       RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
@@ -390,35 +291,9 @@ TEST_F(AppStoreRatingSceneAgentTest, TestOnlyDBMetAndDBIgnored) {
       transitionedToActivationLevel:SceneActivationLevelForegroundActive];
 }
 
-// Tests that promo display is requested when only the default browser condition
-// is met and the user is in a country where the DB condition is ignored, but
-// the DB exclusion feature is disabled.
-TEST_F(AppStoreRatingSceneAgentTest,
-       TestOnlyDBMetAndDBIgnoredButDBExclusionDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kAppStoreRatingDBExclusionJan2024);
-
-  EXPECT_CALL(
-      *promos_manager_.get(),
-      RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
-      .Times(1);
-
-  ScopedVariationsService scoped_variations_service;
-  scoped_variations_service.SimulateCountryWhereDBIgnored();
-  DisableCPE();
-  SetTrueChromeLikelyDefaultBrowser();
-
-  // Simulating the user launching or resuming the app.
-  [test_scene_agent_ sceneState:fake_scene_state_
-      transitionedToActivationLevel:SceneActivationLevelForegroundActive];
-}
-
-// Tests that promo display is NOT requested when none of the conditions are
+// Tests that promo display is not requested when none of the conditions are
 // met.
 TEST_F(AppStoreRatingSceneAgentTest, TestNoConditionsMet) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kAppStoreRatingDBExclusionJan2024);
-
   EXPECT_CALL(
       *promos_manager_.get(),
       RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
@@ -426,27 +301,6 @@ TEST_F(AppStoreRatingSceneAgentTest, TestNoConditionsMet) {
 
   ScopedVariationsService scoped_variations_service;
   scoped_variations_service.SimulateCountryWhereDBIgnored();
-  DisableCPE();
-  SetFalseChromeLikelyDefaultBrowser();
-
-  // Simulating the user launching or resuming the app.
-  [test_scene_agent_ sceneState:fake_scene_state_
-      transitionedToActivationLevel:SceneActivationLevelForegroundActive];
-}
-
-// Tests that promo display is NOT requested when none of the conditions are
-// met. Enables the exclusion feature.
-TEST_F(AppStoreRatingSceneAgentTest, TestNoConditionsMetDBExclusionEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAppStoreRatingDBExclusionJan2024);
-
-  EXPECT_CALL(
-      *promos_manager_.get(),
-      RegisterPromoForSingleDisplay(promos_manager::Promo::AppStoreRating))
-      .Times(0);
-
-  ScopedVariationsService scoped_variations_service;
-  scoped_variations_service.SimulateCountryWhereDBUsed();
   DisableCPE();
   SetFalseChromeLikelyDefaultBrowser();
 

@@ -10,6 +10,14 @@
   box-sizing: border-box;
 }
 
+:host {
+  /**
+    Adjusts the max height of the code area.
+    This can be changed from outside by targeting `devtools-code-block` element.
+  */
+  --max-code-height: none;
+}
+
 code {
   color: var(--sys-color-on-surface);
   font-size: 11px;
@@ -19,38 +27,68 @@ code {
 }
 
 .codeblock {
-  margin-bottom: 8px;
+  margin-bottom: var(--sys-size-5);
   box-sizing: border-box;
-  border-radius: 4px;
-  background-color: var(--sys-color-surface5);
   color: var(--sys-color-on-surface);
 }
 
 .codeblock .toolbar {
+  border-top-left-radius: var(--sys-shape-corner-extra-small);
+  border-top-right-radius: var(--sys-shape-corner-extra-small);
   box-sizing: border-box;
   display: flex;
-  height: 28px;
+  height: var(--sys-size-12);
   flex-direction: row;
   padding: 0 11px;
   font-size: 11px;
   font-style: normal;
   font-weight: 400;
-  line-height: 16px;
+  line-height: var(--sys-size-8);
+  background-color: var(--sys-color-surface5);
 }
 
 .codeblock .editor-wrapper {
   color: var(--sys-color-on-surface);
   background: var(--sys-color-surface1);
-  padding: 10px 5px;
+  padding: 10px 5px 0;
+  border-bottom-left-radius: var(--sys-shape-corner-extra-small);
+  border-bottom-right-radius: var(--sys-shape-corner-extra-small);
+}
+
+.codeblock .editor-wrapper:has(.heading) {
+  padding: var(--sys-size-3) var(--sys-size-4) 0 5px;
+}
+
+.codeblock:not(:has(.toolbar)) .editor-wrapper {
+  border-radius: var(--sys-shape-corner-extra-small);
+}
+
+.codeblock .editor-wrapper .code {
+  max-height: var(--max-code-height);
+  overflow: auto;
+  padding-bottom: 10px;
+}
+
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: var(--sys-size-11);
+}
+
+.heading-text {
+  font: var(--sys-typescale-body5-bold);
+  padding-left: var(--sys-size-4);
+  padding-right: var(--sys-size-2);
 }
 
 .codeblock .lang {
-  padding: 6px 0;
+  padding: var(--sys-size-4) 0;
   flex: 1;
 }
 
 .codeblock .copy {
-  padding: 4px 0;
+  padding: var(--sys-size-3) 0;
   align-items: center;
   display: flex;
 }
@@ -65,20 +103,31 @@ code {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: var(--sys-size-3);
+
+  devtools-icon {
+    width: var(--sys-size-8);
+    height: var(--sys-size-8);
+    color: var(--icon-default);
+  }
 }
 
 .codeblock .copy-button.copied {
   color: var(--sys-color-primary);
 
-  --copy-icon-color: var(--sys-color-primary);
+  devtools-icon {
+    color: var(--sys-color-primary);
+  }
 }
 
 .notice {
-  margin-top: 3px;
-  margin-left: 3px;
+  margin-top: var(--sys-size-2);
+  padding: var(--sys-size-4) var(--sys-size-5);
+  background-color: var(--sys-color-surface1);
+  border-radius: var(--sys-shape-corner-extra-small);
 
   .link {
+    font: var(--sys-typescale-body4-regular);
     color: var(--sys-color-primary);
     text-decoration-line: underline;
   }

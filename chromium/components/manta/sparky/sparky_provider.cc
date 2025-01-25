@@ -1,16 +1,11 @@
 // Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/354693352): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/manta/sparky/sparky_provider.h"
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -41,6 +36,7 @@ namespace {
 
 // TODO (b/336703051) Update with new Oauth.
 constexpr char kOauthConsumerName[] = "manta_sparky";
+constexpr base::TimeDelta kTimeout = base::Seconds(75);
 
 // Handles the QA response from the server.
 void OnQAServerResponseOrErrorReceived(
@@ -99,6 +95,10 @@ SparkyProvider::SparkyProvider(
 
 SparkyProvider::~SparkyProvider() = default;
 
+std::vector<manta::FileData> SparkyProvider::GetFilesSummary() {
+  return sparky_delegate_->GetFileSummaries();
+}
+
 void SparkyProvider::QuestionAndAnswer(
     std::unique_ptr<SparkyContext> sparky_context,
     SparkyShowAnswerCallback done_callback) {
@@ -122,24 +122,18 @@ void SparkyProvider::OnScreenshotObtained(
   AddDialogToSparkyContext(sparky_context->dialog, sparky_context_data);
 
   sparky_context_data->set_task(sparky_context->task);
-  if (sparky_context->page_content.has_value()) {
-    sparky_context_data->set_page_contents(
-        sparky_context->page_content.value());
-  }
   if (sparky_context->page_url.has_value()) {
-    sparky_context_data->set_page_url(sparky_context->page_url.value());
+    auto* web_contents = sparky_context_data->mutable_web_contents();
+    web_contents->set_page_url(sparky_context->page_url.value());
+    if (sparky_context->page_content.has_value()) {
+      web_contents->set_page_contents(sparky_context->page_content.value());
+    }
   }
 
   if (jpeg_screenshot) {
     proto::Image* image_proto = sparky_context_data->mutable_screenshot();
-
-    // This copies the raw data from jpeg_screenshot (handling constness).
-    const uint8_t* data_ptr =
-        reinterpret_cast<const uint8_t*>(jpeg_screenshot->front());
-    size_t data_size = jpeg_screenshot->size();
-    // TODO(crbug.com/354693352): Explicit size when making string is unsafe.
-    image_proto->set_serialized_bytes(std::string(
-        data_ptr, data_ptr + data_size));  // Construct string from data
+    image_proto->set_serialized_bytes(
+        std::string(base::as_string_view(*jpeg_screenshot)));
   }
   auto* apps_data = sparky_context_data->mutable_apps_data();
   AddAppsData(sparky_delegate_->GetAppsList(), apps_data);
@@ -154,6 +148,10 @@ void SparkyProvider::OnScreenshotObtained(
   if (sparky_context->diagnostics_data) {
     auto* diagnostics_proto = sparky_context_data->mutable_diagnostics_data();
     AddDiagnosticsProto(sparky_context->diagnostics_data, diagnostics_proto);
+  }
+  if (!sparky_context->files.empty()) {
+    auto* files_proto = sparky_context_data->mutable_files_data();
+    AddFilesData(sparky_context->files, files_proto);
   }
 
   // This parameter contains the address of one of the backends which the
@@ -174,7 +172,7 @@ void SparkyProvider::OnScreenshotObtained(
   // launch.
   RequestInternal(GURL{GetProviderEndpoint(false)}, kOauthConsumerName,
                   MISSING_TRAFFIC_ANNOTATION, request, MantaMetricType::kSparky,
-                  std::move(internal_callback));
+                  std::move(internal_callback), kTimeout);
 }
 
 void SparkyProvider::OnResponseReceived(
@@ -185,6 +183,13 @@ void SparkyProvider::OnResponseReceived(
   if (status.status_code != manta::MantaStatusCode::kOk) {
     std::move(done_callback).Run(status, nullptr);
     return;
+  }
+
+  if (sparky_response->has_update()) {
+    if (sparky_response->update().has_files_with_summary()) {
+      auto files_proto = sparky_response->update().files_with_summary();
+      sparky_delegate_->UpdateFileSummaries(GetFileDataFromProto(files_proto));
+    }
   }
 
   if (sparky_response->has_context_request()) {
@@ -223,15 +228,32 @@ void SparkyProvider::RequestAdditionalInformation(
     auto diagnostics_vector =
         ObtainDiagnosticsVectorFromProto(context_request.diagnostics());
     if (!diagnostics_vector.empty()) {
+      if (std::find(diagnostics_vector.begin(), diagnostics_vector.end(),
+                    Diagnostics::kStorage) != diagnostics_vector.end()) {
+        sparky_delegate_->ObtainStorageInfo(base::BindOnce(
+            &SparkyProvider::OnStorageReceived, weak_ptr_factory_.GetWeakPtr(),
+            std::move(sparky_context), std::move(done_callback), status,
+            diagnostics_vector));
+        return;
+      }
       system_info_delegate_->ObtainDiagnostics(
           diagnostics_vector,
           base::BindOnce(&SparkyProvider::OnDiagnosticsReceived,
                          weak_ptr_factory_.GetWeakPtr(),
                          std::move(sparky_context), std::move(done_callback),
-                         status));
+                         status, nullptr));
       return;
     }
     std::move(done_callback).Run(status, nullptr);
+    return;
+  }
+  if (context_request.has_files()) {
+    std::set<std::string> files = GetSelectedFilePaths(context_request.files());
+    sparky_delegate_->GetMyFiles(
+        base::BindOnce(
+            &SparkyProvider::OnFilesObtained, weak_ptr_factory_.GetWeakPtr(),
+            std::move(sparky_context), std::move(done_callback), status),
+        /*obtain_bytes=*/true, /*allowed_file_paths=*/files);
     return;
   }
 
@@ -239,12 +261,43 @@ void SparkyProvider::RequestAdditionalInformation(
   std::move(done_callback).Run(status, nullptr);
 }
 
+void SparkyProvider::OnStorageReceived(
+    std::unique_ptr<SparkyContext> sparky_context,
+    SparkyShowAnswerCallback done_callback,
+    manta::MantaStatus status,
+    std::vector<Diagnostics> diagnostics_vector,
+    std::unique_ptr<StorageData> storage_data) {
+  bool get_system_diagnostics = false;
+  for (auto diagnostic : diagnostics_vector) {
+    if (diagnostic == Diagnostics::kBattery ||
+        diagnostic == Diagnostics::kCpu || diagnostic == Diagnostics::kMemory) {
+      get_system_diagnostics = true;
+      break;
+    }
+  }
+  if (get_system_diagnostics) {
+    system_info_delegate_->ObtainDiagnostics(
+        diagnostics_vector,
+        base::BindOnce(&SparkyProvider::OnDiagnosticsReceived,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       std::move(sparky_context), std::move(done_callback),
+                       status, std::move(storage_data)));
+    return;
+  }
+  sparky_context->diagnostics_data = std::make_optional<DiagnosticsData>(
+      std::nullopt, std::nullopt, std::nullopt,
+      std::make_optional(*storage_data));
+  QuestionAndAnswer(std::move(sparky_context), std::move(done_callback));
+}
+
 void SparkyProvider::OnDiagnosticsReceived(
     std::unique_ptr<SparkyContext> sparky_context,
     SparkyShowAnswerCallback done_callback,
     manta::MantaStatus status,
+    std::unique_ptr<StorageData> storage_data,
     std::unique_ptr<DiagnosticsData> diagnostics_data) {
   if (diagnostics_data) {
+    diagnostics_data->storage_data = std::make_optional(*storage_data);
     sparky_context->diagnostics_data = std::make_optional(*diagnostics_data);
     sparky_context->task = proto::TASK_DIAGNOSTICS;
     QuestionAndAnswer(std::move(sparky_context), std::move(done_callback));
@@ -280,11 +333,34 @@ void SparkyProvider::OnDialogResponse(std::unique_ptr<SparkyContext>,
       if (action.has_launch_app_id()) {
         sparky_delegate_->LaunchApp(action.launch_app_id());
       }
+      if (action.has_click()) {
+        sparky_delegate_->Click(action.click().x_pos(), action.click().y_pos());
+      }
+      if (action.has_text_entry()) {
+        sparky_delegate_->KeyboardEntry(action.text_entry().text());
+      }
+      if (action.has_file_action() &&
+          action.file_action().has_launch_file_path()) {
+        sparky_delegate_->LaunchFile(action.file_action().launch_file_path());
+      }
     }
   }
 
   DialogTurn latest_dialog_struct = ConvertDialogToStruct(&latest_reply);
   std::move(done_callback).Run(status, &latest_dialog_struct);
+}
+
+void SparkyProvider::OnFilesObtained(
+    std::unique_ptr<SparkyContext> sparky_context,
+    SparkyShowAnswerCallback done_callback,
+    manta::MantaStatus status,
+    std::vector<FileData> files_data) {
+  if (!files_data.empty()) {
+    sparky_context->files = std::move(files_data);
+    QuestionAndAnswer(std::move(sparky_context), std::move(done_callback));
+  } else {
+    std::move(done_callback).Run(status, nullptr);
+  }
 }
 
 }  // namespace manta

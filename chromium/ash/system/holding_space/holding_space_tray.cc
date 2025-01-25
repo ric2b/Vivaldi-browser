@@ -128,13 +128,7 @@ bool IsPreviewable(const std::unique_ptr<HoldingSpaceItem>& item) {
 // on changes to `tray` activation.
 ui::ImageModel CreateForegroundImageModel(const HoldingSpaceTray* tray,
                                           const gfx::VectorIcon& vector_icon) {
-  // When Jelly is disabled, `tray` activation does not affect color.
-  if (!chromeos::features::IsJellyEnabled()) {
-    return ui::ImageModel::FromVectorIcon(
-        vector_icon, kColorAshIconColorPrimary, kHoldingSpaceTrayIconSize);
-  }
-
-  // When Jelly is enabled, `tray` activation affects color.
+  // `tray` activation affects color.
   ui::ImageModel active = ui::ImageModel::FromVectorIcon(
       vector_icon, cros_tokens::kCrosSysSystemOnPrimaryContainer,
       kHoldingSpaceTrayIconSize);
@@ -163,9 +157,7 @@ std::unique_ptr<views::ImageView> CreateDefaultTrayIcon(
   icon->SetPreferredSize(gfx::Size(kTrayItemSize, kTrayItemSize));
   icon->SetPaintToLayer();
   icon->layer()->SetFillsBoundsOpaquely(false);
-  icon->SetImage(CreateForegroundImageModel(
-      tray, features::IsHoldingSpaceRefreshEnabled() ? kHoldingSpaceRefreshIcon
-                                                     : kHoldingSpaceIcon));
+  icon->SetImage(CreateForegroundImageModel(tray, kHoldingSpaceIcon));
   return icon;
 }
 
@@ -308,9 +300,7 @@ void HoldingSpaceTray::ClickedOutsideBubble(const ui::LocatedEvent& event) {
 std::u16string HoldingSpaceTray::GetAccessibleNameForTray() {
   return l10n_util::GetStringFUTF16(
       IDS_ASH_HOLDING_SPACE_A11Y_NAME,
-      features::IsHoldingSpaceRefreshEnabled()
-          ? l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_TITLE_REFRESH)
-          : l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_TITLE));
+      l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_TITLE));
 }
 
 views::View* HoldingSpaceTray::GetTooltipHandlerForPoint(
@@ -320,9 +310,7 @@ views::View* HoldingSpaceTray::GetTooltipHandlerForPoint(
 }
 
 std::u16string HoldingSpaceTray::GetTooltipText(const gfx::Point& point) const {
-  return features::IsHoldingSpaceRefreshEnabled()
-             ? l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_TITLE_REFRESH)
-             : l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_TITLE);
+  return l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_TITLE);
 }
 
 void HoldingSpaceTray::HandleLocaleChange() {
@@ -343,7 +331,7 @@ void HoldingSpaceTray::UpdateAfterLoginStatusChange() {
   UpdateVisibility();
 }
 
-void HoldingSpaceTray::CloseBubble() {
+void HoldingSpaceTray::CloseBubbleInternal() {
   if (!bubble_)
     return;
 
@@ -522,17 +510,10 @@ void HoldingSpaceTray::UpdateVisibility() {
     return;
   }
 
-  // If the predictability flag is enabled, always show the holding space tray.
-  if (features::IsHoldingSpacePredictabilityEnabled()) {
-    SetVisiblePreferred(true);
-    return;
-  }
-
   // The holding space tray should always be shown if the `model` contains items
-  // that are previewable, or if the predictability feature flag is enabled.
-  // Otherwise, it should only be visible if the time of first add has been
-  // marked, but a file has never been pinned, and the Files app chip has never
-  // been pressed.
+  // that are previewable. Otherwise, it should only be visible if the time of
+  // first add has been marked, but a file has never been pinned, and the Files
+  // app chip has never been pressed.
   auto* prefs = Shell::Get()->session_controller()->GetActivePrefService();
   SetVisiblePreferred(
       base::ranges::any_of(model->items(), IsPreviewable) ||
@@ -677,8 +658,7 @@ void HoldingSpaceTray::ExecuteCommand(int command_id, int event_flags) {
           Shell::Get()->session_controller()->GetActivePrefService(), true);
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 }
 

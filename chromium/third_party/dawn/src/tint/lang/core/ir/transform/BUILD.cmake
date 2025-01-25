@@ -67,6 +67,8 @@ tint_add_target(tint_lang_core_ir_transform lib
   lang/core/ir/transform/multiplanar_external_texture.h
   lang/core/ir/transform/preserve_padding.cc
   lang/core/ir/transform/preserve_padding.h
+  lang/core/ir/transform/remove_continue_in_switch.cc
+  lang/core/ir/transform/remove_continue_in_switch.h
   lang/core/ir/transform/remove_terminator_args.cc
   lang/core/ir/transform/remove_terminator_args.h
   lang/core/ir/transform/rename_conflicts.cc
@@ -109,6 +111,10 @@ tint_target_add_dependencies(tint_lang_core_ir_transform lib
   tint_utils_traits
 )
 
+tint_target_add_external_dependencies(tint_lang_core_ir_transform lib
+  "src_utils"
+)
+
 ################################################################################
 # Target:    tint_lang_core_ir_transform_test
 # Kind:      test
@@ -128,6 +134,7 @@ tint_add_target(tint_lang_core_ir_transform_test test
   lang/core/ir/transform/helper_test.h
   lang/core/ir/transform/multiplanar_external_texture_test.cc
   lang/core/ir/transform/preserve_padding_test.cc
+  lang/core/ir/transform/remove_continue_in_switch_test.cc
   lang/core/ir/transform/remove_terminator_args_test.cc
   lang/core/ir/transform/rename_conflicts_test.cc
   lang/core/ir/transform/robustness_test.cc
@@ -171,6 +178,7 @@ tint_target_add_dependencies(tint_lang_core_ir_transform_test test
 
 tint_target_add_external_dependencies(tint_lang_core_ir_transform_test test
   "gtest"
+  "src_utils"
 )
 
 if(TINT_BUILD_WGSL_READER)
@@ -242,4 +250,8 @@ tint_target_add_dependencies(tint_lang_core_ir_transform_fuzz fuzz
   tint_utils_symbol
   tint_utils_text
   tint_utils_traits
+)
+
+tint_target_add_external_dependencies(tint_lang_core_ir_transform_fuzz fuzz
+  "src_utils"
 )

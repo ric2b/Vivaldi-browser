@@ -52,8 +52,6 @@ std::string GetDecoderName(VideoDecoderType type) {
       return "V4L2VideoDecoder";
     case VideoDecoderType::kVivWMFDecoder:
       return "WMFVideoDecoder";
-    case VideoDecoderType::kVivVTVideo:
-      return "VivVTVideoDecoder";
     case VideoDecoderType::kVivPassThrough:
       return "PassThroughVideoDecoder";
     case VideoDecoderType::kTesting:

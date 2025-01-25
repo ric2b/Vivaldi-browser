@@ -20,6 +20,11 @@ static_library("multi_user") {
     "multi_user_window_manager_stub.h",
   ]
 
+  public_deps = [
+    "//chrome/browser:browser_public_dependencies",
+    "//chrome/browser/ui:browser_list",
+  ]
+
   deps = [
     "//ash",
     "//ash/public/cpp",
@@ -90,8 +95,10 @@ source_set("unit_tests") {
     "//base",
     "//chrome/browser/ash/login/users:test_support",
     "//chrome/browser/ash/profiles",
+    "//chrome/browser/ash/settings",
     "//chrome/browser/ui",
-    "//chrome/browser/ui/ash",
+    "//chrome/browser/ui/ash/new_window",
+    "//chrome/browser/ui/ash/session",
     "//chrome/test:test_support",
     "//chrome/test:test_support_unit",
     "//components/account_id",

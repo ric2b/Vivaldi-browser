@@ -58,55 +58,62 @@ namespace {
   using std::map;
   using std::unique_ptr;
 
-// Compresses the contents of `data` into `deflated` using the deflate
-// algorithm, if supported. Returns true on success, or false if not supported
-// or in case of any error. The contents of `deflated` are undefined in the
-// latter case.
-bool Deflate(const string& data, string& deflated) {
+// Silence warning C4100, which may strike when building without zlib support.
+#pragma warning(push)
+#pragma warning(disable:4100)
+
+  // Compresses the contents of `data` into `deflated` using the deflate
+  // algorithm, if supported. Returns true on success, or false if not supported
+  // or in case of any error. The contents of `deflated` are undefined in the
+  // latter case.
+  bool Deflate(const string& data, string& deflated) {
 #if defined(HAVE_ZLIB)
-  z_stream stream{};
+    z_stream stream{};
 
-  // Start with an output buffer sufficient for 75% compression to avoid
-  // reallocations.
-  deflated.resize(data.size() / 4);
-  stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(data.data()));
-  stream.avail_in = data.size();
-  stream.next_out = reinterpret_cast<Bytef*>(&deflated[0]);
-  stream.avail_out = deflated.size();
-  stream.data_type = Z_TEXT;
+    // Start with an output buffer sufficient for 75% compression to avoid
+    // reallocations.
+    deflated.resize(data.size() / 4);
+    stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(data.data()));
+    stream.avail_in = data.size();
+    stream.next_out = reinterpret_cast<Bytef*>(&deflated[0]);
+    stream.avail_out = deflated.size();
+    stream.data_type = Z_TEXT;
 
-  // Z_BEST_SPEED is chosen because, in practice, it offers excellent speed with
-  // comparable compression for the symbol data typically being uploaded.
-  // Z_BEST_COMPRESSION:    2151202094 bytes compressed 84.27% in 74.440s.
-  // Z_DEFAULT_COMPRESSION: 2151202094 bytes compressed 84.08% in 36.016s.
-  // Z_BEST_SPEED:          2151202094 bytes compressed 80.39% in 13.73s.
-  int result = deflateInit(&stream, Z_BEST_SPEED);
-  if (result != Z_OK) {
-    return false;
-  }
-
-  while (true) {
-    result = deflate(&stream, /*flush=*/Z_FINISH);
-    if (result == Z_STREAM_END) {  // All data processed.
-      deflated.resize(stream.total_out);
-      break;
+    // Z_BEST_SPEED is chosen because, in practice, it offers excellent speed
+    // with comparable compression for the symbol data typically being uploaded.
+    // Z_BEST_COMPRESSION:    2151202094 bytes compressed 84.27% in 74.440s.
+    // Z_DEFAULT_COMPRESSION: 2151202094 bytes compressed 84.08% in 36.016s.
+    // Z_BEST_SPEED:          2151202094 bytes compressed 80.39% in 13.73s.
+    int result = deflateInit(&stream, Z_BEST_SPEED);
+    if (result != Z_OK) {
+      return false;
     }
-    if (result != Z_OK && result != Z_BUF_ERROR) {
-      fwprintf(stderr, L"Compression failed with zlib error %d\n", result);
-      break;  // Error condition.
-    }
-    // Grow `deflated` by at least 1k to accept the rest of the data.
-    deflated.resize(deflated.size() + std::max(stream.avail_in, 1024U));
-    stream.next_out = reinterpret_cast<Bytef*>(&deflated[stream.total_out]);
-    stream.avail_out = deflated.size() - stream.total_out;
-  }
-  deflateEnd(&stream);
 
-  return result == Z_STREAM_END;
+    while (true) {
+      result = deflate(&stream, /*flush=*/Z_FINISH);
+      if (result == Z_STREAM_END) {  // All data processed.
+        deflated.resize(stream.total_out);
+        break;
+      }
+      if (result != Z_OK && result != Z_BUF_ERROR) {
+        fwprintf(stderr, L"Compression failed with zlib error %d\n", result);
+        break;  // Error condition.
+      }
+      // Grow `deflated` by at least 1k to accept the rest of the data.
+      deflated.resize(deflated.size() + std::max(stream.avail_in, 1024U));
+      stream.next_out = reinterpret_cast<Bytef*>(&deflated[stream.total_out]);
+      stream.avail_out = deflated.size() - stream.total_out;
+    }
+    deflateEnd(&stream);
+
+    return result == Z_STREAM_END;
 #else
-  return false;
+    return false;
 #endif  // defined(HAVE_ZLIB)
-}
+  }
+
+// Restore C4100 to its previous state.
+#pragma warning(pop)
 
   const wchar_t kUserAgent[] = L"Breakpad/1.0 (Windows)";
 

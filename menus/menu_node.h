@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/synchronization/waitable_event.h"
-#include "content/public/browser/notification_observer.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/models/tree_node_model.h"
 

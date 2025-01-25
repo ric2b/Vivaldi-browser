@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Maisema 12</translation>
 <translation id="1158503667684816647">Älä pyydä vahvistusta uudelleen</translation>
 <translation id="1222195720020481779">Käynnistetään asennusta…</translation>
+<translation id="1224683873953469764">Hanki mobiili-Vivaldi</translation>
 <translation id="1270785070369717623">Valitettavasti Opera GX -selaimesi asetukset eivät ole käytettävissä sen ollessa avoinna. Tuodaksesi ne Vivaldiin, tallenna tilanteesi ja sulje kaikki Arcin ikkunat, ja paina lopuksi "Jatka".</translation>
 <translation id="1276145862619442150">Pikavalinnat</translation>
 <translation id="1281950884873973195">Eläin 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Älä pyydä vahvistusta uudelleen</translation>
 <translation id="1462666970065907900">Haluatko varmasti sulkea ikkunan?</translation>
 <translation id="1480046233931937785">Kiitokset</translation>
+<translation id="1521774566618522728">Aktiivinen tänään</translation>
 <translation id="1526344461589023948">Ladattua päivitystä tallennettaessa tapahtui virhe. Tarkista, että laitteella on riittävästi tallennustilaa ja yritä myöhemmin uudelleen.</translation>
 <translation id="1635542496948266458">Vaihda profiilia</translation>
 <translation id="1657174850639146440">Hirviö 9</translation>
@@ -97,6 +99,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="4430019312045809116">Äänenvoimakkuus</translation>
 <translation id="443008484043213881">Työkalut</translation>
 <translation id="4456211719108566931">Hirviö 6</translation>
+<translation id="4459169140545916303">Aktiivinen <ph name="DEVICE_LAST_ACTIVATED_TIME" /> päivää sitten</translation>
 <translation id="4512900838580567989">Avaa linkki uuteen taustavälilehteen</translation>
 <translation id="4545097004879999966">Operan sähköposti</translation>
 <translation id="4548358047305717967">Avaa kuva uuteen taustavälilehteen</translation>
@@ -148,6 +151,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="7099506190679014195">Salatun avaintaltion päivitys</translation>
 <translation id="7111492742514999492">Maisema 9</translation>
 <translation id="7208252576848052204">Valitettavasti Arc-selaimesi asetukset eivät ole käytettävissä sen ollessa avoinna. Tuodaksesi ne Vivaldiin, tallenna tilanteesi ja sulje kaikki Arcin ikkunat, ja paina lopuksi "Jatka".</translation>
+<translation id="7321500017121629018">Aktiivinen eilen</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Päivityksen asennuksen käynnistys epäonnistui. Tarkista, että laitteella on riittävästi vapaata keskusmuistia ja tallennustilaa, ja yritä myöhemmin uudelleen.</translation>
 <translation id="7658239707568436148">Peruuta</translation>

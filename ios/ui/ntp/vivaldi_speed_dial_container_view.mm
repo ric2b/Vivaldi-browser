@@ -92,7 +92,8 @@ const CGFloat commonPadding = 20;
 
 #pragma mark - INITIALIZER
 - (instancetype)init {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     [self setUpUI];
     [self setUpTapGesture];
     [self startObservingSDItemPropertyChange];
@@ -185,6 +186,7 @@ const CGFloat commonPadding = 20;
          showAddGroup:(BOOL)showAddGroup
     frequentlyVisited:(BOOL)frequentlyVisited
     topSitesAvailable:(BOOL)topSitesAvailable
+     topToolbarHidden:(BOOL)topToolbarHidden
     verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass {
   self.parent = parent;
   self.isTopSitesResultsAvailable = topSitesAvailable;
@@ -194,6 +196,7 @@ const CGFloat commonPadding = 20;
   self.selectedColumn = column;
   self.layout.layoutStyle = style;
   self.layout.numberOfColumns = column;
+  self.layout.topToolbarHidden = topToolbarHidden;
   self.speedDialItems = [[NSMutableArray alloc] initWithArray:speedDials];
   self.collectionView.hidden = showAddGroup;
   self.addGroupView.hidden = !showAddGroup;
@@ -410,6 +413,10 @@ didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
 - (NSArray<UIDragItem *> *)collectionView:(UICollectionView *)collectionView
              itemsForBeginningDragSession:(id<UIDragSession>)session
                               atIndexPath:(NSIndexPath *)indexPath {
+  // Disable drag and drop for top sites
+  if (self.showingFrequentlyVisited)
+    return @[];
+
   // If there's at least two items apart from the add speed dial tile then
   // enable the drag and drop otherwise return
   if (!(self.speedDialItems.count > 1))

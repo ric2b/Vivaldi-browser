@@ -54,8 +54,7 @@ void UserManager::UserSessionStateObserver::UserAddedToSession(
     const User* active_user) {}
 
 void UserManager::UserSessionStateObserver::OnLoginStateUpdated(
-    const User* active_user,
-    bool is_current_user_owner) {}
+    const User* active_user) {}
 
 UserManager::UserSessionStateObserver::~UserSessionStateObserver() {}
 
@@ -66,6 +65,19 @@ UserManager::UserAccountData::UserAccountData(
     : display_name_(display_name), given_name_(given_name), locale_(locale) {}
 
 UserManager::UserAccountData::~UserAccountData() {}
+
+UserManager::DeviceLocalAccountInfo::DeviceLocalAccountInfo(std::string user_id,
+                                                            UserType type)
+    : user_id(std::move(user_id)), type(type) {}
+
+UserManager::DeviceLocalAccountInfo::DeviceLocalAccountInfo(
+    const UserManager::DeviceLocalAccountInfo&) = default;
+
+UserManager::DeviceLocalAccountInfo&
+UserManager::DeviceLocalAccountInfo::operator=(
+    const UserManager::DeviceLocalAccountInfo&) = default;
+
+UserManager::DeviceLocalAccountInfo::~DeviceLocalAccountInfo() = default;
 
 void UserManager::Initialize() {
   DCHECK(!UserManager::instance);

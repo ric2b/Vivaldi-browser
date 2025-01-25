@@ -20,8 +20,10 @@
 #include <memory>
 #include <string>
 
+#include "absl/base/attributes.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
-#include "internal/network/url.h"
+#include "absl/time/time.h"
 #include "sharing/advertisement.h"
 #include "sharing/attachment_container.h"
 #include "sharing/internal/api/sharing_rpc_notifier.h"
@@ -120,6 +122,8 @@ class NearbySharingService {
     virtual void OnLanStatusChanged(AdapterState state) {}
     virtual void OnIrrecoverableHardwareErrorReported() {}
 
+    virtual void OnCredentialError() {}
+
     // Called during the |KeyedService| shutdown, but before everything has been
     // cleaned up. It is safe to remove any observers on this event.
     virtual void OnShutdown() = 0;
@@ -147,14 +151,20 @@ class NearbySharingService {
 
   // Registers a send surface for handling payload transfer status and device
   // discovery, with optional blocking on a specified vendor ID.
-  // |transfer_callback| is used as the main identity for the surface, so trying
+  // `transfer_callback` is used as the main identity for the surface, so trying
   // to re-register the same transfer callback with a different
-  // |discovery_callback| will result in an error delivered via the status
+  // `discovery_callback` will result in an error delivered via the status
   // callback.
+  // If `disable_wifi_hotspot` true, disables use of Wifi Hotspot for transfer
+  // if the device is currently already connected to Wifi.  This prevents
+  // interruption of connectivity on the device during transfers. If there are
+  // multiple ongoing requests, any requests with `disable_wifi_hotspot` set to
+  // true will disable use of Wifi Hotspot for the device.
   virtual void RegisterSendSurface(
       TransferUpdateCallback* transfer_callback,
       ShareTargetDiscoveredCallback* discovery_callback, SendSurfaceState state,
       Advertisement::BlockedVendorId blocked_vendor_id,
+      bool disable_wifi_hotspot,
       std::function<void(StatusCodes)> status_codes_callback) = 0;
 
   // Unregisters the current send surface.
@@ -178,21 +188,8 @@ class NearbySharingService {
   virtual void ClearForegroundReceiveSurfaces(
       std::function<void(StatusCodes)> status_codes_callback) = 0;
 
-  // Returns true if a foreground receive surface is registered.
-  virtual bool IsInHighVisibility() const = 0;
-
   // Returns true if there is an ongoing file transfer.
   virtual bool IsTransferring() const = 0;
-
-  // Returns true if we're currently receiving a file.
-  virtual bool IsReceivingFile() const = 0;
-
-  // Returns true if we're currently sending a file.
-  virtual bool IsSendingFile() const = 0;
-
-  // Returns true if we're currently attempting to connect to a
-  // remote device.
-  virtual bool IsConnecting() const = 0;
 
   // Returns true if we are currently scanning for remote devices.
   virtual bool IsScanning() const = 0;
@@ -243,23 +240,11 @@ class NearbySharingService {
   // |share_target|.
   virtual bool DidLocalUserCancelTransfer(int64_t share_target_id) = 0;
 
-  // Opens attachments in |attachment_container| from the remote |share_target|.
-  // If |attachment_container| is null, or the container is empty, the status
-  // code will be set to kInvalidArgument.
-  virtual void Open(
-      ShareTarget share_target,
-      std::unique_ptr<AttachmentContainer> attachment_container,
-      std::function<void(StatusCodes status_codes)> status_codes_callback) = 0;
-
-  // Opens an url target on a browser instance.
-  virtual void OpenUrl(const ::nearby::network::Url& url) = 0;
-
-  // Copies text to cache/clipboard.
-  virtual void CopyText(absl::string_view text) = 0;
-
-  // Persists and joins the Wi-Fi network.
-  virtual void JoinWifiNetwork(absl::string_view ssid,
-                               absl::string_view password) = 0;
+  // Checks to make sure visibility setting is valid and updates the service's
+  // visibility if so.
+  virtual void SetVisibility(
+      proto::DeviceVisibility visibility, absl::Duration expiration,
+      absl::AnyInvocable<void(StatusCodes status_code) &&> callback) = 0;
 
   virtual std::string Dump() const = 0;
   virtual void UpdateFilePathsInProgress(bool update_file_paths) = 0;

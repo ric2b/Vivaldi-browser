@@ -13,7 +13,7 @@ source_set("sync_notes") {
   deps = [
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
-    "//ios/chrome/browser/browser_state/model",
+    "//ios/chrome/browser/shared/model/browser_state",
     "//vivaldi/components/notes:browser",
     "//vivaldi/ios/sync:file_sync",
     "//vivaldi/sync/notes:sync_notes",
@@ -21,23 +21,23 @@ source_set("sync_notes") {
   ]
 }
 
-#temporarily commenting this out until it can be properly reimplemented
-#source_set("invalidation") {
-#  configs += [
-#    "//third_party/abseil-cpp:absl_include_config",
-#  ]
-#
-#  sources = [
-#    "vivaldi_invalidation_service_factory.h",
-#    "vivaldi_invalidation_service_factory.mm",
-#  ]
-#
-#  deps = [
-#    "//ios/chrome/browser/browser_state/model",
-#    "//vivaldi/sync:invalidation",
-#    "//third_party/boringssl",
-#  ]
-#}
+source_set("invalidations") {
+  configs += [
+    "//third_party/abseil-cpp:absl_include_config",
+  ]
+
+  sources = [
+    "vivaldi_sync_invalidations_service_factory.h",
+    "vivaldi_sync_invalidations_service_factory.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//vivaldi/sync:invalidations",
+    "//third_party/boringssl",
+  ]
+}
 
 source_set("file_sync") {
   configs += [
@@ -52,68 +52,8 @@ source_set("file_sync") {
   deps = [
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
-    "//ios/chrome/browser/browser_state/model",
+    "//ios/chrome/browser/shared/model/browser_state",
     "//vivaldi/sync/file_sync",
     "//third_party/boringssl",
-  ]
-}
-
-source_set("sync") {
-  sources = [
-    "vivaldi_sync_service_factory.mm",
-    "vivaldi_sync_service_factory.h",
-  ]
-
-  deps = [
-    ":sync_notes",
-    "//base",
-    "//components/autofill/core/browser",
-    "//components/browser_sync",
-    "//components/consent_auditor",
-    "//components/dom_distiller/core",
-    "//components/history/core/browser",
-    "//components/invalidation/impl",
-    "//components/keyed_service/core",
-    "//components/keyed_service/ios",
-    "//components/metrics/demographics",
-    "//components/network_time",
-    "//components/password_manager/core/browser",
-    "//components/pref_registry",
-    "//components/prefs",
-    "//components/reading_list/core",
-    "//components/search_engines",
-    "//components/send_tab_to_self",
-    "//components/sessions",
-    "//components/signin/public/identity_manager",
-    "//components/sync",
-    "//components/sync_device_info",
-    "//components/sync_preferences",
-    "//components/sync_sessions",
-    "//components/sync_user_events",
-    "//components/version_info",
-    "//ios/chrome/browser/autofill/model",
-    "//ios/chrome/browser/bookmarks/model",
-    "//ios/chrome/browser/browser_state/model",
-    "//ios/chrome/browser/complex_tasks/model",
-    "//ios/chrome/browser/dom_distiller/model",
-    "//ios/chrome/browser/favicon/model",
-    "//ios/chrome/browser/history/model",
-    "//ios/chrome/browser/passwords/model:store_factory",
-    "//ios/chrome/browser/policy/model",
-    "//ios/chrome/browser/reading_list/model",
-    "//ios/chrome/browser/search_engines/model",
-    "//ios/chrome/browser/sessions/model",
-    "//ios/chrome/browser/sync/model/glue",
-    "//ios/chrome/browser/tabs/model",
-    "//ios/chrome/browser/webdata_services/model",
-    "//ios/chrome/common",
-    "//ios/components/webui:url_constants",
-    "//ios/web",
-    "//ios/web/public/session",
-    "//net",
-    "//ui/base",
-    "//url",
-    "//vivaldi/prefs",
-    "//vivaldi/sync:browser",
   ]
 }

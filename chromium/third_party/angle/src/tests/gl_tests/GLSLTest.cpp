@@ -4538,6 +4538,39 @@ void main()
     ANGLE_GL_PROGRAM(testProgram, kVS, kFS);
 }
 
+// Test that uniform block variables work as comma expression results.
+TEST_P(GLSLTest_ES3, UniformBlockCommaExpressionResult)
+{
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+layout (std140) uniform C {
+    float u;
+    float v;
+};
+out vec4 o;
+void main() {
+    vec2 z = vec2(1.0 - u, v);
+    vec2 b = vec2((z=z, u)); // Being tested.
+    o = vec4(b.x, z.x, b.x, 1.0);
+})";
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+    glUseProgram(program);
+
+    constexpr GLfloat kInput1Data[2] = {1.f, 0.f};
+    GLBuffer input1;
+    glBindBuffer(GL_UNIFORM_BUFFER, input1);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(GLfloat) * 2, &kInput1Data, GL_STATIC_COPY);
+    const GLuint kInput1Index = glGetUniformBlockIndex(program, "C");
+    glUniformBlockBinding(program, kInput1Index, 1);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, input1);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    ASSERT_GL_NO_ERROR();
+
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::magenta);
+    ASSERT_GL_NO_ERROR();
+}
+
 // Test that the length() method is correctly translated in Vulkan atomic counter buffer emulation.
 TEST_P(GLSLTest_ES31, AtomicCounterArrayLength)
 {
@@ -9013,7 +9046,54 @@ void main()
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
 }
 
-// Test that basic infinite loops are pruned in WebGL
+// Test that an switch over a constant with mismatching cases works.
+TEST_P(GLSLTest_ES3, SwitchWithConstantExpr)
+{
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+out vec4 color;
+
+void main()
+{
+    float r = 0.;
+    float g = 1.;
+    float b = 0.;
+
+    switch(10)
+    {
+        case 44:
+            r = 0.5;
+        case 50:
+            break;
+    }
+
+    switch(20)
+    {
+        case 198:
+            g = 0.5;
+        default:
+            g -= 1.;
+            break;
+    }
+
+    switch(30)
+    {
+        default:
+            b = 0.5;
+        case 4:
+            b += 0.5;
+            break;
+    }
+
+    color = vec4(r, g, b, 1);
+})";
+
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::blue);
+}
+
+// Test that basic infinite loops are either rejected or are pruned in WebGL
 TEST_P(WebGL2GLSLTest, BasicInfiniteLoop)
 {
     constexpr char kFS[] = R"(#version 300 es
@@ -9112,9 +9192,62 @@ void main()
     color = vec4(r, g, b, 1);
 })";
 
+    if (getEGLWindow()->isFeatureEnabled(Feature::RejectWebglShadersWithUndefinedBehavior))
+    {
+        GLuint shader = CompileShader(GL_FRAGMENT_SHADER, kFS);
+        EXPECT_EQ(0u, shader);
+    }
+    else
+    {
+        ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+        drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
+        EXPECT_PIXEL_NEAR(0, 0, 178, 255, 127, 255, 1);
+    }
+}
+
+// Test that while(true) loops with break/return are not rejected
+TEST_P(WebGL2GLSLTest, NotInfiniteLoop)
+{
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+uniform uint zero;
+out vec4 color;
+
+void main()
+{
+    float r = 0.;
+    float g = 1.;
+    float b = 0.;
+
+    while (true)
+    {
+        r += 0.1;
+        if (r > 0.4)
+        {
+            break;
+        }
+    }
+
+    for (;;)
+    {
+        g -= 0.1;
+
+        switch (zero)
+        {
+            case 0u:
+                g -= 0.6;
+                color = vec4(r, g, b, 1);
+                return;
+            default:
+                r = 0.2;
+                break;
+        }
+    }
+})";
+
     ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
     drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
-    EXPECT_PIXEL_NEAR(0, 0, 178, 255, 127, 255, 1);
+    EXPECT_PIXEL_NEAR(0, 0, 127, 76, 0, 255, 1);
 }
 
 // Test that a constant struct inside an expression is handled correctly.

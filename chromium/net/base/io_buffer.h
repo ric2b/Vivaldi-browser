@@ -96,11 +96,11 @@ class NET_EXPORT IOBuffer : public base::RefCountedThreadSafe<IOBuffer> {
     return reinterpret_cast<const uint8_t*>(data());
   }
 
-  base::span<char> span() {
-    return base::make_span(data(), static_cast<size_t>(size_));
+  base::span<uint8_t> span() {
+    return base::make_span(bytes(), static_cast<size_t>(size_));
   }
-  base::span<const char> span() const {
-    return base::make_span(data(), static_cast<size_t>(size_));
+  base::span<const uint8_t> span() const {
+    return base::make_span(bytes(), static_cast<size_t>(size_));
   }
 
  protected:
@@ -215,10 +215,6 @@ class NET_EXPORT GrowableIOBuffer : public IOBuffer {
   int offset() { return offset_; }
 
   int RemainingCapacity();
-
-  // TODO(crbug.com/329476354): Remove this method, use everything() to access
-  // the full buffer.
-  char* StartOfBuffer();
 
   // Returns the entire buffer, including the bytes before the `offset()`.
   //

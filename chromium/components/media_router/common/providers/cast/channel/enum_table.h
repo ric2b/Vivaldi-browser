@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef COMPONENTS_MEDIA_ROUTER_COMMON_PROVIDERS_CAST_CHANNEL_ENUM_TABLE_H_
 #define COMPONENTS_MEDIA_ROUTER_COMMON_PROVIDERS_CAST_CHANNEL_ENUM_TABLE_H_
 
 #include <cstdint>
 #include <cstring>
+#include <new>
 #include <optional>
 #include <ostream>
 #include <string_view>
@@ -362,8 +368,7 @@ class EnumTable {
 
  private:
 #ifdef ARCH_CPU_64_BITS
-  // Align the data on a cache line boundary.
-  alignas(64)
+  alignas(std::hardware_destructive_interference_size)
 #endif
       std::initializer_list<Entry> data_;
   bool is_sorted_;

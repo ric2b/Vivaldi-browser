@@ -52,34 +52,32 @@ std::vector<Scalar> special_values() {
   const Scalar min = (std::numeric_limits<Scalar>::min)();
   const Scalar max = (std::numeric_limits<Scalar>::max)();
   const Scalar max_exp = (static_cast<Scalar>(int(Eigen::NumTraits<Scalar>::max_exponent())) * Scalar(EIGEN_LN2)) / eps;
-  return {zero, denorm_min, min, eps, sqrt_half, one_half, one, sqrt2, two, three, max_exp, max, inf, nan};
+  std::vector<Scalar> values = {zero,  denorm_min, min,   eps,     sqrt_half, one_half, one,
+                                sqrt2, two,        three, max_exp, max,       inf,      nan};
+  std::vector<Scalar> signed_values;
+  for (Scalar value : values) {
+    signed_values.push_back(value);
+    signed_values.push_back(-value);
+  }
+  return signed_values;
 }
 
 template <typename Scalar>
 void special_value_pairs(Array<Scalar, Dynamic, Dynamic>& x, Array<Scalar, Dynamic, Dynamic>& y) {
-  std::vector<Scalar> abs_vals = special_values<Scalar>();
-  const Index abs_cases = (Index)abs_vals.size();
-  const Index num_cases = 2 * abs_cases * 2 * abs_cases;
+  std::vector<Scalar> vals = special_values<Scalar>();
+  int num_cases = vals.size() * vals.size();
   // ensure both vectorized and non-vectorized paths taken
   const Index num_repeats = 2 * (Index)internal::packet_traits<Scalar>::size + 1;
   x.resize(num_repeats, num_cases);
   y.resize(num_repeats, num_cases);
   int count = 0;
-  for (Index i = 0; i < abs_cases; ++i) {
-    const Scalar abs_x = abs_vals[i];
-    for (Index sign_x = 0; sign_x < 2; ++sign_x) {
-      Scalar x_case = sign_x == 0 ? -abs_x : abs_x;
-      for (Index j = 0; j < abs_cases; ++j) {
-        const Scalar abs_y = abs_vals[j];
-        for (Index sign_y = 0; sign_y < 2; ++sign_y) {
-          Scalar y_case = sign_y == 0 ? -abs_y : abs_y;
-          for (Index repeat = 0; repeat < num_repeats; ++repeat) {
-            x(repeat, count) = x_case;
-            y(repeat, count) = y_case;
-          }
-          ++count;
-        }
+  for (const Scalar x_case : vals) {
+    for (const Scalar y_case : vals) {
+      for (Index repeat = 0; repeat < num_repeats; ++repeat) {
+        x(repeat, count) = x_case;
+        y(repeat, count) = y_case;
       }
+      ++count;
     }
   }
 }

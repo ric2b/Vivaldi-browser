@@ -15,7 +15,7 @@
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/stl_util.h"
-#include "core/fxge/cfx_cliprgn.h"
+#include "core/fxge/agg/cfx_agg_cliprgn.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 
 CFX_AggBitmapComposer::CFX_AggBitmapComposer() = default;
@@ -23,7 +23,7 @@ CFX_AggBitmapComposer::CFX_AggBitmapComposer() = default;
 CFX_AggBitmapComposer::~CFX_AggBitmapComposer() = default;
 
 void CFX_AggBitmapComposer::Compose(const RetainPtr<CFX_DIBitmap>& pDest,
-                                    const CFX_ClipRgn* pClipRgn,
+                                    const CFX_AggClipRgn* pClipRgn,
                                     float alpha,
                                     uint32_t mask_color,
                                     const FX_RECT& dest_rect,
@@ -41,8 +41,9 @@ void CFX_AggBitmapComposer::Compose(const RetainPtr<CFX_DIBitmap>& pDest,
   m_Alpha = alpha;
   m_MaskColor = mask_color;
   m_pClipMask = nullptr;
-  if (pClipRgn && pClipRgn->GetType() != CFX_ClipRgn::kRectI)
+  if (pClipRgn && pClipRgn->GetType() != CFX_AggClipRgn::kRectI) {
     m_pClipMask = pClipRgn->GetMask();
+  }
   m_bVertical = bVertical;
   m_bFlipX = bFlipX;
   m_bFlipY = bFlipY;
@@ -58,8 +59,7 @@ bool CFX_AggBitmapComposer::SetInfo(int width,
   DCHECK_NE(src_format, FXDIB_Format::k1bppRgb);
   m_SrcFormat = src_format;
   if (!m_Compositor.Init(m_pBitmap->GetFormat(), src_format, src_palette,
-                         m_MaskColor, m_BlendMode,
-                         m_pClipMask || m_Alpha != 1.0f, m_bRgbByteOrder)) {
+                         m_MaskColor, m_BlendMode, m_bRgbByteOrder)) {
     return false;
   }
   if (m_bVertical) {
@@ -131,12 +131,12 @@ void CFX_AggBitmapComposer::ComposeScanline(
 void CFX_AggBitmapComposer::ComposeScanlineV(
     int line,
     pdfium::span<const uint8_t> scanline) {
-  int Bpp = m_pBitmap->GetBPP() / 8;
+  const int bytes_per_pixel = m_pBitmap->GetBPP() / 8;
   int dest_pitch = m_pBitmap->GetPitch();
   int dest_x = m_DestLeft + (m_bFlipX ? (m_DestWidth - line - 1) : line);
   pdfium::span<uint8_t> dest_span = m_pBitmap->GetWritableBuffer();
   if (!dest_span.empty()) {
-    const size_t dest_x_offset = Fx2DSizeOrDie(dest_x, Bpp);
+    const size_t dest_x_offset = Fx2DSizeOrDie(dest_x, bytes_per_pixel);
     const size_t dest_y_offset = Fx2DSizeOrDie(m_DestTop, dest_pitch);
     dest_span = dest_span.subspan(dest_y_offset).subspan(dest_x_offset);
     if (m_bFlipY) {
@@ -151,7 +151,7 @@ void CFX_AggBitmapComposer::ComposeScanlineV(
   uint8_t* dest_scan = dest_buf;
   UNSAFE_TODO({
     for (int i = 0; i < m_DestHeight; ++i) {
-      for (int j = 0; j < Bpp; ++j) {
+      for (int j = 0; j < bytes_per_pixel; ++j) {
         *src_scan++ = dest_scan[j];
       }
       dest_scan += y_step;
@@ -177,7 +177,7 @@ void CFX_AggBitmapComposer::ComposeScanlineV(
     src_scan = m_pScanlineV.data();
     dest_scan = dest_buf;
     for (int i = 0; i < m_DestHeight; ++i) {
-      for (int j = 0; j < Bpp; ++j) {
+      for (int j = 0; j < bytes_per_pixel; ++j) {
         dest_scan[j] = *src_scan++;
       }
       dest_scan += y_step;

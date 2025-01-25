@@ -1,6 +1,5 @@
 /autom4te.cache/
 /cmake-build-debug/
-m4/
 CMakeFiles/
 Testing/
 aclocal.m4
@@ -39,3 +38,4 @@ source__R*
 /stamp-h1
 /libexpat*.dll
 /changelog
+*~

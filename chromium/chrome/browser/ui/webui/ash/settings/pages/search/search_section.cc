@@ -8,15 +8,18 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/url_constants.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/assistant/assistant_util.h"
+#include "chrome/browser/ash/input_method/editor_mediator_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/ash/assistant_optin/assistant_optin_utils.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/search/google_assistant_handler.h"
+#include "chrome/browser/ui/webui/ash/settings/search/search_concept.h"
 #include "chrome/browser/ui/webui/ash/settings/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/search_engines_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -24,6 +27,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
+#include "chromeos/components/magic_boost/public/cpp/magic_boost_state.h"
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_state.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -53,6 +57,28 @@ namespace {
 bool IsQuickAnswersSupported() {
   return QuickAnswersState::IsEligibleAs(
       QuickAnswersState::FeatureType::kQuickAnswers);
+}
+
+bool IsMagicBoostNoticeBannerVisible(Profile* profile) {
+  chromeos::MagicBoostState* magic_boost_state =
+      chromeos::MagicBoostState::Get();
+
+  bool hmr_needs_notice_banner = magic_boost_state->IsMagicBoostAvailable() &&
+                                 magic_boost_state->CanShowNoticeBannerForHMR();
+
+  bool hmw_needs_notice_banner = false;
+
+  if (chromeos::features::IsOrcaEnabled()) {
+    ash::input_method::EditorMediator* editor_mediator =
+        ash::input_method::EditorMediatorFactory::GetInstance()->GetForProfile(
+            profile);
+
+    hmw_needs_notice_banner = editor_mediator &&
+                              editor_mediator->IsAllowedForUse() &&
+                              editor_mediator->CanShowNoticeBanner();
+  }
+
+  return hmr_needs_notice_banner || hmw_needs_notice_banner;
 }
 
 const std::vector<SearchConcept>& GetSearchPageSearchConcepts(
@@ -197,6 +223,38 @@ const std::vector<SearchConcept>& GetAssistantVoiceMatchSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>& GetMagicBoostSearchConcepts(
+    const char* section_path) {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_MAGIC_BOOST,
+       section_path,
+       mojom::SearchResultIcon::kMagicBoost,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kMagicBoostOnOff}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>& GetMagicBoostSubSearchConcepts(
+    const char* section_path) {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_MAGIC_BOOST_HMR,
+       section_path,
+       mojom::SearchResultIcon::kHelpMeRead,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kMahiOnOff}},
+      {IDS_OS_SETTINGS_TAG_MAGIC_BOOST_HMW,
+       section_path,
+       mojom::SearchResultIcon::kHelpMeWrite,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kShowOrca}},
+  });
+  return *tags;
+}
+
 bool IsVoiceMatchAllowed() {
   return !assistant::features::IsVoiceMatchDisabled();
 }
@@ -289,6 +347,13 @@ SearchSection::SearchSection(Profile* profile,
     QuickAnswersState::Get()->AddObserver(this);
     UpdateQuickAnswersSearchTags();
   }
+
+  auto* magic_boost_state = chromeos::MagicBoostState::Get();
+  if (magic_boost_state && magic_boost_state->IsMagicBoostAvailable()) {
+    updater.AddSearchTags(GetMagicBoostSearchConcepts(GetSectionPath()));
+    magic_boost_state->AddObserver(this);
+    UpdateSubMagicBoostSearchTags();
+  }
 }
 
 SearchSection::~SearchSection() {
@@ -304,6 +369,11 @@ void SearchSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   webui::LocalizedString kLocalizedStrings[] = {
       {"enableMagicBoost", IDS_OS_SETTINGS_ENABLE_MAGIC_BOOST},
+      {"enableMagicBoostDesc", IDS_OS_SETTINGS_ENABLE_MAGIC_BOOST_DESCRIPTION},
+      {"magicBoostReviewTermsBannerDescription",
+       IDS_OS_SETTINGS_MAGIC_BOOST_REVIEW_TERMS_BANNER_DESCRIPTION},
+      {"magicBoostReviewTermsButtonLabel",
+       IDS_OS_SETTINGS_MAGIC_BOOST_REVIEW_TERMS_BUTTON_LABEL},
       {"enableMagicBoostDesc", IDS_OS_SETTINGS_ENABLE_MAGIC_BOOST_DESCRIPTION},
       {"enableHelpMeRead", IDS_OS_SETTINGS_ENABLE_HELP_ME_READ},
       {"enableHelpMeReadDesc", IDS_OS_SETTINGS_ENABLE_HELP_ME_READ_DESCRIPTION},
@@ -326,16 +396,17 @@ void SearchSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
-  html_source->AddString("orcaLearnMoreUrl",
-                         chrome::kOrcaSuggestionLearnMoreURL);
+  html_source->AddString("helpMeReadWriteLearnMoreUrl",
+                         chrome::kHelpMeReadWriteLearnMoreURL);
 
   html_source->AddBoolean("isQuickAnswersSupported", IsQuickAnswersSupported());
-  html_source->AddBoolean("isMahiEnabled",
-                          chromeos::features::IsMahiEnabled() &&
-                              !chromeos::features::IsMagicBoostEnabled());
 
-  html_source->AddBoolean("isMagicBoostFeatureEnabled",
-                          chromeos::features::IsMagicBoostEnabled());
+  html_source->AddBoolean(
+      "isMagicBoostFeatureEnabled",
+      chromeos::MagicBoostState::Get()->IsMagicBoostAvailable());
+
+  html_source->AddBoolean("isMagicBoostNoticeBannerVisible",
+                          IsMagicBoostNoticeBannerVisible(profile()));
 
   const bool is_assistant_allowed = IsAssistantAllowed();
   html_source->AddBoolean("isAssistantAllowed", is_assistant_allowed);
@@ -487,6 +558,14 @@ void SearchSection::OnEligibilityChanged(bool eligible) {
   UpdateQuickAnswersSearchTags();
 }
 
+void SearchSection::OnMagicBoostEnabledUpdated(bool enabled) {
+  UpdateSubMagicBoostSearchTags();
+}
+
+void SearchSection::OnIsDeleting() {
+  magic_boost_state_observation_.Reset();
+}
+
 bool SearchSection::IsAssistantAllowed() const {
   // NOTE: This will be false when the flag is disabled.
   return ::assistant::IsAssistantAllowedForProfile(profile()) ==
@@ -540,6 +619,19 @@ void SearchSection::UpdateQuickAnswersSearchTags() {
       QuickAnswersState::IsEnabledAs(
           QuickAnswersState::FeatureType::kQuickAnswers)) {
     updater.AddSearchTags(GetQuickAnswersOnSearchConcepts());
+  }
+}
+
+void SearchSection::UpdateSubMagicBoostSearchTags() {
+  auto* magic_boost_state = chromeos::MagicBoostState::Get();
+  DCHECK(magic_boost_state);
+
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
+  updater.RemoveSearchTags(GetMagicBoostSubSearchConcepts(GetSectionPath()));
+
+  if (magic_boost_state->magic_boost_enabled().value_or(false)) {
+    updater.AddSearchTags(GetMagicBoostSubSearchConcepts(GetSectionPath()));
   }
 }
 

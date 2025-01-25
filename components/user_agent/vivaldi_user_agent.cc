@@ -43,7 +43,11 @@ const char kEdgeSuffixReduced[] = " Edg/" CHROME_PRODUCT_VERSION_REDUCED;
 bool g_user_agent_switch_checked = false;
 bool g_user_agent_switch_present = false;
 
-constexpr bool g_google_is_vivaldi_partner = true;
+#if BUILDFLAG(IS_ANDROID)
+constexpr bool g_google_is_vivaldi_partner = false;
+#else
+constexpr bool g_google_is_vivaldi_partner = false;
+#endif
 
 template <typename Container>
 bool MatchHost(std::string_view host, const Container& container) {

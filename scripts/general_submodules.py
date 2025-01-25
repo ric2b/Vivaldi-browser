@@ -52,6 +52,7 @@ excluded_modules = [
   "testing/libfuzzer/fuzzers/wasm_corpus",
   "third_party/crabbyavif/src",
   "third_party/instrumented_libs",
+  "third_party/domato/src",
   ]
 
 def main():

@@ -128,8 +128,10 @@ static bool HashElfTextSection(const void* elf_mapped_base,
 
   void* text_section;
   size_t text_size;
-  if (!FindElfSection(elf_mapped_base, ".text", SHT_PROGBITS,
-                      (const void**)&text_section, &text_size) ||
+  if ((!FindElfSection(elf_mapped_base, ".text", SHT_PROGBITS,
+                       (const void**)&text_section, &text_size) &&
+       !FindElfSection(elf_mapped_base, "text", SHT_PROGBITS,
+                       (const void**)&text_section, &text_size)) ||
       text_size == 0) {
     return false;
   }

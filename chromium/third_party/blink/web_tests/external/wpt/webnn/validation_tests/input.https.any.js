@@ -1,5 +1,8 @@
 // META: title=validation tests for WebNN API input interface
 // META: global=window,dedicatedworker
+// META: variant=?cpu
+// META: variant=?gpu
+// META: variant=?npu
 // META: script=../resources/utils_validation.js
 
 'use strict';
@@ -59,6 +62,7 @@ const tests = [
 
 tests.forEach(
     test => promise_test(async t => {
+      const builder = new MLGraphBuilder(context);
       if (test.output) {
         const inputOperand = builder.input(test.name, test.descriptor);
         assert_equals(inputOperand.dataType(), test.output.dataType);

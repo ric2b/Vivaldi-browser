@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import <string>
+
 // Vivaldi
 #import "components/search_engines/template_url_service.h"
 // End Vivaldi
@@ -25,6 +27,9 @@
 // Notifies the consumer to update after the Lens support status
 // changes. (This is usually when the default search engine changes).
 - (void)updateLensImageSupported:(BOOL)lensImageSupported;
+
+/// Sets the name of the search provider.
+- (void)setSearchProviderName:(std::u16string)searchProviderName;
 
 // Notifies the consumer to set the following image as an image
 // in an omnibox with empty text

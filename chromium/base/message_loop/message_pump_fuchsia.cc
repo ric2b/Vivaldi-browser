@@ -12,6 +12,7 @@
 #include <zircon/errors.h>
 
 #include "base/auto_reset.h"
+#include "base/check.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/logging.h"
 #include "base/trace_event/base_tracing.h"
@@ -23,8 +24,8 @@ MessagePumpFuchsia::ZxHandleWatchController::ZxHandleWatchController(
     : async_wait_t({}), created_from_location_(from_here) {}
 
 MessagePumpFuchsia::ZxHandleWatchController::~ZxHandleWatchController() {
-  if (!StopWatchingZxHandle())
-    NOTREACHED_IN_MIGRATION();
+  const bool success = StopWatchingZxHandle();
+  CHECK(success);
 }
 
 bool MessagePumpFuchsia::ZxHandleWatchController::WaitBegin() {
@@ -156,8 +157,8 @@ MessagePumpFuchsia::FdWatchController::FdWatchController(
       ZxHandleWatchController(from_here) {}
 
 MessagePumpFuchsia::FdWatchController::~FdWatchController() {
-  if (!StopWatchingFileDescriptor())
-    NOTREACHED_IN_MIGRATION();
+  const bool success = StopWatchingFileDescriptor();
+  CHECK(success);
 }
 
 bool MessagePumpFuchsia::FdWatchController::WaitBegin() {
@@ -197,8 +198,8 @@ bool MessagePumpFuchsia::WatchFileDescriptor(int fd,
   DCHECK(controller);
   DCHECK(delegate);
 
-  if (!controller->StopWatchingFileDescriptor())
-    NOTREACHED_IN_MIGRATION();
+  const bool success = controller->StopWatchingFileDescriptor();
+  CHECK(success);
 
   controller->fd_ = fd;
   controller->watcher_ = delegate;
@@ -221,8 +222,7 @@ bool MessagePumpFuchsia::WatchFileDescriptor(int fd,
       controller->desired_events_ = FDIO_EVT_READABLE | FDIO_EVT_WRITABLE;
       break;
     default:
-      NOTREACHED_IN_MIGRATION() << "unexpected mode: " << mode;
-      return false;
+      NOTREACHED() << "unexpected mode: " << mode;
   }
 
   // Pass dummy |handle| and |signals| values to WatchZxHandle(). The real
@@ -246,8 +246,8 @@ bool MessagePumpFuchsia::WatchZxHandle(zx_handle_t handle,
   DCHECK(handle == ZX_HANDLE_INVALID || !controller->is_active() ||
          handle == controller->async_wait_t::object);
 
-  if (!controller->StopWatchingZxHandle())
-    NOTREACHED_IN_MIGRATION();
+  const bool success = controller->StopWatchingZxHandle();
+  CHECK(success);
 
   controller->async_wait_t::object = handle;
   controller->persistent_ = persistent;

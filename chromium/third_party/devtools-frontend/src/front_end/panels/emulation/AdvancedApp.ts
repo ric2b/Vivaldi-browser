@@ -23,7 +23,7 @@ export class AdvancedApp implements Common.App.App {
 
   constructor() {
     UI.DockController.DockController.instance().addEventListener(
-        UI.DockController.Events.BeforeDockSideChanged, this.openToolboxWindow, this);
+        UI.DockController.Events.BEFORE_DOCK_SIDE_CHANGED, this.openToolboxWindow, this);
   }
 
   /**
@@ -47,16 +47,16 @@ export class AdvancedApp implements Common.App.App {
     UI.InspectorView.InspectorView.instance().setOwnerSplit(this.rootSplitWidget);
 
     this.inspectedPagePlaceholder = InspectedPagePlaceholder.instance();
-    this.inspectedPagePlaceholder.addEventListener(Events.Update, this.onSetInspectedPageBounds.bind(this), this);
+    this.inspectedPagePlaceholder.addEventListener(Events.UPDATE, this.onSetInspectedPageBounds.bind(this), this);
     this.deviceModeView =
         DeviceModeWrapper.instance({inspectedPagePlaceholder: this.inspectedPagePlaceholder, forceNew: false});
 
     UI.DockController.DockController.instance().addEventListener(
-        UI.DockController.Events.BeforeDockSideChanged, this.onBeforeDockSideChange, this);
+        UI.DockController.Events.BEFORE_DOCK_SIDE_CHANGED, this.onBeforeDockSideChange, this);
     UI.DockController.DockController.instance().addEventListener(
-        UI.DockController.Events.DockSideChanged, this.onDockSideChange, this);
+        UI.DockController.Events.DOCK_SIDE_CHANGED, this.onDockSideChange, this);
     UI.DockController.DockController.instance().addEventListener(
-        UI.DockController.Events.AfterDockSideChanged, this.onAfterDockSideChange, this);
+        UI.DockController.Events.AFTER_DOCK_SIDE_CHANGED, this.onAfterDockSideChange, this);
     this.onDockSideChange();
 
     console.timeStamp('AdvancedApp.attachToBody');
@@ -81,7 +81,8 @@ export class AdvancedApp implements Common.App.App {
   deviceModeEmulationFrameLoaded(toolboxDocument: Document): void {
     ThemeSupport.ThemeSupport.instance().addDocumentToTheme(toolboxDocument);
     UI.UIUtils.initializeUIUtils(toolboxDocument);
-    UI.UIUtils.installComponentRootStyles((toolboxDocument.body as Element));
+    UI.UIUtils.addPlatformClass(toolboxDocument.documentElement);
+    UI.UIUtils.installComponentRootStyles(toolboxDocument.body);
     UI.ContextMenu.ContextMenu.installHandler(toolboxDocument);
 
     this.toolboxRootView = new UI.RootView.RootView();

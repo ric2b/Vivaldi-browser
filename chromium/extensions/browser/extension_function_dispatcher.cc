@@ -109,8 +109,9 @@ bool CanRendererActOnBehalfOfExtension(
   // TODO(lukasza): Investigate if the exception below can be avoided if
   // `render_process_host` hosts HTTP origins (i.e. if the exception can be
   // restricted to NTP, and/or chrome://... cases.
-  if (extension_id.empty())
+  if (extension_id.empty()) {
     return true;
+  }
 
   // Did `render_process_id` run a content script or user script from
   // `extension_id`?
@@ -426,8 +427,9 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
       render_frame_host_url, params.context_type,
       ExtensionAPI::GetSharedInstance(), std::move(callback),
       render_frame_host);
-  if (!function.get())
+  if (!function.get()) {
     return;
+  }
 
   if (extension &&
       ExtensionsBrowserClient::Get()->CanExtensionCrossIncognito(
@@ -463,6 +465,26 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
   std::string violation_error =
       quota->Assess(extension->id(), function.get(), params.arguments,
                     base::TimeTicks::Now());
+
+  function->set_request_uuid(base::Uuid::GenerateRandomV4());
+
+  // Increment the keepalive to ensure the extension doesn't shut down while
+  // it's executing an API function. This is balanced in
+  // `OnExtensionFunctionCompleted()`.
+  if (IsRequestFromServiceWorker(params)) {
+    CHECK(function->worker_id());
+    content::ServiceWorkerExternalRequestTimeoutType timeout_type =
+        function->ShouldKeepWorkerAliveIndefinitely()
+            ? content::ServiceWorkerExternalRequestTimeoutType::kDoesNotTimeout
+            : content::ServiceWorkerExternalRequestTimeoutType::kDefault;
+    function->set_service_worker_keepalive(
+        std::make_unique<ServiceWorkerKeepalive>(
+            browser_context_, *function->worker_id(), timeout_type,
+            Activity::API_FUNCTION, function->name()));
+  } else {
+    process_manager->IncrementLazyKeepaliveCount(
+        function->extension(), Activity::API_FUNCTION, function->name());
+  }
 
   if (violation_error.empty()) {
     // See crbug.com/39178.
@@ -521,30 +543,8 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
   }
 
   // Note: do not access |this| after this point. We may have been deleted
-  // if function->Run() ended up closing the tab that owns us.
-
-  // Check if extension was uninstalled by management.uninstall.
-  if (!registry->enabled_extensions().GetByID(params.extension_id))
-    return;
-
-  function->set_request_uuid(base::Uuid::GenerateRandomV4());
-
-  // Increment the keepalive to ensure the extension doesn't shut down while
-  // it's executing an API function.
-  if (IsRequestFromServiceWorker(params)) {
-    CHECK(function->worker_id());
-    content::ServiceWorkerExternalRequestTimeoutType timeout_type =
-        function->ShouldKeepWorkerAliveIndefinitely()
-            ? content::ServiceWorkerExternalRequestTimeoutType::kDoesNotTimeout
-            : content::ServiceWorkerExternalRequestTimeoutType::kDefault;
-    function->set_service_worker_keepalive(
-        std::make_unique<ServiceWorkerKeepalive>(
-            browser_context_, *function->worker_id(), timeout_type,
-            Activity::API_FUNCTION, function->name()));
-  } else {
-    process_manager->IncrementLazyKeepaliveCount(
-        function->extension(), Activity::API_FUNCTION, function->name());
-  }
+  // if `function->RunWithValidation()` resulted in closing the execution
+  // context for this function.
 }
 
 void ExtensionFunctionDispatcher::OnExtensionFunctionCompleted(

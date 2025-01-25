@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">დამოუკიდებლად დაყენება</translation>
 <translation id="1682285232070778125">Vivaldi-ის ნაგულისხმევ ბრაუზერად გამოყენება</translation>
 <translation id="1974060860693918893">დამატებითი</translation>
+<translation id="2053560788696003312">Vivaldi-ის Windows 10, ან უფრო ახალი სჭირდება.</translation>
 <translation id="2134216661302048561">Vivaldi-ის დაყენების პროგრამას ბრაუზერის დაყენება არ დაუსრულებია. დარწმუნებული ბრძანდებით, რომ გნებავთ, ახლა გახვიდეთ?</translation>
 <translation id="2286454467119466181">მარტივი</translation>
 <translation id="237789874664518125">საავტორო უფლებები <ph name="YEAR" /> Vivaldi Technologies AS. ყველა უფლება დაცულია. &lt;a&gt;კონფიდენციალობის პოლიტიკა&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">მიღება და განახლება</translation>
 <translation id="5302048478445481009">ენა</translation>
 <translation id="694714344624446243">Vivaldi-ის დაყენების პროგრამა</translation>
+<translation id="7467493612551448880">Vivaldi-ის ვერსია, რომელსაც აყენებთ, დაოპტიმიზებული არაა Windows-ის ვერსიისთვის, რომელზეც მუშაობთ
+
+ეწვიეთ ვებგვერდ vivaldi.com/download, რომ გადმოწეროთ ვერსია Windows on Arm.</translation>
 <translation id="7658239707568436148">გაუქმება</translation>
 <translation id="8773751185824654197">შენიშვნა: თუ ანახლებთ გაშვებულ ბაურაზერს Vivaldi, ის გაშვებული ასლი დაიხურება და თავიდან გაეშვება</translation>
 <translation id="933060950687965486">დაყენების ტიპი</translation>

@@ -40,9 +40,9 @@
 
 #include "dawn/common/Platform.h"
 
-#if DAWN_PLATFORM_IS(WINDOWS)
+#if defined(DAWN_USE_WINDOWS_UI)
 #include "dawn/native/d3d/d3d_platform.h"
-#endif  // DAWN_PLATFORM_IS(WINDOWS)
+#endif  // defined(DAWN_USE_WINDOWS_UI)
 
 // Forward declare IUnknown
 // GetCoreWindow needs to return an IUnknown pointer
@@ -128,7 +128,9 @@ class Surface final : public ErrorMonad {
     wgpu::TextureFormat APIGetPreferredFormat(AdapterBase* adapter) const;
     void APIPresent();
     void APIUnconfigure();
+    // TODO(crbug.com/42241188): Remove const char* version of the method.
     void APISetLabel(const char* label);
+    void APISetLabel2(std::optional<std::string_view> label);
 
   private:
     Surface(InstanceBase* instance, ErrorMonad::ErrorTag tag);

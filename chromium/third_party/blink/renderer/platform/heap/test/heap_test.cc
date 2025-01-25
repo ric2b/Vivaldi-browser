@@ -108,7 +108,7 @@ static_assert(WTF::IsTraceable<HeapDeque<IntWrapper>>::value,
 static_assert(
     WTF::IsTraceable<HeapHashSet<IntWrapper, IntWrapperHashTraits>>::value,
     "HeapHashSet<IntWrapper> must be traceable.");
-static_assert(WTF::IsTraceable<HeapHashMap<int, IntWrapper>>::value,
+static_assert(WTF::IsTraceable<HeapHashMap<int, Member<IntWrapper>>>::value,
               "HeapHashMap<int, IntWrapper> must be traceable.");
 
 }  // namespace
@@ -1683,7 +1683,7 @@ class RefCountedAndGarbageCollected final
   ~RefCountedAndGarbageCollected() { ++destructor_calls_; }
 
   void AddRef() {
-    if (UNLIKELY(!ref_count_)) {
+    if (!ref_count_) [[unlikely]] {
       keep_alive_ = this;
     }
     ++ref_count_;
@@ -2805,7 +2805,7 @@ class AllocatesOnAssignment : public GarbageCollected<AllocatesOnAssignment> {
   AllocatesOnAssignment(int x) : value_(MakeGarbageCollected<IntWrapper>(x)) {}
   AllocatesOnAssignment(IntWrapper* x) : value_(x) {}
 
-  AllocatesOnAssignment& operator=(const AllocatesOnAssignment x) {
+  AllocatesOnAssignment& operator=(const AllocatesOnAssignment& x) {
     value_ = x.value_;
     return *this;
   }

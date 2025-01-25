@@ -128,7 +128,6 @@
 <translation id="3378572629723696641">Esta extensión puido estar corrupto.</translation>
 <translation id="3387614642886316601">Usar a revisión ortográfica mellorada</translation>
 <translation id="3390013585654699824">Detalles do aplicativo</translation>
-<translation id="3393582007140394275">Activar a transmisión da pantalla.</translation>
 <translation id="345693547134384690">Abrir a &amp;imaxe nunha lapela nova</translation>
 <translation id="3511307672085573050">Copiar enderezo da &amp;ligazón</translation>
 <translation id="354068948465830244">Isto pode ler e cambiar os datos do sitio</translation>
@@ -283,6 +282,7 @@
 <translation id="6812841287760418429">Manter cambios</translation>
 <translation id="6824564591481349393">Copiar o enderezo &amp;electrónico</translation>
 <translation id="6840155290835956714">Preguntar antes de enviar</translation>
+<translation id="6878862640969460273">Paisaxe</translation>
 <translation id="6886871292305414135">Abrir ligazón nunha &amp;lapela nova</translation>
 <translation id="6892812721183419409">Abrir ligazón como <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplicativo de fondo:<ph name="BACKGROUND_APP_URL" /></translation>
@@ -338,7 +338,6 @@ Ficheiro da clave: <ph name="KEY_FILE" />
 Garda o teu ficheiro de clave nun lugar seguro. Necesitaralo para crear versións novas da túa extensión.</translation>
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controla que información dos sitios web pode usar e que contido poden ensinarche</translation>
-<translation id="8032244173881942855">Non se puido transmitir a lapela.</translation>
 <translation id="8071432093239591881">Imprimir como imaxe</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -386,6 +385,5 @@ Garda o teu ficheiro de clave nun lugar seguro. Necesitaralo para crear versión
 <translation id="9218430445555521422">Establecer como predeterminado</translation>
 <translation id="93766956588638423">Reparar extensión</translation>
 <translation id="961012016278832836">Legado de Microsoft Edge</translation>
-<translation id="98515147261107953">Paisaxe</translation>
 <translation id="998747458861718449">I&amp;nspeccionar</translation>
 </translationbundle>

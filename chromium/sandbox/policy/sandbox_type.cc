@@ -61,7 +61,6 @@ bool IsUnsandboxedSandboxType(Sandbox sandbox_type) {
     case Sandbox::kPrintCompositor:
 #if BUILDFLAG(IS_MAC)
     case Sandbox::kMirroring:
-    case Sandbox::kNaClLoader:
 #endif
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
     case Sandbox::kHardwareVideoDecoding:
@@ -82,6 +81,7 @@ bool IsUnsandboxedSandboxType(Sandbox sandbox_type) {
     case Sandbox::kScreenAI:
 #endif
     case Sandbox::kSpeechRecognition:
+    case Sandbox::kVideoEffects:
       return false;
   }
 }
@@ -163,6 +163,7 @@ void SetCommandLineFlagsForSandboxType(base::CommandLine* command_line,
     case Sandbox::kScreenAI:
 #endif
     case Sandbox::kSpeechRecognition:
+    case Sandbox::kVideoEffects:
       DCHECK(command_line->GetSwitchValueASCII(switches::kProcessType) ==
              switches::kUtilityProcess);
       DCHECK(!command_line->HasSwitch(switches::kServiceSandboxType));
@@ -170,10 +171,6 @@ void SetCommandLineFlagsForSandboxType(base::CommandLine* command_line,
           switches::kServiceSandboxType,
           StringFromUtilitySandboxType(sandbox_type));
       break;
-#if BUILDFLAG(IS_MAC)
-    case Sandbox::kNaClLoader:
-      break;
-#endif  // BUILDFLAG(IS_MAC)
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     case Sandbox::kZygoteIntermediateSandbox:
       break;
@@ -211,11 +208,7 @@ sandbox::mojom::Sandbox SandboxTypeFromCommandLine(
 
   // NaCl tests on all platforms use the loader process.
   if (process_type == switches::kNaClLoaderProcess) {
-#if BUILDFLAG(IS_MAC)
-    return Sandbox::kNaClLoader;
-#else
     return Sandbox::kUtility;
-#endif
   }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -280,6 +273,8 @@ std::string StringFromUtilitySandboxType(Sandbox sandbox_type) {
     case Sandbox::kScreenAI:
       return switches::kScreenAISandbox;
 #endif
+    case Sandbox::kVideoEffects:
+      return switches::kVideoEffectsSandbox;
 #if BUILDFLAG(IS_WIN)
     case Sandbox::kXrCompositing:
       return switches::kXrCompositingSandbox;
@@ -319,9 +314,6 @@ std::string StringFromUtilitySandboxType(Sandbox sandbox_type) {
       // The following are not utility processes so should not occur.
     case Sandbox::kRenderer:
     case Sandbox::kGpu:
-#if BUILDFLAG(IS_MAC)
-    case Sandbox::kNaClLoader:
-#endif  // BUILDFLAG(IS_MAC)
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     case Sandbox::kZygoteIntermediateSandbox:
 #endif
@@ -394,6 +386,9 @@ sandbox::mojom::Sandbox UtilitySandboxTypeFromString(
   if (sandbox_string == switches::kScreenAISandbox)
     return Sandbox::kScreenAI;
 #endif
+  if (sandbox_string == switches::kVideoEffectsSandbox) {
+    return Sandbox::kVideoEffects;
+  }
 #if BUILDFLAG(IS_FUCHSIA)
   if (sandbox_string == switches::kVideoCaptureSandbox)
     return Sandbox::kVideoCapture;

@@ -13,6 +13,10 @@ source_set("sync") {
     "account_bookmark_sync_service_factory.h",
     "chrome_sync_client.cc",
     "chrome_sync_client.h",
+    "chrome_sync_controller_builder.cc",
+    "chrome_sync_controller_builder.h",
+    "data_type_store_service_factory.cc",
+    "data_type_store_service_factory.h",
     "device_info_sync_client_impl.cc",
     "device_info_sync_client_impl.h",
     "device_info_sync_service_factory.cc",
@@ -23,8 +27,6 @@ source_set("sync") {
     "glue/sync_start_util.h",
     "local_or_syncable_bookmark_sync_service_factory.cc",
     "local_or_syncable_bookmark_sync_service_factory.h",
-    "model_type_store_service_factory.cc",
-    "model_type_store_service_factory.h",
     "prefs/chrome_syncable_prefs_database.cc",
     "prefs/chrome_syncable_prefs_database.h",
     "send_tab_to_self_sync_service_factory.cc",
@@ -57,7 +59,6 @@ source_set("sync") {
     "//components/keyed_service/core",
     "//components/prefs",
     "//components/sessions:session_id",
-    "//components/sharing_message",
     "//components/sync/model",
     "//components/sync/service",
     "//components/sync_device_info",
@@ -104,8 +105,8 @@ source_set("sync") {
     "//components/privacy_sandbox:tracking_protection_prefs",
     "//components/saved_tab_groups:core",
     "//components/saved_tab_groups:model",
-    "//components/search_engines",
     "//components/send_tab_to_self",
+    "//components/sharing_message",
     "//components/spellcheck:buildflags",
     "//components/spellcheck/browser",
     "//components/strings:components_strings_grit",
@@ -144,23 +145,32 @@ source_set("sync") {
     ]
   } else {
     sources += [
-      "glue/extension_model_type_controller.cc",
-      "glue/extension_model_type_controller.h",
-      "glue/extension_setting_model_type_controller.cc",
-      "glue/extension_setting_model_type_controller.h",
+      "glue/extension_data_type_controller.cc",
+      "glue/extension_data_type_controller.h",
+      "glue/extension_setting_data_type_controller.cc",
+      "glue/extension_setting_data_type_controller.h",
       "sessions/browser_list_router_helper.cc",
       "sessions/browser_list_router_helper.h",
       "sync_ui_util.cc",
       "sync_ui_util.h",
     ]
-    public_deps += [ "//extensions/buildflags" ]
+    public_deps += [
+      "//chrome/browser/ui:browser_list",
+      "//chrome/browser/ui/tabs:tab_strip_model_observer",
+    ]
     deps += [
       "//chrome/browser/themes",
       "//chrome/browser/web_applications",
-      "//extensions/browser",
-      "//extensions/browser/api/storage",
-      "//extensions/common",
     ]
+
+    if (enable_extensions) {
+      public_deps += [ "//extensions/buildflags" ]
+      deps += [
+        "//extensions/browser",
+        "//extensions/browser/api/storage",
+        "//extensions/common",
+      ]
+    }
   }
   if (is_chromeos_ash) {
     sources += [
@@ -207,7 +217,7 @@ source_set("sync") {
 # because KeyedServiceFactories mix the interface and implementation.
 source_set("factories") {
   sources = [
-    "model_type_store_service_factory.h",
+    "data_type_store_service_factory.h",
     "sync_service_factory.h",
   ]
   public_deps = [

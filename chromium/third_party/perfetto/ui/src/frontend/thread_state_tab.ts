@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {Time, time} from '../base/time';
 import {raf} from '../core/raf_scheduler';
 import {Anchor} from '../widgets/anchor';
@@ -24,26 +23,31 @@ import {Section} from '../widgets/section';
 import {SqlRef} from '../widgets/sql_ref';
 import {Tree, TreeNode} from '../widgets/tree';
 import {Intent} from '../widgets/common';
-
 import {BottomTab, NewBottomTabArgs} from './bottom_tab';
-import {SchedSqlId, ThreadStateSqlId} from './sql_types';
 import {
-  getFullThreadName,
-  getProcessName,
-  getThreadName,
-  ThreadInfo,
-} from './thread_and_process_info';
+  SchedSqlId,
+  ThreadStateSqlId,
+} from '../trace_processor/sql_utils/core_types';
 import {
   getThreadState,
   getThreadStateFromConstraints,
-  goToSchedSlice,
   ThreadState,
-  ThreadStateRef,
-} from './thread_state';
+} from '../trace_processor/sql_utils/thread_state';
 import {DurationWidget, renderDuration} from './widgets/duration';
 import {Timestamp} from './widgets/timestamp';
-import {addDebugSliceTrack} from './debug_tracks/debug_tracks';
 import {globals} from './globals';
+import {getProcessName} from '../trace_processor/sql_utils/process';
+import {
+  ThreadInfo,
+  getFullThreadName,
+  getThreadName,
+} from '../trace_processor/sql_utils/thread';
+import {ThreadStateRef} from './widgets/thread_state';
+import {
+  CRITICAL_PATH_CMD,
+  CRITICAL_PATH_LITE_CMD,
+} from '../public/exposed_commands';
+import {goToSchedSlice} from './widgets/sched';
 
 interface ThreadStateTabConfig {
   // Id into |thread_state| sql table.
@@ -254,22 +258,9 @@ export class ThreadStateTab extends BottomTab<ThreadStateTabConfig> {
         name,
       });
 
-    const sliceColumns = {ts: 'ts', dur: 'dur', name: 'name'};
-    const sliceColumnNames = ['id', 'utid', 'ts', 'dur', 'name', 'table_name'];
-
-    const sliceLiteColumns = {ts: 'ts', dur: 'dur', name: 'thread_name'};
-    const sliceLiteColumnNames = [
-      'id',
-      'utid',
-      'ts',
-      'dur',
-      'thread_name',
-      'process_name',
-      'table_name',
-    ];
-
     const nameForNextOrPrev = (state: ThreadState) =>
       `${state.state} for ${renderDuration(state.dur)}`;
+
     return [
       m(
         Tree,
@@ -318,83 +309,28 @@ export class ThreadStateTab extends BottomTab<ThreadStateTabConfig> {
             ),
           ),
       ),
-      m(Button, {
-        label: 'Critical path lite',
-        intent: Intent.Primary,
-        onclick: () =>
-          this.engine
-            .query(`INCLUDE PERFETTO MODULE sched.thread_executing_span;`)
-            .then(() =>
-              addDebugSliceTrack(
-                // NOTE(stevegolton): This is a temporary patch, this menu
-                // should become part of a critical path plugin, at which point
-                // we can just use the plugin's context object.
-                {
-                  engine: this.engine,
-                  registerTrack: (x) => globals.trackManager.registerTrack(x),
-                },
-                {
-                  sqlSource: `
-                    SELECT
-                      cr.id,
-                      cr.utid,
-                      cr.ts,
-                      cr.dur,
-                      thread.name AS thread_name,
-                      process.name AS process_name,
-                      'thread_state' AS table_name
-                    FROM
-                      _thread_executing_span_critical_path(
-                        ${this.state?.thread?.utid},
-                        trace_bounds.start_ts,
-                        trace_bounds.end_ts - trace_bounds.start_ts) cr,
-                      trace_bounds
-                    JOIN thread USING(utid)
-                    JOIN process USING(upid)
-                  `,
-                  columns: sliceLiteColumnNames,
-                },
-                `${this.state?.thread?.name}`,
-                sliceLiteColumns,
-                sliceLiteColumnNames,
-              ),
-            ),
-      }),
-      m(Button, {
-        label: 'Critical path',
-        intent: Intent.Primary,
-        onclick: () =>
-          this.engine
-            .query(
-              `INCLUDE PERFETTO MODULE sched.thread_executing_span_with_slice;`,
-            )
-            .then(() =>
-              addDebugSliceTrack(
-                // NOTE(stevegolton): This is a temporary patch, this menu
-                // should become part of a critical path plugin, at which point
-                // we can just use the plugin's context object.
-                {
-                  engine: this.engine,
-                  registerTrack: (x) => globals.trackManager.registerTrack(x),
-                },
-                {
-                  sqlSource: `
-                    SELECT cr.id, cr.utid, cr.ts, cr.dur, cr.name, cr.table_name
-                      FROM
-                        _thread_executing_span_critical_path_stack(
-                          ${this.state?.thread?.utid},
-                          trace_bounds.start_ts,
-                          trace_bounds.end_ts - trace_bounds.start_ts) cr,
-                        trace_bounds WHERE name IS NOT NULL
-                  `,
-                  columns: sliceColumnNames,
-                },
-                `${this.state?.thread?.name}`,
-                sliceColumns,
-                sliceColumnNames,
-              ),
-            ),
-      }),
+      globals.commandManager.hasCommand(CRITICAL_PATH_LITE_CMD) &&
+        m(Button, {
+          label: 'Critical path lite',
+          intent: Intent.Primary,
+          onclick: () => {
+            globals.commandManager.runCommand(
+              CRITICAL_PATH_LITE_CMD,
+              this.state?.thread?.utid,
+            );
+          },
+        }),
+      globals.commandManager.hasCommand(CRITICAL_PATH_CMD) &&
+        m(Button, {
+          label: 'Critical path',
+          intent: Intent.Primary,
+          onclick: () => {
+            globals.commandManager.runCommand(
+              CRITICAL_PATH_CMD,
+              this.state?.thread?.utid,
+            );
+          },
+        }),
     ];
   }
 

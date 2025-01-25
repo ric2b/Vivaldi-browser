@@ -59,13 +59,9 @@ BASE_FEATURE(kFillOnAccountSelect,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_IOS)
-BASE_FEATURE(kIOSPasswordSignInUff,
-             "IOSPasswordSignInUff",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kIosDetectUsernameInUff,
              "IosSaveUsernameInUff",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kIOSProactivePasswordGenerationBottomSheet,
              "kIOSProactivePasswordGenerationBottomSheet",
@@ -77,9 +73,15 @@ BASE_FEATURE(kLocalStateEnterprisePasswordHashes,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
-BASE_FEATURE(kPasswordGenerationExperiment,
-             "PasswordGenerationExperiment",
+
+BASE_FEATURE(kPasswordGenerationChunking,
+             "PasswordGenerationChunkPassword",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPasswordGenerationSoftNudge,
+             "PasswordGenerationSoftNudge",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #endif
 
 BASE_FEATURE(kPasswordManagerLogToTerminal,
@@ -123,43 +125,10 @@ BASE_FEATURE(kTriggerPasswordResyncAfterDeletingUndecryptablePasswords,
 BASE_FEATURE(kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning,
              "UnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning",
              base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration,
-             "UnifiedPasswordManagerLocalPasswordsAndroidNoMigration",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kUnifiedPasswordManagerLocalPasswordsAndroidWithMigration,
-             "UnifiedPasswordManagerLocalPasswordsAndroidWithMigration",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-// A parameter which reflects the delay when the local passwords migration is
-// triggered after Chrome startup in seconds.
-constexpr base::FeatureParam<int>
-    kLocalPasswordsMigrationToAndroidBackendDelayParam{
-        &kUnifiedPasswordManagerLocalPasswordsAndroidWithMigration,
-        /* name= */ "local_pwd_migration_delay_seconds",
-        /* default_value= */ 5};
-
-int GetLocalPasswordsMigrationToAndroidBackendDelay() {
-  return kLocalPasswordsMigrationToAndroidBackendDelayParam.Get();
-}
-
-BASE_FEATURE(kUnifiedPasswordManagerSyncOnlyInGMSCore,
-             "UnifiedPasswordManagerSyncOnlyInGMSCore",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kClearLoginDatabaseForAllMigratedUPMUsers,
              "ClearLoginDatabaseForAllMigratedUPMUsers",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kClearLoginDatabaseForUPMUsers,
-             "ClearLoginDatabaseForUPMUsers",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsUnifiedPasswordManagerSyncOnlyInGMSCoreEnabled() {
-#if BUILDFLAG(USE_LOGIN_DATABASE_AS_BACKEND)
-  return false;
-#else
-  return base::FeatureList::IsEnabled(kUnifiedPasswordManagerSyncOnlyInGMSCore);
-#endif
-}
 #endif
 
 BASE_FEATURE(kUsernameFirstFlowFallbackCrowdsourcing,
@@ -190,6 +159,14 @@ BASE_FEATURE(kUsernameFirstFlowWithIntermediateValuesVoting,
 
 BASE_FEATURE(kUseAsyncOsCryptInLoginDatabase,
              "UseAsyncOsCryptInLoginDatabase",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kUseNewEncryptionMethod,
+             "UseNewEncryptionMethod",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEncryptAllPasswordsWithOSCryptAsync,
+             "EncryptAllPasswordsWithOSCryptAsync",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace password_manager::features

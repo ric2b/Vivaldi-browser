@@ -4,9 +4,13 @@
 
 package org.chromium.chrome.browser.tab_resumption;
 
+import static org.chromium.chrome.browser.tab_resumption.TabResumptionModuleUtils.DISPLAY_TEXT_MAX_LINES_DEFAULT;
+import static org.chromium.chrome.browser.tab_resumption.TabResumptionModuleUtils.DISPLAY_TEXT_MAX_LINES_WITH_REASON;
+
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.RelativeLayout;
@@ -26,6 +30,10 @@ public class TabResumptionTileView extends RelativeLayout {
     static final String SEPARATE_PERIOD = ". ";
 
     private RoundedCornerImageView mIconView;
+    private TextView mTilePreInfoView;
+    private TextView mTileDisplayView;
+    private TextView mTilePostInfoView;
+
     private final int mSalientImageCornerRadiusPx;
 
     public TabResumptionTileView(Context context, @Nullable AttributeSet attrs) {
@@ -40,6 +48,9 @@ public class TabResumptionTileView extends RelativeLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
         mIconView = findViewById(R.id.tile_icon);
+        mTilePreInfoView = findViewById(R.id.tile_pre_info_text);
+        mTileDisplayView = findViewById(R.id.tile_display_text);
+        mTilePostInfoView = findViewById(R.id.tile_post_info_text);
     }
 
     void destroy() {
@@ -60,14 +71,19 @@ public class TabResumptionTileView extends RelativeLayout {
             @Nullable String appChipText,
             String displayText,
             String postInfoText) {
-        // TODO(b/337858147): Change the visibility and text of TextView R.id.tile_pre_info_text
-        // for Tab resumption V2 UX.
-        ((TextView) findViewById(R.id.tile_pre_info_text)).setText(preInfoText);
-        ((TextView) findViewById(R.id.tile_display_text)).setText(displayText);
+        boolean showPreInfoText = !TextUtils.isEmpty(preInfoText);
+        mTilePreInfoView.setText(preInfoText);
+        mTilePreInfoView.setVisibility(showPreInfoText ? VISIBLE : GONE);
+
+        mTileDisplayView.setMaxLines(
+                showPreInfoText
+                        ? DISPLAY_TEXT_MAX_LINES_WITH_REASON
+                        : DISPLAY_TEXT_MAX_LINES_DEFAULT);
+        mTileDisplayView.setText(displayText);
         ((TextView) findViewById(R.id.tile_post_info_text)).setText(postInfoText);
 
         StringBuilder stringBuilder = new StringBuilder();
-        if (preInfoText != null) {
+        if (showPreInfoText) {
             stringBuilder.append(preInfoText);
             stringBuilder.append(SEPARATE_COMMA);
         }
@@ -120,7 +136,7 @@ public class TabResumptionTileView extends RelativeLayout {
             titleLayout.addRule(RelativeLayout.BELOW, chipView.getId());
         } else {
             titleLayout.removeRule(RelativeLayout.BELOW);
-            titleLayout.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
+            titleLayout.addRule(RelativeLayout.BELOW, R.id.tile_pre_info_text);
         }
         findViewById(R.id.tile_pre_info_text).setVisibility(View.GONE);
         return label;
@@ -130,16 +146,21 @@ public class TabResumptionTileView extends RelativeLayout {
      * Assigns all texts for the "multi-tile" case and returns the content description string.
      *
      * @param displayText Main text (page title).
-     * @param infoText Info to show below main text.
+     * @param postInfoText Info to show below main text.
      */
-    public String setSuggestionTextsMulti(String displayText, String infoText) {
+    public String setSuggestionTextsMulti(String displayText, String postInfoText) {
         ((TextView) findViewById(R.id.tile_display_text)).setText(displayText);
-        ((TextView) findViewById(R.id.tile_info_text)).setText(infoText);
+        ((TextView) findViewById(R.id.tile_post_info_text)).setText(postInfoText);
 
+        // Construct a content description from the TabResumptionTileView. This string will be used
+        // to construct the content description of its parent view TabResumptionModuleView which
+        // currently has no text accessible to TalkBack. When TabResumptionModuleView is focused,
+        // TalkBack will sequentially read all translated strings from its subviews, using
+        // SEPARATE_COMMA as a delimiter between each.
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(displayText);
         stringBuilder.append(SEPARATE_COMMA);
-        stringBuilder.append(infoText);
+        stringBuilder.append(postInfoText);
         stringBuilder.append(SEPARATE_PERIOD);
 
         String contentDescription = stringBuilder.toString();
@@ -160,5 +181,13 @@ public class TabResumptionTileView extends RelativeLayout {
                 mSalientImageCornerRadiusPx,
                 mSalientImageCornerRadiusPx,
                 mSalientImageCornerRadiusPx);
+    }
+
+    /**
+     * Updates the post info text of the tile. It consists of a domain URL for a local Tab, and a
+     * domain URL + the device info for a remote Tab.
+     */
+    public void updatePostInfoView(String postInfoText) {
+        mTilePostInfoView.setText(postInfoText);
     }
 }

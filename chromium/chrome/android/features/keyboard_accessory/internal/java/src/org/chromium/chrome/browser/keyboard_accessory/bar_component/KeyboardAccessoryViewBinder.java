@@ -170,16 +170,19 @@ class KeyboardAccessoryViewBinder {
             }
             mKeyboardAccessory.setAllowClicksWhileObscured(isIPHShown);
 
-            // Credit card chips never occupy the entire width of the window to allow for other
-            // cards (if they exist) to be seen. Their max width is set to 85% of the window width.
-            // The chip size is limited by truncating the card label.
+            // Credit card or IBAN chips never occupy the entire width of the window to allow for
+            // other cards or IBANs (if they exist) to be seen. Their max width is set to 85% of
+            // the window width.
+            // The chip size is limited by truncating the card/IBAN label.
             // TODO (crbug.com/1376691): Check if it's alright to instead show a fixed portion of
             // the following chip. This might give a more consistent user experience and allow wider
             // windows to show more information in a chip before truncating.
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA)
-                    && ChromeFeatureList.isEnabled(
-                            ChromeFeatureList.AUTOFILL_ENABLE_CARD_PRODUCT_NAME)
-                    && containsCreditCardInfo(item.getSuggestion())) {
+            if (containsIbanInfo(item.getSuggestion())
+                    || ChromeFeatureList.isEnabled(
+                                    ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA)
+                            && ChromeFeatureList.isEnabled(
+                                    ChromeFeatureList.AUTOFILL_ENABLE_CARD_PRODUCT_NAME)
+                            && containsCreditCardInfo(item.getSuggestion())) {
                 int windowWidth =
                         chipView.getContext().getResources().getDisplayMetrics().widthPixels;
                 chipView.setMaxWidth((int) (windowWidth * 0.85));
@@ -227,18 +230,19 @@ class KeyboardAccessoryViewBinder {
             }
 
             float iconAlpha;
-            int textAppearance;
             if (item.getSuggestion().applyDeactivatedStyle()) {
+                // Disabling chipview if deactivated style is set.
+                chipView.setEnabled(false);
                 iconAlpha = GRAYED_OUT_OPACITY_ALPHA;
-                textAppearance = R.style.TextAppearance_TextMedium_Disabled;
-                chipView.setOnClickListener(null);
-                chipView.setOnLongClickListener(null);
+                // Restoring the chipview border post disabling it to meet the
+                // required UI.
+                chipView.setBorder(
+                        chipView.getResources().getDimensionPixelSize(R.dimen.chip_border_width),
+                        chipView.getContext().getColor(R.color.black_alpha_12));
             } else {
+                chipView.setEnabled(true);
                 iconAlpha = COMPLETE_OPACITY_ALPHA;
-                textAppearance = R.style.TextAppearance_ChipText;
             }
-            chipView.getPrimaryTextView().setTextAppearance(textAppearance);
-            chipView.getSecondaryTextView().setTextAppearance(textAppearance);
             Drawable iconDrawable = mSuggestionDrawableFunction.apply(item.getSuggestion());
             if (iconDrawable != null) {
                 iconDrawable.setAlpha((int) (255 * iconAlpha));
@@ -360,5 +364,9 @@ class KeyboardAccessoryViewBinder {
     private static boolean containsCreditCardInfo(AutofillSuggestion suggestion) {
         return suggestion.getSuggestionType() == SuggestionType.CREDIT_CARD_ENTRY
                 || suggestion.getSuggestionType() == SuggestionType.VIRTUAL_CREDIT_CARD_ENTRY;
+    }
+
+    private static boolean containsIbanInfo(AutofillSuggestion suggestion) {
+        return suggestion.getSuggestionType() == SuggestionType.IBAN_ENTRY;
     }
 }

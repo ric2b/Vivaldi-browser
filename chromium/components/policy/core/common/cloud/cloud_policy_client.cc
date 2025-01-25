@@ -4,6 +4,7 @@
 
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 
+#include <string>
 #include <utility>
 
 #include "base/containers/contains.h"
@@ -41,6 +42,10 @@ namespace em = enterprise_management;
 using PsmExecutionResult = em::DeviceRegisterRequest::PsmExecutionResult;
 
 namespace policy {
+
+BASE_FEATURE(kPolicyFetchWithSha256,
+             "PolicyFetchWithSha256",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
 
@@ -141,8 +146,10 @@ em::DevicePolicyRequest::Reason TranslateFetchReason(PolicyFetchReason reason) {
       return Request::TEST;
     case PolicyFetchReason::kUserRequest:
       return Request::USER_REQUEST;
+    case PolicyFetchReason::kRetry:
+      return Request::RETRY;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 em::PolicyValidationReportRequest::ValidationResultType
@@ -198,6 +205,16 @@ TranslatePolicyValidationResultSeverity(
   }
   NOTREACHED_IN_MIGRATION();
   return issue::VALUE_VALIDATION_ISSUE_SEVERITY_UNSPECIFIED;
+}
+
+em::PolicyValidationReportRequest_Action TranslateValidationReportAction(
+    ValidationAction action) {
+  switch (action) {
+    case kStore:
+      return em::PolicyValidationReportRequest_Action_STORE;
+    case kLoad:
+      return em::PolicyValidationReportRequest_Action_LOAD;
+  }
 }
 
 template <typename T>
@@ -435,22 +452,25 @@ void CloudPolicyClient::RegisterWithCertificate(
                      std::move(signing_service)));
 }
 
-void CloudPolicyClient::RegisterBrowserWithEnrollmentToken(
+void CloudPolicyClient::RegisterBrowserOrPolicyAgentWithEnrollmentToken(
     const std::string& token,
     const std::string& client_id,
     const ClientDataDelegate& client_data_delegate,
-    bool is_mandatory) {
+    bool is_mandatory,
+    DeviceManagementService::JobConfiguration::JobType type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(service_);
   DCHECK(!token.empty());
   DCHECK(!client_id.empty());
   DCHECK(!is_registered());
+  DCHECK(type == DeviceManagementService::JobConfiguration::
+                     TYPE_BROWSER_REGISTRATION ||
+         type == DMServerJobConfiguration::JobConfiguration::
+                     TYPE_POLICY_AGENT_REGISTRATION);
 
   SetClientId(client_id);
 
-  auto params = DMServerJobConfiguration::CreateParams::WithClient(
-      DeviceManagementService::JobConfiguration::TYPE_BROWSER_REGISTRATION,
-      this);
+  auto params = DMServerJobConfiguration::CreateParams::WithClient(type, this);
   params.auth_data = DMAuth::FromEnrollmentToken(token);
   params.callback = base::BindOnce(&CloudPolicyClient::OnRegisterCompleted,
                                    weak_ptr_factory_.GetWeakPtr());
@@ -468,6 +488,26 @@ void CloudPolicyClient::RegisterBrowserWithEnrollmentToken(
   client_data_delegate.FillRegisterBrowserRequest(
       request, base::BindOnce(&CloudPolicyClient::CreateUniqueRequestJob,
                               base::Unretained(this), std::move(config)));
+}
+
+void CloudPolicyClient::RegisterBrowserWithEnrollmentToken(
+    const std::string& token,
+    const std::string& client_id,
+    const ClientDataDelegate& client_data_delegate,
+    bool is_mandatory) {
+  RegisterBrowserOrPolicyAgentWithEnrollmentToken(
+      token, client_id, client_data_delegate, is_mandatory,
+      DeviceManagementService::JobConfiguration::TYPE_BROWSER_REGISTRATION);
+}
+
+void CloudPolicyClient::RegisterPolicyAgentWithEnrollmentToken(
+    const std::string& token,
+    const std::string& client_id,
+    const ClientDataDelegate& client_data_delegate) {
+  RegisterBrowserOrPolicyAgentWithEnrollmentToken(
+      token, client_id, client_data_delegate, /*is_mandatory=*/true,
+      DeviceManagementService::JobConfiguration::
+          TYPE_POLICY_AGENT_REGISTRATION);
 }
 
 void CloudPolicyClient::RegisterDeviceWithEnrollmentToken(
@@ -507,7 +547,8 @@ void CloudPolicyClient::RegisterWithOidcResponse(
     const RegistrationParameters& parameters,
     const std::string& oauth_token,
     const std::string& oidc_id_token,
-    const std::string& client_id) {
+    const std::string& client_id,
+    const base::TimeDelta& timeout_duration) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(!oidc_id_token.empty());
   CHECK(!oauth_token.empty());
@@ -523,6 +564,12 @@ void CloudPolicyClient::RegisterWithOidcResponse(
 
   auto config =
       std::make_unique<RegistrationJobConfiguration>(std::move(params));
+
+  // Set a limit for OIDC registration so the loading state doesn't hang
+  // forever.
+  if (timeout_duration > base::TimeDelta()) {
+    config->SetTimeoutDuration(timeout_duration);
+  }
 
   em::DeviceRegisterRequest* request =
       config->request()->mutable_register_request();
@@ -583,6 +630,14 @@ void CloudPolicyClient::SetOAuthTokenAsAdditionalAuth(
   oauth_token_ = oauth_token;
 }
 
+em::PolicyFetchRequest::SignatureType
+CloudPolicyClient::GetPolicyFetchRequestSignatureType() {
+  if (base::FeatureList::IsEnabled(policy::kPolicyFetchWithSha256)) {
+    return em::PolicyFetchRequest::SHA256_RSA;
+  }
+  return em::PolicyFetchRequest::SHA1_RSA;
+}
+
 void CloudPolicyClient::FetchPolicy(PolicyFetchReason reason) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -590,10 +645,6 @@ void CloudPolicyClient::FetchPolicy(PolicyFetchReason reason) {
   CHECK(!types_to_fetch_.empty());
 
   VLOG(2) << "Policy fetch starting";
-  for (const auto& type : types_to_fetch_) {
-    VLOG_POLICY(2, POLICY_FETCHING)
-        << "Fetching policy type: " << type.first << " -> " << type.second;
-  }
   auto params = DMServerJobConfiguration::CreateParams::WithClient(
       DeviceManagementService::JobConfiguration::TYPE_POLICY_FETCH, this);
   params.auth_data = DMAuth::FromDMToken(dm_token_);
@@ -618,7 +669,12 @@ void CloudPolicyClient::FetchPolicy(PolicyFetchReason reason) {
 
   // Build policy fetch requests.
   em::DevicePolicyRequest* policy_request = request->mutable_policy_request();
+  const em::PolicyFetchRequest::SignatureType signature_type =
+      GetPolicyFetchRequestSignatureType();
   for (const auto& type_to_fetch : types_to_fetch_) {
+    VLOG_POLICY(2, POLICY_FETCHING)
+        << "Fetching policy type: " << type_to_fetch.first << " -> "
+        << type_to_fetch.second;
     em::PolicyFetchRequest* fetch_request = policy_request->add_requests();
     fetch_request->set_policy_type(type_to_fetch.first);
     if (!type_to_fetch.second.empty()) {
@@ -626,7 +682,7 @@ void CloudPolicyClient::FetchPolicy(PolicyFetchReason reason) {
     }
 
     // Request signed policy blobs to help prevent tampering on the client.
-    fetch_request->set_signature_type(em::PolicyFetchRequest::SHA1_RSA);
+    fetch_request->set_signature_type(signature_type);
     if (public_key_version_valid_) {
       fetch_request->set_public_key_version(public_key_version_);
     }
@@ -710,6 +766,7 @@ void CloudPolicyClient::SetBrowserDeviceIdentifier(
 void CloudPolicyClient::UploadPolicyValidationReport(
     CloudPolicyValidatorBase::Status status,
     const std::vector<ValueValidationIssue>& value_validation_issues,
+    const ValidationAction action,
     const std::string& policy_type,
     const std::string& policy_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -728,6 +785,8 @@ void CloudPolicyClient::UploadPolicyValidationReport(
 
   policy_validation_report_request->set_policy_type(policy_type);
   policy_validation_report_request->set_policy_token(policy_token);
+  policy_validation_report_request->set_action(
+      TranslateValidationReportAction(action));
   policy_validation_report_request->set_validation_result_type(
       TranslatePolicyValidationResult(status));
 

@@ -828,7 +828,9 @@ IN_PROC_BROWSER_TEST_F(NavigationEarlyHintsTest, DevtoolsEventsForEarlyHint) {
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   Attach();
-  SendCommandAsync("Network.enable");
+  // Send this synchronously, otherwise it might not be sent yet when the
+  // navigation start and the message sending gets suspended.
+  SendCommandSync("Network.enable");
   GURL target_url =
       net::QuicSimpleTestServer::GetFileURL(kPageWithHintedScriptPath);
   EXPECT_TRUE(NavigateToURL(shell(), target_url, target_url));
@@ -935,7 +937,7 @@ IN_PROC_BROWSER_TEST_F(NavigationEarlyHintsPrerenderTest,
   RegisterResponse(entry);
 
   // Loads a page in the prerender.
-  int host_id = prerender_helper()->AddPrerender(
+  FrameTreeNodeId host_id = prerender_helper()->AddPrerender(
       net::QuicSimpleTestServer::GetFileURL(kPageWithHintedScriptPath));
   RenderFrameHostImpl* prerender_rfh = static_cast<RenderFrameHostImpl*>(
       prerender_helper()->GetPrerenderedMainFrameHost(host_id));

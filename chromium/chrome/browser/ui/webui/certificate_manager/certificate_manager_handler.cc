@@ -101,6 +101,13 @@ void CertificateManagerPageHandler::ImportCertificate(
                                              std::move(callback));
 }
 
+void CertificateManagerPageHandler::ImportAndBindCertificate(
+    certificate_manager_v2::mojom::CertificateSource source_id,
+    ImportCertificateCallback callback) {
+  GetCertSource(source_id).ImportAndBindCertificate(web_contents_->GetWeakPtr(),
+                                                    std::move(callback));
+}
+
 CertificateManagerPageHandler::CertSource::~CertSource() = default;
 
 CertificateManagerPageHandler::CertSource&
@@ -115,7 +122,7 @@ CertificateManagerPageHandler::GetCertSource(
         break;
       case certificate_manager_v2::mojom::CertificateSource::
           kPlatformClientCert:
-        source_ptr = CreatePlatformClientCertSource();
+        source_ptr = CreatePlatformClientCertSource(&remote_client_, profile_);
         break;
       case certificate_manager_v2::mojom::CertificateSource::
           kEnterpriseTrustedCerts:
@@ -182,6 +189,13 @@ void CertificateManagerPageHandler::ShowNativeManageCertificates() {
 #endif
 
 void CertificateManagerPageHandler::CertSource::ImportCertificate(
+    base::WeakPtr<content::WebContents> web_contents,
+    CertificateManagerPageHandler::ImportCertificateCallback callback) {
+  std::move(callback).Run(
+      certificate_manager_v2::mojom::ImportResult::NewError("not implemented"));
+}
+
+void CertificateManagerPageHandler::CertSource::ImportAndBindCertificate(
     base::WeakPtr<content::WebContents> web_contents,
     CertificateManagerPageHandler::ImportCertificateCallback callback) {
   std::move(callback).Run(

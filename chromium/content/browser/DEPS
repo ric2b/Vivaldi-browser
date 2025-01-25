@@ -26,7 +26,6 @@ include_rules = [
   "+components/link_header_util",
   "+components/metrics",
   "+components/metrics:single_sample_metrics",
-  "+components/miracle_parameter",
   "+components/network_session_configurator/common",
   "+components/offline_pages/buildflags/buildflags.h",
   "+components/offline_pages/core/request_header",
@@ -75,6 +74,7 @@ include_rules = [
   "-services/content",
   "+services/content/service.h",
   "+services/content/service_delegate.h",
+  "+services/device/public/cpp/compute_pressure",
   "-services/network",
   "+services/network/public/cpp",
   "+services/network/public/mojom",
@@ -83,6 +83,7 @@ include_rules = [
   "+services/cert_verifier/public/mojom",
   "+services/screen_ai/buildflags",
   "+services/screen_ai/public/cpp",
+  "+services/video_effects/public/cpp/buildflags.h",
 
   # In general, //content shouldn't depend on //device.
   # This is the an exception.
@@ -197,6 +198,8 @@ specific_include_rules = {
   ],
   "web_app_system_media_controls_manager.cc": [
     "+components/remote_cocoa/browser"
+  ],
+  "render_widget_host_view_aura.cc": [
+    "+components/stylus_handwriting/win/features.h"
   ]
-
 }

@@ -1032,28 +1032,6 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
                   << setup_exe.value();
     }
     *exit_code = InstallUtil::GetInstallReturnCode(status);
-  } else if (cmd_line.HasSwitch(installer::switches::kPatch)) {
-    const std::string patch_type_str(
-        cmd_line.GetSwitchValueASCII(installer::switches::kPatch));
-    const base::FilePath input_file(
-        cmd_line.GetSwitchValuePath(installer::switches::kInputFile));
-    const base::FilePath patch_file(
-        cmd_line.GetSwitchValuePath(installer::switches::kPatchFile));
-    const base::FilePath output_file(
-        cmd_line.GetSwitchValuePath(installer::switches::kOutputFile));
-
-    if (patch_type_str == installer::kZucchini) {
-      *exit_code =
-          installer::ZucchiniPatchFiles(input_file, patch_file, output_file);
-    } else if (patch_type_str == installer::kCourgette) {
-      *exit_code =
-          installer::CourgettePatchFiles(input_file, patch_file, output_file);
-    } else if (patch_type_str == installer::kBsdiff) {
-      *exit_code =
-          installer::BsdiffPatchFiles(input_file, patch_file, output_file);
-    } else {
-      *exit_code = installer::PATCH_INVALID_ARGUMENTS;
-    }
   } else if (cmd_line.HasSwitch(installer::switches::kReenableAutoupdates)) {
     // setup.exe has been asked to attempt to reenable updates for Chrome.
     bool updates_enabled = GoogleUpdateSettings::ReenableAutoupdates();
@@ -1529,6 +1507,16 @@ int SetupMain(HINSTANCE instance) {
       setup_exe,
       current_version,
   };
+
+  // Histogram storage is enabled at the very top of this function. We disable
+  // it for kConfigureBrowserInDirectory because this switch intended for use
+  // by Chrome for Testing, which does not perform any metrics processing. If it
+  // someday does, this should be changed to set the storage directory to the
+  // value of the kConfigureBrowserInDirectory switch (the path to the directory
+  // containing chrome.exe).
+  if (cmd_line.HasSwitch(installer::switches::kConfigureBrowserInDirectory)) {
+    persistent_histogram_storage.Disable();
+  }
 
   int exit_code = 0;
   // NOTE(igor@vivaldi.com): To allow to test experimental silent updates for

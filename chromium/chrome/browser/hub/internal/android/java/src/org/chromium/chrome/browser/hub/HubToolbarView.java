@@ -27,8 +27,11 @@ import org.chromium.chrome.browser.hub.HubToolbarProperties.PaneButtonLookup;
 
 import java.util.List;
 
+// Vivaldi
+import android.widget.RelativeLayout;
+
 /** Toolbar for the Hub. May contain a single or multiple rows, of which this view is the parent. */
-public class HubToolbarView extends LinearLayout {
+public class HubToolbarView extends RelativeLayout { // Vivaldi
     private Button mActionButton;
     private TabLayout mPaneSwitcher;
     private FrameLayout mMenuButtonContainer;
@@ -49,6 +52,9 @@ public class HubToolbarView extends LinearLayout {
     }
 
     void setMenuButtonVisible(boolean visible) {
+        // Note(david@vivaldi.com): In Vivaldi the menu button is part of the top toolbar layout.
+        // Due to this we must assign that view here.
+        mMenuButtonContainer = ((View)getParent()).findViewById(R.id.menu_button_container);
         mMenuButtonContainer.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
 

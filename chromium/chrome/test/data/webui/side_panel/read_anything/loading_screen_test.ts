@@ -4,15 +4,15 @@
 import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 
 import {BrowserProxy} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
-import type {ReadAnythingElement, SpEmptyStateElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import type {AppElement, SpEmptyStateElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertFalse, assertStringContains, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
-import {flushTasks} from 'chrome-untrusted://webui-test/polymer_test_util.js';
+import {microtasksFinished} from 'chrome-untrusted://webui-test/test_util.js';
 
 import {FakeReadingMode} from './fake_reading_mode.js';
 import {TestColorUpdaterBrowserProxy} from './test_color_updater_browser_proxy.js';
 
 suite('LoadingScreen', () => {
-  let app: ReadAnythingElement;
+  let app: AppElement;
   let emptyState: SpEmptyStateElement;
 
   setup(() => {
@@ -25,7 +25,9 @@ suite('LoadingScreen', () => {
     app = document.createElement('read-anything-app');
     document.body.appendChild(app);
     app.showLoading();
-    emptyState = document.querySelector<SpEmptyStateElement>('sp-empty-state')!;
+    emptyState =
+        app.shadowRoot!.querySelector<SpEmptyStateElement>('sp-empty-state')!;
+    return microtasksFinished();
   });
 
   test('shows spinner', () => {
@@ -39,6 +41,7 @@ suite('LoadingScreen', () => {
       isSpeechActive: true,
       isSpeechTreeInitialized: true,
       isAudioCurrentlyPlaying: true,
+      hasSpeechBeenTriggered: true,
     };
 
     app.showLoading();
@@ -46,6 +49,7 @@ suite('LoadingScreen', () => {
     assertFalse(app.speechPlayingState.isSpeechActive);
     assertFalse(app.speechPlayingState.isSpeechTreeInitialized);
     assertFalse(app.speechPlayingState.isAudioCurrentlyPlaying);
+    assertFalse(app.speechPlayingState.hasSpeechBeenTriggered);
   });
 
   test('selection on loading screen does nothing', async () => {
@@ -56,8 +60,7 @@ suite('LoadingScreen', () => {
     assertTrue(!!selection);
     selection.removeAllRanges();
     selection.addRange(range);
-
-    await flushTasks();
+    await microtasksFinished();
 
     assertEquals('', document.getSelection()?.toString());
   });

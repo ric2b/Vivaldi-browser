@@ -15,7 +15,7 @@
 #import "components/notes/notes_model.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
@@ -67,6 +67,7 @@ enum class PresentedState {
 
 @interface NoteInteractionController () <
     NoteFolderChooserViewControllerDelegate,
+    NoteAddEditViewControllerDelegate,
     NoteHomeViewControllerDelegate> {
   // The browser notes are presented in.
   Browser* _browser;  // weak
@@ -291,7 +292,7 @@ enum class PresentedState {
 
 - (void)dismissNoteEditorAnimated:(BOOL)animated {
   if (self.currentPresentedState != PresentedState::NOTE_EDITOR) {
-      return;
+    return;
   }
   DCHECK(self.noteNavigationController);
 
@@ -483,7 +484,6 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
 - (void)presentNoteEditor:(const NoteNode*)node
                parentNode:(const NoteNode*)parentNode
                 isEditing:(BOOL)isEditing {
-
   NoteAddEditViewController* controller =
     [NoteAddEditViewController
      initWithBrowser:_browser
@@ -492,10 +492,13 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
            isEditing:isEditing
         allowsCancel:YES];
   self.noteEditor = controller;
+  self.noteEditor.delegate = self;
 
   UINavigationController *newVC =
       [[UINavigationController alloc]
         initWithRootViewController:controller];
+
+  self.currentPresentedState = PresentedState::NOTE_EDITOR;
 
   // Present the nav bar controller on top of the parent
   [_parentController presentViewController:newVC
@@ -518,6 +521,9 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
   UINavigationController *newVC =
       [[UINavigationController alloc]
         initWithRootViewController:controller];
+
+  self.currentPresentedState = PresentedState::NOTE_FOLDER_EDITOR;
+
   // Present the nav bar controller on top of the parent
   [_parentController presentViewController:newVC
                                       animated:YES

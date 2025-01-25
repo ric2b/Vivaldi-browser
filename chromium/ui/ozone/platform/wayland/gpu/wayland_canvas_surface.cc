@@ -115,14 +115,17 @@ class WaylandCanvasSurface::SharedMemoryBuffer {
   void CopyDirtyRegionFrom(SharedMemoryBuffer* buffer) {
     DCHECK_NE(this, buffer);
     const size_t stride = CalculateStride(sk_surface_->width());
+    auto dst_span = base::span(shm_mapping_);
     for (SkRegion::Iterator i(dirty_region_); !i.done(); i.next()) {
-      uint8_t* dst_ptr =
-          static_cast<uint8_t*>(shm_mapping_.memory()) +
-          i.rect().x() * SkColorTypeBytesPerPixel(kN32_SkColorType) +
-          i.rect().y() * stride;
-      buffer->sk_surface_->readPixels(
+      auto offset = i.rect().x() * SkColorTypeBytesPerPixel(kN32_SkColorType) +
+                    i.rect().y() * stride;
+      auto dst_subspan = dst_span.subspan(
+          offset, i.rect().width() * i.rect().height() *
+                      SkColorTypeBytesPerPixel(kN32_SkColorType));
+
+      UNSAFE_TODO(buffer->sk_surface_->readPixels(
           SkImageInfo::MakeN32Premul(i.rect().width(), i.rect().height()),
-          dst_ptr, stride, i.rect().x(), i.rect().y());
+          dst_subspan.data(), stride, i.rect().x(), i.rect().y()));
     }
     dirty_region_.setEmpty();
   }

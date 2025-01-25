@@ -16,6 +16,7 @@
 #include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
 #include "components/performance_manager/public/mojom/lifecycle.mojom.h"
 #include "components/performance_manager/public/resource_attribution/frame_context.h"
+#include "components/performance_manager/public/viewport_intersection_state.h"
 #include "content/public/browser/browsing_instance_id.h"
 #include "content/public/browser/site_instance.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -163,7 +164,7 @@ class FrameNode : public TypedNode<FrameNode> {
   virtual const std::optional<url::Origin>& GetOrigin() const = 0;
 
   // Returns true if this frame is current (is part of a content::FrameTree).
-  // See FrameNodeObserver::OnIsCurrentChanged.
+  // See FrameNodeObserver::OnCurrentFrameChanged.
   virtual bool IsCurrent() const = 0;
 
   // Returns the current priority of the frame, and the reason for the frame
@@ -186,10 +187,16 @@ class FrameNode : public TypedNode<FrameNode> {
   // lock is held by an active transaction or an active DB open request.
   virtual bool IsHoldingIndexedDBLock() const = 0;
 
+  // Returns true if this frame currently uses WebRTC.
+  virtual bool UsesWebRTC() const = 0;
+
   // Returns the child workers of this frame. These are either dedicated workers
   // or shared workers created by this frame, or a service worker that handles
   // this frame's network requests.
   virtual NodeSetView<const WorkerNode*> GetChildWorkerNodes() const = 0;
+
+  // Returns true if the frame has been interacted with at least once.
+  virtual bool HadUserActivation() const = 0;
 
   // Returns true if at least one form of the frame has been interacted with.
   virtual bool HadFormInteraction() const = 0;
@@ -205,13 +212,12 @@ class FrameNode : public TypedNode<FrameNode> {
   // Returns true if the frame is capturing a media stream (audio or video).
   virtual bool IsCapturingMediaStream() const = 0;
 
-  // Returns true if the frame intersects with the viewport. This could be false
-  // if the frame is not rendered (display: none) or is scrolled out of view.
-  // This is initially null on node creation and is initialized during layout
-  // when the viewport intersection is first calculated. May only be called for
-  // a child frame, as the main frame is always considered to be intersecting
-  // the viewport.
-  virtual std::optional<bool> IntersectsViewport() const = 0;
+  // Returns the ViewportIntersectionState of this frame. This is initially null
+  // on node creation and is initialized during layout when the viewport
+  // intersection is first calculated. May only be called for a child frame, as
+  // the main frame is always considered to be intersecting the viewport.
+  virtual std::optional<ViewportIntersectionState>
+  GetViewportIntersectionState() const = 0;
 
   // Returns true if the frame is visible. This value is based on the viewport
   // intersection of the frame, and the visibility of the page.
@@ -263,8 +269,10 @@ class FrameNodeObserver : public base::CheckedObserver {
 
   // Notifications of property changes.
 
-  // Invoked when the IsCurrent property changes.
-  virtual void OnIsCurrentChanged(const FrameNode* frame_node) = 0;
+  // Invoked when the current frame changes. Both arguments can be nullptr.
+  virtual void OnCurrentFrameChanged(
+      const FrameNode* previous_frame_node,
+      const FrameNode* current_current_frame) = 0;
 
   // Invoked when the NetworkAlmostIdle property changes.
   virtual void OnNetworkAlmostIdleChanged(const FrameNode* frame_node) = 0;
@@ -296,6 +304,9 @@ class FrameNodeObserver : public base::CheckedObserver {
       const FrameNode* frame_node,
       const PriorityAndReason& previous_value) = 0;
 
+  // Called when the frame is interacted with by the user.
+  virtual void OnHadUserActivationChanged(const FrameNode* frame_node) = 0;
+
   // Called when the frame receives a form interaction.
   virtual void OnHadFormInteractionChanged(const FrameNode* frame_node) = 0;
 
@@ -305,6 +316,9 @@ class FrameNodeObserver : public base::CheckedObserver {
   // property will only trigger `OnHadUserEditsChanged()`.
   virtual void OnHadUserEditsChanged(const FrameNode* frame_node) = 0;
 
+  // Called when the frame starts or stops using WebRTC.
+  virtual void OnFrameUsesWebRTCChanged(const FrameNode* frame_node) = 0;
+
   // Invoked when the IsAudible property changes.
   virtual void OnIsAudibleChanged(const FrameNode* frame_node) = 0;
 
@@ -312,7 +326,8 @@ class FrameNodeObserver : public base::CheckedObserver {
   virtual void OnIsCapturingMediaStreamChanged(const FrameNode* frame_node) = 0;
 
   // Invoked when a frame's intersection with the viewport changes
-  virtual void OnIntersectsViewportChanged(const FrameNode* frame_node) = 0;
+  virtual void OnViewportIntersectionStateChanged(
+      const FrameNode* frame_node) = 0;
 
   // Invoked when the visibility property changes.
   virtual void OnFrameVisibilityChanged(
@@ -350,7 +365,8 @@ class FrameNode::ObserverDefaultImpl : public FrameNodeObserver {
   // FrameNodeObserver implementation:
   void OnFrameNodeAdded(const FrameNode* frame_node) override {}
   void OnBeforeFrameNodeRemoved(const FrameNode* frame_node) override {}
-  void OnIsCurrentChanged(const FrameNode* frame_node) override {}
+  void OnCurrentFrameChanged(const FrameNode* previous_frame_node,
+                             const FrameNode* current_frame_node) override {}
   void OnNetworkAlmostIdleChanged(const FrameNode* frame_node) override {}
   void OnFrameLifecycleStateChanged(const FrameNode* frame_node) override {}
   void OnURLChanged(const FrameNode* frame_node,
@@ -365,11 +381,14 @@ class FrameNode::ObserverDefaultImpl : public FrameNodeObserver {
   void OnPriorityAndReasonChanged(
       const FrameNode* frame_node,
       const PriorityAndReason& previous_value) override {}
+  void OnHadUserActivationChanged(const FrameNode* frame_node) override {}
   void OnHadFormInteractionChanged(const FrameNode* frame_node) override {}
   void OnHadUserEditsChanged(const FrameNode* frame_node) override {}
+  void OnFrameUsesWebRTCChanged(const FrameNode* frame_node) override {}
   void OnIsAudibleChanged(const FrameNode* frame_node) override {}
   void OnIsCapturingMediaStreamChanged(const FrameNode* frame_node) override {}
-  void OnIntersectsViewportChanged(const FrameNode* frame_node) override {}
+  void OnViewportIntersectionStateChanged(
+      const FrameNode* frame_node) override {}
   void OnFrameVisibilityChanged(const FrameNode* frame_node,
                                 FrameNode::Visibility previous_value) override {
   }

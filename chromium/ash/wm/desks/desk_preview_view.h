@@ -11,7 +11,6 @@
 #include "ash/ash_export.h"
 #include "ash/style/system_shadow.h"
 #include "ash/wm/desks/window_occlusion_calculator.h"
-#include "ash/wm/overview/overview_focusable_view.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/aura/window_occlusion_tracker.h"
@@ -62,7 +61,6 @@ class WallpaperBaseView;
 // implementation we must make them sibling layers, rather than one being a
 // descendant of the other. Otherwise, this will trigger a render surface.
 class ASH_EXPORT DeskPreviewView : public views::Button,
-                                   public OverviewFocusableView,
                                    public WindowOcclusionCalculator::Observer {
   METADATA_HEADER(DeskPreviewView, views::Button)
 
@@ -112,6 +110,14 @@ class ASH_EXPORT DeskPreviewView : public views::Button,
   // Updates accessible name for this desk preview.
   void UpdateAccessibleName();
 
+  // Called when the user exits overview by using 3-finger vertical trackpad
+  // swipes.
+  void AcceptSelection();
+
+  // For metrics purposes only. Returns the total number of layers mirrored
+  // to preview the desk's windows.
+  size_t GetNumLayersMirrored() const;
+
   // views::Button:
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void Layout(PassKey) override;
@@ -125,16 +131,6 @@ class ASH_EXPORT DeskPreviewView : public views::Button,
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool CanHandleAccelerators() const override;
-
-  // OverviewFocusableView:
-  views::View* GetView() override;
-  void MaybeActivateFocusedView() override;
-  void MaybeCloseFocusedView(bool primary_action) override;
-  void MaybeSwapFocusedView(bool right) override;
-  bool MaybeActivateFocusedViewOnOverviewExit(
-      OverviewSession* overview_session) override;
-  void OnFocusableViewFocused() override;
-  void OnFocusableViewBlurred() override;
 
   // WindowOcclusionCalculator::Observer:
   void OnWindowOcclusionChanged(aura::Window* window) override;

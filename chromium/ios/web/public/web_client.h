@@ -164,10 +164,6 @@ class WebClient {
   virtual void LogDefaultUserAgent(web::WebState* web_state,
                                    const GURL& url) const;
 
-  // Fetches the session data blob from cache for `web_state`. Returns nil if
-  // the blob could not be loaded (missing, feature disabled, ...).
-  virtual NSData* FetchSessionFromCache(web::WebState* web_state) const;
-
   // Correct missing NTP and reading list virtualURLs and titles. Native session
   // restoration may not properly restore these items.
   virtual void CleanupNativeRestoreURLs(web::WebState* web_state) const;
@@ -183,12 +179,11 @@ class WebClient {
 
   // Returns true if browser lockdown mode is enabled. Default return value is
   // false.
-  virtual bool IsBrowserLockdownModeEnabled(web::BrowserState* browser_state);
+  virtual bool IsBrowserLockdownModeEnabled();
 
   // Sets OS lockdown mode preference value. By default, no preference value is
   // set.
-  virtual void SetOSLockdownModeEnabled(web::BrowserState* browser_state,
-                                        bool enabled);
+  virtual void SetOSLockdownModeEnabled(bool enabled);
 
   virtual bool IsInsecureFormWarningEnabled(
       web::BrowserState* browser_state) const;

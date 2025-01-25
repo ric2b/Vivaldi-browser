@@ -15,8 +15,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
+#include "chrome/browser/extensions/commands/command_service.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_context_menu_model.h"
 #include "chrome/browser/extensions/extension_view.h"
@@ -176,10 +176,7 @@ ExtensionActionViewController::ExtensionActionViewController(
       popup_host_(nullptr),
       view_delegate_(nullptr),
       platform_delegate_(ExtensionActionPlatformDelegate::Create(this)),
-      icon_factory_(browser->profile(),
-                    extension_.get(),
-                    extension_action,
-                    this),
+      icon_factory_(extension_.get(), extension_action, this),
       extension_registry_(extension_registry) {}
 
 ExtensionActionViewController::~ExtensionActionViewController() {
@@ -632,7 +629,7 @@ void ExtensionActionViewController::ShowPopup(
   // ExtensionViewHost). This doesn't necessarily mean that the popup has
   // completed rendering on the screen.
   has_opened_popup_ = true;
-  platform_delegate_->ShowPopup(std::move(popup_host), by_user, show_action,
+  platform_delegate_->ShowPopup(std::move(popup_host), show_action,
                                 std::move(callback));
   view_delegate_->OnPopupShown(by_user);
 }

@@ -70,11 +70,14 @@ struct wl_proxy {
 	wl_dispatcher_func_t dispatcher;
 	uint32_t version;
 	const char * const *tag;
+	struct wl_list queue_link; /**< in struct wl_event_queue::proxy_list */
 };
 
 struct wl_event_queue {
 	struct wl_list event_list;
+	struct wl_list proxy_list; /**< struct wl_proxy::queue_link */
 	struct wl_display *display;
+	char *name;
 };
 
 struct wl_display {
@@ -218,10 +221,15 @@ display_protocol_error(struct wl_display *display, uint32_t code,
 }
 
 static void
-wl_event_queue_init(struct wl_event_queue *queue, struct wl_display *display)
+wl_event_queue_init(struct wl_event_queue *queue,
+		    struct wl_display *display,
+		    const char *name)
 {
 	wl_list_init(&queue->event_list);
+	wl_list_init(&queue->proxy_list);
 	queue->display = display;
+	if (name)
+		queue->name = strdup(name);
 }
 
 static void
@@ -250,8 +258,8 @@ validate_closure_objects(struct wl_closure *closure)
 	for (i = 0; i < count; i++) {
 		signature = get_next_argument(signature, &arg);
 		switch (arg.type) {
-		case 'n':
-		case 'o':
+		case WL_ARG_NEW_ID:
+		case WL_ARG_OBJECT:
 			proxy = (struct wl_proxy *) closure->args[i].o;
 			if (proxy && proxy->flags & WL_PROXY_FLAG_DESTROYED)
 				closure->args[i].o = NULL;
@@ -278,8 +286,8 @@ destroy_queued_closure(struct wl_closure *closure)
 	for (i = 0; i < count; i++) {
 		signature = get_next_argument(signature, &arg);
 		switch (arg.type) {
-		case 'n':
-		case 'o':
+		case WL_ARG_NEW_ID:
+		case WL_ARG_OBJECT:
 			proxy = (struct wl_proxy *) closure->args[i].o;
 			if (proxy)
 				wl_proxy_unref(proxy);
@@ -297,6 +305,34 @@ static void
 wl_event_queue_release(struct wl_event_queue *queue)
 {
 	struct wl_closure *closure;
+
+	if (!wl_list_empty(&queue->proxy_list)) {
+		struct wl_proxy *proxy, *tmp;
+
+		if (queue != &queue->display->default_queue) {
+			if (queue->name) {
+				wl_log("warning: queue \"%s\" "
+				       "%p destroyed while proxies "
+				       "still attached:\n", queue->name, queue);
+			} else {
+				wl_log("warning: queue "
+				       "%p destroyed while proxies "
+				       "still attached:\n", queue);
+			}
+		}
+
+		wl_list_for_each_safe(proxy, tmp, &queue->proxy_list,
+				      queue_link) {
+			if (queue != &queue->display->default_queue) {
+				wl_log("  %s#%u still attached\n",
+				       proxy->object.interface->name,
+				       proxy->object.id);
+			}
+			proxy->queue = NULL;
+			wl_list_remove(&proxy->queue_link);
+			wl_list_init(&proxy->queue_link);
+		}
+	}
 
 	while (!wl_list_empty(&queue->event_list)) {
 		closure = wl_container_of(queue->event_list.next,
@@ -326,6 +362,7 @@ wl_event_queue_destroy(struct wl_event_queue *queue)
 
 	pthread_mutex_lock(&display->mutex);
 	wl_event_queue_release(queue);
+	free(queue->name);
 	free(queue);
 	pthread_mutex_unlock(&display->mutex);
 }
@@ -347,7 +384,30 @@ wl_display_create_queue(struct wl_display *display)
 	if (queue == NULL)
 		return NULL;
 
-	wl_event_queue_init(queue, display);
+	wl_event_queue_init(queue, display, NULL);
+
+	return queue;
+}
+
+/** Create a new event queue for this display and give it a name
+ *
+ * \param display The display context object
+ * \param name A human readable queue name
+ * \return A new event queue associated with this display or NULL on
+ * failure.
+ *
+ * \memberof wl_display
+ */
+WL_EXPORT struct wl_event_queue *
+wl_display_create_queue_with_name(struct wl_display *display, const char *name)
+{
+	struct wl_event_queue *queue;
+
+	queue = zalloc(sizeof *queue);
+	if (queue == NULL)
+		return NULL;
+
+	wl_event_queue_init(queue, display, name);
 
 	return queue;
 }
@@ -361,7 +421,7 @@ message_count_fds(const char *signature)
 	count = arg_count_for_signature(signature);
 	for (i = 0; i < count; i++) {
 		signature = get_next_argument(signature, &arg);
-		if (arg.type == 'h')
+		if (arg.type == WL_ARG_FD)
 			fds++;
 	}
 
@@ -435,6 +495,8 @@ proxy_create(struct wl_proxy *factory, const struct wl_interface *interface,
 		return NULL;
 	}
 
+	wl_list_insert(&proxy->queue->proxy_list, &proxy->queue_link);
+
 	return proxy;
 }
 
@@ -494,6 +556,8 @@ wl_proxy_create_for_id(struct wl_proxy *factory,
 		return NULL;
 	}
 
+	wl_list_insert(&proxy->queue->proxy_list, &proxy->queue_link);
+
 	return proxy;
 }
 
@@ -517,6 +581,10 @@ proxy_destroy(struct wl_proxy *proxy)
 	}
 
 	proxy->flags |= WL_PROXY_FLAG_DESTROYED;
+
+	proxy->queue = NULL;
+	wl_list_remove(&proxy->queue_link);
+	wl_list_init(&proxy->queue_link);
 
 	wl_proxy_unref(proxy);
 }
@@ -665,16 +733,14 @@ create_outgoing_proxy(struct wl_proxy *proxy, const struct wl_message *message,
 	count = arg_count_for_signature(signature);
 	for (i = 0; i < count; i++) {
 		signature = get_next_argument(signature, &arg);
+		if (arg.type != WL_ARG_NEW_ID)
+			continue;
 
-		switch (arg.type) {
-		case 'n':
-			new_proxy = proxy_create(proxy, interface, version);
-			if (new_proxy == NULL)
-				return NULL;
+		new_proxy = proxy_create(proxy, interface, version);
+		if (new_proxy == NULL)
+			return NULL;
 
-			args[i].o = &new_proxy->object;
-			break;
-		}
+		args[i].o = &new_proxy->object;
 	}
 
 	return new_proxy;
@@ -848,18 +914,21 @@ wl_proxy_marshal_array_flags(struct wl_proxy *proxy, uint32_t opcode,
 
 	closure = wl_closure_marshal(&proxy->object, opcode, args, message);
 	if (closure == NULL) {
-		wl_log("Error marshalling request for %s.%s: %s\n",
-					proxy->object.interface->name, message->name, strerror(errno));
+		wl_log("Error marshalling request: %s\n", strerror(errno));
 		display_fatal_error(proxy->display, errno);
 		goto err_unlock;
 	}
 
-	if (debug_client)
-		wl_closure_print(closure, &proxy->object, true, false, NULL);
+	if (debug_client) {
+		struct wl_event_queue *queue;
+
+		queue = wl_proxy_get_queue(proxy);
+		wl_closure_print(closure, &proxy->object, true, false, NULL,
+				 wl_event_queue_get_name(queue));
+	}
 
 	if (wl_closure_send(closure, proxy->display->connection)) {
-		wl_log("Error sending request for %s.%s: %s\n",
-					proxy->object.interface->name, message->name, strerror(errno));
+		wl_log("Error sending request: %s\n", strerror(errno));
 		display_fatal_error(proxy->display, errno);
 	}
 
@@ -1015,7 +1084,7 @@ display_handle_error(void *data,
 	const struct wl_interface *interface;
 
 	if (proxy) {
-		wl_log("%s@%u: error %d: %s\n",
+		wl_log("%s#%u: error %d: %s\n",
 		       proxy->object.interface->name,
 		       proxy->object.id,
 		       code, message);
@@ -1158,8 +1227,8 @@ wl_display_connect_to_fd(int fd)
 
 	display->fd = fd;
 	wl_map_init(&display->objects, WL_MAP_CLIENT_SIDE);
-	wl_event_queue_init(&display->default_queue, display);
-	wl_event_queue_init(&display->display_queue, display);
+	wl_event_queue_init(&display->default_queue, display, "Default Queue");
+	wl_event_queue_init(&display->display_queue, display, "Display Queue");
 	pthread_mutex_init(&display->mutex, NULL);
 	pthread_cond_init(&display->reader_cond, NULL);
 	display->reader_count = 0;
@@ -1278,8 +1347,9 @@ wl_display_connect(const char *name)
  *
  * \param display The display context object
  *
- * Close the connection to \c display and free all resources associated
- * with it.
+ * Close the connection to \c display. The \ref wl_proxy and
+ * \ref wl_event_queue objects need to be manually destroyed by the caller
+ * before disconnecting.
  *
  * \memberof wl_display
  */
@@ -1290,7 +1360,9 @@ wl_display_disconnect(struct wl_display *display)
 	wl_map_for_each(&display->objects, free_zombies, NULL);
 	wl_map_release(&display->objects);
 	wl_event_queue_release(&display->default_queue);
+	free(display->default_queue.name);
 	wl_event_queue_release(&display->display_queue);
+	free(display->display_queue.name);
 	pthread_mutex_destroy(&display->mutex);
 	pthread_cond_destroy(&display->reader_cond);
 	close(display->fd);
@@ -1415,22 +1487,19 @@ create_proxies(struct wl_proxy *sender, struct wl_closure *closure)
 	count = arg_count_for_signature(signature);
 	for (i = 0; i < count; i++) {
 		signature = get_next_argument(signature, &arg);
-		switch (arg.type) {
-		case 'n':
-			id = closure->args[i].n;
-			if (id == 0) {
-				closure->args[i].o = NULL;
-				break;
-			}
-			proxy = wl_proxy_create_for_id(sender, id,
-						       closure->message->types[i]);
-			if (proxy == NULL)
-				return -1;
-			closure->args[i].o = (struct wl_object *)proxy;
-			break;
-		default:
-			break;
+		if (arg.type != WL_ARG_NEW_ID)
+			continue;
+
+		id = closure->args[i].n;
+		if (id == 0) {
+			closure->args[i].o = NULL;
+			continue;
 		}
+		proxy = wl_proxy_create_for_id(sender, id,
+					       closure->message->types[i]);
+		if (proxy == NULL)
+			return -1;
+		closure->args[i].o = (struct wl_object *)proxy;
 	}
 
 	return 0;
@@ -1449,8 +1518,8 @@ increase_closure_args_refcount(struct wl_closure *closure)
 	for (i = 0; i < count; i++) {
 		signature = get_next_argument(signature, &arg);
 		switch (arg.type) {
-		case 'n':
-		case 'o':
+		case WL_ARG_NEW_ID:
+		case WL_ARG_OBJECT:
 			proxy = (struct wl_proxy *) closure->args[i].o;
 			if (proxy)
 				proxy->refcount++;
@@ -1495,7 +1564,7 @@ queue_event(struct wl_display *display, int len)
 			clock_gettime(CLOCK_REALTIME, &tp);
 			time = (tp.tv_sec * 1000000L) + (tp.tv_nsec / 1000);
 
-			fprintf(stderr, "[%7u.%03u] discarded [%s]@%d.[event %d]"
+			fprintf(stderr, "[%7u.%03u] discarded [%s]#%d.[event %d]"
 				"(%d fd, %d byte)\n",
 				time / 1000, time % 1000,
 				zombie ? "zombie" : "unknown",
@@ -1540,6 +1609,9 @@ queue_event(struct wl_display *display, int len)
 	else
 		queue = proxy->queue;
 
+	if (!queue)
+		wl_abort("Tried to add event to destroyed queue\n");
+
 	wl_list_insert(queue->event_list.prev, &closure->link);
 
 	return size;
@@ -1575,9 +1647,16 @@ dispatch_event(struct wl_display *display, struct wl_event_queue *queue)
 	validate_closure_objects(closure);
 	proxy = closure->proxy;
 	proxy_destroyed = !!(proxy->flags & WL_PROXY_FLAG_DESTROYED);
+
+	if (debug_client) {
+		bool discarded = proxy_destroyed ||
+				 !(proxy->dispatcher || proxy->object.implementation);
+
+		wl_closure_print(closure, &proxy->object, false, discarded,
+				 id_from_object, queue->name);
+	}
+
 	if (proxy_destroyed) {
-		if (debug_client)
-			wl_closure_print(closure, &proxy->object, false, true, id_from_object);
 		destroy_queued_closure(closure);
 		return;
 	}
@@ -1585,15 +1664,9 @@ dispatch_event(struct wl_display *display, struct wl_event_queue *queue)
 	pthread_mutex_unlock(&display->mutex);
 
 	if (proxy->dispatcher) {
-		if (debug_client)
-			wl_closure_print(closure, &proxy->object, false, false, id_from_object);
-
 		wl_closure_dispatch(closure, proxy->dispatcher,
 				    &proxy->object, opcode);
 	} else if (proxy->object.implementation) {
-		if (debug_client)
-			wl_closure_print(closure, &proxy->object, false, false, id_from_object);
-
 		wl_closure_invoke(closure, WL_CLOSURE_INVOKE_CLIENT,
 				  &proxy->object, opcode, proxy->user_data);
 	}
@@ -2163,6 +2236,32 @@ wl_display_flush(struct wl_display *display)
 	return ret;
 }
 
+/** Adjust the maximum size of the client connection buffers
+ *
+ * \param display The display context object
+ * \param max_buffer_size The maximum size of the connection buffers
+ *
+ * Client buffers are unbounded by default. This function sets a limit to the
+ * size of the connection buffers.
+ *
+ * A value of 0 for \a max_buffer_size requests the buffers to be unbounded.
+ *
+ * The actual size of the connection buffers is a power of two, the requested
+ * \a max_buffer_size is therefore rounded up to the nearest power of two value.
+ *
+ * Lowering the maximum size may not take effect immediately if the current
+ * content of the buffer does not fit within the new size limit.
+ *
+ * \memberof wl_display
+ * \since 1.22.90
+ */
+WL_EXPORT void
+wl_display_set_max_buffer_size(struct wl_display *display,
+                               size_t max_buffer_size)
+{
+	wl_connection_set_max_buffer_size(display->connection, max_buffer_size);
+}
+
 /** Set the user data associated with a proxy
  *
  * \param proxy The proxy object
@@ -2304,6 +2403,20 @@ wl_proxy_get_class(struct wl_proxy *proxy)
 	return proxy->object.interface->name;
 }
 
+/** Get the display of a proxy object
+ *
+ * \param proxy The proxy object
+ * \return The wl_display the proxy is associated with
+ *
+ * \memberof wl_proxy
+ * \since 1.23
+ */
+WL_EXPORT struct wl_display *
+wl_proxy_get_display(struct wl_proxy *proxy)
+{
+	return proxy->display;
+}
+
 /** Assign a proxy to an event queue
  *
  * \param proxy The proxy object
@@ -2337,6 +2450,8 @@ wl_proxy_set_queue(struct wl_proxy *proxy, struct wl_event_queue *queue)
 {
 	pthread_mutex_lock(&proxy->display->mutex);
 
+	wl_list_remove(&proxy->queue_link);
+
 	if (queue) {
 		assert(proxy->display == queue->display);
 		proxy->queue = queue;
@@ -2344,7 +2459,37 @@ wl_proxy_set_queue(struct wl_proxy *proxy, struct wl_event_queue *queue)
 		proxy->queue = &proxy->display->default_queue;
 	}
 
+	wl_list_insert(&proxy->queue->proxy_list, &proxy->queue_link);
+
 	pthread_mutex_unlock(&proxy->display->mutex);
+}
+
+/** Get a proxy's event queue
+ *
+ * \param proxy The proxy to query
+ *
+ * Return the event queue
+ */
+WL_EXPORT struct wl_event_queue *
+wl_proxy_get_queue(const struct wl_proxy *proxy)
+{
+	return proxy->queue;
+
+}
+/** Get the name of an event queue
+ *
+ * \param queue The queue to query
+ *
+ * Return the human readable name for the event queue
+ *
+ * This may be NULL if no name has been set.
+ *
+ * \memberof wl_proxy
+ */
+WL_EXPORT const char *
+wl_event_queue_get_name(const struct wl_event_queue *queue)
+{
+	return queue->name;
 }
 
 /** Create a proxy wrapper for making queue assignments thread-safe
@@ -2415,6 +2560,8 @@ wl_proxy_create_wrapper(void *proxy)
 	wrapper->flags = WL_PROXY_FLAG_WRAPPER;
 	wrapper->refcount = 1;
 
+	wl_list_insert(&wrapper->queue->proxy_list, &wrapper->queue_link);
+
 	pthread_mutex_unlock(&wrapped_proxy->display->mutex);
 
 	return wrapper;
@@ -2435,6 +2582,12 @@ wl_proxy_wrapper_destroy(void *proxy_wrapper)
 			 "wl_proxy_wrapper_destroy\n");
 
 	assert(wrapper->refcount == 1);
+
+	pthread_mutex_lock(&wrapper->display->mutex);
+
+	wl_list_remove(&wrapper->queue_link);
+
+	pthread_mutex_unlock(&wrapper->display->mutex);
 
 	free(wrapper);
 }

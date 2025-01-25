@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.customtabs;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,7 +43,6 @@ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntent
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
-import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabController;
@@ -55,7 +53,6 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
-import org.chromium.chrome.browser.privacy_sandbox.TrackingProtectionBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
@@ -123,7 +120,6 @@ public final class BaseCustomTabRootUiCoordinatorUnitTest {
     @Mock private Supplier<CustomTabActivityNavigationController> mCustomTabNavigationController;
     @Mock private Supplier<BrowserServicesIntentDataProvider> mIntentDataProvider;
     @Mock private BrowserServicesIntentDataProvider mBrowserServicesIntentDataProvider;
-    @Mock private Supplier<EphemeralTabCoordinator> mEphemeralTabCoordinatorSupplier;
     @Mock private BackPressManager mBackPressManager;
     @Mock private Supplier<CustomTabActivityTabController> mTabController;
     @Mock private Supplier<CustomTabMinimizeDelegate> mMinimizeDelegateSupplier;
@@ -186,7 +182,6 @@ public final class BaseCustomTabRootUiCoordinatorUnitTest {
                         mCustomTabToolbarCoordinator,
                         mCustomTabNavigationController,
                         mIntentDataProvider,
-                        mEphemeralTabCoordinatorSupplier,
                         mBackPressManager,
                         mTabController,
                         mMinimizeDelegateSupplier,
@@ -242,59 +237,5 @@ public final class BaseCustomTabRootUiCoordinatorUnitTest {
         mBaseCustomTabRootUiCoordinator.initProfileDependentFeatures(mProfile);
 
         verify(mGoogleBottomBarCoordinator).initDefaultSearchEngine(mProfile);
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures(ChromeFeatureList.TRACKING_PROTECTION_FULL_ONBOARDING_MOBILE_TRIGGER)
-    public void testTrackingProtectionOnboarded() {
-        TrackingProtectionBridge trackingProtectionBridge =
-                Mockito.mock(TrackingProtectionBridge.class);
-        when(trackingProtectionBridge.shouldRunUILogic(anyInt())).thenReturn(true);
-        when(mBrowserServicesIntentDataProvider.getActivityType())
-                .thenReturn(ActivityType.CUSTOM_TAB);
-        when(mBrowserServicesIntentDataProvider.getClientPackageName())
-                .thenReturn("com.google.android.googlequicksearchbox");
-        when(mBrowserServicesIntentDataProvider.isPartialCustomTab()).thenReturn(false);
-
-        assertTrue(
-                mBaseCustomTabRootUiCoordinator.maybeOnboardTrackingProtection(
-                        mProfile, false, ActivityType.CUSTOM_TAB, trackingProtectionBridge));
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures(ChromeFeatureList.TRACKING_PROTECTION_FULL_ONBOARDING_MOBILE_TRIGGER)
-    public void testTrackingProtectionNotOnboarded_nonAgsaCct() {
-        TrackingProtectionBridge trackingProtectionBridge =
-                Mockito.mock(TrackingProtectionBridge.class);
-        when(trackingProtectionBridge.shouldRunUILogic(anyInt())).thenReturn(true);
-        when(mBrowserServicesIntentDataProvider.getActivityType())
-                .thenReturn(ActivityType.CUSTOM_TAB);
-        when(mBrowserServicesIntentDataProvider.getClientPackageName())
-                .thenReturn("com.google.android.example");
-        when(mBrowserServicesIntentDataProvider.isPartialCustomTab()).thenReturn(false);
-
-        assertFalse(
-                mBaseCustomTabRootUiCoordinator.maybeOnboardTrackingProtection(
-                        mProfile, false, ActivityType.CUSTOM_TAB, trackingProtectionBridge));
-    }
-
-    @Test
-    @MediumTest
-    @DisableFeatures(ChromeFeatureList.TRACKING_PROTECTION_FULL_ONBOARDING_MOBILE_TRIGGER)
-    public void testTrackingProtectionNotOnboarded_disabledFeature() {
-        TrackingProtectionBridge trackingProtectionBridge =
-                Mockito.mock(TrackingProtectionBridge.class);
-        when(trackingProtectionBridge.shouldRunUILogic(anyInt())).thenReturn(true);
-        when(mBrowserServicesIntentDataProvider.getActivityType())
-                .thenReturn(ActivityType.CUSTOM_TAB);
-        when(mBrowserServicesIntentDataProvider.getClientPackageName())
-                .thenReturn("com.google.android.googlequicksearchbox");
-        when(mBrowserServicesIntentDataProvider.isPartialCustomTab()).thenReturn(false);
-
-        assertFalse(
-                mBaseCustomTabRootUiCoordinator.maybeOnboardTrackingProtection(
-                        mProfile, false, ActivityType.CUSTOM_TAB, trackingProtectionBridge));
     }
 }

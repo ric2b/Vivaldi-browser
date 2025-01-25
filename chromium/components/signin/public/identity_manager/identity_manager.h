@@ -252,6 +252,15 @@ class IdentityManager : public KeyedService,
   bool HasAccountWithRefreshTokenInPersistentErrorState(
       const CoreAccountId& account_id) const;
 
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+  // Returns the wrapped binding key of a refresh token associated with
+  // `account_id`, if any.
+  // Returns a non-empty vector iff (a) a refresh token exists for `account_id`,
+  // and (b) the refresh token is bound to a device.
+  std::vector<uint8_t> GetWrappedBindingKeyOfRefreshTokenForAccount(
+      const CoreAccountId& account_id) const;
+#endif
+
   // Returns the error state of the refresh token associated with |account_id|.
   // In particular: Returns GoogleServiceAuthError::AuthErrorNone() if either
   // (a) no refresh token exists for |account_id|, or (b) the refresh token is
@@ -428,13 +437,6 @@ class IdentityManager : public KeyedService,
   void PrepareForAddingNewAccount();
 
 #if BUILDFLAG(IS_ANDROID)
-  // Returns a pointer to the AccountTrackerService Java instance associated
-  // with this object.
-  // TODO(crbug.com/40615112): Eliminate this method once
-  // AccountTrackerService.java has no more client usage.
-  base::android::ScopedJavaLocalRef<jobject>
-  LegacyGetAccountTrackerServiceJavaObject();
-
   // Get the reference on the java IdentityManager.
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
 
@@ -493,9 +495,15 @@ class IdentityManager : public KeyedService,
       const AccountAvailabilityOptions& options);
   friend void SetAutomaticIssueOfAccessTokens(IdentityManager* identity_manager,
                                               bool grant);
-  friend void SetRefreshTokenForAccount(IdentityManager* identity_manager,
-                                        const CoreAccountId& account_id,
-                                        const std::string& token_value);
+  friend void SetRefreshTokenForAccount(
+      IdentityManager* identity_manager,
+      const CoreAccountId& account_id,
+      const std::string& token_value
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+      ,
+      const std::vector<uint8_t>& wrapped_binding_key
+#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+  );
   friend void SetInvalidRefreshTokenForAccount(
       IdentityManager* identity_manager,
       const CoreAccountId& account_id,

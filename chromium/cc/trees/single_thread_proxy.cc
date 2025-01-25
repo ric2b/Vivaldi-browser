@@ -513,8 +513,9 @@ void SingleThreadProxy::NotifyReadyToDraw() {
 void SingleThreadProxy::SetNeedsRedrawOnImplThread() {
   DCHECK(!task_runner_provider_->HasImplThread() ||
          task_runner_provider_->IsImplThread());
-  if (scheduler_on_impl_thread_)
+  if (scheduler_on_impl_thread_) {
     scheduler_on_impl_thread_->SetNeedsRedraw();
+  }
 }
 
 void SingleThreadProxy::SetNeedsOneBeginImplFrameOnImplThread() {
@@ -1211,7 +1212,7 @@ DrawResult SingleThreadProxy::ScheduledActionDrawForced() {
 }
 
 void SingleThreadProxy::ScheduledActionUpdateDisplayTree() {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void SingleThreadProxy::ScheduledActionCommit() {

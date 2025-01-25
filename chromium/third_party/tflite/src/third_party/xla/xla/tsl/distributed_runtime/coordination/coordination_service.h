@@ -33,6 +33,7 @@ limitations under the License.
 #include "tsl/platform/macros.h"
 #include "tsl/platform/status.h"
 #include "tsl/protobuf/coordination_config.pb.h"
+#include "tsl/protobuf/coordination_service.pb.h"
 
 namespace tsl {
 class Env;
@@ -236,6 +237,18 @@ class CoordinationServiceInterface {
   //   - FailedPrecondition: Barrier has already been passed.
   virtual absl::Status CancelBarrier(
       std::string_view barrier_id, const tensorflow::CoordinatedTask& task) = 0;
+
+  // Gets error from the coordination service. Block until the service
+  // returns an error or the task/service is shutdown. This should never be used
+  // when there is service to client connection (i.e. `CoordinationClientCache`
+  // is passed in during construction).
+  //
+  // The first call to this function will trigger the error polling mode in the
+  // coordination service, so once an error occurs after the first call, the
+  // service will use the error polling mode to propagate the error to all
+  // connected tasks instead of simply shutting down.
+  virtual void PollForErrorAsync(const tensorflow::CoordinatedTask& task,
+                                 StatusCallback done) = 0;
 
  private:
   friend class CoordinationServiceRpcHandler;

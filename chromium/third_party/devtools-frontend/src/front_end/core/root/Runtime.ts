@@ -285,40 +285,46 @@ export const enum ExperimentName {
   HEADER_OVERRIDES = 'header-overrides',
   INSTRUMENTATION_BREAKPOINTS = 'instrumentation-breakpoints',
   AUTHORED_DEPLOYED_GROUPING = 'authored-deployed-grouping',
-  IMPORTANT_DOM_PROPERTIES = 'important-dom-properties',
   JUST_MY_CODE = 'just-my-code',
-  PRELOADING_STATUS_PANEL = 'preloading-status-panel',
-  OUTERMOST_TARGET_SELECTOR = 'outermost-target-selector',
   HIGHLIGHT_ERRORS_ELEMENTS_PANEL = 'highlight-errors-elements-panel',
   USE_SOURCE_MAP_SCOPES = 'use-source-map-scopes',
   NETWORK_PANEL_FILTER_BAR_REDESIGN = 'network-panel-filter-bar-redesign',
   AUTOFILL_VIEW = 'autofill-view',
-  INDENTATION_MARKERS_TEMP_DISABLE = 'sources-frame-indentation-markers-temporarily-disable',
   TIMELINE_SHOW_POST_MESSAGE_EVENTS = 'timeline-show-postmessage-events',
-  TIMELINE_ANNOTATIONS_OVERLAYS = 'perf-panel-annotations',
-  TIMELINE_SIDEBAR = 'timeline-rpp-sidebar',
+  TIMELINE_ANNOTATIONS = 'perf-panel-annotations',
+  TIMELINE_INSIGHTS = 'timeline-rpp-sidebar',
   TIMELINE_DEBUG_MODE = 'timeline-debug-mode',
   TIMELINE_OBSERVATIONS = 'timeline-observations',
   TIMELINE_ENHANCED_TRACES = 'timeline-enhanced-traces',
+  GEN_AI_SETTINGS_PANEL = 'gen-ai-settings-panel',
+  TIMELINE_SERVER_TIMINGS = 'timeline-server-timings',
+  TIMELINE_LAYOUT_SHIFT_DETAILS = 'timeline-layout-shift-details',
+}
+
+export interface AidaAvailability {
+  enabled: boolean;
+  blockedByAge: boolean;
+  blockedByEnterprisePolicy: boolean;
+  blockedByGeo: boolean;
+  disallowLogging: boolean;
 }
 
 export interface HostConfigConsoleInsights {
-  aidaModelId: string;
-  aidaTemperature: number;
-  blocked: boolean;
-  blockedByAge: boolean;
-  blockedByEnterprisePolicy: boolean;
-  blockedByFeatureFlag: boolean;
-  blockedByGeo: boolean;
-  blockedByRollout: boolean;
-  disallowLogging: boolean;
+  modelId: string;
+  temperature: number;
   enabled: boolean;
-  optIn: boolean;
 }
 
 export interface HostConfigFreestylerDogfood {
-  aidaModelId: string;
-  aidaTemperature: number;
+  modelId: string;
+  temperature: number;
+  enabled: boolean;
+  userTier: string;
+}
+
+export interface HostConfigExplainThisResourceDogfood {
+  modelId: string;
+  temperature: number;
   enabled: boolean;
 }
 
@@ -327,11 +333,30 @@ export interface HostConfigVeLogging {
   testing: boolean;
 }
 
-export interface HostConfig {
-  devToolsConsoleInsights: HostConfigConsoleInsights;
-  devToolsFreestylerDogfood: HostConfigFreestylerDogfood;
-  devToolsVeLogging: HostConfigVeLogging;
+export interface HostConfigPrivacyUI {
+  enabled: boolean;
 }
+
+// We use `RecursivePartial` here to enforce that DevTools code is able to
+// handle `HostConfig` objects of an unexpected shape. This can happen if
+// the implementation in the Chromium backend is changed without correctly
+// updating the DevTools frontend. Or if remote debugging a different version
+// of Chrome, resulting in the local browser window and the local DevTools
+// window being of different versions, and consequently potentially having
+// differently shaped `HostConfig`s.
+export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
+  aidaAvailability: AidaAvailability,
+  devToolsConsoleInsights: HostConfigConsoleInsights,
+  devToolsFreestylerDogfood: HostConfigFreestylerDogfood,
+  devToolsExplainThisResourceDogfood: HostConfigExplainThisResourceDogfood,
+  devToolsVeLogging: HostConfigVeLogging,
+  devToolsPrivacyUI: HostConfigPrivacyUI,
+  /**
+   * OffTheRecord here indicates that the user's profile is either incognito,
+   * or guest mode, rather than a "normal" profile.
+   */
+  isOffTheRecord: boolean,
+}>;
 
 /**
  * When defining conditions make sure that objects used by the function have

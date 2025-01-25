@@ -48,6 +48,9 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     extensions::VivaldiPrivateTabObserver::CreateForWebContents(web_contents);
+    // Attach a contentsobserver to update the renderer prefs we want to change.
+    extensions::VivaldiGuestViewContentObserver::CreateForWebContents(
+        web_contents);
   }
 #endif
 

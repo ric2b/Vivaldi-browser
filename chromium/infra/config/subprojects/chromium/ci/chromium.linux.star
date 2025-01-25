@@ -41,7 +41,7 @@ consoles.console_view(
     ordering = {
         None: ["release", "debug"],
         "release": consoles.ordering(short_names = ["bld", "tst", "nsl", "gcc"]),
-        "cast": ["x64", "arm64"],
+        "cast": ["arm64", "x64"],
     },
 )
 
@@ -50,13 +50,14 @@ targets.builder_defaults.set(
 )
 
 ci.builder(
-    name = "linux-x64-cast-dbg",
-    branch_selector = branches.selector.MAIN,
-    description_html = "Run Linux and Cast Receiver tests on Linux x64",
+    name = "linux-cast-arm-rel",
+    branch_selector = branches.selector.LINUX_BRANCHES,
+    description_html = "Run Linux and Cast Receiver build on Linux ARM",
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
             apply_configs = [
+                "arm",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -65,36 +66,41 @@ ci.builder(
                 "mb",
             ],
             build_config = builder_config.build_config.RELEASE,
-            target_bits = 64,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 32,
             target_platform = builder_config.target_platform.LINUX,
         ),
         build_gs_bucket = "chromium-linux-archive",
     ),
     gn_args = gn_args.config(
         configs = [
-            "cast_os",
-            "cast_receiver",
+            "cast_linux",
+            "cast_release",
             "remoteexec",
-            "minimal_symbols",
-            "linux",
-            "x64",
+            "arm",
         ],
     ),
-    # TODO(crbug.com/332735845): Garden this once stabilized.
+    targets = targets.bundle(
+        targets = [
+            "chromium_linux_cast_receiver",
+        ],
+    ),
+    # TODO(vigeni): Remove as configuration has been stablized.
     gardener_rotations = args.ignore_default(None),
+    # TODO(vigeni): Set to True configuration has been stablized.
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "cast",
-        short_name = "x64",
+        short_name = "arm32rel",
     ),
     cq_mirrors_console_view = "mirrors",
     contact_team_email = "cast-eng@google.com",
 )
 
 ci.builder(
-    name = "linux-arm64-cast-rel",
-    branch_selector = branches.selector.MAIN,
-    description_html = "Run Linux and Cast Receiver tests on Linux arm64",
+    name = "linux-cast-arm64-rel",
+    branch_selector = branches.selector.LINUX_BRANCHES,
+    description_html = "Run Linux and Cast Receiver build on Linux ARM64",
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -116,21 +122,118 @@ ci.builder(
     ),
     gn_args = gn_args.config(
         configs = [
-            "cast_receiver",
-            "cast_os",
-            "release_builder",
+            "cast_linux",
+            "cast_release",
             "remoteexec",
             "arm64",
-            "minimal_symbols",
-            "linux",
         ],
     ),
-    # TODO(crbug.com/332735845): Garden this once stabilized.
+    targets = targets.bundle(
+        targets = [
+            "chromium_linux_cast_receiver",
+        ],
+    ),
+    # TODO(vigeni): Remove as configuration has been stablized.
     gardener_rotations = args.ignore_default(None),
+    # TODO(vigeni): Set to True configuration has been stablized.
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "cast",
-        short_name = "rel",
+        short_name = "arm64rel",
+    ),
+    cq_mirrors_console_view = "mirrors",
+    contact_team_email = "cast-eng@google.com",
+)
+
+ci.builder(
+    name = "linux-cast-x64-dbg",
+    branch_selector = branches.selector.LINUX_BRANCHES,
+    description_html = "Run Linux and Cast Receiver tests on Linux x64 Debug",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium_clang",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.DEBUG,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.LINUX,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "cast_linux",
+            "cast_debug",
+            "remoteexec",
+            "x64",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_linux_cast_receiver",
+            "chromium_linux_cast_receiver_gtests",
+        ],
+    ),
+    # TODO(vigeni): Remove as configuration has been stablized.
+    gardener_rotations = args.ignore_default(None),
+    # TODO(vigeni): Set to True configuration has been stablized.
+    tree_closing = False,
+    console_view_entry = consoles.console_view_entry(
+        category = "cast",
+        short_name = "x64dbg",
+    ),
+    cq_mirrors_console_view = "mirrors",
+    contact_team_email = "cast-eng@google.com",
+)
+
+ci.builder(
+    name = "linux-cast-x64-rel",
+    branch_selector = branches.selector.LINUX_BRANCHES,
+    description_html = "Run Linux and Cast Receiver tests on Linux x64 Release",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium_clang",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.LINUX,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "cast_linux",
+            "cast_release",
+            "remoteexec",
+            "x64",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_linux_cast_receiver",
+            "chromium_linux_cast_receiver_gtests",
+        ],
+    ),
+    # TODO(vigeni): Remove as configuration has been stablized.
+    gardener_rotations = args.ignore_default(None),
+    # TODO(vigeni): Set to True configuration has been stablized.
+    tree_closing = False,
+    console_view_entry = consoles.console_view_entry(
+        category = "cast",
+        short_name = "x64rel",
     ),
     cq_mirrors_console_view = "mirrors",
     contact_team_email = "cast-eng@google.com",
@@ -418,7 +521,7 @@ ci.thin_tester(
         per_test_modifications = {
             "blink_web_tests": targets.mixin(
                 swarming = targets.swarming(
-                    shards = 12,
+                    shards = 15,
                 ),
             ),
             "blink_wpt_tests": targets.mixin(

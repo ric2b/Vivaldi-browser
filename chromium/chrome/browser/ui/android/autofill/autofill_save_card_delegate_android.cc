@@ -16,7 +16,7 @@ AutofillSaveCardDelegateAndroid::AutofillSaveCardDelegateAndroid(
         payments::PaymentsAutofillClient::LocalSaveCardPromptCallback,
         payments::PaymentsAutofillClient::UploadSaveCardPromptCallback>
         callback,
-    AutofillClient::SaveCreditCardOptions options,
+    payments::PaymentsAutofillClient::SaveCreditCardOptions options,
     content::WebContents* web_contents)
     : AutofillSaveCardDelegate(std::move(callback), options) {
   device_lock_bridge_ = std::make_unique<DeviceLockBridge>();
@@ -31,7 +31,8 @@ void AutofillSaveCardDelegateAndroid::SetDeviceLockBridgeForTesting(
 AutofillSaveCardDelegateAndroid::~AutofillSaveCardDelegateAndroid() = default;
 
 void AutofillSaveCardDelegateAndroid::GatherAdditionalConsentIfApplicable(
-    AutofillClient::UserProvidedCardDetails user_provided_details) {
+    payments::PaymentsAutofillClient::UserProvidedCardDetails
+        user_provided_details) {
   device_lock_bridge_->LaunchDeviceLockUiIfNeededBeforeRunningCallback(
       web_contents_->GetNativeView()->GetWindowAndroid(),
       base::BindOnce(&AutofillSaveCardDelegateAndroid::OnAfterDeviceLockUi,
@@ -39,15 +40,18 @@ void AutofillSaveCardDelegateAndroid::GatherAdditionalConsentIfApplicable(
 }
 
 void AutofillSaveCardDelegateAndroid::OnAfterDeviceLockUi(
-    AutofillClient::UserProvidedCardDetails user_provided_details,
+    payments::PaymentsAutofillClient::UserProvidedCardDetails
+        user_provided_details,
     bool is_device_lock_requirement_met) {
   OnFinishedGatheringConsent(
       /*user_decision=*/is_device_lock_requirement_met
-          ? AutofillClient::SaveCardOfferUserDecision::kAccepted
-          : AutofillClient::SaveCardOfferUserDecision::kIgnored,
+          ? payments::PaymentsAutofillClient::SaveCardOfferUserDecision::
+                kAccepted
+          : payments::PaymentsAutofillClient::SaveCardOfferUserDecision::
+                kIgnored,
       is_device_lock_requirement_met
           ? user_provided_details
-          : AutofillClient::UserProvidedCardDetails());
+          : payments::PaymentsAutofillClient::UserProvidedCardDetails());
 }
 
 }  // namespace autofill

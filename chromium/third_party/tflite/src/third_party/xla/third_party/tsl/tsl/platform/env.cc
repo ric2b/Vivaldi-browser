@@ -111,7 +111,7 @@ Env::Env() : file_system_registry_(new FileSystemRegistryImpl) {}
 
 absl::Status Env::GetFileSystemForFile(const std::string& fname,
                                        FileSystem** result) {
-  StringPiece scheme, host, path;
+  absl::string_view scheme, host, path;
   io::ParseURI(fname, &scheme, &host, &path);
   FileSystem* file_system = file_system_registry_->Lookup(std::string(scheme));
   if (!file_system) {
@@ -231,7 +231,7 @@ bool Env::FilesExist(const std::vector<string>& files,
                      std::vector<absl::Status>* status) {
   std::unordered_map<string, std::vector<string>> files_per_fs;
   for (const auto& file : files) {
-    StringPiece scheme, host, path;
+    absl::string_view scheme, host, path;
     io::ParseURI(file, &scheme, &host, &path);
     files_per_fs[string(scheme)].push_back(file);
   }
@@ -402,8 +402,10 @@ string Env::GetExecutablePath() {
   if (strstr(buf, "python") != nullptr) {
     // Discard the path of the python binary, and any flags.
     int fd = open("/proc/self/cmdline", O_RDONLY);
+    CHECK_NE(-1, fd);
     int cmd_length = read(fd, buf, PATH_MAX - 1);
     CHECK_NE(-1, cmd_length);
+    close(fd);
     int token_pos = 0;
     for (bool token_is_first_or_flag = true; token_is_first_or_flag;) {
       // Get token length, including null
@@ -486,7 +488,7 @@ absl::Status ReadFileToString(Env* env, const string& fname, string* data) {
   }
   data->resize(file_size);
   char* p = &*data->begin();
-  StringPiece result;
+  absl::string_view result;
   s = file->Read(0, file_size, &result, p);
   if (!s.ok()) {
     data->clear();
@@ -503,7 +505,7 @@ absl::Status ReadFileToString(Env* env, const string& fname, string* data) {
 }
 
 absl::Status WriteStringToFile(Env* env, const string& fname,
-                               const StringPiece& data) {
+                               const absl::string_view& data) {
   std::unique_ptr<WritableFile> file;
   absl::Status s = env->NewWritableFile(fname, &file);
   if (!s.ok()) {
@@ -536,7 +538,7 @@ absl::Status FileSystemCopyFile(FileSystem* src_fs, const string& src,
   std::unique_ptr<char[]> scratch(new char[kCopyFileBufferSize]);
   absl::Status s = absl::OkStatus();
   while (s.ok()) {
-    StringPiece result;
+    absl::string_view result;
     s = src_file->Read(offset, kCopyFileBufferSize, &result, scratch.get());
     if (!(s.ok() || s.code() == error::OUT_OF_RANGE)) {
       return s;
@@ -562,7 +564,7 @@ class FileStream : public protobuf::io::ZeroCopyInputStream {
   absl::Status status() const { return status_; }
 
   bool Next(const void** data, int* size) override {
-    StringPiece result;
+    absl::string_view result;
     absl::Status s = file_->Read(pos_, kBufSize, &result, scratch_);
     if (result.empty()) {
       status_ = s;

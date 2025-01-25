@@ -20,6 +20,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "components/lens/buildflags.h"
+#include "components/signin/public/base/signin_buildflags.h"
 #include "content/public/common/url_constants.h"
 #include "media/media_buildflags.h"
 #include "printing/buildflags/buildflags.h"
@@ -49,6 +50,10 @@ inline constexpr char kChromeUIAppsWithDeprecationDialogURL[] =
 inline constexpr char kChromeUIAppsWithForceInstalledDeprecationDialogURL[] =
     "chrome://apps?showForceInstallDialog=";
 inline constexpr char kChromeUIAutofillInternalsHost[] = "autofill-internals";
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+inline constexpr char kChromeUIBatchUploadHost[] = "batch-upload";
+inline constexpr char kChromeUIBatchUploadURL[] = "chrome://batch-upload/";
+#endif
 inline constexpr char kChromeUIBluetoothInternalsHost[] = "bluetooth-internals";
 inline constexpr char kChromeUIBluetoothInternalsURL[] =
     "chrome://bluetooth-internals";
@@ -278,10 +283,17 @@ inline constexpr char kChromeUIUntrustedComposeUrl[] =
 inline constexpr char kChromeUIUntrustedDataSharingHost[] = "data-sharing";
 inline constexpr char kChromeUIUntrustedDataSharingURL[] =
     "chrome-untrusted://data-sharing/";
+inline constexpr char kChromeUIUntrustedDataSharingAPIURL[] =
+    "chrome-untrusted://data-sharing/data_sharing_api.html";
 inline constexpr char kChromeUIUntrustedImageEditorURL[] =
     "chrome-untrusted://image-editor/";
 inline constexpr char kChromeUIUntrustedPrintURL[] =
     "chrome-untrusted://print/";
+inline constexpr char kChromeUIUntrustedPrivacySandboxDialogURL[] =
+    "chrome-untrusted://privacy-sandbox-dialog/";
+inline constexpr char
+    kChromeUIUntrustedPrivacySandboxDialogPrivacyPolicyPath[] =
+        "privacy-policy";
 inline constexpr char kChromeUIUntrustedThemeURL[] =
     "chrome-untrusted://theme/";
 inline constexpr char kChromeUIUsbInternalsHost[] = "usb-internals";
@@ -323,9 +335,14 @@ inline constexpr char kChromeUIHistoryClustersSidePanelHost[] =
 inline constexpr char kChromeUIHistoryClustersSidePanelURL[] =
     "chrome://history-clusters-side-panel.top-chrome/";
 inline constexpr char kChromeUILensHost[] = "lens";
-inline constexpr char kChromeUILensUntrustedSidePanelURL[] =
+inline constexpr char kChromeUILensSidePanelHost[] = "lens";
+inline constexpr char kChromeUILensUntrustedSidePanelAPIURL[] =
     "chrome-untrusted://lens/side_panel/side_panel.html";
-inline constexpr char kChromeUILensUntrustedURL[] = "chrome-untrusted://lens/";
+inline constexpr char kChromeUILensUntrustedSidePanelURL[] =
+    "chrome-untrusted://lens/";
+inline constexpr char kChromeUILensOverlayHost[] = "lens-overlay";
+inline constexpr char kChromeUILensOverlayUntrustedURL[] =
+    "chrome-untrusted://lens-overlay/";
 inline constexpr char kChromeUINearbyInternalsHost[] = "nearby-internals";
 inline constexpr char kChromeUINearbyInternalsURL[] =
     "chrome://nearby-internals";
@@ -664,6 +681,7 @@ inline constexpr char kFileSystemSettingsSubpage[] =
     "content/filesystem/siteDetails";
 inline constexpr char kFileSystemSubpage[] = "content/filesystem";
 inline constexpr char kHandlerSettingsSubPage[] = "handlers";
+inline constexpr char kHistorySearchSubpage[] = "historySearch";
 inline constexpr char kImportDataSubPage[] = "importData";
 inline constexpr char kLanguageOptionsSubPage[] = "languages";
 inline constexpr char kLanguagesSubPage[] = "languages/details";
@@ -712,8 +730,11 @@ inline constexpr char kChromeUILensURL[] = "chrome://lens/";
 
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
 inline constexpr char kChromeUICertificateManagerDialogURL[] =
-    "chrome://certificate-manager/";
+    "chrome://certificate-manager";
 inline constexpr char kChromeUICertificateManagerHost[] = "certificate-manager";
+inline constexpr char kChromeUICertificateRedirectPath[] = "/certificates";
+inline constexpr char kChromeUICertificateRedirectURL[] =
+    "chrome://settings/certificates";
 #endif  // BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
 
 // Extensions sub pages.

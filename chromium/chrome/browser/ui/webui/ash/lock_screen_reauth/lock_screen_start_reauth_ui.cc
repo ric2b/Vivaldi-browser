@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/ash/lock_screen_reauth/lock_screen_start_reauth_ui.h"
 
 #include <memory>
@@ -60,9 +65,6 @@ LockScreenStartReauthUI::LockScreenStartReauthUI(content::WebUI* web_ui)
   source->EnableReplaceI18nInJS();
   source->UseStringsJs();
 
-  source->AddString("lockScreenReauthSubtitile",
-                    l10n_util::GetStringFUTF16(IDS_LOCK_SCREEN_REAUTH_SUBTITLE,
-                                               base::UTF8ToUTF16(email)));
   source->AddString(
       "lockScreenReauthSubtitile1WithError",
       l10n_util::GetStringUTF16(IDS_LOCK_SCREEN_WRONG_USER_SUBTITLE1));
@@ -70,7 +72,6 @@ LockScreenStartReauthUI::LockScreenStartReauthUI(content::WebUI* web_ui)
       "lockScreenReauthSubtitile2WithError",
       l10n_util::GetStringFUTF16(IDS_LOCK_SCREEN_WRONG_USER_SUBTITLE2,
                                  base::UTF8ToUTF16(email)));
-
   source->AddString("lockScreenVerifyButton",
                     l10n_util::GetStringUTF16(IDS_LOCK_SCREEN_VERIFY_BUTTON));
   source->AddString(

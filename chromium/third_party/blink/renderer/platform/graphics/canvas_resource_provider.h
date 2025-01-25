@@ -62,6 +62,7 @@ PLATFORM_EXPORT BASE_DECLARE_FEATURE(kCanvas2DReclaimUnusedResources);
 class CanvasResourceDispatcher;
 class MemoryManagedPaintCanvas;
 class WebGraphicsContext3DProviderWrapper;
+class WebGraphicsSharedImageInterfaceProvider;
 
 // CanvasResourceProvider
 //==============================================================================
@@ -119,6 +120,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
       cc::PaintFlags::FilterQuality filter_quality,
       ShouldInitialize initialize_provider,
       base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher,
+      WebGraphicsSharedImageInterfaceProvider* shared_image_interface_provider,
       CanvasResourceHost* resource_host = nullptr);
 
   static std::unique_ptr<CanvasResourceProvider> CreateSharedImageProvider(
@@ -127,12 +129,12 @@ class PLATFORM_EXPORT CanvasResourceProvider
       ShouldInitialize initialize_provider,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>,
       RasterMode raster_mode,
-      uint32_t shared_image_usage_flags,
+      gpu::SharedImageUsageSet shared_image_usage_flags,
       CanvasResourceHost* resource_host = nullptr);
 
   static std::unique_ptr<CanvasResourceProvider> CreateWebGPUImageProvider(
       const SkImageInfo& info,
-      uint32_t shared_image_usage_flags = 0,
+      gpu::SharedImageUsageSet shared_image_usage_flags = {},
       CanvasResourceHost* resource_host = nullptr);
 
   static std::unique_ptr<CanvasResourceProvider> CreatePassThroughProvider(
@@ -214,24 +216,21 @@ class PLATFORM_EXPORT CanvasResourceProvider
 
   SkSurface* GetSkSurface() const;
   bool IsGpuContextLost() const;
+  virtual bool IsSharedBitmapGpuChannelLost() const;
   virtual bool WritePixels(const SkImageInfo& orig_info,
                            const void* pixels,
                            size_t row_bytes,
                            int x,
                            int y);
 
-  virtual gpu::Mailbox GetBackingMailboxForOverwrite() {
-    NOTREACHED_IN_MIGRATION();
-    return gpu::Mailbox();
-  }
-  virtual GLenum GetBackingTextureTarget() const { return GL_TEXTURE_2D; }
-  virtual void* GetPixelBufferAddressForOverwrite() {
+  virtual scoped_refptr<gpu::ClientSharedImage>
+  GetBackingClientSharedImageForOverwrite() {
     NOTREACHED_IN_MIGRATION();
     return nullptr;
   }
-  virtual uint32_t GetSharedImageUsageFlags() const {
+  virtual gpu::SharedImageUsageSet GetSharedImageUsageFlags() const {
     NOTREACHED_IN_MIGRATION();
-    return 0;
+    return gpu::SharedImageUsageSet();
   }
 
   CanvasResourceProvider(const CanvasResourceProvider&) = delete;
@@ -371,6 +370,8 @@ class PLATFORM_EXPORT CanvasResourceProvider
 
   virtual void OnFlushForImage(cc::PaintImage::ContentId content_id);
   void OnMemoryDump(base::trace_event::ProcessMemoryDump*) override;
+
+  CanvasResourceHost* resource_host() { return resource_host_; }
 
  private:
   friend class FlushForImageListener;

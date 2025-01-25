@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/constants/ash_features.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/close_button.h"
 #include "ash/wm/overview/overview_grid.h"
@@ -79,9 +78,7 @@ OverviewItemView::OverviewItemView(
     views::Button::PressedCallback close_callback,
     aura::Window* window,
     bool show_preview)
-    : WindowMiniView(window,
-                     /*use_custom_focus_predicate=*/!features::
-                         IsOverviewNewFocusEnabled()),
+    : WindowMiniView(window, /*use_custom_focus_predicate=*/false),
       overview_item_(overview_item),
       event_handler_delegate_(event_handler_delegate),
       close_button_(header_view()->icon_label_view()->AddChildView(
@@ -89,9 +86,7 @@ OverviewItemView::OverviewItemView(
                                         CloseButton::Type::kMediumFloating))) {
   CHECK(overview_item_);
   // Focusable so we can add accelerators to this view.
-  SetFocusBehavior(features::IsOverviewNewFocusEnabled()
-                       ? views::View::FocusBehavior::ALWAYS
-                       : views::View::FocusBehavior::NEVER);
+  SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
 
   views::InkDrop::Get(close_button_)
       ->SetMode(views::InkDropHost::InkDropMode::ON_NO_GESTURE_HANDLER);
@@ -108,6 +103,11 @@ OverviewItemView::OverviewItemView(
   // Call this last as it triggers layout, which relies on some of the other
   // elements existing.
   SetShowPreview(show_preview);
+
+  // TODO: This doesn't allow |this| to be navigated by ChromeVox, find a way
+  // to allow |this| as well as the title and close button.
+  GetViewAccessibility().SetRole(ax::mojom::Role::kGenericContainer);
+  UpdateAccessibleDescription();
 }
 
 OverviewItemView::~OverviewItemView() = default;
@@ -162,6 +162,11 @@ void OverviewItemView::RefreshPreviewView() {
   DeprecatedLayoutImmediately();
 }
 
+void OverviewItemView::AcceptSelection(OverviewSession* overview_session) {
+  CHECK(overview_session);
+  overview_session->SelectWindow(overview_item_);
+}
+
 gfx::Size OverviewItemView::GetPreviewViewSize() const {
   // The preview should expand to fit the bounds allocated for the content,
   // except if it is letterboxed or pillarboxed.
@@ -211,51 +216,6 @@ void OverviewItemView::RefreshItemVisuals() {
   }
 
   ResetRoundedCorners();
-}
-
-views::View* OverviewItemView::GetView() {
-  return this;
-}
-
-OverviewItemBase* OverviewItemView::GetOverviewItem() {
-  return overview_item_;
-}
-
-void OverviewItemView::MaybeActivateFocusedView() {
-  if (overview_item_) {
-    overview_item_->OnFocusedViewActivated();
-  }
-}
-
-void OverviewItemView::MaybeCloseFocusedView(bool primary_action) {
-  if (overview_item_ && primary_action)
-    overview_item_->OnFocusedViewClosed();
-}
-
-void OverviewItemView::MaybeSwapFocusedView(bool right) {}
-
-bool OverviewItemView::MaybeActivateFocusedViewOnOverviewExit(
-    OverviewSession* overview_session) {
-  DCHECK(overview_session);
-  overview_session->SelectWindow(overview_item_);
-  return true;
-}
-
-void OverviewItemView::OnFocusableViewFocused() {
-  UpdateFocusState(/*focus=*/true);
-}
-
-void OverviewItemView::OnFocusableViewBlurred() {
-  UpdateFocusState(/*focus=*/false);
-}
-
-gfx::Point OverviewItemView::GetMagnifierFocusPointInScreen() {
-  // When this item is tabbed into, put the magnifier focus on the front of the
-  // title, so that users can read the title first thing.
-  const gfx::Rect title_bounds =
-      header_view()->title_label()->GetBoundsInScreen();
-  return gfx::Point(GetMirroredXInView(title_bounds.x()),
-                    title_bounds.CenterPoint().y());
 }
 
 bool OverviewItemView::OnMousePressed(const ui::MouseEvent& event) {
@@ -308,30 +268,6 @@ bool OverviewItemView::CanAcceptEvent(const ui::Event& event) {
   return accept_events && views::View::CanAcceptEvent(event);
 }
 
-void OverviewItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  WindowMiniView::GetAccessibleNodeData(node_data);
-
-  // TODO: This doesn't allow |this| to be navigated by ChromeVox, find a way
-  // to allow |this| as well as the title and close button.
-  node_data->role = ax::mojom::Role::kGenericContainer;
-  const bool is_group_item = [&]() {
-    auto* snap_group_controller = SnapGroupController::Get();
-    return snap_group_controller &&
-           snap_group_controller->GetSnapGroupForGivenWindow(source_window());
-  }();
-  node_data->AddStringAttribute(
-      ax::mojom::StringAttribute::kDescription,
-      l10n_util::GetStringUTF8(
-          is_group_item
-              ? IDS_ASH_SNAP_GROUP_WINDOW_CYCLE_DESCRIPTION
-              : IDS_ASH_OVERVIEW_CLOSABLE_HIGHLIGHT_ITEM_A11Y_EXTRA_TIP));
-}
-
-void OverviewItemView::OnThemeChanged() {
-  WindowMiniView::OnThemeChanged();
-  UpdateFocusState(is_focused());
-}
-
 bool OverviewItemView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   if (accelerator.IsCtrlDown() && accelerator.key_code() == ui::VKEY_W) {
     if (overview_item_) {
@@ -352,6 +288,23 @@ bool OverviewItemView::AcceleratorPressed(const ui::Accelerator& accelerator) {
 
 bool OverviewItemView::CanHandleAccelerators() const {
   return HasFocus() && WindowMiniView::CanHandleAccelerators();
+}
+
+void OverviewItemView::OnWindowDestroying(aura::Window* window) {
+  WindowMiniView::OnWindowDestroying(window);
+  UpdateAccessibleDescription();
+}
+
+void OverviewItemView::UpdateAccessibleDescription() {
+  const bool is_group_item = [&]() {
+    auto* snap_group_controller = SnapGroupController::Get();
+    return snap_group_controller &&
+           snap_group_controller->GetSnapGroupForGivenWindow(source_window());
+  }();
+
+  GetViewAccessibility().SetDescription(l10n_util::GetStringUTF8(
+      is_group_item ? IDS_ASH_SNAP_GROUP_WINDOW_CYCLE_DESCRIPTION
+                    : IDS_ASH_OVERVIEW_CLOSABLE_HIGHLIGHT_ITEM_A11Y_EXTRA_TIP));
 }
 
 BEGIN_METADATA(OverviewItemView)

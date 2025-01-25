@@ -24,6 +24,7 @@
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/prefs/pref_service.h"
+#include "components/security_state/content/security_state_tab_helper.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
@@ -85,7 +86,7 @@ autofill::PersonalDataManager* AndroidAutofillClient::GetPersonalDataManager() {
 
 autofill::AutocompleteHistoryManager*
 AndroidAutofillClient::GetAutocompleteHistoryManager() {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 PrefService* AndroidAutofillClient::GetPrefs() {
@@ -138,8 +139,14 @@ url::Origin AndroidAutofillClient::GetLastCommittedPrimaryMainFrameOrigin()
 
 security_state::SecurityLevel
 AndroidAutofillClient::GetSecurityLevelForUmaHistograms() {
-  // TODO(crbug.com/321677908): Consider recording for non-webview.
-  // Return the count value which will not be recorded.
+  if (SecurityStateTabHelper* helper =
+          ::SecurityStateTabHelper::FromWebContents(&GetWebContents())) {
+    return helper->GetSecurityLevel();
+  }
+
+  // If there is no helper, it means we are not in a "web" state or the embedder
+  // doesn't support the state helper. Return SECURITY_LEVEL_COUNT which will
+  //  not be logged.
   return security_state::SecurityLevel::SECURITY_LEVEL_COUNT;
 }
 
@@ -171,24 +178,17 @@ void AndroidAutofillClient::ShowDeleteAddressProfileDialog(
 void AndroidAutofillClient::ConfirmSaveAddressProfile(
     const autofill::AutofillProfile& profile,
     const autofill::AutofillProfile* original_profile,
-    SaveAddressProfilePromptOptions options,
+    bool is_migration_to_account,
     AddressProfileSavePromptCallback callback) {
   NOTIMPLEMENTED();
 }
 
-bool AndroidAutofillClient::ShowTouchToFillCreditCard(
-    base::WeakPtr<autofill::TouchToFillDelegate> delegate,
-    base::span<const autofill::CreditCard> cards_to_suggest,
-    const std::vector<bool>& card_acceptabilities) {
-  return false;
-}
-
-void AndroidAutofillClient::HideTouchToFillCreditCard() {}
-
-void AndroidAutofillClient::ShowAutofillSuggestions(
+autofill::AutofillClient::SuggestionUiSessionId
+AndroidAutofillClient::ShowAutofillSuggestions(
     const autofill::AutofillClient::PopupOpenArgs& open_args,
     base::WeakPtr<autofill::AutofillSuggestionDelegate> delegate) {
   NOTIMPLEMENTED();
+  return SuggestionUiSessionId();
 }
 
 void AndroidAutofillClient::UpdateAutofillDataListValues(
@@ -199,13 +199,6 @@ void AndroidAutofillClient::UpdateAutofillDataListValues(
 }
 
 void AndroidAutofillClient::PinAutofillSuggestions() {
-  NOTIMPLEMENTED();
-}
-
-void AndroidAutofillClient::UpdatePopup(
-    const std::vector<autofill::Suggestion>& suggestions,
-    autofill::FillingProduct main_filling_product,
-    autofill::AutofillSuggestionTriggerSource trigger_source) {
   NOTIMPLEMENTED();
 }
 
@@ -222,7 +215,7 @@ bool AndroidAutofillClient::IsPasswordManagerEnabled() {
   // Android 3P mode and WebView rely on the AndroidAutofillManager which
   // doesn't call this function. If it ever does, the function needs to
   // be implemented in a meaningful way.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void AndroidAutofillClient::DidFillOrPreviewForm(
@@ -231,21 +224,23 @@ void AndroidAutofillClient::DidFillOrPreviewForm(
     bool is_refill) {}
 
 bool AndroidAutofillClient::IsContextSecure() const {
-  content::SSLStatus ssl_status;
+  // Note: As of crbug.com/701018, Chrome relies on ChromeSecurityStateTabHelper
+  // to determine whether the page is secure, but WebView can only access a
+  // small part of the functionality so the helper will be null for now.
+  if (SecurityStateTabHelper* helper =
+          SecurityStateTabHelper::FromWebContents(&GetWebContents())) {
+    return security_state::IsSslCertificateValid(helper->GetSecurityLevel());
+  }
+
   content::NavigationEntry* navigation_entry =
       GetWebContents().GetController().GetLastCommittedEntry();
-  if (!navigation_entry) {
+  if (!navigation_entry ||
+      !navigation_entry->GetURL().SchemeIsCryptographic()) {
     return false;
   }
 
-  ssl_status = navigation_entry->GetSSL();
-  // Note: As of crbug.com/701018, Chrome relies on SecurityStateTabHelper to
-  // determine whether the page is secure, but WebView has no equivalent class.
-  // TODO(crbug.com/321679324): Consider injecting SecurityStateTabHelper for 3P
-  // chrome.
-
-  return navigation_entry->GetURL().SchemeIsCryptographic() &&
-         ssl_status.certificate &&
+  content::SSLStatus ssl_status = navigation_entry->GetSSL();
+  return ssl_status.certificate &&
          !net::IsCertStatusError(ssl_status.cert_status) &&
          !(ssl_status.content_status &
            content::SSLStatus::RAN_INSECURE_CONTENT);

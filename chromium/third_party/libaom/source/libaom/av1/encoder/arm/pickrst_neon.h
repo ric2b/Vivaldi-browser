@@ -25,7 +25,7 @@
 
 // Compute 8 values of M (cross correlation) for a single source pixel and
 // accumulate.
-static INLINE void update_M_1pixel(int32_t *M_s32, int16x4_t src_avg,
+static inline void update_M_1pixel(int32_t *M_s32, int16x4_t src_avg,
                                    int16x8_t dgd_avg) {
   int32x4_t lo = vld1q_s32(M_s32 + 0);
   int32x4_t hi = vld1q_s32(M_s32 + 4);
@@ -39,7 +39,7 @@ static INLINE void update_M_1pixel(int32_t *M_s32, int16x4_t src_avg,
 
 // Compute 8 values of M (cross correlation) for two source pixels and
 // accumulate.
-static INLINE void update_M_2pixels(int32_t *M_s32, int16x4_t src_avg0,
+static inline void update_M_2pixels(int32_t *M_s32, int16x4_t src_avg0,
                                     int16x4_t src_avg1, int16x8_t dgd_avg0,
                                     int16x8_t dgd_avg1) {
   int32x4_t lo = vld1q_s32(M_s32 + 0);
@@ -54,7 +54,7 @@ static INLINE void update_M_2pixels(int32_t *M_s32, int16x4_t src_avg0,
   vst1q_s32(M_s32 + 4, hi);
 }
 
-static INLINE void update_H_1pixel(int32_t *H_s32, const int16_t *dgd_avg,
+static inline void update_H_1pixel(int32_t *H_s32, const int16_t *dgd_avg,
                                    int width, int height) {
   for (int i = 0; i < height; i += 4) {
     int16x4_t di = vld1_s16(dgd_avg + i);
@@ -80,7 +80,7 @@ static INLINE void update_H_1pixel(int32_t *H_s32, const int16_t *dgd_avg,
   }
 }
 
-static INLINE void update_H_5x5_2pixels(int32_t *H_s32, const int16_t *dgd_avg0,
+static inline void update_H_5x5_2pixels(int32_t *H_s32, const int16_t *dgd_avg0,
                                         const int16_t *dgd_avg1) {
   for (int i = 0; i < 24; i += 4) {
     int16x4_t di0 = vld1_s16(dgd_avg0 + i);
@@ -112,7 +112,7 @@ static INLINE void update_H_5x5_2pixels(int32_t *H_s32, const int16_t *dgd_avg0,
   }
 }
 
-static INLINE void update_H_7x7_2pixels(int32_t *H_s32, const int16_t *dgd_avg0,
+static inline void update_H_7x7_2pixels(int32_t *H_s32, const int16_t *dgd_avg0,
                                         const int16_t *dgd_avg1) {
   for (int i = 0; i < 48; i += 4) {
     int16x4_t di0 = vld1_s16(dgd_avg0 + i);
@@ -164,7 +164,7 @@ static INLINE void update_H_7x7_2pixels(int32_t *H_s32, const int16_t *dgd_avg0,
 }
 
 // Widen 32-bit src data and accumulate into 64-bit dst. Clear src data.
-static INLINE void accumulate_and_clear(int64_t *dst, int32_t *src,
+static inline void accumulate_and_clear(int64_t *dst, int32_t *src,
                                         int length) {
   do {
     int32x4_t s32 = vld1q_s32(src);

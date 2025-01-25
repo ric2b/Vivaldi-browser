@@ -3,6 +3,7 @@ name = "ukey2_jni"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [lints]
 workspace = true
@@ -28,4 +29,4 @@ boringssl = ["crypto_provider_default/boringssl"]
 std = ["lock_adapter/std"]
 
 [lib]
-crate_type = ["cdylib"]
+crate-type = ["cdylib"]

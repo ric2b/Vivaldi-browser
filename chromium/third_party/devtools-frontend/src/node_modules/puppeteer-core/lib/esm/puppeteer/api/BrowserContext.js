@@ -7,12 +7,13 @@ import { firstValueFrom, from, merge, raceWith, } from '../../third_party/rxjs/r
 import { EventEmitter } from '../common/EventEmitter.js';
 import { debugError, fromEmitterEvent, filterAsync, timeout, } from '../common/util.js';
 import { asyncDisposeSymbol, disposeSymbol } from '../util/disposable.js';
+import { Mutex } from '../util/Mutex.js';
 /**
  * {@link BrowserContext} represents individual user contexts within a
  * {@link Browser | browser}.
  *
- * When a {@link Browser | browser} is launched, it has a single
- * {@link BrowserContext | browser context} by default. Others can be created
+ * When a {@link Browser | browser} is launched, it has at least one default
+ * {@link BrowserContext | browser context}. Others can be created
  * using {@link Browser.createBrowserContext}. Each context has isolated storage
  * (cookies/localStorage/etc.)
  *
@@ -36,6 +37,13 @@ import { asyncDisposeSymbol, disposeSymbol } from '../util/disposable.js';
  * await context.close();
  * ```
  *
+ * @remarks
+ *
+ * In Chrome all non-default contexts are incognito,
+ * and {@link Browser.defaultBrowserContext | default browser context}
+ * might be incognito if you provide the `--incognito` argument when launching
+ * the browser.
+ *
  * @public
  */
 export class BrowserContext extends EventEmitter {
@@ -44,6 +52,32 @@ export class BrowserContext extends EventEmitter {
      */
     constructor() {
         super();
+    }
+    /**
+     * If defined, indicates an ongoing screenshot opereation.
+     */
+    #pageScreenshotMutex;
+    #screenshotOperationsCount = 0;
+    /**
+     * @internal
+     */
+    startScreenshot() {
+        const mutex = this.#pageScreenshotMutex || new Mutex();
+        this.#pageScreenshotMutex = mutex;
+        this.#screenshotOperationsCount++;
+        return mutex.acquire(() => {
+            this.#screenshotOperationsCount--;
+            if (this.#screenshotOperationsCount === 0) {
+                // Remove the mutex to indicate no ongoing screenshot operation.
+                this.#pageScreenshotMutex = undefined;
+            }
+        });
+    }
+    /**
+     * @internal
+     */
+    waitForScreenshotOperations() {
+        return this.#pageScreenshotMutex?.acquire();
     }
     /**
      * Waits until a {@link Target | target} matching the given `predicate`

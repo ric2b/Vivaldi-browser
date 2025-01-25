@@ -73,6 +73,8 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouter
   void ProgressFlingIfNeeded(base::TimeTicks current_time);
   void StopFling();
 
+  bool IsAnyScrollGestureInProgress() const;
+
   blink::mojom::FrameWidgetInputHandler* GetFrameWidgetInputHandler();
 
   void SetView(RenderWidgetHostViewInput* view);
@@ -138,6 +140,8 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouter
   virtual void ForwardTouchEventWithLatencyInfo(
       const blink::WebTouchEvent& touch_event,
       const ui::LatencyInfo& latency);  // Virtual for testing
+
+  void ForwardGestureEvent(const blink::WebGestureEvent& gesture_event);
 
   // Retrieve an iterator over any RenderInputRouters that are
   // immediately embedded within this one. This does not return

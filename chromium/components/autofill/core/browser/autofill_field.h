@@ -14,8 +14,10 @@
 #include <vector>
 
 #include "base/types/optional_ref.h"
+#include "base/types/pass_key.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/profile_value_source.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/form_parsing/regex_patterns.h"
@@ -38,6 +40,16 @@ enum class IsMostRecentSingleUsernameCandidate {
   // Field is candidate for username in Username First Flow and has intermediate
   // fields between candidate and password form.
   kHasIntermediateValuesInBetween = 2,
+};
+
+// Specifies which type of field value is desired from AutofillField::value().
+// TODO: crbug.com/40227496 - Remove together with `value(ValueSemantics)`.
+enum class ValueSemantics {
+  // The field's last known value or the field's value to be filled:
+  // FormFieldData::value().
+  kCurrent,
+  // The field's first known value.
+  kInitial,
 };
 
 class AutofillField : public FormFieldData {
@@ -108,6 +120,17 @@ class AutofillField : public FormFieldData {
     possible_types_ = possible_types;
   }
 
+  // Adds a profile `identifier` for `type` as a possible profile value source.
+  // If `type` is not an address type the call will be a noop.
+  PossibleProfileValueSources* possible_profile_value_sources() {
+    return &possible_profile_value_sources_;
+  }
+
+  void set_possible_profile_value_sources(
+      PossibleProfileValueSources possible_profile_value_sources) {
+    possible_profile_value_sources_ = std::move(possible_profile_value_sources);
+  }
+
   void SetHtmlType(HtmlFieldType type, HtmlFieldMode mode);
 
   void set_previously_autofilled(bool previously_autofilled) {
@@ -144,9 +167,6 @@ class AutofillField : public FormFieldData {
   // type does not take into account the rationalization involving the
   // surrounding fields.
   AutofillType ComputedType() const;
-
-  // Returns true if the value of this field is empty.
-  bool IsEmpty() const;
 
   // The rank of a field is N iff this field is preceded by N other fields
   // in the frame-transcending form.
@@ -203,14 +223,81 @@ class AutofillField : public FormFieldData {
   // should be suppressed for this field (independently of the predicted type).
   bool ShouldSuppressSuggestionsAndFillingByDefault() const;
 
+  // Returns the requested current or initial value depending on the
+  // `ValueSemantics`, if `features::kAutofillFixValueSemantics` is enabled.
+  // Otherwise just forwards to `FormFieldData::value().
+  //
+  // In the context of form submission and import, consider calling
+  // `value_for_import()`.
+  //
+  // Currently, `value(ValueSemantics::kInitial)` is the empty string for fields
+  // of FormControlType::kSelect*.
+  // TODO: crbug.com/40227496 - Let `value(kInitial)` for select elements behave
+  // the same as for non-select elements.
+  //
+  // TODO: crbug.com/40227496 - When kAutofillFixValueSemantics is cleaned up,
+  // replace
+  // - `value(ValueSemantics::kCurrent)` with `FormFieldData::value()`
+  // - `value(ValueSemantics::kInitial)` with `AutofillField::initial_value()`
+  const std::u16string& value(ValueSemantics s) const;
+
+  // Returns the current value, formatted as desired for import:
+  // (1) If the user left a field unchanged, returns the empty string.
+  // (2) If the field has FormControlType::kSelect* and has a selected text,
+  //     it is FormFieldData::selected_text().
+  //
+  // The motivation behind (1) is that unchanged values usually carry little
+  // value for importing. The exception are <select> feilds, which often have
+  // a correct default value, so we consider them for import even if their value
+  // didn't change.
+  // TODO: crbug.com/40137859 - Consider making an exception for also for
+  // non-<select> ADDRESS_HOME_{STATE,COUNTRY} fields.
+  //
+  // The motivation behind (2) is that the human-readable text of an <option> is
+  // usually better suited for import than the its value. See the documentation
+  // of FormFieldData::value() and FormFieldData::selected_text() for further
+  // details.
+  //
+  // This function only behaves reasonably if kAutofillFixValueSemantics and
+  // kAutofillFixCurrentValueInImport are enabled. If the latter is not enabled,
+  // FormStructure::RetrieveFromCache() resets the field's current value, with
+  // the intention of avoiding form import.
+  // TODO: crbug.com/40227496 - Remove the previous paragraph when the feature
+  // is launched.
+  const std::u16string& value_for_import() const;
+
+  // Sets the field's current value, if `features::kAutofillFixValueSemantics`
+  // is enabled. Otherwise just forwards to FormFieldData::set_value().
+  void set_initial_value(std::u16string initial_value,
+                         base::PassKey<FormStructure> pass_key);
+
   void set_initial_value_hash(uint32_t value) { initial_value_hash_ = value; }
   std::optional<uint32_t> initial_value_hash() { return initial_value_hash_; }
 
+  // TODO: crbug.com/40227496 - Remove when kAutofillFixValueSemantics is
+  // cleaned up.
   void set_initial_value_changed(std::optional<bool> initial_value_changed) {
     initial_value_changed_ = initial_value_changed;
   }
   std::optional<bool> initial_value_changed() const {
     return initial_value_changed_;
+  }
+
+  void set_value_identified_as_potentially_sensitive(
+      bool potentially_sensitive) {
+    value_identified_as_potentially_sensitive_ = potentially_sensitive;
+  }
+
+  bool value_identified_as_potentially_sensitive() const {
+    return value_identified_as_potentially_sensitive_;
+  }
+
+  void set_field_is_eligible_for_prediction_improvements(
+      std::optional<bool> eligibily) {
+    field_is_eligible_for_prediction_improvements_ = eligibily;
+  }
+  std::optional<bool> field_is_eligible_for_prediction_improvements() const {
+    return field_is_eligible_for_prediction_improvements_;
   }
 
   void set_credit_card_number_offset(size_t position) {
@@ -383,8 +470,22 @@ class AutofillField : public FormFieldData {
   // Currently this is used to distinguish between billing and shipping fields.
   HtmlFieldMode html_mode_ = HtmlFieldMode::kNone;
 
-  // The set of possible types for this field.
+  // The set of possible types for this field. It is normally only populated on
+  // submission time together with the `possible_profile_value_sources_`.
   FieldTypeSet possible_types_;
+
+  // An Autofill profile is a source for a filled value when the field's value
+  // is contained in the profile stored as a specific type. It does not mean
+  // that the value was actually filled from this Autofill profile. It is
+  // normally only populated on submission time along with the
+  // `possible_types_`. It contains the address related information that is
+  // contained in `possible_types_` with the additional information in which
+  // profile the matching type was detected.
+  PossibleProfileValueSources possible_profile_value_sources_;
+
+  // The field's initial value. By default, it's the same as the field's
+  // `value()`, but FormStructure::RetrieveFromCache() may override it.
+  std::u16string initial_value_ = value(ValueSemantics::kCurrent);
 
   // A low-entropy hash of the field's initial value before user-interactions or
   // automatic fillings. This field is used to detect static placeholders.
@@ -394,8 +495,20 @@ class AutofillField : public FormFieldData {
   // it was changed between page load and form submission. Set to `false` if the
   // pre-filled value wasn't changed. Not set if the field didn't have a
   // pre-filled value.
-  // Currently not implemented for <select> fields.
+  // Set for <select> fields only if kAutofillFixInitialValueOfSelect is
+  // enabled. Always set for <textarea> and <input>.
   std::optional<bool> initial_value_changed_;
+
+  // Indicates if the value contained in the field was identified to potentially
+  // contain sensitive data that should be handled with extra caution.
+  // Note that the 'false' state does not guarantee that the data is not
+  // sensitive, it just means that is wasn't identified as such yet.
+  bool value_identified_as_potentially_sensitive_ = false;
+
+  // Indicates if the field was determined to be eligable for prediction
+  // improvements. The `nullopt` state implies that the eligibility has not been
+  // determined yet.
+  std::optional<bool> field_is_eligible_for_prediction_improvements_;
 
   // Used to hold the position of the first digit to be copied as a substring
   // from credit card number.
@@ -460,6 +573,7 @@ class AutofillField : public FormFieldData {
   // Note: `is_autofilled` is true for autocompleted fields. So `is_autofilled`
   // is not a sufficient condition for `autofill_source_profile_guid_` to have a
   // value. This is not tracked for fields filled with field by field filling.
+  // TODO(crbug.com/364937539): Use AutofillField::ProfileValueSource instead.
   std::optional<std::string> autofill_source_profile_guid_;
 
   // Denotes the type that was used to fill the field in its last autofill
@@ -467,6 +581,7 @@ class AutofillField : public FormFieldData {
   // Autofill might fallback to filling a classified field with a different type
   // than the classified one, based on country-specific rules.
   // This is not tracked for fields filled with field by field filling.
+  // TODO(crbug.com/364937539): Use AutofillField::ProfileValueSource instead.
   std::optional<FieldType> autofilled_type_;
 
   // Denotes the product last responsible for filling the field. If the field is

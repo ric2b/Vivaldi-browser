@@ -81,9 +81,10 @@ text_run = any;
 text_and_emoji_run := |*
 # In order to give the the VS15 sequences higher priority than detecting
 # emoji sequences they are listed first as scanner token here.
-text_presentation_emoji => { *is_emoji = false; return te; };
-emoji_run => { *is_emoji = true; return te; };
-text_run => { *is_emoji = false; return te; };
+text_presentation_emoji => { *is_emoji = false; *has_vs = true; return te; };
+emoji_presentation_sequence => { *is_emoji = true; *has_vs = true; return te; };
+emoji_run => { *is_emoji = true; *has_vs = false; return te; };
+text_run => { *is_emoji = false; *has_vs = false; return te; };
 *|;
 
 }%%
@@ -91,7 +92,8 @@ text_run => { *is_emoji = false; return te; };
 static emoji_text_iter_t
 scan_emoji_presentation (emoji_text_iter_t p,
     const emoji_text_iter_t pe,
-    bool* is_emoji)
+    bool* is_emoji,
+    bool* has_vs)
 {
   emoji_text_iter_t ts, te;
   const emoji_text_iter_t eof = pe;
@@ -106,5 +108,6 @@ scan_emoji_presentation (emoji_text_iter_t p,
 
   /* Should not be reached. */
   *is_emoji = false;
+  *has_vs = false;
   return pe;
 }

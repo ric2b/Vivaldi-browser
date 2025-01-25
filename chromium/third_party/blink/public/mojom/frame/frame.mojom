@@ -769,8 +769,10 @@ interface LocalFrameHost {
   // Can be called when a DOM event named `event_type` fires within a fenced
   // frame's DOM tree. Propagates a censored version of the event to the
   // embedder that omits privacy-sensitive information like mouse coordinates or
-  // timestamps.
-  ForwardFencedFrameEventToEmbedder(string event_type);
+  // timestamps. User activation is also consumed in the fenced frame tree and
+  // notified to the embedder's DOM tree, if this method determines that
+  // `event_type` should result in the embedder receiving user activation.
+  ForwardFencedFrameEventAndUserActivationToEmbedder(string event_type);
 
   // Notifies when the ViewTransition opt-in state for the current Document
   // changes.
@@ -989,6 +991,12 @@ interface LocalFrame {
   // container policy.
   DidUpdateFramePolicy(blink.mojom.FramePolicy frame_policy);
 
+  // Notifies the renderer process that the associated frame has changed its
+  // visibility status. Visibility status changes occur when the frame moves
+  // in/out of the viewport, or when the render status of the object changes,
+  // e.g. if the frame gets set a "display: none" or "visibility: hidden" style.
+  OnFrameVisibilityChanged(blink.mojom.FrameVisibility visibility);
+
   // Posts a message from a frame in another process to the current renderer.
   // |source_frame_token| is the frame token of the RemoteFrame in the current
   // renderer representing the frame (from a different renderer) where this
@@ -1036,13 +1044,19 @@ interface LocalFrame {
       mojo_base.mojom.BigString16 javascript,
       bool wants_result) => (mojo_base.mojom.Value result);
 
-  // ONLY FOR TESTS: Same as above but this can optionally trigger a fake user
-  // activation notification to test functionalities that are gated by user
-  // activation, and can block until a resulting promise is resolved.
+  // ONLY FOR TESTS: Same as above but this can optionally:
+  // - Trigger a fake user activation notification to test functionalities that
+  //   are gated by user activation.
+  // - Can block until a resulting promise is resolved.
+  // - Can choose to not honor JS content settings.
+  // Content settings are a mechanism that allows users to disable various
+  // functions of the browser. One content setting disables javascript. This bit
+  // controls whether this content setting is ignored or honored.
   JavaScriptExecuteRequestForTests(
       mojo_base.mojom.BigString16 javascript,
       bool has_user_gesture,
       bool resolve_promises,
+      bool honor_js_content_settings,
       int32 world_id)
       => (JavaScriptExecutionResultType result_type,
           mojo_base.mojom.Value result);
@@ -1272,6 +1286,10 @@ interface LocalMainFrame {
   // data is a Bloom filter describing which JavaScript functions on the page
   // should be eagerly parsed & compiled by the JS engine.
   SetV8CompileHints(mojo_base.mojom.ReadOnlySharedMemoryRegion data);
+
+  // Replaces the active document with an empty document to free resources,
+  // e.g. for supporting tab discard.
+  Discard();
 };
 
 // Implemented in Browser, this interface defines local-main-frame-specific

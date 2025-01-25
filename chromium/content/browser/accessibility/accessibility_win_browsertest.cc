@@ -30,9 +30,7 @@
 #include "base/win/scoped_variant.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_browsertest.h"
-#include "content/browser/accessibility/browser_accessibility_manager_win.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
-#include "content/browser/accessibility/browser_accessibility_win.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -41,6 +39,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/accessibility_notification_waiter.h"
 #include "content/public/test/browser_test.h"
@@ -58,6 +57,8 @@
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_event_generator.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
+#include "ui/accessibility/platform/browser_accessibility_manager_win.h"
+#include "ui/accessibility/platform/browser_accessibility_win.h"
 #include "ui/accessibility/platform/inspect/ax_inspect_utils_win.h"
 #include "ui/accessibility/platform/uia_registrar_win.h"
 #include "ui/aura/window.h"
@@ -123,9 +124,9 @@ class AccessibilityWinBrowserTest : public AccessibilityBrowserTest {
       ui::AXMode accessibility_mode = ui::kAXModeComplete);
   void SetUpSampleParagraphInScrollableEditable(
       Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text);
-  BrowserAccessibility* FindNode(ax::mojom::Role role,
-                                 const std::string& name_or_value);
-  BrowserAccessibilityManager* GetManager();
+  ui::BrowserAccessibility* FindNode(ax::mojom::Role role,
+                                     const std::string& name_or_value);
+  ui::BrowserAccessibilityManager* GetManager();
   static Microsoft::WRL::ComPtr<IAccessible> GetAccessibleFromVariant(
       IAccessible* parent,
       VARIANT* var);
@@ -151,9 +152,9 @@ class AccessibilityWinBrowserTest : public AccessibilityBrowserTest {
       Microsoft::WRL::ComPtr<IAccessibleText>* input_text);
   void SetUpSampleParagraphHelper(
       Microsoft::WRL::ComPtr<IAccessibleText>* accessible_text);
-  BrowserAccessibility* FindNodeInSubtree(BrowserAccessibility& node,
-                                          ax::mojom::Role role,
-                                          const std::string& name_or_value);
+  ui::BrowserAccessibility* FindNodeInSubtree(ui::BrowserAccessibility& node,
+                                              ax::mojom::Role role,
+                                              const std::string& name_or_value);
 };
 
 AccessibilityWinBrowserTest::AccessibilityWinBrowserTest() = default;
@@ -446,17 +447,17 @@ void AccessibilityWinBrowserTest::SetUpSampleParagraphHelper(
 
 // Retrieve the accessibility node, starting from the root node, that matches
 // the accessibility role, name or value.
-BrowserAccessibility* AccessibilityWinBrowserTest::FindNode(
+ui::BrowserAccessibility* AccessibilityWinBrowserTest::FindNode(
     ax::mojom::Role role,
     const std::string& name_or_value) {
-  BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
+  ui::BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
   CHECK(root);
   return FindNodeInSubtree(*root, role, name_or_value);
 }
 
 // Retrieve the browser accessibility manager object for the current web
 // contents.
-BrowserAccessibilityManager* AccessibilityWinBrowserTest::GetManager() {
+ui::BrowserAccessibilityManager* AccessibilityWinBrowserTest::GetManager() {
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
   return web_contents->GetOrCreateRootBrowserAccessibilityManager();
@@ -464,8 +465,8 @@ BrowserAccessibilityManager* AccessibilityWinBrowserTest::GetManager() {
 
 // Retrieve the accessibility node in the subtree that matches the accessibility
 // role, name or value.
-BrowserAccessibility* AccessibilityWinBrowserTest::FindNodeInSubtree(
-    BrowserAccessibility& node,
+ui::BrowserAccessibility* AccessibilityWinBrowserTest::FindNodeInSubtree(
+    ui::BrowserAccessibility& node,
     ax::mojom::Role role,
     const std::string& name_or_value) {
   const std::string& name =
@@ -484,7 +485,7 @@ BrowserAccessibility* AccessibilityWinBrowserTest::FindNodeInSubtree(
   }
 
   for (unsigned int i = 0; i < node.PlatformChildCount(); ++i) {
-    BrowserAccessibility* result =
+    ui::BrowserAccessibility* result =
         FindNodeInSubtree(*node.PlatformGetChild(i), role, name_or_value);
     if (result)
       return result;
@@ -837,7 +838,7 @@ void AccessibilityWinBrowserTest::AccessibleChecker::CheckAccessibleChildren(
 // event string matches the given match pattern.
 class NativeWinEventWaiter {
  public:
-  NativeWinEventWaiter(BrowserAccessibilityManager* manager,
+  NativeWinEventWaiter(ui::BrowserAccessibilityManager* manager,
                        const std::string& match_pattern,
                        ui::AXApiType::Type type = ui::AXApiType::kWinIA2)
       : event_recorder_(AXInspectFactory::CreateRecorder(
@@ -869,7 +870,7 @@ class NativeWinEventWaiter {
   std::unique_ptr<ui::AXEventRecorder> event_recorder_;
   std::string match_pattern_;
   base::RunLoop run_loop_;
-  raw_ptr<BrowserAccessibilityManager> browser_accessibility_manager_;
+  raw_ptr<ui::BrowserAccessibilityManager> browser_accessibility_manager_;
 };
 
 // Helper class that reproduces a specific crash when UIA parent navigation
@@ -1187,7 +1188,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, FocusEventOnPageLoad) {
     GURL html_data_url(
         "data:text/html," +
         base::EscapeQueryParamValue(R"HTML(<p> Hello</ p>)HTML", false));
-    BrowserAccessibilityManager::SetFocusChangeCallbackForTesting(
+    ui::BrowserAccessibilityManager::SetFocusChangeCallbackForTesting(
         run_loop.QuitClosure());
     EXPECT_TRUE(NavigateToURL(shell(), html_data_url));
     run_loop.Run();  // Wait for the focus change.
@@ -1255,7 +1256,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
     WaitForAccessibilityFocusChange();
     ASSERT_TRUE(iframe_waiter.WaitForNotification());
 
-    const BrowserAccessibility* inner_button =
+    const ui::BrowserAccessibility* inner_button =
         FindNode(ax::mojom::Role::kButton, "Inner button");
     ASSERT_NE(nullptr, inner_button);
     const auto* inner_button_win =
@@ -1292,7 +1293,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
   ASSERT_TRUE(document);
 
-  const BrowserAccessibility* outer_button =
+  const ui::BrowserAccessibility* outer_button =
       FindNode(ax::mojom::Role::kButton, "Outer button");
   ASSERT_NE(nullptr, outer_button);
   const auto* outer_button_win =
@@ -2288,7 +2289,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   // Inline text boxes should have been enabled by this point but since the tree
   // has been updated, any previously retrieved IAccessibles would have been
   // invalidated.
-  BrowserAccessibility* updated_paragraph_text =
+  ui::BrowserAccessibility* updated_paragraph_text =
       FindNode(ax::mojom::Role::kParagraph, "");
   ASSERT_NE(nullptr, updated_paragraph_text);
   auto* updated_paragraph_text_win =
@@ -3197,7 +3198,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
         </body>
       </html>)HTML");
 
-  BrowserAccessibility* list_item = FindNode(ax::mojom::Role::kListItem, "");
+  ui::BrowserAccessibility* list_item =
+      FindNode(ax::mojom::Role::kListItem, "");
   ASSERT_NE(nullptr, list_item);
   gfx::NativeViewAccessible list_item_win =
       list_item->GetNativeViewAccessible();
@@ -3298,9 +3300,10 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
         </body>
       </html>)HTML");
 
-  BrowserAccessibility* list_item = FindNode(ax::mojom::Role::kListItem, "");
+  ui::BrowserAccessibility* list_item =
+      FindNode(ax::mojom::Role::kListItem, "");
   ASSERT_NE(nullptr, list_item);
-  BrowserAccessibility* list = list_item->PlatformGetParent();
+  ui::BrowserAccessibility* list = list_item->PlatformGetParent();
   ASSERT_NE(nullptr, list);
 
   gfx::NativeViewAccessible list_item_win =
@@ -4395,11 +4398,12 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestIAccessibleAction) {
       image_action->get_localizedName(2, localized_name.Receive()));
   EXPECT_EQ(nullptr, localized_name.Get());
 
-  LONG n_key_bindings = -1;
-  BSTR* key_bindings[n_actions];
+  LONG n_key_bindings = 0;
+  BSTR* key_bindings = nullptr;
   EXPECT_HRESULT_SUCCEEDED(
-      image_action->get_keyBinding(0, 100, key_bindings, &n_key_bindings));
+      image_action->get_keyBinding(0, 100, &key_bindings, &n_key_bindings));
   EXPECT_EQ(0, n_key_bindings);
+  EXPECT_EQ(nullptr, key_bindings);
 
   base::win::ScopedVariant childid_self(CHILDID_SELF);
   base::win::ScopedBstr image_name;
@@ -4456,8 +4460,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, HasHWNDAfterNavigation) {
 
   // At this point the root of the accessibility tree shouldn't have an HWND
   // because we never gave a parent window to the RWHVA.
-  BrowserAccessibilityManagerWin* manager =
-      static_cast<BrowserAccessibilityManagerWin*>(GetManager());
+  ui::BrowserAccessibilityManagerWin* manager =
+      static_cast<ui::BrowserAccessibilityManagerWin*>(GetManager());
   ASSERT_EQ(nullptr, manager->GetParentHWND());
 
   // Now add the RWHVA's window to the root window and ensure that we have
@@ -4720,8 +4724,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   // The beforeunload dialog won't be shown unless the page has at
   // least one user gesture on it.
   auto* main_frame = shell()->web_contents()->GetPrimaryMainFrame();
-  main_frame->ExecuteJavaScriptWithUserGestureForTests(std::u16string(),
-                                                       base::NullCallback());
+  main_frame->ExecuteJavaScriptWithUserGestureForTests(
+      std::u16string(), base::NullCallback(), ISOLATED_WORLD_ID_GLOBAL);
 
   // Trigger a reload here, which will get cancelled.
   AppModalDialogWaiter dialog_waiter(shell());
@@ -4736,7 +4740,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   // that if you cancel a reload, events are no longer suppressed.
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
-  BrowserAccessibilityManager* manager =
+  ui::BrowserAccessibilityManager* manager =
       web_contents->GetRootBrowserAccessibilityManager();
   NativeWinEventWaiter win_event_waiter(
       manager, "EVENT_OBJECT_FOCUS on <input> role=ROLE_SYSTEM_TEXT*");
@@ -4814,11 +4818,11 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest, TestIScrollProvider) {
                                               {"x", true, false, 50.0, 0.0},
                                               {"y", false, true, 0.0, 50.0}};
   for (auto& expected : all_expected) {
-    BrowserAccessibility* browser_accessibility =
+    ui::BrowserAccessibility* browser_accessibility =
         FindNode(ax::mojom::Role::kGroup, expected.node_name);
     EXPECT_NE(browser_accessibility, nullptr);
 
-    BrowserAccessibilityComWin* browser_accessibility_com_win =
+    ui::BrowserAccessibilityComWin* browser_accessibility_com_win =
         ToBrowserAccessibilityWin(browser_accessibility)->GetCOM();
     Microsoft::WRL::ComPtr<IScrollProvider> scroll_provider;
 
@@ -4928,10 +4932,10 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest,
         </table>
       </html>)HTML");
 
-  BrowserAccessibility* target =
+  ui::BrowserAccessibility* target =
       FindNode(ax::mojom::Role::kRowHeader, "header");
   EXPECT_NE(nullptr, target);
-  BrowserAccessibilityComWin* accessibility_com_win =
+  ui::BrowserAccessibilityComWin* accessibility_com_win =
       ToBrowserAccessibilityWin(target)->GetCOM();
   EXPECT_NE(nullptr, accessibility_com_win);
 
@@ -4939,7 +4943,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest,
   accessibility_com_win->GetPropertyValue(UIA_IsContentElementPropertyId,
                                           result.Receive());
 
-  BrowserAccessibility* child = target->PlatformDeepestFirstChild();
+  ui::BrowserAccessibility* child = target->PlatformDeepestFirstChild();
   EXPECT_NE(nullptr, child);
   accessibility_com_win = ToBrowserAccessibilityWin(child)->GetCOM();
   EXPECT_NE(nullptr, accessibility_com_win);
@@ -4960,10 +4964,10 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest,
         <button>offscreen</button>
       </html>)HTML");
 
-  BrowserAccessibility* target =
+  ui::BrowserAccessibility* target =
       FindNode(ax::mojom::Role::kButton, "offscreen");
   EXPECT_NE(nullptr, target);
-  BrowserAccessibilityComWin* accessibility_com_win =
+  ui::BrowserAccessibilityComWin* accessibility_com_win =
       ToBrowserAccessibilityWin(target)->GetCOM();
   EXPECT_NE(nullptr, accessibility_com_win);
 
@@ -4990,10 +4994,10 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest,
         <button>onscreen</button>
       </html>)HTML");
 
-  BrowserAccessibility* target =
+  ui::BrowserAccessibility* target =
       FindNode(ax::mojom::Role::kButton, "onscreen");
   EXPECT_NE(nullptr, target);
-  BrowserAccessibilityComWin* accessibility_com_win =
+  ui::BrowserAccessibilityComWin* accessibility_com_win =
       ToBrowserAccessibilityWin(target)->GetCOM();
   EXPECT_NE(nullptr, accessibility_com_win);
 
@@ -5545,9 +5549,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIASelectivelyEnabledBrowserTest,
   // crbug 703277 is tracking separating this out so that kHTML can be removed
   // altogether.
   expected_mode |= ui::AXMode::kHTML;
-  EXPECT_EQ(
-      expected_mode,
-      BrowserAccessibilityStateImpl::GetInstance()->GetAccessibilityMode());
+  EXPECT_EQ(expected_mode, content::BrowserAccessibilityStateImpl::GetInstance()
+                               ->GetAccessibilityMode());
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest,
@@ -5610,7 +5613,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinUIABrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(shell()->web_contents());
-  BrowserAccessibilityManager* browser_accessibility_manager =
+  ui::BrowserAccessibilityManager* browser_accessibility_manager =
       web_contents->GetOrCreateRootBrowserAccessibilityManager();
 
   NativeWinEventWaiter win_event_waiter(
@@ -5731,7 +5734,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, FixedRuntimeId) {
       <div id="newParent">bar</div>
       )HTML");
 
-  BrowserAccessibility* target = FindNode(ax::mojom::Role::kStaticText, "foo");
+  ui::BrowserAccessibility* target =
+      FindNode(ax::mojom::Role::kStaticText, "foo");
   Microsoft::WRL::ComPtr<IRawElementProviderFragment> target_as_fragment;
   EXPECT_HRESULT_SUCCEEDED(target->GetNativeViewAccessible()->QueryInterface(
       IID_PPV_ARGS(&target_as_fragment)));
@@ -5742,7 +5746,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, FixedRuntimeId) {
 
   // First verify that the ids of 'target' and 'newParent' are in fact
   // different.
-  BrowserAccessibility* new_parent =
+  ui::BrowserAccessibility* new_parent =
       FindNode(ax::mojom::Role::kStaticText, "bar");
   Microsoft::WRL::ComPtr<IRawElementProviderFragment> new_parent_as_fragment;
   EXPECT_HRESULT_SUCCEEDED(
@@ -5780,6 +5784,158 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, FixedRuntimeId) {
   EXPECT_HRESULT_SUCCEEDED(ui_automation->CompareRuntimeIds(
       original_runtime_id.Get(), new_runtime_id.Get(), &are_same));
   EXPECT_TRUE(are_same);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, UniqueIdIsStable) {
+  LoadInitialAccessibilityTreeFromHtml("<h1>Hello</h1>");
+
+  Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
+  std::vector<base::win::ScopedVariant> document_children =
+      GetAllAccessibleChildren(document.Get());
+
+  // Retrieve heading's IA2 element and unique id.
+  Microsoft::WRL::ComPtr<IAccessible2> heading;
+  ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
+      GetAccessibleFromVariant(document.Get(), document_children[0].AsInput())
+          .Get(),
+      &heading));
+  LONG heading_role = 0;
+  ASSERT_HRESULT_SUCCEEDED(heading->role(&heading_role));
+  ASSERT_EQ(IA2_ROLE_HEADING, heading_role);
+  LONG heading_unique_id;
+  heading->get_uniqueID(&heading_unique_id);
+
+  // Change the heading to a group. This will cause it to get a new AXObject on
+  // the renderer side, but the id will remain the same.
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ui::AXEventGenerator::Event::ROLE_CHANGED);
+  ExecuteScript(u"document.querySelector('h1').setAttribute('role', 'group');");
+  ASSERT_TRUE(waiter.WaitForNotification());
+
+  // Retrieve group's IA2 element and unique id.
+  Microsoft::WRL::ComPtr<IAccessible2> group;
+  ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
+      GetAccessibleFromVariant(document.Get(), document_children[0].AsInput())
+          .Get(),
+      &group));
+  LONG group_role = 0;
+  ASSERT_HRESULT_SUCCEEDED(group->role(&group_role));
+  ASSERT_EQ(ROLE_SYSTEM_GROUPING, group_role);
+  LONG group_unique_id;
+  group->get_uniqueID(&group_unique_id);
+
+  // The outgoing id assigned on the browser side, which is unique within the
+  // window, remains the same.
+  ASSERT_EQ(heading_unique_id, group_unique_id);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
+                       UniqueIdIsStableAfterReset) {
+  ASSERT_TRUE(NavigateToURL(shell(), GURL(R"HTML(
+      data:text/html,<!DOCTYPE html>
+      <html>
+      <body>
+        <button>Button 1</button>
+        <iframe srcdoc="
+          <!DOCTYPE html>
+          <html>
+          <body>
+            <button>Button 2</button>
+          </body>
+          </html>
+        "></iframe>
+        <button>Button 3</button>
+      </body>
+      </html>)HTML")));
+
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  BrowserAccessibilityState::GetInstance()->ResetAccessibilityMode();
+  auto accessibility_mode = web_contents->GetAccessibilityMode();
+  ASSERT_TRUE(accessibility_mode.is_mode_off());
+  EXPECT_EQ(nullptr, GetManager());
+
+  // Turn accessibility on.
+  AccessibilityNotificationWaiter waiter(shell()->web_contents());
+  BrowserAccessibilityState::GetInstance()->AddAccessibilityModeFlags(
+      ui::kAXModeComplete);
+  ASSERT_TRUE(waiter.WaitForNotification());
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Button 2");
+
+  // Save unique ids.
+  accessibility_mode = web_contents->GetAccessibilityMode();
+  ASSERT_TRUE(accessibility_mode.has_mode(ui::AXMode::kNativeAPIs));
+  ASSERT_TRUE(accessibility_mode.has_mode(ui::AXMode::kWebContents));
+  EXPECT_NE(nullptr, GetManager());
+  const ui::BrowserAccessibility* button_1 =
+      FindNode(ax::mojom::Role::kButton, "Button 1");
+  ASSERT_NE(nullptr, button_1);
+  const ui::BrowserAccessibility* button_2 =
+      FindNode(ax::mojom::Role::kButton, "Button 2");
+  ASSERT_NE(nullptr, button_2);
+  int32_t unique_id_1 = button_1->GetAXPlatformNode()->GetUniqueId();
+  int32_t unique_id_2 = button_2->GetAXPlatformNode()->GetUniqueId();
+
+  // Turn accessibility off again.
+  BrowserAccessibilityState::GetInstance()->ResetAccessibilityMode();
+  accessibility_mode = web_contents->GetAccessibilityMode();
+  ASSERT_TRUE(accessibility_mode.is_mode_off());
+  EXPECT_EQ(nullptr, GetManager());
+
+  // Turn accessibility on again.
+  AccessibilityNotificationWaiter waiter_3(web_contents);
+  BrowserAccessibilityState::GetInstance()->AddAccessibilityModeFlags(
+      ui::kAXModeBasic);
+  ASSERT_TRUE(waiter_3.WaitForNotification());
+  WaitForAccessibilityTreeToContainNodeWithName(web_contents, "Button 2");
+
+  // Compare unique id for newly created a11y nodes with previous unique ids.
+  accessibility_mode = web_contents->GetAccessibilityMode();
+  ASSERT_TRUE(accessibility_mode.has_mode(ui::AXMode::kNativeAPIs));
+  ASSERT_TRUE(accessibility_mode.has_mode(ui::AXMode::kWebContents));
+  EXPECT_NE(nullptr, GetManager());
+  const ui::BrowserAccessibility* button_1_refresh =
+      FindNode(ax::mojom::Role::kButton, "Button 1");
+  ASSERT_NE(nullptr, button_1_refresh);
+  // button_1 is now a dangling pointer for the old button.
+  // The pointers are not the same, proving that button_1_refresh is new.
+  ASSERT_NE(button_1, button_1_refresh);
+  const ui::BrowserAccessibility* button_2_refresh =
+      FindNode(ax::mojom::Role::kButton, "Button 2");
+  ASSERT_NE(nullptr, button_2_refresh);
+  // button_2 is now a dangling pointer for the old button.
+  // The pointers are not the same, proving that button_2_refresh is new.
+  ASSERT_NE(button_2, button_2_refresh);
+
+  // Test platform node ids have remained the same.
+  EXPECT_EQ(unique_id_1, button_1_refresh->GetAXPlatformNode()->GetUniqueId());
+  EXPECT_EQ(unique_id_2, button_2_refresh->GetAXPlatformNode()->GetUniqueId());
+
+  // Test get_accChild with the IA2 unique ids.
+  Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
+  base::win::ScopedVariant button_variant_1(-unique_id_1);
+  Microsoft::WRL::ComPtr<IDispatch> dispatch_button_1;
+  ASSERT_HRESULT_SUCCEEDED(
+      document->get_accChild(button_variant_1, &dispatch_button_1));
+  Microsoft::WRL::ComPtr<IAccessible2> ia2_button_1;
+  ASSERT_HRESULT_SUCCEEDED(
+      dispatch_button_1->QueryInterface(IID_PPV_ARGS(&ia2_button_1)));
+  LONG role_button_1 = 0;
+  ASSERT_HRESULT_SUCCEEDED(ia2_button_1->role(&role_button_1));
+  EXPECT_EQ(role_button_1, ROLE_SYSTEM_PUSHBUTTON);
+
+  base::win::ScopedVariant button_variant_2(-unique_id_2);
+  Microsoft::WRL::ComPtr<IDispatch> dispatch_button_2;
+  ASSERT_HRESULT_SUCCEEDED(
+      document->get_accChild(button_variant_2, &dispatch_button_2));
+  Microsoft::WRL::ComPtr<IAccessible2> ia2_button_2;
+  ASSERT_HRESULT_SUCCEEDED(
+      dispatch_button_2->QueryInterface(IID_PPV_ARGS(&ia2_button_2)));
+  LONG role_button_2 = 0;
+  ASSERT_HRESULT_SUCCEEDED(ia2_button_2->role(&role_button_2));
+  EXPECT_EQ(role_button_2, ROLE_SYSTEM_PUSHBUTTON);
 }
 
 }  // namespace content

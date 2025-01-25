@@ -54,6 +54,7 @@ include_rules = [
     "+services/viz/public/mojom",
     "+services/viz/public/cpp/gpu/context_provider_command_buffer.h",
     "+skia",
+    "+third_party/blink/renderer/platform/bindings/buildflags.h",
     "+third_party/blink/renderer/platform/context_lifecycle_notifier.h",
     "+third_party/blink/renderer/platform/cpu/mips/common_macros_msa.h",
     "+third_party/blink/renderer/platform/disk_data_metadata.h",
@@ -101,5 +102,8 @@ specific_include_rules = {
   ],
   "video_frame_image_util_test.cc": [
     "+media/renderers/shared_image_video_frame_test_utils.h",
+  ],
+  "web_graphics_context_3d_video_frame_pool.h": [
+    "+base/cancelable_callback.h",
   ],
 }

@@ -9,7 +9,6 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "content/public/browser/notification_observer.h"
 #include "sessions/index_model_observer.h"
 #include "sessions/index_node.h"
 

@@ -17,6 +17,7 @@ See also the privacy review. http://eldar/assessments/656778450
 """
 
 import argparse
+import getpass
 import gzip
 import http
 import io
@@ -33,43 +34,45 @@ import urllib.request
 
 import build_telemetry
 
-# These build configs affect build performance.
-ALLOWLISTED_CONFIGS = (
-    "android_static_analysis",
-    "blink_symbol_level",
-    "disable_android_lint",
-    "enable_nacl",
-    "host_cpu",
-    "host_os",
-    "incremental_install",
-    "is_component_build",
-    "is_debug",
-    "is_java_debug",
-    "symbol_level",
-    "target_cpu",
-    "target_os",
-    "treat_warnings_as_errors",
-    "use_errorprone_java_compiler",
-    "use_remoteexec",
-    "use_siso",
+# Configs that should not be uploaded as is.
+SENSITIVE_CONFIGS = (
+    "google_api_key",
+    "google_default_client_id",
+    "google_default_client_secret",
+    "ios_credential_provider_extension_api_key",
+    "ios_credential_provider_extension_client_id",
+    "ios_encryption_export_compliance_code",
+    "ios_google_test_oauth_client_id",
+    "ios_google_test_oauth_client_secret",
 )
-
 
 def ParseGNArgs(gn_args):
     """Parse gn_args as json and return config dictionary."""
     configs = json.loads(gn_args)
     build_configs = {}
+    explicit_keys = []
+    user = getpass.getuser()
 
     for config in configs:
         key = config["name"]
-        if key not in ALLOWLISTED_CONFIGS:
-            continue
         if "current" in config:
-            build_configs[key] = config["current"]["value"]
+            value = config["current"]["value"]
+            # Record configs specified in args.gn as explicit configs.
+            if config["current"]["file"] != "//.gn":
+                explicit_keys.append(key)
         else:
-            build_configs[key] = config["default"]["value"]
+            value = config["default"]["value"]
+        value = value.strip('"')
+        if key in SENSITIVE_CONFIGS and value:
+            value = '<omitted>'
+        # Do not upload username.
+        if os.path.isabs(value):
+            value = os.path.join(*[
+                p if p != user else "$USER" for p in pathlib.Path(value).parts
+            ])
+        build_configs[key] = value
 
-    return build_configs
+    return build_configs, explicit_keys
 
 
 def GetBuildTargetFromCommandLine(cmdline):
@@ -123,7 +126,7 @@ def GetJflag(cmdline):
             return int(cmdline[i][len("-j"):])
 
 
-def GetMetadata(cmdline, ninjalog):
+def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user):
     """Get metadata for uploaded ninjalog.
 
     Returned metadata has schema defined in
@@ -133,15 +136,16 @@ def GetMetadata(cmdline, ninjalog):
     build_dir = os.path.dirname(ninjalog)
 
     build_configs = {}
+    explicit_keys = []
 
     try:
-        args = ["gn", "args", build_dir, "--list", "--short", "--json"]
+        args = ["gn", "args", build_dir, "--list", "--json"]
         if sys.platform == "win32":
             # gn in PATH is bat file in windows environment (except cygwin).
             args = ["cmd", "/c"] + args
 
         gn_args = subprocess.check_output(args)
-        build_configs = ParseGNArgs(gn_args)
+        build_configs, explicit_keys = ParseGNArgs(gn_args)
     except subprocess.CalledProcessError as e:
         logging.error("Failed to call gn %s", e)
         build_configs = {}
@@ -151,12 +155,19 @@ def GetMetadata(cmdline, ninjalog):
         build_configs[k] = str(build_configs[k])
 
     metadata = {
+        "user": user,
+        "exit_code": exit_code,
+        "build_duration_sec": build_duration,
         "platform": platform.system(),
         "cpu_core": multiprocessing.cpu_count(),
         "build_configs": build_configs,
+        "explicit_build_config_keys": explicit_keys,
         "targets": GetBuildTargetFromCommandLine(cmdline),
     }
 
+    invocation_id = os.environ.get("AUTONINJA_BUILD_ID")
+    if invocation_id:
+        metadata['invocation_id'] = invocation_id
     jflag = GetJflag(cmdline)
     if jflag is not None:
         metadata["jobs"] = jflag
@@ -184,15 +195,13 @@ def GetNinjalog(cmdline):
     return os.path.join(ninjalog_dir, ".ninja_log")
 
 
-def UploadNinjaLog(ninjalog, server, cmdline):
+def UploadNinjaLog(server, ninjalog, metadata):
     output = io.BytesIO()
 
     with open(ninjalog) as f:
         with gzip.GzipFile(fileobj=output, mode="wb") as g:
             g.write(f.read().encode())
             g.write(b"# end of ninja log\n")
-
-            metadata = GetMetadata(cmdline, ninjalog)
             logging.info("send metadata: %s", json.dumps(metadata))
             g.write(json.dumps(metadata).encode())
 
@@ -232,6 +241,12 @@ def main():
     parser.add_argument("--verbose",
                         action="store_true",
                         help="Enable verbose logging.")
+    parser.add_argument("--exit_code",
+                        type=int,
+                        help="exit code of the ninja command.")
+    parser.add_argument("--build_duration",
+                        type=int,
+                        help="total duration spent on autoninja (secounds)")
     parser.add_argument(
         "--cmdline",
         required=True,
@@ -268,7 +283,9 @@ def main():
         logging.info("ninjalog is already uploaded.")
         return 0
 
-    exit_code = UploadNinjaLog(ninjalog, args.server, args.cmdline)
+    metadata = GetMetadata(args.cmdline, ninjalog, args.exit_code,
+                           args.build_duration, cfg.user)
+    exit_code = UploadNinjaLog(args.server, ninjalog, metadata)
     if exit_code == 0:
         last_upload_file.touch()
     return exit_code

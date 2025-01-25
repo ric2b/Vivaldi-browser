@@ -26,7 +26,17 @@ typedef int32_t xnn_simd_s32_t;
 // Arithmetic operations.
 static XNN_INLINE xnn_simd_s32_t xnn_mul_s32(xnn_simd_s32_t a,
                                              xnn_simd_s32_t b) {
-  return a * b;
+  return ((((int64_t) a * (int64_t) b) << 32) >> 32);
+}
+
+static XNN_INLINE xnn_simd_s32_t xnn_max_s32(xnn_simd_s32_t a,
+                                             xnn_simd_s32_t b) {
+   return (a > b) ? a : b;
+}
+
+static XNN_INLINE xnn_simd_s32_t xnn_min_s32(xnn_simd_s32_t a,
+                                             xnn_simd_s32_t b) {
+  return (a < b) ? a : b;
 }
 
 static XNN_INLINE xnn_simd_s32_t xnn_loadu_s32(const int32_t *ptr) { return *ptr; }

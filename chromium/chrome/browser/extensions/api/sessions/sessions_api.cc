@@ -20,7 +20,6 @@
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/api/sessions/session_id.h"
-#include "chrome/browser/extensions/api/tab_groups/tab_groups_util.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -40,6 +39,7 @@
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "components/sync_sessions/session_sync_service.h"
 #include "components/sync_sessions/synced_session.h"
+#include "components/tab_groups/tab_group_color.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function_dispatcher.h"
@@ -49,7 +49,9 @@
 #include "extensions/common/mojom/context_type.mojom.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/sessions/vivaldi_session_utils.h"
 #include "components/panel/panel_id.h"
+#include "components/sync_sessions/vivaldi_specific.h"
 
 namespace extensions {
 
@@ -198,8 +200,8 @@ api::tab_groups::TabGroup SessionsGetRecentlyClosedFunction::CreateGroupModel(
     const sessions::tab_restore::Group& group) {
   DCHECK(!group.tabs.empty());
 
-  return tab_groups_util::CreateTabGroupObject(group.group_id,
-                                               group.visual_data);
+  return ExtensionTabUtil::CreateTabGroupObject(group.group_id,
+                                                group.visual_data);
 }
 
 api::sessions::Session SessionsGetRecentlyClosedFunction::CreateSessionModel(
@@ -256,12 +258,17 @@ ExtensionFunction::ResponseAction SessionsGetRecentlyClosedFunction::Run() {
     // rather than sharding the group out into individual tabs.
     if (entry->type == sessions::tab_restore::Type::GROUP) {
       auto& group = static_cast<const sessions::tab_restore::Group&>(*entry);
-      for (const auto& tab : group.tabs)
+      for (const auto& tab : group.tabs) {
+        if (sessions::IsVivaldiPanel(*tab))
+            continue;
         if (counter++ < max_results)
           result.push_back(CreateSessionModel(*tab));
         else
           break;
+      }
     } else {
+      if (sessions::IsVivaldiPanel(*entry))
+        continue;
       if (counter++ < max_results)
         result.push_back(CreateSessionModel(*entry));
       else
@@ -311,12 +318,22 @@ SessionsGetDevicesFunction::CreateWindowModel(
   }
   if (tabs_in_window.empty())
     return std::nullopt;
+  // VB-108890 - in the windows panel, we show the tabs in their original order.
+  if ((!::vivaldi::IsVivaldiApp(extension()->id()))) {
   std::sort(tabs_in_window.begin(), tabs_in_window.end(), SortTabsByRecency);
+  }
 
   std::vector<api::tabs::Tab> tabs;
   for (size_t i = 0; i < tabs_in_window.size(); ++i) {
-    tabs.push_back(CreateTabModel(session_tag, *tabs_in_window[i], i,
-                                  window.selected_tab_index == (int)i));
+    bool is_active = false;
+    if (window.selected_tab_index != -1) {
+      SessionID selected_tab_id =
+          window.tabs[window.selected_tab_index]->tab_id;
+      SessionID current_tab_id = tabs_in_window[i]->tab_id;
+      is_active = selected_tab_id == current_tab_id;
+    }
+    tabs.push_back(
+        CreateTabModel(session_tag, *tabs_in_window[i], i, is_active));
   }
 
   std::string session_id =
@@ -405,7 +422,34 @@ api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
   device_struct.device_name = session->GetSessionName();
 
   if ((::vivaldi::IsVivaldiApp(extension()->id()))) {
-    device_struct.viv_ext_data = session->GetExtData();
+    auto &viv = session->GetVivaldiSpecific();
+    api::sessions::VivaldiSpecific vivaldi_specific;
+
+    if (viv.panels) {
+      for (auto &viv_panel: *viv.panels) {
+        api::sessions::VivaldiPanel panel;
+        panel.url = viv_panel.url;
+        panel.title = viv_panel.title;
+        panel.initial_favicon_url = viv_panel.initial_favicon_url;
+        panel.panel_id = viv_panel.id;
+        vivaldi_specific.panels.push_back(std::move(panel));
+      }
+    }
+
+    if (viv.workspaces) {
+      for (auto &viv_workspace: *viv.workspaces) {
+        api::sessions::VivaldiWorkspace workspace;
+        workspace.workspace_id = viv_workspace.id;
+        workspace.name = viv_workspace.name;
+        workspace.icon_id = viv_workspace.icon_id;
+        workspace.emoji = viv_workspace.emoji;
+        workspace.icon = viv_workspace.icon;
+        vivaldi_specific.workspaces.push_back(std::move(workspace));
+      }
+    }
+
+    device_struct.vivaldi_specific = std::move(vivaldi_specific);
+
     switch(session->GetDeviceFormFactor()) {
       case syncer::DeviceInfo::FormFactor::kPhone:
         device_struct.device_type = "phone";
@@ -416,8 +460,17 @@ api::sessions::Device SessionsGetDevicesFunction::CreateDeviceModel(
       case syncer::DeviceInfo::FormFactor::kTablet:
         device_struct.device_type = "tablet";
         break;
-     case syncer::DeviceInfo::FormFactor::kUnknown:
+      case syncer::DeviceInfo::FormFactor::kUnknown:
         device_struct.device_type = "unknown";
+        break;
+      case syncer::DeviceInfo::FormFactor::kAutomotive:
+        device_struct.device_type = "automotive";
+        break;
+      case syncer::DeviceInfo::FormFactor::kWearable:
+        device_struct.device_type = "wearable";
+        break;
+      case syncer::DeviceInfo::FormFactor::kTv:
+        device_struct.device_type = "tv";
         break;
     }
   }
@@ -481,16 +534,15 @@ ExtensionFunction::ResponseValue SessionsRestoreFunction::GetRestoredTabResult(
 
 ExtensionFunction::ResponseValue
 SessionsRestoreFunction::GetRestoredWindowResult(int window_id) {
-  Browser* browser = nullptr;
+  WindowController* window_controller = nullptr;
   std::string error;
-  if (!windows_util::GetBrowserFromWindowID(this, window_id, 0, &browser,
-                                            &error)) {
+  if (!windows_util::GetControllerFromWindowID(this, window_id, 0,
+                                               &window_controller, &error)) {
     return Error(error);
   }
   base::Value::Dict window_value =
-      ExtensionTabUtil::CreateWindowValueForExtension(
-          *browser, extension(), ExtensionTabUtil::kPopulateTabs,
-          source_context_type());
+      window_controller->CreateWindowValueForExtension(
+          extension(), WindowController::kPopulateTabs, source_context_type());
   std::optional<api::windows::Window> window =
       api::windows::Window::FromValue(window_value);
   DCHECK(window);

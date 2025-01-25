@@ -361,6 +361,8 @@ void BuildAuthFactorWithStatus(
     if (auth_factor->pin_metadata().auth_locked()) {
       factor_with_status->mutable_status_info()->set_time_available_in(
           std::numeric_limits<uint64_t>::max());
+      factor_with_status->mutable_status_info()->set_time_expiring_in(
+          std::numeric_limits<uint64_t>::max());
     }
   }
 }
@@ -681,6 +683,16 @@ void FakeUserDataAuthClient::AddPrepareAuthFactorProgressObserver(
 void FakeUserDataAuthClient::RemovePrepareAuthFactorProgressObserver(
     PrepareAuthFactorProgressObserver* observer) {
   progress_observers_.RemoveObserver(observer);
+}
+
+void FakeUserDataAuthClient::AddAuthFactorStatusUpdateObserver(
+    AuthFactorStatusUpdateObserver* observer) {
+  auth_factor_status_observer_list_.AddObserver(observer);
+}
+
+void FakeUserDataAuthClient::RemoveAuthFactorStatusUpdateObserver(
+    AuthFactorStatusUpdateObserver* observer) {
+  auth_factor_status_observer_list_.RemoveObserver(observer);
 }
 
 void FakeUserDataAuthClient::IsMounted(
@@ -1298,12 +1310,9 @@ void FakeUserDataAuthClient::AuthenticateAuthFactor(
   const UserCryptohomeState& user_state = user_it->second;
 
   std::vector<std::string> auth_factor_labels;
-  if (!request.auth_factor_label().empty()) {
-    auth_factor_labels.push_back(request.auth_factor_label());
-  } else {
-    for (auto label : request.auth_factor_labels()) {
-      auth_factor_labels.push_back(label);
-    }
+  auth_factor_labels.reserve(request.auth_factor_labels_size());
+  for (auto label : request.auth_factor_labels()) {
+    auth_factor_labels.push_back(label);
   }
 
   const ::user_data_auth::AuthInput& auth_input = request.auth_input();
@@ -1890,6 +1899,13 @@ void FakeUserDataAuthClient::GetRecoverableKeyStores(
       *reply.add_key_stores() = std::move(*store);
     }
   }
+}
+
+void FakeUserDataAuthClient::SetUserDataStorageWriteEnabled(
+    const ::user_data_auth::SetUserDataStorageWriteEnabledRequest& request,
+    SetUserDataStorageWriteEnabledCallback callback) {
+  ::user_data_auth::SetUserDataStorageWriteEnabledReply reply;
+  std::move(callback).Run(std::move(reply));
 }
 
 }  // namespace ash

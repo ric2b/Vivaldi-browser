@@ -14,6 +14,10 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace {
 
 // The key to store the timestamp when the scene enters into background.
@@ -35,6 +39,12 @@ base::TimeDelta GetTimeSinceMostRecentTabWasOpenForSceneState(
 }
 
 bool ShouldShowStartSurfaceForSceneState(SceneState* scene_state) {
+
+  // Note: (prio@vivaldi.com) - (VIB-834) Never open NTP even if app stays in
+  // background the for long time, and show the last active tab instead.
+  if (vivaldi::IsVivaldiRunning())
+    return NO; // End Vivaldi
+
   NSDate* timestamp = base::apple::ObjCCast<NSDate>([scene_state
       sessionObjectForKey:kStartSurfaceSceneEnterIntoBackgroundTime]);
   if (timestamp == nil) {

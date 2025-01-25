@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "gpu/command_buffer/service/webgpu_decoder_impl.h"
 
 #include <dawn/native/DawnNative.h>
@@ -59,7 +64,7 @@
 #include "third_party/abseil-cpp/absl/base/attributes.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/gpu/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSemaphore.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/graphite/Context.h"
 #include "ui/gl/gl_context_egl.h"
@@ -1248,7 +1253,7 @@ bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
     case wgpu::FeatureName::ChromiumExperimentalTimestampQueryInsidePasses:
     case wgpu::FeatureName::ChromiumExperimentalSubgroups:
     case wgpu::FeatureName::ChromiumExperimentalSubgroupUniformControlFlow:
-    case wgpu::FeatureName::DualSourceBlending:
+    case wgpu::FeatureName::ClipDistances:
       return safety_level_ == webgpu::SafetyLevel::kUnsafe;
     case wgpu::FeatureName::AdapterPropertiesD3D:
     case wgpu::FeatureName::AdapterPropertiesVk:
@@ -1266,6 +1271,7 @@ bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
     case wgpu::FeatureName::RG11B10UfloatRenderable:
     case wgpu::FeatureName::BGRA8UnormStorage:
     case wgpu::FeatureName::Float32Filterable:
+    case wgpu::FeatureName::DualSourceBlending:
     case wgpu::FeatureName::DawnMultiPlanarFormats:
     case wgpu::FeatureName::Subgroups:
     case wgpu::FeatureName::SubgroupsF16: {
@@ -1460,10 +1466,9 @@ WGPUFuture WebGPUDecoderImpl::RequestDeviceImpl(
   std::vector<const char*> require_device_disabled_toggles;
 
   // Disallows usage of SPIR-V by default for security (we only ensure that WGSL
-  // is secure), unless --enable-unsafe-webgpu is used.
-  if (safety_level_ != webgpu::SafetyLevel::kUnsafe) {
-    require_device_enabled_toggles.push_back("disallow_spirv");
-  }
+  // is secure).
+  require_device_enabled_toggles.push_back("disallow_spirv");
+
   // Enable timestamp quantization by default for privacy, unless
   // --enable-webgpu-developer-features is used.
   if (safety_level_ == webgpu::SafetyLevel::kSafe) {
@@ -1622,8 +1627,9 @@ wgpu::Adapter WebGPUDecoderImpl::CreatePreferredAdapter(
     case WebGPUPowerPreference::kNone:
       if (power_preference == wgpu::PowerPreference::Undefined) {
         // If on battery power, default to the integrated GPU.
-        if (!base::PowerMonitor::IsInitialized() ||
-            base::PowerMonitor::IsOnBatteryPower()) {
+        if (auto* power_monitor = base::PowerMonitor::GetInstance();
+            !power_monitor->IsInitialized() ||
+            power_monitor->IsOnBatteryPower()) {
           power_preference = wgpu::PowerPreference::LowPower;
         } else {
           power_preference = wgpu::PowerPreference::HighPerformance;

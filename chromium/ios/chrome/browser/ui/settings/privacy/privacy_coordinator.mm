@@ -6,8 +6,12 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/check.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "components/browsing_data/core/browsing_data_utils.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -127,10 +131,16 @@
 }
 
 - (void)showClearBrowsingData {
+  base::RecordAction(base::UserMetricsAction("PrivacyPage_DeleteBrowsingData"));
+  base::UmaHistogramEnumeration(
+      browsing_data::kDeleteBrowsingDataDialogHistogram,
+      browsing_data::DeleteBrowsingDataDialogAction::
+          kPrivacyEntryPointSelected);
+
   if (IsIosQuickDeleteEnabled()) {
     id<QuickDeleteCommands> quickDeleteHandler = HandlerForProtocol(
         self.browser->GetCommandDispatcher(), QuickDeleteCommands);
-    [quickDeleteHandler showQuickDelete];
+    [quickDeleteHandler showQuickDeleteAndCanPerformTabsClosureAnimation:NO];
   } else {
     self.clearBrowsingDataCoordinator = [[ClearBrowsingDataCoordinator alloc]
         initWithBaseNavigationController:self.baseNavigationController

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ash/app_mode/app_launch_utils.h"
 
 #include <cstddef>
@@ -14,6 +19,7 @@
 #include "base/check.h"
 #include "base/check_deref.h"
 #include "base/command_line.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/values.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
@@ -49,9 +55,9 @@ const char* const kOneTimeAutoLaunchChromeAppId =
 std::vector<std::string>* test_prefs_to_reset = nullptr;
 
 AccountId ToAccountId(const std::string* account_id_string) {
-  AccountId account_id;
-  CHECK(AccountId::Deserialize(CHECK_DEREF(account_id_string), &account_id));
-  return account_id;
+  auto account_id = AccountId::Deserialize(CHECK_DEREF(account_id_string));
+  CHECK(account_id.has_value());
+  return *account_id;
 }
 
 }  // namespace
@@ -159,8 +165,12 @@ void SetOneTimeAutoLaunchKioskAppId(PrefService& local_state,
                        kiosk_app_id.account_id.Serialize());
       local_state.CommitPendingWrite();
       return;
+    case KioskAppType::kIsolatedWebApp:
+      // TODO(crbug.com/361016399): implement Kiosk IWA autolaunch.
+      NOTIMPLEMENTED();
+      return;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace ash

@@ -174,7 +174,7 @@ class ColorSwatchWidget extends CodeMirror.WidgetType {
       event.consume(true);
       view.dispatch({
         effects: setTooltip.of({
-          type: TooltipType.Color,
+          type: TooltipType.COLOR,
           pos: view.posAtDOM(swatch),
           text: this.#text,
           swatch,
@@ -207,7 +207,7 @@ class CurveSwatchWidget extends CodeMirror.WidgetType {
       event.consume(true);
       view.dispatch({
         effects: setTooltip.of({
-          type: TooltipType.Curve,
+          type: TooltipType.CURVE,
           pos: view.posAtDOM(swatch),
           text: this.text,
           swatch,
@@ -225,18 +225,18 @@ class CurveSwatchWidget extends CodeMirror.WidgetType {
 }
 
 const enum TooltipType {
-  Color = 0,
-  Curve = 1,
+  COLOR = 0,
+  CURVE = 1,
 }
 
 type ActiveTooltip = {
-  type: TooltipType.Color,
+  type: TooltipType.COLOR,
   pos: number,
   text: string,
   color: Common.Color.Color,
   swatch: InlineEditor.ColorSwatch.ColorSwatch,
 }|{
-  type: TooltipType.Curve,
+  type: TooltipType.CURVE,
   pos: number,
   text: string,
   curve: UI.Geometry.CubicBezier,
@@ -250,20 +250,20 @@ function createCSSTooltip(active: ActiveTooltip): CodeMirror.Tooltip {
     create(view): CodeMirror.TooltipView {
       let text = active.text;
       let widget: UI.Widget.VBox, addListener: (handler: (event: {data: string}) => void) => void;
-      if (active.type === TooltipType.Color) {
+      if (active.type === TooltipType.COLOR) {
         const spectrum = new ColorPicker.Spectrum.Spectrum();
         addListener = handler => {
-          spectrum.addEventListener(ColorPicker.Spectrum.Events.ColorChanged, handler);
+          spectrum.addEventListener(ColorPicker.Spectrum.Events.COLOR_CHANGED, handler);
         };
-        spectrum.addEventListener(ColorPicker.Spectrum.Events.SizeChanged, () => view.requestMeasure());
+        spectrum.addEventListener(ColorPicker.Spectrum.Events.SIZE_CHANGED, () => view.requestMeasure());
         spectrum.setColor(active.color);
         widget = spectrum;
-        Host.userMetrics.colorPickerOpenedFrom(Host.UserMetrics.ColorPickerOpenedFrom.SourcesPanel);
+        Host.userMetrics.colorPickerOpenedFrom(Host.UserMetrics.ColorPickerOpenedFrom.SOURCES_PANEL);
       } else {
         const spectrum = new InlineEditor.BezierEditor.BezierEditor(active.curve);
         widget = spectrum;
         addListener = handler => {
-          spectrum.addEventListener(InlineEditor.BezierEditor.Events.BezierChanged, handler);
+          spectrum.addEventListener(InlineEditor.BezierEditor.Events.BEZIER_CHANGED, handler);
         };
       }
       const dom = document.createElement('div');
@@ -350,7 +350,8 @@ function computeSwatchDeco(state: CodeMirror.EditorState, from: number, to: numb
 }
 
 const cssSwatchPlugin = CodeMirror.ViewPlugin.fromClass(class {
-  decorations: CodeMirror.DecorationSet;
+decorations:
+  CodeMirror.DecorationSet;
 
   constructor(view: CodeMirror.EditorView) {
     this.decorations = computeSwatchDeco(view.state, view.viewport.from, view.viewport.to);

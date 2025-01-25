@@ -127,6 +127,14 @@ TEST_F(TabbedPaneTest, SizeAndLayoutInVerticalOrientation) {
   EXPECT_EQ(child1->bounds(), child2->bounds());
 }
 
+TEST_F(TabbedPaneTest, AccessibleAttributes) {
+  auto tabbed_pane = std::make_unique<TabbedPane>();
+
+  ui::AXNodeData data;
+  tabbed_pane->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.role, ax::mojom::Role::kTabList);
+}
+
 class TabbedPaneWithWidgetTest : public ViewsTestBase {
  public:
   TabbedPaneWithWidgetTest() = default;
@@ -141,7 +149,7 @@ class TabbedPaneWithWidgetTest : public ViewsTestBase {
     // Create a widget so that accessibility data will be returned correctly.
     widget_ = std::make_unique<Widget>();
     Widget::InitParams params =
-        CreateParams(Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+        CreateParams(Widget::InitParams::CLIENT_OWNS_WIDGET,
                      Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     params.bounds = gfx::Rect(0, 0, 650, 650);
     widget_->Init(std::move(params));
@@ -449,6 +457,24 @@ TEST_F(TabbedPaneWithWidgetTest, AccessibleNameTest) {
   GetTabAt(0)->GetViewAccessibility().GetAccessibleNodeData(&data);
   EXPECT_EQ(u"", data.GetString16Attribute(ax::mojom::StringAttribute::kName));
   EXPECT_EQ(ax::mojom::NameFrom::kAttributeExplicitlyEmpty, data.GetNameFrom());
+}
+
+TEST_F(TabbedPaneWithWidgetTest, AccessibleSelected) {
+  tabbed_pane_->AddTab(u"Tab1", std::make_unique<View>());
+  ui::AXNodeData data;
+
+  GetTabAt(0)->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
+
+  data = ui::AXNodeData();
+  GetTabAt(0)->SetSelected(false);
+  GetTabAt(0)->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
+
+  data = ui::AXNodeData();
+  GetTabAt(0)->SetSelected(true);
+  GetTabAt(0)->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
 }
 
 }  // namespace views::test

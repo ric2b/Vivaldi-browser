@@ -13,10 +13,11 @@
 // limitations under the License.
 
 import {ColumnDef} from '../../../common/aggregation_data';
-import {Area, Sorting} from '../../../common/state';
+import {Sorting} from '../../../common/state';
+import {Area} from '../../../public/selection';
 import {globals} from '../../../frontend/globals';
 import {Engine} from '../../../trace_processor/engine';
-import {CPUSS_ESTIMATE_TRACK_KIND} from '../../../core/track_kinds';
+import {CPUSS_ESTIMATE_TRACK_KIND} from '../../../public/track_kinds';
 import {AggregationController} from '../aggregation_controller';
 import {hasWattsonSupport} from '../../../core/trace_config_utils';
 import {exists} from '../../../base/utils';
@@ -29,16 +30,13 @@ export class WattsonEstimateAggregationController extends AggregationController 
     if (!(await hasWattsonSupport(engine))) return false;
 
     const estimateTracks: string[] = [];
-    for (const trackKey of area.tracks) {
-      const track = globals.state.tracks[trackKey];
-      if (track?.uri) {
-        const trackInfo = globals.trackManager.resolveTrackInfo(track.uri);
-        if (
-          trackInfo?.tags?.kind === CPUSS_ESTIMATE_TRACK_KIND &&
-          exists(trackInfo.tags?.wattson)
-        ) {
-          estimateTracks.push(`${trackInfo.tags.wattson}`);
-        }
+    for (const trackUri of area.trackUris) {
+      const trackInfo = globals.trackManager.getTrack(trackUri);
+      if (
+        trackInfo?.tags?.kind === CPUSS_ESTIMATE_TRACK_KIND &&
+        exists(trackInfo.tags?.wattson)
+      ) {
+        estimateTracks.push(`${trackInfo.tags.wattson}`);
       }
     }
     if (estimateTracks.length === 0) return false;
@@ -55,15 +53,9 @@ export class WattsonEstimateAggregationController extends AggregationController 
   ): string {
     const duration = area.end - area.start;
     let query = `
-      DROP TABLE IF EXISTS _ss_converted_to_mw;
-      CREATE PERFETTO TABLE _ss_converted_to_mw AS
-      SELECT *,
-        ((IFNULL(l3_hit_value, 0) + IFNULL(l3_miss_value, 0)) * 1000 / dur)
-          + static_curve as dsu_scu_curve
-      FROM _system_state_curves;
+      INCLUDE PERFETTO MODULE wattson.curves.ungrouped;
 
-      DROP TABLE IF EXISTS _ui_selection_window;
-      CREATE PERFETTO TABLE _ui_selection_window AS
+      CREATE OR REPLACE PERFETTO TABLE _ui_selection_window AS
       SELECT
         ${area.start} as ts,
         ${duration} as dur;
@@ -71,7 +63,7 @@ export class WattsonEstimateAggregationController extends AggregationController 
       DROP TABLE IF EXISTS _windowed_cpuss_estimate;
       CREATE VIRTUAL TABLE _windowed_cpuss_estimate
       USING
-        SPAN_JOIN(_ui_selection_window, _ss_converted_to_mw);
+        SPAN_JOIN(_ui_selection_window, _system_state_mw);
 
       CREATE VIEW ${this.kind} AS
     `;
@@ -85,8 +77,8 @@ export class WattsonEstimateAggregationController extends AggregationController 
       query += `
         SELECT
         '${estimateTrack}' as name,
-        ROUND(SUM(${estimateTrack}_curve * dur) / ${duration}, 2) as power,
-        ROUND(SUM(${estimateTrack}_curve * dur) / 1000000000, 2) as energy
+        ROUND(SUM(${estimateTrack}_mw * dur) / ${duration}, 2) as power,
+        ROUND(SUM(${estimateTrack}_mw * dur) / 1000000000, 2) as energy
         FROM _windowed_cpuss_estimate
       `;
     });
@@ -104,14 +96,14 @@ export class WattsonEstimateAggregationController extends AggregationController 
         columnId: 'name',
       },
       {
-        title: 'Average estimated power (mW)',
+        title: 'Average power (estimated mW)',
         kind: 'NUMBER',
         columnConstructor: Float64Array,
         columnId: 'power',
         sum: true,
       },
       {
-        title: 'Total estimated energy (mWs)',
+        title: 'Total energy (estimated mWs)',
         kind: 'NUMBER',
         columnConstructor: Float64Array,
         columnId: 'energy',

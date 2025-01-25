@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "components/segmentation_platform/public/input_context.h"
 #include "components/segmentation_platform/public/types/processed_value.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/url_deduplication/deduplication_strategy.h"
 #include "components/url_deduplication/docs_url_strip_handler.h"
 #include "components/url_deduplication/url_deduplication_helper.h"
@@ -24,6 +25,8 @@
 #include "components/visited_url_ranking/public/features.h"
 #include "components/visited_url_ranking/public/fetch_result.h"
 #include "components/visited_url_ranking/public/url_visit_schema.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/l10n/time_format.h"
 #include "url/gurl.h"
 
 using segmentation_platform::InputContext;
@@ -33,7 +36,8 @@ namespace visited_url_ranking {
 
 namespace {
 
-// Bucketize the value to exponential buckets. Returns lower bound of the bucket.
+// Bucketize the value to exponential buckets. Returns lower bound of the
+// bucket.
 float BucketizeExp(int64_t value, int max_buckets) {
   if (value <= 0) {
     return 0;
@@ -73,6 +77,30 @@ PlatformType GetPlatformInput() {
 #endif
 }
 
+int GetPriority(DecorationType type) {
+  switch (type) {
+    case DecorationType::kMostRecent:
+      return 3;
+    case DecorationType::kFrequentlyVisitedAtTime:
+      return 2;
+    case DecorationType::kFrequentlyVisited:
+      return 2;
+    case DecorationType::kVisitedXAgo:
+      return 1;
+    case DecorationType::kUnknown:
+      return 0;
+  }
+}
+
+// Returns a time like "1 hour ago", "2 days ago", etc for the given `time`.
+std::u16string FormatRelativeTime(const base::Time& time) {
+  base::Time now = base::Time::Now();
+  // TimeFormat does not support negative TimeDelta values, so then we use 0.
+  return ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_ELAPSED,
+                                ui::TimeFormat::LENGTH_SHORT,
+                                now < time ? base::TimeDelta() : now - time);
+}
+
 }  // namespace
 
 std::unique_ptr<url_deduplication::URLDeduplicationHelper>
@@ -93,6 +121,14 @@ CreateDefaultURLDeduplicationHelper() {
     strategy.update_scheme = true;
   }
 
+  if (features::kVisitedURLRankingDeduplicationClearPath.Get()) {
+    strategy.clear_path = true;
+  }
+
+  if (features::kVisitedURLRankingDeduplicationIncludeTitle.Get()) {
+    strategy.include_title = true;
+  }
+
   auto prefix_list = base::SplitString(
       features::kVisitedURLRankingDeduplicationExcludedPrefixes.Get(), ",:;",
       base::WhitespaceHandling::TRIM_WHITESPACE,
@@ -110,17 +146,30 @@ CreateDefaultURLDeduplicationHelper() {
 
 URLMergeKey ComputeURLMergeKey(
     const GURL& url,
+    const std::u16string& title,
     url_deduplication::URLDeduplicationHelper* deduplication_helper) {
-  if (!deduplication_helper) {
-    return url.spec();
+  if (deduplication_helper) {
+    auto key = deduplication_helper->ComputeURLDeduplicationKey(
+        url, base::UTF16ToUTF8(title));
+    DCHECK(!key.empty());
+    return key;
   }
-  return deduplication_helper->ComputeURLDeduplicationKey(url);
+
+  // Default to using the original URL as the URL deduplication / merge key.
+  return url.spec();
 }
 
 scoped_refptr<InputContext> AsInputContext(
     const std::array<FieldSchema, kNumInputs>& fields_schema,
     const URLVisitAggregate& url_visit_aggregate) {
   base::flat_map<std::string, ProcessedValue> signal_value_map;
+  signal_value_map.emplace(
+      "title", ProcessedValue(base::UTF16ToUTF8(
+                   *url_visit_aggregate.GetAssociatedTitles().begin())));
+  signal_value_map.emplace(
+      "url", ProcessedValue(*url_visit_aggregate.GetAssociatedURLs().begin()));
+  signal_value_map.emplace("url_key",
+                           ProcessedValue(url_visit_aggregate.url_key));
 
   auto* local_tab_data =
       (url_visit_aggregate.fetcher_data_map.find(Fetcher::kTabModel) !=
@@ -240,6 +289,18 @@ scoped_refptr<InputContext> AsInputContext(
               url_visit_aggregate.metrics_signals.at(field_schema.name));
         }
         break;
+      case kSameTimeGroupVisitCount:
+        if (history_data) {
+          value = ProcessedValue::FromFloat(
+              history_data->same_time_group_visit_count);
+        }
+        break;
+      case kSameDayGroupVisitCount:
+        if (history_data) {
+          value = ProcessedValue::FromFloat(
+              history_data->same_day_group_visit_count);
+        }
+        break;
     }
 
     signal_value_map.emplace(field_schema.name, std::move(value));
@@ -255,10 +316,10 @@ const URLVisitAggregate::TabData* GetTabDataIfExists(
     const URLVisitAggregate& url_visit_aggregate) {
   const auto& fetcher_data_map = url_visit_aggregate.fetcher_data_map;
   for (const auto& fetcher : {Fetcher::kTabModel, Fetcher::kSession}) {
-    if (fetcher_data_map.find(fetcher) != fetcher_data_map.end()) {
+    auto it = fetcher_data_map.find(fetcher);
+    if (it != fetcher_data_map.end()) {
       const URLVisitAggregate::TabData* tab_data =
-          std::get_if<URLVisitAggregate::TabData>(
-              &fetcher_data_map.at(fetcher));
+          std::get_if<URLVisitAggregate::TabData>(&it->second);
       return tab_data;
     }
   }
@@ -290,6 +351,19 @@ const URLVisitAggregate::Tab* GetTabIfExists(
   return nullptr;
 }
 
+const URLVisitAggregate::HistoryData* GetHistoryDataIfExists(
+    const URLVisitAggregate& url_visit_aggregate) {
+  const auto& fetcher_data_map = url_visit_aggregate.fetcher_data_map;
+  auto it = fetcher_data_map.find(Fetcher::kHistory);
+  if (it != fetcher_data_map.end()) {
+    const URLVisitAggregate::HistoryData* history_data =
+        std::get_if<URLVisitAggregate::HistoryData>(&it->second);
+    return history_data;
+  }
+
+  return nullptr;
+}
+
 const history::AnnotatedVisit* GetHistoryEntryVisitIfExists(
     const URLVisitAggregate& url_visit_aggregate) {
   const auto& fetcher_data_map = url_visit_aggregate.fetcher_data_map;
@@ -303,6 +377,107 @@ const history::AnnotatedVisit* GetHistoryEntryVisitIfExists(
   }
 
   return nullptr;
+}
+
+const Decoration& GetMostRelevantDecoration(
+    const URLVisitAggregate& url_visit_aggregate) {
+  const Decoration* result;
+  int max_priority = -1;
+  for (const auto& decoration : url_visit_aggregate.decorations) {
+    if (GetPriority(decoration.GetType()) > max_priority) {
+      result = &decoration;
+      max_priority = GetPriority(decoration.GetType());
+    }
+  }
+  return *result;
+}
+
+std::u16string GetStringForDecoration(DecorationType type,
+                                      bool visited_recently) {
+#if BUILDFLAG(IS_IOS)
+  switch (type) {
+    case DecorationType::kMostRecent:
+      return l10n_util::GetStringUTF16(
+          IDS_TAB_RESUME_DECORATORS_MOST_RECENT_IOS);
+    case DecorationType::kFrequentlyVisitedAtTime:
+      return l10n_util::GetStringUTF16(
+          IDS_TAB_RESUME_DECORATORS_FREQUENTLY_VISITED_IOS);
+    case DecorationType::kFrequentlyVisited:
+      return l10n_util::GetStringUTF16(
+          IDS_TAB_RESUME_DECORATORS_FREQUENTLY_VISITED_IOS);
+    case DecorationType::kVisitedXAgo:
+      if (visited_recently) {
+        return l10n_util::GetStringUTF16(
+            IDS_TAB_RESUME_DECORATORS_VISITED_RECENTLY_IOS);
+      } else {
+        return l10n_util::GetStringUTF16(
+            IDS_TAB_RESUME_DECORATORS_VISITED_X_AGO_IOS);
+      }
+    case DecorationType::kUnknown:
+      if (visited_recently) {
+        return l10n_util::GetStringUTF16(
+            IDS_TAB_RESUME_DECORATORS_VISITED_RECENTLY_IOS);
+      } else {
+        return l10n_util::GetStringUTF16(
+            IDS_TAB_RESUME_DECORATORS_VISITED_X_AGO_IOS);
+      }
+  }
+#else
+  switch (type) {
+    case DecorationType::kMostRecent:
+      return l10n_util::GetStringUTF16(IDS_TAB_RESUME_DECORATORS_MOST_RECENT);
+    case DecorationType::kFrequentlyVisitedAtTime:
+      return l10n_util::GetStringUTF16(
+          IDS_TAB_RESUME_DECORATORS_FREQUENTLY_VISITED);
+    case DecorationType::kFrequentlyVisited:
+      return l10n_util::GetStringUTF16(
+          IDS_TAB_RESUME_DECORATORS_FREQUENTLY_VISITED);
+    case DecorationType::kVisitedXAgo:
+      if (visited_recently) {
+        return l10n_util::GetStringUTF16(
+            IDS_TAB_RESUME_DECORATORS_VISITED_RECENTLY);
+      } else {
+        return l10n_util::GetStringUTF16(
+            IDS_TAB_RESUME_DECORATORS_VISITED_X_AGO);
+      }
+    case DecorationType::kUnknown:
+      if (visited_recently) {
+        return l10n_util::GetStringUTF16(
+            IDS_TAB_RESUME_DECORATORS_VISITED_RECENTLY);
+      } else {
+        return l10n_util::GetStringUTF16(
+            IDS_TAB_RESUME_DECORATORS_VISITED_X_AGO);
+      }
+  }
+#endif
+}
+
+std::u16string GetStringForRecencyDecorationWithTime(
+    base::Time last_visit_time,
+    base::TimeDelta recently_visited_minutes_threshold) {
+  if (base::Time::Now() - last_visit_time <
+      recently_visited_minutes_threshold) {
+    return GetStringForDecoration(DecorationType::kVisitedXAgo,
+                                  /*visited_recently=*/true);
+  }
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  std::u16string relative_time = FormatRelativeTime(last_visit_time);
+  if (relative_time.find(u"hour") != std::string::npos) {
+    relative_time.erase(relative_time.find(u"hour"));
+    relative_time +=
+        l10n_util::GetStringUTF16(IDS_TAB_RESUME_N_HOURS_AGO_NARROW);
+  } else if (relative_time.find(u"min") != std::string::npos) {
+    relative_time.erase(relative_time.find(u"min"));
+    relative_time +=
+        l10n_util::GetStringUTF16(IDS_TAB_RESUME_N_MINUTES_AGO_NARROW);
+  }
+  return GetStringForDecoration(DecorationType::kVisitedXAgo) + u" " +
+         relative_time;
+#else
+  return GetStringForDecoration(DecorationType::kVisitedXAgo) + u" " +
+         FormatRelativeTime(last_visit_time);
+#endif
 }
 
 }  // namespace visited_url_ranking

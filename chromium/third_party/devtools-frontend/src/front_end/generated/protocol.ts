@@ -1018,6 +1018,7 @@ export namespace Audits {
     NoRegisterTriggerHeader = 'NoRegisterTriggerHeader',
     NoRegisterOsSourceHeader = 'NoRegisterOsSourceHeader',
     NoRegisterOsTriggerHeader = 'NoRegisterOsTriggerHeader',
+    NavigationRegistrationUniqueScopeAlreadySet = 'NavigationRegistrationUniqueScopeAlreadySet',
   }
 
   export const enum SharedDictionaryError {
@@ -1437,11 +1438,19 @@ export namespace Audits {
 }
 
 /**
- * Defines commands and events for browser extensions. Available if the client
- * is connected using the --remote-debugging-pipe flag and
- * the --enable-unsafe-extension-debugging flag is set.
+ * Defines commands and events for browser extensions.
  */
 export namespace Extensions {
+
+  /**
+   * Storage areas.
+   */
+  export const enum StorageArea {
+    Session = 'session',
+    Local = 'local',
+    Sync = 'sync',
+    Managed = 'managed',
+  }
 
   export interface LoadUnpackedRequest {
     /**
@@ -1455,6 +1464,66 @@ export namespace Extensions {
      * Extension id.
      */
     id: string;
+  }
+
+  export interface GetStorageItemsRequest {
+    /**
+     * ID of extension.
+     */
+    id: string;
+    /**
+     * StorageArea to retrieve data from.
+     */
+    storageArea: StorageArea;
+    /**
+     * Keys to retrieve.
+     */
+    keys?: string[];
+  }
+
+  export interface GetStorageItemsResponse extends ProtocolResponseWithError {
+    data: any;
+  }
+
+  export interface RemoveStorageItemsRequest {
+    /**
+     * ID of extension.
+     */
+    id: string;
+    /**
+     * StorageArea to remove data from.
+     */
+    storageArea: StorageArea;
+    /**
+     * Keys to remove.
+     */
+    keys: string[];
+  }
+
+  export interface ClearStorageItemsRequest {
+    /**
+     * ID of extension.
+     */
+    id: string;
+    /**
+     * StorageArea to remove data from.
+     */
+    storageArea: StorageArea;
+  }
+
+  export interface SetStorageItemsRequest {
+    /**
+     * ID of extension.
+     */
+    id: string;
+    /**
+     * StorageArea to set data in.
+     */
+    storageArea: StorageArea;
+    /**
+     * Values to set.
+     */
+    values: any;
   }
 }
 
@@ -1775,6 +1844,7 @@ export namespace Browser {
     VideoCapturePanTiltZoom = 'videoCapturePanTiltZoom',
     WakeLockScreen = 'wakeLockScreen',
     WakeLockSystem = 'wakeLockSystem',
+    WebAppInstallation = 'webAppInstallation',
     WindowManagement = 'windowManagement',
   }
 
@@ -2858,17 +2928,6 @@ export namespace CSS {
   }
 
   /**
-   * CSS position-fallback rule representation.
-   */
-  export interface CSSPositionFallbackRule {
-    name: Value;
-    /**
-     * List of keyframes.
-     */
-    tryRules: CSSTryRule[];
-  }
-
-  /**
    * CSS @position-try rule representation.
    */
   export interface CSSPositionTryRule {
@@ -3153,10 +3212,6 @@ export namespace CSS {
      * A list of CSS keyframed animations matching this node.
      */
     cssKeyframesRules?: CSSKeyframesRule[];
-    /**
-     * A list of CSS position fallbacks matching this node.
-     */
-    cssPositionFallbackRules?: CSSPositionFallbackRule[];
     /**
      * A list of CSS @position-try rules matching this node, based on the position-try-fallbacks property.
      */
@@ -3718,6 +3773,7 @@ export namespace DOM {
     After = 'after',
     Marker = 'marker',
     Backdrop = 'backdrop',
+    Column = 'column',
     Selection = 'selection',
     SearchText = 'search-text',
     TargetText = 'target-text',
@@ -3727,6 +3783,8 @@ export namespace DOM {
     FirstLineInherited = 'first-line-inherited',
     ScrollMarker = 'scroll-marker',
     ScrollMarkerGroup = 'scroll-marker-group',
+    ScrollNextButton = 'scroll-next-button',
+    ScrollPrevButton = 'scroll-prev-button',
     Scrollbar = 'scrollbar',
     ScrollbarThumb = 'scrollbar-thumb',
     ScrollbarButton = 'scrollbar-button',
@@ -3740,6 +3798,12 @@ export namespace DOM {
     ViewTransitionImagePair = 'view-transition-image-pair',
     ViewTransitionOld = 'view-transition-old',
     ViewTransitionNew = 'view-transition-new',
+    Placeholder = 'placeholder',
+    FileSelectorButton = 'file-selector-button',
+    DetailsContent = 'details-content',
+    SelectFallbackButton = 'select-fallback-button',
+    SelectFallbackButtonText = 'select-fallback-button-text',
+    Picker = 'picker',
   }
 
   /**
@@ -3914,6 +3978,15 @@ export namespace DOM {
     isSVG?: boolean;
     compatibilityMode?: CompatibilityMode;
     assignedSlot?: BackendNode;
+    isScrollable?: boolean;
+  }
+
+  /**
+   * A structure to hold the top-level node of a detached tree and an array of its retained descendants.
+   */
+  export interface DetachedElementInfo {
+    treeNode: Node;
+    retainedNodeIds: NodeId[];
   }
 
   /**
@@ -4660,6 +4733,13 @@ export namespace DOM {
     path: string;
   }
 
+  export interface GetDetachedDomNodesResponse extends ProtocolResponseWithError {
+    /**
+     * The list of detached nodes
+     */
+    detachedNodes: DetachedElementInfo[];
+  }
+
   export interface SetInspectedNodeRequest {
     /**
      * DOM node id to be accessible by means of $x command line API.
@@ -4899,6 +4979,20 @@ export namespace DOM {
      * The added pseudo element.
      */
     pseudoElement: Node;
+  }
+
+  /**
+   * Fired when a node's scrollability state changes.
+   */
+  export interface ScrollableFlagUpdatedEvent {
+    /**
+     * The id of the node.
+     */
+    nodeId: DOM.NodeId;
+    /**
+     * If the node is scrollable.
+     */
+    isScrollable: boolean;
   }
 
   /**
@@ -7916,10 +8010,32 @@ export namespace Memory {
     size: number;
   }
 
+  /**
+   * DOM object counter data.
+   */
+  export interface DOMCounter {
+    /**
+     * Object name. Note: object names should be presumed volatile and clients should not expect
+     * the returned names to be consistent across runs.
+     */
+    name: string;
+    /**
+     * Object count.
+     */
+    count: integer;
+  }
+
   export interface GetDOMCountersResponse extends ProtocolResponseWithError {
     documents: integer;
     nodes: integer;
     jsEventListeners: integer;
+  }
+
+  export interface GetDOMCountersForLeakDetectionResponse extends ProtocolResponseWithError {
+    /**
+     * DOM object counters.
+     */
+    counters: DOMCounter[];
   }
 
   export interface SetPressureNotificationsSuppressedRequest {
@@ -8917,11 +9033,11 @@ export namespace Network {
     UserSetting = 'UserSetting',
     TPCDMetadata = 'TPCDMetadata',
     TPCDDeprecationTrial = 'TPCDDeprecationTrial',
+    TopLevelTPCDDeprecationTrial = 'TopLevelTPCDDeprecationTrial',
     TPCDHeuristics = 'TPCDHeuristics',
     EnterprisePolicy = 'EnterprisePolicy',
     StorageAccess = 'StorageAccess',
     TopLevelStorageAccess = 'TopLevelStorageAccess',
-    CorsOptIn = 'CorsOptIn',
     Scheme = 'Scheme',
   }
 
@@ -11431,6 +11547,7 @@ export namespace Page {
    */
   export const enum PermissionsPolicyFeature {
     Accelerometer = 'accelerometer',
+    AllScreensCapture = 'all-screens-capture',
     AmbientLightSensor = 'ambient-light-sensor',
     AttributionReporting = 'attribution-reporting',
     Autoplay = 'autoplay',
@@ -11464,6 +11581,7 @@ export namespace Page {
     ClipboardRead = 'clipboard-read',
     ClipboardWrite = 'clipboard-write',
     ComputePressure = 'compute-pressure',
+    ControlledFrame = 'controlled-frame',
     CrossOriginIsolated = 'cross-origin-isolated',
     DeferredFetch = 'deferred-fetch',
     DigitalCredentialsGet = 'digital-credentials-get',
@@ -11487,11 +11605,13 @@ export namespace Page {
     KeyboardMap = 'keyboard-map',
     LocalFonts = 'local-fonts',
     Magnetometer = 'magnetometer',
+    MediaPlaybackWhileNotVisible = 'media-playback-while-not-visible',
     Microphone = 'microphone',
     Midi = 'midi',
     OtpCredentials = 'otp-credentials',
     Payment = 'payment',
     PictureInPicture = 'picture-in-picture',
+    Popins = 'popins',
     PrivateAggregation = 'private-aggregation',
     PrivateStateTokenIssuance = 'private-state-token-issuance',
     PrivateStateTokenRedemption = 'private-state-token-redemption',
@@ -11512,6 +11632,7 @@ export namespace Page {
     Usb = 'usb',
     UsbUnrestricted = 'usb-unrestricted',
     VerticalScroll = 'vertical-scroll',
+    WebAppInstallation = 'web-app-installation',
     WebPrinting = 'web-printing',
     WebShare = 'web-share',
     WindowManagement = 'window-management',
@@ -12004,14 +12125,16 @@ export namespace Page {
   }
 
   export const enum ClientNavigationReason {
+    AnchorClick = 'anchorClick',
     FormSubmissionGet = 'formSubmissionGet',
     FormSubmissionPost = 'formSubmissionPost',
     HttpHeaderRefresh = 'httpHeaderRefresh',
-    ScriptInitiated = 'scriptInitiated',
+    InitialFrameNavigation = 'initialFrameNavigation',
     MetaTagRefresh = 'metaTagRefresh',
+    Other = 'other',
     PageBlockInterstitial = 'pageBlockInterstitial',
     Reload = 'reload',
-    AnchorClick = 'anchorClick',
+    ScriptInitiated = 'scriptInitiated',
   }
 
   export const enum ClientNavigationDisposition {
@@ -12348,6 +12471,7 @@ export namespace Page {
     ContentWebUSB = 'ContentWebUSB',
     ContentMediaSessionService = 'ContentMediaSessionService',
     ContentScreenReader = 'ContentScreenReader',
+    ContentDiscarded = 'ContentDiscarded',
     EmbedderPopupBlockerTabHelper = 'EmbedderPopupBlockerTabHelper',
     EmbedderSafeBrowsingTriggeredPopupBlocker = 'EmbedderSafeBrowsingTriggeredPopupBlocker',
     EmbedderSafeBrowsingThreatDetails = 'EmbedderSafeBrowsingThreatDetails',
@@ -13240,6 +13364,17 @@ export namespace Page {
   }
 
   /**
+   * Fired before frame subtree is detached. Emitted before any frame of the
+   * subtree is actually detached.
+   */
+  export interface FrameSubtreeWillBeDetachedEvent {
+    /**
+     * Id of the frame that is the root of the subtree that will be detached.
+     */
+    frameId: FrameId;
+  }
+
+  /**
    * Fired once navigation of the frame has completed. Frame is now associated with the new loader.
    */
   export interface FrameNavigatedEvent {
@@ -13467,6 +13602,12 @@ export namespace Page {
     timestamp: Network.MonotonicTime;
   }
 
+  export const enum NavigatedWithinDocumentEventNavigationType {
+    Fragment = 'fragment',
+    HistoryAPI = 'historyApi',
+    Other = 'other',
+  }
+
   /**
    * Fired when same-document navigation happens, e.g. due to history API usage or anchor navigation.
    */
@@ -13479,6 +13620,10 @@ export namespace Page {
      * Frame's new url.
      */
     url: string;
+    /**
+     * Navigation type
+     */
+    navigationType: NavigatedWithinDocumentEventNavigationType;
   }
 
   /**
@@ -14464,6 +14609,16 @@ export namespace Storage {
     aggregationCoordinatorOrigin?: string;
   }
 
+  export interface AttributionScopesData {
+    values: string[];
+    /**
+     * number instead of integer because not all uint32 can be represented by
+     * int
+     */
+    limit: number;
+    maxEventStates: number;
+  }
+
   export interface AttributionReportingSourceRegistration {
     time: Network.TimeSinceEpoch;
     /**
@@ -14487,6 +14642,7 @@ export namespace Storage {
     triggerDataMatching: AttributionReportingTriggerDataMatching;
     destinationLimitPriority: SignedInt64AsBase10;
     aggregatableDebugReportingConfig: AttributionReportingAggregatableDebugReportingConfig;
+    scopesData?: AttributionScopesData;
   }
 
   export const enum AttributionReportingSourceRegistrationResult {
@@ -14502,7 +14658,9 @@ export namespace Storage {
     DestinationBothLimitsReached = 'destinationBothLimitsReached',
     ReportingOriginsPerSiteLimitReached = 'reportingOriginsPerSiteLimitReached',
     ExceedsMaxChannelCapacity = 'exceedsMaxChannelCapacity',
+    ExceedsMaxScopesChannelCapacity = 'exceedsMaxScopesChannelCapacity',
     ExceedsMaxTriggerStateCardinality = 'exceedsMaxTriggerStateCardinality',
+    ExceedsMaxEventStatesLimit = 'exceedsMaxEventStatesLimit',
     DestinationPerDayReportingLimitReached = 'destinationPerDayReportingLimitReached',
   }
 
@@ -14557,6 +14715,7 @@ export namespace Storage {
     sourceRegistrationTimeConfig: AttributionReportingSourceRegistrationTimeConfig;
     triggerContextId?: string;
     aggregatableDebugReportingConfig: AttributionReportingAggregatableDebugReportingConfig;
+    scopes: string[];
   }
 
   export const enum AttributionReportingEventLevelResult {
@@ -17154,6 +17313,8 @@ export namespace Preload {
     JavaScriptInterfaceRemoved = 'JavaScriptInterfaceRemoved',
     AllPrerenderingCanceled = 'AllPrerenderingCanceled',
     WindowClosed = 'WindowClosed',
+    SlowNetwork = 'SlowNetwork',
+    OtherPrerenderedPageActivated = 'OtherPrerenderedPageActivated',
   }
 
   /**
@@ -17180,7 +17341,6 @@ export namespace Preload {
     PrefetchFailedMIMENotSupported = 'PrefetchFailedMIMENotSupported',
     PrefetchFailedNetError = 'PrefetchFailedNetError',
     PrefetchFailedNon2XX = 'PrefetchFailedNon2XX',
-    PrefetchFailedPerPageLimitExceeded = 'PrefetchFailedPerPageLimitExceeded',
     PrefetchEvictedAfterCandidateRemoved = 'PrefetchEvictedAfterCandidateRemoved',
     PrefetchEvictedForNewerPrefetch = 'PrefetchEvictedForNewerPrefetch',
     PrefetchHeldback = 'PrefetchHeldback',
@@ -17492,6 +17652,86 @@ export namespace PWA {
      */
     linkCapturing?: boolean;
     displayMode?: DisplayMode;
+  }
+}
+
+/**
+ * This domain allows configuring virtual Bluetooth devices to test
+ * the web-bluetooth API.
+ */
+export namespace BluetoothEmulation {
+
+  /**
+   * Indicates the various states of Central.
+   */
+  export const enum CentralState {
+    Absent = 'absent',
+    PoweredOff = 'powered-off',
+    PoweredOn = 'powered-on',
+  }
+
+  /**
+   * Stores the manufacturer data
+   */
+  export interface ManufacturerData {
+    /**
+     * Company identifier
+     * https://bitbucket.org/bluetooth-SIG/public/src/main/assigned_numbers/company_identifiers/company_identifiers.yaml
+     * https://usb.org/developers
+     */
+    key: integer;
+    /**
+     * Manufacturer-specific data
+     */
+    data: binary;
+  }
+
+  /**
+   * Stores the byte data of the advertisement packet sent by a Bluetooth device.
+   */
+  export interface ScanRecord {
+    name?: string;
+    uuids?: string[];
+    /**
+     * Stores the external appearance description of the device.
+     */
+    appearance?: integer;
+    /**
+     * Stores the transmission power of a broadcasting device.
+     */
+    txPower?: integer;
+    /**
+     * Key is the company identifier and the value is an array of bytes of
+     * manufacturer specific data.
+     */
+    manufacturerData?: ManufacturerData[];
+  }
+
+  /**
+   * Stores the advertisement packet information that is sent by a Bluetooth device.
+   */
+  export interface ScanEntry {
+    deviceAddress: string;
+    rssi: integer;
+    scanRecord: ScanRecord;
+  }
+
+  export interface EnableRequest {
+    /**
+     * State of the simulated central.
+     */
+    state: CentralState;
+  }
+
+  export interface SimulatePreconnectedPeripheralRequest {
+    address: string;
+    name: string;
+    manufacturerData: ManufacturerData[];
+    knownServiceUuids: string[];
+  }
+
+  export interface SimulateAdvertisementRequest {
+    entry: ScanEntry;
   }
 }
 

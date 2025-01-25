@@ -12,7 +12,7 @@ import {
   waitFor,
   waitForFunction,
 } from '../../shared/helper.js';
-import {describe, it} from '../../shared/mocha-extensions.js';
+
 import {assertMatchesJSONSnapshot} from '../../shared/snapshots.js';
 import {
   clearStorageItems,
@@ -30,7 +30,18 @@ describe('The Application Tab', () => {
     expectError('Request CacheStorage.requestCacheNames failed. {"code":-32602,"message":"Invalid security origin"}');
     const {target} = getBrowserAndPages();
     const cookies = await target.cookies();
-    await target.deleteCookie(...cookies);
+
+    await target.deleteCookie(...cookies.map(cookie => {
+      if (cookie.partitionKey) {
+        // @ts-ignore parition key deletion not working in Puppeteer
+        // https://github.com/puppeteer/puppeteer/pull/12815.
+        cookie.partitionKey = {
+          topLevelSite: cookie.partitionKey,
+          hasCrossSiteAncestor: false,
+        };
+      }
+      return cookie;
+    }));
   });
 
   // Flaky test

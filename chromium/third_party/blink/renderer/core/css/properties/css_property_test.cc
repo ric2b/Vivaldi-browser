@@ -41,14 +41,14 @@ class ModeCheckingAnchorEvaluator : public AnchorEvaluator {
   std::optional<LayoutUnit> Evaluate(
       const AnchorQuery&,
       const ScopedCSSName* position_anchor,
-      const std::optional<InsetAreaOffsets>&) override {
+      const std::optional<PositionAreaOffsets>&) override {
     return (required_mode_ == GetMode()) ? std::optional<LayoutUnit>(1)
                                          : std::optional<LayoutUnit>();
   }
 
-  std::optional<InsetAreaOffsets> ComputeInsetAreaOffsetsForLayout(
+  std::optional<PositionAreaOffsets> ComputePositionAreaOffsetsForLayout(
       const ScopedCSSName*,
-      InsetArea) override {
+      PositionArea) override {
     return std::nullopt;
   }
   std::optional<PhysicalOffset> ComputeAnchorCenterOffsets(
@@ -431,8 +431,8 @@ TEST_F(CSSPropertyTest, AnchorModeLeft) {
             ComputedValue("max-height", "anchor-size(width, 0px)", context));
 }
 
-TEST_F(CSSPropertyTest, AnchorModeSize) {
-  ModeCheckingAnchorEvaluator anchor_evaluator(AnchorScope::Mode::kSize);
+TEST_F(CSSPropertyTest, AnchorModeWidth) {
+  ModeCheckingAnchorEvaluator anchor_evaluator(AnchorScope::Mode::kWidth);
   StyleRecalcContext context = {.anchor_evaluator = &anchor_evaluator};
 
   EXPECT_EQ("0px", ComputedValue("top", "anchor(top, 0px)", context));
@@ -440,12 +440,32 @@ TEST_F(CSSPropertyTest, AnchorModeSize) {
   EXPECT_EQ("0px", ComputedValue("bottom", "anchor(top, 0px)", context));
   EXPECT_EQ("0px", ComputedValue("left", "anchor(top, 0px)", context));
   EXPECT_EQ("1px", ComputedValue("width", "anchor-size(width, 0px)", context));
-  EXPECT_EQ("1px", ComputedValue("height", "anchor-size(width, 0px)", context));
+  EXPECT_EQ("0px", ComputedValue("height", "anchor-size(width, 0px)", context));
   EXPECT_EQ("1px",
+            ComputedValue("min-width", "anchor-size(width, 0px)", context));
+  EXPECT_EQ("0px",
+            ComputedValue("min-height", "anchor-size(width, 0px)", context));
+  EXPECT_EQ("1px",
+            ComputedValue("max-width", "anchor-size(width, 0px)", context));
+  EXPECT_EQ("0px",
+            ComputedValue("max-height", "anchor-size(width, 0px)", context));
+}
+
+TEST_F(CSSPropertyTest, AnchorModeHeight) {
+  ModeCheckingAnchorEvaluator anchor_evaluator(AnchorScope::Mode::kHeight);
+  StyleRecalcContext context = {.anchor_evaluator = &anchor_evaluator};
+
+  EXPECT_EQ("0px", ComputedValue("top", "anchor(top, 0px)", context));
+  EXPECT_EQ("0px", ComputedValue("right", "anchor(top, 0px)", context));
+  EXPECT_EQ("0px", ComputedValue("bottom", "anchor(top, 0px)", context));
+  EXPECT_EQ("0px", ComputedValue("left", "anchor(top, 0px)", context));
+  EXPECT_EQ("0px", ComputedValue("width", "anchor-size(width, 0px)", context));
+  EXPECT_EQ("1px", ComputedValue("height", "anchor-size(width, 0px)", context));
+  EXPECT_EQ("0px",
             ComputedValue("min-width", "anchor-size(width, 0px)", context));
   EXPECT_EQ("1px",
             ComputedValue("min-height", "anchor-size(width, 0px)", context));
-  EXPECT_EQ("1px",
+  EXPECT_EQ("0px",
             ComputedValue("max-width", "anchor-size(width, 0px)", context));
   EXPECT_EQ("1px",
             ComputedValue("max-height", "anchor-size(width, 0px)", context));
@@ -485,6 +505,28 @@ TEST_F(CSSPropertyTest, PositionTryOptionsDisabled) {
   EXPECT_EQ(declarations->PropertyAt(0).Id(), CSSPropertyID::kPositionTryOrder);
   EXPECT_EQ(declarations->PropertyAt(1).Id(),
             CSSPropertyID::kPositionTryFallbacks);
+}
+
+TEST_F(CSSPropertyTest, PositionAreaDisabled) {
+  ScopedCSSInsetAreaPropertyForTest inset_area_enabled(true);
+  ScopedCSSPositionAreaPropertyForTest position_area_enabled(false);
+  auto* declarations = ParseShorthand("position-area", "center top");
+  ASSERT_TRUE(declarations);
+  ASSERT_EQ(declarations->PropertyCount(), 0u);
+  declarations = ParseShorthand("inset-area", "center top");
+  ASSERT_TRUE(declarations);
+  ASSERT_EQ(declarations->PropertyCount(), 1u);
+}
+
+TEST_F(CSSPropertyTest, InsetAreaDisabled) {
+  ScopedCSSInsetAreaPropertyForTest inset_area_enabled(false);
+  ScopedCSSPositionAreaPropertyForTest position_area_enabled(true);
+  auto* declarations = ParseShorthand("position-area", "center top");
+  ASSERT_TRUE(declarations);
+  ASSERT_EQ(declarations->PropertyCount(), 1u);
+  declarations = ParseShorthand("inset-area", "center top");
+  ASSERT_TRUE(declarations);
+  ASSERT_EQ(declarations->PropertyCount(), 0u);
 }
 
 }  // namespace blink

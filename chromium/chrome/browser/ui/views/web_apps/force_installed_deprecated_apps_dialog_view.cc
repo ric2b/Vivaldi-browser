@@ -16,6 +16,8 @@
 #include "extensions/browser/extension_registry.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/base/window_open_disposition_utils.h"
@@ -30,7 +32,7 @@ void ForceInstalledDeprecatedAppsDialogView::CreateAndShowDialog(
     const extensions::ExtensionId& app_id,
     content::WebContents* web_contents) {
   auto delegate = std::make_unique<views::DialogDelegate>();
-  delegate->SetModalType(ui::MODAL_TYPE_CHILD);
+  delegate->SetModalType(ui::mojom::ModalType::kChild);
   delegate->SetShowCloseButton(false);
   delegate->SetOwnedByWidget(true);
   auto* browser_context = web_contents->GetBrowserContext();
@@ -40,7 +42,7 @@ void ForceInstalledDeprecatedAppsDialogView::CreateAndShowDialog(
   std::u16string app_name = base::UTF8ToUTF16(extension->name());
   delegate->SetTitle(l10n_util::GetStringFUTF16(
       IDS_DEPRECATED_APPS_RENDERER_TITLE_WITH_APP_NAME, app_name));
-  delegate->SetButtons(ui::DIALOG_BUTTON_OK);
+  delegate->SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk));
   delegate->SetContentsView(
       base::WrapUnique<ForceInstalledDeprecatedAppsDialogView>(
           new ForceInstalledDeprecatedAppsDialogView(app_name, web_contents)));

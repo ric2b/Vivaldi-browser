@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/audio/mac/audio_manager_mac.h"
 
 #include <limits>
@@ -35,7 +40,6 @@
 #include "media/audio/audio_device_description.h"
 #include "media/audio/mac/audio_loopback_input_mac.h"
 #include "media/audio/mac/core_audio_util_mac.h"
-#include "media/audio/mac/coreaudio_dispatch_override.h"
 #include "media/audio/mac/screen_capture_kit_swizzler.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/audio_timestamp_helper.h"
@@ -458,7 +462,7 @@ class AudioManagerMac::AudioPowerObserver : public base::PowerSuspendObserver {
  public:
   AudioPowerObserver()
       : is_suspending_(false),
-        is_monitoring_(base::PowerMonitor::IsInitialized()),
+        is_monitoring_(base::PowerMonitor::GetInstance()->IsInitialized()),
         num_resume_notifications_(0) {
     // The PowerMonitor requires significant setup (a CFRunLoop and preallocated
     // IO ports) so it's not available under unit tests.  See the OSX impl of
@@ -466,7 +470,7 @@ class AudioManagerMac::AudioPowerObserver : public base::PowerSuspendObserver {
     if (!is_monitoring_) {
       return;
     }
-    base::PowerMonitor::AddPowerSuspendObserver(this);
+    base::PowerMonitor::GetInstance()->AddPowerSuspendObserver(this);
   }
 
   AudioPowerObserver(const AudioPowerObserver&) = delete;
@@ -477,7 +481,7 @@ class AudioManagerMac::AudioPowerObserver : public base::PowerSuspendObserver {
     if (!is_monitoring_) {
       return;
     }
-    base::PowerMonitor::RemovePowerSuspendObserver(this);
+    base::PowerMonitor::GetInstance()->RemovePowerSuspendObserver(this);
   }
 
   bool IsSuspending() const {
@@ -496,7 +500,7 @@ class AudioManagerMac::AudioPowerObserver : public base::PowerSuspendObserver {
 
   bool IsOnBatteryPower() const {
     DCHECK(thread_checker_.CalledOnValidThread());
-    return base::PowerMonitor::IsOnBatteryPower();
+    return base::PowerMonitor::GetInstance()->IsOnBatteryPower();
   }
 
  private:
@@ -971,7 +975,6 @@ AudioParameters AudioManagerMac::GetPreferredOutputStreamParameters(
 
 void AudioManagerMac::InitializeOnAudioThread() {
   DCHECK(GetTaskRunner()->BelongsToCurrentThread());
-  InitializeCoreAudioDispatchOverride();
   power_observer_ = std::make_unique<AudioPowerObserver>();
 }
 

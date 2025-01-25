@@ -443,13 +443,13 @@ void VivaldiAccountManager::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-base::Time VivaldiAccountManager::GetTokenRequestTime() {
+base::Time VivaldiAccountManager::GetTokenRequestTime() const {
   if (access_token_request_handler_)
     return access_token_request_handler_->request_start_time();
   return base::Time();
 }
 
-base::Time VivaldiAccountManager::GetNextTokenRequestTime() {
+base::Time VivaldiAccountManager::GetNextTokenRequestTime() const  {
   if (access_token_request_handler_)
     return access_token_request_handler_->GetNextRequestTime();
   return base::Time();

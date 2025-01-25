@@ -8,26 +8,35 @@
 #include "base/functional/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "base/json/json_reader.h"
+#include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
-#include "chrome/browser/profiles/profile.h"
-#include "content/public/browser/storage_partition.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
-
 #include "components/datasource/vivaldi_data_url_utils.h"
-#include "components/datasource/vivaldi_image_store.h"
 #include "components/signature/vivaldi_signature.h"
 
+#if !BUILDFLAG(IS_IOS)
+#include "chrome/browser/profiles/profile.h"
+#include "components/datasource/vivaldi_image_store.h"
+#include "content/public/browser/storage_partition.h"
+#else
+#include "ios/chrome/browser/shared/model/paths/paths.h"
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+#include "chrome/common/chrome_paths.h"
+#endif
 namespace direct_match {
 
 namespace {
+const std::string kDirectMatchImageDirectory = "VivaldiDirectMatchIcons";
 constexpr float kIncrementConstant = 0.28;
 constexpr int kMaxRequestSize = 2 * 1024 * 1024;
 constexpr net::BackoffEntry::Policy kBackoffPolicy = {
@@ -58,10 +67,9 @@ constexpr net::BackoffEntry::Policy kBackoffPolicy = {
 
 void WriteIconFileThread(base::FilePath image_path,
                          std::unique_ptr<std::string> response_body) {
-  int image_length = response_body->size();
-  int length = base::WriteFile(image_path, response_body->data(), image_length);
-  if (length != image_length) {
-    LOG(ERROR) << "Failed to write to " << image_path.value() << " " << length
+  if (!base::WriteFile(image_path, *response_body)) {
+    LOG(ERROR) << "Failed to write to " << image_path.value() << " "
+               << response_body->size()
                << " bytes";
   }
 }
@@ -85,12 +93,37 @@ DirectMatchService::DirectMatchService()
 
 DirectMatchService::~DirectMatchService() {}
 
+#if BUILDFLAG(IS_IOS)
+void DirectMatchService::Load(
+    const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory) {
+  int dir_key = ios::DIR_USER_DATA;
+  // Use the determined directory key to get the user data directory.
+  if (!base::PathService::Get(dir_key, &user_data_dir_)) {
+    user_data_dir_ = base::FilePath();
+  }
+  user_data_dir_ = user_data_dir_.AppendASCII(kDirectMatchImageDirectory);
+  url_loader_factory_ = url_loader_factory;
+  base::ThreadPool::PostTask(
+       FROM_HERE, {base::MayBlock()},
+       base::BindOnce(base::IgnoreResult(&base::CreateDirectory),
+                      user_data_dir_));
+  DirectMatchService::RunDirectMatchDownload();
+}
+#else
 void DirectMatchService::Load(Profile* profile) {
   if (!profile) {
     return;
   }
   user_data_dir_ = base::FilePath(profile->GetPath().Append(
       vivaldi_image_store::kDirectMatchImageDirectory));
+#if BUILDFLAG(IS_ANDROID)
+    int dir_key = chrome::DIR_USER_DATA;
+    // Use the determined directory key to get the user data directory.
+    if (!base::PathService::Get(dir_key, &user_data_dir_)) {
+        user_data_dir_ = base::FilePath();
+    }
+    user_data_dir_ = user_data_dir_.AppendASCII(kDirectMatchImageDirectory);
+#endif
   url_loader_factory_ = profile->GetDefaultStoragePartition()
                             ->GetURLLoaderFactoryForBrowserProcess();
   base::ThreadPool::PostTask(
@@ -99,6 +132,7 @@ void DirectMatchService::Load(Profile* profile) {
                      user_data_dir_));
   DirectMatchService::RunDirectMatchDownload();
 }
+#endif
 
 void DirectMatchService::RunDirectMatchDownload() {
   net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -318,9 +352,25 @@ void DirectMatchService::RemoveUnusedIcons(
 std::string DirectMatchService::GetIconPath(std::string image_url) {
   GURL url(image_url);
   std::string image_name = url.ExtractFileName();
+#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
+  int dir_key = chrome::DIR_USER_DATA;
+#endif
+#if BUILDFLAG(IS_IOS)
+  int dir_key = ios::DIR_USER_DATA;
+#endif
+  base::FilePath iconPath;
+  if (!base::PathService::Get(dir_key, &iconPath)) {
+    iconPath = base::FilePath();
+  }
+  iconPath = iconPath.AppendASCII(kDirectMatchImageDirectory)
+                     .AppendASCII(image_name);
+  return iconPath.AsUTF8Unsafe();
+#else
   std::string data_url = vivaldi_data_url_utils::MakeUrl(
       vivaldi_data_url_utils::PathType::kDirectMatch, image_name);
   return data_url;
+#endif
 }
 
 const DirectMatchService::DirectMatchUnit* DirectMatchService::GetDirectMatch(

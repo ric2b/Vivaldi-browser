@@ -16,7 +16,7 @@
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 
 // static
 IOSChromePasswordReuseManagerFactory*
@@ -27,15 +27,15 @@ IOSChromePasswordReuseManagerFactory::GetInstance() {
 
 // static
 password_manager::PasswordReuseManager*
-IOSChromePasswordReuseManagerFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
-  if (!base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordReuseDetectionEnabled)) {
-    return nullptr;
-  }
+IOSChromePasswordReuseManagerFactory::GetForBrowserState(ProfileIOS* profile) {
+  return GetForProfile(profile);
+}
 
+// static
+password_manager::PasswordReuseManager*
+IOSChromePasswordReuseManagerFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<password_manager::PasswordReuseManager*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 IOSChromePasswordReuseManagerFactory::IOSChromePasswordReuseManagerFactory()

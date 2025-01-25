@@ -21,6 +21,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/accessibility/ax_node_position.h"
@@ -43,7 +44,9 @@ class MojoUkmRecorder;
 }  // namespace ukm
 
 class AXTreeDistiller;
+class DependencyParserModel;
 class ReadAnythingAppControllerTest;
+class ReadAnythingAppControllerScreen2xDataCollectionModeTest;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ReadAnythingAppController
@@ -87,6 +90,7 @@ class ReadAnythingAppController
 
  private:
   friend ReadAnythingAppControllerTest;
+  friend ReadAnythingAppControllerScreen2xDataCollectionModeTest;
 
   explicit ReadAnythingAppController(content::RenderFrame* render_frame);
   ~ReadAnythingAppController() override;
@@ -109,10 +113,15 @@ class ReadAnythingAppController
       const ui::AXTreeID& tree_id,
       const std::vector<ui::AXTreeUpdate>& updates,
       const std::vector<ui::AXEvent>& events) override;
+  void AccessibilityLocationChangesReceived(
+      const std::vector<ui::AXLocationChanges>& details) override;
   void OnActiveAXTreeIDChanged(const ui::AXTreeID& tree_id,
                                ukm::SourceId ukm_source_id,
                                bool is_pdf) override;
   void OnAXTreeDestroyed(const ui::AXTreeID& tree_id) override;
+  void OnImageDataDownloaded(const ui::AXTreeID& tree_id,
+                             ui::AXNodeID node_id,
+                             const SkBitmap& image) override;
   void OnSettingsRestoredFromPrefs(
       read_anything::mojom::LineSpacing line_spacing,
       read_anything::mojom::LetterSpacing letter_spacing,
@@ -148,8 +157,8 @@ class ReadAnythingAppController
   void OnFontSizeReset();
   void OnLinksEnabledToggled();
   void OnImagesEnabledToggled();
-  float LetterSpacing() const;
-  float LineSpacing() const;
+  int LetterSpacing() const;
+  int LineSpacing() const;
   int ColorTheme() const;
   int HighlightGranularity() const;
   bool IsHighlightOn();
@@ -164,14 +173,18 @@ class ReadAnythingAppController
   int DarkTheme() const;
   int YellowTheme() const;
   int BlueTheme() const;
+  int AutoHighlighting() const;
+  int WordHighlighting() const;
+  int PhraseHighlighting() const;
+  int SentenceHighlighting() const;
+  int NoHighlighting() const;
   std::string GetStoredVoice() const;
   std::vector<std::string> GetLanguagesEnabledInPref() const;
   std::vector<ui::AXNodeID> GetChildren(ui::AXNodeID ax_node_id) const;
   std::string GetDataFontCss(ui::AXNodeID ax_node_id) const;
   std::string GetHtmlTag(ui::AXNodeID ax_node_id) const;
   std::string GetLanguage(ui::AXNodeID ax_node_id) const;
-  std::string GetNameAttributeText(ui::AXNode* ax_node) const;
-  std::string GetTextContent(ui::AXNodeID ax_node_id) const;
+  std::u16string GetTextContent(ui::AXNodeID ax_node_id) const;
   std::string GetTextDirection(ui::AXNodeID ax_node_id) const;
   std::string GetUrl(ui::AXNodeID ax_node_id) const;
   std::string GetAltText(ui::AXNodeID ax_node_id) const;
@@ -193,39 +206,33 @@ class ReadAnythingAppController
                          ui::AXNodeID focus_node_id,
                          int focus_offset) const;
   void OnCollapseSelection() const;
-  void OnRestartReadAloud();
   bool IsGoogleDocs() const;
   bool IsReadAloudEnabled() const;
   bool IsChromeOsAsh() const;
   bool IsAutoVoiceSwitchingEnabled() const;
   bool IsLanguagePackDownloadingEnabled() const;
   bool IsAutomaticWordHighlightingEnabled() const;
-  void OnStandardLineSpacing();
-  void OnLooseLineSpacing();
-  void OnVeryLooseLineSpacing();
-  void OnStandardLetterSpacing();
-  void OnWideLetterSpacing();
-  void OnVeryWideLetterSpacing();
-  void OnLightTheme();
-  void OnDefaultTheme();
-  void OnDarkTheme();
-  void OnYellowTheme();
-  void OnBlueTheme();
+  bool IsPhraseHighlightingEnabled() const;
+  void OnLetterSpacingChange(int value);
+  void OnLineSpacingChange(int value);
+  void OnThemeChange(int value);
   void OnFontChange(const std::string& font);
   void OnSpeechRateChange(double rate);
   void OnVoiceChange(const std::string& voice, const std::string& lang);
   void OnLanguagePrefChange(const std::string& lang, bool enabled);
   bool RequiresDistillation();
-  void TurnedHighlightOn();
-  void TurnedHighlightOff();
+  void OnHighlightGranularityChanged(int granularity);
   double GetLineSpacingValue(int line_spacing) const;
   double GetLetterSpacingValue(int letter_spacing) const;
   std::vector<std::string> GetSupportedFonts();
   void RequestImageDataUrl(ui::AXNodeID node_id) const;
   std::string GetImageDataUrl(ui::AXNodeID node_id) const;
+  v8::Local<v8::Value> GetImageBitmap(ui::AXNodeID node_id);
   void OnSpeechPlayingStateChanged(bool is_speech_active);
   std::string GetValidatedFontName(const std::string& font) const;
   std::vector<std::string> GetAllFonts();
+  void OnScrolledToBottom();
+  bool IsDocsLoadMoreButtonVisible() const;
 
   // The language code that should be used to determine which voices are
   // supported for speech.
@@ -261,6 +268,8 @@ class ReadAnythingAppController
   // where this isn't needed.
   void InitAXPositionWithNode(const ui::AXNodeID& starting_node_id);
 
+  void ResetGranularityIndex();
+
   // Returns a list of AXNodeIds representing the next nodes that should be
   // spoken and highlighted with Read Aloud.
   // This defaults to returning the first granularity until
@@ -271,6 +280,10 @@ class ReadAnythingAppController
   // return by GetCurrentText will return the starting text and ending text
   // indices for specific text that should be referenced within the node.
   std::vector<ui::AXNodeID> GetCurrentText();
+
+  // Preprocess the text on the current page for speech to be used by
+  // Read Aloud.
+  void PreprocessTextForSpeech();
 
   // TODO(crbug.com/40927698): Random access to processed nodes might not always
   // work (e.g. if we're switching granularities or jumping to a specific node),
@@ -294,16 +307,6 @@ class ReadAnythingAppController
   // segment.
   int GetCurrentTextStartIndex(ui::AXNodeID node_id);
 
-  // Given a node id and the boundary position of the highlight start, return
-  // convert to the starting index that should be used for highlighting the
-  // next granularity.
-  // Note that this is only needed for custom granularity highlighting.
-  // Sentence highlighting is able to be handled directly in WebUI because the
-  // entire speech segment is highlighted at once.
-  // This allows us to correctly position the highlight within the current
-  // text segment.
-  int GetHighlightStartIndex(ui::AXNodeID node_id, int index);
-
   // Returns the Read Aloud ending text index for a node. For example,
   // if the entire text of the node should be read by Read Aloud at a particular
   // moment, this will return the length of the node's text. Returns -1 if the
@@ -314,9 +317,22 @@ class ReadAnythingAppController
   // when the active tree changes.
   void RecordNumSelections();
 
-  ui::AXNodeID GetNodeIdForCurrentSegmentIndex(int index);
-
-  int GetNextWordHighlightLength(int index);
+  // Given a boundary position within the current granularity, identifies the
+  // nodes that needs to be highlighted (e.g. until the word boundary), and
+  // returns a list containing nodes and the ranges within those nodes. The
+  // ranges are represented as a start offset and a length. Multiple nodes are
+  // returned if the highlight spans over more than one node. This allows us to
+  // correctly position the highlight within the current text segment. The
+  // return value is thus a list containing node id, start, and length.
+  //
+  //  If the `phrases` argument is `true`, the text ranges for the containing
+  //  phrase are returned, otherwise the text ranges for the word are returned.
+  //
+  // Note that this is only needed for custom granularity highlighting. Sentence
+  // highlighting is able to be handled directly in WebUI because the entire
+  // speech segment is highlighted at once.
+  v8::Local<v8::Value> GetHighlightForCurrentSegmentIndex(int index,
+                                                          bool phrases);
 
   // SetContentForTesting and SetLanguageForTesting are used by
   // ReadAnythingAppTest and thus need to be kept in ReadAnythingAppController
@@ -346,11 +362,19 @@ class ReadAnythingAppController
   void IncrementMetricCount(const std::string& metric);
   void LogSpeechEventCounts();
 
+  // Called when a new dependency parser model file has been loaded and is
+  // available.
+  void UpdateDependencyParserModel(base::File model_file);
+
+  DependencyParserModel& GetDependencyParserModelForTesting();
+
   std::unique_ptr<AXTreeDistiller> distiller_;
   mojo::Remote<read_anything::mojom::UntrustedPageHandlerFactory>
       page_handler_factory_;
   mojo::Remote<read_anything::mojom::UntrustedPageHandler> page_handler_;
   mojo::Receiver<read_anything::mojom::UntrustedPage> receiver_{this};
+
+  std::map<ui::AXNodeID, SkBitmap> downloaded_images_;
 
   // Model that holds Read Aloud state for this controller.
   ReadAloudAppModel read_aloud_model_;
@@ -363,7 +387,6 @@ class ReadAnythingAppController
   ReadAnythingAppModel model_;
 
   // For metrics logging
-
   std::unique_ptr<ukm::MojoUkmRecorder> ukm_recorder_;
 
   // The time when the renderer constructor is first triggered.

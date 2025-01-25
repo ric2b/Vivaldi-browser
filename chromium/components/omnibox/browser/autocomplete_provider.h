@@ -70,6 +70,7 @@ typedef std::vector<metrics::OmniboxEventProto_ProviderInfo> ProvidersInfo;
 // HistoryURL (intranet url never visited match, some inexact matches) | 1400++
 // Search Primary Provider (past query in history within 2 days)       | 1399**
 // Search Primary Provider (what you typed)                            | 1300
+// Direct Match // Vivaldi                                             | 1220+-
 // HistoryURL (what you typed, some inexact matches)                   | 1200++
 // Keyword (substituting, exact match)                                 | 1100
 // Search Primary Provider (past query in history older than 2 days)   | 1050*
@@ -181,6 +182,7 @@ class AutocompleteProvider
 
     // Vivaldi
     TYPE_BOOKMARK_NICKNAME = 1 << 30,
+    TYPE_DIRECT_MATCH = 1 << 31,
 
     // When adding a value here, also update:
     // - omnibox_event.proto

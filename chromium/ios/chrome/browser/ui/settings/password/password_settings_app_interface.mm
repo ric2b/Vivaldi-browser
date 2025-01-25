@@ -26,7 +26,7 @@
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_bulk_leak_check_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/webauthn/model/ios_passkey_model_factory.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -42,6 +42,8 @@ using password_manager::FakeBulkLeakCheckService;
 using password_manager::PasswordForm;
 
 namespace {
+
+constexpr char kEncrypted[] = "encrypted";
 
 scoped_refptr<password_manager::PasswordStoreInterface>
 GetPasswordProfileStore() {
@@ -270,8 +272,8 @@ static std::unique_ptr<ScopedPasswordSettingsReauthModuleOverride>
   [self mockModule].canAttempt = canAttempt;
 }
 
-+ (void)mockReauthenticationModuleShouldReturnSynchronously:(BOOL)returnSync {
-  [self mockModule].shouldReturnSynchronously = returnSync;
++ (void)mockReauthenticationModuleShouldSkipReAuth:(BOOL)returnSync {
+  [self mockModule].shouldSkipReAuth = returnSync;
 }
 
 + (void)mockReauthenticationModuleReturnMockedResult {
@@ -376,18 +378,18 @@ static std::unique_ptr<ScopedPasswordSettingsReauthModuleOverride>
   return SaveToPasswordProfileStore(federated);
 }
 
-+ (void)saveExamplePasskeyToStore:(NSString*)credentialId
-                             rpId:(NSString*)rpId
++ (void)saveExamplePasskeyToStore:(NSString*)rpId
                            userId:(NSString*)userId
                          username:(NSString*)username
                   userDisplayName:(NSString*)userDisplayName {
   sync_pb::WebauthnCredentialSpecifics passkey;
   passkey.set_sync_id(base::RandBytesAsString(16));
-  passkey.set_credential_id(base::SysNSStringToUTF8(credentialId));
+  passkey.set_credential_id(base::RandBytesAsString(16));
   passkey.set_rp_id(base::SysNSStringToUTF8(rpId));
   passkey.set_user_id(base::SysNSStringToUTF8(userId));
   passkey.set_user_name(base::SysNSStringToUTF8(username));
   passkey.set_user_display_name(base::SysNSStringToUTF8(userDisplayName));
+  passkey.set_encrypted(kEncrypted);
   GetPasskeyStore()->AddNewPasskeyForTesting(passkey);
 }
 

@@ -58,6 +58,7 @@
 #include "third_party/blink/renderer/core/layout/table/layout_table_row.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -448,11 +449,15 @@ void TextIteratorAlgorithm<Strategy>::Advance() {
               Strategy::IsDescendantOf(*end_container_, *parent_node)) {
             return;
           }
+          // We should call the ExitNode() always if |node_| has a layout
+          // object or not and it's the last child under |parent_node|.
           bool have_layout_object = node_->GetLayoutObject();
           node_ = parent_node;
           fully_clipped_stack_.Pop();
           parent_node = Strategy::Parent(*node_);
-          if (have_layout_object) {
+          if (RuntimeEnabledFeatures::
+                  CallExitNodeWithoutLayoutObjectEnabled() ||
+              have_layout_object) {
             ExitNode();
           }
           if (text_state_.PositionNode()) {
@@ -568,7 +573,7 @@ void TextIteratorAlgorithm<Strategy>::HandleReplacedElement() {
     return;
 
   LayoutObject* layout_object = node_->GetLayoutObject();
-  if (layout_object->Style()->Visibility() != EVisibility::kVisible &&
+  if (layout_object->Style()->UsedVisibility() != EVisibility::kVisible &&
       !IgnoresStyleVisibility()) {
     return;
   }
@@ -767,7 +772,7 @@ bool TextIteratorAlgorithm<Strategy>::ShouldRepresentNodeOffsetZero() {
   // unrendered content, we would create VisiblePositions on every call to this
   // function without this check.
   if (!node_->GetLayoutObject() ||
-      node_->GetLayoutObject()->Style()->Visibility() !=
+      node_->GetLayoutObject()->Style()->UsedVisibility() !=
           EVisibility::kVisible ||
       (node_->GetLayoutObject()->IsLayoutBlockFlow() &&
        !To<LayoutBlock>(node_->GetLayoutObject())->Size().height &&

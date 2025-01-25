@@ -18,6 +18,10 @@ struct MenuCustomizationView: View {
 
   @ObservedObject var actionCustomizationModel: ActionCustomizationModel
 
+  // Vivaldi
+  @ObservedObject var vivaldiActionCustomizationModel: ActionCustomizationModel
+  // End Vivaldi
+
   @ObservedObject var destinationCustomizationModel: DestinationCustomizationModel
 
   @ObservedObject var uiConfiguration: OverflowMenuUIConfiguration
@@ -36,12 +40,18 @@ struct MenuCustomizationView: View {
 
   init(
     actionCustomizationModel: ActionCustomizationModel,
+    vivaldiActionCustomizationModel: ActionCustomizationModel, // Vivaldi
     destinationCustomizationModel: DestinationCustomizationModel,
     uiConfiguration: OverflowMenuUIConfiguration,
     eventHandler: MenuCustomizationEventHandler?,
     namespace: Namespace.ID
   ) {
     self.actionCustomizationModel = actionCustomizationModel
+
+    // Vivaldi
+    self.vivaldiActionCustomizationModel = vivaldiActionCustomizationModel
+    // End Vivaldi
+
     self.destinationCustomizationModel = destinationCustomizationModel
     self.uiConfiguration = uiConfiguration
     self.eventHandler = eventHandler
@@ -76,6 +86,16 @@ struct MenuCustomizationView: View {
         }
         Divider()
         List {
+          if VivaldiGlobalHelpers.isVivaldiRunning() {
+            OverflowMenuActionSection(
+              actionGroup: actionCustomizationModel.actionsGroup,
+              metricsHandler: nil
+            )
+            OverflowMenuActionSection(
+              actionGroup: vivaldiActionCustomizationModel.actionsGroup,
+              metricsHandler: nil
+            )
+          } else {
           createDefaultSection {
             HStack {
               VStack(alignment: .leading) {
@@ -95,6 +115,8 @@ struct MenuCustomizationView: View {
           OverflowMenuActionSection(
             actionGroup: actionCustomizationModel.actionsGroup, metricsHandler: nil
           )
+          } // End Vivaldi
+
         }
         .matchedGeometryEffect(id: MenuCustomizationAnimationID.actions, in: namespace)
       }
@@ -151,6 +173,10 @@ struct MenuCustomizationView: View {
           .bold()
         }
         .disabled(
+          VivaldiGlobalHelpers.isVivaldiRunning() ?
+                (!destinationCustomizationModel.hasChanged &&
+                !actionCustomizationModel.hasChanged &&
+                 !vivaldiActionCustomizationModel.hasChanged) :  // End Vivaldi
           !destinationCustomizationModel.hasChanged && !actionCustomizationModel.hasChanged
         )
         .padding([.trailing])

@@ -17,7 +17,7 @@ if (-Not (Test-Path ${EIGEN_CI_BUILDDIR})) {
 }
 cd $EIGEN_CI_BUILDDIR
 
-# We need to split EIGEN_CI_ADDITIONAL_ARGS, otherwise they are interpretted
+# We need to split EIGEN_CI_ADDITIONAL_ARGS, otherwise they are interpreted
 # as a single argument.  Split by space, unless double-quoted.
 $split_args = [regex]::Split(${EIGEN_CI_ADDITIONAL_ARGS}, ' (?=(?:[^"]|"[^"]*")*$)' )
 

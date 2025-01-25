@@ -97,7 +97,7 @@ void VerifyCert(const scoped_refptr<net::X509Certificate>& certificate,
                 const GURL& url,
                 const std::string& ocsp_result,
                 const std::string& sct_list,
-                int frame_tree_node_id,
+                FrameTreeNodeId frame_tree_node_id,
                 VerifyCallback callback) {
   VerifyCallback wrapped_callback = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
       std::move(callback), net::ERR_FAILED, net::CertVerifyResult(), false);
@@ -185,7 +185,7 @@ SignedExchangeHandler::SignedExchangeHandler(
     std::unique_ptr<blink::WebPackageRequestMatcher> request_matcher,
     std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy,
     SignedExchangeReporter* reporter,
-    int frame_tree_node_id)
+    FrameTreeNodeId frame_tree_node_id)
     : is_secure_transport_(is_secure_transport),
       has_nosniff_(has_nosniff),
       headers_callback_(std::move(headers_callback)),
@@ -248,8 +248,7 @@ SignedExchangeHandler::~SignedExchangeHandler() = default;
 SignedExchangeHandler::SignedExchangeHandler()
     : is_secure_transport_(true),
       has_nosniff_(true),
-      load_flags_(net::LOAD_NORMAL),
-      frame_tree_node_id_(FrameTreeNode::kFrameTreeNodeInvalidId) {}
+      load_flags_(net::LOAD_NORMAL) {}
 
 const GURL& SignedExchangeHandler::GetFallbackUrl() const {
   return prologue_fallback_url_and_after_.fallback_url().url;
@@ -707,7 +706,7 @@ void SignedExchangeHandler::CheckAbsenceOfCookies(base::OnceClosure callback) {
     std::move(callback).Run();
     return;
   }
-  DCHECK(outer_request_isolation_info_.has_value());
+  CHECK(outer_request_isolation_info_.has_value());
 
   StoragePartition* storage_partition =
       frame->current_frame_host()->GetProcess()->GetStoragePartition();
@@ -731,7 +730,7 @@ void SignedExchangeHandler::CheckAbsenceOfCookies(base::OnceClosure callback) {
           render_frame_host ? render_frame_host->CreateCookieAccessObserver()
                             : mojo::NullRemote());
 
-  DCHECK(isolation_info.top_frame_origin().has_value());
+  CHECK(isolation_info.top_frame_origin().has_value());
   auto match_options = network::mojom::CookieManagerGetOptions::New();
   match_options->name = "";
   match_options->match_type = network::mojom::CookieMatchType::STARTS_WITH;

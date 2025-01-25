@@ -276,7 +276,7 @@ UIButton* CreateDismissButton(UIAction* primaryAction) {
           bubbleBoundingSize:(CGSize)bubbleBoundingSize
               swipeDirection:(UISwipeGestureRecognizerDirection)direction
        voiceOverAnnouncement:(NSString*)voiceOverAnnouncement {
-  if (self = [super initWithFrame:CGRectZero]) {
+  if ((self = [super initWithFrame:CGRectZero])) {
     _text = UIAccessibilityIsVoiceOverRunning() && voiceOverAnnouncement
                 ? voiceOverAnnouncement
                 : text;
@@ -342,6 +342,17 @@ UIButton* CreateDismissButton(UIAction* primaryAction) {
     self.alpha = 0;
     self.isAccessibilityElement = YES;
     self.accessibilityViewIsModal = YES;
+
+    if (@available(iOS 17, *)) {
+      __weak __typeof(self) weakSelf = self;
+      NSArray<UITrait>* traits =
+          (@[ UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self ]);
+      UITraitChangeHandler handler = ^(id<UITraitEnvironment> traitEnvironment,
+                                       UITraitCollection* previousCollection) {
+        [weakSelf pauseAnimationOnTraitChange:previousCollection];
+      };
+      [self registerForTraitChanges:traits withHandler:handler];
+    }
   }
   return self;
 }
@@ -402,14 +413,16 @@ UIButton* CreateDismissButton(UIAction* primaryAction) {
                     MAX(min_height, targetSize.height));
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  if (ShouldGestureIndicatorOffsetFromCenter(previousTraitCollection) !=
-      ShouldGestureIndicatorOffsetFromCenter(self.traitCollection)) {
-    [_animator pauseAnimation];
-    _needsRepositionBubbleAndGestureIndicator = YES;
+  if (@available(iOS 17, *)) {
+    return;
   }
+
+  [self pauseAnimationOnTraitChange:previousTraitCollection];
 }
+#endif
 
 - (void)layoutSubviews {
   [super layoutSubviews];
@@ -730,6 +743,17 @@ UIButton* CreateDismissButton(UIAction* primaryAction) {
       }];
 }
 
+// Pauses the animation if there is a change to the gesture indicator's offset
+// position after a change to the view's trait collection.
+- (void)pauseAnimationOnTraitChange:
+    (UITraitCollection*)previousTraitCollection {
+  if (ShouldGestureIndicatorOffsetFromCenter(previousTraitCollection) !=
+      ShouldGestureIndicatorOffsetFromCenter(self.traitCollection)) {
+    [_animator pauseAnimation];
+    _needsRepositionBubbleAndGestureIndicator = YES;
+  }
+}
+
 @end
 
 @implementation GestureInProductHelpView (Subclassing)
@@ -976,7 +1000,7 @@ UIButton* CreateDismissButton(UIAction* primaryAction) {
       }
       completion:^(BOOL completed) {
         [previousBubbleView removeFromSuperview];
-        if (completed) {
+        if (completed && weakSelf.superview) {
           [weakSelf setInitialBubbleViewWithDirection:
                         GetExpectedBubbleArrowDirectionForSwipeDirection(
                             weakSelf.animatingDirection)

@@ -101,7 +101,6 @@ inline constexpr char kDircryptoMigrationProgress[] =
     "DircryptoMigrationProgress";
 inline constexpr char kAuthFactorStatusUpdate[] = "AuthFactorStatusUpdate";
 inline constexpr char kLowDiskSpace[] = "LowDiskSpace";
-inline constexpr char kAuthScanResultSignal[] = "AuthScanResult";
 inline constexpr char kAuthEnrollmentProgressSignal[] =
     "AuthEnrollmentProgress";
 inline constexpr char kPrepareAuthFactorProgressSignal[] =

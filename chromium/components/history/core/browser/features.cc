@@ -80,19 +80,14 @@ BASE_FEATURE(kPopulateVisitedLinkDatabase,
              "PopulateVisitedLinkDatabase",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSyncSegmentsData,
-             "SyncSegmentsData",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kMostVisitedTilesNewScoring,
+             "MostVisitedTilesNewScoring",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
-// The maximum number of New Tab Page displays to show with synced segments
-// data.
-const base::FeatureParam<int> kMaxNumNewTabPageDisplays(
-    &kSyncSegmentsData,
-    "MaxNumNumNewTabPageDisplays",
-    5);
+const char kMvtScoringParamRecencyFactor[] = "recency_factor";
+const char kMvtScoringParamDailyVisitCountCap[] = "daily_visit_count_cap";
 
-bool IsSyncSegmentsDataEnabled() {
-  return base::FeatureList::IsEnabled(kSyncSegmentsData);
-}
+const char kMvtScoringParamRecencyFactor_Default[] = "default";
+const char kMvtScoringParamRecencyFactor_DecayStaircase[] = "decay_staircase";
 
 }  // namespace history

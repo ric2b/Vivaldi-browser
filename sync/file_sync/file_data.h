@@ -20,8 +20,8 @@ struct SyncedFileData {
   bool IsUnreferenced() const;
   void RunPendingCallbacks();
 
-  std::map<syncer::ModelType, std::set<base::Uuid>> local_references;
-  std::map<syncer::ModelType, std::set<std::string>> sync_references;
+  std::map<syncer::DataType, std::set<base::Uuid>> local_references;
+  std::map<syncer::DataType, std::set<std::string>> sync_references;
   std::string mimetype;
   bool has_content_locally = false;
   bool is_deleting = false;

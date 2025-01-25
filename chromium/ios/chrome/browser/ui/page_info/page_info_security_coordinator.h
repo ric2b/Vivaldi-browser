@@ -9,6 +9,10 @@
 
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
+// Vivaldi
+@protocol PageInfoCommands;
+// End Vivaldi
+
 @class PageInfoSiteSecurityDescription;
 @protocol PageInfoPresentationCommands;
 
@@ -18,6 +22,13 @@
 // Handler for actions within the Page Info UI.
 @property(nonatomic, weak) id<PageInfoPresentationCommands>
     pageInfoPresentationHandler;
+
+// Vivaldi
+// Handler for actions related to the entire Page Info UI such as showing or
+// dismissing the entire UI.
+@property(nonatomic, weak) id<PageInfoCommands> pageInfoCommandsHandler;
+@property(nonatomic, assign) BOOL openedViaSiteTrackerPrefModal;
+// End Vivaldi
 
 - (instancetype)initWithBaseNavigationController:
                     (UINavigationController*)navigationController

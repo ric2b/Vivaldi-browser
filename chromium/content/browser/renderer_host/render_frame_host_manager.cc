@@ -33,6 +33,7 @@
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/preloading/prefetch/prefetch_features.h"
 #include "content/browser/process_lock.h"
+#include "content/browser/process_reuse_policy.h"
 #include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/back_forward_cache_metrics.h"
 #include "content/browser/renderer_host/debug_urls.h"
@@ -291,7 +292,7 @@ ShouldSwapBrowsingInstanceToProto(ShouldSwapBrowsingInstance result) {
   }
 }
 
-void TraceShouldSwapBrowsingInstanceResult(int frame_tree_node_id,
+void TraceShouldSwapBrowsingInstanceResult(FrameTreeNodeId frame_tree_node_id,
                                            ShouldSwapBrowsingInstance result) {
   TRACE_EVENT_INSTANT(
       "navigation",
@@ -299,7 +300,7 @@ void TraceShouldSwapBrowsingInstanceResult(int frame_tree_node_id,
       [&](perfetto::EventContext ctx) {
         auto* event = ctx.event<ChromeTrackEvent>();
         auto* data = event->set_should_swap_browsing_instances_result();
-        data->set_frame_tree_node_id(frame_tree_node_id);
+        data->set_frame_tree_node_id(frame_tree_node_id.value());
         data->set_result(ShouldSwapBrowsingInstanceToProto(result));
       });
 }
@@ -436,7 +437,7 @@ void UpdateProcessReusePolicyForProcessPerSiteWithMainFrameThreshold(
   RecordProcessPerSiteWithMainFrameThresholdBlockReason(
       ProcessPerSiteWithMainFrameThresholdBlockReason::kNotBlocked);
   site_instance->set_process_reuse_policy(
-      SiteInstanceImpl::ProcessReusePolicy::
+      ProcessReusePolicy::
           REUSE_PENDING_OR_COMMITTED_SITE_WITH_MAIN_FRAME_THRESHOLD);
 }
 
@@ -669,13 +670,12 @@ RenderWidgetHostViewBase* RenderFrameHostManager::GetRenderWidgetHostView()
 bool RenderFrameHostManager::IsMainFrameForInnerDelegate() {
   return frame_tree_node_->IsMainFrame() &&
          frame_tree_node_->frame_tree()
-                 .delegate()
-                 ->GetOuterDelegateFrameTreeNodeId() !=
-             FrameTreeNode::kFrameTreeNodeInvalidId;
+             .delegate()
+             ->GetOuterDelegateFrameTreeNodeId();
 }
 
 FrameTreeNode* RenderFrameHostManager::GetOuterDelegateNode() const {
-  int outer_contents_frame_tree_node_id =
+  FrameTreeNodeId outer_contents_frame_tree_node_id =
       frame_tree_node_->frame_tree()
           .delegate()
           ->GetOuterDelegateFrameTreeNodeId();
@@ -776,10 +776,12 @@ void RenderFrameHostManager::DidNavigateFrame(
     bool is_same_document_navigation,
     bool clear_proxies_on_commit,
     const blink::FramePolicy& frame_policy,
-    bool allow_subframe_paint_holding) {
+    bool allow_subframe_paint_holding,
+    bool is_initiated_by_animated_transition) {
   CommitPendingIfNecessary(render_frame_host, was_caused_by_user_gesture,
                            is_same_document_navigation, clear_proxies_on_commit,
-                           allow_subframe_paint_holding);
+                           allow_subframe_paint_holding,
+                           is_initiated_by_animated_transition);
 
   // Make sure any dynamic changes to this frame's sandbox flags and permissions
   // policy that were made prior to navigation take effect.  This should only
@@ -816,7 +818,8 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     bool was_caused_by_user_gesture,
     bool is_same_document_navigation,
     bool clear_proxies_on_commit,
-    bool allow_subframe_paint_holding) {
+    bool allow_subframe_paint_holding,
+    bool is_initiated_by_animated_transition) {
   if (!speculative_render_frame_host_) {
     // There's no speculative RenderFrameHost so it must be that the current
     // RenderFrameHost completed a navigation.
@@ -827,7 +830,8 @@ void RenderFrameHostManager::CommitPendingIfNecessary(
     // A cross-RenderFrameHost navigation completed, so show the new renderer.
     CommitPending(std::move(speculative_render_frame_host_),
                   std::move(stored_page_to_restore_), clear_proxies_on_commit,
-                  allow_subframe_paint_holding);
+                  allow_subframe_paint_holding,
+                  is_initiated_by_animated_transition);
 
     if (GetNavigationQueueingFeatureLevel() >=
         NavigationQueueingFeatureLevel::kAvoidRedundantCancellations) {
@@ -1513,9 +1517,12 @@ void RenderFrameHostManager::PerformEarlyRenderFrameHostSwapIfNeeded(
   }
 
   CommitPending(
-      std::move(speculative_render_frame_host_), nullptr,
+      std::move(speculative_render_frame_host_),
+      /*pending_stored_page=*/nullptr,
       request->browsing_context_group_swap().ShouldClearProxiesOnCommit(),
-      /* allow_subframe_paint_holding */ false);
+      /* allow_subframe_paint_holding */ false,
+      /*is_initiated_by_animated_transition=*/
+      request->was_initiated_by_animated_transition());
   request->SetAssociatedRFHType(
       NavigationRequest::AssociatedRenderFrameHostType::CURRENT);
 
@@ -2228,20 +2235,20 @@ void RenderFrameHostManager::OnDidChangeCollapsedState(bool collapsed) {
   }
 
   DCHECK(frame_tree_node_->parent());
-  SiteInstanceImpl* parent_site_instance =
-      frame_tree_node_->parent()->GetSiteInstance();
+  SiteInstanceGroup* parent_group =
+      frame_tree_node_->parent()->GetSiteInstance()->group();
 
   // There will be no proxy to represent the pending or speculative RFHs in the
-  // parent's SiteInstance until the navigation is committed, but the old RFH is
-  // not unloaded before that happens either, so we can talk to the
+  // parent's SiteInstanceGroup until the navigation is committed, but the old
+  // RFH is not unloaded before that happens either, so we can talk to the
   // FrameOwner in the parent via the child's current RenderFrame at any time.
   DCHECK(current_frame_host());
-  if (current_frame_host()->GetSiteInstance() == parent_site_instance) {
+  if (current_frame_host()->GetSiteInstance()->group() == parent_group) {
     current_frame_host()->GetAssociatedLocalFrame()->Collapse(collapsed);
   } else {
     RenderFrameProxyHost* proxy_to_parent =
         frame_tree_node_->GetBrowsingContextStateForSubframe()
-            ->GetRenderFrameProxyHost(parent_site_instance->group());
+            ->GetRenderFrameProxyHost(parent_group);
     if (proxy_to_parent->is_render_frame_proxy_live())
       proxy_to_parent->GetAssociatedRemoteFrame()->Collapse(collapsed);
   }
@@ -2852,8 +2859,7 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
                 frame_tree_node_->GetParentOrOuterDocument()
                     ->GetOutermostMainFrame())) {
       new_instance->set_process_reuse_policy(
-          SiteInstanceImpl::ProcessReusePolicy::
-              REUSE_PENDING_OR_COMMITTED_SITE);
+          ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE_SUBFRAME);
     }
   }
 
@@ -2967,7 +2973,7 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
   // share the same default process when they don't need a dedicated process.
   // With sites that do require a dedicated process, we reuse processes via the
   // subframe reuse policy (we set the reuse policy to
-  // REUSE_PENDING_OR_COMMITTED_SITE).
+  // REUSE_PENDING_OR_COMMITTED_SITE_SUBFRAME).
   if (!current_frame_host()->IsOutermostMainFrame() &&
       !new_instance->HasProcess() &&
       !new_instance->RequiresDedicatedProcess()) {
@@ -3831,7 +3837,8 @@ RenderFrameHostManager::CreateRenderFrameHost(
   // TODO(yangsharon, rakina, crbug.com/1336305): Handle the
   // cross-SiteInstanceGroup  and crashed frame cases.
   CreateRenderViewHostCase create_rvh_case =
-      (ShouldCreateNewHostForAllFrames() &&
+      (render_frame_host_ &&
+       render_frame_host_->ShouldChangeRenderFrameHostOnSameSiteNavigation() &&
        create_frame_case == CreateFrameCase::kCreateSpeculative &&
        static_cast<SiteInstanceImpl*>(site_instance)->group() ==
            render_frame_host_->GetSiteInstance()->group() &&
@@ -4654,7 +4661,8 @@ void RenderFrameHostManager::CommitPending(
     std::unique_ptr<RenderFrameHostImpl> pending_rfh,
     std::unique_ptr<StoredPage> pending_stored_page,
     bool clear_proxies_on_commit,
-    bool allow_subframe_paint_holding) {
+    bool allow_subframe_paint_holding,
+    bool is_initiated_by_animated_transition) {
   TRACE_EVENT1("navigation", "RenderFrameHostManager::CommitPending",
                "FrameTreeNode id", frame_tree_node_->frame_tree_node_id());
   CHECK(pending_rfh);
@@ -4805,6 +4813,7 @@ void RenderFrameHostManager::CommitPending(
     if (prev_state ==
         RenderFrameHostImpl::LifecycleStateImpl::kInBackForwardCache) {
       for (const auto& rvh : render_view_hosts_to_restore) {
+        CHECK_NE(&*rvh, old_render_frame_host->GetRenderViewHost());
         blink::mojom::PageRestoreParamsPtr page_restore_params =
             pending_stored_page->page_restore_params().Clone();
         // We only send view_transition_state to the main RenderViewHost.
@@ -4976,6 +4985,11 @@ void RenderFrameHostManager::CommitPending(
   delegate_->NotifySwappedFromRenderManager(old_render_frame_host.get(),
                                             render_frame_host_.get());
 
+  // Disable paint holding if the committing request is being animated.
+  if (is_initiated_by_animated_transition) {
+    should_take_fallback_content = false;
+  }
+
   if (should_take_fallback_content) {
     new_view->TakeFallbackContentFrom(old_view);
   }
@@ -5141,9 +5155,8 @@ std::unique_ptr<RenderFrameHostImpl> RenderFrameHostManager::SetRenderFrameHost(
 
   // If the feature is enabled, check if there is a corresponding speculative
   // RenderViewHost that also needs to be swapped in.
-  if (ShouldCreateNewHostForAllFrames() && render_frame_host_ &&
-      render_frame_host_->GetRenderViewHost() ==
-          frame_tree.speculative_render_view_host()) {
+  if (render_frame_host_ && render_frame_host_->GetRenderViewHost() ==
+                                frame_tree.speculative_render_view_host()) {
     CHECK(frame_tree_node_->IsMainFrame());
     frame_tree.MakeSpeculativeRVHCurrent();
   }
@@ -5506,9 +5519,11 @@ void RenderFrameHostManager::CreateNewFrameForInnerDelegateAttachIfNecessary() {
   // WebContents::AttachToOuterWebContentsFrame is called.
   speculative_render_frame_host_->SwapIn();
 
-  CommitPending(std::move(speculative_render_frame_host_), nullptr,
-                false /* clear_proxies_on_commit */,
-                /* allow_subframe_paint_holding */ false);
+  CommitPending(std::move(speculative_render_frame_host_),
+                /*pending_stored_page=*/nullptr,
+                /*clear_proxies_on_commit=*/false,
+                /*allow_subframe_paint_holding=*/false,
+                /*is_initiated_by_animated_transition=*/false);
   NotifyPrepareForInnerDelegateAttachComplete(true /* success */);
 }
 

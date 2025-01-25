@@ -14,8 +14,8 @@
 #include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/actions/omnibox_action_factory_android.h"
 #include "components/omnibox/browser/clipboard_provider.h"
+#include "components/omnibox/browser/omnibox_feature_configs.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
-#include "components/query_tiles/android/tile_conversion_bridge.h"
 #include "url/android/gurl_android.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
@@ -57,7 +57,7 @@ ScopedJavaLocalRef<jobject> AutocompleteMatch::GetOrCreateJavaObject(
 
   base::android::ScopedJavaLocalRef<jobject> janswer;
   if (answer)
-    janswer = answer->CreateJavaObject();
+    janswer = answer->CreateJavaObject(answer_type);
 
   ScopedJavaLocalRef<jbyteArray> j_answer_template;
   if (answer_template) {
@@ -227,8 +227,23 @@ void AutocompleteMatch::UpdateJavaDestinationUrl() {
 void AutocompleteMatch::UpdateJavaAnswer() {
   if (java_match_) {
     JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AutocompleteMatch_setAnswer(
-        env, *java_match_, answer ? answer->CreateJavaObject() : nullptr);
+    if (omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled) {
+      ScopedJavaLocalRef<jbyteArray> j_answer_template;
+      if (answer_template) {
+        std::string str_answer_template;
+        if (answer_template->SerializeToString(&str_answer_template)) {
+          j_answer_template =
+              base::android::ToJavaByteArray(env, str_answer_template);
+        }
+      }
+      Java_AutocompleteMatch_setAnswerTemplate(
+          env, *java_match_, answer_template ? j_answer_template : nullptr);
+    } else {
+      Java_AutocompleteMatch_setAnswer(
+          env, *java_match_,
+          answer ? answer->CreateJavaObject(answer_type) : nullptr);
+    }
+    Java_AutocompleteMatch_setAnswerType(env, *java_match_, answer_type);
   }
 }
 
@@ -246,4 +261,7 @@ void AutocompleteMatch::UpdateJavaDescription() {
         ToJavaIntArray(env, description_class_offsets),
         ToJavaIntArray(env, description_class_styles));
   }
+}
+std::u16string AutocompleteMatch::GetLocalIconPath(JNIEnv* env) {
+    return AutocompleteMatch::local_favicon_path;
 }

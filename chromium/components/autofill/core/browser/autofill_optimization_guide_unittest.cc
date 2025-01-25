@@ -85,7 +85,7 @@ class AutofillOptimizationGuideTest : public testing::Test {
       std::string_view network = kVisaCard,
       CreditCard::VirtualCardEnrollmentType virtual_card_enrollment_type =
           CreditCard::VirtualCardEnrollmentType::kNetwork,
-      std::string_view issuer_id = kCapitalOneCardIssuerId) {
+      std::string_view issuer_id = "") {
     CreditCard card = test::GetMaskedServerCardEnrolledIntoVirtualCardNumber();
     test_api(card).set_network_for_card(network);
     card.set_virtual_card_enrollment_type(virtual_card_enrollment_type);
@@ -716,6 +716,131 @@ TEST_F(AutofillOptimizationGuideTest,
   autofill_optimization_guide_->OnDidParseForm(form_structure,
                                                personal_data_manager_.get());
 }
+
+// Test the `BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM` optimization type is registered
+// when the amount extraction experiment is enabled and there is at least one
+// server credit card.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+TEST_F(
+    AutofillOptimizationGuideTest,
+    CreditCardFormFound_AmountExtractionAllowed_BuyNowPayLaterProviderAffirm) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionDesktop};
+  FormStructure form_structure{
+      CreateTestCreditCardFormData(/*is_https=*/true,
+                                   /*use_month_type=*/true)};
+  test_api(form_structure)
+      .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
+                      CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
+  personal_data_manager_->test_payments_data_manager().AddServerCreditCard(
+      test::GetMaskedServerCard());
+
+  // Ensure that on registration the right optimization type is registered.
+  EXPECT_CALL(
+      *decider_,
+      RegisterOptimizationTypes(testing::IsSupersetOf(
+          {optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM})));
+
+  autofill_optimization_guide_->OnDidParseForm(form_structure,
+                                               personal_data_manager_.get());
+}
+
+// Test the `BUY_NOW_PAY_LATER_ALLOWLIST_ZIP` optimization type is registered
+// when the amount extraction experiment is enabled and there is at least one
+// server credit card.
+TEST_F(AutofillOptimizationGuideTest,
+       CreditCardFormFound_AmountExtractionAllowed_BuyNowPayLaterProviderZip) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionDesktop};
+  FormStructure form_structure{
+      CreateTestCreditCardFormData(/*is_https=*/true,
+                                   /*use_month_type=*/true)};
+  test_api(form_structure)
+      .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
+                      CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
+  personal_data_manager_->test_payments_data_manager().AddServerCreditCard(
+      test::GetMaskedServerCard());
+
+  // Ensure that on registration the right optimization type is registered.
+  EXPECT_CALL(
+      *decider_,
+      RegisterOptimizationTypes(testing::IsSupersetOf(
+          {optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_ZIP})));
+
+  autofill_optimization_guide_->OnDidParseForm(form_structure,
+                                               personal_data_manager_.get());
+}
+
+// Test neither `BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM` nor
+// `BUY_NOW_PAY_LATER_ALLOWLIST_ZIP` optimization types are registered when the
+// amount extraction experiment is off.
+TEST_F(AutofillOptimizationGuideTest,
+       CreditCardFormFound_AmountExtractionAllowed_FlagOff) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      features::kAutofillEnableAmountExtractionDesktop);
+  FormStructure form_structure{
+      CreateTestCreditCardFormData(/*is_https=*/true,
+                                   /*use_month_type=*/true)};
+  test_api(form_structure)
+      .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
+                      CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
+  personal_data_manager_->test_payments_data_manager().AddServerCreditCard(
+      test::GetMaskedServerCard());
+
+  // RegisterOptimizationTypes shouldn't be called.
+  EXPECT_CALL(*decider_, RegisterOptimizationTypes).Times(0);
+
+  autofill_optimization_guide_->OnDidParseForm(form_structure,
+                                               personal_data_manager_.get());
+}
+
+// Test neither `BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM` nor
+// `BUY_NOW_PAY_LATER_ALLOWLIST_ZIP` optimization types are registered when
+// there is no server credit card.
+TEST_F(AutofillOptimizationGuideTest,
+       CreditCardFormFound_AmountExtractionAllowed_NoServerCreditCardFound) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionDesktop};
+  FormStructure form_structure{
+      CreateTestCreditCardFormData(/*is_https=*/true,
+                                   /*use_month_type=*/true)};
+  test_api(form_structure)
+      .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
+                      CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
+  personal_data_manager_->test_payments_data_manager().AddCreditCard(
+      test::GetCreditCard());
+
+  // RegisterOptimizationTypes shouldn't be called.
+  EXPECT_CALL(*decider_, RegisterOptimizationTypes).Times(0);
+
+  autofill_optimization_guide_->OnDidParseForm(form_structure,
+                                               personal_data_manager_.get());
+}
+
+// Test neither `BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM` nor
+// `BUY_NOW_PAY_LATER_ALLOWLIST_ZIP` optimization types are registered when
+// there is no personal data manager present.
+TEST_F(AutofillOptimizationGuideTest,
+       CreditCardFormFound_AmountExtractionAllowed_NoPersonalDataManager) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableAmountExtractionDesktop};
+  FormStructure form_structure{
+      CreateTestCreditCardFormData(/*is_https=*/true,
+                                   /*use_month_type=*/true)};
+  test_api(form_structure)
+      .SetFieldTypes({CREDIT_CARD_NAME_FULL, CREDIT_CARD_NUMBER,
+                      CREDIT_CARD_EXP_MONTH, CREDIT_CARD_VERIFICATION_CODE});
+  personal_data_manager_.reset();
+
+  // RegisterOptimizationTypes shouldn't be called.
+  EXPECT_CALL(*decider_, RegisterOptimizationTypes).Times(0);
+
+  autofill_optimization_guide_->OnDidParseForm(form_structure,
+                                               personal_data_manager_.get());
+}
+#endif
 
 // Test that the ablation site lists are registered in case the ablation
 // experiment is enabled.

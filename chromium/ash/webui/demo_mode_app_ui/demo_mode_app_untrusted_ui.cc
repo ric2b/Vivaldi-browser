@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ash/webui/demo_mode_app_ui/demo_mode_app_untrusted_ui.h"
 
 #include <memory>
@@ -134,12 +139,18 @@ void DemoModeAppUntrustedUI::CreatePageHandler(
       views::Widget::GetWidgetForNativeWindow(top_level_native_window);
   demo_mode_page_handler_ = std::make_unique<DemoModeUntrustedPageHandler>(
       std::move(handler), widget, this);
-  // kLandscapePrimary means 0 degree. If it's kLandscapeSecondary, that means
-  // 180 degrees upside down. When the demo mode app is closed,
-  // UnlockOrientationForWindow() will be called before the window is destroyed.
-  // The lock_info_map_ will not keep the demo mode app window info.
-  ash::Shell::Get()->screen_orientation_controller()->LockOrientationForWindow(
-      top_level_native_window, chromeos::OrientationType::kLandscapePrimary);
+
+  if (ash::features::IsDemoModeAppLandscapeLockedEnabled()) {
+    // kLandscapePrimary is 0 degree, and kLandscapeSecondary is 180 degrees
+    // (upside down). kLandscape includes both. When the demo mode app is
+    // closed, UnlockOrientationForWindow() will be called before the window is
+    // destroyed. The lock_info_map_ will not keep the demo mode app window
+    // info.
+    ash::Shell::Get()
+        ->screen_orientation_controller()
+        ->LockOrientationForWindow(top_level_native_window,
+                                   chromeos::OrientationType::kLandscape);
+  }
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(DemoModeAppUntrustedUI)

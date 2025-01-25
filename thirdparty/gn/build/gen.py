@@ -101,7 +101,7 @@ class Platform(object):
     return self._platform == 'zos'
 
   def is_serenity(self):
-    return self_.platform == 'serenity'
+    return self._platform == 'serenity'
 
 class ArgumentsList:
   """Helper class to accumulate ArgumentParser argument definitions

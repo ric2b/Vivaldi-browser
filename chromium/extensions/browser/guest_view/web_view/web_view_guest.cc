@@ -8,6 +8,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -31,6 +32,7 @@
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/permission_result.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -655,9 +657,9 @@ void WebViewGuest::WebContentsDestroyed() {
   // RenderFrameDeleted(), such as when destroying unattached guests that never
   // had a RenderFrame created.
   WebViewRendererState::GetInstance()->RemoveGuest(
-      web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
-      web_contents()->GetPrimaryMainFrame()->GetRoutingID());
-  }
+      GetGuestMainFrame()->GetProcess()->GetID(),
+      GetGuestMainFrame()->GetRoutingID());
+  } // End Vivaldi
   // The following call may destroy `this`.
   GuestViewBase::WebContentsDestroyed();
 }
@@ -881,14 +883,10 @@ void WebViewGuest::Stop() {
 
 void WebViewGuest::Terminate() {
   base::RecordAction(UserMetricsAction("WebView.Guest.Terminate"));
-  base::ProcessHandle process_handle = web_contents()
-                                           ->GetPrimaryMainFrame()
-                                           ->GetProcess()
-                                           ->GetProcess()
-                                           .Handle();
+  base::ProcessHandle process_handle =
+      GetGuestMainFrame()->GetProcess()->GetProcess().Handle();
   if (process_handle) {
-    web_contents()->GetPrimaryMainFrame()->GetProcess()->Shutdown(
-        content::RESULT_CODE_KILLED);
+    GetGuestMainFrame()->GetProcess()->Shutdown(content::RESULT_CODE_KILLED);
   }
 }
 
@@ -996,8 +994,7 @@ void WebViewGuest::DidFinishNavigation(
       GetController().GetLastCommittedEntry()->GetBaseURLForDataURL().spec());
   args.Set(kInternalCurrentEntryIndex, GetController().GetCurrentEntryIndex());
   args.Set(kInternalEntryCount, GetController().GetEntryCount());
-  args.Set(kInternalProcessId,
-           web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID());
+  args.Set(kInternalProcessId, GetGuestMainFrame()->GetProcess()->GetID());
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventLoadCommit, std::move(args)));
 
@@ -1062,8 +1059,7 @@ void WebViewGuest::PrimaryMainFrameRenderProcessGone(
   find_helper_.CancelAllFindSessions();
 
   base::Value::Dict args;
-  args.Set(webview::kProcessId,
-           web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID());
+  args.Set(webview::kProcessId, GetGuestMainFrame()->GetProcess()->GetID());
   args.Set(webview::kReason, TerminationStatusToString(status));
   DispatchEventToView(
       std::make_unique<GuestViewEvent>(webview::kEventExit, std::move(args)));
@@ -1221,6 +1217,11 @@ void WebViewGuest::RequestMediaAccessPermission(
     WebContents* source,
     const content::MediaStreamRequest& request,
     content::MediaResponseCallback callback) {
+  if (IsOwnedByControlledFrameEmbedder()) {
+    web_view_permission_helper_->RequestMediaAccessPermissionForControlledFrame(
+        source, request, std::move(callback));
+    return;
+  }
   web_view_permission_helper_->RequestMediaAccessPermission(
       source, request, std::move(callback));
 }
@@ -1229,6 +1230,11 @@ bool WebViewGuest::CheckMediaAccessPermission(
     content::RenderFrameHost* render_frame_host,
     const url::Origin& security_origin,
     blink::mojom::MediaStreamType type) {
+  if (IsOwnedByControlledFrameEmbedder()) {
+    return web_view_permission_helper_
+        ->CheckMediaAccessPermissionForControlledFrame(render_frame_host,
+                                                       security_origin, type);
+  }
   return web_view_permission_helper_->CheckMediaAccessPermission(
       render_frame_host, security_origin, type);
 }
@@ -1276,7 +1282,7 @@ void WebViewGuest::WillAttachToEmbedder() {
   //
   // TODO(alexmos): This may be redundant with the call in
   // RenderFrameCreated() and should be cleaned up.
-  PushWebViewStateToIOThread(web_contents()->GetPrimaryMainFrame());
+  PushWebViewStateToIOThread(GetGuestMainFrame());
 
   if (recreate_initial_nav_) {
     SignalWhenReady(std::move(recreate_initial_nav_));
@@ -1315,6 +1321,24 @@ bool WebViewGuest::IsPermissionRequestable(ContentSettingsType type) const {
       // StoragePartitions.
       return false;
   }
+}
+
+std::optional<content::PermissionResult> WebViewGuest::OverridePermissionResult(
+    ContentSettingsType type) const {
+  if (IsOwnedByControlledFrameEmbedder()) {
+    // Permission of content within a Controlled Frame is isolated.
+    // Therefore, Controlled Frame decides what the immediate permission result
+    // is.
+    const blink::PermissionType permission_type =
+        permissions::PermissionUtil::ContentSettingTypeToPermissionType(type);
+    if (permission_type == blink::PermissionType::GEOLOCATION) {
+      return content::PermissionResult(
+          content::PermissionStatus::ASK,
+          content::PermissionStatusSource::UNSPECIFIED);
+    }
+    // Returns nullopt for unhandled cases.
+  }
+  return std::nullopt;
 }
 
 content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(
@@ -1430,7 +1454,10 @@ void WebViewGuest::ApplyAttributes(const base::Value::Dict& params) {
 
   const std::string* user_agent_override =
       params.FindString(kParameterUserAgentOverride);
-  SetUserAgentOverride(user_agent_override ? *user_agent_override : "");
+
+  if (user_agent_override) {
+    SetUserAgentOverride(*user_agent_override);
+  }
 
   std::optional<bool> allow_transparency =
       params.FindBool(kAttributeAllowTransparency);
@@ -1522,7 +1549,7 @@ void WebViewGuest::SetSpatialNavigationEnabled(bool enabled) {
     return;
   is_spatial_navigation_enabled_ = enabled;
   ExtensionWebContentsObserver::GetForWebContents(web_contents())
-      ->GetLocalFrameChecked(web_contents()->GetPrimaryMainFrame())
+      ->GetLocalFrameChecked(GetGuestMainFrame())
       .SetSpatialNavigationEnabled(enabled);
 }
 
@@ -1604,7 +1631,7 @@ bool WebViewGuest::ShouldResumeRequestsForCreatedWindow() {
   return false;
 }
 
-void WebViewGuest::AddNewContents(
+content::WebContents* WebViewGuest::AddNewContents(
     WebContents* source,
     std::unique_ptr<WebContents> new_contents,
     const GURL& target_url,
@@ -1627,7 +1654,7 @@ void WebViewGuest::AddNewContents(
       browser->AddNewContentsVivaldi(source, std::move(new_contents), target_url,
                               disposition, window_features, user_gesture,
                               was_blocked);
-      return;
+      return webcontensimpl;
     }
   }
 
@@ -1649,6 +1676,7 @@ void WebViewGuest::AddNewContents(
 
   RequestNewWindowPermission(disposition, window_features.bounds,
                              std::move(owned_web_view_guest));
+  return nullptr;
 }
 
 WebContents* WebViewGuest::OpenURLFromTab(
@@ -1764,17 +1792,6 @@ void WebViewGuest::WebContentsCreated(WebContents* source_contents,
 void WebViewGuest::EnterFullscreenModeForTab(
     content::RenderFrameHost* requesting_frame,
     const blink::mojom::FullscreenOptions& options) {
-  // Ask the embedder for permission.
-  base::Value::Dict request_info;
-  const GURL& origin =
-      requesting_frame->GetLastCommittedURL().DeprecatedGetOriginAsURL();
-  request_info.Set(webview::kOrigin, origin.spec());
-  web_view_permission_helper_->RequestPermission(
-      WEB_VIEW_PERMISSION_TYPE_FULLSCREEN, std::move(request_info),
-      base::BindOnce(&WebViewGuest::OnFullscreenPermissionDecided,
-                     weak_ptr_factory_.GetWeakPtr()),
-      false /* allowed_by_default */);
-
   // TODO(lazyboy): Right now the guest immediately goes fullscreen within its
   // bounds. If the embedder denies the permission then we will see a flicker.
   // Once we have the ability to "cancel" a renderer/ fullscreen request:
@@ -1782,6 +1799,14 @@ void WebViewGuest::EnterFullscreenModeForTab(
   // Calling SetFullscreenState(true) once the embedder allowed the request.
   // Otherwise we would cancel renderer/ fullscreen if the embedder denied.
   SetFullscreenState(true);
+
+  // Ask the embedder for permission.
+  web_view_permission_helper_->RequestFullscreenPermission(
+      requesting_frame->GetLastCommittedOrigin(),
+      base::BindOnce(&WebViewGuest::OnFullscreenPermissionDecided,
+                     weak_ptr_factory_.GetWeakPtr()));
+
+  // Vivaldi
   ToggleFullscreenModeForTab(web_contents(), true);
 }
 
@@ -1884,8 +1909,7 @@ void WebViewGuest::LoadURLWithParams(
   GURL validated_url(url);
   // If the embedder is Vivaldi do not filter the url, we want to open all urls.
   if (!IsVivaldiApp(owner_host()))
-  web_contents()->GetPrimaryMainFrame()->GetProcess()->FilterURL(
-      false, &validated_url);
+  GetGuestMainFrame()->GetProcess()->FilterURL(false, &validated_url);
   // As guests do not swap processes on navigation, only navigations to
   // normal web URLs are supported.  No protocol handlers are installed for
   // other schemes (e.g., WebUI or extensions), and no permissions or bindings
@@ -2075,11 +2099,7 @@ void WebViewGuest::SetFullscreenState(bool is_fullscreen) {
   }
   // Since we changed fullscreen state, sending a SynchronizeVisualProperties
   // message ensures that renderer/ sees the change.
-  web_contents()
-      ->GetPrimaryMainFrame()
-      ->GetRenderViewHost()
-      ->GetWidget()
-      ->SynchronizeVisualProperties();
+  GetGuestMainFrame()->GetRenderWidgetHost()->SynchronizeVisualProperties();
 }
 
 void WebViewGuest::OnVisibilityChanged(content::Visibility visibility) {

@@ -106,6 +106,7 @@ constexpr char kDefaultServiceProperty[] = "DefaultService";
 constexpr char kDefaultTechnologyProperty[] = "DefaultTechnology";
 constexpr char kDevicesProperty[] = "Devices";
 constexpr char kDhcpPropertyHostnameProperty[] = "DHCPProperty.Hostname";
+constexpr char kDisableLegacyDHCPCDProperty[] = "DisableLegacyDHCPCD";
 constexpr char kDisableWiFiVHTProperty[] = "DisableWiFiVHT";
 constexpr char kDisconnectWiFiOnEthernetProperty[] = "DisconnectWiFiOnEthernet";
 constexpr char kDNSProxyDOHProvidersProperty[] = "DNSProxyDOHProviders";
@@ -138,6 +139,7 @@ constexpr char kWakeOnLanEnabledProperty[] = "WakeOnLanEnabled";
 constexpr char kWifiGlobalFTEnabledProperty[] = "WiFi.GlobalFTEnabled";
 constexpr char kWifiScanAllowRoamProperty[] = "WiFi.ScanAllowRoam";
 constexpr char kWifiRequestScanTypeProperty[] = "WiFi.RequestScanType";
+constexpr char kWiFiInterfacePrioritiesProperty[] = "WiFiInterfacePriorities";
 // Valid values of DisconnectWiFiOnEthernet
 constexpr char kDisconnectWiFiOnEthernetOff[] = "off";
 constexpr char kDisconnectWiFiOnEthernetConnected[] = "connected";
@@ -193,6 +195,7 @@ constexpr char kDownlinkSpeedPropertyKbps[] = "DownlinkSpeedKbps";
 constexpr char kLastManualConnectAttemptProperty[] = "LastManualConnectAttempt";
 constexpr char kLastConnectedProperty[] = "LastConnected";
 constexpr char kLastOnlineProperty[] = "LastOnline";
+constexpr char kStartTimeProperty[] = "StartTime";
 constexpr char kNetworkIDProperty[] = "NetworkID";
 constexpr char kNetworkConfigProperty[] = "NetworkConfig";
 
@@ -584,6 +587,7 @@ constexpr char kApnIsRequiredByCarrierSpecProperty[] =
 // TODO(b/251551314): Remove kApnAttachProperty after 2025Q2
 constexpr char kApnAttachProperty[] = "attach";
 constexpr char kApnIpTypeProperty[] = "ip_type";
+constexpr char kApnRoamingIpTypeProperty[] = "roaming_ip_type";
 constexpr char kApnTypesProperty[] = "apn_types";
 constexpr char kApnIdProperty[] = "id";
 constexpr char kApnSourceProperty[] = "apn_source";
@@ -1208,6 +1212,9 @@ constexpr char kP2PDevicePriority[] = "priority";
 constexpr char kP2PDeviceShillID[] = "shill_id";
 constexpr char kP2PResultCode[] = "result_code";
 
+// Manager kWiFiInterfacePriorites key names
+constexpr char kWiFiInterfacePrioritesNameProperty[] = "name";
+constexpr char kWiFiInterfacePrioritiesPriorityProperty[] = "priority";
 // Manager CreateP2PGroup result values
 constexpr char kCreateP2PGroupResultSuccess[] = "success";
 constexpr char kCreateP2PGroupResultNotAllowed[] = "not_allowed";

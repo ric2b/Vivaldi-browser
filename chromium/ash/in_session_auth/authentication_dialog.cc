@@ -26,6 +26,8 @@
 #include "chromeos/ash/components/osauth/public/common_types.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
@@ -94,7 +96,7 @@ AuthenticationDialog::AuthenticationDialog(
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DistanceMetric::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   SetTitle(l10n_util::GetStringUTF16(IDS_ASH_IN_SESSION_AUTH_TITLE));
-  SetModalType(ui::MODAL_TYPE_SYSTEM);
+  SetModalType(ui::mojom::ModalType::kSystem);
 
   // Callback setup
   SetCancelCallback(base::BindOnce(&AuthenticationDialog::CancelAuthAttempt,
@@ -156,8 +158,8 @@ void AuthenticationDialog::ConfigureOkButton() {
 }
 
 void AuthenticationDialog::SetUIDisabled(bool is_disabled) {
-  SetButtonEnabled(ui::DialogButton::DIALOG_BUTTON_OK, !is_disabled);
-  SetButtonEnabled(ui::DialogButton::DIALOG_BUTTON_CANCEL, !is_disabled);
+  SetButtonEnabled(ui::mojom::DialogButton::kOk, !is_disabled);
+  SetButtonEnabled(ui::mojom::DialogButton::kCancel, !is_disabled);
   password_field_->SetReadOnly(is_disabled);
 }
 

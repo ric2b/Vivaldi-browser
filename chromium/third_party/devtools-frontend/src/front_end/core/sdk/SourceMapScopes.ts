@@ -30,6 +30,7 @@ export interface OriginalScope {
   name?: string;
   variables: string[];
   children: OriginalScope[];
+  parent?: OriginalScope;
 }
 
 /**
@@ -41,9 +42,9 @@ export interface GeneratedRange {
   originalScope?: OriginalScope;
 
   /**
-   * Whether this generated range is an actual JavaScript scope in the generated code.
+   * Whether this generated range is an actual JavaScript function in the generated code.
    */
-  isScope: boolean;
+  isFunctionScope: boolean;
 
   /**
    * If this `GeneratedRange` is the result of inlining `originalScope`, then `callsite`
@@ -121,6 +122,7 @@ function decodeOriginalScope(encodedOriginalScope: string, names: string[]): Ori
         // We are done. There might be more top-level scopes but we only allow one.
         return {root: scope, scopeForItemIndex};
       }
+      scope.parent = scopeStack[scopeStack.length - 1];
       scopeStack[scopeStack.length - 1].children.push(scope);
     }
   }
@@ -194,7 +196,7 @@ export function decodeGeneratedRanges(
   const rangeStack: GeneratedRange[] = [{
     start: {line: 0, column: 0},
     end: {line: 0, column: 0},
-    isScope: false,
+    isFunctionScope: false,
     children: [],
     values: [],
   }];
@@ -205,7 +207,7 @@ export function decodeGeneratedRanges(
       const range: GeneratedRange = {
         start: {line: item.line, column: item.column},
         end: {line: item.line, column: item.column},
-        isScope: Boolean(item.flags & EncodedGeneratedRangeFlag.IsScope),
+        isFunctionScope: Boolean(item.flags & EncodedGeneratedRangeFlag.IS_FUNCTION_SCOPE),
         values: [],
         children: [],
       };
@@ -304,9 +306,9 @@ interface EncodedGeneratedRangeEnd {
 }
 
 export const enum EncodedGeneratedRangeFlag {
-  HasDefinition = 0x1,
-  HasCallsite = 0x2,
-  IsScope = 0x4,
+  HAS_DEFINITION = 0x1,
+  HAS_CALLSITE = 0x2,
+  IS_FUNCTION_SCOPE = 0x4,
 }
 
 function isRangeStart(item: EncodedGeneratedRangeStart|EncodedGeneratedRangeEnd): item is EncodedGeneratedRangeStart {
@@ -355,7 +357,7 @@ function*
       bindings: [],
     };
 
-    if (startItem.flags & EncodedGeneratedRangeFlag.HasDefinition) {
+    if (startItem.flags & EncodedGeneratedRangeFlag.HAS_DEFINITION) {
       const sourceIdx = iter.nextVLQ();
       const scopeIdx = iter.nextVLQ();
       state.defScopeIdx = scopeIdx + (sourceIdx === 0 ? state.defScopeIdx : 0);
@@ -366,7 +368,7 @@ function*
       };
     }
 
-    if (startItem.flags & EncodedGeneratedRangeFlag.HasCallsite) {
+    if (startItem.flags & EncodedGeneratedRangeFlag.HAS_CALLSITE) {
       const sourceIdx = iter.nextVLQ();
       const line = iter.nextVLQ();
       const column = iter.nextVLQ();

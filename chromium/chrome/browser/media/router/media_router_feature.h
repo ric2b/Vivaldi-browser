@@ -62,10 +62,6 @@ BASE_DECLARE_FEATURE(kShowCastPermissionRejectedError);
 // fall back to audio tab mirroring when casting from the Global Media Controls.
 BASE_DECLARE_FEATURE(kFallbackToAudioTabMirroring);
 
-// If enabled, mirroring sessions use the playout delay specified by
-// `kCastMirroringPlayoutDelayMs`.
-BASE_DECLARE_FEATURE(kCastMirroringPlayoutDelay);
-
 // When enabled, Cast virtual connections are removed without explicitly sending
 // a close connection request to the receiver when the sender webpage navigates
 // away.
@@ -74,8 +70,9 @@ BASE_DECLARE_FEATURE(kCastMirroringPlayoutDelay);
 BASE_DECLARE_FEATURE(kCastSilentlyRemoveVcOnNavigation);
 
 #if BUILDFLAG(IS_MAC)
-// If enabled, Chrome uses the Network Framework API for discovery on Mac.
-BASE_DECLARE_FEATURE(kUseNetworkFrameworkForCastDiscovery);
+// If enabled, Chrome uses the Network Framework API for local device discovery
+// on Mac.
+BASE_DECLARE_FEATURE(kUseNetworkFrameworkForLocalDiscovery);
 #endif
 
 extern const base::FeatureParam<int> kCastMirroringPlayoutDelayMs;

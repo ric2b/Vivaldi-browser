@@ -8,6 +8,25 @@ The changes are relative to the previous release, unless the baseline is specifi
 
 ## [Unreleased]
 
+### Changed since 1.1.1
+* avifenc: Allow large images to be encoded.
+* Fix empty CMAKE_CXX_FLAGS_RELEASE if -DAVIF_CODEC_AOM=LOCAL -DAVIF_LIBYUV=OFF
+  is specified. https://github.com/AOMediaCodec/libavif/issues/2365.
+* Renamed AVIF_ENABLE_EXPERIMENTAL_METAV1 to AVIF_ENABLE_EXPERIMENTAL_MINI and
+  updated the experimental reduced header feature to the latest specification
+  draft.
+* Ignore gain maps with unsupported metadata. Handle gain maps with
+  writer_version > 0 correctly.
+  The combination of settings enableParsingGainMapMetadata=false with
+  enableDecodingGainMap=true is no longer allowed and returns an invalid argument
+  error.
+  The `gainMapPresent` field is now only populated if enableParsingGainMapMetadata
+  is true.
+* Write an empty HandlerBox name field instead of "libavif" (saves 7 bytes).
+* Update svt.cmd/svt.sh/LocalSvt.cmake: v2.2.0
+
+## [1.1.1] - 2024-07-30
+
 ### Changed since 1.1.0
 * In avif.h, change "AVIF_API AVIF_NODISCARD" back to "AVIF_NODISCARD AVIF_API"
   to fix clang-cl and MSVC compilation errors in the shared library build on
@@ -21,6 +40,16 @@ The changes are relative to the previous release, unless the baseline is specifi
 * Fix CMake config shared library leaks
   https://github.com/AOMediaCodec/libavif/issues/2264.
 * Fix clang-cl compilation.
+* Update gain map metadata to current ISO 21496-1 draft.
+* cmake: Only search for ASM_NASM language on x86_64 platforms.
+* Fix "No known features for CXX compiler" CMake error.
+* Fix aom link flags so that transitive library link flags are included when
+  aom is a static library
+  https://github.com/AOMediaCodec/libavif/issues/2274.
+* Fix out-of-order 'dimg' grid associations
+  https://github.com/AOMediaCodec/libavif/issues/2311.
+* Report files with an item used in multiple 'dimg' boxes with
+  AVIF_RESULT_NOT_IMPLEMENTED instead of AVIF_RESULT_INVALID_IMAGE_GRID.
 
 ## [1.1.0] - 2024-07-11
 
@@ -1122,7 +1151,8 @@ code.
 - Constants `AVIF_VERSION`, `AVIF_VERSION_MAJOR`, `AVIF_VERSION_MINOR`, `AVIF_VERSION_PATCH`
 - `avifVersion()` function
 
-[Unreleased]: https://github.com/AOMediaCodec/libavif/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/AOMediaCodec/libavif/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/AOMediaCodec/libavif/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/AOMediaCodec/libavif/compare/v1.0.0...v1.1.0
 [1.0.4]: https://github.com/AOMediaCodec/libavif/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/AOMediaCodec/libavif/compare/v1.0.2...v1.0.3

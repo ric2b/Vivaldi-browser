@@ -90,14 +90,16 @@ class TestAutofillDriverTemplate : public T {
     return isolation_info_;
 #endif
   }
-  void TriggerFormExtractionInDriverFrame() override {}
+  void TriggerFormExtractionInDriverFrame(
+      AutofillDriver::AutofillDriverRouterAndFormForestPassKey pass_key)
+      override {}
   void TriggerFormExtractionInAllFrames(
       base::OnceCallback<void(bool)> form_extraction_finished_callback)
       override {}
   void ExtractForm(
       FormGlobalId form,
       AutofillDriver::BrowserFormHandler response_handler) override {}
-  void GetFourDigitCombinationsFromDOM(
+  void GetFourDigitCombinationsFromDom(
       base::OnceCallback<void(const std::vector<std::string>&)>
           potential_matches) override {}
 

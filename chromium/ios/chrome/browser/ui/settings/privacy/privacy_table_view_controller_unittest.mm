@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/settings/privacy/privacy_table_view_controller.h"
 
 #import <LocalAuthentication/LAContext.h>
+
 #import <memory>
 
 #import "base/apple/foundation_util.h"
@@ -28,10 +29,11 @@
 #import "components/sync_preferences/testing_pref_service_syncable.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller_test.h"
@@ -87,7 +89,7 @@ class PrivacyTableViewControllerTest
     test_cbs_builder.AddTestingFactory(
         feature_engagement::TrackerFactory::GetInstance(),
         base::BindRepeating(&BuildFeatureEngagementMockTracker));
-    chrome_browser_state_ = test_cbs_builder.Build();
+    chrome_browser_state_ = std::move(test_cbs_builder).Build();
 
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get());
 
@@ -145,7 +147,7 @@ class PrivacyTableViewControllerTest
   }
 
   web::WebTaskEnvironment task_environment_;
-  IOSChromeScopedTestingLocalState local_state_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<Browser> browser_;
   NSString* initialValueForSpdyProxyEnabled_;
@@ -326,7 +328,8 @@ TEST_P(PrivacyTableViewControllerTest,
       .Times(2);
 
   prefService->Set(prefs::kIosHandoffToOtherDevices, base::Value(true));
-  prefService->Set(prefs::kBrowserLockdownModeEnabled, base::Value(true));
+  GetApplicationContext()->GetLocalState()->Set(
+      prefs::kBrowserLockdownModeEnabled, base::Value(true));
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -11,9 +11,9 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.LinearLayout;
 
 import androidx.annotation.ColorRes;
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.widget.ImageViewCompat;
@@ -23,16 +23,19 @@ import org.chromium.ui.widget.ChromeImageView;
 
 // Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
+import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 
 /** Toolbar for the bottom tab strip see {@link TabGroupUiCoordinator}. */
 public class TabGroupUiToolbarView extends FrameLayout {
-    private ChromeImageView mRightButton;
-    private ChromeImageView mLeftButton;
+    private ChromeImageView mNewTabButton;
+    private ChromeImageView mShowGroupDialogButton;
     private ChromeImageView mFadingEdgeStart;
     private ChromeImageView mFadingEdgeEnd;
     private ViewGroup mContainerView;
-    private LinearLayout mMainContent;
+    private ViewGroup mMainContent;
+    private @Nullable FrameLayout mImageTilesContainer;
 
     // Vivaldi
     private ThemeColorProvider.ThemeColorObserver mThemeColorObserver;
@@ -46,17 +49,20 @@ public class TabGroupUiToolbarView extends FrameLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
 
-        mLeftButton = findViewById(R.id.toolbar_left_button);
-        mRightButton = findViewById(R.id.toolbar_right_button);
+        mShowGroupDialogButton = findViewById(R.id.toolbar_show_group_dialog_button);
+        mNewTabButton = findViewById(R.id.toolbar_new_tab_button);
         mFadingEdgeStart = findViewById(R.id.tab_strip_fading_edge_start);
         mFadingEdgeEnd = findViewById(R.id.tab_strip_fading_edge_end);
         mContainerView = findViewById(R.id.toolbar_container_view);
         mMainContent = findViewById(R.id.main_content);
+        mImageTilesContainer = findViewById(R.id.toolbar_image_tiles_container);
 
         if (ChromeApplicationImpl.isVivaldi()) {
             setLayoutParams(new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             if (getId() == -1) setVisibility(View.GONE);
+            mFadingEdgeStart.setVisibility(GONE);
+            mFadingEdgeEnd.setVisibility(GONE);
         }
 
         // Vivaldi
@@ -64,12 +70,20 @@ public class TabGroupUiToolbarView extends FrameLayout {
         mTintObserver = (tint, activityFocusTint, useLight) -> setTint(tint);
     }
 
-    void setLeftButtonOnClickListener(OnClickListener listener) {
-        mLeftButton.setOnClickListener(listener);
+    void setShowGroupDialogButtonOnClickListener(OnClickListener listener) {
+        mShowGroupDialogButton.setOnClickListener(listener);
     }
 
-    void setRightButtonOnClickListener(OnClickListener listener) {
-        mRightButton.setOnClickListener(listener);
+    void setImageTilesContainerOnClickListener(OnClickListener listener) {
+        if (mImageTilesContainer == null) return;
+
+        // TODO(crbug.com/362280397): Possibly attach to a child view instead for ripple and instead
+        // add a valid TouchDelegate.
+        mImageTilesContainer.setOnClickListener(listener);
+    }
+
+    void setNewTabButtonOnClickListener(OnClickListener listener) {
+        mNewTabButton.setOnClickListener(listener);
     }
 
     ViewGroup getViewContainer() {
@@ -88,6 +102,7 @@ public class TabGroupUiToolbarView extends FrameLayout {
     }
 
     void setIsIncognito(boolean isIncognito) {
+        if (ChromeApplicationImpl.isVivaldi()) return;
         @ColorRes
         int tintListRes =
                 isIncognito
@@ -105,32 +120,36 @@ public class TabGroupUiToolbarView extends FrameLayout {
     }
 
     void setTint(ColorStateList tint) {
-        ImageViewCompat.setImageTintList(mLeftButton, tint);
-        ImageViewCompat.setImageTintList(mRightButton, tint);
+        ImageViewCompat.setImageTintList(mShowGroupDialogButton, tint);
+        ImageViewCompat.setImageTintList(mNewTabButton, tint);
     }
 
     void setBackgroundColorTint(int color) {
         DrawableCompat.setTint(getBackground(), color);
     }
 
-    /** Setup the drawable in the left button. */
-    void setLeftButtonDrawableId(int drawableId) {
-        mLeftButton.setImageResource(drawableId);
+    void setShowGroupDialogButtonVisible(boolean visible) {
+        mShowGroupDialogButton.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
-    /** Set the content description of the left button. */
-    void setLeftButtonContentDescription(String string) {
-        mLeftButton.setContentDescription(string);
-    }
+    void setImageTilesContainerVisible(boolean visible) {
+        if (mImageTilesContainer == null) return;
 
-    /** Set the content description of the right button. */
-    void setRightButtonContentDescription(String string) {
-        mRightButton.setContentDescription(string);
+        mImageTilesContainer.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     /** Vivaldi **/
-    public void setThemeColorProvider(ThemeColorProvider provider) {
+    public void setThemeColorProvider(ThemeColorProvider provider, TabModelSelector selector) {
         provider.addThemeColorObserver(mThemeColorObserver);
         provider.addTintObserver(mTintObserver);
+        // Note(david@vivaldi.com): This applies only when toolbar is at the bottom.
+        // The |TabGroupUiToolbarView| is created delayed, due to this we need to
+        // update the theme colour here.
+        if (ChromeApplicationImpl.isVivaldi() && provider instanceof TopUiThemeColorProvider) {
+            if (selector != null && selector.getCurrentTab() != null) {
+                ((TopUiThemeColorProvider) provider).forceUpdateColor(selector.getCurrentTab());
+                setTint(provider.getTint());
+            }
+        }
     }
 }

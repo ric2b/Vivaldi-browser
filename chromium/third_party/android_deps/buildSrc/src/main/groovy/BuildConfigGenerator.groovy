@@ -67,9 +67,11 @@ class BuildConfigGenerator extends DefaultTask {
         org_hamcrest_hamcrest_core: '//third_party/hamcrest:hamcrest_core_java',
         org_hamcrest_hamcrest_integration: '//third_party/hamcrest:hamcrest_integration_java',
         org_hamcrest_hamcrest_library: '//third_party/hamcrest:hamcrest_library_java',
-        org_jetbrains_kotlin_kotlin_stdlib: '//third_party/kotlin_stdlib:kotlin_stdlib_java',
         org_jetbrains_annotations: '//third_party/kotlin_stdlib:kotlin_stdlib_java',
+        org_jetbrains_kotlin_kotlin_stdlib_jdk7: '//third_party/kotlin_stdlib:kotlin_stdlib_java',
+        org_jetbrains_kotlin_kotlin_stdlib_jdk8: '//third_party/kotlin_stdlib:kotlin_stdlib_java',
         org_jetbrains_kotlin_kotlin_stdlib_common: '//third_party/kotlin_stdlib:kotlin_stdlib_java',
+        org_jetbrains_kotlin_kotlin_stdlib: '//third_party/kotlin_stdlib:kotlin_stdlib_java',
     ]
 
     // Some libraries have such long names they'll create a path that exceeds the 200 char path limit, which is
@@ -91,6 +93,7 @@ class BuildConfigGenerator extends DefaultTask {
         com_google_guava_failureaccess: '//third_party/android_deps:guava_android_java',
         com_google_guava_guava_android: '//third_party/android_deps:guava_android_java',
         com_google_protobuf_protobuf_javalite: '//third_party/android_deps:protobuf_lite_runtime_java',
+        net_bytebuddy_byte_buddy: '//third_party/byte_buddy:byte_buddy_android_java',
         // Logic for google_play_services_package added below.
     ]
 
@@ -624,7 +627,9 @@ class BuildConfigGenerator extends DefaultTask {
         if (aliasedLib) {
             // Cannot add only the specific target because doing so breaks nested template target.
             String visibilityLabel = aliasedLib.replaceAll(':.*', ':*')
-            sb.append('  # Target is swapped out when internal code is enabled.\n')
+            if (CONDITIONAL_LIBS.containsKey(dependency.id)) {
+              sb.append('  # Target is swapped out when internal code is enabled.\n')
+            }
             sb.append("  # Please depend on $aliasedLib instead.\n")
             sb.append("  visibility = [ \"$visibilityLabel\" ]\n")
         } else if (!dependency.visible) {
@@ -700,6 +705,7 @@ class BuildConfigGenerator extends DefaultTask {
         if (dependencyExtension == 'jar' && (
                 dependencyId.startsWith('io_grpc_') ||
                 dependencyId == 'com_google_firebase_firebase_encoders' ||
+                dependencyId == 'com_google_dagger_hilt_core' ||
                 dependencyId == 'com_google_guava_guava_android')) {
             sb.append('  # https://crbug.com/1412551\n')
             sb.append('  requires_android = true\n')
@@ -799,6 +805,17 @@ class BuildConfigGenerator extends DefaultTask {
                 // and android_aar_prebuilt template will fail if it's not set explictly.
                 sb.append('  extract_native_libraries = true\n')
                 break
+            case 'com_google_dagger_hilt_core':
+                sb.append('\n')
+                sb.append('  # Google3 organizes targets differently from maven. Restrict to the only classes we use.\n')
+                sb.append('  jar_included_patterns = [\n')
+                sb.append('    "dagger/hilt/internal/GeneratedComponentManager.class",\n')
+                sb.append('    "dagger/hilt/internal/GeneratedComponentManagerHolder.class",\n')
+                sb.append('  ]\n')
+                break
+            case 'com_google_auto_service_auto_service_annotations_java':
+                sb.append('  preferred_dep = true\n')
+                break
             case 'com_google_guava_guava':
             case 'com_google_guava_guava_android':
                 sb.append('\n')
@@ -840,7 +857,10 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  jar_excluded_patterns = [\n')
                 sb.append('    "org/mockito/internal/junit/ExceptionFactory*",\n')
                 sb.append('    "org/mockito/internal/stubbing/defaultanswers/ReturnsEmptyValues*",\n')
-                sb.append('  ]')
+                sb.append('  ]\n')
+                sb.append('\n')
+                sb.append('  # Because of dep on byte_buddy_android_java.\n')
+                sb.append('  bypass_platform_checks = true\n')
                 break
         }
     }

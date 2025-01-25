@@ -106,6 +106,10 @@ const char* str(BuiltinFn i) {
             return "sign";
         case BuiltinFn::kThreadgroupBarrier:
             return "threadgroup_barrier";
+        case BuiltinFn::kSimdBallot:
+            return "simd_ballot";
+        case BuiltinFn::kQuadShuffleXor:
+            return "quad_shuffle_xor";
     }
     return "<unknown>";
 }

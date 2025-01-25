@@ -73,6 +73,7 @@ pub fn string_to_hex(str: &str) -> Vec<u8> {
 ///
 /// assert_eq!("0x12, 0x34", hex_bytes(&[0x12, 0x34]));
 /// ```
+#[cfg(feature = "std")]
 pub fn hex_bytes(data: impl AsRef<[u8]>) -> String {
     hex::encode_upper(data).chars().tuples().map(|(a, b)| format!("0x{}{}", a, b)).join(", ")
 }

@@ -77,6 +77,7 @@
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -138,7 +139,8 @@ gfx::Rect GetTooSmallToFitCameraRegion() {
 
 class CaptureModeCameraTest : public AshTestBase {
  public:
-  CaptureModeCameraTest() = default;
+  CaptureModeCameraTest()
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
   CaptureModeCameraTest(const CaptureModeCameraTest&) = delete;
   CaptureModeCameraTest& operator=(const CaptureModeCameraTest&) = delete;
   ~CaptureModeCameraTest() override = default;
@@ -4385,6 +4387,35 @@ TEST_F(ProjectorCaptureModeCameraTest, FirstCamSelectedByDefault) {
   EXPECT_TRUE(camera_controller->camera_preview_widget());
 }
 
+// Regression test for http://b/353883311. Tests that starting a default capture
+// mode session and dismissing it during an active Projector recording should
+// not revert the automatically selected camera for the on-going recording.
+TEST_F(ProjectorCaptureModeCameraTest,
+       DefaultCaptureSessionWhileProjectorRecording) {
+  AddDefaultCamera();
+
+  // Start a Projector-initiated session and start recording. The first
+  // available camera will be selected by default.
+  StartProjectorModeSession();
+  auto* camera_controller = GetCameraController();
+  EXPECT_TRUE(camera_controller->selected_camera().is_valid());
+  EXPECT_TRUE(camera_controller->camera_preview_widget());
+  CaptureModeTestApi test_api;
+  test_api.PerformCapture();
+  WaitForRecordingToStart();
+  auto* controller = CaptureModeController::Get();
+  EXPECT_TRUE(controller->is_recording_in_progress());
+  EXPECT_TRUE(camera_controller->camera_preview_widget());
+
+  // Start a new default screenshot session while the projector recording is in
+  // progress. Ending this session should not revert the auto-selected camera.
+  test_api.StartForFullscreen(/*for_video=*/false);
+  controller->Stop();
+  EXPECT_TRUE(controller->is_recording_in_progress());
+  EXPECT_TRUE(camera_controller->selected_camera().is_valid());
+  EXPECT_TRUE(camera_controller->camera_preview_widget());
+}
+
 TEST_F(ProjectorCaptureModeCameraTest,
        SessionStartsWithAnAlreadySelectedCamera) {
   const std::string model_id_1 = "model1";
@@ -4669,8 +4700,7 @@ TEST_P(CaptureModeCameraFramesTest, SelectAnotherCameraWhileRendering) {
 }
 
 // Regression test for https://crbug.com/1316230.
-// Flaky (b/323909190)
-TEST_P(CaptureModeCameraFramesTest, DISABLED_CameraFatalErrors) {
+TEST_P(CaptureModeCameraFramesTest, CameraFatalErrors) {
   CaptureModeTestApi().StartForFullscreen(/*for_video=*/true);
   auto* camera_controller = GetCameraController();
   EXPECT_TRUE(camera_controller->selected_camera().is_valid());
@@ -4756,6 +4786,9 @@ TEST_F(CaptureModeCameraTest, CameraPrivacyIndicators) {
   EXPECT_FALSE(camera_controller->camera_preview_widget());
   // The widget closes its window asynchronously, run a loop to finish that.
   base::RunLoop().RunUntilIdle();
+  // Fast forward by the minimum duration the privacy indicator should be held.
+  task_environment()->FastForwardBy(
+      PrivacyIndicatorsController::kPrivacyIndicatorsMinimumHoldDuration);
   EXPECT_FALSE(IsCameraIndicatorIconVisible());
   EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
   EXPECT_FALSE(message_center->FindNotificationById(
@@ -4810,10 +4843,39 @@ TEST_F(CaptureModeCameraTest, DuringRecordingPrivacyIndicators) {
   capture_controller->EndVideoRecording(
       EndRecordingReason::kStopRecordingButton);
   WaitForCaptureFileToBeSaved();
+  // Fast forward by the minimum duration the privacy indicator should be held.
+  task_environment()->FastForwardBy(
+      PrivacyIndicatorsController::kPrivacyIndicatorsMinimumHoldDuration);
   EXPECT_FALSE(IsCameraIndicatorIconVisible());
   EXPECT_FALSE(IsMicrophoneIndicatorIconVisible());
   EXPECT_FALSE(message_center->FindNotificationById(
       capture_mode_privacy_notification_id));
+}
+
+TEST_F(CaptureModeCameraTest, CameraPreviewViewAccessibleProperties) {
+  StartCaptureSession(CaptureModeSource::kRegion, CaptureModeType::kVideo);
+  AddDefaultCamera();
+  GetCameraController()->SetSelectedCamera(CameraId(kDefaultCameraModelId, 1));
+  auto* camera_preview_view = GetCameraController()->camera_preview_view();
+
+  ui::AXNodeData data;
+  camera_preview_view->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.role, ax::mojom::Role::kVideo);
+  EXPECT_EQ(
+      data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+      l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_CAMERA_PREVIEW_FOCUSED));
+}
+
+TEST_F(CaptureModeCameraTest, CaptureModeMenuHeaderAccessibleProperties) {
+  StartCaptureSession(CaptureModeSource::kFullscreen, CaptureModeType::kVideo);
+  OpenSettingsView();
+  CaptureModeSettingsTestApi test_api;
+  AddDefaultCamera();
+  auto* menu_header = test_api.GetCameraMenuHeader();
+  ui::AXNodeData data;
+
+  menu_header->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.role, ax::mojom::Role::kHeader);
 }
 
 }  // namespace ash

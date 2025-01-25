@@ -71,6 +71,7 @@ version = 2
 allow = [
     "MIT",
     "Apache-2.0",
+    "BSD-3-Clause",
     "Unicode-DFS-2016",
     "ISC",
 ]
@@ -85,6 +86,10 @@ exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     # list
 
+
+    # "Reciprocal" licensed crate pulled directly from crates.io without modifications
+    # Important: Update https://third-party-mirror.googlesource.com/option-ext/ if you update this version
+    { allow = ["MPL-2.0"], name = "option-ext", version = "0.2.0" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
@@ -103,8 +108,8 @@ exceptions = [
 # and the crate will be checked normally, which may produce warnings or errors
 # depending on the rest of your configuration
 #license-files = [
-    # Each entry is a crate relative path, and the (opaque) hash of its contents
-    #{ path = "LICENSE", hash = 0xbd0eed23 }
+# Each entry is a crate relative path, and the (opaque) hash of its contents
+#{ path = "LICENSE", hash = 0xbd0eed23 }
 #]
 
 [[licenses.clarify]]
@@ -121,7 +126,7 @@ license-files = [
 # published to private registries.
 # To see how to mark a crate as unpublished (to the official registry),
 # visit https://doc.rust-lang.org/cargo/reference/manifest.html#the-publish-field.
-ignore = true
+ignore = false
 # One or more private registries that you might publish crates to, if a crate
 # is only published to private registries, and ignore is true, the crate will
 # not have its license(s) checked

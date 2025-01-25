@@ -33,6 +33,7 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/compositor/layer.h"
 #include "ui/wm/core/ime_util_chromeos.h"
 #include "ui/wm/core/window_util.h"
@@ -45,9 +46,10 @@ using ::chromeos::WindowStateType;
 // Sets the restore bounds and show state overrides. These values take
 // precedence over the restore bounds and restore show state (if set).
 // If |bounds_override| is empty the values are cleared.
-void SetWindowRestoreOverrides(aura::Window* window,
-                               const gfx::Rect& bounds_override,
-                               ui::WindowShowState window_state_override) {
+void SetWindowRestoreOverrides(
+    aura::Window* window,
+    const gfx::Rect& bounds_override,
+    ui::mojom::WindowShowState window_state_override) {
   if (bounds_override.IsEmpty()) {
     window->ClearProperty(kRestoreWindowStateTypeOverrideKey);
     window->ClearProperty(kRestoreBoundsOverrideKey);
@@ -199,8 +201,7 @@ void TabletModeWindowState::UpdateWindowPosition(
                                              /*float_state=*/false);
       break;
     case WindowState::BoundsChangeAnimationType::kAnimateZero:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 }
 
@@ -301,8 +302,7 @@ void TabletModeWindowState::OnWMEvent(WindowState* window_state,
       // PIP windows are not managed by TabletModeWindowManager even if the
       // window is in tablet mode. PIP window uses DefaultState instead, not
       // TabletModeWindowState.
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     case WM_EVENT_TRUSTED_PIN:
       if (!Shell::Get()->screen_pinning_controller()->IsPinned()) {
         UpdateWindow(window_state, WindowStateType::kTrustedPinned,
@@ -458,7 +458,7 @@ void TabletModeWindowState::AttachState(WindowState* window_state,
 void TabletModeWindowState::DetachState(WindowState* window_state) {
   // From now on, we can use the default session restore mechanism again.
   SetWindowRestoreOverrides(window_state->window(), gfx::Rect(),
-                            ui::SHOW_STATE_NORMAL);
+                            ui::mojom::WindowShowState::kNormal);
 }
 
 void TabletModeWindowState::UpdateWindow(WindowState* window_state,

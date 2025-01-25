@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/shell_dialogs/select_file_dialog_linux_portal.h"
 
 #include <string_view>
@@ -565,8 +570,7 @@ void SelectFileDialogLinuxPortal::DialogInfo::AppendOptions(
     AppendBoolOption(&options_writer, kFileChooserOptionMultiple, true);
   }
 
-  if (type == SelectFileDialog::Type::SELECT_SAVEAS_FILE &&
-      !default_path.empty()) {
+  if (!default_path.empty()) {
     if (default_path_exists) {
       // If this is an existing directory, navigate to that directory, with no
       // filename.
@@ -578,8 +582,13 @@ void SelectFileDialogLinuxPortal::DialogInfo::AppendOptions(
       // the GTK docs and the pattern followed by SelectFileDialogLinuxGtk.
       AppendByteStringOption(&options_writer, kFileChooserOptionCurrentFolder,
                              default_path.DirName().value());
-      AppendStringOption(&options_writer, kFileChooserOptionCurrentName,
-                         default_path.BaseName().value());
+
+      // current_folder is supported by xdg-desktop-portal but current_name
+      // is not - only try to set this when invoking a save file dialog.
+      if (type == SelectFileDialog::Type::SELECT_SAVEAS_FILE) {
+        AppendStringOption(&options_writer, kFileChooserOptionCurrentName,
+                           default_path.BaseName().value());
+      }
     }
   }
 

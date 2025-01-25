@@ -15,12 +15,12 @@ namespace tab_groups {
 // is enabled.
 BASE_FEATURE(kTabGroupSyncAndroid,
              "TabGroupSyncAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT); // Vivaldi
 
 // Feature flag used to enable tab group revisit surface.
 BASE_FEATURE(kTabGroupPaneAndroid,
              "TabGroupPaneAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT); // Vivaldi
 
 // Feature flag used to determine whether the network layer is disabled for
 // tab group sync.
@@ -31,10 +31,6 @@ BASE_FEATURE(kTabGroupSyncDisableNetworkLayer,
 BASE_FEATURE(kTabGroupSyncForceOff,
              "TabGroupSyncForceOff",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kAndroidTabGroupStableIds,
-             "AndroidTabGroupStableIds",
-             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi ref. VAB-9805.
 
 // Builds off of the original TabGroupsSave feature by making some UI tweaks and
 // adjustments. This flag controls the v2 update of sync, restore, dialog
@@ -47,7 +43,12 @@ BASE_FEATURE(kTabGroupsSaveV2,
 // and sync support for pinning saved tab groups.
 BASE_FEATURE(kTabGroupsSaveUIUpdate,
              "TabGroupsSaveUIUpdate",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_CHROMEOS)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 // Feature flag specific to UNO. Controls how we handle tab groups on sign-out
 // and sync toggle. Can be defined independently for each platform.
@@ -92,6 +93,19 @@ BASE_FEATURE(kSavedTabGroupNotifyOnInteractionTimeChanged,
              "SavedTabGroupNotifyOnInteractionTimeChanged",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Feature flag to determine whether an alternate illustration should be used on
+// the history sync consent screen. This feature should be used independent of
+// any other features in this file.
+BASE_FEATURE(kUseAlternateHistorySyncIllustration,
+             "UseAlternateHistorySyncIllustration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Force remove all closed tab groups from the sync local DB on startup if this
+// feature flag is enabled.
+BASE_FEATURE(kForceRemoveClosedTabGroupsOnStartup,
+             "ForceRemoveClosedTabGroupsOnStartup",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 bool IsTabGroupsSaveV2Enabled() {
   return base::FeatureList::IsEnabled(kTabGroupsSaveV2);
 }
@@ -122,6 +136,10 @@ bool RestrictDownloadOnSyncedTabs() {
 
 bool DeferMediaLoadInBackgroundTab() {
   return base::FeatureList::IsEnabled(kDeferMediaLoadInBackgroundTab);
+}
+
+bool ShouldForceRemoveClosedTabGroupsOnStartup() {
+  return base::FeatureList::IsEnabled(kForceRemoveClosedTabGroupsOnStartup);
 }
 
 }  // namespace tab_groups

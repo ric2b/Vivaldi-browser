@@ -12,19 +12,11 @@
  * [android-go-wembley_webview-perf](https://ci.chromium.org/p/chrome/builders/ci/android-go-wembley_webview-perf): Android U.
  * [android-pixel-fold-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel-fold-perf): Android U.
  * [android-pixel-tangor-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel-tangor-perf): Android U.
- * [android-pixel2-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel2-perf): Android OPM1.171019.021.
- * [android-pixel2-perf-calibration](https://ci.chromium.org/p/chrome/builders/ci/android-pixel2-perf-calibration): Android OPM1.171019.021.
- * [android-pixel2_webview-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel2_webview-perf): Android OPM1.171019.021.
  * [android-pixel4-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel4-perf): Android R.
  * [android-pixel4_webview-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel4_webview-perf): Android R.
- * [android-pixel6-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel6-perf): Android T.
- * [android-pixel6-perf-pgo](https://ci.chromium.org/p/chrome/builders/ci/android-pixel6-perf-pgo): Android T.
+ * [android-pixel6-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel6-perf): Android U.
+ * [android-pixel6-perf-pgo](https://ci.chromium.org/p/chrome/builders/ci/android-pixel6-perf-pgo): Android U.
  * [android-pixel6-pro-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel6-pro-perf): Android T.
-
-### Chromeos
-
- * [lacros-eve-perf](https://ci.chromium.org/p/chrome/builders/ci/lacros-eve-perf).
- * [lacros-x86-perf](https://ci.chromium.org/p/chrome/builders/ci/lacros-x86-perf).
 
 ### Linux
 
@@ -58,8 +50,6 @@
  * android-new-pixel-perf-pgo: Android T.
  * android-new-pixel-pro-perf: Android T.
  * android-new-pixel-pro-perf-pgo: Android T.
- * android-pixel2-perf-pgo: Android OPM1.171019.021.
- * android-pixel2_webview-perf-pgo: Android OPM1.171019.021.
  * android-pixel4-perf-pgo: Android R.
  * android-pixel6-pro-perf-pgo: Android T.
 
@@ -69,7 +59,6 @@
 
 ### Mac
 
- * mac-14-m1-pro-perf: Mac M1 PRO 2020 running MacOS 14.
  * mac-laptop_high_end-perf-pgo: MacBook Pro, Core i7 2.8 GHz, 16GB RAM, 256GB SSD, Radeon 55.
  * mac-laptop_low_end-perf-pgo: MacBook Air, Core i5 1.8 GHz, 8GB RAM, 128GB SSD, HD Graphics.
 
@@ -81,10 +70,6 @@
  * win-11-perf-pgo: Windows Dell PowerEdge R350.
 
 ## FYI Platforms
-
-### Android
-
- * [android-pixel2-perf-fyi](https://ci.chromium.org/p/chrome/builders/ci/android-pixel2-perf-fyi): Android OPM1.171019.021.
 
 ### Chromeos
 

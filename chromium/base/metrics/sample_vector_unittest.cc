@@ -168,7 +168,8 @@ TEST_F(SampleVectorTest, BucketIndexDeath) {
   EXPECT_DEATH_IF_SUPPORTED(samples2.Accumulate(10, 100), "");
 }
 
-TEST_F(SampleVectorTest, AddSubtractBucketNotMatchDeath) {
+// TODO(crbug.com/363154866)
+TEST_F(SampleVectorTest, DISABLED_AddSubtractBucketNotMatchDeath) {
   // Custom buckets 1: [1, 3) [3, 5)
   BucketRanges ranges1(3);
   ranges1.set_range(0, 1);
@@ -205,8 +206,8 @@ TEST_F(SampleVectorTest, AddSubtractBucketNotMatchDeath) {
   // DCHECK.
   samples2.Accumulate(6, -100);
   samples2.Accumulate(3, 100);
-  EXPECT_DCHECK_DEATH(samples1.Add(samples2));
-  EXPECT_DCHECK_DEATH(samples1.Subtract(samples2));
+  EXPECT_NOTREACHED_DEATH(samples1.Add(samples2));
+  EXPECT_NOTREACHED_DEATH(samples1.Subtract(samples2));
 }
 
 TEST_F(SampleVectorTest, Iterate) {

@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-arm64-generic-rel",
-              "project": "chromium-m128"
+              "project": "chromium-m130"
             },
             "builder_spec": {
               "builder_group": "chromium.chromiumos",
@@ -42,10 +42,14 @@
         {
           "bucket": "ci",
           "builder": "chromeos-arm64-generic-rel",
-          "project": "chromium-m128"
+          "project": "chromium-m130"
         }
       ]
     }
+  },
+  "$build/flakiness": {
+    "check_for_flakiness": true,
+    "check_for_flakiness_with_resultdb": true
   },
   "$build/reclient": {
     "instance": "rbe-chromium-untrusted",
@@ -70,5 +74,6 @@
     ]
   },
   "builder_group": "tryserver.chromium.chromiumos",
+  "cq": "required",
   "recipe": "chromium_trybot"
 }

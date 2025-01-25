@@ -9,15 +9,21 @@
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/shared/model/profile/profile_ios.h"
 
 namespace ios {
 
 // static
 HostContentSettingsMap* HostContentSettingsMapFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
+  return GetForProfile(profile);
+}
+
+// static
+HostContentSettingsMap* HostContentSettingsMapFactory::GetForProfile(
+    ProfileIOS* profile) {
   return static_cast<HostContentSettingsMap*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true).get());
+      GetInstance()->GetServiceForBrowserState(profile, true).get());
 }
 
 // static

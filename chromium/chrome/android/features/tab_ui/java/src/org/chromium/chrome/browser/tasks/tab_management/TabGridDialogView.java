@@ -35,10 +35,10 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.widget.ImageViewCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ResettersForTesting;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab_ui.TabThumbnailView;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
@@ -361,7 +361,9 @@ public class TabGridDialogView extends FrameLayout {
             if (view == TabGridDialogView.this) {
                 continue;
             }
-            assert mAccessibilityImportanceMap.containsKey(view);
+            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DATA_SHARING)) {
+                assert mAccessibilityImportanceMap.containsKey(view);
+            }
             Integer importance = mAccessibilityImportanceMap.get(view);
             view.setImportantForAccessibility(
                     importance == null ? IMPORTANT_FOR_ACCESSIBILITY_AUTO : importance);
@@ -809,68 +811,63 @@ public class TabGridDialogView extends FrameLayout {
     }
 
     private void updateAnimationCardView(View view) {
+        View animationCard = mAnimationCardView;
+        TextView cardTitle = animationCard.findViewById(R.id.tab_title);
+        ImageView cardFavicon = animationCard.findViewById(R.id.tab_favicon);
+        TabThumbnailView cardThumbnail = animationCard.findViewById(R.id.tab_thumbnail);
+        ImageView cardActionButton = animationCard.findViewById(R.id.action_button);
+        View cardBackground = animationCard.findViewById(R.id.background_view);
+        cardBackground.setBackground(null);
+
         if (view == null) {
-            ((ImageView) mAnimationCardView.findViewById(R.id.tab_favicon)).setImageDrawable(null);
-            ((TextView) (mAnimationCardView.findViewById(R.id.tab_title))).setText("");
-            ((ImageView) (mAnimationCardView.findViewById(R.id.tab_thumbnail)))
-                    .setImageDrawable(null);
-            ((ImageView) mAnimationCardView.findViewById(R.id.action_button))
-                    .setImageDrawable(null);
-            mAnimationCardView.findViewById(R.id.background_view).setBackground(null);
+            cardFavicon.setImageDrawable(null);
+            cardTitle.setText("");
+            cardThumbnail.setImageDrawable(null);
+            cardActionButton.setImageDrawable(null);
             return;
         }
 
         // Update the stand-in animation card view with the actual item view from grid tab switcher
         // recyclerView.
         FrameLayout.LayoutParams params =
-                (FrameLayout.LayoutParams) mAnimationCardView.getLayoutParams();
+                (FrameLayout.LayoutParams) animationCard.getLayoutParams();
         params.width = view.getWidth();
         params.height = view.getHeight();
-        mAnimationCardView.setLayoutParams(params);
-        if (view.findViewById(R.id.tab_title) == null) return;
+        animationCard.setLayoutParams(params);
+        TextView viewTitle = view.findViewById(R.id.tab_title);
+        if (viewTitle == null) {
+            return;
+        }
 
         // Sometimes we get clip artifacting when sharing a drawable, unclear why, so make a copy.
         Drawable backgroundCopy =
                 view.findViewById(R.id.card_view).getBackground().getConstantState().newDrawable();
-        mAnimationCardView.findViewById(R.id.card_view).setBackground(backgroundCopy);
+        animationCard.findViewById(R.id.card_view).setBackground(backgroundCopy);
 
-        ImageView sourceCardFavicon = view.findViewById(R.id.tab_favicon);
-        ImageView animationCardFavicon = mAnimationCardView.findViewById(R.id.tab_favicon);
-        if (sourceCardFavicon.getDrawable() != null) {
+        Drawable faviconDrawable = ((ImageView) view.findViewById(R.id.tab_favicon)).getDrawable();
+        cardFavicon.setImageDrawable(faviconDrawable);
+        if (faviconDrawable != null) {
             int padding = (int) TabUiThemeProvider.getTabCardTopFaviconPadding(mContext);
-            animationCardFavicon.setPadding(padding, padding, padding, padding);
-            animationCardFavicon.setImageDrawable(sourceCardFavicon.getDrawable());
-        } else {
-            animationCardFavicon.setImageDrawable(null);
+            cardFavicon.setPadding(padding, padding, padding, padding);
         }
 
-        ((TextView) (mAnimationCardView.findViewById(R.id.tab_title)))
-                .setText(((TextView) (view.findViewById(R.id.tab_title))).getText());
-        ApiCompatibilityUtils.setTextAppearance(
-                (TextView) (mAnimationCardView.findViewById(R.id.tab_title)),
-                R.style.TextAppearance_TextMediumThick_Primary);
-        ((TextView) (mAnimationCardView.findViewById(R.id.tab_title)))
-                .setTextColor(((TextView) (view.findViewById(R.id.tab_title))).getTextColors());
+        cardTitle.setText(viewTitle.getText());
+        cardTitle.setTextAppearance(R.style.TextAppearance_TextMediumThick_Primary);
+        cardTitle.setTextColor(viewTitle.getTextColors());
 
         TabThumbnailView originalThumbnailView = view.findViewById(R.id.tab_thumbnail);
-        TabThumbnailView animationThumbnailView =
-                mAnimationCardView.findViewById(R.id.tab_thumbnail);
         if (originalThumbnailView.isPlaceholder()) {
-            animationThumbnailView.setImageDrawable(null);
+            cardThumbnail.setImageDrawable(null);
         } else {
-            animationThumbnailView.setImageDrawable(originalThumbnailView.getDrawable());
-            animationThumbnailView.setImageMatrix(originalThumbnailView.getImageMatrix());
-            animationThumbnailView.setScaleType(originalThumbnailView.getScaleType());
+            cardThumbnail.setImageDrawable(originalThumbnailView.getDrawable());
+            cardThumbnail.setImageMatrix(originalThumbnailView.getImageMatrix());
+            cardThumbnail.setScaleType(originalThumbnailView.getScaleType());
         }
 
-        ImageView actionButton = mAnimationCardView.findViewById(R.id.action_button);
-        actionButton.setImageDrawable(
-                ((ImageView) (view.findViewById(R.id.action_button))).getDrawable());
+        ImageView originalActionButton = view.findViewById(R.id.action_button);
+        cardActionButton.setImageDrawable(originalActionButton.getDrawable());
         ImageViewCompat.setImageTintList(
-                actionButton,
-                ImageViewCompat.getImageTintList((view.findViewById(R.id.action_button))));
-
-        mAnimationCardView.findViewById(R.id.background_view).setBackground(null);
+                cardActionButton, ImageViewCompat.getImageTintList(originalActionButton));
     }
 
     /**

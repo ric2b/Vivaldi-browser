@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <drm_fourcc.h>
 #include <overlay-prioritizer-client-protocol.h>
 
@@ -31,7 +36,6 @@
 #include "ui/ozone/platform/wayland/host/wayland_buffer_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
-#include "ui/ozone/platform/wayland/host/wayland_connection_test_api.h"
 #include "ui/ozone/platform/wayland/host/wayland_frame_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_linux_dmabuf.h"
@@ -292,8 +296,7 @@ class WaylandBufferManagerTest : public WaylandTest {
     auto new_window = WaylandWindow::Create(&delegate_, connection_.get(),
                                             std::move(properties));
     EXPECT_TRUE(new_window);
-
-    WaylandConnectionTestApi(connection_.get()).SyncDisplay();
+    WaylandTestBase::SyncDisplay();
 
     EXPECT_NE(new_window->GetWidget(), gfx::kNullAcceleratedWidget);
     return new_window;
@@ -1591,7 +1594,7 @@ TEST_P(WaylandBufferManagerTest,
   // very first configure ack to be done in the subsequent OnSequencePoint()
   // call.
   window->SetRestoredBoundsInDIP(kRestoredBounds);
-  WaylandConnectionTestApi(connection_.get()).SyncDisplay();
+  WaylandTestBase::SyncDisplay();
 
   window->Show(false);
 
@@ -3288,9 +3291,9 @@ TEST_P(WaylandBufferManagerViewportTest, ViewportDestinationNonInteger) {
   if (!connection_->ShouldUseOverlayDelegation()) {
     GTEST_SKIP();
   }
-  constexpr gfx::RectF test_data[2][2] = {
-      {gfx::RectF({21, 18}, {7, 11}), gfx::RectF({21, 18}, {7, 11})},
-      {gfx::RectF({7, 8}, {43, 63}), gfx::RectF({7, 8}, {43, 63})}};
+  constexpr std::array<std::array<gfx::RectF, 2>, 2> test_data = {
+      {{gfx::RectF({21, 18}, {7, 11}), gfx::RectF({21, 18}, {7, 11})},
+       {gfx::RectF({7, 8}, {43, 63}), gfx::RectF({7, 8}, {43, 63})}}};
 
   for (const auto& data : test_data) {
     ViewportDestinationTestHelper(data[0] /* display_rect */,
@@ -3310,10 +3313,10 @@ TEST_P(WaylandBufferManagerViewportTest, ViewportDestinationInteger) {
     GTEST_SKIP();
   }
 
-  constexpr gfx::RectF test_data[2][2] = {
-      {gfx::RectF({21, 18}, {7.423, 11.854}), gfx::RectF({21, 18}, {7, 12})},
-      {gfx::RectF({7, 8}, {43.562, 63.76}),
-       gfx::RectF({7, 8}, {43.562, 63.76})}};
+  constexpr std::array<std::array<gfx::RectF, 2>, 2> test_data = {
+      {{gfx::RectF({21, 18}, {7.423, 11.854}), gfx::RectF({21, 18}, {7, 12})},
+       {gfx::RectF({7, 8}, {43.562, 63.76}),
+        gfx::RectF({7, 8}, {43.562, 63.76})}}};
 
   for (const auto& data : test_data) {
     ViewportDestinationTestHelper(data[0] /* display_rect */,

@@ -71,9 +71,10 @@ class SharedImageInterfaceProxy {
   Mailbox CreateSharedImage(const SharedImageInfo& si_info,
                             gfx::GpuMemoryBufferHandle handle);
 
-#if BUILDFLAG(IS_WIN)
   void CopyToGpuMemoryBuffer(const SyncToken& sync_token,
                              const Mailbox& mailbox);
+
+#if BUILDFLAG(IS_WIN)
   void CopyToGpuMemoryBufferAsync(const SyncToken& sync_token,
                                   const Mailbox& mailbox,
                                   base::OnceCallback<void(bool)> callback);
@@ -109,7 +110,7 @@ class SharedImageInterfaceProxy {
 #if BUILDFLAG(IS_FUCHSIA)
   void RegisterSysmemBufferCollection(zx::eventpair service_handle,
                                       zx::channel sysmem_token,
-                                      gfx::BufferFormat format,
+                                      const viz::SharedImageFormat& format,
                                       gfx::BufferUsage usage,
                                       bool register_with_image_pipe);
 #endif  // BUILDFLAG(IS_FUCHSIA)

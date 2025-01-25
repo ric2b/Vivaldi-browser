@@ -19,8 +19,6 @@
 #include "components/translate/content/browser/content_translate_driver.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -46,6 +44,8 @@ using JSDetermineTextLanguageCallback =
 using JSElementInfoCallback = base::OnceCallback<
     void(const std::string&, const std::string&, bool, const std::string&)>;
 
+class Browser;
+
 namespace extensions {
 
 class TabMutingHandler;
@@ -55,7 +55,6 @@ bool IsTabInAWorkspace(const content::WebContents* web_contents);
 bool IsTabInAWorkspace(const std::string& viv_extdata);
 std::optional<double> GetTabWorkspaceId(const std::string& viv_extdata);
 Browser* GetWorkspaceBrowser(const double workspace_id);
-std::optional<double> GetActiveWorkspaceId(Browser* browser);
 int CountTabsInWorkspace(TabStripModel* tab_strip, const double workspace_id);
 base::Value::List getLinkRoutes(content::WebContents* contents);
 bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id);
@@ -92,14 +91,85 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI {
   void NotifyTabChange(content::WebContents* web_contents);
 };
 
-// Tab contents observer that forward private settings to any new renderer.
-// This class holds the Tab-specific settings for the lifetime of the tab's
-// WebContents.
+// This class holds the Vivaldi-specific render-settings for the lifetime of the
+// tab's WebContents.
+class VivaldiGuestViewContentObserver
+    : public content::WebContentsObserver,
+      public zoom::ZoomObserver,
+      public content::WebContentsUserData<VivaldiGuestViewContentObserver> {
+ public:
+  explicit VivaldiGuestViewContentObserver(content::WebContents* web_contents);
+  ~VivaldiGuestViewContentObserver() override;
+  VivaldiGuestViewContentObserver(const VivaldiGuestViewContentObserver&) =
+      delete;
+  VivaldiGuestViewContentObserver& operator=(
+      const VivaldiGuestViewContentObserver&) = delete;
+
+  static VivaldiGuestViewContentObserver* FromTabId(
+      content::BrowserContext* browser_context,
+      int tab_id,
+      std::string* error);
+
+  // Used for generating JS-event.
+  bool show_images() { return show_images_; }
+  bool load_from_cache_only() { return load_from_cache_only_; }
+
+  void SetShowImages(bool show_images);
+  void SetLoadFromCacheOnly(bool load_from_cache_only);
+  void SetMuted(bool mute);
+
+  // Commit setting to the active RenderViewHost.
+  void CommitSettings();
+
+ private:
+  friend class content::WebContentsUserData<VivaldiGuestViewContentObserver>;
+
+  // content::WebContentsObserver implementation.
+  void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
+  void RenderViewHostChanged(content::RenderViewHost* old_host,
+                             content::RenderViewHost* new_host) override;
+  void WebContentsDestroyed() override;
+
+  // ZoomObserver implementation.
+  void OnZoomChanged(
+      const zoom::ZoomController::ZoomChangedEventData& data) override;
+  void OnZoomControllerDestroyed(
+      zoom::ZoomController* zoom_controller) override;
+
+  void SaveZoomLevelToExtData(double zoom_level);
+  void SetZoomLevelForTab(double new_level, double old_level);
+
+  void UpdateAllowTabCycleIntoUI();
+  void OnPrefsChanged(const std::string& path);
+
+  // We want to communicate changes in some prefs to the renderer right away.
+  PrefChangeRegistrar prefs_registrar_;
+
+  // Set to true when we are calling HostZoomMapImpl::SetTemporaryZoomLevel
+  // to prevent infinite recursion in observer notification calls
+  bool called_host_zoom_ = false;
+
+  // Show images for all pages loaded in this tab. Default is true.
+  bool show_images_ = true;
+
+  // Only load the page from cache. Default is false.
+  bool load_from_cache_only_ = false;
+
+  // Vivaldi tab zoom level
+  double tab_zoom_level_ = -1;
+
+  // The content is muted.
+  bool mute_ = false;
+
+  base::WeakPtrFactory<VivaldiGuestViewContentObserver> weak_ptr_factory_{this};
+
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+
 class VivaldiPrivateTabObserver
     : public content::WebContentsObserver,
       public translate::ContentTranslateDriver::TranslationObserver,
       public translate::TranslateDriver::LanguageDetectionObserver,
-      public zoom::ZoomObserver,
       public vivaldi_content::TabActivationDelegate,
       public content::WebContentsUserData<VivaldiPrivateTabObserver>,
       public TabResourceUsageCollector::Observer {
@@ -115,14 +185,10 @@ class VivaldiPrivateTabObserver
       int tab_id,
       std::string* error);
 
-  void BroadcastTabInfo(vivaldi::tabs_private::UpdateTabInfo& info);
+  static void BroadcastTabInfo(vivaldi::tabs_private::UpdateTabInfo& info, content::WebContents* web_contents);
 
   // content::WebContentsObserver implementation.
   void DidChangeThemeColor() override;
-  void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
-  void RenderViewHostChanged(content::RenderViewHost* old_host,
-                             content::RenderViewHost* new_host) override;
-
   void WebContentsDestroyed() override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
@@ -148,32 +214,11 @@ class VivaldiPrivateTabObserver
   // Overridden from vivaldi_content::TabActivationDelegate:
   void ActivateTab(content::WebContents* contents) override;
 
-  void SetShowImages(bool show_images);
-  void SetLoadFromCacheOnly(bool load_from_cache_only);
   void SetContentsMimeType(std::string mimetype) {
     contents_mime_type_ = mimetype;
   }
 
-  void SetMuted(bool mute);
-
-  void UpdateAllowTabCycleIntoUI();
-  void UpdateAllowAccessKeys();
-
-  bool show_images() { return show_images_; }
-  bool load_from_cache_only() { return load_from_cache_only_; }
   std::string contents_mime_type() { return contents_mime_type_; }
-  bool mute() { return mute_; }
-
-  // Commit setting to the active RenderViewHost
-  void CommitSettings();
-
-  // ZoomObserver implementation.
-  void OnZoomChanged(
-      const zoom::ZoomController::ZoomChangedEventData& data) override;
-  void OnZoomControllerDestroyed(
-    zoom::ZoomController* zoom_controller) override;
-
-  void SetZoomLevelForTab(double new_level, double old_level);
 
   void GetAccessKeys(JSAccessKeysCallback callback);
   void AccessKeysReceived(
@@ -203,36 +248,17 @@ class VivaldiPrivateTabObserver
  private:
   friend class content::WebContentsUserData<VivaldiPrivateTabObserver>;
 
-  void SaveZoomLevelToExtData(double zoom_level);
-
-  void OnPrefsChanged(const std::string& path);
-
   // TabResourceUsageCollector::Observer:
   void OnTabResourceMetricsRefreshed() override;
-
-  // Show images for all pages loaded in this tab. Default is true.
-  bool show_images_ = true;
-
-  // Only load the page from cache. Default is false.
-  bool load_from_cache_only_ = false;
-
-  // Vivaldi tab zoom level
-  double tab_zoom_level_ = -1;
 
   // Mimetype of displayed document.
   std::string contents_mime_type_;
 
-  // The tab is muted.
-  bool mute_ = false;
-
-  // We want to communicate changes in some prefs to the renderer right away.
-  PrefChangeRegistrar prefs_registrar_;
-
-  base::WeakPtrFactory<VivaldiPrivateTabObserver> weak_ptr_factory_{this};
-
   // Replacement for WEB_CONTENTS_USER_DATA_KEY_DECL() to use an external key
   // from the content.
   static const int& kUserDataKey;
+
+  base::WeakPtrFactory<VivaldiPrivateTabObserver> weak_ptr_factory_{this};
 };
 
 class TabsPrivateUpdateFunction : public ExtensionFunction {
@@ -442,6 +468,52 @@ class TabsPrivateGetTabPerformanceDataFunction : public ExtensionFunction {
  private:
   ResponseAction Run() override;
 };
+
+class TabsPrivateGetSendTabToSelfEntriesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getSendTabToSelfEntries",
+                             TABSPRIVATE_GETSENDTABTOSELFENTRIES)
+
+  TabsPrivateGetSendTabToSelfEntriesFunction() = default;
+
+ protected:
+  ~TabsPrivateGetSendTabToSelfEntriesFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+};
+
+
+class TabsPrivateDismissSendTabToSelfEntriesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.dismissSendTabToSelfEntries",
+                             TABSPRIVATE_DISMISSSENDTABTOSELFENTRIES)
+
+  TabsPrivateDismissSendTabToSelfEntriesFunction() = default;
+
+ protected:
+  ~TabsPrivateDismissSendTabToSelfEntriesFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+};
+
+class TabsPrivateExecSendTabToSelfActionFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.execSendTabToSelfAction",
+                             TABSPRIVATE_EXECSENDTABTOSELFACTION)
+
+  TabsPrivateExecSendTabToSelfActionFunction() = default;
+
+ protected:
+  ~TabsPrivateExecSendTabToSelfActionFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+};
+
+
+
 
 }  // namespace extensions
 

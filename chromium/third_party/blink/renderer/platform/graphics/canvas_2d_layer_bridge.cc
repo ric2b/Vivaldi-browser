@@ -81,11 +81,6 @@ void Canvas2DLayerBridge::SetCanvasResourceHost(CanvasResourceHost* host) {
   resource_host_ = host;
 }
 
-void Canvas2DLayerBridge::ResetResourceProvider() {
-  if (resource_host_)
-    resource_host_->ReplaceResourceProvider(nullptr);
-}
-
 // static
 void Canvas2DLayerBridge::HibernateOrLogFailure(
     base::WeakPtr<Canvas2DLayerBridge> bridge,
@@ -105,7 +100,6 @@ void Canvas2DLayerBridge::Hibernate() {
   CHECK(resource_host_);
   DCHECK(!IsHibernating());
   DCHECK(hibernation_scheduled_);
-  CHECK(resource_host_);
 
   hibernation_scheduled_ = false;
 
@@ -151,7 +145,7 @@ void Canvas2DLayerBridge::Hibernate() {
       std::move(sw_image),
       resource_host_->ResourceProvider()->ReleaseRecorder());
 
-  ResetResourceProvider();
+  resource_host_->ReplaceResourceProvider(nullptr);
   resource_host_->ClearLayerTexture();
 
   // shouldBeDirectComposited() may have changed.
@@ -174,13 +168,10 @@ void Canvas2DLayerBridge::Hibernate() {
   }
 }
 
-CanvasResourceProvider* Canvas2DLayerBridge::ResourceProvider() const {
-  return resource_host_ ? resource_host_->ResourceProvider() : nullptr;
-}
-
 CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider() {
   CHECK(resource_host_);
-  CanvasResourceProvider* resource_provider = ResourceProvider();
+  CanvasResourceProvider* resource_provider =
+      resource_host_->ResourceProvider();
 
   if (resource_host_->context_lost()) {
     DCHECK(!resource_provider);
@@ -239,17 +230,18 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider() {
   hibernation_handler_.Clear();
   DCHECK(!IsHibernating());
 
-  if (resource_host_) {
-    // shouldBeDirectComposited() may have changed.
-    resource_host_->SetNeedsCompositingUpdate();
-  }
+  // shouldBeDirectComposited() may have changed.
+  resource_host_->SetNeedsCompositingUpdate();
+
   return resource_provider;
 }
 
 void Canvas2DLayerBridge::PageVisibilityChanged() {
   bool page_is_visible = resource_host_->IsPageVisible();
-  if (ResourceProvider())
-    ResourceProvider()->SetResourceRecyclingEnabled(page_is_visible);
+  if (resource_host_->ResourceProvider()) {
+    resource_host_->ResourceProvider()->SetResourceRecyclingEnabled(
+        page_is_visible);
+  }
 
   // Conserve memory.
   if (resource_host_->GetRasterMode() == RasterMode::kGPU) {
@@ -258,7 +250,8 @@ void Canvas2DLayerBridge::PageVisibilityChanged() {
     }
   }
 
-  if (features::IsCanvas2DHibernationEnabled() && ResourceProvider() &&
+  if (features::IsCanvas2DHibernationEnabled() &&
+      resource_host_->ResourceProvider() &&
       resource_host_->GetRasterMode() == RasterMode::kGPU && !page_is_visible &&
       !hibernation_scheduled_) {
     resource_host_->ClearLayerTexture();
@@ -327,48 +320,15 @@ bool Canvas2DLayerBridge::WritePixels(const SkImageInfo& orig_info,
     }
   } else {
     resource_host_->FlushRecording(FlushReason::kWritePixels);
-    if (!GetOrCreateResourceProvider())
+
+    // Short-circuit out if an error occurred while flushing the recording.
+    if (!resource_host_->ResourceProvider()->IsValid()) {
       return false;
-  }
-
-  return ResourceProvider()->WritePixels(orig_info, pixels, row_bytes, x, y);
-}
-
-bool Canvas2DLayerBridge::Restore() {
-  CHECK(resource_host_);
-  CHECK(resource_host_->context_lost());
-  if (resource_host_ && resource_host_->GetRasterMode() == RasterMode::kCPU) {
-    return false;
-  }
-  DCHECK(!ResourceProvider());
-
-  resource_host_->ClearLayerTexture();
-
-  base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
-      SharedGpuContext::ContextProviderWrapper();
-
-  if (!context_provider_wrapper->ContextProvider()->IsContextLost()) {
-    CanvasResourceProvider* resource_provider =
-        resource_host_->GetOrCreateCanvasResourceProviderImpl(
-            RasterModeHint::kPreferGPU);
-
-    // The current paradigm does not support switching from accelerated to
-    // non-accelerated, which would be tricky due to changes to the layer tree,
-    // which can only happen at specific times during the document lifecycle.
-    // Therefore, we can only accept the restored surface if it is accelerated.
-    if (resource_provider &&
-        resource_host_->GetRasterMode() == RasterMode::kCPU) {
-      resource_host_->ReplaceResourceProvider(nullptr);
-      // FIXME: draw sad canvas picture into new buffer crbug.com/243842
-    } else {
-      resource_host_->set_context_lost(false);
     }
   }
 
-  if (resource_host_)
-    resource_host_->UpdateMemoryUsage();
-
-  return ResourceProvider();
+  return resource_host_->ResourceProvider()->WritePixels(orig_info, pixels,
+                                                         row_bytes, x, y);
 }
 
 void Canvas2DLayerBridge::FinalizeFrame(FlushReason reason) {
@@ -410,14 +370,11 @@ scoped_refptr<StaticBitmapImage> Canvas2DLayerBridge::NewImageSnapshot(
     return nullptr;
   }
   // GetOrCreateResourceProvider needs to be called before FlushRecording, to
-  // make sure "hint" is properly taken into account, as well as after
-  // FlushRecording, in case the playback crashed the GPU context.
+  // make sure "hint" is properly taken into account.
   if (!GetOrCreateResourceProvider())
     return nullptr;
   resource_host_->FlushRecording(reason);
-  if (!GetOrCreateResourceProvider())
-    return nullptr;
-  return ResourceProvider()->Snapshot(reason);
+  return resource_host_->ResourceProvider()->Snapshot(reason);
 }
 
 void Canvas2DLayerBridge::Logger::ReportHibernationEvent(

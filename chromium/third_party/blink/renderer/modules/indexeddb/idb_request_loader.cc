@@ -11,6 +11,7 @@
 
 #include <algorithm>
 
+#include "base/metrics/histogram_functions.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -72,7 +73,7 @@ void IDBRequestLoader::StartNextValue() {
 
   while (true) {
     if (current_value_ == values_.end()) {
-      OnLoadComplete(/*error=*/false);
+      OnLoadComplete(DOMExceptionCode::kNoError);
       return;
     }
     if (unwrapper.Parse(current_value_->get())) {
@@ -109,9 +110,7 @@ FileErrorCode IDBRequestLoader::DidReceiveData(base::span<const uint8_t> data) {
   DCHECK_LE(wrapped_data_.size() + data.size(), wrapped_data_.capacity())
       << "The reader returned more data than we were prepared for";
 
-  auto char_data = base::as_chars(data);
-  wrapped_data_.Append(char_data.data(),
-                       base::checked_cast<wtf_size_t>(char_data.size()));
+  wrapped_data_.AppendSpan(base::as_chars(data));
   return FileErrorCode::kOK;
 }
 
@@ -132,7 +131,7 @@ void IDBRequestLoader::DidFinishLoading() {
   StartNextValue();
 }
 
-void IDBRequestLoader::DidFail(FileErrorCode) {
+void IDBRequestLoader::DidFail(FileErrorCode error_code) {
 #if DCHECK_IS_ON()
   DCHECK(started_)
       << "FileReaderLoader called DidFail() before it was Start()ed";
@@ -142,21 +141,24 @@ void IDBRequestLoader::DidFail(FileErrorCode) {
   DCHECK(file_reader_loading_);
   file_reader_loading_ = false;
 #endif  // DCHECK_IS_ON()
-
-  OnLoadComplete(/*error=*/true);
+  base::UmaHistogramEnumeration("IndexedDB.LargeValueReadError", error_code);
+  DOMExceptionCode exception_code = error_code == FileErrorCode::kNotFoundErr
+                                        ? DOMExceptionCode::kNotFoundError
+                                        : DOMExceptionCode::kDataError;
+  OnLoadComplete(exception_code);
 }
 
-void IDBRequestLoader::OnLoadComplete(bool error) {
+void IDBRequestLoader::OnLoadComplete(DOMExceptionCode exception_code) {
 #if DCHECK_IS_ON()
   DCHECK(started_);
   DCHECK(!canceled_);
 #endif  // DCHECK_IS_ON()
   std::move(load_complete_callback_)
-      .Run(std::move(values_), error
-                                   ? MakeGarbageCollected<DOMException>(
-                                         DOMExceptionCode::kDataError,
-                                         "Failed to read large IndexedDB value")
-                                   : nullptr);
+      .Run(std::move(values_),
+           exception_code != DOMExceptionCode::kNoError
+               ? MakeGarbageCollected<DOMException>(
+                     exception_code, "Failed to read large IndexedDB value")
+               : nullptr);
 }
 
 }  // namespace blink

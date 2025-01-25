@@ -17,17 +17,67 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "sync/vivaldi_sync_auth_manager.h"
+#include "vivaldi_account/vivaldi_account_manager.h"
 
 namespace vivaldi {
+namespace {
+class TryAccountPasswordForDecryption : public syncer::SyncServiceObserver {
+ public:
+  TryAccountPasswordForDecryption(syncer::SyncService* sync_service,
+                                  VivaldiAccountManager* account_manager)
+      : account_manager_(account_manager) {
+    sync_service->AddObserver(this);
+  }
+  ~TryAccountPasswordForDecryption() override = default;
+
+  TryAccountPasswordForDecryption(
+      const TryAccountPasswordForDecryption& ui_helper) = delete;
+  TryAccountPasswordForDecryption& operator=(
+      const TryAccountPasswordForDecryption& ui_helper) = delete;
+
+  // syncer::SyncServiceObserver implementation.
+  void OnStateChanged(syncer::SyncService* sync) override {
+    if (!sync->IsEngineInitialized()) {
+      tried_decrypt_ = false;
+      return;
+    }
+
+    if (!sync->GetUserSettings()->IsPassphraseRequiredForPreferredDataTypes() ||
+        tried_decrypt_)
+      return;
+
+    tried_decrypt_ = true;
+
+    std::string password = account_manager_->password_handler()->password();
+
+    if (!password.empty()) {
+      // See if the user is using the same encryption and login password. If
+      // yes, this will cause the engine to proceed to the next step, and cause
+      // the encryption password prompt UI to be skipped. Otherwise, the UI will
+      // just stick to showing the password prompt, so we can silently drop
+      // informing the UI about it.
+      std::ignore = sync->GetUserSettings()->SetDecryptionPassphrase(password);
+    };
+  }
+
+  void OnSyncShutdown(syncer::SyncService* sync) override {
+    sync->RemoveObserver(this);
+    delete this;
+  }
+
+ private:
+  const raw_ptr<VivaldiAccountManager> account_manager_;
+
+  bool tried_decrypt_ = false;
+};
+}  // namespace
 
 VivaldiSyncServiceImpl::VivaldiSyncServiceImpl(
     SyncServiceImpl::InitParams init_params,
     PrefService* prefs,
     VivaldiAccountManager* account_manager)
-    : SyncServiceImpl(std::move(init_params)),
-      ui_helper_(this, account_manager),
-      weak_factory_(this) {
-  if (!vivaldi::ForcedVivaldiRunning()) {
+    : SyncServiceImpl(std::move(init_params)), weak_factory_(this) {
+  if (vivaldi::IsVivaldiRunning()) {
     auth_manager_ = std::make_unique<VivaldiSyncAuthManager>(
         identity_manager_,
         base::BindRepeating(&VivaldiSyncServiceImpl::AccountStateChanged,
@@ -36,6 +86,9 @@ VivaldiSyncServiceImpl::VivaldiSyncServiceImpl(
                             base::Unretained(this)),
         account_manager);
   }
+
+  // Self-destructs when sync shuts down.
+  new TryAccountPasswordForDecryption(this, account_manager);
 
   // Notes must be re-synchronized to correct the note-duplication issues.
   base::Version last_seen_version(
@@ -49,11 +102,6 @@ VivaldiSyncServiceImpl::VivaldiSyncServiceImpl(
 
 VivaldiSyncServiceImpl::~VivaldiSyncServiceImpl() {}
 
-void VivaldiSyncServiceImpl::Initialize() {
-  SyncServiceImpl::Initialize();
-  ui_helper_.RegisterObserver();
-}
-
 void VivaldiSyncServiceImpl::ClearSyncData() {
   // This isn't handled by the engine anymore, so we instead do the whole
   // request right here and shut down sync.
@@ -61,7 +109,7 @@ void VivaldiSyncServiceImpl::ClearSyncData() {
   std::string client_id = engine_->GetCacheGuid();
   std::string auth_token = auth_manager_->GetCredentials().access_token;
   is_clearing_sync_data_ = true;
-  StopAndClear();
+  StopAndClear(ResetEngineReason::kResetLocalData);
 
   sync_pb::ClientToServerMessage request;
   request.set_share(auth_manager_->GetCredentials().email);
@@ -151,9 +199,13 @@ void VivaldiSyncServiceImpl::OnClearDataComplete(
   NotifyObservers();
 }
 
-void VivaldiSyncServiceImpl::ResetEncryptionBootstrapToken(
+std::string VivaldiSyncServiceImpl::GetEncryptionBootstrapTokenForBackup() {
+  return GetEncryptionBootstrapToken();
+}
+
+void VivaldiSyncServiceImpl::ResetEncryptionBootstrapTokenFromBackup(
     const std::string& token) {
-  StopAndClear();
+  StopAndClear(ResetEngineReason::kCredentialsChanged);
   SetEncryptionBootstrapToken(token);
   SetSyncFeatureRequested();
 }

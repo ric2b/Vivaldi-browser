@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> e mbylli linjën papritur.</translation>
 <translation id="1161325031994447685">Të rilidheni me Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Printoj…</translation>
+<translation id="132390688737681464">Regjistroj dhe plotësoj adresat</translation>
 <translation id="1375198122581997741">Për versionin</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> nuk dërgoi asnjë të dhënë.</translation>
 <translation id="1559528461873125649">Nuk ekziston skedari apo katalogu</translation>
 <translation id="1640244768702815859">Provoni të <ph name="BEGIN_LINK" />vizitoni faqen zyrtare<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protokoll jofunksional</translation>
+<translation id="1662550410081243962">Regjistroni dhe plotësoni mënyrat e pagimit</translation>
 <translation id="1710259589646384581">Sistemi operativ</translation>
 <translation id="1728677426644403582">Po shihni burimin e faqes së internetit</translation>
 <translation id="1734878702283171397">Provoni të kontaktoni administratorin e sistemit.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Uebsajti nuk ofron linjë të sigurt</translation>
 <translation id="2187317261103489799">Diktoj (standard)</translation>
 <translation id="2224337661447660594">Nuk ka internet</translation>
+<translation id="2283340219607151381">Regjistroj dhe plotësoj adresat</translation>
 <translation id="2292556288342944218">Është bllokuar aksesi në internet</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> kërkon emër përdoruesi dhe fjalëkalim.</translation>
 <translation id="2337852623177822836">Parametri kontrollohet nga administratori</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Linja mbrohet me shifrim dhe vërtetohet me <ph name="CIPHER" /> duke përdorur <ph name="KX" /> për shkëmbimin e algoritmeve kriptografike.</translation>
 <translation id="2909946352844186028">Rrjeti kompjuterik duket se ka ndryshuar.</translation>
 <translation id="2948083400971632585">Në faqen e parametrave mund të çaktivizoni proxy-t për çdo lidhje.</translation>
+<translation id="2954624054936281172">Tabela e mënyrave të regjistruara të pagimit</translation>
 <translation id="2991571918955627853">Uebsajti <ph name="SITE" /> nuk mund të vizitohet për momentin, sepse përdor HSTS. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
 <translation id="3005723025932146533">Tregoj kopjen e regjistruar</translation>
 <translation id="301521992641321250">Është bllokuar automatikisht</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Gjithmonë diktoj materialet e rëndësishme te ky uebsajti</translation>
 <translation id="3308738399950580893">reklamat</translation>
 <translation id="3384522979010096022">Organizata juaj nuk ju lejon ta shihni uebsajtin</translation>
+<translation id="3387261909427947069">Mënyrat e pagimit</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> është e paarritshme për momentin.</translation>
 <translation id="3427092606871434483">Lejoj (standarde)</translation>
 <translation id="3447661539832366887">Zotëruesi i këtij aparati e ka çaktivizuar lojën me dinozaur.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">Lista e certifikatave të uebsajtit është firmosur me standardin SHA-1.</translation>
 <translation id="5452270690849572955">Nuk gjendet faqja <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">E pavlefshme</translation>
+<translation id="5490432419156082418">Adresat dhe të tjera</translation>
 <translation id="5492298309214877701">Ku uebsajt i kompanisë, organizatës apo shkollës ka të njëjtën URL me një uebsajt të jashtëm.
     <ph name="LINE_BREAK" />
     Provoni të kontaktoni administratorin e sistemit.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Lejohet nga një shtesë</translation>
 <translation id="7111012039238467737">(E vlefshme)</translation>
 <translation id="7113310725918019676">Lejoj <ph name="BLOCKED_TYPE" /> nga <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Regjistroni dhe plotësoni mënyrat e pagimit</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nuk i respekton standardet e sigurisë.</translation>
 <translation id="7219179957768738017">Linja përdor <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Shfaq njoftimet</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">Kontaktoni administratorin e rrjetit kompjuterik nëse jeni në mëdyshje.</translation>
 <translation id="8332188693563227489">U refuzua aksesi në <ph name="HOST_NAME" /></translation>
 <translation id="8422228580902424274">Piratët e internetit në uebsajtin që doni të vizitoni mund t'ju mashtrojnë për të instaluar softuere ose për të zbuluar gjërat, si fjalëkalimin, numrin e telefonit ose të kartës së kreditit.</translation>
+<translation id="8473863474539038330">Adresat dhe të tjera</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> u përgjigj shumë vonë.</translation>
 <translation id="8503813439785031346">Përdoruesi</translation>
 <translation id="8703575177326907206">Linja me <ph name="DOMAIN" /> është e pashifruar.</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">Faqet interesante</translation>
 <translation id="8940028675168378100">U bllokua nga <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Shkoj te parametrat e uebsajtit</translation>
+<translation id="8975012916872825179">Përfshihen informacione, si numrat e telefonit, adresat e imejlit dhe të dërgesave</translation>
 <translation id="9001074447101275817">Duhet një emër dhe fjalëkalim për proxy <ph name="DOMAIN" />.</translation>
 <translation id="9008201768610948239">Shpërfill</translation>
 <translation id="9025348182339809926">(E pavlefshme)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> përdor protokoll jofunksional.</translation>
 <translation id="936602727769022409">Mund të humbitni aksesin te kontoja në Google. Chromium rekomandon ta ndryshoni që tani fjalëkalimin. Do ju kërkohet identifikimi.</translation>
 <translation id="969892804517981540">Versioni zyrtar</translation>
+<translation id="984275831282074731">Mënyrat e pagimit</translation>
 <translation id="988159990683914416">Versioni i programuesit</translation>
 </translationbundle>

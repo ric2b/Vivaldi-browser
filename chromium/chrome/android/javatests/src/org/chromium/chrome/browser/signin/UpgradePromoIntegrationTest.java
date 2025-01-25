@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.signin;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
@@ -23,7 +24,6 @@ import static org.mockito.Mockito.when;
 
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
@@ -57,6 +57,7 @@ import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.ui.signin.SigninUtils;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncHelper;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
@@ -70,7 +71,6 @@ import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.AccountConsistencyPromoAction;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
-import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.test.util.BlankUiTestActivity;
 import org.chromium.ui.test.util.DeviceRestriction;
 import org.chromium.ui.test.util.GmsCoreVersionRestriction;
@@ -109,7 +109,7 @@ public class UpgradePromoIntegrationTest {
     @Before
     public void setUp() {
         NativeLibraryTestUtils.loadNativeLibraryAndInitBrowserProcess();
-        mSigninTestRule.addAccountAndWaitForSeeding(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
+        mSigninTestRule.addAccount(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
         HistorySyncHelper.setInstanceForTesting(mHistorySyncHelperMock);
     }
 
@@ -256,21 +256,21 @@ public class UpgradePromoIntegrationTest {
 
         // Verify that the view switcher is displayed with the correct layout.
         onView(withId(R.id.fullscreen_signin)).check(matches(isDisplayed()));
-        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
-            onView(withId(R.id.upgrade_promo_portrait)).check(matches(isDisplayed()));
-        } else {
+        if (SigninUtils.shouldShowDualPanesHorizontalLayout(mActivity)) {
             onViewWaiting(withId(R.id.upgrade_promo_landscape)).check(matches(isDisplayed()));
+        } else {
+            onView(withId(R.id.upgrade_promo_portrait)).check(matches(isDisplayed()));
         }
 
         // Sign in.
-        onView(withId(R.id.signin_fre_continue_button)).perform(click());
+        onView(withId(R.id.signin_fre_continue_button)).perform(scrollTo()).perform(click());
 
         // Verify that the view is displayed with the correct layout.
         onView(withId(R.id.history_sync)).check(matches(isDisplayed()));
-        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
-            onView(withId(R.id.upgrade_promo_portrait)).check(matches(isDisplayed()));
-        } else {
+        if (SigninUtils.shouldShowDualPanesHorizontalLayout(mActivity)) {
             onView(withId(R.id.upgrade_promo_landscape)).check(matches(isDisplayed()));
+        } else {
+            onView(withId(R.id.upgrade_promo_portrait)).check(matches(isDisplayed()));
         }
 
         // Rotate the screen back.
@@ -290,9 +290,6 @@ public class UpgradePromoIntegrationTest {
     @Test
     @MediumTest
     public void testAddAccount() {
-        mSigninTestRule.setResultForNextAddAccountFlow(
-                Activity.RESULT_OK, AccountManagerTestRule.TEST_ACCOUNT_2.getEmail());
-
         launchActivity();
 
         // Verify that the fullscreen sign-in promo is shown with the default account.
@@ -303,6 +300,8 @@ public class UpgradePromoIntegrationTest {
         // Add the second account.
         onView(withText(AccountManagerTestRule.AADC_ADULT_ACCOUNT.getEmail())).perform(click());
         onView(withText(R.string.signin_add_account_to_device)).perform(click());
+        mSigninTestRule.setUpNextAddAccountFlow(AccountManagerTestRule.TEST_ACCOUNT_2.getEmail());
+        onViewWaiting(AccountManagerTestRule.ADD_ACCOUNT_BUTTON_MATCHER).perform(click());
 
         // Verify that the fullscreen sign-in promo is shown with the newly added account.
         onViewWaiting(withId(R.id.fullscreen_signin)).check(matches(isDisplayed()));

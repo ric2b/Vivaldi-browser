@@ -226,14 +226,20 @@ PopupBaseView::PopupBaseView(
     base::WeakPtr<AutofillPopupViewDelegate> delegate,
     views::Widget* parent_widget,
     views::Widget::InitParams::Activatable new_widget_activatable,
-    base::span<const views::BubbleArrowSide> preferred_popup_sides,
     bool show_arrow_pointer)
     : delegate_(delegate),
       parent_widget_(parent_widget),
       new_widget_activatable_(new_widget_activatable),
-      preferred_popup_sides_(
-          {preferred_popup_sides.begin(), preferred_popup_sides.end()}),
-      show_arrow_pointer_(show_arrow_pointer) {}
+      show_arrow_pointer_(show_arrow_pointer) {
+  // TODO(aleventhal) The correct role spec-wise to use here is kMenu, however
+  // as of NVDA 2018.2.1, firing a menu event with kMenu breaks left/right
+  // arrow editing feedback in text field. If NVDA addresses this we should
+  // consider returning to using kMenu, so that users are notified that a
+  // menu popup has been shown.
+  GetViewAccessibility().SetRole(ax::mojom::Role::kPane);
+  GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_POPUP_ACCESSIBLE_NODE_DATA));
+}
 
 PopupBaseView::~PopupBaseView() {
   if (delegate_) {
@@ -289,12 +295,7 @@ bool PopupBaseView::DoShow() {
 
   // Showing the widget can change native focus (which would result in an
   // immediate hiding of the popup). Only start observing after shown.
-  // TODO(crbug.com/325246516): Hiding by widget focus change seems redundant as
-  // it is already done by the field focus loss. After successful password
-  // manual fallback testing confirms safety, remove the focus observation.
-  if (initialize_widget &&
-      !base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordManualFallbackAvailable)) {
+  if (initialize_widget) {
     CHECK(!focus_observation_.IsObserving());
     focus_observation_.Observe(views::WidgetFocusManager::GetInstance());
   }
@@ -359,7 +360,9 @@ void PopupBaseView::NotifyAXSelection(views::View& selected_view) {
       {"PopupSuggestionView", "PopupPasswordSuggestionView", "PopupFooterView",
        "PopupSeparatorView", "PopupWarningView", "PopupBaseView",
        "PasswordGenerationPopupViewViews::GeneratedPasswordBox", "PopupRowView",
-       "PopupRowContentView", "MdTextButton"});
+       "PopupRowContentView", "MdTextButton",
+       "PopupRowPredictionImprovementsFeedbackView",
+       "PopupRowPredictionImprovementsDetailsView"});
   DCHECK(kDerivedClasses.contains(selected_view.GetClassName()))
       << "If you add a new derived class from AutofillPopupRowView, add it "
          "here and to onSelection(evt) in "
@@ -368,7 +371,6 @@ void PopupBaseView::NotifyAXSelection(views::View& selected_view) {
          "announces the item when selected. Missing class: "
       << selected_view.GetClassName();
 #endif
-  selected_view.NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
 }
 
 void PopupBaseView::OnWidgetBoundsChanged(views::Widget* widget,
@@ -448,10 +450,11 @@ gfx::Rect PopupBaseView::GetTopWindowBounds() const {
   return gfx::Rect();
 }
 
-gfx::Rect PopupBaseView::GetOptionalPositionAndPlaceArrowOnPopup(
+gfx::Rect PopupBaseView::GetOptimalPositionAndPlaceArrowOnPopup(
     const gfx::Rect& element_bounds,
     const gfx::Rect& max_bounds_for_popup,
-    const gfx::Size& preferred_size) {
+    const gfx::Size& preferred_size,
+    base::span<const views::BubbleArrowSide> preferred_popup_sides) {
   views::BubbleBorder* border = static_cast<views::BubbleBorder*>(
       GetWidget()->GetRootView()->GetBorder());
   DCHECK(border);
@@ -475,7 +478,7 @@ gfx::Rect PopupBaseView::GetOptionalPositionAndPlaceArrowOnPopup(
       maximum_pixel_offset_to_center,
       /*maximum_width_percentage_to_center=*/
       kMaximumWidthPercentageToMoveTheSuggestionToCenter,
-      /*popup_bounds=*/popup_bounds, preferred_popup_sides_,
+      /*popup_bounds=*/popup_bounds, preferred_popup_sides,
       /*anchor_type=*/delegate_->anchor_type());
 
   // Those values are not supported for adding an arrow.
@@ -534,8 +537,9 @@ bool PopupBaseView::DoUpdateBoundsAndRedrawPopup() {
     return false;
   }
 
-  gfx::Rect popup_bounds = GetOptionalPositionAndPlaceArrowOnPopup(
-      element_bounds, max_bounds_for_popup, preferred_size);
+  gfx::Rect popup_bounds = GetOptimalPositionAndPlaceArrowOnPopup(
+      element_bounds, max_bounds_for_popup, preferred_size,
+      kDefaultPreferredPopupSides);
 
   if (BoundsOverlapWithPictureInPictureWindow(popup_bounds)) {
     HideController(
@@ -557,17 +561,6 @@ void PopupBaseView::OnNativeFocusChanged(gfx::NativeView focused_now) {
   if (GetWidget() && GetWidget()->GetNativeView() != focused_now) {
     HideController(SuggestionHidingReason::kFocusChanged);
   }
-}
-
-void PopupBaseView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  // TODO(aleventhal) The correct role spec-wise to use here is kMenu, however
-  // as of NVDA 2018.2.1, firing a menu event with kMenu breaks left/right
-  // arrow editing feedback in text field. If NVDA addresses this we should
-  // consider returning to using kMenu, so that users are notified that a
-  // menu popup has been shown.
-  node_data->role = ax::mojom::Role::kPane;
-  node_data->SetNameChecked(
-      l10n_util::GetStringUTF16(IDS_AUTOFILL_POPUP_ACCESSIBLE_NODE_DATA));
 }
 
 void PopupBaseView::HideController(SuggestionHidingReason reason) {

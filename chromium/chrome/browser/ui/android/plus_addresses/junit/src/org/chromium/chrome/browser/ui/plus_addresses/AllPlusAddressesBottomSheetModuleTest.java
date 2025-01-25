@@ -38,6 +38,7 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
+import org.chromium.chrome.browser.autofill.helpers.FaviconHelper;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
@@ -53,12 +54,14 @@ public class AllPlusAddressesBottomSheetModuleTest {
     private static final long TEST_NATIVE = 100;
     private static final int WIDTH = 2000;
     private static final int HEIGHT = 2000;
-    private static final PlusProfile PROFILE_1 = new PlusProfile("google.com", "example@gmail.com");
+    private static final PlusProfile PROFILE_1 =
+            new PlusProfile("example@gmail.com", "google.com", "https://google.com");
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule().strictness(Strictness.STRICT_STUBS);
 
     @Captor private ArgumentCaptor<AllPlusAddressesBottomSheetView> mViewCaptor;
 
+    @Mock private FaviconHelper mFaviconHelper;
     @Mock private BottomSheetController mBottomSheetController;
     @Mock private AllPlusAddressesBottomSheetCoordinator.Delegate mDelegate;
 
@@ -72,7 +75,7 @@ public class AllPlusAddressesBottomSheetModuleTest {
         mActivity = Robolectric.setupActivity(TestActivity.class);
         mCoordinator =
                 new AllPlusAddressesBottomSheetCoordinator(
-                        mActivity, mBottomSheetController, mDelegate);
+                        mActivity, mBottomSheetController, mDelegate, mFaviconHelper);
         mUIInfo = new AllPlusAddressesBottomSheetUIInfo();
         mUIInfo.setPlusProfiles(List.of(PROFILE_1));
 
@@ -109,7 +112,7 @@ public class AllPlusAddressesBottomSheetModuleTest {
 
         TextView origin = view.getContentView().findViewById(R.id.plus_profile_origin);
         assertNotNull(origin);
-        assertEquals(origin.getText(), PROFILE_1.getOrigin());
+        assertEquals(origin.getText(), PROFILE_1.getDisplayName());
 
         ChipView plusAddress = view.getContentView().findViewById(R.id.plus_address);
         assertNotNull(plusAddress);

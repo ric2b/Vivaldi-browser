@@ -15,6 +15,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/picker/picker_controller.h"
 #include "ash/public/cpp/picker/picker_search_result.h"
+#include "ash/public/cpp/picker/picker_web_paste_target.h"
 #include "base/check.h"
 #include "base/check_deref.h"
 #include "base/containers/span.h"
@@ -42,6 +43,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/picker/picker_file_suggester.h"
 #include "chrome/browser/ui/ash/picker/picker_lacros_omnibox_search_provider.h"
+#include "chrome/browser/ui/ash/picker/picker_link_suggester.h"
 #include "chrome/browser/ui/ash/picker/picker_thumbnail_loader.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
@@ -49,10 +51,17 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "ui/aura/window.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 
 namespace ash {
@@ -60,6 +69,9 @@ enum class AppListSearchResultType;
 }
 
 namespace {
+
+// TODO: b/345303965 - Finalize this string.
+constexpr std::u16string_view kAnnouncementViewName = u"Picker";
 
 bool IsSupportedLocalFileFormat(const base::FilePath& file_path) {
   for (std::string_view extension :
@@ -76,8 +88,8 @@ std::vector<ash::PickerSearchResult> CreateSearchResultsForRecentLocalImages(
   std::vector<ash::PickerSearchResult> results;
   results.reserve(files.size());
   for (PickerFileSuggester::LocalFile& file : files) {
-    results.push_back(ash::PickerSearchResult::LocalFile(std::move(file.title),
-                                                         std::move(file.path)));
+    results.push_back(ash::PickerLocalFileResult(std::move(file.title),
+                                                 std::move(file.path)));
   }
   return results;
 }
@@ -87,8 +99,9 @@ std::vector<ash::PickerSearchResult> CreateSearchResultsForRecentDriveFiles(
   std::vector<ash::PickerSearchResult> results;
   results.reserve(files.size());
   for (PickerFileSuggester::DriveFile& file : files) {
-    results.push_back(ash::PickerSearchResult::DriveFile(
-        std::move(file.title), std::move(file.url), file.local_path));
+    results.push_back(
+        ash::PickerDriveFileResult(std::move(file.id), std::move(file.title),
+                                   std::move(file.url), file.local_path));
   }
   return results;
 }
@@ -96,7 +109,8 @@ std::vector<ash::PickerSearchResult> CreateSearchResultsForRecentDriveFiles(
 std::unique_ptr<app_list::SearchProvider> CreateDriveSearchProvider(
     Profile* profile) {
   auto provider = std::make_unique<app_list::DriveSearchProvider>(
-      profile, /*should_filter_shared_files=*/false);
+      profile, /*should_filter_shared_files=*/false,
+      /*should_filter_directories=*/true);
   if (base::FeatureList::IsEnabled(ash::features::kPickerCloud)) {
     provider->SetQuerySource(
         drivefs::mojom::QueryParameters::QuerySource::kCloudOnly);
@@ -134,28 +148,27 @@ std::vector<ash::PickerSearchResult> ConvertSearchResults(
 
         if (std::optional<GURL> result_url = result->url();
             result_url.has_value()) {
-          picker_results.push_back(ash::PickerSearchResult::BrowsingHistory(
+          picker_results.push_back(ash::PickerBrowsingHistoryResult(
               *result_url, result->title(), result->icon().icon,
               result->best_match()));
         } else {
-          picker_results.push_back(ash::PickerSearchResult::Text(
-              result->title(),
-              ash::PickerSearchResult::TextData::Source::kOmnibox));
+          picker_results.push_back(ash::PickerTextResult(
+              result->title(), ash::PickerTextResult::Source::kOmnibox));
         }
         break;
       }
       case ash::AppListSearchResultType::kFileSearch: {
         // TODO: b/322926411 - Move this filtering to the search provider.
         if (IsSupportedLocalFileFormat(result->filePath())) {
-          picker_results.push_back(ash::PickerSearchResult::LocalFile(
+          picker_results.push_back(ash::PickerLocalFileResult(
               result->title(), result->filePath(), result->best_match()));
         }
         break;
       }
       case ash::AppListSearchResultType::kDriveSearch:
-        picker_results.push_back(ash::PickerSearchResult::DriveFile(
-            result->title(), *result->url(), result->filePath(),
-            result->best_match()));
+        picker_results.push_back(ash::PickerDriveFileResult(
+            result->DriveId(), result->title(), *result->url(),
+            result->filePath(), result->best_match()));
         break;
       default:
         LOG(DFATAL) << "Got unexpected search result type "
@@ -206,9 +219,8 @@ std::vector<ash::PickerSearchResult> GetEditorResultsFromPanelContext(
   std::vector<ash::PickerSearchResult> results;
   for (const crosapi::mojom::EditorPanelPresetTextQueryPtr& query :
        panel_context->preset_text_queries) {
-    results.push_back(ash::PickerSearchResult::Editor(
-        ash::PickerSearchResult::EditorData::Mode::kRewrite,
-        base::UTF8ToUTF16(query->name),
+    results.push_back(ash::PickerEditorResult(
+        ash::PickerEditorResult::Mode::kRewrite, base::UTF8ToUTF16(query->name),
         FromMojoPresetQueryCategory(query->category), query->text_query_id));
   }
   return results;
@@ -224,7 +236,7 @@ app_list::CategoriesList CreateRankerCategories() {
 
 PickerClientImpl::PickerClientImpl(ash::PickerController* controller,
                                    user_manager::UserManager* user_manager)
-    : controller_(controller) {
+    : announcer_(kAnnouncementViewName), controller_(controller) {
   controller_->SetClient(this);
 
   // As `PickerClientImpl` is initialised in
@@ -259,7 +271,8 @@ void PickerClientImpl::StartCrosSearch(
   switch (*category) {
     case ash::PickerCategory::kEditorWrite:
     case ash::PickerCategory::kEditorRewrite:
-    case ash::PickerCategory::kExpressions:
+    case ash::PickerCategory::kEmojisGifs:
+    case ash::PickerCategory::kEmojis:
     case ash::PickerCategory::kClipboard:
     case ash::PickerCategory::kDatesTimes:
     case ash::PickerCategory::kUnitsMaths:
@@ -299,16 +312,20 @@ void PickerClientImpl::OnCrosSearchResultsUpdated(
                ConvertSearchResults(std::move(results_map[result_type])));
 }
 
-void PickerClientImpl::OnZeroStateLinksSearchResultsUpdated(
-    PickerClientImpl::SuggestedLinksCallback callback,
-    ash::AppListSearchResultType result_type,
-    std::vector<std::unique_ptr<ChromeSearchResult>> results) {
-  callback.Run(ConvertSearchResults(std::move(results)));
-}
-
 void PickerClientImpl::StopCrosQuery() {
   CHECK(search_engine_);
   search_engine_->StopQuery();
+}
+
+bool PickerClientImpl::IsEligibleForEditor() {
+  ash::input_method::EditorMediator* editor_mediator =
+      GetEditorMediator(profile_);
+  if (editor_mediator == nullptr) {
+    return false;
+  }
+
+  return editor_mediator->GetEditorMode() !=
+         ash::input_method::EditorMode::kHardBlocked;
 }
 
 PickerClientImpl::ShowEditorCallback PickerClientImpl::CacheEditorContext() {
@@ -318,13 +335,13 @@ PickerClientImpl::ShowEditorCallback PickerClientImpl::CacheEditorContext() {
     return {};
   }
 
+  editor_mediator->CacheContext();
+
   ash::input_method::EditorMode editor_mode = editor_mediator->GetEditorMode();
   if (editor_mode == ash::input_method::EditorMode::kSoftBlocked ||
       editor_mode == ash::input_method::EditorMode::kHardBlocked) {
     return {};
   }
-
-  editor_mediator->CacheContext();
 
   return base::BindOnce(&PickerClientImpl::ShowEditor,
                         weak_factory_.GetWeakPtr());
@@ -353,10 +370,12 @@ void PickerClientImpl::GetSuggestedEditorResults(
 }
 
 void PickerClientImpl::GetRecentLocalFileResults(size_t max_files,
+                                                 base::TimeDelta now_delta,
                                                  RecentFilesCallback callback) {
   file_suggester_->GetRecentLocalImages(
-      max_files, base::BindOnce(CreateSearchResultsForRecentLocalImages)
-                     .Then(std::move(callback)));
+      max_files, now_delta,
+      base::BindOnce(CreateSearchResultsForRecentLocalImages)
+          .Then(std::move(callback)));
 }
 
 void PickerClientImpl::GetRecentDriveFileResults(size_t max_files,
@@ -367,20 +386,9 @@ void PickerClientImpl::GetRecentDriveFileResults(size_t max_files,
 }
 
 void PickerClientImpl::GetSuggestedLinkResults(
+    size_t max_results,
     SuggestedLinksCallback callback) {
-  // TODO: b/330938446 - Replace with proper zero-state logic.
-  if (zero_state_links_search_engine_ == nullptr) {
-    zero_state_links_search_engine_ =
-        std::make_unique<app_list::SearchEngine>(profile_);
-    zero_state_links_search_engine_->AddProvider(CreateOmniboxProvider(
-        /*bookmarks=*/true, /*history=*/true, /*open_tabs=*/true));
-  }
-
-  zero_state_links_search_engine_->StartSearch(
-      u"http", app_list::SearchOptions(),
-      base::BindRepeating(
-          &PickerClientImpl::OnZeroStateLinksSearchResultsUpdated,
-          weak_factory_.GetWeakPtr(), std::move(callback)));
+  link_suggester_->GetSuggestedLinks(max_results, std::move(callback));
 }
 
 bool PickerClientImpl::IsFeatureAllowedForDogfood() {
@@ -396,6 +404,59 @@ void PickerClientImpl::FetchFileThumbnail(const base::FilePath& path,
 
 PrefService* PickerClientImpl::GetPrefs() {
   return profile_ == nullptr ? nullptr : profile_->GetPrefs();
+}
+
+// Forked from `ClipboardHistoryControllerDelegateImpl::Paste`.
+std::optional<ash::PickerWebPasteTarget> PickerClientImpl::GetWebPasteTarget() {
+  std::unique_ptr<content::RenderWidgetHostIterator> widgets =
+      content::RenderWidgetHost::GetRenderWidgetHosts();
+  while (content::RenderWidgetHost* rwh = widgets->GetNextHost()) {
+    content::RenderViewHost* rvh = content::RenderViewHost::From(rwh);
+    if (rvh == nullptr) {
+      continue;
+    }
+
+    content::WebContents* web_contents =
+        content::WebContents::FromRenderViewHost(rvh);
+    if (web_contents == nullptr) {
+      continue;
+    }
+    if (web_contents->GetPrimaryMainFrame()->GetRenderViewHost() != rvh) {
+      continue;
+    }
+
+    content::RenderFrameHost* focused_frame = web_contents->GetFocusedFrame();
+    if (focused_frame == nullptr) {
+      continue;
+    }
+
+    content::WebContents* focused_web_contents =
+        content::WebContents::FromRenderFrameHost(focused_frame);
+    if (focused_web_contents == nullptr) {
+      continue;
+    }
+
+    gfx::NativeView window = focused_web_contents->GetContentNativeView();
+    if (window == nullptr) {
+      continue;
+    }
+    if (!window->HasFocus()) {
+      continue;
+    }
+
+    return std::make_optional<ash::PickerWebPasteTarget>(
+        focused_web_contents->GetLastCommittedURL(),
+        // SAFETY: Callers must call this synchronously as per the
+        // documentation, so this `base::Unretained` is safe.
+        base::BindOnce(&content::WebContents::Paste,
+                       base::Unretained(focused_web_contents)));
+  }
+
+  return std::nullopt;
+}
+
+void PickerClientImpl::Announce(std::u16string_view message) {
+  announcer_.Announce(std::u16string(message));
 }
 
 void PickerClientImpl::ActiveUserChanged(user_manager::User* active_user) {
@@ -430,10 +491,13 @@ void PickerClientImpl::SetProfile(Profile* profile) {
 
   ranker_manager_ = std::make_unique<app_list::RankerManager>(profile_);
 
-  zero_state_links_search_engine_.reset();
-
   file_suggester_ = std::make_unique<PickerFileSuggester>(profile_);
+  link_suggester_ = std::make_unique<PickerLinkSuggester>(profile_);
   thumbnail_loader_ = std::make_unique<PickerThumbnailLoader>(profile_);
+
+  if (controller_ != nullptr) {
+    controller_->OnClientProfileSet();
+  }
 }
 
 std::unique_ptr<app_list::SearchProvider>
@@ -458,7 +522,8 @@ PickerClientImpl::CreateSearchProviderForCategory(
   switch (category) {
     case ash::PickerCategory::kEditorWrite:
     case ash::PickerCategory::kEditorRewrite:
-    case ash::PickerCategory::kExpressions:
+    case ash::PickerCategory::kEmojisGifs:
+    case ash::PickerCategory::kEmojis:
     case ash::PickerCategory::kClipboard:
     case ash::PickerCategory::kDatesTimes:
     case ash::PickerCategory::kUnitsMaths:

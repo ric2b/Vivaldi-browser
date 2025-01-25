@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       filter_buffer_decoder.c
@@ -5,16 +7,14 @@
 //
 //  Author:     Lasse Collin
 //
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
-//
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "filter_decoder.h"
 
 
 extern LZMA_API(lzma_ret)
-lzma_raw_buffer_decode(const lzma_filter *filters, lzma_allocator *allocator,
+lzma_raw_buffer_decode(
+		const lzma_filter *filters, const lzma_allocator *allocator,
 		const uint8_t *in, size_t *in_pos, size_t in_size,
 		uint8_t *out, size_t *out_pos, size_t out_size)
 {
@@ -23,7 +23,7 @@ lzma_raw_buffer_decode(const lzma_filter *filters, lzma_allocator *allocator,
 			|| out_pos == NULL || *out_pos > out_size)
 		return LZMA_PROG_ERROR;
 
-	// Initialize the decoer.
+	// Initialize the decoder.
 	lzma_next_coder next = LZMA_NEXT_CODER_INIT;
 	return_if_error(lzma_raw_decoder_init(&next, allocator, filters));
 

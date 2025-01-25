@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ppapi/proxy/ppb_graphics_3d_proxy.h"
 
 #include <memory>
@@ -104,11 +109,11 @@ gpu::CommandBuffer::State Graphics3D::WaitForGetOffsetInRange(
 }
 
 void Graphics3D::EnsureWorkVisible() {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void Graphics3D::ResolveAndDetachFramebuffer() {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 gpu::CommandBuffer* Graphics3D::GetCommandBuffer() {

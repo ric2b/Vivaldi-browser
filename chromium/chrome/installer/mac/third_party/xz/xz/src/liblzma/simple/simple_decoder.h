@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       simple_decoder.h
 /// \brief      Properties decoder for simple filters
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -16,7 +15,7 @@
 #include "simple_coder.h"
 
 extern lzma_ret lzma_simple_props_decode(
-		void **options, lzma_allocator *allocator,
+		void **options, const lzma_allocator *allocator,
 		const uint8_t *props, size_t props_size);
 
 #endif

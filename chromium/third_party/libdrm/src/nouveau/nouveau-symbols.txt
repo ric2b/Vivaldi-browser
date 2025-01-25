@@ -1,3 +1,4 @@
+nouveau_bo_make_global
 nouveau_bo_map
 nouveau_bo_name_get
 nouveau_bo_name_ref

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/ash/settings/os_settings_ui.h"
 
 #include <utility>
@@ -37,6 +42,7 @@
 #include "chrome/browser/ui/webui/ash/settings/pages/apps/app_notification_handler.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/apps/app_parental_controls_handler.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/privacy/app_permission_handler.h"
+#include "chrome/browser/ui/webui/ash/settings/pages/search/magic_boost_notice_page_handler_factory.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/storage/device_storage_handler.h"
 #include "chrome/browser/ui/webui/ash/settings/pref_names.h"
 #include "chrome/browser/ui/webui/ash/settings/search/search_handler.h"
@@ -46,6 +52,7 @@
 #include "chrome/browser/ui/webui/ash/settings/services/settings_manager/os_settings_manager.h"
 #include "chrome/browser/ui/webui/ash/settings/services/settings_manager/os_settings_manager_factory.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
+#include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/os_settings_resources.h"
@@ -109,7 +116,8 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
   content::WebUIDataSource* html_source =
       content::WebUIDataSource::CreateAndAdd(profile,
                                              chrome::kChromeUIOSSettingsHost);
-
+  content::URLDataSource::Add(profile,
+                              std::make_unique<SanitizedImageSource>(profile));
   OsSettingsManager* manager = OsSettingsManagerFactory::GetForProfile(profile);
   manager->AddHandlers(web_ui);
   manager->AddLoadTimeData(html_source);
@@ -172,6 +180,12 @@ OSSettingsUI::~OSSettingsUI() {
   // background and the state remains stored in the manager, so we will reset
   // that knowledge.
   settingsHatsManager->SetSettingsUsedSearch(false);
+
+  // Resets the tracking of device IDs associated with notification clicks.
+  // This method is called when the Settings app is closed to prevent the
+  // recording of metrics if a user changes settings long after clicking a
+  // notification.
+  InputDeviceSettingsController::Get()->ResetNotificationDeviceTracking();
 }
 
 void OSSettingsUI::BindInterface(
@@ -432,6 +446,14 @@ void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<date_time::mojom::PageHandlerFactory> receiver) {
   date_time_handler_factory_ = std::make_unique<DateTimeHandlerFactory>(
       web_ui(), Profile::FromWebUI(web_ui()), std::move(receiver));
+}
+
+void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<magic_boost_handler::mojom::PageHandlerFactory>
+        receiver) {
+  magic_boost_notice_page_handler_factory_ =
+      std::make_unique<MagicBoostNoticePageHandlerFactory>(
+          Profile::FromWebUI(web_ui()), std::move(receiver));
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(OSSettingsUI)

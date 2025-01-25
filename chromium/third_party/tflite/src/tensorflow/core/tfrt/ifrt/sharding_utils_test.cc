@@ -34,13 +34,14 @@ limitations under the License.
 #include "xla/python/ifrt/test_util.h"
 #include "xla/python/pjrt_ifrt/xla_sharding.h"
 #include "xla/tsl/concurrency/ref_count.h"
+#include "xla/tsl/lib/core/status_test_util.h"
 #include "xla/xla_data.pb.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_matcher.h"
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/tensor_testutil.h"
+#include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/tfrt/ifrt/ifrt_tensor_utils.h"
-#include "tsl/lib/core/status_test_util.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/ml_dtypes.h"
 #include "tsl/platform/status_matchers.h"
@@ -112,7 +113,7 @@ TEST_P(ReshardToTensorTest, MakeHostTensorFromDeviceArrays) {
   for (int i = 0; i < GetParam().split_tensors.size(); ++i) {
     const auto& split_tensor = GetParam().split_tensors[i];
     auto single_device_sharding = xla::ifrt::SingleDeviceSharding::Create(
-        device_list[i], xla::ifrt::MemoryKind());
+        device_list->devices()[i], xla::ifrt::MemoryKind());
     TF_ASSERT_OK_AND_ASSIGN(auto dtype, ToIfrtDType(split_tensor.dtype()));
     TF_ASSERT_OK_AND_ASSIGN(
         auto array,
@@ -139,7 +140,8 @@ TEST_P(ReshardToTensorTest, MakeHostTensorFromDeviceArrays) {
   TF_ASSERT_OK_AND_ASSIGN(
       auto output_tensor,
       MakeTensorFromArray(*client, *assembled_array, GetParam().sharding,
-                          device_list, thread_pool));
+                          device_list, thread_pool)
+          .Await());
 
   EXPECT_THAT(GetParam().expected_out_tensor, TensorEq(output_tensor));
 }

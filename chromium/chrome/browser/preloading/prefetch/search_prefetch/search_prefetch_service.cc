@@ -7,6 +7,7 @@
 #include <iterator>
 #include <memory>
 
+#include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/json/values_util.h"
@@ -14,7 +15,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/time/time.h"
 #include "base/values.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/prefetch/pref_names.h"
 #include "chrome/browser/preloading/chrome_preloading.h"
@@ -47,6 +50,7 @@
 #include "content/public/browser/web_contents.h"
 #include "net/base/load_flags.h"
 #include "net/base/url_util.h"
+#include "services/network/public/cpp/network_quality_tracker.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "ui/base/page_transition_types.h"
 #include "url/origin.h"
@@ -76,31 +80,6 @@ void SetIsNavigationInDomainCallback(content::PreloadingData* preloading_data) {
   }
 }
 
-#if BUILDFLAG(IS_ANDROID)
-// TODO(crbug.com/345275145): remove this block.
-
-bool is_test = false;
-
-bool CheckPrefetchParameterExistence(const GURL& url) {
-  std::string_view query_piece = url.query_piece();
-  url::Component query(0, url.query_piece().length());
-  url::Component key, value;
-  while (url::ExtractQueryKeyValue(query_piece, &query, &key, &value)) {
-    if (query_piece.substr(key.begin, key.len) == "pf" && !value.is_empty()) {
-      return true;
-    }
-  }
-  return false;
-}
-#endif  // BUILDFLAG(IS_ANDROID)
-#if BUILDFLAG(IS_ANDROID)
-enum CallerType {
-  kSuggestPrefetch = 0,
-  kNavigationPrefetch = 1,
-  kSuggestPrerender = 2,
-};
-#endif
-
 // Recomputes the destination URL for |match| with the updated prefetch
 // information (does not modify |destination_url|). Passing true to
 // |attach_prefetch_information| if the URL request will be sent to network,
@@ -108,9 +87,6 @@ enum CallerType {
 GURL GetPreloadURLFromMatch(
     const TemplateURLRef::SearchTermsArgs& search_terms_args_from_match,
     TemplateURLService* template_url_service,
-#if BUILDFLAG(IS_ANDROID)
-    CallerType caller_type,
-#endif
     std::string prefetch_param) {
   // Copy the search term args, so we can modify them for just the prefetch.
   auto search_terms_args = search_terms_args_from_match;
@@ -120,36 +96,7 @@ GURL GetPreloadURLFromMatch(
   DCHECK(default_provider);
   GURL prefetch_url = GURL(default_provider->url_ref().ReplaceSearchTerms(
       search_terms_args, template_url_service->search_terms_data(), nullptr));
-#if BUILDFLAG(IS_ANDROID)
-  if (caller_type == CallerType::kSuggestPrerender) {
-    // It is expected that prerender does not specify a parameter as the request
-    // does not reach the network.
-    return prefetch_url;
-  }
-  const bool prefetch_parameter_existence =
-      CheckPrefetchParameterExistence(prefetch_url);
-  base::UmaHistogramBoolean("Omnibox.SearchPrefetch.PrefetchParameterExistence",
-                            prefetch_parameter_existence);
-
-  if (prefetch_parameter_existence) {
-    return prefetch_url;
-  }
-
-  // It is quite common that a test does not specify the parameter.
-  if (!is_test) {
-    SCOPED_CRASH_KEY_BOOL("Bug_345275145", "temp_url_origin",
-                          default_provider->HasGoogleBaseURLs(
-                              template_url_service->search_terms_data()));
-    SCOPED_CRASH_KEY_STRING32("Bug_345275145", "prefetch_param",
-                              prefetch_param);
-    SCOPED_CRASH_KEY_STRING1024("Bug_345275145", "provider_url",
-                               default_provider->url());
-    base::debug::DumpWithoutCrashing();
-  }
   return prefetch_url;
-#else
-  return prefetch_url;
-#endif
 }
 
 struct SearchPrefetchEligibilityReasonRecorder {
@@ -252,15 +199,19 @@ content::PreloadingFailureReason ToPreloadingFailureReason(
                            kPreloadingFailureReasonContentEnd));
 }
 
+bool IsSlowNetwork() {
+  static const base::TimeDelta kSlowNetworkThreshold =
+      kSuppressesSearchPrefetchOnSlowNetworkThreshold.Get();
+  if (g_browser_process->network_quality_tracker() &&
+      g_browser_process->network_quality_tracker()->GetHttpRTT() >
+          kSlowNetworkThreshold) {
+    return true;
+  }
+  return false;
+}
+
 }  // namespace
 
-#if BUILDFLAG(IS_ANDROID)
-// static
-void SearchPrefetchService::SetIsTest() {
-  CHECK_IS_TEST();
-  is_test = true;
-}
-#endif
 struct SearchPrefetchService::SearchPrefetchServingReasonRecorder {
  public:
   explicit SearchPrefetchServingReasonRecorder(bool for_prerender)
@@ -394,6 +345,14 @@ bool SearchPrefetchService::MaybePrefetchURL(
     recorder.reason_ = SearchPrefetchEligibilityReason::kJavascriptDisabled;
     SetEligibility(attempt,
                    content::PreloadingEligibility::kJavascriptDisabled);
+    return false;
+  }
+
+  static const bool kSuppressesSearchPrefetchOnSlowNetworkIsEnabled =
+      base::FeatureList::IsEnabled(kSuppressesSearchPrefetchOnSlowNetwork);
+  if (kSuppressesSearchPrefetchOnSlowNetworkIsEnabled && IsSlowNetwork()) {
+    recorder.reason_ = SearchPrefetchEligibilityReason::kSlowNetwork;
+    SetEligibility(attempt, content::PreloadingEligibility::kSlowNetwork);
     return false;
   }
 
@@ -750,9 +709,6 @@ void SearchPrefetchService::OnResultChanged(content::WebContents* web_contents,
     if (BaseSearchProvider::ShouldPrefetch(match)) {
       MaybePrefetchURL(
           GetPreloadURLFromMatch(*match.search_terms_args, template_url_service,
-#if BUILDFLAG(IS_ANDROID)
-                                 CallerType::kSuggestPrefetch,
-#endif
                                  kSuggestPrefetchParam.Get()),
           web_contents);
     }
@@ -836,9 +792,6 @@ bool SearchPrefetchService::OnNavigationLikely(
 
   GURL preload_url = GetPreloadURLFromMatch(*search_terms_args_for_prefetch,
                                             template_url_service,
-#if BUILDFLAG(IS_ANDROID)
-                                            CallerType::kNavigationPrefetch,
-#endif
                                             kNavigationPrefetchParam.Get());
 
   content::PreloadingURLMatchCallback same_url_matcher =
@@ -1071,9 +1024,6 @@ void SearchPrefetchService::CoordinatePrefetchWithPrerender(
   DCHECK(web_contents);
   GURL prefetch_url =
       GetPreloadURLFromMatch(*match.search_terms_args, template_url_service,
-#if BUILDFLAG(IS_ANDROID)
-                             CallerType::kSuggestPrefetch,
-#endif
                              kSuggestPrefetchParam.Get());
   MaybePrefetchURL(prefetch_url, web_contents);
   if (!BaseSearchProvider::ShouldPrerender(match))
@@ -1110,9 +1060,6 @@ void SearchPrefetchService::CoordinatePrefetchWithPrerender(
   // recognize prefetch traffic, because it should not send network requests.
   GURL prerender_url =
       GetPreloadURLFromMatch(*match.search_terms_args, template_url_service,
-#if BUILDFLAG(IS_ANDROID)
-                             CallerType::kSuggestPrerender,
-#endif
                              /*prefetch_param=*/"");
   prefetch_request_iter->second->MaybeStartPrerenderSearchResult(
       *prerender_manager, prerender_url, *preloading_attempt);

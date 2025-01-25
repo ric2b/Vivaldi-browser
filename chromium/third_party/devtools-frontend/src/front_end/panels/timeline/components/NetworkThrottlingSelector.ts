@@ -12,9 +12,21 @@ import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as MobileThrottling from '../../mobile_throttling/mobile_throttling.js';
 
+import networkThrottlingSelectorStyles from './networkThrottlingSelector.css.js';
+
 const {html, nothing} = LitHtml;
 
 const UIStrings = {
+  /**
+   * @description Text label for a selection box showing which network throttling option is applied.
+   * @example {No throttling} PH1
+   */
+  network: 'Network: {PH1}',
+  /**
+   * @description Text label for a selection box showing which network throttling option is applied.
+   * @example {No throttling} PH1
+   */
+  networkThrottling: 'Network throttling: {PH1}',
   /**
    * @description Text label for a menu group that disables network throttling.
    */
@@ -40,6 +52,7 @@ interface ConditionsGroup {
   name: string;
   items: SDK.NetworkManager.Conditions[];
   showCustomAddOption?: boolean;
+  jslogContext?: string;
 }
 
 export class NetworkThrottlingSelector extends HTMLElement {
@@ -60,14 +73,21 @@ export class NetworkThrottlingSelector extends HTMLElement {
   }
 
   connectedCallback(): void {
+    this.#shadow.adoptedStyleSheets = [networkThrottlingSelectorStyles];
     SDK.NetworkManager.MultitargetNetworkManager.instance().addEventListener(
-        SDK.NetworkManager.MultitargetNetworkManager.Events.ConditionsChanged, this.#onConditionsChanged, this);
+        SDK.NetworkManager.MultitargetNetworkManager.Events.CONDITIONS_CHANGED, this.#onConditionsChanged, this);
+
+    // Also call onConditionsChanged immediately to make sure we get the
+    // latest snapshot. Otherwise if another panel updated this value and this
+    // component wasn't in the DOM, this component will not update itself
+    // when it is put into the page
+    this.#onConditionsChanged();
     this.#customNetworkConditionsSetting.addChangeListener(this.#onSettingChanged, this);
   }
 
   disconnectedCallback(): void {
     SDK.NetworkManager.MultitargetNetworkManager.instance().removeEventListener(
-        SDK.NetworkManager.MultitargetNetworkManager.Events.ConditionsChanged, this.#onConditionsChanged, this);
+        SDK.NetworkManager.MultitargetNetworkManager.Events.CONDITIONS_CHANGED, this.#onConditionsChanged, this);
     this.#customNetworkConditionsSetting.removeChangeListener(this.#onSettingChanged, this);
   }
 
@@ -87,6 +107,7 @@ export class NetworkThrottlingSelector extends HTMLElement {
         name: i18nString(UIStrings.custom),
         items: this.#customNetworkConditionsSetting.get(),
         showCustomAddOption: true,
+        jslogContext: 'custom-network-throttling-item',
       },
     ];
   }
@@ -117,6 +138,8 @@ export class NetworkThrottlingSelector extends HTMLElement {
   }
 
   #render = (): void => {
+    const selectionTitle = this.#getConditionsTitle(this.#currentConditions);
+
     // clang-format off
     const output = html`
       <${Menus.SelectMenu.SelectMenu.litTagName}
@@ -127,19 +150,22 @@ export class NetworkThrottlingSelector extends HTMLElement {
         .showSelectedItem=${true}
         .showConnector=${false}
         .jslogContext=${'network-conditions'}
-        .buttonTitle=${this.#getConditionsTitle(this.#currentConditions)}
+        .buttonTitle=${i18nString(UIStrings.network, {PH1: selectionTitle})}
+        title=${i18nString(UIStrings.networkThrottling, {PH1: selectionTitle})}
       >
         ${this.#groups.map(group => {
           return html`
             <${Menus.Menu.MenuGroup.litTagName} .name=${group.name}>
               ${group.items.map(conditions => {
+                const title = this.#getConditionsTitle(conditions);
+                const jslogContext = group.jslogContext || Platform.StringUtilities.toKebabCase(conditions.i18nTitleKey || title);
                 return html`
                   <${Menus.Menu.MenuItem.litTagName}
                     .value=${conditions.i18nTitleKey}
                     .selected=${this.#currentConditions.i18nTitleKey === conditions.i18nTitleKey}
-                    jslog=${VisualLogging.item(Platform.StringUtilities.toKebabCase(conditions.i18nTitleKey || ''))}
+                    jslog=${VisualLogging.item(jslogContext).track({click: true})}
                   >
-                    ${this.#getConditionsTitle(conditions)}
+                    ${title}
                   </${Menus.Menu.MenuItem.litTagName}>
                 `;
               })}

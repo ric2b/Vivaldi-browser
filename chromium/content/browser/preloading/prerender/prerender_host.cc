@@ -47,8 +47,8 @@ namespace content {
 
 namespace {
 
-base::OnceCallback<void(int)>& GetHostCreationCallbackForTesting() {
-  static base::NoDestructor<base::OnceCallback<void(int)>>
+base::OnceCallback<void(FrameTreeNodeId)>& GetHostCreationCallbackForTesting() {
+  static base::NoDestructor<base::OnceCallback<void(FrameTreeNodeId)>>
       host_creation_callback_for_testing;
   return *host_creation_callback_for_testing;
 }
@@ -127,7 +127,7 @@ bool PrerenderHost::AreHttpRequestHeadersCompatible(
 
 // static
 void PrerenderHost::SetHostCreationCallbackForTesting(
-    base::OnceCallback<void(int host_id)> callback) {
+    base::OnceCallback<void(FrameTreeNodeId host_id)> callback) {
   GetHostCreationCallbackForTesting() = std::move(callback);  // IN-TEST
 }
 
@@ -163,16 +163,14 @@ PrerenderHost::PrerenderHost(
     CHECK_EQ(attributes.initiator_process_id,
              ChildProcessHost::kInvalidUniqueID);
     CHECK_EQ(attributes.initiator_ukm_id, ukm::kInvalidSourceId);
-    CHECK_EQ(attributes.initiator_frame_tree_node_id,
-             RenderFrameHost::kNoFrameTreeNodeId);
+    CHECK(attributes.initiator_frame_tree_node_id.is_null());
   } else {
     CHECK(attributes.initiator_origin.has_value());
     CHECK(attributes.initiator_frame_token.has_value());
     CHECK_NE(attributes.initiator_process_id,
              ChildProcessHost::kInvalidUniqueID);
     CHECK_NE(attributes.initiator_ukm_id, ukm::kInvalidSourceId);
-    CHECK_NE(attributes.initiator_frame_tree_node_id,
-             RenderFrameHost::kNoFrameTreeNodeId);
+    CHECK(attributes.initiator_frame_tree_node_id);
   }
 
   SetTriggeringOutcome(PreloadingTriggeringOutcome::kTriggeredButPending);
@@ -328,7 +326,7 @@ void PrerenderHost::SetFocusedFrame(FrameTreeNode* node,
                                     SiteInstanceGroup* source) {
   // `node` can only become focused when `node`'s current RenderFrameHost is
   // active.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 FrameTree* PrerenderHost::GetOwnedPictureInPictureFrameTree() {
@@ -339,13 +337,13 @@ FrameTree* PrerenderHost::GetPictureInPictureOpenerFrameTree() {
   return nullptr;
 }
 
-int PrerenderHost::GetOuterDelegateFrameTreeNodeId() {
+FrameTreeNodeId PrerenderHost::GetOuterDelegateFrameTreeNodeId() {
   // A prerendered FrameTree is not "inner to" or "nested inside" another
   // FrameTree; it exists in parallel to the primary FrameTree of the current
   // WebContents. Therefore, it must not attempt to access the primary
   // FrameTree in the sense of an "outer delegate" relationship, so we return
   // the invalid ID here.
-  return FrameTreeNode::kFrameTreeNodeInvalidId;
+  return FrameTreeNodeId();
 }
 
 RenderFrameHostImpl* PrerenderHost::GetProspectiveOuterDocument() {
@@ -491,14 +489,13 @@ void PrerenderHost::ReadyToCommitNavigation(
       navigation_request->response() &&
       navigation_request->response()->parsed_headers &&
       navigation_request->response()
-          ->parsed_headers->no_vary_search_with_parse_error &&
-      navigation_request->response()
-          ->parsed_headers->no_vary_search_with_parse_error
-          ->is_no_vary_search()) {
-    SetNoVarySearch(no_vary_search::ParseHttpNoVarySearchDataFromMojom(
-        navigation_request->response()
-            ->parsed_headers->no_vary_search_with_parse_error
-            ->get_no_vary_search()));
+          ->parsed_headers->no_vary_search_with_parse_error) {
+    MaybeSetNoVarySearch(
+        *navigation_request->response()
+             ->parsed_headers->no_vary_search_with_parse_error);
+  } else {
+    CHECK(!no_vary_search_.has_value());
+    CHECK(!no_vary_search_parse_error_.has_value());
   }
 
   // ReadyToCommitNavigation is called when the headers are received.
@@ -887,7 +884,10 @@ PrerenderHost::AreCommonNavigationParamsCompatibleWithNavigation(
   // already checked for matching values. Adding a CHECK here to be safe.
   CHECK(common_params_);
   if (attributes_.url_match_predicate) {
-    CHECK(attributes_.url_match_predicate.Run(potential_activation.url));
+    // TODO(crbug.com/41494389): Figure out what we need to pass here as a
+    // web_url_match result instead of std::nullopt.
+    CHECK(attributes_.url_match_predicate.Run(potential_activation.url,
+                                              std::nullopt));
   } else if (no_vary_search_.has_value()) {
     CHECK(no_vary_search_->AreEquivalent(potential_activation.url,
                                          common_params_->url));
@@ -1117,6 +1117,7 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kTabClosedByUserGesture:
     case PrerenderFinalStatus::kTabClosedWithoutUserGesture:
     case PrerenderFinalStatus::kSpeculationRuleRemoved:
+    case PrerenderFinalStatus::kOtherPrerenderedPageActivated:
       return;
     case PrerenderFinalStatus::kDestroyed:
     case PrerenderFinalStatus::kLowEndDevice:
@@ -1184,6 +1185,7 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kJavaScriptInterfaceRemoved:
     case PrerenderFinalStatus::kAllPrerenderingCanceled:
     case PrerenderFinalStatus::kWindowClosed:
+    case PrerenderFinalStatus::kSlowNetwork:
       if (attempt_) {
         attempt_->SetFailureReason(
             ToPreloadingFailureReason(reason.final_status()));
@@ -1202,33 +1204,37 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kActivated:
       // The activation path does not call this method, so it should never reach
       // this case.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
-std::optional<PrerenderHost::UrlMatchType> PrerenderHost::IsUrlMatch(
-    const GURL& url) const {
+std::optional<UrlMatchType> PrerenderHost::IsUrlMatch(const GURL& url) const {
   // Triggers are not allowed to treat a cross-origin url as a matched url. It
   // would cause security risks.
   if (!url::IsSameOriginWith(attributes_.prerendering_url, url)) {
     return std::nullopt;
   }
 
-  if (attributes_.url_match_predicate) {
-    if (attributes_.url_match_predicate.Run(url)) {
-      return PrerenderHost::UrlMatchType::kURLPredicateMatch;
-    }
-    return std::nullopt;
-  }
+  std::optional<UrlMatchType> result;
 
   if (GetInitialUrl() == url) {
-    return PrerenderHost::UrlMatchType::kExact;
+    result = UrlMatchType::kExact;
   }
 
   // Check No-Vary-Search header and try and match.
-  if (no_vary_search_.has_value() &&
+  if (!result && no_vary_search_.has_value() &&
       no_vary_search_->AreEquivalent(GetInitialUrl(), url)) {
-    return PrerenderHost::UrlMatchType::kNoVarySearch;
+    result = UrlMatchType::kNoVarySearch;
+  }
+
+  if (!attributes_.url_match_predicate) {
+    return result;
+  }
+
+  // Override the result of default url match logic with the result
+  // from the custom url matching predicate call.
+  if (attributes_.url_match_predicate.Run(url, result)) {
+    return UrlMatchType::kURLPredicateMatch;
   }
 
   return std::nullopt;
@@ -1245,6 +1251,10 @@ bool PrerenderHost::IsNoVarySearchHintUrlMatch(const GURL& url) const {
   // if we know for sure url is a match. This is a "potential"
   // match depending on the No-Vary-Search header that will be received.
   if (attributes_.url_match_predicate) {
+    return false;
+  }
+  // The same as above. We also don't care about the exact match.
+  if (GetInitialUrl() == url) {
     return false;
   }
 
@@ -1294,8 +1304,20 @@ void PrerenderHost::Cancel(PrerenderFinalStatus status) {
   registry->CancelHost(frame_tree_node_id_, status);
 }
 
-void PrerenderHost::SetNoVarySearch(net::HttpNoVarySearchData no_vary_search) {
+void PrerenderHost::MaybeSetNoVarySearch(
+    network::mojom::NoVarySearchWithParseError&
+        no_vary_search_with_parse_error) {
   CHECK(!no_vary_search_);
+  CHECK(!no_vary_search_parse_error_);
+  if (no_vary_search_with_parse_error.is_parse_error()) {
+    no_vary_search_parse_error_ =
+        no_vary_search_with_parse_error.get_parse_error();
+    return;
+  }
+  CHECK(no_vary_search_with_parse_error.is_no_vary_search());
+  net::HttpNoVarySearchData no_vary_search =
+      no_vary_search::ParseHttpNoVarySearchDataFromMojom(
+          no_vary_search_with_parse_error.get_no_vary_search());
   if (attempt_) {
     static_cast<PreloadingAttemptImpl*>(attempt_.get())
         ->SetNoVarySearchMatchPredicate(base::BindRepeating(
@@ -1357,6 +1379,12 @@ void PrerenderHost::OnWaitingForHeadersFinished(
     WaitingForHeadersFinishedReason reason) {
   // Prerender frame tree is alive. This check is also done by the caller.
   CHECK(frame_tree_);
+
+  base::UmaHistogramEnumeration(
+      "Prerender.Experimental.WaitingForHeadersFinishedReason" +
+          GetHistogramSuffix(),
+      reason);
+
   for (auto& observer : observers_) {
     observer.OnWaitingForHeadersFinished(navigation_handle, reason);
   }

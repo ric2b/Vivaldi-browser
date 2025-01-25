@@ -501,7 +501,7 @@ void Format::initialize(const angle::Format &angleFormat)
 
         case angle::FormatID::B10G10R10A2_UNORM:
             mIntendedGLFormat         = GL_BGR10_A2_ANGLEX;
-            mActualImageFormatID      = angle::FormatID::R16G16B16A16_UNORM;
+            mActualImageFormatID      = angle::FormatID::R10G10B10A2_UNORM;
             mImageInitializerFunction = nullptr;
             mIsRenderable             = true;
 
@@ -548,10 +548,13 @@ void Format::initialize(const angle::Format &angleFormat)
             break;
 
         case angle::FormatID::B8G8R8A8_UNORM_SRGB:
-            mIntendedGLFormat         = GL_BGRA8_SRGB_ANGLEX;
-            mActualImageFormatID      = angle::FormatID::R8G8B8A8_UNORM_SRGB;
-            mImageInitializerFunction = nullptr;
-            mIsRenderable             = true;
+            mIntendedGLFormat = GL_BGRA8_SRGB_ANGLEX;
+            {
+                static constexpr ImageFormatInitInfo kInfo[] = {
+                    {angle::FormatID::B8G8R8A8_UNORM_SRGB, nullptr},
+                    {angle::FormatID::R8G8B8A8_UNORM_SRGB, nullptr}};
+                initImageFallback(kInfo, ArraySize(kInfo));
+            }
 
             break;
 
@@ -566,11 +569,7 @@ void Format::initialize(const angle::Format &angleFormat)
             break;
 
         case angle::FormatID::B8G8R8X8_UNORM_SRGB:
-            mIntendedGLFormat         = GL_BGRX8_SRGB_ANGLEX;
-            mActualImageFormatID      = angle::FormatID::B8G8R8X8_UNORM_SRGB;
-            mImageInitializerFunction = nullptr;
-            mIsRenderable             = true;
-
+            // This format is not implemented in WebGPU.
             break;
 
         case angle::FormatID::BC1_RGBA_UNORM_BLOCK:
@@ -702,7 +701,11 @@ void Format::initialize(const angle::Format &angleFormat)
             break;
 
         case angle::FormatID::D24_UNORM_S8_UINT:
-            // This format is not implemented in WebGPU.
+            mIntendedGLFormat         = GL_DEPTH24_STENCIL8;
+            mActualImageFormatID      = angle::FormatID::D24_UNORM_S8_UINT;
+            mImageInitializerFunction = nullptr;
+            mIsRenderable             = true;
+
             break;
 
         case angle::FormatID::D24_UNORM_X8_UINT:
@@ -1465,13 +1468,13 @@ void Format::initialize(const angle::Format &angleFormat)
             break;
 
         case angle::FormatID::R32G32B32_SINT:
-            mIntendedGLFormat         = GL_RGB32I;
-            mActualImageFormatID      = angle::FormatID::R32G32B32A32_FLOAT;
-            mImageInitializerFunction = Initialize4ComponentData<GLfloat, 0x00000000, 0x00000000,
-                                                                 0x00000000, gl::Float32One>;
-            mIsRenderable             = true;
-            mActualBufferFormatID     = angle::FormatID::R32G32B32_SINT;
-            mVertexLoadFunction       = CopyNativeVertexData<GLint, 3, 3, 0>;
+            mIntendedGLFormat    = GL_RGB32I;
+            mActualImageFormatID = angle::FormatID::R32G32B32A32_SINT;
+            mImageInitializerFunction =
+                Initialize4ComponentData<GLint, 0x00000000, 0x00000000, 0x00000000, 0x00000001>;
+            mIsRenderable                 = true;
+            mActualBufferFormatID         = angle::FormatID::R32G32B32_SINT;
+            mVertexLoadFunction           = CopyNativeVertexData<GLint, 3, 3, 0>;
             mVertexLoadRequiresConversion = false;
             break;
 
@@ -2059,7 +2062,7 @@ wgpu::TextureFormat GetWgpuTextureFormatFromFormatID(angle::FormatID formatID)
         {angle::FormatID::ASTC_8x8_SRGB_BLOCK, wgpu::TextureFormat::ASTC8x8UnormSrgb},
         {angle::FormatID::ASTC_8x8_UNORM_BLOCK, wgpu::TextureFormat::ASTC8x8Unorm},
         {angle::FormatID::B8G8R8A8_UNORM, wgpu::TextureFormat::BGRA8Unorm},
-        {angle::FormatID::B8G8R8X8_UNORM_SRGB, wgpu::TextureFormat::BGRA8UnormSrgb},
+        {angle::FormatID::B8G8R8A8_UNORM_SRGB, wgpu::TextureFormat::BGRA8UnormSrgb},
         {angle::FormatID::BC1_RGBA_UNORM_BLOCK, wgpu::TextureFormat::BC1RGBAUnorm},
         {angle::FormatID::BC1_RGBA_UNORM_SRGB_BLOCK, wgpu::TextureFormat::BC1RGBAUnormSrgb},
         {angle::FormatID::BC2_RGBA_UNORM_BLOCK, wgpu::TextureFormat::BC2RGBAUnorm},
@@ -2075,6 +2078,7 @@ wgpu::TextureFormat GetWgpuTextureFormatFromFormatID(angle::FormatID formatID)
         {angle::FormatID::BC7_RGBA_UNORM_BLOCK, wgpu::TextureFormat::BC7RGBAUnorm},
         {angle::FormatID::BC7_RGBA_UNORM_SRGB_BLOCK, wgpu::TextureFormat::BC7RGBAUnormSrgb},
         {angle::FormatID::D16_UNORM, wgpu::TextureFormat::Depth16Unorm},
+        {angle::FormatID::D24_UNORM_S8_UINT, wgpu::TextureFormat::Depth24PlusStencil8},
         {angle::FormatID::D32_FLOAT, wgpu::TextureFormat::Depth32Float},
         {angle::FormatID::EAC_R11G11_SNORM_BLOCK, wgpu::TextureFormat::EACRG11Snorm},
         {angle::FormatID::EAC_R11G11_UNORM_BLOCK, wgpu::TextureFormat::EACRG11Unorm},
@@ -2204,7 +2208,7 @@ angle::FormatID GetFormatIDFromWgpuTextureFormat(wgpu::TextureFormat wgpuFormat)
         case wgpu::TextureFormat::BGRA8Unorm:
             return angle::FormatID::B8G8R8A8_UNORM;
         case wgpu::TextureFormat::BGRA8UnormSrgb:
-            return angle::FormatID::B8G8R8X8_UNORM_SRGB;
+            return angle::FormatID::B8G8R8A8_UNORM_SRGB;
         case wgpu::TextureFormat::BC1RGBAUnorm:
             return angle::FormatID::BC1_RGBA_UNORM_BLOCK;
         case wgpu::TextureFormat::BC1RGBAUnormSrgb:
@@ -2235,6 +2239,8 @@ angle::FormatID GetFormatIDFromWgpuTextureFormat(wgpu::TextureFormat wgpuFormat)
             return angle::FormatID::BC7_RGBA_UNORM_SRGB_BLOCK;
         case wgpu::TextureFormat::Depth16Unorm:
             return angle::FormatID::D16_UNORM;
+        case wgpu::TextureFormat::Depth24PlusStencil8:
+            return angle::FormatID::D24_UNORM_S8_UINT;
         case wgpu::TextureFormat::Depth32Float:
             return angle::FormatID::D32_FLOAT;
         case wgpu::TextureFormat::EACRG11Snorm:

@@ -10,11 +10,12 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/tab_groups/tab_group_color.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/top_aligned_image_view.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
-#import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/group_tab_info.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/create_or_edit_tab_group_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/group_tab_view.h"
@@ -35,7 +36,6 @@ const CGFloat kMaxHeight = 600;
 const CGFloat kHorizontalMargin = 32;
 const CGFloat kDotAndFieldContainerMargin = 24;
 const CGFloat kDotTitleSeparationMargin = 12;
-const CGFloat kSyncGroupTopConstant = 8;
 const CGFloat kContainersMaxWidth = 400;
 const CGFloat kBackgroundAlpha = 0.7;
 const CGFloat kCompactButtonTopMargin = 12;
@@ -121,8 +121,6 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   UIView* _snapshotsContainer;
   // Whether it is to edit a group (vs creation).
   BOOL _editMode;
-  // Whether this is an incognito group.
-  BOOL _incognito;
   // Whether the user is syncing tabs.
   BOOL _tabSynced;
   // Number of selected items.
@@ -152,7 +150,6 @@ const CGFloat kClearButtonWidthAndHeight = 40;
 }
 
 - (instancetype)initWithEditMode:(BOOL)editMode
-                       incognito:(BOOL)incognito
                        tabSynced:(BOOL)tabSynced {
   CHECK(IsTabGroupInGridEnabled())
       << "You should not be able to create a tab group outside the Tab Groups "
@@ -160,7 +157,6 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   self = [super init];
   if (self) {
     _editMode = editMode;
-    _incognito = incognito;
     _tabSynced = tabSynced;
 
     [self createColorSelectionButtons];
@@ -239,6 +235,10 @@ const CGFloat kClearButtonWidthAndHeight = 40;
                forState:UIControlStateNormal];
   [clearButton setTintColor:[[UIColor colorNamed:kSolidBlackColor]
                                 colorWithAlphaComponent:kClearButtonAlpha]];
+  clearButton.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_ACCNAME_CLEAR_TEXT);
+  clearButton.accessibilityIdentifier =
+      kCreateTabGroupTextFieldClearButtonIdentifier;
   [clearButton addTarget:self
                   action:@selector(clearTextField)
         forControlEvents:UIControlEventTouchUpInside];
@@ -263,6 +263,9 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   [tabGroupTextField addTarget:self
                         action:@selector(creationButtonTapped)
               forControlEvents:UIControlEventPrimaryActionTriggered];
+  [tabGroupTextField addTarget:self
+                        action:@selector(textFieldDidChange)
+              forControlEvents:UIControlEventEditingChanged];
 
   UIColor* placeholderTextColor = [UIColor colorNamed:kTextSecondaryColor];
 
@@ -277,6 +280,7 @@ const CGFloat kClearButtonWidthAndHeight = 40;
 // Removes text in the text field.
 - (void)clearTextField {
   _tabGroupTextField.text = @"";
+  _tabGroupTextField.rightView.hidden = YES;
 }
 
 // Returns the group color dot view.
@@ -292,24 +296,6 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   ]];
 
   return dotView;
-}
-
-// Returns the view containing the explanation string for synced groups.
-- (UIView*)syncGroupExplanation {
-  UILabel* label = [[UILabel alloc] init];
-  label.numberOfLines = 2;
-  label.textAlignment = NSTextAlignmentCenter;
-  label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
-  label.adjustsFontForContentSizeCategory = YES;
-  label.translatesAutoresizingMaskIntoConstraints = NO;
-  label.textColor = [UIColor colorNamed:kTextSecondaryColor];
-  label.text =
-      _tabSynced
-          ? l10n_util::GetNSString(IDS_IOS_TAB_GROUP_CREATION_SYNC_EXPLANATION)
-          : l10n_util::GetNSString(
-                IDS_IOS_TAB_GROUP_CREATION_SAVED_EXPLANATION);
-
-  return label;
 }
 
 // Returns the configured full primary title (colored dot and text title).
@@ -651,10 +637,7 @@ const CGFloat kClearButtonWidthAndHeight = 40;
 
 // Configures the view and all subviews when there is enough space.
 - (void)createConfigurations {
-  BOOL shouldDisplaySyncLabel =
-      IsTabGroupSyncEnabled() && !_editMode && !_incognito;
   UIView* dotAndFieldContainer = [self configuredDotAndFieldContainer];
-  UIView* syncGroupExplanation = [self syncGroupExplanation];
   UILayoutGuide* snapshotsContainerLayoutGuide = [[UILayoutGuide alloc] init];
   _snapshotsContainer = [self configuredSnapshotsContainer];
   _colorsScrollView = [self listOfColorView];
@@ -665,14 +648,6 @@ const CGFloat kClearButtonWidthAndHeight = 40;
 
   UIView* container = [[UIView alloc] init];
   container.translatesAutoresizingMaskIntoConstraints = NO;
-
-  // The view just above the snapshots, for constraints.
-  UIView* viewAboveSnapshots =
-      shouldDisplaySyncLabel ? syncGroupExplanation : dotAndFieldContainer;
-
-  if (shouldDisplaySyncLabel) {
-    [container addSubview:syncGroupExplanation];
-  }
 
   [container addSubview:dotAndFieldContainer];
   [container addSubview:_snapshotsContainer];
@@ -692,7 +667,7 @@ const CGFloat kClearButtonWidthAndHeight = 40;
       [snapshotsContainerLayoutGuide.bottomAnchor
           constraintEqualToAnchor:_colorsScrollView.topAnchor
                          constant:-kSnapshotViewVerticalMargin];
-  snapshotLayoutGuideConstraint.priority = UILayoutPriorityDefaultLow;
+  snapshotLayoutGuideConstraint.priority = UILayoutPriorityDefaultHigh + 1;
 
   _regularConstraints = @[
     [dotAndFieldContainer.leadingAnchor
@@ -775,7 +750,7 @@ const CGFloat kClearButtonWidthAndHeight = 40;
     [snapshotsContainerLayoutGuide.centerXAnchor
         constraintEqualToAnchor:self.view.centerXAnchor],
     [snapshotsContainerLayoutGuide.topAnchor
-        constraintEqualToAnchor:viewAboveSnapshots.bottomAnchor
+        constraintEqualToAnchor:dotAndFieldContainer.bottomAnchor
                        constant:kSnapshotViewVerticalMargin],
     [snapshotsContainerLayoutGuide.widthAnchor
         constraintEqualToAnchor:dotAndFieldContainer.widthAnchor],
@@ -793,18 +768,6 @@ const CGFloat kClearButtonWidthAndHeight = 40;
                                               .widthAnchor],
     keyboardConstraint,
   ]];
-
-  if (shouldDisplaySyncLabel) {
-    [NSLayoutConstraint activateConstraints:@[
-      [syncGroupExplanation.widthAnchor
-          constraintLessThanOrEqualToAnchor:dotAndFieldContainer.widthAnchor],
-      [syncGroupExplanation.centerXAnchor
-          constraintEqualToAnchor:dotAndFieldContainer.centerXAnchor],
-      [syncGroupExplanation.topAnchor
-          constraintEqualToAnchor:dotAndFieldContainer.bottomAnchor
-                         constant:kSyncGroupTopConstant],
-    ]];
-  }
 }
 
 // Returns the view which contains all the selected tabs' snapshot which will be
@@ -830,9 +793,7 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   NSLayoutConstraint* backgroundHeightConstraint =
       [snapshotsBackground.heightAnchor
           constraintEqualToConstant:kSnapshotViewMaxHeight];
-  // Lower the priority of the constraint so for smaller device, snapshot are
-  // reduced instead of other elements where the user can interact with.
-  backgroundHeightConstraint.priority = UILayoutPriorityDefaultLow;
+  backgroundHeightConstraint.priority = UILayoutPriorityDefaultHigh;
 
   _singleSnapshotConstraints = @[
     [_snapshotsView.widthAnchor
@@ -864,6 +825,40 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   [self applyConstraints];
 
   return snapshotsBackground;
+}
+
+// Hides the clear button in the text field if the length of the text is 0.
+- (void)textFieldDidChange {
+  BOOL hasText = _tabGroupTextField.text.length > 0;
+  _tabGroupTextField.rightView.hidden = hasText ? NO : YES;
+}
+
+// Activates or deactivates the appropriate constraints.
+- (void)applyConstraints {
+  if (_numberOfSelectedItems == 1) {
+    [NSLayoutConstraint deactivateConstraints:_multipleSnapshotsConstraints];
+    [NSLayoutConstraint activateConstraints:_singleSnapshotConstraints];
+  } else {
+    [NSLayoutConstraint deactivateConstraints:_singleSnapshotConstraints];
+    [NSLayoutConstraint activateConstraints:_multipleSnapshotsConstraints];
+  }
+}
+
+// Updates the insets of the `colorScrollView`.
+- (void)updateScrollViewInsets:(UIScrollView*)colorScrollView {
+  CGFloat viewWidth = self.view.safeAreaLayoutGuide.layoutFrame.size.width;
+  CGFloat selectionWidth =
+      [_colorSelectionButtons count] * kColoredButtonWidthAndHeight;
+
+  if (selectionWidth > viewWidth) {
+    colorScrollView.contentInset =
+        UIEdgeInsetsMake(0, kHorizontalMargin, 0, kHorizontalMargin);
+    if (colorScrollView.contentOffset.x == 0) {
+      colorScrollView.contentOffset = CGPointMake(-kHorizontalMargin, 0);
+    }
+  } else {
+    colorScrollView.contentInset = UIEdgeInsetsZero;
+  }
 }
 
 #pragma mark - TabGroupCreationConsumer
@@ -908,36 +903,6 @@ const CGFloat kClearButtonWidthAndHeight = 40;
 - (void)keyCommand_close {
   base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
   [self dismissViewController];
-}
-
-#pragma mark - Private Helpers
-
-// Activates or deactivates the appropriate constraints.
-- (void)applyConstraints {
-  if (_numberOfSelectedItems == 1) {
-    [NSLayoutConstraint deactivateConstraints:_multipleSnapshotsConstraints];
-    [NSLayoutConstraint activateConstraints:_singleSnapshotConstraints];
-  } else {
-    [NSLayoutConstraint deactivateConstraints:_singleSnapshotConstraints];
-    [NSLayoutConstraint activateConstraints:_multipleSnapshotsConstraints];
-  }
-}
-
-// Updates the insets of the `colorScrollView`.
-- (void)updateScrollViewInsets:(UIScrollView*)colorScrollView {
-  CGFloat viewWidth = self.view.safeAreaLayoutGuide.layoutFrame.size.width;
-  CGFloat selectionWidth =
-      [_colorSelectionButtons count] * kColoredButtonWidthAndHeight;
-
-  if (selectionWidth > viewWidth) {
-    colorScrollView.contentInset =
-        UIEdgeInsetsMake(0, kHorizontalMargin, 0, kHorizontalMargin);
-    if (colorScrollView.contentOffset.x == 0) {
-      colorScrollView.contentOffset = CGPointMake(-kHorizontalMargin, 0);
-    }
-  } else {
-    colorScrollView.contentInset = UIEdgeInsetsZero;
-  }
 }
 
 @end

@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Erro</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1181037720776840403">Remover</translation>
+<translation id="1184037892196730210">Não foi possível transmitir o ecrã</translation>
 <translation id="1187722533808055681">Reativações após inatividade</translation>
 <translation id="122082903575839559">Algoritmo de assinatura do certificado</translation>
 <translation id="1221825588892235038">Apenas a seleção</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Valor do campo</translation>
 <translation id="2662876636500006917">Web Store do Chrome</translation>
 <translation id="2678063897982469759">Reactivar</translation>
-<translation id="2678100101831051676">Não é possível transmitir.</translation>
 <translation id="2719936478972253983">Os cookies seguintes foram bloqueados</translation>
 <translation id="2721037002783622288">&amp;Pesquisar imagem em <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Não posterior a</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Esta extensão pode ter sido danificada.</translation>
 <translation id="3387614642886316601">Utilizar verificação ortográfica avançada</translation>
 <translation id="3390013585654699824">Detalhes da aplicação</translation>
-<translation id="3393582007140394275">Não é possível transmitir o ecrã.</translation>
 <translation id="345693547134384690">Abrir &amp;imagem num novo separador</translation>
 <translation id="3493881266323043047">Validade</translation>
 <translation id="3511307672085573050">Copiar &amp;endereço da ligação</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Manter alterações</translation>
 <translation id="6824564591481349393">Copiar &amp;endereço de correio eletrónico</translation>
 <translation id="6840155290835956714">Perguntar antes de enviar</translation>
+<translation id="6878862640969460273">Horizontal</translation>
 <translation id="6886871292305414135">Abrir ligação num novo &amp;separador</translation>
 <translation id="6892812721183419409">Abrir ligação como <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplicação em segundo plano: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7339785458027436441">Rever a ortografia durante a escrita</translation>
+<translation id="7359680654975233185">Não foi possível transmitir o separador</translation>
 <translation id="7385854874724088939">Ocorreu um erro ao tentar imprimir. Verifique a impressora e tente novamente.</translation>
 <translation id="7412226954991670867">Memória GPU</translation>
 <translation id="7421925624202799674">&amp;Ver código fonte da página</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Autorizar os websites a guardar e ler dados de cookies</translation>
 <translation id="7663719505383602579">Recetor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada pelo seu administrador</translation>
+<translation id="7685038817958445325">Não foi possível transmitir</translation>
 <translation id="7685049629764448582">Memória JavaScript</translation>
 <translation id="7701869757853594372">Identificadores de UTILIZADOR</translation>
 <translation id="7704305437604973648">Tarefa</translation>
@@ -410,7 +412,6 @@ Ficheiro de chave: <ph name="KEY_FILE" />
 Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para criar novas versões da sua extensão.</translation>
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controle as informações que os websites podem utilizar e os conteúdos que podem apresentar</translation>
-<translation id="8032244173881942855">Não é possível transmitir o separador.</translation>
 <translation id="8071432093239591881">Imprimir como imagem</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +467,6 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="9218430445555521422">Definir como pré-definição</translation>
 <translation id="93766956588638423">Reparar extensão</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Horizontal</translation>
 <translation id="994289308992179865">Cic&amp;lo</translation>
 <translation id="998747458861718449">I&amp;nspecionar</translation>
 </translationbundle>

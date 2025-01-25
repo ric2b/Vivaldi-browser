@@ -139,6 +139,12 @@ typedef struct amdgpu_bo_list *amdgpu_bo_list_handle;
 typedef struct amdgpu_va *amdgpu_va_handle;
 
 /**
+ * Define handle dealing with VA allocation. An amdgpu_device
+ * owns one of these, but they can also be used without a device.
+ */
+typedef struct amdgpu_va_manager *amdgpu_va_manager_handle;
+
+/**
  * Define handle for semaphore
  */
 typedef struct amdgpu_semaphore *amdgpu_semaphore_handle;
@@ -527,6 +533,20 @@ int amdgpu_device_initialize(int fd,
 			     uint32_t *minor_version,
 			     amdgpu_device_handle *device_handle);
 
+/**
+ * Same as amdgpu_device_initialize() except when deduplicate_device
+ * is false *and* fd points to a device that was already initialized.
+ * In this case, amdgpu_device_initialize would return the same
+ * amdgpu_device_handle while here amdgpu_device_initialize2 would
+ * return a new handle.
+ * amdgpu_device_initialize() should be preferred in most situations;
+ * the only use-case where not-deduplicating devices make sense is
+ * when one wants to have isolated device handles in the same process.
+ */
+int amdgpu_device_initialize2(int fd, bool deduplicate_device,
+			      uint32_t *major_version,
+			      uint32_t *minor_version,
+			      amdgpu_device_handle *device_handle);
 /**
  *
  * When access to such library does not needed any more the special
@@ -1283,6 +1303,22 @@ int amdgpu_query_video_caps_info(amdgpu_device_handle dev, unsigned cap_type,
                                  unsigned size, void *value);
 
 /**
+ * Query information about VM faults
+ *
+ * The return sizeof(struct drm_amdgpu_info_gpuvm_fault)
+ *
+ * \param   dev         - \c [in] Device handle. See #amdgpu_device_initialize()
+ * \param   size        - \c [in] Size of the returned value.
+ * \param   value       - \c [out] Pointer to the return value.
+ *
+ * \return   0 on success\n
+ *          <0 - Negative POSIX Error code
+ *
+*/
+int amdgpu_query_gpuvm_fault_info(amdgpu_device_handle dev, unsigned size,
+				  void *value);
+
+/**
  * Read a set of consecutive memory-mapped registers.
  * Not all registers are allowed to be read by userspace.
  *
@@ -1369,6 +1405,11 @@ int amdgpu_va_range_alloc(amdgpu_device_handle dev,
 int amdgpu_va_range_free(amdgpu_va_handle va_range_handle);
 
 /**
+ * Return the starting address of the allocated virtual address range.
+ */
+uint64_t amdgpu_va_get_start_addr(amdgpu_va_handle va_handle);
+
+/**
 * Query virtual address range
 *
 * UMD can query GPU VM range supported by each device
@@ -1388,6 +1429,37 @@ int amdgpu_va_range_query(amdgpu_device_handle dev,
 			  enum amdgpu_gpu_va_range type,
 			  uint64_t *start,
 			  uint64_t *end);
+
+/**
+ * Allocate a amdgpu_va_manager object.
+ * The returned object has be initialized with the amdgpu_va_manager_init
+ * before use.
+ * On release, amdgpu_va_manager_deinit needs to be called, then the memory
+ * can be released using free().
+ */
+amdgpu_va_manager_handle amdgpu_va_manager_alloc(void);
+
+void amdgpu_va_manager_init(amdgpu_va_manager_handle va_mgr,
+			    uint64_t low_va_offset, uint64_t low_va_max,
+			    uint64_t high_va_offset, uint64_t high_va_max,
+			    uint32_t virtual_address_alignment);
+
+void amdgpu_va_manager_deinit(amdgpu_va_manager_handle va_mgr);
+
+/**
+ * Similar to #amdgpu_va_range_alloc() but allocates VA
+ * directly from an amdgpu_va_manager_handle instead of using
+ * the manager from an amdgpu_device.
+ */
+
+int amdgpu_va_range_alloc2(amdgpu_va_manager_handle va_mgr,
+			   enum amdgpu_gpu_va_range va_range_type,
+			   uint64_t size,
+			   uint64_t va_base_alignment,
+			   uint64_t va_base_required,
+			   uint64_t *va_base_allocated,
+			   amdgpu_va_handle *va_range_handle,
+			   uint64_t flags);
 
 /**
  *  VA mapping/unmapping for the buffer object

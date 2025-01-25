@@ -56,6 +56,8 @@ const char kUseDnsHttpsSvcbSecureExtraTimePercent[] =
     "secure_extra_time_percent";
 const char kUseDnsHttpsSvcbSecureExtraTimeMin[] = "secure_extra_time_min";
 
+// An implementation of HostResolver::{ResolveHost,Probe}Request that always
+// fails immediately.
 class FailingRequestImpl : public HostResolver::ResolveHostRequest,
                            public HostResolver::ProbeRequest {
  public:
@@ -96,6 +98,43 @@ class FailingRequestImpl : public HostResolver::ResolveHostRequest,
     static const std::optional<HostCache::EntryStaleness> nullopt_result;
     return nullopt_result;
   }
+
+ private:
+  const int error_;
+};
+
+// Similar to FailingRequestImpl, but for ServiceEndpointRequest.
+class FailingServiceEndpointRequestImpl
+    : public HostResolver::ServiceEndpointRequest {
+ public:
+  explicit FailingServiceEndpointRequestImpl(int error) : error_(error) {}
+
+  FailingServiceEndpointRequestImpl(const FailingServiceEndpointRequestImpl&) =
+      delete;
+  FailingServiceEndpointRequestImpl& operator=(
+      const FailingServiceEndpointRequestImpl&) = delete;
+
+  ~FailingServiceEndpointRequestImpl() override = default;
+
+  int Start(Delegate* delegate) override { return error_; }
+
+  const std::vector<ServiceEndpoint>& GetEndpointResults() override {
+    static const base::NoDestructor<std::vector<ServiceEndpoint>> kEmptyResult;
+    return *kEmptyResult.get();
+  }
+
+  const std::set<std::string>& GetDnsAliasResults() override {
+    static const base::NoDestructor<std::set<std::string>> kEmptyResult;
+    return *kEmptyResult.get();
+  }
+
+  bool EndpointsCryptoReady() override { return false; }
+
+  ResolveErrorInfo GetResolveErrorInfo() override {
+    return ResolveErrorInfo(error_);
+  }
+
+  void ChangeRequestPriority(RequestPriority priority) override {}
 
  private:
   const int error_;
@@ -516,23 +555,6 @@ AddressList HostResolver::EndpointResultToAddressList(
 }
 
 // static
-bool HostResolver::AllProtocolEndpointsHaveEch(
-    base::span<const HostResolverEndpointResult> endpoints) {
-  bool has_svcb = false;
-  for (const auto& endpoint : endpoints) {
-    if (!endpoint.metadata.supported_protocol_alpns.empty()) {
-      has_svcb = true;
-      if (endpoint.metadata.ech_config_list.empty()) {
-        return false;  // There is a non-ECH SVCB/HTTPS route.
-      }
-    }
-  }
-  // Either there were no SVCB/HTTPS records (should be SVCB-optional), or there
-  // were and all supported ECH (should be SVCB-reliant).
-  return has_svcb;
-}
-
-// static
 bool HostResolver::MayUseNAT64ForIPv4Literal(HostResolverFlags flags,
                                              HostResolverSource source,
                                              const IPAddress& ip_address) {
@@ -553,6 +575,12 @@ HostResolver::CreateFailingRequest(int error) {
 std::unique_ptr<HostResolver::ProbeRequest>
 HostResolver::CreateFailingProbeRequest(int error) {
   return std::make_unique<FailingRequestImpl>(error);
+}
+
+// static
+std::unique_ptr<HostResolver::ServiceEndpointRequest>
+HostResolver::CreateFailingServiceEndpointRequest(int error) {
+  return std::make_unique<FailingServiceEndpointRequestImpl>(error);
 }
 
 }  // namespace net

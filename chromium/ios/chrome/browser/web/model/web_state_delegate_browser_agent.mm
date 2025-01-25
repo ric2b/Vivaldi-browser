@@ -18,7 +18,7 @@
 #import "ios/chrome/browser/overlays/model/public/web_content_area/http_auth_overlay.h"
 #import "ios/chrome/browser/overlays/model/public/web_content_area/insecure_form_overlay.h"
 #import "ios/chrome/browser/permissions/model/permissions_tab_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities.h"
 #import "ios/chrome/browser/tab_insertion/model/tab_insertion_browser_agent.h"
@@ -68,15 +68,14 @@ void OnInsecureFormWarningResponse(base::OnceCallback<void(bool)> callback,
 // content setting when a parent has explicitly set site settings controls to
 // block permissions.
 bool IsMicOrCameraAccessSubjectToParentalControls(
-    ChromeBrowserState* browser_state,
+    ProfileIOS* profile,
     NSArray<NSNumber*>* permissions) {
-  if (!browser_state ||
-      !supervised_user::IsSubjectToParentalControls(browser_state)) {
+  if (!profile || !supervised_user::IsSubjectToParentalControls(profile)) {
     return false;
   }
 
   HostContentSettingsMap* host_content_settings_map =
-      ios::HostContentSettingsMapFactory::GetForBrowserState(browser_state);
+      ios::HostContentSettingsMapFactory::GetForProfile(profile);
   CHECK(host_content_settings_map);
 
   ContentSetting default_mic_setting =
@@ -327,12 +326,10 @@ void WebStateDelegateBrowserAgent::HandlePermissionsDecisionRequest(
     web::WebState* source,
     NSArray<NSNumber*>* permissions,
     web::WebStatePermissionDecisionHandler handler) {
-  ChromeBrowserState* chrome_browser_state =
-      ChromeBrowserState::FromBrowserState(source->GetBrowserState());
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(source->GetBrowserState());
   // For supervised users, sites can be denied permission to access camera or
   // mic by default. In this case, we do not show the dialog.
-  if (IsMicOrCameraAccessSubjectToParentalControls(chrome_browser_state,
-                                                   permissions)) {
+  if (IsMicOrCameraAccessSubjectToParentalControls(profile, permissions)) {
     handler(web::PermissionDecisionDeny);
     return;
   }

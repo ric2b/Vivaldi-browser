@@ -109,6 +109,16 @@ void TabGroupSyncServiceAndroid::OnTabGroupRemoved(const base::Uuid& sync_id,
       static_cast<jint>(source));
 }
 
+void TabGroupSyncServiceAndroid::OnTabGroupLocalIdChanged(
+    const base::Uuid& sync_id,
+    const std::optional<LocalTabGroupID>& local_id) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  auto j_local_id =
+      TabGroupSyncConversionsBridge::ToJavaTabGroupId(env, local_id);
+  Java_TabGroupSyncServiceImpl_onTabGroupLocalIdChanged(
+      env, java_obj_, UuidToJavaString(env, sync_id), j_local_id);
+}
+
 ScopedJavaLocalRef<jstring> TabGroupSyncServiceAndroid::CreateGroup(
     JNIEnv* env,
     const JavaParamRef<jobject>& j_caller,
@@ -158,6 +168,18 @@ void TabGroupSyncServiceAndroid::UpdateVisualData(
   tab_group_sync_service_->UpdateVisualData(group_id, &visual_data);
 }
 
+void TabGroupSyncServiceAndroid::MakeTabGroupShared(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& j_caller,
+    const JavaParamRef<jobject>& j_group_id,
+    const JavaParamRef<jstring>& j_collaboration_id) {
+  LocalTabGroupID tab_group_id =
+      TabGroupSyncConversionsBridge::FromJavaTabGroupId(env, j_group_id);
+  std::string collaboration_id =
+      ConvertJavaStringToUTF8(env, j_collaboration_id);
+  tab_group_sync_service_->MakeTabGroupShared(tab_group_id, collaboration_id);
+}
+
 void TabGroupSyncServiceAndroid::AddTab(JNIEnv* env,
                                         const JavaParamRef<jobject>& j_caller,
                                         const JavaParamRef<jobject>& j_group_id,
@@ -188,9 +210,14 @@ void TabGroupSyncServiceAndroid::UpdateTab(
   auto tab_id = FromJavaTabId(j_tab_id);
   auto title = ConvertJavaStringToUTF16(env, j_title);
   GURL url = url::GURLAndroid::ToNativeGURL(env, j_url);
-  std::optional<size_t> position =
-      j_position < 0 ? std::nullopt : std::make_optional<size_t>(j_position);
-  tab_group_sync_service_->UpdateTab(group_id, tab_id, title, url, position);
+
+  SavedTabGroupTabBuilder tab_builder;
+  tab_builder.SetURL(url);
+  tab_builder.SetTitle(title);
+  if (j_position >= 0) {
+    tab_builder.SetPosition(j_position);
+  }
+  tab_group_sync_service_->UpdateTab(group_id, tab_id, std::move(tab_builder));
 }
 
 void TabGroupSyncServiceAndroid::RemoveTab(

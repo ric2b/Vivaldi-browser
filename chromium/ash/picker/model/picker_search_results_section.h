@@ -16,11 +16,13 @@ namespace ash {
 enum class ASH_EXPORT PickerSectionType {
   kNone,
   kClipboard,
+  kExamples,
   kLinks,
   kLocalFiles,
   kDriveFiles,
   kEditorWrite,
   kEditorRewrite,
+  kMaxValue = kEditorRewrite,
 };
 
 // Search results are divided into different sections.

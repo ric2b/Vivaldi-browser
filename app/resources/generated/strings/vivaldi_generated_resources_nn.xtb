@@ -121,7 +121,6 @@
 <translation id="3360297538363969800">Utskrifta feila. Sjå over skrivaren din og prøv på nytt.</translation>
 <translation id="3378572629723696641">Denne utvidinga kan ha vorten øydelagd.</translation>
 <translation id="3387614642886316601">Bruk utvida stavekontroll</translation>
-<translation id="3393582007140394275">Klarer ikkje å dela skjermen.</translation>
 <translation id="345693547134384690">Opna &amp;bildet i ei ny fane</translation>
 <translation id="3511307672085573050">Kopier len&amp;kjeadressa</translation>
 <translation id="354068948465830244">Denne kan lesa og endra nettsidedata</translation>
@@ -271,6 +270,7 @@
 <translation id="6812841287760418429">Ta vare på endringane</translation>
 <translation id="6824564591481349393">Kopier &amp;e-postadressa</translation>
 <translation id="6840155290835956714">Spør før sending</translation>
+<translation id="6878862640969460273">Liggjande</translation>
 <translation id="6886871292305414135">Opna lenkja i ei ny &amp;fane</translation>
 <translation id="6892812721183419409">Opna lenkja som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrunnsapp: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -326,7 +326,6 @@ Nøkkelfil: <ph name="KEY_FILE" />
 Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvidinga di.</translation>
 <translation id="8004582292198964060">Nettlesar</translation>
 <translation id="8018313076035239964">Kontroller kva for opplysningar nettstadar kan nytta og kva innhald dei kan visa deg</translation>
-<translation id="8032244173881942855">Klarer ikkje å senda fana.</translation>
 <translation id="8071432093239591881">Skriv ut som bilde</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -373,6 +372,5 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="9218430445555521422">Bruk som standard</translation>
 <translation id="93766956588638423">Reparer utvidinga</translation>
 <translation id="961012016278832836">Microsoft Edge (eldre)</translation>
-<translation id="98515147261107953">Liggjande</translation>
 <translation id="998747458861718449">&amp;Inspiser</translation>
 </translationbundle>

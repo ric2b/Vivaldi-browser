@@ -186,7 +186,7 @@ environment, and run preupload hooks later on.
 (outside)
 # On Ubuntu, make sure to enable the universe repository.
 $ sudo add-apt-repository universe
-$ sudo apt-get install git gitk git-gui curl xz-utils zstd
+$ sudo apt-get install git gitk git-gui curl
 ```
 
 These commands also installs git's graphical front end (`git gui`) and revision
@@ -413,6 +413,29 @@ building off of.
 Please refer to [Switch repo to the snapshot](/recreating_a_snapshot_or_buildspec.md#switch-repo-to-the-buildspec).
 ***
 
+#### Enable `cros cron` for faster syncing and builds
+
+If you work on ChromiumOS often and want syncing your tree to be fast, turn on
+[`cros cron`](https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/docs/cros-cron.md).
+to automatically prefetch git objects and SDK artifacts hourly in the
+background:
+
+```shellsession
+(outside)
+$ cros cron enable
+```
+
+*** note
+**Note:** `cros cron` daily bandwidth consumption of 10 GB.  If you pay for your
+internet by the gigabyte, enabling it is not recommended.
+***
+
+*** note
+**Note:** `cros cron` works best when you ran `repo init` with either
+`-b stable` or `-b snapshot`.  Using `-b main` will require a `git fetch` on
+every repository when you sync, and is therefore not recommended.
+***
+
 #### Optionally add Google API keys
 
 *** note
@@ -476,55 +499,6 @@ More details about configuring remote caching for non-Google organizations is
 available at [bazel_remote_caching].
 
 ## Building ChromiumOS
-
-### Create a chroot
-
-To make sure everyone uses the same exact environment and tools to build
-ChromiumOS, all building is done inside a [chroot]. This chroot is its own
-little world: it contains its own compiler, its own tools (its own copy of bash,
-its own copy of sudo), etc. Now that you've synced down the source code, you
-need to create this chroot. Assuming you're already in `~/chromiumos` (or
-wherever your source lives), the command to download and install the chroot is:
-
-```bash
-(outside)
-$ cros_sdk --create
-```
-
-If this does not work, make sure you've added the depot_tools directory to your
-PATH already (as was needed above with using `repo`).
-
-This will download and setup a prebuilt chroot from ChromiumOS mirrors (under
-400MB). If you prefer to build it from source, or have trouble accessing the
-servers, use `cros_sdk --bootstrap`. Note that this will also enter the chroot.
-If you prefer to build only, use `--download`.
-
-The command with `--bootstrap` takes about half an hour to run on a four core
-machine. It compiles quite a bit of software, which it installs into your
-chroot, and downloads some additional items (around 300MB). While it is building
-you will see a regular update of the number of packages left to build. Once the
-command finishes, the chroot will take up total disk space of a little over 3GB.
-
-The chroot lives by default at `~/chromiumos/chroot`. Inside that
-directory you will find system directories like `/usr/bin` and `/etc`. These are
-local to the chroot and are separate from the system directories on your
-machine. For example, the chroot has its own version of the `ls` utility. It
-will be very similar, but it is actually a different binary than the normal one
-you use on your machine.
-
-**IMPORTANT NOTES**:
-
-*   **If you need to delete your chroot**, use `cros_sdk --delete` to delete it
-    properly. Using `rm -rf` could end up deleting your source tree due to the
-    active bind mounts.
-
-**SIDE NOTES:**
-
-*   You shouldn't have to create the chroot very often. Most developers create
-    it once and never touch it again unless someone explicitly sends out an
-    email telling them to recreate their chroot.
-*   The `cros_sdk` command currently doesn't work behind a proxy server, but
-    there is a [workaround][crosbug/10048].
 
 ### Select a board
 
@@ -1254,7 +1228,57 @@ trybot.
 
 ## Local Debugging
 
+There are two options for debugging: `cros debug` and `gdb-${BOARD}`.
+Both tools support local debugging within your board sysroot, and both use
+the proper board-specific libraries, thus allowing you to run your target
+compiled binaries locally.
+
+`cros debug` is intended to be a modern replacement for `gdb-${BOARD}`, defaulting
+to the LLVM debugger (LLDB) instead of GDB. It handles both remote
+and local debugging, and automatically points the debugger to your debug
+symbol files and source code files. Although `gdb-${BOARD}` is still available,
+we expect you will have a better experience with the much newer `cros debug`.
+
 ### Debugging both x86 and non-x86 binaries on your workstation
+
+#### Using the `cros debug` tool
+
+`cros debug`, when launched without a `--device` argument, will default to local
+debugging, using QEMU if the target binary's architecture does not match that of
+your development machine. In this mode, a `--board` must be specified. This will
+ensure the debugger is using the correct dependencies and libraries by creating
+a sysroot rooted in your board's build directory.
+
+In local debugging mode, `cros debug` uses the board-specific `lldb` binary,
+as the debugger itself runs in the sysroot within the board's build directory.
+Therefore, you should ensure you have built the local `lldb` binary for your
+board, like so:
+
+```bash
+(outside)
+USE="local-lldb" cros build-packages --board=${BOARD} dev-util/lldb-server
+```
+
+If you want command history and line editing support in local debugging, add the
+`libedit` USE flag:
+```bash
+(outside)
+USE="local-lldb libedit" cros build-packages --board=${BOARD} dev-util/lldb-server
+```
+
+An example invocation, which locally starts `$VOLTEER_BUILD/usr/sbin/spaced`
+within `lldb` inside the volteer sysroot:
+```bash
+(outside)
+$ cros debug --board=volteer --exe=/usr/sbin/spaced
+```
+
+Note that QEMU can often be unreliable for debugging, or fail to work
+at all. Note that you may need to resort to remote debugging on actual
+hardware (e.g. using `crosfleet`) when debugging on non-x86
+architectures.
+
+#### Using `gdb-${BOARD}`
 
 If you build your projects incrementally, write unit tests and use them to drive
 your development, you may want to debug your code without shipping it over to a
@@ -1401,7 +1425,268 @@ If you want to manually run through all the steps necessary to set up your
 system for remote debugging and start the debugger, see [Remote Debugging in
 ChromiumOS].
 
-### Automated remote debugging using gdb-${BOARD} script (gdb-lumpy, gdb-daisy, gdb-parrot, etc)
+### Automated remote debugging using `cros debug`
+
+`cros debug` can automate many of the required steps for remote debugging
+using `lldb` with a single command, as long as you have an SSH connection to
+the remote device. `cros debug` aims to be a replacement for `gdb-${board}`
+with support for LLDB.
+
+`cros debug`---in remote debugging mode---works by doing the following:
+
+* establishing the required SSH tunnel(s) and starting the debug server,
+* running a local instance of the debugger client,
+* and automatically connecting to the remote server.
+
+Note that the tool runs the local debug client inside the chroot so that locally
+built debug symbols and source files can be found by the debugger client without
+requiring symbols to be present on the remote device.
+
+* By leveraging LLDB's "platform" mode, `cros debug` can enable a quick
+  development and remote debugging cycle without the need to `cros deploy` your
+  updated binary each time you make changes. LLDB will seamlessly copy the debug
+  target binary to the remote device from the local development machine. LLDB
+  checks the hash of the binary so that it is only copied if the binary has
+  changed. If the binary on the remote device is up to date (as it would be
+  right after a `cros deploy`), copying is not done.
+However, this workflow has some limitations:
+    - If your debug target program has additional dependency files, these must
+    be copied to the remote device each time. This however can be done from
+    inside `lldb`. More information about remote debugging features in `lldb`
+    can be found in the
+    [LLDB documentation](https://lldb.llvm.org/use/remote.html).
+    - You must compile the binary for the _target_ architecture, which may
+    differ from the local machine's architecture.
+
+Some common invocation examples:
+
+Debug a particular executable:
+```bash
+(outside)
+cros debug --device $DUT --exe /path/to/exe
+```
+
+Attach the debugger to the currently running process with PID 1234
+(note that `-d` is shorthand for `--device`):
+```bash
+(outside)
+cros debug -d $DUT --pid 1234
+```
+
+List all processes of a particular executable, without launching a debugger:
+```bash
+(outside)
+cros debug -d $DUT --exe /path/to/exe --list
+```
+
+Use a binary that is only present on the remote device
+(note that `--debugger=lldb` is the default):
+```bash
+(outside)
+cros debug -d $DUT --exe /path/to/remote/exe/ --use-remote-exe --debugger lldb
+```
+* If there are any already running processes of this executable, then they will
+be listed, and you may choose to attach to one of them or launch a new process.
+
+
+Run the debugger with additional command line arguments with the `--debug-arg`
+or `-g` flag. These arguments are properly shell quoted and appended, in the
+order they are provided, to the local debugger launch command, after all other
+arguments:
+
+```bash
+(outside)
+cros debug -d $DUT --exe /path/to/exe -g=--source-quietly -g="--arch aarch64"
+```
+
+Launch the local debugger with a coredump file (note the path is again rooted in
+the board's build directory):
+```bash
+(outside)
+cros debug --board $BOARD --exe /path/to/exe --corefile /path/to/core/dump
+```
+
+#### Setup notes:
+Debug symbols will be autodetected as long as they have been built (this is the
+default). Additional debug symbol path search locations can be added to LLDB
+like so (note that these paths are rooted in the board's sysroot):
+```bash
+(lldb) settings append target.debug-file-search-paths /path/to/debug/files
+```
+
+Source code should also be found as long as it is still present in your `build`
+directory. This requires that the package was `emerge`d with
+`FEATURES="noclean"`, which you can achieve like so, substituting your
+`${BOARD}` and desired `${package}`:
+```bash
+cros_sdk FEATURES="noclean" -- emerge-${BOARD} ${package}
+```
+`cros deploy` this package and source code files should now be found by the
+debugger when you next run `cros debug`.
+
+#### `cros debug` command line options summary
+
+* `-l, --list`: Lists all processes of the given `--exe` executable currently
+running on the remote device and exit, without launching a debugger.
+
+* `--use-remote-exe`: When using `--debugger=lldb`, interpret the path provided
+to `--exe` as a remote-only path, and therefore use the `-r` flag when running
+LLDB's `target create`. This bypasses the automatic moving of your binary from
+the local device to the remote device provided by LLDB's "platform" connection.
+
+* `--debugger-path`: Provide a path, rooted in the board's sysroot, to a
+specific local debugger binary. Otherwise, this will use the same name as is
+provided to `--debugger`. For example, `--debugger-path=/usr/local/bin/lldb`.
+
+* `--debugger {lldb,gdb}`: Specify whether to use LLDB or GDB. While there are
+extension points for future GDB integration, GDB is not currently supported.
+
+* `--gdbserver-port`: Specify a port number to use for the gdbserver connection.
+This is used for both LLDB and GDB.
+
+* `--platform-port-local`: Specify the local port number for the LLDB platform
+connection. This is distinct from the `gdbserver` port required by LLDB. This
+local port number will be forwarded to the remote platform port number on the
+target device through an SSH tunnel.
+
+* `--platform-port-remote`: Specify the remote port number for the LLDB platform
+connection.
+
+#### Example: debugging a binary locally with `cros debug`
+Debugging locally can be particularly helpful when doing iterative development,
+as you do not need to rely on deploying each change to a remote device. You can
+debug locally like the following example using the `volteer` board. Output-only
+text is commented out to highlight user input:
+
+```bash
+(outside)
+$ cros debug --board=volteer --exe=/usr/bin/dig
+
+# (lldb) platform settings -w /build/volteer
+# (lldb) platform select --sysroot /build/volteer host
+#   Platform: host
+#     Triple: x86_64-*-linux-gnu
+# OS Version: 6.7.12 (6.7.12-1rodete1-amd64)
+#   Hostname: 127.0.0.1
+#    Sysroot: /build/volteer
+# WorkingDir: /build/volteer
+#     Kernel: #1 SMP PREEMPT_DYNAMIC Debian 6.7.12-1rodete1 (2024-06-12)
+#     Kernel: Linux
+#    Release: 6.7.12-1rodete1-amd64
+#    Version: #1 SMP PREEMPT_DYNAMIC Debian 6.7.12-1rodete1 (2024-06-12)
+# (lldb) settings append target.debug-file-search-paths /build/volteer/usr/lib/debug
+# (lldb) settings set prompt "(lldb-volteer) "
+# (lldb-volteer) target create /usr/bin/dig
+# Current executable set to '/usr/bin/dig' (x86_64).
+# Could not load history file
+(lldb-volteer) r
+# Process 266 launched: '/usr/bin/dig' (x86_64)
+#
+# ; <<>> DiG 9.16.42 <<>>
+# ;; global options: +cmd
+# ;; Got answer:
+# ;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 14005
+# ;; flags: qr rd ra; QUERY: 1, ANSWER: 13, AUTHORITY: 0, ADDITIONAL: 1
+#
+# ;; OPT PSEUDOSECTION:
+# ; EDNS: version: 0, flags:; udp: 1232
+# ;; QUESTION SECTION:
+# ;.                              IN      NS
+#
+# ;; ANSWER SECTION:
+# .                       87198   IN      NS      j.root-servers.net.
+# .                       87198   IN      NS      f.root-servers.net.
+# .                       87198   IN      NS      k.root-servers.net.
+# .                       87198   IN      NS      h.root-servers.net.
+# .                       87198   IN      NS      m.root-servers.net.
+# .                       87198   IN      NS      l.root-servers.net.
+# .                       87198   IN      NS      d.root-servers.net.
+# .                       87198   IN      NS      i.root-servers.net.
+# .                       87198   IN      NS      g.root-servers.net.
+# .                       87198   IN      NS      c.root-servers.net.
+# .                       87198   IN      NS      e.root-servers.net.
+# .                       87198   IN      NS      a.root-servers.net.
+# .                       87198   IN      NS      b.root-servers.net.
+#
+# ;; Query time: 95 msec
+# ;; SERVER: 127.0.0.1#53(127.0.0.1)
+# ;; WHEN: Thu Aug 29 22:01:40 UTC 2024
+# ;; MSG SIZE  rcvd: 431
+#
+# Process 266 exited with status = 0 (0x00000000)
+(lldb-volteer)
+```
+
+This example merely runs the target program with the `r` command, but once
+the `(lldb-volteer)` prompt appears, you have full control of LLDB and can set
+breakpoints or issue any other LLDB commands. Consult the
+[LLDB documentation](https://lldb.llvm.org/index.html) for further information
+on how to use LLDB.
+
+#### Example: debugging a running process on a remote device with `cros debug`
+If you know there is an instance of an executable running on the remote device,
+but do not know the PID of that process, `cros debug` will list out the running
+instances of that executable when using the `--exe` option, and will give you
+the choice to attach to any one of them, or to start a new process.
+
+If no processes of that executable are currently running, `lldb` will start one
+when you issue the `run` command.
+
+Below is an example invocation. Once the first command is issued and the process
+is selected, the rest of the commands are handled automatically. Output-only
+text is commented out below to highlight the places where user input is
+required.
+
+```bash
+(outside)
+$ cros debug -d $DUT --exe=/usr/sbin/spaced
+
+# List running processes of /usr/sbin/spaced on device cri26-8:
+# USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+# spaced      1885  0.0  0.3  24680 12844 ?        S    11:21   0:00 /usr/sbin/spaced
+# Please select the process pid to debug (select [0] to start a new process):
+#   [0]: Start a new process under LLDB
+#   [1]: 1885
+Please choose an option [0-1]: 1
+# Warning: Permanently added 'cri26-8.cr.iad65.cr.dev' (ED25519) to the list of known hosts.
+# (lldb) platform select --sysroot /build/volteer remote-linux
+#   Platform: remote-linux
+#  Connected: no
+#    Sysroot: /build/volteer
+# (lldb) settings append target.debug-file-search-paths /build/volteer/usr/lib/debug
+# (lldb) platform connect connect://localhost:58705
+#   Platform: remote-linux
+#     Triple: x86_64-unknown-linux-gnu
+# OS Version: 5.4.282 (5.4.282-23086-g8c9d0527d37d)
+#   Hostname: localhost
+#  Connected: yes
+#    Sysroot: /build/volteer
+# WorkingDir: /root
+#     Kernel: #1 SMP PREEMPT Thu, 29 Aug 2024 00:28:26 +0000
+# (lldb) settings set prompt "(lldb-volteer) "
+# (lldb-volteer) attach 1885
+# Process 1885 stopped
+# * thread #1, name = 'spaced', stop reason = signal SIGSTOP
+#     frame #0: 0x00007d7e16c08403 libc.so.6`epoll_wait + 19
+# libc.so.6`epoll_wait:
+# ->  0x7d7e16c08403 <+19>: cmpq   $-0x1000, %rax ; imm = 0xF000
+#     0x7d7e16c08409 <+25>: ja     0x7d7e16c08460 ; <+112>
+#     0x7d7e16c0840b <+27>: retq
+#     0x7d7e16c0840c <+28>: nopl   (%rax)
+# Executable module set to "/home/abargher/.lldb/module_cache/remote-linux/.cache/460E200B-2A37-33D7/spaced".
+# Architecture set to: x86_64-unknown-linux-gnu.
+(lldb-volteer)
+```
+
+
+#### Tips For Googlers
+Googlers may find the SSH setup instructions [here](#for-googlers) helpful,
+especially for connecting to DUTs which require corp-ssh.
+[corp-ssh-helper-helper](https://goto.google.com/corp-ssh-helper-helper) creates
+the most seamless experience with `cros debug`.
+
+
+### Automated remote debugging using `gdb-${BOARD}` script (gdb-lumpy, gdb-daisy, gdb-parrot, etc)
 
 `gdb-${BOARD}` is a script that automates many of the steps necessary for
 setting up remote debugging with gdb. It should already be installed in your
@@ -1466,8 +1751,17 @@ gdb on your desktop to the gdbserver on the remote device.
 
 ### Edit/Debug cycle
 
-If you want to edit code and debug it on the DUT you can follow this procedure
+If you want to edit code and debug it on the DUT you can follow this procedure:
 
+For `cros debug`:
+```bash
+(outside)
+$ cros_sdk CFLAGS='-g' FEATURES='noclean' -- emerge-${BOARD} -v sys-apps/mosys
+$ cros deploy --board=${BOARD} ${IP} sys-apps/mosys
+$ cros debug --device ${IP} /usr/sbin/mosys
+```
+
+For `gdb-${BOARD}`:
 ```bash
 (outside)
 $ cros_sdk CFLAGS="-ggdb" FEATURES="noclean" emerge-${BOARD} -v sys-apps/mosys
@@ -1484,17 +1778,18 @@ generate build artifacts and have different directory structures then the
 tar/git repo. This ensures all the paths line up correctly and the source code
 can be located. Ideally we would use the `installsources` feature, but we don't
 have support for the debugedit package (yet!). Portage by default will strip the
-symbols and install the debug symbols in `/usr/lib/debug/`. `gdb-${BOARD}` will
-handle setting up the correct debug symbol path. cros deploy will then update
-the rootfs on the DUT. We pass the work directory into `gdb-${BOARD}` so that
-[cgdb] can display the sourcecode inline.
+symbols and install the debug symbols in `/usr/lib/debug/`. `cros debug` or
+`gdb-${BOARD}` will handle setting up the correct debug symbol path. cros deploy
+will then update the rootfs on the DUT. In the `gdb-${BOARD}` example, we pass
+the work directory into `gdb-${BOARD}` so that [cgdb] can display the sourcecode
+inline.
 
 Quick primer on cgdb:
 
 *   ESC: moves to the source window.
 *   i: moves from source window to gdb window.
 
-### Examples of debugging using the gdb-${BOARD} script
+### Examples of debugging using the `gdb-${BOARD}` script
 
 Below are three examples of using the board-specific gdb wrapper scripts to
 start up debugging sessions. The first two examples show connecting to a remote

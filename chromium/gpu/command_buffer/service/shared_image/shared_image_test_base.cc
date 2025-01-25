@@ -14,7 +14,7 @@
 #include "gpu/command_buffer/service/shared_image/copy_image_plane.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "third_party/skia/include/gpu/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSemaphore.h"
 #include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
 #include "third_party/skia/include/gpu/graphite/Context.h"
 #include "third_party/skia/include/gpu/graphite/Image.h"
@@ -168,7 +168,8 @@ void SharedImageTestBase::InitializeContext(GrContextType context_type) {
   if (context_type == GrContextType::kGraphiteDawn) {
 #if BUILDFLAG(SKIA_USE_DAWN)
     dawn_context_provider_ = DawnContextProvider::CreateWithBackend(
-        GetDawnBackendType(), DawnForceFallbackAdapter(), gpu_preferences_);
+        GetDawnBackendType(), DawnForceFallbackAdapter(), gpu_preferences_,
+        DawnContextProvider::DefaultValidateAdapterFn);
     ASSERT_TRUE(dawn_context_provider_);
 #else
     FAIL() << "Graphite-Dawn not available";

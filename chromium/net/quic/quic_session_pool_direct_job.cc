@@ -94,12 +94,9 @@ void QuicSessionPool::DirectJob::UpdatePriority(RequestPriority old_priority,
 
 void QuicSessionPool::DirectJob::PopulateNetErrorDetails(
     NetErrorDetails* details) const {
-  if (!session_attempt_ || !session_attempt_->session()) {
-    return;
+  if (session_attempt_) {
+    session_attempt_->PolulateNetErrorDetails(details);
   }
-  details->connection_info = QuicHttpStream::ConnectionInfoFromQuicVersion(
-      session_attempt_->session()->connection()->version());
-  details->quic_connection_error = session_attempt_->session()->error();
 }
 
 int QuicSessionPool::DirectJob::DoLoop(int rv) {
@@ -203,12 +200,14 @@ int QuicSessionPool::DirectJob::DoAttemptSession() {
       use_dns_aliases_ && resolve_host_request_->GetDnsAliasResults()
           ? *resolve_host_request_->GetDnsAliasResults()
           : std::set<std::string>();
-  session_attempt_ = std::make_unique<SessionAttempt>(
+  // Passing an empty `crypto_client_config_handle` is safe because this job
+  // already owns a handle.
+  session_attempt_ = std::make_unique<QuicSessionAttempt>(
       this, endpoint_result.ip_endpoints.front(), endpoint_result.metadata,
       std::move(quic_version_used), cert_verify_flags_,
       dns_resolution_start_time_, dns_resolution_end_time_,
       retry_on_alternate_network_before_handshake_, use_dns_aliases_,
-      std::move(dns_aliases));
+      std::move(dns_aliases), /*crypto_client_config_handle=*/nullptr);
 
   return session_attempt_->Start(
       base::BindOnce(&DirectJob::OnSessionAttemptComplete, GetWeakPtr()));

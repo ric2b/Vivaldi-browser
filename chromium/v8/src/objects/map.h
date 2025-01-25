@@ -5,6 +5,8 @@
 #ifndef V8_OBJECTS_MAP_H_
 #define V8_OBJECTS_MAP_H_
 
+#include <optional>
+
 #include "include/v8-memory-span.h"
 #include "src/base/bit-field.h"
 #include "src/common/globals.h"
@@ -22,8 +24,7 @@
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
 
-namespace v8 {
-namespace internal {
+namespace v8::internal {
 
 class WasmTypeInfo;
 
@@ -52,7 +53,6 @@ enum InstanceType : uint16_t;
   V(DebugInfo)                       \
   V(EmbedderDataArray)               \
   V(EphemeronHashTable)              \
-  V(ExternalPointerArray)            \
   V(ExternalString)                  \
   V(FeedbackCell)                    \
   V(Foreign)                         \
@@ -68,6 +68,7 @@ enum InstanceType : uint16_t;
   V(JSFunction)                      \
   V(JSObject)                        \
   V(JSObjectFast)                    \
+  V(JSRegExp)                        \
   V(JSSynchronizationPrimitive)      \
   V(JSTypedArray)                    \
   V(JSWeakCollection)                \
@@ -79,6 +80,8 @@ enum InstanceType : uint16_t;
   V(PropertyArray)                   \
   V(PropertyCell)                    \
   V(PrototypeInfo)                   \
+  V(RegExpBoilerplateDescription)    \
+  V(RegExpDataWrapper)               \
   V(SharedFunctionInfo)              \
   V(ShortcutCandidate)               \
   V(SlicedString)                    \
@@ -249,7 +252,7 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   static const int kNoConstructorFunctionIndex = 0;
   inline int GetConstructorFunctionIndex() const;
   inline void SetConstructorFunctionIndex(int value);
-  static base::Optional<Tagged<JSFunction>> GetConstructorFunction(
+  static std::optional<Tagged<JSFunction>> GetConstructorFunction(
       Tagged<Map> map, Tagged<Context> native_context);
 
   // Retrieve interceptors.
@@ -652,7 +655,8 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   DECL_ACQUIRE_GETTER(instance_descriptors, Tagged<DescriptorArray>)
   V8_EXPORT_PRIVATE void SetInstanceDescriptors(
       Isolate* isolate, Tagged<DescriptorArray> descriptors,
-      int number_of_own_descriptors);
+      int number_of_own_descriptors,
+      WriteBarrierMode barrier_mode = UPDATE_WRITE_BARRIER);
 
   inline void UpdateDescriptors(Isolate* isolate,
                                 Tagged<DescriptorArray> descriptors,
@@ -680,6 +684,13 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   // Returns true if prototype validity cell value represents "valid" prototype
   // chain state.
   inline bool IsPrototypeValidityCellValid() const;
+
+  // Returns true if this map belongs to the same native context as given map,
+  // i.e. this map's meta map is equal to other_map's meta map.
+  // Returns false if this map is contextless (in case of JSObject map this
+  // means that the object is remote).
+  inline bool BelongsToSameNativeContextAs(Tagged<Map> other_map) const;
+  inline bool BelongsToSameNativeContextAs(Tagged<Context> context) const;
 
   inline Tagged<Name> GetLastDescriptorName(Isolate* isolate) const;
   inline PropertyDetails GetLastDescriptorDetails(Isolate* isolate) const;
@@ -766,10 +777,10 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   static Handle<Map> TransitionElementsTo(Isolate* isolate, Handle<Map> map,
                                           ElementsKind to_kind);
 
-  static base::Optional<Tagged<Map>> TryAsElementsKind(Isolate* isolate,
-                                                       DirectHandle<Map> map,
-                                                       ElementsKind kind,
-                                                       ConcurrencyMode cmode);
+  static std::optional<Tagged<Map>> TryAsElementsKind(Isolate* isolate,
+                                                      DirectHandle<Map> map,
+                                                      ElementsKind kind,
+                                                      ConcurrencyMode cmode);
   V8_EXPORT_PRIVATE static Handle<Map> AsElementsKind(Isolate* isolate,
                                                       DirectHandle<Map> map,
                                                       ElementsKind kind);
@@ -855,7 +866,7 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
 
   inline bool CanTransition() const;
 
-  static constexpr base::Optional<RootIndex> TryGetMapRootIdxFor(
+  static constexpr std::optional<RootIndex> TryGetMapRootIdxFor(
       InstanceType type) {
     switch (type) {
 #define MAKE_CASE(TYPE, Name, name) \
@@ -983,7 +994,7 @@ class Map : public TorqueGeneratedMap<Map, HeapObject> {
   static Handle<Map> RawCopy(Isolate* isolate, Handle<Map> map,
                              int instance_size, int inobject_properties);
   static Handle<Map> ShareDescriptor(Isolate* isolate, Handle<Map> map,
-                                     Handle<DescriptorArray> descriptors,
+                                     DirectHandle<DescriptorArray> descriptors,
                                      Descriptor* descriptor);
   V8_EXPORT_PRIVATE static Handle<Map> AddMissingTransitions(
       Isolate* isolate, Handle<Map> map,
@@ -1077,8 +1088,7 @@ inline bool IsPrimitiveMap(Tagged<Map> map);
 inline bool IsSpecialReceiverMap(Tagged<Map> map);
 inline bool IsCustomElementsReceiverMap(Tagged<Map> map);
 
-}  // namespace internal
-}  // namespace v8
+}  // namespace v8::internal
 
 #include "src/objects/object-macros-undef.h"
 

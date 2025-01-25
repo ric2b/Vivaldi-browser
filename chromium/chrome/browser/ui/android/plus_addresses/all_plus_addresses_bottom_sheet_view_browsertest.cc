@@ -26,11 +26,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace plus_addresses {
-
 namespace {
+
 using ::testing::Eq;
 using ::testing::Optional;
-}  // namespace
 
 class AllPlusAddressesBottomSheetViewBrowserTest : public AndroidBrowserTest {
  public:
@@ -50,7 +49,8 @@ class AllPlusAddressesBottomSheetViewBrowserTest : public AndroidBrowserTest {
   std::unique_ptr<KeyedService> PlusAddressServiceTestFactory(
       content::BrowserContext* context) {
     return std::make_unique<FakePlusAddressService>(
-        IdentityManagerFactory::GetForProfile(profile()), &setting_service_);
+        profile()->GetPrefs(), IdentityManagerFactory::GetForProfile(profile()),
+        &setting_service_);
   }
 
  protected:
@@ -90,4 +90,5 @@ IN_PROC_BROWSER_TEST_F(AllPlusAddressesBottomSheetViewBrowserTest,
   controller().OnBottomSheetDismissed();
 }
 
+}  // namespace
 }  // namespace plus_addresses

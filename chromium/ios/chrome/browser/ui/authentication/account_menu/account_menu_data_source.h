@@ -10,10 +10,11 @@
 #import <vector>
 
 @class AccountErrorUIInfo;
-@class AccountsTableViewController;
 enum class IdentityAvatarSize;
+@class LegacyAccountsTableViewController;
+struct ManagementState;
 @protocol SystemIdentity;
-@class TableViewIdentityItem;
+@class TableViewAccountItem;
 
 // Identity data source for AccountMenuTableViewController instance, to
 // manage the model.
@@ -34,8 +35,17 @@ enum class IdentityAvatarSize;
 // The user full name of the primary account.
 @property(nonatomic, readonly) NSString* primaryAccountUserFullName;
 
-// The identity for the value at `itemIndex` in the table.
-- (TableViewIdentityItem*)identityItemForGaiaID:(NSString*)gaiaID;
+// The management state of this browser and profile.
+@property(nonatomic, readonly) ManagementState managementState;
+
+// The identity for the user with `gaiaID`.
+- (NSString*)nameForGaiaID:(NSString*)gaiaID;
+
+// The identity for the user with `gaiaID`.
+- (NSString*)emailForGaiaID:(NSString*)gaiaID;
+
+// The image for the user with `gaiaID`.
+- (UIImage*)imageForGaiaID:(NSString*)gaiaID;
 
 @end
 

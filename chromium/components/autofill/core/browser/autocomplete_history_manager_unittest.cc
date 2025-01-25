@@ -37,7 +37,6 @@
 #include "ui/gfx/geometry/rect.h"
 
 namespace autofill {
-
 namespace {
 
 using MockSuggestionsReturnedCallback =
@@ -50,6 +49,8 @@ using ::testing::Return;
 using ::testing::UnorderedElementsAre;
 
 }  // namespace
+// The anonymous namespace needs to end here because of `friend`ships between
+// the tests and the production code.
 
 class AutocompleteHistoryManagerTest : public testing::Test {
  protected:
@@ -727,8 +728,8 @@ TEST_F(AutocompleteHistoryManagerTest,
 
   // Now simulate one autocomplete entry being selected, and expect a metric
   // being logged for that value alone.
-  autocomplete_manager_->OnSingleFieldSuggestionSelected(
-      test_value, SuggestionType::kAutocompleteEntry);
+  Suggestion suggestion(test_value, SuggestionType::kAutocompleteEntry);
+  autocomplete_manager_->OnSingleFieldSuggestionSelected(suggestion);
 
   histogram_tester.ExpectBucketCount("Autocomplete.DaysSinceLastUse",
                                      days_since_last_use, 1);

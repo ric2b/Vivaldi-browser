@@ -61,14 +61,6 @@ void ConfigureHeaderIllustration(T* illustration, gfx::Size header_size) {
   illustration->SetVerticalAlignment(views::ImageView::Alignment::kLeading);
 }
 
-const gfx::VectorIcon& GooglePasswordManagerIcon() {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return vector_icons::kGooglePasswordManagerIcon;
-#else
-  return kKeyIcon;
-#endif
-}
-
 }  // namespace
 
 using views::BoxLayout;
@@ -135,6 +127,11 @@ std::pair<std::unique_ptr<views::View>,
           AuthenticatorRequestSheetView::AutoFocus>
 AuthenticatorRequestSheetView::BuildStepSpecificContent() {
   return std::make_pair(nullptr, AutoFocus::kNo);
+}
+
+int AuthenticatorRequestSheetView::GetSpacingBetweenTitleAndDescription() {
+  return views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_RELATED_CONTROL_VERTICAL);
 }
 
 std::unique_ptr<views::View>
@@ -206,44 +203,19 @@ AuthenticatorRequestSheetView::CreateContentsBelowIllustration() {
     }
   }
 
+  // GPM PIN dialogs have a different spacing, 4px.
   auto label_container = std::make_unique<views::View>();
   label_container->SetLayoutManager(std::make_unique<BoxLayout>(
       BoxLayout::Orientation::kVertical, gfx::Insets(),
-      views::LayoutProvider::Get()->GetDistanceMetric(
-          views::DISTANCE_RELATED_CONTROL_VERTICAL)));
+      GetSpacingBetweenTitleAndDescription()));
 
-  if (model()->has_gpm_banner()) {
-    auto container = std::make_unique<views::View>();
-    container->SetBorder(views::CreateEmptyBorder(
-        gfx::Insets::TLBR(0, 0,
-                          views::LayoutProvider::Get()->GetDistanceMetric(
-                              views::DISTANCE_RELATED_CONTROL_VERTICAL),
-                          0)));
-    container->SetLayoutManager(std::make_unique<BoxLayout>(
-        BoxLayout::Orientation::kHorizontal, gfx::Insets(),
-        views::LayoutProvider::Get()->GetDistanceMetric(
-            views::DISTANCE_RELATED_CONTROL_VERTICAL)));
-
-    auto image_view = std::make_unique<NonAccessibleImageView>();
-    constexpr int kIconSize = 18;
-    // The icon is vertically centered within this size. The addition of
-    // `kIconSize / 8` adds enough margin at the top so that the icon is better
-    // centered with the text.
-    image_view->SetPreferredSize(
-        gfx::Size(kIconSize, kIconSize + kIconSize / 8));
-    image_view->SetImage(ui::ImageModel::FromVectorIcon(
-        GooglePasswordManagerIcon(), ui::kColorIcon, kIconSize));
-    container->AddChildView(image_view.release());
-
-    auto gpm_label = std::make_unique<views::Label>(
-        l10n_util::GetStringUTF16(IDS_WEBAUTHN_SOURCE_GOOGLE_PASSWORD_MANAGER),
-        views::style::CONTEXT_DIALOG_BODY_TEXT);
-    gpm_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    gpm_label->SetVerticalAlignment(gfx::ALIGN_TOP);
-    container->AddChildView(gpm_label.release());
-
-    label_container->AddChildView(container.release());
-  }
+  std::unique_ptr<views::View> step_specific_content;
+  // Compute `should_focus_step_specific_content_` before setting `title_label`
+  // so that the focus behavior of the `title_label` is set correctly.
+  std::tie(step_specific_content, should_focus_step_specific_content_) =
+      BuildStepSpecificContent();
+  DCHECK(should_focus_step_specific_content_ == AutoFocus::kNo ||
+         step_specific_content);
 
   const std::u16string title = model()->GetStepTitle();
   if (!title.empty()) {
@@ -272,11 +244,12 @@ AuthenticatorRequestSheetView::CreateContentsBelowIllustration() {
     label_container->AddChildView(description_label.release());
   }
 
-  std::u16string additional_desciption = model()->GetAdditionalDescription();
-  if (!additional_desciption.empty()) {
-    auto label =
-        std::make_unique<views::Label>(std::move(additional_desciption),
-                                       views::style::CONTEXT_DIALOG_BODY_TEXT);
+  for (const std::u16string& msg : model()->GetAdditionalDescriptions()) {
+    if (msg.empty()) {
+      continue;
+    }
+    auto label = std::make_unique<views::Label>(
+        msg, views::style::CONTEXT_DIALOG_BODY_TEXT);
     label->SetMultiLine(true);
     label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     label->SetAllowCharacterBreak(true);
@@ -291,11 +264,7 @@ AuthenticatorRequestSheetView::CreateContentsBelowIllustration() {
           BoxLayout::Orientation::kVertical, gfx::Insets(),
           views::LayoutProvider::Get()->GetDistanceMetric(
               views::DISTANCE_RELATED_CONTROL_VERTICAL)));
-  std::unique_ptr<views::View> step_specific_content;
-  std::tie(step_specific_content, should_focus_step_specific_content_) =
-      BuildStepSpecificContent();
-  DCHECK(should_focus_step_specific_content_ == AutoFocus::kNo ||
-         step_specific_content);
+
   if (step_specific_content) {
     child_views_.step_specific_content_ =
         content_error_and_hint_view->AddChildView(

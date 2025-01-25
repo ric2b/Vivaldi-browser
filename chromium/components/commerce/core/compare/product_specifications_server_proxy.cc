@@ -24,7 +24,12 @@
 namespace commerce {
 
 namespace {
+
+const char kEndpointUrl[] =
+    "https://memex-pa.googleapis.com/v1/shopping/products:specifications";
+
 const char kAltTextKey[] = "alternativeText";
+const char kBuyingOptionsURLKey[] = "buyingOptionsUrl";
 const char kDescriptionKey[] = "description";
 const char kFaviconUrlKey[] = "faviconUrl";
 const char kGPCKey[] = "gpcId";
@@ -53,12 +58,12 @@ constexpr net::NetworkTrafficAnnotationTag kShoppingListTrafficAnnotation =
         semantics {
           sender: "Chrome Shopping"
           description:
-            "Retrieves product specifications for a list of products as they "
+            "Retrieves Tab Comparison data for a list of products as they "
             "relate to each other based on their cluster IDs. This will only "
             "be called while the UI for the feature is open."
           trigger:
-            "When the product specifications UI is opened, we will send a "
-            "request any time the list of currently viewed products changes."
+            "When the Tab Compare UI is opened, we will send a request any "
+            "time the list of currently viewed products changes."
           user_data {
             type: ACCESS_TOKEN
             type: SENSITIVE_URL
@@ -80,7 +85,12 @@ constexpr net::NetworkTrafficAnnotationTag kShoppingListTrafficAnnotation =
             "feature based on things like country, locale, and whether the "
             "user is signed in. The request is only made after the user "
             "chooses to engage with the feature."
-          chrome_policy {}
+          chrome_policy {
+            TabCompareSettings {
+              policy_options {mode: MANDATORY}
+              TabCompareSettings: 2
+            }
+          }
         })");
 
 std::optional<ProductSpecifications::DescriptionText> ParseDescriptionText(
@@ -215,15 +225,21 @@ ProductSpecificationsServerProxy::~ProductSpecificationsServerProxy() = default;
 void ProductSpecificationsServerProxy::GetProductSpecificationsForClusterIds(
     std::vector<uint64_t> cluster_ids,
     ProductSpecificationsCallback callback) {
-  if (!IsProductSpecificationsEnabled(account_checker_)) {
+  if (!CanFetchProductSpecificationsData(account_checker_)) {
     std::move(callback).Run(cluster_ids, std::nullopt);
     return;
   }
 
-  auto fetcher = CreateEndpointFetcher(
-      GURL(base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          kProductSpecificationsUrlKey)),
-      kPostHttpMethod, GetJsonStringForProductClusterIds(cluster_ids));
+  std::string specs_url =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          kProductSpecificationsUrlKey);
+  if (specs_url.empty()) {
+    specs_url = kEndpointUrl;
+  }
+
+  auto fetcher =
+      CreateEndpointFetcher(GURL(specs_url), kPostHttpMethod,
+                            GetJsonStringForProductClusterIds(cluster_ids));
 
   auto* const fetcher_ptr = fetcher.get();
   fetcher_ptr->Fetch(base::BindOnce(
@@ -373,6 +389,12 @@ ProductSpecificationsServerProxy::ProductSpecificationsFromJsonResponse(
     const std::string* image_url = spec.GetDict().FindString(kImageURLKey);
     if (image_url) {
       product.image_url = GURL(*image_url);
+    }
+
+    const std::string* buying_options_url =
+        spec.GetDict().FindString(kBuyingOptionsURLKey);
+    if (buying_options_url) {
+      product.buying_options_url = GURL(*buying_options_url);
     }
 
     const base::Value::List* product_spec_values =

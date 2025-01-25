@@ -7,7 +7,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/extensions/api/commands/command_service.h"
+#include "chrome/browser/extensions/commands/command_service.h"
 #include "chrome/browser/ui/extensions/extension_action_platform_delegate.h"
 #include "ui/base/accelerators/accelerator.h"
 
@@ -41,7 +41,6 @@ class ExtensionActionPlatformDelegateViews
   void RegisterCommand() override;
   void UnregisterCommand() override;
   void ShowPopup(std::unique_ptr<extensions::ExtensionViewHost> host,
-                 bool by_user,
                  PopupShowAction show_action,
                  ShowPopupCallback callback) override;
 

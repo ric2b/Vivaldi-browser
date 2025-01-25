@@ -1365,6 +1365,24 @@ FPDFTextObj_GetRenderedBitmap(FPDF_DOCUMENT document,
 FPDF_EXPORT FPDF_FONT FPDF_CALLCONV FPDFTextObj_GetFont(FPDF_PAGEOBJECT text);
 
 // Experimental API.
+// Get the base name of a font.
+//
+// font   - the handle to the font object.
+// buffer - the address of a buffer that receives the base font name.
+// length - the size, in bytes, of |buffer|.
+//
+// Returns the number of bytes in the base name (including the trailing NUL
+// character) on success, 0 on error. The base name is typically the font's
+// PostScript name. See descriptions of "BaseFont" in ISO 32000-1:2008 spec.
+//
+// Regardless of the platform, the |buffer| is always in UTF-8 encoding.
+// If |length| is less than the returned length, or |buffer| is NULL, |buffer|
+// will not be modified.
+FPDF_EXPORT size_t FPDF_CALLCONV FPDFFont_GetBaseFontName(FPDF_FONT font,
+                                                          char* buffer,
+                                                          size_t length);
+
+// Experimental API.
 // Get the family name of a font.
 //
 // font   - the handle to the font object.
@@ -1377,8 +1395,9 @@ FPDF_EXPORT FPDF_FONT FPDF_CALLCONV FPDFTextObj_GetFont(FPDF_PAGEOBJECT text);
 // Regardless of the platform, the |buffer| is always in UTF-8 encoding.
 // If |length| is less than the returned length, or |buffer| is NULL, |buffer|
 // will not be modified.
-FPDF_EXPORT unsigned long FPDF_CALLCONV
-FPDFFont_GetFamilyName(FPDF_FONT font, char* buffer, unsigned long length);
+FPDF_EXPORT size_t FPDF_CALLCONV FPDFFont_GetFamilyName(FPDF_FONT font,
+                                                        char* buffer,
+                                                        size_t length);
 
 // Experimental API.
 // Get the decoded data from the |font| object.

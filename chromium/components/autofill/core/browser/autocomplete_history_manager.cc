@@ -138,10 +138,9 @@ void AutocompleteHistoryManager::OnRemoveCurrentSingleFieldSuggestion(
 }
 
 void AutocompleteHistoryManager::OnSingleFieldSuggestionSelected(
-    const std::u16string& value,
-    SuggestionType type) {
+    const Suggestion& suggestion) {
   // Try to find the AutofillEntry associated with the given suggestion.
-  auto last_entries_iter = last_entries_.find(value);
+  auto last_entries_iter = last_entries_.find(suggestion.main_text.value);
   if (last_entries_iter == last_entries_.end()) {
     // Not found, therefore nothing to do. Most likely there was a race
     // condition, but it's not that big of a deal in the current scenario
@@ -299,7 +298,7 @@ bool AutocompleteHistoryManager::IsFieldValueSaveable(
     const FormFieldData& field) {
   // We don't want to save a trimmed string, but we want to make sure that the
   // value is neither empty nor only whitespaces.
-  bool is_value_valid = base::ranges::any_of(
+  bool is_value_valid = std::ranges::any_of(
       field.value(), std::not_fn(base::IsUnicodeWhitespace<char16_t>));
   return is_value_valid && IsMeaningfulFieldName(field.name()) &&
          !field.name().empty() && field.IsTextInputElement() &&

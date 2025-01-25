@@ -8,6 +8,10 @@
 #include "components/ad_blocker/adblock_types.h"
 #include "components/request_filter/request_filter.h"
 
+namespace content {
+class RenderFrameHost;
+}
+
 namespace adblock_filter {
 class RulesIndexManager;
 class TabHandler;
@@ -52,6 +56,10 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
                       int net_error) override;
 
  private:
+  bool DoesAdAttributionMatch(content::RenderFrameHost* frame,
+                              std::string_view tracker_url_spec,
+                              std::string_view ad_domain_and_query_trigger);
+
   base::WeakPtr<RulesIndexManager> rules_index_manager_;
   base::WeakPtr<TabHandler> tab_handler_;
   base::WeakPtr<Resources> resources_;

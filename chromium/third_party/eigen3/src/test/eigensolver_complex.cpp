@@ -44,7 +44,7 @@ bool find_pivot(typename MatrixType::Scalar tol, MatrixType& diffs, Index col = 
 
 /* Check that two column vectors are approximately equal up to permutations.
  * Initially, this method checked that the k-th power sums are equal for all k = 1, ..., vec1.rows(),
- * however this strategy is numerically inacurate because of numerical cancellation issues.
+ * however this strategy is numerically inaccurate because of numerical cancellation issues.
  */
 template <typename VectorType>
 void verify_is_approx_upto_permutation(const VectorType& vec1, const VectorType& vec2) {

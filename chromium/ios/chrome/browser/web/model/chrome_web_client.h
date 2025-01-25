@@ -56,15 +56,13 @@ class ChromeWebClient : public web::WebClient {
                                          const GURL& url) const override;
   void LogDefaultUserAgent(web::WebState* web_state,
                            const GURL& url) const override;
-  NSData* FetchSessionFromCache(web::WebState* web_state) const override;
   void CleanupNativeRestoreURLs(web::WebState* web_state) const override;
   void WillDisplayMediaCapturePermissionPrompt(
       web::WebState* web_state) const override;
   bool IsPointingToSameDocument(const GURL& url1,
                                 const GURL& url2) const override;
-  bool IsBrowserLockdownModeEnabled(web::BrowserState* browser_state) override;
-  void SetOSLockdownModeEnabled(web::BrowserState* browser_state,
-                                bool enabled) override;
+  bool IsBrowserLockdownModeEnabled() override;
+  void SetOSLockdownModeEnabled(bool enabled) override;
   bool IsInsecureFormWarningEnabled(
       web::BrowserState* browser_state) const override;
 

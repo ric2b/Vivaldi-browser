@@ -13,13 +13,16 @@ static_library("quick_pair") {
     "quick_pair_browser_delegate_impl.cc",
     "quick_pair_browser_delegate_impl.h",
   ]
+
   public_deps = [
     "//ash/quick_pair/common",
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chromeos/ash/services/quick_pair/public/mojom",
     "//device/bluetooth",
     "//mojo/public/cpp/bindings",
   ]
+
   deps = [
     "//ash/constants",
     "//ash/quick_pair/feature_status_tracker",
@@ -28,6 +31,7 @@ static_library("quick_pair") {
     "//chrome/browser/ash/profiles",
     "//chrome/browser/image_fetcher",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/webui/ash/settings/pages/bluetooth",
     "//components/cross_device/logging",
     "//components/image_fetcher/core",
     "//components/services/app_service/public/cpp:app_types",
@@ -36,4 +40,7 @@ static_library("quick_pair") {
     "//google_apis",
     "//services/network/public/cpp",
   ]
+
+  allow_circular_includes_from =
+      [ "//chrome/browser/ui/webui/ash/settings/pages/bluetooth" ]
 }

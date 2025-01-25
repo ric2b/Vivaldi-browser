@@ -129,11 +129,12 @@ typedef int (*ChromeMainPtr)(int, char**);
 // revised. Hopefully a more elegant solution will become apparent before that's
 // required.
 #if !defined(DCHECK_ALWAYS_ON)
-__attribute__((used)) const char kGrossPaddingForCrbug1300598[76 * 1024] = {};
+__attribute__((used)) const char kGrossPaddingForCrbug1300598[84 * 1024] = {};
 #else
 // DCHECK builds are larger and therefore require less padding. See
-// https://crbug.com/1394196 for the calculations.
-__attribute__((used)) const char kGrossPaddingForCrbug1300598[56 * 1024] = {};
+// https://crbug.com/1394196 for the calculations, and
+// https://crbug.com/357698332 for further follow-up.
+__attribute__((used)) const char kGrossPaddingForCrbug1300598[44 * 1024] = {};
 #endif  // !defined(DCHECK_ALWAYS_ON)
 #endif
 

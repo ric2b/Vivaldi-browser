@@ -62,10 +62,7 @@ message StartArcMiniInstanceRequest {
   optional bool arc_print_spooler_experiment = 6
       [default = false, deprecated = true];
 
-  // Option to disable ureadahead, Used in specialized tests.
-  // TODO(b/264585671): Refactor this and host_ureadahead_generation to
-  // mode enum.
-  optional bool disable_ureadahead = 7 [default = false];
+  reserved 7;
 
   // Option to disable by hiding default apps shipped on the system image.
   // To be used locally in development that involves overriding these apps.
@@ -99,9 +96,7 @@ message StartArcMiniInstanceRequest {
   // Option to enable disable consumer auto update toggle.
   optional bool enable_consumer_auto_update_toggle = 15 [default = false];
 
-  // Flag to indicate mode with active host ureadahead generation.
-  // TODO(b/264585671): Refactor this and disable_ureadahead to mode enum.
-  optional bool host_ureadahead_generation = 16 [default = false];
+  reserved 16;
 
   // Option to enable privacy hub for chrome in android settings.
   optional bool enable_privacy_hub_for_chrome = 17 [default = false];
@@ -211,4 +206,39 @@ message UpgradeArcContainerRequest {
   optional bool skip_tts_cache = 18 [default = false];
 
   // Next ID to use: 19
+}
+
+// It requests to execute a command on ARC shell.
+// Available requests are managed by ArcCroshService in ARC.
+// ArcCroshServiceProvider in Chrome proxies and translates the message for
+// ArcCroshService.
+message ArcShellExecutionRequest {
+  // The requested command is executed on ARC shell.
+  // The request with unsupported command will be rejected and an error will be
+  // returned. It depends on the ARC side implementation whether flags and
+  // additional arguments are accepted.
+  repeated string command = 1;
+
+  // User id of the requesting user.
+  // Only request from the primary user is received in ArcCroshServiceProvider
+  // since ARC is tied to the primary user.
+  optional string user_id = 2;
+
+  // Next ID to use: 3
+}
+
+// It contains the execution result of ArcShellExecutionRequest.
+// ArcCroshService in ARC creates the original mojo message,
+// then ArcCroshServiceProvider in Chrome translates it into
+// ArcShellExecutionResult and proxies to crosh.
+message ArcShellExecutionResult {
+  oneof payload {
+    // Acquired output if the execution successes.
+    string stdout = 1;
+
+    // Error message if the execution fails.
+    string error = 2;
+  }
+
+  // Next ID to use: 3
 }

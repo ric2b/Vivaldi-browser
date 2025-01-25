@@ -102,8 +102,7 @@ class AndroidAutofillProvider : public AutofillProvider,
                        const FormData& form,
                        bool known_success,
                        mojom::SubmissionSource source) override;
-  void OnFocusOnNonFormField(AndroidAutofillManager* manager,
-                             bool had_interacted_form) override;
+  void OnFocusOnNonFormField(AndroidAutofillManager* manager) override;
   void OnFocusOnFormField(AndroidAutofillManager* manager,
                           const FormData& form,
                           const FormFieldData& field) override;
@@ -155,16 +154,21 @@ class AndroidAutofillProvider : public AutofillProvider,
 
   void FireSuccessfulSubmission(mojom::SubmissionSource source);
 
+  // Updates fields that changed on native class only. The Android bridge is not
+  // yet invoked to give preference to a possible CredMan flow.
+  // Using the given form and field that are newly focused, the method returns
+  // the necessary field information to continue the focus event later on. If
+  // continuing the focus event is not possible or necessary, it returns a
+  // `std::nullopt`.
+  std::optional<AndroidAutofillProviderBridge::FieldInfo> StartFocusChange(
+      const FormData& form,
+      const FormFieldData& field);
+
   // Calls `OnFormFieldDidChange` in the bridge if there is an ongoing Autofill
   // session for this `form`.
   void MaybeFireFormFieldDidChange(AndroidAutofillManager* manager,
                                    const FormData& form,
                                    const FormFieldData& field);
-
-  // Propagates visibility changes for fields in `form` and notifies the bridge
-  // in case any of the fields had a visibility change.
-  void MaybeFireFormFieldVisibilitiesDidChange(AndroidAutofillManager* manager,
-                                             const FormData& form);
 
   bool IsLinkedManager(AndroidAutofillManager* manager) const;
 
@@ -174,9 +178,9 @@ class AndroidAutofillProvider : public AutofillProvider,
 
   // Same as `IsLinkedForm`, but also checks that `form` and `form_` are
   // similar, using form similarity checks.
-  bool IsLinkedForm(const FormData& form);
+  bool IsLinkedForm(const FormData& form) const;
 
-  gfx::RectF ToClientAreaBound(const gfx::RectF& bounding_box);
+  gfx::RectF ToClientAreaBound(const gfx::RectF& bounding_box) const;
 
   void StartNewSession(AndroidAutofillManager* manager,
                        const FormData& form,
@@ -200,11 +204,14 @@ class AndroidAutofillProvider : public AutofillProvider,
   // conditions are met:
   // 1. Prefill requests are supported (correct SDK version & feature flag).
   // 2. No prefill request has been sent so far, since the framework only
-  // supports caching a single form at a time.
+  //    supports caching a single form at a time.
   // 3. There is no ongoing Autofill session. This is to ensure that the
-  // `onProvideAutofillStructure` callback from the framework does not confuse
-  // information requests for caching and for the current Autofill session.
-  // 4. The form is predicted to be a login form.
+  //    `onProvideAutofillStructure` callback from the framework does not
+  //     confuse information requests for caching and for the current Autofill
+  //     session.
+  // 4. The form is predicted to be a login form or a (assuming that
+  //    `kAndroidAutofillPrefillRequestsForChangePassword` is enabled) a change
+  //     password form.
   void MaybeSendPrefillRequest(const AndroidAutofillManager& manager,
                                FormGlobalId form_id);
 
@@ -216,10 +223,10 @@ class AndroidAutofillProvider : public AutofillProvider,
     // Returns the `PasswordParserOverrides` obtained from matching the
     // `FieldRendererId`s of username and password fields in `pw_form` to the
     // `FieldGlobalId`s in `form_structure`. Returns `std::nullopt` if no unique
-    // matching could be found. A unique matching may not exist if the form is
-    // spread across multiple iframes. In practice, this should be extremely
-    // rare for password forms.
-    static std::optional<PasswordParserOverrides> FromLoginForm(
+    // matching could be found or if the matching is incomplete. A unique
+    // matching may not exist if the form is spread across multiple iframes. In
+    // practice, this should be extremely rare for password forms.
+    static std::optional<PasswordParserOverrides> FromPasswordForm(
         const password_manager::PasswordForm& pw_form,
         const FormStructure& form_structure);
 
@@ -228,6 +235,7 @@ class AndroidAutofillProvider : public AutofillProvider,
 
     std::optional<FieldGlobalId> username_field_id;
     std::optional<FieldGlobalId> password_field_id;
+    std::optional<FieldGlobalId> new_password_field_id;
   };
 
   // Checks whether `form` is similar to the cached form. `form_structure` must
@@ -250,20 +258,32 @@ class AndroidAutofillProvider : public AutofillProvider,
 
   // Stops the keyboard suppression. Called when the CredMan UI was closed. If
   // the UI was dismissed without selecting a passkey, `success` will be false.
-  void OnCredManUiClosed(bool success);
+  // If a `field_to_focus` is given and CredMan wasn't able to sign the
+  // user in, attempt to continue an earlier attempt to focus a field.
+  void OnCredManUiClosed(
+      FormGlobalId form_id,
+      std::optional<AndroidAutofillProviderBridge::FieldInfo> field_to_focus,
+      bool success);
 
   // Returns true if CredMan *may* be shown for the given field. It only returns
   // false if the sheet was already shown or prefetching concluded and indicated
   // that no passkeys are available.
-  bool IntendsToShowCredMan(content::RenderFrameHost* rfh) const;
+  bool IntendsToShowCredMan(const FormFieldData& field,
+                            content::RenderFrameHost* rfh) const;
 
   // Returns true if a passkey request is pending  or succeeded for the given
   // `rfh` and the CredMan UI should be shown when the given `field` is focused.
   bool ShouldShowCredManForField(const FormFieldData& field,
                                  content::RenderFrameHost* rfh);
 
-  // Triggers a prefetched passkey request which opens a bottom sheet.
-  void ShowCredManSheet(content::RenderFrameHost* rfh);
+  // Triggers a prefetched passkey request which opens a bottom sheet. The given
+  // `field_to_focus` is used to continue any interrupted focus event once
+  // CredMan closes. Returns true if the sheet was opened and false if that
+  // wasn't possible.
+  bool ShowCredManSheet(
+      content::RenderFrameHost* rfh,
+      FormGlobalId form_id,
+      std::optional<AndroidAutofillProviderBridge::FieldInfo> field_to_focus);
 
   enum class CredManBottomSheetLifecycle {
     kNotShown,   // The sheet hasn't been shown. Does not indicate it will be.

@@ -14,9 +14,9 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/gpu/ganesh/GrCaps.h"
@@ -29,6 +29,7 @@
 #include "src/gpu/ganesh/GrPixmap.h"
 #include "src/gpu/ganesh/GrResourceProvider.h"
 #include "src/gpu/ganesh/GrTexture.h"
+#include "src/gpu/ganesh/GrUtil.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tests/TestUtils.h"
@@ -513,11 +514,13 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TransferPixelsToTextureTest,
                      GrColorType::kBGRA_8888,
                      GrColorType::kRGBA_1010102,
                      GrColorType::kBGRA_1010102,
+                     GrColorType::kRGB_101010x,
                      GrColorType::kRGBA_10x6,
                      GrColorType::kGray_8,
                      GrColorType::kAlpha_F16,
                      GrColorType::kRGBA_F16,
                      GrColorType::kRGBA_F16_Clamped,
+                     GrColorType::kRGB_F16F16F16x,
                      GrColorType::kRGBA_F32,
                      GrColorType::kAlpha_16,
                      GrColorType::kRG_1616,
@@ -551,11 +554,13 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(TransferPixelsFromTextureTest,
                      GrColorType::kBGRA_8888,
                      GrColorType::kRGBA_1010102,
                      GrColorType::kBGRA_1010102,
+                     GrColorType::kRGB_101010x,
                      GrColorType::kRGBA_10x6,
                      GrColorType::kGray_8,
                      GrColorType::kAlpha_F16,
                      GrColorType::kRGBA_F16,
                      GrColorType::kRGBA_F16_Clamped,
+                     GrColorType::kRGB_F16F16F16x,
                      GrColorType::kRGBA_F32,
                      GrColorType::kRG_1616,
                      GrColorType::kRGBA_16161616,

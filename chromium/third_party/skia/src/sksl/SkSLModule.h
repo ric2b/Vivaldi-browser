@@ -18,6 +18,11 @@
 
 namespace SkSL {
 
+/**
+ * Documentation for modules in SkSL: http://go/modules-in-sksl
+ * https://docs.google.com/document/d/1P8LkkimNr-nPlxMimUsz3K_7qMM7-tZOxDCWZejPcWg/edit?usp=sharing
+ */
+
 // A list of modules used in SkSL.
 // Using an X-Macro (https://en.wikipedia.org/wiki/X_Macro) to manage the list.
 #define SKSL_MODULE_LIST(M)   \
@@ -34,7 +39,10 @@ namespace SkSL {
     M(sksl_graphite_vert_es2)
 
 enum class ModuleType : int8_t {
-    unknown = 0,
+    // `program` code is not in a module at all.
+    program = 0,
+    // `unknown` code exists in a module outside of SKSL_MODULE_LIST.
+    unknown = 1,
 #define M(type) type,
     SKSL_MODULE_LIST(M)
 #undef M

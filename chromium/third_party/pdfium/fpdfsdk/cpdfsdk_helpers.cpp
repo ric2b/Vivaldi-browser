@@ -23,6 +23,7 @@
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
+#include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/stl_util.h"
@@ -99,14 +100,10 @@ class FPDF_FileHandlerContext final : public IFX_SeekableStream {
   FX_FILESIZE GetSize() override;
   FX_FILESIZE GetPosition() override;
   bool IsEOF() override;
-  size_t ReadBlock(pdfium::span<uint8_t> buffer) override;
   bool ReadBlockAtOffset(pdfium::span<uint8_t> buffer,
                          FX_FILESIZE offset) override;
-  bool WriteBlockAtOffset(pdfium::span<const uint8_t> buffer,
-                          FX_FILESIZE offset) override;
+  bool WriteBlock(pdfium::span<const uint8_t> buffer) override;
   bool Flush() override;
-
-  void SetPosition(FX_FILESIZE pos) { m_nCurPos = pos; }
 
  private:
   explicit FPDF_FileHandlerContext(FPDF_FILEHANDLER* pFS);
@@ -117,16 +114,20 @@ class FPDF_FileHandlerContext final : public IFX_SeekableStream {
 };
 
 FPDF_FileHandlerContext::FPDF_FileHandlerContext(FPDF_FILEHANDLER* pFS)
-    : m_pFS(pFS) {}
+    : m_pFS(pFS) {
+  CHECK(m_pFS);
+}
 
 FPDF_FileHandlerContext::~FPDF_FileHandlerContext() {
-  if (m_pFS && m_pFS->Release)
+  if (m_pFS->Release) {
     m_pFS->Release(m_pFS->clientData);
+  }
 }
 
 FX_FILESIZE FPDF_FileHandlerContext::GetSize() {
-  if (m_pFS && m_pFS->GetSize)
+  if (m_pFS->GetSize) {
     return static_cast<FX_FILESIZE>(m_pFS->GetSize(m_pFS->clientData));
+  }
   return 0;
 }
 
@@ -140,56 +141,52 @@ FX_FILESIZE FPDF_FileHandlerContext::GetPosition() {
 
 bool FPDF_FileHandlerContext::ReadBlockAtOffset(pdfium::span<uint8_t> buffer,
                                                 FX_FILESIZE offset) {
-  if (buffer.empty() || !m_pFS->ReadBlock)
+  if (buffer.empty() || !m_pFS->ReadBlock) {
     return false;
+  }
+
+  FX_SAFE_FILESIZE new_position = offset;
+  new_position += buffer.size();
+  if (!new_position.IsValid()) {
+    return false;
+  }
 
   if (m_pFS->ReadBlock(m_pFS->clientData, static_cast<FPDF_DWORD>(offset),
                        buffer.data(),
-                       static_cast<FPDF_DWORD>(buffer.size())) == 0) {
-    m_nCurPos = offset + buffer.size();
-    return true;
-  }
-  return false;
-}
-
-size_t FPDF_FileHandlerContext::ReadBlock(pdfium::span<uint8_t> buffer) {
-  if (buffer.empty() || !m_pFS->ReadBlock)
-    return 0;
-
-  FX_FILESIZE nSize = GetSize();
-  if (m_nCurPos >= nSize)
-    return 0;
-  FX_FILESIZE dwAvail = nSize - m_nCurPos;
-  if (dwAvail < (FX_FILESIZE)buffer.size())
-    buffer = buffer.first(static_cast<size_t>(dwAvail));
-  if (m_pFS->ReadBlock(m_pFS->clientData, static_cast<FPDF_DWORD>(m_nCurPos),
-                       buffer.data(),
-                       static_cast<FPDF_DWORD>(buffer.size())) == 0) {
-    m_nCurPos += buffer.size();
-    return buffer.size();
-  }
-
-  return 0;
-}
-
-bool FPDF_FileHandlerContext::WriteBlockAtOffset(
-    pdfium::span<const uint8_t> buffer,
-    FX_FILESIZE offset) {
-  if (!m_pFS || !m_pFS->WriteBlock)
+                       static_cast<FPDF_DWORD>(buffer.size())) != 0) {
     return false;
-
-  if (m_pFS->WriteBlock(m_pFS->clientData, static_cast<FPDF_DWORD>(offset),
-                        buffer.data(),
-                        static_cast<FPDF_DWORD>(buffer.size())) == 0) {
-    m_nCurPos = offset + buffer.size();
-    return true;
   }
-  return false;
+
+  m_nCurPos = new_position.ValueOrDie();
+  return true;
+}
+
+bool FPDF_FileHandlerContext::WriteBlock(pdfium::span<const uint8_t> buffer) {
+  if (!m_pFS->WriteBlock) {
+    return false;
+  }
+
+  const FX_FILESIZE size = GetSize();
+  FX_SAFE_FILESIZE new_position = size;
+  new_position += buffer.size();
+  if (!new_position.IsValid()) {
+    return false;
+  }
+
+  if (m_pFS->WriteBlock(m_pFS->clientData, static_cast<FPDF_DWORD>(size),
+                        buffer.data(),
+                        static_cast<FPDF_DWORD>(buffer.size())) != 0) {
+    return false;
+  }
+
+  m_nCurPos = new_position.ValueOrDie();
+  return true;
 }
 
 bool FPDF_FileHandlerContext::Flush() {
-  if (!m_pFS || !m_pFS->Flush)
+  if (!m_pFS->Flush) {
     return true;
+  }
 
   return m_pFS->Flush(m_pFS->clientData) == 0;
 }
@@ -217,6 +214,21 @@ CPDF_Page* CPDFPageFromFPDFPage(FPDF_PAGE page) {
   return page ? IPDFPageFromFPDFPage(page)->AsPDFPage() : nullptr;
 }
 
+FXDIB_Format FXDIBFormatFromFPDFFormat(int format) {
+  switch (format) {
+    case FPDFBitmap_Gray:
+      return FXDIB_Format::k8bppRgb;
+    case FPDFBitmap_BGR:
+      return FXDIB_Format::kBgr;
+    case FPDFBitmap_BGRx:
+      return FXDIB_Format::kBgrx;
+    case FPDFBitmap_BGRA:
+      return FXDIB_Format::kBgra;
+    default:
+      return FXDIB_Format::kInvalid;
+  }
+}
+
 CPDFSDK_InteractiveForm* FormHandleToInteractiveForm(FPDF_FORMHANDLE hHandle) {
   CPDFSDK_FormFillEnvironment* pFormFillEnv =
       CPDFSDKFormFillEnvironmentFromFPDFFormHandle(hHandle);
@@ -237,7 +249,9 @@ WideString WideStringFromFPDFWideString(FPDF_WIDESTRING wide_string) {
                         FPDFWideStringLength(wide_string) * 2)));
 }
 
-pdfium::span<char> SpanFromFPDFApiArgs(void* buffer, unsigned long buflen) {
+UNSAFE_BUFFER_USAGE pdfium::span<char> SpanFromFPDFApiArgs(
+    void* buffer,
+    pdfium::StrictNumeric<size_t> buflen) {
   if (!buffer) {
     // API convention is to ignore `buflen` arg when `buffer` is NULL.
     return pdfium::span<char>();

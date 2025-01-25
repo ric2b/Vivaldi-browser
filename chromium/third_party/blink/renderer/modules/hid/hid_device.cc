@@ -347,7 +347,7 @@ ScriptPromise<IDLUndefined> HIDDevice::sendReport(ScriptState* script_state,
   }
 
   Vector<uint8_t> vector;
-  vector.Append(data.Bytes(), static_cast<wtf_size_t>(data.ByteLength()));
+  vector.AppendSpan(data.ByteSpan());
 
   device_requests_.insert(resolver);
   connection_->Write(
@@ -382,7 +382,7 @@ ScriptPromise<IDLUndefined> HIDDevice::sendFeatureReport(
   }
 
   Vector<uint8_t> vector;
-  vector.Append(data.Bytes(), static_cast<wtf_size_t>(data.ByteLength()));
+  vector.AppendSpan(data.ByteSpan());
 
   device_requests_.insert(resolver);
   connection_->SendFeatureReport(
@@ -547,8 +547,7 @@ void HIDDevice::FinishReceiveFeatureReport(
     const std::optional<Vector<uint8_t>>& data) {
   MarkRequestComplete(resolver);
   if (success && data) {
-    DOMArrayBuffer* dom_buffer =
-        DOMArrayBuffer::Create(data->data(), data->size());
+    DOMArrayBuffer* dom_buffer = DOMArrayBuffer::Create(data.value());
     DOMDataView* data_view = DOMDataView::Create(dom_buffer, 0, data->size());
     resolver->Resolve(NotShared(data_view));
   } else {

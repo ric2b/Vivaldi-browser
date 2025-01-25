@@ -21,8 +21,10 @@ use jni::{
     sys::jint,
     JNIEnv, JavaVM,
 };
-use std::error::Error;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    error::Error,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 mod common;
 use common::foo_class::*;

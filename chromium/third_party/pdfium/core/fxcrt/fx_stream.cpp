@@ -25,12 +25,11 @@ class CFX_CRTFileStream final : public IFX_SeekableStream {
                          FX_FILESIZE offset) override {
     return m_pFile->ReadPos(buffer, offset) > 0;
   }
-  size_t ReadBlock(pdfium::span<uint8_t> buffer) override {
-    return m_pFile->Read(buffer);
-  }
-  bool WriteBlockAtOffset(pdfium::span<const uint8_t> buffer,
-                          FX_FILESIZE offset) override {
-    return !!m_pFile->WritePos(buffer, offset);
+  bool WriteBlock(pdfium::span<const uint8_t> buffer) override {
+    if (m_pFile->SetPosition(GetSize()) == static_cast<FX_FILESIZE>(-1)) {
+      return false;
+    }
+    return !!m_pFile->Write(buffer);
   }
   bool Flush() override { return m_pFile->Flush(); }
 
@@ -74,22 +73,10 @@ RetainPtr<IFX_SeekableReadStream> IFX_SeekableReadStream::CreateFromFilename(
   return pdfium::MakeRetain<CFX_CRTFileStream>(std::move(pFA));
 }
 
-bool IFX_SeekableWriteStream::WriteBlock(pdfium::span<const uint8_t> buffer) {
-  return WriteBlockAtOffset(buffer, GetSize());
-}
-
 bool IFX_SeekableReadStream::IsEOF() {
   return false;
 }
 
 FX_FILESIZE IFX_SeekableReadStream::GetPosition() {
   return 0;
-}
-
-size_t IFX_SeekableReadStream::ReadBlock(pdfium::span<uint8_t> buffer) {
-  return 0;
-}
-
-bool IFX_SeekableStream::WriteBlock(pdfium::span<const uint8_t> buffer) {
-  return WriteBlockAtOffset(buffer, GetSize());
 }

@@ -11,9 +11,9 @@
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/data_type_store_service_factory.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
-#include "chrome/browser/sync/model_type_store_service_factory.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
 #include "chrome/browser/ui/sync/browser_synced_window_delegates_getter.h"
@@ -21,13 +21,15 @@
 #include "chrome/common/url_constants.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/history/core/browser/history_service.h"
-#include "components/sync/model/model_type_store_service.h"
+#include "components/sync/model/data_type_store_service.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 #include "components/sync_device_info/device_info_tracker.h"
 #include "components/sync_sessions/session_sync_prefs.h"
 #include "components/sync_sessions/session_sync_service_impl.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "content/public/common/url_utils.h"
+
+#include "components/sync_sessions/vivaldi_specific_observer.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/sync/glue/synced_window_delegates_getter_android.h"
@@ -52,7 +54,9 @@ bool ShouldSyncURLImpl(const GURL& url) {
 class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
  public:
   explicit SyncSessionsClientImpl(Profile* profile)
-      : profile_(profile), session_sync_prefs_(profile->GetPrefs()) {
+      : profile_(profile), session_sync_prefs_(profile->GetPrefs()),
+        vivaldi_specific_observer_(profile)
+  {
     window_delegates_getter_ =
 #if BUILDFLAG(IS_ANDROID)
         // Android doesn't have multi-profile support, so no need to pass the
@@ -74,8 +78,8 @@ class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
     return &session_sync_prefs_;
   }
 
-  syncer::RepeatingModelTypeStoreFactory GetStoreFactory() override {
-    return ModelTypeStoreServiceFactory::GetForProfile(profile_)
+  syncer::RepeatingDataTypeStoreFactory GetStoreFactory() override {
+    return DataTypeStoreServiceFactory::GetForProfile(profile_)
         ->GetStoreFactory();
   }
 
@@ -122,14 +126,19 @@ class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
     return weak_ptr_factory_.GetWeakPtr();
   }
 
+  void NotifyVivaldiObserver() override {
+    vivaldi_specific_observer_.TriggerSync();
+  }
+
  private:
   const raw_ptr<Profile> profile_;
   std::unique_ptr<sync_sessions::SyncedWindowDelegatesGetter>
       window_delegates_getter_;
   sync_sessions::SessionSyncPrefs session_sync_prefs_;
   base::WeakPtrFactory<SyncSessionsClientImpl> weak_ptr_factory_{this};
-};
 
+  vivaldi::VivSpecificObserver vivaldi_specific_observer_;
+};
 }  // namespace
 
 // static
@@ -163,10 +172,10 @@ SessionSyncServiceFactory::SessionSyncServiceFactory()
               // Ash Internals.
               .WithAshInternals(ProfileSelection::kOriginalOnly)
               .Build()) {
+  DependsOn(DataTypeStoreServiceFactory::GetInstance());
   DependsOn(DeviceInfoSyncServiceFactory::GetInstance());
   DependsOn(FaviconServiceFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
-  DependsOn(ModelTypeStoreServiceFactory::GetInstance());
   DependsOn(sync_sessions::SyncSessionsWebContentsRouterFactory::GetInstance());
 }
 

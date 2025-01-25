@@ -203,6 +203,20 @@ struct FrontendFeatures : FeatureSetBase
         &members, "https://issuetracker.google.com/349489248"
     };
 
+    FeatureInfo rejectWebglShadersWithUndefinedBehavior = {
+        "rejectWebglShadersWithUndefinedBehavior",
+        FeatureCategory::FrontendWorkarounds,
+        "Attempts to detect undefined behavior when in WebGL mode and reject shaders if any detected.",
+        &members, "http://crbug.com/350528343"
+    };
+
+    FeatureInfo alwaysEnableEmulatedMultidrawExtensions = {
+        "alwaysEnableEmulatedMultidrawExtensions",
+        FeatureCategory::FrontendWorkarounds,
+        "Enable multi-draw and base vertex base instance extensions for non-WebGL contexts if they are emulated.",
+        &members, "http://anglebug.com/355645824"
+    };
+
 };
 
 inline FrontendFeatures::FrontendFeatures()  = default;

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as TraceModel from '../trace.js';
 import * as Types from '../types/types.js';
@@ -27,7 +28,7 @@ function getInsight(insights: TraceModel.Insights.Types.TraceInsightData, naviga
   return insight;
 }
 
-describe('DocumentLatency', function() {
+describeWithEnvironment('DocumentLatency', function() {
   it('reports savings for main document with redirects', async () => {
     const {data, insights} = await processTrace(this, 'lantern/redirect/trace.json.gz');
     const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
@@ -39,6 +40,7 @@ describe('DocumentLatency', function() {
     const {data, insights} = await processTrace(this, 'lantern/paul/trace.json.gz');
     const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
     assert.strictEqual(insight.serverResponseTime, 43);
+    assert(!insight.serverResponseTooSlow);
     assert.deepEqual(insight.metricSavings, {FCP: 0, LCP: 0});
   });
 
@@ -50,6 +52,9 @@ describe('DocumentLatency', function() {
     const mainRequestEvent = structuredClone(traceEvents[mainRequestEventIndex]);
     assert(Types.TraceEvents.isTraceEventResourceReceiveResponse(mainRequestEvent));
     assert.strictEqual(mainRequestEvent.args.data.requestId, '1000C0FDC0A75327167272FC7438E999');
+    if (!mainRequestEvent.args.data.timing) {
+      throw new Error('missing timing field');
+    }
     mainRequestEvent.args.data.timing.receiveHeadersStart =
         Types.Timing.MilliSeconds(mainRequestEvent.args.data.timing.receiveHeadersStart + 1000);
     traceEvents[mainRequestEventIndex] = mainRequestEvent;
@@ -60,12 +65,51 @@ describe('DocumentLatency', function() {
       throw new Error('missing traceParsedData');
     }
 
+    const [navigationId, navigation] = data.Meta.navigationsByNavigationId.entries().next().value;
     const context = {
       frameId: data.Meta.mainFrameId,
-      navigationId: data.Meta.navigationsByNavigationId.keys().next().value,
+      navigation,
+      navigationId,
     };
     const insight = TraceModel.Insights.InsightRunners.DocumentLatency.generateInsight(data, context);
     assert.strictEqual(insight.serverResponseTime, 1043);
+    assert(insight.serverResponseTooSlow);
     assert.deepEqual(insight.metricSavings, {FCP: 943, LCP: 943});
+  });
+
+  it('reports no compression savings for compressed text', async () => {
+    const {data, insights} = await processTrace(this, 'lantern/paul/trace.json.gz');
+    const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
+    assert.strictEqual(insight.uncompressedResponseBytes, 0);
+    assert.deepEqual(insight.metricSavings, {FCP: 0, LCP: 0});
+  });
+
+  it('reports compression savings for uncompressed text', async function() {
+    const traceEvents = [...await TraceLoader.rawEvents(this, 'lantern/paul/trace.json.gz')];
+    const processor = TraceModel.Processor.TraceProcessor.createWithAllHandlers();
+
+    const mainRequestEventIndex = traceEvents.findIndex(e => e.name === 'ResourceReceiveResponse');
+    const mainRequestEvent = structuredClone(traceEvents[mainRequestEventIndex]);
+    assert(Types.TraceEvents.isTraceEventResourceReceiveResponse(mainRequestEvent));
+    assert.strictEqual(mainRequestEvent.args.data.requestId, '1000C0FDC0A75327167272FC7438E999');
+    // Delete content-encoding header.
+    mainRequestEvent.args.data.headers = mainRequestEvent.args.data.headers?.filter(h => h.name !== 'content-encoding');
+    traceEvents[mainRequestEventIndex] = mainRequestEvent;
+
+    await processor.parse(traceEvents);
+    const data = processor.traceParsedData;
+    if (!data) {
+      throw new Error('missing traceParsedData');
+    }
+
+    const [navigationId, navigation] = data.Meta.navigationsByNavigationId.entries().next().value;
+    const context = {
+      frameId: data.Meta.mainFrameId,
+      navigation,
+      navigationId,
+    };
+    const insight = TraceModel.Insights.InsightRunners.DocumentLatency.generateInsight(data, context);
+    assert.strictEqual(insight.uncompressedResponseBytes, 39799);
+    assert.deepEqual(insight.metricSavings, {FCP: 0, LCP: 0});
   });
 });

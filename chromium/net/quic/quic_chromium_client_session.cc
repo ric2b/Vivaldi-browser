@@ -261,6 +261,15 @@ base::Value::Dict NetLogAcceptChFrameReceivedParams(
       .Set("accept_ch", entry.value);
 }
 
+base::Value::Dict NetLogReceivedOrigins(
+    const std::set<url::SchemeHostPort>& received_origins) {
+  base::Value::List origins;
+  for (const auto& origin : received_origins) {
+    origins.Append(origin.Serialize());
+  }
+  return base::Value::Dict().Set("origins", std::move(origins));
+}
+
 // Histogram for recording the different reasons that a QUIC session is unable
 // to complete the handshake.
 enum HandshakeFailureReason {
@@ -344,8 +353,6 @@ base::Value::Dict NetLogQuicClientSessionParams(
           .Set("versions", ParsedQuicVersionVectorToString(supported_versions))
           .Set("require_confirmation", require_confirmation)
           .Set("cert_verify_flags", cert_verify_flags)
-          .Set("server_id_privacy_mode",
-               session_key->server_id().privacy_mode_enabled())
           .Set("privacy_mode",
                PrivacyModeToDebugString(session_key->privacy_mode()))
           .Set("proxy_chain", session_key->proxy_chain().ToDebugString())
@@ -914,7 +921,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     TransportSecurityState* transport_security_state,
     SSLConfigService* ssl_config_service,
     std::unique_ptr<QuicServerInfo> server_info,
-    const QuicSessionKey& session_key,
+    QuicSessionAliasKey session_alias_key,
     bool require_confirmation,
     bool migrate_session_early_v2,
     bool migrate_sessions_on_network_change_v2,
@@ -940,12 +947,14 @@ QuicChromiumClientSession::QuicChromiumClientSession(
     std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
     const ConnectionEndpointMetadata& metadata,
     bool report_ecn,
+    bool enable_origin_frame,
     const NetLogWithSource& net_log)
     : quic::QuicSpdyClientSessionBase(connection,
                                       /*visitor=*/nullptr,
                                       config,
                                       connection->supported_versions()),
-      session_key_(session_key),
+      session_alias_key_(std::move(session_alias_key)),
+      session_key_(session_alias_key_.session_key()),
       require_confirmation_(require_confirmation),
       migrate_session_early_v2_(migrate_session_early_v2),
       migrate_session_on_network_change_v2_(
@@ -972,6 +981,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
       ssl_config_service_(ssl_config_service),
       server_info_(std::move(server_info)),
       report_ecn_(report_ecn),
+      enable_origin_frame_(enable_origin_frame),
       task_runner_(task_runner),
       net_log_(NetLogWithSource::Make(net_log.net_log(),
                                       NetLogSourceType::QUIC_SESSION)),
@@ -989,7 +999,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
       std::move(socket), clock, this, yield_after_packets, yield_after_duration,
       report_ecn, net_log_));
   crypto_stream_ = crypto_client_stream_factory->CreateQuicCryptoClientStream(
-      session_key.server_id(), this,
+      session_key_.server_id(), this,
       std::make_unique<ProofVerifyContextChromium>(cert_verify_flags, net_log_),
       crypto_config_->GetConfig());
   set_debug_visitor(http3_logger_.get());
@@ -998,7 +1008,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
   migrate_back_to_default_timer_.SetTaskRunner(task_runner_.get());
   net_log_.BeginEvent(NetLogEventType::QUIC_SESSION, [&] {
     return NetLogQuicClientSessionParams(
-        net_log, &session_key, connection_id(),
+        net_log, &session_key_, connection_id(),
         connection->client_connection_id(), supported_versions(),
         cert_verify_flags, require_confirmation_, ech_config_list_);
   });
@@ -1177,6 +1187,33 @@ void QuicChromiumClientSession::OnAcceptChFrameReceivedViaAlps(
                       [&] { return NetLogAcceptChFrameReceivedParams(entry); });
   }
   LogAcceptChFrameReceivedHistogram(has_valid_entry, has_invalid_entry);
+}
+
+void QuicChromiumClientSession::OnOriginFrame(const quic::OriginFrame& frame) {
+  if (!enable_origin_frame_) {
+    return;
+  }
+  // The max size of an origin in ASCII serializaion can be 64kB. Choose a
+  // relatively small limit on total number of received origins.
+  static constexpr uint32_t kMaxOriginCount = 20;
+  for (const std::string& origin_str : frame.origins) {
+    if (received_origins_.size() >= kMaxOriginCount) {
+      return;
+    }
+    GURL url(base::StrCat({origin_str, "/"}));
+    if (!url.is_valid() || url.path() != "/") {
+      continue;
+    }
+    url::SchemeHostPort origin(url);
+    if (!origin.IsValid()) {
+      continue;
+    }
+    received_origins_.insert(origin);
+  }
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_ORIGIN_FRAME_RECEIVED,
+                    [&] { return NetLogReceivedOrigins(received_origins_); });
+  base::UmaHistogramCounts100("Net.QuicSession.NumReceivedOrigins",
+                              received_origins_.size());
 }
 
 void QuicChromiumClientSession::AddHandle(Handle* handle) {

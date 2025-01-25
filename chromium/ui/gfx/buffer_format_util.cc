@@ -13,16 +13,14 @@
 namespace gfx {
 namespace {
 
-const BufferFormat kBufferFormats[] = {
-    BufferFormat::R_8,          BufferFormat::R_16,
-    BufferFormat::RG_88,        BufferFormat::RG_1616,
-    BufferFormat::BGR_565,      BufferFormat::RGBA_4444,
-    BufferFormat::RGBX_8888,    BufferFormat::RGBA_8888,
-    BufferFormat::BGRX_8888,    BufferFormat::BGRA_1010102,
-    BufferFormat::RGBA_1010102, BufferFormat::BGRA_8888,
-    BufferFormat::RGBA_F16,     BufferFormat::YUV_420_BIPLANAR,
-    BufferFormat::YVU_420,      BufferFormat::YUVA_420_TRIPLANAR,
-    BufferFormat::P010};
+constexpr auto kBufferFormats = std::to_array<BufferFormat>(
+    {BufferFormat::R_8, BufferFormat::R_16, BufferFormat::RG_88,
+     BufferFormat::RG_1616, BufferFormat::BGR_565, BufferFormat::RGBA_4444,
+     BufferFormat::RGBX_8888, BufferFormat::RGBA_8888, BufferFormat::BGRX_8888,
+     BufferFormat::BGRA_1010102, BufferFormat::RGBA_1010102,
+     BufferFormat::BGRA_8888, BufferFormat::RGBA_F16,
+     BufferFormat::YUV_420_BIPLANAR, BufferFormat::YVU_420,
+     BufferFormat::YUVA_420_TRIPLANAR, BufferFormat::P010});
 
 static_assert(std::size(kBufferFormats) ==
                   (static_cast<int>(BufferFormat::LAST) + 1),
@@ -30,9 +28,8 @@ static_assert(std::size(kBufferFormats) ==
 
 }  // namespace
 
-std::vector<BufferFormat> GetBufferFormatsForTesting() {
-  return std::vector<BufferFormat>(kBufferFormats,
-                                   kBufferFormats + std::size(kBufferFormats));
+base::span<const BufferFormat> GetBufferFormatsForTesting() {
+  return kBufferFormats;
 }
 
 size_t AlphaBitsForBufferFormat(BufferFormat format) {
@@ -113,18 +110,18 @@ size_t SubsamplingFactorForBufferFormat(BufferFormat format, size_t plane) {
     case BufferFormat::RGBA_F16:
       return 1;
     case BufferFormat::YVU_420: {
-      constexpr size_t factor[] = {1, 2, 2};
+      constexpr auto factor = std::to_array<size_t>({1, 2, 2});
       DCHECK_LT(plane, std::size(factor));
       return factor[plane];
     }
     case BufferFormat::YUV_420_BIPLANAR:
     case BufferFormat::P010: {
-      constexpr size_t factor[] = {1, 2};
+      constexpr auto factor = std::to_array<size_t>({1, 2});
       DCHECK_LT(plane, std::size(factor));
       return factor[plane];
     }
     case BufferFormat::YUVA_420_TRIPLANAR: {
-      constexpr size_t factor[] = {1, 2, 1};
+      constexpr auto factor = std::to_array<size_t>({1, 2, 1});
       DCHECK_LT(plane, std::size(factor));
       return factor[plane];
     }
@@ -362,26 +359,6 @@ const char* BufferFormatToString(BufferFormat format) {
   NOTREACHED_IN_MIGRATION()
       << "Invalid BufferFormat: " << base::to_underlying(format);
   return "Invalid Format";
-}
-
-const char* BufferPlaneToString(BufferPlane format) {
-  switch (format) {
-    case BufferPlane::DEFAULT:
-      return "DEFAULT";
-    case BufferPlane::Y:
-      return "Y";
-    case BufferPlane::UV:
-      return "UV";
-    case BufferPlane::U:
-      return "U";
-    case BufferPlane::V:
-      return "V";
-    case BufferPlane::A:
-      return "A";
-  }
-  NOTREACHED_IN_MIGRATION()
-      << "Invalid BufferPlane: " << base::to_underlying(format);
-  return "Invalid Plane";
 }
 
 bool IsOddHeightMultiPlanarBuffersAllowed() {

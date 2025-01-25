@@ -977,7 +977,8 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
           ? TemplateURLRef::NO_SUGGESTIONS_AVAILABLE
           : TemplateURLRef::NO_SUGGESTION_CHOSEN;
   const TemplateURL* keyword_url = providers_.GetKeywordProviderURL();
-  const bool should_curb_default_suggestions = ShouldCurbDefaultSuggestions();
+  const bool should_curb_default_suggestions =
+      providers_.has_keyword_provider();
   // Don't add what-you-typed suggestion from the default provider when the
   // user requested keyword search.
   if (!should_curb_default_suggestions && verbatim_relevance > 0) {
@@ -1392,22 +1393,6 @@ int SearchProvider::GetVerbatimRelevance(bool* relevance_from_server) const {
                               : CalculateRelevanceForVerbatim();
 }
 
-bool SearchProvider::ShouldCurbDefaultSuggestions() const {
-  // Only curb if we're in keyword mode for stater pack, or
-  // LimitKeywordModeSuggestions flag is enabled.
-  if (providers_.has_keyword_provider()) {
-    const TemplateURL* turl = providers_.GetKeywordProviderURL();
-    DCHECK(turl);
-    return (omnibox_feature_configs::LimitKeywordModeSuggestions::Get()
-                .enabled &&
-            omnibox_feature_configs::LimitKeywordModeSuggestions::Get()
-                .limit_dse_suggestions) ||
-           turl->starter_pack_id() > 0;
-  } else {
-    return false;
-  }
-}
-
 int SearchProvider::CalculateRelevanceForVerbatim() const {
   if (!providers_.keyword_provider().empty())
     return 250;
@@ -1562,15 +1547,19 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
 
   match.from_keyword = navigation.from_keyword();
 
-  // Initialize the ML scoring signals for this suggestion if needed.
-  if (!match.scoring_signals) {
-    match.scoring_signals = std::make_optional<ScoringSignals>();
-  }
+  // Only set scoring signals for eligible matches.
+  if (match.IsMlSignalLoggingEligible()) {
+    // Initialize the ML scoring signals for this suggestion if needed.
+    if (!match.scoring_signals) {
+      match.scoring_signals = std::make_optional<ScoringSignals>();
+    }
 
-  if (navigation.relevance_from_server()) {
-    match.scoring_signals->set_search_suggest_relevance(navigation.relevance());
+    if (navigation.relevance_from_server()) {
+      match.scoring_signals->set_search_suggest_relevance(
+          navigation.relevance());
+    }
+    SearchScoringSignalsAnnotator::UpdateMatchTypeScoringSignals(match, input);
   }
-  SearchScoringSignalsAnnotator::UpdateMatchTypeScoringSignals(match, input);
 
   return match;
 }

@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Erreur</translation>
 <translation id="1175364870820465910">Im&amp;primer...</translation>
 <translation id="1181037720776840403">Supprimer</translation>
+<translation id="1184037892196730210">Impossible de caster l'écran</translation>
 <translation id="1187722533808055681">Sorties de veille</translation>
 <translation id="122082903575839559">Algorithme de signature du certificat</translation>
 <translation id="1221825588892235038">Sélection uniquement</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Valeur du champ</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Réactiver</translation>
-<translation id="2678100101831051676">Impossible de caster.</translation>
 <translation id="2719936478972253983">Les cookies suivants ont été bloqués</translation>
 <translation id="2721037002783622288">Rechercher une &amp;image avec <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Pas après le</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Cette extension a pu être corrompue.</translation>
 <translation id="3387614642886316601">Utiliser le correcteur orthographique amélioré</translation>
 <translation id="3390013585654699824">Détails sur l’application</translation>
-<translation id="3393582007140394275">Impossible de caster l’écran.</translation>
 <translation id="345693547134384690">Ouvrir l’&amp;image dans un nouvel onglet</translation>
 <translation id="3493881266323043047">Validité</translation>
 <translation id="3511307672085573050">Copier l’adr&amp;esse du lien</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Conserver les modifications</translation>
 <translation id="6824564591481349393">Copi&amp;er l’adresse e-mail</translation>
 <translation id="6840155290835956714">Demander avant d’envoyer</translation>
+<translation id="6878862640969460273">Paysage</translation>
 <translation id="6886871292305414135">Ouvrir le lien dans un nouvel ongle&amp;t</translation>
 <translation id="6892812721183419409">Ouvrir le lien avec le compte <ph name="USER" /></translation>
 <translation id="6900284862687837908">Application en arrière-plan : <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Accès refusé.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> points par pouce</translation>
 <translation id="7339785458027436441">Vérifier l'orthographe lors de la frappe</translation>
+<translation id="7359680654975233185">Impossible de caster l'onglet</translation>
 <translation id="7385854874724088939">Erreur lors de la tentative d’impression. Vérifiez votre imprimante et réessayez.</translation>
 <translation id="7412226954991670867">Mémoire processeur graphique</translation>
 <translation id="7421925624202799674">&amp;Afficher le code source de la page</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Autoriser les sites à enregistrer et à lire les données des cookies</translation>
 <translation id="7663719505383602579">Destinataire : <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installée par votre administrateur</translation>
+<translation id="7685038817958445325">Impossible de caster</translation>
 <translation id="7685049629764448582">Mémoire JavaScript</translation>
 <translation id="7701869757853594372">Handles utilisateur</translation>
 <translation id="7704305437604973648">Tâche</translation>
@@ -410,7 +412,6 @@ Fichier de clé : <ph name="KEY_FILE" />
 Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la création de nouvelles versions de l’extension.</translation>
 <translation id="8004582292198964060">Navigateur</translation>
 <translation id="8018313076035239964">Contrôler les informations que les sites Web peuvent utiliser et le contenu qu’ils peuvent afficher</translation>
-<translation id="8032244173881942855">Impossible de caster l’onglet.</translation>
 <translation id="8071432093239591881">Imprimer en tant qu'image</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> Kio</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
@@ -466,7 +467,6 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="9218430445555521422">Définir par défaut</translation>
 <translation id="93766956588638423">Réparer l’extension</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Paysage</translation>
 <translation id="994289308992179865">&amp;Répéter</translation>
 <translation id="998747458861718449">I&amp;nspecter</translation>
 </translationbundle>

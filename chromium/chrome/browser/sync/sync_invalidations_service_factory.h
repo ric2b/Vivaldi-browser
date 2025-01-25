@@ -11,6 +11,10 @@
 
 class Profile;
 
+namespace vivaldi {
+class VivaldiSyncInvalidationsServiceFactory;
+}
+
 namespace syncer {
 class SyncInvalidationsService;
 }  // namespace syncer
@@ -28,6 +32,7 @@ class SyncInvalidationsServiceFactory : public ProfileKeyedServiceFactory {
 
  private:
   friend class base::NoDestructor<SyncInvalidationsServiceFactory>;
+  friend class vivaldi::VivaldiSyncInvalidationsServiceFactory;
 
   SyncInvalidationsServiceFactory();
   ~SyncInvalidationsServiceFactory() override;

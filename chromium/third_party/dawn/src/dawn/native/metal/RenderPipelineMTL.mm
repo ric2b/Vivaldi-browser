@@ -347,6 +347,10 @@ MaybeError RenderPipeline::InitializeImpl() {
     NSRef<NSString> label = MakeDebugName(GetDevice(), "Dawn_RenderPipeline", GetLabel());
     descriptorMTL.label = label.Get();
 
+    // Only put this flag on if the feature is enabled because it may have a performance cost.
+    descriptorMTL.supportIndirectCommandBuffers =
+        GetDevice()->HasFeature(Feature::MultiDrawIndirect);
+
     NSRef<MTLVertexDescriptor> vertexDesc;
     if (GetDevice()->IsToggleEnabled(Toggle::MetalEnableVertexPulling)) {
         vertexDesc = AcquireNSRef([MTLVertexDescriptor new]);
@@ -546,7 +550,8 @@ NSRef<MTLDepthStencilDescriptor> RenderPipeline::MakeDepthStencilDesc() {
 
     mtlDepthStencilDescriptor.depthCompareFunction =
         ToMetalCompareFunction(descriptor->depthCompare);
-    mtlDepthStencilDescriptor.depthWriteEnabled = descriptor->depthWriteEnabled;
+    mtlDepthStencilDescriptor.depthWriteEnabled =
+        descriptor->depthWriteEnabled == wgpu::OptionalBool::True;
 
     if (UsesStencil()) {
         NSRef<MTLStencilDescriptor> backFaceStencilRef = AcquireNSRef([MTLStencilDescriptor new]);

@@ -65,7 +65,48 @@ Debuggers\x64 directory from another machine because it does not get installed
 on ARM64 and is needed, whether you are building Chromium for x64 or ARM64 on
 ARM64.
 
+## git installation
+
+### Install git
+
+If you haven't installed `git` directly before, you can download a standalone
+installer for the latest version of Git For Windows from the Git website at
+https://git-scm.com/download/win.
+
+For more information on Git for Windows (which is a separate project from Git),
+see https://gitforwindows.org.
+
+Note: if you are a Google employee, see [go/building-chrome-win#install-git](https://goto.google.com/building-chrome-win#install-git).
+
+### Update git
+
+Note: this section is about updating a direct installation of `git` because
+`depot_tools` will soon stop bundling `git`.
+
+If you have already set up `depot_tools` and would like to update an existing
+directly-installed `git`, you must first
+[modify your PATH](#modify-path-for-git) to prefer the non-`depot_tools` `git`.
+
+Updating to the latest version of `git` will depend on which version you
+currently have installed. First, check your `git` version. From a cmd.exe shell,
+run:
+```shell
+$ git version
+```
+
+| Current version | How to update to latest |
+| --- | --- |
+| `2.14.1` or earlier | You will need to manually uninstall Git, then follow the instructions above to [install git](#install-git) |
+| `2.14.2` to `2.16.1` | In a cmd.exe shell, run: `git update` |
+| `2.16.1(2)` and later | In a cmd.exe shell, run: `git update-git-for-windows` |
+
 ## Install `depot_tools`
+
+***
+**Warning:** `depot_tools` will stop bundling Git for Windows from Sep 23, 2024
+onwards. To prepare for this change, Windows users should
+[install Git](#git-installation) directly before then.
+***
 
 Download the
 [depot_tools bundle](https://storage.googleapis.com/chrome-infra/depot_tools.zip)
@@ -80,15 +121,35 @@ context menu though.
 
 Add depot_tools to the start of your PATH (must be ahead of any installs of
 Python. Note that environment variable names are case insensitive).
-* Assuming you unzipped the bundle to C:\src\depot_tools, open: Control Panel → System and Security → System → Advanced system settings
-* If you have Administrator access, Modify the PATH system variable and put
-`C:\src\depot_tools` at the front (or at least in front of any directory that
-might already have a copy of Python or Git).
-* If you don't have Administrator access, you can add a user-level PATH
-environment variable by opening: Control Panel → System and Security → System →
-Search for "Edit environment variables for your account"
-* Add `C:\src\depot_tools` at the front. Note: If your system PATH has a Python
-in it, you will be out of luck.
+* Assuming you unzipped the bundle to `C:\src\depot_tools`, open:
+  Control Panel → System and Security → System
+* Select which PATH variable to edit.
+  * If you have Administrator access, you can edit the **system** PATH. Click
+  Advanced system settings → Environment Variables. Under "System variables",
+  select the Path variable for editing.
+  * If you don't have Administrator access, you can edit your **user-level**
+  PATH. Search for "Edit environment variables for your account". Under "User
+  variables for %USER%", select the Path variable for editing.
+* Modify the Path variable by adding `C:\src\depot_tools` at the front (or at
+  least in front of any directory that might already have a copy of Python).
+  Note: If you can only modify your user-level PATH and the system PATH has a
+  Python in it, you will be out of luck.
+
+***
+### Modify PATH for git
+**Optional:** You can modify your PATH to prefer using an independently installed
+`git` over the version currently bundled with `depot_tools`. If you are happy to
+keep using the bundled `git` within `depot_tools` until it is removed, you can
+skip this step.
+
+* Assuming you installed Git at `C:\Program Files\Git`, edit your system or
+  user-level PATH in the same way when `C:\src\depot_tools` was added.
+  Modify the Path variable by adding the following *before*
+  `C:\src\depot_tools`:
+  * `C:\Program Files\Git\cmd`
+  * `C:\Program Files\Git\mingw64\bin`
+  * `C:\Program Files\Git\usr\bin`
+***
 
 Also, add a DEPOT_TOOLS_WIN_TOOLCHAIN environment variable in the same way, and set
 it to 0. This tells depot_tools to use your locally installed version of Visual
@@ -382,9 +443,9 @@ use `autoninja -C out\Default chrome/test:unit_tests`).
 
 ## Compile a single file
 
-Ninja supports a special [syntax `^`][ninja hat syntax] to compile a single object file specyfing
-the source file. For example, `ninja -C out/Default ../../base/logging.cc^`
-compiles `obj/base/base/logging.o`.
+Ninja supports a special [syntax `^`][ninja hat syntax] to compile a single
+object file specifying the source file. For example, `ninja -C
+out/Default ../../base/logging.cc^` compiles `obj/base/base/logging.o`.
 
 [ninja hat syntax]: https://ninja-build.org/manual.html#:~:text=There%20is%20also%20a%20special%20syntax%20target%5E%20for%20specifying%20a%20target%20as%20the%20first%20output%20of%20some%20rule%20containing%20the%20source%20you%20put%20in%20the%20command%20line%2C%20if%20one%20exists.%20For%20example%2C%20if%20you%20specify%20target%20as%20foo.c%5E%20then%20foo.o%20will%20get%20built%20(assuming%20you%20have%20those%20targets%20in%20your%20build%20files)
 
@@ -396,6 +457,29 @@ $ autoninja -C out\Default ..\..\base\logging.cc^^
 
 In addition to `foo.cc^^`, Siso also supports `foo.h^^` syntax to compile
 the corresponding `foo.o` if it exists.
+
+If you run a `bash` shell, you can use the following script to ease invocation:
+
+```shell
+#!/bin/sh
+files=("${@/#/..\/..\/}")
+autoninja -C out/Default ${files[@]/%/^^}
+```
+
+This script assumes it is run from `src` and your output dir is `out/Default`;
+it invokes `autoninja` to compile all given files. If you place it in your
+`$PATH` and name it e.g. `compile`, you can invoke like this:
+
+```shell
+$ pwd  # Just to illustrate where this is run from
+/c/src
+$ compile base/time/time.cc base/time/time_unittest.cc
+...
+[0/47] 5.56s S CXX obj/base/base/time.obj
+...
+[2/3] 9.27s S CXX obj/base/base_unittests/time_unittest.obj
+...
+```
 
 ## Run Chromium
 

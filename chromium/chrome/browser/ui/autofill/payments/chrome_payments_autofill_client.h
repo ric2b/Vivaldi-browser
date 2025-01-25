@@ -7,16 +7,20 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
 #include "base/memory/raw_ref.h"
+#include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/ui/payments/autofill_error_dialog_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/autofill_progress_dialog_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
+#include "components/autofill/core/browser/ui/suggestion.h"
 #include "content/public/browser/web_contents_observer.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_payment_method_controller.h"
 #include "components/autofill/core/browser/ui/payments/card_expiration_date_fix_flow_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_name_fix_flow_controller_impl.h"
 #else  // !BUILDFLAG(IS_ANDROID)
@@ -25,16 +29,22 @@
 
 class GURL;
 
+namespace webauthn {
+class InternalAuthenticator;
+}
+
 namespace autofill {
 
 #if BUILDFLAG(IS_ANDROID)
 class AutofillCvcSaveMessageDelegate;
 #endif  // BUILDFLAG(IS_ANDROID)
+class AutofillDriver;
 class AutofillErrorDialogControllerImpl;
 #if BUILDFLAG(IS_ANDROID)
 class AutofillMessageController;
 #endif
 class AutofillOfferData;
+class AutofillOfferManager;
 class AutofillSaveCardBottomSheetBridge;
 class AutofillSaveIbanBottomSheetBridge;
 #if BUILDFLAG(IS_ANDROID)
@@ -53,12 +63,14 @@ class MerchantPromoCodeManager;
 struct OfferNotificationOptions;
 class OtpUnmaskDelegate;
 enum class OtpUnmaskResult;
+class TouchToFillDelegate;
 struct VirtualCardEnrollmentFields;
 class VirtualCardEnrollmentManager;
 struct VirtualCardManualFallbackBubbleOptions;
 
 namespace payments {
 
+class MandatoryReauthManager;
 class PaymentsWindowManager;
 
 // Chrome implementation of PaymentsAutofillClient. Used for Chrome Desktop
@@ -118,14 +130,14 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
   void ScanCreditCard(CreditCardScanCallback callback) override;
   void ConfirmSaveCreditCardLocally(
       const CreditCard& card,
-      AutofillClient::SaveCreditCardOptions options,
+      SaveCreditCardOptions options,
       LocalSaveCardPromptCallback callback) override;
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       const LegalMessageLines& legal_message_lines,
-      AutofillClient::SaveCreditCardOptions options,
+      SaveCreditCardOptions options,
       UploadSaveCardPromptCallback callback) override;
-  void CreditCardUploadCompleted(bool card_saved,
+  void CreditCardUploadCompleted(PaymentsRpcResult result,
                                  std::optional<OnConfirmationClosedCallback>
                                      on_confirmation_closed_callback) override;
   void HideSaveCardPrompt() override;
@@ -133,7 +145,7 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
       const VirtualCardEnrollmentFields& virtual_card_enrollment_fields,
       base::OnceClosure accept_virtual_card_callback,
       base::OnceClosure decline_virtual_card_callback) override;
-  void VirtualCardEnrollCompleted(bool is_vcn_enrolled) override;
+  void VirtualCardEnrollCompleted(PaymentsRpcResult result) override;
   void OnVirtualCardDataAvailable(
       const VirtualCardManualFallbackBubbleOptions& options) override;
   void ConfirmSaveIbanLocally(const Iban& iban,
@@ -143,6 +155,7 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
                                 LegalMessageLines legal_message_lines,
                                 bool should_show_prompt,
                                 SaveIbanPromptCallback callback) override;
+  void IbanUploadCompleted(bool iban_saved, bool hit_max_strikes) override;
   void ShowAutofillProgressDialog(
       AutofillProgressDialogType autofill_progress_dialog_type,
       base::OnceClosure cancel_callback) override;
@@ -184,6 +197,19 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
   void DismissOfferNotification() override;
   void OpenPromoCodeOfferDetailsURL(const GURL& url) override;
   MerchantPromoCodeManager* GetMerchantPromoCodeManager() override;
+  AutofillOfferManager* GetAutofillOfferManager() override;
+  bool ShowTouchToFillCreditCard(
+      base::WeakPtr<TouchToFillDelegate> delegate,
+      base::span<const autofill::CreditCard> cards_to_suggest,
+      base::span<const Suggestion> suggestions) override;
+  bool ShowTouchToFillIban(
+      base::WeakPtr<TouchToFillDelegate> delegate,
+      base::span<const autofill::Iban> ibans_to_suggest) override;
+  void HideTouchToFillPaymentMethod() override;
+  std::unique_ptr<webauthn::InternalAuthenticator>
+  CreateCreditCardInternalAuthenticator(AutofillDriver* driver) override;
+  payments::MandatoryReauthManager* GetOrCreatePaymentsMandatoryReauthManager()
+      override;
 
 #if BUILDFLAG(IS_ANDROID)
   // The AutofillSnackbarController is used to show a snackbar notification
@@ -192,6 +218,8 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
   // The AutofillMessageController is used to show a message notification
   // on Android.
   AutofillMessageController& GetAutofillMessageController();
+
+  TouchToFillPaymentMethodController& GetTouchToFillPaymentMethodController();
 #endif
 
   AutofillProgressDialogControllerImpl*
@@ -220,9 +248,22 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
   void SetAutofillMessageControllerForTesting(
       std::unique_ptr<AutofillMessageController> autofill_message_controller);
 #endif
+  void SetRiskDataForTesting(const std::string& risk_data);
+
+  void SetCachedRiskDataLoadedCallbackForTesting(
+      base::OnceCallback<void(const std::string&)>
+          cached_risk_data_loaded_callback_for_testing);
 
  private:
   std::u16string GetAccountHolderName() const;
+
+  const raw_ref<ContentAutofillClient> client_;
+
+  // The method takes `risk_data` and caches it in `risk_data_`, logs the start
+  // time and runs the callback with the risk_data.
+  void OnRiskDataLoaded(base::OnceCallback<void(const std::string&)> callback,
+                        base::TimeTicks start_time,
+                        const std::string& risk_data);
 
 #if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<AutofillCvcSaveMessageDelegate>
@@ -243,8 +284,10 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
 
   CardExpirationDateFixFlowControllerImpl
       card_expiration_date_fix_flow_controller_;
+
+  TouchToFillPaymentMethodController touch_to_fill_payment_method_controller_{
+      &client_.get()};
 #endif
-  const raw_ref<ContentAutofillClient> client_;
 
   std::unique_ptr<PaymentsNetworkInterface> payments_network_interface_;
 
@@ -279,6 +322,18 @@ class ChromePaymentsAutofillClient : public PaymentsAutofillClient,
       card_unmask_authentication_selection_controller_;
 
   std::unique_ptr<IbanAccessManager> iban_access_manager_;
+
+  std::unique_ptr<payments::MandatoryReauthManager>
+      payments_mandatory_reauth_manager_;
+
+  // Used to cache client side risk data. The cache is invalidated when the
+  // chrome browser tab is closed.
+  std::string risk_data_;
+
+  base::OnceCallback<void(const std::string&)>
+      cached_risk_data_loaded_callback_for_testing_;
+
+  base::WeakPtrFactory<ChromePaymentsAutofillClient> weak_ptr_factory_{this};
 };
 
 }  // namespace payments

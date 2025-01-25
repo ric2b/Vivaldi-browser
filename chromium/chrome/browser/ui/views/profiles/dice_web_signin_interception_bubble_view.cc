@@ -40,6 +40,7 @@
 #include "content/public/browser/web_ui.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/views/bubble/bubble_border.h"
@@ -81,7 +82,7 @@ std::u16string InterceptionTypeToIdentityPillText(
     case WebSigninInterceptor::SigninInterceptionType::kProfileSwitchForced:
       // These intercept type do not show a bubble and should not need to change
       // the identity pill text.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -106,7 +107,7 @@ std::optional<std::u16string> InteractionTypeToIdentityPillAccessibilityLabel(
     case WebSigninInterceptor::SigninInterceptionType::kProfileSwitchForced:
       // These intercept type do not show a bubble and should not need to change
       // the identity pill text.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -140,8 +141,8 @@ std::string_view GetChromeSigninReactionString(
     case SigninInterceptionResult::kAcceptedWithExistingProfile:
     case SigninInterceptionResult::kIgnored:
     case SigninInterceptionResult::kNotDisplayed:
-      NOTREACHED_NORETURN() << "These results should not be recorded or not "
-                               "expected for the Chrome Signin Bubble.";
+      NOTREACHED() << "These results should not be recorded or not "
+                      "expected for the Chrome Signin Bubble.";
   }
 }
 
@@ -263,7 +264,7 @@ bool DiceWebSigninInterceptionBubbleView::GetAccepted() const {
   return accepted_;
 }
 
-void DiceWebSigninInterceptionBubbleView::AddNewContents(
+content::WebContents* DiceWebSigninInterceptionBubbleView::AddNewContents(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
     const GURL& target_url,
@@ -276,6 +277,7 @@ void DiceWebSigninInterceptionBubbleView::AddNewContents(
     chrome::AddWebContents(browser_.get(), source, std::move(new_contents),
                            target_url, disposition, window_features);
   }
+  return nullptr;
 }
 
 DiceWebSigninInterceptionBubbleView::DiceWebSigninInterceptionBubbleView(
@@ -322,7 +324,7 @@ DiceWebSigninInterceptionBubbleView::DiceWebSigninInterceptionBubbleView(
   AddChildView(std::move(web_view));
 
   set_margins(gfx::Insets());
-  SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   SetLayoutManager(std::make_unique<views::FillLayout>());
 }
 

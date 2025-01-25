@@ -194,6 +194,11 @@ typedef struct {
   uint64_t avg_source_sad;
   uint64_t prev_avg_source_sad;
   uint64_t frame_source_sad;
+  uint64_t spatial_variance_keyframe;
+  int last_encoded_size_keyframe;
+  int last_target_size_keyframe;
+  int frames_since_scene_change;
+  int perc_flat_blocks_keyframe;
 
   int avg_frame_bandwidth;  // Average frame size target for clip
   int min_frame_bandwidth;  // Minimum allocation used for any frame
@@ -585,10 +590,6 @@ double av1_convert_qindex_to_q(int qindex, aom_bit_depth_t bit_depth);
 void av1_rc_init_minq_luts(void);
 
 int av1_rc_get_default_min_gf_interval(int width, int height, double framerate);
-// Note av1_rc_get_default_max_gf_interval() requires the min_gf_interval to
-// be passed in to ensure that the max_gf_interval returned is at least as bis
-// as that.
-int av1_rc_get_default_max_gf_interval(double framerate, int min_gf_interval);
 
 // Generally at the high level, the following flow is expected
 // to be enforced for rate control:
@@ -681,20 +682,10 @@ int av1_rc_regulate_q(const struct AV1_COMP *cpi, int target_bits_per_frame,
                       int width, int height);
 
 /*!\cond */
-// Gets the appropriate bpmb ennumerator based on the frame and content type
-int av1_get_bpmb_enumerator(FRAME_TYPE frame_type,
-                            const int is_screen_content_type);
-
 // Estimates bits per mb for a given qindex and correction factor.
 int av1_rc_bits_per_mb(const struct AV1_COMP *cpi, FRAME_TYPE frame_type,
                        int qindex, double correction_factor,
                        int accurate_estimate);
-
-// Clamping utilities for bitrate targets for iframes and pframes.
-int av1_rc_clamp_iframe_target_size(const struct AV1_COMP *const cpi,
-                                    int64_t target);
-int av1_rc_clamp_pframe_target_size(const struct AV1_COMP *const cpi,
-                                    int64_t target, uint8_t frame_update_type);
 
 // Find q_index corresponding to desired_q, within [best_qindex, worst_qindex].
 // To be precise, 'q_index' is the smallest integer, for which the corresponding
@@ -714,12 +705,7 @@ int av1_compute_qdelta_by_rate(const struct AV1_COMP *cpi,
                                FRAME_TYPE frame_type, int qindex,
                                double rate_target_ratio);
 
-int av1_frame_type_qdelta(const struct AV1_COMP *cpi, int q);
-
 void av1_rc_update_framerate(struct AV1_COMP *cpi, int width, int height);
-
-void av1_rc_set_gf_interval_range(const struct AV1_COMP *const cpi,
-                                  RATE_CONTROL *const rc);
 
 void av1_set_target_rate(struct AV1_COMP *cpi, int width, int height);
 
@@ -852,30 +838,6 @@ int av1_postencode_drop_cbr(struct AV1_COMP *cpi, size_t *size);
 int av1_q_mode_get_q_index(int base_q_index, int gf_update_type,
                            int gf_pyramid_level, int arf_q);
 
-/*!\brief Compute the q_indices for the ARF of a GOP.
- *
- * \param[in]       base_q_index      Base q index
- * \param[in]       gfu_boost         GFU boost
- * \param[in]       bit_depth         Bit depth
- * \param[in]       arf_boost_factor  ARF boost factor
- *
- * \return Returns the q_index for the ARF frame.
- */
-int av1_get_arf_q_index(int base_q_index, int gfu_boost, int bit_depth,
-                        double arf_boost_factor);
-
-#if !CONFIG_REALTIME_ONLY
-struct TplDepFrame;
-/*!\brief Compute the q_indices for the ARF of a GOP in Q mode.
- *
- * \param[in]       cpi               Top level encoder structure
- * \param[in]       tpl_frame         Tpl Frame stats
- *
- * \return Returns the q_index for the ARF frame.
- */
-int av1_get_arf_q_index_q_mode(struct AV1_COMP *cpi,
-                               struct TplDepFrame *tpl_frame);
-#endif
 #ifdef __cplusplus
 }  // extern "C"
 #endif

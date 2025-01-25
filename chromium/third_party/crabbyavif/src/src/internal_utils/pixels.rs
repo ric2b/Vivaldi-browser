@@ -15,12 +15,72 @@
 use crate::internal_utils::*;
 use crate::*;
 
+#[derive(Clone, Copy, Debug)]
+pub struct PointerSlice<T> {
+    ptr: *mut [T],
+}
+
+impl<T> PointerSlice<T> {
+    /// # Safety
+    /// `ptr` must live at least as long as the struct, and not be accessed other than through this
+    /// struct. It must point to a memory region of at least `size` elements.
+    pub unsafe fn create(ptr: *mut T, size: usize) -> AvifResult<Self> {
+        if ptr.is_null() || size == 0 {
+            return Err(AvifError::NoContent);
+        }
+        // Ensure that size does not exceed isize::MAX.
+        let _ = isize_from_usize(size)?;
+        Ok(Self {
+            ptr: unsafe { std::slice::from_raw_parts_mut(ptr, size) },
+        })
+    }
+
+    fn slice_impl(&self) -> &[T] {
+        // SAFETY: We only construct this with `ptr` which is valid at least as long as this struct
+        // is alive, and ro/mut borrows of the whole struct to access the inner slice, which makes
+        // our access appropriately exclusive.
+        unsafe { &(*self.ptr) }
+    }
+
+    fn slice_impl_mut(&mut self) -> &mut [T] {
+        // SAFETY: We only construct this with `ptr` which is valid at least as long as this struct
+        // is alive, and ro/mut borrows of the whole struct to access the inner slice, which makes
+        // our access appropriately exclusive.
+        unsafe { &mut (*self.ptr) }
+    }
+
+    pub fn slice(&self, range: Range<usize>) -> AvifResult<&[T]> {
+        let data = self.slice_impl();
+        check_slice_range(data.len(), &range)?;
+        Ok(&data[range])
+    }
+
+    pub fn slice_mut(&mut self, range: Range<usize>) -> AvifResult<&mut [T]> {
+        let data = self.slice_impl_mut();
+        check_slice_range(data.len(), &range)?;
+        Ok(&mut data[range])
+    }
+
+    pub fn ptr(&self) -> *const T {
+        self.slice_impl().as_ptr()
+    }
+
+    pub fn ptr_mut(&mut self) -> *mut T {
+        self.slice_impl_mut().as_mut_ptr()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.slice_impl().is_empty()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Pixels {
-    // Intended for use from the C API. Used for 8-bit images.
-    Pointer(*mut u8),
-    // Intended for use from the C API. Used for 10-bit, 12-bit and 16-bit images.
-    Pointer16(*mut u16),
+    // Intended for holding data from underlying native libraries. Used for 8-bit images.
+    Pointer(PointerSlice<u8>),
+    // Intended for holding data from underlying native libraries. Used for 10-bit, 12-bit and
+    // 16-bit images.
+    Pointer16(PointerSlice<u16>),
     // Used for 8-bit images.
     Buffer(Vec<u8>),
     // Used for 10-bit, 12-bit and 16-bit images.
@@ -28,11 +88,22 @@ pub enum Pixels {
 }
 
 impl Pixels {
-    pub fn from_raw_pointer(ptr: *mut u8, depth: u32) -> Self {
+    pub fn from_raw_pointer(
+        ptr: *mut u8,
+        depth: u32,
+        height: u32,
+        mut row_bytes: u32,
+    ) -> AvifResult<Self> {
         if depth > 8 {
-            Pixels::Pointer16(ptr as *mut u16)
+            row_bytes /= 2;
+        }
+        let size = usize_from_u32(checked_mul!(height, row_bytes)?)?;
+        if depth > 8 {
+            Ok(Pixels::Pointer16(unsafe {
+                PointerSlice::create(ptr as *mut u16, size)?
+            }))
         } else {
-            Pixels::Pointer(ptr)
+            Ok(Pixels::Pointer(unsafe { PointerSlice::create(ptr, size)? }))
         }
     }
 
@@ -56,8 +127,8 @@ impl Pixels {
 
     pub fn has_data(&self) -> bool {
         match self {
-            Pixels::Pointer(ptr) => !ptr.is_null(),
-            Pixels::Pointer16(ptr) => !ptr.is_null(),
+            Pixels::Pointer(ptr) => !ptr.is_empty(),
+            Pixels::Pointer16(ptr) => !ptr.is_empty(),
             Pixels::Buffer(buffer) => !buffer.is_empty(),
             Pixels::Buffer16(buffer) => !buffer.is_empty(),
         }
@@ -89,7 +160,7 @@ impl Pixels {
 
     pub fn ptr(&self) -> *const u8 {
         match self {
-            Pixels::Pointer(ptr) => *ptr as *const u8,
+            Pixels::Pointer(ptr) => ptr.ptr(),
             Pixels::Buffer(buffer) => buffer.as_ptr(),
             _ => std::ptr::null_mut(),
         }
@@ -97,7 +168,7 @@ impl Pixels {
 
     pub fn ptr16(&self) -> *const u16 {
         match self {
-            Pixels::Pointer16(ptr) => *ptr as *const u16,
+            Pixels::Pointer16(ptr) => ptr.ptr(),
             Pixels::Buffer16(buffer) => buffer.as_ptr(),
             _ => std::ptr::null_mut(),
         }
@@ -105,7 +176,7 @@ impl Pixels {
 
     pub fn ptr_mut(&mut self) -> *mut u8 {
         match self {
-            Pixels::Pointer(ptr) => *ptr,
+            Pixels::Pointer(ptr) => ptr.ptr_mut(),
             Pixels::Buffer(buffer) => buffer.as_mut_ptr(),
             _ => std::ptr::null_mut(),
         }
@@ -113,7 +184,7 @@ impl Pixels {
 
     pub fn ptr16_mut(&mut self) -> *mut u16 {
         match self {
-            Pixels::Pointer16(ptr) => *ptr,
+            Pixels::Pointer16(ptr) => ptr.ptr_mut(),
             Pixels::Buffer16(buffer) => buffer.as_mut_ptr(),
             _ => std::ptr::null_mut(),
         }
@@ -132,8 +203,8 @@ impl Pixels {
         let size: usize = usize_from_u32(size)?;
         match self {
             Pixels::Pointer(ptr) => {
-                let offset = isize_from_usize(offset)?;
-                Ok(unsafe { std::slice::from_raw_parts(ptr.offset(offset), size) })
+                let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
+                ptr.slice(offset..end)
             }
             Pixels::Pointer16(_) => Err(AvifError::NoContent),
             Pixels::Buffer(buffer) => {
@@ -151,8 +222,8 @@ impl Pixels {
         let size: usize = usize_from_u32(size)?;
         match self {
             Pixels::Pointer(ptr) => {
-                let offset = isize_from_usize(offset)?;
-                Ok(unsafe { std::slice::from_raw_parts_mut(ptr.offset(offset), size) })
+                let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
+                ptr.slice_mut(offset..end)
             }
             Pixels::Pointer16(_) => Err(AvifError::NoContent),
             Pixels::Buffer(buffer) => {
@@ -171,9 +242,8 @@ impl Pixels {
         match self {
             Pixels::Pointer(_) => Err(AvifError::NoContent),
             Pixels::Pointer16(ptr) => {
-                let offset = isize_from_usize(offset)?;
-                let ptr = (*ptr) as *const u16;
-                Ok(unsafe { std::slice::from_raw_parts(ptr.offset(offset), size) })
+                let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
+                ptr.slice(offset..end)
             }
             Pixels::Buffer(_) => Err(AvifError::NoContent),
             Pixels::Buffer16(buffer) => {
@@ -191,9 +261,8 @@ impl Pixels {
         match self {
             Pixels::Pointer(_) => Err(AvifError::NoContent),
             Pixels::Pointer16(ptr) => {
-                let offset = isize_from_usize(offset)?;
-                let ptr = *ptr;
-                Ok(unsafe { std::slice::from_raw_parts_mut(ptr.offset(offset), size) })
+                let end = offset.checked_add(size).ok_or(AvifError::NoContent)?;
+                ptr.slice_mut(offset..end)
             }
             Pixels::Buffer(_) => Err(AvifError::NoContent),
             Pixels::Buffer16(buffer) => {

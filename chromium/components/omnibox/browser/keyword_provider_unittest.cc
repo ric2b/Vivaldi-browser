@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/omnibox/browser/keyword_provider.h"
 
 #include <stddef.h>
@@ -117,7 +122,7 @@ class KeywordProviderTest : public testing::Test {
 void KeywordProviderTest::SetUp() {
   client_ = std::make_unique<MockAutocompleteProviderClient>();
   client_->set_template_url_service(
-      search_engines_test_environment_.ReleaseTemplateURLService());
+      search_engines_test_environment_.template_url_service());
   kw_provider_ = new KeywordProvider(client_.get(), nullptr);
 }
 

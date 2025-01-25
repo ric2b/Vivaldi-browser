@@ -22,6 +22,7 @@ static_library("phonehub") {
 
   public_deps = [
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/ash/attestation",
     "//chrome/browser/ash/sync",
     "//chrome/browser/profiles:profile",
@@ -47,7 +48,6 @@ static_library("phonehub") {
     "//chrome/browser/favicon",
     "//chrome/browser/sync",
     "//chrome/browser/sync:factories",
-    "//chrome/browser/ui/ash/holding_space",
     "//chromeos/ash/components/multidevice",
     "//chromeos/ash/components/multidevice/logging",
     "//chromeos/ash/services/multidevice_setup/public/cpp:prefs",
@@ -82,9 +82,9 @@ source_set("unit_tests") {
     "//ash/public/cpp",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/attestation:test_support",
     "//chrome/browser/ash/crosapi:browser_util",
+    "//chrome/browser/ash/login/users:test_support",
     "//chrome/browser/ash/sync",
     "//chrome/browser/ui",
     "//chrome/browser/ui/ash/holding_space",

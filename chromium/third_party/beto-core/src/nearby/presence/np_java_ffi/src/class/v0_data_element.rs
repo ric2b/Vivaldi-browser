@@ -283,5 +283,5 @@ extern "system" fn nativeMergeActions<'local>(
         };
     }
 
-    0
+    v0_actions.as_u32() as jint
 }

@@ -24,6 +24,7 @@
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "media/base/async_destroy_video_encoder.h"
 #include "media/base/limits.h"
+#include "media/base/media_log.h"
 #include "media/base/mime_util.h"
 #include "media/base/svc_scalability_mode.h"
 #include "media/base/timestamp_constants.h"
@@ -362,6 +363,8 @@ VideoEncoderTraits::ParsedConfig* ParseConfigStatic(
       result->options.scalability_mode = media::SVCScalabilityMode::kL1T2;
     } else if (config->scalabilityMode() == "L1T3") {
       result->options.scalability_mode = media::SVCScalabilityMode::kL1T3;
+    } else if (config->scalabilityMode() == "manual") {
+      result->options.manual_reference_buffer_control = true;
     } else {
       result->not_supported_error_message =
           String::Format("Unsupported scalabilityMode: %s",
@@ -625,6 +628,17 @@ const char* VideoEncoderTraits::GetName() {
   return "VideoEncoder";
 }
 
+String VideoEncoderTraits::ParsedConfig::ToString() {
+  return String::Format(
+      "{codec: %s, profile: %s, level: %d, hw_pref: %s, "
+      "options: {%s}, codec_string: %s, display_size: %s}",
+      media::GetCodecName(codec).c_str(),
+      media::GetProfileName(profile).c_str(), level,
+      HardwarePreferenceToString(hw_pref).Utf8().c_str(),
+      options.ToString().c_str(), codec_string.Utf8().c_str(),
+      display_size ? display_size->ToString().c_str() : "");
+}
+
 // static
 VideoEncoder* VideoEncoder::Create(ScriptState* script_state,
                                    const VideoEncoderInit* init,
@@ -809,6 +823,9 @@ void VideoEncoder::ContinueConfigureWithGpuFactories(
     DCHECK_CALLED_ON_VALID_SEQUENCE(self->sequence_checker_);
     DCHECK(self->active_config_);
 
+    MEDIA_LOG(INFO, self->logger_->log())
+        << "Configured " << self->active_config_->ToString();
+
     if (!status.is_ok()) {
       std::string error_message;
       switch (status.code()) {
@@ -892,6 +909,7 @@ bool VideoEncoder::HasPendingActivity() const {
 
 void VideoEncoder::Trace(Visitor* visitor) const {
   visitor->Trace(background_readback_);
+  visitor->Trace(frame_reference_buffers_);
   Base::Trace(visitor);
 }
 
@@ -960,7 +978,7 @@ bool VideoEncoder::StartReadback(scoped_refptr<media::VideoFrame> frame,
         return result_frame;
       result_frame->set_timestamp(txt_frame->timestamp());
       result_frame->metadata().MergeMetadataFrom(txt_frame->metadata());
-      result_frame->metadata().ClearTextureFrameMedatada();
+      result_frame->metadata().ClearTextureFrameMetadata();
       return result_frame;
     };
 
@@ -1035,6 +1053,29 @@ void VideoEncoder::ProcessEncode(Request* request) {
   DCHECK(media_encoder_);
   DCHECK_EQ(request->type, Request::Type::kEncode);
   DCHECK_GT(requested_encodes_, 0u);
+
+  String js_error_message;
+  if (request->encodeOpts->hasUpdateBuffer()) {
+    auto* buffer = request->encodeOpts->updateBuffer();
+    if (buffer->owner() != this) {
+      QueueHandleError(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotAllowedError,
+          "updateBuffer doesn't belong to this encoder"));
+      request->EndTracing();
+      return;
+    }
+  }
+  if (request->encodeOpts->hasReferenceBuffers()) {
+    for (auto& buffer : request->encodeOpts->referenceBuffers()) {
+      if (buffer->owner() != this) {
+        QueueHandleError(MakeGarbageCollected<DOMException>(
+            DOMExceptionCode::kNotAllowedError,
+            "one of referenceBuffers doesn't belong to this encoder"));
+        request->EndTracing();
+        return;
+      }
+    }
+  }
 
   auto frame = request->input->frame();
   auto encode_options = CreateEncodeOptions(request);
@@ -1122,6 +1163,14 @@ media::VideoEncoder::EncodeOptions VideoEncoder::CreateEncodeOptions(
     Request* request) {
   media::VideoEncoder::EncodeOptions result;
   result.key_frame = request->encodeOpts->keyFrame();
+  if (request->encodeOpts->hasUpdateBuffer()) {
+    result.update_buffer = request->encodeOpts->updateBuffer()->internal_id();
+  }
+  if (request->encodeOpts->hasReferenceBuffers()) {
+    for (auto& buffer : request->encodeOpts->referenceBuffers()) {
+      result.reference_buffers.push_back(buffer->internal_id());
+    }
+  }
   switch (active_config_->codec) {
     case media::VideoCodec::kAV1: {
       if (!active_config_->options.bitrate.has_value() ||
@@ -1230,6 +1279,18 @@ void VideoEncoder::ProcessConfigure(Request* request) {
         DOMExceptionCode::kNotSupportedError, js_error_message));
     request->EndTracing();
     return;
+  }
+
+  // TODO(crbug.com/347676170): remove this hack when we make
+  // getAllFrameBuffers() async and can asynchronously get the number of
+  // encoder buffers.
+  if (active_config_->options.manual_reference_buffer_control &&
+      active_config_->codec == media::VideoCodec::kAV1) {
+    frame_reference_buffers_.clear();
+    for (size_t i = 0; i < 3; ++i) {
+      auto* buffer = MakeGarbageCollected<VideoEncoderBuffer>(this, i);
+      frame_reference_buffers_.push_back(buffer);
+    }
   }
 
   if (active_config_->hw_pref == HardwarePreference::kPreferSoftware &&
@@ -1353,6 +1414,14 @@ void VideoEncoder::OnMediaEncoderInfoChanged(
   is_platform_encoder_ = encoder_info.is_hardware_accelerated;
   max_active_encodes_ = ComputeMaxActiveEncodes(encoder_info.frame_delay,
                                                 encoder_info.input_capacity);
+  if (active_config_->options.manual_reference_buffer_control) {
+    frame_reference_buffers_.clear();
+    for (size_t i = 0; i < encoder_info.number_of_manual_reference_buffers;
+         ++i) {
+      auto* buffer = MakeGarbageCollected<VideoEncoderBuffer>(this, i);
+      frame_reference_buffers_.push_back(buffer);
+    }
+  }
   // We may have increased our capacity for active encodes.
   ProcessRequests();
 }
@@ -1457,8 +1526,7 @@ void VideoEncoder::CallOutputCallback(
     decoder_config->setColorSpace(color_space->toJSON());
 
     if (codec_desc.has_value()) {
-      auto* desc_array_buf = DOMArrayBuffer::Create(codec_desc.value().data(),
-                                                    codec_desc.value().size());
+      auto* desc_array_buf = DOMArrayBuffer::Create(codec_desc.value());
       decoder_config->setDescription(
           MakeGarbageCollected<AllowSharedBufferSource>(desc_array_buf));
     }
@@ -1624,10 +1692,14 @@ ScriptPromise<VideoEncoderSupport> VideoEncoder::isConfigSupported(
 HeapVector<Member<VideoEncoderBuffer>> VideoEncoder::getAllFrameBuffers(
     ScriptState*,
     ExceptionState& exception_state) {
-  exception_state.ThrowDOMException(
-      DOMExceptionCode::kNotSupportedError,
-      "getAllFrameBuffers() only supported with manual scalability mode.");
-  return {};
+  if (!active_config_->options.manual_reference_buffer_control) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        "getAllFrameBuffers() only supported with manual scalability mode.");
+    return {};
+  }
+
+  return frame_reference_buffers_;
 }
 
 }  // namespace blink

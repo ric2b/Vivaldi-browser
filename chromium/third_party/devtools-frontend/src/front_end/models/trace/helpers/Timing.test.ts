@@ -48,7 +48,6 @@ describeWithEnvironment('Timing helpers', () => {
       startTime: TraceModel.Types.Timing.MicroSeconds(10),
       endTime: TraceModel.Types.Timing.MicroSeconds(15),
       duration: TraceModel.Types.Timing.MicroSeconds(5),
-      selfTime: TraceModel.Types.Timing.MicroSeconds(5),
     });
   });
 
@@ -61,7 +60,6 @@ describeWithEnvironment('Timing helpers', () => {
       startTime: TraceModel.Types.Timing.MilliSeconds(10),
       endTime: TraceModel.Types.Timing.MilliSeconds(15),
       duration: TraceModel.Types.Timing.MilliSeconds(5),
-      selfTime: TraceModel.Types.Timing.MilliSeconds(5),
     });
   });
 
@@ -74,7 +72,6 @@ describeWithEnvironment('Timing helpers', () => {
       startTime: TraceModel.Types.Timing.Seconds(0.1),
       endTime: TraceModel.Types.Timing.Seconds(0.15),
       duration: TraceModel.Types.Timing.Seconds(0.05),
-      selfTime: TraceModel.Types.Timing.Seconds(0.05),
     });
   });
 
@@ -132,6 +129,71 @@ describeWithEnvironment('Timing helpers', () => {
       // To make the assertion easier to read.
       const timeAsMS = TraceModel.Helpers.Timing.microSecondsToMilliseconds(adjustedTime);
       assert.strictEqual(timeAsMS.toFixed(2), String(178.92));
+    });
+  });
+
+  describe('expandWindowByPercentOrToOneMillisecond', () => {
+    it('can expand trace window by a percentage', async function() {
+      const traceWindow = TraceModel.Helpers.Timing.traceWindowFromMicroSeconds(
+          milliToMicro(40),
+          milliToMicro(60),
+      );
+
+      const maxTraceWindow = TraceModel.Helpers.Timing.traceWindowFromMicroSeconds(
+          milliToMicro(0),
+          milliToMicro(100),
+      );
+
+      const expandedTraceWindow =
+          TraceModel.Helpers.Timing.expandWindowByPercentOrToOneMillisecond(traceWindow, maxTraceWindow, 50);
+
+      // Since initial window was 20ms, make sure the that it is 30ms after being expanded by 50%
+      assert.strictEqual(expandedTraceWindow.range, 30000);
+      // min and max bounds are expanded by 25% from the initial window bounds
+      assert.strictEqual(expandedTraceWindow.min, 35000);
+      assert.strictEqual(expandedTraceWindow.max, 65000);
+    });
+
+    it('if the expanded window is smaller than 1 millisecond, expands it to 1 millisecond ', async function() {
+      // Trace window that is smaller than 1 millisecond
+      const traceWindow = TraceModel.Helpers.Timing.traceWindowFromMicroSeconds(
+          TraceModel.Types.Timing.MicroSeconds(1000),
+          TraceModel.Types.Timing.MicroSeconds(1500),
+      );
+      const maxTraceWindow = TraceModel.Helpers.Timing.traceWindowFromMicroSeconds(
+          milliToMicro(0),
+          milliToMicro(100),
+      );
+
+      const expandedTraceWindow =
+          TraceModel.Helpers.Timing.expandWindowByPercentOrToOneMillisecond(traceWindow, maxTraceWindow, 5);
+
+      // Make sure the window was expanded to 1 millisecond instead of 5 percent.
+      assert.strictEqual(expandedTraceWindow.range, 1000);
+      // The middle of the window should not change
+      assert.strictEqual(
+          (traceWindow.max + traceWindow.min) / 2, (expandedTraceWindow.max + expandedTraceWindow.min) / 2);
+
+      assert.strictEqual(expandedTraceWindow.min, 750);
+      assert.strictEqual(expandedTraceWindow.max, 1750);
+    });
+
+    it('window does not expand past the provided max window', async function() {
+      const traceWindow = TraceModel.Helpers.Timing.traceWindowFromMicroSeconds(
+          milliToMicro(5),
+          milliToMicro(55),
+      );
+      const maxTraceWindow = TraceModel.Helpers.Timing.traceWindowFromMicroSeconds(
+          milliToMicro(0),
+          milliToMicro(100),
+      );
+
+      const expandedTraceWindow =
+          TraceModel.Helpers.Timing.expandWindowByPercentOrToOneMillisecond(traceWindow, maxTraceWindow, 50);
+      assert.strictEqual(expandedTraceWindow.range, 67500);
+      // Since the expanded window min bound would be smaller than the max window min bound, the expanded window min should be equal to the max window min
+      assert.strictEqual(expandedTraceWindow.min, 0);
+      assert.strictEqual(expandedTraceWindow.max, 67500);
     });
   });
 
@@ -239,6 +301,37 @@ describeWithEnvironment('Timing helpers', () => {
         timeRange,
       }));
     });
+  });
+
+  describe('timestampIsInBounds', () => {
+    const {eventIsInBounds} = TraceModel.Helpers.Timing;
+    const {MicroSeconds} = TraceModel.Types.Timing;
+
+    const bounds: TraceModel.Types.Timing.TraceWindowMicroSeconds = {
+      min: MicroSeconds(100),
+      max: MicroSeconds(200),
+      range: MicroSeconds(100),
+    };
+
+    const makeEvent = (ts: number, dur: number) => ({
+                                                     ts: TraceModel.Types.Timing.MicroSeconds(ts),
+                                                     dur: TraceModel.Types.Timing.MicroSeconds(dur),
+                                                   }) as unknown as TraceModel.Types.TraceEvents.TraceEventData;
+
+    // Left boundary
+    assert.isTrue(eventIsInBounds(makeEvent(101, 1), bounds));
+    assert.isTrue(eventIsInBounds(makeEvent(100, 1), bounds));
+    assert.isTrue(eventIsInBounds(makeEvent(99, 1), bounds));
+    assert.isTrue(eventIsInBounds(makeEvent(150, 500), bounds));
+    assert.isFalse(eventIsInBounds(makeEvent(98, 1), bounds));
+    assert.isFalse(eventIsInBounds(makeEvent(0, 1), bounds));
+    assert.isFalse(eventIsInBounds(makeEvent(0, 0), bounds));
+
+    // Right boundary
+    assert.isTrue(eventIsInBounds(makeEvent(199, 1), bounds));
+    assert.isTrue(eventIsInBounds(makeEvent(200, 1), bounds));
+    assert.isFalse(eventIsInBounds(makeEvent(201, 1), bounds));
+    assert.isFalse(eventIsInBounds(makeEvent(300, 50), bounds));
   });
 
   describe('timestampIsInBounds', () => {

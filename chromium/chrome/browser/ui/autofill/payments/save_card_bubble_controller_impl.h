@@ -15,7 +15,6 @@
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller.h"
 #include "chrome/browser/ui/autofill/payments/save_card_ui.h"
 #include "chrome/browser/ui/autofill/payments/save_payment_icon_controller.h"
-#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
@@ -65,7 +64,7 @@ class SaveCardBubbleControllerImpl
   // immediately move it into a member.
   virtual void OfferLocalSave(
       const CreditCard& card,
-      AutofillClient::SaveCreditCardOptions options,
+      payments::PaymentsAutofillClient::SaveCreditCardOptions options,
       payments::PaymentsAutofillClient::LocalSaveCardPromptCallback
           save_card_prompt_callback);
 
@@ -89,7 +88,7 @@ class SaveCardBubbleControllerImpl
   void OfferUploadSave(
       const CreditCard& card,
       const LegalMessageLines& legal_message_lines,
-      AutofillClient::SaveCreditCardOptions options,
+      payments::PaymentsAutofillClient::SaveCreditCardOptions options,
       payments::PaymentsAutofillClient::UploadSaveCardPromptCallback
           save_card_prompt_callback);
 
@@ -127,8 +126,9 @@ class SaveCardBubbleControllerImpl
   bool ShouldRequestExpirationDateFromUser() const override;
   ui::ImageModel GetCreditCardImage() const override;
 
-  void OnSaveButton(const AutofillClient::UserProvidedCardDetails&
-                        user_provided_card_details) override;
+  void OnSaveButton(
+      const payments::PaymentsAutofillClient::UserProvidedCardDetails&
+          user_provided_card_details) override;
   void OnLegalMessageLinkClicked(const GURL& url) override;
   void OnManageCardsClicked() override;
   void OnBubbleClosed(PaymentsBubbleClosedReason closed_reason) override;
@@ -239,7 +239,7 @@ class SaveCardBubbleControllerImpl
   // `CardSaveType::kCardSaveWithCvc`, the offer-to-save card bubble is shown,
   // and the users are informed that the CVC will also be stored. If the type is
   // `CardSaveType::kCvcSaveOnly`, the offer-to-save CVC bubble is shown.
-  AutofillClient::SaveCreditCardOptions options_;
+  payments::PaymentsAutofillClient::SaveCreditCardOptions options_;
 
   // Contains the details of the card that will be saved if the user accepts.
   CreditCard card_;

@@ -40,6 +40,8 @@ class ReceivingUiHandlerRegistry {
   // Called by the SendTabToSelfClientService.
   const std::vector<std::unique_ptr<ReceivingUiHandler>>& GetHandlers() const;
 
+  ReceivingUiHandler* GetVivaldiUIRelayForProfile(Profile* profile);
+
   // Return the SendTabToSelfToolbarIconController owned by the registry
   // for the given |profile|.
   SendTabToSelfToolbarIconController* GetToolbarButtonControllerForProfile(

@@ -13,9 +13,7 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {getPlatform, Hotkey, Key, parseHotkey, Platform} from '../base/hotkeys';
-
 import {Icon} from './icon';
 
 export interface HotkeyGlyphsAttrs {
@@ -28,7 +26,7 @@ export class HotkeyGlyphs implements m.ClassComponent<HotkeyGlyphsAttrs> {
   view({attrs}: m.Vnode<HotkeyGlyphsAttrs>) {
     const {hotkey, spoof} = attrs;
 
-    const platform = getPlatform(spoof);
+    const platform = spoof || getPlatform();
     const result = parseHotkey(hotkey);
     if (result) {
       const {key, modifier} = result;
@@ -60,7 +58,7 @@ export interface KeycapGlyphsAttrs {
 export class KeycapGlyph implements m.ClassComponent<KeycapGlyphsAttrs> {
   view({attrs}: m.Vnode<KeycapGlyphsAttrs>) {
     const {keyValue, spoof} = attrs;
-    const platform = getPlatform(spoof);
+    const platform = spoof || getPlatform();
     return m('span.pf-keycap', glyphForKey(keyValue, platform));
   }
 }

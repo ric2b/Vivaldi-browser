@@ -32,9 +32,7 @@ import * as Common from '../../../../core/common/common.js';
 import * as Host from '../../../../core/host/host.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
-import * as Root from '../../../../core/root/root.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
-import * as JavaScriptMetaData from '../../../../models/javascript_metadata/javascript_metadata.js';
 import * as TextUtils from '../../../../models/text_utils/text_utils.js';
 import * as IconButton from '../../../components/icon_button/icon_button.js';
 import * as TextEditor from '../../../components/text_editor/text_editor.js';
@@ -138,8 +136,6 @@ const EXPANDABLE_MAX_DEPTH = 100;
 
 const parentMap = new WeakMap<SDK.RemoteObject.RemoteObjectProperty, SDK.RemoteObject.RemoteObject|null>();
 const objectPropertiesSectionMap = new WeakMap<Element, ObjectPropertiesSection>();
-const domPinnedProperties =
-    JavaScriptMetaData.JavaScriptMetadata.JavaScriptMetadataImpl.domPinnedProperties.DOMPinnedProperties;
 
 export const getObjectPropertiesSectionFrom = (element: Element): ObjectPropertiesSection|undefined => {
   return objectPropertiesSectionMap.get(element);
@@ -213,55 +209,6 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
     }
 
     return objectPropertiesSection;
-  }
-
-  static assignWebIDLMetadata(
-      value: SDK.RemoteObject.RemoteObject|null, properties: SDK.RemoteObject.RemoteObjectProperty[]): void {
-    if (!value) {
-      return;
-    }
-
-    const isInstance = value.type === 'object' && value.className !== null;
-    const webIdlType = isInstance ? domPinnedProperties[value.className] : undefined;
-    if (webIdlType) {
-      value.webIdl = {info: webIdlType, state: new Map()};
-    } else {
-      return;
-    }
-
-    const includedWebIdlTypes = webIdlType.includes?.map(className => domPinnedProperties[className]) ?? [];
-    const includedWebIdlProps = includedWebIdlTypes.flatMap(webIdlType => Object.entries(webIdlType?.props ?? {}));
-    const webIdlProps = {...webIdlType.props, ...Object.fromEntries(includedWebIdlProps)};
-
-    for (const property of properties) {
-      const webIdlProperty = webIdlProps[property.name];
-      if (webIdlProperty) {
-        property.webIdl = {info: webIdlProperty};
-      }
-    }
-
-    const names = ObjectPropertiesSection.getPropertyValuesByNames(properties);
-    const parentRules = value.webIdl.info.rules;
-    if (parentRules) {
-      for (const {when: name, is: expected} of parentRules) {
-        if (names.get(name)?.value === expected) {
-          value.webIdl.state.set(name, expected);
-        }
-      }
-    }
-
-    for (const property of properties) {
-      if (property.webIdl) {
-        const parentState = value.webIdl.state;
-        const propertyRules = property.webIdl.info.rules;
-        if (!parentRules && !propertyRules) {
-          property.webIdl.applicable = true;
-        } else {
-          property.webIdl.applicable =
-              !propertyRules || propertyRules?.some(rule => parentState.get(rule.when) === rule.is);
-        }
-      }
-    }
   }
 
   static getPropertyValuesByNames(properties: SDK.RemoteObject.RemoteObjectProperty[]):
@@ -669,8 +616,8 @@ export class ObjectPropertiesSectionsTreeOutline extends UI.TreeOutline.TreeOutl
 }
 
 export const enum ObjectPropertiesMode {
-  All = 0,                         // All properties, including prototype properties
-  OwnAndInternalAndInherited = 1,  // Own, internal, and inherited properties
+  ALL = 0,                             // All properties, including prototype properties
+  OWN_AND_INTERNAL_AND_INHERITED = 1,  // Own, internal, and inherited properties
 }
 
 export class RootElement extends UI.TreeOutline.TreeElement {
@@ -683,7 +630,7 @@ export class RootElement extends UI.TreeOutline.TreeElement {
   override toggleOnClick: boolean;
   constructor(
       object: SDK.RemoteObject.RemoteObject, linkifier?: Components.Linkifier.Linkifier, emptyPlaceholder?: string|null,
-      propertiesMode: ObjectPropertiesMode = ObjectPropertiesMode.OwnAndInternalAndInherited,
+      propertiesMode: ObjectPropertiesMode = ObjectPropertiesMode.OWN_AND_INTERNAL_AND_INHERITED,
       extraProperties: SDK.RemoteObject.RemoteObjectProperty[] = [],
       targetObject: SDK.RemoteObject.RemoteObject = object) {
     const contentElement = document.createElement('slot');
@@ -786,7 +733,7 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
   static async populate(
       treeElement: UI.TreeOutline.TreeElement, value: SDK.RemoteObject.RemoteObject, skipProto: boolean,
       skipGettersAndSetters: boolean, linkifier?: Components.Linkifier.Linkifier, emptyPlaceholder?: string|null,
-      propertiesMode: ObjectPropertiesMode = ObjectPropertiesMode.OwnAndInternalAndInherited,
+      propertiesMode: ObjectPropertiesMode = ObjectPropertiesMode.OWN_AND_INTERNAL_AND_INHERITED,
       extraProperties?: SDK.RemoteObject.RemoteObjectProperty[],
       targetValue?: SDK.RemoteObject.RemoteObject): Promise<void> {
     if (value.arrayLength() > ARRAY_LOAD_THRESHOLD) {
@@ -797,10 +744,10 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
 
     let properties, internalProperties = null;
     switch (propertiesMode) {
-      case ObjectPropertiesMode.All:
+      case ObjectPropertiesMode.ALL:
         ({properties} = await value.getAllProperties(false /* accessorPropertiesOnly */, true /* generatePreview */));
         break;
-      case ObjectPropertiesMode.OwnAndInternalAndInherited:
+      case ObjectPropertiesMode.OWN_AND_INTERNAL_AND_INHERITED:
         ({properties, internalProperties} =
              await SDK.RemoteObject.RemoteObject.loadFromObjectPerProto(value, true /* generatePreview */));
         break;
@@ -824,8 +771,6 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
       internalProperties: SDK.RemoteObject.RemoteObjectProperty[]|null, skipProto: boolean,
       skipGettersAndSetters: boolean, value: SDK.RemoteObject.RemoteObject|null,
       linkifier?: Components.Linkifier.Linkifier, emptyPlaceholder?: string|null): void {
-    ObjectPropertiesSection.assignWebIDLMetadata(value, properties);
-
     properties.sort(ObjectPropertiesSection.compareProperties);
     internalProperties = internalProperties || [];
 
@@ -1138,23 +1083,8 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
       this.expandedValueElement = this.createExpandedValueElement(this.property.value, this.property.synthetic);
     }
 
-    const experiment = Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.IMPORTANT_DOM_PROPERTIES);
-
-    let adorner: Element|string = '';
+    const adorner: Element|string = '';
     let container: Element;
-
-    if (this.property.webIdl?.applicable && experiment) {
-      const icon = new IconButton.Icon.Icon();
-      icon.data = {
-        iconName: 'star',
-        color: 'var(--icon-default)',
-        width: '16px',
-        height: '16px',
-      };
-      adorner = UI.Fragment.html`
-         <span class='adorner'>${icon}</span>
-       `;
-    }
 
     if (isInternalEntries) {
       container = UI.Fragment.html`
@@ -1170,10 +1100,6 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
     this.listItemElement.removeChildren();
     this.rowContainer = (container as HTMLElement);
     this.listItemElement.appendChild(this.rowContainer);
-
-    if (experiment) {
-      this.listItemElement.dataset.webidl = this.property.webIdl?.applicable ? 'true' : 'false';
-    }
   }
 
   private updatePropertyPath(): void {
@@ -1398,7 +1324,6 @@ export class ArrayGroupingTreeElement extends UI.TreeOutline.TreeElement {
   private readonly fromIndex: number;
   private readonly toIndex: number;
   private readonly object: SDK.RemoteObject.RemoteObject;
-  private readonly readOnly: boolean;
   private readonly propertyCount: number;
   private readonly linkifier: Components.Linkifier.Linkifier|undefined;
   constructor(
@@ -1409,7 +1334,6 @@ export class ArrayGroupingTreeElement extends UI.TreeOutline.TreeElement {
     this.fromIndex = fromIndex;
     this.toIndex = toIndex;
     this.object = object;
-    this.readOnly = true;
     this.propertyCount = propertyCount;
     this.linkifier = linkifier;
   }
@@ -1423,9 +1347,6 @@ export class ArrayGroupingTreeElement extends UI.TreeOutline.TreeElement {
   private static async populateRanges(
       treeNode: UI.TreeOutline.TreeElement, object: SDK.RemoteObject.RemoteObject, fromIndex: number, toIndex: number,
       topLevel: boolean, linkifier?: Components.Linkifier.Linkifier): Promise<void> {
-    // The definition of callFunctionJSON expects an unknown, and setting to `any` causes Closure to fail.
-    // However, leaving this as unknown also causes TypeScript to fail, so for now we leave this as unchecked.
-    // @ts-ignore  TODO(crbug.com/1011811): Fix after Closure is removed.
     const jsonValue = await object.callFunctionJSON(packRanges, [
       {value: fromIndex},
       {value: toIndex},
@@ -1521,7 +1442,7 @@ export class ArrayGroupingTreeElement extends UI.TreeOutline.TreeElement {
         }
       }
 
-      return {ranges: ranges};
+      return {ranges};
     }
 
     async function callback(result: {ranges: Array<Array<number>>}|undefined): Promise<void> {
@@ -1558,10 +1479,7 @@ export class ArrayGroupingTreeElement extends UI.TreeOutline.TreeElement {
   private static async populateAsFragment(
       this: ArrayGroupingTreeElement, treeNode: UI.TreeOutline.TreeElement, object: SDK.RemoteObject.RemoteObject,
       fromIndex: number, toIndex: number, linkifier?: Components.Linkifier.Linkifier): Promise<void> {
-    // The definition of callFunction expects an unknown, and setting to `any` causes Closure to fail.
-    // However, leaving this as unknown also causes TypeScript to fail, so for now we leave this as unchecked.
     const result = await object.callFunction(
-        // @ts-ignore  TODO(crbug.com/1011811): Fix after Closure is removed.
         buildArrayFragment,
         [{value: fromIndex}, {value: toIndex}, {value: ArrayGroupingTreeElement.sparseIterationThreshold}]);
     if (!result.object || result.wasThrown) {
@@ -1587,9 +1505,7 @@ export class ArrayGroupingTreeElement extends UI.TreeOutline.TreeElement {
         this: {
           [x: number]: Object,
         },
-        // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        fromIndex?: number, toIndex?: number, sparseIterationThreshold?: number): any {
+        fromIndex?: number, toIndex?: number, sparseIterationThreshold?: number): unknown {
       const result = Object.create(null);
 
       if (fromIndex === undefined || toIndex === undefined || sparseIterationThreshold === undefined) {

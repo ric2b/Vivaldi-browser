@@ -37,7 +37,7 @@
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/widget/input/widget_input_handler_manager.h"
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
-#include "ui/base/ui_base_types.h"
+#include "ui/base/mojom/window_show_state.mojom-blink.h"
 
 namespace blink {
 
@@ -264,9 +264,6 @@ class MockWebFrameWidgetImpl : public frame_test_helpers::TestWebFrameWidget {
                     const gfx::Vector2dF& unused_delta,
                     const cc::OverscrollBehavior& overscroll_behavior,
                     bool event_processed));
-
-  MOCK_METHOD2(WillHandleGestureEvent,
-               void(const WebGestureEvent& event, bool* suppress));
 };
 
 class WebFrameWidgetImplSimTest : public SimTest {
@@ -309,20 +306,6 @@ class WebFrameWidgetImplSimTest : public SimTest {
         WebCoalescedInputEvent(event.Clone(), {}, {}, ui::LatencyInfo()),
         std::move(callback));
   }
-  void WillHandleGestureEvent(const blink::WebGestureEvent& event,
-                              bool* suppress) {
-    if (event.GetType() == WebInputEvent::Type::kGestureScrollUpdate) {
-      MockMainFrameWidget()->DidOverscroll(
-          gfx::Vector2dF(event.data.scroll_update.delta_x,
-                         event.data.scroll_update.delta_y),
-          gfx::Vector2dF(event.data.scroll_update.delta_x,
-                         event.data.scroll_update.delta_y),
-          event.PositionInWidget(),
-          gfx::Vector2dF(event.data.scroll_update.velocity_x,
-                         event.data.scroll_update.velocity_y));
-      *suppress = true;
-    }
-  }
 
   const base::HistogramTester& histogram_tester() const {
     return histogram_tester_;
@@ -357,33 +340,6 @@ TEST_F(WebFrameWidgetImplSimTest, CursorChange) {
   MockMainFrameWidget()->SetCursor(cursor);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(widget_host.CursorSetCount(), 2u);
-}
-
-TEST_F(WebFrameWidgetImplSimTest, EventOverscroll) {
-  ON_CALL(*MockMainFrameWidget(), WillHandleGestureEvent(_, _))
-      .WillByDefault(testing::Invoke(
-          this, &WebFrameWidgetImplSimTest::WillHandleGestureEvent));
-  EXPECT_CALL(*MockMainFrameWidget(), HandleInputEvent(_))
-      .WillRepeatedly(::testing::Return(WebInputEventResult::kNotHandled));
-
-  WebGestureEvent scroll(WebInputEvent::Type::kGestureScrollUpdate,
-                         WebInputEvent::kNoModifiers, base::TimeTicks::Now());
-  scroll.SetPositionInWidget(gfx::PointF(-10, 0));
-  scroll.data.scroll_update.delta_y = 10;
-  MockHandledEventCallback handled_event;
-
-  InputHandlerProxy::DidOverscrollParams expected_overscroll;
-  expected_overscroll.latest_overscroll_delta = gfx::Vector2dF(0, 10);
-  expected_overscroll.accumulated_overscroll = gfx::Vector2dF(0, 10);
-  expected_overscroll.causal_event_viewport_point = gfx::PointF(-10, 0);
-  expected_overscroll.current_fling_velocity = gfx::Vector2dF();
-  // Overscroll notifications received while handling an input event should
-  // be bundled with the event ack IPC.
-  EXPECT_CALL(handled_event, Run(mojom::InputEventResultState::kConsumed, _,
-                                 testing::Pointee(expected_overscroll), _))
-      .Times(1);
-
-  SendInputEvent(scroll, handled_event.GetCallback());
 }
 
 TEST_F(WebFrameWidgetImplSimTest, RenderWidgetInputEventUmaMetrics) {
@@ -1085,10 +1041,13 @@ TEST_F(WebFrameWidgetSimTest, DisplayStateMatchesWindowShowState) {
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyBackgroundColor()));
 
-  WTF::Vector<std::pair<ui::WindowShowState, Color>> test_cases = {
-      {ui::SHOW_STATE_MINIMIZED, Color::FromRGB(/*cyan*/ 0, 255, 255)},
-      {ui::SHOW_STATE_MAXIMIZED, Color::FromRGB(/*red*/ 255, 0, 0)},
-      {ui::SHOW_STATE_FULLSCREEN, Color::FromRGB(/*blue*/ 0, 0, 255)}};
+  WTF::Vector<std::pair<ui::mojom::blink::WindowShowState, Color>> test_cases =
+      {{ui::mojom::blink::WindowShowState::kMinimized,
+        Color::FromRGB(/*cyan*/ 0, 255, 255)},
+       {ui::mojom::blink::WindowShowState::kMaximized,
+        Color::FromRGB(/*red*/ 255, 0, 0)},
+       {ui::mojom::blink::WindowShowState::kFullscreen,
+        Color::FromRGB(/*blue*/ 0, 0, 255)}};
 
   for (const auto& [show_state, color] : test_cases) {
     visual_properties.window_show_state = show_state;

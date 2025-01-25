@@ -115,10 +115,7 @@ bool PDFiumFuzzerHelper::OnFormFillEnvLoaded(FPDF_DOCUMENT doc) {
 }
 
 void PDFiumFuzzerHelper::RenderPdf(const char* data, size_t len) {
-  int render_flags;
-  int form_flags;
-  std::tie(render_flags, form_flags) =
-      GetRenderingAndFormFlagFromData(data, len);
+  auto [render_flags, form_flags] = GetRenderingAndFormFlagFromData(data, len);
 
   IPDF_JSPLATFORM platform_callbacks;
   memset(&platform_callbacks, '\0', sizeof(platform_callbacks));
@@ -224,7 +221,9 @@ bool PDFiumFuzzerHelper::RenderPage(FPDF_DOCUMENT doc,
   int height = static_cast<int>(FPDF_GetPageHeightF(page.get()) * scale);
   ScopedFPDFBitmap bitmap(FPDFBitmap_Create(width, height, 0));
   if (bitmap) {
-    FPDFBitmap_FillRect(bitmap.get(), 0, 0, width, height, 0xFFFFFFFF);
+    if (!FPDFBitmap_FillRect(bitmap.get(), 0, 0, width, height, 0xFFFFFFFF)) {
+      return false;
+    }
     FPDF_RenderPageBitmap(bitmap.get(), page.get(), 0, 0, width, height, 0,
                           render_flags);
     FPDF_FFLDraw(form, bitmap.get(), page.get(), 0, 0, width, height, 0,

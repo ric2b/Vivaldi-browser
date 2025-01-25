@@ -39,7 +39,7 @@ NSString* const kPrintActivityType = @"com.google.chrome.printActivity";
 - (instancetype)initWithData:(ShareToData*)webData
                      handler:(id<BrowserCoordinatorCommands>)handler
           baseViewController:(UIViewController*)baseViewController {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _webData = webData;
     _handler = handler;
     _baseViewController = baseViewController;
@@ -50,7 +50,7 @@ NSString* const kPrintActivityType = @"com.google.chrome.printActivity";
 - (instancetype)initWithImageData:(ShareImageData*)imageData
                           handler:(id<BrowserCoordinatorCommands>)handler
                baseViewController:(UIViewController*)baseViewController {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _imageData = imageData;
     _handler = handler;
     _baseViewController = baseViewController;

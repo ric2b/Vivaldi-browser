@@ -123,7 +123,7 @@ const char* FromDawnEnum(wgpu::QueryType dawn_enum) {
     case wgpu::QueryType::Timestamp:
       return "timestamp";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 wgpu::TextureFormat AsDawnEnum(const V8GPUTextureFormat& webgpu_enum) {
@@ -580,7 +580,7 @@ const char* FromDawnEnum(wgpu::TextureDimension dawn_enum) {
     case wgpu::TextureDimension::Undefined:
       break;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 wgpu::TextureViewDimension AsDawnEnum(
@@ -687,6 +687,8 @@ wgpu::FeatureName AsDawnEnum(const V8GPUFeatureName& webgpu_enum) {
       return wgpu::FeatureName::Subgroups;
     case V8GPUFeatureName::Enum::kSubgroupsF16:
       return wgpu::FeatureName::SubgroupsF16;
+    case V8GPUFeatureName::Enum::kClipDistances:
+      return wgpu::FeatureName::ClipDistances;
   }
 }
 
@@ -915,7 +917,7 @@ const char* FromDawnEnum(wgpu::BufferMapState dawn_enum) {
     case wgpu::BufferMapState::Mapped:
       return "mapped";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 const char* FromDawnEnum(wgpu::BackendType dawn_enum) {
@@ -939,7 +941,7 @@ const char* FromDawnEnum(wgpu::BackendType dawn_enum) {
     case wgpu::BackendType::OpenGLES:
       return "openGLES";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 const char* FromDawnEnum(wgpu::AdapterType dawn_enum) {
@@ -953,7 +955,7 @@ const char* FromDawnEnum(wgpu::AdapterType dawn_enum) {
     case wgpu::AdapterType::Unknown:
       return "unknown";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 bool FromDawnEnum(wgpu::WGSLFeatureName dawn_enum, V8WGSLFeatureName* result) {

@@ -41,13 +41,13 @@
 #include "chrome/browser/ash/system_web_apps/test_support/system_web_app_browsertest_base.h"
 #include "chrome/browser/ash/system_web_apps/test_support/system_web_app_integration_test.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
-#include "chrome/browser/ui/ash/system_tray_client_impl.h"
+#include "chrome/browser/ui/ash/system/system_tray_client_impl.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/webui/ash/system_web_dialog_delegate.h"
+#include "chrome/browser/ui/webui/ash/system_web_dialog/system_web_dialog_delegate.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
@@ -539,16 +539,14 @@ IN_PROC_BROWSER_TEST_P(
     EXPECT_NO_FATAL_FAILURE(navigation_observer.Wait());
     EXPECT_EQ(expected_trusted_frame_url,
               GetActiveWebContents()->GetVisibleURL());
-    histogram_tester.ExpectUniqueSample(
-        "Discover.Overall.AppLaunched",
-        apps::LaunchSource::kFromReleaseNotesNotification, 1);
+    histogram_tester.ExpectUniqueSample("Discover.Overall.AppLaunched",
+                                        apps::LaunchSource::kFromOsLogin, 1);
   }
 #else
   // We just have the original browser. No new app opens.
   EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
-  histogram_tester.ExpectUniqueSample(
-      "Discover.Overall.AppLaunched",
-      apps::LaunchSource::kFromReleaseNotesNotification, 0);
+  histogram_tester.ExpectUniqueSample("Discover.Overall.AppLaunched",
+                                      apps::LaunchSource::kFromOsLogin, 0);
 #endif
 }
 

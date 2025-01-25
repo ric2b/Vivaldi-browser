@@ -3,7 +3,8 @@
 #ifndef COMPONENTS_AD_BLOCKER_ADBLOCK_RULESET_FILE_PARSER_H_
 #define COMPONENTS_AD_BLOCKER_ADBLOCK_RULESET_FILE_PARSER_H_
 
-#include "base/strings/string_piece.h"
+#include <string_view>
+
 #include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/adblock_rule_parser.h"
 

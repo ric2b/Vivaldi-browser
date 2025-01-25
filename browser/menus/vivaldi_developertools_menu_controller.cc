@@ -93,9 +93,11 @@ bool DeveloperToolsMenuController::HandleCommand(int command_id) {
         return true;
 
       case IDC_CONTENT_CONTEXT_INSPECTELEMENT:
-        DevToolsWindow::InspectElement(web_contents_->GetPrimaryMainFrame(),
-                                       location_.x(), location_.y());
-        return true;
+        if (handle_inspect_element_) {
+          DevToolsWindow::InspectElement(web_contents_->GetPrimaryMainFrame(),
+                                         location_.x(), location_.y());
+        }
+        return handle_inspect_element_;
 
       case IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE:
         if (platform_app && platform_app->is_platform_app()) {

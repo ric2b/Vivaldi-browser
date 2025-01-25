@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> hat die Verbindung unerwartet geschlossen.</translation>
 <translation id="1161325031994447685">WLAN-Verbindung erneut herstellen</translation>
 <translation id="1175364870820465910">&amp;Drucken...</translation>
+<translation id="132390688737681464">Adressen speichern und ausfüllen</translation>
 <translation id="1375198122581997741">Informationen zur Version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hat keine Daten gesendet.</translation>
 <translation id="1559528461873125649">Datei oder Verzeichnis nicht vorhanden</translation>
 <translation id="1640244768702815859">Versuchen Sie <ph name="BEGIN_LINK" />die Startseite aufzurufen<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nicht unterstütztes Protokoll</translation>
+<translation id="1662550410081243962">Zahlungsmethoden speichern und ausfüllen</translation>
 <translation id="1710259589646384581">Betriebssystem</translation>
 <translation id="1728677426644403582">Dies ist der Quelltext einer Webseite</translation>
 <translation id="1734878702283171397">Setzen Sie sich mit dem Systemadministrator in Verbindung.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Diese Website kann keine sichere Verbindung bereitstellen</translation>
 <translation id="2187317261103489799">Erkennen (Standardeinstellung)</translation>
 <translation id="2224337661447660594">Kein Internet</translation>
+<translation id="2283340219607151381">Adressen speichern und ausfüllen</translation>
 <translation id="2292556288342944218">Ihre Internetverbindung ist gesperrt</translation>
 <translation id="2317259163369394535">Für <ph name="DOMAIN" /> sind ein Nutzername und ein Passwort erforderlich.</translation>
 <translation id="2337852623177822836">Einstellung wird von Ihrem Administrator gesteuert</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Die Verbindung ist mit <ph name="CIPHER" /> verschlüsselt und authentifiziert und verwendet <ph name="KX" /> als Mechanismus für den Schlüsselaustausch.</translation>
 <translation id="2909946352844186028">Eine Netzwerkänderung ist aufgetreten.</translation>
 <translation id="2948083400971632585">Sie können jeden Proxy, der für eine Verbindung konfiguriert wurde, in den Einstellungen deaktivieren.</translation>
+<translation id="2954624054936281172">Tabelle der gespeicherten Zahlungsarten</translation>
 <translation id="2991571918955627853">Sie können <ph name="SITE" /> zurzeit nicht aufrufen, da die Website HSTS verwendet. Netzwerkfehler und Angriffe sind in der Regel nur vorübergehend, sodass die Seite wahrscheinlich später wieder funktioniert.</translation>
 <translation id="3005723025932146533">Gespeicherte Kopie anzeigen</translation>
 <translation id="301521992641321250">Automatisch blockiert</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Wichtige Inhalte auf dieser Website immer erkennen</translation>
 <translation id="3308738399950580893">Werbung</translation>
 <translation id="3384522979010096022">Ihre Organisation lässt nicht zu, dass Sie diese Website aufrufen</translation>
+<translation id="3387261909427947069">Zahlungsmethoden</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> ist momentan nicht erreichbar.</translation>
 <translation id="3427092606871434483">Zulassen (Standardeinstellung)</translation>
 <translation id="3447661539832366887">Der Besitzer dieses Geräts hat das Antonio-Spiel deaktiviert.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">Die Zertifikatskette für diese Site enthält ein mit SHA-1 signiertes Zertifikat.</translation>
 <translation id="5452270690849572955">Die Seite wurde auf <ph name="HOST_NAME" /> nicht gefunden</translation>
 <translation id="5457113250005438886">Ungültig</translation>
+<translation id="5490432419156082418">Adressen und andere Daten</translation>
 <translation id="5492298309214877701">Diese Website im Intranet des Unternehmens, der Organisation oder der Schule hat die gleiche URL wie eine externe Website.
     <ph name="LINE_BREAK" />
     Wenden Sie sich an Ihren Systemadministrator.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Von einer Erweiterung zugelassen</translation>
 <translation id="7111012039238467737">(Gültig)</translation>
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> von <ph name="DOMAIN" /> zulassen</translation>
+<translation id="7179323680825933600">Zahlungsmethoden speichern und ausfüllen</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> erfüllt die Sicherheitsstandards nicht.</translation>
 <translation id="7219179957768738017">Die Verbindung verwendet <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Benachrichtigungen anzeigen</translation>
@@ -197,13 +204,15 @@
 <translation id="8289355894181816810">Wenn Sie weitere Informationen dazu benötigen, kann Ihnen Ihr Netzwerkadministrator weiterhelfen.</translation>
 <translation id="8332188693563227489">Der Zugriff auf <ph name="HOST_NAME" /> wurde verweigert</translation>
 <translation id="8422228580902424274">Angreifer auf der Website, die Sie besuchen wollen, könnten Sie dazu verleiten, Software zu installieren sowie Ihr Passwort, Ihre Telefon- oder Kreditkartennummer preiszugeben.</translation>
+<translation id="8473863474539038330">Adressen und andere Daten</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> antwortete dem Gateway nicht.</translation>
 <translation id="8503813439785031346">Nutzername</translation>
 <translation id="8703575177326907206">Die Verbindung zu <ph name="DOMAIN" /> ist nicht verschlüsselt.</translation>
-<translation id="8740359287975076522">Die &lt;abbr id="dnsDefinition"&gt;DNS-Adresse&lt;/abbr&gt; von <ph name="HOST_NAME" /> wurde nicht gefunden. Eine Problemdiagnose wird durchgeführt.</translation>
+<translation id="8740359287975076522">Die<ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-Adresse&lt;/abbr&gt; wurde nicht gefunden. Eine Problemdiagnose wird durchgeführt.</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>
 <translation id="8940028675168378100">Geblockt von <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Website-Einstellungen aufrufen</translation>
+<translation id="8975012916872825179">Enthält Informationen wie Telefonnummern, E-Mail-Adressen und Lieferadressen</translation>
 <translation id="9001074447101275817">Für den Proxy <ph name="DOMAIN" /> sind ein Nutzername und ein Passwort erforderlich.</translation>
 <translation id="9008201768610948239">Ignorieren</translation>
 <translation id="9025348182339809926">(Ungültig)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> verwendet ein nicht unterstütztes Protokoll.</translation>
 <translation id="936602727769022409">Sie könnten den Zugriff auf Ihr Google-Konto verlieren. Vivaldi empfiehlt Ihnen, Ihr Passwort jetzt zu ändern. Sie werden dazu aufgefordert, sich anzumelden.</translation>
 <translation id="969892804517981540">Offizieller Build</translation>
+<translation id="984275831282074731">Zahlungsmethoden</translation>
 <translation id="988159990683914416">Entwickler-Build</translation>
 </translationbundle>

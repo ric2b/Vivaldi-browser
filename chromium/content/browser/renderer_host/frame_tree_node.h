@@ -73,11 +73,9 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
     virtual ~Observer() = default;
   };
 
-  static const int kFrameTreeNodeInvalidId;
-
   // Returns the FrameTreeNode with the given global |frame_tree_node_id|,
   // regardless of which FrameTree it is in.
-  static FrameTreeNode* GloballyFindByID(int frame_tree_node_id);
+  static FrameTreeNode* GloballyFindByID(FrameTreeNodeId frame_tree_node_id);
 
   // Returns the FrameTreeNode for the given |rfh|. Same as
   // rfh->frame_tree_node(), but also supports nullptrs.
@@ -118,7 +116,7 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   const RenderFrameHostManager* render_manager() const {
     return &render_manager_;
   }
-  int frame_tree_node_id() const { return frame_tree_node_id_; }
+  FrameTreeNodeId frame_tree_node_id() const { return frame_tree_node_id_; }
   // This reflects window.name, which is initially set to the the "name"
   // attribute. But this won't reflect changes of 'name' attribute and instead
   // reflect changes to the Window object's name property.
@@ -607,21 +605,6 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
     return fenced_frame_properties_.has_value();
   }
 
-  // Called from the currently active document via the
-  // `Fence.setReportEventDataForAutomaticBeacons` JS API.
-  void SetFencedFrameAutomaticBeaconReportEventData(
-      blink::mojom::AutomaticBeaconType event_type,
-      const std::string& event_data,
-      const std::vector<blink::FencedFrame::ReportingDestination>& destinations,
-      bool once,
-      bool cross_origin_exposed) override;
-
-  // Helper function to clear out automatic beacon data after one automatic
-  // beacon if `once` was set to true when calling
-  // `setReportEventDataForAutomaticBeacons()`.
-  void MaybeResetFencedFrameAutomaticBeaconReportEventData(
-      blink::mojom::AutomaticBeaconType event_type);
-
   // Returns the number of fenced frame boundaries above this frame. The
   // outermost main frame's frame tree has fenced frame depth 0, a topmost
   // fenced frame tree embedded in the outermost main frame has fenced frame
@@ -728,6 +711,7 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
       std::unique_ptr<CrossOriginEmbedderPolicyReporter> coep_reporter,
       int http_response_code) override;
   void CancelNavigation(NavigationDiscardReason reason) override;
+  void ResetNavigationsForDiscard() override;
   bool Credentialless() const override;
 #if !BUILDFLAG(IS_ANDROID)
   void GetVirtualAuthenticatorManager(
@@ -801,8 +785,8 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   // See `RestartBackForwardCachedNavigationAsync()`.
   void RestartBackForwardCachedNavigationImpl(int nav_entry_id);
 
-  // The next available browser-global FrameTreeNode ID.
-  static int next_frame_tree_node_id_;
+  // The browser-global FrameTreeNodeId generator.
+  static FrameTreeNodeId::Generator frame_tree_node_id_generator_;
 
   // The FrameTree owning |this|. It can change with Prerender2 during
   // activation.
@@ -810,7 +794,7 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
 
   // A browser-global identifier for the frame in the page, which stays stable
   // even if the frame does a cross-process navigation.
-  const int frame_tree_node_id_;
+  const FrameTreeNodeId frame_tree_node_id_;
 
   // The RenderFrameHost owning this FrameTreeNode, which cannot change for the
   // life of this FrameTreeNode. |nullptr| if this node is the root.

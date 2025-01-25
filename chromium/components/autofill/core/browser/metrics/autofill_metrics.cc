@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -31,6 +32,7 @@
 #include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
 #include "components/autofill/core/browser/metrics/form_events/form_event_logger_base.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/ui/popup_interaction.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
@@ -147,6 +149,7 @@ enum FieldTypeGroupForMetrics {
   GROUP_ADDRESS_HOME_DEPENDENT_LOCALITY_AND_LANDMARK = 45,
   GROUP_ADDRESS_HOME_HOUSE_NUMBER_AND_APT = 46,
   GROUP_STANDALONE_CREDIT_CARD_VERIFICATION = 47,
+  GROUP_PREDICTION_IMPROVEMENTS = 48,
   // Note: if adding an enum value here, run
   // tools/metrics/histograms/update_autofill_enums.py
   NUM_FIELD_TYPE_GROUPS_FOR_METRICS
@@ -248,6 +251,10 @@ int GetFieldTypeGroupPredictionQualityMetric(
 
     case FieldTypeGroup::kIban:
       group = GROUP_IBAN;
+      break;
+
+    case FieldTypeGroup::kPredictionImprovements:
+      group = GROUP_PREDICTION_IMPROVEMENTS;
       break;
 
     case FieldTypeGroup::kAddress:
@@ -409,6 +416,7 @@ int GetFieldTypeGroupPredictionQualityMetric(
         case CREDIT_CARD_STANDALONE_VERIFICATION_CODE:
         case SINGLE_USERNAME_FORGOT_PASSWORD:
         case SINGLE_USERNAME_WITH_INTERMEDIATE_VALUES:
+        case IMPROVED_PREDICTION:
           NOTREACHED_IN_MIGRATION()
               << field_type << " type is not in that group.";
           group = GROUP_AMBIGUOUS;
@@ -597,10 +605,10 @@ bool DuplicatedFilling(const FormStructure& form, const AutofillField& field) {
           // *duplicate* filling happened.
           return false;
         }
-        return field.value() == form_field->value() &&
+        return field.value_for_import() == form_field->value_for_import() &&
                form_field->is_autofilled();
       };
-  return base::ranges::any_of(form, is_autofilled_with_same_value);
+  return std::ranges::any_of(form, is_autofilled_with_same_value);
 }
 
 void LogOnlyFillWhenFocusedRationalizationQuality(
@@ -924,7 +932,7 @@ void AutofillMetrics::LogCardUnmaskAuthenticationSelectionDialogShown(
 void AutofillMetrics::LogCreditCardInfoBarMetric(
     InfoBarMetric metric,
     bool is_uploading,
-    AutofillClient::SaveCreditCardOptions options) {
+    payments::PaymentsAutofillClient::SaveCreditCardOptions options) {
   DCHECK_LT(metric, NUM_INFO_BAR_METRICS);
 
   std::string destination = is_uploading ? ".Server" : ".Local";
@@ -955,7 +963,7 @@ void AutofillMetrics::LogCreditCardInfoBarMetric(
   }
 
   if (options.card_save_type ==
-      AutofillClient::CardSaveType::kCardSaveWithCvc) {
+      payments::PaymentsAutofillClient::CardSaveType::kCardSaveWithCvc) {
     base::UmaHistogramEnumeration(base::StrCat({"Autofill.CreditCardInfoBar",
                                                 destination, ".SavingWithCvc"}),
                                   metric, NUM_INFO_BAR_METRICS);
@@ -1002,16 +1010,16 @@ void AutofillMetrics::LogProgressDialogShown(
 std::string_view AutofillMetrics::GetDialogTypeStringForLogging(
     AutofillProgressDialogType autofill_progress_dialog_type) {
   switch (autofill_progress_dialog_type) {
-    case AutofillProgressDialogType::kAndroidFIDOProgressDialog:
-      return "AndroidFIDO";
     case AutofillProgressDialogType::kVirtualCardUnmaskProgressDialog:
       return "VirtualCardUnmask";
     case AutofillProgressDialogType::kServerCardUnmaskProgressDialog:
       return "ServerCardUnmask";
     case AutofillProgressDialogType::kServerIbanUnmaskProgressDialog:
       return "ServerIbanUnmask";
-    default:
-      NOTREACHED_NORETURN();
+    case AutofillProgressDialogType::k3dsFetchVcnProgressDialog:
+      return "3dsFetchVirtualCard";
+    case AutofillProgressDialogType::kUnspecified:
+      NOTREACHED();
   }
 }
 
@@ -1122,6 +1130,9 @@ void AutofillMetrics::LogRealPanResult(PaymentsRpcResult result,
       DCHECK_EQ(card_type, PaymentsRpcCardType::kVirtualCard);
       metric_result = PAYMENTS_RESULT_VCN_RETRIEVAL_PERMANENT_FAILURE;
       break;
+    case PaymentsRpcResult::kClientSideTimeout:
+      metric_result = PAYMENTS_RESULT_CLIENT_SIDE_TIMEOUT;
+      break;
     case PaymentsRpcResult::kNone:
       NOTREACHED_IN_MIGRATION();
       return;
@@ -1186,6 +1197,9 @@ void AutofillMetrics::LogRealPanDuration(base::TimeDelta duration,
     case PaymentsRpcResult::kNetworkError:
       result_suffix = "NetworkError";
       break;
+    case PaymentsRpcResult::kClientSideTimeout:
+      result_suffix = "ClientSideTimeout";
+      break;
     case PaymentsRpcResult::kNone:
       NOTREACHED_IN_MIGRATION();
       return;
@@ -1232,6 +1246,9 @@ void AutofillMetrics::LogUnmaskingDuration(base::TimeDelta duration,
       break;
     case PaymentsRpcResult::kNetworkError:
       result_suffix = "NetworkError";
+      break;
+    case PaymentsRpcResult::kClientSideTimeout:
+      result_suffix = "ClientSideTimeout";
       break;
     case PaymentsRpcResult::kNone:
       NOTREACHED_IN_MIGRATION();
@@ -1291,11 +1308,12 @@ void AutofillMetrics::LogOverallPredictionQualityMetrics(
 void AutofillMetrics::LogEmailFieldPredictionMetrics(
     const AutofillField& field) {
   // If the field has no value, there is no need to record any of the metrics.
-  if (field.value().empty()) {
+  const std::u16string& value = field.value_for_import();
+  if (value.empty()) {
     return;
   }
 
-  bool is_valid_email = IsValidEmailAddress(field.value());
+  bool is_valid_email = IsValidEmailAddress(value);
   bool is_email_prediction = field.Type().GetStorableType() == EMAIL_ADDRESS;
 
   if (is_email_prediction) {
@@ -1435,12 +1453,10 @@ void AutofillMetrics::LogStoredCreditCardMetrics(
   size_t num_local_cards = 0;
   size_t num_local_cards_with_nickname = 0;
   size_t num_local_cards_with_invalid_number = 0;
-  size_t num_masked_cards = 0;
-  size_t num_masked_cards_with_nickname = 0;
-  size_t num_unmasked_cards = 0;
+  size_t num_server_cards = 0;
+  size_t num_server_cards_with_nickname = 0;
   size_t num_disused_local_cards = 0;
-  size_t num_disused_masked_cards = 0;
-  size_t num_disused_unmasked_cards = 0;
+  size_t num_disused_server_cards = 0;
 
   // Concatenate the local and server cards into one big collection of raw
   // CreditCard pointers.
@@ -1478,36 +1494,21 @@ void AutofillMetrics::LogStoredCreditCardMetrics(
         UMA_HISTOGRAM_COUNTS_1000(
             "Autofill.DaysSinceLastUse.StoredCreditCard.Server",
             days_since_last_use);
-        UMA_HISTOGRAM_COUNTS_1000(
-            "Autofill.DaysSinceLastUse.StoredCreditCard.Server.Masked",
-            days_since_last_use);
-        num_masked_cards += 1;
-        num_disused_masked_cards += disused_delta;
+        num_server_cards += 1;
+        num_disused_server_cards += disused_delta;
         if (card->HasNonEmptyValidNickname())
-          num_masked_cards_with_nickname += 1;
+          num_server_cards_with_nickname += 1;
         break;
       case CreditCard::RecordType::kFullServerCard:
-        UMA_HISTOGRAM_COUNTS_1000(
-            "Autofill.DaysSinceLastUse.StoredCreditCard.Server",
-            days_since_last_use);
-        UMA_HISTOGRAM_COUNTS_1000(
-            "Autofill.DaysSinceLastUse.StoredCreditCard.Server.Unmasked",
-            days_since_last_use);
-        num_unmasked_cards += 1;
-        num_disused_unmasked_cards += disused_delta;
-        break;
       case CreditCard::RecordType::kVirtualCard:
-        // This card type is not persisted in Chrome.
+        // These card types are not persisted in Chrome.
         NOTREACHED_IN_MIGRATION();
         break;
     }
   }
 
   // Calculate some summary info.
-  const size_t num_server_cards = num_masked_cards + num_unmasked_cards;
   const size_t num_cards = num_local_cards + num_server_cards;
-  const size_t num_disused_server_cards =
-      num_disused_masked_cards + num_disused_unmasked_cards;
   const size_t num_disused_cards =
       num_disused_local_cards + num_disused_server_cards;
 
@@ -1522,13 +1523,9 @@ void AutofillMetrics::LogStoredCreditCardMetrics(
       num_local_cards_with_invalid_number);
   UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardCount.Server",
                             num_server_cards);
-  UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardCount.Server.Masked",
-                            num_masked_cards);
   UMA_HISTOGRAM_COUNTS_1000(
-      "Autofill.StoredCreditCardCount.Server.Masked.WithNickname",
-      num_masked_cards_with_nickname);
-  UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardCount.Server.Unmasked",
-                            num_unmasked_cards);
+      "Autofill.StoredCreditCardCount.Server.WithNickname",
+      num_server_cards_with_nickname);
 
   // For card types held by the user, log how many are disused.
   if (num_cards) {
@@ -1542,16 +1539,6 @@ void AutofillMetrics::LogStoredCreditCardMetrics(
   if (num_server_cards) {
     UMA_HISTOGRAM_COUNTS_1000("Autofill.StoredCreditCardDisusedCount.Server",
                               num_disused_server_cards);
-  }
-  if (num_masked_cards) {
-    UMA_HISTOGRAM_COUNTS_1000(
-        "Autofill.StoredCreditCardDisusedCount.Server.Masked",
-        num_disused_masked_cards);
-  }
-  if (num_unmasked_cards) {
-    UMA_HISTOGRAM_COUNTS_1000(
-        "Autofill.StoredCreditCardDisusedCount.Server.Unmasked",
-        num_disused_unmasked_cards);
   }
 
   // Log the number of server cards that are enrolled with virtual cards.
@@ -2177,7 +2164,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogTextFieldDidChange(
       .SetHtmlFieldType(static_cast<int>(field.html_type()))
       .SetHtmlFieldMode(static_cast<int>(field.html_mode()))
       .SetIsAutofilled(field.is_autofilled())
-      .SetIsEmpty(field.IsEmpty())
+      .SetIsEmpty(field.value(ValueSemantics::kCurrent).empty())
       .SetMillisecondsSinceFormParsed(
           MillisecondsSinceFormParsed(form.form_parsed_timestamp()))
       .Record(ukm_recorder_);
@@ -2245,7 +2232,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::
   // Set the fields with autofill information according to Autofill2.FieldInfo
   // UKM schema:
   // https://docs.google.com/document/d/1ZH0JbL6bES3cD4KqZWsGR6n8I-rhnkx6no6nQOgYq5w/
-  OptionalBoolean was_focused = OptionalBoolean::kFalse;
+  OptionalBoolean was_focused_by_tap_or_click = OptionalBoolean::kFalse;
   OptionalBoolean suggestion_was_available = OptionalBoolean::kUndefined;
   OptionalBoolean suggestion_was_shown = OptionalBoolean::kUndefined;
   OptionalBoolean suggestion_was_accepted = OptionalBoolean::kUndefined;
@@ -2343,7 +2330,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::
                   "need to be updated.");
     if (auto* event =
             absl::get_if<AskForValuesToFillFieldLogEvent>(&log_event)) {
-      was_focused = OptionalBoolean::kTrue;
+      was_focused_by_tap_or_click = OptionalBoolean::kTrue;
       suggestion_was_available |= event->has_suggestion;
       suggestion_was_shown |= event->suggestion_is_shown;
       if (suggestion_was_shown == OptionalBoolean::kTrue &&
@@ -2395,27 +2382,28 @@ void AutofillMetrics::FormInteractionsUkmLogger::
 
     if (auto* event =
             absl::get_if<HeuristicPredictionFieldLogEvent>(&log_event)) {
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-      switch (event->pattern_source) {
-        case PatternSource::kLegacy:
+      switch (event->heuristic_source) {
+#if !BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
+        case HeuristicSource::kLegacyRegexes:
           heuristic_legacy_type = event->field_type;
           break;
-        case PatternSource::kDefault:
+#else
+        case HeuristicSource::kDefaultRegexes:
           heuristic_default_type = event->field_type;
           break;
-        case PatternSource::kExperimental:
+        case HeuristicSource::kExperimentalRegexes:
           heuristic_experimental_type = event->field_type;
           break;
-      }
-#else
-      switch (event->pattern_source) {
-        case PatternSource::kLegacy:
-          heuristic_legacy_type = event->field_type;
+        case HeuristicSource::kPredictionImprovementRegexes:
+          // Prediction improvements are currently ignored for Autofill based
+          // UKM logging.
           break;
-      }
 #endif
+        case HeuristicSource::kMachineLearning:
+          NOTREACHED();
+      }
 
-      if (event->is_active_pattern_source) {
+      if (event->is_active_heuristic_source) {
         heuristic_type = event->field_type;
       }
       rank_in_field_signature_group = event->rank_in_field_signature_group;
@@ -2469,10 +2457,11 @@ void AutofillMetrics::FormInteractionsUkmLogger::
   SetStatusVector(AutofillStatus::kIsFocusable, field.IsFocusable());
   SetStatusVector(AutofillStatus::kUserTypedIntoField,
                   OptionalBooleanToBool(user_typed_into_field));
-  SetStatusVector(AutofillStatus::kWasFocused,
-                  OptionalBooleanToBool(was_focused));
+  SetStatusVector(AutofillStatus::kWasFocused, field.was_focused());
+  SetStatusVector(AutofillStatus::kWasFocusedByTapOrClick,
+                  OptionalBooleanToBool(was_focused_by_tap_or_click));
   SetStatusVector(AutofillStatus::kIsInSubFrame,
-                  form.ToFormData().host_frame() != field.host_frame());
+                  form.global_id().frame_token != field.host_frame());
 
   if (filling_prevented_by_iframe_security_policy !=
       OptionalBoolean::kUndefined) {
@@ -2481,7 +2470,7 @@ void AutofillMetrics::FormInteractionsUkmLogger::
         OptionalBooleanToBool(filling_prevented_by_iframe_security_policy));
   }
 
-  if (was_focused == OptionalBoolean::kTrue) {
+  if (was_focused_by_tap_or_click == OptionalBoolean::kTrue) {
     SetStatusVector(AutofillStatus::kSuggestionWasAvailable,
                     OptionalBooleanToBool(suggestion_was_available));
     SetStatusVector(AutofillStatus::kSuggestionWasShown,
@@ -2596,8 +2585,6 @@ void AutofillMetrics::LogAutofillFieldInfoAfterSubmission(
       }
     }
 
-    // TODO(crbug.com/40225658): Modify the enum object of SubmissionSource by
-    // assigning values (= 0, = 1, ...) and adding a comment to not change it.
     builder.SetSubmittedType1(submitted_type1)
         .SetSubmissionSource(static_cast<int>(form.submission_source()))
         .SetMillisecondsFromFormParsedUntilSubmission(
@@ -3094,20 +3081,6 @@ AutofillMetrics::UkmTimestampPin::~UkmTimestampPin() {
 }
 
 // static
-void AutofillMetrics::LogFieldParsingPageTranslationStatusMetric(bool metric) {
-  base::UmaHistogramBoolean("Autofill.ParsedFieldTypesWasPageTranslated",
-                            metric);
-}
-
-// static
-void AutofillMetrics::LogFieldParsingTranslatedFormLanguageMetric(
-    std::string_view locale) {
-  base::UmaHistogramSparse(
-      "Autofill.ParsedFieldTypesUsingTranslatedPageLanguage",
-      language::LanguageUsageMetrics::ToLanguageCodeHash(locale));
-}
-
-// static
 void AutofillMetrics::LogWebOTPPhoneCollectionMetricStateUkm(
     ukm::UkmRecorder* recorder,
     ukm::SourceId source_id,
@@ -3256,6 +3229,9 @@ const std::string PaymentsRpcResultToMetricsSuffix(PaymentsRpcResult result) {
     case PaymentsRpcResult::kVcnRetrievalTryAgainFailure:
     case PaymentsRpcResult::kVcnRetrievalPermanentFailure:
       result_suffix = ".VcnRetrievalFailure";
+      break;
+    case PaymentsRpcResult::kClientSideTimeout:
+      result_suffix = ".ClientSideTimeout";
       break;
     case PaymentsRpcResult::kNone:
       NOTREACHED_IN_MIGRATION();

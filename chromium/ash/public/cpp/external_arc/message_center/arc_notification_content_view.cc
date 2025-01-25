@@ -33,6 +33,7 @@
 #include "ui/events/event_handler.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
@@ -309,6 +310,7 @@ ArcNotificationContentView::ArcNotificationContentView(
       OnNotificationSurfaceAdded(surface);
   }
 
+  UpdateAccessibleRole();
   // Creates the control_buttons_view_, which collects all control buttons into
   // a horizontal box.
   control_buttons_view_.set_owned_by_client();
@@ -344,7 +346,8 @@ void ArcNotificationContentView::Update(
       notification.should_show_snooze_button());
   UpdateControlButtonsVisibility();
 
-  accessible_name_ = message_view_->CreateAccessibleName(notification);
+  GetViewAccessibility().SetName(
+      message_view_->CreateAccessibleName(notification));
   UpdateSnapshot();
 }
 
@@ -396,14 +399,10 @@ void ArcNotificationContentView::UpdateControlButtonsVisibility() {
 
 void ArcNotificationContentView::UpdateCornerRadius(float top_radius,
                                                     float bottom_radius) {
-  bool force_update =
-      top_radius_ != top_radius || bottom_radius_ != bottom_radius;
-
-  top_radius_ = top_radius;
-  bottom_radius_ = bottom_radius;
-
-  if (GetWidget() && GetNativeViewContainer()) {
-    UpdateMask(force_update);
+  contents_radii_ = gfx::RoundedCornersF(top_radius, top_radius, bottom_radius,
+                                         bottom_radius);
+  if (GetWidget()) {
+    SetCornerRadii(contents_radii_);
   }
 }
 
@@ -482,6 +481,7 @@ void ArcNotificationContentView::SetSurface(ArcNotificationSurface* surface) {
   }
 
   surface_ = surface;
+  UpdateAccessibleRole();
 
   if (surface_) {
     DCHECK(surface_->GetWindow());
@@ -561,8 +561,6 @@ void ArcNotificationContentView::AttachSurface() {
 
   // (Re-)create the floating buttons after |surface_| is attached to a widget.
   MaybeCreateFloatingControlButtons();
-
-  UpdateMask(false /* force_update */);
 }
 
 void ArcNotificationContentView::SetVisible(bool visible) {
@@ -601,8 +599,7 @@ void ArcNotificationContentView::ShowCopiedSurface() {
   surface_copy_->root()->SetBounds(size);
   layer()->Add(surface_copy_->root());
 
-  surface_copy_->root()->SetRoundedCornerRadius(
-      {top_radius_, top_radius_, bottom_radius_, bottom_radius_});
+  surface_copy_->root()->SetRoundedCornerRadius(contents_radii_);
   surface_copy_->root()->SetIsFastRoundedCorner(true);
 
   // Changes the opacity instead of setting the visibility, to keep
@@ -617,34 +614,6 @@ void ArcNotificationContentView::HideCopiedSurface() {
   surface_->GetWindow()->layer()->SetOpacity(1.0f);
   DeprecatedLayoutImmediately();
   surface_copy_.reset();
-
-  // Re-install the mask since the custom mask is unset by
-  // |::wm::RecreateLayers()| in |ShowCopiedSurface()| method.
-  UpdateMask(true /* force_update */);
-}
-
-void ArcNotificationContentView::UpdateMask(bool force_update) {
-  if (top_radius_ == 0 && bottom_radius_ == 0) {
-    SetCustomMask(nullptr);
-    mask_insets_.reset();
-    return;
-  }
-
-  gfx::Insets new_insets = GetContentsBounds().InsetsFrom(GetVisibleBounds());
-  if (mask_insets_ == new_insets && !force_update)
-    return;
-  mask_insets_ = new_insets;
-
-  // The color of the mask, which is used only for corner-rounding, should be
-  // pure opaque white.
-  const SkColor mask_color = SK_ColorWHITE;
-  auto mask_painter =
-      std::make_unique<message_center::NotificationBackgroundPainter>(
-          top_radius_, bottom_radius_, mask_color);
-  // Set insets to round visible notification corners. https://crbug.com/866777
-  mask_painter->set_insets(new_insets);
-
-  SetCustomMask(views::Painter::CreatePaintedLayer(std::move(mask_painter)));
 }
 
 void ArcNotificationContentView::AddedToWidget() {
@@ -657,6 +626,8 @@ void ArcNotificationContentView::AddedToWidget() {
   // Hide the copied surface since it may be visible by OnWidgetClosing().
   if (surface_copy_)
     HideCopiedSurface();
+
+  SetCornerRadii(contents_radii_);
 }
 
 void ArcNotificationContentView::RemovedFromWidget() {
@@ -706,9 +677,6 @@ void ArcNotificationContentView::Layout(PassKey) {
     // views::NativeViewHostAura::ShowWidget() and aura::Window::Show() which
     // DCHECKs the opacity of the window.
     LayoutSuperclass<views::NativeViewHost>(this);
-    // Reinstall mask to update rounded mask insets. Set null mask unless radius
-    // is set.
-    UpdateMask(false /* force_update */);
 
     // Scale notification surface if necessary.
     gfx::Transform transform;
@@ -749,11 +717,14 @@ void ArcNotificationContentView::Layout(PassKey) {
 void ArcNotificationContentView::OnPaint(gfx::Canvas* canvas) {
   views::NativeViewHost::OnPaint(canvas);
 
-  SkScalar radii[8] = {top_radius_,    top_radius_,      // top-left
-                       top_radius_,    top_radius_,      // top-right
-                       bottom_radius_, bottom_radius_,   // bottom-right
-                       bottom_radius_, bottom_radius_};  // bottom-left
-
+  SkScalar radii[8] = {contents_radii_.upper_left(),
+                       contents_radii_.upper_left(),  // top-left
+                       contents_radii_.upper_right(),
+                       contents_radii_.upper_right(),  // top-right
+                       contents_radii_.lower_right(),
+                       contents_radii_.lower_right(),  // bottom-right
+                       contents_radii_.lower_left(),
+                       contents_radii_.lower_left()};  // bottom-left
   SkPath path;
   path.addRoundRect(gfx::RectToSkRect(GetLocalBounds()), radii,
                     SkPathDirection::kCCW);
@@ -810,9 +781,6 @@ void ArcNotificationContentView::OnBlur() {
 
 void ArcNotificationContentView::OnThemeChanged() {
   View::OnThemeChanged();
-  // OnThemeChanged may be called before container is set.
-  if (GetWidget() && GetNativeViewContainer())
-    UpdateMask(true);
 
   // Adjust control button color.
   control_buttons_view_.SetButtonIconColors(
@@ -861,16 +829,13 @@ views::FocusTraversable* ArcNotificationContentView::GetFocusTraversable() {
 void ArcNotificationContentView::GetAccessibleNodeData(
     ui::AXNodeData* node_data) {
   if (surface_ && surface_->GetAXTreeId() != ui::AXTreeIDUnknown()) {
-    node_data->role = ax::mojom::Role::kClient;
     GetViewAccessibility().SetChildTreeID(surface_->GetAXTreeId());
   } else {
-    node_data->role = ax::mojom::Role::kButton;
     node_data->AddStringAttribute(
         ax::mojom::StringAttribute::kRoleDescription,
         l10n_util::GetStringUTF8(
             IDS_MESSAGE_NOTIFICATION_SETTINGS_BUTTON_ACCESSIBLE_NAME));
   }
-  node_data->SetNameChecked(accessible_name_);
 }
 
 void ArcNotificationContentView::OnAccessibilityEvent(ax::mojom::Event event) {
@@ -960,6 +925,23 @@ void ArcNotificationContentView::OnNotificationSurfaceRemoved(
     return;
 
   SetSurface(nullptr);
+}
+
+void ArcNotificationContentView::OnNotificationSurfaceAXTreeIdChanged(
+    ArcNotificationSurface* surface) {
+  if (surface->GetNotificationKey() != notification_key_) {
+    return;
+  }
+
+  UpdateAccessibleRole();
+}
+
+void ArcNotificationContentView::UpdateAccessibleRole() {
+  if (surface_ && surface_->GetAXTreeId() != ui::AXTreeIDUnknown()) {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kClient);
+  } else {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  }
 }
 
 BEGIN_METADATA(ArcNotificationContentView)

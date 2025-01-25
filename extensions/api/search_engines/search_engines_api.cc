@@ -284,9 +284,16 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
     const auto default_search_engine_id =
         engines[engines_info.default_engine_index]->id;
 
-    const bool engine_has_changed =
-        prefs->GetInteger(index_pref_path) != default_search_engine_id &&
-        prefs->GetInteger(last_change_pref_path) < version;
+    const bool engine_has_changed = [&]() {
+      const int index = prefs->GetInteger(index_pref_path);
+      const int last_change = prefs->GetInteger(last_change_pref_path);
+
+      // Search engine has changed if both prefs were valid and the last seen
+      // version is lower than a new one and the index of the default search
+      // engine changed.
+      return last_change > 0 && index > 0 && last_change < version &&
+             index != default_search_engine_id;
+    }();
 
     prefs->SetInteger(index_pref_path, default_search_engine_id);
     prefs->SetInteger(last_change_pref_path, version);

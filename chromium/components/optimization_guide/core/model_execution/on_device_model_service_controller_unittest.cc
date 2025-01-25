@@ -6,8 +6,8 @@
 #include <memory>
 #include <optional>
 
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -27,7 +27,8 @@
 #include "components/optimization_guide/core/model_execution/on_device_model_adaptation_loader.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_metadata.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_service_controller.h"
-#include "components/optimization_guide/core/model_execution/on_device_model_test_utils.h"
+#include "components/optimization_guide/core/model_execution/test/fake_model_assets.h"
+#include "components/optimization_guide/core/model_execution/test/fake_on_device_model_service_controller.h"
 #include "components/optimization_guide/core/model_execution/test/feature_config_builder.h"
 #include "components/optimization_guide/core/model_execution/test/request_builder.h"
 #include "components/optimization_guide/core/model_execution/test/response_holder.h"
@@ -37,6 +38,7 @@
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_logger.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
+#include "components/optimization_guide/core/optimization_guide_test_util.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
 #include "components/optimization_guide/proto/features/compose.pb.h"
@@ -59,8 +61,6 @@ using ExecuteModelResult = SessionImpl::ExecuteModelResult;
 
 namespace {
 
-constexpr int64_t kModelAdatationVersion = 1;
-
 class FakeOnDeviceModelAvailabilityObserver
     : public OnDeviceModelAvailabilityObserver {
  public:
@@ -69,7 +69,7 @@ class FakeOnDeviceModelAvailabilityObserver
     expected_feature_ = expected_feature;
   }
 
-  void OnDeviceModelAvailablityChanged(
+  void OnDeviceModelAvailabilityChanged(
       ModelBasedCapabilityKey feature,
       OnDeviceModelEligibilityReason reason) override {
     EXPECT_EQ(expected_feature_, feature);
@@ -97,7 +97,6 @@ constexpr auto kFeature = ModelBasedCapabilityKey::kCompose;
 class OnDeviceModelServiceControllerTest : public testing::Test {
  public:
   void SetUp() override {
-    ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     feature_list_.InitWithFeaturesAndParameters(
         {{features::kOptimizationGuideModelExecution, {}},
          {features::kOptimizationGuideOnDeviceModel,
@@ -143,19 +142,19 @@ class OnDeviceModelServiceControllerTest : public testing::Test {
 
   void Initialize(const InitializeParams& params) {
     if (params.config) {
-      WriteFeatureConfig(*params.config, params.config2,
-                         params.validation_config);
+      base_model_asset_.Write(*params.config, params.config2,
+                              params.validation_config);
     } else {
       auto default_config = SimpleComposeConfig();
       default_config.set_can_skip_text_safety(true);
-      WriteFeatureConfig(default_config, std::nullopt,
-                         params.validation_config);
+      base_model_asset_.Write(default_config, std::nullopt,
+                              params.validation_config);
     }
 
     if (params.model_component_ready) {
       on_device_component_state_manager_.get()->OnStartup();
       task_environment_.FastForwardBy(base::Seconds(1));
-      on_device_component_state_manager_.SetReady(temp_dir());
+      on_device_component_state_manager_.SetReady(base_model_asset_.path());
     }
 
     RecreateServiceController();
@@ -165,10 +164,10 @@ class OnDeviceModelServiceControllerTest : public testing::Test {
 
   ExecuteRemoteFn CreateExecuteRemoteFn() {
     return base::BindLambdaForTesting(
-        [=](ModelBasedCapabilityKey feature,
-            const google::protobuf::MessageLite& m,
-            std::unique_ptr<proto::LogAiDataRequest> l,
-            OptimizationGuideModelExecutionResultCallback c) {
+        [=, this](ModelBasedCapabilityKey feature,
+                  const google::protobuf::MessageLite& m,
+                  std::unique_ptr<proto::LogAiDataRequest> l,
+                  OptimizationGuideModelExecutionResultCallback c) {
           remote_execute_called_ = true;
           last_remote_message_ = base::WrapUnique(m.New());
           last_remote_message_->CheckTypeAndMergeFrom(m);
@@ -178,26 +177,6 @@ class OnDeviceModelServiceControllerTest : public testing::Test {
             last_remote_ts_callback_ = std::move(c);
           }
         });
-  }
-
-  void SetFeatureTextSafetyConfiguration(
-      std::unique_ptr<proto::FeatureTextSafetyConfiguration> feature_config) {
-    feature_config->set_feature(ToModelExecutionFeatureProto(kFeature));
-    proto::TextSafetyModelMetadata model_metadata;
-    model_metadata.mutable_feature_text_safety_configurations()->AddAllocated(
-        feature_config.release());
-    proto::Any any;
-    any.set_type_url(
-        "type.googleapis.com/optimization_guide.proto.TextSafetyModelMetadata");
-    model_metadata.SerializeToString(any.mutable_value());
-    std::unique_ptr<optimization_guide::ModelInfo> model_info =
-        TestModelInfoBuilder()
-            .SetAdditionalFiles(
-                {temp_dir().Append(kTsDataFile),
-                 temp_dir().Append(base::FilePath(kTsSpModelFile))})
-            .SetModelMetadata(any)
-            .Build();
-    test_controller_->MaybeUpdateSafetyModel(*model_info);
   }
 
   void RecreateServiceController() {
@@ -214,39 +193,16 @@ class OnDeviceModelServiceControllerTest : public testing::Test {
     test_controller_->Init();
   }
 
-  void WriteExecutionConfig(const proto::OnDeviceModelExecutionConfig& config) {
-    CHECK(base::WriteFile(temp_dir().Append(kOnDeviceModelExecutionConfigFile),
-                          config.SerializeAsString()));
-  }
-
-  void WriteFeatureConfig(
-      const proto::OnDeviceModelExecutionFeatureConfig& config,
-      std::optional<proto::OnDeviceModelExecutionFeatureConfig> config2 =
-          std::nullopt,
-      std::optional<proto::OnDeviceModelValidationConfig> validation_config =
-          std::nullopt) {
-    proto::OnDeviceModelExecutionConfig execution_config;
-    *execution_config.add_feature_configs() = config;
-    if (config2) {
-      *execution_config.add_feature_configs() = *config2;
-    }
-    if (validation_config) {
-      *execution_config.mutable_validation_config() = *validation_config;
-    }
-    WriteExecutionConfig(execution_config);
-  }
-
   std::map<ModelBasedCapabilityKey, OnDeviceModelAdaptationController>&
   GetModelAdaptationControllers() const {
     return test_controller_->model_adaptation_controllers_;
   }
 
-  base::FilePath temp_dir() const { return temp_dir_.GetPath(); }
-
  protected:
+  FakeBaseModelAsset base_model_asset_;
+  FakeLanguageModelAsset language_asset_;
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  base::ScopedTempDir temp_dir_;
   TestingPrefServiceSimple pref_service_;
   on_device_model::FakeOnDeviceServiceSettings fake_settings_;
   TestOnDeviceModelComponentStateManager on_device_component_state_manager_{
@@ -377,19 +333,22 @@ TEST_F(OnDeviceModelServiceControllerTest,
   test_controller_->AddOnDeviceModelAvailabilityChangeObserver(
       ModelBasedCapabilityKey::kTest, &availability_observer_test);
 
-  on_device_model::AdaptationAssetPaths asset_paths;
-  test_controller_->MaybeUpdateModelAdaptation(
-      ModelBasedCapabilityKey::kCompose,
-      OnDeviceModelAdaptationMetadata::New(&asset_paths, kModelAdatationVersion,
-                                           /*adapter=*/nullptr));
+  FakeAdaptationAsset compose_asset({
+      .config = config_compose,
+      .weight = 1015,
+  });
+  test_controller_->MaybeUpdateModelAdaptation(compose_asset.feature(),
+                                               compose_asset.metadata());
   EXPECT_EQ(OnDeviceModelEligibilityReason::kSuccess,
             availability_observer_compose.reason_);
   EXPECT_FALSE(availability_observer_test.reason_);
 
-  test_controller_->MaybeUpdateModelAdaptation(
-      ModelBasedCapabilityKey::kTest,
-      OnDeviceModelAdaptationMetadata::New(&asset_paths, kModelAdatationVersion,
-                                           /*adapter=*/nullptr));
+  FakeAdaptationAsset test_asset({
+      .config = config_test,
+      .weight = 2024,
+  });
+  test_controller_->MaybeUpdateModelAdaptation(test_asset.feature(),
+                                               test_asset.metadata());
   EXPECT_EQ(OnDeviceModelEligibilityReason::kSuccess,
             availability_observer_test.reason_);
 
@@ -397,24 +356,26 @@ TEST_F(OnDeviceModelServiceControllerTest,
       ModelBasedCapabilityKey::kCompose, base::DoNothing(),
       logger_.GetWeakPtr(), nullptr,
       /*config_params=*/std::nullopt);
+  ASSERT_TRUE(session_compose);
   task_environment_.RunUntilIdle();
   auto session_test = test_controller_->CreateSession(
       ModelBasedCapabilityKey::kTest, base::DoNothing(), logger_.GetWeakPtr(),
       nullptr,
       /*config_params=*/std::nullopt);
+  ASSERT_TRUE(session_test);
 
   EXPECT_EQ(2u, GetModelAdaptationControllers().size());
 
   session_compose->ExecuteModel(PageUrlRequest("foo"), response_.callback());
   task_environment_.RunUntilIdle();
   EXPECT_TRUE(response_.value());
-  EXPECT_EQ(*response_.value(), "Adaptation model: 1\nInput: execute:foo\n");
+  EXPECT_EQ(*response_.value(), "Adaptation model: 1015\nInput: execute:foo\n");
   EXPECT_TRUE(*response_.provided_by_on_device());
 
   session_test->ExecuteModel(PageUrlRequest("bar"), response_.callback());
   task_environment_.RunUntilIdle();
   EXPECT_TRUE(response_.value());
-  EXPECT_EQ(*response_.value(), "Adaptation model: 2\nInput: execute:bar\n");
+  EXPECT_EQ(*response_.value(), "Adaptation model: 2024\nInput: execute:bar\n");
   EXPECT_TRUE(*response_.provided_by_on_device());
 
   EXPECT_TRUE(response_.log_entry());
@@ -431,7 +392,7 @@ TEST_F(OnDeviceModelServiceControllerTest,
             "Test");
   EXPECT_EQ(model_version.on_device_base_model_metadata().base_model_version(),
             "0.0.1");
-  EXPECT_EQ(model_version.model_adaptation_version(), 1);
+  EXPECT_EQ(model_version.model_adaptation_version(), compose_asset.version());
 
   session_compose.reset();
   session_test.reset();
@@ -466,11 +427,12 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelAdaptationAndBaseModelSuccess) {
   test_controller_->AddOnDeviceModelAvailabilityChangeObserver(
       ModelBasedCapabilityKey::kCompose, &availability_observer_compose);
 
-  on_device_model::AdaptationAssetPaths asset_paths;
-  test_controller_->MaybeUpdateModelAdaptation(
-      ModelBasedCapabilityKey::kCompose,
-      OnDeviceModelAdaptationMetadata::New(&asset_paths, kModelAdatationVersion,
-                                           /*adapter=*/nullptr));
+  FakeAdaptationAsset compose_asset({
+      .config = config_compose,
+      .weight = 1015,
+  });
+  test_controller_->MaybeUpdateModelAdaptation(compose_asset.feature(),
+                                               compose_asset.metadata());
   EXPECT_EQ(OnDeviceModelEligibilityReason::kSuccess,
             availability_observer_compose.reason_);
 
@@ -489,7 +451,7 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelAdaptationAndBaseModelSuccess) {
   session_compose->ExecuteModel(PageUrlRequest("foo"), response_.callback());
   task_environment_.RunUntilIdle();
   EXPECT_TRUE(response_.value());
-  EXPECT_EQ(*response_.value(), "Adaptation model: 1\nInput: execute:foo\n");
+  EXPECT_EQ(*response_.value(), "Adaptation model: 1015\nInput: execute:foo\n");
   EXPECT_TRUE(*response_.provided_by_on_device());
 
   session_test->ExecuteModel(PageUrlRequest("bar"), response_.callback());
@@ -533,11 +495,12 @@ TEST_F(OnDeviceModelServiceControllerTest,
   test_controller_->AddOnDeviceModelAvailabilityChangeObserver(
       ModelBasedCapabilityKey::kCompose, &availability_observer_compose);
 
-  test_controller_->MaybeUpdateModelAdaptation(
-      ModelBasedCapabilityKey::kCompose,
-      OnDeviceModelAdaptationMetadata::New(/*asset_paths=*/nullptr,
-                                           kModelAdatationVersion,
-                                           /*adapter=*/nullptr));
+  FakeAdaptationAsset compose_asset({
+      .config = config_compose,
+      .weight = std::nullopt,
+  });
+  test_controller_->MaybeUpdateModelAdaptation(compose_asset.feature(),
+                                               compose_asset.metadata());
   EXPECT_EQ(OnDeviceModelEligibilityReason::kSuccess,
             availability_observer_compose.reason_);
 
@@ -711,7 +674,7 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelAvailableAfterInit) {
 
   on_device_component_state_manager_.get()->OnStartup();
   task_environment_.RunUntilIdle();
-  on_device_component_state_manager_.SetReady(temp_dir());
+  on_device_component_state_manager_.SetReady(base_model_asset_.path());
   task_environment_.RunUntilIdle();
 
   // Model now available.
@@ -731,8 +694,8 @@ TEST_F(OnDeviceModelServiceControllerTest, MidSessionModelUpdate) {
       /*config_params=*/std::nullopt);
 
   // Simulate a model update.
-  WriteExecutionConfig({});
-  on_device_component_state_manager_.SetReady(temp_dir());
+  base_model_asset_.Write({});
+  on_device_component_state_manager_.SetReady(base_model_asset_.path());
   task_environment_.RunUntilIdle();
 
   // Verify the existing session still works.
@@ -757,8 +720,8 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionBeforeAndAfterModelUpdate) {
 
   // Simulates a model update. This should close the model remote.
   // Write a new empty execution config to check that the config is reloaded.
-  WriteExecutionConfig({});
-  on_device_component_state_manager_.SetReady(temp_dir());
+  base_model_asset_.Write({});
+  on_device_component_state_manager_.SetReady(base_model_asset_.path());
   task_environment_.RunUntilIdle();
   EXPECT_EQ(0ull, test_controller_->on_device_model_receiver_count());
 
@@ -792,6 +755,8 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionFailsForInvalidFeature) {
 }
 
 TEST_F(OnDeviceModelServiceControllerTest, UpdateSafetyModel) {
+  FakeSafetyModelAsset fake_safety_asset(ComposeSafetyConfig());
+
   Initialize();
 
   // Safety model info is valid but no metadata.
@@ -800,9 +765,7 @@ TEST_F(OnDeviceModelServiceControllerTest, UpdateSafetyModel) {
 
     std::unique_ptr<optimization_guide::ModelInfo> model_info =
         TestModelInfoBuilder()
-            .SetAdditionalFiles(
-                {temp_dir().Append(kTsDataFile),
-                 temp_dir().Append(base::FilePath(kTsSpModelFile))})
+            .SetAdditionalFiles(fake_safety_asset.AdditionalFiles())
             .Build();
     test_controller_->MaybeUpdateSafetyModel(*model_info);
 
@@ -820,9 +783,7 @@ TEST_F(OnDeviceModelServiceControllerTest, UpdateSafetyModel) {
     any.set_type_url("garbagetype");
     std::unique_ptr<optimization_guide::ModelInfo> model_info =
         TestModelInfoBuilder()
-            .SetAdditionalFiles(
-                {temp_dir().Append(kTsDataFile),
-                 temp_dir().Append(base::FilePath(kTsSpModelFile))})
+            .SetAdditionalFiles(fake_safety_asset.AdditionalFiles())
             .SetModelMetadata(any)
             .Build();
     test_controller_->MaybeUpdateSafetyModel(*model_info);
@@ -844,9 +805,7 @@ TEST_F(OnDeviceModelServiceControllerTest, UpdateSafetyModel) {
     model_metadata.SerializeToString(any.mutable_value());
     std::unique_ptr<optimization_guide::ModelInfo> model_info =
         TestModelInfoBuilder()
-            .SetAdditionalFiles(
-                {temp_dir().Append(kTsDataFile),
-                 temp_dir().Append(base::FilePath(kTsSpModelFile))})
+            .SetAdditionalFiles(fake_safety_asset.AdditionalFiles())
             .SetModelMetadata(any)
             .Build();
     test_controller_->MaybeUpdateSafetyModel(*model_info);
@@ -870,9 +829,7 @@ TEST_F(OnDeviceModelServiceControllerTest, UpdateSafetyModel) {
     model_metadata.SerializeToString(any.mutable_value());
     std::unique_ptr<optimization_guide::ModelInfo> model_info =
         TestModelInfoBuilder()
-            .SetAdditionalFiles(
-                {temp_dir().Append(kTsDataFile),
-                 temp_dir().Append(base::FilePath(kTsSpModelFile))})
+            .SetAdditionalFiles(fake_safety_asset.AdditionalFiles())
             .SetModelMetadata(any)
             .Build();
     test_controller_->MaybeUpdateSafetyModel(*model_info);
@@ -882,6 +839,43 @@ TEST_F(OnDeviceModelServiceControllerTest, UpdateSafetyModel) {
         "OnDeviceTextSafetyModelMetadataValidity",
         TextSafetyModelMetadataValidity::kValid, 1);
   }
+}
+
+TEST_F(OnDeviceModelServiceControllerTest, UpdatingSafetyModelResetsSession) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeaturesAndParameters(
+      {{features::internal::kModelAdaptationCompose, {}},
+       {features::internal::kOnDeviceModelTestFeature,
+        {{"enable_adaptation", "false"}}}},
+      {});
+
+  auto config_compose = SimpleComposeConfig();
+  config_compose.set_can_skip_text_safety(false);
+  auto config_test = SimpleComposeConfig();
+  config_test.set_feature(proto::MODEL_EXECUTION_FEATURE_TEST);
+  config_test.set_can_skip_text_safety(true);
+  Initialize({.config = config_compose, .config2 = config_test});
+  EXPECT_FALSE(test_controller_->CreateSession(
+      ModelBasedCapabilityKey::kCompose, base::DoNothing(),
+      logger_.GetWeakPtr(), nullptr,
+      /*config_params=*/std::nullopt));
+  EXPECT_TRUE(test_controller_->CreateSession(ModelBasedCapabilityKey::kTest,
+                                              base::DoNothing(),
+                                              logger_.GetWeakPtr(), nullptr,
+                                              /*config_params=*/std::nullopt));
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(1ull, test_controller_->on_device_model_receiver_count());
+
+  FakeSafetyModelAsset safety_asset(ComposeSafetyConfig());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(0ull, test_controller_->on_device_model_receiver_count());
+  EXPECT_TRUE(test_controller_->CreateSession(ModelBasedCapabilityKey::kCompose,
+                                              base::DoNothing(),
+                                              logger_.GetWeakPtr(), nullptr,
+                                              /*config_params=*/std::nullopt));
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(1ull, test_controller_->on_device_model_receiver_count());
 }
 
 TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
@@ -908,21 +902,12 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
   {
     base::HistogramTester histogram_tester;
 
-    proto::TextSafetyModelMetadata model_metadata;
-    model_metadata.add_feature_text_safety_configurations()->set_feature(
-        proto::MODEL_EXECUTION_FEATURE_TEST);
-    proto::Any any;
-    any.set_type_url(
-        "type.googleapis.com/optimization_guide.proto.TextSafetyModelMetadata");
-    model_metadata.SerializeToString(any.mutable_value());
-    std::unique_ptr<optimization_guide::ModelInfo> model_info =
-        TestModelInfoBuilder()
-            .SetAdditionalFiles(
-                {temp_dir().Append(kTsDataFile),
-                 temp_dir().Append(base::FilePath(kTsSpModelFile))})
-            .SetModelMetadata(any)
-            .Build();
-    test_controller_->MaybeUpdateSafetyModel(*model_info);
+    FakeSafetyModelAsset safety_asset([]() {
+      auto safety_config = ComposeSafetyConfig();
+      safety_config.set_feature(proto::MODEL_EXECUTION_FEATURE_TEST);
+      return safety_config;
+    }());
+    test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
     EXPECT_FALSE(test_controller_->CreateSession(
         kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
         /*config_params=*/std::nullopt));
@@ -941,21 +926,8 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
   {
     base::HistogramTester histogram_tester;
 
-    proto::TextSafetyModelMetadata model_metadata;
-    model_metadata.add_feature_text_safety_configurations()->set_feature(
-        ToModelExecutionFeatureProto(kFeature));
-    proto::Any any;
-    any.set_type_url(
-        "type.googleapis.com/optimization_guide.proto.TextSafetyModelMetadata");
-    model_metadata.SerializeToString(any.mutable_value());
-    std::unique_ptr<optimization_guide::ModelInfo> model_info =
-        TestModelInfoBuilder()
-            .SetAdditionalFiles(
-                {temp_dir().Append(kTsDataFile),
-                 temp_dir().Append(base::FilePath(kTsSpModelFile))})
-            .SetModelMetadata(any)
-            .Build();
-    test_controller_->MaybeUpdateSafetyModel(*model_info);
+    FakeSafetyModelAsset safety_asset(ComposeSafetyConfig());
+    test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
     EXPECT_TRUE(test_controller_->CreateSession(
         kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
         /*config_params=*/std::nullopt));
@@ -995,10 +967,7 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
   {
     base::HistogramTester histogram_tester;
 
-    std::unique_ptr<ModelInfo> model_info =
-        TestModelInfoBuilder()
-            .SetModelFilePath(temp_dir().Append(FILE_PATH_LITERAL("garbage")))
-            .Build();
+    std::unique_ptr<ModelInfo> model_info = TestModelInfoBuilder().Build();
     test_controller_->MaybeUpdateSafetyModel(*model_info);
     EXPECT_FALSE(test_controller_->CreateSession(
         kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
@@ -1020,10 +989,12 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
   {
     base::HistogramTester histogram_tester;
 
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("en");
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
+    FakeSafetyModelAsset safety_asset([]() {
+      auto safety_config = ComposeSafetyConfig();
+      safety_config.add_allowed_languages("en");
+      return safety_config;
+    }());
+    test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
     EXPECT_FALSE(test_controller_->CreateSession(
         kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
@@ -1044,13 +1015,13 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
   {
     base::HistogramTester histogram_tester;
 
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("en");
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
+    FakeSafetyModelAsset safety_asset([]() {
+      auto safety_config = ComposeSafetyConfig();
+      safety_config.add_allowed_languages("en");
+      return safety_config;
+    }());
+    test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+    test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
     EXPECT_TRUE(test_controller_->CreateSession(
         kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
@@ -1085,13 +1056,11 @@ TEST_F(OnDeviceModelServiceControllerTest, SessionRequiresSafetyModel) {
 }
 
 TEST(SafetyConfigTest, MissingScoreIsUnsafe) {
-  auto safety_config =
-      std::make_unique<proto::FeatureTextSafetyConfiguration>();
-  safety_config->set_feature(ToModelExecutionFeatureProto(kFeature));
-  auto* threshold = safety_config->add_safety_category_thresholds();
+  auto safety_config = ComposeSafetyConfig();
+  auto* threshold = safety_config.add_safety_category_thresholds();
   threshold->set_output_index(1);
   threshold->set_threshold(0.5);
-  SafetyConfig cfg(*safety_config);
+  SafetyConfig cfg(safety_config);
 
   auto safety_info = on_device_model::mojom::SafetyInfo::New();
   safety_info->class_scores = {0.1};  // Only 1 score, but expects 2.
@@ -1099,13 +1068,11 @@ TEST(SafetyConfigTest, MissingScoreIsUnsafe) {
 }
 
 TEST(SafetyConfigTest, SafeWithRequiredScores) {
-  auto safety_config =
-      std::make_unique<proto::FeatureTextSafetyConfiguration>();
-  safety_config->set_feature(ToModelExecutionFeatureProto(kFeature));
-  auto* threshold = safety_config->add_safety_category_thresholds();
+  auto safety_config = ComposeSafetyConfig();
+  auto* threshold = safety_config.add_safety_category_thresholds();
   threshold->set_output_index(1);
   threshold->set_threshold(0.5);
-  SafetyConfig cfg(*safety_config);
+  SafetyConfig cfg(safety_config);
 
   auto safety_info = on_device_model::mojom::SafetyInfo::New();
   safety_info->class_scores = {0.1, 0.1};  // Has score with index = 1.
@@ -1122,15 +1089,14 @@ TEST_F(OnDeviceModelServiceControllerTest, DefaultOutputSafetyPasses) {
       features::kTextSafetyClassifier,
       {{"on_device_retract_unsafe_content", "true"}});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->set_feature(ToModelExecutionFeatureProto(kFeature));
-    safety_config->mutable_safety_category_thresholds()->Add(
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
@@ -1175,15 +1141,14 @@ TEST_F(OnDeviceModelServiceControllerTest, DefaultOutputSafetyFails) {
       features::kTextSafetyClassifier,
       {{"on_device_retract_unsafe_content", "true"}});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->set_feature(ToModelExecutionFeatureProto(kFeature));
-    safety_config->mutable_safety_category_thresholds()->Add(
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
@@ -1223,15 +1188,14 @@ TEST_F(OnDeviceModelServiceControllerTest, SafetyModelUsedButNoRetract) {
       features::kTextSafetyClassifier,
       {{"on_device_retract_unsafe_content", "false"}});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->set_feature(ToModelExecutionFeatureProto(kFeature));
-    safety_config->mutable_safety_category_thresholds()->Add(
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
@@ -1272,17 +1236,17 @@ TEST_F(OnDeviceModelServiceControllerTest, RequestCheckPassesWithSafeUrl) {
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->mutable_input_template()->Add(PageUrlSubstitution());
     check->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1323,20 +1287,17 @@ TEST_F(OnDeviceModelServiceControllerTest, RequestCheckFailsWithUnsafeUrl) {
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->mutable_input_template()->Add(PageUrlSubstitution());
     check->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1377,16 +1338,16 @@ TEST_F(OnDeviceModelServiceControllerTest, RequestCheckIgnoredInDarkMode) {
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->mutable_input_template()->Add(PageUrlSubstitution());
     check->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1429,20 +1390,17 @@ TEST_F(OnDeviceModelServiceControllerTest,
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->mutable_input_template()->Add(PageUrlSubstitution());
     // Omitted check thresholds, should fallback to default.
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1484,22 +1442,19 @@ TEST_F(OnDeviceModelServiceControllerTest,
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("eo");
-    safety_config->mutable_safety_category_thresholds()->Add(
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.add_allowed_languages("eo");
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->mutable_input_template()->Add(PageUrlSubstitution());
     check->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1524,23 +1479,20 @@ TEST_F(OnDeviceModelServiceControllerTest,
       {{"on_device_retract_unsafe_content", "true"}});
   Initialize();
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("eo");
-    safety_config->mutable_safety_category_thresholds()->Add(
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.add_allowed_languages("eo");
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->set_ignore_language_result(true);
     check->mutable_input_template()->Add(PageUrlSubstitution());
     check->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1565,18 +1517,18 @@ TEST_F(OnDeviceModelServiceControllerTest,
       {{"on_device_retract_unsafe_content", "true"}});
   Initialize();
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("eo");
-    safety_config->mutable_safety_category_thresholds()->Add(
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.add_allowed_languages("eo");
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->mutable_input_template()->Add(PageUrlSubstitution());
     check->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1602,19 +1554,19 @@ TEST_F(OnDeviceModelServiceControllerTest,
       {{"on_device_retract_unsafe_content", "true"}});
   Initialize();
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("eo");
-    safety_config->mutable_safety_category_thresholds()->Add(
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.add_allowed_languages("eo");
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->mutable_input_template()->Add(PageUrlSubstitution());
     check->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
     check->set_check_language_only(true);
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1642,23 +1594,20 @@ TEST_F(OnDeviceModelServiceControllerTest,
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("eo");
-    safety_config->mutable_safety_category_thresholds()->Add(
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.add_allowed_languages("eo");
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->add_request_check();
+    auto* check = safety_config.add_request_check();
     check->mutable_input_template()->Add(PageUrlSubstitution());
     check->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
     check->set_check_language_only(true);
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   // This should pass the default raw output safety check
   fake_settings_.set_execute_result(
@@ -1703,23 +1652,20 @@ TEST_F(OnDeviceModelServiceControllerTest,
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("eo");
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    safety_config->mutable_safety_category_thresholds()->Add(
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.add_allowed_languages("eo");
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->mutable_raw_output_check();
+    auto* check = safety_config.mutable_raw_output_check();
     check->mutable_input_template()->Add(
         FieldSubstitution("safe_text in esperanto: %s", StringValueField()));
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   // This should be used in the raw output check.
   fake_settings_.set_execute_result({"reasonable_output"});
@@ -1762,23 +1708,20 @@ TEST_F(OnDeviceModelServiceControllerTest, RawOutputCheckFailsWithUnsafeText) {
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("eo");
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    safety_config->mutable_safety_category_thresholds()->Add(
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.add_allowed_languages("eo");
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    auto* check = safety_config->mutable_raw_output_check();
+    auto* check = safety_config.mutable_raw_output_check();
     check->mutable_input_template()->Add(
         FieldSubstitution("unsafe_text in esperanto: %s", StringValueField()));
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   // This should be used in the raw output check.
   fake_settings_.set_execute_result({"reasonable_output"});
@@ -1822,21 +1765,18 @@ TEST_F(OnDeviceModelServiceControllerTest,
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
+  FakeSafetyModelAsset safety_asset([]() {
     // Configure a request safety check on the PageUrl.
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->add_allowed_languages("eo");
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    auto* check = safety_config->mutable_raw_output_check();
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.add_allowed_languages("eo");
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    auto* check = safety_config.mutable_raw_output_check();
     check->mutable_input_template()->Add(FieldSubstitution(
         "safe_text in unknown language: %s", StringValueField()));
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   // This should be used in the raw output check.
   fake_settings_.set_execute_result({"reasonable_output"});
@@ -1879,18 +1819,15 @@ TEST_F(OnDeviceModelServiceControllerTest, SafetyModelDarkMode) {
       features::kTextSafetyClassifier,
       {{"on_device_retract_unsafe_content", "false"}});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    safety_config->mutable_safety_category_thresholds()->Add(
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    safety_config.mutable_safety_category_thresholds()->Add(
         RequireReasonable());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-
-    std::unique_ptr<optimization_guide::ModelInfo> ld_model_info =
-        TestModelInfoBuilder().SetVersion(123).Build();
-    test_controller_->SetLanguageDetectionModel(*ld_model_info);
-  }
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+  test_controller_->SetLanguageDetectionModel(language_asset_.model_info());
 
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
@@ -1931,26 +1868,16 @@ TEST_F(OnDeviceModelServiceControllerTest, SafetyModelDarkModeNoFeatureConfig) {
       features::kTextSafetyClassifier,
       {{"on_device_retract_unsafe_content", "false"}});
 
-  proto::TextSafetyModelMetadata model_metadata;
-  auto* other_feature_safety_config =
-      model_metadata.add_feature_text_safety_configurations();
-  other_feature_safety_config->set_feature(proto::MODEL_EXECUTION_FEATURE_TEST);
-  other_feature_safety_config->mutable_safety_category_thresholds()->Add(
-      ForbidUnsafe());
-  other_feature_safety_config->mutable_safety_category_thresholds()->Add(
-      RequireReasonable());
-  proto::Any any;
-  any.set_type_url(
-      "type.googleapis.com/optimization_guide.proto.TextSafetyModelMetadata");
-  model_metadata.SerializeToString(any.mutable_value());
-  std::unique_ptr<optimization_guide::ModelInfo> model_info =
-      TestModelInfoBuilder()
-          .SetAdditionalFiles(
-              {temp_dir().Append(kTsDataFile),
-               temp_dir().Append(base::FilePath(kTsSpModelFile))})
-          .SetModelMetadata(any)
-          .Build();
-  test_controller_->MaybeUpdateSafetyModel(*model_info);
+  FakeSafetyModelAsset safety_asset([]() {
+    proto::FeatureTextSafetyConfiguration safety_config;
+    safety_config.set_feature(proto::MODEL_EXECUTION_FEATURE_TEST);
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    safety_config.mutable_safety_category_thresholds()->Add(
+        RequireReasonable());
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
+
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
       /*config_params=*/std::nullopt);
@@ -3280,12 +3207,12 @@ TEST_F(OnDeviceModelServiceControllerTest, TsInterval0) {
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
       /*config_params=*/std::nullopt);
@@ -3314,12 +3241,12 @@ TEST_F(OnDeviceModelServiceControllerTest, TsInterval1) {
       },
       {});
   Initialize();
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
       /*config_params=*/std::nullopt);
@@ -3355,12 +3282,12 @@ TEST_F(OnDeviceModelServiceControllerTest, TsInterval3) {
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
       /*config_params=*/std::nullopt);
@@ -3378,28 +3305,6 @@ TEST_F(OnDeviceModelServiceControllerTest, TsInterval3) {
   };
   EXPECT_EQ(*response_.value(), expected_responses.back());
   EXPECT_THAT(response_.streamed(), ElementsAreArray(expected_responses));
-}
-
-TEST_F(OnDeviceModelServiceControllerTest,
-       FailsWhenOnDeviceModelAdaptationMissing) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      {features::kOptimizationGuideComposeOnDeviceEval,
-       features::internal::kModelAdaptationCompose},
-      {});
-
-  Initialize();
-
-  base::HistogramTester histogram_tester;
-  auto session = test_controller_->CreateSession(
-      ModelBasedCapabilityKey::kCompose, base::DoNothing(),
-      logger_.GetWeakPtr(), nullptr,
-      /*config_params=*/std::nullopt);
-  EXPECT_FALSE(session);
-
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.ModelExecution.OnDeviceModelEligibilityReason.Compose",
-      OnDeviceModelEligibilityReason::kModelAdaptationNotAvailable, 1);
 }
 
 TEST_F(OnDeviceModelServiceControllerTest, TestAvailabilityObserver) {
@@ -3430,18 +3335,17 @@ TEST_F(OnDeviceModelServiceControllerTest, TestAvailabilityObserver) {
 
   on_device_component_state_manager_.get()->OnStartup();
   task_environment_.RunUntilIdle();
-  on_device_component_state_manager_.SetReady(temp_dir());
+  on_device_component_state_manager_.SetReady(base_model_asset_.path());
   task_environment_.RunUntilIdle();
   EXPECT_EQ(OnDeviceModelEligibilityReason::kSuccess,
             availability_observer_test.reason_);
-  EXPECT_EQ(OnDeviceModelEligibilityReason::kModelAdaptationNotAvailable,
-            availability_observer_compose.reason_);
 
-  on_device_model::AdaptationAssetPaths asset_paths;
-  test_controller_->MaybeUpdateModelAdaptation(
-      ModelBasedCapabilityKey::kCompose,
-      OnDeviceModelAdaptationMetadata::New(&asset_paths, kModelAdatationVersion,
-                                           /*adapter=*/nullptr));
+  FakeAdaptationAsset adaptation_asset({
+      .config = config_compose,
+      .weight = 1015,
+  });
+  test_controller_->MaybeUpdateModelAdaptation(adaptation_asset.feature(),
+                                               adaptation_asset.metadata());
   EXPECT_EQ(OnDeviceModelEligibilityReason::kSuccess,
             availability_observer_test.reason_);
   EXPECT_EQ(OnDeviceModelEligibilityReason::kSuccess,
@@ -3469,12 +3373,12 @@ TEST_P(OnDeviceModelServiceControllerTsIntervalTest,
   config.set_can_skip_text_safety(false);
   Initialize({.config = config});
 
-  {
-    auto safety_config =
-        std::make_unique<proto::FeatureTextSafetyConfiguration>();
-    safety_config->mutable_safety_category_thresholds()->Add(ForbidUnsafe());
-    SetFeatureTextSafetyConfiguration(std::move(safety_config));
-  }
+  FakeSafetyModelAsset safety_asset([]() {
+    auto safety_config = ComposeSafetyConfig();
+    safety_config.mutable_safety_category_thresholds()->Add(ForbidUnsafe());
+    return safety_config;
+  }());
+  test_controller_->MaybeUpdateSafetyModel(safety_asset.model_info());
 
   auto session = test_controller_->CreateSession(
       kFeature, base::DoNothing(), logger_.GetWeakPtr(), nullptr,
@@ -3663,7 +3567,8 @@ TEST_F(OnDeviceModelServiceControllerTest, ModelValidationNewModelVersion) {
 
     on_device_component_state_manager_.get()->OnStartup();
     task_environment_.RunUntilIdle();
-    on_device_component_state_manager_.SetReady(temp_dir(), "0.0.2");
+    on_device_component_state_manager_.SetReady(base_model_asset_.path(),
+                                                "0.0.2");
     task_environment_.RunUntilIdle();
 
     histogram_tester.ExpectUniqueSample(
@@ -3693,9 +3598,10 @@ TEST_F(OnDeviceModelServiceControllerTest,
   // Write an empty validation config and send a new model update.
   auto default_config = SimpleComposeConfig();
   default_config.set_can_skip_text_safety(true);
-  WriteFeatureConfig(default_config);
+  base_model_asset_.Write(default_config);
 
-  on_device_component_state_manager_.SetReady(temp_dir(), "0.0.2");
+  on_device_component_state_manager_.SetReady(base_model_asset_.path(),
+                                              "0.0.2");
   task_environment_.RunUntilIdle();
 
   task_environment_.FastForwardBy(base::Seconds(10) + base::Milliseconds(1));

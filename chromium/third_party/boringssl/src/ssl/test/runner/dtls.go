@@ -16,6 +16,7 @@ package runner
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -23,9 +24,130 @@ import (
 	"net"
 )
 
-func (c *Conn) dtlsDoReadRecord(want recordType) (recordType, *block, error) {
-	recordHeaderLen := dtlsRecordHeaderLen
+func (c *Conn) readDTLS13RecordHeader(b *block) (headerLen int, recordLen int, recTyp recordType, seq []byte, err error) {
+	// The DTLS 1.3 record header starts with the type byte containing
+	// 0b001CSLEE, where C, S, L, and EE are bits with the following
+	// meanings:
+	//
+	// C=1: Connection ID is present (C=0: CID is absent)
+	// S=1: the sequence number is 16 bits (S=0: it is 8 bits)
+	// L=1: 16-bit length field is present (L=0: record goes to end of packet)
+	// EE: low two bits of the epoch.
+	//
+	// A real DTLS implementation would parse these bits and take
+	// appropriate action based on them. However, this is a test
+	// implementation, and the code we are testing only ever sends C=0, S=1,
+	// L=1. This code expects those bits to be set and will error if
+	// anything else is set. This means we expect the type byte to look like
+	// 0b001011EE, or 0x2c-0x2f.
+	recordHeaderLen := 5
+	if len(b.data) < recordHeaderLen {
+		return 0, 0, 0, nil, errors.New("dtls: failed to read record header")
+	}
+	typ := b.data[0]
+	if typ&0xfc != 0x2c {
+		return 0, 0, 0, nil, errors.New("dtls: DTLS 1.3 record header has bad type byte")
+	}
+	// For test purposes, require the epoch received be the same as the
+	// epoch we expect to receive.
+	epoch := typ & 0x03
+	if epoch != c.in.seq[1]&0x03 {
+		c.sendAlert(alertIllegalParameter)
+		return 0, 0, 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: bad epoch"))
+	}
+	wireSeq := b.data[1:3]
+	if !c.config.Bugs.NullAllCiphers {
+		sample := b.data[recordHeaderLen:]
+		mask := c.in.recordNumberEncrypter.generateMask(sample)
+		xorSlice(wireSeq, mask)
+	}
+	decWireSeq := binary.BigEndian.Uint16(wireSeq)
+	// Reconstruct the sequence number from the low 16 bits on the wire.
+	// A real implementation would compute the full sequence number that is
+	// closest to the highest successfully decrypted record in the
+	// identified epoch. Since this test implementation errors on decryption
+	// failures instead of simply discarding packets, it reconstructs a
+	// sequence number that is not less than c.in.seq. (This matches the
+	// behavior of the check of the sequence number in the old record
+	// header format.)
+	seqInt := binary.BigEndian.Uint64(c.in.seq[:])
+	// c.in.seq has the epoch in the upper two bytes - clear those.
+	seqInt = seqInt &^ (0xffff << 48)
+	newSeq := seqInt&^0xffff | uint64(decWireSeq)
+	if newSeq < seqInt {
+		newSeq += 0x10000
+	}
 
+	seq = make([]byte, 8)
+	binary.BigEndian.PutUint64(seq, newSeq)
+	copy(c.in.seq[2:], seq[2:])
+
+	recordLen = int(b.data[3])<<8 | int(b.data[4])
+	return recordHeaderLen, recordLen, 0, seq, nil
+}
+
+// readDTLSRecordHeader reads the record header from the block. Based on the
+// header it reads, it checks the header's validity and sets appropriate state
+// as needed. This function returns the record header, the record type indicated
+// in the header (if it contains the type), and the sequence number to use for
+// record decryption.
+func (c *Conn) readDTLSRecordHeader(b *block) (headerLen int, recordLen int, typ recordType, seq []byte, err error) {
+	if c.in.cipher != nil && c.in.version >= VersionTLS13 {
+		return c.readDTLS13RecordHeader(b)
+	}
+
+	recordHeaderLen := 13
+	// Read out one record.
+	//
+	// A real DTLS implementation should be tolerant of errors,
+	// but this is test code. We should not be tolerant of our
+	// peer sending garbage.
+	if len(b.data) < recordHeaderLen {
+		return 0, 0, 0, nil, errors.New("dtls: failed to read record header")
+	}
+	typ = recordType(b.data[0])
+	vers := uint16(b.data[1])<<8 | uint16(b.data[2])
+	// Alerts sent near version negotiation do not have a well-defined
+	// record-layer version prior to TLS 1.3. (In TLS 1.3, the record-layer
+	// version is irrelevant.)
+	if typ != recordTypeAlert {
+		if c.haveVers {
+			wireVersion := c.wireVersion
+			if c.vers >= VersionTLS13 {
+				wireVersion = VersionDTLS12
+			}
+			if vers != wireVersion {
+				c.sendAlert(alertProtocolVersion)
+				return 0, 0, 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: received record with version %x when expecting version %x", vers, c.wireVersion))
+			}
+		} else {
+			// Pre-version-negotiation alerts may be sent with any version.
+			if expect := c.config.Bugs.ExpectInitialRecordVersion; expect != 0 && vers != expect {
+				c.sendAlert(alertProtocolVersion)
+				return 0, 0, 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: received record with version %x when expecting version %x", vers, expect))
+			}
+		}
+	}
+	epoch := b.data[3:5]
+	seq = b.data[5:11]
+	// For test purposes, require the sequence number be monotonically
+	// increasing, so c.in includes the minimum next sequence number. Gaps
+	// may occur if packets failed to be sent out. A real implementation
+	// would maintain a replay window and such.
+	if !bytes.Equal(epoch, c.in.seq[:2]) {
+		c.sendAlert(alertIllegalParameter)
+		return 0, 0, 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: bad epoch"))
+	}
+	if bytes.Compare(seq, c.in.seq[2:]) < 0 {
+		c.sendAlert(alertIllegalParameter)
+		return 0, 0, 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: bad sequence number"))
+	}
+	copy(c.in.seq[2:], seq)
+	recordLen = int(b.data[11])<<8 | int(b.data[12])
+	return recordHeaderLen, recordLen, typ, b.data[3:11], nil
+}
+
+func (c *Conn) dtlsDoReadRecord(want recordType) (recordType, *block, error) {
 	if c.rawInput == nil {
 		c.rawInput = c.in.newBlock()
 	}
@@ -35,7 +157,7 @@ func (c *Conn) dtlsDoReadRecord(want recordType) (recordType, *block, error) {
 	var newPacket bool
 	if len(b.data) == 0 {
 		// Pick some absurdly large buffer size.
-		b.resize(maxCiphertext + recordHeaderLen)
+		b.resize(maxCiphertext + dtlsMaxRecordHeaderLen)
 		n, err := c.conn.Read(c.rawInput.data)
 		if err != nil {
 			return 0, nil, err
@@ -47,57 +169,18 @@ func (c *Conn) dtlsDoReadRecord(want recordType) (recordType, *block, error) {
 		newPacket = true
 	}
 
-	// Read out one record.
-	//
-	// A real DTLS implementation should be tolerant of errors,
-	// but this is test code. We should not be tolerant of our
-	// peer sending garbage.
-	if len(b.data) < recordHeaderLen {
-		return 0, nil, errors.New("dtls: failed to read record header")
+	recordHeaderLen, n, typ, seq, err := c.readDTLSRecordHeader(b)
+	if err != nil {
+		return 0, nil, err
 	}
-	typ := recordType(b.data[0])
-	vers := uint16(b.data[1])<<8 | uint16(b.data[2])
-	// Alerts sent near version negotiation do not have a well-defined
-	// record-layer version prior to TLS 1.3. (In TLS 1.3, the record-layer
-	// version is irrelevant.)
-	if typ != recordTypeAlert {
-		if c.haveVers {
-			if vers != c.wireVersion {
-				c.sendAlert(alertProtocolVersion)
-				return 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: received record with version %x when expecting version %x", vers, c.wireVersion))
-			}
-		} else {
-			// Pre-version-negotiation alerts may be sent with any version.
-			if expect := c.config.Bugs.ExpectInitialRecordVersion; expect != 0 && vers != expect {
-				c.sendAlert(alertProtocolVersion)
-				return 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: received record with version %x when expecting version %x", vers, expect))
-			}
-		}
-	}
-	epoch := b.data[3:5]
-	seq := b.data[5:11]
-	// For test purposes, require the sequence number be monotonically
-	// increasing, so c.in includes the minimum next sequence number. Gaps
-	// may occur if packets failed to be sent out. A real implementation
-	// would maintain a replay window and such.
-	if !bytes.Equal(epoch, c.in.seq[:2]) {
-		c.sendAlert(alertIllegalParameter)
-		return 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: bad epoch"))
-	}
-	if bytes.Compare(seq, c.in.seq[2:]) < 0 {
-		c.sendAlert(alertIllegalParameter)
-		return 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: bad sequence number"))
-	}
-	copy(c.in.seq[2:], seq)
-	n := int(b.data[11])<<8 | int(b.data[12])
 	if n > maxCiphertext || len(b.data) < recordHeaderLen+n {
 		c.sendAlert(alertRecordOverflow)
 		return 0, nil, c.in.setErrorLocked(fmt.Errorf("dtls: oversized record received with length %d", n))
 	}
+	b, c.rawInput = c.in.splitBlock(b, recordHeaderLen+n)
 
 	// Process message.
-	b, c.rawInput = c.in.splitBlock(b, recordHeaderLen+n)
-	ok, off, _, alertValue := c.in.decrypt(b)
+	ok, off, encTyp, alertValue := c.in.decrypt(seq, recordHeaderLen, b)
 	if !ok {
 		// A real DTLS implementation would silently ignore bad records,
 		// but we want to notice errors from the implementation under
@@ -106,8 +189,12 @@ func (c *Conn) dtlsDoReadRecord(want recordType) (recordType, *block, error) {
 	}
 	b.off = off
 
-	// TODO(nharper): Once DTLS 1.3 is defined, handle the extra
-	// parameter from decrypt.
+	if typ == 0 {
+		// readDTLSRecordHeader sets typ=0 when decoding the DTLS 1.3
+		// record header. When the new record header format is used, the
+		// type is returned by decrypt() in encTyp.
+		typ = encTyp
+	}
 
 	// Require that ChangeCipherSpec always share a packet with either the
 	// previous or next handshake message.
@@ -165,7 +252,7 @@ func (c *Conn) dtlsWriteRecord(typ recordType, data []byte) (n int, err error) {
 			}
 		}
 
-		if typ == recordTypeChangeCipherSpec {
+		if typ == recordTypeChangeCipherSpec && c.vers < VersionTLS13 {
 			err = c.out.changeCipherSpec(c.config)
 			if err != nil {
 				return n, c.sendAlertLocked(alertLevelError, err.(alert))
@@ -327,11 +414,47 @@ func (c *Conn) dtlsFlushHandshake() error {
 	return nil
 }
 
+// writeDTLS13RecordHeader writes to b the record header for a record of length
+// recordLen.
+func (c *Conn) writeDTLS13RecordHeader(b *block, recordLen int) {
+	// Set the top 3 bits on the type byte to indicate the DTLS 1.3 record
+	// header format.
+	typ := byte(0x20)
+
+	if c.config.Bugs.DTLS13RecordHeaderSetCIDBit && c.handshakeComplete {
+		// Set the Connection ID bit
+		typ |= 0x10
+	}
+
+	// Set the sequence number length bit
+	if !c.config.DTLSUseShortSeqNums {
+		typ |= 0x08
+	}
+	// Set the length presence bit
+	if !c.config.DTLSRecordHeaderOmitLength {
+		typ |= 0x04
+	}
+	// Set the epoch bits
+	typ |= c.out.outSeq[1] & 0x3
+	b.data[0] = typ
+	lenOffset := 3
+	if c.config.DTLSUseShortSeqNums {
+		b.data[1] = c.out.outSeq[7]
+		lenOffset = 2
+	} else {
+		copy(b.data[1:3], c.out.outSeq[6:8])
+	}
+	if !c.config.DTLSRecordHeaderOmitLength {
+		b.data[lenOffset] = byte(recordLen >> 8)
+		b.data[lenOffset+1] = byte(recordLen)
+	}
+}
+
 // dtlsPackRecord packs a single record to the pending packet, flushing it
 // if necessary. The caller should call dtlsFlushPacket to flush the current
 // pending packet afterwards.
 func (c *Conn) dtlsPackRecord(typ recordType, data []byte, mustPack bool) (n int, err error) {
-	recordHeaderLen := dtlsRecordHeaderLen
+	recordHeaderLen := c.out.writeRecordHeaderLen()
 	maxLen := c.config.Bugs.MaxHandshakeRecordLength
 	if maxLen <= 0 {
 		maxLen = 1024
@@ -358,9 +481,6 @@ func (c *Conn) dtlsPackRecord(typ recordType, data []byte, mustPack bool) (n int
 		panic("Unknown cipher")
 	}
 	b.resize(recordHeaderLen + explicitIVLen + len(data))
-	// TODO(nharper): DTLS 1.3 will likely need to set this to
-	// recordTypeApplicationData if c.out.cipher != nil.
-	b.data[0] = byte(typ)
 	vers := c.wireVersion
 	if vers == 0 {
 		// Some TLS servers fail if the record version is greater than
@@ -371,12 +491,9 @@ func (c *Conn) dtlsPackRecord(typ recordType, data []byte, mustPack bool) (n int
 			vers = VersionTLS10
 		}
 	}
-	b.data[1] = byte(vers >> 8)
-	b.data[2] = byte(vers)
-	// DTLS records include an explicit sequence number.
-	copy(b.data[3:11], c.out.outSeq[0:])
-	b.data[11] = byte(len(data) >> 8)
-	b.data[12] = byte(len(data))
+	if c.vers >= VersionTLS13 || c.out.version >= VersionTLS13 {
+		vers = VersionDTLS12
+	}
 	if explicitIVLen > 0 {
 		explicitIV := b.data[recordHeaderLen : recordHeaderLen+explicitIVLen]
 		if explicitIVIsSeq {
@@ -388,7 +505,38 @@ func (c *Conn) dtlsPackRecord(typ recordType, data []byte, mustPack bool) (n int
 		}
 	}
 	copy(b.data[recordHeaderLen+explicitIVLen:], data)
+	recordLen := c.addTLS13Padding(b, recordHeaderLen, len(data), typ)
+	useDTLS13RecordHeader := c.out.version >= VersionTLS13 && c.out.cipher != nil && !(c.config.Bugs.DTLSUsePlaintextRecordHeader && c.handshakeComplete)
+	if useDTLS13RecordHeader {
+		c.writeDTLS13RecordHeader(b, recordLen)
+	} else {
+		b.data[0] = byte(typ)
+		b.data[1] = byte(vers >> 8)
+		b.data[2] = byte(vers)
+		// DTLS records include an explicit sequence number.
+		copy(b.data[3:11], c.out.outSeq[0:])
+		b.data[11] = byte(recordLen >> 8)
+		b.data[12] = byte(recordLen)
+	}
+	// encrypt will increment the sequence number. Copy it here to use when
+	// performing sequence number encryption.
+	seqBytes := make([]byte, 2)
+	copy(seqBytes, c.out.outSeq[6:8])
 	c.out.encrypt(b, explicitIVLen, typ)
+	if useDTLS13RecordHeader && !c.config.Bugs.NullAllCiphers {
+		recordHeaderLen := c.out.writeRecordHeaderLen()
+		sample := b.data[recordHeaderLen:]
+		mask := c.out.recordNumberEncrypter.generateMask(sample)
+		if c.config.DTLSUseShortSeqNums {
+			seqBytes = seqBytes[1:2]
+		}
+		xorSlice(seqBytes, mask)
+		for i := range seqBytes {
+			// The sequence number starts at index 1 in the record
+			// header.
+			b.data[1+i] = seqBytes[i]
+		}
+	}
 
 	// Flush the current pending packet if necessary.
 	if !mustPack && len(b.data)+len(c.pendingPacket) > c.config.Bugs.PackHandshakeRecords {
@@ -402,6 +550,15 @@ func (c *Conn) dtlsPackRecord(typ recordType, data []byte, mustPack bool) (n int
 	// Add the record to the pending packet.
 	c.pendingPacket = append(c.pendingPacket, b.data...)
 	c.out.freeBlock(b)
+	if c.config.DTLSRecordHeaderOmitLength {
+		if c.config.Bugs.SplitAndPackAppData {
+			panic("incompatible config")
+		}
+		err = c.dtlsFlushPacket()
+		if err != nil {
+			return
+		}
+	}
 	n = len(data)
 	return
 }

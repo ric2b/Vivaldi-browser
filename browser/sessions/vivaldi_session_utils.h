@@ -7,6 +7,7 @@
 #include "base/values.h"
 #include "browser/sessions/vivaldi_session_service.h"
 #include "components/datasource/vivaldi_image_store.h"
+#include "components/sessions/core/tab_restore_types.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
 
 class Browser;
@@ -175,4 +176,6 @@ void DumpContent(base::FilePath name);
 // Add index to list of tabs opened on the command-line, before tab to window
 bool AddCommandLineTab(Browser* browser);
 
+// Returns true if the entry is a web-widget or a panel.
+bool IsVivaldiPanel(const sessions::tab_restore::Entry& entry);
 }  // namespace sessions

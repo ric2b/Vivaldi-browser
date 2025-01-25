@@ -8,12 +8,11 @@
 #ifndef SKSL_TRANSFORM
 #define SKSL_TRANSFORM
 
-#include "include/core/SkSpan.h"
-#include "src/sksl/SkSLPosition.h"
+#include "src/sksl/SkSLDefines.h"
 #include "src/sksl/ir/SkSLModifierFlags.h"
 
+#include <cstdint>
 #include <memory>
-#include <vector>
 
 namespace SkSL {
 
@@ -21,14 +20,13 @@ class Block;
 class Context;
 class Expression;
 class IndexExpression;
-struct Module;
-struct Program;
-class ProgramElement;
+class Position;
 class ProgramUsage;
-class Statement;
-class SwitchStatement;
+class SymbolTable;
 class Variable;
 enum class ProgramKind : int8_t;
+struct Module;
+struct Program;
 
 namespace Transform {
 
@@ -85,6 +83,12 @@ void EliminateEmptyStatements(Module& module);
  * for Programs because extra braces are harmless, but they waste space in long-lived module IR.
  */
 void EliminateUnnecessaryBraces(const Context& context, Module& module);
+
+/**
+ * Replaces splat-casts like `float4(myFloat)` with `myFloat.xxxx`. This should be slightly smaller
+ * in textual form, and will be optimized back to the splat-cast at load time.
+ */
+void ReplaceSplatCastsWithSwizzles(const Context& context, Module& module);
 
 /**
  * Eliminates functions in a program which are never called. Returns true if any changes were made.

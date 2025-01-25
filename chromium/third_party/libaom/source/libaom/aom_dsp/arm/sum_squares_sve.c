@@ -15,7 +15,7 @@
 #include "aom_dsp/arm/mem_neon.h"
 #include "config/aom_dsp_rtcd.h"
 
-static INLINE uint64_t aom_sum_squares_2d_i16_4xh_sve(const int16_t *src,
+static inline uint64_t aom_sum_squares_2d_i16_4xh_sve(const int16_t *src,
                                                       int stride, int height) {
   int64x2_t sum_squares = vdupq_n_s64(0);
 
@@ -31,7 +31,7 @@ static INLINE uint64_t aom_sum_squares_2d_i16_4xh_sve(const int16_t *src,
   return (uint64_t)vaddvq_s64(sum_squares);
 }
 
-static INLINE uint64_t aom_sum_squares_2d_i16_8xh_sve(const int16_t *src,
+static inline uint64_t aom_sum_squares_2d_i16_8xh_sve(const int16_t *src,
                                                       int stride, int height) {
   int64x2_t sum_squares[2] = { vdupq_n_s64(0), vdupq_n_s64(0) };
 
@@ -50,7 +50,7 @@ static INLINE uint64_t aom_sum_squares_2d_i16_8xh_sve(const int16_t *src,
   return (uint64_t)vaddvq_s64(sum_squares[0]);
 }
 
-static INLINE uint64_t aom_sum_squares_2d_i16_large_sve(const int16_t *src,
+static inline uint64_t aom_sum_squares_2d_i16_large_sve(const int16_t *src,
                                                         int stride, int width,
                                                         int height) {
   int64x2_t sum_squares[2] = { vdupq_n_s64(0), vdupq_n_s64(0) };
@@ -76,7 +76,7 @@ static INLINE uint64_t aom_sum_squares_2d_i16_large_sve(const int16_t *src,
   return (uint64_t)vaddvq_s64(sum_squares[0]);
 }
 
-static INLINE uint64_t aom_sum_squares_2d_i16_wxh_sve(const int16_t *src,
+static inline uint64_t aom_sum_squares_2d_i16_wxh_sve(const int16_t *src,
                                                       int stride, int width,
                                                       int height) {
   svint64_t sum_squares = svdup_n_s64(0);
@@ -147,7 +147,7 @@ uint64_t aom_sum_squares_i16_sve(const int16_t *src, uint32_t n) {
   return aom_sum_squares_i16_c(src, n);
 }
 
-static INLINE uint64_t aom_sum_sse_2d_i16_4xh_sve(const int16_t *src,
+static inline uint64_t aom_sum_sse_2d_i16_4xh_sve(const int16_t *src,
                                                   int stride, int height,
                                                   int *sum) {
   int64x2_t sse = vdupq_n_s64(0);
@@ -168,7 +168,7 @@ static INLINE uint64_t aom_sum_sse_2d_i16_4xh_sve(const int16_t *src,
   return vaddvq_s64(sse);
 }
 
-static INLINE uint64_t aom_sum_sse_2d_i16_8xh_sve(const int16_t *src,
+static inline uint64_t aom_sum_sse_2d_i16_8xh_sve(const int16_t *src,
                                                   int stride, int height,
                                                   int *sum) {
   int64x2_t sse[2] = { vdupq_n_s64(0), vdupq_n_s64(0) };
@@ -192,7 +192,7 @@ static INLINE uint64_t aom_sum_sse_2d_i16_8xh_sve(const int16_t *src,
   return vaddvq_s64(vaddq_s64(sse[0], sse[1]));
 }
 
-static INLINE uint64_t aom_sum_sse_2d_i16_16xh_sve(const int16_t *src,
+static inline uint64_t aom_sum_sse_2d_i16_16xh_sve(const int16_t *src,
                                                    int stride, int width,
                                                    int height, int *sum) {
   int64x2_t sse[2] = { vdupq_n_s64(0), vdupq_n_s64(0) };
@@ -237,7 +237,7 @@ uint64_t aom_sum_sse_2d_i16_sve(const int16_t *src, int stride, int width,
   return sse;
 }
 
-static INLINE uint64_t aom_var_2d_u16_4xh_sve(uint8_t *src, int src_stride,
+static inline uint64_t aom_var_2d_u16_4xh_sve(uint8_t *src, int src_stride,
                                               int width, int height) {
   uint16_t *src_u16 = CONVERT_TO_SHORTPTR(src);
   uint64_t sum = 0;
@@ -264,7 +264,7 @@ static INLINE uint64_t aom_var_2d_u16_4xh_sve(uint8_t *src, int src_stride,
   return sse - sum * sum / (width * height);
 }
 
-static INLINE uint64_t aom_var_2d_u16_8xh_sve(uint8_t *src, int src_stride,
+static inline uint64_t aom_var_2d_u16_8xh_sve(uint8_t *src, int src_stride,
                                               int width, int height) {
   uint16_t *src_u16 = CONVERT_TO_SHORTPTR(src);
   uint64_t sum = 0;
@@ -296,7 +296,7 @@ static INLINE uint64_t aom_var_2d_u16_8xh_sve(uint8_t *src, int src_stride,
   return sse - sum * sum / (width * height);
 }
 
-static INLINE uint64_t aom_var_2d_u16_16xh_sve(uint8_t *src, int src_stride,
+static inline uint64_t aom_var_2d_u16_16xh_sve(uint8_t *src, int src_stride,
                                                int width, int height) {
   uint16_t *src_u16 = CONVERT_TO_SHORTPTR(src);
   uint64_t sum = 0;
@@ -334,7 +334,7 @@ static INLINE uint64_t aom_var_2d_u16_16xh_sve(uint8_t *src, int src_stride,
   return sse - sum * sum / (width * height);
 }
 
-static INLINE uint64_t aom_var_2d_u16_large_sve(uint8_t *src, int src_stride,
+static inline uint64_t aom_var_2d_u16_large_sve(uint8_t *src, int src_stride,
                                                 int width, int height) {
   uint16_t *src_u16 = CONVERT_TO_SHORTPTR(src);
   uint64_t sum = 0;

@@ -21,6 +21,8 @@
 #include "chrome/browser/ui/views/editor_menu/editor_menu_view.h"
 #include "chrome/browser/ui/views/editor_menu/utils/editor_types.h"
 #include "chromeos/components/editor_menu/public/cpp/preset_text_query.h"
+#include "chromeos/components/magic_boost/public/cpp/magic_boost_state.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "content/public/browser/browser_context.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/view_utils.h"
@@ -77,10 +79,15 @@ void EditorMenuControllerImpl::OnDismiss(bool is_other_command_executed) {
 }
 
 void EditorMenuControllerImpl::OnSettingsButtonPressed() {
-  GURL setting_url = GURL(base::StrCat({"chrome://os-settings/",
-                    chromeos::settings::mojom::kInputSubpagePath, "?settingId=",
-                    base::NumberToString(static_cast<int>(
-                        chromeos::settings::mojom::Setting::kShowOrca))}));
+  GURL setting_url = GURL(base::StrCat(
+      {"chrome://os-settings/",
+       chromeos::MagicBoostState::Get() &&
+               chromeos::MagicBoostState::Get()->IsMagicBoostAvailable()
+           ? chromeos::settings::mojom::kSystemPreferencesSectionPath
+           : chromeos::settings::mojom::kInputSubpagePath,
+       "?settingId=",
+       base::NumberToString(
+           static_cast<int>(chromeos::settings::mojom::Setting::kShowOrca))}));
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   chromeos::LacrosService* service = chromeos::LacrosService::Get();
   DCHECK(service->IsAvailable<crosapi::mojom::UrlHandler>());
@@ -148,10 +155,17 @@ void EditorMenuControllerImpl::OnEditorMenuVisibilityChanged(bool visible) {
   }
 }
 
-void EditorMenuControllerImpl::SetBrowserContext(
+bool EditorMenuControllerImpl::SetBrowserContext(
     content::BrowserContext* context) {
-  card_session_ =
-      std::make_unique<EditorCardSession>(this, CreateEditorManager(context));
+  std::unique_ptr<EditorManager> editor_manager = CreateEditorManager(context);
+
+  if (editor_manager) {
+    card_session_ =
+        std::make_unique<EditorCardSession>(this, std::move(editor_manager));
+    return true;
+  }
+  card_session_ = nullptr;
+  return false;
 }
 
 void EditorMenuControllerImpl::DismissCard() {

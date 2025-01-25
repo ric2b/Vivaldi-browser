@@ -220,6 +220,7 @@
 <translation id="2490721194269245365">بادمجانی</translation>
 <translation id="249330843868392562">باز کردن تنظیمات نوشتار به گفتار</translation>
 <translation id="2497706219848005458">مغز پسته‌ای</translation>
+<translation id="2512979179176933762">نمایش پنجره‌ها</translation>
 <translation id="2523609930580546572">‏آموزش گام‌به‌گام ChromeVox</translation>
 <translation id="2525706221823668172">‏میان‌برهای صفحه‌کلید Chromebook</translation>
 <translation id="2553108862507765288">اشتباه دستوری</translation>
@@ -382,7 +383,7 @@
 <translation id="3457000393508828486">فشردن مختصر</translation>
 <translation id="3458865416877308321"><ph name="NAME" /> در حالت خاموش است</translation>
 <translation id="3466530247399808663">فشار کلید نامعتبر</translation>
-<translation id="3468959318854349468">بدون عنوان</translation>
+<translation id="3468959318854349468">بی‌عنوان</translation>
 <translation id="3469413619751135069">سبز مات</translation>
 <translation id="3490765818161916458">جدول فهرست</translation>
 <translation id="3492609944033322585">{COUNT,plural, =1{کروشه راست}one{# کروشه راست}other{# کروشه راست}}</translation>
@@ -459,7 +460,7 @@
 <translation id="4006140876663370126">img</translation>
 <translation id="4021716437419160885">پیمایش به پایین</translation>
 <translation id="4035381225449278841">بهار</translation>
-<translation id="4038098586530338813">انجام مجدد</translation>
+<translation id="4038098586530338813">ازنو انجام دادن</translation>
 <translation id="4047216625641135770">علامت</translation>
 <translation id="4047910800766704982">‏وقتی دستگاهتان آنلاین شد، می‌توانید از صدایی طبیعی و شبیه صدای انسان استفاده کنید. نوشتار برای پردازش به Google ارسال خواهد شد. هرزمان خواستید می‌توانید آن را در «تنظیمات» خاموش کنید.</translation>
 <translation id="4053520724192563562">سبز مغزپسته‌ای</translation>
@@ -491,12 +492,13 @@
 <translation id="4221012616705981690">فهرست قبلی وجود ندارد</translation>
 <translation id="4225355998815256469">کنترل‌های فرم</translation>
 <translation id="4230834257931120629">سربی روشن</translation>
-<translation id="4231102694147661229">فعال کردن گزینه‌های برنامه‌نویس</translation>
+<translation id="4231102694147661229">فعال کردن گزینه‌های توسعه‌دهندگان</translation>
 <translation id="423428485095722850">‏«جستجو+فاصله» (Search+Space) را برای تغییر وضعیت فشار دهید</translation>
 <translation id="4243624244759495699"><ph name="LOCALE" />، درجه <ph name="GRADE" /></translation>
 <translation id="4246217262268234757">نیلی متالیک</translation>
 <translation id="4253168017788158739">یادداشت</translation>
 <translation id="4254798249533888099">درخت</translation>
+<translation id="4259220820964911921">کنترل چهره فعال شود؟</translation>
 <translation id="4271220233568730077">عبارت ریاضی بعدی</translation>
 <translation id="4275397969489577657">فعال کردن گزارش‌گیری از جریان رویداد</translation>
 <translation id="4278486392851938658">پیوند بازدیدشده قبلی وجود ندارد</translation>
@@ -710,6 +712,7 @@
 <translation id="5760594853119905566">ضمیمه</translation>
 <translation id="5761219715606611783">‏عالی بود! با اصول اولیه گزینه‌های لمسی ChromeVox آشنا شدید. می‌توانید دوباره آموزش گام‌به‌گام را طی کنید یا بااستفاده از دکمه‌های زیر، از آموزش گام‌به‌گام خارج شوید.</translation>
 <translation id="5776001898637896684">‏افزونه نوشتار به گفتار «شبکه بهبودیافته Google»</translation>
+<translation id="5783252477644995371">با کنترل چهره می‌توانید مکان‌نما را ازطریق اشاره صورت کنترل کنید و کنش‌هایی مثل کلیک چپ را با اشاره‌های چهره مثل لبخند انجام دهید</translation>
 <translation id="5805940204952508776">ضربه با دو انگشت</translation>
 <translation id="5819072574982403430">مورد درختی</translation>
 <translation id="5822819874379903994">فیروزه‌ای سیر</translation>
@@ -1073,7 +1076,6 @@
 <translation id="847040613207937740">چارگوش انتخاب بعدی وجود ندارد</translation>
 <translation id="8473540203671727883">خواندن نوشتار زیر نشانگر موشواره</translation>
 <translation id="8476408756881832830">‏توقف بازپخش هنگامی که ChromeVox درحال صحبت کردن است</translation>
-<translation id="8476508772960940536">نمای کلی پنجره</translation>
 <translation id="8480873377842220259">اکنون برخی از پیمایش‌های پایه را یاد خواهید گرفت. برای حرکت در اطراف صفحه‌نمایش، می‌توانید کلید «جستجو» را نگه دارید و کلیدهای پیکان را فشار دهید. برای ادامه، کلید «جستجو» + «پیکان روبه‌راست» را فشار دهید.</translation>
 <translation id="8503360654911991865">کاهش جزئیات پیمایش</translation>
 <translation id="8520472399088452386">دکمه چرخش</translation>

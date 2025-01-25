@@ -720,10 +720,10 @@ TEST_F(CustomizeChromePageHandlerTest, OpenChromeWebStoreCollectionPage) {
             1);
 }
 
-TEST_F(CustomizeChromePageHandlerTest, OpenSettingsSearchEnginePage) {
+TEST_F(CustomizeChromePageHandlerTest, OpenNtpManagedByPage) {
   GURL url;
   EXPECT_CALL(mock_open_url_callback_, Run).Times(1).WillOnce(SaveArg<0>(&url));
-  handler().OpenSettingsSearchEnginePage();
+  handler().OpenNtpManagedByPage();
 
   EXPECT_EQ(GURL(chrome::kBrowserSettingsSearchEngineURL), url);
 }
@@ -814,7 +814,8 @@ class CustomizeChromePageHandlerWithModulesTest
   void SetUp() override {
     base::test::ScopedFeatureList features;
     features.InitWithFeatures(
-        /*enabled_features=*/{ntp_features::kNtpTabResumptionModule},
+        /*enabled_features=*/{ntp_features::
+                                  kNtpMostRelevantTabResumptionModule},
         /*disabled_features=*/{});
     CustomizeChromePageHandlerTest::SetUp();
   }

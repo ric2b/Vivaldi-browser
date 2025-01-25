@@ -183,7 +183,7 @@ using security_interstitials::https_only_mode::NavigationRequestSecurityLevel;
 // static
 std::unique_ptr<HttpsUpgradesInterceptor>
 HttpsUpgradesInterceptor::MaybeCreateInterceptor(
-    int frame_tree_node_id,
+    content::FrameTreeNodeId frame_tree_node_id,
     content::NavigationUIData* navigation_ui_data) {
   auto* web_contents =
       content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
@@ -208,7 +208,7 @@ HttpsUpgradesInterceptor::MaybeCreateInterceptor(
 }
 
 HttpsUpgradesInterceptor::HttpsUpgradesInterceptor(
-    int frame_tree_node_id,
+    content::FrameTreeNodeId frame_tree_node_id,
     bool http_interstitial_enabled_by_pref,
     content::NavigationUIData* navigation_ui_data)
     : frame_tree_node_id_(frame_tree_node_id),
@@ -309,8 +309,8 @@ void HttpsUpgradesInterceptor::MaybeCreateLoader(
                                             storage_partition)) {
     interstitial_state_->enabled_by_engagement_heuristic = true;
   }
-  if (IsBalanceModeEnabled() &&
-      (state && !state->HttpsFirstBalancedModeSuppressedForTesting())) {
+  if (IsBalancedModeEnabled(prefs) && state &&
+      !state->HttpsFirstBalancedModeSuppressedForTesting()) {
     interstitial_state_->enabled_in_balanced_mode = true;
   }
 
@@ -670,10 +670,15 @@ bool HttpsUpgradesInterceptor::MaybeCreateLoaderForResponse(
   // However, if this is a request to a non-unique hostname, don't prefer
   // net error as it is likely non-recoverable -- we want to fallback to HTTP
   // and the HTTPS-First Mode interstitial in this case. (In particular, this
-  // avoids breaking corporate single-label hostnames.)
+  // avoids breaking corporate single-label hostnames.) Treat all single-label
+  // hostnames as if they were non-unique, since while unique single-label hosts
+  // (i.e. TLDs on the PSL) could get a cert, it's more likely they're being
+  // used as a corporate hostname. These domains are safe to exclude since this
+  // only results in potentially show an extra HFM warning before the net error.
   if (IsInterstitialEnabled(*interstitial_state_) &&
       IsHttpsFirstModeExemptedError(status.error_code) &&
-      !net::IsHostnameNonUnique(request.url.host())) {
+      !net::IsHostnameNonUnique(request.url.host()) &&
+      !net::GetSuperdomain(request.url.host()).empty()) {
     tab_helper->set_is_exempt_error(true);
     return false;
   }
@@ -697,17 +702,14 @@ bool HttpsUpgradesInterceptor::MaybeCreateLoaderForResponse(
                                    *interstitial_state_);
   }
 
-  // If HTTPS-First Mode is not enabled (so no interstitial will be shown),
-  // add the fallback hostname to the allowlist now before triggering fallback.
-  // HTTPS-First Mode handles this on the user proceeding through the
+  // If HTTPS-First Mode is not enabled (so no interstitial will be shown), or
+  // if the URL is one that balanced mode is excluding from warnings, add the
+  // fallback hostname to the allowlist now before triggering fallback.
+  // HTTPS-First Strict Mode handles this on the user proceeding through the
   // interstitial only.
-  // TODO(crbug.com/40248833): Distinguish HTTPS-First Mode and HTTPS-Upgrades
-  // allowlist entries, and ensure that HTTPS-Upgrades allowlist entries don't
-  // downgrade Page Info.
-  // TODO(crbug.com/40248833): Move this to a helper function
-  // `AddUrlToAllowlist()`, especially once this gets more complicated for
-  // HFM vs. Upgrades.
-  if (!IsInterstitialEnabled(*interstitial_state_)) {
+  if (!IsInterstitialEnabled(*interstitial_state_) ||
+      ShouldExcludeUrlFromInterstitial(*interstitial_state_,
+                                       tab_helper->fallback_url())) {
     // StatefulSSLHostStateDelegate can be null during tests.
     if (state) {
       state->AllowHttpForHost(

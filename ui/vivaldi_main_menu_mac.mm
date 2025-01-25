@@ -287,8 +287,9 @@ unichar NSFunctionKeyFromString(std::string& string) {
 // Expected format: [modifier[+modifier]+]accelerator
 NSString* acceleratorFromString(std::string& string) {
   size_t index = string.find_last_of("+");
-  std::string candidate = index == std::string::npos ?
-      string : string.substr(index+1);
+  // The extra index test is for shortcuts like "cmd +" (written as cmd++).
+  std::string candidate = index == std::string::npos || index == 0 ?
+      string : string.substr(string[index-1] == '+' ? index : index + 1);
 
   NSString* accelerator = nil;
   unichar functionKey = NSFunctionKeyFromString(candidate);
@@ -486,8 +487,8 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
         std::string png_data;
         if (base::Base64Decode(*item.icon, &png_data)) {
           gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
-            reinterpret_cast<const unsigned char*>(png_data.c_str()),
-            png_data.length());
+            base::span(reinterpret_cast<const unsigned char*>(png_data.c_str()),
+            png_data.length()));
           menuItem.image = img.ToNSImage();
         }
       }

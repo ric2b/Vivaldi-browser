@@ -14,6 +14,7 @@ const assert_js_1 = require("../util/assert.js");
 const Deferred_js_1 = require("../util/Deferred.js");
 const disposable_js_1 = require("../util/disposable.js");
 const ErrorLike_js_1 = require("../util/ErrorLike.js");
+const CdpPreloadScript_js_1 = require("./CdpPreloadScript.js");
 const CDPSession_js_2 = require("./CDPSession.js");
 const Connection_js_1 = require("./Connection.js");
 const DeviceRequestPrompt_js_1 = require("./DeviceRequestPrompt.js");
@@ -33,9 +34,10 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
     #page;
     #networkManager;
     #timeoutSettings;
-    #contextIdToContext = new Map();
     #isolatedWorlds = new Set();
     #client;
+    #scriptsToEvaluateOnNewDocument = new Map();
+    #bindings = new Set();
     _frameTree = new FrameTree_js_1.FrameTree();
     /**
      * Set of frame IDs stored to indicate if a frame has received a
@@ -54,11 +56,11 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
     get client() {
         return this.#client;
     }
-    constructor(client, page, ignoreHTTPSErrors, timeoutSettings) {
+    constructor(client, page, timeoutSettings) {
         super();
         this.#client = client;
         this.#page = page;
-        this.#networkManager = new NetworkManager_js_1.NetworkManager(ignoreHTTPSErrors, this);
+        this.#networkManager = new NetworkManager_js_1.NetworkManager(this);
         this.#timeoutSettings = timeoutSettings;
         this.setupEventListeners(this.#client);
         client.once(CDPSession_js_1.CDPSessionEvent.Disconnected, () => {
@@ -98,7 +100,6 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
      * its frame tree and ID.
      */
     async swapFrameTree(client) {
-        this.#onExecutionContextsCleared(this.#client);
         this.#client = client;
         (0, assert_js_1.assert)(this.#client instanceof CDPSession_js_2.CdpCDPSession, 'CDPSession is not an instance of CDPSessionImpl.');
         const frame = this._frameTree.getMainFrame();
@@ -106,16 +107,14 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
             this.#frameNavigatedReceived.add(this.#client._target()._targetId);
             this._frameTree.removeFrame(frame);
             frame.updateId(this.#client._target()._targetId);
-            frame.mainRealm().clearContext();
-            frame.isolatedRealm().clearContext();
             this._frameTree.addFrame(frame);
-            frame.updateClient(client, true);
+            frame.updateClient(client);
         }
         this.setupEventListeners(client);
         client.once(CDPSession_js_1.CDPSessionEvent.Disconnected, () => {
             this.#onClientDisconnect().catch(util_js_1.debugError);
         });
-        await this.initialize(client);
+        await this.initialize(client, frame);
         await this.#networkManager.addClient(client);
         if (frame) {
             frame.emit(Frame_js_1.FrameEvent.FrameSwappedByActivation, undefined);
@@ -154,20 +153,12 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
             await this.#frameTreeHandled?.valueOrThrow();
             this.#onExecutionContextCreated(event.context, session);
         });
-        session.on('Runtime.executionContextDestroyed', async (event) => {
-            await this.#frameTreeHandled?.valueOrThrow();
-            this.#onExecutionContextDestroyed(event.executionContextId, session);
-        });
-        session.on('Runtime.executionContextsCleared', async () => {
-            await this.#frameTreeHandled?.valueOrThrow();
-            this.#onExecutionContextsCleared(session);
-        });
         session.on('Page.lifecycleEvent', async (event) => {
             await this.#frameTreeHandled?.valueOrThrow();
             this.#onLifecycleEvent(event);
         });
     }
-    async initialize(client) {
+    async initialize(client, frame) {
         try {
             this.#frameTreeHandled?.resolve();
             this.#frameTreeHandled = Deferred_js_1.Deferred.create();
@@ -186,6 +177,14 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
                 client.send('Runtime.enable').then(() => {
                     return this.#createIsolatedWorld(client, util_js_1.UTILITY_WORLD_NAME);
                 }),
+                ...(frame
+                    ? Array.from(this.#scriptsToEvaluateOnNewDocument.values())
+                    : []).map(script => {
+                    return frame?.addPreloadScript(script);
+                }),
+                ...(frame ? Array.from(this.#bindings.values()) : []).map(binding => {
+                    return frame?.addExposedFunctionBinding(binding);
+                }),
             ]);
         }
         catch (error) {
@@ -196,14 +195,6 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
             }
             throw error;
         }
-    }
-    executionContextById(contextId, session = this.#client) {
-        const context = this.getExecutionContextById(contextId, session);
-        (0, assert_js_1.assert)(context, 'INTERNAL ERROR: missing context with id = ' + contextId);
-        return context;
-    }
-    getExecutionContextById(contextId, session = this.#client) {
-        return this.#contextIdToContext.get(`${session.id()}:${contextId}`);
     }
     page() {
         return this.#page;
@@ -219,6 +210,50 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
     frame(frameId) {
         return this._frameTree.getById(frameId) || null;
     }
+    async addExposedFunctionBinding(binding) {
+        this.#bindings.add(binding);
+        await Promise.all(this.frames().map(async (frame) => {
+            return await frame.addExposedFunctionBinding(binding);
+        }));
+    }
+    async removeExposedFunctionBinding(binding) {
+        this.#bindings.delete(binding);
+        await Promise.all(this.frames().map(async (frame) => {
+            return await frame.removeExposedFunctionBinding(binding);
+        }));
+    }
+    async evaluateOnNewDocument(source) {
+        const { identifier } = await this.mainFrame()
+            ._client()
+            .send('Page.addScriptToEvaluateOnNewDocument', {
+            source,
+        });
+        const preloadScript = new CdpPreloadScript_js_1.CdpPreloadScript(this.mainFrame(), identifier, source);
+        this.#scriptsToEvaluateOnNewDocument.set(identifier, preloadScript);
+        await Promise.all(this.frames().map(async (frame) => {
+            return await frame.addPreloadScript(preloadScript);
+        }));
+        return { identifier };
+    }
+    async removeScriptToEvaluateOnNewDocument(identifier) {
+        const preloadScript = this.#scriptsToEvaluateOnNewDocument.get(identifier);
+        if (!preloadScript) {
+            throw new Error(`Script to evaluate on new document with id ${identifier} not found`);
+        }
+        this.#scriptsToEvaluateOnNewDocument.delete(identifier);
+        await Promise.all(this.frames().map(frame => {
+            const identifier = preloadScript.getIdForFrame(frame);
+            if (!identifier) {
+                return;
+            }
+            return frame
+                ._client()
+                .send('Page.removeScriptToEvaluateOnNewDocument', {
+                identifier,
+            })
+                .catch(util_js_1.debugError);
+        }));
+    }
     onAttachedToTarget(target) {
         if (target._getTargetInfo().type !== 'iframe') {
             return;
@@ -228,7 +263,7 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
             frame.updateClient(target._session());
         }
         this.setupEventListeners(target._session());
-        void this.initialize(target._session());
+        void this.initialize(target._session(), frame);
     }
     _deviceRequestPromptManager(client) {
         let manager = this.#deviceRequestPromptManagerMap.get(client);
@@ -283,10 +318,12 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
     #onFrameAttached(session, frameId, parentFrameId) {
         let frame = this.frame(frameId);
         if (frame) {
-            if (session && frame.isOOPFrame()) {
-                // If an OOP iframes becomes a normal iframe again
-                // it is first attached to the parent page before
-                // the target is removed.
+            if (session && frame.client !== this.#client) {
+                // TODO: check this condition. It might not be correct for
+                // nested frames.
+                // If an OOP iframes becomes a normal iframe
+                // again it is first attached to the parent page before the
+                // target is removed.
                 frame.updateClient(session);
             }
             return;
@@ -391,8 +428,7 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
             if (contextPayload.auxData && contextPayload.auxData['isDefault']) {
                 world = frame.worlds[IsolatedWorlds_js_1.MAIN_WORLD];
             }
-            else if (contextPayload.name === util_js_1.UTILITY_WORLD_NAME &&
-                !frame.worlds[IsolatedWorlds_js_1.PUPPETEER_WORLD].hasContext()) {
+            else if (contextPayload.name === util_js_1.UTILITY_WORLD_NAME) {
                 // In case of multiple sessions to the same target, there's a race between
                 // connections so we might end up creating multiple isolated worlds.
                 // We can use either.
@@ -404,35 +440,7 @@ class FrameManager extends EventEmitter_js_1.EventEmitter {
             return;
         }
         const context = new ExecutionContext_js_1.ExecutionContext(frame?.client || this.#client, contextPayload, world);
-        if (world) {
-            world.setContext(context);
-        }
-        const key = `${session.id()}:${contextPayload.id}`;
-        this.#contextIdToContext.set(key, context);
-    }
-    #onExecutionContextDestroyed(executionContextId, session) {
-        const key = `${session.id()}:${executionContextId}`;
-        const context = this.#contextIdToContext.get(key);
-        if (!context) {
-            return;
-        }
-        this.#contextIdToContext.delete(key);
-        if (context._world) {
-            context._world.clearContext();
-        }
-    }
-    #onExecutionContextsCleared(session) {
-        for (const [key, context] of this.#contextIdToContext.entries()) {
-            // Make sure to only clear execution contexts that belong
-            // to the current session.
-            if (context._client !== session) {
-                continue;
-            }
-            if (context._world) {
-                context._world.clearContext();
-            }
-            this.#contextIdToContext.delete(key);
-        }
+        world.setContext(context);
     }
     #removeFramesRecursively(frame) {
         for (const child of frame.childFrames()) {

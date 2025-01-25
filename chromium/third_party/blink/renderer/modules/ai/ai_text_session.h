@@ -5,46 +5,55 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_AI_AI_TEXT_SESSION_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_AI_AI_TEXT_SESSION_H_
 
+#include <variant>
+
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/types/pass_key.h"
 #include "third_party/blink/public/mojom/ai/ai_text_session.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/public/mojom/ai/ai_text_session_info.mojom-blink.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
-#include "third_party/blink/renderer/core/streams/readable_stream.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 
 namespace blink {
 
-// The class that represents a session with simple generic model execution.
-class AITextSession final : public ScriptWrappable,
-                            public ExecutionContextClient {
-  DEFINE_WRAPPERTYPEINFO();
+class AIAssistant;
+class AITextSessionFactory;
 
+// The class that represents a session with simple generic model execution. It's
+// a simple wrapper of the `mojom::blink::AITextSession` remote.
+class AITextSession final : public GarbageCollected<AITextSession>,
+                            public ExecutionContextClient {
  public:
   AITextSession(ExecutionContext* context,
                 scoped_refptr<base::SequencedTaskRunner> task_runner);
-  ~AITextSession() override = default;
+  ~AITextSession() = default;
 
   void Trace(Visitor* visitor) const override;
 
   mojo::PendingReceiver<blink::mojom::blink::AITextSession>
   GetModelSessionReceiver();
 
-  // ai_text_session.idl implementation.
-  ScriptPromise<IDLString> prompt(ScriptState* script_state,
-                                  const WTF::String& input,
-                                  ExceptionState& exception_state);
-  ReadableStream* promptStreaming(ScriptState* script_state,
-                                  const WTF::String& input,
-                                  ExceptionState& exception_state);
-  void destroy(ScriptState* script_state, ExceptionState& exception_state);
+  HeapMojoRemote<blink::mojom::blink::AITextSession>& GetRemoteTextSession() {
+    return text_session_remote_;
+  }
+
+  // These `SetInfo()` allows `AITextSessionFactory` (for session creation) and
+  // `AIAssistant` (for session cloning) to set the info after getting it from
+  // the remote.
+  void SetInfo(std::variant<base::PassKey<AITextSessionFactory>,
+                            base::PassKey<AIAssistant>> pass_key,
+               blink::mojom::blink::AITextSessionInfoPtr info);
+
+  const blink::mojom::blink::AITextSessionInfoPtr GetInfo() const {
+    return info_.Clone();
+  }
 
  private:
-  class Responder;
-  class StreamingResponder;
-
-  bool is_destroyed_ = false;
+  blink::mojom::blink::AITextSessionInfoPtr info_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   HeapMojoRemote<blink::mojom::blink::AITextSession> text_session_remote_;

@@ -70,6 +70,9 @@
   "app/resources/components_resources/vivaldi_components.grd": {
     "includes": [91000],
   },
+  "app/resources/components_resources/vivaldi_about.grd": {
+    "includes": [91050],
+  },
   "app/resources/components_scaled/vivaldi_components_scaled.grd": {
     "structures": [91100],
   },
@@ -136,5 +139,8 @@
   },
   "app/resources/ios_open_extension_google_chrome_strings/vivaldi_ios_open_extension_google_chrome_strings.grd": {
     "messages": [93300],
+  },
+  "app/resources/android_webapps/vivaldi_android_webapps_strings.grd": {
+    "messages": [93400],
   },
 }

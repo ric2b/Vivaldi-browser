@@ -48,6 +48,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/color_palette.h"
@@ -90,19 +92,36 @@ class MaybeEmptyLabel : public views::Label {
   MaybeEmptyLabel& operator=(const MaybeEmptyLabel&) = delete;
   MaybeEmptyLabel(const MaybeEmptyLabel&) = delete;
   ~MaybeEmptyLabel() override = default;
-
-  // views::Label:
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    views::Label::GetAccessibleNodeData(node_data);
-    if (!GetText().empty()) {
-      node_data->SetNameChecked(GetText());
-    } else {
-      node_data->SetNameExplicitlyEmpty();
-    }
-  }
 };
 
 BEGIN_METADATA(MaybeEmptyLabel)
+END_METADATA
+
+// TODO(crbug.com/355018927): Remove this when we implement in views::Label.
+class MessageContentWrapper : public views::View {
+  METADATA_HEADER(MessageContentWrapper, views::View)
+
+ public:
+  explicit MessageContentWrapper(std::unique_ptr<views::View> title) {
+    SetUseDefaultFillLayout(true);
+    title_ = AddChildView(std::move(title));
+  }
+
+ private:
+  // View:
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
+    gfx::Size preferred_size = title_->GetPreferredSize(available_size);
+    if (!available_size.width().is_bounded()) {
+      preferred_size.set_width(title_->GetMinimumSize().width());
+    }
+    return preferred_size;
+  }
+
+  raw_ptr<views::View> title_ = nullptr;
+};
+
+BEGIN_METADATA(MessageContentWrapper)
 END_METADATA
 
 TestParentPermissionDialogViewObserver* test_view_observer = nullptr;
@@ -362,15 +381,15 @@ ParentPermissionDialogView::ParentPermissionDialogView(
     std::unique_ptr<Params> params,
     ParentPermissionDialogView::Observer* observer)
     : params_(std::move(params)), observer_(observer) {
-  SetDefaultButton(ui::DIALOG_BUTTON_OK);
+  SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kOk));
   SetButtonLabel(
-      ui::DIALOG_BUTTON_OK,
+      ui::mojom::DialogButton::kOk,
       l10n_util::GetStringUTF16(IDS_PARENT_PERMISSION_PROMPT_APPROVE_BUTTON));
   SetButtonLabel(
-      ui::DIALOG_BUTTON_CANCEL,
+      ui::mojom::DialogButton::kCancel,
       l10n_util::GetStringUTF16(IDS_PARENT_PERMISSION_PROMPT_CANCEL_BUTTON));
 
-  SetModalType(ui::MODAL_TYPE_WINDOW);
+  SetModalType(ui::mojom::ModalType::kWindow);
   SetShowCloseButton(false);
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
@@ -448,12 +467,8 @@ void ParentPermissionDialogView::AddedToWidget() {
 
   DCHECK(!params_->message.empty());
   message_container.AddChild(
-      views::Builder<views::Label>(
-          views::BubbleFrameView::CreateDefaultTitleLabel(params_->message))
-          // Setting the message's preferred size to 0 ensures it won't
-          // influence the overall size of the dialog. It will be expanded by
-          // TableLayout.
-          .SetPreferredSize(gfx::Size(0, 0)));
+      views::Builder<views::View>(std::make_unique<MessageContentWrapper>(
+          views::BubbleFrameView::CreateDefaultTitleLabel(params_->message))));
 
   GetBubbleFrameView()->SetTitleView(std::move(message_container).Build());
 }

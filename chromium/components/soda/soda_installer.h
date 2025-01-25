@@ -96,6 +96,10 @@ class COMPONENT_EXPORT(SODA_INSTALLER) SodaInstaller {
   virtual void UninstallLanguage(const std::string& language,
                                  PrefService* global_prefs) = 0;
 
+  // Installs the SODA binary. `global_prefs` is passed as part of component
+  // registration for the non-chromeos implementation.
+  virtual void InstallSoda(PrefService* global_prefs) = 0;
+
   // Gets all installed and installable language codes supported by SODA
   // (in BCP-47 format).
   virtual std::vector<std::string> GetAvailableLanguages() const = 0;
@@ -109,6 +113,9 @@ class COMPONENT_EXPORT(SODA_INSTALLER) SodaInstaller {
   // this device. Will return a stale value until InstallSoda() and
   // InstallLanguage() have run and asynchronously returned an answer.
   bool IsSodaInstalled(LanguageCode language_code) const;
+
+  // Returns whether or not the SODA binary is installed.
+  bool IsSodaBinaryInstalled() const;
 
   // Adds an observer to the observer list.
   void AddObserver(Observer* observer);
@@ -143,6 +150,15 @@ class COMPONENT_EXPORT(SODA_INSTALLER) SodaInstaller {
   bool IsAnyLanguagePackInstalledForTesting() const;
 
   const std::set<LanguageCode> InstalledLanguages() const;
+  // Gets a list of locales enabled by the Finch flag.
+  virtual std::vector<std::string> GetLiveCaptionEnabledLanguages() const;
+
+  // Registers a language pack by adding it to the preference tracking the
+  // installed SODA language packs.
+  void RegisterLanguage(const std::string& language, PrefService* global_prefs);
+
+  void UnregisterLanguage(const std::string& language,
+                          PrefService* global_prefs);
 
  protected:
   // Initializes language and installs the per-language components.
@@ -151,10 +167,6 @@ class COMPONENT_EXPORT(SODA_INSTALLER) SodaInstaller {
 
   // Registers the preference tracking the installed SODA language packs.
   static void RegisterRegisteredLanguagePackPref(PrefRegistrySimple* registry);
-
-  // Installs the SODA binary. `global_prefs` is passed as part of component
-  // registration for the non-chromeos implementation.
-  virtual void InstallSoda(PrefService* global_prefs) = 0;
 
   // Uninstalls SODA and associated language model(s). On some platforms, disc
   // space may not be freed immediately.
@@ -175,16 +187,9 @@ class COMPONENT_EXPORT(SODA_INSTALLER) SodaInstaller {
   // 100.
   void NotifyOnSodaProgress(LanguageCode language_code, int progress);
 
-  // Registers a language pack by adding it to the preference tracking the
-  // installed SODA language packs.
-  void RegisterLanguage(const std::string& language, PrefService* global_prefs);
-
   // Unregisters all language packs by clearing the preference tracking the
   // installed SODA language packs.
   void UnregisterLanguages(PrefService* global_prefs);
-
-  void UnregisterLanguage(const std::string& language,
-                          PrefService* global_prefs);
 
   // Returns whether or not the language pack for a given language is
   // installed. The language should be localized in BCP-47, e.g. "en-US".

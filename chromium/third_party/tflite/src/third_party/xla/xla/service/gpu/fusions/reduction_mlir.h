@@ -24,11 +24,11 @@ limitations under the License.
 #include "absl/status/status.h"
 #include "absl/types/span.h"
 #include "llvm/ADT/SmallVector.h"
-#include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.h"  // from @llvm-project
-#include "mlir/IR/AffineExpr.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/IR/ValueRange.h"  // from @llvm-project
+#include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.h"
+#include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/service/gpu/fusions/mlir/computation_partitioner.h"
@@ -194,6 +194,27 @@ class MlirColumnReductionFusion : public MlirReductionFusion {
   IndexingMap GetSharedMemoryReductionReadMap(
       mlir::MLIRContext* ctx) const override;
   IndexingMap GetSharedMemoryWriteMap(mlir::MLIRContext* ctx) const override;
+};
+
+// Special emitter for column reductions whose minor reduced dimension divides
+// the warp size.
+class MlirSmallColumnReductionFusion : public MlirReductionFusion {
+ public:
+  explicit MlirSmallColumnReductionFusion(const HloFusionAnalysis& analysis);
+
+ protected:
+  llvm::SmallVector<mlir::Value> EmitReduction(
+      int group_id, EmitterState& state) const override;
+  IndexingMap ComputeReductionInputIndexing(
+      mlir::MLIRContext* ctx) const override;
+  IndexingMap ComputeReductionOutputIndexing(
+      mlir::MLIRContext* ctx) const override;
+  IndexingMap GetSharedMemoryReductionReadMap(
+      mlir::MLIRContext* ctx) const override;
+  IndexingMap GetSharedMemoryWriteMap(mlir::MLIRContext* ctx) const override;
+
+  int64_t shared_rows_;
+  int64_t loop_size_;
 };
 
 std::unique_ptr<MlirReductionFusion> CreateMlirReductionFusion(

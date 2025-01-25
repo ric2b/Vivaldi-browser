@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "build/build_config.h"
 #include "core/fpdfapi/page/cpdf_clippath.h"
 #include "core/fpdfapi/page/cpdf_colorspace.h"
 #include "core/fpdfapi/page/cpdf_graphicstates.h"
@@ -83,7 +84,13 @@ class CPDF_RenderStatus {
   CPDF_ColorSpace::Family GetGroupFamily() const { return m_GroupFamily; }
   bool GetLoadMask() const { return m_bLoadMask; }
   bool GetDropObjects() const { return m_bDropObjects; }
-  bool IsPrint() const { return m_bPrint; }
+  bool IsPrint() const {
+#if BUILDFLAG(IS_WIN)
+    return m_bPrint;
+#else
+    return false;
+#endif
+  }
   bool IsStopped() const { return m_bStopped; }
   CPDF_RenderContext* GetContext() const { return m_pContext; }
   const CPDF_Dictionary* GetFormResource() const {
@@ -94,10 +101,6 @@ class CPDF_RenderStatus {
   }
   CFX_RenderDevice* GetRenderDevice() const { return m_pDevice; }
   const CPDF_RenderOptions& GetRenderOptions() const { return m_Options; }
-
-#if defined(PDF_USE_SKIA)
-  void DebugVerifyDeviceIsPreMultiplied() const;
-#endif
 
   RetainPtr<CPDF_TransferFunc> GetTransferFunc(
       RetainPtr<const CPDF_Object> pObject) const;
@@ -133,6 +136,10 @@ class CPDF_RenderStatus {
                            const CFX_Matrix& mtObj2Device);
   void DrawObjWithBackground(CPDF_PageObject* pObj,
                              const CFX_Matrix& mtObj2Device);
+  void DrawObjWithBackgroundToDevice(CPDF_PageObject* obj,
+                                     const CFX_Matrix& object_to_device,
+                                     CFX_RenderDevice* device,
+                                     const CFX_Matrix& device_matrix);
   bool DrawObjWithBlend(CPDF_PageObject* pObj, const CFX_Matrix& mtObj2Device);
   bool ProcessPath(CPDF_PathObject* path_obj, const CFX_Matrix& mtObj2Device);
   void ProcessPathPattern(CPDF_PathObject* path_obj,
@@ -181,6 +188,8 @@ class CPDF_RenderStatus {
   FX_ARGB GetStrokeArgb(CPDF_PageObject* pObj) const;
   FX_RECT GetObjectClippedRect(const CPDF_PageObject* pObj,
                                const CFX_Matrix& mtObj2Device) const;
+  // Returns the format that is compatible with `m_pDevice`.
+  FXDIB_Format GetCompatibleArgbFormat() const;
 
   CPDF_RenderOptions m_Options;
   RetainPtr<const CPDF_Dictionary> m_pFormResource;
@@ -197,14 +206,15 @@ class CPDF_RenderStatus {
   UnownedPtr<const CPDF_Type3Char> m_pType3Char;
   CPDF_Transparency m_Transparency;
   bool m_bStopped = false;
+#if BUILDFLAG(IS_WIN)
   bool m_bPrint = false;
+#endif
   bool m_bDropObjects = false;
   bool m_bStdCS = false;
   bool m_bLoadMask = false;
   bool m_bInGroup = false;
   CPDF_ColorSpace::Family m_GroupFamily = CPDF_ColorSpace::Family::kUnknown;
   FX_ARGB m_T3FillColor = 0;
-  BlendMode m_curBlend = BlendMode::kNormal;
 };
 
 #endif  // CORE_FPDFAPI_RENDER_CPDF_RENDERSTATUS_H_

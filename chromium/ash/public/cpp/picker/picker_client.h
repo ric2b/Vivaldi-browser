@@ -8,12 +8,14 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/ash_public_export.h"
 #include "ash/public/cpp/picker/picker_category.h"
 #include "ash/public/cpp/picker/picker_search_result.h"
+#include "ash/public/cpp/picker/picker_web_paste_target.h"
 #include "base/files/file.h"
 #include "base/functional/callback_forward.h"
 #include "url/gurl.h"
@@ -54,6 +56,9 @@ class ASH_PUBLIC_EXPORT PickerClient {
   // (`app_list::SearchEngine::StopQuery`).
   virtual void StopCrosQuery() = 0;
 
+  // Whether this device is eligble for editor.
+  virtual bool IsEligibleForEditor() = 0;
+
   // Caches the current input field context and returns a callback to show
   // Editor. If Editor is not available, this returns a null callback.
   virtual ShowEditorCallback CacheEditorContext() = 0;
@@ -62,12 +67,14 @@ class ASH_PUBLIC_EXPORT PickerClient {
       SuggestedEditorResultsCallback callback) = 0;
 
   virtual void GetRecentLocalFileResults(size_t max_files,
+                                         base::TimeDelta now_delta,
                                          RecentFilesCallback callback) = 0;
 
   virtual void GetRecentDriveFileResults(size_t max_files,
                                          RecentFilesCallback callback) = 0;
 
-  virtual void GetSuggestedLinkResults(SuggestedLinksCallback callback) = 0;
+  virtual void GetSuggestedLinkResults(size_t max_results,
+                                       SuggestedLinksCallback callback) = 0;
 
   virtual bool IsFeatureAllowedForDogfood() = 0;
 
@@ -76,6 +83,12 @@ class ASH_PUBLIC_EXPORT PickerClient {
                                   FetchFileThumbnailCallback callback) = 0;
 
   virtual PrefService* GetPrefs() = 0;
+  // SAFETY: The returned `do_paste` MUST be called synchronously. Calling it
+  // after a delay, such as in a different task, may result in use-after-frees.
+  virtual std::optional<PickerWebPasteTarget> GetWebPasteTarget() = 0;
+
+  // Make an announcement via an offscreen live region.
+  virtual void Announce(std::u16string_view message) = 0;
 
  protected:
   PickerClient();

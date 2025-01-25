@@ -120,10 +120,10 @@ bool CheckContentSecurityPolicyForPreload(
       if (it == policy->directives.end())
         continue;
 
-      if (!network::CheckCSPSourceList(
-              directive, *it->second, link->href, *(policy->self_origin),
-              /*has_followed_redirect=*/false, /*is_response_check=*/false,
-              /*is_opaque_fenced_frame=*/false)) {
+      if (!network::CheckCSPSourceList(directive, *it->second, link->href,
+                                       *(policy->self_origin),
+                                       /*has_followed_redirect=*/false,
+                                       /*is_opaque_fenced_frame=*/false)) {
         // TODO(crbug.com/40218207): Report CSP violation once the final
         // response is received.
         return false;
@@ -373,7 +373,7 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
 NavigationEarlyHintsManager::NavigationEarlyHintsManager(
     BrowserContext& browser_context,
     StoragePartition& storage_partition,
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     NavigationEarlyHintsManagerParams params)
     : browser_context_(browser_context),
       storage_partition_(storage_partition),
@@ -614,7 +614,7 @@ net::RequestPriority NavigationEarlyHintsManager::CalculateRequestPriority(
           return net::IDLE;
       }
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace content

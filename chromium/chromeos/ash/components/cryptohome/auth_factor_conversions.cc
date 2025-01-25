@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/logging.h"
@@ -44,6 +45,15 @@ void ConvertKnowledgeFactorHashInfoToProto(
   hash_info_proto.set_salt(hash_info.salt);
   hash_info_proto.set_should_generate_key_store(
       hash_info.should_generate_key_store);
+}
+
+PinStatus PasrePinFactorStatus(const user_data_auth::StatusInfo& proto) {
+  base::TimeDelta available_in = base::TimeDelta::Max();
+  if (proto.time_available_in() != std::numeric_limits<uint64_t>::max()) {
+    available_in = base::Milliseconds(proto.time_available_in());
+  }
+  CHECK(!available_in.is_negative());
+  return PinStatus{available_in};
 }
 
 PasswordMetadata ParsePasswordMetadata(
@@ -205,6 +215,13 @@ void SerializeAuthFactor(const AuthFactor& factor,
       break;
     }
     case AuthFactorType::kPin: {
+      if (ash::features::IsAllowPinTimeoutSetupEnabled()) {
+        out_proto->mutable_common_metadata()->set_lockout_policy(
+            user_data_auth::LOCKOUT_POLICY_TIME_LIMITED);
+      } else {
+        out_proto->mutable_common_metadata()->set_lockout_policy(
+            user_data_auth::LOCKOUT_POLICY_ATTEMPT_LIMITED);
+      }
       user_data_auth::PinMetadata& pin_metadata_proto =
           *out_proto->mutable_pin_metadata();
       if (factor.GetPinMetadata().hash_info().has_value()) {
@@ -362,7 +379,9 @@ AuthFactor DeserializeAuthFactor(
     case AuthFactorType::kPin: {
       DCHECK(factor_proto.has_pin_metadata());
       auto pin_metadata = ParsePinMetadata(factor_proto);
-      PinStatus pin_status{factor_proto.pin_metadata().auth_locked()};
+      PinStatus pin_status = proto.has_status_info()
+                                 ? PasrePinFactorStatus(proto.status_info())
+                                 : PinStatus();
       return AuthFactor(std::move(ref), std::move(common_metadata),
                         std::move(pin_metadata), std::move(pin_status));
     }

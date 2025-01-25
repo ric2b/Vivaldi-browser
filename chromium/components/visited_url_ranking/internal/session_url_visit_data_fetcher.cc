@@ -49,7 +49,8 @@ void AddAggregateVisitDataFromSession(
           continue;
         }
 
-        auto url_key = ComputeURLMergeKey(tab_url, deduplication_helper);
+        auto url_key = ComputeURLMergeKey(tab_url, current_navigation.title(),
+                                          deduplication_helper);
         bool tab_data_map_already_has_url_entry =
             url_visit_tab_data_map.find(url_key) !=
             url_visit_tab_data_map.end();
@@ -57,7 +58,8 @@ void AddAggregateVisitDataFromSession(
           auto last_active_tab = URLVisitAggregate::Tab(
               tab->tab_id.id(),
               URLVisit(tab_url, current_navigation.title(), tab->timestamp,
-                       session->GetDeviceFormFactor(), source),
+                       session->GetDeviceFormFactor(), source,
+                       session->GetSessionName()),
               session->GetSessionTag(), session->GetSessionName());
           auto tab_data =
               URLVisitAggregate::TabData(std::move(last_active_tab));

@@ -70,8 +70,7 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
       const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
       base::RepeatingCallback<gpu::CommandBufferStub*()> get_stub_cb,
       GetD3DDeviceCB get_d3d_device_cb,
-      SupportedConfigs supported_configs,
-      bool system_hdr_enabled);
+      SupportedConfigs supported_configs);
 
   D3D11VideoDecoder(const D3D11VideoDecoder&) = delete;
   D3D11VideoDecoder& operator=(const D3D11VideoDecoder&) = delete;
@@ -95,7 +94,7 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
   void UpdateTimestamp(D3D11PictureBuffer* picture_buffer) override;
   bool OutputResult(const CodecPicture* picture,
                     D3D11PictureBuffer* picture_buffer) override;
-  void SetDecoderWrapperCB(const SetAcceleratorDecoderWrapperCB&) override;
+  D3DVideoDecoderWrapper* GetWrapper() override;
 
   bool ResetD3DVideoDecoder();
 
@@ -128,8 +127,7 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
       base::RepeatingCallback<scoped_refptr<CommandBufferHelper>()>
           get_helper_cb,
       GetD3DDeviceCB get_d3d_device_cb,
-      SupportedConfigs supported_configs,
-      bool system_hdr_enabled);
+      SupportedConfigs supported_configs);
 
   // Receive |buffer|, that is now unused by the client.
   void ReceivePictureBufferFromClient(scoped_refptr<D3D11PictureBuffer> buffer);
@@ -272,9 +270,6 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
 
   SupportedConfigs supported_configs_;
 
-  // Should we assume that we're outputting to an HDR display?
-  bool system_hdr_enabled_ = false;
-
   // Should we use shared handles for WebGPU interop or if using Graphite.
   bool use_shared_handle_ = false;
 
@@ -282,9 +277,7 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
   // texture with multiple array slices (false)?
   bool use_single_video_decoder_texture_ = false;
 
-  // Word-salad callback to set / update D3D11 Video callback to the
-  // accelerator.  Needed for config changes.
-  SetAcceleratorDecoderWrapperCB set_accelerator_decoder_wrapper_cb_;
+  std::unique_ptr<D3DVideoDecoderWrapper> d3d_video_decoder_wrapper_;
 
   // The currently configured bit depth for the decoder. When this changes we
   // need to recreate the decoder.

@@ -171,7 +171,7 @@ void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
   if (excluded_origins) {
     for (const auto& origin : *excluded_origins) {
       if (origin.is_string())
-        rule.excluded_domains.push_back(origin.GetString());
+        rule.excluded_domains.insert(origin.GetString());
     }
   }
 
@@ -236,9 +236,9 @@ void DuckDuckGoRulesParser::ParseRule(
   }
 
   std::optional<std::bitset<RequestFilterRule::kTypeCount>> exception_types;
-  std::optional<std::vector<std::string>> exception_domains;
+  std::optional<std::set<std::string>> exception_domains;
   std::optional<std::bitset<RequestFilterRule::kTypeCount>> option_types;
-  std::optional<std::vector<std::string>> option_domains;
+  std::optional<std::set<std::string>> option_domains;
   if (exceptions) {
     exception_types = GetTypes(exceptions);
     exception_domains = GetDomains(exceptions);
@@ -326,8 +326,7 @@ void DuckDuckGoRulesParser::ParseRule(
             }
           }
           if (!potential_domain.empty()) {
-            filter_rule.included_domains.push_back(
-                std::string(potential_domain));
+            filter_rule.included_domains.insert(std::string(potential_domain));
           }
         }
       } else if (option_domains) {
@@ -372,7 +371,7 @@ void DuckDuckGoRulesParser::ParseRule(
     if (excluded_origins) {
       for (const auto& origin : *excluded_origins) {
         if (origin.is_string())
-          filter_rule.excluded_domains.push_back(origin.GetString());
+          filter_rule.excluded_domains.insert(origin.GetString());
       }
     }
 
@@ -411,12 +410,12 @@ void DuckDuckGoRulesParser::ParseRule(
     if (excluded_origins) {
       for (const auto& origin : *excluded_origins) {
         if (origin.is_string())
-          redirect_rule.excluded_domains.push_back(origin.GetString());
+          redirect_rule.excluded_domains.insert(origin.GetString());
       }
     }
 
     redirect_rule.modifier = RequestFilterRule::kRedirect;
-    redirect_rule.modifier_value = *surrogate;
+    redirect_rule.modifier_values = {*surrogate};
 
     parse_result_->request_filter_rules.push_back(std::move(redirect_rule));
     parse_result_->rules_info.valid_rules++;
@@ -445,9 +444,9 @@ DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
   return types;
 }
 
-std::optional<std::vector<std::string>> DuckDuckGoRulesParser::GetDomains(
+std::optional<std::set<std::string>> DuckDuckGoRulesParser::GetDomains(
     const base::Value* rule_properties) {
-  std::vector<std::string> domains;
+  std::set<std::string> domains;
   const base::Value::List* domains_value =
       rule_properties->GetDict().FindList(kDomainsKey);
   if (!domains_value)
@@ -457,7 +456,7 @@ std::optional<std::vector<std::string>> DuckDuckGoRulesParser::GetDomains(
     if (!domain.is_string())
       continue;
 
-    domains.push_back(domain.GetString());
+    domains.insert(domain.GetString());
   }
 
   return domains;

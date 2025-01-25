@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Installer standalone</translation>
 <translation id="1682285232070778125">Indstil Vivaldi som standardbrowser</translation>
 <translation id="1974060860693918893">Avanceret</translation>
+<translation id="2053560788696003312">Vivaldi kræver Windows 10 eller nyere.</translation>
 <translation id="2134216661302048561">Vivaldi Installer er ikke færdig med at installere Vivaldi-browseren. Er du sikker på du vil afbryde den nu?</translation>
 <translation id="2286454467119466181">Enkel</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Alle rettigheder forbeholdes. &lt;a&gt;Privatlivspolitik&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Accepter og opdater</translation>
 <translation id="5302048478445481009">Sprog</translation>
 <translation id="694714344624446243">Installationsprogram til Vivaldi</translation>
+<translation id="7467493612551448880">Den version af Vivaldi du er ved at installere er ikke optimeret til den Windows-version du kører.
+
+Besøg vivaldi.com/download for at hente versionen til Windows på Arm.</translation>
 <translation id="7658239707568436148">Annuller</translation>
 <translation id="8773751185824654197">Bemærk: Hvis du opdaterer en kørende Vivaldi-browser vil denne instans blive lukket og genstartet</translation>
 <translation id="933060950687965486">Installationstype</translation>

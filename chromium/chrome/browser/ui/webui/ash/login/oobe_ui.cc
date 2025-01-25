@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/ash/login/oobe_ui.h"
 
 #include <stddef.h>
@@ -33,7 +38,6 @@
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/login/screens/error_screen.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_service_factory.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
@@ -43,6 +47,7 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/browser/ui/webui/about/about_ui.h"
 #include "chrome/browser/ui/webui/ash/login/add_child_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/ai_intro_screen_handler.h"
@@ -81,8 +86,6 @@
 #include "chrome/browser/ui/webui/ash/login/hardware_data_collection_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/hid_detection_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/install_attributes_error_screen_handler.h"
-#include "chrome/browser/ui/webui/ash/login/kiosk_autolaunch_screen_handler.h"
-#include "chrome/browser/ui/webui/ash/login/kiosk_enable_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/lacros_data_backward_migration_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/lacros_data_migration_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/local_password_setup_handler.h"
@@ -118,6 +121,7 @@
 #include "chrome/browser/ui/webui/ash/login/saml_confirm_password_handler.h"
 #include "chrome/browser/ui/webui/ash/login/signin_fatal_error_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/smart_privacy_protection_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/split_modifier_keyboard_info_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/ssh_configured_handler.h"
 #include "chrome/browser/ui/webui/ash/login/sync_consent_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/terms_of_service_screen_handler.h"
@@ -372,6 +376,9 @@ void CreateAndAddOobeUIDataSource(Profile* profile,
                      base::FeatureList::IsEnabled(
                          remoting::features::kEnableCrdAdminRemoteAccessV2));
 
+  source->AddBoolean("isSplitModifierKeyboardInfoEnabled",
+                     features::IsOobeSplitModifierKeyboardInfoEnabled());
+
   // Configure shared resources
   AddProductLogoResources(source);
   if (ash::features::IsBootAnimationEnabled()) {
@@ -449,7 +456,6 @@ void OobeUI::ConfigureOobeDisplay() {
     AddScreenHandler(std::make_unique<WelcomeScreenHandler>());
 
     AddScreenHandler(std::make_unique<DemoPreferencesScreenHandler>());
-
   }
 
   AddScreenHandler(std::make_unique<QuickStartScreenHandler>());
@@ -461,10 +467,6 @@ void OobeUI::ConfigureOobeDisplay() {
   AddScreenHandler(std::make_unique<EnableDebuggingScreenHandler>());
 
   AddScreenHandler(std::make_unique<ResetScreenHandler>());
-
-  AddScreenHandler(std::make_unique<KioskAutolaunchScreenHandler>());
-
-  AddScreenHandler(std::make_unique<KioskEnableScreenHandler>());
 
   AddScreenHandler(std::make_unique<WrongHWIDScreenHandler>());
 
@@ -613,13 +615,13 @@ void OobeUI::ConfigureOobeDisplay() {
     AddScreenHandler(std::make_unique<DrivePinningScreenHandler>());
   }
 
-  if (features::IsOobePerksDiscoveryEnabled()) {
-    AddScreenHandler(std::make_unique<PerksDiscoveryScreenHandler>());
-  }
+  AddScreenHandler(std::make_unique<PerksDiscoveryScreenHandler>());
 
   AddScreenHandler(std::make_unique<LocalStateErrorScreenHandler>());
 
   AddScreenHandler(std::make_unique<CryptohomeRecoveryScreenHandler>());
+
+  AddScreenHandler(std::make_unique<SplitModifierKeyboardInfoScreenHandler>());
 
   if (base::FeatureList::IsEnabled(
           remoting::features::kEnableCrdAdminRemoteAccessV2)) {

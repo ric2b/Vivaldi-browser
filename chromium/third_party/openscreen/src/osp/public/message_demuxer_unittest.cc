@@ -4,6 +4,8 @@
 
 #include "osp/public/message_demuxer.h"
 
+#include <utility>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "osp/msgs/osp_messages.h"
@@ -86,7 +88,28 @@ TEST_F(MessageDemuxerTest, WatchStartStop) {
                         buffer_.size());
   ExpectDecodedRequest(decode_result, received_request);
 
-  watch = MessageDemuxer::MessageWatch();
+  // Move a MessageWatch will not make it invalid.
+  MessageDemuxer::MessageWatch new_watch = std::move(watch);
+  msgs::PresentationConnectionOpenRequest new_received_request;
+  ssize_t new_decode_result = 0;
+  EXPECT_CALL(
+      mock_callback_,
+      OnStreamMessage(endpoint_id_, connection_id_,
+                      msgs::Type::kPresentationConnectionOpenRequest, _, _, _))
+      .WillOnce(Invoke([&new_decode_result, &new_received_request](
+                           uint64_t endpoint_id, uint64_t connection_id,
+                           msgs::Type message_type, const uint8_t* buffer,
+                           size_t buffer_size, Clock::time_point now) {
+        new_decode_result = msgs::DecodePresentationConnectionOpenRequest(
+            buffer, buffer_size, new_received_request);
+        return ConvertDecodeResult(new_decode_result);
+      }));
+  demuxer_.OnStreamData(endpoint_id_, connection_id_, buffer_.data(),
+                        buffer_.size());
+  ExpectDecodedRequest(new_decode_result, new_received_request);
+
+  // Reset a MessageWatch will make it invalid.
+  new_watch.Reset();
   EXPECT_CALL(mock_callback_, OnStreamMessage(_, _, _, _, _, _)).Times(0);
   demuxer_.OnStreamData(endpoint_id_, connection_id_, buffer_.data(),
                         buffer_.size());

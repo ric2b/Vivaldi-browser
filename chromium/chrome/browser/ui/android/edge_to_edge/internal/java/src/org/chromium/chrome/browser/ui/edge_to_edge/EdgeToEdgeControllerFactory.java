@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.ui.edge_to_edge;
 
 import static org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils.hasTappableBottomBar;
+import static org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils.isEdgeToEdgeBottomChinEnabled;
 
 import android.app.Activity;
 import android.os.Build;
@@ -16,12 +17,15 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.BuildInfo;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -51,20 +55,26 @@ public class EdgeToEdgeControllerFactory {
             WindowAndroid windowAndroid,
             @NonNull ObservableSupplier<Tab> tabObservableSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
-            LayoutManager layoutManager) {
+            LayoutManager layoutManager,
+            FullscreenManager fullscreenManager) {
         if (Build.VERSION.SDK_INT < VERSION_CODES.R) return null;
+        assert isSupportedConfiguration(activity);
         return new EdgeToEdgeControllerImpl(
                 activity,
                 windowAndroid,
                 tabObservableSupplier,
                 null,
                 browserControlsStateProvider,
-                layoutManager);
+                layoutManager,
+                fullscreenManager);
     }
 
     /**
      * Build the coordinator that manages the edge-to-edge bottom chin.
      *
+     * @param androidView The Android view for the bottom chin.
+     * @param keyboardVisibilityDelegate A {@link KeyboardVisibilityDelegate} for watching keyboard
+     *     visibility events.
      * @param layoutManager The {@link LayoutManager} for adding new scene overlays.
      * @param edgeToEdgeController The {@link EdgeToEdgeController} for observing the edge-to-edge
      *     status and window bottom insets.
@@ -72,17 +82,25 @@ public class EdgeToEdgeControllerFactory {
      *     color for the navigation bar.
      * @param bottomControlsStacker The {@link BottomControlsStacker} for observing and changing
      *     browser controls heights.
+     * @param fullscreenManager The {@link FullscreenManager} for provide the fullscreen state.
      */
     public static Destroyable createBottomChin(
+            View androidView,
+            KeyboardVisibilityDelegate keyboardVisibilityDelegate,
             LayoutManager layoutManager,
             EdgeToEdgeController edgeToEdgeController,
             NavigationBarColorProvider navigationBarColorProvider,
-            BottomControlsStacker bottomControlsStacker) {
+            BottomControlsStacker bottomControlsStacker,
+            FullscreenManager fullscreenManager) {
+        assert isEdgeToEdgeBottomChinEnabled();
         return new EdgeToEdgeBottomChinCoordinator(
+                androidView,
+                keyboardVisibilityDelegate,
                 layoutManager,
                 edgeToEdgeController,
                 navigationBarColorProvider,
-                bottomControlsStacker);
+                bottomControlsStacker,
+                fullscreenManager);
     }
 
     /**
@@ -92,35 +110,26 @@ public class EdgeToEdgeControllerFactory {
      * @param view The view to be adjusted.
      */
     public static EdgeToEdgePadAdjuster createForView(View view) {
-        return new SimpleEdgeToEdgePadAdjuster(view, /* accountForBrowserControls= */ false);
+        return new SimpleEdgeToEdgePadAdjuster(
+                view, EdgeToEdgeUtils.isDrawKeyNativePageToEdgeEnabled());
     }
 
     /**
-     * Creates an adjuster for padding to the view to account for edge-to-edge.
-     *
-     * @param view The view to be adjusted.
-     * @param accountForBrowserControls Whether to account for browser controls when adjusting the
-     *     view.
-     */
-    public static EdgeToEdgePadAdjuster createForView(
-            View view, boolean accountForBrowserControls) {
-        return new SimpleEdgeToEdgePadAdjuster(view, accountForBrowserControls);
-    }
-
-    /**
-     * @return whether the configuration of the device should allow Edge To Edge.
+     * Returns whether the configuration of the device should allow Edge To Edge. Note the results
+     * are false-positive, if the method is called before the |activity|'s decor view being attached
+     * to the window.
      */
     public static boolean isSupportedConfiguration(Activity activity) {
         // Make sure we test SDK version before checking the Feature so Field Trials only collect
         // from qualifying devices.
         if (android.os.Build.VERSION.SDK_INT < VERSION_CODES.R) return false;
 
-        boolean atLeastOneE2EFeatureEnabled =
-                EdgeToEdgeUtils.isEdgeToEdgeBottomChinEnabled()
-                        || EdgeToEdgeUtils.isFullWebEdgeToEdgeOptInEnabled()
-                        || EdgeToEdgeUtils.isEnabled();
+        // The root view's window insets is needed to determine if we are in gesture nav mode.
+        if (activity.getWindow().getDecorView().getRootWindowInsets() == null) {
+            return false;
+        }
 
-        return atLeastOneE2EFeatureEnabled
+        return EdgeToEdgeUtils.isEnabled()
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(activity)
                 && !BuildInfo.getInstance().isAutomotive
                 // TODO(https://crbug.com/325356134) use UiUtils#isGestureNavigationMode instead.
@@ -131,5 +140,6 @@ public class EdgeToEdgeControllerFactory {
     @VisibleForTesting
     public static void setHas3ButtonNavBar(boolean has3ButtonNavBar) {
         sHas3ButtonNavBarForTesting = has3ButtonNavBar;
+        ResettersForTesting.register(() -> sHas3ButtonNavBarForTesting = false);
     }
 }

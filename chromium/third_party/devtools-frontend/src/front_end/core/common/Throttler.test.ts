@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Platform from '../platform/platform.js';
-
 import * as Common from './common.js';
 
 const {Throttler, Scheduling} = Common.Throttler;
@@ -40,7 +38,7 @@ describe('Throttler class', () => {
 
     throttler = new Throttler(TIMEOUT);
     await ensureHasRecentRun();
-    void throttler.schedule(process, Scheduling.AsSoonAsPossible);
+    void throttler.schedule(process, Scheduling.AS_SOON_AS_POSSIBLE);
 
     assert.isFalse(process.called);
     await clock.tickAsync(0);
@@ -53,8 +51,8 @@ describe('Throttler class', () => {
 
     throttler = new Throttler(TIMEOUT);
     await ensureHasRecentRun();
-    const promiseTest = throttler.schedule(process1, Scheduling.AsSoonAsPossible);
-    void throttler.schedule(process2, Scheduling.AsSoonAsPossible);
+    const promiseTest = throttler.schedule(process1, Scheduling.AS_SOON_AS_POSSIBLE);
+    void throttler.schedule(process2, Scheduling.AS_SOON_AS_POSSIBLE);
 
     assert.isFalse(process1.called);
     assert.isFalse(process2.called);
@@ -96,7 +94,7 @@ describe('Throttler class', () => {
     const process = sinon.spy();
 
     const throttler = new Throttler(10);
-    void throttler.schedule(process, Scheduling.Delayed);
+    void throttler.schedule(process, Scheduling.DELAYED);
 
     assert.isFalse(process.called);
     await clock.tickAsync(0);
@@ -108,8 +106,8 @@ describe('Throttler class', () => {
   it('runs only one process at a time', async () => {
     throttler = new Throttler(50);
 
-    const {promise: process1Promise, resolve: process1Resolve} = Platform.PromiseUtilities.promiseWithResolvers<void>();
-    const {promise: process2Promise, resolve: process2Resolve} = Platform.PromiseUtilities.promiseWithResolvers<void>();
+    const {promise: process1Promise, resolve: process1Resolve} = Promise.withResolvers<void>();
+    const {promise: process2Promise, resolve: process2Resolve} = Promise.withResolvers<void>();
     const spy1 = sinon.spy();
     const spy2 = sinon.spy();
     const process1 = () => {
@@ -121,7 +119,7 @@ describe('Throttler class', () => {
       return process2Promise;
     };
 
-    void throttler.schedule(process1, Scheduling.AsSoonAsPossible);
+    void throttler.schedule(process1, Scheduling.AS_SOON_AS_POSSIBLE);
 
     await clock.tickAsync(0);
     assert.isTrue(spy1.called);

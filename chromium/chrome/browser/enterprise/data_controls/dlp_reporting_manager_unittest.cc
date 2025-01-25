@@ -18,9 +18,9 @@
 #include "chrome/browser/policy/messaging_layer/public/report_client.h"
 #include "chrome/browser/policy/messaging_layer/public/report_client_test_util.h"
 #include "components/account_id/account_id.h"
-#include "components/enterprise/data_controls/core/dlp_histogram_helper.h"
-#include "components/enterprise/data_controls/core/dlp_policy_event.pb.h"
-#include "components/enterprise/data_controls/core/rule.h"
+#include "components/enterprise/data_controls/core/browser/dlp_histogram_helper.h"
+#include "components/enterprise/data_controls/core/browser/dlp_policy_event.pb.h"
+#include "components/enterprise/data_controls/core/browser/rule.h"
 #include "components/reporting/client/mock_report_queue.h"
 #include "components/reporting/encryption/primitives.h"
 #include "components/reporting/storage/test_storage_module.h"
@@ -32,8 +32,10 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "components/user_manager/user_names.h"  // nogncheck
+#include "chrome/test/base/scoped_testing_local_state.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/user_names.h"  // nogncheck
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -237,6 +239,7 @@ TEST_F(DlpReportingManagerTest, MetricsReported) {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(DlpReportingManagerTest, UserType) {
+  ScopedTestingLocalState local_state{TestingBrowserProcess::GetGlobal()};
   auto* user_manager = new ash::FakeChromeUserManager();
   user_manager::ScopedUserManager enabler(base::WrapUnique(user_manager));
 

@@ -19,7 +19,7 @@
 #include "aom_dsp/arm/mem_neon.h"
 #include "aom_dsp/arm/sum_neon.h"
 
-static INLINE unsigned int sad128xh_neon(const uint8_t *src_ptr, int src_stride,
+static inline unsigned int sad128xh_neon(const uint8_t *src_ptr, int src_stride,
                                          const uint8_t *ref_ptr, int ref_stride,
                                          int h) {
   // We use 8 accumulators to prevent overflow for large values of 'h', as well
@@ -91,7 +91,7 @@ static INLINE unsigned int sad128xh_neon(const uint8_t *src_ptr, int src_stride,
   return horizontal_add_u32x4(sum_u32);
 }
 
-static INLINE unsigned int sad64xh_neon(const uint8_t *src_ptr, int src_stride,
+static inline unsigned int sad64xh_neon(const uint8_t *src_ptr, int src_stride,
                                         const uint8_t *ref_ptr, int ref_stride,
                                         int h) {
   uint16x8_t sum[4] = { vdupq_n_u16(0), vdupq_n_u16(0), vdupq_n_u16(0),
@@ -134,7 +134,7 @@ static INLINE unsigned int sad64xh_neon(const uint8_t *src_ptr, int src_stride,
   return horizontal_add_u32x4(sum_u32);
 }
 
-static INLINE unsigned int sad32xh_neon(const uint8_t *src_ptr, int src_stride,
+static inline unsigned int sad32xh_neon(const uint8_t *src_ptr, int src_stride,
                                         const uint8_t *ref_ptr, int ref_stride,
                                         int h) {
   uint16x8_t sum[2] = { vdupq_n_u16(0), vdupq_n_u16(0) };
@@ -158,7 +158,7 @@ static INLINE unsigned int sad32xh_neon(const uint8_t *src_ptr, int src_stride,
   return horizontal_add_u16x8(vaddq_u16(sum[0], sum[1]));
 }
 
-static INLINE unsigned int sad16xh_neon(const uint8_t *src_ptr, int src_stride,
+static inline unsigned int sad16xh_neon(const uint8_t *src_ptr, int src_stride,
                                         const uint8_t *ref_ptr, int ref_stride,
                                         int h) {
   uint16x8_t sum = vdupq_n_u16(0);
@@ -178,7 +178,7 @@ static INLINE unsigned int sad16xh_neon(const uint8_t *src_ptr, int src_stride,
   return horizontal_add_u16x8(sum);
 }
 
-static INLINE unsigned int sad8xh_neon(const uint8_t *src_ptr, int src_stride,
+static inline unsigned int sad8xh_neon(const uint8_t *src_ptr, int src_stride,
                                        const uint8_t *ref_ptr, int ref_stride,
                                        int h) {
   uint16x8_t sum = vdupq_n_u16(0);
@@ -197,7 +197,7 @@ static INLINE unsigned int sad8xh_neon(const uint8_t *src_ptr, int src_stride,
   return horizontal_add_u16x8(sum);
 }
 
-static INLINE unsigned int sad4xh_neon(const uint8_t *src_ptr, int src_stride,
+static inline unsigned int sad4xh_neon(const uint8_t *src_ptr, int src_stride,
                                        const uint8_t *ref_ptr, int ref_stride,
                                        int h) {
   uint16x8_t sum = vdupq_n_u16(0);
@@ -296,7 +296,7 @@ SAD_SKIP_WXH_NEON(64, 16)
 
 #undef SAD_SKIP_WXH_NEON
 
-static INLINE unsigned int sad128xh_avg_neon(const uint8_t *src_ptr,
+static inline unsigned int sad128xh_avg_neon(const uint8_t *src_ptr,
                                              int src_stride,
                                              const uint8_t *ref_ptr,
                                              int ref_stride, int h,
@@ -389,7 +389,7 @@ static INLINE unsigned int sad128xh_avg_neon(const uint8_t *src_ptr,
   return horizontal_add_u32x4(sum_u32);
 }
 
-static INLINE unsigned int sad64xh_avg_neon(const uint8_t *src_ptr,
+static inline unsigned int sad64xh_avg_neon(const uint8_t *src_ptr,
                                             int src_stride,
                                             const uint8_t *ref_ptr,
                                             int ref_stride, int h,
@@ -443,7 +443,7 @@ static INLINE unsigned int sad64xh_avg_neon(const uint8_t *src_ptr,
   return horizontal_add_u32x4(sum_u32);
 }
 
-static INLINE unsigned int sad32xh_avg_neon(const uint8_t *src_ptr,
+static inline unsigned int sad32xh_avg_neon(const uint8_t *src_ptr,
                                             int src_stride,
                                             const uint8_t *ref_ptr,
                                             int ref_stride, int h,
@@ -474,7 +474,7 @@ static INLINE unsigned int sad32xh_avg_neon(const uint8_t *src_ptr,
   return horizontal_add_u16x8(vaddq_u16(sum[0], sum[1]));
 }
 
-static INLINE unsigned int sad16xh_avg_neon(const uint8_t *src_ptr,
+static inline unsigned int sad16xh_avg_neon(const uint8_t *src_ptr,
                                             int src_stride,
                                             const uint8_t *ref_ptr,
                                             int ref_stride, int h,
@@ -499,7 +499,7 @@ static INLINE unsigned int sad16xh_avg_neon(const uint8_t *src_ptr,
   return horizontal_add_u16x8(sum);
 }
 
-static INLINE unsigned int sad8xh_avg_neon(const uint8_t *src_ptr,
+static inline unsigned int sad8xh_avg_neon(const uint8_t *src_ptr,
                                            int src_stride,
                                            const uint8_t *ref_ptr,
                                            int ref_stride, int h,
@@ -523,7 +523,7 @@ static INLINE unsigned int sad8xh_avg_neon(const uint8_t *src_ptr,
   return horizontal_add_u16x8(sum);
 }
 
-static INLINE unsigned int sad4xh_avg_neon(const uint8_t *src_ptr,
+static inline unsigned int sad4xh_avg_neon(const uint8_t *src_ptr,
                                            int src_stride,
                                            const uint8_t *ref_ptr,
                                            int ref_stride, int h,
@@ -588,7 +588,7 @@ SAD_WXH_AVG_NEON(64, 16)
 
 #undef SAD_WXH_AVG_NEON
 
-static INLINE unsigned int dist_wtd_sad128xh_avg_neon(
+static inline unsigned int dist_wtd_sad128xh_avg_neon(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {
@@ -675,7 +675,7 @@ static INLINE unsigned int dist_wtd_sad128xh_avg_neon(
   return horizontal_add_u32x4(sum_u32);
 }
 
-static INLINE unsigned int dist_wtd_sad64xh_avg_neon(
+static inline unsigned int dist_wtd_sad64xh_avg_neon(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {
@@ -726,7 +726,7 @@ static INLINE unsigned int dist_wtd_sad64xh_avg_neon(
   return horizontal_add_u32x4(sum_u32);
 }
 
-static INLINE unsigned int dist_wtd_sad32xh_avg_neon(
+static inline unsigned int dist_wtd_sad32xh_avg_neon(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {
@@ -757,7 +757,7 @@ static INLINE unsigned int dist_wtd_sad32xh_avg_neon(
   return horizontal_add_u16x8(vaddq_u16(sum[0], sum[1]));
 }
 
-static INLINE unsigned int dist_wtd_sad16xh_avg_neon(
+static inline unsigned int dist_wtd_sad16xh_avg_neon(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {
@@ -782,7 +782,7 @@ static INLINE unsigned int dist_wtd_sad16xh_avg_neon(
   return horizontal_add_u16x8(sum);
 }
 
-static INLINE unsigned int dist_wtd_sad8xh_avg_neon(
+static inline unsigned int dist_wtd_sad8xh_avg_neon(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {
@@ -806,7 +806,7 @@ static INLINE unsigned int dist_wtd_sad8xh_avg_neon(
   return horizontal_add_u16x8(sum);
 }
 
-static INLINE unsigned int dist_wtd_sad4xh_avg_neon(
+static inline unsigned int dist_wtd_sad4xh_avg_neon(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {

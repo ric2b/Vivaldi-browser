@@ -2,7 +2,7 @@ use ffi::{FillLinearParams, FillRadialParams};
 // Copyright 2023 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found
 // in the LICENSE file.
-use font_types::{BoundingBox, GlyphId, Pen};
+use font_types::{BoundingBox, GlyphId};
 use read_fonts::{
     tables::{colr::CompositeMode, cpal::Cpal, os2::SelectionFlags},
     FileRef, FontRef, ReadError, TableProvider,
@@ -13,7 +13,9 @@ use skrifa::{
     color::{Brush, ColorGlyphFormat, ColorPainter, Transform},
     instance::{Location, Size},
     metrics::{GlyphMetrics, Metrics},
-    outline::{DrawSettings, HintingInstance, LcdLayout},
+    outline::{
+        DrawSettings, Engine, HintingInstance, HintingOptions, OutlinePen, SmoothMode, Target,
+    },
     setting::VariationSetting,
     string::{LocalizedStrings, StringId},
     MetadataProvider, OutlineGlyphCollection, Tag,
@@ -41,24 +43,45 @@ unsafe fn make_hinting_instance<'a>(
     outlines: &BridgeOutlineCollection,
     size: f32,
     coords: &BridgeNormalizedCoords,
+    do_light_hinting: bool,
     do_lcd_antialiasing: bool,
     lcd_orientation_vertical: bool,
-    preserve_linear_metrics: bool,
+    force_autohinting: bool,
 ) -> Box<BridgeHintingInstance> {
     let hinting_instance = match &outlines.0 {
         Some(outlines) => {
-            let lcd_subpixel = match (do_lcd_antialiasing, lcd_orientation_vertical) {
-                (true, false) => Some(LcdLayout::Horizontal),
-                (true, true) => Some(LcdLayout::Vertical),
-                _ => None,
+            let smooth_mode = match (
+                do_light_hinting,
+                do_lcd_antialiasing,
+                lcd_orientation_vertical,
+            ) {
+                (true, _, _) => SmoothMode::Light,
+                (false, true, false) => SmoothMode::Lcd,
+                (false, true, true) => SmoothMode::VerticalLcd,
+                _ => SmoothMode::Normal,
             };
+
+            let hinting_target = Target::Smooth {
+                mode: smooth_mode,
+                // See https://docs.rs/skrifa/latest/skrifa/outline/enum.Target.html#variant.Smooth.field.mode
+                // Configure additional params to match FreeType.
+                symmetric_rendering: true,
+                preserve_linear_metrics: false,
+            };
+
+            let engine_type = if force_autohinting {
+                Engine::Auto(None)
+            } else {
+                Engine::AutoFallback
+            };
+
             HintingInstance::new(
                 outlines,
                 Size::new(size),
                 &coords.normalized_coords,
-                skrifa::outline::HintingMode::Smooth {
-                    lcd_subpixel,
-                    preserve_linear_metrics,
+                HintingOptions {
+                    engine: engine_type,
+                    target: hinting_target,
                 },
             )
             .ok()
@@ -87,7 +110,12 @@ unsafe fn make_mono_hinting_instance<'a>(
 
 fn lookup_glyph_or_zero(font_ref: &BridgeFontRef, map: &BridgeMappingIndex, codepoint: u32) -> u16 {
     font_ref
-        .with_font(|f| Some(map.0.charmap(f).map(codepoint)?.to_u16()))
+        .with_font(|f| {
+            let glyph_id = map.0.charmap(f).map(codepoint)?.to_u32();
+            // Remove conversion and change return type to u32 when
+            // implementing large glyph id support in Skia.
+            glyph_id.try_into().ok()
+        })
         .unwrap_or_default()
 }
 
@@ -102,8 +130,8 @@ fn fill_glyph_to_unicode_map(font_ref: &BridgeFontRef, map: &mut [u32]) {
     font_ref.with_font(|f| {
         let mappings = f.charmap().mappings();
         for item in mappings {
-            if map[item.1.to_u16() as usize] == 0 {
-                map[item.1.to_u16() as usize] = item.0;
+            if map[item.1.to_u32() as usize] == 0 {
+                map[item.1.to_u32() as usize] = item.0;
             }
         }
         Some(())
@@ -117,7 +145,7 @@ struct PathWrapperPen<'a> {
 // We need to wrap ffi::PathWrapper in PathWrapperPen and forward the path
 // recording calls to the path wrapper as we can't define trait implementations
 // inside the cxx::bridge section.
-impl<'a> Pen for PathWrapperPen<'a> {
+impl<'a> OutlinePen for PathWrapperPen<'a> {
     fn move_to(&mut self, x: f32, y: f32) {
         self.path_wrapper.as_mut().move_to(x, -y);
     }
@@ -143,7 +171,7 @@ impl<'a> Pen for PathWrapperPen<'a> {
 
 struct NoOpPen {}
 
-impl<'a> Pen for NoOpPen {
+impl<'a> OutlinePen for NoOpPen {
     fn move_to(&mut self, _x: f32, _y: f32) {}
 
     fn line_to(&mut self, _x: f32, _y: f32) {}
@@ -178,9 +206,10 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
     }
 
     fn push_clip_glyph(&mut self, glyph: GlyphId) {
+        // TODO(drott): Handle large glyph ids in clip operation.
         self.color_painter_wrapper
             .as_mut()
-            .push_clip_glyph(glyph.to_u16());
+            .push_clip_glyph(glyph.to_u32().try_into().ok().unwrap_or_default());
     }
 
     fn push_clip_box(&mut self, clip_box: BoundingBox<f32>) {
@@ -285,7 +314,12 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
                 palette_index,
                 alpha,
             } => {
-                color_painter.fill_glyph_solid(glyph.to_u16(), palette_index, alpha);
+                // TODO(drott): Handle large glyph ids in fill glyph operation.
+                color_painter.fill_glyph_solid(
+                    glyph.to_u32().try_into().ok().unwrap_or_default(),
+                    palette_index,
+                    alpha,
+                );
             }
             Brush::LinearGradient {
                 p0,
@@ -298,7 +332,8 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
                     num_stops: color_stops.len(),
                 };
                 color_painter.fill_glyph_linear(
-                    glyph.to_u16(),
+                    // TODO(drott): Handle large glyph ids in fill glyph operation.
+                    glyph.to_u32().try_into().ok().unwrap_or_default(),
                     &ffi::Transform {
                         xx: brush_transform.xx,
                         xy: brush_transform.xy,
@@ -330,7 +365,8 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
                     num_stops: color_stops.len(),
                 };
                 color_painter.fill_glyph_radial(
-                    glyph.to_u16(),
+                    // TODO(drott): Handle large glyph ids in fill glyph operation.
+                    glyph.to_u32().try_into().ok().unwrap_or_default(),
                     &ffi::Transform {
                         xx: brush_transform.xx,
                         xy: brush_transform.xy,
@@ -363,7 +399,8 @@ impl<'a> ColorPainter for ColorPainterImpl<'a> {
                     num_stops: color_stops.len(),
                 };
                 color_painter.fill_glyph_sweep(
-                    glyph.to_u16(),
+                    // TODO(drott): Handle large glyph ids in fill glyph operation.
+                    glyph.to_u32().try_into().ok().unwrap_or_default(),
                     &ffi::Transform {
                         xx: brush_transform.xx,
                         xy: brush_transform.xy,
@@ -408,7 +445,7 @@ fn get_path(
         .0
         .as_ref()
         .and_then(|outlines| {
-            let glyph = outlines.get(GlyphId::new(glyph_id))?;
+            let glyph = outlines.get(GlyphId::from(glyph_id))?;
 
             let draw_settings = match &hinting_instance.0 {
                 Some(instance) => DrawSettings::hinted(instance, false),
@@ -436,7 +473,7 @@ fn unhinted_advance_width_or_zero(
     font_ref
         .with_font(|f| {
             GlyphMetrics::new(f, Size::new(size), coords.normalized_coords.coords())
-                .advance_width(GlyphId::new(glyph_id))
+                .advance_width(GlyphId::from(glyph_id))
         })
         .unwrap_or_default()
 }
@@ -454,7 +491,7 @@ fn scaler_hinted_advance_width(
             let draw_settings = DrawSettings::hinted(instance, false);
 
             let outlines = outlines.0.as_ref()?;
-            let glyph = outlines.get(GlyphId::new(glyph_id))?;
+            let glyph = outlines.get(GlyphId::from(glyph_id))?;
             let mut pen_dump = NoOpPen {};
             let adjusted_metrics = glyph.draw(draw_settings, &mut pen_dump).ok()?;
             adjusted_metrics.advance_width.map(|adjusted_advance| {
@@ -551,15 +588,22 @@ fn english_or_first_font_name(font_ref: &BridgeFontRef, name_id: StringId) -> Op
 }
 
 fn family_name(font_ref: &BridgeFontRef) -> String {
-    font_ref.with_font(|f| {
-        // https://learn.microsoft.com/en-us/typography/opentype/spec/os2#fsselection
-        // Bit 8 of the `fsSelection' field in the `OS/2' table indicates a WWS-only font face.
-        // When this bit is set it means *do not* use the WWS strings.
-        let use_wws = !f.os2().map_or(false, |t| t.fs_selection().contains(SelectionFlags::WWS));
-        if use_wws { english_or_first_font_name(font_ref, StringId::WWS_FAMILY_NAME) } else { None }
-         .or_else(|| english_or_first_font_name(font_ref, StringId::TYPOGRAPHIC_FAMILY_NAME))
-         .or_else(|| english_or_first_font_name(font_ref, StringId::FAMILY_NAME))
-    }).unwrap_or_default()
+    font_ref
+        .with_font(|f| {
+            // https://learn.microsoft.com/en-us/typography/opentype/spec/os2#fsselection
+            // Bit 8 of the `fsSelection' field in the `OS/2' table indicates a WWS-only font face.
+            // When this bit is set it means *do not* use the WWS strings.
+            let use_wws = !f
+                .os2()
+                .map(|t| t.fs_selection().contains(SelectionFlags::WWS))
+                .unwrap_or_default();
+            use_wws
+                .then(|| english_or_first_font_name(font_ref, StringId::WWS_FAMILY_NAME))
+                .flatten()
+                .or_else(|| english_or_first_font_name(font_ref, StringId::TYPOGRAPHIC_FAMILY_NAME))
+                .or_else(|| english_or_first_font_name(font_ref, StringId::FAMILY_NAME))
+        })
+        .unwrap_or_default()
 }
 
 fn postscript_name(font_ref: &BridgeFontRef, out_string: &mut String) -> bool {
@@ -619,7 +663,7 @@ fn has_colr_glyph(font_ref: &BridgeFontRef, format: ColorGlyphFormat, glyph_id: 
         .with_font(|f| {
             let colrv1_paintable = f
                 .color_glyphs()
-                .get_with_format(GlyphId::new(glyph_id), format);
+                .get_with_format(GlyphId::from(glyph_id), format);
             Some(colrv1_paintable.is_some())
         })
         .unwrap_or_default()
@@ -650,7 +694,7 @@ fn get_colrv1_clip_box(
         .with_font(|f| {
             match f
                 .color_glyphs()
-                .get_with_format(GlyphId::new(glyph_id), ColorGlyphFormat::ColrV1)?
+                .get_with_format(GlyphId::from(glyph_id), ColorGlyphFormat::ColrV1)?
                 .bounding_box(coords.normalized_coords.coords(), size)
             {
                 Some(bounding_box) => {
@@ -768,6 +812,12 @@ fn coordinates_for_shifted_named_instance_index(
         .unwrap_or(-1)
 }
 
+fn num_axes(font_ref: &BridgeFontRef) -> usize {
+    font_ref
+        .with_font(|f| Some(f.axes().len()))
+        .unwrap_or_default()
+}
+
 fn populate_axes(font_ref: &BridgeFontRef, mut axis_wrapper: Pin<&mut AxisWrapper>) -> isize {
     font_ref
         .with_font(|f| {
@@ -843,6 +893,12 @@ fn font_or_collection<'a>(font_data: &'a [u8], num_fonts: &mut u32) -> bool {
     }
 }
 
+fn num_named_instances(font_ref: &BridgeFontRef) -> usize {
+    font_ref
+        .with_font(|f| Some(f.named_instances().len()))
+        .unwrap_or_default()
+}
+
 fn resolve_into_normalized_coords(
     font_ref: &BridgeFontRef,
     design_coords: &[SkiaDesignCoordinate],
@@ -886,7 +942,7 @@ fn draw_colr_glyph(
     };
     font_ref
         .with_font(|f| {
-            let paintable = f.color_glyphs().get(GlyphId::new(glyph_id))?;
+            let paintable = f.color_glyphs().get(GlyphId::from(glyph_id))?;
             paintable
                 .paint(coords.normalized_coords.coords(), &mut color_painter_impl)
                 .ok()
@@ -915,14 +971,18 @@ fn get_font_style(
     coords: &BridgeNormalizedCoords,
     style: &mut BridgeFontStyle,
 ) -> bool {
+    const SKIA_SLANT_UPRIGHT: i32 = 0; /* kUpright_Slant */
+    const SKIA_SLANT_ITALIC: i32 = 1; /* kItalic_Slant */
+    const SKIA_SLANT_OBLIQUE: i32 = 2; /* kOblique_Slant */
+
     font_ref
         .with_font(|f| {
             let attrs = f.attributes();
             let mut skia_weight = attrs.weight.value().round() as i32;
             let mut skia_slant = match attrs.style {
-                Style::Normal => 0,
-                Style::Italic => 1,
-                _ => 2, /* kOblique_Slant */
+                Style::Normal => SKIA_SLANT_UPRIGHT,
+                Style::Italic => SKIA_SLANT_ITALIC,
+                _ => SKIA_SLANT_OBLIQUE,
             };
             //0.5, 0.625, 0.75, 0.875, 1.0, 1.125, 1.25, 1.5, 2.0 map to 1-9
             let mut skia_width = match attrs.stretch.ratio() {
@@ -945,24 +1005,28 @@ fn get_font_style(
                 match user_coord.selector {
                     wght => skia_weight = user_coord.value.round() as i32,
                     // 50, 62.5, 75, 87.5, 100, 112.5, 125, 150, 200 map to 1-9
-                    wdth => skia_width = match user_coord.value {
-                        x if x <=  56.25 => 1,
-                        x if x <=  68.75 => 2,
-                        x if x <=  81.25 => 3,
-                        x if x <=  93.75 => 4,
-                        x if x <= 106.25 => 5,
-                        x if x <= 118.75 => 6,
-                        x if x <= 137.50 => 7,
-                        x if x <= 175.00 => 8,
-                        _ => 9,
-                    },
-                    slnt => skia_slant = if skia_slant == 1 /* kItalic_Slant */ {
-                                             skia_slant
-                                         } else if user_coord.value == 0.0 {
-                                             0 /* kUpright_Slant */
-                                         } else {
-                                             2 /* kOblique_Slant */
-                                         },
+                    wdth => {
+                        skia_width = match user_coord.value {
+                            x if x <= 56.25 => 1,
+                            x if x <= 68.75 => 2,
+                            x if x <= 81.25 => 3,
+                            x if x <= 93.75 => 4,
+                            x if x <= 106.25 => 5,
+                            x if x <= 118.75 => 6,
+                            x if x <= 137.50 => 7,
+                            x if x <= 175.00 => 8,
+                            _ => 9,
+                        }
+                    }
+                    slnt => {
+                        if skia_slant != SKIA_SLANT_ITALIC {
+                            if user_coord.value == 0.0 {
+                                skia_slant = SKIA_SLANT_UPRIGHT;
+                            } else {
+                                skia_slant = SKIA_SLANT_OBLIQUE
+                            }
+                        }
+                    }
                     _ => (),
                 }
             }
@@ -1197,7 +1261,7 @@ mod bitmap {
     }
 
     pub fn has_bitmap_glyph(font_ref: &BridgeFontRef, glyph_id: u16) -> bool {
-        let glyph_id = GlyphId::new(glyph_id);
+        let glyph_id = GlyphId::from(glyph_id);
         font_ref
             .with_font(|font| {
                 let has_sbix = sbix_glyph(font, glyph_id, None).is_some();
@@ -1227,7 +1291,7 @@ mod bitmap {
         glyph_id: u16,
         font_size: f32,
     ) -> Box<BridgeBitmapGlyph<'a>> {
-        let glyph_id = GlyphId::new(glyph_id);
+        let glyph_id = GlyphId::from(glyph_id);
         font_ref
             .with_font(|font| {
                 if let Some(sbix_glyph) = sbix_glyph(font, glyph_id, Some(font_size)) {
@@ -1444,6 +1508,8 @@ mod ffi {
         /// Returns false if the data cannot be interpreted as a font or collection.
         unsafe fn font_or_collection<'a>(font_data: &'a [u8], num_fonts: &mut u32) -> bool;
 
+        unsafe fn num_named_instances(font_ref: &BridgeFontRef) -> usize;
+
         type BridgeMappingIndex;
         unsafe fn make_mapping_index<'a>(font_ref: &'a BridgeFontRef) -> Box<BridgeMappingIndex>;
 
@@ -1452,9 +1518,10 @@ mod ffi {
             outlines: &BridgeOutlineCollection,
             size: f32,
             coords: &BridgeNormalizedCoords,
+            do_light_hinting: bool,
             do_lcd_antialiasing: bool,
             lcd_orientation_vertical: bool,
-            preserve_linear_metrics: bool,
+            force_autohinting: bool,
         ) -> Box<BridgeHintingInstance>;
         unsafe fn make_mono_hinting_instance<'a>(
             outlines: &BridgeOutlineCollection,
@@ -1554,6 +1621,8 @@ mod ffi {
             shifted_index: u32,
             coords: &mut [SkiaDesignCoordinate],
         ) -> isize;
+
+        fn num_axes(font_ref: &BridgeFontRef) -> usize;
 
         fn populate_axes(font_ref: &BridgeFontRef, axis_wrapper: Pin<&mut AxisWrapper>) -> isize;
 
@@ -1717,8 +1786,8 @@ mod test {
     use crate::{
         coordinates_for_shifted_named_instance_index,
         ffi::{BridgeFontStyle, PaletteOverride, SkiaDesignCoordinate},
-        font_or_collection, font_ref_is_valid, get_font_style, make_font_ref,
-        resolve_into_normalized_coords, resolve_palette,
+        font_or_collection, font_ref_is_valid, get_font_style, make_font_ref, num_axes,
+        num_named_instances, resolve_into_normalized_coords, resolve_palette,
     };
     use std::fs;
 
@@ -1851,6 +1920,75 @@ mod test {
         assert_eq!(font_style.width, 5); // Skia normal
         assert_eq!(font_style.slant, 0); // Skia upright
         assert_eq!(font_style.weight, 400); // Skia normal
+    }
+
+    #[test]
+    fn test_no_instances() {
+        let font_buffer = fs::read(TEST_CONDENSED_BOLD_ITALIC)
+            .expect("Font to test font styles could not be opened.");
+        let font_ref = make_font_ref(&font_buffer, 0);
+        let num_instances = num_named_instances(font_ref.as_ref());
+        assert!(num_instances == 0);
+    }
+
+    #[test]
+    fn test_no_axes() {
+        let font_buffer = fs::read(TEST_CONDENSED_BOLD_ITALIC)
+            .expect("Font to test font styles could not be opened.");
+        let font_ref = make_font_ref(&font_buffer, 0);
+        let size = num_axes(&font_ref);
+        assert_eq!(0, size);
+    }
+
+    #[test]
+    fn test_named_instances() {
+        let font_buffer =
+            fs::read(TEST_VARIABLE).expect("Font to test font styles could not be opened.");
+
+        let font_ref = make_font_ref(&font_buffer, 0);
+        let num_instances = num_named_instances(font_ref.as_ref());
+        assert!(num_instances == 5);
+
+        let mut index = 0;
+        loop {
+            if index >= num_instances {
+                break;
+            }
+            let named_instance_index: u32 = ((index + 1) << 16) as u32;
+            let num_coords = coordinates_for_shifted_named_instance_index(
+                &font_ref,
+                named_instance_index,
+                &mut [],
+            );
+            assert_eq!(num_coords, 2);
+
+            let mut received_coords: [SkiaDesignCoordinate; 2] = Default::default();
+            let num_coords = coordinates_for_shifted_named_instance_index(
+                &font_ref,
+                named_instance_index,
+                &mut received_coords,
+            );
+            let size = num_axes(&font_ref) as isize;
+            assert_eq!(num_coords, size);
+            if (index + 1) == 5 {
+                assert_eq!(num_coords, 2);
+                assert_eq!(
+                    received_coords[0],
+                    SkiaDesignCoordinate {
+                        axis: u32::from_be_bytes([b'w', b'g', b'h', b't']),
+                        value: 400.0
+                    }
+                );
+                assert_eq!(
+                    received_coords[1],
+                    SkiaDesignCoordinate {
+                        axis: u32::from_be_bytes([b'w', b'd', b't', b'h']),
+                        value: 200.0
+                    }
+                );
+            };
+            index += 1;
+        }
     }
 
     #[test]

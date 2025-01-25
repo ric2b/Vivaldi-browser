@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> 意外中斷連線。</translation>
 <translation id="1161325031994447685">重新連線至 Wi-Fi 網路</translation>
 <translation id="1175364870820465910">列印 (&amp;P)…</translation>
+<translation id="132390688737681464">儲存並填入地址</translation>
 <translation id="1375198122581997741">關於版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未傳送任何資料。</translation>
 <translation id="1559528461873125649">找不到您所指定的檔案或目錄</translation>
 <translation id="1640244768702815859">請嘗試<ph name="BEGIN_LINK" />前往網站首頁<ph name="END_LINK" />。</translation>
 <translation id="1645368109819982629">不支援的通訊協定</translation>
+<translation id="1662550410081243962">儲存並填入付款方式</translation>
 <translation id="1710259589646384581">作業系統</translation>
 <translation id="1728677426644403582">目前顯示的是網頁原始碼</translation>
 <translation id="1734878702283171397">建議您與系統管理員聯絡。</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">這個網站無法提供安全連線</translation>
 <translation id="2187317261103489799">偵測（預設）</translation>
 <translation id="2224337661447660594">沒有網際網路連線</translation>
+<translation id="2283340219607151381">儲存並填入地址</translation>
 <translation id="2292556288342944218">您的網際網路存取權限遭到封鎖</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> 要求提供使用者名稱和密碼。</translation>
 <translation id="2337852623177822836">管理員所控制的設定</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">連線採用 <ph name="CIPHER" /> 加密，並設有 <ph name="KX" /> 金鑰交換機制。</translation>
 <translation id="2909946352844186028">系統偵測到網路變更。</translation>
 <translation id="2948083400971632585">您可以在設定頁面中為一個連線停用任意代理配置。</translation>
+<translation id="2954624054936281172">已儲存的付款方式表格</translation>
 <translation id="2991571918955627853">目前無法造訪 <ph name="SITE" />，因為這個網站使用 HSTS。網路錯誤和攻擊行為通常是暫時性的，因此這個網頁可能稍後就會恢復正常狀態。</translation>
 <translation id="3005723025932146533">顯示儲存的複本</translation>
 <translation id="301521992641321250">已自動封鎖</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">一律偵測這個網站的重要內容</translation>
 <translation id="3308738399950580893">廣告</translation>
 <translation id="3384522979010096022">貴機構不允許您瀏覽這個網站</translation>
+<translation id="3387261909427947069">付款方式</translation>
 <translation id="3422472998109090673">目前無法連上 <ph name="HOST_NAME" />。</translation>
 <translation id="3427092606871434483">允許 (預設)</translation>
 <translation id="3447661539832366887">這個裝置的擁有者已關閉恐龍遊戲。</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">這個網站的憑證鏈結包含使用 SHA-1 進行簽署的憑證。</translation>
 <translation id="5452270690849572955">找不到網頁「<ph name="HOST_NAME" />」</translation>
 <translation id="5457113250005438886">無效</translation>
+<translation id="5490432419156082418">地址和其它資訊</translation>
 <translation id="5492298309214877701">這個位於公司、機構或學校內部網路的網站使用的網址與某個外部網站相同。
     <ph name="LINE_BREAK" />
     請與您的系統管理員聯絡。</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">依據擴充功能設定允許</translation>
 <translation id="7111012039238467737">（有效）</translation>
 <translation id="7113310725918019676">允許來自 <ph name="DOMAIN" /> 的 <ph name="BLOCKED_TYPE" /></translation>
+<translation id="7179323680825933600">儲存並填入付款方式</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合安全性標準。</translation>
 <translation id="7219179957768738017">這個連線使用 <ph name="SSL_VERSION" />。</translation>
 <translation id="7221855153210829124">顯示通知</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">如果您不確定這代表什麼意思，請與網路管理員聯絡。</translation>
 <translation id="8332188693563227489">存取 <ph name="HOST_NAME" /> 的請求遭拒</translation>
 <translation id="8422228580902424274">您試圖造訪的網站的攻擊者，可能會誘騙您安裝軟體或是洩露您的密碼、電話號碼或是信用卡號碼等資料。</translation>
+<translation id="8473863474539038330">地址和其它資訊</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的回應時間過長。</translation>
 <translation id="8503813439785031346">使用者名稱</translation>
 <translation id="8703575177326907206">您到 <ph name="DOMAIN" /> 的連線未加密。</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">書籤</translation>
 <translation id="8940028675168378100">已遭 <ph name="BLOCKER_NAME" /> 封鎖</translation>
 <translation id="8963117664422609631">前往網站設定</translation>
+<translation id="8975012916872825179">包含電話號碼、電子郵件地址和送貨地址等資訊</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> Proxy 要求提供使用者名稱和密碼。</translation>
 <translation id="9008201768610948239">忽略</translation>
 <translation id="9025348182339809926">（無效）</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不支援的通訊協定。</translation>
 <translation id="936602727769022409">您可能失去 Google 帳號存取權限，Chromium 建議立即變更密碼，系統會請求登入帳號。</translation>
 <translation id="969892804517981540">正式版本</translation>
+<translation id="984275831282074731">付款方式</translation>
 <translation id="988159990683914416">開發者版本</translation>
 </translationbundle>

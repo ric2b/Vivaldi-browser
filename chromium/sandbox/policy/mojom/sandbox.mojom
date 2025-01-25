@@ -64,6 +64,9 @@ enum Sandbox {
   // Like kUtility but allows loading of speech recognition libraries.
   kSpeechRecognition,
 
+  // Like kUtility but allows loading of the optimization guide library.
+  kVideoEffects,
+
   // Like kUtility but allows loading of screen AI library.
   [EnableIf=enable_screen_ai_service]
   kScreenAI,
@@ -151,10 +154,6 @@ enum Sandbox {
   // Like kUtility but allows access to IOSurface on macOS.
   [EnableIf=is_mac]
   kMirroring,
-
-  // The NaCl loader process.
-  [EnableIf=is_mac]
-  kNaClLoader,
 
   // Used to prime zygotes before they specialize. The process will receive a
   // new sandbox later in its lifetime.

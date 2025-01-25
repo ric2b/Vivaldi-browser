@@ -91,7 +91,6 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(uuid(
   IFACEMETHODIMP GetChildren(SAFEARRAY** children) override;
 
   AXPlatformNodeWin* GetOwner() const;
-  AXPlatformNodeDelegate* GetDelegate() const;
   void SetOwnerForTesting(AXPlatformNodeWin* owner);
 
  private:
@@ -191,7 +190,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(uuid(
   static void NormalizeAsUnignoredTextRange(AXPositionInstance& start,
                                             AXPositionInstance& end);
 
-  AXPlatformNodeDelegate* GetRootDelegate(const ui::AXTreeID tree_id);
+  AXPlatformNodeDelegate* GetRootDelegate(const AXTreeID tree_id);
   AXNode* GetSelectionCommonAnchor();
   void RemoveFocusFromPreviousSelectionIfNeeded(
       const AXNodeRange& new_selection);

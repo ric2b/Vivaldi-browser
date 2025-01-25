@@ -12,8 +12,8 @@
  * If you are looking to add a user command, follow the below steps for best
  * integration with existing components:
  * 1. Add the command to the |Command| enum in command.js.
- * 2. Add a command below in CommandStore.COMMAND_DATA. Fill in each of the
- * relevant JSON keys.
+ * 2. Add a command below in COMMAND_DATA. Fill in each of the relevant JSON
+ * keys.
  * Be sure to add a msg id and define it in chromevox/messages/messages.js which
  * describes the command. Please also add a category msg id so that the command
  * will show up in the options page.
@@ -34,7 +34,7 @@ export class CommandStore {
    * @return The message id, if any.
    */
   static messageForCommand(command: Command): string | undefined {
-    return CommandStore.COMMAND_DATA[command]?.msgId;
+    return COMMAND_DATA[command]?.msgId;
   }
 
   /**
@@ -43,7 +43,7 @@ export class CommandStore {
    * @return The category, if any.
    */
   static categoryForCommand(command: Command): CommandCategory | undefined {
-    return CommandStore.COMMAND_DATA[command]?.category;
+    return COMMAND_DATA[command]?.category;
   }
 
   /**
@@ -51,8 +51,8 @@ export class CommandStore {
    * @return The command, if any.
    */
   static commandForMessage(msgId: string): Command | void {
-    for (const commandName in CommandStore.COMMAND_DATA) {
-      const command = CommandStore.COMMAND_DATA[commandName as Command];
+    for (const commandName in COMMAND_DATA) {
+      const command = COMMAND_DATA[commandName as Command];
       if (command.msgId === msgId) {
         return commandName as Command;
       }
@@ -66,8 +66,8 @@ export class CommandStore {
    */
   static commandsForCategory(category: CommandCategory): Command[] {
     const ret: Command[] = [];
-    for (const cmd in CommandStore.COMMAND_DATA) {
-      const struct = CommandStore.COMMAND_DATA[cmd as Command];
+    for (const cmd in COMMAND_DATA) {
+      const struct = COMMAND_DATA[cmd as Command];
       if (category === struct.category) {
         ret.push(cmd as Command);
       }
@@ -77,18 +77,15 @@ export class CommandStore {
 
   /**
    * @param command The command to query.
-   * @return Whether or not this command is denied in the OOBE.
+   * @return Whether this command is denied in signed out contexts.
    */
   static denySignedOut(command: Command): boolean {
-    if (!CommandStore.COMMAND_DATA[command]) {
-      return false;
-    }
-    return Boolean(CommandStore.COMMAND_DATA[command].denySignedOut);
+    return Boolean(COMMAND_DATA[command]?.denySignedOut);
   }
 
   static getKeyBindings(): KeyBinding[] {
     const primaryKeyBindings: KeyBinding[] =
-        Object.entries(CommandStore.COMMAND_DATA)
+        Object.entries(COMMAND_DATA)
             .filter(([_command, data]) => data.sequence)
             .map(([command, data]) => {
               // Always true, but closure compiler doesn't know that.
@@ -102,7 +99,7 @@ export class CommandStore {
             }) as KeyBinding[];
 
     const secondaryKeyBindings: KeyBinding[] =
-        Object.entries(CommandStore.COMMAND_DATA)
+        Object.entries(COMMAND_DATA)
             .filter(([_command, data]) => data.altSequence)
             .map(([command, data]) => {
               // Always true, but closure compiler doesn't know that.
@@ -133,8 +130,10 @@ interface DataEntry {
   altSequence?: SerializedKeySequence;
 }
 
-export namespace CommandStore {
-/** Collection of command properties. */
+/**
+ * Collection of command properties.
+ * NOTE: sorted in lookup order when matching against commands.
+ */
 export const COMMAND_DATA: Record<Command, DataEntry> = {
   [Command.ANNOUNCE_BATTERY_DESCRIPTION]: {
     category: CommandCategory.INFORMATION,
@@ -389,26 +388,6 @@ export const COMMAND_DATA: Record<Command, DataEntry> = {
   },
   [Command.MOVE_TO_START_OF_LINE]: {category: CommandCategory.NO_CATEGORY},
   [Command.MOVE_TO_END_OF_LINE]: {category: CommandCategory.NO_CATEGORY},
-  [Command.NATIVE_NEXT_CHARACTER]: {
-    category: CommandCategory.NO_CATEGORY,
-    sequence: {cvoxModifier: false, keys: {keyCode: [KeyCode.RIGHT]}},
-  },
-  [Command.NATIVE_NEXT_WORD]: {
-    category: CommandCategory.NO_CATEGORY,
-    sequence: {
-      cvoxModifier: false,
-      keys: {keyCode: [KeyCode.RIGHT], ctrlKey: [true]},
-    },
-  },
-  [Command.NATIVE_PREVIOUS_CHARACTER]: {
-    category: CommandCategory.NO_CATEGORY,
-    sequence: {cvoxModifier: false, keys: {keyCode: [KeyCode.LEFT]}},
-  },
-  [Command.NATIVE_PREVIOUS_WORD]: {
-    category: CommandCategory.NO_CATEGORY,
-    sequence:
-        {cvoxModifier: false, keys: {keyCode: [KeyCode.LEFT], ctrlKey: [true]}},
-  },
   [Command.NEXT_ARTICLE]: {category: CommandCategory.NO_CATEGORY},
   [Command.NEXT_AT_GRANULARITY]: {
     category: CommandCategory.NAVIGATION,
@@ -928,6 +907,7 @@ export const COMMAND_DATA: Record<Command, DataEntry> = {
   },
   [Command.SHOW_OPTIONS_PAGE]: {
     category: CommandCategory.HELP_COMMANDS,
+    denySignedOut: true,
     msgId: 'show_options_page',
     sequence: {cvoxModifier: true, keys: {keyCode: [KeyCode.O, KeyCode.O]}},
   },
@@ -951,14 +931,14 @@ export const COMMAND_DATA: Record<Command, DataEntry> = {
     msgId: 'show_tts_settings',
     sequence: {cvoxModifier: true, keys: {keyCode: [KeyCode.O, KeyCode.S]}},
   },
+  [Command.SPEAK_TABLE_LOCATION]: {
+    category: CommandCategory.TABLES,
+    msgId: 'speak_table_location',
+  },
   [Command.SPEAK_TIME_AND_DATE]: {
     category: CommandCategory.INFORMATION,
     msgId: 'speak_time_and_date',
     sequence: {cvoxModifier: true, keys: {keyCode: [KeyCode.A, KeyCode.D]}},
-  },
-  [Command.SPEAK_TABLE_LOCATION]: {
-    category: CommandCategory.TABLES,
-    msgId: 'speak_table_location',
   },
   [Command.START_HISTORY_RECORDING]: {category: CommandCategory.NO_CATEGORY},
   [Command.STOP_HISTORY_RECORDING]: {category: CommandCategory.NO_CATEGORY},
@@ -1039,5 +1019,27 @@ export const COMMAND_DATA: Record<Command, DataEntry> = {
     sequence:
         {cvoxModifier: true, keys: {keyCode: [KeyCode.G], altKey: [true]}},
   },
+
+  // Keep these commands last since they potentially conflict with above
+  // commands when sticky mode is enabled.
+  [Command.NATIVE_NEXT_CHARACTER]: {
+    category: CommandCategory.NO_CATEGORY,
+    sequence: {cvoxModifier: false, keys: {keyCode: [KeyCode.RIGHT]}},
+  },
+  [Command.NATIVE_NEXT_WORD]: {
+    category: CommandCategory.NO_CATEGORY,
+    sequence: {
+      cvoxModifier: false,
+      keys: {keyCode: [KeyCode.RIGHT], ctrlKey: [true]},
+    },
+  },
+  [Command.NATIVE_PREVIOUS_CHARACTER]: {
+    category: CommandCategory.NO_CATEGORY,
+    sequence: {cvoxModifier: false, keys: {keyCode: [KeyCode.LEFT]}},
+  },
+  [Command.NATIVE_PREVIOUS_WORD]: {
+    category: CommandCategory.NO_CATEGORY,
+    sequence:
+        {cvoxModifier: false, keys: {keyCode: [KeyCode.LEFT], ctrlKey: [true]}},
+  },
 };
-}

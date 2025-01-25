@@ -13,7 +13,7 @@
 #include "base/ranges/algorithm.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_service_observer.h"
 #include "components/sync/service/sync_service_utils.h"
@@ -57,7 +57,7 @@ class SyncBasedUrlKeyedDataCollectionConsentHelper
  public:
   SyncBasedUrlKeyedDataCollectionConsentHelper(
       syncer::SyncService* sync_service,
-      std::set<syncer::ModelType> sync_data_types,
+      std::set<syncer::DataType> sync_data_types,
       bool require_sync_feature_enabled);
 
   SyncBasedUrlKeyedDataCollectionConsentHelper(
@@ -79,7 +79,7 @@ class SyncBasedUrlKeyedDataCollectionConsentHelper
 
   const bool require_sync_feature_enabled_;
   raw_ptr<syncer::SyncService> sync_service_;
-  std::map<syncer::ModelType, syncer::UploadState> sync_data_type_states_;
+  std::map<syncer::DataType, syncer::UploadState> sync_data_type_states_;
   bool sync_feature_state_ = false;
 };
 
@@ -114,7 +114,7 @@ void PrefBasedUrlKeyedDataCollectionConsentHelper::OnPrefChanged() {
 SyncBasedUrlKeyedDataCollectionConsentHelper::
     SyncBasedUrlKeyedDataCollectionConsentHelper(
         syncer::SyncService* sync_service,
-        std::set<syncer::ModelType> sync_data_types,
+        std::set<syncer::DataType> sync_data_types,
         bool require_sync_feature_enabled)
     : require_sync_feature_enabled_(require_sync_feature_enabled),
       sync_service_(sync_service) {
@@ -189,8 +189,8 @@ void SyncBasedUrlKeyedDataCollectionConsentHelper::UpdateSyncDataTypeStates() {
     sync_feature_state_ =
         sync_service_ && sync_service_->IsSyncFeatureEnabled();
   }
-  for (auto& [model_type, upload_state] : sync_data_type_states_) {
-    upload_state = syncer::GetUploadToGoogleState(sync_service_, model_type);
+  for (auto& [data_type, upload_state] : sync_data_type_states_) {
+    upload_state = syncer::GetUploadToGoogleState(sync_service_, data_type);
   }
 }
 
@@ -215,8 +215,7 @@ UrlKeyedDataCollectionConsentHelper::NewPersonalizedDataCollectionConsentHelper(
     syncer::SyncService* sync_service) {
   return std::make_unique<SyncBasedUrlKeyedDataCollectionConsentHelper>(
       sync_service,
-      std::set<syncer::ModelType>(
-          {syncer::ModelType::HISTORY_DELETE_DIRECTIVES}),
+      std::set<syncer::DataType>({syncer::DataType::HISTORY_DELETE_DIRECTIVES}),
       /*require_sync_feature_enabled=*/false);
 }
 
@@ -227,7 +226,7 @@ UrlKeyedDataCollectionConsentHelper::
         syncer::SyncService* sync_service,
         bool require_sync_feature_enabled) {
   return std::make_unique<SyncBasedUrlKeyedDataCollectionConsentHelper>(
-      sync_service, std::set<syncer::ModelType>({syncer::ModelType::BOOKMARKS}),
+      sync_service, std::set<syncer::DataType>({syncer::DataType::BOOKMARKS}),
       require_sync_feature_enabled);
 }
 

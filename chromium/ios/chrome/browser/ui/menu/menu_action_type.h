@@ -65,6 +65,13 @@ enum class MenuActionType {
   RemoveTabFromGroup = 52,
   OpenLinkInNewGroup = 53,
   ShowDetails = 54,
+  ShowFullURL = 55,
+  SortDriveItemsByName = 56,
+  SortDriveItemsByModificationTime = 57,
+  SortDriveItemsByOpeningTime = 58,
+  SelectDriveIdentity = 59,
+  AddDriveAccount = 60,
+  ManageInNewTab = 61,
 
   // Vivaldi
   OpenInNewBackgroundTab,

@@ -23,7 +23,7 @@ ChromiumOS unit tests, you can run `cros_run_unit_tests`. If you want to run
 just the unit tests for specific packages, you can use:
 
 ```bash
-(chroot) $ cros_run_unit_tests \
+$ cros_sdk cros_run_unit_tests \
            --packages <space-delimited list of portage package names>
 ```
 
@@ -33,7 +33,7 @@ As an example, let's say you just want to run the unit tests for the metrics
 package. To do so, you can run:
 
 ```bash
-(chroot) $ cros_run_unit_tests --board ${BOARD} --packages "metrics"
+$ cros_sdk cros_run_unit_tests --board ${BOARD} --packages "metrics"
 ```
 
 By default, `cros_run_unit_tests` runs packages in parallel, and shows the
@@ -47,7 +47,16 @@ If you work on a package with `cros_workon`, you can use `cros_workon_make
 --test` to run unit tests more quickly.
 
 ```bash
-cros_workon_make --board=${BOARD} ${PACKAGE_NAME} --test
+$ cros_sdk cros_workon_make --board=${BOARD} ${PACKAGE_NAME} --test
+```
+
+Just like `cros_run_unit_tests`, `cros_workon_make` runs the tests in parallel.
+If you want to see the test progress directly (e.g. when performing printf
+debugging), you can use PLATFORM_PARALLEL_GTEST_TEST="no":
+
+```bash
+$ cros_sdk PLATFORM_PARALLEL_GTEST_TEST="no" cros_workon_make \
+           --board=${BOARD} ${PACKAGE_NAME} --test
 ```
 
 ### Running a subset of unit tests
@@ -57,14 +66,14 @@ GTEST_ARGS= to set a filter with a regex like this:
 
 ```bash
 # Run the string utilities unit tests for libbrillo.
-(chroot) $ GTEST_ARGS="--gtest_filter=StringUtils.*" cros_run_unit_tests \
+$ cros_sdk GTEST_ARGS="--gtest_filter=StringUtils.*" cros_run_unit_tests \
            --board ${BOARD} --packages libbrillo
 ```
 
 You can also use `P2_TEST_FILTER` for a platform2 package:
 
 ```bash
-(chroot) P2_TEST_FILTER="StringUtils.*" cros_workon_make --board=${BOARD} --test libbrillo
+$ cros_sdk P2_TEST_FILTER="StringUtils.*" cros_workon_make --board=${BOARD} --test libbrillo
 ```
 
 For more information, consult the [upstream gtest documentation].

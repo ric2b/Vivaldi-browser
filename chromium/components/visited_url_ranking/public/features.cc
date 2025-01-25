@@ -4,6 +4,8 @@
 
 #include "components/visited_url_ranking/public/features.h"
 
+#include <string>
+
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
 
@@ -12,6 +14,17 @@ namespace visited_url_ranking::features {
 BASE_FEATURE(kVisitedURLRankingService,
              "VisitedURLRankingService",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<bool>
+    kVisitedURLRankingHistoryFetcherDiscardZeroDurationVisits{
+        &kVisitedURLRankingService,
+        /*name=*/"history_fetcher_discard_zero_duration_visits",
+        /*default_value=*/true};
+
+constexpr base::FeatureParam<std::string> kVisitedURLRankingResultTypesParam{
+    &kVisitedURLRankingService,
+    /*name=*/"visited_url_ranking_url_types",
+    /*default_value=*/""};
 
 const char kVisitedURLRankingFetchDurationInHoursParam[] =
     "VisitedURLRankingFetchDurationInHoursParam";
@@ -57,10 +70,40 @@ constexpr base::FeatureParam<bool> kVisitedURLRankingDeduplicationUpdateScheme{
     /*name=*/"url_deduplication_update_scheme",
     /*default_value=*/true};
 
+constexpr base::FeatureParam<bool> kVisitedURLRankingDeduplicationClearPath{
+    &kVisitedURLRankingDeduplication,
+    /*name=*/"url_deduplication_clear_path",
+    /*default_value=*/true};
+
+constexpr base::FeatureParam<bool> kVisitedURLRankingDeduplicationIncludeTitle{
+    &kVisitedURLRankingDeduplication,
+    /*name=*/"url_deduplication_include_title",
+    /*default_value=*/true};
+
 constexpr base::FeatureParam<std::string>
     kVisitedURLRankingDeduplicationExcludedPrefixes{
         &kVisitedURLRankingDeduplication,
         /*name=*/"url_deduplication_excluded_prefixes",
         /*default_value=*/"www."};
+
+BASE_FEATURE(kVisitedURLRankingDecorations,
+             "VisitedURLRankingDecorations",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<int> kVisitedURLRankingDecorationTimeOfDay{
+    &kVisitedURLRankingDecorations,
+    /*name=*/"decorations_time_of_day_threshold",
+    /*default_value=*/5};
+
+constexpr base::FeatureParam<int> kVisitedURLRankingFrequentlyVisitedThreshold{
+    &kVisitedURLRankingDecorations,
+    /*name=*/"decorations_frequently_visited_threshold",
+    /*default_value=*/5};
+
+constexpr base::FeatureParam<int>
+    kVisitedURLRankingDecorationRecentlyVisitedMinutesThreshold{
+        &kVisitedURLRankingDecorations,
+        /*name=*/"decorations_recently_visited_minutes_threshold",
+        /*default_value=*/1};
 
 }  // namespace visited_url_ranking::features

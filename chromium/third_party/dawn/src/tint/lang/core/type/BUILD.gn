@@ -34,6 +34,7 @@
 #                       Do not modify this file directly
 ################################################################################
 
+import("../../../../../scripts/dawn_overrides_with_defaults.gni")
 import("../../../../../scripts/tint_overrides_with_defaults.gni")
 
 import("${tint_src_dir}/tint.gni")
@@ -73,6 +74,8 @@ libtint_source_set("type") {
     "f32.h",
     "i32.cc",
     "i32.h",
+    "i8.cc",
+    "i8.h",
     "input_attachment.cc",
     "input_attachment.h",
     "invalid.cc",
@@ -105,6 +108,8 @@ libtint_source_set("type") {
     "storage_texture.h",
     "struct.cc",
     "struct.h",
+    "subgroup_matrix.cc",
+    "subgroup_matrix.h",
     "texture.cc",
     "texture.h",
     "texture_dimension.cc",
@@ -113,6 +118,8 @@ libtint_source_set("type") {
     "type.h",
     "u32.cc",
     "u32.h",
+    "u8.cc",
+    "u8.h",
     "unique_node.cc",
     "unique_node.h",
     "vector.cc",
@@ -121,6 +128,7 @@ libtint_source_set("type") {
     "void.h",
   ]
   deps = [
+    "${dawn_root}/src/utils:utils",
     "${tint_src_dir}/lang/core",
     "${tint_src_dir}/utils/containers",
     "${tint_src_dir}/utils/diagnostic",
@@ -151,6 +159,7 @@ if (tint_build_unittests) {
       "f32_test.cc",
       "helper_test.h",
       "i32_test.cc",
+      "i8_test.cc",
       "input_attachment_test.cc",
       "manager_test.cc",
       "matrix_test.cc",
@@ -161,12 +170,15 @@ if (tint_build_unittests) {
       "sampler_test.cc",
       "storage_texture_test.cc",
       "struct_test.cc",
+      "subgroup_matrix_test.cc",
       "texture_test.cc",
       "type_test.cc",
       "u32_test.cc",
+      "u8_test.cc",
       "vector_test.cc",
     ]
     deps = [
+      "${dawn_root}/src/utils:utils",
       "${tint_src_dir}:gmock_and_gtest",
       "${tint_src_dir}/api/common",
       "${tint_src_dir}/lang/core",

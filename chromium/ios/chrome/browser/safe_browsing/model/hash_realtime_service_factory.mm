@@ -11,7 +11,7 @@
 #import "ios/chrome/browser/safe_browsing/model/ohttp_key_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/model/verdict_cache_manager_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_service.h"
 
 namespace {
@@ -24,10 +24,15 @@ network::mojom::NetworkContext* GetNetworkContext() {
 
 // static
 safe_browsing::HashRealTimeService*
-HashRealTimeServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+HashRealTimeServiceFactory::GetForBrowserState(ProfileIOS* profile) {
+  return GetForProfile(profile);
+}
+
+// static
+safe_browsing::HashRealTimeService* HashRealTimeServiceFactory::GetForProfile(
+    ProfileIOS* profile) {
   return static_cast<safe_browsing::HashRealTimeService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, /*create=*/true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static

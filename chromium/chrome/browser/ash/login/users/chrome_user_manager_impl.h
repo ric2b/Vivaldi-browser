@@ -19,12 +19,8 @@
 #include "chrome/browser/ash/login/users/affiliation.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
-#include "chrome/browser/ash/policy/external_data/cloud_external_data_policy_observer.h"
 #include "chrome/browser/ash/policy/handlers/minimum_version_policy_handler.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
-#include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/profiles/profile_manager_observer.h"
-#include "chrome/browser/profiles/profile_observer.h"
 #include "chromeos/ash/components/login/auth/mount_performer.h"
 #include "chromeos/ash/components/settings/cros_settings.h"
 #include "components/account_id/account_id.h"
@@ -38,9 +34,7 @@ class ChromeUserManagerImpl
     : public user_manager::UserManagerBase,
       public DeviceSettingsService::Observer,
       public policy::DeviceLocalAccountPolicyService::Observer,
-      public policy::MinimumVersionPolicyHandler::Observer,
-      public ProfileObserver,
-      public ProfileManagerObserver {
+      public policy::MinimumVersionPolicyHandler::Observer {
  public:
   ChromeUserManagerImpl(const ChromeUserManagerImpl&) = delete;
   ChromeUserManagerImpl& operator=(const ChromeUserManagerImpl&) = delete;
@@ -60,18 +54,8 @@ class ChromeUserManagerImpl
   void OnPolicyUpdated(const std::string& user_id) override;
   void OnDeviceLocalAccountsChanged() override;
 
-  void StopPolicyObserverForTesting();
-
   // policy::MinimumVersionPolicyHandler::Observer:
   void OnMinimumVersionStateChanged() override;
-
-  // ProfileManagerObserver:
-  void OnProfileCreationStarted(Profile* profile) override;
-  void OnProfileAdded(Profile* profile) override;
-  void OnProfileManagerDestroying() override;
-
-  // ProfileObserver:
-  void OnProfileWillBeDestroyed(Profile* profile) override;
 
  protected:
   void RemoveNonCryptohomeData(const AccountId& account_id) override;
@@ -91,14 +75,7 @@ class ChromeUserManagerImpl
 
   // If data for a device local account is marked as pending removal and the
   // user is no longer logged into that account, removes the data.
-  void CleanUpDeviceLocalAccountNonCryptohomeDataPendingRemoval();
-
-  // Removes data belonging to device local accounts that are no longer found on
-  // the user list. If the user is currently logged into one of these accounts,
-  // the data for that account is not removed immediately but marked as pending
-  // removal after logout.
-  void CleanUpDeviceLocalAccountNonCryptohomeData(
-      const std::vector<std::string>& old_device_local_accounts);
+  void RemovePendingDeviceLocalAccount();
 
   // Replaces the list of device local accounts with those found in
   // `device_local_accounts`. Ensures that data belonging to accounts no longer
@@ -106,16 +83,16 @@ class ChromeUserManagerImpl
   // Device local accounts are defined by policy. This method is called whenever
   // an updated list of device local accounts is received from policy.
   bool UpdateAndCleanUpDeviceLocalAccounts(
-      const std::vector<policy::DeviceLocalAccount>& device_local_accounts);
-
-  // Updates the display name for public account `username` from policy settings
-  // associated with that username.
-  void UpdatePublicAccountDisplayName(const std::string& user_id);
+      const std::vector<DeviceLocalAccountInfo>& device_local_accounts);
 
   // Update the number of users.
   void UpdateNumberOfUsers();
 
   void UpdateOwnerId();
+
+  // Returns the display name taken from policy, expected to be used for
+  // public accounts.
+  std::optional<std::u16string> GetDisplayName(std::string_view user_id);
 
   // Interface to device-local account definitions and associated policy.
   raw_ptr<policy::DeviceLocalAccountPolicyService>
@@ -129,16 +106,6 @@ class ChromeUserManagerImpl
 
   base::CallbackListSubscription ephemeral_users_enabled_subscription_;
   base::CallbackListSubscription local_accounts_subscription_;
-
-  std::vector<std::unique_ptr<policy::CloudExternalDataPolicyObserver>>
-      cloud_external_data_policy_observers_;
-
-  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
-      profile_manager_observation_{this};
-
-  std::vector<
-      std::unique_ptr<base::ScopedObservation<Profile, ProfileObserver>>>
-      profile_observations_;
 
   base::RepeatingClosure remove_non_cryptohome_data_barrier_;
 

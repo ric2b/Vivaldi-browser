@@ -101,12 +101,12 @@ public class FakeRwsPrivacySandboxBridge implements PrivacySandboxBridge.Natives
             Profile profile, String topFrameEtldPlus1, boolean allowed) {}
 
     @Override
-    public int getRequiredPromptType(Profile profile) {
+    public int getRequiredPromptType(Profile profile, int surfaceType) {
         return 0;
     }
 
     @Override
-    public void promptActionOccurred(Profile profile, int action) {}
+    public void promptActionOccurred(Profile profile, int action, int surfaceType) {}
 
     @Override
     public void topicsToggleChanged(Profile profile, boolean newValue) {}

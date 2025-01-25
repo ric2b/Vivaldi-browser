@@ -31,6 +31,10 @@ class EditorSwitch {
   // Determines if the feature trace is ever allowed to be visible.
   bool IsAllowedForUse() const;
 
+  bool IsFeedbackEnabled() const;
+
+  bool CanShowNoticeBanner() const;
+
   EditorMode GetEditorMode() const;
 
   EditorOpportunityMode GetEditorOpportunityMode() const;

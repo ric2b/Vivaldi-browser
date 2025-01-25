@@ -1,6 +1,7 @@
 # Update default configurations
 
 vivaldi_compiler_configs = [
+  "//vivaldi/gn/config:diagnostics",
   "//vivaldi/gn/config:features",
   "//vivaldi/gn/config:extra_cfi_flags",
 ]

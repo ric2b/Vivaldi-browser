@@ -392,6 +392,8 @@ static_library("common") {
     "resizing_host_observer.h",
     "server_log_entry_host.cc",
     "server_log_entry_host.h",
+    "session_policies_from_dict.cc",
+    "session_policies_from_dict.h",
     "shutdown_watchdog.cc",
     "shutdown_watchdog.h",
     "test_echo_extension.cc",
@@ -445,6 +447,7 @@ static_library("common") {
     "//remoting/base",
     "//remoting/base:authorization",
     "//remoting/base:errors",
+    "//remoting/base:session_policies",
     "//remoting/host/file_transfer:common",
     "//remoting/host/input_monitor",
     "//remoting/host/mojom",
@@ -724,12 +727,7 @@ static_library("common") {
 }
 
 source_set("display_layout") {
-  sources = [
-    "desktop_display_layout_util.cc",
-    "desktop_display_layout_util.h",
-    "desktop_geometry.cc",
-    "desktop_geometry.h",
-  ]
+  sources = [ "desktop_geometry.h" ]
   deps = [ "//ui/gfx" ]
 }
 
@@ -742,10 +740,6 @@ if (is_linux && (ozone_platform_x11 || remoting_use_x11)) {
       "linux/gnome_display_config_dbus_client.h",
       "linux/scoped_glib.cc",
       "linux/scoped_glib.h",
-      "x11_crtc_resizer.cc",
-      "x11_crtc_resizer.h",
-      "x11_desktop_resizer.cc",
-      "x11_desktop_resizer.h",
       "x11_display_util.cc",
       "x11_display_util.h",
     ]
@@ -758,6 +752,7 @@ if (is_linux && (ozone_platform_x11 || remoting_use_x11)) {
       "//ui/base",
       "//ui/base/x",
       "//ui/gfx/geometry",
+      "//ui/gfx/x",
     ]
   }
 }
@@ -825,7 +820,6 @@ source_set("unit_tests") {
     "corp_host_status_logger_unittest.cc",
     "daemon_process_unittest.cc",
     "desktop_display_info_unittest.cc",
-    "desktop_display_layout_util_unittest.cc",
     "desktop_process_unittest.cc",
     "desktop_session_agent_unittest.cc",
     "ftl_echo_message_listener_unittest.cc",
@@ -856,6 +850,7 @@ source_set("unit_tests") {
     "resizing_host_observer_unittest.cc",
     "resources_unittest.cc",
     "server_log_entry_host_unittest.cc",
+    "session_policies_from_dict_unittest.cc",
     "setup/host_starter_oauth_helper_unittest.cc",
     "setup/me2me_native_messaging_host_unittest.cc",
     "setup/pin_validator_unittest.cc",
@@ -881,6 +876,7 @@ source_set("unit_tests") {
     "//components/named_mojo_ipc_server",
     "//components/named_mojo_ipc_server:test_support",
     "//net:test_support",
+    "//remoting/base:session_policies",
     "//remoting/codec:encoder",
     "//remoting/host/base",
     "//remoting/host/file_transfer:unit_tests",
@@ -940,10 +936,7 @@ source_set("unit_tests") {
   }
 
   if (remoting_use_x11) {
-    sources += [
-      "x11_crtc_resizer_unittest.cc",
-      "x11_display_util_unittest.cc",
-    ]
+    sources += [ "x11_display_util_unittest.cc" ]
     deps += [
       ":x11_display_utils",
       "//ui/gfx/x",
@@ -1139,6 +1132,7 @@ if (enable_me2me_host) {
       "//net",
       "//remoting/base",
       "//remoting/base:authorization",
+      "//remoting/base:session_policies",
       "//remoting/host",
       "//remoting/host/base",
       "//remoting/host/mojom",

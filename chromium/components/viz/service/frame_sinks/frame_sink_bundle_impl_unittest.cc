@@ -136,7 +136,8 @@ struct TestFrameSink {
     }
     manager_->CreateCompositorFrameSink(
         id, bundle_id, frame_sink.BindNewPipeAndPassReceiver(),
-        client_receiver_.BindNewPipeAndPassRemote());
+        client_receiver_.BindNewPipeAndPassRemote(),
+        /* render_input_router_config= */ nullptr);
     manager_->GetFrameSinkForId(id)->SetNeedsBeginFrame(true);
   }
 

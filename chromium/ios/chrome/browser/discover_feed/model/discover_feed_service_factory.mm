@@ -8,21 +8,28 @@
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_configuration.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
+#import "ios/chrome/browser/ntp/shared/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
-#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/public/provider/chrome/browser/discover_feed/discover_feed_api.h"
 
 // static
 DiscoverFeedService* DiscoverFeedServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state,
+    ProfileIOS* profile,
+    bool create) {
+  return GetForProfile(profile, create);
+}
+
+// static
+DiscoverFeedService* DiscoverFeedServiceFactory::GetForProfile(
+    ProfileIOS* profile,
     bool create) {
   return static_cast<DiscoverFeedService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, create));
+      GetInstance()->GetServiceForBrowserState(profile, create));
 }
 
 // static
@@ -46,26 +53,24 @@ DiscoverFeedServiceFactory::~DiscoverFeedServiceFactory() = default;
 std::unique_ptr<KeyedService>
 DiscoverFeedServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
 
   DiscoverFeedConfiguration* configuration =
       [[DiscoverFeedConfiguration alloc] init];
-  configuration.browserStatePrefService = browser_state->GetPrefs();
+  configuration.browserStatePrefService = profile->GetPrefs();
   configuration.localStatePrefService =
       GetApplicationContext()->GetLocalState();
   configuration.authService =
-      AuthenticationServiceFactory::GetForBrowserState(browser_state);
+      AuthenticationServiceFactory::GetForBrowserState(profile);
   configuration.identityManager =
-      IdentityManagerFactory::GetForBrowserState(browser_state);
-  configuration.metricsRecorder = [[FeedMetricsRecorder alloc]
-      initWithPrefService:browser_state->GetPrefs()];
+      IdentityManagerFactory::GetForProfile(profile);
+  configuration.metricsRecorder =
+      [[FeedMetricsRecorder alloc] initWithPrefService:profile->GetPrefs()];
   configuration.singleSignOnService =
       GetApplicationContext()->GetSingleSignOnService();
   configuration.templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(browser_state);
-  configuration.syncService =
-      SyncServiceFactory::GetForBrowserState(browser_state);
+      ios::TemplateURLServiceFactory::GetForBrowserState(profile);
+  configuration.syncService = SyncServiceFactory::GetForBrowserState(profile);
 
   return ios::provider::CreateDiscoverFeedService(configuration);
 }

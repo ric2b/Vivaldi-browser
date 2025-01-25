@@ -19,6 +19,8 @@
 #include "components/sync/protocol/sync_enums.pb.h"
 #include "components/sync_device_info/device_info.h"
 
+#include "components/sync_sessions/vivaldi_specific.h"
+
 namespace sync_sessions {
 
 // Construct a SerializedNavigationEntry for a particular index from a sync
@@ -86,15 +88,18 @@ struct SyncedSession {
   ~SyncedSession();
 
   void SetSessionTag(const std::string& session_tag);
-
   const std::string& GetSessionTag() const;
 
   void SetSessionName(const std::string& session_name);
-
   const std::string& GetSessionName() const;
 
-  void SetModifiedTime(const base::Time& modified_time);
+  // The timestamp when this session was started, i.e. when the user signed in
+  // or turned on the sessions data type. Only populated for sessions started in
+  // M130 or later.
+  void SetStartTime(base::Time start_time);
+  std::optional<base::Time> GetStartTime() const;
 
+  void SetModifiedTime(const base::Time& modified_time);
   const base::Time& GetModifiedTime() const;
 
   // Map of windows that make up this session.
@@ -110,17 +115,23 @@ struct SyncedSession {
 
   syncer::DeviceInfo::FormFactor GetDeviceFormFactor() const;
 
-  void SetExtData(const std::string &data);
-  std::optional<std::string> GetExtData() const;
+  // Vivaldi
+  void SetVivaldiSpecific(const VivaldiSpecific &vivaldi_specific);
+  const VivaldiSpecific & GetVivaldiSpecific() const;
 
  private:
-  std::optional<std::string> viv_ext_data;
+  VivaldiSpecific vivaldi_specific_;
 
   // Unique tag for each session.
   std::string session_tag_;
 
   // User-visible name
   std::string session_name_;
+
+  // The timestamp when this session was started, i.e. when the user signed in
+  // or turned on the sessions data type. Only populated for sessions started in
+  // M130 or later.
+  std::optional<base::Time> start_time_;
 
   // Last time this session was modified remotely. This is the max of the header
   // and all children tab mtimes.

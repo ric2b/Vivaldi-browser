@@ -23,6 +23,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/test/base/testing_browser_process_platform_part.h"
+#include "components/signin/core/browser/active_primary_accounts_metrics_recorder.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
 #include "printing/buildflags/buildflags.h"
@@ -36,10 +37,6 @@ class NotificationPlatformBridge;
 class NotificationUIManager;
 class PrefService;
 class SystemNotificationHelper;
-
-namespace content {
-class NotificationService;
-}
 
 namespace extensions {
 class ExtensionsBrowserClient;
@@ -106,6 +103,8 @@ class TestingBrowserProcess : public BrowserProcess {
   GetOriginTrialsSettingsStorage() override;
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
+  signin::ActivePrimaryAccountsMetricsRecorder*
+  active_primary_accounts_metrics_recorder() override;
   variations::VariationsService* variations_service() override;
   policy::ChromeBrowserPolicyConnector* browser_policy_connector() override;
   policy::PolicyService* policy_service() override;
@@ -124,7 +123,6 @@ class TestingBrowserProcess : public BrowserProcess {
   fingerprinting_protection_ruleset_service() override;
   BrowserProcessPlatformPart* platform_part() override;
 
-  extensions::EventRouterForwarder* extension_event_router_forwarder() override;
   NotificationUIManager* notification_ui_manager() override;
   NotificationPlatformBridge* notification_platform_bridge() override;
 #if !BUILDFLAG(IS_ANDROID)
@@ -166,7 +164,6 @@ class TestingBrowserProcess : public BrowserProcess {
   SerialPolicyAllowedPorts* serial_policy_allowed_ports() override;
   HidSystemTrayIcon* hid_system_tray_icon() override;
   UsbSystemTrayIcon* usb_system_tray_icon() override;
-  GlobalDesktopFeatures* GetDesktopFeatures() override;
 #endif
   os_crypt_async::OSCryptAsync* os_crypt_async() override;
   void set_additional_os_crypt_async_provider_for_test(
@@ -174,6 +171,7 @@ class TestingBrowserProcess : public BrowserProcess {
       std::unique_ptr<os_crypt_async::KeyProvider> provider) override;
 
   BuildState* GetBuildState() override;
+  GlobalFeatures* GetFeatures() override;
 
   // Set the local state for tests. Consumer is responsible for cleaning it up
   // afterwards (using ScopedTestingLocalState, for example).
@@ -216,7 +214,6 @@ class TestingBrowserProcess : public BrowserProcess {
 
   void Init();
 
-  std::unique_ptr<content::NotificationService> notification_service_;
   std::string app_locale_;
   bool is_shutting_down_ = false;
 
@@ -283,16 +280,15 @@ class TestingBrowserProcess : public BrowserProcess {
   std::unique_ptr<HidSystemTrayIcon> hid_system_tray_icon_;
   std::unique_ptr<UsbSystemTrayIcon> usb_system_tray_icon_;
   BuildState build_state_;
-  std::unique_ptr<GlobalDesktopFeatures> desktop_features_;
 #endif
 
   std::unique_ptr<StatusTray> status_tray_;
   std::unique_ptr<os_crypt_async::OSCryptAsync> os_crypt_async_;
+  std::unique_ptr<GlobalFeatures> features_;
 };
 
 // RAII (resource acquisition is initialization) for TestingBrowserProcess.
-// Allows you to initialize TestingBrowserProcess/NotificationService before
-// other member variables.
+// Allows you to initialize TestingBrowserProcess before other member variables.
 //
 // This can be helpful if you are running a unit test inside the browser_tests
 // suite because browser_tests do not make a TestingBrowserProcess for you.
@@ -302,7 +298,6 @@ class TestingBrowserProcess : public BrowserProcess {
 //  private:
 //   TestingBrowserProcessInitializer initializer_;
 //   LocalState local_state_;  // Needs a BrowserProcess to initialize.
-//   NotificationRegistrar registar_;  // Needs NotificationService.
 // };
 class TestingBrowserProcessInitializer {
  public:

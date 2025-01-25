@@ -24,10 +24,10 @@ export class TimelineJSProfileProcessor {
 
   static nativeGroup(nativeName: string): string|null {
     if (nativeName.startsWith('Parse')) {
-      return TimelineJSProfileProcessor.NativeGroups.Parse;
+      return TimelineJSProfileProcessor.NativeGroups.PARSE;
     }
     if (nativeName.startsWith('Compile') || nativeName.startsWith('Recompile')) {
-      return TimelineJSProfileProcessor.NativeGroups.Compile;
+      return TimelineJSProfileProcessor.NativeGroups.COMPILE;
     }
     return null;
   }
@@ -37,9 +37,9 @@ export class TimelineJSProfileProcessor {
     const events: TraceEngine.Types.TraceEvents.TraceEventData[] = [];
 
     const threadName = i18nString(UIStrings.threadS, {PH1: tid});
-    appendEvent('TracingStartedInPage', {data: {'sessionId': '1'}}, 0, 0, TraceEngine.Types.TraceEvents.Phase.METADATA);
+    appendEvent('TracingStartedInPage', {data: {sessionId: '1'}}, 0, 0, TraceEngine.Types.TraceEvents.Phase.METADATA);
     appendEvent(
-        TraceEngine.Types.TraceEvents.KnownEventName.ThreadName, {name: threadName}, 0, 0,
+        TraceEngine.Types.TraceEvents.KnownEventName.THREAD_NAME, {name: threadName}, 0, 0,
         TraceEngine.Types.TraceEvents.Phase.METADATA, '__metadata');
     if (!profile) {
       return events;
@@ -55,8 +55,7 @@ export class TimelineJSProfileProcessor {
 
     // TODO: create a `Profile` event instead, as `cpuProfile` is legacy
     appendEvent(
-        'CpuProfile', {data: {'cpuProfile': profile}}, profile.endTime, 0,
-        TraceEngine.Types.TraceEvents.Phase.COMPLETE);
+        'CpuProfile', {data: {cpuProfile: profile}}, profile.endTime, 0, TraceEngine.Types.TraceEvents.Phase.COMPLETE);
     return events;
 
     function appendEvent(
@@ -83,7 +82,7 @@ export class TimelineJSProfileProcessor {
 
 export namespace TimelineJSProfileProcessor {
   export const enum NativeGroups {
-    Compile = 'Compile',
-    Parse = 'Parse',
+    COMPILE = 'Compile',
+    PARSE = 'Parse',
   }
 }

@@ -385,7 +385,8 @@ class PresubmitUnittest(PresubmitTestsBase):
                                      0,
                                      0,
                                      None,
-                                     upstream='upstream')
+                                     upstream='upstream',
+                                     end_commit='end_commit')
         self.assertIsNotNone(change.Name() == 'mychange')
         self.assertIsNotNone(change.DescriptionText(
         ) == 'Hello there\nthis is a change\nand some more regular text')
@@ -413,6 +414,12 @@ class PresubmitUnittest(PresubmitTestsBase):
         actual_rhs_lines = []
         for f, linenum, line in change.RightHandSideLines():
             actual_rhs_lines.append((f.LocalPath(), linenum, line))
+        scm.GIT.GenerateDiff.assert_called_once_with(self.fake_root_dir,
+                                                     files=[],
+                                                     full_move=True,
+                                                     branch='upstream',
+                                                     branch_head='end_commit')
+
 
         f_blat = os.path.normpath('boo/blat.cc')
         f_test_expectations = os.path.normpath('foo/TestExpectations')
@@ -450,7 +457,8 @@ class PresubmitUnittest(PresubmitTestsBase):
                                 0,
                                 0,
                                 None,
-                                upstream='upstream')
+                                upstream='upstream',
+                                end_commit='HEAD')
 
     def testExecPresubmitScript(self):
         description_lines = ('Hello there', 'this is a change', 'BUG=123')
@@ -888,7 +896,7 @@ def CheckChangeOnCommit(input_api, output_api):
                 '** Presubmit ERRORS: 1 **\n!!\n\n'
                 'There were Python 3 presubmit errors.\n'
                 'Was the presubmit check useful? If not, run "git cl presubmit -v"\n'
-                'to figure out which PRESUBMIT.py was run, then run git blame\n'
+                'to figure out which PRESUBMIT.py was run, then run "git blame"\n'
                 'on the file to figure out who to ask for help.\n')
             self.assertEqual(sys.stdout.getvalue(), text)
 
@@ -1035,14 +1043,15 @@ def CheckChangeOnCommit(input_api, output_api):
 
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.GitChange.return_value, change)
-        presubmit.GitChange.assert_called_once_with(options.name,
-                                                    options.description,
-                                                    options.root,
-                                                    [('M', 'random_file.txt')],
-                                                    options.issue,
-                                                    options.patchset,
-                                                    options.author,
-                                                    upstream=options.upstream)
+        presubmit.GitChange.assert_called_once_with(
+            options.name,
+            options.description,
+            options.root, [('M', 'random_file.txt')],
+            options.issue,
+            options.patchset,
+            options.author,
+            upstream=options.upstream,
+            end_commit=options.end_commit)
         presubmit._parse_files.assert_called_once_with(options.files,
                                                        options.recursive)
 
@@ -1055,14 +1064,15 @@ def CheckChangeOnCommit(input_api, output_api):
 
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.GitChange.return_value, change)
-        presubmit.GitChange.assert_called_once_with(options.name,
-                                                    options.description,
-                                                    options.root,
-                                                    [('A', 'added.txt')],
-                                                    options.issue,
-                                                    options.patchset,
-                                                    options.author,
-                                                    upstream=options.upstream)
+        presubmit.GitChange.assert_called_once_with(
+            options.name,
+            options.description,
+            options.root, [('A', 'added.txt')],
+            options.issue,
+            options.patchset,
+            options.author,
+            upstream=options.upstream,
+            end_commit=options.end_commit)
         scm.GIT.CaptureStatus.assert_called_once_with(options.root,
                                                       options.upstream,
                                                       ignore_submodules=False)
@@ -1076,15 +1086,15 @@ def CheckChangeOnCommit(input_api, output_api):
 
         change = presubmit._parse_change(None, options)
         self.assertEqual(presubmit.GitChange.return_value, change)
-        presubmit.GitChange.assert_called_once_with(options.name,
-                                                    options.description,
-                                                    options.root,
-                                                    [('M', 'foo.txt'),
-                                                     ('M', 'bar.txt')],
-                                                    options.issue,
-                                                    options.patchset,
-                                                    options.author,
-                                                    upstream=options.upstream)
+        presubmit.GitChange.assert_called_once_with(
+            options.name,
+            options.description,
+            options.root, [('M', 'foo.txt'), ('M', 'bar.txt')],
+            options.issue,
+            options.patchset,
+            options.author,
+            upstream=options.upstream,
+            end_commit=options.end_commit)
         scm.GIT.GetAllFiles.assert_called_once_with(options.root)
 
     def testParseChange_EmptyDiffFile(self):
@@ -1270,7 +1280,8 @@ class InputApiUnittest(PresubmitTestsBase):
                                      0,
                                      0,
                                      None,
-                                     upstream='upstream')
+                                     upstream='upstream',
+                                     end_commit='HEAD')
         input_api = presubmit.InputApi(
             change, os.path.join(self.fake_root_dir, 'foo', 'PRESUBMIT.py'),
             False, None, False)
@@ -1331,7 +1342,8 @@ class InputApiUnittest(PresubmitTestsBase):
                                      0,
                                      0,
                                      None,
-                                     upstream='upstream')
+                                     upstream='upstream',
+                                     end_commit='HEAD')
         input_api = presubmit.InputApi(
             change, os.path.join(self.fake_root_dir, 'foo', 'PRESUBMIT.py'),
             False, None, False)
@@ -1466,7 +1478,8 @@ class InputApiUnittest(PresubmitTestsBase):
                                      0,
                                      0,
                                      None,
-                                     upstream='upstream')
+                                     upstream='upstream',
+                                     end_commit='HEAD')
         input_api = presubmit.InputApi(
             change, os.path.join(self.fake_root_dir, 'PRESUBMIT.py'), False,
             None, False)
@@ -1493,7 +1506,8 @@ class InputApiUnittest(PresubmitTestsBase):
                                      0,
                                      0,
                                      None,
-                                     upstream='upstream')
+                                     upstream='upstream',
+                                     end_commit='HEAD')
         input_api = presubmit.InputApi(
             change, os.path.join(self.fake_root_dir, 'PRESUBMIT.py'), False,
             None, False)
@@ -1799,7 +1813,8 @@ class ChangeUnittest(PresubmitTestsBase):
                                      3,
                                      5,
                                      '',
-                                     upstream='upstream')
+                                     upstream='upstream',
+                                     end_commit='HEAD')
         self.assertEqual(1, len(change.AffectedSubmodules()))
         self.assertEqual('A', change.AffectedSubmodules()[0].Action())
 
@@ -1812,7 +1827,8 @@ class ChangeUnittest(PresubmitTestsBase):
                                      3,
                                      5,
                                      '',
-                                     upstream='upstream')
+                                     upstream='upstream',
+                                     end_commit='HEAD')
         change.AffectedSubmodules()
         mockListSubmodules.assert_called_once()
         change.AffectedSubmodules()

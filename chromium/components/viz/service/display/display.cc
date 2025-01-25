@@ -13,6 +13,7 @@
 #include <string>
 #include <utility>
 
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_macros.h"
@@ -36,6 +37,7 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/shared_quad_state.h"
+#include "components/viz/common/switches.h"
 #include "components/viz/common/viz_utils.h"
 #include "components/viz/service/debugger/viz_debugger.h"
 #include "components/viz/service/display/aggregated_frame.h"
@@ -48,9 +50,12 @@
 #include "components/viz/service/display/display_resource_provider_software.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/display_utils.h"
+#include "components/viz/service/display/frame_interval_decider.h"
+#include "components/viz/service/display/frame_interval_matchers.h"
 #include "components/viz/service/display/null_renderer.h"
 #include "components/viz/service/display/occlusion_culler.h"
 #include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/overdraw_tracker.h"
 #include "components/viz/service/display/overlay_candidate_factory.h"
 #include "components/viz/service/display/renderer_utils.h"
 #include "components/viz/service/display/skia_output_surface.h"
@@ -60,6 +65,7 @@
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_manager.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
+#include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/scheduler_sequence.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
@@ -134,18 +140,6 @@ gfx::PresentationFeedback SanitizePresentationFeedback(
   return feedback;
 }
 
-bool SupportsSetFrameRate(const OutputSurface* output_surface) {
-#if BUILDFLAG(IS_ANDROID)
-  return output_surface->capabilities().supports_surfaceless &&
-         gfx::SurfaceControl::SupportsSetFrameRate();
-#elif BUILDFLAG(IS_WIN)
-  return output_surface->capabilities().supports_dc_layers &&
-         features::ShouldUseSetPresentDuration();
-#else
-  return false;
-#endif
-}
-
 void IssueDisplayRenderingStatsEvent() {
   std::unique_ptr<base::trace_event::TracedValue> record_data =
       std::make_unique<base::trace_event::TracedValue>();
@@ -217,6 +211,7 @@ Display::Display(
     SharedBitmapManager* bitmap_manager,
     gpu::SharedImageManager* shared_image_manager,
     gpu::SyncPointManager* sync_point_manager,
+    gpu::Scheduler* gpu_scheduler,
     const RendererSettings& settings,
     const DebugRendererSettings* debug_settings,
     const FrameSinkId& frame_sink_id,
@@ -228,6 +223,7 @@ Display::Display(
     : bitmap_manager_(bitmap_manager),
       shared_image_manager_(shared_image_manager),
       sync_point_manager_(sync_point_manager),
+      gpu_scheduler_(gpu_scheduler),
       settings_(settings),
       debug_settings_(debug_settings),
       frame_sink_id_(frame_sink_id),
@@ -242,6 +238,16 @@ Display::Display(
       last_presented_trace_id_(swapped_trace_id_) {
   DCHECK(output_surface_);
   DCHECK(frame_sink_id_.is_valid());
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  static bool logged = false;
+  // TODO(b/329688656): Remove this after the issue is resolved.
+  if (!logged && output_surface_->capabilities().max_texture_size > 0) {
+    logged = true;
+    LOG(ERROR) << "Max Texture Size="
+               << output_surface_->capabilities().max_texture_size;
+  }
+#endif
 
   occlusion_culler_ = std::make_unique<OcclusionCuller>(
       overlay_processor_.get(), settings_.occlusion_culler_settings);
@@ -298,9 +304,18 @@ void Display::Initialize(DisplayClient* client,
   if (output_surface_->software_device())
     output_surface_->software_device()->BindToClient(this);
 
-  frame_rate_decider_ = std::make_unique<FrameRateDecider>(
-      surface_manager_, this, hw_support_for_multiple_refresh_rates,
-      SupportsSetFrameRate(output_surface_.get()));
+  if (features::IsUsingFrameIntervalDecider()) {
+    frame_interval_decider_ = std::make_unique<FrameIntervalDecider>();
+  } else {
+    bool output_surface_supports_set_frame_rate = false;
+#if BUILDFLAG(IS_ANDROID)
+    output_surface_supports_set_frame_rate =
+        OutputSurfaceSupportsSetFrameRate();
+#endif
+    frame_rate_decider_ = std::make_unique<FrameRateDecider>(
+        surface_manager_, this, hw_support_for_multiple_refresh_rates,
+        output_surface_supports_set_frame_rate);
+  }
 
   InitializeRenderer();
 
@@ -456,7 +471,8 @@ void Display::InitializeRenderer() {
     resource_provider_ = std::move(resource_provider);
   } else {
     auto resource_provider = std::make_unique<DisplayResourceProviderSoftware>(
-        bitmap_manager_, shared_image_manager_, sync_point_manager_);
+        bitmap_manager_, shared_image_manager_, sync_point_manager_,
+        gpu_scheduler_);
     DCHECK(!overlay_processor_->IsOverlaySupported());
     auto renderer = std::make_unique<SoftwareRenderer>(
         &settings_, debug_settings_, output_surface_.get(),
@@ -481,7 +497,10 @@ void Display::InitializeRenderer() {
 #if BUILDFLAG(IS_WIN)
   const bool prevent_merging_surfaces_to_root_pass =
       features::IsDelegatedCompositingEnabled() &&
-      base::FeatureList::IsEnabled(features::kDelegatedCompositingLimitToUi);
+      features::kDelegatedCompositingModeParam.Get() ==
+          features::DelegatedCompositingMode::kLimitToUi &&
+      output_surface_->capabilities().dc_support_level >=
+          OutputSurface::DCSupportLevel::kDCompTexture;
 #else
   const bool prevent_merging_surfaces_to_root_pass = false;
 #endif
@@ -763,6 +782,29 @@ void Display::MaybeLogQuadsProperties(
                           logging_timer.Elapsed().InMicroseconds());
 }
 
+void Display::StartTrackingOverdraw(int interval_length_in_seconds) {
+  CHECK(!overdraw_tracker_);
+
+  OverdrawTracker::Settings settings;
+  settings.interval_length_in_seconds = interval_length_in_seconds;
+
+  overdraw_tracker_ = std::make_unique<OverdrawTracker>(settings);
+}
+
+OverdrawTracker::OverdrawTimeSeries Display::StopTrackingOverdraw() {
+  // Returns empty time series if `overdraw_tracker_` has no value. This could
+  // happen when gpu-process is restarted in middle of test and test scripts
+  // still calls this at the end.
+  if (!overdraw_tracker_) {
+    return OverdrawTracker::OverdrawTimeSeries();
+  }
+
+  auto overdraw_data = overdraw_tracker_->TakeDataAsTimeSeries();
+  overdraw_tracker_.reset();
+
+  return overdraw_data;
+}
+
 bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
   TRACE_EVENT0("viz", "Display::DrawAndSwap");
   if (debug_settings_->show_aggregated_damage !=
@@ -784,6 +826,18 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
     TRACE_EVENT_INSTANT0("viz", "No output surface", TRACE_EVENT_SCOPE_THREAD);
     return false;
   }
+
+  ++swapped_trace_id_;
+  TRACE_EVENT(
+      "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+      perfetto::Flow::Global(swapped_trace_id_),
+      [this](perfetto::EventContext ctx) {
+        auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+        auto* data = event->set_chrome_graphics_pipeline();
+        data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                           StepName::STEP_DRAW_AND_SWAP);
+        data->set_display_trace_id(swapped_trace_id_);
+      });
 
   if (params.max_pending_swaps >= 0 && skia_output_surface_ &&
       skia_output_surface_->capabilities()
@@ -828,8 +882,16 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
   base::ElapsedTimer aggregate_timer;
   AggregatedFrame frame;
   {
-    FrameRateDecider::ScopedAggregate scoped_aggregate(
-        frame_rate_decider_.get());
+    std::optional<FrameRateDecider::ScopedAggregate> scoped_aggregate;
+    if (frame_rate_decider_) {
+      scoped_aggregate.emplace(frame_rate_decider_.get());
+    }
+    std::unique_ptr<FrameIntervalDecider::ScopedAggregate>
+        scoped_interval_decider;
+    if (frame_interval_decider_) {
+      scoped_interval_decider = frame_interval_decider_->WrapAggregate(
+          *surface_manager_, params.frame_time);
+    }
     gfx::Rect target_damage_bounding_rect;
     if (output_surface_->capabilities().supports_target_damage)
       target_damage_bounding_rect = renderer_->GetTargetDamageBoundingRect();
@@ -841,7 +903,7 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
     frame = aggregator_->Aggregate(
         current_surface_id_, params.expected_display_time,
         current_display_transform, target_damage_bounding_rect,
-        ++swapped_trace_id_);
+        swapped_trace_id_);
   }
   DebugDrawFrame(frame, resource_provider_);
 
@@ -955,6 +1017,13 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
     DBG_LOG("renderer.ptr", "renderer = %p%s", this,
             renderer_.get() == software_renderer_ ? " (software)" : "");
 
+    if (overdraw_tracker_) {
+      overdraw_tracker_->EstimateAndRecordOverdraw(&frame,
+                                                   base::TimeTicks::Now());
+    }
+
+    OverdrawTracker::EstimateAndRecordOverdrawAsUMAMetric(&frame);
+
     draw_timer.emplace();
     overlay_processor_->SetFrameSequenceNumber(frame_sequence_number_);
     overlay_processor_->SetIsPageFullscreen(frame.page_fullscreen_mode);
@@ -1003,10 +1072,6 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
                                  "Graphics.Pipeline.DrawAndSwap",
                                  swapped_trace_id_, "WaitForSwap");
     swapped_since_resize_ = true;
-
-    ui::LatencyInfo::TraceIntermediateFlowEvents(
-        frame.latency_info,
-        perfetto::protos::pbzero::ChromeLatencyInfo::STEP_DRAW_AND_SWAP);
 
     IssueDisplayRenderingStatsEvent();
     DirectRenderer::SwapFrameData swap_frame_data;
@@ -1298,16 +1363,12 @@ void Display::SetNeedsOneBeginFrame() {
 }
 
 void Display::SetPreferredFrameInterval(base::TimeDelta interval) {
-  if (frame_rate_decider_->output_surface_supports_set_frame_rate()) {
-    float interval_s = interval.InSecondsF();
-    float frame_rate = interval_s == 0 ? 0 : (1 / interval_s);
-    output_surface_->SetFrameRate(frame_rate);
 #if BUILDFLAG(IS_ANDROID)
-    // On Android we want to return early because the |client_| callback hits
-    // a platform API in the browser process.
+  if (OutputSurfaceSupportsSetFrameRate()) {
+    SetFrameIntervalOnOutputSurface(interval);
     return;
-#endif  // BUILDFLAG(IS_ANDROID)
   }
+#endif
 
   client_->SetPreferredFrameInterval(interval);
 }
@@ -1320,14 +1381,30 @@ base::TimeDelta Display::GetPreferredFrameIntervalForFrameSinkId(
 
 void Display::SetSupportedFrameIntervals(
     base::flat_set<base::TimeDelta> intervals) {
-  frame_rate_decider_->SetSupportedFrameIntervals(std::move(intervals));
+  if (frame_rate_decider_) {
+    frame_rate_decider_->SetSupportedFrameIntervals(intervals);
+  }
 }
 
 void Display::SetHwSupportForMultipleRefreshRates(bool support) {
-  frame_rate_decider_->SetHwSupportForMultipleRefreshRates(support);
+  if (frame_rate_decider_) {
+    frame_rate_decider_->SetHwSupportForMultipleRefreshRates(support);
+  }
 }
 
 #if BUILDFLAG(IS_ANDROID)
+bool Display::OutputSurfaceSupportsSetFrameRate() {
+  return output_surface_ &&
+         output_surface_->capabilities().supports_surfaceless &&
+         gfx::SurfaceControl::SupportsSetFrameRate();
+}
+
+void Display::SetFrameIntervalOnOutputSurface(base::TimeDelta interval) {
+  float interval_s = interval.InSecondsF();
+  float frame_rate = interval_s == 0 ? 0 : (1 / interval_s);
+  output_surface_->SetFrameRate(frame_rate);
+}
+
 base::ScopedClosureRunner Display::GetCacheBackBufferCb() {
   return output_surface_->GetCacheBackBufferCb();
 }
@@ -1347,6 +1424,29 @@ void Display::PreserveChildSurfaceControls() {
 void Display::InitDelegatedInkPointRendererReceiver(
     mojo::PendingReceiver<gfx::mojom::DelegatedInkPointRenderer>
         pending_receiver) {
+  if (std::optional<switches::DelegatedInkRendererMode> mode =
+          switches::GetDelegatedInkRendererMode()) {
+    switch (mode.value()) {
+      case switches::DelegatedInkRendererMode::kSkia:
+        if (DelegatedInkPointRendererBase* ink_renderer =
+                renderer_->GetDelegatedInkPointRenderer(
+                    /*create_if_necessary=*/true)) {
+          ink_renderer->InitMessagePipeline(std::move(pending_receiver));
+        }
+        break;
+      case switches::DelegatedInkRendererMode::kSystem:
+        if (DoesPlatformSupportDelegatedInk()) {
+          output_surface_->InitDelegatedInkPointRendererReceiver(
+              std::move(pending_receiver));
+        }
+        break;
+      case switches::DelegatedInkRendererMode::kNone:
+        // Do not initialize a receiver for `kNone` or any other values.
+        return;
+    }
+    return;
+  }
+
   if (DoesPlatformSupportDelegatedInk() && output_surface_) {
     output_surface_->InitDelegatedInkPointRendererReceiver(
         std::move(pending_receiver));

@@ -156,10 +156,10 @@ IbanSaveManager::TypeOfOfferToSave IbanSaveManager::DetermineHowToSaveIban(
 
 bool IbanSaveManager::MatchesExistingLocalIban(
     const Iban& import_candidate) const {
-  return base::ranges::any_of(
-      payments_data_manager().GetLocalIbans(), [&](const Iban* iban) {
-        return iban->value() == import_candidate.value();
-      });
+  return std::ranges::any_of(payments_data_manager().GetLocalIbans(),
+                             [&](const Iban* iban) {
+                               return iban->value() == import_candidate.value();
+                             });
 }
 
 bool IbanSaveManager::MatchesExistingServerIban(
@@ -167,7 +167,7 @@ bool IbanSaveManager::MatchesExistingServerIban(
   return std::ranges::any_of(
       payments_data_manager().GetServerIbans(),
       [&import_candidate](const auto& iban) {
-        return iban->MatchesPrefixSuffixAndLength(import_candidate);
+        return iban->MatchesPrefixAndSuffix(import_candidate);
       });
 }
 
@@ -392,6 +392,11 @@ void IbanSaveManager::OnDidUploadIban(const Iban& import_candidate,
       GetIbanSaveStrikeDatabase()->AddStrike(partial_iban_hash);
     }
   }
+
+  // Display the IBAN upload save confirmation dialog based on the result.
+  client_->GetPaymentsAutofillClient()->IbanUploadCompleted(
+      result == PaymentsRpcResult::kSuccess,
+      GetIbanSaveStrikeDatabase()->ShouldBlockFeature(partial_iban_hash));
   if (observer_for_testing_) {
     if (result == PaymentsRpcResult::kSuccess) {
       observer_for_testing_->OnAcceptUploadSaveIbanComplete();

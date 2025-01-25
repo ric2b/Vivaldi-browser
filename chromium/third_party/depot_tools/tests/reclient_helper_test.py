@@ -134,6 +134,8 @@ class ReclientHelperTest(trial_dir.TestCase):
 
     @unittest.mock.patch.dict(os.environ,
                               {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"})
+    @unittest.mock.patch('reclient_helper.get_hostname',
+                         return_value='somehost')
     @unittest.mock.patch('subprocess.call', return_value=0)
     @unittest.mock.patch('ninja.main', return_value=0)
     def test_ninja_reclient_collect_metrics_cache_missing(self, *_):
@@ -149,7 +151,7 @@ class ReclientHelperTest(trial_dir.TestCase):
         self.assertEqual(
             0, reclient_helper.run_ninja(argv, should_collect_logs=True))
 
-        self.assertIn("/SOME_RANDOM_ID", os.environ["RBE_invocation_id"])
+        self.assertIn("SOME_RANDOM_ID", os.environ["RBE_invocation_id"])
         self.assertEqual(os.environ.get('RBE_metrics_project'),
                          "chromium-reclient-metrics")
         self.assertEqual(os.environ.get('RBE_metrics_table'),
@@ -157,13 +159,16 @@ class ReclientHelperTest(trial_dir.TestCase):
         self.assertEqual(
             os.environ.get('RBE_metrics_labels'),
             "source=developer,tool=ninja_reclient,"
-            "creds_cache_status=missing,creds_cache_mechanism=UNSPECIFIED")
+            "creds_cache_status=missing,creds_cache_mechanism=UNSPECIFIED,"
+            "host=somehost")
         self.assertEqual(os.environ.get('RBE_metrics_prefix'),
                          "go.chromium.org")
 
     @unittest.mock.patch.dict(os.environ,
                               {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"},
                               clear=True)
+    @unittest.mock.patch('reclient_helper.get_hostname',
+                         return_value='somehost')
     @unittest.mock.patch('reclient_helper.datetime_now',
                          return_value=datetime.datetime(2017, 3, 16, 20, 0, 41,
                                                         0))
@@ -194,7 +199,7 @@ expiry:  {
         self.assertEqual(
             0, reclient_helper.run_ninja(argv, should_collect_logs=True))
 
-        self.assertIn("/SOME_RANDOM_ID", os.environ["RBE_invocation_id"])
+        self.assertIn("SOME_RANDOM_ID", os.environ["RBE_invocation_id"])
         self.assertEqual(os.environ.get('RBE_metrics_project'),
                          "chromium-reclient-metrics")
         self.assertEqual(os.environ.get('RBE_metrics_table'),
@@ -202,13 +207,16 @@ expiry:  {
         self.assertEqual(
             os.environ.get('RBE_metrics_labels'),
             "source=developer,tool=ninja_reclient,"
-            "creds_cache_status=valid,creds_cache_mechanism=GCLOUD")
+            "creds_cache_status=valid,creds_cache_mechanism=GCLOUD,"
+            "host=somehost")
         self.assertEqual(os.environ.get('RBE_metrics_prefix'),
                          "go.chromium.org")
 
     @unittest.mock.patch.dict(os.environ,
                               {'AUTONINJA_BUILD_ID': "SOME_RANDOM_ID"},
                               clear=True)
+    @unittest.mock.patch('reclient_helper.get_hostname',
+                         return_value='somehost')
     @unittest.mock.patch('subprocess.call', return_value=0)
     @unittest.mock.patch('ninja.main', return_value=0)
     def test_ninja_reclient_collect_metrics_cache_expired(self, *_):
@@ -236,7 +244,7 @@ expiry:  {
         self.assertEqual(
             0, reclient_helper.run_ninja(argv, should_collect_logs=True))
 
-        self.assertIn("/SOME_RANDOM_ID", os.environ["RBE_invocation_id"])
+        self.assertIn("SOME_RANDOM_ID", os.environ["RBE_invocation_id"])
         self.assertEqual(os.environ.get('RBE_metrics_project'),
                          "chromium-reclient-metrics")
         self.assertEqual(os.environ.get('RBE_metrics_table'),
@@ -244,7 +252,8 @@ expiry:  {
         self.assertEqual(
             os.environ.get('RBE_metrics_labels'),
             "source=developer,tool=ninja_reclient,"
-            "creds_cache_status=expired,creds_cache_mechanism=GCLOUD")
+            "creds_cache_status=expired,creds_cache_mechanism=GCLOUD,"
+            "host=somehost")
         self.assertEqual(os.environ.get('RBE_metrics_prefix'),
                          "go.chromium.org")
 

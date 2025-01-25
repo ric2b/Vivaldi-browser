@@ -587,8 +587,7 @@ class DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest
     // be saved on disc, therefore unable to find them back on startup which is
     // causing a startup signout. Managed accounts cannot be signed out which is
     // a workaround not to be signed out on Chrome restart.
-    chrome::enterprise_util::SetUserAcceptedAccountManagement(GetProfile(),
-                                                              !allow);
+    enterprise_util::SetUserAcceptedAccountManagement(GetProfile(), !allow);
   }
 };
 
@@ -1627,8 +1626,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
       WebSigninInterceptor::SigninInterceptionType::kEnterprise);
   Profile* new_profile =
       InterceptAndWaitProfileCreation(web_contents, account_info.account_id);
-  EXPECT_FALSE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(new_profile));
+  EXPECT_FALSE(enterprise_util::UserAcceptedAccountManagement(new_profile));
   ASSERT_TRUE(new_profile);
   EXPECT_TRUE(source_interceptor_delegate->intercept_bubble_shown());
   signin::IdentityManager* new_identity_manager =
@@ -1724,8 +1722,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
 
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(GetProfile());
-  EXPECT_FALSE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(GetProfile()));
+  EXPECT_FALSE(enterprise_util::UserAcceptedAccountManagement(GetProfile()));
   EXPECT_TRUE(source_interceptor_delegate->intercept_bubble_destroyed());
   EXPECT_TRUE(
       identity_manager->HasAccountWithRefreshToken(account_info.account_id));
@@ -1769,8 +1766,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
       WebSigninInterceptor::SigninInterceptionType::kEnterpriseForced);
   Profile* new_profile =
       InterceptAndWaitProfileCreation(web_contents, account_info.account_id);
-  EXPECT_TRUE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(new_profile));
+  EXPECT_TRUE(enterprise_util::UserAcceptedAccountManagement(new_profile));
   ASSERT_TRUE(new_profile);
   EXPECT_TRUE(source_interceptor_delegate->intercept_bubble_shown());
   signin::IdentityManager* new_identity_manager =
@@ -1863,8 +1859,7 @@ IN_PROC_BROWSER_TEST_F(
 
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(GetProfile());
-  EXPECT_FALSE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(GetProfile()));
+  EXPECT_FALSE(enterprise_util::UserAcceptedAccountManagement(GetProfile()));
   EXPECT_TRUE(source_interceptor_delegate->intercept_bubble_destroyed());
   EXPECT_FALSE(
       identity_manager->HasAccountWithRefreshToken(account_info.account_id));
@@ -1924,8 +1919,7 @@ IN_PROC_BROWSER_TEST_F(
 
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(GetProfile());
-  EXPECT_FALSE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(GetProfile()));
+  EXPECT_FALSE(enterprise_util::UserAcceptedAccountManagement(GetProfile()));
   EXPECT_TRUE(source_interceptor_delegate->intercept_bubble_destroyed());
   EXPECT_FALSE(
       identity_manager->HasAccountWithRefreshToken(account_info.account_id));
@@ -1967,8 +1961,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
       WebSigninInterceptor::SigninInterceptionType::kEnterpriseForced);
   Profile* new_profile =
       InterceptAndWaitProfileCreation(web_contents, account_info.account_id);
-  EXPECT_TRUE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(new_profile));
+  EXPECT_TRUE(enterprise_util::UserAcceptedAccountManagement(new_profile));
   ASSERT_TRUE(new_profile);
   EXPECT_TRUE(source_interceptor_delegate->intercept_bubble_shown());
   signin::IdentityManager* new_identity_manager =
@@ -2049,8 +2042,7 @@ IN_PROC_BROWSER_TEST_F(
   source_interceptor_delegate->set_expected_interception_type(
       WebSigninInterceptor::SigninInterceptionType::kEnterpriseForced);
 
-  EXPECT_FALSE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(GetProfile()));
+  EXPECT_FALSE(enterprise_util::UserAcceptedAccountManagement(GetProfile()));
   // Start the interception.
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
@@ -2060,8 +2052,7 @@ IN_PROC_BROWSER_TEST_F(
       /*is_new_account=*/false,
       /*is_sync_signin=*/false);
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(GetProfile()));
+  EXPECT_TRUE(enterprise_util::UserAcceptedAccountManagement(GetProfile()));
   // Interception bubble was closed.
   EXPECT_TRUE(source_interceptor_delegate->intercept_bubble_destroyed());
   EXPECT_TRUE(IdentityManagerFactory::GetForProfile(GetProfile())
@@ -2103,8 +2094,7 @@ IN_PROC_BROWSER_TEST_F(
   int original_tab_count = browser()->tab_strip_model()->count();
 
   EXPECT_EQ(BrowserList::GetInstance()->size(), 1u);
-  EXPECT_FALSE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(GetProfile()));
+  EXPECT_FALSE(enterprise_util::UserAcceptedAccountManagement(GetProfile()));
   // Start the interception.
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
@@ -2286,29 +2276,8 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   EXPECT_EQ(GetInterceptorDelegate(GetProfile())->fre_browser(), nullptr);
 }
 
-class DiceWebSigninInterceptorParametrizedBrowserTest
-    : public DiceWebSigninInterceptorBrowserTest,
-      public testing::WithParamInterface<bool> {
- public:
-  DiceWebSigninInterceptorParametrizedBrowserTest() {
-    if (WithSearchEngineChoiceEnabled()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          switches::kSearchEngineChoiceTrigger);
-    } else {
-      scoped_feature_list_.InitAndDisableFeature(
-          switches::kSearchEngineChoiceTrigger);
-    }
-  }
-
-  bool WithSearchEngineChoiceEnabled() const { return GetParam(); }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // Tests the complete interception flow including profile and browser creation.
-IN_PROC_BROWSER_TEST_P(DiceWebSigninInterceptorParametrizedBrowserTest,
-                       InterceptionTest) {
+IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, InterceptionTest) {
   base::HistogramTester histogram_tester;
   // Setup profile for interception.
   identity_test_env()->MakePrimaryAccountAvailable(
@@ -2321,19 +2290,17 @@ IN_PROC_BROWSER_TEST_P(DiceWebSigninInterceptorParametrizedBrowserTest,
   int64_t search_engine_choice_timestamp =
       base::Time::Now().ToDeltaSinceWindowsEpoch().InSeconds();
   const char kChoiceVersion[] = "1.2.3.4";
-  if (WithSearchEngineChoiceEnabled()) {
-    PrefService* pref_service = browser()->profile()->GetPrefs();
-    pref_service->SetInt64(
-        prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp,
-        search_engine_choice_timestamp);
-    pref_service->SetString(
-        prefs::kDefaultSearchProviderChoiceScreenCompletionVersion,
-        kChoiceVersion);
+  PrefService* pref_service = browser()->profile()->GetPrefs();
+  pref_service->SetInt64(
+      prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp,
+      search_engine_choice_timestamp);
+  pref_service->SetString(
+      prefs::kDefaultSearchProviderChoiceScreenCompletionVersion,
+      kChoiceVersion);
 
-    TemplateURLService* template_url_service =
-        TemplateURLServiceFactory::GetForProfile(browser()->profile());
-    SetUserSelectedDefaultSearchProvider(template_url_service);
-  }
+  TemplateURLService* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(browser()->profile());
+  SetUserSelectedDefaultSearchProvider(template_url_service);
 
   // Add a tab.
   GURL intercepted_url = embedded_test_server()->GetURL("/defaultresponse");
@@ -2368,21 +2335,18 @@ IN_PROC_BROWSER_TEST_P(DiceWebSigninInterceptorParametrizedBrowserTest,
                   ->GetUserColor()
                   .has_value());
 
-  if (WithSearchEngineChoiceEnabled()) {
-    PrefService* new_pref_service = new_profile->GetPrefs();
-    EXPECT_EQ(new_pref_service->GetInt64(
-                  prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp),
-              search_engine_choice_timestamp);
-    EXPECT_EQ(new_pref_service->GetString(
-                  prefs::kDefaultSearchProviderChoiceScreenCompletionVersion),
-              kChoiceVersion);
+  PrefService* new_pref_service = new_profile->GetPrefs();
+  EXPECT_EQ(new_pref_service->GetInt64(
+                prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp),
+            search_engine_choice_timestamp);
+  EXPECT_EQ(new_pref_service->GetString(
+                prefs::kDefaultSearchProviderChoiceScreenCompletionVersion),
+            kChoiceVersion);
 
-    TemplateURLService* new_template_url_service =
-        TemplateURLServiceFactory::GetForProfile(new_profile);
-    EXPECT_EQ(
-        new_template_url_service->GetDefaultSearchProvider()->short_name(),
-        base::UTF8ToUTF16(std::string(kCustomSearchEngineDomain)));
-  }
+  TemplateURLService* new_template_url_service =
+      TemplateURLServiceFactory::GetForProfile(new_profile);
+  EXPECT_EQ(new_template_url_service->GetDefaultSearchProvider()->short_name(),
+            base::UTF8ToUTF16(std::string(kCustomSearchEngineDomain)));
 
   // A browser has been created for the new profile and the tab was moved there.
   Browser* added_browser = ui_test_utils::WaitForBrowserToOpen();
@@ -2409,7 +2373,3 @@ IN_PROC_BROWSER_TEST_P(DiceWebSigninInterceptorParametrizedBrowserTest,
             account_info.account_id);
   EXPECT_EQ(source_interceptor_delegate->fre_browser(), nullptr);
 }
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         DiceWebSigninInterceptorParametrizedBrowserTest,
-                         testing::Bool());

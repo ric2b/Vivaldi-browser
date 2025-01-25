@@ -85,7 +85,7 @@ using PaymentsSuggestionBottomSheetExitReason::kBadProvider;
                               params:(const autofill::FormActivityParams&)params
                  personalDataManager:
                      (autofill::PersonalDataManager*)personalDataManager {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _params = params;
     _hasCreditCards = NO;
     _webStateList = webStateList;
@@ -137,11 +137,14 @@ using PaymentsSuggestionBottomSheetExitReason::kBadProvider;
   _webStateList = nullptr;
 }
 
-- (autofill::CreditCard*)creditCardForIdentifier:(NSString*)identifier {
+- (std::optional<autofill::CreditCard>)creditCardForIdentifier:
+    (NSString*)identifier {
   CHECK(identifier);
   CHECK(_personalDataManager);
-  return _personalDataManager->payments_data_manager().GetCreditCardByGUID(
-      base::SysNSStringToUTF8(identifier));
+  autofill::CreditCard* card =
+      _personalDataManager->payments_data_manager().GetCreditCardByGUID(
+          base::SysNSStringToUTF8(identifier));
+  return card ? std::make_optional(*card) : std::nullopt;
 }
 
 - (BOOL)hasCreditCards {
@@ -207,7 +210,8 @@ using PaymentsSuggestionBottomSheetExitReason::kBadProvider;
 
 #pragma mark - PaymentsSuggestionBottomSheetDelegate
 
-- (void)didSelectCreditCard:(CreditCardData*)creditCardData {
+- (void)didSelectCreditCard:(CreditCardData*)creditCardData
+                    atIndex:(NSInteger)index {
   if (!_webStateList) {
     return;
   }
@@ -258,7 +262,7 @@ using PaymentsSuggestionBottomSheetExitReason::kBadProvider;
           base::SysUTF16ToNSString(l10n_util::GetStringUTF16(
               IDS_AUTOFILL_A11Y_ANNOUNCE_FILLED_FORM))];
 
-  [provider didSelectSuggestion:suggestion params:_params];
+  [provider didSelectSuggestion:suggestion atIndex:index params:_params];
 }
 
 - (void)disableBottomSheetAndRefocus:(BOOL)refocus {

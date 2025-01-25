@@ -12,7 +12,10 @@
 #include "net/base/backoff_entry.h"
 #include "url/gurl.h"
 
+#if !BUILDFLAG(IS_IOS)
 class Profile;
+#endif
+
 class QwertyWeightedDistance;
 
 namespace network {
@@ -44,7 +47,12 @@ class DirectMatchService : public KeyedService {
   };
   DirectMatchService();
   ~DirectMatchService() override;
+#if BUILDFLAG(IS_IOS)
+  void Load(
+      const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory);
+#else
   void Load(Profile* profile);
+#endif
   const DirectMatchService::DirectMatchUnit* GetDirectMatch(std::string query);
   float GetAcceptableDirectMatchDistance(std::u16string name);
 

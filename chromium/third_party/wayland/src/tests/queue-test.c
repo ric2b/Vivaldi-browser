@@ -23,14 +23,18 @@
  * SOFTWARE.
  */
 
+#define _GNU_SOURCE /* For memrchr */
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <assert.h>
+#include <signal.h>
 
 #include "wayland-client.h"
 #include "wayland-server.h"
@@ -303,6 +307,270 @@ client_test_queue_set_queue_race(void)
 	wl_display_disconnect(display);
 }
 
+static char *
+maybe_map_file(int fd, size_t *len)
+{
+	char *data;
+
+	*len = lseek(fd, 0, SEEK_END);
+	data = mmap(0, *len, PROT_READ, MAP_PRIVATE, fd, 0);
+
+	return data;
+}
+
+static char *
+map_file(int fd, size_t *len)
+{
+	char *data;
+
+	data = maybe_map_file(fd, len);
+	assert(data != MAP_FAILED && "Failed to mmap file");
+
+	return data;
+}
+
+static char *
+last_line_of(char *s)
+{
+	size_t len = strlen(s);
+	char *last;
+
+	last = memrchr(s, '\n', len);
+	/* If we found a newline at end of string, find the previous one. */
+	if (last && last[1] == 0)
+		last = memrchr(s, '\n', len - 1);
+	/* If we have a newline, the last line starts after the newline.
+	 * Otherwise, the whole string is the last line. */
+	if (last)
+		last += 1;
+	else
+		last = s;
+
+	return last;
+}
+
+static void
+client_test_queue_destroy_with_attached_proxies(void)
+{
+	struct wl_event_queue *queue;
+	struct wl_display *display;
+	struct wl_display *display_wrapper;
+	struct wl_callback *callback;
+	char *log;
+	size_t log_len;
+	char callback_name[24];
+	int ret;
+
+	display = wl_display_connect(NULL);
+	assert(display);
+
+	/* Pretend we are in a separate thread where a thread-local queue is
+	 * used. */
+	queue = wl_display_create_queue(display);
+	assert(queue);
+
+	/* Create a sync dispatching events on the thread-local queue. */
+	display_wrapper = wl_proxy_create_wrapper(display);
+	assert(display_wrapper);
+	wl_proxy_set_queue((struct wl_proxy *) display_wrapper, queue);
+	callback = wl_display_sync(display_wrapper);
+	wl_proxy_wrapper_destroy(display_wrapper);
+	assert(callback != NULL);
+
+	/* Destroy the queue before the attached object. */
+	wl_event_queue_destroy(queue);
+
+	/* Check that the log contains some information about the attached
+	 * wl_callback proxy. */
+	log = map_file(client_log_fd, &log_len);
+	ret = snprintf(callback_name, sizeof(callback_name), "wl_callback#%u",
+		       wl_proxy_get_id((struct wl_proxy *) callback));
+	assert(ret > 0 && ret < (int)sizeof(callback_name) &&
+	       "callback name creation failed (possibly truncated)");
+	assert(strstr(last_line_of(log), callback_name));
+	munmap(log, log_len);
+
+	wl_callback_destroy(callback);
+
+	wl_display_disconnect(display);
+}
+
+static void
+client_test_queue_proxy_event_to_destroyed_queue(void)
+{
+	struct wl_event_queue *queue;
+	struct wl_display *display;
+	struct wl_display *display_wrapper;
+	struct wl_callback *callback;
+
+	display = wl_display_connect(NULL);
+	assert(display);
+
+	/* Pretend we are in a separate thread where a thread-local queue is
+	 * used. */
+	queue = wl_display_create_queue(display);
+	assert(queue);
+
+	/* Create a sync dispatching events on the thread-local queue. */
+	display_wrapper = wl_proxy_create_wrapper(display);
+	assert(display_wrapper);
+	wl_proxy_set_queue((struct wl_proxy *) display_wrapper, queue);
+	callback = wl_display_sync(display_wrapper);
+	wl_proxy_wrapper_destroy(display_wrapper);
+	assert(callback != NULL);
+	wl_display_flush(display);
+
+	/* Destroy the queue before the attached object. */
+	wl_event_queue_destroy(queue);
+
+	/* During this roundtrip we should receive the done event on 'callback',
+	 * try to queue it to the destroyed queue, and abort. */
+	wl_display_roundtrip(display);
+
+	wl_callback_destroy(callback);
+
+	wl_display_disconnect(display);
+}
+
+static void
+client_test_queue_destroy_default_with_attached_proxies(void)
+{
+	struct wl_display *display;
+	struct wl_callback *callback;
+	char *log;
+	size_t log_len;
+	char callback_name[24];
+	int ret;
+
+	display = wl_display_connect(NULL);
+	assert(display);
+
+	/* Create a sync dispatching events on the default queue. */
+	callback = wl_display_sync(display);
+	assert(callback != NULL);
+
+	/* Destroy the default queue (by disconnecting) before the attached
+	 * object. */
+	wl_display_disconnect(display);
+
+	/* Check that the log does not contain any warning about the attached
+	 * wl_callback proxy. */
+	log = maybe_map_file(client_log_fd, &log_len);
+	ret = snprintf(callback_name, sizeof(callback_name), "wl_callback#%u",
+		       wl_proxy_get_id((struct wl_proxy *) callback));
+	assert(ret > 0 && ret < (int)sizeof(callback_name) &&
+	       "callback name creation failed (possibly truncated)");
+	assert(log == MAP_FAILED || strstr(log, callback_name) == NULL);
+	if (log != MAP_FAILED)
+		munmap(log, log_len);
+
+	/* HACK: Directly free the memory of the wl_callback proxy to appease
+	 * ASan. We would normally use wl_callback_destroy(), but since we have
+	 * destroyed the associated wl_display, using this function would lead
+	 * to memory errors. */
+	free(callback);
+}
+
+static void
+check_queue_name(struct wl_proxy *proxy, const char *name)
+{
+	struct wl_event_queue *queue;
+	const char *queue_name;
+
+	queue = wl_proxy_get_queue(proxy);
+	queue_name = wl_event_queue_get_name(queue);
+	if (!name)
+		assert(!queue_name);
+	else
+		assert(strcmp(queue_name, name) == 0);
+}
+
+static struct wl_callback *
+roundtrip_named_queue_nonblock(struct wl_display *display,
+			       struct wl_event_queue *queue,
+			       const char *name)
+{
+	struct wl_callback *callback;
+	struct wl_display *wrapped_display = NULL;
+
+	if (queue) {
+		wrapped_display = wl_proxy_create_wrapper(display);
+		assert(wrapped_display);
+		wl_proxy_set_queue((struct wl_proxy *) wrapped_display, queue);
+		check_queue_name((struct wl_proxy *) wrapped_display, name);
+
+		callback = wl_display_sync(wrapped_display);
+	} else
+		callback = wl_display_sync(display);
+
+	check_queue_name((struct wl_proxy *) callback, name);
+
+	if (wrapped_display)
+		wl_proxy_wrapper_destroy(wrapped_display);
+
+	assert(callback != NULL);
+
+	return callback;
+}
+
+static void
+client_test_queue_names(void)
+{
+	struct wl_event_queue *queue1, *queue2, *queue3;
+	struct wl_display *display;
+	struct wl_callback *callback1, *callback2, *callback3, *callback4;
+	struct wl_event_queue *default_queue;
+	char *log;
+	size_t log_len;
+	const char *default_queue_name;
+
+	display = wl_display_connect(NULL);
+	assert(display);
+
+	default_queue = wl_proxy_get_queue((struct wl_proxy *) display);
+	default_queue_name = wl_event_queue_get_name(default_queue);
+	assert(strcmp(default_queue_name, "Default Queue") == 0);
+
+	/* Create some event queues both with and without names. */
+	queue1 = wl_display_create_queue_with_name(display, "First");
+	assert(queue1);
+
+	queue2 = wl_display_create_queue_with_name(display, "Second");
+	assert(queue2);
+
+	queue3 = wl_display_create_queue(display);
+	assert(queue3);
+
+	/* Create some requests and ensure their queues have the expected
+	 * names.
+	 */
+	callback1 = roundtrip_named_queue_nonblock(display, queue1, "First");
+	callback2 = roundtrip_named_queue_nonblock(display, queue2, "Second");
+	callback3 = roundtrip_named_queue_nonblock(display, queue3, NULL);
+	callback4 = roundtrip_named_queue_nonblock(display, NULL, "Default Queue");
+
+	/* Destroy one queue with proxies still attached so we can verify
+         * that the queue name is in the log message. */
+	wl_event_queue_destroy(queue2);
+	log = map_file(client_log_fd, &log_len);
+	assert(strstr(log, "Second"));
+
+	/* There's no reason for the First queue name to be present. */
+	assert(!strstr(log, "First"));
+
+	munmap(log, log_len);
+
+	wl_callback_destroy(callback1);
+	wl_callback_destroy(callback2);
+	wl_callback_destroy(callback3);
+	wl_callback_destroy(callback4);
+
+	wl_event_queue_destroy(queue1);
+	wl_event_queue_destroy(queue3);
+
+	wl_display_disconnect(display);
+}
+
 static void
 dummy_bind(struct wl_client *client,
 	   void *data, uint32_t version, uint32_t id)
@@ -378,6 +646,65 @@ TEST(queue_set_queue_race)
 	test_set_timeout(2);
 
 	client_create_noarg(d, client_test_queue_set_queue_race);
+	display_run(d);
+
+	display_destroy(d);
+}
+
+TEST(queue_destroy_with_attached_proxies)
+{
+	struct display *d = display_create();
+
+	test_set_timeout(2);
+
+	client_create_noarg(d, client_test_queue_destroy_with_attached_proxies);
+	display_run(d);
+
+	display_destroy(d);
+}
+
+TEST(queue_proxy_event_to_destroyed_queue)
+{
+	struct display *d = display_create();
+	struct client_info *ci;
+	char *client_log;
+	size_t client_log_len;
+
+	test_set_timeout(2);
+
+	ci = client_create_noarg(d, client_test_queue_proxy_event_to_destroyed_queue);
+	display_run(d);
+
+	/* Check that the final line in the log mentions the expected reason
+	 * for the abort. */
+	client_log = map_file(ci->log_fd, &client_log_len);
+	assert(!strcmp(last_line_of(client_log),
+		       "Tried to add event to destroyed queue\n"));
+	munmap(client_log, client_log_len);
+
+	/* Check that the client aborted. */
+	display_destroy_expect_signal(d, SIGABRT);
+}
+
+TEST(queue_destroy_default_with_attached_proxies)
+{
+	struct display *d = display_create();
+
+	test_set_timeout(2);
+
+	client_create_noarg(d, client_test_queue_destroy_default_with_attached_proxies);
+	display_run(d);
+
+	display_destroy(d);
+}
+
+TEST(queue_names)
+{
+	struct display *d = display_create();
+
+	test_set_timeout(2);
+
+	client_create_noarg(d, client_test_queue_names);
 	display_run(d);
 
 	display_destroy(d);

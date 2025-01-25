@@ -17,8 +17,7 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/tabs/tab_group_editor_bubble_view.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/saved_tab_groups/features.h"
+#include "components/saved_tab_groups/tab_group_sync_service.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
@@ -48,6 +48,7 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button_factory.h"
@@ -103,11 +104,6 @@ TabGroupHeader::TabGroupHeader(TabSlotController& tab_slot_controller,
       title_(title_chip_->AddChildView(std::make_unique<views::Label>())),
       sync_icon_(
           title_chip_->AddChildView(std::make_unique<views::ImageView>())),
-      saved_tab_group_service_(
-          tab_slot_controller_->GetBrowser()
-              ? tab_groups::SavedTabGroupServiceFactory::GetForProfile(
-                    tab_slot_controller_->GetBrowser()->profile())
-              : nullptr),
       group_style_(style),
       tab_style_(TabStyle::Get()),
       editor_bubble_tracker_(tab_slot_controller) {
@@ -140,6 +136,8 @@ TabGroupHeader::TabGroupHeader(TabSlotController& tab_slot_controller,
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
 
   UpdateIsCollapsed();
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kTabList);
 }
 
 TabGroupHeader::~TabGroupHeader() = default;
@@ -264,7 +262,6 @@ void TabGroupHeader::OnFocus() {
 }
 
 void TabGroupHeader::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kTabList;
   node_data->AddState(ax::mojom::State::kEditable);
 
   std::u16string title = tab_slot_controller_->GetGroupTitle(group().value());
@@ -527,8 +524,13 @@ bool TabGroupHeader::ShouldShowSyncIcon() const {
     return false;
   }
 
-  return saved_tab_group_service_ && saved_tab_group_service_->model() &&
-         saved_tab_group_service_->model()->Contains(group().value());
+  tab_groups::TabGroupSyncService* tab_group_service =
+      tab_slot_controller_->GetBrowser()
+          ? tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+                tab_slot_controller_->GetBrowser()->profile())
+          : nullptr;
+
+  return tab_group_service && tab_group_service->GetGroup(group().value());
 }
 
 void TabGroupHeader::UpdateIsCollapsed() {

@@ -7,4 +7,9 @@
 
 #define VIVALDI_INSTALLER_ICON   "../../../installer/images/@VIVALDI_RELEASE_KIND@/win_installer.ico"
 
+#define VIVALDI_APP_LIST_ICON      "../../app/resources/theme/@VIVALDI_RELEASE_KIND@/app_list.ico"
+#define VIVALDI_INCOGNITO_ICON     "../../app/resources/theme/@VIVALDI_RELEASE_KIND@/incognito.ico"
+#define VIVALDI_HTML_DOC_ICON      "../../app/resources/theme/@VIVALDI_RELEASE_KIND@/vivaldi_doc.ico"
+#define VIVALDI_PDF_DOC_ICON       "../../app/resources/theme/@VIVALDI_RELEASE_KIND@/vivaldi_pdf.ico"
+
 #endif  // APP_VIVALDI_ICON_H_

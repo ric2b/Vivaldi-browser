@@ -16,9 +16,7 @@
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_util.h"
-#include "ash/wm/desks/desk_action_button.h"
 #include "ash/wm/desks/desk_action_context_menu.h"
-#include "ash/wm/desks/desk_action_view.h"
 #include "ash/wm/desks/desks_test_api.h"
 #include "ash/wm/desks/overview_desk_bar_view.h"
 #include "ash/wm/desks/templates/saved_desk_test_util.h"
@@ -269,33 +267,11 @@ void ClickSaveDeskAsTemplateButton() {
   SendKey(ui::VKEY_RETURN, &event_generator);
 }
 
-// TODO(hewer): Combine with `ClickSaveDeskAsTemplateButton` in
-// `desks_client_browsertest.cc`.
 void SelectSaveDeskAsTemplateMenuItem(int index) {
-  // Get the mini view for the given desk `index`.
-  aura::Window* root_window = Shell::GetPrimaryRootWindow();
-  DeskMiniView* mini_view = OverviewController::Get()
-                                ->overview_session()
-                                ->GetGridWithRootWindow(root_window)
-                                ->desks_bar_view()
-                                ->mini_views()[index];
-  ASSERT_TRUE(mini_view);
-
-  // Use the desk action view to get the context menu button.
-  ASSERT_TRUE(mini_view->desk_action_view());
-  DeskActionButton* menu_button =
-      mini_view->desk_action_view()->context_menu_button();
-  ASSERT_TRUE(menu_button);
-  ASSERT_TRUE(menu_button->GetVisible());
-
-  // Click the button to open the context menu.
-  ClickView(menu_button);
-  DeskActionContextMenu* menu = mini_view->context_menu();
-  ASSERT_TRUE(menu);
-
-  // Get the menu option to save the desk as a template and click it.
-  views::MenuItemView* menu_item = DesksTestApi::GetDeskActionContextMenuItem(
-      menu, DeskActionContextMenu::CommandId::kSaveAsTemplate);
+  views::MenuItemView* menu_item =
+      ash::DesksTestApi::OpenDeskContextMenuAndGetMenuItem(
+          ash::Shell::GetPrimaryRootWindow(), DeskBarViewBase::Type::kOverview,
+          index, ash::DeskActionContextMenu::CommandId::kSaveAsTemplate);
   ASSERT_TRUE(menu_item);
   ClickView(menu_item);
 
@@ -678,8 +654,8 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
 IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
                        RestoreAndLaunchBrowserWithClickRestore) {
   // TODO(http://b/328779923): This test tests clicking a notification that will
-  // not be shown if forest feature is enabled. Remove this test once forest
-  // feature can no longer be disabled.
+  // not be shown if this feature is enabled. Remove this test once this feature
+  // can no longer be disabled.
   if (ash::features::IsForestFeatureEnabled()) {
     GTEST_SKIP() << "Skipping test body for Forest Feature.";
   }
@@ -1067,7 +1043,7 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
   ToggleOverview();
   WaitForOverviewEnterAnimation();
 
-  if (features::IsForestFeatureEnabled()) {
+  if (features::IsSavedDeskUiRevampEnabled()) {
     SelectSaveDeskAsTemplateMenuItem(/*index=*/1);
   } else {
     ClickSaveDeskAsTemplateButton();
@@ -2270,7 +2246,7 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerArcAppBrowserTest,
   // Capture the active desk as a template.
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  if (features::IsForestFeatureEnabled()) {
+  if (features::IsSavedDeskUiRevampEnabled()) {
     SelectSaveDeskAsTemplateMenuItem(/*index=*/2);
   } else {
     ClickSaveDeskAsTemplateButton();

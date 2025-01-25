@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<protocol name="dialog_v1">
+<protocol name="xdg_dialog_v1">
   <copyright>
     Copyright © 2023 Carlos Garnacho
 

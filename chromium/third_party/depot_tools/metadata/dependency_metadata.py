@@ -6,6 +6,7 @@
 from collections import defaultdict
 import os
 import sys
+import itertools
 from typing import Dict, List, Set, Tuple, Union, Optional, Literal, Any
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -64,6 +65,15 @@ class DependencyMetadata:
         # The current value of each field.
         self._metadata: Dict[field_types.MetadataField, str] = {}
 
+        # The line numbers of each metadata fields.
+        self._metadata_line_numbers: Dict[field_types.MetadataField,
+                                          Set[int]] = defaultdict(lambda: set())
+
+        # The line numbers of the first and the last line (in the text file)
+        # of this dependency metadata.
+        self._first_line = float('inf')
+        self._last_line = -1
+
         # The record of how many times a field entry was added.
         self._occurrences: Dict[field_types.MetadataField,
                                 int] = defaultdict(int)
@@ -82,6 +92,22 @@ class DependencyMetadata:
 
     def get_entries(self) -> List[Tuple[str, str]]:
         return list(self._entries)
+
+    def record_line(self, line_number):
+        """Records `line_number` to be part of this metadata."""
+        self._first_line = min(self._first_line, line_number)
+        self._last_line = max(self._last_line, line_number)
+
+    def record_field_line_number(self, field: field_types.MetadataField,
+                                 line_number: int):
+        self._metadata_line_numbers[field].add(line_number)
+
+    def get_first_and_last_line_number(self) -> Tuple[int, int]:
+        return (self._first_line, self._last_line)
+
+    def get_field_line_numbers(self,
+                               field: field_types.MetadataField) -> List[int]:
+        return sorted(self._metadata_line_numbers[field])
 
     def _assess_required_fields(self) -> Set[field_types.MetadataField]:
         """Returns the set of required fields, based on the current
@@ -131,16 +157,26 @@ class DependencyMetadata:
         results = []
 
         # Check for duplicate fields.
-        repeated_field_info = [
-            f"{field.get_name()} ({count})"
-            for field, count in self._occurrences.items() if count > 1
+        repeated_fields = [
+            field for field, count in self._occurrences.items() if count > 1
         ]
-        if repeated_field_info:
-            repeated = ", ".join(repeated_field_info)
+        if repeated_fields:
+            repeated = ", ".join([
+                f"{field.get_name()} ({self._occurrences[field]})"
+                for field in repeated_fields
+            ])
             error = vr.ValidationError(reason="There is a repeated field.",
                                        additional=[
                                            f"Repeated fields: {repeated}",
                                        ])
+            # Merge line numbers.
+            lines = sorted(
+                set(
+                    itertools.chain.from_iterable([
+                        self.get_field_line_numbers(field)
+                        for field in repeated_fields
+                    ])))
+            error.set_lines(lines)
             results.append(error)
 
         # Process alias fields.
@@ -155,6 +191,8 @@ class DependencyMetadata:
                     if field_result:
                         field_result.set_tag(tag="field",
                                              value=main_field.get_name())
+                        field_result.set_lines(
+                            self.get_field_line_numbers(main_field))
                         results.append(field_result)
 
                 self._metadata[main_field] = self._metadata[alias_field]
@@ -167,6 +205,8 @@ class DependencyMetadata:
             field_result = source_field.validate(value)
             if field_result:
                 field_result.set_tag(tag="field", value=source_field.get_name())
+                field_result.set_lines(
+                    self.get_field_line_numbers(source_field))
                 results.append(field_result)
 
         # Check required fields are present.
@@ -178,16 +218,11 @@ class DependencyMetadata:
                     reason=f"Required field '{field_name}' is missing.")
                 results.append(error)
 
-        # At least one of the fields Version, Date or Revision must be
-        # provided.
-        version_value = self._metadata.get(known_fields.VERSION)
-        date_value = self._metadata.get(known_fields.DATE)
-        revision_value = self._metadata.get(known_fields.REVISION)
-        if ((not version_value
-             or version_util.version_is_unknown(version_value)) and
-            (not date_value or version_util.version_is_unknown(date_value))
-                and (not revision_value
-                     or version_util.version_is_unknown(revision_value))):
+        # If the repository is hosted somewhere (i.e. Chromium isn't the
+        # canonical repositroy of the dependency), at least one of the fields
+        # Version, Date or Revision must be provided.
+        if (not (self.is_canonical or self.version or self.date
+                 or self.revision)):
             versioning_fields = [
                 known_fields.VERSION, known_fields.DATE, known_fields.REVISION
             ]
@@ -210,6 +245,8 @@ class DependencyMetadata:
             if result:
                 result.set_tag(tag="field",
                                value=known_fields.LICENSE_FILE.get_name())
+                result.set_lines(
+                    self.get_field_line_numbers(known_fields.LICENSE_FILE))
                 results.append(result)
 
         return results

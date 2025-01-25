@@ -29,6 +29,13 @@ enum PressureLevelChrome {
   CRITICAL = 2,
 };
 
+enum DiscardType {
+  // Only unprotected pages can be discarded.
+  UNPROTECTED = 0,
+  // Both unprotected and protected pages can be discarded.
+  PROTECTED = 1,
+};
+
 enum class PressureLevelArcContainer {
   // There is enough memory to use.
   NONE = 0,
@@ -67,6 +74,8 @@ const char kGetComponentMemoryMarginsKBMethod[] = "GetComponentMemoryMarginsKB";
 const char kGetGameModeMethod[] = "GetGameMode";
 const char kSetGameModeMethod[] = "SetGameMode";
 const char kSetGameModeWithTimeoutMethod[] = "SetGameModeWithTimeout";
+const char kSetMemoryMarginsMethod[] = "SetMemoryMargins";
+// TODO(vovoy): remove method SetMemoryMarginsBps.
 const char kSetMemoryMarginsBps[] = "SetMemoryMarginsBps";
 const char kSetFullscreenVideoWithTimeout[] = "SetFullscreenVideoWithTimeout";
 const char kSetVmBootModeWithTimeoutMethod[] = "SetVmBootModeWithTimeout";
@@ -76,22 +85,26 @@ const char kSetThreadStateMethod[] = "SetThreadState";
 
 // Signals.
 
-// MemoryPressureChrome signal contains 2 arguments:
+// MemoryPressureChrome signal contains 4 arguments:
 //   1. pressure_level, BYTE, see also enum PressureLevelChrome.
 //   2. reclaim_target_kb, UINT64, memory amount to free in KB to leave the
 //   current pressure level.
-//   E.g., argument (PressureLevelChrome::CRITICAL, 10000): Chrome should free
-//   10000 KB to leave the critical memory pressure level (to moderate pressure
-//   level).
+//   3. Origin time, to avoid discard due to out-of-dated signals.
+//   4. discard_type, BYTE, see also enum DiscardType.
+//   E.g., argument (PressureLevelChrome::CRITICAL, 10000, origin_time,
+//   DiscardType::UNPROTECTED): Chrome should free 10000 KB to leave the
+//   critical memory pressure level (to moderate pressure level), only
+//   unprotected pages can be discarded.
 const char kMemoryPressureChrome[] = "MemoryPressureChrome";
 
-// MemoryPressureArcContainer signal contains 2 arguments:
+// MemoryPressureArcContainer signal contains 3 arguments:
 //   1. pressure_level, BYTE, see also enum PressureLevelArcContainer.
 //   2. delta, UINT64, memory amount to free in KB to leave the current
 //   pressure level.
-//   E.g. argument (PressureLevelArcContainer::FOREGROUND, 10000): ARC container
-//   should free 10000 KB to leave the foreground memory pressure level (to
-//   perceptible pressure level).
+//   3. Origin time.
+//   E.g. argument (PressureLevelArcContainer::FOREGROUND, 10000, origin_time):
+//   ARC container should free 10000 KB to leave the foreground memory pressure
+//   level (to perceptible pressure level).
 const char kMemoryPressureArcContainer[] = "MemoryPressureArcContainer";
 
 }  // namespace resource_manager

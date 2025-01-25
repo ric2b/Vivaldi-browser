@@ -34,6 +34,8 @@
 #include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/enterprise/browser/reporting/real_time_report_type.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
+#include "components/enterprise/connectors/core/common.h"
+#include "components/enterprise/connectors/core/connectors_prefs.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/dm_token.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -65,6 +67,7 @@
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/crostini/fake_crostini_features.h"
+#include "chrome/browser/ash/net/secure_dns_manager.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_manager_ash.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_store_ash.h"
 #include "chrome/browser/ash/policy/core/user_cloud_policy_manager_ash.h"
@@ -298,6 +301,14 @@ class TestManagementUIHandler : public ManagementUIHandlerBase {
 
   const std::string GetDeviceManager() const override { return device_domain; }
   void SetDeviceDomain(const std::string& domain) { device_domain = domain; }
+
+  const ash::SecureDnsManager* GetSecureDnsManager() const override {
+    return secure_dns_manager_.get();
+  }
+  void CreateSecureDnsManagerForTesting(PrefService* local_state) {
+    secure_dns_manager_ = std::make_unique<ash::SecureDnsManager>(
+        local_state, /*profile_prefs=*/nullptr, /*is_profile_managed=*/true);
+  }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
  private:
@@ -307,6 +318,9 @@ class TestManagementUIHandler : public ManagementUIHandlerBase {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   device_signals::MockUserPermissionService mock_user_permission_service_;
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  std::unique_ptr<ash::SecureDnsManager> secure_dns_manager_;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 };
 
 // We need to use a different base class for ChromeOS and non ChromeOS case.
@@ -538,10 +552,11 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     local_state_.SetBoolean(enterprise_reporting::kCloudReportingEnabled,
                             GetTestConfig().cloud_reporting_enabled);
     profile_->GetPrefs()->SetInteger(
-        prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode, 1);
+        enterprise_connectors::kEnterpriseRealTimeUrlCheckMode, 1);
     profile_->GetPrefs()->SetInteger(
-        prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope,
+        enterprise_connectors::kEnterpriseRealTimeUrlCheckScope,
         policy::POLICY_SCOPE_MACHINE);
+
     if (GetTestConfig().legacy_tech_reporting_enabled) {
       base::Value::List allowlist;
       allowlist.Append("www.example.com");
@@ -614,6 +629,7 @@ class ManagementUIHandlerTests : public TestingBaseClass {
 #endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     handler_.SetDeviceDomain(GetTestConfig().device_domain);
+    handler_.CreateSecureDnsManagerForTesting(&local_state_);
 #endif
     base::Value::Dict data =
         handler_.GetContextualManagedDataForTesting(profile_.get());
@@ -1216,7 +1232,8 @@ TEST_F(ManagementUIHandlerTests, AllEnabledDeviceReportingInfo) {
       {kManagementReportExtensions, "extension"},
       {kManagementReportAndroidApplications, "android application"},
       {kManagementReportDlpEvents, "dlp events"},
-      {kManagementReportLoginLogout, "login-logout"}};
+      {kManagementReportLoginLogout, "login-logout"},
+      {kManagementReportFileEvents, "file events"}};
 
   ASSERT_PRED_FORMAT2(ReportingElementsToBeEQ, info, expected_elements);
 }
@@ -1241,7 +1258,8 @@ TEST_F(ManagementUIHandlerTests,
       {kManagementExtensionReportUsername, "username"},
       {kManagementReportExtensions, "extension"},
       {kManagementReportAndroidApplications, "android application"},
-      {kManagementReportLoginLogout, "login-logout"}};
+      {kManagementReportLoginLogout, "login-logout"},
+      {kManagementReportFileEvents, "file events"}};
 
   ASSERT_PRED_FORMAT2(ReportingElementsToBeEQ, info, expected_elements);
 }
@@ -1315,7 +1333,8 @@ TEST_F(ManagementUIHandlerTests, ReportDeviceXdrEventsEnabled) {
   const std::map<std::string, std::string> expected_elements = {
       {kManagementReportActivityTimes, "device activity"},
       {kManagementReportAppInfoAndActivity, "app info and activity"},
-      {kManagementReportLoginLogout, "login-logout"}};
+      {kManagementReportLoginLogout, "login-logout"},
+      {kManagementReportFileEvents, "file events"}};
 
   ASSERT_PRED_FORMAT2(ReportingElementsToBeEQ, info, expected_elements);
 }
@@ -1477,15 +1496,15 @@ TEST_F(ManagementUIHandlerTests, ReportLegacyTechReport) {
 TEST_F(ManagementUIHandlerTests,
        ShowPrivacyDisclosureForSecureDnsWithIdentifiers) {
   ResetTestConfig();
-  local_state_.Set(prefs::kDnsOverHttpsMode,
-                   base::Value(SecureDnsConfig::kModeSecure));
+  local_state_.SetManagedPref(prefs::kDnsOverHttpsMode,
+                              base::Value(SecureDnsConfig::kModeSecure));
   local_state_.Set(prefs::kDnsOverHttpsSalt, base::Value("test-salt"));
   local_state_.Set(prefs::kDnsOverHttpsTemplatesWithIdentifiers,
                    base::Value("www.test-dns.com"));
-
   // Owned by |scoped_user_manager|.
   auto user_manager =
       std::make_unique<user_manager::FakeUserManager>(&local_state_);
+
   // The DNS templates with identifiers only work is a user is logged in.
   const AccountId account_id(AccountId::FromUserEmailGaiaId(kUser, kGaiaId));
   user_manager->AddUser(account_id);
@@ -1600,9 +1619,9 @@ TEST_F(ManagementUIHandlerTests, CloudReportingPolicy) {
   SetUpProfileAndHandler();
 
   profile_->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode, 1);
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckMode, 1);
   profile_->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope,
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckScope,
       policy::POLICY_SCOPE_MACHINE);
 
   std::set<std::string> expected_messages = {
@@ -1651,9 +1670,9 @@ TEST_F(ManagementUIHandlerTests,
       .WillRepeatedly(ReturnRef(policies));
   local_state_.SetBoolean(enterprise_reporting::kCloudReportingEnabled, true);
   profile_->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode, 1);
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckMode, 1);
   profile_->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope,
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckScope,
       policy::POLICY_SCOPE_MACHINE);
 
   std::set<std::string> expected_messages = {
@@ -1731,9 +1750,9 @@ TEST_F(ManagementUIHandlerTests, ExtensionReportingInfoPoliciesMerge) {
       .WillOnce(ReturnRef(on_prem_reporting_extension_beta_policies));
   local_state_.SetBoolean(enterprise_reporting::kCloudReportingEnabled, true);
   profile_->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode, 1);
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckMode, 1);
   profile_->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope,
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckScope,
       policy::POLICY_SCOPE_MACHINE);
 
   std::set<std::string> expected_messages = {
@@ -1811,7 +1830,7 @@ TEST_F(ManagementUIHandlerTests, ThreatReportingInfo) {
   SetConnectorPolicyValue(policy::key::kOnSecurityEventEnterpriseConnector,
                           "[]", chrome_policies);
   profile_no_domain->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode, 0);
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckMode, 0);
 
   info = handler_.GetThreatProtectionInfo(profile_no_domain.get());
   EXPECT_TRUE(info.FindList("info")->empty());
@@ -1840,11 +1859,14 @@ TEST_F(ManagementUIHandlerTests, ThreatReportingInfo) {
       "[{\"service_provider\":\"google\"}]");
 #endif
   enterprise_connectors::test::SetOnSecurityEventReporting(
-      profile_no_domain->GetPrefs(), true);
+      /*prefs=*/profile_no_domain->GetPrefs(),
+      /*enabled=*/true,
+      /*enabled_event_names=*/{},
+      /*enabled_opt_in_events=*/{{"extensionTelemetryEvent", {"*"}}});
   profile_no_domain->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode, 1);
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckMode, 1);
   profile_no_domain->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope,
+      enterprise_connectors::kEnterpriseRealTimeUrlCheckScope,
       policy::POLICY_SCOPE_MACHINE);
 
   info = handler_.GetThreatProtectionInfo(profile_no_domain.get());
@@ -1859,9 +1881,9 @@ TEST_F(ManagementUIHandlerTests, ThreatReportingInfo) {
 
   info = handler_.GetThreatProtectionInfo(profile_no_domain.get());
 #if BUILDFLAG(IS_CHROMEOS)
-  const size_t expected_size = 7u;
+  const size_t expected_size = 8u;
 #else
-  const size_t expected_size = 6u;
+  const size_t expected_size = 7u;
 #endif
   EXPECT_EQ(expected_size, info.FindList("info")->size());
   EXPECT_EQ(
@@ -1911,6 +1933,12 @@ TEST_F(ManagementUIHandlerTests, ThreatReportingInfo) {
     base::Value::Dict value;
     value.Set("title", kManagementOnPageVisitedEvent);
     value.Set("permission", kManagementOnPageVisitedVisibleData);
+    expected_info.Append(std::move(value));
+  }
+  {
+    base::Value::Dict value;
+    value.Set("title", kManagementOnExtensionTelemetryEvent);
+    value.Set("permission", kManagementOnExtensionTelemetryVisibleData);
     expected_info.Append(std::move(value));
   }
 

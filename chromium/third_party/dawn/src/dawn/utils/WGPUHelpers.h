@@ -28,6 +28,8 @@
 #ifndef SRC_DAWN_UTILS_WGPUHELPERS_H_
 #define SRC_DAWN_UTILS_WGPUHELPERS_H_
 
+#include <webgpu/webgpu_cpp.h>
+
 #include <array>
 #include <initializer_list>
 #include <string>
@@ -35,7 +37,6 @@
 
 #include "dawn/common/Constants.h"
 #include "dawn/utils/TextureUtils.h"
-#include "dawn/webgpu_cpp.h"
 
 namespace dawn::utils {
 
@@ -118,7 +119,9 @@ wgpu::PipelineLayout MakeBasicPipelineLayout(const wgpu::Device& device,
 wgpu::PipelineLayout MakePipelineLayout(const wgpu::Device& device,
                                         std::vector<wgpu::BindGroupLayout> bgls);
 
+#ifndef __EMSCRIPTEN__
 extern wgpu::ExternalTextureBindingLayout kExternalTextureBindingLayout;
+#endif  // __EMSCRIPTEN__
 
 // Helpers to make creating bind group layouts look nicer:
 //
@@ -149,9 +152,11 @@ struct BindingLayoutEntryInitializationHelper : wgpu::BindGroupLayoutEntry {
         wgpu::StorageTextureAccess storageTextureAccess,
         wgpu::TextureFormat format,
         wgpu::TextureViewDimension viewDimension = wgpu::TextureViewDimension::e2D);
+#ifndef __EMSCRIPTEN__
     BindingLayoutEntryInitializationHelper(uint32_t entryBinding,
                                            wgpu::ShaderStage entryVisibility,
                                            wgpu::ExternalTextureBindingLayout* bindingLayout);
+#endif  // __EMSCRIPTEN__
 
     // NOLINTNEXTLINE(runtime/explicit)
     BindingLayoutEntryInitializationHelper(const wgpu::BindGroupLayoutEntry& entry);
@@ -174,7 +179,9 @@ wgpu::BindGroupLayout MakeBindGroupLayout(
 struct BindingInitializationHelper {
     BindingInitializationHelper(uint32_t binding, const wgpu::Sampler& sampler);
     BindingInitializationHelper(uint32_t binding, const wgpu::TextureView& textureView);
+#ifndef __EMSCRIPTEN__
     BindingInitializationHelper(uint32_t binding, const wgpu::ExternalTexture& externalTexture);
+#endif  // __EMSCRIPTEN__
     BindingInitializationHelper(uint32_t binding,
                                 const wgpu::Buffer& buffer,
                                 uint64_t offset = 0,
@@ -188,7 +195,9 @@ struct BindingInitializationHelper {
     wgpu::Sampler sampler;
     wgpu::TextureView textureView;
     wgpu::Buffer buffer;
+#ifndef __EMSCRIPTEN__
     wgpu::ExternalTextureBindingEntry externalTextureBindingEntry;
+#endif  // __EMSCRIPTEN__
     uint64_t offset = 0;
     uint64_t size = 0;
 };
@@ -206,6 +215,8 @@ struct ColorSpaceConversionInfo {
 };
 ColorSpaceConversionInfo GetYUVBT709ToRGBSRGBColorSpaceConversionInfo();
 ColorSpaceConversionInfo GetNoopRGBColorSpaceConversionInfo();
+
+bool BackendRequiresCompat(wgpu::BackendType backend);
 
 }  // namespace dawn::utils
 

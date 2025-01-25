@@ -195,7 +195,8 @@ public class TabModelSelectorTabObserverTest {
     private Tab createTestTab(boolean incognito) {
         return ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    return new MockTab(mTabId++, incognito ? mIncognitoProfile : mProfile);
+                    return new MockTab(
+                            Tab.INVALID_TAB_ID, incognito ? mIncognitoProfile : mProfile);
                 });
     }
 
@@ -210,7 +211,8 @@ public class TabModelSelectorTabObserverTest {
     }
 
     private static void closeTab(TabModel tabModel, Tab tab) {
-        ThreadUtils.runOnUiThreadBlocking(() -> tabModel.closeTab(tab));
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> tabModel.closeTabs(TabClosureParams.closeTab(tab).allowUndo(false).build()));
     }
 
     private static void removeTab(TabModel tabModel, Tab tab) {

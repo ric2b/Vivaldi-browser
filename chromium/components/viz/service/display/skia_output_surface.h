@@ -21,7 +21,6 @@
 #include "gpu/vulkan/buildflags.h"
 #include "media/gpu/buildflags.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/core/SkYUVAInfo.h"
 #include "ui/gfx/gpu_fence_handle.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -84,23 +83,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
       const gfx::ColorSpace& yuv_color_space,
       bool force_rgbx) = 0;
 
-  // Make a promise SkImage from the given |contexts| and |image_color_space|.
-  // The number of contexts provided should match the number of planes indicated
-  // by plane_config.
-  virtual sk_sp<SkImage> MakePromiseSkImageFromYUV(
-      const std::vector<ExternalUseClient::ImageContext*>& contexts,
-      sk_sp<SkColorSpace> image_color_space,
-      SkYUVAInfo::PlaneConfig plane_config,
-      SkYUVAInfo::Subsampling subsampling) = 0;
-
   // Called if SwapBuffers() will be skipped.
   virtual void SwapBuffersSkipped(const gfx::Rect root_pass_damage_rect) = 0;
-
-  // TODO(weiliangc): This API should move to OverlayProcessor.
-  // Schedule |output_surface_plane| as an overlay plane to be displayed.
-  virtual void ScheduleOutputSurfaceAsOverlay(
-      OverlayProcessorInterface::OutputSurfaceOverlayPlane
-          output_surface_plane) = 0;
 
   // Begin painting a render pass. This method will create a
   // GrDeferredDisplayListRecorder and return a SkCanvas of it. The SkiaRenderer
@@ -199,12 +183,6 @@ class VIZ_SERVICE_EXPORT SkiaOutputSurface : public OutputSurface,
   // waited on in a command buffer to ensure all pending tasks are executed on
   // the GPU main thread.
   virtual gpu::SyncToken Flush() = 0;
-
-  // Set the number of frame buffers to use when
-  // `supports_dynamic_frame_buffer_allocation` is true. `n` must satisfy
-  // 0 < n <= capabilities_.number_of_buffers.
-  // Return true if new buffers are allocated.
-  virtual bool EnsureMinNumberOfBuffers(int n) = 0;
 
   // Enqueue a GPU task to create a shared image with the specified params and
   // returns the mailbox.

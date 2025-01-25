@@ -32,7 +32,7 @@
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_session_tab_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/web_location_bar.h"
@@ -159,10 +159,9 @@ GURL ChromeOmniboxClientIOS::GetNavigationEntryURL() const {
 }
 
 metrics::OmniboxEventProto::PageClassification
-ChromeOmniboxClientIOS::GetPageClassification(OmniboxFocusSource focus_source,
-                                              bool is_prefetch) {
+ChromeOmniboxClientIOS::GetPageClassification(bool is_prefetch) {
   return location_bar_->GetLocationBarModel()->GetPageClassification(
-      focus_source, is_prefetch);
+      is_prefetch);
 }
 
 security_state::SecurityLevel ChromeOmniboxClientIOS::GetSecurityLevel() const {
@@ -336,7 +335,7 @@ void ChromeOmniboxClientIOS::DidFinishNavigation(
   scoped_observations_.RemoveObservation(web_state);
 
   scoped_refptr<ShortcutsBackend> shortcuts_backend =
-      ios::ShortcutsBackendFactory::GetInstance()->GetForBrowserState(
+      ios::ShortcutsBackendFactory::GetInstance()->GetForProfile(
           browser_state_);
 
   // Add the shortcut if the navigation from the omnibox was successful.

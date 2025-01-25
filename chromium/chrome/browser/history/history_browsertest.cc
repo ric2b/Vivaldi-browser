@@ -1052,8 +1052,9 @@ IN_PROC_BROWSER_TEST_F(HistoryPrerenderBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kInitialUrl));
 
   // Start a prerender, but we don't activate it.
-  const int kHostId = prerender_helper().AddPrerender(kPrerenderingUrl);
-  ASSERT_NE(kHostId, content::RenderFrameHost::kNoFrameTreeNodeId);
+  const content::FrameTreeNodeId kHostId =
+      prerender_helper().AddPrerender(kPrerenderingUrl);
+  ASSERT_TRUE(kHostId);
 
   // The prerendered page should not be recorded.
   EXPECT_THAT(GetHistoryContents(), testing::ElementsAre(kInitialUrl));
@@ -1070,8 +1071,9 @@ IN_PROC_BROWSER_TEST_F(HistoryPrerenderBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kInitialUrl));
 
   // Start a prerender.
-  const int kHostId = prerender_helper().AddPrerender(kPrerenderingUrl);
-  ASSERT_NE(kHostId, content::RenderFrameHost::kNoFrameTreeNodeId);
+  const content::FrameTreeNodeId kHostId =
+      prerender_helper().AddPrerender(kPrerenderingUrl);
+  ASSERT_TRUE(kHostId);
 
   // Activate.
   prerender_helper().NavigatePrimaryPage(kPrerenderingUrl);
@@ -1095,8 +1097,9 @@ IN_PROC_BROWSER_TEST_F(HistoryPrerenderBrowserTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kInitialUrl));
 
   // Start a prerender.
-  const int kHostId = prerender_helper().AddPrerender(kPrerenderingUrl);
-  ASSERT_NE(kHostId, content::RenderFrameHost::kNoFrameTreeNodeId);
+  const content::FrameTreeNodeId kHostId =
+      prerender_helper().AddPrerender(kPrerenderingUrl);
+  ASSERT_TRUE(kHostId);
 
   // Do a fragment navigation in the prerendered page.
   prerender_helper().NavigatePrerenderedPage(kHostId, kPrerenderingFragmentUrl);
@@ -1195,12 +1198,36 @@ IN_PROC_BROWSER_TEST_F(HistoryFencedFrameBrowserTest,
             history_tab_helper->last_load_completion_);
 }
 
+enum TestMode {
+  kPartitionedNoSelfLinks,
+  kPartitionedWithSelfLinks,
+  kPartitionedBothEnabled
+};
+
 // For tests which enable :visited links partitioning.
-class HistoryVisitedLinksBrowserTest : public HistoryBrowserTest {
+class HistoryVisitedLinksBrowserTest
+    : public HistoryBrowserTest,
+      public ::testing::WithParamInterface<TestMode> {
  public:
   HistoryVisitedLinksBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        blink::features::kPartitionVisitedLinkDatabase);
+    switch (GetParam()) {
+      case TestMode::kPartitionedNoSelfLinks:
+        scoped_feature_list_.InitWithFeatures(
+            {blink::features::kPartitionVisitedLinkDatabase},
+            {blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks});
+        break;
+      case TestMode::kPartitionedWithSelfLinks:
+        scoped_feature_list_.InitWithFeatures(
+            {blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks},
+            {blink::features::kPartitionVisitedLinkDatabase});
+        break;
+      case TestMode::kPartitionedBothEnabled:
+        scoped_feature_list_.InitWithFeatures(
+            {blink::features::kPartitionVisitedLinkDatabase,
+             blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks},
+            {});
+        break;
+    }
   }
   content::WebContents* web_contents() {
     return browser()->tab_strip_model()->GetActiveWebContents();
@@ -1210,7 +1237,13 @@ class HistoryVisitedLinksBrowserTest : public HistoryBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(HistoryVisitedLinksBrowserTest, GetSaltForSameOrigin) {
+INSTANTIATE_TEST_SUITE_P(All,
+                         HistoryVisitedLinksBrowserTest,
+                         testing::Values(TestMode::kPartitionedNoSelfLinks,
+                                         TestMode::kPartitionedWithSelfLinks,
+                                         TestMode::kPartitionedBothEnabled));
+
+IN_PROC_BROWSER_TEST_P(HistoryVisitedLinksBrowserTest, GetSaltForSameOrigin) {
   constexpr char kOrigin[] = "foo.com";
   const GURL kUrl(embedded_https_test_server().GetURL(kOrigin, "/empty.html"));
 
@@ -1236,7 +1269,7 @@ IN_PROC_BROWSER_TEST_F(HistoryVisitedLinksBrowserTest, GetSaltForSameOrigin) {
   EXPECT_EQ(observer.GetVisitedLinkSalt(), observer2.GetVisitedLinkSalt());
 }
 
-IN_PROC_BROWSER_TEST_F(HistoryVisitedLinksBrowserTest, AddSaltForCrossOrigin) {
+IN_PROC_BROWSER_TEST_P(HistoryVisitedLinksBrowserTest, AddSaltForCrossOrigin) {
   constexpr char kOrigin[] = "foo.com";
   const GURL kUrl(embedded_https_test_server().GetURL(kOrigin, "/empty.html"));
 

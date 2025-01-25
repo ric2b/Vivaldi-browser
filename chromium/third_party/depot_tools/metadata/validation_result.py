@@ -28,6 +28,7 @@ class ValidationResult:
         self._fatal = fatal
         self._additional = additional
         self._tags = {}
+        self._lines = []
 
     def __str__(self) -> str:
         prefix = self.get_severity_prefix()
@@ -97,6 +98,12 @@ class ValidationResult:
             return textwrap.fill(text=message, width=width)
 
         return message
+
+    def set_lines(self, lines: List[int]):
+        self._lines = lines
+
+    def get_lines(self) -> List[int]:
+        return self._lines
 
 
 class ValidationError(ValidationResult):

@@ -32,10 +32,17 @@ export interface ProductSelectionMenuElement {
   };
 }
 
+export enum SectionType {
+  NONE = 0,
+  SUGGESTED = 1,
+  RECENT = 2,
+}
+
 interface MenuSection {
   title: string;
   entries: UrlListEntry[];
   expanded: boolean;
+  sectionType: SectionType;
 }
 
 export class ProductSelectionMenuElement extends PolymerElement {
@@ -59,6 +66,16 @@ export class ProductSelectionMenuElement extends PolymerElement {
         value: () => [],
       },
 
+      forNewColumn: {
+        type: Boolean,
+        value: false,
+      },
+
+      isTableFull: {
+        type: Boolean,
+        value: false,
+      },
+
       sections: Array,
     };
   }
@@ -67,6 +84,8 @@ export class ProductSelectionMenuElement extends PolymerElement {
 
   selectedUrl: string;
   excludedUrls: string[];
+  forNewColumn: boolean;
+  isTableFull: boolean;
   sections: MenuSection[];
 
   async showAt(element: HTMLElement) {
@@ -90,6 +109,7 @@ export class ProductSelectionMenuElement extends PolymerElement {
         title: loadTimeData.getString('suggestedTabs'),
         entries: suggestedTabs,
         expanded: true,
+        sectionType: SectionType.SUGGESTED,
       });
     }
     if (recentlyViewedTabs.length > 0) {
@@ -97,6 +117,7 @@ export class ProductSelectionMenuElement extends PolymerElement {
         title: loadTimeData.getString('recentlyViewedTabs'),
         entries: recentlyViewedTabs,
         expanded: true,
+        sectionType: SectionType.RECENT,
       });
     }
     // Notify elements that use the |sections| property of its new value.
@@ -136,6 +157,7 @@ export class ProductSelectionMenuElement extends PolymerElement {
       composed: true,
       detail: {
         url: e.model.item.url,
+        urlSection: (e.currentTarget as any).dataUrlSection || SectionType.NONE,
       },
     }));
   }
@@ -157,6 +179,18 @@ export class ProductSelectionMenuElement extends PolymerElement {
 
   private getUrl_(item: UrlListEntry) {
     return getAbbreviatedUrl(item.url);
+  }
+
+  private showEmptySuggestionsMessage_(
+      sections: MenuSection[], forNewColumn: boolean,
+      isTableFull: boolean): boolean {
+    return (!sections || sections.length === 0) &&
+        !this.showTableFullMessage_(forNewColumn, isTableFull);
+  }
+
+  private showTableFullMessage_(forNewColumn: boolean, isTableFull: boolean):
+      boolean {
+    return forNewColumn && isTableFull;
   }
 }
 

@@ -82,6 +82,17 @@ class SafeStructOutputGenerator(BaseGenerator):
                 ', const bool is_host, const VkAccelerationStructureBuildRangeInfoKHR *build_range_info',
         }
 
+    def isInPnextChain(self, struct: Struct) -> bool:
+        # Can appear in VkPipelineCreateInfoKHR::pNext even though it isn't listed in the xml structextends attribute
+        # VUID-VkPipelineCreateInfoKHR-pNext-09604
+        pipeline_create_infos = [
+            'VkGraphicsPipelineCreateInfo',
+            'VkExecutionGraphPipelineCreateInfoAMDX',
+            'VkRayTracingPipelineCreateInfoKHR',
+            'VkComputePipelineCreateInfo',
+        ]
+        return struct.extends or struct.name in pipeline_create_infos
+
     # Determine if a structure needs a safe_struct helper function
     # That is, it has an sType or one of its members is a pointer
     def needSafeStruct(self, struct: Struct) -> bool:
@@ -96,6 +107,9 @@ class SafeStructOutputGenerator(BaseGenerator):
         for member in struct.members:
             if member.pointer:
                 return True
+        # The VK_EXT_sample_locations design created edge case, easiest to handle here
+        if struct.name == 'VkAttachmentSampleLocationsEXT' or struct.name == 'VkSubpassSampleLocationsEXT':
+            return True
         return False
 
     def containsObjectHandle(self, member: Member) -> bool:
@@ -159,7 +173,7 @@ class SafeStructOutputGenerator(BaseGenerator):
             #include <vulkan/utility/vk_safe_struct_utils.hpp>
 
             namespace vku {
-            
+
             // Mapping of unknown stype codes to structure lengths. This should be set up by the application
             // before vkCreateInstance() and not modified afterwards.
             std::vector<std::pair<uint32_t, uint32_t>>& GetCustomStypeInfo();
@@ -296,7 +310,7 @@ void *SafePnextCopy(const void *pNext, PNextCopyState* copy_state) {
             }
 ''')
         guard_helper = PlatformGuardHelper()
-        for struct in [x for x in self.vk.structs.values() if x.extends]:
+        for struct in filter(self.isInPnextChain, self.vk.structs.values()):
             safe_name = self.convertName(struct.name)
             out.extend(guard_helper.add_guard(struct.protect))
             out.append(f'            case {struct.sType}:\n')
@@ -352,7 +366,7 @@ void FreePnextChain(const void *pNext) {
             break;
 ''')
 
-        for struct in [x for x in self.vk.structs.values() if x.extends]:
+        for struct in filter(self.isInPnextChain, self.vk.structs.values()):
             safe_name = self.convertName(struct.name)
             out.extend(guard_helper.add_guard(struct.protect))
             out.append(f'        case {struct.sType}:\n')

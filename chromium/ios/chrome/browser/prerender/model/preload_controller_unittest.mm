@@ -18,8 +18,8 @@
 #import "components/supervised_user/test_support/supervised_user_signin_test_utils.h"
 #import "ios/chrome/browser/prerender/model/preload_controller.h"
 #import "ios/chrome/browser/prerender/model/prerender_pref.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/signin/model/identity_test_environment_browser_state_adaptor.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -67,7 +67,7 @@ class PreloadControllerTest : public PlatformTest {
         IdentityManagerFactory::GetInstance(),
         base::BindRepeating(IdentityTestEnvironmentBrowserStateAdaptor::
                                 BuildIdentityManagerForTests));
-    chrome_browser_state_ = test_cbs_builder.Build();
+    chrome_browser_state_ = std::move(test_cbs_builder).Build();
     // Set up a NetworkChangeNotifier so that the test can simulate Wi-Fi vs.
     // cellular connection.
     network_change_notifier_.reset(new TestNetworkChangeNotifier);
@@ -209,7 +209,7 @@ TEST_F(PreloadControllerTest, PrenderingDisabledForSupervisedUsers) {
 
   // Sign in supervised user.
   signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForBrowserState(chrome_browser_state_.get());
+      IdentityManagerFactory::GetForProfile(chrome_browser_state_.get());
   AccountInfo account = signin::MakePrimaryAccountAvailable(
       identity_manager, "test@gmail.com", signin::ConsentLevel::kSignin);
   supervised_user::UpdateSupervisionStatusForAccount(

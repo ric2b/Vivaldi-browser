@@ -24,20 +24,6 @@ update_target("//media/renderers:renderers") {
     "//vivaldi/platform_media/decoders/vivaldi_decoder_config.h",
     "//vivaldi/platform_media/decoders/vivaldi_decoder_config.cc",
   ]
-  if (is_mac) {
-    sources += [
-      "//vivaldi/platform_media/decoders/mac/viv_video_decoder.h",
-      "//vivaldi/platform_media/decoders/mac/viv_video_decoder.mm",
-    ]
-    if (!defined(frameworks)) {
-      frameworks = []
-    }
-    frameworks += [
-      "CoreMedia.framework",
-      "CoreVideo.framework",
-      "VideoToolbox.framework",
-    ]
-  }
 
   if (is_win) {
     sources += [

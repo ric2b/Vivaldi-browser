@@ -11,7 +11,7 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_tabs/cr_tabs.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
+import 'chrome://resources/cr_elements/cr_page_selector/cr_page_selector.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
 import './history_deletion_dialog.js';
 import './passwords_deletion_dialog.js';
@@ -29,13 +29,13 @@ import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import type {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import type {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import type {CrPageSelectorElement} from 'chrome://resources/cr_elements/cr_page_selector/cr_page_selector.js';
 import type {CrTabsElement} from 'chrome://resources/cr_elements/cr_tabs/cr_tabs.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
 import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
-import type {IronPagesElement} from 'chrome://resources/polymer/v3_0/iron-pages/iron-pages.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import type {SettingsCheckboxElement} from '../controls/settings_checkbox.js';
@@ -71,7 +71,7 @@ export interface SettingsClearBrowsingDataDialogElement {
     cookiesCheckboxBasic: SettingsCheckboxElement,
     clearButton: CrButtonElement,
     clearBrowsingDataDialog: CrDialogElement,
-    pages: IronPagesElement,
+    pages: CrPageSelectorElement,
     tabs: CrTabsElement,
   };
 }
@@ -460,7 +460,7 @@ export class SettingsClearBrowsingDataDialogElement extends
 
   /**
    * Choose a label for the cookie checkbox
-   * @param isSignedIn boolean whether the user is signed in or not.
+   * @param signedInState SignedInState
    * @param shouldShowCookieException boolean whether the exception about not
    * being signed out of your Google account should be shown when user is
    * sync.
@@ -477,7 +477,7 @@ export class SettingsClearBrowsingDataDialogElement extends
    * will not be signed out on clearing cookies
    */
   private cookiesCheckboxLabel_(
-      isSignedIn: boolean,
+      signedInState: SignedInState,
       shouldShowCookieException: boolean,
       cookiesSummary: string,
       clearCookiesSummarySignedIn: string,
@@ -492,7 +492,8 @@ export class SettingsClearBrowsingDataDialogElement extends
     }
     // </if>
 
-    if (this.unoDesktopEnabled_ && isSignedIn) {
+    // The exception is not shown for SIGNED_IN_PAUSED.
+    if (this.unoDesktopEnabled_ && signedInState === SignedInState.SIGNED_IN) {
       return clearCookiesSummarySignedIn;
     }
 

@@ -575,6 +575,11 @@ ResultCode GenerateConfigForSandboxedProcess(const base::CommandLine& cmd_line,
     mitigations |= MITIGATION_CET_DISABLED;
 
   Sandbox sandbox_type = delegate->GetSandboxType();
+
+  // TODO(crbug.com/361128453): Implement this.
+  CHECK(sandbox_type != Sandbox::kVideoEffects)
+      << "kVideoEffects sandbox not implemented";
+
   if (sandbox_type == Sandbox::kRenderer &&
       base::FeatureList::IsEnabled(
           sandbox::policy::features::kWinSboxRestrictCoreSharingOnRenderer)) {
@@ -825,13 +830,8 @@ ResultCode SandboxWin::AddAppContainerProfileToConfig(
     return SBOX_ALL_OK;
   std::wstring profile_name =
       GetAppContainerProfileName(appcontainer_id, sandbox_type);
-  const ACProfileRegistration registration =
-      base::FeatureList::IsEnabled(features::kWinSboxACProfileWithoutFirewall)
-          ? ACProfileRegistration::kNoFirewall
-          : ACProfileRegistration::kDefault;
 
-  ResultCode result =
-      config->AddAppContainerProfile(profile_name.c_str(), registration);
+  ResultCode result = config->AddAppContainerProfile(profile_name.c_str());
   if (result != SBOX_ALL_OK)
     return result;
 
@@ -1088,6 +1088,8 @@ std::string SandboxWin::GetSandboxTypeInEnglish(Sandbox sandbox_type) {
     case Sandbox::kScreenAI:
       return "Screen AI";
 #endif
+    case Sandbox::kVideoEffects:
+      return "Video Effects";
     case Sandbox::kSpeechRecognition:
       return "Speech Recognition";
     case Sandbox::kPdfConversion:

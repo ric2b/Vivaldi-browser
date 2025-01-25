@@ -8,6 +8,7 @@
 #
 # Copyright (c) 2019-2024 Sebastian Pipping <sebastian@pipping.org>
 # Copyright (c) 2022      Rosen Penev <rosenp@gmail.com>
+# Copyright (c) 2024      Dag-Erling Smørgrav <des@des.dev>
 # Licensed under the MIT license:
 #
 # Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -56,5 +57,5 @@ clang-format "${args[@]}" -- "${files[@]}"
 sed \
         -e 's, @$,@,' \
         -e 's,#\( \+\)cmakedefine,#cmakedefine,' \
-        -i \
+        -i.bak \
         expat_config.h.cmake

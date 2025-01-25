@@ -21,9 +21,10 @@
 #import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_opt_in_status.h"
 #import "ios/chrome/browser/power_bookmarks/model/power_bookmark_service_factory.h"
+#import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
@@ -65,6 +66,7 @@ ShoppingServiceFactory::ShoppingServiceFactory()
             parcel_tracking_db::ParcelTrackingContent>::GetInstance());
   DependsOn(SyncServiceFactory::GetInstance());
   DependsOn(ios::HistoryServiceFactory::GetInstance());
+  DependsOn(IOSChromeTabRestoreServiceFactory::GetInstance());
 }
 
 std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
@@ -81,8 +83,8 @@ std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
       GetCurrentCountryCode(GetApplicationContext()->GetVariationsService()),
       GetApplicationContext()->GetApplicationLocale(),
       ios::BookmarkModelFactory::GetForBrowserState(chrome_state),
-      OptimizationGuideServiceFactory::GetForBrowserState(chrome_state),
-      pref_service, IdentityManagerFactory::GetForBrowserState(chrome_state),
+      OptimizationGuideServiceFactory::GetForProfile(chrome_state),
+      pref_service, IdentityManagerFactory::GetForProfile(chrome_state),
       SyncServiceFactory::GetForBrowserState(chrome_state),
       chrome_state->GetSharedURLLoaderFactory(),
       SessionProtoDBFactory<commerce_subscription_db::
@@ -96,7 +98,8 @@ std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
           ->GetForBrowserState(chrome_state),
       ios::HistoryServiceFactory::GetForBrowserState(
           chrome_state, ServiceAccessType::EXPLICIT_ACCESS),
-      std::make_unique<commerce::WebExtractorImpl>());
+      std::make_unique<commerce::WebExtractorImpl>(),
+      IOSChromeTabRestoreServiceFactory::GetForBrowserState(chrome_state));
 }
 
 bool ShoppingServiceFactory::ServiceIsNULLWhileTesting() const {

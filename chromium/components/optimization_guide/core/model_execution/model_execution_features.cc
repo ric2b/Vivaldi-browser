@@ -43,7 +43,7 @@ BASE_FEATURE(kComposeGraduated,
              base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kTabOrganizationGraduated,
              "TabOrganizationGraduated",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kWallpaperSearchGraduated,
              "WallpaperSearchGraduated",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -64,9 +64,13 @@ BASE_FEATURE(kOnDeviceModelTestFeature,
              "OnDeviceModelTestFeature",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kOnDeviceModelPromptApiFeature,
-             "OnDeviceModelPromptApiFeature",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kModelAdaptationHistorySearch,
+             "ModelAdaptationHistorySearch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kModelAdaptationSummarize,
+             "ModelAdaptationHistorySearch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsGraduatedFeature(UserVisibleFeatureKey feature) {
   bool is_graduated = false;
@@ -132,6 +136,10 @@ bool ShouldEnableFeatureWhenMainToggleOn(UserVisibleFeatureKey feature) {
 // On-device supported features should return true.
 // `GetOnDeviceFeatureRecentlyUsedPref` should return a valid pref for each
 // on-device feature.
+// Due to limitations of the gerrit IFTTT analyzer(b/249297195),
+// multiple paths are not supported.
+// Be sure to edit `IsOnDeviceModelAdaptationEnabled` as well if you edit this
+// function.
 bool IsOnDeviceModelEnabled(ModelBasedCapabilityKey feature) {
   switch (feature) {
     case ModelBasedCapabilityKey::kCompose:
@@ -139,18 +147,19 @@ bool IsOnDeviceModelEnabled(ModelBasedCapabilityKey feature) {
           optimization_guide::features::kOptimizationGuideComposeOnDeviceEval);
     case ModelBasedCapabilityKey::kTest:
       return base::FeatureList::IsEnabled(kOnDeviceModelTestFeature);
+    case ModelBasedCapabilityKey::kFormsAnnotations:
+    case ModelBasedCapabilityKey::kFormsPredictions:
     case ModelBasedCapabilityKey::kTabOrganization:
     case ModelBasedCapabilityKey::kWallpaperSearch:
     case ModelBasedCapabilityKey::kTextSafety:
       return false;
     case ModelBasedCapabilityKey::kHistorySearch:
     case ModelBasedCapabilityKey::kPromptApi:
+    case ModelBasedCapabilityKey::kSummarize:
       return true;
   }
 }
-// LINT.ThenChange(model_execution_prefs.cc:GetOnDeviceFeatureRecentlyUsedPref,
-//                 IsOnDeviceModelAdaptationEnabled,
-//                 GetOptimizationTargetForModelAdaptation)
+// LINT.ThenChange(//components/optimization_guide/core/model_execution/model_execution_prefs.cc:GetOnDeviceFeatureRecentlyUsedPref)
 
 // LINT.IfChange(IsOnDeviceModelAdaptationEnabled)
 //
@@ -166,40 +175,36 @@ bool IsOnDeviceModelAdaptationEnabled(ModelBasedCapabilityKey feature) {
       return base::GetFieldTrialParamByFeatureAsBool(
           kOnDeviceModelTestFeature, "enable_adaptation", false);
     case ModelBasedCapabilityKey::kPromptApi:
-      return base::GetFieldTrialParamByFeatureAsBool(
-          kOnDeviceModelPromptApiFeature, "enable_adaptation", false);
+    case ModelBasedCapabilityKey::kSummarize:
+      return true;
     case ModelBasedCapabilityKey::kHistorySearch:
-      // TODO(crbug.com/325108985): Update to true once we onboard the model.
-      return false;
+      return true;
+    case ModelBasedCapabilityKey::kFormsAnnotations:
+    case ModelBasedCapabilityKey::kFormsPredictions:
     case ModelBasedCapabilityKey::kTabOrganization:
     case ModelBasedCapabilityKey::kWallpaperSearch:
     case ModelBasedCapabilityKey::kTextSafety:
       return false;
   }
 }
-// LINT.ThenChange(IsOnDeviceModelEnabled)
+// LINT.ThenChange(//components/optimization_guide/core/model_execution/model_execution_features.cc:IsOnDeviceModelEnabled)
 
-// LINT.IfChange(GetOptimizationTargetForModelAdaptation)
 proto::OptimizationTarget GetOptimizationTargetForModelAdaptation(
-    ModelBasedCapabilityKey feature) {
-  switch (feature) {
-    case ModelBasedCapabilityKey::kCompose:
-      return proto::OPTIMIZATION_TARGET_COMPOSE;
-    case ModelBasedCapabilityKey::kTest:
-      return proto::OPTIMIZATION_TARGET_MODEL_VALIDATION;
-    // TODO(crbug.com/325108985): Update once we onboard the model.
-    case ModelBasedCapabilityKey::kHistorySearch:
-      NOTREACHED_IN_MIGRATION();
-      break;
-    case ModelBasedCapabilityKey::kPromptApi:
-    case ModelBasedCapabilityKey::kTabOrganization:
-    case ModelBasedCapabilityKey::kWallpaperSearch:
-    case ModelBasedCapabilityKey::kTextSafety:
-      NOTREACHED_IN_MIGRATION();
+    ModelBasedCapabilityKey feature_key) {
+  proto::OptimizationTarget optimization_target;
+  if (proto::OptimizationTarget_Parse(
+          "OPTIMIZATION_TARGET_" +
+              proto::ModelExecutionFeature_Name(static_cast<int>(feature_key)),
+          &optimization_target)) {
+    return optimization_target;
+  } else if (feature_key == ModelBasedCapabilityKey::kTest) {
+    return proto::OPTIMIZATION_TARGET_MODEL_VALIDATION;
+  } else if (feature_key == ModelBasedCapabilityKey::kCompose) {
+    return proto::OPTIMIZATION_TARGET_COMPOSE;
   }
+  NOTREACHED_IN_MIGRATION();
   return proto::OPTIMIZATION_TARGET_UNKNOWN;
 }
-// LINT.ThenChange(IsOnDeviceModelEnabled)
 
 }  // namespace internal
 

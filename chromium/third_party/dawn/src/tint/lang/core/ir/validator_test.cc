@@ -340,6 +340,117 @@ note: # Disassembly
 )");
 }
 
+TEST_F(IR_ValidatorTest, Function_UnnamedEntryPoint) {
+    auto* f = b.Function(ty.void_());
+    f->SetWorkgroupSize(0, 0, 0);
+    f->SetStage(Function::PipelineStage::kCompute);
+
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:1:1 error: entry points must have names
+%1 = @compute @workgroup_size(0, 0, 0) func():void {
+^^
+
+note: # Disassembly
+%1 = @compute @workgroup_size(0, 0, 0) func():void {
+  $B1: {
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Function_NonConstructibleReturnType) {
+    auto types = Vector<const core::type::Type*, 2>{
+        ty.external_texture(),   ty.sampler(), ty.runtime_array(ty.f32()), ty.ptr<function, i32>(),
+        ty.ref<function, u32>(),
+    };
+
+    for (auto t : types) {
+        auto* f = b.Function(t);
+        b.Append(f->Block(), [&] { b.Unreachable(); });
+    }
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:1:1 error: function return type must be constructible
+%1 = func():texture_external {
+^^
+
+:6:1 error: function return type must be constructible
+%2 = func():sampler {
+^^
+
+:11:1 error: function return type must be constructible
+%3 = func():array<f32> {
+^^
+
+:16:1 error: function return type must be constructible
+%4 = func():ptr<function, i32, read_write> {
+^^
+
+:21:1 error: reference types are not permitted here
+%5 = func():ref<function, u32, read_write> {
+^^
+
+:21:1 error: function return type must be constructible
+%5 = func():ref<function, u32, read_write> {
+^^
+
+note: # Disassembly
+%1 = func():texture_external {
+  $B1: {
+    unreachable
+  }
+}
+%2 = func():sampler {
+  $B2: {
+    unreachable
+  }
+}
+%3 = func():array<f32> {
+  $B3: {
+    unreachable
+  }
+}
+%4 = func():ptr<function, i32, read_write> {
+  $B4: {
+    unreachable
+  }
+}
+%5 = func():ref<function, u32, read_write> {
+  $B5: {
+    unreachable
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Function_UnexpectedFragDepth) {
+    auto* f = b.Function("my_func", ty.void_());
+    f->SetReturnBuiltin(BuiltinValue::kFragDepth);
+    b.Append(f->Block(), [&] { b.Return(f); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:1:1 error: frag_depth can only be declared for fragment entry points
+%my_func = func():void [@frag_depth] {
+^^^^^^^^
+
+note: # Disassembly
+%my_func = func():void [@frag_depth] {
+  $B1: {
+    ret
+  }
+}
+)");
+}
+
 TEST_F(IR_ValidatorTest, CallToFunctionOutsideModule) {
     auto* f = b.Function("f", ty.void_());
     auto* g = b.Function("g", ty.void_());
@@ -702,6 +813,238 @@ note: # Disassembly
 )");
 }
 
+TEST_F(IR_ValidatorTest, CallToBuiltinMissingResult) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* c = b.Call(ty.f32(), BuiltinFn::kAbs, 1_f);
+        c->SetResults(Vector{static_cast<ir::InstructionResult*>(nullptr)});
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: abs: result is undefined
+    undef = abs 1.0f
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:3:13 error: abs: call to builtin does not have a return type
+    undef = abs 1.0f
+            ^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    undef = abs 1.0f
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, CallToBuiltinMismatchResultType) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* c = b.Call(ty.f32(), BuiltinFn::kAbs, 1_f);
+        c->Result(0)->SetType(ty.i32());
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:14 error: abs: call result type does not match builtin return type
+    %2:i32 = abs 1.0f
+             ^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    %2:i32 = abs 1.0f
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, CallToBuiltinArgNullType) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* i = b.Var<function, f32>("i");
+        i->SetInitializer(b.Constant(0_f));
+        auto* load = b.Load(i);
+        auto* load_ret = load->Result(0);
+        b.Call(ty.f32(), BuiltinFn::kAbs, load_ret);
+        load_ret->SetType(nullptr);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:5 error: load: result type is undefined
+    %3:undef = load %i
+    ^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:5:14 error: abs: argument to builtin has undefined type
+    %4:f32 = abs %3
+             ^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    %i:ptr<function, f32, read_write> = var, 0.0f
+    %3:undef = load %i
+    %4:f32 = abs %3
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Bitcast_MissingArg) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* bitcast = b.Bitcast(ty.i32(), 1_u);
+        bitcast->ClearOperands();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:14 error: bitcast: expected exactly 1 operands, got 0
+    %2:i32 = bitcast
+             ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    %2:i32 = bitcast
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Bitcast_NullArg) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        b.Bitcast(ty.i32(), nullptr);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:22 error: bitcast: operand is undefined
+    %2:i32 = bitcast undef
+                     ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    %2:i32 = bitcast undef
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Bitcast_MissingResult) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* bitcast = b.Bitcast(ty.i32(), 1_u);
+        bitcast->ClearResults();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:13 error: bitcast: expected exactly 1 results, got 0
+    undef = bitcast 1u
+            ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    undef = bitcast 1u
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Bitcast_NullResult) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* c = b.Bitcast(ty.i32(), 1_u);
+        c->SetResults(Vector<InstructionResult*, 1>{nullptr});
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: bitcast: result is undefined
+    undef = bitcast 1u
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:3:5 error: bitcast: result is undefined
+    undef = bitcast 1u
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    undef = bitcast 1u
+    ret
+  }
+}
+)");
+}
+
 TEST_F(IR_ValidatorTest, Construct_Struct_ZeroValue) {
     auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"), {
                                                               {mod.symbols.New("a"), ty.i32()},
@@ -727,6 +1070,22 @@ TEST_F(IR_ValidatorTest, Construct_Struct_ValidArgs) {
     auto* f = b.Function("f", ty.void_());
     b.Append(f->Block(), [&] {
         b.Construct(str_ty, 1_i, 2_u);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_EQ(res, Success) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Construct_Struct_UnusedArgs) {
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"), {
+                                                              {mod.symbols.New("a"), ty.i32()},
+                                                              {mod.symbols.New("b"), ty.u32()},
+                                                          });
+
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        b.Construct(str_ty, 1_i, b.Unused());
         b.Return(f);
     });
 
@@ -843,6 +1202,374 @@ MyStruct = struct @align(4) {
 %f = func():void {
   $B1: {
     %2:MyStruct = construct 1i, 2i
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Construct_NullArg) {
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"), {
+                                                              {mod.symbols.New("a"), ty.i32()},
+                                                              {mod.symbols.New("b"), ty.u32()},
+                                                          });
+
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        b.Construct(str_ty, 1_i, nullptr);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:8:33 error: construct: operand is undefined
+    %2:MyStruct = construct 1i, undef
+                                ^^^^^
+
+:7:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+MyStruct = struct @align(4) {
+  a:i32 @offset(0)
+  b:u32 @offset(4)
+}
+
+%f = func():void {
+  $B1: {
+    %2:MyStruct = construct 1i, undef
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Construct_NullResult) {
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"), {
+                                                              {mod.symbols.New("a"), ty.i32()},
+                                                              {mod.symbols.New("b"), ty.u32()},
+                                                          });
+
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* c = b.Construct(str_ty, 1_i, 2_u);
+        c->SetResults(Vector<ir::InstructionResult*, 1>{nullptr});
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:8:5 error: construct: result is undefined
+    undef = construct 1i, 2u
+    ^^^^^
+
+:7:3 note: in block
+  $B1: {
+  ^^^
+
+:8:5 error: construct: result is undefined
+    undef = construct 1i, 2u
+    ^^^^^
+
+:7:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+MyStruct = struct @align(4) {
+  a:i32 @offset(0)
+  b:u32 @offset(4)
+}
+
+%f = func():void {
+  $B1: {
+    undef = construct 1i, 2u
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Construct_EmptyResult) {
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"), {
+                                                              {mod.symbols.New("a"), ty.i32()},
+                                                              {mod.symbols.New("b"), ty.u32()},
+                                                          });
+
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* c = b.Construct(str_ty, 1_i, 2_u);
+        c->ClearResults();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:8:13 error: construct: expected exactly 1 results, got 0
+    undef = construct 1i, 2u
+            ^^^^^^^^^
+
+:7:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+MyStruct = struct @align(4) {
+  a:i32 @offset(0)
+  b:u32 @offset(4)
+}
+
+%f = func():void {
+  $B1: {
+    undef = construct 1i, 2u
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Convert_MissingArg) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* c = b.Convert(ty.i32(), 1_f);
+        c->ClearOperands();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:14 error: convert: expected exactly 1 operands, got 0
+    %2:i32 = convert
+             ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    %2:i32 = convert
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Convert_NullArg) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        b.Convert(ty.i32(), nullptr);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:22 error: convert: operand is undefined
+    %2:i32 = convert undef
+                     ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    %2:i32 = convert undef
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Convert_MissingResult) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* c = b.Convert(ty.i32(), 1_f);
+        c->ClearResults();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:13 error: convert: expected exactly 1 results, got 0
+    undef = convert 1.0f
+            ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    undef = convert 1.0f
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Convert_NullResult) {
+    auto* f = b.Function("f", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* c = b.Convert(ty.i32(), 1_f);
+        c->SetResults(Vector<InstructionResult*, 1>{nullptr});
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: convert: result is undefined
+    undef = convert 1.0f
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:3:5 error: convert: result is undefined
+    undef = convert 1.0f
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%f = func():void {
+  $B1: {
+    undef = convert 1.0f
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Discard_TooManyOperands) {
+    auto* func = b.Function("foo", ty.void_());
+    b.Append(func->Block(), [&] {
+        auto* d = b.Discard();
+        d->SetOperands(Vector{b.Value(0_i)});
+        b.Return(func);
+    });
+
+    auto* ep = b.Function("ep", ty.void_());
+    ep->SetStage(Function::PipelineStage::kFragment);
+    b.Append(ep->Block(), [&] {
+        b.Call(func);
+        b.Return(ep);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: discard: expected exactly 0 operands, got 1
+    discard
+    ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%foo = func():void {
+  $B1: {
+    discard
+    ret
+  }
+}
+%ep = @fragment func():void {
+  $B2: {
+    %3:void = call %foo
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Discard_TooManyResults) {
+    auto* func = b.Function("foo", ty.void_());
+    b.Append(func->Block(), [&] {
+        auto* d = b.Discard();
+        d->SetResults(Vector{b.InstructionResult(ty.i32())});
+        b.Return(func);
+    });
+
+    auto* ep = b.Function("ep", ty.void_());
+    ep->SetStage(Function::PipelineStage::kFragment);
+    b.Append(ep->Block(), [&] {
+        b.Call(func);
+        b.Return(ep);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: discard: expected exactly 0 results, got 1
+    discard
+    ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%foo = func():void {
+  $B1: {
+    discard
+    ret
+  }
+}
+%ep = @fragment func():void {
+  $B2: {
+    %3:void = call %foo
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Discard_NotInFragment) {
+    auto* func = b.Function("foo", ty.void_());
+    b.Append(func->Block(), [&] {
+        b.Discard();
+        b.Return(func);
+    });
+
+    auto* ep = b.Function("ep", ty.void_());
+    ep->SetStage(Function::PipelineStage::kVertex);
+    b.Append(ep->Block(), [&] {
+        b.Call(func);
+        b.Return(ep);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: discard: cannot be called in non-fragment end point
+    discard
+    ^^^^^^^
+
+note: # Disassembly
+%foo = func():void {
+  $B1: {
+    discard
+    ret
+  }
+}
+%ep = @vertex func():void {
+  $B2: {
+    %3:void = call %foo
     ret
   }
 }
@@ -1694,7 +2421,7 @@ TEST_F(IR_ValidatorTest, Access_ExtractPointerFromStruct) {
         b.Return(f);
     });
 
-    auto res = ir::Validate(mod);
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowPointersInStructures});
     ASSERT_EQ(res, Success);
 }
 
@@ -1925,7 +2652,7 @@ note: # Disassembly
 }
 
 TEST_F(IR_ValidatorTest, Var_RootBlock_NullResult) {
-    auto* v = mod.allocators.instructions.Create<ir::Var>(nullptr);
+    auto* v = mod.CreateInstruction<ir::Var>(nullptr);
     v->SetInitializer(b.Constant(0_i));
     mod.root_block->Append(v);
 
@@ -1956,7 +2683,7 @@ $B1: {  # root
 }
 
 TEST_F(IR_ValidatorTest, Var_Function_NullResult) {
-    auto* v = mod.allocators.instructions.Create<ir::Var>(nullptr);
+    auto* v = mod.CreateInstruction<ir::Var>(nullptr);
     v->SetInitializer(b.Constant(0_i));
 
     auto* f = b.Function("my_func", ty.void_());
@@ -2017,6 +2744,36 @@ note: # Disassembly
 %my_func = func():void {
   $B1: {
     undef = var, 1i
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Var_Function_NonPtrResult) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    b.Append(f->Block(), [&] {
+        auto* v = b.Var<function, f32>();
+        v->Result(0)->SetType(ty.f32());
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:14 error: var: result type must be a pointer or a reference
+    %2:f32 = var
+             ^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:f32 = var
     ret
   }
 }
@@ -2236,6 +2993,51 @@ note: # Disassembly
 )");
 }
 
+TEST_F(IR_ValidatorTest, Var_Init_NullType) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    b.Append(f->Block(), [&] {
+        auto* i = b.Var<function, f32>("i");
+        i->SetInitializer(b.Constant(0_f));
+        auto* load = b.Load(i);
+        auto* load_ret = load->Result(0);
+        auto* j = b.Var<function, f32>("j");
+        j->SetInitializer(load_ret);
+        load_ret->SetType(nullptr);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:5 error: load: result type is undefined
+    %3:undef = load %i
+    ^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:5:46 error: var: operand type is undefined
+    %j:ptr<function, f32, read_write> = var, %3
+                                             ^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %i:ptr<function, f32, read_write> = var, 0.0f
+    %3:undef = load %i
+    %j:ptr<function, f32, read_write> = var, %3
+    ret
+  }
+}
+)");
+}
+
 TEST_F(IR_ValidatorTest, Var_HandleMissingBindingPoint) {
     auto* v = b.Var(ty.ptr<handle, i32>());
     mod.root_block->Append(v);
@@ -2306,7 +3108,7 @@ $B1: {  # root
 }
 
 TEST_F(IR_ValidatorTest, Let_NullResult) {
-    auto* v = mod.allocators.instructions.Create<ir::Let>(nullptr, b.Constant(1_i));
+    auto* v = mod.CreateInstruction<ir::Let>(nullptr, b.Constant(1_i));
 
     auto* f = b.Function("my_func", ty.void_());
 
@@ -2335,7 +3137,7 @@ note: # Disassembly
 }
 
 TEST_F(IR_ValidatorTest, Let_NullValue) {
-    auto* v = mod.allocators.instructions.Create<ir::Let>(b.InstructionResult(ty.f32()), nullptr);
+    auto* v = mod.CreateInstruction<ir::Let>(b.InstructionResult(ty.f32()), nullptr);
 
     auto* f = b.Function("my_func", ty.void_());
 
@@ -2364,8 +3166,7 @@ note: # Disassembly
 }
 
 TEST_F(IR_ValidatorTest, Let_WrongType) {
-    auto* v =
-        mod.allocators.instructions.Create<ir::Let>(b.InstructionResult(ty.f32()), b.Constant(1_i));
+    auto* v = mod.CreateInstruction<ir::Let>(b.InstructionResult(ty.f32()), b.Constant(1_i));
 
     auto* f = b.Function("my_func", ty.void_());
 
@@ -2602,8 +3403,8 @@ note: # Disassembly
 }
 
 TEST_F(IR_ValidatorTest, Binary_Result_Nullptr) {
-    auto* bin = mod.allocators.instructions.Create<ir::CoreBinary>(
-        nullptr, BinaryOp::kAdd, b.Constant(3_i), b.Constant(2_i));
+    auto* bin = mod.CreateInstruction<ir::CoreBinary>(nullptr, BinaryOp::kAdd, b.Constant(3_i),
+                                                      b.Constant(2_i));
 
     auto* f = b.Function("my_func", ty.void_());
 
@@ -2621,10 +3422,74 @@ TEST_F(IR_ValidatorTest, Binary_Result_Nullptr) {
   $B1: {
   ^^^
 
+:3:5 error: binary: result is undefined
+    undef = add 3i, 2i
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
 note: # Disassembly
 %my_func = func():void {
   $B1: {
     undef = add 3i, 2i
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Binary_MissingOperands) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    auto sb = b.Append(f->Block());
+    auto* add = sb.Add(ty.i32(), sb.Constant(1_i), sb.Constant(2_i));
+    add->ClearOperands();
+    sb.Return(f);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(), R"(:3:5 error: binary: expected at least 2 operands, got 0
+    %2:i32 = add
+    ^^^^^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:i32 = add
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Binary_MissingResult) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    auto sb = b.Append(f->Block());
+    auto* add = sb.Add(ty.i32(), sb.Constant(1_i), sb.Constant(2_i));
+    add->ClearResults();
+    sb.Return(f);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(), R"(:3:5 error: binary: expected exactly 1 results, got 0
+    undef = add 1i, 2i
+    ^^^^^^^^^^^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    undef = add 1i, 2i
     ret
   }
 }
@@ -2659,8 +3524,7 @@ note: # Disassembly
 }
 
 TEST_F(IR_ValidatorTest, Unary_Result_Nullptr) {
-    auto* bin = mod.allocators.instructions.Create<ir::CoreUnary>(nullptr, UnaryOp::kNegation,
-                                                                  b.Constant(2_i));
+    auto* bin = mod.CreateInstruction<ir::CoreUnary>(nullptr, UnaryOp::kNegation, b.Constant(2_i));
 
     auto* f = b.Function("my_func", ty.void_());
 
@@ -2671,6 +3535,14 @@ TEST_F(IR_ValidatorTest, Unary_Result_Nullptr) {
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_EQ(res.Failure().reason.Str(), R"(:3:5 error: unary: result is undefined
+    undef = negation 2i
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:3:5 error: unary: result is undefined
     undef = negation 2i
     ^^^^^
 
@@ -2719,6 +3591,66 @@ note: # Disassembly
 )");
 }
 
+TEST_F(IR_ValidatorTest, Unary_MissingOperands) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    auto sb = b.Append(f->Block());
+    auto* u = b.Negation(ty.f32(), 2_f);
+    u->ClearOperands();
+    sb.Append(u);
+    sb.Return(f);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: unary: expected at least 1 operands, got 0
+    %2:f32 = negation
+    ^^^^^^^^^^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:f32 = negation
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Unary_MissingResults) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    auto sb = b.Append(f->Block());
+    auto* u = b.Negation(ty.f32(), 2_f);
+    u->ClearResults();
+    sb.Append(u);
+    sb.Return(f);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: unary: expected exactly 1 results, got 0
+    undef = negation 2.0f
+    ^^^^^^^^^^^^^^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    undef = negation 2.0f
+    ret
+  }
+}
+)");
+}
+
 TEST_F(IR_ValidatorTest, ExitIf) {
     auto* if_ = b.If(true);
     if_->True()->Append(b.ExitIf(if_));
@@ -2733,7 +3665,7 @@ TEST_F(IR_ValidatorTest, ExitIf) {
 
 TEST_F(IR_ValidatorTest, ExitIf_NullIf) {
     auto* if_ = b.If(true);
-    if_->True()->Append(mod.allocators.instructions.Create<ExitIf>(nullptr));
+    if_->True()->Append(mod.CreateInstruction<ExitIf>(nullptr));
 
     auto* f = b.Function("my_func", ty.void_());
     auto sb = b.Append(f->Block());
@@ -3120,7 +4052,7 @@ TEST_F(IR_ValidatorTest, ExitSwitch_NullSwitch) {
     auto* switch_ = b.Switch(1_i);
 
     auto* def = b.DefaultCase(switch_);
-    def->Append(mod.allocators.instructions.Create<ExitSwitch>(nullptr));
+    def->Append(mod.CreateInstruction<ExitSwitch>(nullptr));
 
     auto* f = b.Function("my_func", ty.void_());
     auto sb = b.Append(f->Block());
@@ -4455,7 +5387,7 @@ TEST_F(IR_ValidatorTest, ExitLoop) {
 TEST_F(IR_ValidatorTest, ExitLoop_NullLoop) {
     auto* loop = b.Loop();
     loop->Continuing()->Append(b.NextIteration(loop));
-    loop->Body()->Append(mod.allocators.instructions.Create<ExitLoop>(nullptr));
+    loop->Body()->Append(mod.CreateInstruction<ExitLoop>(nullptr));
 
     auto* f = b.Function("my_func", ty.void_());
     auto sb = b.Append(f->Block());
@@ -5055,15 +5987,71 @@ TEST_F(IR_ValidatorTest, Return_WithValue) {
     EXPECT_EQ(ir::Validate(mod), Success);
 }
 
-TEST_F(IR_ValidatorTest, Return_NullFunction) {
-    auto* f = b.Function("my_func", ty.void_());
+TEST_F(IR_ValidatorTest, Return_UnexpectedResult) {
+    auto* f = b.Function("my_func", ty.i32());
     b.Append(f->Block(), [&] {  //
-        b.Return(nullptr);
+        auto* r = b.Return(f, 42_i);
+        r->SetResults(Vector{b.InstructionResult(ty.i32())});
     });
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
-    EXPECT_EQ(res.Failure().reason.Str(), R"(:3:5 error: return: undefined function
+    EXPECT_EQ(res.Failure().reason.Str(), R"(:3:5 error: return: expected exactly 0 results, got 1
+    ret 42i
+    ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():i32 {
+  $B1: {
+    ret 42i
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Return_NotFunction) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {  //
+        auto* var = b.Var(ty.ptr<function, f32>());
+        auto* r = b.Return(nullptr);
+        r->SetOperand(0, var->Result(0));
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(), R"(:4:5 error: return: expected function for first operand
+    ret
+    ^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, f32, read_write> = var
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Return_MissingFunction) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* r = b.Return(f);
+        r->ClearOperands();
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:5 error: return: expected between 1 and 2 operands, got 0
     ret
     ^^^
 
@@ -5161,8 +6149,7 @@ TEST_F(IR_ValidatorTest, Load_NullFrom) {
     auto* f = b.Function("my_func", ty.void_());
 
     b.Append(f->Block(), [&] {
-        b.Append(
-            mod.allocators.instructions.Create<ir::Load>(b.InstructionResult(ty.i32()), nullptr));
+        b.Append(mod.CreateInstruction<ir::Load>(b.InstructionResult(ty.i32()), nullptr));
         b.Return(f);
     });
 
@@ -5191,8 +6178,7 @@ TEST_F(IR_ValidatorTest, Load_SourceNotMemoryView) {
 
     b.Append(f->Block(), [&] {
         auto* let = b.Let("l", 1_i);
-        b.Append(mod.allocators.instructions.Create<ir::Load>(b.InstructionResult(ty.f32()),
-                                                              let->Result(0)));
+        b.Append(mod.CreateInstruction<ir::Load>(b.InstructionResult(ty.f32()), let->Result(0)));
         b.Return(f);
     });
 
@@ -5223,8 +6209,7 @@ TEST_F(IR_ValidatorTest, Load_TypeMismatch) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, i32>());
-        b.Append(mod.allocators.instructions.Create<ir::Load>(b.InstructionResult(ty.f32()),
-                                                              var->Result(0)));
+        b.Append(mod.CreateInstruction<ir::Load>(b.InstructionResult(ty.f32()), var->Result(0)));
         b.Return(f);
     });
 
@@ -5255,7 +6240,7 @@ TEST_F(IR_ValidatorTest, Load_MissingResult) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, i32>());
-        auto* load = mod.allocators.instructions.Create<ir::Load>(nullptr, var->Result(0));
+        auto* load = mod.CreateInstruction<ir::Load>(nullptr, var->Result(0));
         load->ClearResults();
         b.Append(load);
         b.Return(f);
@@ -5287,7 +6272,7 @@ TEST_F(IR_ValidatorTest, Store_NullTo) {
     auto* f = b.Function("my_func", ty.void_());
 
     b.Append(f->Block(), [&] {
-        b.Append(mod.allocators.instructions.Create<ir::Store>(nullptr, b.Constant(42_i)));
+        b.Append(mod.CreateInstruction<ir::Store>(nullptr, b.Constant(42_i)));
         b.Return(f);
     });
 
@@ -5316,7 +6301,7 @@ TEST_F(IR_ValidatorTest, Store_NullFrom) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, i32>());
-        b.Append(mod.allocators.instructions.Create<ir::Store>(var->Result(0), nullptr));
+        b.Append(mod.CreateInstruction<ir::Store>(var->Result(0), nullptr));
         b.Return(f);
     });
 
@@ -5345,7 +6330,7 @@ TEST_F(IR_ValidatorTest, Store_NullToAndFrom) {
     auto* f = b.Function("my_func", ty.void_());
 
     b.Append(f->Block(), [&] {
-        b.Append(mod.allocators.instructions.Create<ir::Store>(nullptr, nullptr));
+        b.Append(mod.CreateInstruction<ir::Store>(nullptr, nullptr));
         b.Return(f);
     });
 
@@ -5382,8 +6367,7 @@ TEST_F(IR_ValidatorTest, Store_NonEmptyResult) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, i32>());
-        auto* store =
-            mod.allocators.instructions.Create<ir::Store>(var->Result(0), b.Constant(42_i));
+        auto* store = mod.CreateInstruction<ir::Store>(var->Result(0), b.Constant(42_i));
         store->SetResults(Vector{b.InstructionResult(ty.i32())});
         b.Append(store);
         b.Return(f);
@@ -5415,7 +6399,7 @@ TEST_F(IR_ValidatorTest, Store_TargetNotMemoryView) {
 
     b.Append(f->Block(), [&] {
         auto* let = b.Let("l", 1_i);
-        b.Append(mod.allocators.instructions.Create<ir::Store>(let->Result(0), b.Constant(42_u)));
+        b.Append(mod.CreateInstruction<ir::Store>(let->Result(0), b.Constant(42_u)));
         b.Return(f);
     });
 
@@ -5446,7 +6430,7 @@ TEST_F(IR_ValidatorTest, Store_TypeMismatch) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, i32>());
-        b.Append(mod.allocators.instructions.Create<ir::Store>(var->Result(0), b.Constant(42_u)));
+        b.Append(mod.CreateInstruction<ir::Store>(var->Result(0), b.Constant(42_u)));
         b.Return(f);
     });
 
@@ -5478,7 +6462,7 @@ TEST_F(IR_ValidatorTest, Store_NoStoreType) {
     b.Append(f->Block(), [&] {
         auto* result = b.InstructionResult(ty.u32());
         result->SetType(nullptr);
-        b.Append(mod.allocators.instructions.Create<ir::Store>(result, b.Constant(42_u)));
+        b.Append(mod.CreateInstruction<ir::Store>(result, b.Constant(42_u)));
         b.Return(f);
     });
 
@@ -5493,7 +6477,7 @@ TEST_F(IR_ValidatorTest, Store_NoStoreType) {
   $B1: {
   ^^^
 
-:3:11 error: store: store target operand is not a memory view
+:3:11 error: store: operand type is undefined
     store %2, 42u
           ^^
 
@@ -5519,14 +6503,22 @@ TEST_F(IR_ValidatorTest, Store_NoValueType) {
         auto* val = b.Construct(ty.u32(), 42_u);
         val->Result(0)->SetType(nullptr);
 
-        b.Append(mod.allocators.instructions.Create<ir::Store>(var->Result(0), val->Result(0)));
+        b.Append(mod.CreateInstruction<ir::Store>(var->Result(0), val->Result(0)));
         b.Return(f);
     });
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_EQ(res.Failure().reason.Str(),
-              R"(:5:15 error: store: value type must not be null
+              R"(:4:5 error: construct: result type is undefined
+    %3:undef = construct 42u
+    ^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:5:15 error: store: operand type is undefined
     store %2, %3
               ^^
 
@@ -5538,7 +6530,7 @@ note: # Disassembly
 %my_func = func():void {
   $B1: {
     %2:ptr<function, i32, read_write> = var
-    %3:null = construct 42u
+    %3:undef = construct 42u
     store %2, %3
     ret
   }
@@ -5551,8 +6543,8 @@ TEST_F(IR_ValidatorTest, LoadVectorElement_NullResult) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, vec3<f32>>());
-        b.Append(mod.allocators.instructions.Create<ir::LoadVectorElement>(nullptr, var->Result(0),
-                                                                           b.Constant(1_i)));
+        b.Append(
+            mod.CreateInstruction<ir::LoadVectorElement>(nullptr, var->Result(0), b.Constant(1_i)));
         b.Return(f);
     });
 
@@ -5560,6 +6552,14 @@ TEST_F(IR_ValidatorTest, LoadVectorElement_NullResult) {
     ASSERT_NE(res, Success);
     EXPECT_EQ(res.Failure().reason.Str(),
               R"(:4:5 error: load_vector_element: result is undefined
+    undef = load_vector_element %2, 1i
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:4:5 error: load_vector_element: result is undefined
     undef = load_vector_element %2, 1i
     ^^^^^
 
@@ -5582,8 +6582,8 @@ TEST_F(IR_ValidatorTest, LoadVectorElement_NullFrom) {
     auto* f = b.Function("my_func", ty.void_());
 
     b.Append(f->Block(), [&] {
-        b.Append(mod.allocators.instructions.Create<ir::LoadVectorElement>(
-            b.InstructionResult(ty.f32()), nullptr, b.Constant(1_i)));
+        b.Append(mod.CreateInstruction<ir::LoadVectorElement>(b.InstructionResult(ty.f32()),
+                                                              nullptr, b.Constant(1_i)));
         b.Return(f);
     });
 
@@ -5612,8 +6612,8 @@ TEST_F(IR_ValidatorTest, LoadVectorElement_NullIndex) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, vec3<f32>>());
-        b.Append(mod.allocators.instructions.Create<ir::LoadVectorElement>(
-            b.InstructionResult(ty.f32()), var->Result(0), nullptr));
+        b.Append(mod.CreateInstruction<ir::LoadVectorElement>(b.InstructionResult(ty.f32()),
+                                                              var->Result(0), nullptr));
         b.Return(f);
     });
 
@@ -5638,19 +6638,83 @@ note: # Disassembly
 )");
 }
 
+TEST_F(IR_ValidatorTest, LoadVectorElement_MissingResult) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr<function, vec3<f32>>());
+        auto* load = b.LoadVectorElement(var, b.Constant(1_i));
+        load->ClearResults();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:13 error: load_vector_element: expected exactly 1 results, got 0
+    undef = load_vector_element %2, 1i
+            ^^^^^^^^^^^^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec3<f32>, read_write> = var
+    undef = load_vector_element %2, 1i
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, LoadVectorElement_MissingOperands) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr<function, vec3<f32>>());
+        auto* load = b.LoadVectorElement(var, b.Constant(1_i));
+        load->ClearOperands();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:14 error: load_vector_element: expected exactly 2 operands, got 0
+    %3:f32 = load_vector_element
+             ^^^^^^^^^^^^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec3<f32>, read_write> = var
+    %3:f32 = load_vector_element
+    ret
+  }
+}
+)");
+}
+
 TEST_F(IR_ValidatorTest, StoreVectorElement_NullTo) {
     auto* f = b.Function("my_func", ty.void_());
 
     b.Append(f->Block(), [&] {
-        b.Append(mod.allocators.instructions.Create<ir::StoreVectorElement>(
-            nullptr, b.Constant(1_i), b.Constant(2_i)));
+        b.Append(mod.CreateInstruction<ir::StoreVectorElement>(nullptr, b.Constant(1_i),
+                                                               b.Constant(2_f)));
         b.Return(f);
     });
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_EQ(res.Failure().reason.Str(), R"(:3:26 error: store_vector_element: operand is undefined
-    store_vector_element undef, 1i, 2i
+    store_vector_element undef, 1i, 2.0f
                          ^^^^^
 
 :2:3 note: in block
@@ -5660,7 +6724,7 @@ TEST_F(IR_ValidatorTest, StoreVectorElement_NullTo) {
 note: # Disassembly
 %my_func = func():void {
   $B1: {
-    store_vector_element undef, 1i, 2i
+    store_vector_element undef, 1i, 2.0f
     ret
   }
 }
@@ -5672,24 +6736,16 @@ TEST_F(IR_ValidatorTest, StoreVectorElement_NullIndex) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, vec3<f32>>());
-        b.Append(mod.allocators.instructions.Create<ir::StoreVectorElement>(var->Result(0), nullptr,
-                                                                            b.Constant(2_i)));
+        b.Append(mod.CreateInstruction<ir::StoreVectorElement>(var->Result(0), nullptr,
+                                                               b.Constant(2_f)));
         b.Return(f);
     });
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
     EXPECT_EQ(res.Failure().reason.Str(), R"(:4:30 error: store_vector_element: operand is undefined
-    store_vector_element %2, undef, 2i
+    store_vector_element %2, undef, 2.0f
                              ^^^^^
-
-:2:3 note: in block
-  $B1: {
-  ^^^
-
-:4:37 error: store_vector_element: value type 'i32' does not match vector pointer element type 'f32'
-    store_vector_element %2, undef, 2i
-                                    ^^
 
 :2:3 note: in block
   $B1: {
@@ -5699,7 +6755,7 @@ note: # Disassembly
 %my_func = func():void {
   $B1: {
     %2:ptr<function, vec3<f32>, read_write> = var
-    store_vector_element %2, undef, 2i
+    store_vector_element %2, undef, 2.0f
     ret
   }
 }
@@ -5711,8 +6767,8 @@ TEST_F(IR_ValidatorTest, StoreVectorElement_NullValue) {
 
     b.Append(f->Block(), [&] {
         auto* var = b.Var(ty.ptr<function, vec3<f32>>());
-        b.Append(mod.allocators.instructions.Create<ir::StoreVectorElement>(
-            var->Result(0), b.Constant(1_i), nullptr));
+        b.Append(mod.CreateInstruction<ir::StoreVectorElement>(var->Result(0), b.Constant(1_i),
+                                                               nullptr));
         b.Return(f);
     });
 
@@ -5731,6 +6787,70 @@ note: # Disassembly
   $B1: {
     %2:ptr<function, vec3<f32>, read_write> = var
     store_vector_element %2, 1i, undef
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, StoreVectorElement_MissingOperands) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr<function, vec3<f32>>());
+        auto* store = b.StoreVectorElement(var, b.Constant(1_i), b.Constant(2_f));
+        store->ClearOperands();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:5 error: store_vector_element: expected exactly 3 operands, got 0
+    store_vector_element
+    ^^^^^^^^^^^^^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec3<f32>, read_write> = var
+    store_vector_element
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, StoreVectorElement_UnexpectedResult) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr<function, vec3<f32>>());
+        auto* store = b.StoreVectorElement(var, b.Constant(1_i), b.Constant(2_f));
+        store->SetResults(Vector{b.InstructionResult(ty.f32())});
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:5 error: store_vector_element: expected exactly 0 results, got 1
+    store_vector_element %2, 1i, 2.0f
+    ^^^^^^^^^^^^^^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec3<f32>, read_write> = var
+    store_vector_element %2, 1i, 2.0f
     ret
   }
 }
@@ -5813,7 +6933,7 @@ TEST_P(IR_ValidatorRefTypeTest, Var) {
     } else {
         ASSERT_NE(res, Success);
         EXPECT_THAT(res.Failure().reason.Str(),
-                    testing::HasSubstr("3:5 error: var: reference type is not permitted"));
+                    testing::HasSubstr("3:5 error: var: reference types are not permitted"));
     }
 }
 
@@ -5836,7 +6956,7 @@ TEST_P(IR_ValidatorRefTypeTest, FnParam) {
     } else {
         ASSERT_NE(res, Success);
         EXPECT_THAT(res.Failure().reason.Str(),
-                    testing::HasSubstr("references are not permitted as parameter types"));
+                    testing::HasSubstr("reference types are not permitted"));
     }
 }
 
@@ -5858,7 +6978,39 @@ TEST_P(IR_ValidatorRefTypeTest, FnRet) {
     } else {
         ASSERT_NE(res, Success);
         EXPECT_THAT(res.Failure().reason.Str(),
-                    testing::HasSubstr("references are not permitted as return types"));
+                    testing::HasSubstr("reference types are not permitted"));
+    }
+}
+
+TEST_P(IR_ValidatorRefTypeTest, BlockParam) {
+    bool holds_ref = std::get<0>(GetParam());
+    bool refs_allowed = std::get<1>(GetParam());
+    auto* type = std::get<2>(GetParam())(ty);
+
+    auto* fn = b.Function("my_func", ty.void_());
+    b.Append(fn->Block(), [&] {
+        auto* loop = b.Loop();
+        loop->Continuing()->SetParams({b.BlockParam(type)});
+        b.Append(loop->Body(), [&] {  //
+            b.Continue(loop, nullptr);
+        });
+        b.Append(loop->Continuing(), [&] {  //
+            b.NextIteration(loop);
+        });
+        b.Unreachable();
+    });
+
+    Capabilities caps;
+    if (refs_allowed) {
+        caps.Add(Capability::kAllowRefTypes);
+    }
+    auto res = ir::Validate(mod, caps);
+    if (!holds_ref) {
+        ASSERT_EQ(res, Success) << res.Failure();
+    } else {
+        ASSERT_NE(res, Success);
+        EXPECT_THAT(res.Failure().reason.Str(),
+                    testing::HasSubstr("reference types are not permitted"));
     }
 }
 
@@ -5881,10 +7033,223 @@ INSTANTIATE_TEST_SUITE_P(RefTypes,
                                                           RefTypeBuilder<bool>,
                                                           RefTypeBuilder<vec4<f32>>)));
 
+TEST_F(IR_ValidatorTest, PointerToPointer) {
+    auto* type = ty.ptr<function, ptr<function, i32>>();
+    auto* fn = b.Function("my_func", ty.void_());
+    fn->SetParams(Vector{b.FunctionParam(type)});
+    b.Append(fn->Block(), [&] {  //
+        b.Return(fn);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason.Str(),
+                testing::HasSubstr("nested pointer types are not permitted"));
+}
+
+TEST_F(IR_ValidatorTest, ReferenceToReference) {
+    auto* type = ty.ref<function>(ty.ref<function, i32>());
+    auto* fn = b.Function("my_func", ty.void_());
+    b.Append(fn->Block(), [&] {  //
+        b.Var(type);
+        b.Return(fn);
+    });
+
+    Capabilities caps;
+    caps.Add(Capability::kAllowRefTypes);
+    auto res = ir::Validate(mod, caps);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason.Str(),
+                testing::HasSubstr("nested reference types are not permitted"));
+}
+
+TEST_F(IR_ValidatorTest, PointerInStructure_WithoutCapability) {
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("S"), {
+                                            {mod.symbols.New("a"), ty.ptr<private_, i32>()},
+                                        });
+
+    auto* fn = b.Function("F", ty.void_());
+    auto* param = b.FunctionParam("param", str_ty);
+    fn->SetParams({param});
+    b.Append(fn->Block(), [&] { b.Return(fn); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason.Str(),
+                testing::HasSubstr("nested pointer types are not permitted"));
+}
+
+TEST_F(IR_ValidatorTest, PointerInStructure_WithCapability) {
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("S"), {
+                                            {mod.symbols.New("a"), ty.ptr<private_, i32>()},
+                                        });
+
+    auto* fn = b.Function("F", ty.void_());
+    auto* param = b.FunctionParam("param", str_ty);
+    fn->SetParams({param});
+    b.Append(fn->Block(), [&] { b.Return(fn); });
+
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowPointersInStructures});
+    EXPECT_EQ(res, Success) << res.Failure();
+}
+
+using IR_Validator8BitIntTypeTest = IRTestParamHelper<std::tuple<
+    /* int8_allowed */ bool,
+    /* type_builder */ TypeBuilderFn>>;
+
+TEST_P(IR_Validator8BitIntTypeTest, Var) {
+    bool int8_allowed = std::get<0>(GetParam());
+    auto* type = std::get<1>(GetParam())(ty);
+
+    auto* fn = b.Function("my_func", ty.void_());
+    b.Append(fn->Block(), [&] {
+        b.Var(ty.ptr<function>(type));
+        b.Return(fn);
+    });
+
+    Capabilities caps;
+    if (int8_allowed) {
+        caps.Add(Capability::kAllow8BitIntegers);
+    }
+    auto res = ir::Validate(mod, caps);
+    if (int8_allowed) {
+        ASSERT_EQ(res, Success) << res.Failure();
+    } else {
+        ASSERT_NE(res, Success);
+        EXPECT_THAT(res.Failure().reason.Str(),
+                    testing::HasSubstr("3:5 error: var: 8-bit integer types are not permitted"));
+    }
+}
+
+TEST_P(IR_Validator8BitIntTypeTest, FnParam) {
+    bool int8_allowed = std::get<0>(GetParam());
+    auto* type = std::get<1>(GetParam())(ty);
+
+    auto* fn = b.Function("my_func", ty.void_());
+    fn->SetParams(Vector{b.FunctionParam(type)});
+    b.Append(fn->Block(), [&] { b.Return(fn); });
+
+    Capabilities caps;
+    if (int8_allowed) {
+        caps.Add(Capability::kAllow8BitIntegers);
+    }
+    auto res = ir::Validate(mod, caps);
+    if (int8_allowed) {
+        ASSERT_EQ(res, Success) << res.Failure();
+    } else {
+        ASSERT_NE(res, Success);
+        EXPECT_THAT(res.Failure().reason.Str(),
+                    testing::HasSubstr("8-bit integer types are not permitted"));
+    }
+}
+
+TEST_P(IR_Validator8BitIntTypeTest, FnRet) {
+    bool int8_allowed = std::get<0>(GetParam());
+    auto* type = std::get<1>(GetParam())(ty);
+
+    auto* fn = b.Function("my_func", type);
+    b.Append(fn->Block(), [&] { b.Unreachable(); });
+
+    Capabilities caps;
+    if (int8_allowed) {
+        caps.Add(Capability::kAllow8BitIntegers);
+    }
+    auto res = ir::Validate(mod, caps);
+    if (int8_allowed) {
+        ASSERT_EQ(res, Success) << res.Failure();
+    } else {
+        ASSERT_NE(res, Success);
+        EXPECT_THAT(res.Failure().reason.Str(),
+                    testing::HasSubstr("8-bit integer types are not permitted"));
+    }
+}
+
+TEST_P(IR_Validator8BitIntTypeTest, BlockParam) {
+    bool int8_allowed = std::get<0>(GetParam());
+    auto* type = std::get<1>(GetParam())(ty);
+
+    auto* fn = b.Function("my_func", ty.void_());
+    b.Append(fn->Block(), [&] {
+        auto* loop = b.Loop();
+        loop->Continuing()->SetParams({b.BlockParam(type)});
+        b.Append(loop->Body(), [&] {  //
+            b.Continue(loop, nullptr);
+        });
+        b.Append(loop->Continuing(), [&] {  //
+            b.NextIteration(loop);
+        });
+        b.Unreachable();
+    });
+
+    Capabilities caps;
+    if (int8_allowed) {
+        caps.Add(Capability::kAllow8BitIntegers);
+    }
+    auto res = ir::Validate(mod, caps);
+    if (int8_allowed) {
+        ASSERT_EQ(res, Success) << res.Failure();
+    } else {
+        ASSERT_NE(res, Success);
+        EXPECT_THAT(res.Failure().reason.Str(),
+                    testing::HasSubstr("8-bit integer types are not permitted"));
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(Int8Types,
+                         IR_Validator8BitIntTypeTest,
+                         testing::Combine(
+                             /* int8_allowed */ testing::Values(false, true),
+                             /* type_builder */
+                             testing::Values(TypeBuilder<i8>,
+                                             TypeBuilder<u8>,
+                                             TypeBuilder<vec4<i8>>,
+                                             TypeBuilder<array<u8, 4>>)));
+
+TEST_F(IR_ValidatorTest, Int8Type_InstructionOperand_NotAllowed) {
+    auto* fn = b.Function("my_func", ty.void_());
+    b.Append(fn->Block(), [&] {
+        b.Convert(ty.i32(), u8(1));
+        b.Return(fn);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:3:22 error: convert: 8-bit integer types are not permitted
+    %2:i32 = convert 1u8
+                     ^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:i32 = convert 1u8
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Int8Type_InstructionOperand_Allowed) {
+    auto* fn = b.Function("my_func", ty.void_());
+    b.Append(fn->Block(), [&] {
+        b.Convert(ty.i32(), u8(1));
+        b.Return(fn);
+    });
+
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllow8BitIntegers});
+    ASSERT_EQ(res, Success) << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, Switch_NoCondition) {
     auto* f = b.Function("my_func", ty.void_());
 
-    auto* s = b.ir.allocators.instructions.Create<ir::Switch>();
+    auto* s = b.ir.CreateInstruction<ir::Switch>();
     f->Block()->Append(s);
     b.Append(b.DefaultCase(s), [&] { b.ExitSwitch(s); });
     f->Block()->Append(b.Return(f));
@@ -6000,6 +7365,231 @@ note: # Disassembly
         exit_switch  # switch_1
       }
     }
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Swizzle_MissingValue) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr(function, ty.vec4<f32>()));
+        auto* swizzle = b.Swizzle(ty.vec4<f32>(), var, {3, 2, 1, 0});
+        swizzle->ClearOperands();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:20 error: swizzle: expected exactly 1 operands, got 0
+    %3:vec4<f32> = swizzle undef, wzyx
+                   ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec4<f32>, read_write> = var
+    %3:vec4<f32> = swizzle undef, wzyx
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Swizzle_NullValue) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr(function, ty.vec4<f32>()));
+        auto* swizzle = b.Swizzle(ty.vec4<f32>(), var, {3, 2, 1, 0});
+        swizzle->SetOperand(0, nullptr);
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(error: swizzle: operand is undefined
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec4<f32>, read_write> = var
+    %3:vec4<f32> = swizzle undef, wzyx
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Swizzle_MissingResult) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr(function, ty.vec4<f32>()));
+        auto* swizzle = b.Swizzle(ty.vec4<f32>(), var, {3, 2, 1, 0});
+        swizzle->ClearResults();
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:13 error: swizzle: expected exactly 1 results, got 0
+    undef = swizzle %2, wzyx
+            ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec4<f32>, read_write> = var
+    undef = swizzle %2, wzyx
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Swizzle_NullResult) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr(function, ty.vec4<f32>()));
+        auto* swizzle = b.Swizzle(ty.vec4<f32>(), var, {3, 2, 1, 0});
+        swizzle->SetResults(Vector<ir::InstructionResult*, 1>{nullptr});
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:5 error: swizzle: result is undefined
+    undef = swizzle %2, wzyx
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+:4:5 error: swizzle: result is undefined
+    undef = swizzle %2, wzyx
+    ^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec4<f32>, read_write> = var
+    undef = swizzle %2, wzyx
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Swizzle_NoIndices) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr(function, ty.vec4<f32>()));
+        auto* swizzle = b.Swizzle(ty.vec4<f32>(), var, {3, 2, 1, 0});
+        auto indices = Vector<uint32_t, 0>();
+        swizzle->SetIndices(std::move(indices));
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:20 error: swizzle: expected at least 1 indices
+    %3:vec4<f32> = swizzle %2, 
+                   ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec4<f32>, read_write> = var
+    %3:vec4<f32> = swizzle %2, 
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Swizzle_TooManyIndices) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr(function, ty.vec4<f32>()));
+        auto* swizzle = b.Swizzle(ty.vec4<f32>(), var, {3, 2, 1, 0});
+        auto indices = Vector<uint32_t, 5>{1, 1, 1, 1, 1};
+        swizzle->SetIndices(std::move(indices));
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:20 error: swizzle: expected at most 4 indices
+    %3:vec4<f32> = swizzle %2, yyyyy
+                   ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec4<f32>, read_write> = var
+    %3:vec4<f32> = swizzle %2, yyyyy
+    ret
+  }
+}
+)");
+}
+
+TEST_F(IR_ValidatorTest, Swizzle_InvalidIndices) {
+    auto* f = b.Function("my_func", ty.void_());
+    b.Append(f->Block(), [&] {
+        auto* var = b.Var(ty.ptr(function, ty.vec4<f32>()));
+        auto* swizzle = b.Swizzle(ty.vec4<f32>(), var, {3, 2, 1, 0});
+        auto indices = Vector<uint32_t, 4>{4, 3, 2, 1};
+        swizzle->SetIndices(std::move(indices));
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_EQ(res.Failure().reason.Str(),
+              R"(:4:20 error: swizzle: invalid index value
+    %3:vec4<f32> = swizzle %2, wzy
+                   ^^^^^^^
+
+:2:3 note: in block
+  $B1: {
+  ^^^
+
+note: # Disassembly
+%my_func = func():void {
+  $B1: {
+    %2:ptr<function, vec4<f32>, read_write> = var
+    %3:vec4<f32> = swizzle %2, wzy
     ret
   }
 }

@@ -25,8 +25,8 @@
 #include <vector>
 
 #include "absl/base/nullability.h"
-#include "./centipede/defs.h"
 #include "./centipede/mutation_input.h"
+#include "./common/defs.h"
 
 // Typedefs for the libFuzzer API, https://llvm.org/docs/LibFuzzer.html
 using FuzzerTestOneInputCallback = int (*)(const uint8_t *data, size_t size);
@@ -111,6 +111,12 @@ extern "C" size_t CentipedeGetExecutionResult(uint8_t *data, size_t capacity);
 // the size of the saved data. It may be called after
 // CentipedeFinalizeProcessing().
 extern "C" size_t CentipedeGetCoverageData(uint8_t *data, size_t capacity);
+
+// Set the current execution result to the opaque memory `data` with `size`.
+// Such data is retrieved using `CentipedeGetExecutionResult`, possibly from
+// another process. When `data` is `nullptr`, will set the execution result to
+// "empty" with no features or metadata.
+extern "C" void CentipedeSetExecutionResult(const uint8_t *data, size_t size);
 
 namespace centipede {
 

@@ -2,7 +2,7 @@
 
 #import "ios/website_dark_mode/website_dark_mode_tab_helper.h"
 
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/website_dark_mode/website_dark_mode_agent.h"
 
 WebsiteDarkModeTabHelper::~WebsiteDarkModeTabHelper() = default;

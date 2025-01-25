@@ -243,7 +243,7 @@ void GPUDevice::AddConsoleWarning(const String& message) {
 
 void GPUDevice::AddSingletonWarning(GPUSingletonWarning type) {
   size_t index = static_cast<size_t>(type);
-  if (UNLIKELY(!singleton_warning_fired_[index])) {
+  if (!singleton_warning_fired_[index]) [[unlikely]] {
     singleton_warning_fired_[index] = true;
 
     std::string message;
@@ -565,9 +565,8 @@ GPUPipelineLayout* GPUDevice::createPipelineLayout(
 }
 
 GPUShaderModule* GPUDevice::createShaderModule(
-    const GPUShaderModuleDescriptor* descriptor,
-    ExceptionState& exception_state) {
-  return GPUShaderModule::Create(this, descriptor, exception_state);
+    const GPUShaderModuleDescriptor* descriptor) {
+  return GPUShaderModule::Create(this, descriptor);
 }
 
 GPURenderPipeline* GPUDevice::createRenderPipeline(
@@ -584,30 +583,26 @@ GPUComputePipeline* GPUDevice::createComputePipeline(
 
 ScriptPromise<GPURenderPipeline> GPUDevice::createRenderPipelineAsync(
     ScriptState* script_state,
-    const GPURenderPipelineDescriptor* descriptor) {
+    const GPURenderPipelineDescriptor* descriptor,
+    ExceptionState& exception_state) {
+  OwnedRenderPipelineDescriptor dawn_desc_info;
+  ConvertToDawnType(script_state->GetIsolate(), this, descriptor,
+                    &dawn_desc_info, exception_state);
+  if (exception_state.HadException()) {
+    return EmptyPromise();
+  }
+
   auto* resolver =
       MakeGarbageCollected<ScriptPromiseResolver<GPURenderPipeline>>(
-          script_state);
+          script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
+  auto* callback = MakeWGPUOnceCallback(resolver->WrapCallbackInScriptScope(
+      WTF::BindOnce(&GPUDevice::OnCreateRenderPipelineAsyncCallback,
+                    WrapPersistent(this), descriptor->label())));
 
-  v8::Isolate* isolate = script_state->GetIsolate();
-  ExceptionState exception_state(isolate,
-                                 ExceptionContextType::kOperationInvoke,
-                                 "GPUDevice", "createRenderPipelineAsync");
-  OwnedRenderPipelineDescriptor dawn_desc_info;
-  ConvertToDawnType(isolate, this, descriptor, &dawn_desc_info,
-                    exception_state);
-  if (exception_state.HadException()) {
-    resolver->Reject(exception_state);
-  } else {
-    auto* callback = MakeWGPUOnceCallback(resolver->WrapCallbackInScriptScope(
-        WTF::BindOnce(&GPUDevice::OnCreateRenderPipelineAsyncCallback,
-                      WrapPersistent(this), descriptor->label())));
-
-    GetHandle().CreateRenderPipelineAsync(
-        &dawn_desc_info.dawn_desc, wgpu::CallbackMode::AllowSpontaneous,
-        callback->UnboundCallback(), callback->AsUserdata());
-  }
+  GetHandle().CreateRenderPipelineAsync(
+      &dawn_desc_info.dawn_desc, wgpu::CallbackMode::AllowSpontaneous,
+      callback->UnboundCallback(), callback->AsUserdata());
 
   // WebGPU guarantees that promises are resolved in finite time so we need to
   // ensure commands are flushed.

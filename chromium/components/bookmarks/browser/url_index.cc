@@ -157,8 +157,17 @@ bool UrlIndex::IsBookmarkedNoLock(const GURL& url) {
   if (vivaldi::IsVivaldiRunning()) {
     if (const auto iter = nodes_ordered_by_url_set_.find(url);
         iter != nodes_ordered_by_url_set_.end()) {
-      return !(*iter)->is_root() &&
-             (*iter)->parent()->type() != BookmarkNode::Type::TRASH;
+      const BookmarkNode* node = *iter;
+      while (node) {
+        if (node->type() == BookmarkNode::Type::TRASH) {
+          return false;
+        }
+        if (node->is_root()) {
+          break;
+        }
+        node = node->parent();
+      }
+      return true;
     }
   }
 #endif

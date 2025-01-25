@@ -5,10 +5,12 @@
 #ifndef COMPONENTS_AUTOFILL_CONTENT_BROWSER_CONTENT_AUTOFILL_DRIVER_H_
 #define COMPONENTS_AUTOFILL_CONTENT_BROWSER_CONTENT_AUTOFILL_DRIVER_H_
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/types/optional_ref.h"
@@ -112,6 +114,13 @@ class AutofillDriverRouter;
 class ContentAutofillDriver : public AutofillDriver,
                               public mojom::AutofillDriver {
  public:
+  class ContentAutofillDriverFactoryPassKey {
+   private:
+    friend class ContentAutofillDriverFactory;
+    friend class ContentAutofillDriverTestApi;
+    ContentAutofillDriverFactoryPassKey() = default;
+  };
+
   // Gets the driver for |render_frame_host|.
   // If |render_frame_host| is currently being deleted, this may be nullptr.
   static ContentAutofillDriver* GetForRenderFrameHost(
@@ -124,6 +133,11 @@ class ContentAutofillDriver : public AutofillDriver,
   ContentAutofillDriver(const ContentAutofillDriver&) = delete;
   ContentAutofillDriver& operator=(const ContentAutofillDriver&) = delete;
   ~ContentAutofillDriver() override;
+
+  // Clears the driver's and the manager's stored forms and other state,
+  // *except* for the LifecycleState, which is controlled by the
+  // AutofillDriverFactory. Called on certain types of navigations.
+  void Reset(ContentAutofillDriverFactoryPassKey pass_key);
 
   content::RenderFrameHost* render_frame_host() { return &*render_frame_host_; }
   const content::RenderFrameHost* render_frame_host() const {
@@ -160,9 +174,6 @@ class ContentAutofillDriver : public AutofillDriver,
   bool CanShowAutofillUi() const override;
   std::optional<net::IsolationInfo> GetIsolationInfo() override;
 
-  // Called on certain types of navigations by ContentAutofillDriverFactory.
-  void Reset();
-
   // Vivaldi
   void set_browser_autofill_manager(
       std::unique_ptr<BrowserAutofillManager> browser_autofill_manager) {
@@ -184,7 +195,9 @@ class ContentAutofillDriver : public AutofillDriver,
   //     (1a) Broadcast events are sent to many AutofillAgents.
   //     (1b) Routed events are sent to a single AutofillAgent, which may
   //          be not this driver's AutofillAgent.
-  //     (1c) Unrouted events are sent to this driver's AutofillAgent.
+  //     (1c) Main-frame events are sent to the driver's main frame's
+  //          AutofillAgent.
+  //     (1d) Unrouted events are sent to this driver's AutofillAgent.
   // (2) Renderer -> browser (mojom::AutofillDriver):
   //     These events are triggered by an AutofillAgent and are passed to one or
   //     multiple AutofillManagers. They fall into two groups:
@@ -232,19 +245,22 @@ class ContentAutofillDriver : public AutofillDriver,
       const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms)
       override;
 
-  // Group (1c): browser -> renderer events, unrouted (see comment above).
+  // Group (1c): browser -> renderer events, directed to to this driver's main
+  // driver (see comment above).
   // autofill::AutofillDriver:
-  // TODO(crbug.com/40209327): This event is currently not routed, but it looks
-  // like it should be breadcast to all renderers.
-  void GetFourDigitCombinationsFromDOM(
+  void GetFourDigitCombinationsFromDom(
       base::OnceCallback<void(const std::vector<std::string>&)>
           potential_matches) override;
-  void TriggerFormExtractionInDriverFrame() override;
+
+  // Group (1d): browser -> renderer events, unrouted (see comment above).
+  // autofill::AutofillDriver:
+  void TriggerFormExtractionInDriverFrame(
+      AutofillDriverRouterAndFormForestPassKey pass_key) override;
 
   // Group (2a): renderer -> browser events, broadcast (see comment above).
   // mojom::AutofillDriver:
   void DidEndTextFieldEditing() override;
-  void FocusOnNonFormField(bool had_interacted_form) override;
+  void FocusOnNonFormField() override;
   void HidePopup() override;
 
   // Group (2b): renderer -> browser events, routed (see comment above).

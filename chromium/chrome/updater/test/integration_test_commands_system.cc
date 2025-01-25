@@ -114,7 +114,9 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                             const std::string& tag,
                             const std::string& child_window_text_to_find,
                             const bool always_launch_cmd,
-                            const bool verify_app_logo_loaded) const override {
+                            const bool verify_app_logo_loaded,
+                            const bool expect_success,
+                            const bool wait_for_the_installer) const override {
     RunCommand(
         "install_updater_and_app",
         {
@@ -125,6 +127,9 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
             Param("always_launch_cmd", BoolToString(always_launch_cmd)),
             Param("verify_app_logo_loaded",
                   BoolToString(verify_app_logo_loaded)),
+            Param("expect_success", BoolToString(expect_success)),
+            Param("wait_for_the_installer",
+                  BoolToString(wait_for_the_installer)),
         });
   }
 
@@ -210,10 +215,11 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                             const std::string& install_data_index,
                             UpdateService::Priority priority,
                             const base::Version& from_version,
-                            const base::Version& to_version) const override {
-    updater::test::ExpectUpdateSequence(updater_scope_, test_server, app_id,
-                                        install_data_index, priority,
-                                        from_version, to_version);
+                            const base::Version& to_version,
+                            bool do_fault_injection) const override {
+    updater::test::ExpectUpdateSequence(
+        updater_scope_, test_server, app_id, install_data_index, priority,
+        from_version, to_version, do_fault_injection);
   }
 
   void ExpectUpdateSequenceBadHash(
@@ -233,10 +239,11 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                              const std::string& install_data_index,
                              UpdateService::Priority priority,
                              const base::Version& from_version,
-                             const base::Version& to_version) const override {
-    updater::test::ExpectInstallSequence(updater_scope_, test_server, app_id,
-                                         install_data_index, priority,
-                                         from_version, to_version);
+                             const base::Version& to_version,
+                             bool do_fault_injection) const override {
+    updater::test::ExpectInstallSequence(
+        updater_scope_, test_server, app_id, install_data_index, priority,
+        from_version, to_version, do_fault_injection);
   }
 
   void ExpectVersionActive(const std::string& version) const override {
@@ -492,6 +499,16 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("expect_prepare_to_run_bundle_success",
                {Param("bundle_path", bundle_path.MaybeAsASCII())});
   }
+
+  void ExpectKSAdminFetchTag(
+      bool elevate,
+      const std::string& product_id,
+      const base::FilePath& xc_path,
+      std::optional<UpdaterScope> store_flag,
+      std::optional<std::string> want_tag) const override {
+    updater::test::ExpectKSAdminFetchTag(updater_scope_, elevate, product_id,
+                                         xc_path, store_flag, want_tag);
+  }
 #endif  // BUILDFLAG(IS_MAC)
 
   void ExpectLegacyUpdaterMigrated() const override {
@@ -540,6 +557,16 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   }
   void DMDeregisterDevice() override { RunCommand("dm_deregister_device"); }
   void DMCleanup() override { RunCommand("dm_cleanup"); }
+  void InstallEnterpriseCompanionApp(
+      const base::Value::Dict& external_overrides) override {
+    RunCommand(
+        "install_enterprise_companion_app",
+        {Param("external_overrides",
+               StringFromValue(base::Value(external_overrides.Clone())))});
+  }
+  void UninstallEnterpriseCompanionApp() override {
+    RunCommand("uninstall_enterprise_companion_app");
+  }
 
  private:
   ~IntegrationTestCommandsSystem() override = default;

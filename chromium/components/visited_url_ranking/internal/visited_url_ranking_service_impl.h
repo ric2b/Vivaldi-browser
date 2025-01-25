@@ -83,6 +83,17 @@ class VisitedURLRankingServiceImpl : public VisitedURLRankingService {
   void RankURLVisitAggregates(const Config& config,
                               std::vector<URLVisitAggregate> visits,
                               RankURLVisitAggregatesCallback callback) override;
+  // TODO(crbug/364577990): Remove this function when callers switch to the
+  // version that uses metadata.
+  void DecorateURLVisitAggregates(
+      const Config& config,
+      std::vector<URLVisitAggregate> visit_aggregates,
+      DecorateURLVisitAggregatesCallback callback) override;
+  void DecorateURLVisitAggregates(
+      const Config& config,
+      visited_url_ranking::URLVisitsMetadata url_visits_metadata,
+      std::vector<URLVisitAggregate> visit_aggregates,
+      DecorateURLVisitAggregatesCallback callback) override;
   void RecordAction(
       ScoredURLUserAction action,
       const std::string& visit_id,
@@ -109,6 +120,8 @@ class VisitedURLRankingServiceImpl : public VisitedURLRankingService {
       std::queue<URLVisitAggregatesTransformType> transform_type_queue,
       URLVisitAggregatesTransformType transform_type,
       size_t previous_aggregates_count,
+      URLVisitsMetadata url_visits_metadata,
+      base::Time start_time,
       URLVisitAggregatesTransformer::Status status,
       std::vector<URLVisitAggregate> aggregates);
 
@@ -145,6 +158,10 @@ class VisitedURLRankingServiceImpl : public VisitedURLRankingService {
 
   // Sampling rate for kSeen events to balance training collection.
   const int seen_records_sampling_rate_;
+
+  // Threshold for when the "You just visited" communication should be
+  // displayed instead of relative time.
+  const base::TimeDelta recently_visited_minutes_threshold_;
 
   // The helper used by the fetchers to deduplicate URLs.
   std::unique_ptr<url_deduplication::URLDeduplicationHelper>

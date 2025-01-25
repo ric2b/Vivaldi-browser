@@ -9,7 +9,7 @@ source_set("vivaldi_promo") {
 
   deps = [
     "//base",
-    "resources:resources",
+    "resources:assets",
   ]
 
  frameworks = [ "UIKit.framework" ]

@@ -39,7 +39,7 @@ ChromeOSResultToLocalApprovalResult(
       return supervised_user::WebContentHandler::LocalApprovalResult::kError;
     case crosapi::mojom::ParentAccessResult::Tag::kDisabled:
       // Disabled is not a possible result for Local Web Approvals.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -87,7 +87,7 @@ SupervisedUserWebContentHandlerImpl::SupervisedUserWebContentHandlerImpl(
     content::WebContents* web_contents,
     const GURL& url,
     favicon::LargeIconService& large_icon_service,
-    int frame_id,
+    content::FrameTreeNodeId frame_id,
     int64_t interstitial_navigation_id)
     : ChromeSupervisedUserWebContentHandlerBase(web_contents,
                                                 frame_id,

@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import type {BrowserProxy} from 'chrome://resources/cr_components/commerce/browser_proxy.js';
-import type {BookmarkProductInfo, PageRemote, PriceInsightsInfo, ProductInfo, ProductSpecifications, UserFeedback} from 'chrome://resources/cr_components/commerce/shopping_service.mojom-webui.js';
+import type {BookmarkProductInfo, PageRemote, PriceInsightsInfo, ProductInfo, ProductSpecifications, ProductSpecificationsDisclosureVersion, UserFeedback} from 'chrome://resources/cr_components/commerce/shopping_service.mojom-webui.js';
 import {PageCallbackRouter, PriceInsightsInfo_PriceBucket} from 'chrome://resources/cr_components/commerce/shopping_service.mojom-webui.js';
 import type {Uuid} from 'chrome://resources/mojo/mojo/public/mojom/base/uuid.mojom-webui.js';
 import type {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
@@ -64,6 +64,7 @@ export class TestBrowserProxy extends BaseTestBrowserProxy implements
       'getParentBookmarkFolderNameForCurrentUrl',
       'showBookmarkEditorForCurrentUrl',
       'showProductSpecificationsSetForUuid',
+      'getPriceInsightsInfoForUrl',
       'getProductInfoForUrl',
       'getProductSpecificationsForUrls',
       'getAllProductSpecificationsSets',
@@ -73,6 +74,12 @@ export class TestBrowserProxy extends BaseTestBrowserProxy implements
       'setNameForProductSpecificationsSet',
       'setUrlsForProductSpecificationsSet',
       'setProductSpecificationsUserFeedback',
+      'setProductSpecificationDisclosureAcceptVersion',
+      'maybeShowProductSpecificationDisclosure',
+      'declineProductSpecificationDisclosure',
+      'showSyncSetupFlow',
+      'getProductSpecificationsFeatureState',
+      'getPageTitleFromHistory',
     ]);
 
     this.callbackRouter = new PageCallbackRouter();
@@ -105,6 +112,11 @@ export class TestBrowserProxy extends BaseTestBrowserProxy implements
 
   untrackPriceForBookmark(bookmarkId: bigint) {
     this.methodCalled('untrackPriceForBookmark', bookmarkId);
+  }
+
+  getPriceInsightsInfoForUrl(url: Url) {
+    this.methodCalled('getPriceInsightsInfoForUrl', url);
+    return Promise.resolve({priceInsightsInfo: this.priceInsights_});
   }
 
   getProductInfoForUrl(url: Url) {
@@ -181,8 +193,8 @@ export class TestBrowserProxy extends BaseTestBrowserProxy implements
     this.methodCalled('showBookmarkEditorForCurrentUrl');
   }
 
-  showProductSpecificationsSetForUuid(uuid: Uuid) {
-    this.methodCalled('showProductSpecificationsSetForUuid', uuid);
+  showProductSpecificationsSetForUuid(uuid: Uuid, inNewTab: boolean) {
+    this.methodCalled('showProductSpecificationsSetForUuid', uuid, inNewTab);
   }
 
   getAllProductSpecificationsSets() {
@@ -216,6 +228,37 @@ export class TestBrowserProxy extends BaseTestBrowserProxy implements
 
   setProductSpecificationsUserFeedback(feedback: UserFeedback) {
     this.methodCalled('setUrlsForProductSpecificationsSet', feedback);
+  }
+
+  setProductSpecificationDisclosureAcceptVersion(
+      version: ProductSpecificationsDisclosureVersion) {
+    this.methodCalled(
+        'setProductSpecificationDisclosureAcceptVersion', version);
+  }
+
+  maybeShowProductSpecificationDisclosure(
+      urls: Url[], name: string, setId: string) {
+    this.methodCalled(
+        'maybeShowProductSpecificationDisclosure', urls, name, setId);
+    return Promise.resolve({disclosureShown: false});
+  }
+
+  declineProductSpecificationDisclosure() {
+    this.methodCalled('declineProductSpecificationDisclosure');
+  }
+
+  showSyncSetupFlow() {
+    this.methodCalled('showSyncSetupFlow');
+  }
+
+  getProductSpecificationsFeatureState() {
+    this.methodCalled('getProductSpecificationsFeatureState');
+    return Promise.resolve({state: null});
+  }
+
+  getPageTitleFromHistory() {
+    this.methodCalled('getPageTitleFromHistory');
+    return Promise.resolve({title: ''});
   }
 
   getCallbackRouter() {

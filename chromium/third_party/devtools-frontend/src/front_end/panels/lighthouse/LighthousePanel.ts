@@ -211,7 +211,7 @@ export class LighthousePanel extends UI.Panel.Panel {
 
     this.newButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.performAnAudit), 'plus');
     toolbar.appendToolbarItem(this.newButton);
-    this.newButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.renderStartView.bind(this));
+    this.newButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.renderStartView.bind(this));
 
     toolbar.appendSeparator();
 
@@ -220,14 +220,14 @@ export class LighthousePanel extends UI.Panel.Panel {
 
     this.clearButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.clearAll), 'clear');
     toolbar.appendToolbarItem(this.clearButton);
-    this.clearButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.clearAll.bind(this));
+    this.clearButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.clearAll.bind(this));
 
     this.settingsPane = new UI.Widget.HBox();
     this.settingsPane.show(this.contentElement);
     this.settingsPane.element.classList.add('lighthouse-settings-pane');
     this.settingsPane.element.appendChild(this.startView.settingsToolbar().element);
     this.showSettingsPaneSetting = Common.Settings.Settings.instance().createSetting(
-        'lighthouse-show-settings-toolbar', false, Common.Settings.SettingStorageType.Synced);
+        'lighthouse-show-settings-toolbar', false, Common.Settings.SettingStorageType.SYNCED);
 
     this.rightToolbar = new UI.Toolbar.Toolbar('', lighthouseToolbarContainer);
     this.rightToolbar.appendSeparator();

@@ -41,7 +41,6 @@
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
-#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
@@ -77,6 +76,7 @@ class Isolate;
 class Value;
 template <class T>
 class Local;
+class String;
 }  // namespace v8
 
 namespace blink {
@@ -187,9 +187,15 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   void save();
   void restore(ExceptionState& exception_state);
   // Push state on state stack and creates bitmap for subsequent draw ops.
-  void beginLayer(ScriptState*,
+  void beginLayer(ScriptState* script_state) {
+    beginLayerImpl(script_state, /*options=*/nullptr,
+                   /*exception_state=*/nullptr);
+  }
+  void beginLayer(ScriptState* script_state,
                   const BeginLayerOptions* options,
-                  ExceptionState& exception_state);
+                  ExceptionState& exception_state) {
+    beginLayerImpl(script_state, options, &exception_state);
+  }
   // Pop state stack if top state was pushed by beginLayer, restore state and draw the bitmap.
   void endLayer(ExceptionState& exception_state);
   int LayerCount() const { return layer_count_; }
@@ -217,8 +223,10 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   void beginPath();
 
-  void fill(const String& winding = "nonzero");
-  void fill(Path2D*, const String& winding = "nonzero");
+  void fill();
+  void fill(const String& winding);
+  void fill(Path2D*);
+  void fill(Path2D*, const String& winding);
   void stroke();
   void stroke(Path2D*);
   void clip(const String& winding = "nonzero");
@@ -238,6 +246,11 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   void fillRect(double x, double y, double width, double height);
   void strokeRect(double x, double y, double width, double height);
 
+  // https://github.com/Igalia/explainers/blob/main/canvas-formatted-text/html-in-canvas.md
+  void placeElement(Element* element,
+                    double x,
+                    double y,
+                    ExceptionState& exception_state);
   void drawImage(const V8CanvasImageSource* image_source,
                  double x,
                  double y,
@@ -675,11 +688,17 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   // Returns the color provider stored in the Page via the Document.
   const ui::ColorProvider* GetColorProvider() const;
 
+  // Returns if the current Document is within installed WebApp scope.
+  bool IsInWebAppScope() const;
+
   bool context_restorable_{true};
   CanvasRenderingContext::LostContextMode context_lost_mode_{
       CanvasRenderingContext::kNotLostContext};
 
  private:
+  void FillImpl(SkPathFillType winding_rule);
+  void FillPathImpl(Path2D* dom_path, SkPathFillType winding_rule);
+
   void DrawTextInternal(const String& text,
                         double x,
                         double y,
@@ -695,9 +714,12 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   CanvasRenderingContext2DState::SaveType SaveLayerForState(
       const CanvasRenderingContext2DState& state,
-      sk_sp<PaintFilter> filter,
-      cc::PaintCanvas& canvas) const;
+      sk_sp<PaintFilter> layer_filter,
+      cc::PaintCanvas& canvas);
 
+  void beginLayerImpl(ScriptState* script_state,
+                      const BeginLayerOptions* options,
+                      ExceptionState* exception_state);
   void AddLayerFilterUserCount(const V8CanvasFilterInput*);
 
   // Pops from the top of the state stack, inverts transform, restores the
@@ -925,8 +947,8 @@ ALWAYS_INLINE void BaseRenderingContext2D::CheckOverdraw(
     const cc::PaintFlags* flags,
     CanvasRenderingContext2DState::ImageType image_type,
     BaseRenderingContext2D::OverdrawOp overdraw_op) {
-  if (UNLIKELY(
-          base::FeatureList::IsEnabled(kDisableCanvasOverdrawOptimization))) {
+  if (base::FeatureList::IsEnabled(kDisableCanvasOverdrawOptimization))
+      [[unlikely]] {
     return;
   }
 
@@ -937,8 +959,9 @@ ALWAYS_INLINE void BaseRenderingContext2D::CheckOverdraw(
     return;
 
   cc::PaintCanvas* c = GetPaintCanvas();
-  if (UNLIKELY(!c))
+  if (!c) [[unlikely]] {
     return;
+  }
 
   // Overdraw in layers is not currently supported. We would need to be able to
   // drop draw ops in the current layer only, which is not currently possible.
@@ -947,28 +970,30 @@ ALWAYS_INLINE void BaseRenderingContext2D::CheckOverdraw(
   }
 
   if (overdraw_op == OverdrawOp::kDrawImage) {  // static branch
-    if (UNLIKELY(flags->getBlendMode() != SkBlendMode::kSrcOver) ||
-        UNLIKELY(flags->getLooper()) || UNLIKELY(flags->getImageFilter()) ||
-        UNLIKELY(!flags->isOpaque()) ||
-        UNLIKELY(image_type ==
-                 CanvasRenderingContext2DState::kNonOpaqueImage)) {
+    if (flags->getBlendMode() != SkBlendMode::kSrcOver || flags->getLooper() ||
+        flags->getImageFilter() || !flags->isOpaque() ||
+        image_type == CanvasRenderingContext2DState::kNonOpaqueImage)
+        [[unlikely]] {
       return;
     }
   }
 
   if (overdraw_op == OverdrawOp::kClearRect ||
       overdraw_op == OverdrawOp::kDrawImage) {  // static branch
-    if (UNLIKELY(GetState().HasComplexClip()))
+    if (GetState().HasComplexClip()) [[unlikely]] {
       return;
+    }
 
     SkIRect sk_i_bounds;
-    if (UNLIKELY(!c->getDeviceClipBounds(&sk_i_bounds)))
+    if (!c->getDeviceClipBounds(&sk_i_bounds)) [[unlikely]] {
       return;
+    }
     SkRect device_rect = SkRect::Make(sk_i_bounds);
     const SkImageInfo& image_info = c->imageInfo();
-    if (LIKELY(!device_rect.contains(
-            SkRect::MakeWH(image_info.width(), image_info.height()))))
+    if (!device_rect.contains(SkRect::MakeWH(image_info.width(),
+                                             image_info.height()))) [[likely]] {
       return;
+    }
   }
 
   WillOverwriteCanvas(overdraw_op);
@@ -986,7 +1011,7 @@ void BaseRenderingContext2D::DrawInternal(
     CanvasRenderingContext2DState::ImageType image_type,
     const SkIRect& clip_bounds,
     CanvasPerformanceMonitor::DrawType draw_type) {
-  if (UNLIKELY(!paint_canvas)) {
+  if (!paint_canvas) [[unlikely]] {
     // This is the async draw case.
     paint_canvas = GetPaintCanvas();
     if (!paint_canvas) {
@@ -1025,7 +1050,7 @@ void BaseRenderingContext2D::DrawInternal(
       ResetAlphaIfNeeded(paint_canvas, global_composite, &bounds);
     }
   }
-  if (UNLIKELY(paint_canvas->NeedsFlush())) {
+  if (paint_canvas->NeedsFlush()) [[unlikely]] {
     // This happens if draw_func called flush() on the PaintCanvas. The flush
     // cannot be performed inside the scope of draw_func because it would break
     // the logic of CompositedDraw.
@@ -1043,7 +1068,7 @@ void BaseRenderingContext2D::Draw(
     CanvasRenderingContext2DState::PaintType paint_type,
     CanvasRenderingContext2DState::ImageType image_type,
     CanvasPerformanceMonitor::DrawType draw_type) {
-  if (UNLIKELY(!IsTransformInvertible())) {
+  if (!IsTransformInvertible()) [[unlikely]] {
     return;
   }
 
@@ -1052,7 +1077,7 @@ void BaseRenderingContext2D::Draw(
   if (!paint_canvas || !paint_canvas->getDeviceClipBounds(&clip_bounds))
     return;
 
-  if (UNLIKELY(GetState().IsFilterUnresolved())) {
+  if (GetState().IsFilterUnresolved()) [[unlikely]] {
     // Resolving a filter requires allocating garbage-collected objects.
     DrawInternal<CurrentOverdrawOp, DrawFunc, DrawCoversClipBoundsFunc>(
         nullptr, draw_func, draw_covers_clip_bounds, bounds, paint_type,
@@ -1177,7 +1202,7 @@ ALWAYS_INLINE bool BaseRenderingContext2D::IsFullCanvasCompositeMode(
 
 ALWAYS_INLINE bool BaseRenderingContext2D::StateHasFilter() {
   const CanvasRenderingContext2DState& state = GetState();
-  if (UNLIKELY(state.IsFilterUnresolved())) {
+  if (state.IsFilterUnresolved()) [[unlikely]] {
     return !!StateGetFilter();
   }
   // The fast path avoids the virtual call overhead of StateGetFilter
@@ -1192,7 +1217,7 @@ ALWAYS_INLINE bool BaseRenderingContext2D::ComputeDirtyRect(
   const CanvasRenderingContext2DState& state = GetState();
   gfx::RectF canvas_rect = state.GetTransform().MapRect(local_rect);
 
-  if (UNLIKELY(!state.ShadowColor().IsFullyTransparent())) {
+  if (!state.ShadowColor().IsFullyTransparent()) [[unlikely]] {
     gfx::RectF shadow_rect(canvas_rect);
     shadow_rect.Offset(state.ShadowOffset());
     shadow_rect.Outset(ClampTo<float>(state.ShadowBlur()));
@@ -1200,8 +1225,9 @@ ALWAYS_INLINE bool BaseRenderingContext2D::ComputeDirtyRect(
   }
 
   gfx::RectFToSkRect(canvas_rect).roundOut(dirty_rect);
-  if (UNLIKELY(!dirty_rect->intersect(transformed_clip_bounds)))
+  if (!dirty_rect->intersect(transformed_clip_bounds)) [[unlikely]] {
     return false;
+  }
 
   return true;
 }

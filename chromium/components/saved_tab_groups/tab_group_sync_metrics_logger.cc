@@ -331,8 +331,6 @@ void TabGroupSyncMetricsLogger::RecordMetricsOnStartup(
     }
   }
 
-  DCHECK_EQ(total_group_count, open_group_count + closed_group_count);
-
   base::UmaHistogramCounts10000("TabGroups.Sync.TotalTabGroupCount",
                                 total_group_count);
   base::UmaHistogramCounts10000("TabGroups.Sync.OpenTabGroupCount",
@@ -357,6 +355,12 @@ void TabGroupSyncMetricsLogger::RecordMetricsOnStartup(
   base::UmaHistogramCounts10000(
       "TabGroups.Sync.RemoteActiveTabGroupCount.28Day",
       remote_active_group_count_28_day);
+}
+
+void TabGroupSyncMetricsLogger::RecordTabGroupDeletionsOnStartup(
+    size_t group_count) {
+  base::UmaHistogramCounts10000("TabGroups.Sync.NumberOfGroupsDeletedOnStartup",
+                                group_count);
 }
 
 }  // namespace tab_groups

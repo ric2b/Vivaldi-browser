@@ -1,8 +1,12 @@
 // META: title=ensure MLGraphBuilder.constant() handles buffers which change
 // META: global=window,dedicatedworker
+// META: variant=?cpu
+// META: variant=?gpu
+// META: variant=?npu
 // META: script=../resources/utils_validation.js
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   let backingBuffer = new ArrayBuffer(8);
   let aBuffer = new Float32Array(backingBuffer, 0, 2);
   aBuffer[0] = 2;
@@ -26,6 +30,7 @@ promise_test(async t => {
 }, 'Constant data is unaffected by detaching the buffer');
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   let aBuffer = new Float32Array([2, 3]);
   const a = builder.constant({dataType: 'float32', dimensions: [2]}, aBuffer);
 
@@ -47,6 +52,7 @@ promise_test(async t => {
 }, 'Constant data is unaffected by changes to the buffer contents');
 
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
   let backingBuffer = new ArrayBuffer(8);
   const aBuffer = new Float32Array(backingBuffer, 0, 2);
   // Detach `aBuffer` _before_ calling `constant()`. This should throw, since

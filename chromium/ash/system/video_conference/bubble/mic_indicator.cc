@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ash/system/video_conference/bubble/mic_indicator.h"
 
 #include <cmath>
@@ -28,7 +33,7 @@ const int kIndicatorSpace = 2;
 const int kIndicatorWidth = 2;
 const int kIndicatorTotalWidth =
     kIndicatorLines * kIndicatorWidth + (kIndicatorLines - 1) * kIndicatorSpace;
-const float kIndicatorLengths[] = {0.3, 0.8, 0.5, 0.75};
+const float kIndicatorLengths[] = {0.4, 0.9, 0.6, 0.85};
 
 // Powers above kLogEwmaMax will be restricted to this value.
 const float kLogEwmaMax = std::log(0.02);
@@ -37,7 +42,8 @@ const float kLogEwmaMin = std::log(0.00002);
 const float kLogEwmaDiff = kLogEwmaMax - kLogEwmaMin;
 
 constexpr int kMaxStep = 8;
-constexpr auto kMicIndicatorInsets = gfx::Insets::TLBR(16, 16, 16, 16);
+constexpr float phaseLengths[] = {1.0, 1.1, 1.3, 1.1, 1.0, 0.9, 0.7, 0.9};
+constexpr auto kMicIndicatorInsets = gfx::Insets::TLBR(10, 10, 10, 10);
 
 float ScalePower(float power) {
   // Adjust the power on a logarithmic scale, allowing for more noticeable
@@ -61,7 +67,7 @@ MicIndicator::MicIndicator() {
 
   power_ = VideoConferenceTrayController::Get()->GetEwmaPower();
   step_ = 0;
-  color_ = cros_tokens::kCrosSysDisabledOpaque;
+  color_ = cros_tokens::kCrosSysOnSurface;
 
   timer_ = std::make_unique<base::RepeatingTimer>();
   timer_->Start(FROM_HERE, base::Milliseconds(30),
@@ -76,12 +82,12 @@ MicIndicator::~MicIndicator() {
 }
 
 void MicIndicator::UpdateProgress() {
-  step_ = (step_ + 1) % (2 * kMaxStep + 1);
+  step_ = (step_ + 1) % kMaxStep;
   if (step_ == 0) {
     bool sidetone_enabled =
         VideoConferenceTrayController::Get()->GetSidetoneEnabled();
-    color_ = sidetone_enabled ? cros_tokens::kCrosSysPrimary
-                              : cros_tokens::kCrosSysDisabledOpaque;
+    color_ = sidetone_enabled ? cros_tokens::kCrosSysSystemOnPrimaryContainer
+                              : cros_tokens::kCrosSysOnSurface;
     power_ = VideoConferenceTrayController::Get()->GetEwmaPower();
   }
   SchedulePaint();
@@ -89,16 +95,6 @@ void MicIndicator::UpdateProgress() {
 
 void MicIndicator::OnPaint(gfx::Canvas* canvas) {
   const float multiplier = ScalePower(power_);
-
-  // Use 1-base to avoid 0 in length calculation;
-  int step = step_ + 1;
-
-  // [1..kMaxStep]              -> Growing phase
-  // [kMaxStep+1]               -> Peak
-  // [kMaxStep+2..2*kMaxStep+1] -> Shrinking phase
-  if (step > kMaxStep) {
-    step = kMaxStep - (step - kMaxStep);
-  }
 
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
@@ -111,14 +107,11 @@ void MicIndicator::OnPaint(gfx::Canvas* canvas) {
   const int view_width = GetContentsBounds().width();
   float x = (view_width - kIndicatorTotalWidth) / 2;
   for (int i = 0; i < kIndicatorLines; i++) {
-    float length = step * view_height * kIndicatorLengths[i] / kMaxStep;
-
-    // Special case for the last line.
-    // It is shorter than the previouos line during the growing phase,
-    // but has its own length during the shrinking phase.
-    if (i == kIndicatorLines - 1 && step_ <= kMaxStep) {
-      length = 0.65 * step * view_height * kIndicatorLengths[i - 1] / kMaxStep;
-    }
+    float length = view_height *
+                   // Set each line's animation cycle based on the previous
+                   // line, creating a wave-like effect.
+                   phaseLengths[(step_ + kMaxStep - i) % kMaxStep] *
+                   kIndicatorLengths[i];
 
     length = length * multiplier;
 

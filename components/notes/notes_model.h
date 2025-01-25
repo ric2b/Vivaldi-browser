@@ -13,7 +13,6 @@
 #include "components/notes/note_model_loader.h"
 #include "components/notes/note_node.h"
 #include "components/notes/notes_model_observer.h"
-#include "content/public/browser/notification_observer.h"
 #include "importer/imported_notes_entry.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 

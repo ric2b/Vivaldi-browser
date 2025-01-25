@@ -94,11 +94,13 @@ class RealboxOmniboxClient final : public OmniboxClient {
   std::u16string GetURLForDisplay() const override;
   GURL GetNavigationEntryURL() const override;
   metrics::OmniboxEventProto::PageClassification GetPageClassification(
-      OmniboxFocusSource focus_source,
       bool is_prefetch) override;
   security_state::SecurityLevel GetSecurityLevel() const override;
   net::CertStatus GetCertStatus() const override;
   const gfx::VectorIcon& GetVectorIcon() const override;
+  std::optional<lens::proto::LensOverlayInteractionResponse>
+    GetLensOverlayInteractionResponse() const override;
+  void OnThumbnailRemoved() override;
   gfx::Image GetFaviconForPageUrl(
       const GURL& page_url,
       FaviconFetchedCallback on_favicon_fetched) override;
@@ -226,8 +228,7 @@ GURL RealboxOmniboxClient::GetNavigationEntryURL() const {
 }
 
 metrics::OmniboxEventProto::PageClassification
-RealboxOmniboxClient::GetPageClassification(OmniboxFocusSource focus_source,
-                                            bool is_prefetch) {
+RealboxOmniboxClient::GetPageClassification(bool is_prefetch) {
   if (lens_searchbox_client_) {
     return lens_searchbox_client_->GetPageClassification();
   }
@@ -250,6 +251,21 @@ gfx::Image RealboxOmniboxClient::GetFaviconForPageUrl(
     const GURL& page_url,
     FaviconFetchedCallback on_favicon_fetched) {
   return gfx::Image();
+}
+
+std::optional<lens::proto::LensOverlayInteractionResponse>
+    RealboxOmniboxClient::GetLensOverlayInteractionResponse() const {
+  if (lens_searchbox_client_ &&
+      lens_searchbox_client_->GetLensResponse().has_suggest_signals()) {
+    return lens_searchbox_client_->GetLensResponse();
+  }
+  return std::nullopt;
+}
+
+void RealboxOmniboxClient::OnThumbnailRemoved() {
+  if (lens_searchbox_client_) {
+    lens_searchbox_client_->OnThumbnailRemoved();
+  }
 }
 
 void RealboxOmniboxClient::OnBookmarkLaunched() {
@@ -389,7 +405,6 @@ void RealboxHandler::QueryAutocomplete(const std::u16string& input,
   // RealboxOmniboxClient::GetPageClassification() ignores the arguments.
   const auto page_classification =
       omnibox_controller()->client()->GetPageClassification(
-          OmniboxFocusSource::INVALID,
           /*is_prefetch=*/false);
   AutocompleteInput autocomplete_input(
       input, page_classification, ChromeAutocompleteSchemeClassifier(profile_));
@@ -403,10 +418,9 @@ void RealboxHandler::QueryAutocomplete(const std::u16string& input,
   autocomplete_input.set_prefer_keyword(false);
   autocomplete_input.set_allow_exact_keyword_match(false);
   // Set the lens overlay interaction response, if available.
-  if (lens_searchbox_client_ &&
-      lens_searchbox_client_->GetLensResponse().has_suggest_signals()) {
-    autocomplete_input.set_lens_overlay_interaction_response(
-        lens_searchbox_client_->GetLensResponse());
+  if (std::optional<lens::proto::LensOverlayInteractionResponse> response =
+          controller_->client()->GetLensOverlayInteractionResponse()) {
+    autocomplete_input.set_lens_overlay_interaction_response(*response);
   }
 
   omnibox_controller()->StartAutocomplete(autocomplete_input);
@@ -456,9 +470,7 @@ void RealboxHandler::OnNavigationLikely(
 }
 
 void RealboxHandler::OnThumbnailRemoved() {
-  if (lens_searchbox_client_) {
-    lens_searchbox_client_->OnThumbnailRemoved();
-  }
+  omnibox_controller()->client()->OnThumbnailRemoved();
 }
 
 void RealboxHandler::PopupElementSizeChanged(const gfx::Size& size) {

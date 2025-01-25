@@ -22,6 +22,7 @@
 #include "components/saved_tab_groups/saved_tab_group_sync_bridge.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
 #include "components/saved_tab_groups/saved_tab_group_test_utils.h"
+#include "components/saved_tab_groups/types.h"
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -32,6 +33,17 @@
 #include "url/url_constants.h"
 
 namespace tab_groups {
+
+namespace {
+
+using testing::IsEmpty;
+using testing::Not;
+using testing::Pointee;
+using testing::UnorderedElementsAre;
+
+MATCHER_P(HasGroupId, guid, "") {
+  return arg.saved_guid() == guid;
+}
 
 // Serves to test the functions in SavedTabGroupModelObserver.
 class SavedTabGroupModelObserverTest
@@ -75,6 +87,11 @@ class SavedTabGroupModelObserverTest
         saved_tab_group_model_->GetIndexOf(group_guid).value_or(-1);
   }
 
+  void SavedTabGroupSharedStateUpdatedLocally(
+      const base::Uuid& group_guid) override {
+    SavedTabGroupUpdatedLocally(group_guid, /*tab_guid=*/std::nullopt);
+  }
+
   void SavedTabGroupAddedFromSync(const base::Uuid& guid) override {
     retrieved_group_.emplace_back(*saved_tab_group_model_->Get(guid));
     retrieved_index_ = saved_tab_group_model_->GetIndexOf(guid).value_or(-1);
@@ -94,8 +111,8 @@ class SavedTabGroupModelObserverTest
   }
 
   void SavedTabGroupReorderedLocally() override { reordered_called_ = true; }
-  void SavedTabGroupTabsReorderedLocally(
-      const base::Uuid& group_guid) override {
+  void SavedTabGroupTabMovedLocally(const base::Uuid& group_guid,
+                                    const base::Uuid& tab_guid) override {
     tabs_reodered_called_ = true;
   }
 
@@ -347,6 +364,18 @@ TEST_P(SavedTabGroupModelTest, UpdateElement) {
   EXPECT_EQ(group->color(), random_color);
 }
 
+TEST_P(SavedTabGroupModelTest, MakeTabGroupShared) {
+  const SavedTabGroup* group = saved_tab_group_model_->Get(id_1_);
+  saved_tab_group_model_->OnGroupOpenedInTabStrip(
+      id_1_, test::GenerateRandomTabGroupID());
+  ASSERT_FALSE(group->is_shared_tab_group());
+
+  saved_tab_group_model_->MakeTabGroupShared(group->local_group_id().value(),
+                                             "collaboration");
+
+  EXPECT_TRUE(group->is_shared_tab_group());
+}
+
 // Tests that the correct tabs are added to the correct position in group 1.
 TEST_P(SavedTabGroupModelTest, AddTabToGroup) {
   SavedTabGroupTab tab1 = test::CreateSavedTabGroupTab(
@@ -487,6 +516,24 @@ TEST_P(SavedTabGroupModelTest, MoveElement) {
     EXPECT_EQ(1, saved_tab_group_model_->GetIndexOf(id_2_));
     EXPECT_EQ(2, saved_tab_group_model_->GetIndexOf(id_3_));
   }
+}
+
+TEST_P(SavedTabGroupModelTest, ShouldDistinguishSavedAndSharedGroups) {
+  const SavedTabGroup* group = saved_tab_group_model_->Get(id_1_);
+  saved_tab_group_model_->OnGroupOpenedInTabStrip(
+      id_1_, test::GenerateRandomTabGroupID());
+  saved_tab_group_model_->MakeTabGroupShared(group->local_group_id().value(),
+                                             "collaboration");
+
+  ASSERT_TRUE(saved_tab_group_model_->Get(id_1_)->is_shared_tab_group());
+  ASSERT_FALSE(saved_tab_group_model_->Get(id_2_)->is_shared_tab_group());
+  ASSERT_FALSE(saved_tab_group_model_->Get(id_3_)->is_shared_tab_group());
+
+  EXPECT_THAT(saved_tab_group_model_->GetSavedTabGroupsOnly(),
+              UnorderedElementsAre(Pointee(HasGroupId(id_2_)),
+                                   Pointee(HasGroupId(id_3_))));
+  EXPECT_THAT(saved_tab_group_model_->GetSharedTabGroupsOnly(),
+              UnorderedElementsAre(Pointee(HasGroupId(id_1_))));
 }
 
 TEST_P(SavedTabGroupModelTest, LoadStoredEntriesPopulatesModel) {
@@ -1057,6 +1104,20 @@ TEST_P(SavedTabGroupModelObserverTest, UpdatedElement) {
             retrieved_index_);
 }
 
+TEST_P(SavedTabGroupModelObserverTest, MakeTabGroupShared) {
+  SavedTabGroup group = test::CreateTestSavedTabGroup();
+  group.SetLocalGroupId(test::GenerateRandomTabGroupID());
+  saved_tab_group_model_->Add(group);
+  ClearSignals();
+
+  saved_tab_group_model_->MakeTabGroupShared(group.local_group_id().value(),
+                                             "collaboration");
+
+  ASSERT_THAT(retrieved_group_, Not(IsEmpty()));
+  EXPECT_EQ(retrieved_group_.back().saved_guid(), group.saved_guid());
+  EXPECT_EQ(retrieved_group_.back().collaboration_id(), "collaboration");
+}
+
 // Tests that SavedTabGroupModelObserver::AddedFromSync passes the correct
 // element from the model.
 TEST_P(SavedTabGroupModelObserverTest, AddElementFromSync) {
@@ -1384,5 +1445,7 @@ INSTANTIATE_TEST_SUITE_P(SavedTabGroupModel,
 INSTANTIATE_TEST_SUITE_P(SavedTabGroupModel,
                          SavedTabGroupModelObserverTest,
                          testing::Bool());
+
+}  // namespace
 
 }  // namespace tab_groups

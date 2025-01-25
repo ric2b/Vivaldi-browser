@@ -8,34 +8,37 @@
 #include <string>
 #include <utility>
 
-#include "ash/bubble/bubble_utils.h"
+#include "ash/constants/ash_features.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/pill_button.h"
-#include "ash/style/typography.h"
+#include "ash/style/system_dialog_delegate_view.h"
+#include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/location.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/branding_buildflags.h"
+#include "chromeos/ash/grit/ash_resources.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
-#include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
-#include "ui/views/bubble/bubble_border.h"
-#include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/image_view.h"
-#include "ui/views/controls/label.h"
-#include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/box_layout_view.h"
-#include "ui/views/layout/layout_types.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
+#include "ui/wm/public/activation_client.h"
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chromeos/ash/resources/internal/strings/grit/ash_internal_strings.h"
@@ -44,157 +47,91 @@
 namespace ash {
 namespace {
 
-constexpr int kDialogBorderRadius = 20;
-constexpr int kDialogWidth = 512;
-constexpr auto kIllustrationSize = gfx::Size(kDialogWidth, 236);
-// The insets of the main contents.
-constexpr auto kMainContentInsets = gfx::Insets::TLBR(32, 32, 28, 32);
-// Margin between the heading text and the body text.
-constexpr int kBodyTextTopMargin = 16;
-// Margin between the body text and the buttons.
-constexpr int kButtonRowTopMargin = 32;
-// Margin between the two buttons.
-constexpr int kBetweenButtonMargin = 8;
+constexpr auto kFeatureTourDialogBorderInsets =
+    gfx::Insets::TLBR(0, 32, 28, 32);
+
+constexpr int kFeatureTourDialogCornerRadius = 20;
+constexpr auto kFeatureTourDialogIllustrationCornerRadii =
+    gfx::RoundedCornersF(/*upper_left=*/kFeatureTourDialogCornerRadius,
+                         /*upper_right=*/kFeatureTourDialogCornerRadius,
+                         /*lower_right=*/0,
+                         /*lower_left=*/0);
+
 // Pref storing whether the feature tour was completed.
 constexpr char kFeatureTourCompletedPref[] =
     "ash.picker.feature_tour.completed";
 
-bool g_feature_tour_enabled = true;
-
-std::u16string GetHeadingText() {
+std::u16string GetHeadingText(PickerFeatureTour::EditorStatus editor_status) {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return l10n_util::GetStringUTF16(IDS_PICKER_FEATURE_TOUR_HEADING_TEXT);
+  switch (editor_status) {
+    case PickerFeatureTour::EditorStatus::kEligible:
+      return l10n_util::GetStringUTF16(
+          IDS_PICKER_FEATURE_TOUR_WITH_EDITOR_HEADING_TEXT);
+    case PickerFeatureTour::EditorStatus::kNotEligible:
+      return l10n_util::GetStringUTF16(
+          IDS_PICKER_FEATURE_TOUR_WITHOUT_EDITOR_HEADING_TEXT);
+  }
 #else
   return u"";
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
-std::u16string GetBodyText() {
+std::u16string GetBodyText(PickerFeatureTour::EditorStatus editor_status) {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return l10n_util::GetStringUTF16(IDS_PICKER_FEATURE_TOUR_BODY_TEXT);
+  switch (editor_status) {
+    case PickerFeatureTour::EditorStatus::kEligible:
+      return l10n_util::GetStringUTF16(
+          IDS_PICKER_FEATURE_TOUR_WITH_EDITOR_BODY_TEXT);
+    case PickerFeatureTour::EditorStatus::kNotEligible:
+      return l10n_util::GetStringUTF16(
+          IDS_PICKER_FEATURE_TOUR_WITHOUT_EDITOR_BODY_TEXT);
+  }
 #else
   return u"";
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
-class FeatureTourBubbleView : public views::WidgetDelegate,
-                              public views::BoxLayoutView {
-  METADATA_HEADER(FeatureTourBubbleView, views::BoxLayoutView)
-
- public:
-  FeatureTourBubbleView(base::RepeatingClosure completion_callback) {
-    auto button_row_view =
-        views::Builder<views::BoxLayoutView>()
-            .SetProperty(views::kMarginsKey,
-                         gfx::Insets::TLBR(kButtonRowTopMargin, 0, 0, 0))
-            .SetOrientation(views::LayoutOrientation::kHorizontal)
-            .SetMainAxisAlignment(views::LayoutAlignment::kEnd)
-            .SetCrossAxisAlignment(views::LayoutAlignment::kStart)
-            .SetBetweenChildSpacing(kBetweenButtonMargin)
-            .AddChildren(
-                views::Builder<PillButton>(std::make_unique<PillButton>(
-                    PillButton::PressedCallback(),
-                    l10n_util::GetStringUTF16(
-                        IDS_PICKER_FEATURE_TOUR_LEARN_MORE_BUTTON_LABEL),
-                    PillButton::Type::kSecondaryWithoutIcon)),
-                views::Builder<PillButton>(
-                    std::make_unique<PillButton>(
-                        // base::Unretained is safe here since the
-                        // Widget owns the View.
-                        base::BindRepeating(&FeatureTourBubbleView::CloseWidget,
-                                            base::Unretained(this))
-                            .Then(std::move(completion_callback)),
-                        l10n_util::GetStringUTF16(
-                            IDS_PICKER_FEATURE_TOUR_START_BUTTON_LABEL),
-                        PillButton::Type::kPrimaryWithoutIcon))
-                    .CopyAddressTo(&complete_button_));
-
-    auto main_contents_view =
-        views::Builder<views::BoxLayoutView>()
-            .SetOrientation(views::LayoutOrientation::kVertical)
-            .SetInsideBorderInsets(kMainContentInsets)
-            .AddChildren(
-                views::Builder<views::Label>(
-                    bubble_utils::CreateLabel(TypographyToken::kCrosDisplay7,
-                                              GetHeadingText(),
-                                              cros_tokens::kCrosSysOnSurface))
-                    .SetMultiLine(true)
-                    .SetMaximumWidth(kDialogWidth - kMainContentInsets.width())
-                    .SetHorizontalAlignment(
-                        gfx::HorizontalAlignment::ALIGN_LEFT),
-                views::Builder<views::Label>(
-                    bubble_utils::CreateLabel(
-                        TypographyToken::kCrosBody1, GetBodyText(),
-                        cros_tokens::kCrosSysOnSurfaceVariant))
-                    .SetMultiLine(true)
-                    .SetMaximumWidth(kDialogWidth - kMainContentInsets.width())
-                    .SetHorizontalAlignment(
-                        gfx::HorizontalAlignment::ALIGN_LEFT)
-                    .SetProperty(
-                        views::kMarginsKey,
-                        gfx::Insets::TLBR(kBodyTextTopMargin, 0, 0, 0)),
-                std::move(button_row_view));
-
-    // TODO: b/343599950 - Add final banner image.
-    views::Builder<views::BoxLayoutView>(this)
-        .SetOrientation(views::LayoutOrientation::kVertical)
-        .SetBackground(views::CreateThemedRoundedRectBackground(
-            cros_tokens::kCrosSysDialogContainer, kDialogBorderRadius))
-        .AddChildren(
-            views::Builder<views::ImageView>().SetImageSize(kIllustrationSize),
-            std::move(main_contents_view))
-        .BuildChildren();
-  }
-
-  FeatureTourBubbleView(const FeatureTourBubbleView&) = delete;
-  FeatureTourBubbleView& operator=(const FeatureTourBubbleView&) = delete;
-  ~FeatureTourBubbleView() override = default;
-
-  views::Button* complete_button() { return complete_button_; }
-
-  View* GetContentsView() override { return this; }
-
-  std::unique_ptr<views::NonClientFrameView> CreateNonClientFrameView(
-      views::Widget* widget) override {
-    auto frame =
-        std::make_unique<views::BubbleFrameView>(gfx::Insets(), gfx::Insets());
-    auto border = std::make_unique<views::BubbleBorder>(
-        views::BubbleBorder::NONE, views::BubbleBorder::DIALOG_SHADOW);
-    border->SetCornerRadius(kDialogBorderRadius);
-    frame->SetBubbleBorder(std::move(border));
-    return frame;
-  }
-
- private:
-  void CloseWidget() {
-    if (views::Widget* widget = views::View::GetWidget(); widget != nullptr) {
-      widget->CloseWithReason(
-          views::Widget::ClosedReason::kAcceptButtonClicked);
-    }
-  }
-
-  raw_ptr<views::Button> complete_button_ = nullptr;
-};
-
-BEGIN_METADATA(FeatureTourBubbleView)
-END_METADATA
-
-BEGIN_VIEW_BUILDER(/*no export*/, FeatureTourBubbleView, views::BoxLayoutView)
-END_VIEW_BUILDER
-
-}  // namespace
-}  // namespace ash
-
-DEFINE_VIEW_BUILDER(/* no export */, ash::FeatureTourBubbleView)
-
-namespace ash {
-namespace {
+ui::ImageModel GetIllustration() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  return ui::ResourceBundle::GetSharedInstance().GetThemedLottieImageNamed(
+      IDR_PICKER_FEATURE_TOUR_ILLUSTRATION);
+#else
+  return {};
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+}
 
 std::unique_ptr<views::Widget> CreateWidget(
-    base::RepeatingClosure completion_callback) {
+    PickerFeatureTour::EditorStatus editor_status,
+    base::OnceClosure learn_more_callback,
+    base::OnceClosure completion_callback) {
+  auto feature_tour_dialog =
+      views::Builder<SystemDialogDelegateView>()
+          .SetBorder(views::CreatePaddedBorder(
+              std::make_unique<views::HighlightBorder>(
+                  kFeatureTourDialogCornerRadius,
+                  views::HighlightBorder::Type::kHighlightBorderOnShadow),
+              kFeatureTourDialogBorderInsets))
+          .SetTitleText(GetHeadingText(editor_status))
+          .SetDescription(GetBodyText(editor_status))
+          .SetAcceptButtonText(l10n_util::GetStringUTF16(
+              IDS_PICKER_FEATURE_TOUR_START_BUTTON_LABEL))
+          .SetAcceptCallback(std::move(completion_callback))
+          .SetCancelButtonText(l10n_util::GetStringUTF16(
+              IDS_PICKER_FEATURE_TOUR_LEARN_MORE_BUTTON_LABEL))
+          .SetCancelCallback(std::move(learn_more_callback))
+          .SetTopContentView(
+              views::Builder<views::ImageView>()
+                  .SetBackground(views::CreateThemedRoundedRectBackground(
+                      cros_tokens::kCrosSysIlloColor12,
+                      kFeatureTourDialogIllustrationCornerRadii))
+                  .SetImage(GetIllustration()))
+          .SetModalType(ui::mojom::ModalType::kSystem)
+          .Build();
+
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
-  params.delegate = new FeatureTourBubbleView(std::move(completion_callback));
+  params.delegate = feature_tour_dialog.release();
   params.name = "PickerFeatureTourWidget";
+  params.activatable = views::Widget::InitParams::Activatable::kYes;
 
   auto widget = std::make_unique<views::Widget>(std::move(params));
   widget->GetLayer()->SetFillsBoundsOpaquely(false);
@@ -215,43 +152,124 @@ void PickerFeatureTour::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(kFeatureTourCompletedPref, false);
 }
 
-void PickerFeatureTour::DisableFeatureTourForTesting() {
-  g_feature_tour_enabled = false;
-}
-
 bool PickerFeatureTour::MaybeShowForFirstUse(
     PrefService* prefs,
+    EditorStatus editor_status,
+    base::RepeatingClosure learn_more_callback,
     base::RepeatingClosure completion_callback) {
-  if (!g_feature_tour_enabled) {
-    return false;
-  }
-
   auto* pref = prefs->FindPreference(kFeatureTourCompletedPref);
   // Don't show if `pref` is null (this happens in unit tests that don't call
   // `RegisterProfilePrefs`).
-  if (pref == nullptr || pref->GetValue()->GetBool()) {
+  if (!base::FeatureList::IsEnabled(
+          ash::features::kPickerAlwaysShowFeatureTour) &&
+      (pref == nullptr || pref->GetValue()->GetBool())) {
     return false;
   }
 
-  widget_ = CreateWidget(std::move(completion_callback));
+  widget_ = CreateWidget(
+      editor_status,
+      base::BindOnce(&PickerFeatureTour::SetOnWindowDeactivatedCallback,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(learn_more_callback)),
+      base::BindOnce(&PickerFeatureTour::SetOnWindowDeactivatedCallback,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(completion_callback)));
+
+  aura::Window* window = widget_->GetNativeWindow();
+  CHECK_NE(window, nullptr);
+  wm::ActivationClient* activation_client =
+      wm::GetActivationClient(window->GetRootWindow());
+  CHECK_NE(activation_client, nullptr);
+  obs_.Reset();
+  obs_.Observe(activation_client);
+
   widget_->Show();
 
   prefs->SetBoolean(kFeatureTourCompletedPref, true);
   return true;
 }
 
-views::Button* PickerFeatureTour::complete_button_for_testing() {
+const views::Button* PickerFeatureTour::learn_more_button_for_testing() const {
   if (!widget_) {
     return nullptr;
   }
 
-  auto* bubble_view =
-      static_cast<FeatureTourBubbleView*>(widget_->GetContentsView());
-  return bubble_view ? bubble_view->complete_button() : nullptr;
+  auto* feature_tour_dialog =
+      static_cast<SystemDialogDelegateView*>(widget_->GetContentsView());
+  return feature_tour_dialog != nullptr
+             ? feature_tour_dialog->GetCancelButtonForTesting()  // IN-TEST
+             : nullptr;
+}
+
+const views::Button* PickerFeatureTour::complete_button_for_testing() const {
+  if (!widget_) {
+    return nullptr;
+  }
+
+  auto* feature_tour_dialog =
+      static_cast<SystemDialogDelegateView*>(widget_->GetContentsView());
+  return feature_tour_dialog != nullptr
+             ? feature_tour_dialog->GetAcceptButtonForTesting()  // IN-TEST
+             : nullptr;
 }
 
 views::Widget* PickerFeatureTour::widget_for_testing() {
   return widget_.get();
+}
+
+void PickerFeatureTour::OnWindowActivated(ActivationReason reason,
+                                          aura::Window* gained_active,
+                                          aura::Window* lost_active) {
+  RunOnWindowDeactivatedIfNeeded();
+}
+
+void PickerFeatureTour::SetOnWindowDeactivatedCallback(
+    base::OnceClosure callback) {
+  on_window_deactivated_callback_ = std::move(callback);
+
+  RunOnWindowDeactivatedIfNeeded();
+}
+
+void PickerFeatureTour::RunOnWindowDeactivatedIfNeeded() {
+  if (on_window_deactivated_callback_.is_null()) {
+    return;
+  }
+  if (widget_ && obs_.IsObserving() &&
+      widget_->GetNativeWindow() == obs_.GetSource()->GetActiveWindow()) {
+    return;
+  }
+
+  // As of writing, this method is called from two code paths:
+  //
+  // 1. `OnWindowActivated`, which is called from
+  // `wm::FocusController::SetActiveWindow`.
+  // When `OnWindowActivated` is called, the active window should be set... but
+  // we cannot activate any other windows (such as Picker) synchronously due to
+  // being in the middle of `wm::FocusController::SetActiveWindow`'s
+  // "active window stack".
+  // Doing so will cause a `DCHECK` crash in
+  // `wm::FocusController::FocusAndActivateWindow` due to the active window
+  // changing reentrantly. Turning off `DCHECK`s will result in no window
+  // being shown / activated.
+  //
+  // We should only run callbacks after the `SetActiveWindow` "stack" is fully
+  // resolved to avoid this. The only feasible way of doing this is to post a
+  // task.
+  //
+  // 2. `SetOnWindowDeactivatedCallback`, which is passed in as callbacks to
+  // `SystemDialogDelegateView`. Those callbacks are called from
+  // `SystemDialogDelegateView::RunCallbackAndCloseDialog` before the widget is
+  // closed.
+  // Therefore, the active window should still be `widget_`'s native window, so
+  // we should not have gotten to this point.
+  //
+  // However, `SystemDialogDelegateView` behaviour might change in the future.
+  // The worst case would be `SystemDialogDelegateView` changing its behaviour
+  // to call callbacks during `OnWindowDeactivated`, which would be equivalent
+  // to the above code path. Therefore, we should also post a task in this
+  // scenario.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, std::move(on_window_deactivated_callback_));
 }
 
 }  // namespace ash

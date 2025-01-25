@@ -787,14 +787,15 @@ void DeleteSelectionCommand::HandleGeneralDelete(EditingState* editing_state) {
             text_node_to_trim, start_offset,
             downstream_end_.ComputeOffsetInContainerNode() - start_offset);
       } else {
-        RelocatablePosition relocatable_downstream_end(downstream_end_);
+        RelocatablePosition* relocatable_downstream_end =
+            MakeGarbageCollected<RelocatablePosition>(downstream_end_);
         RemoveChildrenInRange(start_node, start_offset,
                               downstream_end_.ComputeEditingOffset(),
                               editing_state);
         if (editing_state->IsAborted())
           return;
         ending_position_ = upstream_start_;
-        downstream_end_ = relocatable_downstream_end.GetPosition();
+        downstream_end_ = relocatable_downstream_end->GetPosition();
       }
       // We should update layout to associate |start_node| to layout object.
       GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
@@ -982,7 +983,8 @@ void DeleteSelectionCommand::MergeParagraphs(EditingState* editing_state) {
     return;
   }
 
-  RelocatablePosition relocatable_start(merge_origin.DeepEquivalent());
+  RelocatablePosition* relocatable_start =
+      MakeGarbageCollected<RelocatablePosition>(merge_origin.DeepEquivalent());
 
   // We need to merge into upstream_start_'s block, but it's been emptied out
   // and collapsed by deletion.
@@ -999,7 +1001,7 @@ void DeleteSelectionCommand::MergeParagraphs(EditingState* editing_state) {
       return;
     GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
     merge_destination = CreateVisiblePosition(upstream_start_);
-    merge_origin = CreateVisiblePosition(relocatable_start.GetPosition());
+    merge_origin = CreateVisiblePosition(relocatable_start->GetPosition());
   }
 
   if (merge_destination.DeepEquivalent() == merge_origin.DeepEquivalent())
@@ -1047,7 +1049,7 @@ void DeleteSelectionCommand::MergeParagraphs(EditingState* editing_state) {
           editing_state);
       if (editing_state->IsAborted())
         return;
-      ending_position_ = relocatable_start.GetPosition();
+      ending_position_ = relocatable_start->GetPosition();
       return;
     }
   }
@@ -1229,7 +1231,8 @@ void DeleteSelectionCommand::DoApply(EditingState* editing_state) {
     return;
   }
 
-  RelocatablePosition relocatable_reference_position(reference_move_position_);
+  RelocatablePosition* relocatable_reference_position =
+      MakeGarbageCollected<RelocatablePosition>(reference_move_position_);
 
   // save this to later make the selection with
   TextAffinity affinity = selection_to_delete_.Affinity();
@@ -1238,12 +1241,30 @@ void DeleteSelectionCommand::DoApply(EditingState* editing_state) {
 
   Position downstream_end =
       MostForwardCaretPosition(selection_to_delete_.End());
+  const Node* downstream_container_node = downstream_end.ComputeContainerNode();
+  const Element* downstream_container_root_element =
+      RootEditableElement(*downstream_container_node);
   bool root_will_stay_open_without_placeholder =
-      downstream_end.ComputeContainerNode() ==
-          RootEditableElement(*downstream_end.ComputeContainerNode()) ||
-      (downstream_end.ComputeContainerNode()->IsTextNode() &&
-       downstream_end.ComputeContainerNode()->parentNode() ==
-           RootEditableElement(*downstream_end.ComputeContainerNode()));
+      downstream_container_node == downstream_container_root_element;
+
+  // Check to determine if the root will stay open without a placeholder.
+  // This is done by checking if the downstream end is within a root editable
+  // element that has an inline layout object, or if the downstream end's
+  // container node is within a shadow host that is a text control.
+  if (RuntimeEnabledFeatures::
+          RootElementWithPlaceHolderAfterDeletingSelectionEnabled()) {
+    root_will_stay_open_without_placeholder |=
+        (downstream_container_root_element &&
+         downstream_container_root_element->GetLayoutObject() &&
+         downstream_container_root_element->GetLayoutObject()->IsInline()) ||
+        (downstream_container_node->OwnerShadowHost() &&
+         downstream_container_node->OwnerShadowHost()->IsTextControl());
+  } else {
+    root_will_stay_open_without_placeholder |=
+        (downstream_container_node->IsTextNode() &&
+         downstream_container_node->parentNode() ==
+             downstream_container_root_element);
+  }
   VisiblePosition visible_start = CreateVisiblePosition(
       selection_to_delete_.Start(),
       selection_to_delete_.IsRange() ? TextAffinity::kDownstream : affinity);
@@ -1365,14 +1386,14 @@ void DeleteSelectionCommand::DoApply(EditingState* editing_state) {
   SetEndingSelection(
       SelectionForUndoStep::From(visible_selection.AsSelection()));
 
-  if (relocatable_reference_position.GetPosition().IsNull()) {
+  if (relocatable_reference_position->GetPosition().IsNull()) {
     ClearTransientState();
     return;
   }
 
   // This deletion command is part of a move operation, we need to cleanup after
   // deletion.
-  reference_move_position_ = relocatable_reference_position.GetPosition();
+  reference_move_position_ = relocatable_reference_position->GetPosition();
   // If the node for the destination has been removed as a result of the
   // deletion, set the destination to the ending point after the deletion.
   // Fixes: <rdar://problem/3910425> REGRESSION (Mail): Crash in

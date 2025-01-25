@@ -93,13 +93,8 @@ import java.io.IOException;
             + "session_rate/<1"
 })
 @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-// TODO(crbug.com/40238208): The message cards aren't shown the first time when entering GTS
-// with Start surface enabled.
 // Remove the ANDROID_HUB_FLOATING_ACTION_BUTTON restriction and regenerate goldens when launching.
-@DisableFeatures({
-    ChromeFeatureList.ARCHIVE_TAB_SERVICE,
-    ChromeFeatureList.ANDROID_HUB_FLOATING_ACTION_BUTTON
-})
+@DisableFeatures({ChromeFeatureList.ANDROID_HUB_FLOATING_ACTION_BUTTON})
 @DoNotBatch(reason = "Batching can cause message state to leak between tests.")
 public class TabGridIphTest {
     private ModalDialogManager mModalDialogManager;
@@ -113,6 +108,7 @@ public class TabGridIphTest {
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(
                             ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_TAB_SWITCHER_GRID)
+                    .setRevision(2)
                     .build();
 
     @Before

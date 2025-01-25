@@ -18,8 +18,6 @@ after discussions on the right group.
     <sender name="Android Unsorted">
       <annotation id="android_device_manager_socket"/>
       <annotation id="android_web_socket"/>
-      <annotation id="query_tiles_fetcher"/>
-      <annotation id="query_tiles_image_loader"/>
       <annotation id="cached_image_fetcher"/>
       <annotation id="chrome_variations_android"/>
       <annotation id="customtabs_parallel_request"/>
@@ -201,7 +199,6 @@ after discussions on the right group.
       <annotation id="stream_message_pipe_adapter"/>
       <annotation id="stream_packet_socket"/>
       <annotation id="certificate_verifier_url_loader"/>
-      <annotation id="services_http_server_error_response"/>
       <annotation id="webrtc_peer_connection"/>
       <annotation id="direct_sockets"/>
       <annotation id="sanitized_image_source"/>
@@ -308,7 +305,6 @@ after discussions on the right group.
       <annotation id="remoting_corp_session_authz_generate_host_token"/>
       <annotation id="remoting_corp_session_authz_verify_session_token"/>
       <annotation id="remoting_corp_session_reauthorize_host"/>
-      <annotation id="weather_icon"/>
       <annotation id="birch_calendar_provider"/>
       <annotation id="recovery_key_store_fetch"/>
       <annotation id="enterprise_logo_fetcher"/>
@@ -337,6 +333,16 @@ after discussions on the right group.
       <annotation id="peripherals_companion_app"/>
       <annotation id="enterprise_companion_event_logging"/>
       <annotation id="get_locale_oauth2_people_api_call"/>
+      <annotation id="boca_classroom_integration"/>
+      <annotation id="android_webview_shell"/>
+      <annotation id="contextual_search_resolve_debug"/>
+      <annotation id="help_me_read_request"/>
+      <annotation id="chrome_data_sharing_preview"/>
+      <annotation id="lens_overlay_save"/>
+      <annotation id="iwa_web_app_internals_update_manifest"/>
+      <annotation id="iwa_web_app_internals_web_bundle"/>
+      <annotation id="digital_asset_links_include"/>
+      <annotation id="lens_overlay_gen204"/>
     </sender>
   </group>
   <group name="Admin Features" hidden="true">
@@ -383,7 +389,6 @@ after discussions on the right group.
       <annotation id="supervised_user_list_family_members"/>
       <annotation id="password_protection_request"/>
       <annotation id="permission_predictions"/>
-      <annotation id="safe_browsing_certificate_error_reporting"/>
       <annotation id="safe_browsing_client_side_phishing_detector"/>
       <annotation id="safe_browsing_extended_reporting"/>
       <annotation id="safe_browsing_extension_telemetry"/>
@@ -433,6 +438,7 @@ after discussions on the right group.
       <annotation id="bidding_and_auction_server_key_fetch"/>
       <annotation id="interest_group_update_fetcher"/>
       <annotation id="interest_group_well_known_fetcher"/>
+      <annotation id="trusted_signals_fetcher"/>
     </sender>
   </group>
   <group name="Identity and Security" hidden="true">
@@ -620,9 +626,9 @@ after discussions on the right group.
   </group>
   <group name="PlusAddresses" hidden="true">
     <sender name="PlusAddresses">
-      <annotation id="get_all_plus_addresses"/>
       <annotation id="plus_address_reservation"/>
       <annotation id="plus_address_confirmation"/>
+      <annotation id="plus_address_preallocation"/>
     </sender>
   </group>
 </groups>

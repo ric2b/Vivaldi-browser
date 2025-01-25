@@ -51,7 +51,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
                                  "https://bifrost.vivaldi.com:4433/vivid-sync");
   }
   registry->RegisterStringPref(vivaldiprefs::kVivaldiSyncNotificationsServerUrl,
-                               "wss://bifrost.vivaldi.com:15674/ws");
+                               "wss://stream.vivaldi.com:8080/");
 
   base::Value::List args;
   for (int i = 0; i < kDefaultLanguageListSize; i++) {

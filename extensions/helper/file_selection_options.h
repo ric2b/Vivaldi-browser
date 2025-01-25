@@ -4,10 +4,10 @@
 #define EXTENSIONS_HELPER_FILE_SELECTION_OPTIONS_H_
 
 #include <string>
+#include <string_view>
 
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
-#include "base/strings/string_piece.h"
 #include "components/sessions/core/session_id.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/shell_dialogs/select_file_dialog.h"

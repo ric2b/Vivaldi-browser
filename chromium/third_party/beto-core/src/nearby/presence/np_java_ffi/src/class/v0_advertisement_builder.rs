@@ -71,8 +71,13 @@ impl<'local, Obj: AsRef<JObject<'local>>> V0BuilderHandle<Obj> {
         data_element: V0DataElement,
     ) -> jni::errors::Result<()> {
         let builder = self.as_rust_handle(env)?;
-        #[allow(clippy::expect_used)]
-        let res = builder.add_de(data_element).expect("valid data structure (created in Rust)");
+        let Ok(res) = builder.add_de(data_element) else {
+            let _ = env.throw_new(
+                "java/lang/IllegalStateException",
+                "V0Actions is not validly constructed",
+            );
+            return Err(jni::errors::Error::JavaException);
+        };
 
         match res {
             AddV0DEResult::Success => {}

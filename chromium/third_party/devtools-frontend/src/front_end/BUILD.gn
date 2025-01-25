@@ -6,7 +6,7 @@ import("../scripts/build/ninja/copy.gni")
 import("../scripts/build/ninja/devtools_entrypoint.gni")
 import("../scripts/build/ninja/node.gni")
 import("../scripts/build/ninja/vars.gni")
-import("../third_party/typescript/typescript.gni")
+import("../scripts/build/typescript/typescript.gni")
 
 group("front_end") {
   public_deps = [
@@ -24,6 +24,7 @@ group("front_end") {
     "entrypoints/lighthouse_worker:bundle",
     "entrypoints/ndb_app:entrypoint",
     "entrypoints/node_app:entrypoint",
+    "entrypoints/rehydrated_devtools_app:entrypoint",
     "entrypoints/shell",
     "entrypoints/wasmparser_worker:worker_entrypoint",
     "entrypoints/worker_app:entrypoint",
@@ -55,6 +56,7 @@ node_action("html_entrypoints") {
     "js_app",
     "ndb_app",
     "node_app",
+    "rehydrated_devtools_app",
     "worker_app",
     "device_mode_emulation_frame",
   ]
@@ -135,6 +137,7 @@ group("unittests") {
     "models/trace/insights:unittests",
     "models/trace/lantern/core:unittests",
     "models/trace/lantern/graph:unittests",
+    "models/trace/lantern/metrics:unittests",
     "models/trace/lantern/simulation:unittests",
     "models/trace/root-causes:unittests",
     "models/trace/types:unittests",
@@ -181,6 +184,7 @@ group("unittests") {
     "panels/screencast:unittests",
     "panels/search:unittests",
     "panels/security:unittests",
+    "panels/settings:unittests",
     "panels/settings/components:unittests",
     "panels/settings/emulation/components:unittests",
     "panels/settings/emulation/utils:unittests",
@@ -223,6 +227,7 @@ group("unittests") {
     "ui/components/settings:unittests",
     "ui/components/split_view:unittests",
     "ui/components/survey_link:unittests",
+    "ui/components/switch:unittests",
     "ui/components/text_editor:unittests",
     "ui/components/text_prompt:unittests",
     "ui/components/tree_outline:unittests",

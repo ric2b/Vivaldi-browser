@@ -1314,14 +1314,14 @@ void av1_highbd_convolve_2d_facade(const uint8_t *src8, int src_stride,
 // --((128 - 1) * 32 + 15) >> 4 + 8 = 263.
 #define WIENER_MAX_EXT_SIZE 263
 
-static INLINE int horz_scalar_product(const uint8_t *a, const int16_t *b) {
+static inline int horz_scalar_product(const uint8_t *a, const int16_t *b) {
   int sum = 0;
   for (int k = 0; k < SUBPEL_TAPS; ++k) sum += a[k] * b[k];
   return sum;
 }
 
 #if CONFIG_AV1_HIGHBITDEPTH
-static INLINE int highbd_horz_scalar_product(const uint16_t *a,
+static inline int highbd_horz_scalar_product(const uint16_t *a,
                                              const int16_t *b) {
   int sum = 0;
   for (int k = 0; k < SUBPEL_TAPS; ++k) sum += a[k] * b[k];
@@ -1329,7 +1329,7 @@ static INLINE int highbd_horz_scalar_product(const uint16_t *a,
 }
 #endif
 
-static INLINE int highbd_vert_scalar_product(const uint16_t *a,
+static inline int highbd_vert_scalar_product(const uint16_t *a,
                                              ptrdiff_t a_stride,
                                              const int16_t *b) {
   int sum = 0;

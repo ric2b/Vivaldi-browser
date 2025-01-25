@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <optional>
 #include <vector>
 
 #include "base/sequence_checker.h"
@@ -21,6 +22,7 @@
 #include "content/common/content_export.h"
 
 namespace attribution_reporting {
+class AttributionScopesData;
 class EventLevelEpsilon;
 class EventReportWindows;
 class TriggerSpecs;
@@ -92,10 +94,6 @@ class CONTENT_EXPORT AttributionResolverDelegate {
   // Returns the rate limits for capping contributions per window.
   const AttributionConfig::RateLimitConfig& GetRateLimits() const;
 
-  // Returns the max number of info gain in bits for a source given its
-  // SourceType.
-  double GetMaxChannelCapacity(attribution_reporting::mojom::SourceType) const;
-
   // Returns the maximum frequency at which to delete expired sources.
   // Must be positive.
   virtual base::TimeDelta GetDeleteExpiredSourcesFrequency() const = 0;
@@ -139,7 +137,8 @@ class CONTENT_EXPORT AttributionResolverDelegate {
   virtual GetRandomizedResponseResult GetRandomizedResponse(
       attribution_reporting::mojom::SourceType,
       const attribution_reporting::TriggerSpecs&,
-      attribution_reporting::EventLevelEpsilon) = 0;
+      attribution_reporting::EventLevelEpsilon,
+      const std::optional<attribution_reporting::AttributionScopesData>&) = 0;
 
   int GetMaxAggregatableReportsPerSource() const;
 
@@ -151,6 +150,11 @@ class CONTENT_EXPORT AttributionResolverDelegate {
   virtual bool GenerateNullAggregatableReportForLookbackDay(
       int lookback_day,
       attribution_reporting::mojom::SourceRegistrationTimeConfig) const = 0;
+
+  const AttributionConfig& config() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return config_;
+  }
 
  protected:
   AttributionConfig config_ GUARDED_BY_CONTEXT(sequence_checker_);

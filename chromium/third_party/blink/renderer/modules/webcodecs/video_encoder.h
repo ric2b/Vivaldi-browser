@@ -53,6 +53,7 @@ class MODULES_EXPORT VideoEncoderTraits {
 
     std::optional<String> not_supported_error_message;
 
+    String ToString();
     void Trace(Visitor*) const {}
   };
 
@@ -182,6 +183,9 @@ class MODULES_EXPORT VideoEncoder : public EncoderBase<VideoEncoderTraits> {
     base::TimeDelta duration;
   };
   base::flat_map<base::TimeDelta, FrameMetadata> frame_metadata_;
+
+  // Buffers returned by getAllFrameBuffers()
+  HeapVector<Member<VideoEncoderBuffer>> frame_reference_buffers_;
 
   // The color space corresponding to the last emitted output. Used to update
   // emitted VideoDecoderConfig when necessary.

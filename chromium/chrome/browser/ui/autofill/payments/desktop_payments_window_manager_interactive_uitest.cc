@@ -491,6 +491,9 @@ IN_PROC_BROWSER_TEST_F(DesktopPaymentsWindowManagerInteractiveUiTest,
       authentication_response();
   ASSERT_TRUE(response.has_value());
   EXPECT_FALSE(response->card.has_value());
+  EXPECT_EQ(
+      response->result,
+      PaymentsWindowManager::Vcn3dsAuthenticationResult::kAuthenticationFailed);
 }
 
 // Tests that the VCN 3DS flow failed during second server call histogram bucket
@@ -560,6 +563,9 @@ IN_PROC_BROWSER_TEST_F(DesktopPaymentsWindowManagerInteractiveUiTest,
       authentication_response();
   ASSERT_TRUE(response.has_value());
   EXPECT_FALSE(response->card.has_value());
+  EXPECT_EQ(
+      response->result,
+      PaymentsWindowManager::Vcn3dsAuthenticationResult::kAuthenticationFailed);
   EXPECT_TRUE(
       client()->GetPaymentsAutofillClient()->autofill_error_dialog_shown());
 }
@@ -614,6 +620,9 @@ IN_PROC_BROWSER_TEST_F(DesktopPaymentsWindowManagerInteractiveUiTest,
       authentication_response();
   ASSERT_TRUE(response.has_value());
   EXPECT_FALSE(response->card.has_value());
+  EXPECT_EQ(response->result,
+            PaymentsWindowManager::Vcn3dsAuthenticationResult::
+                kAuthenticationNotCompleted);
   EXPECT_FALSE(
       client()->GetPaymentsAutofillClient()->autofill_error_dialog_shown());
 }
@@ -667,6 +676,9 @@ IN_PROC_BROWSER_TEST_F(DesktopPaymentsWindowManagerInteractiveUiTest,
       authentication_response();
   ASSERT_TRUE(response.has_value());
   EXPECT_FALSE(response->card.has_value());
+  EXPECT_EQ(response->result,
+            PaymentsWindowManager::Vcn3dsAuthenticationResult::
+                kAuthenticationNotCompleted);
   EXPECT_FALSE(
       client()->GetPaymentsAutofillClient()->autofill_error_dialog_shown());
 }
@@ -703,6 +715,9 @@ IN_PROC_BROWSER_TEST_F(DesktopPaymentsWindowManagerInteractiveUiTest,
       authentication_response();
   ASSERT_TRUE(response.has_value());
   EXPECT_FALSE(response->card.has_value());
+  EXPECT_EQ(response->result,
+            PaymentsWindowManager::Vcn3dsAuthenticationResult::
+                kAuthenticationNotCompleted);
   EXPECT_TRUE(test_api(window_manager()).NoOngoingFlow());
 }
 
@@ -843,7 +858,7 @@ IN_PROC_BROWSER_TEST_F(PaymentsWindowUserConsentDialogIntegrationTest,
                        FlowStartedConsentNotGivenYetHistogramBucketLogs) {
   RunTestSequence(
       TriggerDialogAndWaitForShow(views::DialogClientView::kOkButtonElementId),
-      FlushEvents(), Check([this]() {
+      Check([this]() {
         return histogram_tester_.GetBucketCount(
                    kVcn3dsFlowEventsConsentNotGivenYetHistogramName,
                    autofill_metrics::Vcn3dsFlowEvent::kFlowStarted) == 1;
@@ -882,7 +897,7 @@ IN_PROC_BROWSER_TEST_F(PaymentsWindowUserConsentDialogIntegrationTest,
           AfterHide(
               PaymentsWindowUserConsentDialogView::kTopViewId,
               []() { EXPECT_EQ(BrowserList::GetInstance()->size(), 2U); }),
-          FlushEvents(), Check([this]() {
+          Check([this]() {
             return histogram_tester_.GetBucketCount(
                        kVcn3dsFlowEventsHistogramName,
                        autofill_metrics::Vcn3dsFlowEvent::
@@ -927,7 +942,7 @@ IN_PROC_BROWSER_TEST_F(PaymentsWindowUserConsentDialogIntegrationTest,
       // must be used.
       InSameContext(
           Steps(PressButton(views::DialogClientView::kCancelButtonElementId),
-                FlushEvents(), Check([this]() {
+                Check([this]() {
                   return histogram_tester_.GetBucketCount(
                              kVcn3dsFlowEventsHistogramName,
                              autofill_metrics::Vcn3dsFlowEvent::

@@ -10,13 +10,13 @@
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/data_sharing/public/features.h"
 #include "components/sync/base/command_line_switches.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
-#include "components/sync/base/model_type.h"
-#include "components/sync/service/model_type_controller.h"
+#include "components/sync/service/data_type_controller.h"
 #include "components/sync/service/sync_service_impl.h"
 #include "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #include "ios/chrome/browser/history/model/history_service_factory.h"
-#include "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#include "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #include "ios/chrome/browser/webdata_services/model/web_data_service_factory.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #include "ios/web/public/test/web_task_environment.h"
@@ -38,7 +38,7 @@ class SyncServiceFactoryTest : public PlatformTest {
     browser_state_builder.AddTestingFactory(
         ios::WebDataServiceFactory::GetInstance(),
         ios::WebDataServiceFactory::GetDefaultFactory());
-    chrome_browser_state_ = browser_state_builder.Build();
+    chrome_browser_state_ = std::move(browser_state_builder).Build();
   }
 
   void TearDown() override {
@@ -47,12 +47,12 @@ class SyncServiceFactoryTest : public PlatformTest {
 
  protected:
   // Returns the collection of default datatypes.
-  syncer::ModelTypeSet DefaultDatatypes() {
-    static_assert(53 == syncer::GetNumModelTypes(),
+  syncer::DataTypeSet DefaultDatatypes() {
+    static_assert(53 == syncer::GetNumDataTypes(),
                   "When adding a new type, you probably want to add it here as "
                   "well (assuming it is already enabled).");
 
-    syncer::ModelTypeSet datatypes;
+    syncer::DataTypeSet datatypes;
 
     // Common types. This excludes PASSWORDS,
     // INCOMING_PASSWORD_SHARING_INVITATION and
@@ -91,9 +91,8 @@ class SyncServiceFactoryTest : public PlatformTest {
       datatypes.Put(syncer::COLLABORATION_GROUP);
       datatypes.Put(syncer::SHARED_TAB_GROUP_DATA);
     }
-    if (base::FeatureList::IsEnabled(syncer::kSyncPlusAddress)) {
-      datatypes.Put(syncer::PLUS_ADDRESS);
-    }
+    // syncer::PLUS_ADDRESS is excluded because GoogleGroupsManagerFactory is
+    // null for testing and hence no controller gets instantiated for the type.
     if (base::FeatureList::IsEnabled(syncer::kSyncPlusAddressSetting)) {
       datatypes.Put(syncer::PLUS_ADDRESS_SETTING);
     }
@@ -125,10 +124,10 @@ TEST_F(SyncServiceFactoryTest, CreateSyncServiceImplDefault) {
   syncer::SyncServiceImpl* sync_service =
       SyncServiceFactory::GetAsSyncServiceImplForBrowserStateForTesting(
           chrome_browser_state());
-  syncer::ModelTypeSet types = sync_service->GetRegisteredDataTypesForTest();
-  const syncer::ModelTypeSet default_types = DefaultDatatypes();
+  syncer::DataTypeSet types = sync_service->GetRegisteredDataTypesForTest();
+  const syncer::DataTypeSet default_types = DefaultDatatypes();
   EXPECT_EQ(default_types.size(), types.size());
-  for (syncer::ModelType type : default_types) {
+  for (syncer::DataType type : default_types) {
     EXPECT_TRUE(types.Has(type)) << type << " not found in datatypes map";
   }
 }

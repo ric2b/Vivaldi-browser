@@ -22,6 +22,8 @@ static_library("nearby") {
     "quick_start_connectivity_service_impl.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     ":bluetooth_adapter_manager",
     ":quick_start_connectivity_service",
@@ -49,10 +51,6 @@ static_library("nearby") {
     "//mojo/public/cpp/bindings",
     "//net",
     "//services/network/public/mojom",
-
-    # TODO(b/353449134): Use //chrome/browser after fixing cyclic dependency from
-    # obj/chrome/browser/ash/nearby/nearby/nearby_dependencies_provider.o.
-    "//chrome/browser/nearby_sharing/instantmessaging/proto",
   ]
 }
 
@@ -125,6 +123,7 @@ source_set("unit_tests") {
     "//chrome/browser:browser_process",
     "//chrome/browser/ash/nearby/presence/credential_storage:unit_tests",
     "//chrome/browser/nearby_sharing/common",
+    "//chrome/browser/profiles:profile_attributes",
     "//chrome/services/sharing/nearby/test_support",
     "//chromeos/ash/services/nearby/public/cpp:test_support",
     "//chromeos/ash/services/nearby/public/mojom",

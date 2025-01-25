@@ -4,8 +4,11 @@
 
 #include "ash/wm/splitview/split_view_test_util.h"
 
+#include "ash/public/cpp/shelf_config.h"
 #include "ash/root_window_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
+#include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_grid_test_api.h"
@@ -83,18 +86,28 @@ void VerifySplitViewOverviewSession(aura::Window* window) {
   gfx::Rect expected_grid_bounds = GetWorkAreaBoundsForWindow(window);
   expected_grid_bounds.Subtract(window->GetBoundsInScreen());
 
+  // In SplitViewOverviewSession, even when set to auto-hide, the shelf remains
+  // visible, the work area calculation doesn't subtract the shelf area, causing
+  // a discrepancy. This is corrected by subtracting the shelf area from the
+  // work area in this case.
+  Shelf* shelf = RootWindowController::ForWindow(window)->shelf();
+  if (shelf->auto_hide_behavior() == ShelfAutoHideBehavior::kAlways) {
+    const gfx::Rect shelf_bounds = shelf->GetShelfBoundsInScreen();
+    expected_grid_bounds.Subtract(shelf_bounds);
+  }
+
   if (auto* divider = GetSplitViewDivider();
       divider && divider->divider_widget()) {
     expected_grid_bounds.Subtract(GetSplitViewDividerBoundsInScreen());
   }
 
   // Clamp the length on the side that can be shrunk by resizing to avoid going
-  // below the threshold i.e. 1/3 of the corresponding work area length.
-  // TODO(b/349902164): Get the const from overview instead of hardcoding 3.
+  // below the threshold i.e. `kOverviewGridClampThresholdRatio` of the
+  // corresponding work area length.
   const bool is_horizontal = IsLayoutHorizontal(Shell::GetPrimaryRootWindow());
   const int min_length = (is_horizontal ? GetWorkAreaBounds().width()
-                                        : GetWorkAreaBounds().height()) /
-                         3;
+                                        : GetWorkAreaBounds().height()) *
+                         kOverviewGridClampThresholdRatio;
   if (is_horizontal) {
     expected_grid_bounds.set_width(
         std::max(expected_grid_bounds.width(), min_length));
@@ -129,50 +142,6 @@ void VerifyNotSplitViewOrOverviewSession(aura::Window* window) {
       SplitViewController::Get(window->GetRootWindow())->InSplitViewMode());
   EXPECT_FALSE(
       RootWindowController::ForWindow(window)->split_view_overview_session());
-}
-
-void UnionBoundsEqualToWorkAreaBounds(aura::Window* w1,
-                                      aura::Window* w2,
-                                      SplitViewDivider* divider) {
-  gfx::Rect w1_bounds(w1->GetTargetBounds());
-  wm::ConvertRectToScreen(w1->GetRootWindow(), &w1_bounds);
-  gfx::Rect w2_bounds(w2->GetTargetBounds());
-  wm::ConvertRectToScreen(w2->GetRootWindow(), &w2_bounds);
-
-  const auto divider_bounds =
-      divider->GetDividerBoundsInScreen(/*is_dragging=*/false);
-  EXPECT_FALSE(w1_bounds.IsEmpty());
-  EXPECT_FALSE(w2_bounds.IsEmpty());
-  EXPECT_FALSE(divider_bounds.IsEmpty());
-
-  gfx::Rect union_bounds;
-  union_bounds.Union(w1_bounds);
-  union_bounds.Union(w2_bounds);
-  EXPECT_FALSE(w1_bounds.Contains(divider_bounds));
-  EXPECT_FALSE(w2_bounds.Contains(divider_bounds));
-  if (IsLayoutHorizontal(w1)) {
-    EXPECT_EQ(w1_bounds.right(), divider_bounds.x());
-    EXPECT_EQ(w2_bounds.x(), divider_bounds.right());
-  } else {
-    EXPECT_EQ(w1_bounds.bottom(), divider_bounds.y());
-    EXPECT_EQ(w2_bounds.y(), divider_bounds.bottom());
-  }
-
-  union_bounds.Union(divider_bounds);
-  EXPECT_EQ(
-      display::Screen::GetScreen()->GetDisplayNearestWindow(w1).work_area(),
-      union_bounds);
-}
-
-void UnionBoundsEqualToWorkAreaBounds(SnapGroup* snap_group) {
-  aura::Window* w1 = snap_group->window1();
-  aura::Window* w2 = snap_group->window2();
-  auto* divider = snap_group->snap_group_divider();
-  if (IsPhysicallyLeftOrTop(w1)) {
-    UnionBoundsEqualToWorkAreaBounds(w1, w2, divider);
-  } else {
-    UnionBoundsEqualToWorkAreaBounds(w2, w1, divider);
-  }
 }
 
 }  // namespace ash

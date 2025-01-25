@@ -6,8 +6,8 @@ import type {DomIf} from 'chrome://new-tab-page/new_tab_page.js';
 import type {BackgroundImage, Theme} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
 import {NtpBackgroundImageSource} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.js';
-import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {assertEquals, assertNotEquals} from 'chrome://webui-test/chai_assert.js';
+import {keyDownOn} from 'chrome://webui-test/keyboard_mock_interactions.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
 
 export const NONE_ANIMATION: string = 'none 0s ease 0s 1 normal none running';
@@ -67,7 +67,7 @@ export function createBackgroundImage(url: string): BackgroundImage {
   };
 }
 
-export function createTheme(isDark: boolean = false): Theme {
+export function createTheme({isDark = false, isBaseline = true} = {}): Theme {
   const mostVisited = {
     backgroundColor: {value: 0xff00ff00},
     isDark,
@@ -82,7 +82,7 @@ export function createTheme(isDark: boolean = false): Theme {
     dailyRefreshEnabled: false,
     backgroundImageCollectionId: '',
     logoColor: null,
-    isBaseline: true,
+    isBaseline: isBaseline,
     isDark,
     mostVisited: mostVisited,
     textColor: {value: 0xff0000ff},

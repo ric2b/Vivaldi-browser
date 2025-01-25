@@ -22,10 +22,6 @@ enum class ActionType;
 @class OverflowMenuModel;
 class PrefService;
 
-// Vivaldi
-@class OverflowMenuDestination;
-// End Vivaldi
-
 @protocol OverflowMenuDestinationProvider <NSObject>
 
 // The default base ranking of destinations currently supported.
@@ -46,10 +42,6 @@ class PrefService;
 // Allows destination provider to fire any feature-specific logic for clearing
 // feature-driven badges.
 - (void)destinationCustomizationCompleted;
-
-// Vivaldi
-- (NSArray<OverflowMenuDestination*>*)baseDestinationsVivaldi;
-// End Vivaldi
 
 @end
 
@@ -138,8 +130,28 @@ class PrefService;
                          actionSubtitle:(NSString*)actionSubtitle;
 
 // Vivaldi
-// Returns the current ordering of active page actions.
-- (NSArray<OverflowMenuAction*>*)pageActionsVivaldi;
+// Model object to be used for customizing (reordering, showing/hiding)
+// vivaldi actions.
+@property(nonatomic, readonly)
+    ActionCustomizationModel* vivaldiActionCustomizationModel;
+
+// Requests that the orderer update the order of the vivaldi actions in its page
+// actions group.
+- (void)updateVivaldiActions;
+
+// The vivaldi actions group provided to this orderer, allowing it to update the
+// order when needed.
+// Tells the orderer that actions customization has finished using the current
+// data in `vivaldiActionCustomizationModel`.
+- (void)commitVivaldiActionsUpdate;
+
+// Tells the orderer that vivaldi actions customization was cancelled and
+// should not be saved.
+- (void)cancelVivaldiActionsUpdate;
+
+// The vivaldi actions group provided to this orderer, allowing it to update the
+// order when needed.
+@property(nonatomic, weak) OverflowMenuActionGroup* vivaldiActionsGroup;
 // End Vivaldi
 
 @end

@@ -125,6 +125,11 @@ static constexpr content::PreloadingPredictor
 static constexpr content::PreloadingPredictor kTouchOnNewTabPage(
     114,
     "TouchOnNewTabPage");
+
+// When a certain CCT prefetch API is triggered.
+static constexpr content::PreloadingPredictor kChromeCustomTabs(
+    115,
+    "ChromeCustomTabs");
 }  // namespace chrome_preloading_predictor
 // LINT.ThenChange()
 
@@ -212,5 +217,14 @@ bool HasCanonicalPreloadingOmniboxSearchURL(
 bool IsSearchDestinationMatch(const GURL& canonical_preloading_search_url,
                               content::BrowserContext* browser_context,
                               const GURL& navigation_url);
+// Returns true when |navigation_url| is considered as navigating to the same
+// omnibox search results page as |canonical_preloading_search_url|. Includes
+// the result from the default web url match operation.
+bool IsSearchDestinationMatchWithWebUrlMatchResult(
+    const GURL& canonical_preloading_search_url,
+    content::BrowserContext* browser_context,
+    const GURL& navigation_url,
+    const std::optional<content::UrlMatchType>& default_web_url_match =
+        std::nullopt);
 
 #endif  // CHROME_BROWSER_PRELOADING_CHROME_PRELOADING_H_

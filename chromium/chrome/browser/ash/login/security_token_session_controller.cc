@@ -33,7 +33,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/ash/security_token_session_restriction_view.h"
+#include "chrome/browser/ui/ash/security_token_restriction/security_token_session_restriction_view.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/login/auth/challenge_response/known_user_pref_utils.h"
@@ -105,7 +105,7 @@ std::string SerializeBehaviorValue(
     case SecurityTokenSessionController::Behavior::kLock:
       return std::string(kLockPrefValue);
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // Checks if `domain` represents a valid domain. Returns false if `domain` is
@@ -533,7 +533,7 @@ void SecurityTokenSessionController::ExtensionStopsProvidingCertificate() {
             base::BindOnce(&SecurityTokenSessionController::TriggerAction,
                            weak_ptr_factory_.GetWeakPtr()),
             behavior_,
-            chrome::enterprise_util::GetDomainFromEmail(
+            enterprise_util::GetDomainFromEmail(
                 primary_user_->GetDisplayEmail())),
         nullptr, nullptr);
     fullscreen_notification_->Show();
@@ -547,8 +547,8 @@ void SecurityTokenSessionController::AddLockNotification() {
     return;
   SetNotificationDisplayedKnownUserFlag();
 
-  std::string domain = chrome::enterprise_util::GetDomainFromEmail(
-      primary_user_->GetDisplayEmail());
+  std::string domain =
+      enterprise_util::GetDomainFromEmail(primary_user_->GetDisplayEmail());
   DisplayNotification(
       l10n_util::GetStringFUTF16(IDS_SECURITY_TOKEN_SESSION_LOCK_MESSAGE_TITLE,
                                  ui::GetChromeOSDeviceName()),
@@ -566,8 +566,7 @@ void SecurityTokenSessionController::ScheduleLogoutNotification() {
 
   local_state_->SetString(
       prefs::kSecurityTokenSessionNotificationScheduledDomain,
-      chrome::enterprise_util::GetDomainFromEmail(
-          primary_user_->GetDisplayEmail()));
+      enterprise_util::GetDomainFromEmail(primary_user_->GetDisplayEmail()));
 }
 
 void SecurityTokenSessionController::Reset() {

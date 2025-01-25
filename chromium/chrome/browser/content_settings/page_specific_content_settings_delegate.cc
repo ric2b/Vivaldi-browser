@@ -5,7 +5,6 @@
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 
 #include "base/feature_list.h"
-#include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_file_system_util.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_model_delegate.h"
 #include "chrome/browser/content_settings/chrome_content_settings_utils.h"
@@ -13,6 +12,7 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
+#include "chrome/browser/permissions/system/system_permission_settings.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
@@ -41,10 +41,6 @@
 #include "pdf/pdf_features.h"
 #endif  // BUILDFLAG(ENABLE_PDF)
 
-#if BUILDFLAG(IS_MAC)
-#include "chrome/browser/media/webrtc/system_media_capture_permissions_mac.h"
-#endif
-
 #include "app/vivaldi_apptools.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -52,8 +48,6 @@
 #endif // extensions
 
 using content_settings::PageSpecificContentSettings;
-
-namespace chrome {
 
 PageSpecificContentSettingsDelegate::PageSpecificContentSettingsDelegate(
     content::WebContents* web_contents)
@@ -300,22 +294,7 @@ bool PageSpecificContentSettingsDelegate::IsBlockedOnSystemLevel(
   DCHECK(type == ContentSettingsType::MEDIASTREAM_MIC ||
          type == ContentSettingsType::MEDIASTREAM_CAMERA);
 
-#if BUILDFLAG(IS_MAC)
-  switch (type) {
-    case ContentSettingsType::MEDIASTREAM_CAMERA: {
-      return system_media_permissions::CheckSystemVideoCapturePermission() ==
-             system_media_permissions::SystemPermission::kDenied;
-    }
-    case ContentSettingsType::MEDIASTREAM_MIC: {
-      return system_media_permissions::CheckSystemAudioCapturePermission() ==
-             system_media_permissions::SystemPermission::kDenied;
-    }
-    default:
-      return false;
-  }
-#else
-  return false;
-#endif
+  return system_permission_settings::IsDenied(type);
 }
 
 bool PageSpecificContentSettingsDelegate::IsFrameAllowlistedForJavaScript(
@@ -348,5 +327,3 @@ void PageSpecificContentSettingsDelegate::PrimaryPageChanged(
     content::Page& page) {
   ClearPendingProtocolHandler();
 }
-
-}  // namespace chrome

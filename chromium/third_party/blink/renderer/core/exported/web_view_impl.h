@@ -52,6 +52,7 @@
 #include "third_party/blink/public/mojom/page/page.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/prerender_page_param.mojom-forward.h"
+#include "third_party/blink/public/mojom/partitioned_popins/partitioned_popin_params.mojom-forward.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
@@ -97,7 +98,6 @@ class DevToolsEmulator;
 class Frame;
 class FullscreenController;
 class PageScaleConstraintsSet;
-class WebDevToolsAgentImpl;
 class WebLocalFrame;
 class WebLocalFrameImpl;
 class WebSettingsImpl;
@@ -131,7 +131,8 @@ class CORE_EXPORT WebViewImpl final : public WebView,
       const SessionStorageNamespaceId& session_storage_namespace_id,
       std::optional<SkColor> page_base_background_color,
       const BrowsingContextGroupInfo& browsing_context_group_info,
-      const ColorProviderColorMaps* color_provider_colors);
+      const ColorProviderColorMaps* color_provider_colors,
+      blink::mojom::PartitionedPopinParamsPtr partitioned_popin_params);
 
   // All calls to Create() should be balanced with a call to Close(). This
   // synchronously destroys the WebViewImpl.
@@ -361,8 +362,6 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   Page* GetPage() const { return page_.Get(); }
 
   WebViewClient* Client() { return web_view_client_; }
-
-  WebDevToolsAgentImpl* MainFrameDevToolsAgentImpl();
 
   DevToolsEmulator* GetDevToolsEmulator() const {
     return dev_tools_emulator_.Get();
@@ -637,8 +636,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   void DraggableRegionsChanged();
 
   double ClampZoomLevel(double zoom_level) const;
-  double ZoomLevelToZoomFactor(double zoom_level, bool for_main_frame) const;
-  double ZoomFactorToZoomLevel(double zoom_factor) const;
+  double ZoomLevelToZoomFactor(double zoom_level) const;
 
   // Vivaldi start
   void SetImagesEnabled(const bool images_enabled) override;
@@ -724,7 +722,8 @@ class CORE_EXPORT WebViewImpl final : public WebView,
       const SessionStorageNamespaceId& session_storage_namespace_id,
       std::optional<SkColor> page_base_background_color,
       const BrowsingContextGroupInfo& browsing_context_group_info,
-      const ColorProviderColorMaps* color_provider_colors);
+      const ColorProviderColorMaps* color_provider_colors,
+      blink::mojom::PartitionedPopinParamsPtr partitioned_popin_params);
   ~WebViewImpl() override;
 
   void ConfigureAutoResizeMode();
@@ -866,7 +865,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   const double maximum_zoom_level_;
 
   // Additional zoom factor used to scale the content by device scale factor.
-  double zoom_factor_for_device_scale_factor_ = 0.;
+  double zoom_factor_for_device_scale_factor_ = 1.;
 
   // This value, when multiplied by the font scale factor, gives the maximum
   // page scale that can result from automatic zooms.

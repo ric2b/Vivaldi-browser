@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/gpu/windows/d3d11_video_decoder_wrapper.h"
 
 #include <d3d9.h>
@@ -27,7 +32,7 @@ BufferTypeToD3D11BufferType(D3DVideoDecoderWrapper::BufferType type) {
     case D3DVideoDecoderWrapper::BufferType::kBitstream:
       return D3D11_VIDEO_DECODER_BUFFER_BITSTREAM;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 template <typename D3D11VideoContext, typename D3D11VideoDecoderBufferDesc>
@@ -245,7 +250,7 @@ class ScopedD3D11DecoderBuffer : public ScopedD3DBuffer {
           status_code = D3D11StatusCode::kGetBitstreamBufferFailed;
           break;
         default:
-          NOTREACHED_NORETURN();
+          NOTREACHED();
       }
       media_log_->NotifyError(
           D3D11Status{status_code, "D3D11 GetDecoderBuffer failed", hr});
@@ -287,7 +292,7 @@ class ScopedD3D11DecoderBuffer : public ScopedD3DBuffer {
           status_code = D3D11StatusCode::kReleaseBitstreamBufferFailed;
           break;
         default:
-          NOTREACHED_NORETURN();
+          NOTREACHED();
       }
       media_log_->NotifyError(
           D3D11Status{status_code, "D3D11 ReleaseDecoderBuffer failed", hr});

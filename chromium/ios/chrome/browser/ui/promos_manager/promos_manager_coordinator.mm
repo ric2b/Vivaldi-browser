@@ -45,7 +45,6 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
-#import "ios/chrome/browser/ui/first_run/omnibox_position/promo/omnibox_position_choice_display_handler.h"
 #import "ios/chrome/browser/ui/post_restore_signin/post_restore_signin_provider.h"
 #import "ios/chrome/browser/ui/promos_manager/bannered_promo_view_provider.h"
 #import "ios/chrome/browser/ui/promos_manager/promos_manager_coordinator+Testing.h"
@@ -126,8 +125,8 @@
                        dockingPromoHandler:
                            (id<DockingPromoCommands>)dockingPromoHandler {
   DCHECK(ShouldPromoManagerDisplayPromos());
-  if (self = [super initWithBaseViewController:viewController
-                                       browser:browser]) {
+  if ((self = [super initWithBaseViewController:viewController
+                                        browser:browser])) {
     _credentialProviderPromoCommandHandler = credentialProviderPromoHandler;
     _dockingPromoCommandHandler = dockingPromoHandler;
 
@@ -592,12 +591,6 @@
       [[DefaultBrowserPromoDisplayHandler alloc] init];
   _displayHandlerPromos[promos_manager::Promo::DefaultBrowserRemindMeLater] =
       [[DefaultBrowserRemindMeLaterPromoDisplayHandler alloc] init];
-
-  // Omnibox position choice promo handler.
-  if (IsBottomOmniboxPromoFlagEnabled(BottomOmniboxPromoType::kAppLaunch)) {
-    _displayHandlerPromos[promos_manager::Promo::OmniboxPosition] =
-        [[OmniboxPositionChoiceDisplayHandler alloc] init];
-  }
 }
 
 - (void)registerStandardPromoViewProviderPromos {

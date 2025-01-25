@@ -1,159 +1,93 @@
 # Copyright 2022 Vivaldi Technologies AS. All rights reserved.
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-group("resources") {
-  deps = [
-    ":vivaldi_ntp_background_color",
-    ":vivaldi_private_ntp_background_color",
-    ":vivaldi_ntp_searchbar_background_color",
-    ":vivaldi_regular_toolbar_background_color",
-    ":vivaldi_private_toolbar_background_color",
-    ":vivaldi_private_tabview_selected_background_color",
-    ":vivaldi_ntp_speed_dial_container_background_color",
-    ":vivaldi_ntp_speed_dial_cell_background_color",
-    ":vivaldi_ntp_speed_dial_cell_shadow_color",
-    ":vivaldi_ntp_speed_dial_domain_text_color",
-    ":vivaldi_ntp_toolbar_selectionline_color",
-    ":vivaldi_ntp_toolbar_text_color",
-    ":vivaldi_ntp_toolbar_text_highlighted_color",
-    ":vivaldi_ntp_toolbar_more_dark_color",
-    ":vivaldi_ntp_toolbar_more_light_color",
-    ":vivaldi_ntp_search",
-    ":vivaldi_ntp_toolbar_more",
-    ":vivaldi_ntp_add_new_speed_dial",
-    ":vivaldi_ntp_add_new_speed_dial_folder",
-    ":vivaldi_private_tab_bg",
-    ":vivaldi_open_in_private_tab",
-    ":vivaldi_private_tab_ghost",
-    ":vivaldi_ntp_fallback_favicon",
-    ":vivaldi_ntp_internal_favicon",
-  ]
-}
-
-colorset("vivaldi_ntp_background_color") {
-  sources = [ "vivaldi_ntp_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_private_ntp_background_color") {
-  sources = [ "vivaldi_private_ntp_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_searchbar_background_color") {
-  sources = [ "vivaldi_ntp_searchbar_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_speed_dial_container_background_color") {
-  sources = [ "vivaldi_ntp_speed_dial_container_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_speed_dial_cell_background_color") {
-  sources = [ "vivaldi_ntp_speed_dial_cell_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_speed_dial_cell_shadow_color") {
-  sources = [ "vivaldi_ntp_speed_dial_cell_shadow_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_speed_dial_domain_text_color") {
-  sources = [ "vivaldi_ntp_speed_dial_domain_text_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_toolbar_selectionline_color") {
-  sources = [ "vivaldi_ntp_toolbar_selectionline_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_toolbar_text_color") {
-  sources = [ "vivaldi_ntp_toolbar_text_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_toolbar_text_highlighted_color") {
-  sources = [ "vivaldi_ntp_toolbar_text_highlighted_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_regular_toolbar_background_color") {
-  sources = [ "vivaldi_regular_toolbar_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_private_toolbar_background_color") {
-  sources = [ "vivaldi_private_toolbar_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_private_tabview_selected_background_color") {
-  sources = [ "vivaldi_private_tabview_selected_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_toolbar_more_dark_color") {
-  sources = [ "vivaldi_ntp_toolbar_more_dark_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_ntp_toolbar_more_light_color") {
-  sources = [ "vivaldi_ntp_toolbar_more_light_color.colorset/Contents.json" ]
-}
-
-imageset("vivaldi_ntp_search") {
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
   sources = [
-    "vivaldi_ntp_search.imageset/Contents.json",
-    "vivaldi_ntp_search.imageset/vivaldi_ntp_search.pdf",
-    "vivaldi_ntp_search.imageset/vivaldi_ntp_search_dark.pdf",
-  ]
-}
+    # vivaldi_ntp_background_color
+    "Assets.xcassets/vivaldi_ntp_background_color.colorset/Contents.json",
 
-imageset("vivaldi_ntp_toolbar_more") {
-  sources = [
-    "vivaldi_ntp_toolbar_more.imageset/Contents.json",
-    "vivaldi_ntp_toolbar_more.imageset/vivaldi_ntp_toolbar_more.pdf"
-  ]
-}
+    # vivaldi_private_ntp_background_color
+    "Assets.xcassets/vivaldi_private_ntp_background_color.colorset/Contents.json",
 
-imageset("vivaldi_ntp_add_new_speed_dial") {
-  sources = [
-    "vivaldi_ntp_add_new_speed_dial.imageset/Contents.json",
-    "vivaldi_ntp_add_new_speed_dial.imageset/vivaldi_ntp_add_new_speed_dial.pdf",
-    "vivaldi_ntp_add_new_speed_dial.imageset/vivaldi_ntp_add_new_speed_dial_dark.pdf",
-  ]
-}
+    # vivaldi_ntp_searchbar_background_color
+    "Assets.xcassets/vivaldi_ntp_searchbar_background_color.colorset/Contents.json",
 
-imageset("vivaldi_ntp_add_new_speed_dial_folder") {
-  sources = [
-    "vivaldi_ntp_add_new_speed_dial_folder.imageset/Contents.json",
-    "vivaldi_ntp_add_new_speed_dial_folder.imageset/vivaldi_ntp_add_new_speed_dial_folder.pdf",
-    "vivaldi_ntp_add_new_speed_dial_folder.imageset/vivaldi_ntp_add_new_speed_dial_folder_dark.pdf",
-  ]
-}
+    # vivaldi_ntp_speed_dial_container_background_color
+    "Assets.xcassets/vivaldi_ntp_speed_dial_container_background_color.colorset/Contents.json",
 
-imageset("vivaldi_private_tab_bg") {
-  sources = [
-    "vivaldi_private_tab_bg.imageset/Contents.json",
-    "vivaldi_private_tab_bg.imageset/vivaldi_private_tab_bg.pdf",
-  ]
-}
+    # vivaldi_ntp_speed_dial_cell_background_color
+    "Assets.xcassets/vivaldi_ntp_speed_dial_cell_background_color.colorset/Contents.json",
 
-imageset("vivaldi_open_in_private_tab") {
-  sources = [
-    "vivaldi_open_in_private_tab.imageset/Contents.json",
-    "vivaldi_open_in_private_tab.imageset/vivaldi_open_in_private_tab.pdf",
-  ]
-}
+    # vivaldi_ntp_speed_dial_cell_shadow_color
+    "Assets.xcassets/vivaldi_ntp_speed_dial_cell_shadow_color.colorset/Contents.json",
 
-imageset("vivaldi_private_tab_ghost") {
-  sources = [
-    "vivaldi_private_tab_ghost.imageset/Contents.json",
-    "vivaldi_private_tab_ghost.imageset/vivaldi_private_tab_ghost.pdf",
-  ]
-}
+    # vivaldi_ntp_speed_dial_domain_text_color
+    "Assets.xcassets/vivaldi_ntp_speed_dial_domain_text_color.colorset/Contents.json",
 
-imageset("vivaldi_ntp_fallback_favicon") {
-  sources = [
-    "vivaldi_ntp_fallback_favicon.imageset/Contents.json",
-    "vivaldi_ntp_fallback_favicon.imageset/vivaldi_ntp_fallback_favicon.pdf",
-    "vivaldi_ntp_fallback_favicon.imageset/vivaldi_ntp_fallback_favicon_dark.pdf",
-  ]
-}
+    # vivaldi_ntp_toolbar_selectionline_color
+    "Assets.xcassets/vivaldi_ntp_toolbar_selectionline_color.colorset/Contents.json",
 
-imageset("vivaldi_ntp_internal_favicon") {
-  sources = [
-    "vivaldi_ntp_internal_favicon.imageset/Contents.json",
-    "vivaldi_ntp_internal_favicon.imageset/vivaldi_ntp_internal_favicon.pdf",
+    # vivaldi_ntp_toolbar_text_color
+    "Assets.xcassets/vivaldi_ntp_toolbar_text_color.colorset/Contents.json",
+
+    # vivaldi_ntp_toolbar_text_highlighted_color
+    "Assets.xcassets/vivaldi_ntp_toolbar_text_highlighted_color.colorset/Contents.json",
+
+    # vivaldi_regular_toolbar_background_color
+    "Assets.xcassets/vivaldi_regular_toolbar_background_color.colorset/Contents.json",
+
+    # vivaldi_private_toolbar_background_color
+    "Assets.xcassets/vivaldi_private_toolbar_background_color.colorset/Contents.json",
+
+    # vivaldi_private_tabview_selected_background_color
+    "Assets.xcassets/vivaldi_private_tabview_selected_background_color.colorset/Contents.json",
+
+    # vivaldi_ntp_toolbar_more_dark_color
+    "Assets.xcassets/vivaldi_ntp_toolbar_more_dark_color.colorset/Contents.json",
+
+    # vivaldi_ntp_toolbar_more_light_color
+    "Assets.xcassets/vivaldi_ntp_toolbar_more_light_color.colorset/Contents.json",
+
+    # vivaldi_ntp_search
+    "Assets.xcassets/vivaldi_ntp_search.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_ntp_search.imageset/vivaldi_ntp_search.pdf",
+    "Assets.xcassets/vivaldi_ntp_search.imageset/vivaldi_ntp_search_dark.pdf",
+
+    # vivaldi_ntp_toolbar_more
+    "Assets.xcassets/vivaldi_ntp_toolbar_more.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_ntp_toolbar_more.imageset/vivaldi_ntp_toolbar_more.pdf",
+
+    # vivaldi_ntp_add_new_speed_dial
+    "Assets.xcassets/vivaldi_ntp_add_new_speed_dial.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_ntp_add_new_speed_dial.imageset/vivaldi_ntp_add_new_speed_dial.pdf",
+    "Assets.xcassets/vivaldi_ntp_add_new_speed_dial.imageset/vivaldi_ntp_add_new_speed_dial_dark.pdf",
+
+    # vivaldi_ntp_add_new_speed_dial_folder
+    "Assets.xcassets/vivaldi_ntp_add_new_speed_dial_folder.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_ntp_add_new_speed_dial_folder.imageset/vivaldi_ntp_add_new_speed_dial_folder.pdf",
+    "Assets.xcassets/vivaldi_ntp_add_new_speed_dial_folder.imageset/vivaldi_ntp_add_new_speed_dial_folder_dark.pdf",
+
+    # vivaldi_private_tab_bg
+    "Assets.xcassets/vivaldi_private_tab_bg.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_private_tab_bg.imageset/vivaldi_private_tab_bg.pdf",
+
+    # vivaldi_open_in_private_tab
+    "Assets.xcassets/vivaldi_open_in_private_tab.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_open_in_private_tab.imageset/vivaldi_open_in_private_tab.pdf",
+
+    # vivaldi_private_tab_ghost
+    "Assets.xcassets/vivaldi_private_tab_ghost.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_private_tab_ghost.imageset/vivaldi_private_tab_ghost.pdf",
+
+    # vivaldi_ntp_fallback_favicon
+    "Assets.xcassets/vivaldi_ntp_fallback_favicon.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_ntp_fallback_favicon.imageset/vivaldi_ntp_fallback_favicon.pdf",
+    "Assets.xcassets/vivaldi_ntp_fallback_favicon.imageset/vivaldi_ntp_fallback_favicon_dark.pdf",
+
+    # vivaldi_ntp_internal_favicon
+    "Assets.xcassets/vivaldi_ntp_internal_favicon.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_ntp_internal_favicon.imageset/vivaldi_ntp_internal_favicon.pdf",
   ]
 }

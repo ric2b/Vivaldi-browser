@@ -329,7 +329,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.searchableViewInternal.setPlaceholder(i18nString(UIStrings.findStringInLogs));
     this.searchableViewInternal.setMinimalSearchQuerySize(0);
     this.sidebar = new ConsoleSidebar();
-    this.sidebar.addEventListener(Events.FilterSelected, this.onFilterChanged.bind(this));
+    this.sidebar.addEventListener(Events.FILTER_SELECTED, this.onFilterChanged.bind(this));
     this.isSidebarOpen = false;
     this.filter = new ConsoleViewFilter(this.onFilterChanged.bind(this));
 
@@ -341,10 +341,10 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.splitWidget.show(this.element);
     this.splitWidget.hideSidebar();
     this.splitWidget.enableShowModeSaving();
-    this.isSidebarOpen = this.splitWidget.showMode() === UI.SplitWidget.ShowMode.Both;
+    this.isSidebarOpen = this.splitWidget.showMode() === UI.SplitWidget.ShowMode.BOTH;
     this.filter.setLevelMenuOverridden(this.isSidebarOpen);
-    this.splitWidget.addEventListener(UI.SplitWidget.Events.ShowModeChanged, event => {
-      this.isSidebarOpen = event.data === UI.SplitWidget.ShowMode.Both;
+    this.splitWidget.addEventListener(UI.SplitWidget.Events.SHOW_MODE_CHANGED, event => {
+      this.isSidebarOpen = event.data === UI.SplitWidget.ShowMode.BOTH;
 
       if (this.isSidebarOpen) {
         if (!this.userHasOpenedSidebarAtLeastOnce) {
@@ -420,12 +420,12 @@ export class ConsoleView extends UI.Widget.VBox implements
     const issuesToolbarItem = new UI.Toolbar.ToolbarItem(this.issueCounter);
     this.issueCounter.data = {
       clickHandler: () => {
-        Host.userMetrics.issuesPanelOpenedFrom(Host.UserMetrics.IssueOpener.StatusBarIssuesCounter);
+        Host.userMetrics.issuesPanelOpenedFrom(Host.UserMetrics.IssueOpener.STATUS_BAR_ISSUES_COUNTER);
         void UI.ViewManager.ViewManager.instance().showView('issues-pane');
       },
       issuesManager: IssuesManager.IssuesManager.IssuesManager.instance(),
       accessibleName: i18nString(UIStrings.issueToolbarTooltipGeneral),
-      displayMode: IssueCounter.IssueCounter.DisplayMode.OmitEmpty,
+      displayMode: IssueCounter.IssueCounter.DisplayMode.OMIT_EMPTY,
     };
     toolbar.appendToolbarItem(issuesToolbarItem);
     toolbar.appendSeparator();
@@ -437,7 +437,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.consoleHistoryAutocompleteSetting =
         Common.Settings.Settings.instance().moduleSetting('console-history-autocomplete');
     this.selfXssWarningDisabledSetting = Common.Settings.Settings.instance().createSetting(
-        'disable-self-xss-warning', false, Common.Settings.SettingStorageType.Synced);
+        'disable-self-xss-warning', false, Common.Settings.SettingStorageType.SYNCED);
 
     const settingsPane = new UI.Widget.HBox();
     settingsPane.show(this.contentsElement);
@@ -524,7 +524,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     const throttler = new Common.Throttler.Throttler(100);
     const refilterMessages = (): Promise<void> => throttler.schedule(async () => this.onFilterChanged());
     this.linkifier = new Components.Linkifier.Linkifier(MaxLengthForLinks);
-    this.linkifier.addEventListener(Components.Linkifier.Events.LiveLocationUpdated, refilterMessages);
+    this.linkifier.addEventListener(Components.Linkifier.Events.LIVE_LOCATION_UPDATED, refilterMessages);
 
     this.consoleMessages = [];
     this.consoleGroupStarts = [];
@@ -532,7 +532,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.prompt = new ConsolePrompt();
     this.prompt.show(this.promptElement);
     this.prompt.element.addEventListener('keydown', this.promptKeyDown.bind(this), true);
-    this.prompt.addEventListener(ConsolePromptEvents.TextChanged, this.promptTextChanged, this);
+    this.prompt.addEventListener(ConsolePromptEvents.TEXT_CHANGED, this.promptTextChanged, this);
 
     this.messagesElement.addEventListener('keydown', this.messagesKeyDown.bind(this), false);
     this.prompt.element.addEventListener('focusin', () => {
@@ -580,7 +580,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     const issuesManager = IssuesManager.IssuesManager.IssuesManager.instance();
     this.issueToolbarThrottle = new Common.Throttler.Throttler(100);
     issuesManager.addEventListener(
-        IssuesManager.IssuesManager.Events.IssuesCountUpdated, this.#onIssuesCountUpdateBound);
+        IssuesManager.IssuesManager.Events.ISSUES_COUNT_UPDATED, this.#onIssuesCountUpdateBound);
   }
 
   static appendSettingsCheckboxToToolbar(
@@ -676,7 +676,7 @@ export class ConsoleView extends UI.Widget.VBox implements
 
   private registerWithMessageSink(): void {
     Common.Console.Console.instance().messages().forEach(this.addSinkMessage, this);
-    Common.Console.Console.instance().addEventListener(Common.Console.Events.MessageAdded, ({data: message}) => {
+    Common.Console.Console.instance().addEventListener(Common.Console.Events.MESSAGE_ADDED, ({data: message}) => {
       this.addSinkMessage(message);
     }, this);
   }
@@ -684,13 +684,13 @@ export class ConsoleView extends UI.Widget.VBox implements
   private addSinkMessage(message: Common.Console.Message): void {
     let level: Protocol.Log.LogEntryLevel = Protocol.Log.LogEntryLevel.Verbose;
     switch (message.level) {
-      case Common.Console.MessageLevel.Info:
+      case Common.Console.MessageLevel.INFO:
         level = Protocol.Log.LogEntryLevel.Info;
         break;
-      case Common.Console.MessageLevel.Error:
+      case Common.Console.MessageLevel.ERROR:
         level = Protocol.Log.LogEntryLevel.Error;
         break;
-      case Common.Console.MessageLevel.Warning:
+      case Common.Console.MessageLevel.WARNING:
         level = Protocol.Log.LogEntryLevel.Warning;
         break;
     }
@@ -721,7 +721,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     if (this.#isDetached) {
       const issuesManager = IssuesManager.IssuesManager.IssuesManager.instance();
       issuesManager.addEventListener(
-          IssuesManager.IssuesManager.Events.IssuesCountUpdated, this.#onIssuesCountUpdateBound);
+          IssuesManager.IssuesManager.Events.ISSUES_COUNT_UPDATED, this.#onIssuesCountUpdateBound);
     }
     this.#isDetached = false;
     this.updateIssuesToolbarItem();
@@ -789,7 +789,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.#isDetached = true;
     const issuesManager = IssuesManager.IssuesManager.IssuesManager.instance();
     issuesManager.removeEventListener(
-        IssuesManager.IssuesManager.Events.IssuesCountUpdated, this.#onIssuesCountUpdateBound);
+        IssuesManager.IssuesManager.Events.ISSUES_COUNT_UPDATED, this.#onIssuesCountUpdateBound);
   }
 
   private updateIssuesToolbarItem(): void {
@@ -1647,7 +1647,7 @@ export class ConsoleViewFilter {
     if (this.textFilterSetting.get()) {
       this.textFilterUI.setValue(this.textFilterSetting.get());
     }
-    this.textFilterUI.addEventListener(UI.Toolbar.ToolbarInput.Event.TextChanged, () => {
+    this.textFilterUI.addEventListener(UI.Toolbar.ToolbarInput.Event.TEXT_CHANGED, () => {
       this.textFilterSetting.set(this.textFilterUI.value());
       this.onFilterChanged();
     });

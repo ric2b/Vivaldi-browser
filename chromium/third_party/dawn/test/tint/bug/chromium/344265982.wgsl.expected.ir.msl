@@ -13,6 +13,10 @@ struct tint_array {
   T elements[N];
 };
 
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
 struct tint_module_vars_struct {
   device tint_array<int, 4>* tint_symbol;
 };
@@ -20,7 +24,7 @@ struct tint_module_vars_struct {
 void foo(device tint_array<int, 4>* const arg) {
   {
     int i = 0;
-    while(true) {
+    TINT_ISOLATE_UB(tint_volatile_true) while(true) {
       if ((i < 4)) {
       } else {
         break;
@@ -29,7 +33,7 @@ void foo(device tint_array<int, 4>* const arg) {
         case 1:
         {
           {
-            i = (i + 1);
+            i = as_type<int>((as_type<uint>(i) + as_type<uint>(1)));
           }
           continue;
         }
@@ -40,7 +44,7 @@ void foo(device tint_array<int, 4>* const arg) {
         }
       }
       {
-        i = (i + 1);
+        i = as_type<int>((as_type<uint>(i) + as_type<uint>(1)));
       }
       continue;
     }

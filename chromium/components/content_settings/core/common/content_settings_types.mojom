@@ -6,12 +6,11 @@
 module content_settings.mojom;
 
 // A particular type of content to care about. We give the user various types
-// of controls over each of these.
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
+// of controls over each of these. Values can be added, removed and reshuffled.
+// For persistent values use the strings defined in content_settings_registry
+// or the helpers defined in content_settings_uma_util.
 // When adding values to this enum, be sure to update the
-// kHistogramValue array in c/c/c/browser/content_settings_uma_util.cc and
-// SafetyHubPermissionType in t/m/h/m/settings/enums.xml as well.
+// kHistogramValue array in c/c/c/browser/content_settings_uma_util.cc.
 // Add "NO_IFTTT=<reason>" in the commit message if it's not applicable.
 // LINT.IfChange(ContentSettingsType)
 // A Java counterpart will be generated for this enum.
@@ -452,5 +451,12 @@ enum ContentSettingsType {
   //        origins to retry a request or load with storage access.
   // BLOCK (default): no effect.
   STORAGE_ACCESS_HEADER_ORIGIN_TRIAL,
+
+  // Whether or not sites can request Hand Tracking data within WebXR Sessions.
+  HAND_TRACKING,
+
+  // Website setting to indicate whether user has opted in to allow web apps to
+  // install other web apps.
+  WEB_APP_INSTALLATION,
 };
-// LINT.ThenChange(//tools/metrics/histograms/metadata/settings/enums.xml:SafetyHubPermissionType)
+// LINT.ThenChange(//components/content_settings/core/browser/content_settings_uma_util.cc:kHistogramValue)

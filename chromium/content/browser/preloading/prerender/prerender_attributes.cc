@@ -4,6 +4,8 @@
 
 #include "content/browser/preloading/prerender/prerender_attributes.h"
 
+#include <optional>
+
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 namespace content {
@@ -27,11 +29,13 @@ PrerenderAttributes::PrerenderAttributes(
     int initiator_process_id,
     base::WeakPtr<WebContents> initiator_web_contents,
     std::optional<blink::LocalFrameToken> initiator_frame_token,
-    int initiator_frame_tree_node_id,
+    FrameTreeNodeId initiator_frame_tree_node_id,
     ukm::SourceId initiator_ukm_id,
     ui::PageTransition transition_type,
     bool should_warm_up_compositor,
-    base::RepeatingCallback<bool(const GURL&)> url_match_predicate,
+    base::RepeatingCallback<bool(const GURL&,
+                                 const std::optional<UrlMatchType>&)>
+        url_match_predicate,
     base::RepeatingCallback<void(NavigationHandle&)>
         prerender_navigation_handle_callback,
     const std::optional<base::UnguessableToken>&

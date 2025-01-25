@@ -39,7 +39,6 @@ parser.set_defaults(defines=list())
 def split_ukernel_name(name):
   common_name, target_name = name.split("__", 1)
   common_parts = common_name.split("_")
-  xw = "gemm_xw_" in common_name
   param_spec = common_parts[-1]
   if "s" in param_spec:
     param_spec, sr = param_spec.split("s", 1)
@@ -67,29 +66,7 @@ def split_ukernel_name(name):
   requantization = common_parts[-3]
   if requantization not in ["fp32", "rndnu"]:
     requantization = None
-  return mr, nr, kr, sr, mr_packed, xw, vector_tile, requantization, arch, isa, assembly
-
-
-GEMM_BENCH_CODE_XW = """\
-static void ${UKERNEL_NAME}(benchmark::State& state, const char* net) {
-  GEMMBenchmark(state,
-    ${GEMM},
-    $if INIT_PARAMS is not None:
-      ${INIT_PARAMS},
-    $if PACK_FN is not None:
-      ${PACK_FN},
-    /*mr=*/${MR}, /*nr=*/${NR}${NR_SCALE}, /*kr=*/${KR}, /*sr=*/${SR},
-    $if ISA_CHECK:
-      benchmark::utils::${ISA_CHECK},
-    $else:
-      /*isa_check=*/nullptr,
-    /*extended_weights=*/true);
-}\n
-$if KERNELTYPE in ['qb4w']:
-  BENCHMARK_GEMM_BL(${UKERNEL_NAME})
-$else:
-  BENCHMARK_GEMM(${UKERNEL_NAME})
-"""
+  return mr, nr, kr, sr, mr_packed, vector_tile, requantization, arch, isa, assembly
 
 GEMM_BENCH_CODE = """\
 $if CPP_CHECK:
@@ -148,114 +125,96 @@ std::vector<GemmTestParams> CreateTests(
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs,
       tester.clone()
-          $if EXTENDED_WEIGHTS:
-            .extended_weights(true)
           .m(mr).n(nr).k(k_block)
           $if KERNELTYPE in ['qb4w', 'qc4w']:
             .b_zero_point(8)
           $if KERNELTYPE in ['qb4w']:
-            .bl(kr * sr * 2)
+            .bl(32)
       , test_func, isa_check));
   $if DATATYPE != "qp8":
     gemm_tests.push_back(GemmTestParams(
         "strided_cn",
         tester.clone()
-            $if EXTENDED_WEIGHTS:
-              .extended_weights(true)
             .m(mr).n(nr).k(k_block)
-            .cn_stride(NextPrime(nr + 1))
+            .cn_stride(xnnpack::NextPrime(nr + 1))
             $if KERNELTYPE in ['qb4w', 'qc4w']:
               .b_zero_point(8)
             $if KERNELTYPE in ['qb4w']:
-              .bl(kr * sr * 2)
+              .bl(32)
       , test_func, isa_check));
   if (!is_igemm) {
     gemm_tests.push_back(GemmTestParams(
         "k_eq_" + kbs + "_strided_a",
         tester.clone()
-            $if EXTENDED_WEIGHTS:
-              .extended_weights(true)
             .m(mr).n(nr).k(k_block)
-            .a_stride(NextPrime(k_block + 1))
+            .a_stride(xnnpack::NextPrime(k_block + 1))
             $if KERNELTYPE in ['qb4w', 'qc4w']:
               .b_zero_point(8)
             $if KERNELTYPE in ['qb4w']:
-              .bl(kr * sr * 2)
+              .bl(32)
         , test_func, isa_check));
   }
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile",
       tester.clone()
-          $if EXTENDED_WEIGHTS:
-            .extended_weights(true)
           .k(k_block).iterations(1)
           $if KERNELTYPE in ['qb4w', 'qc4w']:
             .b_zero_point(8)
           $if KERNELTYPE in ['qb4w']:
-            .bl(kr * sr * 2)
+            .bl(32)
       , test_func, isa_check)
       .loop_n(1, nr)
       .loop_m(1, mr));
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile_m",
       tester.clone()
-          $if EXTENDED_WEIGHTS:
-            .extended_weights(true)
           .n(nr).k(k_block).iterations(1)
           $if KERNELTYPE in ['qb4w', 'qc4w']:
             .b_zero_point(8)
           $if KERNELTYPE in ['qb4w']:
-            .bl(kr * sr * 2)
+            .bl(32)
       , test_func, isa_check)
       .loop_m(1, mr));
   gemm_tests.push_back(GemmTestParams(
       "k_eq_" + kbs + "_subtile_n",
       tester.clone()
-          $if EXTENDED_WEIGHTS:
-            .extended_weights(true)
           .m(mr).k(k_block).iterations(1)
           $if KERNELTYPE in ['qb4w', 'qc4w']:
             .b_zero_point(8)
           $if KERNELTYPE in ['qb4w']:
-            .bl(kr * sr * 2)
+            .bl(32)
       , test_func, isa_check)
       .loop_n(1, nr));
   $if IS_PIPELINED:
     gemm_tests.push_back(GemmTestParams(
         "k_eq_" + kb2s,
         tester.clone()
-          $if EXTENDED_WEIGHTS:
-            .extended_weights(true)
           .m(mr).n(nr).k(k_block * 2)
           $if KERNELTYPE in ['qb4w', 'qc4w']:
             .b_zero_point(8)
           $if KERNELTYPE in ['qb4w']:
-            .bl(kr * sr * 2)
+            .bl(32)
       , test_func, isa_check));
     if (!is_igemm) {
       gemm_tests.push_back(GemmTestParams(
           "k_eq_" + kb2s + "_strided_a",
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .m(mr).n(nr).k(k_block * 2)
-              .a_stride(NextPrime(k_block * 2 + 1))
+              .a_stride(xnnpack::NextPrime(k_block * 2 + 1))
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
             $if KERNELTYPE in ['qb4w']:
-              .bl(kr * sr * 2)
+              .bl(32)
           , test_func, isa_check));
     }
     gemm_tests.push_back(GemmTestParams(
         "k_eq_" + kb2s + "_subtile",
         tester.clone()
-            $if EXTENDED_WEIGHTS:
-              .extended_weights(true)
             .k(k_block * 2).iterations(1)
             $if KERNELTYPE in ['qb4w', 'qc4w']:
               .b_zero_point(8)
             $if KERNELTYPE in ['qb4w']:
-              .bl(kr * sr * 2)
+              .bl(32)
         , test_func, isa_check)
         .loop_n(1, nr)
         .loop_m(1, mr));
@@ -264,40 +223,34 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "k_lt_" + akbs,
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_k(1, adj_k_block - 1));
         if (!is_igemm) {
           gemm_tests.push_back(GemmTestParams(
               "k_lt_" + akbs + "_strided_a",
               tester.clone()
-                  $if EXTENDED_WEIGHTS:
-                    .extended_weights(true)
                   .m(mr).n(nr)
-                  .a_stride(NextPrime(adj_k_block + 1))
+                  .a_stride(xnnpack::NextPrime(adj_k_block + 1))
                   $if KERNELTYPE in ['qb4w', 'qc4w']:
                     .b_zero_point(8)
                   $if KERNELTYPE in ['qb4w']:
-                    .bl(kr * sr * 2)
+                    .bl(32)
               , test_func, isa_check)
               .loop_k(1, adj_k_block - 1));
         }
         gemm_tests.push_back(GemmTestParams(
             "k_lt_" + akbs + "_subtile",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .iterations(1)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_k(1, adj_k_block - 1)
             .loop_n(1, nr)
@@ -306,40 +259,34 @@ std::vector<GemmTestParams> CreateTests(
       gemm_tests.push_back(GemmTestParams(
           "k_gt_" + akbs,
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .m(mr).n(nr)
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check)
           .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block));
       if (is_igemm) {
         gemm_tests.push_back(GemmTestParams(
             "k_gt_" + akbs + "_strided_a",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr)
-                .a_stride(NextPrime(adj_k_block * 2 + 1))
+                .a_stride(xnnpack::NextPrime(adj_k_block * 2 + 1))
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check)
           .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block));
       }
       gemm_tests.push_back(GemmTestParams(
           "k_gt_" + akbs + "_subtile",
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .iterations(1)
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check)
           .loop_k(adj_k_block + 1, adj_k_block * 2 - 1, k_block)
           .loop_n(1, nr)
@@ -348,40 +295,34 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "k_div_" + kbs,
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_k(adj_k_block + k_block, k_block * 5, k_block));
         if (is_igemm) {
           gemm_tests.push_back(GemmTestParams(
               "k_div_" + kbs + "_strided_a",
               tester.clone()
-                  $if EXTENDED_WEIGHTS:
-                    .extended_weights(true)
                   .m(mr).n(nr)
-                  .a_stride(NextPrime(k_block * 3 + 1))
+                  .a_stride(xnnpack::NextPrime(k_block * 3 + 1))
                   $if KERNELTYPE in ['qb4w', 'qc4w']:
                     .b_zero_point(8)
                   $if KERNELTYPE in ['qb4w']:
-                    .bl(kr * sr * 2)
+                    .bl(32)
               , test_func, isa_check)
               .loop_k(adj_k_block + k_block, k_block * 3, k_block));
         }
         gemm_tests.push_back(GemmTestParams(
             "k_div_" + kbs + "_subtile",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .iterations(1)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_k(adj_k_block + k_block, k_block * 5, k_block)
             .loop_n(1, nr)
@@ -390,13 +331,11 @@ std::vector<GemmTestParams> CreateTests(
       gemm_tests.push_back(GemmTestParams(
           "n_gt_" + nrs,
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .m(mr)
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check)
           $if NR_SCALE != "":
             .loop_n(nr + 1, nr * 2 - 1, 4)
@@ -407,13 +346,11 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "unknown_nc_mod_nr",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).known_nc_mod_nr(false)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             $if NR_SCALE != "":
               .loop_n(1, nr * 2 - 1, 4)
@@ -423,28 +360,24 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "relu",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).k(k_block).relu(true)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check));
       $if DATATYPE != "qp8":
         gemm_tests.push_back(GemmTestParams(
             "n_gt_" + nrs + "_strided_cn",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr)
-                .cn_stride(NextPrime(nr + 1))
+                .cn_stride(xnnpack::NextPrime(nr + 1))
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             $if NR_SCALE != "":
               .loop_n(nr + 1, nr * 2 - 1, 4)
@@ -455,14 +388,12 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "n_gt_" + nrs + "_strided_a",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr)
-                .a_stride(NextPrime(k_block * 3 + 1))
+                .a_stride(xnnpack::NextPrime(k_block * 3 + 1))
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             $if NR_SCALE != "":
               .loop_n(nr + 1, nr * 2 - 1, 4)
@@ -473,13 +404,11 @@ std::vector<GemmTestParams> CreateTests(
       gemm_tests.push_back(GemmTestParams(
           "n_gt_" + nrs + "_subtile",
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .iterations(1)
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check)
           $if NR_SCALE != "":
             .loop_n(nr + 1, nr * 2 - 1, 4)
@@ -490,13 +419,11 @@ std::vector<GemmTestParams> CreateTests(
       gemm_tests.push_back(GemmTestParams(
           "n_div_" + nrs,
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .m(mr)
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check)
           .loop_n(nr * 2, nr * 3, nr)
           .loop_k(1, k_block * 3, k_block + 1));
@@ -504,14 +431,12 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "n_div_" + nrs + "_strided_cn",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr)
-                .cn_stride(NextPrime(nr + 1))
+                .cn_stride(xnnpack::NextPrime(nr + 1))
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_n(nr * 2, nr * 3, nr)
             .loop_k(1, k_block * 3, k_block + 1));
@@ -519,14 +444,12 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "n_div_" + nrs + "_strided_a",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr)
-                .a_stride(NextPrime(k_block * 3 + 1))
+                .a_stride(xnnpack::NextPrime(k_block * 3 + 1))
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_n(nr * 2, nr * 3, nr)
             .loop_k(1, k_block * 3, k_block));
@@ -534,13 +457,11 @@ std::vector<GemmTestParams> CreateTests(
       gemm_tests.push_back(GemmTestParams(
           "n_div_" + nrs + "_subtile",
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .iterations(1)
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check)
           .loop_n(nr * 2, nr * 3, nr)
           .loop_k(1, k_block * 3, k_block + 1)
@@ -549,25 +470,21 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "small_kernel",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).ks(3)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_k(1, k_block * 3, k_block + 1));
         gemm_tests.push_back(GemmTestParams(
             "small_kernel_subtile",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .ks(3).iterations(1)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_k(1, k_block * 3, k_block + 1)
             .loop_n(1, nr)
@@ -575,13 +492,11 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "n_gt_" + nrs + "_small_kernel",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).ks(3)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             $if NR_SCALE != "":
               .loop_n(nr + 1, nr * 2 - 1, 4)
@@ -591,13 +506,11 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "n_div_" + nrs + "_small_kernel",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).ks(3)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_n(nr * 2, nr * 3, nr)
             .loop_k(1, k_block * 3, k_block + 1));
@@ -605,15 +518,13 @@ std::vector<GemmTestParams> CreateTests(
       gemm_tests.push_back(GemmTestParams(
           "strided_cm_subtile",
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .mr(mr).nr(nr).kr(kr).sr(sr)
-              .cm_stride(NextPrime(nr + 1))
+              .cm_stride(xnnpack::NextPrime(nr + 1))
               .iterations(1)
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check)
           .loop_k(1, k_block * 3, k_block + 1)
           .loop_n(1, nr)
@@ -622,27 +533,23 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "a_offset",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).ks(3)
-                .a_offset(NextPrime(mr * k_block * 3 + 1))
+                .a_offset(xnnpack::NextPrime(mr * k_block * 3 + 1))
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_k(1, k_block * 3, k_block + 1));
         gemm_tests.push_back(GemmTestParams(
             "zero",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).ks(3)
-                .a_offset(NextPrime(mr * k_block * 3 + 1))
+                .a_offset(xnnpack::NextPrime(mr * k_block * 3 + 1))
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check)
             .loop_k(1, k_block * 3, k_block + 1)
             .loop_zi(0, mr - 1));
@@ -651,43 +558,35 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "qmin",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).k(k_block).qmin(128)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check));
         gemm_tests.push_back(GemmTestParams(
             "qmax",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).k(k_block).qmax(128)
                 $if KERNELTYPE in ['qb4w', 'qc4w']:
                   .b_zero_point(8)
                 $if KERNELTYPE in ['qb4w']:
-                  .bl(kr * sr * 2)
+                  .bl(32)
             , test_func, isa_check));
       gemm_tests.push_back(GemmTestParams(
           "strided_cm",
           tester.clone()
-              $if EXTENDED_WEIGHTS:
-                .extended_weights(true)
               .m(mr).n(nr).k(k_block)
-              .cm_stride(NextPrime(nr + 1))
+              .cm_stride(xnnpack::NextPrime(nr + 1))
               $if KERNELTYPE in ['qb4w', 'qc4w']:
                 .b_zero_point(8)
               $if KERNELTYPE in ['qb4w']:
-                .bl(kr * sr * 2)
+                .bl(32)
           , test_func, isa_check));
       $if DATATYPE == "qu8":
         gemm_tests.push_back(GemmTestParams(
             "no_a_zero_point",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).a_zero_point(0)
             , test_func, isa_check)
             .loop_k(1, k_block * 3, k_block + 1));
@@ -695,24 +594,18 @@ std::vector<GemmTestParams> CreateTests(
         gemm_tests.push_back(GemmTestParams(
             "no_b_zero_point",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).b_zero_point(0)
             , test_func, isa_check)
             .loop_k(1, k_block * 3, k_block + 1));
         gemm_tests.push_back(GemmTestParams(
             "b_zero_point",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr).k(k_block)
             , test_func, isa_check)
             .loop_bzp(0, 255));
         gemm_tests.push_back(GemmTestParams(
             "no_zero_point",
             tester.clone()
-                $if EXTENDED_WEIGHTS:
-                  .extended_weights(true)
                 .m(mr).n(nr)
                 .a_zero_point(0)
                 .b_zero_point(0)
@@ -722,13 +615,11 @@ std::vector<GemmTestParams> CreateTests(
     gemm_tests.push_back(GemmTestParams(
         "bl",
         tester.clone()
-            $if EXTENDED_WEIGHTS:
-              .extended_weights(true)
             .m(mr).n(nr).k(k_block * 12)
             .b_zero_point(8)
         , test_func, isa_check)
         .loop_k(k_block, k_block * 12, k_block, LoopStepType::Linear)
-        .loop_bl(2 * kr * sr, k_block * 12, 2 * kr * sr));
+        .loop_bl(32, k_block * 32, 32));
 
   return gemm_tests;
 }
@@ -767,8 +658,6 @@ $if TEST_NAME.startswith('GENERATE') and DATATYPE in ['f32', 'f16']:
       for (uint32_t m = 1; m <= max_mr; m++) {
         for (size_t k = 1; k <= ${KBLOCK * 2}; k += 1) {
           GemmMicrokernelTester()
-            $if EXTENDED_WEIGHTS:
-              .extended_weights(true)
             .mr(max_mr)
             $if NR > 1:
               .nr(${NR})
@@ -795,8 +684,6 @@ $if TEST_NAME.startswith('GENERATE') and DATATYPE == 'f32' and POST_OP:
       ${ISA_CHECK};
     const std::vector<xnn_post_operation> fused_operators = { {xnn_post_operation_type_hardswish} };
     GemmMicrokernelTester()
-      $if EXTENDED_WEIGHTS:
-        .extended_weights(true)
       $if MR > 1:
         .mr(${MR})
       $if NR > 1:
@@ -822,8 +709,6 @@ $if TEST_NAME.startswith('GENERATE') and DATATYPE == 'f32' and POST_OP:
       const std::vector<xnn_post_operation> fused_operators = { {xnn_post_operation_type_hardswish} };
       for (uint32_t max_mr = 1; max_mr < ${MR}; max_mr++) {
         GemmMicrokernelTester()
-          $if EXTENDED_WEIGHTS:
-            .extended_weights(true)
           .mr(max_mr)
           $if NR > 1:
             .nr(${NR})
@@ -877,7 +762,6 @@ def generate_test_cases(
     kr,
     sr,
     mr_packed,
-    xw,
     k_block,
     vector_tile,
     init_fn,
@@ -900,7 +784,6 @@ def generate_test_cases(
     kr: KR parameter of the GEMM micro-kernel.
     sr: SR parameter of the GEMM micro-kernel.
     mr_packed: Optional MR parameter for the left-hand packing function.
-    xw: boolean indicator for microkernel with extended weights.
     k_block: Number of K values processed per one iteration of the main loop of
       the micro-kernel.
     vector_tile: Indicates if vector tile for NR is specified in vectors rather
@@ -993,7 +876,6 @@ def generate_test_cases(
       "KR": kr,
       "SR": sr,
       "MR_PACKED": mr_packed,
-      "EXTENDED_WEIGHTS": xw,
       "KBLOCK": k_block,
       "NR_SCALE": nr_scale,
       "ADJKBLOCK": 2 * k_block if is_pipelined else k_block,
@@ -1011,7 +893,7 @@ def generate_test_cases(
   test_case = xngen.preprocess(GEMM_TEST_CODE, test_args)
 
   benchmark = xngen.preprocess(
-      GEMM_BENCH_CODE_XW if xw else GEMM_BENCH_CODE,
+      GEMM_BENCH_CODE,
       {
           "UKERNEL_NAME": ukernel_name,
           "GEMM": ukernel,
@@ -1026,7 +908,6 @@ def generate_test_cases(
           "SR": sr,
           "MR_PACKED": mr_packed,
           "NR_SCALE": nr_scale,
-          "EXTENDED_WEIGHTS": xw,
           "ISA_CHECK": xnncommon.generate_isa_utilcheck_macro(isa),
           "CPP_CHECK": cpp_check,
       },
@@ -1073,6 +954,7 @@ def main(args):
 #include "xnnpack/ppmm.h"
 #include "xnnpack/requantization.h"
 #include "gemm-microkernel-tester.h"
+#include "next_prime.h"
 """.format(specification=options.spec, generator=sys.argv[0])
 
     benches = """\
@@ -1126,7 +1008,6 @@ def main(args):
           kr,
           sr,
           mr_packed,
-          xw,
           vector_tile,
           requantization,
           arch,
@@ -1141,7 +1022,6 @@ def main(args):
           kr,
           sr,
           mr_packed,
-          xw,
           k_block,
           vector_tile,
           init_fn,

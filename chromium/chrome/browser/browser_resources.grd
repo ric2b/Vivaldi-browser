@@ -131,10 +131,6 @@
         <include name="IDR_SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_HIGH_WAV" file="resources\chromeos\sounds\spoken_feedback_toggle_countdown_high.wav" type="BINDATA" />
         <include name="IDR_SOUND_SPOKEN_FEEDBACK_TOGGLE_COUNTDOWN_LOW_WAV" file="resources\chromeos\sounds\spoken_feedback_toggle_countdown_low.wav" type="BINDATA" />
         <include name="IDR_SOUND_TOUCH_TYPE_WAV" file="resources\chromeos\sounds\touch_type.wav" type="BINDATA" />
-        <include name="IDR_SOUND_CHARGE_HIGH_BATTERY_FLAC" file="resources\chromeos\sounds\power\charging_started_high.flac" type="BINDATA" />
-        <include name="IDR_SOUND_CHARGE_MEDIUM_BATTERY_FLAC" file="resources\chromeos\sounds\power\charging_started_medium.flac" type="BINDATA" />
-        <include name="IDR_SOUND_CHARGE_LOW_BATTERY_FLAC" file="resources\chromeos\sounds\power\charging_started_low.flac" type="BINDATA" />
-        <include name="IDR_SOUND_NO_CHARGE_LOW_BATTERY_FLAC" file="resources\chromeos\sounds\power\low_battery.flac" type="BINDATA" />
         <include name="IDR_ABOUT_POWER_HTML" file="resources\chromeos\power.html" type="BINDATA" />
         <include name="IDR_ABOUT_POWER_JS" file="resources\chromeos\power.js" type="BINDATA" />
         <include name="IDR_ABOUT_POWER_CSS" file="resources\chromeos\power.css" type="BINDATA" />
@@ -225,6 +221,7 @@
       <include name="IDR_INSPECT_JS" file="resources\inspect\inspect.js" type="BINDATA" />
 
       <include name="IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST" file="resources\network_speech_synthesis\manifest.json" type="BINDATA" />
+      <include name="IDR_READING_MODE_GDOCS_HELPER_MANIFEST" file="resources\reading_mode_gdocs_helper\manifest.json" type="BINDATA" />
 
       <if expr="enable_pdf">
         <include name="IDR_PDF_MANIFEST" file="resources\pdf\manifest.json" type="BINDATA" />

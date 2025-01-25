@@ -28,7 +28,9 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_view.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_web_contents_host.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -43,6 +45,10 @@
 #include "ui/views/controls/webview/web_contents_set_background_color.h"
 
 namespace {
+
+bool IsTwoFactorIntersitial(const GURL& url) {
+  return base::StartsWith(url.spec(), chrome::kGoogleTwoFactorIntersitialURL);
+}
 
 bool IsExternalURL(const GURL& url) {
   // Empty URL is used initially, about:blank is used to stop navigation after
@@ -142,7 +148,7 @@ bool ProfilePickerDiceSignInProvider::HandleContextMenu(
   return true;
 }
 
-void ProfilePickerDiceSignInProvider::AddNewContents(
+content::WebContents* ProfilePickerDiceSignInProvider::AddNewContents(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
     const GURL& target_url,
@@ -160,7 +166,7 @@ void ProfilePickerDiceSignInProvider::AddNewContents(
   // removed or if the links on the page are removed.
   if (signin_util::IsForceSigninEnabled() &&
       base::FeatureList::IsEnabled(kForceSigninFlowInProfilePicker)) {
-    return;
+    return nullptr;
   }
 
   NavigateParams params(profile_, target_url, ui::PAGE_TRANSITION_LINK);
@@ -169,6 +175,7 @@ void ProfilePickerDiceSignInProvider::AddNewContents(
   params.contents_to_insert = std::move(new_contents);
   params.window_features = window_features;
   Navigate(&params);
+  return nullptr;
 }
 
 bool ProfilePickerDiceSignInProvider::HandleKeyboardEvent(
@@ -180,10 +187,29 @@ bool ProfilePickerDiceSignInProvider::HandleKeyboardEvent(
 void ProfilePickerDiceSignInProvider::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
-  if (source == contents_.get() && IsExternalURL(contents_->GetVisibleURL()) &&
-      // SAML with ForceSignin in Profile Picker should follow the regular flow.
-      (!signin_util::IsForceSigninEnabled() ||
-       !base::FeatureList::IsEnabled(kForceSigninFlowInProfilePicker))) {
+  if (source != contents_.get()) {
+    return;
+  }
+  auto primary_account =
+      IdentityManagerFactory::GetForProfile(profile_)->GetPrimaryAccountInfo(
+          signin::ConsentLevel::kSignin);
+  if (IsTwoFactorIntersitial(contents_->GetVisibleURL()) &&
+      !primary_account.IsEmpty()) {
+    // This intersitial should be skipped while in the profile picker, so we
+    // finish flow with the current primary account. The intersitial will be
+    // opened in a tab after the profile is created. This is handled by the
+    // signed-in flow controller.
+    // Posting the task to avoid navigation re-entrancy caused by the
+    // next step of the flow causing a navigation.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ProfilePickerDiceSignInProvider::FinishFlow,
+                       weak_ptr_factory_.GetWeakPtr(), primary_account));
+  } else if (IsExternalURL(contents_->GetVisibleURL()) &&
+             // SAML with ForceSignin in Profile Picker should follow the
+             // regular flow.
+             (!signin_util::IsForceSigninEnabled() ||
+              !base::FeatureList::IsEnabled(kForceSigninFlowInProfilePicker))) {
     // Attach DiceTabHelper to `contents_` so that sync consent dialog appears
     // after a successful sign-in.
     DiceTabHelper* tab_helper = DiceTabHelper::FromWebContents(contents_.get());

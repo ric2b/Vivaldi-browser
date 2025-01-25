@@ -1102,6 +1102,9 @@ void DumpAst(AstNode* node, int indent_level) {
       case AstNode::Type::kFloat:
         node_text += "kFloat";
         break;
+      case AstNode::Type::kFloat64:
+        node_text += "kFloat64";
+        break;
       case AstNode::Type::kInt:
         node_text += "kInt";
         break;

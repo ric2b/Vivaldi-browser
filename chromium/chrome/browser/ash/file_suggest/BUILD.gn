@@ -26,6 +26,8 @@ static_library("file_suggest") {
     "local_file_suggestion_provider.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash",
     "//ash/constants",
@@ -40,6 +42,7 @@ static_library("file_suggest") {
     "//chrome/browser/ash/drive",
     "//chrome/browser/ash/file_manager",
     "//chrome/browser/profiles:profile",
+    "//chromeos/ash/components/drivefs",
     "//chromeos/ash/components/drivefs/mojom",
     "//components/drive",
     "//components/google/core/common",
@@ -93,9 +96,9 @@ source_set("unit_tests") {
     "//ash/constants",
     "//base/test:test_support",
     "//chrome/browser",
-    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/drive:test_support",
     "//chrome/browser/ash/file_manager:test_support",
+    "//chrome/browser/ash/login/users:test_support",
     "//chrome/browser/ui",
     "//chrome/browser/ui/ash/holding_space:test_support",
     "//chrome/test:test_support",
@@ -125,7 +128,6 @@ source_set("browser_tests") {
     ":test_support",
     "//ash/constants",
     "//base/test:test_support",
-    "//chrome/browser/ash/drive",
     "//chrome/browser/ash/drive:test_support",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui",

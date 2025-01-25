@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/webui/ash/lobster/lobster_ui.h"
 
+#include "chrome/browser/ash/lobster/lobster_service_provider.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/ash/lobster/lobster_service_provider.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace ash {
@@ -14,7 +14,8 @@ LobsterUI::LobsterUI(content::WebUI* web_ui)
     : UntrustedTopChromeWebUIController(web_ui),
       page_handler_(std::make_unique<LobsterPageHandler>(
           LobsterServiceProvider::GetForProfile(Profile::FromWebUI(web_ui))
-              ->active_session())) {
+              ->active_session(),
+          Profile::FromWebUI(web_ui))) {
   // TODO(b/348281154): Initialize WebUI container and show to the user.
 }
 

@@ -146,7 +146,7 @@ void SyncedFileStoreImpl::OnLoadingDone(SyncedFilesData files_data) {
 }
 
 void SyncedFileStoreImpl::DoSetLocalFileRef(base::Uuid owner_uuid,
-                                            syncer::ModelType sync_type,
+                                            syncer::DataType sync_type,
                                             std::string checksum) {
   DCHECK(IsLoaded());
 
@@ -165,14 +165,14 @@ void SyncedFileStoreImpl::DoSetLocalFileRef(base::Uuid owner_uuid,
 }
 
 void SyncedFileStoreImpl::SetLocalFileRef(base::Uuid owner_uuid,
-                                          syncer::ModelType sync_type,
+                                          syncer::DataType sync_type,
                                           std::string checksum) {
   DoSetLocalFileRef(owner_uuid, sync_type, checksum);
   storage_->ScheduleSave();
 }
 
 std::string SyncedFileStoreImpl::SetLocalFile(base::Uuid owner_uuid,
-                                              syncer::ModelType sync_type,
+                                              syncer::DataType sync_type,
                                               std::vector<uint8_t> content) {
   DCHECK(IsLoaded());
   DCHECK(!content.empty());
@@ -217,7 +217,7 @@ std::string SyncedFileStoreImpl::SetLocalFile(base::Uuid owner_uuid,
 }
 
 void SyncedFileStoreImpl::SetSyncFileRef(std::string owner_sync_id,
-                                         syncer::ModelType sync_type,
+                                         syncer::DataType sync_type,
                                          std::string checksum) {
   DCHECK(IsLoaded());
 
@@ -283,7 +283,7 @@ std::string SyncedFileStoreImpl::GetMimeType(std::string checksum) {
 }
 
 void SyncedFileStoreImpl::RemoveLocalRef(base::Uuid owner_uuid,
-                                         syncer::ModelType sync_type) {
+                                         syncer::DataType sync_type) {
   DCHECK(IsLoaded());
   auto checksum_node =
       checksums_for_local_owners_[sync_type].extract(owner_uuid);
@@ -304,7 +304,7 @@ void SyncedFileStoreImpl::RemoveLocalRef(base::Uuid owner_uuid,
 }
 
 void SyncedFileStoreImpl::RemoveSyncRef(std::string owner_sync_id,
-                                        syncer::ModelType sync_type) {
+                                        syncer::DataType sync_type) {
   DCHECK(IsLoaded());
   auto checksum_node =
       checksums_for_sync_owners_[sync_type].extract(owner_sync_id);
@@ -324,8 +324,7 @@ void SyncedFileStoreImpl::RemoveSyncRef(std::string owner_sync_id,
   storage_->ScheduleSave();
 }
 
-void SyncedFileStoreImpl::RemoveAllSyncRefsForType(
-    syncer::ModelType sync_type) {
+void SyncedFileStoreImpl::RemoveAllSyncRefsForType(syncer::DataType sync_type) {
   DCHECK(IsLoaded());
 
   checksums_for_sync_owners_.erase(sync_type);

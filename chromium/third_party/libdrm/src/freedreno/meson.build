@@ -77,6 +77,6 @@ test(
   args : [
     '--lib', libdrm_freedreno,
     '--symbols-file', files('freedreno-symbols.txt'),
-    '--nm', prog_nm.path(),
+    '--nm', prog_nm.full_path(),
   ],
 )

@@ -46,7 +46,7 @@
         "id": "ContainerContent",
         "type": "string",
         "description": "Defines functionality to set up on the C++ side. One or more menu items may be created.",
-        "enum": ["extensions", "imageinprofile", "linkinprofile", "linktohighlight", "notes", "pwa", "linkinpwa", "sendlinktodevices", "sendpagetodevices", "spellcheck", "spellcheckoptions", "speech"]
+        "enum": ["extensions", "imageinprofile", "linkinprofile", "linktohighlight", "notes", "pwa", "linkinpwa", "sendlinktodevices", "sendpagetodevices", "sendimagetodevices", "spellcheck", "spellcheckoptions", "speech"]
       },
       {
         "id": "Item",
@@ -133,6 +133,11 @@
           "mode": {
             "$ref": "ContainerMode",
             "description": "Container content format"
+          },
+          "icons": {
+            "$ref": "Icons",
+            "optional": true,
+            "description": "Icon in PNG format encoded as base64."
           }
         }
       },
@@ -214,10 +219,7 @@
           "qrcode": {
             "type": "boolean"
           },
-          "sendlinktodevices": {
-            "type": "boolean"
-          },
-          "sendpagetodevices": {
+          "sendtodevices": {
             "type": "boolean"
           },
           "video": {
@@ -297,6 +299,9 @@
             "type": "boolean"
           },
           "ismailto": {
+            "type": "boolean"
+          },
+          "iswebpagewidget": {
             "type": "boolean"
           },
           "support": {"$ref": "DocumentSupport"},

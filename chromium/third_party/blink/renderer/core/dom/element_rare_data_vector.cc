@@ -42,35 +42,19 @@ ElementRareDataVector::~ElementRareDataVector() {
   DCHECK(!GetField(FieldId::kPseudoElementData));
 }
 
-unsigned ElementRareDataVector::GetFieldIndex(FieldId field_id) const {
-  unsigned field_id_int = static_cast<unsigned>(field_id);
-  DCHECK(fields_bitfield_ & (static_cast<BitfieldType>(1) << field_id_int));
-  return __builtin_popcount(fields_bitfield_ &
-                            ~(~static_cast<BitfieldType>(0) << field_id_int));
-}
-
 ElementRareDataField* ElementRareDataVector::GetField(FieldId field_id) const {
-  if (fields_bitfield_ &
-      (static_cast<BitfieldType>(1) << static_cast<unsigned>(field_id)))
-    return fields_[GetFieldIndex(field_id)].Get();
+  if (fields_.HasField(field_id)) {
+    return fields_.GetField(field_id).Get();
+  }
   return nullptr;
 }
 
 void ElementRareDataVector::SetField(FieldId field_id,
                                      ElementRareDataField* field) {
-  unsigned field_id_int = static_cast<unsigned>(field_id);
-  if (fields_bitfield_ & (static_cast<BitfieldType>(1) << field_id_int)) {
-    if (field) {
-      fields_[GetFieldIndex(field_id)] = field;
-    } else {
-      fields_.EraseAt(GetFieldIndex(field_id));
-      fields_bitfield_ =
-          fields_bitfield_ & ~(static_cast<BitfieldType>(1) << field_id_int);
-    }
-  } else if (field) {
-    fields_bitfield_ =
-        fields_bitfield_ | (static_cast<BitfieldType>(1) << field_id_int);
-    fields_.insert(GetFieldIndex(field_id), field);
+  if (field) {
+    fields_.SetField(field_id, field);
+  } else {
+    fields_.EraseField(field_id);
   }
 }
 
@@ -119,6 +103,33 @@ ElementRareDataVector::GetPseudoElements() const {
   if (!data)
     return {};
   return data->GetPseudoElements();
+}
+void ElementRareDataVector::AddColumnScrollMarker(
+    ScrollMarkerPseudoElement& column_scroll_marker) {
+  PseudoElementData* data =
+      static_cast<PseudoElementData*>(GetField(FieldId::kPseudoElementData));
+  if (!data) {
+    data = MakeGarbageCollected<PseudoElementData>();
+    SetField(FieldId::kPseudoElementData, data);
+  }
+  data->AddColumnScrollMarker(column_scroll_marker);
+}
+const PseudoElementData::ColumnScrollMarkersVector*
+ElementRareDataVector::GetColumnScrollMarkers() const {
+  PseudoElementData* data =
+      static_cast<PseudoElementData*>(GetField(FieldId::kPseudoElementData));
+  if (!data) {
+    return nullptr;
+  }
+  return data->GetColumnScrollMarkers();
+}
+void ElementRareDataVector::ClearColumnScrollMarkers() {
+  PseudoElementData* data =
+      static_cast<PseudoElementData*>(GetField(FieldId::kPseudoElementData));
+  if (!data) {
+    return;
+  }
+  data->ClearColumnScrollMarkers();
 }
 
 CSSStyleDeclaration& ElementRareDataVector::EnsureInlineCSSStyleDeclaration(
@@ -311,7 +322,6 @@ StyleScopeData* ElementRareDataVector::GetStyleScopeData() const {
 }
 
 OutOfFlowData& ElementRareDataVector::EnsureOutOfFlowData() {
-  CHECK(RuntimeEnabledFeatures::LastSuccessfulPositionOptionEnabled());
   return EnsureField<OutOfFlowData>(FieldId::kOutOfFlowData);
 }
 
@@ -419,11 +429,12 @@ AnchorPositionScrollData& ElementRareDataVector::EnsureAnchorPositionScrollData(
 }
 
 AnchorElementObserver& ElementRareDataVector::EnsureAnchorElementObserver(
-    HTMLElement* element) {
+    Element* new_source_element) {
   DCHECK(!GetAnchorElementObserver() ||
-         GetAnchorElementObserver()->GetElement() == element);
+         GetAnchorElementObserver()->GetSourceElement() == new_source_element);
+  CHECK(RuntimeEnabledFeatures::HTMLAnchorAttributeEnabled());
   return EnsureField<AnchorElementObserver>(FieldId::kAnchorElementObserver,
-                                            element);
+                                            new_source_element);
 }
 
 AnchorElementObserver* ElementRareDataVector::GetAnchorElementObserver() const {

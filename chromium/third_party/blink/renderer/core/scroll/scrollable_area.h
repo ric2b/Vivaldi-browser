@@ -65,10 +65,6 @@ class AnimationTimeline;
 class Layer;
 }  // namespace cc
 
-namespace ui {
-class ColorProvider;
-}  // namespace ui
-
 namespace blink {
 class ChromeClient;
 class Document;
@@ -151,7 +147,8 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
 
   virtual void SetPendingHistoryRestoreScrollOffset(
       const HistoryItem::ViewState& view_state,
-      bool should_restore_scroll) {}
+      bool should_restore_scroll,
+      mojom::blink::ScrollBehavior scroll_behavior) {}
   virtual void ApplyPendingHistoryRestoreScrollOffset() {}
 
   virtual bool HasPendingHistoryRestoreScrollOffset() { return false; }
@@ -163,6 +160,8 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
       const PhysicalRect&,
       const PhysicalBoxStrut& scroll_margin,
       const mojom::blink::ScrollIntoViewParamsPtr&);
+
+  virtual PhysicalOffset LocalToScrollOriginOffset() const = 0;
 
   static bool ScrollBehaviorFromString(const String&,
                                        mojom::blink::ScrollBehavior&);
@@ -249,12 +248,6 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
     return static_cast<mojom::blink::ColorScheme>(
         overlay_scrollbar_color_scheme__);
   }
-
-  // Returns the color provider for this scrollbar.
-  const ui::ColorProvider* GetColorProvider(mojom::blink::ColorScheme) const;
-
-  // Returns the forced colors state for this scrollbar.
-  bool InForcedColorsMode() const;
 
   // This getter will create a MacScrollAnimator if it doesn't already exist,
   // only on MacOS.
@@ -378,9 +371,7 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
     return position.OffsetFromOrigin();
   }
   virtual gfx::Vector2d ScrollOffsetInt() const = 0;
-  virtual ScrollOffset GetScrollOffset() const {
-    return ScrollOffset(ScrollOffsetInt());
-  }
+  virtual ScrollOffset GetScrollOffset() const = 0;
   // Returns a floored version of the scroll offset as the web-exposed scroll
   // offset to ensure web compatibility in DOM APIs.
   virtual ScrollOffset GetWebExposedScrollOffset() const;
@@ -621,6 +612,9 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
 
   virtual void DropCompositorScrollDeltaNextCommit() {}
 
+  virtual void SetSnappedQueryTargetIds(
+      std::optional<cc::TargetSnapAreaElementIds>) {}
+
  protected:
   // Deduces the mojom::blink::ScrollBehavior based on the
   // element style and the parameter set by programmatic scroll into either
@@ -673,6 +667,8 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
  private:
   FRIEND_TEST_ALL_PREFIXES(ScrollableAreaTest,
                            PopupOverlayScrollbarShouldNotFadeOut);
+  FRIEND_TEST_ALL_PREFIXES(ScrollableAreaTest,
+                           FilterIncomingScrollDuringSmoothUserScroll);
 
   void SetScrollbarsHiddenIfOverlayInternal(bool);
 
@@ -723,10 +719,16 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
         incoming_type == mojom::blink::ScrollType::kAnchoring) {
       return false;
     }
-    // If the current smooth scroll is UserScroll, but the incoming scroll is
-    // not, filter the incoming scroll. See crbug.com/913009 for more details.
+    // If the current smooth scroll is a kUser scroll, i.e. a smooth scroll
+    // triggered by find-in-page, filter the incoming scroll unless it is:
+    // - another find-in-page scroll (kUser),
+    // - a gesture scroll (kCompositor), or
+    // - an update from the current find-in-page scroll animation running on the
+    //   compositor (kCompositor).
+    // See crbug.com/913009, crbug.com/365493092 for more details.
     if (old_type == mojom::blink::ScrollType::kUser &&
-        incoming_type != mojom::blink::ScrollType::kUser) {
+        incoming_type != mojom::blink::ScrollType::kUser &&
+        incoming_type != mojom::blink::ScrollType::kCompositor) {
       return true;
     }
     // TODO(crbug.com/325081538, crbug.com/342093060): Ideally, if the incoming
@@ -738,6 +740,11 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
     //     kCompositorProgrammatic and
     //   - pass the ScrollType from the compositor to the main thread.
     return false;
+  }
+
+  void set_active_smooth_scroll_type_for_testing(
+      mojom::blink::ScrollType type) {
+    active_smooth_scroll_type_ = type;
   }
 
   // This animator is used to handle painting animations for MacOS scrollbars

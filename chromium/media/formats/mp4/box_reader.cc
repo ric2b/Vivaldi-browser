@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/formats/mp4/box_reader.h"
 
 #include <stddef.h>
@@ -22,7 +27,7 @@ BufferReader::BufferReader(const uint8_t* buf, const size_t buf_size)
     :  // TODO(crbug.com/40284755): BufferReader should be receiving a span,
        // the construction of the span here is unsound as there's no way to
        // tell the size is correct from here.
-      UNSAFE_BUFFERS(buf_(buf, buf_size)) {}
+      UNSAFE_TODO(buf_(buf, buf_size)) {}
 
 BufferReader::~BufferReader() = default;
 

@@ -11,6 +11,8 @@
     "file_globs": [ "Vivaldi*.dmg" ],
     "archive_type": "ARCHIVE_TYPE_FILES"
   },
+  "sparkle_lib/Build/Products/Release/generate_keys": {},
+  "sparkle_lib/Build/Products/Release/generate_appcast": {},
   "dump_syms": {},
   "minidump_stackwalk": {},
   "Vivaldi.dSYM.tar.bz2": { "versioned": true },

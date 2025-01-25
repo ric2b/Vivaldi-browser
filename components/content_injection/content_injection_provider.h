@@ -5,10 +5,10 @@
 
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
-#include "base/strings/string_piece.h"
 #include "components/content_injection/content_injection_types.h"
 #include "url/gurl.h"
 

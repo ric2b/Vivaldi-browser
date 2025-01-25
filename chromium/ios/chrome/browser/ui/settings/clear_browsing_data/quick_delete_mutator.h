@@ -19,11 +19,28 @@ enum class TimePeriod;
 - (void)triggerDeletion;
 
 // Called on confirming the browsing data types selection with the user choice
+// for the history type.
+- (void)updateHistorySelection:(BOOL)selected;
+
+// Called on confirming the browsing data types selection with the user choice
+// for the tabs type.
+- (void)updateTabsSelection:(BOOL)selected;
+
+// Called on confirming the browsing data types selection with the user choice
+// for the site data type.
+- (void)updateSiteDataSelection:(BOOL)selected;
+
+// Called on confirming the browsing data types selection with the user choice
+// for the cache type.
+- (void)updateCacheSelection:(BOOL)selected;
+
+// Called on confirming the browsing data types selection with the user choice
+// for the passwords type.
+- (void)updatePasswordsSelection:(BOOL)selected;
+
+// Called on confirming the browsing data types selection with the user choice
 // for the autofill type.
 - (void)updateAutofillSelection:(BOOL)selected;
-
-// TODO(crbug.com/341107834): Add other update browsing data type selection
-// methods here.
 
 @end
 

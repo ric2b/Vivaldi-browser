@@ -24,18 +24,6 @@ static_assert(File::FROM_BEGIN == SEEK_SET && File::FROM_CURRENT == SEEK_CUR &&
 
 namespace {
 
-#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
-    defined(OS_HAIKU) || defined(OS_MSYS) || defined(OS_ZOS) ||  \
-    defined(OS_ANDROID) && __ANDROID_API__ < 21 || defined(OS_SERENITY)
-int CallFstat(int fd, stat_wrapper_t* sb) {
-  return fstat(fd, sb);
-}
-#else
-int CallFstat(int fd, stat_wrapper_t* sb) {
-  return fstat64(fd, sb);
-}
-#endif
-
 // Some systems don't provide the following system calls, so either simulate
 // them or wrap them in order to minimize the number of #ifdef's in this file.
 #if !defined(OS_AIX)
@@ -82,7 +70,7 @@ File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
 
 }  // namespace
 
-void File::Info::FromStat(const stat_wrapper_t& stat_info) {
+void File::Info::FromStat(const struct stat& stat_info) {
   is_directory = S_ISDIR(stat_info.st_mode);
   is_symbolic_link = S_ISLNK(stat_info.st_mode);
   size = stat_info.st_size;
@@ -247,8 +235,8 @@ int File::WriteAtCurrentPosNoBestEffort(const char* data, int size) {
 int64_t File::GetLength() {
   DCHECK(IsValid());
 
-  stat_wrapper_t file_info;
-  if (CallFstat(file_.get(), &file_info))
+  struct stat file_info;
+  if (fstat(file_.get(), &file_info))
     return -1;
 
   return file_info.st_size;
@@ -263,8 +251,8 @@ bool File::SetLength(int64_t length) {
 bool File::GetInfo(Info* info) {
   DCHECK(IsValid());
 
-  stat_wrapper_t file_info;
-  if (CallFstat(file_.get(), &file_info))
+  struct stat file_info;
+  if (fstat(file_.get(), &file_info))
     return false;
 
   info->FromStat(file_info);

@@ -417,22 +417,22 @@ TEST(BirchRankerTest, RankFileSuggestItems) {
   BirchRanker ranker(now);
 
   // Create a file shared in the last hour.
-  BirchFileItem item0(base::FilePath("/item0"), u"suggested",
+  BirchFileItem item0(base::FilePath("/item0"), "title_0", u"suggested",
                       TimeFromString("22 Feb 2024 08:45 UTC"), "id_0",
                       "icon_url");
 
   // Create a file shared in the last day.
-  BirchFileItem item1(base::FilePath("/item1"), u"suggested",
+  BirchFileItem item1(base::FilePath("/item1"), "title_1", u"suggested",
                       TimeFromString("21 Feb 2024 09:15 UTC"), "id_1",
                       "icon_url");
 
   // Create a file shared in the last week.
-  BirchFileItem item2(base::FilePath("/item2"), u"suggested",
+  BirchFileItem item2(base::FilePath("/item2"), "title_2", u"suggested",
                       TimeFromString("15 Feb 2024 09:15 UTC"), "id_2",
                       "icon_url");
 
   // Create a file shared more than a week ago.
-  BirchFileItem item3(base::FilePath("/item3"), u"suggested",
+  BirchFileItem item3(base::FilePath("/item3"), "title_3", u"suggested",
                       TimeFromString("14 Feb 2024 09:15 UTC"), "id_3",
                       "icon_url");
 
@@ -445,19 +445,19 @@ TEST(BirchRankerTest, RankFileSuggestItems) {
   ASSERT_EQ(4u, items.size());
 
   // The file shared in the last hour has high priority.
-  EXPECT_EQ(items[0].title(), u"item0");
+  EXPECT_EQ(items[0].title(), u"title_0");
   EXPECT_FLOAT_EQ(items[0].ranking(), 22.f);
 
   // The file shared in the last day has medium priority.
-  EXPECT_EQ(items[1].title(), u"item1");
+  EXPECT_EQ(items[1].title(), u"title_1");
   EXPECT_FLOAT_EQ(items[1].ranking(), 35.f);
 
   // The file shared in the last week has low priority.
-  EXPECT_EQ(items[2].title(), u"item2");
+  EXPECT_EQ(items[2].title(), u"title_2");
   EXPECT_FLOAT_EQ(items[2].ranking(), 43.f);
 
   // The file shared more than a week ago wasn't ranked.
-  EXPECT_EQ(items[3].title(), u"item3");
+  EXPECT_EQ(items[3].title(), u"title_3");
   EXPECT_FLOAT_EQ(items[3].ranking(), std::numeric_limits<float>::max());
 }
 
@@ -470,33 +470,27 @@ TEST(BirchRankerTest, RankRecentTabItems) {
 
   // Create phone tab with a timestamp in the last 5 minutes.
   BirchTabItem item0(u"item0", GURL(), TimeFromString("22 Feb 2024 08:59 UTC"),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kPhone,
-                     ui::ImageModel());
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kPhone);
 
   // Create tablet tab with a timestamp in the last 5 minutes.
   BirchTabItem item1(u"item1", GURL(), TimeFromString("22 Feb 2024 08:58 UTC"),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kTablet,
-                     ui::ImageModel());
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kTablet);
 
   // Create phone tab with a timestamp in the last hour.
   BirchTabItem item2(u"item2", GURL(), TimeFromString("22 Feb 2024 08:31 UTC"),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kPhone,
-                     ui::ImageModel());
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kPhone);
 
   // Create a desktop tab with timestamp in the last hour.
   BirchTabItem item3(u"item3", GURL(), TimeFromString("22 Feb 2024 08:30 UTC"),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop,
-                     ui::ImageModel());
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
 
   // Create a tab with timestamp in the last day.
   BirchTabItem item4(u"item4", GURL(), TimeFromString("21 Feb 2024 09:01 UTC"),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop,
-                     ui::ImageModel());
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
 
   // Create a tab with timestamp more than a day ago.
   BirchTabItem item5(u"item5", GURL(), TimeFromString("21 Feb 2024 08:59 UTC"),
-                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop,
-                     ui::ImageModel());
+                     GURL(), "", BirchTabItem::DeviceFormFactor::kDesktop);
 
   // Put the items in the vector in reverse order to validate that they are
   // still handled in the correct order (by time) inside the ranker.
@@ -538,7 +532,7 @@ TEST(BirchRankerTest, RankWeatherItems_Morning) {
   ASSERT_TRUE(ranker.IsMorning());
 
   // Create a weather item.
-  BirchWeatherItem item(u"Sunny", 72.f, ui::ImageModel());
+  BirchWeatherItem item(u"Sunny", 72.f, GURL("http://icon.com/"));
   std::vector<BirchWeatherItem> items = {item};
 
   ranker.RankWeatherItems(&items);
@@ -558,7 +552,7 @@ TEST(BirchRankerTest, RankWeatherItems_Afternoon) {
   ASSERT_FALSE(ranker.IsMorning());
 
   // Create a weather item.
-  BirchWeatherItem item(u"Sunny", 72.f, ui::ImageModel());
+  BirchWeatherItem item(u"Sunny", 72.f, GURL("http://icon.com/"));
   std::vector<BirchWeatherItem> items = {item};
 
   ranker.RankWeatherItems(&items);

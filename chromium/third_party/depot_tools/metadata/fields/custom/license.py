@@ -127,16 +127,9 @@ class LicenseField(field_types.SingleLineTextField):
             return vr.ValidationWarning(
                 reason=f"{self._name} has a license not in the allowlist.",
                 additional=[
-                    f"Separate licenses using a '{self.VALUE_DELIMITER}'.",
                     "Licenses not allowlisted: "
                     f"{util.quoted(not_allowlisted)}.",
                 ])
-
-        # Suggest using the standard value delimiter when possible.
-        if (len(licenses) > 1 and re.search(_PATTERN_VERBOSE_DELIMITER, value)
-                and self.VALUE_DELIMITER not in value):
-            return vr.ValidationWarning(
-                reason=f"Separate licenses using a '{self.VALUE_DELIMITER}'.")
 
         return None
 

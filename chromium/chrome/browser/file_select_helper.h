@@ -27,6 +27,7 @@
 #endif
 
 class Profile;
+class ScopedDisallowPictureInPicture;
 
 namespace content {
 class FileSelectListener;
@@ -324,10 +325,9 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
   bool abort_on_missing_web_contents_in_tests_ = true;
 
 #if !BUILDFLAG(IS_ANDROID)
-  // True if we've called `PictureInPictureWindowManager::OnFileDialogOpened()`
-  // but have not yet called
-  // `PictureInPictureWindowManager::OnFileDialogClosed()`.
-  bool has_notified_picture_in_picture_window_manager_of_open_dialog_ = false;
+  // When not null, this prevents picture-in-picture windows from opening.
+  std::unique_ptr<ScopedDisallowPictureInPicture>
+      scoped_disallow_picture_in_picture_;
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

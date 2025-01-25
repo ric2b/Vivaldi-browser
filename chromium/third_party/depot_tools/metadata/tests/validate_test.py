@@ -6,6 +6,7 @@
 import os
 import sys
 import unittest
+import unittest.mock
 
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
@@ -17,6 +18,7 @@ sys.path.insert(0, _ROOT_DIR)
 import gclient_utils
 import metadata.validate
 import metadata.validation_result
+import metadata.fields.known
 
 # Common paths for tests.
 _SOURCE_FILE_DIR = os.path.join(_THIS_DIR, "data")
@@ -180,6 +182,41 @@ class ValidationResultTest(unittest.TestCase):
         )
         self.assertEqual("abc", ve.get_reason())
         self.assertEqual(["message1", "message2"], ve.get_additional())
+
+
+class ValidationWithLineNumbers(unittest.TestCase):
+
+    def test_reports_line_number(self):
+        """Checks validate reports line number if available."""
+        filepath = os.path.join(_THIS_DIR, "data",
+                                "README.chromium.test.validation-line-number")
+        content = gclient_utils.FileRead(filepath)
+        unittest.mock.patch(
+            'metadata.fields.known.LICENSE_FILE.validate_on_disk',
+            return_value=metadata.validation_result.ValidationError(
+                "File doesn't exist."))
+
+        results = metadata.validate.validate_content(content,
+                                                     "chromium/src/test_dir",
+                                                     "chromium/src")
+
+        for r in results:
+            if r.get_reason() == 'License File is invalid.':
+                self.assertEqual(r.get_lines(), [10])
+            elif r.get_reason(
+            ) == "Required field 'License Android Compatible' is missing.":
+                # We can't add a line number to errors caused by missing fields.
+                self.assertEqual(r.get_lines(), [])
+            elif r.get_reason() == "Versioning fields are insufficient.":
+                # We can't add a line number to errors caused by missing fields.
+                self.assertEqual(r.get_lines(), [])
+            elif r.get_reason(
+            ) == "License has a license not in the allowlist.":
+                self.assertEqual(r.get_lines(), [9])
+            elif r.get_reason() == "URL is invalid.":
+                self.assertEqual(r.get_lines(), [2, 3, 4])
+            elif r.get_reason() == "Shipped in Chromium is invalid":
+                self.assertEqual(r.get_lines(), [13])
 
 
 if __name__ == "__main__":

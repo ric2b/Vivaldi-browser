@@ -46,7 +46,7 @@ void GpuHelper::popProjectionMode2D(void) {
 }
 
 void GpuHelper::drawVector(const Vector3f& position, const Vector3f& vec, const Color& color, float aspect /* = 50.*/) {
-  static GLUquadricObj* cylindre = gluNewQuadric();
+  static GLUquadricObj* cylinder = gluNewQuadric();
   glColor4fv(color.data());
   float length = vec.norm();
   pushMatrix(GL_MODELVIEW);
@@ -57,15 +57,15 @@ void GpuHelper::drawVector(const Vector3f& position, const Vector3f& vec, const 
   tmp.normalize();
   float angle = 180.f / M_PI * acos(tmp.z());
   if (angle > 1e-3) glRotatef(angle, ax.x(), ax.y(), ax.z());
-  gluCylinder(cylindre, length / aspect, length / aspect, 0.8 * length, 10, 10);
+  gluCylinder(cylinder, length / aspect, length / aspect, 0.8 * length, 10, 10);
   glTranslatef(0.0, 0.0, 0.8 * length);
-  gluCylinder(cylindre, 2.0 * length / aspect, 0.0, 0.2 * length, 10, 10);
+  gluCylinder(cylinder, 2.0 * length / aspect, 0.0, 0.2 * length, 10, 10);
 
   popMatrix(GL_MODELVIEW);
 }
 
 void GpuHelper::drawVectorBox(const Vector3f& position, const Vector3f& vec, const Color& color, float aspect) {
-  static GLUquadricObj* cylindre = gluNewQuadric();
+  static GLUquadricObj* cylinder = gluNewQuadric();
   glColor4fv(color.data());
   float length = vec.norm();
   pushMatrix(GL_MODELVIEW);
@@ -76,7 +76,7 @@ void GpuHelper::drawVectorBox(const Vector3f& position, const Vector3f& vec, con
   tmp.normalize();
   float angle = 180.f / M_PI * acos(tmp.z());
   if (angle > 1e-3) glRotatef(angle, ax.x(), ax.y(), ax.z());
-  gluCylinder(cylindre, length / aspect, length / aspect, 0.8 * length, 10, 10);
+  gluCylinder(cylinder, length / aspect, length / aspect, 0.8 * length, 10, 10);
   glTranslatef(0.0, 0.0, 0.8 * length);
   glScalef(4.0 * length / aspect, 4.0 * length / aspect, 4.0 * length / aspect);
   drawUnitCube();

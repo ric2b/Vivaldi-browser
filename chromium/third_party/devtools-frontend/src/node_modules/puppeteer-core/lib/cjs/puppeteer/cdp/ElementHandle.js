@@ -4,22 +4,6 @@
  * Copyright 2019 Google Inc.
  * SPDX-License-Identifier: Apache-2.0
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
 var __runInitializers = (this && this.__runInitializers) || function (thisArg, initializers, value) {
     var useValue = arguments.length > 2;
     for (var i = 0; i < initializers.length; i++) {
@@ -54,20 +38,16 @@ var __esDecorate = (this && this.__esDecorate) || function (ctor, descriptorIn, 
     if (target) Object.defineProperty(target, contextIn.name, descriptor);
     done = true;
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CdpElementHandle = void 0;
 const ElementHandle_js_1 = require("../api/ElementHandle.js");
 const util_js_1 = require("../common/util.js");
+const environment_js_1 = require("../environment.js");
 const assert_js_1 = require("../util/assert.js");
+const AsyncIterableUtil_js_1 = require("../util/AsyncIterableUtil.js");
 const decorators_js_1 = require("../util/decorators.js");
 const JSHandle_js_1 = require("./JSHandle.js");
+const NON_ELEMENT_NODE_ROLES = new Set(['StaticText', 'InlineTextBox']);
 /**
  * The CdpElementHandle extends ElementHandle now to keep compatibility
  * with `instanceof` because of that we need to have methods for
@@ -143,16 +123,7 @@ let CdpElementHandle = (() => {
             });
             (0, assert_js_1.assert)(filePaths.length <= 1 || isMultiple, 'Multiple file uploads only work with <input type=file multiple>');
             // Locate all files and confirm that they exist.
-            let path;
-            try {
-                path = await Promise.resolve().then(() => __importStar(require('path')));
-            }
-            catch (error) {
-                if (error instanceof TypeError) {
-                    throw new Error(`JSHandle#uploadFile can only be used in Node-like environments.`);
-                }
-                throw error;
-            }
+            const path = environment_js_1.environment.value.path;
             const files = filePaths.map(filePath => {
                 if (path.win32.isAbsolute(filePath) || path.posix.isAbsolute(filePath)) {
                     return filePath;
@@ -196,6 +167,28 @@ let CdpElementHandle = (() => {
                 fieldId,
                 frameId,
                 card: data.creditCard,
+            });
+        }
+        async *queryAXTree(name, role) {
+            const { nodes } = await this.client.send('Accessibility.queryAXTree', {
+                objectId: this.id,
+                accessibleName: name,
+                role,
+            });
+            const results = nodes.filter(node => {
+                if (node.ignored) {
+                    return false;
+                }
+                if (!node.role) {
+                    return false;
+                }
+                if (NON_ELEMENT_NODE_ROLES.has(node.role.value)) {
+                    return false;
+                }
+                return true;
+            });
+            return yield* AsyncIterableUtil_js_1.AsyncIterableUtil.map(results, node => {
+                return this.realm.adoptBackendNode(node.backendDOMNodeId);
             });
         }
     };

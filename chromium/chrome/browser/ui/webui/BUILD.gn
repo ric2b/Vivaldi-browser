@@ -3,7 +3,9 @@
 # found in the LICENSE file.
 
 import("//build/config/chromeos/ui_mode.gni")
+import("//chromeos/dbus/config/use_real_dbus_clients.gni")
 import("//components/metrics/generate_allowlist_from_histograms_file.gni")
+import("//extensions/buildflags/buildflags.gni")
 
 generate_allowlist_from_histograms_file("webui_url_hashes") {
   namespace = "webui_metrics"
@@ -25,7 +27,6 @@ source_set("configs") {
 
   deps = [
     "//chrome/browser/ui",
-    "//chrome/browser/ui/webui",
     "//components/compose:buildflags",
     "//components/lens:buildflags",
     "//content/public/browser",
@@ -48,82 +49,52 @@ source_set("configs") {
   }
 
   if (is_chromeos_ash) {
-    sources += [
-      "ash/chrome_untrusted_web_ui_configs_chromeos.cc",
-      "ash/chrome_untrusted_web_ui_configs_chromeos.h",
-      "ash/chrome_web_ui_configs_chromeos.cc",
-      "ash/chrome_web_ui_configs_chromeos.h",
-    ]
-
-    deps += [
-      "//ash/constants",
-      "//ash/webui/color_internals",
-      "//ash/webui/demo_mode_app_ui",
-      "//ash/webui/diagnostics_ui",
-      "//ash/webui/eche_app_ui",
-      "//ash/webui/file_manager:file_manager_untrusted_ui",
-      "//ash/webui/firmware_update_ui",
-      "//ash/webui/focus_mode",
-      "//ash/webui/help_app_ui",
-      "//ash/webui/mall",
-      "//ash/webui/os_feedback_ui",
-      "//ash/webui/print_management",
-      "//ash/webui/print_preview_cros",
-      "//ash/webui/sanitize_ui",
-      "//ash/webui/scanning",
-      "//ash/webui/shimless_rma",
-      "//ash/webui/shortcut_customization_ui",
-      "//ash/webui/status_area_internals",
-      "//ash/webui/vc_background_ui",
-      "//chrome/browser/ash",
-      "//chrome/browser/ash/annotator",
-      "//chrome/browser/ash/app_mode",
-      "//chrome/browser/ash/eche_app",
-      "//chrome/browser/ash/login/demo_mode",
-      "//chrome/browser/ash/mall",
-      "//chrome/browser/ash/multidevice_debug",
-      "//chrome/browser/ash/net",
-      "//chrome/browser/ash/net/network_health",
-      "//chrome/browser/ash/net/rollback_network_config",
-      "//chrome/browser/ash/os_feedback",
-      "//chrome/browser/ash/printing/print_management",
-      "//chrome/browser/ash/scanning",
-      "//chrome/browser/ash/shimless_rma",
-      "//chrome/browser/ash/system_web_apps/apps/camera_app",
-      "//chrome/browser/ash/system_web_apps/apps/media_app",
-      "//chrome/browser/ash/system_web_apps/apps/personalization_app",
-      "//chrome/browser/ash/system_web_apps/apps/projector_app",
-      "//chrome/browser/ash/system_web_apps/apps/recorder_app",
-      "//chrome/browser/ash/system_web_apps/apps/vc_background_ui",
-      "//chrome/browser/ui/ash/holding_space",
-      "//chromeos/ash/components/kiosk/vision/webui",
-      "//components/cross_device/logging",
-    ]
-
-    if (!is_official_build) {
-      deps += [ "//ash/webui/sample_system_web_app_ui" ]
-    }
+    deps += [ "//chrome/browser/ui/webui/ash/config" ]
   }
 }
 
-source_set("webui") {
+source_set("webui_util") {
   sources = [
     "webui_util.cc",
     "webui_util.h",
   ]
 
-  sources += get_target_outputs(":webui_url_hashes")
+  public_deps = [
+    "//base",
+    "//ui/base",
+  ]
 
   deps = [
-    ":webui_url_hashes",
-    "//base",
+    "//build:chromeos_buildflags",
     "//content/public/browser",
     "//content/public/common",
     "//services/network/public/mojom",
-    "//ui/base",
     "//ui/resources",
   ]
+
   if (is_chromeos_lacros) {
     deps += [ "//chromeos/startup" ]
+  }
+}
+
+source_set("webui") {
+  sources = [
+    "constrained_web_dialog_ui.cc",
+    "constrained_web_dialog_ui.h",
+  ]
+
+  sources += get_target_outputs(":webui_url_hashes")
+
+  public_deps = [ "//content/public/browser" ]
+
+  deps = [
+    ":webui_url_hashes",
+    "//extensions/buildflags",
+  ]
+  if (enable_extensions) {
+    deps += [ "//chrome/browser/extensions" ]
+  }
+  if (!is_android) {
+    deps += [ "//ui/web_dialogs" ]
   }
 }

@@ -83,6 +83,11 @@ extern const CGFloat kOmniboxPopupCellMinimumHeight;
 // Some margins are updated with popout omnibox.
 @property(nonatomic, assign, readonly) BOOL isPopoutOmnibox;
 
+// Vivaldi
+@property(nonatomic, strong, readwrite) UIImage* leadingIconLocal;
+@property(nonatomic, readonly) BOOL isDirectMatch;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_POPUP_ROW_OMNIBOX_POPUP_ROW_CONTENT_CONFIGURATION_H_

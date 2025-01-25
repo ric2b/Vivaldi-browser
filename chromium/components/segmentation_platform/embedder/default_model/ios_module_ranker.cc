@@ -27,7 +27,7 @@ constexpr SegmentId kSegmentId =
 // Default parameters for TestIosModuleRanker model.
 constexpr SegmentId kTestSegmentId =
     SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_IOS_MODULE_RANKER_TEST;
-constexpr int64_t kModelVersion = 3;
+constexpr int64_t kModelVersion = 5;
 // Store 28 buckets of input data (28 days).
 constexpr int64_t kSignalStorageLength = 28;
 // Wait until we have 0 days of data.

@@ -576,6 +576,11 @@ CSSPrimitiveValue::BoolStatus CSSPrimitiveValue::IsOne() const {
                         : To<CSSNumericLiteralValue>(this)->IsOne();
 }
 
+CSSPrimitiveValue::BoolStatus CSSPrimitiveValue::IsHundred() const {
+  return IsCalculated() ? To<CSSMathFunctionValue>(this)->IsHundred()
+                        : To<CSSNumericLiteralValue>(this)->IsHundred();
+}
+
 CSSPrimitiveValue::BoolStatus CSSPrimitiveValue::IsNegative() const {
   return IsCalculated() ? To<CSSMathFunctionValue>(this)->IsNegative()
                         : To<CSSNumericLiteralValue>(this)->IsNegative();
@@ -1136,6 +1141,20 @@ CSSPrimitiveValue* CSSPrimitiveValue::Divide(double value,
   return CreateValueFromOperation(
       ToMathExpressionNode(), CreateExpressionNodeFromDouble(value, unit_type),
       CSSMathOperator::kDivide);
+}
+
+CSSPrimitiveValue* CSSPrimitiveValue::ConvertLiteralsFromPercentageToNumber()
+    const {
+  if (const auto* numeric = DynamicTo<CSSNumericLiteralValue>(this)) {
+    return MakeGarbageCollected<CSSNumericLiteralValue>(
+        numeric->DoubleValue() / 100, UnitType::kNumber);
+  }
+  CHECK(IsMathFunctionValue());
+  const CSSMathExpressionNode* math_node =
+      To<CSSMathFunctionValue>(this)->ExpressionNode();
+  return MakeGarbageCollected<CSSMathFunctionValue>(
+      math_node->ConvertLiteralsFromPercentageToNumber(),
+      CSSPrimitiveValue::ValueRange::kAll);
 }
 
 }  // namespace blink

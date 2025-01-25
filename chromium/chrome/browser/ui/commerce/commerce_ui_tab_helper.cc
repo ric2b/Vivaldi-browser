@@ -10,6 +10,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/ui/commerce/commerce_page_action_controller.h"
 #include "chrome/browser/ui/commerce/discounts_page_action_controller.h"
 #include "chrome/browser/ui/commerce/price_tracking_page_action_controller.h"
+#include "chrome/browser/ui/commerce/product_specifications_entry_point_controller.h"
 #include "chrome/browser/ui/commerce/product_specifications_page_action_controller.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/commerce/price_insights_icon_view.h"
@@ -83,12 +85,14 @@ CommerceUiTabHelper::CommerceUiTabHelper(
     content::WebContents* content,
     ShoppingService* shopping_service,
     bookmarks::BookmarkModel* model,
-    image_fetcher::ImageFetcher* image_fetcher)
+    image_fetcher::ImageFetcher* image_fetcher,
+    SidePanelRegistry* side_panel_registry)
     : content::WebContentsObserver(content),
-      content::WebContentsUserData<CommerceUiTabHelper>(*content),
       shopping_service_(shopping_service),
       bookmark_model_(model),
-      image_fetcher_(image_fetcher) {
+      image_fetcher_(image_fetcher),
+      side_panel_registry_(side_panel_registry),
+      price_insights_label_type_(PriceInsightsIconLabelType::kNone) {
   if (!image_fetcher_) {
     CHECK_IS_TEST();
   }
@@ -170,14 +174,15 @@ void CommerceUiTabHelper::DidFinishNavigation(
   pending_tracking_state_.reset();
   price_insights_info_.reset();
   icon_use_recorded_for_page_.clear();
-  price_insights_label_type_ =
-      PriceInsightsIconView::PriceInsightsIconLabelType::kNone;
+  price_insights_label_type_ = PriceInsightsIconLabelType::kNone;
 
   MakeShoppingInsightsSidePanelUnavailable();
 
   if (!shopping_service_) {
     return;
   }
+
+  page_action_icon_compute_start_time_ = base::TimeTicks::Now();
 
   discounts_page_action_controller_->ResetForNewNavigation(
       web_contents()->GetLastCommittedURL());
@@ -200,12 +205,15 @@ void CommerceUiTabHelper::DidFinishNavigation(
                        weak_ptr_factory_.GetWeakPtr()));
   }
 
-  if (!base::FeatureList::IsEnabled(commerce::kDiscountsUiRefactor) &&
-      shopping_service_->IsDiscountEligibleToShowOnNavigation()) {
-    shopping_service_->GetDiscountInfoForUrls(
-        {web_contents()->GetLastCommittedURL()},
-        base::BindOnce(&CommerceUiTabHelper::HandleDiscountsResponse,
-                       weak_ptr_factory_.GetWeakPtr()));
+  auto* browser = chrome::FindBrowserWithTab(web_contents());
+  if (browser) {
+    auto* product_specifications_entry_point_controller =
+        browser->browser_window_features()
+            ->product_specifications_entry_point_controller();
+    if (product_specifications_entry_point_controller) {
+      product_specifications_entry_point_controller->DidFinishNavigation(
+          web_contents());
+    }
   }
 }
 
@@ -309,46 +317,16 @@ void CommerceUiTabHelper::HandlePriceInsightsInfoResponse(
   TriggerUpdateForIconView();
 }
 
-// TODO(b/351935350): Remove this.
-void CommerceUiTabHelper::HandleDiscountsResponse(const DiscountsMap& map) {
-  bool response_has_discounts = false;
-  if (!map.empty()) {
-    for (auto it = map.begin(); it == map.end(); ++it) {
-      if (!it->second.empty()) {
-        response_has_discounts = true;
-        break;
-      }
-    }
-  }
-
-  page_has_discounts_ =
-      response_has_discounts
-          ? shopping_service_->IsDiscountEligibleToShowOnNavigation() ||
-                commerce::UrlContainsDiscountUtmTag(
-                    web_contents()->GetLastCommittedURL())
-          : false;
-
-  got_discounts_response_for_page_ = true;
-  MaybeComputePageActionToExpand();
-}
-
 void CommerceUiTabHelper::MaybeComputePageActionToExpand() {
   if (!shopping_service_) {
     return;
   }
 
   // Make sure we have responses from all the relevant features first.
-  if (base::FeatureList::IsEnabled(commerce::kDiscountsUiRefactor)) {
     if (!discounts_page_action_controller_->ShouldShowForNavigation()
              .has_value()) {
       return;
     }
-  } else {
-    if (shopping_service_->IsDiscountEligibleToShowOnNavigation() &&
-        !got_discounts_response_for_page_) {
-      return;
-    }
-  }
 
   if (shopping_service_->IsPriceInsightsEligible() &&
       !got_insights_response_for_page_) {
@@ -385,7 +363,8 @@ void CommerceUiTabHelper::MaybeComputePageActionToExpand() {
   if (ShouldShowDiscountsIconView()) {
     commerce::metrics::DiscountsMetricCollector::
         RecordDiscountsPageActionIconExpandState(
-            IsPageActionIconExpanded(PageActionIconType::kDiscounts));
+            IsPageActionIconExpanded(PageActionIconType::kDiscounts),
+            GetDiscounts());
   }
 }
 
@@ -431,9 +410,9 @@ void CommerceUiTabHelper::SetPriceTrackingState(
 
 void CommerceUiTabHelper::OnPriceInsightsIconClicked() {
   auto* side_panel_ui = GetSidePanelUI();
-  auto* registry = SidePanelRegistry::Get(web_contents());
-  DCHECK(side_panel_ui && registry->GetEntryForKey(SidePanelEntry::Key(
-                              SidePanelEntry::Id::kShoppingInsights)));
+  DCHECK(side_panel_ui &&
+         side_panel_registry_->GetEntryForKey(
+             SidePanelEntry::Key(SidePanelEntry::Id::kShoppingInsights)));
 
   if (side_panel_ui->IsSidePanelShowing() &&
       side_panel_ui->GetCurrentEntryId() ==
@@ -492,17 +471,12 @@ void CommerceUiTabHelper::UpdateProductSpecificationsIconView() {
 }
 
 void CommerceUiTabHelper::MakeShoppingInsightsSidePanelAvailable() {
-  auto* registry = SidePanelRegistry::Get(web_contents());
-  if (!registry) {
-    return;
-  }
-
   auto entry = std::make_unique<SidePanelEntry>(
       SidePanelEntry::Id::kShoppingInsights,
       base::BindRepeating(
           &CommerceUiTabHelper::CreateShoppingInsightsWebView,
           base::Unretained(this)));
-  registry->Register(std::move(entry));
+  side_panel_registry_->Register(std::move(entry));
 }
 
 void CommerceUiTabHelper::MakeShoppingInsightsSidePanelUnavailable() {
@@ -515,11 +489,7 @@ void CommerceUiTabHelper::MakeShoppingInsightsSidePanelUnavailable() {
         "Commerce.PriceInsights.NavigationClosedSidePanel"));
   }
 
-  auto* registry = SidePanelRegistry::Get(web_contents());
-  if (!registry) {
-    return;
-  }
-  registry->Deregister(
+  side_panel_registry_->Deregister(
       SidePanelEntry::Key(SidePanelEntry::Id::kShoppingInsights));
 }
 
@@ -556,9 +526,6 @@ CommerceUiTabHelper::GetPriceInsightsInfo() {
 }
 
 void CommerceUiTabHelper::UpdateDiscountsIconView() {
-  if (!base::FeatureList::IsEnabled(commerce::kDiscountsUiRefactor)) {
-    return;
-  }
   UpdatePageActionIconView(web_contents(), PageActionIconType::kDiscounts);
 }
 
@@ -585,7 +552,14 @@ bool CommerceUiTabHelper::IsShowingDiscountsIcon() {
 }
 
 void CommerceUiTabHelper::ComputePageActionToExpand() {
-  page_action_to_expand_ = std::nullopt;
+  if (!page_action_icon_compute_start_time_.is_null()) {
+    base::UmaHistogramTimes(
+        "Commerce.IconComputationTime",
+        base::TimeTicks::Now() - page_action_icon_compute_start_time_);
+    page_action_to_expand_ = std::nullopt;
+  }
+
+  page_action_icon_compute_start_time_ = base::TimeTicks();
 
   if (!web_contents() || !web_contents()->GetBrowserContext()) {
     page_action_to_expand_ = std::nullopt;
@@ -597,22 +571,11 @@ void CommerceUiTabHelper::ComputePageActionToExpand() {
 
   // TODO(b:301440117): Splitting the triggering logic for each icon into
   //                    delegates would make this much easier to test.
-
-  if (base::FeatureList::IsEnabled(commerce::kDiscountsUiRefactor)) {
     if (discounts_page_action_controller_->WantsExpandedUi()) {
       page_action_to_expand_ = PageActionIconType::kDiscounts;
       MaybeRecordShoppingInformationUKM(PageActionIconType::kDiscounts);
       return;
     }
-  } else {
-    // We don't have full control over the discounts icon, so if we detect
-    // that it is showing at all, block the others from expanding.
-    if (IsShowingDiscountsIcon()) {
-      MaybeRecordShoppingInformationUKM(
-          PageActionIconType::kPaymentsOfferNotification);
-      return;
-    }
-  }
 
   if (ShouldShowProductSpecificationsIconView()) {
     page_action_to_expand_ = PageActionIconType::kProductSpecifications;
@@ -621,10 +584,9 @@ void CommerceUiTabHelper::ComputePageActionToExpand() {
 
   // Prioritize the price insights icon.
   if (ShouldShowPriceInsightsIconView()) {
-    PriceInsightsIconView::PriceInsightsIconLabelType label_type =
+    PriceInsightsIconLabelType label_type =
         GetPriceInsightsIconLabelTypeForPage();
-    bool icon_has_label =
-        label_type != PriceInsightsIconView::PriceInsightsIconLabelType::kNone;
+    bool icon_has_label = label_type != PriceInsightsIconLabelType::kNone;
 
     if (icon_has_label && tracker &&
         tracker->ShouldTriggerHelpUI(
@@ -649,7 +611,7 @@ void CommerceUiTabHelper::ComputePageActionToExpand() {
   MaybeRecordShoppingInformationUKM(std::nullopt);
 }
 
-PriceInsightsIconView::PriceInsightsIconLabelType
+PriceInsightsIconLabelType
 CommerceUiTabHelper::GetPriceInsightsIconLabelTypeForPage() {
   auto& price_insights_info = GetPriceInsightsInfo();
 
@@ -657,16 +619,16 @@ CommerceUiTabHelper::GetPriceInsightsIconLabelTypeForPage() {
       !price_insights_info->typical_low_price_micros.has_value() ||
       !price_insights_info->typical_high_price_micros.has_value() ||
       price_insights_info->catalog_history_prices.empty()) {
-    return PriceInsightsIconView::PriceInsightsIconLabelType::kNone;
+    return PriceInsightsIconLabelType::kNone;
   } else if (price_insights_info->price_bucket ==
              commerce::PriceBucket::kLowPrice) {
-    return PriceInsightsIconView::PriceInsightsIconLabelType::kPriceIsLow;
+    return PriceInsightsIconLabelType::kPriceIsLow;
   } else if (price_insights_info->price_bucket ==
                  commerce::PriceBucket::kHighPrice &&
              commerce::kPriceInsightsChipLabelExpandOnHighPrice.Get()) {
-    return PriceInsightsIconView::PriceInsightsIconLabelType::kPriceIsHigh;
+    return PriceInsightsIconLabelType::kPriceIsHigh;
   } else {
-    return PriceInsightsIconView::PriceInsightsIconLabelType::kNone;
+    return PriceInsightsIconLabelType::kNone;
   }
 }
 
@@ -708,6 +670,10 @@ bool CommerceUiTabHelper::ShouldAutoShowDiscountsBubble(uint64_t discount_id,
                                                         bool is_merchant_wide) {
   return discounts_page_action_controller_->ShouldAutoShowBubble(
       discount_id, is_merchant_wide);
+}
+
+void CommerceUiTabHelper::DiscountsBubbleShown(uint64_t discount_id) {
+  discounts_page_action_controller_->DiscountsBubbleShown(discount_id);
 }
 
 void CommerceUiTabHelper::RecordIconMetrics(PageActionIconType page_action,
@@ -766,9 +732,7 @@ void CommerceUiTabHelper::MaybeRecordShoppingInformationUKM(
 
   if (page_action_type.has_value()) {
     int64_t promoted_feature = 0;
-    // TODO(b/351935350): Remove the kPaymentsOfferNotification check.
-    if (page_action_type == PageActionIconType::kPaymentsOfferNotification ||
-        page_action_type == PageActionIconType::kDiscounts) {
+    if (page_action_type == PageActionIconType::kDiscounts) {
       promoted_feature =
           static_cast<int64_t>(ShoppingContextualFeature::kDiscounts);
     } else if (page_action_type == PageActionIconType::kPriceInsights) {
@@ -814,7 +778,5 @@ void CommerceUiTabHelper::SetPriceTrackingControllerForTesting(
     std::unique_ptr<PriceTrackingPageActionController> controller) {
   price_tracking_controller_.reset(controller.release());
 }
-
-WEB_CONTENTS_USER_DATA_KEY_IMPL(CommerceUiTabHelper);
 
 }  // namespace commerce

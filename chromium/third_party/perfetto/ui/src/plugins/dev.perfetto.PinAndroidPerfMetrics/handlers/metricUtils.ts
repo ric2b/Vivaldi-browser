@@ -11,9 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-import {TrackType} from '../../dev.perfetto.AndroidCujs/trackUtils';
-import {PluginContextTrace} from '../../../public';
+import {Trace} from '../../../public/trace';
 
 /**
  * Represents data for a Full trace metric
@@ -61,11 +59,17 @@ export interface BlockingCallMetricData {
   aggregation: string;
 }
 
+/** Represents a cuj to be pinned. */
+export interface CujMetricData {
+  cujName: string;
+}
+
 // Common MetricData for all handler. If new needed then add here.
 export type MetricData =
   | FullTraceMetricData
   | CujScopedMetricData
-  | BlockingCallMetricData;
+  | BlockingCallMetricData
+  | CujMetricData;
 
 // Common JankType for cujScoped and fullTrace metrics
 export type JankType = 'sf_frames' | 'app_frames' | 'frames';
@@ -86,16 +90,10 @@ export interface MetricHandler {
    * Add debug track for parsed metric data.
    *
    * @param {MetricData} metricData The parsed metric data.
-   * @param {PluginContextTrace} ctx context for trace methods and properties
-   * @param {TrackType} type 'static' onTraceload, 'debug' on command.
-   * TODO: b/349502258 - Refactor to single API
+   * @param {Trace} ctx context for trace methods and properties
    * @returns {void}
    */
-  addMetricTrack(
-    metricData: MetricData,
-    ctx: PluginContextTrace,
-    type: TrackType,
-  ): void;
+  addMetricTrack(metricData: MetricData, ctx: Trace): void;
 }
 
 // Pair for matching metric and its handler
@@ -115,6 +113,8 @@ export function expandProcessName(metricProcessName: string): string {
     return 'com.android.systemui';
   } else if (metricProcessName.includes('launcher')) {
     return 'com.google.android.apps.nexuslauncher';
+  } else if (metricProcessName.includes('surfaceflinger')) {
+    return '/system/bin/surfaceflinger';
   } else {
     return metricProcessName;
   }

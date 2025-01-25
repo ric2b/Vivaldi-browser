@@ -901,6 +901,26 @@ enum wl_display_error {
 	 */
 	WL_DISPLAY_ERROR_NO_MEMORY = 2,
 };
+/**
+ * @ingroup iface_wl_display
+ * Validate a wl_display error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_display_error
+ */
+static inline bool
+wl_display_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_DISPLAY_ERROR_INVALID_OBJECT:
+		return version >= 1;
+	case WL_DISPLAY_ERROR_INVALID_METHOD:
+		return version >= 1;
+	case WL_DISPLAY_ERROR_NO_MEMORY:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_DISPLAY_ERROR_ENUM */
 
 /**
@@ -1174,6 +1194,26 @@ enum wl_shm_error {
 	 */
 	WL_SHM_ERROR_INVALID_FD = 2,
 };
+/**
+ * @ingroup iface_wl_shm
+ * Validate a wl_shm error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_shm_error
+ */
+static inline bool
+wl_shm_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SHM_ERROR_INVALID_FORMAT:
+		return version >= 1;
+	case WL_SHM_ERROR_INVALID_STRIDE:
+		return version >= 1;
+	case WL_SHM_ERROR_INVALID_FD:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SHM_ERROR_ENUM */
 
 #ifndef WL_SHM_FORMAT_ENUM
@@ -1426,6 +1466,136 @@ enum wl_shm_format {
 	 */
 	WL_SHM_FORMAT_YVU444 = 0x34325659,
 };
+/**
+ * @ingroup iface_wl_shm
+ * Validate a wl_shm format value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_shm_format
+ */
+static inline bool
+wl_shm_format_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SHM_FORMAT_ARGB8888:
+		return version >= 1;
+	case WL_SHM_FORMAT_XRGB8888:
+		return version >= 1;
+	case WL_SHM_FORMAT_C8:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGB332:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGR233:
+		return version >= 1;
+	case WL_SHM_FORMAT_XRGB4444:
+		return version >= 1;
+	case WL_SHM_FORMAT_XBGR4444:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGBX4444:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGRX4444:
+		return version >= 1;
+	case WL_SHM_FORMAT_ARGB4444:
+		return version >= 1;
+	case WL_SHM_FORMAT_ABGR4444:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGBA4444:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGRA4444:
+		return version >= 1;
+	case WL_SHM_FORMAT_XRGB1555:
+		return version >= 1;
+	case WL_SHM_FORMAT_XBGR1555:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGBX5551:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGRX5551:
+		return version >= 1;
+	case WL_SHM_FORMAT_ARGB1555:
+		return version >= 1;
+	case WL_SHM_FORMAT_ABGR1555:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGBA5551:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGRA5551:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGB565:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGR565:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGB888:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGR888:
+		return version >= 1;
+	case WL_SHM_FORMAT_XBGR8888:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGBX8888:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGRX8888:
+		return version >= 1;
+	case WL_SHM_FORMAT_ABGR8888:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGBA8888:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGRA8888:
+		return version >= 1;
+	case WL_SHM_FORMAT_XRGB2101010:
+		return version >= 1;
+	case WL_SHM_FORMAT_XBGR2101010:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGBX1010102:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGRX1010102:
+		return version >= 1;
+	case WL_SHM_FORMAT_ARGB2101010:
+		return version >= 1;
+	case WL_SHM_FORMAT_ABGR2101010:
+		return version >= 1;
+	case WL_SHM_FORMAT_RGBA1010102:
+		return version >= 1;
+	case WL_SHM_FORMAT_BGRA1010102:
+		return version >= 1;
+	case WL_SHM_FORMAT_YUYV:
+		return version >= 1;
+	case WL_SHM_FORMAT_YVYU:
+		return version >= 1;
+	case WL_SHM_FORMAT_UYVY:
+		return version >= 1;
+	case WL_SHM_FORMAT_VYUY:
+		return version >= 1;
+	case WL_SHM_FORMAT_AYUV:
+		return version >= 1;
+	case WL_SHM_FORMAT_NV12:
+		return version >= 1;
+	case WL_SHM_FORMAT_NV21:
+		return version >= 1;
+	case WL_SHM_FORMAT_NV16:
+		return version >= 1;
+	case WL_SHM_FORMAT_NV61:
+		return version >= 1;
+	case WL_SHM_FORMAT_YUV410:
+		return version >= 1;
+	case WL_SHM_FORMAT_YVU410:
+		return version >= 1;
+	case WL_SHM_FORMAT_YUV411:
+		return version >= 1;
+	case WL_SHM_FORMAT_YVU411:
+		return version >= 1;
+	case WL_SHM_FORMAT_YUV420:
+		return version >= 1;
+	case WL_SHM_FORMAT_YVU420:
+		return version >= 1;
+	case WL_SHM_FORMAT_YUV422:
+		return version >= 1;
+	case WL_SHM_FORMAT_YVU422:
+		return version >= 1;
+	case WL_SHM_FORMAT_YUV444:
+		return version >= 1;
+	case WL_SHM_FORMAT_YVU444:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SHM_FORMAT_ENUM */
 
 /**
@@ -1536,6 +1706,28 @@ enum wl_data_offer_error {
 	 */
 	WL_DATA_OFFER_ERROR_INVALID_OFFER = 3,
 };
+/**
+ * @ingroup iface_wl_data_offer
+ * Validate a wl_data_offer error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_data_offer_error
+ */
+static inline bool
+wl_data_offer_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_DATA_OFFER_ERROR_INVALID_FINISH:
+		return version >= 1;
+	case WL_DATA_OFFER_ERROR_INVALID_ACTION_MASK:
+		return version >= 1;
+	case WL_DATA_OFFER_ERROR_INVALID_ACTION:
+		return version >= 1;
+	case WL_DATA_OFFER_ERROR_INVALID_OFFER:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_DATA_OFFER_ERROR_ENUM */
 
 /**
@@ -1748,6 +1940,24 @@ enum wl_data_source_error {
 	 */
 	WL_DATA_SOURCE_ERROR_INVALID_SOURCE = 1,
 };
+/**
+ * @ingroup iface_wl_data_source
+ * Validate a wl_data_source error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_data_source_error
+ */
+static inline bool
+wl_data_source_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_DATA_SOURCE_ERROR_INVALID_ACTION_MASK:
+		return version >= 1;
+	case WL_DATA_SOURCE_ERROR_INVALID_SOURCE:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_DATA_SOURCE_ERROR_ENUM */
 
 /**
@@ -1920,6 +2130,22 @@ enum wl_data_device_error {
 	 */
 	WL_DATA_DEVICE_ERROR_ROLE = 0,
 };
+/**
+ * @ingroup iface_wl_data_device
+ * Validate a wl_data_device error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_data_device_error
+ */
+static inline bool
+wl_data_device_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_DATA_DEVICE_ERROR_ROLE:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_DATA_DEVICE_ERROR_ENUM */
 
 /**
@@ -2161,6 +2387,28 @@ enum wl_data_device_manager_dnd_action {
 	 */
 	WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK = 4,
 };
+/**
+ * @ingroup iface_wl_data_device_manager
+ * Validate a wl_data_device_manager dnd_action value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_data_device_manager_dnd_action
+ */
+static inline bool
+wl_data_device_manager_dnd_action_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE:
+		return version >= 1;
+	case WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY:
+		return version >= 1;
+	case WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE:
+		return version >= 1;
+	case WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_DATA_DEVICE_MANAGER_DND_ACTION_ENUM */
 
 /**
@@ -2208,6 +2456,22 @@ enum wl_shell_error {
 	 */
 	WL_SHELL_ERROR_ROLE = 0,
 };
+/**
+ * @ingroup iface_wl_shell
+ * Validate a wl_shell error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_shell_error
+ */
+static inline bool
+wl_shell_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SHELL_ERROR_ROLE:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SHELL_ERROR_ENUM */
 
 /**
@@ -2287,6 +2551,38 @@ enum wl_shell_surface_resize {
 	 */
 	WL_SHELL_SURFACE_RESIZE_BOTTOM_RIGHT = 10,
 };
+/**
+ * @ingroup iface_wl_shell_surface
+ * Validate a wl_shell_surface resize value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_shell_surface_resize
+ */
+static inline bool
+wl_shell_surface_resize_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SHELL_SURFACE_RESIZE_NONE:
+		return version >= 1;
+	case WL_SHELL_SURFACE_RESIZE_TOP:
+		return version >= 1;
+	case WL_SHELL_SURFACE_RESIZE_BOTTOM:
+		return version >= 1;
+	case WL_SHELL_SURFACE_RESIZE_LEFT:
+		return version >= 1;
+	case WL_SHELL_SURFACE_RESIZE_TOP_LEFT:
+		return version >= 1;
+	case WL_SHELL_SURFACE_RESIZE_BOTTOM_LEFT:
+		return version >= 1;
+	case WL_SHELL_SURFACE_RESIZE_RIGHT:
+		return version >= 1;
+	case WL_SHELL_SURFACE_RESIZE_TOP_RIGHT:
+		return version >= 1;
+	case WL_SHELL_SURFACE_RESIZE_BOTTOM_RIGHT:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SHELL_SURFACE_RESIZE_ENUM */
 
 #ifndef WL_SHELL_SURFACE_TRANSIENT_ENUM
@@ -2304,6 +2600,22 @@ enum wl_shell_surface_transient {
 	 */
 	WL_SHELL_SURFACE_TRANSIENT_INACTIVE = 0x1,
 };
+/**
+ * @ingroup iface_wl_shell_surface
+ * Validate a wl_shell_surface transient value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_shell_surface_transient
+ */
+static inline bool
+wl_shell_surface_transient_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SHELL_SURFACE_TRANSIENT_INACTIVE:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SHELL_SURFACE_TRANSIENT_ENUM */
 
 #ifndef WL_SHELL_SURFACE_FULLSCREEN_METHOD_ENUM
@@ -2334,6 +2646,28 @@ enum wl_shell_surface_fullscreen_method {
 	 */
 	WL_SHELL_SURFACE_FULLSCREEN_METHOD_FILL = 3,
 };
+/**
+ * @ingroup iface_wl_shell_surface
+ * Validate a wl_shell_surface fullscreen_method value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_shell_surface_fullscreen_method
+ */
+static inline bool
+wl_shell_surface_fullscreen_method_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SHELL_SURFACE_FULLSCREEN_METHOD_DEFAULT:
+		return version >= 1;
+	case WL_SHELL_SURFACE_FULLSCREEN_METHOD_SCALE:
+		return version >= 1;
+	case WL_SHELL_SURFACE_FULLSCREEN_METHOD_DRIVER:
+		return version >= 1;
+	case WL_SHELL_SURFACE_FULLSCREEN_METHOD_FILL:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SHELL_SURFACE_FULLSCREEN_METHOD_ENUM */
 
 /**
@@ -2666,6 +3000,24 @@ enum wl_surface_error {
 	 */
 	WL_SURFACE_ERROR_INVALID_TRANSFORM = 1,
 };
+/**
+ * @ingroup iface_wl_surface
+ * Validate a wl_surface error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_surface_error
+ */
+static inline bool
+wl_surface_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SURFACE_ERROR_INVALID_SCALE:
+		return version >= 1;
+	case WL_SURFACE_ERROR_INVALID_TRANSFORM:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SURFACE_ERROR_ENUM */
 
 /**
@@ -3125,6 +3477,26 @@ enum wl_seat_capability {
 	 */
 	WL_SEAT_CAPABILITY_TOUCH = 4,
 };
+/**
+ * @ingroup iface_wl_seat
+ * Validate a wl_seat capability value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_seat_capability
+ */
+static inline bool
+wl_seat_capability_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SEAT_CAPABILITY_POINTER:
+		return version >= 1;
+	case WL_SEAT_CAPABILITY_KEYBOARD:
+		return version >= 1;
+	case WL_SEAT_CAPABILITY_TOUCH:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SEAT_CAPABILITY_ENUM */
 
 /**
@@ -3249,6 +3621,22 @@ enum wl_pointer_error {
 	 */
 	WL_POINTER_ERROR_ROLE = 0,
 };
+/**
+ * @ingroup iface_wl_pointer
+ * Validate a wl_pointer error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_pointer_error
+ */
+static inline bool
+wl_pointer_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_POINTER_ERROR_ROLE:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_POINTER_ERROR_ENUM */
 
 #ifndef WL_POINTER_BUTTON_STATE_ENUM
@@ -3270,6 +3658,24 @@ enum wl_pointer_button_state {
 	 */
 	WL_POINTER_BUTTON_STATE_PRESSED = 1,
 };
+/**
+ * @ingroup iface_wl_pointer
+ * Validate a wl_pointer button_state value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_pointer_button_state
+ */
+static inline bool
+wl_pointer_button_state_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_POINTER_BUTTON_STATE_RELEASED:
+		return version >= 1;
+	case WL_POINTER_BUTTON_STATE_PRESSED:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_POINTER_BUTTON_STATE_ENUM */
 
 #ifndef WL_POINTER_AXIS_ENUM
@@ -3290,6 +3696,24 @@ enum wl_pointer_axis {
 	 */
 	WL_POINTER_AXIS_HORIZONTAL_SCROLL = 1,
 };
+/**
+ * @ingroup iface_wl_pointer
+ * Validate a wl_pointer axis value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_pointer_axis
+ */
+static inline bool
+wl_pointer_axis_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_POINTER_AXIS_VERTICAL_SCROLL:
+		return version >= 1;
+	case WL_POINTER_AXIS_HORIZONTAL_SCROLL:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_POINTER_AXIS_ENUM */
 
 #ifndef WL_POINTER_AXIS_SOURCE_ENUM
@@ -3338,6 +3762,28 @@ enum wl_pointer_axis_source {
  * @ingroup iface_wl_pointer
  */
 #define WL_POINTER_AXIS_SOURCE_WHEEL_TILT_SINCE_VERSION 6
+/**
+ * @ingroup iface_wl_pointer
+ * Validate a wl_pointer axis_source value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_pointer_axis_source
+ */
+static inline bool
+wl_pointer_axis_source_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_POINTER_AXIS_SOURCE_WHEEL:
+		return version >= 1;
+	case WL_POINTER_AXIS_SOURCE_FINGER:
+		return version >= 1;
+	case WL_POINTER_AXIS_SOURCE_CONTINUOUS:
+		return version >= 1;
+	case WL_POINTER_AXIS_SOURCE_WHEEL_TILT:
+		return version >= 6;
+	default:
+		return false;
+	}
+}
 #endif /* WL_POINTER_AXIS_SOURCE_ENUM */
 
 /**
@@ -3599,6 +4045,24 @@ enum wl_keyboard_keymap_format {
 	 */
 	WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 = 1,
 };
+/**
+ * @ingroup iface_wl_keyboard
+ * Validate a wl_keyboard keymap_format value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_keyboard_keymap_format
+ */
+static inline bool
+wl_keyboard_keymap_format_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_KEYBOARD_KEYMAP_FORMAT_NO_KEYMAP:
+		return version >= 1;
+	case WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_KEYBOARD_KEYMAP_FORMAT_ENUM */
 
 #ifndef WL_KEYBOARD_KEY_STATE_ENUM
@@ -3619,6 +4083,24 @@ enum wl_keyboard_key_state {
 	 */
 	WL_KEYBOARD_KEY_STATE_PRESSED = 1,
 };
+/**
+ * @ingroup iface_wl_keyboard
+ * Validate a wl_keyboard key_state value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_keyboard_key_state
+ */
+static inline bool
+wl_keyboard_key_state_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_KEYBOARD_KEY_STATE_RELEASED:
+		return version >= 1;
+	case WL_KEYBOARD_KEY_STATE_PRESSED:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_KEYBOARD_KEY_STATE_ENUM */
 
 /**
@@ -3945,6 +4427,32 @@ enum wl_output_subpixel {
 	 */
 	WL_OUTPUT_SUBPIXEL_VERTICAL_BGR = 5,
 };
+/**
+ * @ingroup iface_wl_output
+ * Validate a wl_output subpixel value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_output_subpixel
+ */
+static inline bool
+wl_output_subpixel_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_OUTPUT_SUBPIXEL_UNKNOWN:
+		return version >= 1;
+	case WL_OUTPUT_SUBPIXEL_NONE:
+		return version >= 1;
+	case WL_OUTPUT_SUBPIXEL_HORIZONTAL_RGB:
+		return version >= 1;
+	case WL_OUTPUT_SUBPIXEL_HORIZONTAL_BGR:
+		return version >= 1;
+	case WL_OUTPUT_SUBPIXEL_VERTICAL_RGB:
+		return version >= 1;
+	case WL_OUTPUT_SUBPIXEL_VERTICAL_BGR:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_OUTPUT_SUBPIXEL_ENUM */
 
 #ifndef WL_OUTPUT_TRANSFORM_ENUM
@@ -3999,6 +4507,36 @@ enum wl_output_transform {
 	 */
 	WL_OUTPUT_TRANSFORM_FLIPPED_270 = 7,
 };
+/**
+ * @ingroup iface_wl_output
+ * Validate a wl_output transform value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_output_transform
+ */
+static inline bool
+wl_output_transform_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+		return version >= 1;
+	case WL_OUTPUT_TRANSFORM_90:
+		return version >= 1;
+	case WL_OUTPUT_TRANSFORM_180:
+		return version >= 1;
+	case WL_OUTPUT_TRANSFORM_270:
+		return version >= 1;
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+		return version >= 1;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		return version >= 1;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		return version >= 1;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_OUTPUT_TRANSFORM_ENUM */
 
 #ifndef WL_OUTPUT_MODE_ENUM
@@ -4020,6 +4558,24 @@ enum wl_output_mode {
 	 */
 	WL_OUTPUT_MODE_PREFERRED = 0x2,
 };
+/**
+ * @ingroup iface_wl_output
+ * Validate a wl_output mode value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_output_mode
+ */
+static inline bool
+wl_output_mode_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_OUTPUT_MODE_CURRENT:
+		return version >= 1;
+	case WL_OUTPUT_MODE_PREFERRED:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_OUTPUT_MODE_ENUM */
 
 /**
@@ -4188,6 +4744,22 @@ enum wl_subcompositor_error {
 	 */
 	WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE = 0,
 };
+/**
+ * @ingroup iface_wl_subcompositor
+ * Validate a wl_subcompositor error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_subcompositor_error
+ */
+static inline bool
+wl_subcompositor_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SUBCOMPOSITOR_ERROR_ENUM */
 
 /**
@@ -4243,6 +4815,22 @@ enum wl_subsurface_error {
 	 */
 	WL_SUBSURFACE_ERROR_BAD_SURFACE = 0,
 };
+/**
+ * @ingroup iface_wl_subsurface
+ * Validate a wl_subsurface error value.
+ *
+ * @return true on success, false on error.
+ * @ref wl_subsurface_error
+ */
+static inline bool
+wl_subsurface_error_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case WL_SUBSURFACE_ERROR_BAD_SURFACE:
+		return version >= 1;
+	default:
+		return false;
+	}
+}
 #endif /* WL_SUBSURFACE_ERROR_ENUM */
 
 /**

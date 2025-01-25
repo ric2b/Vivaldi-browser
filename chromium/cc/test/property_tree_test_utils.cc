@@ -322,13 +322,10 @@ ScrollNode& CreateScrollNode(Layer* layer,
 ScrollNode& CreateScrollNode(LayerImpl* layer,
                              const gfx::Size& scroll_container_bounds,
                              int parent_id) {
-  auto& node =
-      CreateScrollNodeInternal(layer, scroll_container_bounds, parent_id);
-  layer->UpdateScrollable();
-  return node;
+  return CreateScrollNodeInternal(layer, scroll_container_bounds, parent_id);
 }
 
-ScrollNode& CreateScrollNodeForUncompositedScroller(
+ScrollNode& CreateScrollNodeForNonCompositedScroller(
     PropertyTrees* property_trees,
     int parent_id,
     ElementId element_id,

@@ -14,13 +14,16 @@
 #include "base/test/values_test_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
+#include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/extensions/api/runtime/chrome_runtime_api_delegate.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -505,6 +508,49 @@ IN_PROC_BROWSER_TEST_F(RuntimeAPIUpdateTest,
   }
 }
 
+// Tests that when the last active tab in the window belongs to the extension
+// with an uninstall URL, uninstalling the extension does not close the current
+// browser. Regression test for crbug.com/362452856
+IN_PROC_BROWSER_TEST_P(RuntimeApiTest,
+                       OpenUninstallUrlWhenExtensionPageIsTheOnlyActiveTab) {
+  ExtensionTestMessageListener ready_listener("ready");
+  // Load an extension that has set an uninstall url.
+  scoped_refptr<const Extension> extension =
+      LoadExtension(test_data_dir_.AppendASCII("runtime")
+                        .AppendASCII("uninstall_url")
+                        .AppendASCII("sets_uninstall_url"));
+  EXPECT_TRUE(ready_listener.WaitUntilSatisfied());
+  ASSERT_TRUE(extension.get());
+  extension_service()->AddExtension(extension.get());
+  ASSERT_TRUE(extension_service()->IsExtensionEnabled(extension->id()));
+  TabStripModel* tabs = browser()->tab_strip_model();
+
+  ASSERT_EQ(1, tabs->count());
+  ASSERT_EQ("about:blank", GetActiveUrl(browser()));
+
+  // Navigate to an extension page.
+  const GURL extension_page_url = extension->GetResourceURL("page.html");
+  content::RenderFrameHost* new_host =
+      ui_test_utils::NavigateToURL(browser(), extension_page_url);
+  ASSERT_TRUE(new_host);
+
+  EXPECT_EQ(1, tabs->count());
+  EXPECT_EQ(extension_page_url.spec(), GetActiveUrl(browser()));
+
+  // Uninstall the extension and expect its uninstall url to open in a new tab.
+  extension_service()->UninstallExtension(
+      extension->id(), UNINSTALL_REASON_USER_INITIATED, nullptr);
+  content::WaitForLoadStop(tabs->GetActiveWebContents());
+  EXPECT_EQ(2, tabs->count());
+
+  // The current tab should be pointing to the uninstall url of the extension.
+  EXPECT_EQ(kUninstallUrl, GetActiveUrl(browser()));
+
+  // The tab at index 0 should now be overwritten with the default NTP.
+  EXPECT_EQ(chrome::kChromeUINewTabURL,
+            tabs->GetWebContentsAt(0)->GetLastCommittedURL().spec());
+}
+
 // Tests that when a blocklisted extension with a set uninstall url is
 // uninstalled, its uninstall url does not open.
 IN_PROC_BROWSER_TEST_P(RuntimeApiTest,
@@ -645,6 +691,7 @@ class RuntimeGetContextsApiTest : public ExtensionApiTest {
              "side_panel": {
                "default_path": "side_panel.html"
              },
+             "devtools_page": "devtools.html",
              "action": {},
              "background": {
                "service_worker": "background.js"
@@ -664,6 +711,13 @@ class RuntimeGetContextsApiTest : public ExtensionApiTest {
                            </html>)");
     test_dir_.WriteFile(FILE_PATH_LITERAL("side_panel.js"),
                         "chrome.test.sendMessage('panel opened');");
+    test_dir_.WriteFile(FILE_PATH_LITERAL("devtools.html"),
+                        R"(<html>
+                             Hello, developer tools!
+                             <script src="devtools.js"></script>
+                           </html>)");
+    test_dir_.WriteFile(FILE_PATH_LITERAL("devtools.js"),
+                        "chrome.test.sendMessage('devtools page opened');");
     extension_ = LoadExtension(test_dir_.UnpackedPath());
     ASSERT_TRUE(extension_);
   }
@@ -1268,5 +1322,100 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, GetExtensionURL) {
   ASSERT_TRUE(extension);
   EXPECT_TRUE(catcher.GetNextResult());
 }
+
+// Tests retrieving contexts when developer tools are opened.
+class GetContextsWithDeveloperToolsOpened
+    : public RuntimeGetContextsApiTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  GetContextsWithDeveloperToolsOpened() = default;
+  ~GetContextsWithDeveloperToolsOpened() override = default;
+
+  GetContextsWithDeveloperToolsOpened(
+      const GetContextsWithDeveloperToolsOpened&) = delete;
+  GetContextsWithDeveloperToolsOpened& operator=(
+      const GetContextsWithDeveloperToolsOpened&) = delete;
+};
+
+// TODO(crbug.com/357845909): flaky on ChromeOS and Linux MSAN.
+#if defined(MEMORY_SANITIZER) && (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
+#define MAYBE_ReturnsDevToolsContext DISABLED_ReturnsDevToolsContext
+#else
+#define MAYBE_ReturnsDevToolsContext ReturnsDevToolsContext
+#endif
+IN_PROC_BROWSER_TEST_P(GetContextsWithDeveloperToolsOpened,
+                       MAYBE_ReturnsDevToolsContext) {
+  const bool open_docked = GetParam();
+
+  // Open the developer tools and wait for the extension page to be loaded.
+  ExtensionTestMessageListener listener("devtools page opened");
+  content::WebContents* inspected_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  DevToolsWindow* devtools_window =
+      DevToolsWindowTesting::OpenDevToolsWindowSync(inspected_web_contents,
+                                                    open_docked);
+  ASSERT_TRUE(listener.WaitUntilSatisfied());
+
+  // Assert the docked state of developer tools.
+  content::WebContents* devtools_web_contents =
+      DevToolsWindowTesting::Get(devtools_window)->main_web_contents();
+  bool is_docked = devtools_web_contents->GetTopLevelNativeWindow() ==
+                   browser()->window()->GetNativeWindow();
+  ASSERT_EQ(open_docked, is_docked);
+
+  // Extract the extension host from the devtools web contents.
+  GURL expected_frame_url = extension().GetResourceURL("devtools.html");
+  auto is_extension_frame =
+      [expected_frame_url](content::RenderFrameHost* rfh) {
+        return rfh->GetLastCommittedURL() == expected_frame_url;
+      };
+  content::RenderFrameHost* extension_host = content::FrameMatchingPredicate(
+      devtools_web_contents->GetPrimaryPage(),
+      base::BindLambdaForTesting(is_extension_frame));
+
+  // Setup the expected values for the context. Only one tab-based context
+  // should be returned by chrome.runtime.getContexts().
+  int expected_tab_id = -1;
+  int expected_window_id = ExtensionTabUtil::GetWindowIdOfTab(
+      is_docked ? inspected_web_contents : devtools_web_contents);
+  int expected_frame_id = -1;
+  std::string expected_context_id =
+      ExtensionApiFrameIdMap::GetContextId(extension_host).AsLowercaseString();
+  std::string expected_document_id =
+      ExtensionApiFrameIdMap::GetDocumentId(extension_host).ToString();
+  std::string expected_origin = extension().origin().Serialize();
+  static constexpr char kExpectedTemplate[] =
+      R"([{
+            "contextType": "DEVELOPER_TOOLS",
+            "contextId": "%s",
+            "tabId": %d,
+            "windowId": %d,
+            "frameId": %d,
+            "documentId": "%s",
+            "documentUrl": "%s",
+            "documentOrigin": "%s",
+            "incognito": false
+         }])";
+  std::string expected_contexts = base::StringPrintf(
+      kExpectedTemplate, expected_context_id.c_str(), expected_tab_id,
+      expected_window_id, expected_frame_id, expected_document_id.c_str(),
+      expected_frame_url.spec().c_str(), expected_origin.c_str());
+
+  // Verify the result of chrome.runtime.getContexts().
+  base::Value contexts =
+      GetContexts(R"({"contextTypes": ["DEVELOPER_TOOLS"]})");
+  EXPECT_THAT(contexts, base::test::IsJson(expected_contexts));
+}
+
+// Test for undocked developer tools.
+INSTANTIATE_TEST_SUITE_P(UndockedDevTools,
+                         GetContextsWithDeveloperToolsOpened,
+                         ::testing::Values(false) /* open_docked */);
+
+// Test for docked developer tools. This is also a regression test for
+// crbug.com/355625882.
+INSTANTIATE_TEST_SUITE_P(DockedDevTools,
+                         GetContextsWithDeveloperToolsOpened,
+                         ::testing::Values(true) /* open_docked */);
 
 }  // namespace extensions

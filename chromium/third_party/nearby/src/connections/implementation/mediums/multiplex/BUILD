@@ -25,11 +25,11 @@ cc_library(
         "multiplex_output_stream.h",
         "multiplex_socket.h",
     ],
-    copts = ["-DCORE_ADAPTER_DLL"],
     visibility = [
         "//connections/implementation:__subpackages__",
     ],
     deps = [
+        "//connections:core_types",
         "//connections/implementation/flags:connections_flags",
         "//connections/implementation/mediums:utils",
         "//internal/flags:nearby_flags",
@@ -42,7 +42,6 @@ cc_library(
         "//internal/platform/implementation:types",
         "//proto:connections_enums_cc_proto",
         "//proto/mediums:multiplex_frames_cc_proto",
-        "@aappleby_smhasher//:libmurmur3",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",

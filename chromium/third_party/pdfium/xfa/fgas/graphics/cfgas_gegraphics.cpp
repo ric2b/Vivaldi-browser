@@ -14,7 +14,6 @@
 #include <utility>
 
 #include "core/fxcrt/check.h"
-#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/stl_util.h"
@@ -249,7 +248,9 @@ void CFGAS_GEGraphics::FillPathWithPattern(
   int32_t width = bitmap->GetWidth();
   int32_t height = bitmap->GetHeight();
   auto bmp = pdfium::MakeRetain<CFX_DIBitmap>();
-  CHECK(bmp->Create(width, height, FXDIB_Format::kArgb));
+  // TODO(crbug.com/355630556): Consider adding support for
+  // `FXDIB_Format::kBgraPremul`
+  CHECK(bmp->Create(width, height, FXDIB_Format::kBgra));
   m_renderDevice->GetDIBits(bmp, 0, 0);
 
   CFGAS_GEPattern::HatchStyle hatchStyle =
@@ -292,7 +293,9 @@ void CFGAS_GEGraphics::FillPathWithShading(
   float end_x = m_info.fillColor.GetShading()->GetEndPoint().x;
   float end_y = m_info.fillColor.GetShading()->GetEndPoint().y;
   auto bmp = pdfium::MakeRetain<CFX_DIBitmap>();
-  CHECK(bmp->Create(width, height, FXDIB_Format::kArgb));
+  // TODO(crbug.com/355630556): Consider adding support for
+  // `FXDIB_Format::kBgraPremul`
+  CHECK(bmp->Create(width, height, FXDIB_Format::kBgra));
   m_renderDevice->GetDIBits(bmp, 0, 0);
   bool result = false;
   switch (m_info.fillColor.GetShading()->GetType()) {
@@ -301,7 +304,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
       float y_span = end_y - start_y;
       float axis_len_square = (x_span * x_span) + (y_span * y_span);
       for (int32_t row = 0; row < height; row++) {
-        uint32_t* dib_buf = bmp->GetWritableScanlineAs<uint32_t>(row).data();
+        auto dib_buf = bmp->GetWritableScanlineAs<uint32_t>(row);
         for (int32_t column = 0; column < width; column++) {
           float scale = 0.0f;
           if (axis_len_square) {
@@ -319,8 +322,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
               scale = 1.0f;
             }
           }
-          UNSAFE_TODO(dib_buf[column]) =
-              m_info.fillColor.GetShading()->GetArgb(scale);
+          dib_buf[column] = m_info.fillColor.GetShading()->GetArgb(scale);
         }
       }
       result = true;
@@ -333,7 +335,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
                 ((start_y - end_y) * (start_y - end_y)) -
                 ((start_r - end_r) * (start_r - end_r));
       for (int32_t row = 0; row < height; row++) {
-        uint32_t* dib_buf = bmp->GetWritableScanlineAs<uint32_t>(row).data();
+        auto dib_buf = bmp->GetWritableScanlineAs<uint32_t>(row);
         for (int32_t column = 0; column < width; column++) {
           float x = (float)(column);
           float y = (float)(row);
@@ -379,8 +381,7 @@ void CFGAS_GEGraphics::FillPathWithShading(
               continue;
             s = 1.0f;
           }
-          UNSAFE_TODO(dib_buf[column]) =
-              m_info.fillColor.GetShading()->GetArgb(s);
+          dib_buf[column] = m_info.fillColor.GetShading()->GetArgb(s);
         }
       }
       result = true;

@@ -27,6 +27,8 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -38,8 +40,9 @@
 using Step = AuthenticatorRequestDialogModel::Step;
 
 // static
-void ShowAuthenticatorRequestDialog(content::WebContents* web_contents,
-                                    AuthenticatorRequestDialogModel* model) {
+void ShowAuthenticatorRequestDialog(
+    content::WebContents* web_contents,
+    scoped_refptr<AuthenticatorRequestDialogModel> model) {
   // The authenticator request dialog will only be shown for common user-facing
   // WebContents, which have a |manager|. Most other sources without managers,
   // like service workers and extension background pages, do not allow WebAuthn
@@ -56,13 +59,11 @@ void ShowAuthenticatorRequestDialog(content::WebContents* web_contents,
     return;
   }
 
-  new AuthenticatorRequestDialogView(web_contents, model);
+  new AuthenticatorRequestDialogView(web_contents, std::move(model));
 }
 
 AuthenticatorRequestDialogView::~AuthenticatorRequestDialogView() {
-  if (model_) {
-    model_->observers.RemoveObserver(this);
-  }
+  model_->observers.RemoveObserver(this);
   RemoveAllChildViews();
 }
 
@@ -92,18 +93,20 @@ void AuthenticatorRequestDialogView::UpdateUIForCurrentSheet() {
 
   sheet_->ReInitChildViews();
 
-  int buttons = ui::DIALOG_BUTTON_NONE;
+  int buttons = static_cast<int>(ui::mojom::DialogButton::kNone);
   if (sheet()->model()->IsAcceptButtonVisible()) {
-    buttons |= ui::DIALOG_BUTTON_OK;
+    buttons |= static_cast<int>(ui::mojom::DialogButton::kOk);
   }
   if (sheet()->model()->IsCancelButtonVisible()) {
-    buttons |= ui::DIALOG_BUTTON_CANCEL;
+    buttons |= static_cast<int>(ui::mojom::DialogButton::kCancel);
   }
   SetButtons(buttons);
-  SetDefaultButton((buttons & ui::DIALOG_BUTTON_OK) ? ui::DIALOG_BUTTON_OK
-                                                    : ui::DIALOG_BUTTON_NONE);
-  SetButtonLabel(ui::DIALOG_BUTTON_OK, sheet_->model()->GetAcceptButtonLabel());
-  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+  SetDefaultButton(buttons & static_cast<int>(ui::mojom::DialogButton::kOk)
+                       ? static_cast<int>(ui::mojom::DialogButton::kOk)
+                       : static_cast<int>(ui::mojom::DialogButton::kNone));
+  SetButtonLabel(ui::mojom::DialogButton::kOk,
+                 sheet_->model()->GetAcceptButtonLabel());
+  SetButtonLabel(ui::mojom::DialogButton::kCancel,
                  sheet_->model()->GetCancelButtonLabel());
   if (model_->step() == Step::kTrustThisComputerAssertion ||
       model_->step() == Step::kTrustThisComputerCreation ||
@@ -114,7 +117,7 @@ void AuthenticatorRequestDialogView::UpdateUIForCurrentSheet() {
       model_->step() == Step::kGPMCreateArbitraryPin ||
       model_->step() == Step::kGPMChangePin ||
       model_->step() == Step::kGPMChangeArbitraryPin) {
-    SetButtonStyle(ui::DIALOG_BUTTON_CANCEL, ui::ButtonStyle::kTonal);
+    SetButtonStyle(ui::mojom::DialogButton::kCancel, ui::ButtonStyle::kTonal);
   }
 
   if (ShouldOtherMechanismsButtonBeVisible()) {
@@ -202,9 +205,8 @@ void AuthenticatorRequestDialogView::UpdateUIForCurrentSheet() {
   if (model_->ui_disabled_ && sheet_->model()->IsActivityIndicatorVisible()) {
     // Announce the loading state after request focus; otherwise the view that
     // has the focus will suppress the loading announcement.
-    // TODO(b/356417228): Replace with a WebAuthn string.
     GetViewAccessibility().AnnounceText(
-        l10n_util::GetStringUTF16(IDS_TAB_LOADING_TITLE));
+        l10n_util::GetStringUTF16(IDS_WEBAUTHN_LOADING));
   }
 }
 
@@ -229,16 +231,16 @@ bool AuthenticatorRequestDialogView::Cancel() {
 }
 
 bool AuthenticatorRequestDialogView::IsDialogButtonEnabled(
-    ui::DialogButton button) const {
+    ui::mojom::DialogButton button) const {
   switch (button) {
-    case ui::DIALOG_BUTTON_NONE:
+    case ui::mojom::DialogButton::kNone:
       break;
-    case ui::DIALOG_BUTTON_OK:
+    case ui::mojom::DialogButton::kOk:
       return sheet()->model()->IsAcceptButtonEnabled();
-    case ui::DIALOG_BUTTON_CANCEL:
+    case ui::mojom::DialogButton::kCancel:
       return true;  // Cancel is always enabled if visible.
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 views::View* AuthenticatorRequestDialogView::GetInitiallyFocusedView() {
@@ -277,7 +279,7 @@ std::u16string AuthenticatorRequestDialogView::GetWindowTitle() const {
 
 void AuthenticatorRequestDialogView::OnModelDestroyed(
     AuthenticatorRequestDialogModel* model) {
-  model_ = nullptr;
+  NOTREACHED() << "The model should outlive this view.";
 }
 
 void AuthenticatorRequestDialogView::OnStepTransition() {
@@ -295,7 +297,7 @@ void AuthenticatorRequestDialogView::OnStepTransition() {
     }
     return;
   }
-  ReplaceCurrentSheetWith(CreateSheetViewForCurrentStepOf(model_));
+  ReplaceCurrentSheetWith(CreateSheetViewForCurrentStepOf(model_.get()));
   Show();
 }
 
@@ -322,7 +324,7 @@ void AuthenticatorRequestDialogView::OnVisibilityChanged(
 
 AuthenticatorRequestDialogView::AuthenticatorRequestDialogView(
     content::WebContents* web_contents,
-    AuthenticatorRequestDialogModel* model)
+    scoped_refptr<AuthenticatorRequestDialogModel> model)
     : content::WebContentsObserver(web_contents),
       model_(model),
       web_contents_hidden_(web_contents->GetVisibility() ==
@@ -331,7 +333,7 @@ AuthenticatorRequestDialogView::AuthenticatorRequestDialogView(
   DCHECK(!model_->should_dialog_be_closed());
   model_->observers.AddObserver(this);
 
-  SetModalType(ui::MODAL_TYPE_CHILD);
+  SetModalType(ui::mojom::ModalType::kChild);
   SetShowCloseButton(false);
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
@@ -339,8 +341,6 @@ AuthenticatorRequestDialogView::AuthenticatorRequestDialogView(
   // Currently, all sheets have a label on top and controls at the bottom.
   // Consider moving this to AuthenticatorRequestSheetView if this changes.
   SetLayoutManager(std::make_unique<views::FillLayout>());
-
-  OnStepTransition();
 }
 
 void AuthenticatorRequestDialogView::Show() {

@@ -37,6 +37,11 @@ namespace bookmarks {
 class BookmarkModel;
 }
 
+// Vivaldi
+namespace direct_match {
+class DirectMatchService;
+}
+
 namespace history {
 class HistoryService;
 class URLDatabase;
@@ -61,10 +66,6 @@ class ComponentUpdateService;
 
 namespace signin {
 class IdentityManager;
-}
-
-namespace query_tiles {
-class TileService;
 }
 
 class TemplateURLService;
@@ -99,7 +100,6 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   virtual scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() = 0;
   virtual std::unique_ptr<KeywordExtensionsDelegate>
   GetKeywordExtensionsDelegate(KeywordProvider* keyword_provider) = 0;
-  virtual query_tiles::TileService* GetQueryTileService() const = 0;
   virtual OmniboxTriggeredFeatureService* GetOmniboxTriggeredFeatureService()
       const = 0;
   virtual AutocompleteScoringModelService* GetAutocompleteScoringModelService()
@@ -215,6 +215,9 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   // Gets a weak pointer to the client. Used when providers need to use the
   // client when the client may no longer be around.
   virtual base::WeakPtr<AutocompleteProviderClient> GetWeakPtr();
+
+  // Vivaldi
+  virtual direct_match::DirectMatchService* GetDirectMatchService() = 0;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_PROVIDER_CLIENT_H_

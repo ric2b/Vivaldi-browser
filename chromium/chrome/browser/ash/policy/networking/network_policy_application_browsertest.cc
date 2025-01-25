@@ -30,10 +30,10 @@
 #include "base/test/values_test_util.h"
 #include "chrome/browser/ash/login/login_manager_test.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
-#include "chrome/browser/ash/scoped_test_system_nss_key_slot_mixin.h"
 #include "chrome/browser/policy/networking/network_configuration_updater.h"
 #include "chrome/browser/ui/ash/network/enrollment_dialog_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/test/base/ash/scoped_test_system_nss_key_slot_mixin.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/ash/components/dbus/shill/shill_device_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_ipconfig_client.h"
@@ -2837,7 +2837,7 @@ IN_PROC_BROWSER_TEST_F(NetworkPolicyApplicationTest,
   AddPskWifiService(kServiceWifi3, kGuidWifiHTTPOnly, kWifiNameHTTPOnly,
                     shill::kStateIdle);
 
-  const char* kConfig = R"(
+  static constexpr char kConfig[] = R"(
       {
         "GlobalNetworkConfiguration": {
         },
@@ -2945,7 +2945,7 @@ IN_PROC_BROWSER_TEST_F(NetworkPolicyApplicationTest,
   // Set a policy that uses a ClientCertPattern which has an EnrollmentURI and
   // will not resolve to any client certificate (no client certificate has been
   // installed/imported at all).
-  const char kUserONC[] = R"(
+  static constexpr char kUserONC[] = R"(
     {
       "NetworkConfigurations": [
         {

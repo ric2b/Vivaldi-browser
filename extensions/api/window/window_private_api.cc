@@ -24,9 +24,6 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/color_parser.h"
@@ -246,15 +243,6 @@ void VivaldiBrowserObserver::OnTabStripModelChanged(
   TabsPrivateAPI::FromBrowserContext(
       selection.new_contents->GetBrowserContext())
       ->NotifyTabSelectionChange(selection.new_contents);
-
-  // Lookup the proper ExtensionActionUtil based on tab WebContents.
-  extensions::ExtensionActionUtil* utils =
-      extensions::ExtensionActionUtilFactory::GetForBrowserContext(
-          selection.new_contents->GetBrowserContext());
-  DCHECK(utils);
-  if (!utils)
-    return;
-  utils->NotifyTabSelectionChange(selection.new_contents);
 }
 
 }  // namespace
@@ -410,6 +398,10 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   create_params.is_vivaldi = true;
   create_params.window = window;
   create_params.viv_ext_data = viv_ext_data;
+#if BUILDFLAG(IS_WIN)
+  // see VB-109884
+  create_params.initial_show_state = window_params.state;
+#endif
   std::unique_ptr<Browser> browser(Browser::Create(create_params));
   DCHECK(browser->window() == window);
   window->SetWindowURL(window_params.resource_relative_url);
@@ -457,14 +449,15 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  Browser* browser;
+  extensions::WindowController* controller;
   std::string error;
   bool was_fullscreen;
-  if (!windows_util::GetBrowserFromWindowID(
+  if (!windows_util::GetControllerFromWindowID(
           this, params->window_id, WindowController::GetAllWindowFilter(),
-          &browser, &error)) {
+          &controller, &error)) {
     return RespondNow(Error(error));
   }
+  Browser* browser = controller->GetBrowser();
   ui::WindowShowState show_state =
       vivaldi::ConvertToWindowShowState(params->state);
 
@@ -529,14 +522,15 @@ WindowPrivateUpdateMaximizeButtonPositionFunction::Run() {
   std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  Browser* browser;
+  extensions::WindowController* controller;
   std::string error;
-  if (!windows_util::GetBrowserFromWindowID(
+  if (!windows_util::GetControllerFromWindowID(
           this, params->window_id, WindowController::GetAllWindowFilter(),
-          &browser, &error)) {
+          &controller, &error)) {
     return RespondNow(Error(error));
   }
-  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromBrowser(controller->GetBrowser());
   if (window) {
     gfx::RectF rect(params->left, params->top, params->width, params->height);
     ::vivaldi::FromUICoordinates(window->web_contents(), &rect);
@@ -616,14 +610,15 @@ WindowPrivateSetControlButtonsPaddingFunction::Run() {
   std::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  Browser* browser;
+  extensions::WindowController* controller;
   std::string error;
-  if (!windows_util::GetBrowserFromWindowID(
+  if (!windows_util::GetControllerFromWindowID(
           this, params->window_id, WindowController::GetAllWindowFilter(),
-          &browser, &error)) {
+          &controller, &error)) {
     return RespondNow(Error(error));
   }
-  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
+  VivaldiBrowserWindow* window =
+      VivaldiBrowserWindow::FromBrowser(controller->GetBrowser());
   if (!window) {
     return RespondNow(Error("No window for browser."));
   }

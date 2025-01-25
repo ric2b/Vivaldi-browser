@@ -261,7 +261,7 @@ void DisplayMediaAccessHandler::HandleRequest(
     }
     BypassMediaSelectionDialog(web_contents, request, std::move(callback));
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 }
 
@@ -605,14 +605,15 @@ void DisplayMediaAccessHandler::OnDisplaySurfaceSelected(
 #if BUILDFLAG(IS_MAC)
   // Check screen capture permissions on Mac if necessary.
   // Do not check screen capture permissions when window_id is populated. The
-  // presence of the window_id indicates the window to be captured is a Chrome
+  // presence of the window_id indicates the window to be captured is a Chromium
   // window which will be captured internally, the macOS screen capture APIs
   // will not be used.
-  if ((media_id.type == content::DesktopMediaID::TYPE_SCREEN ||
+  if (system_media_permissions::ScreenCaptureNeedsSystemLevelPermissions() &&
+      (media_id.type == content::DesktopMediaID::TYPE_SCREEN ||
        (media_id.type == content::DesktopMediaID::TYPE_WINDOW &&
         !media_id.window_id)) &&
       system_media_permissions::CheckSystemScreenCapturePermission() !=
-          system_media_permissions::SystemPermission::kAllowed) {
+          system_permission_settings::SystemPermission::kAllowed) {
     RejectRequest(
         web_contents.get(),
         blink::mojom::MediaStreamRequestResult::SYSTEM_PERMISSION_DENIED);

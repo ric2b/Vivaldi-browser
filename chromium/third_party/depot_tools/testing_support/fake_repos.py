@@ -170,6 +170,22 @@ class FakeReposBase(object):
                 'git', 'init', '-b', DEFAULT_BRANCH, '-q',
                 join(self.git_base, repo)
             ])
+            subprocess2.check_call([
+                'git',
+                '-C',
+                join(self.git_base, repo),
+                'config',
+                'user.name',
+                'Hina Hoshino',
+            ])
+            subprocess2.check_call([
+                'git',
+                '-C',
+                join(self.git_base, repo),
+                'config',
+                'user.email',
+                'testing@example.com',
+            ])
             self.git_hashes[repo] = [(None, None)]
         self.populateGit()
         self.initialized = True

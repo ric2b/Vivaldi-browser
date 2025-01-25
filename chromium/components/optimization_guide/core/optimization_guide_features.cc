@@ -19,6 +19,7 @@
 #include "base/strings/to_string.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
+#include "components/optimization_guide/core/feature_registry/mqls_feature_registry.h"
 #include "components/optimization_guide/core/insertion_ordered_set.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
@@ -62,12 +63,6 @@ BASE_FEATURE(kRemoteOptimizationGuideFetching,
 BASE_FEATURE(kRemoteOptimizationGuideFetchingAnonymousDataConsent,
              "OptimizationHintsFetchingAnonymousDataConsent",
              base::FEATURE_DISABLED_BY_DEFAULT);  // Vivaldi
-
-// Enables performance info in the context menu and fetching from a remote
-// Optimization Guide Service.
-BASE_FEATURE(kContextMenuPerformanceInfoAndRemoteHintFetching,
-             "ContextMenuPerformanceInfoAndRemoteHintFetching",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables the prediction of optimization targets.
 BASE_FEATURE(kOptimizationTargetPrediction,
@@ -298,28 +293,13 @@ bool IsModelQualityLoggingEnabled() {
   return base::FeatureList::IsEnabled(kModelQualityLogging);
 }
 
-bool IsModelQualityLoggingEnabledForFeature(UserVisibleFeatureKey key) {
+bool IsModelQualityLoggingEnabledForFeature(
+    const MqlsFeatureMetadata* metadata) {
   if (!IsModelQualityLoggingEnabled()) {
     return false;
   }
 
-  bool default_logging_enabled = false;
-  switch (key) {
-    case UserVisibleFeatureKey::kCompose:
-    case UserVisibleFeatureKey::kTabOrganization:
-    case UserVisibleFeatureKey::kWallpaperSearch:
-    case UserVisibleFeatureKey::kHistorySearch:
-      // Enable logging when you have approvals. For new features please
-      // consult with components/optimization_guide/core/model_quality/OWNERS to
-      // discuss if you need logging or not for your feature.
-      default_logging_enabled = true;
-      break;
-  }
-
-  std::string param_name = base::ToLowerASCII(
-      proto::ModelExecutionFeature_Name(ToModelExecutionFeatureProto(key)));
-  return GetFieldTrialParamByFeatureAsBool(kModelQualityLogging, param_name,
-                                           default_logging_enabled);
+  return metadata->LoggingEnabledViaFieldTrial();
 }
 
 bool IsRemoteFetchingEnabled() {
@@ -337,11 +317,6 @@ bool IsPushNotificationsEnabled() {
 bool IsRemoteFetchingForAnonymousDataConsentEnabled() {
   return base::FeatureList::IsEnabled(
       kRemoteOptimizationGuideFetchingAnonymousDataConsent);
-}
-
-bool IsRemoteFetchingExplicitlyAllowedForPerformanceInfo() {
-  return base::FeatureList::IsEnabled(
-      kContextMenuPerformanceInfoAndRemoteHintFetching);
 }
 
 int MaxServerBloomFilterByteSize() {
@@ -438,7 +413,7 @@ size_t MaxHostKeyedHintCacheSize() {
 
 size_t MaxURLKeyedHintCacheSize() {
   size_t max_url_keyed_hint_cache_size = GetFieldTrialParamByFeatureAsInt(
-      kOptimizationHints, "max_url_keyed_hint_cache_size", 30);
+      kOptimizationHints, "max_url_keyed_hint_cache_size", 50);
   DCHECK_GE(max_url_keyed_hint_cache_size,
             MaxUrlsForOptimizationGuideServiceHintsFetch());
   return max_url_keyed_hint_cache_size;
@@ -837,6 +812,13 @@ int GetOnDeviceModelDefaultTopK() {
       &optimization_guide::features::kOptimizationGuideOnDeviceModel,
       "on_device_model_topk", 3};
   return kTopK.Get();
+}
+
+int GetOnDeviceModelMaxTopK() {
+  static const base::FeatureParam<int> kMaxTopK{
+      &optimization_guide::features::kOptimizationGuideOnDeviceModel,
+      "on_device_model_max_topk", 128};
+  return kMaxTopK.Get();
 }
 
 double GetOnDeviceModelDefaultTemperature() {

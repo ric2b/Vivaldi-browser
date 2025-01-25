@@ -30,6 +30,9 @@ interface FacilitatedPaymentsPaymentMethodsComponent {
 
         /** Called whenever the payment settings text is clicked on the bottom sheet. */
         boolean showFinancialAccountsManagementSettings(Context context);
+
+        /** Called whenever the manage payment methods footer is tapped on the bottom sheet. */
+        boolean showManagePaymentMethodsSettings(Context context);
     }
 
     /** Initializes the component. */
@@ -38,6 +41,11 @@ interface FacilitatedPaymentsPaymentMethodsComponent {
             BottomSheetController bottomSheetController,
             Delegate delegate,
             Profile profile);
+
+    /**
+     * @return True if the device is being used in the landscape mode.
+     */
+    boolean isInLandscapeMode();
 
     /** Displays a FOP selector in a bottom sheet. */
     boolean showSheet(List<BankAccount> bankAccounts);

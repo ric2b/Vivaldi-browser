@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
+#include "base/profiler/process_type.h"
 #include "base/profiler/profiler_buildflags.h"
 #include "base/profiler/stack_sampling_profiler.h"
 #include "base/profiler/unwinder.h"
@@ -20,7 +21,6 @@
 #include "build/build_config.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/profiler/process_type.h"
-#include "components/metrics/call_stacks/call_stack_profile_params.h"
 #include "components/version_info/channel.h"
 
 #if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARMEL) && \
@@ -114,8 +114,7 @@ std::vector<std::unique_ptr<base::Unwinder>> CreateLibunwindstackUnwinders(
 }
 
 std::vector<std::unique_ptr<base::Unwinder>> CreateCoreUnwinders(
-    stack_unwinder::Module* const stack_unwinder_module,
-    bool is_java_name_hashing_enabled) {
+    stack_unwinder::Module* const stack_unwinder_module) {
   CHECK_NE(getpid(), gettid());
 
 #if ANDROID_ARM64_UNWINDING_SUPPORTED
@@ -130,8 +129,7 @@ std::vector<std::unique_ptr<base::Unwinder>> CreateCoreUnwinders(
   // vector.
   std::vector<std::unique_ptr<base::Unwinder>> unwinders;
   unwinders.push_back(stack_unwinder_module->CreateNativeUnwinder(
-      map_delegate.get(), reinterpret_cast<uintptr_t>(&__executable_start),
-      is_java_name_hashing_enabled));
+      map_delegate.get(), reinterpret_cast<uintptr_t>(&__executable_start)));
   unwinders.push_back(chrome_unwinder_creator->Create());
 
   return unwinders;
@@ -157,8 +155,8 @@ class ModuleUnwindPrerequisitesDelegate : public UnwindPrerequisitesDelegate {
 void RequestUnwindPrerequisitesInstallation(
     version_info::Channel channel,
     UnwindPrerequisitesDelegate* prerequites_delegate) {
-  CHECK_EQ(metrics::CallStackProfileParams::Process::kBrowser,
-           GetProfileParamsProcess(*base::CommandLine::ForCurrentProcess()));
+  CHECK_EQ(base::ProfilerProcessType::kBrowser,
+           GetProfilerProcessType(*base::CommandLine::ForCurrentProcess()));
   if (AreUnwindPrerequisitesAvailable(channel, prerequites_delegate)) {
     return;
   }
@@ -232,18 +230,12 @@ stack_unwinder::Module* GetOrLoadModule() {
 }
 #endif  // ANDROID_UNWINDING_SUPPORTED
 
-#if BUILDFLAG(IS_ANDROID)
-base::StackSamplingProfiler::UnwindersFactory CreateCoreUnwindersFactory(
-    bool is_java_name_hashing_enabled) {
-#else
 base::StackSamplingProfiler::UnwindersFactory CreateCoreUnwindersFactory() {
-#endif  // BUILDFLAG(IS_ANDROID)
   if (!AreUnwindPrerequisitesAvailable(chrome::GetChannel())) {
     return base::StackSamplingProfiler::UnwindersFactory();
   }
 #if ANDROID_UNWINDING_SUPPORTED
-  return base::BindOnce(CreateCoreUnwinders, GetOrLoadModule(),
-                        is_java_name_hashing_enabled);
+  return base::BindOnce(CreateCoreUnwinders, GetOrLoadModule());
 #else   // ANDROID_UNWINDING_SUPPORTED
   return base::StackSamplingProfiler::UnwindersFactory();
 #endif  // ANDROID_UNWINDING_SUPPORTED

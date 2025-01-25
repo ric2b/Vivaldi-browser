@@ -157,7 +157,7 @@ uint64_t aom_sum_sse_2d_i16_avx2(const int16_t *src, int src_stride, int width,
 }
 
 // Accumulate sum of 16-bit elements in the vector
-static AOM_INLINE int32_t mm256_accumulate_epi16(__m256i vec_a) {
+static inline int32_t mm256_accumulate_epi16(__m256i vec_a) {
   __m128i vtmp1 = _mm256_extracti128_si256(vec_a, 1);
   __m128i vtmp2 = _mm256_castsi256_si128(vec_a);
   vtmp1 = _mm_add_epi16(vtmp1, vtmp2);
@@ -171,7 +171,7 @@ static AOM_INLINE int32_t mm256_accumulate_epi16(__m256i vec_a) {
 }
 
 // Accumulate sum of 32-bit elements in the vector
-static AOM_INLINE int32_t mm256_accumulate_epi32(__m256i vec_a) {
+static inline int32_t mm256_accumulate_epi32(__m256i vec_a) {
   __m128i vtmp1 = _mm256_extracti128_si256(vec_a, 1);
   __m128i vtmp2 = _mm256_castsi256_si128(vec_a);
   vtmp1 = _mm_add_epi32(vtmp1, vtmp2);

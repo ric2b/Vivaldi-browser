@@ -8,9 +8,9 @@
 #include "services/webnn/public/cpp/supported_data_types.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom-shared.h"
-#include "services/webnn/tflite/buffer_impl_tflite.h"
 #include "services/webnn/tflite/graph_builder_tflite.h"
 #include "services/webnn/tflite/graph_impl_tflite.h"
+#include "services/webnn/tflite/tensor_impl_tflite.h"
 #include "services/webnn/webnn_context_impl.h"
 #include "services/webnn/webnn_graph_impl.h"
 
@@ -18,16 +18,12 @@ namespace webnn::tflite {
 
 ContextImplTflite::ContextImplTflite(
     mojo::PendingReceiver<mojom::WebNNContext> receiver,
-    mojo::PendingRemote<mojom::WebNNContextClient> client_remote,
     WebNNContextProviderImpl* context_provider,
-    mojom::CreateContextOptionsPtr options,
-    base::UnguessableToken context_handle)
+    mojom::CreateContextOptionsPtr options)
     : WebNNContextImpl(std::move(receiver),
-                       std::move(client_remote),
                        context_provider,
                        GraphBuilderTflite::GetContextProperties(),
-                       std::move(options),
-                       std::move(context_handle)) {}
+                       std::move(options)) {}
 
 ContextImplTflite::~ContextImplTflite() = default;
 
@@ -44,12 +40,12 @@ void ContextImplTflite::CreateGraphImpl(
       std::move(graph_info), std::move(compute_resource_info), this));
 }
 
-std::unique_ptr<WebNNBufferImpl> ContextImplTflite::CreateBufferImpl(
-    mojo::PendingAssociatedReceiver<mojom::WebNNBuffer> receiver,
-    mojom::BufferInfoPtr buffer_info,
-    const base::UnguessableToken& buffer_handle) {
-  return BufferImplTflite::Create(std::move(receiver), this,
-                                  std::move(buffer_info), buffer_handle);
+void ContextImplTflite::CreateTensorImpl(
+    mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
+    mojom::TensorInfoPtr tensor_info,
+    CreateTensorImplCallback callback) {
+  std::move(callback).Run(TensorImplTflite::Create(std::move(receiver), this,
+                                                   std::move(tensor_info)));
 }
 
 }  // namespace webnn::tflite

@@ -17,7 +17,6 @@ using ::base::Bucket;
 using ::base::BucketsAre;
 
 namespace autofill::autofill_metrics {
-
 namespace {
 
 using AddressImportRequirements = AddressProfileImportRequirementMetric;
@@ -50,8 +49,6 @@ void TestAddressProfileImportCountrySpecificFieldRequirements(
   // Test that the right bucket was populated.
   histogram_tester->ExpectBucketCount(histogram, metric, 1);
 }
-
-}  // namespace
 
 class AutofillProfileImportMetricsTest : public AutofillMetricsBaseTest,
                                          public testing::Test {
@@ -532,4 +529,26 @@ TEST_F(AutofillProfileImportMetricsTest,
       kExpectedDecision, 1);
 }
 
+// Tests that the storage type where a new address is saved to is correctly
+// emitted.
+TEST_F(AutofillProfileImportMetricsTest, EmitsStorageNewProfileIsSavedTo) {
+  AutofillProfile import_candidate = test::GetFullProfile();
+  base::HistogramTester histogram_tester;
+
+  // Saved to local/syncable storage.
+  LogNewProfileStorageLocation(import_candidate);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.ProfileImport.StorageNewAddressIsSavedTo",
+      AutofillProfile::RecordType::kLocalOrSyncable, 1);
+
+  import_candidate = import_candidate.ConvertToAccountProfile();
+
+  // Saved to account storage.
+  LogNewProfileStorageLocation(import_candidate);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.ProfileImport.StorageNewAddressIsSavedTo",
+      AutofillProfile::RecordType::kAccount, 1);
+}
+
+}  // namespace
 }  // namespace autofill::autofill_metrics

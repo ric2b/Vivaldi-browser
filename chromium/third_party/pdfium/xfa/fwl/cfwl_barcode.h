@@ -17,6 +17,8 @@
 
 class CFX_Barcode;
 
+namespace pdfium {
+
 class CFWL_Barcode final : public CFWL_Edit {
  public:
   CONSTRUCT_VIA_MAKE_GARBAGE_COLLECTED;
@@ -36,7 +38,6 @@ class CFWL_Barcode final : public CFWL_Edit {
   void SetType(BC_TYPE type);
   bool IsProtectedType() const;
 
-  void SetCharEncoding(BC_CHAR_ENCODING encoding);
   void SetModuleHeight(int32_t height);
   void SetModuleWidth(int32_t width);
   void SetDataLength(int32_t dataLength);
@@ -63,7 +64,6 @@ class CFWL_Barcode final : public CFWL_Edit {
   BC_TYPE m_type = BC_TYPE::kUnknown;
   Status m_eStatus = Status::kNormal;
   std::optional<BC_TEXT_LOC> m_eTextLocation;
-  std::optional<BC_CHAR_ENCODING> m_eCharEncoding;
   std::optional<bool> m_bCalChecksum;
   std::optional<bool> m_bPrintChecksum;
   std::optional<char> m_cStartChar;
@@ -75,5 +75,10 @@ class CFWL_Barcode final : public CFWL_Edit {
   std::optional<int32_t> m_nECLevel;
   std::unique_ptr<CFX_Barcode> m_pBarcodeEngine;
 };
+
+}  // namespace pdfium
+
+// TODO(crbug.com/42271761): Remove.
+using pdfium::CFWL_Barcode;
 
 #endif  // XFA_FWL_CFWL_BARCODE_H_

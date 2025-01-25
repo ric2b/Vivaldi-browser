@@ -71,6 +71,8 @@ void SigninErrorUI::Initialize(Browser* browser, bool from_profile_picker) {
       {"signin_error_app.js", IDR_SIGNIN_SIGNIN_ERROR_SIGNIN_ERROR_APP_JS},
       {"signin_error_app.html.js",
        IDR_SIGNIN_SIGNIN_ERROR_SIGNIN_ERROR_APP_HTML_JS},
+      {"signin_error_app.css.js",
+       IDR_SIGNIN_SIGNIN_ERROR_SIGNIN_ERROR_APP_CSS_JS},
       {"signin_error.js", IDR_SIGNIN_SIGNIN_ERROR_SIGNIN_ERROR_JS},
       {"signin_shared.css.js", IDR_SIGNIN_SIGNIN_SHARED_CSS_JS},
       {"signin_vars.css.js", IDR_SIGNIN_SIGNIN_VARS_CSS_JS},

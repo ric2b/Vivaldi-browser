@@ -109,8 +109,6 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     }
 
     private static final String TEST_EMAIL1 = "test.account1@gmail.com";
-    private static final String CHILD_ACCOUNT_NAME =
-            AccountManagerTestRule.generateChildEmail("account@gmail.com");
 
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -181,7 +179,6 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
         SigninCheckerProvider.setForTests(mSigninCheckerMock);
         when(mPolicyLoadListenerMock.get()).thenReturn(false);
         when(mFirstRunPageDelegateMock.getPolicyLoadListener()).thenReturn(mPolicyLoadListenerMock);
-        when(mFirstRunPageDelegateMock.canUseLandscapeLayout()).thenReturn(true);
         mFragment = new CustomSigninFirstRunFragment();
         mFragment.setPageDelegate(mFirstRunPageDelegateMock);
         ThreadUtils.runOnUiThreadBlocking(
@@ -530,7 +527,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWithChildAccount(boolean nightModeEnabled, int orientation)
             throws IOException {
-        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
 
         launchActivityWithFragment(orientation);
 
@@ -548,7 +545,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWithChildAccount_replaceSyncWithSigninPromosEnabled(
             boolean nightModeEnabled, int orientation) throws IOException {
-        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
 
         launchActivityWithFragment(orientation);
 
@@ -568,7 +565,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWithChildAccount_doesNotApplyFREStringVariation(
             boolean nightModeEnabled, int orientation) throws IOException {
-        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
 
         launchActivityWithFragment(orientation);
 
@@ -589,7 +586,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     public void
             testFragmentWithChildAccount_doesNotApplyFREStringVariation_replaceSyncWithSigninPromosAnabled(
                     boolean nightModeEnabled, int orientation) throws IOException {
-        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
 
         launchActivityWithFragment(orientation);
 
@@ -739,7 +736,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
 
         PrivacyPreferencesManagerImpl.setInstanceForTesting(mPrivacyPreferencesManagerMock);
 
-        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
 
         launchActivityWithFragment(orientation);
 
@@ -766,7 +763,7 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
 
         PrivacyPreferencesManagerImpl.setInstanceForTesting(mPrivacyPreferencesManagerMock);
 
-        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_CHILD_ACCOUNT);
 
         launchActivityWithFragment(orientation);
 

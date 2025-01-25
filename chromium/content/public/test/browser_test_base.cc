@@ -23,6 +23,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -140,6 +141,8 @@
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
 #if BUILDFLAG(IS_WIN)
+#include <shlobj.h>
+
 #include "base/files/file_util.h"
 #include "base/test/test_reg_util_win.h"
 #endif  // BUILDFLAG(IS_WIN)
@@ -292,7 +295,11 @@ BrowserTestBase::BrowserTestBase() {
   // Even if running as admin, browser tests should not write temp files to
   // secure temp, otherwise any left-over files cannot be cleaned up by the test
   // runner.
-  base::SetDisableSecureSystemTempForTesting(/*disabled=*/true);
+  if (::IsUserAnAdmin()) {
+    system_temp_override_.emplace(base::DIR_SYSTEM_TEMP,
+                                  base::PathService::CheckedGet(base::DIR_TEMP),
+                                  /*is_absolute=*/true, /*create=*/false);
+  }
 #endif  // BUILDFLAG(IS_WIN)
 
 #if defined(USE_AURA)
@@ -934,9 +941,12 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 
       {
         auto* test = ::testing::UnitTest::GetInstance()->current_test_info();
-        TRACE_EVENT("test", "RunTestOnMainThread", "test_name",
-                    test->test_suite_name() + std::string(".") + test->name(),
-                    "file", test->file(), "line", test->line());
+        // This might be nullptr in a fuzz test or something else without gtest.
+        if (test) {
+          TRACE_EVENT("test", "RunTestOnMainThread", "test_name",
+                      test->test_suite_name() + std::string(".") + test->name(),
+                      "file", test->file(), "line", test->line());
+        }
         base::ScopedDisallowBlocking disallow_blocking;
         RunTestOnMainThread();
       }

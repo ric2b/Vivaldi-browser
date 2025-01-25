@@ -211,30 +211,6 @@ void MaybeSendDownloadReport(const GURL& url,
   }
 }
 
-// Submits download to download feedback service if the user has approved and
-// the download is suitable for submission.
-// If user hasn't seen SBER opt-in text before, show SBER opt-in dialog first.
-bool MaybeSubmitDownloadToFeedbackService(DownloadCommands::Command command,
-                                          Profile* profile,
-                                          download::DownloadItem* download) {
-  if (!download->IsDangerous() || download->IsInsecure()) {
-    return false;
-  }
-  if (!safe_browsing::DownloadFeedbackService::IsEnabledForDownload(
-          *download)) {
-    return false;
-  }
-
-  auto* const sb_service = g_browser_process->safe_browsing_service();
-  if (!sb_service)
-    return false;
-  auto* const dp_service = sb_service->download_protection_service();
-  if (!dp_service)
-    return false;
-  // TODO(shaktisahu): Enable feedback service for offline item.
-  return dp_service->MaybeBeginFeedbackForDownload(profile, download, command);
-}
-
 #endif
 
 }  // namespace
@@ -898,11 +874,6 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
       }
       [[fallthrough]];
     case DownloadCommands::KEEP:
-#if BUILDFLAG(FULL_SAFE_BROWSING)
-      if (command == DownloadCommands::KEEP) {
-        MaybeSubmitDownloadToFeedbackService(command, profile(), download_);
-      }
-#endif
       if (IsInsecure()) {
         download_->ValidateInsecureDownload();
         break;
@@ -923,10 +894,6 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
                               profile(), download_);
       if (GetDangerType() == download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING) {
         LogDeepScanEvent(download_, safe_browsing::DeepScanEvent::kScanDeleted);
-      }
-      if (MaybeSubmitDownloadToFeedbackService(command, profile(), download_)) {
-        // Skip Remove because it is handled by download feedback service.
-        break;
       }
 #endif
       DownloadUIModel::ExecuteCommand(download_commands, command);
@@ -1026,7 +993,7 @@ DangerUiPattern DownloadItemModel::GetDangerUiPattern() const {
   if (state == DownloadItem::CANCELLED || state == DownloadItem::INTERRUPTED) {
     return DangerUiPattern::kOther;
   } else if (state == DownloadItem::MAX_DOWNLOAD_STATE) {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   switch (GetInsecureDownloadStatus()) {
@@ -1269,6 +1236,6 @@ void DownloadItemModel::DetermineAndSetShouldPreferOpeningInBrowser(
   SetShouldPreferOpeningInBrowser(false);
 }
 
-bool DownloadItemModel::IsEncryptedArchive() const {
-  return DownloadItemWarningData::IsEncryptedArchive(download_);
+bool DownloadItemModel::IsTopLevelEncryptedArchive() const {
+  return DownloadItemWarningData::IsTopLevelEncryptedArchive(download_);
 }

@@ -81,8 +81,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
         shift.name = 'LayoutShift';
       }
 
-      const clusters =
-          [{events: shifts}] as unknown as TraceEngine.Handlers.ModelHandlers.LayoutShifts.LayoutShiftCluster[];
+      const clusters = [{events: shifts}] as unknown as TraceEngine.Types.TraceEvents.SyntheticLayoutShiftCluster[];
 
       // PrePaint events to which each layout shift belongs.
       prePaintEvents = [{ts: 5, dur: 30}, {ts: 45, dur: 30}, {ts: 85, dur: 10}] as unknown as
@@ -153,7 +152,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
       ].sort((a, b) => a.ts - b.ts);
 
       for (const e of layoutInvalidationEvents) {
-        e.name = TraceEngine.Types.TraceEvents.KnownEventName.LayoutInvalidationTracking;
+        e.name = TraceEngine.Types.TraceEvents.KnownEventName.LAYOUT_INVALIDATION_TRACKING;
       }
 
       // Map from fake BackendNodeId to fake Protocol.DOM.Node used by the handler to
@@ -421,8 +420,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           shift.name = 'LayoutShift';
         }
 
-        const clusters =
-            [{events: shifts}] as unknown as TraceEngine.Handlers.ModelHandlers.LayoutShifts.LayoutShiftCluster[];
+        const clusters = [{events: shifts}] as unknown as TraceEngine.Types.TraceEvents.SyntheticLayoutShiftCluster[];
         modelMut.LayoutShifts.clusters = clusters;
 
         assert.doesNotThrow(async () => {
@@ -634,7 +632,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
         modelMut.Renderer.allTraceEntries = [{
           name: 'Layout',
           ts: 82,
-        } as unknown as TraceEngine.Types.TraceEvents.SyntheticTraceEntry];
+        } as unknown as TraceEngine.Types.TraceEvents.TraceEventData];
 
         const node = {
           entry: model.Renderer.allTraceEntries[0],

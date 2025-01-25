@@ -128,6 +128,8 @@ class MochaTests extends Tests {
           path.join(SOURCE_ROOT, 'node_modules', 'mocha', 'bin', 'mocha'),
           '--config',
           path.join(this.suite.buildPath, 'mocharc.js'),
+          '-u',
+          path.join(this.suite.buildPath, '..', 'shared', 'mocha-interface.js'),
         ],
         /* positionalTestArgs= */ false,  // Mocha interprets positional arguments as test files itself. Work around
                                           // that by passing the tests as dashed args instead.
@@ -142,7 +144,7 @@ class KarmaTests extends Tests {
           'python3',
           [
             path.join(SOURCE_ROOT, 'scripts', 'deps', 'set_lpac_acls.py'),
-            options['chrome-binary'] ?? defaultChromePath(),
+            path.dirname(options['chrome-binary'] ?? defaultChromePath()),
           ],
           {encoding: 'utf-8', stdio: 'inherit'});
       if (result.error || (result.status ?? 1) !== 0) {

@@ -120,6 +120,23 @@ try_.builder(
 )
 
 try_.builder(
+    name = "android-12l-x64-rel-cq",
+    # TODO(crbug.com/364967534): Enable on branch once stable.
+    # branch_selector = branches.selector.ANDROID_BRANCHES,
+    mirrors = [
+        "ci/android-12l-x64-rel-cq",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/android-12l-x64-rel-cq",
+            "release_try_builder",
+        ],
+    ),
+    contact_team_email = "clank-engprod@google.com",
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
+)
+
+try_.builder(
     name = "android-13-x64-rel",
     branch_selector = branches.selector.ANDROID_BRANCHES,
     mirrors = [
@@ -169,6 +186,7 @@ try_.builder(
 
 try_.builder(
     name = "android-14-arm64-rel",
+    branch_selector = branches.selector.ANDROID_BRANCHES,
     mirrors = [
         "ci/android-14-arm64-rel",
     ],
@@ -241,8 +259,10 @@ try_.orchestrator_builder(
     branch_selector = branches.selector.ANDROID_BRANCHES,
     description_html = "This builder may trigger tests on multiple Android versions.",
     mirrors = [
-        "ci/Android Release (Nexus 5X)",  # Nexus 5X on Nougat
+        "ci/Android Release (Pixel 2)",  # Pixel 2 on Pie
+        # TODO(crbug.com/352811552): Drop Pie after 14 is fully on CQ
         "ci/android-pie-arm64-rel",  # Pixel 1, 2 on Pie
+        "ci/android-14-arm64-rel",  # Pixel 7 on Android 14
     ],
     gn_args = gn_args.config(
         configs = [
@@ -253,7 +273,6 @@ try_.orchestrator_builder(
             "no_secondary_abi",
             "use_clang_coverage",
             "partial_code_coverage_instrumentation",
-            "webview_instrumentation_tests_multi_process_only",
         ],
     ),
     compilator = "android-arm64-rel-compilator",
@@ -348,10 +367,12 @@ try_.builder(
             # Allows the bot to measure low-end arm32 and high-end arm64 using
             # a single build.
             "android_low_end_secondary_toolchain",
+            # Disable PGO due to too much volatility: https://crbug.com/344608183
+            "pgo_phase_0",
         ],
     ),
     builderless = not settings.is_main,
-    cores = 16,
+    cores = "16|32",
     ssd = True,
     main_list_view = "try",
     properties = {
@@ -415,6 +436,35 @@ try_.builder(
             "build/config/android/.+",
         ],
     ),
+)
+
+try_.builder(
+    name = "android-cronet-arm-rel",
+    branch_selector = branches.selector.ANDROID_BRANCHES,
+    description_html = "Compile Cronet targets and verify the sizes",
+    mirrors = [
+        "ci/android-cronet-arm-rel",
+    ],
+    builder_config_settings = builder_config.try_settings(
+        is_compile_only = True,
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "android_builder_without_codecs",
+            "cronet_android",
+            "release_try_builder",
+            "remoteexec",
+            "arm_no_neon",
+        ],
+    ),
+    builderless = not settings.is_main,
+    contact_team_email = "cronet-team@google.com",
+    experiments = {
+        # crbug/940930
+        "chromium.enable_cleandead": 50,
+    },
+    main_list_view = "try",
+    tryjob = try_.job(),
 )
 
 try_.builder(
@@ -568,10 +618,12 @@ try_.builder(
         configs = [
             "ci/android-cronet-x64-dbg",
             "use_clang_coverage",
+            "use_java_coverage",
             "partial_code_coverage_instrumentation",
         ],
     ),
     contact_team_email = "cronet-team@google.com",
+    coverage_test_types = ["unit", "overall"],
     main_list_view = "try",
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
     tryjob = try_.job(
@@ -583,6 +635,7 @@ try_.builder(
         ],
     ),
     use_clang_coverage = True,
+    use_java_coverage = True,
 )
 
 try_.builder(
@@ -671,10 +724,12 @@ try_.builder(
         configs = [
             "ci/android-cronet-x86-dbg",
             "use_clang_coverage",
+            "use_java_coverage",
             "partial_code_coverage_instrumentation",
         ],
     ),
     contact_team_email = "cronet-team@google.com",
+    coverage_test_types = ["unit", "overall"],
     main_list_view = "try",
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
     tryjob = try_.job(
@@ -686,6 +741,7 @@ try_.builder(
         ],
     ),
     use_clang_coverage = True,
+    use_java_coverage = True,
 )
 
 try_.builder(
@@ -1027,7 +1083,6 @@ try_.orchestrator_builder(
             "use_clang_coverage",
             "use_java_coverage",
             "partial_code_coverage_instrumentation",
-            "webview_instrumentation_tests_multi_process_only",
         ],
     ),
     compilator = "android-x64-rel-compilator",
@@ -1071,7 +1126,6 @@ try_.orchestrator_builder(
             "use_clang_coverage",
             "use_java_coverage",
             "partial_code_coverage_instrumentation",
-            "webview_instrumentation_tests_multi_process_only",
         ],
     ),
     compilator = "android-x86-rel-compilator",
@@ -1313,34 +1367,6 @@ try_.builder(
     ),
 )
 
-try_.builder(
-    name = "android_cronet",
-    branch_selector = branches.selector.ANDROID_BRANCHES,
-    mirrors = [
-        "ci/android-cronet-arm-rel",
-    ],
-    builder_config_settings = builder_config.try_settings(
-        is_compile_only = True,
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "android_builder_without_codecs",
-            "cronet_android",
-            "release_try_builder",
-            "remoteexec",
-            "arm_no_neon",
-        ],
-    ),
-    builderless = not settings.is_main,
-    contact_team_email = "cronet-team@google.com",
-    experiments = {
-        # crbug/940930
-        "chromium.enable_cleandead": 50,
-    },
-    main_list_view = "try",
-    tryjob = try_.job(),
-)
-
 try_.gpu.optional_tests_builder(
     name = "android_optional_gpu_tests_rel",
     branch_selector = branches.selector.ANDROID_BRANCHES,
@@ -1383,6 +1409,7 @@ try_.gpu.optional_tests_builder(
             cq.location_filter(path_regexp = "chrome/browser/vr/.+"),
             cq.location_filter(path_regexp = "content/browser/xr/.+"),
             cq.location_filter(path_regexp = "components/viz/.+"),
+            cq.location_filter(path_regexp = "content/test/data/gpu/.+"),
             cq.location_filter(path_regexp = "content/test/gpu/.+"),
             cq.location_filter(path_regexp = "gpu/.+"),
             cq.location_filter(path_regexp = "media/audio/.+"),
@@ -1430,6 +1457,7 @@ try_.gpu.optional_tests_builder(
             cq.location_filter(path_regexp = "chrome/browser/vr/.+"),
             cq.location_filter(path_regexp = "content/browser/xr/.+"),
             cq.location_filter(path_regexp = "components/viz/.+"),
+            cq.location_filter(path_regexp = "content/test/data/gpu/.+"),
             cq.location_filter(path_regexp = "content/test/gpu/.+"),
             cq.location_filter(path_regexp = "gpu/.+"),
             cq.location_filter(path_regexp = "media/audio/.+"),

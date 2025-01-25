@@ -34,7 +34,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <fcntl.h>
@@ -45,50 +44,20 @@
 #include "test-runner.h"
 #include "wayland-os.h"
 
+extern int (*wl_socket)(int domain, int type, int protocol);
+extern int (*wl_fcntl)(int fildes, int cmd, ...);
+extern ssize_t (*wl_recvmsg)(int socket, struct msghdr *message, int flags);
+extern int (*wl_epoll_create1)(int flags);
+
 static int fall_back;
 
-/* Play nice with sanitizers
- *
- * Sanitizers need to intercept syscalls in the compiler run-time library. As
- * this isn't a separate ELF object, the usual dlsym(RTLD_NEXT) approach won't
- * work: there can only be one function named "socket" etc. To support this, the
- * sanitizer library names its interceptors with the prefix __interceptor_ ("__"
- * being reserved for the implementation) and then weakly aliases it to the real
- * function. The functions we define below will override the weak alias, and we
- * can call them by the __interceptor_ name directly. This allows the sanitizer
- * to do its work before calling the next version of the function via dlsym.
- *
- * However! We also don't know which of these functions the sanitizer actually
- * wants to override, so we have to declare our own weak symbols for
- * __interceptor_ and check at run time if they linked to anything or not.
-*/
+static int wrapped_calls_socket = 0;
+static int wrapped_calls_fcntl = 0;
+static int wrapped_calls_recvmsg = 0;
+static int wrapped_calls_epoll_create1 = 0;
 
-#define DECL(ret_type, func, ...) \
-	ret_type __interceptor_ ## func(__VA_ARGS__) __attribute__((weak)); \
-	static ret_type (*real_ ## func)(__VA_ARGS__);			\
-	static int wrapped_calls_ ## func;
-
-#define REAL(func) (__interceptor_ ## func) ?				\
-	__interceptor_ ## func :					\
-	(__typeof__(&__interceptor_ ## func))dlsym(RTLD_NEXT, #func)
-
-DECL(int, socket, int, int, int);
-DECL(int, fcntl, int, int, ...);
-DECL(ssize_t, recvmsg, int, struct msghdr *, int);
-DECL(int, epoll_create1, int);
-
-static void
-init_fallbacks(int do_fallbacks)
-{
-	fall_back = do_fallbacks;
-	real_socket = REAL(socket);
-	real_fcntl = REAL(fcntl);
-	real_recvmsg = REAL(recvmsg);
-	real_epoll_create1 = REAL(epoll_create1);
-}
-
-__attribute__ ((visibility("default"))) int
-socket(int domain, int type, int protocol)
+static int
+socket_wrapper(int domain, int type, int protocol)
 {
 	wrapped_calls_socket++;
 
@@ -97,11 +66,11 @@ socket(int domain, int type, int protocol)
 		return -1;
 	}
 
-	return real_socket(domain, type, protocol);
+	return socket(domain, type, protocol);
 }
 
-__attribute__ ((visibility("default"))) int
-(fcntl)(int fd, int cmd, ...)
+static int
+fcntl_wrapper(int fd, int cmd, ...)
 {
 	va_list ap;
 	int arg;
@@ -131,13 +100,13 @@ __attribute__ ((visibility("default"))) int
 	}
 
 	if (has_arg) {
-		return real_fcntl(fd, cmd, arg);
+		return fcntl(fd, cmd, arg);
 	}
-	return real_fcntl(fd, cmd);
+	return fcntl(fd, cmd);
 }
 
-__attribute__ ((visibility("default"))) ssize_t
-recvmsg(int sockfd, struct msghdr *msg, int flags)
+static ssize_t
+recvmsg_wrapper(int sockfd, struct msghdr *msg, int flags)
 {
 	wrapped_calls_recvmsg++;
 
@@ -146,11 +115,11 @@ recvmsg(int sockfd, struct msghdr *msg, int flags)
 		return -1;
 	}
 
-	return real_recvmsg(sockfd, msg, flags);
+	return recvmsg(sockfd, msg, flags);
 }
 
-__attribute__ ((visibility("default"))) int
-epoll_create1(int flags)
+static int
+epoll_create1_wrapper(int flags)
 {
 	wrapped_calls_epoll_create1++;
 
@@ -160,7 +129,17 @@ epoll_create1(int flags)
 		return -1;
 	}
 
-	return real_epoll_create1(flags);
+	return epoll_create1(flags);
+}
+
+static void
+init_fallbacks(int do_fallbacks)
+{
+	fall_back = do_fallbacks;
+	wl_fcntl = fcntl_wrapper;
+	wl_socket = socket_wrapper;
+	wl_recvmsg = recvmsg_wrapper;
+	wl_epoll_create1 = epoll_create1_wrapper;
 }
 
 static void

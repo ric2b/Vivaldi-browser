@@ -38,6 +38,7 @@ import android.widget.ImageButton;
 
 // Vivaldi
 import android.view.ViewGroup;
+import org.chromium.build.BuildConfig;
 
 /**
  * Root component for the app menu button on the toolbar. Owns the MenuButton view and handles
@@ -128,6 +129,15 @@ public class MenuButtonCoordinator {
                         mActivity
                                 .getResources()
                                 .getString(R.string.accessibility_toolbar_btn_menu));
+
+                // Vivaldi (ref. VAB-9155)
+                if (BuildConfig.IS_VIVALDI) {
+                    TooltipCompat.setTooltipText(
+                            mMenuButton,
+                            mActivity
+                                    .getResources()
+                                    .getString(R.string.v_menu_button_hint));
+                }
             }
         }
     }

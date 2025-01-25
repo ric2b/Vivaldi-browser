@@ -9,6 +9,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/picker/picker_category.h"
+#include "ash/public/cpp/picker/picker_search_result.h"
 #include "ui/base/emoji/emoji_panel_helper.h"
 
 namespace views {
@@ -17,8 +18,8 @@ class View;
 
 namespace ash {
 
-class PickerSearchResult;
 enum class PickerActionType;
+enum class PickerCapsLockPosition;
 
 // Delegate for `PickerZeroStateView`.
 class ASH_EXPORT PickerZeroStateViewDelegate {
@@ -41,6 +42,13 @@ class ASH_EXPORT PickerZeroStateViewDelegate {
 
   virtual PickerActionType GetActionForResult(
       const PickerSearchResult& result) = 0;
+
+  // Informs that the height of the zero state view may change.
+  virtual void OnZeroStateViewHeightChanged() = 0;
+
+  virtual PickerCapsLockPosition GetCapsLockPosition() = 0;
+
+  virtual void SetCapsLockDisplayed(bool displayed) = 0;
 };
 
 }  // namespace ash

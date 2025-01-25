@@ -83,7 +83,6 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/profiles/profile_picker.h"
 #include "chrome/browser/ui/startup/first_run_service.h"
-#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/startup/startup_tab.h"
@@ -130,7 +129,6 @@
 #include "app/vivaldi_command_controller.h"
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_resources.h"
-#include "browser/mac/mac_utils.h"
 #include "browser/vivaldi_app_observer.h"
 #include "browser/vivaldi_internal_handlers.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -225,7 +223,7 @@ void LaunchBrowserStartup(Profile* profile) {
   browser_creator.LaunchBrowser(
       *base::CommandLine::ForCurrentProcess(), profile, base::FilePath(),
       chrome::startup::IsProcessStartup::kNo, chrome::startup::IsFirstRun::kYes,
-      nullptr, /*restore_tabbed_browser=*/true);
+      /*restore_tabbed_browser=*/true);
 }
 
 // Creates an empty browser window with the given profile and returns a pointer
@@ -293,7 +291,7 @@ void RecordLastRunAppBundlePath() {
                                        .DirName()
                                        .DirName();
   base::apple::ScopedCFTypeRef<CFStringRef> app_bundle_path_cfstring =
-      base::SysUTF8ToCFStringRef(app_bundle_path.value());
+      base::apple::FilePathToCFString(app_bundle_path);
   CFPreferencesSetAppValue(
       base::apple::NSToCFPtrCast(app_mode::kLastRunAppBundlePathPrefsKey),
       app_bundle_path_cfstring.get(),
@@ -814,38 +812,61 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   return [[NSApp.mainMenu itemWithTag:IDC_FILE_MENU] submenu];
 }
 
-// Returns the ⌘W menu item in the File menu.
+// Returns the ⌘W menu item in the File menu. Returns nil if no such menu item
+// exists (e.g. the user has custom shortcut settings).
+
 - (NSMenuItem*)cmdWMenuItem {
+  NSArray* fileMenuItemArray = [self fileMenu].itemArray;
   if (_cmdWMenuItemForTesting) {
-    return _cmdWMenuItemForTesting;
+    fileMenuItemArray = @[ _cmdWMenuItemForTesting ];
   }
 
-  for (NSMenuItem* item in [self fileMenu].itemArray) {
+  NSMenuItem* cmdWMenuItem = nil;
+
+  for (NSMenuItem* item in fileMenuItemArray) {
     if ([@"w" isEqualToString:item.keyEquivalent] &&
         item.keyEquivalentModifierMask == NSEventModifierFlagCommand) {
-      return item;
+      cmdWMenuItem = item;
+      break;
     }
   }
 
-  return nil;
-}
-
-// Returns the ⇧⌘W menu item in the File menu.
-- (NSMenuItem*)shiftCmdWMenuItem {
-  if (_shiftCmdWMenuItemForTesting) {
-    return _shiftCmdWMenuItemForTesting;
+  // Make sure the user hasn't reassigned ⌘W.
+  if (cmdWMenuItem.tag != 0 && cmdWMenuItem.tag != IDC_CLOSE_WINDOW &&
+      cmdWMenuItem.tag != IDC_CLOSE_TAB) {
+    return nil;
   }
 
-  for (NSMenuItem* item in [self fileMenu].itemArray) {
+  return cmdWMenuItem;
+}
+
+// Returns the ⇧⌘W menu item in the File menu. Returns nil if no such menu item
+// exists (e.g. the user has custom shortcut settings).
+- (NSMenuItem*)shiftCmdWMenuItem {
+  NSArray* fileMenuItemArray = [self fileMenu].itemArray;
+  if (_shiftCmdWMenuItemForTesting) {
+    fileMenuItemArray = @[ _shiftCmdWMenuItemForTesting ];
+  }
+
+  NSMenuItem* shiftCmdWMenuItem = nil;
+
+  for (NSMenuItem* item in fileMenuItemArray) {
     // "Shift" is part of the keyEquivalent. It doesn't live in the modifier
     // mask.
     if ([@"W" isEqualToString:item.keyEquivalent] &&
         item.keyEquivalentModifierMask == NSEventModifierFlagCommand) {
-      return item;
+      shiftCmdWMenuItem = item;
+      break;
     }
   }
 
-  return nil;
+  // Make sure the user hasn't reassigned ⇧⌘W.
+  if (shiftCmdWMenuItem.tag != 0 && shiftCmdWMenuItem.tag != IDC_CLOSE_WINDOW &&
+      shiftCmdWMenuItem.tag != IDC_CLOSE_TAB) {
+    return nil;
+  }
+
+  return shiftCmdWMenuItem;
 }
 
 // This method is called very early in application startup (ie, before
@@ -869,9 +890,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
          selector:@selector(willPowerOff:)
              name:NSWorkspaceWillPowerOffNotification
            object:nil];
-
-  DCHECK([self cmdWMenuItem]);
-  DCHECK([self shiftCmdWMenuItem]);
 
   // Set up the command updater for when there are no windows open
   [self initMenuState];
@@ -1682,54 +1700,6 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
         }
       }
     } // end VB-13452
-
-    SEL action = [sender action];
-    if (action == @selector(commandFromDock:) || tag == IDC_VIV_EXIT) {
-      // Do nothing, but make it clear. The dock menu is not controlled from
-      // Vivaldi and actions from that must not be subject to those we use below.
-
-      // IDC_VIV_EXIT keyb shortcut needs to be handled on this side to show the
-      // confirmation dialog before quitting
-    } else {
-      // Vivaldi executes its own shortcuts from the javascript side. Mac will in
-      // addition execute shortcuts that are displayed in the menu so we must stop
-      // those. Note: On Mac/intel (13.6.8) it has been observed that
-      // currentEvent is null when executing an action from items generated by
-      // Help | Search. We then allow the action without further testing.
-      if ([NSApp currentEvent] &&
-          !vivaldi::CanEventExecuteCommand([NSApp currentEvent])) {
-        return;
-      }
-      if ([[NSApp currentEvent] type] == NSEventTypeKeyDown) {
-        // Additional test for key presses. Allow those that are sent from the
-        // menu by selecting an entry and pressing space/enter and even a shortcut
-        // if there is no browser window (in that case vivaldi will not execute its
-        // own). Note that if the shortcut happens as a result of dead keys the
-        // character length is 0. We have seen this for Alt+E when used with a
-        // Japanese input method (Romaji).
-        auto key = [[NSApp currentEvent] characters];
-        if (key.length == 0 ||
-            ([key characterAtIndex:0] != NSCarriageReturnCharacter &&
-             [key characterAtIndex:0] != NSNewlineCharacter &&
-             [key characterAtIndex:0] != NSEnterCharacter &&
-             ![key isEqual:@" "])) {
-          if (lastProfile) {
-            Browser* browser = chrome::FindLastActiveWithProfile(
-                lastProfile->IsGuestSession()
-                    ? lastProfile->GetOffTheRecordProfile(
-                          Profile::OTRProfileID::PrimaryID(), true)
-                    : lastProfile);
-            if (browser) {
-              // The window will not receive regular shortcuts in JS when
-              // minimzed. So allow the menu drive action continue in that case.
-              if (!browser->window() || !browser->window()->IsMinimized()) {
-                return;
-              }
-            }
-          }
-        }
-      }
-    }
 
     Browser* browser = nullptr;
     if (lastProfile) {
@@ -2585,6 +2555,14 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   // titles and actions of the menu items that own those equivalents.
   NSMenuItem* cmdWMenuItem = [self cmdWMenuItem];
   NSMenuItem* shiftCmdWMenuItem = [self shiftCmdWMenuItem];
+
+  // If we can't find a ⌘W or ⇧⌘W item with IDC_CLOSE_WINDOW or IDC_CLOSE_TAB
+  // as the tag, assume the user has assigned a custom shortcut to one or both
+  // of these items. If the user has assigned a custom shortcut, it doesn't
+  // make sense to perform any shuffling.
+  if (cmdWMenuItem == nil || shiftCmdWMenuItem == nil) {
+    return;
+  }
 
   if ([self windowHasBrowserTabs:[self windowForPerformClose]]) {
     // Close Window   ⇧⌘W

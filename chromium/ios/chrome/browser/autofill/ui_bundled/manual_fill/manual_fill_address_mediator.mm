@@ -17,6 +17,7 @@
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_address+AutofillProfile.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_address.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_address_cell.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_constants.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_content_injector.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
@@ -31,19 +32,36 @@
 
 using autofill::AutofillProfile;
 
-namespace manual_fill {
-NSString* const ManageAddressAccessibilityIdentifier =
-    @"kManualFillManageAddressAccessibilityIdentifier";
-}  // namespace manual_fill
+namespace {
+
+// Fetches the addresses to suggest using the given `personal_data_manager` and
+// dereferences them before returning them.
+std::vector<AutofillProfile> FetchAddresses(
+    const autofill::PersonalDataManager& personal_data_manager) {
+  std::vector<const AutofillProfile*> fetched_addresses =
+      personal_data_manager.address_data_manager().GetProfilesToSuggest();
+  std::vector<AutofillProfile> addresses;
+  addresses.reserve(fetched_addresses.size());
+
+  // Make copies of the received `fetched_addresses` to not make any assumption
+  // over their lifetime and make sure that the AutofillProfile objects stay
+  // valid throughout the lifetime of this class.
+  base::ranges::transform(
+      fetched_addresses, std::back_inserter(addresses),
+      [](const AutofillProfile* address) { return *address; });
+
+  return addresses;
+}
+
+}  // namespace
 
 @interface ManualFillAddressMediator () <PersonalDataManagerObserver>
-
-// All available addresses.
-@property(nonatomic, assign) std::vector<const AutofillProfile*> addresses;
-
 @end
 
 @implementation ManualFillAddressMediator {
+  // All available addresses.
+  std::vector<AutofillProfile> _addresses;
+
   // Personal data manager to be observed.
   raw_ptr<autofill::PersonalDataManager> _personalDataManager;
 
@@ -66,12 +84,12 @@ NSString* const ManageAddressAccessibilityIdentifier =
   self = [super init];
   if (self) {
     _personalDataManager = personalDataManager;
+    CHECK(_personalDataManager);
     _personalDataManagerObserver =
         std::make_unique<autofill::PersonalDataManagerObserverBridge>(self);
     _personalDataManager->AddObserver(_personalDataManagerObserver.get());
     _authenticationService = authenticationService;
-    _addresses =
-        _personalDataManager->address_data_manager().GetProfilesToSuggest();
+    _addresses = FetchAddresses(*_personalDataManager);
     _showAutofillFormButton = showAutofillFormButton;
   }
   return self;
@@ -98,8 +116,7 @@ NSString* const ManageAddressAccessibilityIdentifier =
 #pragma mark - PersonalDataManagerObserver
 
 - (void)onPersonalDataChanged {
-  self.addresses =
-      _personalDataManager->address_data_manager().GetProfilesToSuggest();
+  _addresses = FetchAddresses(*_personalDataManager);
   if (self.consumer) {
     [self postAddressesToConsumer];
     [self postActionsToConsumer];
@@ -114,16 +131,16 @@ NSString* const ManageAddressAccessibilityIdentifier =
     return;
   }
 
-  int addressCount = self.addresses.size();
+  int addressCount = _addresses.size();
   NSMutableArray* items =
       [[NSMutableArray alloc] initWithCapacity:addressCount];
   for (int i = 0; i < addressCount; i++) {
     ManualFillAddress* manualFillAddress =
-        [[ManualFillAddress alloc] initWithProfile:*self.addresses[i]];
+        [[ManualFillAddress alloc] initWithProfile:_addresses[i]];
 
     NSArray<UIAction*>* menuActions =
         IsKeyboardAccessoryUpgradeEnabled()
-            ? @[ [self createMenuEditActionForAddress:self.addresses[i]] ]
+            ? @[ [self createMenuEditActionForAddress:_addresses[i]] ]
             : @[];
 
     NSString* cellIndexAccessibilityLabel = base::SysUTF16ToNSString(
@@ -136,6 +153,7 @@ NSString* const ManageAddressAccessibilityIdentifier =
                     initWithAddress:manualFillAddress
                     contentInjector:self.contentInjector
                         menuActions:menuActions
+                          cellIndex:static_cast<NSInteger>(i)
         cellIndexAccessibilityLabel:cellIndexAccessibilityLabel
              showAutofillFormButton:_showAutofillFormButton];
     [items addObject:item];
@@ -160,39 +178,48 @@ NSString* const ManageAddressAccessibilityIdentifier =
                [weakSelf.navigationDelegate openAddressSettings];
              }];
   manageAddressesItem.accessibilityIdentifier =
-      manual_fill::ManageAddressAccessibilityIdentifier;
+      manual_fill::kManageAddressAccessibilityIdentifier;
   [self.consumer presentActions:@[ manageAddressesItem ]];
 }
 
 // Creates a UIAction to edit an address from a UIMenu.
-- (UIAction*)createMenuEditActionForAddress:(const AutofillProfile*)address {
+- (UIAction*)createMenuEditActionForAddress:(const AutofillProfile)address {
   ActionFactory* actionFactory = [[ActionFactory alloc]
       initWithScenario:
           kMenuScenarioHistogramAutofillManualFallbackAddressEntry];
 
   __weak __typeof(self) weakSelf = self;
-  UIAction* editAction = [actionFactory actionToEditWithBlock:^{
-    BOOL offerMigrateToAccount =
-        [weakSelf offerMigrateToAccountForAddress:address];
-    [weakSelf.navigationDelegate
-        openAddressDetailsInEditMode:address
-               offerMigrateToAccount:offerMigrateToAccount];
-  }];
+  auto callback = base::BindOnce(
+      [](__weak __typeof(self) weak_self, AutofillProfile address) {
+        [weak_self openAddressDetailsInEditMode:std::move(address)];
+      },
+      weakSelf, std::move(address));
+  UIAction* editAction = [actionFactory
+      actionToEditWithBlock:base::CallbackToBlock(std::move(callback))];
 
   return editAction;
 }
 
+// Requests the `navigationDelegate` to open the details of the given `address`
+// in edit mode.
+- (void)openAddressDetailsInEditMode:(AutofillProfile)address {
+  base::RecordAction(
+      base::UserMetricsAction("ManualFallback_Profiles_OverflowMenu_Edit"));
+  BOOL offerMigrateToAccount = [self offerMigrateToAccountForAddress:address];
+  [self.navigationDelegate openAddressDetailsInEditMode:std::move(address)
+                                  offerMigrateToAccount:offerMigrateToAccount];
+}
+
 // Evaluates whether or not the option to move the address to the account should
 // be available when navigating to the details page of the given address.
-- (BOOL)offerMigrateToAccountForAddress:(const AutofillProfile*)address {
+- (BOOL)offerMigrateToAccountForAddress:(const AutofillProfile&)address {
   BOOL syncIsEnabled = _personalDataManager->address_data_manager()
                            .IsSyncFeatureEnabledForAutofill();
-  BOOL addressIsLocalOrSyncable =
-      address->source() == autofill::AutofillProfile::Source::kLocalOrSyncable;
+  BOOL addressIsLocalOrSyncable = !address.IsAccountProfile();
   BOOL addressIsEligibleForAccountMigration =
       addressIsLocalOrSyncable &&
       IsEligibleForMigrationToAccount(
-          _personalDataManager->address_data_manager(), *address);
+          _personalDataManager->address_data_manager(), address);
   BOOL userEmailIsValid = [self userEmail] != nil;
 
   return !syncIsEnabled && addressIsEligibleForAccountMigration &&

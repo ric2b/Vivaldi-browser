@@ -22,6 +22,7 @@
 #include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_state.h"
+#include "chrome/browser/permissions/system/system_permission_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -47,8 +48,6 @@
 #include "content/public/browser/web_contents.h"
 #include "net/base/schemeful_site.h"
 #include "services/device/public/cpp/device_features.h"
-#include "services/device/public/cpp/geolocation/geolocation_system_permission_manager.h"
-#include "services/device/public/cpp/geolocation/location_system_permission_status.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/base/ui_base_features.h"
@@ -60,7 +59,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/media/webrtc/system_media_capture_permissions_mac.h"
+#include "chrome/browser/permissions/system/system_media_capture_permissions_mac.h"
 #include "chrome/browser/web_applications/os_integration/mac/app_shim_registry.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #endif
@@ -112,8 +111,6 @@ class ContentSettingGeolocationImageModel : public ContentSettingImageModel {
   bool UpdateAndGetVisibility(WebContents* web_contents) override;
 
   bool IsGeolocationAccessed();
-  bool IsGeolocationAllowedOnASystemLevel();
-  bool IsGeolocationPermissionDetermined();
 
   std::unique_ptr<ContentSettingBubbleModel> CreateBubbleModelImpl(
       ContentSettingBubbleModel::Delegate* delegate,
@@ -338,8 +335,8 @@ void GetIconChromeRefresh(ContentSettingsType type,
                       : &vector_icons::kFileDownloadChromeRefreshIcon;
       return;
     case ContentSettingsType::CLIPBOARD_READ_WRITE:
-      *icon = blocked ? &vector_icons::kContentPasteOffChromeRefreshIcon
-                      : &vector_icons::kContentPasteChromeRefreshIcon;
+      *icon = blocked ? &vector_icons::kContentPasteOffIcon
+                      : &vector_icons::kContentPasteIcon;
       return;
     case ContentSettingsType::MEDIASTREAM_MIC:
       *icon = blocked ? &vector_icons::kMicOffChromeRefreshIcon
@@ -576,18 +573,25 @@ bool ContentSettingBlockedImageModel::UpdateAndGetVisibility(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   auto* map = HostContentSettingsMapFactory::GetForProfile(profile);
 
-  // For allowed cookies, don't show the cookie page action unless cookies are
-  // blocked by default.
-  if (!is_blocked && type == ContentSettingsType::COOKIES &&
-      map->GetDefaultContentSetting(type, nullptr) != CONTENT_SETTING_BLOCK) {
-    return false;
-  }
-
-  // TODO(crbug.com/40675739): Handle first-party blocking with new ui.
-  if (type == ContentSettingsType::COOKIES &&
-      CookieSettingsFactory::GetForProfile(profile)
-          ->ShouldBlockThirdPartyCookies()) {
-    return false;
+  if (type == ContentSettingsType::COOKIES) {
+    auto cookie_settings = CookieSettingsFactory::GetForProfile(profile);
+    const auto& url = web_contents->GetLastCommittedURL();
+    bool blocked_via_setting = cookie_settings->GetCookieSetting(
+                                   url, net::SiteForCookies::FromUrl(url), url,
+                                   {}) == CONTENT_SETTING_BLOCK;
+    // We check the cookie setting here as well because 3PC access influences
+    // the allowed/blocked status even though the icon is meant for 1PC control.
+    is_blocked = is_blocked && blocked_via_setting;
+    // True if the user blocked 1PCs by default but allowed them for this site.
+    bool allowed_for_site =
+        is_allowed && !blocked_via_setting &&
+        map->GetDefaultContentSetting(type) == CONTENT_SETTING_BLOCK;
+    // Only show the cookie page action if 1PCs are allowed via site-level
+    // exception on the current site OR blocked AND 3PCs are allowed.
+    if ((!allowed_for_site && !is_blocked) ||
+        cookie_settings->ShouldBlockThirdPartyCookies()) {
+      return false;
+    }
   }
 
   if (!is_blocked) {
@@ -595,7 +599,7 @@ bool ContentSettingBlockedImageModel::UpdateAndGetVisibility(
     explanation_id = 0;
   }
 
-  SetIcon(type, content_settings->IsContentBlocked(type));
+  SetIcon(type, is_blocked);
   set_explanatory_string_id(explanation_id);
   DCHECK(tooltip_id);
   set_tooltip(l10n_util::GetStringUTF16(tooltip_id));
@@ -632,18 +636,19 @@ bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
   set_explanatory_string_id(0);
 
   if (is_allowed) {
-    if (!IsGeolocationAllowedOnASystemLevel()) {
+    if (!system_permission_settings::IsAllowed(
+            ContentSettingsType::GEOLOCATION)) {
       SetIcon(ContentSettingsType::GEOLOCATION, /*blocked=*/true);
       base::RecordAction(base::UserMetricsAction(
           "ContentSettings.Geolocation.BlockedIconShown"));
       set_tooltip(l10n_util::GetStringUTF16(IDS_BLOCKED_GEOLOCATION_MESSAGE));
       if (content_settings->geolocation_was_just_granted_on_site_level()) {
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-        if (features::IsOsLevelGeolocationPermissionSupportEnabled() &&
-            !IsGeolocationPermissionDetermined()) {
+        if (system_permission_settings::CanPrompt(
+                ContentSettingsType::GEOLOCATION)) {
           // Ask the system to display a permission prompt for location access.
-          device::GeolocationSystemPermissionManager::GetInstance()
-              ->RequestSystemPermission();
+          system_permission_settings::Request(ContentSettingsType::GEOLOCATION,
+                                              base::DoNothing());
         } else {
           // If the system permission is already denied then requesting the
           // system permission will not show a prompt. Show the bubble instead.
@@ -657,7 +662,8 @@ bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
       // has been allowed or blocked. Wait until the permission state is
       // determined before displaying this message since it triggers an
       // animation that cannot be cancelled
-      if (IsGeolocationPermissionDetermined()) {
+      if (!system_permission_settings::CanPrompt(
+              ContentSettingsType::GEOLOCATION)) {
         set_explanatory_string_id(IDS_GEOLOCATION_TURNED_OFF);
       }
       return true;
@@ -671,34 +677,6 @@ bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
   set_accessibility_string_id(message_id);
 
   return true;
-}
-
-bool ContentSettingGeolocationImageModel::IsGeolocationAllowedOnASystemLevel() {
-  if (!features::IsOsLevelGeolocationPermissionSupportEnabled()) {
-    return true;
-  }
-  device::GeolocationSystemPermissionManager*
-      geolocation_system_permission_manager =
-          device::GeolocationSystemPermissionManager::GetInstance();
-  CHECK(geolocation_system_permission_manager);
-  device::LocationSystemPermissionStatus permission =
-      geolocation_system_permission_manager->GetSystemPermission();
-
-  return permission == device::LocationSystemPermissionStatus::kAllowed;
-}
-
-bool ContentSettingGeolocationImageModel::IsGeolocationPermissionDetermined() {
-  if (!features::IsOsLevelGeolocationPermissionSupportEnabled()) {
-    return true;
-  }
-  device::GeolocationSystemPermissionManager*
-      geolocation_system_permission_manager =
-          device::GeolocationSystemPermissionManager::GetInstance();
-  CHECK(geolocation_system_permission_manager);
-  device::LocationSystemPermissionStatus permission =
-      geolocation_system_permission_manager->GetSystemPermission();
-
-  return permission != device::LocationSystemPermissionStatus::kNotDetermined;
 }
 
 std::unique_ptr<ContentSettingBubbleModel>
@@ -721,8 +699,7 @@ ContentSettingRPHImageModel::ContentSettingRPHImageModel()
 bool ContentSettingRPHImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
   auto* content_settings_delegate =
-      chrome::PageSpecificContentSettingsDelegate::FromWebContents(
-          web_contents);
+      PageSpecificContentSettingsDelegate::FromWebContents(web_contents);
   if (!content_settings_delegate)
     return false;
   if (content_settings_delegate->pending_protocol_handler().IsEmpty())
@@ -985,26 +962,26 @@ bool ContentSettingMediaImageModel::IsCameraBlockedOnSiteLevel() {
 bool ContentSettingMediaImageModel::
     DidCameraAccessFailBecauseOfSystemLevelBlock() {
   return (IsCamAccessed() && !IsCameraBlockedOnSiteLevel() &&
-          system_media_permissions::CheckSystemVideoCapturePermission() ==
-              system_media_permissions::SystemPermission::kDenied);
+          system_permission_settings::CheckSystemVideoCapturePermission() ==
+              system_permission_settings::SystemPermission::kDenied);
 }
 
 bool ContentSettingMediaImageModel::
     DidMicAccessFailBecauseOfSystemLevelBlock() {
   return (IsMicAccessed() && !IsMicBlockedOnSiteLevel() &&
-          system_media_permissions::CheckSystemAudioCapturePermission() ==
-              system_media_permissions::SystemPermission::kDenied);
+          system_permission_settings::CheckSystemAudioCapturePermission() ==
+              system_permission_settings::SystemPermission::kDenied);
 }
 
 bool ContentSettingMediaImageModel::IsCameraAccessPendingOnSystemLevelPrompt() {
-  return (system_media_permissions::CheckSystemVideoCapturePermission() ==
-              system_media_permissions::SystemPermission::kNotDetermined &&
+  return (system_permission_settings::CheckSystemVideoCapturePermission() ==
+              system_permission_settings::SystemPermission::kNotDetermined &&
           IsCamAccessed() && !IsCameraBlockedOnSiteLevel());
 }
 
 bool ContentSettingMediaImageModel::IsMicAccessPendingOnSystemLevelPrompt() {
-  return (system_media_permissions::CheckSystemAudioCapturePermission() ==
-              system_media_permissions::SystemPermission::kNotDetermined &&
+  return (system_permission_settings::CheckSystemAudioCapturePermission() ==
+              system_permission_settings::SystemPermission::kNotDetermined &&
           IsMicAccessed() && !IsMicBlockedOnSiteLevel());
 }
 

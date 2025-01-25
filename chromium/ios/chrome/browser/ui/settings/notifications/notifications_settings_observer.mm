@@ -38,8 +38,14 @@
   // YES if sports notification is enabled.
   BOOL _sportsNotificationEnabled;
 
+  // Yes if send tab notification is enabled.
+  BOOL _sendTabNotificationEnabled;
+
   // Yes if tips notification is enabled.
   BOOL _tipsNotificationEnabled;
+
+  // Yes if Safety Check notifications are enabled.
+  BOOL _safetyCheckNotificationsEnabled;
 }
 
 - (instancetype)initWithPrefService:(PrefService*)prefService
@@ -68,6 +74,10 @@
         _prefService->GetDict(prefs::kFeaturePushNotificationPermissions)
             .FindBool(kSportsNotificationKey)
             .value_or(false);
+    _sendTabNotificationEnabled =
+        _prefService->GetDict(prefs::kFeaturePushNotificationPermissions)
+            .FindBool(kSendTabNotificationKey)
+            .value_or(false);
 
     _localStatePrefChangeRegistrar.Init(localState);
     _prefObserverBridge->ObserveChangesForPreference(
@@ -78,6 +88,10 @@
     _tipsNotificationEnabled =
         _localState->GetDict(prefs::kAppLevelPushNotificationPermissions)
             .FindBool(kTipsNotificationKey)
+            .value_or(false);
+    _safetyCheckNotificationsEnabled =
+        _localState->GetDict(prefs::kAppLevelPushNotificationPermissions)
+            .FindBool(kSafetyCheckNotificationKey)
             .value_or(false);
   }
 
@@ -107,12 +121,27 @@
       _sportsNotificationEnabled = [self isSportsNotificationEnabled];
       [self.delegate notificationsSettingsDidChangeForClient:
                          PushNotificationClientId::kSports];
+    } else if (_sendTabNotificationEnabled !=
+               [self isSendTabNotificationEnabled]) {
+      _sendTabNotificationEnabled = [self isSendTabNotificationEnabled];
+      [self.delegate notificationsSettingsDidChangeForClient:
+                         PushNotificationClientId::kSendTab];
+      if (!_sendTabNotificationEnabled) {
+        _prefService->SetBoolean(prefs::kSendTabNotificationsPreviouslyDisabled,
+                                 true);
+      }
     }
   } else if (preferenceName == prefs::kAppLevelPushNotificationPermissions) {
     if (_tipsNotificationEnabled != [self isTipsNotificationEnabled]) {
       _tipsNotificationEnabled = [self isTipsNotificationEnabled];
       [self.delegate notificationsSettingsDidChangeForClient:
                          PushNotificationClientId::kTips];
+    } else if (_safetyCheckNotificationsEnabled !=
+               [self isSafetyCheckNotificationsEnabled]) {
+      _safetyCheckNotificationsEnabled =
+          [self isSafetyCheckNotificationsEnabled];
+      [self.delegate notificationsSettingsDidChangeForClient:
+                         PushNotificationClientId::kSafetyCheck];
     }
   }
 }
@@ -145,9 +174,21 @@
       .value_or(false);
 }
 
+- (BOOL)isSendTabNotificationEnabled {
+  return _prefService->GetDict(prefs::kFeaturePushNotificationPermissions)
+      .FindBool(kSendTabNotificationKey)
+      .value_or(false);
+}
+
 - (BOOL)isTipsNotificationEnabled {
   return _localState->GetDict(prefs::kAppLevelPushNotificationPermissions)
       .FindBool(kTipsNotificationKey)
+      .value_or(false);
+}
+
+- (BOOL)isSafetyCheckNotificationsEnabled {
+  return _localState->GetDict(prefs::kAppLevelPushNotificationPermissions)
+      .FindBool(kSafetyCheckNotificationKey)
       .value_or(false);
 }
 

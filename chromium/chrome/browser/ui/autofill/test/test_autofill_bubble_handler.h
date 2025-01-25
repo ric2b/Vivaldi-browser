@@ -46,6 +46,9 @@ class TestAutofillBubbleHandler : public AutofillBubbleHandler {
       content::WebContents* contents,
       OfferNotificationBubbleController* controller,
       bool is_user_gesture) override;
+  AutofillBubbleBase* ShowSaveAutofillPredictionImprovementsBubble(
+      content::WebContents* web_contents,
+      SaveAutofillPredictionImprovementsController* controller) override;
   AutofillBubbleBase* ShowSaveAddressProfileBubble(
       content::WebContents* contents,
       std::unique_ptr<SaveAddressBubbleController> controller,
@@ -77,6 +80,9 @@ class TestAutofillBubbleHandler : public AutofillBubbleHandler {
   AutofillBubbleBase* ShowSaveCardConfirmationBubble(
       content::WebContents* web_contents,
       SaveCardBubbleController* controller) override;
+  AutofillBubbleBase* ShowSaveIbanConfirmationBubble(
+      content::WebContents* web_contents,
+      IbanBubbleController* controller) override;
 
  private:
   std::unique_ptr<TestAutofillBubble> local_card_migration_bubble_view_;
@@ -85,6 +91,8 @@ class TestAutofillBubbleHandler : public AutofillBubbleHandler {
   std::unique_ptr<TestAutofillBubble> iban_bubble_view_;
   std::unique_ptr<TestAutofillBubble> save_address_profile_bubble_view_;
   std::unique_ptr<TestAutofillBubble> update_address_profile_bubble_view_;
+  std::unique_ptr<TestAutofillBubble>
+      save_autofill_prediction_improvements_bubble_view_;
   std::unique_ptr<TestAutofillBubble> add_new_address_profile_bubble_view_;
   std::unique_ptr<TestAutofillBubble> edit_address_profile_bubble_view_;
   std::unique_ptr<TestAutofillBubble> virtual_card_manual_fallback_bubble_view_;
@@ -93,6 +101,7 @@ class TestAutofillBubbleHandler : public AutofillBubbleHandler {
       virtual_card_enroll_confirmation_bubble_view_;
   std::unique_ptr<TestAutofillBubble> mandatory_reauth_bubble_view_;
   std::unique_ptr<TestAutofillBubble> save_card_confirmation_bubble_view_;
+  std::unique_ptr<TestAutofillBubble> save_iban_confirmation_bubble_view_;
 
   int save_card_confirmation_bubble_shown_count_ = 0;
 };

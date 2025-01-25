@@ -11,6 +11,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "base/containers/span.h"
 #include "base/json/json_writer.h"
 #include "base/numerics/byte_conversions.h"
+#include "base/numerics/ostream_operators.h"
 #include "base/strings/abseil_string_number_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/gtest_util.h"
@@ -46,7 +48,7 @@ namespace {
 
 testing::AssertionResult CborMapContainsKeyAndType(
     const cbor::Value::MapValue& map,
-    const std::string& key,
+    std::string_view key,
     cbor::Value::Type value_type) {
   const auto it = map.find(cbor::Value(key));
   if (it == map.end()) {
@@ -901,13 +903,6 @@ TEST_F(AggregatableReportTest,
   AggregationServicePayloadContents payload_contents =
       example_request.payload_contents();
 
-  payload_contents.max_contributions_allowed = -1;
-
-  std::optional<AggregatableReportRequest> negative_request =
-      AggregatableReportRequest::Create(payload_contents,
-                                        example_request.shared_info().Clone());
-  EXPECT_FALSE(negative_request.has_value());
-
   payload_contents.contributions.emplace_back(/*bucket=*/456,
                                               /*value=*/78,
                                               /*filtering_id=*/std::nullopt);
@@ -1033,7 +1028,7 @@ TEST_F(AggregatableReportTest, MaxContributionsAllowed) {
   std::optional<AggregatableReportRequest> parsed_request =
       AggregatableReportRequest::Deserialize(proto);
   ASSERT_TRUE(parsed_request.has_value());
-  EXPECT_EQ(parsed_request->payload_contents().max_contributions_allowed, 20);
+  EXPECT_EQ(parsed_request->payload_contents().max_contributions_allowed, 20u);
   EXPECT_EQ(parsed_request->delay_type(),
             AggregatableReportRequest::DelayType::ScheduledWithFullDelay);
 }
@@ -1354,7 +1349,7 @@ TEST(AggregatableReportProtoMigrationTest,
                   /*filtering_id=*/std::nullopt)},
               blink::mojom::AggregationServiceMode::kDefault,
               /*aggregation_coordinator_origin=*/std::nullopt,
-              /*max_contributions_allowed=*/1,
+              /*max_contributions_allowed=*/1u,
               /*filtering_id_max_bytes=*/std::nullopt),
           AggregatableReportSharedInfo(
               base::Time::FromMillisecondsSinceUnixEpoch(1652984901234),
@@ -1402,7 +1397,7 @@ TEST(AggregatableReportProtoMigrationTest, NegativeDebugKey_ParsesCorrectly) {
                   /*filtering_id=*/std::nullopt)},
               blink::mojom::AggregationServiceMode::kDefault,
               /*aggregation_coordinator_origin=*/std::nullopt,
-              /*max_contributions_allowed=*/1,
+              /*max_contributions_allowed=*/1u,
               /*filtering_id_max_bytes=*/std::nullopt),
           AggregatableReportSharedInfo(
               base::Time::FromMillisecondsSinceUnixEpoch(1652984901234),
@@ -1451,7 +1446,7 @@ TEST(
                   /*filtering_id=*/std::nullopt)},
               blink::mojom::AggregationServiceMode::kDefault,
               /*aggregation_coordinator_origin=*/std::nullopt,
-              /*max_contributions_allowed=*/1,
+              /*max_contributions_allowed=*/1u,
               /*filtering_id_max_bytes=*/std::nullopt),
           AggregatableReportSharedInfo(
               base::Time::FromMillisecondsSinceUnixEpoch(1652984901234),
@@ -1519,7 +1514,7 @@ TEST_F(AggregatableReportTest, AggregationCoordinator_ProcessingUrlSet) {
                     /*filtering_id=*/std::nullopt)},
                 blink::mojom::AggregationServiceMode::kDefault,
                 test_case.aggregation_coordinator_origin,
-                /*max_contributions_allowed=*/20,
+                /*max_contributions_allowed=*/20u,
                 /*filtering_id_max_bytes=*/std::nullopt),
             AggregatableReportSharedInfo(
                 /*scheduled_report_time=*/base::Time::Now(),
@@ -1566,6 +1561,97 @@ TEST_F(AggregatableReportTest, AggregationCoordinator_SetInReport) {
       R"("shared_info":"example_shared_info")"
       R"(})";
   EXPECT_EQ(report_json_string, kExpectedJsonString);
+}
+
+TEST(AggregatableReportPayloadLengthTest, With20Contributions) {
+  // NOTE: These expectations are inscrutable when they fail due to
+  // `StrictNumeric`, unless we include base/numerics/ostream_operators.h.
+  EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
+                /*num_contributions=*/20u,
+                /*filtering_id_max_bytes=*/std::nullopt),
+            747);
+  EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
+                /*num_contributions=*/20u,
+                /*filtering_id_max_bytes=*/std::nullopt),
+            747);
+  EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
+                /*num_contributions=*/20u, /*filtering_id_max_bytes=*/1u),
+            847);
+}
+
+TEST(AggregatableReportPayloadLengthTest, With100Contributions) {
+  EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
+                /*num_contributions=*/100u,
+                /*filtering_id_max_bytes=*/std::nullopt),
+            3628);
+  EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
+                /*num_contributions=*/100u, /*filtering_id_max_bytes=*/1u),
+            4128);
+}
+
+TEST(AggregatableReportPayloadLengthTest, OutOfRange) {
+  EXPECT_FALSE(
+      AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
+          /*num_contributions=*/std::numeric_limits<size_t>::max(),
+          /*filtering_id_max_bytes=*/1u)
+          .has_value());
+  if constexpr (std::numeric_limits<size_t>::max() >
+                std::numeric_limits<uint32_t>::max()) {
+    EXPECT_FALSE(
+        AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
+            // It's critical to convert the max `uint32_t` value to size_t
+            // before adding one to avoid an unwanted integer overflow.
+            /*num_contributions=*/size_t{std::numeric_limits<uint32_t>::max()} +
+                1,
+            /*filtering_id_max_bytes=*/1u)
+            .has_value());
+  }
+}
+
+TEST(AggregatableReportPayloadLengthTest, PredictionMatchesReality) {
+  constexpr size_t kNumContributionsValues[] = {
+      20, 100, 1000,
+      // Numbers near the CBOR edge case of 0x17 elements in an array.
+      0x16, 0x17, 0x18,
+      // Edge cases for one-byte and two-byte length prefixes.
+      255, 256, 257, 65535, 65536, 65537};
+
+  constexpr std::optional<size_t> kFilteringIdMaxBytesValues[] = {
+      std::nullopt, {1u}, {2u}, {3u}, {4u}, {8u}};
+
+  for (const size_t num_contributions : kNumContributionsValues) {
+    for (const std::optional<size_t> filtering_id_max_bytes :
+         kFilteringIdMaxBytesValues) {
+      SCOPED_TRACE(testing::Message()
+                   << "num_contributions: " << num_contributions
+                   << ", filtering_id_max_bytes: "
+                   << (filtering_id_max_bytes.has_value()
+                           ? base::ToString(*filtering_id_max_bytes)
+                           : "nullopt"));
+
+      const std::optional<size_t> predicted_length =
+          AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
+              num_contributions, filtering_id_max_bytes);
+      ASSERT_TRUE(predicted_length.has_value());
+
+      blink::mojom::AggregatableReportHistogramContribution contribution(
+          /*bucket=*/0, /*value=*/0, /*filtering_id=*/std::nullopt);
+      std::vector<blink::mojom::AggregatableReportHistogramContribution>
+          contributions(/*count=*/num_contributions, /*value=*/contribution);
+      AggregationServicePayloadContents payload_contents(
+          AggregationServicePayloadContents::Operation::kHistogram,
+          contributions, blink::mojom::AggregationServiceMode::kTeeBased,
+          /*aggregation_coordinator_origin=*/std::nullopt,
+          /*max_contributions_allowed=*/num_contributions,
+          filtering_id_max_bytes);
+
+      const std::optional<std::vector<uint8_t>> serialized =
+          AggregatableReport::SerializeTeeBasedPayloadForTesting(
+              payload_contents);
+      ASSERT_TRUE(serialized.has_value());
+      EXPECT_EQ(serialized->size(), *predicted_length);
+    }
+  }
 }
 
 }  // namespace

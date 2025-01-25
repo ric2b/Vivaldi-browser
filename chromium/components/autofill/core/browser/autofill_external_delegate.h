@@ -10,6 +10,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ref.h"
@@ -18,8 +19,11 @@
 #include "components/autofill/core/browser/address_data_manager.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_trigger_details.h"
+#include "components/autofill/core/browser/form_filler.h"
+#include "components/autofill/core/browser/metrics/suggestions_list_metrics.h"
 #include "components/autofill/core/browser/ui/autofill_suggestion_delegate.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
+#include "components/autofill/core/browser/ui/suggestion_hiding_reason.h"
 #include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/form_data.h"
@@ -58,13 +62,14 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   // AutofillSuggestionDelegate implementation.
   absl::variant<AutofillDriver*, password_manager::PasswordManagerDriver*>
   GetDriver() override;
-  void OnSuggestionsShown() override;
+  void OnSuggestionsShown(base::span<const Suggestion> suggestions) override;
   void OnSuggestionsHidden() override;
   void DidSelectSuggestion(const Suggestion& suggestion) override;
   void DidAcceptSuggestion(const Suggestion& suggestion,
-                           const SuggestionPosition& position) override;
+                           const SuggestionMetadata& metadata) override;
   void DidPerformButtonActionForSuggestion(
-      const Suggestion& suggestion) override;
+      const Suggestion& suggestion,
+      const SuggestionButtonAction& button_action) override;
   bool RemoveSuggestion(const Suggestion& suggestion) override;
   void ClearPreviewedForm() override;
 
@@ -90,9 +95,13 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
 
   // Records query results and correctly formats them before sending them off
   // to be displayed. Called when an Autofill query result is available.
+  // `suggestion_ranking_context` contains information regarding the ranking of
+  // suggestions in `input_suggestions` and is used for metrics logging.
   virtual void OnSuggestionsReturned(
       FieldGlobalId field_id,
-      const std::vector<Suggestion>& suggestions);
+      const std::vector<Suggestion>& input_suggestions,
+      std::optional<autofill_metrics::SuggestionRankingContext>
+          suggestion_ranking_context);
 
   // Returns the type of the last accepted address filling suggestion.
   // This is used by group filling to keep users in the same granularity level
@@ -125,6 +134,16 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
 
   const FormData& query_form() const { return query_form_; }
 
+  void AttemptToDisplayAutofillSuggestionsForTest(
+      std::vector<Suggestion> suggestions,
+      std::optional<autofill_metrics::SuggestionRankingContext>
+          suggestion_ranking_context,
+      AutofillSuggestionTriggerSource trigger_source,
+      bool is_update) {
+    AttemptToDisplayAutofillSuggestions(std::move(suggestions),
+                                        std::move(suggestion_ranking_context),
+                                        trigger_source, is_update);
+  }
   base::WeakPtr<AutofillExternalDelegate> GetWeakPtrForTest() {
     return GetWeakPtr();
   }
@@ -133,15 +152,57 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   FRIEND_TEST_ALL_PREFIXES(AutofillExternalDelegateUnitTest,
                            FillCreditCardForm);
 
-  base::WeakPtr<AutofillExternalDelegate> GetWeakPtr();
+  // Tries to display `suggestions` in the suggestions UI. If `is_update` is
+  // true, then `AutofillClient::UpdateAutofillSuggestions` is called, which
+  // means that suggestions will only be shown if there is currently suggestion
+  // UI with the same main filling product showing and that no new
+  // `SuggestionsUiSessionId` will be assigned.
+  void AttemptToDisplayAutofillSuggestions(
+      std::vector<Suggestion> suggestions,
+      std::optional<autofill_metrics::SuggestionRankingContext>
+          suggestion_ranking_context,
+      AutofillSuggestionTriggerSource trigger_source,
+      bool is_update);
+
+  // Returns a callback that, when run, attempts to update the currently shown
+  // suggestions. If the `SuggestionUiSessionId` of the currently showing UI
+  // surface has changed between when this callback is created and when it is
+  // run, running it is a no-op. The callback is also safe to call even if
+  // `this` is no longer alive.
+  base::RepeatingCallback<void(std::vector<Suggestion>,
+                               AutofillSuggestionTriggerSource)>
+  CreateUpdateSuggestionsCallback();
+
+  // Returns a callback that, when run, attempts to close the currently shown
+  // suggestion UI. If the `SuggestionUiSessionId` of the currently showing UI
+  // surface has changed between when this callback is created and when it is
+  // run, running it is a no-op. The callback is also safe to call even if
+  // `this` is no longer alive.
+  base::OnceCallback<void(SuggestionHidingReason)>
+  CreateHideSuggestionsCallback();
+
+  // Creates a callback that, when run, fills the field that was last queried
+  // when the callback was created.
+  base::RepeatingCallback<void(const std::u16string&)>
+  CreateSingleFieldFillCallback(SuggestionType suggestion_type,
+                                std::optional<FieldType> field_type_used);
 
   // Private handler for DidAcceptSuggestions for address related suggestions.
   void DidAcceptAddressSuggestion(const Suggestion& suggestion,
-                                  const SuggestionPosition& position);
+                                  const SuggestionMetadata& metadata);
 
   // Private handler for DidAcceptSuggestions for payments related suggestions.
   void DidAcceptPaymentsSuggestion(const Suggestion& suggestion,
-                                   const SuggestionPosition& position);
+                                   const SuggestionMetadata& metadata);
+
+  // Creates a specialized version of a single field fill callback that converts
+  // the argument from UTF8 to UTF16 and set `EMAIL_ADDRESS` as the filled type.
+  PlusAddressCallback CreatePlusAddressCallback(SuggestionType suggestion_type);
+
+  // Informs the `AutofillPlusAddress` delegate and passes callbacks for
+  // hiding/updating suggestions UI and filling.
+  void DidAcceptCreateNewPlusAddressInlineSuggestion(
+      const Suggestion& suggestion);
 
   // Shows the address editor to the user. The Autofill profile to edit is
   // determined by passed `guid`.
@@ -173,7 +234,7 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   // this data.
   void FillAutofillFormData(SuggestionType type,
                             Suggestion::BackendId backend_id,
-                            std::optional<SuggestionPosition> position,
+                            std::optional<SuggestionMetadata> metadata,
                             bool is_preview,
                             const AutofillTriggerDetails& trigger_details);
 
@@ -184,7 +245,7 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   // Determines the correct data type (`AutofillProfile` or `CreditCard`) to be
   // filled and fills the corresponding field-by-field filling suggestion.
   void FillFieldByFieldFillingSuggestion(const Suggestion& suggestion,
-                                         const SuggestionPosition& position);
+                                         const SuggestionMetadata& metadata);
 
   // Previews the value from `profile` specified in the `suggestion`.
   void PreviewAddressFieldByFieldFillingSuggestion(
@@ -201,7 +262,7 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   void FillAddressFieldByFieldFillingSuggestion(
       const AutofillProfile& profile,
       const Suggestion& suggestion,
-      const SuggestionPosition& position);
+      const SuggestionMetadata& metadata);
 
   // Uses the `credit_card` to optionally fetch the credit card number depending
   // on the `suggestion.field_by_field_filling_type_used`. Fills the fetched
@@ -209,6 +270,9 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   void FillCreditCardFieldByFieldFillingSuggestion(
       const CreditCard& credit_card,
       const Suggestion& suggestion);
+
+  // Fills `values_to_fill` into the fields of `query_form_`.
+  void FillPredictionImprovements(const Suggestion& suggestion);
 
   // Triggered when the user closes the authentication flow needed to access
   // the number and cvc of the `credit_card`.
@@ -220,13 +284,6 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   void OnVirtualCreditCardFetched(CreditCardFetchResult result,
                                   const CreditCard* credit_card);
 
-  // Will remove Autofill warnings from |suggestions| if there are also
-  // autocomplete entries in the vector. Note: at this point, it is assumed that
-  // if there are Autofill warnings, they will be at the head of the vector and
-  // any entry that is not an Autofill warning is considered an Autocomplete
-  // entry.
-  void PossiblyRemoveAutofillWarnings(std::vector<Suggestion>* suggestions);
-
   // Handle applying any Autofill option listings to the Autofill popup.
   // This function should only get called when there is at least one
   // multi-field suggestion in the list of suggestions.
@@ -235,11 +292,11 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   void ApplyAutofillOptions(std::vector<Suggestion>* suggestions,
                             bool is_all_server_suggestions);
 
-  // Insert the data list values at the start of the given list, including
-  // any required separators. Will also go through |suggestions| and remove
+  // Inserts the data list values at the start of the given list, including
+  // any required separators. Will also go through `suggestions` and remove
   // duplicate autocomplete (not Autofill) suggestions, keeping their datalist
   // version.
-  void InsertDataListValues(std::vector<Suggestion>* suggestions);
+  void InsertDataListValues(std::vector<Suggestion>& suggestions) const;
 
   bool IsPaymentsManualFallbackOnNonPaymentsField() const;
 
@@ -249,6 +306,13 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   // Returns the trigger source to use to reopen the popup after an edit or
   // delete address profile dialog is closed.
   AutofillSuggestionTriggerSource GetReopenTriggerSource() const;
+
+  // Checks the user's accepted suggestion and logs metrics on the ranking of
+  // the suggestion in the Autofill dropdown.
+  void LogRankingContextAfterSuggestionAccepted(
+      const Suggestion& accepted_suggestion);
+
+  base::WeakPtr<AutofillExternalDelegate> GetWeakPtr();
 
   // If non-negative, OnSuggestionsReturned() passes one of the suggestions
   // directly to DidAcceptSuggestion(). See ScopedSuggestionSelectionShortcut
@@ -271,6 +335,12 @@ class AutofillExternalDelegate : public AutofillSuggestionDelegate,
   bool show_cards_from_account_suggestion_was_shown_ = false;
 
   std::vector<SuggestionType> shown_suggestion_types_;
+
+  // Contains information on the ranking of suggestions using the new and old
+  // ranking algorithm. Used for metrics logging. If the new ranking algorithm
+  // is not enabled, this will be nullopt.
+  std::optional<autofill_metrics::SuggestionRankingContext>
+      suggestion_ranking_context_;
 
   // The current data list values.
   std::vector<SelectOption> datalist_;

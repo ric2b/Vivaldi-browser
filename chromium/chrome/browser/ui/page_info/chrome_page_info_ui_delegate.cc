@@ -169,18 +169,12 @@ bool ChromePageInfoUiDelegate::ShouldShowSiteSettings(int* link_text_id,
 
 // TODO(crbug.com/40776829): Reconcile with LastTabStandingTracker.
 bool ChromePageInfoUiDelegate::IsMultipleTabsOpen() {
-  const extensions::WindowControllerList::ControllerList& windows =
-      extensions::WindowControllerList::GetInstance()->windows();
   int count = 0;
   auto site_origin = site_url_.DeprecatedGetOriginAsURL();
-  for (extensions::WindowController* window : windows) {
-    const Browser* const browser = window->GetBrowser();
-    if (!browser)
-      continue;
-    const TabStripModel* const tabs = browser->tab_strip_model();
-    DCHECK(tabs);
-    for (int i = 0; i < tabs->count(); ++i) {
-      content::WebContents* const web_contents = tabs->GetWebContentsAt(i);
+  for (extensions::WindowController* window :
+       *extensions::WindowControllerList::GetInstance()) {
+    for (int i = 0; i < window->GetTabCount(); ++i) {
+      content::WebContents* const web_contents = window->GetWebContentsAt(i);
       if (web_contents->GetLastCommittedURL().DeprecatedGetOriginAsURL() ==
           site_origin) {
         count++;
@@ -262,8 +256,7 @@ bool ChromePageInfoUiDelegate::ShouldShowSettingsLinkForPermission(
     case ContentSettingsType::MEDIASTREAM_CAMERA:
       if (base::FeatureList::IsEnabled(
               content_settings::features::kLeftHandSideActivityIndicators) &&
-          SystemPermissionSettings::GetInstance() &&
-          SystemPermissionSettings::GetInstance()->IsDenied(type)) {
+          system_permission_settings::IsDenied(type)) {
         *text_id = IDS_PAGE_INFO_CAMERA_SYSTEM_SETTINGS_DESCRIPTION;
         *link_id = IDS_PAGE_INFO_SETTINGS_OF_A_SYSTEM_LINK;
         return true;
@@ -272,21 +265,31 @@ bool ChromePageInfoUiDelegate::ShouldShowSettingsLinkForPermission(
     case ContentSettingsType::MEDIASTREAM_MIC:
       if (base::FeatureList::IsEnabled(
               content_settings::features::kLeftHandSideActivityIndicators) &&
-          SystemPermissionSettings::GetInstance() &&
-          SystemPermissionSettings::GetInstance()->IsDenied(type)) {
+          system_permission_settings::IsDenied(type)) {
         *text_id = IDS_PAGE_INFO_MICROPHONE_SYSTEM_SETTINGS_DESCRIPTION;
         *link_id = IDS_PAGE_INFO_SETTINGS_OF_A_SYSTEM_LINK;
         return true;
       }
       return false;
+#if BUILDFLAG(IS_CHROMEOS)
+    case ContentSettingsType::GEOLOCATION:
+      if (base::FeatureList::IsEnabled(
+              content_settings::features::
+                  kCrosSystemLevelPermissionBlockedWarnings) &&
+          system_permission_settings::IsDenied(type)) {
+        *text_id = IDS_PAGE_INFO_LOCATION_SYSTEM_SETTINGS_DESCRIPTION;
+        *link_id = IDS_PAGE_INFO_SETTINGS_OF_A_SYSTEM_LINK;
+        return true;
+      }
+      return false;
+#endif
     default:
       return false;
   }
 }
 
 void ChromePageInfoUiDelegate::SettingsLinkClicked(ContentSettingsType type) {
-  SystemPermissionSettings::GetInstance()->OpenSystemSettings(web_contents_,
-                                                              type);
+  system_permission_settings::OpenSystemSettings(web_contents_, type);
 }
 
 bool ChromePageInfoUiDelegate::IsBlockAutoPlayEnabled() {

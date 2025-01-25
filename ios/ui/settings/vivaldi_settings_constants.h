@@ -9,7 +9,8 @@
 #pragma mark - ICONS
 // Image name for sync setting
 extern NSString* vSyncSetting;
-
+// Image name for general setting
+extern NSString* vGeneralSetting;
 // Image name for default browser setting
 extern NSString* vDefaultBrowserSetting;
 // Image name for search engine setting

@@ -50,6 +50,7 @@
          showAddGroup:(BOOL)showAddGroup
     frequentlyVisited:(BOOL)frequentlyVisited
     topSitesAvailable:(BOOL)topSitesAvailable
+     topToolbarHidden:(BOOL)topToolbarHidden
     verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass {
   [self.speedDialView configureWith:speedDials
                              parent:parent
@@ -59,6 +60,7 @@
                        showAddGroup:showAddGroup
                   frequentlyVisited:frequentlyVisited
                   topSitesAvailable:topSitesAvailable
+                   topToolbarHidden:topToolbarHidden
                   verticalSizeClass:verticalSizeClass];
 }
 

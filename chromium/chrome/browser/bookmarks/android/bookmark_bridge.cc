@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/bookmarks/android/bookmark_bridge.h"
 
 #include <stddef.h>
@@ -358,6 +363,14 @@ void BookmarkBridge::GetAllFoldersWithDepths(
       bookmark_model_->other_node(),
   };
 
+  if (vivaldi::IsVivaldiRunning()) {
+    if (bookmark_model_->mobile_node()->children().size() == 0) {
+      bookmarks.clear();
+      bookmarks.push_back(bookmark_model_->bookmark_bar_node());
+      bookmarks.push_back(bookmark_model_->other_node());
+    }
+  }
+
   // Push all sorted top folders in stack and give them depth of 0.
   // Note the order to push folders to stack should be opposite to the order in
   // output.
@@ -430,16 +443,28 @@ std::vector<const BookmarkNode*> BookmarkBridge::GetTopLevelFolderIdsImpl(
     top_level_folders.push_back(account_reading_list_node);
   }
 
+  if (!vivaldi::IsVivaldiRunning()) {
   const BookmarkNode* mobile_node = bookmark_model_->mobile_node();
   // Partner bookmarks are child of the local mobile_node.
   if (IsPermanentFolderVisible(ignore_visibility, mobile_node) ||
       partner_bookmarks_shim_->HasPartnerBookmarks()) {
     top_level_folders.push_back(mobile_node);
   }
+  }
 
   const BookmarkNode* bookmark_bar_node = bookmark_model_->bookmark_bar_node();
   if (IsPermanentFolderVisible(ignore_visibility, bookmark_bar_node)) {
     top_level_folders.push_back(bookmark_bar_node);
+  }
+
+  if (vivaldi::IsVivaldiRunning()) {
+  const BookmarkNode* mobile_node = bookmark_model_->mobile_node();
+  // Partner bookmarks are child of the local mobile_node.
+  if (mobile_node->children().size() > 0)
+  if (IsPermanentFolderVisible(ignore_visibility, mobile_node) ||
+      partner_bookmarks_shim_->HasPartnerBookmarks()) {
+    top_level_folders.push_back(mobile_node);
+  }
   }
 
   const BookmarkNode* other_node = bookmark_model_->other_node();
@@ -525,7 +550,7 @@ const BookmarkNode* BookmarkBridge::GetCorrespondingAccountFolder(
                : nullptr;
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 ScopedJavaLocalRef<jobject> BookmarkBridge::GetRootFolderId(JNIEnv* env) {
@@ -1756,7 +1781,7 @@ ReadingListManager* BookmarkBridge::GetReadingListManagerFromParentNode(
     return local_or_syncable_reading_list_manager_.get();
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void BookmarkBridge::ReadingListModelLoaded(const ReadingListModel* model) {

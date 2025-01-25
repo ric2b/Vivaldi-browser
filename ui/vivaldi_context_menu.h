@@ -11,6 +11,7 @@
 #include "browser/menus/bookmark_support.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "extensions/schema/bookmark_context_menu.h"
+#include "extensions/schema/menubar_menu.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
 
@@ -45,6 +46,8 @@ class VivaldiRenderViewContextMenu;
 
 namespace vivaldi {
 
+ui::ImageModel GetImageModel(const std::string icon);
+
 struct MenubarMenuEntry {
   // Menu id
   int id;
@@ -55,31 +58,17 @@ struct MenubarMenuEntry {
 struct MenubarMenuParams {
   class Delegate {
    public:
-    virtual void PopulateModel(int menu_id,
-                               bool dark_text_color,
-                               ui::MenuModel** menu_model) {}
-    virtual void PopulateSubmodel(int menu_id,
-                                  bool dark_text_color,
-                                  ui::MenuModel* menu_model) {}
     virtual void OnMenuOpened(int menu_id) {}
     virtual void OnMenuClosed() {}
     virtual void OnAction(int id, int state) {}
-    virtual bool IsBookmarkMenu(int menu_id);
-    virtual int GetSelectedMenuId();
-    virtual bool IsItemChecked(int id);
-    virtual bool IsItemEnabled(int id);
-    virtual bool IsItemPersistent(int id);
-    virtual bool GetAccelerator(int id, ui::Accelerator* accelerator);
-    virtual bool GetUrl(int id, std::string* url);
-    virtual BookmarkMenuContainer* GetBookmarkMenuContainer();
+    virtual void OnError(std::string message) {}
   };
 
-  MenubarMenuParams(Delegate* delegate);
+  MenubarMenuParams();
   ~MenubarMenuParams();
   MenubarMenuEntry* GetSibling(int id);
   // All menus that can be opened.
   std::vector<MenubarMenuEntry> siblings;
-  const raw_ptr<Delegate> delegate;
 };
 
 struct BookmarkMenuContainerEntry {
@@ -142,11 +131,12 @@ VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     const gfx::Rect& button_rect);
 
 VivaldiMenubarMenu* CreateVivaldiMenubarMenu(content::WebContents* web_contents,
-                                             MenubarMenuParams& params,
+                                             MenubarMenuParams::Delegate* delegate,
+                                             std::optional<extensions::vivaldi::menubar_menu::Show::Params> api_params,
                                              int id);
 
 void ConvertMenubarButtonRectToScreen(content::WebContents* web_contents,
-                                      vivaldi::MenubarMenuParams& params);
+                                      vivaldi::MenubarMenuParams& bar_params);
 
 void ConvertContainerRectToScreen(content::WebContents* web_contents,
                                   vivaldi::BookmarkMenuContainer& container);

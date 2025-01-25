@@ -51,6 +51,18 @@ def callError(code=1, cmd='', cwd='', stdout=b'', stderr=b''):
 CERR1 = callError(1)
 
 
+def getAccountDetailsMock(host, account_id='self'):
+    if account_id == 'self':
+        return {
+            '_account_id': 123456,
+            'avatars': [],
+            'email': 'getAccountDetailsMock@example.com',
+            'name': 'GetAccountDetails(self)',
+            'status': 'OOO',
+        }
+    return None
+
+
 class TemporaryFileMock(object):
     def __init__(self):
         self.suffix = 0
@@ -583,6 +595,12 @@ class TestGitCl(unittest.TestCase):
         super(TestGitCl, self).setUp()
         self.calls = []
         self._calls_done = []
+
+        oldEnv = dict(os.environ)
+        def _resetEnv():
+            os.environ = oldEnv
+        self.addCleanup(_resetEnv)
+
         self.failed = False
         mock.patch('sys.stdout', io.StringIO()).start()
         mock.patch('git_cl.time_time',
@@ -709,24 +727,6 @@ class TestGitCl(unittest.TestCase):
     def test_LoadCodereviewSettingsFromFile_gerrit(self):
         codereview_file = io.StringIO('GERRIT_HOST: true')
         self.calls = [
-            ((['git', 'config', '--unset-all', 'rietveld.cc'], ), CERR1),
-            ((['git', 'config', '--unset-all',
-               'rietveld.tree-status-url'], ), CERR1),
-            ((['git', 'config', '--unset-all',
-               'rietveld.viewvc-url'], ), CERR1),
-            ((['git', 'config', '--unset-all',
-               'rietveld.bug-prefix'], ), CERR1),
-            ((['git', 'config', '--unset-all',
-               'rietveld.cpplint-regex'], ), CERR1),
-            ((['git', 'config', '--unset-all',
-               'rietveld.cpplint-ignore-regex'], ), CERR1),
-            ((['git', 'config', '--unset-all',
-               'rietveld.run-post-upload-hook'], ), CERR1),
-            (([
-                'git', 'config', '--unset-all',
-                'rietveld.format-full-by-default'
-            ], ), CERR1),
-            ((['git', 'config', 'gerrit.host', 'true'], ), ''),
         ]
         self.assertIsNone(
             git_cl.LoadCodereviewSettingsFromFile(codereview_file))
@@ -1063,14 +1063,13 @@ class TestGitCl(unittest.TestCase):
                 None,
             ),
             # Collect git config and gitcookies.
-            (
-                (['git', 'config', '-l'], ),
-                'git-config-output',
-            ),
+            #
+            # We accept ANY for the git-config file because it's just reflecting
+            # our mocked git config in scm.GIT anyway.
             (
                 ([
                     'FileWrite',
-                    os.path.join('TEMP_DIR', 'git-config'), 'git-config-output'
+                    os.path.join('TEMP_DIR', 'git-config'), mock.ANY,
                 ], ),
                 None,
             ),
@@ -1212,6 +1211,8 @@ class TestGitCl(unittest.TestCase):
                    return_value=change_id).start()
         mock.patch('git_common.get_or_create_merge_base',
                    return_value='origin/' + default_branch).start()
+        mock.patch('gerrit_util.GetAccountDetails',
+                    getAccountDetailsMock).start()
         mock.patch(
             'gclient_utils.AskForData',
             lambda prompt: self._mocked_call('ask_for_data', prompt)).start()
@@ -1223,7 +1224,6 @@ class TestGitCl(unittest.TestCase):
                           f'https://{short_hostname}.googlesource.com/my/repo')
         scm.GIT.SetConfig('', 'user.email', 'owner@example.com')
 
-        self.calls = []
         if squash_mode == "override_nosquash":
             if issue:
                 mock.patch('gerrit_util.GetChange',
@@ -1286,6 +1286,8 @@ class TestGitCl(unittest.TestCase):
                 scm.GIT.GetBranchConfig('', 'main',
                                         git_cl.GERRIT_SQUASH_HASH_CONFIG_KEY))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_upload_traces_no_gitcookies(self):
         self._run_gerrit_upload_test(
             ['--no-squash'],
@@ -1295,6 +1297,8 @@ class TestGitCl(unittest.TestCase):
             change_id='Ixxx',
             gitcookies_exists=False)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_upload_without_change_id_nosquash(self):
         self._run_gerrit_upload_test(
             ['--no-squash'],
@@ -1303,6 +1307,8 @@ class TestGitCl(unittest.TestCase):
             post_amend_description='desc ✔\n\nBUG=\n\nChange-Id: Ixxx',
             change_id='Ixxx')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_upload_without_change_id_override_nosquash(self):
         self._run_gerrit_upload_test(
             [],
@@ -1312,6 +1318,8 @@ class TestGitCl(unittest.TestCase):
             post_amend_description='desc ✔\n\nBUG=\n\nChange-Id: Ixxx',
             change_id='Ixxx')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_no_reviewer(self):
         self._run_gerrit_upload_test(
             [],
@@ -1320,6 +1328,8 @@ class TestGitCl(unittest.TestCase):
             squash_mode='override_nosquash',
             change_id='I123456789')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_push_opts(self):
         self._run_gerrit_upload_test(
             ['-o', 'wip'],
@@ -1329,6 +1339,8 @@ class TestGitCl(unittest.TestCase):
             change_id='I123456789',
             push_opts=['-o', 'wip'])
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_no_reviewer_non_chromium_host(self):
         # TODO(crbug/877717): remove this test case.
         self._run_gerrit_upload_test(
@@ -1339,6 +1351,8 @@ class TestGitCl(unittest.TestCase):
             short_hostname='other',
             change_id='I123456789')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_patchset_title_special_chars_nosquash(self):
         self._run_gerrit_upload_test(
             ['-f', '-t', 'We\'ll escape ^_ ^ special chars...@{u}'],
@@ -1348,6 +1362,8 @@ class TestGitCl(unittest.TestCase):
             change_id='I123456789',
             title='We\'ll escape ^_ ^ special chars...@{u}')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_reviewers_cmd_line(self):
         self._run_gerrit_upload_test(
             ['-r', 'foo@example.com', '--send-mail'],
@@ -1360,6 +1376,8 @@ class TestGitCl(unittest.TestCase):
             final_description=(
                 'desc ✔\n\nBUG=\nR=foo@example.com\n\nChange-Id: I123456789'))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_reviewers_cmd_line_send_email(self):
         self._run_gerrit_upload_test(
             ['-r', 'foo@example.com', '--send-email'],
@@ -2391,6 +2409,8 @@ class TestGitCl(unittest.TestCase):
             },
         }
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_patch_gerrit_default(self):
         self._patch_common()
         self.calls += [
@@ -2403,6 +2423,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(git_cl.main(['patch', '123456']), 0)
         self.assertIssueAndPatchset()
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_patch_gerrit_new_branch(self):
         self._patch_common()
         self.calls += [
@@ -2415,6 +2437,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(git_cl.main(['patch', '-b', 'feature', '123456']), 0)
         self.assertIssueAndPatchset(branch='feature')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_patch_gerrit_force(self):
         self._patch_common('host')
         self.calls += [
@@ -2427,6 +2451,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(git_cl.main(['patch', '123456', '--force']), 0)
         self.assertIssueAndPatchset(git_short_host='host')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_patch_gerrit_guess_by_url(self):
         self._patch_common('else')
         self.calls += [
@@ -2442,6 +2468,8 @@ class TestGitCl(unittest.TestCase):
             0)
         self.assertIssueAndPatchset(patchset='1', git_short_host='else')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_patch_gerrit_guess_by_url_with_repo(self):
         self._patch_common('else')
         self.calls += [
@@ -2458,6 +2486,8 @@ class TestGitCl(unittest.TestCase):
             ]), 0)
         self.assertIssueAndPatchset(patchset='1', git_short_host='else')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('sys.stderr', io.StringIO())
     def test_patch_gerrit_conflict(self):
         self._patch_common()
@@ -2473,6 +2503,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual('Command "git cherry-pick FETCH_HEAD" failed.\n\n',
                          sys.stderr.getvalue())
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('gerrit_util.GetChangeDetail',
                 side_effect=gerrit_util.GerritError(404, ''))
     @mock.patch('sys.stderr', io.StringIO())
@@ -2485,34 +2517,25 @@ class TestGitCl(unittest.TestCase):
             'change 123456 at https://chromium-review.googlesource.com does not '
             'exist or you have no access to it\n', sys.stderr.getvalue())
 
-    def _checkout_calls(self):
-        return [
-            (([
-                'git', 'config', '--local', '--get-regexp',
-                'branch\\..*\\.gerritissue'
-            ], ), ('branch.ger-branch.gerritissue 123456\n'
-                   'branch.gbranch654.gerritissue 654321\n')),
-        ]
+    def _checkout_config(self):
+        scm.GIT.SetConfig('', 'branch.ger-branch.gerritissue', '123456')
+        scm.GIT.SetConfig('', 'branch.gbranch654.gerritissue', '654321')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_checkout_gerrit(self):
         """Tests git cl checkout <issue>."""
-        self.calls = self._checkout_calls()
+        self._checkout_config()
         self.calls += [((['git', 'checkout', 'ger-branch'], ), '')]
         self.assertEqual(0, git_cl.main(['checkout', '123456']))
 
     def test_checkout_not_found(self):
         """Tests git cl checkout <issue>."""
-        self.calls = self._checkout_calls()
+        self._checkout_config()
         self.assertEqual(1, git_cl.main(['checkout', '99999']))
 
     def test_checkout_no_branch_issues(self):
         """Tests git cl checkout <issue>."""
-        self.calls = [
-            (([
-                'git', 'config', '--local', '--get-regexp',
-                'branch\\..*\\.gerritissue'
-            ], ), CERR1),
-        ]
         self.assertEqual(1, git_cl.main(['checkout', '99999']))
 
     def _test_gerrit_ensure_authenticated_common(self, auth):
@@ -2657,18 +2680,26 @@ class TestGitCl(unittest.TestCase):
               }, notify, None), ''),
         ]
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_cmd_set_commit_gerrit_clear(self):
         self._cmd_set_commit_gerrit_common(0)
         self.assertEqual(0, git_cl.main(['set-commit', '-c']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_cmd_set_commit_gerrit_dry(self):
         self._cmd_set_commit_gerrit_common(1, notify=False)
         self.assertEqual(0, git_cl.main(['set-commit', '-d']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_cmd_set_commit_gerrit(self):
         self._cmd_set_commit_gerrit_common(2)
         self.assertEqual(0, git_cl.main(['set-commit']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_description_display(self):
         mock.patch('git_cl.Changelist', ChangelistMock).start()
         ChangelistMock.desc = 'foo\n'
@@ -2676,6 +2707,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(0, git_cl.main(['description', '-d']))
         self.assertEqual('foo\n', sys.stdout.getvalue())
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('sys.stderr', io.StringIO())
     def test_StatusFieldOverrideIssueMissingArgs(self):
         try:
@@ -2684,6 +2717,8 @@ class TestGitCl(unittest.TestCase):
             self.assertIn('--field must be given when --issue is set.',
                           sys.stderr.getvalue())
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_StatusFieldOverrideIssue(self):
         def assertIssue(cl_self, *_args):
             self.assertEqual(cl_self.issue, 1)
@@ -2694,6 +2729,8 @@ class TestGitCl(unittest.TestCase):
             git_cl.main(['status', '--issue', '1', '--field', 'desc']), 0)
         self.assertEqual(sys.stdout.getvalue(), 'foobar\n')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_SetCloseOverrideIssue(self):
         def assertIssue(cl_self, *_args):
             self.assertEqual(cl_self.issue, 1)
@@ -2703,6 +2740,8 @@ class TestGitCl(unittest.TestCase):
         mock.patch('git_cl.Changelist.CloseIssue', lambda *_: None).start()
         self.assertEqual(git_cl.main(['set-close', '--issue', '1']), 0)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_description(self):
         scm.GIT.SetConfig('', 'remote.origin.url',
                           'https://chromium.googlesource.com/my/repo')
@@ -2725,6 +2764,8 @@ class TestGitCl(unittest.TestCase):
             ]))
         self.assertEqual('foobar\n', sys.stdout.getvalue())
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_description_set_raw(self):
         mock.patch('git_cl.Changelist', ChangelistMock).start()
         mock.patch('git_cl.sys.stdin', io.StringIO('hihi')).start()
@@ -2732,6 +2773,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(0, git_cl.main(['description', '-n', 'hihi']))
         self.assertEqual('hihi', ChangelistMock.desc)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_description_appends_bug_line(self):
         current_desc = 'Some.\n\nChange-Id: xxx'
 
@@ -2758,6 +2801,8 @@ class TestGitCl(unittest.TestCase):
         scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
         self.assertEqual(0, git_cl.main(['description']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_description_does_not_append_bug_line_if_fixed_is_present(self):
         current_desc = 'Some.\n\nFixed: 123\nChange-Id: xxx'
 
@@ -2778,6 +2823,8 @@ class TestGitCl(unittest.TestCase):
         scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
         self.assertEqual(0, git_cl.main(['description']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_description_set_stdin(self):
         mock.patch('git_cl.Changelist', ChangelistMock).start()
         mock.patch('git_cl.sys.stdin',
@@ -2786,6 +2833,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(0, git_cl.main(['description', '-n', '-']))
         self.assertEqual('hi\n\t there\n\nman', ChangelistMock.desc)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_archive(self):
         self.calls = [
             ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
@@ -2806,6 +2855,8 @@ class TestGitCl(unittest.TestCase):
 
         self.assertEqual(0, git_cl.main(['archive', '-f']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_archive_tag_collision(self):
         self.calls = [
             ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
@@ -2826,6 +2877,8 @@ class TestGitCl(unittest.TestCase):
 
         self.assertEqual(0, git_cl.main(['archive', '-f']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_archive_current_branch_fails(self):
         self.calls = [
             ((['git', 'for-each-ref', '--format=%(refname)',
@@ -2842,6 +2895,8 @@ class TestGitCl(unittest.TestCase):
 
         self.assertEqual(1, git_cl.main(['archive', '-f']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_archive_dry_run(self):
         self.calls = [
             ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
@@ -2860,6 +2915,8 @@ class TestGitCl(unittest.TestCase):
 
         self.assertEqual(0, git_cl.main(['archive', '-f', '--dry-run']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_archive_no_tags(self):
         self.calls = [
             ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
@@ -2878,6 +2935,8 @@ class TestGitCl(unittest.TestCase):
 
         self.assertEqual(0, git_cl.main(['archive', '-f', '--notags']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_archive_tag_cleanup_on_branch_deletion_error(self):
         self.calls = [
             ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
@@ -2901,6 +2960,8 @@ class TestGitCl(unittest.TestCase):
 
         self.assertEqual(0, git_cl.main(['archive', '-f']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_archive_with_format(self):
         self.calls = [
             ((['git', 'for-each-ref', '--format=%(refname)', 'refs/heads'], ),
@@ -2921,6 +2982,8 @@ class TestGitCl(unittest.TestCase):
             0, git_cl.main(['archive', '-f', '-p',
                             'archived/{issue}-{branch}']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_cmd_issue_erase_existing(self):
         scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
         scm.GIT.SetConfig('', 'branch.main.gerritserver',
@@ -2932,6 +2995,8 @@ class TestGitCl(unittest.TestCase):
         self.assertIsNone(scm.GIT.GetConfig('root', 'branch.main.gerritissue'))
         self.assertIsNone(scm.GIT.GetConfig('root', 'branch.main.gerritserver'))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_cmd_issue_erase_existing_with_change_id(self):
         scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
         scm.GIT.SetConfig('', 'branch.main.gerritserver',
@@ -2949,6 +3014,8 @@ class TestGitCl(unittest.TestCase):
         self.assertIsNone(scm.GIT.GetConfig('root', 'branch.main.gerritissue'))
         self.assertIsNone(scm.GIT.GetConfig('root', 'branch.main.gerritserver'))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_cmd_issue_json(self):
         scm.GIT.SetConfig('', 'branch.main.gerritissue', '123')
         scm.GIT.SetConfig('', 'branch.main.gerritserver',
@@ -3157,13 +3224,8 @@ class TestGitCl(unittest.TestCase):
         mock.patch('git_cl._GitCookiesChecker.get_hosts_with_creds',
                    lambda _: []).start()
         self.calls = [
-            ((['git', 'config', '--global', 'http.cookiefile'], ), CERR1),
             (('ask_for_data', 'Press Enter to setup .gitcookies, '
               'or Ctrl+C to abort'), ''),
-            (([
-                'git', 'config', '--global', 'http.cookiefile',
-                os.path.expanduser(os.path.join('~', '.gitcookies'))
-            ], ), ''),
         ]
         self.assertEqual(0, git_cl.main(['creds-check']))
         self.assertIn('\nConfigured git to use .gitcookies from',
@@ -3171,20 +3233,18 @@ class TestGitCl(unittest.TestCase):
 
     def test_creds_check_gitcookies_configured_custom_broken(self):
         self._common_creds_check_mocks()
-        mock.patch('git_cl._GitCookiesChecker.get_hosts_with_creds',
-                   lambda _: []).start()
+
         custom_cookie_path = ('C:\\.gitcookies' if sys.platform == 'win32' else
                               '/custom/.gitcookies')
+        scm.GIT.SetConfig('', 'http.cookiefile', custom_cookie_path)
+        os.environ['GIT_COOKIES_PATH'] = '/official/.gitcookies'
+
+        mock.patch('git_cl._GitCookiesChecker.get_hosts_with_creds',
+                   lambda _: []).start()
         self.calls = [
-            ((['git', 'config', '--global',
-               'http.cookiefile'], ), custom_cookie_path),
             (('os.path.exists', custom_cookie_path), False),
             (('ask_for_data', 'Reconfigure git to use default .gitcookies? '
               'Press Enter to reconfigure, or Ctrl+C to abort'), ''),
-            (([
-                'git', 'config', '--global', 'http.cookiefile',
-                os.path.expanduser(os.path.join('~', '.gitcookies'))
-            ], ), ''),
         ]
         self.assertEqual(0, git_cl.main(['creds-check']))
         self.assertIn(
@@ -3193,6 +3253,8 @@ class TestGitCl(unittest.TestCase):
         self.assertIn('However, your configured .gitcookies file is missing.',
                       sys.stdout.getvalue())
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_git_cl_comment_add_gerrit(self):
         git_new_branch.create_new_branch(None)  # hits mock from scm_mock.GIT.
         scm.GIT.SetConfig('', 'remote.origin.url',
@@ -3203,6 +3265,8 @@ class TestGitCl(unittest.TestCase):
         ]
         self.assertEqual(0, git_cl.main(['comment', '-i', '10', '-a', 'msg']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('git_cl.Changelist.GetBranch', return_value='foo')
     def test_git_cl_comments_fetch_gerrit(self, *_mocks):
         scm.GIT.SetConfig('', 'remote.origin.url',
@@ -3356,6 +3420,8 @@ class TestGitCl(unittest.TestCase):
         self.assertEqual(
             0, git_cl.main(['comments', '-i', '1', '-j', 'output.json']))
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_git_cl_comments_robot_comments(self):
         # git cl comments also fetches robot comments (which are considered a
         # type of autogenerated comment), and unlike other types of comments,
@@ -3563,6 +3629,8 @@ class TestGitCl(unittest.TestCase):
         cl = git_cl.Changelist(issue=123456)
         self.assertEqual(cl._GerritChangeIdentifier(), '123456')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_new_default(self):
         self._run_gerrit_upload_test(
             [],
@@ -3572,6 +3640,8 @@ class TestGitCl(unittest.TestCase):
             change_id='I123456789',
             default_branch='main')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def test_gerrit_nosquash_with_issue(self):
         self._run_gerrit_upload_test(
             [],
@@ -4113,7 +4183,8 @@ class ChangelistTest(unittest.TestCase):
                                             parallel=False,
                                             upstream='420parent',
                                             description=desc,
-                                            all_files=False)
+                                            all_files=False,
+                                            end_commit='420latest_tree')
 
     @mock.patch('git_cl.Changelist.GetAffectedFiles', return_value=[])
     @mock.patch('git_cl.Changelist.GetIssue', return_value='123')
@@ -4163,9 +4234,10 @@ class ChangelistTest(unittest.TestCase):
                                             may_prompt=True,
                                             verbose=False,
                                             parallel=False,
-                                            upstream='420parent',
+                                            upstream=parent,
                                             description=desc,
-                                            all_files=False)
+                                            all_files=False,
+                                            end_commit=latest_tree)
         mockEnsureCanUploadPatchset.assert_called_once()
 
         # Test preserve_tryjob
@@ -4299,6 +4371,8 @@ class CMDTestCaseBase(unittest.TestCase):
         self.addCleanup(mock.patch.stopall)
 
 
+@unittest.skipIf(gclient_utils.IsEnvCog(),
+                'not supported in non-git environment')
 class CMDPresubmitTestCase(CMDTestCaseBase):
     _RUN_HOOK_RETURN = {
         'errors': [],
@@ -4414,6 +4488,8 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
                    ',builds.*.createTime,builds.*.tags'),
     }
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def testNoJobs(self):
         git_cl._call_buildbucket.return_value = {}
 
@@ -4423,6 +4499,8 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
             mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
             self._DEFAULT_REQUEST)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def testTrivialCommits(self):
         self.assertEqual(0, git_cl.main(['try-results']))
         git_cl._call_buildbucket.assert_called_with(
@@ -4454,6 +4532,8 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
         ],
                          sys.stdout.getvalue().splitlines())
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def testPrintToStdout(self):
         self.assertEqual(0, git_cl.main(['try-results']))
         self.assertEqual([
@@ -4478,6 +4558,8 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
             mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
             self._DEFAULT_REQUEST)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     def testPrintToStdoutWithMasters(self):
         self.assertEqual(0, git_cl.main(['try-results', '--print-master']))
         self.assertEqual([
@@ -4502,6 +4584,8 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
             mock.ANY, 'cr-buildbucket.appspot.com', 'SearchBuilds',
             self._DEFAULT_REQUEST)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('git_cl.write_json')
     def testWriteToJson(self, mockJsonDump):
         self.assertEqual(0, git_cl.main(['try-results', '--json', 'file.json']))
@@ -4561,6 +4645,8 @@ class CMDTryResultsTestCase(CMDTestCaseBase):
 
 
 class CMDTryTestCase(CMDTestCaseBase):
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('git_cl.Changelist.SetCQState')
     def testSetCQDryRunByDefault(self, mockSetCQState):
         mockSetCQState.return_value = 0
@@ -4570,6 +4656,8 @@ class CMDTryTestCase(CMDTestCaseBase):
             sys.stdout.getvalue(), 'Scheduling CQ dry run on: '
             'https://chromium-review.googlesource.com/123456\n')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('git_cl._call_buildbucket')
     def testScheduleOnBuildbucket(self, mockCallBuildbucket):
         mockCallBuildbucket.return_value = {}
@@ -4623,6 +4711,8 @@ class CMDTryTestCase(CMDTestCaseBase):
                                                'cr-buildbucket.appspot.com',
                                                'Batch', expected_request)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('git_cl._call_buildbucket')
     def testScheduleOnBuildbucketWithRevision(self, mockCallBuildbucket):
         mockCallBuildbucket.return_value = {}
@@ -4726,6 +4816,8 @@ class CMDTryTestCase(CMDTestCaseBase):
                                                'cr-buildbucket.appspot.com',
                                                'Batch', expected_request)
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('sys.stderr', io.StringIO())
     def testScheduleOnBuildbucket_WrongBucket(self):
         with self.assertRaises(SystemExit):
@@ -4735,6 +4827,8 @@ class CMDTryTestCase(CMDTestCaseBase):
             ])
         self.assertIn('Invalid bucket: not-a-bucket.', sys.stderr.getvalue())
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('git_cl._call_buildbucket')
     @mock.patch('git_cl._fetch_tryjobs')
     def testScheduleOnBuildbucketRetryFailed(self, mockFetchTryJobs,
@@ -5134,6 +5228,8 @@ class CMDFormatTestCase(unittest.TestCase):
         self._check_yapf_filtering(files, expected)
 
 
+@unittest.skipIf(gclient_utils.IsEnvCog(),
+                'not supported in non-git environment')
 class CMDStatusTestCase(CMDTestCaseBase):
     # Return branch names a,..,f with comitterdates in increasing order, i.e.
     # 'f' is the most-recently changed branch.
@@ -5233,6 +5329,8 @@ class CMDStatusTestCase(CMDTestCaseBase):
             'x\n')
 
 
+@unittest.skipIf(gclient_utils.IsEnvCog(),
+                'not supported in non-git environment')
 class CMDOwnersTestCase(CMDTestCaseBase):
     def setUp(self):
         super(CMDOwnersTestCase, self).setUp()
@@ -5316,6 +5414,8 @@ class CMDLintTestCase(CMDTestCaseBase):
         self.assertIn('pdf.cc:3:  (cpplint) Do not indent within a namespace',
                       git_cl.sys.stderr.getvalue())
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                    'not supported in non-git environment')
     @mock.patch('git_cl.Changelist.GetAffectedFiles',
                 return_value=['chg-1.h', 'chg-2.cc'])
     @mock.patch('git_cl.Changelist.GetCommonAncestorWithUpstream',
@@ -5329,6 +5429,60 @@ class CMDLintTestCase(CMDTestCaseBase):
                       git_cl.sys.stderr.getvalue())
         self.assertIn('chg-2.cc:3:  (cpplint) Do not indent within a namespace',
                       git_cl.sys.stderr.getvalue())
+
+
+class CMDCherryPickTestCase(CMDTestCaseBase):
+
+    def setUp(self):
+        super(CMDTestCaseBase, self).setUp()
+
+    def testCreateCommitMessage(self):
+        orig_message = """Foo the bar
+
+This change foo's the bar.
+
+Bug: 123456
+Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
+"""
+        expected_message = """Cherry pick "Foo the bar"
+
+Original change's description:
+> Foo the bar
+> 
+> This change foo's the bar.
+> 
+> Bug: 123456
+> Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
+
+Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
+"""
+        self.assertEqual(git_cl._create_commit_message(orig_message),
+                         expected_message)
+
+    def testCreateCommitMessageWithBug(self):
+        bug = "987654"
+        orig_message = """Foo the bar
+
+This change foo's the bar.
+
+Bug: 123456
+Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
+"""
+        expected_message = f"""Cherry pick "Foo the bar"
+
+Original change's description:
+> Foo the bar
+> 
+> This change foo's the bar.
+> 
+> Bug: 123456
+> Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
+
+Bug: {bug}
+Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
+"""
+        self.assertEqual(git_cl._create_commit_message(orig_message, bug),
+                         expected_message)
 
 
 if __name__ == '__main__':

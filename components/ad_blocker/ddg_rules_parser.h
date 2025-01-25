@@ -28,7 +28,7 @@ class DuckDuckGoRulesParser {
                  const base::Value::List* excluded_origins);
   std::optional<std::bitset<RequestFilterRule::kTypeCount>> GetTypes(
       const base::Value* rule_properties);
-  std::optional<std::vector<std::string>> GetDomains(
+  std::optional<std::set<std::string>> GetDomains(
       const base::Value* rule_properties);
   const raw_ptr<ParseResult> parse_result_;
 };

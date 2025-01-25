@@ -35,11 +35,15 @@ export declare class Request extends EventEmitter<{
     get response(): Bidi.Network.ResponseData | undefined;
     get url(): string;
     get isBlocked(): boolean;
+    get resourceType(): string | undefined;
+    get postData(): string | undefined;
+    get hasPostData(): boolean;
     continueRequest({ url, method, headers, cookies, body, }: Omit<Bidi.Network.ContinueRequestParameters, 'request'>): Promise<void>;
     failRequest(): Promise<void>;
     provideResponse({ statusCode, reasonPhrase, headers, body, }: Omit<Bidi.Network.ProvideResponseParameters, 'request'>): Promise<void>;
     continueWithAuth(parameters: Bidi.Network.ContinueWithAuthCredentials | Bidi.Network.ContinueWithAuthNoCredentials): Promise<void>;
     private dispose;
     [disposeSymbol](): void;
+    timing(): Bidi.Network.FetchTimingInfo;
 }
 //# sourceMappingURL=Request.d.ts.map

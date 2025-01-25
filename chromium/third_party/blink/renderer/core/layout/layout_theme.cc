@@ -183,7 +183,10 @@ ControlPart LayoutTheme::AdjustAppearanceWithElementType(
       return part;
     case kBaseSelectPart:
       CHECK(RuntimeEnabledFeatures::StylableSelectEnabled());
-      return part;
+      return IsA<HTMLSelectElement>(element) ||
+                     HTMLSelectElement::IsPopoverForAppearanceBase(element)
+                 ? part
+                 : auto_appearance;
 
     // Aliases of 'auto'.
     // https://drafts.csswg.org/css-ui-4/#typedef-appearance-compat-auto
@@ -416,6 +419,10 @@ bool LayoutTheme::IsControlStyled(ControlPart part,
     case kProgressBarPart:
       return builder.HasAuthorBackground() || builder.HasAuthorBorder();
 
+    case kMeterPart:
+      return RuntimeEnabledFeatures::MeterDevolveAppearanceEnabled() &&
+             (builder.HasAuthorBackground() || builder.HasAuthorBorder());
+
     case kMenulistPart:
     case kSearchFieldPart:
     case kTextAreaPart:
@@ -485,8 +492,6 @@ void LayoutTheme::AdjustSliderContainerStyle(
 
   if (!IsHorizontalWritingMode(builder.GetWritingMode())) {
     builder.SetTouchAction(TouchAction::kPanX);
-    // If FormControlsVerticalWritingModeDirectionSupport disabled, then it is
-    // always RTL because the slider value increases up even in LTR.
   } else if (RuntimeEnabledFeatures::
                  NonStandardAppearanceValueSliderVerticalEnabled() &&
              builder.EffectiveAppearance() == kSliderVerticalPart) {
@@ -494,14 +499,10 @@ void LayoutTheme::AdjustSliderContainerStyle(
     builder.SetWritingMode(WritingMode::kVerticalRl);
     // It's always in RTL because the slider value increases up even in LTR.
     builder.SetDirection(TextDirection::kRtl);
-    if (!RuntimeEnabledFeatures::
-            FormControlsVerticalWritingModeDirectionSupportEnabled()) {
-      builder.SetDirection(TextDirection::kRtl);
-    }
   } else {
     builder.SetTouchAction(TouchAction::kPanY);
     builder.SetWritingMode(WritingMode::kHorizontalTb);
-    if (To<HTMLInputElement>(element.OwnerShadowHost())->list()) {
+    if (To<HTMLInputElement>(element.OwnerShadowHost())->DataList()) {
       builder.SetAlignSelf(StyleSelfAlignmentData(ItemPosition::kCenter,
                                                   OverflowAlignment::kUnsafe));
     }
@@ -539,29 +540,31 @@ base::TimeDelta LayoutTheme::CaretBlinkInterval() const {
 
 Color LayoutTheme::SystemColor(CSSValueID css_value_id,
                                mojom::blink::ColorScheme color_scheme,
-                               const ui::ColorProvider* color_provider) const {
+                               const ui::ColorProvider* color_provider,
+                               bool is_in_web_app_scope) const {
   if (color_provider && !WebTestSupport::IsRunningWebTest()) {
     return SystemColorFromColorProvider(css_value_id, color_scheme,
-                                        color_provider);
+                                        color_provider, is_in_web_app_scope);
   }
-  return DefaultSystemColor(css_value_id, color_scheme, color_provider);
+  return DefaultSystemColor(css_value_id, color_scheme, color_provider,
+                            is_in_web_app_scope);
 }
 
-Color LayoutTheme::DefaultSystemColor(
-    CSSValueID css_value_id,
-    mojom::blink::ColorScheme color_scheme,
-    const ui::ColorProvider* color_provider) const {
+Color LayoutTheme::DefaultSystemColor(CSSValueID css_value_id,
+                                      mojom::blink::ColorScheme color_scheme,
+                                      const ui::ColorProvider* color_provider,
+                                      bool is_in_web_app_scope) const {
   // The source for the deprecations commented on below is
   // https://www.w3.org/TR/css-color-4/#deprecated-system-colors.
 
   switch (css_value_id) {
     case CSSValueID::kAccentcolor:
       return RuntimeEnabledFeatures::CSSSystemAccentColorEnabled()
-                 ? GetAccentColorOrDefault(color_scheme)
+                 ? GetAccentColorOrDefault(color_scheme, is_in_web_app_scope)
                  : Color();
     case CSSValueID::kAccentcolortext:
       return RuntimeEnabledFeatures::CSSSystemAccentColorEnabled()
-                 ? GetAccentColorText(color_scheme)
+                 ? GetAccentColorText(color_scheme, is_in_web_app_scope)
                  : Color();
     case CSSValueID::kActivetext:
       return Color::FromRGBA32(0xFFFF0000);
@@ -661,19 +664,21 @@ Color LayoutTheme::DefaultSystemColor(
     case CSSValueID::kInternalSearchColor:
       return PlatformTextSearchHighlightColor(/* active_match */ false,
                                               /* in_forced_colors */ false,
-                                              color_scheme, color_provider);
+                                              color_scheme, color_provider,
+                                              is_in_web_app_scope);
     case CSSValueID::kInternalSearchTextColor:
       return PlatformTextSearchColor(/* active_match */ false,
                                      /* in_forced_colors */ false, color_scheme,
-                                     color_provider);
+                                     color_provider, is_in_web_app_scope);
     case CSSValueID::kInternalCurrentSearchColor:
       return PlatformTextSearchHighlightColor(/* active_match */ true,
                                               /* in_forced_colors */ false,
-                                              color_scheme, color_provider);
+                                              color_scheme, color_provider,
+                                              is_in_web_app_scope);
     case CSSValueID::kInternalCurrentSearchTextColor:
       return PlatformTextSearchColor(/* active_match */ true,
                                      /* in_forced_colors */ false, color_scheme,
-                                     color_provider);
+                                     color_provider, is_in_web_app_scope);
     default:
       break;
   }
@@ -685,7 +690,8 @@ Color LayoutTheme::DefaultSystemColor(
 Color LayoutTheme::SystemColorFromColorProvider(
     CSSValueID css_value_id,
     mojom::blink::ColorScheme color_scheme,
-    const ui::ColorProvider* color_provider) const {
+    const ui::ColorProvider* color_provider,
+    bool is_in_web_app_scope) const {
   SkColor system_theme_color;
   switch (css_value_id) {
     case CSSValueID::kActivetext:
@@ -746,7 +752,8 @@ Color LayoutTheme::SystemColorFromColorProvider(
           color_provider->GetColor(ui::kColorCssSystemWindowText);
       break;
     default:
-      return DefaultSystemColor(css_value_id, color_scheme, color_provider);
+      return DefaultSystemColor(css_value_id, color_scheme, color_provider,
+                                is_in_web_app_scope);
   }
 
   return Color::FromSkColor(system_theme_color);
@@ -764,11 +771,12 @@ Color LayoutTheme::PlatformTextSearchHighlightColor(
     bool active_match,
     bool in_forced_colors,
     mojom::blink::ColorScheme color_scheme,
-    const ui::ColorProvider* color_provider) const {
+    const ui::ColorProvider* color_provider,
+    bool is_in_web_app_scope) const {
   if (active_match) {
     if (in_forced_colors) {
       return GetTheme().SystemColor(CSSValueID::kHighlight, color_scheme,
-                                    color_provider);
+                                    color_provider, is_in_web_app_scope);
     }
     return Color(255, 150, 50);  // Orange.
   }
@@ -779,10 +787,11 @@ Color LayoutTheme::PlatformTextSearchColor(
     bool active_match,
     bool in_forced_colors,
     mojom::blink::ColorScheme color_scheme,
-    const ui::ColorProvider* color_provider) const {
+    const ui::ColorProvider* color_provider,
+    bool is_in_web_app_scope) const {
   if (in_forced_colors && active_match) {
     return GetTheme().SystemColor(CSSValueID::kHighlighttext, color_scheme,
-                                  color_provider);
+                                  color_provider, is_in_web_app_scope);
   }
   return Color::kBlack;
 }
@@ -870,7 +879,7 @@ Color LayoutTheme::GetSystemAccentColor(
     return Color();
   }
 
-  // Currently only plumbed through on ChromeOS.
+  // Currently only plumbed through on ChromeOS and Windows.
   const auto& accent_color =
       WebThemeEngineHelper::GetNativeThemeEngine()->GetAccentColor();
   if (!accent_color.has_value()) {
@@ -880,16 +889,24 @@ Color LayoutTheme::GetSystemAccentColor(
 }
 
 Color LayoutTheme::GetAccentColorOrDefault(
-    mojom::blink::ColorScheme color_scheme) const {
+    mojom::blink::ColorScheme color_scheme,
+    bool is_in_web_app_scope) const {
   // This is from the kAccent color from NativeThemeBase::GetControlColor
   const Color kDefaultAccentColor = Color(0x00, 0x75, 0xFF);
-  Color accent_color = GetSystemAccentColor(color_scheme);
+  Color accent_color = Color();
+  // Currently OS-defined accent color is exposed via System AccentColor keyword
+  // ONLY for installed WebApps where fingerprinting risk is not as large of a
+  // risk.
+  if (is_in_web_app_scope) {
+    accent_color = GetSystemAccentColor(color_scheme);
+  }
   return accent_color == Color() ? kDefaultAccentColor : accent_color;
 }
 
-Color LayoutTheme::GetAccentColorText(
-    mojom::blink::ColorScheme color_scheme) const {
-  Color accent_color = GetAccentColorOrDefault(color_scheme);
+Color LayoutTheme::GetAccentColorText(mojom::blink::ColorScheme color_scheme,
+                                      bool is_in_web_app_scope) const {
+  Color accent_color =
+      GetAccentColorOrDefault(color_scheme, is_in_web_app_scope);
   // This logic matches AccentColorText in Firefox. If the accent color to draw
   // text on is dark, then use white. If it's light, then use dark.
   return color_utils::GetRelativeLuminance4f(accent_color.toSkColor4f()) <= 128

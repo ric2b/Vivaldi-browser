@@ -22,7 +22,6 @@
 #include "chrome/browser/language/url_language_histogram_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
-#include "chrome/browser/translate/translate_model_service_factory.h"
 #include "chrome/browser/translate/translate_ranker_factory.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/translate/translate_bubble_factory.h"
@@ -45,7 +44,6 @@
 #include "components/translate/core/common/translate_util.h"
 #include "components/variations/service/variations_service.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "third_party/metrics_proto/translate_event.pb.h"
@@ -55,7 +53,8 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/android/android_theme_resources.h"
-#include "chrome/browser/ui/android/infobars/translate_compact_infobar.h"
+#include "chrome/browser/translate/android/auto_translate_snackbar_controller.h"
+#include "components/translate/content/android/translate_message.h"
 #else
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -71,9 +70,7 @@ VivaldiTranslateClient::VivaldiTranslateClient(
   translate_driver_ = std::make_unique<translate::ContentTranslateDriver>(
       *web_contents,
       UrlLanguageHistogramFactory::GetForBrowserContext(
-          web_contents->GetBrowserContext()),
-      TranslateModelServiceFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents->GetBrowserContext())));
+          web_contents->GetBrowserContext()));
   translate_manager_ = std::make_unique<translate::TranslateManager>(
       this,
       translate::TranslateRankerFactory::GetForBrowserContext(
@@ -121,6 +118,16 @@ std::string ReplaceServerUrl(std::string& script) {
 
   return script;
 }
+#if BUILDFLAG(IS_ANDROID)
+// helper function for use in VivaldiTranslateClient::ShowTranslateUI.
+bool IsAutomaticTranslationType(translate::TranslationType type) {
+  return type == translate::TranslationType::kAutomaticTranslationByHref ||
+         type == translate::TranslationType::kAutomaticTranslationByLink ||
+         type == translate::TranslationType::kAutomaticTranslationByPref ||
+         type == translate::TranslationType::
+                     kAutomaticTranslationToPredefinedTarget;
+}
+#endif
 }  // namespace
 
 /* static */
@@ -282,15 +289,39 @@ bool VivaldiTranslateClient::ShowTranslateUI(
     step = translate::TRANSLATE_STEP_TRANSLATE_ERROR;
   }
 
-// Translate uses a an infobar on Android (here)
+// Translate uses a an SnackBar on Android (here)
 #if BUILDFLAG(IS_ANDROID)
-  // Infobar UI.
   DCHECK(!TranslateService::IsTranslateBubbleEnabled());
-  translate::TranslateInfoBarDelegate::Create(
-      step != translate::TRANSLATE_STEP_BEFORE_TRANSLATE,
-      translate_manager_->GetWeakPtr(),
-      infobars::ContentInfoBarManager::FromWebContents(web_contents()), step,
-      source_language, target_language, error_type, triggered_from_menu);
+  // Message UI.
+  translate::TranslationType translate_type =
+          GetLanguageState().translation_type();
+  // Use the automatic translation Snackbar if the current translation is an
+  // automatic translation and there was no error.
+  if (IsAutomaticTranslationType(translate_type) &&
+      step != translate::TRANSLATE_STEP_TRANSLATE_ERROR) {
+      // The Automatic translation snackbar is only shown after translation
+      // has completed. The translating step is a no-op with the Snackbar.
+      if (step == translate::TRANSLATE_STEP_AFTER_TRANSLATE) {
+
+        // An automatic translation has completed show the snackbar.
+        if (!auto_translate_snackbar_controller_) {
+          auto_translate_snackbar_controller_ =
+              std::make_unique<translate::AutoTranslateSnackbarController>(
+                  web_contents(), translate_manager_->GetWeakPtr());
+        }
+        auto_translate_snackbar_controller_->ShowSnackbar(target_language);
+      }
+    } else {
+      // Not an automatic translation. Use TranslateMessage instead.
+      if (!translate_message_) {
+        translate_message_ = std::make_unique<translate::TranslateMessage>(
+            web_contents(), translate_manager_->GetWeakPtr(),
+            base::BindRepeating([]() {}));
+      }
+      translate_message_->ShowTranslateStep(step, source_language,
+                                            target_language);
+    }
+  translate_manager_->GetActiveTranslateMetricsLogger()->LogUIChange(true);
 #else
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::vivaldi::tabs_private::TranslateError api_error =
@@ -346,11 +377,7 @@ VivaldiTranslateClient::GetTranslatePrefs() {
 #if BUILDFLAG(IS_ANDROID)
 std::unique_ptr<infobars::InfoBar> VivaldiTranslateClient::CreateInfoBar(
     std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
-  return std::make_unique<TranslateCompactInfoBar>(std::move(delegate));
-}
-
-int VivaldiTranslateClient::GetInfobarIconID() const {
-  return IDR_ANDROID_INFOBAR_TRANSLATE;
+  return nullptr;
 }
 
 void VivaldiTranslateClient::ManualTranslateWhenReady() {
@@ -381,7 +408,12 @@ void VivaldiTranslateClient::WebContentsDestroyed() {
   // Translation process can be interrupted.
   // Destroying the TranslateManager now guarantees that it never has to deal
   // with NULL WebContents.
-  translate_manager_.reset();
+    if (translate_manager_) {
+        if (translate_driver_) {
+            translate_driver_->set_translate_manager(nullptr);
+        }
+        translate_manager_.reset();
+    }
 }
 
 // ContentTranslateDriver::TranslationObserver implementation.
@@ -403,7 +435,23 @@ void VivaldiTranslateClient::OnLanguageDetermined(
   }
 #endif
 }
+#if BUILDFLAG(IS_ANDROID)
+void VivaldiTranslateClient::PrimaryPageChanged(content::Page& page) {
+  if (auto_translate_snackbar_controller_ &&
+      auto_translate_snackbar_controller_->IsShowing()) {
+    auto_translate_snackbar_controller_->NativeDismissSnackbar();
+  }
+}
 
+void VivaldiTranslateClient::OnVisibilityChanged(
+    content::Visibility visibility) {
+  if (auto_translate_snackbar_controller_ &&
+      auto_translate_snackbar_controller_->IsShowing() &&
+      visibility == content::Visibility::HIDDEN) {
+    auto_translate_snackbar_controller_->NativeDismissSnackbar();
+  }
+}
+#endif
 // The bubble is implemented only on the desktop platforms.
 #if !BUILDFLAG(IS_ANDROID)
 #if 0

@@ -14,7 +14,7 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/test/web_state_list_builder_from_description.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_drag_drop_metrics.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_mediator_test.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mode_holder.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_group_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/test/fake_tab_collection_consumer.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -43,6 +44,8 @@ class TabGroupMediatorTest : public GridMediatorTestClass {
     ASSERT_TRUE(builder_->BuildWebStateListFromDescription(
         "| f [ 1 a* b c ] d e ", browser_->GetBrowserState()));
 
+    mode_holder_ = [[TabGridModeHolder alloc] init];
+
     tab_group_ = web_state_list->GetGroupOfWebStateAt(1);
 
     tab_group_consumer_ = OCMProtocolMock(@protocol(TabGroupConsumer));
@@ -51,7 +54,8 @@ class TabGroupMediatorTest : public GridMediatorTestClass {
         initWithWebStateList:browser_->GetWebStateList()
                     tabGroup:tab_group_->GetWeakPtr()
                     consumer:tab_group_consumer_
-                gridConsumer:consumer_];
+                gridConsumer:consumer_
+                  modeHolder:mode_holder_];
     mediator_.browser = browser_.get();
   }
 
@@ -77,6 +81,7 @@ class TabGroupMediatorTest : public GridMediatorTestClass {
   std::unique_ptr<WebStateListBuilderFromDescription> builder_;
   base::test::ScopedFeatureList scoped_feature_list_;
   base::HistogramTester histogram_tester_;
+  TabGridModeHolder* mode_holder_;
 };
 
 // Tests dropping a local tab (e.g. drag from same window) in the grid.

@@ -33,7 +33,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/ioctl.h>
-#include <sys/poll.h>
+#include <poll.h>
 #include <unistd.h>
 
 #if defined(__cplusplus)

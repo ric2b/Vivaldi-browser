@@ -56,11 +56,29 @@ BASE_FEATURE(kCertificateTransparencyAskBeforeEnabling,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
+// Enables using network time for certificate verification. If enabled, network
+// time will be used to verify certificate validity, however certificates that
+// fail to validate with network time will fall back to the system time.
+// This has no effect if the network_time::kNetworkTimeServiceQuerying flag is
+// disabled, or the BrowserNetworkTimeQueriesEnabled policy is set to false.
+BASE_FEATURE(kCertVerificationNetworkTime,
+             "CertVerificationNetworkTime",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables using the ClosedTabCache to instantly restore recently closed tabs
 // using the "Reopen Closed Tab" button.
 BASE_FEATURE(kClosedTabCache,
              "ClosedTabCache",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_LINUX)
+// Enables usage of os_crypt_async::SecretPortalKeyProvider.  Once
+// `kSecretPortalKeyProviderUseForEncryption` is enabled, this flag cannot be
+// disabled without losing data.
+BASE_FEATURE(kDbusSecretPortal,
+             "DbusSecretPortal",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_LINUX)
 
 // Destroy profiles when their last browser window is closed, instead of when
 // the browser exits.
@@ -101,6 +119,24 @@ const base::FeatureParam<std::string> kDevToolsFreestylerDogfoodModelId{
     &kDevToolsFreestylerDogfood, "aida_model_id", /*default_value=*/""};
 const base::FeatureParam<double> kDevToolsFreestylerDogfoodTemperature{
     &kDevToolsFreestylerDogfood, "aida_temperature", /*default_value=*/0};
+const base::FeatureParam<DevToolsFreestylerUserTier>::Option devtools_freestyler_user_tier_options[] = {
+    {DevToolsFreestylerUserTier::kTesters, "TESTERS"},
+    {DevToolsFreestylerUserTier::kPublic, "PUBLIC"}};
+const base::FeatureParam<DevToolsFreestylerUserTier> kDevToolsFreestylerDogfoodUserTier{
+    &kDevToolsFreestylerDogfood, "user_tier", /*default_value=*/DevToolsFreestylerUserTier::kTesters,
+    &devtools_freestyler_user_tier_options};
+
+// Whether the DevTools resource explainer assistant is enabled.
+BASE_FEATURE(kDevToolsExplainThisResourceDogfood,
+             "DevToolsExplainThisResourceDogfood",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<std::string>
+    kDevToolsExplainThisResourceDogfoodModelId{
+        &kDevToolsExplainThisResourceDogfood, "aida_model_id",
+        /*default_value=*/""};
+const base::FeatureParam<double> kDevToolsExplainThisResourceDogfoodTemperature{
+    &kDevToolsExplainThisResourceDogfood, "aida_temperature",
+    /*default_value=*/0};
 
 // Whether an infobar is shown when the process is shared.
 BASE_FEATURE(kDevToolsSharedProcessInfobar,
@@ -143,7 +179,7 @@ BASE_FEATURE(kRegisterAppBoundEncryptionProvider,
 // the default encryption provider.
 BASE_FEATURE(kUseAppBoundEncryptionProviderForEncryption,
              "UseAppBoundEncryptionProviderForEncryption",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 // Enables showing the email of the flex org admin that setup CBCM in the
@@ -198,7 +234,7 @@ BASE_FEATURE(kNetworkAnnotationMonitoring,
 // crbug.com/1462832 for more details of New Tab Page triggered prerendering.
 BASE_FEATURE(kNewTabPageTriggerForPrerender2,
              "NewTabPageTriggerForPrerender2",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_WIN)
 // Don't call the Win32 API PrefetchVirtualMemory when loading chrome.dll inside
@@ -311,6 +347,14 @@ BASE_FEATURE(kSandboxExternalProtocolBlockedWarning,
              "SandboxExternalProtocolBlockedWarning",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_LINUX)
+// If true, encrypt new data with the key provided by SecretPortalKeyProvider.
+// Otherwise, it will only decrypt existing data.
+BASE_FEATURE(kSecretPortalKeyProviderUseForEncryption,
+             "SecretPortalKeyProviderUseForEncryption",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_LINUX)
+
 // This flag controls whether to trigger prerendering when the default search
 // engine suggests to prerender a search result.
 BASE_FEATURE(kSupportSearchSuggestionForPrerender2,
@@ -321,6 +365,13 @@ BASE_FEATURE(kSupportSearchSuggestionForPrerender2,
 #else
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
+
+// Enables the Task Manager Desktop Refresh project.
+#if !BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kTaskManagerDesktopRefresh,
+             "TaskManagerDesktopRefresh",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // Enables migration of the network context data from `unsandboxed_data_path` to
 // `data_path`. See the explanation in network_context.mojom.
@@ -377,5 +428,26 @@ BASE_FEATURE(kBrowserDynamicCodeDisabled,
              "BrowserDynamicCodeDisabled",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
+
+#if !BUILDFLAG(IS_ANDROID)
+// This flag controls whether to perform Pak integrity check on startup to
+// report statistics for on-disk corruption.
+// Disabled on ChromeOS, as dm-verity enforces integrity and the check would
+// be redundant.
+BASE_FEATURE(kReportPakFileIntegrity,
+             "ReportPakFileIntegrity",
+#if !BUILDFLAG(IS_CHROMEOS)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ANDROID)
+
+// This flag enables the removal of IWAs surface captures from Chrome Tabs
+// category in getDisplayMedia() API. When disabled, IWAs surface captures
+// show both in Chrome Tabs and Windows.
+BASE_FEATURE(kRemovalOfIWAsFromTabCapture,
+             "RemovalOfIWAsFromTabCapture",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features

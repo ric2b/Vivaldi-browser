@@ -116,14 +116,18 @@ void PredictionBasedPermissionUiSelector::SelectUiToUse(
   }
 
   auto features = BuildPredictionRequestFeatures(request);
-  if (features.requested_permission_counts.total() <
-      kRequestedPermissionMinimumHistoricalActions) {
-    VLOG(1) << "[CPSS] Historic prompt count ("
-            << features.requested_permission_counts.total()
-            << ") is smaller than threshold ("
-            << kRequestedPermissionMinimumHistoricalActions << ")";
-    std::move(callback_).Run(Decision::UseNormalUiAndShowNoWarning());
-    return;
+  if (!base::FeatureList::IsEnabled(
+          permissions::features::kPermissionPredictionsV3) ||
+      prediction_source == PredictionSource::USE_ONDEVICE) {
+    if (features.requested_permission_counts.total() <
+        kRequestedPermissionMinimumHistoricalActions) {
+      VLOG(1) << "[CPSS] Historic prompt count ("
+              << features.requested_permission_counts.total()
+              << ") is smaller than threshold ("
+              << kRequestedPermissionMinimumHistoricalActions << ")";
+      std::move(callback_).Run(Decision::UseNormalUiAndShowNoWarning());
+      return;
+    }
   }
 
   if (likelihood_override_for_testing_.has_value()) {
@@ -238,6 +242,11 @@ PredictionBasedPermissionUiSelector::BuildPredictionRequestFeatures(
     features.url = request->requesting_origin().GetWithEmptyPath();
   }
 #endif
+
+  features.experiment_id = base::FeatureList::IsEnabled(
+                               permissions::features::kPermissionPredictionsV3)
+                               ? 1
+                               : 0;
 
   base::Time cutoff = base::Time::Now() - kPermissionActionCutoffAge;
 

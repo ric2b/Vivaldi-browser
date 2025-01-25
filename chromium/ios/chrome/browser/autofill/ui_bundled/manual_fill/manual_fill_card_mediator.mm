@@ -39,36 +39,51 @@
 using autofill::CreditCard;
 using manual_fill::PaymentFieldType;
 
-namespace manual_fill {
-
-NSString* const kManagePaymentMethodsAccessibilityIdentifier =
-    @"kManagePaymentMethodsAccessibilityIdentifier";
-NSString* const kAddPaymentMethodAccessibilityIdentifier =
-    @"kAddPaymentMethodAccessibilityIdentifier";
+namespace {
 
 // Returns `true` if overflow menu actions should be made available in the
 // manual fill cell of a card with the given `record_type`.
 bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
   switch (record_type) {
     case autofill::CreditCard::RecordType::kLocalCard:
-    case autofill::CreditCard::RecordType::kFullServerCard:
     case autofill::CreditCard::RecordType::kMaskedServerCard:
       return IsKeyboardAccessoryUpgradeEnabled();
     case autofill::CreditCard::RecordType::kVirtualCard:
       return NO;
+    case autofill::CreditCard::RecordType::kFullServerCard:
+      // Full server cards are a temporary cached state and should never be
+      // being offered as a suggestion for manual fill.
+      NOTREACHED();
   }
 }
 
-}  // namespace manual_fill
+// Fetches the payment methods to suggest using the given
+// `personal_data_manager` and dereferences them before returning them.
+std::vector<CreditCard> FetchCards(
+    const autofill::PersonalDataManager& personal_data_manager) {
+  std::vector<CreditCard*> fetched_cards =
+      personal_data_manager.payments_data_manager().GetCreditCardsToSuggest();
+  std::vector<CreditCard> cards;
+  cards.reserve(fetched_cards.size());
+
+  // Make copies of the received `fetched_cards` to not make any assumption over
+  // their lifetime and make sure that the CreditCard objects stay valid
+  // throughout the lifetime of this class.
+  base::ranges::transform(fetched_cards, std::back_inserter(cards),
+                          [](CreditCard* card) { return *card; });
+
+  return cards;
+}
+
+}  // namespace
 
 @interface ManualFillCardMediator () <PersonalDataManagerObserver>
-
-// All available credit cards.
-@property(nonatomic, assign) std::vector<CreditCard*> cards;
-
 @end
 
 @implementation ManualFillCardMediator {
+  // All available credit cards.
+  std::vector<CreditCard> _cards;
+
   // Personal data manager to be observed.
   raw_ptr<autofill::PersonalDataManager> _personalDataManager;
 
@@ -94,7 +109,7 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
     _personalDataManagerObserver.reset(
         new autofill::PersonalDataManagerObserverBridge(self));
     _personalDataManager->AddObserver(_personalDataManagerObserver.get());
-    _cards = _personalDataManager->payments_data_manager().GetCreditCards();
+    _cards = FetchCards(*_personalDataManager);
     _reauthenticationModule = reauthenticationModule;
     _showAutofillFormButton = showAutofillFormButton;
   }
@@ -110,14 +125,13 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
   [self postActionsToConsumer];
 }
 
-- (const CreditCard*)findCreditCardfromGUID:(NSString*)GUID {
-  for (CreditCard* card : self.cards) {
-    NSString* cppGUID =
-        base::SysUTF16ToNSString(base::ASCIIToUTF16(card->guid()));
+- (std::optional<const CreditCard>)findCreditCardfromGUID:(NSString*)GUID {
+  for (const CreditCard& card : _cards) {
+    NSString* cppGUID = base::SysUTF8ToNSString(card.guid());
     if ([cppGUID isEqualToString:GUID])
       return card;
   }
-  return nil;
+  return std::nullopt;
 }
 
 - (void)disconnect {
@@ -130,8 +144,7 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
 #pragma mark - PersonalDataManagerObserver
 
 - (void)onPersonalDataChanged {
-  self.cards =
-      _personalDataManager->payments_data_manager().GetCreditCardsToSuggest();
+  _cards = FetchCards(*_personalDataManager);
   if (self.consumer) {
     [self postCardsToConsumer];
     [self postActionsToConsumer];
@@ -146,29 +159,38 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
     return;
   }
 
-  int cardCount = self.cards.size();
+  // Holds the cards that will be presented in the UI. Can differ from
+  // `self.cards` as a virtual card will be created for the cards that are
+  // enrolled to have one (if any).
+  std::vector<CreditCard> cardsToPresent;
+
+  // Go through `self.cards` and create a virtual card for every card that is
+  // enrolled to have one.
+  for (const CreditCard& card : _cards) {
+    // Virtual cards are ordered directly before their original card.
+    if (base::FeatureList::IsEnabled(
+            autofill::features::kAutofillEnableVirtualCards) &&
+        card.virtual_card_enrollment_state() ==
+            CreditCard::VirtualCardEnrollmentState::kEnrolled) {
+      CreditCard virtualCard = CreditCard::CreateVirtualCard(card);
+      cardsToPresent.push_back(virtualCard);
+    }
+    cardsToPresent.push_back(card);
+  }
+
+  int cardsToPresentCount = cardsToPresent.size();
   NSMutableArray* cardItems =
-      [[NSMutableArray alloc] initWithCapacity:cardCount];
-  for (int i = 0; i < cardCount; i++) {
-    CreditCard* card = self.cards[i];
+      [[NSMutableArray alloc] initWithCapacity:cardsToPresentCount];
+  for (int i = 0; i < cardsToPresentCount; i++) {
+    CreditCard card = cardsToPresent[i];
     NSString* cellIndexAccessibilityLabel = base::SysUTF16ToNSString(
         base::i18n::MessageFormatter::FormatWithNamedArgs(
             l10n_util::GetStringUTF16(
                 IDS_IOS_MANUAL_FALLBACK_PAYMENT_CELL_INDEX),
-            "count", cardCount, "position", i + 1));
+            "count", cardsToPresentCount, "position", i + 1));
 
-    // If this card is enrolled to have a virtual card, create the virtual card
-    // and order it directly before the original card.
-    if (base::FeatureList::IsEnabled(
-            autofill::features::kAutofillEnableVirtualCards) &&
-        card->virtual_card_enrollment_state() ==
-            CreditCard::VirtualCardEnrollmentState::kEnrolled) {
-      CreditCard virtualCard = CreditCard::CreateVirtualCard(*card);
-      [cardItems addObject:[self createManualFillCardItemForCard:&virtualCard
-                                     cellIndexAccessibilityLabel:
-                                         cellIndexAccessibilityLabel]];
-    }
     [cardItems addObject:[self createManualFillCardItemForCard:card
+                                                     cellIndex:i
                                    cellIndexAccessibilityLabel:
                                        cellIndexAccessibilityLabel]];
   }
@@ -177,14 +199,15 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
 }
 
 // Creates a ManualFillCardItem for the given `card`.
-- (ManualFillCardItem*)createManualFillCardItemForCard:(CreditCard*)card
+- (ManualFillCardItem*)createManualFillCardItemForCard:(CreditCard)card
+                                             cellIndex:(NSInteger)cellIndex
                            cellIndexAccessibilityLabel:
                                (NSString*)cellIndexAccessibilityLabel {
   ManualFillCreditCard* manualFillCreditCard = [[ManualFillCreditCard alloc]
-      initWithCreditCard:*card
+      initWithCreditCard:card
                     icon:[self iconForCreditCard:card]];
   NSArray<UIAction*>* menuActions =
-      manual_fill::ShouldShowMenuActionsInManualFallback(card->record_type())
+      ShouldShowMenuActionsInManualFallback(card.record_type())
           ? [self createMenuActionsForCard:card]
           : @[];
 
@@ -193,6 +216,7 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
                                      contentInjector:self.contentInjector
                                   navigationDelegate:self.navigationDelegate
                                          menuActions:menuActions
+                                           cellIndex:cellIndex
                          cellIndexAccessibilityLabel:cellIndexAccessibilityLabel
                               showAutofillFormButton:_showAutofillFormButton];
 }
@@ -230,28 +254,48 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
 }
 
 // Creates an "Edit" and a "Show Details" UIAction to be used with a UIMenu.
-- (NSArray<UIAction*>*)createMenuActionsForCard:(const CreditCard*)card {
+- (NSArray<UIAction*>*)createMenuActionsForCard:(CreditCard)card {
   ActionFactory* actionFactory = [[ActionFactory alloc]
       initWithScenario:
           kMenuScenarioHistogramAutofillManualFallbackPaymentEntry];
 
   __weak __typeof(self) weakSelf = self;
-  UIAction* editAction = [actionFactory actionToEditWithBlock:^{
-    [weakSelf.navigationDelegate openCardDetails:card inEditMode:YES];
-  }];
+  auto editActionCallback = base::BindOnce(
+      [](__weak __typeof(self) weak_self, CreditCard card) {
+        [weak_self openCardDetails:std::move(card) inEditMode:YES];
+      },
+      weakSelf, card);
+  UIAction* editAction =
+      [actionFactory actionToEditWithBlock:base::CallbackToBlock(
+                                               std::move(editActionCallback))];
 
-  UIAction* showDetailsAction = [actionFactory actionToShowDetailsWithBlock:^{
-    [weakSelf.navigationDelegate openCardDetails:card inEditMode:NO];
-  }];
+  auto showDetailsActionCallback = base::BindOnce(
+      [](__weak __typeof(self) weak_self, CreditCard card) {
+        [weak_self openCardDetails:std::move(card) inEditMode:NO];
+      },
+      weakSelf, std::move(card));
+  UIAction* showDetailsAction = [actionFactory
+      actionToShowDetailsWithBlock:base::CallbackToBlock(
+                                       std::move(showDetailsActionCallback))];
 
   return @[ editAction, showDetailsAction ];
 }
 
+// Requests the `navigationDelegate` to open the details of the given `card`.
+// `editMode` indicates whether the details should be opened in edit mode.
+- (void)openCardDetails:(CreditCard)card inEditMode:(BOOL)editMode {
+  base::RecordAction(base::UserMetricsAction(
+      editMode ? "ManualFallback_CreditCard_OverflowMenu_Edit"
+               : "ManualFallback_CreditCard_OverflowMenu_ShowDetails"));
+
+  [self.navigationDelegate openCardDetails:std::move(card) inEditMode:editMode];
+}
+
 // Returns the icon associated with the provided credit card.
-- (UIImage*)iconForCreditCard:(const autofill::CreditCard*)creditCard {
+- (UIImage*)iconForCreditCard:(const CreditCard&)creditCard {
   // Check if custom card art is available.
   GURL cardArtURL =
-      _personalDataManager->payments_data_manager().GetCardArtURL(*creditCard);
+      _personalDataManager->payments_data_manager().GetCardArtURL(creditCard);
   if (IsKeyboardAccessoryUpgradeEnabled() && !cardArtURL.is_empty() &&
       cardArtURL.is_valid()) {
     gfx::Image* image = _personalDataManager->payments_data_manager()
@@ -262,7 +306,7 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
   }
 
   // Otherwise, try to get the default card icon
-  autofill::Suggestion::Icon icon = creditCard->CardIconForAutofillSuggestion();
+  autofill::Suggestion::Icon icon = creditCard.CardIconForAutofillSuggestion();
   return icon == autofill::Suggestion::Icon::kNoIcon
              ? nil
              : ui::ResourceBundle::GetSharedInstance()
@@ -278,7 +322,7 @@ bool ShouldShowMenuActionsInManualFallback(CreditCard::RecordType record_type) {
   // Credit card are not shown as 'Secure'.
   ManualFillCreditCard* manualFillCreditCard = [[ManualFillCreditCard alloc]
       initWithCreditCard:card
-                    icon:[self iconForCreditCard:&card]];
+                    icon:[self iconForCreditCard:card]];
   NSString* fillValue;
   if (base::FeatureList::IsEnabled(
           autofill::features::kAutofillEnableVirtualCards)) {

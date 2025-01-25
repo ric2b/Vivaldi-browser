@@ -5,31 +5,33 @@
 #ifndef IOS_CHROME_BROWSER_METRICS_MODEL_IOS_CHROME_METRICS_SERVICE_CLIENT_H_
 #define IOS_CHROME_BROWSER_METRICS_MODEL_IOS_CHROME_METRICS_SERVICE_CLIENT_H_
 
-#include <stdint.h>
+#import <stdint.h>
 
-#include <memory>
-#include <set>
-#include <string>
-#include <string_view>
+#import <memory>
+#import <set>
+#import <string>
+#import <string_view>
 
-#include "base/functional/callback.h"
-#include "base/memory/raw_ptr.h"
-#include "base/scoped_observation.h"
-#include "base/threading/thread_checker.h"
-#include "components/metrics/file_metrics_provider.h"
-#include "components/metrics/metrics_log_uploader.h"
-#include "components/metrics/metrics_service_client.h"
-#include "components/metrics/persistent_synthetic_trial_observer.h"
-#include "components/omnibox/browser/omnibox_event_global_tracker.h"
-#include "components/ukm/observers/history_delete_observer.h"
-#include "components/ukm/observers/ukm_consent_state_observer.h"
-#include "components/variations/synthetic_trial_registry.h"
-#include "ios/chrome/browser/metrics/model/incognito_web_state_observer.h"
-#include "ios/web/public/deprecated/global_web_state_observer.h"
+#import "base/callback_list.h"
+#import "base/functional/callback.h"
+#import "base/memory/raw_ptr.h"
+#import "base/scoped_observation.h"
+#import "base/sequence_checker.h"
+#import "components/metrics/file_metrics_provider.h"
+#import "components/metrics/metrics_log_uploader.h"
+#import "components/metrics/metrics_service_client.h"
+#import "components/metrics/persistent_synthetic_trial_observer.h"
+#import "components/omnibox/browser/omnibox_event_global_tracker.h"
+#import "components/ukm/observers/history_delete_observer.h"
+#import "components/ukm/observers/ukm_consent_state_observer.h"
+#import "components/variations/synthetic_trial_registry.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
+#import "ios/chrome/browser/shared/model/profile/profile_manager_observer_ios.h"
+#import "ios/web/public/deprecated/global_web_state_observer.h"
 
-class ChromeBrowserState;
 class IOSChromeStabilityMetricsProvider;
 class PrefRegistrySimple;
+class ProfileManagerIOS;
 
 namespace metrics {
 class MetricsService;
@@ -46,11 +48,11 @@ class UkmService;
 
 // IOSChromeMetricsServiceClient provides an implementation of
 // MetricsServiceClient that depends on //ios/chrome/.
-class IOSChromeMetricsServiceClient : public IncognitoWebStateObserver,
-                                      public metrics::MetricsServiceClient,
+class IOSChromeMetricsServiceClient : public metrics::MetricsServiceClient,
                                       public ukm::HistoryDeleteObserver,
                                       public ukm::UkmConsentStateObserver,
-                                      public web::GlobalWebStateObserver {
+                                      public web::GlobalWebStateObserver,
+                                      public ProfileManagerObserverIOS {
  public:
   IOSChromeMetricsServiceClient(const IOSChromeMetricsServiceClient&) = delete;
   IOSChromeMetricsServiceClient& operator=(
@@ -101,9 +103,12 @@ class IOSChromeMetricsServiceClient : public IncognitoWebStateObserver,
   void WebStateDidStartLoading(web::WebState* web_state) override;
   void WebStateDidStopLoading(web::WebState* web_state) override;
 
-  // IncognitoWebStateObserver:
-  void OnIncognitoWebStateAdded() override;
-  void OnIncognitoWebStateRemoved() override;
+  // ProfileManagerObserverIOS:
+  void OnProfileManagerDestroyed(ProfileManagerIOS* manager) override;
+  void OnProfileCreated(ProfileManagerIOS* manager,
+                        ChromeBrowserState* profile) override;
+  void OnProfileLoaded(ProfileManagerIOS* manager,
+                       ChromeBrowserState* profile) override;
 
   metrics::EnableMetricsDefault GetMetricsReportingDefaultState() override;
 
@@ -135,12 +140,11 @@ class IOSChromeMetricsServiceClient : public IncognitoWebStateObserver,
   // user is performing work. This is useful to allow some features to sleep,
   // until the machine becomes active, such as precluding UMA uploads unless
   // there was recent activity.
-  // Returns true if registration was successful.
-  bool RegisterForNotifications();
+  void RegisterForNotifications();
 
-  // Register to observe events on a browser state's services.
+  // Register to observe events on a Profile's services.
   // Returns true if registration was successful.
-  bool RegisterForBrowserStateEvents(ChromeBrowserState* browser_state);
+  bool RegisterForProfileEvents(ChromeBrowserState* profile);
 
   // Called when a tab is parented.
   void OnTabParented(web::WebState* web_state);
@@ -148,7 +152,7 @@ class IOSChromeMetricsServiceClient : public IncognitoWebStateObserver,
   // Called when a URL is opened from the Omnibox.
   void OnURLOpenedFromOmnibox(OmniboxLog* log);
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // Weak pointer to the MetricsStateManager.
   raw_ptr<metrics::MetricsStateManager> metrics_state_manager_;
@@ -168,8 +172,12 @@ class IOSChromeMetricsServiceClient : public IncognitoWebStateObserver,
   // The UkmService that `this` is a client of.
   std::unique_ptr<ukm::UkmService> ukm_service_;
 
+  // Observation of the ProfileManagerIOS.
+  base::ScopedObservation<ProfileManagerIOS, ProfileManagerObserverIOS>
+      profile_manager_observation_{this};
+
   // Whether we registered all notification listeners successfully.
-  bool notification_listeners_active_;
+  bool notification_listeners_active_ = true;
 
   // The IOSChromeStabilityMetricsProvider instance that was registered with
   // MetricsService. Has the same lifetime as `metrics_service_`.
@@ -184,6 +192,10 @@ class IOSChromeMetricsServiceClient : public IncognitoWebStateObserver,
   // Subscription for receiving callbacks that a URL was opened from the
   // omnibox.
   base::CallbackListSubscription omnibox_url_opened_subscription_;
+
+  // Subscription for receiving callbacks when the number of incognito tabs
+  // open in the application transition from 0 to 1 or 1 to 0.
+  base::CallbackListSubscription incognito_session_tracker_subscription_;
 };
 
 #endif  // IOS_CHROME_BROWSER_METRICS_MODEL_IOS_CHROME_METRICS_SERVICE_CLIENT_H_

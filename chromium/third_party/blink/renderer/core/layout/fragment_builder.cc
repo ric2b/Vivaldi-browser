@@ -61,6 +61,14 @@ LogicalAnchorQuery::SetOptions AnchorQuerySetOptions(
 
 }  // namespace
 
+bool FragmentBuilder::IsRoot() const {
+  return node_ && node_.IsView() && !space_.IsAnonymous();
+}
+
+bool FragmentBuilder::IsPaginatedRoot() const {
+  return IsRoot() && node_.IsPaginatedRoot();
+}
+
 PhysicalFragment::BoxType FragmentBuilder::GetBoxType() const {
   if (box_type_ != PhysicalFragment::BoxType::kNormalBox) {
     return box_type_;
@@ -145,8 +153,12 @@ void FragmentBuilder::PropagateSnapAreas(const PhysicalFragment& child) {
     return 0;
   };
   if (child.IsSnapArea()) {
-    auto* snap_area = To<LayoutBox>(child.GetMutableLayoutObject());
-    EnsureSnapAreas().insert(get_insertion_pos(snap_area), snap_area);
+    // Insert a new snap area *once* per node, when at the last fragment
+    // (i.e. when there's no outgoing break token).
+    if (!To<PhysicalBoxFragment>(child).GetBreakToken()) {
+      auto* snap_area = To<LayoutBox>(child.GetMutableLayoutObject());
+      EnsureSnapAreas().insert(get_insertion_pos(snap_area), snap_area);
+    }
   }
 
   if (const auto* child_snap_areas = child.PropagatedSnapAreas()) {
@@ -185,7 +197,6 @@ void FragmentBuilder::PropagateChildAnchors(const PhysicalFragment& child,
       (child.Style().AnchorName() || child.IsImplicitAnchor())) {
     // Set the child's `anchor-name` before propagating its descendants', so
     // that ancestors have precedence over their descendants.
-    DCHECK(RuntimeEnabledFeatures::CSSAnchorPositioningEnabled());
     LogicalRect rect{child_offset,
                      child.Size().ConvertToLogical(GetWritingMode())};
     options = AnchorQuerySetOptions(
@@ -319,7 +330,7 @@ void FragmentBuilder::PropagateFromFragment(
     // depends on the available block-size, rather than the %-block-size.
     const auto& child_style = child.Style();
     if (child.IsCSSBox() && child_style.GetPosition() == EPosition::kRelative) {
-      if (IsHorizontalWritingMode(Style().GetWritingMode())) {
+      if (Style().IsHorizontalWritingMode()) {
         if (child_style.Top().HasPercent() ||
             child_style.Bottom().HasPercent()) {
           has_descendant_that_depends_on_percentage_block_size_ = true;
@@ -416,8 +427,14 @@ void FragmentBuilder::AddOutOfFlowChildCandidate(
     const LogicalOffset& child_offset,
     LogicalStaticPosition::InlineEdge inline_edge,
     LogicalStaticPosition::BlockEdge block_edge,
-    bool is_hidden_for_paint) {
+    bool is_hidden_for_paint,
+    bool allow_top_layer_nodes) {
   DCHECK(child);
+  // Top-layer elements are processed separately in the OutOfFlowLayoutPart.
+  if (child.IsInTopOrViewTransitionLayer() && !allow_top_layer_nodes) {
+    return;
+  }
+
   oof_candidates_may_have_anchor_queries_ |= child.MayHaveAnchorQuery();
   oof_positioned_candidates_.emplace_back(
       child, LogicalStaticPosition{child_offset, inline_edge, block_edge},

@@ -58,7 +58,7 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
   bool Cancel() override;
 
   // views::WidgetDelegate:
-  ui::ModalType GetModalType() const override;
+  ui::mojom::ModalType GetModalType() const override;
   std::u16string GetWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
 

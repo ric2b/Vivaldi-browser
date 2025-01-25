@@ -14,7 +14,6 @@
 #include "ash/picker/model/picker_search_results_section.h"
 #include "ash/picker/picker_asset_fetcher.h"
 #include "ash/picker/views/picker_emoji_item_view.h"
-#include "ash/picker/views/picker_emoticon_item_view.h"
 #include "ash/picker/views/picker_image_item_view.h"
 #include "ash/picker/views/picker_item_view.h"
 #include "ash/picker/views/picker_list_item_view.h"
@@ -24,19 +23,21 @@
 #include "ash/picker/views/picker_section_view.h"
 #include "ash/picker/views/picker_skeleton_loader_view.h"
 #include "ash/picker/views/picker_strings.h"
-#include "ash/picker/views/picker_symbol_item_view.h"
 #include "ash/picker/views/picker_traversable_item_container.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/typography.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/throbber.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
@@ -47,11 +48,44 @@
 namespace ash {
 namespace {
 
+constexpr int kThrobberDiameter = 32;
+
 constexpr gfx::Insets kNoResultsViewInsets(24);
 constexpr int kNoResultsIllustrationAndDescriptionSpacing = 16;
 constexpr gfx::Size kNoResultsIllustrationSize(200, 100);
 
 constexpr int kMaxIndexForMetrics = 10;
+
+std::u16string GetAccessibleNameForSeeMoreButton(
+    PickerSectionType section_type) {
+  switch (section_type) {
+    case PickerSectionType::kLinks:
+      return l10n_util::GetStringUTF16(
+          IDS_PICKER_SEE_MORE_LINKS_BUTTON_ACCESSIBLE_NAME);
+    case PickerSectionType::kLocalFiles:
+      return l10n_util::GetStringUTF16(
+          IDS_PICKER_SEE_MORE_LOCAL_FILES_BUTTON_ACCESSIBLE_NAME);
+    case PickerSectionType::kDriveFiles:
+      return l10n_util::GetStringUTF16(
+          IDS_PICKER_SEE_MORE_DRIVE_FILES_BUTTON_ACCESSIBLE_NAME);
+    case PickerSectionType::kNone:
+    case PickerSectionType::kClipboard:
+    case PickerSectionType::kExamples:
+    case PickerSectionType::kEditorWrite:
+    case PickerSectionType::kEditorRewrite:
+      return u"";
+  }
+}
+
+PickerSectionView::LocalFileResultStyle ConvertLocalFileResultStyle(
+    PickerSearchResultsView::LocalFileResultStyle style) {
+  switch (style) {
+    case PickerSearchResultsView::LocalFileResultStyle::kList:
+      return PickerSectionView::LocalFileResultStyle::kList;
+    case PickerSearchResultsView::LocalFileResultStyle::kGrid:
+      return PickerSectionView::LocalFileResultStyle::kGrid;
+  }
+}
 
 }  // namespace
 
@@ -59,11 +93,14 @@ PickerSearchResultsView::PickerSearchResultsView(
     PickerSearchResultsViewDelegate* delegate,
     int picker_view_width,
     PickerAssetFetcher* asset_fetcher,
-    PickerSubmenuController* submenu_controller)
-    : delegate_(delegate) {
+    PickerSubmenuController* submenu_controller,
+    PickerPreviewBubbleController* preview_controller)
+    : delegate_(delegate), preview_controller_(preview_controller) {
   SetLayoutManager(std::make_unique<views::BoxLayout>())
       ->SetOrientation(views::LayoutOrientation::kVertical);
   SetProperty(views::kElementIdentifierKey, kPickerSearchResultsPageElementId);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
+  GetViewAccessibility().SetContainerLiveStatus("polite");
 
   section_list_view_ = AddChildView(std::make_unique<PickerSectionListView>(
       picker_view_width, asset_fetcher, submenu_controller));
@@ -91,9 +128,26 @@ PickerSearchResultsView::PickerSearchResultsView(
 
   skeleton_loader_view_ = AddChildView(
       views::Builder<PickerSkeletonLoaderView>().SetVisible(false).Build());
+
+  throbber_container_ = AddChildView(
+      views::Builder<views::BoxLayoutView>()
+          .SetOrientation(views::LayoutOrientation::kVertical)
+          .SetInsideBorderInsets(kNoResultsViewInsets)
+          .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
+          .AddChildren(
+              views::Builder<views::SmoothedThrobber>(
+                  std::make_unique<views::SmoothedThrobber>(kThrobberDiameter))
+                  .CopyAddressTo(&throbber_)
+                  .SetStartDelay(kLoadingAnimationDelay))
+          .Build());
 }
 
 PickerSearchResultsView::~PickerSearchResultsView() = default;
+
+void PickerSearchResultsView::SetLocalFileResultStyle(
+    LocalFileResultStyle style) {
+  local_file_result_style_ = style;
+}
 
 views::View* PickerSearchResultsView::GetTopItem() {
   return section_list_view_->GetTopItem();
@@ -132,14 +186,14 @@ views::View* PickerSearchResultsView::GetItemBelow(views::View* item) {
 }
 
 views::View* PickerSearchResultsView::GetItemLeftOf(views::View* item) {
-  if (!Contains(item) || !views::IsViewClass<PickerItemView>(item)) {
+  if (!Contains(item)) {
     return nullptr;
   }
   return section_list_view_->GetItemLeftOf(item);
 }
 
 views::View* PickerSearchResultsView::GetItemRightOf(views::View* item) {
-  if (!Contains(item) || !views::IsViewClass<PickerItemView>(item)) {
+  if (!Contains(item)) {
     return nullptr;
   }
   return section_list_view_->GetItemRightOf(item);
@@ -155,12 +209,17 @@ void PickerSearchResultsView::ClearSearchResults() {
   section_list_view_->SetVisible(true);
   no_results_view_->SetVisible(false);
   StopLoadingAnimation();
+  StartThrobber();
   top_results_.clear();
+  delegate_->OnSearchResultsViewHeightChanged();
+  UpdateAccessibleName();
 }
 
 void PickerSearchResultsView::AppendSearchResults(
     PickerSearchResultsSection section) {
   StopLoadingAnimation();
+  StopThrobber();
+
   auto* section_view = section_list_view_->AddSection();
   std::u16string section_title =
       GetSectionTitleForPickerSectionType(section.type());
@@ -168,8 +227,7 @@ void PickerSearchResultsView::AppendSearchResults(
   if (section.has_more_results()) {
     section_view->AddTitleTrailingLink(
         l10n_util::GetStringUTF16(IDS_PICKER_SEE_MORE_BUTTON_TEXT),
-        l10n_util::GetStringFUTF16(IDS_PICKER_SEE_MORE_BUTTON_ACCESSIBLE_NAME,
-                                   section_title),
+        GetAccessibleNameForSeeMoreButton(section.type()),
         base::BindRepeating(&PickerSearchResultsView::OnTrailingLinkClicked,
                             base::Unretained(this), section.type()));
   }
@@ -182,11 +240,14 @@ void PickerSearchResultsView::AppendSearchResults(
   section_views_.push_back(section_view);
 
   delegate_->RequestPseudoFocus(section_list_view_->GetTopItem());
+  delegate_->OnSearchResultsViewHeightChanged();
+  UpdateAccessibleName();
 }
 
 bool PickerSearchResultsView::SearchStopped(ui::ImageModel illustration,
                                             std::u16string description) {
   StopLoadingAnimation();
+  StopThrobber();
   if (!section_views_.empty()) {
     return false;
   }
@@ -195,13 +256,17 @@ bool PickerSearchResultsView::SearchStopped(ui::ImageModel illustration,
   no_results_label_->SetText(std::move(description));
   no_results_view_->SetVisible(true);
   section_list_view_->SetVisible(false);
+  delegate_->OnSearchResultsViewHeightChanged();
+  UpdateAccessibleName();
   return true;
 }
 
 void PickerSearchResultsView::ShowLoadingAnimation() {
   ClearSearchResults();
+  StopThrobber();
   skeleton_loader_view_->StartAnimationAfter(kLoadingAnimationDelay);
   skeleton_loader_view_->SetVisible(true);
+  delegate_->OnSearchResultsViewHeightChanged();
 }
 
 void PickerSearchResultsView::SelectSearchResult(
@@ -215,12 +280,16 @@ void PickerSearchResultsView::AddResultToSection(
   // `base::Unretained` is safe here because `this` will own the item view which
   // takes this callback.
   PickerItemView* view = section_view->AddResult(
-      result, &preview_controller_,
+      result, preview_controller_,
+      ConvertLocalFileResultStyle(local_file_result_style_),
       base::BindRepeating(&PickerSearchResultsView::SelectSearchResult,
                           base::Unretained(this), result));
 
   if (auto* list_item_view = views::AsViewClass<PickerListItemView>(view)) {
     list_item_view->SetBadgeAction(delegate_->GetActionForResult(result));
+  } else if (auto* image_item_view =
+                 views::AsViewClass<PickerImageItemView>(view)) {
+    image_item_view->SetAction(delegate_->GetActionForResult(result));
   }
 }
 
@@ -232,6 +301,9 @@ void PickerSearchResultsView::OnTrailingLinkClicked(
 
 int PickerSearchResultsView::GetIndex(
     const PickerSearchResult& inserted_result) {
+  if (top_results_.empty()) {
+    return -1;
+  }
   auto it = base::ranges::find(top_results_, inserted_result);
   if (it == top_results_.end()) {
     return kMaxIndexForMetrics;
@@ -240,9 +312,49 @@ int PickerSearchResultsView::GetIndex(
                   static_cast<int>(it - top_results_.begin()));
 }
 
+void PickerSearchResultsView::SetNumEmojiResultsForA11y(
+    size_t num_emoji_results) {
+  num_emoji_results_displayed_ = num_emoji_results;
+}
+
+void PickerSearchResultsView::StartThrobber() {
+  throbber_container_->SetVisible(true);
+  throbber_->Start();
+  delegate_->OnSearchResultsViewHeightChanged();
+}
+
+void PickerSearchResultsView::StopThrobber() {
+  throbber_container_->SetVisible(false);
+  throbber_->Stop();
+  delegate_->OnSearchResultsViewHeightChanged();
+}
+
 void PickerSearchResultsView::StopLoadingAnimation() {
   skeleton_loader_view_->StopAnimation();
   skeleton_loader_view_->SetVisible(false);
+  delegate_->OnSearchResultsViewHeightChanged();
+}
+
+void PickerSearchResultsView::UpdateAccessibleName() {
+  // If the sections are empty but the no results view is not visible, it means
+  // we are in a pending state, which should not have an announcement.
+  if (!section_views_.empty() || !no_results_view_->GetVisible()) {
+    GetViewAccessibility().SetName(u"");
+    return;
+  }
+
+  // Avoid announcing the same "no results found" live region consecutively.
+  const std::u16string accessible_name =
+      num_emoji_results_displayed_ == 0
+          ? l10n_util::GetStringUTF16(IDS_PICKER_NO_RESULTS_TEXT)
+          : l10n_util::GetPluralStringFUTF16(
+                IDS_PICKER_EMOJI_SEARCH_RESULTS_ACCESSIBILITY_ANNOUNCEMENT_TEXT,
+                num_emoji_results_displayed_);
+  if (GetAccessibleName() == accessible_name) {
+    return;
+  }
+  GetViewAccessibility().SetName(std::move(accessible_name));
+  NotifyAccessibilityEvent(ax::mojom::Event::kLiveRegionChanged, true);
 }
 
 BEGIN_METADATA(PickerSearchResultsView)

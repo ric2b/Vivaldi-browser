@@ -559,9 +559,13 @@ LayoutUnit TableLayoutAlgorithm::ComputeCaptionBlockSize() {
 
 const LayoutResult* TableLayoutAlgorithm::Layout() {
   if (is_known_to_be_last_table_box_) {
-    // This is the last table box fragment. Shouldn't make room for cloned
+    // This is the last table box fragment. Shouldn't reserve space for cloned
     // block-end box decorations.
     container_builder_.SetShouldCloneBoxEndDecorations(false);
+    // And since this is the last table box fragment, be sure *not* to break
+    // before any trailing decorations (even if that would cause it to overflow
+    // the fragmentainer).
+    container_builder_.SetShouldPreventBreakBeforeBlockEndDecorations(true);
   }
 
   const bool is_fixed_layout = Style().IsFixedTableLayout();
@@ -815,7 +819,7 @@ void TableLayoutAlgorithm::ComputeRows(
     }
 
     css_table_block_size = ComputeBlockSizeForFragment(
-        space, Style(), table_border_padding, intrinsic_block_size,
+        space, Node(), table_border_padding, intrinsic_block_size,
         table_grid_inline_size, override_available_block_size);
   }
   // In quirks mode, empty tables ignore any specified block-size.
@@ -1184,7 +1188,7 @@ const LayoutResult* TableLayoutAlgorithm::GenerateFragment(
     DCHECK(child.IsTableCaption() || child.IsTableSection());
 
     const EarlyBreak* early_break_in_child = nullptr;
-    if (UNLIKELY(early_break_)) {
+    if (early_break_) [[unlikely]] {
       if (IsEarlyBreakTarget(*early_break_, container_builder_, child)) {
         container_builder_.AddBreakBeforeChild(child, kBreakAppealPerfect,
                                                /* is_forced_break */ false);
@@ -1639,9 +1643,8 @@ const LayoutResult* TableLayoutAlgorithm::GenerateFragment(
 
   container_builder_.SetIsTablePart();
 
-  if (UNLIKELY(InvolvedInBlockFragmentation(container_builder_))) {
-    BreakStatus status =
-        FinishFragmentation(border_padding.block_end, &container_builder_);
+  if (InvolvedInBlockFragmentation(container_builder_)) [[unlikely]] {
+    BreakStatus status = FinishFragmentation(&container_builder_);
     if (status == BreakStatus::kNeedsEarlierBreak) {
       return container_builder_.Abort(LayoutResult::kNeedsEarlierBreak);
     }

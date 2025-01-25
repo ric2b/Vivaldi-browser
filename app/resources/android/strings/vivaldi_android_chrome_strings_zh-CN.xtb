@@ -37,6 +37,7 @@
 <translation id="4167670741834902166">新建隐身标签</translation>
 <translation id="4195643157523330669">在新标签页中打开</translation>
 <translation id="4243710787042215766">在隐身标签中打开</translation>
+<translation id="4304713468139749426">密码管理器</translation>
 <translation id="451872707440238414">搜索书签</translation>
 <translation id="4526803704855831732">隐身标签页</translation>
 <translation id="4719086422742491124">了解网站上某些关键字无需离开页面，您可以直接划词搜索。
@@ -47,7 +48,7 @@
 <translation id="4883379392681899581">离开隐身模式</translation>
 <translation id="4943872375798546930">无结果</translation>
 <translation id="49576331685473090">内容拦截器</translation>
-<translation id="5079259810715830221">当谷歌网站在其页面上要求加密预下载链接内容时，Vivaldi将通过谷歌服务器加密和预加载页面而不使用Cookie。这将对预加载页面隐藏您的身份。</translation>
+<translation id="5079259810715830221">当谷歌网站在其页面上要求加密预下载链接内容时，Vivaldi 将通过谷歌服务器加密和预加载页面而不使用 Cookie。这将对预加载页面隐藏您的身份。</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> 存储空间</translation>
 <translation id="5186185447130319458">隐身模式</translation>
 <translation id="5233638681132016545">新建标签</translation>
@@ -61,7 +62,7 @@
 <translation id="6585139692466700358">借助 Vivaldi 的翻译服务将网站翻译为其他语言</translation>
 <translation id="6593061639179217415">桌面版网站</translation>
 <translation id="6610147964972079463">关闭隐身标签</translation>
-<translation id="7029995644714925509">当某个网站在其页面上要求加密预下载链接内容时，Vivaldi将通过谷歌服务器加密和预加载页面而不使用Cookie。这将对预加载页面隐藏您的身份。</translation>
+<translation id="7029995644714925509">当某个网站在其页面上要求加密预下载链接内容时，Vivaldi 将通过谷歌服务器加密和预加载页面而不使用 Cookie。这将对预加载页面隐藏您的身份。</translation>
 <translation id="706339621163631076">浏览器隐私政策</translation>
 <translation id="732145680195464316">书签已保存至 <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">关于 Vivaldi</translation>

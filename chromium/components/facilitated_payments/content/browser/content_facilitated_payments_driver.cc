@@ -32,17 +32,37 @@ ContentFacilitatedPaymentsDriver::~ContentFacilitatedPaymentsDriver() = default;
 void ContentFacilitatedPaymentsDriver::TriggerPixCodeDetection(
     base::OnceCallback<void(mojom::PixCodeDetectionResult, const std::string&)>
         callback) {
-  GetAgent()->TriggerPixCodeDetection(std::move(callback));
+  content::RenderFrameHost* render_frame_host =
+      content::RenderFrameHost::FromID(render_frame_host_id_);
+  if (render_frame_host && render_frame_host->IsActive()) {
+    GetAgent(render_frame_host)->TriggerPixCodeDetection(std::move(callback));
+  }
+}
+
+// TODO(crbug.com//40280186): Add test for this method once FPManager
+// refactoring is done.
+void ContentFacilitatedPaymentsDriver::HandlePaymentLink(const GURL& url) {
+  content::RenderFrameHost* render_frame_host =
+      content::RenderFrameHost::FromID(render_frame_host_id_);
+  if (!render_frame_host->IsInPrimaryMainFrame()) {
+    return;
+  }
+
+  // TODO(crbug.com//40280186): Add security check and triggering the eWallet
+  // push flow.
+  return;
+}
+
+void ContentFacilitatedPaymentsDriver::SetPaymentLinkHandlerReceiver(
+    mojo::PendingReceiver<mojom::PaymentLinkHandler> pending_receiver) {
+  receiver_.Bind(std::move(pending_receiver));
 }
 
 const mojo::AssociatedRemote<mojom::FacilitatedPaymentsAgent>&
-ContentFacilitatedPaymentsDriver::GetAgent() {
+ContentFacilitatedPaymentsDriver::GetAgent(
+    content::RenderFrameHost* render_frame_host) {
   if (!agent_.is_bound()) {
-    content::RenderFrameHost* render_frame_host =
-        content::RenderFrameHost::FromID(render_frame_host_id_);
-    if (render_frame_host && render_frame_host->IsActive()) {
-      render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(&agent_);
-    }
+    render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(&agent_);
   }
   return agent_;
 }

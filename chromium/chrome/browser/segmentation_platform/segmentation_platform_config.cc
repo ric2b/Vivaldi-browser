@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "base/check_is_test.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
@@ -20,6 +21,7 @@
 #include "components/segmentation_platform/embedder/default_model/feed_user_segment.h"
 #include "components/segmentation_platform/embedder/default_model/frequent_feature_user_model.h"
 #include "components/segmentation_platform/embedder/default_model/low_user_engagement_model.h"
+#include "components/segmentation_platform/embedder/default_model/metrics_clustering.h"
 #include "components/segmentation_platform/embedder/default_model/optimization_target_segmentation_dummy.h"
 #include "components/segmentation_platform/embedder/default_model/password_manager_user_segment.h"
 #include "components/segmentation_platform/embedder/default_model/resume_heavy_user_model.h"
@@ -27,6 +29,7 @@
 #include "components/segmentation_platform/embedder/default_model/shopping_user_model.h"
 #include "components/segmentation_platform/embedder/default_model/tab_resumption_ranker.h"
 #include "components/segmentation_platform/embedder/default_model/url_visit_resumption_ranker.h"
+#include "components/segmentation_platform/embedder/home_modules/ephemeral_home_module_backend.h"
 #include "components/segmentation_platform/internal/config_parser.h"
 #include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/constants.h"
@@ -98,12 +101,6 @@ std::unique_ptr<Config> GetConfigForAdaptiveToolbar() {
 
   return config;
 }
-#endif
-
-#if BUILDFLAG(IS_ANDROID)
-bool IsEnabledContextualPageActions() {
-  return base::FeatureList::IsEnabled(features::kContextualPageActions);
-}
 
 std::unique_ptr<Config> GetConfigForContextualPageActions(
     content::BrowserContext* context) {
@@ -143,14 +140,15 @@ std::unique_ptr<Config> GetConfigForDesktopNtpModule() {
 
 // Note: Do not remove feature flag for models that are served on the server.
 std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
-    content::BrowserContext* context) {
+    content::BrowserContext* context,
+    home_modules::HomeModulesCardRegistry* home_modules_card_registry) {
   std::vector<std::unique_ptr<Config>> configs;
 #if BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(
           chrome::android::kAdaptiveButtonInTopToolbarCustomizationV2)) {
     configs.emplace_back(GetConfigForAdaptiveToolbar());
   }
-  if (IsEnabledContextualPageActions()) {
+  if (base::FeatureList::IsEnabled(features::kContextualPageActions)) {
     configs.emplace_back(GetConfigForContextualPageActions(context));
   }
 
@@ -173,6 +171,13 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
   configs.emplace_back(URLVisitResumptionRanker::GetConfig());
   configs.emplace_back(PasswordManagerUserModel::GetConfig());
   configs.emplace_back(DatabaseApiClients::GetConfig());
+  configs.emplace_back(MetricsClustering::GetConfig());
+  if (home_modules_card_registry) {
+    configs.emplace_back(home_modules::EphemeralHomeModuleBackend::GetConfig(
+        home_modules_card_registry));
+  } else {
+    CHECK_IS_TEST();
+  }
 
 #if BUILDFLAG(ENABLE_COMPOSE)
   configs.emplace_back(ComposePromotion::GetConfig());

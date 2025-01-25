@@ -187,7 +187,8 @@ PasswordAutofillManager::GetDriver() {
   return password_manager_driver_.get();
 }
 
-void PasswordAutofillManager::OnSuggestionsShown() {}
+void PasswordAutofillManager::OnSuggestionsShown(
+    base::span<const Suggestion> suggestions) {}
 
 void PasswordAutofillManager::OnSuggestionsHidden() {}
 
@@ -237,7 +238,7 @@ void PasswordAutofillManager::OnUnlockItemAccepted(
 
 void PasswordAutofillManager::DidAcceptSuggestion(
     const Suggestion& suggestion,
-    const SuggestionPosition& position) {
+    const SuggestionMetadata& metadata) {
   using metrics_util::PasswordDropdownSelectedOption;
   switch (suggestion.type) {
     case autofill::SuggestionType::kGeneratePasswordEntry:
@@ -352,7 +353,8 @@ void PasswordAutofillManager::DidAcceptSuggestion(
 }
 
 void PasswordAutofillManager::DidPerformButtonActionForSuggestion(
-    const Suggestion&) {
+    const Suggestion&,
+    const autofill::SuggestionButtonAction&) {
   // Button actions do currently not exist for password entries.
   NOTREACHED_IN_MIGRATION();
 }
@@ -453,7 +455,8 @@ void PasswordAutofillManager::OnShowPasswordSuggestions(
                 suggestion_generator_.GetSuggestionsForDomain(
                     fill_data_.get(), page_favicon_, typed_username,
                     OffersGeneration(false), ShowPasswordSuggestions(true),
-                    show_webauthn_credentials));
+                    show_webauthn_credentials),
+                show_webauthn_credentials.value());
 
   password_manager_driver_->SetSuggestionAvailability(
       element_id,
@@ -469,7 +472,8 @@ bool PasswordAutofillManager::MaybeShowPasswordSuggestions(
                    suggestion_generator_.GetSuggestionsForDomain(
                        fill_data_.get(), page_favicon_, std::u16string(),
                        OffersGeneration(false), ShowPasswordSuggestions(true),
-                       ShowWebAuthnCredentials(false)));
+                       ShowWebAuthnCredentials(false)),
+                   /*is_for_webauthn_request=*/false);
 }
 
 bool PasswordAutofillManager::MaybeShowPasswordSuggestionsWithGeneration(
@@ -481,7 +485,8 @@ bool PasswordAutofillManager::MaybeShowPasswordSuggestionsWithGeneration(
                        fill_data_.get(), page_favicon_, std::u16string(),
                        OffersGeneration(true),
                        ShowPasswordSuggestions(show_password_suggestions),
-                       ShowWebAuthnCredentials(false)));
+                       ShowWebAuthnCredentials(false)),
+                   /*is_for_webauthn_request=*/false);
 }
 
 void PasswordAutofillManager::DidNavigateMainFrame() {
@@ -518,29 +523,11 @@ base::WeakPtr<PasswordAutofillManager> PasswordAutofillManager::GetWeakPtr() {
 ////////////////////////////////////////////////////////////////////////////////
 // PasswordAutofillManager, private:
 
-void PasswordAutofillManager::LogMetricsForSuggestions(
-    const std::vector<Suggestion>& suggestions) const {
-  metrics_util::PasswordDropdownState dropdown_state =
-      metrics_util::PasswordDropdownState::kStandard;
-  for (const auto& suggestion : suggestions) {
-    switch (suggestion.type) {
-      case autofill::SuggestionType::kGeneratePasswordEntry:
-        // TODO(crbug.com/40122999): Revisit metrics for the "opt in and
-        // generate" button.
-      case autofill::SuggestionType::kPasswordAccountStorageOptInAndGenerate:
-        dropdown_state = metrics_util::PasswordDropdownState::kStandardGenerate;
-        break;
-      default:
-        break;
-    }
-  }
-  metrics_util::LogPasswordDropdownShown(dropdown_state);
-}
-
 bool PasswordAutofillManager::ShowPopup(
     const gfx::RectF& bounds,
     base::i18n::TextDirection text_direction,
-    const std::vector<Suggestion>& suggestions) {
+    const std::vector<Suggestion>& suggestions,
+    bool is_for_webauthn_request) {
   if (!password_manager_driver_->CanShowAutofillUi()) {
     return false;
   }
@@ -554,7 +541,9 @@ bool PasswordAutofillManager::ShowPopup(
            ->HasPendingPasskeySelection() ||
       !AreNewSuggestionsTheSame(suggestions,
                                 last_popup_open_args_.suggestions)) {
-    LogMetricsForSuggestions(suggestions);
+    metrics_util::LogPasswordDropdownShown(suggestions);
+    metrics_util::MaybeLogMetricsForPasswordAndWebauthnCounts(
+        suggestions, is_for_webauthn_request);
     // TODO(crbug.com/41474723): Set the right `form_control_ax_id`.
     last_popup_open_args_ = autofill::AutofillClient::PopupOpenArgs(
         bounds, text_direction, suggestions,
@@ -575,7 +564,7 @@ void PasswordAutofillManager::UpdatePopup(std::vector<Suggestion> suggestions) {
         autofill::SuggestionHidingReason::kNoSuggestions);
     return;
   }
-  autofill_client_->UpdatePopup(
+  autofill_client_->UpdateAutofillSuggestions(
       suggestions, autofill::FillingProduct::kPassword,
       autofill::AutofillSuggestionTriggerSource::kPasswordManager);
   last_popup_open_args_.suggestions = std::move(suggestions);

@@ -17,6 +17,7 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/preloading/chrome_preloading.h"
+#include "chrome/browser/preloading/prefetch/search_prefetch/cache_alias_search_prefetch_url_loader.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/field_trial_settings.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_request.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_test_utils.h"
+#include "chrome/test/base/platform_browser_test.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_result.h"
@@ -53,13 +55,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "chrome/test/base/android/android_browser_test.h"
-#else  // BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
-#include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/omnibox_controller.h"
@@ -99,12 +98,6 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
               {"device_memory_threshold_MB", "0"}}},
         },
         /*disabled_features=*/{});
-  }
-
-  // TODO(crbug.com/40285326): This fails with the field trial testing config.
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    PlatformBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch("disable-field-trial-config");
   }
 
   void SetUp() override {
@@ -612,10 +605,6 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
   WaitUntilStatusChangesTo(
       GetCanonicalSearchURL(expected_prefetch_url),
       {SearchPrefetchStatus::kCanBeServed, SearchPrefetchStatus::kComplete});
-#if BUILDFLAG(IS_ANDROID)
-  histogram_tester.ExpectUniqueSample(
-      "Omnibox.SearchPrefetch.PrefetchParameterExistence", true, 1);
-#endif
   std::string search_query_2 = "prer";
   ChangeAutocompleteResult(search_query_2, prerender_query,
                            PrerenderHint::kEnabled, PrefetchHint::kEnabled);
@@ -625,11 +614,6 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
   registry_observer.WaitForTrigger(expected_prerender_url);
   prerender_helper().WaitForPrerenderLoadCompletion(*GetActiveWebContents(),
                                                     expected_prerender_url);
-#if BUILDFLAG(IS_ANDROID)
-  // Generate the url when upgrading a prefetch attempt to a prerender attempt.
-  histogram_tester.ExpectUniqueSample(
-      "Omnibox.SearchPrefetch.PrefetchParameterExistence", true, 2);
-#endif
 
   // No prerender requests went through network, so there should be only one
   // request and it is with the prefetch flag attached.
@@ -1354,6 +1338,12 @@ IN_PROC_BROWSER_TEST_F(HTTPCacheSearchPreloadUnifiedBrowserTest,
             GetActiveWebContents()->GetLastCommittedURL());
   EXPECT_EQ(0, prerender_helper().GetRequestCount(expected_prerender_url_1));
   EXPECT_EQ(1, prerender_helper().GetRequestCount(expected_prefetch_url_1));
+
+  histogram_tester.ExpectUniqueSample(
+      "Omnibox.SearchPrefetch.CacheAliasFallbackReason",
+      CacheAliasSearchPrefetchURLLoader::FallbackReason::kNoFallback, 1);
+  histogram_tester.ExpectTotalCount(
+      "Omnibox.SearchPrefetch.CacheAliasElapsedTimeToFallback", 0);
 }
 
 // Tests the started prerender is destroyed after prefetch request expired.
@@ -1522,8 +1512,9 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
   // 4. Fail the prerender.
   content::test::PrerenderHostObserver prerender_observer(
       *GetActiveWebContents(), expected_prerender_url);
-  int host_id = prerender_helper().GetHostForUrl(expected_prerender_url);
-  ASSERT_NE(host_id, content::RenderFrameHost::kNoFrameTreeNodeId);
+  content::FrameTreeNodeId host_id =
+      prerender_helper().GetHostForUrl(expected_prerender_url);
+  ASSERT_TRUE(host_id);
   prerender_helper().CancelPrerenderedPage(host_id);
   prerender_observer.WaitForDestroyed();
   EXPECT_EQ(1, prerender_helper().GetRequestCount(expected_prefetch_url));
@@ -1548,30 +1539,9 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
 
-class NoCancelSearchPreloadUnifiedBrowserTest
-    : public SearchPreloadUnifiedBrowserTest {
- public:
-  NoCancelSearchPreloadUnifiedBrowserTest() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {
-            {features::kSupportSearchSuggestionForPrerender2, {{}}},
-            {kSearchPrefetchServicePrefetching,
-             {{"max_attempts_per_caching_duration", "3"},
-              {"cache_size", "4"},
-              {"device_memory_threshold_MB", "0"}}},
-        },
-        // Disable BackForwardCache to ensure that the page is not restored from
-        // the cache.
-        /*disabled_features=*/{features::kBackForwardCache});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // Tests prerender is not cancelled after SearchPrefetchService cancels prefetch
 // requests.
-IN_PROC_BROWSER_TEST_F(NoCancelSearchPreloadUnifiedBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        SuggestionChangeAfterStartPrerender) {
   base::HistogramTester histogram_tester;
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -1672,27 +1642,8 @@ void CheckCorrectForwardingResultMetric(
       count);
 }
 
-class SearchPreloadUnifiedFallbackBrowserTest
-    : public SearchPreloadUnifiedBrowserTest {
- public:
-  SearchPreloadUnifiedFallbackBrowserTest() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {
-            {features::kSupportSearchSuggestionForPrerender2, {{}}},
-            {kSearchPrefetchServicePrefetching,
-             {{"max_attempts_per_caching_duration", "3"},
-              {"device_memory_threshold_MB", "0"}}},
-        },
-        /*disabled_features=*/{});
-  }
-  ~SearchPreloadUnifiedFallbackBrowserTest() override = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // Tests cancelling prerenders should not delete the prefetched responses.
-IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        PrefetchSucceedAfterPrerenderFailed) {
   base::HistogramTester histogram_tester;
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -1728,7 +1679,8 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
   EXPECT_EQ(prefetch_status.value(), SearchPrefetchStatus::kComplete);
 
   // 3. Cancel the prerenders
-  int host_id = prerender_helper().GetHostForUrl(expected_prerender_url);
+  content::FrameTreeNodeId host_id =
+      prerender_helper().GetHostForUrl(expected_prerender_url);
   content::test::PrerenderHostObserver prerender_observer(
       *GetActiveWebContents(), host_id);
   // Ensure kCompleted is recorded.
@@ -1766,7 +1718,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
 // Tests that prefetched response can be served to prerender client
 // successfully.
-IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        FetchPrerenderActivated) {
   base::HistogramTester histogram_tester;
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -1822,7 +1774,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
 // Tests that the SearchSuggestionService can trigger prerendering if it
 // receives prerender hints after the previous prefetch request succeeds.
-IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        PrerenderHintReceivedAfterCompletion) {
   base::HistogramTester histogram_tester;
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -1887,7 +1839,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
 // Tests that once prefetch encountered error, prerender would be canceled as
 // well.
-IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        PrefetchErrorCancelsPrerender) {
   base::HistogramTester histogram_tester;
   set_service_deferral_type(SearchPreloadTestResponseDeferralType::kDeferBody);
@@ -1953,7 +1905,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
 // Tests that if prerender is canceled by itself before the loader receives
 // response body from the internet, the correct result can be recorded.
-IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        PrerenderDiscardedBeforeServingData) {
   base::HistogramTester histogram_tester;
   set_service_deferral_type(SearchPreloadTestResponseDeferralType::kDeferBody);
@@ -1986,7 +1938,8 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
   // The suggestion service should hint `expected_prefetch_url`, and
   // prerendering for this url should start.
   registry_observer.WaitForTrigger(expected_prerender_url);
-  int host_id = prerender_helper().GetHostForUrl(expected_prerender_url);
+  content::FrameTreeNodeId host_id =
+      prerender_helper().GetHostForUrl(expected_prerender_url);
 
   // Ensure prerender has started to read response body.
   ASSERT_TRUE(prerender_navigation_manager.WaitForResponse());
@@ -2053,7 +2006,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
 // Edge case: when the prerendering navigation is still reading from the cache,
 // the loader would not be deleted until finishing reading.
-IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        ServingToPrerenderingUntilCompletion) {
   base::HistogramTester histogram_tester;
   set_service_deferral_type(
@@ -2127,7 +2080,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
 // It is possible that one prefetched response is served to multiple prerender
 // in the current design.
-IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        ServingToPrerenderNavigationTwice) {
   base::HistogramTester histogram_tester;
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -2160,7 +2113,8 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
   // 3. Turns to another prediction.
   {
-    int host_id = prerender_helper().GetHostForUrl(expected_prerender_url);
+    content::FrameTreeNodeId host_id =
+        prerender_helper().GetHostForUrl(expected_prerender_url);
     content::test::PrerenderHostObserver prerender_observer(
         *GetActiveWebContents(), host_id);
     ChangeAutocompleteResult("pref", "prefetch", PrerenderHint::kEnabled,
@@ -2269,7 +2223,7 @@ class SearchPreloadServingTestURLLoader
 };
 
 // Regression test for https://crbug.com/1493229.
-IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        PrerenderHandlerExecutedAfterPrefetchHandler) {
   base::HistogramTester histogram_tester;
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -2328,31 +2282,6 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedFallbackBrowserTest,
 
 // We cannot open the result in another tab on Android.
 #if !BUILDFLAG(IS_ANDROID)
-class NoCancelSearchPreloadUnifiedFallbackBrowserTest
-    : public SearchPreloadUnifiedBrowserTest {
- public:
-  NoCancelSearchPreloadUnifiedFallbackBrowserTest() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {
-            {features::kSupportSearchSuggestionForPrerender2, {{}}},
-            {kSearchPrefetchServicePrefetching,
-             {{"max_attempts_per_caching_duration", "3"},
-              {"cache_size", "4"},
-              {"device_memory_threshold_MB", "0"}}},
-        },
-        /*disabled_features=*/{});
-  }
-  ~NoCancelSearchPreloadUnifiedFallbackBrowserTest() override = default;
-
-  // TODO(crbug.com/40285326): This fails with the field trial testing config.
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    SearchPreloadUnifiedBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch("disable-field-trial-config");
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
 
 // Tests that even when prerendering is not failed, users can open the
 // prefetched result in another tab and activate the prefetched response
@@ -2367,7 +2296,7 @@ class NoCancelSearchPreloadUnifiedFallbackBrowserTest
 #endif
 // TODO(crbug.com/40272425): Flaky on chromiumos ASAN LSAN and Linux
 // ASAN.
-IN_PROC_BROWSER_TEST_F(NoCancelSearchPreloadUnifiedFallbackBrowserTest,
+IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                        MAYBE_OpenPrefetchedResponseInBackgroundedTab) {
   base::HistogramTester histogram_tester;
   set_service_deferral_type(

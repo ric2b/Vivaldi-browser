@@ -9,6 +9,7 @@
 #include "base/base64.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
@@ -46,6 +47,45 @@ enum class KeyDerivationMethodStateForMetrics {
   kMaxValue = SCRYPT_8192_8_11
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:SyncCustomPassphraseKeyDerivationMethodState)
+
+// The state of the cross user sharing key pair after pending keys are
+// successfully decrypted. These values are persisted to logs. Entries should
+// not be renumbered and numeric values should never be reused.
+// LINT.IfChange(CrossUserSharingKeyPairStateOnDecryptPendingKeys)
+enum class CrossUserSharingKeyPairStateOnDecryptPendingKeys {
+  // The key pair exists and is in valid state.
+  kValid = 0,
+
+  // The private key is missing for the current public key version.
+  kMissingPrivateKey = 1,
+
+  // Both public and private keys are empty.
+  kEmptyKeyPair = 2,
+
+  // The private key is non-empty but the public key version is not set.
+  kMissingPublicKey = 3,
+
+  kMaxValue = kMissingPublicKey,
+};
+// LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:CrossUserSharingKeyPairStateOnDecryptPendingKeys)
+
+CrossUserSharingKeyPairStateOnDecryptPendingKeys
+GetKeyPairStateOnDecryptPendingKeys(const CrossUserSharingKeys& new_key_pair,
+                                    std::optional<uint32_t> key_pair_version) {
+  if (new_key_pair.size() == 0 && !key_pair_version.has_value()) {
+    return CrossUserSharingKeyPairStateOnDecryptPendingKeys::kEmptyKeyPair;
+  }
+
+  if (!key_pair_version.has_value()) {
+    return CrossUserSharingKeyPairStateOnDecryptPendingKeys::kMissingPublicKey;
+  }
+
+  if (!new_key_pair.HasKeyPair(key_pair_version.value())) {
+    return CrossUserSharingKeyPairStateOnDecryptPendingKeys::kMissingPrivateKey;
+  }
+
+  return CrossUserSharingKeyPairStateOnDecryptPendingKeys::kValid;
+}
 
 KeyDerivationMethodStateForMetrics GetKeyDerivationMethodStateForMetrics(
     const std::optional<KeyDerivationParams>& key_derivation_params) {
@@ -227,8 +267,8 @@ bool IsValidEncryptedTypesTransition(bool old_encrypt_everything,
 }
 
 bool IsValidLocalData(const sync_pb::NigoriLocalData& local_data) {
-  if (local_data.model_type_state().initial_sync_state() !=
-      sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE) {
+  if (local_data.data_type_state().initial_sync_state() !=
+      sync_pb::DataTypeState_InitialSyncState_INITIAL_SYNC_DONE) {
     // |local_data| should not be stored before initial sync is done.
     return false;
   }
@@ -260,7 +300,7 @@ bool IsValidLocalData(const sync_pb::NigoriLocalData& local_data) {
 
   // All new validation logic should be added either before or into the switch
   // above.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 std::optional<CrossUserSharingPublicKey> PublicKeyFromProto(
@@ -320,7 +360,7 @@ class NigoriSyncBridgeImpl::BroadcastingObserver
     }
   }
 
-  void OnEncryptedTypesChanged(ModelTypeSet encrypted_types,
+  void OnEncryptedTypesChanged(DataTypeSet encrypted_types,
                                bool encrypt_everything) override {
     for (Observer& observer : observers_) {
       observer.OnEncryptedTypesChanged(encrypted_types, encrypt_everything);
@@ -365,7 +405,7 @@ NigoriSyncBridgeImpl::NigoriSyncBridgeImpl(
 
   // Restore metadata.
   NigoriMetadataBatch metadata_batch;
-  metadata_batch.model_type_state = deserialized_data->model_type_state();
+  metadata_batch.data_type_state = deserialized_data->data_type_state();
   metadata_batch.entity_metadata = deserialized_data->entity_metadata();
   processor_->ModelReadyToSync(this, std::move(metadata_batch));
 
@@ -447,7 +487,7 @@ void NigoriSyncBridgeImpl::NotifyInitialStateToObservers() {
   }
 }
 
-ModelTypeSet NigoriSyncBridgeImpl::GetEncryptedTypes() {
+DataTypeSet NigoriSyncBridgeImpl::GetEncryptedTypes() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return state_.GetEncryptedTypes();
 }
@@ -709,7 +749,7 @@ std::optional<ModelError> NigoriSyncBridgeImpl::UpdateLocalState(
   }
 
   const bool had_pending_keys_before_update = state_.pending_keys.has_value();
-  const ModelTypeSet encrypted_types_before_update = state_.GetEncryptedTypes();
+  const DataTypeSet encrypted_types_before_update = state_.GetEncryptedTypes();
 
   state_.encrypt_everything = specifics.encrypt_everything();
 
@@ -875,6 +915,11 @@ std::optional<ModelError> NigoriSyncBridgeImpl::TryDecryptPendingKeysWith(
     new_cross_user_sharing_keys.AddKeyPairFromProto(key_pair);
   }
 
+  base::UmaHistogramEnumeration(
+      "Sync.CrossUserSharingKeyPairState.DecryptPendingKeys",
+      GetKeyPairStateOnDecryptPendingKeys(
+          new_cross_user_sharing_keys,
+          state_.cross_user_sharing_key_pair_version));
   if (state_.cross_user_sharing_key_pair_version.has_value() &&
       !new_cross_user_sharing_keys.HasKeyPair(
           state_.cross_user_sharing_key_pair_version.value())) {
@@ -1024,7 +1069,7 @@ sync_pb::NigoriLocalData NigoriSyncBridgeImpl::SerializeAsNigoriLocalData()
 
   // Serialize the metadata.
   const NigoriMetadataBatch metadata_batch = processor_->GetMetadata();
-  *output.mutable_model_type_state() = metadata_batch.model_type_state;
+  *output.mutable_data_type_state() = metadata_batch.data_type_state;
   if (metadata_batch.entity_metadata) {
     *output.mutable_entity_metadata() = *metadata_batch.entity_metadata;
   }

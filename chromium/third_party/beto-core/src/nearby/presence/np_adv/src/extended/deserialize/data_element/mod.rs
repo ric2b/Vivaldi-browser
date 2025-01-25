@@ -16,6 +16,7 @@
 
 use crate::extended::{de_requires_extended_bit, de_type::DeType, deserialize, DeLength};
 use array_view::ArrayView;
+use core::fmt;
 use nom::{branch, bytes, combinator, error, number, sequence};
 use np_hkdf::v1_salt;
 
@@ -34,7 +35,34 @@ pub struct DataElement<'adv> {
 }
 
 impl<'adv> DataElement<'adv> {
+    /// The offset of the DE in its containing Section.
+    ///
+    /// Used with the section salt to derive per-DE salt.
+    pub fn offset(&self) -> v1_salt::DataElementOffset {
+        self.offset
+    }
+
+    /// The type of the DE
+    pub fn de_type(&self) -> DeType {
+        self.de_type
+    }
+    /// The contents of the DE
+    pub fn contents(&self) -> &'adv [u8] {
+        self.contents
+    }
+
     pub(crate) fn new(
+        offset: v1_salt::DataElementOffset,
+        de_type: DeType,
+        contents: &'adv [u8],
+    ) -> Self {
+        Self { offset, de_type, contents }
+    }
+
+    /// Exposes the ability to create a DE for testing purposes, real clients should only obtain
+    /// one by deserializing an advertisement
+    #[cfg(feature = "testing")]
+    pub fn new_for_testing(
         offset: v1_salt::DataElementOffset,
         de_type: DeType,
         contents: &'adv [u8],
@@ -144,23 +172,6 @@ impl DeHeader {
     }
 }
 
-impl<'adv> DataElement<'adv> {
-    /// The offset of the DE in its containing Section.
-    ///
-    /// Used with the section salt to derive per-DE salt.
-    pub fn offset(&self) -> v1_salt::DataElementOffset {
-        self.offset
-    }
-    /// The type of the DE
-    pub fn de_type(&self) -> DeType {
-        self.de_type
-    }
-    /// The contents of the DE
-    pub fn contents(&self) -> &'adv [u8] {
-        self.contents
-    }
-}
-
 /// An iterator that parses the given data elements iteratively. In environments where memory is
 /// not severely constrained, it is usually safer to collect this into `Result<Vec<DataElement>>`
 /// so the validity of the whole advertisement can be checked before proceeding with further
@@ -224,6 +235,19 @@ pub enum DataElementParseError {
     /// A parse error is returned during nom.
     NomError(error::ErrorKind),
 }
+
+impl fmt::Display for DataElementParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DataElementParseError::UnexpectedDataAfterEnd => write!(f, "Unexpected data after end"),
+            DataElementParseError::TooManyDataElements => write!(f, "Too many data elements"),
+            DataElementParseError::NomError(_) => write!(f, "Nom error"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for DataElementParseError {}
 
 /// Deserialize-specific version of a DE header that incorporates the header length.
 /// This is needed for encrypted identities that need to construct a slice of everything in the

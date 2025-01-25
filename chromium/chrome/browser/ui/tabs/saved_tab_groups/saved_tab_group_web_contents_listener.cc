@@ -6,13 +6,16 @@
 
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_tab_state.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_utils.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_service_wrapper.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_service_proxy.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/saved_tab_groups/features.h"
 #include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/utils.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
@@ -20,41 +23,6 @@
 
 namespace tab_groups {
 namespace {
-
-bool IsSaveableNavigation(content::NavigationHandle* navigation_handle) {
-  ui::PageTransition page_transition = navigation_handle->GetPageTransition();
-  if (navigation_handle->IsPost()) {
-    return false;
-  }
-  if (!ui::IsValidPageTransitionType(page_transition)) {
-    return false;
-  }
-  if (ui::PageTransitionIsRedirect(page_transition)) {
-    return false;
-  }
-
-  if (!ui::PageTransitionIsMainFrame(page_transition)) {
-    return false;
-  }
-
-  if (!navigation_handle->HasCommitted()) {
-    return false;
-  }
-
-  if (!navigation_handle->ShouldUpdateHistory()) {
-    return false;
-  }
-
-  // For renderer initiated navigation, in most cases these navigations will be
-  // auto triggered on restoration. So there is no need to save them.
-  if (navigation_handle->IsRendererInitiated() &&
-      !navigation_handle->HasUserGesture()) {
-    return false;
-  }
-
-  return SavedTabGroupUtils::IsURLValidForSavedTabGroups(
-      navigation_handle->GetURL());
-}
 
 // Returns whether this navigation is user triggered main frame navigation.
 bool IsUserTriggeredMainFrameNavigation(
@@ -102,22 +70,22 @@ bool IsURLInRedirectChain(const GURL& url,
 
 SavedTabGroupWebContentsListener::SavedTabGroupWebContentsListener(
     content::WebContents* web_contents,
-    base::Token token,
-    TabGroupServiceWrapper* wrapper_service)
-    : token_(token),
+    const LocalTabID& saved_tab_group_tab_id,
+    TabGroupSyncService* service)
+    : saved_tab_group_tab_id_(saved_tab_group_tab_id),
       web_contents_(web_contents),
-      wrapper_service_(wrapper_service) {
+      service_(service) {
   Observe(web_contents_);
 }
 
 SavedTabGroupWebContentsListener::SavedTabGroupWebContentsListener(
     content::WebContents* web_contents,
     content::NavigationHandle* navigation_handle,
-    base::Token token,
-    TabGroupServiceWrapper* wrapper_service)
-    : token_(token),
+    const LocalTabID& saved_tab_group_tab_id,
+    TabGroupSyncService* service)
+    : saved_tab_group_tab_id_(saved_tab_group_tab_id),
       web_contents_(web_contents),
-      wrapper_service_(wrapper_service),
+      service_(service),
       handle_from_sync_update_(navigation_handle) {
   Observe(web_contents_);
 }
@@ -131,14 +99,18 @@ void SavedTabGroupWebContentsListener::NavigateToUrl(const GURL& url) {
     return;
   }
 
+  std::optional<SavedTabGroup> group = saved_group();
+  SavedTabGroupTab* tab = group->GetTab(saved_tab_group_tab_id_);
+  CHECK(tab);
+
   // If the URL is inside current tab URL's redirect chain, there is no need to
   // navigate as the navigation will end up with the current tab URL.
-  if (IsURLInRedirectChain(url, tab_redirect_chain_)) {
+  if (IsURLInRedirectChain(url, tab->redirect_url_chain())) {
     return;
   }
 
   // Dont navigate to the new URL if its not valid for sync.
-  if (!SavedTabGroupUtils::IsURLValidForSavedTabGroups(url)) {
+  if (!IsURLValidForSavedTabGroups(url)) {
     return;
   }
 
@@ -168,21 +140,27 @@ void SavedTabGroupWebContentsListener::DidFinishNavigation(
     TabGroupSyncTabState::Reset(web_contents());
   }
 
-  if (!IsSaveableNavigation(navigation_handle)) {
+  if (!TabGroupSyncUtils::IsSaveableNavigation(navigation_handle)) {
     return;
   }
 
   std::optional<SavedTabGroup> group = saved_group();
-  SavedTabGroupTab* tab = group->GetTab(token_);
+  SavedTabGroupTab* tab = group->GetTab(saved_tab_group_tab_id_);
   CHECK(tab);
 
-  wrapper_service_->SetFaviconForTab(
-      group->local_group_id().value(), token_,
-      favicon::TabFaviconFromWebContents(web_contents_));
-  wrapper_service_->UpdateTab(group->local_group_id().value(), token_,
-                              web_contents_->GetTitle(),
-                              web_contents_->GetURL(), /*position=*/
-                              std::nullopt);
+  if (!tab_groups::IsTabGroupSyncServiceDesktopMigrationEnabled()) {
+    // TODO(crbug.com/359715038): Implement in TGSS then remove cast.
+    static_cast<TabGroupSyncServiceProxy*>(service_)->SetFaviconForTab(
+        group->local_group_id().value(), saved_tab_group_tab_id_,
+        favicon::TabFaviconFromWebContents(web_contents_));
+  }
+
+  SavedTabGroupTabBuilder tab_builder;
+  tab_builder.SetURL(web_contents_->GetURL());
+  tab_builder.SetTitle(web_contents_->GetTitle());
+
+  service_->UpdateTab(group->local_group_id().value(), saved_tab_group_tab_id_,
+                      std::move(tab_builder));
 }
 
 void SavedTabGroupWebContentsListener::DidGetUserInteraction(
@@ -196,18 +174,19 @@ void SavedTabGroupWebContentsListener::UpdateTabRedirectChain(
     return;
   }
 
-  tab_redirect_chain_.clear();
-  for (const auto& url : navigation_handle->GetRedirectChain()) {
-    tab_redirect_chain_.emplace_back(url);
-  }
+  std::optional<SavedTabGroup> group = saved_group();
+
+  SavedTabGroupTabBuilder tab_builder;
+  tab_builder.SetRedirectURLChain(navigation_handle->GetRedirectChain());
+  service_->UpdateTab(group->local_group_id().value(), saved_tab_group_tab_id_,
+                      std::move(tab_builder));
 }
 
-const std::optional<SavedTabGroup>
-SavedTabGroupWebContentsListener::saved_group() {
-  std::vector<SavedTabGroup> all_groups = wrapper_service_->GetAllGroups();
+const SavedTabGroup SavedTabGroupWebContentsListener::saved_group() {
+  std::vector<SavedTabGroup> all_groups = service_->GetAllGroups();
   auto iter = base::ranges::find_if(
       all_groups, [&](const SavedTabGroup& potential_group) {
-        return potential_group.ContainsTab(token_);
+        return potential_group.ContainsTab(saved_tab_group_tab_id_);
       });
   CHECK(iter != all_groups.end());
 

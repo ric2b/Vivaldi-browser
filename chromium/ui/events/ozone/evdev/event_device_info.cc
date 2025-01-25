@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/events/ozone/evdev/event_device_info.h"
 
 #include <linux/input.h>
@@ -16,6 +21,7 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/types/fixed_array.h"
 #include "ui/events/devices/device_util_linux.h"
 #include "ui/events/ozone/evdev/keyboard_mouse_combo_device_metrics.h"
 #include "ui/events/ozone/features.h"
@@ -499,19 +505,18 @@ bool EventDeviceInfo::Initialize(int fd, const base::FilePath& path) {
   int max_num_slots = GetAbsMtSlotCount();
 
   // |request| is MT code + slots.
-  int32_t request[max_num_slots + 1];
-  int32_t* request_code = &request[0];
-  int32_t* request_slots = &request[1];
+  base::FixedArray<int32_t> request(max_num_slots + 1);
+  int32_t& request_code = request.front();
   for (unsigned int i = EVDEV_ABS_MT_FIRST; i <= EVDEV_ABS_MT_LAST; ++i) {
     if (!HasAbsEvent(i))
       continue;
 
-    memset(request, 0, sizeof(request));
-    *request_code = i;
-    GetSlotValues(fd, path, request, max_num_slots + 1);
+    memset(request.data(), 0, request.memsize());
+    request_code = i;
+    GetSlotValues(fd, path, request.data(), max_num_slots + 1);
 
     std::vector<int32_t>* slots = &slot_values_[i - EVDEV_ABS_MT_FIRST];
-    slots->assign(request_slots, request_slots + max_num_slots);
+    slots->assign(request.begin() + 1, request.begin() + 1 + max_num_slots);
   }
 
   if (!GetDeviceName(fd, path, &name_))

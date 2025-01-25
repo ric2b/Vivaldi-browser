@@ -21,7 +21,6 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
-#include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -61,8 +60,9 @@ class LocalExtensionCacheTest : public testing::Test {
                            const base::Time& timestamp,
                            base::FilePath* filename) {
     const base::FilePath file = GetExtensionFileName(dir, id, version, "");
-    if (filename)
+    if (filename) {
       *filename = file;
+    }
     CreateFile(file, size, timestamp);
   }
 
@@ -81,18 +81,14 @@ class LocalExtensionCacheTest : public testing::Test {
                                         const base::Time& timestamp,
                                         base::FilePath* filename) {
     std::string data(size, 0);
-
-    std::unique_ptr<crypto::SecureHash> hash =
-        crypto::SecureHash::Create(crypto::SecureHash::SHA256);
-    hash->Update(data.c_str(), size);
-    uint8_t output[crypto::kSHA256Length];
-    hash->Finish(output, sizeof(output));
-    const std::string hex_hash = base::ToLowerASCII(base::HexEncode(output));
+    const std::string hex_hash = base::ToLowerASCII(
+        base::HexEncode(crypto::SHA256Hash(base::as_byte_span(data))));
 
     const base::FilePath file =
         GetExtensionFileName(dir, id, version, hex_hash);
-    if (filename)
+    if (filename) {
       *filename = file;
+    }
     EXPECT_TRUE(base::WriteFile(file, data));
     EXPECT_TRUE(base::TouchFile(file, timestamp, timestamp));
 

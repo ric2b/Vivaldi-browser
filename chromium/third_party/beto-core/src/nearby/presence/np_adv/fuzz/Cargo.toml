@@ -1,0 +1,32 @@
+[package]
+name = "np_adv_fuzz"
+version.workspace = true
+publish = false
+edition.workspace = true
+license.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = { workspace = true, features = ["derive"] }
+derive_fuzztest.workspace = true
+np_adv = { workspace = true, features = ["testing"] }
+crypto_provider.workspace = true
+crypto_provider_default = { workspace = true, features = ["std", "rustcrypto"] }
+
+[target.'cfg(fuzzing)'.dependencies]
+libfuzzer-sys.workspace = true
+
+[[bin]]
+name = "actions_de_deser"
+doc = false
+
+[[bin]]
+name = "actions_de_encoder"
+doc = false
+
+[[bin]]
+name = "actions_de_roundtrip"
+doc = false
+

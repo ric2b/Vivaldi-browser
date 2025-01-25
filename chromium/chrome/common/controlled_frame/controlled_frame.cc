@@ -95,7 +95,7 @@ bool AvailabilityCheck(const std::string& api_full_name,
   // in our expected list.
   return !extension && is_allowed_for_scheme &&
          context == extensions::mojom::ContextType::kWebPage &&
-         context_data.IsIsolatedApplication() &&
+         context_data.HasControlledFrameCapability() &&
          base::Contains(GetControlledFrameFeatureList(), api_full_name);
 }
 

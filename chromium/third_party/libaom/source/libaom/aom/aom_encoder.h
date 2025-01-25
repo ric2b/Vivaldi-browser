@@ -78,6 +78,8 @@ extern "C" {
  */
 #define AOM_CODEC_USE_PSNR 0x10000         /**< Calculate PSNR on each frame */
 #define AOM_CODEC_USE_HIGHBITDEPTH 0x40000 /**< Use high bitdepth */
+// WARNING: Experimental feature. Not part of the stable API.
+#define AOM_CODEC_USE_PRESET 0x80000 /**< Use preset based on g_usage */
 
 /*!\brief Generic fixed size buffer structure
  *
@@ -802,6 +804,8 @@ typedef struct aom_codec_enc_cfg {
    *     S-Frame.
    *
    * Otherwise: the considered frame will be made into an S-Frame.
+   *
+   * \attention Not implemented.
    */
   unsigned int sframe_mode;
 

@@ -17,7 +17,6 @@
 #include "chrome/browser/ui/views/payments/secure_payment_confirmation_views_util.h"
 #include "chrome/browser/ui/views/payments/test_secure_payment_confirmation_payment_request_delegate.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/payments/core/features.h"
 #include "components/payments/core/sizes.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -25,8 +24,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -201,11 +202,11 @@ class SecurePaymentConfirmationDialogViewTest
 
     EXPECT_EQ(model_.verify_button_label(),
               test_delegate_->dialog_view()->GetDialogButtonLabel(
-                  ui::DIALOG_BUTTON_OK));
+                  ui::mojom::DialogButton::kOk));
 
     EXPECT_EQ(model_.cancel_button_label(),
               test_delegate_->dialog_view()->GetDialogButtonLabel(
-                  ui::DIALOG_BUTTON_CANCEL));
+                  ui::mojom::DialogButton::kCancel));
 
     if (ShouldShowHeaderIcon()) {
       EXPECT_TRUE(GetViewByID(
@@ -215,11 +216,10 @@ class SecurePaymentConfirmationDialogViewTest
           SecurePaymentConfirmationDialogView::DialogViewID::HEADER_ICON));
     }
 
-    EXPECT_EQ(
-        model_.progress_bar_visible(),
-        GetViewByID(
-            SecurePaymentConfirmationDialogView::DialogViewID::PROGRESS_BAR)
-            ->GetVisible());
+    ASSERT_TRUE(test_delegate_->dialog_view()->GetBubbleFrameView());
+    std::optional<double> progress =
+        test_delegate_->dialog_view()->GetBubbleFrameView()->GetProgress();
+    ASSERT_EQ(model_.progress_bar_visible(), progress.has_value());
 
     ExpectLabelText(GetExpectedTitleText(),
                     SecurePaymentConfirmationDialogView::DialogViewID::TITLE);
@@ -629,6 +629,13 @@ IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationDialogViewTest,
 class SecurePaymentConfirmationDialogViewNetworkAndIssuerIconsTest
     : public SecurePaymentConfirmationDialogViewTest {
  public:
+  SecurePaymentConfirmationDialogViewNetworkAndIssuerIconsTest() {
+    base::FieldTrialParams params;
+    params["spc_network_and_issuer_icons_option"] = "rows";
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        blink::features::kSecurePaymentConfirmationNetworkAndIssuerIcons,
+        params);
+  }
   void ExpectViewMatchesModelForNetworkAndIssuerRows() override {
     ExpectLabelText(
         model_.network_label(),
@@ -650,8 +657,7 @@ class SecurePaymentConfirmationDialogViewNetworkAndIssuerIconsTest
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      blink::features::kSecurePaymentConfirmationNetworkAndIssuerIcons};
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Variant of the main ViewMatchesModel test, which verifies that the network
@@ -702,10 +708,11 @@ class SecurePaymentConfirmationDialogViewInlineNetworkAndIssuerIconsTest
     : public SecurePaymentConfirmationDialogViewTest {
  public:
   SecurePaymentConfirmationDialogViewInlineNetworkAndIssuerIconsTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {blink::features::kSecurePaymentConfirmationNetworkAndIssuerIcons,
-         features::kSecurePaymentConfirmationInlineNetworkAndIssuerIcons},
-        {});
+    base::FieldTrialParams params;
+    params["spc_network_and_issuer_icons_option"] = "inline";
+    scoped_feature_list_.InitAndEnableFeatureWithParameters(
+        blink::features::kSecurePaymentConfirmationNetworkAndIssuerIcons,
+        params);
   }
 
   void CreateModel() override {

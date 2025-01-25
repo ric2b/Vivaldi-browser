@@ -20,6 +20,8 @@ static_library("nearby_share") {
     "share_info_file_stream_adapter.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash/components/arc",
     "//ash/components/arc/mojom",
@@ -31,7 +33,6 @@ static_library("nearby_share") {
     "//chrome/browser/ash/arc/nearby_share/ui",
     "//chrome/browser/ash/file_manager",
     "//chrome/browser/ash/fileapi",
-    "//chrome/browser/ash/fusebox",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/webshare:storage",
     "//chrome/common",
@@ -60,10 +61,9 @@ source_set("unit_tests") {
     "//ash/components/arc/mojom",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/ash:test_support",
+    "//chrome/browser/ash/app_list/arc:test_support",
     "//chrome/browser/ash/arc/fileapi",
-    "//chrome/browser/ash/arc/nearby_share/ui",
-    "//chrome/browser/ash/fusebox",
+    "//chrome/browser/ui/ash/shelf",
     "//chrome/test:test_support",
     "//chromeos/ui/base",
     "//components/exo",

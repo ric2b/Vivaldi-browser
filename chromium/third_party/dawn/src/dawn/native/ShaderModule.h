@@ -235,7 +235,7 @@ struct EntryPointMetadata {
     // inputs and outputs in one shader stage.
     std::vector<bool> usedInterStageVariables;
     std::vector<InterStageVariableInfo> interStageVariables;
-    uint32_t totalInterStageShaderComponents;
+    uint32_t totalInterStageShaderVariables;
 
     // The shader stage for this entry point.
     SingleShaderStage stage;
@@ -277,7 +277,9 @@ struct EntryPointMetadata {
     bool usesInstanceIndex = false;
     bool usesNumWorkgroups = false;
     bool usesSampleMaskOutput = false;
+    bool usesSampleIndex = false;
     bool usesVertexIndex = false;
+    bool usesTextureLoadWithDepthTexture = false;
 };
 
 class ShaderModuleBase : public RefCountedWithExternalCount<ApiObjectBase>,

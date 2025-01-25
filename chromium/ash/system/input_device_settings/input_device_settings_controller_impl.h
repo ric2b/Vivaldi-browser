@@ -22,12 +22,14 @@
 #include "ash/system/input_device_settings/input_device_settings_metrics_manager.h"
 #include "ash/system/input_device_settings/input_device_settings_notification_controller.h"
 #include "ash/system/input_device_settings/input_device_settings_policy_handler.h"
+#include "ash/system/input_device_settings/modifier_split_bypass_checker.h"
 #include "ash/system/input_device_settings/pref_handlers/graphics_tablet_pref_handler.h"
 #include "ash/system/input_device_settings/pref_handlers/keyboard_pref_handler.h"
 #include "ash/system/input_device_settings/pref_handlers/mouse_pref_handler.h"
 #include "ash/system/input_device_settings/pref_handlers/pointing_stick_pref_handler.h"
 #include "ash/system/input_device_settings/pref_handlers/touchpad_pref_handler.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
@@ -35,6 +37,7 @@
 #include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/events/devices/input_device.h"
 #include "ui/events/devices/keyboard_device.h"
+#include "ui/message_center/message_center_observer.h"
 
 class AccountId;
 class PrefChangeRegistrar;
@@ -49,7 +52,8 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
       public SessionObserver,
       public device::BluetoothAdapter::Observer,
       public LoginDataDispatcher::Observer,
-      public apps::AppRegistryCache::Observer {
+      public apps::AppRegistryCache::Observer,
+      public message_center::MessageCenterObserver {
  public:
   explicit InputDeviceSettingsControllerImpl(PrefService* local_state);
   InputDeviceSettingsControllerImpl(
@@ -67,6 +71,10 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   ~InputDeviceSettingsControllerImpl() override;
 
   static void RegisterProfilePrefs(PrefRegistrySimple* pref_registry);
+
+  // Refreshes keyboard info and settings. To be used when the feature is first
+  // forcibly enabled.
+  void ForceKeyboardSettingRefreshWhenFeatureEnabled();
 
   // InputDeviceSettingsController:
   std::vector<mojom::KeyboardPtr> GetConnectedKeyboards() override;
@@ -110,6 +118,8 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
       const std::string& device_key,
       base::OnceCallback<void(const std::optional<std::string>&)> callback)
       override;
+  void ResetNotificationDeviceTracking() override;
+
   void AddObserver(InputDeviceSettingsController::Observer* observer) override;
   void RemoveObserver(
       InputDeviceSettingsController::Observer* observer) override;
@@ -133,6 +143,8 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   // SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;
 
+  void OnSessionStateChanged(session_manager::SessionState state) override;
+
   // input_method::InputMethodManager::Observer:
   void InputMethodChanged(input_method::InputMethodManager* manager,
                           Profile* profile,
@@ -151,12 +163,23 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   void OnAppRegistryCacheWillBeDestroyed(
       apps::AppRegistryCache* cache) override;
 
+  // message_center::MessageCenterObserver:
+  void OnNotificationClicked(
+      const std::string& notification_id,
+      const std::optional<int>& button_index,
+      const std::optional<std::u16string>& reply) override;
+
   InputDeviceDuplicateIdFinder& duplicate_id_finder() {
     CHECK(duplicate_id_finder_);
     return *duplicate_id_finder_;
   }
 
   void SetPeripheralsAppDelegate(PeripheralsAppDelegate* delegate);
+
+  void AddWelcomeNotificationDeviceKeyForTesting(
+      const std::string& device_key) {
+    welcome_notification_clicked_device_keys_.insert(device_key);
+  }
 
  private:
   void Init();
@@ -255,6 +278,7 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   void RefreshCompanionAppInfoForConnectedDevices();
   void OnCompanionAppInfoReceived(
       DeviceId id,
+      const std::string& device_key,
       const std::optional<mojom::CompanionAppInfo>& info);
 
   void DispatchMouseCompanionAppInfoChanged(const mojom::Mouse& mouse);
@@ -278,9 +302,9 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   // current input method.
   void RefreshKeyDisplay();
 
-  // Refresh modifier keys when they potentially changed due to flags being
-  // enabled.
-  void RefreshModifierKeys();
+  // Refresh meta and modifier keys when they potentially changed due to flags
+  // being enabled.
+  void RefreshMetaAndModifierKeys();
 
   // Get the mouse button config based on the mouse metadata. Return
   // kDefault by default if there is no mouse metadata.
@@ -332,6 +356,8 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
 
   raw_ptr<PrefService> local_state_ = nullptr;  // Not owned.
 
+  std::unique_ptr<ModifierSplitBypassChecker> modifier_split_bypass_checker_;
+
   std::unique_ptr<KeyboardPrefHandler> keyboard_pref_handler_;
   std::unique_ptr<TouchpadPrefHandler> touchpad_pref_handler_;
   std::unique_ptr<MousePrefHandler> mouse_pref_handler_;
@@ -348,6 +374,15 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   // installed or used. This map is used to track installations and removals for
   // devies with companion apps.
   base::flat_map<std::string, DeviceId> package_id_to_device_id_map_;
+  // A set to track unique device keys of devices where the user clicked on the
+  // welcome notification displayed during initial device connection.
+  // This information is used for recording metrics:
+  // - If a user modifies device settings AFTER clicking the notification,
+  //   the presence of the device key in this set indicates the notification
+  //   was seen before the setting change.
+  // - This helps measure the impact of the welcome notification on user
+  // behavior.
+  base::flat_set<std::string> welcome_notification_clicked_device_keys_;
 
   // Notifiers must be declared after the `flat_map` objects as the notifiers
   // depend on these objects.
@@ -385,6 +420,9 @@ class ASH_EXPORT InputDeviceSettingsControllerImpl
   base::ScopedObservation<apps::AppRegistryCache,
                           apps::AppRegistryCache::Observer>
       app_registry_cache_observer_{this};
+
+  session_manager::SessionState last_session_ =
+      session_manager::SessionState::UNKNOWN;
 
   // Task runner where settings refreshes are scheduled to run.
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;

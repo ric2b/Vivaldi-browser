@@ -41,6 +41,7 @@
 #include "cc/layers/layer.h"
 #include "media/base/media_content_type.h"
 #include "media/base/media_switches.h"
+#include "media/base/media_track.h"
 #include "services/media_session/public/mojom/media_session.mojom-blink.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
@@ -254,52 +255,6 @@ class AudioSourceProviderClientLockScope {
  private:
   AudioSourceProviderClient* client_;
 };
-
-const AtomicString& AudioKindToString(
-    WebMediaPlayerClient::AudioTrackKind kind) {
-  switch (kind) {
-    case WebMediaPlayerClient::kAudioTrackKindNone:
-      return g_empty_atom;
-    case WebMediaPlayerClient::kAudioTrackKindAlternative:
-      return AudioTrack::AlternativeKeyword();
-    case WebMediaPlayerClient::kAudioTrackKindDescriptions:
-      return AudioTrack::DescriptionsKeyword();
-    case WebMediaPlayerClient::kAudioTrackKindMain:
-      return AudioTrack::MainKeyword();
-    case WebMediaPlayerClient::kAudioTrackKindMainDescriptions:
-      return AudioTrack::MainDescriptionsKeyword();
-    case WebMediaPlayerClient::kAudioTrackKindTranslation:
-      return AudioTrack::TranslationKeyword();
-    case WebMediaPlayerClient::kAudioTrackKindCommentary:
-      return AudioTrack::CommentaryKeyword();
-  }
-
-  NOTREACHED_IN_MIGRATION();
-  return g_empty_atom;
-}
-
-const AtomicString& VideoKindToString(
-    WebMediaPlayerClient::VideoTrackKind kind) {
-  switch (kind) {
-    case WebMediaPlayerClient::kVideoTrackKindNone:
-      return g_empty_atom;
-    case WebMediaPlayerClient::kVideoTrackKindAlternative:
-      return VideoTrack::AlternativeKeyword();
-    case WebMediaPlayerClient::kVideoTrackKindCaptions:
-      return VideoTrack::CaptionsKeyword();
-    case WebMediaPlayerClient::kVideoTrackKindMain:
-      return VideoTrack::MainKeyword();
-    case WebMediaPlayerClient::kVideoTrackKindSign:
-      return VideoTrack::SignKeyword();
-    case WebMediaPlayerClient::kVideoTrackKindSubtitles:
-      return VideoTrack::SubtitlesKeyword();
-    case WebMediaPlayerClient::kVideoTrackKindCommentary:
-      return VideoTrack::CommentaryKeyword();
-  }
-
-  NOTREACHED_IN_MIGRATION();
-  return g_empty_atom;
-}
 
 bool CanLoadURL(const KURL& url, const String& content_type_str) {
   DEFINE_STATIC_LOCAL(const String, codecs, ("codecs"));
@@ -609,7 +564,14 @@ void HTMLMediaElement::DidMoveToNewDocument(Document& old_document) {
       DCHECK(!opener_document_);
       // Only set this when we're going from "original opener" to "elsewhere",
       // in case we're moved from one same-origin window to another.
+      //
+      // This assumes that the first move is from the opener to the pip window.
+      // If `ShouldReusePlayer()` lets the first move be in the other direction,
+      // then we'll get this wrong.  Somebody would have to set
+      // `opener_document_` correctly before we get here, so we'd end up in the
+      // case above, instead.  They'd also have to create the context observer.
       opener_document_ = old_document;
+      CHECK(!opener_document_->domWindow()->IsPictureInPictureWindow());
       opener_context_observer_ =
           MakeGarbageCollected<OpenerContextObserver>(this);
     }
@@ -654,12 +616,34 @@ bool HTMLMediaElement::ShouldReusePlayer(Document& old_document,
     return false;
   }
 
-  // Reuse player if the two documents have opener-pip relationship (for either
-  // direction).
-  return (new_document.domWindow()->IsPictureInPictureWindow() &&
-          new_document.GetFrame()->Opener() == old_document.GetFrame()) ||
-         (old_document.domWindow()->IsPictureInPictureWindow() &&
-          old_document.GetFrame()->Opener() == new_document.GetFrame());
+  // If we're moving from the opener to pip window, then the player is already
+  // connected to the opener and should stay connected to prevent jank.
+  if (new_document.domWindow()->IsPictureInPictureWindow() &&
+      new_document.GetFrame()->Opener() == old_document.GetFrame()) {
+    return true;
+  }
+
+  // If we're moving from the pip window to the opener, then we should only
+  // reuse the player if it's already associated with the opener.  In practice,
+  // this means that `opener_document_` has been set, since
+  // `LocalFrameForOpener()` uses that to decide which frame owns the player.
+  //
+  // Since we don't currently check if the original document is a pip window in
+  // the ctor, that means that creating a video element in the pip window will
+  // not be jankless when moved to the opener the first time.  Once it's in the
+  // opener (either by being moved there or being created there), moves in both
+  // directions will be jankless.
+  //
+  // It could be made jankless in both directions if we noticed (e.g., in the
+  // ctor) that we're being created in a pip document, and set
+  // `opener_document_` correctly and create the context observer for it.
+  //
+  // This logic works whether or not we make the ctor smarter about pip.
+  // However, it can be simiplified to skip the `opener_document_` check if
+  // we're guaranteed that it's always set properly.
+  return (old_document.domWindow()->IsPictureInPictureWindow() &&
+          old_document.GetFrame()->Opener() == new_document.GetFrame()) &&
+         opener_document_ == &new_document;
 }
 
 void HTMLMediaElement::AttachToNewFrame() {
@@ -695,21 +679,27 @@ void HTMLMediaElement::ResetMojoState() {
           this, GetExecutionContext());
 }
 
-bool HTMLMediaElement::SupportsFocus(UpdateBehavior update_behavior) const {
+FocusableState HTMLMediaElement::SupportsFocus(
+    UpdateBehavior update_behavior) const {
   // TODO(https://crbug.com/911882): Depending on result of discussion, remove.
-  if (ownerDocument()->IsMediaDocument())
-    return false;
+  if (ownerDocument()->IsMediaDocument()) {
+    return FocusableState::kNotFocusable;
+  }
 
   // If no controls specified, we should still be able to focus the element if
   // it has tabIndex.
-  return ShouldShowControls() || HTMLElement::SupportsFocus(update_behavior);
+  if (ShouldShowControls()) {
+    return FocusableState::kFocusable;
+  }
+  return HTMLElement::SupportsFocus(update_behavior);
 }
 
-bool HTMLMediaElement::IsFocusable(UpdateBehavior update_behavior) const {
-  if (!SupportsFocus(update_behavior)) {
-    return false;
+FocusableState HTMLMediaElement::IsFocusableState(
+    UpdateBehavior update_behavior) const {
+  if (!IsFullscreen()) {
+    return SupportsFocus(update_behavior);
   }
-  return !IsFullscreen() || HTMLElement::IsFocusable(update_behavior);
+  return HTMLElement::IsFocusableState(update_behavior);
 }
 
 int HTMLMediaElement::DefaultTabIndex() const {
@@ -1608,6 +1598,15 @@ void HTMLMediaElement::StartPlayerLoad() {
 
   web_media_player_->RequestRemotePlaybackDisabled(
       FastHasAttribute(html_names::kDisableremoteplaybackAttr));
+
+  if (RuntimeEnabledFeatures::
+          MediaPlaybackWhileNotVisiblePermissionPolicyEnabled()) {
+    web_media_player_->SetShouldPauseWhenFrameIsHidden(
+        !GetDocument().GetExecutionContext()->IsFeatureEnabled(
+            mojom::blink::PermissionsPolicyFeature::
+                kMediaPlaybackWhileNotVisible,
+            ReportOptions::kDoNotReport));
+  }
 
   bool is_cache_disabled = false;
   probe::IsCacheDisabled(GetDocument().GetExecutionContext(),
@@ -2859,8 +2858,9 @@ void HTMLMediaElement::PlayInternal() {
   DVLOG(3) << "playInternal(" << *this << ")";
 
   if (web_media_player_) {
-    web_media_player_->SetWasPlayedWithUserActivation(
-        LocalFrame::HasTransientUserActivation(GetDocument().GetFrame()));
+    web_media_player_->SetWasPlayedWithUserActivationAndHighMediaEngagement(
+        LocalFrame::HasTransientUserActivation(GetDocument().GetFrame()) &&
+        AutoplayPolicy::DocumentHasHighMediaEngagement(GetDocument()));
   }
 
   // Playback aborts any lazy loading.
@@ -3232,30 +3232,6 @@ void HTMLMediaElement::AudioTracksTimerFired(TimerBase*) {
   web_media_player_->EnabledAudioTracksChanged(enabled_track_ids);
 }
 
-WebMediaPlayer::TrackId HTMLMediaElement::AddAudioTrack(
-    const WebString& id,
-    WebMediaPlayerClient::AudioTrackKind kind,
-    const WebString& label,
-    const WebString& language,
-    bool enabled) {
-  AtomicString kind_string = AudioKindToString(kind);
-  DVLOG(3) << "addAudioTrack(" << *this << ", '" << String(id) << "', ' "
-           << kind_string << "', '" << String(label) << "', '"
-           << String(language) << "', " << BoolString(enabled) << ")";
-
-  auto* audio_track = MakeGarbageCollected<AudioTrack>(id, kind_string, label,
-                                                       language, enabled);
-  audioTracks().Add(audio_track);
-
-  return audio_track->id();
-}
-
-void HTMLMediaElement::RemoveAudioTrack(WebMediaPlayer::TrackId track_id) {
-  DVLOG(3) << "removeAudioTrack(" << *this << ")";
-
-  audioTracks().Remove(track_id);
-}
-
 VideoTrackList& HTMLMediaElement::videoTracks() {
   return *video_tracks_;
 }
@@ -3272,37 +3248,46 @@ void HTMLMediaElement::SelectedVideoTrackChanged(VideoTrack* track) {
   if (media_source_attachment_)
     media_source_attachment_->OnTrackChanged(media_source_tracer_, track);
 
-  WebMediaPlayer::TrackId id = track->id();
-  web_media_player_->SelectedVideoTrackChanged(track->selected() ? &id
-                                                                 : nullptr);
+  if (track->selected()) {
+    web_media_player_->SelectedVideoTrackChanged(track->id());
+  } else {
+    web_media_player_->SelectedVideoTrackChanged(std::nullopt);
+  }
 }
 
-WebMediaPlayer::TrackId HTMLMediaElement::AddVideoTrack(
-    const WebString& id,
-    WebMediaPlayerClient::VideoTrackKind kind,
-    const WebString& label,
-    const WebString& language,
-    bool selected) {
-  AtomicString kind_string = VideoKindToString(kind);
-  DVLOG(3) << "addVideoTrack(" << *this << ", '" << String(id) << "', '"
-           << kind_string << "', '" << String(label) << "', '"
-           << String(language) << "', " << BoolString(selected) << ")";
-
-  // If another track was selected (potentially by the user), leave it selected.
-  if (selected && videoTracks().selectedIndex() != -1)
-    selected = false;
-
-  auto* video_track = MakeGarbageCollected<VideoTrack>(id, kind_string, label,
-                                                       language, selected);
-  videoTracks().Add(video_track);
-
-  return video_track->id();
+void HTMLMediaElement::AddMediaTrack(const media::MediaTrack& track) {
+  switch (track.type()) {
+    case media::MediaTrack::Type::kVideo: {
+      bool enabled = track.enabled() && videoTracks().selectedIndex() == -1;
+      videoTracks().Add(MakeGarbageCollected<VideoTrack>(
+          String::FromUTF8(track.track_id().value()),
+          WebString::FromUTF8(track.kind().value()),
+          WebString::FromUTF8(track.label().value()),
+          WebString::FromUTF8(track.language().value()), enabled));
+      break;
+    }
+    case media::MediaTrack::Type::kAudio: {
+      audioTracks().Add(MakeGarbageCollected<AudioTrack>(
+          String::FromUTF8(track.track_id().value()),
+          WebString::FromUTF8(track.kind().value()),
+          WebString::FromUTF8(track.label().value()),
+          WebString::FromUTF8(track.language().value()), track.enabled()));
+      break;
+    }
+  }
 }
 
-void HTMLMediaElement::RemoveVideoTrack(WebMediaPlayer::TrackId track_id) {
-  DVLOG(3) << "removeVideoTrack(" << *this << ")";
-
-  videoTracks().Remove(track_id);
+void HTMLMediaElement::RemoveMediaTrack(const media::MediaTrack& track) {
+  switch (track.type()) {
+    case media::MediaTrack::Type::kVideo: {
+      videoTracks().Remove(String::FromUTF8(track.track_id().value()));
+      break;
+    }
+    case media::MediaTrack::Type::kAudio: {
+      audioTracks().Remove(String::FromUTF8(track.track_id().value()));
+      break;
+    }
+  }
 }
 
 void HTMLMediaElement::ForgetResourceSpecificTracks() {
@@ -4454,15 +4439,15 @@ void HTMLMediaElement::CreatePlaceholderTracksIfNecessary() {
   // Create a placeholder audio track if the player says it has audio but it
   // didn't explicitly announce the tracks.
   if (HasAudio() && !audioTracks().length()) {
-    AddAudioTrack("audio", WebMediaPlayerClient::kAudioTrackKindMain,
-                  "Audio Track", "", true);
+    AddMediaTrack(media::MediaTrack::CreateAudioTrack(
+        "audio", media::MediaTrack::AudioKind::kMain, "Audio Track", "", true));
   }
 
   // Create a placeholder video track if the player says it has video but it
   // didn't explicitly announce the tracks.
   if (HasVideo() && !videoTracks().length()) {
-    AddVideoTrack("video", WebMediaPlayerClient::kVideoTrackKindMain,
-                  "Video Track", "", true);
+    AddMediaTrack(media::MediaTrack::CreateVideoTrack(
+        "video", media::MediaTrack::VideoKind::kMain, "Video Track", "", true));
   }
 }
 
@@ -4584,6 +4569,11 @@ void HTMLMediaElement::RejectScheduledPlayPromises() {
       break;
     case PlayPromiseError::kPaused_PauseRequestedInternally:
       reason = " because a pause was requested by the browser";
+      break;
+    case PlayPromiseError::kPaused_FrameHidden:
+      reason =
+          " because the media playback is not allowed by the "
+          "media-playback-while-not-visible permission policy";
       break;
     case PlayPromiseError::kNotSupported:
       NOTREACHED_IN_MIGRATION();
@@ -4725,6 +4715,8 @@ void HTMLMediaElement::PausePlayback(PauseReason pause_reason) {
           PlayPromiseError::kPaused_SuspendedPlayerIdleTimeout);
     case PauseReason::kRemotePlayStateChange:
       return PauseInternal(PlayPromiseError::kPaused_RemotePlayStateChange);
+    case PauseReason::kFrameHidden:
+      return PauseInternal(PlayPromiseError::kPaused_FrameHidden);
   }
   NOTREACHED_IN_MIGRATION();
 }

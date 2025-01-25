@@ -8,6 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/system/focus_mode/sounds/youtube_music/youtube_music_client.h"
+#include "ash/system/focus_mode/sounds/youtube_music/youtube_music_types.h"
 #include "base/containers/flat_map.h"
 
 class AccountId;
@@ -48,7 +49,15 @@ class ASH_EXPORT YouTubeMusicController : public SessionObserver {
   bool PlaybackQueueNext(const std::string& playback_queue_id,
                          youtube_music::GetPlaybackContextCallback callback);
 
+  // Triggers request to report the playback. Returns true if the request is
+  // successfully triggered.
+  bool ReportPlayback(const std::string& playback_reporting_token,
+                      const PlaybackData& playback_data,
+                      ReportPlaybackCallback callback);
+
  private:
+  std::string GetDeviceId();
+
   base::flat_map<AccountId, std::unique_ptr<youtube_music::YouTubeMusicClient>>
       clients_;
 };

@@ -348,17 +348,17 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
         this.showPage_(visibility);
   }
 
+  private showAiInfoCard_(visibility?: boolean): boolean {
+    return loadTimeData.getBoolean('enableAiSettingsPageRefresh') &&
+        this.showExperimentalAdvancedPage_(visibility);
+  }
+
   private showExperimentalAdvancedPage_(visibility?: boolean): boolean {
     return loadTimeData.getBoolean('showAdvancedFeaturesMainControl') &&
         this.showPage_(visibility);
   }
 
   // <if expr="_google_chrome">
-  private showGetMostChrome_(visibility?: boolean): boolean {
-    return loadTimeData.getBoolean('showGetTheMostOutOfChromeSection') &&
-        this.showPage_(visibility);
-  }
-
   private onSendPerformanceFeedbackClick_(e: Event) {
     e.stopPropagation();
     this.performanceBrowserProxy_.openFeedbackDialog(

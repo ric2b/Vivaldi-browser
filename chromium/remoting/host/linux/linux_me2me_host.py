@@ -285,12 +285,10 @@ def is_supported_platform():
   return os.path.isfile(DEBIAN_XSESSION_PATH);
 
 
-def is_googler_owned(config):
-  try:
-    host_owner = config["host_owner"]
-    return host_owner.endswith("@google.com")
-  except KeyError:
-    return False
+def is_crash_reporting_enabled(config):
+  # Enable crash reporting for Google hosts or when usage_stats_consent is true.
+  return (config.get("host_owner", "").endswith("@google.com") or
+          config.get("usage_stats_consent", False))
 
 
 def get_pipewire_session_manager():
@@ -445,8 +443,8 @@ class Config:
     except (IOError, TypeError) as e:
       logging.error("Failed to save config: " + str(e))
 
-  def get(self, key):
-    return self.data.get(key)
+  def get(self, key, default = None):
+    return self.data.get(key, default)
 
   def __getitem__(self, key):
     return self.data[key]
@@ -2526,14 +2524,14 @@ def main():
   extra_start_host_args = []
   if HOST_EXTRA_PARAMS_ENV_VAR in os.environ:
       extra_start_host_args = \
-          re.split('\s+', os.environ[HOST_EXTRA_PARAMS_ENV_VAR].strip())
+          re.split(r"\s+", os.environ[HOST_EXTRA_PARAMS_ENV_VAR].strip())
   is_wayland = any([opt == '--enable-wayland' for opt in extra_start_host_args])
   if is_wayland:
     desktop = WaylandDesktop(sizes, host_config)
   else:
     desktop = XDesktop(sizes, host_config)
 
-  if is_googler_owned(host_config):
+  if is_crash_reporting_enabled(host_config):
     desktop.enable_crash_reporting()
 
   # Whether we are tearing down because the display server and/or session

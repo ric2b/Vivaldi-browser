@@ -10,10 +10,12 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
+#include "chrome/browser/ui/autofill/autofill_prediction_improvements/save_autofill_prediction_improvements_controller.h"
 #include "chrome/browser/ui/autofill/payments/save_card_ui.h"
 #include "chrome/browser/ui/autofill/payments/save_iban_ui.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/views/autofill/add_new_address_bubble_view.h"
+#include "chrome/browser/ui/views/autofill/autofill_prediction_improvements/save_autofill_prediction_improvements_bubble_view.h"
 #include "chrome/browser/ui/views/autofill/payments/local_card_migration_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/local_card_migration_icon_view.h"
 #include "chrome/browser/ui/views/autofill/payments/manage_saved_iban_bubble_view.h"
@@ -21,11 +23,11 @@
 #include "chrome/browser/ui/views/autofill/payments/mandatory_reauth_opt_in_bubble_view.h"
 #include "chrome/browser/ui/views/autofill/payments/offer_notification_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/offer_notification_icon_view.h"
-#include "chrome/browser/ui/views/autofill/payments/save_card_and_virtual_card_enroll_confirmation_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_manage_cards_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_offer_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_iban_bubble_view.h"
+#include "chrome/browser/ui/views/autofill/payments/save_payment_method_and_virtual_card_enroll_confirmation_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/virtual_card_enroll_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/virtual_card_enroll_icon_view.h"
 #include "chrome/browser/ui/views/autofill/payments/virtual_card_manual_fallback_bubble_views.h"
@@ -172,8 +174,9 @@ AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowIbanBubble(
                                    : LocationBarBubbleDelegateView::AUTOMATIC);
       return bubble;
     }
+    case IbanBubbleType::kUploadCompleted:
     case IbanBubbleType::kInactive:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -231,6 +234,28 @@ AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowSaveAddressProfileBubble(
   return ShowAddressProfileBubble<SaveAddressProfileView>(
       toolbar_button_provider_, web_contents, std::move(controller),
       is_user_gesture);
+}
+
+AutofillBubbleBase*
+AutofillBubbleHandlerImpl::ShowSaveAutofillPredictionImprovementsBubble(
+    content::WebContents* web_contents,
+    SaveAutofillPredictionImprovementsController* controller) {
+  views::View* anchor_view = toolbar_button_provider_->GetAnchorView(
+      PageActionIconType::kAutofillAddress);
+  PageActionIconView* icon_view =
+      toolbar_button_provider_->GetPageActionIconView(
+          PageActionIconType::kAutofillAddress);
+  auto bubble = std::make_unique<SaveAutofillPredictionImprovementsBubbleView>(
+      anchor_view, web_contents, controller);
+  SaveAutofillPredictionImprovementsBubbleView* bubble_ptr = bubble.get();
+  views::BubbleDialogDelegateView::CreateBubble(std::move(bubble));
+
+  if (!views::Button::AsButton(anchor_view)) {
+    bubble_ptr->SetHighlightedButton(icon_view);
+  }
+  bubble_ptr->ShowForReason(LocationBarBubbleDelegateView::AUTOMATIC);
+
+  return bubble_ptr;
 }
 
 AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowUpdateAddressProfileBubble(
@@ -363,7 +388,7 @@ AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowMandatoryReauthBubble(
       return bubble;
     }
     case MandatoryReauthBubbleType::kInactive:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -384,6 +409,22 @@ AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowSaveCardConfirmationBubble(
       anchor_view, web_contents, std::move(callback), icon_view, ui_params);
 }
 
+AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowSaveIbanConfirmationBubble(
+    content::WebContents* web_contents,
+    IbanBubbleController* controller) {
+  views::View* anchor_view =
+      toolbar_button_provider_->GetAnchorView(PageActionIconType::kSaveIban);
+  base::OnceCallback<void(PaymentsBubbleClosedReason)> callback =
+      controller->GetOnBubbleClosedCallback();
+  PageActionIconView* icon_view =
+      toolbar_button_provider_->GetPageActionIconView(
+          PageActionIconType::kSaveIban);
+
+  return ShowSaveCardAndVirtualCardEnrollConfirmationBubble(
+      anchor_view, web_contents, std::move(callback), icon_view,
+      controller->GetConfirmationUiParams());
+}
+
 AutofillBubbleBase*
 AutofillBubbleHandlerImpl::ShowSaveCardAndVirtualCardEnrollConfirmationBubble(
     views::View* anchor_view,
@@ -392,8 +433,8 @@ AutofillBubbleHandlerImpl::ShowSaveCardAndVirtualCardEnrollConfirmationBubble(
         controller_hide_callback,
     PageActionIconView* icon_view,
     SavePaymentMethodAndVirtualCardEnrollConfirmationUiParams ui_params) {
-  SaveCardAndVirtualCardEnrollConfirmationBubbleViews* bubble =
-      new SaveCardAndVirtualCardEnrollConfirmationBubbleViews(
+  SavePaymentMethodAndVirtualCardEnrollConfirmationBubbleViews* bubble =
+      new SavePaymentMethodAndVirtualCardEnrollConfirmationBubbleViews(
           anchor_view, web_contents, std::move(controller_hide_callback),
           std::move(ui_params));
 

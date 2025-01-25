@@ -59,12 +59,6 @@ class AutoEnrollmentTypeCheckerTest : public testing::Test {
   ~AutoEnrollmentTypeCheckerTest() override = default;
 
  protected:
-  void SetUpNonchromeDevice() {
-    fake_statistics_provider_.SetMachineStatistic(
-        ash::system::kFirmwareTypeKey,
-        ash::system::kFirmwareTypeValueNonchrome);
-  }
-
   void SetUpFlexDeviceWithFREOnFlexEnabled() {
     enrollment_test_helper_.SetUpFlexDevice();
     enrollment_test_helper_.EnableFREOnFlex();
@@ -139,8 +133,7 @@ class AutoEnrollmentTypeCheckerTest : public testing::Test {
     fake_statistics_provider_.SetMachineStatistic(ash::system::kRlzBrandCodeKey,
                                                   kBrandCodeValue);
     fake_statistics_provider_.SetMachineStatistic(
-        ash::system::kEnterpriseManagementEmbargoEndDateKey,
-        kMalformedEmbargoDateValue);
+        ash::system::kRlzEmbargoEndDateKey, kMalformedEmbargoDateValue);
   }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -737,7 +730,7 @@ TEST_F(AutoEnrollmentTypeCheckerUSDStatusTest, KillSwitch) {
 }
 
 TEST_F(AutoEnrollmentTypeCheckerUSDStatusTest, NonChrome) {
-  SetUpNonchromeDevice();
+  enrollment_test_helper_.SetUpNonchromeDevice();
 
   AutoEnrollmentTypeChecker::IsUnifiedStateDeterminationEnabled();
 
@@ -770,7 +763,7 @@ class AutoEnrollmentTypeCheckerUnifiedStateDeterminationTestP
   void SetUp() override {
     AutoEnrollmentTypeCheckerTest::SetUp();
     if (device_os_ == DeviceOs::Nonchrome) {
-      SetUpNonchromeDevice();
+      enrollment_test_helper_.SetUpNonchromeDevice();
     } else if (device_os_ == DeviceOs::FlexWithoutFRE) {
       enrollment_test_helper_.SetUpFlexDevice();
     } else if (device_os_ == DeviceOs::FlexWithFRE) {
@@ -1105,8 +1098,7 @@ TEST_P(
         ToUTCString(base::Time::Now() +
                     2 * ash::system::kEmbargoEndDateGarbageDateThreshold);
     fake_statistics_provider_.SetMachineStatistic(
-        ash::system::kEnterpriseManagementEmbargoEndDateKey,
-        past_embargo_threshold);
+        ash::system::kRlzEmbargoEndDateKey, past_embargo_threshold);
 
     EXPECT_EQ(AutoEnrollmentTypeChecker::DetermineAutoEnrollmentCheckType(
                   /*is_system_clock_synchronized=*/false,
@@ -1125,8 +1117,7 @@ TEST_P(
         ToUTCString(base::Time::Now() +
                     ash::system::kEmbargoEndDateGarbageDateThreshold / 2);
     fake_statistics_provider_.SetMachineStatistic(
-        ash::system::kEnterpriseManagementEmbargoEndDateKey,
-        before_embargo_threshold);
+        ash::system::kRlzEmbargoEndDateKey, before_embargo_threshold);
 
     EXPECT_EQ(AutoEnrollmentTypeChecker::DetermineAutoEnrollmentCheckType(
                   /*is_system_clock_synchronized=*/false,
@@ -1153,8 +1144,7 @@ TEST_P(
 
   {
     fake_statistics_provider_.SetMachineStatistic(
-        ash::system::kEnterpriseManagementEmbargoEndDateKey,
-        kMalformedEmbargoDateValue);
+        ash::system::kRlzEmbargoEndDateKey, kMalformedEmbargoDateValue);
     EXPECT_EQ(
         AutoEnrollmentTypeChecker::DetermineAutoEnrollmentCheckType(
             /*is_system_clock_synchronized=*/false, &fake_statistics_provider_,
@@ -1173,8 +1163,7 @@ TEST_P(
     const auto yeasterday_embargo =
         ToUTCString(base::Time::Now() - base::Days(1));
     fake_statistics_provider_.SetMachineStatistic(
-        ash::system::kEnterpriseManagementEmbargoEndDateKey,
-        yeasterday_embargo);
+        ash::system::kRlzEmbargoEndDateKey, yeasterday_embargo);
     EXPECT_EQ(
         AutoEnrollmentTypeChecker::DetermineAutoEnrollmentCheckType(
             /*is_system_clock_synchronized=*/false, &fake_statistics_provider_,

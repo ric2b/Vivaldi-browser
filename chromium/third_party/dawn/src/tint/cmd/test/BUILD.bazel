@@ -93,7 +93,12 @@ cc_binary(
     ":tint_build_glsl_writer": [
       "//src/tint/lang/glsl/writer/ast_printer:test",
       "//src/tint/lang/glsl/writer/common:test",
-      "//src/tint/lang/glsl/writer/printer:test",
+      "//src/tint/lang/glsl/writer/raise:test",
+    ],
+    "//conditions:default": [],
+  }) + select({
+    ":tint_build_glsl_writer_and_tint_build_glsl_validator": [
+      "//src/tint/lang/glsl/writer:test",
     ],
     "//conditions:default": [],
   }) + select({
@@ -154,15 +159,9 @@ cc_binary(
     "//conditions:default": [],
   }) + select({
     ":tint_build_spv_writer": [
-      "//src/tint/lang/spirv/writer/ast_printer:test",
       "//src/tint/lang/spirv/writer/common:test",
       "//src/tint/lang/spirv/writer/raise:test",
       "//src/tint/lang/spirv/writer:test",
-    ],
-    "//conditions:default": [],
-  }) + select({
-    ":tint_build_spv_writer_and_tint_build_wgsl_reader_and_tint_build_wgsl_writer": [
-      "//src/tint/lang/spirv/writer/ast_raise:test",
     ],
     "//conditions:default": [],
   }) + select({
@@ -192,6 +191,11 @@ cc_binary(
   }),
   copts = COPTS,
   visibility = ["//visibility:public"],
+)
+
+alias(
+  name = "tint_build_glsl_validator",
+  actual = "//src/tint:tint_build_glsl_validator_true",
 )
 
 alias(
@@ -248,6 +252,13 @@ selects.config_setting_group(
 )
 
 selects.config_setting_group(
+    name = "tint_build_glsl_writer_and_tint_build_glsl_validator",
+    match_all = [
+        ":tint_build_glsl_writer",
+        ":tint_build_glsl_validator",
+    ],
+)
+selects.config_setting_group(
     name = "tint_build_glsl_writer_and_tint_build_wgsl_reader_and_tint_build_wgsl_writer",
     match_all = [
         ":tint_build_glsl_writer",
@@ -283,14 +294,6 @@ selects.config_setting_group(
     name = "tint_build_spv_reader_and_tint_build_wgsl_writer",
     match_all = [
         ":tint_build_spv_reader",
-        ":tint_build_wgsl_writer",
-    ],
-)
-selects.config_setting_group(
-    name = "tint_build_spv_writer_and_tint_build_wgsl_reader_and_tint_build_wgsl_writer",
-    match_all = [
-        ":tint_build_spv_writer",
-        ":tint_build_wgsl_reader",
         ":tint_build_wgsl_writer",
     ],
 )

@@ -85,6 +85,7 @@ remove_crates = [
     # C/C++ dependencies must be explicitly writting in GN rules somehow.
     'cc',
     'link-cplusplus',
+    'shlex',
     # minimal-lexical is unsound see https://crrev.com/c/4977110 for more info.
     # It is a dependency of nom, but not actually used.
     'minimal-lexical',
@@ -125,6 +126,14 @@ remove_build_rs = true
 [crate.cxxbridge-cmd]
 shipped = false
 bin_targets = ["cxxbridge"]
+
+[crate.flate2]
+ban_features = [
+    # `any_zlib` feature is banned because Chromium does not use the `zlib`
+    # backend (and because this backend's extensive `unsafe` usage hasn't been
+    # audited).
+    'any_zlib',
+]
 
 [crate.hex]
 group = 'test'
@@ -184,6 +193,9 @@ shipped = false
 
 [crate.serde_json]
 group = 'test'
+
+[crate.skrifa]
+extra_src_roots = ['../generated']
 
 [crate.small_ctor]
 group = 'test'

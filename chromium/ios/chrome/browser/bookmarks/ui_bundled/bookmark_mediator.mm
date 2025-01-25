@@ -22,20 +22,20 @@
 #import "ios/chrome/browser/bookmarks/model/bookmark_storage_type.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/ntp/shared/metrics/home_metrics.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
-#import "ios/chrome/browser/ui/ntp/metrics/home_metrics.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "net/base/apple/url_conversions.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -234,6 +234,55 @@ using bookmarks::BookmarkNode;
   NSString* messageString =
     [NSString stringWithFormat:@"%@ %@", bookmarkedInString, folderTitle];
   return messageString;
+}
+
+- (NSString*)messageForAddingSpeedDialInFolder:(NSString*)folderTitle {
+  NSString* addedToString = l10n_util::GetNSString(IDS_IOS_ADDED_TO);
+  NSString* messageString =
+    [NSString stringWithFormat:@"%@ %@", addedToString, folderTitle];
+  return messageString;
+}
+
+- (MDCSnackbarMessage*)addSpeedDialWithTitle:(NSString*)title
+                                         URL:(const GURL&)URL
+                                  editAction:(void (^)())editAction {
+  RecordModuleFreshnessSignal(ContentSuggestionsModuleType::kShortcuts);
+  base::RecordAction(base::UserMetricsAction("BookmarkAdded"));
+
+  const BookmarkNode* startPageGroup =
+      vivaldi_bookmark_kit::GetStartPageNode(_bookmarkModel.get());
+
+  if (!startPageGroup) {
+    // If there's no group found create a group with default title under
+    // bookmark bar node.
+    const BookmarkNode* bookmarkBarNode = _bookmarkModel->bookmark_bar_node();
+    std::u16string folderTitle =
+        base::SysNSStringToUTF16(
+            l10n_util::GetNSString(IDS_IOS_BOOKMARKS_DEFAULT_HOME_GROUP_TITLE));
+    startPageGroup = _bookmarkModel->AddFolder(
+        bookmarkBarNode, bookmarkBarNode->children().size(), folderTitle);
+    vivaldi_bookmark_kit::SetNodeSpeeddial(
+        _bookmarkModel.get(), startPageGroup, YES);
+  }
+
+  _bookmarkModel->AddNewURL(startPageGroup, startPageGroup->children().size(),
+                            base::SysNSStringToUTF16(title), URL);
+
+  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
+  action.handler = editAction;
+  action.title =
+      l10n_util::GetNSString(IDS_IOS_BOOKMARK_SNACKBAR_EDIT_BOOKMARK);
+  action.accessibilityIdentifier = @"Edit";
+
+  NSString* folderTitle =
+      bookmark_utils_ios::TitleForBookmarkNode(startPageGroup);
+  NSString* text = [self messageForAddingSpeedDialInFolder:folderTitle];
+
+  TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
+  MDCSnackbarMessage* message = CreateSnackbarMessage(text);
+  message.action = action;
+  message.category = bookmark_utils_ios::kBookmarksSnackbarCategory;
+  return message;
 }
 
 @end

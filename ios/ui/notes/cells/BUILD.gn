@@ -21,16 +21,12 @@ source_set("cells") {
     "//ios/chrome/browser/ui/authentication",
     "//ios/chrome/browser/ui/authentication/cells",
     "//ios/chrome/browser/shared/ui/symbols:icons",
-    "//ios/chrome/browser/ui/ntp:logo",
     "//ios/chrome/browser/shared/ui/table_view:styler",
     "//ios/chrome/browser/shared/ui/table_view/cells",
     "//ios/chrome/common/ui/util",
     "//ios/third_party/material_components_ios",
     "//ui/base",
-    "//vivaldi/ios/ui/notes/resources:panel_notes",
-    "//vivaldi/ios/ui/notes/resources:single_note_icon",
-    "//vivaldi/ios/ui/notes/resources:context_menu_icon",
-    "//vivaldi/ios/ui/notes/resources:sort_order_icon"
+    "//vivaldi/ios/ui/notes/resources:notes_assets",
   ]
 }
 

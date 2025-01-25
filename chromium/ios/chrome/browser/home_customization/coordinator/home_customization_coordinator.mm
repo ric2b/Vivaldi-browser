@@ -6,10 +6,25 @@
 
 #import "ios/chrome/browser/home_customization/coordinator/home_customization_delegate.h"
 #import "ios/chrome/browser/home_customization/coordinator/home_customization_mediator.h"
+#import "ios/chrome/browser/home_customization/ui/home_customization_discover_view_controller.h"
+#import "ios/chrome/browser/home_customization/ui/home_customization_magic_stack_view_controller.h"
 #import "ios/chrome/browser/home_customization/ui/home_customization_main_view_controller.h"
 #import "ios/chrome/browser/home_customization/utils/home_customization_constants.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
+
+namespace {
+
+// The height of the menu's initial detent, which roughly represents a header
+// and 3 cells.
+const CGFloat kInitialDetentHeight = 350;
+
+// The corner radius of the customization menu sheet.
+CGFloat const kSheetCornerRadius = 30;
+
+}  // namespace
 
 @interface HomeCustomizationCoordinator () <
     UISheetPresentationControllerDelegate>
@@ -18,11 +33,23 @@
 @property(nonatomic, strong)
     HomeCustomizationMainViewController* mainViewController;
 
+// The Magic Stack page of the customization menu.
+@property(nonatomic, strong)
+    HomeCustomizationMagicStackViewController* magicStackViewController;
+
+// The Discover page of the customization menu.
+@property(nonatomic, strong)
+    HomeCustomizationDiscoverViewController* discoverViewController;
+
 // The mediator for the Home customization menu.
 @property(nonatomic, strong) HomeCustomizationMediator* mediator;
 
-// The navigation controller to allow for navigations between the submenus.
-@property(nonatomic, strong) UINavigationController* navigationController;
+// This menu consists of several sheets that can be overlayed on top of each
+// other, each representing a submenu.
+// This property points to the view controller that is at the base of the stack.
+@property(nonatomic, weak) UIViewController* firstPageViewController;
+// This property points to the view controller that is at the top of the stack.
+@property(nonatomic, weak) UIViewController* currentPageViewController;
 
 @end
 
@@ -31,13 +58,13 @@
 #pragma mark - ChromeCoordinator
 
 - (void)start {
-  _mainViewController = [[HomeCustomizationMainViewController alloc] init];
   _mediator = [[HomeCustomizationMediator alloc]
       initWithPrefService:ChromeBrowserState::FromBrowserState(
                               self.browser->GetBrowserState())
                               ->GetPrefs()];
-  _mainViewController.mutator = _mediator;
-  _mediator.mainPageConsumer = _mainViewController;
+  _mediator.navigationDelegate = self;
+
+  _currentPageViewController = self.baseViewController;
 
   [super start];
 }
@@ -46,6 +73,8 @@
   [self.baseViewController dismissViewControllerAnimated:NO completion:nil];
 
   _mainViewController = nil;
+  _magicStackViewController = nil;
+  _discoverViewController = nil;
   _mediator = nil;
 
   [super stop];
@@ -53,26 +82,125 @@
 
 #pragma mark - Public
 
-- (void)presentCustomizationMenuAtPage:(CustomizationMenuPage)page {
-  [self.mediator configureMainPageData];
+- (void)updateMenuData {
+  if (self.mainViewController) {
+    [self.mediator configureMainPageData];
+  }
+
+  if (self.magicStackViewController) {
+    [self.mediator configureMagicStackPageData];
+  }
+
+  if (self.discoverViewController) {
+    [self.mediator configureDiscoverPageData];
+  }
+}
+
+#pragma mark - HomeCustomizationNavigationDelegate
+
+- (void)presentCustomizationMenuPage:(CustomizationMenuPage)page {
+  UIViewController* menuPage = [self createMenuPage:page];
+
+  // If this is the first page being presented, set a reference to it in
+  // `firstPageViewController`.
+  if (self.baseViewController == self.currentPageViewController) {
+    self.firstPageViewController = menuPage;
+  }
+
+  [self.currentPageViewController
+      presentViewController:menuPage
+                   animated:YES
+                 completion:^{
+                   UIAccessibilityPostNotification(
+                       UIAccessibilityScreenChangedNotification, menuPage);
+                 }];
+
+  self.currentPageViewController.view.accessibilityElementsHidden = YES;
+  self.currentPageViewController = menuPage;
+}
+
+- (void)dismissMenuPage {
+  // If the page being dismissed is the first page of the stack, then the entire
+  // menu should be dismissed. Otherwise, dismiss the topmost page and update
+  // the currently visible page.
+  if (self.currentPageViewController == self.firstPageViewController) {
+    [self.delegate dismissCustomizationMenu];
+  } else {
+    [self.currentPageViewController dismissViewControllerAnimated:YES
+                                                       completion:nil];
+    self.currentPageViewController =
+        self.currentPageViewController.presentingViewController;
+    self.currentPageViewController.view.accessibilityElementsHidden = NO;
+  }
+}
+
+- (void)navigateToURL:(GURL)URL {
+  UrlLoadingBrowserAgent::FromBrowser(self.browser)
+      ->Load(UrlLoadParams::InCurrentTab(URL));
+  [self.delegate dismissCustomizationMenu];
+}
+
+#pragma mark - UISheetPresentationControllerDelegate
+
+- (void)presentationControllerWillDismiss:
+    (UIPresentationController*)presentationController {
+  [self dismissMenuPage];
+}
+
+#pragma mark - Private
+
+// Creates a view controller for a page in the menu.
+- (UIViewController*)createMenuPage:(CustomizationMenuPage)page {
+  UIViewController* menuPage;
+
+  // Create view controller for the `page` and configure it with the mediator.
+  switch (page) {
+    case CustomizationMenuPage::kMain: {
+      self.mainViewController =
+          [[HomeCustomizationMainViewController alloc] init];
+      self.mainViewController.mutator = _mediator;
+      self.mediator.mainPageConsumer = self.mainViewController;
+      [self.mediator configureMainPageData];
+      menuPage = self.mainViewController;
+      break;
+    }
+    case CustomizationMenuPage::kMagicStack: {
+      self.magicStackViewController =
+          [[HomeCustomizationMagicStackViewController alloc] init];
+      self.magicStackViewController.mutator = _mediator;
+      self.mediator.magicStackPageConsumer = self.magicStackViewController;
+      [self.mediator configureMagicStackPageData];
+      menuPage = self.magicStackViewController;
+      break;
+    }
+    case CustomizationMenuPage::kDiscover: {
+      self.discoverViewController =
+          [[HomeCustomizationDiscoverViewController alloc] init];
+      self.discoverViewController.mutator = _mediator;
+      self.mediator.discoverPageConsumer = self.discoverViewController;
+      [self.mediator configureDiscoverPageData];
+      menuPage = self.discoverViewController;
+      break;
+    }
+    case CustomizationMenuPage::kUnknown:
+      NOTREACHED_NORETURN();
+  }
 
   // Configure the navigation controller.
-  self.navigationController = [[UINavigationController alloc]
-      initWithRootViewController:self.mainViewController];
-  self.navigationController.modalPresentationStyle =
-      UIModalPresentationPageSheet;
-  self.navigationController.presentationController.delegate = self;
+  UINavigationController* navigationController =
+      [[UINavigationController alloc] initWithRootViewController:menuPage];
+  navigationController.modalPresentationStyle = UIModalPresentationFormSheet;
 
   // Configure the presentation controller with a custom initial detent.
   UISheetPresentationController* presentationController =
-      self.navigationController.sheetPresentationController;
+      navigationController.sheetPresentationController;
   presentationController.prefersEdgeAttachedInCompactHeight = YES;
+  presentationController.preferredCornerRadius = kSheetCornerRadius;
+  presentationController.delegate = self;
 
-  // TODO(crbug.com/350990359): Dynamically calculate height.
-  CGFloat bottomSheetHeight = 200;
   auto detentResolver = ^CGFloat(
       id<UISheetPresentationControllerDetentResolutionContext> context) {
-    return bottomSheetHeight;
+    return kInitialDetentHeight;
   };
   UISheetPresentationControllerDetent* initialDetent =
       [UISheetPresentationControllerDetent
@@ -80,44 +208,13 @@
                             resolver:detentResolver];
   presentationController.detents = @[
     initialDetent,
-    UISheetPresentationControllerDetent.mediumDetent,
   ];
   presentationController.selectedDetentIdentifier =
       kBottomSheetDetentIdentifier;
+  presentationController.largestUndimmedDetentIdentifier =
+      kBottomSheetDetentIdentifier;
 
-  // Present the navigation controller.
-  [self.baseViewController presentViewController:self.navigationController
-                                        animated:YES
-                                      completion:nil];
-
-  // Handle navigation if the initial page isn't the main one.
-  if (page != CustomizationMenuPage::kMain) {
-    [self navigateToPage:page];
-  }
-}
-
-#pragma mark - Private
-
-// Navigates to a given page within the customization menu.
-- (void)navigateToPage:(CustomizationMenuPage)page {
-  switch (page) {
-    case CustomizationMenuPage::kMain:
-      [self.navigationController pushViewController:self.mainViewController
-                                           animated:YES];
-      break;
-    case CustomizationMenuPage::kMagicStack:
-      // TODO(crbug.com/350990359): Push Magic Stack view controller.
-      [self.navigationController pushViewController:self.mainViewController
-                                           animated:YES];
-      break;
-  }
-}
-
-#pragma mark - UIAdaptivePresentationControllerDelegate
-
-- (void)presentationControllerDidDismiss:
-    (UIPresentationController*)presentationController {
-  [self.delegate handleCustomizationMenuDismissed:self];
+  return navigationController;
 }
 
 @end

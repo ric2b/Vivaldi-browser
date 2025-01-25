@@ -5,14 +5,20 @@
 #import "ios/chrome/browser/context_menu/ui_bundled/context_menu_configuration_provider.h"
 
 #import "base/ios/ios_util.h"
+#import "base/memory/weak_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
 #import "components/search_engines/template_url_service.h"
 #import "ios/chrome/browser/context_menu/ui_bundled/context_menu_configuration_provider+Testing.h"
+#import "ios/chrome/browser/context_menu/ui_bundled/context_menu_configuration_provider_delegate.h"
 #import "ios/chrome/browser/context_menu/ui_bundled/context_menu_utils.h"
+#import "ios/chrome/browser/context_menu/ui_bundled/image_preview_view_controller.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_commands.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/photos/model/photos_availability.h"
 #import "ios/chrome/browser/photos/model/photos_metrics.h"
@@ -22,10 +28,12 @@
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group_utils.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
+#import "ios/chrome/browser/shared/public/commands/activity_service_share_url_command.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
@@ -39,8 +47,6 @@
 #import "ios/chrome/browser/shared/ui/util/image/image_saver.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_commands.h"
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/lens/lens_availability.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
@@ -58,6 +64,7 @@
 #import "ios/web/common/url_scheme_util.h"
 #import "ios/web/public/ui/context_menu_params.h"
 #import "ios/web/public/web_state.h"
+#import "net/base/apple/url_conversions.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
@@ -79,6 +86,8 @@ NSString* const kContextMenuEllipsis = @"…";
 // Maximum length for a context menu title formed from an address, date or phone
 // number experience.
 const NSUInteger kContextMenuMaxTitleLength = 30;
+// Full URL alert accessibility identifier.
+NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
 
 }  // namespace
 
@@ -93,22 +102,41 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
 
 @property(nonatomic, weak) UIViewController* baseViewController;
 
-@property(nonatomic, assign, readonly) web::WebState* currentWebState;
+@property(nonatomic, assign, readonly) web::WebState* webState;
 
 @end
 
-@implementation ContextMenuConfigurationProvider
+@implementation ContextMenuConfigurationProvider {
+  /// Override the `webState` when the context menu is not triggered by the
+  /// `currentWebState`.
+  base::WeakPtr<web::WebState> _baseWebState;
+
+  // Whether the context menu is presented in the lens overlay.
+  BOOL _isLensOverlay;
+}
 
 - (instancetype)initWithBrowser:(Browser*)browser
-             baseViewController:(UIViewController*)baseViewController {
+             baseViewController:(UIViewController*)baseViewController
+                   baseWebState:(web::WebState*)webState
+                  isLensOverlay:(BOOL)isLensOverlay {
   self = [super init];
   if (self) {
     _browser = browser;
     _baseViewController = baseViewController;
     _imageSaver = [[ImageSaver alloc] initWithBrowser:self.browser];
     _imageCopier = [[ImageCopier alloc] initWithBrowser:self.browser];
+    _baseWebState = webState ? webState->GetWeakPtr() : nullptr;
+    _isLensOverlay = isLensOverlay;
   }
   return self;
+}
+
+- (instancetype)initWithBrowser:(Browser*)browser
+             baseViewController:(UIViewController*)baseViewController {
+  return [self initWithBrowser:browser
+            baseViewController:baseViewController
+                  baseWebState:nullptr
+                 isLensOverlay:NO];
 }
 
 - (void)stop {
@@ -118,6 +146,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   _imageSaver = nil;
   [_imageCopier stop];
   _imageCopier = nil;
+  _baseWebState = nullptr;
 }
 
 - (void)dealloc {
@@ -127,6 +156,10 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
 - (UIContextMenuConfiguration*)
     contextMenuConfigurationForWebState:(web::WebState*)webState
                                  params:(web::ContextMenuParams)params {
+  UIContextMenuContentPreviewProvider previewProvider =
+      [self contextMenuContentPreviewProviderForWebState:webState
+                                                  params:params];
+
   UIContextMenuActionProvider actionProvider =
       [self contextMenuActionProviderForWebState:webState params:params];
   if (!actionProvider) {
@@ -134,18 +167,42 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   }
   return
       [UIContextMenuConfiguration configurationWithIdentifier:nil
-                                              previewProvider:nil
+                                              previewProvider:previewProvider
                                                actionProvider:actionProvider];
 }
 
 #pragma mark - Properties
 
-- (web::WebState*)currentWebState {
+- (web::WebState*)webState {
+  if (base::FeatureList::IsEnabled(kEnableLensOverlay) && _baseWebState) {
+    return _baseWebState.get();
+  }
   return self.browser ? self.browser->GetWebStateList()->GetActiveWebState()
                       : nullptr;
 }
 
 #pragma mark - Private
+
+// Returns a preview for the images in contextual menu for a given image web
+// state.
+- (UIContextMenuContentPreviewProvider)
+    contextMenuContentPreviewProviderForWebState:(web::WebState*)webState
+                                          params:
+                                              (web::ContextMenuParams)params {
+  if (!base::FeatureList::IsEnabled(kShareInWebContextMenuIOS) ||
+      !params.src_url.is_valid() || params.link_url.is_valid()) {
+    return nil;
+  }
+
+  ImagePreviewViewController* previewViewController =
+      [[ImagePreviewViewController alloc]
+          initWithSrcURL:net::NSURLWithGURL(params.src_url)
+                webState:webState];
+  [previewViewController loadPreview];
+  return ^() {
+    return previewViewController;
+  };
+}
 
 // Returns an action based contextual menu for a given web state (link, image,
 // copy and intent detection actions).
@@ -157,7 +214,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
 
   // Prevent context menu from displaying for a tab which is no longer the
   // current one.
-  if (webState != self.currentWebState) {
+  if (webState != self.webState) {
     return nil;
   }
 
@@ -179,13 +236,44 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
       : isImage         ? kMenuScenarioHistogramContextMenuImage
                         : kMenuScenarioHistogramContextMenuLink;
 
+  NSString* menuTitle = nil;
+  UIAction* showFullURL = nil;
+
+  if (isLink || isImage) {
+    menuTitle = GetContextMenuTitle(params);
+
+    if (!IsImageTitle(params) &&
+        menuTitle.length > kContextMenuMaxURLTitleLength + 1) {
+      if (base::FeatureList::IsEnabled(kShareInWebContextMenuIOS)) {
+        // "Show URL action" at the top of the context menu.
+        __weak __typeof(self) weakSelf = self;
+        BrowserActionFactory* actionFactory =
+            [[BrowserActionFactory alloc] initWithBrowser:self.browser
+                                                 scenario:menuScenario];
+        showFullURL = [actionFactory
+            actionToShowFullURL:menuTitle
+                          block:^{
+                            [weakSelf showFullURLPopUp:params
+                                             URLString:menuTitle];
+                          }];
+        menuTitle = nil;
+      } else {
+        // Truncate context menu titles that originate from URLs, leaving text
+        // titles untruncated.
+        menuTitle = [[menuTitle substringToIndex:kContextMenuMaxURLTitleLength]
+            stringByAppendingString:kContextMenuEllipsis];
+      }
+    }
+  }
+
   if (isLink) {
     [menuElements
         addObjectsFromArray:[self contextMenuElementsForLink:linkURL
                                                     scenario:menuScenario
                                                     referrer:referrer
                                               isOffTheRecord:isOffTheRecord
-                                                      params:params]];
+                                                      params:params
+                                           showFullURLAction:showFullURL]];
   }
   if (isImage) {
     [menuElements
@@ -207,7 +295,6 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
                              MiniMapCommands),
           HandlerForProtocol(self.browser->GetCommandDispatcher(),
                              UnitConversionCommands));
-  NSString* menuTitle = nil;
   if (result && result.elements) {
     [menuElements addObjectsFromArray:result.elements];
     menuTitle = result.title;
@@ -219,41 +306,6 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
 
   if (menuElements.count == 0) {
     return nil;
-  }
-
-  if (isLink || isImage) {
-    menuTitle = GetContextMenuTitle(params);
-
-    // Truncate context meny titles that originate from URLs, leaving text
-    // titles untruncated.
-    if (!IsImageTitle(params) &&
-        menuTitle.length > kContextMenuMaxURLTitleLength + 1) {
-      menuTitle = [[menuTitle substringToIndex:kContextMenuMaxURLTitleLength]
-          stringByAppendingString:kContextMenuEllipsis];
-    }
-
-    // Vivaldi: Add share link item for context menu.
-    if (IsVivaldiRunning()) {
-      id<ActivityServiceCommands> handler =
-      HandlerForProtocol(_browser->GetCommandDispatcher(),
-                         ActivityServiceCommands);
-      BrowserActionFactory* actionFactory =
-          [[BrowserActionFactory alloc] initWithBrowser:self.browser
-                                               scenario:menuScenario];
-      UIAction* shareAction =
-          [actionFactory actionToShareWithBlock:^{
-            ShareHighlightCommand* command =
-                [[ShareHighlightCommand alloc] initWithURL:
-                                                isImage? imageURL : linkURL
-                                                     title:@""
-                                              selectedText:@""
-                                                sourceView:params.view
-                                                sourceRect:params.view.frame];
-            [handler shareHighlight:command];
-          }];
-      [menuElements addObject:shareAction];
-    } // End Vivaldi
-
   }
 
   UIMenu* menu = [UIMenu menuWithTitle:menuTitle children:menuElements];
@@ -273,7 +325,8 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
                       scenario:(MenuScenarioHistogram)scenario
                       referrer:(web::Referrer)referrer
                 isOffTheRecord:(BOOL)isOffTheRecord
-                        params:(web::ContextMenuParams)params {
+                        params:(web::ContextMenuParams)params
+             showFullURLAction:(UIAction*)showFullURLAction {
   BrowserActionFactory* actionFactory =
       [[BrowserActionFactory alloc] initWithBrowser:self.browser
                                            scenario:scenario];
@@ -286,6 +339,11 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   // Array for the actions/menus used to open a link.
   NSMutableArray<UIMenuElement*>* linkOpeningElements =
       [[NSMutableArray alloc] init];
+
+  if (showFullURLAction &&
+      base::FeatureList::IsEnabled(kShareInWebContextMenuIOS)) {
+    [linkOpeningElements addObject:showFullURLAction];
+  }
 
   _URLToLoad = linkURL;
   base::RecordAction(
@@ -318,6 +376,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
       } else {
       UrlLoadingBrowserAgent::FromBrowser(strongSelf.browser)->Load(loadParams);
       } // End Vivaldi
+      [strongSelf didOpenTabInBackground:linkURL];
     }];
     [linkOpeningElements addObject:openNewTab];
 
@@ -405,6 +464,19 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
       [actionFactory actionToCopyURL:[[CrURL alloc] initWithGURL:linkURL]];
   [linkMenuElements addObject:copyLink];
 
+  // Share Link.
+  // TODO(crbug.com/351817704): Disable the share menu with lens overlay as the
+  // share sheet is not presented in `baseViewController`.
+  if (!_isLensOverlay &&
+      base::FeatureList::IsEnabled(kShareInWebContextMenuIOS)) {
+    UIAction* shareLink = [actionFactory actionToShareWithBlock:^{
+      [weakSelf shareURLFromContextMenu:linkURL
+                               URLTitle:params.text ? params.text : @""
+                                 params:params];
+    }];
+    [linkMenuElements addObject:shareLink];
+  }
+
   return linkMenuElements;
 }
 
@@ -444,7 +516,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
     }
     [strongSelf.imageCopier copyImageAtURL:imageURL
                                   referrer:referrer
-                                  webState:strongSelf.currentWebState
+                                  webState:strongSelf.webState
                         baseViewController:strongSelf.baseViewController];
   }];
   [imageMenuElements addObject:copyImage];
@@ -466,6 +538,21 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
                                  referrer:referrer];
   [imageMenuElements addObjectsFromArray:imageSearchingElements];
 
+  // Share Image.
+  // Shares the URL of the image and not the image itself.
+  // This avoids doing in process image processing by working as the share sheet
+  // fetches the image to share it.
+  // TODO(crbug.com/351817704): Disable the share menu with lens overlay as the
+  // share sheet is not presented in `baseViewController`.
+  if (!_isLensOverlay &&
+      base::FeatureList::IsEnabled(kShareInWebContextMenuIOS) && !isLink) {
+    UIAction* shareImage = [actionFactory actionToShareWithBlock:^{
+      [weakSelf shareURLFromContextMenu:imageURL
+                               URLTitle:GetContextMenuTitle(params)
+                                 params:params];
+    }];
+    [imageMenuElements addObject:shareImage];
+  }
   return imageMenuElements;
 }
 
@@ -475,7 +562,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
                  usingLens:(BOOL)usingLens
                   referrer:(web::Referrer)referrer {
   ImageFetchTabHelper* imageFetcher =
-      ImageFetchTabHelper::FromWebState(self.currentWebState);
+      ImageFetchTabHelper::FromWebState(self.webState);
   DCHECK(imageFetcher);
   __weak ContextMenuConfigurationProvider* weakSelf = self;
   imageFetcher->GetImageData(imageURL, referrer, ^(NSData* data) {
@@ -553,6 +640,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
 
     UrlLoadingBrowserAgent::FromBrowser(strongSelf.browser)
         ->Load(groupLoadParams);
+    [strongSelf didOpenTabInBackground:linkURL];
   };
 
   return [actionFactory menuToOpenLinkInGroupWithGroups:groups
@@ -575,9 +663,12 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
       [[NSMutableArray alloc] init];
 
   // Open Image.
-  UIAction* openImage = [actionFactory actionOpenImageWithURL:imageURL
-                                                   completion:nil];
-  [imageOpeningMenuElements addObject:openImage];
+  // TODO(crbug.com/351817704): Add open image suport for lens overlay.
+  if (!_isLensOverlay) {
+    UIAction* openImage = [actionFactory actionOpenImageWithURL:imageURL
+                                                     completion:nil];
+    [imageOpeningMenuElements addObject:openImage];
+  }
 
   // Open Image in new tab.
   UrlLoadParams loadParams = UrlLoadParams::InNewTab(imageURL);
@@ -596,9 +687,13 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   loadParams.origin_point = [params.view convertPoint:params.location
                                                toView:nil];
 
-  UIAction* openImageInNewTab =
-      [actionFactory actionOpenImageInNewTabWithUrlLoadParams:loadParams
-                                                   completion:nil];
+  __weak __typeof__(self) weakSelf = self;
+  UIAction* openImageInNewTab = [actionFactory
+      actionOpenImageInNewTabWithUrlLoadParams:loadParams
+                                    completion:^() {
+                                      [weakSelf
+                                          didOpenTabInBackground:imageURL];
+                                    }];
 
 #if defined(VIVALDI_BUILD)
   UrlLoadParams loadParamsBackgroundTab = UrlLoadParams::InNewTab(imageURL);
@@ -662,7 +757,10 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
                       scenario:(MenuScenarioHistogram)scenario
                       referrer:(web::Referrer)referrer
                       webState:(web::WebState*)webState {
+  // TODO(crbug.com/351817704): Save to photo is not presented in the
+  // baseViewController.
   const bool saveToPhotosAvailable =
+      !_isLensOverlay &&
       IsSaveToPhotosAvailable(self.browser->GetBrowserState());
 
   BrowserActionFactory* actionFactory =
@@ -682,7 +780,7 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
     }
     [strongSelf.imageSaver saveImageAtURL:imageURL
                                  referrer:referrer
-                                 webState:strongSelf.currentWebState
+                                 webState:strongSelf.webState
                        baseViewController:strongSelf.baseViewController];
     base::UmaHistogramEnumeration(
         kSaveToPhotosContextMenuActionsHistogram,
@@ -728,6 +826,9 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
     imageSearchingElementsWithURL:(GURL)imageURL
                          scenario:(MenuScenarioHistogram)scenario
                          referrer:(web::Referrer)referrer {
+  if (_isLensOverlay) {
+    return @[];
+  }
   BrowserActionFactory* actionFactory =
       [[BrowserActionFactory alloc] initWithBrowser:self.browser
                                            scenario:scenario];
@@ -778,6 +879,50 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
   return imageSearchingMenuElements;
 }
 
+// Creates the UIAlertController with URLString that appears when clicking
+// on Show Full URL button from the context menu.
+- (void)showFullURLPopUp:(web::ContextMenuParams)params
+               URLString:(NSString*)URLString {
+  UIAlertController* alert =
+      [UIAlertController alertControllerWithTitle:@""
+                                          message:URLString
+                                   preferredStyle:UIAlertControllerStyleAlert];
+
+  UIAlertAction* defaultAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_CLOSE_ALERT_BUTTON_LABEL)
+                style:UIAlertActionStyleDefault
+              handler:nil];
+
+  [alert addAction:defaultAction];
+  alert.view.accessibilityIdentifier = kAlertAccessibilityIdentifier;
+  // The alert pop up will be presenting on top of the menu.
+  [self.baseViewController.presentedViewController presentViewController:alert
+                                                                animated:YES
+                                                              completion:nil];
+}
+
+// Calls the shareURLFromContextMenu with the given command.
+- (void)shareURLFromContextMenu:(const GURL&)URLToShare
+                       URLTitle:(NSString*)URLTitle
+                         params:(web::ContextMenuParams)params {
+  id<ActivityServiceCommands> handler = HandlerForProtocol(
+      _browser->GetCommandDispatcher(), ActivityServiceCommands);
+
+  CGRect sourceRect = CGRectMake(params.location.x, params.location.y, 0, 0);
+
+  ActivityServiceShareURLCommand* command =
+      [[ActivityServiceShareURLCommand alloc] initWithURL:URLToShare
+                                                    title:URLTitle
+                                               sourceView:params.view
+                                               sourceRect:sourceRect];
+  [handler shareURLFromContextMenu:command];
+}
+
+// Informs the delegate that a new tab has been opened in the background.
+- (void)didOpenTabInBackground:(GURL)URL {
+  [self.delegate contextMenuConfigurationProvider:self
+                 didOpenNewTabInBackgroundWithURL:URL];
+}
 
 #pragma mark - Vivaldi
 - (UrlLoadParams)urlLoadParamsForNewTab:(BOOL)isBackgroundTab

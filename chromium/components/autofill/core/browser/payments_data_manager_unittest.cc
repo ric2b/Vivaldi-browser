@@ -39,7 +39,8 @@
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/mandatory_reauth_metrics.h"
 #include "components/autofill/core/browser/payments_data_manager_test_api.h"
-#include "components/autofill/core/browser/personal_data_manager_test_base.h"
+#include "components/autofill/core/browser/payments_data_manager_test_base.h"
+#include "components/autofill/core/browser/personal_data_manager_test_utils.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/ui/autofill_image_fetcher_base.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
@@ -53,7 +54,7 @@
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/version_info/version_info.h"
@@ -66,7 +67,6 @@
 #endif
 
 namespace autofill {
-
 namespace {
 
 using testing::Pointee;
@@ -110,15 +110,14 @@ class MockPaymentsDataManagerObserver : public PaymentsDataManager::Observer {
   MOCK_METHOD(void, OnPaymentsDataChanged, (), (override));
 };
 
-}  // anonymous namespace
-
-class PaymentsDataManagerHelper : public PersonalDataManagerTestBase {
+class PaymentsDataManagerHelper : public PaymentsDataManagerTestBase {
  protected:
   PaymentsDataManagerHelper() = default;
 
   void ResetPaymentsDataManager(bool use_sync_transport_mode = false) {
     payments_data_manager_.reset();
-    MakePrimaryAccountAvailable(use_sync_transport_mode);
+    MakePrimaryAccountAvailable(use_sync_transport_mode, identity_test_env_,
+                                sync_service_);
     payments_data_manager_ = std::make_unique<PaymentsDataManager>(
         profile_database_service_, account_database_service_,
         /*image_fetcher=*/nullptr, /*shared_storage_handler=*/nullptr,
@@ -254,6 +253,7 @@ class MockAutofillImageFetcher : public AutofillImageFetcherBase {
       void,
       FetchImagesForURLs,
       (base::span<const GURL> card_art_urls,
+       base::span<const AutofillImageFetcherBase::ImageSize> image_sizes,
        base::OnceCallback<void(
            const std::vector<std::unique_ptr<CreditCardArtImage>>&)> callback),
       (override));
@@ -337,7 +337,6 @@ TEST_F(PaymentsDataManagerTest,
   Iban server_iban(Iban::InstrumentId(1234567));
   server_iban.set_prefix(u"FR76");
   server_iban.set_suffix(u"0189");
-  server_iban.set_length(27);
   server_iban.set_use_date(AutofillClock::Now() - base::Days(2));
 
   AddLocalIban(local_iban);
@@ -616,6 +615,49 @@ TEST_F(PaymentsDataManagerTest, AddUpdateRemoveCreditCards) {
       base::Uuid::GenerateRandomV4().AsLowercaseString());
   test_api(payments_data_manager()).AddServerCreditCard(duplicate_server_card);
   ExpectSameElements(cards, payments_data_manager().GetCreditCards());
+}
+
+// Adds two local cards and one server cards with different modification dates.
+// - `local_card1`'s modification date doesn't fall in the removal range, but
+//   its CVC does. Expect that the CVC is cleared.
+// - `local_card2`'s and `server_card`'s modification dates fall in the removal
+//   range. Expect that only the local card is removed.
+TEST_F(PaymentsDataManagerTest, RemoveLocalDataModifiedBetween) {
+  base::test::ScopedFeatureList features(
+      features::kAutofillEnableCvcStorageAndFilling);
+
+  TestAutofillClock test_clock;
+  test_clock.SetNow(kArbitraryTime);
+  CreditCard local_card1 = test::GetCreditCard();
+  // PaymentsAutofillTable sets modification dates when adding/updating.
+  payments_data_manager().AddCreditCard(local_card1);
+  WaitForOnPaymentsDataChanged();
+
+  CreditCard local_card2 = test::GetCreditCard2();
+  test_clock.Advance(base::Minutes(2));
+  payments_data_manager().AddCreditCard(local_card2);
+  WaitForOnPaymentsDataChanged();
+
+  payments_data_manager().UpdateLocalCvc(local_card1.guid(), u"234");
+  WaitForOnPaymentsDataChanged();
+
+  CreditCard server_card = test::GetMaskedServerCard();
+  test_clock.Advance(base::Minutes(3));
+  test_api(payments_data_manager()).AddServerCreditCard(server_card);
+  WaitForOnPaymentsDataChanged();
+
+  payments_data_manager().RemoveLocalDataModifiedBetween(
+      kArbitraryTime + base::Minutes(1), kArbitraryTime + base::Minutes(10));
+  WaitForOnPaymentsDataChanged();
+  local_card1.clear_cvc();
+  EXPECT_THAT(payments_data_manager().GetLocalCreditCards(),
+              testing::UnorderedElementsAre(Pointee(local_card1)));
+  // TODO(crbug.com/40276087): `CreditCard::operator==()` compares GUIDs even
+  // for server cards, which change after every load from the database.
+  std::vector<CreditCard*> server_cards =
+      payments_data_manager().GetServerCreditCards();
+  ASSERT_EQ(server_cards.size(), 1u);
+  EXPECT_EQ(server_cards[0]->Compare(server_card), 0);
 }
 
 TEST_F(PaymentsDataManagerTest, RecordUseOfCard) {
@@ -1354,19 +1396,11 @@ TEST_F(PaymentsDataManagerTest, LogStoredCreditCardMetrics) {
   histogram_tester.ExpectTotalCount("Autofill.StoredCreditCardCount", 1);
   histogram_tester.ExpectTotalCount("Autofill.StoredCreditCardCount.Local", 1);
   histogram_tester.ExpectTotalCount("Autofill.StoredCreditCardCount.Server", 1);
-  histogram_tester.ExpectTotalCount(
-      "Autofill.StoredCreditCardCount.Server.Masked", 1);
-  histogram_tester.ExpectTotalCount(
-      "Autofill.StoredCreditCardCount.Server.Unmasked", 1);
   histogram_tester.ExpectBucketCount("Autofill.StoredCreditCardCount", 4, 1);
   histogram_tester.ExpectBucketCount("Autofill.StoredCreditCardCount.Local", 2,
                                      1);
   histogram_tester.ExpectBucketCount("Autofill.StoredCreditCardCount.Server", 2,
                                      1);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.StoredCreditCardCount.Server.Masked", 2, 1);
-  histogram_tester.ExpectBucketCount(
-      "Autofill.StoredCreditCardCount.Server.Unmasked", 0, 1);
   histogram_tester.ExpectTotalCount(
       "Autofill.StoredCreditCardCount.Server.WithVirtualCardMetadata", 1);
   histogram_tester.ExpectBucketCount(
@@ -1900,7 +1934,7 @@ TEST_F(PaymentsDataManagerTest, GetMaskedBankAccounts_ExpOff) {
   BankAccount bank_account2 = test::CreatePixBankAccount(5678L);
   ASSERT_TRUE(GetServerDataTable()->SetMaskedBankAccounts(
       {bank_account1, bank_account2}));
-  std::vector<BankAccount> bank_accounts =
+  base::span<const BankAccount> bank_accounts =
       payments_data_manager().GetMaskedBankAccounts();
   // Since the PaymentsDataManager was initialized before adding the masked
   // bank accounts to the WebDatabase, we expect GetMaskedBankAccounts to return
@@ -1950,7 +1984,7 @@ TEST_F(PaymentsDataManagerTest, GetMaskedBankAccounts_DatabaseUpdated) {
   // Since the PaymentsDataManager was initialized before adding the masked
   // bank accounts to the WebDatabase, we expect GetMaskedBankAccounts to return
   // an empty list.
-  std::vector<BankAccount> bank_accounts =
+  base::span<const BankAccount> bank_accounts =
       payments_data_manager().GetMaskedBankAccounts();
   EXPECT_EQ(0u, bank_accounts.size());
 
@@ -2512,7 +2546,10 @@ TEST_F(PaymentsDataManagerTest, IsServerCard_UniqueLocalCard) {
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PaymentsDataManagerSyncTransportModeTest,
-       ShouldShowCardsFromAccountOption) {
+       ShouldShowCardsFromAccountOption_FlagOff) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      features::kAutofillRemovePaymentsButterDropdown);
   // The method should return false if one of these is not respected:
   //   * The sync_service is not null
   //   * The sync feature is not enabled
@@ -2576,6 +2613,68 @@ TEST_F(PaymentsDataManagerSyncTransportModeTest,
   payments_data_manager().SetSyncServiceForTest(nullptr);
   EXPECT_FALSE(payments_data_manager().ShouldShowCardsFromAccountOption());
 }
+
+TEST_F(PaymentsDataManagerSyncTransportModeTest,
+       ShouldShowCardsFromAccountOption_FlagOn) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kAutofillRemovePaymentsButterDropdown);
+  // Set up a new, non-sync-consented account, with a card, in transport mode.
+  std::vector<CreditCard> server_cards;
+  server_cards.emplace_back(CreditCard::RecordType::kMaskedServerCard, "c789");
+  test::SetCreditCardInfo(&server_cards.back(), "Clyde Barrow",
+                          "0005" /* American Express */, "04", "2999", "1");
+  server_cards.back().SetNetworkForMaskedCard(kAmericanExpressCard);
+  SetServerCards(server_cards);
+  payments_data_manager().Refresh();
+  WaitForOnPaymentsDataChanged();
+
+  // The function should returns false because the
+  // kAutofillRemovePaymentsButterDropdown flag is enabled.
+  EXPECT_FALSE(payments_data_manager().ShouldShowCardsFromAccountOption());
+}
+
+TEST_F(PaymentsDataManagerSyncTransportModeTest,
+       ShouldSuggestServerPaymentMethods_FlagOff) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      features::kAutofillRemovePaymentsButterDropdown);
+
+  // Set up a new, non-sync-consented account in transport mode.
+  ASSERT_TRUE(identity_test_env_.identity_manager()->HasPrimaryAccount(
+      signin::ConsentLevel::kSignin));
+  ASSERT_FALSE(sync_service_.HasSyncConsent());
+  sync_service_.GetUserSettings()->SetSelectedTypes(
+      /*sync_everything=*/false,
+      /*types=*/{syncer::UserSelectableType::kAutofill,
+                 syncer::UserSelectableType::kPayments});
+
+  // Server payment methods should not be suggested because the user has not
+  // acknowledged the notice to begin seeing them.
+  EXPECT_FALSE(
+      test_api(payments_data_manager()).ShouldSuggestServerPaymentMethods());
+}
+
+TEST_F(PaymentsDataManagerSyncTransportModeTest,
+       ShouldSuggestServerPaymentMethods_FlagOn) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kAutofillRemovePaymentsButterDropdown);
+
+  // Set up a new, non-sync-consented account in transport mode.
+  ASSERT_TRUE(identity_test_env_.identity_manager()->HasPrimaryAccount(
+      signin::ConsentLevel::kSignin));
+  ASSERT_FALSE(sync_service_.HasSyncConsent());
+  sync_service_.GetUserSettings()->SetSelectedTypes(
+      /*sync_everything=*/false,
+      /*types=*/{syncer::UserSelectableType::kAutofill,
+                 syncer::UserSelectableType::kPayments});
+
+  // Server payment methods should be suggested because the flag is enabled.
+  EXPECT_TRUE(
+      test_api(payments_data_manager()).ShouldSuggestServerPaymentMethods());
+}
+
 #else   // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS) &&
         // !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PaymentsDataManagerSyncTransportModeTest,
@@ -3012,4 +3111,5 @@ TEST_F(PaymentsDataManagerTest, OnAccountsCookieDeletedByUserAction) {
   EXPECT_TRUE(prefs_->GetDict(prefs::kAutofillSyncTransportOptIn).empty());
 }
 
+}  // namespace
 }  // namespace autofill

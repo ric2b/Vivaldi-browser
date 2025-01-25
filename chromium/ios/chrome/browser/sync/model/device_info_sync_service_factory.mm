@@ -7,6 +7,7 @@
 #import <optional>
 #import <utility>
 
+#import "base/feature_list.h"
 #import "base/functional/bind.h"
 #import "base/memory/raw_ptr.h"
 #import "base/memory/singleton.h"
@@ -18,20 +19,26 @@
 #import "components/signin/public/base/device_id_helper.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/sync/invalidations/sync_invalidations_service.h"
-#import "components/sync/model/model_type_store_service.h"
+#import "components/sync/model/data_type_store_service.h"
 #import "components/sync/protocol/sync_enums.pb.h"
 #import "components/sync_device_info/device_info_prefs.h"
 #import "components/sync_device_info/device_info_sync_client.h"
 #import "components/sync_device_info/device_info_sync_service_impl.h"
 #import "components/sync_device_info/local_device_info_provider_impl.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_service.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_settings_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/profile_manager_ios.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
-#import "ios/chrome/browser/sync/model/model_type_store_service_factory.h"
+#import "ios/chrome/browser/sync/model/data_type_store_service_factory.h"
 #import "ios/chrome/browser/sync/model/sync_invalidations_service_factory.h"
 #import "ios/chrome/common/channel_info.h"
+
+// Vivaldi
+#import "sync/vivaldi_device_info_utils.h"
+// End Vivaldi
 
 namespace {
 
@@ -61,14 +68,20 @@ class DeviceInfoSyncClient : public syncer::DeviceInfoSyncClient {
   // syncer::DeviceInfoSyncClient:
   sync_pb::SyncEnums_SendTabReceivingType GetSendTabToSelfReceivingType()
       const override {
-    // TODO(crbug.com/343495515): Check if push notifications are enabled on
-    // device.
-    return base::FeatureList::IsEnabled(
-               send_tab_to_self::kSendTabToSelfIOSPushNotifications)
-               ? sync_pb::
-                     SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_AND_PUSH_NOTIFICATION
-               : sync_pb::
-                     SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_OR_UNSPECIFIED;
+    std::string gaia_id =
+        identity_manager_->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
+            .gaia;
+    bool send_tab_notifications_enabled = push_notification_settings::
+        GetMobileNotificationPermissionStatusForClient(
+            PushNotificationClientId::kSendTab, gaia_id);
+    if (base::FeatureList::IsEnabled(
+            send_tab_to_self::kSendTabToSelfIOSPushNotifications) &&
+        send_tab_notifications_enabled) {
+      return sync_pb::
+          SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_AND_PUSH_NOTIFICATION;
+    }
+    return sync_pb::
+        SyncEnums_SendTabReceivingType_SEND_TAB_RECEIVING_TYPE_CHROME_OR_UNSPECIFIED;
   }
 
   // syncer::DeviceInfoSyncClient:
@@ -113,14 +126,14 @@ class DeviceInfoSyncClient : public syncer::DeviceInfoSyncClient {
   }
 
   // syncer::DeviceInfoSyncClient:
-  std::optional<syncer::ModelTypeSet> GetInterestedDataTypes() const override {
+  std::optional<syncer::DataTypeSet> GetInterestedDataTypes() const override {
     if (sync_invalidations_service_) {
       return sync_invalidations_service_->GetInterestedDataTypes();
     }
     // If the service is not enabled, then the list of types must be empty, not
     // unknown (std::nullopt). This is needed to reset previous types if the
     // invalidations have been turned off.
-    return syncer::ModelTypeSet();
+    return syncer::DataTypeSet();
   }
 
   size_t VivaldiGetSyncedFileStorageSize() const override {
@@ -143,9 +156,15 @@ class DeviceInfoSyncClient : public syncer::DeviceInfoSyncClient {
 
 // static
 syncer::DeviceInfoSyncService* DeviceInfoSyncServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
+  return GetForProfile(profile);
+}
+
+// static
+syncer::DeviceInfoSyncService* DeviceInfoSyncServiceFactory::GetForProfile(
+    ProfileIOS* profile) {
   return static_cast<syncer::DeviceInfoSyncService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
@@ -157,11 +176,8 @@ DeviceInfoSyncServiceFactory* DeviceInfoSyncServiceFactory::GetInstance() {
 void DeviceInfoSyncServiceFactory::GetAllDeviceInfoTrackers(
     std::vector<const syncer::DeviceInfoTracker*>* trackers) {
   DCHECK(trackers);
-  std::vector<ChromeBrowserState*> browser_state_list =
-      GetApplicationContext()
-          ->GetChromeBrowserStateManager()
-          ->GetLoadedBrowserStates();
-  for (ChromeBrowserState* browser_state : browser_state_list) {
+  for (ChromeBrowserState* browser_state :
+       GetApplicationContext()->GetProfileManager()->GetLoadedProfiles()) {
     syncer::DeviceInfoSyncService* service =
         DeviceInfoSyncServiceFactory::GetForBrowserState(browser_state);
     if (service != nullptr) {
@@ -178,7 +194,7 @@ DeviceInfoSyncServiceFactory::DeviceInfoSyncServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "DeviceInfoSyncService",
           BrowserStateDependencyManager::GetInstance()) {
-  DependsOn(ModelTypeStoreServiceFactory::GetInstance());
+  DependsOn(DataTypeStoreServiceFactory::GetInstance());
   DependsOn(SyncInvalidationsServiceFactory::GetInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
 }
@@ -194,17 +210,32 @@ DeviceInfoSyncServiceFactory::BuildServiceInstanceFor(
   syncer::SyncInvalidationsService* const sync_invalidations_service =
       SyncInvalidationsServiceFactory::GetForBrowserState(browser_state);
   signin::IdentityManager* const identity_manager =
-      IdentityManagerFactory::GetForBrowserState(browser_state);
+      IdentityManagerFactory::GetForProfile(browser_state);
   auto device_info_sync_client = std::make_unique<DeviceInfoSyncClient>(
       browser_state->GetPrefs(), sync_invalidations_service, identity_manager);
+
+#if defined(VIVALDI_BUILD)
+  // Override client name with custom device name
+  syncer::LocalDeviceInfoProviderImpl::SessionNameOverrideCallback
+        session_name_override_callback = base::BindRepeating(
+          &vivaldi::GetSessionNameOverride, browser_state->GetPrefs());
+#endif // End Vivaldi
+
   auto local_device_info_provider =
       std::make_unique<syncer::LocalDeviceInfoProviderImpl>(
           ::GetChannel(), ::GetVersionString(), device_info_sync_client.get());
+
+#if defined(VIVALDI_BUILD)
+    // Override client name with custom device name
+    local_device_info_provider->set_session_name_override_callback(
+        session_name_override_callback);
+#endif // End Vivaldi
+
   auto device_prefs = std::make_unique<syncer::DeviceInfoPrefs>(
       browser_state->GetPrefs(), base::DefaultClock::GetInstance());
 
   return std::make_unique<syncer::DeviceInfoSyncServiceImpl>(
-      ModelTypeStoreServiceFactory::GetForBrowserState(browser_state)
+      DataTypeStoreServiceFactory::GetForBrowserState(browser_state)
           ->GetStoreFactory(),
       std::move(local_device_info_provider), std::move(device_prefs),
       std::move(device_info_sync_client), sync_invalidations_service);

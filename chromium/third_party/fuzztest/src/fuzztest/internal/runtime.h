@@ -32,6 +32,7 @@
 #include "absl/functional/function_ref.h"
 #include "absl/random/bit_gen_ref.h"
 #include "absl/random/discrete_distribution.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
@@ -41,13 +42,9 @@
 #include "./fuzztest/internal/coverage.h"
 #include "./fuzztest/internal/domains/domain.h"
 #include "./fuzztest/internal/fixture_driver.h"
-#include "./fuzztest/internal/io.h"
 #include "./fuzztest/internal/logging.h"
-#include "./fuzztest/internal/meta.h"
 #include "./fuzztest/internal/registration.h"
 #include "./fuzztest/internal/seed_seq.h"
-#include "./fuzztest/internal/serialization.h"
-#include "./fuzztest/internal/type_support.h"
 
 namespace fuzztest {
 
@@ -126,6 +123,14 @@ class Runtime {
     return external_failure_was_detected_.load(std::memory_order_relaxed);
   }
 
+  void SetSkippingRequested(bool requested) {
+    skipping_requested_.store(requested, std::memory_order_relaxed);
+  }
+
+  bool skipping_requested() const {
+    return skipping_requested_.load(std::memory_order_relaxed);
+  }
+
   void SetShouldTerminateOnNonFatalFailure(bool v) {
     should_terminate_on_non_fatal_failure_ = v;
   }
@@ -186,7 +191,9 @@ class Runtime {
   void CheckWatchdogLimits();
   void Watchdog();
 
-  void DumpReproducer(absl::string_view outdir) const;
+  // Returns the file path of the reproducer.
+  // Returns empty string if writing the file failed.
+  std::string DumpReproducer(absl::string_view outdir) const;
 
   // Some failures are not necessarily detected by signal handlers or by
   // sanitizers. For example, we could have test framework failures like
@@ -196,15 +203,20 @@ class Runtime {
   // Note: Even though failures should happen within the code under test, they
   // could be set from other threads at any moment. We make it an atomic to
   // avoid a race condition.
-  std::atomic<bool> external_failure_was_detected_{false};
+  std::atomic<bool> external_failure_was_detected_ = false;
 
   // To support in-process minimization for non-fatal failures we signal
   // suppress termination until we believe minimization is complete.
   bool should_terminate_on_non_fatal_failure_ = true;
 
+  // If set to true in fixture setup, skips calling property functions
+  // utill the matching teardown is called; If set to true in a property
+  // function, skip adding the current input to the corpus when fuzzing.
+  std::atomic<bool> skipping_requested_ = false;
+
   // If true, fuzzing should terminate as soon as possible.
   // Atomic because it is set from signal handlers.
-  std::atomic<bool> termination_requested_{false};
+  std::atomic<bool> termination_requested_ = false;
 
   RunMode run_mode_ = RunMode::kUnitTest;
   std::atomic<bool> watchdog_thread_started = false;
@@ -272,7 +284,7 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
 
   std::optional<corpus_type> ReadReproducerToMinimize();
 
-  std::optional<corpus_type> TryParse(absl::string_view data);
+  absl::StatusOr<corpus_type> TryParse(absl::string_view data);
 
   void MutateValue(Input& input, absl::BitGenRef prng);
 
@@ -292,8 +304,18 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
   void TrySampleAndUpdateInMemoryCorpus(Input sample,
                                         bool write_to_file = true);
 
-  void ForEachInputFile(absl::Span<const std::string> files,
-                        absl::FunctionRef<void(Input&&)> consume);
+  // Iterates over inputs in `files` and calls `consume` on each input.
+  // `consume` is a function that takes a file path, an optional blob index in
+  // the file (for blob files with multiple blobs), and an input in the given
+  // file at the given blob index (if applicable). When `timeout` is reached
+  // before calling the `consume` on an input, the iteration stops and the rest
+  // of the inputs won't be consumed.
+  void ForEachInput(
+      absl::Span<const std::string> files,
+      absl::FunctionRef<void(absl::string_view file_path,
+                             std::optional<int> blob_idx, Input input)>
+          consume,
+      absl::Duration timeout = absl::InfiniteDuration());
 
   // Returns true if we're in minimization mode.
   bool MinimizeCorpusIfInMinimizationMode(absl::BitGenRef prng);
@@ -308,9 +330,10 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
 
   bool ShouldStop();
 
-  std::optional<GenericDomainCorpusType> GetCorpusValueFromFile(
-      const std::string& path);
-  void ReplayInput(const std::string& path);
+  // Prints a message indicating that we're replaying an input from `file_path`
+  // at `blob_idx` (if applicable) and then runs `input`.
+  void ReplayInput(absl::string_view file_path, std::optional<int> blob_idx,
+                   const Input& input);
 
   const FuzzTest& test_;
   std::unique_ptr<UntypedFixtureDriver> fixture_driver_;

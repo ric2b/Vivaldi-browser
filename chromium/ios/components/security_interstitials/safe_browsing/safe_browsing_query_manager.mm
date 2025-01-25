@@ -39,11 +39,6 @@ SafeBrowsingQueryManager::~SafeBrowsingQueryManager() {
   for (auto& observer : observers_) {
     observer.SafeBrowsingQueryManagerDestroyed(this);
   }
-
-  if (!base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)) {
-    web::GetIOThreadTaskRunner({})->DeleteSoon(FROM_HERE,
-                                               url_checker_client_.release());
-  }
 }
 
 void SafeBrowsingQueryManager::AddObserver(Observer* observer) {
@@ -74,15 +69,14 @@ void SafeBrowsingQueryManager::StartQuery(const Query& query) {
             performed_check)>
         sync_callback =
             base::BindOnce(&SafeBrowsingQueryManager::UrlCheckFinished,
-                           weak_factory_.GetWeakPtr(), query,
-                           /*is_async_check=*/false);
+                           weak_factory_.GetWeakPtr(), query, QueryType::kSync);
     base::OnceCallback<void(
         bool proceed, bool show_error_page,
         safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
             performed_check)>
         async_callback = base::BindOnce(
             &SafeBrowsingQueryManager::UrlCheckFinished,
-            weak_factory_.GetWeakPtr(), query, /*is_async_check=*/true);
+            weak_factory_.GetWeakPtr(), query, QueryType::kAsync);
 
     std::unique_ptr<safe_browsing::SafeBrowsingUrlCheckerImpl> sync_checker =
         safe_browsing_service->CreateSyncChecker(request_destination,
@@ -92,50 +86,25 @@ void SafeBrowsingQueryManager::StartQuery(const Query& query) {
         safe_browsing_service->CreateAsyncChecker(request_destination,
                                                   web_state_, client_);
 
-    if (base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)) {
-      url_checker_client_->CheckUrl(std::move(sync_checker), query.url,
-                                    query.http_method,
-                                    std::move(sync_callback));
-      url_checker_client_->CheckUrl(std::move(async_checker), query.url,
-                                    query.http_method,
-                                    std::move(async_callback));
-    } else {
-      web::GetIOThreadTaskRunner({})->PostTask(
-          FROM_HERE,
-          base::BindOnce(&UrlCheckerClient::CheckUrl,
-                         url_checker_client_->AsWeakPtr(),
-                         std::move(sync_checker), query.url, query.http_method,
-                         std::move(sync_callback)));
-      web::GetIOThreadTaskRunner({})->PostTask(
-          FROM_HERE,
-          base::BindOnce(&UrlCheckerClient::CheckUrl,
-                         url_checker_client_->AsWeakPtr(),
-                         std::move(async_checker), query.url, query.http_method,
-                         std::move(async_callback)));
-    }
+    url_checker_client_->CheckUrl(std::move(sync_checker), query.url,
+                                  query.http_method, std::move(sync_callback));
+    url_checker_client_->CheckUrl(std::move(async_checker), query.url,
+                                  query.http_method, std::move(async_callback));
   } else {
     base::OnceCallback<void(
         bool proceed, bool show_error_page,
         safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
             performed_check)>
-        callback = base::BindOnce(&SafeBrowsingQueryManager::UrlCheckFinished,
-                                  weak_factory_.GetWeakPtr(), query,
-                                  /*is_async_check=*/false);
+        callback =
+            base::BindOnce(&SafeBrowsingQueryManager::UrlCheckFinished,
+                           weak_factory_.GetWeakPtr(), query, QueryType::kSync);
 
     std::unique_ptr<safe_browsing::SafeBrowsingUrlCheckerImpl> url_checker =
         safe_browsing_service->CreateUrlChecker(request_destination, web_state_,
                                                 client_);
 
-    if (base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)) {
-      url_checker_client_->CheckUrl(std::move(url_checker), query.url,
-                                    query.http_method, std::move(callback));
-    } else {
-      web::GetIOThreadTaskRunner({})->PostTask(
-          FROM_HERE, base::BindOnce(&UrlCheckerClient::CheckUrl,
-                                    url_checker_client_->AsWeakPtr(),
-                                    std::move(url_checker), query.url,
-                                    query.http_method, std::move(callback)));
-    }
+    url_checker_client_->CheckUrl(std::move(url_checker), query.url,
+                                  query.http_method, std::move(callback));
   }
 }
 
@@ -159,50 +128,74 @@ void SafeBrowsingQueryManager::StoreUnsafeResource(
 
 void SafeBrowsingQueryManager::UrlCheckFinished(
     const Query query,
-    bool is_async_check,
+    const QueryType type,
     bool proceed,
     bool show_error_page,
     safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check) {
   auto query_result_pair = results_.find(query);
-
-  // TODO(crbug.com/337243708): Remove when observer check is implemented.
-  if (base::FeatureList::IsEnabled(
-          safe_browsing::kSafeBrowsingAsyncRealTimeCheck)) {
-    // If one of the checks (sync/async) successfully finishes, early return if
-    // the query was already checked and erased from the map.
-    if (query_result_pair == results_.end()) {
-      return;
-    }
-  } else {
-    DCHECK(query_result_pair != results_.end());
-  }
+  DCHECK(query_result_pair != results_.end());
 
   // Store the query result.
   Result& result = query_result_pair->second;
-  result.proceed = proceed;
-  result.show_error_page = show_error_page;
-
-  // If an error page is requested, an UnsafeResource must be stored before the
-  // execution of its completion block.
+  if (base::FeatureList::IsEnabled(
+          safe_browsing::kSafeBrowsingAsyncRealTimeCheck)) {
+    if (result.sync_check_complete || result.async_check_complete) {
+      // If one result has already been received, combine results.
+      result.proceed = result.proceed && proceed;
+      result.show_error_page = result.show_error_page || show_error_page;
+    } else {
+      result.proceed = proceed;
+      result.show_error_page = show_error_page;
+    }
+  } else {
+    result.proceed = proceed;
+    result.show_error_page = show_error_page;
+  }
+  // If an error page is requested, an UnsafeResource must be stored before
+  // the execution of its completion block.
   DCHECK(!show_error_page || result.resource);
 
   // Notify observers of the completed URL check. `this` might get destroyed
   // when an observer is notified.
   auto weak_this = weak_factory_.GetWeakPtr();
-  for (auto& observer : observers_) {
-    if (base::FeatureList::IsEnabled(
-            safe_browsing::kSafeBrowsingAsyncRealTimeCheck)) {
-      observer.SafeBrowsingSyncQueryFinished(this, query, result,
-                                             performed_check);
-    } else {
-      observer.SafeBrowsingQueryFinished(this, query, result, performed_check);
-    }
-    if (!weak_this)
-      return;
-  }
 
-  // Clear out the state since the query is finished.
-  results_.erase(query_result_pair);
+  if (base::FeatureList::IsEnabled(
+          safe_browsing::kSafeBrowsingAsyncRealTimeCheck)) {
+    if (type == QueryType::kAsync) {
+      result.async_check_complete = true;
+    } else if (type == QueryType::kSync) {
+      result.sync_check_complete = true;
+    }
+
+    for (auto& observer : observers_) {
+      const QueryData& query_data =
+          QueryData(this, query, type, result, performed_check);
+      if (type == QueryType::kAsync) {
+        observer.SafeBrowsingAsyncQueryFinished(query_data);
+      } else if (type == QueryType::kSync) {
+        observer.SafeBrowsingSyncQueryFinished(query_data);
+      }
+
+      if (!weak_this) {
+        return;
+      }
+    }
+
+    // Clear out the state since the query is finished.
+    if (result.sync_check_complete && result.async_check_complete) {
+      results_.erase(query_result_pair);
+    }
+  } else {
+    for (auto& observer : observers_) {
+      observer.SafeBrowsingQueryFinished(this, query, result, performed_check);
+      if (!weak_this) {
+        return;
+      }
+    }
+
+    // Clear out the state since the query is finished.
+    results_.erase(query_result_pair);
+  }
 }
 
 #pragma mark - SafeBrowsingQueryManager::Query
@@ -230,15 +223,30 @@ SafeBrowsingQueryManager::Result& SafeBrowsingQueryManager::Result::operator=(
 
 SafeBrowsingQueryManager::Result::~Result() = default;
 
+#pragma mark - SafeBrowsingQueryManager::QueryData
+
+SafeBrowsingQueryManager::QueryData::QueryData(
+    SafeBrowsingQueryManager* manager,
+    const SafeBrowsingQueryManager::Query& query,
+    const QueryType type,
+    const SafeBrowsingQueryManager::Result& result,
+    safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check)
+    : manager(manager),
+      query(query),
+      type(type),
+      result(result),
+      performed_check(performed_check) {}
+
+SafeBrowsingQueryManager::QueryData::QueryData(const QueryData&) = default;
+
+SafeBrowsingQueryManager::QueryData::~QueryData() = default;
+
 #pragma mark - SafeBrowsingQueryManager::UrlCheckerClient
 
 SafeBrowsingQueryManager::UrlCheckerClient::UrlCheckerClient() = default;
 
 SafeBrowsingQueryManager::UrlCheckerClient::~UrlCheckerClient() {
-  DCHECK_CURRENTLY_ON(
-      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
-          ? web::WebThread::UI
-          : web::WebThread::IO);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
 }
 
 void SafeBrowsingQueryManager::UrlCheckerClient::CheckUrl(
@@ -249,10 +257,7 @@ void SafeBrowsingQueryManager::UrlCheckerClient::CheckUrl(
                             bool show_error_page,
                             safe_browsing::SafeBrowsingUrlCheckerImpl::
                                 PerformedCheck performed_check)> callback) {
-  DCHECK_CURRENTLY_ON(
-      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
-          ? web::WebThread::UI
-          : web::WebThread::IO);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
   safe_browsing::SafeBrowsingUrlCheckerImpl* url_checker_ptr =
       url_checker.get();
   active_url_checkers_[std::move(url_checker)] = std::move(callback);
@@ -267,14 +272,11 @@ void SafeBrowsingQueryManager::UrlCheckerClient::OnCheckUrlResult(
     bool showed_interstitial,
     bool has_post_commit_interstitial_skipped,
     safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check) {
-  DCHECK_CURRENTLY_ON(
-      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
-          ? web::WebThread::UI
-          : web::WebThread::IO);
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
   DCHECK(url_checker);
 
   auto it = active_url_checkers_.find(url_checker);
-  // TODO(crbug.com/40677290): consider removing this PostTask once
+  // TODO(crbug.com/359420122): consider removing this PostTask once
   // kSafeBrowsingOnUIThread launches, if all the callers are ok with the
   // callback being run synchronously sometimes.
   web::GetUIThreadTaskRunner({})->PostTask(

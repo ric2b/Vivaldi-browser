@@ -92,7 +92,8 @@ PageInfoMainView::PageInfoMainView(
     ChromePageInfoUiDelegate* ui_delegate,
     PageInfoNavigationHandler* navigation_handler,
     PageInfoHistoryController* history_controller,
-    base::OnceClosure initialized_callback)
+    base::OnceClosure initialized_callback,
+    bool allow_about_this_site)
     : presenter_(presenter),
       ui_delegate_(ui_delegate),
       navigation_handler_(navigation_handler) {
@@ -148,8 +149,8 @@ PageInfoMainView::PageInfoMainView(
     history_controller->InitRow(AddChildView(CreateContainerView()));
   }
 
-  if (page_info::IsAboutThisSiteFeatureEnabled(
-          g_browser_process->GetApplicationLocale())) {
+  if (allow_about_this_site && page_info::IsAboutThisSiteFeatureEnabled(
+                                   g_browser_process->GetApplicationLocale())) {
     about_this_site_section_ = AddChildView(CreateContainerView());
   }
 
@@ -389,8 +390,7 @@ void PageInfoMainView::SetIdentityInfo(const IdentityInfo& identity_info) {
 
     // Show "About this site" section only if connection is secure, because
     // security information has higher priority.
-    if (page_info::IsAboutThisSiteFeatureEnabled(
-            g_browser_process->GetApplicationLocale())) {
+    if (about_this_site_section_) {
       auto info = ui_delegate_->GetAboutThisSiteInfo();
       if (info.has_value()) {
         about_this_site_section_->RemoveAllChildViews();
@@ -529,7 +529,7 @@ void PageInfoMainView::HandleMoreInfoRequestAsync(int view_id) {
       presenter_->OpenSiteSettingsView();
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -562,36 +562,38 @@ void PageInfoMainView::ChildPreferredSizeChanged(views::View* child) {
 }
 
 std::unique_ptr<views::View> PageInfoMainView::CreateBubbleHeaderView() {
-  auto header = std::make_unique<views::View>();
-  header->SetLayoutManager(std::make_unique<views::FlexLayout>())
-      ->SetInteriorMargin(gfx::Insets::VH(0, 20));
-  title_ = header->AddChildView(std::make_unique<views::Label>(
-      std::u16string(), views::style::CONTEXT_DIALOG_TITLE,
-      views::style::STYLE_HEADLINE_4,
-      gfx::DirectionalityMode::DIRECTIONALITY_AS_URL));
-  title_->SetMultiLine(true);
-  title_->SetAllowCharacterBreak(true);
-  title_->SetProperty(
-      views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                               views::MaximumFlexSizeRule::kUnbounded,
-                               /*adjust_height_for_width =*/true)
-          .WithWeight(1));
-  title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  auto close_button = views::BubbleFrameView::CreateCloseButton(
-      base::BindRepeating(&PageInfoNavigationHandler::CloseBubble,
-                          base::Unretained(navigation_handler_)));
-
-  close_button->SetVisible(true);
-  close_button->SetProperty(views::kCrossAxisAlignmentKey,
-                            views::LayoutAlignment::kStart);
-  // Set views::kInternalPaddingKey for flex layout to account for internal
-  // button padding when calculating margins.
-  close_button->SetProperty(views::kInternalPaddingKey,
-                            close_button->GetInsets());
-  header->AddChildView(close_button.release());
-
-  return header;
+  return views::Builder<views::FlexLayoutView>()
+      .SetInteriorMargin(gfx::Insets::VH(0, 20))
+      .AddChildren(
+          views::Builder<views::Label>(
+              std::make_unique<views::Label>(
+                  std::u16string(), views::style::CONTEXT_DIALOG_TITLE,
+                  views::style::STYLE_HEADLINE_4,
+                  gfx::DirectionalityMode::DIRECTIONALITY_AS_URL))
+              .CopyAddressTo(&title_)
+              .SetMultiLine(true)
+              .SetAllowCharacterBreak(true)
+              .SetHorizontalAlignment(gfx::ALIGN_LEFT)
+              .SetProperty(views::kFlexBehaviorKey,
+                           views::FlexSpecification(
+                               views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kScaleToZero,
+                               views::MaximumFlexSizeRule::kUnbounded)
+                               .WithWeight(1)),
+          views::Builder<views::View>(
+              views::BubbleFrameView::CreateCloseButton(
+                  base::BindRepeating(&PageInfoNavigationHandler::CloseBubble,
+                                      base::Unretained(navigation_handler_))))
+              .SetVisible(true)
+              .SetProperty(views::kCrossAxisAlignmentKey,
+                           views::LayoutAlignment::kStart)
+              .CustomConfigure(base::BindOnce([](views::View* button) {
+                // Set views::kInternalPaddingKey for flex layout to account for
+                // internal button padding when calculating margins.
+                button->SetProperty(views::kInternalPaddingKey,
+                                    button->GetInsets());
+              })))
+      .Build();
 }
 
 std::unique_ptr<views::View> PageInfoMainView::CreateAboutThisSiteSection(

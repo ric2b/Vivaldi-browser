@@ -20,8 +20,12 @@ public class AdaptiveToolbarPrefs {
      * enabled.
      */
     public static boolean isCustomizationPreferenceEnabled() {
-        return ChromeSharedPreferences.getInstance()
-                .readBoolean(ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED, true);
+        // Vivaldi: Toolbar shortcut is disabled by default to increase the url bar width but we
+        // keep it enabled for the users that has customized the shortcut.
+        boolean defaultValue = ChromeSharedPreferences.getInstance().contains(
+                ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS);
+        return ChromeSharedPreferences.getInstance().readBoolean(
+                ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED, defaultValue);
     }
 
     /**

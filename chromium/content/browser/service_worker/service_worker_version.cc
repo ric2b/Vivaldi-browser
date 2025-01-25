@@ -8,6 +8,7 @@
 
 #include <limits>
 #include <map>
+#include <optional>
 #include <string>
 
 #include "base/check.h"
@@ -278,8 +279,13 @@ constexpr base::TimeDelta ServiceWorkerVersion::kStopWorkerTimeout;
 ServiceWorkerVersion::MainScriptResponse::MainScriptResponse(
     const network::mojom::URLResponseHead& response_head) {
   response_time = response_head.response_time;
-  if (response_head.headers)
-    response_head.headers->GetLastModifiedValue(&last_modified);
+  if (response_head.headers) {
+    std::optional<base::Time> value =
+        response_head.headers->GetLastModifiedValue();
+    if (value) {
+      last_modified = value.value();
+    }
+  }
   headers = response_head.headers;
   if (response_head.ssl_info.has_value())
     ssl_info = response_head.ssl_info.value();
@@ -664,11 +670,13 @@ bool ServiceWorkerVersion::OnRequestTermination() {
     }
   }
 
-  will_warm_up_on_stopped_ =
-      will_be_terminated &&
+  static const bool kSpeculativeServiceWorkerWarmUpOnIdleTimeoutEnabled =
       base::FeatureList::IsEnabled(
           blink::features::kSpeculativeServiceWorkerWarmUp) &&
-      blink::features::kSpeculativeServiceWorkerWarmUpOnIdleTimeout.Get() &&
+      blink::features::kSpeculativeServiceWorkerWarmUpOnIdleTimeout.Get();
+  will_warm_up_on_stopped_ =
+      will_be_terminated &&
+      kSpeculativeServiceWorkerWarmUpOnIdleTimeoutEnabled &&
       scope_.SchemeIsHTTPOrHTTPS();
 
   if (will_be_terminated) {
@@ -936,10 +944,15 @@ void ServiceWorkerVersion::AddControllee(
   // crash.
   CHECK(!base::Contains(controllee_map_, uuid));
 
+  controllee_map_[uuid] = service_worker_client->AsWeakPtr();
+  // Even if `context_` is invalid, `controllee_map_` should have `uuid`.
+  // Otherwise, `Uncontrol()` may fail with CHECK. (crbug.com/357954498)
+  // However, if `context_` is invalid, we may not need to raise a worker to
+  // foreground priority or reset timer because this ServiceWorkerVersion is
+  // shutting down.
   if (!context_) {
     return;
   }
-  controllee_map_[uuid] = service_worker_client->AsWeakPtr();
   embedded_worker_->UpdateForegroundPriority();
   ClearTick(&no_controllees_time_);
 
@@ -1275,7 +1288,7 @@ bool ServiceWorkerVersion::IsWarmedUp() const {
       CHECK(warm_up_callbacks_.empty());
       return true;
     case EmbeddedWorkerInstance::StartingPhase::STARTING_PHASE_MAX_VALUE:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -2486,8 +2499,9 @@ void ServiceWorkerVersion::OnTimeoutTimer() {
                                     : kStartNewWorkerTimeout;
 
   if (IsWarmedUp()) {
-    start_limit =
+    static const base::TimeDelta kStartLimit =
         blink::features::kSpeculativeServiceWorkerWarmUpDuration.Get();
+    start_limit = kStartLimit;
   }
 
   if (GetTickDuration(start_time_) > start_limit) {
@@ -2686,6 +2700,10 @@ ServiceWorkerVersion::DeduceStartWorkerFailureReason(
   }
 
   return default_code;
+}
+
+net::Error ServiceWorkerVersion::GetMainScriptNetError() {
+  return net::Error(script_cache_map()->main_script_net_error());
 }
 
 void ServiceWorkerVersion::MarkIfStale() {
@@ -3008,7 +3026,7 @@ bool ServiceWorkerVersion::ShouldRequireForegroundPriority(
     // Require foreground if the controllee is in different process and is
     // foreground.
     if (controllee_process_id != worker_process_id &&
-        !render_host->IsProcessBackgrounded()) {
+        render_host->GetPriority() != base::Process::Priority::kBestEffort) {
       return true;
     }
   }

@@ -228,7 +228,7 @@ class PageInfo : private content_settings::CookieControlsObserver,
 
   // Handles opening the link to show all sites settings with a filter for
   // current site's fps  and records the event.
-  void OpenAllSitesViewFilteredToFps();
+  void OpenAllSitesViewFilteredToRws();
 
   // Handles opening the cookies dialog and records the event.
   void OpenCookiesDialog();
@@ -495,6 +495,8 @@ class PageInfo : private content_settings::CookieControlsObserver,
 
   CookieBlocking3pcdStatus blocking_status_ =
       CookieBlocking3pcdStatus::kNotIn3pcd;
+
+  std::vector<content_settings::TrackingProtectionFeature> features_;
 
   base::Time cookie_exception_expiration_;
 

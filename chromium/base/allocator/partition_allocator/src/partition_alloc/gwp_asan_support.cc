@@ -42,8 +42,7 @@ void* GwpAsanSupport::MapRegion(size_t slot_count,
 
   const size_t kSuperPagePayloadStartOffset =
       internal::SuperPagePayloadStartOffset(
-          /* is_managed_by_normal_buckets = */ true,
-          /* with_quarantine = */ false);
+          /* is_managed_by_normal_buckets = */ true);
   PA_CHECK(kSuperPagePayloadStartOffset % kSlotSize == 0);
   const size_t kSuperPageGwpAsanSlotAreaBeginOffset =
       kSuperPagePayloadStartOffset;
@@ -94,15 +93,16 @@ void* GwpAsanSupport::MapRegion(size_t slot_count,
            partition_page_idx += bucket->get_pages_per_slot_span()) {
         auto* slot_span_metadata =
             &page_metadata[partition_page_idx].slot_span_metadata;
-        bucket->InitializeSlotSpanForGwpAsan(slot_span_metadata);
+        bucket->InitializeSlotSpanForGwpAsan(slot_span_metadata, root.get());
         auto slot_span_start =
-            internal::SlotSpanMetadata::ToSlotSpanStart(slot_span_metadata);
+            internal::SlotSpanMetadata<internal::MetadataKind::kReadOnly>::
+                ToSlotSpanStart(slot_span_metadata);
 
         for (uintptr_t slot_idx = 0; slot_idx < kSlotsPerSlotSpan; ++slot_idx) {
           auto slot_start = slot_span_start + slot_idx * kSlotSize;
           PartitionRoot::InSlotMetadataPointerFromSlotStartAndSize(slot_start,
                                                                    kSlotSize)
-              ->InitalizeForGwpAsan();
+              ->InitializeForGwpAsan();
           size_t global_slot_idx = (slot_start - super_page_span_start -
                                     kSuperPageGwpAsanSlotAreaBeginOffset) /
                                    kSlotSize;

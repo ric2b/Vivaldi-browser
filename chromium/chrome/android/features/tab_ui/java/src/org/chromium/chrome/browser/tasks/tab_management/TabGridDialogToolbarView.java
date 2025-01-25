@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
@@ -11,6 +12,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextWatcher;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.TouchDelegate;
 import android.view.View;
 import android.widget.EditText;
@@ -35,8 +37,8 @@ import org.chromium.ui.widget.ChromeImageView;
 
 /** Toolbar used in the tab grid dialog see {@link TabGridDialogCoordinator}. */
 public class TabGridDialogToolbarView extends FrameLayout {
-    private ChromeImageView mRightButton;
-    private ChromeImageView mLeftButton;
+    private ChromeImageView mNewTabButton;
+    private ChromeImageView mBackButton;
     private ChromeImageView mMenuButton;
     private EditText mTitleTextView;
     private LinearLayout mMainContent;
@@ -54,8 +56,8 @@ public class TabGridDialogToolbarView extends FrameLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
 
-        mLeftButton = findViewById(R.id.toolbar_left_button);
-        mRightButton = findViewById(R.id.toolbar_right_button);
+        mBackButton = findViewById(R.id.toolbar_back_button);
+        mNewTabButton = findViewById(R.id.toolbar_new_tab_button);
         mMenuButton = findViewById(R.id.toolbar_menu_button);
         mTitleTextView = (EditText) findViewById(R.id.title);
         mMainContent = findViewById(R.id.main_content);
@@ -66,12 +68,20 @@ public class TabGridDialogToolbarView extends FrameLayout {
         mImageTilesContainer = findViewById(R.id.image_tiles_container);
     }
 
-    void setLeftButtonOnClickListener(OnClickListener listener) {
-        mLeftButton.setOnClickListener(listener);
+    @Override
+    @SuppressLint("ClickableViewAccessibility")
+    public boolean onTouchEvent(MotionEvent motionEvent) {
+        super.onTouchEvent(motionEvent);
+        // Prevent touch events from "falling through" to views below.
+        return true;
     }
 
-    void setRightButtonOnClickListener(OnClickListener listener) {
-        mRightButton.setOnClickListener(listener);
+    void setBackButtonOnClickListener(OnClickListener listener) {
+        mBackButton.setOnClickListener(listener);
+    }
+
+    void setNewTabButtonOnClickListener(OnClickListener listener) {
+        mNewTabButton.setOnClickListener(listener);
     }
 
     void setMenuButtonOnClickListener(OnClickListener listener) {
@@ -152,8 +162,8 @@ public class TabGridDialogToolbarView extends FrameLayout {
     }
 
     void setTint(ColorStateList tint) {
-        ImageViewCompat.setImageTintList(mLeftButton, tint);
-        ImageViewCompat.setImageTintList(mRightButton, tint);
+        ImageViewCompat.setImageTintList(mBackButton, tint);
+        ImageViewCompat.setImageTintList(mNewTabButton, tint);
         if (mTitleTextView != null) mTitleTextView.setTextColor(tint);
         if (mMenuButton != null) {
             ImageViewCompat.setImageTintList(mMenuButton, tint);
@@ -165,18 +175,18 @@ public class TabGridDialogToolbarView extends FrameLayout {
     }
 
     /** Setup the drawable in the left button. */
-    void setLeftButtonDrawableId(int drawableId) {
-        mLeftButton.setImageResource(drawableId);
+    void setBackButtonDrawableId(int drawableId) {
+        mBackButton.setImageResource(drawableId);
     }
 
     /** Set the content description of the left button. */
-    void setLeftButtonContentDescription(String string) {
-        mLeftButton.setContentDescription(string);
+    void setBackButtonContentDescription(String string) {
+        mBackButton.setContentDescription(string);
     }
 
     /** Set the content description of the right button. */
-    void setRightButtonContentDescription(String string) {
-        mRightButton.setContentDescription(string);
+    void setNewTabButtonContentDescription(String string) {
+        mNewTabButton.setContentDescription(string);
     }
 
     void setImageTilesVisibility(boolean isVisible) {

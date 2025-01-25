@@ -7,38 +7,25 @@
 #include "content/browser/navigation_transitions/back_forward_transition_animator.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot.h"
+#include "content/browser/renderer_host/navigation_transitions/navigation_transition_config.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view_android.h"
 #include "content/public/browser/back_forward_transition_animation_manager.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "ui/base/l10n/l10n_util_android.h"
 
 namespace content {
 
 namespace {
 
+// TODO(crbug/353766658): Move these shorthands to a proper header file.
 using NavigationDirection =
     BackForwardTransitionAnimationManager::NavigationDirection;
 
 using AnimationStage = BackForwardTransitionAnimationManager::AnimationStage;
 using SwipeEdge = ui::BackGestureEventSwipeEdge;
-
-bool ShouldSkipDefaultNavTransitionForPendingUX(
-    NavigationDirection nav_direction,
-    SwipeEdge edge) {
-  SwipeEdge back_edge = !l10n_util::ShouldMirrorBackForwardGestures()
-                            ? SwipeEdge::LEFT
-                            : SwipeEdge::RIGHT;
-
-  // Currently we only have approved UX for the history back navigation on the
-  // back edge (left in LTR), in both gesture mode and 3-button mode.
-  if (nav_direction == NavigationDirection::kBackward && edge == back_edge) {
-    return false;
-  }
-
-  return true;
-}
+using AnimationAbortReason =
+    BackForwardTransitionAnimator::AnimationAbortReason;
 
 }  // namespace
 
@@ -82,24 +69,23 @@ void BackForwardTransitionAnimationManagerAndroid::OnGestureStarted(
     // reclaim all the resources).
     //
     // TODO(crbug.com/40261105): We need a proper UX to support this.
-    animator_.reset();
+    animator_->AbortAnimation(AnimationAbortReason::kChainedBack);
+    DestroyAnimator();
   }
 
   // Handle the case where the screenshot's dimension does not match the
   // physical viewport:
-  // - TODO(https://crbug.com/340292683): Screenshot is captured with the URL
-  // bar shown but used for transition where the URL bar is hidden (default
-  // background color at the bottom).
   // - TODO(https://crbug.com/346979589): Screenshot is captured in a landscape
   // / portrait mode but used for transition in the different mode.
-  if (ShouldSkipDefaultNavTransitionForPendingUX(navigation_direction, edge)) {
+  if (!ShouldAnimateNavigationTransition(navigation_direction, edge)) {
     return;
   }
 
   CHECK(animator_factory_);
   animator_ = animator_factory_->Create(
       web_contents_view_android_.get(), navigation_controller_.get(), gesture,
-      navigation_direction, edge, destination_entry, this);
+      navigation_direction, edge, destination_entry,
+      MaybeCopyContentAreaAsBitmapSync(), this);
 
   // Become a WCO as soon as this class is created, because we want to
   // observe all navigations while this class is controlling the UI. This
@@ -156,11 +142,21 @@ BackForwardTransitionAnimationManagerAndroid::GetCurrentAnimationStage() {
                    : AnimationStage::kNone;
 }
 
+void BackForwardTransitionAnimationManagerAndroid::SetFavicon(
+    const SkBitmap& favicon) {
+  CHECK(NavigationTransitionConfig::AreBackForwardTransitionsEnabled());
+  auto* entry = web_contents_view_android_->web_contents()
+                    ->GetController()
+                    .GetLastCommittedEntry();
+  CHECK(entry);
+  entry->navigation_transition_data().set_favicon(favicon);
+}
+
 void BackForwardTransitionAnimationManagerAndroid::OnDetachedFromWindow() {
   // The WebContentsViewAndroid's native view is detached from the top level
   // window. We must abort the transition.
   CHECK(animator_);
-  animator_->AbortAnimation();
+  animator_->AbortAnimation(AnimationAbortReason::kDetachedFromWindow);
   DestroyAnimator();
 }
 
@@ -168,14 +164,15 @@ void BackForwardTransitionAnimationManagerAndroid::
     OnRootWindowVisibilityChanged(bool visible) {
   CHECK(animator_);
   if (!visible) {
-    animator_->AbortAnimation();
+    animator_->AbortAnimation(
+        AnimationAbortReason::kRootWindowVisibilityChanged);
     DestroyAnimator();
   }
 }
 
 void BackForwardTransitionAnimationManagerAndroid::OnDetachCompositor() {
   CHECK(animator_);
-  animator_->AbortAnimation();
+  animator_->AbortAnimation(AnimationAbortReason::kCompositorDetached);
   DestroyAnimator();
 }
 
@@ -204,15 +201,15 @@ void BackForwardTransitionAnimationManagerAndroid::DidStartNavigation(
   MaybeDestroyAnimator();
 }
 
-void BackForwardTransitionAnimationManagerAndroid::DidFinishNavigation(
-    NavigationHandle* navigation_handle) {
-  animator_->DidFinishNavigation(navigation_handle);
-  MaybeDestroyAnimator();
-}
-
 void BackForwardTransitionAnimationManagerAndroid::ReadyToCommitNavigation(
     NavigationHandle* navigation_handle) {
   animator_->ReadyToCommitNavigation(navigation_handle);
+  MaybeDestroyAnimator();
+}
+
+void BackForwardTransitionAnimationManagerAndroid::DidFinishNavigation(
+    NavigationHandle* navigation_handle) {
+  animator_->DidFinishNavigation(navigation_handle);
   MaybeDestroyAnimator();
 }
 
@@ -241,6 +238,28 @@ void BackForwardTransitionAnimationManagerAndroid::OnAnimationStageChanged() {
       ->web_contents()
       ->GetDelegate()
       ->DidBackForwardTransitionAnimationChange();
+}
+
+void BackForwardTransitionAnimationManagerAndroid::
+    OnPostNavigationFirstFrameTimeout() {
+  CHECK(animator_);
+  CHECK(animator_->IsTerminalState());
+  DestroyAnimator();
+}
+
+SkBitmap BackForwardTransitionAnimationManagerAndroid::
+    MaybeCopyContentAreaAsBitmapSync() {
+  return web_contents_view_android()
+      ->web_contents()
+      ->GetDelegate()
+      ->MaybeCopyContentAreaAsBitmapSync();
+}
+
+void BackForwardTransitionAnimationManagerAndroid::MaybeRecordIgnoredInput(
+    const blink::WebInputEvent& event) {
+  if (animator_) {
+    animator_->MaybeRecordIgnoredInput(event);
+  }
 }
 
 void BackForwardTransitionAnimationManagerAndroid::MaybeDestroyAnimator() {

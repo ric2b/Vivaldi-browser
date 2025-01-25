@@ -66,6 +66,9 @@ class MetricsCollectorTest(unittest.TestCase):
         mock.patch('metrics_utils.get_repo_timestamp', lambda _: 1234).start()
         mock.patch('metrics_utils.get_git_version', lambda: '2.18.1').start()
 
+        mock.patch('newauth.Enabled', lambda: False).start()
+        mock.patch('newauth.ExplicitlyDisabled', lambda: False).start()
+
         self.maxDiff = None
         self.default_metrics = {
             "metrics_version": 0,

@@ -35,15 +35,15 @@ AxisEdge AxisEdgeFromItemPosition(GridTrackSizingDirection track_direction,
   const bool is_for_columns = track_direction == kForColumns;
   const auto root_grid_writing_direction =
       root_grid_style.GetWritingDirection();
+  const StyleSelfAlignmentData normal_value(ItemPosition::kNormal,
+                                            OverflowAlignment::kDefault);
 
   const auto& alignment =
       (is_for_columns ==
        IsParallelWritingMode(root_grid_writing_direction.GetWritingMode(),
                              parent_grid_style.GetWritingMode()))
-          ? item_style.ResolvedJustifySelf(ItemPosition::kNormal,
-                                           &parent_grid_style)
-          : item_style.ResolvedAlignSelf(ItemPosition::kNormal,
-                                         &parent_grid_style);
+          ? item_style.ResolvedJustifySelf(normal_value, &parent_grid_style)
+          : item_style.ResolvedAlignSelf(normal_value, &parent_grid_style);
 
   *auto_behavior = AutoSizeBehavior::kFitContent;
   *is_overflow_safe = alignment.Overflow() == OverflowAlignment::kSafe;
@@ -174,7 +174,8 @@ GridItemData::GridItemData(
   //   https://drafts.csswg.org/css-contain-2/#containment-layout
   //   https://drafts.csswg.org/css-contain-2/#containment-paint
   if (node.IsGrid() && !node.ShouldApplyLayoutContainment() &&
-      !node.ShouldApplyPaintContainment()) {
+      !node.ShouldApplyPaintContainment() &&
+      !style.IsContainerForSizeContainerQueries()) {
     has_subgridded_columns =
         is_parallel_with_root_grid
             ? style.GridTemplateColumns().IsSubgriddedAxis()

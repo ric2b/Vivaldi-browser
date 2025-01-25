@@ -11,11 +11,9 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
-#include "chrome/browser/new_tab_page/modules/feed/feed.mojom.h"
 #include "chrome/browser/new_tab_page/modules/file_suggestion/file_suggestion.mojom.h"
 #include "chrome/browser/new_tab_page/modules/v2/calendar/google_calendar.mojom.h"
 #include "chrome/browser/new_tab_page/modules/v2/most_relevant_tab_resumption/most_relevant_tab_resumption.mojom.h"
-#include "chrome/browser/new_tab_page/modules/v2/tab_resumption/tab_resumption.mojom.h"
 #include "components/user_education/webui/help_bubble_handler.h"
 #include "ui/webui/resources/cr_components/help_bubble/help_bubble.mojom.h"
 #include "ui/webui/resources/js/browser_command/browser_command.mojom.h"
@@ -24,14 +22,12 @@
 #endif
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/search/background/ntp_custom_background_service.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_observer.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_observer.h"
 #include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom.h"
-#include "components/feed/buildflags.h"
 #include "components/page_image_service/mojom/page_image_service.mojom.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -56,10 +52,6 @@ class NavigationHandle;
 class WebUI;
 }  // namespace content
 
-namespace ntp {
-class FeedHandler;
-}  // namespace ntp
-
 namespace page_image_service {
 class ImageServiceHandler;
 }  // namespace page_image_service
@@ -78,11 +70,11 @@ class GURL;
 class MostRelevantTabResumptionPageHandler;
 class MostVisitedHandler;
 class NewTabPageHandler;
+class NtpCustomBackgroundService;
 class PrefRegistrySimple;
 class PrefService;
 class Profile;
 class RealboxHandler;
-class TabResumptionPageHandler;
 
 class NewTabPageUI
     : public ui::MojoWebUIController,
@@ -106,7 +98,6 @@ class NewTabPageUI
   static bool IsNewTabPageOrigin(const GURL& url);
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
   static void ResetProfilePrefs(PrefService* prefs);
-  static bool IsDriveModuleEnabledForProfile(Profile* profile);
   static bool IsManagedProfile(Profile* profile);
 
   // Instantiates the implementor of the mojom::PageHandlerFactory mojo
@@ -159,11 +150,6 @@ class NewTabPageUI
       mojo::PendingReceiver<ntp::calendar::mojom::GoogleCalendarPageHandler>
           pending_receiver);
 
-  // Instantiates the implementor of ntp::feed::mojom::FeedHandler mojo
-  // interface passing the pending receiver that will be internally bound.
-  void BindInterface(
-      mojo::PendingReceiver<ntp::feed::mojom::FeedHandler> pending_receiver);
-
 #if !defined(OFFICIAL_BUILD)
   // Instantiates the implementor of the foo::mojom::FooHandler mojo interface
   // passing the pending receiver that will be internally bound.
@@ -174,10 +160,6 @@ class NewTabPageUI
   void BindInterface(mojo::PendingReceiver<
                      ntp::most_relevant_tab_resumption::mojom::PageHandler>
                          pending_page_handler);
-
-  void BindInterface(
-      mojo::PendingReceiver<ntp::tab_resumption::mojom::PageHandler>
-          pending_page_handler);
 
   void BindInterface(
       mojo::PendingReceiver<page_image_service::mojom::PageImageServiceHandler>
@@ -257,7 +239,6 @@ class NewTabPageUI
 #endif
   std::unique_ptr<MostRelevantTabResumptionPageHandler>
       most_relevant_tab_resumption_handler_;
-  std::unique_ptr<TabResumptionPageHandler> tab_resumption_handler_;
   std::unique_ptr<page_image_service::ImageServiceHandler>
       image_service_handler_;
   raw_ptr<Profile> profile_;
@@ -275,9 +256,6 @@ class NewTabPageUI
   // Mojo implementations for modules:
   std::unique_ptr<GoogleCalendarPageHandler> google_calendar_handler_;
   std::unique_ptr<FileSuggestionHandler> file_handler_;
-#if BUILDFLAG(ENABLE_FEED_V2)
-  std::unique_ptr<ntp::FeedHandler> feed_handler_;
-#endif  // BUILDFLAG(ENABLE_FEED_V2)
   PrefChangeRegistrar pref_change_registrar_;
 
   // Holds subscriptions for TabInterface callbacks.

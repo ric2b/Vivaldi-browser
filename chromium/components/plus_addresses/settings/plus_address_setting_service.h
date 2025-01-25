@@ -10,7 +10,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 
 namespace syncer {
-class ModelTypeControllerDelegate;
+class DataTypeControllerDelegate;
 }  // namespace syncer
 
 namespace plus_addresses {
@@ -24,11 +24,11 @@ class PlusAddressSettingService : public KeyedService {
       delete;
 
   // Getters for the settings. If the client isn't aware of the value of a
-  // setting yet (because it's still being downloaded by sync), the default
-  // value (false, "" or 0) is returned.
+  // setting, a setting-specific default value is returned.
 
+  // Defaults to true.
   virtual bool GetIsPlusAddressesEnabled() const = 0;
-  // Whether the user went through the onboarding flow.
+  // Whether the user went through the onboarding flow. Defaults to false.
   virtual bool GetHasAcceptedNotice() const = 0;
 
   // Setters for the settings writable from Chrome.
@@ -36,7 +36,7 @@ class PlusAddressSettingService : public KeyedService {
   virtual void SetHasAcceptedNotice() = 0;
 
   // Returns a controller delegate for the `sync_bridge_` owned by this service.
-  virtual std::unique_ptr<syncer::ModelTypeControllerDelegate>
+  virtual std::unique_ptr<syncer::DataTypeControllerDelegate>
   GetSyncControllerDelegate() = 0;
 };
 

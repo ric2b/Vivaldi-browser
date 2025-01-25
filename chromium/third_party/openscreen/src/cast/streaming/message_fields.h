@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-#include "cast/streaming/constants.h"
+#include "cast/streaming/public/constants.h"
 #include "platform/base/error.h"
 
 namespace openscreen::cast {

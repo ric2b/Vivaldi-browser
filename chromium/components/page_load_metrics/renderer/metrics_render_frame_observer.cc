@@ -686,6 +686,18 @@ MetricsRenderFrameObserver::Timing MetricsRenderFrameObserver::GetTiming()
         CreateTimeDeltaFromTimestampsInSeconds(
             (*perf.FirstScrollTimestamp()).InSecondsF(), start);
   }
+  if (perf.DomainLookupStart() > 0.0) {
+    timing->domain_lookup_timing->domain_lookup_start =
+        CreateTimeDeltaFromTimestampsInSeconds(perf.DomainLookupStart(), start);
+  }
+  if (perf.DomainLookupEnd() > 0.0) {
+    timing->domain_lookup_timing->domain_lookup_end =
+        CreateTimeDeltaFromTimestampsInSeconds(perf.DomainLookupEnd(), start);
+  }
+  if (perf.ConnectStart() > 0.0) {
+    timing->connect_start =
+        CreateTimeDeltaFromTimestampsInSeconds(perf.ConnectStart(), start);
+  }
   if (perf.ResponseStart() > 0.0) {
     timing->response_start =
         CreateTimeDeltaFromTimestampsInSeconds(perf.ResponseStart(), start);
@@ -823,14 +835,6 @@ MetricsRenderFrameObserver::Timing MetricsRenderFrameObserver::GetTiming()
               .InSecondsF(),
           start);
     }
-
-    timing->paint_timing->largest_contentful_paint
-        ->is_loaded_from_memory_cache =
-        largest_contentful_paint_details.is_loaded_from_memory_cache;
-
-    timing->paint_timing->largest_contentful_paint
-        ->is_preloaded_with_early_hints =
-        largest_contentful_paint_details.is_preloaded_with_early_hints;
   }
   if (largest_contentful_paint_details.text_paint_size > 0) {
     // LargestTextPaint and LargestTextPaintSize should be available at the

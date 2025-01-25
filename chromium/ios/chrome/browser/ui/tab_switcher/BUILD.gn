@@ -27,7 +27,6 @@ source_set("items") {
   deps = [
     "//base",
     "//components/favicon/ios",
-    "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/url",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/ui/symbols",
@@ -36,6 +35,28 @@ source_set("items") {
     "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid:group_tab_info",
     "//ios/web/public",
     "//url",
+  ]
+}
+
+source_set("tab_group_confirmation") {
+  sources = [
+    "tab_group_action_type.h",
+    "tab_group_confirmation_coordinator.h",
+    "tab_group_confirmation_coordinator.mm",
+  ]
+
+  public_deps = [ "//ios/chrome/browser/shared/coordinator/chrome_coordinator" ]
+  deps = [
+    "//base",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/shared/coordinator/alert",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/web_state_list",
+    "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/signin/model",
+    "//ui/base",
   ]
 }
 
@@ -55,7 +76,6 @@ source_set("utils") {
     "//components/favicon/ios",
     "//components/tab_groups",
     "//ios/chrome/browser/shared/model/browser",
-    "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/url",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/model/web_state_list:utils",
@@ -82,7 +102,7 @@ source_set("unit_tests") {
     ":utils",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser/test:test_support",
-    "//ios/chrome/browser/shared/model/browser_state:test_support",
+    "//ios/chrome/browser/shared/model/profile/test",
     "//ios/chrome/browser/snapshots/model",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",

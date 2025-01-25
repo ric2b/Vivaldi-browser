@@ -4,8 +4,11 @@
 
 #include "chrome/browser/controlled_frame/controlled_frame_test_base.h"
 
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "base/types/expected.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
@@ -91,7 +94,11 @@ void ControlledFrameTestBase::StartContentServer(
 web_app::IsolatedWebAppUrlInfo
 ControlledFrameTestBase::CreateAndInstallEmptyApp(
     const web_app::ManifestBuilder& manifest_builder) {
-  app_ = web_app::IsolatedWebAppBuilder(manifest_builder).BuildBundle();
+  auto updated_manifest_builder = manifest_builder;
+  updated_manifest_builder.AddPermissionsPolicy(
+      blink::mojom::PermissionsPolicyFeature::kControlledFrame, /*self=*/true,
+      /*origins=*/{});
+  app_ = web_app::IsolatedWebAppBuilder(updated_manifest_builder).BuildBundle();
   app_->TrustSigningKey();
   base::expected<web_app::IsolatedWebAppUrlInfo, std::string> url_info =
       app_->Install(profile());
@@ -99,6 +106,7 @@ ControlledFrameTestBase::CreateAndInstallEmptyApp(
   return url_info.value();
 }
 
+// Keep this in sync with web_kiosk_base_test.cc.
 [[nodiscard]] bool ControlledFrameTestBase::CreateControlledFrame(
     content::RenderFrameHost* frame,
     const GURL& src) {
@@ -117,6 +125,38 @@ ControlledFrameTestBase::CreateAndInstallEmptyApp(
     });
 )";
   return ExecJs(frame, content::JsReplace(kCreateControlledFrame, src));
+}
+
+std::pair<content::RenderFrameHost*, content::RenderFrameHost*>
+ControlledFrameTestBase::InstallAndOpenIwaThenCreateControlledFrame(
+    std::optional<std::string_view> controlled_frame_host_name,
+    std::string_view controlled_frame_src_relative_url,
+    web_app::ManifestBuilder manfest_builder) {
+  CHECK(embedded_https_test_server().Started())
+      << "Controlled Frame content server has not been started.";
+
+  web_app::IsolatedWebAppUrlInfo url_info =
+      CreateAndInstallEmptyApp(manfest_builder);
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+  CHECK(app_frame);
+
+  GURL controlled_frame_src = controlled_frame_host_name.has_value()
+                                  ? embedded_https_test_server().GetURL(
+                                        controlled_frame_host_name.value(),
+                                        controlled_frame_src_relative_url)
+                                  : embedded_https_test_server().GetURL(
+                                        controlled_frame_src_relative_url);
+
+  CHECK(CreateControlledFrame(app_frame, controlled_frame_src));
+
+  extensions::WebViewGuest* web_view_guest = GetWebViewGuest(app_frame);
+  CHECK(web_view_guest);
+
+  content::RenderFrameHost* controlled_frame =
+      web_view_guest->GetGuestMainFrame();
+  CHECK(controlled_frame);
+
+  return {app_frame, controlled_frame};
 }
 
 extensions::WebViewGuest* ControlledFrameTestBase::GetWebViewGuest(

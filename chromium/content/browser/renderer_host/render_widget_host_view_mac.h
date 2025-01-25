@@ -55,7 +55,6 @@ class CursorManager;
 
 @class NSAccessibilityRemoteUIElement;
 @class RenderWidgetHostViewCocoa;
-@class CursorAccessibilityScaleFactorObserver;
 
 namespace content {
 
@@ -184,7 +183,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   bool GetIsPointerLockedUnadjustedMovementForTesting() override;
   // Returns true when running on a recent enough OS for unaccelerated pointer
   // events.
-  static bool IsUnadjustedMouseMovementSupported();
   bool LockKeyboard(std::optional<base::flat_set<ui::DomCode>> codes) override;
   void UnlockKeyboard() override;
   bool IsKeyboardLocked() override;
@@ -634,7 +632,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   std::unique_ptr<input::CursorManager> cursor_manager_;
 
   // Observes macOS's accessibility pointer size user preference changes.
-  CursorAccessibilityScaleFactorObserver* __strong cursor_scale_observer_;
+  id<NSObject> __strong cursor_scale_observer_;
 
   // Used to track active password input sessions.
   std::unique_ptr<ui::ScopedPasswordInputEnabler> password_input_enabler_;

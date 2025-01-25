@@ -44,8 +44,6 @@ namespace {
 using ::testing::_;
 using ::testing::Return;
 using TpcdExperimentEligibility = privacy_sandbox::TpcdExperimentEligibility;
-using NoticeType = privacy_sandbox::TrackingProtectionOnboarding::NoticeType;
-using SurfaceType = privacy_sandbox::TrackingProtectionOnboarding::SurfaceType;
 
 constexpr char kReasonForEligibilityStoredInPrefsHistogram[] =
     "PrivacySandbox.CookieDeprecationFacilitatedTesting."
@@ -98,11 +96,6 @@ class EligibilityServiceTest : public EligibilityServiceTestBase {
   EligibilityServiceTest() {
     feature_list_.InitAndEnableFeature(
         features::kCookieDeprecationFacilitatedTesting);
-  }
-
- protected:
-  void SetChannelVersion(version_info::Channel channel) {
-    onboarding_service_->channel_ = channel;
   }
 
  private:
@@ -182,31 +175,6 @@ TEST_F(EligibilityServiceTest,
       kReasonForComputedEligibilityForProfileHistogram,
       /*sample=*/TpcdExperimentEligibility::Reason::kEligible,
       /*expected_bucket_count=*/1);
-}
-
-TEST_F(EligibilityServiceTest, VersionChange_OnboardingPrefsReset) {
-  EXPECT_CALL(*experiment_manager_, DidVersionChange).WillOnce(Return(true));
-
-  SetChannelVersion(version_info::Channel::BETA);
-
-  // Simulate onboarding a profile.
-  onboarding_service_->MaybeMarkModeBEligible();
-  onboarding_service_->NoticeShown(SurfaceType::kDesktop,
-                                   NoticeType::kModeBOnboarding);
-  onboarding_service_->NoticeActionTaken(
-      SurfaceType::kDesktop, NoticeType::kModeBOnboarding,
-      privacy_sandbox::TrackingProtectionOnboarding::NoticeAction::kGotIt);
-
-  EXPECT_EQ(onboarding_service_->GetOnboardingStatus(),
-            privacy_sandbox::TrackingProtectionOnboarding::OnboardingStatus::
-                kOnboarded);
-
-  EligibilityService eligibility_service(&profile_, onboarding_service_,
-                                         privacy_sandbox_settings_,
-                                         experiment_manager_.get());
-  EXPECT_EQ(onboarding_service_->GetOnboardingStatus(),
-            privacy_sandbox::TrackingProtectionOnboarding::OnboardingStatus::
-                kIneligible);
 }
 
 class EligibilityServiceOTRProfileTest
@@ -310,57 +278,5 @@ TEST_P(EligibilityServiceHistogramTest, ProfileEligibilityMismatch) {
 INSTANTIATE_TEST_SUITE_P(EligibilityServiceHistogramTests,
                          EligibilityServiceHistogramTest,
                          testing::ValuesIn(kTestCases));
-
-class EligibilityServiceDisable3PCsTest : public EligibilityServiceTestBase {
- public:
-  EligibilityServiceDisable3PCsTest() {
-    feature_list_.InitAndEnableFeatureWithParameters(
-        features::kCookieDeprecationFacilitatedTesting,
-        {{kDisable3PCookiesName, "true"}});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-TEST_F(EligibilityServiceDisable3PCsTest, Onboarded_NotifyManager) {
-  EXPECT_CALL(*experiment_manager_, IsClientEligible).WillOnce(Return(true));
-  EligibilityService eligibility_service(&profile_, onboarding_service_,
-                                         privacy_sandbox_settings_,
-                                         experiment_manager_.get());
-
-  EXPECT_CALL(*experiment_manager_, NotifyProfileTrackingProtectionOnboarded);
-
-  // Simulate onboarding a profile.
-  onboarding_service_->NoticeShown(SurfaceType::kDesktop,
-                                   NoticeType::kModeBOnboarding);
-}
-
-class EligibilityServiceSilentOnboardingTest
-    : public EligibilityServiceTestBase {
- public:
-  EligibilityServiceSilentOnboardingTest() {
-    feature_list_.InitAndEnableFeatureWithParameters(
-        features::kCookieDeprecationFacilitatedTesting,
-        {{kDisable3PCookiesName, "false"},
-         {kEnableSilentOnboardingName, "true"}});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-TEST_F(EligibilityServiceSilentOnboardingTest, Onboarded_NotifyManager) {
-  EXPECT_CALL(*experiment_manager_, IsClientEligible).WillOnce(Return(true));
-  EligibilityService eligibility_service(&profile_, onboarding_service_,
-                                         privacy_sandbox_settings_,
-                                         experiment_manager_.get());
-
-  EXPECT_CALL(*experiment_manager_, NotifyProfileTrackingProtectionOnboarded);
-
-  // Simulate onboarding a profile.
-  onboarding_service_->NoticeShown(SurfaceType::kDesktop,
-                                   NoticeType::kModeBSilentOnboarding);
-}
 
 }  // namespace tpcd::experiment

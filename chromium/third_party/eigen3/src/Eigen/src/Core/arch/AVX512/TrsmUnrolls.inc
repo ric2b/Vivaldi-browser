@@ -28,7 +28,7 @@ EIGEN_ALWAYS_INLINE int64_t idA(int64_t i, int64_t j, int64_t LDA) {
  *     func(startI,startJ)                                startJ = (startC)%(endJ)
  *                                                        func(...)
  *
- * The 1-D loop can be unrolled recursively by using enable_if and defining an auxillary function
+ * The 1-D loop can be unrolled recursively by using enable_if and defining an auxiliary function
  * with a template parameter used as a counter.
  *
  * template <endI, endJ, counter>
@@ -124,7 +124,7 @@ EIGEN_ALWAYS_INLINE void trans8x8blocks(PacketBlock<Packet8d, 8> &kernel) {
 }
 
 /***
- * Unrolls for tranposed C stores
+ * Unrolls for transposed C stores
  */
 template <typename Scalar>
 class trans {
@@ -134,7 +134,7 @@ class trans {
   static constexpr int64_t PacketSize = packet_traits<Scalar>::size;
 
   /***********************************
-   * Auxillary Functions for:
+   * Auxiliary Functions for:
    *  - storeC
    ***********************************
    */
@@ -285,7 +285,7 @@ class transB {
   static constexpr int64_t PacketSize = packet_traits<Scalar>::size;
 
   /***********************************
-   * Auxillary Functions for:
+   * Auxiliary Functions for:
    *  - loadB
    *  - storeB
    *  - loadBBlock
@@ -588,7 +588,7 @@ class trsm {
   static constexpr int64_t PacketSize = packet_traits<Scalar>::size;
 
   /***********************************
-   * Auxillary Functions for:
+   * Auxiliary Functions for:
    *  - loadRHS
    *  - storeRHS
    *  - divRHSByDiag
@@ -867,7 +867,7 @@ class gemm {
   static constexpr int64_t PacketSize = packet_traits<Scalar>::size;
 
   /***********************************
-   * Auxillary Functions for:
+   * Auxiliary Functions for:
    *  - setzero
    *  - updateC
    *  - storeC
@@ -1101,7 +1101,7 @@ class gemm {
       }
     }
 
-    // We have updated all accumlators, time to load next set of B's
+    // We have updated all accumulators, time to load next set of B's
     EIGEN_IF_CONSTEXPR((startN == endN - 1) && (startM == endM - 1)) {
       gemm::template loadB<endM, endN, startK, endK, numLoad, numBCast, rem>(B_t, LDB, zmm, rem_);
     }

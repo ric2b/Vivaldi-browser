@@ -5,8 +5,7 @@
 import * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 
-import {ContentData} from './ContentData.js';
-import {type DeferredContent} from './ContentProvider.js';
+import {ContentData, type ContentDataOrError} from './ContentData.js';
 
 /**
  * Usage of this class is mostly intended for content that is never "complete".
@@ -51,7 +50,11 @@ export class StreamingContentData extends Common.ObjectWrapper.ObjectWrapper<Eve
     return new StreamingContentData(content.mimeType, content.charset, content);
   }
 
+  /** @returns true, if this `ContentData` was constructed from text content or the mime type indicates text that can be decoded */
   get isTextContent(): boolean {
+    if (this.#contentData) {
+      return this.#contentData.isTextContent;
+    }
     return Platform.MimeType.isTextType(this.mimeType);
   }
 
@@ -62,7 +65,7 @@ export class StreamingContentData extends Common.ObjectWrapper.ObjectWrapper<Eve
     }
 
     this.#chunks.push(chunk);
-    this.dispatchEventToListeners(Events.ChunkAdded, {content: this, chunk});
+    this.dispatchEventToListeners(Events.CHUNK_ADDED, {content: this, chunk});
   }
 
   /** @returns An immutable ContentData with all the bytes received so far */
@@ -89,17 +92,17 @@ error:
   return 'error' in contentDataOrError;
 };
 
-export const asDeferredContent = function(contentDataOrError: StreamingContentDataOrError): DeferredContent {
+export const asContentDataOrError = function(contentDataOrError: StreamingContentDataOrError): ContentDataOrError {
   if (isError(contentDataOrError)) {
-    return {error: contentDataOrError.error, content: null, isEncoded: false};
+    return contentDataOrError;
   }
-  return contentDataOrError.content().asDeferedContent();
+  return contentDataOrError.content();
 };
 
 export const enum Events {
-  ChunkAdded = 'ChunkAdded',
+  CHUNK_ADDED = 'ChunkAdded',
 }
 
 export type EventTypes = {
-  [Events.ChunkAdded]: {content: StreamingContentData, chunk: string},
+  [Events.CHUNK_ADDED]: {content: StreamingContentData, chunk: string},
 };

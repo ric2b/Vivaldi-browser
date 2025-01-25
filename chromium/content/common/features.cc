@@ -24,6 +24,11 @@ BASE_FEATURE(kAndroidDownloadableFontsMatching,
              "AndroidDownloadableFontsMatching",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Adds OOPIF support for android drag and drop.
+BASE_FEATURE(kAndroidDragDropOopif,
+             "AndroidDragDropOopif",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Enables controlling the time to live for pages in the BackForwardCache.
 // The time to live is defined by the param 'time_to_live_seconds'; if this
 // param is not specified then this feature is ignored and the default is used.
@@ -100,26 +105,6 @@ BASE_FEATURE(kCriticalClientHint,
              "CriticalClientHint",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables setting the nonce of the data: opaque origin early in the navigation
-// so the nonce remains stable throughout a navigation.
-// Note: kDataUrlsHaveOriginAsUrl is dependent on this feature. If this feature
-// is being disabled, the other needs to be disabled as well.
-// TODO(crbug.com/1447896, yangsharon): Remove this once we're confident that
-// this change isn't causing issues in the wild.
-BASE_FEATURE(kDataUrlsHaveStableNonce,
-             "DataUrlsHaveStableNonce",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// When enabled, main frame data: URLs use the serialized nonce from the origin
-// as the site URL. Otherwise, use the entire data: URL as the site URL.
-// Note: This feature is dependent on kDataUrlsHaveStableNonce. If that flag
-// needs to be disabled, this will have to be disabled as well.
-// TODO(crbug.com/1447896, yangsharon): Remove this once we're confident that
-// this change isn't causing issues in the wild.
-BASE_FEATURE(kDataUrlsHaveOriginAsUrl,
-             "DataUrlsHaveOriginAsUrl",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enable changing source dynamically for desktop capture.
 BASE_FEATURE(kDesktopCaptureChangeSource,
              "DesktopCaptureChangeSource",
@@ -169,6 +154,12 @@ BASE_FEATURE(kEnableDevToolsJsErrorReporting,
 // experimental Content Security Policy features ('navigate-to').
 BASE_FEATURE(kExperimentalContentSecurityPolicyFeatures,
              "ExperimentalContentSecurityPolicyFeatures",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Allow specifying subsets of "name", "picture", "email" in the fields API.
+// Requires FedCmAuthz to be enabled.
+BASE_FEATURE(kFedCmFlexibleFields,
+             "FedCmFlexibleFields",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables CORS checks on the ID assertion endpoint of the FedCM API.
@@ -269,7 +260,7 @@ BASE_FEATURE(kFontSrcLocalMatching,
 // of using Fontations. See https://crbug.com/349952802
 BASE_FEATURE(kFontIndexingFontations,
              "FontIndexingFontations",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 // Feature controlling whether or not memory pressure signals will be forwarded
@@ -313,6 +304,17 @@ BASE_FEATURE(kHandleChildThreadTypeChangesInBrowser,
              "HandleChildThreadTypeChangesInBrowser",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
+
+// Controls whether we ignore duplicate navigations or not, in favor of
+// preserving the already ongoing navigation.
+BASE_FEATURE(kIgnoreDuplicateNavs,
+             "IgnoreDuplicateNavs",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kDuplicateNavThreshold,
+                   &kIgnoreDuplicateNavs,
+                   "duplicate_nav_threshold",
+                   base::Milliseconds(2000));
 
 // A feature flag for the memory-backed code cache.
 BASE_FEATURE(kInMemoryCodeCache,
@@ -501,7 +503,12 @@ BASE_FEATURE(kServiceWorkerAutoPreload,
 
 BASE_FEATURE(kServiceWorkerAvoidMainThreadForInitialization,
              "ServiceWorkerAvoidMainThreadForInitialization",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 // (crbug.com/1371756): When enabled, the static routing API starts
 // ServiceWorker when the routing result of a main resource request was network

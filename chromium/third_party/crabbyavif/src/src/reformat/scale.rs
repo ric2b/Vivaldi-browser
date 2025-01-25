@@ -75,6 +75,9 @@ impl Image {
             }
             let src_pd = src.plane_data(*plane).unwrap();
             let dst_pd = self.plane_data(*plane).unwrap();
+            // SAFETY: This function calls into libyuv which is a C++ library. We pass in pointers
+            // and strides to rust slices that are guaranteed to be valid.
+            //
             // libyuv versions >= 1880 reports a return value here. Older versions do not. Ignore
             // the return value for now.
             #[allow(clippy::let_unit_value)]
@@ -117,7 +120,7 @@ impl Image {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::internal_utils::pixels::Pixels;
+    use crate::internal_utils::pixels::*;
     use test_case::test_matrix;
 
     #[test_matrix([PixelFormat::Yuv444, PixelFormat::Yuv422, PixelFormat::Yuv420, PixelFormat::Yuv400], [false, true], [false, true])]
@@ -142,7 +145,9 @@ mod tests {
         ];
         for plane in planes {
             yuv.planes[plane.to_usize()] = Some(if is_pointer_input {
-                Pixels::Pointer(values.as_mut_ptr())
+                Pixels::Pointer(unsafe {
+                    PointerSlice::create(values.as_mut_ptr(), values.len()).unwrap()
+                })
             } else {
                 Pixels::Buffer(values.to_vec())
             });

@@ -71,7 +71,8 @@ class PasswordProtectionRequest
   void Cancel(bool timed_out) override;
 
   // Processes the received response.
-  void OnURLLoaderComplete(std::unique_ptr<std::string> response_body);
+  void OnURLLoaderComplete(bool has_access_token,
+                           std::unique_ptr<std::string> response_body);
 
   GURL main_frame_url() const { return main_frame_url_; }
 
@@ -175,11 +176,6 @@ class PasswordProtectionRequest
 
   // Start checking the allowlist.
   void CheckAllowlist();
-
-  static void OnAllowlistCheckDoneOnSB(
-      scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
-      base::WeakPtr<PasswordProtectionRequest> weak_request,
-      bool match_allowlist);
 
   // If |main_frame_url_| matches allowlist, call Finish() immediately;
   // otherwise call CheckCachedVerdicts().

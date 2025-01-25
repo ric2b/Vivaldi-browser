@@ -39,9 +39,7 @@ import {
   TrackEventConfig,
   VmstatCounters,
 } from '../../protos';
-
 import {TargetInfo} from './recording_interfaces_v2';
-
 import PerfClock = PerfEvents.PerfClock;
 import Timebase = PerfEvents.Timebase;
 import CallstackSampling = PerfEventConfig.CallstackSampling;
@@ -103,6 +101,7 @@ export function genTraceConfig(
   targetInfo: TargetInfo,
 ): TraceConfig {
   const isAndroid = targetInfo.targetType === 'ANDROID';
+  const isLinux = targetInfo.targetType === 'LINUX';
   const androidApiLevel = isAndroid ? targetInfo.androidApiLevel : undefined;
   const protoCfg = new TraceConfig();
   protoCfg.durationMs = uiCfg.durationMs;
@@ -159,6 +158,14 @@ export function genTraceConfig(
     ds.config = new DataSourceConfig();
     ds.config.targetBuffer = 1;
     ds.config.name = 'android.packages_list';
+    protoCfg.dataSources.push(ds);
+  }
+
+  if (isAndroid || isLinux) {
+    const ds = new TraceConfig.DataSource();
+    ds.config = new DataSourceConfig();
+    ds.config.targetBuffer = 1;
+    ds.config.name = 'linux.system_info';
     protoCfg.dataSources.push(ds);
   }
 

@@ -82,7 +82,7 @@ LocalDOMWindow* OpenDocumentPictureInPictureWindow(
   auto* resolver =
       MakeGarbageCollected<ScriptPromiseResolver<DOMWindow>>(script_state);
   ExceptionState exception_state(script_state->GetIsolate(),
-                                 ExceptionContextType::kOperationInvoke,
+                                 v8::ExceptionContext::kOperation,
                                  "DocumentPictureInPicture", "requestWindow");
 
   v8::Local<v8::Object> v8_object = v8::Object::New(v8_scope.GetIsolate());
@@ -103,7 +103,7 @@ LocalDOMWindow* OpenDocumentPictureInPictureWindow(
   EXPECT_EQ(opener_url.GetString(), document.BaseURL().GetString());
 
   controller.CreateDocumentPictureInPictureWindow(
-      script_state, *document.domWindow(), options, resolver, exception_state);
+      script_state, *document.domWindow(), options, resolver);
 
   return controller.documentPictureInPictureWindow();
 }
@@ -766,7 +766,7 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
         document->GetFrame(), mojom::UserActivationNotificationType::kTest);
     ExceptionState exception_state(
         ToScriptStateForMainWorld(document->GetFrame())->GetIsolate(),
-        ExceptionContextType::kOperationInvoke, "Window", "resizeTo");
+        v8::ExceptionContext::kOperation, "Window", "resizeTo");
     document->domWindow()->resizeTo(10, 10, exception_state);
     document->domWindow()->resizeTo(20, 20, exception_state);
     testing::Mock::VerifyAndClearExpectations(&GetPipChromeClient());
@@ -780,7 +780,7 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
         document->GetFrame(), mojom::UserActivationNotificationType::kTest);
     ExceptionState exception_state(
         ToScriptStateForMainWorld(document->GetFrame())->GetIsolate(),
-        ExceptionContextType::kOperationInvoke, "Window", "resizeBy");
+        v8::ExceptionContext::kOperation, "Window", "resizeBy");
     document->domWindow()->resizeBy(10, 10, exception_state);
     document->domWindow()->resizeBy(20, 20, exception_state);
     testing::Mock::VerifyAndClearExpectations(&GetPipChromeClient());
@@ -833,7 +833,7 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
   auto* resolver =
       MakeGarbageCollected<ScriptPromiseResolver<DOMWindow>>(script_state);
   ExceptionState exception_state(script_state->GetIsolate(),
-                                 ExceptionContextType::kOperationInvoke,
+                                 v8::ExceptionContext::kOperation,
                                  "DocumentPictureInPicture", "requestWindow");
 
   v8::Local<v8::Object> v8_object = v8::Object::New(v8_scope.GetIsolate());
@@ -848,7 +848,7 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
 
   // Create document picture in picture window.
   controller.CreateDocumentPictureInPictureWindow(
-      script_state, *document.domWindow(), options, resolver, exception_state);
+      script_state, *document.domWindow(), options, resolver);
 
   // Verify the document picture in picture window was not created.
   auto* pictureInPictureWindow = controller.documentPictureInPictureWindow();

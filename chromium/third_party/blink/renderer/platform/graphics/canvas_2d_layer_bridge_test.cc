@@ -109,7 +109,7 @@ class Canvas2DLayerBridgeTest : public Test {
   virtual bool NeedsMockGL() { return false; }
 
   void TearDown() override {
-    SharedGpuContext::ResetForTesting();
+    SharedGpuContext::Reset();
     test_context_provider_.reset();
     accelerated_compositing_scope_ = nullptr;
   }
@@ -172,38 +172,15 @@ TEST_F(Canvas2DLayerBridgeTest, PrepareMailboxWhenContextIsLost) {
       MakeBridge(gfx::Size(300, 150), RasterModeHint::kPreferGPU, kNonOpaque);
 
   EXPECT_TRUE(GetRasterMode(bridge.get()) == RasterMode::kGPU);
-  bridge->FinalizeFrame(FlushReason::kTesting);  // Trigger the creation
-                                                 // of a backing store
-  // When the context is lost we are not sure if we should still be producing
-  // GL frames for the compositor or not, so fail to generate frames.
-  test_context_provider_->TestContextGL()->set_context_lost(true);
 
   viz::TransferableResource resource;
   viz::ReleaseCallback release_callback;
-  EXPECT_FALSE(Host()->PrepareTransferableResource(nullptr, &resource,
-                                                   &release_callback));
-}
+  EXPECT_TRUE(Host()->PrepareTransferableResource(nullptr, &resource,
+                                                  &release_callback));
 
-TEST_F(Canvas2DLayerBridgeTest,
-       PrepareMailboxWhenContextIsLostWithFailedRestore) {
-  std::unique_ptr<Canvas2DLayerBridge> bridge =
-      MakeBridge(gfx::Size(300, 150), RasterModeHint::kPreferGPU, kNonOpaque);
-
-  bridge->GetOrCreateResourceProvider();
-  EXPECT_TRUE(Host()->IsResourceValid());
   // When the context is lost we are not sure if we should still be producing
   // GL frames for the compositor or not, so fail to generate frames.
   test_context_provider_->TestContextGL()->set_context_lost(true);
-  EXPECT_FALSE(Host()->IsResourceValid());
-
-  // Restoration will fail because
-  // Platform::createSharedOffscreenGraphicsContext3DProvider() is stubbed
-  // in unit tests.  This simulates what would happen when attempting to
-  // restore while the GPU process is down.
-  bridge->Restore();
-
-  viz::TransferableResource resource;
-  viz::ReleaseCallback release_callback;
   EXPECT_FALSE(Host()->PrepareTransferableResource(nullptr, &resource,
                                                    &release_callback));
 }
@@ -863,42 +840,6 @@ TEST_F(Canvas2DLayerBridgeTest,
   EXPECT_FALSE(Host()->PrepareTransferableResource(nullptr, &resource,
                                                    &release_callback2));
   EXPECT_FALSE(release_callback2);
-}
-
-class CustomFakeCanvasResourceHost : public FakeCanvasResourceHost {
- public:
-  explicit CustomFakeCanvasResourceHost(const gfx::Size& size)
-      : FakeCanvasResourceHost(size) {}
-  void InitializeForRecording(cc::PaintCanvas* canvas) const override {
-    // Restore the canvas stack to hold a simple matrix transform.
-    canvas->save();
-    canvas->translate(5, 0);
-  }
-};
-
-TEST_F(Canvas2DLayerBridgeTest, WritePixelsRestoresClipStack) {
-  gfx::Size size(300, 300);
-  auto host = std::make_unique<CustomFakeCanvasResourceHost>(size);
-  std::unique_ptr<Canvas2DLayerBridge> bridge =
-      MakeBridge(size, RasterModeHint::kPreferGPU, kOpaque, std::move(host));
-  cc::PaintFlags flags;
-
-  // MakeBridge() results in a call to restore the matrix. So we already have 1.
-  EXPECT_EQ(Canvas().getLocalToDevice().rc(0, 3), 5);
-  // Drawline so WritePixels has something to flush
-  Canvas().drawLine(0, 0, 2, 2, flags);
-
-  // WritePixels flushes recording. Post flush, a new drawing canvas is created
-  // that should have the matrix restored onto it.
-  bridge->WritePixels(SkImageInfo::MakeN32Premul(10, 10), nullptr, 10, 0, 0);
-  EXPECT_EQ(Canvas().getLocalToDevice().rc(0, 3), 5);
-
-  Canvas().drawLine(0, 0, 2, 2, flags);
-  // Standard flush recording. Post flush, a new drawing canvas is created that
-  // should have the matrix restored onto it.
-  DrawSomething(bridge.get());
-
-  EXPECT_EQ(Canvas().getLocalToDevice().rc(0, 3), 5);
 }
 
 TEST_F(Canvas2DLayerBridgeTest, DisplayedCanvasIsRateLimited) {

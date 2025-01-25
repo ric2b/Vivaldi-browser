@@ -24,7 +24,7 @@ import './sea_pen_zero_state_svg_element.js';
 import {afterNextRender} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {QUERY, Query, SeaPenImageId} from './constants.js';
-import {isLacrosEnabled, isSeaPenTextInputEnabled, isVcResizeThumbnailEnabled} from './load_time_booleans.js';
+import {isLacrosEnabled, isManagedSeaPenFeedbackEnabled, isSeaPenTextInputEnabled, isVcResizeThumbnailEnabled} from './load_time_booleans.js';
 import {MantaStatusCode, SeaPenQuery, SeaPenThumbnail, TextQueryHistoryEntry} from './sea_pen.mojom-webui.js';
 import {clearSeaPenThumbnails, openFeedbackDialog, selectSeaPenThumbnail} from './sea_pen_controller.js';
 import {SeaPenTemplateId} from './sea_pen_generated.mojom-webui.js';
@@ -34,7 +34,8 @@ import {logSeaPenTemplateFeedback, logSeaPenThumbnailClicked} from './sea_pen_me
 import {WithSeaPenStore} from './sea_pen_store.js';
 import {isNonEmptyArray, isPersonalizationApp, isSeaPenImageId} from './sea_pen_utils.js';
 
-const kLoadingPlaceholderCount = 8;
+const kFreeformLoadingPlaceholderCount = 4;
+const kTemplateLoadingPlaceholderCount = 8;
 
 type Tile = 'loading'|SeaPenThumbnail;
 
@@ -121,7 +122,7 @@ export class SeaPenImagesElement extends WithSeaPenStore {
         type: Array,
         value() {
           // Pre-populate the tiles with placeholders.
-          return new Array(kLoadingPlaceholderCount).fill('loading');
+          return new Array(kTemplateLoadingPlaceholderCount).fill('loading');
         },
       },
 
@@ -147,6 +148,13 @@ export class SeaPenImagesElement extends WithSeaPenStore {
         type: Boolean,
         value() {
           return isSeaPenTextInputEnabled();
+        },
+      },
+
+      isManagedSeaPenFeedbackEnabled_: {
+        type: Boolean,
+        value() {
+          return isManagedSeaPenFeedbackEnabled();
         },
       },
 
@@ -245,6 +253,11 @@ export class SeaPenImagesElement extends WithSeaPenStore {
     return !isSeaPenTextInputEnabled || templateId !== QUERY;
   }
 
+  private shouldShowThumbnailFeedback_(
+      isManagedSeaPenFeedbackEnabled: boolean, thumbnailsLoading: boolean) {
+    return isManagedSeaPenFeedbackEnabled && !thumbnailsLoading;
+  }
+
   private getPlaceholders_(x: number) {
     return new Array(x).fill(0);
   }
@@ -309,11 +322,15 @@ export class SeaPenImagesElement extends WithSeaPenStore {
       return;
     }
 
+    const placeholderCount = this.templateId === QUERY ?
+        kFreeformLoadingPlaceholderCount :
+        kTemplateLoadingPlaceholderCount;
+
     this.updateList(
         /*propertyPath=*/ 'tiles_',
         /*identityGetter=*/
         () => 'loading',
-        /*newList=*/ new Array(kLoadingPlaceholderCount).fill('loading'),
+        /*newList=*/ new Array(placeholderCount).fill('loading'),
         /*identityBasedUpdate=*/ false,
     );
   }

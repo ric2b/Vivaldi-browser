@@ -34,7 +34,6 @@
 class AppListModelUpdater;
 class AppServiceAppModelBuilder;
 class AppServicePromiseAppModelBuilder;
-class AppServiceShortcutModelBuilder;
 class ChromeAppListItem;
 class Profile;
 
@@ -318,10 +317,10 @@ class AppListSyncableService : public syncer::SyncableService,
   // syncer::SyncableService
   void WaitUntilReadyToSync(base::OnceClosure done) override;
   std::optional<syncer::ModelError> MergeDataAndStartSyncing(
-      syncer::ModelType type,
+      syncer::DataType type,
       const syncer::SyncDataList& initial_sync_data,
       std::unique_ptr<syncer::SyncChangeProcessor> sync_processor) override;
-  void StopSyncing(syncer::ModelType type) override;
+  void StopSyncing(syncer::DataType type) override;
   syncer::SyncDataList GetAllSyncDataForTesting() const;
   std::optional<syncer::ModelError> ProcessSyncChanges(
       const base::Location& from_here,
@@ -398,10 +397,8 @@ class AppListSyncableService : public syncer::SyncableService,
   // after a sync item is removed (which may result in an empty folder).
   void PruneEmptySyncFolders();
 
-  // Creates or updates a SyncItem from |specifics|. Returns true if a new item
-  // was created.
-  // TODO(crbug.com/40677489): Change return type to void.
-  bool ProcessSyncItemSpecifics(const sync_pb::AppListSpecifics& specifics);
+  // Creates or updates a SyncItem from |specifics|.
+  void ProcessSyncItemSpecifics(const sync_pb::AppListSpecifics& specifics);
 
   // Handles a newly created sync item (e.g. creates a new AppItem and adds it
   // to the model or uninstalls a deleted default item.
@@ -514,8 +511,6 @@ class AppListSyncableService : public syncer::SyncableService,
   std::unique_ptr<AppServiceAppModelBuilder> app_service_apps_builder_;
   std::unique_ptr<AppServicePromiseAppModelBuilder>
       app_service_promise_apps_builder_;
-  std::unique_ptr<AppServiceShortcutModelBuilder>
-      app_service_shortcuts_builder_;
   std::unique_ptr<syncer::SyncChangeProcessor> sync_processor_;
   SyncItemMap sync_items_;
   // Map that keeps pending request to transfer attributes from one app to

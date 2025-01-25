@@ -30,7 +30,6 @@
 #include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
@@ -43,6 +42,8 @@
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
+#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/policy_generator.h"
@@ -325,8 +326,7 @@ class IsolatedWebAppPolicyManagerAshBrowserTestBase
       web_app::TestSignedWebBundleBuilder::BuildDefault(
           TestSignedWebBundleBuilder::BuildOptions()
               .SetVersion(base::Version("7.0.6"))
-              .AddKeyPair(web_package::WebBundleSigner::Ed25519KeyPair::
-                              CreateRandom()));
+              .AddKeyPair(web_package::test::Ed25519KeyPair::CreateRandom()));
   const web_app::TestSignedWebBundle iwa_bundle_2_ =
       web_app::TestSignedWebBundleBuilder::BuildDefault(
           TestSignedWebBundleBuilder::BuildOptions().SetVersion(
@@ -581,10 +581,13 @@ class CleanupOrphanedBundlesTest
   void SimulateOrphanedBundle(Profile* profile,
                               const std::string& bundle_directory) {
     base::ScopedAllowBlockingForTesting allow_blocking;
-    ASSERT_TRUE(base::CreateDirectory(CHECK_DEREF(profile)
-                                          .GetPath()
-                                          .Append(kIwaDirName)
-                                          .Append(bundle_directory)));
+    auto base_path = CHECK_DEREF(profile)
+                         .GetPath()
+                         .Append(kIwaDirName)
+                         .Append(bundle_directory);
+    ASSERT_TRUE(base::CreateDirectory(base_path));
+    ASSERT_TRUE(
+        base::WriteFile(base_path.Append("main.swbn"), "Sample content"));
   }
 
   bool CheckBundleDirectoryExists(Profile* profile,

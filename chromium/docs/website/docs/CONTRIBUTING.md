@@ -75,8 +75,8 @@ see this under chromiumos/website already. Skip to step 3.*
 
     It should only take a few seconds to build out the website.
 
-    (`npmw` is a simple wrapper around the version of `npm` that is bundled
-    as part of this checkout.)
+    (`npmw` is a simple wrapper around `npm-run-all` that finds the
+    appropriate node binary to use.)
 
 6.  Start a local web server to view the site. The server will (re-)generate
     the pages on the fly as needed if the input or conversion code changes.

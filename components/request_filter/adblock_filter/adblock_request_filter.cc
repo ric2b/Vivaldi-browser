@@ -53,6 +53,8 @@ flat::ResourceType ResourceTypeFromRequest(
   }
 
   switch (request.request.destination) {
+    case network::mojom::RequestDestination::kDocument:
+      return flat::ResourceType_DOCUMENT;
     case network::mojom::RequestDestination::kIframe:
     case network::mojom::RequestDestination::kFrame:
     case network::mojom::RequestDestination::kFencedframe:
@@ -92,7 +94,6 @@ flat::ResourceType ResourceTypeFromRequest(
     case network::mojom::RequestDestination::kVideo:
       return flat::ResourceType_MEDIA;
     case network::mojom::RequestDestination::kReport:
-    case network::mojom::RequestDestination::kDocument:
       NOTREACHED();
   }
 }
@@ -142,6 +143,17 @@ bool AdBlockRequestFilter::WantsExtraHeadersForRequest(
   return false;
 }
 
+bool AdBlockRequestFilter::DoesAdAttributionMatch(
+    content::RenderFrameHost* frame,
+    std::string_view tracker_url_spec,
+    std::string_view ad_domain_and_query_trigger) {
+  if (!tab_handler_) {
+    return false;
+  }
+  return tab_handler_->DoesAdAttributionMatch(frame, tracker_url_spec,
+                                              ad_domain_and_query_trigger);
+}
+
 bool AdBlockRequestFilter::OnBeforeRequest(
     content::BrowserContext* browser_context,
     const vivaldi::FilteredRequestInfo* request,
@@ -160,18 +172,31 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   else
     document_origin = request->request.request_initiator.value();
 
+  content::RenderFrameHost* frame = content::RenderFrameHost::FromID(
+      request->render_process_id, request->render_frame_id);
+
+  if (is_frame && tab_handler_) {
+    tab_handler_->ResetFrameBlockState(rules_index_manager_->group(), frame);
+  }
+
   // TODO(julien): Add filtering of csp reports
   if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
       destination == network::mojom::RequestDestination::kReport ||
       !IsRequestWanted(request->request.url)) {
-    std::move(callback).Run(false, false, GURL());
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL());
     return true;
   }
 
   bool is_third_party = IsThirdParty(request->request.url, document_origin);
 
-  content::RenderFrameHost* frame = content::RenderFrameHost::FromID(
-      request->render_process_id, request->render_frame_id);
+  // For requests happening outside of pages, we can't rely on the activation
+  // checks to discard requests from an allow-listed origin. Just check it
+  // directly instead.
+  if (!frame && !IsOriginWanted(browser_context, rules_index_manager_->group(),
+                                document_origin)) {
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL());
+    return true;
+  }
 
   std::optional<GURL> url_for_activations;
   std::optional<url::Origin> origin_for_activations;
@@ -189,15 +214,15 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   std::optional<flat::Decision> document_decision =
       activations[flat::ActivationType_DOCUMENT].GetDecision();
 
-  if (is_main_frame && document_decision &&
-      document_decision != flat::Decision_PASS) {
-    std::move(callback).Run(true, false, GURL());
-    return true;
+  if (tab_handler_ && is_main_frame &&
+      activations[flat::ActivationType_ATTRIBUTE_ADS].GetDecision().value_or(
+          flat::Decision_MODIFY) == flat::Decision_PASS) {
+    tab_handler_->SetAdAttributionState(true, frame);
   }
 
-  if (is_main_frame ||
-      (document_decision && document_decision == flat::Decision_PASS)) {
-    std::move(callback).Run(false, false, GURL());
+  if (document_decision && document_decision == flat::Decision_PASS) {
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL());
+    // Whole document is allowed as is. No more questions asked.
     return true;
   }
 
@@ -209,12 +234,40 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   const flat::RequestFilterRule* rule =
       rules_index_manager_->rules_index()->FindMatchingBeforeRequestRule(
           request->request.url, document_origin, resource_type, is_third_party,
-          disable_generic_rules);
+          disable_generic_rules,
+          base::BindRepeating(&AdBlockRequestFilter::DoesAdAttributionMatch,
+                              base::Unretained(this), frame));
 
   CHECK(!rule || rule->options() & flat::OptionFlag_MODIFY_BLOCK);
 
   if (!rule || rule->decision() == flat::Decision_PASS) {
-    std::move(callback).Run(false, false, GURL());
+    RulesIndex::FoundModifiersByType modifiers_by_type =
+        rules_index_manager_->rules_index()->FindMatchingModifierRules(
+            RulesIndex::kAllowedRequest, request->request.url, document_origin,
+            resource_type, is_third_party, disable_generic_rules);
+    if (is_main_frame) {
+      RulesIndex::FoundModifiers& ad_query_trigger_results =
+          modifiers_by_type[flat::Modifier_AD_QUERY_TRIGGER];
+
+      std::vector<std::string> ad_query_triggers;
+      for (const auto& [ad_query_trigger, ad_query_trigger_rule] :
+           ad_query_trigger_results.value_with_decision) {
+        if (ad_query_trigger_rule->decision() != flat::Decision_PASS) {
+          ad_query_triggers.push_back(ad_query_trigger);
+        }
+      }
+      if (!ad_query_triggers.empty() && tab_handler_) {
+        tab_handler_->SetTabAdQueryTriggers(
+            request->request.url, std::move(ad_query_triggers), frame);
+      }
+    }
+
+    if (rule && rule->ad_domains_and_query_triggers()) {
+      std::move(callback).Run(RequestFilter::kPreventCancel, false, GURL());
+      return true;
+    }
+
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL());
     return true;
   }
 
@@ -223,9 +276,9 @@ bool AdBlockRequestFilter::OnBeforeRequest(
                                request->request.url, frame);
 
   RulesIndex::FoundModifiersByType modifiers_by_type =
-      rules_index_manager_->rules_index()->FindMatchingRequestModifierRules(
-          request->request.url, document_origin, resource_type, is_third_party,
-          disable_generic_rules);
+      rules_index_manager_->rules_index()->FindMatchingModifierRules(
+          RulesIndex::kBlockedRequest, request->request.url, document_origin,
+          resource_type, is_third_party, disable_generic_rules);
 
   RulesIndex::FoundModifiers& redirects =
       modifiers_by_type[flat::Modifier_REDIRECT];
@@ -248,13 +301,19 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     std::optional<std::string> resource(
         resources_->GetRedirect(redirect->first, resource_type));
     if (resource) {
-      std::move(callback).Run(false, false, GURL(resource.value()));
+      std::move(callback).Run(RequestFilter::kAllow, false,
+                              GURL(resource.value()));
       return true;
     }
   }
 
-  std::move(callback).Run(
-      true, ShouldCollapse(ResourceTypeFromRequest(*request)), GURL());
+  if (is_frame && tab_handler_) {
+    tab_handler_->SetFrameBlockState(rules_index_manager_->group(), frame);
+  }
+
+  std::move(callback).Run(RequestFilter::kCancel,
+                          ShouldCollapse(ResourceTypeFromRequest(*request)),
+                          GURL());
   return true;
 }
 
@@ -263,7 +322,7 @@ bool AdBlockRequestFilter::OnBeforeSendHeaders(
     const vivaldi::FilteredRequestInfo* request,
     const net::HttpRequestHeaders* headers,
     BeforeSendHeadersCallback callback) {
-  std::move(callback).Run(false,
+  std::move(callback).Run(RequestFilter::kAllow,
                           vivaldi::RequestFilter::RequestHeaderChanges());
   return true;
 }
@@ -286,7 +345,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
   if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
       destination == network::mojom::RequestDestination::kReport ||
       !IsRequestWanted(request->request.url)) {
-    std::move(callback).Run(false, false, GURL(),
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
   }
@@ -315,15 +374,15 @@ bool AdBlockRequestFilter::OnHeadersReceived(
 
   if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
           flat::Decision_MODIFY) == flat::Decision_PASS) {
-    std::move(callback).Run(false, false, GURL(),
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
   }
 
   RulesIndex::FoundModifiersByType modifiers_by_type =
-      rules_index_manager_->rules_index()->FindMatchingHeadersReceivedRules(
-          request->request.url, document_origin, flat::ResourceType_ANY,
-          is_third_party,
+      rules_index_manager_->rules_index()->FindMatchingModifierRules(
+          RulesIndex::kHeadersReceived, request->request.url, document_origin,
+          flat::ResourceType_ANY, is_third_party,
           (activations[flat::ActivationType_GENERIC_BLOCK]
                .GetDecision()
                .value_or(flat::Decision_MODIFY) == flat::Decision_PASS));
@@ -331,7 +390,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
   RulesIndex::FoundModifiers& csp = modifiers_by_type[flat::Modifier_CSP];
 
   if (csp.value_with_decision.empty()) {
-    std::move(callback).Run(false, false, GURL(),
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
   }
@@ -351,7 +410,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
         std::make_pair("Content-Security-Policy", added_header));
   }
 
-  std::move(callback).Run(false, false, GURL(),
+  std::move(callback).Run(RequestFilter::kAllow, false, GURL(),
                           std::move(response_header_changes));
   return true;
 }

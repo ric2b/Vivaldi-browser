@@ -10,6 +10,7 @@ import android.os.Build;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.SysUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.Locale;
@@ -79,6 +80,12 @@ public class TabUiFeatureUtilities {
                 && TAB_TEARING_OEM_ALLOWLIST.contains(Build.MANUFACTURER.toLowerCase(Locale.US));
     }
 
+    /** Returns whether the settings button for showing the group creation dialog is enabled. */
+    public static boolean isTabGroupCreationDialogShowConfigurable() {
+        return ChromeFeatureList.sTabGroupParityAndroid.isEnabled()
+                && TabGroupModelFilter.SHOW_TAB_GROUP_CREATION_DIALOG_SETTING.getValue();
+    }
+
     /** Vivaldi
      * @return Whether the tab group feature is enabled and available for use.
      */
@@ -86,4 +93,5 @@ public class TabUiFeatureUtilities {
             return (VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                     VivaldiPreferences.ENABLE_TAB_STACK, true));
     }
+    // End Vivaldi
 }

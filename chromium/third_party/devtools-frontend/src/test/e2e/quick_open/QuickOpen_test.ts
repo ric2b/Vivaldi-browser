@@ -5,7 +5,7 @@
 import {assert} from 'chai';
 
 import {clickElement, enableExperiment, goToResource, step, waitFor} from '../../shared/helper.js';
-import {describe, it} from '../../shared/mocha-extensions.js';
+
 import {navigateToElementsTab} from '../helpers/elements-helpers.js';
 import {
   getMenuItemAtPosition,
@@ -23,7 +23,7 @@ async function openAFileWithQuickMenu() {
   });
 
   await waitForSourceFiles(
-      SourceFileEvents.SourceFileLoaded, files => files.some(f => f.endsWith('hello-world.html')), async () => {
+      SourceFileEvents.SOURCE_FILE_LOADED, files => files.some(f => f.endsWith('hello-world.html')), async () => {
         await step('open quick open menu and select the first option', async () => {
           await goToResource('pages/hello-world.html');
           await openFileQuickOpen();

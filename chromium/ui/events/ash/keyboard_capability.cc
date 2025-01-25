@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/events/ash/keyboard_capability.h"
 
 #include <fcntl.h>
@@ -79,6 +84,8 @@ const int kHotrodRemoteProductId = 0x21cc;
 
 constexpr auto kRightAltBlocklist =
     base::MakeFixedFlatSet<std::string_view>({"eve", "nocturne", "atlas"});
+
+constexpr std::string_view kRevenBoardName = "reven";
 
 constexpr char kLayoutProperty[] = "CROS_KEYBOARD_TOP_ROW_LAYOUT";
 constexpr char kCustomTopRowLayoutAttribute[] = "function_row_physmap";
@@ -1008,6 +1015,12 @@ bool KeyboardCapability::HasFunctionKey(const KeyboardDevice& keyboard) const {
     return true;
   }
 
+  // ChromeOS flex devices may have an fn key in their HID report, but are not
+  // supported in the same way.
+  if (board_name_ == kRevenBoardName) {
+    return false;
+  }
+
   return ash::features::IsModifierSplitEnabled() &&
          keyboard.type == InputDeviceType::INPUT_DEVICE_INTERNAL &&
          keyboard.has_function_key;
@@ -1042,6 +1055,10 @@ bool KeyboardCapability::HasRightAltKey(const KeyboardDevice& keyboard) const {
   }
 
   if (kRightAltBlocklist.contains(board_name_)) {
+    return false;
+  }
+
+  if (board_name_ == kRevenBoardName) {
     return false;
   }
 
@@ -1085,6 +1102,17 @@ bool KeyboardCapability::HasRightAltKeyForOobe(int device_id) const {
   return HasRightAltKeyForOobe(*keyboard);
 }
 
+bool KeyboardCapability::IsSplitModifierKeyboardForOverride(
+    const KeyboardDevice& keyboard) const {
+  if (kRightAltBlocklist.contains(board_name_)) {
+    return false;
+  }
+
+  return ash::features::IsModifierSplitEnabled() &&
+         keyboard.type == InputDeviceType::INPUT_DEVICE_INTERNAL &&
+         keyboard.has_function_key && keyboard.has_assistant_key;
+}
+
 ui::mojom::MetaKey KeyboardCapability::GetMetaKey(
     const KeyboardDevice& keyboard) const {
   const auto device_type = GetDeviceType(keyboard);
@@ -1123,6 +1151,15 @@ ui::mojom::MetaKey KeyboardCapability::GetMetaKey(
     case KeyboardTopRowLayout::kKbdTopRowLayoutCustom:
       return mojom::MetaKey::kLauncher;
   }
+}
+
+ui::mojom::MetaKey KeyboardCapability::GetMetaKey(int device_id) const {
+  auto keyboard = FindKeyboardWithId(device_id);
+  if (!keyboard) {
+    return mojom::MetaKey::kLauncher;
+  }
+
+  return GetMetaKey(*keyboard);
 }
 
 ui::mojom::MetaKey KeyboardCapability::GetMetaKeyToDisplay() const {
@@ -1164,6 +1201,10 @@ ui::mojom::MetaKey KeyboardCapability::GetMetaKeyToDisplay() const {
   } else {
     return mojom::MetaKey::kLauncher;
   }
+}
+
+bool KeyboardCapability::UseRefreshedIcons() const {
+  return GetMetaKeyToDisplay() == mojom::MetaKey::kLauncherRefresh;
 }
 
 void KeyboardCapability::OnDeviceListsComplete() {
@@ -1286,6 +1327,10 @@ bool KeyboardCapability::IsChromeOSKeyboard(int device_id) const {
 
 void KeyboardCapability::SetBoardNameForTesting(const std::string& board_name) {
   board_name_ = board_name;
+}
+
+void KeyboardCapability::ForceEnableFeature() {
+  modifier_split_dogfood_controller_->ForceEnableFeature();
 }
 
 void KeyboardCapability::ResetModifierSplitDogfoodControllerForTesting() {

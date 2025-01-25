@@ -39,13 +39,29 @@ class TabInterface {
  public:
   // This method exists to ease the transition from WebContents to TabInterface.
   // This method should only be called on instances of WebContents that are
-  // known to be tabs.
+  // known to be tabs. Calling this on a non-tab will crash.
   static TabInterface* GetFromContents(content::WebContents* web_contents);
+
+  // Code that references a WebContents should already know whether the
+  // WebContents is a tab, and thus should use GetFromContents(). For historical
+  // reasons, there is code in the repository that typically lives in or below
+  // //content which does not know whether it's being invoked in the context of
+  // a tab. This is an anti-pattern that should be avoided. When it is
+  // unavoidable, this method may be used. Features that live entirely above the
+  // //content layer should not use this method.
+  static TabInterface* MaybeGetFromContents(content::WebContents* web_contents);
+
+  // Returns the TabInterface associated with the given `handle_id`, if one
+  // exists, otherwise it returns null.
+  static TabInterface* MaybeGetFromHandle(uint32_t handle_id);
 
   // When a tab is in the background, the WebContents may be discarded to save
   // memory. When a tab is in the foreground it is guaranteed to have a
   // WebContents.
   virtual content::WebContents* GetContents() const = 0;
+
+  // Closes the tab.
+  virtual void Close() = 0;
 
   // Register for this callback to detect changes to GetContents(). The first
   // WebContents is the contents that will be discarded. The second WebContents
@@ -104,7 +120,19 @@ class TabInterface {
   virtual BrowserWindowInterface* GetBrowserWindowInterface() = 0;
 
   // Returns the feature controllers scoped to this tab.
+  // TabFeatures that depend on other TabFeatures should not use this method.
+  // Instead they should use use dependency injection to pass dependencies at
+  // construction or initialization. This method exists for three reasons:
+  //   (1) BrowserWindowFeatures often depend on state of TabFeatures for the
+  //   active tab, which can change. BrowserWindowFeatures need a way to
+  //   dynamically fetch TabFeatures.
+  //   (2) To expose TabFeatures for tests.
+  //   (3) It is not possible to perform dependency injection for legacy code
+  //   that is conceptually a TabFeature and needs access to other TabFeatures.
   virtual tabs::TabFeatures* GetTabFeatures() = 0;
+
+  // An identifier that is guaranteed to be unique.
+  virtual uint32_t GetTabHandle() = 0;
 };
 
 }  // namespace tabs

@@ -18,13 +18,9 @@ package com.google.android.nearby.presence.rust;
 
 import androidx.annotation.Nullable;
 import com.google.android.nearby.presence.rust.credential.CredentialBook;
-import java.lang.ref.Cleaner;
 
 /**
  * The main entrypoint to the library.
- *
- * <p>On Android call {@link #setCleaner} with a {@code SystemCleaner} instance before any other
- * method to avoid creating a new cleaner thread.
  *
  * <h3>Supported Features:</h3>
  *
@@ -43,7 +39,12 @@ public final class NpAdv {
     System.loadLibrary(LIBRARY_NAME);
   }
 
-  private static @Nullable Cleaner CLEANER = null;
+  // This is effectively an injected variable, but without depending on a DI implementation.
+  @SuppressWarnings("NonFinalStaticField")
+  @Nullable
+  private static CooperativeCleaner cleaner = null;
+
+  private NpAdv() {}
 
   /**
    * Deserialize a Nearby Presence advertisement from its service data bytes.
@@ -55,40 +56,26 @@ public final class NpAdv {
   public static <M extends CredentialBook.MatchedMetadata>
       DeserializeResult<M> deserializeAdvertisement(
           byte[] serviceData, CredentialBook<M> credentialBook) {
-    DeserializeResult result = nativeDeserializeAdvertisement(serviceData, credentialBook);
+    DeserializeResult<M> result = nativeDeserializeAdvertisement(serviceData, credentialBook);
     if (result == null) {
-      result = new DeserializeResult(DeserializeResult.Kind.UNKNOWN_ERROR);
+      result = new DeserializeResult<M>(DeserializeResult.Kind.UNKNOWN_ERROR);
     }
     return result;
   }
 
   /**
-   * Get the currently configured cleaner. If a cleaner is not configured, a new one will be created
-   * via the {@link Cleaner#create()} factory function.
+   * Get the currently configured cleaner. If a cleaner is not configured, a new one will be
+   * created.
    */
-  public static synchronized Cleaner getCleaner() {
-    if (CLEANER == null) {
-      CLEANER = Cleaner.create();
+  public static synchronized CooperativeCleaner getCleaner() {
+    if (cleaner == null) {
+      cleaner = new CooperativeCleaner();
     }
-    return CLEANER;
-  }
-
-  /**
-   * Configure a {@link Cleaner} to be used by this library. This cleaner will be used to ensure
-   * that {@link OwnedHandle} instances are properly freed. Since each {@code Cleaner} instance
-   * requires its own thread; this can be used to share a {@code Cleaner} instance to reduce the
-   * number of threads used.
-   *
-   * <p>On Android the {@code SystemCleaner} should be provided.
-   */
-  @Nullable
-  public static synchronized Cleaner setCleaner(Cleaner cleaner) {
-    Cleaner old = CLEANER;
-    CLEANER = cleaner;
-    return old;
+    return cleaner;
   }
 
   @Nullable
-  private static native DeserializeResult nativeDeserializeAdvertisement(
-      byte[] serviceData, CredentialBook credentialBook);
+  private static native <M extends CredentialBook.MatchedMetadata>
+      DeserializeResult<M> nativeDeserializeAdvertisement(
+          byte[] serviceData, CredentialBook<M> credentialBook);
 }

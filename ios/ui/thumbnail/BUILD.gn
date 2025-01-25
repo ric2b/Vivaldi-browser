@@ -1,6 +1,6 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/swift_source_set.gni")
+import("//build/config/apple/swift_source_set.gni")
 
 source_set("service") {
   sources = [

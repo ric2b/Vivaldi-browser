@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/chromeos/crosier_tests.gni")
 import("//build/config/chromeos/ui_mode.gni")
 
 assert(is_chromeos_ash)
@@ -35,6 +36,8 @@ static_library("apps") {
     "files_internals_ui_delegate.h",
     "firmware_update_system_web_app_info.cc",
     "firmware_update_system_web_app_info.h",
+    "graduation_app_delegate.cc",
+    "graduation_app_delegate.h",
     "mall_system_web_app_info.cc",
     "mall_system_web_app_info.h",
     "os_feedback_system_web_app_info.cc",
@@ -78,6 +81,7 @@ static_library("apps") {
     "//ash/webui/shimless_rma",
     "//ash/webui/shortcut_customization_ui:url_constants",
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/ash/system_web_apps/types",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/web_applications",
@@ -104,6 +108,8 @@ static_library("apps") {
     "//ash/webui/file_manager/resources:file_manager_swa_resources",
     "//ash/webui/firmware_update_ui:url_constants",
     "//ash/webui/firmware_update_ui/resources",
+    "//ash/webui/graduation",
+    "//ash/webui/graduation/resources",
     "//ash/webui/mall:url_constants",
     "//ash/webui/mall/resources",
     "//ash/webui/os_feedback_ui:url_constants",
@@ -129,17 +135,22 @@ static_library("apps") {
     "//chrome/app:generated_resources_grit",
     "//chrome/app/theme:chrome_unscaled_resources",
     "//chrome/browser:browser_process",
+    "//chrome/browser/apps:user_type_filter",
     "//chrome/browser/apps/app_service:constants",
     "//chrome/browser/ash/crosapi:browser_util",
     "//chrome/browser/ash/crostini",
+    "//chrome/browser/ash/drive",
     "//chrome/browser/ash/file_manager",
     "//chrome/browser/ash/guest_os/public",
     "//chrome/browser/ash/login/demo_mode",
     "//chrome/browser/ash/policy/dlp",
+    "//chrome/browser/chromeos/upload_office_to_cloud",
     "//chrome/browser/resources/ash/settings:resources",
+    "//chrome/browser/ui/webui/ash/diagnostics_dialog",
     "//chrome/browser/web_applications/mojom:mojom_web_apps_enum",
     "//chrome/common:channel_info",
     "//chrome/common:constants",
+    "//chromeos/ash/components/boca",
     "//chromeos/constants",
     "//chromeos/crosapi/cpp",
     "//chromeos/strings:strings_grit",
@@ -225,9 +236,6 @@ source_set("browser_tests") {
     "//chrome/browser",
     "//chrome/browser/apps/app_service",
     "//chrome/browser/apps/app_service:constants",
-    "//chrome/browser/ash",
-    "//chrome/browser/ash:test_support",
-    "//chrome/browser/ash/hats",
     "//chrome/browser/ash/system_web_apps",
     "//chrome/browser/ash/system_web_apps/test_support:test_support_ui",
     "//chrome/browser/profiles:profile",
@@ -283,6 +291,7 @@ source_set("unit_tests") {
     "//ash/constants",
     "//ash/webui/boca_ui",
     "//base/test:test_support",
+    "//chrome/browser/ui",
     "//testing/gtest",
 
     # Tests from subdirectories:
@@ -292,20 +301,19 @@ source_set("unit_tests") {
 }
 
 if (is_chromeos_device) {
-  source_set("integration_tests") {
-    testonly = true
-
-    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-
+  crosier_tests("integration_tests") {
     sources = [ "terminal_integration_test.cc" ]
 
+    sources_metadata = [ "terminal_integration_test.yaml" ]
+
     deps = [
-      ":apps",
       "//ash",
       "//ash/constants",
       "//base",
       "//chrome/browser",
       "//chrome/browser/ui",
+      "//chrome/browser/ui/ash/shelf",
+      "//chrome/browser/web_applications",
       "//chrome/test:ash_integration_test_support",
       "//testing/gmock",
       "//testing/gtest",

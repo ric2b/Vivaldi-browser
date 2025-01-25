@@ -122,6 +122,20 @@ std::optional<base::FilePath> GetRelativePath(const base::FilePath& root_path,
   return std::nullopt;
 }
 
+bool RenderFrameHostIsActive(
+    const FileSystemAccessManagerImpl::BindingContext& binding_context) {
+  GlobalRenderFrameHostId render_frame_host_id = binding_context.frame_id;
+  RenderFrameHostImpl* rfh = RenderFrameHostImpl::FromID(render_frame_host_id);
+
+  // Frames without an associated render frame host (e.g. Service Workers,
+  // Shared Workers) are considered active.
+  if (!rfh) {
+    return true;
+  }
+
+  return rfh->IsActive();
+}
+
 }  // namespace
 
 FileSystemAccessObserverObservation::FileSystemAccessObserverObservation(
@@ -176,6 +190,10 @@ void FileSystemAccessObserverObservation::OnChanges(
         changes_or_error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (received_error_while_in_bf_cache_) {
+    return;
+  }
+
   if (!changes_or_error.has_value()) {
     HandleError();
     return;
@@ -184,12 +202,10 @@ void FileSystemAccessObserverObservation::OnChanges(
   FileSystemAccessHandleBase& handle_base = AsHandleBase(handle_);
   const FileSystemAccessManagerImpl::BindingContext& binding_context =
       handle_base.context();
-  GlobalRenderFrameHostId render_frame_host_id = binding_context.frame_id;
-  RenderFrameHostImpl* rfh = RenderFrameHostImpl::FromID(render_frame_host_id);
 
   // Make sure the RenderFrameHost is Active before sending changes to the
   // renderer.
-  if (!rfh || !rfh->IsActive()) {
+  if (!RenderFrameHostIsActive(binding_context)) {
     received_changes_while_in_bf_cache_ = true;
     return;
   }
@@ -237,10 +253,10 @@ void FileSystemAccessObserverObservation::OnChanges(
         CreateEntryForUrl(*manager, binding_context, handle_state, change.url,
                           changed_entry_handle_type);
 
-    // TODO(crbug.com/321980270, crbug.com/321980447): Some platforms do not
-    // support ChangeInfo for Local FS changes, in which case a default, empty
-    // ChangeInfo is passed. In this case, report an event without metadata.
-    // Remove this section once ChangeInfo is supported in all platforms.
+    // Some platforms do not support ChangeInfo for Local FS changes, in which
+    // case a default, empty ChangeInfo is passed. In this case, report an event
+    // without metadata. Remove this section once ChangeInfo is supported in all
+    // platforms.
     if (change_info == FileSystemAccessChangeSource::ChangeInfo()) {
       mojo_changes.emplace_back(blink::mojom::FileSystemAccessChange::New(
           blink::mojom::FileSystemAccessChangeMetadata::New(
@@ -328,12 +344,10 @@ void FileSystemAccessObserverObservation::HandleError() {
   FileSystemAccessHandleBase& handle_base = AsHandleBase(handle_);
   const FileSystemAccessManagerImpl::BindingContext& binding_context =
       handle_base.context();
-  GlobalRenderFrameHostId render_frame_host_id = binding_context.frame_id;
-  RenderFrameHostImpl* rfh = RenderFrameHostImpl::FromID(render_frame_host_id);
 
   // Skip sending changes to the renderer if RenderFrameHost is not valid.
-  if (!rfh || !rfh->IsActive()) {
-    host_->RemoveObservation(this);
+  if (!RenderFrameHostIsActive(binding_context)) {
+    received_error_while_in_bf_cache_ = true;
     return;
   }
 
@@ -371,8 +385,16 @@ void FileSystemAccessObserverObservation::RenderFrameHostStateChanged(
 
   if (render_frame_host !=
           RenderFrameHost::FromID(AsHandleBase(handle_).context().frame_id) ||
-      !transitioned_from_bf_cache_to_active ||
-      !received_changes_while_in_bf_cache_) {
+      !transitioned_from_bf_cache_to_active) {
+    return;
+  }
+
+  if (received_error_while_in_bf_cache_) {
+    HandleError();
+    return;
+  }
+
+  if (!received_changes_while_in_bf_cache_) {
     return;
   }
 
@@ -410,6 +432,10 @@ void FileSystemAccessObserverObservation::OnReceiverDisconnect() {
 
 void FileSystemAccessObserverObservation::OnPermissionStatusChanged() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (received_error_while_in_bf_cache_) {
+    return;
+  }
 
   const FileSystemAccessManagerImpl::SharedHandleState& handle_state =
       AsHandleBase(handle_).handle_state();

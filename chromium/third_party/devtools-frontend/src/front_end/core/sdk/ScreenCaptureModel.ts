@@ -6,9 +6,8 @@ import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
 import type * as Protocol from '../../generated/protocol.js';
 
 import {OverlayModel} from './OverlayModel.js';
-
-import {Capability, type Target} from './Target.js';
 import {SDKModel} from './SDKModel.js';
+import {Capability, type Target} from './Target.js';
 
 export const enum ScreenshotMode {
   FROM_VIEWPORT = 'fromViewport',
@@ -47,8 +46,8 @@ export class ScreenCaptureModel extends SDKModel<void> implements ProtocolProxyA
       format: Protocol.Page.CaptureScreenshotRequestFormat, quality: number, mode: ScreenshotMode,
       clip?: Protocol.Page.Viewport): Promise<string|null> {
     const properties: Protocol.Page.CaptureScreenshotRequest = {
-      format: format,
-      quality: quality,
+      format,
+      quality,
       fromSurface: true,
     };
     switch (mode) {
@@ -141,6 +140,9 @@ export class ScreenCaptureModel extends SDKModel<void> implements ProtocolProxyA
   frameRequestedNavigation(_params: Protocol.Page.FrameRequestedNavigationEvent): void {
   }
 
+  frameSubtreeWillBeDetached(_params: Protocol.Page.FrameSubtreeWillBeDetachedEvent): void {
+  }
+
   frameScheduledNavigation(_params: Protocol.Page.FrameScheduledNavigationEvent): void {
   }
 
@@ -184,4 +186,4 @@ export class ScreenCaptureModel extends SDKModel<void> implements ProtocolProxyA
   }
 }
 
-SDKModel.register(ScreenCaptureModel, {capabilities: Capability.ScreenCapture, autostart: false});
+SDKModel.register(ScreenCaptureModel, {capabilities: Capability.SCREEN_CAPTURE, autostart: false});

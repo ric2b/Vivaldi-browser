@@ -17,6 +17,10 @@ class VivaldiBrowserMainExtraPartsAndroid
 
   // VivaldiBrowserMainExtraParts override.
   void PostProfileInit(Profile* profile, bool is_initial_profile) override;
+  //void PreProfileInit() override;
+
+ //private:
+  //void EnsureBrowserContextKeyedServiceFactoriesBuilt();
 };
 
 #endif  // EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_ANDROID_H_

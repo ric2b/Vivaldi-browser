@@ -42,15 +42,21 @@ cc_library(
     "binary_polyfill.cc",
     "builtin_polyfill.cc",
     "module_scope_vars.cc",
+    "packed_vec3.cc",
     "raise.cc",
     "shader_io.cc",
+    "simd_ballot.cc",
+    "unary_polyfill.cc",
   ],
   hdrs = [
     "binary_polyfill.h",
     "builtin_polyfill.h",
     "module_scope_vars.h",
+    "packed_vec3.h",
     "raise.h",
     "shader_io.h",
+    "simd_ballot.h",
+    "unary_polyfill.h",
   ],
   deps = [
     "//src/tint/api/common",
@@ -79,6 +85,7 @@ cc_library(
     "//src/tint/utils/symbol",
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
+    "//src/utils",
   ] + select({
     ":tint_build_msl_writer": [
       "//src/tint/lang/msl/writer/common",
@@ -95,7 +102,10 @@ cc_library(
     "binary_polyfill_test.cc",
     "builtin_polyfill_test.cc",
     "module_scope_vars_test.cc",
+    "packed_vec3_test.cc",
     "shader_io_test.cc",
+    "simd_ballot_test.cc",
+    "unary_polyfill_test.cc",
   ],
   deps = [
     "//src/tint/api/common",
@@ -119,6 +129,7 @@ cc_library(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@gtest",
+    "//src/utils",
   ] + select({
     ":tint_build_msl_writer": [
       "//src/tint/lang/msl/writer/raise",

@@ -493,3 +493,90 @@ TEST(NinjaCreateBundleTargetWriter, PostProcessing) {
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
 }
+
+TEST(NinjaCreateBundleTargetWriter, PostProcessingNoStampFilesCustomToolchain) {
+  Err err;
+  TestWithScope setup;
+  setup.build_settings()->set_no_stamp_files(true);
+
+  Label other_toolchain_label(SourceDir("//other/"), "toolchain");
+  setup.settings()->set_toolchain_label(other_toolchain_label);
+
+  std::unique_ptr<Target> action = NewAction(setup);
+  ASSERT_TRUE(action->OnResolved(&err)) << err.message();
+
+  Target executable(setup.settings(), Label(SourceDir("//baz/"), "quz"));
+  executable.set_output_type(Target::EXECUTABLE);
+  executable.sources().push_back(SourceFile("//baz/quz.c"));
+  executable.SetToolchain(setup.toolchain());
+  executable.visibility().SetPublic();
+  ASSERT_TRUE(executable.OnResolved(&err));
+
+  Target bundle_data(setup.settings(), Label(SourceDir("//foo/"), "data"));
+  bundle_data.set_output_type(Target::BUNDLE_DATA);
+  bundle_data.sources().push_back(SourceFile("//foo/input1.txt"));
+  bundle_data.sources().push_back(SourceFile("//foo/input2.txt"));
+  bundle_data.action_values().outputs() = SubstitutionList::MakeForTest(
+      "{{bundle_resources_dir}}/{{source_file_part}}");
+  bundle_data.SetToolchain(setup.toolchain());
+  bundle_data.visibility().SetPublic();
+  ASSERT_TRUE(bundle_data.OnResolved(&err));
+
+  Target create_bundle(
+      setup.settings(),
+      Label(SourceDir("//baz/"), "bar", setup.toolchain()->label().dir(),
+            setup.toolchain()->label().name()));
+  SetupBundleDataDir(&create_bundle.bundle_data(), "//out/Debug");
+  create_bundle.set_output_type(Target::CREATE_BUNDLE);
+  create_bundle.bundle_data().set_post_processing_script(
+      SourceFile("//build/codesign.py"));
+  create_bundle.bundle_data().post_processing_sources().push_back(
+      SourceFile("//out/Debug/quz"));
+  create_bundle.bundle_data().post_processing_outputs() =
+      SubstitutionList::MakeForTest(
+          "//out/Debug/bar.bundle/Contents/quz",
+          "//out/Debug/bar.bundle/_CodeSignature/CodeResources");
+  create_bundle.bundle_data().post_processing_args() =
+      SubstitutionList::MakeForTest("-b=quz", "bar.bundle");
+  create_bundle.public_deps().push_back(LabelTargetPair(&executable));
+  create_bundle.private_deps().push_back(LabelTargetPair(&bundle_data));
+  create_bundle.private_deps().push_back(LabelTargetPair(action.get()));
+  create_bundle.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(create_bundle.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCreateBundleTargetWriter writer(&create_bundle, out);
+  writer.Run();
+
+  const char expected[] =
+      "build toolchain/phony/baz/bar.inputdeps: phony ./quz "
+      "toolchain/phony/foo/bar "
+      "toolchain/phony/foo/data\n"
+      "rule __baz_bar___toolchain_default__post_processing_rule\n"
+      "  command =  ../../build/codesign.py -b=quz bar.bundle\n"
+      "  description = POST PROCESSING //baz:bar(//toolchain:default)\n"
+      "  restat = 1\n"
+      "\n"
+      "build bar.bundle/Contents/Resources/input1.txt: "
+      "toolchain_copy_bundle_data "
+      "../../foo/input1.txt || toolchain/phony/baz/bar.inputdeps\n"
+      "build bar.bundle/Contents/Resources/input2.txt: "
+      "toolchain_copy_bundle_data "
+      "../../foo/input2.txt || toolchain/phony/baz/bar.inputdeps\n"
+      "build toolchain/phony/baz/bar.postprocessing.inputdeps: phony "
+      "../../build/codesign.py "
+      "quz "
+      "bar.bundle/Contents/Resources/input1.txt "
+      "bar.bundle/Contents/Resources/input2.txt || "
+      "toolchain/phony/baz/bar.inputdeps\n"
+      "build bar.bundle/Contents/quz bar.bundle/_CodeSignature/CodeResources: "
+      "__baz_bar___toolchain_default__post_processing_rule "
+      "| toolchain/phony/baz/bar.postprocessing.inputdeps\n"
+      "build toolchain/phony/baz/bar: phony "
+      "bar.bundle/Contents/quz "
+      "bar.bundle/_CodeSignature/CodeResources || "
+      "toolchain/phony/baz/bar.inputdeps\n"
+      "build bar.bundle: phony toolchain/phony/baz/bar\n";
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}

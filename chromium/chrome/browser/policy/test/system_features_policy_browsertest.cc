@@ -55,7 +55,7 @@ class SystemFeaturesPolicyTest : public PolicyTest {
  public:
   SystemFeaturesPolicyTest() {
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{ash::features::kEcheSWA},
+        /*enabled_features=*/{ash::features::kEcheSWA, ash::features::kConch},
         /*disabled_features=*/{});
     fake_crostini_features_.set_is_allowed_now(true);
   }
@@ -341,6 +341,16 @@ IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest, DisableSWAs) {
 
   // Disable Terminal app.
   VerifyAppDisableMode(guest_os::kTerminalSystemAppId, kTerminalFeature);
+
+  // Disable Print Jobs app.
+  VerifyAppDisableMode(web_app::kPrintManagementAppId, kPrintJobsFeature);
+
+  // Disable Key Shortcuts app.
+  VerifyAppDisableMode(web_app::kShortcutCustomizationAppId,
+                       kKeyShortcutsFeature);
+
+  // Disable Recorder app.
+  VerifyAppDisableMode(web_app::kRecorderAppId, kRecorderFeature);
 }
 
 IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
@@ -356,7 +366,10 @@ IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
                                                 .Append(kCanvasFeature)
                                                 .Append(kCroshFeature)
                                                 .Append(kGalleryFeature)
-                                                .Append(kTerminalFeature);
+                                                .Append(kTerminalFeature)
+                                                .Append(kPrintJobsFeature)
+                                                .Append(kKeyShortcutsFeature)
+                                                .Append(kRecorderFeature);
   UpdateSystemFeaturesDisableList(system_features.Clone(), kHiddenDisableMode);
 
   VisibilityFlags expected_visibility =
@@ -376,6 +389,12 @@ IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
                  expected_visibility);
   VerifyAppState(guest_os::kTerminalSystemAppId,
                  apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kPrintManagementAppId,
+                 apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kShortcutCustomizationAppId,
+                 apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kRecorderAppId, apps::Readiness::kDisabledByPolicy,
+                 true, expected_visibility);
 
   // Disable and block apps.
   expected_visibility = GetVisibilityFlags(false /* is_hidden */);
@@ -399,6 +418,12 @@ IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
                  expected_visibility);
   VerifyAppState(guest_os::kTerminalSystemAppId,
                  apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kPrintManagementAppId,
+                 apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kShortcutCustomizationAppId,
+                 apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kRecorderAppId, apps::Readiness::kDisabledByPolicy,
+                 true, expected_visibility);
 
   // Enable apps.
   UpdateSystemFeaturesDisableList(base::Value(), nullptr);
@@ -416,6 +441,12 @@ IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
                  expected_visibility);
   VerifyAppState(guest_os::kTerminalSystemAppId, apps::Readiness::kReady, false,
                  expected_visibility);
+  VerifyAppState(web_app::kPrintManagementAppId, apps::Readiness::kReady, false,
+                 expected_visibility);
+  VerifyAppState(web_app::kShortcutCustomizationAppId, apps::Readiness::kReady,
+                 false, expected_visibility);
+  VerifyAppState(web_app::kRecorderAppId, apps::Readiness::kReady, false,
+                 expected_visibility);
 }
 
 IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
@@ -427,7 +458,10 @@ IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
                                                 .Append(kCanvasFeature)
                                                 .Append(kCroshFeature)
                                                 .Append(kGalleryFeature)
-                                                .Append(kTerminalFeature);
+                                                .Append(kTerminalFeature)
+                                                .Append(kPrintJobsFeature)
+                                                .Append(kKeyShortcutsFeature)
+                                                .Append(kRecorderFeature);
   UpdateSystemFeaturesDisableList(system_features.Clone(), kHiddenDisableMode);
 
   InstallSWAs();
@@ -452,6 +486,12 @@ IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest,
                  expected_visibility);
   VerifyAppState(guest_os::kTerminalSystemAppId,
                  apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kPrintManagementAppId,
+                 apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kShortcutCustomizationAppId,
+                 apps::Readiness::kDisabledByPolicy, true, expected_visibility);
+  VerifyAppState(web_app::kRecorderAppId, apps::Readiness::kDisabledByPolicy,
+                 true, expected_visibility);
 }
 
 IN_PROC_BROWSER_TEST_F(SystemFeaturesPolicyTest, RedirectChromeSettingsURL) {

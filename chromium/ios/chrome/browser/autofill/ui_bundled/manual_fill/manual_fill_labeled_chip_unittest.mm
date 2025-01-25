@@ -3,11 +3,15 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_labeled_chip.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/chip_button.h"
 
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/chip_button.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
 
 using ManualFillLabeledChipiOSTest = PlatformTest;
+
+namespace {
 
 NSString* TOP_LABEL_TEXT = @"Label Text";
 NSString* BOTTOM_BUTTON_TEXT_0 = @"Button Text";
@@ -18,6 +22,18 @@ int BOTTOM_BUTTONS_INDEX = 1;
 int BOTTOM_BUTTON_0_INDEX = 0;
 int BOTTOM_LABEL_1_INDEX = 1;
 int BOTTOM_BUTTON_2_INDEX = 2;
+
+// Returns the title of the given `button`.
+NSString* ButtonTitle(UIButton* button) {
+  if (IsKeyboardAccessoryUpgradeEnabled()) {
+    UIButtonConfiguration* button_configuration = button.configuration;
+    return button_configuration.attributedTitle.string;
+  }
+
+  return button.currentTitle;
+}
+
+}  // namespace
 
 // Tests that a labeled chip is successfully created.
 TEST_F(ManualFillLabeledChipiOSTest, Creation_SingleChip) {
@@ -71,11 +87,10 @@ TEST_F(ManualFillLabeledChipiOSTest, SetText_SingleChip) {
 
   // Confirm the label has the correct text.
   NSArray<UIView*>* chipSubviews = labeledChip.arrangedSubviews;
-  EXPECT_TRUE([((UILabel*)chipSubviews[TOP_LABEL_INDEX]).text
-      isEqualToString:TOP_LABEL_TEXT]);
+  EXPECT_NSEQ(((UILabel*)chipSubviews[TOP_LABEL_INDEX]).text, TOP_LABEL_TEXT);
 
   // Confirm the button has the correct text.
-  EXPECT_EQ(((UIButton*)chipSubviews[BOTTOM_BUTTONS_INDEX]).currentTitle,
+  EXPECT_EQ(ButtonTitle((UIButton*)chipSubviews[BOTTOM_BUTTONS_INDEX]),
             BOTTOM_BUTTON_TEXT_0);
 }
 
@@ -92,19 +107,18 @@ TEST_F(ManualFillLabeledChipiOSTest, SetText_ExpirationDateChip) {
 
   // Confirm the top label has the correct text.
   NSArray<UIView*>* chipSubviews = labeledChip.arrangedSubviews;
-  EXPECT_TRUE([((UILabel*)chipSubviews[TOP_LABEL_INDEX]).text
-      isEqualToString:TOP_LABEL_TEXT]);
+  EXPECT_NSEQ(((UILabel*)chipSubviews[TOP_LABEL_INDEX]).text, TOP_LABEL_TEXT);
 
   // Confirm the bottom button, label and other button have the correct text.
   NSArray<UIView*>* buttonStackViewSubviews =
       ((UIStackView*)chipSubviews[BOTTOM_BUTTONS_INDEX]).arrangedSubviews;
   EXPECT_EQ(
-      ((UIButton*)buttonStackViewSubviews[BOTTOM_BUTTON_0_INDEX]).currentTitle,
+      ButtonTitle((UIButton*)buttonStackViewSubviews[BOTTOM_BUTTON_0_INDEX]),
       BOTTOM_BUTTON_TEXT_0);
   EXPECT_EQ(((UILabel*)buttonStackViewSubviews[BOTTOM_LABEL_1_INDEX]).text,
             BOTTOM_LABEL_TEXT_1);
   EXPECT_EQ(
-      ((UIButton*)buttonStackViewSubviews[BOTTOM_BUTTON_2_INDEX]).currentTitle,
+      ButtonTitle((UIButton*)buttonStackViewSubviews[BOTTOM_BUTTON_2_INDEX]),
       BOTTOM_BUTTON_TEXT_2);
 }
 
@@ -121,11 +135,10 @@ TEST_F(ManualFillLabeledChipiOSTest, PrepareForReuse_SingleChip) {
 
   // Confirm the label has the correct text.
   NSArray<UIView*>* chipSubviews = labeledChip.arrangedSubviews;
-  EXPECT_TRUE(
-      [((UILabel*)chipSubviews[TOP_LABEL_INDEX]).text isEqualToString:@""]);
+  EXPECT_NSEQ(((UILabel*)chipSubviews[TOP_LABEL_INDEX]).text, @"");
 
   // Confirm the button has the correct text.
-  EXPECT_EQ(((UIButton*)chipSubviews[BOTTOM_BUTTONS_INDEX]).currentTitle, @"");
+  EXPECT_EQ(ButtonTitle((UIButton*)chipSubviews[BOTTOM_BUTTONS_INDEX]), @"");
 }
 
 // Tests that a labeled chip for an expiration date is successfully cleared for
@@ -144,16 +157,15 @@ TEST_F(ManualFillLabeledChipiOSTest, PrepareForReuse_ExpirationDateChip) {
 
   // Confirm the top label has the correct text.
   NSArray<UIView*>* chipSubviews = labeledChip.arrangedSubviews;
-  EXPECT_TRUE(
-      [((UILabel*)chipSubviews[TOP_LABEL_INDEX]).text isEqualToString:@""]);
+  EXPECT_NSEQ(((UILabel*)chipSubviews[TOP_LABEL_INDEX]).text, @"");
 
   // Confirm the bottom button, label and other button have the correct text.
   NSArray<UIView*>* buttonStackViewSubviews =
       ((UIStackView*)chipSubviews[BOTTOM_BUTTONS_INDEX]).arrangedSubviews;
   EXPECT_EQ(
-      ((UIButton*)buttonStackViewSubviews[BOTTOM_BUTTON_0_INDEX]).currentTitle,
+      ButtonTitle((UIButton*)buttonStackViewSubviews[BOTTOM_BUTTON_0_INDEX]),
       @"");
   EXPECT_EQ(
-      ((UIButton*)buttonStackViewSubviews[BOTTOM_BUTTON_2_INDEX]).currentTitle,
+      ButtonTitle((UIButton*)buttonStackViewSubviews[BOTTOM_BUTTON_2_INDEX]),
       @"");
 }

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 // For some sample vp9 test videos, $filename, there is a file of golden value
 // of frame entropy, named $filename.context. These values are dumped from
 // libvpx.
@@ -71,7 +76,7 @@ class Vp9ParserTest : public TestWithParam<TestParams> {
     context_file_.Close();
   }
 
-  void Initialize(const std::string& filename, bool parsing_compressed_header) {
+  void Initialize(std::string_view filename, bool parsing_compressed_header) {
     base::FilePath file_path = GetTestDataFilePath(filename);
 
     stream_ = std::make_unique<base::MemoryMappedFile>();
@@ -86,7 +91,8 @@ class Vp9ParserTest : public TestWithParam<TestParams> {
     vp9_parser_ = std::make_unique<Vp9Parser>(parsing_compressed_header);
 
     if (parsing_compressed_header) {
-      base::FilePath context_path = GetTestDataFilePath(filename + ".context");
+      base::FilePath context_path =
+          GetTestDataFilePath(std::string(filename).append(".context"));
       context_file_.Initialize(context_path,
                                base::File::FLAG_OPEN | base::File::FLAG_READ);
       ASSERT_TRUE(context_file_.IsValid());
@@ -663,7 +669,7 @@ TEST_P(Vp9ParserTest, VerifyFirstFrame) {
 INSTANTIATE_TEST_SUITE_P(All, Vp9ParserTest, ::testing::ValuesIn(kTestParams));
 
 TEST_F(Vp9ParserTest, CheckColorSpace) {
-  Vp9FrameHeader fhdr{};
+  Vp9FrameHeader fhdr;
   EXPECT_FALSE(fhdr.GetColorSpace().IsSpecified());
   fhdr.color_space = Vp9ColorSpace::BT_709;
   EXPECT_EQ(VideoColorSpace::REC709(), fhdr.GetColorSpace());

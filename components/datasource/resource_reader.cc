@@ -18,6 +18,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
+#include "ui/gfx/image/image.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/apk_assets.h"
@@ -117,7 +118,7 @@ gfx::Image ResourceReader::ReadPngImage(std::string_view resource_url) {
     return gfx::Image();
   }
   gfx::Image image =
-      gfx::Image::CreateFrom1xPNGBytes(reader.data(), reader.size());
+      gfx::Image::CreateFrom1xPNGBytes(reader);
   if (image.IsEmpty()) {
     LOG(ERROR) << "Failed to read " << resource_url << " as PNG image";
     return gfx::Image();

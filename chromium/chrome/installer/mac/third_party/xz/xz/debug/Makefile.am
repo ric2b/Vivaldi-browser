@@ -1,9 +1,5 @@
-##
+## SPDX-License-Identifier: 0BSD
 ## Author: Lasse Collin
-##
-## This file has been put into the public domain.
-## You can do whatever you want with this file.
-##
 
 EXTRA_DIST = \
 	translation.bash
@@ -15,7 +11,8 @@ noinst_PROGRAMS = \
 	memusage \
 	crc32 \
 	known_sizes \
-	hex2bin
+	hex2bin \
+	testfilegen-arm64
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir)/src/common \

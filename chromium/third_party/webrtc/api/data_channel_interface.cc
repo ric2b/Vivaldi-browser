@@ -10,6 +10,12 @@
 
 #include "api/data_channel_interface.h"
 
+#include <cstdint>
+#include <string>
+
+#include "absl/functional/any_invocable.h"
+#include "api/priority.h"
+#include "api/rtc_error.h"
 #include "rtc_base/checks.h"
 
 namespace webrtc {
@@ -26,12 +32,12 @@ uint16_t DataChannelInterface::maxRetransmits() const {
   return 0;
 }
 
-absl::optional<int> DataChannelInterface::maxRetransmitsOpt() const {
-  return absl::nullopt;
+std::optional<int> DataChannelInterface::maxRetransmitsOpt() const {
+  return std::nullopt;
 }
 
-absl::optional<int> DataChannelInterface::maxPacketLifeTime() const {
-  return absl::nullopt;
+std::optional<int> DataChannelInterface::maxPacketLifeTime() const {
+  return std::nullopt;
 }
 
 std::string DataChannelInterface::protocol() const {
@@ -40,6 +46,10 @@ std::string DataChannelInterface::protocol() const {
 
 bool DataChannelInterface::negotiated() const {
   return false;
+}
+
+PriorityValue DataChannelInterface::priority() const {
+  return PriorityValue(Priority::kLow);
 }
 
 uint64_t DataChannelInterface::MaxSendQueueSize() {

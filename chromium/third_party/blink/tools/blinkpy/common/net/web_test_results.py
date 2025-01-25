@@ -31,7 +31,7 @@ import json
 from typing import Dict, List, Literal, NamedTuple, Optional, Set
 
 from blinkpy.common.memoized import memoized
-from blinkpy.common.net.rpc import BuildStatus
+from blinkpy.common.net.rpc import Build, BuildStatus
 from blinkpy.web_tests.layout_package import json_results_generator
 from blinkpy.web_tests.models.test_failures import FailureImage
 from blinkpy.web_tests.models.typ_types import ResultType
@@ -154,6 +154,10 @@ class IncompleteResultsReason(NamedTuple):
             return 'build was canceled'
         elif self.build_status is BuildStatus.MISSING:
             return 'build is missing and not triggered'
+        elif self.build_status is BuildStatus.COMPILE_FAILURE:
+            return 'build failed to compile'
+        elif self.build_status is BuildStatus.PATCH_FAILURE:
+            return 'build failed to apply patch'
         elif self.build_status not in BuildStatus.COMPLETED:
             return 'build is not complete'
         return 'results are incomplete for an unknown reason'
@@ -190,7 +194,10 @@ class WebTestResults:
         if json_dict.get('interrupted'):
             # Results JSON doesn't provide more specific information.
             kwargs.setdefault('incomplete_reason', IncompleteResultsReason())
-        kwargs.setdefault('builder_name', json_dict.get('builder_name'))
+        builder_name = json_dict.get('builder_name')
+        if builder_name:
+            build = Build(builder_name, json_dict.get('build_number'))
+            kwargs.setdefault('build', build)
         kwargs.setdefault('chromium_revision',
                           json_dict.get('chromium_revision'))
         return cls(results, **kwargs)
@@ -228,7 +235,7 @@ class WebTestResults:
                  chromium_revision: Optional[str] = None,
                  step_name: Optional[str] = None,
                  incomplete_reason: Optional[IncompleteResultsReason] = None,
-                 builder_name: Optional[str] = None):
+                 build: Optional[Build] = None):
         self._results_by_name = collections.OrderedDict([
             (result.test_name(), result)
             for result in sorted(results, key=WebTestResult.test_name)
@@ -236,13 +243,17 @@ class WebTestResults:
         self._chromium_revision = chromium_revision
         self._step_name = step_name
         self.incomplete_reason = incomplete_reason
-        self.builder_name = builder_name
+        self.build = build
 
     def __iter__(self):
         yield from self._results_by_name.values()
 
     def __len__(self):
         return len(self._results_by_name)
+
+    @property
+    def builder_name(self) -> Optional[str]:
+        return self.build and self.build.builder_name
 
     def step_name(self):
         return self._step_name

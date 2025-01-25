@@ -11,7 +11,8 @@ enum Decision : ubyte {
 enum Modifier : ubyte {
   NO_MODIFIER,
   REDIRECT,
-  CSP
+  CSP,
+  AD_QUERY_TRIGGER
 }
 
 enum PatternType : ubyte {
@@ -36,20 +37,21 @@ enum OptionFlag : ubyte (bit_flags) {
 // The options controlling whether or not to activate filtering for subresources
 // of documents that match the URL pattern of the rule.
 enum ActivationType : ubyte (bit_flags) {
-  POPUP ,         // Block popups.
   DOCUMENT,       // Disable all rules on the page.
   ELEMENT_HIDE,   // Disable all element hiding rules on the page.
   GENERIC_HIDE,   // Disable generic hiding rules on the page.
   GENERIC_BLOCK,  // Disable generic blocking rules on the page.
+  ATTRIBUTE_ADS,  // Allow attribution of ads clicked on the page.
 }
 
-// The types of subresource requests that a URL rule should be applied to.
+// The types of resource requests that a URL rule should be applied to.
 enum ResourceType : ushort (bit_flags) {
   STYLESHEET,
   IMAGE,
   OBJECT,
   SCRIPT,
   XMLHTTPREQUEST,
+  DOCUMENT,
   SUBDOCUMENT,
   FONT,
   MEDIA,
@@ -59,6 +61,7 @@ enum ResourceType : ushort (bit_flags) {
   WEBTRANSPORT,
   WEBBUNDLE,
   OTHER,
+  POPUP,
 }
 
 table RequestFilterRule {
@@ -84,6 +87,8 @@ table RequestFilterRule {
   // or is a subdomain of the given host.
   host : string;
 
+  ad_domains_and_query_triggers: [string];
+
   // The list of origin domains to be included/excluded from the filter's
   // affected set. Should either be null or have at least a single element. The
   // domains should be in lower-case and must consist of only ascii
@@ -93,7 +98,7 @@ table RequestFilterRule {
 
   // Redirect or CSP rules
   modifier : Modifier = NO_MODIFIER;
-  modifier_value : string;
+  modifier_values : [string];
 
   // A URL pattern in the format defined by |pattern_type|.  This should
   // only consist of ascii characters, since it's matched against a url where

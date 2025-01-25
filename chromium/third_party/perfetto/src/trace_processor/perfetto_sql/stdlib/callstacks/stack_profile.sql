@@ -68,7 +68,7 @@ SELECT
   -- significant fraction of the runtime on big traces.
   IFNULL(
     DEMANGLE(COALESCE(s.name, f.deobfuscated_name, f.name)),
-    COALESCE(s.name, f.deobfuscated_name, f.name)
+    COALESCE(s.name, f.deobfuscated_name, f.name, '[Unknown]')
   ) AS name,
   f.mapping AS mapping_id,
   s.source_file,
@@ -111,4 +111,29 @@ AS
   ) g
   JOIN _callstack_spc_forest f USING (id)
   JOIN stack_profile_mapping m ON f.mapping_id = m.id
+);
+
+CREATE PERFETTO MACRO _callstacks_for_cpu_profile_stack_samples(
+  samples TableOrSubquery
+)
+RETURNS TableOrSubquery
+AS
+(
+  WITH metrics AS MATERIALIZED (
+    SELECT
+      callsite_id,
+      COUNT() AS self_count
+    FROM $samples
+    GROUP BY callsite_id
+  )
+  SELECT
+    c.id,
+    c.parent_id,
+    c.name,
+    c.mapping_name,
+    c.source_file,
+    c.line_number,
+    IFNULL(m.self_count, 0) AS self_count
+  FROM _callstacks_for_stack_profile_samples!(metrics) c
+  LEFT JOIN metrics m USING (callsite_id)
 );

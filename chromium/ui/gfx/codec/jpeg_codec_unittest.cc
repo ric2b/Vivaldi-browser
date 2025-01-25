@@ -144,11 +144,11 @@ static void MakeRGBAImage(int w, int h, std::vector<unsigned char>* dat) {
   dat->resize(w * h * 4);
   for (int y = 0; y < h; y++) {
     for (int x = 0; x < w; x++) {
-      unsigned char* org_px = &(*dat)[(y * w + x) * 4];
-      org_px[0] = x * 3;      // r
-      org_px[1] = x * 3 + 1;  // g
-      org_px[2] = x * 3 + 2;  // b
-      org_px[3] = 0xFF;       // a
+      size_t base = (y * w + x) * 4;
+      (*dat)[base] = x * 3;          // r
+      (*dat)[base + 1] = x * 3 + 1;  // g
+      (*dat)[base + 2] = x * 3 + 2;  // b
+      (*dat)[base + 3] = 0xFF;       // a
     }
   }
 }

@@ -18,6 +18,7 @@
 #include "components/input/render_widget_host_input_event_router.h"
 #include "components/input/render_widget_host_view_input.h"
 #include "components/input/touch_emulator.h"
+#include "components/input/utils.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -123,10 +124,12 @@ RenderInputRouter::RenderInputRouter(
           std::make_unique<RenderInputRouterLatencyTracker>(delegate)),
       render_input_router_client_(host),
       delegate_(delegate),
-      task_runner_(std::move(task_runner)) {}
+      task_runner_(std::move(task_runner)) {
+  TRACE_EVENT("input", "RenderInputRouter::RenderInputRouter");
+}
 
 void RenderInputRouter::SetupInputRouter(float device_scale_factor) {
-  TRACE_EVENT("toplevel.flow", "RenderInputRouter::SetupInputRouter");
+  TRACE_EVENT("input", "RenderInputRouter::SetupInputRouter");
 
   input_router_ = std::make_unique<InputRouterImpl>(
       this, this, fling_scheduler_.get(),
@@ -145,7 +148,7 @@ void RenderInputRouter::BindRenderInputRouterInterfaces(
 }
 
 void RenderInputRouter::RendererWidgetCreated(bool for_frame_widget) {
-  TRACE_EVENT("toplevel.flow", "RenderInputRouter::RendererWidgetCreated");
+  TRACE_EVENT("input", "RenderInputRouter::RendererWidgetCreated");
 
   client_remote_->GetWidgetInputHandler(
       widget_input_handler_.BindNewPipeAndPassReceiver(task_runner_),
@@ -170,7 +173,7 @@ void RenderInputRouter::SetDeviceScaleFactor(float device_scale_factor) {
 }
 
 void RenderInputRouter::ProgressFlingIfNeeded(base::TimeTicks current_time) {
-  TRACE_EVENT("toplevel.flow", "RenderInputRouter::ProgressFlingIfNeeded");
+  TRACE_EVENT("input", "RenderInputRouter::ProgressFlingIfNeeded");
   fling_scheduler_->ProgressFlingOnBeginFrameIfneeded(current_time);
 }
 
@@ -178,8 +181,17 @@ void RenderInputRouter::StopFling() {
   input_router()->StopFling();
 }
 
+bool RenderInputRouter::IsAnyScrollGestureInProgress() const {
+  for (size_t i = 0; i < is_in_gesture_scroll_.size(); i++) {
+    if (is_in_gesture_scroll_[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 blink::mojom::WidgetInputHandler* RenderInputRouter::GetWidgetInputHandler() {
-  TRACE_EVENT("toplevel.flow", "RenderInputRouter::GetWidgetInputHandler");
+  TRACE_EVENT("input", "RenderInputRouter::GetWidgetInputHandler");
 
   if (widget_input_handler_) {
     return widget_input_handler_.get();
@@ -261,6 +273,7 @@ blink::mojom::InputEventResultState RenderInputRouter::FilterInputEvent(
   // confused about how many touches are active.
   if (delegate_->IsIgnoringWebInputEvents(event) &&
       event.GetType() != WebInputEvent::Type::kTouchCancel) {
+    delegate_->OnInputIgnored(event);
     return blink::mojom::InputEventResultState::kNoConsumerExists;
   }
 
@@ -302,11 +315,35 @@ void RenderInputRouter::OnInvalidInputEventSource() {
   delegate_->OnInvalidInputEventSource();
 }
 
+void RenderInputRouter::ForwardGestureEvent(
+    const blink::WebGestureEvent& gesture_event) {
+  TRACE_EVENT("input", "RenderInputRouter::ForwardGestureEvent", "type",
+              WebInputEvent::GetName(gesture_event.GetType()));
+
+  ForwardGestureEventWithLatencyInfo(gesture_event, ui::LatencyInfo());
+}
+
 void RenderInputRouter::ForwardGestureEventWithLatencyInfo(
     const blink::WebGestureEvent& gesture_event,
     const ui::LatencyInfo& latency_info) {
   TRACE_EVENT1("input", "RenderInputRouter::ForwardGestureEvent", "type",
                WebInputEvent::GetName(gesture_event.GetType()));
+
+  input::GestureEventWithLatencyInfo gesture_with_latency(gesture_event,
+                                                          latency_info);
+
+  // Assigns a `trace_id` to the latency object.
+  latency_tracker_->OnEventStart(&gesture_with_latency.latency);
+
+  TRACE_EVENT(
+      "input,benchmark,latencyInfo", "LatencyInfo.Flow",
+      [&gesture_with_latency](perfetto::EventContext ctx) {
+        ui::LatencyInfo::EmitFirstLatencyInfoStep(
+            ctx, gesture_with_latency.latency.trace_id(),
+            perfetto::protos::pbzero::ChromeLatencyInfo2::Step::
+                STEP_SEND_INPUT_EVENT_UI,
+            InputEventTypeToProto(gesture_with_latency.event.GetType()));
+      });
 
   // Early out if necessary, prior to performing latency logic.
   if (delegate_->IsIgnoringWebInputEvents(gesture_event)) {
@@ -348,8 +385,6 @@ void RenderInputRouter::ForwardGestureEventWithLatencyInfo(
     return;
   }
 
-  input::GestureEventWithLatencyInfo gesture_with_latency(gesture_event,
-                                                          latency_info);
   DispatchInputEventWithLatencyInfo(
       gesture_with_latency.event, &gesture_with_latency.latency,
       &gesture_with_latency.event.GetModifiableEventLatencyMetadata());
@@ -432,12 +467,25 @@ void RenderInputRouter::DispatchInputEventWithLatencyInfo(
 void RenderInputRouter::ForwardTouchEventWithLatencyInfo(
     const blink::WebTouchEvent& touch_event,
     const ui::LatencyInfo& latency) {
-  TRACE_EVENT0("input", "RenderInputRouter::ForwardTouchEvent");
+  TRACE_EVENT0("input,input.scrolling", "RenderInputRouter::ForwardTouchEvent");
 
   // Always forward TouchEvents for touch stream consistency. They will be
   // ignored if appropriate in FilterInputEvent().
 
   input::TouchEventWithLatencyInfo touch_with_latency(touch_event, latency);
+
+  // Assigns a `trace_id` to the latency object.
+  latency_tracker_->OnEventStart(&touch_with_latency.latency);
+
+  TRACE_EVENT("input,benchmark,latencyInfo", "LatencyInfo.Flow",
+              [&touch_with_latency](perfetto::EventContext ctx) {
+                ui::LatencyInfo::EmitFirstLatencyInfoStep(
+                    ctx, touch_with_latency.latency.trace_id(),
+                    perfetto::protos::pbzero::ChromeLatencyInfo2::Step::
+                        STEP_SEND_INPUT_EVENT_UI,
+                    InputEventTypeToProto(touch_with_latency.event.GetType()));
+              });
+
   DispatchInputEventWithLatencyInfo(
       touch_with_latency.event, &touch_with_latency.latency,
       &touch_with_latency.event.GetModifiableEventLatencyMetadata());

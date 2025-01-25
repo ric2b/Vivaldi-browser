@@ -15,7 +15,7 @@
 #import "components/tab_groups/tab_group_id.h"
 #import "components/tab_groups/tab_group_visual_data.h"
 #import "ios/chrome/browser/sessions/model/session_util.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/web/public/web_state.h"
@@ -130,7 +130,8 @@ std::string LiveTabContextBrowserAgent::GetWorkspace() const {
 sessions::LiveTab* LiveTabContextBrowserAgent::AddRestoredTab(
     const sessions::tab_restore::Tab& tab,
     int tab_index,
-    bool select) {
+    bool select,
+    sessions::tab_restore::Type original_session_type) {
   // TODO(crbug.com/40491734): Handle tab-switch animation somehow...
   web_state_list_->InsertWebState(
       session_util::CreateWebStateWithNavigationEntries(

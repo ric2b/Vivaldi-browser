@@ -67,7 +67,7 @@ enum visibility {
 static int
 usage(int ret)
 {
-	fprintf(stderr, "usage: %s [OPTION] [client-header|server-header|private-code|public-code]"
+	fprintf(stderr, "usage: %s [OPTION] [client-header|server-header|enum-header|private-code|public-code]"
 		" [input_file output_file]\n", PROGRAM_NAME);
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Converts XML protocol descriptions supplied on "
@@ -175,7 +175,7 @@ struct interface {
 	char *name;
 	char *uppercase_name;
 	int version;
-	int since;
+	int since, deprecated_since;
 	struct wl_list request_list;
 	struct wl_list event_list;
 	struct wl_list enumeration_list;
@@ -194,7 +194,7 @@ struct message {
 	int type_index;
 	int all_null;
 	int destructor;
-	int since;
+	int since, deprecated_since;
 	struct description *description;
 };
 
@@ -234,7 +234,7 @@ struct entry {
 	char *uppercase_name;
 	char *value;
 	char *summary;
-	int since;
+	int since, deprecated_since;
 	struct wl_list link;
 	struct description *description;
 };
@@ -411,11 +411,9 @@ static bool
 is_nullable_type(struct arg *arg)
 {
 	switch (arg->type) {
-	/* Strings, objects, and arrays are possibly nullable */
+	/* Strings and objects are possibly nullable */
 	case STRING:
 	case OBJECT:
-	case NEW_ID:
-	case ARRAY:
 		return true;
 	default:
 		return false;
@@ -699,6 +697,25 @@ version_from_since(struct parse_context *ctx, const char *since)
 	return version;
 }
 
+static int
+version_from_deprecated_since(struct parse_context *ctx, const char *deprecated_since)
+{
+	int version;
+
+	if (deprecated_since == NULL)
+		return 0;
+
+	version = strtouint(deprecated_since);
+	if (version == -1) {
+		fail(&ctx->loc, "invalid integer (%s)\n", deprecated_since);
+	} else if (version > ctx->interface->version) {
+		fail(&ctx->loc, "deprecated-since (%u) larger than version (%u)\n",
+		     version, ctx->interface->version);
+	}
+
+	return version;
+}
+
 static void
 start_element(void *data, const char *element_name, const char **atts)
 {
@@ -715,6 +732,7 @@ start_element(void *data, const char *element_name, const char **atts)
 	const char *value = NULL;
 	const char *summary = NULL;
 	const char *since = NULL;
+	const char *deprecated_since = NULL;
 	const char *allow_null = NULL;
 	const char *enumeration_name = NULL;
 	const char *bitfield = NULL;
@@ -739,6 +757,8 @@ start_element(void *data, const char *element_name, const char **atts)
 			summary = atts[i + 1];
 		if (strcmp(atts[i], "since") == 0)
 			since = atts[i + 1];
+		if (strcmp(atts[i], "deprecated-since") == 0)
+			deprecated_since = atts[i + 1];
 		if (strcmp(atts[i], "allow-null") == 0)
 			allow_null = atts[i + 1];
 		if (strcmp(atts[i], "enum") == 0)
@@ -788,11 +808,17 @@ start_element(void *data, const char *element_name, const char **atts)
 			message->destructor = 1;
 
 		version = version_from_since(ctx, since);
-
 		if (version < ctx->interface->since)
 			warn(&ctx->loc, "since version not increasing\n");
 		ctx->interface->since = version;
 		message->since = version;
+
+		version = version_from_deprecated_since(ctx, deprecated_since);
+		if (version > 0 && version <= message->since)
+			fail(&ctx->loc, "deprecated-since version (%d) smaller "
+			     "or equal to since version (%u)\n",
+			     version, message->since);
+		message->deprecated_since = version;
 
 		if (strcmp(name, "destroy") == 0 && !message->destructor)
 			fail(&ctx->loc, "destroy request should be destructor type");
@@ -874,12 +900,19 @@ start_element(void *data, const char *element_name, const char **atts)
 
 		validate_identifier(&ctx->loc, name, TRAILING_IDENT);
 		entry = create_entry(name, value);
-		version = version_from_since(ctx, since);
 
+		version = version_from_since(ctx, since);
 		if (version < ctx->enumeration->since)
 			warn(&ctx->loc, "since version not increasing\n");
 		ctx->enumeration->since = version;
 		entry->since = version;
+
+		version = version_from_deprecated_since(ctx, deprecated_since);
+		if (version > 0 && version <= entry->since)
+			fail(&ctx->loc, "deprecated-since version (%d) smaller "
+			     "or equal to since version (%u)\n",
+			     version, entry->since);
+		entry->deprecated_since = version;
 
 		if (summary)
 			entry->summary = xstrdup(summary);
@@ -1346,7 +1379,7 @@ emit_event_wrappers(struct wl_list *message_list, struct interface *interface)
 }
 
 static void
-emit_enumerations(struct interface *interface)
+emit_enumerations(struct interface *interface, bool with_validators)
 {
 	struct enumeration *e;
 	struct entry *entry;
@@ -1382,6 +1415,9 @@ emit_enumerations(struct interface *interface)
 				}
 				if (entry->since > 1)
 					printf("\t * @since %d\n", entry->since);
+				if (entry->deprecated_since > 0)
+					printf("\t * @deprecated Deprecated since version %d\n",
+					       entry->deprecated_since);
 				printf("\t */\n");
 			}
 			printf("\t%s_%s_%s = %s,\n",
@@ -1401,6 +1437,33 @@ emit_enumerations(struct interface *interface)
                                e->uppercase_name, entry->uppercase_name,
                                entry->since);
 
+		}
+
+		if (with_validators) {
+			printf("/**\n"
+			       " * @ingroup iface_%s\n"
+			       " * Validate a %s %s value.\n"
+			       " *\n"
+			       " * @return true on success, false on error.\n"
+			       " * @ref %s_%s\n"
+			       " */\n"
+			       "static inline bool\n"
+			       "%s_%s_is_valid(uint32_t value, uint32_t version) {\n"
+			       "	switch (value) {\n",
+			       interface->name, interface->name, e->name,
+			       interface->name, e->name,
+			       interface->name, e->name);
+			wl_list_for_each(entry, &e->entry_list, link) {
+				printf("	case %s%s_%s_%s:\n"
+				       "		return version >= %d;\n",
+				       entry->value[0] == '-' ? "(uint32_t)" : "",
+				       interface->uppercase_name, e->uppercase_name,
+				       entry->uppercase_name, entry->since);
+			}
+			printf("	default:\n"
+			       "		return false;\n"
+			       "	}\n"
+			       "}\n");
 		}
 
 		printf("#endif /* %s_%s_ENUM */\n\n",
@@ -1446,9 +1509,11 @@ emit_structs(struct wl_list *message_list, struct interface *interface, enum sid
 				printf("\t * @param %s %s\n", a->name,
 				       a->summary);
 		}
-		if (m->since > 1) {
+		if (m->since > 1)
 			printf("\t * @since %d\n", m->since);
-		}
+		if (m->deprecated_since > 0)
+			printf("\t * @deprecated Deprecated since version %d\n",
+			       m->deprecated_since);
 		printf("\t */\n");
 		printf("\tvoid (*%s)(", m->name);
 
@@ -1636,7 +1701,9 @@ emit_header(struct protocol *protocol, enum side side)
 		*p = i->name;
 	}
 
-	qsort(types.data, types.size / sizeof *p, sizeof *p, cmp_names);
+	if (types.size > 0)
+		qsort(types.data, types.size / sizeof *p, sizeof *p, cmp_names);
+
 	prev = NULL;
 	wl_array_for_each(p, &types) {
 		if (prev && strcmp(*p, prev) == 0)
@@ -1677,7 +1744,7 @@ emit_header(struct protocol *protocol, enum side side)
 
 	wl_list_for_each_safe(i, i_next, &protocol->interface_list, link) {
 
-		emit_enumerations(i);
+		emit_enumerations(i, side == SERVER);
 
 		if (side == SERVER) {
 			emit_structs(&i->request_list, i, side);
@@ -1692,6 +1759,35 @@ emit_header(struct protocol *protocol, enum side side)
 			emit_opcode_versions(&i->request_list, i);
 			emit_stubs(&i->request_list, i);
 		}
+
+		free_interface(i);
+	}
+
+	printf("#ifdef  __cplusplus\n"
+	       "}\n"
+	       "#endif\n"
+	       "\n"
+	       "#endif\n");
+}
+
+static void
+emit_enum_header(struct protocol *protocol)
+{
+	struct interface *i, *i_next;
+
+	printf("/* Generated by %s %s */\n\n", PROGRAM_NAME, WAYLAND_VERSION);
+
+	printf("#ifndef %s_ENUM_PROTOCOL_H\n"
+	       "#define %s_ENUM_PROTOCOL_H\n"
+	       "\n"
+	       "#ifdef  __cplusplus\n"
+	       "extern \"C\" {\n"
+	       "#endif\n\n",
+	       protocol->uppercase_name,
+	       protocol->uppercase_name);
+
+	wl_list_for_each_safe(i, i_next, &protocol->interface_list, link) {
+		emit_enumerations(i, false);
 
 		free_interface(i);
 	}
@@ -1820,7 +1916,8 @@ emit_code(struct protocol *protocol, enum visibility vis)
 	if (protocol->copyright)
 		format_text_to_comment(protocol->copyright, true);
 
-	printf("#include <stdlib.h>\n"
+	printf("#include <stdbool.h>\n"
+	       "#include <stdlib.h>\n"
 	       "#include <stdint.h>\n"
 	       "#include \"wayland-util.h\"\n\n");
 
@@ -1846,9 +1943,10 @@ emit_code(struct protocol *protocol, enum visibility vis)
 		emit_types_forward_declarations(protocol, &i->request_list, &types);
 		emit_types_forward_declarations(protocol, &i->event_list, &types);
 	}
-	if (types.size > 0) {
+
+	if (types.size > 0)
 		qsort(types.data, types.size / sizeof *p, sizeof *p, cmp_names);
-	}
+
 	prev = NULL;
 	wl_array_for_each(p, &types) {
 		if (prev && strcmp(*p, prev) == 0)
@@ -1922,6 +2020,7 @@ int main(int argc, char *argv[])
 	enum {
 		CLIENT_HEADER,
 		SERVER_HEADER,
+		ENUM_HEADER,
 		PRIVATE_CODE,
 		PUBLIC_CODE,
 		CODE,
@@ -1975,6 +2074,8 @@ int main(int argc, char *argv[])
 		mode = CLIENT_HEADER;
 	else if (strcmp(argv[0], "server-header") == 0)
 		mode = SERVER_HEADER;
+	else if (strcmp(argv[0], "enum-header") == 0)
+		mode = ENUM_HEADER;
 	else if (strcmp(argv[0], "private-code") == 0)
 		mode = PRIVATE_CODE;
 	else if (strcmp(argv[0], "public-code") == 0)
@@ -2065,6 +2166,9 @@ int main(int argc, char *argv[])
 			break;
 		case SERVER_HEADER:
 			emit_header(&protocol, SERVER);
+			break;
+		case ENUM_HEADER:
+			emit_enum_header(&protocol);
 			break;
 		case PRIVATE_CODE:
 			emit_code(&protocol, PRIVATE);

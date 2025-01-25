@@ -56,16 +56,44 @@ class ZWPTextInputWrapperV3 : public ZWPTextInputWrapper {
 
  private:
   struct ContentType {
+    constexpr ContentType() = default;
+    constexpr ContentType(uint32_t content_hint, uint32_t content_purpose)
+        : content_hint(content_hint), content_purpose(content_purpose) {}
     bool operator==(const ContentType& other) const = default;
-    uint32_t content_hint;
-    uint32_t content_purpose;
+    uint32_t content_hint = ZWP_TEXT_INPUT_V3_CONTENT_HINT_NONE;
+    uint32_t content_purpose = ZWP_TEXT_INPUT_V3_CONTENT_PURPOSE_NORMAL;
+  };
+  struct SetSurroundingTextData {
+    constexpr SetSurroundingTextData() = default;
+    constexpr SetSurroundingTextData(std::string text,
+                                     int32_t cursor,
+                                     int32_t anchor)
+        : text(std::move(text)), cursor(cursor), anchor(anchor) {}
+    bool operator==(const SetSurroundingTextData&) const = default;
+    std::string text;
+    int32_t cursor = 0;
+    int32_t anchor = 0;
+  };
+  struct PreeditData {
+    constexpr PreeditData() = default;
+    constexpr PreeditData(std::string text,
+                          int32_t cursor_begin,
+                          int32_t cursor_end)
+        : text(std::move(text)),
+          cursor_begin(cursor_begin),
+          cursor_end(cursor_end) {}
+    std::string text;
+    int32_t cursor_begin = 0;
+    int32_t cursor_end = 0;
   };
 
   void SendCursorRect(const gfx::Rect& rect);
   void SendContentType(const ContentType& content_type);
+  void SendSurroundingText(const SetSurroundingTextData& data);
   void ApplyPendingSetRequests();
   void ResetPendingSetRequests();
   void ResetLastSentValues();
+  void ResetPendingInputEvents();
   void Commit();
 
   // zwp_text_input_v3_listener
@@ -97,13 +125,19 @@ class ZWPTextInputWrapperV3 : public ZWPTextInputWrapper {
   uint32_t commit_count_ = 0;
   uint32_t last_done_serial_ = 0;
 
+  // Pending input events that will be applied in done event.
+  std::optional<PreeditData> pending_preedit_;
+  std::optional<std::string> pending_commit_;
+
   // Pending set requests to be sent to compositor
   std::optional<gfx::Rect> pending_set_cursor_rect_;
   std::optional<ContentType> pending_set_content_type_;
+  std::optional<SetSurroundingTextData> pending_set_surrounding_text_;
 
   // last sent values
-  gfx::Rect last_sent_cursor_rect_;
-  ContentType last_sent_content_type_;
+  std::optional<gfx::Rect> last_sent_cursor_rect_;
+  std::optional<ContentType> last_sent_content_type_;
+  std::optional<SetSurroundingTextData> last_sent_surrounding_text_data_;
 };
 
 }  // namespace ui

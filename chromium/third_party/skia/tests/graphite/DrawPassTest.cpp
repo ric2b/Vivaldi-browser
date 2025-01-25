@@ -7,6 +7,7 @@
 
 #include "tests/Test.h"
 
+#include "include/core/SkBlender.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/DrawList.h"
 #include "src/gpu/graphite/DrawPass.h"
@@ -19,13 +20,13 @@ namespace skgpu::graphite {
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(DrawPassTestFailedDstCopy,
                                    reporter,
                                    context,
-                                   CtsEnforcement::kNextRelease) {
+                                   CtsEnforcement::kApiLevel_V) {
     const Caps* caps = context->priv().caps();
     std::unique_ptr<Recorder> recorder = context->makeRecorder();
 
     // Define a paint that requires a dst copy.
     SkPaint paint;
-    PaintParams paintParams{paint, nullptr, nullptr, DstReadRequirement::kTextureCopy, false};
+    PaintParams paintParams{paint, nullptr, {}, nullptr, DstReadRequirement::kTextureCopy, false};
 
     // Define a draw that uses the paint, but is larger than the max texture size. In this case the
     // dst copy will fail.
@@ -34,7 +35,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(DrawPassTestFailedDstCopy,
     drawList->recordDraw(recorder->priv().rendererProvider()->analyticRRect(),
                          Transform::Identity(),
                          Geometry(Shape(SkRect::Make(drawSize))),
-                         Clip(Rect::Infinite(), Rect::Infinite(), drawSize, nullptr),
+                         Clip(Rect::Infinite(), Rect::Infinite(), drawSize, {}, nullptr),
                          DrawOrder(DrawOrder::kClearDepth.next()),
                          &paintParams,
                          nullptr);

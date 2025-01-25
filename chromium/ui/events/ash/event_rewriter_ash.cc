@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/events/ash/event_rewriter_ash.h"
 
 #include <fcntl.h>
@@ -113,7 +118,7 @@ void RecordAutoRepeatUsageMetric(
 
   // Only want to record metrics if its a repeated keypressed event.
   if (!(auto_repeat_event->flags() & EF_IS_REPEAT) ||
-      !(auto_repeat_event->type() & EventType::kKeyPressed)) {
+      auto_repeat_event->type() != EventType::kKeyPressed) {
     return;
   }
 
@@ -1001,6 +1006,7 @@ void NotifySixPackRewriteBlockedByFnKey(
           map.result.key_code, (map.condition.flags & ui::EF_COMMAND_DOWN)
                                    ? mojom::SixPackShortcutModifier::kSearch
                                    : mojom::SixPackShortcutModifier::kAlt);
+      return;
     }
   }
 }

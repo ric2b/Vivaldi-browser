@@ -6,7 +6,7 @@
 #define COMPONENTS_DATA_SHARING_INTERNAL_EMPTY_DATA_SHARING_SERVICE_H_
 
 #include "components/data_sharing/public/data_sharing_service.h"
-#include "components/sync/model/model_type_sync_bridge.h"
+#include "components/sync/model/data_type_sync_bridge.h"
 
 namespace data_sharing {
 
@@ -26,7 +26,7 @@ class EmptyDataSharingService : public DataSharingService {
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   DataSharingNetworkLoader* GetDataSharingNetworkLoader() override;
-  base::WeakPtr<syncer::ModelTypeControllerDelegate>
+  base::WeakPtr<syncer::DataTypeControllerDelegate>
   GetCollaborationGroupControllerDelegate() override;
   void ReadAllGroups(
       base::OnceCallback<void(const GroupsDataSetOrFailureOutcome&)> callback)
@@ -44,12 +44,28 @@ class EmptyDataSharingService : public DataSharingService {
       const GroupId& group_id,
       const std::string& invitee_email,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) override;
+  void AddMember(
+      const GroupId& group_id,
+      const std::string& access_token,
+      base::OnceCallback<void(PeopleGroupActionOutcome)> callback) override;
   void RemoveMember(
       const GroupId& group_id,
       const std::string& member_email,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) override;
   bool ShouldInterceptNavigationForShareURL(const GURL& url) override;
   void HandleShareURLNavigationIntercepted(const GURL& url) override;
+  std::unique_ptr<GURL> GetDataSharingURL(const GroupData& group_data) override;
+  ParseURLResult ParseDataSharingURL(const GURL& url) override;
+  void EnsureGroupVisibility(
+      const GroupId& group_id,
+      base::OnceCallback<void(const GroupDataOrFailureOutcome&)> callback)
+      override;
+  void GetSharedEntitiesPreview(
+      const GroupToken& group_token,
+      base::OnceCallback<void(const SharedDataPreviewOrFailureOutcome&)>
+          callback) override;
+  DataSharingUIDelegate* GetUIDelegate() override;
+  ServiceStatus GetServiceStatus() override;
 };
 
 }  // namespace data_sharing

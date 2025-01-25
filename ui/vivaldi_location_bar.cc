@@ -20,10 +20,6 @@ VivaldiLocationBar::VivaldiLocationBar(VivaldiBrowserWindow& window)
 
 VivaldiLocationBar::~VivaldiLocationBar() = default;
 
-const OmniboxView* VivaldiLocationBar::GetOmniboxView() const {
-  return nullptr;
-}
-
 OmniboxView* VivaldiLocationBar::GetOmniboxView() {
   return nullptr;
 }

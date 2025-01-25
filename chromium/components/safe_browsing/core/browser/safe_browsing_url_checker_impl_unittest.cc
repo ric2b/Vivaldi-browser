@@ -51,7 +51,6 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
  public:
   MockSafeBrowsingDatabaseManager()
       : TestSafeBrowsingDatabaseManager(
-            base::SequencedTaskRunner::GetCurrentDefault(),
             base::SequencedTaskRunner::GetCurrentDefault()) {}
   // SafeBrowsingDatabaseManager implementation.
   // Checks the threat type of |gurl| previously set by |SetThreatTypeForUrl|.
@@ -104,7 +103,7 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
     DCHECK(base::Contains(urls_allowlist_match_, url));
     DCHECK(base::Contains(urls_allowlist_logging_details_, url));
 
-    sb_task_runner()->PostTask(
+    ui_task_runner()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback), urls_allowlist_match_[url]));
     return urls_allowlist_logging_details_[url];
@@ -354,6 +353,7 @@ class MockHashRealTimeService : public HashRealTimeService {
 
 struct CreateSafeBrowsingUrlCheckerOptionalArgs {
   std::string url_lookup_service_metric_suffix = ".Enterprise";
+  bool check_allowlist_before_hash_database = false;
 };
 
 }  // namespace
@@ -393,7 +393,9 @@ class SafeBrowsingUrlCheckerTest : public PlatformTest {
                                      : nullptr,
         /*hash_realtime_service=*/hash_realtime_service_->GetWeakPtr(),
         hash_real_time_selection,
-        /*is_async_check=*/false, SessionID::InvalidValue());
+        /*is_async_check=*/false,
+        optional_args.check_allowlist_before_hash_database,
+        SessionID::InvalidValue());
   }
 
  protected:
@@ -610,6 +612,135 @@ TEST_F(SafeBrowsingUrlCheckerTest,
               StartDisplayingBlockingPageHelper(_, _, _, _))
       .Times(1);
   database_manager_->RestartDelayedCallback(origin_url);
+  task_environment_.RunUntilIdle();
+  ValidateCheckUrlTimeTakenMetrics(/*expected_hprt_log_count=*/0,
+                                   /*expected_urt_log_count=*/0,
+                                   /*expected_hpd_log_count=*/1);
+}
+
+TEST_F(SafeBrowsingUrlCheckerTest,
+       CheckUrl_CheckAllowlistBeforeHashDatabaseCheck_OnAllowlistUnsafe) {
+  auto safe_browsing_url_checker = CreateSafeBrowsingUrlChecker(
+      /*url_real_time_lookup_enabled=*/false,
+      /*can_check_safe_browsing_db=*/true,
+      /*hash_real_time_selection=*/
+      hash_realtime_utils::HashRealTimeSelection::kNone,
+      /*optional_args=*/{.check_allowlist_before_hash_database = true});
+
+  GURL url("https://example.test/");
+  database_manager_->SetAllowlistLookupDetailsForUrl(
+      url, /*match=*/true,
+      /*logging_details=*/std::nullopt);
+  // Although we mark the URL as phishing in the hash database, the callback
+  // should return safe because it is on the allowlist.
+  database_manager_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                         /*delayed_callback=*/false);
+
+  base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
+      callback;
+  EXPECT_CALL(
+      callback,
+      Run(/*proceed=*/true, /*showed_interstitial=*/false,
+          /*has_post_commit_interstitial_skipped=*/false,
+          SafeBrowsingUrlCheckerImpl::PerformedCheck::kHashDatabaseCheck));
+
+  safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
+  task_environment_.RunUntilIdle();
+  ValidateCheckUrlTimeTakenMetrics(/*expected_hprt_log_count=*/0,
+                                   /*expected_urt_log_count=*/0,
+                                   /*expected_hpd_log_count=*/1);
+}
+
+TEST_F(SafeBrowsingUrlCheckerTest,
+       CheckUrl_CheckAllowlistBeforeHashDatabaseCheck_NotOnAllowlistSafe) {
+  auto safe_browsing_url_checker = CreateSafeBrowsingUrlChecker(
+      /*url_real_time_lookup_enabled=*/false,
+      /*can_check_safe_browsing_db=*/true,
+      /*hash_real_time_selection=*/
+      hash_realtime_utils::HashRealTimeSelection::kNone,
+      /*optional_args=*/{.check_allowlist_before_hash_database = true});
+
+  GURL url("https://example.test/");
+  database_manager_->SetAllowlistLookupDetailsForUrl(
+      url, /*match=*/false,
+      /*logging_details=*/std::nullopt);
+  database_manager_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_SAFE,
+                                         /*delayed_callback=*/false);
+
+  base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
+      callback;
+  EXPECT_CALL(
+      callback,
+      Run(/*proceed=*/true, /*showed_interstitial=*/false,
+          /*has_post_commit_interstitial_skipped=*/false,
+          SafeBrowsingUrlCheckerImpl::PerformedCheck::kHashDatabaseCheck));
+
+  safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
+  task_environment_.RunUntilIdle();
+  ValidateCheckUrlTimeTakenMetrics(/*expected_hprt_log_count=*/0,
+                                   /*expected_urt_log_count=*/0,
+                                   /*expected_hpd_log_count=*/1);
+}
+
+TEST_F(SafeBrowsingUrlCheckerTest,
+       CheckUrl_CheckAllowlistBeforeHashDatabaseCheck_NotOnAllowlistUnsafe) {
+  auto safe_browsing_url_checker = CreateSafeBrowsingUrlChecker(
+      /*url_real_time_lookup_enabled=*/false,
+      /*can_check_safe_browsing_db=*/true,
+      /*hash_real_time_selection=*/
+      hash_realtime_utils::HashRealTimeSelection::kNone,
+      /*optional_args=*/{.check_allowlist_before_hash_database = true});
+
+  GURL url("https://example.test/");
+  database_manager_->SetAllowlistLookupDetailsForUrl(
+      url, /*match=*/false,
+      /*logging_details=*/std::nullopt);
+  database_manager_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                         /*delayed_callback=*/false);
+
+  base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
+      callback;
+  EXPECT_CALL(callback, Run(_, _, _, _)).Times(0);
+  EXPECT_CALL(*url_checker_delegate_,
+              StartDisplayingBlockingPageHelper(
+                  IsSameThreatSource(ThreatSource::UNKNOWN), _, _, _))
+      .Times(1);
+
+  safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
+  task_environment_.RunUntilIdle();
+  ValidateCheckUrlTimeTakenMetrics(/*expected_hprt_log_count=*/0,
+                                   /*expected_urt_log_count=*/0,
+                                   /*expected_hpd_log_count=*/1);
+}
+
+TEST_F(SafeBrowsingUrlCheckerTest,
+       CheckUrl_NotCheckAllowlistBeforeHashDatabaseCheck) {
+  auto safe_browsing_url_checker = CreateSafeBrowsingUrlChecker(
+      /*url_real_time_lookup_enabled=*/false,
+      /*can_check_safe_browsing_db=*/true,
+      /*hash_real_time_selection=*/
+      hash_realtime_utils::HashRealTimeSelection::kNone,
+      /*optional_args=*/{.check_allowlist_before_hash_database = false});
+
+  GURL url("https://example.test/");
+  // Although we mark the URL matching the allowlist, the URL should still be
+  // flagged by the hash database check because
+  // check_allowlist_before_hash_database is set to false.
+  database_manager_->SetAllowlistLookupDetailsForUrl(
+      url, /*match=*/true,
+      /*logging_details=*/std::nullopt);
+  database_manager_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                         /*delayed_callback=*/false);
+
+  base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
+      callback;
+  EXPECT_CALL(callback, Run(_, _, _, _)).Times(0);
+  EXPECT_CALL(*url_checker_delegate_,
+              StartDisplayingBlockingPageHelper(
+                  IsSameThreatSource(ThreatSource::UNKNOWN), _, _, _))
+      .Times(1);
+
+  safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
   task_environment_.RunUntilIdle();
   ValidateCheckUrlTimeTakenMetrics(/*expected_hprt_log_count=*/0,
                                    /*expected_urt_log_count=*/0,
@@ -1490,6 +1621,182 @@ TEST_F(SafeBrowsingUrlCheckerTest,
   ValidateCheckUrlTimeTakenMetrics(/*expected_hprt_log_count=*/0,
                                    /*expected_urt_log_count=*/1,
                                    /*expected_hpd_log_count=*/0);
+}
+
+TEST_F(SafeBrowsingUrlCheckerTest,
+       CheckUrl_BackgroundHashRealTimeLookups_SampleRateIsZero) {
+  scoped_feature_list_.InitAndEnableFeatureWithParameters(
+      safe_browsing::kHashPrefixRealTimeLookupsSamplePing,
+      {{"HashPrefixRealTimeLookupsSampleRate",
+        /** Override to 0% to make sure it will not be sampled. */
+        "0"}});
+  auto safe_browsing_url_checker = CreateSafeBrowsingUrlChecker(
+      /*url_real_time_lookup_enabled=*/true,
+      /*can_check_safe_browsing_db=*/true,
+      /*hash_real_time_selection=*/
+      hash_realtime_utils::HashRealTimeSelection::kHashRealTimeService);
+
+  GURL url("https://example.test/");
+  database_manager_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                         /*delayed_callback=*/false);
+  database_manager_->SetAllowlistLookupDetailsForUrl(
+      url, /*match=*/true,
+      /*logging_details=*/std::nullopt);
+  url_lookup_service_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                           /*should_complete_lookup=*/true);
+
+  base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
+      callback;
+  safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
+
+  task_environment_.RunUntilIdle();
+
+  // The UrlRealTimeCheckWithBackgroundHashRealTimeCheck should not be
+  // performed.
+  // TODO(crbug.com/362551880): Replace the histogram testing with CSBRR testing
+  // once that functionality is implemented.
+  histogram_tester_.ExpectBucketCount(
+      /*name=*/
+      "SafeBrowsing.CheckUrl."
+      "UrlRealTimeWithBackgroundHashRealTimeMechanismTriggered",
+      /*sample=*/1,
+      /*expected_count=*/0);
+
+  // The normal URT lookup should be performed.
+  ValidateCheckUrlTimeTakenMetrics(/*expected_hprt_log_count=*/0,
+                                   /*expected_urt_log_count=*/1,
+                                   /*expected_hpd_log_count=*/0);
+}
+
+TEST_F(SafeBrowsingUrlCheckerTest,
+       CheckUrl_BackgroundHashRealTimeLookups_NoHashRealTimeSelection) {
+  scoped_feature_list_.InitAndEnableFeatureWithParameters(
+      safe_browsing::kHashPrefixRealTimeLookupsSamplePing,
+      {{"HashPrefixRealTimeLookupsSampleRate",
+        /** Override to 100% to make sure it will always be sampled. */
+        "100"}});
+  auto safe_browsing_url_checker = CreateSafeBrowsingUrlChecker(
+      /*url_real_time_lookup_enabled=*/true,
+      /*can_check_safe_browsing_db=*/true,
+      /*hash_real_time_selection=*/
+      hash_realtime_utils::HashRealTimeSelection::kNone);
+
+  GURL url("https://example.test/");
+  database_manager_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                         /*delayed_callback=*/false);
+  database_manager_->SetAllowlistLookupDetailsForUrl(
+      url, /*match=*/true,
+      /*logging_details=*/std::nullopt);
+  url_lookup_service_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                           /*should_complete_lookup=*/true);
+
+  base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
+      callback;
+  safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
+
+  task_environment_.RunUntilIdle();
+
+  // The UrlRealTimeCheckWithBackgroundHashRealTimeCheck should not be performed
+  // when the hash_real_time_selection is kNone.
+  // TODO(crbug.com/362551880): Replace the histogram testing with CSBRR testing
+  // once that functionality is implemented.
+  histogram_tester_.ExpectBucketCount(
+      /*name=*/
+      "SafeBrowsing.CheckUrl."
+      "UrlRealTimeWithBackgroundHashRealTimeMechanismTriggered",
+      /*sample=*/1,
+      /*expected_count=*/0);
+}
+
+TEST_F(SafeBrowsingUrlCheckerTest,
+       CheckUrl_BackgroundHashRealTimeLookups_HashRealTimeService) {
+  scoped_feature_list_.InitAndEnableFeatureWithParameters(
+      safe_browsing::kHashPrefixRealTimeLookupsSamplePing,
+      {{"HashPrefixRealTimeLookupsSampleRate",
+        /** Override to 100% to make sure it will always be sampled. */
+        "100"}});
+  auto safe_browsing_url_checker = CreateSafeBrowsingUrlChecker(
+      /*url_real_time_lookup_enabled=*/true,
+      /*can_check_safe_browsing_db=*/true,
+      /*hash_real_time_selection=*/
+      hash_realtime_utils::HashRealTimeSelection::kHashRealTimeService);
+
+  GURL url("https://example.test/");
+  hash_realtime_service_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                              /*should_fail_lookup=*/false);
+  url_lookup_service_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_SAFE,
+                                           /*should_complete_lookup=*/true);
+  database_manager_->SetAllowlistLookupDetailsForUrl(
+      url, /*match=*/false,
+      /*logging_details=*/std::nullopt);
+
+  base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
+      callback;
+  EXPECT_CALL(
+      callback,
+      Run(/*proceed=*/true, /*showed_interstitial=*/false,
+          /*has_post_commit_interstitial_skipped=*/false,
+          SafeBrowsingUrlCheckerImpl::PerformedCheck::kUrlRealTimeCheck));
+  EXPECT_CALL(*url_checker_delegate_,
+              StartDisplayingBlockingPageHelper(_, _, _, _))
+      .Times(0);
+  safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
+
+  task_environment_.RunUntilIdle();
+
+  // TODO(crbug.com/362551880): Replace the histogram testing with CSBRR testing
+  // once that functionality is implemented.
+  histogram_tester_.ExpectBucketCount(
+      /*name=*/
+      "SafeBrowsing.CheckUrl."
+      "UrlRealTimeWithBackgroundHashRealTimeMechanismTriggered",
+      /*sample=*/1,
+      /*expected_count=*/1);
+}
+
+TEST_F(SafeBrowsingUrlCheckerTest,
+       CheckUrl_BackgroundHashRealTimeLookups_Android) {
+  scoped_feature_list_.InitAndEnableFeatureWithParameters(
+      safe_browsing::kHashPrefixRealTimeLookupsSamplePing,
+      {{"HashPrefixRealTimeLookupsSampleRate",
+        /** Override to 100% to make sure it will always be sampled. */
+        "100"}});
+  auto safe_browsing_url_checker = CreateSafeBrowsingUrlChecker(
+      /*url_real_time_lookup_enabled=*/true,
+      /*can_check_safe_browsing_db=*/true,
+      /*hash_real_time_selection=*/
+      hash_realtime_utils::HashRealTimeSelection::kDatabaseManager);
+
+  GURL url("https://example.test/");
+  database_manager_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_SAFE,
+                                         /*delayed_callback=*/false);
+  database_manager_->SetExpectedCheckBrowseUrlType(
+      CheckBrowseUrlType::kHashRealTime);
+  url_lookup_service_->SetThreatTypeForUrl(url, SB_THREAT_TYPE_URL_PHISHING,
+                                           /*should_complete_lookup=*/true);
+  database_manager_->SetAllowlistLookupDetailsForUrl(
+      url, /*match=*/false,
+      /*logging_details=*/std::nullopt);
+
+  base::MockCallback<SafeBrowsingUrlCheckerImpl::NativeCheckUrlCallback>
+      callback;
+  EXPECT_CALL(
+      *url_checker_delegate_,
+      StartDisplayingBlockingPageHelper(
+          IsSameThreatSource(ThreatSource::URL_REAL_TIME_CHECK), _, _, _))
+      .Times(1);
+  safe_browsing_url_checker->CheckUrl(url, "GET", callback.Get());
+
+  task_environment_.RunUntilIdle();
+
+  // TODO(crbug.com/362551880): Replace the histogram testing with CSBRR testing
+  // once that functionality is implemented.
+  histogram_tester_.ExpectBucketCount(
+      /*name=*/
+      "SafeBrowsing.CheckUrl."
+      "UrlRealTimeWithBackgroundHashRealTimeMechanismTriggered",
+      /*sample=*/1,
+      /*expected_count=*/1);
 }
 
 TEST_F(SafeBrowsingUrlCheckerTest,

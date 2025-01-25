@@ -6,7 +6,8 @@
 
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/disabled_grid_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_container_view_controller.h"
@@ -103,6 +104,10 @@
 #pragma mark - ChromeCoordinator
 
 - (void)start {
+  [self.browser->GetCommandDispatcher()
+      startDispatchingToTarget:self
+                   forProtocol:@protocol(TabsAnimationCommands)];
+
   BOOL regularModeEnabled =
       !IsIncognitoModeForced(self.browser->GetBrowserState()->GetPrefs());
 
@@ -134,7 +139,7 @@
 
   self.gridViewController = gridViewController;
 
-  _mediator = [[RegularGridMediator alloc] init];
+  _mediator = [[RegularGridMediator alloc] initWithModeHolder:self.modeHolder];
   _mediator.consumer = gridViewController;
 
   gridViewController.dragDropHandler = _mediator;
@@ -154,6 +159,7 @@
     gridViewController.emptyStateView.accessibilityIdentifier =
         kTabGridRegularTabsEmptyStateIdentifier;
     gridViewController.theme = GridThemeLight;
+    gridViewController.suggestedActionsDelegate = _mediator;
 
     self.gridContainerViewController.containedViewController =
         gridViewController;
@@ -176,10 +182,27 @@
 }
 
 - (void)stop {
+  [self.browser->GetCommandDispatcher() stopDispatchingToTarget:self];
+
   _pinnedTabsMediator = nil;
   _contextMenuProvider = nil;
 
   [super stop];
+}
+
+#pragma mark - TabsAnimationCommands
+
+- (void)animateTabsClosureForTabs:(std::set<web::WebStateID>)tabsToClose
+                           groups:
+                               (std::map<tab_groups::TabGroupId, std::set<int>>)
+                                   groupsWithTabsToClose
+                  allInactiveTabs:(BOOL)animateAllInactiveTabs
+                completionHandler:(ProceduralBlock)completionHandler {
+  [self hideTabGroup];  // Make sure that no tab group is being displayed.
+  [_gridViewController animateTabsClosureForTabs:tabsToClose
+                                          groups:groupsWithTabsToClose
+                                 allInactiveTabs:animateAllInactiveTabs
+                               completionHandler:completionHandler];
 }
 
 #pragma mark - Public

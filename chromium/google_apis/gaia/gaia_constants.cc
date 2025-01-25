@@ -139,8 +139,8 @@ const char kAssistantOAuth2Scope[] =
     "https://www.googleapis.com/auth/assistant-sdk-prototype";
 
 // OAuth2 scope for access to nearby devices (fast pair) APIs.
-const char kCloudPlatformProjectsOAuth2Scope[] =
-    "https://www.googleapis.com/auth/cloudplatformprojects";
+const char kNearbyDevicesOAuth2Scope[] =
+    "https://www.googleapis.com/auth/nearbydevices-pa";
 
 // OAuth2 scope for access to nearby sharing.
 const char kNearbyShareOAuth2Scope[] =
@@ -209,6 +209,8 @@ const char kClassroomReadOnlyCourseWorkSelfOAuth2Scope[] =
     "https://www.googleapis.com/auth/classroom.coursework.me.readonly";
 const char kClassroomReadOnlyStudentSubmissionsSelfOAuth2Scope[] =
     "https://www.googleapis.com/auth/classroom.student-submissions.me.readonly";
+const char kClassroomReadOnlyRostersOAuth2Scope[] =
+    "https://www.googleapis.com/auth/classroom.rosters.readonly";
 
 // OAuth2 scopes for Optimization Guide.
 const char kOptimizationGuideServiceGetHintsOAuth2Scope[] =

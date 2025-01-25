@@ -7,6 +7,7 @@
 #include <tuple>
 
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/files/file.h"
 #include "base/files/platform_file.h"
 #include "base/files/scoped_temp_dir.h"
@@ -98,8 +99,7 @@ class PlatformHandleTest : public testing::Test,
 #if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_MAC)
     return GetSharedMemoryContents(handle);
 #else
-    NOTREACHED_IN_MIGRATION();
-    return std::string();
+    NOTREACHED();
 #endif
   }
 
@@ -115,8 +115,7 @@ class PlatformHandleTest : public testing::Test,
     base::File test_file(temp_dir_.GetPath().AppendASCII("test"),
                          base::File::FLAG_CREATE | base::File::FLAG_WRITE |
                              base::File::FLAG_READ);
-    test_file.WriteAtCurrentPos(kTestData.data(),
-                                static_cast<int>(kTestData.size()));
+    test_file.WriteAtCurrentPos(base::as_byte_span(kTestData));
 
 #if BUILDFLAG(IS_WIN)
     return PlatformHandle(
@@ -139,7 +138,7 @@ class PlatformHandleTest : public testing::Test,
     base::File file(handle.TakeFD());
 #endif
     std::vector<char> buffer(kTestData.size());
-    file.Read(0, buffer.data(), static_cast<int>(buffer.size()));
+    file.Read(0, base::as_writable_byte_span(buffer));
     std::string contents(buffer.begin(), buffer.end());
 
 // Let |handle| retain ownership.
@@ -158,7 +157,7 @@ class PlatformHandleTest : public testing::Test,
   PlatformHandle SetUpSharedMemory() {
     auto region = base::UnsafeSharedMemoryRegion::Create(kTestData.size());
     auto mapping = region.Map();
-    memcpy(mapping.memory(), kTestData.data(), kTestData.size());
+    base::as_writable_chars(base::span(mapping)).copy_from(kTestData);
     auto generic_region =
         base::UnsafeSharedMemoryRegion::TakeHandleForSerialization(
             std::move(region));
@@ -184,8 +183,7 @@ class PlatformHandleTest : public testing::Test,
     auto region =
         base::UnsafeSharedMemoryRegion::Deserialize(std::move(generic_region));
     auto mapping = region.Map();
-    std::string contents(static_cast<char*>(mapping.memory()),
-                         kTestData.size());
+    std::string contents(base::as_string_view(mapping));
 
     // Let |handle| retain ownership.
     generic_region = base::UnsafeSharedMemoryRegion::TakeHandleForSerialization(

@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Paesaggio 12</translation>
 <translation id="1158503667684816647">Non mostrare nuovamente la conferma</translation>
 <translation id="1222195720020481779">Avvio programma di installazione...</translation>
+<translation id="1224683873953469764">Ottieni Vivaldi per dispositivi mobili</translation>
 <translation id="1270785070369717623">Purtroppo le tue impostazioni di Opera GX non sono disponibili mentre il browser è in esecuzione. Per importarle in Vivaldi, salva il tuo lavoro e chiudi tutte le finestre di Opera GX. Poi clicca su Continua.</translation>
 <translation id="1276145862619442150">Selezioni rapide</translation>
 <translation id="1281950884873973195">Animale 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Non Chiedere Conferma Di Nuovo</translation>
 <translation id="1462666970065907900">Vuoi davvero chiudere questa finestra?</translation>
 <translation id="1480046233931937785">Riconoscimenti</translation>
+<translation id="1521774566618522728">Attivo oggi</translation>
 <translation id="1526344461589023948">Si è verificato un errore durante il salvataggio di un aggiornamento. Verifica che il computer abbia spazio su disco sufficiente e riprova.</translation>
 <translation id="1635542496948266458">Cambia profilo</translation>
 <translation id="1657174850639146440">Mostro 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Volume</translation>
 <translation id="443008484043213881">Strumenti</translation>
 <translation id="4456211719108566931">Mostro 6</translation>
+<translation id="4459169140545916303">Attivo <ph name="DEVICE_LAST_ACTIVATED_TIME" /> giorni fa</translation>
 <translation id="4512900838580567989">Apri link in una nuova scheda in secondo piano</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Apri immagine in una nuova scheda in secondo piano</translation>
@@ -129,7 +132,7 @@
 <translation id="5916080360077521750">Purtroppo, le impostazioni di Chrome non sono disponibili mentre il browser è in esecuzione. Per importare queste impostazioni in Vivaldi, salvare il lavoro e chiudere tutte le finestre di Chrome. Dopo clicca su continua.</translation>
 <translation id="6040143037577758943">Chiudi</translation>
 <translation id="6229528619562190452">Clicca qui per aggiornare Vivaldi.</translation>
-<translation id="6234173136417926046">Usa immagine come sfondo per la pagina iniziale</translation>
+<translation id="6234173136417926046">Usa immagine come sfondo per la pagina d'avvio</translation>
 <translation id="6339818817272922368">Account locale</translation>
 <translation id="6398710281890660037">Proteggi il mio profilo</translation>
 <translation id="6438786710866753178">Paesaggio 4</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Aggiornamento sicuro dell'archivio chiavi</translation>
 <translation id="7111492742514999492">Paesaggio 9</translation>
 <translation id="7208252576848052204">Purtroppo le tue impostazioni di Arc non sono disponibili mentre il browser è in esecuzione. Per importarle in Vivaldi, salva il tuo lavoro e chiudi tutte le finestre di Arc. Poi clicca su Continua.</translation>
+<translation id="7321500017121629018">Attivo ieri</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Impossibile avviare l'installazione dell'aggiornamento. Verifica che il computer abbia memoria o spazio su disco sufficienti e riprova.</translation>
 <translation id="7658239707568436148">Annulla</translation>

@@ -8,6 +8,7 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/task/bind_post_task.h"
 #import "components/commerce/core/commerce_constants.h"
 #import "components/commerce/core/price_tracking_utils.h"
 #import "components/commerce/core/shopping_service.h"
@@ -33,7 +34,12 @@ namespace {
 // The histogram used to record a product's new tracking state when a user
 // initates a state change.
 const char kPriceTrackingStatusHistogram[] =
-    "Commerce.PriceTracking.IOS.ProductStatus";
+    "Commerce.PriceTracking.IOS.PriceTracking.ProductStatus";
+
+// The histogram used to record a product's new tracking state when a user
+// initates a state change.
+const char kPriceInsightsTrackingStatusHistogram[] =
+    "Commerce.PriceTracking.IOS.PriceInsights.ProductStatus";
 
 // This enum is used to represent the different tracking states a product can
 // observe.
@@ -41,6 +47,13 @@ enum class PriceNotificationProductStatus {
   kTrack,
   kUntrack,
   kMaxValue = kUntrack
+};
+
+// This enum is used to represent the different sources of tracking a product.
+enum class PriceNotificationTrackingSource {
+  kPriceTracking,
+  kPriceInsights,
+  kMaxValue = kPriceInsights
 };
 
 }  // namespace
@@ -58,7 +71,7 @@ using PriceNotificationItems =
 // The service responsible for managing bookmarks.
 @property(nonatomic, readonly) bookmarks::BookmarkModel* bookmarkModel;
 // The current browser state's webstate.
-@property(nonatomic, assign) web::WebState* webState;
+@property(nonatomic, assign) base::WeakPtr<web::WebState> webState;
 // The product data for the product contained on the site the user is currently
 // viewing.
 @property(nonatomic, assign) std::optional<commerce::ProductInfo>
@@ -76,7 +89,7 @@ using PriceNotificationItems =
               bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
                imageFetcher:
                    (std::unique_ptr<image_fetcher::ImageDataFetcher>)fetcher
-                   webState:(web::WebState*)webState
+                   webState:(base::WeakPtr<web::WebState>)webState
     pushNotificationService:(PushNotificationService*)pushNotificationService {
   self = [super init];
   if (self) {
@@ -169,40 +182,34 @@ using PriceNotificationItems =
 
 #pragma mark - PriceInsightsMutator
 
-- (void)priceInsightsTrackItem:(PriceInsightsItem*)item {
+- (void)tryPriceInsightsTrackItem:(PriceInsightsItem*)item {
   __weak PriceNotificationsPriceTrackingMediator* weakSelf = self;
 
-  [self presentNotificationPermission:^(BOOL granted, BOOL promptShown,
-                                        NSError* error) {
-    if (!error && !promptShown && !granted) {
-      // This callback can be executed on a background thread, make sure the UI
-      // is displayed on the main thread.
-      dispatch_async(dispatch_get_main_queue(), ^{
-        [weakSelf.priceInsightsConsumer presentPushNotificationPermissionAlert];
-      });
-    } else if (!error && promptShown && granted) {
-      // This callback can be executed on a background thread causing this
-      // function to fail. Thus, the invocation is scheduled to run on the main
-      // thread.
-      dispatch_async(dispatch_get_main_queue(), ^{
-        weakSelf.pushNotificationService->SetPreference(
-            weakSelf.gaiaID, PushNotificationClientId::kCommerce, true);
-      });
-    }
+  auto callback = base::BindPostTask(
+      base::SequencedTaskRunner::GetCurrentDefault(),
+      base::BindOnce(^(BOOL granted, BOOL promptShown, NSError* error) {
+        [weakSelf onNotificationPermissionRequestForItem:item
+                                       permissionGranted:granted
+                                             promptShown:promptShown
+                                                   error:error];
+      }));
 
-    [self trackForURL:item.productURL
-                    title:item.title
-        completionHandler:^(bool success) {
-          if (!success) {
-            [weakSelf.priceInsightsConsumer
-                presentStartPriceTrackingErrorAlertForItem:item];
-            return;
-          }
+  [self
+      presentNotificationPermission:base::CallbackToBlock(std::move(callback))];
+}
 
-          [weakSelf.priceInsightsConsumer
-              didStartPriceTrackingWithNotification:granted];
-        }];
-  }];
+- (void)priceInsightsTrackItem:(PriceInsightsItem*)item
+          notificationsGranted:(BOOL)granted
+                showCompletion:(BOOL)showCompletion {
+  __weak PriceNotificationsPriceTrackingMediator* weakSelf = self;
+  [self trackForURL:item.productURL
+                  title:item.title
+      completionHandler:^(bool success) {
+        [weakSelf onPriceInsightsTrackItem:item
+                                   success:success
+                         permissionGranted:granted
+                            showCompletion:showCompletion];
+      }];
 }
 
 - (void)priceInsightsStopTrackingItem:(PriceInsightsItem*)item {
@@ -210,13 +217,7 @@ using PriceNotificationItems =
   [self stopTrackingForURL:item.productURL
                   clusterId:item.clusterId
       withCompletionHandler:^(bool success) {
-        if (!success) {
-          [weakSelf.priceInsightsConsumer
-              presentStopPriceTrackingErrorAlertForItem:item];
-          return;
-        }
-
-        [weakSelf.priceInsightsConsumer didStopPriceTracking];
+        [weakSelf onPriceInsightsStopTrackingItem:item success:success];
       }];
 }
 
@@ -224,7 +225,8 @@ using PriceNotificationItems =
   DCHECK(item.buyingOptionsURL.is_valid());
   [self navigateToWebpageForURL:item.buyingOptionsURL
                     disposition:WindowOpenDisposition::NEW_FOREGROUND_TAB];
-  [self.priceInsightsConsumer didStartNavigationToWebpage];
+  [self.priceInsightsConsumer
+      didStartNavigationToWebpageWithPriceBucket:item.priceBucket];
 }
 
 #pragma mark - Private
@@ -325,7 +327,9 @@ using PriceNotificationItems =
   [self.consumer reconfigureCellsForItems:@[ trackableItem ]];
   [self.consumer didStartPriceTrackingForItem:trackableItem];
 
-  [self recordProductStatus:PriceNotificationProductStatus::kTrack];
+  [self recordProductStatusFromSource:PriceNotificationTrackingSource::
+                                          kPriceTracking
+                               status:PriceNotificationProductStatus::kTrack];
 }
 
 // This function handles the response from the user attempting to unsubscribe to
@@ -348,7 +352,9 @@ using PriceNotificationItems =
                                         onCurrentSite:isProductOnCurrentSite];
       }));
 
-  [self recordProductStatus:PriceNotificationProductStatus::kUntrack];
+  [self recordProductStatusFromSource:PriceNotificationTrackingSource::
+                                          kPriceTracking
+                               status:PriceNotificationProductStatus::kUntrack];
 }
 
 // This function fetches the product data for the items the user has subscribed
@@ -505,7 +511,7 @@ using PriceNotificationItems =
       continue;
     }
 
-    // TODO: This should use the async version of IsSubscribed.
+    // TODO: b/355423868 - This should use the async version of IsSubscribed.
     if (self.shoppingService->IsSubscribedFromCache(
             commerce::BuildUserSubscriptionForClusterId(
                 meta->shopping_specifics().product_cluster_id()))) {
@@ -516,8 +522,17 @@ using PriceNotificationItems =
   return false;
 }
 
-- (void)recordProductStatus:(PriceNotificationProductStatus)status {
-  base::UmaHistogramEnumeration(kPriceTrackingStatusHistogram, status);
+- (void)recordProductStatusFromSource:(PriceNotificationTrackingSource)source
+                               status:(PriceNotificationProductStatus)status {
+  switch (source) {
+    case PriceNotificationTrackingSource::kPriceTracking:
+      base::UmaHistogramEnumeration(kPriceTrackingStatusHistogram, status);
+      break;
+    case PriceNotificationTrackingSource::kPriceInsights:
+      base::UmaHistogramEnumeration(kPriceInsightsTrackingStatusHistogram,
+                                    status);
+      break;
+  }
 }
 
 - (void)navigateToWebpageForURL:(const GURL&)URL
@@ -600,6 +615,66 @@ using PriceNotificationItems =
   commerce::SetPriceTrackingStateForBookmark(
       self.shoppingService, self.bookmarkModel, bookmark, true,
       base::BindOnce(completionHandler), isNewBookmark);
+}
+
+// Callback invoked after requesting push notification permission.
+- (void)onNotificationPermissionRequestForItem:(PriceInsightsItem*)item
+                             permissionGranted:(BOOL)granted
+                                   promptShown:(BOOL)promptShown
+                                         error:(NSError*)error {
+  if (error) {
+    [self priceInsightsTrackItem:item
+            notificationsGranted:false
+                  showCompletion:true];
+    return;
+  }
+
+  if (!promptShown && !granted) {
+    [self.priceInsightsConsumer presentPushNotificationPermissionAlert];
+    return;
+  }
+
+  if (promptShown && granted) {
+    self.pushNotificationService->SetPreference(
+        self.gaiaID, PushNotificationClientId::kCommerce, true);
+  }
+
+  [self priceInsightsTrackItem:item
+          notificationsGranted:granted
+                showCompletion:true];
+}
+
+// Callback invoked after requesting to track an item.
+- (void)onPriceInsightsTrackItem:(PriceInsightsItem*)item
+                         success:(BOOL)success
+               permissionGranted:(BOOL)granted
+                  showCompletion:(BOOL)showCompletion {
+  if (!success) {
+    [self.priceInsightsConsumer presentStartPriceTrackingErrorSnackbar];
+    return;
+  }
+
+  [self.priceInsightsConsumer
+      didStartPriceTrackingWithNotification:granted
+                             showCompletion:showCompletion];
+
+  [self recordProductStatusFromSource:PriceNotificationTrackingSource::
+                                          kPriceInsights
+                               status:PriceNotificationProductStatus::kTrack];
+}
+
+// Callback invoked after requesting to stop tracking an item.
+- (void)onPriceInsightsStopTrackingItem:(PriceInsightsItem*)item
+                                success:(BOOL)success {
+  if (!success) {
+    [self.priceInsightsConsumer presentStopPriceTrackingErrorSnackbar];
+    return;
+  }
+
+  [self recordProductStatusFromSource:PriceNotificationTrackingSource::
+                                          kPriceInsights
+                               status:PriceNotificationProductStatus::kUntrack];
+  [self.priceInsightsConsumer didStopPriceTracking];
 }
 
 @end

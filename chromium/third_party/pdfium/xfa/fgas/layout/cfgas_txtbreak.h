@@ -12,8 +12,8 @@
 
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/retain_ptr.h"
+#include "core/fxcrt/span.h"
 #include "core/fxcrt/unowned_ptr.h"
-#include "core/fxcrt/unowned_ptr_exclusion.h"
 #include "xfa/fgas/layout/cfgas_break.h"
 #include "xfa/fgas/layout/cfgas_char.h"
 
@@ -53,7 +53,7 @@ class CFGAS_TxtBreak final : public CFGAS_Break {
 
     UnownedPtr<CFGAS_TxtBreak::Engine> pEdtEngine;
     WideString wsStr;
-    UNOWNED_PTR_EXCLUSION int32_t* pWidths = nullptr;
+    pdfium::span<int32_t> pWidths;
     // TODO(thestig): These 2 members probably should be size_t.
     int32_t iStart = 0;
     int32_t iLength = 0;
@@ -75,7 +75,8 @@ class CFGAS_TxtBreak final : public CFGAS_Break {
   void SetCombWidth(float fCombWidth);
   CFGAS_Char::BreakType EndBreak(CFGAS_Char::BreakType dwStatus);
 
-  size_t GetDisplayPos(const Run& run, TextCharPos* pCharPos) const;
+  size_t GetDisplayPos(const Run& run,
+                       pdfium::span<TextCharPos> pCharPos) const;
   std::vector<CFX_RectF> GetCharRects(const Run& run) const;
   CFGAS_Char::BreakType AppendChar(wchar_t wch);
 

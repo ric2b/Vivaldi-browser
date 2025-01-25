@@ -338,10 +338,8 @@ class COMPONENT_EXPORT(X11) Connection final : public XProto,
     auto write_buffer = Write(event);
     CHECK_EQ(write_buffer.GetBuffers().size(), 1ul);
     base::span<uint8_t> first_buffer = write_buffer.GetBuffers()[0];
-    char event_bytes[32] = {};
-    base::span(event_bytes)
-        .first(first_buffer.size_bytes())
-        .copy_from(base::as_chars(first_buffer));
+    char event_bytes[kMinimumEventSize] = {};
+    base::span(event_bytes).copy_prefix_from(base::as_chars(first_buffer));
 
     SendEventRequest send_event{false, target, mask};
     base::span(send_event.event).copy_from(event_bytes);
@@ -469,6 +467,8 @@ class COMPONENT_EXPORT(X11) Connection final : public XProto,
     ~Request();
 
     // Takes ownership of |reply| and |error|.
+    // Note that raw_error is an xcb_generic_error_t, but that type is not used
+    // here to avoid having this header file pull in xcb.h.
     void SetResponse(Connection* connection, void* raw_reply, void* raw_error);
 
     // If |callback| is nullptr, then this request has already been processed
@@ -601,6 +601,21 @@ class COMPONENT_EXPORT(X11) Connection final : public XProto,
 
   std::unique_ptr<PropertyCache> root_props_;
   std::unique_ptr<PropertyCache> wm_props_;
+};
+
+// Grab/release the X server connection within a scope. This can help avoid race
+// conditions that would otherwise lead to X errors.
+class COMPONENT_EXPORT(X11) ScopedXGrabServer {
+ public:
+  explicit ScopedXGrabServer(x11::Connection* connection);
+
+  ScopedXGrabServer(const ScopedXGrabServer&) = delete;
+  ScopedXGrabServer& operator=(const ScopedXGrabServer&) = delete;
+
+  ~ScopedXGrabServer();
+
+ private:
+  raw_ptr<x11::Connection> connection_;
 };
 
 }  // namespace x11

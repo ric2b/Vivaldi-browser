@@ -8,6 +8,7 @@
 #include "chrome/test/base/ash/interactive/interactive_ash_test.h"
 #include "chrome/test/base/ash/interactive/network/shill_service_util.h"
 #include "chrome/test/base/ash/interactive/settings/interactive_uitest_elements.h"
+#include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_service_client.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
@@ -58,8 +59,46 @@ class ToggleHotspotInteractiveUITest : public InteractiveAshTest {
             FakeShillSimulatedResult::kSuccess, result);
   }
 
+  void SimulateHotspotUsedBefore() {
+    ShillManagerClient::Get()->GetTestInterface()->SetManagerProperty(
+        shill::kTetheringStatusProperty,
+        base::Value(
+            base::Value::Dict().Set(shill::kTetheringStatusStateProperty,
+                                    shill::kTetheringStateActive)));
+    base::RunLoop().RunUntilIdle();
+
+    // Set the hotspot state back to idle.
+    ShillManagerClient::Get()->GetTestInterface()->SetManagerProperty(
+        shill::kTetheringStatusProperty,
+        base::Value(base::Value::Dict().Set(
+            shill::kTetheringStatusStateProperty, shill::kTetheringStateIdle)));
+    base::RunLoop().RunUntilIdle();
+
+    SetTetheringReadinessCheckSuccessResult(shill::kTetheringReadinessReady);
+  }
+
+  // Shill updates the tethering state to Idle if no clients are connected
+  // within 5 minutes. We are simulating that scenario here by skipping the
+  // 5 minute timer and setting the status property to Idle.
+  ui::test::internal::InteractiveTestPrivate::MultiStep
+  SimulateHotspotTimeout() {
+    return Steps(Do([&]() {
+      ShillManagerClient::Get()->GetTestInterface()->SetManagerProperty(
+          shill::kTetheringStatusProperty,
+          base::Value(base::Value::Dict()
+                          .Set(shill::kTetheringStatusStateProperty,
+                               shill::kTetheringStateIdle)
+                          .Set(shill::kTetheringStatusIdleReasonProperty,
+                               shill::kTetheringIdleReasonInactive)));
+      base::RunLoop().RunUntilIdle();
+    }));
+  }
+
+  void LockScreen() { SessionManagerClient::Get()->RequestLockScreen(); }
+
  private:
-  const ShillServiceInfo shill_service_info_ = ShillServiceInfo(/*id=*/0);
+  const ShillServiceInfo shill_service_info_ =
+      ShillServiceInfo(/*id=*/0, shill::kTypeCellular);
 };
 
 IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest,
@@ -122,13 +161,16 @@ IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest,
 }
 
 IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest,
-                       EnableHotspotFromSettingsAndQuickSettings) {
+                       ToggleHotspotFromSettingsAndQuickSettings) {
   SetTetheringReadinessCheckSuccessResult(shill::kTetheringReadinessReady);
   AddCellularService();
   ShillManagerClient::Get()
       ->GetTestInterface()
       ->SetSimulateTetheringEnableResult(FakeShillSimulatedResult::kSuccess,
                                          shill::kTetheringEnableResultSuccess);
+  using Observer =
+      views::test::PollingViewPropertyObserver<bool, views::ToggleButton>;
+  DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(Observer, kPollingViewPropertyState);
 
   RunTestSequence(
       Log("Open quick settings and make sure hotspot does not show"),
@@ -190,8 +232,10 @@ IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest,
       Log("Open quick settings and navigate to hotspot page"),
 
       OpenQuickSettings(), NavigateQuickSettingsToHotspotPage(),
-      CheckViewProperty(ash::kHotspotDetailedViewToggleElementId,
-                        &views::ToggleButton::GetIsOn, false),
+      PollViewProperty(kPollingViewPropertyState,
+                       ash::kHotspotDetailedViewToggleElementId,
+                       &views::ToggleButton::GetIsOn),
+      WaitForState(kPollingViewPropertyState, false),
 
       Log("Click on the toggle to turn on hotspot from Quick Settings"),
 
@@ -201,8 +245,7 @@ IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest,
 
       WaitForState(kHotspotStateService,
                    hotspot_config::mojom::HotspotState::kEnabled),
-      CheckViewProperty(ash::kHotspotDetailedViewToggleElementId,
-                        &views::ToggleButton::GetIsOn, true),
+      WaitForState(kPollingViewPropertyState, true),
 
       Log("Click on the toggle to turn off hotspot from Quick Settings"),
 
@@ -212,8 +255,7 @@ IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest,
 
       WaitForState(kHotspotStateService,
                    hotspot_config::mojom::HotspotState::kDisabled),
-      CheckViewProperty(ash::kHotspotDetailedViewToggleElementId,
-                        &views::ToggleButton::GetIsOn, false),
+      WaitForState(kPollingViewPropertyState, false),
 
       Log("Turn on and off hotspot from Quick Settings complete"));
 }
@@ -286,6 +328,115 @@ IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest, AbortEnablingHotspot) {
                          false),
 
       Log("Test complete"));
+}
+
+IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest, AutoDisableHotspot) {
+  SetTetheringReadinessCheckSuccessResult(shill::kTetheringReadinessReady);
+  AddCellularService();
+  ShillManagerClient::Get()
+      ->GetTestInterface()
+      ->SetSimulateTetheringEnableResult(FakeShillSimulatedResult::kSuccess,
+                                         shill::kTetheringEnableResultSuccess);
+
+  ui::ElementContext context =
+      LaunchSystemWebApp(SystemWebAppType::SETTINGS, kOSSettingsId);
+
+  // Run the following steps with the OS Settings context set as the default.
+  RunTestSequenceInContext(
+      context,
+
+      Log("Navigating to the internet page"),
+
+      NavigateSettingsToInternetPage(kOSSettingsId),
+
+      Log("Waiting for hotspot summary item and toggle to exist and enabled"),
+
+      WaitForElementExists(kOSSettingsId,
+                           settings::hotspot::HotspotSummaryItem()),
+      WaitForElementEnabled(kOSSettingsId, settings::hotspot::HotspotToggle()),
+
+      Log("Make sure hotspot is initially disabled"),
+
+      ObserveState(kHotspotStateService,
+                   std::make_unique<HotspotStateObserver>()),
+      WaitForState(kHotspotStateService,
+                   hotspot_config::mojom::HotspotState::kDisabled),
+      WaitForToggleState(kOSSettingsId, settings::hotspot::HotspotToggle(),
+                         false),
+
+      Log("Waiting for hotspot toggle to be enabled then click it"),
+
+      ClickElement(kOSSettingsId, settings::hotspot::HotspotToggle()),
+
+      Log("Wait for the hotspot state to be enabled"),
+
+      WaitForState(kHotspotStateService,
+                   hotspot_config::mojom::HotspotState::kEnabled),
+      WaitForToggleState(kOSSettingsId, settings::hotspot::HotspotToggle(),
+                         true),
+
+      Log("Setting tethering state to idle in Shill to simulate auto disable "
+          "scenario"),
+
+      SimulateHotspotTimeout(),
+
+      Log("Waiting for the hotspot auto-disable notification to be shown"),
+
+      WaitForShow(kCellularHotspotAutoDisableNotificationElementId),
+      WaitForState(kHotspotStateService,
+                   hotspot_config::mojom::HotspotState::kDisabled),
+      WaitForToggleState(kOSSettingsId, settings::hotspot::HotspotToggle(),
+                         false),
+
+      Log("Test complete"));
+}
+
+IN_PROC_BROWSER_TEST_F(ToggleHotspotInteractiveUITest,
+                       ToggleHotspotFromLockScreen) {
+  LockScreen();
+  SimulateHotspotUsedBefore();
+  AddCellularService();
+  ShillManagerClient::Get()
+      ->GetTestInterface()
+      ->SetSimulateTetheringEnableResult(FakeShillSimulatedResult::kSuccess,
+                                         shill::kTetheringEnableResultSuccess);
+
+  using Observer =
+      views::test::PollingViewPropertyObserver<bool, views::ToggleButton>;
+  DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(Observer, kPollingViewPropertyState);
+
+  RunTestSequence(
+      Log("Open quick settings and navigate to hotspot page"),
+
+      OpenQuickSettings(), NavigateQuickSettingsToHotspotPage(),
+      PollViewProperty(kPollingViewPropertyState,
+                       ash::kHotspotDetailedViewToggleElementId,
+                       &views::ToggleButton::GetIsOn),
+      WaitForState(kPollingViewPropertyState, false),
+
+      Log("Click on the toggle to turn on hotspot from Quick Settings"),
+
+      MoveMouseTo(ash::kHotspotDetailedViewToggleElementId), ClickMouse(),
+
+      Log("Hotspot is turned on from Quick Settings"),
+
+      ObserveState(kHotspotStateService,
+                   std::make_unique<HotspotStateObserver>()),
+      WaitForState(kHotspotStateService,
+                   hotspot_config::mojom::HotspotState::kEnabled),
+      WaitForState(kPollingViewPropertyState, true),
+
+      Log("Click on the toggle to turn off hotspot from Quick Settings"),
+
+      MoveMouseTo(ash::kHotspotDetailedViewToggleElementId), ClickMouse(),
+
+      Log("Hotspot is turned off from Quick Settings"),
+
+      WaitForState(kHotspotStateService,
+                   hotspot_config::mojom::HotspotState::kDisabled),
+      WaitForState(kPollingViewPropertyState, false),
+
+      Log("Turn on and off hotspot from Quick Settings complete"));
 }
 
 }  // namespace

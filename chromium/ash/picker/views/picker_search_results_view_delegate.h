@@ -6,6 +6,7 @@
 #define ASH_PICKER_VIEWS_PICKER_SEARCH_RESULTS_VIEW_DELEGATE_H_
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/picker/picker_search_result.h"
 
 namespace views {
 class View;
@@ -15,7 +16,6 @@ namespace ash {
 
 enum class PickerActionType;
 enum class PickerSectionType;
-class PickerSearchResult;
 
 // Delegate for `PickerSearchResultsView`.
 class ASH_EXPORT PickerSearchResultsViewDelegate {
@@ -29,6 +29,9 @@ class ASH_EXPORT PickerSearchResultsViewDelegate {
 
   virtual PickerActionType GetActionForResult(
       const PickerSearchResult& result) = 0;
+
+  // Informs that the height of the search results view may change.
+  virtual void OnSearchResultsViewHeightChanged() = 0;
 };
 
 }  // namespace ash

@@ -10,6 +10,12 @@ import {SeaPenTemplateChip, SeaPenTemplateId, SeaPenTemplateOption} from './sea_
 export type Query = 'Query';
 export const QUERY: Query = 'Query';
 
+/** Enumeration of supported tabs. */
+export enum FreeformTab {
+  SAMPLE_PROMPTS = 'sample_prompts',
+  RESULTS = 'results',
+}
+
 // SeaPen images are identified by a positive integer. For a newly generated
 // thumbnail, this is `SeaPenThumbnail.id`.
 export type SeaPenImageId = number;
@@ -60,64 +66,3 @@ export function parseTemplateText(template: string): string[] {
       })
       .map(entry => entry.trim());
 }
-
-export const SEA_PEN_SUGGESTIONS: string[] = [
-  'blue',
-  'black',
-  'green',
-  'purple',
-  'red',
-  'yellow',
-  'gray',
-  'brown',
-  'white',
-  'teal',
-  'olive',
-  'cerulean',
-  'beige',
-];
-
-export const SEA_PEN_SAMPLES: SeaPenSamplePrompt[] = [
-  {
-    prompt: 'A fluffy golden retreiver puppy with floppy ears',
-    preview: {
-      url:
-          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_glowscapes.jpg',
-    },
-  },
-  {
-    prompt: 'A time lapse photo of a bioluminescent beach',
-    preview: {
-      url:
-          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_dreamscapes.jpg',
-    },
-  },
-  {
-    prompt: 'Sand dunes with abstract shadows at dawn',
-    preview: {
-      url:
-          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_terrain.jpg',
-    },
-  },
-  {
-    prompt: 'A misty green forest of flowering cactus',
-    preview: {
-      url:
-          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_surreal.jpg',
-    },
-  },
-  {
-    prompt: 'A beige feathergrass stem on a pink background',
-    preview: {
-      url:
-          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_art.jpg',
-    },
-  },
-  {
-    prompt: 'A cat riding a unicorn off into the sunset',
-    preview: {
-      url:
-          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_characters.jpg',
-    },
-  },
-];

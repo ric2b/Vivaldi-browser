@@ -40,6 +40,12 @@ enable_pointer_compression =
 # as a buildflag.
 dchecks_are_on = is_debug || dcheck_always_on
 
+# Building PartitionAlloc for Windows component build.
+# Currently use build_with_chromium not to affect any third_party code,
+# but if any third_party code wants to use, remove build_with_chromium.
+use_partition_alloc_as_malloc_on_win_component_build =
+    build_with_chromium && is_win && is_component_build
+
 # TODO(crbug.com/40276913): Split PartitionAlloc into a public and
 # private parts. The public config would include add the "./include" dir and
 # the private config would add the "./src" dir.
@@ -77,6 +83,7 @@ config("dependants_extra_warnings") {
       "-Wduplicate-enum",
       "-Wextra-semi",
       "-Wextra-semi-stmt",
+      "-Widiomatic-parentheses",
       "-Wimplicit-fallthrough",
       "-Winconsistent-missing-destructor-override",
       "-Winvalid-offsetof",
@@ -142,6 +149,7 @@ pa_buildflag_header("buildflags") {
     "GLUE_CORE_POOLS=$glue_core_pools",
     "HAS_64_BIT_POINTERS=$has_64_bit_pointers",
     "HAS_MEMORY_TAGGING=$has_memory_tagging",
+    "IS_ANDROID=$is_android",
     "IS_CASTOS=$is_castos",
     "IS_CAST_ANDROID=$is_cast_android",
     "IS_CHROMEOS=$is_chromeos",
@@ -162,6 +170,7 @@ pa_buildflag_header("buildflags") {
     "USE_RAW_PTR_ASAN_UNOWNED_IMPL=$use_raw_ptr_asan_unowned_impl",
     "USE_RAW_PTR_BACKUP_REF_IMPL=$use_raw_ptr_backup_ref_impl",
     "USE_RAW_PTR_HOOKABLE_IMPL=$use_raw_ptr_hookable_impl",
+    "ENABLE_ALLOCATOR_SHIM_PARTITION_ALLOC_DISPATCH_WITH_ADVANCED_CHECKS_SUPPORT=$enable_allocator_shim_partition_alloc_dispatch_with_advanced_checks_support",
     "DCHECKS_ARE_ON=$dchecks_are_on",
     "EXPENSIVE_DCHECKS_ARE_ON=$enable_expensive_dchecks",
     "DCHECK_IS_CONFIGURABLE=$dcheck_is_configurable",
@@ -225,11 +234,13 @@ component("raw_ptr") {
     sources += [ "pointers/raw_ptr_noop_impl.h" ]
     sources += [ "pointers/empty.cc" ]
   }
-  public_deps = [ ":build_config" ]
+  public_deps = [
+    ":build_config",
+    ":buildflags",
+  ]
   if (use_partition_alloc) {
     public_deps += [ ":partition_alloc" ]
   }
-  deps = [ ":buildflags" ]
 
   # See also: `partition_alloc_base/component_export.h`
   defines = [ "IS_RAW_PTR_IMPL" ]
@@ -330,11 +341,39 @@ if (is_clang_or_gcc) {
       ":allocator_base",
       ":allocator_core",
       ":allocator_shim",
+      ":buildflags",
     ]
+  }
+
+  if (is_win && is_component_build) {
+    group("win_component_build_adapter") {
+      # Currently guard this target by using build_with_chromium to avoid
+      # any issues on third_party build. But if any third_party code wants to
+      # use allocator_shim for its own component build, we will remove this
+      # guard.
+      if (build_with_chromium) {
+        if (use_allocator_shim) {
+          public_deps = [
+            ":allocator_base",
+            ":allocator_shim",
+          ]
+        }
+      }
+      # If not with chromium, currently do nothing.
+    }
   }
 
   component("allocator_core") {
     visibility = [ ":*" ]
+
+    if (use_partition_alloc_as_malloc_on_win_component_build) {
+      # Since common_deps defined in //build/config/BUILD.gn depends on
+      # PartitionAlloc for PartitionAlloc-Everywhere, we need no_default_deps
+      # here, because default deps includes common_deps dependency.
+      # Without no_defaults_deps=true, we will see cyclic deps:
+      # common_deps=>PartitionAlloc=>common_deps
+      no_default_deps = true
+    }
 
     sources = [
       "aarch64_support.h",
@@ -484,6 +523,12 @@ if (is_clang_or_gcc) {
       ":wexit_time_destructors",
     ]
     deps = [ ":allocator_base" ]
+    if (use_partition_alloc_as_malloc_on_win_component_build) {
+      # We need to add explicit libc++ dependency here because of
+      # no_default_deps=true.
+      deps += [ "//buildtools/third_party/libc++:libc++" ]
+    }
+
     public_configs = []
     if (is_fuchsia) {
       deps += [
@@ -527,6 +572,14 @@ if (is_clang_or_gcc) {
 
   component("allocator_base") {
     visibility = [ ":*" ]
+    if (use_partition_alloc_as_malloc_on_win_component_build) {
+      # Since common_deps defined in //build/config/BUILD.gn depends on
+      # PartitionAlloc for PartitionAlloc-Everywhere, we need no_default_deps
+      # here, because default deps includes common_deps dependency.
+      # Without no_defaults_deps=true, we will see cyclic deps:
+      # common_deps=>PartitionAlloc=>common_deps
+      no_default_deps = true
+    }
 
     sources = [
       "partition_alloc_base/atomic_ref_count.h",
@@ -706,6 +759,11 @@ if (is_clang_or_gcc) {
     ]
 
     deps = []
+    if (use_partition_alloc_as_malloc_on_win_component_build) {
+      # We need to add explicit libc++ dependency here because of
+      # no_default_deps=true.
+      deps += [ "//buildtools/third_party/libc++:libc++" ]
+    }
     if (is_fuchsia) {
       public_deps += [ "//third_party/fuchsia-sdk/sdk/pkg/fit" ]
     }
@@ -760,6 +818,10 @@ if (is_clang_or_gcc) {
           [ "shim/allocator_shim_default_dispatch_to_partition_alloc.cc" ]
       shim_headers +=
           [ "shim/allocator_shim_default_dispatch_to_partition_alloc.h" ]
+    }
+    if (enable_allocator_shim_partition_alloc_dispatch_with_advanced_checks_support) {
+      shim_sources += [ "shim/allocator_shim_default_dispatch_to_partition_alloc_with_advanced_checks.cc" ]
+      shim_headers += [ "shim/allocator_shim_default_dispatch_to_partition_alloc_with_advanced_checks.h" ]
     }
     if (is_android) {
       shim_headers += [

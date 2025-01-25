@@ -6,9 +6,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
+#include <set>
 
-#include "base/strings/string_piece.h"
 #include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/parse_result.h"
 
@@ -46,8 +45,8 @@ class RuleParser {
                                    ContentInjectionRuleCore rule_core);
   bool ParseDomains(std::string_view domain_string,
                     std::string separator,
-                    std::vector<std::string>* included_domains,
-                    std::vector<std::string>* excluded_domains);
+                    std::set<std::string>& included_domains,
+                    std::set<std::string>& excluded_domains);
   Result ParseRequestFilterRule(std::string_view rule_string,
                                 RequestFilterRule& rule);
   Result ParseRequestFilterRuleOptions(std::string_view options,
@@ -58,6 +57,10 @@ class RuleParser {
   bool SetModifier(RequestFilterRule& rule,
                    RequestFilterRule::ModifierType type,
                    std::optional<std::string_view> value);
+
+  bool SetModifier(RequestFilterRule& rule,
+                   RequestFilterRule::ModifierType type,
+                   std::set<std::string> value);
 
   const raw_ptr<ParseResult> parse_result_;
   RuleSourceSettings source_settings_;

@@ -13,16 +13,22 @@ import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classe
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
 import '../settings_shared.css.js';
+import './facegaze_icons.html.js';
 
+import {CrSliderElement} from '//resources/ash/common/cr_elements/cr_slider/cr_slider.js';
+import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
 import {FacialGesture} from 'chrome://resources/ash/common/accessibility/facial_gestures.js';
 import {MacroName} from 'chrome://resources/ash/common/accessibility/macro_names.js';
 import {CrDialogElement} from 'chrome://resources/ash/common/cr_elements/cr_dialog/cr_dialog.js';
 import {CrScrollableMixin} from 'chrome://resources/ash/common/cr_elements/cr_scrollable_mixin.js';
 import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/ash/common/cr_elements/web_ui_listener_mixin.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './facegaze_actions_add_dialog.html.js';
-import {FACEGAZE_COMMAND_PAIR_ADDED_EVENT_NAME, FaceGazeActions, FaceGazeCommandPair, FaceGazeGestures, FaceGazeUtils} from './facegaze_constants.js';
+import {FACE_GAZE_GESTURE_TO_CONFIDENCE_PREF, FACE_GAZE_GESTURE_TO_CONFIDENCE_PREF_DICT, FACEGAZE_COMMAND_PAIR_ADDED_EVENT_NAME, FaceGazeActions, FaceGazeCommandPair, FaceGazeGestures, FaceGazeUtils} from './facegaze_constants.js';
+import {FaceGazeSubpageBrowserProxy, FaceGazeSubpageBrowserProxyImpl} from './facegaze_subpage_browser_proxy.js';
 
 export interface FaceGazeAddActionDialogElement {
   $: {
@@ -36,8 +42,28 @@ export enum AddDialogPage {
   GESTURE_THRESHOLD = 2,
 }
 
-const FaceGazeAddActionDialogElementBase =
-    I18nMixin(CrScrollableMixin(PolymerElement));
+export enum Navigation {
+  PREVIOUS = 0,
+  NEXT = 1,
+}
+
+export class PageNavigation {
+  previous?: AddDialogPage;
+  next?: AddDialogPage;
+}
+
+export class FaceGazeGestureConfidence {
+  gesture: FacialGesture;
+  confidence: number;
+}
+
+export const FACEGAZE_CONFIDENCE_DEFAULT = 60;
+export const FACEGAZE_CONFIDENCE_MIN = 1;
+export const FACEGAZE_CONFIDENCE_MAX = 100;
+export const FACEGAZE_CONFIDENCE_BUTTON_STEP = 5;
+
+const FaceGazeAddActionDialogElementBase = PrefsMixin(
+    I18nMixin(CrScrollableMixin(WebUiListenerMixin(PolymerElement))));
 
 export class FaceGazeAddActionDialogElement extends
     FaceGazeAddActionDialogElementBase {
@@ -51,6 +77,32 @@ export class FaceGazeAddActionDialogElement extends
 
   static get properties() {
     return {
+      currentPage_: {
+        type: Number,
+        observer: 'currentPageChanged_',
+      },
+
+      initialPage: {
+        type: Object,
+        observer: 'initialPageChanged_',
+      },
+
+      actionToAssignGesture: {
+        type: Object,
+        observer: 'actionToAssignGestureChanged_',
+      },
+
+      gestureToConfigure: {
+        type: Object,
+        observer: 'gestureToConfigureChanged_',
+      },
+
+      leftClickGestures: {
+        type: Array,
+        value: () => [],
+        observer: 'leftClickGesturesChanged_',
+      },
+
       showSelectAction_: {
         type: Boolean,
         computed: 'shouldShowSelectAction_(currentPage_)',
@@ -89,6 +141,26 @@ export class FaceGazeAddActionDialogElement extends
       selectedGesture_: {
         type: Object,
         value: null,
+        observer: 'onSelectedGestureChanged_',
+      },
+
+      localizedGestureThresholdTitle_: {
+        type: String,
+        computed: 'getLocalizedGestureThresholdTitle_(selectedGesture_)',
+      },
+
+      localizedGestureCountLabel_: {
+        type: String,
+        computed: 'getLocalizedGestureCountLabel_(detectedGestureCount_)',
+      },
+
+      gestureThresholdValue_: {
+        type: Number,
+        observer: 'onGestureThresholdChanged_',
+      },
+
+      detectedGestureCount_: {
+        type: Number,
       },
 
       disableActionNextButton_: {
@@ -100,21 +172,58 @@ export class FaceGazeAddActionDialogElement extends
         type: Boolean,
         computed: 'shouldDisableGestureNextButton_(selectedGesture_)',
       },
+
+      displayGesturePreviousButton_: {
+        type: Boolean,
+        computed: 'shouldDisplayGesturePreviousButton_(initialPage)',
+      },
+
+      displayThresholdPreviousButton_: {
+        type: Boolean,
+        computed: 'shouldDisplayThresholdPreviousButton_(initialPage)',
+      },
     };
   }
+
+  actionToAssignGesture: MacroName|null = null;
+  initialPage: AddDialogPage = AddDialogPage.SELECT_ACTION;
+  gestureToConfigure: FacialGesture|null = null;
+  leftClickGestures: FacialGesture[] = [];
 
   // Internal state.
   private selectedAction_: MacroName|null = null;
   private selectedGesture_: FacialGesture|null = null;
+  private gestureThresholdValue_: number;
   private currentPage_: AddDialogPage = AddDialogPage.SELECT_ACTION;
+  private pageNavigation_: Record<AddDialogPage, PageNavigation> = {
+    [AddDialogPage.SELECT_ACTION]: {
+      next: AddDialogPage.SELECT_GESTURE,
+    },
+    [AddDialogPage.SELECT_GESTURE]: {
+      previous: AddDialogPage.SELECT_ACTION,
+      next: AddDialogPage.GESTURE_THRESHOLD,
+    },
+    [AddDialogPage.GESTURE_THRESHOLD]: {
+      previous: AddDialogPage.SELECT_GESTURE,
+    },
+  };
+  private detectedGestureCount_ = 0;
 
   // Computed properties.
   private displayedActions_: MacroName[] = FaceGazeActions;
-
-  // TODO(b:353403651): If left-click action is assigned to a singular gesture
-  // then remove it from the list of available gestures to avoid losing left
-  // click functionality.
   private displayedGestures_: FacialGesture[] = FaceGazeGestures;
+
+  private faceGazeSubpageBrowserProxy_: FaceGazeSubpageBrowserProxy;
+
+  constructor() {
+    super();
+    this.faceGazeSubpageBrowserProxy_ =
+        FaceGazeSubpageBrowserProxyImpl.getInstance();
+    this.addWebUiListener(
+        'settings.sendGestureInfoToSettings',
+        (gestureConfidences: FaceGazeGestureConfidence[]) =>
+            this.onGestureConfidencesReceived_(gestureConfidences));
+  }
 
   private getItemClass_(selected: boolean): 'selected'|'' {
     return selected ? 'selected' : '';
@@ -128,6 +237,26 @@ export class FaceGazeAddActionDialogElement extends
             '');
   }
 
+  private getLocalizedGestureThresholdTitle_(): string {
+    return this.i18n(
+        'faceGazeActionsDialogGestureThresholdTitle',
+        this.selectedGesture_ ?
+            FaceGazeUtils.getGestureDisplayText(this.selectedGesture_) :
+            '');
+  }
+
+  private getLocalizedGestureCountLabel_(): string {
+    if (this.detectedGestureCount_ === 0) {
+      return this.i18n('faceGazeActionsDialogGestureNotDetectedLabel');
+    } else if (this.detectedGestureCount_ === 1) {
+      return this.i18n('faceGazeActionsDialogGestureDetectedCountOneLabel');
+    } else {
+      return this.i18n(
+          'faceGazeActionsDialogGestureDetectedCountLabel',
+          this.detectedGestureCount_);
+    }
+  }
+
   private getActionDisplayText_(action: MacroName): string {
     return FaceGazeUtils.getMacroDisplayText(action);
   }
@@ -136,16 +265,11 @@ export class FaceGazeAddActionDialogElement extends
     return FaceGazeUtils.getGestureDisplayText(gesture);
   }
 
-  // Disable next buttons
-  private shouldDisableActionNextButton_(): boolean {
-    return this.selectedAction_ === null;
+  private getGestureIconName_(gesture: FacialGesture|null): string {
+    return `facegaze:${FaceGazeUtils.getGestureIconName(gesture)}`;
   }
 
-  private shouldDisableGestureNextButton_(): boolean {
-    return this.selectedGesture_ === null;
-  }
-
-  // Dialog page navigation
+  // Dialog page navigation.
   private shouldShowSelectAction_(): boolean {
     return this.currentPage_ === AddDialogPage.SELECT_ACTION;
   }
@@ -158,46 +282,60 @@ export class FaceGazeAddActionDialogElement extends
     return this.currentPage_ === AddDialogPage.GESTURE_THRESHOLD;
   }
 
-  // Button event handlers
+  // Disable navigation buttons.
+  private shouldDisableActionNextButton_(): boolean {
+    return this.selectedAction_ === null;
+  }
+
+  private shouldDisableGestureNextButton_(): boolean {
+    return this.selectedGesture_ === null;
+  }
+
+  private shouldDisplayGesturePreviousButton_(): boolean {
+    // Only show the previous button on the gesture page if we are starting from
+    // the beginning of the dialog flow.
+    return this.initialPage === AddDialogPage.SELECT_ACTION;
+  }
+
+  private shouldDisplayThresholdPreviousButton_(): boolean {
+    // Only show the previous button on the threshold page if we are starting
+    // from an earlier dialog flow.
+    return this.initialPage !== AddDialogPage.GESTURE_THRESHOLD;
+  }
+
+  // Dialog navigation button event handlers.
+  private onPreviousButtonClick_(): void {
+    this.onNavigateButtonClick_(Navigation.PREVIOUS);
+  }
+
+  private onNextButtonClick_(): void {
+    this.onNavigateButtonClick_(Navigation.NEXT);
+  }
+
+  private onNavigateButtonClick_(direction: Navigation): void {
+    const newPage = direction === Navigation.PREVIOUS ?
+        this.pageNavigation_[this.currentPage_].previous :
+        this.pageNavigation_[this.currentPage_].next;
+
+    if (newPage === undefined) {
+      // This should never happen.
+      throw new Error(`Tried to navigate in ${
+          direction.toString()} direction from page index ${
+          this.currentPage_.toString()}`);
+    }
+
+    this.currentPage_ = newPage;
+  }
+
   private onCancelButtonClick_(): void {
-    this.$.dialog.close();
-  }
-
-  private onActionNextButtonClick_(): void {
-    this.currentPage_ = AddDialogPage.SELECT_GESTURE;
-  }
-
-  private onGesturePreviousButtonClick_(): void {
-    this.currentPage_ = AddDialogPage.SELECT_ACTION;
-  }
-
-  private onGestureNextButtonClick_(): void {
-    this.currentPage_ = AddDialogPage.GESTURE_THRESHOLD;
-  }
-
-  private onGestureThresholdPreviousButtonClick_(): void {
-    this.currentPage_ = AddDialogPage.SELECT_GESTURE;
-  }
-
-  private onDecreaseThresholdButtonClick_(): void {
-    // TODO(b:341770753): Implement button with slider. See
-    // switch_access_setup_guide_dialog.ts onAutoScanSpeedSlower_ for example of
-    // slider with increment/decrement buttons. Button interacts with pref
-    // directly.
-  }
-
-  private onIncreaseThresholdButtonClick_(): void {
-    // TODO(b:341770753): Implement button with slider. See
-    // switch_access_setup_guide_dialog.ts onAutoScanSpeedSlower_ for example of
-    // slider with increment/decrement buttons. Button interacts with pref
-    // directly.
+    this.close_();
   }
 
   private onSaveButtonClick_(): void {
-    if (this.selectedAction_ === null) {
+    if (!this.selectedAction_ || !this.selectedGesture_) {
       console.error(
-          'FaceGaze Add Dialog clicked save button but no action has been selected. Closing dialog.');
-      this.$.dialog.close();
+          'FaceGaze Add Dialog clicked save button but no action/gesture pair selected. Closing dialog.');
+      this.close_();
       return;
     }
 
@@ -210,14 +348,133 @@ export class FaceGazeAddActionDialogElement extends
     });
     this.dispatchEvent(event);
 
+    this.setPrefDictEntry(
+        FACE_GAZE_GESTURE_TO_CONFIDENCE_PREF_DICT, this.selectedGesture_,
+        Math.round(this.getThresholdSlider().value));
+
+    this.close_();
+  }
+
+  private currentPageChanged_(newPage: AddDialogPage, oldPage: AddDialogPage):
+      void {
+    // Only toggle request for gesture information on if we are on the gesture
+    // threshold page, which requires information about detected gestures,
+    // or toggle request off if we are switching away from the gesture
+    // threshold page.
+    if (newPage === AddDialogPage.GESTURE_THRESHOLD ||
+        oldPage === AddDialogPage.GESTURE_THRESHOLD) {
+      this.faceGazeSubpageBrowserProxy_.toggleGestureInfoForSettings(
+          newPage === AddDialogPage.GESTURE_THRESHOLD);
+    }
+  }
+
+  // Handlers for initial state.
+  private initialPageChanged_(page: AddDialogPage): void {
+    this.currentPage_ = page;
+  }
+
+  private actionToAssignGestureChanged_(newValue: MacroName|null): void {
+    if (!newValue) {
+      return;
+    }
+
+    this.selectedAction_ = newValue;
+  }
+
+  private gestureToConfigureChanged_(newValue: FacialGesture|null): void {
+    if (!newValue) {
+      return;
+    }
+
+    this.selectedGesture_ = newValue;
+  }
+
+  // If left-click action is assigned to a singular gesture then remove it
+  // from the list of available gestures to avoid losing left click
+  // functionality.
+  private leftClickGesturesChanged_(leftClickGestures: FacialGesture[]): void {
+    if (leftClickGestures.length === 1) {
+      this.displayedGestures_ =
+          this.displayedGestures_.filter((gesture: FacialGesture) => {
+            return leftClickGestures[0] !== gesture;
+          });
+    }
+  }
+
+  private onDecreaseThresholdButtonClick_(): void {
+    this.gestureThresholdValue_ = Math.max(
+        FACEGAZE_CONFIDENCE_MIN,
+        this.gestureThresholdValue_ - FACEGAZE_CONFIDENCE_BUTTON_STEP);
+  }
+
+  private onIncreaseThresholdButtonClick_(): void {
+    this.gestureThresholdValue_ = Math.min(
+        FACEGAZE_CONFIDENCE_MAX,
+        this.gestureThresholdValue_ + FACEGAZE_CONFIDENCE_BUTTON_STEP);
+  }
+
+  private getThresholdSlider(): CrSliderElement {
+    const slider = this.shadowRoot?.querySelector<CrSliderElement>(
+        '#faceGazeGestureThresholdSlider');
+    assert(slider);
+    return slider;
+  }
+
+  private onThresholdSliderChanged_(): void {
+    this.gestureThresholdValue_ = this.getThresholdSlider().value;
+  }
+
+  private onGestureConfidencesReceived_(info: FaceGazeGestureConfidence[]):
+      void {
+    if (!this.selectedGesture_ ||
+        this.currentPage_ !== AddDialogPage.GESTURE_THRESHOLD) {
+      return;
+    }
+
+    info.forEach((entry) => {
+      if (entry.gesture === this.selectedGesture_) {
+        if (entry.confidence >= this.gestureThresholdValue_) {
+          this.detectedGestureCount_++;
+        }
+
+        // Show confidence values for all gestures in dynamic bar.
+        const slider = this.getThresholdSlider();
+        const sliderBar = slider.shadowRoot!.querySelector<HTMLElement>('#bar');
+        assert(sliderBar);
+        sliderBar.style.width = `${entry.confidence}%`;
+      }
+    });
+  }
+
+  private onSelectedGestureChanged_(): void {
+    this.detectedGestureCount_ = 0;
+    this.gestureThresholdValue_ = FACEGAZE_CONFIDENCE_DEFAULT;
+    const gesturesToConfidence = this.get(FACE_GAZE_GESTURE_TO_CONFIDENCE_PREF);
+
+    if (this.selectedGesture_ &&
+        this.selectedGesture_ in gesturesToConfidence) {
+      this.gestureThresholdValue_ = gesturesToConfidence[this.selectedGesture_];
+    }
+  }
+
+  private onGestureThresholdChanged_(): void {
+    this.detectedGestureCount_ = 0;
+  }
+
+  private close_(): void {
+    this.faceGazeSubpageBrowserProxy_.toggleGestureInfoForSettings(false);
     this.$.dialog.close();
   }
 
   private onKeydown_(e: KeyboardEvent): void {
     // Close dialog if 'esc' is pressed.
     if (e.key === 'Escape') {
-      this.$.dialog.close();
+      this.close_();
     }
+  }
+
+  getCurrentPageForTest(): AddDialogPage {
+    return this.currentPage_;
   }
 }
 

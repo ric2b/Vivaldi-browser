@@ -41,14 +41,22 @@ base::FilePath SodaInstallerImpl::GetSodaBinaryPath() const {
 
 base::FilePath SodaInstallerImpl::GetLanguagePath(
     const std::string& language) const {
-  DLOG(FATAL) << "GetLanguagePath not supported on this platform";
+  std::optional<speech::SodaLanguagePackComponentConfig> config =
+      speech::GetLanguageComponentConfig(language);
+  if (config.has_value() &&
+      config.value().language_code != speech::LanguageCode::kNone) {
+    return g_browser_process->local_state()->GetFilePath(
+        config.value().config_path_pref);
+  }
+
   return base::FilePath();
 }
 
 void SodaInstallerImpl::InstallSoda(PrefService* global_prefs) {
-  if (never_download_soda_for_testing_)
+  if (soda_binary_installed_ || never_download_soda_for_testing_) {
     return;
-  soda_binary_installed_ = false;
+  }
+
   is_soda_downloading_ = true;
   component_updater::RegisterSodaComponent(
       g_browser_process->component_updater(), global_prefs,
@@ -109,7 +117,7 @@ void SodaInstallerImpl::UninstallLanguage(const std::string& language,
 }
 
 std::vector<std::string> SodaInstallerImpl::GetAvailableLanguages() const {
-  return speech::GetLiveCaptionEnabledLanguages();
+  return GetLiveCaptionEnabledLanguages();
 }
 
 void SodaInstallerImpl::UninstallSoda(PrefService* global_prefs) {

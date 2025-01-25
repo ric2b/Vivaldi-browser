@@ -42,9 +42,6 @@
 /// function `sample` which will print "Hello World".
 ///
 /// ```
-/// #[macro_use]///
-/// extern crate lazy_static;
-///
 /// use core::ops::Deref;
 /// use handle_map::{declare_handle_map, HandleMapDimensions, HandleLike};
 ///
@@ -105,7 +102,7 @@ macro_rules! declare_handle_map {
                     " which references values of type `", ::core::stringify!($wrapped_type), "`."
                 )]
         pub mod $handle_module_name {
-            lazy_static! {
+            $crate::reexport::lazy_static::lazy_static! {
                 static ref GLOBAL_HANDLE_MAP: $crate::HandleMap<$wrapped_type> =
                 $crate::HandleMap::with_dimensions($map_dimension_provider);
             }

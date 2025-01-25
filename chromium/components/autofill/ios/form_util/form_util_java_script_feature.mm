@@ -7,6 +7,7 @@
 #include "base/no_destructor.h"
 #include "base/values.h"
 #import "components/autofill/ios/common/javascript_feature_util.h"
+#import "components/autofill/ios/form_util/cross_content_world_util_java_script_feature.h"
 #import "ios/web/public/js_messaging/java_script_feature_util.h"
 
 namespace {
@@ -41,8 +42,11 @@ FormUtilJavaScriptFeature::FormUtilJavaScriptFeature()
                FeatureScript::InjectionTime::kDocumentStart,
                FeatureScript::TargetFrames::kAllFrames,
                FeatureScript::ReinjectionBehavior::kInjectOncePerWindow)},
-          {web::java_script_features::GetCommonJavaScriptFeature(),
-           web::java_script_features::GetMessageJavaScriptFeature()}) {}
+          {
+              web::java_script_features::GetCommonJavaScriptFeature(),
+              web::java_script_features::GetMessageJavaScriptFeature(),
+              CrossContentWorldUtilJavaScriptFeature::GetInstance(),
+          }) {}
 
 FormUtilJavaScriptFeature::~FormUtilJavaScriptFeature() = default;
 
@@ -53,11 +57,11 @@ void FormUtilJavaScriptFeature::SetAutofillAcrossIframes(web::WebFrame* frame,
                          base::Value::List().Append(enabled));
 }
 
-void FormUtilJavaScriptFeature::SetAutofillXHRSubmissionDetection(
+void FormUtilJavaScriptFeature::SetAutofillIsolatedContentWorld(
     web::WebFrame* frame,
     bool enabled) {
   CallJavaScriptFunction(
-      frame, "autofill_form_features.setAutofillXHRSubmissionDetection",
+      frame, "autofill_form_features.setAutofillIsolatedContentWorld",
       base::Value::List().Append(enabled));
 }
 

@@ -101,36 +101,53 @@ const char kSafeBrowsingName[] = "vivaldi";
 const InstallConstants kInstallModes[] = {
     // The primary install mode for stable Google Chrome.
     {
-        sizeof(kInstallModes[0]),
-        VIVALDI_INDEX,
-        "",  // Empty install_suffix for the primary install mode.
-        L"",
-        L"",         // The empty string means "stable".
-        L"",         // Empty app_guid since no integraion with Google Update.
-        L"Vivaldi",  // A distinct base_app_name.
-        L"Vivaldi",  // A distinct base_app_id.
-        L"VivaldiHTM",                              // ProgID prefix.
-        L"Vivaldi HTML Document",                   // ProgID description.
-        L"VivaldiPPDF",                             // PDF ProgID prefix.
-        L"Vivaldi PDF Document",                    // PDF ProgID description.
-        L"{9C142C0C-124C-4467-B117-EBCC62801D7B}",  // Active Setup GUID.
-        L"{DAB968E0-3A13-4CCC-A3AF-85578ACBE9AB}",  // CommandExecuteImpl CLSID.
+        .size = sizeof(kInstallModes[0]),
+        .index = VIVALDI_INDEX,
+        .install_switch =
+            "",  // Empty install_suffix for the primary install mode.
+        .install_suffix =
+            L"",
+        .logo_suffix = L"",         // The empty string means "stable".
+        .app_guid =
+            L"",         // Empty app_guid since no integraion with Google Update.
+        .base_app_name = L"Vivaldi",  // A distinct base_app_name.
+        .base_app_id = L"Vivaldi",  // A distinct base_app_id.
+        .browser_prog_id_prefix = L"VivaldiHTM",    // ProgID prefix.
+        .browser_prog_id_description =
+            L"Vivaldi HTML Document",               // ProgID description.
+        .pdf_prog_id_prefix = L"VivaldiPPDF",       // PDF ProgID prefix.
+        .pdf_prog_id_description =
+            L"Vivaldi PDF Document",                // PDF ProgID description.
+        .active_setup_guid =
+            L"{9C142C0C-124C-4467-B117-EBCC62801D7B}",  // Active Setup GUID.
+        .legacy_command_execute_clsid =
+            L"{DAB968E0-3A13-4CCC-A3AF-85578ACBE9AB}",  // CommandExecuteImpl CLSID.
 
-        vivaldi::GetOrGenerateToastActivatorCLSID(),  // Toast Activator CLSID.
+        .toast_activator_clsid =
+            vivaldi::GetOrGenerateToastActivatorCLSID(),  // Toast Activator CLSID.
 
-        {0x412E5152,
-         0x7091,
-         0x4930,
-         {0x92, 0xBD, 0x6A, 0x33, 0x9A, 0xE9, 0x07, 0x06}},  // Elevator CLSID.
-        {},   // IID elevator_iid;
-        L"",  // Empty default channel name since no update integration.
-        ChannelStrategy::UNSUPPORTED,
-        true,   // Supports system-level installs.
-        true,   // Supports in-product set as default browser UX.
-        icon_resources::kApplicationIndex,  // App icon resource index.
-        IDR_MAINFRAME,                      // App icon resource id.
-        L"S-1-15-2-3251537155-1984446955-2931258699-841473695-1938553385-"
-        L"934012048-",
+        .elevator_clsid = {0x412E5152,
+                           0x7091,
+                           0x4930,
+                           {0x92, 0xBD, 0x6A, 0x33, 0x9A, 0xE9, 0x07,
+                            0x06}},  // Elevator CLSID.
+        .elevator_iid = {},   // IID elevator_iid;
+        .default_channel_name =
+            L"",  // Empty default channel name since no update integration.
+        .channel_strategy = ChannelStrategy::UNSUPPORTED,
+        .supports_system_level = true,   // Supports system-level installs.
+        .supports_set_as_default_browser =
+            true,   // Supports in-product set as default browser UX.
+        .app_icon_resource_index =
+            icon_resources::kApplicationIndex,  // App icon resource index.
+        .app_icon_resource_id = IDR_MAINFRAME,  // App icon resource id.
+        .html_doc_icon_resource_index =
+            icon_resources::kHtmlDocIndex,  // HTML doc icon resource index.
+        .pdf_doc_icon_resource_index =
+            icon_resources::kPDFDocIndex,  // PDF doc icon resource index.
+        .sandbox_sid_prefix =
+            L"S-1-15-2-3251537155-1984446955-2931258699-841473695-1938553385-"
+            L"934012048-",
     },
 };
 

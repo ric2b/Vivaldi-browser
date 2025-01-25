@@ -10,10 +10,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/data_type_store_service_factory.h"
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
-#include "chrome/browser/sync/model_type_store_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "components/data_sharing/public/features.h"
+#include "components/saved_tab_groups/empty_tab_group_sync_delegate.h"
 #include "components/saved_tab_groups/features.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/sync_data_type_configuration.h"
@@ -22,28 +23,28 @@
 #include "components/saved_tab_groups/tab_group_sync_metrics_logger.h"
 #include "components/saved_tab_groups/tab_group_sync_service.h"
 #include "components/saved_tab_groups/tab_group_sync_service_impl.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/base/report_unrecoverable_error.h"
-#include "components/sync/model/client_tag_based_model_type_processor.h"
-#include "components/sync/model/model_type_store_service.h"
+#include "components/sync/model/client_tag_based_data_type_processor.h"
+#include "components/sync/model/data_type_store_service.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "components/saved_tab_groups/empty_tab_group_sync_delegate.h"
-#else
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
 #include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_delegate_desktop.h"
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_WIN)
 
 namespace tab_groups {
 namespace {
 std::unique_ptr<SyncDataTypeConfiguration>
 CreateSavedTabGroupDataTypeConfiguration(Profile* profile) {
   return std::make_unique<SyncDataTypeConfiguration>(
-      std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
+      std::make_unique<syncer::ClientTagBasedDataTypeProcessor>(
           syncer::SAVED_TAB_GROUP,
           base::BindRepeating(&syncer::ReportUnrecoverableError,
                               chrome::GetChannel())),
-      ModelTypeStoreServiceFactory::GetForProfile(profile)->GetStoreFactory());
+      DataTypeStoreServiceFactory::GetForProfile(profile)->GetStoreFactory());
 }
 
 std::unique_ptr<SyncDataTypeConfiguration>
@@ -54,11 +55,11 @@ MaybeCreateSharedTabGroupDataTypeConfiguration(Profile* profile) {
   }
 
   return std::make_unique<SyncDataTypeConfiguration>(
-      std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
+      std::make_unique<syncer::ClientTagBasedDataTypeProcessor>(
           syncer::SHARED_TAB_GROUP_DATA,
           base::BindRepeating(&syncer::ReportUnrecoverableError,
                               chrome::GetChannel())),
-      ModelTypeStoreServiceFactory::GetForProfile(profile)->GetStoreFactory());
+      DataTypeStoreServiceFactory::GetForProfile(profile)->GetStoreFactory());
 }
 }  // namespace
 
@@ -72,7 +73,6 @@ TabGroupSyncServiceFactory* TabGroupSyncServiceFactory::GetInstance() {
 TabGroupSyncService* TabGroupSyncServiceFactory::GetForProfile(
     Profile* profile) {
   CHECK(profile);
-  CHECK(!profile->IsOffTheRecord());
   return static_cast<TabGroupSyncService*>(
       GetInstance()->GetServiceForBrowserContext(profile, /*create=*/true));
 }
@@ -83,7 +83,7 @@ TabGroupSyncServiceFactory::TabGroupSyncServiceFactory()
           ProfileSelections::Builder()
               .WithRegular(ProfileSelection::kOriginalOnly)
               .Build()) {
-  DependsOn(ModelTypeStoreServiceFactory::GetInstance());
+  DependsOn(DataTypeStoreServiceFactory::GetInstance());
   DependsOn(DeviceInfoSyncServiceFactory::GetInstance());
 }
 
@@ -111,8 +111,12 @@ TabGroupSyncServiceFactory::BuildServiceInstanceForBrowserContext(
   std::unique_ptr<TabGroupSyncDelegate> delegate;
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
-  delegate =
-      std::make_unique<TabGroupSyncDelegateDesktop>(service.get(), profile);
+  if (tab_groups::IsTabGroupSyncServiceDesktopMigrationEnabled()) {
+    delegate =
+        std::make_unique<TabGroupSyncDelegateDesktop>(service.get(), profile);
+  } else {
+    delegate = std::make_unique<EmptyTabGroupSyncDelegate>();
+  }
 #else
   delegate = std::make_unique<EmptyTabGroupSyncDelegate>();
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||

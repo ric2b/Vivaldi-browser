@@ -11,7 +11,7 @@
 #include "util/enum_name_table.h"
 #include "util/json/json_helpers.h"
 #include "util/json/json_serialization.h"
-#include "util/stringutil.h"
+#include "util/string_util.h"
 
 namespace openscreen::cast {
 
@@ -27,7 +27,7 @@ SenderMessage::Type GetMessageType(const Json::Value& root) {
   if (!json::TryParseString(root[kMessageType], &type)) {
     return SenderMessage::Type::kUnknown;
   }
-  stringutil::AsciiStrToUpper(type);
+  string_util::AsciiStrToUpper(type);
   ErrorOr<SenderMessage::Type> parsed = GetEnum(kMessageTypeNames, type);
 
   return parsed.value(SenderMessage::Type::kUnknown);

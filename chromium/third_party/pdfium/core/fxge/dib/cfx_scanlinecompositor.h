@@ -26,7 +26,6 @@ class CFX_ScanlineCompositor {
             pdfium::span<const uint32_t> src_palette,
             uint32_t mask_color,
             BlendMode blend_type,
-            bool bClip,
             bool bRgbByteOrder);
 
   void CompositeRgbBitmapLine(pdfium::span<uint8_t> dest_scan,
@@ -80,16 +79,21 @@ class CFX_ScanlineCompositor {
 
   void InitSourceMask(uint32_t mask_color);
 
-  void CompositeRgbBitmapLineSrcRgbx(
+  void CompositeRgbBitmapLineSrcBgrx(
       pdfium::span<uint8_t> dest_scan,
       pdfium::span<const uint8_t> src_scan,
       int width,
       pdfium::span<const uint8_t> clip_scan) const;
-  void CompositeRgbBitmapLineSrcArgb(
+  void CompositeRgbBitmapLineSrcBgra(
       pdfium::span<uint8_t> dest_scan,
       pdfium::span<const uint8_t> src_scan,
       int width,
       pdfium::span<const uint8_t> clip_scan) const;
+#if defined(PDF_USE_SKIA)
+  void CompositeRgbBitmapLineSrcBgraPremul(pdfium::span<uint8_t> dest_scan,
+                                           pdfium::span<const uint8_t> src_scan,
+                                           int width) const;
+#endif
 
   void CompositePalBitmapLineSrcBpp1(
       pdfium::span<uint8_t> dest_scan,
@@ -113,7 +117,6 @@ class CFX_ScanlineCompositor {
   int m_MaskBlue;
   BlendMode m_BlendType = BlendMode::kNormal;
   bool m_bRgbByteOrder = false;
-  bool m_bClip = false;
 };
 
 #endif  // CORE_FXGE_DIB_CFX_SCANLINECOMPOSITOR_H_

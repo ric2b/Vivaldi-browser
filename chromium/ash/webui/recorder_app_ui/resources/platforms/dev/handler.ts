@@ -8,49 +8,56 @@
  * implementation other than mojo to exist in release image.
  */
 import 'chrome://resources/cros_components/dropdown/dropdown_option.js';
+import 'chrome://resources/cros_components/switch/switch.js';
 import '../../components/cra/cra-dropdown.js';
+import './error-view.js';
 
-import {html, nothing, styleMap} from 'chrome://resources/mwc/lit/index.js';
+import {
+  Switch as CrosSwitch,
+} from 'chrome://resources/cros_components/switch/switch.js';
+import {html, styleMap} from 'chrome://resources/mwc/lit/index.js';
 
 import {CraDropdown} from '../../components/cra/cra-dropdown.js';
 import {SAMPLE_RATE} from '../../core/audio_constants.js';
+import {NoArgStringName} from '../../core/i18n.js';
 import {InternalMicInfo} from '../../core/microphone_manager.js';
 import {
   Model,
-  ModelId,
+  ModelLoader,
   ModelResponse,
   ModelState,
 } from '../../core/on_device_model/types.js';
+import {PerfLogger} from '../../core/perf.js';
 import {
   PlatformHandler as PlatformHandlerBase,
 } from '../../core/platform_handler.js';
-import {signal} from '../../core/reactive/signal.js';
-import {SodaEvent, SodaSession, TimeDelta} from '../../core/soda/types.js';
+import {computed, signal} from '../../core/reactive/signal.js';
+import {
+  HypothesisPart,
+  SodaEvent,
+  SodaSession,
+  TimeDelta,
+} from '../../core/soda/types.js';
 import {
   assert,
   assertEnumVariant,
   assertExists,
   assertInstanceof,
 } from '../../core/utils/assert.js';
-import * as localStorage from '../../core/utils/local_storage.js';
 import {
   Observer,
   ObserverList,
   Unsubscribe,
 } from '../../core/utils/observer_list.js';
-import {ValidationError} from '../../core/utils/schema.js';
 import {sleep} from '../../core/utils/utils.js';
 
-import {
-  ColorTheme,
-  devSettings,
-  devSettingsSchema,
-  init as settingsInit,
-} from './settings.js';
+import {ErrorView} from './error-view.js';
+import {EventsSender} from './metrics.js';
+import {ColorTheme, devSettings, init as settingsInit} from './settings.js';
 import {strings} from './strings.js';
 
-class ModelDev implements Model {
-  async suggestTitles(content: string): Promise<ModelResponse<string[]>> {
+class TitleSuggestionModelDev implements Model<string[]> {
+  async execute(content: string): Promise<ModelResponse<string[]>> {
     await sleep(3000);
     const words = content.split(' ');
     const result = [
@@ -62,7 +69,11 @@ class ModelDev implements Model {
     return {kind: 'success', result};
   }
 
-  async summarize(content: string): Promise<ModelResponse> {
+  close(): void {}
+}
+
+class SummaryModelDev implements Model<string> {
+  async execute(content: string): Promise<ModelResponse<string>> {
     await sleep(3000);
     const result = `Summary for ${content.substring(0, 40)}...`;
     // TODO(pihsun): Mock error state.
@@ -70,6 +81,43 @@ class ModelDev implements Model {
   }
 
   close(): void {}
+}
+
+class ModelLoaderDev<T> extends ModelLoader<T> {
+  constructor(private readonly model: Model<T>) {
+    super();
+  }
+
+  override state = signal<ModelState>({kind: 'notInstalled'});
+
+  override async load(): Promise<Model<T>> {
+    console.log('model installation requested');
+    if (this.state.value.kind === 'notInstalled') {
+      this.state.value = {kind: 'installing', progress: 0};
+      // Simulate the loading of model.
+      let progress = 0;
+      while (true) {
+        await sleep(200);
+        // 4% per 200 ms -> simulate 5 seconds for the whole installation.
+        progress += 4;
+        if (progress >= 100) {
+          this.state.value = {kind: 'installed'};
+          break;
+        }
+        this.state.value = {kind: 'installing', progress};
+      }
+    }
+    return this.model;
+  }
+
+  override async loadAndExecute(content: string): Promise<ModelResponse<T>> {
+    const model = await this.load();
+    try {
+      return await model.execute(content);
+    } finally {
+      model.close();
+    }
+  }
 }
 
 // Random placeholder text from ChromeOS blog.
@@ -126,8 +174,10 @@ involved at chromium.org.
 Lastly, here is a short video that explains why we're so excited about Google
 Chrome OS.`.split('\n\n').map((line) => line.split(/\s+/));
 
-// Emit one word per 300 ms.
-const WORD_INTERVAL_MS = 300;
+// Emit one word per 200 ms.
+const WORD_INTERVAL_MS = 200;
+
+const MAX_NUM_SPEAKER = 3;
 
 function timeDelta(milliseconds: number): TimeDelta {
   return {microseconds: BigInt(milliseconds * 1000)};
@@ -144,6 +194,8 @@ class SodaSessionDev implements SodaSession {
 
   private fakeTimeMs = 0;
 
+  private speakerLabelCorrectionPart: HypothesisPart|null = null;
+
   // TODO(pihsun): Simulate partial result being changed/corrected.
   private emitSodaNextWord(finishLine = false): void {
     this.fakeTimeMs += WORD_INTERVAL_MS;
@@ -152,22 +204,52 @@ class SodaSessionDev implements SodaSession {
       return;
     }
     const currentLine = assertExists(TRANSCRIPTION_LINES[this.currentLineIdx]);
+    const lineStartTimeMs =
+      this.fakeTimeMs - (this.currentWordIdx + 1) * WORD_INTERVAL_MS;
     const timingEvent = {
-      audioStartTime: timeDelta(
-        this.fakeTimeMs - (this.currentWordIdx + 1) * WORD_INTERVAL_MS,
-      ),
+      audioStartTime: timeDelta(lineStartTimeMs),
       eventEndTime: timeDelta(this.fakeTimeMs),
     };
+    // Speaker label starts from "1".
+    const lineSpeakerLabel = (this.currentLineIdx % MAX_NUM_SPEAKER) + 1;
+    const hypothesisPart =
+      currentLine.slice(0, this.currentWordIdx + 1).map((w, i) => {
+        let speakerLabel = lineSpeakerLabel;
+        if (i === 0 && this.currentLineIdx > 0 && !finishLine) {
+          // Change speaker label of first word of each line to "wrong" speaker
+          // ID, to simulate speaker label correction event.
+          speakerLabel--;
+          if (speakerLabel === 0) {
+            speakerLabel = MAX_NUM_SPEAKER;
+          }
+        }
+        return {
+          text: [w],
+          alignment: timeDelta(i * WORD_INTERVAL_MS),
+          leadingSpace: true,
+          speakerLabel: speakerLabel.toString(),
+        } satisfies HypothesisPart;
+      });
+
+    // Emit the previous line correction event on the half point of the
+    // next line.
+    if ((this.currentWordIdx >= currentLine.length / 2 || finishLine) &&
+        this.speakerLabelCorrectionPart !== null) {
+      this.observers.notify({
+        labelCorrectionEvent: {
+          hypothesisParts: [this.speakerLabelCorrectionPart],
+        },
+      });
+      this.speakerLabelCorrectionPart = null;
+    }
 
     if (this.currentWordIdx === currentLine.length - 1 || finishLine) {
-      const hypothesisPart =
-        currentLine.slice(0, this.currentWordIdx + 1).map((w, i) => {
-          return {
-            text: [w],
-            alignment: timeDelta(i * WORD_INTERVAL_MS),
-            leadingSpace: true,
-          };
-        });
+      this.speakerLabelCorrectionPart = {
+        text: [assertExists(currentLine[0])],
+        alignment: timeDelta(lineStartTimeMs),
+        leadingSpace: true,
+        speakerLabel: lineSpeakerLabel.toString(),
+      };
       this.observers.notify({
         finalResult: {
           finalHypotheses: currentLine,
@@ -187,6 +269,7 @@ class SodaSessionDev implements SodaSession {
           partialText: [
             currentLine.slice(0, this.currentWordIdx + 1).join(' '),
           ],
+          hypothesisPart,
           timingEvent,
         },
       });
@@ -250,14 +333,32 @@ function substituteI18nString(label: string, ...args: Array<number|string>):
 }
 
 export class PlatformHandler extends PlatformHandlerBase {
-  readonly sodaState = signal<ModelState>({kind: 'notInstalled'});
+  override readonly quietMode = signal(false);
 
-  readonly modelStates = new Map([
-    [ModelId.SUMMARY, signal<ModelState>({kind: 'notInstalled'})],
-    [ModelId.GEMINI_XXS_IT_BASE, signal<ModelState>({kind: 'notInstalled'})],
-  ]);
+  override readonly sodaState = signal<ModelState>({kind: 'notInstalled'});
+
+  override readonly canUseSpeakerLabel = computed(
+    () => devSettings.value.canUseSpeakerLabel,
+  );
+
+  readonly errorView = new ErrorView();
+
+  static override getStringF(id: string, ...args: Array<number|string>):
+    string {
+    const label = strings[id];
+    if (label === undefined) {
+      console.error(`Unknown string ${id}`);
+      return '';
+    }
+    return substituteI18nString(label, ...args);
+  }
+
+  override readonly canCaptureSystemAudioWithLoopback = computed(
+    () => devSettings.value.canCaptureSystemAudioWithLoopback,
+  );
 
   override async init(): Promise<void> {
+    document.body.appendChild(this.errorView);
     settingsInit();
     if (devSettings.value.sodaInstalled) {
       // TODO(pihsun): Remember the whole state in devSettings instead?
@@ -265,26 +366,15 @@ export class PlatformHandler extends PlatformHandlerBase {
     }
   }
 
-  override async loadModel(modelId: ModelId): Promise<Model> {
-    console.log('model installation requested');
-    const state = assertExists(this.modelStates.get(modelId));
-    if (state.value.kind === 'notInstalled') {
-      state.value = {kind: 'installing', progress: 0};
-      // Simulate the loading of model.
-      let progress = 0;
-      while (true) {
-        await sleep(200);
-        // 4% per 200 ms -> simulate 5 seconds for the whole installation.
-        progress += 4;
-        if (progress >= 100) {
-          state.value = {kind: 'installed'};
-          break;
-        }
-        state.value = {kind: 'installing', progress};
-      }
-    }
-    return new ModelDev();
-  }
+  override summaryModelLoader = new ModelLoaderDev(new SummaryModelDev());
+
+  override titleSuggestionModelLoader = new ModelLoaderDev(
+    new TitleSuggestionModelDev(),
+  );
+
+  override eventsSender = new EventsSender();
+
+  override perfLogger = new PerfLogger(this.eventsSender);
 
   override installSoda(): void {
     console.log('SODA installation requested');
@@ -316,27 +406,31 @@ export class PlatformHandler extends PlatformHandlerBase {
     return new SodaSessionDev();
   }
 
-  override async getMicrophoneInfo(_deviceId: string
+  override async getMicrophoneInfo(
+    _deviceId: string,
   ): Promise<InternalMicInfo> {
     return {isDefault: false, isInternal: false};
   }
 
-  override getStringF(id: string, ...args: Array<number|string>): string {
-    const label = strings[id];
-    if (label === undefined) {
-      console.error(`Unknown string ${id}`);
-      return '';
-    }
-    return substituteI18nString(label, ...args);
-  }
-
   override renderDevUi(): RenderResult {
-    function handleChange(ev: Event) {
+    function handleColorModeChange(ev: Event) {
       devSettings.mutate((s) => {
         s.forceTheme = assertEnumVariant(
           ColorTheme,
           assertInstanceof(ev.target, CraDropdown).value,
         );
+      });
+    }
+    function handleCanUseSpeakerLabelChange(ev: Event) {
+      const target = assertInstanceof(ev.target, CrosSwitch);
+      devSettings.mutate((s) => {
+        s.canUseSpeakerLabel = target.selected;
+      });
+    }
+    function handleCanCaptureSystemAudioWithLoopbackChange(ev: Event) {
+      const target = assertInstanceof(ev.target, CrosSwitch);
+      devSettings.mutate((s) => {
+        s.canCaptureSystemAudioWithLoopback = target.selected;
       });
     }
     // TODO(pihsun): Move the dev toggle to a separate component, so we don't
@@ -351,7 +445,7 @@ export class PlatformHandler extends PlatformHandlerBase {
         <label style=${styleMap(labelStyle)}>
           <cra-dropdown
             label="dark/light mode"
-            @change=${handleChange}
+            @change=${handleColorModeChange}
             .value=${devSettings.value.forceTheme ?? ColorTheme.SYSTEM}
           >
             <cros-dropdown-option
@@ -366,20 +460,39 @@ export class PlatformHandler extends PlatformHandlerBase {
           </cra-dropdown>
         </label>
       </div>
+      <div class="section">
+        <label style=${styleMap(labelStyle)}>
+          <!--
+            TODO(pihsun): cros-switch doesn't automatically makes clicking the
+            surrounding label toggles the switch, unlike md-switch.
+          -->
+          <cros-switch
+            @change=${handleCanUseSpeakerLabelChange}
+            .selected=${this.canUseSpeakerLabel.value}
+          >
+          </cros-switch>
+          Toggle can use speaker label
+        </label>
+      </div>
+      <div class="section">
+        <label style=${styleMap(labelStyle)}>
+          <!--
+            TODO(hsuanling): cros-switch doesn't automatically makes clicking
+            the surrounding label toggles the switch, unlike md-switch.
+          -->
+          <cros-switch
+            @change=${handleCanCaptureSystemAudioWithLoopbackChange}
+            .selected=${this.canCaptureSystemAudioWithLoopback.value}
+          >
+          </cros-switch>
+          Toggle can capture system audio via getDisplayMedia
+        </label>
+      </div>
     `;
   }
 
-  override handleUncaughtError(error: unknown): RenderResult|null {
-    if (error instanceof ValidationError &&
-        error.issue.schema === devSettingsSchema) {
-      // This is caused by dev settings schema change, clear the localStorage
-      // and refresh.
-      console.error('Detected dev settings schema change...');
-      localStorage.remove(localStorage.Key.DEV_SETTINGS);
-      window.location.reload();
-      return nothing;
-    }
-    return null;
+  override handleUncaughtError(error: unknown): void {
+    this.errorView.error = error;
   }
 
   override showAiFeedbackDialog(description: string): void {
@@ -392,7 +505,11 @@ export class PlatformHandler extends PlatformHandlerBase {
     // DISPLAY_MEDIA_SYSTEM_AUDIO permission is not granted, so we need to
     // remove the video tracks manually.
     const stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: true,
+      audio: {
+        autoGainControl: {ideal: false},
+        echoCancellation: {ideal: false},
+        noiseSuppression: {ideal: false},
+      },
       systemAudio: 'include',
     });
     const videoTracks = stream.getVideoTracks();
@@ -400,5 +517,24 @@ export class PlatformHandler extends PlatformHandlerBase {
       stream.removeTrack(videoTrack);
     }
     return stream;
+  }
+
+  override getLocale(): string|undefined {
+    // Always use en-US in dev mode, since mock for the main i18n also use en-US
+    // translations.
+    return 'en-US';
+  }
+
+  override recordSpeakerLabelConsent(
+    consentGiven: boolean,
+    consentDescriptionNames: NoArgStringName[],
+    consentConfirmationName: NoArgStringName,
+  ): void {
+    console.info(
+      'Recorded speaker label consent: ',
+      consentGiven,
+      consentDescriptionNames,
+      consentConfirmationName,
+    );
   }
 }

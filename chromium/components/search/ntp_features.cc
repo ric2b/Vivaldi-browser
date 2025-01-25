@@ -13,25 +13,12 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 
-namespace {
-
-bool IsEnUSInUS(std::string application_locale, std::string country_code) {
-  return application_locale == "en-US" && country_code == "us";
-}
-
-}  // namespace
-
 namespace ntp_features {
 
 // If enabled, shows a confirm dialog before removing search suggestions from
 // the New Tab page real search box ("realbox").
 BASE_FEATURE(kConfirmSuggestionRemovals,
              "ConfirmNtpSuggestionRemovals",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, the OneGooleBar cached response is sent back to NTP.
-BASE_FEATURE(kCacheOneGoogleBar,
-             "CacheOneGoogleBar",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, Chrome theme color will be set to match the NTP background
@@ -62,35 +49,6 @@ BASE_FEATURE(kCustomizeChromeWallpaperSearchButton,
 // Search.
 BASE_FEATURE(kCustomizeChromeWallpaperSearchInspirationCard,
              "CustomizeChromeWallpaperSearchInspirationCard",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, all NTP "realbox" Chrome Refresh features will be enabled
-BASE_FEATURE(kRealboxCr23All,
-             "NtpRealboxCr23All",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, NTP "realbox" will have consistent row height. Includes changing
-// entity sizes and inlining subtitles.
-BASE_FEATURE(kRealboxCr23ConsistentRowHeight,
-             "NtpRealboxCr23ConsistentRowHeight",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, NTP "realbox" expanded state icon CR23 updates will appear.
-// Includes CR23 icons as well as backgrounds for AiS and pedal suggestions and
-// updated entity corner radii.
-BASE_FEATURE(kRealboxCr23ExpandedStateIcons,
-             "NtpRealboxCr23ExpandedStateIcons",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, NTP "realbox" expanded state layout CR23 updates will
-// appear.
-BASE_FEATURE(kRealboxCr23ExpandedStateLayout,
-             "NtpRealboxCr23ExpandedStateLayout",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, NTP "realbox" will use CR23 hover fill shape.
-BASE_FEATURE(kRealboxCr23HoverFillShape,
-             "NtpRealboxCr23HoverFillShape",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, NTP "realbox" will be themed for CR23. Includes realbox
@@ -157,15 +115,6 @@ BASE_FEATURE(kNtpDriveModuleSegmentation,
 BASE_FEATURE(kNtpDriveModuleShowSixFiles,
              "NtpDriveModuleShowSixFiles",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, handles navigations from the Most Visited tiles explicitly and
-// overrides the navigation's transition type to bookmark navigation before the
-// navigation is issued.
-// TODO(crbug.com/40730793): When removing this flag, also remove the workaround
-// in ChromeContentBrowserClient::OverrideNavigationParams.
-BASE_FEATURE(kNtpHandleMostVisitedNavigationExplicitly,
-             "HandleMostVisitedNavigationExplicitly",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, logo will be shown.
 // This is a kill switch. Keep indefinitely.
@@ -296,97 +245,10 @@ BASE_FEATURE(kNtpSharepointModule,
 // This is a kill switch. Keep indefinitely.
 BASE_FEATURE(kNtpShortcuts, "NtpShortcuts", base::FEATURE_ENABLED_BY_DEFAULT);
 
-// If enabled, the History clusters module will be shown.
-BASE_FEATURE(kNtpHistoryClustersModule,
-             "NtpHistoryClustersModule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Dummy feature to set kNtpHistoryClustersModuleBeginTimeDurationHoursParam.
-BASE_FEATURE(kNtpHistoryClustersModuleBeginTimeDuration,
-             "NtpHistoryClustersModuleBeginTimeDuration",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Dummy feature to set kNtpHistoryClustersModuleMinimumVisitsRequiredParam.
-BASE_FEATURE(kNtpHistoryClustersModuleMinimumVisitsRequired,
-             "NtpHistoryClustersModuleMinimumVisitsRequired",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Dummy feature to set kNtpHistoryClustersModuleMinimumImagesRequiredParam.
-BASE_FEATURE(kNtpHistoryClustersModuleMinimumImagesRequired,
-             "NtpHistoryClustersModuleMinimumImagesRequired",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Dummy feature to set kNtpHistoryClustersModuleCategoriesParam.
-BASE_FEATURE(kNtpHistoryClustersModuleCategories,
-             "NtpHistoryClustersModuleCategories",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, the history clusters module will be loaded but not shown. This is
-// useful to determine if a user would have seen modules in order to
-// counterfactually log or trigger.
-BASE_FEATURE(kNtpHistoryClustersModuleLoad,
-             "NtpHistoryClustersModuleLoad",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Dummy feature to set kNtpHistoryClustersModuleMaxClustersParam.
-BASE_FEATURE(kNtpHistoryClustersModuleMaxClusters,
-             "NtpHistoryClustersMaxClusters",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Dummy feature to set the history clusters rankers' metrics data query time
-// range in days.
-BASE_FEATURE(kNtpHistoryClustersModuleRankingMetricsQueryDays,
-             "NtpHistoryClustersModuleRankingMetricsQueryDays",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // If enabled, module headers will display an associated icon.
 BASE_FEATURE(kNtpModulesHeaderIcon,
              "NtpModulesHeaderIcon",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled a suggestion chip will show in the header for Quests V2.
-BASE_FEATURE(kNtpHistoryClustersModuleSuggestionChipHeader,
-             "NtpHistoryClustersModuleSuggestionChipHeader",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, ChromeCart tile will show in the History clusters module when
-// available.
-BASE_FEATURE(kNtpChromeCartInHistoryClusterModule,
-             "NtpChromeCartInHistoryClusterModule",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kNtpHistoryClustersModuleUseModelRanking,
-             "NtpHistoryClustersModuleUseModelRanking",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kNtpHistoryClustersModuleTextOnly,
-             "NtpHistoryClustersModuleTextOnly",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, ChromeCart module will show together with ChromeCart+History
-// cluster module when available.
-BASE_FEATURE(kNtpChromeCartHistoryClusterCoexist,
-             "NtpChromeCartHistoryClusterCoexist",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, the History Clusters module will attempt to fetch clusters until
-// it has enough clusters for the module or the History Clusters service says
-// that all visits have been exhausted.
-BASE_FEATURE(kNtpHistoryClustersModuleFetchClustersUntilExhausted,
-             "NtpHistoryClustersModuleFetchClustersUntilExhausted",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, the History clusters module will contain visits from other
-// devices.
-BASE_FEATURE(kNtpHistoryClustersModuleIncludeSyncedVisits,
-             "NtpHistoryClustersModuleIncludeSyncedVisits",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, the History clsuters module will enable content clustering for
-// the displayed clusters.
-BASE_FEATURE(kNtpHistoryClustersModuleEnableContentClustering,
-             "HistoryClustersModuleEnableContentClustering",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, the Tab Resumption module will be shown.
 BASE_FEATURE(kNtpMostRelevantTabResumptionModule,
@@ -396,11 +258,6 @@ BASE_FEATURE(kNtpMostRelevantTabResumptionModule,
 // If enabled, the Tab Resumption module with the device icon will be shown.
 BASE_FEATURE(kNtpMostRelevantTabResumptionModuleDeviceIcon,
              "NtpMostRelevantTabResumptionModuleDeviceIcon",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, the Tab Resumption module will be shown.
-BASE_FEATURE(kNtpTabResumptionModule,
-             "NtpTabResumptionModule",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNtpTabResumptionModuleCategories,
@@ -421,6 +278,12 @@ BASE_FEATURE(kNtpWallpaperSearchButton,
 // If enabled, animates New Tab Page's Wallpaper Search Button.
 BASE_FEATURE(kNtpWallpaperSearchButtonAnimation,
              "NtpWallpaperSearchButtonAnimation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Dummy feature to set param "NtpWallpaperSearchButtonHideCondition".
+// This is used for an emergency Finch param. Keep indefinitely.
+BASE_FEATURE(kNtpWallpaperSearchButtonHideCondition,
+             "NtpWallpaperSearchButtonHideCondition",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Dummy feature to set param "NtpWallpaperSearchButtonAnimationShownThreshold".
@@ -459,10 +322,8 @@ const char kNtpDriveModuleCacheMaxAgeSParam[] =
     "NtpDriveModuleCacheMaxAgeSParam";
 const char kNtpDriveModuleExperimentGroupParam[] =
     "NtpDriveModuleExperimentGroupParam";
-const char kNtpHistoryClustersModuleDataParam[] =
-    "NtpHistoryClustersModuleDataParam";
-const char kNtpChromeCartInHistoryClustersModuleDataParam[] =
-    "NtpChromeCartInHistoryClustersModuleDataParam";
+const char kNtpOutlookCalendarModuleDataParam[] =
+    "NtpOutlookCalendarModuleDataParam";
 const char kNtpMiddleSlotPromoDismissalParam[] =
     "NtpMiddleSlotPromoDismissalParam";
 const char kNtpPhotosModuleDataParam[] = "NtpPhotosModuleDataParam";
@@ -473,32 +334,14 @@ const char kNtpSafeBrowsingModuleCooldownPeriodDaysParam[] =
     "NtpSafeBrowsingModuleCooldownPeriodDaysParam";
 const char kNtpSafeBrowsingModuleCountMaxParam[] =
     "NtpSafeBrowsingModuleCountMaxParam";
-const char kNtpHistoryClustersModuleBeginTimeDurationHoursParam[] =
-    "NtpHistoryClustersModuleBeginTimeDurationHoursParam";
-const char kNtpHistoryClustersModuleMinimumVisitsRequiredParam[] =
-    "NtpHistoryClustersModuleMinimumVisitsRequiredParam";
-const char kNtpHistoryClustersModuleMinimumImagesRequiredParam[] =
-    "NtpHistoryClustersModuleMinimumImagesRequiredParam";
-const char kNtpHistoryClustersModuleCategoriesAllowlistParam[] =
-    "NtpHistoryClustersModuleCategoriesParam";
-const char kNtpHistoryClustersModuleCategoriesBlocklistParam[] =
-    "NtpHistoryClustersModuleCategoriesBlocklistParam";
-const char kNtpHistoryClustersModuleCategoriesBoostlistParam[] =
-    "NtpHistoryClustersModuleCategoriesBoostlistParam";
-const char kNtpHistoryClustersModuleMaxClustersParam[] =
-    "NtpHistoryClustersModuleMaxClustersParam";
-const char kNtpHistoryClustersModuleMaxCategoriesToRecordParam[] =
-    "NtpHistoryClustersModuleMaxCategoriesToRecordParam";
-const char kNtpHistoryClustersModuleMinCategoryWeightToRecordParam[] =
-    "NtpHistoryClustersModuleMinCategoryWeightToRecordParam";
-const char kNtpHistoryClustersModuleRankingMetricsQueryDaysParam[] =
-    "NtpHistoryClustersModuleRankingMetricsQueryDaysParam";
-const char kNtpHistoryClustersModuleScoreThresholdParam[] =
-    "NtpHistoryClustersModuleScoreThresholdParam";
-const char kNtpTabResumptionModuleCategoriesBlocklistParam[] =
-    "NtpTabResumptionModuleCategoriesBlocklistParam";
 const char kNtpMostRelevantTabResumptionModuleDataParam[] =
     "NtpMostRelevantTabResumptionModuleDataParam";
+const char kNtpMostRelevantTabResumptionModuleMaxVisitsParam[] =
+    "NtpMostRelevantTabResumptionModuleMaxVisitsParam";
+const char kNtpTabResumptionModuleCategoriesBlocklistParam[] =
+    "NtpTabResumptionModuleCategoriesBlocklistParam";
+const char kNtpTabResumptionModuleDismissalDurationParam[] =
+    "NtpMostRelevantTabResumptionModuleDismissalDurationParam";
 const char kNtpTabResumptionModuleDataParam[] =
     "NtpTabResumptionModuleDataParam";
 const char kNtpTabResumptionModuleResultTypesParam[] =
@@ -507,6 +350,8 @@ const char kNtpTabResumptionModuleTimeLimitParam[] =
     "NtpTabResumptionModuleTimeLimitParam";
 const char kNtpTabResumptionModuleVisibilityThresholdDataParam[] =
     "NtpTabResumptionModuleVisibilityThresholdDataParam";
+const char kNtpWallpaperSearchButtonHideConditionParam[] =
+    "NtpWallpaperSearchButtonHideConditionParam";
 const char kNtpWallpaperSearchButtonAnimationShownThresholdParam[] =
     "NtpWallpaperSearchButtonAnimationShownThresholdParam";
 const char kWallpaperSearchHatsDelayParam[] = "WallpaperSearchHatsDelayParam";
@@ -536,16 +381,6 @@ const base::FeatureParam<bool> kNtpRealboxCr23SteadyStateShadow(
     &ntp_features::kRealboxCr23Theming,
     "kNtpRealboxCr23SteadyStateShadow",
     false);
-
-bool IsNtpModulesRedesignedEnabled(std::string application_locale,
-                                   std::string country_code) {
-  if (base::FeatureList::GetInstance()->IsFeatureOverridden(
-          kNtpModulesRedesigned.name)) {
-    return base::FeatureList::IsEnabled(ntp_features::kNtpModulesRedesigned);
-  }
-
-  return IsEnUSInUS(application_locale, country_code);
-}
 
 base::TimeDelta GetModulesLoadTimeout() {
   std::string param_value = base::GetFieldTrialParamValueByFeature(
@@ -582,5 +417,11 @@ int GetWallpaperSearchButtonAnimationShownThreshold() {
   return base::GetFieldTrialParamByFeatureAsInt(
       kNtpWallpaperSearchButtonAnimationShownThreshold,
       kNtpWallpaperSearchButtonAnimationShownThresholdParam, 15);
+}
+
+int GetWallpaperSearchButtonHideCondition() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      kNtpWallpaperSearchButtonHideCondition,
+      kNtpWallpaperSearchButtonHideConditionParam, 0);
 }
 }  // namespace ntp_features

@@ -24,13 +24,11 @@
 #include "absl/base/nullability.h"
 #include "absl/time/time.h"
 #include "./centipede/binary_info.h"
-#include "./centipede/blob_file.h"
 #include "./centipede/centipede_callbacks.h"
 #include "./centipede/command.h"
 #include "./centipede/control_flow.h"
 #include "./centipede/corpus.h"
 #include "./centipede/coverage.h"
-#include "./centipede/defs.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
 #include "./centipede/feature_set.h"
@@ -40,6 +38,8 @@
 #include "./centipede/stats.h"
 #include "./centipede/symbol_table.h"
 #include "./centipede/workdir.h"
+#include "./common/blob_file.h"
+#include "./common/defs.h"
 
 namespace centipede {
 
@@ -82,8 +82,10 @@ class Centipede {
                 absl::Nullable<BlobFileWriter *> corpus_file,
                 absl::Nullable<BlobFileWriter *> features_file,
                 absl::Nullable<BlobFileWriter *> unconditional_features_file);
-  // Loads seed inputs from the user callbacks.
-  void LoadSeedInputs();
+  // Loads seed inputs from the user callbacks, execute them, and store them
+  // with the corresponding features into `corpus_file` and `features_file`.
+  void LoadSeedInputs(absl::Nonnull<BlobFileWriter *> corpus_file,
+                      absl::Nonnull<BlobFileWriter *> features_file);
   // Loads a shard `shard_index` from `load_env.workdir`.
   // Note: `load_env_` may be different from `env_`.
   // If `rerun` is true, then also re-runs any inputs

@@ -12,6 +12,7 @@
 <translation id="1454726940098520109">No tornar a mostrar confirmació</translation>
 <translation id="1462666970065907900">Segur que vols tancar aquesta finestra?</translation>
 <translation id="1480046233931937785">Crèdits</translation>
+<translation id="1521774566618522728">Actiu avui</translation>
 <translation id="1526344461589023948">Ha ocorregut un error mentre s'intentava desar una actualització descarregada. Si us plau, comprova que el dispositiu tingui prou espai al disc i torna-ho a intentar més tard.</translation>
 <translation id="1635542496948266458">Canvia de perfil</translation>
 <translation id="1657174850639146440">Monstre 9</translation>
@@ -97,6 +98,7 @@
 <translation id="4430019312045809116">Volum</translation>
 <translation id="443008484043213881">Eines</translation>
 <translation id="4456211719108566931">Monstre 6</translation>
+<translation id="4459169140545916303">Actiu fa <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dies</translation>
 <translation id="4512900838580567989">Obre l'enllaç a una pestanya nova en segon pla</translation>
 <translation id="4545097004879999966">Correu d'Opera</translation>
 <translation id="4548358047305717967">Obre la imatge a una pestanya nova en segon pla</translation>
@@ -148,6 +150,7 @@
 <translation id="7099506190679014195">Actualització del magatzem de claus segures</translation>
 <translation id="7111492742514999492">Paisatge 9</translation>
 <translation id="7208252576848052204">Desgraciadament, els teus ajusts d'Arc no estan disponibles mentre el navegador funciona. Per importar-los a Vivaldi, desa el que estiguis fent i tanca totes les finestres d'Arc. Després clica a continuar.</translation>
+<translation id="7321500017121629018">Actiu ahir</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Error en iniciar l'instal·lador d'actualitzacions. Si us plau, comprova que el dispositiu tingui suficient memòria o espai al disc i torna-ho a intentar més tard.</translation>
 <translation id="7658239707568436148">Cancel·la</translation>

@@ -166,6 +166,7 @@ group("All") {
     deps += [
       "//third_party/breakpad:minidump_stackwalk($host_system_allocator_toolchain)",
       "//third_party/breakpad:dump_syms($host_system_allocator_toolchain)",
+      ":copy_symbol_tools",
     ]
   }
 }
@@ -192,6 +193,28 @@ group("vivaldi") {
     deps += [ "//third_party/crashpad/crashpad/handler:crashpad_handler" ]
   }
 }
+}
+
+if (is_mac || is_linux || is_android) {
+  copy("copy_symbol_tools") {
+    toolchain_folder = get_label_info("$host_system_allocator_toolchain","name")
+
+    sources = [
+      "$root_build_dir/$toolchain_folder/minidump_stackwalk"
+    ]
+    if (!is_android || !is_official_build) {
+      sources += [
+        "$root_build_dir/$toolchain_folder/dump_syms",
+      ]
+    }
+    outputs = [
+      "$root_build_dir/{{source_file_part}}"
+    ]
+    deps = [
+      "//third_party/breakpad:minidump_stackwalk($host_system_allocator_toolchain)",
+      "//third_party/breakpad:dump_syms($host_system_allocator_toolchain)",
+    ]
+  }
 }
 
 copy("standalone") {

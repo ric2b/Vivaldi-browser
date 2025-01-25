@@ -29,6 +29,9 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Represents the dialog containing the page info view. */
 public class PageInfoDialog {
     private static final int ENTER_START_DELAY_MS = 100;
@@ -96,6 +99,7 @@ public class PageInfoDialog {
                     }
                 });
 
+        if (!BuildConfig.IS_VIVALDI)
         mScrollView.addView(pageInfoContainer);
 
         if (isSheet) {

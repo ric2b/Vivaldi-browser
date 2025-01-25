@@ -26,7 +26,7 @@ public:
   explicit VivaldiAccountSyncManagerObserverBridge(
     id<VivaldiAccountSyncManagerConsumer> consumer,
                              VivaldiAccountManager* account_manager,
-                             VivaldiSyncServiceImpl* sync_service);
+                             SyncService* sync_service);
   ~VivaldiAccountSyncManagerObserverBridge() override;
 
 private:
@@ -42,7 +42,7 @@ private:
   void OnSyncShutdown(SyncService* sync) override;
 
   VivaldiAccountManager* account_manager_ = nullptr;
-  VivaldiSyncServiceImpl* sync_service_ = nullptr;
+  SyncService* sync_service_ = nullptr;
   __weak id<VivaldiAccountSyncManagerConsumer> consumer_; // Weak, owns us
 };
 

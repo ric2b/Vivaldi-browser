@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <tuple>
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -37,11 +38,12 @@
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/base/signin_prefs.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
-#include "components/supervised_user/core/common/features.h"
+#include "components/signin/public/identity_manager/tribool.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -1007,6 +1009,13 @@ TEST_F(DiceWebSigninInterceptorTest, NoInterception) {
   entry->SetAuthInfo(account_info.gaia, base::UTF8ToUTF16(email),
                      /*is_consented_primary_account=*/false);
 
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+    // Suppress the signin bubble.
+    SigninPrefs(*profile()->GetPrefs())
+        .SetChromeSigninInterceptionUserChoice(
+            account_info.gaia, ChromeSigninUserChoice::kDoNotSignin);
+  }
+
   // Check that Sync signin is not intercepted.
   TestSynchronousInterception(
       account_info, /*is_new_account=*/true, /*is_sync_signin=*/true,
@@ -1344,6 +1353,14 @@ TEST_F(DiceWebSigninInterceptorTest, NoInterceptionWithOneAccount) {
                    ->identity_manager()
                    ->FindExtendedAccountInfoByAccountId(account_info.account_id)
                    .IsValid());
+
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+    // Suppress the signin bubble.
+    SigninPrefs(*profile()->GetPrefs())
+        .SetChromeSigninInterceptionUserChoice(
+            account_info.gaia, ChromeSigninUserChoice::kDoNotSignin);
+  }
+
   TestSynchronousInterception(
       account_info, /*is_new_account=*/true, /*is_sync_signin=*/false,
       SigninInterceptionHeuristicOutcome::kAbortSingleAccount);
@@ -1371,6 +1388,13 @@ TEST_F(DiceWebSigninInterceptorTest, ProfileCreationDisallowed) {
   ASSERT_NE(entry, nullptr);
   entry->SetAuthInfo(account_info.gaia, base::UTF8ToUTF16(email),
                      /*is_consented_primary_account=*/false);
+
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+    // Suppress the signin bubble.
+    SigninPrefs(*profile()->GetPrefs())
+        .SetChromeSigninInterceptionUserChoice(
+            other_account_info.gaia, ChromeSigninUserChoice::kDoNotSignin);
+  }
 
   // Interception that would offer creating a new profile does not work.
   TestSynchronousInterception(
@@ -1466,12 +1490,8 @@ TEST_F(DiceWebSigninInterceptorTest, MultiUserInterception) {
       SigninInterceptionHeuristicOutcome::kInterceptMultiUser, 1);
 }
 
-TEST_F(
-    DiceWebSigninInterceptorTest,
-    AccountInfoAndCapabilitiesAlreadyAvailable_CustomInterceptForSupervisedUser) {
-  base::test::ScopedFeatureList scoped_list;
-  scoped_list.InitAndEnableFeature(
-      supervised_user::kCustomWebSignInInterceptForSupervisedUsers);
+TEST_F(DiceWebSigninInterceptorTest,
+       AccountInfoAndCapabilitiesAlreadyAvailable) {
   base::HistogramTester histogram_tester;
   AccountInfo primary_account_info =
       identity_test_env()->MakePrimaryAccountAvailable(
@@ -1496,12 +1516,8 @@ TEST_F(
       SigninInterceptionHeuristicOutcome::kInterceptEnterprise, 1);
 }
 
-TEST_F(
-    DiceWebSigninInterceptorTest,
-    AccountInfoAlreadyAvailableWaitForCapabilities_CustomInterceptForSupervisedUser) {
-  base::test::ScopedFeatureList scoped_list;
-  scoped_list.InitAndEnableFeature(
-      supervised_user::kCustomWebSignInInterceptForSupervisedUsers);
+TEST_F(DiceWebSigninInterceptorTest,
+       AccountInfoAlreadyAvailableWaitForCapabilities) {
   base::HistogramTester histogram_tester;
   AccountInfo primary_account_info =
       identity_test_env()->MakePrimaryAccountAvailable(
@@ -1531,12 +1547,8 @@ TEST_F(
   identity_test_env()->UpdateAccountInfoForAccount(account_info);
 }
 
-TEST_F(
-    DiceWebSigninInterceptorTest,
-    AccountCapabilitiesAlreadyAvailableWaitForInfo_CustomInterceptForSupervisedUser) {
-  base::test::ScopedFeatureList scoped_list;
-  scoped_list.InitAndEnableFeature(
-      supervised_user::kCustomWebSignInInterceptForSupervisedUsers);
+TEST_F(DiceWebSigninInterceptorTest,
+       AccountCapabilitiesAlreadyAvailableWaitForInfo) {
   base::HistogramTester histogram_tester;
   AccountInfo primary_account_info =
       identity_test_env()->MakePrimaryAccountAvailable(
@@ -1615,11 +1627,7 @@ TEST_F(DiceWebSigninInterceptorTest, AccountInfoRemovedWhileWaiting) {
       SigninInterceptionHeuristicOutcome::kAbortSignedOut, 1);
 }
 
-TEST_F(DiceWebSigninInterceptorTest,
-       WaitForAccountCapabilitiesTimeout_CustomInterceptForSupervisedUser) {
-  base::test::ScopedFeatureList scoped_list;
-  scoped_list.InitAndEnableFeature(
-      supervised_user::kCustomWebSignInInterceptForSupervisedUsers);
+TEST_F(DiceWebSigninInterceptorTest, WaitForAccountCapabilitiesTimeout) {
   base::HistogramTester histogram_tester;
   AccountInfo primary_account_info =
       identity_test_env()->MakePrimaryAccountAvailable(
@@ -1684,6 +1692,13 @@ TEST_F(DiceWebSigninInterceptorTest, ConsumerAccountAllowedOnEmptyProfile) {
       identity_test_env()->MakeAccountAvailable("alice@gmail.com");
   MakeValidAccountInfo(&account_info);
   identity_test_env()->UpdateAccountInfoForAccount(account_info);
+
+  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+    // Suppress the signin bubble.
+    SigninPrefs(*profile()->GetPrefs())
+        .SetChromeSigninInterceptionUserChoice(
+            account_info.gaia, ChromeSigninUserChoice::kDoNotSignin);
+  }
 
   base::Value::List profile_separation_exception_list;
   profile_separation_exception_list.Append(base::Value("gmail.com"));
@@ -1758,6 +1773,161 @@ TEST_F(DiceWebSigninInterceptorTest, StateResetTest) {
 
   // Values should be properly reset to default values.
   EXPECT_TRUE(AreStatesEqual(interceptor()->state_.get(), &default_values));
+}
+
+// Tests the recording of metrics relating to the supervised user capability.
+class DiceWebSigninInterceptorTestSupervisionMetrics
+    : public DiceWebSigninInterceptorTest,
+      public testing::WithParamInterface<
+          std::tuple<signin::Tribool,
+                     WebSigninInterceptor::SigninInterceptionType>> {
+ public:
+  DiceWebSigninInterceptorTestSupervisionMetrics() {
+    feature_list_.InitAndEnableFeature(
+        switches::kExplicitBrowserSigninUIOnDesktop);
+  }
+
+  signin::Tribool IsSupervisedUser() { return std::get<0>(GetParam()); }
+  WebSigninInterceptor::SigninInterceptionType GetInterceptionType() {
+    return std::get<1>(GetParam());
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// helper
+std::string InterceptionTypeString(
+    WebSigninInterceptor::SigninInterceptionType interception_type) {
+  switch (interception_type) {
+    case WebSigninInterceptor::SigninInterceptionType::kChromeSignin:
+      return "ChromeSignin";
+    case WebSigninInterceptor::SigninInterceptionType::kMultiUser:
+      return "MultiUser";
+    case WebSigninInterceptor::SigninInterceptionType::kProfileSwitch:
+      return "ProfileSwitch";
+    default:
+      return "";
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DiceWebSigninInterceptorTestSupervisionMetrics,
+    testing::Combine(
+        testing::Values(signin::Tribool::kTrue,
+                        signin::Tribool::kFalse,
+                        signin::Tribool::kUnknown),
+        testing::Values(
+            WebSigninInterceptor::SigninInterceptionType::kChromeSignin,
+            WebSigninInterceptor::SigninInterceptionType::kMultiUser,
+            WebSigninInterceptor::SigninInterceptionType::kProfileSwitch)),
+    [](const auto& info) {
+      std::string name = "";
+      switch (std::get<0>(info.param)) {
+        case signin::Tribool::kTrue:
+          name += "ForSupervisedUser";
+          break;
+        case signin::Tribool::kFalse:
+          name += "ForRegularUser";
+          break;
+        case signin::Tribool::kUnknown:
+          name += "ForUnknownSupervision";
+          break;
+      }
+      name += InterceptionTypeString(std::get<1>(info.param));
+      return name;
+    });
+
+TEST_P(DiceWebSigninInterceptorTestSupervisionMetrics, RecordMetrics) {
+  base::HistogramTester histogram_tester;
+
+  std::string intercepted_account_email = "alice@example.com";
+  std::string other_account_email = "bob@example.com";
+
+  AccountInfo other_account_info;
+  if (GetInterceptionType() ==
+      WebSigninInterceptor::SigninInterceptionType::kMultiUser) {
+    // For the multi-use case, set the other account as the primary account.
+    other_account_info = identity_test_env()->MakePrimaryAccountAvailable(
+        other_account_email, signin::ConsentLevel::kSignin);
+  }
+
+  AccountInfo intercepted_account_info =
+      identity_test_env()->MakeAccountAvailable(intercepted_account_email);
+  MakeValidAccountInfoWithoutCapabilities(&intercepted_account_info);
+
+  // Set supervised user capabilities and expectations.
+  AccountCapabilitiesTestMutator mutator(
+      &intercepted_account_info.capabilities);
+  SinginInterceptSupervisionState expected_state;
+  switch (IsSupervisedUser()) {
+    case (signin::Tribool::kTrue):
+      mutator.set_is_subject_to_parental_controls(true);
+      expected_state = SinginInterceptSupervisionState::kSupervisedUser;
+      break;
+    case (signin::Tribool::kFalse):
+      mutator.set_is_subject_to_parental_controls(false);
+      expected_state = SinginInterceptSupervisionState::kRegularUser;
+      break;
+    case (signin::Tribool::kUnknown):
+      expected_state = SinginInterceptSupervisionState::kUnknownSupervision;
+      break;
+  }
+  identity_test_env()->UpdateAccountInfoForAccount(intercepted_account_info);
+
+  if (GetInterceptionType() ==
+      WebSigninInterceptor::SigninInterceptionType::kProfileSwitch) {
+    // For the profile switch case, create an existing profile for the account
+    // to be intercepted.
+    Profile* profile_2 = CreateTestingProfile("Profile 2");
+    ProfileAttributesEntry* entry =
+        profile_attributes_storage()->GetProfileAttributesWithPath(
+            profile_2->GetPath());
+    ASSERT_NE(entry, nullptr);
+    entry->SetAuthInfo(intercepted_account_info.gaia,
+                       base::UTF8ToUTF16(intercepted_account_email),
+                       /*is_consented_primary_account=*/false);
+  }
+
+  WebSigninInterceptor::Delegate::BubbleParameters expected_parameters(
+      GetInterceptionType(), intercepted_account_info, other_account_info);
+  EXPECT_CALL(*mock_delegate(),
+              ShowSigninInterceptionBubble(
+                  web_contents(), MatchBubbleParameters(expected_parameters),
+                  testing::_));
+  MaybeIntercept(intercepted_account_info.account_id);
+
+  if (IsSupervisedUser() == signin::Tribool::kUnknown) {
+    // Timeout the capabilities and account info fetching, as this is the case
+    // the supervised user capability is still unknown.
+    task_environment()->FastForwardBy(base::Seconds(5));
+  }
+
+  int expected_count_multiuser =
+      GetInterceptionType() ==
+              WebSigninInterceptor::SigninInterceptionType::kMultiUser
+          ? 1
+          : 0;
+  int expected_count_signin =
+      GetInterceptionType() ==
+              WebSigninInterceptor::SigninInterceptionType::kChromeSignin
+          ? 1
+          : 0;
+  int expected_count_switch =
+      GetInterceptionType() ==
+              WebSigninInterceptor::SigninInterceptionType::kProfileSwitch
+          ? 1
+          : 0;
+  histogram_tester.ExpectBucketCount(
+      "Signin.Intercept.Heuristic.SupervisionState.ChromeSignin",
+      expected_state, expected_count_signin);
+  histogram_tester.ExpectBucketCount(
+      "Signin.Intercept.Heuristic.SupervisionState.MultiUser", expected_state,
+      expected_count_multiuser);
+  histogram_tester.ExpectBucketCount(
+      "Signin.Intercept.Heuristic.SupervisionState.Switch", expected_state,
+      expected_count_switch);
 }
 
 class DiceWebSigninInterceptorTestWithUnoEnabled

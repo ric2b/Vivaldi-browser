@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/highlight_painter.h"
 
+#include "base/not_fatal_until.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -19,6 +20,7 @@
 #include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/inline/text_offset_range.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_inline_text.h"
 #include "third_party/blink/renderer/core/layout/text_decoration_offset.h"
 #include "third_party/blink/renderer/core/paint/highlight_overlay.h"
@@ -192,7 +194,8 @@ TextPaintStyle TextPaintStyleForTextMatch(const TextMatchMarker& marker,
   const Color platform_text_color =
       LayoutTheme::GetTheme().PlatformTextSearchColor(
           marker.IsActiveMatch(), document.InForcedColorsMode(), color_scheme,
-          document.GetColorProviderForPainting(color_scheme));
+          document.GetColorProviderForPainting(color_scheme),
+          document.IsInWebAppScope());
   // Comparing against the value of the 'color' property doesn't always make
   // sense (for example for SVG <text> which paints using 'fill' and 'stroke').
   if (!ignore_current_color) {
@@ -383,6 +386,18 @@ void HighlightPainter::SelectionPaintState::
   }
 }
 
+// GetNode() for first-letter fragment returns null because it is anonymous.
+// Use AssociatedTextNode() of LayoutTextFragment to get the associated node.
+static Node* AssociatedNode(const LayoutObject* layout_object) {
+  if (RuntimeEnabledFeatures::PaintHighlightsForFirstLetterEnabled()) {
+    if (auto* layout_text_fragment =
+            DynamicTo<LayoutTextFragment>(layout_object)) {
+      return layout_text_fragment->AssociatedTextNode();
+    }
+  }
+  return layout_object->GetNode();
+}
+
 HighlightPainter::HighlightPainter(
     const TextFragmentPaintInfo& fragment_paint_info,
     TextPainter& text_painter,
@@ -406,7 +421,7 @@ HighlightPainter::HighlightPainter(
       originating_text_style_(text_style),
       selection_(selection),
       layout_object_(fragment_item_.GetLayoutObject()),
-      node_(layout_object_->GetNode()),
+      node_(AssociatedNode(layout_object_)),
       foreground_auto_dark_mode_(
           PaintAutoDarkMode(originating_style_,
                             DarkModeFilter::ElementRole::kForeground)),
@@ -502,7 +517,7 @@ void HighlightPainter::PaintNonCssMarkers(Phase phase) {
   if (markers_.empty())
     return;
 
-  DCHECK(fragment_item_.GetNode());
+  CHECK(node_);
   const StringView text = cursor_.CurrentText();
 
   const auto* text_node = DynamicTo<Text>(node_);
@@ -533,7 +548,8 @@ void HighlightPainter::PaintNonCssMarkers(Phase phase) {
                   document.InForcedColorsMode(),
                   originating_style_.UsedColorScheme(),
                   document.GetColorProviderForPainting(
-                      originating_style_.UsedColorScheme()));
+                      originating_style_.UsedColorScheme()),
+                  document.IsInWebAppScope());
           PaintRect(
               paint_info_.context,
               ComputeBackgroundRect(text, paint_start_offset, paint_end_offset),
@@ -574,7 +590,7 @@ void HighlightPainter::PaintNonCssMarkers(Phase phase) {
               LineRelativeLocalRect(fragment_item_, text, paint_start_offset,
                                     paint_end_offset),
               LayoutUnit(font_data->GetFontMetrics().Height()),
-              fragment_item_.GetNode()->GetDocument().InDarkMode());
+              node_->GetDocument().InDarkMode());
         }
         if (marker->GetType() == DocumentMarker::kComposition &&
             !styleable_marker.TextColor().IsFullyTransparent() &&
@@ -646,8 +662,8 @@ HighlightPainter::Case HighlightPainter::ComputePaintCase() const {
 
 void HighlightPainter::FastPaintSpellingGrammarDecorations() {
   DCHECK_EQ(paint_case_, kFastSpellingGrammar);
-  DCHECK(fragment_item_.GetNode());
-  const auto& text_node = To<Text>(*fragment_item_.GetNode());
+  CHECK(node_);
+  const auto& text_node = To<Text>(*node_);
   const StringView text = cursor_.CurrentText();
 
   // ::spelling-error overlay is drawn on top of ::grammar-error overlay.
@@ -678,8 +694,9 @@ void HighlightPainter::PaintOneSpellingGrammarDecoration(
     const StringView& text,
     unsigned paint_start_offset,
     unsigned paint_end_offset) {
-  if (fragment_item_.GetNode()->GetDocument().Printing())
+  if (node_->GetDocument().Printing()) {
     return;
+  }
 
   if (!text_painter_.GetSvgState()) {
     if (const auto* pseudo_style = HighlightStyleUtils::HighlightPseudoStyle(
@@ -757,7 +774,7 @@ void HighlightPainter::PaintOriginatingShadow(const TextPaintStyle& text_style,
 Vector<LayoutSelectionStatus> HighlightPainter::GetHighlights(
     const HighlightLayer& layer) {
   Vector<LayoutSelectionStatus> result{};
-  const auto* text_node = DynamicTo<Text>(fragment_item_.GetNode());
+  const auto* text_node = DynamicTo<Text>(node_);
   switch (layer.type) {
     case HighlightLayerType::kOriginating:
       NOTREACHED_IN_MIGRATION();
@@ -969,7 +986,8 @@ void HighlightPainter::PaintHighlightOverlays(
       // transformed text (include text paths). This might be fixable by
       // transforming the ink overflow before using it to expamd the clip.
       TextPainter::SvgTextPaintState* svg_state = text_painter_.GetSvgState();
-      if (UNLIKELY(svg_state) && part.type == HighlightLayerType::kSelection) {
+      if (svg_state && part.type == HighlightLayerType::kSelection)
+          [[unlikely]] {
         // SVG text painting needs to know it is painting selection.
         is_painting_selection_reset.emplace(&svg_state->is_painting_selection_,
                                             true);
@@ -1083,18 +1101,18 @@ LineRelativeRect HighlightPainter::LocalRectInWritingModeSpace(
     return LineRelativeLocalRect(fragment_item_, text, from, to);
   }
 
-  const HighlightEdgeInfo* from_info =
+  auto from_info =
       std::lower_bound(edges_info_.begin(), edges_info_.end(), from,
                        [](const HighlightEdgeInfo& info, unsigned offset) {
                          return info.offset < offset;
                        });
-  const HighlightEdgeInfo* to_info =
+  auto to_info =
       std::lower_bound(from_info, edges_info_.end(), to,
                        [](const HighlightEdgeInfo& info, unsigned offset) {
                          return info.offset < offset;
                        });
-  DCHECK_NE(from_info, edges_info_.end());
-  DCHECK_NE(to_info, edges_info_.end());
+  CHECK_NE(from_info, edges_info_.end(), base::NotFatalUntil::M130);
+  CHECK_NE(to_info, edges_info_.end(), base::NotFatalUntil::M130);
 
   // This rect is used for 2 purposes: To set the offset and width for
   // text decoration painting, and the set the clip. The former uses the
@@ -1118,7 +1136,7 @@ LineRelativeRect HighlightPainter::LocalRectInWritingModeSpace(
 
 void HighlightPainter::ClipToPartRect(const LineRelativeRect& part_rect) {
   gfx::RectF clip_rect{part_rect};
-  if (UNLIKELY(fragment_item_.IsSvgText())) {
+  if (fragment_item_.IsSvgText()) [[unlikely]] {
     clip_rect = TextDecorationPainter::ExpandRectForSVGDecorations(part_rect);
   } else {
     clip_rect.Offset(0, fragment_item_.InkOverflowRect().Y());

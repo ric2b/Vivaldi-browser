@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/component_export.h"
 #include "base/files/file.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
@@ -18,14 +19,15 @@ namespace ml {
 
 // Allows for safely accessing ChromeMLSession on a task runner. ChromeMLSession
 // may make blocking calls, so it can't be used on the main thread.
-class SessionAccessor {
+class COMPONENT_EXPORT(ON_DEVICE_MODEL_ML) SessionAccessor {
  public:
   using Ptr = std::unique_ptr<SessionAccessor, base::OnTaskRunnerDeleter>;
 
-  static Ptr Empty();
-  static Ptr Create(scoped_refptr<base::SequencedTaskRunner> task_runner,
+  static Ptr Create(const ChromeML& chrome_ml,
+                    scoped_refptr<base::SequencedTaskRunner> task_runner,
                     ChromeMLModel model,
-                    base::File adaptation_data = base::File());
+                    on_device_model::AdaptationAssets adaptation_assets =
+                        on_device_model::AdaptationAssets());
 
   ~SessionAccessor();
 
@@ -36,25 +38,27 @@ class SessionAccessor {
                            ChromeMLExecutionOutputFn output_fn,
                            ChromeMLContextSavedFn context_saved_fn);
   void Score(const std::string& text, ChromeMLScoreFn score_fn);
-  void SizeInTokens(const std::string& text,
+  void SizeInTokens(on_device_model::mojom::InputPtr input,
                     ChromeMLSizeInTokensFn size_in_tokens_fn);
 
  private:
   class Canceler;
 
-  SessionAccessor(scoped_refptr<base::SequencedTaskRunner> task_runner,
+  SessionAccessor(const ChromeML& chrome_ml,
+                  scoped_refptr<base::SequencedTaskRunner> task_runner,
                   ChromeMLModel model);
 
   void CloneFrom(SessionAccessor* other);
-  void CreateInternal(base::File adaptation_data);
+  void CreateInternal(on_device_model::AdaptationAssets adaptation_assets);
   void ExecuteInternal(on_device_model::mojom::InputOptionsPtr input,
                        ChromeMLExecutionOutputFn output_fn,
                        ChromeMLContextSavedFn context_saved_fn,
                        scoped_refptr<Canceler> canceler);
   void ScoreInternal(const std::string& text, ChromeMLScoreFn score_fn);
-  void SizeInTokensInternal(const std::string& text,
+  void SizeInTokensInternal(on_device_model::mojom::InputPtr input,
                             ChromeMLSizeInTokensFn size_in_tokens_fn);
 
+  const raw_ref<const ChromeML> chrome_ml_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   ChromeMLModel model_;
   ChromeMLSession session_ = 0;

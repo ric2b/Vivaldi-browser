@@ -74,7 +74,7 @@ bug in the chain may differ.
 
 Security bugs are in scope for our Vulnerability Rewards Program
 but will be rewarded at the Panel’s discretion. Security bugs
-will havetype _bug_ rather than _vulnerability_ in our Issue
+will have type _bug_ rather than _vulnerability_ in our Issue
 Tracker.
 
 
@@ -83,7 +83,8 @@ Tracker.
 Security vulnerabilities may be triggered by user interaction.
 However, an attacker has to be able to control the user interaction.
 If the attacker must rely on social engineering to get a user to
-perform a certain interaction, we don’t consider that a vulnerability.
+perform a certain action that the user would not otherwise perform,
+we don’t consider that a vulnerability.
 
 Social engineering attacks are out of scope for our Vulnerability
 Rewards Program.
@@ -138,7 +139,7 @@ other vulnerability in a third party component.
 ### Third Party/Dependent Software Components
 
 Since we are not a general purpose OS, many vulnerabilities in
-software components we ship (including the Chrome browser and 
+software components we ship (including the Chrome browser and
 Android OS) cannot be exploited on ChromeOS, or may not have the
 same severity level.
 
@@ -153,7 +154,7 @@ We routinely update third party packages to ensure defense-in-depth.
 ### Toolchain and Code Hardening
 
 We compile with clang and take advantage of compiler hardening
-options such as FORTIFY_SRC. We also use MiraclePtr and other
+options such as FORTIFY_SOURCE. We also use MiraclePtr and other
 techniques to harden code. Many of these techniques will result
 in a crash that prevents an attacker from exploiting a bug.
 We do not consider bugs that are mitigated via these techniques
@@ -174,9 +175,9 @@ for more information on denial of service bugs in Chrome.
 
 ### Fuzzers
 
-Fuzzer found bugs are considered security bugs unless they are 
-demonstrated to be vulnerabilities e.g. attacker reachable and
-controllable.
+Fuzzer found bugs are not considered security bugs unless they
+are demonstrated to be vulnerabilities e.g. attacker reachable
+and controllable.
 
 
 ### Graphics Stack
@@ -190,7 +191,7 @@ considered a vulnerability.
 In the case of graphics virtualization, the Vulkan or Venus
 renderer process is a sandboxed process designed to be an extension
 of the guest process it serves. If an attacker is able to compromise
-the guestOS and trigger a security bug (e.g. UAF, buffer 
+the guestOS and trigger a security bug (e.g. UAF, buffer
 overrun, etc) in the renderer (e.g. via UAF, buffer overrun, etc),
 the attacker may be able to leak data from their own process. However,
 since we consider the process within the guest boundary we would not
@@ -235,15 +236,15 @@ user data in verified boot is rated as Critical severity.
 
 If the vulnerability were exploited, damage could be considerable.
 
-Vulnerabilities that allow an attacker to take control over a 
-sandboxed process are rated as High severity. 
+Vulnerabilities that allow an attacker to take control over a
+sandboxed process are rated as High severity.
 
 
 ### [Medium Severity (S2)](?tab=t.0#heading=h.snhrhvgk9uzq)
 
 If the vulnerability were exploited, damage would be limited.
 
-Medium severity vulnerabilities allow attackers to read or 
+Medium severity vulnerabilities allow attackers to read or
 modify limited amounts of information, or security bugs that
 are potentially more harmful as part of an exploit chain.
 

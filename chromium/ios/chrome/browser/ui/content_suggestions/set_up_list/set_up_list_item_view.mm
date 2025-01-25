@@ -11,6 +11,7 @@
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_item.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
+#import "ios/chrome/browser/segmentation_platform/model/segmented_default_browser_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/crossfade_label.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -82,6 +83,7 @@ struct ViewConfig {
   if (self) {
     _type = data.type;
     _complete = data.complete;
+
     if (data.compactLayout) {
       // ViewConfig for a compact layout.
       int syncString =
@@ -90,11 +92,15 @@ struct ViewConfig {
           IsIOSTipsNotificationsEnabled()
               ? IDS_IOS_SET_UP_LIST_NOTIFICATIONS_SHORT_DESCRIPTION
               : IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_SHORT_DESCRIPTION;
+      int defaultBrowserString =
+          IsSegmentedDefaultBrowserPromoEnabled()
+              ? GetSetUpListDefaultBrowserDescriptionStringID(data.userSegment)
+              : IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_SHORT_DESCRIPTION;
       _config = {
           YES,
           NO,
           syncString,
-          IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_SHORT_DESCRIPTION,
+          defaultBrowserString,
           IDS_IOS_SET_UP_LIST_AUTOFILL_SHORT_DESCRIPTION,
           notificationsString,
           UIFontTextStyleFootnote,
@@ -107,11 +113,15 @@ struct ViewConfig {
           IsIOSTipsNotificationsEnabled()
               ? IDS_IOS_SET_UP_LIST_NOTIFICATIONS_DESCRIPTION
               : IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_DESCRIPTION;
+      int defaultBrowserString =
+          IsSegmentedDefaultBrowserPromoEnabled()
+              ? GetSetUpListDefaultBrowserDescriptionStringID(data.userSegment)
+              : IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_MAGIC_STACK_DESCRIPTION;
       _config = {
           NO,
           YES,
           syncString,
-          IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_MAGIC_STACK_DESCRIPTION,
+          defaultBrowserString,
           IDS_IOS_SET_UP_LIST_AUTOFILL_MAGIC_STACK_DESCRIPTION,
           notificationsString,
           UIFontTextStyleSubheadline,
@@ -125,17 +135,27 @@ struct ViewConfig {
           IsIOSTipsNotificationsEnabled()
               ? IDS_IOS_SET_UP_LIST_NOTIFICATIONS_DESCRIPTION
               : IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_DESCRIPTION;
+      int defaultBrowserString =
+          IsSegmentedDefaultBrowserPromoEnabled()
+              ? GetSetUpListDefaultBrowserDescriptionStringID(data.userSegment)
+              : IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_DESCRIPTION;
       _config = {
           NO,
           NO,
           syncString,
-          IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_DESCRIPTION,
+          defaultBrowserString,
           IDS_IOS_SET_UP_LIST_AUTOFILL_DESCRIPTION,
           notificationsString,
           UIFontTextStyleSubheadline,
           UIFontTextStyleFootnote,
           kTextSpacing,
       };
+    }
+    if (@available(iOS 17, *)) {
+      NSArray<UITrait>* traits = TraitCollectionSetForTraits(
+          @[ UITraitPreferredContentSizeCategory.self ]);
+      [self registerForTraitChanges:traits
+                         withAction:@selector(hideDescriptionOnTraitChange)];
     }
   }
   return self;
@@ -156,17 +176,19 @@ struct ViewConfig {
 
 #pragma mark - UITraitEnvironment
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
+  if (@available(iOS 17, *)) {
+    return;
+  }
+
   if (previousTraitCollection.preferredContentSizeCategory !=
       self.traitCollection.preferredContentSizeCategory) {
-    _description.hidden = self.traitCollection.preferredContentSizeCategory >
-                          UIContentSizeCategoryExtraExtraLarge;
-    // Force a layout since the size of text components may have changed.
-    [self setNeedsLayout];
-    [self layoutIfNeeded];
+    [self hideDescriptionOnTraitChange];
   }
 }
+#endif
 
 #pragma mark - Public methods
 
@@ -365,7 +387,7 @@ struct ViewConfig {
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ALL_SET_TITLE);
     case SetUpListItemType::kFollow:
       // TODO(crbug.com/40262090): Add a Follow item to the Set Up List.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -384,7 +406,7 @@ struct ViewConfig {
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ALL_SET_DESCRIPTION);
     case SetUpListItemType::kFollow:
       // TODO(crbug.com/40262090): Add a Follow item to the Set Up List.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -403,6 +425,16 @@ struct ViewConfig {
     case SetUpListItemType::kFollow:
       return set_up_list::kFollowItemID;
   }
+}
+
+// Hides `_description` if the font size category is larger than
+// extra-extra-large.
+- (void)hideDescriptionOnTraitChange {
+  _description.hidden = self.traitCollection.preferredContentSizeCategory >
+                        UIContentSizeCategoryExtraExtraLarge;
+  // Force a layout since the size of text components may have changed.
+  [self setNeedsLayout];
+  [self layoutIfNeeded];
 }
 
 #pragma mark - Private methods (animation helpers)

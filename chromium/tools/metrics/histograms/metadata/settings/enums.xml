@@ -26,6 +26,68 @@ chromium-metrics-reviews@google.com.
 
 <enums>
 
+<enum name="AndroidSettingsFragmentHashes">
+  <int value="-2093401879" label="SafetyCheckSettingsFragment"/>
+  <int value="-2054907175" label="GroupedWebsitesSettings"/>
+  <int value="-1989639959" label="AdMeasurementFragment"/>
+  <int value="-1897035940" label="ThemeSettingsFragment"/>
+  <int value="-1768724911" label="HomepageSettings"/>
+  <int value="-1752194986" label="SingleWebsiteSettings"/>
+  <int value="-1696636734" label="EnhancedProtectionSettingsFragment"/>
+  <int value="-1467975767" label="StandardPreloadingSettingsFragment"/>
+  <int value="-1413642316" label="TopicsFragment"/>
+  <int value="-1285374344" label="TopicsBlockedFragment"/>
+  <int value="-1200678803" label="SearchEngineSettings"/>
+  <int value="-1035378917" label="PrivacySettingsFragment"/>
+  <int value="-988526347" label="RWSCookieSettings"/>
+  <int value="-980428258" label="FledgeAllSitesFragment"/>
+  <int value="-894030932" label="AutofillLocalIbanEditor"/>
+  <int value="-847585811" label="DeveloperSettings"/>
+  <int value="-745020245" label="AllSiteSettings"/>
+  <int value="-676399019" label="SecureDnsSettings"/>
+  <int value="-571101369" label="SafeBrowsingSettingsFragment"/>
+  <int value="-518410470" label="GoogleServicesSettings"/>
+  <int value="-475543757" label="IpProtectionSettingsFragment"/>
+  <int value="-275160283" label="ExtendedPreloadingSettingsFragment"/>
+  <int value="-273029950" label="PasswordCheckFragmentView"/>
+  <int value="-191422304" label="AccountManagementFragment"/>
+  <int value="-132150623" label="TracingCategoriesSettings"/>
+  <int value="-121335732" label="AutofillProfilesFragment"/>
+  <int value="-90603956" label="ChosenObjectSettings"/>
+  <int value="-67456740" label="MainSettings"/>
+  <int value="-45144853" label="DownloadSettings"/>
+  <int value="-27162861" label="FledgeFragment"/>
+  <int value="19814032" label="ClearBrowsingDataFragmentAdvanced"/>
+  <int value="51577713" label="AccessibilitySettings"/>
+  <int value="91451948" label="ContextualSearchSettingsFragment"/>
+  <int value="383093746" label="PrivacySandboxSettingsFragment"/>
+  <int value="406265787" label="LanguageSettings"/>
+  <int value="436870314" label="SiteSettings"/>
+  <int value="453432714" label="AboutChromeSettings"/>
+  <int value="460038414" label="PreloadPagesSettingsFragment"/>
+  <int value="493474121" label="StandardProtectionSettingsFragment"/>
+  <int value="513483078" label="DoNotTrackSettings"/>
+  <int value="590543987" label="StorageAccessSubpageSettings"/>
+  <int value="688926211" label="ManageSyncSettings"/>
+  <int value="690866195" label="SafetyHubFragment"/>
+  <int value="887082954" label="FingerprintingProtectionSettingsFragment"/>
+  <int value="894297033" label="SingleCategorySettings"/>
+  <int value="903277107" label="FledgeBlockedSitesFragment"/>
+  <int value="1118292269" label="HomeModulesConfigSettings"/>
+  <int value="1322563897" label="TopicsManageFragment"/>
+  <int value="1370078648" label="AdaptiveToolbarSettingsFragment"/>
+  <int value="1370406966" label="AutofillLocalCardEditor"/>
+  <int value="1421890558" label="PasswordSettings"/>
+  <int value="1505293227" label="PrivacySettings"/>
+  <int value="1603955025" label="SafetyHubPermissionsFragment"/>
+  <int value="1676521220" label="SelectLanguageFragment"/>
+  <int value="1849593145" label="AndroidPaymentAppsFragment"/>
+  <int value="1891640238" label="AutofillPaymentMethodsFragment"/>
+  <int value="1952237285" label="TracingSettings"/>
+  <int value="1968319616" label="ClearBrowsingDataFragmentBasic"/>
+  <int value="2070921964" label="ClearBrowsingDataTabsFragment"/>
+</enum>
+
 <enum name="BooleanRedirected">
   <int value="0" label="Not redirected"/>
   <int value="1" label="Redirected"/>
@@ -173,6 +235,7 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Open Safety Hub (main settings)"/>
   <int value="1" label="Open Safety Hub (magic stack)"/>
   <int value="2" label="Open Safe Browsing (magic stack)"/>
+  <int value="3" label="Open Google Password Manager (magic stack)"/>
 </enum>
 
 <enum name="SafetyHubModuleState">
@@ -190,125 +253,6 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Passwords"/>
   <int value="5" label="Version"/>
 </enum>
-
-<!-- LINT.IfChange(SafetyHubPermissionType) -->
-
-<enum name="SafetyHubPermissionType">
-  <int value="0" label="Cookies"/>
-  <int value="1" label="Images"/>
-  <int value="2" label="Javascript"/>
-  <int value="3" label="Popups"/>
-  <int value="4" label="Geolocation"/>
-  <int value="5" label="Notifications"/>
-  <int value="6" label="Auto-select Certificate"/>
-  <int value="7" label="mixed-script"/>
-  <int value="8" label="Mediastream Mic"/>
-  <int value="9" label="Mediastream Camera"/>
-  <int value="10" label="Protocol Handlers"/>
-  <int value="11" label="Deprecated PPAPI Broker"/>
-  <int value="12" label="Automatic Downloads"/>
-  <int value="13" label="Midi Sysex"/>
-  <int value="14" label="SSL Cert Decisions"/>
-  <int value="15" label="Protected Media Identifier"/>
-  <int value="16" label="App Banner"/>
-  <int value="17" label="Site Engagement"/>
-  <int value="18" label="Durable Storage"/>
-  <int value="19" label="USB Chooser Data"/>
-  <int value="20" label="Bluetooth Guard"/>
-  <int value="21" label="Background Sync"/>
-  <int value="22" label="Autoplay"/>
-  <int value="23" label="Important Site Info"/>
-  <int value="24" label="Permission Autoblocker Data"/>
-  <int value="25" label="Ads"/>
-  <int value="26" label="Ads Data"/>
-  <int value="27" label="MIDI"/>
-  <int value="28" label="Password Protection"/>
-  <int value="29" label="Media Engagement"/>
-  <int value="30" label="Sound"/>
-  <int value="31" label="Client Hints"/>
-  <int value="32" label="Sensors"/>
-  <int value="33" label="Accessibility Events"/>
-  <int value="34" label="Payment-handler"/>
-  <int value="35" label="USB Guard"/>
-  <int value="36" label="Background Fetch"/>
-  <int value="37" label="Intent Picker Display"/>
-  <int value="38" label="Idle Detection"/>
-  <int value="39" label="Serial Guard"/>
-  <int value="40" label="SerialChooserData"/>
-  <int value="41" label="Periodic Background Sync"/>
-  <int value="42" label="Bluetooth Scanning"/>
-  <int value="43" label="HID Guard"/>
-  <int value="44" label="HID Chooser Data"/>
-  <int value="45" label="Wake Lock Screen Guard"/>
-  <int value="46" label="Wake Lock System"/>
-  <int value="47" label="Legacy Cookie Access"/>
-  <int value="48" label="File System Write Guard"/>
-  <int value="49" label="NFC"/>
-  <int value="50" label="Bluetooth Chooser Data"/>
-  <int value="51" label="Clipboard Read Write"/>
-  <int value="52" label="Clipboard Sanitized Write"/>
-  <int value="53" label="Safe Browsing URL Check Data"/>
-  <int value="54" label="VR"/>
-  <int value="55" label="AR"/>
-  <int value="56" label="File System Read Guard"/>
-  <int value="57" label="Storage Access"/>
-  <int value="58" label="Camera Pan Tilt Zoom"/>
-  <int value="59" label="Window Management"/>
-  <int value="60" label="Insecure Private Network"/>
-  <int value="61" label="Local Fonts"/>
-  <int value="62" label="Permission Auto-revocation Data"/>
-  <int value="63" label="File System Last Picked Directory"/>
-  <int value="64" label="Display Capture"/>
-  <int value="65" label="File System Access Chooser Data"/>
-  <int value="66" label="Federated Identity Sharing"/>
-  <int value="67" label="Javascript JIT"/>
-  <int value="68" label="HTTP Allowed"/>
-  <int value="69" label="Formfill Metadata"/>
-  <int value="70" label="Deprecated Federated Identity Active Session"/>
-  <int value="71" label="Auto Dark Web Content"/>
-  <int value="72" label="Request Desktop Site"/>
-  <int value="73" label="Federated Identity API"/>
-  <int value="74" label="Notification Interactions"/>
-  <int value="75" label="Reduced Accept Language"/>
-  <int value="76" label="Notification Permission Review"/>
-  <int value="77" label="Private Network Guard"/>
-  <int value="78" label="Private Network Chooser Data"/>
-  <int value="79" label="Federated Identity - Identity Provider Signin Status"/>
-  <int value="80" label="Revoked Unused Site Permissions"/>
-  <int value="81" label="Top Level Storage Access"/>
-  <int value="82" label="Federated Identity - Auto Reauthn Permission"/>
-  <int value="83" label="Federated Identity - Identity Provider Registration"/>
-  <int value="84" label="Anti Abuse"/>
-  <int value="85" label="Third-party Storage Partitioning"/>
-  <int value="86" label="HTTPS Enforced"/>
-  <int value="87" label="All Screen Capture"/>
-  <int value="88" label="Cookie Controls Metadata"/>
-  <int value="89" label="TPCD Heuristics Grants"/>
-  <int value="90" label="TPCD Metadata Grants"/>
-  <int value="91" label="TPCD Trial"/>
-  <int value="92" label="Top Level TPCD Trial"/>
-  <int value="93" label="Top Level TPCD Origin Trial"/>
-  <int value="94" label="Auto Picture in Picture"/>
-  <int value="95" label="File System Access Extended Permission"/>
-  <int value="96" label="File System Access Restore Permission"/>
-  <int value="97" label="Captured Surface Control"/>
-  <int value="98" label="Smart Card Guard"/>
-  <int value="99" label="Smart Card Data"/>
-  <int value="100" label="Web Printing"/>
-  <int value="101" label="Automatic Fullscreen"/>
-  <int value="102" label="Sub App Installation Prompts"/>
-  <int value="103" label="Speaker Selection"/>
-  <int value="104" label="Direct Sockets"/>
-  <int value="105" label="Keyboard Lock"/>
-  <int value="106" label="Pointer Lock"/>
-  <int value="107" label="Revoked Abusive Notification Permissions"/>
-  <int value="108" label="Tracking Protection"/>
-  <int value="109" label="Display Media System Audio"/>
-  <int value="110" label="Javascript Optimizer"/>
-  <int value="111" label="Storage Access Header Origin Trial"/>
-</enum>
-
-<!-- LINT.ThenChange(//components/content_settings/core/common/content_settings_types.mojom:ContentSettingsType) -->
 
 <enum name="SafetyHubSurfaces">
   <int value="0" label="Three-dot menu"/>
@@ -375,6 +319,7 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="Privacy Sandbox Completion Link"/>
   <int value="10" label="Search Suggestions Next Button"/>
   <int value="11" label="Tracking Protection Completion Link"/>
+  <int value="12" label="Ad Topics Next Button"/>
 </enum>
 
 <enum name="SettingsPrivacyGuideSettingsStates">
@@ -398,6 +343,10 @@ chromium-metrics-reviews@google.com.
   <int value="17" label="Search Suggestions Turned Off"/>
   <int value="18" label="Search Suggestions Turned On"/>
   <int value="19" label="Search Suggestions Remain Off"/>
+  <int value="20" label="Ad Topics Remain On"/>
+  <int value="21" label="Ad Topics Turned Off"/>
+  <int value="22" label="Ad Topics Turned On"/>
+  <int value="23" label="Ad Topics Remain Off"/>
 </enum>
 
 <enum name="SettingsPrivacyGuideStepsEligibleAndReached">
@@ -413,6 +362,8 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="Completion card is reached"/>
   <int value="10" label="Search Suggestions card is eligible to be shown"/>
   <int value="11" label="Search Suggestions card is reached"/>
+  <int value="12" label="Ad Topics card is eligible to be shown"/>
+  <int value="13" label="Ad Topics card is reached"/>
 </enum>
 
 <enum name="SettingsPrivacySandboxDialogDisplayHostHash">

@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "std")]
+extern crate std;
+
 use array_view::ArrayView;
+use core::{convert, fmt};
 use crypto_provider::CryptoProvider;
 use np_hkdf::v1_salt::DataElementOffset;
 use sink::Sink as _;
@@ -151,8 +155,8 @@ impl<R: AsMut<AdvBuilder>, SE: SectionEncoder> SectionBuilder<R, SE> {
     pub fn add_de<W: WriteDataElement, F: FnOnce(SE::DerivedSalt) -> W>(
         &mut self,
         build_de: F,
-    ) -> Result<(), AddDataElementError<()>> {
-        self.add_de_res(|derived_salt| Ok::<_, ()>(build_de(derived_salt)))
+    ) -> Result<(), AddDataElementError<convert::Infallible>> {
+        self.add_de_res(|derived_salt| Ok::<_, convert::Infallible>(build_de(derived_salt)))
     }
 
     /// Convert a section builder's contents into an encoded section.
@@ -199,6 +203,20 @@ pub enum AddDataElementError<E> {
     /// Too much data to fit into the section
     InsufficientSectionSpace,
 }
+
+impl<E: fmt::Display> fmt::Display for AddDataElementError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AddDataElementError::BuildDeError(e) => write!(f, "Build DE error: {}", e),
+            AddDataElementError::InsufficientSectionSpace => {
+                write!(f, "Insufficient section space")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<E: fmt::Debug + fmt::Display> std::error::Error for AddDataElementError<E> {}
 
 /// The encoded form of an advertisement section
 pub(crate) type EncodedSection = ArrayView<u8, NP_ADV_MAX_SECTION_LEN>;

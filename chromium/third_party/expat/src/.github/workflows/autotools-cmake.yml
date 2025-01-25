@@ -5,8 +5,9 @@
 #                      \___/_/\_\ .__/ \__,_|\__|
 #                               |_| XML parser
 #
-# Copyright (c) 2021-2023 Sebastian Pipping <sebastian@pipping.org>
+# Copyright (c) 2021-2024 Sebastian Pipping <sebastian@pipping.org>
 # Copyright (c) 2023      Joyce Brum <joycebrum@google.com>
+# Copyright (c) 2024      Dag-Erling Smørgrav <des@des.dev>
 # Licensed under the MIT license:
 #
 # Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -46,7 +47,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-11
+          - os: macos-14
             configure_args:
             cmake_args:
           - os: ubuntu-20.04
@@ -60,7 +61,7 @@ jobs:
         shell: bash
     runs-on: "${{ matrix.os }}"
     steps:
-    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
 
     - name: (Linux) Install build dependencies
       if: "${{ runner.os == 'Linux' }}"
@@ -81,7 +82,6 @@ jobs:
             automake \
             cmake \
             docbook2x \
-            gnu-sed \
             libtool \
             lzip
 
@@ -128,8 +128,14 @@ jobs:
           # Autotools' LT_LIB_M has a hardcoded exclude for "*-*-darwin*" hosts,
           # while macOS does have libm and is successfully found by CMake.
           # We patch the CMake side in line here to get the differ below to empty.
-          export PATH="$(brew --prefix)/opt/gnu-sed/libexec/gnubin:${PATH}"
-          sed 's,-lm,,' -i build_cmake/ROOT/usr/local/lib*/pkgconfig/expat.pc
+          #
+          # Both GNU and BSD sed can edit in-place without creating a backup,
+          # but not with the same syntax.  The syntax for editing in-place
+          # _with_ a backup however is the same, so do that, then remove the
+          # backup so it doesn't show up in the diff later.
+          sed -e 's,-lm,,' -i.bak \
+              build_cmake/ROOT/usr/local/lib*/pkgconfig/expat.pc
+          rm -f build_cmake/ROOT/usr/local/lib*/pkgconfig/expat.pc.bak
         fi
 
         diff \

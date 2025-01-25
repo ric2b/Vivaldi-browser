@@ -206,7 +206,7 @@ EIGEN_ALWAYS_INLINE void transStoreC(PacketBlock<vec, EIGEN_ARCH_DEFAULT_NUMBER_
 /**
  * GEMM like operation for trsm panel updates.
  * Computes: C -= A*B
- * K must be multipe of 4.
+ * K must be multiple of 4.
  *
  * Unrolls used are {1,2,4,8}x{U1,U2,U3};
  * For good performance we want K to be large with M/N relatively small, but also large enough

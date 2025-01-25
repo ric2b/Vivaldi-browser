@@ -12,8 +12,17 @@
 @protocol HomeCustomizationMutator
 
 // Handles the visibility of a Home module being toggled.
-- (void)handleModuleToggledWithType:(CustomizationToggleType)type
-                            enabled:(BOOL)enabled;
+- (void)toggleModuleVisibilityForType:(CustomizationToggleType)type
+                              enabled:(BOOL)enabled;
+
+// Navigates to the customization submenu for a given `type`.
+- (void)navigateToSubmenuForType:(CustomizationToggleType)type;
+
+// Navigates to an external URL for a given `type`.
+- (void)navigateToLinkForType:(CustomizationLinkType)type;
+
+// Dismisses the top page of the menu stack.
+- (void)dismissMenuPage;
 
 @end
 

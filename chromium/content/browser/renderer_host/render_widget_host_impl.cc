@@ -46,11 +46,12 @@
 #include "cc/trees/render_frame_metadata.h"
 #include "components/input/input_router_config_helper.h"
 #include "components/input/native_web_keyboard_event.h"
+#include "components/input/render_input_router.mojom.h"
 #include "components/input/render_widget_host_input_event_router.h"
 #include "components/input/timeout_monitor.h"
+#include "components/input/utils.h"
 #include "components/viz/common/features.h"
 #include "components/viz/host/host_frame_sink_manager.h"
-#include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/browser_main_loop.h"
@@ -60,7 +61,6 @@
 #include "content/browser/file_system/browser_file_system_helper.h"
 #include "content/browser/file_system_access/file_system_access_manager_impl.h"
 #include "content/browser/gpu/compositor_util.h"
-#include "content/browser/notification_service_impl.h"
 #include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/data_transfer_util.h"
 #include "content/browser/renderer_host/dip_util.h"
@@ -89,8 +89,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/peak_gpu_memory_tracker_factory.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_process_host_priority_client.h"
@@ -121,10 +119,12 @@
 #include "third_party/blink/public/mojom/drag/drag.mojom.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom.h"
 #include "third_party/blink/public/mojom/input/touch_event.mojom.h"
+#include "ui/accessibility/platform/browser_accessibility_manager.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/ime/mojom/text_input_state.mojom.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor.h"
@@ -152,7 +152,7 @@
 #include "content/browser/renderer_host/input/fling_scheduler_mac.h"
 #include "services/device/public/mojom/wake_lock_provider.mojom.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
-#include "ui/base/cocoa/cursor_utils.h"
+#include "ui/base/cocoa/cursor_accessibility_scale_factor.h"
 #endif
 
 #include "content/browser/renderer_host/text_input_manager.h"
@@ -715,11 +715,19 @@ void RenderWidgetHostImpl::RendererWidgetCreated(bool for_frame_widget) {
 
   renderer_widget_created_ = true;
 
-  mojo::PendingRemote<blink::mojom::RenderInputRouterClient> remote;
-
+  mojo::PendingRemote<blink::mojom::RenderInputRouterClient> browser_remote;
+  mojo::PendingReceiver<blink::mojom::RenderInputRouterClient> viz_receiver =
+      mojo::NullReceiver();
+  if (input::TransferInputToViz()) {
+    mojo::PendingRemote<blink::mojom::RenderInputRouterClient> viz_remote;
+    viz_receiver = viz_remote.InitWithNewPipeAndPassReceiver();
+    viz_rir_client_remote_ = std::move(viz_remote);
+  }
   blink_widget_->SetupRenderInputRouterConnections(
-      remote.InitWithNewPipeAndPassReceiver());
-  GetRenderInputRouter()->BindRenderInputRouterInterfaces(std::move(remote));
+      browser_remote.InitWithNewPipeAndPassReceiver(), std::move(viz_receiver));
+
+  GetRenderInputRouter()->BindRenderInputRouterInterfaces(
+      std::move(browser_remote));
   GetRenderInputRouter()->RendererWidgetCreated(for_frame_widget);
 
   // TODO(crbug.com/40162510): The `view_` can be null. :( Speculative
@@ -816,10 +824,6 @@ void RenderWidgetHostImpl::WasHidden() {
   // Tell the RenderProcessHost we were hidden.
   GetProcess()->UpdateClientPriority(this);
 
-  bool is_visible = false;
-  NotificationServiceImpl::current()->Notify(
-      NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      Source<RenderWidgetHost>(this), Details<bool>(&is_visible));
   for (auto& observer : observers_) {
     observer.RenderWidgetHostVisibilityChanged(this, false);
   }
@@ -864,10 +868,6 @@ void RenderWidgetHostImpl::WasShown(
 
   GetProcess()->UpdateClientPriority(this);
 
-  bool is_visible = true;
-  NotificationServiceImpl::current()->Notify(
-      NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
-      Source<RenderWidgetHost>(this), Details<bool>(&is_visible));
   for (auto& observer : observers_) {
     observer.RenderWidgetHostVisibilityChanged(this, true);
   }
@@ -999,7 +999,8 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   } else {
     visual_properties.display_mode = blink::mojom::DisplayMode::kBrowser;
   }
-  visual_properties.zoom_level = view_->GetZoomLevel();
+  visual_properties.zoom_level = delegate_->GetPendingPageZoomLevel();
+  visual_properties.css_zoom_factor = view_->GetCSSZoomFactor();
 
   RenderViewHostDelegateView* rvh_delegate_view = delegate_->GetDelegateView();
   CHECK(rvh_delegate_view);
@@ -1069,7 +1070,7 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   } else {
     visual_properties.compositor_viewport_pixel_rect =
         properties_from_parent_local_root_.compositor_viewport;
-    visual_properties.window_show_state = ui::SHOW_STATE_DEFAULT;
+    visual_properties.window_show_state = ui::mojom::WindowShowState::kDefault;
 
     // These properties come from the top-level main frame's renderer. The
     // top-level main frame in the browser doesn't specify a value.
@@ -1156,6 +1157,11 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   }
 
   return visual_properties;
+}
+
+void RenderWidgetHostImpl::ClearVisualProperties() {
+  old_visual_properties_.reset();
+  visual_properties_ack_pending_ = false;
 }
 
 bool RenderWidgetHostImpl::UpdateVisualProperties(bool propagate) {
@@ -1796,8 +1802,13 @@ void RenderWidgetHostImpl::AddSuppressShowingImeCallback(
 }
 
 void RenderWidgetHostImpl::RemoveSuppressShowingImeCallback(
-    const SuppressShowingImeCallback& callback) {
+    const SuppressShowingImeCallback& callback,
+    bool trigger_ime) {
   std::erase(suppress_showing_ime_callbacks_, callback);
+  if (trigger_ime && !saved_text_input_state_for_suppression_.is_null()) {
+    saved_text_input_state_for_suppression_->always_hide_ime = false;
+    TextInputStateChanged(std::move(saved_text_input_state_for_suppression_));
+  }
 }
 
 void RenderWidgetHostImpl::AddInputEventObserver(
@@ -2446,6 +2457,13 @@ void RenderWidgetHostImpl::ForwardDelegatedInkPoint(
     return;
   }
 
+  // If being given the same point twice, return early and avoid an unnecessary
+  // call to the GPU process.
+  if (last_delegated_ink_point_sent_ == delegated_ink_point) {
+    return;
+  }
+  last_delegated_ink_point_sent_ = delegated_ink_point;
+
   auto* delegated_ink_point_renderer =
       delegate_->GetDelegatedInkRenderer(view_->GetCompositor());
   if (!delegated_ink_point_renderer) {
@@ -2822,7 +2840,9 @@ bool RenderWidgetHostImpl::StoredVisualPropertiesNeedsUpdate(
           new_parent_local_surface_id.embed_token();
 
   const bool zoom_changed =
-      old_visual_properties->zoom_level != new_visual_properties.zoom_level;
+      old_visual_properties->zoom_level != new_visual_properties.zoom_level ||
+      old_visual_properties->css_zoom_factor !=
+          new_visual_properties.css_zoom_factor;
 
   return zoom_changed || size_changed || parent_local_surface_id_changed ||
          old_visual_properties->screen_infos !=
@@ -2930,13 +2950,16 @@ TouchEmulatorImpl* RenderWidgetHostImpl::GetTouchEmulator(
 
 void RenderWidgetHostImpl::TextInputStateChanged(
     ui::mojom::TextInputStatePtr state) {
+  saved_text_input_state_for_suppression_.reset();
   if (!view_) {
     return;
   }
   for (auto& callback : suppress_showing_ime_callbacks_) {
     if (callback.Run()) {
       state->always_hide_ime = true;
-      break;
+      saved_text_input_state_for_suppression_ = std::move(state);
+      view_->TextInputStateChanged(*saved_text_input_state_for_suppression_);
+      return;
     }
   }
   view_->TextInputStateChanged(*state);
@@ -2966,22 +2989,41 @@ input::StylusInterface* RenderWidgetHostImpl::GetStylusInterface() {
 }
 
 void RenderWidgetHostImpl::OnStartStylusWriting() {
+  if (view_) {
+    view_->OnStartStylusWriting();
+  }
+}
+
+void RenderWidgetHostImpl::UpdateElementFocusForStylusWriting() {
   if (blink_frame_widget_) {
     auto callback = base::BindOnce(
-        &RenderWidgetHostImpl::OnEditElementFocusedForStylusWriting,
+        &RenderWidgetHostImpl::OnUpdateElementFocusForStylusWritingHandled,
         weak_factory_.GetWeakPtr());
     blink_frame_widget_->OnStartStylusWriting(std::move(callback));
   }
 }
 
-void RenderWidgetHostImpl::OnEditElementFocusedForStylusWriting(
+void RenderWidgetHostImpl::OnUpdateElementFocusForStylusWritingHandled(
     const std::optional<gfx::Rect>& focused_edit_bounds,
     const std::optional<gfx::Rect>& caret_bounds) {
   if (view_) {
-    view_->OnEditElementFocusedForStylusWriting(
-        focused_edit_bounds.value_or(gfx::Rect()),
-        caret_bounds.value_or(gfx::Rect()));
+    if (focused_edit_bounds.has_value() && caret_bounds.has_value()) {
+      view_->OnEditElementFocusedForStylusWriting(focused_edit_bounds.value(),
+                                                  caret_bounds.value());
+    } else {
+      view_->OnEditElementFocusClearedForStylusWriting();
+    }
   }
+}
+
+void RenderWidgetHostImpl::PassImeRenderWidgetHost(
+    mojo::PendingRemote<blink::mojom::ImeRenderWidgetHost> pending_remote) {
+#if BUILDFLAG(IS_ANDROID)
+  if (!blink_frame_widget_) {
+    return;
+  }
+  blink_frame_widget_->PassImeRenderWidgetHost(std::move(pending_remote));
+#endif
 }
 
 void RenderWidgetHostImpl::SetMouseCapture(bool capture) {
@@ -3182,6 +3224,10 @@ void RenderWidgetHostImpl::NotifyUISchedulerOfGestureEventUpdate(
   CHECK_CURRENTLY_ON(BrowserThread::UI);
   BrowserUIThreadScheduler::Get()->OnScrollStateUpdate(
       GetScrollStateUpdateFromGestureEvent(gesture_event));
+}
+
+void RenderWidgetHostImpl::OnInputIgnored(const blink::WebInputEvent& event) {
+  delegate_->OnInputIgnored(event);
 }
 
 void RenderWidgetHostImpl::DecrementInFlightEventCount(
@@ -3471,12 +3517,12 @@ void RenderWidgetHostImpl::OnSnapshotReceived(int snapshot_id,
 #endif
 }
 
-BrowserAccessibilityManager*
+ui::BrowserAccessibilityManager*
 RenderWidgetHostImpl::GetRootBrowserAccessibilityManager() {
   return delegate_ ? delegate_->GetRootBrowserAccessibilityManager() : nullptr;
 }
 
-BrowserAccessibilityManager*
+ui::BrowserAccessibilityManager*
 RenderWidgetHostImpl::GetOrCreateRootBrowserAccessibilityManager() {
   return delegate_ ? delegate_->GetOrCreateRootBrowserAccessibilityManager()
                    : nullptr;
@@ -3511,12 +3557,22 @@ void RenderWidgetHostImpl::CreateFrameSink(
   create_frame_sink_callback_ = base::BindOnce(
       [](mojo::PendingReceiver<viz::mojom::CompositorFrameSink> receiver,
          mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient> client,
+         std::optional<mojo::PendingRemote<
+             blink::mojom::RenderInputRouterClient>> viz_rir_client_remote,
          const viz::FrameSinkId& frame_sink_id) {
+        input::mojom::RenderInputRouterConfigPtr config;
+        if (input::TransferInputToViz()) {
+          DCHECK(viz_rir_client_remote.has_value());
+          config = input::mojom::RenderInputRouterConfig::New();
+          config->rir_client = std::move(viz_rir_client_remote.value());
+        }
         GetHostFrameSinkManager()->CreateCompositorFrameSink(
-            frame_sink_id, std::move(receiver), std::move(client));
+            frame_sink_id, std::move(receiver), std::move(client),
+            std::move(config));
       },
       std::move(compositor_frame_sink_receiver),
-      std::move(compositor_frame_sink_client));
+      std::move(compositor_frame_sink_client),
+      std::move(viz_rir_client_remote_));
 
   MaybeDispatchBufferedFrameSinkRequest();
 }
@@ -3657,23 +3713,23 @@ void RenderWidgetHostImpl::SetScreenOrientationForTesting(
 }
 
 void RenderWidgetHostImpl::LockKeyboard() {
-  if (!keyboard_lock_allowed_ || !is_focused_ || !view_) {
+  if (!keyboard_lock_allowed_ || !view_) {
     if (keyboard_lock_request_callback_) {
       std::move(keyboard_lock_request_callback_)
           .Run(blink::mojom::KeyboardLockRequestResult::kRequestFailedError);
     }
     return;
   }
-  // Even if the page isn't in fullscreen, we still want to call
+  // Even if the page isn't focused or in fullscreen, we still want to call
   // `keyboard_lock_request_callback_` to let it know whether it has the
   // permission to lock the keyboard, but we don't actually lock the
-  // keyboard until it enters fullscreen. LockKeyboard() will be called again
-  // when the page enters fullscreen.
+  // keyboard until it gains focus and enters fullscreen. LockKeyboard() will be
+  // called again when the page gains focus or enters fullscreen.
   if (keyboard_lock_request_callback_) {
     std::move(keyboard_lock_request_callback_)
         .Run(blink::mojom::KeyboardLockRequestResult::kSuccess);
   }
-  if (!delegate_->IsFullscreen()) {
+  if (!delegate_->IsFullscreen() || !is_focused_) {
     return;
   }
   // KeyboardLock can be activated and deactivated several times per request,
@@ -3714,7 +3770,7 @@ void RenderWidgetHostImpl::OnRenderFrameMetadataChangedAfterActivation(
 
   // The root BrowserAccessibilityManager only is reachable if there's a
   // delegate() still, ie we're not in shutdown. This can be null in tests.
-  BrowserAccessibilityManager* accessibility_manager =
+  ui::BrowserAccessibilityManager* accessibility_manager =
       GetRootBrowserAccessibilityManager();
   if (accessibility_manager) {
     accessibility_manager->SetPageScaleFactor(metadata.page_scale_factor);

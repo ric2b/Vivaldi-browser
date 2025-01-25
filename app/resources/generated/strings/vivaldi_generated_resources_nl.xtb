@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Fout</translation>
 <translation id="1175364870820465910">A&amp;fdrukken…</translation>
 <translation id="1181037720776840403">Verwijderen</translation>
+<translation id="1184037892196730210">Kan scherm niet casten</translation>
 <translation id="1187722533808055681">Activeringen vanuit inactief</translation>
 <translation id="122082903575839559">Algoritme voor handtekening van certificaat</translation>
 <translation id="1221825588892235038">Alleen selectie</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Veldwaarde</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Opnieuw inschakelen</translation>
-<translation id="2678100101831051676">Kan niet casten.</translation>
 <translation id="2719936478972253983">De volgende cookies zijn geblokkeerd</translation>
 <translation id="2721037002783622288">Afbeelding &amp;zoeken in <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Niet na</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Deze extensie is mogelijk beschadigd.</translation>
 <translation id="3387614642886316601">Verbeterde spellingcontrole gebruiken</translation>
 <translation id="3390013585654699824">App-gegevens</translation>
-<translation id="3393582007140394275">Kan scherm niet casten.</translation>
 <translation id="345693547134384690">Afbeelding openen in nieuwe &amp;tab</translation>
 <translation id="3493881266323043047">Geldigheid</translation>
 <translation id="3511307672085573050">Koppelingsadr&amp;es kopiëren</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Wijzigingen behouden</translation>
 <translation id="6824564591481349393">&amp;E-mailadres kopiëren</translation>
 <translation id="6840155290835956714">Goedkeuring vragen vóór verzenden</translation>
+<translation id="6878862640969460273">Liggend</translation>
 <translation id="6886871292305414135">Koppeling openen in nieuwe &amp;tab</translation>
 <translation id="6892812721183419409">Koppeling openen als <ph name="USER" /></translation>
 <translation id="6900284862687837908">Achtergrond-app: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Toegang geweigerd.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Controleer spelling tijdens typen</translation>
+<translation id="7359680654975233185">Kan tabblad niet casten</translation>
 <translation id="7385854874724088939">Er is iets misgegaan bij het afdrukken. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="7412226954991670867">GPU-geheugen</translation>
 <translation id="7421925624202799674">&amp;Paginabron weergeven</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Websites toestaan cookiegegevens op te slaan en te lezen</translation>
 <translation id="7663719505383602579">Ontvanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Geïnstalleerd door je administrator</translation>
+<translation id="7685038817958445325">Kan niet casten</translation>
 <translation id="7685049629764448582">JavaScript-geheugen</translation>
 <translation id="7701869757853594372">USER-handles</translation>
 <translation id="7704305437604973648">Taak</translation>
@@ -410,7 +412,6 @@ Sleutelbestand: <ph name="KEY_FILE" />
 Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nieuwe versies van je extensie te maken.</translation>
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8018313076035239964">Bepaal welke informatie websites kunnen gebruiken en welke inhoud ze aan je kunnen laten zien</translation>
-<translation id="8032244173881942855">Kan tabblad niet casten.</translation>
 <translation id="8071432093239591881">Afdrukken als afbeelding</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
@@ -466,7 +467,6 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="9218430445555521422">Instellen als standaard</translation>
 <translation id="93766956588638423">Extensie repareren</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Liggend</translation>
 <translation id="994289308992179865">&amp;Herhalen</translation>
 <translation id="998747458861718449">&amp;Inspecteren</translation>
 </translationbundle>

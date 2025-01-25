@@ -112,7 +112,6 @@ enum class DomCode : uint32_t;
 }
 
 namespace content {
-class BrowserAccessibilityManager;
 class FrameTree;
 class MockRenderWidgetHost;
 class MockRenderWidgetHostImpl;
@@ -272,7 +271,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void AddSuppressShowingImeCallback(
       const SuppressShowingImeCallback& callback) override;
   void RemoveSuppressShowingImeCallback(
-      const SuppressShowingImeCallback& callback) override;
+      const SuppressShowingImeCallback& callback,
+      bool trigger_ime) override;
   void AddInputEventObserver(
       RenderWidgetHost::InputEventObserver* observer) override;
   void RemoveInputEventObserver(
@@ -392,6 +392,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnInvalidInputEventSource() override;
   void NotifyUISchedulerOfGestureEventUpdate(
       blink::WebInputEvent::Type gesture_event) override;
+  void OnInputIgnored(const blink::WebInputEvent& event) override;
 
   // Update the stored set of visual properties for the renderer. If 'propagate'
   // is true, the new properties will be sent to the renderer process.
@@ -703,11 +704,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void SetForceEnableZoom(bool);
 
   // Get the BrowserAccessibilityManager for the root of the frame tree,
-  BrowserAccessibilityManager* GetRootBrowserAccessibilityManager();
+  ui::BrowserAccessibilityManager* GetRootBrowserAccessibilityManager();
 
   // Get the BrowserAccessibilityManager for the root of the frame tree,
   // or create it if it doesn't already exist.
-  BrowserAccessibilityManager* GetOrCreateRootBrowserAccessibilityManager();
+  ui::BrowserAccessibilityManager* GetOrCreateRootBrowserAccessibilityManager();
 
   void RejectPointerLockOrUnlockIfNecessary(
       blink::mojom::PointerLockResult reason);
@@ -744,6 +745,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // TODO(dcheng): Tests call this directly but shouldn't have to. Investigate
   // getting rid of this.
   blink::VisualProperties GetInitialVisualProperties();
+
+  // Clears the state of the VisualProperties of this widget.
+  void ClearVisualProperties();
 
   // Pushes updated visual properties to the renderer as well as whether the
   // focused node should be scrolled into view.
@@ -809,6 +813,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnImeCancelComposition() override;
   input::StylusInterface* GetStylusInterface() override;
   void OnStartStylusWriting() override;
+  void UpdateElementFocusForStylusWriting() override;
   bool IsAutoscrollInProgress() override;
   void SetMouseCapture(bool capture) override;
   void SetAutoscrollSelectionActiveInMainFrame(
@@ -934,6 +939,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       const cc::RenderFrameMetadata& metadata) override;
 
   SiteInstanceGroup* GetSiteInstanceGroup();
+
+  void PassImeRenderWidgetHost(
+      mojo::PendingRemote<blink::mojom::ImeRenderWidgetHost> pending_remote);
 
   // Updates the browser controls by directly IPCing onto the compositor thread.
   void UpdateBrowserControlsState(
@@ -1173,7 +1181,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // It receives the focused edit element bounds and the current caret bounds
   // needed for stylus writing service. These bounds would be null when the
   // stylus writable element could not be focused.
-  void OnEditElementFocusedForStylusWriting(
+  void OnUpdateElementFocusForStylusWritingHandled(
       const std::optional<gfx::Rect>& focused_edit_bounds,
       const std::optional<gfx::Rect>& caret_bounds);
 
@@ -1514,6 +1522,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   const viz::FrameSinkId frame_sink_id_;
 
+  // Used to avoid unnecessary IPC calls when ForwardDelegatedInkPoint receives
+  // the same point twice.
+  std::optional<gfx::DelegatedInkPoint> last_delegated_ink_point_sent_;
+
   bool sent_autoscroll_scroll_begin_ = false;
   gfx::PointF autoscroll_start_position_;
 
@@ -1524,6 +1536,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   base::OneShotTimer pending_user_activation_timer_;
 
   input::InputRouterImpl::RequestMouseLockCallback request_pointer_lock_callback_;
+
+  ui::mojom::TextInputStatePtr saved_text_input_state_for_suppression_;
 
   // Parameters to pass to blink::mojom::Widget::WasShown after
   // `waiting_for_init_` becomes true. These are stored in a struct instead of
@@ -1571,6 +1585,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   bool view_is_frame_sink_id_owner_{false};
 
   std::unique_ptr<CompositorMetricRecorder> compositor_metric_recorder_;
+
+  std::optional<mojo::PendingRemote<blink::mojom::RenderInputRouterClient>>
+      viz_rir_client_remote_;
 
   // NOTE(david@vivaldi.com): |device_emulation_active_| indicates if the device
   // emulation is active for this specific RenderWidgetHostImpl.

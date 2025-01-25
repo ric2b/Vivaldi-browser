@@ -16,6 +16,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "api/environment/environment.h"
@@ -27,8 +28,10 @@
 #include "common_video/include/video_frame_buffer_pool.h"
 #include "modules/video_coding/codecs/interface/libvpx_interface.h"
 #include "modules/video_coding/codecs/vp9/include/vp9.h"
+#include "modules/video_coding/codecs/vp9/svc_config.h"
 #include "modules/video_coding/codecs/vp9/vp9_frame_buffer_pool.h"
 #include "modules/video_coding/svc/scalable_video_controller.h"
+#include "modules/video_coding/svc/simulcast_to_svc_converter.h"
 #include "modules/video_coding/utility/framerate_controller_deprecated.h"
 #include "rtc_base/containers/flat_map.h"
 #include "rtc_base/experiments/encoder_info_settings.h"
@@ -66,11 +69,11 @@ class LibvpxVp9Encoder : public VideoEncoder {
   int NumberOfThreads(int width, int height, int number_of_cores);
 
   // Call encoder initialize function and set control settings.
-  int InitAndSetControlSettings(const VideoCodec* inst);
+  int InitAndSetControlSettings();
 
   bool PopulateCodecSpecific(CodecSpecificInfo* codec_specific,
-                             absl::optional<int>* spatial_idx,
-                             absl::optional<int>* temporal_idx,
+                             std::optional<int>* spatial_idx,
+                             std::optional<int>* temporal_idx,
                              const vpx_codec_cx_pkt& pkt);
   void FillReferenceIndices(const vpx_codec_cx_pkt& pkt,
                             size_t pic_num,
@@ -151,8 +154,11 @@ class LibvpxVp9Encoder : public VideoEncoder {
   bool ss_info_needed_;
   bool force_all_active_layers_;
 
+  const bool enable_svc_for_simulcast_;
+  std::optional<SimulcastToSvcConverter> simulcast_to_svc_converter_;
+
   std::unique_ptr<ScalableVideoController> svc_controller_;
-  absl::optional<ScalabilityMode> scalability_mode_;
+  std::optional<ScalabilityMode> scalability_mode_;
   std::vector<FramerateControllerDeprecated> framerate_controller_;
 
   // Used for flexible mode.
@@ -222,14 +228,6 @@ class LibvpxVp9Encoder : public VideoEncoder {
   bool config_changed_;
 
   const LibvpxVp9EncoderInfoSettings encoder_info_override_;
-
-  const struct SvcFrameDropConfig {
-    bool enabled;
-    int layer_drop_mode;  // SVC_LAYER_DROP_MODE
-    int max_consec_drop;
-  } svc_frame_drop_config_;
-  static SvcFrameDropConfig ParseSvcFrameDropConfig(
-      const FieldTrialsView& trials);
 };
 
 }  // namespace webrtc

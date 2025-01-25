@@ -12,11 +12,14 @@
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/webid/digital_identity_request.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom-blink-forward.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_all_accepted_credentials_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_unknown_credential_options.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
+class AllAcceptedCredentialsOptions;
 class AuthenticationExtensionsClientInputs;
 class AuthenticationExtensionsClientOutputs;
 class AuthenticationExtensionsSupplementalPubKeysInputs;
@@ -26,6 +29,7 @@ class AuthenticationExtensionsPRFValues;
 class AuthenticatorSelectionCriteria;
 class CableAuthenticationData;
 class Credential;
+class CurrentUserDetailsOptions;
 class DigitalCredentialProvider;
 class IdentityCredentialDisconnectOptions;
 class IdentityProviderConfig;
@@ -34,7 +38,6 @@ class IdentityUserInfo;
 class PublicKeyCredentialCreationOptions;
 class PublicKeyCredentialDescriptor;
 class PublicKeyCredentialParameters;
-class PublicKeyCredentialReportOptions;
 class PublicKeyCredentialRequestOptions;
 class PublicKeyCredentialRpEntity;
 class PublicKeyCredentialUserEntity;
@@ -298,9 +301,25 @@ struct TypeConverter<Vector<blink::mojom::blink::Hint>, Vector<String>> {
 template <>
 struct MODULES_EXPORT
     TypeConverter<blink::mojom::blink::PublicKeyCredentialReportOptionsPtr,
-                  blink::PublicKeyCredentialReportOptions> {
+                  blink::UnknownCredentialOptions> {
   static blink::mojom::blink::PublicKeyCredentialReportOptionsPtr Convert(
-      const blink::PublicKeyCredentialReportOptions&);
+      const blink::UnknownCredentialOptions&);
+};
+
+template <>
+struct MODULES_EXPORT
+    TypeConverter<blink::mojom::blink::PublicKeyCredentialReportOptionsPtr,
+                  blink::AllAcceptedCredentialsOptions> {
+  static blink::mojom::blink::PublicKeyCredentialReportOptionsPtr Convert(
+      const blink::AllAcceptedCredentialsOptions&);
+};
+
+template <>
+struct MODULES_EXPORT
+    TypeConverter<blink::mojom::blink::PublicKeyCredentialReportOptionsPtr,
+                  blink::CurrentUserDetailsOptions> {
+  static blink::mojom::blink::PublicKeyCredentialReportOptionsPtr Convert(
+      const blink::CurrentUserDetailsOptions&);
 };
 
 }  // namespace mojo

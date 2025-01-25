@@ -23,7 +23,7 @@
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "cc/base/switches.h"
-#include "chrome/browser/ash/boot_times_recorder.h"
+#include "chrome/browser/ash/boot_times_recorder/boot_times_recorder.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/common/chrome_constants.h"
@@ -142,7 +142,7 @@ void DeriveCommandLine(const GURL& start_url,
       ::switches::kTopChromeTouchUi,
       ::switches::kTraceToConsole,
       ::switches::kUIDisablePartialSwap,
-#if defined(USE_CRAS)
+#if BUILDFLAG(USE_CRAS)
       ::switches::kUseCras,
 #endif
       ::switches::kUseGL,
@@ -247,12 +247,13 @@ void DeriveCommandLine(const GURL& start_url,
 // current session.
 void DeriveFeatures(base::CommandLine* out_command_line) {
   auto kForwardFeatures = {
-    &features::kAutoNightLight,
-    &ash::features::kSeamlessRefreshRateSwitching,
-    &ash::standalone_browser::features::kLacrosOnly,
-    &::features::kPluginVm,
+      &features::kAutoNightLight,
+      &ash::features::kSeamlessRefreshRateSwitching,
+      &ash::standalone_browser::features::kLacrosOnly,
+      &::features::kPluginVm,
+      &display::features::kOledScaleFactorEnabled,
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-    &media::kPlatformHEVCDecoderSupport,
+      &media::kPlatformHEVCDecoderSupport,
 #endif
   };
   std::vector<std::string> enabled_features;

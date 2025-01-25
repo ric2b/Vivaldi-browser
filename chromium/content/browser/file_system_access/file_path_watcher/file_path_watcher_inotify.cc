@@ -195,6 +195,13 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate {
   // Returns a WatcherEntry for this, must be called on the original sequence.
   InotifyReader::WatcherEntry GetWatcherEntry();
 
+  void UpdateInotifyCountHighWaterMark() {
+    int current_inotify_count =
+        watches_.size() + recursive_watches_by_path_.size();
+    inotify_count_high_water_mark_ =
+        std::max(inotify_count_high_water_mark_, current_inotify_count);
+  }
+
  private:
   // Start watching |path| for changes and notify |delegate| on each change.
   // Returns true if watch for |path| has been added successfully.
@@ -302,6 +309,8 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate {
       recursive_paths_by_watch_;
   std::map<base::FilePath, InotifyReader::Watch> recursive_watches_by_path_;
 
+  int inotify_count_high_water_mark_ = 0;
+
   base::WeakPtrFactory<FilePathWatcherImpl> weak_factory_{this};
 };
 
@@ -314,84 +323,101 @@ void InotifyReaderThreadDelegate::ThreadMain() {
   std::array<pollfd, 1> fdarray{{{inotify_fd_, POLLIN, 0}}};
 
   while (true) {
-    // Wait until some inotify events are available.
-    int poll_result = HANDLE_EINTR(poll(fdarray.data(), fdarray.size(), -1));
-    if (poll_result < 0) {
-      DPLOG(WARNING) << "poll failed";
-      return;
+    {
+      // Wait until some inotify events are available.
+      int poll_result = HANDLE_EINTR(poll(fdarray.data(), fdarray.size(), -1));
+      if (poll_result < 0) {
+        DPLOG(WARNING) << "poll failed";
+        return;
+      }
     }
 
-    // Adjust buffer size to current event queue size.
-    int buffer_size;
-    int ioctl_result = HANDLE_EINTR(ioctl(inotify_fd_, FIONREAD, &buffer_size));
+    bool has_batch = true;
+    while (has_batch) {
+      // Adjust buffer size to current event queue size.
+      int buffer_size;
+      int ioctl_result =
+          HANDLE_EINTR(ioctl(inotify_fd_, FIONREAD, &buffer_size));
 
-    if (ioctl_result != 0 || buffer_size < 0) {
-      DPLOG(WARNING) << "ioctl failed";
-      return;
-    }
-
-    std::vector<char> buffer(static_cast<size_t>(buffer_size));
-
-    ssize_t bytes_read = HANDLE_EINTR(
-        read(inotify_fd_, buffer.data(), static_cast<size_t>(buffer_size)));
-
-    if (bytes_read < 0) {
-      DPLOG(WARNING) << "read from inotify fd failed";
-      return;
-    }
-
-    // Most events are notified one by one, except for move events, which
-    // are expected to come in a pair (IN_MOVED_FROM and IN_MOVED_TO) with
-    // a matching cookie value. IN_MOVED_FROM event is expected to arrive right
-    // before the matching IN_MOVED_TO event, but inotify does not guarantee
-    // that these events are consecutive in the stream, or that they exist in
-    // the same buffer read. (i.e. IN_MOVED_FROM  is the last item to fit in the
-    // current buffer, so the matching IN_MOVED_TO is read in the next buffer).
-    // We don't want to wait indefinitely for the matching pair due to this
-    // lack of guarantee, so perform the best-effort coalescing of move events
-    // only within the same buffer.
-    inotify_event* pending_move_from_event = nullptr;
-    for (size_t i = 0; i < static_cast<size_t>(bytes_read);) {
-      inotify_event* event = reinterpret_cast<inotify_event*>(&buffer[i]);
-      size_t event_size = sizeof(inotify_event) + event->len;
-      DUMP_WILL_BE_CHECK_LE(i + event_size, static_cast<size_t>(bytes_read));
-      i += event_size;
-
-      if (event->mask & IN_IGNORED) {
-        continue;
+      if (ioctl_result != 0 || buffer_size < 0) {
+        DPLOG(WARNING) << "ioctl failed";
+        return;
       }
 
-      if (pending_move_from_event) {
-        if (event->mask & IN_MOVED_TO &&
-            pending_move_from_event->cookie == event->cookie) {
-          // Matching IN_MOVED_TO is observed for the existing pending move.
-          // Match up the two move events, and reset `pending_move_from_event`.
-          g_inotify_reader.Get().OnInotifyMatchingMoveEvents(
-              pending_move_from_event, event);
-          pending_move_from_event = nullptr;
+      std::vector<char> buffer(static_cast<size_t>(buffer_size));
+
+      ssize_t bytes_read = HANDLE_EINTR(
+          read(inotify_fd_, buffer.data(), static_cast<size_t>(buffer_size)));
+
+      if (bytes_read < 0) {
+        DPLOG(WARNING) << "read from inotify fd failed";
+        return;
+      }
+
+      // Most events are notified one by one, except for move events, which are
+      // expected to come in a pair (IN_MOVED_FROM and IN_MOVED_TO) with a
+      // matching cookie value. IN_MOVED_FROM event is expected to arrive right
+      // before the matching IN_MOVED_TO event, but inotify does not guarantee
+      // that these events are consecutive in the stream, or that they exist in
+      // the same buffer read. (i.e. IN_MOVED_FROM  is the last item to fit in
+      // the current buffer, so the matching IN_MOVED_TO is read in the next
+      // buffer). We don't want to wait indefinitely for the matching pair due
+      // to this lack of guarantee, so perform the best-effort coalescing of
+      // move events only within the same buffer.
+      inotify_event* pending_move_from_event = nullptr;
+      for (size_t i = 0; i < static_cast<size_t>(bytes_read);) {
+        inotify_event* event = reinterpret_cast<inotify_event*>(&buffer[i]);
+        size_t event_size = sizeof(inotify_event) + event->len;
+        DUMP_WILL_BE_CHECK_LE(i + event_size, static_cast<size_t>(bytes_read));
+        i += event_size;
+
+        if (event->mask & IN_IGNORED) {
           continue;
         }
-        // No matching IN_MOVED_TO is observed for `pending_move_from_event`.
-        // Flush and reset `pending_move_from_event`.
+
+        if (pending_move_from_event) {
+          if (event->mask & IN_MOVED_TO &&
+              pending_move_from_event->cookie == event->cookie) {
+            // Matching IN_MOVED_TO is observed for the existing pending move.
+            // Match up the two move events, and reset
+            // `pending_move_from_event`.
+            g_inotify_reader.Get().OnInotifyMatchingMoveEvents(
+                pending_move_from_event, event);
+            pending_move_from_event = nullptr;
+            continue;
+          }
+          // No matching IN_MOVED_TO is observed for `pending_move_from_event`.
+          // Flush and reset `pending_move_from_event`.
+          g_inotify_reader.Get().OnInotifyEvent(pending_move_from_event);
+          pending_move_from_event = nullptr;
+        }
+
+        if (event->mask & IN_MOVED_FROM) {
+          // IN_MOVED_FROM event is observed. Save as `pending_move_from_event`,
+          // so that it can attempt to find the matching IN_MOVED_TO event for
+          // the next iteration.
+          pending_move_from_event = event;
+        } else {
+          // Process other events as normal.
+          g_inotify_reader.Get().OnInotifyEvent(event);
+        }
+      }
+
+      // Poll with zero timeout to see if another batch is immediately
+      // available. This allows coalescing move events across batches.
+      int poll_result = HANDLE_EINTR(poll(fdarray.data(), fdarray.size(), 0));
+      has_batch = poll_result > 0;
+
+      if (poll_result < 0) {
+        DPLOG(WARNING) << "poll failed";
+        return;
+      }
+
+      // If we don't have another batch to process, assume any pending move-from
+      // event doesn't have a matching move-to event.
+      if (!has_batch && pending_move_from_event) {
         g_inotify_reader.Get().OnInotifyEvent(pending_move_from_event);
-        pending_move_from_event = nullptr;
       }
-
-      if (event->mask & IN_MOVED_FROM) {
-        // IN_MOVED_FROM event is observed. Save as `pending_move_from_event`,
-        // so that it can attempt to find the matching IN_MOVED_TO event for the
-        // next iteration.
-        pending_move_from_event = event;
-      } else {
-        // Process other events as normal.
-        g_inotify_reader.Get().OnInotifyEvent(event);
-      }
-    }
-
-    // Flush any cached IN_MOVED_FROM event, in case it was the last item
-    // in the iteration above and therefore not handled.
-    if (pending_move_from_event) {
-      g_inotify_reader.Get().OnInotifyEvent(pending_move_from_event);
     }
   }
 }
@@ -430,10 +456,9 @@ InotifyReader::Watch InotifyReader::AddWatch(const base::FilePath& path,
 
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::WILL_BLOCK);
-  const int watch_int =
-      inotify_add_watch(inotify_fd_, path.value().c_str(),
-                        IN_ATTRIB | IN_CREATE | IN_DELETE | IN_CLOSE_WRITE |
-                            IN_MOVE | IN_ONLYDIR);
+  const int watch_int = inotify_add_watch(
+      inotify_fd_, path.value().c_str(),
+      IN_CREATE | IN_DELETE | IN_CLOSE_WRITE | IN_MOVE | IN_ONLYDIR);
   if (watch_int == -1) {
     return kInvalidWatch;
   }
@@ -602,8 +627,11 @@ void FilePathWatcherImpl::OnFilePathChanged(
   } else if (event_mask & (IN_DELETE | IN_MOVED_FROM)) {
     // A non-paired IN_MOVED_FROM event is considered as created.
     change_type = FilePathWatcher::ChangeType::kDeleted;
-  } else {
+  } else if (event_mask & (IN_MODIFY | IN_CLOSE_WRITE)) {
     change_type = FilePathWatcher::ChangeType::kModified;
+  } else {
+    // Ignore other types of events.
+    return;
   }
   auto result = FindChangedPathAndUpdateWatches(
       fired_watch, child_name, file_path_type,
@@ -767,6 +795,8 @@ FilePathWatcherImpl::FindChangedPathAndUpdateWatches(
   }
 
   if (Contains(recursive_paths_by_watch_, fired_watch)) {
+    base::FilePath child_path =
+        recursive_paths_by_watch_[fired_watch].Append(child);
     if (!did_update) {
       if (!UpdateRecursiveWatches(
               fired_watch,
@@ -774,7 +804,7 @@ FilePathWatcherImpl::FindChangedPathAndUpdateWatches(
         return base::unexpected(ChangeProcessError::kLimitExceeded);
       }
     }
-    return base::ok(recursive_paths_by_watch_[fired_watch].Append(child));
+    return base::ok(child_path);
   }
 
   return base::unexpected(ChangeProcessError::kNotFound);
@@ -853,6 +883,7 @@ bool FilePathWatcherImpl::WatchWithChangeInfo(
     watches_.emplace_back(comps[i]);
   }
   watches_.emplace_back(base::FilePath::StringType());
+  UpdateInotifyCountHighWaterMark();
 
   if (!UpdateWatches()) {
     RecordWatchWithChangeInfoResultUma(
@@ -886,6 +917,8 @@ void FilePathWatcherImpl::Cancel() {
   watches_.clear();
   target_.clear();
   RemoveRecursiveWatches();
+
+  RecordInotifyWatchCountUma(inotify_count_high_water_mark_);
 }
 
 bool FilePathWatcherImpl::UpdateWatches() {
@@ -1060,6 +1093,8 @@ void FilePathWatcherImpl::TrackWatchForRecursion(InotifyReader::Watch watch,
   DUMP_WILL_BE_CHECK(!Contains(recursive_watches_by_path_, path));
   recursive_paths_by_watch_[watch] = path;
   recursive_watches_by_path_[path] = watch;
+
+  UpdateInotifyCountHighWaterMark();
 }
 
 void FilePathWatcherImpl::RemoveRecursiveWatches() {

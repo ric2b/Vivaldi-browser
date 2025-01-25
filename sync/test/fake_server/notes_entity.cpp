@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/uuid.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/protocol/loopback_server.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 
@@ -21,7 +21,7 @@ namespace {
 
 // Returns true if and only if |client_entity| is a notes.
 bool IsNotes(const sync_pb::SyncEntity& client_entity) {
-  return syncer::GetModelTypeFromSpecifics(client_entity.specifics()) ==
+  return syncer::GetDataTypeFromSpecifics(client_entity.specifics()) ==
          syncer::NOTES;
 }
 

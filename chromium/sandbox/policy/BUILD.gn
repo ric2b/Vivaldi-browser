@@ -7,6 +7,7 @@ import("//build/config/cast.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//chromeos/ash/components/assistant/assistant.gni")
+import("//components/nacl/features.gni")
 import("//printing/buildflags/buildflags.gni")
 import("//services/screen_ai/buildflags/features.gni")
 import("//testing/test.gni")
@@ -67,6 +68,8 @@ component("policy") {
       "linux/bpf_cros_intel_gpu_policy_linux.h",
       "linux/bpf_cros_nvidia_gpu_policy_linux.cc",
       "linux/bpf_cros_nvidia_gpu_policy_linux.h",
+      "linux/bpf_cros_virtio_gpu_policy_linux.cc",
+      "linux/bpf_cros_virtio_gpu_policy_linux.h",
       "linux/bpf_gpu_policy_linux.cc",
       "linux/bpf_gpu_policy_linux.h",
       "linux/bpf_network_policy_linux.cc",

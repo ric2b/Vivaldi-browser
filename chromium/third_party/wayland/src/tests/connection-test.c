@@ -247,9 +247,6 @@ TEST(connection_marshal)
 	marshal(&data, "n", 12, &object);
 	assert(data.buffer[2] == object.id);
 
-	marshal(&data, "?n", 12, NULL);
-	assert(data.buffer[2] == 0);
-
 	array.data = (void *) text;
 	array.size = sizeof text;
 	marshal(&data, "a", 20, &array);
@@ -326,7 +323,6 @@ TEST(connection_marshal_nullables)
 {
 	struct marshal_data data;
 	struct wl_object object;
-	struct wl_array array;
 	const char text[] = "curry";
 
 	setup_marshal_data(&data);
@@ -338,21 +334,12 @@ TEST(connection_marshal_nullables)
 	marshal(&data, "?o", 12, NULL);
 	assert(data.buffer[2] == 0);
 
-	marshal(&data, "?a", 12, NULL);
-	assert(data.buffer[2] == 0);
-
 	marshal(&data, "?s", 12, NULL);
 	assert(data.buffer[2] == 0);
 
 	object.id = 55293;
 	marshal(&data, "?o", 12, &object);
 	assert(data.buffer[2] == object.id);
-
-	array.data = (void *) text;
-	array.size = sizeof text;
-	marshal(&data, "?a", 20, &array);
-	assert(data.buffer[2] == array.size);
-	assert(memcmp(&data.buffer[3], text, array.size) == 0);
 
 	marshal(&data, "?s", 20, text);
 	assert(data.buffer[2] == sizeof text);
@@ -697,20 +684,15 @@ TEST(connection_marshal_big_enough)
 	free(big_string);
 }
 
-/* Ensures that buffers are resiable to accomodate requests for sizes at the
- * resize threshold (power of 2). Regression test for crbug.com/1451333. */
-TEST(connection_marshal_resize_at_buffer_growth_threshold)
+TEST(connection_marshal_unbounded_boundary_size)
 {
-	/* A string of lenth 8178 requires a buffer size of exactly 2^13.
-	 * TODO(tluk): Determine a way to require a resize at 2^13 in a more robust
-	 * way */
+	/* A string of lenth 8178 requires a buffer size of exactly 2^13. */
 	struct marshal_data data;
-	const int kStrSize = 8178;
-	char *big_string = malloc(kStrSize);
+	char *big_string = malloc(8178);
 	assert(big_string);
 
-	memset(big_string, ' ', kStrSize-1);
-	big_string[kStrSize-1] = '\0';
+	memset(big_string, ' ', 8177);
+	big_string[8177] = '\0';
 
 	setup_marshal_data(&data);
 

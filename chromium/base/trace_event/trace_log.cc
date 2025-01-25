@@ -245,8 +245,7 @@ void WriteDebugAnnotations(base::trace_event::TraceEvent* trace_event,
       } break;
 
       default:
-        NOTREACHED_IN_MIGRATION() << "Don't know how to serialize this value";
-        break;
+        NOTREACHED() << "Don't know how to serialize this value";
     }
   }
 }
@@ -948,8 +947,7 @@ TraceLog::InternalTraceOptions TraceLog::GetInternalOptionsFromTraceConfig(
     case RECORD_AS_MUCH_AS_POSSIBLE:
       return ret | kInternalRecordAsMuchAsPossible;
   }
-  NOTREACHED_IN_MIGRATION();
-  return kInternalNone;
+  NOTREACHED();
 }
 
 TraceConfig TraceLog::GetCurrentTraceConfig() const {
@@ -1198,9 +1196,11 @@ void TraceLog::OnTraceData(const char* data, size_t size, bool has_more) {
   }
   if (has_more)
     return;
-  trace_processor_->NotifyEndOfFile();
 
-  auto status = perfetto::trace_processor::json::ExportJson(
+  auto status = trace_processor_->NotifyEndOfFile();
+  DCHECK(status.ok()) << status.message();
+
+  status = perfetto::trace_processor::json::ExportJson(
       trace_processor_.get(), json_output_writer_.get());
   DCHECK(status.ok()) << status.message();
   trace_processor_.reset();

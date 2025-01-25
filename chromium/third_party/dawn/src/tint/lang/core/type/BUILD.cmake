@@ -68,6 +68,8 @@ tint_add_target(tint_lang_core_type lib
   lang/core/type/f32.h
   lang/core/type/i32.cc
   lang/core/type/i32.h
+  lang/core/type/i8.cc
+  lang/core/type/i8.h
   lang/core/type/input_attachment.cc
   lang/core/type/input_attachment.h
   lang/core/type/invalid.cc
@@ -100,6 +102,8 @@ tint_add_target(tint_lang_core_type lib
   lang/core/type/storage_texture.h
   lang/core/type/struct.cc
   lang/core/type/struct.h
+  lang/core/type/subgroup_matrix.cc
+  lang/core/type/subgroup_matrix.h
   lang/core/type/texture.cc
   lang/core/type/texture.h
   lang/core/type/texture_dimension.cc
@@ -108,6 +112,8 @@ tint_add_target(tint_lang_core_type lib
   lang/core/type/type.h
   lang/core/type/u32.cc
   lang/core/type/u32.h
+  lang/core/type/u8.cc
+  lang/core/type/u8.h
   lang/core/type/unique_node.cc
   lang/core/type/unique_node.h
   lang/core/type/vector.cc
@@ -133,6 +139,10 @@ tint_target_add_dependencies(tint_lang_core_type lib
   tint_utils_traits
 )
 
+tint_target_add_external_dependencies(tint_lang_core_type lib
+  "src_utils"
+)
+
 ################################################################################
 # Target:    tint_lang_core_type_test
 # Kind:      test
@@ -149,6 +159,7 @@ tint_add_target(tint_lang_core_type_test test
   lang/core/type/f32_test.cc
   lang/core/type/helper_test.h
   lang/core/type/i32_test.cc
+  lang/core/type/i8_test.cc
   lang/core/type/input_attachment_test.cc
   lang/core/type/manager_test.cc
   lang/core/type/matrix_test.cc
@@ -159,9 +170,11 @@ tint_add_target(tint_lang_core_type_test test
   lang/core/type/sampler_test.cc
   lang/core/type/storage_texture_test.cc
   lang/core/type/struct_test.cc
+  lang/core/type/subgroup_matrix_test.cc
   lang/core/type/texture_test.cc
   lang/core/type/type_test.cc
   lang/core/type/u32_test.cc
+  lang/core/type/u8_test.cc
   lang/core/type/vector_test.cc
 )
 
@@ -194,4 +207,5 @@ tint_target_add_dependencies(tint_lang_core_type_test test
 
 tint_target_add_external_dependencies(tint_lang_core_type_test test
   "gtest"
+  "src_utils"
 )

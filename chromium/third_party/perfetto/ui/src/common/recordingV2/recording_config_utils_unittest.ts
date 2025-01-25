@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import {createEmptyRecordConfig} from '../../controller/record_config_types';
-
 import {genTraceConfig} from './recording_config_utils';
 import {AndroidTargetInfo} from './recording_interfaces_v2';
 
@@ -46,6 +45,12 @@ test('genTraceConfig() can run without manipulating the input config', () => {
       {
         config: {
           name: 'android.packages_list',
+          targetBuffer: 1,
+        },
+      },
+      {
+        config: {
+          name: 'linux.system_info',
           targetBuffer: 1,
         },
       },

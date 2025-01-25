@@ -143,8 +143,10 @@ export class LayerTreeModel extends SDK.SDKModel.SDKModel<EventTypes> {
 SDK.SDKModel.SDKModel.register(LayerTreeModel, {capabilities: SDK.Target.Capability.DOM, autostart: false});
 
 export enum Events {
+  /* eslint-disable @typescript-eslint/naming-convention -- Used by web_tests. */
   LayerTreeChanged = 'LayerTreeChanged',
   LayerPainted = 'LayerPainted',
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 export type EventTypes = {
@@ -368,7 +370,7 @@ export class AgentLayer implements SDK.LayerTreeBase.Layer {
       if (!snapshot) {
         return null;
       }
-      return {rect: {x: 0, y: 0, width: this.width(), height: this.height()}, snapshot: snapshot};
+      return {rect: {x: 0, y: 0, width: this.width(), height: this.height()}, snapshot};
     });
     return [promise];
   }

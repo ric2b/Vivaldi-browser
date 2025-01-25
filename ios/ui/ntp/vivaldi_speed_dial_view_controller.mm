@@ -5,8 +5,8 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
@@ -254,6 +254,7 @@
                                 showAddGroup:NO
                            frequentlyVisited:NO
                            topSitesAvailable:NO
+                            topToolbarHidden:NO
                            verticalSizeClass:
                                 self.view.traitCollection.verticalSizeClass];
 }

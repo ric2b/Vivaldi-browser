@@ -8,6 +8,7 @@
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace content {
@@ -50,13 +51,13 @@ double RenderWidgetHostDelegate::GetPendingPageZoomLevel() {
   return 0.0;
 }
 
-BrowserAccessibilityManager*
-    RenderWidgetHostDelegate::GetRootBrowserAccessibilityManager() {
+ui::BrowserAccessibilityManager*
+RenderWidgetHostDelegate::GetRootBrowserAccessibilityManager() {
   return nullptr;
 }
 
-BrowserAccessibilityManager*
-    RenderWidgetHostDelegate::GetOrCreateRootBrowserAccessibilityManager() {
+ui::BrowserAccessibilityManager*
+RenderWidgetHostDelegate::GetOrCreateRootBrowserAccessibilityManager() {
   return nullptr;
 }
 
@@ -92,7 +93,7 @@ blink::mojom::DisplayMode RenderWidgetHostDelegate::GetDisplayMode() const {
 }
 
 ui::WindowShowState RenderWidgetHostDelegate::GetWindowShowState() {
-  return ui::WindowShowState::SHOW_STATE_DEFAULT;
+  return ui::mojom::WindowShowState::kDefault;
 }
 
 blink::mojom::DevicePostureProvider*
@@ -168,11 +169,6 @@ int RenderWidgetHostDelegate::GetVirtualKeyboardResizeHeight() {
 
 bool RenderWidgetHostDelegate::ShouldDoLearning() {
   return true;
-}
-
-std::optional<double> RenderWidgetHostDelegate::AdjustedChildZoom(
-    const RenderWidgetHostViewChildFrame* render_widget) {
-  return std::nullopt;
 }
 
 }  // namespace content

@@ -30,6 +30,7 @@
 #include <utility>
 
 #include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -137,10 +138,9 @@ ImageResource* CreateResourceForTransparentPlaceholderImage(
   response.SetHttpStatusText(AtomicString("OK"));
   response.SetCurrentRequestUrl(request.Url());
   response.SetExpectedContentLength(data->size());
-  response.SetTextEncodingName(WebString::FromUTF8(""));
-  response.SetMimeType(WebString::FromUTF8("image/gif"));
-  response.AddHttpHeaderField(WebString::FromUTF8("Content-Type"),
-                              WebString::FromUTF8("image/gif"));
+  response.SetTextEncodingName(g_empty_atom);
+  response.SetMimeType(AtomicString("image/gif"));
+  response.AddHttpHeaderField(http_names::kContentType, response.MimeType());
 
   // The below code is the same as in
   // `ResourceFetcher::CreateResourceForStaticData()`.
@@ -228,10 +228,9 @@ class ImageResource::ImageResourceInfoImpl final
   }
   void EmulateLoadStartedForInspector(
       ResourceFetcher* fetcher,
-      const KURL& url,
       const AtomicString& initiator_name) override {
     fetcher->EmulateLoadStartedForInspector(
-        resource_.Get(), url, mojom::blink::RequestContextType::IMAGE,
+        resource_.Get(), mojom::blink::RequestContextType::IMAGE,
         network::mojom::RequestDestination::kImage, initiator_name);
   }
 
@@ -389,6 +388,8 @@ ImageResource::ImageResource(const ResourceRequest& resource_request,
 ImageResource::~ImageResource() {
   RESOURCE_LOADING_DVLOG(1) << "~ImageResource " << this;
 
+  external_memory_accounter_.Clear(v8::Isolate::GetCurrent());
+
   if (is_referenced_from_ua_stylesheet_)
     InstanceCounters::DecrementCounter(InstanceCounters::kUACSSResourceCounter);
 }
@@ -425,6 +426,7 @@ void ImageResource::DestroyDecodedDataForFailedRevalidation() {
   // revalidation response.
   UpdateImage(nullptr, ImageResourceContent::kClearAndUpdateImage, false);
   SetDecodedSize(0);
+  external_memory_accounter_.Clear(v8::Isolate::GetCurrent());
 }
 
 void ImageResource::DestroyDecodedDataIfPossible() {
@@ -458,10 +460,7 @@ void ImageResource::AppendData(
   // method must be called with a `span<const char>` data.
   CHECK(absl::holds_alternative<base::span<const char>>(data));
   base::span<const char> span = absl::get<base::span<const char>>(data);
-  v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(span.size());
-  if (span.size() > 0) {
-    GetContent()->SetAllocatedExternalMemory();
-  }
+  external_memory_accounter_.Increase(v8::Isolate::GetCurrent(), span.size());
   if (multipart_parser_) {
     multipart_parser_->AppendData(span.data(),
                                   base::checked_cast<wtf_size_t>(span.size()));
@@ -521,6 +520,7 @@ void ImageResource::DecodeError(bool all_data_received) {
 
   ClearData();
   SetEncodedSize(0);
+  external_memory_accounter_.Clear(v8::Isolate::GetCurrent());
   if (!ErrorOccurred())
     SetStatus(ResourceStatus::kDecodeError);
 
@@ -582,6 +582,7 @@ void ImageResource::FinishAsError(const ResourceError& error,
   // TODO(hiroshige): Move setEncodedSize() call to Resource::error() if it
   // is really needed, or remove it otherwise.
   SetEncodedSize(0);
+  external_memory_accounter_.Clear(v8::Isolate::GetCurrent());
   is_during_finish_as_error_ = true;
   Resource::FinishAsError(error, task_runner);
   is_during_finish_as_error_ = false;
@@ -641,13 +642,9 @@ void ImageResource::OnePartInMultipartReceived(
   }
 }
 
-void ImageResource::MultipartDataReceived(const char* bytes, size_t size) {
+void ImageResource::MultipartDataReceived(base::span<const uint8_t> bytes) {
   DCHECK(multipart_parser_);
-  Resource::AppendData(
-      // SAFETY: The caller must ensure `bytes` points to `size` elements.
-      // TODO(crbug.com/40284755): Make this method take a span to capture the
-      // invariant.
-      UNSAFE_BUFFERS(base::span(bytes, size)));
+  Resource::AppendData(base::as_chars(bytes));
 }
 
 bool ImageResource::IsAccessAllowed(

@@ -21,8 +21,10 @@ import traceback
 
 import gclient_utils
 # import gerrit_util
+# import git_auth
 import git_cache
 import git_common
+# import newauth
 import scm
 import subprocess2
 
@@ -669,10 +671,33 @@ class GitWrapper(SCMWrapper):
                 # the cache to set and unset consecutively.
                 config_updates = []
 
-                if scm.GIT.GetConfig(args[0].checkout_path,
-                                     'diff.ignoresubmodules') != 'dirty':
-                    # If diff.ignoreSubmodules is not already set, set it to `all`.
+                if scm.GIT.GetConfig(
+                        args[0].checkout_path,
+                        'blame.ignorerevsfile') != '.git-blame-ignore-revs':
+                    config_updates.append(
+                        ('blame.ignoreRevsFile', '.git-blame-ignore-revs'))
+
+                ignore_submodules = scm.GIT.GetConfig(args[0].checkout_path,
+                                                      'diff.ignoresubmodules',
+                                                      None, 'local')
+
+                if not ignore_submodules:
                     config_updates.append(('diff.ignoreSubmodules', 'dirty'))
+                elif ignore_submodules != 'dirty':
+                    warning_message = (
+                        "diff.ignoreSubmodules is not set to 'dirty' "
+                        "for this repository.\n"
+                        "This may cause unexpected behavior with submodules; "
+                        "see //docs/git_submodules.md\n"
+                        "Consider setting the config:\n"
+                        "\tgit config diff.ignoreSubmodules dirty\n"
+                        "or disable this warning by setting the "
+                        "GCLIENT_SUPPRESS_SUBMODULE_WARNING\n"
+                        "environment variable to 1.")
+                    if os.environ.get(
+                            'GCLIENT_SUPPRESS_SUBMODULE_WARNING') != '1':
+                        gclient_utils.AddWarning(warning_message)
+
 
                 if scm.GIT.GetConfig(args[0].checkout_path,
                                      'fetch.recursesubmodules') != 'off':
@@ -754,12 +779,14 @@ class GitWrapper(SCMWrapper):
             # Rewrite remote refs to their local equivalents.
             revision = ''.join(remote_ref)
             rev_type = "branch"
-        elif revision.startswith('refs/'):
+        elif revision.startswith('refs/heads/'):
             # Local branch? We probably don't want to support, since DEPS should
             # always specify branches as they are in the upstream repo.
             rev_type = "branch"
         else:
-            # hash is also a tag, only make a distinction at checkout
+            # hash is also a tag, only make a distinction at checkout.
+            # Any ref (e.g. /refs/changes/*) not a branch has no difference from
+            # a hash.
             rev_type = "hash"
 
         # If we are going to introduce a new project, there is a possibility
@@ -1320,6 +1347,10 @@ class GitWrapper(SCMWrapper):
         # create it, so we need to do it manually.
         parent_dir = os.path.dirname(self.checkout_path)
         gclient_utils.safe_makedirs(parent_dir)
+
+        # Set up Git authentication configuration that is needed to clone/fetch the repo.
+#        if newauth.Enabled():
+#            git_auth.ConfigureGlobal('/', url)
 
         if hasattr(options, 'no_history') and options.no_history:
             self._Run(['init', self.checkout_path], options, cwd=self._root_dir)

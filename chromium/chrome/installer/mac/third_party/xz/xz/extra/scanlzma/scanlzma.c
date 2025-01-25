@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /*
     scanlzma, scan for lzma compressed data in stdin and echo it to stdout.
     Copyright (C) 2006 Timo Lindfors
@@ -37,6 +39,10 @@
 /*   5     8   Uncompressed size (little endian). -1 means unknown size */
 /*  13         Compressed data */
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
 #define BUFSIZE 4096
 
 int find_lzma_header(unsigned char *buf) {
@@ -48,7 +54,7 @@ int find_lzma_header(unsigned char *buf) {
 }
 
 int main(int argc, char *argv[]) {
-	char buf[BUFSIZE];
+	unsigned char buf[BUFSIZE];
 	int ret, i, numlzma, blocks=0;
 
 	if (argc != 2) {

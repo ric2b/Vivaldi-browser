@@ -1,43 +1,67 @@
 <style include="settings-shared input-device-settings-shared">
-    .device-info-header {
-      padding-block-end: 0;
-      padding-inline-start: 0;
-    }
+  .device-details {
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+  }
 
-    .device-details {
-      display: flex;
-      flex-direction: column;
-    }
+  .device-info {
+    align-items: center;
+    box-sizing: border-box;
+    display: flex;
+    gap: 16px;
+    padding-bottom: var(--cr-section-vertical-padding);
+    padding-inline-start: 18px;
+    padding-top: var(--cr-section-vertical-padding);
+  }
 
-    .device-info {
-      align-items: center;
-      display: flex;
-      gap: 10px;
-      padding-inline-start: 18px;
-    }
+  .device-image {
+    border-radius: 20px;
+    height: 32px;
+    width: 32px;
+  }
 
-    .device-image {
-      border-radius: 50%;
-      height: 36px;
-      width: 36px;
-    }
+  #deviceIcon {
+    --iron-icon-fill-color: var(--cros-sys-primary);
+  }
 
-    .device-details {
-      display: flex;
-      flex-direction: column;
-    }
-  </style>
+  .icon-container {
+    background-color: var(--cros-sys-primary_container);
+    border-radius: 50%;
+    height: 20px;
+    padding: 8px;
+    width: 20px;
+  }
+
+  .device-details {
+    display: flex;
+    flex-direction: column;
+  }
+</style>
+<div role="region" aria-label="[[getAriaLabel(name, batteryInfo.*)]]">
+  <h2 aria-hidden="true" class="subsection-header bottom-divider"
+      id="deviceName">
+    [[name]]
+  </h2>
   <template is="dom-if" if="[[isWelcomeExperienceEnabled]]">
-    <div class="device-info">
+    <div aria-hidden="true" class="device-info bottom-divider">
+      <template is="dom-if" if="[[shouldShowPlaceholder(deviceDisplayState)]]">
+        <div class="icon-container"></div>
+      </template>
+      <template is="dom-if"
+          if="[[shouldShowDeviceIcon(deviceDisplayState)]]" restamp>
+        <iron-icon icon="[[icon]]" class="icon-container" id="deviceIcon">
+        </iron-icon>
+      </template>
       <img
           class="device-image"
           src="[[deviceImageDataUrl]]"
           hidden="[[!deviceImageDataUrl]]"
           alt="">
       <div class="device-details">
-        <h2 class="subsection-header device-info-header" id="deviceName">
+        <div class="device-info-header" id="deviceInfoName">
           [[name]]
-        </h2>
+        </div>
         <template is="dom-if" if="[[showBatteryInfo(batteryInfo.*)]]">
           <bluetooth-battery-icon-percentage
               id="batteryIcon"
@@ -48,6 +72,4 @@
       </div>
     </div>
   </template>
-  <template is="dom-if" if="[[!isWelcomeExperienceEnabled]]">
-    <h2 class="subsection-header" id="deviceName">[[name]]</h2>
-  </template>
+</div>

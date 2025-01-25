@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "build/build_config.h"
@@ -44,6 +45,12 @@
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom-shared.h"
 
 namespace {
+
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::TimeDelta kPermissionsDelay = base::Milliseconds(0);
+#else
+constexpr base::TimeDelta kPermissionsDelay = base::Milliseconds(300);
+#endif
 
 device::mojom::XRRuntimeSessionOptionsPtr GetRuntimeOptions(
     device::mojom::XRSessionOptions* options) {
@@ -374,8 +381,10 @@ void VRServiceImpl::OnInlineSessionCreated(
       session_metrics_recorder = GetSessionMetricsHelper()->StartInlineSession(
           *(request.options), enabled_features, id.GetUnsafeValue());
 
-  OnSessionCreated(std::move(request), std::move(session_result->session),
-                   std::move(session_metrics_recorder));
+  OnSessionCreated(
+      std::move(request), std::move(session_result->session),
+      std::move(session_metrics_recorder),
+      mojo::PendingRemote<device::mojom::WebXrInternalsRendererListener>());
 }
 
 void VRServiceImpl::OnImmersiveSessionCreated(
@@ -433,7 +442,8 @@ void VRServiceImpl::OnImmersiveSessionCreated(
   }
 
   OnSessionCreated(std::move(request), std::move(session_result->session),
-                   std::move(session_metrics_recorder));
+                   std::move(session_metrics_recorder),
+                   runtime_manager_->GetLoggerManager().BindRenderListener());
 }
 
 void VRServiceImpl::OnInlineSessionDisconnected(
@@ -462,7 +472,9 @@ void VRServiceImpl::OnSessionCreated(
     SessionRequestData request,
     device::mojom::XRSessionPtr session,
     mojo::PendingRemote<device::mojom::XRSessionMetricsRecorder>
-        session_metrics_recorder) {
+        session_metrics_recorder,
+    mojo::PendingRemote<device::mojom::WebXrInternalsRendererListener>
+        xr_internals_listener) {
   DVLOG(2) << __func__ << ": session_runtime_id=" << request.runtime_id;
 
   // Not checking for validity of |session|, since that's done by
@@ -482,6 +494,8 @@ void VRServiceImpl::OnSessionCreated(
   auto success = device::mojom::RequestSessionSuccess::New();
   success->session = std::move(session);
   success->metrics_recorder = std::move(session_metrics_recorder);
+  success->trace_id = request.options->trace_id;
+  success->xr_internals_listener = std::move(xr_internals_listener);
 
   std::move(request.callback)
       .Run(device::mojom::RequestSessionResult::NewSuccess(std::move(success)));
@@ -557,6 +571,21 @@ void VRServiceImpl::RequestSession(
   GetPermissionStatus(std::move(request), runtime);
 }
 
+void VRServiceImpl::DoRequestPermissions(
+    const std::vector<blink::PermissionType> request_permissions,
+    base::OnceCallback<void(const std::vector<blink::mojom::PermissionStatus>&)>
+        result_callback) {
+  PermissionController* permission_controller =
+      GetWebContents()->GetBrowserContext()->GetPermissionController();
+  CHECK(permission_controller);
+
+  permission_controller->RequestPermissionsFromCurrentDocument(
+      render_frame_host_,
+      PermissionRequestDescription(request_permissions,
+                                   /*user_gesture=*/true),
+      std::move(result_callback));
+}
+
 void VRServiceImpl::GetPermissionStatus(SessionRequestData request,
                                         BrowserXRRuntimeImpl* runtime) {
   DVLOG(2) << __func__;
@@ -571,19 +600,13 @@ void VRServiceImpl::GetPermissionStatus(SessionRequestData request,
   }
 #endif
 
-  PermissionController* permission_controller =
-      GetWebContents()->GetBrowserContext()->GetPermissionController();
-  DCHECK(permission_controller);
-
   // Need to calculate the permissions before the call below, as otherwise
   // std::move nulls options out before `GetRequiredPermissions()` runs.
   const std::vector<blink::PermissionType> permissions_for_mode =
       GetRequiredPermissionsForMode(request.options->mode);
 
-  permission_controller->RequestPermissionsFromCurrentDocument(
-      render_frame_host_,
-      PermissionRequestDescription(permissions_for_mode,
-                                   /*user_gesture=*/true),
+  DoRequestPermissions(
+      permissions_for_mode,
       base::BindOnce(&VRServiceImpl::OnPermissionResultsForMode,
                      weak_ptr_factory_.GetWeakPtr(), std::move(request),
                      permissions_for_mode));
@@ -619,21 +642,27 @@ void VRServiceImpl::OnPermissionResultsForMode(
     return;
   }
 
-  PermissionController* permission_controller =
-      GetWebContents()->GetBrowserContext()->GetPermissionController();
-  DCHECK(permission_controller);
-
   const std::vector<blink::PermissionType> permissions_for_features =
       GetRequiredPermissionsForFeatures(request.required_features,
                                         request.optional_features);
 
-  permission_controller->RequestPermissionsFromCurrentDocument(
-      render_frame_host_,
-      PermissionRequestDescription(permissions_for_features,
-                                   /* user_gesture = */ true),
+  auto result_callback =
       base::BindOnce(&VRServiceImpl::OnPermissionResultsForFeatures,
                      weak_ptr_factory_.GetWeakPtr(), std::move(request),
-                     permissions_for_features));
+                     permissions_for_features);
+  if (permissions_for_features.empty()) {
+    std::move(result_callback).Run({});
+    return;
+  }
+
+  // TODO(https://crbug.com/364669911): Remove posted task once permissions code
+  // is fixed.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&VRServiceImpl::DoRequestPermissions,
+                     weak_ptr_factory_.GetWeakPtr(), permissions_for_features,
+                     std::move(result_callback)),
+      kPermissionsDelay);
 }
 
 void VRServiceImpl::OnPermissionResultsForFeatures(

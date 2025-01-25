@@ -30,14 +30,47 @@
         }
       },
       {
+        "id": "VivaldiPanel",
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "optional": true, "description": "Vivaldi WebPanel url." },
+          "title": { "type": "string", "optional": true, "description": "Vivaldi WebPanel title." },
+          "initialFaviconUrl": { "type": "string", "optional": true, "description": "Vivaldi WebPanel favIcon." },
+          "panelId": { "type": "string", "optional": true, "description": "Vivaldi WebPanel id." }
+        }
+      },
+      {
+        "id": "VivaldiWorkspace",
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "number", "optional": true, "description": "Vivaldi workspace ID." },
+          "iconId": { "type": "integer", "optional": true, "description": "Vivaldi icon ID." },
+          "icon": { "type": "string", "optional": true, "description": "Vivaldi icon SVG, if iconId is missing." },
+          "name": { "type": "string", "optional": true, "description": "The workspace name." },
+          "emoji": { "type": "string", "optional": true, "description": "The workspace emoji." }
+        }
+      },
+      {
+        "id": "VivaldiSpecific",
+        "type": "object",
+        "properties": {
+          "panels": { "type": "array", "items": {"$ref": "VivaldiPanel"}, "description": "Vivaldi panels." },
+          "workspaces": { "type": "array", "items": {"$ref": "VivaldiWorkspace"}, "description": "Vivaldi workspaces." }
+        }
+      },
+      {
         "id": "Device",
         "type": "object",
         "properties": {
           "info": {"type": "string", "nodoc": true},
           "deviceName": {"type": "string", "description": "The name of the foreign device."},
           "sessions": {"type": "array", "items": {"$ref": "Session"}, "description": "A list of open window sessions for the foreign device, sorted from most recently to least recently modified session."},
-          "vivExtData": { "type": "string", "optional": true, "description": "Vivaldi ext data" },
-          "deviceType": { "type": "string", "optional": true, "description": "Device type" }
+          "deviceType": { "type": "string", "optional": true, "description": "Device type" },
+          "vivaldiSpecific": {
+            "$ref": "VivaldiSpecific",
+            "optional": true,
+            "description": "Vivaldi specific data."
+          }
         }
       }
     ],

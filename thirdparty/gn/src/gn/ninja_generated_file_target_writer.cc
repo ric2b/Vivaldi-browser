@@ -4,8 +4,6 @@
 
 #include "gn/ninja_generated_file_target_writer.h"
 
-#include "base/strings/string_util.h"
-#include "gn/deps_iterator.h"
 #include "gn/output_conversion.h"
 #include "gn/output_file.h"
 #include "gn/scheduler.h"
@@ -26,24 +24,30 @@ void NinjaGeneratedFileTargetWriter::Run() {
   // Write the file.
   GenerateFile();
 
-  // A generated_file target should generate a stamp file with dependencies
+  // A generated_file target should generate a phony target with dependencies
   // on each of the deps and data_deps in the target. The actual collection is
-  // done at gen time, and so ninja doesn't need to know about it.
-  std::vector<OutputFile> output_files;
+  // done at gen time, but to have correct input deps in ninja, we add output
+  // from generated_file targets as deps for the stamp.
+  std::vector<OutputFile> output_files = target_->computed_outputs();
   std::vector<OutputFile> data_output_files;
   const auto& target_deps = resolved().GetTargetDeps(target_);
   for (const Target* dep : target_deps.linked_deps()) {
+    if (!dep->has_dependency_output()) {
+      continue;
+    }
     if (dep->IsDataOnly()) {
-      data_output_files.push_back(dep->dependency_output_file());
+      data_output_files.push_back(dep->dependency_output());
     } else {
-      output_files.push_back(dep->dependency_output_file());
+      output_files.push_back(dep->dependency_output());
     }
   }
 
-  for (const Target* data_dep : target_deps.data_deps())
-    data_output_files.push_back(data_dep->dependency_output_file());
+  for (const Target* data_dep : target_deps.data_deps()) {
+    if (data_dep->has_dependency_output())
+      data_output_files.push_back(data_dep->dependency_output());
+  }
 
-  WriteStampForTarget(output_files, data_output_files);
+  WriteStampOrPhonyForTarget(output_files, data_output_files);
 }
 
 void NinjaGeneratedFileTargetWriter::GenerateFile() {

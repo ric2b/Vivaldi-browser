@@ -109,7 +109,13 @@ struct unpacket_traits<Packet8h> {
 
 template <>
 EIGEN_STRONG_INLINE Packet32h pset1<Packet32h>(const Eigen::half& from) {
-  return _mm512_set1_ph(static_cast<_Float16>(from));
+  // half/half_raw is bit compatible
+  return _mm512_set1_ph(numext::bit_cast<_Float16>(from));
+}
+
+template <>
+EIGEN_STRONG_INLINE Packet32h pzero(const Packet32h& /*a*/) {
+  return _mm512_setzero_ph();
 }
 
 // pset1frombits
@@ -209,10 +215,8 @@ EIGEN_STRONG_INLINE Packet32h pmax<Packet32h>(const Packet32h& a, const Packet32
 // plset
 template <>
 EIGEN_STRONG_INLINE Packet32h plset<Packet32h>(const half& a) {
-  return _mm512_add_ph(_mm512_set1_ph(a),
-                       _mm512_set_ph(31.0f, 30.0f, 29.0f, 28.0f, 27.0f, 26.0f, 25.0f, 24.0f, 23.0f, 22.0f, 21.0f, 20.0f,
-                                     19.0f, 18.0f, 17.0f, 16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f, 8.0f,
-                                     7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f, 0.0f));
+  return _mm512_add_ph(pset1<Packet32h>(a), _mm512_set_ph(31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+                                                          16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0));
 }
 
 // por
@@ -256,7 +260,7 @@ EIGEN_DEVICE_FUNC inline Packet32h pselect(const Packet32h& mask, const Packet32
 template <>
 EIGEN_STRONG_INLINE Packet32h pcmp_eq(const Packet32h& a, const Packet32h& b) {
   __mmask32 mask = _mm512_cmp_ph_mask(a, b, _CMP_EQ_OQ);
-  return _mm512_castsi512_ph(_mm512_mask_set1_epi16(_mm512_set1_epi32(0), mask, 0xffffu));
+  return _mm512_castsi512_ph(_mm512_mask_set1_epi16(_mm512_set1_epi32(0), mask, static_cast<short>(0xffffu)));
 }
 
 // pcmp_le
@@ -264,7 +268,7 @@ EIGEN_STRONG_INLINE Packet32h pcmp_eq(const Packet32h& a, const Packet32h& b) {
 template <>
 EIGEN_STRONG_INLINE Packet32h pcmp_le(const Packet32h& a, const Packet32h& b) {
   __mmask32 mask = _mm512_cmp_ph_mask(a, b, _CMP_LE_OQ);
-  return _mm512_castsi512_ph(_mm512_mask_set1_epi16(_mm512_set1_epi32(0), mask, 0xffffu));
+  return _mm512_castsi512_ph(_mm512_mask_set1_epi16(_mm512_set1_epi32(0), mask, static_cast<short>(0xffffu)));
 }
 
 // pcmp_lt
@@ -272,7 +276,7 @@ EIGEN_STRONG_INLINE Packet32h pcmp_le(const Packet32h& a, const Packet32h& b) {
 template <>
 EIGEN_STRONG_INLINE Packet32h pcmp_lt(const Packet32h& a, const Packet32h& b) {
   __mmask32 mask = _mm512_cmp_ph_mask(a, b, _CMP_LT_OQ);
-  return _mm512_castsi512_ph(_mm512_mask_set1_epi16(_mm512_set1_epi32(0), mask, 0xffffu));
+  return _mm512_castsi512_ph(_mm512_mask_set1_epi16(_mm512_set1_epi32(0), mask, static_cast<short>(0xffffu)));
 }
 
 // pcmp_lt_or_nan
@@ -280,7 +284,7 @@ EIGEN_STRONG_INLINE Packet32h pcmp_lt(const Packet32h& a, const Packet32h& b) {
 template <>
 EIGEN_STRONG_INLINE Packet32h pcmp_lt_or_nan(const Packet32h& a, const Packet32h& b) {
   __mmask32 mask = _mm512_cmp_ph_mask(a, b, _CMP_NGE_UQ);
-  return _mm512_castsi512_ph(_mm512_mask_set1_epi16(_mm512_set1_epi16(0), mask, 0xffffu));
+  return _mm512_castsi512_ph(_mm512_mask_set1_epi16(_mm512_set1_epi16(0), mask, static_cast<short>(0xffffu)));
 }
 
 // padd
@@ -510,7 +514,7 @@ EIGEN_STRONG_INLINE Packet8h pnmsub(const Packet8h& a, const Packet8h& b, const 
 
 template <>
 EIGEN_STRONG_INLINE Packet32h pnegate<Packet32h>(const Packet32h& a) {
-  return _mm512_sub_ph(_mm512_set1_ph(0.0), a);
+  return psub(pzero(a), a);
 }
 
 // pconj

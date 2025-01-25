@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 
 assert(
     use_blink,
@@ -14,6 +15,8 @@ component("input") {
     "cursor_manager.cc",
     "cursor_manager.h",
     "event_with_latency_info.h",
+    "features.cc",
+    "features.h",
     "fling_controller.cc",
     "fling_controller.h",
     "fling_scheduler_base.h",
@@ -47,6 +50,7 @@ component("input") {
     "render_input_router_latency_tracker.h",
     "render_widget_host_input_event_router.cc",
     "render_widget_host_input_event_router.h",
+    "render_widget_host_view_input.cc",
     "render_widget_host_view_input.h",
     "render_widget_host_view_input_observer.cc",
     "render_widget_host_view_input_observer.h",
@@ -72,10 +76,13 @@ component("input") {
     "touchpad_tap_suppression_controller.h",
     "touchscreen_tap_suppression_controller.cc",
     "touchscreen_tap_suppression_controller.h",
+    "utils.cc",
+    "utils.h",
     "web_touch_event_traits.cc",
     "web_touch_event_traits.h",
   ]
   deps = [
+    ":mojom",
     "//base",
     "//cc",
     "//services/viz/public/mojom",
@@ -117,6 +124,23 @@ component("input") {
       "Foundation.framework",
     ]
   }
+}
+
+mojom_component("mojom") {
+  sources = [ "render_input_router.mojom" ]
+  public_deps = [ "//third_party/blink/public/mojom:mojom_platform" ]
+
+  overridden_deps = [ "//third_party/blink/public/mojom:mojom_platform" ]
+  component_deps = [ "//third_party/blink/public/common" ]
+
+  # It's important to specify these settings for Blink bindings, because the
+  # dependency above requires linkage into the platform library.
+  export_class_attribute_blink = "PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/blink/renderer/platform/platform_export.h"
+
+  output_prefix = "components_input_mojom"
+  macro_prefix = "COMPONENTS_INPUT_MOJOM"
 }
 
 source_set("unit_tests") {
@@ -168,5 +192,20 @@ source_set("test_support") {
     "//base",
     "//cc",
     "//third_party/blink/public/common:headers",
+  ]
+}
+
+source_set("browser_tests") {
+  testonly = true
+  sources = [ "test/input_browsertest.cc" ]
+
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  deps = [
+    "//base",
+    "//components/input",
+    "//content/shell:content_shell_lib",
+    "//content/test:browsertest_support",
+    "//content/test:test_support",
   ]
 }

@@ -18,12 +18,15 @@ static_library("bluetooth") {
     "arc_floss_bridge.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash/components/arc",
     "//ash/constants",
     "//base",
     "//chrome/browser/ash/profiles",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/webui/ash/bluetooth",
     "//components/arc",
     "//components/arc/common:arc_intent_helper_constants",
     "//components/device_event_log",

@@ -105,6 +105,27 @@ bool SetBookmarkThumbnail(BookmarkModel* model,
 
 void RemovePartnerId(BookmarkModel* model, const BookmarkNode* node);
 
+// Android and iOS specific functions
+// Returns the Bookmark Node which is potentially showed as the Start Page.
+// ***Conditions for Start Page:
+// |-| On fresh install first (with the order is comes from the backend) SD Node
+// from *bookmark_bar_node()* is shown as the Start Page.
+// |-| If users have their own set of SD,
+// first (with the order is comes from the backend) SD folder from
+// *bookmark_bar_node()* is shown as the Start Page.
+// |-| If *bookmark_bar_node()* does not have any SD folder then we sequentially
+// check *mobile_node()* and *other_node()* for any SD folder and returns first
+// found node if exists.
+// Returns nil if no SD folder found on any of the root nodes.
+const BookmarkNode* GetStartPageNode(BookmarkModel* model);
+
+// Returns if the given URL is added to the Start Page node.
+bool IsURLAddedToStartPage(BookmarkModel* model, const GURL& url);
+
+// Helper method to find if given Node is Start Page node by checking certain
+// conditions.
+const BookmarkNode* FindStartPageNode(const BookmarkNode* node);
+
 // Android-specific functions
 
 void SetNodeNickname(BookmarkModel* model,

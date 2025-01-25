@@ -316,23 +316,6 @@ void TransferredMediaStreamTrack::UnregisterMediaStream(MediaStream* stream) {
   // initialized.
 }
 
-#if !BUILDFLAG(IS_ANDROID)
-void TransferredMediaStreamTrack::SendWheel(
-    double relative_x,
-    double relative_y,
-    int wheel_delta_x,
-    int wheel_delta_y,
-    base::OnceCallback<void(DOMException*)> callback) {
-  NOTREACHED_NORETURN();
-}
-
-void TransferredMediaStreamTrack::SetZoomLevel(
-    int zoom_level,
-    base::OnceCallback<void(DOMException*)> callback) {
-  NOTREACHED_NORETURN();
-}
-#endif
-
 // EventTarget
 const AtomicString& TransferredMediaStreamTrack::InterfaceName() const {
   // TODO(https://crbug.com/1288839): Should TMST have its own interface name?

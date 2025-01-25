@@ -33,6 +33,7 @@
 
 #include "base/containers/contains.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
+#include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_v8_reference.h"
 #include "third_party/blink/renderer/platform/bindings/wrapper_type_info.h"
@@ -89,8 +90,22 @@ class DOMDataStore final : public GarbageCollected<DOMDataStore> {
                                         v8::Local<v8::Object> v8_receiver,
                                         const ScriptWrappable* blink_receiver);
 
+  // Returns the wrapper for `object` in the world corresponding to
+  // `script_state`. Can be used from any world. Cross-checks the world in
+  // `script_state` against the current world used by the Isolate (in the script
+  // state).
+  //
+  // Prefer this method over the version taking the Isolate parameter for
+  // performance reasons.
+  static inline v8::MaybeLocal<v8::Object> GetWrapper(
+      ScriptState* script_state,
+      const ScriptWrappable* object);
+
   // Returns the wrapper for `object` in the world corresponding to `isolate`.
   // Can be used from any world. Will only consider the current world.
+  //
+  // Prefer the method taking the ScriptState if possible for performance
+  // reasons.
   static inline v8::MaybeLocal<v8::Object> GetWrapper(
       v8::Isolate* isolate,
       const ScriptWrappable* object);
@@ -310,12 +325,24 @@ v8::MaybeLocal<v8::Object> DOMDataStore::GetWrapper(
   return Current(isolate).Get(isolate, object);
 }
 
+// static
+v8::MaybeLocal<v8::Object> DOMDataStore::GetWrapper(
+    ScriptState* script_state,
+    const ScriptWrappable* object) {
+  DOMDataStore& store = script_state->World().DomDataStore();
+  auto* isolate = script_state->GetIsolate();
+  return store.Get(isolate, object);
+}
+
 template <bool entered_context>
 v8::MaybeLocal<v8::Object> DOMDataStore::Get(v8::Isolate* isolate,
                                              const ScriptWrappable* object) {
+  DCHECK(!CanUseInlineStorageForWrapper() || can_use_inline_storage_);
   if (can_use_inline_storage_) {
-    return entered_context ? GetInlineStorage(isolate, object).Get(isolate)
-                           : GetUncheckedInlineStorage(object).Get(isolate);
+    // The following will crash if no context is entered. This is by design. The
+    // validation can be skipped with `entered_context`.
+    DCHECK(!entered_context || Current(isolate).can_use_inline_storage_);
+    return GetUncheckedInlineStorage(object).Get(isolate);
   }
   if (const auto it = wrapper_map_.find(object); it != wrapper_map_.end()) {
     return it->value.Get(isolate);
@@ -345,7 +372,7 @@ bool DOMDataStore::SetWrapperInInlineStorage(
   DCHECK(!wrapper.IsEmpty());
   auto& ref = entered_context ? GetInlineStorage(isolate, object)
                               : GetUncheckedInlineStorage(object);
-  if (UNLIKELY(!ref.IsEmpty())) {
+  if (!ref.IsEmpty()) [[unlikely]] {
     wrapper = ref.Get(isolate);
     return false;
   }
@@ -379,7 +406,7 @@ bool DOMDataStore::Set(v8::Isolate* isolate,
   // TODO(mlippautz): Check whether there's still recursive cases of
   // Wrap()/AssociateWithWrapper() that can run into the case of an existing
   // entry.
-  if (UNLIKELY(!result.is_new_entry)) {
+  if (!result.is_new_entry) [[unlikely]] {
     CHECK(!result.stored_value->value.IsEmpty());
     wrapper = result.stored_value->value.Get(isolate);
   }
@@ -407,7 +434,7 @@ bool DOMDataStore::Contains(const ScriptWrappable* object) const {
 template <typename HandleType>
 bool DOMDataStore::ClearWrapperInAnyWorldIfEqualTo(ScriptWrappable* object,
                                                    const HandleType& handle) {
-  if (LIKELY(ClearInlineStorageWrapperIfEqualTo(object, handle))) {
+  if (ClearInlineStorageWrapperIfEqualTo(object, handle)) [[likely]] {
     return true;
   }
   return DOMWrapperWorld::ClearWrapperInAnyNonInlineStorageWorldIfEqualTo(

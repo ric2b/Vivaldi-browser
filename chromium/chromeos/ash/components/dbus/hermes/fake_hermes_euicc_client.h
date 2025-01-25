@@ -34,9 +34,6 @@ class COMPONENT_EXPORT(HERMES_CLIENT) FakeHermesEuiccClient
              dbus::PropertySet::SetCallback callback) override;
   };
 
-  // Constants used for testing.
-  static constexpr char kFakeDefaultApn[] = "default_apn";
-
   FakeHermesEuiccClient();
   FakeHermesEuiccClient(const FakeHermesEuiccClient&) = delete;
   FakeHermesEuiccClient& operator=(const FakeHermesEuiccClient&) = delete;
@@ -132,6 +129,9 @@ class COMPONENT_EXPORT(HERMES_CLIENT) FakeHermesEuiccClient
                                          std::string activation_code);
   void CreateCellularService(const dbus::ObjectPath& euicc_path,
                              const dbus::ObjectPath& carrier_profile_path);
+  // Add the default cellular APN. This is intended to simulate the
+  // auto-detecting APN in Shill.
+  void CreateDefaultModbApn(const std::string& service_path);
   void CallNotifyPropertyChanged(const dbus::ObjectPath& object_path,
                                  const std::string& property_name);
   void NotifyPropertyChanged(const dbus::ObjectPath& object_path,

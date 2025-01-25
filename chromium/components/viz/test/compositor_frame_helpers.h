@@ -87,6 +87,7 @@ class RenderPassBuilder {
   RenderPassBuilder& SetHasDamageFromContributingContent(bool val);
   RenderPassBuilder& AddFilter(const cc::FilterOperation& filter);
   RenderPassBuilder& AddBackdropFilter(const cc::FilterOperation& filter);
+  RenderPassBuilder& SetTransformToRootTarget(const gfx::Transform& transform);
 
   // Creates a new stub CopyOutputRequest and adds it to the render pass. If
   // |request_out| is not null the pointer will set to the newly created
@@ -242,6 +243,8 @@ class CompositorFrameBuilder {
       std::vector<SurfaceId> activation_dependencies);
   CompositorFrameBuilder& SetDeadline(const FrameDeadline& deadline);
   CompositorFrameBuilder& SetSendFrameTokenToEmbedder(bool send);
+  CompositorFrameBuilder& SetIsHandlingInteraction(
+      bool is_handling_interaction);
 
   CompositorFrameBuilder& AddDelegatedInkMetadata(
       const gfx::DelegatedInkMetadata& metadata);
@@ -273,6 +276,9 @@ CompositorFrame MakeCompositorFrame(CompositorRenderPassList render_pass_list);
 
 // Makes an aggregated frame out of the default compositor frame.
 AggregatedFrame MakeDefaultAggregatedFrame(size_t num_render_passes = 1);
+
+CompositorFrame MakeDefaultInteractiveCompositorFrame(
+    uint64_t source_id = BeginFrameArgs::kManualSourceId);
 
 // Creates a CompositorFrame that will be valid once its render_pass_list is
 // initialized.

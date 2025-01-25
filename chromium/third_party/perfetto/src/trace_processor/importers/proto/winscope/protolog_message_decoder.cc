@@ -26,7 +26,8 @@
 
 namespace perfetto::trace_processor {
 
-ProtoLogMessageDecoder::ProtoLogMessageDecoder() = default;
+ProtoLogMessageDecoder::ProtoLogMessageDecoder(TraceProcessorContext* context)
+    : context_(context) {}
 ProtoLogMessageDecoder::~ProtoLogMessageDecoder() = default;
 
 std::optional<DecodedMessage> ProtoLogMessageDecoder::Decode(
@@ -118,19 +119,32 @@ std::optional<DecodedMessage> ProtoLogMessageDecoder::Decode(
     }
   }
 
-  return DecodedMessage{tracked_message->level, group->tag, formatted_message};
+  return DecodedMessage{tracked_message->level, group->tag, formatted_message,
+                        tracked_message->location};
 }
 
 void ProtoLogMessageDecoder::TrackGroup(uint32_t id, const std::string& tag) {
+  auto tracked_group = tracked_groups_.Find(id);
+  if (tracked_group != nullptr && tracked_group->tag != tag) {
+    context_->storage->IncrementStats(
+            stats::winscope_protolog_view_config_collision);
+  }
   tracked_groups_.Insert(id, TrackedGroup{tag});
 }
 
-void ProtoLogMessageDecoder::TrackMessage(uint64_t message_id,
-                                          ProtoLogLevel level,
-                                          uint32_t group_id,
-                                          const std::string& message) {
+void ProtoLogMessageDecoder::TrackMessage(
+    uint64_t message_id,
+    ProtoLogLevel level,
+    uint32_t group_id,
+    const std::string& message,
+    const std::optional<std::string>& location) {
+  auto tracked_message = tracked_messages_.Find(message_id);
+  if (tracked_message != nullptr && tracked_message->message != message) {
+    context_->storage->IncrementStats(
+            stats::winscope_protolog_view_config_collision);
+  }
   tracked_messages_.Insert(message_id,
-                           TrackedMessage{level, group_id, message});
+                           TrackedMessage{level, group_id, message, location});
 }
 
 }  // namespace perfetto::trace_processor

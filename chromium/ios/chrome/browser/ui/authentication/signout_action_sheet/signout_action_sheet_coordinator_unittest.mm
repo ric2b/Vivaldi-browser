@@ -20,8 +20,8 @@
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -63,7 +63,7 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
         AuthenticationServiceFactory::GetDefaultFactory());
     builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
                               base::BindRepeating(&CreateMockSyncService));
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         browser_state_.get(),
         std::make_unique<FakeAuthenticationServiceDelegate>());
@@ -104,7 +104,9 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
     return signout_coordinator_;
   }
 
-  PrefService* GetLocalState() { return scoped_testing_local_state_.Get(); }
+  PrefService* GetLocalState() {
+    return GetApplicationContext()->GetLocalState();
+  }
 
   PrefService* GetPrefs() { return browser_state_->GetPrefs(); }
 
@@ -179,9 +181,9 @@ TEST_F(SignoutActionSheetCoordinatorTest,
   // Mock returning no unsynced datatype.
   ON_CALL(*sync_service_mock_, GetTypesWithUnsyncedData)
       .WillByDefault(
-          [](syncer::ModelTypeSet requested_types,
-             base::OnceCallback<void(syncer::ModelTypeSet)> callback) {
-            std::move(callback).Run(syncer::ModelTypeSet());
+          [](syncer::DataTypeSet requested_types,
+             base::OnceCallback<void(syncer::DataTypeSet)> callback) {
+            std::move(callback).Run(syncer::DataTypeSet());
           });
   EXPECT_CALL(completion_callback_, Run);
 
@@ -201,9 +203,9 @@ TEST_F(SignoutActionSheetCoordinatorTest, ShouldShowActionSheetIfUnsyncedData) {
   // Mock returning unsynced datatypes.
   ON_CALL(*sync_service_mock_, GetTypesWithUnsyncedData)
       .WillByDefault(
-          [](syncer::ModelTypeSet requested_types,
-             base::OnceCallback<void(syncer::ModelTypeSet)> callback) {
-            constexpr syncer::ModelTypeSet kUnsyncedTypes = {
+          [](syncer::DataTypeSet requested_types,
+             base::OnceCallback<void(syncer::DataTypeSet)> callback) {
+            constexpr syncer::DataTypeSet kUnsyncedTypes = {
                 syncer::BOOKMARKS, syncer::PREFERENCES};
             std::move(callback).Run(
                 base::Intersection(kUnsyncedTypes, requested_types));
@@ -216,12 +218,12 @@ TEST_F(SignoutActionSheetCoordinatorTest, ShouldShowActionSheetIfUnsyncedData) {
 
   histogram_tester.ExpectTotalCount("Sync.UnsyncedDataOnSignout2", 1u);
   histogram_tester.ExpectBucketCount("Sync.UnsyncedDataOnSignout2",
-                                     syncer::ModelTypeForHistograms::kBookmarks,
+                                     syncer::DataTypeForHistograms::kBookmarks,
                                      1u);
   // Only a few "interesting" data types are recorded. PREFERENCES is not.
   histogram_tester.ExpectBucketCount(
       "Sync.UnsyncedDataOnSignout2",
-      syncer::ModelTypeForHistograms::kPreferences, 0u);
+      syncer::DataTypeForHistograms::kPreferences, 0u);
 
   histogram_tester.ExpectTotalCount("Sync.SignoutWithUnsyncedData", 0u);
 }
@@ -241,9 +243,9 @@ TEST_F(SignoutActionSheetCoordinatorTest,
   EXPECT_CALL(*sync_service_mock_, GetTypesWithUnsyncedData)
       .Times(testing::AtLeast(1))
       .WillRepeatedly(
-          [](syncer::ModelTypeSet requested_types,
-             base::OnceCallback<void(syncer::ModelTypeSet)> callback) {
-            constexpr syncer::ModelTypeSet kUnsyncedTypes = {
+          [](syncer::DataTypeSet requested_types,
+             base::OnceCallback<void(syncer::DataTypeSet)> callback) {
+            constexpr syncer::DataTypeSet kUnsyncedTypes = {
                 syncer::BOOKMARKS, syncer::PREFERENCES};
             std::move(callback).Run(
                 base::Intersection(kUnsyncedTypes, requested_types));

@@ -20,7 +20,6 @@
 #include "ash/wm/overview/delayed_animation_observer_impl.h"
 #include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/overview/overview_focus_cycler_old.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_session.h"
@@ -282,7 +281,7 @@ gfx::Rect GetGridBoundsInScreen(
       case SplitViewController::State::kBothSnapped:
         // When this function is called, SplitViewController should have
         // already handled the state change.
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
 
@@ -318,11 +317,11 @@ gfx::Rect GetGridBoundsInScreen(
     }
   }
 
-  // Clamp the bounds of the overview grid such that it doesn't go below 1/3 of
-  // the work area length.
+  // Clamp the bounds of the overview grid such that it doesn't go below
+  // `kOverviewGridClampThresholdRatio` of the work area length.
   const bool horizontal = IsLayoutHorizontal(target_root);
-  const int min_length =
-      (horizontal ? work_area.width() : work_area.height()) / 3;
+  const int min_length = (horizontal ? work_area.width() : work_area.height()) *
+                         kOverviewGridClampThresholdRatio;
   const int current_length = horizontal ? bounds.width() : bounds.height();
 
   if (current_length > min_length)
@@ -388,21 +387,6 @@ bool ShouldUseTabletModeGridLayout() {
 gfx::Rect ToStableSizeRoundedRect(const gfx::RectF& rect) {
   return gfx::Rect(gfx::ToRoundedPoint(rect.origin()),
                    gfx::ToRoundedSize(rect.size()));
-}
-
-void MoveFocusToView(OverviewFocusableView* target_view) {
-  auto* overview_session = OverviewController::Get()->overview_session();
-  // Events should not be processed on overview widgets after it has shutdown.
-  // However, there are some edge cases where the gesture stream has started
-  // almost immediately before overview shutdown, and the rest of the stream
-  // still reaches the widget. See http://b/302708219.
-  if (!overview_session) {
-    return;
-  }
-
-  if (auto* focus_cycler_old = overview_session->focus_cycler_old()) {
-    focus_cycler_old->MoveFocusToView(target_view);
-  }
 }
 
 bool IsEligibleForDraggingToSnapInOverview(OverviewItemBase* item) {

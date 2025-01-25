@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/filters/source_buffer_stream.h"
 
 #include <algorithm>
@@ -79,7 +84,7 @@ std::string StatusToString(const SourceBufferStreamStatus& status) {
     case SourceBufferStreamStatus::kEndOfStream:
       return "kEndOfStream";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // Helper method for logging, converts a range into a readable string.
@@ -1987,7 +1992,7 @@ std::string SourceBufferStream::GetStreamTypeName() const {
     case SourceBufferStreamType::kVideo:
       return "VIDEO";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 SourceBufferStreamType SourceBufferStream::GetType() const {

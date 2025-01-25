@@ -447,6 +447,7 @@ absl::StatusOr<GlobalDataHandle> Service::ExecuteAndRegisterResult(
     ExecutableRunOptions options;
     options.set_stream(stream.get());
     options.set_device_ordinal(stream->parent()->device_ordinal());
+    options.set_local_device_count(backend->device_count());
     options.set_allocator(backend->memory_allocator());
     options.set_intra_op_thread_pool(
         backend->eigen_intra_op_thread_pool_device());
@@ -921,8 +922,9 @@ absl::StatusOr<Literal> Service::TransferToClient(
     }
   }
 
-  TF_ASSIGN_OR_RETURN(auto stream, execute_backend_->BorrowStream(
-                                       shaped_buffer->device_ordinal()));
+  TF_ASSIGN_OR_RETURN(
+      auto stream,
+      execute_backend_->BorrowStream(shaped_buffer->physical_device_ordinal()));
 
   TF_ASSIGN_OR_RETURN(
       Literal result_literal,

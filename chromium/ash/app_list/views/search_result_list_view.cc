@@ -68,8 +68,7 @@ SearchResultListView::SearchResultListType CategoryToListType(
     case ash::AppListSearchResultCategory::kGames:
       return SearchResultListView::SearchResultListType::kGames;
     case ash::AppListSearchResultCategory::kUnknown:
-      NOTREACHED_IN_MIGRATION();
-      return SearchResultListView::SearchResultListType::kBestMatch;
+      NOTREACHED();
   }
 }
 
@@ -91,14 +90,10 @@ SearchResultListView::SearchResultListView(
       u"", CONTEXT_SEARCH_RESULT_CATEGORY_LABEL, STYLE_LAUNCHER));
   title_label_->SetBackgroundColor(SK_ColorTRANSPARENT);
   title_label_->SetAutoColorReadabilityEnabled(false);
-  if (chromeos::features::IsJellyEnabled()) {
-    TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosBody2,
-                                          *title_label_);
-    title_label_->SetEnabledColorId(
-        static_cast<ui::ColorId>(cros_tokens::kCrosSysOnSurfaceVariant));
-  } else {
-    title_label_->SetEnabledColorId(kColorAshTextColorSecondary);
-  }
+  TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosBody2,
+                                        *title_label_);
+  title_label_->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
+
   title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title_label_->SetBorder(views::CreateEmptyBorder(gfx::Insets::TLBR(
       kPreferredTitleTopMargins, kPreferredTitleHorizontalMargins,
@@ -339,10 +334,6 @@ gfx::Size SearchResultListView::CalculatePreferredSize(
   return results_container_->GetPreferredSize(available_size);
 }
 
-int SearchResultListView::GetHeightForWidth(int w) const {
-  return results_container_->GetHeightForWidth(w);
-}
-
 void SearchResultListView::SearchResultActivated(SearchResultView* view,
                                                  int event_flags,
                                                  bool by_button_press) {
@@ -385,8 +376,7 @@ SearchResult::Category SearchResultListView::GetSearchCategory() {
     case SearchResultListType::kAnswerCard:
       // Categories are undefined for |KBestMatch|, and
       // |kAnswerCard| list types.
-      NOTREACHED_IN_MIGRATION();
-      return SearchResult::Category::kUnknown;
+      NOTREACHED();
     case SearchResultListType::kApps:
       return SearchResult::Category::kApps;
     case SearchResultListType::kAppShortcuts:

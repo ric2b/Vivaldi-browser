@@ -15,7 +15,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/leveldatabase/src/include/leveldb/slice.h"
 
-namespace content {
+namespace content::indexed_db {
 namespace {
 
 class LevelDBScopesStartupTest : public LevelDBScopesTestBase {
@@ -99,7 +99,7 @@ TEST_F(LevelDBScopesStartupTest, RevertWithLocksOnRecoveryWithNoCleanup) {
   bool lock_grabbed = false;
   PartitionedLockHolder locks_receiver;
   lock_manager.AcquireLocks(
-      {CreateSimpleExclusiveLock()}, locks_receiver.AsWeakPtr(),
+      {CreateSimpleExclusiveLock()}, locks_receiver,
       base::BindLambdaForTesting([&]() { lock_grabbed = true; }));
 
   scopes.StartRecoveryAndCleanupTasks();
@@ -140,4 +140,4 @@ TEST_F(LevelDBScopesStartupTest, RevertWithLocksOnRecoveryWithNoCleanup) {
 }
 
 }  // namespace
-}  // namespace content
+}  // namespace content::indexed_db

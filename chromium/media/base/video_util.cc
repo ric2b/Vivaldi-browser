@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/base/video_util.h"
 
 #include <cmath>
@@ -676,7 +681,7 @@ scoped_refptr<VideoFrame> ReadbackTextureBackedFrameToMemorySync(
                  txt_frame.natural_size(), txt_frame.timestamp());
   result->set_color_space(txt_frame.ColorSpace());
   result->metadata().MergeMetadataFrom(txt_frame.metadata());
-  result->metadata().ClearTextureFrameMedatada();
+  result->metadata().ClearTextureFrameMetadata();
 
   // NOTE: Iterating over the number of planes of the readback format (rather
   // than `txt_frame`) ensures that frames with external
@@ -744,7 +749,7 @@ MEDIA_EXPORT SkColorType SkColorTypeForPlane(VideoPixelFormat format,
     case PIXEL_FORMAT_ARGB:
       return kBGRA_8888_SkColorType;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

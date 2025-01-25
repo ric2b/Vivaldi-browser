@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "cc/metrics/dropped_frame_counter.h"
 
 #include <algorithm>
@@ -369,20 +374,6 @@ void DroppedFrameCounter::ReportFramesOnEveryFrameForUI() {
 
   recorder->ReportPercentDroppedFramesInOneSecondWindow2(
       *sliding_window_current_percent_dropped_);
-}
-
-double DroppedFrameCounter::GetMostRecentAverageSmoothness() const {
-  if (ukm_smoothness_data_)
-    return ukm_smoothness_data_->data.avg_smoothness;
-
-  return -1.f;
-}
-
-double DroppedFrameCounter::GetMostRecent95PercentileSmoothness() const {
-  if (ukm_smoothness_data_)
-    return ukm_smoothness_data_->data.percentile_95;
-
-  return -1.f;
 }
 
 void DroppedFrameCounter::SetUkmSmoothnessDestination(

@@ -14,26 +14,25 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/values.h"
+#include "chrome/browser/ash/login/configuration_keys.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/oobe_configuration.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_context.h"
-#include "chrome/browser/ash/policy/core/device_cloud_policy_manager_ash.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_token_provider.h"
 #include "chrome/browser/ash/policy/server_backed_state/server_backed_device_state.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/system/statistics_provider.h"
+#include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_service.h"
 
 namespace policy {
 namespace {
 
 const char kRecoveryHistogram[] = "EnterpriseCheck.EnrollementRecoveryOnBoot";
-
-const char kZeroTouchEnrollmentForced[] = "forced";
 
 // Do not reorder or delete entries because it is used in UMA.
 enum class EnrollmentRecoveryOnBootUma {
@@ -105,7 +104,7 @@ std::string_view ToStringView(EnrollmentConfig::Mode mode) {
     CASE(MODE_ENROLLMENT_TOKEN_INITIAL_MANUAL_FALLBACK);
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 #undef CASE
 }
 
@@ -121,40 +120,8 @@ std::string_view ToStringView(EnrollmentConfig::AuthMechanism auth) {
     CASE(AUTH_MECHANISM_TOKEN_PREFERRED);
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 #undef CASE
-}
-
-EnrollmentConfig::AuthMechanism GetPrescribedAuthMechanism(
-    PrefService* local_state) {
-  // Authentication through the attestation mechanism is controlled by a
-  // command line switch that either enables it or forces it (meaning that
-  // interactive authentication is disabled).
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(
-          ash::switches::kEnterpriseEnableZeroTouchEnrollment)) {
-    return EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE;
-  }
-
-  const std::string value = command_line->GetSwitchValueASCII(
-      ash::switches::kEnterpriseEnableZeroTouchEnrollment);
-  if (value == kZeroTouchEnrollmentForced) {
-    return EnrollmentConfig::AUTH_MECHANISM_ATTESTATION;
-  }
-
-  if (value.empty()) {
-    // If OOBE is done and we are not enrolled, make sure we only try
-    // interactive enrollment.
-    if (local_state->GetBoolean(ash::prefs::kOobeComplete)) {
-      return EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE;
-    }
-    return EnrollmentConfig::AUTH_MECHANISM_ATTESTATION_PREFERRED;
-  }
-
-  LOG(WARNING) << "Malformed value \"" << value << "\" for switch --"
-               << ash::switches::kEnterpriseEnableZeroTouchEnrollment
-               << ". Ignoring switch.";
-  return EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE;
 }
 
 EnrollmentConfig GetPrescribedRecoveryConfig(
@@ -163,8 +130,8 @@ EnrollmentConfig GetPrescribedRecoveryConfig(
     ash::system::StatisticsProvider* statistics_provider) {
   EnrollmentConfig recovery_config;
 
-  // Regardless what mode is applicable, auth mechanism must be prescribed one.
-  recovery_config.auth_mechanism = GetPrescribedAuthMechanism(local_state);
+  // Regardless what mode is applicable, auth mechanism must be manual one.
+  recovery_config.auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE;
 
   // Regardless what mode is applicable, the enrollment domain is fixed.
   recovery_config.management_domain = install_attributes.GetDomain();
@@ -199,6 +166,20 @@ EnrollmentConfig GetPrescribedRecoveryConfig(
   return recovery_config;
 }
 
+OOBEConfigSource ConvertToOOBEConfigSource(
+    const std::string* oobe_config_source) {
+  if (!oobe_config_source || oobe_config_source->empty()) {
+    return OOBEConfigSource::kNone;
+  }
+  if (*oobe_config_source == "REMOTE_DEPLOYMENT") {
+    return OOBEConfigSource::kRemoteDeployment;
+  }
+  if (*oobe_config_source == "PACKAGING_TOOL") {
+    return OOBEConfigSource::kPackagingTool;
+  }
+  return OOBEConfigSource::kUnknown;
+}
+
 }  // namespace
 
 struct EnrollmentConfig::PrescribedConfig {
@@ -206,6 +187,7 @@ struct EnrollmentConfig::PrescribedConfig {
   EnrollmentConfig::AuthMechanism auth_mechanism;
   std::string management_domain;
   std::string enrollment_token;
+  OOBEConfigSource oobe_config_source;
 
   static PrescribedConfig GetPrescribedConfig(
       PrefService* local_state,
@@ -235,13 +217,13 @@ EnrollmentConfig::PrescribedConfig::GetPrescribedConfig(
 
   if (device_state_mode == kDeviceStateRestoreModeReEnrollmentEnforced) {
     return {.mode = EnrollmentConfig::MODE_SERVER_FORCED,
-            .auth_mechanism = GetPrescribedAuthMechanism(local_state),
+            .auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE,
             .management_domain = device_state_management_domain};
   }
 
   if (device_state_mode == kDeviceStateInitialModeEnrollmentEnforced) {
     return {.mode = EnrollmentConfig::MODE_INITIAL_SERVER_FORCED,
-            .auth_mechanism = GetPrescribedAuthMechanism(local_state),
+            .auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE,
             .management_domain = device_state_management_domain};
   }
 
@@ -265,13 +247,16 @@ EnrollmentConfig::PrescribedConfig::GetPrescribedConfig(
     // TODO(b/329271128): CHECK to ensure enrollment_token always has value
     // after this bug is fixed.
     if (enrollment_token.has_value()) {
+      const std::string* oobe_config_source =
+          oobe_configuration->configuration().FindString(
+              ash::configuration::kSource);
       return {
           .mode = EnrollmentConfig::MODE_ENROLLMENT_TOKEN_INITIAL_SERVER_FORCED,
           .auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_TOKEN_PREFERRED,
-          .enrollment_token = std::move(enrollment_token.value())};
+          .enrollment_token = std::move(enrollment_token.value()),
+          .oobe_config_source = ConvertToOOBEConfigSource(oobe_config_source)};
     } else {
-      return {.mode = EnrollmentConfig::MODE_NONE,
-              .auth_mechanism = GetPrescribedAuthMechanism(local_state)};
+      return {.mode = EnrollmentConfig::MODE_NONE};
     }
   }
 
@@ -288,7 +273,7 @@ EnrollmentConfig::PrescribedConfig::GetPrescribedConfig(
   if (pref_enrollment_auto_start_present && pref_enrollment_auto_start &&
       pref_enrollment_can_exit_present && !pref_enrollment_can_exit) {
     return {.mode = EnrollmentConfig::MODE_LOCAL_FORCED,
-            .auth_mechanism = GetPrescribedAuthMechanism(local_state)};
+            .auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE};
   }
 
   const bool oem_is_managed = ash::system::StatisticsProvider::FlagValueToBool(
@@ -303,34 +288,32 @@ EnrollmentConfig::PrescribedConfig::GetPrescribedConfig(
 
   if (oem_is_managed && !oem_can_exit_enrollment) {
     return {.mode = EnrollmentConfig::MODE_LOCAL_FORCED,
-            .auth_mechanism = GetPrescribedAuthMechanism(local_state)};
+            .auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE};
   }
 
   if (local_state->GetBoolean(ash::prefs::kOobeComplete)) {
     // If OOBE is complete, don't return advertised modes as there's currently
     // no way to make sure advertised enrollment only gets shown once.
-    return {.mode = EnrollmentConfig::MODE_NONE,
-            .auth_mechanism = GetPrescribedAuthMechanism(local_state)};
+    return {.mode = EnrollmentConfig::MODE_NONE};
   }
 
   if (device_state_mode == kDeviceStateRestoreModeReEnrollmentRequested) {
     return {.mode = EnrollmentConfig::MODE_SERVER_ADVERTISED,
-            .auth_mechanism = GetPrescribedAuthMechanism(local_state),
+            .auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE,
             .management_domain = device_state_management_domain};
   }
 
   if (pref_enrollment_auto_start_present && pref_enrollment_auto_start) {
     return {.mode = EnrollmentConfig::MODE_LOCAL_ADVERTISED,
-            .auth_mechanism = GetPrescribedAuthMechanism(local_state)};
+            .auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE};
   }
 
   if (oem_is_managed) {
     return {.mode = EnrollmentConfig::MODE_LOCAL_ADVERTISED,
-            .auth_mechanism = GetPrescribedAuthMechanism(local_state)};
+            .auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE};
   }
 
-  return {.mode = EnrollmentConfig::MODE_NONE,
-          .auth_mechanism = GetPrescribedAuthMechanism(local_state)};
+  return {.mode = EnrollmentConfig::MODE_NONE};
 }
 
 struct EnrollmentConfig::PrescribedLicense {
@@ -390,7 +373,8 @@ EnrollmentConfig::EnrollmentConfig(PrescribedConfig prescribed_config,
           prescribed_license.is_license_packaged_with_device),
       license_type(prescribed_license.license_type),
       assigned_upgrade_type(prescribed_license.assigned_upgrade_type),
-      enrollment_token(std::move(prescribed_config.enrollment_token)) {}
+      enrollment_token(std::move(prescribed_config.enrollment_token)),
+      oobe_config_source(prescribed_config.oobe_config_source) {}
 
 // static
 EnrollmentConfig EnrollmentConfig::GetPrescribedEnrollmentConfig() {
@@ -424,6 +408,16 @@ EnrollmentConfig EnrollmentConfig::GetPrescribedEnrollmentConfig(
       PrescribedConfig::GetPrescribedConfig(local_state, statistics_provider,
                                             device_state, oobe_configuration),
       PrescribedLicense::GetPrescribedLicense(device_state));
+}
+
+// static
+EnrollmentConfig EnrollmentConfig::GetDemoModeEnrollmentConfig() {
+  policy::EnrollmentConfig config;
+  config.mode = policy::EnrollmentConfig::MODE_ATTESTATION;
+  config.auth_mechanism = AUTH_MECHANISM_ATTESTATION;
+  config.management_domain = policy::kDemoModeDomain;
+  config.license_type = policy::LicenseType::kEnterprise;
+  return config;
 }
 
 // static

@@ -12,7 +12,9 @@
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/element_tracker.h"
 #include "ui/base/models/dialog_model.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/widget_test.h"
@@ -125,36 +127,36 @@ TEST_F(BubbleDialogModelHostTest, DefaultButtonWithoutOverride) {
       ui::DialogModel::Builder().AddCancelButton(base::DoNothing()).Build(),
       /*anchor_view=*/nullptr, BubbleBorder::Arrow::TOP_RIGHT);
   EXPECT_EQ(host->GetDefaultDialogButton(),
-            ui::DialogButton::DIALOG_BUTTON_CANCEL);
+            static_cast<int>(ui::mojom::DialogButton::kCancel));
 }
 
 TEST_F(BubbleDialogModelHostTest, OverrideDefaultButton) {
   auto host = std::make_unique<BubbleDialogModelHost>(
       ui::DialogModel::Builder()
           .AddCancelButton(base::DoNothing())
-          .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_CANCEL)
+          .OverrideDefaultButton(ui::mojom::DialogButton::kCancel)
           .Build(),
       /*anchor_view=*/nullptr, BubbleBorder::Arrow::TOP_RIGHT);
   EXPECT_EQ(host->GetDefaultDialogButton(),
-            ui::DialogButton::DIALOG_BUTTON_CANCEL);
+            static_cast<int>(ui::mojom::DialogButton::kCancel));
 }
 
 TEST_F(BubbleDialogModelHostTest, OverrideNoneDefaultButton) {
   auto host = std::make_unique<BubbleDialogModelHost>(
       ui::DialogModel::Builder()
           .AddCancelButton(base::DoNothing())
-          .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_NONE)
+          .OverrideDefaultButton(ui::mojom::DialogButton::kNone)
           .Build(),
       /*anchor_view=*/nullptr, BubbleBorder::Arrow::TOP_RIGHT);
   EXPECT_EQ(host->GetDefaultDialogButton(),
-            ui::DialogButton::DIALOG_BUTTON_NONE);
+            static_cast<int>(ui::mojom::DialogButton::kNone));
 }
 
 TEST_F(BubbleDialogModelHostTest, OverrideDefaultButtonDeathTest) {
   EXPECT_DCHECK_DEATH(std::make_unique<BubbleDialogModelHost>(
       ui::DialogModel::Builder()
           .AddCancelButton(base::DoNothing())
-          .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_OK)
+          .OverrideDefaultButton(ui::mojom::DialogButton::kOk)
           .Build(),
       /*anchor_view=*/nullptr, BubbleBorder::Arrow::TOP_RIGHT))
       << "Cannot override the default button with a button which does not "
@@ -168,15 +170,38 @@ TEST_F(BubbleDialogModelHostTest,
   auto host = std::make_unique<BubbleDialogModelHost>(
       ui::DialogModel::Builder()
           .AddCancelButton(base::DoNothing())
-          .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_CANCEL)
+          .OverrideDefaultButton(ui::mojom::DialogButton::kCancel)
           .AddTextfield(kFocusedField, u"label", u"text")
           .SetInitiallyFocusedField(kFocusedField)
           .Build(),
       /*anchor_view=*/nullptr, BubbleBorder::Arrow::TOP_RIGHT);
   EXPECT_EQ(host->GetDefaultDialogButton(),
-            ui::DialogButton::DIALOG_BUTTON_CANCEL);
+            static_cast<int>(ui::mojom::DialogButton::kCancel));
   EXPECT_EQ(host->GetInitiallyFocusedView()->GetProperty(kElementIdentifierKey),
             kFocusedField);
+}
+
+TEST_F(BubbleDialogModelHostTest, SetCustomInitiallyFocusedView) {
+  DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kCustomFieldId);
+
+  std::unique_ptr<View> container = Builder<View>().Build();
+  std::unique_ptr<Textfield> textfield_unique = Builder<Textfield>().Build();
+  raw_ptr<View> textfield = textfield_unique.get();
+  container->AddChildView(std::move(textfield_unique));
+
+  auto host = std::make_unique<BubbleDialogModelHost>(
+      ui::DialogModel::Builder()
+          .AddCustomField(
+              std::make_unique<views::BubbleDialogModelHost::CustomView>(
+                  std::move(container),
+                  views::BubbleDialogModelHost::FieldType::kControl, textfield),
+              kCustomFieldId)
+          .SetInitiallyFocusedField(kCustomFieldId)
+          .Build(),
+      /*anchor_view=*/nullptr, BubbleBorder::Arrow::TOP_RIGHT);
+
+  EXPECT_EQ(host->GetInitiallyFocusedView(), textfield);
+  textfield = nullptr;
 }
 
 TEST_F(BubbleDialogModelHostTest, SetEnabledButtons) {

@@ -27,6 +27,7 @@
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/frame_rate_decider.h"
 #include "components/viz/service/display/output_surface_client.h"
+#include "components/viz/service/display/overdraw_tracker.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
 #include "components/viz/service/display/software_output_device_client.h"
 #include "components/viz/service/display/surface_aggregator.h"
@@ -48,12 +49,14 @@ class ScopedAllowScheduleGpuTask;
 struct SwapBuffersCompleteParams;
 class SharedImageManager;
 class SyncPointManager;
+class Scheduler;
 }
 
 namespace viz {
 class DirectRenderer;
 class DisplayClient;
 class DisplayResourceProvider;
+class FrameIntervalDecider;
 class OutputSurface;
 class RendererSettings;
 class SharedBitmapManager;
@@ -89,6 +92,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
       SharedBitmapManager* bitmap_manager,
       gpu::SharedImageManager* shared_image_manager,
       gpu::SyncPointManager* sync_point_manager,
+      gpu::Scheduler* gpu_scheduler,
       const RendererSettings& settings,
       const DebugRendererSettings* debug_settings,
       const FrameSinkId& frame_sink_id,
@@ -110,6 +114,11 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void Initialize(DisplayClient* client,
                   SurfaceManager* surface_manager,
                   bool hw_support_for_multiple_refresh_rates = false);
+
+  // May be null depending on if kUseFrameIntervalDecider is enabled.
+  FrameIntervalDecider* frame_interval_decider() const {
+    return frame_interval_decider_.get();
+  }
 
   void AddObserver(DisplayObserver* observer);
   void RemoveObserver(DisplayObserver* observer);
@@ -196,6 +205,11 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
 
   void SetHwSupportForMultipleRefreshRates(bool support);
 
+#if BUILDFLAG(IS_ANDROID)
+  bool OutputSurfaceSupportsSetFrameRate();
+  void SetFrameIntervalOnOutputSurface(base::TimeDelta interval);
+#endif
+
   void PreserveChildSurfaceControls();
 
 #if BUILDFLAG(IS_ANDROID)
@@ -222,6 +236,14 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void MaybeLogQuadsProperties(
       AggregatedRenderPass& last_render_pass,
       const SurfaceDamageRectList* surface_damage_rect_list);
+
+  // Starts overdraw tacking for content rendered on the OutputSurface.
+  void StartTrackingOverdraw(int interval_length_in_seconds);
+
+  // Stop tracking overdraw and return the overdraw data collected during the
+  // interval between `StartTrackingOverdraw()` and `StopTrackingOverdraw()`
+  // calls.
+  OverdrawTracker::OverdrawTimeSeries StopTrackingOverdraw();
 
  protected:
   friend class DisplayTest;
@@ -271,6 +293,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   const raw_ptr<SharedBitmapManager> bitmap_manager_;
   const raw_ptr<gpu::SharedImageManager> shared_image_manager_;
   const raw_ptr<gpu::SyncPointManager> sync_point_manager_;
+  const raw_ptr<gpu::Scheduler> gpu_scheduler_;
   const RendererSettings settings_;
 
   // Points to the viz-global singleton.
@@ -307,6 +330,10 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   std::unique_ptr<DisplaySchedulerBase> scheduler_;
   bool last_wide_color_enabled_ = false;
   std::unique_ptr<FrameRateDecider> frame_rate_decider_;
+
+  // Replaces `frame_rate_decider_` behind a feature.
+  std::unique_ptr<FrameIntervalDecider> frame_interval_decider_;
+
   // This may be null if the Display is on a thread without a MessageLoop.
   scoped_refptr<base::SingleThreadTaskRunner> current_task_runner_;
   // Currently, this OverlayProcessor takes raw pointer to memory tracker, which
@@ -323,6 +350,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   raw_ptr<SoftwareRenderer> software_renderer_ = nullptr;
   std::vector<ui::LatencyInfo> stored_latency_info_;
   std::unique_ptr<OcclusionCuller> occlusion_culler_;
+  std::unique_ptr<OverdrawTracker> overdraw_tracker_;
 
   // |pending_presentation_group_timings_| stores a
   // Display::PresentationGroupTiming for each group currently waiting for

@@ -19,6 +19,8 @@
 
 namespace wallpaper_handlers {
 
+// A class to fetch SeaPen images from a Google server. Used for both Wallpaper
+// and VC Background.
 class SeaPenFetcher {
  public:
   using OnFetchThumbnailsComplete = base::OnceCallback<void(
@@ -27,8 +29,11 @@ class SeaPenFetcher {
   using OnFetchWallpaperComplete =
       base::OnceCallback<void(std::optional<ash::SeaPenImage> image)>;
 
-  // The number of thumbnails requested per call.
-  constexpr static size_t kNumThumbnailsRequested = 8;
+  // The number of thumbnails requested per call for text queries.
+  constexpr static size_t kNumTextThumbnailsRequested = 4;
+
+  // The number of thumbnails requested per call for template queries.
+  constexpr static size_t kNumTemplateThumbnailsRequested = 8;
 
   // Timeout value for fetching SeaPen thumbnails and wallpaper. Requests that
   // take longer than this will return with an error instead of completing.
@@ -42,13 +47,17 @@ class SeaPenFetcher {
   virtual ~SeaPenFetcher();
 
   // Run `query` against the Manta API. `query` is required to be a valid UTF-8
-  // string no longer than `kMaximumGetSeaPenThumbnailsTextBytes`.
+  // string no longer than `kMaximumGetSeaPenThumbnailsTextBytes`. Thumbnails
+  // are decoded and re-encoded in a sandboxed process for safety before being
+  // sent to the caller in `callback`.
   virtual void FetchThumbnails(
       manta::proto::FeatureName feature_name,
       const ash::personalization_app::mojom::SeaPenQueryPtr& query,
       OnFetchThumbnailsComplete callback) = 0;
 
   // Calls the Manta API to fetch a higher resolution image of the thumbnail.
+  // Wallpaper image is decoded and re-encoded in a sandboxed process for safety
+  // before being sent to the caller in `callback`.
   virtual void FetchWallpaper(
       manta::proto::FeatureName feature_name,
       const ash::SeaPenImage& thumbnail,

@@ -11,7 +11,8 @@
 
 #include "openssl/base.h"
 #include "osp/public/agent_certificate.h"
-#include "quiche/quic/core/crypto/proof_source_x509.h"
+#include "quiche/quic/core/crypto/client_proof_source.h"
+#include "quiche/quic/core/crypto/proof_source.h"
 
 namespace openscreen::osp {
 
@@ -30,9 +31,14 @@ class QuicAgentCertificate final : public AgentCertificate {
   bool RotateAgentCertificate() override;
   AgentFingerprint GetAgentFingerprint() override;
 
-  // Create a ProofSource using currently active agent certificate and private
-  // key.
-  std::unique_ptr<quic::ProofSource> CreateProofSource();
+  // Create a ProofSource for server using currently active agent certificate
+  // and private key.
+  std::unique_ptr<quic::ProofSource> CreateServerProofSource();
+
+  // Create a ProofSource for client using currently active agent certificate
+  // and private key.
+  std::unique_ptr<quic::ClientProofSource> CreateClientProofSource(
+      std::string_view server_hostname);
 
   void ResetCredentials();
 

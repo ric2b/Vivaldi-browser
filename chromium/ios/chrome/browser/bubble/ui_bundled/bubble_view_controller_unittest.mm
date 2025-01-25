@@ -3,10 +3,13 @@
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_view_controller.h"
+
 #import "base/apple/foundation_util.h"
+#import "base/test/scoped_feature_list.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_constants.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_unittest_util.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_view.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
@@ -52,6 +55,8 @@ class BubbleViewControllerTest : public PlatformTest {
     EXPECT_EQ(expect_image, static_cast<bool>(imageView));
     EXPECT_EQ(expect_snooze_button, static_cast<bool>(snoozeButton));
   }
+
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // Tests that with BubbleViewTypeDefault, bubble view contains the expected
@@ -93,7 +98,7 @@ TEST_F(BubbleViewControllerTest, BubbleTypeRichContent) {
                                        alignment:alignment_
                                   bubbleViewType:BubbleViewTypeRich
                                         delegate:nil];
-  ExpectBubbleViewContent(bubble_view_controller, true, true, true, false);
+  ExpectBubbleViewContent(bubble_view_controller, false, true, true, false);
 }
 
 // Tests that with BubbleViewTypeRichWithSnooze, bubble view contains the
@@ -107,5 +112,37 @@ TEST_F(BubbleViewControllerTest, BubbleTypeRichWithSnoozeContent) {
                                        alignment:alignment_
                                   bubbleViewType:BubbleViewTypeRichWithSnooze
                                         delegate:nil];
-  ExpectBubbleViewContent(bubble_view_controller, true, true, true, true);
+  ExpectBubbleViewContent(bubble_view_controller, false, true, true, true);
+}
+
+// Tests that with kRichBubbleWithoutImage enabled, BubbleViewTypeRich's bubble
+// view contains the expected subviews (no image).
+TEST_F(BubbleViewControllerTest, BubbleViewTypeRichWithoutImageContent) {
+  feature_list_.InitWithFeatures({kRichBubbleWithoutImage}, {});
+
+  BubbleViewController* bubble_view_controller =
+      [[BubbleViewController alloc] initWithText:text_
+                                           title:title_text_
+                                           image:image_
+                                  arrowDirection:arrow_direction_
+                                       alignment:alignment_
+                                  bubbleViewType:BubbleViewTypeRich
+                                        delegate:nil];
+  ExpectBubbleViewContent(bubble_view_controller, false, true, false, false);
+}
+
+// Tests that with kRichBubbleWithoutImage enabled, BubbleTypeRichWithSnooze's
+// bubble view contains the expected subviews (no image).
+TEST_F(BubbleViewControllerTest, BubbleTypeRichWithSnoozeWithoutImageContent) {
+  feature_list_.InitWithFeatures({kRichBubbleWithoutImage}, {});
+
+  BubbleViewController* bubble_view_controller =
+      [[BubbleViewController alloc] initWithText:text_
+                                           title:title_text_
+                                           image:image_
+                                  arrowDirection:arrow_direction_
+                                       alignment:alignment_
+                                  bubbleViewType:BubbleViewTypeRichWithSnooze
+                                        delegate:nil];
+  ExpectBubbleViewContent(bubble_view_controller, false, true, false, true);
 }

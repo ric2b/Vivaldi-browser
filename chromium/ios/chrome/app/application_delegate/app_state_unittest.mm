@@ -32,8 +32,8 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -47,14 +47,15 @@
 #import "ios/chrome/browser/web_state_list/model/web_usage_enabler/web_usage_enabler_browser_agent.h"
 #import "ios/chrome/common/crash_report/crash_helper.h"
 #import "ios/chrome/test/block_cleanup_test.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/chrome/test/providers/app_distribution/test_app_distribution.h"
 #import "ios/chrome/test/scoped_key_window.h"
-#import "ios/chrome/test/testing_application_context.h"
 #import "ios/public/provider/chrome/browser/app_distribution/app_distribution_api.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
 #import "ios/testing/scoped_block_swizzler.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "ios/web/public/thread/web_task_traits.h"
+#import "testing/gtest_mac.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 #import "ui/base/device_form_factor.h"
@@ -214,14 +215,9 @@ class AppStateTest : public BlockCleanupTest {
     test_cbs_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetDefaultFactory());
-
-    browser_state_manager_ = std::make_unique<TestChromeBrowserStateManager>(
-        test_cbs_builder.Build());
-    TestingApplicationContext::GetGlobal()->SetChromeBrowserStateManager(
-        browser_state_manager_.get());
-
     browser_state_ =
-        browser_state_manager_->GetLastUsedBrowserStateForTesting();
+        profile_manager_.AddProfileWithBuilder(std::move(test_cbs_builder));
+
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         browser_state_.get(),
         std::make_unique<FakeAuthenticationServiceDelegate>());
@@ -348,6 +344,8 @@ class AppStateTest : public BlockCleanupTest {
 
  private:
   web::WebTaskEnvironment task_environment_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
+  TestProfileManagerIOS profile_manager_;
   TestAppState* app_state_;
   FakeSceneState* main_scene_state_;
   SafeModeAppAgent* safe_mode_app_agent_;
@@ -365,7 +363,6 @@ class AppStateTest : public BlockCleanupTest {
   std::unique_ptr<ScopedBlockSwizzler> connected_scenes_swizzler_;
   std::unique_ptr<ScopedBlockSwizzler> handle_startup_swizzler_;
   raw_ptr<ChromeBrowserState> browser_state_;
-  std::unique_ptr<TestChromeBrowserStateManager> browser_state_manager_;
 };
 
 #pragma mark - Tests.
@@ -380,11 +377,9 @@ TEST_F(AppStateNoFixtureTest, WillResignActive) {
       [[FakeStartupInformation alloc] init];
   [startupInformation setIsColdStart:YES];
 
-  TestChromeBrowserState::Builder test_cbs_builder;
-  std::unique_ptr<TestChromeBrowserStateManager> browser_state_manager =
-      std::make_unique<TestChromeBrowserStateManager>(test_cbs_builder.Build());
-  TestingApplicationContext::GetGlobal()->SetChromeBrowserStateManager(
-      browser_state_manager.get());
+  IOSChromeScopedTestingLocalState scoped_testing_local_state;
+  TestProfileManagerIOS profile_manager;
+  profile_manager.AddProfileWithBuilder(TestChromeBrowserState::Builder());
 
   AppState* appState =
       [[AppState alloc] initWithStartupInformation:startupInformation];
@@ -707,4 +702,26 @@ TEST_F(AppStateTest, AppAgentRetrieval) {
 
   TestAppAgent* retrievedAgent = [TestAppAgent agentFromApp:appState];
   EXPECT_EQ(retrievedAgent, agent);
+}
+
+// Tests observers for UIBlockerManager
+TEST_F(AppStateTest, AppAgentUIBlockerManagerObserver) {
+  AppState* appState = GetAppStateWithMock();
+
+  id<UIBlockerManagerObserver> observer =
+      [OCMockObject mockForProtocol:@protocol(UIBlockerManagerObserver)];
+  id<UIBlockerTarget> blocker_target =
+      [OCMockObject mockForProtocol:@protocol(UIBlockerTarget)];
+
+  [appState addUIBlockerManagerObserver:observer];
+  EXPECT_EQ(appState.currentUIBlocker, nil);
+
+  [appState incrementBlockingUICounterForTarget:blocker_target];
+  EXPECT_NSEQ(appState.currentUIBlocker, blocker_target);
+  EXPECT_OCMOCK_VERIFY(observer);
+
+  OCMExpect([observer currentUIBlockerRemoved]);
+  [appState decrementBlockingUICounterForTarget:blocker_target];
+  EXPECT_NSEQ(appState.currentUIBlocker, nil);
+  EXPECT_OCMOCK_VERIFY(observer);
 }

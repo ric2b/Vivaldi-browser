@@ -365,7 +365,7 @@ pass it along to / include someone who can direct it more precisely.
     * Set a provisional severity of Low (S3).
     * Assign to the current [V8
       Sheriff](https://goto.google.com/current-v8-sheriff).
-    * Apply the `Security_Impact-None` hotlist (hotlistID:5433277.
+    * Apply the `Security_Impact-None` hotlist (hotlistID:5433277).
     * If possible, please also apply the `V8 Sandbox` hotlist
       (hotlistID:4802478).
 * **Skia bugs** can be assigned to hcm@chromium.org. Be careful while triaging
@@ -555,9 +555,9 @@ description of the report, simply choose the `Edit description` option and
 remove any PII.
 
 For cases in which we are just delaying public disclosure (such as when a
-security issue impacts other products or vendors), please use this label and set
-a date in the `Next Action` field so that disclosure can be re-evaluated at
-that time.
+security issue impacts other products or vendors), please add the
+`SecurityEmbargo` hotlist (hotlistID: 1053360) and set a date in the `Next
+Action` field so that disclosure can be re-evaluated at that time.
 
 ### Protecting researcher identities
 

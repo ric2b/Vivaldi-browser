@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/types/optional_util.h"
 #include "base/types/pass_key.h"
 #include "base/values.h"
 #include "net/base/auth.h"
@@ -1327,9 +1328,10 @@ bool URLRequest::ShouldSetLoadWithStorageAccess() const {
       case cookie_util::StorageAccessStatus::kActive:
         return true;
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   };
-  return base::FeatureList::IsEnabled(features::kStorageAccessHeaders) &&
+  return network_delegate()->IsStorageAccessHeaderEnabled(
+             base::OptionalToPtr(isolation_info().top_frame_origin()), url()) &&
          storage_access_can_be_activated() && response_headers() &&
          response_headers()->HasStorageAccessLoadHeader();
 }

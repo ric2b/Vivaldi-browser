@@ -443,7 +443,8 @@ void BuildAndSaveIndex(
 
   IndexBuildData activation_rules;
   IndexBuildData before_request;
-  IndexBuildData modify_request;
+  IndexBuildData modify_blocked_request;
+  IndexBuildData modify_allowed_request;
   IndexBuildData headers_received;
 
   std::unique_ptr<flatbuffers::FlatBufferBuilder> builder =
@@ -494,8 +495,11 @@ void BuildAndSaveIndex(
           break;
 
         case flat::Modifier_REDIRECT:
-          AddRuleToMap(*rule, rule_id, false, modify_request);
+          AddRuleToMap(*rule, rule_id, false, modify_blocked_request);
           break;
+
+        case flat::Modifier_AD_QUERY_TRIGGER:
+          AddRuleToMap(*rule, rule_id, false, modify_allowed_request);
       }
     }
 
@@ -548,8 +552,10 @@ void BuildAndSaveIndex(
       BuildFlatMap(builder.get(), activation_rules);
   RulesMapOffset before_request_map_offset =
       BuildFlatMap(builder.get(), before_request);
-  RulesMapOffset modify_request_map_offset =
-      BuildFlatMap(builder.get(), modify_request);
+  RulesMapOffset modify_blocked_request_map_offset =
+      BuildFlatMap(builder.get(), modify_blocked_request);
+  RulesMapOffset modify_allowed_request_map_offset =
+      BuildFlatMap(builder.get(), modify_allowed_request);
   RulesMapOffset headers_received_map_offset =
       BuildFlatMap(builder.get(), headers_received);
 
@@ -566,8 +572,9 @@ void BuildAndSaveIndex(
 
   auto rule_index_offset = flat::CreateRulesIndex(
       *builder, source_checksums_offset, activation_rules_map_offset,
-      before_request_map_offset, modify_request_map_offset,
-      headers_received_map_offset, default_stylesheet_offset, root_index,
+      before_request_map_offset, modify_blocked_request_map_offset,
+      modify_allowed_request_map_offset, headers_received_map_offset,
+      default_stylesheet_offset, root_index,
       flat_content_injection_rule_tree_offset);
 
   flat::FinishRulesIndexBuffer(*builder, rule_index_offset);

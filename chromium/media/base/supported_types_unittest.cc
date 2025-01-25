@@ -125,6 +125,7 @@ TEST(SupportedTypesTest, IsSupportedVideoType_VP9Primaries) {
       VideoColorSpace::PrimaryID::SMPTEST428_1,
       VideoColorSpace::PrimaryID::SMPTEST431_2,
       VideoColorSpace::PrimaryID::SMPTEST432_1,
+      VideoColorSpace::PrimaryID::EBU_3213_E,
   };
 
   for (int i = 0; i <= (1 << (8 * sizeof(VideoColorSpace::PrimaryID))); i++) {
@@ -338,7 +339,8 @@ TEST(SupportedTypesTest, IsSupportedVideoTypeWithHdrMetadataBasics) {
 
 TEST(SupportedTypesTest, IsBuiltInVideoCodec) {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
-  EXPECT_TRUE(IsBuiltInVideoCodec(VideoCodec::kH264));
+  EXPECT_EQ(base::FeatureList::IsEnabled(kBuiltInH264Decoder),
+            IsBuiltInVideoCodec(VideoCodec::kH264));
 #else
   EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kH264));
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS) &&
@@ -346,11 +348,11 @@ TEST(SupportedTypesTest, IsBuiltInVideoCodec) {
 
   EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kTheora));
 
-#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS) || BUILDFLAG(ENABLE_LIBVPX)
+#if BUILDFLAG(ENABLE_LIBVPX)
   EXPECT_TRUE(IsBuiltInVideoCodec(VideoCodec::kVP8));
 #else
   EXPECT_FALSE(IsBuiltInVideoCodec(VideoCodec::kVP8));
-#endif  // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS) || BUILDFLAG(ENABLE_LIBVPX)
+#endif  // BUILDFLAG(ENABLE_LIBVPX)
 
 #if BUILDFLAG(ENABLE_LIBVPX)
   EXPECT_TRUE(IsBuiltInVideoCodec(VideoCodec::kVP9));

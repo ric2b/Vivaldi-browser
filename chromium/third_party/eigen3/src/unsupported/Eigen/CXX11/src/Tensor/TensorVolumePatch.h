@@ -274,8 +274,10 @@ struct TensorEvaluator<const TensorVolumePatchOp<Planes, Rows, Cols, ArgType>, D
           m_colPaddingLeft = dx / 2;
           break;
         }
-        default:
+        default: {
           eigen_assert(false && "unexpected padding");
+          return;
+        }
       }
     }
     eigen_assert(m_outputRows > 0);

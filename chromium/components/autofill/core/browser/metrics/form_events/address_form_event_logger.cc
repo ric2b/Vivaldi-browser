@@ -23,10 +23,10 @@ namespace autofill::autofill_metrics {
 
 namespace {
 
-// Converts a set of `AutofillProfileSourceCategory` to the corresponding
+// Converts a set of `AutofillProfileRecordTypeCategory` to the corresponding
 // `CategoryResolvedKeyMetricBucket`.
 CategoryResolvedKeyMetricBucket ProfileCategoriesToMetricBucket(
-    DenseSet<AutofillProfileSourceCategory> categories) {
+    DenseSet<AutofillProfileRecordTypeCategory> categories) {
   if (categories.empty()) {
     return CategoryResolvedKeyMetricBucket::kNone;
   }
@@ -34,11 +34,11 @@ CategoryResolvedKeyMetricBucket ProfileCategoriesToMetricBucket(
     return CategoryResolvedKeyMetricBucket::kMixed;
   }
   switch (*categories.begin()) {
-    case AutofillProfileSourceCategory::kLocalOrSyncable:
+    case AutofillProfileRecordTypeCategory::kLocalOrSyncable:
       return CategoryResolvedKeyMetricBucket::kLocalOrSyncable;
-    case AutofillProfileSourceCategory::kAccountChrome:
+    case AutofillProfileRecordTypeCategory::kAccountChrome:
       return CategoryResolvedKeyMetricBucket::kAccountChrome;
-    case AutofillProfileSourceCategory::kAccountNonChrome:
+    case AutofillProfileRecordTypeCategory::kAccountNonChrome:
       return CategoryResolvedKeyMetricBucket::kAccountNonChrome;
   }
 }
@@ -69,19 +69,13 @@ void AddressFormEventLogger::OnDidFillFormFillingSuggestion(
     const AutofillProfile& profile,
     const FormStructure& form,
     const AutofillField& field,
-    AutofillMetrics::PaymentsSigninState signin_state_for_metrics,
     const AutofillTriggerSource trigger_source) {
-  signin_state_for_metrics_ = signin_state_for_metrics;
-
   form_interactions_ukm_logger_->LogDidFillSuggestion(form, field);
-
   Log(FORM_EVENT_LOCAL_SUGGESTION_FILLED, form);
-
   if (!has_logged_form_filling_suggestion_filled_) {
     has_logged_form_filling_suggestion_filled_ = true;
     Log(FORM_EVENT_LOCAL_SUGGESTION_FILLED_ONCE, form);
   }
-
   base::RecordAction(
       base::UserMetricsAction("Autofill_FilledProfileSuggestion"));
 

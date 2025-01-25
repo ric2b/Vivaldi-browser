@@ -17,9 +17,9 @@ namespace base::features {
 // Alphabetical:
 BASE_EXPORT BASE_DECLARE_FEATURE(kEnforceNoExecutableFileHandles);
 
-BASE_EXPORT BASE_DECLARE_FEATURE(kLowEndMemoryExperiment);
+BASE_EXPORT BASE_DECLARE_FEATURE(kFeatureParamWithCache);
 
-BASE_EXPORT BASE_DECLARE_FEATURE(kNotReachedIsFatal);
+BASE_EXPORT BASE_DECLARE_FEATURE(kLowEndMemoryExperiment);
 
 BASE_EXPORT BASE_DECLARE_FEATURE(kUseRustJsonParser);
 
@@ -34,6 +34,7 @@ BASE_EXPORT BASE_DECLARE_FEATURE(kPartialLowEndModeOnMidRangeDevices);
 BASE_EXPORT BASE_DECLARE_FEATURE(kCollectAndroidFrameTimelineMetrics);
 BASE_EXPORT BASE_DECLARE_FEATURE(
     kPostPowerMonitorBroadcastReceiverInitToBackground);
+BASE_EXPORT BASE_DECLARE_FEATURE(kPostGetMyMemoryStateToBackground);
 #endif
 
 // Policy for emitting profiler metadata from `ThreadController`.

@@ -1327,6 +1327,10 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
     int ret, got_packet = 0;
     AVDictionary *metadata = NULL;
 
+    // TODO(crbug.com/355485812): Remove after M132 if video parsers can be
+    // removed from the build configurations.
+    int skip_parse = 0;
+
     while (!got_packet && !si->parse_queue.head) {
         AVStream *st;
         FFStream *sti;
@@ -1408,7 +1412,10 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
                    av_ts2str(pkt->dts),
                    pkt->size, pkt->duration, pkt->flags);
 
-        if (sti->need_parsing && !sti->parser && !(s->flags & AVFMT_FLAG_NOPARSE)) {
+        skip_parse = (s->flags & AVFMT_FLAG_NOH264PARSE) &&
+                     (st->codecpar->codec_id == AV_CODEC_ID_H264);
+
+        if (sti->need_parsing && !sti->parser && !(s->flags & AVFMT_FLAG_NOPARSE) && !skip_parse) {
             sti->parser = av_parser_init(st->codecpar->codec_id);
             if (!sti->parser) {
                 av_log(s, AV_LOG_VERBOSE, "parser not found for codec "
@@ -2559,9 +2566,14 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         FFStream *const sti = ffstream(st);
         AVCodecContext *const avctx = sti->avctx;
 
+        // TODO(crbug.com/355485812): Remove after M132 if video parsers can be
+        // removed from the build configurations.
+        int skip_parse = (ic->flags & AVFMT_FLAG_NOH264PARSE) &&
+                         (st->codecpar->codec_id == AV_CODEC_ID_H264);
+
         /* check if the caller has overridden the codec id */
         // only for the split stuff
-        if (!sti->parser && !(ic->flags & AVFMT_FLAG_NOPARSE) && sti->request_probe <= 0) {
+        if (!sti->parser && !(ic->flags & AVFMT_FLAG_NOPARSE) && !skip_parse && sti->request_probe <= 0) {
             sti->parser = av_parser_init(st->codecpar->codec_id);
             if (sti->parser) {
                 if (sti->need_parsing == AVSTREAM_PARSE_HEADERS) {
@@ -3100,9 +3112,12 @@ find_stream_info_err:
             av_freep(&sti->info);
         }
 
-        err = codec_close(sti);
-        if (err < 0 && ret >= 0)
-            ret = err;
+        if (avcodec_is_open(sti->avctx)) {
+            err = codec_close(sti);
+            if (err < 0 && ret >= 0)
+                ret = err;
+        }
+
         av_bsf_free(&sti->extract_extradata.bsf);
     }
     if (ic->pb) {

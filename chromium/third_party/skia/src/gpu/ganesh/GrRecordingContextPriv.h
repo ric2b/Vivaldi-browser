@@ -10,15 +10,15 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTArray.h"
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/ganesh/Device.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrImageContextPriv.h"
-#include "src/text/gpu/SDFTControl.h"
+#include "src/text/gpu/SubRunControl.h"
 
 #include <memory>
 #include <string_view>
@@ -108,7 +108,7 @@ public:
 
     GrAuditTrail* auditTrail() { return this->context()->fAuditTrail.get(); }
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     // Used by tests that intentionally exercise codepaths that print warning messages, in order to
     // not confuse users with output that looks like a testing failure.
     class AutoSuppressWarningMessages {
@@ -127,7 +127,7 @@ public:
 #endif
 
     void printWarningMessage(const char* msg) const {
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
         if (this->context()->fSuppressWarningMessages > 0) {
             return;
         }
@@ -139,12 +139,12 @@ public:
         return &this->context()->fStats;
     }
 
-#if GR_GPU_STATS && defined(GR_TEST_UTILS)
+#if GR_GPU_STATS && defined(GPU_TEST_UTILS)
     using DMSAAStats = GrRecordingContext::DMSAAStats;
     DMSAAStats& dmsaaStats() { return this->context()->fDMSAAStats; }
 #endif
 
-    sktext::gpu::SDFTControl getSDFTControl(bool useSDFTForSmallText) const;
+    sktext::gpu::SubRunControl getSubRunControl(bool useSDFTForSmallText) const;
 
     /**
      * Create a GrRecordingContext without a resource cache

@@ -51,6 +51,10 @@ class PasswordsModelDelegateMock : public PasswordsModelDelegate {
       GetCurrentForms,
       (),
       (const override));
+  MOCK_METHOD(const std::optional<password_manager::PasswordForm>&,
+              GetManagePasswordsSingleCredentialDetailsModeCredential,
+              (),
+              (const override));
   MOCK_METHOD(password_manager::InteractionsStats*,
               GetCurrentInteractionStats,
               (),
@@ -60,10 +64,6 @@ class PasswordsModelDelegateMock : public PasswordsModelDelegate {
   MOCK_METHOD(bool, BubbleIsManualFallbackForSaving, (), (const override));
   MOCK_METHOD(bool,
               GpmPinCreatedDuringRecentPasskeyCreation,
-              (),
-              (const override));
-  MOCK_METHOD(std::u16string,
-              GetRecentlySavedPasskeyUsername,
               (),
               (const override));
   MOCK_METHOD(void, OnBubbleShown, (), (override));
@@ -106,9 +106,9 @@ class PasswordsModelDelegateMock : public PasswordsModelDelegate {
               (password_manager::PasswordCheckReferrer),
               (override));
   MOCK_METHOD(void,
-              SignIn,
-              (const AccountInfo& account,
-               const password_manager::PasswordForm& password_to_move),
+              MovePendingPasswordToAccountStoreUsingHelper,
+              (const password_manager::PasswordForm&,
+               password_manager::metrics_util::MoveToAccountStoreTrigger),
               (override));
   MOCK_METHOD(void, OnDialogHidden, (), (override));
   MOCK_METHOD(void,

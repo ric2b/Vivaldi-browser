@@ -30,13 +30,12 @@ limitations under the License.
 #include "absl/log/log.h"
 #include "absl/types/span.h"
 #include "llvm/ADT/STLExtras.h"
-#include "mlir/IR/AffineExpr.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
+#include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/MLIRContext.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/utils/hlo_query.h"
 #include "xla/primitive_util.h"
 #include "xla/service/gpu/fusions/fusion_emitter.h"
-#include "xla/service/gpu/fusions/tiling_util.h"
 #include "xla/service/gpu/gpu_fusible.h"
 #include "xla/service/gpu/hlo_fusion_analysis.h"
 #include "xla/service/gpu/hlo_traversal.h"
@@ -102,11 +101,9 @@ int GetVectorSize(const HloFusionAnalysis& analysis,
   return 1;
 }
 
-int GetVectorSizeForMlir(const HloFusionAnalysis& analysis,
-                         const ReductionDimensions& reduction_dimensions,
+int GetVectorSizeForMlir(const HloFusionAnalysis& analysis, int64_t minor_dim,
                          int num_threads) {
   // If the minor dimension is not divisible by 2, we can't currently vectorize.
-  int64_t minor_dim = reduction_dimensions.dimensions.back();
   if (minor_dim % 2 != 0) {
     return 1;
   }
@@ -183,11 +180,12 @@ ReductionGroups GroupDisjointReductions(const HloFusionAnalysis& analysis,
   }
 
   absl::flat_hash_set<HloInstructionAdaptor> instructions;
-
+  for (const HloInstruction* operand : analysis.fusion().GetParameters()) {
+    instructions.insert(HloInstructionAdaptor{*operand, &analysis.fusion()});
+  }
   auto visit = [&](absl::Span<const HloInstructionAdaptor> roots) {
     HloBfsConsumersFirstTraversal(
-        roots, analysis.fusion(),
-        [&](HloInstructionAdaptor consumer) {
+        roots, analysis.fusion(), [&](HloInstructionAdaptor consumer) {
           auto& consumer_reachable = reachable_outputs[consumer];
           for (auto producer : consumer.GetOperands()) {
             reachable_outputs[producer].insert(consumer_reachable.begin(),
@@ -195,8 +193,7 @@ ReductionGroups GroupDisjointReductions(const HloFusionAnalysis& analysis,
           }
           instructions.insert(consumer);
           return TraversalResult::kAdvance;
-        },
-        [&](HloInstructionAdaptor argument) { instructions.insert(argument); });
+        });
   };
 
   // The legacy emitter grouping is buggy: it does not visit instructions in the

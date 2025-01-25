@@ -13,7 +13,7 @@ const bidiServerLogger = (prefix, ...args) => {
 /**
  * @internal
  */
-export async function connectBidiOverCdp(cdp, options) {
+export async function connectBidiOverCdp(cdp) {
     const transportBiDi = new NoOpTransport();
     const cdpConnectionAdapter = new CdpConnectionAdapter(cdp);
     const pptrTransport = {
@@ -34,10 +34,9 @@ export async function connectBidiOverCdp(cdp, options) {
         // Forwards a BiDi event sent by BidiServer to Puppeteer.
         pptrTransport.onmessage(JSON.stringify(message));
     });
-    const pptrBiDiConnection = new BidiConnection(cdp.url(), pptrTransport);
-    const bidiServer = await BidiMapper.BidiServer.createAndStart(transportBiDi, cdpConnectionAdapter, 
-    // TODO: most likely need a little bit of refactoring
-    cdpConnectionAdapter.browserClient(), '', options, undefined, bidiServerLogger);
+    const pptrBiDiConnection = new BidiConnection(cdp.url(), pptrTransport, cdp.delay, cdp.timeout);
+    const bidiServer = await BidiMapper.BidiServer.createAndStart(transportBiDi, cdpConnectionAdapter, cdpConnectionAdapter.browserClient(), 
+    /* selfTargetId= */ '', undefined, bidiServerLogger);
     return pptrBiDiConnection;
 }
 /**

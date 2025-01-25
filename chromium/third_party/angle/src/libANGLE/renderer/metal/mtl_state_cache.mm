@@ -611,8 +611,8 @@ void RenderPipelineOutputDesc::updateEnabledDrawBuffers(gl::DrawBufferMask enabl
 RenderPipelineDesc::RenderPipelineDesc()
 {
     memset(this, 0, sizeof(*this));
-    outputDescriptor.sampleCount = 1;
-    rasterizationType            = RenderPipelineRasterization::Enabled;
+    outputDescriptor.rasterSampleCount = 1;
+    rasterizationType                  = RenderPipelineRasterization::Enabled;
 }
 
 RenderPipelineDesc::RenderPipelineDesc(const RenderPipelineDesc &src)
@@ -665,13 +665,9 @@ AutoObjCPtr<MTLRenderPipelineDescriptor *> RenderPipelineDesc::createMetalDesc(
     }
     ANGLE_OBJC_CP_PROPERTY(objCDesc.get(), outputDescriptor, depthAttachmentPixelFormat);
     ANGLE_OBJC_CP_PROPERTY(objCDesc.get(), outputDescriptor, stencilAttachmentPixelFormat);
-    ANGLE_APPLE_ALLOW_DEPRECATED_BEGIN
-    ANGLE_OBJC_CP_PROPERTY(objCDesc.get(), outputDescriptor, sampleCount);
-    ANGLE_APPLE_ALLOW_DEPRECATED_END
+    ANGLE_OBJC_CP_PROPERTY(objCDesc.get(), outputDescriptor, rasterSampleCount);
 
-#if ANGLE_MTL_PRIMITIVE_TOPOLOGY_CLASS_AVAILABLE
     ANGLE_OBJC_CP_PROPERTY(objCDesc.get(), *this, inputPrimitiveTopology);
-#endif
     ANGLE_OBJC_CP_PROPERTY(objCDesc.get(), *this, alphaToCoverageEnabled);
 
     // rasterizationEnabled will be true for both EmulatedDiscard & Enabled.
@@ -744,7 +740,7 @@ void RenderPassDesc::populateRenderPipelineOutputDesc(const BlendDescArray &blen
 {
     RenderPipelineOutputDesc &outputDescriptor = *outDesc;
     outputDescriptor.numColorAttachments       = this->numColorAttachments;
-    outputDescriptor.sampleCount               = this->sampleCount;
+    outputDescriptor.rasterSampleCount         = this->rasterSampleCount;
     for (uint32_t i = 0; i < this->numColorAttachments; ++i)
     {
         auto &renderPassColorAttachment = this->colorAttachments[i];

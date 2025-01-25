@@ -23,10 +23,6 @@ BASE_FEATURE(kLauncherQueryFederatedAnalyticsPHH,
              "LauncherQueryFederatedAnalyticsPHH",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kLauncherFuzzyMatchAcrossProviders,
-             "LauncherFuzzyMatchAcrossProviders",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kLauncherFuzzyMatchForOmnibox,
              "LauncherFuzzyMatchForOmnibox",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -59,13 +55,17 @@ BASE_FEATURE(kLauncherImageSearchIndexingLimit,
              "LauncherImageSearchIndexingLimit",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kLauncherImageSearchDebug,
+             "kLauncherImageSearchDebug",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kLauncherSystemInfoAnswerCards,
              "LauncherSystemInfoAnswerCards",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kLauncherSearchFileScan,
              "kLauncherSearchFileScan",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kLauncherKeyShortcutInBestMatch,
              "LauncherKeyShortcutInBestMatch",
@@ -85,10 +85,6 @@ bool IsLauncherKeywordExtractionScoringEnabled() {
 
 bool IsLauncherQueryFederatedAnalyticsPHHEnabled() {
   return base::FeatureList::IsEnabled(kLauncherQueryFederatedAnalyticsPHH);
-}
-
-bool IsLauncherFuzzyMatchAcrossProvidersEnabled() {
-  return base::FeatureList::IsEnabled(kLauncherFuzzyMatchAcrossProviders);
 }
 
 bool IsLauncherFuzzyMatchForOmniboxEnabled() {
@@ -115,6 +111,10 @@ bool IsLauncherImageSearchOcrEnabled() {
 
 bool IsLauncherImageSearchIndexingLimitEnabled() {
   return base::FeatureList::IsEnabled(kLauncherImageSearchIndexingLimit);
+}
+
+bool IsLauncherImageSearchDebugEnabled() {
+  return base::FeatureList::IsEnabled(kLauncherImageSearchDebug);
 }
 
 bool IsLauncherSystemInfoAnswerCardsEnabled() {

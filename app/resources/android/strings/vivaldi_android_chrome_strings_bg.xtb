@@ -17,7 +17,7 @@
 <translation id="2501278716633472235">Върни назад</translation>
 <translation id="2633278372998075009">Частни раздели</translation>
 <translation id="272026394418727548">Начална страница на Vivaldi</translation>
-<translation id="2951071800649516099">Добави страници към списъка за четене по-късно</translation>
+<translation id="2951071800649516099">Добави страници към списъка за четене по&amp;#8209;късно</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> отметка}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> отметки}}</translation>
@@ -37,6 +37,7 @@
 <translation id="4167670741834902166">Създай частен раздел</translation>
 <translation id="4195643157523330669">Отвори в нов раздел</translation>
 <translation id="4243710787042215766">Отвори в частен раздел</translation>
+<translation id="4304713468139749426">Диспечер на пароли</translation>
 <translation id="451872707440238414">Търси в отметките</translation>
 <translation id="4526803704855831732">Частни раздели</translation>
 <translation id="4719086422742491124">Узнавате темите на сайта, без да напускате страницата. Изберете една или повече думи в страницата, за да ги потърсите.

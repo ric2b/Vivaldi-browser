@@ -12,18 +12,17 @@
 #import "base/strings/utf_string_conversions.h"
 #import "components/sessions/core/tab_restore_service_impl.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
-#import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_client.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/tabs/model/closing_web_state_observer_browser_agent.h"
 #import "ios/chrome/browser/tabs_search/model/tabs_search_service_factory.h"
-#import "ios/chrome/test/ios_chrome_scoped_testing_chrome_browser_state_manager.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -51,30 +50,20 @@ const char kWebState2Url[] = "http://www.url2.com/";
 // Title for a second sample WebState.
 const char16_t kWebState2Title[] = u"Web State 2";
 
-std::unique_ptr<KeyedService> BuildTabRestoreService(
-    web::BrowserState* context) {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
-  return std::make_unique<sessions::TabRestoreServiceImpl>(
-      base::WrapUnique(new IOSChromeTabRestoreServiceClient(browser_state)),
-      browser_state->GetPrefs(), nullptr);
-}
 }  // namespace
 
 // Test fixture to test the search service.
 class TabsSearchServiceTest : public PlatformTest {
  public:
-  TabsSearchServiceTest()
-      : scoped_browser_state_manager_(
-            std::make_unique<TestChromeBrowserStateManager>(base::FilePath())) {
+  TabsSearchServiceTest() {
     TestChromeBrowserState::Builder test_browser_state_builder;
     test_browser_state_builder.AddTestingFactory(
         IOSChromeTabRestoreServiceFactory::GetInstance(),
-        base::BindRepeating(&BuildTabRestoreService));
+        IOSChromeTabRestoreServiceFactory::GetDefaultFactory());
     test_browser_state_builder.AddTestingFactory(
         ios::HistoryServiceFactory::GetInstance(),
         ios::HistoryServiceFactory::GetDefaultFactory());
-    chrome_browser_state_ = test_browser_state_builder.Build();
+    chrome_browser_state_ = std::move(test_browser_state_builder).Build();
 
     browser_list_ =
         BrowserListFactory::GetForBrowserState(chrome_browser_state_.get());
@@ -133,7 +122,8 @@ class TabsSearchServiceTest : public PlatformTest {
   }
 
   web::WebTaskEnvironment task_environment_;
-  IOSChromeScopedTestingChromeBrowserStateManager scoped_browser_state_manager_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
+  TestProfileManagerIOS profile_manager_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   std::unique_ptr<Browser> browser_;
   std::unique_ptr<Browser> other_browser_;

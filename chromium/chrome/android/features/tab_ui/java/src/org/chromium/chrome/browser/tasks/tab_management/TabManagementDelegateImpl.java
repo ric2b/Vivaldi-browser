@@ -22,6 +22,7 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.hub.HubManager;
 import org.chromium.chrome.browser.hub.Pane;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
@@ -56,12 +57,11 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull ScrimCoordinator scrimCoordinator,
             @NonNull ObservableSupplier<Boolean> omniboxFocusStateSupplier,
             @NonNull BottomSheetController bottomSheetController,
+            @NonNull DataSharingTabManager dataSharingTabManager,
             TabModelSelector tabModelSelector,
             @NonNull TabContentManager tabContentManager,
-            ViewGroup rootView,
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
-            @NonNull SnackbarManager snackbarManager,
             @NonNull ModalDialogManager modalDialogManager) {
         return new TabGroupUiCoordinator(
                 activity,
@@ -71,12 +71,11 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                 scrimCoordinator,
                 omniboxFocusStateSupplier,
                 bottomSheetController,
+                dataSharingTabManager,
                 tabModelSelector,
                 tabContentManager,
-                rootView,
                 tabCreatorManager,
                 layoutStateProviderSupplier,
-                snackbarManager,
                 modalDialogManager);
     }
 
@@ -94,6 +93,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull SnackbarManager snackbarManager,
             @NonNull ModalDialogManager modalDialogManager,
             @NonNull BottomSheetController bottomSheetController,
+            @NonNull DataSharingTabManager dataSharingTabManager,
             @Nullable OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
             @NonNull OnClickListener newTabButtonOnClickListener,
             boolean isIncognito,
@@ -115,7 +115,15 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                         snackbarManager,
                         modalDialogManager,
                         bottomSheetController,
+                        dataSharingTabManager,
                         backPressManager);
+        OneshotSupplierImpl<Profile> profileSupplier = new OneshotSupplierImpl<>();
+        Handler handler = new Handler();
+        profileProviderSupplier.onAvailable(
+                (profileProvider) -> profileSupplier.set(profileProvider.getOriginalProfile()));
+        UserEducationHelper userEducationHelper =
+                new UserEducationHelper(activity, profileSupplier, handler);
+
         TabSwitcherPaneBase pane;
         if (isIncognito) {
             Supplier<TabModelFilter> incongitorTabModelFilterSupplier =
@@ -123,20 +131,16 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             pane =
                     new IncognitoTabSwitcherPane(
                             activity,
+                            profileProviderSupplier,
                             factory,
                             incongitorTabModelFilterSupplier,
                             newTabButtonOnClickListener,
                             incognitoReauthControllerSupplier,
-                            onToolbarAlphaChange);
+                            onToolbarAlphaChange,
+                            userEducationHelper);
         } else {
             Supplier<TabModelFilter> tabModelFilterSupplier =
                     () -> tabModelSelector.getTabModelFilterProvider().getTabModelFilter(false);
-            OneshotSupplierImpl<Profile> profileSupplier = new OneshotSupplierImpl<>();
-            profileProviderSupplier.onAvailable(
-                    (profileProvider) -> profileSupplier.set(profileProvider.getOriginalProfile()));
-            Handler handler = new Handler();
-            UserEducationHelper userEducationHelper =
-                    new UserEducationHelper(activity, profileSupplier, handler);
             pane =
                     new TabSwitcherPane(
                             activity,
@@ -158,7 +162,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull TabModelSelector tabModelSelector,
             @NonNull DoubleConsumer onToolbarAlphaChange,
             @NonNull OneshotSupplier<ProfileProvider> profileProviderSupplier,
-            @NonNull OneshotSupplier<HubManager> hubManagerSupplier,
+            @NonNull LazyOneshotSupplier<HubManager> hubManagerSupplier,
             @NonNull Supplier<TabGroupUiActionHandler> tabGroupUiActionHandlerSupplier,
             @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier) {
         LazyOneshotSupplier<TabModelFilter> tabModelFilterSupplier =

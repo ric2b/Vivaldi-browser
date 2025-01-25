@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/strings/str_cat.h"
 #include "cast/receiver/channel/static_credentials.h"
 #include "cast/standalone_receiver/cast_service.h"
 #include "platform/api/time.h"
@@ -23,6 +22,7 @@
 #include "platform/impl/task_runner.h"
 #include "platform/impl/text_trace_logging_platform.h"
 #include "util/chrono_helpers.h"
+#include "util/string_util.h"
 #include "util/stringprintf.h"
 #include "util/trace_logging.h"
 
@@ -199,7 +199,7 @@ int RunStandaloneReceiver(int argc, char* argv[]) {
       << "No interface name provided.";
 
   std::string receiver_id =
-      absl::StrCat("Standalone Receiver on ", interface_name);
+      string_util::StrCat({"Standalone Receiver on ", interface_name});
   ErrorOr<GeneratedCredentials> creds = GenerateCredentials(
       receiver_id, private_key_path, developer_certificate_path);
   OSP_CHECK(creds.is_value()) << creds.error();

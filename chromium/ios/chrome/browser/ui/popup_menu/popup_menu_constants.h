@@ -56,6 +56,8 @@ extern NSString* const kToolsMenuRequestMobileId;
 extern NSString* const kToolsMenuReadLater;
 // AddBookmark item accessibility Identifier.
 extern NSString* const kToolsMenuAddToBookmarks;
+// Open lens overlay item accessibility Identifier.
+extern NSString* const kToolsMenuOpenLensOverlay;
 // EditBookmark item accessibility Identifier.
 extern NSString* const kToolsMenuEditBookmark;
 // SiteInformation item accessibility Identifier.
@@ -88,6 +90,22 @@ extern NSString* const kToolsMenuEditActionsId;
 extern NSString* const kToolsMenuAboutVivaldiId;
 // Share item accessibility Identifier.
 extern NSString* const kToolsMenuShareId;
+// Text Zoom item accessibility Identifier.
+extern NSString* const vToolsMenuTextZoomId;
+// Find In Page item accessibility Identifier.
+extern NSString* const vToolsMenuFindInPageId;
+// Mobile site item accessibility Identifier.
+extern NSString* const vToolsMenuMobileSiteId;
+// Desktop site item accessibility Identifier.
+extern NSString* const vToolsMenuDesktopSiteId;
+// Add page to... item accessibility Identifier.
+extern NSString* const vToolsMenuAddPageToId;
+// Edit item accessibility Identifier.
+extern NSString* const vToolsMenuEditPageId;
+// Add To Start Page item accessibility Identifier.
+extern NSString* const vToolsMenuAddStartPageId;
+// Edit Start Page item accessibility Identifier.
+extern NSString* const vToolsMenuEditStartPageId;
 // End Vivaldi
 
 #endif  // IOS_CHROME_BROWSER_UI_POPUP_MENU_POPUP_MENU_CONSTANTS_H_

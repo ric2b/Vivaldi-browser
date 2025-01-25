@@ -25,6 +25,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_util.h"
+#import "prefs/vivaldi_pref_names.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -187,13 +189,23 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
   // The data for which destinations currently have badges and how many
   // impressions they have remaining.
   std::map<overflow_menu::Destination, BadgeData> _destinationBadgeData;
+
+  // Vivaldi
+  // The data for the current vivaldi actions ordering and show/hide state.
+  ActionOrderData _vivaldiActionOrderData;
+  // End Vivaldi
+
 }
 
 @synthesize actionCustomizationModel = _actionCustomizationModel;
 @synthesize destinationCustomizationModel = _destinationCustomizationModel;
 
+// Vivaldi
+@synthesize vivaldiActionCustomizationModel = _vivaldiActionCustomizationModel;
+// End Vivaldi
+
 - (instancetype)initWithIsIncognito:(BOOL)isIncognito {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _isIncognito = isIncognito;
   }
   return self;
@@ -209,6 +221,8 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 - (void)setLocalStatePrefs:(PrefService*)localStatePrefs {
   _localStatePrefs = localStatePrefs;
 
+  // Note: (prio@vivaldi.com) - Do not collect data on destination usage
+  if (!IsVivaldiRunning()) {
   if (!_isIncognito) {
     self.destinationUsageHistory =
         [[DestinationUsageHistory alloc] initWithPrefService:localStatePrefs];
@@ -220,6 +234,9 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
   _destinationUsageHistoryEnabled = [[PrefBackedBoolean alloc]
       initWithPrefService:_localStatePrefs
                  prefName:prefs::kOverflowMenuDestinationUsageHistoryEnabled];
+  } else {
+    [self loadVivaldiActionsFromPrefs];
+  } // End Vivaldi
 
   [self loadDestinationsFromPrefs];
   [self loadActionsFromPrefs];
@@ -300,6 +317,8 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 #pragma mark - Public
 
 - (void)recordClickForDestination:(overflow_menu::Destination)destination {
+
+  if (!IsVivaldiRunning()) {
   _untappedDestinations.erase(destination);
 
   if (base::Contains(_destinationBadgeData, destination) &&
@@ -310,11 +329,14 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
   [self flushDestinationsToPrefs];
 
   [self.destinationUsageHistory recordClickForDestination:destination];
+  } // End Vivaldi
+
 }
 
 - (void)reorderDestinationsForInitialMenu {
   [self initializeDestinationOrderDataIfEmpty];
 
+  if (!IsVivaldiRunning()) {
   DestinationRanking availableDestinations =
       [self.destinationProvider baseDestinations];
 
@@ -355,24 +377,14 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
     _destinationOrderData.shownDestinations = badgedRanking;
     [self flushDestinationsToPrefs];
   }
-
-  if (IsVivaldiRunning()) {
-    self.model.destinations = [self destinationsVivaldi];
-  } else {
-  self.model.destinations = [self destinationsFromCurrentRanking];
   } // End Vivaldi
 
+  self.model.destinations = [self destinationsFromCurrentRanking];
 }
 
 - (void)updateDestinations {
   [self initializeDestinationOrderDataIfEmpty];
-
-  if (IsVivaldiRunning()) {
-    self.model.destinations = [self destinationsVivaldi];
-  } else {
   self.model.destinations = [self destinationsFromCurrentRanking];
-  } // End Vivaldi
-
 }
 
 - (void)updatePageActions {
@@ -484,13 +496,8 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
       _destinationCustomizationModel.destinationUsageEnabled;
   [self flushDestinationsToPrefs];
 
-  if (IsVivaldiRunning()) {
-    [self.model
-        setDestinationsWithAnimation:[self destinationsVivaldi]];
-  } else {
   [self.model
       setDestinationsWithAnimation:[self destinationsFromCurrentRanking]];
-  } // End Vivaldi
 
   // Reset customization model so next customization can start fresh.
   _destinationCustomizationModel = nil;
@@ -536,6 +543,12 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 
 // Loads the stored destinations data from local prefs/disk.
 - (void)loadDestinationsFromPrefs {
+
+  if (IsVivaldiRunning() && ShouldResetOverflowMenuDestinations()) {
+    [self flushDestinationsToPrefs];
+    SetOverflowMenuDestinationsResetComplete();
+  } // End Vivaldi
+
   // Fetch the stored list of newly-added, unclicked destinations, then update
   // `_untappedDestinations` with its data.
   AddDestinationsToSet(
@@ -619,6 +632,11 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 
 // Load the stored actions data from local prefs/disk.
 - (void)loadActionsFromPrefs {
+  if (IsVivaldiRunning() && ShouldResetOverflowMenuActions()) {
+    [self updateActionOrderData];
+    SetOverflowMenuActionsResetComplete();
+  } // End Vivaldi
+
   const base::Value::Dict& storedActions =
       _localStatePrefs->GetDict(prefs::kOverflowMenuActionsOrder);
   ActionOrderData actionOrderData;
@@ -759,10 +777,6 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 
 // Returns the current pageActions in order.
 - (NSArray<OverflowMenuAction*>*)pageActions {
-
-  if (IsVivaldiRunning())
-    return [self pageActionsVivaldi]; // End Vivaldi
-
   if (!IsOverflowMenuCustomizationEnabled()) {
     ActionRanking availableActions = [self.actionProvider basePageActions];
     // Convert back to Objective-C array for returning. This step also filters
@@ -1489,15 +1503,66 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 }
 
 #pragma mark - VIVALDI
-// Returns the current ordering of active page actions.
-- (NSArray<OverflowMenuAction*>*)pageActionsVivaldi {
-  ActionRanking availableActions = [self.actionProvider basePageActionsVivaldi];
+
+// Lazily create vivaldi action customization model.
+- (ActionCustomizationModel*)vivaldiActionCustomizationModel {
+  if (_vivaldiActionCustomizationModel) {
+    return _vivaldiActionCustomizationModel;
+  }
+
+  [self updateVivaldiActionOrderData];
+
+  NSMutableArray<OverflowMenuAction*>* actions = [[NSMutableArray alloc] init];
+  for (overflow_menu::ActionType action : _vivaldiActionOrderData.shownActions)
+  {
+    if (OverflowMenuAction* overflowMenuAction =
+            [self.actionProvider customizationActionForActionType:action]) {
+      [actions addObject:overflowMenuAction];
+    }
+  }
+  for (overflow_menu::ActionType action : _vivaldiActionOrderData.hiddenActions)
+  {
+    if (OverflowMenuAction* overflowMenuAction =
+            [self.actionProvider customizationActionForActionType:action]) {
+      overflowMenuAction.shown = NO;
+      [actions addObject:overflowMenuAction];
+    }
+  }
+
+  _vivaldiActionCustomizationModel =
+      [[ActionCustomizationModel alloc] initWithActions:actions];
+  return _vivaldiActionCustomizationModel;
+}
+
+- (void)updateVivaldiActions {
+  [self.vivaldiActionsGroup setActionsWithAnimation:[self vivaldiActions]];
+}
+
+// Returns the current vivaldi actions in order.
+- (NSArray<OverflowMenuAction*>*)vivaldiActions {
+  if (!IsOverflowMenuCustomizationEnabled()) {
+    ActionRanking availableActions = [self.actionProvider vivaldiActions];
+    // Convert back to Objective-C array for returning. This step also filters
+    // out any actions that are not supported on the current page.
+    NSMutableArray<OverflowMenuAction*>* sortedActions =
+        [[NSMutableArray alloc] init];
+    for (overflow_menu::ActionType action : availableActions) {
+      if (OverflowMenuAction* overflowMenuAction =
+              [self.actionProvider actionForActionType:action]) {
+        [sortedActions addObject:overflowMenuAction];
+      }
+    }
+
+    return sortedActions;
+  }
+
+  [self updateVivaldiActionOrderData];
 
   // Convert back to Objective-C array for returning. This step also filters out
   // any actions that are not supported on the current page.
   NSMutableArray<OverflowMenuAction*>* sortedActions =
       [[NSMutableArray alloc] init];
-  for (overflow_menu::ActionType action : availableActions) {
+  for (overflow_menu::ActionType action: _vivaldiActionOrderData.shownActions) {
     if (OverflowMenuAction* overflowMenuAction =
             [self.actionProvider actionForActionType:action]) {
       [sortedActions addObject:overflowMenuAction];
@@ -1507,8 +1572,115 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
   return sortedActions;
 }
 
-- (NSArray<OverflowMenuDestination*>*)destinationsVivaldi {
-  return [self.actionProvider baseDestinationsVivaldi];
+- (void)commitVivaldiActionsUpdate {
+  if (!_vivaldiActionCustomizationModel.hasChanged) {
+    [self cancelVivaldiActionsUpdate];
+    return;
+  }
+
+  ActionOrderData vivaldiActionOrderData;
+  for (OverflowMenuAction* action in self.vivaldiActionCustomizationModel
+           .shownActions) {
+             vivaldiActionOrderData.shownActions.push_back(
+        static_cast<overflow_menu::ActionType>(action.actionType));
+  }
+
+  for (OverflowMenuAction* action in self.vivaldiActionCustomizationModel
+           .hiddenActions) {
+             vivaldiActionOrderData.hiddenActions.push_back(
+        static_cast<overflow_menu::ActionType>(action.actionType));
+  }
+
+  _vivaldiActionOrderData = vivaldiActionOrderData;
+  [self flushVivaldiActionsToPrefs];
+
+  [self updateVivaldiActions];
+
+  _vivaldiActionCustomizationModel = nil;
+}
+
+- (void)cancelVivaldiActionsUpdate {
+  _vivaldiActionCustomizationModel = nil;
+}
+
+// Load the stored actions data from local prefs/disk.
+- (void)loadVivaldiActionsFromPrefs {
+  const base::Value::Dict& storedActions =
+      _localStatePrefs->GetDict(vivaldiprefs::kOverflowMenuVivaldiActionsOrder);
+  ActionOrderData vivaldiActionOrderData;
+
+  const base::Value::List* shownActions =
+      storedActions.FindList(kShownActionsKey);
+  if (shownActions) {
+    for (const auto& value : *shownActions) {
+      if (!value.is_string()) {
+        continue;
+      }
+
+      vivaldiActionOrderData.shownActions.push_back(
+          overflow_menu::ActionTypeForStringName(value.GetString()));
+    }
+  }
+
+  const base::Value::List* hiddenActions =
+      storedActions.FindList(kHiddenActionsKey);
+  if (hiddenActions) {
+    for (const auto& value : *hiddenActions) {
+      if (!value.is_string()) {
+        continue;
+      }
+
+      vivaldiActionOrderData.hiddenActions.push_back(
+          overflow_menu::ActionTypeForStringName(value.GetString()));
+    }
+  }
+
+  _vivaldiActionOrderData = vivaldiActionOrderData;
+}
+
+// Write stored action data back to local prefs/disk.
+- (void)flushVivaldiActionsToPrefs {
+  if (!_localStatePrefs) {
+    return;
+  }
+  base::Value::Dict storedActions;
+
+  base::Value::List shownActions;
+  for (overflow_menu::ActionType action: _vivaldiActionOrderData.shownActions) {
+    shownActions.Append(overflow_menu::StringNameForActionType(action));
+  }
+
+  base::Value::List hiddenActions;
+  for (
+    overflow_menu::ActionType action: _vivaldiActionOrderData.hiddenActions
+  ) {
+    hiddenActions.Append(overflow_menu::StringNameForActionType(action));
+  }
+
+  storedActions.Set(kShownActionsKey, std::move(shownActions));
+  storedActions.Set(kHiddenActionsKey, std::move(hiddenActions));
+
+  _localStatePrefs->SetDict(vivaldiprefs::kOverflowMenuVivaldiActionsOrder,
+                            std::move(storedActions));
+}
+
+// Uses the current `actionProvider` to add any new actions to the shown list.
+// This handles new users with no stored data and new actions added.
+- (void)updateVivaldiActionOrderData {
+  ActionRanking availableActions = [self.actionProvider vivaldiActions];
+
+  // Add any available actions not present in shown or hidden to the shown list.
+  std::set<overflow_menu::ActionType> knownActions(
+      _vivaldiActionOrderData.shownActions.begin(),
+      _vivaldiActionOrderData.shownActions.end());
+  knownActions.insert(_vivaldiActionOrderData.hiddenActions.begin(),
+                      _vivaldiActionOrderData.hiddenActions.end());
+
+  std::set_difference(availableActions.begin(), availableActions.end(),
+                      knownActions.begin(), knownActions.end(),
+                      std::back_inserter(_vivaldiActionOrderData.shownActions));
+
+  [self flushVivaldiActionsToPrefs];
 }
 
 @end

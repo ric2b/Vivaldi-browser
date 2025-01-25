@@ -271,9 +271,7 @@ std::optional<base::Pickle> OSExchangeDataProviderMac::GetPickledData(
     return std::nullopt;
   }
 
-  base::span<const uint8_t> data_span(
-      reinterpret_cast<const uint8_t*>(ns_data.bytes), ns_data.length);
-  return base::Pickle::WithData(data_span);
+  return base::Pickle::WithData(base::apple::NSDataToSpan(ns_data));
 }
 
 bool OSExchangeDataProviderMac::HasString() const {

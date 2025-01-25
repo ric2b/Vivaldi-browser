@@ -4,9 +4,8 @@
 #define COMPONENTS_USER_AGENT_VIVALDI_USER_AGENT_H_
 
 #include <string>
+#include <string_view>
 #include <vector>
-
-#include "base/strings/string_piece.h"
 
 class GURL;
 

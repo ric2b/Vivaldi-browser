@@ -28,12 +28,11 @@ void FaviconBackend::SetVivaldiPreloadedFavicons() {
   db_->DeleteVivaldiPreloadedFavicons();
 
   for (size_t i = 0; i < std::size(kPreloadedFavicons); i++) {
-    std::string png;
-    if (!base::Base64Decode(kPreloadedFavicons[i].favicon_png_base64, &png)) {
+    auto png = base::Base64Decode(kPreloadedFavicons[i].favicon_png_base64);
+    if (!png) {
       NOTREACHED();
     }
-    gfx::Image image = gfx::Image::CreateFrom1xPNGBytes(
-      reinterpret_cast<const unsigned char*>(png.c_str()), png.length());
+    gfx::Image image = gfx::Image::CreateFrom1xPNGBytes(*png);
     gfx::ImageSkia image_skia = image.AsImageSkia();
     image_skia.EnsureRepsForSupportedScales();
     std::vector<SkBitmap> bitmaps;

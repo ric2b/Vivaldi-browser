@@ -32,6 +32,7 @@ namespace ui {
 
 extern UI_ANDROID_EXPORT const float kDefaultMouseWheelTickMultiplier;
 
+class ModalDialogManagerBridge;
 class WindowAndroidCompositor;
 class WindowAndroidObserver;
 
@@ -45,6 +46,9 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
     ~ScopedWindowAndroidForTesting();
 
     WindowAndroid* get() { return window_; }
+
+    void SetModalDialogManager(
+        base::android::ScopedJavaLocalRef<jobject> modal_dialog_manager);
 
    private:
     raw_ptr<WindowAndroid> window_;
@@ -113,6 +117,8 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
     progress_bar_config_for_testing_ = config;
   }
   ProgressBarConfig GetProgressBarConfig();
+
+  ModalDialogManagerBridge* GetModalDialogManagerBridge();
 
   float mouse_wheel_scroll_factor() const { return mouse_wheel_scroll_factor_; }
 

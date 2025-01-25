@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       signals.c
 /// \brief      Handling signals to abort operation
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -23,7 +22,7 @@ volatile sig_atomic_t user_abort = false;
 /// been done.
 static volatile sig_atomic_t exit_signal = 0;
 
-/// Mask of signals for which have have established a signal handler to set
+/// Mask of signals for which we have established a signal handler to set
 /// user_abort to true.
 static sigset_t hooked_signals;
 
@@ -41,10 +40,19 @@ signal_handler(int sig)
 {
 	exit_signal = sig;
 	user_abort = true;
+
+#ifndef TUKLIB_DOSLIKE
+	io_write_to_user_abort_pipe();
+#endif
+
 	return;
 }
 
 
+#ifdef __APPLE__
+#	pragma GCC diagnostic push
+#	pragma GCC diagnostic ignored "-Wsign-conversion"
+#endif
 extern void
 signals_init(void)
 {
@@ -77,35 +85,55 @@ signals_init(void)
 		sigaddset(&hooked_signals, message_progress_sigs[i]);
 #endif
 
-	struct sigaction sa;
+#ifdef USE_SIGTSTP_HANDLER
+	// Add the SIGTSTP handler from mytime.c to hooked_signals.
+	sigaddset(&hooked_signals, SIGTSTP);
+#endif
+
+	// Using "my_sa" because "sa" may conflict with a sockaddr variable
+	// from system headers on Solaris.
+	struct sigaction my_sa;
 
 	// All the signals that we handle we also blocked while the signal
 	// handler runs.
-	sa.sa_mask = hooked_signals;
+	my_sa.sa_mask = hooked_signals;
 
 	// Don't set SA_RESTART, because we want EINTR so that we can check
 	// for user_abort and cleanup before exiting. We block the signals
 	// for which we have established a handler when we don't want EINTR.
-	sa.sa_flags = 0;
-	sa.sa_handler = &signal_handler;
+	my_sa.sa_flags = 0;
+	my_sa.sa_handler = &signal_handler;
+
+	struct sigaction old;
 
 	for (size_t i = 0; i < ARRAY_SIZE(sigs); ++i) {
 		// If the parent process has left some signals ignored,
 		// we don't unignore them.
-		struct sigaction old;
 		if (sigaction(sigs[i], NULL, &old) == 0
 				&& old.sa_handler == SIG_IGN)
 			continue;
 
 		// Establish the signal handler.
-		if (sigaction(sigs[i], &sa, NULL))
+		if (sigaction(sigs[i], &my_sa, NULL))
 			message_signal_handler();
 	}
+
+#ifdef USE_SIGTSTP_HANDLER
+	if (!(sigaction(SIGTSTP, NULL, &old) == 0
+				&& old.sa_handler == SIG_IGN)) {
+		my_sa.sa_handler = &mytime_sigtstp_handler;
+		if (sigaction(SIGTSTP, &my_sa, NULL))
+			message_signal_handler();
+	}
+#endif
 
 	signals_are_initialized = true;
 
 	return;
 }
+#ifdef __APPLE__
+#	pragma GCC diagnostic pop
+#endif
 
 
 #ifndef __VMS
@@ -145,7 +173,7 @@ signals_unblock(void)
 extern void
 signals_exit(void)
 {
-	const int sig = exit_signal;
+	const int sig = (int)exit_signal;
 
 	if (sig != 0) {
 #if defined(TUKLIB_DOSLIKE) || defined(__VMS)
@@ -159,7 +187,7 @@ signals_exit(void)
 		sigfillset(&sa.sa_mask);
 		sa.sa_flags = 0;
 		sigaction(sig, &sa, NULL);
-		raise(exit_signal);
+		raise(sig);
 #endif
 	}
 

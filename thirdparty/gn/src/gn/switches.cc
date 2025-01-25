@@ -233,9 +233,12 @@ Runtime deps output file
   an output file "bar.so", GN will create a file "bar.so.runtime_deps" in the
   build directory.
 
-  If a source set, action, copy, or group is listed, the runtime deps file will
-  correspond to the .stamp file corresponding to that target. This is probably
-  not useful; the use-case for this feature is generally executable targets.
+  For targets that don't generate an output file (such as source set, action,
+  copy or group), the runtime deps file will be in the output directory where an
+  output file would have been located. For example, the source_set target
+  "//foo:bar" would result in a runtime dependency file being written to
+  "<output_dir>/obj/foo/bar.runtime_deps". This is probably not useful; the
+  use-case for this feature is generally executable targets.
 
   The runtime dependency file will list one file per line, with no escaping.
   The files will be relative to the root_build_dir. The first line of the file

@@ -277,7 +277,8 @@ struct RequestFilterManager::RequestHandler::PendingRequest {
   // priority can change it again.
   size_t new_url_priority = 0;
 
-  bool cancel_request;
+  RequestFilter::CancelDecision cancel;
+
   raw_ptr<bool> collapse;
 
   // The request headers that will be issued along with this request. Only valid
@@ -368,7 +369,7 @@ int RequestFilterManager::RequestHandler::OnBeforeRequest(
     return net::ERR_IO_PENDING;
   }
 
-  bool cancelled = pending_request.cancel_request;
+  bool cancelled = pending_request.cancel == RequestFilter::kCancel;
   pending_requests_.erase(request->id);
   return cancelled ? net::ERR_BLOCKED_BY_CLIENT : net::OK;
 }
@@ -376,7 +377,7 @@ int RequestFilterManager::RequestHandler::OnBeforeRequest(
 void RequestFilterManager::RequestHandler::OnBeforeRequestHandled(
     int64_t request_id,
     size_t filter_priority,
-    bool cancel,
+    RequestFilter::CancelDecision cancel,
     bool collapse,
     const GURL& new_url) {
   auto pending_request_it = pending_requests_.find(request_id);
@@ -384,12 +385,17 @@ void RequestFilterManager::RequestHandler::OnBeforeRequestHandled(
     return;
   PendingRequest& pending_request = pending_request_it->second;
 
-  DCHECK(!collapse || cancel);
+  DCHECK(!collapse || cancel == RequestFilter::kCancel);
 
-  if (cancel) {
-    pending_request.cancel_request = true;
-    if (collapse && pending_request.collapse)
+  if (cancel > pending_request.cancel) {
+    pending_request.cancel = cancel;
+    if (cancel == RequestFilter::kCancel && collapse &&
+        pending_request.collapse) {
       *pending_request.collapse = true;
+    } else if (cancel == RequestFilter::kPreventCancel &&
+               pending_request.collapse) {
+      *pending_request.collapse = false;
+    }
   }
 
   // All filters have different priorities and the callbacks only runs once, so
@@ -410,7 +416,7 @@ void RequestFilterManager::RequestHandler::OnBeforeRequestHandled(
   // No more blocking filters. We can continue handling the request.
   DCHECK(!pending_request.callback.is_null());
 
-  bool cancelled = pending_request.cancel_request;
+  bool cancelled = pending_request.cancel == RequestFilter::kCancel;
   auto callback = std::move(pending_request.callback);
   pending_requests_.erase(request_id);
   std::move(callback).Run(cancelled ? net::ERR_BLOCKED_BY_CLIENT : net::OK);
@@ -460,7 +466,7 @@ int RequestFilterManager::RequestHandler::OnBeforeSendHeaders(
 
   MergeRequestHeaderChanges(&pending_request);
 
-  bool cancelled = pending_request.cancel_request;
+  bool cancelled = pending_request.cancel == RequestFilter::kCancel;
   pending_requests_.erase(request->id);
   return cancelled ? net::ERR_BLOCKED_BY_CLIENT : net::OK;
 }
@@ -468,15 +474,16 @@ int RequestFilterManager::RequestHandler::OnBeforeSendHeaders(
 void RequestFilterManager::RequestHandler::OnBeforeSendHeadersHandled(
     int64_t request_id,
     size_t filter_priority,
-    bool cancel,
+    RequestFilter::CancelDecision cancel,
     RequestFilter::RequestHeaderChanges header_changes) {
   auto pending_request_it = pending_requests_.find(request_id);
   if (pending_request_it == pending_requests_.end())
     return;
   PendingRequest& pending_request = pending_request_it->second;
 
-  if (cancel)
-    pending_request.cancel_request = true;
+  if (cancel > pending_request.cancel) {
+    pending_request.cancel = cancel;
+  }
 
   pending_request.all_request_header_changes[filter_priority] =
       std::move(header_changes);
@@ -492,7 +499,7 @@ void RequestFilterManager::RequestHandler::OnBeforeSendHeadersHandled(
 
   DCHECK(!pending_request.callback.is_null());
 
-  bool cancelled = pending_request.cancel_request;
+  bool cancelled = pending_request.cancel == RequestFilter::kCancel;
   auto callback = std::move(pending_request.callback);
   pending_requests_.erase(request_id);
   std::move(callback).Run(cancelled ? net::ERR_BLOCKED_BY_CLIENT : net::OK);
@@ -501,7 +508,7 @@ void RequestFilterManager::RequestHandler::OnBeforeSendHeadersHandled(
 void RequestFilterManager::RequestHandler::MergeRequestHeaderChanges(
     PendingRequest* pending_request) {
   // No point doing this if we're going to cancel anyway.
-  if (pending_request->cancel_request)
+  if (pending_request->cancel == RequestFilter::kCancel)
     return;
 
   // No point doing this if the proxying side doesn't care.
@@ -540,9 +547,9 @@ void RequestFilterManager::RequestHandler::MergeRequestHeaderChanges(
   net::HttpRequestHeaders::Iterator new_headers_it(*request_headers);
 
   while (new_headers_it.GetNext()) {
-    std::string old_value;
-    if (!original_headers.GetHeader(new_headers_it.name(), &old_value) ||
-        old_value != new_headers_it.value())
+    std::optional<std::string> old_value =
+        original_headers.GetHeader(new_headers_it.name());
+    if (!old_value || old_value != new_headers_it.value())
       pending_request->set_request_headers->insert(new_headers_it.name());
   }
 }
@@ -609,7 +616,7 @@ int RequestFilterManager::RequestHandler::OnHeadersReceived(
 
   MergeResponseHeaderChanges(&pending_request);
 
-  bool cancelled = pending_request.cancel_request;
+  bool cancelled = pending_request.cancel == RequestFilter::kCancel;
   pending_requests_.erase(request->id);
   return cancelled ? net::ERR_BLOCKED_BY_CLIENT : net::OK;
 }
@@ -617,7 +624,7 @@ int RequestFilterManager::RequestHandler::OnHeadersReceived(
 void RequestFilterManager::RequestHandler::OnHeadersReceivedHandled(
     int64_t request_id,
     size_t filter_priority,
-    bool cancel,
+    RequestFilter::CancelDecision cancel,
     bool collapse,
     const GURL& new_url,
     RequestFilter::ResponseHeaderChanges header_changes) {
@@ -626,12 +633,17 @@ void RequestFilterManager::RequestHandler::OnHeadersReceivedHandled(
     return;
   PendingRequest& pending_request = pending_request_it->second;
 
-  DCHECK(!collapse || cancel);
+  DCHECK(!collapse || cancel == RequestFilter::kCancel);
 
-  if (cancel) {
-    pending_request.cancel_request = true;
-    if (collapse && pending_request.collapse)
+  if (cancel > pending_request.cancel) {
+    pending_request.cancel = cancel;
+    if (cancel == RequestFilter::kCancel && collapse &&
+        pending_request.collapse) {
       *pending_request.collapse = true;
+    } else if (cancel == RequestFilter::kPreventCancel &&
+               pending_request.collapse) {
+      *pending_request.collapse = false;
+    }
   }
 
   // All filters have different priorities and the callbacks only runs once, so
@@ -657,7 +669,7 @@ void RequestFilterManager::RequestHandler::OnHeadersReceivedHandled(
 
   DCHECK(!pending_request.callback.is_null());
 
-  bool cancelled = pending_request.cancel_request;
+  bool cancelled = pending_request.cancel == RequestFilter::kCancel;
   auto callback = std::move(pending_request.callback);
   pending_requests_.erase(request_id);
   std::move(callback).Run(cancelled ? net::ERR_BLOCKED_BY_CLIENT : net::OK);
@@ -666,7 +678,7 @@ void RequestFilterManager::RequestHandler::OnHeadersReceivedHandled(
 void RequestFilterManager::RequestHandler::MergeResponseHeaderChanges(
     PendingRequest* pending_request) {
   // No point doing this if we're going to cancel anyway.
-  if (pending_request->cancel_request)
+  if (pending_request->cancel == RequestFilter::kCancel)
     return;
 
   scoped_refptr<net::HttpResponseHeaders>* response_headers =

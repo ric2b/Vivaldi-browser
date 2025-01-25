@@ -142,11 +142,13 @@ struct packet_traits<double> : default_packet_traits {
     HasSin = EIGEN_FAST_MATH,
     HasCos = EIGEN_FAST_MATH,
 #endif
+    HasTanh = EIGEN_FAST_MATH,
     HasLog = 1,
     HasExp = 1,
     HasSqrt = 1,
     HasRsqrt = 1,
     HasATan = 1,
+    HasATanh = 1,
     HasBlend = 1
   };
 };
@@ -1180,7 +1182,7 @@ EIGEN_STRONG_INLINE Packet8i psign(const Packet8i& a) {
 }
 #endif
 
-// Add specializations for min/max with prescribed NaN progation.
+// Add specializations for min/max with prescribed NaN propagation.
 template <>
 EIGEN_STRONG_INLINE Packet8f pmin<PropagateNumbers, Packet8f>(const Packet8f& a, const Packet8f& b) {
   return pminmax_propagate_numbers(a, b, pmin<Packet8f>);

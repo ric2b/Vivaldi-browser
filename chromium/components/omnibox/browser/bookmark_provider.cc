@@ -28,6 +28,7 @@
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/page_transition_types.h"
 #include "url/url_constants.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using bookmarks::BookmarkNode;
 using bookmarks::TitledUrlMatch;
@@ -111,6 +112,14 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
       // If the input was in a starter pack keyword scope, set the `keyword` and
       // `transition` appropriately to avoid popping the user out of keyword
       // mode.
+#if defined(VIVALDI_BUILD)
+      PrefService* prefs = client_->GetPrefs();
+      bool allow_default_match =
+          prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBookmarks) &&
+          (!input.prevent_inline_autocomplete() ||
+           match.inline_autocompletion.empty());
+      match.allowed_to_be_default_match = allow_default_match;
+#endif
       if (starter_pack_engine) {
         match.keyword = starter_pack_engine->keyword();
         match.transition = ui::PAGE_TRANSITION_KEYWORD;
@@ -225,8 +234,22 @@ std::pair<int, int> BookmarkProvider::CalculateBookmarkMatchRelevance(
   const GURL& url(bookmark_match.node->GetTitledUrlNodeUrl());
   const bool bookmarklet_without_title_match =
       url.SchemeIs(url::kJavaScriptScheme) && title_match_strength == 0.0;
+#if defined(VIVALDI_BUILD)
+  int vivaldi_bookmark_boost_score = 0;
+  PrefService* prefs = client_->GetPrefs();
+  bool bookmark_boost =
+      prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBookmarks);
+  vivaldi_bookmark_boost_score = bookmark_boost ? 450 : 0;
+  const int kBaseBookmarkScore = bookmarklet_without_title_match
+                                     ? 400
+                                     : 900 + vivaldi_bookmark_boost_score;
+  const int kMaxBookmarkScore = bookmarklet_without_title_match
+                                    ? 799
+                                    : 1199 + vivaldi_bookmark_boost_score;
+#else
   const int kBaseBookmarkScore = bookmarklet_without_title_match ? 400 : 900;
   const int kMaxBookmarkScore = bookmarklet_without_title_match ? 799 : 1199;
+#endif
   const double kBookmarkScoreRange =
       static_cast<double>(kMaxBookmarkScore - kBaseBookmarkScore);
   int relevance = static_cast<int>(normalized_sum * kBookmarkScoreRange) +
@@ -242,12 +265,12 @@ std::pair<int, int> BookmarkProvider::CalculateBookmarkMatchRelevance(
   }
 
   // Boost the score if the bookmark's URL is referenced by other bookmarks.
-  const int kURLCountBoost[4] = {0, 75, 125, 150};
+  constexpr std::array<int, 4> kURLCountBoost = {0, 75, 125, 150};
 
   const size_t url_node_count = bookmark_model_->GetNodesByURL(url).size();
   DCHECK_GE(std::min(std::size(kURLCountBoost), url_node_count), 1U);
   relevance +=
-      kURLCountBoost[std::min(std::size(kURLCountBoost), url_node_count) - 1];
+      kURLCountBoost[std::min(kURLCountBoost.size(), url_node_count) - 1];
   relevance = std::min(kMaxBookmarkScore, relevance);
   return {relevance, url_node_count};
 }

@@ -14,7 +14,7 @@
 
 #include "platform/base/error.h"
 #include "util/osp_logging.h"
-#include "util/stringutil.h"
+#include "util/string_util.h"
 
 namespace openscreen {
 
@@ -40,7 +40,7 @@ template <typename Enum, size_t Size>
 ErrorOr<Enum> GetEnum(const EnumNameTable<Enum, Size>& map,
                       std::string_view name) {
   for (auto pair : map) {
-    if (::openscreen::stringutil::EqualsIgnoreCase(pair.first, name)) {
+    if (::openscreen::string_util::EqualsIgnoreCase(pair.first, name)) {
       return pair.second;
     }
   }

@@ -13,7 +13,7 @@
 #include <sstream>
 #include <type_traits>
 
-#include "cast/streaming/expanded_value_base.h"
+#include "cast/streaming/impl/expanded_value_base.h"
 #include "platform/api/time.h"
 #include "util/saturate_cast.h"
 

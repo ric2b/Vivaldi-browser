@@ -758,9 +758,13 @@ FPDFTextObj_GetRenderedBitmap(FPDF_DOCUMENT document,
   if (rect.IsEmpty())
     return nullptr;
 
+  // TODO(crbug.com/42271020): Consider adding support for
+  // `FXDIB_Format::kBgraPremul`
   auto result_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  if (!result_bitmap->Create(rect.Width(), rect.Height(), FXDIB_Format::kArgb))
+  if (!result_bitmap->Create(rect.Width(), rect.Height(),
+                             FXDIB_Format::kBgra)) {
     return nullptr;
+  }
 
   auto render_context = std::make_unique<CPDF_PageRenderContext>();
   CPDF_PageRenderContext* render_context_ptr = render_context.get();
@@ -788,6 +792,8 @@ FPDFTextObj_GetRenderedBitmap(FPDF_DOCUMENT document,
   CFX_Matrix render_matrix(1, 0, 0, -1, -text_rect.left, text_rect.top);
   render_matrix *= scale_matrix;
   status.RenderSingleObject(text, render_matrix);
+
+  CHECK(!result_bitmap->IsPremultiplied());
 
   // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(result_bitmap.Leak());
@@ -849,8 +855,25 @@ FPDF_EXPORT FPDF_FONT FPDF_CALLCONV FPDFTextObj_GetFont(FPDF_PAGEOBJECT text) {
   return FPDFFontFromCPDFFont(pTextObj->GetFont());
 }
 
-FPDF_EXPORT unsigned long FPDF_CALLCONV
-FPDFFont_GetFamilyName(FPDF_FONT font, char* buffer, unsigned long length) {
+FPDF_EXPORT size_t FPDF_CALLCONV FPDFFont_GetBaseFontName(FPDF_FONT font,
+                                                          char* buffer,
+                                                          size_t length) {
+  auto* cfont = CPDFFontFromFPDFFont(font);
+  if (!cfont) {
+    return 0;
+  }
+
+  // SAFETY: required from caller.
+  auto result_span = UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, length));
+  ByteString name = cfont->GetBaseFontName();
+  pdfium::span<const char> name_span = name.span_with_terminator();
+  fxcrt::try_spancpy(result_span, name_span);
+  return name_span.size();
+}
+
+FPDF_EXPORT size_t FPDF_CALLCONV FPDFFont_GetFamilyName(FPDF_FONT font,
+                                                        char* buffer,
+                                                        size_t length) {
   auto* cfont = CPDFFontFromFPDFFont(font);
   if (!cfont) {
     return 0;
@@ -861,7 +884,7 @@ FPDFFont_GetFamilyName(FPDF_FONT font, char* buffer, unsigned long length) {
   ByteString name = cfont->GetFont()->GetFamilyName();
   pdfium::span<const char> name_span = name.span_with_terminator();
   fxcrt::try_spancpy(result_span, name_span);
-  return static_cast<unsigned long>(name_span.size());
+  return name_span.size();
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFFont_GetFontData(FPDF_FONT font,
@@ -873,8 +896,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFFont_GetFontData(FPDF_FONT font,
     return false;
 
   // SAFETY: required from caller.
-  auto result_span = UNSAFE_BUFFERS(
-      SpanFromFPDFApiArgs(buffer, pdfium::checked_cast<unsigned long>(buflen)));
+  auto result_span = UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen));
   pdfium::span<const uint8_t> data = cfont->GetFont()->GetFontSpan();
   fxcrt::try_spancpy(result_span, data);
   *out_buflen = data.size();

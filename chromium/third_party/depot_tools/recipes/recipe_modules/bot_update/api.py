@@ -211,6 +211,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
                       enforce_fetch=False,
                       download_topics=False,
                       recipe_revision_overrides=None,
+                      step_tags=None,
                       **kwargs):
     """
     Args:
@@ -246,6 +247,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
         to each particular build/recipe run. e.g. the recipe might parse a gerrit
         change's commit message to get this revision override requested by the
         author.
+      * step_tags: a dict {tag name: tag value} of tags to add to the step
     """
     assert not (ignore_input_commit and set_output_commit)
     if assert_one_gerrit_change:
@@ -439,6 +441,10 @@ class BotUpdateApi(recipe_api.RecipeApi):
                          **kwargs)
     finally:
       step_result = self.m.step.active_result
+
+      if step_tags:
+        for tag, value in step_tags.items():
+          step_result.presentation.tags[tag] = value
 
       # The step_result can be missing the json attribute if the build
       # is shutting down and the bot_update script is not able to finish

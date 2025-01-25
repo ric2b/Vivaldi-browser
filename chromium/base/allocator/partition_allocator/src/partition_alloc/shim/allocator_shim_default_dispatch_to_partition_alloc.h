@@ -14,8 +14,6 @@
 
 namespace allocator_shim {
 
-struct AllocatorDispatch;
-
 namespace internal {
 
 class PA_COMPONENT_EXPORT(ALLOCATOR_SHIM) PartitionAllocMalloc {
@@ -30,70 +28,85 @@ class PA_COMPONENT_EXPORT(ALLOCATOR_SHIM) PartitionAllocMalloc {
 };
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionMalloc(const AllocatorDispatch*, size_t size, void* context);
+void* PartitionMalloc(size_t size, void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionMallocUnchecked(const AllocatorDispatch*,
-                               size_t size,
-                               void* context);
+void* PartitionMallocUnchecked(size_t size, void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionCalloc(const AllocatorDispatch*,
-                      size_t n,
-                      size_t size,
-                      void* context);
+void* PartitionCalloc(size_t n, size_t size, void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionMemalign(const AllocatorDispatch*,
-                        size_t alignment,
-                        size_t size,
-                        void* context);
+void* PartitionMemalign(size_t alignment, size_t size, void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionAlignedAlloc(const AllocatorDispatch* dispatch,
-                            size_t size,
-                            size_t alignment,
-                            void* context);
+void* PartitionAlignedAlloc(size_t size, size_t alignment, void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionAlignedAllocUnchecked(const AllocatorDispatch* dispatch,
-                                     size_t size,
+void* PartitionAlignedAllocUnchecked(size_t size,
                                      size_t alignment,
                                      void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionAlignedRealloc(const AllocatorDispatch* dispatch,
-                              void* address,
+void* PartitionAlignedRealloc(void* address,
                               size_t size,
                               size_t alignment,
                               void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionAlignedReallocUnchecked(const AllocatorDispatch* dispatch,
-                                       void* address,
+void* PartitionAlignedReallocUnchecked(void* address,
                                        size_t size,
                                        size_t alignment,
                                        void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionRealloc(const AllocatorDispatch*,
-                       void* address,
-                       size_t size,
-                       void* context);
+void* PartitionRealloc(void* address, size_t size, void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void* PartitionReallocUnchecked(const AllocatorDispatch*,
-                                void* address,
-                                size_t size,
-                                void* context);
+void* PartitionReallocWithAdvancedChecks(void* address,
+                                         size_t size,
+                                         void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-void PartitionFree(const AllocatorDispatch*, void* object, void* context);
+void* PartitionReallocUnchecked(void* address, size_t size, void* context);
 
 PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
-size_t PartitionGetSizeEstimate(const AllocatorDispatch*,
-                                void* address,
-                                void* context);
+void PartitionFree(void* object, void* context);
+
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+void PartitionFreeWithAdvancedChecks(void* object, void* context);
+
+#if PA_BUILDFLAG(IS_APPLE)
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+void PartitionFreeDefiniteSize(void* address, size_t size, void* context);
+#endif  // PA_BUILDFLAG(IS_APPLE)
+
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+size_t PartitionGetSizeEstimate(void* address, void* context);
+
+#if PA_BUILDFLAG(IS_APPLE)
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+size_t PartitionGoodSize(size_t size, void* context);
+
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+bool PartitionClaimedAddress(void* address, void* context);
+#endif  // PA_BUILDFLAG(IS_APPLE)
+
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+unsigned PartitionBatchMalloc(size_t size,
+                              void** results,
+                              unsigned num_requested,
+                              void* context);
+
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+void PartitionBatchFree(void** to_be_freed,
+                        unsigned num_to_be_freed,
+                        void* context);
+
+#if PA_BUILDFLAG(IS_APPLE)
+PA_COMPONENT_EXPORT(ALLOCATOR_SHIM)
+void PartitionTryFreeDefault(void* address, void* context);
+#endif  // PA_BUILDFLAG(IS_APPLE)
 
 }  // namespace internal
 
@@ -102,16 +115,18 @@ size_t PartitionGetSizeEstimate(const AllocatorDispatch*,
 // we're making it more resilient to ConfigurePartitions() interface changes, so
 // that we don't have to modify multiple callers. This is particularly important
 // when callers are in a different repo, like PDFium or Dawn.
-PA_ALWAYS_INLINE void ConfigurePartitionsForTesting(
-    bool enable_memory_tagging_if_available = true) {
+// -----------------------------------------------------------------------------
+// DO NOT MODIFY this signature. This is meant for partition_alloc's embedders
+// only, so that partition_alloc can evolve without breaking them.
+// Chromium/PartitionAlloc are part of the same repo, they must not depend on
+// this function. They should call ConfigurePartitions() directly.
+PA_ALWAYS_INLINE void ConfigurePartitionsForTesting() {
   auto enable_brp = allocator_shim::EnableBrp(true);
 
-#if PA_BUILDFLAG(HAS_MEMORY_TAGGING)
-  auto enable_memory_tagging =
-      allocator_shim::EnableMemoryTagging(enable_memory_tagging_if_available);
-#else
-  auto enable_memory_tagging = allocator_shim::EnableMemoryTagging(false);
-#endif  // PA_BUILDFLAG(HAS_MEMORY_TAGGING)
+  // Embedders's tests might benefit from MTE checks. However, this is costly
+  // and shouldn't be used in benchmarks.
+  auto enable_memory_tagging = allocator_shim::EnableMemoryTagging(
+      PA_BUILDFLAG(HAS_MEMORY_TAGGING) && PA_BUILDFLAG(DCHECKS_ARE_ON));
 
   // Since the only user of this function is a test function, we use
   // synchronous reporting mode, if MTE is enabled.

@@ -13,6 +13,7 @@
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
 // SETTERS
+- (void)updateBackgroundColor:(UIColor*)backgroundColor;
 - (void)updateLocationText:(NSString*)text
                     domain:(NSString*)domain
                   showFull:(BOOL)showFull;

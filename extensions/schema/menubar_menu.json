@@ -207,6 +207,21 @@
           "description": "Notifies caller that menu has closed.",
           "parameters": []
         }
+      },
+      {
+        "name": "getMaxId",
+        "type": "function",
+        "description": "Returns the maximium id (elements) a menu can use.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "type": "number",
+              "name": "maxId"
+            }
+          ]
+        }
       }
     ],
     "events": [

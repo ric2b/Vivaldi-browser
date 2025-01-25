@@ -14,7 +14,7 @@ import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.junit.Assert.assertTrue;
 
-import static org.chromium.base.test.transit.ViewElement.scopedViewElement;
+import static org.chromium.base.test.transit.ViewSpec.viewSpec;
 
 import android.view.View;
 
@@ -23,7 +23,7 @@ import org.hamcrest.Matcher;
 import org.chromium.base.test.transit.Condition;
 import org.chromium.base.test.transit.Elements;
 import org.chromium.base.test.transit.Transition;
-import org.chromium.base.test.transit.ViewElement;
+import org.chromium.base.test.transit.ViewSpec;
 import org.chromium.base.test.util.ViewActionOnDescendant;
 import org.chromium.chrome.browser.hub.HubFieldTrial;
 import org.chromium.chrome.browser.hub.HubToolbarView;
@@ -36,20 +36,20 @@ import org.chromium.chrome.test.transit.tabmodel.TabCountChangedCondition;
 
 /** The base station for Hub tab switcher stations. */
 public abstract class TabSwitcherStation extends HubBaseStation {
-    public static final ViewElement TAB_LIST_RECYCLER_VIEW =
-            scopedViewElement(
+    public static final ViewSpec TAB_LIST_RECYCLER_VIEW =
+            viewSpec(
                     allOf(
                             isDescendantOfA(HubBaseStation.HUB_PANE_HOST.getViewMatcher()),
                             withId(R.id.tab_list_recycler_view)));
 
-    public static final ViewElement TOOLBAR_NEW_TAB_BUTTON =
-            scopedViewElement(
+    public static final ViewSpec TOOLBAR_NEW_TAB_BUTTON =
+            viewSpec(
                     allOf(
                             withId(R.id.toolbar_action_button),
                             isDescendantOfA(instanceOf(HubToolbarView.class))));
 
-    public static final ViewElement FLOATING_NEW_TAB_BUTTON =
-            scopedViewElement(
+    public static final ViewSpec FLOATING_NEW_TAB_BUTTON =
+            viewSpec(
                     allOf(
                             withId(R.id.host_action_button),
                             isDescendantOfA(HubBaseStation.HUB_PANE_HOST.getViewMatcher())));
@@ -83,7 +83,7 @@ public abstract class TabSwitcherStation extends HubBaseStation {
     public void declareElements(Elements.Builder elements) {
         super.declareElements(elements);
 
-        elements.declareView(getNewTabButtonViewElement());
+        elements.declareView(getNewTabButtonViewSpec());
         elements.declareView(TAB_LIST_RECYCLER_VIEW);
     }
 
@@ -100,19 +100,20 @@ public abstract class TabSwitcherStation extends HubBaseStation {
         recheckActiveConditions();
 
         return enterFacilitySync(
-                new TabSwitcherAppMenuFacility(mIsIncognito),
-                () -> HUB_MENU_BUTTON.perform(click()));
+                new TabSwitcherAppMenuFacility(mIsIncognito), HUB_MENU_BUTTON::click);
     }
 
     /**
      * @param index The tab index to select.
-     * @return the {@link PageStation} for the tab that was selected.
+     * @param destinationBuilder Builder for the specific type of PageStation expected to appear.
+     * @return Builder of the {@link PageStation} for the tab that was selected.
      */
-    public PageStation selectTabAtIndex(int index) {
+    public <T extends PageStation> T selectTabAtIndex(
+            int index, PageStation.Builder<T> destinationBuilder) {
         recheckActiveConditions();
 
-        PageStation destination =
-                PageStation.newPageStationBuilder()
+        T destination =
+                destinationBuilder
                         .withIncognito(mIsIncognito)
                         .withIsOpeningTabs(0)
                         .withIsSelectingTabs(1)
@@ -176,21 +177,7 @@ public abstract class TabSwitcherStation extends HubBaseStation {
                 });
     }
 
-    /** Open a new tab using the New Tab action button. */
-    public PageStation openNewTab() {
-        recheckActiveConditions();
-
-        PageStation page =
-                PageStation.newPageStationBuilder()
-                        .withIncognito(mIsIncognito)
-                        .withIsOpeningTabs(1)
-                        .withIsSelectingTabs(1)
-                        .build();
-
-        return travelToSync(page, () -> getNewTabButtonViewElement().perform(click()));
-    }
-
-    private ViewElement getNewTabButtonViewElement() {
+    protected ViewSpec getNewTabButtonViewSpec() {
         if (HubFieldTrial.usesFloatActionButton()) {
             return FLOATING_NEW_TAB_BUTTON;
         } else {
@@ -201,11 +188,13 @@ public abstract class TabSwitcherStation extends HubBaseStation {
     /**
      * Returns to the previous tab via the back button.
      *
+     * @param destinationBuilder Builder for the specific type of PageStation expected to appear.
      * @return the {@link PageStation} that Hub returned to.
      */
-    public PageStation leaveHubToPreviousTabViaBack() {
-        PageStation destination =
-                PageStation.newPageStationBuilder()
+    public <T extends PageStation> T leaveHubToPreviousTabViaBack(
+            PageStation.Builder<T> destinationBuilder) {
+        T destination =
+                destinationBuilder
                         .withIsOpeningTabs(0)
                         .withIsSelectingTabs(1)
                         .withIncognito(mIsIncognito)

@@ -12,8 +12,22 @@
         "id": "TabAlertState",
         "type": "string",
         "description": "The active media type.",
-        "enum": [ "recording", "capturing", "playing", "muting", "bluetooth", "usb",
-                  "pip", "desktop_capturing", "vr_presenting_in_headset", "serial_connected" ]
+        "enum": [
+          "recording", // Audio/Video [both] being recorded.
+          "capturing", // Tab contents being captured.
+          "playing", // Audible audio is playing from the tab.
+          "muting", // Tab audio is being muted.
+          "bluetooth", // Tab is connected to a BT Device.
+          "usb", // Tab is connected to a USB device.
+          "pip", // Tab contains a video in Picture-in-Picture mode.
+          "desktop_capturing", // Desktop contents being recorded.
+          "vr_presenting_in_headset", // VR content is being presented in a headset.
+          "serial_connected", // Tab is connected to a serial device.
+          "bluetooth_scan", // Tab is actively scanning for BT devices.
+          "hid_connected", // Tab is connected to a HID device.
+          "audio_recording", // Audio [only] being recorded, consumed by tab.
+          "video_recording" // Video [only] being recorded, consumed by tab.
+        ]
       },
       {
         "id":  "TranslateStep",
@@ -234,6 +248,38 @@
           "discarded": {
             "type": "boolean",
             "description": "If true |memoryUsage| will be saved memory."
+          }
+        }
+      },
+      {
+        "id": "SendTabToSelfAction",
+        "type": "string",
+        "enum": ["delete", "dismiss"]
+      },
+      {
+        "id": "SendTabToSelfEntry",
+        "type": "object",
+        "description" :  "Url received from another Vivaldi instance.",
+        "properties": {
+           "guid": {
+            "type": "string",
+            "description": "Unique identifier."
+          },
+          "url": {
+            "type": "string",
+            "description": "The url."
+          },
+          "title": {
+            "type": "string",
+            "description": "The url's title."
+          },
+          "deviceName": {
+            "type": "string",
+            "description": "Sharing device name."
+          },
+          "sharedTime": {
+            "type": "number",
+            "description": "Sharing time."
           }
         }
       }
@@ -554,9 +600,91 @@
             }
           ]
         }
+      },
+      {
+        "name": "getSendTabToSelfEntries",
+        "type": "function",
+        "description": "Fetch current entries that have been shared to us.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "entries",
+              "type": "array",
+              "items": {
+                "$ref": "SendTabToSelfEntry"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "execSendTabToSelfAction",
+        "type": "function",
+        "description": "Delete entries from the model.",
+        "parameters": [
+          {
+            "name": "action",
+            "$ref": "SendTabToSelfAction"
+          },
+          {
+            "name": "guids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
+      },
+      {
+        "name": "dismissSendTabToSelfEntries",
+        "type": "function",
+        "description": "Dismiss entries from the model.",
+        "parameters": [
+          {
+            "name": "guids",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
       }
     ],
     "events": [
+      {
+        "name": "onSendTabToSelfAdded",
+        "type": "function",
+        "description": "Fired when one or more urls are received from a remote instance.",
+        "parameters": [
+          {
+            "name": "entries",
+            "type": "array",
+            "items": { "$ref": "SendTabToSelfEntry" }
+          }
+        ]
+      },
+      {
+        "name": "onSendTabToSelfDismissed",
+        "type": "function",
+        "description": "Fired when one or more entries not to be used anymore.",
+        "parameters": [
+          {
+            "name": "guids",
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        ]
+      },
       {
         "name": "onMediaStateChanged",
         "type": "function",

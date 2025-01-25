@@ -13,9 +13,8 @@
 // limitations under the License.
 
 import {globals} from '../frontend/globals';
-import {Plugin} from '../public';
+import {PerfettoPlugin} from '../public/plugin';
 import {EngineBase} from '../trace_processor/engine';
-
 import {createEmptyState} from './empty_state';
 import {PluginManager, PluginRegistry} from './plugins';
 
@@ -25,10 +24,9 @@ class FakeEngine extends EngineBase {
   rpcSendRequestBytes(_data: Uint8Array) {}
 }
 
-function makeMockPlugin(): Plugin {
+function makeMockPlugin(): PerfettoPlugin {
   return {
     onActivate: jest.fn(),
-    onDeactivate: jest.fn(),
     onTraceLoad: jest.fn(),
     onTraceUnload: jest.fn(),
   };
@@ -37,7 +35,7 @@ function makeMockPlugin(): Plugin {
 const engine = new FakeEngine();
 globals.initStore(createEmptyState());
 
-let mockPlugin: Plugin;
+let mockPlugin: PerfettoPlugin;
 let manager: PluginManager;
 
 describe('PluginManger', () => {
@@ -58,14 +56,6 @@ describe('PluginManger', () => {
     expect(mockPlugin.onActivate).toHaveBeenCalledTimes(1);
   });
 
-  it('can deactivate plugin', async () => {
-    await manager.activatePlugin('foo');
-    await manager.deactivatePlugin('foo');
-
-    expect(manager.isActive('foo')).toBe(false);
-    expect(mockPlugin.onDeactivate).toHaveBeenCalledTimes(1);
-  });
-
   it('invokes onTraceLoad when trace is loaded', async () => {
     await manager.activatePlugin('foo');
     await manager.onTraceLoad(engine);
@@ -78,13 +68,5 @@ describe('PluginManger', () => {
     await manager.activatePlugin('foo');
 
     expect(mockPlugin.onTraceLoad).toHaveBeenCalledTimes(1);
-  });
-
-  it('invokes onTraceUnload when plugin deactivated while trace loaded', async () => {
-    await manager.activatePlugin('foo');
-    await manager.onTraceLoad(engine);
-    await manager.deactivatePlugin('foo');
-
-    expect(mockPlugin.onTraceUnload).toHaveBeenCalledTimes(1);
   });
 });

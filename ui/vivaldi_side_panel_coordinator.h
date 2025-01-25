@@ -4,7 +4,7 @@
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 
-class Browser;
+class BrowserWindowInterface;
 class Profile;
 
 namespace vivaldi {
@@ -12,7 +12,7 @@ namespace vivaldi {
 class SidePanelCoordinator : public SidePanelUI,
                              public extensions::SidePanelService::Observer {
  public:
-  SidePanelCoordinator(Browser*);
+  SidePanelCoordinator(BrowserWindowInterface*);
 
   ~SidePanelCoordinator() override;
 
@@ -54,7 +54,7 @@ class SidePanelCoordinator : public SidePanelUI,
  private:
   Profile * GetProfile();
 
-  Browser* browser_;
+  BrowserWindowInterface* browser_;
 };
 
 }  // namespace vivaldi

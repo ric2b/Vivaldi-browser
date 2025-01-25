@@ -17,6 +17,7 @@ static_library("wallpaper") {
   deps = [
     "//ash/public/cpp",
     "//base",
+    "//chrome/browser/ash/drive",
     "//chrome/browser/ash/file_manager",
     "//chrome/browser/ash/profiles",
     "//chromeos/ash/components/drivefs",
@@ -36,7 +37,17 @@ source_set("browser_tests") {
     ":wallpaper",
     "//ash",
     "//base",
-    "//chrome/browser/ash:test_support",
+    "//base/test:test_support",
+    "//chrome/browser/ash/drive",
+    "//chrome/browser/ash/drive:test_support",
+    "//chrome/browser/ash/profiles",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui",
     "//chromeos/ash/components/drivefs:test_support",
+    "//chromeos/ash/components/drivefs/mojom",
+    "//content/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx:test_support",
   ]
 }

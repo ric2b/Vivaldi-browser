@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
+#include "components/enterprise/buildflags/buildflags.h"
 #include "components/services/print_compositor/public/cpp/print_service_mojo_types.h"
 #include "content/public/utility/utility_thread.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -41,12 +42,23 @@
 #include "third_party/blink/public/platform/platform.h"
 #endif
 
+#if BUILDFLAG(ENTERPRISE_WATERMARK)
+#include "components/enterprise/watermarking/features.h"  // nogncheck
+#include "components/enterprise/watermarking/watermark.h"  // nogncheck
+#endif
+
 using MojoDiscardableSharedMemoryManager =
     discardable_memory::mojom::DiscardableSharedMemoryManager;
 
 namespace printing {
 
 namespace {
+
+#if BUILDFLAG(ENTERPRISE_WATERMARK)
+// Print UX requirement for watermarking. Values are in pixels.
+constexpr int kWatermarkBlockWidth = 350;
+constexpr float kTextSize = 24.0f;
+#endif
 
 sk_sp<SkDocument> MakeDocument(
     const std::string& creator,
@@ -65,6 +77,31 @@ sk_sp<SkDocument> MakeDocument(
       creator, title,
       accessibility_tree ? *accessibility_tree : ui::AXTreeUpdate(),
       generate_document_outline, &stream);
+}
+
+#if BUILDFLAG(ENTERPRISE_WATERMARK)
+void DrawEnterpriseWatermark(SkCanvas* canvas, SkSize size) {
+  if (!base::FeatureList::IsEnabled(
+          enterprise_watermark::features::kEnablePrintWatermark)) {
+    return;
+  }
+
+  // TODO(b/356446812): For now, use this hard-coded string to facilitate
+  // implementing UI tests. We must update the PrintCompositor mojo interface in
+  // order to pass the watermark string here from the browser process.
+  std::string text = "Private! Confidential!\n2024-05-24\nexample@gmail.com";
+  enterprise_watermark::DrawWatermark(canvas, size, text, kWatermarkBlockWidth,
+                                      kTextSize);
+}
+#endif
+
+void DrawPage(SkDocument* doc, const SkDocumentPage& page) {
+  SkCanvas* canvas = doc->beginPage(page.fSize.width(), page.fSize.height());
+  canvas->drawPicture(page.fPicture);
+#if BUILDFLAG(ENTERPRISE_WATERMARK)
+  DrawEnterpriseWatermark(canvas, page.fSize);
+#endif
+  doc->endPage();
 }
 
 }  // namespace
@@ -184,8 +221,6 @@ void PrintCompositorImpl::CompositePage(
     const ContentToFrameMap& subframe_content_map,
     mojom::PrintCompositor::CompositePageCallback callback) {
   TRACE_EVENT0("print", "PrintCompositorImpl::CompositePage");
-  if (docinfo_)
-    docinfo_->pages_provided++;
   // This function is always called to composite a page to PDF.
   HandleCompositionRequest(
       frame_guid, std::move(serialized_content), subframe_content_map,
@@ -199,7 +234,7 @@ void PrintCompositorImpl::CompositeDocument(
     mojom::PrintCompositor::DocumentType document_type,
     mojom::PrintCompositor::CompositeDocumentCallback callback) {
   TRACE_EVENT0("print", "PrintCompositorImpl::CompositeDocument");
-  DCHECK(!docinfo_);
+  CHECK(!doc_info_);
   HandleCompositionRequest(frame_guid, std::move(serialized_content),
                            subframe_content_map, document_type,
                            std::move(callback));
@@ -208,28 +243,28 @@ void PrintCompositorImpl::CompositeDocument(
 void PrintCompositorImpl::PrepareToCompositeDocument(
     mojom::PrintCompositor::DocumentType document_type,
     mojom::PrintCompositor::PrepareToCompositeDocumentCallback callback) {
-  DCHECK(!docinfo_);
+  CHECK(!doc_info_);
 #if BUILDFLAG(IS_WIN)
   if (document_type == mojom::PrintCompositor::DocumentType::kXPS) {
     xps_initializer_ = std::make_unique<ScopedXPSInitializer>();
   }
 #endif
-  docinfo_ = std::make_unique<DocumentInfo>(document_type);
+  doc_info_ = std::make_unique<DocumentInfo>(document_type);
   std::move(callback).Run(mojom::PrintCompositor::Status::kSuccess);
 }
 
 void PrintCompositorImpl::FinishDocumentComposition(
     uint32_t page_count,
     mojom::PrintCompositor::FinishDocumentCompositionCallback callback) {
-  DCHECK(docinfo_);
+  CHECK(doc_info_);
   DCHECK_GT(page_count, 0U);
-  docinfo_->page_count = page_count;
-  docinfo_->callback = std::move(callback);
+  doc_info_->page_count = page_count;
+  doc_info_->callback = std::move(callback);
 
-  if (!docinfo_->doc) {
-    docinfo_->doc = MakeDocument(
+  if (!doc_info_->doc) {
+    doc_info_->doc = MakeDocument(
         creator_, title_, &accessibility_tree_, generate_document_outline_,
-        docinfo_->document_type, docinfo_->compositor_stream);
+        doc_info_->document_type, doc_info_->compositor_stream);
   }
 
   HandleDocumentCompletionRequest();
@@ -277,10 +312,10 @@ void PrintCompositorImpl::UpdateRequestsWithSubframeInfo(
 
     // Check for a collected print preview document that was waiting on
     // this page to finish.
-    if (docinfo_) {
-      if (docinfo_->page_count &&
-          (docinfo_->pages_written == docinfo_->page_count)) {
-        FinishDocumentRequest(std::move(docinfo_->callback));
+    if (doc_info_) {
+      if (doc_info_->page_count &&
+          (doc_info_->pages_written == doc_info_->page_count)) {
+        FinishDocumentRequest(std::move(doc_info_->callback));
       }
     }
     it = requests_.erase(it);
@@ -358,8 +393,8 @@ void PrintCompositorImpl::HandleCompositionRequest(
 }
 
 void PrintCompositorImpl::HandleDocumentCompletionRequest() {
-  if (docinfo_->pages_written == docinfo_->page_count) {
-    FinishDocumentRequest(std::move(docinfo_->callback));
+  if (doc_info_->pages_written == doc_info_->page_count) {
+    FinishDocumentRequest(std::move(doc_info_->callback));
     return;
   }
   // Just need to wait on pages to percolate through processing, callback will
@@ -398,28 +433,27 @@ mojom::PrintCompositor::Status PrintCompositorImpl::CompositePages(
   // CompositeDocumentToPdf() call.
   SkDynamicMemoryWStream wstream;
   sk_sp<SkDocument> doc =
-      MakeDocument(creator_, title_, docinfo_ ? nullptr : &accessibility_tree_,
+      MakeDocument(creator_, title_, doc_info_ ? nullptr : &accessibility_tree_,
                    generate_document_outline_, document_type, wstream);
+
+  if (doc_info_) {
+    // Create full document if needed.
+    if (!doc_info_->doc) {
+      doc_info_->doc = MakeDocument(
+          creator_, title_, &accessibility_tree_, generate_document_outline_,
+          doc_info_->document_type, doc_info_->compositor_stream);
+    }
+  }
 
   for (const auto& page : pages) {
     TRACE_EVENT0("print", "PrintCompositorImpl::CompositePages draw page");
-    SkCanvas* canvas = doc->beginPage(page.fSize.width(), page.fSize.height());
-    canvas->drawPicture(page.fPicture);
-    doc->endPage();
-    if (docinfo_) {
-      // Create full document if needed.
-      if (!docinfo_->doc) {
-        docinfo_->doc = MakeDocument(
-            creator_, title_, &accessibility_tree_, generate_document_outline_,
-            docinfo_->document_type, docinfo_->compositor_stream);
-      }
+    DrawPage(doc.get(), page);
 
-      // Collect this page into full document.
-      SkCanvas* canvas_doc =
-          docinfo_->doc->beginPage(page.fSize.width(), page.fSize.height());
-      canvas_doc->drawPicture(page.fPicture);
-      docinfo_->doc->endPage();
-      docinfo_->pages_written++;
+    if (doc_info_) {
+      // Optionally draw this page into the full document in `doc_info_` as
+      // well.
+      DrawPage(doc_info_->doc.get(), page);
+      doc_info_->pages_written++;
     }
   }
   doc->close();
@@ -486,13 +520,14 @@ void PrintCompositorImpl::FinishDocumentRequest(
   mojom::PrintCompositor::Status status;
   base::ReadOnlySharedMemoryRegion region;
 
-  docinfo_->doc->close();
+  doc_info_->doc->close();
 
   base::MappedReadOnlyRegion region_mapping =
       base::ReadOnlySharedMemoryRegion::Create(
-          docinfo_->compositor_stream.bytesWritten());
+          doc_info_->compositor_stream.bytesWritten());
   if (region_mapping.IsValid()) {
-    docinfo_->compositor_stream.copyToAndReset(region_mapping.mapping.memory());
+    doc_info_->compositor_stream.copyToAndReset(
+        region_mapping.mapping.memory());
     region = std::move(region_mapping.region);
     status = mojom::PrintCompositor::Status::kSuccess;
   } else {

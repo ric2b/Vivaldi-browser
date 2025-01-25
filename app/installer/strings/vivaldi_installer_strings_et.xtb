@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Eraldiseisev paigaldus</translation>
 <translation id="1682285232070778125">Vivaldi määratakse vaikebrauseriks</translation>
 <translation id="1974060860693918893">Täpsem</translation>
+<translation id="2053560788696003312">Vivaldi kasutamiseks on vajalik Windows 10 või uuem.</translation>
 <translation id="2134216661302048561">Vivaldi paigaldusabiline pole veel Vivaldi brauseri paigaldamist lõpetanud. Kas oled kindel, et soovid praegu väljuda?</translation>
 <translation id="2286454467119466181">Lihtne</translation>
 <translation id="237789874664518125">Autoriõigus <ph name="YEAR" /> Vivaldi Technologies AS. Kõik õigused kaitstud. &lt;a&gt;Privaatsuspõhimõtted&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Olen nõus – uuenda</translation>
 <translation id="5302048478445481009">Keel</translation>
 <translation id="694714344624446243">Vivaldi paigaldusabiline</translation>
+<translation id="7467493612551448880">Paigaldatav Vivaldi versioon ei ole optimeeritud sinu Windowsi versiooni jaoks.
+
+Vivaldi ARM-versiooni saad alla laadida aadressilt vivaldi.com/download.</translation>
 <translation id="7658239707568436148">Loobu</translation>
 <translation id="8773751185824654197">Pane tähele, et kui uuendad parajasti töötavat Vivaldi brauserit, siis see suletakse ja pärast käivitatakse uuesti.</translation>
 <translation id="933060950687965486">Paigalduse tüüp</translation>

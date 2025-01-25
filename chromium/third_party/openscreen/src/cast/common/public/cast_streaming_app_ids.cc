@@ -7,7 +7,7 @@
 #include <array>
 
 #include "util/std_util.h"
-#include "util/stringutil.h"
+#include "util/string_util.h"
 
 namespace openscreen::cast {
 namespace {
@@ -116,31 +116,33 @@ bool IsCastStreamingAppId(const std::string& app_id) {
 }
 
 bool IsCastStreamingAudioVideoAppId(const std::string& app_id) {
-  return stringutil::EqualsIgnoreCase(app_id,
-                                      GetCastStreamingAudioVideoAppId());
+  return string_util::EqualsIgnoreCase(app_id,
+                                       GetCastStreamingAudioVideoAppId());
 }
 
 bool IsCastStreamingAudioOnlyAppId(const std::string& app_id) {
-  return stringutil::EqualsIgnoreCase(app_id, GetCastStreamingAudioOnlyAppId());
+  return string_util::EqualsIgnoreCase(app_id,
+                                       GetCastStreamingAudioOnlyAppId());
 }
 
 bool IsCastStreamingReceiverAppId(const std::string& app_id) {
-  if (stringutil::EqualsIgnoreCase(app_id, GetCastStreamingAudioVideoAppId()) ||
-      stringutil::EqualsIgnoreCase(app_id, GetCastStreamingAudioOnlyAppId()) ||
-      stringutil::EqualsIgnoreCase(app_id,
-                                   GetAndroidMirroringAudioVideoAppId()) ||
-      stringutil::EqualsIgnoreCase(app_id,
-                                   GetAndroidMirroringAudioOnlyAppId()) ||
-      stringutil::EqualsIgnoreCase(app_id,
-                                   GetAndroidAppStreamingAudioVideoAppId()) ||
-      stringutil::EqualsIgnoreCase(app_id,
-                                   GetIosAppStreamingAudioVideoAppId())) {
+  if (string_util::EqualsIgnoreCase(app_id,
+                                    GetCastStreamingAudioVideoAppId()) ||
+      string_util::EqualsIgnoreCase(app_id, GetCastStreamingAudioOnlyAppId()) ||
+      string_util::EqualsIgnoreCase(app_id,
+                                    GetAndroidMirroringAudioVideoAppId()) ||
+      string_util::EqualsIgnoreCase(app_id,
+                                    GetAndroidMirroringAudioOnlyAppId()) ||
+      string_util::EqualsIgnoreCase(app_id,
+                                    GetAndroidAppStreamingAudioVideoAppId()) ||
+      string_util::EqualsIgnoreCase(app_id,
+                                    GetIosAppStreamingAudioVideoAppId())) {
     return true;
   }
 
   return ContainsIf(kRemoteDisplayAppStreamingAudioVideoAppIds,
                     [app_id](const std::string& id) {
-                      return stringutil::EqualsIgnoreCase(id, app_id);
+                      return string_util::EqualsIgnoreCase(id, app_id);
                     });
 }
 

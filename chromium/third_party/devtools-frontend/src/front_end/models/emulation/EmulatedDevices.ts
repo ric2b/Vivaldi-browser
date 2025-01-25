@@ -59,7 +59,7 @@ export class EmulatedDevice {
     this.vertical = {width: 0, height: 0, outlineInsets: null, outlineImage: null, hinge: null};
     this.horizontal = {width: 0, height: 0, outlineInsets: null, outlineImage: null, hinge: null};
     this.deviceScaleFactor = 1;
-    this.capabilities = [Capability.Touch, Capability.Mobile];
+    this.capabilities = [Capability.TOUCH, Capability.MOBILE];
     this.userAgent = '';
     this.userAgentMetadata = null;
     this.modes = [];
@@ -233,8 +233,8 @@ export class EmulatedDevice {
       }
 
       const modes = parseValue(json, 'modes', 'object', [
-        {'title': 'default', 'orientation': 'vertical'},
-        {'title': 'default', 'orientation': 'horizontal'},
+        {title: 'default', orientation: 'vertical'},
+        {title: 'default', orientation: 'horizontal'},
       ]);
       if (!Array.isArray(modes)) {
         throw new Error('Emulated device modes must be an array');
@@ -348,13 +348,13 @@ export class EmulatedDevice {
     json['modes'] = [] as JSONMode[];
     for (let i = 0; i < this.modes.length; ++i) {
       const mode: JSONMode = {
-        'title': this.modes[i].title,
-        'orientation': this.modes[i].orientation,
-        'insets': {
-          'left': this.modes[i].insets.left,
-          'top': this.modes[i].insets.top,
-          'right': this.modes[i].insets.right,
-          'bottom': this.modes[i].insets.bottom,
+        title: this.modes[i].title,
+        orientation: this.modes[i].orientation,
+        insets: {
+          left: this.modes[i].insets.left,
+          top: this.modes[i].insets.top,
+          right: this.modes[i].insets.right,
+          bottom: this.modes[i].insets.bottom,
         },
         image: this.modes[i].image || undefined,
       };
@@ -380,20 +380,20 @@ export class EmulatedDevice {
     if (orientation.outlineInsets) {
       json.outline = {
         insets: {
-          'left': orientation.outlineInsets.left,
-          'top': orientation.outlineInsets.top,
-          'right': orientation.outlineInsets.right,
-          'bottom': orientation.outlineInsets.bottom,
+          left: orientation.outlineInsets.left,
+          top: orientation.outlineInsets.top,
+          right: orientation.outlineInsets.right,
+          bottom: orientation.outlineInsets.bottom,
         },
         image: orientation.outlineImage,
       } as {image: string | null, insets: {left: number, right: number, top: number, bottom: number}};
     }
     if (orientation.hinge) {
       json.hinge = {
-        'width': orientation.hinge.width,
-        'height': orientation.hinge.height,
-        'x': orientation.hinge.x,
-        'y': orientation.hinge.y,
+        width: orientation.hinge.width,
+        height: orientation.hinge.height,
+        x: orientation.hinge.x,
+        y: orientation.hinge.y,
         contentColor: undefined,
         outlineColor: undefined,
       } as {
@@ -407,18 +407,18 @@ export class EmulatedDevice {
 
       if (orientation.hinge.contentColor) {
         json.hinge.contentColor = {
-          'r': orientation.hinge.contentColor.r,
-          'g': orientation.hinge.contentColor.g,
-          'b': orientation.hinge.contentColor.b,
-          'a': orientation.hinge.contentColor.a,
+          r: orientation.hinge.contentColor.r,
+          g: orientation.hinge.contentColor.g,
+          b: orientation.hinge.contentColor.b,
+          a: orientation.hinge.contentColor.a,
         };
       }
       if (orientation.hinge.outlineColor) {
         json.hinge.outlineColor = {
-          'r': orientation.hinge.outlineColor.r,
-          'g': orientation.hinge.outlineColor.g,
-          'b': orientation.hinge.outlineColor.b,
-          'a': orientation.hinge.outlineColor.a,
+          r: orientation.hinge.outlineColor.r,
+          g: orientation.hinge.outlineColor.g,
+          b: orientation.hinge.outlineColor.b,
+          a: orientation.hinge.outlineColor.a,
         };
       }
     }
@@ -468,11 +468,11 @@ export class EmulatedDevice {
   }
 
   touch(): boolean {
-    return this.capabilities.indexOf(Capability.Touch) !== -1;
+    return this.capabilities.indexOf(Capability.TOUCH) !== -1;
   }
 
   mobile(): boolean {
-    return this.capabilities.indexOf(Capability.Mobile) !== -1;
+    return this.capabilities.indexOf(Capability.MOBILE) !== -1;
   }
 }
 
@@ -482,22 +482,26 @@ export const HorizontalSpanned = 'horizontal-spanned';
 export const VerticalSpanned = 'vertical-spanned';
 
 enum Type {
+  /* eslint-disable @typescript-eslint/naming-convention -- Indexed access. */
   Phone = 'phone',
   Tablet = 'tablet',
   Notebook = 'notebook',
   Desktop = 'desktop',
   Unknown = 'unknown',
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 export const enum Capability {
-  Touch = 'touch',
-  Mobile = 'mobile',
+  TOUCH = 'touch',
+  MOBILE = 'mobile',
 }
 
 enum Show {
+  /* eslint-disable @typescript-eslint/naming-convention -- Indexed access. */
   Always = 'Always',
   Default = 'Default',
   Never = 'Never',
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 let emulatedDevicesListInstance: EmulatedDevicesList;
@@ -589,7 +593,7 @@ export class EmulatedDevicesList extends Common.ObjectWrapper.ObjectWrapper<Even
     this.#customInternal.forEach(device => json.push(device.toJSON()));
 
     this.#customSetting.set(json);
-    this.dispatchEventToListeners(Events.CustomDevicesUpdated);
+    this.dispatchEventToListeners(Events.CUSTOM_DEVICES_UPDATED);
   }
 
   saveStandardDevices(): void {
@@ -597,7 +601,7 @@ export class EmulatedDevicesList extends Common.ObjectWrapper.ObjectWrapper<Even
     this.#standardInternal.forEach(device => json.push(device.toJSON()));
 
     this.#standardSetting.set(json);
-    this.dispatchEventToListeners(Events.StandardDevicesUpdated);
+    this.dispatchEventToListeners(Events.STANDARD_DEVICES_UPDATED);
   }
 
   private copyShowValues(from: Set<EmulatedDevice>, to: Set<EmulatedDevice>): void {
@@ -616,13 +620,13 @@ export class EmulatedDevicesList extends Common.ObjectWrapper.ObjectWrapper<Even
 }
 
 export const enum Events {
-  CustomDevicesUpdated = 'CustomDevicesUpdated',
-  StandardDevicesUpdated = 'StandardDevicesUpdated',
+  CUSTOM_DEVICES_UPDATED = 'CustomDevicesUpdated',
+  STANDARD_DEVICES_UPDATED = 'StandardDevicesUpdated',
 }
 
 export type EventTypes = {
-  [Events.CustomDevicesUpdated]: void,
-  [Events.StandardDevicesUpdated]: void,
+  [Events.CUSTOM_DEVICES_UPDATED]: void,
+  [Events.STANDARD_DEVICES_UPDATED]: void,
 };
 
 export interface Mode {
@@ -650,6 +654,8 @@ export interface JSONMode {
   };
 }
 
+// These props should quoted for the script to work properly
+/* eslint-disable quote-props */
 const emulatedDevices = [
   // This is used by a python script to keep this list up-to-date with
   // chromedriver native code.
@@ -1925,3 +1931,4 @@ const emulatedDevices = [
   },
   // DEVICE-LIST-END
 ];
+/* eslint-enable quote-props */

@@ -1,9 +1,20 @@
-SKIP: FAILED
+SKIP: INVALID
 
-<dawn>/src/tint/lang/hlsl/writer/printer/printer.cc:285 internal compiler error: Switch() matched no cases. Type: tint::core::ir::Construct
-********************************************************************
-*  The tint shader compiler has encountered an unexpected error.   *
-*                                                                  *
-*  Please help us fix this issue by submitting a bug report at     *
-*  crbug.com/tint with the source program that triggered the bug.  *
-********************************************************************
+
+void f() {
+  float16_t v = float16_t(3.0h);
+  vector<float16_t, 2> v2 = vector<float16_t, 2>((v).xx);
+  vector<float16_t, 3> v3 = vector<float16_t, 3>((v).xxx);
+  vector<float16_t, 4> v4 = vector<float16_t, 4>((v).xxxx);
+}
+
+[numthreads(1, 1, 1)]
+void unused_entry_point() {
+}
+
+FXC validation failure:
+<scrubbed_path>(3,3-11): error X3000: unrecognized identifier 'float16_t'
+<scrubbed_path>(3,13): error X3000: unrecognized identifier 'v'
+
+
+tint executable returned error: exit status 1

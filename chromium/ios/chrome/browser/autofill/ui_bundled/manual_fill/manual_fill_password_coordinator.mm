@@ -8,6 +8,12 @@
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/password_store/password_store_interface.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_injection_handler.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_password_mediator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_plus_address_mediator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/password_list_navigator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/password_view_controller.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/plus_address_list_navigator.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
@@ -15,13 +21,10 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_injection_handler.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_password_mediator.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/password_list_navigator.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/password_view_controller.h"
 #import "ui/base/device_form_factor.h"
 
-@interface ManualFillPasswordCoordinator () <PasswordListNavigator>
+@interface ManualFillPasswordCoordinator () <PasswordListNavigator,
+                                             PlusAddressListNavigator>
 
 // Fetches and filters the passwords for the view controller.
 @property(nonatomic, strong) ManualFillPasswordMediator* passwordMediator;
@@ -45,6 +48,8 @@
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
+             manualFillPlusAddressMediator:
+                 (ManualFillPlusAddressMediator*)manualFillPlusAddressMediator
                                        URL:(const GURL&)URL
                           injectionHandler:
                               (ManualFillInjectionHandler*)injectionHandler
@@ -57,17 +62,17 @@
     _passwordViewController =
         [[PasswordViewController alloc] initWithSearchController:nil];
 
-    ChromeBrowserState* browserState = self.browser->GetBrowserState();
+    ProfileIOS* profile = self.browser->GetProfile();
     FaviconLoader* faviconLoader =
-        IOSChromeFaviconLoaderFactory::GetForBrowserState(browserState);
+        IOSChromeFaviconLoaderFactory::GetForProfile(profile);
     syncer::SyncService* syncService =
-        SyncServiceFactory::GetForBrowserState(browserState);
+        SyncServiceFactory::GetForBrowserState(profile);
     auto profilePasswordStore =
         IOSChromeProfilePasswordStoreFactory::GetForBrowserState(
-            browserState, ServiceAccessType::EXPLICIT_ACCESS);
+            profile, ServiceAccessType::EXPLICIT_ACCESS);
     auto accountPasswordStore =
         IOSChromeAccountPasswordStoreFactory::GetForBrowserState(
-            browserState, ServiceAccessType::EXPLICIT_ACCESS);
+            profile, ServiceAccessType::EXPLICIT_ACCESS);
 
     _passwordMediator = [[ManualFillPasswordMediator alloc]
            initWithFaviconLoader:faviconLoader
@@ -85,6 +90,12 @@
     _passwordMediator.contentInjector = injectionHandler;
 
     _passwordViewController.imageDataSource = _passwordMediator;
+
+    if (manualFillPlusAddressMediator) {
+      manualFillPlusAddressMediator.contentInjector = injectionHandler;
+      manualFillPlusAddressMediator.consumer = _passwordViewController;
+      manualFillPlusAddressMediator.navigator = self;
+    }
   }
   return self;
 }
@@ -145,6 +156,29 @@
   __weak __typeof(self) weakSelf = self;
   [self dismissIfNecessaryThenDoCompletion:^{
     [weakSelf.delegate openPasswordDetailsInEditModeForCredential:credential];
+  }];
+}
+
+#pragma mark - PlusAddressListNavigator
+
+- (void)openCreatePlusAddressSheet {
+  __weak __typeof(self) weakSelf = self;
+  [self dismissIfNecessaryThenDoCompletion:^{
+    [weakSelf.delegate openCreatePlusAddressSheet];
+  }];
+}
+
+- (void)openAllPlusAddressList {
+  __weak __typeof(self) weakSelf = self;
+  [self dismissIfNecessaryThenDoCompletion:^{
+    [weakSelf.delegate openAllPlusAddressesPicker];
+  }];
+}
+
+- (void)openManagePlusAddress {
+  __weak __typeof(self) weakSelf = self;
+  [self dismissIfNecessaryThenDoCompletion:^{
+    [weakSelf.delegate openManagePlusAddress];
   }];
 }
 

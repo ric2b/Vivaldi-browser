@@ -45,8 +45,9 @@ std::unique_ptr<base::Value> MenuUpgrade::Run(
   }
   // Set new version
   profile_control->GetDict().Set("version", version);
-  // Get all deleted nodes to prevent adding them once more.
-  const base::Value* deleted = profile_control->GetDict().Find("deleted");
+  // Get all deleted nodes to prevent adding them once more. We may modify
+  // this list so it is written back to profile below.
+  base::Value* deleted = profile_control->GetDict().Find("deleted");
   if (deleted && deleted->is_list()) {
     const auto& list = deleted->GetList();
     for (int i = list.size() - 1; i >= 0; i--) {
@@ -94,6 +95,23 @@ std::unique_ptr<base::Value> MenuUpgrade::Run(
         }
       }
     }
+  }
+
+  // Update deleted list in case we have removed one or more entries.
+  // Note. The existing pointer to the control segment may no longer be valid
+  // after adding nodes so we must set it up once again.
+  profile_control = FindControlNode(profile_list);
+  if (!profile_control) {
+    LOG(ERROR) << "Menu Upgrade: Aborted, control segment missing after upgrade";
+    return nullptr;
+  }
+  deleted = profile_control->GetDict().Find("deleted");
+  if (deleted && deleted->is_list()) {
+     base::Value deleted_list(base::Value::Type::LIST);
+     for (const auto& elm : deleted_) {
+      deleted_list.GetList().Append(elm);
+    }
+    profile_control->GetDict().Set("deleted", std::move(deleted_list));
   }
 
   return profile_root;
@@ -221,10 +239,24 @@ bool MenuUpgrade::RemoveFromProfile(const base::Value::Dict& profile_dict,
     if (!FindNodeByGuid(bundle_list, *guid)) {
       return Remove(profile_dict, parent_guid, profile_list);
     }
-  } else if (origin == Menu_Node::MODIFIED_BUNDLE && !IsDeleted(*guid)) {
-    // This means the item has gotten a new guid (which we did intentionally
-    // at an early stage of development). We do not want that.
-    needs_fixup_ = true;
+  } else if (origin == Menu_Node::MODIFIED_BUNDLE) {
+    if (IsDeleted(*guid)) {
+      // Modified (not added) item. If it has been deleted from the bundle it
+      // should be removed as well in profile. Note, we do not do this if user
+      // has added an element, only modified it.
+      if (!FindNodeByGuid(bundle_list, *guid)) {
+        std::string guid_copy(*guid); // Points to data that will be removed.
+        bool success = Remove(profile_dict, parent_guid, profile_list);
+        if (success) {
+          PruneDeleted(guid_copy);
+        }
+        return success;
+      }
+    } else {
+      // This means the item has gotten a new guid (which we did intentionally
+      // at an early stage of development). We do not want that.
+      needs_fixup_ = true;
+    }
   }
   if (const base::Value::List* children = profile_dict.FindList("children")) {
     for (size_t i = children->size(); i != 0;) {
@@ -318,6 +350,17 @@ bool MenuUpgrade::IsDeleted(const std::string& guid) {
   }
   return false;
 }
+
+bool MenuUpgrade::PruneDeleted(const std::string& guid) {
+  for (int i = deleted_.size() - 1; i >= 0; i--) {
+    if (guid == deleted_[i]) {
+      deleted_.erase(deleted_.begin() + i);
+      return true;
+    }
+  }
+  return false;
+}
+
 
 // Inserts 'bundle_dict' into the profile list. 'bundle_dict' is assumed to not
 // exist (guid wise) in the profile list.

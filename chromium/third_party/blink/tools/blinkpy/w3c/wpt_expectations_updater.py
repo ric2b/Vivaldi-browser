@@ -182,9 +182,6 @@ class WPTExpectationsUpdater:
             if flag_specific:
                 path = port.path_to_flag_specific_expectations_file(
                     flag_specific)
-            elif port.name() == 'chrome':
-                path = self.finder.path_from_web_tests(
-                    'ChromeTestExpectations')
             else:
                 path = port.path_to_generic_test_expectations_file()
             results_by_path[path].append(suite_results)
@@ -297,7 +294,7 @@ class WPTExpectationsUpdater:
             filled_results.append(filled_result)
 
         return WebTestResults(filled_results,
-                              builder_name=missing_results.builder_name,
+                              build=missing_results.build,
                               step_name=missing_results.step_name())
 
     def _tests(self, results: List[WebTestResults]) -> Set[str]:
@@ -377,7 +374,7 @@ class WPTExpectationsUpdater:
             results_to_update,
             step_name=test_results.step_name(),
             incomplete_reason=test_results.incomplete_reason,
-            builder_name=test_results.builder_name)
+            build=test_results.build)
         return tests_to_rebaseline, results_to_update
 
     def _is_wpt_test(self, test_name):
@@ -483,9 +480,6 @@ class WPTExpectationsUpdater:
     def _port_for_build_step(self, builder: str, step: str) -> Port:
         """"Get the port used to run a build step in CQ/CI."""
         builders = self.host.builders
-        product = builders.product_for_build_step(builder, step)
-        if product != 'content_shell':
-            return self.host.port_factory.get(product)
         port_name = builders.port_name_for_builder_name(builder)
         port = self.host.port_factory.get(port_name)
         port.set_option_default('flag_specific',

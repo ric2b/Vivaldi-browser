@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> 意外终止了连接。</translation>
 <translation id="1161325031994447685">重新连接到 Wi-Fi 网络</translation>
 <translation id="1175364870820465910">打印(&amp;P)...</translation>
+<translation id="132390688737681464">保存并填写地址</translation>
 <translation id="1375198122581997741">关于版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未发送数据。</translation>
 <translation id="1559528461873125649">该文件或目录不存在</translation>
 <translation id="1640244768702815859">请尝试<ph name="BEGIN_LINK" />访问该网站的首页<ph name="END_LINK" />。</translation>
 <translation id="1645368109819982629">协议不受支持</translation>
+<translation id="1662550410081243962">保存并填写支付方式</translation>
 <translation id="1710259589646384581">操作系统</translation>
 <translation id="1728677426644403582">您正在查看网页的源代码</translation>
 <translation id="1734878702283171397">请尝试联系系统管理员。</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">此网站无法提供安全连接</translation>
 <translation id="2187317261103489799">检测（默认）</translation>
 <translation id="2224337661447660594">未连接到互联网</translation>
+<translation id="2283340219607151381">保存并填写地址</translation>
 <translation id="2292556288342944218">您被禁止访问互联网</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> 要求提供用户名和密码。</translation>
 <translation id="2337852623177822836">设置由管理员控制</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">该连接使用 <ph name="CIPHER" /> 进行加密和身份验证，并使用 <ph name="KX" /> 作为密钥交换机制。</translation>
 <translation id="2909946352844186028">检测到了网络变化。</translation>
 <translation id="2948083400971632585">你可以在设置页中为任意链接禁用任何代理设置。</translation>
+<translation id="2954624054936281172">“已保存的支付方式”表格</translation>
 <translation id="2991571918955627853">您目前无法访问 <ph name="SITE" />，因为此网站使用了 HSTS。网络错误和攻击通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="3005723025932146533">显示已保存的版本</translation>
 <translation id="301521992641321250">已被自动禁止</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">始终检测此网站上的重要内容</translation>
 <translation id="3308738399950580893">广告</translation>
 <translation id="3384522979010096022">您的组织不允许您查看此网站</translation>
+<translation id="3387261909427947069">支付方式</translation>
 <translation id="3422472998109090673">目前无法访问 <ph name="HOST_NAME" />。</translation>
 <translation id="3427092606871434483">允许（默认）</translation>
 <translation id="3447661539832366887">此设备的所有者已关闭恐龙游戏。</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">此网站的证书链包含使用 SHA-1 签署的证书。</translation>
 <translation id="5452270690849572955">找不到 <ph name="HOST_NAME" /> 的网页</translation>
 <translation id="5457113250005438886">无效</translation>
+<translation id="5490432419156082418">地址和其他信息</translation>
 <translation id="5492298309214877701">这个位于公司、组织或学校内网中的网站使用的网址与某个外部网站的网址相同。
     <ph name="LINE_BREAK" />
     请尝试与您的系统管理员联系。</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">某款扩展程序允许</translation>
 <translation id="7111012039238467737">（有效）</translation>
 <translation id="7113310725918019676">不屏蔽来自 <ph name="DOMAIN" /> 的<ph name="BLOCKED_TYPE" /></translation>
+<translation id="7179323680825933600">保存并填写支付方式</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合相关安全标准。</translation>
 <translation id="7219179957768738017">该连接使用 <ph name="SSL_VERSION" />。</translation>
 <translation id="7221855153210829124">显示通知</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">如果您不确定这是什么意思，请与您的网络管理员联系。</translation>
 <translation id="8332188693563227489">访问 <ph name="HOST_NAME" /> 的请求遭到拒绝</translation>
 <translation id="8422228580902424274">您尝试访问的网站上的攻击者可能会诱骗您安装软件或泄露您的密码、电话或信用卡号等信息。</translation>
+<translation id="8473863474539038330">地址和其他信息</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的响应时间过长。</translation>
 <translation id="8503813439785031346">用户名</translation>
 <translation id="8703575177326907206">您与 <ph name="DOMAIN" /> 的连接未加密。</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">书签</translation>
 <translation id="8940028675168378100">被 <ph name="BLOCKER_NAME" /> 屏蔽</translation>
 <translation id="8963117664422609631">转到网站设置</translation>
+<translation id="8975012916872825179">包括电话号码、电子邮件地址和送货地址等信息</translation>
 <translation id="9001074447101275817">代理 (<ph name="DOMAIN" />) 要求提供用户名和密码。</translation>
 <translation id="9008201768610948239">忽略</translation>
 <translation id="9025348182339809926">（无效）</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>
 <translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。建议您立即更改密码。系统会要求您登录。</translation>
 <translation id="969892804517981540">官方版</translation>
+<translation id="984275831282074731">支付方式</translation>
 <translation id="988159990683914416">开发者内部版本</translation>
 </translationbundle>

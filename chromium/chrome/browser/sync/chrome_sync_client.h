@@ -17,18 +17,11 @@
 
 class Profile;
 
-namespace syncer {
-class ModelTypeController;
-class ModelTypeStoreService;
-class SyncService;
-class SyncableService;
-}  // namespace syncer
-
 namespace browser_sync {
 
 class LocalDataQueryHelper;
 class LocalDataMigrationHelper;
-class SyncApiComponentFactoryImpl;
+class SyncEngineFactoryImpl;
 
 class ChromeSyncClient : public syncer::SyncClient {
  public:
@@ -43,12 +36,10 @@ class ChromeSyncClient : public syncer::SyncClient {
   PrefService* GetPrefService() override;
   signin::IdentityManager* GetIdentityManager() override;
   base::FilePath GetLocalSyncBackendFolder() override;
-  syncer::ModelTypeController::TypeVector CreateModelTypeControllers(
-      syncer::SyncService* sync_service) override;
   trusted_vault::TrustedVaultClient* GetTrustedVaultClient() override;
   syncer::SyncInvalidationsService* GetSyncInvalidationsService() override;
   scoped_refptr<syncer::ExtensionsActivity> GetExtensionsActivity() override;
-  syncer::SyncApiComponentFactory* GetSyncApiComponentFactory() override;
+  syncer::SyncEngineFactory* GetSyncEngineFactory() override;
   bool IsCustomPassphraseAllowed() override;
   bool IsPasswordSyncAllowed() override;
   void SetPasswordSyncAllowedChangeCb(
@@ -58,41 +49,21 @@ class ChromeSyncClient : public syncer::SyncClient {
       override;
 #if BUILDFLAG(IS_ANDROID)
   void GetLocalDataDescriptions(
-      syncer::ModelTypeSet types,
+      syncer::DataTypeSet types,
       base::OnceCallback<void(
-          std::map<syncer::ModelType, syncer::LocalDataDescription>)> callback)
+          std::map<syncer::DataType, syncer::LocalDataDescription>)> callback)
       override;
-  void TriggerLocalDataMigration(syncer::ModelTypeSet types) override;
+  void TriggerLocalDataMigration(syncer::DataTypeSet types) override;
 #endif  // BUILDFLAG(IS_ANDROID)
 
  private:
-  // Convenience function that exercises ModelTypeStoreServiceFactory.
-  syncer::ModelTypeStoreService* GetModelTypeStoreService();
-
-  // Convenience function used during controller creation.
-  base::WeakPtr<syncer::SyncableService> GetSyncableServiceForType(
-      syncer::ModelType type);
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  // Creates the ModelTypeController for syncer::APPS.
-  std::unique_ptr<syncer::ModelTypeController> CreateAppsModelTypeController();
-
-  // Creates the ModelTypeController for syncer::APP_SETTINGS.
-  std::unique_ptr<syncer::ModelTypeController>
-  CreateAppSettingsModelTypeController(syncer::SyncService* sync_service);
-
-  // Creates the ModelTypeController for syncer::WEB_APPS.
-  std::unique_ptr<syncer::ModelTypeController>
-  CreateWebAppsModelTypeController();
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-
   const raw_ptr<Profile> profile_;
 
-  // The sync api component factory in use by this client.
-  std::unique_ptr<browser_sync::SyncApiComponentFactoryImpl> component_factory_;
+  // The sync engine factory in use by this client.
+  std::unique_ptr<browser_sync::SyncEngineFactoryImpl> engine_factory_;
 
   // Generates and monitors the ExtensionsActivity object used by sync.
-  ExtensionsActivityMonitor extensions_activity_monitor_;
+  browser_sync::ExtensionsActivityMonitor extensions_activity_monitor_;
 
 #if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<browser_sync::LocalDataQueryHelper> local_data_query_helper_;

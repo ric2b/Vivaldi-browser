@@ -3,10 +3,9 @@
 // found in the LICENSE file.
 
 import {PluginController, SaveRequestType} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
-import {assert} from 'chrome://resources/js/assert.js';
-import {eventToPromise} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
-import {createMockPdfPluginForTest, finishInkStroke, getAnnotationsBar} from './test_util.js';
+import {createMockPdfPluginForTest, finishInkStroke, getRequiredElement} from './test_util.js';
 
 const viewer = document.body.querySelector('pdf-viewer')!;
 const viewerToolbar = viewer.$.toolbar;
@@ -15,10 +14,7 @@ const mockPlugin = createMockPdfPluginForTest();
 controller.setPluginForTesting(mockPlugin);
 
 function getDownloadControls() {
-  const downloadControls =
-      viewerToolbar.shadowRoot!.querySelector('viewer-download-controls');
-  assert(downloadControls);
-  return downloadControls;
+  return getRequiredElement(viewerToolbar, 'viewer-download-controls');
 }
 
 chrome.test.runTests([
@@ -26,6 +22,7 @@ chrome.test.runTests([
   // the download button will save the PDF as original.
   async function testSaveOriginal() {
     viewerToolbar.toggleAnnotation();
+    await microtasksFinished();
     chrome.test.assertTrue(viewerToolbar.annotationMode);
 
     const downloadControls = getDownloadControls();
@@ -57,6 +54,7 @@ chrome.test.runTests([
     chrome.test.assertFalse(actionMenu.open);
 
     finishInkStroke(controller);
+    await microtasksFinished();
     downloadButton.click();
 
     // The download menu should be shown.
@@ -72,6 +70,7 @@ chrome.test.runTests([
     chrome.test.assertTrue(viewerToolbar.annotationMode);
 
     viewerToolbar.toggleAnnotation();
+    await microtasksFinished();
     chrome.test.assertFalse(viewerToolbar.annotationMode);
 
     const downloadControls = getDownloadControls();
@@ -95,12 +94,13 @@ chrome.test.runTests([
     chrome.test.assertFalse(viewerToolbar.annotationMode);
 
     viewerToolbar.toggleAnnotation();
+    await microtasksFinished();
     chrome.test.assertTrue(viewerToolbar.annotationMode);
 
     mockPlugin.clearMessages();
 
-    const annotationBar = getAnnotationsBar(viewerToolbar);
-    const undoButton = annotationBar.$.undo;
+    const undoButton =
+        getRequiredElement<HTMLButtonElement>(viewerToolbar, '#undo');
     chrome.test.assertFalse(undoButton.disabled);
 
     const downloadControls = getDownloadControls();
@@ -109,6 +109,7 @@ chrome.test.runTests([
     actionMenu.close();
 
     undoButton.click();
+    await microtasksFinished();
 
     // After undo, there aren't any ink strokes on the PDF, and the button will
     // be disabled.
@@ -131,8 +132,8 @@ chrome.test.runTests([
   async function testSaveMenuAfterRedo() {
     mockPlugin.clearMessages();
 
-    const annotationBar = getAnnotationsBar(viewerToolbar);
-    const redoButton = annotationBar.$.redo;
+    const redoButton =
+        getRequiredElement<HTMLButtonElement>(viewerToolbar, '#redo');
     chrome.test.assertFalse(redoButton.disabled);
 
     const downloadControls = getDownloadControls();
@@ -140,6 +141,7 @@ chrome.test.runTests([
     const actionMenu = downloadControls.$.menu;
 
     redoButton.click();
+    await microtasksFinished();
     downloadButton.click();
 
     // The download menu should be shown.
@@ -156,14 +158,16 @@ chrome.test.runTests([
 
     // Add another ink stroke. There should now be two ink strokes on the PDF.
     finishInkStroke(controller);
+    await microtasksFinished();
 
-    const annotationBar = getAnnotationsBar(viewerToolbar);
-    const undoButton = annotationBar.$.undo;
+    const undoButton =
+        getRequiredElement<HTMLButtonElement>(viewerToolbar, '#undo');
     chrome.test.assertFalse(undoButton.disabled);
 
     // Undo both ink strokes.
     undoButton.click();
     undoButton.click();
+    await microtasksFinished();
 
     // There shouldn't be any ink strokes on the PDF.
     chrome.test.assertTrue(undoButton.disabled);

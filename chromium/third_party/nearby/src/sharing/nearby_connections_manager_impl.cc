@@ -205,7 +205,7 @@ void NearbyConnectionsManagerImpl::StartAdvertising(
 
   NearbyConnectionsService::ConnectionListener connection_listener;
   connection_listener.initiated_cb =
-      [&](absl::string_view endpoint_id,
+      [this](absl::string_view endpoint_id,
           const ConnectionInfo& connection_info) {
         OnConnectionInitiated(endpoint_id, connection_info);
       };
@@ -361,8 +361,10 @@ void NearbyConnectionsManagerImpl::Connect(
 
   auto timeout_timer = context_->CreateTimer();
   timeout_timer->Start(
-      kInitiateNearbyConnectionTimeout / absl::Milliseconds(1), 0,
-      [&, endpoint_id]() { OnConnectionTimedOut(endpoint_id); });
+      absl::ToInt64Milliseconds(kInitiateNearbyConnectionTimeout), /*period=*/0,
+      [this, endpoint_id = std::string(endpoint_id)]() {
+        OnConnectionTimedOut(endpoint_id);
+      });
 
   connect_timeout_timers_.emplace(endpoint_id, std::move(timeout_timer));
 
@@ -400,7 +402,7 @@ void NearbyConnectionsManagerImpl::Connect(
                         /*keep_alive_interval=*/std::nullopt,
                         /*keep_alive_timeout=*/std::nullopt),
       std::move(connection_listener),
-      [&, endpoint_id](ConnectionsStatus status) {
+      [this, endpoint_id = std::string(endpoint_id)](ConnectionsStatus status) {
         MutexLock lock(&mutex_);
         if (status != ConnectionsStatus::kSuccess) {
           transfer_managers_.erase(endpoint_id);
@@ -599,7 +601,8 @@ void NearbyConnectionsManagerImpl::UpgradeBandwidth(
 
   requested_bwu_endpoint_ids_.emplace(endpoint_id);
   nearby_connections_service_->InitiateBandwidthUpgrade(
-      kServiceId, endpoint_id, [&, endpoint_id](ConnectionsStatus status) {
+      kServiceId, endpoint_id,
+      [&, endpoint_id = std::string(endpoint_id)](ConnectionsStatus status) {
         NL_VLOG(1) << __func__ << ": Bandwidth upgrade attempted to endpoint "
                    << endpoint_id << "over Nearby Connections with result: "
                    << ConnectionsStatusToString(status);
@@ -659,7 +662,7 @@ void NearbyConnectionsManagerImpl::OnConnectionInitiated(
 
   NearbyConnectionsService::PayloadListener payload_listener;
 
-  payload_listener.payload_cb = [&](absl::string_view endpoint_id,
+  payload_listener.payload_cb = [this](absl::string_view endpoint_id,
                                     Payload payload) {
     OnPayloadReceived(endpoint_id, payload);
   };
@@ -675,7 +678,7 @@ void NearbyConnectionsManagerImpl::OnConnectionInitiated(
 
   nearby_connections_service_->AcceptConnection(
       kServiceId, endpoint_id, std::move(payload_listener),
-      [&, endpoint_id = std::string(endpoint_id)](ConnectionsStatus status) {
+      [endpoint_id = std::string(endpoint_id)](ConnectionsStatus status) {
         NL_VLOG(1) << __func__ << ": Accept connection attempted to endpoint "
                    << endpoint_id << " over Nearby Connections with result: "
                    << ConnectionsStatusToString(status);
@@ -803,9 +806,34 @@ void NearbyConnectionsManagerImpl::ProcessUnknownFilePathsToDelete(
   }
 }
 
+std::optional<
+    std::weak_ptr<NearbyConnectionsManagerImpl::PayloadStatusListener>>
+NearbyConnectionsManagerImpl::GetStatusListenerForId(int64_t payload_id) const {
+  MutexLock lock(&mutex_);
+  auto listener_it = payload_status_listeners_.find(payload_id);
+  if (listener_it == payload_status_listeners_.end()) {
+    return std::nullopt;
+  }
+
+  return listener_it->second;
+}
+
+NearbyConnectionImpl* NearbyConnectionsManagerImpl::GetConnectionForId(
+    absl::string_view endpoint_id) const {
+  MutexLock lock(&mutex_);
+  auto connection_it = connections_.find(endpoint_id);
+  if (connection_it == connections_.end()) return nullptr;
+  return connection_it->second.get();
+}
+
+void NearbyConnectionsManagerImpl::RemoveStatusListenerForPayloadId(
+    int64_t payload_id) {
+  MutexLock lock(&mutex_);
+  payload_status_listeners_.erase(payload_id);
+}
+
 void NearbyConnectionsManagerImpl::OnPayloadTransferUpdate(
     absl::string_view endpoint_id, const PayloadTransferUpdate& update) {
-  MutexLock lock(&mutex_);
   NL_LOG(INFO) << "Received payload transfer update id=" << update.payload_id
                << ",status=" << PayloadStatusToString(update.status)
                << ",total=" << update.total_bytes
@@ -814,21 +842,22 @@ void NearbyConnectionsManagerImpl::OnPayloadTransferUpdate(
   // If this is a payload we've registered for, then forward its status to
   // the PayloadStatusListener if it still exists. We don't need to do
   // anything more with the payload.
-  auto listener_it = payload_status_listeners_.find(update.payload_id);
-  if (listener_it != payload_status_listeners_.end()) {
-    std::weak_ptr<PayloadStatusListener> listener = listener_it->second;
+  std::optional<std::weak_ptr<PayloadStatusListener>> listener =
+      GetStatusListenerForId(update.payload_id);
+  if (listener.has_value()) {
     switch (update.status) {
       case PayloadStatus::kInProgress:
         break;
       case PayloadStatus::kSuccess:
       case PayloadStatus::kCanceled:
       case PayloadStatus::kFailure:
-        payload_status_listeners_.erase(update.payload_id);
+        RemoveStatusListenerForPayloadId(update.payload_id);
         break;
     }
+
     // Note: The listener might be invalidated, for example, if it is shared
     // with another payload in the same transfer.
-    if (auto status_listener = listener.lock()) {
+    if (auto status_listener = listener->lock()) {
       status_listener->OnStatusUpdate(
           std::make_unique<PayloadTransferUpdate>(update),
           GetUpgradedMedium(endpoint_id));
@@ -839,27 +868,25 @@ void NearbyConnectionsManagerImpl::OnPayloadTransferUpdate(
   // If this is an incoming payload that we have not registered for, then
   // we'll treat it as a control frame (e.g. IntroductionFrame) and
   // forward it to the associated NearbyConnection.
-  auto payload_it = incoming_payloads_.find(update.payload_id);
-  if (payload_it == incoming_payloads_.end()) return;
+  auto payload = GetIncomingPayload(update.payload_id);
+  if (payload == nullptr) return;
 
-  if (payload_it->second.content.type != PayloadContent::Type::kBytes) {
+  if (payload->content.type != PayloadContent::Type::kBytes) {
     NL_LOG(WARNING) << "Received unknown payload of file type. Cancelling.";
-    nearby_connections_service_->CancelPayload(kServiceId, payload_it->first,
+    nearby_connections_service_->CancelPayload(kServiceId, payload->id,
                                                [](Status status) {});
-    ProcessUnknownFilePathsToDelete(
-        update.status, payload_it->second.content.type,
-        payload_it->second.content.file_payload.file.path);
+    ProcessUnknownFilePathsToDelete(update.status, payload->content.type,
+                                    payload->content.file_payload.file.path);
     return;
   }
 
   if (update.status != PayloadStatus::kSuccess) return;
 
-  auto connections_it = connections_.find(endpoint_id);
-  if (connections_it == connections_.end()) return;
+  NearbyConnectionImpl* connection = GetConnectionForId(endpoint_id);
+  if (connection == nullptr) return;
 
   NL_LOG(INFO) << "Writing incoming byte message to NearbyConnection.";
-  connections_it->second->WriteMessage(
-      payload_it->second.content.bytes_payload.bytes);
+  connection->WriteMessage(payload->content.bytes_payload.bytes);
 }
 
 void NearbyConnectionsManagerImpl::Reset() {

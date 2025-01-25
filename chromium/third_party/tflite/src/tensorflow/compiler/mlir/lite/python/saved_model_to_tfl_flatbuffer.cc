@@ -33,7 +33,6 @@ limitations under the License.
 #include "mlir/IR/TypeUtilities.h"  // from @llvm-project
 #include "mlir/Support/FileUtilities.h"  // from @llvm-project
 #include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "tensorflow/cc/saved_model/loader.h"
 #include "tensorflow/compiler/mlir/lite/common/tfl_pass_config.h"
 #include "tensorflow/compiler/mlir/lite/python/tf_tfl_flatbuffer_helpers.h"
 #include "tensorflow/compiler/mlir/lite/tf_to_tfl_flatbuffer.h"
@@ -174,14 +173,13 @@ Status ConvertSavedModelToTFLiteFlatBuffer(
 
   std::vector<std::string> custom_opdefs(toco_flags.custom_opdefs().begin(),
                                          toco_flags.custom_opdefs().end());
-  auto bundle = std::make_unique<tensorflow::SavedModelBundle>();
   TF_ASSIGN_OR_RETURN(
       auto module,
       ImportSavedModel(model_flags.saved_model_dir(),
                        model_flags.saved_model_version(), tags,
                        absl::MakeSpan(custom_opdefs), exported_names, specs,
-                       !toco_flags.enable_tflite_resource_variables(),
-                       context.get(), &bundle));
+                       /*enable_variable_lifting=*/true, context.get(),
+                       /*saved_model_bundle=*/nullptr));
 
   if (!model_flags.input_arrays().empty() ||
       !model_flags.output_arrays().empty()) {
@@ -213,6 +211,9 @@ Status ConvertSavedModelToTFLiteFlatBuffer(
   pass_config.enable_stablehlo_quantizer = toco_flags.has_quantization_config();
   pass_config.enable_composite_direct_lowering =
       toco_flags.enable_composite_direct_lowering();
+  pass_config.model_origin_framework = toco_flags.model_origin_framework();
+  pass_config.canonicalizing_inf_as_min_max_float =
+      toco_flags.canonicalizing_inf_as_min_max_float();
 
   if (toco_flags.qdq_conversion_mode() == "STATIC") {
     pass_config.quant_specs.qdq_conversion_mode =
@@ -242,8 +243,7 @@ Status ConvertSavedModelToTFLiteFlatBuffer(
   // TODO(b/153507667): Pass the session object when importing logic is removed.
   auto status = internal::ConvertMLIRToTFLiteFlatBuffer(
       model_flags, toco_flags, std::move(context), std::move(module),
-      pass_config, tags, result, std::move(bundle),
-      quantization_py_function_lib);
+      pass_config, tags, result, quantization_py_function_lib);
 
   return status;
 }

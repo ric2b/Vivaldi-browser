@@ -11,7 +11,7 @@
 #include "base/types/id_type.h"
 #include "base/types/optional_ref.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
-#include "components/enterprise/connectors/analysis/analysis_settings.h"
+#include "components/enterprise/connectors/core/analysis_settings.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "url/gurl.h"
@@ -62,7 +62,10 @@ class BinaryUploadService : public KeyedService {
     // being sent.
     TOO_MANY_REQUESTS = 9,
 
-    kMaxValue = TOO_MANY_REQUESTS,
+    // The server did not return all the results for the synchronous requests
+    INCOMPLETE_RESPONSE = 10,
+
+    kMaxValue = INCOMPLETE_RESPONSE,
   };
 
   static std::string ResultToString(Result result);

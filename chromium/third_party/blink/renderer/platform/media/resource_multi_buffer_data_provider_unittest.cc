@@ -86,8 +86,8 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
 
   void Initialize(const char* url, int first_position) {
     gurl_ = GURL(url);
-    url_data_ = url_index_.GetByUrl(gurl_, UrlData::CORS_UNSPECIFIED,
-                                    UrlIndex::kNormal);
+    url_data_ =
+        url_index_.GetByUrl(gurl_, UrlData::CORS_UNSPECIFIED, UrlData::kNormal);
     url_data_->set_etag(kEtag);
     DCHECK(url_data_);
     url_data_->OnRedirect(
@@ -185,12 +185,13 @@ class ResourceMultiBufferDataProviderTest : public testing::Test {
 
   // Helper method to write to |loader_| from |data_|.
   void WriteLoader(int position, int size) {
-    loader_->DidReceiveData(reinterpret_cast<char*>(data_ + position), size);
+    loader_->DidReceiveData(
+        base::as_chars(base::span(data_).subspan(position, size)));
   }
 
   void WriteData(int size) {
     auto data = base::HeapArray<char>::Uninit(size);
-    loader_->DidReceiveData(data.data(), size);
+    loader_->DidReceiveData(data);
   }
 
   // Verifies that data in buffer[0...size] is equal to data_[pos...pos+size].

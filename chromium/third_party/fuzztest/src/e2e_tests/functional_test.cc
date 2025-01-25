@@ -80,7 +80,7 @@ std::string BinaryPath(const absl::string_view name) {
       "Please set TEST_SRCDIR to non-empty value or use bazel to run the "
       "test.");
   const std::string binary_path = absl::StrCat(
-      test_srcdir, "/com_google_fuzztest/e2e_tests/", name,
+      test_srcdir, "/_main/e2e_tests/", name,
       absl::EndsWith(name, ".stripped") ? "" : ".stripped");
 
   FUZZTEST_INTERNAL_CHECK(std::filesystem::exists(binary_path),
@@ -603,6 +603,34 @@ TEST_F(UnitTestModeTest, TimeLimitFlagWorks) {
   EXPECT_THAT(status, Eq(Signal(SIGABRT)));
 }
 
+TEST_F(UnitTestModeTest, TestIsSkippedWhenRequestedInFixturePerTest) {
+  auto [status, std_out, std_err] =
+      Run("SkippedTestFixturePerTest.SkippedTest", kDefaultTargetBinary,
+          /*env=*/{},
+          /*fuzzer_flags=*/{{"time_limit_per_input", "1s"}});
+  EXPECT_THAT(std_err,
+              HasSubstr("Skipping SkippedTestFixturePerTest.SkippedTest"));
+  EXPECT_THAT(std_err, Not(HasSubstr("SkippedTest is executed")));
+  EXPECT_THAT(status, Eq(ExitCode(0)));
+}
+
+TEST_F(UnitTestModeTest, TestIsSkippedWhenRequestedInFixturePerIteration) {
+  auto [status, std_out, std_err] =
+      Run("SkippedTestFixturePerIteration.SkippedTest", kDefaultTargetBinary,
+          /*env=*/{},
+          /*fuzzer_flags=*/{{"time_limit_per_input", "1s"}});
+  EXPECT_THAT(std_err, Not(HasSubstr("SkippedTest is executed")));
+  EXPECT_THAT(status, Eq(ExitCode(0)));
+}
+
+TEST_F(UnitTestModeTest, InputsAreSkippedWhenRequestedInTests) {
+  auto [status, std_out, std_err] =
+      Run("MySuite.SkipInputs", kDefaultTargetBinary,
+          /*env=*/{},
+          /*fuzzer_flags=*/{{"time_limit_per_input", "1s"}});
+  EXPECT_THAT(std_err, HasSubstr("Skipped input"));
+}
+
 class GetRandomValueTest : public UnitTestModeTest {
  protected:
   int GetValueFromInnerTest(
@@ -643,6 +671,21 @@ TEST_F(GetRandomValueTest, SettingPrngSeedReproducesValue) {
                               "pJJCK_iNZeUJGe8M42hjOcQ8T2pCXSrQ4Y1dsU3M2_g"}});
 
   EXPECT_EQ(val, other_val);
+}
+
+std::string CentipedePath() {
+  const auto test_srcdir = absl::NullSafeStringView(getenv("TEST_SRCDIR"));
+  FUZZTEST_INTERNAL_CHECK_PRECONDITION(
+      !test_srcdir.empty(),
+      "Please set TEST_SRCDIR to non-empty value or use bazel to run the "
+      "test.");
+  const std::string binary_path = absl::StrCat(
+      test_srcdir,
+      "/_main/centipede/centipede_uninstrumented");
+
+  FUZZTEST_INTERNAL_CHECK(std::filesystem::exists(binary_path),
+                          absl::StrCat("Can't find ", binary_path));
+  return binary_path;
 }
 
 // Tests for the FuzzTest command line interface.
@@ -801,8 +844,10 @@ void ExpectCorpusInputMessageInLogs(absl::string_view logs, int num_inputs) {
               HasSubstr(absl::StrFormat("%d inputs to rerun", num_inputs)))
       << logs;
 #else
-  EXPECT_THAT(logs, HasSubstr(absl::StrFormat(
-                        "Parsed %d inputs and ignored 0 inputs", num_inputs)))
+  EXPECT_THAT(logs,
+              HasSubstr(absl::StrFormat(
+                  "In total, loaded %d inputs and ignored 0 invalid inputs",
+                  num_inputs)))
       << logs;
 #endif
 }
@@ -1137,8 +1182,7 @@ TEST_F(FuzzingModeCommandLineInterfaceTest, TimeLimitFlagWorks) {
 
 // TODO: b/340232436 - Once fixed, remove this test since we will no longer need
 // to restrict the filter to only fuzz tests.
-TEST_F(FuzzingModeCommandLineInterfaceTest,
-       RunsOnlyFuzzTestsWhenNoFilterIsSpecified) {
+TEST_F(FuzzingModeCommandLineInterfaceTest, RunsOnlyFuzzTests) {
   auto [status, std_out, std_err] =
       RunWith({{"fuzz_for", "1ns"}}, /*env=*/{}, /*timeout=*/absl::Seconds(10),
               "testdata/unit_test_and_fuzz_tests");
@@ -1158,27 +1202,50 @@ TEST_F(FuzzingModeCommandLineInterfaceTest,
               {{GTEST_FLAG_PREFIX_ "filter",
                 "UnitTest.AlwaysPasses:FuzzTest.AlwaysPasses"}});
 
-  EXPECT_THAT(std_out, HasSubstr("[ RUN      ] UnitTest.AlwaysPasses"));
   EXPECT_THAT(std_out, HasSubstr("[ RUN      ] FuzzTest.AlwaysPasses"));
   EXPECT_THAT(std_out,
               Not(HasSubstr("[ RUN      ] FuzzTest.AlsoAlwaysPasses")));
-  EXPECT_THAT(std_out, HasSubstr("2 tests from 2 test suites ran."));
+  EXPECT_THAT(std_out, Not(HasSubstr("[ RUN      ] UnitTest.AlwaysPasses")));
+  EXPECT_THAT(std_out, HasSubstr("1 test from 1 test suite ran."));
   EXPECT_THAT(status, Eq(ExitCode(0)));
 }
 
-std::string CentipedePath() {
-  const auto test_srcdir = absl::NullSafeStringView(getenv("TEST_SRCDIR"));
-  FUZZTEST_INTERNAL_CHECK_PRECONDITION(
-      !test_srcdir.empty(),
-      "Please set TEST_SRCDIR to non-empty value or use bazel to run the "
-      "test.");
-  const std::string binary_path = absl::StrCat(
-      test_srcdir,
-      "/com_google_fuzztest/centipede/centipede_uninstrumented");
+// This tests both the command line interface and the fuzzing logic. It is under
+// FuzzingModeCommandLineInterfaceTest so it can specify the command line.
+TEST_F(FuzzingModeCommandLineInterfaceTest, CorpusDoesNotContainSkippedInputs) {
+  TempDir corpus_dir;
+  // Although theoretically possible, it is extreme unlikely that the test would
+  // find the crash without saving some corpus.
+  auto [producer_status, producer_std_out, producer_std_err] =
+      RunWith({{"fuzz", "MySuite.SkipInputs"}, {"fuzz_for", "10s"}},
+              {{"FUZZTEST_TESTSUITE_OUT_DIR", corpus_dir.dirname()}});
 
-  FUZZTEST_INTERNAL_CHECK(std::filesystem::exists(binary_path),
-                          absl::StrCat("Can't find ", binary_path));
-  return binary_path;
+  ASSERT_THAT(producer_std_err, HasSubstr("Skipped input"));
+
+  auto [replayer_status, replayer_std_out, replayer_std_err] =
+      RunWith({{"fuzz", "MySuite.SkipInputs"}},
+              {{"FUZZTEST_REPLAY", corpus_dir.dirname()}});
+
+  EXPECT_THAT(replayer_std_err, Not(HasSubstr("Skipped input")));
+}
+
+TEST_F(FuzzingModeCommandLineInterfaceTest, UsesCentipedeBinaryWhenEnvIsSet) {
+#ifndef FUZZTEST_USE_CENTIPEDE
+  GTEST_SKIP() << "Skipping Centipede-specific test";
+#endif
+  TempDir temp_dir;
+  auto [status, std_out, std_err] = RunWith(
+      {
+          {"fuzz_for", "1s"},
+          {"corpus_database", temp_dir.dirname()},
+      },
+      {{"FUZZTEST_CENTIPEDE_BINARY", CentipedePath()}},
+      /*timeout=*/absl::Minutes(1), "testdata/unit_test_and_fuzz_tests");
+  EXPECT_THAT(
+      std_err,
+      HasSubstr("Starting the update of the corpus database for fuzz tests"));
+  EXPECT_THAT(std_err, HasSubstr("FuzzTest.AlwaysPasses"));
+  EXPECT_THAT(status, Eq(ExitCode(0)));
 }
 
 struct ExecutionModelParam {
@@ -1303,6 +1370,23 @@ TEST_P(FuzzingModeFixtureTest, GoogleTestStaticTestSuiteFunctionsCalledOnce) {
   EXPECT_EQ(
       CountTargetRuns(std_err),
       CountSubstrs(std_err, "<<CallCountGoogleTest::TearDownTestSuite()>>"));
+}
+
+TEST_P(FuzzingModeFixtureTest, TestIsSkippedWhenRequestedInFixturePerTest) {
+  auto [status, std_out, std_err] =
+      Run("SkippedTestFixturePerTest.SkippedTest", /*iterations=*/10);
+  EXPECT_THAT(std_err,
+              HasSubstr("Skipping SkippedTestFixturePerTest.SkippedTest"));
+  EXPECT_THAT(std_err, Not(HasSubstr("SkippedTest should not be run")));
+  EXPECT_THAT(status, Eq(ExitCode(0)));
+}
+
+TEST_P(FuzzingModeFixtureTest,
+       TestIsSkippedWhenRequestedInFixturePerIteration) {
+  auto [status, std_out, std_err] =
+      Run("SkippedTestFixturePerIteration.SkippedTest", /*iterations=*/10);
+  EXPECT_THAT(std_err, Not(HasSubstr("SkippedTest should not be run")));
+  EXPECT_THAT(status, Eq(ExitCode(0)));
 }
 
 INSTANTIATE_TEST_SUITE_P(FuzzingModeFixtureTestWithExecutionModel,
@@ -1701,6 +1785,14 @@ TEST_P(FuzzingModeCrashFindingTest,
   auto [status, std_out, std_err] =
       Run("AlternateSignalStackFixture."
           "StackCalculationWorksWithAlternateStackForSignalHandlers");
+  EXPECT_THAT(std_err, HasSubstr("argument 0: 123456789"));
+  ExpectTargetAbort(status, std_err);
+}
+
+TEST_P(FuzzingModeCrashFindingTest, InputsAreSkippedWhenRequestedInTests) {
+  auto [status, std_out, std_err] =
+      Run("MySuite.SkipInputs", kDefaultTargetBinary);
+  EXPECT_THAT(std_err, HasSubstr("Skipped input"));
   EXPECT_THAT(std_err, HasSubstr("argument 0: 123456789"));
   ExpectTargetAbort(status, std_err);
 }

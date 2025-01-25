@@ -15,6 +15,7 @@
 #include "components/autofill/core/browser/autofill_form_test_utils.h"
 #include "components/autofill/core/browser/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/password_form_classification.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/browser/test_browser_autofill_manager.h"
@@ -29,15 +30,15 @@
 #include "url/gurl.h"
 
 namespace plus_addresses::metrics {
-
 namespace {
+
 using ::autofill::FieldType;
 using ::autofill::FormData;
 using ::autofill::SuggestionType;
 using ::autofill::test::FormDescription;
 using ::testing::ElementsAreArray;
 using ::testing::IsEmpty;
-using PasswordFormType = autofill::AutofillClient::PasswordFormType;
+using PasswordFormType = autofill::PasswordFormClassification::Type;
 using SuggestionContext =
     autofill::AutofillPlusAddressDelegate::SuggestionContext;
 
@@ -81,8 +82,6 @@ ukm::TestUkmRecorder::HumanReadableUkmMetrics CreateUkmMetrics(
   metrics["WasShownCreateSuggestion"] = was_shown_create_suggestion;
   return metrics;
 }
-
-}  // namespace
 
 class PlusAddressSubmissionLoggerTest : public ::testing::Test {
  public:
@@ -514,4 +513,5 @@ INSTANTIATE_TEST_SUITE_P(
             .ukms = {},
             .uma = {}}));
 
+}  // namespace
 }  // namespace plus_addresses::metrics

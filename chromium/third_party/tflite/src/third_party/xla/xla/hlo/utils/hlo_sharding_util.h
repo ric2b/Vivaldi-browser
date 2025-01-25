@@ -478,9 +478,9 @@ bool IsSortOperandShardingMovable(const HloInstruction* sort_operand,
 // Returns a set of parallel dimensions for Gather/Scatter instructions given
 // the parameters for the op.
 std::optional<GatherScatterParallelDims> GetGatherScatterBatchParallelDims(
-    const HloInstruction* indices, absl::Span<const int64_t> slice_sizes,
-    int64_t index_vector_dim, absl::Span<const int64_t> index_map,
-    const CallGraph& call_graph);
+    const HloInstruction* operand, const HloInstruction* indices,
+    absl::Span<const int64_t> slice_sizes, int64_t index_vector_dim,
+    absl::Span<const int64_t> index_map, const CallGraph& call_graph);
 
 // Returns the sharding of an output of an instruction. Some instructions have
 // special handling like Outfeed and this function takes care of those.
@@ -536,6 +536,14 @@ std::optional<HloSharding> ReturnImprovedShardingImpl(
 // operand.
 HloSharding InferDotOperandSharding(
     const HloInstruction* dot, int64_t operand_index,
+    const dot_as_convolution_util::DotConvolutionDimsInfo& dnums,
+    bool consider_other_operand, bool may_combine_partial_sharding);
+
+// Same as above, but takes the sharding of the dot and the other operand as
+// input.
+HloSharding InferDotOperandSharding(
+    const HloSharding* dot_sharding, const HloSharding* other_operand_sharding,
+    int64_t operand_index,
     const dot_as_convolution_util::DotConvolutionDimsInfo& dnums,
     bool consider_other_operand, bool may_combine_partial_sharding);
 

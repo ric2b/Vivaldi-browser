@@ -9,17 +9,14 @@ load(
     "//xla/tsl/mkl:build_defs.bzl",
     "if_enable_mkl",
     "if_mkl",
+    "if_mkldnn_aarch64_acl",
+    "if_mkldnn_aarch64_acl_openmp",
+    "if_mkldnn_openmp",
     "onednn_v3_define",
 )
 load(
     "//third_party/compute_library:build_defs.bzl",
     "if_enable_acl",
-)
-load(
-    "@local_tsl//third_party/mkl_dnn:build_defs.bzl",
-    "if_mkldnn_aarch64_acl",
-    "if_mkldnn_aarch64_acl_openmp",
-    "if_mkldnn_openmp",
 )
 load(
     "@local_config_rocm//rocm:build_defs.bzl",
@@ -223,6 +220,16 @@ def if_with_tpu_support(if_true, if_false = []):
         clean_dep("//xla/tsl:with_tpu_support"): if_true,
         "//conditions:default": if_false,
     })
+
+# These configs are used to determine whether we should use CUDA tools and libs in cc_libraries.
+# They are intended for the OSS builds only.
+def if_cuda_tools(if_true, if_false = []):  # buildifier: disable=unused-variable
+    """Shorthand for select()'ing on whether we're building with hCUDA tools."""
+    return select({"@local_config_cuda//cuda:cuda_tools": if_true, "//conditions:default": if_false})  # copybara:comment_replace return if_false
+
+def if_cuda_libs(if_true, if_false = []):  # buildifier: disable=unused-variable
+    """Shorthand for select()'ing on whether we need to include hermetic CUDA libraries."""
+    return select({"@local_config_cuda//cuda:cuda_tools_and_libs": if_true, "//conditions:default": if_false})  # copybara:comment_replace return if_false
 
 def get_win_copts(is_external = False):
     WINDOWS_COPTS = [
@@ -788,4 +795,10 @@ def nvtx_headers():
     return if_oss(["@nvtx_archive//:headers"], ["@local_config_cuda//cuda:cuda_headers"])
 
 def tsl_google_bzl_deps():
+    return []
+
+def tsl_extra_config_settings():
+    pass
+
+def tsl_extra_config_settings_targets():
     return []

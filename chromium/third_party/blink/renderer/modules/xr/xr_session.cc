@@ -337,7 +337,8 @@ XRSession::XRSession(
     device::mojom::blink::XRInteractionMode interaction_mode,
     device::mojom::blink::XRSessionDeviceConfigPtr device_config,
     bool sensorless_session,
-    XRSessionFeatureSet enabled_feature_set)
+    XRSessionFeatureSet enabled_feature_set,
+    uint64_t trace_id)
     : ActiveScriptWrappable<XRSession>({}),
       frame_tracked_images_(
           MakeGarbageCollected<FrozenArray<XRImageTrackingResult>>()),
@@ -357,7 +358,8 @@ XRSession::XRSession(
               xr->GetExecutionContext())),
       supports_viewport_scaling_(immersive() &&
                                  device_config_->supports_viewport_scaling),
-      sensorless_session_(sensorless_session) {
+      sensorless_session_(sensorless_session),
+      trace_id_(trace_id) {
   FrozenArray<IDLString>::VectorType enabled_features;
   for (const auto& feature : enabled_feature_set_) {
     enabled_features.push_back(XRSessionFeatureToString(feature));
@@ -605,7 +607,7 @@ void XRSession::UpdateViews(Vector<device::mojom::blink::XRViewPtr> views) {
     for (wtf_size_t i = 0; i < views.size(); ++i) {
       if (create_views) {
         views_[i] = MakeGarbageCollected<XRViewData>(
-            std::move(views[i]), render_state_->depthNear(),
+            i, std::move(views[i]), render_state_->depthNear(),
             render_state_->depthFar(), *device_config_, enabled_feature_set_);
       } else {
         views_[i]->UpdateView(std::move(views[i]), render_state_->depthNear(),
@@ -617,33 +619,7 @@ void XRSession::UpdateViews(Vector<device::mojom::blink::XRViewPtr> views) {
       render_state_->baseLayer()->OnResize();
     }
   } else {  // Inline
-    if (canvas_was_resized_) {
-      views_.clear();
-      canvas_was_resized_ = false;
-    }
-    if (views_.empty()) {
-      views_.emplace_back(MakeGarbageCollected<XRViewData>(
-          device::mojom::blink::XREye::kNone,
-          gfx::Rect(0, 0, output_width_, output_height_)));
-    }
-
-    float aspect = 1.0f;
-    if (output_width_ && output_height_) {
-      aspect = static_cast<float>(output_width_) /
-               static_cast<float>(output_height_);
-    }
-
-    // In non-immersive mode, if there is no explicit projection matrix
-    // provided, the projection matrix must be aligned with the
-    // output canvas dimensions.
-    std::optional<double> inline_vertical_fov =
-        render_state_->inlineVerticalFieldOfView();
-
-    // inlineVerticalFieldOfView should only be null in immersive mode.
-    DCHECK(inline_vertical_fov.has_value());
-    views_[kMonoView]->UpdateProjectionMatrixFromAspect(
-        inline_vertical_fov.value(), aspect, render_state_->depthNear(),
-        render_state_->depthFar());
+    UpdateInlineView();
   }
 }
 
@@ -839,6 +815,10 @@ void XRSession::ScheduleVideoFrameCallbacksExecution(
     ExecuteVfcCallback execute_vfc_callback) {
   vfc_execution_queue_.push_back(std::move(execute_vfc_callback));
   MaybeRequestFrame();
+}
+
+base::TimeDelta XRSession::TakeAnimationFrameTimerAverage() {
+  return page_animation_frame_timer_.TakeAverageMicroseconds();
 }
 
 void XRSession::ExecuteVideoFrameCallbacks(double timestamp) {
@@ -1481,6 +1461,7 @@ void XRSession::HandleShutdown() {
   // either the promise or the event callback, it's not blocked by the frame
   // provider thinking there's still an active immersive session.
   xr_->frameProvider()->OnSessionEnded(this);
+  xr_->OnSessionEnded(this);
 
   if (end_session_resolver_) {
     DVLOG(3) << __func__ << ": Resolving end_session_resolver_";
@@ -1528,6 +1509,22 @@ gfx::SizeF XRSession::RecommendedFramebufferSize() const {
   for (const auto& view : views_) {
     const auto& viewport = view->Viewport();
     width += viewport.width();
+    height = std::max<float>(height, viewport.height());
+  }
+
+  return gfx::SizeF(width * scale, height * scale);
+}
+
+gfx::SizeF XRSession::RecommendedArrayTextureSize() const {
+  float scale = RecommendedFramebufferScale();
+  float width = 0;
+  float height = 0;
+
+  // When using array textures the texture size should be determined by the
+  // maximum size required for any viewport.
+  for (const auto& view : views_) {
+    const auto& viewport = view->Viewport();
+    width = std::max<float>(width, viewport.width());
     height = std::max<float>(height, viewport.height());
   }
 
@@ -1638,6 +1635,16 @@ void XRSession::MaybeRequestFrame() {
   if (request_frame) {
     xr_->frameProvider()->RequestFrame(this);
     pending_frame_ = true;
+  } else {
+    std::stringstream ss;
+    ss << __func__
+       << ": Not requesting frame, pending_frame_=" << pending_frame_
+       << ", page_allowed_frames= " << page_allowed_frames
+       << ", page_can_process_frames=" << page_can_process_frames
+       << ", page_configured_properly=" << page_configured_properly
+       << ", page_wants_frame=" << page_wants_frame
+       << ", frames_throttled=" << frames_throttled_;
+    xr_->AddWebXrInternalsMessage(ss.str().c_str());
   }
 }
 
@@ -2022,8 +2029,10 @@ void XRSession::OnFrame(
     // happen within these calls. resolving_frame_ will be true for the duration
     // of the callbacks.
     base::AutoReset<bool> resolving(&resolving_frame_, true);
+    page_animation_frame_timer_.StartTimer();
     ExecuteVideoFrameCallbacks(timestamp);
     callback_collection_->ExecuteCallbacks(this, timestamp, presentation_frame);
+    page_animation_frame_timer_.StopTimer();
 
     // The session might have ended in the middle of the frame. Only call
     // OnFrameEnd if it's still valid.
@@ -2099,6 +2108,36 @@ XRFrame* XRSession::CreatePresentationFrame(bool is_animation_frame) {
   return presentation_frame;
 }
 
+void XRSession::UpdateInlineView() {
+  if (canvas_was_resized_) {
+    views_.clear();
+    canvas_was_resized_ = false;
+  }
+  if (views_.empty()) {
+    views_.emplace_back(MakeGarbageCollected<XRViewData>(
+        /*index=*/0, device::mojom::blink::XREye::kNone,
+        gfx::Rect(0, 0, output_width_, output_height_)));
+  }
+
+  float aspect = 1.0f;
+  if (output_width_ && output_height_) {
+    aspect =
+        static_cast<float>(output_width_) / static_cast<float>(output_height_);
+  }
+
+  // In non-immersive mode, if there is no explicit projection matrix
+  // provided, the projection matrix must be aligned with the
+  // output canvas dimensions.
+  std::optional<double> inline_vertical_fov =
+      render_state_->inlineVerticalFieldOfView();
+
+  // inlineVerticalFieldOfView should only be null in immersive mode.
+  DCHECK(inline_vertical_fov.has_value());
+  views_[kMonoView]->UpdateProjectionMatrixFromAspect(
+      inline_vertical_fov.value(), aspect, render_state_->depthNear(),
+      render_state_->depthFar());
+}
+
 // Called when the canvas element for this session's output context is resized.
 void XRSession::UpdateCanvasDimensions(Element* element) {
   DCHECK(element);
@@ -2117,6 +2156,7 @@ void XRSession::UpdateCanvasDimensions(Element* element) {
   }
 
   canvas_was_resized_ = true;
+  UpdateInlineView();
 }
 
 void XRSession::OnInputStateChangeInternal(

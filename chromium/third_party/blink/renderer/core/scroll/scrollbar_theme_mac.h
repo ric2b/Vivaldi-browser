@@ -76,14 +76,7 @@ class CORE_EXPORT ScrollbarThemeMac : public ScrollbarTheme {
 
   void PaintThumb(GraphicsContext& context,
                   const Scrollbar& scrollbar,
-                  const gfx::Rect& rect) override {
-    PaintThumbInternal(context, scrollbar, rect, 1.0f);
-  }
-  void PaintThumbWithOpacity(GraphicsContext& context,
-                             const Scrollbar& scrollbar,
-                             const gfx::Rect& rect) override {
-    PaintThumbInternal(context, scrollbar, rect, Opacity(scrollbar));
-  }
+                  const gfx::Rect& rect) override;
 
   float Opacity(const Scrollbar&) const override;
 
@@ -114,20 +107,13 @@ class CORE_EXPORT ScrollbarThemeMac : public ScrollbarTheme {
 
   int TickmarkBorderWidth() const override { return 1; }
 
-  void PaintTrack(GraphicsContext&,
-                  const Scrollbar&,
-                  const gfx::Rect&) override;
+  void PaintTrackBackground(GraphicsContext&,
+                            const Scrollbar&,
+                            const gfx::Rect&) override;
   void PaintScrollCorner(GraphicsContext&,
-                         const Scrollbar* vertical_scrollbar,
+                         const ScrollableArea&,
                          const DisplayItemClient&,
-                         const gfx::Rect& corner_rect,
-                         mojom::blink::ColorScheme color_scheme,
-                         bool in_forced_colors,
-                         const ui::ColorProvider* color_provider) override;
-  void PaintThumbInternal(GraphicsContext&,
-                          const Scrollbar&,
-                          const gfx::Rect&,
-                          float opacity);
+                         const gfx::Rect& corner_rect) override;
 };
 }  // namespace blink
 

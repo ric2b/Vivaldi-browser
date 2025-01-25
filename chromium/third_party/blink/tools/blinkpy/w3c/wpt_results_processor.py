@@ -288,7 +288,7 @@ class WPTResult(Result):
             TestharnessLine(LineType.FOOTER),
         ])
 
-    def summarize(self) -> Optional[str]:
+    def summarize(self, product: str) -> Optional[str]:
         """Generate a summary of this test result as sanitized HTML.
 
         See [1] for ResultDB-specific markup features.
@@ -300,14 +300,14 @@ class WPTResult(Result):
         # TODO(crbug.com/1521922): Unify result sink reporting with
         # `blinkpy.web_tests.*`.
         summary = textwrap.dedent(f"""\
-            <p><strong>This WPT was run against <code>chrome</code> using
+            <p><strong>This WPT was run against <code>{product}</code> using
             <code>chromedriver</code>. See <a href="{_WPT_DOC_URL}">these
             instructions</a> about running these tests locally and triaging
             failures.</strong></p>""").replace('\n', ' ')
         url = wpt_fyi_url(self.name)
         if url:
             summary += f'<p><a href="{url}">Latest wpt.fyi results</a></p>'
-        for name in ['command', 'stderr', 'crash_log']:
+        for name in ['stderr', 'crash_log']:
             if name in self.artifacts:
                 summary += f'<h3>{name}</h3>'
                 summary += f'<p><text-artifact artifact-id="{name}"/></p>'
@@ -685,18 +685,19 @@ class WPTResultsProcessor:
         result.pid = (extra or {}).get('browser_pid', 0)
         result.update_from_test(status, message)
         artifacts, image_diff_stats = self._extract_artifacts(
-            result, message, extra)
+            result, message, extra or {})
         result.artifacts = artifacts.artifacts
         result.image_diff_stats = image_diff_stats
         if result.unexpected:
             self._handle_unexpected_result(result)
+        product = self.port.get_option('product', '(unknown)')
         self.sink.report_individual_test_result(
             test_name_prefix=self.test_name_prefix,
             result=result,
             artifact_output_dir=self.fs.dirname(self.artifacts_dir),
             expectations=None,
             test_file_location=result.file_path,
-            html_summary=result.summarize())
+            html_summary=result.summarize(product))
         _log.debug(
             'Reported result for %s, iteration %d (actual: %s, '
             'expected: %s, artifacts: %s)', result.name, self._iteration,
@@ -750,6 +751,7 @@ class WPTResultsProcessor:
         # compute the tests dict
         tests = {}
         num_passes = num_regressions = 0
+        shard_index = self.port.get_option('shard_index')
         for test_name, results in self._results_by_name.items():
             # TODO: the expected result calculated this way could change each time
             expected = ' '.join(results[0].expected)
@@ -761,12 +763,13 @@ class WPTResultsProcessor:
             test_dict = {}
             test_dict['expected'] = expected
             test_dict['actual'] = ' '.join(actual)
-            test_dict['shard'] = self.port.get_option('shard_index')
 
             # Fields below are optional. To avoid bloating the output results json
             # too much, only add them when they are True or non-empty.
             if len(set(actual)) > 1:
                 test_dict['is_flaky'] = True
+            if shard_index is not None:
+                test_dict['shard'] = shard_index
 
             rounded_run_time = round(results[0].took, 1)
             if rounded_run_time:
@@ -901,8 +904,9 @@ class WPTResultsProcessor:
             artifacts.CreateArtifact('expected_text', expected_subpath,
                                      expected_text.encode())
 
-        if not actual_text or not expected_text:
+        if not actual_text:
             return
+        expected_text = expected_text or ''
         diff_content = unified_diff(expected_text, actual_text,
                                     expected_subpath, actual_subpath)
         diff_subpath = self.port.output_filename(
@@ -1008,7 +1012,7 @@ class WPTResultsProcessor:
         artifacts.CreateArtifact(artifact_id, log_subpath, contents.encode())
 
     def _extract_artifacts(self, result: WPTResult, message: Optional[str],
-                           extra) -> Tuple[Artifacts, str]:
+                           extra: Dict[str, Any]) -> Tuple[Artifacts, str]:
         # Ensure `artifacts_base_dir` (i.e., `layout-test-results`) is prepended
         # to `full_results_jsonp.js` paths so that `results.html` can correctly
         # fetch artifacts.
@@ -1024,7 +1028,7 @@ class WPTResultsProcessor:
         if self.reset_results or result.actual == ResultType.Failure:
             if result.can_have_subtests:
                 self._write_text_results(result, artifacts)
-            screenshots = (extra or {}).get('reftest_screenshots') or []
+            screenshots = extra.get('reftest_screenshots') or []
             if screenshots:
                 # Remove the relation operator `==` or `!=` between the
                 # screenshot objects.
@@ -1035,6 +1039,11 @@ class WPTResultsProcessor:
         if message:
             self._write_log(result.name, artifacts, 'crash_log',
                             test_failures.FILENAME_SUFFIX_CRASH_LOG, message)
+
+        if leak_counters := extra.get('leak_counters'):
+            leak_log = json.dumps(leak_counters, separators=(',', ':'))
+            self._write_log(result.name, artifacts, 'leak_log',
+                            test_failures.FILENAME_SUFFIX_LEAK_LOG, leak_log)
 
         # If the browser process isn't restarted, it's possible for that process
         # to continue producing stdio that will be dumped into the log for the

@@ -115,8 +115,9 @@ bool MediaAttributeMatches(const MediaValuesCached& media_values,
   // trials for media queries are not needed.
   MediaQuerySet* media_queries =
       MediaQuerySet::Create(attribute_value, nullptr);
-  MediaQueryEvaluator media_query_evaluator(&media_values);
-  return media_query_evaluator.Eval(*media_queries);
+  MediaQueryEvaluator* media_query_evaluator =
+      MakeGarbageCollected<MediaQueryEvaluator>(&media_values);
+  return media_query_evaluator->Eval(*media_queries);
 }
 
 void ScanScriptWebBundle(
@@ -611,8 +612,7 @@ class TokenPreloadScanner::StartTagScanner {
     //
     // If the dry run mode is enabled, prevents the actual preload request from
     // being created.
-    static const bool dry_run_mode =
-        features::kLCPPLazyLoadImagePreloadDryRun.Get();
+    const bool dry_run_mode = features::kLCPPLazyLoadImagePreloadDryRun.Get();
     if (is_potentially_lcp_element && !source_size_is_auto_ && !dry_run_mode) {
       switch (document_parameters.preload_lazy_load_image_type) {
         case features::LcppPreloadLazyLoadImageType::kNativeLazyLoading:
@@ -1330,9 +1330,22 @@ CachedDocumentParameters::CachedDocumentParameters(Document* document) {
   static const features::LcppPreloadLazyLoadImageType
       kPreloadLazyLoadImageType =
           features::kLCPCriticalPathPredictorPreloadLazyLoadImageType.Get();
-  preload_lazy_load_image_type = kPreloadLazyLoadImageType;
+  preload_lazy_load_image_type =
+      preload_lazy_load_image_type_for_testing.has_value()
+          ? preload_lazy_load_image_type_for_testing.value()
+          : kPreloadLazyLoadImageType;
   probe::GetDisabledImageTypes(document->GetExecutionContext(),
                                &disabled_image_types);
+}
+
+// static
+std::optional<features::LcppPreloadLazyLoadImageType>
+    CachedDocumentParameters::preload_lazy_load_image_type_for_testing =
+        std::nullopt;
+// static
+void CachedDocumentParameters::SetLcppPreloadLazyLoadImageTypeForTesting(
+    std::optional<features::LcppPreloadLazyLoadImageType> type) {
+  preload_lazy_load_image_type_for_testing = type;
 }
 
 }  // namespace blink

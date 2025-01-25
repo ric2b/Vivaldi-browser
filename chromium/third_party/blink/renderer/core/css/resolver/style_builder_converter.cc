@@ -23,13 +23,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+#include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
 #ifdef UNSAFE_BUFFERS_BUILD
 // TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
 #pragma allow_unsafe_buffers
 #endif
-
-#include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
 
 #include <algorithm>
 #include <memory>
@@ -66,6 +64,7 @@
 #include "third_party/blink/renderer/core/css/css_quad_value.h"
 #include "third_party/blink/renderer/core/css/css_ratio_value.h"
 #include "third_party/blink/renderer/core/css/css_reflect_value.h"
+#include "third_party/blink/renderer/core/css/css_relative_color_value.h"
 #include "third_party/blink/renderer/core/css/css_shadow_value.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
@@ -92,6 +91,7 @@
 #include "third_party/blink/renderer/core/style/shape_offset_path_operation.h"
 #include "third_party/blink/renderer/core/style/style_overflow_clip_margin.h"
 #include "third_party/blink/renderer/core/style/style_svg_resource.h"
+#include "third_party/blink/renderer/core/style/style_view_transition_group.h"
 #include "third_party/blink/renderer/platform/fonts/font_palette.h"
 #include "third_party/blink/renderer/platform/fonts/opentype/open_type_math_support.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
@@ -114,7 +114,8 @@ Length ConvertGridTrackBreadth(const StyleResolverState& state,
   // Fractional unit.
   auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value);
   if (primitive_value && primitive_value->IsFlex()) {
-    return Length::Flex(primitive_value->GetFloatValue());
+    return Length::Flex(primitive_value->ComputeValueInCanonicalUnit(
+        state.CssToLengthConversionData()));
   }
 
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
@@ -614,23 +615,23 @@ StyleBuilderConverter::ConvertFontVariationSettings(
 scoped_refptr<FontPalette> StyleBuilderConverter::ConvertFontPalette(
     StyleResolverState& state,
     const CSSValue& value) {
-  return StyleBuilderConverterBase::ConvertFontPalette(value);
+  return StyleBuilderConverterBase::ConvertFontPalette(
+      state.CssToLengthConversionData(), value);
 }
 
 scoped_refptr<FontPalette> StyleBuilderConverterBase::ConvertPaletteMix(
+    const CSSLengthResolver& length_resolver,
     const CSSValue& value) {
-  DCHECK(RuntimeEnabledFeatures::FontPaletteAnimationEnabled());
-
   auto* palette_mix_value = DynamicTo<cssvalue::CSSPaletteMixValue>(value);
   if (palette_mix_value) {
     scoped_refptr<FontPalette> palette1 =
-        ConvertFontPalette(palette_mix_value->Palette1());
+        ConvertFontPalette(length_resolver, palette_mix_value->Palette1());
     if (palette1 == nullptr) {
       // Use normal palette.
       palette1 = FontPalette::Create();
     }
     scoped_refptr<FontPalette> palette2 =
-        ConvertFontPalette(palette_mix_value->Palette2());
+        ConvertFontPalette(length_resolver, palette_mix_value->Palette2());
     if (palette2 == nullptr) {
       palette2 = FontPalette::Create();
     }
@@ -644,18 +645,22 @@ scoped_refptr<FontPalette> StyleBuilderConverterBase::ConvertPaletteMix(
     double normalized_percentage;
     if (cssvalue::CSSColorMixValue::NormalizePercentages(
             palette_mix_value->Percentage1(), palette_mix_value->Percentage2(),
-            normalized_percentage, alpha_multiplier)) {
+            normalized_percentage, alpha_multiplier, length_resolver)) {
       double percentage1 = kMiddleStatePercentage;
       double percentage2 = kMiddleStatePercentage;
       if (palette_mix_value->Percentage1() &&
           palette_mix_value->Percentage2()) {
-        percentage1 = palette_mix_value->Percentage1()->GetDoubleValue();
-        percentage2 = palette_mix_value->Percentage2()->GetDoubleValue();
+        percentage1 = palette_mix_value->Percentage1()->ComputePercentage(
+            length_resolver);
+        percentage2 = palette_mix_value->Percentage2()->ComputePercentage(
+            length_resolver);
       } else if (palette_mix_value->Percentage1()) {
-        percentage1 = palette_mix_value->Percentage1()->GetDoubleValue();
+        percentage1 = palette_mix_value->Percentage1()->ComputePercentage(
+            length_resolver);
         percentage2 = kFinalStatePercentage - percentage1;
       } else if (palette_mix_value->Percentage2()) {
-        percentage2 = palette_mix_value->Percentage2()->GetDoubleValue();
+        percentage2 = palette_mix_value->Percentage2()->ComputePercentage(
+            length_resolver);
         percentage1 = kFinalStatePercentage - percentage2;
       }
       return FontPalette::Mix(palette1, palette2, percentage1, percentage2,
@@ -667,6 +672,7 @@ scoped_refptr<FontPalette> StyleBuilderConverterBase::ConvertPaletteMix(
 }
 
 scoped_refptr<FontPalette> StyleBuilderConverterBase::ConvertFontPalette(
+    const CSSLengthResolver& length_resolver,
     const CSSValue& value) {
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
   if (identifier_value &&
@@ -688,11 +694,7 @@ scoped_refptr<FontPalette> StyleBuilderConverterBase::ConvertFontPalette(
     return FontPalette::Create(custom_identifier->Value());
   }
 
-  if (RuntimeEnabledFeatures::FontPaletteAnimationEnabled()) {
-    return ConvertPaletteMix(value);
-  } else {
-    return nullptr;
-  }
+  return ConvertPaletteMix(length_resolver, value);
 }
 
 float MathScriptScaleFactor(StyleResolverState& state) {
@@ -795,7 +797,9 @@ FontDescription::Size StyleBuilderConverterBase::ConvertFontSize(
   const auto& primitive_value = To<CSSPrimitiveValue>(value);
   if (primitive_value.IsPercentage()) {
     return FontDescription::Size(
-        0, (primitive_value.GetFloatValue() * parent_size.value / 100.0f),
+        /*keyword=*/0,
+        (primitive_value.ComputePercentage(conversion_data) *
+         parent_size.value / 100.0f),
         parent_size.is_absolute);
   }
 
@@ -807,7 +811,8 @@ FontDescription::Size StyleBuilderConverterBase::ConvertFontSize(
       To<CSSNumericLiteralValue>(primitive_value).GetType() ==
           CSSPrimitiveValue::UnitType::kRems;
   return FontDescription::Size(
-      0, ComputeFontSize(conversion_data, primitive_value, parent_size),
+      /*keyword=*/0,
+      ComputeFontSize(conversion_data, primitive_value, parent_size),
       is_absolute);
 }
 
@@ -944,6 +949,7 @@ FontSelectionValue StyleBuilderConverter::ConvertFontStretch(
 }
 
 FontSelectionValue StyleBuilderConverterBase::ConvertFontStyle(
+    const CSSLengthResolver& length_resolver,
     const CSSValue& value) {
   DCHECK(!value.IsPrimitiveValue());
 
@@ -965,8 +971,8 @@ FontSelectionValue StyleBuilderConverterBase::ConvertFontStyle(
     const CSSValueList* values = style_range_value->GetObliqueValues();
     CHECK_LT(values->length(), 2u);
     if (values->length()) {
-      return FontSelectionValue(
-          To<CSSPrimitiveValue>(values->Item(0)).ComputeDegrees());
+      return FontSelectionValue(To<CSSPrimitiveValue>(values->Item(0))
+                                    .ComputeDegrees(length_resolver));
     } else {
       identifier_value = style_range_value->GetFontStyleValue();
       if (identifier_value->GetValueID() == CSSValueID::kNormal) {
@@ -986,7 +992,8 @@ FontSelectionValue StyleBuilderConverterBase::ConvertFontStyle(
 FontSelectionValue StyleBuilderConverter::ConvertFontStyle(
     StyleResolverState& state,
     const CSSValue& value) {
-  return StyleBuilderConverterBase::ConvertFontStyle(value);
+  return StyleBuilderConverterBase::ConvertFontStyle(
+      state.CssToLengthConversionData(), value);
 }
 
 FontSelectionValue StyleBuilderConverterBase::ConvertFontWeight(
@@ -1401,7 +1408,7 @@ GridPosition StyleBuilderConverter::ConvertGridPosition(
   int grid_line_number = 1;
   AtomicString grid_line_name;
 
-  auto* it = values.begin();
+  auto it = values.begin();
   const CSSValue* current_value = it->Get();
   auto* current_identifier_value = DynamicTo<CSSIdentifierValue>(current_value);
   if (current_identifier_value &&
@@ -1553,7 +1560,7 @@ void StyleBuilderConverter::ConvertGridTrackList(
   };
 
   const auto& values = To<CSSValueList>(value);
-  auto* curr_value = values.begin();
+  auto curr_value = values.begin();
   bool is_subgrid = false;
 
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(curr_value->Get());
@@ -1659,6 +1666,18 @@ void StyleBuilderConverter::ConvertGridTrackList(
   // the syntax.
   DCHECK(track_list.RepeaterCount() ||
          computed_grid_track_list.IsSubgriddedAxis());
+}
+
+std::optional<Length> StyleBuilderConverter::ConvertMasonrySlack(
+    const StyleResolverState& state,
+    const CSSValue& value) {
+  auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
+  if (identifier_value &&
+      identifier_value->GetValueID() == CSSValueID::kNormal) {
+    return std::nullopt;
+  }
+
+  return ConvertLength(state, value);
 }
 
 StyleHyphenateLimitChars StyleBuilderConverter::ConvertHyphenateLimitChars(
@@ -1776,10 +1795,12 @@ float StyleBuilderConverter::ConvertZoom(const StyleResolverState& state,
   } else if (const auto* primitive_value =
                  DynamicTo<CSSPrimitiveValue>(value)) {
     if (primitive_value->IsPercentage()) {
-      float percent = primitive_value->GetFloatValue();
+      float percent =
+          primitive_value->ComputePercentage(state.CssToLengthConversionData());
       return percent ? (percent / 100.0f) : 1.0f;
     } else if (primitive_value->IsNumber()) {
-      float number = primitive_value->GetFloatValue();
+      float number =
+          primitive_value->ComputeNumber(state.CssToLengthConversionData());
       return number ? number : 1.0f;
     }
   }
@@ -1857,7 +1878,9 @@ TabSize StyleBuilderConverter::ConvertLengthOrTabSpaces(
     const CSSValue& value) {
   const auto& primitive_value = To<CSSPrimitiveValue>(value);
   if (primitive_value.IsNumber()) {
-    return TabSize(primitive_value.GetFloatValue(), TabSizeValueType::kSpace);
+    return TabSize(
+        primitive_value.ComputeNumber(state.CssToLengthConversionData()),
+        TabSizeValueType::kSpace);
   }
   return TabSize(
       primitive_value.ComputeLength<float>(state.CssToLengthConversionData()),
@@ -1891,14 +1914,16 @@ Length StyleBuilderConverter::ConvertLineHeight(StyleResolverState& state,
     }
     if (primitive_value->IsNumber()) {
       return Length::Percent(
-          ClampTo<float>(primitive_value->GetDoubleValue() * 100.0));
+          ClampTo<float>(primitive_value->ComputeNumber(
+                             LineHeightToLengthConversionData(state)) *
+                         100.0));
     }
     float computed_font_size =
         state.StyleBuilder().GetFontDescription().ComputedSize();
     if (primitive_value->IsPercentage()) {
       return Length::Fixed(
           (computed_font_size * ClampTo<int>(primitive_value->ComputePercentage(
-                                    state.CssToLengthConversionData()))) /
+                                    LineHeightToLengthConversionData(state)))) /
           100.0);
     }
     if (primitive_value->IsCalculated()) {
@@ -2047,7 +2072,8 @@ StyleInitialLetter StyleBuilderConverter::ConvertInitialLetter(
 
   const auto& list = To<CSSValueList>(value);
   DCHECK(list.length() == 1 || list.length() == 2);
-  const float size = To<CSSPrimitiveValue>(list.Item(0)).GetFloatValue();
+  const float size = To<CSSPrimitiveValue>(list.Item(0))
+                         .ComputeNumber(state.CssToLengthConversionData());
   DCHECK_GE(size, 1);
   if (list.length() == 1) {
     return StyleInitialLetter(size);
@@ -2251,9 +2277,10 @@ ShadowData StyleBuilderConverter::ConvertShadow(
       black_text_link_colors.SetVisitedLinkColor(Color::kBlack);
       black_text_link_colors.SetActiveLinkColor(Color::kBlack);
 
-      color = ResolveColorValue(*shadow.color, black_text_link_colors,
-                                mojom::blink::ColorScheme::kLight, nullptr,
-                                /*for_visited_link=*/false);
+      const ResolveColorValueContext context{
+          .length_resolver = conversion_data,
+          .text_link_colors = black_text_link_colors};
+      color = ResolveColorValue(*shadow.color, context);
       if (!color.IsAbsoluteColor()) {
         color = StyleColor(Color::kBlack);
       }
@@ -2343,32 +2370,49 @@ scoped_refptr<SVGDashArray> StyleBuilderConverter::ConvertStrokeDasharray(
   return array;
 }
 
+StyleViewTransitionGroup StyleBuilderConverter::ConvertViewTransitionGroup(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  if (auto* ident = DynamicTo<CSSIdentifierValue>(value)) {
+    switch (ident->GetValueID()) {
+      case CSSValueID::kNearest:
+        return StyleViewTransitionGroup::Nearest();
+      case CSSValueID::kNormal:
+        return StyleViewTransitionGroup::Normal();
+      case CSSValueID::kContain:
+        return StyleViewTransitionGroup::Contain();
+      default:
+        NOTREACHED();
+    }
+  }
+  return StyleViewTransitionGroup::Create(
+      ConvertCustomIdent(state, value)->GetName());
+}
+
 ScopedCSSName* StyleBuilderConverter::ConvertViewTransitionName(
     StyleResolverState& state,
     const CSSValue& value) {
   return ConvertNoneOrCustomIdent(state, value);
 }
 
-Vector<AtomicString> StyleBuilderConverter::ConvertViewTransitionClass(
+ScopedCSSNameList* StyleBuilderConverter::ConvertViewTransitionClass(
     StyleResolverState& state,
     const CSSValue& value) {
-  Vector<AtomicString> result;
-  if (auto* id = DynamicTo<CSSIdentifierValue>(value);
-      id && id->GetValueID() == CSSValueID::kNone) {
-    return result;
+  DCHECK(value.IsScopedValue());
+  if (IsA<CSSIdentifierValue>(value)) {
+    DCHECK_EQ(To<CSSIdentifierValue>(value).GetValueID(), CSSValueID::kNone);
+    return nullptr;
   }
-  for (const Member<const CSSValue>& class_name : To<CSSValueList>(value)) {
-    result.push_back(To<CSSCustomIdentValue>(*class_name).Value());
+  DCHECK(value.IsBaseValueList());
+  HeapVector<Member<const ScopedCSSName>> names;
+  for (const Member<const CSSValue>& item : To<CSSValueList>(value)) {
+    names.push_back(ConvertNoneOrCustomIdent(state, *item));
   }
-  CHECK(!result.empty());
-  return result;
+  return MakeGarbageCollected<ScopedCSSNameList>(std::move(names));
 }
 
 StyleColor ResolveColorValue(const CSSValue& value,
-                             const TextLinkColors& text_link_colors,
-                             mojom::blink::ColorScheme used_color_scheme,
-                             const ui::ColorProvider* color_provider,
-                             bool for_visited_link) {
+                             const ResolveColorValueContext& context) {
   if (auto* color_value = DynamicTo<cssvalue::CSSColor>(value)) {
     Color result_color = color_value->Value();
     result_color.ResolveNonFiniteValues();
@@ -2382,10 +2426,12 @@ StyleColor ResolveColorValue(const CSSValue& value,
     }
     if (IsQuirkOrLinkOrFocusRingColor(value_id)) {
       return StyleColor(ResolveQuirkOrLinkOrFocusRingColor(
-          value_id, text_link_colors, used_color_scheme, for_visited_link));
+          value_id, context.text_link_colors, context.used_color_scheme,
+          context.for_visited_link));
     }
-    Color color = StyleColor::ColorFromKeyword(value_id, used_color_scheme,
-                                               color_provider);
+    Color color = StyleColor::ColorFromKeyword(
+        value_id, context.used_color_scheme, context.color_provider,
+        context.is_in_web_app_scope);
     // Preserve the identifier for system colors since this is needed by
     // 'forced colors mode'.
     if (StyleColor::IsSystemColorIncludingDeprecated(value_id)) {
@@ -2396,38 +2442,57 @@ StyleColor ResolveColorValue(const CSSValue& value,
 
   if (auto* color_mix_value = DynamicTo<cssvalue::CSSColorMixValue>(value)) {
     const StyleColor style_color1 =
-        ResolveColorValue(color_mix_value->Color1(), text_link_colors,
-                          used_color_scheme, color_provider, for_visited_link);
+        ResolveColorValue(color_mix_value->Color1(), context);
     const StyleColor style_color2 =
-        ResolveColorValue(color_mix_value->Color2(), text_link_colors,
-                          used_color_scheme, color_provider, for_visited_link);
-    // If neither color is "currentcolor" (or a color-mix function containing a
-    // currentcolor) then color-mix functions can be resolved right now like
-    // other colors. Otherwise we need to store an unresolved value on
-    // StyleColor.
-    if (style_color1.IsAbsoluteColor() && style_color2.IsAbsoluteColor()) {
-      const Color c1 = style_color1.Resolve(Color(), used_color_scheme);
-      const Color c2 = style_color2.Resolve(Color(), used_color_scheme);
-      return StyleColor(color_mix_value->Mix(c1, c2));
-    }
+        ResolveColorValue(color_mix_value->Color2(), context);
     double alpha_multiplier = 0.0;
     double mix_amount = 0.0;
     // TODO(crbug.com/40238188): Not sure what is appropriate to return when
     // both mix amounts are zero.
-    color_mix_value->NormalizePercentages(mix_amount, alpha_multiplier);
-    return StyleColor(MakeGarbageCollected<StyleColor::UnresolvedColorMix>(
-        color_mix_value->ColorInterpolationSpace(),
-        color_mix_value->HueInterpolationMethod(), style_color1, style_color2,
-        mix_amount, alpha_multiplier));
+    color_mix_value->NormalizePercentages(mix_amount, alpha_multiplier,
+                                          context.length_resolver);
+    const StyleColor::UnresolvedColorMix* unresolved_color_mix =
+        MakeGarbageCollected<StyleColor::UnresolvedColorMix>(
+            color_mix_value->ColorInterpolationSpace(),
+            color_mix_value->HueInterpolationMethod(), style_color1,
+            style_color2, mix_amount, alpha_multiplier);
+    // https://drafts.csswg.org/css-color-5/#resolving-mix
+    // If both parameters are resolvable at computed-value time, the color-mix
+    // function should be resolved at computed-value time as well.
+    // Otherwise we need to store an unresolved value on StyleColor.
+    if (style_color1.IsAbsoluteColor() && style_color2.IsAbsoluteColor()) {
+      return StyleColor(unresolved_color_mix->Resolve(Color()));
+    } else {
+      return StyleColor(unresolved_color_mix);
+    }
+  }
+
+  if (auto* relative_color_value =
+          DynamicTo<cssvalue::CSSRelativeColorValue>(value)) {
+    const StyleColor origin_color =
+        ResolveColorValue(relative_color_value->OriginColor(), context);
+    const StyleColor::UnresolvedRelativeColor* unresolved_relative_color =
+        MakeGarbageCollected<StyleColor::UnresolvedRelativeColor>(
+            origin_color, relative_color_value->ColorInterpolationSpace(),
+            relative_color_value->Channel0(), relative_color_value->Channel1(),
+            relative_color_value->Channel2(), relative_color_value->Alpha());
+    // https://drafts.csswg.org/css-color-5/#resolving-rcs
+    // If the origin color is resolvable at computed-value time, the relative
+    // color function should be resolved at computed-value time as well.
+    // Otherwise we need to store an unresolved value on StyleColor.
+    if (origin_color.IsAbsoluteColor()) {
+      return StyleColor(unresolved_relative_color->Resolve(Color()));
+    } else {
+      return StyleColor(unresolved_relative_color);
+    }
   }
 
   auto& light_dark_pair = To<CSSLightDarkValuePair>(value);
   const CSSValue& color_value =
-      used_color_scheme == mojom::blink::ColorScheme::kLight
+      context.used_color_scheme == mojom::blink::ColorScheme::kLight
           ? light_dark_pair.First()
           : light_dark_pair.Second();
-  return ResolveColorValue(color_value, text_link_colors, used_color_scheme,
-                           color_provider, for_visited_link);
+  return ResolveColorValue(color_value, context);
 }
 
 StyleColor StyleBuilderConverter::ConvertStyleColor(StyleResolverState& state,
@@ -2435,10 +2500,15 @@ StyleColor StyleBuilderConverter::ConvertStyleColor(StyleResolverState& state,
                                                     bool for_visited_link) {
   mojom::blink::ColorScheme color_scheme =
       state.StyleBuilder().UsedColorScheme();
-  return ResolveColorValue(
-      value, state.GetDocument().GetTextLinkColors(), color_scheme,
-      state.GetDocument().GetColorProviderForPainting(color_scheme),
-      for_visited_link);
+  auto& document = state.GetDocument();
+  const ResolveColorValueContext context{
+      .length_resolver = state.CssToLengthConversionData(),
+      .text_link_colors = document.GetTextLinkColors(),
+      .used_color_scheme = color_scheme,
+      .color_provider = document.GetColorProviderForPainting(color_scheme),
+      .is_in_web_app_scope = document.IsInWebAppScope(),
+      .for_visited_link = for_visited_link};
+  return ResolveColorValue(value, context);
 }
 
 StyleAutoColor StyleBuilderConverter::ConvertStyleAutoColor(
@@ -2859,13 +2929,18 @@ scoped_refptr<BasicShape> StyleBuilderConverter::ConvertObjectViewBox(
 }
 
 static const CSSValue& ComputeColorValue(
+    const CSSLengthResolver& length_resolver,
     const CSSValue& color_value,
     const Document& document,
     mojom::blink::ColorScheme color_scheme) {
-  const bool kNotForVisitedLink = false;
-  const StyleColor style_color = ResolveColorValue(
-      color_value, document.GetTextLinkColors(), color_scheme,
-      document.GetColorProviderForPainting(color_scheme), kNotForVisitedLink);
+  const ResolveColorValueContext context{
+      .length_resolver = length_resolver,
+      .text_link_colors = document.GetTextLinkColors(),
+      .used_color_scheme = color_scheme,
+      .color_provider = document.GetColorProviderForPainting(color_scheme),
+      .is_in_web_app_scope = document.IsInWebAppScope(),
+      .for_visited_link = false};
+  const StyleColor style_color = ResolveColorValue(color_value, context);
   return *ComputedStyleUtils::ValueForColor(style_color);
 }
 
@@ -2954,7 +3029,8 @@ static const CSSValue& ComputeRegisteredPropertyValue(
       return value;
     }
     if (StyleColor::IsColorKeyword(value_id)) {
-      return ComputeColorValue(*identifier_value, document, color_scheme);
+      return ComputeColorValue(css_to_length_conversion_data, *identifier_value,
+                               document, color_scheme);
     }
   }
 
@@ -2976,7 +3052,14 @@ static const CSSValue& ComputeRegisteredPropertyValue(
   }
 
   if (auto* color_mix_value = DynamicTo<cssvalue::CSSColorMixValue>(value)) {
-    return ComputeColorValue(*color_mix_value, document, color_scheme);
+    return ComputeColorValue(css_to_length_conversion_data, *color_mix_value,
+                             document, color_scheme);
+  }
+
+  if (auto* relative_color_value =
+          DynamicTo<cssvalue::CSSRelativeColorValue>(value)) {
+    return ComputeColorValue(css_to_length_conversion_data,
+                             *relative_color_value, document, color_scheme);
   }
 
   return value;
@@ -3030,15 +3113,16 @@ CSSVariableData* StyleBuilderConverter::ConvertRegisteredPropertyVariableData(
 }
 
 namespace {
-gfx::SizeF GetRatioFromList(const CSSValueList& list) {
+gfx::SizeF GetRatioFromList(const CSSLengthResolver& length_resolver,
+                            const CSSValueList& list) {
   auto* ratio = DynamicTo<cssvalue::CSSRatioValue>(list.Item(0));
   if (!ratio) {
     DCHECK_EQ(list.length(), 2u);
     ratio = DynamicTo<cssvalue::CSSRatioValue>(list.Item(1));
   }
   DCHECK(ratio);
-  return gfx::SizeF(ratio->First().GetFloatValue(),
-                    ratio->Second().GetFloatValue());
+  return gfx::SizeF(ratio->First().ComputeNumber(length_resolver),
+                    ratio->Second().ComputeNumber(length_resolver));
 }
 
 bool ListHasAuto(const CSSValueList& list) {
@@ -3073,7 +3157,7 @@ StyleAspectRatio StyleBuilderConverter::ConvertAspectRatio(
   bool has_auto = ListHasAuto(list);
   EAspectRatioType type =
       has_auto ? EAspectRatioType::kAutoAndRatio : EAspectRatioType::kRatio;
-  gfx::SizeF ratio = GetRatioFromList(list);
+  gfx::SizeF ratio = GetRatioFromList(state.CssToLengthConversionData(), list);
   return StyleAspectRatio(type, ratio);
 }
 
@@ -3364,186 +3448,187 @@ ScopedCSSNameList* StyleBuilderConverter::ConvertTimelineScope(
   return MakeGarbageCollected<ScopedCSSNameList>(std::move(names));
 }
 
-InsetArea StyleBuilderConverter::ConvertInsetArea(StyleResolverState& state,
-                                                  const CSSValue& value) {
-  auto extract_inset_area_span =
-      [](CSSValueID value) -> std::pair<InsetAreaRegion, InsetAreaRegion> {
-    InsetAreaRegion start = InsetAreaRegion::kNone;
-    InsetAreaRegion end = InsetAreaRegion::kNone;
+PositionArea StyleBuilderConverter::ConvertPositionArea(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  auto extract_position_area_span = [](CSSValueID value)
+      -> std::pair<PositionAreaRegion, PositionAreaRegion> {
+    PositionAreaRegion start = PositionAreaRegion::kNone;
+    PositionAreaRegion end = PositionAreaRegion::kNone;
     switch (value) {
       case CSSValueID::kSpanAll:
-        start = end = InsetAreaRegion::kAll;
+        start = end = PositionAreaRegion::kAll;
         break;
       case CSSValueID::kCenter:
-        start = end = InsetAreaRegion::kCenter;
+        start = end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kLeft:
-        start = end = InsetAreaRegion::kLeft;
+        start = end = PositionAreaRegion::kLeft;
         break;
       case CSSValueID::kRight:
-        start = end = InsetAreaRegion::kRight;
+        start = end = PositionAreaRegion::kRight;
         break;
       case CSSValueID::kSpanLeft:
-        start = InsetAreaRegion::kLeft;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kLeft;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanRight:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kRight;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kRight;
         break;
       case CSSValueID::kXStart:
-        start = end = InsetAreaRegion::kXStart;
+        start = end = PositionAreaRegion::kXStart;
         break;
       case CSSValueID::kXEnd:
-        start = end = InsetAreaRegion::kXEnd;
+        start = end = PositionAreaRegion::kXEnd;
         break;
       case CSSValueID::kSpanXStart:
-        start = InsetAreaRegion::kXStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kXStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanXEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kXEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kXEnd;
         break;
       case CSSValueID::kXSelfStart:
-        start = end = InsetAreaRegion::kXSelfStart;
+        start = end = PositionAreaRegion::kXSelfStart;
         break;
       case CSSValueID::kXSelfEnd:
-        start = end = InsetAreaRegion::kXSelfEnd;
+        start = end = PositionAreaRegion::kXSelfEnd;
         break;
       case CSSValueID::kSpanXSelfStart:
-        start = InsetAreaRegion::kXSelfStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kXSelfStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanXSelfEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kXSelfEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kXSelfEnd;
         break;
       case CSSValueID::kTop:
-        start = end = InsetAreaRegion::kTop;
+        start = end = PositionAreaRegion::kTop;
         break;
       case CSSValueID::kBottom:
-        start = end = InsetAreaRegion::kBottom;
+        start = end = PositionAreaRegion::kBottom;
         break;
       case CSSValueID::kSpanTop:
-        start = InsetAreaRegion::kTop;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kTop;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanBottom:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kBottom;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kBottom;
         break;
       case CSSValueID::kYStart:
-        start = end = InsetAreaRegion::kYStart;
+        start = end = PositionAreaRegion::kYStart;
         break;
       case CSSValueID::kYEnd:
-        start = end = InsetAreaRegion::kYEnd;
+        start = end = PositionAreaRegion::kYEnd;
         break;
       case CSSValueID::kSpanYStart:
-        start = InsetAreaRegion::kYStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kYStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanYEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kYEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kYEnd;
         break;
       case CSSValueID::kYSelfStart:
-        start = end = InsetAreaRegion::kYSelfStart;
+        start = end = PositionAreaRegion::kYSelfStart;
         break;
       case CSSValueID::kYSelfEnd:
-        start = end = InsetAreaRegion::kYSelfEnd;
+        start = end = PositionAreaRegion::kYSelfEnd;
         break;
       case CSSValueID::kSpanYSelfStart:
-        start = InsetAreaRegion::kYSelfStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kYSelfStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanYSelfEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kYSelfEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kYSelfEnd;
         break;
       case CSSValueID::kBlockStart:
-        start = end = InsetAreaRegion::kBlockStart;
+        start = end = PositionAreaRegion::kBlockStart;
         break;
       case CSSValueID::kBlockEnd:
-        start = end = InsetAreaRegion::kBlockEnd;
+        start = end = PositionAreaRegion::kBlockEnd;
         break;
       case CSSValueID::kSpanBlockStart:
-        start = InsetAreaRegion::kBlockStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kBlockStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanBlockEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kBlockEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kBlockEnd;
         break;
       case CSSValueID::kSelfBlockStart:
-        start = end = InsetAreaRegion::kSelfBlockStart;
+        start = end = PositionAreaRegion::kSelfBlockStart;
         break;
       case CSSValueID::kSelfBlockEnd:
-        start = end = InsetAreaRegion::kSelfBlockEnd;
+        start = end = PositionAreaRegion::kSelfBlockEnd;
         break;
       case CSSValueID::kSpanSelfBlockStart:
-        start = InsetAreaRegion::kSelfBlockStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kSelfBlockStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanSelfBlockEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kSelfBlockEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kSelfBlockEnd;
         break;
       case CSSValueID::kInlineStart:
-        start = end = InsetAreaRegion::kInlineStart;
+        start = end = PositionAreaRegion::kInlineStart;
         break;
       case CSSValueID::kInlineEnd:
-        start = end = InsetAreaRegion::kInlineEnd;
+        start = end = PositionAreaRegion::kInlineEnd;
         break;
       case CSSValueID::kSpanInlineStart:
-        start = InsetAreaRegion::kInlineStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kInlineStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanInlineEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kInlineEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kInlineEnd;
         break;
       case CSSValueID::kSelfInlineStart:
-        start = end = InsetAreaRegion::kSelfInlineStart;
+        start = end = PositionAreaRegion::kSelfInlineStart;
         break;
       case CSSValueID::kSelfInlineEnd:
-        start = end = InsetAreaRegion::kSelfInlineEnd;
+        start = end = PositionAreaRegion::kSelfInlineEnd;
         break;
       case CSSValueID::kSpanSelfInlineStart:
-        start = InsetAreaRegion::kSelfInlineStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kSelfInlineStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanSelfInlineEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kSelfInlineEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kSelfInlineEnd;
         break;
       case CSSValueID::kStart:
-        start = end = InsetAreaRegion::kStart;
+        start = end = PositionAreaRegion::kStart;
         break;
       case CSSValueID::kEnd:
-        start = end = InsetAreaRegion::kEnd;
+        start = end = PositionAreaRegion::kEnd;
         break;
       case CSSValueID::kSpanStart:
-        start = InsetAreaRegion::kStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kEnd;
         break;
       case CSSValueID::kSelfStart:
-        start = end = InsetAreaRegion::kSelfStart;
+        start = end = PositionAreaRegion::kSelfStart;
         break;
       case CSSValueID::kSelfEnd:
-        start = end = InsetAreaRegion::kSelfEnd;
+        start = end = PositionAreaRegion::kSelfEnd;
         break;
       case CSSValueID::kSpanSelfStart:
-        start = InsetAreaRegion::kSelfStart;
-        end = InsetAreaRegion::kCenter;
+        start = PositionAreaRegion::kSelfStart;
+        end = PositionAreaRegion::kCenter;
         break;
       case CSSValueID::kSpanSelfEnd:
-        start = InsetAreaRegion::kCenter;
-        end = InsetAreaRegion::kSelfEnd;
+        start = PositionAreaRegion::kCenter;
+        end = PositionAreaRegion::kSelfEnd;
         break;
       default:
         NOTREACHED_IN_MIGRATION();
@@ -3555,26 +3640,26 @@ InsetArea StyleBuilderConverter::ConvertInsetArea(StyleResolverState& state,
   if (const auto* first_value = DynamicTo<CSSIdentifierValue>(value)) {
     CSSValueID first_keyword = first_value->GetValueID();
     if (first_keyword == CSSValueID::kNone) {
-      return InsetArea();
+      return PositionArea();
     }
-    InsetAreaRegion span[2];
-    std::tie(span[0], span[1]) = extract_inset_area_span(first_keyword);
-    if (css_parsing_utils::IsRepeatedInsetAreaValue(first_keyword)) {
-      return InsetArea(span[0], span[1], span[0], span[1]);
+    PositionAreaRegion span[2];
+    std::tie(span[0], span[1]) = extract_position_area_span(first_keyword);
+    if (css_parsing_utils::IsRepeatedPositionAreaValue(first_keyword)) {
+      return PositionArea(span[0], span[1], span[0], span[1]);
     } else {
-      return InsetArea(span[0], span[1], InsetAreaRegion::kAll,
-                       InsetAreaRegion::kAll);
+      return PositionArea(span[0], span[1], PositionAreaRegion::kAll,
+                          PositionAreaRegion::kAll);
     }
   }
 
-  InsetAreaRegion span[4];
+  PositionAreaRegion span[4];
   const CSSValuePair& value_pair = To<CSSValuePair>(value);
-  std::tie(span[0], span[1]) = extract_inset_area_span(
+  std::tie(span[0], span[1]) = extract_position_area_span(
       To<CSSIdentifierValue>(value_pair.First()).GetValueID());
-  std::tie(span[2], span[3]) = extract_inset_area_span(
+  std::tie(span[2], span[3]) = extract_position_area_span(
       To<CSSIdentifierValue>(value_pair.Second()).GetValueID());
 
-  return InsetArea(span[0], span[1], span[2], span[3]);
+  return PositionArea(span[0], span[1], span[2], span[3]);
 }
 
 }  // namespace blink

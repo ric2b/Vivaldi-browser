@@ -67,19 +67,27 @@ set(DAWN_TEMPLATE_DIR "${DAWN_GENERATOR_DIR}/templates" CACHE PATH "Directory th
 set(ENABLE_D3D11 OFF)
 set(ENABLE_D3D12 OFF)
 set(ENABLE_METAL OFF)
+set(ENABLE_NULL ON)
 set(ENABLE_OPENGLES OFF)
 set(ENABLE_DESKTOP_GL OFF)
 set(ENABLE_VULKAN OFF)
+set(ENABLE_EMSCRIPTEN OFF)
 set(ENABLE_SPIRV_VALIDATION OFF)
 set(USE_WAYLAND OFF)
 set(USE_X11 OFF)
 set(USE_WINDOWS_UI OFF)
 set(BUILD_SAMPLES OFF)
 set(TARGET_MACOS OFF)
-if (WIN32)
-    set(ENABLE_D3D11 ON)
-    set(USE_WINDOWS_UI ON)
-    set(ENABLE_D3D12 ON)
+if (CMAKE_SYSTEM_NAME MATCHES "Emscripten")
+  # Only the samples are supported for Emscripten at the moment.
+  # TODO(crbug.com/42240181): Make dawn_end2end_tests work too.
+  set(ENABLE_EMSCRIPTEN ON)
+  set(BUILD_SAMPLES ON)
+  set(ENABLE_NULL OFF)
+elseif (WIN32)
+  set(ENABLE_D3D11 ON)
+  set(USE_WINDOWS_UI ON)
+  set(ENABLE_D3D12 ON)
   if (NOT WINDOWS_STORE)
     # Enable Vulkan in win32 compilation only
     # since UWP only supports d3d
@@ -107,8 +115,7 @@ endif()
 
 # GLFW is not supported in UWP
 set(DAWN_SUPPORTS_GLFW_FOR_WINDOWING OFF)
-
-if ((WIN32 AND NOT WINDOWS_STORE) OR (UNIX AND NOT ANDROID))
+if (NOT ENABLE_EMSCRIPTEN AND ((WIN32 AND NOT WINDOWS_STORE) OR (UNIX AND NOT ANDROID)))
     set(DAWN_SUPPORTS_GLFW_FOR_WINDOWING ON)
 endif()
 
@@ -126,11 +133,18 @@ option(DAWN_ENABLE_UBSAN "Enable undefined behaviour sanitizer" OFF)
 option(DAWN_ENABLE_D3D11 "Enable compilation of the D3D11 backend" ${ENABLE_D3D11})
 option(DAWN_ENABLE_D3D12 "Enable compilation of the D3D12 backend" ${ENABLE_D3D12})
 option(DAWN_ENABLE_METAL "Enable compilation of the Metal backend" ${ENABLE_METAL})
-option(DAWN_ENABLE_NULL "Enable compilation of the Null backend" ON)
+option(DAWN_ENABLE_NULL "Enable compilation of the Null backend" ${ENABLE_NULL})
 option(DAWN_ENABLE_DESKTOP_GL "Enable compilation of the OpenGL backend" ${ENABLE_DESKTOP_GL})
 option(DAWN_ENABLE_OPENGLES "Enable compilation of the OpenGL ES backend" ${ENABLE_OPENGLES})
 option(DAWN_ENABLE_VULKAN "Enable compilation of the Vulkan backend" ${ENABLE_VULKAN})
 option(DAWN_ENABLE_SPIRV_VALIDATION "Enable validation of SPIR-V" ${ENABLE_SPIRV_VALIDATION})
+
+# Optional path to Emscripten toolchain to allow for building WASM.
+option(DAWN_EMSCRIPTEN_TOOLCHAIN "Directory in which to find Emscripten toolchain" "")
+set(DAWN_ENABLE_EMSCRIPTEN OFF)
+if (NOT ${DAWN_EMSCRIPTEN_TOOLCHAIN} STREQUAL "" AND ENABLE_EMSCRIPTEN)
+    set(DAWN_ENABLE_EMSCRIPTEN ON)
+endif()
 
 option(DAWN_ALWAYS_ASSERT "Enable assertions on all build types" OFF)
 option(DAWN_USE_WAYLAND "Enable support for Wayland surface" ${USE_WAYLAND})
@@ -138,7 +152,7 @@ option(DAWN_USE_X11 "Enable support for X11 surface" ${USE_X11})
 option(DAWN_USE_GLFW "Enable compilation of the GLFW windowing utils" ${DAWN_SUPPORTS_GLFW_FOR_WINDOWING})
 option(DAWN_USE_WINDOWS_UI "Enable support for Windows UI surface" ${USE_WINDOWS_UI})
 option(DAWN_USE_BUILT_DXC "Enable building and using DXC by the D3D12 backend" OFF)
-option(DAWN_DXC_DISABLE_ASSERTS_DEBUG "Disable asserts in DXC in debug builds" OFF)
+option(DAWN_DXC_ENABLE_ASSERTS_IN_NDEBUG "Enable DXC asserts in non-debug builds" ON)
 option(DAWN_TARGET_MACOS "Manually link Apple core frameworks" ${TARGET_MACOS})
 
 option(DAWN_BUILD_SAMPLES "Enables building Dawn's samples" ${BUILD_SAMPLES})
@@ -162,8 +176,10 @@ endif()
 option(TINT_ENABLE_INSTALL "Enable install step for Tint libraries" OFF)
 option(TINT_BUILD_CMD_TOOLS "Build the Tint command line tools" ON)
 
-if (NOT DAWN_USE_GLFW AND DAWN_BUILD_SAMPLES)
-  message(SEND_ERROR "Dawn samples require GLFW")
+if (DAWN_BUILD_SAMPLES)
+  if (NOT DAWN_USE_GLFW AND NOT DAWN_ENABLE_EMSCRIPTEN)
+    message(SEND_ERROR "Dawn samples require GLFW or Emscripten")
+  endif()
 endif()
 
 option(TINT_BUILD_SPV_READER "Build the SPIR-V input reader" ${DAWN_ENABLE_VULKAN})
@@ -192,8 +208,6 @@ option(TINT_BUILD_AS_OTHER_OS "Override OS detection to force building of *_othe
 
 option(TINT_BUILD_TINTD "Build the WGSL language server" OFF)
 
-set_if_not_defined(TINT_EXTERNAL_BENCHMARK_CORPUS_DIR "" "Directory that holds a corpus of external shaders to benchmark.")
-
 option(TINT_ENABLE_BREAK_IN_DEBUGGER "Enable tint::debugger::Break()" OFF)
 option(TINT_CHECK_CHROMIUM_STYLE "Check for [chromium-style] issues during build" OFF)
 option(TINT_RANDOMIZE_HASHES "Randomize the hash seed value to detect non-deterministic output" OFF)
@@ -208,6 +222,7 @@ set_if_not_defined(DAWN_KHRONOS_DIR "${DAWN_THIRD_PARTY_DIR}/khronos" "Directory
 set_if_not_defined(DAWN_SWIFTSHADER_DIR "${DAWN_THIRD_PARTY_DIR}/swiftshader" "Directory in which to find swiftshader")
 set_if_not_defined(DAWN_PROTOBUF_DIR "${DAWN_THIRD_PARTY_DIR}/protobuf" "Directory in which to find protobuf")
 set_if_not_defined(DAWN_LPM_DIR "${DAWN_THIRD_PARTY_DIR}/libprotobuf-mutator/src" "Directory in which to find libprotobuf")
+set_if_not_defined(DAWN_EMDAWNWEBGPU_DIR "${DAWN_THIRD_PARTY_DIR}/emdawnwebgpu" "Directory in which to find Dawn specific Emscripten bindings")
 
 set_if_not_defined(DAWN_SPIRV_TOOLS_DIR "${DAWN_THIRD_PARTY_DIR}/spirv-tools/src" "Directory in which to find SPIRV-Tools")
 set_if_not_defined(DAWN_SPIRV_HEADERS_DIR "${DAWN_THIRD_PARTY_DIR}/spirv-headers/src" "Directory in which to find SPIRV-Headers")
@@ -224,6 +239,13 @@ set_if_not_defined(GO_EXECUTABLE "go" "Golang executable for running the IDL gen
 option(DAWN_FETCH_DEPENDENCIES "Use fetch_dawn_dependencies.py as an alternative to using depot_tools" OFF)
 
 option(DAWN_BUILD_MONOLITHIC_LIBRARY "Bundle all dawn components into a single shared library." ON)
+
+# Optional path to Emscripten toolchain to allow for building WASM.
+set_if_not_defined(DAWN_EMSCRIPTEN_TOOLCHAIN "" "Directory in which to find Emscripten toolchain")
+set(DAWN_ENABLE_EMSCRIPTEN OFF)
+if (NOT ${DAWN_EMSCRIPTEN_TOOLCHAIN} STREQUAL "" AND ENABLE_EMSCRIPTEN)
+    set(DAWN_ENABLE_EMSCRIPTEN ON)
+endif()
 
 # Much of the backend code is shared among desktop OpenGL and OpenGL ES
 if (${DAWN_ENABLE_DESKTOP_GL} OR ${DAWN_ENABLE_OPENGLES})
@@ -247,6 +269,7 @@ target_include_directories(dawn_public_config INTERFACE
 # The internal config contains additional path but includes the dawn_public_config include paths
 add_library(dawn_internal_config INTERFACE)
 target_include_directories(dawn_internal_config INTERFACE
+    "${PROJECT_SOURCE_DIR}"
     "${DAWN_SRC_DIR}"
     "${DAWN_BUILD_GEN_DIR}/src"
 )
@@ -268,6 +291,7 @@ message(STATUS "Dawn build Metal backend: ${DAWN_ENABLE_METAL}")
 message(STATUS "Dawn build Vulkan backend: ${DAWN_ENABLE_VULKAN}")
 message(STATUS "Dawn build OpenGL backend: ${DAWN_ENABLE_DESKTOP_GL}")
 message(STATUS "Dawn build OpenGL ES backend: ${DAWN_ENABLE_OPENGLES}")
+message(STATUS "Dawn build Emscripten: ${DAWN_ENABLE_EMSCRIPTEN}")
 message(STATUS "Dawn build Null backend: ${DAWN_ENABLE_NULL}")
 
 message(STATUS "Dawn enable SPIR-V validation: ${DAWN_ENABLE_SPIRV_VALIDATION}")
@@ -278,7 +302,7 @@ message(STATUS "Dawn build X11 support: ${DAWN_USE_X11}")
 message(STATUS "Dawn build GLFW support: ${DAWN_USE_GLFW}")
 message(STATUS "Dawn build Windows UI support: ${DAWN_USE_WINDOWS_UI}")
 message(STATUS "Dawn build and use DXC: ${DAWN_USE_BUILT_DXC}")
-message(STATUS "Dawn disable DXC asserts in debug builds: ${DAWN_DXC_DISABLE_ASSERTS_DEBUG}")
+message(STATUS "Dawn enable DXC asserts in non-debug builds: ${DAWN_DXC_ENABLE_ASSERTS_IN_NDEBUG}")
 
 message(STATUS "Dawn build samples: ${DAWN_BUILD_SAMPLES}")
 message(STATUS "Dawn build Node bindings: ${DAWN_BUILD_NODE_BINDINGS}")
@@ -292,6 +316,8 @@ message(STATUS "Dawn build with TSAN: ${DAWN_ENABLE_TSAN}")
 message(STATUS "Dawn build with MSAN: ${DAWN_ENABLE_MSAN}")
 message(STATUS "Dawn build with UBSAN: ${DAWN_ENABLE_UBSAN}")
 
+# We don't build Tint when building with Emscripten so silence these messages.
+if (NOT ${DAWN_ENABLE_EMSCRIPTEN})
 message(STATUS "Tint build command line executable tools: ${TINT_BUILD_CMD_TOOLS}")
 message(STATUS "Tint build SPIR-V reader: ${TINT_BUILD_SPV_READER}")
 message(STATUS "Tint build WGSL reader: ${TINT_BUILD_WGSL_READER}")
@@ -308,7 +334,7 @@ message(STATUS "Tint build IR fuzzer: ${TINT_BUILD_IR_FUZZER}")
 message(STATUS "Tint build benchmarks: ${TINT_BUILD_BENCHMARKS}")
 message(STATUS "Tint build tests: ${TINT_BUILD_TESTS}")
 message(STATUS "Tint build checking [chromium-style]: ${TINT_CHECK_CHROMIUM_STYLE}")
-message(STATUS "Tint external benchmark corpus dir: ${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}")
+endif()
 
 set(IS_ASAN ${DAWN_ENABLE_ASAN})
 
@@ -395,11 +421,20 @@ add_subdirectory(third_party)
 # BUILD_SHARED_LIBS=1, so always build it as static for now.
 set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
 set(BUILD_SHARED_LIBS 0)
-add_subdirectory(src/tint)
+
+add_subdirectory(src/utils)
+
+# Only build Tint when we are not building under Emscripten.
+if (NOT ${DAWN_ENABLE_EMSCRIPTEN})
+  add_subdirectory(src/tint)
+endif()
 set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED})
 
-if (DAWN_ENABLE_D3D11 OR DAWN_ENABLE_D3D12 OR DAWN_ENABLE_METAL OR DAWN_ENABLE_NULL OR DAWN_ENABLE_DESKTOP_GL OR DAWN_ENABLE_OPENGLES OR DAWN_ENABLE_VULKAN)
+if (DAWN_ENABLE_D3D11 OR DAWN_ENABLE_D3D12 OR DAWN_ENABLE_METAL OR DAWN_ENABLE_NULL OR DAWN_ENABLE_DESKTOP_GL OR DAWN_ENABLE_OPENGLES OR DAWN_ENABLE_VULKAN OR DAWN_ENABLE_EMSCRIPTEN)
     add_subdirectory(generator)
+    # Note that we must add Emscripten directory first to ensure the correct
+    # headers will be exported upwards.
+    add_subdirectory(src/emdawnwebgpu)
     add_subdirectory(src/dawn)
 endif()
 

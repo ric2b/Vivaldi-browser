@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/binding_security.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_file.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_html_document.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_node.h"
 #include "third_party/blink/renderer/core/css/css_computed_style_declaration.h"
 #include "third_party/blink/renderer/core/css/css_container_rule.h"
@@ -64,6 +65,7 @@
 #include "third_party/blink/renderer/core/fileapi/file.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/location.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/html/fenced_frame/document_fenced_frames.h"
 #include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
@@ -85,6 +87,7 @@
 #include "third_party/blink/renderer/core/inspector/v8_inspector_string.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
+#include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
@@ -232,10 +235,28 @@ protocol::DOM::PseudoType InspectorDOMAgent::ProtocolPseudoElementType(
     case kPseudoIdScrollMarkerGroupAfter:
     case kPseudoIdScrollMarkerGroupBefore:
       return protocol::DOM::PseudoTypeEnum::ScrollMarkerGroup;
+    case kPseudoIdScrollNextButton:
+      return protocol::DOM::PseudoTypeEnum::ScrollNextButton;
+    case kPseudoIdScrollPrevButton:
+      return protocol::DOM::PseudoTypeEnum::ScrollPrevButton;
+    case kPseudoIdColumn:
+      return protocol::DOM::PseudoTypeEnum::Column;
     case kPseudoIdResizer:
       return protocol::DOM::PseudoTypeEnum::Resizer;
     case kPseudoIdInputListButton:
       return protocol::DOM::PseudoTypeEnum::InputListButton;
+    case kPseudoIdPlaceholder:
+      return protocol::DOM::PseudoTypeEnum::Placeholder;
+    case kPseudoIdFileSelectorButton:
+      return protocol::DOM::PseudoTypeEnum::FileSelectorButton;
+    case kPseudoIdDetailsContent:
+      return protocol::DOM::PseudoTypeEnum::DetailsContent;
+    case kPseudoIdSelectFallbackButton:
+      return protocol::DOM::PseudoTypeEnum::SelectFallbackButton;
+    case kPseudoIdSelectFallbackButtonText:
+      return protocol::DOM::PseudoTypeEnum::SelectFallbackButtonText;
+    case kPseudoIdPickerSelect:
+      return protocol::DOM::PseudoTypeEnum::Picker;
     case kPseudoIdViewTransition:
       return protocol::DOM::PseudoTypeEnum::ViewTransition;
     case kPseudoIdViewTransitionGroup:
@@ -246,6 +267,10 @@ protocol::DOM::PseudoType InspectorDOMAgent::ProtocolPseudoElementType(
       return protocol::DOM::PseudoTypeEnum::ViewTransitionNew;
     case kPseudoIdViewTransitionOld:
       return protocol::DOM::PseudoTypeEnum::ViewTransitionOld;
+    case kPseudoIdColumnScrollMarker:
+      // Not reachable, since it's an internal representation of
+      // ::column::scroll-marker and won't be exposed to devtools
+      NOTREACHED_NORETURN();
     case kAfterLastInternalPseudoId:
     case kPseudoIdNone:
     case kPseudoIdInvalid:
@@ -1749,7 +1774,7 @@ protocol::Response InspectorDOMAgent::getAnchorElement(
         "No layout object for node, perhaps orphan or hidden node");
   }
 
-  const auto* box = To<LayoutBox>(querying_object);
+  const auto* box = DynamicTo<LayoutBox>(querying_object);
   if (!box || !box->Container()) {
     return protocol::Response::ServerError(
         "The box or the container of the box does not exist");
@@ -2010,7 +2035,9 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
         depth)  // Push children along with shadow in any case.
       value->setChildren(std::move(children));
   }
-
+  if (isNodeScrollable(node)) {
+    value->setIsScrollable(true);
+  }
   return value;
 }
 
@@ -2413,6 +2440,16 @@ void InspectorDOMAgent::DidInvalidateStyleAttr(Node* node) {
   RevalidateTask()->ScheduleStyleAttrRevalidationFor(To<Element>(node));
 }
 
+bool InspectorDOMAgent::isNodeScrollable(Node* node) {
+  if (auto* box = DynamicTo<LayoutBox>(node->GetLayoutObject())) {
+    if (!box->Style()) {
+      return false;
+    }
+    return box->IsUserScrollable();
+  }
+  return false;
+}
+
 void InspectorDOMAgent::DidPushShadowRoot(Element* host, ShadowRoot* root) {
   if (!host->ownerDocument())
     return;
@@ -2526,7 +2563,21 @@ void InspectorDOMAgent::NodeCreated(Node* node) {
   }
 }
 
-static ShadowRoot* ShadowRootForNode(Node* node, const String& type) {
+void InspectorDOMAgent::UpdateScrollableFlag(Node* node) {
+  if (!node) {
+    return;
+  }
+  int nodeId = BoundNodeId(node);
+  // If node is not mapped yet -> ignore the event.
+  if (!nodeId) {
+    return;
+  }
+  GetFrontend()->scrollableFlagUpdated(nodeId, isNodeScrollable(node));
+}
+
+namespace {
+
+ShadowRoot* ShadowRootForNode(Node* node, const String& type) {
   auto* element = DynamicTo<Element>(node);
   if (!element)
     return nullptr;
@@ -2537,11 +2588,21 @@ static ShadowRoot* ShadowRootForNode(Node* node, const String& type) {
   return nullptr;
 }
 
+Document* DocumentForFrameOwner(Node* node) {
+  if (auto* owner = DynamicTo<HTMLFrameOwnerElement>(node)) {
+    return owner->contentDocument();
+  }
+  return nullptr;
+}
+
+}  // namespace
+
 Node* InspectorDOMAgent::NodeForPath(const String& path) {
   // The path is of form "1,HTML,2,BODY,1,DIV" (<index> and <nodeName>
   // interleaved).  <index> may also be "a" (author shadow root) or "u"
   // (user-agent shadow root), in which case <nodeName> MUST be
   // "#document-fragment".
+  // The first component after an iframe will always be "d,#document".
   if (!document_)
     return nullptr;
 
@@ -2558,15 +2619,19 @@ Node* InspectorDOMAgent::NodeForPath(const String& path) {
     String& index_value = path_tokens[i];
     wtf_size_t child_number = index_value.ToUInt(&success);
     Node* child;
+    String child_name = path_tokens[i + 1];
     if (!success) {
-      child = ShadowRootForNode(node, index_value);
+      if (index_value == "d") {
+        child = DocumentForFrameOwner(node);
+      } else {
+        child = ShadowRootForNode(node, index_value);
+      }
     } else {
       if (child_number >= InnerChildNodeCount(node, include_whitespace))
         return nullptr;
 
       child = InnerFirstChild(node, include_whitespace);
     }
-    String child_name = path_tokens[i + 1];
     for (wtf_size_t j = 0; child && j < child_number; ++j)
       child = InnerNextSibling(child, include_whitespace);
 
@@ -2705,7 +2770,7 @@ protocol::Response InspectorDOMAgent::scrollIntoViewIfNeeded(
   }
   scroll_into_view_util::ScrollRectToVisible(
       *layout_object, rect_to_scroll,
-      ScrollAlignment::CreateScrollIntoViewParams(
+      scroll_into_view_util::CreateScrollIntoViewParams(
           ScrollAlignment::CenterIfNeeded(), ScrollAlignment::CenterIfNeeded(),
           mojom::blink::ScrollType::kProgrammatic,
           true /* make_visible_in_visual_viewport */,
@@ -2777,6 +2842,66 @@ protocol::Response InspectorDOMAgent::getFileInfo(const String& object_id,
   }
 
   *path = file->GetPath();
+  return protocol::Response::Success();
+}
+
+protocol::Response InspectorDOMAgent::getDetachedDomNodes(
+    std::unique_ptr<protocol::Array<protocol::DOM::DetachedElementInfo>>*
+        detached_nodes) {
+  *detached_nodes =
+      std::make_unique<protocol::Array<protocol::DOM::DetachedElementInfo>>();
+  v8::HandleScope handles(isolate_);
+  std::map<DOMNodeId, size_t> seen_ids;
+
+  for (v8::Local<v8::Value> data :
+       isolate_->GetHeapProfiler()->GetDetachedJSWrapperObjects()) {
+    Node* node = V8Node::ToWrappable(isolate_, data);
+    if (!node) {
+      continue;
+    }
+
+    // It's possible to obtain nodes that come from a different document / page
+    // / frame. We want to ensure that the nodes we get are not from an
+    // inspected frame. This works around a crash in the front end when nodes
+    // are created in the inspector overlay.
+    Document& document = node->GetDocument();
+    if (!document.GetFrame() ||
+        !inspected_frames_->Contains(document.GetFrame())) {
+      continue;
+    }
+
+    Node* parent = node;
+    // Obtain Top Most Node
+    while (parent->parentNode()) {
+      parent = parent->parentNode();
+    }
+
+    // It is possible to get multiple child nodes from V8 that are in the same
+    // detached tree. In this case, we can see the top level node multiple
+    // times. We don't want to return the same tree more than once, so we record
+    // the ID and skip to avoid duplicate returns. We do want to return the ID
+    // of the retained object `node`.
+    blink::DOMNodeId parent_id = parent->GetDomNodeId();
+    if (seen_ids.contains(parent_id)) {
+      size_t parent_index = seen_ids[parent_id];
+      (**detached_nodes)[parent_index]->getRetainedNodeIds()->emplace_back(
+          node->GetDomNodeId());
+      continue;
+    }
+    // Remember where the top-level node resides in the detached_nodes array
+    seen_ids[parent_id] = (*detached_nodes)->size();
+
+    auto children = std::make_unique<protocol::Array<blink::DOMNodeId>>();
+    children->emplace_back(node->GetDomNodeId());
+    std::unique_ptr<protocol::DOM::DetachedElementInfo> value =
+        protocol::DOM::DetachedElementInfo::create()
+            .setTreeNode(BuildObjectForNode(
+                parent, -1, true, document_node_to_id_map_.Get(), nullptr))
+            .setRetainedNodeIds(std::move(children))
+            .build();
+
+    (*detached_nodes)->emplace_back(std::move(value));
+  }
   return protocol::Response::Success();
 }
 

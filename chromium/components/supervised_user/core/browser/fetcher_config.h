@@ -95,6 +95,11 @@ struct FetcherConfig {
 
   net::RequestPriority request_priority;
 
+  // System parameters that apply to HTTP GET method.
+  // This is automatically concatenated to existing parameters, there is no need
+  // to include "&".
+  std::string_view system_param_suffix;
+
   std::string GetHttpMethod() const;
 
   // Returns the non-template service_path or crashes for templated one.
@@ -116,6 +121,9 @@ struct FetcherConfig {
   // ServicePath({"a", "b", "c"}) -> /path/ab/with/template/c
   // ServicePath({"a", "b", "c", "d"}) -> /path/ab/with/template/cd
   std::string ServicePath(const PathArgs& args) const;
+
+  // Creates backoff entry based on the exact policy from this config.
+  std::unique_ptr<net::BackoffEntry> BackoffEntry() const;
 };
 
 inline constexpr FetcherConfig kClassifyUrlConfig = {
@@ -214,6 +222,9 @@ inline constexpr FetcherConfig kListFamilyMembersConfig{
         .oauth2_scope = "https://www.googleapis.com/auth/kid.family.readonly",
     },
     .request_priority = net::IDLE,
+    // If there is no associated Family Group with the account return an empty
+    // response instead of NOT_FOUND.
+    .system_param_suffix = "allow_empty_family=true",
 };
 
 inline constexpr FetcherConfig kCreatePermissionRequestConfig = {

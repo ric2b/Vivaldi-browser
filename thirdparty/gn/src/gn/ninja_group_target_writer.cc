@@ -17,22 +17,26 @@ NinjaGroupTargetWriter::NinjaGroupTargetWriter(const Target* target,
 NinjaGroupTargetWriter::~NinjaGroupTargetWriter() = default;
 
 void NinjaGroupTargetWriter::Run() {
-  // A group rule just generates a stamp file with dependencies on each of
+  // A group rule just generates a phony target with dependencies on each of
   // the deps and data_deps in the group.
   std::vector<OutputFile> output_files;
   std::vector<OutputFile> data_output_files;
   const auto& target_deps = resolved().GetTargetDeps(target_);
 
   for (const Target* dep : target_deps.linked_deps()) {
+    if (!dep->has_dependency_output())
+      continue;
     if (dep->IsDataOnly()) {
-      data_output_files.push_back(dep->dependency_output_file());
+      data_output_files.push_back(dep->dependency_output());
     } else {
-      output_files.push_back(dep->dependency_output_file());
+      output_files.push_back(dep->dependency_output());
     }
   }
 
-  for (const Target* data_dep : target_deps.data_deps())
-    data_output_files.push_back(data_dep->dependency_output_file());
+  for (const Target* data_dep : target_deps.data_deps()) {
+    if (data_dep->has_dependency_output())
+      data_output_files.push_back(data_dep->dependency_output());
+  }
 
-  WriteStampForTarget(output_files, data_output_files);
+  WriteStampOrPhonyForTarget(output_files, data_output_files);
 }

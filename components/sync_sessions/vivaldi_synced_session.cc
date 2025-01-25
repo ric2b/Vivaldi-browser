@@ -1,15 +1,17 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
+#include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync_sessions/synced_session.h"
+#include "components/sync_sessions/vivaldi_specific.h"
 
 namespace sync_sessions {
 
-void SyncedSession::SetExtData(const std::string &data) {
-  viv_ext_data = data;
+void SyncedSession::SetVivaldiSpecific(
+    const VivaldiSpecific& vivaldi_specific) {
+  vivaldi_specific_ = vivaldi_specific;
 }
 
-std::optional<std::string> SyncedSession::GetExtData() const {
-  return viv_ext_data;
+const VivaldiSpecific& SyncedSession::GetVivaldiSpecific() const {
+  return vivaldi_specific_;
 }
-
 } // namespace sync_sessions

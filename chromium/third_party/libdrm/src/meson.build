@@ -21,9 +21,9 @@
 project(
   'libdrm',
   ['c'],
-  version : '2.4.115',
+  version : '2.4.122',
   license : 'MIT',
-  meson_version : '>= 0.53',
+  meson_version : '>= 0.59',
   default_options : ['buildtype=debugoptimized', 'c_std=c11'],
 )
 
@@ -84,109 +84,61 @@ config.set10('HAVE_LIB_ATOMIC_OPS', lib_atomics)
 
 dep_pciaccess = dependency('pciaccess', version : '>= 0.10', required : get_option('intel'))
 
-with_intel = false
-_intel = get_option('intel')
-if not _intel.disabled()
-  if _intel.enabled() and not with_atomics
-    error('libdrm_intel requires atomics.')
-  else
-    with_intel = (_intel.enabled() or host_machine.cpu_family().startswith('x86')) and with_atomics and dep_pciaccess.found()
-  endif
-endif
+with_intel = get_option('intel') \
+  .require(with_atomics, error_message : 'libdrm_intel requires atomics') \
+  .require(dep_pciaccess.found(), error_message : 'libdrm_intel requires libpciaccess') \
+  .disable_auto_if(not host_machine.cpu_family().startswith('x86')) \
+  .allowed()
 summary('Intel', with_intel)
 
-with_radeon = false
-_radeon = get_option('radeon')
-if not _radeon.disabled()
-  if _radeon.enabled() and not with_atomics
-    error('libdrm_radeon requires atomics.')
-  endif
-  with_radeon = with_atomics
-endif
+with_radeon = get_option('radeon') \
+  .require(with_atomics, error_message : 'libdrm_radeon requires atomics') \
+  .allowed()
 summary('Radeon', with_radeon)
 
-with_amdgpu = false
-_amdgpu = get_option('amdgpu')
-if not _amdgpu.disabled()
-  if _amdgpu.enabled() and not with_atomics
-    error('libdrm_amdgpu requires atomics.')
-  endif
-  with_amdgpu = with_atomics
-endif
+with_amdgpu = get_option('amdgpu') \
+  .require(with_atomics, error_message : 'libdrm_amdgpu requires atomics') \
+  .allowed()
 summary('AMDGPU', with_amdgpu)
 
-with_nouveau = false
-_nouveau = get_option('nouveau')
-if not _nouveau.disabled()
-  if _nouveau.enabled() and not with_atomics
-    error('libdrm_nouveau requires atomics.')
-  endif
-  with_nouveau = with_atomics
-endif
+with_nouveau = get_option('nouveau') \
+  .require(with_atomics, error_message : 'libdrm_nouveau requires atomics') \
+  .allowed()
 summary('Nouveau', with_nouveau)
 
-with_vmwgfx = false
-_vmwgfx = get_option('vmwgfx')
-if not _vmwgfx.disabled()
-  with_vmwgfx = true
-endif
+with_vmwgfx = get_option('vmwgfx').allowed()
 summary('vmwgfx', with_vmwgfx)
 
-with_omap = false
-_omap = get_option('omap')
-if _omap.enabled()
-  if not with_atomics
-    error('libdrm_omap requires atomics.')
-  endif
-  with_omap = true
-endif
+with_omap = get_option('omap') \
+  .require(with_atomics, error_message : 'libdrm_omap requires atomics') \
+  .enabled()
 summary('OMAP', with_omap)
 
-with_freedreno = false
-_freedreno = get_option('freedreno')
-if not _freedreno.disabled()
-  if _freedreno.enabled() and not with_atomics
-    error('libdrm_freedreno requires atomics.')
-  else
-    with_freedreno = (_freedreno.enabled() or ['arm', 'aarch64'].contains(host_machine.cpu_family())) and with_atomics
-  endif
-endif
+with_freedreno = get_option('freedreno') \
+  .require(with_atomics, error_message : 'libdrm_freedreno requires atomics') \
+  .disable_auto_if(not ['arm', 'aarch64'].contains(host_machine.cpu_family())) \
+  .allowed()
 summary('Freedreno', with_freedreno)
 summary('Freedreon-kgsl', with_freedreno_kgsl)
 
-with_tegra = false
-_tegra = get_option('tegra')
-if _tegra.enabled()
-  if not with_atomics
-    error('libdrm_tegra requires atomics.')
-  endif
-  with_tegra = true
-endif
+with_tegra = get_option('tegra') \
+  .require(with_atomics, error_message : 'libdrm_tegra requires atomics') \
+  .disable_auto_if(not ['arm', 'aarch64'].contains(host_machine.cpu_family())) \
+  .enabled()
 summary('Tegra', with_tegra)
 
-with_etnaviv = false
-_etnaviv = get_option('etnaviv')
-if not _etnaviv.disabled()
-  if _etnaviv.enabled() and not with_atomics
-    error('libdrm_etnaviv requires atomics.')
-  endif
-  with_etnaviv = _etnaviv.enabled() or (
-    with_atomics and [
-      'loongarch64', 'mips', 'mips64',
-      'arm', 'aarch64', 'arc',
-    ].contains(host_machine.cpu_family())
-  )
-endif
+with_etnaviv = get_option('etnaviv') \
+  .require(with_atomics, error_message : 'libdrm_etnaviv requires atomics') \
+  .disable_auto_if(not ['arm', 'aarch64', 'arc', 'mips', 'mips64', 'loongarch64'].contains(host_machine.cpu_family())) \
+  .allowed()
 summary('Etnaviv', with_etnaviv)
 
 with_exynos = get_option('exynos').enabled()
 summary('EXYNOS', with_exynos)
 
-with_vc4 = false
-_vc4 = get_option('vc4')
-if not _vc4.disabled()
-  with_vc4 = _vc4.enabled() or ['arm', 'aarch64'].contains(host_machine.cpu_family())
-endif
+with_vc4 = get_option('vc4') \
+  .disable_auto_if(not ['arm', 'aarch64'].contains(host_machine.cpu_family())) \
+  .allowed()
 summary('VC4', with_vc4)
 
 # Among others FreeBSD does not have a separate dl library.
@@ -202,7 +154,6 @@ if not cc.has_function('clock_gettime', prefix : '#define _GNU_SOURCE\n#include 
 else
   dep_rt = []
 endif
-dep_m = cc.find_library('m', required : false)
 
 # The header is not required on Linux, and is in fact deprecated in glibc 2.30+
 if ['linux'].contains(host_machine.system())
@@ -274,11 +225,16 @@ if with_freedreno_kgsl and not with_freedreno
   error('cannot enable freedreno-kgsl without freedreno support')
 endif
 config.set10('_GNU_SOURCE', true)
+
+if target_machine.endian() == 'big'
+  config.set('HAVE_BIG_ENDIAN', 1)
+endif
+
 config_file = configure_file(
   configuration : config,
   output : 'config.h',
 )
-add_project_arguments('-include', '@0@'.format(config_file), language : 'c')
+add_project_arguments('-include', meson.current_build_dir() / 'config.h', language : 'c')
 
 inc_root = include_directories('.')
 inc_drm = include_directories('include/drm')
@@ -301,7 +257,7 @@ libdrm = library(
   'drm',
   libdrm_files,
   c_args : libdrm_c_args,
-  dependencies : [dep_valgrind, dep_rt, dep_m],
+  dependencies : [dep_valgrind, dep_rt],
   include_directories : inc_drm,
   install : true,
   kwargs : libdrm_kw,
@@ -314,7 +270,7 @@ test(
   args : [
     '--lib', libdrm,
     '--symbols-file', files('core-symbols.txt'),
-    '--nm', prog_nm.path(),
+    '--nm', prog_nm.full_path(),
   ],
 )
 

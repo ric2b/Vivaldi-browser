@@ -28,18 +28,19 @@ target_link_libraries(
   PUBLIC
   protobuf::libprotobuf
   test_protobuf
+  absl::algorithm_container
   absl::function_ref
   absl::str_format
+  absl::strings
   absl::time
   fuzztest_googletest_fixture_adapter
   fuzztest_logging
-  fuzztest_status
 )
 link_fuzztest(fuzz_tests_for_functional_testing.stripped)
 set_target_properties(
   fuzz_tests_for_functional_testing.stripped
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-  "${CMAKE_BINARY_DIR}/com_google_fuzztest/e2e_tests/testdata"
+  "${CMAKE_BINARY_DIR}/_main/e2e_tests/testdata"
 )
 
 add_executable(
@@ -55,7 +56,7 @@ link_fuzztest(fuzz_tests_with_invalid_seeds.stripped)
 set_target_properties(
   fuzz_tests_with_invalid_seeds.stripped
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-  "${CMAKE_BINARY_DIR}/com_google_fuzztest/e2e_tests/testdata"
+  "${CMAKE_BINARY_DIR}/_main/e2e_tests/testdata"
 )
 
 add_executable(
@@ -66,7 +67,7 @@ link_fuzztest(dynamically_registered_fuzz_tests.stripped)
 set_target_properties(
   dynamically_registered_fuzz_tests.stripped
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-  "${CMAKE_BINARY_DIR}/com_google_fuzztest/e2e_tests/testdata"
+  "${CMAKE_BINARY_DIR}/_main/e2e_tests/testdata"
 )
 
 add_executable(
@@ -82,7 +83,7 @@ link_fuzztest_core(domain_tests.stripped)
 set_target_properties(
   domain_tests.stripped
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-  "${CMAKE_BINARY_DIR}/com_google_fuzztest/e2e_tests/testdata"
+  "${CMAKE_BINARY_DIR}/_main/e2e_tests/testdata"
 )
 
 add_executable(
@@ -93,5 +94,5 @@ link_fuzztest(unit_test_and_fuzz_tests.stripped)
 set_target_properties(
   unit_test_and_fuzz_tests.stripped
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-  "${CMAKE_BINARY_DIR}/com_google_fuzztest/e2e_tests/testdata"
+  "${CMAKE_BINARY_DIR}/_main/e2e_tests/testdata"
 )

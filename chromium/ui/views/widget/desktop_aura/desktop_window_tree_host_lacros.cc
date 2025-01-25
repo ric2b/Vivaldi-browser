@@ -145,15 +145,16 @@ void DesktopWindowTreeHostLacros::OnNativeWidgetCreated(
   platform_window()->SetUseNativeFrame(false);
 }
 
-void DesktopWindowTreeHostLacros::InitModalType(ui::ModalType modal_type) {
+void DesktopWindowTreeHostLacros::InitModalType(
+    ui::mojom::ModalType modal_type) {
   if (ui::GetSystemModalExtension(*(platform_window()))) {
     ui::GetSystemModalExtension(*(platform_window()))
-        ->SetSystemModal(modal_type == ui::MODAL_TYPE_SYSTEM);
+        ->SetSystemModal(modal_type == ui::mojom::ModalType::kSystem);
   }
 
   switch (modal_type) {
-    case ui::MODAL_TYPE_NONE:
-    case ui::MODAL_TYPE_SYSTEM:
+    case ui::mojom::ModalType::kNone:
+    case ui::mojom::ModalType::kSystem:
       break;
     default:
       // TODO(erg): Figure out under what situations |modal_type| isn't
@@ -192,6 +193,12 @@ void DesktopWindowTreeHostLacros::OnFullscreenTypeChanged(
 void DesktopWindowTreeHostLacros::OnOverviewModeChanged(bool in_overview) {
   GetContentWindow()->SetProperty(chromeos::kIsShowingInOverviewKey,
                                   in_overview);
+
+  // Window corner radius depends on whether the window is in overview mode or
+  // not. Once the overview property has been updated, the browser window
+  // corners need to be updated.
+  // See `chromeos::GetFrameCornerRadius()` for more details.
+  UpdateWindowHints();
 }
 
 void DesktopWindowTreeHostLacros::OnTooltipShownOnServer(

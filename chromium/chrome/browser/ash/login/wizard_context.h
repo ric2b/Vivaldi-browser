@@ -46,6 +46,16 @@ class WizardContext {
     kQuickStartFallback,
   };
 
+  // Reflects if Gaia screen first shows a Gaia page or a SAML IdP
+  // page. This has some UI implications for the screen.
+  enum GaiaScreenMode {
+    // Gaia page is the first one to be shown.
+    kDefault = 0,
+
+    // SAML IdP page is the first one to be shown.
+    kSamlRedirect = 1,
+  };
+
   struct GaiaConfig {
     GaiaConfig();
     ~GaiaConfig();
@@ -66,6 +76,9 @@ class WizardContext {
     // The URL path and parameters to be used when showing the 'fallback' URL
     // flow of QuickStart. Only exists when Gaia demands an extra verification.
     std::optional<std::string> quick_start_fallback_path_contents;
+
+    // The type of Gaia screen to show.
+    GaiaScreenMode screen_mode = GaiaScreenMode::kDefault;
   };
 
   struct RecoverySetup {
@@ -247,14 +260,18 @@ class WizardContext {
   // selected screen.
   bool return_to_choobe_screen = false;
 
-  // Information that is used during Cryptohome recovery or password changed
-  // flow.
+  // Information that is used during Cryptohome recovery, password changed
+  // or add user with cached credentials flow.
   std::unique_ptr<UserContext> user_context;
 
   // Configuration for GAIA screen. If the configs needs to be updated, it
   // should be updated before showing the GAIA screen. If the GAIA screen is
   // already shown, a call to reload GAIA webview may be necessary.
   GaiaConfig gaia_config;
+
+  // If this flag is true and the user_context contains cached credentials
+  // there will be an attempt to skip the GAIA screen and signin directly.
+  bool add_user_from_cached_credentials = false;
 };
 
 // Returns |true| if this is an OOBE flow after enterprise enrollment.

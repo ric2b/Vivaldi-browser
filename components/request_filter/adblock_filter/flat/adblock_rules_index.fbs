@@ -97,7 +97,11 @@ table RulesIndex {
 
   // These rules are used to determine if a given sub-resource request should
   // be modified.
-  request_modifier: RulesMap;
+  blocked_request_modifiers: RulesMap;
+
+  // These rules are used to determine if a given sub-resource request should
+  // be modified.
+  allowed_request_modifiers: RulesMap;
 
   // These rules can modify the response headers for matching requests,
   // before they're passed on.

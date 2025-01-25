@@ -65,12 +65,14 @@ void FakeNearbySharingService::RegisterSendSurface(
     foreground_send_surface_map_.insert(
         {transfer_callback,
          WrappedShareTargetDiscoveredCallback(
-             discovery_callback, Advertisement::BlockedVendorId::kNone)});
+             discovery_callback, Advertisement::BlockedVendorId::kNone,
+             /*disable_wifi_hotspot=*/false)});
   } else {
     background_send_surface_map_.insert(
         {transfer_callback,
          WrappedShareTargetDiscoveredCallback(
-             discovery_callback, Advertisement::BlockedVendorId::kNone)});
+             discovery_callback, Advertisement::BlockedVendorId::kNone,
+             /*disable_wifi_hotspot=*/false)});
   }
 
   status_codes_callback(StatusCodes::kOk);
@@ -115,21 +117,8 @@ void FakeNearbySharingService::ClearForegroundReceiveSurfaces(
   status_codes_callback(StatusCodes::kOk);
 }
 
-// Returns true if a foreground receive surface is registered.
-bool FakeNearbySharingService::IsInHighVisibility() const { return false; }
-
 // Returns true if there is an ongoing file transfer.
 bool FakeNearbySharingService::IsTransferring() const { return false; }
-
-// Returns true if we're currently receiving a file.
-bool FakeNearbySharingService::IsReceivingFile() const { return false; }
-
-// Returns true if we're currently sending a file.
-bool FakeNearbySharingService::IsSendingFile() const { return false; }
-
-// Returns true if we're currently attempting to connect to a
-// remote device.
-bool FakeNearbySharingService::IsConnecting() const { return false; }
 
 // Returns true if we are currently scanning for remote devices.
 bool FakeNearbySharingService::IsScanning() const { return false; }
@@ -169,20 +158,6 @@ bool FakeNearbySharingService::DidLocalUserCancelTransfer(
     int64_t share_target_id) {
   return false;
 }
-
-// Opens attachments from the remote |share_target|.
-void FakeNearbySharingService::Open(
-    ShareTarget share_target,
-    std::unique_ptr<AttachmentContainer> attachment_container,
-    std::function<void(StatusCodes status_codes)> status_codes_callback) {
-  status_codes_callback(StatusCodes::kOk);
-}
-
-// Opens an url target on a browser instance.
-void FakeNearbySharingService::OpenUrl(const ::nearby::network::Url& url) {}
-
-// Copies text to cache/clipboard.
-void FakeNearbySharingService::CopyText(absl::string_view text) {}
 
 std::string FakeNearbySharingService::Dump() const { return ""; }
 

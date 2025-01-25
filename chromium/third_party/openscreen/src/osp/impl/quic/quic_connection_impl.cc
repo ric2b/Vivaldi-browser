@@ -117,14 +117,21 @@ void QuicConnectionImpl::OnCryptoHandshakeComplete() {
   TRACE_SCOPED(TraceCategory::kQuic,
                "QuicConnectionImpl::OnCryptoHandshakeComplete");
   instance_id_ = delegate_.OnCryptoHandshakeComplete(instance_name_);
-  OSP_VLOG << "QUIC connection handshake complete for instance: "
-           << instance_name_
-           << ", the corresponding instance ID is: " << instance_id_;
+  OSP_VLOG_IF(instance_id_ > 0)
+      << "QUIC connection handshake complete for instance: " << instance_name_
+      << ", the corresponding instance ID is: " << instance_id_;
 }
 
 void QuicConnectionImpl::OnIncomingStream(QuicStream* stream) {
   TRACE_SCOPED(TraceCategory::kQuic, "QuicConnectionImpl::OnIncomingStream");
   delegate_.OnIncomingStream(instance_id_, stream);
+}
+
+void QuicConnectionImpl::OnClientCertificates(
+    const std::vector<std::string>& certs) {
+  TRACE_SCOPED(TraceCategory::kQuic,
+               "QuicConnectionImpl::OnClientCertificates");
+  delegate_.OnClientCertificates(instance_name_, certs);
 }
 
 }  // namespace openscreen::osp

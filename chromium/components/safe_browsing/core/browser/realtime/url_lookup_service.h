@@ -15,6 +15,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/browser/realtime/url_lookup_service_base.h"
@@ -82,6 +83,10 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
   void Shutdown() override;
   bool CanSendRTSampleRequest() const override;
   std::string GetUserEmail() const override;
+  std::string GetBrowserDMTokenString() const override;
+  std::string GetProfileDMTokenString() const override;
+  std::unique_ptr<enterprise_connectors::ClientMetadata> GetClientMetadata()
+      const override;
   std::string GetMetricSuffix() const override;
 
 #if defined(UNIT_TEST)

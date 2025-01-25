@@ -280,28 +280,12 @@ absl::StatusOr<tsl::RCReference<xla::ifrt::Array>> Array::FullyReplicatedShard(
   // sharding and (2) A generalized `Reshard` API that allows the user to
   // request an Array to be made out of a specific single shard.
   std::unique_ptr<xla::ifrt::SingleDeviceSharding> single_device_sharding =
-      xla::ifrt::SingleDeviceSharding::Create(sharding_->devices()[0],
-                                              sharding_->memory_kind());
+      xla::ifrt::SingleDeviceSharding::Create(
+          sharding_->devices()->devices().front(), sharding_->memory_kind());
 
   return tsl::RCReference<xla::ifrt::Array>(
       tsl::MakeRef<Array>(client_, rpc_helper_, dtype_, shape_,
                           std::move(single_device_sharding), handle));
-}
-
-absl::StatusOr<tsl::RCReference<xla::ifrt::Array>> Array::Reshard(
-    std::shared_ptr<const Sharding> new_sharding,
-    ArrayCopySemantics semantics) {
-  auto req = std::make_unique<ReshardRequest>();
-  req->set_array_handle(handle_.handle);
-  TF_ASSIGN_OR_RETURN(*req->mutable_sharding(), new_sharding->ToProto());
-  req->set_copy_semantics(ToArrayCopySemanticsProto(semantics));
-
-  TF_ASSIGN_OR_RETURN(std::shared_ptr<ReshardResponse> response,
-                      rpc_helper_->Reshard(std::move(req)).Await());
-  ArrayHandle handle{response->array_handle()};
-
-  return tsl::RCReference<xla::ifrt::Array>(tsl::MakeRef<Array>(
-      client_, rpc_helper_, dtype_, shape_, std::move(new_sharding), handle));
 }
 
 Future<> Array::CopyToHostBuffer(

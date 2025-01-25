@@ -6,20 +6,33 @@
 
 #include <utility>
 
+#include "quiche/quic/core/quic_types.h"
+#include "quiche/quic/core/quic_versions.h"
+#include "util/osp_logging.h"
+
 namespace openscreen::osp {
 
-bool OpenScreenCryptoServerStreamHelper::CanAcceptClientHello(
-    const quic::CryptoHandshakeMessage& chlo,
-    const quic::QuicSocketAddress& client_address,
-    const quic::QuicSocketAddress& peer_address,
-    const quic::QuicSocketAddress& self_address,
-    std::string* error_details) const {
-  return true;
+TlsServerHandshakerImpl::TlsServerHandshakerImpl(
+    quic::QuicSession* session,
+    const quic::QuicCryptoServerConfig* crypto_config)
+    : TlsServerHandshaker(session, crypto_config) {}
+
+TlsServerHandshakerImpl::~TlsServerHandshakerImpl() = default;
+
+quic::QuicAsyncStatus TlsServerHandshakerImpl::VerifyCertChain(
+    const std::vector<std::string>& certs,
+    std::string* /*error_details*/,
+    std::unique_ptr<quic::ProofVerifyDetails>* /*details*/,
+    uint8_t* /*out_alert*/,
+    std::unique_ptr<quic::ProofVerifierCallback> /*callback*/) {
+  static_cast<OpenScreenServerSession*>(session())
+      ->visitor()
+      .OnClientCertificates(certs);
+  return quic::QUIC_SUCCESS;
 }
 
 OpenScreenServerSession::OpenScreenServerSession(
     std::unique_ptr<quic::QuicConnection> connection,
-    std::unique_ptr<quic::QuicCompressedCertsCache> compressed_certs_cache,
     OpenScreenSessionBase::Visitor& visitor,
     const quic::QuicCryptoServerConfig& crypto_server_config,
     const quic::QuicConfig& config,
@@ -28,18 +41,25 @@ OpenScreenServerSession::OpenScreenServerSession(
                             visitor,
                             config,
                             supported_versions),
-      compressed_certs_cache_(std::move(compressed_certs_cache)),
       crypto_server_config_(crypto_server_config) {
   Initialize();
 }
 
 OpenScreenServerSession::~OpenScreenServerSession() = default;
 
+quic::QuicSSLConfig OpenScreenServerSession::GetSSLConfig() const {
+  quic::QuicSSLConfig ssl_config;
+  ssl_config.client_cert_mode = quic::ClientCertMode::kRequest;
+  return ssl_config;
+}
+
 std::unique_ptr<quic::QuicCryptoStream>
 OpenScreenServerSession::CreateCryptoStream() {
-  return CreateCryptoServerStream(&crypto_server_config_,
-                                  compressed_certs_cache_.get(), this,
-                                  &stream_helper_);
+  OSP_CHECK_EQ(connection_->version().handshake_protocol,
+               quic::HandshakeProtocol::PROTOCOL_TLS1_3);
+
+  return std::make_unique<TlsServerHandshakerImpl>(this,
+                                                   &crypto_server_config_);
 }
 
 }  // namespace openscreen::osp

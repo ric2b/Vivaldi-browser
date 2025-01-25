@@ -7,24 +7,13 @@ import 'chrome://resources/mwc/@material/web/icon/icon.js';
 import 'chrome://resources/mwc/@material/web/iconbutton/icon-button.js';
 import '../components/cra/cra-icon.js';
 
-import {
-  createRef,
-  css,
-  html,
-  nothing,
-  ref,
-  when,
-} from 'chrome://resources/mwc/lit/index.js';
+import {createRef, css, html, ref} from 'chrome://resources/mwc/lit/index.js';
 
 import {
   usePlatformHandler,
   useRecordingDataManager,
 } from '../core/lit/context.js';
-import {
-  Model,
-  ModelId,
-  ModelResponse,
-} from '../core/on_device_model/types.js';
+import {ModelResponse} from '../core/on_device_model/types.js';
 import {ReactiveLitElement} from '../core/reactive/lit.js';
 import {signal} from '../core/reactive/signal.js';
 
@@ -65,67 +54,27 @@ export class DevPage extends ReactiveLitElement {
 
   readonly recordingDataManager = useRecordingDataManager();
 
-  // TODO(pihsun): Better loading state handling. The following two should
-  // probably come together from some Promise -> signal utility?
-  private readonly modelLoading = signal(false);
-
-  private readonly loadedModels = signal<Model[]|null>(null);
-
   private readonly textareaRef = createRef<HTMLTextAreaElement>();
 
   /**
-   * Contains an array of each models response of the suggested titles.
+   * Contains model response of the suggested titles.
    */
-  private readonly titles = signal<Array<ModelResponse<string[]>>>([]);
-
-  override disconnectedCallback(): void {
-    if (this.loadedModels.value !== null) {
-      for (const model of this.loadedModels.value) {
-        model.close();
-      }
-      this.loadedModels.value = null;
-    }
-  }
+  private readonly titles = signal<ModelResponse<string[]>|null>(null);
 
   private async onSuggestTitleClick() {
-    if (this.loadedModels.value === null) {
-      return;
-    }
     const value = this.textareaRef.value?.value;
     if (value === undefined) {
       return;
     }
     // TODO(shik): Add loading state.
-    this.titles.value = await Promise.all(
-      this.loadedModels.value.map((m) => m.suggestTitles(value)),
-    );
+    this.titles.value =
+      await this.platformHandler.titleSuggestionModelLoader.loadAndExecute(
+        value,
+      );
   }
 
   private async onClearClicked() {
     await this.recordingDataManager.clear();
-  }
-
-  private async onLoadModelClicked() {
-    const modelIds = [ModelId.GEMINI_XXS_IT_BASE, ModelId.SUMMARY];
-    this.modelLoading.value = true;
-    try {
-      this.loadedModels.value = await Promise.all(
-        modelIds.map((id) => this.platformHandler.loadModel(id)),
-      );
-    } finally {
-      // TODO(pihsun): Display / handle error better.
-      this.modelLoading.value = false;
-    }
-  }
-
-  private renderLoadModelResult() {
-    if (this.modelLoading.value) {
-      return 'Loading...';
-    }
-    if (this.loadedModels.value !== null) {
-      return 'Model loaded';
-    }
-    return nothing;
   }
 
   override render(): RenderResult {
@@ -141,24 +90,12 @@ export class DevPage extends ReactiveLitElement {
           >
         </div>
         <div class="section">
-          <md-filled-button @click=${this.onLoadModelClicked}
-            >Load Model</md-filled-button
-          >
-          <span>${this.renderLoadModelResult()}</span>
+          <textarea ${ref(this.textareaRef)} rows=${5}></textarea>
+          <pre>Titles: ${JSON.stringify(this.titles.value, null, 2)}</pre>
+          <md-filled-button @click=${this.onSuggestTitleClick}>
+            Suggest Title
+          </md-filled-button>
         </div>
-        ${
-      when(
-        this.loadedModels.value !== null,
-        () => html`
-            <div class="section">
-              <textarea ${ref(this.textareaRef)} rows=${5}></textarea>
-              <pre>Titles: ${JSON.stringify(this.titles.value, null, 2)}</pre>
-              <md-filled-button @click=${this.onSuggestTitleClick}>
-                Suggest Title
-              </md-filled-button>
-            </div>
-          `,
-      )}
         ${this.platformHandler.renderDevUi()}
       </div>
     `;

@@ -8,6 +8,7 @@
 
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
+#include "gn/builtin_tool.h"
 #include "gn/c_substitution_type.h"
 #include "gn/config_values_extractors.h"
 #include "gn/err.h"
@@ -432,16 +433,16 @@ void NinjaTargetWriter::WriteRustCompilerVars(const SubstitutionBits& bits,
   }
 }
 
-std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(
+std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampOrPhonyAndGetDep(
     const std::vector<const Target*>& additional_hard_deps,
-    size_t num_stamp_uses) const {
+    size_t num_output_uses) const {
   CHECK(target_->toolchain()) << "Toolchain not set on target "
                               << target_->label().GetUserVisibleName(true);
 
   // ----------
   // Collect all input files that are input deps of this target. Knowing the
   // number before writing allows us to either skip writing the input deps
-  // stamp or optimize it. Use pointers to avoid copies here.
+  // phony or optimize it. Use pointers to avoid copies here.
   std::vector<const SourceFile*> input_deps_sources;
   input_deps_sources.reserve(32);
 
@@ -496,7 +497,7 @@ std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(
   // Toolchain dependencies. These must be resolved before doing anything.
   // This just writes all toolchain deps for simplicity. If we find that
   // toolchains often have more than one dependency, we could consider writing
-  // a toolchain-specific stamp file and only include the stamp here.
+  // a toolchain-specific phony target and only include the phony here.
   // Note that these are usually empty/small.
   const LabelTargetVector& toolchain_deps = target_->toolchain()->deps();
   for (const auto& toolchain_dep : toolchain_deps) {
@@ -513,14 +514,15 @@ std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(
     return std::vector<OutputFile>();  // No input dependencies.
 
   // If we're only generating one input dependency, return it directly instead
-  // of writing a stamp file for it.
+  // of writing a phony target for it.
   if (input_deps_sources.size() == 1 && input_deps_targets.size() == 0)
     return std::vector<OutputFile>{
         OutputFile(settings_->build_settings(), *input_deps_sources[0])};
   if (input_deps_sources.size() == 0 && input_deps_targets.size() == 1) {
-    const OutputFile& dep = input_deps_targets[0]->dependency_output_file();
-    DCHECK(!dep.value().empty());
-    return std::vector<OutputFile>{dep};
+    const auto& dep = *input_deps_targets[0];
+    if (!dep.has_dependency_output())
+      return std::vector<OutputFile>();
+    return std::vector<OutputFile>{dep.dependency_output()};
   }
 
   std::vector<OutputFile> outs;
@@ -534,48 +536,85 @@ std::vector<OutputFile> NinjaTargetWriter::WriteInputDepsStampAndGetDep(
       input_deps_targets.begin(), input_deps_targets.end(),
       [](const Target* a, const Target* b) { return a->label() < b->label(); });
   for (auto* dep : input_deps_targets) {
-    DCHECK(!dep->dependency_output_file().value().empty());
-    outs.push_back(dep->dependency_output_file());
+    if (dep->has_dependency_output())
+      outs.push_back(dep->dependency_output());
   }
 
-  // If there are multiple inputs, but the stamp file would be referenced only
+  // If there are multiple inputs, but the phony target would be referenced only
   // once, don't write it but depend on the inputs directly.
-  if (num_stamp_uses == 1u)
+  if (num_output_uses == 1u)
     return outs;
 
-  // Make a stamp file.
-  OutputFile input_stamp_file =
-      GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
-  input_stamp_file.value().append(target_->label().name());
-  input_stamp_file.value().append(".inputdeps.stamp");
+  OutputFile input_stamp_or_phony;
+  std::string tool;
+  if (settings_->build_settings()->no_stamp_files()) {
+    // Make a phony target. We don't need to worry about an empty phony target,
+    // as we would return early if there were no inputs.
+    CHECK(!outs.empty());
+    input_stamp_or_phony =
+        GetBuildDirForTargetAsOutputFile(target_, BuildDirType::PHONY);
+    input_stamp_or_phony.value().append(target_->label().name());
+    input_stamp_or_phony.value().append(".inputdeps");
+    tool = BuiltinTool::kBuiltinToolPhony;
+  } else {
+    // Make a stamp file.
+    input_stamp_or_phony =
+        GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
+    input_stamp_or_phony.value().append(target_->label().name());
+    input_stamp_or_phony.value().append(".inputdeps.stamp");
+
+    tool = GetNinjaRulePrefixForToolchain(settings_) +
+           GeneralTool::kGeneralToolStamp;
+  }
 
   out_ << "build ";
-  WriteOutput(input_stamp_file);
-
-  out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
-       << GeneralTool::kGeneralToolStamp;
-  path_output_.WriteFiles(out_, outs);
-
+  WriteOutput(input_stamp_or_phony);
+  out_ << ": " << tool;
+  WriteOutputs(outs);
   out_ << "\n";
-  return std::vector<OutputFile>{input_stamp_file};
+  return std::vector<OutputFile>{input_stamp_or_phony};
 }
 
-void NinjaTargetWriter::WriteStampForTarget(
+void NinjaTargetWriter::WriteStampOrPhonyForTarget(
     const std::vector<OutputFile>& files,
     const std::vector<OutputFile>& order_only_deps) {
-  const OutputFile& stamp_file = target_->dependency_output_file();
+  // We should have already discerned whether this target is a stamp or a phony.
+  // If there's a dependency_output_file, it should be a stamp. Else is a phony
+  // or omitted phony (in which case, we don't write it).
+  if (target_->has_dependency_output_file()) {
+    // Make a stamp target.
+    const OutputFile& stamp_file = target_->dependency_output_file();
 
-  // First validate that the target's dependency is a stamp file. Otherwise,
-  // we shouldn't have gotten here!
-  CHECK(base::EndsWithCaseInsensitiveASCII(stamp_file.value(), ".stamp"))
-      << "Output should end in \".stamp\" for stamp file output. Instead got: "
-      << "\"" << stamp_file.value() << "\"";
+    // First validate that the target's dependency is a stamp file. Otherwise,
+    // we shouldn't have gotten here!
+    CHECK(base::EndsWithCaseInsensitiveASCII(stamp_file.value(), ".stamp"))
+        << "Output should end in \".stamp\" for stamp file output. Instead "
+           "got: "
+        << "\"" << stamp_file.value() << "\"";
 
-  out_ << "build ";
-  WriteOutput(std::move(stamp_file));
+    out_ << "build ";
+    WriteOutput(stamp_file);
 
-  out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
-       << GeneralTool::kGeneralToolStamp;
+    out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
+         << GeneralTool::kGeneralToolStamp;
+  } else if (target_->has_dependency_output_alias()) {
+    // Make a phony target.
+    const OutputFile& phony_target = target_->dependency_output_alias();
+    CHECK(!phony_target.value().empty());
+
+    out_ << "build ";
+    WriteOutput(phony_target);
+
+    out_ << ": " << BuiltinTool::kBuiltinToolPhony;
+
+  } else {
+    // This is the omitted phony case. We should not get here if there were any
+    // dependencies, so ensure that none got added.
+    CHECK(files.empty());
+    CHECK(order_only_deps.empty());
+    return;
+  }
+
   path_output_.WriteFiles(out_, files);
 
   if (!order_only_deps.empty()) {

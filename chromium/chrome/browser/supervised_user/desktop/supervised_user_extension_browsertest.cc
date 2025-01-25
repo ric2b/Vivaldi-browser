@@ -105,7 +105,7 @@ class SupervisionExtensionTestBase
 #else
     // For ChromeOS, the parental controls should always apply to extensions
     // and this case should not be reached. See the instantiation of the test suite.
-    NOTREACHED_NORETURN();
+    NOTREACHED();
 #endif // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
     }
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
@@ -212,6 +212,7 @@ class SupervisionExtensionTestBase
   supervised_user::SupervisionMixin supervision_mixin_{
       mixin_host_,
       this,
+      embedded_test_server(),
       {.sign_in_mode = GetMixinSigninMode()}};
 };
 
@@ -583,11 +584,6 @@ class SupervisedUserSkipParentalApprovalModeReleaseTest
   }
 
  private:
-  supervised_user::SupervisionMixin supervision_mixin_{
-      mixin_host_,
-      this,
-      {.sign_in_mode = GetMixinSigninMode()}};
-
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 

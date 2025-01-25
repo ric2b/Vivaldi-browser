@@ -54,7 +54,7 @@ The idea is to decentralize Sync storage and to shift the storage
 responsibility, at least conceptually, from Sync engine to Sync clients e.g.
 native models that own the actual synced data. The core Sync components don’t
 have to know anything about the storage, they just pass messages containing sync
-data asynchronously all the way to model type specific sync service (the adapter
+data asynchronously all the way to data type specific sync service (the adapter
 between Sync engine and the native model). The sync service encapsulates the
 storage capable of storing sync metadata along with the model data. The storage
 implementation is responsible for ensuring consistency of the model data with
@@ -62,7 +62,7 @@ sync metadata.
 
 That doesn’t mean every native model has to roll out its own storage. Sync team
 will provide a generic levelDB based storage that should satisfy requirements
-for most simple model types that want to leverage the simple “syncable storage”
+for most simple data types that want to leverage the simple “syncable storage”
 API.
 
 More complex data types can roll their own sync metadata storage implementation
@@ -103,14 +103,14 @@ Color coding:
 
 <td>Blue</td>
 
-<td>New USS specific components (typically one instance per native model type).</td>
+<td>New USS specific components (typically one instance per native data type).</td>
 
 </tr>
 <tr>
 
 <td>Yellow</td>
 
-<td>Native model type specific components. The most typical case of model type implementation is shown, but a more complex custom implementation is possible.</td>
+<td>Native data type specific components. The most typical case of data type implementation is shown, but a more complex custom implementation is possible.</td>
 
 </tr>
 </table>
@@ -121,14 +121,14 @@ the storage for sync data and metadata is.
 With the USS proposal there is no centralized in-memory Directory and Sync DB.
 The responsibility for providing the storage for sync metadata is shifted to the
 native model, the storage is encapsulated by the model specific implementation
-of ModelTypeService.
+of DataTypeService.
 
 The in-memory repository of sync entities is handled by a generic type agnostic
-sync processor component - SharedModelTypeProcessor. This component is roughly a
+sync processor component - SharedDataTypeProcessor. This component is roughly a
 counterpart of SharedChangeProcessor and GenericChangeProcessor in the current
 design.
 
-ModelTypeService works in conjunction with SharedModelTypeProcessor. The pair is
+DataTypeService works in conjunction with SharedDataTypeProcessor. The pair is
 designed to be fairly decoupled from the rest of Sync engine and to handle
 native model changes even when the rest of Sync isn’t running. Here is how
 responsibilities are divided between them:
@@ -136,9 +136,9 @@ responsibilities are divided between them:
 <table>
 <tr>
 
-<td>Model specific ModelTypeService (the service)</td>
+<td>Model specific DataTypeService (the service)</td>
 
-<td>SharedModelTypeProcessor (the processor)</td>
+<td>SharedDataTypeProcessor (the processor)</td>
 
 </tr>
 <tr>
@@ -161,7 +161,7 @@ responsibilities are divided between them:
     <td>Has ability to asynchronously fetch model data and translate it to sync
     data on demand.</td>
 
-    <td>Integrates the model type specific service with the rest of Sync
+    <td>Integrates the data type specific service with the rest of Sync
     engine.</td>
 
     <td>Serves as a broker between the model specific service and Sync backend
@@ -189,7 +189,7 @@ USS reuses a significant part of the current design. There are two integration
 points where USS specific components plug into Sync architecture:
 
 On the UI thread sync datatype configuration and management is done through
-model type specific instance of NonBlockingDataTypeController (USS specific
+data type specific instance of NonBlockingDataTypeController (USS specific
 implementation of DataTypeController). It has the same responsibilities as
 regular DataType controllers in the current implementation:
 
@@ -200,7 +200,7 @@ regular DataType controllers in the current implementation:
 
     Handles activation and deactivation of the datatype with Sync backend.
 
-ModelTypeWorker (the worker) is USS specific implementation of Sync engine’s
+DataTypeWorker (the worker) is USS specific implementation of Sync engine’s
 UpdateHandler and CommitContributer interfaces. The key difference between this
 component and currently existing counterparts is that the existing
 implementation propagates sync changes through the shared directory by writing
@@ -214,7 +214,7 @@ processor running on the model, based on the last saved snapshot of the
 metadata, can still determine all the entities with unfinished commit and
 re-commit them through the engine pipeline.
 
-ModelTypeWorker has the following responsibilities:
+DataTypeWorker has the following responsibilities:
 
     Provides integration of USS datatypes on Sync backend side:
 
@@ -234,7 +234,7 @@ ModelTypeWorker has the following responsibilities:
 The rest of Sync backend (shown as Syncer on the diagram) remains mostly
 unchanged from the current design.
 
-Patterns of model type implementation on top of USS
+Patterns of data type implementation on top of USS
 
     ### Typical - for data types with a simple model.
 
@@ -249,12 +249,12 @@ the entire model is fully syncable meaning that:
     [sync_pb::EntitySpecifics](https://code.google.com/p/chromium/codesearch#chromium/src/sync/protocol/sync.proto&q=EntitySpecifics&sq=package:chromium&type=cs&l=66)
     and back without losing any state.
 
-This pattern would be most suitable for brand new model types that don’t have
+This pattern would be most suitable for brand new data types that don’t have
 their own storage mechanism. The consistency is ensured by the Sync provided
 levelDB based storage that holds both native model data and Sync metadata.
 
 The typical implementation is based on a fairly generic base implementation of
-ModelTypeService that would implement all of the logic for hosting the storage,
+DataTypeService that would implement all of the logic for hosting the storage,
 accessing and saving all model data and sync metadata, handling interaction with
 the Sync Engine, etc. The service surfaces a simple storage API for the native
 model to get, put, delete entities, and to notify about remote updates. All of
@@ -265,26 +265,26 @@ src="/developers/design-documents/sync/unified-sync-and-storage-overview/syHRLLS
 
 ### 2. Trivial - special case of Typical pattern without the native model
 
-Model type examples: Sessions, DeviceInfo.
+Data type examples: Sessions, DeviceInfo.
 
 This is a further simplification of the Typical pattern where there is no native
-model and everything is fully contained inside the model type specific
-ModelTypeService.
+model and everything is fully contained inside the data type specific
+DataTypeService.
 
 ### 3. Custom with unified storage.
 
-Model type examples: Bookmarks, TypedURLs.
+Data type examples: Bookmarks, TypedURLs.
 
-This pattern is for complex model types with existing storage mechanism that can
+This pattern is for complex data types with existing storage mechanism that can
 accommodate storing additional Sync metadata. The consistency is ensured by
-custom, model type specific sync metadata storage implementation that piggybacks
+custom, data type specific sync metadata storage implementation that piggybacks
 the already existing native storage mechanism.
 
-For example, for Bookmarks model type, the metadata storage could leverage the
+For example, for Bookmarks data type, the metadata storage could leverage the
 existing bookmark’s MetaInfo container to bundle arbitrary Sync metadata along
 with bookmarks.
 
-For TypedURLs model type, sync metadata could go into a separate table in the
+For TypedURLs data type, sync metadata could go into a separate table in the
 existing SQLite database. The consistency would be ensured by leveraging the
 already existing open transaction mechanism.
 
@@ -293,9 +293,9 @@ src="/developers/design-documents/sync/unified-sync-and-storage-overview/sK5QS5E
 
 ### 4. Custom with separate sync storage.
 
-Model type examples: Passwords.
+Data type examples: Passwords.
 
-This pattern is for complex model types with existing storage mechanism that
+This pattern is for complex data types with existing storage mechanism that
 can’t accommodate storing additional Sync metadata.
 
 While this pattern can’t guarantee the high level of consistency that the
@@ -308,8 +308,8 @@ parallelism.
 src="/developers/design-documents/sync/unified-sync-and-storage-overview/sGBklpDhSmt-dGNQJUSkhNA.png">](/developers/design-documents/sync/unified-sync-and-storage-overview/sGBklpDhSmt-dGNQJUSkhNA.png)
 
 In this case Sync metadata is stored on the side, in Sync provided levelDB
-storage which is hosted by the model type specific implementation of
-ModelTypeService. There should be no need to duplicate the actual data in the
+storage which is hosted by the data type specific implementation of
+DataTypeService. There should be no need to duplicate the actual data in the
 metadata storage except may be for in-flight data for a small number of
 entities.
 
@@ -318,8 +318,8 @@ would need to be performed when the storage is loaded to detect and handle any
 discrepancies. The association / synchronization of the two storages would be
 done entirely at the service level. Just like in other cases, as far as Sync
 core components are concerned, the Sync metadata storage mechanism should be
-opaque to the engine and handled completely by the model type specific
-ModelTypeService implementation.
+opaque to the engine and handled completely by the data type specific
+DataTypeService implementation.
 
 Implementation Notes
 
@@ -347,8 +347,8 @@ Sync writing sync data to its own database and the native models persisting data
 into their own storages.
 
 USS avoids this problem altogether by eliminating the Sync’s private storage and
-shifting the metadata storage to the unified storage. The model type specific
-service (ModelTypeService implementation) is responsible for keeping the sync
+shifting the metadata storage to the unified storage. The data type specific
+service (DataTypeService implementation) is responsible for keeping the sync
 metadata in sync with the data changes. In some cases the metadata consistency
 with the data is guaranteed by owning the storage implementation and in some
 cases that is provided by piggybacking on the native storage implementation and
@@ -361,7 +361,7 @@ of Sync may sometimes be blocked on network connectivity and gives a user plenty
 of time to make local changes that remain untracked by Sync.
 
 USS avoids this problem by allowing the change processor component
-(SharedModelTypeProcessor) to handle local changes and keep updating related
+(SharedDataTypeProcessor) to handle local changes and keep updating related
 sync metadata regardless of whether the rest of Sync engine is up and running.
 This is possible because the storage of sync metadata doesn’t depend on the Sync
 backend anymore.
@@ -413,7 +413,7 @@ complexity around the directory access with the transactions, directory
 persistence, integrity checking, etc is completely eliminated. Each syncable
 datatype becomes mostly independent from any other datatype. The type specific
 complexity that is still present in the directory implementation should be moved
-all the way to type specific ModelTypeService implementation. The core of Sync
+all the way to type specific DataTypeService implementation. The core of Sync
 engine should become more or less a streamlined messaging pipeline with conflict
 resolution logic.
 

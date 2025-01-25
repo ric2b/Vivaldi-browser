@@ -45,11 +45,11 @@ TEST_F(HlslIRTest, SetsUsage) {
     auto* cmp = b.Constant(true);
 
     Vector<core::ir::Value*, 3> args = {false_, true_, cmp};
-    auto* t = b.ir.allocators.instructions.Create<Ternary>(b.InstructionResult(ty.u32()), args);
+    auto* t = b.ir.CreateInstruction<Ternary>(b.InstructionResult(ty.u32()), args);
 
-    EXPECT_THAT(false_->Usages(), testing::UnorderedElementsAre(core::ir::Usage{t, 0u}));
-    EXPECT_THAT(true_->Usages(), testing::UnorderedElementsAre(core::ir::Usage{t, 1u}));
-    EXPECT_THAT(cmp->Usages(), testing::UnorderedElementsAre(core::ir::Usage{t, 2u}));
+    EXPECT_THAT(false_->UsagesUnsorted(), testing::UnorderedElementsAre(core::ir::Usage{t, 0u}));
+    EXPECT_THAT(true_->UsagesUnsorted(), testing::UnorderedElementsAre(core::ir::Usage{t, 1u}));
+    EXPECT_THAT(cmp->UsagesUnsorted(), testing::UnorderedElementsAre(core::ir::Usage{t, 2u}));
 }
 
 TEST_F(HlslIRTest, Result) {
@@ -58,7 +58,7 @@ TEST_F(HlslIRTest, Result) {
     auto* cmp = b.Constant(true);
 
     Vector<core::ir::Value*, 3> args = {false_, true_, cmp};
-    auto* t = b.ir.allocators.instructions.Create<Ternary>(b.InstructionResult(ty.u32()), args);
+    auto* t = b.ir.CreateInstruction<Ternary>(b.InstructionResult(ty.u32()), args);
 
     EXPECT_EQ(t->Results().Length(), 1u);
 
@@ -72,7 +72,7 @@ TEST_F(HlslIRTest, Clone) {
     auto* cmp = b.Constant(true);
 
     Vector<core::ir::Value*, 3> args = {false_, true_, cmp};
-    auto* t = b.ir.allocators.instructions.Create<Ternary>(b.InstructionResult(ty.u32()), args);
+    auto* t = b.ir.CreateInstruction<Ternary>(b.InstructionResult(ty.u32()), args);
 
     auto* new_t = clone_ctx.Clone(t);
 

@@ -37,6 +37,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "build/build_config.h"
@@ -50,13 +51,13 @@
 #include "chrome/browser/ash/accessibility/fullscreen_magnifier_test_helper.h"
 #include "chrome/browser/ash/accessibility/magnification_manager.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
-#include "chrome/browser/ash/input_method/ui/candidate_window_view.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/input_method/candidate_window_view.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/browser/ui/ash/shelf/app_shortcut_shelf_item_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
@@ -97,6 +98,8 @@ namespace ash {
 
 namespace {
 
+const char* kChromeVoxPerformCommandMetric =
+    "Accessibility.ChromeVox.PerformCommand";
 const double kExpectedPhoneticSpeechAndHintDelayMS = 1000;
 
 }  // namespace
@@ -364,7 +367,7 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, LearnModeHardwareKeys) {
   sm_.Call([this]() { SendKeyPress(ui::VKEY_F4); });
   sm_.ExpectSpeech("toggle full screen");
   sm_.Call([this]() { SendKeyPress(ui::VKEY_F5); });
-  sm_.ExpectSpeech("window overview");
+  sm_.ExpectSpeech("show windows");
   sm_.Call([this]() { SendKeyPress(ui::VKEY_F6); });
   sm_.ExpectSpeech("Brightness down");
   sm_.Call([this]() { SendKeyPress(ui::VKEY_F7); });
@@ -442,6 +445,44 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, OpenLogPage) {
   });
   sm_.ExpectSpeech("chromevox-log");
   sm_.Replay();
+}
+
+IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest,
+                       CheckChromeVoxPerformCommandMetric) {
+  EnableChromeVox(/*check_for_intro=*/false);
+  base::HistogramTester histogram_tester;
+
+  // Command.ANNOUNCE_BATTERY_DESCRIPTION
+  sm_.Call(
+      [this]() { ExecuteCommandHandlerCommand("announceBatteryDescription"); });
+  sm_.ExpectSpeechPattern("*");
+  // Command.NEXT_OBJECT
+  sm_.Call([this]() { ExecuteCommandHandlerCommand("nextObject"); });
+  sm_.ExpectSpeechPattern("*");
+  // Command.DECREASE_TTS_RATE
+  sm_.Call([this]() { ExecuteCommandHandlerCommand("decreaseTtsRate"); });
+  sm_.ExpectSpeechPattern("*");
+  // Command.NEXT_BUTTON
+  sm_.Call([this]() { ExecuteCommandHandlerCommand("nextButton"); });
+  sm_.ExpectSpeechPattern("*");
+  // Command.HELP
+  sm_.Call([this]() { ExecuteCommandHandlerCommand("help"); });
+  sm_.ExpectSpeechPattern("*");
+  sm_.Replay();
+
+  histogram_tester.ExpectBucketCount(
+      kChromeVoxPerformCommandMetric,
+      0 /*ChromeVoxCommand.ANNOUNCE_BATTERY_DESCRIPTION*/, 1);
+  histogram_tester.ExpectBucketCount(kChromeVoxPerformCommandMetric,
+                                     81 /*ChromeVoxCommand.NEXT_OBJECT*/, 1);
+  histogram_tester.ExpectBucketCount(kChromeVoxPerformCommandMetric,
+                                     12 /*ChromeVoxCommand.DECREASE_TTS_RATE*/,
+                                     1);
+  histogram_tester.ExpectBucketCount(kChromeVoxPerformCommandMetric,
+                                     55 /*ChromeVoxCommand.NEXT_BUTTON*/, 1);
+  histogram_tester.ExpectBucketCount(kChromeVoxPerformCommandMetric,
+                                     36 /*ChromeVoxCommand.HELP*/, 1);
+  histogram_tester.ExpectTotalCount(kChromeVoxPerformCommandMetric, 5);
 }
 
 class NotificationCenterSpokenFeedbackTest : public LoggedInSpokenFeedbackTest {
@@ -1229,9 +1270,6 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
       "a keyboard.");
 
   sm_.Call([this]() { SendKeyPress(ui::VKEY_TAB); });
-  if (!ash::features::IsOverviewNewFocusEnabled()) {
-    sm_.ExpectSpeechPattern(", window");
-  }
   sm_.ExpectSpeechPattern(
       "*data:text slash html;charset equal utf-8, percent 0A less than "
       "button autofocus greater than Click me less than slash button greater "
@@ -2433,13 +2471,9 @@ IN_PROC_BROWSER_TEST_F(DeskTemplatesSpokenFeedbackTest, DeskTemplatesBasic) {
 
   // The first item in the tab order is the template card, which is a button. It
   // has the same name as the desk it was created from, in this case the default
-  // desk name is "Desk 1". With new focus enabled, we focus the name view
-  // first. Then we can go backwards to the template card, which is a button.
-  if (ash::features::IsOverviewNewFocusEnabled()) {
-    sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_TAB); });
-  } else {
-    sm_.Call([this]() { SendKeyPress(ui::VKEY_TAB); });
-  }
+  // desk name is "Desk 1". The name view will be focused first, then we can go
+  // backwards to the template card, which is a button.
+  sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_TAB); });
   sm_.ExpectSpeechPattern("Template, Desk 1");
   sm_.ExpectSpeech("Button");
   sm_.ExpectSpeech("Press Ctrl plus W to delete");

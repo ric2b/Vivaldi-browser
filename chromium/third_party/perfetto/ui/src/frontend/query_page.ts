@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {SimpleResizeObserver} from '../base/resize_observer';
 import {undoCommonChatAppReplacements} from '../base/string_utils';
 import {QueryResponse, runQuery} from '../common/queries';
@@ -21,7 +20,6 @@ import {raf} from '../core/raf_scheduler';
 import {Engine} from '../trace_processor/engine';
 import {Callout} from '../widgets/callout';
 import {Editor} from '../widgets/editor';
-
 import {globals} from './globals';
 import {createPage} from './pages';
 import {QueryHistoryComponent, queryHistoryStorage} from './query_history';
@@ -111,6 +109,7 @@ class QueryInput implements m.ClassComponent {
 
       onUpdate: (text: string) => {
         state.enteredText = text;
+        raf.scheduleFullRedraw();
       },
     });
   }
@@ -121,6 +120,14 @@ export const QueryPage = createPage({
     return m(
       '.query-page',
       m(Callout, 'Enter query and press Cmd/Ctrl + Enter'),
+      state.enteredText.includes('"') &&
+        m(
+          Callout,
+          {icon: 'warning'},
+          `" (double quote) character observed in query; if this is being used to ` +
+            `define a string, please use ' (single quote) instead. Using double quotes ` +
+            `can cause subtle problems which are very hard to debug.`,
+        ),
       m(QueryInput),
       state.executedQuery === undefined
         ? null

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "gpu/command_buffer/service/gles2_cmd_decoder_unittest_base.h"
 
 #include <stddef.h>
@@ -153,6 +158,9 @@ void GLES2DecoderTestBase::OnFenceSyncRelease(uint64_t release) {}
 void GLES2DecoderTestBase::OnDescheduleUntilFinished() {}
 void GLES2DecoderTestBase::OnRescheduleAfterFinished() {}
 void GLES2DecoderTestBase::OnSwapBuffers(uint64_t swap_id, uint32_t flags) {}
+bool GLES2DecoderTestBase::ShouldYield() {
+  return false;
+}
 
 void GLES2DecoderTestBase::SetUp() {
   InitState init;
@@ -2331,6 +2339,9 @@ void GLES2DecoderPassthroughTestBase::OnDescheduleUntilFinished() {}
 void GLES2DecoderPassthroughTestBase::OnRescheduleAfterFinished() {}
 void GLES2DecoderPassthroughTestBase::OnSwapBuffers(uint64_t swap_id,
                                                     uint32_t flags) {}
+bool GLES2DecoderPassthroughTestBase::ShouldYield() {
+  return false;
+}
 
 void GLES2DecoderPassthroughTestBase::SetUp() {
   base::CommandLine::Init(0, nullptr);
@@ -2349,9 +2360,8 @@ void GLES2DecoderPassthroughTestBase::SetUp() {
   context_creation_attribs_.bind_generates_resource = true;
 
   gl::init::InitializeStaticGLBindingsImplementation(
-      gl::GLImplementationParts(gl::ANGLEImplementation::kNull), false);
+      gl::GLImplementationParts(gl::ANGLEImplementation::kNull));
   display_ = gl::init::InitializeGLOneOffPlatformImplementation(
-      /*fallback_to_software_gl=*/false,
       /*disable_gl_drawing=*/false,
       /*init_extensions=*/true,
       /*gpu_preference=*/gl::GpuPreference::kDefault);

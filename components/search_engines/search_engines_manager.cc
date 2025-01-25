@@ -1,6 +1,7 @@
 // Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
 
 #include <set>
+#include <string_view>
 
 #include "app/vivaldi_apptools.h"
 #include "base/files/file_util.h"
@@ -8,7 +9,6 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/chrome_paths.h"
 #include "chromium/base/strings/strcat.h"
@@ -27,6 +27,7 @@
 namespace TemplateURLPrepopulateData {
 PrepopulatedEngine google;
 PrepopulatedEngine::PrepopulatedEngine() {}
+//RegulatoryExtension::RegulatoryExtension() {}
 }  // namespace TemplateURLPrepopulateData
 
 namespace {

@@ -15,10 +15,7 @@ import {
   waitForAria,
   waitForFunction,
 } from '../../../test/shared/helper.js';
-import {
-  describe,
-  it,
-} from '../../../test/shared/mocha-extensions.js';
+
 import {assertMatchesJSONSnapshot} from '../../../test/shared/snapshots.js';
 
 import {
@@ -633,7 +630,7 @@ describe('Recorder', function() {
       const controller = await getRecordingController();
       await controller.evaluate(element => {
         return element.handleActions(
-            'chrome-recorder.create-recording' as RecorderActions.CreateRecording,
+            'chrome-recorder.create-recording' as RecorderActions.CREATE_RECORDING,
         );
       });
       const page = await controller.evaluate(element => {

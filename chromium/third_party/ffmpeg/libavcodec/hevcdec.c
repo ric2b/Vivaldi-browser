@@ -390,9 +390,12 @@ static int export_stream_params_from_sei(HEVCContext *s)
         avctx->color_trc = s->sei.common.alternative_transfer.preferred_transfer_characteristics;
     }
 
-    if (s->sei.common.film_grain_characteristics.present ||
-        s->sei.common.aom_film_grain.enable)
-        avctx->properties |= FF_CODEC_PROPERTY_FILM_GRAIN;
+    if ((s->sei.common.film_grain_characteristics &&
+         s->sei.common.film_grain_characteristics->present) ||
+        (s->sei.common.aom_film_grain &&
+         s->sei.common.aom_film_grain->enable)) {
+      avctx->properties |= FF_CODEC_PROPERTY_FILM_GRAIN;
+    }
 
     return 0;
 }
@@ -2888,8 +2891,11 @@ static int hevc_frame_start(HEVCContext *s)
     else
         s->ref->frame->flags &= ~AV_FRAME_FLAG_KEY;
 
-    s->ref->needs_fg = (s->sei.common.film_grain_characteristics.present ||
-                        s->sei.common.aom_film_grain.enable) &&
+    s->ref->needs_fg =
+        ((s->sei.common.film_grain_characteristics &&
+          s->sei.common.film_grain_characteristics->present) ||
+         (s->sei.common.aom_film_grain &&
+          s->sei.common.aom_film_grain->enable)) &&
         !(s->avctx->export_side_data & AV_CODEC_EXPORT_DATA_FILM_GRAIN) &&
         !s->avctx->hwaccel;
 
@@ -2898,13 +2904,16 @@ static int hevc_frame_start(HEVCContext *s)
         goto fail;
 
     if (s->ref->needs_fg &&
-        (s->sei.common.film_grain_characteristics.present &&
-         !ff_h274_film_grain_params_supported(s->sei.common.film_grain_characteristics.model_id,
-                                              s->ref->frame->format)
-         || !av_film_grain_params_select(s->ref->frame))) {
-        av_log_once(s->avctx, AV_LOG_WARNING, AV_LOG_DEBUG, &s->film_grain_warning_shown,
-                    "Unsupported film grain parameters. Ignoring film grain.\n");
-        s->ref->needs_fg = 0;
+         (s->sei.common.film_grain_characteristics &&
+             s->sei.common.film_grain_characteristics->present &&
+             !ff_h274_film_grain_params_supported(
+                 s->sei.common.film_grain_characteristics->model_id,
+                 s->ref->frame->format) ||
+         !av_film_grain_params_select(s->ref->frame))) {
+      av_log_once(s->avctx, AV_LOG_WARNING, AV_LOG_DEBUG,
+                  &s->film_grain_warning_shown,
+                  "Unsupported film grain parameters. Ignoring film grain.\n");
+      s->ref->needs_fg = 0;
     }
 
     if (s->ref->needs_fg) {

@@ -506,6 +506,10 @@ ResultOrError<VulkanDeviceKnobs> Device::CreateDevice(VkPhysicalDevice vkPhysica
         usedKnobs.features.dualSrcBlend = VK_TRUE;
     }
 
+    if (HasFeature(Feature::ClipDistances)) {
+        usedKnobs.features.shaderClipDistance = VK_TRUE;
+    }
+
     if (HasFeature(Feature::R8UnormStorage)) {
         usedKnobs.features.shaderStorageImageExtendedFormats = VK_TRUE;
     }
@@ -534,6 +538,12 @@ ResultOrError<VulkanDeviceKnobs> Device::CreateDevice(VkPhysicalDevice vkPhysica
         usedKnobs.samplerYCbCrConversionFeatures.samplerYcbcrConversion = VK_TRUE;
         featuresChain.Add(&usedKnobs.samplerYCbCrConversionFeatures,
                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES);
+    }
+
+    if (HasFeature(Feature::MultiDrawIndirect)) {
+        DAWN_ASSERT(usedKnobs.HasExt(DeviceExt::DrawIndirectCount) &&
+                    mDeviceInfo.features.multiDrawIndirect == VK_TRUE);
+        usedKnobs.features.multiDrawIndirect = VK_TRUE;
     }
 
     // Find a universal queue family

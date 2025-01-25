@@ -61,6 +61,6 @@ test(
   args : [
     '--lib', libdrm_etnaviv,
     '--symbols-file', files('etnaviv-symbols.txt'),
-    '--nm', prog_nm.path(),
+    '--nm', prog_nm.full_path(),
   ],
 )

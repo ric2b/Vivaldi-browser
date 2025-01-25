@@ -83,9 +83,6 @@ class CONTENT_EXPORT TouchEmulatorImpl : public input::TouchEmulator {
     return suppress_next_fling_cancel_;
   }
 
-  // NOTE(david@vivaldi.com): Get default cursor.
-  const ui::Cursor &GetDefaultCursor() const { return touch_cursor_; }
-
  private:
   // ui::GestureProviderClient implementation.
   void OnGestureEvent(const ui::GestureEventData& gesture) override;

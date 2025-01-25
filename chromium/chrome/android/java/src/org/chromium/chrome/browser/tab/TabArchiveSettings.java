@@ -27,8 +27,18 @@ public class TabArchiveSettings {
         void onSettingChanged();
     }
 
-    @VisibleForTesting static final boolean ARCHIVE_ENABLED_DEFAULT = true;
-    @VisibleForTesting static final boolean AUTO_DELETE_ENABLED_DEFAULT = true;
+    private static boolean sIphShownThisSession;
+
+    /** Sets whether the iph was shown this session. */
+    public static void setIphShownThisSession(boolean iphShownThisSession) {
+        sIphShownThisSession = iphShownThisSession;
+    }
+
+    /** Returns whether the iph was shown this session. */
+    public static boolean getIphShownThisSession() {
+        return sIphShownThisSession;
+    }
+
     @VisibleForTesting static final boolean DIALOG_IPH_DEFAULT = true;
     private static final Set<String> PREF_KEYS_FOR_NOTIFICATIONS =
             Set.of(
@@ -83,7 +93,9 @@ public class TabArchiveSettings {
         // this will need to be turned on manually.
         return mPrefsManager.readBoolean(
                 ChromePreferenceKeys.TAB_DECLUTTER_ARCHIVE_ENABLED,
-                BuildConfig.IS_FOR_TEST ? false : ARCHIVE_ENABLED_DEFAULT);
+                BuildConfig.IS_FOR_TEST
+                        ? false
+                        : ChromeFeatureList.sAndroidTabDeclutterArchiveEnabled.getValue());
     }
 
     /** Sets whether archive is enabled in settings. */
@@ -121,9 +133,10 @@ public class TabArchiveSettings {
 
     /** Returns whether auto-deletion of archived tabs is enabled. */
     public boolean isAutoDeleteEnabled() {
-        return mPrefsManager.readBoolean(
-                ChromePreferenceKeys.TAB_DECLUTTER_AUTO_DELETE_ENABLED,
-                AUTO_DELETE_ENABLED_DEFAULT);
+        return getArchiveEnabled()
+                && mPrefsManager.readBoolean(
+                        ChromePreferenceKeys.TAB_DECLUTTER_AUTO_DELETE_ENABLED,
+                        ChromeFeatureList.sAndroidTabDeclutterAutoDeleteEnabled.getValue());
     }
 
     /** Sets whether auto deletion for archived tabs is enabled in settings. */
@@ -163,13 +176,25 @@ public class TabArchiveSettings {
 
     /** Returns whether the dialog iph should be shown. */
     public boolean shouldShowDialogIph() {
-        return mPrefsManager.readBoolean(
-                ChromePreferenceKeys.TAB_DECLUTTER_DIALOG_IPH, DIALOG_IPH_DEFAULT);
+        return mPrefsManager.readInt(ChromePreferenceKeys.TAB_DECLUTTER_DIALOG_IPH_DISMISS_COUNT, 0)
+                < ChromeFeatureList.sAndroidTabDeclutterIphMessageDismissThreshold.getValue();
     }
 
     /** Sets whether the dialog iph should be shown. */
-    public void setShouldShowDialogIph(boolean shouldShow) {
-        mPrefsManager.writeBoolean(ChromePreferenceKeys.TAB_DECLUTTER_DIALOG_IPH, shouldShow);
+    public void markDialogIphDismissed() {
+        mPrefsManager.writeInt(
+                ChromePreferenceKeys.TAB_DECLUTTER_DIALOG_IPH_DISMISS_COUNT,
+                mPrefsManager.readInt(ChromePreferenceKeys.TAB_DECLUTTER_DIALOG_IPH_DISMISS_COUNT)
+                        + 1);
+    }
+
+    public void setShouldShowDialogIphForTesting(boolean shouldShow) {
+        mPrefsManager.writeInt(
+                ChromePreferenceKeys.TAB_DECLUTTER_DIALOG_IPH_DISMISS_COUNT,
+                shouldShow
+                        ? 0
+                        : ChromeFeatureList.sAndroidTabDeclutterIphMessageDismissThreshold
+                                .getValue());
     }
 
     // Private methods.
@@ -189,6 +214,6 @@ public class TabArchiveSettings {
         mPrefsManager.removeKey(ChromePreferenceKeys.TAB_DECLUTTER_ARCHIVE_TIME_DELTA_HOURS);
         mPrefsManager.removeKey(ChromePreferenceKeys.TAB_DECLUTTER_AUTO_DELETE_ENABLED);
         mPrefsManager.removeKey(ChromePreferenceKeys.TAB_DECLUTTER_AUTO_DELETE_TIME_DELTA_HOURS);
-        mPrefsManager.removeKey(ChromePreferenceKeys.TAB_DECLUTTER_DIALOG_IPH);
+        mPrefsManager.removeKey(ChromePreferenceKeys.TAB_DECLUTTER_DIALOG_IPH_DISMISS_COUNT);
     }
 }

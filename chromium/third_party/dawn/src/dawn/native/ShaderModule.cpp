@@ -352,11 +352,9 @@ ResultOrError<PixelLocalMemberType> FromTintPixelLocalMemberType(
 
 ResultOrError<tint::Program> ParseWGSL(const tint::Source::File* file,
                                        const tint::wgsl::AllowedFeatures& allowedFeatures,
-                                       const tint::wgsl::ValidationMode mode,
                                        const std::vector<tint::wgsl::Extension>& internalExtensions,
                                        OwnedCompilationMessages* outMessages) {
     tint::wgsl::reader::Options options;
-    options.mode = mode;
     options.allowed_features = allowedFeatures;
     options.allowed_features.extensions.insert(internalExtensions.begin(),
                                                internalExtensions.end());
@@ -670,10 +668,11 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
         metadata->usesNumWorkgroups = entryPoint.num_workgroups_used;
     }
 
+    metadata->usesTextureLoadWithDepthTexture = entryPoint.has_texture_load_with_depth_texture;
+
     const CombinedLimits& limits = device->GetLimits();
     const uint32_t maxVertexAttributes = limits.v1.maxVertexAttributes;
     const uint32_t maxInterStageShaderVariables = limits.v1.maxInterStageShaderVariables;
-    const uint32_t maxInterStageShaderComponents = limits.v1.maxInterStageShaderComponents;
 
     metadata->usedInterStageVariables.resize(maxInterStageShaderVariables);
     metadata->interStageVariables.resize(maxInterStageShaderVariables);
@@ -696,7 +695,12 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
             metadata->usedVertexInputs.set(location);
         }
 
-        // Vertex ouput (inter-stage variables) reflection.
+        // Vertex output (inter-stage variables) reflection.
+        uint32_t clipDistancesSlots = 0;
+        if (entryPoint.clip_distances_size.has_value()) {
+            clipDistancesSlots = RoundUp(*entryPoint.clip_distances_size, 4) / 4;
+        }
+        uint32_t minInvalidLocation = maxInterStageShaderVariables - clipDistancesSlots;
         for (const auto& outputVar : entryPoint.output_variables) {
             EntryPointMetadata::InterStageVariableInfo variable;
             variable.name = outputVar.variable_name;
@@ -711,10 +715,19 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
                                 outputVar.interpolation_sampling));
 
             uint32_t location = outputVar.attributes.location.value();
-            if (DelayedInvalidIf(location >= maxInterStageShaderVariables,
-                                 "Vertex output variable \"%s\" has a location (%u) that "
-                                 "is greater than or equal to (%u).",
-                                 outputVar.name, location, maxInterStageShaderVariables)) {
+            if (location >= minInvalidLocation) {
+                if (clipDistancesSlots > 0) {
+                    metadata->infringedLimitErrors.push_back(absl::StrFormat(
+                        "Vertex output variable \"%s\" has a location (%u) that "
+                        "is too large. It should be less than (%u = %u - %u (clip_distances)).",
+                        outputVar.name, location, minInvalidLocation, maxInterStageShaderVariables,
+                        clipDistancesSlots));
+                } else {
+                    metadata->infringedLimitErrors.push_back(
+                        absl::StrFormat("Vertex output variable \"%s\" has a location (%u) that "
+                                        "is too large. It should be less than (%u).",
+                                        outputVar.name, location, minInvalidLocation));
+                }
                 continue;
             }
 
@@ -723,10 +736,23 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
         }
 
         // Other vertex metadata.
-        metadata->totalInterStageShaderComponents = 4 * entryPoint.output_variables.size();
-        DelayedInvalidIf(metadata->totalInterStageShaderComponents > maxInterStageShaderComponents,
-                         "Total vertex output components count (%u) exceeds the maximum (%u).",
-                         metadata->totalInterStageShaderComponents, maxInterStageShaderComponents);
+        metadata->totalInterStageShaderVariables =
+            entryPoint.output_variables.size() + clipDistancesSlots;
+        if (metadata->totalInterStageShaderVariables > maxInterStageShaderVariables) {
+            size_t userDefinedOutputVariables = entryPoint.output_variables.size();
+
+            std::ostringstream builtinInfo;
+            if (entryPoint.clip_distances_size.has_value()) {
+                builtinInfo << " + " << RoundUp(*entryPoint.clip_distances_size, 4) / 4
+                            << " (clip_distances)";
+            }
+
+            metadata->infringedLimitErrors.push_back(absl::StrFormat(
+                "Total vertex output variables count (%u = %u (user-defined)%s) exceeds the "
+                "maximum (%u).",
+                metadata->totalInterStageShaderVariables, userDefinedOutputVariables,
+                builtinInfo.str(), maxInterStageShaderVariables));
+        }
 
         metadata->usesVertexIndex = entryPoint.vertex_index_used;
         metadata->usesInstanceIndex = entryPoint.instance_index_used;
@@ -766,25 +792,51 @@ ResultOrError<std::unique_ptr<EntryPointMetadata>> ReflectEntryPointUsingTint(
             metadata->interStageVariables[location] = variable;
         }
 
-        uint32_t totalInterStageShaderComponents = 4 * entryPoint.input_variables.size();
+        uint32_t totalInterStageShaderVariables = entryPoint.input_variables.size();
 
         // Other fragment metadata
-        if (entryPoint.front_facing_used) {
-            totalInterStageShaderComponents += 1;
-        }
-        if (entryPoint.input_sample_mask_used) {
-            totalInterStageShaderComponents += 1;
-        }
         metadata->usesSampleMaskOutput = entryPoint.output_sample_mask_used;
-        if (entryPoint.sample_index_used) {
-            totalInterStageShaderComponents += 1;
+        metadata->usesSampleIndex = entryPoint.sample_index_used;
+        if (entryPoint.front_facing_used || entryPoint.input_sample_mask_used ||
+            entryPoint.sample_index_used) {
+            ++totalInterStageShaderVariables;
         }
         metadata->usesFragDepth = entryPoint.frag_depth_used;
 
-        metadata->totalInterStageShaderComponents = totalInterStageShaderComponents;
-        DelayedInvalidIf(totalInterStageShaderComponents > maxInterStageShaderComponents,
-                         "Total fragment input components count (%u) exceeds the maximum (%u).",
-                         totalInterStageShaderComponents, maxInterStageShaderComponents);
+        metadata->totalInterStageShaderVariables = totalInterStageShaderVariables;
+        if (metadata->totalInterStageShaderVariables > maxInterStageShaderVariables) {
+            size_t userDefinedInputVariables = entryPoint.input_variables.size();
+
+            std::ostringstream builtinInfo;
+            if (metadata->totalInterStageShaderVariables > userDefinedInputVariables) {
+                builtinInfo << " + 1 (";
+                bool isFirst = true;
+                if (entryPoint.front_facing_used) {
+                    builtinInfo << "front_facing";
+                    isFirst = false;
+                }
+                if (entryPoint.input_sample_mask_used) {
+                    if (!isFirst) {
+                        builtinInfo << "|";
+                    }
+                    builtinInfo << "sample_mask";
+                    isFirst = false;
+                }
+                if (entryPoint.sample_index_used) {
+                    if (!isFirst) {
+                        builtinInfo << "|";
+                    }
+                    builtinInfo << "sample_index";
+                    isFirst = false;
+                }
+            }
+
+            metadata->infringedLimitErrors.push_back(absl::StrFormat(
+                "Total fragment input variables count (%u = %u (user-defined)%s) exceeds the "
+                "maximum (%u).",
+                metadata->totalInterStageShaderVariables, userDefinedInputVariables,
+                builtinInfo.str(), maxInterStageShaderVariables));
+        }
 
         // Fragment output reflection.
         uint32_t maxColorAttachments = limits.v1.maxColorAttachments;
@@ -1087,33 +1139,29 @@ MaybeError ValidateAndParseShaderModule(
     // A WGSL (or SPIR-V, if enabled) subdescriptor is required, and a Dawn-specific SPIR-V options
 // descriptor is allowed when using SPIR-V.
 #if TINT_BUILD_SPV_READER
-    DAWN_TRY_ASSIGN(moduleType,
-                    (descriptor.ValidateBranches<
-                        Branch<ShaderModuleWGSLDescriptor, ShaderModuleCompilationOptions>,
-                        Branch<ShaderModuleSPIRVDescriptor, DawnShaderModuleSPIRVOptionsDescriptor,
-                               ShaderModuleCompilationOptions>>()));
+    DAWN_TRY_ASSIGN(
+        moduleType,
+        (descriptor
+             .ValidateBranches<Branch<ShaderSourceWGSL, ShaderModuleCompilationOptions>,
+                               Branch<ShaderSourceSPIRV, DawnShaderModuleSPIRVOptionsDescriptor,
+                                      ShaderModuleCompilationOptions>>()));
 #else
-    DAWN_TRY_ASSIGN(moduleType,
-                    (descriptor.ValidateBranches<
-                        Branch<ShaderModuleWGSLDescriptor, ShaderModuleCompilationOptions>>()));
+    DAWN_TRY_ASSIGN(
+        moduleType,
+        (descriptor.ValidateBranches<Branch<ShaderSourceWGSL, ShaderModuleCompilationOptions>>()));
 #endif
     DAWN_ASSERT(moduleType != wgpu::SType(0u));
 
     ScopedTintICEHandler scopedICEHandler(device);
 
-    // Multiple paths may use a WGSL descriptor so declare it here now.
-    const ShaderModuleWGSLDescriptor* wgslDesc = nullptr;
-#if TINT_BUILD_WGSL_WRITER
-    ShaderModuleWGSLDescriptor newWgslDesc = {};
-    std::string newWgslCode;
-#endif  // TINT_BUILD_WGSL_WRITER
+    const ShaderSourceWGSL* wgslDesc = nullptr;
 
     switch (moduleType) {
 #if TINT_BUILD_SPV_READER
-        case wgpu::SType::ShaderModuleSPIRVDescriptor: {
+        case wgpu::SType::ShaderSourceSPIRV: {
             DAWN_INVALID_IF(device->IsToggleEnabled(Toggle::DisallowSpirv),
                             "SPIR-V is disallowed.");
-            const auto* spirvDesc = descriptor.Get<ShaderModuleSPIRVDescriptor>();
+            const auto* spirvDesc = descriptor.Get<ShaderSourceSPIRV>();
             const auto* spirvOptions = descriptor.Get<DawnShaderModuleSPIRVOptionsDescriptor>();
 
             // TODO(dawn:2033): Avoid unnecessary copies of the SPIR-V code.
@@ -1131,8 +1179,8 @@ MaybeError ValidateAndParseShaderModule(
             return {};
         }
 #endif  // TINT_BUILD_SPV_READER
-        case wgpu::SType::ShaderModuleWGSLDescriptor: {
-            wgslDesc = descriptor.Get<ShaderModuleWGSLDescriptor>();
+        case wgpu::SType::ShaderSourceWGSL: {
+            wgslDesc = descriptor.Get<ShaderSourceWGSL>();
             break;
         }
         default:
@@ -1154,10 +1202,8 @@ MaybeError ValidateAndParseShaderModule(
     }
 
     tint::Program program;
-    auto validationMode = device->IsCompatibilityMode() ? tint::wgsl::ValidationMode::kCompat
-                                                        : tint::wgsl::ValidationMode::kFull;
     DAWN_TRY_ASSIGN(program, ParseWGSL(tintFile.get(), device->GetWGSLAllowedFeatures(),
-                                       validationMode, internalExtensions, outMessages));
+                                       internalExtensions, outMessages));
 
     parseResult->tintProgram = AcquireRef(new TintProgram(std::move(program), std::move(tintFile)));
 
@@ -1236,16 +1282,6 @@ MaybeError ValidateCompatibilityWithPipelineLayout(DeviceBase* device,
         const TextureBindingInfo& sampledTextureBindingInfo =
             std::get<TextureBindingInfo>(textureInfo.bindingLayout);
 
-        // Uint/Sint can't be statically used with a sampler, so they any
-        // texture bindings reflected must be float or depth textures. If
-        // the shader uses a float/depth texture but the bind group layout
-        // specifies a uint/sint texture binding,
-        // |ValidateCompatibilityWithBindGroupLayout| will fail since the
-        // sampleType does not match.
-        DAWN_ASSERT(sampledTextureBindingInfo.sampleType != wgpu::TextureSampleType::Undefined &&
-                    sampledTextureBindingInfo.sampleType != wgpu::TextureSampleType::Uint &&
-                    sampledTextureBindingInfo.sampleType != wgpu::TextureSampleType::Sint);
-
         DAWN_INVALID_IF(
             sampledTextureBindingInfo.sampleType == wgpu::TextureSampleType::UnfilterableFloat,
             "Texture binding (group:%u, binding:%u) is %s but used statically with a sampler "
@@ -1318,10 +1354,10 @@ ShaderModuleBase::ShaderModuleBase(DeviceBase* device,
     : Base(device, descriptor->label),
       mType(Type::Undefined),
       mInternalExtensions(std::move(internalExtensions)) {
-    if (auto* spirvDesc = descriptor.Get<ShaderModuleSPIRVDescriptor>()) {
+    if (auto* spirvDesc = descriptor.Get<ShaderSourceSPIRV>()) {
         mType = Type::Spirv;
         mOriginalSpirv.assign(spirvDesc->code, spirvDesc->code + spirvDesc->codeSize);
-    } else if (auto* wgslDesc = descriptor.Get<ShaderModuleWGSLDescriptor>()) {
+    } else if (auto* wgslDesc = descriptor.Get<ShaderSourceWGSL>()) {
         mType = Type::Wgsl;
         mWgsl = std::string(wgslDesc->code);
     } else {
@@ -1413,8 +1449,8 @@ ShaderModuleBase::ScopedUseTintProgram ShaderModuleBase::UseTintProgram() {
         // recreate mTintProgram, when the mTintProgram is required for initializing new
         // pipelines.
         ShaderModuleDescriptor descriptor;
-        ShaderModuleWGSLDescriptor wgslDescriptor;
-        ShaderModuleSPIRVDescriptor sprivDescriptor;
+        ShaderSourceWGSL wgslDescriptor;
+        ShaderSourceSPIRV sprivDescriptor;
 
         switch (mType) {
             case Type::Spirv:

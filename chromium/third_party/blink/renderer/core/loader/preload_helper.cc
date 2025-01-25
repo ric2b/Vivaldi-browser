@@ -153,8 +153,9 @@ bool MediaMatches(const String& media,
                   const ExecutionContext* execution_context) {
   MediaQuerySet* media_queries =
       MediaQuerySet::Create(media, execution_context);
-  MediaQueryEvaluator evaluator(media_values);
-  return evaluator.Eval(*media_queries);
+  MediaQueryEvaluator* evaluator =
+      MakeGarbageCollected<MediaQueryEvaluator>(media_values);
+  return evaluator->Eval(*media_queries);
 }
 
 KURL GetBestFitImageURL(const Document& document,
@@ -700,12 +701,25 @@ void PreloadHelper::PrefetchIfNeeded(const LinkLoadParameters& params,
 
   ResourceRequest resource_request(params.href);
 
+  bool as_document = EqualIgnoringASCIICase(params.as, "document");
+
+  // If this corresponds to a preload that we promoted to a prefetch, and the
+  // preload had `as="document"`, don't proceed because the original preload
+  // statement was invalid.
+  if (as_document && params.recursive_prefetch_token) {
+    document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kOther,
+        mojom::blink::ConsoleMessageLevel::kWarning,
+        String("Link header with rel=preload and as=document is unsupported")));
+    return;
+  }
+
   // Later a security check is done asserting that the initiator of a
   // cross-origin prefetch request is same-origin with the origin that the
   // browser process is aware of. However, since opaque request initiators are
   // always cross-origin with every other origin, we must not request
   // cross-origin prefetches from opaque requestors.
-  if (EqualIgnoringASCIICase(params.as, "document") &&
+  if (as_document &&
       !document.GetExecutionContext()->GetSecurityOrigin()->IsOpaque()) {
     resource_request.SetPrefetchMaybeForTopLevelNavigation(true);
 
@@ -912,10 +926,11 @@ void PreloadHelper::FetchCompressionDictionaryIfNeeded(
 
   FetchParameters link_fetch_params(std::move(resource_request), options);
   IdleRequestOptions* idle_options = IdleRequestOptions::Create();
-  document.RequestIdleCallback(
-      MakeGarbageCollected<LoadDictionaryWhenIdleTask>(
-          std::move(link_fetch_params), document.Fetcher(), pending_preload),
-      idle_options);
+  ScriptedIdleTaskController::From(*document.GetExecutionContext())
+      .RegisterCallback(MakeGarbageCollected<LoadDictionaryWhenIdleTask>(
+                            std::move(link_fetch_params), document.Fetcher(),
+                            pending_preload),
+                        idle_options);
 }
 
 Resource* PreloadHelper::StartPreload(ResourceType type,
@@ -944,10 +959,15 @@ Resource* PreloadHelper::StartPreload(ResourceType type,
 
       params.SetRequestContext(mojom::blink::RequestContextType::SCRIPT);
       params.SetRequestDestination(network::mojom::RequestDestination::kScript);
+      const bool v8_compile_hints_magic_comment_runtime_enabled =
+          RuntimeEnabledFeatures::JavaScriptCompileHintsMagicRuntimeEnabled(
+              document.GetExecutionContext());
+
       resource = ScriptResource::Fetch(
           params, resource_fetcher, nullptr, document.GetAgent().isolate(),
           ScriptResource::kAllowStreaming, v8_compile_hints_producer,
-          v8_compile_hints_consumer);
+          v8_compile_hints_consumer,
+          v8_compile_hints_magic_comment_runtime_enabled);
       break;
     }
     case ResourceType::kCSSStyleSheet:

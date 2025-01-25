@@ -4,7 +4,6 @@
 
 #include "components/viz/service/display/overlay_processor_win.h"
 
-#include <algorithm>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -27,7 +26,6 @@
 #include "components/viz/service/display/overlay_candidate_factory.h"
 #include "components/viz/service/display/overlay_processor_delegated_support.h"
 #include "ui/gfx/geometry/rect_conversions.h"
-#include "ui/gl/gl_switches.h"
 
 namespace viz {
 namespace {
@@ -39,6 +37,15 @@ constexpr gfx::Insets kDCLayerDebugBorderInsets = gfx::Insets(-2);
 // switch away after a large number of frames not needing DC layers have
 // been produced.
 constexpr int kNumberOfFramesBeforeDisablingDCLayers = 60;
+
+// The maximum number of quads to attempt for delegated compositing. This is an
+// arbitrary conservative value picked from experimentation. We don't expect to
+// hit these limits in practice, but this guards against degenerate cases.
+constexpr size_t kTooManyQuads = 2048;
+
+// Rounded corners have a higher performance cost in DWM so this value is lower
+// than |kTooManyQuads|.
+constexpr int kTooManyQuadsWithRoundedCorners = 256;
 
 gfx::Rect UpdateRenderPassFromOverlayData(
     const DCLayerOverlayProcessor::RenderPassOverlayData& overlay_data,
@@ -68,8 +75,7 @@ gfx::Rect UpdateRenderPassFromOverlayData(
   // compositing scenarios.
   if (!overlay_data.promoted_overlays.empty() ||
       (frame_has_delegated_ink &&
-       base::FeatureList::IsEnabled(
-           features::kUseDCompSurfacesForDelegatedInk))) {
+       features::ShouldUseDCompSurfacesForDelegatedInk())) {
     frames_since_using_dc_layers_map[render_pass->id] = 0;
     using_dc_layers = true;
   } else if ((was_using_dc_layers &&
@@ -120,21 +126,19 @@ OverlayCandidateFactory::OverlayContext WindowsDelegatedOverlayContext() {
   context.supports_rounded_display_masks = true;
   context.supports_mask_filter = true;
   context.transform_and_clip_rpdq = true;
-  context.allow_non_overlay_resources = base::FeatureList::IsEnabled(
-      features::kCopyNonOverlayResourcesToDCompSurfaces);
   return context;
 }
 
 }  // anonymous namespace
 
 OverlayProcessorWin::OverlayProcessorWin(
-    OutputSurface* output_surface,
+    OutputSurface::DCSupportLevel dc_support_level,
     const DebugRendererSettings* debug_settings,
     std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor)
-    : output_surface_(output_surface),
+    : dc_support_level_(dc_support_level),
       debug_settings_(debug_settings),
       dc_layer_overlay_processor_(std::move(dc_layer_overlay_processor)) {
-  DCHECK(output_surface_->capabilities().supports_dc_layers);
+  DCHECK_GT(dc_support_level_, OutputSurface::DCSupportLevel::kNone);
 }
 
 OverlayProcessorWin::~OverlayProcessorWin() = default;
@@ -212,12 +216,17 @@ DelegationStatus OverlayProcessorWin::ProcessOverlaysForDelegation(
     const SurfaceDamageRectList& surface_damage_rect_list_in_root_space,
     CandidateList* candidates,
     gfx::Rect* root_damage_rect) {
-  if (!features::IsDelegatedCompositingEnabled() || ForceDisableDelegation()) {
+  // Do not attempt delegated compositing if we do not support DComp textures
+  // (and therefore cannot possibly scanout quad resources) or if the feature is
+  // disabled.
+  if (dc_support_level_ < OutputSurface::DCSupportLevel::kDCompTexture ||
+      !features::IsDelegatedCompositingEnabled() || ForceDisableDelegation()) {
     return DelegationStatus::kCompositedFeatureDisabled;
   }
 
   const bool is_full_delegated_compositing =
-      !base::FeatureList::IsEnabled(features::kDelegatedCompositingLimitToUi);
+      features::kDelegatedCompositingModeParam.Get() ==
+      features::DelegatedCompositingMode::kFull;
 
   OverlayCandidateFactory factory(
       render_passes->back().get(), resource_provider,
@@ -488,6 +497,10 @@ OverlayProcessorWin::TryDelegatedCompositing(
     return base::unexpected(DelegationStatus::kCompositedCopyRequest);
   }
 
+  if (root_render_pass->quad_list.size() > kTooManyQuads) {
+    return base::unexpected(DelegationStatus::kCompositedTooManyQuads);
+  }
+
   if (root_render_pass->is_color_conversion_pass) {
     // We don't expect to handle a color conversion pass (e.g. for frames with
     // HDR content) with delegated compositing. See: crbug.com/41497086
@@ -496,6 +509,8 @@ OverlayProcessorWin::TryDelegatedCompositing(
 
   DelegatedCompositingResult result;
   result.candidates.reserve(root_render_pass->quad_list.size());
+
+  int draw_quad_rounded_corner_count = 0;
 
   // Try to promote all the quads in the root pass to overlay.
   for (auto it = root_render_pass->quad_list.begin();
@@ -553,6 +568,14 @@ OverlayProcessorWin::TryDelegatedCompositing(
     }
 
     result.candidates.push_back(std::move(dc_layer).value());
+
+    const auto& candidate = result.candidates.back();
+    if (!candidate.rounded_corners.IsEmpty()) {
+      draw_quad_rounded_corner_count++;
+      if (draw_quad_rounded_corner_count > kTooManyQuadsWithRoundedCorners) {
+        return base::unexpected(DelegationStatus::kCompositedTooManyQuads);
+      }
+    }
   }
 
   return base::ok(std::move(result));

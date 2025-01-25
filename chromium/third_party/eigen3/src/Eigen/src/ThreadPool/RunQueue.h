@@ -154,16 +154,18 @@ class RunQueue {
  private:
   static const unsigned kMask = kSize - 1;
   static const unsigned kMask2 = (kSize << 1) - 1;
-  struct Elem {
-    std::atomic<uint8_t> state;
-    Work w;
-  };
-  enum {
+
+  enum State {
     kEmpty,
     kBusy,
     kReady,
   };
-  EIGEN_MUTEX mutex_;
+
+  struct Elem {
+    std::atomic<uint8_t> state;
+    Work w;
+  };
+
   // Low log(kSize) + 1 bits in front_ and back_ contain rolling index of
   // front/back, respectively. The remaining bits contain modification counters
   // that are incremented on Push operations. This allows us to (1) distinguish
@@ -171,9 +173,11 @@ class RunQueue {
   // position, these conditions would be indistinguishable); (2) obtain
   // consistent snapshot of front_/back_ for Size operation using the
   // modification counters.
-  std::atomic<unsigned> front_;
-  std::atomic<unsigned> back_;
-  Elem array_[kSize];
+  EIGEN_ALIGN_TO_AVOID_FALSE_SHARING std::atomic<unsigned> front_;
+  EIGEN_ALIGN_TO_AVOID_FALSE_SHARING std::atomic<unsigned> back_;
+  EIGEN_MUTEX mutex_;  // guards `PushBack` and `PopBack` (accesses `back_`)
+
+  EIGEN_ALIGN_TO_AVOID_FALSE_SHARING Elem array_[kSize];
 
   // SizeOrNotEmpty returns current queue size; if NeedSizeEstimate is false,
   // only whether the size is 0 is guaranteed to be correct.
@@ -208,12 +212,12 @@ class RunQueue {
   EIGEN_ALWAYS_INLINE unsigned CalculateSize(unsigned front, unsigned back) const {
     int size = (front & kMask2) - (back & kMask2);
     // Fix overflow.
-    if (size < 0) size += 2 * kSize;
+    if (EIGEN_PREDICT_FALSE(size < 0)) size += 2 * kSize;
     // Order of modification in push/pop is crafted to make the queue look
     // larger than it is during concurrent modifications. E.g. push can
     // increment size before the corresponding pop has decremented it.
     // So the computed size can be up to kSize + 1, fix it.
-    if (size > static_cast<int>(kSize)) size = kSize;
+    if (EIGEN_PREDICT_FALSE(size > static_cast<int>(kSize))) size = kSize;
     return static_cast<unsigned>(size);
   }
 

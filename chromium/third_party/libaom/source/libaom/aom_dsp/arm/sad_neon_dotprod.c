@@ -19,7 +19,7 @@
 #include "aom_dsp/arm/mem_neon.h"
 #include "aom_dsp/arm/sum_neon.h"
 
-static INLINE unsigned int sadwxh_neon_dotprod(const uint8_t *src_ptr,
+static inline unsigned int sadwxh_neon_dotprod(const uint8_t *src_ptr,
                                                int src_stride,
                                                const uint8_t *ref_ptr,
                                                int ref_stride, int w, int h) {
@@ -53,28 +53,28 @@ static INLINE unsigned int sadwxh_neon_dotprod(const uint8_t *src_ptr,
   return horizontal_add_u32x4(vaddq_u32(sum[0], sum[1]));
 }
 
-static INLINE unsigned int sad128xh_neon_dotprod(const uint8_t *src_ptr,
+static inline unsigned int sad128xh_neon_dotprod(const uint8_t *src_ptr,
                                                  int src_stride,
                                                  const uint8_t *ref_ptr,
                                                  int ref_stride, int h) {
   return sadwxh_neon_dotprod(src_ptr, src_stride, ref_ptr, ref_stride, 128, h);
 }
 
-static INLINE unsigned int sad64xh_neon_dotprod(const uint8_t *src_ptr,
+static inline unsigned int sad64xh_neon_dotprod(const uint8_t *src_ptr,
                                                 int src_stride,
                                                 const uint8_t *ref_ptr,
                                                 int ref_stride, int h) {
   return sadwxh_neon_dotprod(src_ptr, src_stride, ref_ptr, ref_stride, 64, h);
 }
 
-static INLINE unsigned int sad32xh_neon_dotprod(const uint8_t *src_ptr,
+static inline unsigned int sad32xh_neon_dotprod(const uint8_t *src_ptr,
                                                 int src_stride,
                                                 const uint8_t *ref_ptr,
                                                 int ref_stride, int h) {
   return sadwxh_neon_dotprod(src_ptr, src_stride, ref_ptr, ref_stride, 32, h);
 }
 
-static INLINE unsigned int sad16xh_neon_dotprod(const uint8_t *src_ptr,
+static inline unsigned int sad16xh_neon_dotprod(const uint8_t *src_ptr,
                                                 int src_stride,
                                                 const uint8_t *ref_ptr,
                                                 int ref_stride, int h) {
@@ -167,7 +167,7 @@ SAD_SKIP_WXH_NEON_DOTPROD(64, 16)
 
 #undef SAD_SKIP_WXH_NEON_DOTPROD
 
-static INLINE unsigned int sadwxh_avg_neon_dotprod(const uint8_t *src_ptr,
+static inline unsigned int sadwxh_avg_neon_dotprod(const uint8_t *src_ptr,
                                                    int src_stride,
                                                    const uint8_t *ref_ptr,
                                                    int ref_stride, int w, int h,
@@ -207,28 +207,28 @@ static INLINE unsigned int sadwxh_avg_neon_dotprod(const uint8_t *src_ptr,
   return horizontal_add_u32x4(vaddq_u32(sum[0], sum[1]));
 }
 
-static INLINE unsigned int sad128xh_avg_neon_dotprod(
+static inline unsigned int sad128xh_avg_neon_dotprod(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred) {
   return sadwxh_avg_neon_dotprod(src_ptr, src_stride, ref_ptr, ref_stride, 128,
                                  h, second_pred);
 }
 
-static INLINE unsigned int sad64xh_avg_neon_dotprod(
+static inline unsigned int sad64xh_avg_neon_dotprod(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred) {
   return sadwxh_avg_neon_dotprod(src_ptr, src_stride, ref_ptr, ref_stride, 64,
                                  h, second_pred);
 }
 
-static INLINE unsigned int sad32xh_avg_neon_dotprod(
+static inline unsigned int sad32xh_avg_neon_dotprod(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred) {
   return sadwxh_avg_neon_dotprod(src_ptr, src_stride, ref_ptr, ref_stride, 32,
                                  h, second_pred);
 }
 
-static INLINE unsigned int sad16xh_avg_neon_dotprod(
+static inline unsigned int sad16xh_avg_neon_dotprod(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred) {
   uint32x4_t sum[2] = { vdupq_n_u32(0), vdupq_n_u32(0) };
@@ -295,7 +295,7 @@ SAD_WXH_AVG_NEON_DOTPROD(64, 16)
 
 #undef SAD_WXH_AVG_NEON_DOTPROD
 
-static INLINE unsigned int dist_wtd_sad128xh_avg_neon_dotprod(
+static inline unsigned int dist_wtd_sad128xh_avg_neon_dotprod(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {
@@ -379,7 +379,7 @@ static INLINE unsigned int dist_wtd_sad128xh_avg_neon_dotprod(
   return horizontal_add_u32x4(sum[0]);
 }
 
-static INLINE unsigned int dist_wtd_sad64xh_avg_neon_dotprod(
+static inline unsigned int dist_wtd_sad64xh_avg_neon_dotprod(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {
@@ -428,7 +428,7 @@ static INLINE unsigned int dist_wtd_sad64xh_avg_neon_dotprod(
   return horizontal_add_u32x4(sum[0]);
 }
 
-static INLINE unsigned int dist_wtd_sad32xh_avg_neon_dotprod(
+static inline unsigned int dist_wtd_sad32xh_avg_neon_dotprod(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {
@@ -460,7 +460,7 @@ static INLINE unsigned int dist_wtd_sad32xh_avg_neon_dotprod(
   return horizontal_add_u32x4(sum[0]);
 }
 
-static INLINE unsigned int dist_wtd_sad16xh_avg_neon_dotprod(
+static inline unsigned int dist_wtd_sad16xh_avg_neon_dotprod(
     const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr,
     int ref_stride, int h, const uint8_t *second_pred,
     const DIST_WTD_COMP_PARAMS *jcp_param) {

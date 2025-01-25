@@ -74,7 +74,7 @@ public class AutocompleteMatch {
     private List<MatchClassification> mDescriptionClassifications;
     private SuggestionAnswer mAnswer;
     private @Nullable RichAnswerTemplate mAnswerTemplate;
-    private final AnswerType mAnswerType;
+    private AnswerType mAnswerType;
     private final String mFillIntoEdit;
     private GURL mUrl;
     private final GURL mImageUrl;
@@ -290,6 +290,22 @@ public class AutocompleteMatch {
     }
 
     @CalledByNative
+    private void setAnswerTemplate(byte[] serializedAnswerTemplate) {
+        if (serializedAnswerTemplate != null) {
+            try {
+                mAnswerTemplate = RichAnswerTemplate.parseFrom(serializedAnswerTemplate);
+            } catch (InvalidProtocolBufferException e) {
+                mAnswerTemplate = null;
+            }
+        }
+    }
+
+    @CalledByNative
+    private void setAnswerType(int answerType) {
+        mAnswerType = AnswerType.forNumber(answerType);
+    }
+
+    @CalledByNative
     private void setDescription(
             String description,
             int[] descriptionClassificationOffsets,
@@ -445,6 +461,10 @@ public class AutocompleteMatch {
         }
 
         AutocompleteMatch suggestion = (AutocompleteMatch) obj;
+        boolean answer_template_is_equal =
+                mAnswerTemplate != null && suggestion.mAnswerTemplate != null
+                        ? mAnswerTemplate.equals(suggestion.mAnswerTemplate)
+                        : mAnswerTemplate == null && suggestion.mAnswerTemplate == null;
         return mType == suggestion.mType
                 && mNativeMatch == suggestion.mNativeMatch
                 && ObjectsCompat.equals(mSubtypes, suggestion.mSubtypes)
@@ -460,7 +480,9 @@ public class AutocompleteMatch {
                 && ObjectsCompat.equals(mAnswer, suggestion.mAnswer)
                 && TextUtils.equals(mPostContentType, suggestion.mPostContentType)
                 && Arrays.equals(mPostData, suggestion.mPostData)
-                && mGroupId == suggestion.mGroupId;
+                && mGroupId == suggestion.mGroupId
+                && mAnswerType == suggestion.mAnswerType
+                && answer_template_is_equal;
     }
 
     /**
@@ -509,12 +531,22 @@ public class AutocompleteMatch {
                         "mGroupId=" + mGroupId,
                         "mDisplayTextClassifications=" + mDisplayTextClassifications,
                         "mDescriptionClassifications=" + mDescriptionClassifications,
-                        "mAnswer=" + mAnswer);
+                        "mAnswer=" + mAnswer,
+                        "mAnswerTemplate=" + mAnswerTemplate);
         return pieces.toString();
+    }
+
+    /**
+     * Retrieve the local icon path for Direct Match Icons.
+     */
+    public String getLocalIconPath() {
+        return AutocompleteMatchJni.get().getLocalIconPath(mNativeMatch);
     }
 
     @NativeMethods
     interface Natives {
         void updateWithClipboardContent(long nativeAutocompleteMatch, Runnable callback);
+        @JniType("std::u16string")
+        String getLocalIconPath(long nativeAutocompleteMatch);
     }
 }

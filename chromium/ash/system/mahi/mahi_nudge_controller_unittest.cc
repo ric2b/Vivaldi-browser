@@ -45,6 +45,8 @@ class TestMagicBoostState : public chromeos::MagicBoostState {
     UpdateHMREnabled(enabled);
   }
 
+  bool IsMagicBoostAvailable() override { return true; }
+  bool CanShowNoticeBannerForHMR() override { return false; }
   int32_t AsyncIncrementHMRConsentWindowDismissCount() override { return 0; }
   void DisableOrcaFeature() override {}
 };
@@ -120,7 +122,7 @@ TEST_F(MahiNudgeControllerTest, NudgeDoesNotShow_WhenConsentStatusSet) {
   test_magic_boost_state_.AsyncWriteHMREnabled(false);
 
   test_magic_boost_state_.AsyncWriteConsentStatus(
-      chromeos::HMRConsentStatus::kPending);
+      chromeos::HMRConsentStatus::kPendingDisclaimer);
 
   EXPECT_FALSE(IsMahiNudgeShown());
   nudge_controller()->MaybeShowNudge();

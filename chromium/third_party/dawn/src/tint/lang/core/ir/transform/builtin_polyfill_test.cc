@@ -878,6 +878,172 @@ TEST_F(IR_BuiltinPolyfillTest, ExtractBits_ClampArgs_Vec4I32) {
     EXPECT_EQ(expect, str());
 }
 
+TEST_F(IR_BuiltinPolyfillTest, ExtractBits_Full_U32) {
+    Build(core::BuiltinFn::kExtractBits, ty.u32(), Vector{ty.u32(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:u32, %arg_1:u32, %arg_2:u32):u32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:u32 = extractBits %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:u32, %arg_1:u32, %arg_2:u32):u32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:u32 = min %arg_1, 32u
+    %6:u32 = add %5, %arg_2
+    %7:u32 = min 32u, %6
+    %8:u32 = sub 32u, %7
+    %9:u32 = add %8, %5
+    %10:u32 = construct %8
+    %11:u32 = shl %arg, %10
+    %12:bool = lt %8, 32u
+    %13:u32 = select 0u, %11, %12
+    %14:u32 = shr %13, 31u
+    %15:u32 = shr %14, 1u
+    %16:u32 = construct %9
+    %17:u32 = shr %13, %16
+    %18:bool = lt %9, 32u
+    %result:u32 = select %15, %17, %18
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.extract_bits = BuiltinPolyfillLevel::kFull;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, ExtractBits_Full_I32) {
+    Build(core::BuiltinFn::kExtractBits, ty.i32(), Vector{ty.i32(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:i32, %arg_1:u32, %arg_2:u32):i32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:i32 = extractBits %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:i32, %arg_1:u32, %arg_2:u32):i32 {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:u32 = min %arg_1, 32u
+    %6:u32 = add %5, %arg_2
+    %7:u32 = min 32u, %6
+    %8:u32 = sub 32u, %7
+    %9:u32 = add %8, %5
+    %10:u32 = construct %8
+    %11:i32 = shl %arg, %10
+    %12:bool = lt %8, 32u
+    %13:i32 = select 0i, %11, %12
+    %14:i32 = shr %13, 31u
+    %15:i32 = shr %14, 1u
+    %16:u32 = construct %9
+    %17:i32 = shr %13, %16
+    %18:bool = lt %9, 32u
+    %result:i32 = select %15, %17, %18
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.extract_bits = BuiltinPolyfillLevel::kFull;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, ExtractBits_Full_Vec2U32) {
+    Build(core::BuiltinFn::kExtractBits, ty.vec2<u32>(),
+          Vector{ty.vec2<u32>(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:vec2<u32>, %arg_1:u32, %arg_2:u32):vec2<u32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:vec2<u32> = extractBits %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec2<u32>, %arg_1:u32, %arg_2:u32):vec2<u32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:u32 = min %arg_1, 32u
+    %6:u32 = add %5, %arg_2
+    %7:u32 = min 32u, %6
+    %8:u32 = sub 32u, %7
+    %9:u32 = add %8, %5
+    %10:vec2<u32> = construct %8
+    %11:vec2<u32> = shl %arg, %10
+    %12:bool = lt %8, 32u
+    %13:vec2<u32> = select vec2<u32>(0u), %11, %12
+    %14:vec2<u32> = shr %13, vec2<u32>(31u)
+    %15:vec2<u32> = shr %14, vec2<u32>(1u)
+    %16:vec2<u32> = construct %9
+    %17:vec2<u32> = shr %13, %16
+    %18:bool = lt %9, 32u
+    %result:vec2<u32> = select %15, %17, %18
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.extract_bits = BuiltinPolyfillLevel::kFull;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, ExtractBits_Full_Vec4I32) {
+    Build(core::BuiltinFn::kExtractBits, ty.vec4<i32>(),
+          Vector{ty.vec4<i32>(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:vec4<i32>, %arg_1:u32, %arg_2:u32):vec4<i32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %result:vec4<i32> = extractBits %arg, %arg_1, %arg_2
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec4<i32>, %arg_1:u32, %arg_2:u32):vec4<i32> {  # %arg_1: 'arg', %arg_2: 'arg'
+  $B1: {
+    %5:u32 = min %arg_1, 32u
+    %6:u32 = add %5, %arg_2
+    %7:u32 = min 32u, %6
+    %8:u32 = sub 32u, %7
+    %9:u32 = add %8, %5
+    %10:vec4<u32> = construct %8
+    %11:vec4<i32> = shl %arg, %10
+    %12:bool = lt %8, 32u
+    %13:vec4<i32> = select vec4<i32>(0i), %11, %12
+    %14:vec4<i32> = shr %13, vec4<u32>(31u)
+    %15:vec4<i32> = shr %14, vec4<u32>(1u)
+    %16:vec4<u32> = construct %9
+    %17:vec4<i32> = shr %13, %16
+    %18:bool = lt %9, 32u
+    %result:vec4<i32> = select %15, %17, %18
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.extract_bits = BuiltinPolyfillLevel::kFull;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
 TEST_F(IR_BuiltinPolyfillTest, FirstLeadingBit_NoPolyfill) {
     Build(core::BuiltinFn::kFirstLeadingBit, ty.u32(), Vector{ty.u32()});
     auto* src = R"(
@@ -1340,6 +1506,88 @@ TEST_F(IR_BuiltinPolyfillTest, FirstTrailingBit_Vec4I32) {
     EXPECT_EQ(expect, str());
 }
 
+TEST_F(IR_BuiltinPolyfillTest, FwidthFine_NoPolyfill) {
+    Build(core::BuiltinFn::kFwidthFine, ty.f32(), Vector{ty.f32()});
+    auto* src = R"(
+%foo = func(%arg:f32):f32 {
+  $B1: {
+    %result:f32 = fwidthFine %arg
+    ret %result
+  }
+}
+)";
+    auto* expect = src;
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.fwidth_fine = false;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, FirstLeadingBit_F32) {
+    Build(core::BuiltinFn::kFwidthFine, ty.f32(), Vector{ty.f32()});
+    auto* src = R"(
+%foo = func(%arg:f32):f32 {
+  $B1: {
+    %result:f32 = fwidthFine %arg
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:f32):f32 {
+  $B1: {
+    %3:f32 = dpdxFine %arg
+    %4:f32 = dpdyFine %arg
+    %5:f32 = abs %3
+    %6:f32 = abs %4
+    %7:f32 = add %5, %6
+    ret %7
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.fwidth_fine = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, FirstLeadingBit_Vector) {
+    Build(core::BuiltinFn::kFwidthFine, ty.vec4<f32>(), Vector{ty.vec4<f32>()});
+    auto* src = R"(
+%foo = func(%arg:vec4<f32>):vec4<f32> {
+  $B1: {
+    %result:vec4<f32> = fwidthFine %arg
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec4<f32>):vec4<f32> {
+  $B1: {
+    %3:vec4<f32> = dpdxFine %arg
+    %4:vec4<f32> = dpdyFine %arg
+    %5:vec4<f32> = abs %3
+    %6:vec4<f32> = abs %4
+    %7:vec4<f32> = add %5, %6
+    ret %7
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.fwidth_fine = true;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
 TEST_F(IR_BuiltinPolyfillTest, InsertBits_NoPolyfill) {
     Build(core::BuiltinFn::kInsertBits, ty.u32(), Vector{ty.u32(), ty.u32(), ty.u32(), ty.u32()});
     auto* src = R"(
@@ -1478,6 +1726,192 @@ TEST_F(IR_BuiltinPolyfillTest, InsertBits_ClampArgs_Vec4I32) {
 
     BuiltinPolyfillConfig config;
     config.insert_bits = BuiltinPolyfillLevel::kClampOrRangeCheck;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, InsertBits_Full_U32) {
+    Build(core::BuiltinFn::kInsertBits, ty.u32(), Vector{ty.u32(), ty.u32(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:u32, %arg_1:u32, %arg_2:u32, %arg_3:u32):u32 {  # %arg_1: 'arg', %arg_2: 'arg', %arg_3: 'arg'
+  $B1: {
+    %result:u32 = insertBits %arg, %arg_1, %arg_2, %arg_3
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:u32, %arg_1:u32, %arg_2:u32, %arg_3:u32):u32 {  # %arg_1: 'arg', %arg_2: 'arg', %arg_3: 'arg'
+  $B1: {
+    %6:u32 = add %arg_2, %arg_3
+    %7:u32 = shl 1u, %arg_2
+    %8:bool = lt %arg_2, 32u
+    %9:u32 = select 0u, %7, %8
+    %10:u32 = shl 1u, %6
+    %11:bool = lt %6, 32u
+    %12:u32 = select 0u, %10, %11
+    %13:u32 = sub %9, 1u
+    %14:u32 = sub %12, 1u
+    %15:u32 = xor %13, %14
+    %16:u32 = construct %arg_2
+    %17:u32 = shl %arg_1, %16
+    %18:bool = lt %arg_2, 32u
+    %19:u32 = select 0u, %17, %18
+    %20:u32 = construct %15
+    %21:u32 = and %19, %20
+    %22:u32 = complement %15
+    %23:u32 = construct %22
+    %24:u32 = and %arg, %23
+    %result:u32 = or %21, %24
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.insert_bits = BuiltinPolyfillLevel::kFull;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, InsertBits_Full_I32) {
+    Build(core::BuiltinFn::kInsertBits, ty.i32(), Vector{ty.i32(), ty.i32(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:i32, %arg_1:i32, %arg_2:u32, %arg_3:u32):i32 {  # %arg_1: 'arg', %arg_2: 'arg', %arg_3: 'arg'
+  $B1: {
+    %result:i32 = insertBits %arg, %arg_1, %arg_2, %arg_3
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:i32, %arg_1:i32, %arg_2:u32, %arg_3:u32):i32 {  # %arg_1: 'arg', %arg_2: 'arg', %arg_3: 'arg'
+  $B1: {
+    %6:u32 = add %arg_2, %arg_3
+    %7:u32 = shl 1u, %arg_2
+    %8:bool = lt %arg_2, 32u
+    %9:u32 = select 0u, %7, %8
+    %10:u32 = shl 1u, %6
+    %11:bool = lt %6, 32u
+    %12:u32 = select 0u, %10, %11
+    %13:u32 = sub %9, 1u
+    %14:u32 = sub %12, 1u
+    %15:u32 = xor %13, %14
+    %16:u32 = construct %arg_2
+    %17:i32 = shl %arg_1, %16
+    %18:bool = lt %arg_2, 32u
+    %19:i32 = select 0i, %17, %18
+    %20:i32 = construct %15
+    %21:i32 = and %19, %20
+    %22:u32 = complement %15
+    %23:i32 = construct %22
+    %24:i32 = and %arg, %23
+    %result:i32 = or %21, %24
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.insert_bits = BuiltinPolyfillLevel::kFull;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, InsertBits_Full_Vec2U32) {
+    Build(core::BuiltinFn::kInsertBits, ty.vec2<u32>(),
+          Vector{ty.vec2<u32>(), ty.vec2<u32>(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:vec2<u32>, %arg_1:vec2<u32>, %arg_2:u32, %arg_3:u32):vec2<u32> {  # %arg_1: 'arg', %arg_2: 'arg', %arg_3: 'arg'
+  $B1: {
+    %result:vec2<u32> = insertBits %arg, %arg_1, %arg_2, %arg_3
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec2<u32>, %arg_1:vec2<u32>, %arg_2:u32, %arg_3:u32):vec2<u32> {  # %arg_1: 'arg', %arg_2: 'arg', %arg_3: 'arg'
+  $B1: {
+    %6:u32 = add %arg_2, %arg_3
+    %7:u32 = shl 1u, %arg_2
+    %8:bool = lt %arg_2, 32u
+    %9:u32 = select 0u, %7, %8
+    %10:u32 = shl 1u, %6
+    %11:bool = lt %6, 32u
+    %12:u32 = select 0u, %10, %11
+    %13:u32 = sub %9, 1u
+    %14:u32 = sub %12, 1u
+    %15:u32 = xor %13, %14
+    %16:vec2<u32> = construct %arg_2
+    %17:vec2<u32> = shl %arg_1, %16
+    %18:bool = lt %arg_2, 32u
+    %19:vec2<u32> = select vec2<u32>(0u), %17, %18
+    %20:vec2<u32> = construct %15
+    %21:vec2<u32> = and %19, %20
+    %22:u32 = complement %15
+    %23:vec2<u32> = construct %22
+    %24:vec2<u32> = and %arg, %23
+    %result:vec2<u32> = or %21, %24
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.insert_bits = BuiltinPolyfillLevel::kFull;
+    Run(BuiltinPolyfill, config);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(IR_BuiltinPolyfillTest, InsertBits_Full_Vec4I32) {
+    Build(core::BuiltinFn::kInsertBits, ty.vec4<i32>(),
+          Vector{ty.vec4<i32>(), ty.vec4<i32>(), ty.u32(), ty.u32()});
+    auto* src = R"(
+%foo = func(%arg:vec4<i32>, %arg_1:vec4<i32>, %arg_2:u32, %arg_3:u32):vec4<i32> {  # %arg_1: 'arg', %arg_2: 'arg', %arg_3: 'arg'
+  $B1: {
+    %result:vec4<i32> = insertBits %arg, %arg_1, %arg_2, %arg_3
+    ret %result
+  }
+}
+)";
+    auto* expect = R"(
+%foo = func(%arg:vec4<i32>, %arg_1:vec4<i32>, %arg_2:u32, %arg_3:u32):vec4<i32> {  # %arg_1: 'arg', %arg_2: 'arg', %arg_3: 'arg'
+  $B1: {
+    %6:u32 = add %arg_2, %arg_3
+    %7:u32 = shl 1u, %arg_2
+    %8:bool = lt %arg_2, 32u
+    %9:u32 = select 0u, %7, %8
+    %10:u32 = shl 1u, %6
+    %11:bool = lt %6, 32u
+    %12:u32 = select 0u, %10, %11
+    %13:u32 = sub %9, 1u
+    %14:u32 = sub %12, 1u
+    %15:u32 = xor %13, %14
+    %16:vec4<u32> = construct %arg_2
+    %17:vec4<i32> = shl %arg_1, %16
+    %18:bool = lt %arg_2, 32u
+    %19:vec4<i32> = select vec4<i32>(0i), %17, %18
+    %20:vec4<i32> = construct %15
+    %21:vec4<i32> = and %19, %20
+    %22:u32 = complement %15
+    %23:vec4<i32> = construct %22
+    %24:vec4<i32> = and %arg, %23
+    %result:vec4<i32> = or %21, %24
+    ret %result
+  }
+}
+)";
+
+    EXPECT_EQ(src, str());
+
+    BuiltinPolyfillConfig config;
+    config.insert_bits = BuiltinPolyfillLevel::kFull;
     Run(BuiltinPolyfill, config);
     EXPECT_EQ(expect, str());
 }

@@ -60,7 +60,6 @@ enum class VideoDecoderType : int {
   kVideoToolbox = 19,  // VideoToolboxVideoDecoder (Mac)
 
   kVivWMFDecoder,
-  kVivVTVideo,
   kVivPassThrough,
 
   // Keep this at the end and equal to the last entry.

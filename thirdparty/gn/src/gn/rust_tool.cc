@@ -54,6 +54,8 @@ bool RustTool::MayLink() const {
 
 void RustTool::SetComplete() {
   SetToolComplete();
+  link_output_.FillRequiredTypes(&substitution_bits_);
+  depend_output_.FillRequiredTypes(&substitution_bits_);
 }
 
 std::string_view RustTool::GetSysroot() const {
@@ -109,6 +111,55 @@ bool RustTool::ReadOutputsPatternList(Scope* scope,
   return true;
 }
 
+bool RustTool::ValidateRuntimeOutputs(Err* err) {
+  if (runtime_outputs().list().empty())
+    return true;  // Empty is always OK.
+
+  if (name_ == kRsToolRlib || name_ == kRsToolStaticlib) {
+    *err =
+        Err(defined_from(), "This tool specifies runtime_outputs.",
+            "This is only valid for linker tools (rust_rlib doesn't count).");
+    return false;
+  }
+
+  for (const SubstitutionPattern& pattern : runtime_outputs().list()) {
+    if (!IsPatternInOutputList(outputs(), pattern)) {
+      *err = Err(defined_from(), "This tool's runtime_outputs is bad.",
+                 "It must be a subset of the outputs. The bad one is:\n  " +
+                     pattern.AsString());
+      return false;
+    }
+  }
+  return true;
+}
+
+// Validates either link_output or depend_output. To generalize to either, pass
+// the associated pattern, and the variable name that should appear in error
+// messages.
+bool RustTool::ValidateLinkAndDependOutput(const SubstitutionPattern& pattern,
+                                           const char* variable_name,
+                                           Err* err) {
+  if (pattern.empty())
+    return true;  // Empty is always OK.
+
+  // It should only be specified for certain tool types.
+  if (name_ == kRsToolRlib || name_ == kRsToolStaticlib) {
+    *err = Err(defined_from(),
+               "This tool specifies a " + std::string(variable_name) + ".",
+               "This is only valid for linking tools, not rust_rlib or "
+               "rust_staticlib.");
+    return false;
+  }
+
+  if (!IsPatternInOutputList(outputs(), pattern)) {
+    *err = Err(defined_from(), "This tool's link_output is bad.",
+               "It must match one of the outputs.");
+    return false;
+  }
+
+  return true;
+}
+
 bool RustTool::InitTool(Scope* scope, Toolchain* toolchain, Err* err) {
   // Initialize default vars.
   if (!Tool::InitTool(scope, toolchain, err)) {
@@ -131,6 +182,29 @@ bool RustTool::InitTool(Scope* scope, Toolchain* toolchain, Err* err) {
         !ReadString(scope, "dynamic_link_switch", &dynamic_link_switch_, err)) {
       return false;
     }
+  }
+
+  if (!ValidateRuntimeOutputs(err)) {
+    return false;
+  }
+
+  if (!ReadPattern(scope, "link_output", &link_output_, err) ||
+      !ReadPattern(scope, "depend_output", &depend_output_, err)) {
+    return false;
+  }
+
+  // Validate link_output and depend_output.
+  if (!ValidateLinkAndDependOutput(link_output(), "link_output", err)) {
+    return false;
+  }
+  if (!ValidateLinkAndDependOutput(depend_output(), "depend_output", err)) {
+    return false;
+  }
+  if (link_output().empty() != depend_output().empty()) {
+    *err = Err(defined_from(),
+               "Both link_output and depend_output should either "
+               "be specified or they should both be empty.");
+    return false;
   }
 
   return true;

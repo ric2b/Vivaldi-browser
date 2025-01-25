@@ -23,8 +23,8 @@
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_java_script_feature.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_observer.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/autofill_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -95,6 +95,11 @@ void AutofillBottomSheetTabHelper::ShowEditAddressBottomSheet() {
 
 void AutofillBottomSheetTabHelper::SetAutofillBottomSheetHandler(
     id<AutofillCommands> commands_handler) {
+  if (!commands_handler) {
+    // Means that the web state has been destroyed therefore dismiss the edit
+    // address bottom sheet if it's shown.
+    [commands_handler_ dismissEditAddressBottomSheet];
+  }
   commands_handler_ = commands_handler;
 }
 
@@ -355,9 +360,20 @@ void AutofillBottomSheetTabHelper::WebFrameBecameAvailable(
 
 // autofill::AutofillManager::Observer
 
-void AutofillBottomSheetTabHelper::OnAutofillManagerDestroyed(
-    autofill::AutofillManager& manager) {
-  autofill_manager_observations_.RemoveObservation(&manager);
+void AutofillBottomSheetTabHelper::OnAutofillManagerStateChanged(
+    autofill::AutofillManager& manager,
+    autofill::AutofillManager::LifecycleState old_state,
+    autofill::AutofillManager::LifecycleState new_state) {
+  using enum autofill::AutofillManager::LifecycleState;
+  switch (new_state) {
+    case kInactive:
+    case kActive:
+    case kPendingReset:
+      break;
+    case kPendingDeletion:
+      autofill_manager_observations_.RemoveObservation(&manager);
+      break;
+  }
 }
 
 void AutofillBottomSheetTabHelper::OnFieldTypesDetermined(
@@ -413,8 +429,7 @@ AutofillBottomSheetTabHelper::GetVirtualCardEnrollmentCallbacks() {
 
 bool AutofillBottomSheetTabHelper::HasReachedPasswordSuggestionDismissLimit() {
   const PrefService* pref_service =
-      ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState())
-          ->GetPrefs();
+      ProfileIOS::FromBrowserState(web_state_->GetBrowserState())->GetPrefs();
   bool dismissLimitReached =
       pref_service->GetInteger(prefs::kIosPasswordBottomSheetDismissCount) >=
       kPasswordBottomSheetMaxDismissCount;
@@ -425,8 +440,7 @@ bool AutofillBottomSheetTabHelper::HasReachedPasswordSuggestionDismissLimit() {
 
 bool AutofillBottomSheetTabHelper::HasReachedPasswordGenerationDismissLimit() {
   const PrefService* pref_service =
-      ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState())
-          ->GetPrefs();
+      ProfileIOS::FromBrowserState(web_state_->GetBrowserState())->GetPrefs();
   return pref_service->GetInteger(
              prefs::kIosPasswordGenerationBottomSheetDismissCount) >=
          kPasswordGenerationBottomSheetMaxDismissCount;

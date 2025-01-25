@@ -20,25 +20,14 @@ interface CachedScopeMap {
 
 const scopeToCachedIdentifiersMap = new WeakMap<Formatter.FormatterWorkerPool.ScopeTreeNode, CachedScopeMap>();
 const cachedMapByCallFrame = new WeakMap<SDK.DebuggerModel.CallFrame, Map<string, string|null>>();
-const cachedTextByContentData = new WeakMap<TextUtils.ContentData.ContentData, TextUtils.Text.Text>();
 
 export async function getTextFor(contentProvider: TextUtils.ContentProvider.ContentProvider):
     Promise<TextUtils.Text.Text|null> {
-  // We intentionally cache based on the ContentData object rather
-  // than the ContentProvider object, which may appear as a more sensible
-  // choice, since the content of both Script and UISourceCode objects
-  // can change over time.
   const contentData = await contentProvider.requestContentData();
   if (TextUtils.ContentData.ContentData.isError(contentData) || !contentData.isTextContent) {
     return null;
   }
-
-  let text = cachedTextByContentData.get(contentData);
-  if (text === undefined) {
-    text = new TextUtils.Text.Text(contentData.text);
-    cachedTextByContentData.set(contentData, text);
-  }
-  return text;
+  return contentData.textObj;
 }
 
 export class IdentifierPositions {
@@ -168,7 +157,7 @@ freeVariables:
   for (const variable of scope.variables) {
     // Skip the fixed-kind variable (i.e., 'this' or 'arguments') if we only found their "definition"
     // without any uses.
-    if (variable.kind === Formatter.FormatterWorkerPool.DefinitionKind.Fixed && variable.offsets.length <= 1) {
+    if (variable.kind === Formatter.FormatterWorkerPool.DefinitionKind.FIXED && variable.offsets.length <= 1) {
       continue;
     }
 
@@ -205,11 +194,11 @@ freeVariables:
 const identifierAndPunctuationRegExp = /^\s*([A-Za-z_$][A-Za-z_$0-9]*)\s*([.;,=]?)\s*$/;
 
 const enum Punctuation {
-  None = 'none',
-  Comma = 'comma',
-  Dot = 'dot',
-  Semicolon = 'semicolon',
-  Equals = 'equals',
+  NONE = 'none',
+  COMMA = 'comma',
+  DOT = 'dot',
+  SEMICOLON = 'semicolon',
+  EQUALS = 'equals',
 }
 
 const resolveDebuggerScope = async(scope: SDK.DebuggerModel.ScopeChainEntry):
@@ -346,7 +335,7 @@ const resolveScope = async(script: SDK.Script.Script, scopeChain: Formatter.Form
           return sourceName;
         }
         // Let us also allow semicolons into commas since that it is a common transformation.
-        if (compiledPunctuation === Punctuation.Comma && sourcePunctuation === Punctuation.Semicolon) {
+        if (compiledPunctuation === Punctuation.COMMA && sourcePunctuation === Punctuation.SEMICOLON) {
           return sourceName;
         }
 
@@ -362,19 +351,19 @@ const resolveScope = async(script: SDK.Script.Script, scopeChain: Formatter.Form
           let punctuation: Punctuation|null = null;
           switch (match[2]) {
             case '.':
-              punctuation = Punctuation.Dot;
+              punctuation = Punctuation.DOT;
               break;
             case ',':
-              punctuation = Punctuation.Comma;
+              punctuation = Punctuation.COMMA;
               break;
             case ';':
-              punctuation = Punctuation.Semicolon;
+              punctuation = Punctuation.SEMICOLON;
               break;
             case '=':
-              punctuation = Punctuation.Equals;
+              punctuation = Punctuation.EQUALS;
               break;
             case '':
-              punctuation = Punctuation.None;
+              punctuation = Punctuation.NONE;
               break;
             default:
               console.error(`Name token parsing error: unexpected token "${match[2]}"`);
@@ -389,7 +378,12 @@ const resolveScope = async(script: SDK.Script.Script, scopeChain: Formatter.Form
 export const resolveScopeChain =
     async function(callFrame: SDK.DebuggerModel.CallFrame): Promise<SDK.DebuggerModel.ScopeChainEntry[]> {
   const {pluginManager} = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance();
-  const scopeChain = await pluginManager.resolveScopeChain(callFrame);
+  let scopeChain: SDK.DebuggerModel.ScopeChainEntry[]|null|undefined = await pluginManager.resolveScopeChain(callFrame);
+  if (scopeChain) {
+    return scopeChain;
+  }
+
+  scopeChain = callFrame.script.sourceMap()?.resolveScopeChain(callFrame);
   if (scopeChain) {
     return scopeChain;
   }

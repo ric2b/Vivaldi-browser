@@ -157,10 +157,12 @@ class AutofillAgentTest : public test::AutofillRendererTest {
  public:
   void SetUp() override {
     test::AutofillRendererTest::SetUp();
-    test_api(autofill_agent())
-        .set_form_tracker(std::make_unique<MockFormTracker>(
+    std::unique_ptr<MockFormTracker> form_tracker =
+        std::make_unique<MockFormTracker>(
             GetMainRenderFrame(), FormTracker::UserGestureRequired(true),
-            autofill_agent()));
+            autofill_agent());
+    form_tracker->AddObserver(&autofill_agent());
+    test_api(autofill_agent()).set_form_tracker(std::move(form_tracker));
   }
 
   FormRendererId GetFormRendererIdById(std::string_view id) {
@@ -190,19 +192,6 @@ class AutofillAgentTest : public test::AutofillRendererTest {
     SimulatePointRightClick(
         GetWebElementById(target).BoundsInWidget().CenterPoint());
     task_environment_.RunUntilIdle();
-  }
-
-  void SimulateUserEditField(const blink::WebFormElement& form,
-                             const std::string& field_id,
-                             const std::string& value) {
-    blink::WebFormControlElement element =
-        GetWebElementById(field_id).To<blink::WebFormControlElement>();
-    element.SetValue(blink::WebString::FromUTF8(value));
-    // Call AutofillAgent::OnProvisionallySaveForm() in order to update
-    // AutofillAgent::formless_elements_user_edited_
-    autofill_agent().OnProvisionallySaveForm(
-        form, element,
-        FormTracker::Observer::SaveFormReason::kTextFieldChanged);
   }
 
   MockFormTracker& form_tracker() {
@@ -324,19 +313,7 @@ TEST_F(AutofillAgentTestWithFeatures, TriggerFormExtractionWithResponse) {
   task_environment_.FastForwardBy(AutofillAgent::kFormsSeenThrottle / 2);
 }
 
-class AutofillAgentShadowDomTest : public AutofillAgentTestWithFeatures {
- public:
-  AutofillAgentShadowDomTest() {
-    scoped_features_.InitWithFeatures(
-        /*enabled_features=*/
-        {blink::features::kAutofillIncludeShadowDomInUnassociatedListedElements,
-         blink::features::kAutofillIncludeFormElementsInShadowDom},
-        /*disabled_features=*/{});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_features_;
-};
+using AutofillAgentShadowDomTest = AutofillAgentTestWithFeatures;
 
 // Tests that unassociated form control elements in a Shadow DOM tree that do
 // not have a form ancestor are extracted correctly.
@@ -789,23 +766,23 @@ TEST_P(AutofillAgentSubmissionTest,
   FormRendererId form_id = form_util::GetFormRendererId(form);
 
   ExecuteJavaScriptForTests(
-      R"(document.forms[0].elements[0].value = 'js-set value';)");
+      R"(document.forms[0].elements[0].value = 'js_set_value';)");
   std::optional<FormData> provisionally_saved_form =
       AutofillAgentTestApi(&autofill_agent()).provisionally_saved_form();
   // Since we do not have a tracked form yet, the JS call should not update (in
   // this case set) the last interacted form.
   ASSERT_FALSE(provisionally_saved_form.has_value());
 
-  SimulateUserEditField(form, "text_id", "user-set value");
+  SimulateUserInputChangeForElementById("text_id", "user_set_value");
   provisionally_saved_form =
       AutofillAgentTestApi(&autofill_agent()).provisionally_saved_form();
   ASSERT_TRUE(provisionally_saved_form.has_value());
   EXPECT_EQ(provisionally_saved_form->renderer_id(), form_id);
   ASSERT_EQ(1u, provisionally_saved_form->fields().size());
-  EXPECT_EQ(u"user-set value", provisionally_saved_form->fields()[0].value());
+  EXPECT_EQ(u"user_set_value", provisionally_saved_form->fields()[0].value());
 
   ExecuteJavaScriptForTests(
-      R"(document.forms[0].elements[0].value = 'js-set value';)");
+      R"(document.forms[0].elements[0].value = 'js_set_value';)");
   provisionally_saved_form =
       AutofillAgentTestApi(&autofill_agent()).provisionally_saved_form();
   // Since we now have a tracked form and JS modified the same form, we should
@@ -813,7 +790,7 @@ TEST_P(AutofillAgentSubmissionTest,
   ASSERT_TRUE(provisionally_saved_form.has_value());
   EXPECT_EQ(provisionally_saved_form->renderer_id(), form_id);
   ASSERT_EQ(1u, provisionally_saved_form->fields().size());
-  EXPECT_EQ(u"js-set value", provisionally_saved_form->fields()[0].value());
+  EXPECT_EQ(u"js_set_value", provisionally_saved_form->fields()[0].value());
 }
 
 // Test that AutofillAgent::ApplyFormAction(mojom::ActionPersistence::kFill)
@@ -984,8 +961,8 @@ TEST_P(AutofillAgentSubmissionTest,
     </div>
   )");
 
-  SimulateUserEditField(blink::WebFormElement(), "name", "Ariel");
-  SimulateUserEditField(blink::WebFormElement(), "address", "Atlantica");
+  SimulateUserInputChangeForElementById("name", "Ariel");
+  SimulateUserInputChangeForElementById("address", "Atlantica");
 
   EXPECT_CALL(autofill_driver(),
               FormSubmitted(
@@ -1015,8 +992,8 @@ TEST_P(AutofillAgentSubmissionTest,
     </div>
   )");
 
-  SimulateUserEditField(blink::WebFormElement(), "name", "Ariel");
-  SimulateUserEditField(blink::WebFormElement(), "address", "Atlantica");
+  SimulateUserInputChangeForElementById("name", "Ariel");
+  SimulateUserInputChangeForElementById("address", "Atlantica");
 
   EXPECT_CALL(autofill_driver(),
               FormSubmitted(AllOf(FieldsAre(HasFieldIdAttribute(u"search"),
@@ -1048,8 +1025,8 @@ TEST_P(AutofillAgentSubmissionTest,
     Address: <input type='text' id='address'>
   )");
 
-  SimulateUserEditField(blink::WebFormElement(), "name", "Ariel");
-  SimulateUserEditField(blink::WebFormElement(), "address", "Atlantica");
+  SimulateUserInputChangeForElementById("name", "Ariel");
+  SimulateUserInputChangeForElementById("address", "Atlantica");
 
   if (improved_submission_detection()) {
     EXPECT_CALL(autofill_driver(),
@@ -1207,10 +1184,6 @@ class AutofillAgentTestFocus : public AutofillAgentTest {
     ASSERT_TRUE(e) << "Field " << id << " doesn't exist";
     FocusedElementChanged(e);
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      autofill::features::kAutofillNewFocusEvents};
 };
 
 // Tests that when the focus moves from field to field, FocusedElementChanged()
@@ -1305,7 +1278,7 @@ class AutofillAgentTestCaret
         LoadHTML(R"(<textarea id=f>012345</textarea>)");
         break;
       default:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
   }
 
@@ -1324,7 +1297,7 @@ class AutofillAgentTestCaret
                 GetElement().DynamicTo<blink::WebFormControlElement>(), {});
         break;
       default:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
     task_environment_.RunUntilIdle();
   }
@@ -1344,7 +1317,7 @@ class AutofillAgentTestCaret
             end));
         break;
       default:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
     task_environment_.FastForwardBy(pause_for);
   }

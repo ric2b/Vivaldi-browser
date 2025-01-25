@@ -33,10 +33,7 @@ pub const BLE_5_ADV_SVC_MAX_CONTENT_LEN: usize = 254
     - 2;
 
 /// Maximum number of sections in an advertisement
-pub const NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT: usize = 8;
-
-/// Maximum number of public sections in an advertisement
-pub const NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT: usize = 1;
+pub const NP_V1_ADV_MAX_SECTION_COUNT: usize = 8;
 
 /// Maximum size of a NP section, including its length header byte
 pub const NP_ADV_MAX_SECTION_LEN: usize = NP_ADV_MAX_SECTION_CONTENTS_LEN + 1;

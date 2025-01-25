@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/signin/profile_picker_ui.h"
 
 #include "base/feature_list.h"
@@ -330,6 +335,12 @@ gfx::Size ProfilePickerUI::GetMinimumSize() {
 
 ProfilePickerHandler* ProfilePickerUI::GetProfilePickerHandlerForTesting() {
   return profile_picker_handler_;
+}
+
+void ProfilePickerUI::ShowForceSigninErrorDialog(
+    const ForceSigninUIError& error) {
+  profile_picker_handler_->DisplayForceSigninErrorDialog(base::FilePath(),
+                                                         error);
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(ProfilePickerUI)

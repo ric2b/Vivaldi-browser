@@ -31,7 +31,6 @@
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_table_view_constants.h"
 #import "ios/chrome/browser/ui/settings/password/password_manager_egtest_utils.h"
-#import "ios/chrome/browser/ui/settings/password/password_manager_ui_features.h"
 #import "ios/chrome/browser/ui/settings/password/password_settings/password_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/password/password_settings_app_interface.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_in_other_apps/passwords_in_other_apps_app_interface.h"
@@ -700,29 +699,6 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   // later ones from interacting with the UI.
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
 
-  if ([self
-          isRunningTest:@selector(testOpenPasswordManagerWithSuccessfulAuth)] ||
-      [self isRunningTest:@selector(testOpenPasswordManagerWithFailedAuth)] ||
-      [self isRunningTest:@selector
-            (testOpenPasswordManagerWithWithoutPasscodeSet)] ||
-      [self isRunningTest:@selector
-            (testOpenPasswordSettingsSubmenuWithFailedAuth)] ||
-      [self isRunningTest:@selector(testAddNewPasswordWithFailedAuth)]) {
-    config.features_enabled.push_back(
-        password_manager::features::kIOSPasswordAuthOnEntryV2);
-  }
-
-  if ([self isRunningTest:@selector(testSavePasswordsInAccountFlowCompletes)] ||
-      [self
-          isRunningTest:@selector(testSavePasswordsInAccountFlowAuthFailed)] ||
-      [self isRunningTest:@selector
-            (testSavePasswordsInAccountFlowNoAuthSetOnDevice)] ||
-      [self isRunningTest:@selector
-            (testSavePasswordsInAccountFlowCompletesMovingPasswords)]) {
-    config.features_disabled.push_back(
-        password_manager::features::kIOSPasswordAuthOnEntryV2);
-  }
-
   if ([self isRunningTest:@selector(testClosingPasswordManagerWidgetPromo)] ||
       [self isRunningTest:@selector
             (testOpeningPasswordManagerWidgetPromoInstructions)] ||
@@ -739,9 +715,6 @@ void OpenPasswordManagerWidgetPromoInstructions() {
           (testOpeningPasswordManagerWidgetPromoInstructionsWithFailedAuth)] ||
       [self isRunningTest:@selector(testDeletingLastAffiliatedGroup)]) {
     config.iph_feature_enabled = "IPH_iOSPromoPasswordManagerWidget";
-    config.additional_args.push_back(base::StringPrintf(
-        "--enable-features=%s",
-        password_manager::features::kIOSPasswordAuthOnEntryV2.name));
   }
 
   if ([self isRunningTest:@selector(testEditPasskeyUsername)] ||
@@ -1426,6 +1399,60 @@ void OpenPasswordManagerWidgetPromoInstructions() {
       assertWithMatcher:grey_enabled()];
   [[EarlGrey selectElementWithMatcher:TooLongNoteFooter()]
       assertWithMatcher:grey_nil()];
+}
+
+// Check that tapping on empty note in password details switches to editing when
+// the view is not in editing mode.
+- (void)testTappingEmptyNoteInPasswordDetailsWhenNotEditing {
+  SavePasswordFormToProfileStore();
+
+  OpenPasswordManager();
+
+  [GetInteractionForPasswordEntry(@"example.com") performAction:grey_tap()];
+
+  // Check that view switches to editing on empty note tap.
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNote()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:NavigationBarEditButton()]
+      assertWithMatcher:grey_notVisible()];
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNote()]
+      performAction:grey_replaceText(@"note")];
+  [[EarlGrey selectElementWithMatcher:EditDoneButton()]
+      performAction:grey_tap()];
+
+  // Check that view remains in non-editing state on non-empty note tap.
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNote()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:NavigationBarEditButton()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
+// Check that after deleting a note tapping on its field in non-editing mode
+// switches to editing mode.
+- (void)testTappingEmptyNoteAfterDeleting {
+  SaveExamplePasswordFormToProfileStoreWithNote();
+
+  OpenPasswordManager();
+
+  [GetInteractionForPasswordEntry(@"example.com") performAction:grey_tap()];
+
+  TapNavigationBarEditButton();
+
+  // Delete the note.
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNote()]
+      performAction:grey_replaceText(@"")];
+  [[EarlGrey selectElementWithMatcher:EditDoneButton()]
+      performAction:grey_tap()];
+
+  // Check that the view is in non-editing state.
+  [[EarlGrey selectElementWithMatcher:NavigationBarEditButton()]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Check that it switches to editing on empty note tap.
+  [[EarlGrey selectElementWithMatcher:PasswordDetailNote()]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:NavigationBarEditButton()]
+      assertWithMatcher:grey_notVisible()];
 }
 
 // Checks the order of the elements in the detail view layout for a blocked
@@ -2420,8 +2447,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
 
   [PasswordSettingsAppInterface mockReauthenticationModuleExpectedResult:
                                     ReauthenticationResult::kFailure];
-  [PasswordSettingsAppInterface
-      mockReauthenticationModuleShouldReturnSynchronously:NO];
+  [PasswordSettingsAppInterface mockReauthenticationModuleShouldSkipReAuth:NO];
 
   [[AppLaunchManager sharedManager] backgroundAndForegroundApp];
 
@@ -2881,8 +2907,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
 
   [PasswordSettingsAppInterface mockReauthenticationModuleExpectedResult:
                                     ReauthenticationResult::kFailure];
-  [PasswordSettingsAppInterface
-      mockReauthenticationModuleShouldReturnSynchronously:NO];
+  [PasswordSettingsAppInterface mockReauthenticationModuleShouldSkipReAuth:NO];
 
   [[AppLaunchManager sharedManager] backgroundAndForegroundApp];
 
@@ -3350,70 +3375,6 @@ void OpenPasswordManagerWidgetPromoInstructions() {
               @"Password saved in your Google Account, foo1@gmail.com")];
 }
 
-// Tests that the local password is not moved when accepting the confirmation
-// dialog since authentication failed.
-- (void)testSavePasswordsInAccountFlowAuthFailed {
-  SavePasswordFormToProfileStore(@"password1", @"user1",
-                                 @"https://example1.com");
-  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
-
-  OpenPasswordManager();
-  OpenSettingsSubmenu();
-  [ChromeEarlGreyUI waitForAppToIdle];
-
-  // Tap on save passwords to account button.
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_accessibilityID(
-              kPasswordSettingsBulkMovePasswordsToAccountButtonTableViewId)]
-      performAction:grey_tap()];
-  [ChromeEarlGreyUI waitForAppToIdle];
-
-  [PasswordSettingsAppInterface mockReauthenticationModuleExpectedResult:
-                                    ReauthenticationResult::kFailure];
-
-  // Tap on "Save in Account" (accept) button.
-  [SaveInAccountConfirmationDialogButton() performAction:grey_tap()];
-  [ChromeEarlGreyUI waitForAppToIdle];
-
-  // Ensure the save passwords to account section is still there.
-  CheckSavePasswordsInAccountSectionVisible();
-}
-
-// Tests that the "set passcode" alert is shown if no authentication is set when
-// user tries to save passwords in their account.
-- (void)testSavePasswordsInAccountFlowNoAuthSetOnDevice {
-  SavePasswordFormToProfileStore(@"password1", @"user1",
-                                 @"https://example1.com");
-  FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
-
-  OpenPasswordManager();
-  OpenSettingsSubmenu();
-  [ChromeEarlGreyUI waitForAppToIdle];
-
-  // Tap on save passwords to account button.
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_accessibilityID(
-              kPasswordSettingsBulkMovePasswordsToAccountButtonTableViewId)]
-      performAction:grey_tap()];
-  [ChromeEarlGreyUI waitForAppToIdle];
-
-  [PasswordSettingsAppInterface mockReauthenticationModuleCanAttempt:NO];
-
-  // Tap on "Save in Account" (accept) button.
-  [SaveInAccountConfirmationDialogButton() performAction:grey_tap()];
-  [ChromeEarlGreyUI waitForAppToIdle];
-
-  // Ensure the "set passcode" alert is shown.
-  [ChromeEarlGrey
-      waitForSufficientlyVisibleElementWithMatcher:
-          grey_accessibilityLabel(l10n_util::GetNSString(
-              IDS_IOS_PASSWORD_SETTINGS_BULK_UPLOAD_PASSWORDS_SET_UP_SCREENLOCK_CONTENT))];
-}
-
 // Tests that the local passwords are correctly handled in the save
 // passwords to account flow, and the correct snackbar appears.
 - (void)testSavePasswordsInAccountFlowCompletesMovingPasswords {
@@ -3464,8 +3425,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
                                     ReauthenticationResult::kSuccess];
   // Delay the auth result to be able to validate that the passwords are not
   // visible until the result is emitted.
-  [PasswordSettingsAppInterface
-      mockReauthenticationModuleShouldReturnSynchronously:NO];
+  [PasswordSettingsAppInterface mockReauthenticationModuleShouldSkipReAuth:NO];
 
   OpenPasswordManager();
 
@@ -3498,8 +3458,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
                                     ReauthenticationResult::kFailure];
   // Delay the auth result to be able to validate that the passwords are not
   // visible until the result is emitted.
-  [PasswordSettingsAppInterface
-      mockReauthenticationModuleShouldReturnSynchronously:NO];
+  [PasswordSettingsAppInterface mockReauthenticationModuleShouldSkipReAuth:NO];
 
   OpenPasswordManager();
 
@@ -3562,6 +3521,41 @@ void OpenPasswordManagerWidgetPromoInstructions() {
   CheckPasswordManagerVisitMetricCount(0);
 }
 
+// Checks that the user is prompt to set a passcode after backgrounding and
+// foregrounding the app and no passcode is set, while in a surface that
+// requires Local Authentication.
+- (void)testSetPasscodeAlertPresentedAfterBackgroundingApp {
+  OpenPasswordManager();
+
+  // Password Manager should be visible.
+  CheckVisibilityOfElement(/*matcher=*/PasswordsTableViewMatcher(),
+                           /*is_visible=*/true);
+  // Simulate passcode not set.
+  [PasswordSettingsAppInterface mockReauthenticationModuleCanAttempt:NO];
+  // Trigger local authentication by backgrounding the app.
+  [[AppLaunchManager sharedManager] backgroundAndForegroundApp];
+
+  if ([PasswordSettingsAppInterface isPasscodeSettingsAvailable]) {
+    // Go to Settings should be present.
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::AlertAction(
+                                            @"Go to Settings")]
+        assertWithMatcher:grey_notNil()];
+  } else {
+    // Dismiss the passcode alert, this should dismiss the Password Manager.
+    [[EarlGrey
+        selectElementWithMatcher:grey_accessibilityLabel(l10n_util::GetNSString(
+                                     IDS_IOS_SETTINGS_SET_UP_SCREENLOCK_TITLE))]
+        assertWithMatcher:grey_sufficientlyVisible()];
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::OKButton()]
+        performAction:grey_tap()];
+
+    // Check for the Settings page after Password Manager is gone.
+    [[EarlGrey
+        selectElementWithMatcher:chrome_test_util::SettingsCollectionView()]
+        assertWithMatcher:grey_sufficientlyVisible()];
+  }
+}
+
 // Tests that the Password Manager is opened is search mode when opened from the
 // Search Passwords widget.
 - (void)testOpenSearchPasswordsWidget {
@@ -3576,8 +3570,7 @@ void OpenPasswordManagerWidgetPromoInstructions() {
           GURL("chromewidgetkit://search-passwords-widget/search-passwords")];
 
   // The Password Manager should be visible behind the keyboard.
-  GREYAssertTrue([EarlGrey isKeyboardShownWithError:nil],
-                 @"Keyboard Should be Shown");
+  [ChromeEarlGrey waitForKeyboardToAppear];
   [[EarlGrey selectElementWithMatcher:PasswordsTableViewMatcher()]
       assertWithMatcher:grey_minimumVisiblePercent(0.5)];
 

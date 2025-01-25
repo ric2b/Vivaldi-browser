@@ -8,8 +8,8 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper_delegate.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
 @class NewTabPageCoordinator;
 @protocol SideSwipeToolbarSnapshotProviding;
 @protocol TabConsumer;
@@ -35,10 +35,10 @@ class WebStateList;
 // TODO(crbug.com/40233361): Stop lazy loading in NTPCoordinator and remove this
 // dependency.
 // TODO(crbug.com/40901519): TabEventsMediator should not have knoledge of
-// browserState.
+// profile.
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
                       ntpCoordinator:(NewTabPageCoordinator*)ntpCoordinator
-                        browserState:(ChromeBrowserState*)browserState
+                             profile:(ProfileIOS*)profile
                      loadingNotifier:
                          (UrlLoadingNotifierBrowserAgent*)urlLoadingNotifier;
 

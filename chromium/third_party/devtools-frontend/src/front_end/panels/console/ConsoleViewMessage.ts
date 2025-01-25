@@ -200,6 +200,18 @@ const UIStrings = {
    *@description Message to offer insights for a console message
    */
   explainThisMessage: 'Understand this message',
+  /**
+   *@description Message to offer insights for a console error message
+   */
+  explainThisErrorWithAI: 'Understand this error. Powered by AI.',
+  /**
+   *@description Message to offer insights for a console warning message
+   */
+  explainThisWarningWithAI: 'Understand this warning. Powered by AI.',
+  /**
+   *@description Message to offer insights for a console message
+   */
+  explainThisMessageWithAI: 'Understand this message. Powered by AI',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/console/ConsoleViewMessage.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -325,11 +337,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     insight.addEventListener('close', () => {
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightClosed);
       this.elementInternal?.classList.toggle('has-insight', false);
-      insight.addEventListener('animationend', () => {
-        this.elementInternal?.removeChild(insight);
-      }, {
-        once: true,
-      });
+      this.elementInternal?.removeChild(insight);
     }, {once: true});
   }
 
@@ -1338,7 +1346,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       // Do not show insights for direct calls to Console APIs from within DevTools Console.
       return false;
     }
-    if (this.message.messageText === '' || this.message.source === Common.Console.FrontendMessageSource.SelfXss) {
+    if (this.message.messageText === '' || this.message.source === Common.Console.FrontendMessageSource.SELF_XSS) {
       return false;
     }
     return this.message.level === Protocol.Log.LogEntryLevel.Error ||
@@ -1355,6 +1363,16 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     return i18nString(UIStrings.explainThisMessage);
   }
 
+  #getExplainAriaLabel(): string {
+    if (this.message.level === Protocol.Log.LogEntryLevel.Error) {
+      return i18nString(UIStrings.explainThisErrorWithAI);
+    }
+    if (this.message.level === Protocol.Log.LogEntryLevel.Warning) {
+      return i18nString(UIStrings.explainThisWarningWithAI);
+    }
+    return i18nString(UIStrings.explainThisMessageWithAI);
+  }
+
   getExplainActionId(): string {
     if (this.message.level === Protocol.Log.LogEntryLevel.Error) {
       return EXPLAIN_CONTEXT_ERROR_ACTION_ID;
@@ -1369,7 +1387,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     const icon = new IconButton.Icon.Icon();
     icon.data = {
       iconName: 'lightbulb-spark',
-      color: 'var(--sys-color-primary)',
+      color: 'var(--sys-color-on-surface-subtle)',
       width: '16px',
       height: '16px',
     };
@@ -1381,11 +1399,18 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       const action = UI.ActionRegistry.ActionRegistry.instance().getAction(EXPLAIN_HOVER_ACTION_ID);
       void action.execute();
     };
-    const text = document.createElement('span');
+    const label = document.createElement('div');
+    label.classList.add('button-label');
+    const text = document.createElement('div');
     text.innerText = this.getExplainLabel();
-    button.append(text);
+    label.append(text);
+    const badge = document.createElement('div');
+    badge.classList.add('badge');
+    badge.innerText = i18n.i18n.lockedString('AI');
+    label.append(badge);
+    button.append(label);
     button.classList.add('hover-button');
-    button.ariaLabel = this.getExplainLabel();
+    button.ariaLabel = this.#getExplainAriaLabel();
     button.tabIndex = 0;
     button.setAttribute('jslog', `${VisualLogging.action(EXPLAIN_HOVER_ACTION_ID).track({click: true})}`);
     hoverButtonObserver.observe(button);

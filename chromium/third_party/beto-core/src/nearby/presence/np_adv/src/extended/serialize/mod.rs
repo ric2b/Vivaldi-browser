@@ -109,6 +109,10 @@
 //!         .try_into().expect("array sizes match")
 //! }
 //! ```
+
+#[cfg(feature = "std")]
+extern crate std;
+
 use core::fmt::{self, Display};
 
 use array_view::ArrayView;
@@ -118,8 +122,7 @@ use sink::Sink;
 
 use crate::extended::{
     de_requires_extended_bit, de_type::DeType, serialize::section::EncodedSection, to_array_view,
-    DeLength, BLE_5_ADV_SVC_MAX_CONTENT_LEN, NP_ADV_MAX_SECTION_LEN,
-    NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT, NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT,
+    DeLength, BLE_5_ADV_SVC_MAX_CONTENT_LEN, NP_ADV_MAX_SECTION_LEN, NP_V1_ADV_MAX_SECTION_COUNT,
 };
 
 mod section;
@@ -223,7 +226,7 @@ impl AdvBuilder {
         &self,
         section_encoder: &SE,
     ) -> Result<(usize, CapacityLimitedVec<u8, NP_ADV_MAX_SECTION_LEN>), AddSectionError> {
-        if self.section_count >= self.advertisement_type.max_sections() {
+        if self.section_count >= NP_V1_ADV_MAX_SECTION_COUNT {
             return Err(AddSectionError::MaxSectionCountExceeded);
         }
         if self.advertisement_type != SE::ADVERTISEMENT_TYPE {
@@ -267,7 +270,7 @@ impl AdvBuilder {
 pub enum AddSectionError {
     /// The advertisement doesn't have enough space to hold the minimum size of the section
     InsufficientAdvSpace,
-    /// The advertisement can only hold a maximum of NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT number of sections
+    /// The advertisement can only hold a maximum of NP_V1_ADV_MAX_SECTION_COUNT number of sections
     MaxSectionCountExceeded,
     /// An incompatible section trying to be added
     IncompatibleSectionType,
@@ -280,7 +283,7 @@ impl Display for AddSectionError {
                 write!(f, "The advertisement (max {BLE_5_ADV_SVC_MAX_CONTENT_LEN} bytes) doesn't have enough remaining space to hold the section")
             }
             AddSectionError::MaxSectionCountExceeded => {
-                write!(f, "The advertisement can only hold a maximum of {NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT} number of sections")
+                write!(f, "The advertisement can only hold a maximum of {NP_V1_ADV_MAX_SECTION_COUNT} number of sections")
             }
             AddSectionError::IncompatibleSectionType => {
                 write!(f, "Public and Encrypted sections cannot be mixed in the same advertisement")
@@ -288,6 +291,9 @@ impl Display for AddSectionError {
         }
     }
 }
+
+#[cfg(feature = "std")]
+impl std::error::Error for AddSectionError {}
 
 /// An encoded NP V1 advertisement, starting with the NP advertisement header byte.
 #[derive(Debug, PartialEq, Eq)]
@@ -314,15 +320,6 @@ pub enum AdvertisementType {
     Plaintext,
     /// Encrypted advertisement with only encrypted sections
     Encrypted,
-}
-
-impl AdvertisementType {
-    fn max_sections(&self) -> usize {
-        match self {
-            AdvertisementType::Plaintext => NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT,
-            AdvertisementType::Encrypted => NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT,
-        }
-    }
 }
 
 /// Derived salt for an individual data element.

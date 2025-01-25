@@ -155,6 +155,26 @@ class TestFingerprintObserver
   ::user_data_auth::AuthEnrollmentProgress last_enroll_progress_;
 };
 
+// The test observer that only observe AuthFactorStatusUpdate messages.
+class TestAuthFactorStatusUpdateObserver
+    : public UserDataAuthClient::AuthFactorStatusUpdateObserver {
+ public:
+  void OnAuthFactorStatusUpdate(
+      const ::user_data_auth::AuthFactorStatusUpdate& update) override {
+    last_broadcast_id_ = update.broadcast_id();
+    last_auth_factor_with_status_ = update.auth_factor_with_status();
+  }
+  const std::string& last_broadcast_id() const { return last_broadcast_id_; }
+  const ::user_data_auth::AuthFactorWithStatus& last_auth_factor_with_status()
+      const {
+    return last_auth_factor_with_status_;
+  }
+
+ private:
+  std::string last_broadcast_id_;
+  ::user_data_auth::AuthFactorWithStatus last_auth_factor_with_status_;
+};
+
 }  // namespace
 
 class UserDataAuthClientTest : public testing::Test {
@@ -193,10 +213,6 @@ class UserDataAuthClientTest : public testing::Test {
                                   ::user_data_auth::kLowDiskSpace, _, _))
         .WillOnce(SaveArg<2>(&low_disk_space_callback_));
 
-    EXPECT_CALL(*proxy_, DoConnectToSignal(
-                             ::user_data_auth::kUserDataAuthInterface,
-                             ::user_data_auth::kAuthScanResultSignal, _, _))
-        .WillOnce(SaveArg<2>(&auth_scan_callback_));
     EXPECT_CALL(*proxy_,
                 DoConnectToSignal(
                     ::user_data_auth::kUserDataAuthInterface,
@@ -207,6 +223,11 @@ class UserDataAuthClientTest : public testing::Test {
                     ::user_data_auth::kUserDataAuthInterface,
                     ::user_data_auth::kPrepareAuthFactorProgressSignal, _, _))
         .WillOnce(SaveArg<2>(&prepare_auth_factor_progress_callback_));
+
+    EXPECT_CALL(*proxy_, DoConnectToSignal(
+                             ::user_data_auth::kUserDataAuthInterface,
+                             ::user_data_auth::kAuthFactorStatusUpdate, _, _))
+        .WillOnce(SaveArg<2>(&auth_factor_status_update_callback_));
 
     UserDataAuthClient::Initialize(bus_.get());
 
@@ -247,8 +268,19 @@ class UserDataAuthClientTest : public testing::Test {
     dbus::MessageWriter writer(&signal);
     writer.AppendProtoAsArrayOfBytes(progress);
     // Emit the signal.
-    ASSERT_FALSE(low_disk_space_callback_.is_null());
+    ASSERT_FALSE(prepare_auth_factor_progress_callback_.is_null());
     prepare_auth_factor_progress_callback_.Run(&signal);
+  }
+
+  void EmitAuthFactorStatusUpdateSignal(
+      const ::user_data_auth::AuthFactorStatusUpdate& update) {
+    dbus::Signal signal(::user_data_auth::kUserDataAuthInterface,
+                        ::user_data_auth::kAuthFactorStatusUpdate);
+    dbus::MessageWriter writer(&signal);
+    writer.AppendProtoAsArrayOfBytes(update);
+    // Emit the signal.
+    ASSERT_FALSE(auth_factor_status_update_callback_.is_null());
+    auth_factor_status_update_callback_.Run(&signal);
   }
 
   base::test::SingleThreadTaskEnvironment task_environment_;
@@ -333,10 +365,6 @@ class UserDataAuthClientTest : public testing::Test {
   // client when called.
   dbus::ObjectProxy::SignalCallback dircrypto_progress_callback_;
 
-  // Callback that delivers the cryptohome AuthScanResult signal to the
-  // client when called.
-  dbus::ObjectProxy::SignalCallback auth_scan_callback_;
-
   // Callback that delivers the cryptohome AuthEnrollmentProgress signal to the
   // client when called.
   dbus::ObjectProxy::SignalCallback auth_enrollment_callback_;
@@ -344,6 +372,10 @@ class UserDataAuthClientTest : public testing::Test {
   // Callback that delivers the cryptohome AuthEnrollmentProgress signal to the
   // client when called.
   dbus::ObjectProxy::SignalCallback prepare_auth_factor_progress_callback_;
+
+  // Callback that delivers the cryptohome AuthFactorStatusUpdate signal to the
+  // client when called.
+  dbus::ObjectProxy::SignalCallback auth_factor_status_update_callback_;
 };
 
 TEST_F(UserDataAuthClientTest, IsMounted) {
@@ -589,6 +621,45 @@ TEST_F(UserDataAuthClientTest, PrepareAuthFactorForAuthenticateProgressSignal) {
   client_->RemovePrepareAuthFactorProgressObserver(&observer);
   EmitPrepareAuthFactorProgressSignal(progress2);
   EXPECT_EQ(observer.auth_scan_done_count(), 2);
+}
+
+TEST_F(UserDataAuthClientTest, AuthFactorStatusUpdateSignal) {
+  TestAuthFactorStatusUpdateObserver observer;
+  client_->AddAuthFactorStatusUpdateObserver(&observer);
+
+  ::user_data_auth::AuthFactorStatusUpdate update1;
+  update1.set_broadcast_id("id1");
+  update1.mutable_auth_factor_with_status()->mutable_auth_factor()->set_type(
+      ::user_data_auth::AUTH_FACTOR_TYPE_PASSWORD);
+  update1.mutable_auth_factor_with_status()->mutable_auth_factor()->set_label(
+      "password");
+
+  // Basic validity check, emit a signal and check.
+  EmitAuthFactorStatusUpdateSignal(update1);
+  EXPECT_EQ(observer.last_broadcast_id(), "id1");
+  EXPECT_EQ(observer.last_auth_factor_with_status().auth_factor().label(),
+            "password");
+  EXPECT_EQ(observer.last_auth_factor_with_status().auth_factor().type(),
+            ::user_data_auth::AUTH_FACTOR_TYPE_PASSWORD);
+
+  // Try again to see nothing is stuck.
+  ::user_data_auth::AuthFactorStatusUpdate update2;
+  update2.set_broadcast_id("id2");
+  update2.mutable_auth_factor_with_status()->mutable_auth_factor()->set_type(
+      ::user_data_auth::AUTH_FACTOR_TYPE_PIN);
+  update2.mutable_auth_factor_with_status()->mutable_auth_factor()->set_label(
+      "pin");
+  EmitAuthFactorStatusUpdateSignal(update2);
+  EXPECT_EQ(observer.last_broadcast_id(), "id2");
+  EXPECT_EQ(observer.last_auth_factor_with_status().auth_factor().label(),
+            "pin");
+  EXPECT_EQ(observer.last_auth_factor_with_status().auth_factor().type(),
+            ::user_data_auth::AUTH_FACTOR_TYPE_PIN);
+
+  // Remove the observer to check that it no longer gets triggered.
+  client_->RemoveAuthFactorStatusUpdateObserver(&observer);
+  EmitAuthFactorStatusUpdateSignal(update1);
+  EXPECT_EQ(observer.last_broadcast_id(), "id2");
 }
 
 }  // namespace ash

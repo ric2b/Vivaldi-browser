@@ -96,8 +96,7 @@ class FadeImageView : public views::ImageView,
   void OnImplicitAnimationsCompleted() override {
     switch (animation_state_) {
       case FadeAnimationState::kNoFadeAnimation:
-        NOTREACHED_IN_MIGRATION();
-        return;
+        NOTREACHED();
       case FadeAnimationState::kFadeOut:
         CHECK_EQ(layer()->opacity(), 0.0f);
         animation_state_ = FadeAnimationState::kFadeIn;
@@ -244,8 +243,14 @@ class ClipboardHistoryBitmapItemView::BitmapContentsView
         .close();
   }
 
-  int GetHeightForWidth(int width) const override {
-    return ClipboardHistoryViews::kImageViewPreferredHeight;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override {
+    const int preferred_width =
+        ClipboardHistoryBitmapItemView::ContentsView::CalculatePreferredSize(
+            available_size)
+            .width();
+    return gfx::Size(preferred_width,
+                     ClipboardHistoryViews::kImageViewPreferredHeight);
   }
 
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override {
@@ -300,8 +305,7 @@ class ClipboardHistoryBitmapItemView::BitmapContentsView
         break;
       }
       default:
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
     }
 
     CHECK_GT(scaling_up_ratio, 0.f);
@@ -338,7 +342,7 @@ ClipboardHistoryBitmapItemView::ClipboardHistoryBitmapItemView(
           l10n_util::GetStringUTF16(IDS_CLIPBOARD_HISTORY_MENU_PNG_IMAGE));
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 

@@ -16,14 +16,12 @@
 #include "base/lazy_instance.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
-#include "chrome/browser/extensions/api/bookmarks/bookmark_api_constants.h"
 #include "chrome/browser/extensions/api/bookmarks/bookmark_api_helpers.h"
-#include "chrome/browser/extensions/api/bookmarks/bookmarks_api_watcher.h"
+#include "chrome/browser/extensions/bookmarks/bookmarks_error_constants.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
@@ -31,18 +29,15 @@
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
-#include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
-#include "components/prefs/pref_service.h"
-#include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_dispatcher.h"
-#include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -61,207 +56,6 @@ using api::bookmarks::CreateDetails;
 using content::BrowserContext;
 using content::BrowserThread;
 using content::WebContents;
-
-namespace {
-
-const char kBookmarkServiceNotAvailable[] =
-    "BookmarkModelService not available for profile.";
-
-}  // namespace
-
-ExtensionFunction::ResponseAction BookmarksFunction::Run() {
-  // NOTE(andre@vivaldi.com) : This can be called from Vivaldi for profiles not
-  // providing bookmarks. Introduced in VB-92877.
-  BookmarkModel* model = GetBookmarkModel();
-  if (!model) {
-    return RespondNow(Error(kBookmarkServiceNotAvailable));
-  }
-  if (!model->loaded()) {
-    // Bookmarks are not ready yet.  We'll wait.
-    model->AddObserver(this);
-    AddRef();  // Balanced in BookmarkModelLoaded().
-    return RespondLater();
-  }
-
-  ResponseValue response = RunOnReady();
-  return RespondNow(std::move(response));
-}
-
-BookmarkModel* BookmarksFunction::GetBookmarkModel() {
-  return BookmarkModelFactory::GetForBrowserContext(GetProfile());
-}
-
-ManagedBookmarkService* BookmarksFunction::GetManagedBookmarkService() {
-  return ManagedBookmarkServiceFactory::GetForProfile(GetProfile());
-}
-
-const BookmarkNode* BookmarksFunction::GetBookmarkNodeFromId(
-    const std::string& id_string,
-    std::string* error) {
-  int64_t id;
-  if (!base::StringToInt64(id_string, &id)) {
-    *error = bookmark_api_constants::kInvalidIdError;
-    return nullptr;
-  }
-
-  const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(
-      BookmarkModelFactory::GetForBrowserContext(GetProfile()), id);
-  if (!node)
-    *error = bookmark_api_constants::kNoNodeError;
-
-  return node;
-}
-
-const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
-    BookmarkModel* model,
-    const CreateDetails& details,
-    std::string* error) {
-  int64_t parent_id;
-
-  if (!details.parent_id) {
-    // Optional, default to "other bookmarks".
-    parent_id = model->other_node()->id();
-  } else if (!base::StringToInt64(*details.parent_id, &parent_id)) {
-    *error = bookmark_api_constants::kInvalidIdError;
-    return nullptr;
-  }
-  const BookmarkNode* parent = bookmarks::GetBookmarkNodeByID(model, parent_id);
-  if (!CanBeModified(parent, error)) {
-    return nullptr;
-  }
-  if (!parent->is_folder()) {
-    *error = bookmark_api_constants::kInvalidParentError;
-    return nullptr;
-  }
-
-  size_t index;
-  if (!details.index) {  // Optional (defaults to end).
-    index = parent->children().size();
-  } else {
-    if (*details.index < 0 ||
-        static_cast<size_t>(*details.index) > parent->children().size()) {
-      *error = bookmark_api_constants::kInvalidIndexError;
-      return nullptr;
-    }
-    index = static_cast<size_t>(*details.index);
-  }
-
-  std::u16string title;  // Optional.
-  if (details.title)
-    title = base::UTF8ToUTF16(*details.title);
-
-  std::string url_string;  // Optional.
-  if (details.url)
-    url_string = *details.url;
-
-  GURL url(url_string);
-  if (!url_string.empty() && !url.is_valid()) {
-    *error = bookmark_api_constants::kInvalidUrlError;
-    return nullptr;
-  }
-
-  if (extension() && IsVivaldiApp(extension_id()) == false) {
-    // NOTE(pettern): Vivaldi-specific properties, no extension are allowed to
-    // set them.
-    if (details.nickname.has_value() || details.description.has_value() ||
-        details.speeddial.has_value() || details.thumbnail.has_value() ||
-        details.bookmarkbar.has_value() || details.partner.has_value()) {
-      *error = kVivaldiReservedApiError;
-      return nullptr;
-    }
-  }
-
-  vivaldi_bookmark_kit::CustomMetaInfo vivaldi_meta;
-  if (details.nickname) {
-    if (!details.nickname->empty()) {
-      std::string nickname;
-      vivaldi_bookmark_kit::SuggestUniqueNick(model, *details.nickname,
-                                              nullptr, &nickname);
-      vivaldi_meta.SetNickname(nickname);
-    }
-  }
-  if (details.description) {
-    vivaldi_meta.SetDescription(*details.description);
-  }
-  if (details.speeddial) {
-    vivaldi_meta.SetSpeeddial(*details.speeddial);
-  }
-  if (details.bookmarkbar) {
-    vivaldi_meta.SetBookmarkbar(*details.bookmarkbar);
-  }
-  if (details.thumbnail) {
-    vivaldi_meta.SetThumbnail(*details.thumbnail);
-  }
-  if (details.partner) {
-    base::Uuid vivaldi_partner =
-      base::Uuid::ParseCaseInsensitive(*details.partner);
-    if (!vivaldi_partner.is_valid()) {
-      *error = "Partner id string is not a valid GUID - " + *details.partner;
-      return nullptr;
-    }
-    vivaldi_meta.SetPartner(vivaldi_partner);
-  }
-  // --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
-
-  const BookmarkNode* node;
-  if (url_string.length()) {
-    node = model->AddNewURL(parent, index, title, url, vivaldi_meta.map());
-  } else {
-    node = model->AddFolder(parent, index, title, vivaldi_meta.map());
-    model->SetDateFolderModified(parent, base::Time::Now());
-  }
-
-  DCHECK(node);
-
-  return node;
-}
-
-bool BookmarksFunction::EditBookmarksEnabled() {
-  PrefService* prefs = user_prefs::UserPrefs::Get(GetProfile());
-  return prefs->GetBoolean(bookmarks::prefs::kEditBookmarksEnabled);
-}
-
-bool BookmarksFunction::CanBeModified(const BookmarkNode* node,
-                                      std::string* error) {
-  if (!node) {
-    *error = bookmark_api_constants::kNoParentError;
-    return false;
-  }
-  if (node->is_root()) {
-    *error = bookmark_api_constants::kModifySpecialError;
-    return false;
-  }
-  ManagedBookmarkService* managed = GetManagedBookmarkService();
-  if (bookmarks::IsDescendantOf(node, managed->managed_node())) {
-    *error = bookmark_api_constants::kModifyManagedError;
-    return false;
-  }
-  return true;
-}
-
-Profile* BookmarksFunction::GetProfile() {
-  return Profile::FromBrowserContext(browser_context());
-}
-
-void BookmarksFunction::OnResponded() {
-  DCHECK(response_type());
-  if (*response_type() == ExtensionFunction::SUCCEEDED) {
-    BookmarksApiWatcher::GetForBrowserContext(browser_context())
-        ->NotifyApiInvoked(extension(), this);
-  }
-}
-
-void BookmarksFunction::BookmarkModelChanged() {
-}
-
-void BookmarksFunction::BookmarkModelLoaded(bool ids_reassigned) {
-  GetBookmarkModel()->RemoveObserver(this);
-
-  ResponseValue response = RunOnReady();
-  Respond(std::move(response));
-
-  Release();  // Balanced in Run().
-}
 
 BookmarkEventRouter::BookmarkEventRouter(Profile* profile)
     : browser_context_(profile),
@@ -584,7 +378,7 @@ ExtensionFunction::ResponseValue BookmarksSearchFunction::RunOnReady() {
 
 ExtensionFunction::ResponseValue BookmarksRemoveFunctionBase::RunOnReady() {
   if (!EditBookmarksEnabled())
-    return Error(bookmark_api_constants::kEditBookmarksDisabled);
+    return Error(bookmarks_errors::kEditBookmarksDisabled);
 
   std::optional<api::bookmarks::Remove::Params> params =
       api::bookmarks::Remove::Params::Create(args());
@@ -593,7 +387,7 @@ ExtensionFunction::ResponseValue BookmarksRemoveFunctionBase::RunOnReady() {
 
   int64_t id;
   if (!base::StringToInt64(params->id, &id))
-    return Error(bookmark_api_constants::kInvalidIdError);
+    return Error(bookmarks_errors::kInvalidIdError);
 
   std::string error;
   BookmarkModel* model = GetBookmarkModel();
@@ -616,10 +410,10 @@ ExtensionFunction::ResponseValue BookmarksRemoveFunctionBase::RunOnReady() {
     DCHECK(trash_node);
     const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, id);
     if (!node || !trash_node) {
-      return Error(bookmark_api_constants::kNoNodeError);
+      return Error(bookmarks_errors::kNoNodeError);
     }
     if (model->is_permanent_node(node)) {
-      return Error(bookmark_api_constants::kModifySpecialError);
+      return Error(bookmarks_errors::kModifySpecialError);
     }
 
     // If it's already in trash or a separator, just delete it.
@@ -651,7 +445,7 @@ bool BookmarksRemoveTreeFunction::is_recursive() const {
 
 ExtensionFunction::ResponseValue BookmarksCreateFunction::RunOnReady() {
   if (!EditBookmarksEnabled())
-    return Error(bookmark_api_constants::kEditBookmarksDisabled);
+    return Error(bookmarks_errors::kEditBookmarksDisabled);
 
   std::optional<api::bookmarks::Create::Params> params =
       api::bookmarks::Create::Params::Create(args());
@@ -671,9 +465,115 @@ ExtensionFunction::ResponseValue BookmarksCreateFunction::RunOnReady() {
   return ArgumentList(api::bookmarks::Create::Results::Create(ret));
 }
 
+const BookmarkNode* BookmarksCreateFunction::CreateBookmarkNode(
+    BookmarkModel* model,
+    const CreateDetails& details,
+    std::string* error) {
+  int64_t parent_id;
+
+  if (!details.parent_id) {
+    // Optional, default to "other bookmarks".
+    parent_id = model->other_node()->id();
+  } else if (!base::StringToInt64(*details.parent_id, &parent_id)) {
+    *error = bookmarks_errors::kInvalidIdError;
+    return nullptr;
+  }
+  const BookmarkNode* parent = bookmarks::GetBookmarkNodeByID(model, parent_id);
+  if (!CanBeModified(parent, error)) {
+    return nullptr;
+  }
+  if (!parent->is_folder()) {
+    *error = bookmarks_errors::kInvalidParentError;
+    return nullptr;
+  }
+
+  size_t index;
+  if (!details.index) {  // Optional (defaults to end).
+    index = parent->children().size();
+  } else {
+    if (*details.index < 0 ||
+        static_cast<size_t>(*details.index) > parent->children().size()) {
+      *error = bookmarks_errors::kInvalidIndexError;
+      return nullptr;
+    }
+    index = static_cast<size_t>(*details.index);
+  }
+
+  std::u16string title;  // Optional.
+  if (details.title) {
+    title = base::UTF8ToUTF16(*details.title);
+  }
+
+  std::string url_string;  // Optional.
+  if (details.url) {
+    url_string = *details.url;
+  }
+
+  GURL url(url_string);
+  if (!url_string.empty() && !url.is_valid()) {
+    *error = bookmarks_errors::kInvalidUrlError;
+    return nullptr;
+  }
+
+  if (extension() && IsVivaldiApp(extension_id()) == false) {
+    // NOTE(pettern): Vivaldi-specific properties, no extension are allowed to
+    // set them.
+    if (details.nickname.has_value() || details.description.has_value() ||
+        details.speeddial.has_value() || details.thumbnail.has_value() ||
+        details.bookmarkbar.has_value() || details.partner.has_value()) {
+      *error = kVivaldiReservedApiError;
+      return nullptr;
+    }
+  }
+
+  vivaldi_bookmark_kit::CustomMetaInfo vivaldi_meta;
+  if (details.nickname) {
+    if (!details.nickname->empty()) {
+      std::string nickname;
+      vivaldi_bookmark_kit::SuggestUniqueNick(model, *details.nickname,
+                                              nullptr, &nickname);
+      vivaldi_meta.SetNickname(nickname);
+    }
+  }
+  if (details.description) {
+    vivaldi_meta.SetDescription(*details.description);
+  }
+  if (details.speeddial) {
+    vivaldi_meta.SetSpeeddial(*details.speeddial);
+  }
+  if (details.bookmarkbar) {
+    vivaldi_meta.SetBookmarkbar(*details.bookmarkbar);
+  }
+  if (details.thumbnail) {
+    vivaldi_meta.SetThumbnail(*details.thumbnail);
+  }
+  if (details.partner) {
+    base::Uuid vivaldi_partner =
+      base::Uuid::ParseCaseInsensitive(*details.partner);
+    if (!vivaldi_partner.is_valid()) {
+      *error = "Partner id string is not a valid GUID - " + *details.partner;
+      return nullptr;
+    }
+    vivaldi_meta.SetPartner(vivaldi_partner);
+  }
+  // --- VIVALDI --- changed by Daniel Sig. @ 11-02-2015
+
+  const BookmarkNode* node;
+  if (url_string.length()) {
+    node = model->AddNewURL(parent, index, title, url, vivaldi_meta.map());
+  } else {
+    node = model->AddFolder(parent, index, title, vivaldi_meta.map());
+    model->SetDateFolderModified(parent, base::Time::Now());
+  }
+
+  DCHECK(node);
+
+  return node;
+}
+
 ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
   if (!EditBookmarksEnabled())
-    return Error(bookmark_api_constants::kEditBookmarksDisabled);
+    return Error(bookmarks_errors::kEditBookmarksDisabled);
 
   std::optional<api::bookmarks::Move::Params> params =
       api::bookmarks::Move::Params::Create(args());
@@ -688,7 +588,7 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
   if (model->is_permanent_node(node))
-    return Error(bookmark_api_constants::kModifySpecialError);
+    return Error(bookmarks_errors::kModifySpecialError);
 
   const BookmarkNode* parent = nullptr;
   if (!params->destination.parent_id) {
@@ -697,7 +597,7 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
   } else {
     int64_t parent_id;
     if (!base::StringToInt64(*params->destination.parent_id, &parent_id))
-      return Error(bookmark_api_constants::kInvalidIdError);
+      return Error(bookmarks_errors::kInvalidIdError);
 
     parent = bookmarks::GetBookmarkNodeByID(model, parent_id);
 
@@ -707,7 +607,7 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
       // if we try to move a folder to the bookmark bar folder and the folder is
       // already the bookmark bar folder or a parent of it.
       if (node->is_folder() && bookmarks::IsDescendantOf(parent, node)) {
-        return Error(bookmark_api_constants::kInvalidIndexError);
+        return Error(bookmarks_errors::kInvalidIndexError);
       }
     }
   }
@@ -717,11 +617,11 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
   }
 
   if (!parent->is_folder()) {
-    return Error(bookmark_api_constants::kInvalidParentError);
+    return Error(bookmarks_errors::kInvalidParentError);
   }
 
   if (parent->HasAncestor(node)) {
-    return Error(bookmark_api_constants::kInvalidMoveDestinationError);
+    return Error(bookmarks_errors::kInvalidMoveDestinationError);
   }
 
   size_t index;
@@ -729,7 +629,7 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
     if (*params->destination.index < 0 ||
         static_cast<size_t>(*params->destination.index) >
             parent->children().size()) {
-      return Error(bookmark_api_constants::kInvalidIndexError);
+      return Error(bookmarks_errors::kInvalidIndexError);
     }
     index = static_cast<size_t>(*params->destination.index);
   } else {
@@ -745,7 +645,7 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
 
 ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
   if (!EditBookmarksEnabled())
-    return Error(bookmark_api_constants::kEditBookmarksDisabled);
+    return Error(bookmarks_errors::kEditBookmarksDisabled);
 
   std::optional<api::bookmarks::Update::Params> params =
       api::bookmarks::Update::Params::Create(args());
@@ -776,7 +676,7 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
     url_string = *params->changes.url;
   GURL url(url_string);
   if (!url_string.empty() && !url.is_valid())
-    return Error(bookmark_api_constants::kInvalidUrlError);
+    return Error(bookmarks_errors::kInvalidUrlError);
 
   std::string error;
   const BookmarkNode* node = GetBookmarkNodeFromId(params->id, &error);
@@ -786,10 +686,10 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
   if (model->is_permanent_node(node))
-    return Error(bookmark_api_constants::kModifySpecialError);
+    return Error(bookmarks_errors::kModifySpecialError);
 
   if (!url.is_empty() && node->is_folder())
-    return Error(bookmark_api_constants::kCannotSetUrlOfFolderError);
+    return Error(bookmarks_errors::kCannotSetUrlOfFolderError);
 
   if (params->changes.nickname && !params->changes.nickname->empty() &&
       ::vivaldi_bookmark_kit::DoesNickExists(model, *params->changes.nickname,

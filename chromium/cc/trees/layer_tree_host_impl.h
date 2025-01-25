@@ -240,6 +240,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
     // The original BeginFrameArgs that triggered the latest update from the
     // main thread.
     viz::BeginFrameArgs origin_begin_main_frame_args;
+    DamageReasonSet damage_reasons;
+    // Preferred frame rate of VideoLayerImpl mapped to number of layers.
+    base::flat_map<base::TimeDelta, uint32_t> video_layer_preferred_intervals;
     // Indicates if there are SharedElementDrawQuads in this frame.
     bool has_shared_element_resources = false;
     // Indicates if this frame has a save directive which will add copy requests
@@ -349,7 +352,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
       bool scroll_and_viewport_changes_synced,
       const BeginMainFrameMetrics* begin_main_frame_metrics,
       bool commit_timeout = false);
-  virtual void BeginCommit(int source_frame_number, uint64_t trace_id);
+  virtual void BeginCommit(int source_frame_number,
+                           BeginMainFrameTraceId trace_id);
   virtual void FinishCommit(CommitState& commit_state,
                             const ThreadUnsafeCommitState& unsafe_state);
   virtual void CommitComplete();
@@ -659,7 +663,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   void DidNotProduceFrame(const viz::BeginFrameAck& ack,
                           FrameSkippedReason reason);
   void OnBeginImplFrameDeadline();
-  void DidModifyTilePriorities();
+  void DidModifyTilePriorities(bool pending_update_tiles);
   // Requests that we do not produce frames until the new viz::LocalSurfaceId
   // has been activated.
   void SetTargetLocalSurfaceId(
@@ -959,6 +963,10 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   // Holds image decode cache instance. It can either be a shared cache or
   // a cache create by this instance. Which is used depends on the settings.
   class ImageDecodeCacheHolder;
+
+  // TODO(https://crbug.com/365813260): Remove once the bug is analyzed and
+  // solved.
+  void CrashWhenMaxTextureSizeIsUninitialized() const;
 
   void UpdateChildLocalSurfaceId();
 

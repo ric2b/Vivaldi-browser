@@ -100,10 +100,6 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 8;
     case DISTANCE_CONTROL_LIST_VERTICAL:
       return 12;
-    case DISTANCE_DROPDOWN_BUTTON_LABEL_ARROW_SPACING:
-      return 8;
-    case DISTANCE_DROPDOWN_BUTTON_RIGHT_MARGIN:
-      return 12;
     case DISTANCE_EXTENSIONS_MENU_WIDTH:
       return kMediumDialogWidth;
     case DISTANCE_EXTENSIONS_MENU_BUTTON_ICON_SIZE:
@@ -166,8 +162,30 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 8;
     case DISTANCE_RICH_HOVER_BUTTON_ICON_HORIZONTAL:
       return 8;
+    case DISTANCE_TOAST_BUBBLE_BETWEEN_CHILD_SPACING:
+      return 4;
+    case DISTANCE_TOAST_BUBBLE_BETWEEN_LABEL_ACTION_BUTTON_SPACING:
+      return 16;
+    case DISTANCE_TOAST_BUBBLE_HEIGHT:
+      return 48;
+    case DISTANCE_TOAST_BUBBLE_HEIGHT_ACTION_BUTTON:
+      return 36;
+    case DISTANCE_TOAST_BUBBLE_HEIGHT_CONTENT:
+      return 24;
+    case DISTANCE_TOAST_BUBBLE_ICON_SIZE:
+      return 20;
+    case DISTANCE_TOAST_BUBBLE_LEADING_ICON_SIDE_MARGINS:
+      return 2;
+    case DISTANCE_TOAST_BUBBLE_MARGIN_LEFT:
+      return 12;
+    case DISTANCE_TOAST_BUBBLE_MARGIN_RIGHT_ACTION_BUTTON:
+      return 6;
+    case DISTANCE_TOAST_BUBBLE_MARGIN_RIGHT_CLOSE_BUTTON:
+      return 12;
+    case DISTANCE_TOAST_BUBBLE_MARGIN_RIGHT_LABEL:
+      return 16;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 int ChromeLayoutProvider::GetSnappedDialogWidth(int min_width) const {

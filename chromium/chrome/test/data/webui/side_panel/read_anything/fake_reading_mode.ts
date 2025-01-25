@@ -40,6 +40,13 @@ export class FakeReadingMode {
   yellowTheme: number = 9;
   blueTheme: number = 10;
 
+  // Enum values for highlight granularity.
+  autoHighlighting: number = 0;
+  wordHighlighting: number = 1;
+  phraseHighlighting: number = 2;
+  sentenceHighlighting: number = 3;
+  noHighlighting: number = 4;
+
   // Whether the WebUI toolbar feature flag is enabled.
   isWebUIToolbarVisible: boolean = true;
 
@@ -66,7 +73,7 @@ export class FakeReadingMode {
 
   // Returns whether the reading highlight is currently on.
   isHighlightOn(): boolean {
-    return this.highlightGranularity === 0;
+    return this.highlightGranularity !== this.noHighlighting;
   }
 
   // Returns the stored user voice preference for the current language.
@@ -150,14 +157,8 @@ export class FakeReadingMode {
   onLinkClicked(_nodeId: number) {}
 
   // Called when the line spacing is changed via the webui toolbar.
-  onStandardLineSpacing() {
-    this.lineSpacing = this.standardLineSpacing;
-  }
-  onLooseLineSpacing() {
-    this.lineSpacing = this.looseLineSpacing;
-  }
-  onVeryLooseLineSpacing() {
-    this.lineSpacing = this.veryLooseLineSpacing;
+  onLineSpacingChange(value: number) {
+    this.lineSpacing = value;
   }
 
   // Called when a user makes a font size change via the webui toolbar.
@@ -166,6 +167,10 @@ export class FakeReadingMode {
   }
   onFontSizeReset() {
     this.fontSize = 0;
+  }
+
+  onHighlightGranularityChanged(value: number) {
+    this.highlightGranularity = value;
   }
 
   // Called when a user toggles a switch in the language menu
@@ -184,31 +189,13 @@ export class FakeReadingMode {
   }
 
   // Called when the letter spacing is changed via the webui toolbar.
-  onStandardLetterSpacing() {
-    this.letterSpacing = this.standardLetterSpacing;
-  }
-  onWideLetterSpacing() {
-    this.letterSpacing = this.wideLetterSpacing;
-  }
-  onVeryWideLetterSpacing() {
-    this.letterSpacing = this.veryWideLetterSpacing;
+  onLetterSpacingChange(value: number) {
+    this.letterSpacing = value;
   }
 
   // Called when the color theme is changed via the webui toolbar.
-  onDefaultTheme() {
-    this.colorTheme = this.defaultTheme;
-  }
-  onLightTheme() {
-    this.colorTheme = this.lightTheme;
-  }
-  onDarkTheme() {
-    this.colorTheme = this.darkTheme;
-  }
-  onYellowTheme() {
-    this.colorTheme = this.yellowTheme;
-  }
-  onBlueTheme() {
-    this.colorTheme = this.blueTheme;
+  onThemeChange(value: number) {
+    this.colorTheme = value;
   }
 
   // Returns the css name of the given font, or the default if it's not valid.
@@ -234,10 +221,11 @@ export class FakeReadingMode {
 
   // Called when the highlight granularity is changed via the webui toolbar.
   turnedHighlightOn() {
-    this.highlightGranularity = 0;
+    this.highlightGranularity = this.autoHighlighting;
   }
+
   turnedHighlightOff() {
-    this.highlightGranularity = 1;
+    this.highlightGranularity = this.noHighlighting;
   }
 
   // Returns the actual spacing value to use based on the given lineSpacing
@@ -371,6 +359,9 @@ export class FakeReadingMode {
   // refer to the previous granularity.
   movePositionToPreviousGranularity(): void {}
 
+  // Signal that the page language has changed.
+  languageChanged(): void {}
+
   // Returns the index of the next sentence of the given text, such that the
   // next sentence is equivalent to text.substr(0, <returned_index>).
   // If the sentence exceeds the maximum text length, the sentence will be
@@ -387,4 +378,8 @@ export class FakeReadingMode {
   getDisplayNameForLocale(_locale: string, _displayLocale: string): string {
     return '';
   }
+
+  // Begins processing the speech segments on the current page to be used by
+  // Read Aloud.
+  preprocessTextForSpeech() {}
 }

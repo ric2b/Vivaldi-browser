@@ -23,6 +23,7 @@
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
+#include "ui/android/color_utils_android.h"
 #include "ui/android/view_android.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -477,6 +478,24 @@ bool WebContentsDelegateAndroid::MaybeCopyContentAreaAsBitmap(
   return false;
 }
 
+SkBitmap WebContentsDelegateAndroid::MaybeCopyContentAreaAsBitmapSync() {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null()) {
+    return SkBitmap();
+  }
+  ScopedJavaLocalRef<jobject> bitmap =
+      Java_WebContentsDelegateAndroid_maybeCopyContentAreaAsBitmapSync(env,
+                                                                       obj);
+  if (bitmap.is_null()) {
+    return SkBitmap();
+  }
+  gfx::JavaBitmap java_bitmap_lock(bitmap);
+  SkBitmap skbitmap = gfx::CreateSkBitmapFromJavaBitmap(java_bitmap_lock);
+  skbitmap.setImmutable();
+  return skbitmap;
+}
+
 void WebContentsDelegateAndroid::DidBackForwardTransitionAnimationChange() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
@@ -485,6 +504,24 @@ void WebContentsDelegateAndroid::DidBackForwardTransitionAnimationChange() {
   }
   Java_WebContentsDelegateAndroid_didBackForwardTransitionAnimationChange(env,
                                                                           obj);
+}
+
+content::BackForwardTransitionAnimationManager::FallbackUXConfig
+WebContentsDelegateAndroid::GetBackForwardTransitionFallbackUXConfig() {
+  JNIEnv* env = AttachCurrentThread();
+  // Java colors are already in 32bit ARBG, same as `SkColor`.
+  jint favicon_background =
+      Java_WebContentsDelegateAndroid_getBackForwardTransitionFallbackUXFaviconBackgroundColor(
+          env, GetJavaDelegate(env));
+  jint page_background =
+      Java_WebContentsDelegateAndroid_getBackForwardTransitionFallbackUXPageBackgroundColor(
+          env, GetJavaDelegate(env));
+  return {
+      .rounded_rectangle_color =
+          SkColor4f::FromColor(static_cast<SkColor>(favicon_background)),
+      .background_color =
+          SkColor4f::FromColor(static_cast<SkColor>(page_background)),
+  };
 }
 
 void JNI_WebContentsDelegateAndroid_MaybeCopyContentAreaAsBitmapOutcome(

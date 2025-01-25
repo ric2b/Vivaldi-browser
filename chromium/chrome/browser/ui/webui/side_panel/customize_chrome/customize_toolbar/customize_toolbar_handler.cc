@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_toolbar/customize_toolbar_handler.h"
 
+#include "base/metrics/user_metrics.h"
+#include "base/strings/strcat.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
@@ -72,6 +74,8 @@ MojoActionForChromeAction(actions::ActionId action_id) {
       return side_panel::customize_chrome::mojom::ActionId::kDevTools;
     case kActionShowChromeLabs:
       return side_panel::customize_chrome::mojom::ActionId::kShowChromeLabs;
+    case kActionCopyUrl:
+      return side_panel::customize_chrome::mojom::ActionId::kCopyLink;
     default:
       return std::nullopt;
   }
@@ -124,6 +128,8 @@ std::optional<actions::ActionId> ChromeActionForMojoAction(
       return kActionDevTools;
     case side_panel::customize_chrome::mojom::ActionId::kShowChromeLabs:
       return kActionShowChromeLabs;
+    case side_panel::customize_chrome::mojom::ActionId::kCopyLink:
+      return kActionCopyUrl;
     default:
       return std::nullopt;
   }
@@ -157,11 +163,9 @@ CustomizeToolbarHandler::~CustomizeToolbarHandler() = default;
 void CustomizeToolbarHandler::ListActions(ListActionsCallback callback) {
   std::vector<side_panel::customize_chrome::mojom::ActionPtr> actions;
 
-  actions::ActionItem* const scope_action =
-      browser_->browser_actions()->root_action_item();
-  const PinnedToolbarActionsModel* const model = model_;
   const ui::ColorProvider* const provider =
       browser_->window()->GetColorProvider();
+  const int icon_color_id = ui::kColorSysOnSurface;
   const float scale_factor =
       display::Screen::GetScreen()
           ->GetDisplayNearestWindow(browser_->window()->GetNativeWindow())
@@ -174,11 +178,9 @@ void CustomizeToolbarHandler::ListActions(ListActionsCallback callback) {
       side_panel::customize_chrome::mojom::CategoryId::kNavigation,
       GURL(webui::EncodePNGAndMakeDataURI(
           ui::ImageModel::FromVectorIcon(kNavigateHomeChromeRefreshIcon,
-                                         ui::kColorIcon)
+                                         icon_color_id)
               .Rasterize(provider),
           scale_factor)));
-
-  actions.push_back(std::move(home_action));
 
   auto forward_action = side_panel::customize_chrome::mojom::Action::New(
       MojoActionForChromeAction(kActionForward).value(),
@@ -187,43 +189,64 @@ void CustomizeToolbarHandler::ListActions(ListActionsCallback callback) {
       side_panel::customize_chrome::mojom::CategoryId::kNavigation,
       GURL(webui::EncodePNGAndMakeDataURI(
           ui::ImageModel::FromVectorIcon(
-              vector_icons::kForwardArrowChromeRefreshIcon, ui::kColorIcon)
+              vector_icons::kForwardArrowChromeRefreshIcon, icon_color_id)
               .Rasterize(provider),
           scale_factor)));
 
-  actions.push_back(std::move(forward_action));
-
   const auto add_action =
-      [&actions, model, provider, scale_factor, scope_action](
+      [&actions, this, provider, scale_factor](
           actions::ActionId id,
           side_panel::customize_chrome::mojom::CategoryId category) {
-        const actions::ActionItem* const action_item =
+        actions::ActionItem* const scope_action =
+            browser_->browser_actions()->root_action_item();
+        actions::ActionItem* const action_item =
             actions::ActionManager::Get().FindAction(id, scope_action);
         if (!action_item || !action_item->GetVisible()) {
           return;
         }
 
+        if (!action_observations_.contains(id)) {
+          action_observations_.emplace(
+              id, action_item->AddActionChangedCallback(base::BindRepeating(
+                      &CustomizeToolbarHandler::OnActionItemChanged,
+                      base::Unretained(this))));
+        }
+
+        // If the icon is a vector icon, recolor it to match the spec.
+        // Non-vector icons cannot be recolored, but there aren't any of those
+        // currently anyways.
+        const ui::ImageModel& original_icon = action_item->GetImage();
+        const ui::ImageModel recolored_icon =
+            original_icon.IsVectorIcon()
+                ? ui::ImageModel::FromVectorIcon(
+                      *(action_item->GetImage().GetVectorIcon().vector_icon()),
+                      icon_color_id,
+                      action_item->GetImage().GetVectorIcon().icon_size())
+                : original_icon;
+
         auto mojo_action = side_panel::customize_chrome::mojom::Action::New(
             MojoActionForChromeAction(id).value(),
-            base::UTF16ToUTF8(action_item->GetText()), model->Contains(id),
+            base::UTF16ToUTF8(action_item->GetText()), model_->Contains(id),
             category,
             GURL(webui::EncodePNGAndMakeDataURI(
-                action_item->GetImage().Rasterize(provider), scale_factor)));
+                recolored_icon.Rasterize(provider), scale_factor)));
         actions.push_back(std::move(mojo_action));
       };
 
+  actions.push_back(std::move(home_action));
+  actions.push_back(std::move(forward_action));
   add_action(kActionNewIncognitoWindow,
              side_panel::customize_chrome::mojom::CategoryId::kNavigation);
 
   add_action(kActionShowPasswordsBubbleOrPage,
              side_panel::customize_chrome::mojom::CategoryId::kYourChrome);
-  add_action(kActionSidePanelShowBookmarks,
-             side_panel::customize_chrome::mojom::CategoryId::kYourChrome);
-  add_action(kActionSidePanelShowReadingList,
-             side_panel::customize_chrome::mojom::CategoryId::kYourChrome);
   add_action(kActionShowPaymentsBubbleOrPage,
              side_panel::customize_chrome::mojom::CategoryId::kYourChrome);
   add_action(kActionShowAddressesBubbleOrPage,
+             side_panel::customize_chrome::mojom::CategoryId::kYourChrome);
+  add_action(kActionSidePanelShowBookmarks,
+             side_panel::customize_chrome::mojom::CategoryId::kYourChrome);
+  add_action(kActionSidePanelShowReadingList,
              side_panel::customize_chrome::mojom::CategoryId::kYourChrome);
   add_action(kActionSidePanelShowHistoryCluster,
              side_panel::customize_chrome::mojom::CategoryId::kYourChrome);
@@ -240,13 +263,17 @@ void CustomizeToolbarHandler::ListActions(ListActionsCallback callback) {
              side_panel::customize_chrome::mojom::CategoryId::kTools);
   add_action(kActionShowTranslate,
              side_panel::customize_chrome::mojom::CategoryId::kTools);
-  add_action(kActionSendTabToSelf,
-             side_panel::customize_chrome::mojom::CategoryId::kTools);
   add_action(kActionQrCodeGenerator,
              side_panel::customize_chrome::mojom::CategoryId::kTools);
-  add_action(kActionRouteMedia,
-             side_panel::customize_chrome::mojom::CategoryId::kTools);
+  // TODO(b/323962377): Reinstate after Cast action implementation is
+  // complete.
+  // add_action(kActionRouteMedia,
+  //             side_panel::customize_chrome::mojom::CategoryId::kTools);
   add_action(kActionSidePanelShowReadAnything,
+             side_panel::customize_chrome::mojom::CategoryId::kTools);
+  add_action(kActionCopyUrl,
+             side_panel::customize_chrome::mojom::CategoryId::kTools);
+  add_action(kActionSendTabToSelf,
              side_panel::customize_chrome::mojom::CategoryId::kTools);
   add_action(kActionTaskManager,
              side_panel::customize_chrome::mojom::CategoryId::kTools);
@@ -295,37 +322,29 @@ void CustomizeToolbarHandler::PinAction(
       break;
     default:
       model_->UpdatePinnedState(chrome_action.value(), pin);
+      const std::optional<std::string> metrics_name =
+          actions::ActionIdMap::ActionIdToString(chrome_action.value());
+      CHECK(metrics_name.has_value());
+      base::RecordComputedAction(base::StrCat(
+          {"Actions.PinnedToolbarButton.", pin ? "Pinned" : "Unpinned",
+           ".ByCustomizeChromeSidePanel.", metrics_name.value()}));
+      base::RecordComputedAction(base::StrCat({"Actions.PinnedToolbarButton.",
+                                               pin ? "Pinned" : "Unpinned",
+                                               ".ByCustomizeChromeSidePanel"}));
   }
 }
 
 void CustomizeToolbarHandler::GetIsCustomized(
     GetIsCustomizedCallback callback) {
-  // By default, only forward is pinned.
-  // TODO(323962536): Chrome Labs should be pinned by default, if it exists.
-  const bool is_default = !prefs()->GetBoolean(prefs::kShowHomeButton) &&
-                          prefs()->GetBoolean(prefs::kShowForwardButton) &&
-                          model_->PinnedActionIds().size() == 0;
-  std::move(callback).Run(!is_default);
+  std::move(callback).Run(!model_->IsDefault());
 }
 
 void CustomizeToolbarHandler::ResetToDefault() {
-  prefs()->ClearPref(prefs::kShowHomeButton);
-  prefs()->ClearPref(prefs::kShowForwardButton);
-
-  // By default, only forward is pinned.
-  // TODO(323962536): Chrome Labs should be pinned by default, if it exists.
-  const std::vector<actions::ActionId> pinned_ids = model_->PinnedActionIds();
-  for (actions::ActionId id : pinned_ids) {
-    model_->UpdatePinnedState(id, false);
-  }
+  model_->ResetToDefault();
 }
 
-void CustomizeToolbarHandler::OnActionAdded(const actions::ActionId& id) {
-  OnActionPinnedChanged(id, true);
-}
-
-void CustomizeToolbarHandler::OnActionRemoved(const actions::ActionId& id) {
-  OnActionPinnedChanged(id, false);
+void CustomizeToolbarHandler::OnActionsChanged() {
+  client_->NotifyActionsUpdated();
 }
 
 void CustomizeToolbarHandler::OnActionPinnedChanged(actions::ActionId id,
@@ -347,6 +366,10 @@ void CustomizeToolbarHandler::OnShowHomeButtonChanged() {
 void CustomizeToolbarHandler::OnShowForwardButtonChanged() {
   OnActionPinnedChanged(kActionForward,
                         prefs()->GetBoolean(prefs::kShowForwardButton));
+}
+
+void CustomizeToolbarHandler::OnActionItemChanged() {
+  client_->NotifyActionsUpdated();
 }
 
 PrefService* CustomizeToolbarHandler::prefs() const {

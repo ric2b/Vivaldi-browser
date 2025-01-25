@@ -120,7 +120,7 @@ export class Hint {
 
 export abstract class CSSRuleValidator {
   getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.Other;
+    return Host.UserMetrics.CSSHintType.OTHER;
   }
 
   readonly #affectedProperties: string[];
@@ -144,7 +144,7 @@ export class AlignContentValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.AlignContent;
+    return Host.UserMetrics.CSSHintType.ALIGN_CONTENT;
   }
 
   getHint(_propertyName: string, computedStyles?: Map<string, string>): Hint|undefined {
@@ -158,8 +158,8 @@ export class AlignContentValidator extends CSSRuleValidator {
 
       return new Hint(
           i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-            'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-            'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+            REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+            AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
           }),
           i18nString(UIStrings.ruleViolatedBySameElementRuleFix, {
             PROPERTY_NAME: buildPropertyName('display'),
@@ -180,8 +180,8 @@ export class AlignContentValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleFix, {
           PROPERTY_NAME: buildPropertyName('flex-wrap'),
@@ -197,7 +197,7 @@ export class FlexItemValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.FlexItem;
+    return Host.UserMetrics.CSSHintType.FLEX_ITEM;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>, parentComputedStyles?: Map<string, string>): Hint
@@ -213,12 +213,12 @@ export class FlexItemValidator extends CSSRuleValidator {
     const targetParentPropertyDeclaration = buildPropertyDefinitionText('display', 'flex');
     return new Hint(
         i18nString(UIStrings.ruleViolatedByParentElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedByParentElementRuleFix, {
-          'EXISTING_PARENT_ELEMENT_RULE': reasonPropertyDeclaration,
-          'TARGET_PARENT_ELEMENT_RULE': targetParentPropertyDeclaration,
+          EXISTING_PARENT_ELEMENT_RULE: reasonPropertyDeclaration,
+          TARGET_PARENT_ELEMENT_RULE: targetParentPropertyDeclaration,
         }),
     );
   }
@@ -230,7 +230,7 @@ export class FlexContainerValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.FlexContainer;
+    return Host.UserMetrics.CSSHintType.FLEX_CONTAINER;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>): Hint|undefined {
@@ -246,12 +246,12 @@ export class FlexContainerValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleChangeSuggestion, {
-          'EXISTING_PROPERTY_DECLARATION': reasonPropertyDeclaration,
-          'TARGET_PROPERTY_DECLARATION': targetRuleCode,
+          EXISTING_PROPERTY_DECLARATION: reasonPropertyDeclaration,
+          TARGET_PROPERTY_DECLARATION: targetRuleCode,
         }),
     );
   }
@@ -272,7 +272,7 @@ export class GridContainerValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.GridContainer;
+    return Host.UserMetrics.CSSHintType.GRID_CONTAINER;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>): Hint|undefined {
@@ -285,12 +285,12 @@ export class GridContainerValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleChangeSuggestion, {
-          'EXISTING_PROPERTY_DECLARATION': reasonPropertyDeclaration,
-          'TARGET_PROPERTY_DECLARATION': targetRuleCode,
+          EXISTING_PROPERTY_DECLARATION: reasonPropertyDeclaration,
+          TARGET_PROPERTY_DECLARATION: targetRuleCode,
         }),
     );
   }
@@ -313,7 +313,7 @@ export class GridItemValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.GridItem;
+    return Host.UserMetrics.CSSHintType.GRID_ITEM;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>, parentComputedStyles?: Map<string, string>): Hint
@@ -330,12 +330,12 @@ export class GridItemValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedByParentElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedByParentElementRuleFix, {
-          'EXISTING_PARENT_ELEMENT_RULE': reasonPropertyDeclaration,
-          'TARGET_PARENT_ELEMENT_RULE': targetParentPropertyDeclaration,
+          EXISTING_PARENT_ELEMENT_RULE: reasonPropertyDeclaration,
+          TARGET_PARENT_ELEMENT_RULE: targetParentPropertyDeclaration,
         }),
     );
   }
@@ -351,7 +351,7 @@ export class FlexOrGridItemValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.FlexOrGridItem;
+    return Host.UserMetrics.CSSHintType.FLEX_OR_GRID_ITEM;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>, parentComputedStyles?: Map<string, string>): Hint
@@ -369,12 +369,12 @@ export class FlexOrGridItemValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedByParentElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedByParentElementRuleFix, {
-          'EXISTING_PARENT_ELEMENT_RULE': reasonPropertyDeclaration,
-          'TARGET_PARENT_ELEMENT_RULE': targetParentPropertyDeclaration,
+          EXISTING_PARENT_ELEMENT_RULE: reasonPropertyDeclaration,
+          TARGET_PARENT_ELEMENT_RULE: targetParentPropertyDeclaration,
         }),
     );
   }
@@ -390,7 +390,7 @@ export class FlexGridValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.FlexGrid;
+    return Host.UserMetrics.CSSHintType.FLEX_GRID;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>, parentComputedStyles?: Map<string, string>): Hint
@@ -410,12 +410,12 @@ export class FlexGridValidator extends CSSRuleValidator {
           buildPropertyName(propertyName === 'justify-content' ? 'justify-self' : 'align-self');
       return new Hint(
           i18nString(UIStrings.flexGridContainerPropertyRuleReason, {
-            'CONTAINER_DISPLAY_NAME': reasonContainerDisplayName,
-            'PROPERTY_NAME': reasonPropertyName,
+            CONTAINER_DISPLAY_NAME: reasonContainerDisplayName,
+            PROPERTY_NAME: reasonPropertyName,
           }),
           i18nString(UIStrings.flexGridContainerPropertyRuleFix, {
-            'PROPERTY_NAME': reasonPropertyName,
-            'ALTERNATIVE_PROPERTY_NAME': reasonAlternativePropertyName,
+            PROPERTY_NAME: reasonPropertyName,
+            ALTERNATIVE_PROPERTY_NAME: reasonAlternativePropertyName,
           }),
       );
     }
@@ -425,12 +425,12 @@ export class FlexGridValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleChangeFlexOrGrid, {
-          'DISPLAY_GRID_RULE': buildPropertyDefinitionText('display', 'grid'),
-          'DISPLAY_FLEX_RULE': buildPropertyDefinitionText('display', 'flex'),
+          DISPLAY_GRID_RULE: buildPropertyDefinitionText('display', 'grid'),
+          DISPLAY_FLEX_RULE: buildPropertyDefinitionText('display', 'flex'),
         }),
     );
   }
@@ -450,7 +450,7 @@ export class MulticolFlexGridValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.MulticolFlexGrid;
+    return Host.UserMetrics.CSSHintType.MULTICOL_FLEX_GRID;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>): Hint|undefined {
@@ -467,8 +467,8 @@ export class MulticolFlexGridValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleFix, {
           PROPERTY_NAME: buildPropertyName('display'),
@@ -490,7 +490,7 @@ export class PaddingValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.Padding;
+    return Host.UserMetrics.CSSHintType.PADDING;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>): Hint|undefined {
@@ -515,8 +515,8 @@ export class PaddingValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleFix, {
           PROPERTY_NAME: buildPropertyName('display'),
@@ -537,7 +537,7 @@ export class PositionValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.Position;
+    return Host.UserMetrics.CSSHintType.POSITION;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>): Hint|undefined {
@@ -554,8 +554,8 @@ export class PositionValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleFix, {
           PROPERTY_NAME: buildPropertyName('position'),
@@ -573,7 +573,7 @@ export class ZIndexValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.ZIndex;
+    return Host.UserMetrics.CSSHintType.Z_INDEX;
   }
 
   getHint(propertyName: string, computedStyles?: Map<string, string>, parentComputedStyles?: Map<string, string>): Hint
@@ -592,8 +592,8 @@ export class ZIndexValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleFix, {
           PROPERTY_NAME: buildPropertyName('position'),
@@ -617,7 +617,7 @@ export class SizingValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.Sizing;
+    return Host.UserMetrics.CSSHintType.SIZING;
   }
 
   getHint(
@@ -639,8 +639,8 @@ export class SizingValidator extends CSSRuleValidator {
 
     return new Hint(
         i18nString(UIStrings.ruleViolatedBySameElementRuleReason, {
-          'REASON_PROPERTY_DECLARATION_CODE': reasonPropertyDeclaration,
-          'AFFECTED_PROPERTY_DECLARATION_CODE': affectedPropertyDeclarationCode,
+          REASON_PROPERTY_DECLARATION_CODE: reasonPropertyDeclaration,
+          AFFECTED_PROPERTY_DECLARATION_CODE: affectedPropertyDeclarationCode,
         }),
         i18nString(UIStrings.ruleViolatedBySameElementRuleFix, {
           PROPERTY_NAME: buildPropertyName('display'),
@@ -661,7 +661,7 @@ export class FontVariationSettingsValidator extends CSSRuleValidator {
   }
 
   override getMetricType(): Host.UserMetrics.CSSHintType {
-    return Host.UserMetrics.CSSHintType.FontVariationSettings;
+    return Host.UserMetrics.CSSHintType.FONT_VARIATION_SETTINGS;
   }
 
   getHint(

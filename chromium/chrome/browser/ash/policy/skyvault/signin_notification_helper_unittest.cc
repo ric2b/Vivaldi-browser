@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/policy/skyvault/signin_notification_helper.h"
 
 #include "base/test/mock_callback.h"
+#include "chrome/browser/ash/policy/skyvault/odfs_skyvault_uploader.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/testing_profile.h"
@@ -13,8 +14,36 @@
 
 namespace policy::skyvault_ui_utils {
 
-class SignInNotificationHelperTest : public testing::Test {
+namespace {
+
+const gfx::Image CreateTestThumbnail() {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(1, 1);
+  return gfx::Image::CreateFrom1xBitmap(bitmap);
+}
+
+}  // namespace
+
+constexpr int kId = 123;
+
+class SignInNotificationHelperTest
+    : public testing::Test,
+      public ::testing::WithParamInterface<
+          std::tuple<ash::cloud_upload::OdfsSkyvaultUploader::FileType,
+                     /*notification_id*/ std::string>> {
  public:
+  static std::string ParamToName(const testing::TestParamInfo<ParamType> info) {
+    auto [file_type, id] = info.param;
+    switch (file_type) {
+      case ash::cloud_upload::OdfsSkyvaultUploader::FileType::kDownload:
+        return "download";
+      case ash::cloud_upload::OdfsSkyvaultUploader::FileType::kScreenCapture:
+        return "screen_capture";
+      case ash::cloud_upload::OdfsSkyvaultUploader::FileType::kMigration:
+        return "migration";
+    }
+  }
+
   SignInNotificationHelperTest() = default;
 
   SignInNotificationHelperTest(const SignInNotificationHelperTest&) = delete;
@@ -38,14 +67,12 @@ class SignInNotificationHelperTest : public testing::Test {
 
 // Tests that when the user clicks on cancel, the sign-in callback will be run
 // with error.
-TEST_F(SignInNotificationHelperTest, Download_ClickOnCancel) {
+TEST_P(SignInNotificationHelperTest, ClickOnCancel) {
+  auto [file_type, notification_id] = GetParam();
+
   base::MockCallback<base::RepeatingCallback<void(base::File::Error)>> mock_cb;
-  ShowSignInNotification(
-      profile_.get(), /*id=*/123,
-      ash::cloud_upload::OdfsSkyvaultUploader::FileType::kDownload,
-      "dummy_name.txt", mock_cb.Get());
-  auto notification_id = base::StrCat(
-      {kDownloadSignInNotificationPrefix, base::NumberToString(123)});
+  ShowSignInNotification(profile_.get(), kId, file_type,
+                         base::FilePath("dummy_name.txt"), mock_cb.Get());
   EXPECT_TRUE(display_service_->GetNotification(notification_id).has_value());
 
   EXPECT_CALL(mock_cb, Run(base::File::Error::FILE_ERROR_FAILED));
@@ -58,15 +85,23 @@ TEST_F(SignInNotificationHelperTest, Download_ClickOnCancel) {
 
 // Tests that when the user closes the notification, the sign-in callback will
 // be run with error.
-TEST_F(SignInNotificationHelperTest, Download_CloseNotification) {
+TEST_P(SignInNotificationHelperTest, CloseNotification) {
+  auto [file_type, notification_id] = GetParam();
+  const bool with_image =
+      file_type ==
+      ash::cloud_upload::OdfsSkyvaultUploader::FileType::kScreenCapture;
+
   base::MockCallback<base::RepeatingCallback<void(base::File::Error)>> mock_cb;
-  ShowSignInNotification(
-      profile_.get(), /*id=*/123,
-      ash::cloud_upload::OdfsSkyvaultUploader::FileType::kDownload,
-      "dummy_name.txt", mock_cb.Get());
-  auto notification_id = base::StrCat(
-      {kDownloadSignInNotificationPrefix, base::NumberToString(123)});
+  std::optional<const gfx::Image> thumbnail =
+      with_image ? std::optional<const gfx::Image>(CreateTestThumbnail())
+                 : std::nullopt;
+  ShowSignInNotification(profile_.get(), kId, file_type,
+                         base::FilePath("dummy_name.txt"), mock_cb.Get(),
+                         thumbnail);
   EXPECT_TRUE(display_service_->GetNotification(notification_id).has_value());
+  EXPECT_EQ(
+      display_service_->GetNotification(notification_id)->image().IsEmpty(),
+      !with_image);
 
   EXPECT_CALL(mock_cb, Run(base::File::Error::FILE_ERROR_FAILED));
   display_service_->RemoveNotification(NotificationHandler::Type::TRANSIENT,
@@ -76,5 +111,23 @@ TEST_F(SignInNotificationHelperTest, Download_CloseNotification) {
 
   EXPECT_FALSE(display_service_->GetNotification(notification_id).has_value());
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    SkyVault,
+    SignInNotificationHelperTest,
+    ::testing::Values(
+        std::make_tuple(
+            ash::cloud_upload::OdfsSkyvaultUploader::FileType::kDownload,
+            base::StrCat({kDownloadSignInNotificationPrefix,
+                          base::NumberToString(kId)})),
+        std::make_tuple(
+            ash::cloud_upload::OdfsSkyvaultUploader::FileType::kMigration,
+            kMigrationSignInNotification),
+        std::make_tuple(
+            ash::cloud_upload::OdfsSkyvaultUploader::FileType::kScreenCapture,
+            base::StrCat({kScreenCaptureSignInNotificationIdPrefix,
+                          base::NumberToString(kId)}))),
+
+    SignInNotificationHelperTest::ParamToName);
 
 }  // namespace policy::skyvault_ui_utils

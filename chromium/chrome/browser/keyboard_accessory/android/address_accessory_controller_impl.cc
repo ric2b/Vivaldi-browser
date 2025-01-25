@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/containers/span.h"
 #include "base/memory/ptr_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,8 +15,10 @@
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/keyboard_accessory/android/manual_filling_controller.h"
 #include "chrome/browser/keyboard_accessory/android/manual_filling_utils.h"
+#include "chrome/browser/plus_addresses/plus_address_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/android/plus_addresses/all_plus_addresses_bottom_sheet_controller.h"
+#include "chrome/browser/ui/android/plus_addresses/plus_addresses_helper.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/address_data_manager.h"
@@ -23,7 +26,9 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/plus_addresses/features.h"
+#include "components/plus_addresses/plus_address_types.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -52,10 +57,10 @@ void AddProfileInfoAsSelectableField(UserInfo* info,
   if (type == FieldType::NAME_MIDDLE && field.empty()) {
     field = profile->GetRawInfo(FieldType::NAME_MIDDLE_INITIAL);
   }
-  info->add_field(AccessorySheetField(
-      /*display_text=*/field, /*text_to_fill=*/field,
-      /*a11y_description=*/field, /*id=*/std::string(), /*is_obfuscated=*/false,
-      /*selectable=*/true));
+  info->add_field(AccessorySheetField::Builder()
+                      .SetDisplayText(std::move(field))
+                      .SetSelectable(true)
+                      .Build());
 }
 
 UserInfo TranslateProfile(const AutofillProfile* profile) {
@@ -73,29 +78,14 @@ std::vector<UserInfo> UserInfosForProfiles(
   return infos;
 }
 
-std::vector<FooterCommand> CreateManageAddressesFooter() {
-  std::vector<FooterCommand> commands = {FooterCommand(
-      l10n_util::GetStringUTF16(IDS_AUTOFILL_ADDRESS_SHEET_ALL_ADDRESSES_LINK),
-      AccessoryAction::MANAGE_ADDRESSES)};
-  if (base::FeatureList::IsEnabled(
-          plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled)) {
-    commands.emplace_back(FooterCommand(
-        l10n_util::GetStringUTF16(
-            IDS_PLUS_ADDRESS_CREATE_NEW_PLUS_ADDRESSES_LINK_ANDROID),
-        AccessoryAction::CREATE_PLUS_ADDRESS));
-    commands.emplace_back(
-        FooterCommand(l10n_util::GetStringUTF16(
-                          IDS_PLUS_ADDRESS_SELECT_PLUS_ADDRESS_LINK_ANDROID),
-                      AccessoryAction::SELECT_PLUS_ADDRESS));
-  }
-  return commands;
-}
-
 }  // namespace
 
 AddressAccessoryControllerImpl::~AddressAccessoryControllerImpl() {
   if (personal_data_manager_)
     personal_data_manager_->RemoveObserver(this);
+  if (plus_profiles_provider_) {
+    plus_profiles_provider_->RemoveObserver(this);
+  }
 }
 
 // static
@@ -112,20 +102,41 @@ void AddressAccessoryControllerImpl::RegisterFillingSourceObserver(
 
 std::optional<autofill::AccessorySheetData>
 AddressAccessoryControllerImpl::GetSheetData() const {
-  if (!personal_data_manager_) {
-    return std::nullopt;
+  base::span<const plus_addresses::PlusProfile> plus_profiles;
+  if (plus_profiles_provider_) {
+    plus_profiles = plus_profiles_provider_->GetAffiliatedPlusProfiles();
   }
-  std::vector<const AutofillProfile*> profiles =
-      personal_data_manager_->address_data_manager().GetProfilesToSuggest();
-  std::u16string title_or_empty_message;
+  std::vector<const AutofillProfile*> profiles;
+  if (personal_data_manager_) {
+    profiles =
+        personal_data_manager_->address_data_manager().GetProfilesToSuggest();
+  }
+  std::u16string user_info_title, plus_address_title;
   if (profiles.empty()) {
-    title_or_empty_message =
+    // User info title is not empty if and only if the list of addresses is
+    // empty.
+    user_info_title =
         l10n_util::GetStringUTF16(IDS_AUTOFILL_ADDRESS_SHEET_EMPTY_MESSAGE);
+    auto* client = ContentAutofillClient::FromWebContents(&GetWebContents());
+    if (client && !plus_profiles.empty()) {
+      const std::u16string elided_url =
+          url_formatter::FormatOriginForSecurityDisplay(
+              client->GetLastCommittedPrimaryMainFrameOrigin(),
+              url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
+      plus_address_title = l10n_util::GetStringFUTF16(
+          IDS_PLUS_ADDRESS_FALLBACK_MANUAL_FILLING_SHEET_TITLE, elided_url);
+    }
   }
-  // TODO: crbug.com/327838324 - Populate the plus address section.
-  return autofill::CreateAccessorySheetData(
-      autofill::AccessoryTabType::ADDRESSES, title_or_empty_message,
-      UserInfosForProfiles(profiles), CreateManageAddressesFooter());
+  AccessorySheetData sheet_data = autofill::CreateAccessorySheetData(
+      autofill::AccessoryTabType::ADDRESSES, user_info_title,
+      plus_address_title, UserInfosForProfiles(profiles),
+      CreateManageAddressesFooter());
+  for (const plus_addresses::PlusProfile& plus_profile : plus_profiles) {
+    sheet_data.add_plus_address_info(
+        PlusAddressInfo(plus_profile.facet.canonical_spec(),
+                        base::UTF8ToUTF16(*plus_profile.plus_address)));
+  }
+  return sheet_data;
 }
 
 void AddressAccessoryControllerImpl::OnFillingTriggered(
@@ -145,20 +156,19 @@ void AddressAccessoryControllerImpl::OnOptionSelected(
     case AccessoryAction::MANAGE_ADDRESSES:
       autofill::ShowAutofillProfileSettings(&GetWebContents());
       return;
-    case AccessoryAction::CREATE_PLUS_ADDRESS: {
-      auto* client = ContentAutofillClient::FromWebContents(&GetWebContents());
-      client->OfferPlusAddressCreation(
-          client->GetLastCommittedPrimaryMainFrameOrigin(),
-          base::BindOnce(
-              &AddressAccessoryControllerImpl::OnPlusAddressCreated,
-              weak_ptr_factory_.GetWeakPtr(),
-              GetManualFillingController()->GetLastFocusedFieldId()));
-      // TODO: crbug.com/327838324 - Confirm with the UX that the manual filling
-      // sheet should be closed after the bottom sheet is closed.
-      GetManualFillingController()->Hide();
+    case AccessoryAction::CREATE_PLUS_ADDRESS_FROM_ADDRESS_SHEET:
+      if (auto* client =
+              ContentAutofillClient::FromWebContents(&GetWebContents())) {
+        client->OfferPlusAddressCreation(
+            client->GetLastCommittedPrimaryMainFrameOrigin(),
+            base::BindOnce(
+                &AddressAccessoryControllerImpl::OnPlusAddressCreated,
+                weak_ptr_factory_.GetWeakPtr(),
+                GetManualFillingController()->GetLastFocusedFieldId()));
+        GetManualFillingController()->Hide();
+      }
       return;
-    }
-    case AccessoryAction::SELECT_PLUS_ADDRESS: {
+    case AccessoryAction::SELECT_PLUS_ADDRESS_FROM_ADDRESS_SHEET:
       if (!all_plus_addresses_bottom_sheet_controller_) {
         all_plus_addresses_bottom_sheet_controller_ = std::make_unique<
             plus_addresses::AllPlusAddressesBottomSheetController>(
@@ -167,20 +177,31 @@ void AddressAccessoryControllerImpl::OnOptionSelected(
             &AddressAccessoryControllerImpl::OnPlusAddressSelected,
             weak_ptr_factory_.GetWeakPtr(),
             GetManualFillingController()->GetLastFocusedFieldId()));
+        GetManualFillingController()->Hide();
       }
       return;
-    }
+    case AccessoryAction::MANAGE_PLUS_ADDRESS_FROM_ADDRESS_SHEET:
+      plus_addresses::ShowManagePlusAddressesPage(GetWebContents());
+      return;
     default:
-      NOTREACHED_NORETURN()
-          << "Unhandled selected action: " << static_cast<int>(selected_action);
+      NOTREACHED() << "Unhandled selected action: "
+                   << static_cast<int>(selected_action);
   }
 }
 
 void AddressAccessoryControllerImpl::OnToggleChanged(
     AccessoryAction toggled_action,
     bool enabled) {
-  NOTREACHED_NORETURN() << "Unhandled toggled action: "
-                        << static_cast<int>(toggled_action);
+  NOTREACHED() << "Unhandled toggled action: "
+               << static_cast<int>(toggled_action);
+}
+
+void AddressAccessoryControllerImpl::RegisterPlusProfilesProvider(
+    base::WeakPtr<AffiliatedPlusProfilesProvider> provider) {
+  plus_profiles_provider_ = provider;
+  if (plus_profiles_provider_) {
+    plus_profiles_provider_->AddObserver(this);
+  }
 }
 
 void AddressAccessoryControllerImpl::RefreshSuggestions() {
@@ -193,11 +214,16 @@ void AddressAccessoryControllerImpl::RefreshSuggestions() {
     personal_data_manager_->AddObserver(this);
   }
   CHECK(source_observer_);
-  source_observer_.Run(this, IsFillingSourceAvailable(
-                                 personal_data_manager_ &&
-                                 !personal_data_manager_->address_data_manager()
-                                      .GetProfilesToSuggest()
-                                      .empty()));
+  const bool address_data_available =
+      personal_data_manager_ && !personal_data_manager_->address_data_manager()
+                                     .GetProfilesToSuggest()
+                                     .empty();
+  const bool plus_profiles_data_available =
+      plus_profiles_provider_ &&
+      !plus_profiles_provider_->GetAffiliatedPlusProfiles().empty();
+  source_observer_.Run(this,
+                       IsFillingSourceAvailable(address_data_available ||
+                                                plus_profiles_data_available));
 }
 
 base::WeakPtr<AddressAccessoryController>
@@ -206,6 +232,10 @@ AddressAccessoryControllerImpl::AsWeakPtr() {
 }
 
 void AddressAccessoryControllerImpl::OnPersonalDataChanged() {
+  RefreshSuggestions();
+}
+
+void AddressAccessoryControllerImpl::OnAffiliatedPlusProfilesFetched() {
   RefreshSuggestions();
 }
 
@@ -233,7 +263,63 @@ AddressAccessoryControllerImpl::AddressAccessoryControllerImpl(
     : content::WebContentsUserData<AddressAccessoryControllerImpl>(
           *web_contents),
       mf_controller_(std::move(mf_controller)),
-      personal_data_manager_(nullptr) {}
+      personal_data_manager_(nullptr),
+      plus_address_service_(PlusAddressServiceFactory::GetForBrowserContext(
+          GetWebContents().GetBrowserContext())) {}
+
+std::vector<FooterCommand>
+AddressAccessoryControllerImpl::CreateManageAddressesFooter() const {
+  std::vector<FooterCommand> commands = {FooterCommand(
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_ADDRESS_SHEET_ALL_ADDRESSES_LINK),
+      AccessoryAction::MANAGE_ADDRESSES)};
+  if (!base::FeatureList::IsEnabled(
+          plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled)) {
+    return commands;
+  }
+  // Both `ContentAutofillClient and this controller are instances of the
+  // `WebContentsUserData`. There's no no well-defined destruction order between
+  // two different `WebContentsUserData` objects. That's why
+  // `ContentAutofillClient` cannot be stored in a `raw_ptr` member variable
+  // like `PlusAddressService`.
+  auto* autofill_client =
+      autofill::ContentAutofillClient::FromWebContents(&GetWebContents());
+  if (!autofill_client || !plus_address_service_) {
+    return commands;
+  }
+  // Offer plus address creation if it's supported for the current user session
+  // and if the user doesn't have any plus addresses created for the current
+  // domain.
+  if (plus_address_service_->IsPlusAddressCreationEnabled(
+          autofill_client->GetLastCommittedPrimaryMainFrameOrigin(),
+          autofill_client->IsOffTheRecord()) &&
+      plus_profiles_provider_ &&
+      plus_profiles_provider_->GetAffiliatedPlusProfiles().empty()) {
+    commands.emplace_back(FooterCommand(
+        l10n_util::GetStringUTF16(
+            IDS_PLUS_ADDRESS_CREATE_NEW_PLUS_ADDRESSES_LINK_ANDROID),
+        AccessoryAction::CREATE_PLUS_ADDRESS_FROM_ADDRESS_SHEET));
+  }
+  // Offer the user to select the plus address manually if plus address filling
+  // is supported for the last committed origin and the user has at least 1 plus
+  // address.
+  if (plus_address_service_->IsPlusAddressFillingEnabled(
+          autofill_client->GetLastCommittedPrimaryMainFrameOrigin()) &&
+      !plus_address_service_->GetPlusProfiles().empty()) {
+    commands.emplace_back(
+        FooterCommand(l10n_util::GetStringUTF16(
+                          IDS_PLUS_ADDRESS_SELECT_PLUS_ADDRESS_LINK_ANDROID),
+                      AccessoryAction::SELECT_PLUS_ADDRESS_FROM_ADDRESS_SHEET));
+  }
+
+  if (plus_profiles_provider_ &&
+      !plus_profiles_provider_->GetAffiliatedPlusProfiles().empty()) {
+    commands.emplace_back(
+        FooterCommand(l10n_util::GetStringUTF16(
+                          IDS_PLUS_ADDRESS_MANAGE_PLUS_ADDRESSES_LINK_ANDROID),
+                      AccessoryAction::MANAGE_PLUS_ADDRESS_FROM_ADDRESS_SHEET));
+  }
+  return commands;
+}
 
 void AddressAccessoryControllerImpl::OnPlusAddressCreated(
     FieldGlobalId focused_field_id,

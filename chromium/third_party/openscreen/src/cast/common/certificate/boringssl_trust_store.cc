@@ -18,12 +18,12 @@
 #include <string_view>
 #include <utility>
 
-#include "absl/strings/str_cat.h"
 #include "cast/common/certificate/boringssl_parsed_certificate.h"
 #include "cast/common/certificate/boringssl_util.h"
 #include "cast/common/certificate/date_time.h"
 #include "util/crypto/pem_helpers.h"
 #include "util/osp_logging.h"
+#include "util/stringprintf.h"
 
 namespace openscreen::cast {
 namespace {
@@ -383,11 +383,10 @@ BoringSSLTrustStore::FindCertificatePath(
   for (size_t i = 1; i < der_certs.size(); ++i) {
     intermediate_certs.emplace_back(ParseX509Der(der_certs[i]));
     if (!intermediate_certs.back()) {
-      return Error(
-          Error::Code::kErrCertsParse,
-          absl::StrCat(
-              "FindCertificatePath: Failed to parse intermediate certificate ",
-              i, " of ", der_certs.size()));
+      return Error(Error::Code::kErrCertsParse,
+                   StringPrintf("FindCertificatePath: Failed to parse "
+                                "intermediate certificate %zu of %zu",
+                                i, der_certs.size()));
     }
   }
 

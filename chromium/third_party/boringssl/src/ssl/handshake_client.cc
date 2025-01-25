@@ -244,23 +244,36 @@ static bool ssl_write_client_cipher_list(const SSL_HANDSHAKE *hs, CBB *out,
   // Add TLS 1.3 ciphers. Order ChaCha20-Poly1305 relative to AES-GCM based on
   // hardware support.
   if (hs->max_version >= TLS1_3_VERSION) {
+    static const uint16_t kCiphersNoAESHardware[] = {
+        TLS1_3_CK_CHACHA20_POLY1305_SHA256 & 0xffff,
+        TLS1_3_CK_AES_128_GCM_SHA256 & 0xffff,
+        TLS1_3_CK_AES_256_GCM_SHA384 & 0xffff,
+    };
+    static const uint16_t kCiphersAESHardware[] = {
+        TLS1_3_CK_AES_128_GCM_SHA256 & 0xffff,
+        TLS1_3_CK_AES_256_GCM_SHA384 & 0xffff,
+        TLS1_3_CK_CHACHA20_POLY1305_SHA256 & 0xffff,
+    };
+    static const uint16_t kCiphersCNSA[] = {
+        TLS1_3_CK_AES_256_GCM_SHA384 & 0xffff,
+        TLS1_3_CK_AES_128_GCM_SHA256 & 0xffff,
+        TLS1_3_CK_CHACHA20_POLY1305_SHA256 & 0xffff,
+    };
+
     const bool has_aes_hw = ssl->config->aes_hw_override
                                 ? ssl->config->aes_hw_override_value
                                 : EVP_has_aes_hardware();
+    const bssl::Span<const uint16_t> ciphers =
+        ssl->config->tls13_cipher_policy == ssl_compliance_policy_cnsa_202407
+            ? bssl::Span<const uint16_t>(kCiphersCNSA)
+            : (has_aes_hw ? bssl::Span<const uint16_t>(kCiphersAESHardware)
+                          : bssl::Span<const uint16_t>(kCiphersNoAESHardware));
 
-    if ((!has_aes_hw &&  //
-         !ssl_add_tls13_cipher(&child,
-                               TLS1_3_CK_CHACHA20_POLY1305_SHA256 & 0xffff,
-                               ssl->config->tls13_cipher_policy)) ||
-        !ssl_add_tls13_cipher(&child, TLS1_3_CK_AES_128_GCM_SHA256 & 0xffff,
-                              ssl->config->tls13_cipher_policy) ||
-        !ssl_add_tls13_cipher(&child, TLS1_3_CK_AES_256_GCM_SHA384 & 0xffff,
-                              ssl->config->tls13_cipher_policy) ||
-        (has_aes_hw &&  //
-         !ssl_add_tls13_cipher(&child,
-                               TLS1_3_CK_CHACHA20_POLY1305_SHA256 & 0xffff,
-                               ssl->config->tls13_cipher_policy))) {
-      return false;
+    for (auto cipher : ciphers) {
+      if (!ssl_add_tls13_cipher(&child, cipher,
+                                ssl->config->tls13_cipher_policy)) {
+        return false;
+      }
     }
   }
 
@@ -372,9 +385,13 @@ bool ssl_add_client_hello(SSL_HANDSHAKE *hs) {
 static bool parse_server_version(const SSL_HANDSHAKE *hs, uint16_t *out_version,
                                  uint8_t *out_alert,
                                  const ParsedServerHello &server_hello) {
+  uint16_t legacy_version = TLS1_2_VERSION;
+  if (SSL_is_dtls(hs->ssl)) {
+    legacy_version = DTLS1_2_VERSION;
+  }
   // If the outer version is not TLS 1.2, use it.
   // TODO(davidben): This function doesn't quite match the RFC8446 formulation.
-  if (server_hello.legacy_version != TLS1_2_VERSION) {
+  if (server_hello.legacy_version != legacy_version) {
     *out_version = server_hello.legacy_version;
     return true;
   }
@@ -509,25 +526,28 @@ static enum ssl_hs_wait_t do_start_connect(SSL_HANDSHAKE *hs) {
     return ssl_hs_error;
   }
 
-  // Never send a session ID in QUIC. QUIC uses TLS 1.3 at a minimum and
-  // disables TLS 1.3 middlebox compatibility mode.
-  if (ssl->quic_method == nullptr) {
-    const bool has_id_session = ssl->session != nullptr &&
-                                ssl->session->session_id_length > 0 &&
-                                ssl->session->ticket.empty();
-    const bool has_ticket_session =
-        ssl->session != nullptr && !ssl->session->ticket.empty();
-    if (has_id_session) {
-      hs->session_id_len = ssl->session->session_id_length;
-      OPENSSL_memcpy(hs->session_id, ssl->session->session_id,
-                     hs->session_id_len);
-    } else if (has_ticket_session || hs->max_version >= TLS1_3_VERSION) {
-      // Send a random session ID. TLS 1.3 always sends one, and TLS 1.2 session
-      // tickets require a placeholder value to signal resumption.
-      hs->session_id_len = sizeof(hs->session_id);
-      if (!RAND_bytes(hs->session_id, hs->session_id_len)) {
-        return ssl_hs_error;
-      }
+  const bool has_id_session = ssl->session != nullptr &&
+                              ssl->session->session_id_length > 0 &&
+                              ssl->session->ticket.empty();
+  const bool has_ticket_session =
+      ssl->session != nullptr && !ssl->session->ticket.empty();
+  // TLS 1.2 session tickets require a placeholder value to signal resumption.
+  const bool ticket_session_requires_random_id =
+      has_ticket_session &&
+      ssl_session_protocol_version(ssl->session.get()) < TLS1_3_VERSION;
+  // Compatibility mode sends a random session ID. Compatibility mode is
+  // enabled for TLS 1.3, but not when it's run over QUIC or DTLS.
+  const bool enable_compatibility_mode = hs->max_version >= TLS1_3_VERSION &&
+                                         ssl->quic_method == nullptr &&
+                                         !SSL_is_dtls(hs->ssl);
+  if (has_id_session) {
+    hs->session_id_len = ssl->session->session_id_length;
+    OPENSSL_memcpy(hs->session_id, ssl->session->session_id,
+                   hs->session_id_len);
+  } else if (ticket_session_requires_random_id || enable_compatibility_mode) {
+    hs->session_id_len = sizeof(hs->session_id);
+    if (!RAND_bytes(hs->session_id, hs->session_id_len)) {
+      return ssl_hs_error;
     }
   }
 
@@ -618,10 +638,6 @@ static enum ssl_hs_wait_t do_read_hello_verify_request(SSL_HANDSHAKE *hs) {
 
   assert(SSL_is_dtls(ssl));
 
-  // When implementing DTLS 1.3, we need to handle the interactions between
-  // HelloVerifyRequest, DTLS 1.3's HelloVerifyRequest removal, and ECH.
-  assert(hs->max_version < TLS1_3_VERSION);
-
   SSLMessage msg;
   if (!ssl->method->get_message(ssl, &msg)) {
     return ssl_hs_read_message;
@@ -631,6 +647,12 @@ static enum ssl_hs_wait_t do_read_hello_verify_request(SSL_HANDSHAKE *hs) {
     hs->state = state_read_server_hello;
     return ssl_hs_ok;
   }
+
+  // TODO(crbug.com/boringssl/715): At the point when we read an HVR, we don't
+  // know whether the connection is DTLS 1.2 (or earlier) or DTLS 1.3 - that's
+  // determined when we read the supported_versions in the ServerHello. If we
+  // receive HVR and then the ServerHello selects DTLS 1.3, that is an error and
+  // we should close the connection.
 
   CBS hello_verify_request = msg.body, cookie;
   uint16_t server_version;
@@ -715,6 +737,15 @@ static enum ssl_hs_wait_t do_read_server_hello(SSL_HANDSHAKE *hs) {
     ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_PROTOCOL_VERSION);
     return ssl_hs_error;
   }
+
+  // TODO(crbug.com/boringssl/715): Check that if the server picked DTLS 1.3,
+  // that it didn't also previously send an HVR, as that is not allowed by RFC
+  // 9147. (DTLS 1.25 still uses HVR instead of HRR.) Also add a runner test to
+  // test that we handle that case properly.
+  //
+  // See
+  // https://boringssl-review.googlesource.com/c/boringssl/+/68027/3/ssl/handshake_client.cc
+  // for an example of what this check might look like.
 
   assert(ssl->s3->have_version == ssl->s3->initial_handshake_complete);
   if (!ssl->s3->have_version) {

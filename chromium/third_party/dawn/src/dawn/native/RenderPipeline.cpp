@@ -116,20 +116,23 @@ MaybeError ValidateVertexAttribute(DeviceBase* device,
     // No underflow is possible because the max vertex format size is smaller than
     // kMaxVertexBufferArrayStride.
     DAWN_ASSERT(kMaxVertexBufferArrayStride >= formatInfo.byteSize);
-    DAWN_INVALID_IF(
-        attribute->offset > kMaxVertexBufferArrayStride - formatInfo.byteSize,
-        "Attribute offset (%u) with format %s (size: %u) doesn't fit in the maximum vertex "
-        "buffer stride (%u).",
-        attribute->offset, attribute->format, formatInfo.byteSize, kMaxVertexBufferArrayStride);
+    DAWN_INVALID_IF(attribute->offset > kMaxVertexBufferArrayStride - formatInfo.byteSize,
+                    "Attribute offset (%u) + format size (%u for %s) must be <= the maximum vertex "
+                    "buffer stride (%u). Offsets larger than the maximum vertex buffer stride are "
+                    "accomodated by setting buffer offsets when calling setVertexBuffer, which the "
+                    "attribute offset is added to.",
+                    attribute->offset, formatInfo.byteSize, attribute->format,
+                    kMaxVertexBufferArrayStride);
 
     // No overflow is possible because the offset is already validated to be less
     // than kMaxVertexBufferArrayStride.
     DAWN_ASSERT(attribute->offset < kMaxVertexBufferArrayStride);
     DAWN_INVALID_IF(
         vertexBufferStride > 0 && attribute->offset + formatInfo.byteSize > vertexBufferStride,
-        "Attribute offset (%u) with format %s (size: %u) doesn't fit in the vertex buffer "
-        "stride (%u).",
-        attribute->offset, attribute->format, formatInfo.byteSize, vertexBufferStride);
+        "Attribute offset (%u) + format size (%u for %s) must be <= the vertex buffer stride (%u). "
+        "Offsets larger than the vertex buffer stride are accomodated by setting buffer offsets "
+        "when calling setVertexBuffer, which the attribute offset is added to.",
+        attribute->offset, formatInfo.byteSize, attribute->format, vertexBufferStride);
 
     DAWN_INVALID_IF(attribute->offset % std::min(4u, formatInfo.byteSize) != 0,
                     "Attribute offset (%u) in not a multiple of %u.", attribute->offset,
@@ -200,12 +203,12 @@ ResultOrError<ShaderModuleEntryPoint> ValidateVertexState(
     const EntryPointMetadata& vertexMetadata = descriptor->module->GetEntryPoint(entryPoint.name);
     if (primitiveTopology == wgpu::PrimitiveTopology::PointList) {
         DAWN_INVALID_IF(
-            vertexMetadata.totalInterStageShaderComponents + 1 >
-                limits.v1.maxInterStageShaderComponents,
-            "Total vertex output components count (%u) exceeds the maximum (%u) when primitive "
-            "topology is %s as another component is implicitly used for the point size.",
-            vertexMetadata.totalInterStageShaderComponents,
-            limits.v1.maxInterStageShaderComponents - 1, primitiveTopology);
+            vertexMetadata.totalInterStageShaderVariables + 1 >
+                limits.v1.maxInterStageShaderVariables,
+            "Total vertex output variables count (%u) exceeds the maximum (%u) when primitive "
+            "topology is %s as another variable is implicitly used for the point size.",
+            vertexMetadata.totalInterStageShaderVariables,
+            limits.v1.maxInterStageShaderVariables - 1, primitiveTopology);
     }
 
     VertexAttributeMask attributesSetMask;
@@ -256,8 +259,7 @@ ResultOrError<ShaderModuleEntryPoint> ValidateVertexState(
 MaybeError ValidatePrimitiveState(const DeviceBase* device, const PrimitiveState* rawDescriptor) {
     UnpackedPtr<PrimitiveState> descriptor;
     DAWN_TRY_ASSIGN(descriptor, ValidateAndUnpack(rawDescriptor));
-    const auto* depthClipControl = descriptor.Get<PrimitiveDepthClipControl>();
-    DAWN_INVALID_IF(depthClipControl && !device->HasFeature(Feature::DepthClipControl),
+    DAWN_INVALID_IF(descriptor->unclippedDepth && !device->HasFeature(Feature::DepthClipControl),
                     "%s is not supported", wgpu::FeatureName::DepthClipControl);
     DAWN_TRY(ValidatePrimitiveTopology(descriptor->topology));
     DAWN_TRY(ValidateIndexFormat(descriptor->stripIndexFormat));
@@ -335,23 +337,19 @@ MaybeError ValidateDepthStencilState(const DeviceBase* device,
 
     DAWN_INVALID_IF(
         format->HasDepth() && descriptor->depthCompare == wgpu::CompareFunction::Undefined &&
-            (descriptor->depthWriteEnabled ||
+            (descriptor->depthWriteEnabled == wgpu::OptionalBool::True ||
              descriptor->stencilFront.depthFailOp != wgpu::StencilOperation::Keep ||
              descriptor->stencilBack.depthFailOp != wgpu::StencilOperation::Keep),
         "Depth stencil format (%s) has a depth aspect and depthCompare is %s while it's actually "
-        "used by depthWriteEnabled (%u), or stencil front depth fail operation (%s), or "
+        "used by depthWriteEnabled (%s), or stencil front depth fail operation (%s), or "
         "stencil back depth fail operation (%s).",
         descriptor->format, wgpu::CompareFunction::Undefined, descriptor->depthWriteEnabled,
         descriptor->stencilFront.depthFailOp, descriptor->stencilBack.depthFailOp);
 
-    UnpackedPtr<DepthStencilState> unpacked;
-    DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpack(descriptor));
-    if (const auto* depthWriteDefined = unpacked.Get<DepthStencilStateDepthWriteDefinedDawn>()) {
-        DAWN_INVALID_IF(
-            format->HasDepth() && !depthWriteDefined->depthWriteDefined,
-            "Depth stencil format (%s) has a depth aspect and depthWriteEnabled is undefined.",
-            descriptor->format);
-    }
+    DAWN_INVALID_IF(
+        format->HasDepth() && descriptor->depthWriteEnabled == wgpu::OptionalBool::Undefined,
+        "Depth stencil format (%s) has a depth aspect and depthWriteEnabled is undefined.",
+        descriptor->format);
 
     DAWN_INVALID_IF(
         !format->HasDepth() && descriptor->depthCompare != wgpu::CompareFunction::Always &&
@@ -362,8 +360,9 @@ MaybeError ValidateDepthStencilState(const DeviceBase* device,
         wgpu::CompareFunction::Undefined);
 
     DAWN_INVALID_IF(
-        !format->HasDepth() && descriptor->depthWriteEnabled,
-        "Depth stencil format (%s) doesn't have depth aspect while depthWriteEnabled (%u) is true.",
+        !format->HasDepth() && descriptor->depthWriteEnabled == wgpu::OptionalBool::True,
+        "Depth stencil format (%s) doesn't have depth aspect while depthWriteEnabled (%s) "
+        "is true.",
         descriptor->format, descriptor->depthWriteEnabled);
 
     if (!format->HasStencil()) {
@@ -388,11 +387,11 @@ MaybeError ValidateDepthStencilState(const DeviceBase* device,
             DAWN_INVALID_IF(descriptor->depthBiasClamp != 0,
                             "depthBiasClamp must be 0 when using using %s.", topology);
             break;
+        case wgpu::PrimitiveTopology::Undefined:
+            // Default is TriangleList.
         case wgpu::PrimitiveTopology::TriangleList:
         case wgpu::PrimitiveTopology::TriangleStrip:
             break;
-        case wgpu::PrimitiveTopology::Undefined:
-            DAWN_UNREACHABLE();
     }
 
     return {};
@@ -461,18 +460,16 @@ MaybeError ValidateBlendState(DeviceBase* device, const BlendState* descriptor) 
 bool BlendFactorContainsSrcAlpha(wgpu::BlendFactor blendFactor) {
     return blendFactor == wgpu::BlendFactor::SrcAlpha ||
            blendFactor == wgpu::BlendFactor::OneMinusSrcAlpha ||
-           blendFactor == wgpu::BlendFactor::SrcAlphaSaturated;
-}
-
-bool BlendFactorContainsSrc1Alpha(wgpu::BlendFactor blendFactor) {
-    return blendFactor == wgpu::BlendFactor::Src1Alpha ||
+           blendFactor == wgpu::BlendFactor::SrcAlphaSaturated ||
+           blendFactor == wgpu::BlendFactor::Src1Alpha ||
            blendFactor == wgpu::BlendFactor::OneMinusSrc1Alpha;
 }
 
 bool BlendFactorContainsSrc1(wgpu::BlendFactor blendFactor) {
     return blendFactor == wgpu::BlendFactor::Src1 ||
            blendFactor == wgpu::BlendFactor::OneMinusSrc1 ||
-           BlendFactorContainsSrc1Alpha(blendFactor);
+           blendFactor == wgpu::BlendFactor::Src1Alpha ||
+           blendFactor == wgpu::BlendFactor::OneMinusSrc1Alpha;
 }
 
 bool BlendStateUsesBlendFactorSrc1(const BlendState& blend) {
@@ -480,13 +477,6 @@ bool BlendStateUsesBlendFactorSrc1(const BlendState& blend) {
            BlendFactorContainsSrc1(blend.alpha.dstFactor) ||
            BlendFactorContainsSrc1(blend.color.srcFactor) ||
            BlendFactorContainsSrc1(blend.color.dstFactor);
-}
-
-bool BlendStateUsesBlendFactorSrc1Alpha(const BlendState& blend) {
-    return BlendFactorContainsSrc1Alpha(blend.alpha.srcFactor) ||
-           BlendFactorContainsSrc1Alpha(blend.alpha.dstFactor) ||
-           BlendFactorContainsSrc1Alpha(blend.color.srcFactor) ||
-           BlendFactorContainsSrc1Alpha(blend.color.dstFactor);
 }
 
 MaybeError ValidateColorTargetState(
@@ -677,8 +667,7 @@ ResultOrError<ShaderModuleEntryPoint> ValidateFragmentState(DeviceBase* device,
     }
 
     bool usesSrc1 = false;
-    bool usesSrc1Alpha = false;
-    uint8_t blendSrc1ComponentCount = 0;
+    bool usesBlendSrc1 = false;
     ColorAttachmentFormats colorAttachmentFormats;
     for (auto i : IterateBitSet(targetMask)) {
         const Format* format;
@@ -691,7 +680,7 @@ ResultOrError<ShaderModuleEntryPoint> ValidateFragmentState(DeviceBase* device,
         colorAttachmentFormats.push_back(&device->GetValidInternalFormat(targets[i].format));
 
         if (fragmentMetadata.fragmentOutputVariables[i].blendSrc == 1u) {
-            blendSrc1ComponentCount = fragmentMetadata.fragmentOutputVariables[i].componentCount;
+            usesBlendSrc1 = true;
         }
 
         if (fragmentMetadata.fragmentInputMask[i]) {
@@ -702,19 +691,16 @@ ResultOrError<ShaderModuleEntryPoint> ValidateFragmentState(DeviceBase* device,
 
         if (targets[i].blend != nullptr) {
             usesSrc1 |= BlendStateUsesBlendFactorSrc1(*targets[i].blend);
-            usesSrc1Alpha |= BlendStateUsesBlendFactorSrc1Alpha(*targets[i].blend);
         }
     }
 
     if (usesSrc1) {
-        DAWN_INVALID_IF(blendSrc1ComponentCount == 0,
+        DAWN_INVALID_IF(!usesBlendSrc1,
                         "One of the blend factor uses `blend_src(1)` while `blend_src(1)` is "
                         "missing from the fragment shader outputs.");
-
-        DAWN_INVALID_IF(usesSrc1Alpha && blendSrc1ComponentCount < 4u,
-                        "One of the blend factor is reading the alpha of the fragment shader "
-                        "output with `blend_src(1)` but it is missing from that fragment shader "
-                        "output.");
+        DAWN_INVALID_IF(descriptor->targetCount != 1,
+                        "One of the blend factor uses `blend_src(1)` but the color targets count "
+                        "is not 1.");
     }
 
     auto extraFramebufferInputs = fragmentMetadata.fragmentInputMask & ~targetMask;
@@ -745,6 +731,16 @@ ResultOrError<ShaderModuleEntryPoint> ValidateFragmentState(DeviceBase* device,
     }
 
     if (device->IsCompatibilityMode()) {
+        DAWN_INVALID_IF(
+            fragmentMetadata.usesSampleMaskOutput,
+            "sample_mask is not supported in compatibility mode in the fragment stage (%s, %s)",
+            descriptor->module, &entryPoint);
+
+        DAWN_INVALID_IF(
+            fragmentMetadata.usesSampleIndex,
+            "sample_index is not supported in compatibility mode in the fragment stage (%s, %s)",
+            descriptor->module, &entryPoint);
+
         // Check that all the color target states match.
         ColorAttachmentIndex firstColorTargetIndex{};
         const ColorTargetState* firstColorTargetState = nullptr;
@@ -816,6 +812,29 @@ MaybeError ValidateInterStageMatching(DeviceBase* device,
             "different from the interpolation sampling (%s) of the fragment input at "
             "location %u.",
             vertexOutputInfo.interpolationSampling, i, fragmentInputInfo.interpolationSampling, i);
+
+        if (device->IsCompatibilityMode()) {
+            DAWN_INVALID_IF(
+                vertexOutputInfo.interpolationType == InterpolationType::Linear,
+                "The interpolation type (%s) of the vertex output at location %u is not "
+                "supported in compatibility mode",
+                vertexOutputInfo.interpolationType, i);
+
+            DAWN_INVALID_IF(
+                vertexOutputInfo.interpolationSampling == InterpolationSampling::Sample ||
+                    vertexOutputInfo.interpolationSampling == InterpolationSampling::First,
+                "The interpolation sampling (%s) of the vertex output at location %u is "
+                "not supported in compatibility mode",
+                vertexOutputInfo.interpolationSampling, i);
+
+            DAWN_INVALID_IF(
+                vertexOutputInfo.interpolationType == InterpolationType::Flat &&
+                    vertexOutputInfo.interpolationSampling == InterpolationSampling::None,
+                "The interpolation sampling (%s) of the vertex output at location %u when "
+                "interpolation type is (%s)"
+                "not supported in compatibility mode",
+                vertexOutputInfo.interpolationSampling, i, vertexOutputInfo.interpolationType);
+        }
     }
 
     return {};
@@ -981,11 +1000,6 @@ RenderPipelineBase::RenderPipelineBase(DeviceBase* device,
     }
 
     mPrimitive = descriptor->primitive.WithTrivialFrontendDefaults();
-    UnpackedPtr<PrimitiveState> unpackedPrimitive = Unpack(&mPrimitive);
-    if (auto* depthClipControl = unpackedPrimitive.Get<PrimitiveDepthClipControl>()) {
-        mUnclippedDepth = depthClipControl->unclippedDepth;
-    }
-
     mMultisample = descriptor->multisample;
 
     if (mAttachmentState->HasDepthStencilAttachment()) {
@@ -994,16 +1008,16 @@ RenderPipelineBase::RenderPipelineBase(DeviceBase* device,
         // Reify depth option for stencil-only formats
         const Format& format = device->GetValidInternalFormat(mDepthStencil.format);
         if (!format.HasDepth()) {
-            mDepthStencil.depthWriteEnabled = false;
+            mDepthStencil.depthWriteEnabled = wgpu::OptionalBool::False;
             mDepthStencil.depthCompare = wgpu::CompareFunction::Always;
         }
         if (format.HasDepth() && mDepthStencil.depthCompare == wgpu::CompareFunction::Undefined &&
-            !mDepthStencil.depthWriteEnabled &&
+            mDepthStencil.depthWriteEnabled != wgpu::OptionalBool::True &&
             mDepthStencil.stencilFront.depthFailOp == wgpu::StencilOperation::Keep &&
             mDepthStencil.stencilBack.depthFailOp == wgpu::StencilOperation::Keep) {
             mDepthStencil.depthCompare = wgpu::CompareFunction::Always;
         }
-        mWritesDepth = mDepthStencil.depthWriteEnabled;
+        mWritesDepth = mDepthStencil.depthWriteEnabled == wgpu::OptionalBool::True;
         if (mDepthStencil.stencilWriteMask) {
             if ((mPrimitive.cullMode != wgpu::CullMode::Front &&
                  (mDepthStencil.stencilFront.failOp != wgpu::StencilOperation::Keep ||
@@ -1194,7 +1208,7 @@ float RenderPipelineBase::GetDepthBiasClamp() const {
 
 bool RenderPipelineBase::HasUnclippedDepth() const {
     DAWN_ASSERT(!IsError());
-    return mUnclippedDepth;
+    return mPrimitive.unclippedDepth;
 }
 
 ColorAttachmentMask RenderPipelineBase::GetColorAttachmentsMask() const {
@@ -1312,7 +1326,7 @@ size_t RenderPipelineBase::ComputeContentHash() {
 
     // Record primitive state
     recorder.Record(mPrimitive.topology, mPrimitive.stripIndexFormat, mPrimitive.frontFace,
-                    mPrimitive.cullMode, mUnclippedDepth);
+                    mPrimitive.cullMode, mPrimitive.unclippedDepth);
 
     // Record multisample state
     // Sample count hashed as part of the attachment state
@@ -1428,7 +1442,7 @@ bool RenderPipelineBase::EqualityFunc::operator()(const RenderPipelineBase* a,
         if (stateA.topology != stateB.topology ||
             stateA.stripIndexFormat != stateB.stripIndexFormat ||
             stateA.frontFace != stateB.frontFace || stateA.cullMode != stateB.cullMode ||
-            a->mUnclippedDepth != b->mUnclippedDepth) {
+            stateA.unclippedDepth != stateB.unclippedDepth) {
             return false;
         }
     }

@@ -42,6 +42,8 @@
 #include "ui/base/models/dialog_model.h"
 #include "ui/base/models/dialog_model_field.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
@@ -298,10 +300,6 @@ class ImageCarouselView : public views::View {
     return gfx::Size(width, fixed_height);
   }
 
-  int GetHeightForWidth(int w) const override {
-    return CalculatePreferredSize(views::SizeBounds(w, {})).height();
-  }
-
  private:
   void OnScrollButtonClicked(ButtonType button_type) {
     DCHECK(image_inner_container_->children().size());
@@ -433,7 +431,7 @@ void ShowWebAppDetailedInstallDialog(
                 std::make_unique<views::BubbleDialogModelHost::CustomView>(
                     std::make_unique<ImageCarouselView>(screenshots),
                     views::BubbleDialogModelHost::FieldType::kControl))
-            .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_NONE)
+            .OverrideDefaultButton(ui::mojom::DialogButton::kCancel)
             .Build();
   } else {
     // TODO(crbug.com/341254289): Completely remove after Universal Install has
@@ -460,11 +458,11 @@ void ShowWebAppDetailedInstallDialog(
                 std::make_unique<views::BubbleDialogModelHost::CustomView>(
                     std::make_unique<ImageCarouselView>(screenshots),
                     views::BubbleDialogModelHost::FieldType::kControl))
-            .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_CANCEL)
+            .OverrideDefaultButton(ui::mojom::DialogButton::kCancel)
             .Build();
   }
   auto dialog = views::BubbleDialogModelHost::CreateModal(
-      std::move(dialog_model), ui::MODAL_TYPE_CHILD);
+      std::move(dialog_model), ui::mojom::ModalType::kChild);
 
   views::Widget* detailed_dialog_widget =
       constrained_window::ShowWebModalDialogViews(dialog.release(),

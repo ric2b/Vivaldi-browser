@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       block_encoder.c
 /// \brief      Encodes .xz Blocks
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -15,7 +14,7 @@
 #include "check.h"
 
 
-struct lzma_coder_s {
+typedef struct {
 	/// The filters in the chain; initialized with lzma_raw_decoder_init().
 	lzma_next_coder next;
 
@@ -41,15 +40,17 @@ struct lzma_coder_s {
 
 	/// Check of the uncompressed data
 	lzma_check_state check;
-};
+} lzma_block_coder;
 
 
 static lzma_ret
-block_encode(lzma_coder *coder, lzma_allocator *allocator,
+block_encode(void *coder_ptr, const lzma_allocator *allocator,
 		const uint8_t *restrict in, size_t *restrict in_pos,
 		size_t in_size, uint8_t *restrict out,
 		size_t *restrict out_pos, size_t out_size, lzma_action action)
 {
+	lzma_block_coder *coder = coder_ptr;
+
 	// Check that our amount of input stays in proper limits.
 	if (LZMA_VLI_MAX - coder->uncompressed_size < in_size - *in_pos)
 		return LZMA_DATA_ERROR;
@@ -75,8 +76,11 @@ block_encode(lzma_coder *coder, lzma_allocator *allocator,
 		// checked it at the beginning of this function.
 		coder->uncompressed_size += in_used;
 
-		lzma_check_update(&coder->check, coder->block->check,
-				in + in_start, in_used);
+		// Call lzma_check_update() only if input was consumed. This
+		// avoids null pointer + 0 (undefined behavior) when in == 0.
+		if (in_used > 0)
+			lzma_check_update(&coder->check, coder->block->check,
+					in + in_start, in_used);
 
 		if (ret != LZMA_STREAM_END || action == LZMA_SYNC_FLUSH)
 			return ret;
@@ -134,8 +138,9 @@ block_encode(lzma_coder *coder, lzma_allocator *allocator,
 
 
 static void
-block_encoder_end(lzma_coder *coder, lzma_allocator *allocator)
+block_encoder_end(void *coder_ptr, const lzma_allocator *allocator)
 {
+	lzma_block_coder *coder = coder_ptr;
 	lzma_next_end(&coder->next, allocator);
 	lzma_free(coder, allocator);
 	return;
@@ -143,10 +148,12 @@ block_encoder_end(lzma_coder *coder, lzma_allocator *allocator)
 
 
 static lzma_ret
-block_encoder_update(lzma_coder *coder, lzma_allocator *allocator,
+block_encoder_update(void *coder_ptr, const lzma_allocator *allocator,
 		const lzma_filter *filters lzma_attribute((__unused__)),
 		const lzma_filter *reversed_filters)
 {
+	lzma_block_coder *coder = coder_ptr;
+
 	if (coder->sequence != SEQ_CODE)
 		return LZMA_PROG_ERROR;
 
@@ -156,7 +163,7 @@ block_encoder_update(lzma_coder *coder, lzma_allocator *allocator,
 
 
 extern lzma_ret
-lzma_block_encoder_init(lzma_next_coder *next, lzma_allocator *allocator,
+lzma_block_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		lzma_block *block)
 {
 	lzma_next_coder_init(&lzma_block_encoder_init, next, allocator);
@@ -166,7 +173,7 @@ lzma_block_encoder_init(lzma_next_coder *next, lzma_allocator *allocator,
 
 	// The contents of the structure may depend on the version so
 	// check the version first.
-	if (block->version != 0)
+	if (block->version > 1)
 		return LZMA_OPTIONS_ERROR;
 
 	// If the Check ID is not supported, we cannot calculate the check and
@@ -178,30 +185,31 @@ lzma_block_encoder_init(lzma_next_coder *next, lzma_allocator *allocator,
 		return LZMA_UNSUPPORTED_CHECK;
 
 	// Allocate and initialize *next->coder if needed.
-	if (next->coder == NULL) {
-		next->coder = lzma_alloc(sizeof(lzma_coder), allocator);
-		if (next->coder == NULL)
+	lzma_block_coder *coder = next->coder;
+	if (coder == NULL) {
+		coder = lzma_alloc(sizeof(lzma_block_coder), allocator);
+		if (coder == NULL)
 			return LZMA_MEM_ERROR;
 
+		next->coder = coder;
 		next->code = &block_encode;
 		next->end = &block_encoder_end;
 		next->update = &block_encoder_update;
-		next->coder->next = LZMA_NEXT_CODER_INIT;
+		coder->next = LZMA_NEXT_CODER_INIT;
 	}
 
 	// Basic initializations
-	next->coder->sequence = SEQ_CODE;
-	next->coder->block = block;
-	next->coder->compressed_size = 0;
-	next->coder->uncompressed_size = 0;
-	next->coder->pos = 0;
+	coder->sequence = SEQ_CODE;
+	coder->block = block;
+	coder->compressed_size = 0;
+	coder->uncompressed_size = 0;
+	coder->pos = 0;
 
 	// Initialize the check
-	lzma_check_init(&next->coder->check, block->check);
+	lzma_check_init(&coder->check, block->check);
 
 	// Initialize the requested filters.
-	return lzma_raw_encoder_init(&next->coder->next, allocator,
-			block->filters);
+	return lzma_raw_encoder_init(&coder->next, allocator, block->filters);
 }
 
 
@@ -211,6 +219,7 @@ lzma_block_encoder(lzma_stream *strm, lzma_block *block)
 	lzma_next_strm_init(lzma_block_encoder_init, strm, block);
 
 	strm->internal->supported_actions[LZMA_RUN] = true;
+	strm->internal->supported_actions[LZMA_SYNC_FLUSH] = true;
 	strm->internal->supported_actions[LZMA_FINISH] = true;
 
 	return LZMA_OK;

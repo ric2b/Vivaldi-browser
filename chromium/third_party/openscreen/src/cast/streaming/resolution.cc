@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "cast/streaming/message_fields.h"
 #include "platform/base/error.h"

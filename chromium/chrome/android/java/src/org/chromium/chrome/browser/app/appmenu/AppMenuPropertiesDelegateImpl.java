@@ -35,6 +35,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
@@ -1025,13 +1026,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     /** Sets the visibility and labels of the "Add to Home screen" and "Open WebAPK" menu items. */
     protected void prepareAddToHomescreenMenuItem(
             Menu menu, Tab currentTab, boolean shouldShowHomeScreenMenuItem) {
-        MenuItem addTohomescreenItem = menu.findItem(R.id.add_to_homescreen_id);
-        MenuItem installWebAppItem = menu.findItem(R.id.install_webapp_id);
         MenuItem universalInstallItem = menu.findItem(R.id.universal_install);
         MenuItem openWebApkItem = menu.findItem(R.id.open_webapk_id);
 
-        addTohomescreenItem.setVisible(false);
-        installWebAppItem.setVisible(false);
         universalInstallItem.setVisible(false);
         openWebApkItem.setVisible(false);
 
@@ -1045,13 +1042,12 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 "Android.PrepareMenu.OpenWebApkVisibilityCheck",
                 SystemClock.elapsedRealtime() - addToHomeScreenStart);
 
+        // When Universal Install is active, we only show this menu item if we are browsing
+        // the root page of an already installed app.
         boolean openWebApkItemVisible =
-                resolveInfo != null && resolveInfo.activityInfo.packageName != null;
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_UNIVERSAL_INSTALL_UI)) {
-            // When Universal Install is active, we only show this menu item if we are browsing
-            // the root page of an already installed app.
-            openWebApkItemVisible &= "/".equals(currentTab.getUrl().getPath());
-        }
+                resolveInfo != null
+                        && resolveInfo.activityInfo.packageName != null
+                        && "/".equals(currentTab.getUrl().getPath());
 
         if (openWebApkItemVisible) {
             // This is the 'webapp is already installed' case, so we offer to open the webapp.
@@ -1061,19 +1057,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             return;
         }
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_UNIVERSAL_INSTALL_UI)) {
-            universalInstallItem.setVisible(true);
-        } else {
-            AppBannerManager.InstallStringPair installStrings = getAddToHomeScreenTitle(currentTab);
-
-            if (installStrings.titleTextId == AppBannerManager.PWA_PAIR.titleTextId) {
-                installWebAppItem.setTitle(installStrings.titleTextId);
-                installWebAppItem.setVisible(true);
-            } else if (installStrings.titleTextId == AppBannerManager.NON_PWA_PAIR.titleTextId) {
-                addTohomescreenItem.setTitle(installStrings.titleTextId);
-                addTohomescreenItem.setVisible(true);
-            }
-        }
+        universalInstallItem.setVisible(true);
     }
 
     public static ResolveInfo queryWebApkResolveInfo(Context context, Tab currentTab) {
@@ -1092,11 +1076,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         }
 
         return resolveInfo;
-    }
-
-    @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
-    public AppBannerManager.InstallStringPair getAddToHomeScreenTitle(@NonNull Tab currentTab) {
-        return AppBannerManager.getHomescreenLanguageOption(currentTab.getWebContents());
     }
 
     @Override
@@ -1202,6 +1181,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
     /** Returns true if a badge (i.e. a red-dot) should be shown on the menu item icon. */
     protected boolean shouldShowBadgeOnMenuItemIcon(MenuItem item) {
         if (item.getItemId() == R.id.preferences_id) {
+            // Vivaldi: Hide Chromium badge. Ref: VAB-10011
+            if (BuildConfig.IS_VIVALDI) return false;
             // Theoretically mTabModelSelector could return a stub model.
             Profile profile = mTabModelSelector.getCurrentModel().getProfile();
             if (profile == null) {
@@ -1468,13 +1449,15 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         MenuItem requestMenuLabel = menu.findItem(R.id.request_desktop_site_id);
         MenuItem requestMenuCheck = menu.findItem(R.id.request_desktop_site_check_id);
 
-        // Hide request desktop site on all native pages.
+        // Hide request desktop site on all native pages. Also hide it for desktop Android, which
+        // always requests desktop sites.
         boolean itemVisible =
                 currentTab != null
                         && canShowRequestDesktopSite
                         && !isNativePage
                         && !shouldShowReaderModePrefs(currentTab)
-                        && currentTab.getWebContents() != null;
+                        && currentTab.getWebContents() != null
+                        && !BuildConfig.IS_DESKTOP_ANDROID;
 
         requestMenuRow.setVisible(itemVisible);
         if (!itemVisible) return;

@@ -10,6 +10,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "components/browsing_topics/common/common_types.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -95,6 +96,10 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings,
       const url::Origin& accessing_origin,
       std::string* out_debug_message,
       bool* out_block_is_site_setting_specific) const override;
+  bool IsLocalUnpartitionedDataAccessAllowed(
+      const url::Origin& top_frame_origin,
+      const url::Origin& accessing_origin,
+      content::RenderFrameHost* console_frame) const override;
   bool IsPrivateAggregationAllowed(
       const url::Origin& top_frame_origin,
       const url::Origin& reporting_origin,
@@ -123,6 +128,9 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings,
   bool AreRelatedWebsiteSetsEnabled() const override;
 
  private:
+  // TODO(crbug.com/366168654): Browser tests should not reach into the private
+  // method or states of this class. Consider exposing the required functions
+  // via a test helper class or test only functions.
   friend class PrivacySandboxSettingsTest;
   friend class PrivacySandboxAttestations;
   friend class PrivacySandboxAttestationsTestBase;
@@ -133,6 +141,9 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings,
                            SentinelFilePreventsSubsequentParsings);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxAttestationsBrowserTest,
                            DifferentHistogramAfterAttestationsFileCheck);
+  FRIEND_TEST_ALL_PREFIXES(
+      PrivacySandboxAttestationPreInstallInteractionWithDownloadTest,
+      BothPreinstalledAndDownloadedAttestationsAvailable);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxSettingsTest, FledgeJoiningAllowed);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxSettingsTest, NonEtldPlusOneBlocked);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxSettingsTest,

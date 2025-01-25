@@ -8,6 +8,7 @@ load("//lib/builders.star", "builders", "cpu", "os", "siso")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
+load("//lib/html.star", "linkify_builder")
 load("//lib/structs.star", "structs")
 load("//lib/xcode.star", "xcode")
 
@@ -299,46 +300,6 @@ fyi_reclient_staging_builder(
     },
 )
 
-fyi_reclient_test_builder(
-    name = "Mac Builder reclient test",
-    builder_spec = builder_config.copy_from(
-        "ci/Mac Builder",
-        lambda spec: structs.evolve(
-            spec,
-            gclient_config = structs.extend(
-                spec.gclient_config,
-                apply_configs = [
-                    "reclient_test",
-                ],
-            ),
-            build_gs_bucket = "chromium-fyi-archive",
-        ),
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "gpu_tests",
-            "release_builder",
-            "remoteexec",
-            "minimal_symbols",
-            "mac",
-            "arm64",
-        ],
-    ),
-    builderless = True,
-    cores = None,
-    os = os.MAC_DEFAULT,
-    cpu = cpu.ARM64,
-    console_view_category = "mac",
-    priority = 35,
-    reclient_bootstrap_env = {
-        "GLOG_vmodule": "depsscannerclient.go=2,main.go=2",
-    },
-    reclient_profiler_service = "reclient-mac",
-    reclient_rewrapper_env = {
-        "RBE_compression_threshold": "0",
-    },
-)
-
 fyi_reclient_staging_builder(
     name = "Win x64 Builder reclient staging",
     builder_spec = builder_config.copy_from(
@@ -411,7 +372,7 @@ fyi_reclient_staging_builder(
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
-            apply_configs = ["chromeos", "reclient_staging", "checkout_lacros_sdk"],
+            apply_configs = ["chromeos", "reclient_staging"],
         ),
         chromium_config = builder_config.chromium_config(
             config = "chromium",
@@ -434,7 +395,7 @@ fyi_reclient_test_builder(
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
-            apply_configs = ["chromeos", "reclient_test", "checkout_lacros_sdk"],
+            apply_configs = ["chromeos", "reclient_test"],
         ),
         chromium_config = builder_config.chromium_config(
             config = "chromium",
@@ -455,50 +416,12 @@ fyi_reclient_test_builder(
             "amd64-generic-vm",
             "ozone_headless",
             "use_fake_dbus_clients",
-            "also_build_lacros_chrome_for_architecture_amd64",
             "x64",
         ],
     ),
     os = os.LINUX_DEFAULT,
     console_view_category = "linux",
     execution_timeout = 4 * time.hour,
-)
-
-fyi_reclient_test_builder(
-    name = "ios-simulator reclient test",
-    builder_spec = builder_config.copy_from(
-        "ci/ios-simulator",
-        lambda spec: structs.evolve(
-            spec,
-            gclient_config = structs.extend(
-                spec.gclient_config,
-                apply_configs = [
-                    "reclient_test",
-                ],
-            ),
-            build_gs_bucket = "chromium-fyi-archive",
-        ),
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "debug",
-            "static",
-            "minimal_symbols",
-            "remoteexec",
-            "ios_simulator",
-            "x64",
-            "xctest",
-        ],
-    ),
-    builderless = True,
-    cores = 12,
-    os = os.MAC_DEFAULT,
-    console_view_category = "ios",
-    priority = 35,
-    reclient_bootstrap_env = {
-        "GLOG_vmodule": "bridge*=2",
-    },
-    xcode = xcode.xcode_default,
 )
 
 fyi_reclient_staging_builder(
@@ -548,42 +471,6 @@ fyi_reclient_staging_builder(
                 spec.gclient_config,
                 apply_configs = [
                     "reclient_staging",
-                ],
-            ),
-            build_gs_bucket = "chromium-fyi-archive",
-        ),
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "arm64",
-            "gpu_tests",
-            "release_builder",
-            "remoteexec",
-            "minimal_symbols",
-            "mac",
-        ],
-    ),
-    builderless = True,
-    cores = None,
-    os = os.MAC_DEFAULT,
-    cpu = cpu.ARM64,
-    console_view_category = "mac",
-    priority = 35,
-    reclient_bootstrap_env = {
-        "GLOG_vmodule": "depsscannerclient.go=2,main.go=2",
-    },
-)
-
-fyi_reclient_test_builder(
-    name = "mac-arm64-rel reclient test",
-    builder_spec = builder_config.copy_from(
-        "ci/mac-arm64-rel",
-        lambda spec: structs.evolve(
-            spec,
-            gclient_config = structs.extend(
-                spec.gclient_config,
-                apply_configs = [
-                    "reclient_test",
                 ],
             ),
             build_gs_bucket = "chromium-fyi-archive",
@@ -812,8 +699,8 @@ ci.builder(
     name = "Comparison Linux (reclient)(CQ)",
     description_html = """\
 This builder measures Linux build performance with reclient prod vs test in cq configuration.<br/>\
-The bot specs should be in sync with <a href="https://ci.chromium.org/p/chromium/builders/try/linux-rel-compilator">linux-rel-compilator</a>.\
-""",
+The bot specs should be in sync with {}.\
+""".format(linkify_builder("try", "linux-rel-compilator")),
     executable = "recipe:reclient_reclient_comparison",
     gn_args = {
         "build1": gn_args.config(
@@ -839,4 +726,33 @@ The bot specs should be in sync with <a href="https://ci.chromium.org/p/chromium
     shadow_siso_project = siso.project.TEST_UNTRUSTED,
     siso_project = siso.project.TEST_UNTRUSTED,
     siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
+)
+
+# TODO(crbug.com/352206623) Turn down builder once reclient depscan issue has been resolved.
+ci.builder(
+    name = "Win Builder (reclient shadow)",
+    description_html = "This builder mirrors Win Builder in order to debug an reclient dependency scanner issue (crbug.com/352206623).",
+    builder_spec = builder_config.copy_from(
+        "ci/Win Builder",
+        lambda spec: structs.evolve(
+            spec,
+            gclient_config = structs.extend(
+                spec.gclient_config,
+                apply_configs = ["reclient_experimental"],
+            ),
+        ),
+    ),
+    gn_args = "ci/Win Builder",
+    builderless = False,
+    cores = 32,
+    os = os.WINDOWS_ANY,
+    tree_closing = False,
+    console_view_entry = consoles.console_view_entry(
+        category = "release|builder",
+        short_name = "32",
+    ),
+    contact_team_email = "git-build-tools@google.com",
+    siso_enabled = True,
+    siso_project = siso.project.DEFAULT_TRUSTED,
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
 )

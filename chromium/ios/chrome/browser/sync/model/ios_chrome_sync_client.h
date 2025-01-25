@@ -5,20 +5,19 @@
 #ifndef IOS_CHROME_BROWSER_SYNC_MODEL_IOS_CHROME_SYNC_CLIENT_H__
 #define IOS_CHROME_BROWSER_SYNC_MODEL_IOS_CHROME_SYNC_CLIENT_H__
 
-#include <memory>
+#import <memory>
 
-#include "base/files/file_path.h"
+#import "base/files/file_path.h"
 #import "base/memory/raw_ptr.h"
-#include "base/memory/weak_ptr.h"
-#include "components/sync/service/sync_client.h"
-#include "components/trusted_vault/trusted_vault_client.h"
-
-class ChromeBrowserState;
+#import "base/memory/weak_ptr.h"
+#import "components/sync/service/sync_client.h"
+#import "components/trusted_vault/trusted_vault_client.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
 namespace browser_sync {
 class LocalDataQueryHelper;
 class LocalDataMigrationHelper;
-class SyncApiComponentFactoryImpl;
+class SyncEngineFactoryImpl;
 }  // namespace browser_sync
 
 namespace password_manager {
@@ -38,22 +37,20 @@ class IOSChromeSyncClient : public syncer::SyncClient {
   PrefService* GetPrefService() override;
   signin::IdentityManager* GetIdentityManager() override;
   base::FilePath GetLocalSyncBackendFolder() override;
-  syncer::ModelTypeController::TypeVector CreateModelTypeControllers(
-      syncer::SyncService* sync_service) override;
   trusted_vault::TrustedVaultClient* GetTrustedVaultClient() override;
   syncer::SyncInvalidationsService* GetSyncInvalidationsService() override;
   scoped_refptr<syncer::ExtensionsActivity> GetExtensionsActivity() override;
-  syncer::SyncApiComponentFactory* GetSyncApiComponentFactory() override;
+  syncer::SyncEngineFactory* GetSyncEngineFactory() override;
   bool IsCustomPassphraseAllowed() override;
   bool IsPasswordSyncAllowed() override;
   void SetPasswordSyncAllowedChangeCb(
       const base::RepeatingClosure& cb) override;
   void GetLocalDataDescriptions(
-      syncer::ModelTypeSet types,
+      syncer::DataTypeSet types,
       base::OnceCallback<void(
-          std::map<syncer::ModelType, syncer::LocalDataDescription>)> callback)
+          std::map<syncer::DataType, syncer::LocalDataDescription>)> callback)
       override;
-  void TriggerLocalDataMigration(syncer::ModelTypeSet types) override;
+  void TriggerLocalDataMigration(syncer::DataTypeSet types) override;
   void RegisterTrustedVaultAutoUpgradeSyntheticFieldTrial(
       const syncer::TrustedVaultAutoUpgradeSyntheticFieldTrialGroup& group)
       override;
@@ -61,8 +58,8 @@ class IOSChromeSyncClient : public syncer::SyncClient {
  private:
   const raw_ptr<ChromeBrowserState> browser_state_;
 
-  // The sync api component factory in use by this client.
-  std::unique_ptr<browser_sync::SyncApiComponentFactoryImpl> component_factory_;
+  // The sync engine factory in use by this client.
+  std::unique_ptr<browser_sync::SyncEngineFactoryImpl> engine_factory_;
 
   scoped_refptr<password_manager::PasswordStoreInterface>
       profile_password_store_;

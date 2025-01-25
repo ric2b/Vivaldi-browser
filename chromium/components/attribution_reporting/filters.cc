@@ -17,7 +17,6 @@
 #include "base/containers/flat_set.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
@@ -146,7 +145,7 @@ base::expected<FilterValues, FilterValuesError> ParseFilterValuesFromJSON(
             case StringSetError::kSetTooLong:
               return FilterValuesError::kListTooLong;
           }
-          NOTREACHED_NORETURN();
+          NOTREACHED();
         });
 
     filter_values.emplace_back(filter, std::move(values).extract());
@@ -225,7 +224,7 @@ FilterData::FilterData() = default;
 
 FilterData::FilterData(FilterValues filter_values)
     : filter_values_(std::move(filter_values)) {
-  CHECK(IsValidForSource(filter_values_), base::NotFatalUntil::M128);
+  CHECK(IsValidForSource(filter_values_));
 }
 
 FilterData::~FilterData() = default;
@@ -349,8 +348,7 @@ FilterConfig::FilterConfig(FilterValues filter_values,
                            std::optional<base::TimeDelta> lookback_window)
     : lookback_window_(lookback_window),
       filter_values_(std::move(filter_values)) {
-  CHECK(!lookback_window_.has_value() || lookback_window_->is_positive(),
-        base::NotFatalUntil::M128);
+  CHECK(!lookback_window_.has_value() || lookback_window_->is_positive());
 }
 
 FilterConfig::~FilterConfig() = default;
@@ -384,7 +382,7 @@ base::expected<FiltersDisjunction, TriggerRegistrationError> FiltersFromJSON(
       case FilterValuesError::kKeyTooLong:
       case FilterValuesError::kListTooLong:
       case FilterValuesError::kValueTooLong:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
   };
 
@@ -404,12 +402,12 @@ base::expected<FiltersDisjunction, TriggerRegistrationError> FiltersFromJSON(
     std::optional<base::TimeDelta> lookback_window;
     if (std::optional<base::Value> lookback_window_value =
             dict->Extract(FilterConfig::kLookbackWindowKey)) {
-      if (std::optional<int> int_val = lookback_window_value->GetIfInt()) {
-        lookback_window = base::Seconds(*int_val);
-        if (!lookback_window->is_positive()) {
-          return base::unexpected(lookback_window_error);
-        }
-      } else {
+      ASSIGN_OR_RETURN(lookback_window, ParseDuration(*lookback_window_value),
+                       [lookback_window_error](ParseError) {
+                         return lookback_window_error;
+                       });
+
+      if (!lookback_window->is_positive()) {
         return base::unexpected(lookback_window_error);
       }
     }

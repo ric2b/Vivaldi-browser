@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
+#include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
@@ -41,10 +42,13 @@
 #include "third_party/blink/renderer/core/dom/range.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/editing/commands/editing_commands_utilities.h"
 #include "third_party/blink/renderer/core/editing/editing_strategy.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/ime/edit_context.h"
+#include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 #include "third_party/blink/renderer/core/editing/iterators/text_iterator.h"
 #include "third_party/blink/renderer/core/editing/local_caret_rect.h"
 #include "third_party/blink/renderer/core/editing/plain_text_range.h"
@@ -1294,6 +1298,30 @@ PositionWithAffinity AdjustForEditingBoundary(const Position& position) {
   return AdjustForEditingBoundary(PositionWithAffinity(position));
 }
 
+Position ComputePlaceholderToCollapseAt(const Position& insertion_pos) {
+  Position placeholder;
+  // We want to remove preserved newlines and brs that will collapse (and thus
+  // become unnecessary) when content is inserted just before them.
+  // FIXME: We shouldn't really have to do this, but removing placeholders is a
+  // workaround for 9661.
+  // If the caret is just before a placeholder, downstream will normalize the
+  // caret to it.
+  Position downstream(MostForwardCaretPosition(insertion_pos));
+  if (LineBreakExistsAtPosition(downstream)) {
+    // FIXME: This doesn't handle placeholders at the end of anonymous blocks.
+    VisiblePosition caret = CreateVisiblePosition(insertion_pos);
+    if (IsEndOfBlock(caret) && IsStartOfParagraph(caret)) {
+      placeholder = downstream;
+    }
+    // Don't remove the placeholder yet, otherwise the block we're inserting
+    // into would collapse before we get a chance to insert into it.  We check
+    // for a placeholder now, though, because doing so requires the creation of
+    // a VisiblePosition, and if we did that post-insertion it would force a
+    // layout.
+  }
+  return placeholder;
+}
+
 Position ComputePositionForNodeRemoval(const Position& position,
                                        const Node& node) {
   if (position.IsNull())
@@ -1624,6 +1652,67 @@ DispatchEventResult DispatchBeforeInputDataTransfer(
         TargetRangesForInputEvent(*target));
   }
   return target->DispatchEvent(*before_input_event);
+}
+
+void InsertTextAndSendInputEventsOfTypeInsertReplacementText(
+    LocalFrame& frame,
+    const String& replacement,
+    bool allow_edit_context) {
+  // TODO(editing-dev): The use of UpdateStyleAndLayout
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kSpellCheck);
+
+  Document& current_document = *frame.GetDocument();
+
+  // Dispatch 'beforeinput'.
+  Element* const target = FindEventTargetFrom(
+      frame, frame.Selection().ComputeVisibleSelectionInDOMTree());
+
+  // Copy the original target text into a string, in case the 'beforeinput'
+  // event handler modifies the text.
+  const String before_input_target_string = target->GetInnerTextWithoutUpdate();
+
+  DataTransfer* const data_transfer = DataTransfer::Create(
+      DataTransfer::DataTransferType::kInsertReplacementText,
+      DataTransferAccessPolicy::kReadable,
+      DataObject::CreateFromString(replacement));
+
+  const bool is_canceled =
+      DispatchBeforeInputDataTransfer(
+          target, InputEvent::InputType::kInsertReplacementText,
+          data_transfer) != DispatchEventResult::kNotCanceled;
+
+  // 'beforeinput' event handler may destroy target frame.
+  if (current_document != frame.GetDocument()) {
+    return;
+  }
+
+  // If the 'beforeinput' event handler has modified the input text, then the
+  // replacement text shouldn't be inserted.
+  if (target->innerText() != before_input_target_string) {
+    return;
+  }
+
+  // When allowed, insert the text into the active edit context if it exists.
+  if (auto* edit_context =
+          frame.GetInputMethodController().GetActiveEditContext()) {
+    if (allow_edit_context) {
+      edit_context->InsertText(replacement);
+    }
+    return;
+  }
+
+  // TODO(editing-dev): The use of UpdateStyleAndLayout
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kSpellCheck);
+
+  if (is_canceled) {
+    return;
+  }
+
+  frame.GetEditor().InsertTextWithoutSendingTextEvent(
+      replacement, false, nullptr,
+      InputEvent::InputType::kInsertReplacementText);
 }
 
 // |IsEmptyNonEditableNodeInEditable()| is introduced for fixing

@@ -16,23 +16,42 @@ import type * as Freestyler from './freestyler.js';
   */
 const UIStringsTemp = {
   /**
-   * @description The title of the action for showing Freestyler panel.
+   * @description The title of the command menu action for showing the Freestyler panel.
    */
-  showFreestyler: 'Show Freestyler',
+  showAiAssistant: 'Show  AI assistant',
   /**
-   * @description The title of the Freestyler panel.
+   * @description The title of the AI assistant panel.
    */
-  freestyler: 'Freestyler',
+  aiAssistant: 'AI assistant',
   /**
    * @description The setting title to enable the freestyler via
    * the settings tab.
    */
-  enableFreestyler: 'Enable Freestyler',
+  enableFreestyler: 'Enable AI assistant',
   /**
    *@description Text of a tooltip to redirect to the AI assistant panel with
    *the current element as context
    */
-  askFreestyler: 'Ask Freestyler',
+  askAiAssistant: 'Ask AI assistant',
+  /**
+   * @description Message shown to the user if the DevTools locale is not
+   * supported.
+   */
+  wrongLocale: 'To use this feature, update your Language preference in DevTools Settings to English',
+  /**
+   * @description Message shown to the user if the age check is not successful.
+   */
+  ageRestricted: 'This feature is only available to users who are 18 years of age or older',
+  /**
+   * @description Message shown to the user if the user's region is not
+   * supported.
+   */
+  geoRestricted: 'This feature is unavailable in your region',
+  /**
+   * @description Message shown to the user if the enterprise policy does
+   * not allow this feature.
+   */
+  policyRestricted: 'Your organization turned off this feature. Contact your administrators for more information',
 };
 
 // TODO(nvitkov): b/346933425
@@ -40,8 +59,26 @@ const UIStringsTemp = {
 // const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 /* eslint-disable  rulesdir/l10n_i18nString_call_only_with_uistrings */
 const i18nLazyString = i18n.i18n.lockedLazyString;
+const i18nString = i18n.i18n.lockedString;
 
 const setting = 'freestyler-enabled';
+
+function isLocaleRestricted(): boolean {
+  const devtoolsLocale = i18n.DevToolsLocale.DevToolsLocale.instance();
+  return !devtoolsLocale.locale.startsWith('en-');
+}
+
+function isAgeRestricted(config?: Root.Runtime.HostConfig): boolean {
+  return config?.aidaAvailability?.blockedByAge === true;
+}
+
+function isGeoRestricted(config?: Root.Runtime.HostConfig): boolean {
+  return config?.aidaAvailability?.blockedByGeo === true;
+}
+
+function isPolicyRestricted(config?: Root.Runtime.HostConfig): boolean {
+  return config?.aidaAvailability?.blockedByEnterprisePolicy === true;
+}
 
 let loadedFreestylerModule: (typeof Freestyler|undefined);
 async function loadFreestylerModule(): Promise<typeof Freestyler> {
@@ -52,18 +89,25 @@ async function loadFreestylerModule(): Promise<typeof Freestyler> {
 }
 
 function isFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
-  return config?.devToolsFreestylerDogfood?.enabled === true;
+  return (config?.aidaAvailability?.enabled && config?.devToolsFreestylerDogfood?.enabled) === true;
+}
+
+function isDrJonesFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
+  return (config?.aidaAvailability?.enabled && config?.devToolsFreestylerDogfood?.enabled &&
+          config?.devToolsExplainThisResourceDogfood?.enabled) === true;
 }
 
 UI.ViewManager.registerViewExtension({
   location: UI.ViewManager.ViewLocationValues.DRAWER_VIEW,
   id: 'freestyler',
-  commandPrompt: i18nLazyString(UIStringsTemp.showFreestyler),
-  title: i18nLazyString(UIStringsTemp.freestyler),
+  commandPrompt: i18nLazyString(UIStringsTemp.showAiAssistant),
+  title: i18nLazyString(UIStringsTemp.aiAssistant),
   order: 10,
+  isPreviewFeature: true,
   persistence: UI.ViewManager.ViewPersistence.CLOSEABLE,
   hasToolbar: false,
-  condition: isFeatureAvailable,
+  condition: config => isFeatureAvailable(config) && !isPolicyRestricted(config) &&
+      Common.Settings.Settings.instance().moduleSetting(setting).get(),
   async loadView() {
     const Freestyler = await loadFreestylerModule();
     return Freestyler.FreestylerPanel.instance();
@@ -78,6 +122,22 @@ Common.Settings.registerSettingExtension({
   defaultValue: isFeatureAvailable,
   reloadRequired: true,
   condition: isFeatureAvailable,
+  disabledCondition: config => {
+    if (isLocaleRestricted()) {
+      return {disabled: true, reason: i18nString(UIStringsTemp.wrongLocale)};
+    }
+    if (isAgeRestricted(config)) {
+      return {disabled: true, reason: i18nString(UIStringsTemp.ageRestricted)};
+    }
+    if (isGeoRestricted(config)) {
+      return {disabled: true, reason: i18nString(UIStringsTemp.geoRestricted)};
+    }
+    if (isPolicyRestricted(config)) {
+      return {disabled: true, reason: i18nString(UIStringsTemp.policyRestricted)};
+    }
+
+    return {disabled: false};
+  },
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -87,26 +147,25 @@ UI.ActionRegistration.registerActionExtension({
   },
   setting,
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStringsTemp.askFreestyler),
+  title: i18nLazyString(UIStringsTemp.askAiAssistant),
   async loadActionDelegate() {
     const Freestyler = await loadFreestylerModule();
     return new Freestyler.ActionDelegate();
   },
-  condition: isFeatureAvailable,
+  condition: config => isFeatureAvailable(config) && !isPolicyRestricted(config),
 });
 
 UI.ActionRegistration.registerActionExtension({
-  actionId: 'freestyler.style-tab-context',
+  actionId: 'drjones.network-panel-context',
   contextTypes(): [] {
     return [];
   },
   setting,
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStringsTemp.askFreestyler),
-  iconClass: UI.ActionRegistration.IconClass.SPARK,
+  title: i18nLazyString(UIStringsTemp.askAiAssistant),
   async loadActionDelegate() {
     const Freestyler = await loadFreestylerModule();
     return new Freestyler.ActionDelegate();
   },
-  condition: isFeatureAvailable,
+  condition: config => isDrJonesFeatureAvailable(config) && !isPolicyRestricted(config),
 });

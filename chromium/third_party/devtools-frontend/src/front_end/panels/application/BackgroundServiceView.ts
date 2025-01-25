@@ -194,7 +194,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
       throw new Error('StorageKeyManager instance is missing');
     }
     this.storageKeyManager.addEventListener(
-        SDK.StorageKeyManager.Events.MainStorageKeyChanged, () => this.onStorageKeyChanged());
+        SDK.StorageKeyManager.Events.MAIN_STORAGE_KEY_CHANGED, () => this.onStorageKeyChanged());
 
     this.recordAction = UI.ActionRegistry.ActionRegistry.instance().getAction('background-service.toggle-recording');
 
@@ -234,18 +234,19 @@ export class BackgroundServiceView extends UI.Widget.VBox {
   private async setupToolbar(): Promise<void> {
     this.toolbar.makeWrappable(true);
     this.recordButton = (UI.Toolbar.Toolbar.createActionButton(this.recordAction) as UI.Toolbar.ToolbarToggle);
+    this.recordButton.toggleOnClick(false);
     this.toolbar.appendToolbarItem(this.recordButton);
 
     const clearButton =
         new UI.Toolbar.ToolbarButton(i18nString(UIStrings.clear), 'clear', undefined, 'background-service.clear');
-    clearButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, () => this.clearEvents());
+    clearButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, () => this.clearEvents());
     this.toolbar.appendToolbarItem(clearButton);
 
     this.toolbar.appendSeparator();
 
     this.saveButton = new UI.Toolbar.ToolbarButton(
         i18nString(UIStrings.saveEvents), 'download', undefined, 'background-service.save-events');
-    this.saveButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, _event => {
+    this.saveButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, _event => {
       void this.saveToFile();
     });
     this.saveButton.setEnabled(false);
@@ -289,7 +290,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
    * Called when the `Toggle Record` button is clicked.
    */
   toggleRecording(): void {
-    this.model.setRecording(!this.recordButton.toggled(), this.serviceName);
+    this.model.setRecording(!this.recordButton.isToggled(), this.serviceName);
   }
 
   /**
@@ -305,7 +306,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
       return;
     }
 
-    if (state.isRecording === this.recordButton.toggled()) {
+    if (state.isRecording === this.recordButton.isToggled()) {
       return;
     }
 
@@ -315,8 +316,8 @@ export class BackgroundServiceView extends UI.Widget.VBox {
   }
 
   private updateRecordButtonTooltip(): void {
-    const buttonTooltip = this.recordButton.toggled() ? i18nString(UIStrings.stopRecordingEvents) :
-                                                        i18nString(UIStrings.startRecordingEvents);
+    const buttonTooltip = this.recordButton.isToggled() ? i18nString(UIStrings.stopRecordingEvents) :
+                                                          i18nString(UIStrings.startRecordingEvents);
     this.recordButton.setTitle(buttonTooltip, 'background-service.toggle-recording');
   }
 
@@ -375,7 +376,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
     dataGrid.setStriped(true);
 
     dataGrid.addEventListener(
-        DataGrid.DataGrid.Events.SelectedNode, event => this.showPreview((event.data as EventDataNode)));
+        DataGrid.DataGrid.Events.SELECTED_NODE, event => this.showPreview((event.data as EventDataNode)));
 
     return dataGrid;
   }
@@ -472,7 +473,7 @@ export class BackgroundServiceView extends UI.Widget.VBox {
     if (this.dataGrid.rootNode().children.length) {
       // Inform users that grid entries are clickable.
       centered.createChild('p').textContent = i18nString(UIStrings.selectAnEntryToViewMetadata);
-    } else if (this.recordButton.toggled()) {
+    } else if (this.recordButton.isToggled()) {
       // Inform users that we are recording/waiting for events.
       const featureName = BackgroundServiceView.getUIString(this.serviceName).toLowerCase();
       centered.createChild('p').textContent = i18nString(UIStrings.recordingSActivity, {PH1: featureName});

@@ -93,8 +93,8 @@ bool IsPreconnectExpensive() {
 #if BUILDFLAG(IS_ANDROID)
   // Preconnecting is expensive while on battery power and cellular data and
   // the radio signal is weak.
-  if ((base::PowerMonitor::IsInitialized() &&
-       !base::PowerMonitor::IsOnBatteryPower()) ||
+  if (auto* power_monitor = base::PowerMonitor::GetInstance();
+      (power_monitor->IsInitialized() && !power_monitor->IsOnBatteryPower()) ||
       (base::android::RadioUtils::GetConnectionType() !=
        base::android::RadioConnectionType::kCell)) {
     return false;
@@ -110,10 +110,13 @@ bool IsPreconnectExpensive() {
 }
 
 void MaybeWarmUpServiceWorker(const GURL& url, Profile* profile) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kSpeculativeServiceWorkerWarmUp) ||
-      !blink::features::kSpeculativeServiceWorkerWarmUpFromLoadingPredictor
-           .Get()) {
+  static const bool kEnabled =
+      base::FeatureList::IsEnabled(
+          blink::features::kSpeculativeServiceWorkerWarmUp) &&
+      base::GetFieldTrialParamByFeatureAsBool(
+          blink::features::kSpeculativeServiceWorkerWarmUp,
+          "sw_warm_up_from_loading_predictor", true);
+  if (!kEnabled) {
     return;
   }
 
@@ -286,11 +289,14 @@ bool LoadingPredictor::PrepareForPageLoad(
   // LCPP: set fonts to be prefetched to prefetch_requests.
   // TODO(crbug.com/40285959): make prefetch work for platforms without the
   // optimization guide.
-  if (base::FeatureList::IsEnabled(blink::features::kLCPPFontURLPredictor) &&
-      blink::features::kLCPPFontURLPredictorEnablePrefetch.Get() &&
+  static const bool kLCPPFontURLPredictorEnabled =
+      base::FeatureList::IsEnabled(blink::features::kLCPPFontURLPredictor) &&
+      blink::features::kLCPPFontURLPredictorEnablePrefetch.Get();
+  static const bool kLoadingPredictorPrefetchEnabled =
       base::FeatureList::IsEnabled(features::kLoadingPredictorPrefetch) &&
       features::kLoadingPredictorPrefetchSubresourceType.Get() ==
-          features::PrefetchSubresourceType::kAll) {
+          features::PrefetchSubresourceType::kAll;
+  if (kLCPPFontURLPredictorEnabled && kLoadingPredictorPrefetchEnabled) {
     std::optional<LcppStat> lcpp_stat =
         resource_prefetch_predictor()->GetLcppStat(initiator_origin, url);
     if (lcpp_stat) {

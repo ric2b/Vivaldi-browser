@@ -22,6 +22,7 @@ class ContentPasswordManagerDriver;
 namespace autofill {
 
 class AutofillField;
+class AutofillPredictionImprovementsDelegate;
 class PersonalDataManager;
 
 // `AutofillContextMenuManager` is responsible for adding/executing Autofill
@@ -66,6 +67,10 @@ class AutofillContextMenuManager : public RenderViewContextMenuObserver {
   // available for the field.
   void MaybeAddAutofillFeedbackItem();
 
+  // Conditionally adds the item to trigger filling with prediction
+  // improvements.
+  void MaybeAddAutofillPredictionImprovementsItem();
+
   // Conditionally adds the address, payments and / or passwords Autofill manual
   // fallbacks to the context menu model depending on whether there's data to
   // suggest.
@@ -75,6 +80,11 @@ class AutofillContextMenuManager : public RenderViewContextMenuObserver {
   // currently focused field.
   bool ShouldAddPlusAddressManualFallbackItem(
       ContentAutofillDriver& autofill_driver);
+
+  // Returns if the item to trigger prediction improvements should be added.
+  bool ShouldAddPredictionImprovementsItem(
+      AutofillPredictionImprovementsDelegate* delegate,
+      const GURL& url);
 
   // Checks if the manual fallback context menu entry can be shown for the
   // currently focused field.
@@ -113,27 +123,30 @@ class AutofillContextMenuManager : public RenderViewContextMenuObserver {
   void AddPasswordsManualFallbackItems(
       password_manager::ContentPasswordManagerDriver& password_manager_driver);
 
-  // Emits metrics about showing the manual fallback context menu entries to the
-  // user.
-  // `address_option_shown` specifies whether address manual fallback was
-  // available, same for `payments_option_shown` and
-  // `select_passwords_option_shown`.
+  void LogAddressManualFallbackContextMenuEntryShown(
+      ContentAutofillDriver& autofill_driver);
+
+  void LogPaymentsManualFallbackContextMenuEntryShown(
+      ContentAutofillDriver& autofill_driver);
+
   // Out of all password entries, this method is only interested in the "select
   // password" entry, because the rest of them don't trigger suggestions and are
   // recorded by default separately (outside `AutofillContextMenuManager`).
-  void LogManualFallbackContextMenuEntryShown(
-      ContentAutofillDriver* autofill_driver,
-      password_manager::ContentPasswordManagerDriver* password_manager_driver,
-      bool address_option_shown,
-      bool payments_option_shown,
-      bool select_passwords_option_shown);
+  void LogSelectPasswordManualFallbackContextMenuEntryShown(
+      password_manager::ContentPasswordManagerDriver& password_manager_drivern);
 
-  // Emits metrics about accepting the manual fallback context menu entries
-  // shown to the user. `filling_product` defines which manual fallback option
-  // was accepted.
-  void LogManualFallbackContextMenuEntryAccepted(
-      AutofillDriver& autofill_driver,
-      const FillingProduct filling_product);
+  void LogAddressManualFallbackContextMenuEntryAccepted(
+      AutofillDriver& autofill_driver);
+
+  void LogPaymentsManualFallbackContextMenuEntryAccepted(
+      AutofillDriver& autofill_driver);
+
+  void LogSelectPasswordManualFallbackContextMenuEntryAccepted();
+
+  // Triggers the filling with prediction improvements flow.
+  void ExecutePredictionImprovementsCommand(
+      const LocalFrameToken& frame_token,
+      ContentAutofillDriver& autofill_driver);
 
   // Triggers the feedback flow for Autofill command.
   void ExecuteAutofillFeedbackCommand(const LocalFrameToken& frame_token,
@@ -149,18 +162,16 @@ class AutofillContextMenuManager : public RenderViewContextMenuObserver {
 
   // Triggers passwords suggestions on the field that the context menu was
   // opened on.
-  void ExecuteFallbackForPasswordsCommand(AutofillDriver& driver);
+  void ExecuteFallbackForSelectPasswordCommand(AutofillDriver& driver);
 
   // Triggers Autofill address suggestions on the field that the context menu
   // was opened on.
   void ExecuteFallbackForAddressesCommand(
       ContentAutofillDriver& autofill_driver);
 
-  // Gets the `AutofillField` described by the `params_` from the `manager`.
-  // The `frame_token` is used to map from the `params_` renderer id to a global
-  // id.
-  AutofillField* GetAutofillField(AutofillManager& manager,
-                                  const LocalFrameToken& frame_token) const;
+  // Gets the `AutofillField` described by the `params_` from the
+  // `autofill_driver`'s manager.
+  AutofillField* GetAutofillField(AutofillDriver& autofill_driver) const;
 
   // Dangling on linux-lacros-rel in:
   // AutofillContextMenuManagerFeedbackUILacrosBrowserTest

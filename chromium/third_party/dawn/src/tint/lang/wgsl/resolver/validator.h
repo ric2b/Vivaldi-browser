@@ -28,6 +28,7 @@
 #ifndef SRC_TINT_LANG_WGSL_RESOLVER_VALIDATOR_H_
 #define SRC_TINT_LANG_WGSL_RESOLVER_VALIDATOR_H_
 
+#include <cstdint>
 #include <set>
 #include <string>
 #include <utility>
@@ -37,7 +38,6 @@
 #include "src/tint/lang/wgsl/ast/input_attachment_index_attribute.h"
 #include "src/tint/lang/wgsl/ast/pipeline_stage.h"
 #include "src/tint/lang/wgsl/common/allowed_features.h"
-#include "src/tint/lang/wgsl/common/validation_mode.h"
 #include "src/tint/lang/wgsl/program/program_builder.h"
 #include "src/tint/lang/wgsl/resolver/sem_helper.h"
 #include "src/tint/utils/containers/hashmap.h"
@@ -108,6 +108,14 @@ struct TypeAndAddressSpace {
 /// DiagnosticFilterStack is a scoped stack of diagnostic filters.
 using DiagnosticFilterStack = ScopeStack<wgsl::DiagnosticRule, wgsl::DiagnosticSeverity>;
 
+/// Enumerator of duplication behavior for diagnostics.
+enum class DiagnosticDuplicates : uint8_t {
+    // Diagnostic duplicates are allowed.
+    kAllowed,
+    // Diagnostic duplicates are not allowed.
+    kDenied,
+};
+
 /// Validation logic for various ast nodes. The validations in general should
 /// be shallow and depend on the resolver to call on children. The validations
 /// also assume that sem changes have already been made. The validation checks
@@ -119,14 +127,12 @@ class Validator {
     /// @param helper the SEM helper to validate with
     /// @param enabled_extensions all the extensions declared in current module
     /// @param allowed_features the allowed extensions and features
-    /// @param mode the validation mode to use
     /// @param atomic_composite_info atomic composite info of the module
     /// @param valid_type_storage_layouts a set of validated type layouts by address space
     Validator(ProgramBuilder* builder,
               SemHelper& helper,
               const wgsl::Extensions& enabled_extensions,
               const wgsl::AllowedFeatures& allowed_features,
-              wgsl::ValidationMode mode,
               const Hashmap<const core::type::Type*, const Source*, 8>& atomic_composite_info,
               Hashset<TypeAndAddressSpace, 8>& valid_type_storage_layouts);
     ~Validator();
@@ -224,13 +230,15 @@ class Validator {
     bool Assignment(const ast::Statement* a, const core::type::Type* rhs_ty) const;
 
     /// Validates a binary expression
-    /// @param expr the ast binary expression
+    /// @param node the ast binary expression or compound assignment node
+    /// @param op the binary operator
+    /// @param lhs the left hand side sem node
     /// @param rhs the right hand side sem node
-    /// @param lhs_ty the type of the left hand side
     /// @returns true on success, false otherwise.
-    bool BinaryExpression(const ast::BinaryExpression* expr,
-                          const tint::sem::ValueExpression* rhs,
-                          const tint::core::type::Type* lhs_ty) const;
+    bool BinaryExpression(const ast::Node* node,
+                          const core::BinaryOp op,
+                          const tint::sem::ValueExpression* lhs,
+                          const tint::sem::ValueExpression* rhs) const;
 
     /// Validates a break statement
     /// @param stmt the break statement to validate
@@ -243,11 +251,13 @@ class Validator {
     /// @param storage_type the attribute storage type
     /// @param stage the current pipeline stage
     /// @param is_input true if this is an input attribute
+    /// @param ignore_clip_distances_type_validation true if ignore type check on clip_distances
     /// @returns true on success, false otherwise.
     bool BuiltinAttribute(const ast::BuiltinAttribute* attr,
                           const core::type::Type* storage_type,
                           ast::PipelineStage stage,
-                          const bool is_input) const;
+                          const bool is_input,
+                          const bool ignore_clip_distances_type_validation = false) const;
 
     /// Validates a continue statement
     /// @param stmt the continue statement to validate
@@ -533,6 +543,11 @@ class Validator {
     /// @returns true on success, false otherwise
     bool SubgroupBroadcast(const sem::Call* call) const;
 
+    /// Validates a quadBroadcast builtin function
+    /// @param call the builtin call to validate
+    /// @returns true on success, false otherwise
+    bool QuadBroadcast(const sem::Call* call) const;
+
     /// Validates an optional builtin function and its required extensions and language features.
     /// @param call the builtin call to validate
     /// @returns true on success, false otherwise
@@ -551,9 +566,11 @@ class Validator {
     /// Validates a set of diagnostic controls.
     /// @param controls the diagnostic controls to validate
     /// @param use the place where the controls are being used ("directive" or "attribute")
+    /// @param allow_duplicates if same name same severity diagnostics are allowed
     /// @returns true on success, false otherwise.
     bool DiagnosticControls(VectorRef<const ast::DiagnosticControl*> controls,
-                            const char* use) const;
+                            const char* use,
+                            DiagnosticDuplicates allow_duplicates) const;
 
     /// Validates a address space layout
     /// @param type the type to validate
@@ -638,7 +655,6 @@ class Validator {
     DiagnosticFilterStack diagnostic_filters_;
     const wgsl::Extensions& enabled_extensions_;
     const wgsl::AllowedFeatures& allowed_features_;
-    const wgsl::ValidationMode mode_;
     const Hashmap<const core::type::Type*, const Source*, 8>& atomic_composite_info_;
     Hashset<TypeAndAddressSpace, 8>& valid_type_storage_layouts_;
 };

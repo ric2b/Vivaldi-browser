@@ -96,6 +96,7 @@ optimize_ts("password_controller_js") {
 
   deps = [
     "//components/autofill/ios/form_util:fill_js_dependencies",
+    "//components/autofill/ios/form_util:fill_js_namespace",
     "//ios/web/public/js_messaging:gcrweb",
   ]
 }
@@ -138,8 +139,10 @@ source_set("unit_tests") {
     "//components/autofill/core/common:test_support",
     "//components/autofill/ios/browser",
     "//components/autofill/ios/browser:test_support",
+    "//components/autofill/ios/browser:util",
     "//components/autofill/ios/common",
     "//components/autofill/ios/form_util",
+    "//components/autofill/ios/form_util:child_frame_registrar",
     "//components/autofill/ios/form_util:form_handler_feature",
     "//components/autofill/ios/form_util:form_util_feature",
     "//components/autofill/ios/form_util:test_support",

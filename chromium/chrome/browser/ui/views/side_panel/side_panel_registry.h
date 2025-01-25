@@ -10,9 +10,9 @@
 
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
-#include "chrome/browser/ui/side_panel/side_panel_entry_observer.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_key.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_entry_observer.h"
 
 namespace content {
 class WebContents;
@@ -22,17 +22,20 @@ class SidePanelRegistryObserver;
 
 // This class is used for storing SidePanelEntries specific to a context. This
 // context can be one per tab or one per window. See also SidePanelCoordinator.
-class SidePanelRegistry final : public base::SupportsUserData::Data,
-                                public SidePanelEntryObserver {
+class SidePanelRegistry final : public SidePanelEntryObserver {
  public:
   SidePanelRegistry();
   SidePanelRegistry(const SidePanelRegistry&) = delete;
   SidePanelRegistry& operator=(const SidePanelRegistry&) = delete;
   ~SidePanelRegistry() override;
 
+  // The tab-scoped registry should be obtained from the tab, e.g.
+  // tab_model->tab_features()->side_panel_registry(). This is the fallback for
+  // old code that is conceptually tab-scoped but does not use tab_model.
+  //
   // Gets the contextual registry for the tab associated with |web_contents|.
   // Can return null for non-tab contents.
-  static SidePanelRegistry* Get(content::WebContents* web_contents);
+  static SidePanelRegistry* GetDeprecated(content::WebContents* web_contents);
 
   SidePanelEntry* GetEntryForKey(const SidePanelEntry::Key& entry_key);
   void ResetActiveEntry();

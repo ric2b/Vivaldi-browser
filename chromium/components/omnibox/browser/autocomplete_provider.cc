@@ -82,6 +82,8 @@ const char* AutocompleteProvider::TypeToString(Type type) {
     // Vivaldi
     case TYPE_BOOKMARK_NICKNAME:
       return "BookmarkNickname";
+    case TYPE_DIRECT_MATCH:
+      return "DirectMatch";
 
     default:
       DUMP_WILL_BE_NOTREACHED()
@@ -168,11 +170,13 @@ AutocompleteProvider::AsOmniboxEventProviderType() const {
     // Vivaldi
     case TYPE_BOOKMARK_NICKNAME:
       return metrics::OmniboxEventProto::BOOKMARK;
+    case TYPE_DIRECT_MATCH:
+      return metrics::OmniboxEventProto::DIRECT_MATCH;
     default:
       // TODO(crbug.com/40940012) This was a NOTREACHED that we converted to
       //   help debug crbug.com/1499235 since NOTREACHED's don't log their
       //   message in crash reports. Should be reverted back to a NOTREACHED or
-      //   NOTREACHED_NORETURN if their logs eventually begin being logged to
+      //   NOTREACHED if their logs eventually begin being logged to
       //   crash reports.
       DUMP_WILL_BE_NOTREACHED()
           << "[NOTREACHED] Unhandled AutocompleteProvider::Type " << type_;

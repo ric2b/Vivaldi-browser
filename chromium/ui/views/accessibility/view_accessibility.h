@@ -52,6 +52,8 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
                                    const ax::mojom::Event)>;
   using AXVirtualViews = AXVirtualView::AXVirtualViews;
 
+  enum class State { kUninitialized, kInitializing, kInitialized };
+
   static std::unique_ptr<ViewAccessibility> Create(View* view);
 
   ViewAccessibility(const ViewAccessibility&) = delete;
@@ -112,11 +114,10 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   // Call when a menu closes, to restore focus to where it was previously.
   virtual void FireFocusAfterMenuClose();
 
-  // Convenience function to set common accessibility properties during view
-  // construction/initialization. It should only be used to define property
-  // values as part of the creation of this view; not to provide property-
-  // change updates. This function will only modify properties for which a value
-  // has been explicitly set.
+  // Deprecated, do not use. Prefer calling SetName, SetDescription, etc.
+  // TODO(crbug.com/325137417): Remove this function, no real benefit is added
+  // anymore now that all event firing is blocked during
+  // construction/initialization.
   void SetProperties(
       std::optional<ax::mojom::Role> role = std::nullopt,
       std::optional<std::u16string> name = std::nullopt,
@@ -185,6 +186,10 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   // completed and we don't have ViewAXPlatformNodeDelegate anymore.
   ax::mojom::Role GetCachedRole() const;
 
+  void SetRoleDescription(const std::u16string& role_description);
+  void SetRoleDescription(const std::string& role_description);
+  void RemoveRoleDescription();
+
   // For the same reasons as GetCachedRole, this function cannot
   // follow the established pattern and be named GetName()
   // TODO(crbug.com/325137417): Rename to GetName once the ViewsAX project is
@@ -231,6 +236,9 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   // will work.
   void SetName(View& naming_view);
 
+  // Removes kName and KNameFrom attributes from accessibility cache.
+  void RemoveName();
+
   void SetIsEditable(bool editable);
 
   void SetBounds(const gfx::RectF& bounds);
@@ -272,6 +280,7 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   void SetIsScrollable(bool scrollable);
 
   void SetActiveDescendant(views::View& view);
+  void SetActiveDescendant(ui::AXPlatformNodeId id);
   void ClearActiveDescendant();
 
   void SetIsInvisible(bool is_invisible);
@@ -288,6 +297,8 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   // cache.
   void RemoveExpandCollapseState();
 
+  void SetIsVertical(bool vertical);
+
   void SetIsDefault(bool is_default);
 
   // Sets/gets whether or not this view should be marked as "enabled" for the
@@ -300,6 +311,9 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
 
   void SetTableRowCount(int row_count);
   void SetTableColumnCount(int column_count);
+
+  void ClearDescriptionAndDescriptionFrom();
+  void RemoveDescription();
 
   void SetDescription(const std::string& description,
                       const ax::mojom::DescriptionFrom description_from =
@@ -318,6 +332,8 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   std::u16string GetCachedDescription() const;
 
   void SetPlaceholder(const std::string& placeholder);
+
+  void AddAction(ax::mojom::Action action);
 
   void SetCheckedState(ax::mojom::CheckedState checked_state);
   void RemoveCheckedState();
@@ -354,6 +370,7 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   void SetShowContextMenu(bool show_context_menu);
 
   void SetContainerLiveStatus(const std::string& status);
+  void RemoveContainerLiveStatus();
 
   // Sets the kValue attribute of the accessible object.
   // In case of ProgressBar, if progressBarIndicator value is negative,
@@ -361,10 +378,13 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   void SetValue(const std::string& value);
   void SetValue(const std::u16string& value);
   void RemoveValue();
+  std::u16string GetValue() const;
 
   void SetDefaultActionVerb(
       const ax::mojom::DefaultActionVerb default_action_verb);
   void RemoveDefaultActionVerb();
+
+  void SetAutoComplete(const std::string autocomplete);
 
   void SetHierarchicalLevel(int hierarchical_level);
 
@@ -378,6 +398,12 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   // and that of the view's children. Then it updates the focusable state of the
   // current view.
   void UpdateFocusableStateRecursive();
+
+  // This updates some shared state for the view and all its descendants.
+  void UpdateStatesForViewAndDescendants();
+
+  // This should only ever be called on the RootView.
+  void SetRootViewIsReadyToNotifyEvents();
 
   // Updates the invisible state of the `data_` object. The view is considered
   // invisible if it is not visible and its role is not kAlert.
@@ -474,6 +500,12 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
 
   void OnWidgetUpdated(Widget* widget, Widget* old_widget);
 
+  void CompleteCacheInitialization();
+
+  bool is_initialized() const {
+    return initialization_state_ == State::kInitialized;
+  }
+
  protected:
   explicit ViewAccessibility(View* view);
 
@@ -485,9 +517,12 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   bool ignore_missing_widget_for_testing_ = false;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(ViewTest, PauseAccessibilityEvents);
+  FRIEND_TEST_ALL_PREFIXES(ViewTest, ViewAccessibilityReadyToNotifyEvents);
   FRIEND_TEST_ALL_PREFIXES(ViewTest,
                            WidgetObserverViewWidgetClosedViewReparented);
+
+  // Fully initialize the cache.
+  void CompleteCacheInitializationRecursive();
 
   // Initializes the role attribute on the `data_` object with the one returned
   // from `View::GetAccessibleNodeData` called on the owning view to ensure that
@@ -510,6 +545,16 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
   // `should_be_ignored_`, or if it has been pruned (`pruned_`), or if its role
   // is 'kNone'.
   void UpdateIgnoredState();
+
+  // We don't want to fire accessibility events when the view is being
+  // initialized and any setters are called from their respective constructors.
+  // We only want to fire events of any subtree of views when that subtree of
+  // views is connected to a RootView. This way we ensure that we don't fire
+  // events for views that are not connected to a valid tree. See
+  // `SetRootViewIsReadyToNotifyEvents`.
+  void UpdateReadyToNotifyEvents();
+
+  void SetReadyToNotifyEvents();
 
   void SetWidgetClosedRecursive(Widget* widget, bool value);
 
@@ -568,9 +613,12 @@ class VIEWS_EXPORT ViewAccessibility : public WidgetObserver {
 
   // Prevents accessibility events from being fired during initialization of
   // the owning View.
-  bool pause_accessibility_events_ = false;
+  // True once a View is connected to a RootView.
+  bool ready_to_notify_events_ = false;
 
   bool is_widget_closed_ = false;
+
+  State initialization_state_ = State::kUninitialized;
 
   base::ScopedObservation<Widget, WidgetObserver> observation_{this};
 };

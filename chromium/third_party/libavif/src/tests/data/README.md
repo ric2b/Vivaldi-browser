@@ -363,6 +363,24 @@ License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LIC
 Source: Personal photo converted with `avifenc --grid 1x5 --yuv 420` at
 commit [632d131](https://github.com/AOMediaCodec/libavif/commit/632d13188f9b7faa40f20d870e792174b8b5b8e6).
 
+### File [sofa_grid1x5_420_dimg_repeat.avif](sofa_grid1x5_420_dimg_repeat.avif)
+
+![](sofa_grid1x5_420_dimg_repeat.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: `sofa_grid1x5_420.avif` with manually edited `dimg` associations
+2,3,4,5,5 instead of 2,3,4,5,6 (invalid file).
+
+### File [sofa_grid1x5_420_reversed_dimg_order.avif](sofa_grid1x5_420_reversed_dimg_order.avif)
+
+![](sofa_grid1x5_420_reversed_dimg_order.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: `sofa_grid1x5_420.avif` manually edited so that the `dimg` order is
+6,5,4,3,2 instead of 2,3,4,5,6.
+
 ### File [color_grid_alpha_nogrid.avif](color_grid_alpha_nogrid.avif)
 
 ![](color_grid_alpha_nogrid.avif)
@@ -389,6 +407,18 @@ Box structure of the items in this file:
    |       |
 [alpha] [alpha]
 ```
+
+### File [color_grid_alpha_grid_tile_shared_in_dimg.avif](color_grid_alpha_grid_tile_shared_in_dimg.avif)
+
+![](color_grid_alpha_grid_tile_shared_in_dimg.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: Same as `color_grid_alpha_nogrid.avif`
+
+The color and alpha planes are arranged as 2x2 grid items. The color `dimg`
+associations are manually edited from 2,3,4,5 to 2,3,4,A. The item with ID 0xA
+is an item used in two grids.
 
 ### File [alpha_noispe.avif](alpha_noispe.avif)
 
@@ -471,6 +501,7 @@ exiftool "-icc_profile<=p3.icc" paris_exif_xmp_icc_gainmap_bigendian.jpg
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
 Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/weirdgainmaps
+by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/`
 
 Contains a 4x3 color grid, a 4x3 alpha grid, and a 2x2 gain map grid.
 
@@ -481,6 +512,7 @@ Contains a 4x3 color grid, a 4x3 alpha grid, and a 2x2 gain map grid.
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
 Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/weirdgainmaps
+by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
 
 Contains a single color image, single alpha image, and a 2x2 gain map grid.
 
@@ -491,8 +523,58 @@ Contains a single color image, single alpha image, and a 2x2 gain map grid.
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
 Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/weirdgainmaps
+by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
 
 Contains a 4x3 color grid, a 4x3 alpha grid, and a single gain map image.
+
+### File [unsupported_gainmap_version.avif](unsupported_gainmap_version.avif)
+
+![](unsupported_gainmap_version.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/weirdgainmaps
+by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
+
+Contains a gain map with the `version` field set to 99 in the tmap box.
+`minimum_version` and `writer_version` are 0.
+
+### File [unsupported_gainmap_minimum_version.avif](unsupported_gainmap_minimum_version.avif)
+
+![](unsupported_gainmap_minimum_version.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/weirdgainmaps
+by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
+
+Contains a gain map with the `minimum_version` field set to 99 in the tmap box.
+`version` and `writer_version` are 0.
+
+### File [unsupported_gainmap_writer_version_with_extra_bytes.avif](unsupported_gainmap_writer_version_with_extra_bytes.avif)
+
+![](unsupported_gainmap_writer_version_with_extra_bytes.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/weirdgainmaps
+by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
+
+Contains a gain map with the `writer_version` field set to 99 in the tmap box,
+and some extra unexpected bytes at the end of the gain map metadata.
+`version` and `minimum_version` are 0.
+
+### File [supported_gainmap_writer_version_with_extra_bytes.avif](supported_gainmap_writer_version_with_extra_bytes.avif)
+
+![](supported_gainmap_writer_version_with_extra_bytes.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/weirdgainmaps
+by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
+
+Contains a gain map with some extra unexpected bytes at the end of the gain map metadata.
+`version`, `minimum_version` and `writer_version` are 0.
 
 ### File [seine_hdr_srgb.avif](seine_hdr_srgb.avif)
 
@@ -510,7 +592,7 @@ HDR image using the PQ transfer curve. Contains a gain map in
 [Adobe's format](https://helpx.adobe.com/camera-raw/using/gain-map.html) that is not recognized by
 libavif and ignored by the tests.
 
-### File [seine_sdr_gainmap_srgb.jpg](seine_sdr_gainmap_srgb.avif)
+### File [seine_sdr_gainmap_srgb.jpg](seine_sdr_gainmap_srgb.jpg)
 
 ![](seine_sdr_gainmap_srgb.jpg)
 
@@ -544,12 +626,22 @@ with AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP and AVIF_ENABLE_LIBXML2 then:
 
 SDR image with a gain map to allow tone mapping to HDR.
 
+### File [seine_sdr_gainmap_notmapbrand.avif](seine_sdr_gainmap_notmapbrand.avif)
+
+![](seine_sdr_gainmap_notmapbrand.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source : same as seine_sdr_gainmap_srgb.avif before commit 10b7232
+
+An image with a `tmap` item (i.e. a gain map) but no 'tmap' brand in the `ftyp` box.
+
 ### File [seine_sdr_gainmap_big_srgb.avif](seine_sdr_gainmap_big_srgb.avif)
 
 ![](seine_sdr_gainmap_big_srgb.avif)
 
-Source : modified version of `seine_sdr_gainmap_srgb.avif` with an upscaled gain map, generated using libavif's API.
-See `CreateTestImages` in `avifgainmaptest.cc` (set kUpdateTestImages to update images).
+Source : generated by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/`
+after changing `kUpdateTestImages` to true in the `avifgainmaptest.cc`.
 
 SDR image with a gain map to allow tone mapping to HDR. The gain map's width and height are doubled compared to the base image.
 This is an atypical image just for testing. Typically, the gain map would be either the same size or smaller as the base image.
@@ -560,8 +652,8 @@ This is an atypical image just for testing. Typically, the gain map would be eit
 
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
-Source : created from `seine_hdr_srgb.avif` (for the base image) and `seine_sdr_gainmap_srgb.avif` (for the gain map) with libavif's API.
-See `CreateTestImages` in `avifgainmaptest.cc` (set kUpdateTestImages to update images).
+Source : generated by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/`
+after changing `kUpdateTestImages` to true in the `avifgainmaptest.cc`.
 
 HDR image with a gain map to allow tone mapping to SDR.
 
@@ -571,8 +663,8 @@ HDR image with a gain map to allow tone mapping to SDR.
 
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
-Source : modified version of `seine_hdr_gainmap_srgb.avif` with a downscaled gain map, generated using libavif's API.
-See `CreateTestImages` in `avifgainmaptest.cc` (set kUpdateTestImages to update images).
+Source : generated by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/`
+after changing `kUpdateTestImages` to true in the `avifgainmaptest.cc`.
 
 SDR image with a gain map to allow tone mapping to HDR. The gain map's width and height are halved compared to the base image.
 

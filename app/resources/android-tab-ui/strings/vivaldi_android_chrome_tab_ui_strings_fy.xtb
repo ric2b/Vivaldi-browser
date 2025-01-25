@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fy">
+<translation id="2947471979790858922">Dyn aktiviteit yn dizze privee ljeppers wurde fan dit apparaat wiske</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Jo kinne sluten ljeppers weromfine yn de resinte ljppers yn it Vivaldi menu. Dyn privee ljepper is net beskikber wêze.}
+        other {YJo kinne sluten ljeppers weromfine yn de resinte ljppers yn it Vivaldi menu. Dyn # privee ljeppers sille net beskikber wêze.}}</translation>
 <translation id="4871187110787939393">Alle privee ljeppers slute?</translation>
 </translationbundle>

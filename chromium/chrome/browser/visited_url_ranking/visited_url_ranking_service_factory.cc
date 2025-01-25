@@ -17,6 +17,7 @@
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
+#include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/browser/visited_url_ranking/url_deduplication/search_engine_url_strip_handler.h"
 #include "chrome/common/channel_info.h"
@@ -24,11 +25,13 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history_clusters/core/config.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/sync_device_info/device_info_sync_service.h"
 #include "components/url_deduplication/url_deduplication_helper.h"
 #include "components/visited_url_ranking/internal/history_url_visit_data_fetcher.h"
 #include "components/visited_url_ranking/internal/session_url_visit_data_fetcher.h"
 #include "components/visited_url_ranking/internal/transformer/bookmarks_url_visit_aggregates_transformer.h"
 #include "components/visited_url_ranking/internal/transformer/default_app_url_visit_aggregates_transformer.h"
+#include "components/visited_url_ranking/internal/transformer/history_url_visit_aggregates_browser_type_transformer.h"
 #include "components/visited_url_ranking/internal/transformer/history_url_visit_aggregates_categories_transformer.h"
 #include "components/visited_url_ranking/internal/transformer/history_url_visit_aggregates_visibility_score_transformer.h"
 #include "components/visited_url_ranking/internal/transformer/recency_filter_transformer.h"
@@ -76,6 +79,7 @@ VisitedURLRankingServiceFactory::VisitedURLRankingServiceFactory()
   DependsOn(SessionSyncServiceFactory::GetInstance());
   DependsOn(BookmarkModelFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
+  DependsOn(DeviceInfoSyncServiceFactory::GetInstance());
 }
 
 VisitedURLRankingServiceFactory::~VisitedURLRankingServiceFactory() = default;
@@ -135,9 +139,12 @@ VisitedURLRankingServiceFactory::BuildServiceInstanceForBrowserContext(
   history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::IMPLICIT_ACCESS);
   if (hs) {
+    syncer::DeviceInfoSyncService* device_info_sync_service =
+        DeviceInfoSyncServiceFactory::GetForProfile(profile);
     data_fetchers.emplace(
         Fetcher::kHistory,
-        std::make_unique<visited_url_ranking::HistoryURLVisitDataFetcher>(hs));
+        std::make_unique<visited_url_ranking::HistoryURLVisitDataFetcher>(
+            hs, device_info_sync_service));
   }
 
   // TODO(crbug.com/349317344): Move transformers map to a shareable helper
@@ -177,6 +184,9 @@ VisitedURLRankingServiceFactory::BuildServiceInstanceForBrowserContext(
           std::move(default_app_blocklist));
   transformers.emplace(URLVisitAggregatesTransformType::kDefaultAppUrlFilter,
                        std::move(default_app_transformer));
+  transformers.emplace(
+      URLVisitAggregatesTransformType::kHistoryBrowserTypeFilter,
+      std::make_unique<HistoryURLVisitAggregatesBrowserTypeTransformer>());
 #endif  // BUILDFLAG(IS_ANDROID)
 
   return std::make_unique<VisitedURLRankingServiceImpl>(

@@ -29,7 +29,7 @@
 #include "gpu/command_buffer/service/shared_memory_region_wrapper.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/config/gpu_finch_features.h"
-#include "third_party/skia/include/gpu/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSemaphore.h"
 #include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/buffer_types.h"
@@ -74,27 +74,6 @@ bool IsExoTexture(std::string_view label) {
 }
 
 }  // namespace
-
-class OzoneImageBacking::VaapiOzoneImageRepresentation
-    : public VaapiImageRepresentation {
- public:
-  VaapiOzoneImageRepresentation(SharedImageManager* manager,
-                                SharedImageBacking* backing,
-                                MemoryTypeTracker* tracker,
-                                VaapiDependencies* vaapi_dependency)
-      : VaapiImageRepresentation(manager, backing, tracker, vaapi_dependency) {}
-
- private:
-  OzoneImageBacking* ozone_backing() {
-    return static_cast<OzoneImageBacking*>(backing());
-  }
-  void EndAccess() override { ozone_backing()->has_pending_va_writes_ = true; }
-  void BeginAccess() override {
-    // TODO(andrescj): DCHECK that there are no fences to wait on (because the
-    // compositor should be completely done with a VideoFrame before returning
-    // it).
-  }
-};
 
 class OzoneImageBacking::OverlayOzoneImageRepresentation
     : public OverlayImageRepresentation {
@@ -198,8 +177,7 @@ OzoneImageBacking::ProduceSkiaGraphite(
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
   CHECK(context_state);
-  CHECK(context_state->graphite_context());
-  CHECK(context_state->gr_context_type() == GrContextType::kGraphiteDawn);
+  CHECK(context_state->IsGraphiteDawn());
 #if BUILDFLAG(SKIA_USE_DAWN)
   auto device = context_state->dawn_context_provider()->GetDevice();
   auto backend_type = context_state->dawn_context_provider()->backend_type();
@@ -469,23 +447,6 @@ OzoneImageBacking::~OzoneImageBacking() {
   }
 }
 
-std::unique_ptr<VaapiImageRepresentation> OzoneImageBacking::ProduceVASurface(
-    SharedImageManager* manager,
-    MemoryTypeTracker* tracker,
-    VaapiDependenciesFactory* dep_factory) {
-  DCHECK(pixmap_);
-  if (!vaapi_deps_)
-    vaapi_deps_ = dep_factory->CreateVaapiDependencies(pixmap_);
-
-  if (!vaapi_deps_) {
-    LOG(ERROR) << "OzoneImageBacking::ProduceVASurface failed to create "
-                  "VaapiDependencies";
-    return nullptr;
-  }
-  return std::make_unique<OzoneImageBacking::VaapiOzoneImageRepresentation>(
-      manager, this, tracker, vaapi_deps_.get());
-}
-
 #if BUILDFLAG(ENABLE_VULKAN)
 std::unique_ptr<VulkanImageRepresentation> OzoneImageBacking::ProduceVulkan(
     SharedImageManager* manager,
@@ -543,12 +504,6 @@ std::unique_ptr<VulkanImageRepresentation> OzoneImageBacking::ProduceVulkan(
 }
 #endif
 
-bool OzoneImageBacking::VaSync() {
-  if (has_pending_va_writes_)
-    has_pending_va_writes_ = !vaapi_deps_->SyncSurface();
-  return !has_pending_va_writes_;
-}
-
 bool OzoneImageBacking::UploadFromMemory(const std::vector<SkPixmap>& pixmaps) {
   if (context_state_->context_lost()) {
     return false;
@@ -556,7 +511,7 @@ bool OzoneImageBacking::UploadFromMemory(const std::vector<SkPixmap>& pixmaps) {
   DCHECK(context_state_->IsCurrent(nullptr));
 
 #if BUILDFLAG(USE_DAWN)
-  if (context_state_->gr_context_type() == GrContextType::kGraphiteDawn) {
+  if (context_state_->IsGraphiteDawn()) {
     return UploadFromMemoryGraphite(pixmaps);
   }
 #endif  // BUILDFLAG(USE_DAWN)
@@ -604,7 +559,7 @@ bool OzoneImageBacking::UploadFromMemory(const std::vector<SkPixmap>& pixmaps) {
 #if BUILDFLAG(USE_DAWN)
 bool OzoneImageBacking::UploadFromMemoryGraphite(
     const std::vector<SkPixmap>& pixmaps) {
-  DCHECK(context_state_->gr_context_type() == GrContextType::kGraphiteDawn);
+  DCHECK(context_state_->IsGraphiteDawn());
   auto representation = ProduceSkiaGraphite(
       nullptr, context_state_->memory_type_tracker(), context_state_);
   DCHECK_EQ(pixmaps.size(), representation->NumPlanesExpected());

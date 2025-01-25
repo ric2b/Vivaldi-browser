@@ -76,7 +76,7 @@ mojom::KeyEvent GetStaticShortcutAction(mojom::StaticShortcutAction action) {
     case mojom::StaticShortcutAction::kLeftClick:
     case mojom::StaticShortcutAction::kRightClick:
     case mojom::StaticShortcutAction::kMiddleClick:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case mojom::StaticShortcutAction::kCopy:
       key_event =
           mojom::KeyEvent(ui::VKEY_C, static_cast<int>(ui::DomCode::US_C),
@@ -180,6 +180,7 @@ bool AreScrollWheelEventRewritesAllowed(
     case mojom::CustomizationRestriction::
         kAllowAlphabetOrNumberKeyEventRewrites:
     case mojom::CustomizationRestriction::kAllowTabEventRewrites:
+    case mojom::CustomizationRestriction::kAllowFKeyRewrites:
       return false;
     case mojom::CustomizationRestriction::kAllowHorizontalScrollWheelRewrites:
     case mojom::CustomizationRestriction::kAllowCustomizations:
@@ -511,7 +512,7 @@ mojom::ButtonPtr GetButtonFromMouseEvent(const ui::MouseEvent& mouse_event) {
           mojom::CustomizableButton::kExtra);
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // Returns the customizable button for the scroll wheel event. Will return null
@@ -916,6 +917,9 @@ bool PeripheralCustomizationEventRewriter::IsButtonCustomizable(
       return IsAlphaKeyEvent(key_event) || IsNumberKeyEvent(key_event);
     case mojom::CustomizationRestriction::kAllowTabEventRewrites:
       return key_event.key_code() == ui::VKEY_TAB;
+    case mojom::CustomizationRestriction::kAllowFKeyRewrites:
+      return key_event.key_code() >= ui::VKEY_F1 &&
+             key_event.key_code() <= ui::VKEY_F15;
     case mojom::CustomizationRestriction::kDisallowCustomizations:
     case mojom::CustomizationRestriction::kDisableKeyEventRewrites:
     case mojom::CustomizationRestriction::kAllowHorizontalScrollWheelRewrites:

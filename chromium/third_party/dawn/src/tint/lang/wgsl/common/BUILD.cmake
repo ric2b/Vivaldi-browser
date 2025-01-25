@@ -41,7 +41,6 @@
 tint_add_target(tint_lang_wgsl_common lib
   lang/wgsl/common/allowed_features.h
   lang/wgsl/common/common.cc
-  lang/wgsl/common/validation_mode.h
 )
 
 tint_target_add_dependencies(tint_lang_wgsl_common lib
@@ -58,6 +57,10 @@ tint_target_add_dependencies(tint_lang_wgsl_common lib
   tint_utils_rtti
   tint_utils_text
   tint_utils_traits
+)
+
+tint_target_add_external_dependencies(tint_lang_wgsl_common lib
+  "src_utils"
 )
 
 ################################################################################
@@ -87,4 +90,5 @@ tint_target_add_dependencies(tint_lang_wgsl_common_test test
 
 tint_target_add_external_dependencies(tint_lang_wgsl_common_test test
   "gtest"
+  "src_utils"
 )

@@ -42,7 +42,7 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
       bool bRgbByteOrder,
       RetainPtr<CFX_DIBitmap> pBackdropBitmap,
       bool bGroupKnockout);
-  static std::unique_ptr<CFX_SkiaDeviceDriver> Create(SkCanvas* canvas);
+  static std::unique_ptr<CFX_SkiaDeviceDriver> Create(SkCanvas& canvas);
 
   ~CFX_SkiaDeviceDriver() override;
 
@@ -62,15 +62,8 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
                 const CFX_GraphStateData* pGraphState,
                 uint32_t fill_color,
                 uint32_t stroke_color,
-                const CFX_FillRenderOptions& fill_options,
-                BlendMode blend_type) override;
-  bool FillRectWithBlend(const FX_RECT& rect,
-                         uint32_t fill_color,
-                         BlendMode blend_type) override;
-  bool DrawCosmeticLine(const CFX_PointF& ptMoveTo,
-                        const CFX_PointF& ptLineTo,
-                        uint32_t color,
-                        BlendMode blend_type) override;
+                const CFX_FillRenderOptions& fill_options) override;
+  bool FillRect(const FX_RECT& rect, uint32_t fill_color) override;
   FX_RECT GetClipBox() const override;
   bool GetDIBits(RetainPtr<CFX_DIBitmap> bitmap,
                  int left,
@@ -89,7 +82,7 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
                        float alpha,
                        BlendMode blend_type) override;
   void SetGroupKnockout(bool group_knockout) override;
-  bool SyncInternalBitmaps() override;
+  void SyncInternalBitmaps() override;
   bool StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
                      uint32_t color,
                      int dest_left,
@@ -117,11 +110,10 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
                       uint32_t color,
                       const CFX_TextRenderOptions& options) override;
   int GetDriverType() const override;
-  bool DrawShading(const CPDF_ShadingPattern* pPattern,
-                   const CFX_Matrix* pMatrix,
+  bool DrawShading(const CPDF_ShadingPattern& pattern,
+                   const CFX_Matrix& matrix,
                    const FX_RECT& clip_rect,
-                   int alpha,
-                   bool bAlphaMode) override;
+                   int alpha) override;
 
   bool MultiplyAlpha(float alpha) override;
   bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) override;
@@ -169,7 +161,7 @@ class CFX_SkiaDeviceDriver final : public RenderDeviceDriverIface {
                        bool bRgbByteOrder,
                        RetainPtr<CFX_DIBitmap> pBackdropBitmap,
                        bool bGroupKnockout);
-  explicit CFX_SkiaDeviceDriver(SkCanvas* canvas);
+  explicit CFX_SkiaDeviceDriver(SkCanvas& canvas);
 
   bool TryDrawText(pdfium::span<const TextCharPos> char_pos,
                    const CFX_Font* pFont,

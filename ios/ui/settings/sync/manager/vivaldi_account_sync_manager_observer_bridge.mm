@@ -8,7 +8,7 @@ VivaldiAccountSyncManagerObserverBridge::
   VivaldiAccountSyncManagerObserverBridge(
       id<VivaldiAccountSyncManagerConsumer> consumer,
       VivaldiAccountManager* account_manager,
-      VivaldiSyncServiceImpl* sync_service)
+      SyncService* sync_service)
 : account_manager_(account_manager),
   sync_service_(sync_service),
   consumer_(consumer) {

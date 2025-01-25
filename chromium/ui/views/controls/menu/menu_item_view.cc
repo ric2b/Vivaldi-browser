@@ -125,6 +125,23 @@ void MenuItemView::OnThemeChanged() {
     UpdateSelectionBasedState(ShouldPaintAsSelected(PaintMode::kNormal));
 }
 
+void MenuItemView::UpdateAccessibleCheckedState() {
+  if (type_ == Type::kCheckbox || type_ == Type::kRadio) {
+    bool is_checked =
+        GetDelegate() && GetDelegate()->IsItemChecked(GetCommand());
+    GetViewAccessibility().SetCheckedState(
+        is_checked ? ax::mojom::CheckedState::kTrue
+                   : ax::mojom::CheckedState::kFalse);
+  } else {
+    GetViewAccessibility().RemoveCheckedState();
+  }
+}
+
+void MenuItemView::SetCommand(int command) {
+  command_ = command;
+  UpdateAccessibleCheckedState();
+}
+
 void MenuItemView::ViewHierarchyChanged(
     const ViewHierarchyChangedDetails& details) {
   // Whether the selection is painted may change based on the number of
@@ -164,19 +181,6 @@ std::u16string MenuItemView::GetTooltipText(const gfx::Point& p) const {
 }
 
 void MenuItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  // Set the role based on the type of menu item.
-  switch (type_) {
-    case Type::kCheckbox:
-      node_data->role = ax::mojom::Role::kMenuItemCheckBox;
-      break;
-    case Type::kRadio:
-      node_data->role = ax::mojom::Role::kMenuItemRadio;
-      break;
-    default:
-      node_data->role = ax::mojom::Role::kMenuItem;
-      break;
-  }
-
   node_data->SetName(CalculateAccessibleName());
 
   switch (type_) {
@@ -187,12 +191,7 @@ void MenuItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       node_data->SetHasPopup(ax::mojom::HasPopup::kMenu);
       break;
     case Type::kCheckbox:
-    case Type::kRadio: {
-      const bool is_checked =
-          GetDelegate() && GetDelegate()->IsItemChecked(GetCommand());
-      node_data->SetCheckedState(is_checked ? ax::mojom::CheckedState::kTrue
-                                            : ax::mojom::CheckedState::kFalse);
-    } break;
+    case Type::kRadio:
     case Type::kTitle:
     case Type::kNormal:
     case Type::kSeparator:
@@ -200,11 +199,6 @@ void MenuItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     case Type::kHighlighted:
       // No additional accessibility states currently for these menu states.
       break;
-  }
-
-  if (IsTraversableByKeyboard()) {
-    node_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
-                                IsSelected());
   }
 }
 
@@ -509,6 +503,7 @@ void MenuItemView::SetSelected(bool selected) {
     return;
 
   selected_ = selected;
+  UpdateAccessibleSelection();
   UpdateSelectionBasedStateIfChanged(PaintMode::kNormal);
   OnPropertyChanged(&selected_, kPropertyEffectsPaint);
 }
@@ -872,6 +867,7 @@ MenuItemView::MenuItemView(MenuItemView* parent,
       type_(type),
       command_(command) {
   GetViewAccessibility().set_needs_ax_tree_manager(true);
+  UpdateAccessibleRole();
   if (type_ == Type::kCheckbox || type_ == Type::kRadio) {
     radio_check_image_view_ = AddChildView(std::make_unique<ImageView>());
     bool show_check_radio_icon =
@@ -879,6 +875,7 @@ MenuItemView::MenuItemView(MenuItemView* parent,
                                   GetDelegate()->IsItemChecked(GetCommand()));
     radio_check_image_view_->SetVisible(show_check_radio_icon);
     radio_check_image_view_->SetCanProcessEventsWithinSubtree(false);
+    UpdateAccessibleCheckedState();
   }
 
   if (type_ == Type::kActionableSubMenu)
@@ -890,6 +887,13 @@ MenuItemView::MenuItemView(MenuItemView* parent,
   if (parent && type != Type::kEmpty && root_delegate)
     SetEnabled(root_delegate->IsCommandEnabled(command));
   SetLayoutManager(std::make_unique<DelegatingLayoutManager>(this));
+
+  visible_changed_callback_ = AddVisibleChangedCallback(base::BindRepeating(
+      &MenuItemView::UpdateAccessibleSelection, base::Unretained(this)));
+  enabled_changed_callback_ = AddEnabledChangedCallback(base::BindRepeating(
+      &MenuItemView::UpdateAccessibleSelection, base::Unretained(this)));
+
+  UpdateAccessibleSelection();
   UpdateAccessibleKeyShortcuts();
 }
 
@@ -1531,6 +1535,25 @@ void MenuItemView::UpdateAccessibleKeyShortcuts() {
         base::UTF16ToUTF8(std::u16string(1, mnemonic)));
   } else {
     GetViewAccessibility().RemoveKeyShortcuts();
+  }
+}
+
+void MenuItemView::UpdateAccessibleSelection() {
+  GetViewAccessibility().SetIsSelected(IsTraversableByKeyboard() && selected_);
+}
+
+void MenuItemView::UpdateAccessibleRole() {
+  // Set the role based on the type of menu item.
+  switch (type_) {
+    case Type::kCheckbox:
+      GetViewAccessibility().SetRole(ax::mojom::Role::kMenuItemCheckBox);
+      break;
+    case Type::kRadio:
+      GetViewAccessibility().SetRole(ax::mojom::Role::kMenuItemRadio);
+      break;
+    default:
+      GetViewAccessibility().SetRole(ax::mojom::Role::kMenuItem);
+      break;
   }
 }
 

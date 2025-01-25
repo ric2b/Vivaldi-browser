@@ -32,6 +32,8 @@ ALLOWED_CLIENTS = [
     'perf-v8-internal@skia-infra-corp.iam.gserviceaccount.com',
     # Devtools-Frontend skia instance service account
     'perf-devtools-frontend@skia-infra-corp.iam.gserviceaccount.com',
+    # Fuchsia (internal) skia instance service account
+    'perf-fuchsia-internal@skia-infra-corp.iam.gserviceaccount.com',
 ]
 
 DATASTORE_TEST_BATCH_SIZE = 25
@@ -65,6 +67,11 @@ class AnomalyData:
   segment_size_after:int
   segment_size_before:int
   std_dev_before_anomaly:float
+  t_statistic: float
+  subscription_name: str
+  bug_component: str
+  bug_labels: list[str]
+  bug_cc_emails: list[str]
 
   def __init__(
       self,
@@ -103,7 +110,9 @@ def QueryAnomaliesPostHandler():
       return 'Malformed Json', 400
 
     client = datastore_client.DataStoreClient()
-    if data.get('revision', None):
+    if data.get('key', None):
+      anomalies = client.QueryAnomaliesForKey(data['key'])
+    elif data.get('revision', None):
       anomalies = client.QueryAnomaliesAroundRevision(int(data['revision']))
     else:
       is_valid, error = ValidateRequest(
@@ -336,9 +345,25 @@ def CreateTestBatches(testList):
 
 def GetAnomalyData(anomaly_obj):
   bug_id = anomaly_obj.get('bug_id')
-
+  # Mark empty bug id value as 0, instead of -1,
+  # so that SkiaPerf UI is less confusion between invalid bug id and empty bug id
   if bug_id is None:
-    bug_id = '-1'
+    bug_id = '0'
+
+  subscription_names = anomaly_obj.get('subscription_names')
+  bug_components = ['']
+  bug_labels = []
+  bug_cc_emails = []
+  if subscription_names:
+    if len(subscription_names) > 1:
+      logging.warning(
+          "More than one subscription names in anomaly %s. Subs: %s",
+          anomaly_obj.id, subscription_names)
+    subscriptions = anomaly_obj.get('subscriptions')
+    if subscriptions:
+      bug_components = subscriptions[0].get('bug_components', [''])
+      bug_labels = subscriptions[0].get('bug_labels', [])
+      bug_cc_emails = subscriptions[0].get('bug_cc_emails', [])
 
   return AnomalyData(
       test_path=utils.TestPath(anomaly_obj.get('test')),
@@ -359,7 +384,11 @@ def GetAnomalyData(anomaly_obj):
       segment_size_after=anomaly_obj.get('segment_size_after'),
       segment_size_before=anomaly_obj.get('segment_size_before'),
       std_dev_before_anomaly=anomaly_obj.get('std_dev_before_anomaly'),
-  )
+      t_statistic=anomaly_obj.get('t_statistic'),
+      subscription_name=subscription_names[0],
+      bug_component=bug_components[0],
+      bug_labels=bug_labels,
+      bug_cc_emails=bug_cc_emails)
 
 def ValidateRequest(request_data, required_keys):
   missing_keys = []

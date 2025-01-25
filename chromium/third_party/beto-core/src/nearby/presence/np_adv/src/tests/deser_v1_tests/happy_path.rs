@@ -68,6 +68,30 @@ fn v1_plaintext() {
 }
 
 #[test]
+fn v1_multiple_plaintext_sections() {
+    let mut rng = StdRng::from_entropy();
+    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
+    add_plaintext_section(&mut rng, &mut adv_builder).unwrap();
+
+    // append an extra plaintext section
+    let adv = [
+        adv_builder.into_advertisement().as_slice(),
+        &[
+            0x00, // format unencrypted
+            0x03, // section len
+        ],
+        &[0xDD; 3], // 3 bytes of de contents
+    ]
+    .concat();
+
+    let arena = deserialization_arena!();
+    let cred_book = build_empty_cred_book();
+    let v1_contents = deser_v1::<_, CryptoProviderImpl>(arena, &adv, &cred_book);
+    assert_eq!(0, v1_contents.invalid_sections_count());
+    assert_eq!(2, v1_contents.sections().len());
+}
+
+#[test]
 fn v1_all_identities_resolvable_ciphertext() {
     let mut rng = StdRng::from_entropy();
     for _ in 0..100 {

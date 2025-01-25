@@ -5,26 +5,22 @@
 #include "services/webnn/tflite/context_impl_cros.h"
 
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
-#include "services/webnn/tflite/buffer_impl_tflite.h"
 #include "services/webnn/tflite/context_impl_tflite.h"
 #include "services/webnn/tflite/graph_builder_tflite.h"
 #include "services/webnn/tflite/graph_impl_cros.h"
+#include "services/webnn/tflite/tensor_impl_tflite.h"
 #include "services/webnn/webnn_context_impl.h"
 
 namespace webnn::tflite {
 
 ContextImplCrOS::ContextImplCrOS(
     mojo::PendingReceiver<mojom::WebNNContext> receiver,
-    mojo::PendingRemote<mojom::WebNNContextClient> client_remote,
     WebNNContextProviderImpl* context_provider,
-    mojom::CreateContextOptionsPtr options,
-    base::UnguessableToken context_handle)
+    mojom::CreateContextOptionsPtr options)
     : WebNNContextImpl(std::move(receiver),
-                       std::move(client_remote),
                        context_provider,
                        GraphBuilderTflite::GetContextProperties(),
-                       std::move(options),
-                       std::move(context_handle)) {}
+                       std::move(options)) {}
 
 ContextImplCrOS::~ContextImplCrOS() = default;
 
@@ -104,12 +100,12 @@ void ContextImplCrOS::CreateGraphImpl(
                                 std::move(callback));
 }
 
-std::unique_ptr<WebNNBufferImpl> ContextImplCrOS::CreateBufferImpl(
-    mojo::PendingAssociatedReceiver<mojom::WebNNBuffer> receiver,
-    mojom::BufferInfoPtr buffer_info,
-    const base::UnguessableToken& buffer_handle) {
-  return BufferImplTflite::Create(std::move(receiver), this,
-                                  std::move(buffer_info), buffer_handle);
+void ContextImplCrOS::CreateTensorImpl(
+    mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
+    mojom::TensorInfoPtr tensor_info,
+    CreateTensorImplCallback callback) {
+  std::move(callback).Run(TensorImplTflite::Create(std::move(receiver), this,
+                                                   std::move(tensor_info)));
 }
 
 }  // namespace webnn::tflite

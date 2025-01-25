@@ -44,7 +44,7 @@
 
 #define TEMPORAL_FILTER_KEY_FRAME (CONFIG_REALTIME_ONLY ? 0 : 1)
 
-static INLINE void set_refresh_frame_flags(
+static inline void set_refresh_frame_flags(
     RefreshFrameInfo *const refresh_frame, bool refresh_gf, bool refresh_bwdref,
     bool refresh_arf) {
   refresh_frame->golden_frame = refresh_gf;
@@ -716,6 +716,7 @@ int av1_get_refresh_frame_flags(
 // If the current frame does not require filtering, this function is identical
 // to av1_encode() except that tpl is not performed.
 static int denoise_and_encode(AV1_COMP *const cpi, uint8_t *const dest,
+                              size_t dest_size,
                               EncodeFrameInput *const frame_input,
                               const EncodeFrameParams *const frame_params,
                               EncodeFrameResults *const frame_results) {
@@ -900,8 +901,8 @@ static int denoise_and_encode(AV1_COMP *const cpi, uint8_t *const dest,
 #endif  // CONFIG_BITRATE_ACCURACY && CONFIG_THREE_PASS
   }
 
-  if (av1_encode(cpi, dest, frame_input, frame_params, frame_results) !=
-      AOM_CODEC_OK) {
+  if (av1_encode(cpi, dest, dest_size, frame_input, frame_params,
+                 frame_results) != AOM_CODEC_OK) {
     return AOM_CODEC_ERROR;
   }
 
@@ -1213,8 +1214,9 @@ void av1_get_ref_frames(RefFrameMapPair ref_frame_map_pairs[REF_FRAMES],
 }
 
 int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
-                        uint8_t *const dest, unsigned int *frame_flags,
-                        int64_t *const time_stamp, int64_t *const time_end,
+                        uint8_t *const dest, size_t dest_size,
+                        unsigned int *frame_flags, int64_t *const time_stamp,
+                        int64_t *const time_end,
                         const aom_rational64_t *const timestamp_ratio,
                         int *const pop_lookahead, int flush) {
   AV1EncoderConfig *const oxcf = &cpi->oxcf;
@@ -1669,18 +1671,19 @@ int av1_encode_strategy(AV1_COMP *const cpi, size_t *const size,
   }
 
 #if CONFIG_REALTIME_ONLY
-  if (av1_encode(cpi, dest, &frame_input, &frame_params, &frame_results) !=
-      AOM_CODEC_OK) {
+  if (av1_encode(cpi, dest, dest_size, &frame_input, &frame_params,
+                 &frame_results) != AOM_CODEC_OK) {
     return AOM_CODEC_ERROR;
   }
 #else
   if (has_no_stats_stage(cpi) && oxcf->mode == REALTIME &&
       gf_cfg->lag_in_frames == 0) {
-    if (av1_encode(cpi, dest, &frame_input, &frame_params, &frame_results) !=
-        AOM_CODEC_OK) {
+    if (av1_encode(cpi, dest, dest_size, &frame_input, &frame_params,
+                   &frame_results) != AOM_CODEC_OK) {
       return AOM_CODEC_ERROR;
     }
-  } else if (denoise_and_encode(cpi, dest, &frame_input, &frame_params,
+  } else if (denoise_and_encode(cpi, dest, dest_size, &frame_input,
+                                &frame_params,
                                 &frame_results) != AOM_CODEC_OK) {
     return AOM_CODEC_ERROR;
   }

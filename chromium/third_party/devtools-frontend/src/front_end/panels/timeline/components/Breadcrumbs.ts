@@ -21,31 +21,41 @@ export function flattenBreadcrumbs(initialBreadcrumb: TraceEngine.Types.File.Bre
   return allBreadcrumbs;
 }
 
+export interface SetActiveBreadcrumbOptions {
+  removeChildBreadcrumbs: boolean;
+  updateVisibleWindow: boolean;
+}
+
 export class Breadcrumbs {
   initialBreadcrumb: TraceEngine.Types.File.Breadcrumb;
-  lastBreadcrumb: TraceEngine.Types.File.Breadcrumb;
+  activeBreadcrumb: TraceEngine.Types.File.Breadcrumb;
 
   constructor(initialTraceWindow: TraceEngine.Types.Timing.TraceWindowMicroSeconds) {
     this.initialBreadcrumb = {
       window: initialTraceWindow,
       child: null,
     };
-    this.lastBreadcrumb = this.initialBreadcrumb;
+    let lastBreadcrumb = this.initialBreadcrumb;
+    while (lastBreadcrumb.child !== null) {
+      lastBreadcrumb = lastBreadcrumb.child;
+    }
+    this.activeBreadcrumb = lastBreadcrumb;
   }
 
-  add(newBreadcrumbTraceWindow: TraceEngine.Types.Timing.TraceWindowMicroSeconds): void {
-    if (this.isTraceWindowWithinTraceWindow(newBreadcrumbTraceWindow, this.lastBreadcrumb.window)) {
-      const newBreadcrumb = {
-        window: newBreadcrumbTraceWindow,
-        child: null,
-      };
-      // To add a new Breadcrumb to the Breadcrumbs Linked List, set the child of last breadcrumb
-      // to the new breadcrumb and update the last Breadcrumb
-      this.lastBreadcrumb.child = newBreadcrumb;
-      this.setLastBreadcrumb(newBreadcrumb);
-    } else {
+  add(newBreadcrumbTraceWindow: TraceEngine.Types.Timing.TraceWindowMicroSeconds): TraceEngine.Types.File.Breadcrumb {
+    if (!this.isTraceWindowWithinTraceWindow(newBreadcrumbTraceWindow, this.activeBreadcrumb.window)) {
       throw new Error('Can not add a breadcrumb that is equal to or is outside of the parent breadcrumb TimeWindow');
     }
+
+    const newBreadcrumb = {
+      window: newBreadcrumbTraceWindow,
+      child: null,
+    };
+    // To add a new Breadcrumb to the Breadcrumbs Linked List, set the child of active breadcrumb
+    // to the new breadcrumb and update the active Breadcrumb to the newly added one
+    this.activeBreadcrumb.child = newBreadcrumb;
+    this.setActiveBreadcrumb(newBreadcrumb, {removeChildBreadcrumbs: false, updateVisibleWindow: true});
+    return newBreadcrumb;
   }
 
   // Breadcumb should be within the bounds of the parent and can not have both start and end be equal to the parent
@@ -64,19 +74,38 @@ export class Breadcrumbs {
     while (lastBreadcrumb.child !== null) {
       lastBreadcrumb = lastBreadcrumb.child;
     }
-    this.setLastBreadcrumb(lastBreadcrumb);
+    this.setActiveBreadcrumb(lastBreadcrumb, {removeChildBreadcrumbs: false, updateVisibleWindow: true});
   }
 
-  setLastBreadcrumb(lastBreadcrumb: TraceEngine.Types.File.Breadcrumb): void {
+  /**
+   * Sets a breadcrumb to be active.
+   * Doing this will update the minimap bounds and optionally based on the
+   * `updateVisibleWindow` parameter, it will also update the active window.
+   * The reason `updateVisibleWindow` is configurable is because if we are
+   * changing which breadcrumb is active because we want to reveal something to
+   * the user, we may have already updated the visible timeline window, but we
+   * are activating the breadcrumb to show the user that they are now within
+   * this breadcrumb. This is used when revealing insights and annotations.
+   */
+  setActiveBreadcrumb(activeBreadcrumb: TraceEngine.Types.File.Breadcrumb, options: SetActiveBreadcrumbOptions): void {
+    // If the children of the activated breadcrumb need to be removed, set the child on the
+    // activated breadcrumb to null. Since breadcrumbs are a linked list, this will remove all
+    // of the following children.
+    if (options.removeChildBreadcrumbs) {
+      activeBreadcrumb.child = null;
+    }
+
     // When we assign a new active breadcrumb, both the minimap bounds and the visible
     // window get set to that breadcrumb's window.
-    this.lastBreadcrumb = lastBreadcrumb;
-    this.lastBreadcrumb.child = null;
+    this.activeBreadcrumb = activeBreadcrumb;
     TraceBounds.TraceBounds.BoundsManager.instance().setMiniMapBounds(
-        lastBreadcrumb.window,
+        activeBreadcrumb.window,
     );
-    TraceBounds.TraceBounds.BoundsManager.instance().setTimelineVisibleWindow(
-        lastBreadcrumb.window,
-    );
+
+    if (options.updateVisibleWindow) {
+      TraceBounds.TraceBounds.BoundsManager.instance().setTimelineVisibleWindow(
+          activeBreadcrumb.window,
+      );
+    }
   }
 }

@@ -18,6 +18,7 @@
 #include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/capture_mode/null_capture_mode_session.h"
+#include "ash/capture_mode/search_results_panel.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/game_dashboard/game_dashboard_controller.h"
@@ -64,6 +65,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
@@ -316,8 +318,7 @@ int GetDisabledNotificationMessageId(CaptureAllowance allowance,
       return for_title ? IDS_ASH_SCREEN_CAPTURE_HDCP_STOPPED_TITLE
                        : IDS_ASH_SCREEN_CAPTURE_HDCP_BLOCKED_MESSAGE;
     case CaptureAllowance::kAllowed:
-      NOTREACHED_IN_MIGRATION();
-      return IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_MESSAGE;
+      NOTREACHED();
   }
 }
 
@@ -457,7 +458,30 @@ std::unique_ptr<BaseCaptureModeSession> CreateSession(
                                                       active_behavior);
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
+}
+
+// Hides the cursor to avoid capturing it in the screenshot. Returns true if the
+// cursor is already locked, in which case there is no need to unlock it after.
+bool MaybeLockCursor() {
+  auto* cursor_manager = Shell::Get()->cursor_manager();
+  bool was_cursor_originally_blocked = cursor_manager->IsCursorLocked();
+  if (!was_cursor_originally_blocked) {
+    cursor_manager->HideCursor();
+    cursor_manager->LockCursor();
+  }
+  return was_cursor_originally_blocked;
+}
+
+// Re-shows the cursor after the image capture, if the cursor was locked by us.
+void MaybeUnlockCursor(bool was_cursor_originally_blocked) {
+  if (!was_cursor_originally_blocked) {
+    auto* cursor_manager = Shell::Get()->cursor_manager();
+    if (!display::Screen::GetScreen()->InTabletMode()) {
+      cursor_manager->ShowCursor();
+    }
+    cursor_manager->UnlockCursor();
+  }
 }
 
 }  // namespace
@@ -660,6 +684,12 @@ void CaptureModeController::StartRecordingInstantlyForGameDashboard(
                 }));
 }
 
+void CaptureModeController::StartSunfishSession() {
+  DCHECK(features::IsSunfishFeatureEnabled());
+  // TODO(b/357658506): Determine whether to close the results panel.
+  StartInternal(SessionType::kReal, CaptureModeEntryType::kSunfish);
+}
+
 void CaptureModeController::Stop() {
   CHECK(IsActive());
   capture_mode_session_->ReportSessionHistograms();
@@ -835,6 +865,28 @@ void CaptureModeController::PerformCapture() {
           weak_ptr_factory_.GetWeakPtr()));
 }
 
+void CaptureModeController::PerformImageSearch() {
+  DCHECK_EQ(capture_mode_session_->active_behavior()->behavior_type(),
+            BehaviorType::kSunfish);
+  DCHECK(delegate_->IsCaptureAllowedByPolicy());
+
+  const std::optional<CaptureParams> capture_params = GetCaptureParams();
+  CHECK(capture_params);
+
+  const bool was_cursor_originally_blocked = MaybeLockCursor();
+
+  // Capture the image for search. We use JPEG bytes for low file size and fast
+  // compression speed.
+  ui::GrabWindowSnapshotAsJPEG(
+      capture_params->window, capture_params->bounds,
+      base::BindOnce(&CaptureModeController::OnImageCapturedForSearch,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     was_cursor_originally_blocked));
+
+  delegate_->OnCaptureImageAttempted(capture_params->window,
+                                     capture_params->bounds);
+}
+
 void CaptureModeController::EndVideoRecording(EndRecordingReason reason) {
   if (!is_recording_in_progress()) {
     // A user may click on the stop recording button multiple times while still
@@ -902,6 +954,11 @@ bool CaptureModeController::IsLinuxFilesPath(const base::FilePath& path) const {
 bool CaptureModeController::IsRootOneDriveFilesPath(
     const base::FilePath& path) const {
   return path == delegate_->GetOneDriveMountPointPath();
+}
+
+std::unique_ptr<AshWebView> CaptureModeController::CreateSearchResultsView()
+    const {
+  return delegate_->CreateSearchResultsView();
 }
 
 aura::Window* CaptureModeController::GetOnCaptureSurfaceWidgetParentWindow()
@@ -1500,22 +1557,25 @@ void CaptureModeController::CaptureImage(const CaptureParams& capture_params,
   // which doesn't go through the capture mode UI, and doesn't change |type_|.
   CHECK(delegate_->IsCaptureAllowedByPolicy());
 
-  // Stop the capture session now, so as not to take a screenshot of the capture
-  // bar.
-  if (IsActive()) {
-    CHECK_EQ(capture_mode_session_->active_behavior(), behavior);
+  // A screenshot can be requested via the fullscreen screenshot keyboard
+  // shortcut (which uses the default `behavior`) even though an active capture
+  // mode session belongs to a different `behavior` kind (e.g. Projector or
+  // Game Dashboard). In this case, the assumption is that the user wants to
+  // take a screenshot of the screen in its current state (i.e. while keeping
+  // the session active). Therefore, we don't stop the session in this case.
+  // See http://b/353908198 for more details.
+  if (IsActive() && behavior == capture_mode_session_->active_behavior()) {
+    // Other than the above mentioned case, we stop the session now, so the
+    // capture UIs don't end up in the screenshot.
     Stop();
   }
 
   CHECK(!capture_params.bounds.IsEmpty());
 
-  auto* cursor_manager = Shell::Get()->cursor_manager();
-  bool was_cursor_originally_blocked = cursor_manager->IsCursorLocked();
-  if (!was_cursor_originally_blocked) {
-    cursor_manager->HideCursor();
-    cursor_manager->LockCursor();
-  }
+  const bool was_cursor_originally_blocked = MaybeLockCursor();
 
+  // Attempt the capture image. Note the callback `OnImageCaptured()` will only
+  // be invoked if an image was successfully captured.
   ui::GrabWindowSnapshotAsPNG(
       capture_params.window, capture_params.bounds,
       base::BindOnce(&CaptureModeController::OnImageCaptured,
@@ -1531,6 +1591,8 @@ void CaptureModeController::CaptureImage(const CaptureParams& capture_params,
   capture_mode_util::TriggerAccessibilityAlert(
       IDS_ASH_SCREEN_CAPTURE_ALERT_SCREENSHOT_CAPTURED);
 
+  // Notifies DLP that taking a screenshot was attempted so that it may report
+  // the event or show a warning if restricted content was captured.
   delegate_->OnCaptureImageAttempted(capture_params.window,
                                      capture_params.bounds);
 }
@@ -1557,13 +1619,7 @@ void CaptureModeController::OnImageCaptured(
     bool was_cursor_originally_blocked,
     const CaptureModeBehavior* behavior,
     scoped_refptr<base::RefCountedMemory> png_bytes) {
-  if (!was_cursor_originally_blocked) {
-    auto* cursor_manager = Shell::Get()->cursor_manager();
-    if (!display::Screen::GetScreen()->InTabletMode()) {
-      cursor_manager->ShowCursor();
-    }
-    cursor_manager->UnlockCursor();
-  }
+  MaybeUnlockCursor(was_cursor_originally_blocked);
 
   if (!png_bytes || !png_bytes->size()) {
     LOG(ERROR) << "Failed to capture image.";
@@ -1578,23 +1634,45 @@ void CaptureModeController::OnImageCaptured(
                      weak_ptr_factory_.GetWeakPtr(), png_bytes, behavior));
 }
 
+void CaptureModeController::OnImageCapturedForSearch(
+    bool was_cursor_originally_blocked,
+    scoped_refptr<base::RefCountedMemory> jpeg_bytes) {
+  // Capture mode session may end before the `jpeg_bytes` are received, no-op if
+  // the session is no longer active.
+  if (!IsActive()) {
+    return;
+  }
+  MaybeUnlockCursor(was_cursor_originally_blocked);
+  // TODO(b/356878705): Send the image data to the backend. This currently shows
+  // the results panel immediately for debugging purposes.
+  const std::unique_ptr<SkBitmap> bitmap =
+      gfx::JPEGCodec::Decode(jpeg_bytes->data(), jpeg_bytes->size());
+  const gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(*bitmap);
+  capture_mode_session_->ShowSearchResultsPanel(image);
+
+  if (on_image_captured_for_search_callback_for_test_) {
+    std::move(on_image_captured_for_search_callback_for_test_).Run();
+  }
+}
+
 void CaptureModeController::OnImageFileSaved(
     scoped_refptr<base::RefCountedMemory> png_bytes,
     const CaptureModeBehavior* behavior,
     const base::FilePath& file_saved_path) {
   if (file_saved_path.empty()) {
-    OnImageFileFinalized(png_bytes, behavior, /*success=*/false,
+    OnImageFileFinalized(/*image=*/gfx::Image(), behavior, /*success=*/false,
                          file_saved_path);
     return;
   }
+  const auto image = gfx::Image::CreateFrom1xPNGBytes(png_bytes);
   delegate_->FinalizeSavedFile(
       base::BindOnce(&CaptureModeController::OnImageFileFinalized,
-                     weak_ptr_factory_.GetWeakPtr(), png_bytes, behavior),
-      file_saved_path);
+                     weak_ptr_factory_.GetWeakPtr(), image, behavior),
+      file_saved_path, image);
 }
 
 void CaptureModeController::OnImageFileFinalized(
-    scoped_refptr<base::RefCountedMemory> png_bytes,
+    const gfx::Image& image,
     const CaptureModeBehavior* behavior,
     bool success,
     const base::FilePath& file_saved_path) {
@@ -1606,8 +1684,7 @@ void CaptureModeController::OnImageFileFinalized(
     std::move(on_file_saved_callback_for_test_).Run(file_saved_path);
   }
 
-  DCHECK(png_bytes && png_bytes->size());
-  const auto image = gfx::Image::CreateFrom1xPNGBytes(png_bytes);
+  DCHECK(!image.IsEmpty());
   CopyImageToClipboard(image);
   ShowPreviewNotification(file_saved_path, image, CaptureModeType::kImage,
                           behavior);
@@ -1728,8 +1805,7 @@ void CaptureModeController::HandleNotificationClicked(
                             std::move(on_file_deleted_callback_for_test_));
             break;
           default:
-            NOTREACHED_IN_MIGRATION();
-            break;
+            NOTREACHED();
         }
       } else {
         CHECK_EQ(VideoNotificationButtonIndex::kButtonDeleteVideo,
@@ -1751,8 +1827,7 @@ void CaptureModeController::HandleNotificationClicked(
           RecordScreenshotNotificationQuickAction(CaptureQuickAction::kDelete);
           break;
         default:
-          NOTREACHED_IN_MIGRATION();
-          break;
+          NOTREACHED();
       }
     }
   }
@@ -1981,12 +2056,12 @@ void CaptureModeController::OnDlpRestrictionCheckedAtPerformingCapture(
   }
 
   // We don't need to bring capture mode UIs back if `proceed` is false or if
-  // `type_` is `CaptureModeType::kImage`, since the session is about to
-  // shutdown anyways at these use cases, so it's better to avoid any wasted
-  // effort. In the case of video recording, we need to reshow the UIs so that
-  // we can start the 3-second count down animation.
+  // the session is about to shutdown. See also
+  // `CaptureModeBehavior::ShouldReShowUisAtPerformingCapture()`.
+  auto* active_behavior = capture_mode_session_->active_behavior();
   capture_mode_session_->OnWaitingForDlpConfirmationEnded(
-      /*reshow_uis=*/proceed && type_ != CaptureModeType::kImage);
+      /*reshow_uis=*/proceed &&
+      active_behavior->ShouldReShowUisAtPerformingCapture());
 
   if (!proceed) {
     Stop();
@@ -2003,8 +2078,14 @@ void CaptureModeController::OnDlpRestrictionCheckedAtPerformingCapture(
   }
 
   if (type_ == CaptureModeType::kImage) {
-    CaptureImage(*capture_params, BuildImagePath(),
-                 capture_mode_session_->active_behavior());
+    if (active_behavior->behavior_type() == BehaviorType::kSunfish) {
+      // Sunfish behavior doesn't need the file path and does specific image
+      // capture handling.
+      PerformImageSearch();
+    } else {
+      CaptureImage(*capture_params, BuildImagePath(),
+                   capture_mode_session_->active_behavior());
+    }
   } else {
     // HDCP affects only video recording.
     if (ShouldBlockRecordingForContentProtection(capture_params->window)) {
@@ -2143,15 +2224,13 @@ void CaptureModeController::OnDlpRestrictionCheckedAtSessionInit(
   } else if (entry_type == CaptureModeEntryType::kGameDashboard) {
     CHECK(features::IsGameDashboardEnabled());
     behavior_type = BehaviorType::kGameDashboard;
+  } else if (entry_type == CaptureModeEntryType::kSunfish) {
+    DCHECK(features::IsSunfishFeatureEnabled());
+    behavior_type = BehaviorType::kSunfish;
   }
 
   RecordCaptureModeEntryType(entry_type);
-  // Reset the user capture region if enough time has passed as it can be
-  // annoying to still have the old capture region from the previous session
-  // long time ago.
-  if (!user_capture_region_.IsEmpty() &&
-      base::TimeTicks::Now() - last_capture_region_update_time_ >
-          kResetCaptureRegionDuration) {
+  if (ShouldClearCaptureRegion(behavior_type)) {
     SetUserCaptureRegion(gfx::Rect(), /*by_user=*/false);
   }
 
@@ -2196,7 +2275,7 @@ void CaptureModeController::OnDlpRestrictionCheckedAtVideoEnd(
                                  weak_ptr_factory_.GetWeakPtr(),
                                  /*should_delete_file=*/false,
                                  video_thumbnail)),
-        video_file_path);
+        video_file_path, gfx::Image(video_thumbnail));
   }
 }
 
@@ -2243,8 +2322,8 @@ void CaptureModeController::OnDlpRestrictionCheckedAtCaptureScreenshot(
     return;
   }
 
-  // Due to fact that the DLP warning dialog may take a while, check the
-  // enterprise policy again even though we checked in
+  // Due to the fact that the DLP warning dialog may take a while, check the
+  // enterprise policy again even though we checked it in
   // `CaptureInstantScreenshot()`.
   if (!delegate_->IsCaptureAllowedByPolicy()) {
     ShowDisabledNotification(CaptureAllowance::kDisallowedByPolicy);
@@ -2293,6 +2372,17 @@ void CaptureModeController::PerformScreenshotOfGivenWindow(
   // TODO(michelefan): Add behavior type as an input parameter, if this API is
   // used for other entry types in future.
   CaptureImage(capture_params, BuildImagePath(), GetBehavior(behavior_type));
+}
+
+bool CaptureModeController::ShouldClearCaptureRegion(
+    BehaviorType behavior_type) const {
+  // Reset the user capture region if enough time has passed as it can be
+  // annoying to still have the old capture region from the previous session
+  // long time ago, or if the active behavior is sunfish behavior.
+  return !user_capture_region_.IsEmpty() &&
+         (base::TimeTicks::Now() - last_capture_region_update_time_ >
+              kResetCaptureRegionDuration ||
+          behavior_type == BehaviorType::kSunfish);
 }
 
 CaptureModeSaveToLocation CaptureModeController::GetSaveToOption(

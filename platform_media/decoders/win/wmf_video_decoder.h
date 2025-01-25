@@ -12,8 +12,8 @@
 #include <wrl/client.h>
 
 #include <string>
+#include <string_view>
 
-#include "base/strings/string_piece.h"
 #include "base/task/sequenced_task_runner.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_decoder_config.h"

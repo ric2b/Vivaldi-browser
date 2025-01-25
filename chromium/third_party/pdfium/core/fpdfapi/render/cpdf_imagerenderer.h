@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 
+#include "build/build_config.h"
 #include "core/fxcrt/fx_coordinates.h"
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/unowned_ptr.h"
@@ -19,13 +20,16 @@ class CFX_AggImageRenderer;
 class CFX_DIBBase;
 class CFX_DIBitmap;
 class CFX_DefaultRenderDevice;
-class CFX_ImageTransformer;
 class CPDF_ImageLoader;
 class CPDF_ImageObject;
 class CPDF_Pattern;
 class CPDF_RenderOptions;
 class CPDF_RenderStatus;
 class PauseIndicatorIface;
+
+#if BUILDFLAG(IS_WIN)
+class CFX_ImageTransformer;
+#endif
 
 class CPDF_ImageRenderer {
  public:
@@ -34,8 +38,7 @@ class CPDF_ImageRenderer {
 
   bool Start(CPDF_ImageObject* pImageObject,
              const CFX_Matrix& mtObj2Device,
-             bool bStdCS,
-             BlendMode blendType);
+             bool bStdCS);
 
   bool Start(RetainPtr<CFX_DIBBase> pDIBBase,
              FX_ARGB bitmap_argb,
@@ -50,8 +53,10 @@ class CPDF_ImageRenderer {
   enum class Mode {
     kNone = 0,
     kDefault,
-    kBlend,
+    kBlend,  // AGG-specific
+#if BUILDFLAG(IS_WIN)
     kTransform,
+#endif
   };
 
   bool StartBitmapAlpha();
@@ -60,10 +65,14 @@ class CPDF_ImageRenderer {
   bool StartLoadDIBBase();
   bool ContinueDefault(PauseIndicatorIface* pPause);
   bool ContinueBlend(PauseIndicatorIface* pPause);
-  bool ContinueTransform(PauseIndicatorIface* pPause);
   bool DrawMaskedImage();
   bool DrawPatternImage();
-  bool NotDrawing() const;
+#if BUILDFLAG(IS_WIN)
+  bool StartDIBBaseFallback();
+  bool ContinueTransform(PauseIndicatorIface* pPause);
+  bool IsPrinting() const;
+  void HandleFilters();
+#endif
   FX_RECT GetDrawRect() const;
   CFX_Matrix GetDrawMatrix(const FX_RECT& rect) const;
   // Returns the mask, or nullptr if the mask could not be created.
@@ -73,7 +82,6 @@ class CPDF_ImageRenderer {
       const CFX_Matrix& mtNewMatrix,
       const FX_RECT& rect) const;
   const CPDF_RenderOptions& GetRenderOptions() const;
-  void HandleFilters();
   std::optional<FX_RECT> GetUnitRect() const;
   bool GetDimensionsFromUnitRect(const FX_RECT& rect,
                                  int* left,
@@ -88,7 +96,9 @@ class CPDF_ImageRenderer {
   CFX_Matrix m_mtObj2Device;
   CFX_Matrix m_ImageMatrix;
   std::unique_ptr<CPDF_ImageLoader> const m_pLoader;
+#if BUILDFLAG(IS_WIN)
   std::unique_ptr<CFX_ImageTransformer> m_pTransformer;
+#endif
   std::unique_ptr<CFX_AggImageRenderer> m_DeviceHandle;
   Mode m_Mode = Mode::kNone;
   float m_Alpha = 0.0f;

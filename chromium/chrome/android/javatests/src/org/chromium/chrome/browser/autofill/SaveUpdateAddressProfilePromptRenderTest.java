@@ -27,10 +27,8 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
@@ -50,7 +48,6 @@ import java.util.List;
  */
 @DoNotBatch(reason = "The tests can't be batched because they run for different set-ups.")
 @RunWith(ParameterizedRunner.class)
-@EnableFeatures({ChromeFeatureList.AUTOFILL_ADDRESS_PROFILE_SAVE_PROMPT_NICKNAME_SUPPORT})
 public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivityTestCase {
     private static final long NATIVE_SAVE_UPDATE_ADDRESS_PROFILE_PROMPT_CONTROLLER = 100L;
 
@@ -174,11 +171,11 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
                                     /* address= */ "321 Spear Street",
                                     /* email= */ "example@example.com",
                                     /* phone= */ "+0000000000000");
-                            mPrompt.setSourceNotice(
+                            mPrompt.setRecordTypeNotice(
                                     getActivity()
                                             .getString(
                                                     R.string
-                                                            .autofill_address_will_be_saved_in_account_source_notice)
+                                                            .autofill_address_will_be_saved_in_account_record_type_notice)
                                             .replace("$1", "example@gmail.com"));
                             mPrompt.show();
                             return mPrompt.getDialogViewForTesting();
@@ -210,11 +207,11 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
                                     /* address= */ "321 Spear Street",
                                     /* email= */ "example@example.com",
                                     /* phone= */ "+0000000000000");
-                            mPrompt.setSourceNotice(
+                            mPrompt.setRecordTypeNotice(
                                     getActivity()
                                             .getString(
                                                     R.string
-                                                            .autofill_address_will_be_saved_in_account_source_notice)
+                                                            .autofill_address_will_be_saved_in_account_record_type_notice)
                                             .replace("$1", "example@gmail.com"));
                             mPrompt.show();
                             return mPrompt.getDialogViewForTesting();
@@ -276,11 +273,11 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
                                     /* subtitle= */ "Update your address",
                                     /* oldDetails= */ "321 Spear Street",
                                     /* newDetails= */ "123 Lake Street");
-                            mPrompt.setSourceNotice(
+                            mPrompt.setRecordTypeNotice(
                                     getActivity()
                                             .getString(
                                                     R.string
-                                                            .autofill_address_already_saved_in_account_source_notice)
+                                                            .autofill_address_already_saved_in_account_record_type_notice)
                                             .replace("$1", "example@gmail.com"));
                             mPrompt.show();
                             return mPrompt.getDialogViewForTesting();

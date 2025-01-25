@@ -36,7 +36,7 @@ SWARMING_GO = os.path.join(SRC_DIR, 'tools', 'luci-go',
 _A_WEEK_IN_SECONDS = 60 * 60 * 24 * 7
 
 
-def _convert_to_go_swarming_args(args):
+def convert_to_go_swarming_args(args):
     go_args = []
     i = 0
     while i < len(args):
@@ -136,11 +136,10 @@ class BaseTestTriggerer(object):  # pylint: disable=useless-object-inheritance
         try:
             self._bot_configs = strip_unicode(
                 json.loads(args.multiple_trigger_configs))
-        except Exception as e:
-            six.raise_from(
-                ValueError(
-                    'Error while parsing JSON from bot config string %s: %s' %
-                    (args.multiple_trigger_configs, str(e))), e)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                'Error while parsing JSON from bot config string %s: %s' %
+                (args.multiple_trigger_configs, str(e))) from e
         # Validate the input.
         if not isinstance(self._bot_configs, list):
             raise ValueError('Bot configurations must be a list, were: %s' %
@@ -202,8 +201,8 @@ class BaseTestTriggerer(object):  # pylint: disable=useless-object-inheritance
                 return json.load(f)
 
     def remove_swarming_dimension(self, args, dimension):
-        for i in range(len(args)):
-            if args[i] == '--dimension' and args[i + 1] == dimension:
+        for i, argument in enumerate(args):
+            if argument == '--dimension' and args[i + 1] == dimension:
                 return args[:i] + args[i + 3:]
         return args
 
@@ -243,8 +242,7 @@ class BaseTestTriggerer(object):  # pylint: disable=useless-object-inheritance
         if 'tasks' not in merged_json:
             merged_json['tasks'] = {}
 
-        ret = subprocess.call([SWARMING_GO] +
-                              _convert_to_go_swarming_args(args))
+        ret = subprocess.call([SWARMING_GO] + convert_to_go_swarming_args(args))
         result_json = self.read_json_from_temp_file(json_path)
 
         tasks = {}

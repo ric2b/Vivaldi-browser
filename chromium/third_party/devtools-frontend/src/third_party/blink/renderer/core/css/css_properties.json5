@@ -289,7 +289,8 @@
         "bottom",
 
         // anchor-size()
-        "size",
+        "width",
+        "height",
       ]
     },
 
@@ -782,26 +783,6 @@
       valid_type: "bool",
     },
 
-    // - valid_for_formatted_text: true
-    //
-    // Whether the property can be used to style the top-level container
-    // (similar to display:block, but supporting fewer properties), in the
-    // experimental API to bring multiline text rendering to HTML canvas.
-    // https://github.com/WICG/canvas-formatted-text/
-    valid_for_formatted_text: {
-      default: false,
-      valid_type: "bool",
-    },
-
-    // - valid_for_formatted_text_run: true
-    //
-    // Whether the property can be used to style individual text runs, in the
-    // experimental API to bring multiline text rendering to HTML canvas.
-    valid_for_formatted_text_run: {
-      default: false,
-      valid_type: "bool",
-    },
-
     // - valid_for_keyframe: true
     //
     // Whether the property can be used in @keyframes.
@@ -1169,13 +1150,11 @@
       valid_for_marker: true,
       valid_for_highlight_legacy: true,
       valid_for_highlight: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       is_highlight_colors: true,
       supports_incremental_style: true,
       valid_for_permission_element: true,
       valid_for_page_context: true,
-      invalidate: ["accent-color", "background-current-color", "border-visual", "color"],
+      invalidate: ["accent-color", "background-current-color", "border-visual", "color", "outline"],
     },
     {
       name: "direction",
@@ -1191,8 +1170,6 @@
       style_builder_custom_functions: ["value"],
       priority: 1,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["reshape"],
     },
@@ -1211,8 +1188,6 @@
       valid_for_first_line: true,
       valid_for_cue: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       // See comment on font.
       supports_incremental_style: false,
@@ -1231,8 +1206,6 @@
       valid_for_first_letter: true,
       valid_for_first_line: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
       valid_for_permission_element: true,
@@ -1291,8 +1264,6 @@
       valid_for_first_line: true,
       valid_for_cue: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
       valid_for_permission_element: true,
@@ -1336,8 +1307,6 @@
       valid_for_first_line: true,
       valid_for_cue: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
       valid_for_permission_element: true,
@@ -1359,8 +1328,6 @@
       valid_for_first_line: true,
       valid_for_cue: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
       valid_for_permission_element: true,
@@ -1385,8 +1352,6 @@
       valid_for_first_letter: true,
       valid_for_first_line: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
     },
@@ -1406,8 +1371,6 @@
       valid_for_first_letter: true,
       valid_for_first_line: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
     },
@@ -1427,8 +1390,6 @@
       valid_for_first_letter: true,
       valid_for_first_line: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
     },
@@ -1449,8 +1410,6 @@
       valid_for_first_letter: true,
       valid_for_first_line: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
     },
@@ -1470,8 +1429,6 @@
       valid_for_first_letter: true,
       valid_for_first_line: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
     },
@@ -1491,8 +1448,6 @@
       valid_for_first_line: true,
       valid_for_cue: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
       valid_for_permission_element: true,
@@ -1564,8 +1519,6 @@
       valid_for_first_line: true,
       valid_for_marker: true,
       computable: false,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
       valid_for_permission_element: true,
@@ -1586,8 +1539,6 @@
       valid_for_cue: true,
       valid_for_marker: true,
       computable: false,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       // See comment on font.
       supports_incremental_style: false,
     },
@@ -1698,7 +1649,6 @@
       style_builder_custom_functions: ["initial", "inherit", "value"],
       priority: 1,
       computable: false,
-      valid_for_formatted_text: true,
       invalidate: ["layout", "paint"],
     },
     {
@@ -1722,7 +1672,6 @@
       type_name: "WritingMode",
       style_builder_custom_functions: ["initial", "inherit", "value"],
       priority: 1,
-      valid_for_formatted_text: true,
       valid_for_page_context: true,
       // Incremental code does not call DidChangeWritingMode(), which influences
       // the font.
@@ -1838,7 +1787,6 @@
       converter: "ConvertAnchorName",
       keywords: ["none"],
       typedom_types: ["Keyword"],
-      runtime_flag: "CSSAnchorPositioning",
       valid_for_permission_element: true,
       invalidate: ["layout"],
     },
@@ -2966,6 +2914,7 @@
       style_builder_custom_functions: ["initial", "inherit", "value"],
       typedom_types: ["Keyword"],
       valid_for_highlight_legacy: true,
+      valid_for_marker: true,
       valid_for_permission_element: true,
     },
     {
@@ -3017,7 +2966,7 @@
         "table-row", "table-column-group", "table-column", "table-cell",
         "table-caption", "-webkit-box", "-webkit-inline-box", "flex",
         "inline-flex", "grid", "inline-grid", "contents", "flow-root", "none",
-        "flow", "math", "ruby", "ruby-text"
+        "flow", "math", "ruby", "ruby-text", "masonry", "inline-masonry"
       ],
       typedom_types: ["Keyword"],
       style_builder_custom_functions: ["initial", "inherit", "value"],
@@ -3344,7 +3293,7 @@
       type_name: "ComputedGridTrackList",
       style_builder_template: "grid",
       style_builder_template_args: {
-        type: "Column",
+        type: "GridTemplateColumns",
       },
       keywords: ["none"],
       typedom_types: ["Keyword"],
@@ -3362,7 +3311,7 @@
       type_name: "ComputedGridTrackList",
       style_builder_template: "grid",
       style_builder_template_args: {
-        type: "Row",
+        type: "GridTemplateRows",
       },
       keywords: ["none"],
       typedom_types: ["Keyword"],
@@ -3379,13 +3328,12 @@
       default_value: "Length()",
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthSizing",
-      anchor_mode: "size",
+      anchor_mode: "height",
       logical_property_group: {
         name: "size",
         resolver: "vertical",
       },
       supports_incremental_style: true,
-      valid_for_formatted_text: true,
       valid_for_position_try: true,
       valid_for_permission_element: true,
       valid_for_page_context: true,
@@ -3836,6 +3784,65 @@
       invalidate: ["paint"],
     },
     {
+      // TODO(crbug.com/343257585): We might need to alter the spec's grammar to accept
+      // normal | <length-percentage>. With normal, we use `1em` for slack size.
+      name: "masonry-slack",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      field_group: "*",
+      field_template: "external",
+      default_value: "std::nullopt",
+      type_name: "std::optional<Length>",
+      converter: "ConvertMasonrySlack",
+      typedom_types: ["Length", "Percentage"],
+      keywords: ["normal"],
+      invalidate: ["layout", "paint"],
+      runtime_flag: "CSSMasonryLayout",
+    },
+    {
+      name: "masonry-template-tracks",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "InitialValue"],
+      layout_dependent: true,
+      field_group: "*->masonry",
+      field_template: "external",
+      include_paths: ["third_party/blink/renderer/core/style/computed_grid_track_list.h"],
+      default_value: "ComputedGridTrackList::DefaultMasonryTrackList()",
+      type_name: "ComputedGridTrackList",
+      style_builder_template: "grid",
+      style_builder_template_args: {
+        type: "MasonryTemplateTracks",
+      },
+      invalidate: ["layout", "paint"],
+      runtime_flag: "CSSMasonryLayout",
+    },
+    {
+      name: "masonry-track-end",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      field_group: "*",
+      field_template: "external",
+      include_paths: ["third_party/blink/renderer/core/style/grid_position.h"],
+      default_value: "GridPosition()",
+      type_name: "GridPosition",
+      keywords: ["auto"],
+      typedom_types: ["Keyword"],
+      converter: "ConvertGridPosition",
+      invalidate: ["layout", "paint"],
+      runtime_flag: "CSSMasonryLayout",
+    },
+    {
+      name: "masonry-track-start",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      field_group: "*",
+      field_template: "external",
+      include_paths: ["third_party/blink/renderer/core/style/grid_position.h"],
+      default_value: "GridPosition()",
+      type_name: "GridPosition",
+      keywords: ["auto"],
+      typedom_types: ["Keyword"],
+      converter: "ConvertGridPosition",
+      invalidate: ["layout", "paint"],
+      runtime_flag: "CSSMasonryLayout",
+    },
+    {
       name: "math-shift",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
@@ -3863,7 +3870,7 @@
       field_template: "<length>",
       default_value: "Length::None()",
       converter: "ConvertLengthMaxSizing",
-      anchor_mode: "size",
+      anchor_mode: "height",
       keywords: ["none"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       logical_property_group: {
@@ -3884,7 +3891,7 @@
       field_template: "<length>",
       default_value: "Length::None()",
       converter: "ConvertLengthMaxSizing",
-      anchor_mode: "size",
+      anchor_mode: "width",
       keywords: ["none"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       logical_property_group: {
@@ -3905,7 +3912,7 @@
       field_template: "<length>",
       default_value: "Length()",
       converter: "ConvertLengthSizing",
-      anchor_mode: "size",
+      anchor_mode: "height",
       typedom_types: ["Length", "Percentage"],
       logical_property_group: {
         name: "min-size",
@@ -3925,7 +3932,7 @@
       field_template: "<length>",
       default_value: "Length()",
       converter: "ConvertLengthSizing",
-      anchor_mode: "size",
+      anchor_mode: "width",
       typedom_types: ["Length", "Percentage"],
       logical_property_group: {
         name: "min-size",
@@ -4535,7 +4542,7 @@
       // @position-try-styling rely on this being high-priority, so that
       // declarations from @position-try blocks can be applied conditionally
       // based on whether or not we're out-of-flow positioned. Also, it needs to
-      // have a priority higher than inset-area which is already at priority:1.
+      // have a priority higher than position-area which is already at priority:1.
       priority: 2,
       valid_for_permission_element: true,
       invalidate: ["clip", "layout", "scroll-anchor"],
@@ -4553,10 +4560,9 @@
       converter: "ConvertPositionAnchor",
       keywords: ["auto"],
       typedom_types: ["Keyword"],
-      runtime_flag: "CSSAnchorPositioning",
       valid_for_permission_element: true,
       valid_for_position_try: true,
-      // Needs to be applied before inset-area which in turn needs to be applied
+      // Needs to be applied before position-area which in turn needs to be applied
       // before inset properties.
       priority: 2,
       invalidate: ["layout", "paint"],
@@ -4591,7 +4597,6 @@
       typedom_types: ["Keyword"],
       default_value: "normal",
       invalidate: ["layout", "paint"],
-      runtime_flag: "CSSPositionTryOrder",
     },
     {
       name: "position-visibility",
@@ -4607,7 +4612,6 @@
       keywords: ["always", "anchors-visible", "no-overflow"],
       typedom_types: ["Keyword"],
       invalidate: ["layout", "paint"],
-      runtime_flag: "CSSPositionVisibility",
     },
     {
       name: "quotes",
@@ -5400,7 +5404,6 @@
       default_value: "start",
       getter: "GetTextAlign",
       style_builder_custom_functions: ["value"],
-      valid_for_formatted_text: true,
       valid_for_page_context: true,
       invalidate: ["layout", "paint"],
     },
@@ -5440,6 +5443,12 @@
       runtime_flag: "CSSTextAutoSpace",
     },
     {
+      name: "text-box",
+      longhands: ["text-box-trim", "text-box-edge"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSTextBoxTrim",
+    },
+    {
       name: "text-box-edge",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
@@ -5459,7 +5468,7 @@
       field_group: "box",
       field_template: "keyword",
       default_value: "none",
-      keywords: ["none", "start", "end", "both"],
+      keywords: ["none", "trim-start", "trim-end", "trim-both"],
       typedom_types: ["Keyword"],
       invalidate: ["layout"],
       runtime_flag: "CSSTextBoxTrim",
@@ -5476,7 +5485,6 @@
       name_for_methods: "TextCombine",
       valid_for_marker: true,
       computable: false,
-      valid_for_formatted_text: true,
       invalidate: ["layout", "paint"],
     },
     {
@@ -5499,8 +5507,6 @@
       valid_for_highlight_legacy: true,
       valid_for_highlight: true,
       supports_incremental_style: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["color"],
     },
@@ -5519,8 +5525,6 @@
       valid_for_cue: true,
       valid_for_highlight_legacy: true,
       valid_for_highlight: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["text-decoration"],
     },
@@ -5539,8 +5543,6 @@
       valid_for_marker: true,
       valid_for_highlight_legacy: true,
       valid_for_highlight: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["text-decoration"],
     },
@@ -5557,8 +5559,6 @@
       valid_for_cue: true,
       valid_for_highlight_legacy: true,
       valid_for_highlight: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["text-decoration"],
     },
@@ -5579,8 +5579,6 @@
       valid_for_highlight_legacy: true,
       valid_for_highlight: true,
       computable: false,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["text-decoration"],
     },
@@ -5606,7 +5604,6 @@
       keywords: ["clip", "ellipsis"],
       typedom_types: ["Keyword"],
       default_value: "clip",
-      valid_for_formatted_text: true,
       valid_for_page_context: true,
       invalidate: ["layout", "paint"],
     },
@@ -5630,8 +5627,6 @@
       valid_for_marker: true,
       valid_for_highlight_legacy: true,
       valid_for_highlight: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["layout", "paint"],
       affected_by_zoom: true,
@@ -5692,8 +5687,6 @@
       valid_for_first_letter: true,
       valid_for_first_line: true,
       valid_for_marker: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["reshape"],
     },
@@ -5712,8 +5705,6 @@
       valid_for_first_letter: true,
       valid_for_first_line: true,
       computable: false,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_highlight: true,
       valid_for_page_context: true,
       invalidate: ["text-decoration"],
@@ -5734,8 +5725,6 @@
       typedom_types: ["Keyword"],
       valid_for_first_letter: true,
       valid_for_first_line: true,
-      valid_for_formatted_text: true,
-      valid_for_formatted_text_run: true,
       valid_for_page_context: true,
       invalidate: ["text-decoration"],
     },
@@ -5973,12 +5962,26 @@
       field_group: "*",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       converter: "ConvertViewTransitionClass",
-      type_name: "Vector<AtomicString>",
-      default_value: "Vector<AtomicString, 0>()",
+      type_name: "ScopedCSSNameList",
+      default_value: "nullptr",
+      wrapper_pointer_name: "Member",
       field_template: "external",
       keywords: ["none"],
       typedom_types: ["Keyword"],
       runtime_flag: "CSSViewTransitionClass",
+    },
+    {
+      name: "view-transition-group",
+      field_group: "*",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      converter: "ConvertViewTransitionGroup",
+      type_name: "StyleViewTransitionGroup",
+      default_value: "StyleViewTransitionGroup::Normal()",
+      include_paths: ["third_party/blink/renderer/core/style/style_view_transition_group.h"],
+      field_template: "external",
+      keywords: ["normal", "contain", "nearest"],
+      typedom_types: ["Keyword"],
+      runtime_flag: "NestedViewTransition",
     },
     {
       name: "view-transition-name",
@@ -5999,7 +6002,7 @@
       interpolable: true,
       inherited: true,
       field_template: "keyword",
-      keywords: ["visible", "hidden", "collapse"],
+      keywords: ["visible", "hidden", "collapse", "inert"],
       typedom_types: ["Keyword"],
       default_value: "visible",
       valid_for_first_letter: true,
@@ -6008,6 +6011,7 @@
       valid_for_permission_element: true,
       valid_for_page_context: true,
       invalidate: ["paint", "visibility"],
+      computed_style_protected_functions: ["getter"],
     },
     {
       name: "x",
@@ -6321,7 +6325,6 @@
       keywords: ["auto", "loose", "normal", "strict", "after-white-space", "anywhere"],
       default_value: "auto",
       type_name: "LineBreak",
-      valid_for_formatted_text: true,
       invalidate: ["layout", "paint"],
     },
     {
@@ -6332,7 +6335,6 @@
       keywords: ["auto", "loose", "normal", "strict", "anywhere"],
       typedom_types: ["Keyword"],
       valid_for_marker: true,
-      valid_for_formatted_text: true,
       surrogate_for: "-webkit-line-break",
     },
     {
@@ -6357,6 +6359,8 @@
       field_group: "*",
       field_template: "primitive",
       default_value: "0",
+      converter: "ConvertIntegerOrNone<0>",
+      keywords: ["none"],
       type_name: "int",
       invalidate: ["layout", "paint"],
       name_for_methods: "WebkitLineClamp",
@@ -6775,7 +6779,7 @@
     {
       name: "white-space",
       longhands: [
-        "white-space-collapse", "text-wrap"
+        "white-space-collapse", "text-wrap-mode"
       ],
       property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       valid_for_page_context: true,
@@ -6798,14 +6802,34 @@
     },
     {
       name: "text-wrap",
+      longhands: [
+        "text-wrap-mode", "text-wrap-style"
+      ],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+      valid_for_page_context: true,
+    },
+    {
+      name: "text-wrap-mode",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
-      field_template: "primitive",
-      field_size: 2,  // Ensure this is in sync with `kTextWrapBits`.
-      keywords: ["wrap", "nowrap", "balance", "pretty"],
-      type_name: "TextWrap",
-      default_value: "TextWrap::kWrap",
-      include_paths: ["third_party/blink/renderer/core/css/white_space.h"],
+      field_template: "keyword",
+      type_name: "TextWrapMode",
+      keywords: ["wrap", "nowrap"],
+      default_value: "wrap",
+      typedom_types: ["Keyword"],
+      valid_for_cue: true,
+      valid_for_marker: true,
+      valid_for_page_context: true,
+      invalidate: ["layout"],
+    },
+    {
+      name: "text-wrap-style",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
+      inherited: true,
+      field_template: "keyword",
+      type_name: "TextWrapStyle",
+      keywords: ["auto", "balance", "pretty", "stable"],
+      default_value: "auto",
       typedom_types: ["Keyword"],
       valid_for_cue: true,
       valid_for_marker: true,
@@ -6836,13 +6860,12 @@
       default_value: "Length()",
       typedom_types: ["Keyword", "Length", "Percentage"],
       converter: "ConvertLengthSizing",
-      anchor_mode: "size",
+      anchor_mode: "width",
       logical_property_group: {
         name: "size",
         resolver: "horizontal",
       },
       supports_incremental_style: true,
-      valid_for_formatted_text: true,
       valid_for_position_try: true,
       affected_by_zoom: true,
       valid_for_permission_element: true,
@@ -6900,6 +6923,7 @@
       keywords: ["auto"],
       typedom_types: ["Keyword", "Number"],
       valid_for_permission_element: true,
+      valid_for_page_context: true,
       invalidate: ["z-index"],
     },
 
@@ -7606,30 +7630,43 @@
       runtime_flag: "ViewTransitionOnNavigation",
     },
     {
-      name: "inset-area",
+      name: "position-area",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       style_builder_custom_functions: ["value", "inherit"],
       field_group: "*",
       field_template: "external",
-      include_paths: ["third_party/blink/renderer/core/style/inset_area.h"],
-      converter: "ConvertInsetArea",
-      default_value: "InsetArea()",
-      type_name: "InsetArea",
+      include_paths: ["third_party/blink/renderer/core/style/position_area.h"],
+      converter: "ConvertPositionArea",
+      default_value: "PositionArea()",
+      type_name: "PositionArea",
       keywords: [
         "none", "top", "bottom", "center", "left", "right", "x-start", "x-end",
         "y-start", "y-end", "start", "end", "self-start", "self-end", "all"
       ],
       typedom_types: ["Keyword"],
       valid_for_position_try: true,
-      runtime_flag: "CSSAnchorPositioning",
+      runtime_flag: "CSSPositionAreaProperty",
       valid_for_permission_element: true,
-      // inset-area needs to be applied before inset properties since
+      // position-area needs to be applied before inset properties since
       // anchor() functions compute relative to the containing block that is
-      // modified by inset-area in AnchorEvaluatorImpl.
+      // modified by position-area in AnchorEvaluatorImpl.
       priority: 1,
       invalidate: ["layout", "out-of-flow", "paint"],
     },
+    {
+      name: "inset-area",
+      surrogate_for: "position-area",
+      runtime_flag: "CSSInsetAreaProperty",
 
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      keywords: [
+        "none", "top", "bottom", "center", "left", "right", "x-start", "x-end",
+        "y-start", "y-end", "start", "end", "self-start", "self-end", "all"
+      ],
+      typedom_types: ["Keyword"],
+      valid_for_position_try: true,
+      priority: 1,
+    },
     // Shorthands
     {
       name: "animation",
@@ -8105,6 +8142,12 @@
       property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
+      name: "masonry-track",
+      longhands: ["masonry-track-start", "masonry-track-end"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSMasonryLayout",
+    },
+    {
       name: "offset",
       longhands: [
         "offset-position", "offset-path", "offset-distance", "offset-rotate",
@@ -8171,7 +8214,6 @@
       name: "position-try",
       longhands: ["position-try-order", "position-try-options"],
       property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
-      runtime_flag: "CSSPositionTryOrder",
     },
     {
       // Variant of the "position-try" shorthand which has the new

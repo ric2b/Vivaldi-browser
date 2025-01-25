@@ -29,12 +29,6 @@ namespace switches {
 
 #if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kSeedAccountsRevamp);
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kEnterprisePolicyOnSignin);
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kSkipCheckForAccountManagementOnSignin);
 
 // Feature flag to hide signin promo in settings page.
@@ -114,6 +108,13 @@ extern const base::FeatureParam<bool>
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 bool IsExplicitBrowserSigninUIOnDesktopEnabled();
 
+// Requires `kExplicitBrowserSigninUIOnDesktop`.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kImprovedSigninUIOnDesktop);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+bool IsImprovedSigninUIOnDesktopEnabled();
+
 // Controls the view mode for (history) sync screen.
 #if BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
@@ -139,11 +140,6 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kPreconnectAccountCapabilitiesPostSignin);
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kUpdateMetricsServicesStateInRestore);
-#endif
-
 #if BUILDFLAG(IS_IOS)
 // This flag enables IdentityManager to load all accounts when having no primary
 // accounts. And it makes IdentityManager reloads AccountInfo when an update
@@ -152,6 +148,11 @@ BASE_DECLARE_FEATURE(kUpdateMetricsServicesStateInRestore);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kAlwaysLoadDeviceAccounts);
 #endif
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kBatchUploadDesktop);
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 }  // namespace switches
 

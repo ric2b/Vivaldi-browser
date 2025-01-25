@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/viz/service/frame_sinks/video_capture/frame_sink_video_capturer_impl.h"
 
 #include <algorithm>
@@ -118,14 +123,14 @@ std::unique_ptr<VideoFramePool> GetVideoFramePoolForFormat(
         case mojom::BufferFormatPreference::kDefault:
           return std::make_unique<SharedMemoryVideoFramePool>(capacity);
         default:
-          NOTREACHED_NORETURN();
+          NOTREACHED();
       }
     }
     case media::PIXEL_FORMAT_NV12:
       return std::make_unique<GpuMemoryBufferVideoFramePool>(
           capacity, format, gfx::ColorSpace::CreateREC709(), context_provider);
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -139,7 +144,7 @@ CopyOutputRequest::ResultFormat VideoPixelFormatToCopyOutputRequestFormat(
     case media::PIXEL_FORMAT_ARGB:
       return CopyOutputRequest::ResultFormat::RGBA;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

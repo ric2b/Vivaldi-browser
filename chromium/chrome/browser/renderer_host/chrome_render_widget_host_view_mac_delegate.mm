@@ -32,6 +32,8 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 
 #include "app/vivaldi_apptools.h"
+#include "content/browser/web_contents/web_contents_impl.h"
+#include "ui/gfx/mac/coordinate_conversion.h"
 
 @interface ChromeRenderWidgetHostViewMacDelegate () <HistorySwiperDelegate>
 
@@ -452,5 +454,21 @@
 
   return kAcceptMouseEventsInActiveWindow;
 }
+
+
+// Vivaldi Additions
+- (AcceptMouseEventsOption)acceptsMouseEventsOptionVivaldi:(NSPoint)point {
+  content::WebContents* webContents = self.webContents;
+  if (!webContents) {
+    return kAcceptMouseEventsInActiveWindow;
+  }
+  content::WebContentsImpl* wci =
+      static_cast<content::WebContentsImpl*>(webContents);
+  if (wci->IsVivaldiUI(gfx::ScreenPointFromNSPoint(point))) {
+    return kAcceptMouseEventsInActiveApp;
+  }
+  return [self acceptsMouseEventsOption];
+}
+// End Vivaldi Additions
 
 @end

@@ -35,16 +35,6 @@
     }
   }
 
-  pref-toggle-button:first-of-type {
-    border-top-left-radius: inherit;
-    border-top-right-radius: inherit;
-  }
-
-  cr-link-row:last-of-type {
-    border-bottom-left-radius: inherit;
-    border-bottom-right-radius: inherit;
-  }
-
   /* Hide the default icon element.*/
   cr-link-row[hide-icon]::part(icon) {
     display: none;
@@ -74,12 +64,12 @@
       sub-label="$i18n{autosigninDescription}"
       pref="{{prefs.credentials_enable_autosignin}}">
   </pref-toggle-button>
-  <if expr="is_win or is_macosx">
+  <if expr="is_win or is_macosx or is_chromeos">
     <template is="dom-if"
         if="[[isBiometricAuthenticationForFillingToggleVisible_]]">
       <pref-toggle-button id="biometricAuthenticationToggle" class="hr"
-          label="$i18n{biometricAuthenticaionForFillingLabel}"
-          sub-label="$i18n{biometricAuthenticaionForFillingSublabel}"
+          label="$i18n{biometricAuthenticationForFillingLabel}"
+          sub-label="$i18n{biometricAuthenticationForFillingSubLabel}"
           pref="{{prefs.password_manager.biometric_authentication_filling}}"
           change-requires-validation
           on-validate-and-change-pref="switchBiometricAuthBeforeFillingState_">
@@ -166,7 +156,8 @@
   </if>
   <template is="dom-if"
       if="[[isDeleteAllPasswordManagerDataRowAvailable_]]" restamp>
-    <full-data-reset is-syncing-passwords="[[isSyncingPasswords]]">
+    <full-data-reset is-account-store-user="[[isAccountStoreUser]]"
+        is-syncing-passwords="[[isSyncingPasswords]]">
     </full-data-reset>
   </template>
 </div>

@@ -23,17 +23,25 @@
 #include "mojo/core/embedder/embedder.h"
 #include "mojo/core/ipcz_driver/mojo_message.h"
 #include "mojo/core/test/mojo_test_base.h"
-#include "mojo/core/user_message_impl.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
-namespace mojo {
-namespace core {
+#if BUILDFLAG(MOJO_SUPPORT_LEGACY_CORE)
+#include "mojo/core/user_message_impl.h"
+#endif
+
+namespace mojo::core {
 namespace {
 
 using MessageTest = test::MojoTestBase;
+
+#if BUILDFLAG(MOJO_SUPPORT_LEGACY_CORE)
+constexpr uint32_t kLegacyMinimumPayloadBufferSize = kMinimumPayloadBufferSize;
+#else
+constexpr uint32_t kLegacyMinimumPayloadBufferSize = 0;
+#endif
 
 // Helper class which provides a base implementation for an unserialized user
 // message context and helpers to go between these objects and opaque message
@@ -124,12 +132,10 @@ class NeverSerializedMessage : public TestMessageBase {
  private:
   // TestMessageBase:
   void GetSerializedSize(size_t* num_bytes, size_t* num_handles) override {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
-  void SerializeHandles(MojoHandle* handles) override {
-    NOTREACHED_IN_MIGRATION();
-  }
-  void SerializePayload(void* buffer) override { NOTREACHED_IN_MIGRATION(); }
+  void SerializeHandles(MojoHandle* handles) override { NOTREACHED(); }
+  void SerializePayload(void* buffer) override { NOTREACHED(); }
 
   base::OnceClosure destruction_callback_;
 };
@@ -707,7 +713,7 @@ TEST_F(MessageTest, PreallocateEnoughMemoryForMessage) {
   // `kMinimumBufferSize` bytes of capacity will be allocated).
   const size_t kMinimumBufferSize =
       IsMojoIpczEnabled() ? ipcz_driver::MojoMessage::kMinBufferSize
-                          : kMinimumPayloadBufferSize;
+                          : kLegacyMinimumPayloadBufferSize;
   const std::string kMsgPart1(kMinimumBufferSize / 2, 'x');
   const std::string kMsgPart2(kMinimumBufferSize, 'y');
   const std::string kCombined = kMsgPart1 + kMsgPart2;
@@ -775,7 +781,7 @@ TEST_F(MessageTest, PreallocateNotEnoughMemoryForMessage) {
   // `kMinimumBufferSize` bytes of capacity will be allocated).
   const size_t kMinimumBufferSize =
       IsMojoIpczEnabled() ? ipcz_driver::MojoMessage::kMinBufferSize
-                          : kMinimumPayloadBufferSize;
+                          : kLegacyMinimumPayloadBufferSize;
   const std::string kMsgPart1(kMinimumBufferSize / 2, 'x');
   const std::string kMsgPart2(kMinimumBufferSize, 'y');
   const std::string kCombined = kMsgPart1 + kMsgPart2;
@@ -985,6 +991,7 @@ TEST_F(MessageTest, CorrectPayloadBufferBoundaries) {
   EXPECT_EQ(MOJO_RESULT_OK, MojoDestroyMessage(message));
 }
 
+#if BUILDFLAG(MOJO_SUPPORT_LEGACY_CORE)
 TEST_F(MessageTest, CommitInvalidMessageContents) {
   // Regression test for https://crbug.com/755127. Ensures that we don't crash
   // if we attempt to commit the contents of an unserialized message.
@@ -1007,6 +1014,7 @@ TEST_F(MessageTest, CommitInvalidMessageContents) {
   EXPECT_EQ(MOJO_RESULT_OK, MojoDestroyMessage(message));
   EXPECT_EQ(MOJO_RESULT_OK, MojoClose(b));
 }
+#endif  // BUILDFLAG(MOJO_SUPPORT_LEGACY_CORE)
 
 #if BUILDFLAG(USE_BLINK)
 
@@ -1173,5 +1181,4 @@ TEST_F(MessageTest, PartiallySerializedMessagesDontLeakHandles) {
 }
 
 }  // namespace
-}  // namespace core
-}  // namespace mojo
+}  // namespace mojo::core

@@ -45,6 +45,7 @@
 #include "sandbox/policy/linux/bpf_cros_arm_gpu_policy_linux.h"
 #include "sandbox/policy/linux/bpf_cros_intel_gpu_policy_linux.h"
 #include "sandbox/policy/linux/bpf_cros_nvidia_gpu_policy_linux.h"
+#include "sandbox/policy/linux/bpf_cros_virtio_gpu_policy_linux.h"
 #include "sandbox/policy/linux/bpf_gpu_policy_linux.h"
 #include "sandbox/policy/linux/bpf_network_policy_linux.h"
 #include "sandbox/policy/linux/bpf_ppapi_policy_linux.h"
@@ -137,6 +138,9 @@ std::unique_ptr<BPFBasePolicy> GetGpuProcessSandbox(
     if (options.use_nvidia_specific_policies) {
       return std::make_unique<CrosNvidiaGpuProcessPolicy>();
     }
+    if (options.use_virtio_specific_policies) {
+      return std::make_unique<CrosVirtIoGpuProcessPolicy>();
+    }
   }
   return std::make_unique<GpuProcessPolicy>();
 }
@@ -214,6 +218,9 @@ std::unique_ptr<BPFBasePolicy> SandboxSeccompBPF::PolicyForSandboxType(
     case sandbox::mojom::Sandbox::kScreenAI:
       return std::make_unique<ScreenAIProcessPolicy>();
 #endif
+    case sandbox::mojom::Sandbox::kVideoEffects:
+      // TODO(crbug.com/361128453): Implement this.
+      NOTREACHED() << "kVideoEffects sandbox not implemented.";
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
     case sandbox::mojom::Sandbox::kHardwareVideoDecoding:
       return std::make_unique<HardwareVideoDecodingProcessPolicy>(
@@ -283,6 +290,9 @@ void SandboxSeccompBPF::RunSandboxSanityChecks(
       CHECK_EQ(EPERM, errno);
 #endif  // !defined(NDEBUG)
     } break;
+    case sandbox::mojom::Sandbox::kVideoEffects:
+      // TODO(crbug.com/361128453): Implement this.
+      NOTREACHED() << "kVideoEffects sandbox not implemented.";
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
     case sandbox::mojom::Sandbox::kHardwareVideoDecoding:
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
@@ -332,10 +342,7 @@ bool SandboxSeccompBPF::StartSandboxWithExternalPolicy(
     sandbox.SetProcFd(std::move(proc_fd));
     bool enable_ibpb = true;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    if (base::FeatureList::IsEnabled(
-            features::kForceSpectreVariant2Mitigation)) {
-      enable_ibpb = true;
-    } else if (force_disable_spectre_variant2_mitigation) {
+    if (force_disable_spectre_variant2_mitigation) {
       enable_ibpb = false;
     } else {
       enable_ibpb =

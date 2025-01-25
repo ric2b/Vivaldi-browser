@@ -69,21 +69,18 @@ void LogPrimaryAccountChangeMetrics(PrimaryAccountChangeEvent event_details) {
         break;
       }
 
-      DCHECK(absl::holds_alternative<signin_metrics::AccessPoint>(
-          event_details.GetEventSource()));
+      DCHECK(event_details.GetSetPrimaryAccountAccessPoint().has_value());
       base::UmaHistogramEnumeration(
           "Signin.SignIn.Completed",
-          absl::get<signin_metrics::AccessPoint>(
-              event_details.GetEventSource()),
+          event_details.GetSetPrimaryAccountAccessPoint().value(),
           signin_metrics::AccessPoint::ACCESS_POINT_MAX);
       break;
 
     case PrimaryAccountChangeEvent::Type::kCleared:
-      DCHECK(absl::holds_alternative<signin_metrics::ProfileSignout>(
-          event_details.GetEventSource()));
-      base::UmaHistogramEnumeration("Signin.SignOut.Completed",
-                                    absl::get<signin_metrics::ProfileSignout>(
-                                        event_details.GetEventSource()));
+      DCHECK(event_details.GetClearPrimaryAccountSource().has_value());
+      base::UmaHistogramEnumeration(
+          "Signin.SignOut.Completed",
+          event_details.GetClearPrimaryAccountSource().value());
       break;
   }
 
@@ -92,21 +89,18 @@ void LogPrimaryAccountChangeMetrics(PrimaryAccountChangeEvent event_details) {
       break;
 
     case PrimaryAccountChangeEvent::Type::kSet:
-      DCHECK(absl::holds_alternative<signin_metrics::AccessPoint>(
-          event_details.GetEventSource()));
+      DCHECK(event_details.GetSetPrimaryAccountAccessPoint().has_value());
       base::UmaHistogramEnumeration(
           "Signin.SyncOptIn.Completed",
-          absl::get<signin_metrics::AccessPoint>(
-              event_details.GetEventSource()),
+          event_details.GetSetPrimaryAccountAccessPoint().value(),
           signin_metrics::AccessPoint::ACCESS_POINT_MAX);
       break;
 
     case PrimaryAccountChangeEvent::Type::kCleared:
-      DCHECK(absl::holds_alternative<signin_metrics::ProfileSignout>(
-          event_details.GetEventSource()));
-      base::UmaHistogramEnumeration("Signin.SyncTurnOff.Completed",
-                                    absl::get<signin_metrics::ProfileSignout>(
-                                        event_details.GetEventSource()));
+      DCHECK(event_details.GetClearPrimaryAccountSource().has_value());
+      base::UmaHistogramEnumeration(
+          "Signin.SyncTurnOff.Completed",
+          event_details.GetClearPrimaryAccountSource().value());
       break;
   }
 }
@@ -229,14 +223,70 @@ PrimaryAccountManager::PrimaryAccountManager(
         base::BindRepeating(&PrimaryAccountManager::OnSigninAllowedPrefChanged,
                             base::Unretained(this)));
   }
+
+  // Prepare prefs before loading them.
+  PrepareToLoadPrefs();
+
+  PrefService* prefs = client_->GetPrefs();
+  std::string pref_account_id =
+      prefs->GetString(prefs::kGoogleServicesAccountId);
+  bool pref_consented_to_sync =
+      prefs->GetBoolean(prefs::kGoogleServicesConsentedToSync);
+  LogPrimaryAccountPrefsOnInitialize(pref_account_id, pref_consented_to_sync);
+
+  ScopedPrefCommit scoped_pref_commit(client_->GetPrefs(),
+                                      /*commit_on_destroy=*/false);
+  if (pref_account_id.empty()) {
+    SetPrimaryAccountInternal(CoreAccountInfo(), /*consented_to_sync=*/false,
+                              scoped_pref_commit);
+  } else {
+    auto [account_info, account_info_state] =
+        GetOrRestorePrimaryAccountInfoOnInitialize(pref_account_id,
+                                                   pref_consented_to_sync);
+    base::UmaHistogramEnumeration(
+        "Signin.PAMInitialize.PrimaryAccountInfoState", account_info_state);
+
+    if (pref_consented_to_sync && !account_info.IsEmpty()) {
+      SetPrimaryAccountInternal(account_info, /*consented_to_sync=*/true,
+                                scoped_pref_commit);
+
+      // Ensure that the last syncing account data is consistent with the
+      // primary account. The last signed-in account data is written inside
+      // SetPrimaryAccountInternal().
+      scoped_pref_commit.SetString(prefs::kGoogleServicesLastSyncingGaiaId,
+                                   account_info.gaia);
+      scoped_pref_commit.SetString(prefs::kGoogleServicesLastSyncingUsername,
+                                   account_info.email);
+    } else if (ShouldSigninAllowedPrefAffectPrimaryAccount(
+                   pref_consented_to_sync)) {
+      SetPrimaryAccountInternal(CoreAccountInfo(), /*consented_to_sync=*/false,
+                                scoped_pref_commit);
+    } else {
+      SetPrimaryAccountInternal(account_info, /*consented_to_sync=*/false,
+                                scoped_pref_commit);
+    }
+  }
+
+  // PrimaryAccountManager is initialized once the primary account and consent
+  // level are loaded.
+  CHECK(primary_account_.has_value());
+
+  // Instrument metrics to know what fraction of users without a primary
+  // account previously did have one, with sync enabled.
+  RecordHadPreviousSyncAccount();
+
+  // It is important to only load credentials after starting to observe the
+  // token service.
+  token_service_observation_.Observe(token_service_);
+  token_service_->LoadCredentials(
+      GetPrimaryAccountId(signin::ConsentLevel::kSignin),
+      HasPrimaryAccount(signin::ConsentLevel::kSync));
 }
 
 PrimaryAccountManager::~PrimaryAccountManager() = default;
 
 // static
 void PrimaryAccountManager::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterStringPref(
-      prefs::kGoogleServicesLastSyncingAccountIdDeprecated, std::string());
   registry->RegisterStringPref(prefs::kGoogleServicesLastSyncingGaiaId,
                                std::string());
   registry->RegisterStringPref(prefs::kGoogleServicesLastSyncingUsername,
@@ -376,69 +426,6 @@ PrimaryAccountManager::GetOrRestorePrimaryAccountInfoOnInitialize(
         InitializeAccountInfoState::
             kEmptyAccountInfo_RestoreFailedAsRestoreFeatureIsDisabled);
   }
-}
-
-void PrimaryAccountManager::Initialize() {
-  // Should never call Initialize() twice.
-  CHECK(!primary_account_.has_value());
-
-  // Prepare prefs before loading them.
-  PrepareToLoadPrefs();
-
-  PrefService* prefs = client_->GetPrefs();
-  std::string pref_account_id =
-      prefs->GetString(prefs::kGoogleServicesAccountId);
-  bool pref_consented_to_sync =
-      prefs->GetBoolean(prefs::kGoogleServicesConsentedToSync);
-  LogPrimaryAccountPrefsOnInitialize(pref_account_id, pref_consented_to_sync);
-
-  ScopedPrefCommit scoped_pref_commit(client_->GetPrefs(),
-                                      /*commit_on_destroy=*/false);
-  if (pref_account_id.empty()) {
-    SetPrimaryAccountInternal(CoreAccountInfo(), /*consented_to_sync=*/false,
-                              scoped_pref_commit);
-  } else {
-    auto [account_info, account_info_state] =
-        GetOrRestorePrimaryAccountInfoOnInitialize(pref_account_id,
-                                                   pref_consented_to_sync);
-    base::UmaHistogramEnumeration(
-        "Signin.PAMInitialize.PrimaryAccountInfoState", account_info_state);
-
-    if (pref_consented_to_sync && !account_info.IsEmpty()) {
-      SetPrimaryAccountInternal(account_info, /*consented_to_sync=*/true,
-                                scoped_pref_commit);
-
-      // Ensure that the last syncing account data is consistent with the
-      // primary account. The last signed-in account data is written inside
-      // SetPrimaryAccountInternal().
-      scoped_pref_commit.SetString(prefs::kGoogleServicesLastSyncingGaiaId,
-                                   account_info.gaia);
-      scoped_pref_commit.SetString(prefs::kGoogleServicesLastSyncingUsername,
-                                   account_info.email);
-    } else if (ShouldSigninAllowedPrefAffectPrimaryAccount(
-                   pref_consented_to_sync)) {
-      SetPrimaryAccountInternal(CoreAccountInfo(), /*consented_to_sync=*/false,
-                                scoped_pref_commit);
-    } else {
-      SetPrimaryAccountInternal(account_info, /*consented_to_sync=*/false,
-                                scoped_pref_commit);
-    }
-  }
-
-  // PrimaryAccountManager is initialized once the primary account and consent
-  // level are loaded.
-  CHECK(primary_account_.has_value());
-
-  // Instrument metrics to know what fraction of users without a primary
-  // account previously did have one, with sync enabled.
-  RecordHadPreviousSyncAccount();
-
-  // It is important to only load credentials after starting to observe the
-  // token service.
-  token_service_observation_.Observe(token_service_);
-  token_service_->LoadCredentials(
-      GetPrimaryAccountId(signin::ConsentLevel::kSignin),
-      HasPrimaryAccount(signin::ConsentLevel::kSync));
 }
 
 const PrimaryAccountManager::PrimaryAccount&
@@ -745,9 +732,9 @@ void PrimaryAccountManager::ComputeExplicitBrowserSignin(
       }
       return;
     case PrimaryAccountChangeEvent::Type::kSet:
-      CHECK(event_details.GetAccessPoint().has_value());
+      CHECK(event_details.GetSetPrimaryAccountAccessPoint().has_value());
       signin_metrics::AccessPoint access_point =
-          event_details.GetAccessPoint().value();
+          event_details.GetSetPrimaryAccountAccessPoint().value();
 
       if (access_point == signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN ||
           access_point ==
@@ -788,12 +775,14 @@ void PrimaryAccountManager::FirePrimaryAccountChanged(
 
   ComputeExplicitBrowserSignin(event_details, scoped_pref_commit);
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   if (event_details.GetEventTypeFor(signin::ConsentLevel::kSignin) ==
       PrimaryAccountChangeEvent::Type::kCleared) {
     SigninPrefs(*client_->GetPrefs())
         .SetChromeLastSignoutTime(previous_state.primary_account.gaia,
                                   base::Time::Now());
   }
+#endif
 
   client_->OnPrimaryAccountChanged(event_details);
 
@@ -812,14 +801,9 @@ void PrimaryAccountManager::OnRefreshTokensLoaded() {
   }
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(switches::kSeedAccountsRevamp)) {
-    // If SeedAccountsRevamp is enabled, account seeding on Android is
-    // controlled by SigninManager, so don't remove any accounts here.
-    return;
-  }
-#endif
-
+// On Android, account seeding on Android is
+// controlled by SigninManager, so don't remove any accounts here.
+#if !BUILDFLAG(IS_ANDROID)
   // Remove account information from the account tracker service if needed.
   if (token_service_->HasLoadCredentialsFinishedWithNoErrors()) {
     std::vector<AccountInfo> accounts_in_tracker_service =
@@ -835,6 +819,7 @@ void PrimaryAccountManager::OnRefreshTokensLoaded() {
       }
     }
   }
+#endif
 }
 
 void PrimaryAccountManager::OnSigninAllowedPrefChanged() {

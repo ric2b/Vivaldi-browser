@@ -25,7 +25,7 @@
 #include "av1/encoder/pickrst.h"
 #include "av1/encoder/arm/pickrst_sve.h"
 
-static INLINE uint8_t find_average_sve(const uint8_t *src, int src_stride,
+static inline uint8_t find_average_sve(const uint8_t *src, int src_stride,
                                        int width, int height) {
   uint32x4_t avg_u32 = vdupq_n_u32(0);
   uint8x16_t ones = vdupq_n_u8(1);
@@ -52,7 +52,7 @@ static INLINE uint8_t find_average_sve(const uint8_t *src, int src_stride,
   return (uint8_t)(vaddlvq_u32(avg_u32) / (width * height));
 }
 
-static INLINE void compute_sub_avg(const uint8_t *buf, int buf_stride, int avg,
+static inline void compute_sub_avg(const uint8_t *buf, int buf_stride, int avg,
                                    int16_t *buf_avg, int buf_avg_stride,
                                    int width, int height,
                                    int downsample_factor) {
@@ -84,7 +84,7 @@ static INLINE void compute_sub_avg(const uint8_t *buf, int buf_stride, int avg,
   } while (height > 0);
 }
 
-static INLINE void copy_upper_triangle(int64_t *H, int64_t *H_tmp,
+static inline void copy_upper_triangle(int64_t *H, int64_t *H_tmp,
                                        const int wiener_win2, const int scale) {
   for (int i = 0; i < wiener_win2 - 2; i = i + 2) {
     // Transpose the first 2x2 square. It needs a special case as the element
@@ -115,7 +115,7 @@ static INLINE void copy_upper_triangle(int64_t *H, int64_t *H_tmp,
 }
 
 // Transpose the matrix that has just been computed and accumulate it in M.
-static INLINE void acc_transpose_M(int64_t *M, const int64_t *M_trn,
+static inline void acc_transpose_M(int64_t *M, const int64_t *M_trn,
                                    const int wiener_win, int scale) {
   for (int i = 0; i < wiener_win; ++i) {
     for (int j = 0; j < wiener_win; ++j) {
@@ -142,7 +142,7 @@ static INLINE void acc_transpose_M(int64_t *M, const int64_t *M_trn,
 // by taking each different pair of columns, and multiplying all the elements of
 // the first one with all the elements of the second one, with a special case
 // when multiplying a column by itself.
-static INLINE void compute_stats_win7_sve(int16_t *dgd_avg, int dgd_avg_stride,
+static inline void compute_stats_win7_sve(int16_t *dgd_avg, int dgd_avg_stride,
                                           int16_t *src_avg, int src_avg_stride,
                                           int width, int height, int64_t *M,
                                           int64_t *H, int downsample_factor) {
@@ -276,7 +276,7 @@ static INLINE void compute_stats_win7_sve(int16_t *dgd_avg, int dgd_avg_stride,
 // by taking each different pair of columns, and multiplying all the elements of
 // the first one with all the elements of the second one, with a special case
 // when multiplying a column by itself.
-static INLINE void compute_stats_win5_sve(int16_t *dgd_avg, int dgd_avg_stride,
+static inline void compute_stats_win5_sve(int16_t *dgd_avg, int dgd_avg_stride,
                                           int16_t *src_avg, int src_avg_stride,
                                           int width, int height, int64_t *M,
                                           int64_t *H, int downsample_factor) {

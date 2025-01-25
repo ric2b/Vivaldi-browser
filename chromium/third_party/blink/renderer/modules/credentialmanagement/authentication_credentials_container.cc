@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_arraybuffer_arraybufferview.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_all_accepted_credentials_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_client_inputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_client_outputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_large_blob_inputs.h"
@@ -32,8 +33,8 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authenticator_selection_criteria.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_credential_creation_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_credential_properties_output.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_credential_report_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_credential_request_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_current_user_details_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_federated_credential_request_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_identity_credential_request_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_identity_provider_config.h"
@@ -42,7 +43,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_creation_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_parameters.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_report_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_request_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_rp_entity.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_user_entity.h"
@@ -65,7 +65,9 @@
 #include "third_party/blink/renderer/modules/credentialmanagement/credential.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/credential_manager_proxy.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/credential_manager_type_converters.h"  // IWYU pragma: keep
+#include "third_party/blink/renderer/modules/credentialmanagement/credential_metrics.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/credential_utils.h"
+#include "third_party/blink/renderer/modules/credentialmanagement/digital_identity_credential.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/federated_credential.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/identity_credential.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/identity_credential_error.h"
@@ -107,8 +109,6 @@ using MojoPublicKeyCredentialCreationOptions =
 using mojom::blink::MakeCredentialAuthenticatorResponsePtr;
 using MojoPublicKeyCredentialRequestOptions =
     mojom::blink::PublicKeyCredentialRequestOptions;
-using MojoPublicKeyCredentialReportOptions =
-    mojom::blink::PublicKeyCredentialReportOptions;
 using mojom::blink::GetAssertionAuthenticatorResponsePtr;
 using mojom::blink::RequestTokenStatus;
 using payments::mojom::blink::PaymentCredentialStorageStatus;
@@ -454,174 +454,6 @@ DOMException* CredentialManagerErrorToDOMException(
   return nullptr;
 }
 
-DOMException* AuthenticatorStatusToDOMException(
-    AuthenticatorStatus status,
-    const WebAuthnDOMExceptionDetailsPtr& dom_exception_details) {
-  DCHECK_EQ(status != AuthenticatorStatus::ERROR_WITH_DOM_EXCEPTION_DETAILS,
-            dom_exception_details.is_null());
-  switch (status) {
-    case AuthenticatorStatus::SUCCESS:
-      NOTREACHED_IN_MIGRATION();
-      break;
-    case AuthenticatorStatus::PENDING_REQUEST:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kOperationError, "A request is already pending.");
-    case AuthenticatorStatus::NOT_ALLOWED_ERROR:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotAllowedError,
-          "The operation either timed out or was not allowed. See: "
-          "https://www.w3.org/TR/webauthn-2/"
-          "#sctn-privacy-considerations-client.");
-    case AuthenticatorStatus::INVALID_DOMAIN:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kSecurityError, "This is an invalid domain.");
-    case AuthenticatorStatus::CREDENTIAL_EXCLUDED:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kInvalidStateError,
-          "The user attempted to register an authenticator that contains one "
-          "of the credentials already registered with the relying party.");
-    case AuthenticatorStatus::NOT_IMPLEMENTED:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "Not implemented");
-    case AuthenticatorStatus::NOT_FOCUSED:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotAllowedError,
-          "The operation is not allowed at this time "
-          "because the page does not have focus.");
-    case AuthenticatorStatus::RESIDENT_CREDENTIALS_UNSUPPORTED:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "Resident credentials or empty "
-          "'allowCredentials' lists are not supported "
-          "at this time.");
-    case AuthenticatorStatus::USER_VERIFICATION_UNSUPPORTED:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "The specified `userVerification` "
-          "requirement cannot be fulfilled by "
-          "this device unless the device is secured "
-          "with a screen lock.");
-    case AuthenticatorStatus::ALGORITHM_UNSUPPORTED:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "None of the algorithms specified in "
-          "`pubKeyCredParams` are supported by "
-          "this device.");
-    case AuthenticatorStatus::EMPTY_ALLOW_CREDENTIALS:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "Use of an empty `allowCredentials` list is "
-          "not supported on this device.");
-    case AuthenticatorStatus::ANDROID_NOT_SUPPORTED_ERROR:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "Either the device has received unexpected "
-          "request parameters, or the device "
-          "cannot support this request.");
-    case AuthenticatorStatus::PROTECTION_POLICY_INCONSISTENT:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "Requested protection policy is inconsistent or incongruent with "
-          "other requested parameters.");
-    case AuthenticatorStatus::ABORT_ERROR:
-      return MakeGarbageCollected<DOMException>(DOMExceptionCode::kAbortError,
-                                                "Request has been aborted.");
-    case AuthenticatorStatus::OPAQUE_DOMAIN:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotAllowedError,
-          "The current origin is an opaque origin and hence not allowed to "
-          "access 'PublicKeyCredential' objects.");
-    case AuthenticatorStatus::INVALID_PROTOCOL:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kSecurityError,
-          "Public-key credentials are only available to HTTPS origins with "
-          "valid certificates, HTTP origins that fall under 'localhost', or "
-          "pages served from an extension. See "
-          "https://chromium.googlesource.com/chromium/src/+/main/content/"
-          "browser/webauth/origins.md for details");
-    case AuthenticatorStatus::BAD_RELYING_PARTY_ID:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kSecurityError,
-          "The relying party ID is not a registrable domain suffix of, nor "
-          "equal to the current domain.");
-    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_ATTEMPTED_FETCH:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kSecurityError,
-          "The relying party ID is not a registrable domain suffix of, nor "
-          "equal to the current domain. Subsequently, an attempt to fetch the "
-          ".well-known/webauthn resource of the claimed RP ID failed.");
-    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_WRONG_CONTENT_TYPE:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kSecurityError,
-          "The relying party ID is not a registrable domain suffix of, nor "
-          "equal to the current domain. Subsequently, the "
-          ".well-known/webauthn resource of the claimed RP ID had the "
-          "wrong content-type. (It should be application/json.)");
-    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_JSON_PARSE_ERROR:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kSecurityError,
-          "The relying party ID is not a registrable domain suffix of, nor "
-          "equal to the current domain. Subsequently, fetching the "
-          ".well-known/webauthn resource of the claimed RP ID resulted "
-          "in a JSON parse error.");
-    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_NO_JSON_MATCH:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kSecurityError,
-          "The relying party ID is not a registrable domain suffix of, nor "
-          "equal to the current domain. Subsequently, fetching the "
-          ".well-known/webauthn resource of the claimed RP ID was "
-          "successful, but no listed origin matched the caller.");
-    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_NO_JSON_MATCH_HIT_LIMITS:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kSecurityError,
-          "The relying party ID is not a registrable domain suffix of, nor "
-          "equal to the current domain. Subsequently, fetching the "
-          ".well-known/webauthn resource of the claimed RP ID was "
-          "successful, but no listed origin matched the caller. Note that a "
-          "match may have been found but the limit on the number of eTLD+1 "
-          "labels was reached, causing some entries to be ignored.");
-    case AuthenticatorStatus::CANNOT_READ_AND_WRITE_LARGE_BLOB:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "Only one of the 'largeBlob' extension's 'read' and 'write' "
-          "parameters is allowed at a time");
-    case AuthenticatorStatus::INVALID_ALLOW_CREDENTIALS_FOR_LARGE_BLOB:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError,
-          "The 'largeBlob' extension's 'write' parameter can only be used "
-          "with a single credential present on 'allowCredentials'");
-    case AuthenticatorStatus::
-        FAILED_TO_SAVE_CREDENTIAL_ID_FOR_PAYMENT_EXTENSION:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotReadableError,
-          "Failed to save the credential identifier for the 'payment' "
-          "extension.");
-    case AuthenticatorStatus::REMOTE_DESKTOP_CLIENT_OVERRIDE_NOT_AUTHORIZED:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotAllowedError,
-          "This origin is not permitted to use the "
-          "'remoteDesktopClientOverride' extension.");
-    case AuthenticatorStatus::CERTIFICATE_ERROR:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotAllowedError,
-          "WebAuthn is not supported on sites with TLS certificate errors.");
-    case AuthenticatorStatus::ERROR_WITH_DOM_EXCEPTION_DETAILS:
-      return DOMException::Create(
-          /*message=*/dom_exception_details->message,
-          /*name=*/dom_exception_details->name);
-    case AuthenticatorStatus::DEVICE_PUBLIC_KEY_ATTESTATION_REJECTED:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotAllowedError,
-          "The authenticator responded with an invalid message");
-    case AuthenticatorStatus::UNKNOWN_ERROR:
-      return MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotReadableError,
-          "An unknown error occurred while talking "
-          "to the credential manager.");
-  }
-  return nullptr;
-}
-
 // Abort an ongoing IdentityCredential request. This will only be called before
 // the request finishes due to `scoped_abort_state`.
 void AbortIdentityCredentialRequest(ScriptState* script_state) {
@@ -724,8 +556,7 @@ void OnGetComplete(std::unique_ptr<ScopedPromiseResolver> scoped_resolver,
 }
 
 DOMArrayBuffer* VectorToDOMArrayBuffer(const Vector<uint8_t> buffer) {
-  return DOMArrayBuffer::Create(static_cast<const void*>(buffer.data()),
-                                buffer.size());
+  return DOMArrayBuffer::Create(buffer);
 }
 
 AuthenticationExtensionsPRFValues* GetPRFExtensionResults(
@@ -1011,21 +842,6 @@ void OnSmsReceive(ScriptPromiseResolver<IDLNullable<Credential>>* resolver,
   resolver->Resolve(MakeGarbageCollected<OTPCredential>(otp));
 }
 
-void OnReportComplete(std::unique_ptr<ScopedPromiseResolver> scoped_resolver,
-                      AuthenticatorStatus status,
-                      WebAuthnDOMExceptionDetailsPtr dom_exception_details) {
-  auto* resolver = scoped_resolver->Release()->DowncastTo<IDLUndefined>();
-  const auto required_origin_type = RequiredOriginType::kSecure;
-  AssertSecurityRequirementsBeforeResponse(resolver, required_origin_type);
-
-  if (status != AuthenticatorStatus::SUCCESS) {
-    resolver->Reject(
-        AuthenticatorStatusToDOMException(status, dom_exception_details));
-    return;
-  }
-  resolver->Resolve();
-}
-
 // Validates the "payment" extension for public key credential creation. The
 // function rejects the promise before returning in this case.
 bool IsPaymentExtensionValid(const CredentialCreationOptions* options,
@@ -1185,6 +1001,174 @@ const char* validateGetPublicKeyCredentialPRFExtension(
 const char AuthenticationCredentialsContainer::kSupplementName[] =
     "AuthenticationCredentialsContainer";
 
+DOMException* AuthenticatorStatusToDOMException(
+    AuthenticatorStatus status,
+    const WebAuthnDOMExceptionDetailsPtr& dom_exception_details) {
+  DCHECK_EQ(status != AuthenticatorStatus::ERROR_WITH_DOM_EXCEPTION_DETAILS,
+            dom_exception_details.is_null());
+  switch (status) {
+    case AuthenticatorStatus::SUCCESS:
+      NOTREACHED_IN_MIGRATION();
+      break;
+    case AuthenticatorStatus::PENDING_REQUEST:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kOperationError, "A request is already pending.");
+    case AuthenticatorStatus::NOT_ALLOWED_ERROR:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotAllowedError,
+          "The operation either timed out or was not allowed. See: "
+          "https://www.w3.org/TR/webauthn-2/"
+          "#sctn-privacy-considerations-client.");
+    case AuthenticatorStatus::INVALID_DOMAIN:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError, "This is an invalid domain.");
+    case AuthenticatorStatus::CREDENTIAL_EXCLUDED:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kInvalidStateError,
+          "The user attempted to register an authenticator that contains one "
+          "of the credentials already registered with the relying party.");
+    case AuthenticatorStatus::NOT_IMPLEMENTED:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError, "Not implemented");
+    case AuthenticatorStatus::NOT_FOCUSED:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotAllowedError,
+          "The operation is not allowed at this time "
+          "because the page does not have focus.");
+    case AuthenticatorStatus::RESIDENT_CREDENTIALS_UNSUPPORTED:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "Resident credentials or empty "
+          "'allowCredentials' lists are not supported "
+          "at this time.");
+    case AuthenticatorStatus::USER_VERIFICATION_UNSUPPORTED:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "The specified `userVerification` "
+          "requirement cannot be fulfilled by "
+          "this device unless the device is secured "
+          "with a screen lock.");
+    case AuthenticatorStatus::ALGORITHM_UNSUPPORTED:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "None of the algorithms specified in "
+          "`pubKeyCredParams` are supported by "
+          "this device.");
+    case AuthenticatorStatus::EMPTY_ALLOW_CREDENTIALS:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "Use of an empty `allowCredentials` list is "
+          "not supported on this device.");
+    case AuthenticatorStatus::ANDROID_NOT_SUPPORTED_ERROR:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "Either the device has received unexpected "
+          "request parameters, or the device "
+          "cannot support this request.");
+    case AuthenticatorStatus::PROTECTION_POLICY_INCONSISTENT:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "Requested protection policy is inconsistent or incongruent with "
+          "other requested parameters.");
+    case AuthenticatorStatus::ABORT_ERROR:
+      return MakeGarbageCollected<DOMException>(DOMExceptionCode::kAbortError,
+                                                "Request has been aborted.");
+    case AuthenticatorStatus::OPAQUE_DOMAIN:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotAllowedError,
+          "The current origin is an opaque origin and hence not allowed to "
+          "access 'PublicKeyCredential' objects.");
+    case AuthenticatorStatus::INVALID_PROTOCOL:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError,
+          "Public-key credentials are only available to HTTPS origins with "
+          "valid certificates, HTTP origins that fall under 'localhost', or "
+          "pages served from an extension. See "
+          "https://chromium.googlesource.com/chromium/src/+/main/content/"
+          "browser/webauth/origins.md for details");
+    case AuthenticatorStatus::BAD_RELYING_PARTY_ID:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError,
+          "The relying party ID is not a registrable domain suffix of, nor "
+          "equal to the current domain.");
+    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_ATTEMPTED_FETCH:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError,
+          "The relying party ID is not a registrable domain suffix of, nor "
+          "equal to the current domain. Subsequently, an attempt to fetch the "
+          ".well-known/webauthn resource of the claimed RP ID failed.");
+    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_WRONG_CONTENT_TYPE:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError,
+          "The relying party ID is not a registrable domain suffix of, nor "
+          "equal to the current domain. Subsequently, the "
+          ".well-known/webauthn resource of the claimed RP ID had the "
+          "wrong content-type. (It should be application/json.)");
+    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_JSON_PARSE_ERROR:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError,
+          "The relying party ID is not a registrable domain suffix of, nor "
+          "equal to the current domain. Subsequently, fetching the "
+          ".well-known/webauthn resource of the claimed RP ID resulted "
+          "in a JSON parse error.");
+    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_NO_JSON_MATCH:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError,
+          "The relying party ID is not a registrable domain suffix of, nor "
+          "equal to the current domain. Subsequently, fetching the "
+          ".well-known/webauthn resource of the claimed RP ID was "
+          "successful, but no listed origin matched the caller.");
+    case AuthenticatorStatus::BAD_RELYING_PARTY_ID_NO_JSON_MATCH_HIT_LIMITS:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kSecurityError,
+          "The relying party ID is not a registrable domain suffix of, nor "
+          "equal to the current domain. Subsequently, fetching the "
+          ".well-known/webauthn resource of the claimed RP ID was "
+          "successful, but no listed origin matched the caller. Note that a "
+          "match may have been found but the limit on the number of eTLD+1 "
+          "labels was reached, causing some entries to be ignored.");
+    case AuthenticatorStatus::CANNOT_READ_AND_WRITE_LARGE_BLOB:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "Only one of the 'largeBlob' extension's 'read' and 'write' "
+          "parameters is allowed at a time");
+    case AuthenticatorStatus::INVALID_ALLOW_CREDENTIALS_FOR_LARGE_BLOB:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "The 'largeBlob' extension's 'write' parameter can only be used "
+          "with a single credential present on 'allowCredentials'");
+    case AuthenticatorStatus::
+        FAILED_TO_SAVE_CREDENTIAL_ID_FOR_PAYMENT_EXTENSION:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotReadableError,
+          "Failed to save the credential identifier for the 'payment' "
+          "extension.");
+    case AuthenticatorStatus::REMOTE_DESKTOP_CLIENT_OVERRIDE_NOT_AUTHORIZED:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotAllowedError,
+          "This origin is not permitted to use the "
+          "'remoteDesktopClientOverride' extension.");
+    case AuthenticatorStatus::CERTIFICATE_ERROR:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotAllowedError,
+          "WebAuthn is not supported on sites with TLS certificate errors.");
+    case AuthenticatorStatus::ERROR_WITH_DOM_EXCEPTION_DETAILS:
+      return DOMException::Create(
+          /*message=*/dom_exception_details->message,
+          /*name=*/dom_exception_details->name);
+    case AuthenticatorStatus::DEVICE_PUBLIC_KEY_ATTESTATION_REJECTED:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotAllowedError,
+          "The authenticator responded with an invalid message");
+    case AuthenticatorStatus::UNKNOWN_ERROR:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotReadableError,
+          "An unknown error occurred while talking "
+          "to the credential manager.");
+  }
+  return nullptr;
+}
+
 class AuthenticationCredentialsContainer::OtpRequestAbortAlgorithm final
     : public AbortSignal::Algorithm {
  public:
@@ -1293,11 +1277,12 @@ ScriptPromise<IDLNullable<Credential>> AuthenticationCredentialsContainer::get(
   // TODO(cbiesinger): Consider removing the hasIdentity() check after FedCM
   // ships. Before then, it is useful for RPs to pass both identity and
   // federated while transitioning from the older to the new API.
-  if (options->hasFederated() && !options->hasIdentity()) {
+  if (options->hasFederated() && options->federated()->hasProviders() &&
+      options->federated()->providers().size() > 0 && !options->hasIdentity()) {
     UseCounter::Count(
         context, WebFeature::kCredentialManagerGetLegacyFederatedCredential);
   }
-  if (!options->hasFederated() && options->hasPassword()) {
+  if (options->hasPassword() && options->password()) {
     UseCounter::Count(context,
                       WebFeature::kCredentialManagerGetPasswordCredential);
   }
@@ -1432,6 +1417,7 @@ ScriptPromise<IDLNullable<Credential>> AuthenticationCredentialsContainer::get(
 
     if (is_conditional_ui_request) {
       UseCounter::Count(context, WebFeature::kWebAuthnConditionalUiGet);
+      CredentialMetrics::From(script_state).RecordWebAuthnConditionalUiCall();
     }
 
     auto mojo_options =
@@ -1488,6 +1474,14 @@ ScriptPromise<IDLNullable<Credential>> AuthenticationCredentialsContainer::get(
 
   if (options->hasIdentity() && options->identity()->hasProviders()) {
     GetForIdentity(script_state, resolver, *options, *options->identity());
+    return promise;
+  }
+
+  if (IsDigitalIdentityCredentialType(*options) &&
+      RuntimeEnabledFeatures::WebIdentityDigitalCredentialsEnabled(
+          resolver->GetExecutionContext())) {
+    DiscoverDigitalIdentityCredentialFromExternalSource(
+        resolver, exception_state, *options);
     return promise;
   }
 
@@ -1943,42 +1937,6 @@ AuthenticationCredentialsContainer::preventSilentAccess(
   return promise;
 }
 
-ScriptPromise<IDLUndefined> AuthenticationCredentialsContainer::report(
-    ScriptState* script_state,
-    const CredentialReportOptions* options,
-    ExceptionState& exception_state) {
-  if (!script_state->ContextIsValid()) {
-    return ScriptPromise<IDLUndefined>::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kInvalidStateError,
-                                           "Context is detached"));
-  }
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
-      script_state, exception_state.GetContext());
-
-  mojom::blink::PublicKeyCredentialReportOptionsPtr mojo_options;
-  if (options->hasPublicKey()) {
-    mojo_options =
-        MojoPublicKeyCredentialReportOptions::From(*options->publicKey());
-  }
-
-  if (mojo_options) {
-    if (!mojo_options->relying_party_id) {
-      mojo_options->relying_party_id =
-          ExecutionContext::From(script_state)->GetSecurityOrigin()->Domain();
-    }
-    auto* authenticator =
-        CredentialManagerProxy::From(script_state)->Authenticator();
-    authenticator->Report(
-        std::move(mojo_options),
-        WTF::BindOnce(&OnReportComplete,
-                      std::make_unique<ScopedPromiseResolver>(resolver)));
-  } else {
-    resolver->Resolve();
-  }
-  return resolver->Promise();
-}
-
 void AuthenticationCredentialsContainer::Trace(Visitor* visitor) const {
   Supplement<Navigator>::Trace(visitor);
   CredentialsContainer::Trace(visitor);
@@ -2122,6 +2080,15 @@ void AuthenticationCredentialsContainer::GetForIdentity(
   } else {
     DCHECK_EQ("optional", options.mediation());
     mediation_requirement = CredentialMediationRequirement::kOptional;
+  }
+
+  if (identity_options.hasMediation()) {
+    resolver->GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kJavaScript,
+            mojom::blink::ConsoleMessageLevel::kWarning,
+            "The 'mediation' parameter should be used outside of 'identity' in "
+            "the FedCM API call."));
   }
 
   mojom::blink::RpMode rp_mode = mojom::blink::RpMode::kWidget;

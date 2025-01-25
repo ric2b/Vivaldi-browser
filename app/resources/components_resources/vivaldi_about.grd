@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grit base_dir="." latest_public_release="0" current_release="1"
+      source_lang_id="en" enc_check="möl">
+  <release seq="1">
+    <includes>
+      <include name="IDR_VERSION_UI_ABOUT_VERSION_CSS" file="version_ui/about_version.css"
+               resource_path="about_version.css" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_VERSION_UI_ABOUT_VERSION_HTML" file="version_ui/about_version.html"
+               preprocess="true" type="BINDATA" />
+    </includes>
+  </release>
+</grit>

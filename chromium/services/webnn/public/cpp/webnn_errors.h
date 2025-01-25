@@ -19,9 +19,12 @@ inline constexpr char kArgMin[] = "argMin";
 inline constexpr char kBatchNormalization[] = "batchNormalization";
 inline constexpr char kClamp[] = "clamp";
 inline constexpr char kConcat[] = "concat";
+inline constexpr char kCumulativeSum[] = "cumulativeSum";
+inline constexpr char kDequantizeLinear[] = "dequantizeLinear";
 inline constexpr char kElu[] = "elu";
 inline constexpr char kExpand[] = "expand";
 inline constexpr char kGather[] = "gather";
+inline constexpr char kGatherElements[] = "gatherElements";
 inline constexpr char kGelu[] = "gelu";
 inline constexpr char kGemm[] = "gemm";
 inline constexpr char kGru[] = "gru";
@@ -37,9 +40,11 @@ inline constexpr char kLstmCell[] = "lstmCell";
 inline constexpr char kMatmul[] = "matmul";
 inline constexpr char kPad[] = "pad";
 inline constexpr char kPrelu[] = "prelu";
+inline constexpr char kQuantizeLinear[] = "quantizeLinear";
 inline constexpr char kRelu[] = "relu";
 inline constexpr char kResample2d[] = "resample2d";
 inline constexpr char kReshape[] = "reshape";
+inline constexpr char kScatterND[] = "scatterND";
 inline constexpr char kSigmoid[] = "sigmoid";
 inline constexpr char kSlice[] = "slice";
 inline constexpr char kSoftmax[] = "softmax";
@@ -47,6 +52,7 @@ inline constexpr char kSoftplus[] = "softplus";
 inline constexpr char kSoftsign[] = "softsign";
 inline constexpr char kSplit[] = "split";
 inline constexpr char kTanh[] = "tanh";
+inline constexpr char kTile[] = "tile";
 inline constexpr char kTranspose[] = "transpose";
 inline constexpr char kTriangular[] = "triangular";
 inline constexpr char kWhere[] = "where";
@@ -77,6 +83,7 @@ inline constexpr char kExp[] = "exp";
 inline constexpr char kFloor[] = "floor";
 inline constexpr char kLog[] = "log";
 inline constexpr char kNeg[] = "neg";
+inline constexpr char kSign[] = "sign";
 inline constexpr char kSin[] = "sin";
 inline constexpr char kTan[] = "tan";
 inline constexpr char kLogicalNot[] = "logicalNot";
@@ -128,9 +135,12 @@ std::string COMPONENT_EXPORT(WEBNN_PUBLIC_CPP)
     NotSupportedOutputTypeError(std::string_view output_name,
                                 OperandDataType type,
                                 SupportedDataTypes supported_types);
+std::string COMPONENT_EXPORT(WEBNN_PUBLIC_CPP)
+    NotSupportedMLTensorTypeError(OperandDataType type,
+                                  SupportedDataTypes supported_types);
 
 std::string COMPONENT_EXPORT(WEBNN_PUBLIC_CPP)
-    GetLabelErrorSuffix(std::string_view label);
+    GetErrorLabelPrefix(std::string_view label);
 
 }  // namespace webnn
 

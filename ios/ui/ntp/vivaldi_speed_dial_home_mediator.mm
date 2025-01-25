@@ -6,8 +6,8 @@
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "chromium/base/containers/stack.h"
-#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_model_observer.h"
+#import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/bookmarks/managed/managed_bookmark_service.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
@@ -17,15 +17,15 @@
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
+#import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_config.h"
-#import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/most_visited_sites/vivaldi_most_visited_sites_manager.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/top_toolbar/top_toolbar_swift.h"
@@ -311,9 +311,17 @@ using l10n_util::GetNSString;
   // Stack for Depth-First Search of bookmark model.
   base::stack<const BookmarkNode*> stk;
 
-  bookmarkList.push_back(_bookmarkModel.get()->mobile_node());
-  bookmarkList.push_back(_bookmarkModel.get()->bookmark_bar_node());
-  bookmarkList.push_back(_bookmarkModel.get()->other_node());
+  if (!_bookmarkModel.get()->bookmark_bar_node()->children().empty()) {
+    bookmarkList.push_back(_bookmarkModel.get()->bookmark_bar_node());
+  }
+
+  if (!_bookmarkModel.get()->mobile_node()->children().empty()) {
+    bookmarkList.push_back(_bookmarkModel.get()->mobile_node());
+  }
+
+  if (!_bookmarkModel.get()->other_node()->children().empty()) {
+    bookmarkList.push_back(_bookmarkModel.get()->other_node());
+  }
 
   // Push all top folders in stack and give them depth of 0.
   for (std::vector<const BookmarkNode*>::reverse_iterator it =
@@ -399,9 +407,17 @@ using l10n_util::GetNSString;
   // Stack for Depth-First Search of bookmark model.
   base::stack<const BookmarkNode*> stk;
 
-  bookmarkList.push_back(_bookmarkModel.get()->mobile_node());
-  bookmarkList.push_back(_bookmarkModel.get()->bookmark_bar_node());
-  bookmarkList.push_back(_bookmarkModel.get()->other_node());
+  if (!_bookmarkModel.get()->bookmark_bar_node()->children().empty()) {
+    bookmarkList.push_back(_bookmarkModel.get()->bookmark_bar_node());
+  }
+
+  if (!_bookmarkModel.get()->mobile_node()->children().empty()) {
+    bookmarkList.push_back(_bookmarkModel.get()->mobile_node());
+  }
+
+  if (!_bookmarkModel.get()->other_node()->children().empty()) {
+    bookmarkList.push_back(_bookmarkModel.get()->other_node());
+  }
 
   // Push all top folders in stack and give them depth of 0.
   for (std::vector<const BookmarkNode*>::reverse_iterator it =

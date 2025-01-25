@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/display/manager/display_configurator.h"
 
 #include <stddef.h>
@@ -20,9 +25,9 @@
 #include "ui/display/manager/test/action_logger_util.h"
 #include "ui/display/manager/test/fake_display_snapshot.h"
 #include "ui/display/manager/test/test_native_display_delegate.h"
-#include "ui/display/manager/util/display_manager_test_util.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/util/display_util.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/ozone/public/ozone_switches.h"
 
 namespace display::test {
@@ -40,8 +45,8 @@ std::unique_ptr<DisplayMode> MakeDisplayMode(int width,
                                              int height,
                                              bool is_interlaced,
                                              float refresh_rate) {
-  return CreateDisplayModePtrForTest({width, height}, is_interlaced,
-                                     refresh_rate);
+  return std::make_unique<DisplayMode>(gfx::Size{width, height}, is_interlaced,
+                                       refresh_rate);
 }
 
 enum CallbackResult {
@@ -254,16 +259,16 @@ class DisplayConfiguratorTest : public testing::Test {
     configurator_.set_state_controller(&state_controller_);
     configurator_.set_mirroring_controller(&mirroring_controller_);
 
-    outputs_[0] = FakeDisplaySnapshot::Builder()
-                      .SetId(kDisplayIds[0])
-                      .SetNativeMode(small_mode_.Clone())
-                      .SetCurrentMode(small_mode_.Clone())
-                      .SetType(DISPLAY_CONNECTION_TYPE_INTERNAL)
-                      .SetBaseConnectorId(kEdpConnectorId)
-                      .SetIsAspectPreservingScaling(true)
-                      .SetVariableRefreshRateState(kVrrDisabled)
-                      .SetVsyncRateMin(40)
-                      .Build();
+    outputs_[0] =
+        FakeDisplaySnapshot::Builder()
+            .SetId(kDisplayIds[0])
+            .SetNativeMode(small_mode_.Clone())
+            .SetCurrentMode(small_mode_.Clone())
+            .SetType(DISPLAY_CONNECTION_TYPE_INTERNAL)
+            .SetBaseConnectorId(kEdpConnectorId)
+            .SetIsAspectPreservingScaling(true)
+            .SetVariableRefreshRateState(VariableRefreshRateState::kVrrDisabled)
+            .Build();
 
     outputs_[1] = FakeDisplaySnapshot::Builder()
                       .SetId(kDisplayIds[1])
@@ -273,7 +278,8 @@ class DisplayConfiguratorTest : public testing::Test {
                       .SetType(DISPLAY_CONNECTION_TYPE_HDMI)
                       .SetBaseConnectorId(kSecondConnectorId)
                       .SetIsAspectPreservingScaling(true)
-                      .SetVariableRefreshRateState(kVrrNotCapable)
+                      .SetVariableRefreshRateState(
+                          VariableRefreshRateState::kVrrNotCapable)
                       .Build();
 
     outputs_[2] = FakeDisplaySnapshot::Builder()
@@ -283,7 +289,8 @@ class DisplayConfiguratorTest : public testing::Test {
                       .SetType(DISPLAY_CONNECTION_TYPE_HDMI)
                       .SetBaseConnectorId(kThirdConnectorId)
                       .SetIsAspectPreservingScaling(true)
-                      .SetVariableRefreshRateState(kVrrNotCapable)
+                      .SetVariableRefreshRateState(
+                          VariableRefreshRateState::kVrrNotCapable)
                       .Build();
 
     UpdateOutputs(2, false);
@@ -294,10 +301,8 @@ class DisplayConfiguratorTest : public testing::Test {
   }
 
   // Predefined modes that can be used by outputs.
-  const DisplayMode small_mode_ =
-      CreateDisplayModeForTest({1366, 768}, false, 60.0f);
-  const DisplayMode big_mode_ =
-      CreateDisplayModeForTest({2560, 1600}, false, 60.0f);
+  const DisplayMode small_mode_ = DisplayMode({1366, 768}, false, 60.0f);
+  const DisplayMode big_mode_ = DisplayMode({2560, 1600}, false, 60.0f);
 
  protected:
   // Returns the output at the specified |index| as it currently exists within
@@ -2352,8 +2357,8 @@ TEST_F(DisplayConfiguratorTest,
                    .SetType(DISPLAY_CONNECTION_TYPE_INTERNAL)
                    .SetBaseConnectorId(kEdpConnectorId)
                    .SetIsAspectPreservingScaling(true)
-                   .SetVariableRefreshRateState(kVrrDisabled)
-                   .SetVsyncRateMin(40)
+                   .SetVariableRefreshRateState(
+                       VariableRefreshRateState::kVrrDisabled)
                    .Build());
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_SINGLE);
   UpdateOutputs(1, true);
@@ -2557,7 +2562,8 @@ TEST_F(DisplayConfiguratorTest, SetVrrEnabled) {
 
 TEST_F(DisplayConfiguratorTest, SetVrrEnabled_NotCapable) {
   std::unique_ptr<DisplaySnapshot> output = GetOutput(0)->Clone();
-  output->set_variable_refresh_rate_state(kVrrNotCapable);
+  output->set_variable_refresh_rate_state(
+      VariableRefreshRateState::kVrrNotCapable);
   SetOutput(0, std::move(output));
   InitWithOutputs(&small_mode_);
   UpdateOutputs(2, true);
@@ -2588,8 +2594,8 @@ TEST_F(DisplayConfiguratorTest, RefreshRateThrottle_VrrEnabled) {
                    .SetType(DISPLAY_CONNECTION_TYPE_INTERNAL)
                    .SetBaseConnectorId(kEdpConnectorId)
                    .SetIsAspectPreservingScaling(true)
-                   .SetVariableRefreshRateState(kVrrDisabled)
-                   .SetVsyncRateMin(40)
+                   .SetVariableRefreshRateState(
+                       VariableRefreshRateState::kVrrDisabled)
                    .Build());
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_SINGLE);
   UpdateOutputs(1, true);
@@ -2657,7 +2663,8 @@ TEST_F(DisplayConfiguratorTest,
                    .SetType(DISPLAY_CONNECTION_TYPE_INTERNAL)
                    .SetBaseConnectorId(kEdpConnectorId)
                    .SetIsAspectPreservingScaling(true)
-                   .SetVariableRefreshRateState(kVrrNotCapable)
+                   .SetVariableRefreshRateState(
+                       VariableRefreshRateState::kVrrNotCapable)
                    .Build());
   SetOutput(1, FakeDisplaySnapshot::Builder()
                    .SetId(kDisplayIds[1])
@@ -2667,8 +2674,8 @@ TEST_F(DisplayConfiguratorTest,
                    .SetType(DISPLAY_CONNECTION_TYPE_HDMI)
                    .SetBaseConnectorId(kSecondConnectorId)
                    .SetIsAspectPreservingScaling(true)
-                   .SetVariableRefreshRateState(kVrrDisabled)
-                   .SetVsyncRateMin(40)
+                   .SetVariableRefreshRateState(
+                       VariableRefreshRateState::kVrrDisabled)
                    .Build());
   state_controller_.set_state(MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED);
   UpdateOutputs(2, true);

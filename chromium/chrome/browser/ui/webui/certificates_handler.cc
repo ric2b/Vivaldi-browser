@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/certificates_handler.h"
 
 #include <errno.h>
@@ -74,21 +79,6 @@ static const char kCertificatesHandlerCertificateErrors[] = "certificateErrors";
 static const char kCertificatesHandlerErrorDescription[] = "description";
 static const char kCertificatesHandlerErrorField[] = "error";
 static const char kCertificatesHandlerErrorTitle[] = "title";
-
-#if BUILDFLAG(IS_CHROMEOS)
-// Before this experiment on ChromeOS it was possible to import a PKCS#12 file
-// (a client certificate with a key pair for it) on the
-// chrome://settings/certificates using the "Import" button and then export it
-// as a new PKCS#12 file. All the other certificates (imported using the "Import
-// and Bind" button, imported from extensions and policies) could not be
-// exported as PKCS#12 (primarily to protect their private keys). This
-// experiment, when enabled, prevents export of certificates with their private
-// keys for all certificates. Just the certificates without private keys can
-// still be exported on the "View > Details" dialog.
-BASE_FEATURE(kDeprecatePrivateKeyExport,
-             "DeprecatePrivateKeyExport",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 std::string OrgNameToId(const std::string& org) {
   return "org-" + org;
@@ -194,9 +184,8 @@ class FileAccessProvider
   // parameter is read result.
   typedef base::OnceCallback<void(const int*, const std::string*)> ReadCallback;
 
-  // The first parameter is 0 on success or errno on failure. The second
-  // parameter is the number of bytes written on success.
-  typedef base::OnceCallback<void(const int*, const int*)> WriteCallback;
+  // The first parameter is 0 on success or errno on failure.
+  typedef base::OnceCallback<void(const int*)> WriteCallback;
 
   base::CancelableTaskTracker::TaskId StartRead(
       const base::FilePath& path,
@@ -220,11 +209,10 @@ class FileAccessProvider
               std::string* data,
               file_access::ScopedFileAccess file_access);
   // Writes data to file at |path|. |saved_errno| is 0 on success or errno on
-  // failure. When success, |bytes_written| has number of bytes written.
+  // failure.
   void DoWrite(const base::FilePath& path,
                const std::string& data,
-               int* saved_errno,
-               int* bytes_written);
+               int* saved_errno);
 };
 
 base::CancelableTaskTracker::TaskId FileAccessProvider::StartRead(
@@ -254,7 +242,6 @@ base::CancelableTaskTracker::TaskId FileAccessProvider::StartWrite(
     base::CancelableTaskTracker* tracker) {
   // Owned by reply callback posted below.
   int* saved_errno = new int(0);
-  int* bytes_written = new int(0);
 
   // This task blocks shutdown because it saves critical user data.
   auto task_runner = base::ThreadPool::CreateTaskRunner(
@@ -263,9 +250,8 @@ base::CancelableTaskTracker::TaskId FileAccessProvider::StartWrite(
   return tracker->PostTaskAndReply(
       task_runner.get(), FROM_HERE,
       base::BindOnce(&FileAccessProvider::DoWrite, this, path, data,
-                     saved_errno, bytes_written),
-      base::BindOnce(std::move(callback), base::Owned(saved_errno),
-                     base::Owned(bytes_written)));
+                     saved_errno),
+      base::BindOnce(std::move(callback), base::Owned(saved_errno)));
 }
 
 // The `file_access` object for reading `path` should be in scope to
@@ -280,10 +266,12 @@ void FileAccessProvider::DoRead(const base::FilePath& path,
 
 void FileAccessProvider::DoWrite(const base::FilePath& path,
                                  const std::string& data,
-                                 int* saved_errno,
-                                 int* bytes_written) {
-  *bytes_written = base::WriteFile(path, data.data(), data.size());
-  *saved_errno = *bytes_written >= 0 ? 0 : errno;
+                                 int* saved_errno) {
+  if (base::WriteFile(path, data)) {
+    *saved_errno = 0;
+  } else {
+    *saved_errno = errno;
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -593,8 +581,7 @@ void CertificatesHandler::ExportPersonalSlotsUnlocked() {
       &tracker_);
 }
 
-void CertificatesHandler::ExportPersonalFileWritten(const int* write_errno,
-                                                    const int* bytes_written) {
+void CertificatesHandler::ExportPersonalFileWritten(const int* write_errno) {
   ImportExportCleanup();
   if (*write_errno) {
     RejectCallbackWithError(
@@ -837,7 +824,7 @@ void CertificatesHandler::ImportServerFileRead(const int* read_errno,
   }
 
   selected_cert_list_ = net::x509_util::CreateCERTCertificateListFromBytes(
-      data->data(), data->size(), net::X509Certificate::FORMAT_AUTO);
+      base::as_byte_span(*data), net::X509Certificate::FORMAT_AUTO);
   if (selected_cert_list_.empty()) {
     ImportExportCleanup();
     RejectCallbackWithError(
@@ -920,7 +907,7 @@ void CertificatesHandler::ImportCAFileRead(const int* read_errno,
   }
 
   selected_cert_list_ = net::x509_util::CreateCERTCertificateListFromBytes(
-      data->data(), data->size(), net::X509Certificate::FORMAT_AUTO);
+      base::as_byte_span(*data), net::X509Certificate::FORMAT_AUTO);
   if (selected_cert_list_.empty()) {
     ImportExportCleanup();
     RejectCallbackWithError(
@@ -1104,9 +1091,7 @@ void CertificatesHandler::PopulateTree(const std::string& tab_name,
 
       bool is_extractable = !cert_info->hardware_backed();
 #if BUILDFLAG(IS_CHROMEOS)
-      if (base::FeatureList::IsEnabled(kDeprecatePrivateKeyExport)) {
-        is_extractable = false;
-      }
+      is_extractable = false;
 #endif
 
       auto cert_dict =

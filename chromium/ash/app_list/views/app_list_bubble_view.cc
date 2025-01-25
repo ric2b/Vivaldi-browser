@@ -85,9 +85,6 @@ namespace {
 // Folder view inset from the edge of the bubble.
 constexpr int kFolderViewInset = 16;
 
-// Elevation for the bubble's shadow.
-constexpr int kShadowElevation = 3;
-
 AppListConfig* GetAppListConfig() {
   return AppListConfigProvider::Get().GetConfigForType(
       AppListConfigType::kDense, /*can_create=*/true);
@@ -226,18 +223,12 @@ AppListBubbleView::AppListBubbleView(
   layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
   layer()->SetBackdropFilterQuality(ColorProvider::kBackgroundBlurQuality);
 
-  const bool is_jelly_enabled = chromeos::features::IsJellyEnabled();
-  ui::ColorId background_color_id =
-      is_jelly_enabled
-          ? static_cast<ui::ColorId>(cros_tokens::kCrosSysSystemBaseElevated)
-          : kColorAshShieldAndBase80;
+  ui::ColorId background_color_id = cros_tokens::kCrosSysSystemBaseElevated;
   SetBackground(views::CreateThemedRoundedRectBackground(background_color_id,
                                                          corner_radius));
 
   SetBorder(std::make_unique<views::HighlightBorder>(
-      corner_radius,
-      is_jelly_enabled ? views::HighlightBorder::Type::kHighlightBorderOnShadow
-                       : views::HighlightBorder::Type::kHighlightBorder1,
+      corner_radius, views::HighlightBorder::Type::kHighlightBorderOnShadow,
       /*insets_type=*/views::HighlightBorder::InsetsType::kHalfInsets));
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -300,6 +291,9 @@ void AppListBubbleView::InitContentsView(
 
   // Skip the assistant button on arrow up/down in app list.
   button_focus_skipper_ = std::make_unique<ButtonFocusSkipper>();
+  if (features::IsSunfishFeatureEnabled()) {
+    button_focus_skipper_->AddButton(search_box_view_->sunfish_button());
+  }
   button_focus_skipper_->AddButton(search_box_view_->assistant_button());
 
   // The main view has a solid color layer, so the separator needs its own
@@ -581,8 +575,7 @@ void AppListBubbleView::ShowPage(AppListBubblePage page) {
   assistant_page_->SetVisible(page == AppListBubblePage::kAssistant);
   switch (current_page_) {
     case AppListBubblePage::kNone:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     case AppListBubblePage::kApps:
       apps_page_->ResetScrollPosition();
       if (previous_page == AppListBubblePage::kSearch) {
@@ -713,8 +706,7 @@ bool AppListBubbleView::AcceleratorPressed(const ui::Accelerator& accelerator) {
       }
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return false;
+      NOTREACHED();
   }
 
   // Don't let the accelerator propagate any further.
@@ -866,15 +858,6 @@ void AppListBubbleView::OnShowAnimationEnded(const gfx::Rect& layer_bounds) {
   // visible because the bounds won't change. If the animation was aborted, this
   // is needed to reset state before starting the hide animation.
   layer()->SetBounds(layer_bounds);
-
-  // Add a shadow.
-  // TODO(b/292286998): The shadow is removed when jelly is enabled for
-  // consistency with bubbles in status area. Add it when status area bubbles
-  // get updated.
-  if (!chromeos::features::IsJellyEnabled()) {
-    view_shadow_ = std::make_unique<views::ViewShadow>(this, kShadowElevation);
-    view_shadow_->SetRoundedCornerRadius(GetBubbleCornerRadius());
-  }
 
   if (current_page_ == AppListBubblePage::kAppsCollections) {
     apps_collections_page_->RecordAboveTheFoldMetrics();

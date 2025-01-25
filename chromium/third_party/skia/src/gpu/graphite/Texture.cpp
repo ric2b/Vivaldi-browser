@@ -27,7 +27,7 @@ Texture::Texture(const SharedContext* sharedContext,
         , fInfo(info)
         , fMutableState(std::move(mutableState)) {}
 
-Texture::~Texture() {}
+Texture::~Texture() = default;
 
 void Texture::setReleaseCallback(sk_sp<RefCntedCallback> releaseCallback) {
     fReleaseCallback = std::move(releaseCallback);

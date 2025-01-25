@@ -11,6 +11,10 @@
 #include "media/gpu/buildflags.h"
 #include "mojo/core/embedder/embedder.h"
 
+#if BUILDFLAG(USE_V4L2_CODEC)
+#include "media/gpu/v4l2/v4l2_utils.h"
+#endif
+
 #if BUILDFLAG(USE_VAAPI)
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #endif
@@ -43,7 +47,14 @@ VideoTestEnvironment::VideoTestEnvironment(
   if (need_task_environment) {
     TestTimeouts::Initialize();
     task_environment_ = std::make_unique<base::test::TaskEnvironment>(
-        base::test::TaskEnvironment::MainThreadType::UI);
+// Not sure why on CrOS this needs to be UI thread type? On Windows we use
+// the default type.
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+        base::test::TaskEnvironment::MainThreadType::UI
+#else
+        base::test::TaskEnvironment::MainThreadType::DEFAULT
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+    );
 
     at_exit_manager_ = std::make_unique<base::AtExitManager>();
   }
@@ -74,15 +85,25 @@ base::FilePath VideoTestEnvironment::GetTestOutputFilePath() const {
   base::FilePath::StringType test_name;
   base::FilePath::StringType test_suite_name;
 #if BUILDFLAG(IS_WIN)
-  // On Windows the default file path string type is UTF16. Since the test name
-  // is always returned in UTF8 we need to do a conversion here.
-  test_name = base::UTF8ToUTF16(test_info->name());
-  test_suite_name = base::UTF8ToUTF16(test_info->test_suite_name());
+  test_name =
+      base::FilePath::FromASCII(base::StringPrintf("%s", test_info->name()))
+          .value();
+  test_suite_name = base::FilePath::FromASCII(
+                        base::StringPrintf("%s", test_info->test_suite_name()))
+                        .value();
 #else
   test_name = test_info->name();
   test_suite_name = test_info->test_suite_name();
-#endif
+#endif  // BUILDFLAG(IS_WIN)
   return base::FilePath(test_suite_name).Append(test_name);
+}
+
+bool VideoTestEnvironment::IsV4L2VirtualDriver() const {
+#if BUILDFLAG(USE_V4L2_CODEC)
+  return IsVislDriver();
+#else
+  return false;
+#endif
 }
 
 }  // namespace test

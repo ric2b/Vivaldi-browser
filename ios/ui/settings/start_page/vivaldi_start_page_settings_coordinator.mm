@@ -2,8 +2,8 @@
 
 #import "ios/ui/settings/start_page/vivaldi_start_page_settings_coordinator.h"
 
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_settings_mediator.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_settings_view_controller.h"
 #import "ui/base/l10n/l10n_util_mac.h"

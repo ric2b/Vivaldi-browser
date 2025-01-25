@@ -43,8 +43,13 @@
 using content::BrowserThread;
 
 static const char* kGoodURL = "https://www.good.com";
+static const char* kGoodIpAddress = "http://1.2.3.4/";
 static const char* kBadURL = "https://www.malware.com";
+static const char* kBadURLWithAlternateScheme = "http://www.malware.com";
 static const char* kBadURLWithPath = "https://www.malware.com/index.html";
+static const char* kIpAddress = "https://195.127.0.11/uploads";
+static const char* kIpAddressAlternatePathAndScheme =
+    "http://195.127.0.11/otherPath";
 static const char* kRedirectURL = "https://www.test1.com";
 static const char* kAnotherRedirectURL = "https://www.test2.com";
 
@@ -70,15 +75,6 @@ class SafeBrowsingCallbackWaiter {
     has_post_commit_interstitial_skipped_ =
         result.has_post_commit_interstitial_skipped;
     loop_.Quit();
-  }
-
-  void OnBlockingPageDoneOnIO(
-      security_interstitials::UnsafeResource::UrlCheckResult result) {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
-                       base::Unretained(this), result));
   }
 
   void WaitForCallback() {
@@ -432,6 +428,40 @@ TEST_F(SafeBrowsingUIManagerTest, AllowlistIgnoresPath) {
   EXPECT_TRUE(IsAllowlisted(resource_path));
 }
 
+TEST_F(SafeBrowsingUIManagerTest, AllowlistIgnoresScheme) {
+  security_interstitials::UnsafeResource resource =
+      MakeUnsafeResourceAndStartNavigation(kBadURL);
+  AddToAllowlist(resource, /*pending=*/false);
+  EXPECT_TRUE(IsAllowlisted(resource));
+
+  content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
+
+  security_interstitials::UnsafeResource alternate_scheme_resource =
+      MakeUnsafeResource(kBadURLWithAlternateScheme);
+  EXPECT_TRUE(IsAllowlisted(alternate_scheme_resource));
+
+  security_interstitials::UnsafeResource good_resource =
+      MakeUnsafeResource(kGoodURL);
+  EXPECT_FALSE(IsAllowlisted(good_resource));
+}
+
+TEST_F(SafeBrowsingUIManagerTest, AllowlistIPAddress) {
+  security_interstitials::UnsafeResource resource =
+      MakeUnsafeResourceAndStartNavigation(kIpAddress);
+  AddToAllowlist(resource, /*pending=*/false);
+  EXPECT_TRUE(IsAllowlisted(resource));
+
+  content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
+
+  security_interstitials::UnsafeResource alternate_unsafe_resource =
+      MakeUnsafeResource(kIpAddressAlternatePathAndScheme);
+  EXPECT_TRUE(IsAllowlisted(alternate_unsafe_resource));
+
+  security_interstitials::UnsafeResource good_resource =
+      MakeUnsafeResource(kGoodIpAddress);
+  EXPECT_FALSE(IsAllowlisted(good_resource));
+}
+
 TEST_F(SafeBrowsingUIManagerTest, AllowlistIgnoresThreatType) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
@@ -444,7 +474,7 @@ TEST_F(SafeBrowsingUIManagerTest, AllowlistIgnoresThreatType) {
   EXPECT_TRUE(IsAllowlisted(resource_phishing));
 }
 
-TEST_F(SafeBrowsingUIManagerTest, UICallbackProceed) {
+TEST_F(SafeBrowsingUIManagerTest, CallbackProceed) {
   security_interstitials::UnsafeResource resource =
       MakeUnsafeResourceAndStartNavigation(kBadURL);
   SafeBrowsingCallbackWaiter waiter;
@@ -469,40 +499,6 @@ TEST_F(SafeBrowsingUIManagerTest, UICallbackDontProceed) {
       base::BindRepeating(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
                           base::Unretained(&waiter));
   resource.callback_sequence = content::GetUIThreadTaskRunner({});
-  std::vector<security_interstitials::UnsafeResource> resources;
-  resources.push_back(resource);
-  SimulateBlockingPageDone(resources, false);
-  EXPECT_FALSE(IsAllowlisted(resource));
-  waiter.WaitForCallback();
-  EXPECT_TRUE(waiter.callback_called());
-  EXPECT_FALSE(waiter.proceed());
-}
-
-TEST_F(SafeBrowsingUIManagerTest, IOCallbackProceed) {
-  security_interstitials::UnsafeResource resource =
-      MakeUnsafeResourceAndStartNavigation(kBadURL);
-  SafeBrowsingCallbackWaiter waiter;
-  resource.callback =
-      base::BindRepeating(&SafeBrowsingCallbackWaiter::OnBlockingPageDoneOnIO,
-                          base::Unretained(&waiter));
-  resource.callback_sequence = content::GetIOThreadTaskRunner({});
-  std::vector<security_interstitials::UnsafeResource> resources;
-  resources.push_back(resource);
-  SimulateBlockingPageDone(resources, true);
-  EXPECT_TRUE(IsAllowlisted(resource));
-  waiter.WaitForCallback();
-  EXPECT_TRUE(waiter.callback_called());
-  EXPECT_TRUE(waiter.proceed());
-}
-
-TEST_F(SafeBrowsingUIManagerTest, IOCallbackDontProceed) {
-  security_interstitials::UnsafeResource resource =
-      MakeUnsafeResourceAndStartNavigation(kBadURL);
-  SafeBrowsingCallbackWaiter waiter;
-  resource.callback =
-      base::BindRepeating(&SafeBrowsingCallbackWaiter::OnBlockingPageDoneOnIO,
-                          base::Unretained(&waiter));
-  resource.callback_sequence = content::GetIOThreadTaskRunner({});
   std::vector<security_interstitials::UnsafeResource> resources;
   resources.push_back(resource);
   SimulateBlockingPageDone(resources, false);
@@ -555,7 +551,7 @@ TEST_F(SafeBrowsingUIManagerTest, VisibleSecurityStateChanged) {
   // Simulate a blocking page.
   security_interstitials::UnsafeResource resource = MakeUnsafeResource(kBadURL);
   // Needed for showing the blocking page.
-  resource.threat_source = safe_browsing::ThreatSource::REMOTE;
+  resource.threat_source = safe_browsing::ThreatSource::ANDROID_SAFEBROWSING;
 
   NavigateAndCommit(GURL(kBadURL));
 
@@ -567,9 +563,9 @@ TEST_F(SafeBrowsingUIManagerTest, VisibleSecurityStateChanged) {
   // Simulate proceeding through the blocking page.
   SafeBrowsingCallbackWaiter waiter;
   resource.callback =
-      base::BindRepeating(&SafeBrowsingCallbackWaiter::OnBlockingPageDoneOnIO,
+      base::BindRepeating(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
                           base::Unretained(&waiter));
-  resource.callback_sequence = content::GetIOThreadTaskRunner({});
+  resource.callback_sequence = content::GetUIThreadTaskRunner({});
   std::vector<security_interstitials::UnsafeResource> resources;
   resources.push_back(resource);
 
@@ -591,7 +587,7 @@ TEST_F(SafeBrowsingUIManagerTest, ShowBlockPageNoCallback) {
   // Simulate a blocking page.
   security_interstitials::UnsafeResource resource = MakeUnsafeResource(kBadURL);
   // Needed for showing the blocking page.
-  resource.threat_source = safe_browsing::ThreatSource::REMOTE;
+  resource.threat_source = safe_browsing::ThreatSource::ANDROID_SAFEBROWSING;
 
   // This call caused a crash in https://crbug.com/1058094. Just verify that we
   // don't crash anymore.
@@ -632,7 +628,7 @@ TEST_F(SafeBrowsingUIManagerTest, DisplayInterstitial) {
 
 TEST_F(SafeBrowsingUIManagerTest, DisplayInterstitial_PostCommitInterstitial) {
   security_interstitials::UnsafeResource resource = MakeUnsafeResource(kBadURL);
-  resource.threat_source = safe_browsing::ThreatSource::REMOTE;
+  resource.threat_source = safe_browsing::ThreatSource::ANDROID_SAFEBROWSING;
   // Make it a post commit interstitial.
   resource.threat_type = SBThreatType::SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING;
 

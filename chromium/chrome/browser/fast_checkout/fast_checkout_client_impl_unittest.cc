@@ -127,8 +127,6 @@ std::unique_ptr<KeyedService> BuildTestPersonalDataManager(
   return personal_data_manager;
 }
 
-}  // namespace
-
 class MockFastCheckoutController : public FastCheckoutController {
  public:
   MockFastCheckoutController() : FastCheckoutController() {}
@@ -252,6 +250,10 @@ class MockFastCheckoutAccessibilityService
 
   MOCK_METHOD(void, Announce, (const std::u16string&), (override));
 };
+
+}  // namespace
+// The anonymous namespace needs to end here because of `friend`ships between
+// the tests and the production code.
 
 // TODO(crbug.com/348576043) : Tests are failing on android-arm64-tests builder.
 class DISABLED_FastCheckoutClientImplTest
@@ -704,8 +706,8 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
   autofill::ChromeAutofillClient::CreateForWebContents(web_contents());
   auto autofill_driver = std::make_unique<autofill::ContentAutofillDriver>(
       web_contents()->GetPrimaryMainFrame(),
-      autofill::ContentAutofillClient::FromWebContents(web_contents())
-          ->GetAutofillDriverFactory());
+      &autofill::ContentAutofillClient::FromWebContents(web_contents())
+           ->GetAutofillDriverFactory());
   autofill::BrowserAutofillManager& autofill_manager =
       static_cast<autofill::BrowserAutofillManager&>(
           autofill_driver->GetAutofillManager());
@@ -918,6 +920,7 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
 
 TEST_F(DISABLED_FastCheckoutClientImplTest,
        OnAutofillManagerReset_IsShowing_ResetsState) {
+  using enum autofill::AutofillManager::LifecycleState;
   OnBeforeAskForValuesToFill();
   EXPECT_TRUE(fast_checkout_client()->TryToStart(
       GURL(kUrl), autofill::FormData(), autofill::FormFieldData(),
@@ -926,7 +929,8 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
 
   EXPECT_TRUE(fast_checkout_client()->IsRunning());
   EXPECT_TRUE(fast_checkout_client()->IsShowing());
-  fast_checkout_client()->OnAutofillManagerReset(*autofill_manager());
+  fast_checkout_client()->OnAutofillManagerStateChanged(*autofill_manager(),
+                                                        kActive, kPendingReset);
   EXPECT_FALSE(fast_checkout_client()->IsRunning());
   ExpectRunOutcomeUkm(
       FastCheckoutRunOutcome::kNavigationWhileBottomsheetWasShown);
@@ -935,12 +939,14 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
 
 TEST_F(DISABLED_FastCheckoutClientImplTest,
        OnAutofillManagerReset_IsNotShowing_ResetsState) {
+  using enum autofill::AutofillManager::LifecycleState;
   std::unique_ptr<autofill::FormStructure> address_form = SetUpAddressForm();
 
   StartRunAndSelectOptions({address_form->form_signature()});
   EXPECT_TRUE(fast_checkout_client()->IsRunning());
   EXPECT_FALSE(fast_checkout_client()->IsShowing());
-  fast_checkout_client()->OnAutofillManagerReset(*autofill_manager());
+  fast_checkout_client()->OnAutofillManagerStateChanged(*autofill_manager(),
+                                                        kActive, kPendingReset);
   EXPECT_FALSE(fast_checkout_client()->IsRunning());
   ExpectRunOutcomeUkm(FastCheckoutRunOutcome::kPageRefreshed);
   EXPECT_TRUE(fast_checkout_client()->IsNotShownYet());
@@ -948,6 +954,7 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
 
 TEST_F(DISABLED_FastCheckoutClientImplTest,
        OnAutofillManagerDestroyed_ResetsState) {
+  using enum autofill::AutofillManager::LifecycleState;
   OnBeforeAskForValuesToFill();
   EXPECT_TRUE(fast_checkout_client()->TryToStart(
       GURL(kUrl), autofill::FormData(), autofill::FormFieldData(),
@@ -955,7 +962,8 @@ TEST_F(DISABLED_FastCheckoutClientImplTest,
   OnAfterAskForValuesToFill();
 
   EXPECT_TRUE(fast_checkout_client()->IsRunning());
-  fast_checkout_client()->OnAutofillManagerDestroyed(*autofill_manager());
+  fast_checkout_client()->OnAutofillManagerStateChanged(
+      *autofill_manager(), kActive, kPendingDeletion);
   EXPECT_FALSE(fast_checkout_client()->IsRunning());
   ExpectRunOutcomeUkm(FastCheckoutRunOutcome::kAutofillManagerDestroyed);
   EXPECT_TRUE(fast_checkout_client()->IsNotShownYet());

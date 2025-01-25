@@ -28,13 +28,13 @@
 #include "internal/platform/clock.h"
 #include "internal/platform/task_runner.h"
 #include "proto/sharing_enums.pb.h"
+#include "sharing/analytics/analytics_recorder.h"
 #include "sharing/attachment_container.h"
 #include "sharing/certificates/nearby_share_certificate_manager.h"
 #include "sharing/certificates/nearby_share_decrypted_public_certificate.h"
 #include "sharing/incoming_frames_reader.h"
 #include "sharing/nearby_connection.h"
 #include "sharing/nearby_connections_manager.h"
-#include "sharing/nearby_sharing_decoder.h"
 #include "sharing/paired_key_verification_runner.h"
 #include "sharing/payload_tracker.h"
 #include "sharing/proto/wire_format.pb.h"
@@ -47,8 +47,9 @@ namespace nearby::sharing {
 // This class is thread-compatible.
 class ShareSession {
  public:
-  ShareSession(TaskRunner& service_thread, std::string endpoint_id,
-               const ShareTarget& share_target);
+  ShareSession(TaskRunner& service_thread,
+               analytics::AnalyticsRecorder& analytics_recorder,
+               std::string endpoint_id, const ShareTarget& share_target);
   ShareSession(ShareSession&&);
   ShareSession& operator=(ShareSession&&) = delete;
   ShareSession& operator=(const ShareSession&) = delete;
@@ -76,9 +77,7 @@ class ShareSession {
   IncomingFramesReader* frames_reader() const { return frames_reader_.get(); }
 
   std::weak_ptr<NearbyConnectionsManager::PayloadStatusListener>
-  payload_tracker() const {
-    return payload_tracker_->GetWeakPtr();
-  }
+  payload_tracker() const;
 
   int64_t session_id() const { return session_id_; }
 
@@ -104,8 +103,13 @@ class ShareSession {
   }
   // Notifies the ShareTargetInfo that the connection has been established.
   // Returns true if the connection was successfully established.
-  bool OnConnected(const NearbySharingDecoder& decoder,
-                   absl::Time connect_start_time, NearbyConnection* connection);
+  bool OnConnected(absl::Time connect_start_time,
+                   NearbyConnectionsManager* connections_manager,
+                   NearbyConnection* connection);
+
+  // Send TransferMetadataUpdate with the final status.
+  // If connected, also close the connection.
+  void Abort(TransferMetadata::Status status);
 
   void RunPairedKeyVerification(
       Clock* clock, location::nearby::proto::sharing::OSType os_type,
@@ -125,7 +129,7 @@ class ShareSession {
     return attachment_container_;
   }
 
-  void CancelPayloads(NearbyConnectionsManager& connections_manager);
+  void CancelPayloads();
 
   const absl::flat_hash_map<int64_t, int64_t>& attachment_payload_map() const {
     return attachment_payload_map_;
@@ -138,11 +142,18 @@ class ShareSession {
 
   void SetTokenForTests(std::string token) { token_ = std::move(token); }
 
+  void Disconnect();
+
  protected:
   virtual void InvokeTransferUpdateCallback(
       const TransferMetadata& metadata) = 0;
   virtual bool OnNewConnection(NearbyConnection* connection) = 0;
 
+  analytics::AnalyticsRecorder& analytics_recorder() {
+    return analytics_recorder_;
+  };
+
+  TaskRunner& service_thread() const { return service_thread_; }
   void SetAttachmentPayloadId(int64_t attachment_id, int64_t payload_id);
 
   void set_payload_tracker(std::shared_ptr<PayloadTracker> payload_tracker) {
@@ -159,10 +170,16 @@ class ShareSession {
       PairedKeyVerificationRunner::PairedKeyVerificationResult result,
       location::nearby::proto::sharing::OSType share_target_os_type);
 
+  NearbyConnectionsManager* connections_manager() {
+    return connections_manager_;
+  }
+
  private:
   TaskRunner& service_thread_;
+  analytics::AnalyticsRecorder& analytics_recorder_;
   std::string endpoint_id_;
   std::optional<NearbyShareDecryptedPublicCertificate> certificate_;
+  NearbyConnectionsManager* connections_manager_ = nullptr;
   NearbyConnection* connection_ = nullptr;
   // If not empty, this is the 4 digit token used to verify the connection.
   // If token is empty, it means self-share and verification is not needed.

@@ -187,7 +187,6 @@ class Port(object):
     # the documentation in docs/testing/web_test_expectations.md when this list
     # changes.
     ALL_SYSTEMS = (
-        ('mac10.15', 'x86'),
         ('mac11', 'x86'),
         ('mac11-arm64', 'arm64'),
         ('mac12', 'x86_64'),
@@ -196,6 +195,8 @@ class Port(object):
         ('mac13-arm64', 'arm64'),
         ('mac14', 'x86_64'),
         ('mac14-arm64', 'arm64'),
+        ('mac15', 'x86_64'),
+        ('mac15-arm64', 'arm64'),
         ('win10.20h2', 'x86'),
         ('win11-arm64', 'arm64'),
         ('win11', 'x86_64'),
@@ -206,8 +207,8 @@ class Port(object):
 
     CONFIGURATION_SPECIFIER_MACROS = {
         'mac': [
-            'mac10.15', 'mac11', 'mac11-arm64', 'mac12', 'mac12-arm64',
-            'mac13', 'mac13-arm64', 'mac14', 'mac14-arm64'
+            'mac11', 'mac11-arm64', 'mac12', 'mac12-arm64', 'mac13',
+            'mac13-arm64', 'mac14', 'mac14-arm64', 'mac15', 'mac15-arm64'
         ],
         'ios': ['ios17-simulator'],
         'win': ['win10.20h2', 'win11-arm64', 'win11'],
@@ -721,6 +722,11 @@ class Port(object):
     def driver_name(self):
         if self.get_option('driver_name'):
             return self.get_option('driver_name')
+        product = self.get_option('product')
+        if product == 'chrome':
+            return self.CHROME_NAME
+        elif product == 'headless_shell':
+            return self.HEADLESS_SHELL_NAME
         return self.CONTENT_SHELL_NAME
 
     def expected_baselines_by_extension(self, test_name):
@@ -1936,10 +1942,19 @@ class Port(object):
         if pac_url is not None:
             args.append("--proxy-pac-url=" + pac_url)
 
-        if ENABLE_THREADED_COMPOSITING_FLAG not in args:
-            # We run single-threaded by default.
-            # Note that this logic is mirrored in wptrunner:
-            # third_party/wpt_tools/wpt/tools/wptrunner/wptrunner/browsers/content_shell.py
+        # We run single-threaded by default (overriding content_shell's default,
+        # which is to enable threading).
+        #
+        # But we use threading if we find --enable-threaded-compositing in
+        # virtual test suite args, or if the user explicitly passed it as:
+        #
+        #   --additional-driver-flag=--enable-threaded-compositing
+        #
+        # (Note content_shell only understands --disable-threaded-compositing,
+        # not --enable-threaded-compositing.)
+        #
+        if ENABLE_THREADED_COMPOSITING_FLAG not in (
+                args + self._specified_additional_driver_flags()):
             args.append(DISABLE_THREADED_COMPOSITING_FLAG)
             args.append(DISABLE_THREADED_ANIMATION_FLAG)
         else:
@@ -1949,6 +1964,9 @@ class Port(object):
                 args.remove(DISABLE_THREADED_COMPOSITING_FLAG)
             if DISABLE_THREADED_ANIMATION_FLAG in args:
                 args.remove(DISABLE_THREADED_ANIMATION_FLAG)
+
+        # Always support running web tests using SwiftShader for compositing or WebGL
+        args.append('--enable-unsafe-swiftshader')
 
         startup_trace_file = self.startup_trace_file_for_test(test_name)
         if startup_trace_file is not None:

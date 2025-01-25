@@ -760,7 +760,7 @@ void DownloadsDOMHandler::DeepScan(const std::string& id) {
     return;
   }
 
-  if (DownloadItemWarningData::IsEncryptedArchive(download)) {
+  if (DownloadItemWarningData::IsTopLevelEncryptedArchive(download)) {
     // For encrypted archives, we need a password from the user. We will request
     // this in the download bubble.
     PromptForScanningInBubble(GetWebUIWebContents(), download);
@@ -769,6 +769,9 @@ void DownloadsDOMHandler::DeepScan(const std::string& id) {
 
   LogDeepScanEvent(download,
                    safe_browsing::DeepScanEvent::kPromptAcceptedFromWebUI);
+  DownloadItemWarningData::AddWarningActionEvent(
+      download, DownloadItemWarningData::WarningSurface::DOWNLOADS_PAGE,
+      DownloadItemWarningData::WarningAction::ACCEPT_DEEP_SCAN);
   DownloadItemModel model(download);
   DownloadCommands commands(model.GetWeakPtr());
   commands.ExecuteCommand(DownloadCommands::DEEP_SCAN);

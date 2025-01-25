@@ -339,7 +339,7 @@ void LocalFrameView::Trace(Visitor* visitor) const {
   visitor->Trace(viewport_scrollable_area_);
   visitor->Trace(anchoring_adjustment_queue_);
   visitor->Trace(scroll_event_queue_);
-  visitor->Trace(paint_controller_);
+  visitor->Trace(paint_controller_persistent_data_);
   visitor->Trace(paint_artifact_compositor_);
   visitor->Trace(layout_shift_tracker_);
   visitor->Trace(paint_timing_detector_);
@@ -533,7 +533,7 @@ void LocalFrameView::InvalidateAllCustomScrollbarsOnActiveChanged() {
 void LocalFrameView::UsesOverlayScrollbarsChanged() {
   if (!user_scrollable_areas_)
     return;
-  for (const auto& scrollable_area : *user_scrollable_areas_) {
+  for (const auto& scrollable_area : user_scrollable_areas_->Values()) {
     if (scrollable_area->ScrollsOverflow() || scrollable_area->HasScrollbar()) {
       scrollable_area->RemoveScrollbarsForReconstruction();
       if (auto* layout_box = scrollable_area->GetLayoutBox()) {
@@ -826,7 +826,7 @@ void LocalFrameView::UpdateLayout() {
   v8::Isolate* isolate = frame_->GetPage()->GetAgentGroupScheduler().Isolate();
   ENTER_EMBEDDER_STATE(isolate, frame_, BlinkState::LAYOUT);
   TRACE_EVENT_BEGIN0("blink,benchmark", "LocalFrameView::layout");
-  if (UNLIKELY(RuntimeEnabledFeatures::BlinkRuntimeCallStatsEnabled())) {
+  if (RuntimeEnabledFeatures::BlinkRuntimeCallStatsEnabled()) [[unlikely]] {
     rcs_scope.emplace(RuntimeCallStats::From(isolate),
                       RuntimeCallStats::CounterId::kUpdateLayout);
   }
@@ -1719,7 +1719,7 @@ void LocalFrameView::NotifyPageThatContentAreaWillPaint() const {
   if (!user_scrollable_areas_)
     return;
 
-  for (const auto& scrollable_area : *user_scrollable_areas_) {
+  for (const auto& scrollable_area : user_scrollable_areas_->Values()) {
     if (!scrollable_area->ScrollbarsCanBeActive())
       continue;
 
@@ -2080,14 +2080,14 @@ bool LocalFrameView::UpdateLifecyclePhases(
     DocumentUpdateReason reason) {
   // If the lifecycle is postponed, which can happen if the inspector requests
   // it, then we shouldn't update any lifecycle phases.
-  if (UNLIKELY(frame_->GetDocument() &&
-               frame_->GetDocument()->Lifecycle().LifecyclePostponed())) {
+  if (frame_->GetDocument() &&
+      frame_->GetDocument()->Lifecycle().LifecyclePostponed()) [[unlikely]] {
     return false;
   }
 
   // Prevent reentrance.
   // TODO(vmpstr): Should we just have a DCHECK instead here?
-  if (UNLIKELY(IsUpdatingLifecycle())) {
+  if (IsUpdatingLifecycle()) [[unlikely]] {
     DUMP_WILL_BE_NOTREACHED()
         << "LocalFrameView::updateLifecyclePhasesInternal() reentrance";
     return false;
@@ -2463,7 +2463,7 @@ void LocalFrameView::EnqueueScrollSnapChangingFromImplIfNecessary() {
     if (!scrollable_areas) {
       return;
     }
-    for (const auto& area : *scrollable_areas) {
+    for (const auto& area : scrollable_areas->Values()) {
       area->EnqueueScrollSnapChangingEventFromImplIfNeeded();
     }
   });
@@ -2647,9 +2647,10 @@ void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
 
   bool needed_update;
   {
-    PaintControllerCycleScope cycle_scope(EnsurePaintController(),
-                                          PaintDebugInfoEnabled());
-    bool repainted = PaintTree(benchmark_mode);
+    // paint_controller will be constructed when PaintTree repaints, and will
+    // be destructed after PushPaintArtifactToCompositor.
+    std::optional<PaintController> paint_controller;
+    PaintTree(benchmark_mode, paint_controller);
 
     if (paint_artifact_compositor_ &&
         benchmark_mode ==
@@ -2658,7 +2659,7 @@ void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
     }
     needed_update = !paint_artifact_compositor_ ||
                     paint_artifact_compositor_->NeedsUpdate();
-    PushPaintArtifactToCompositor(repainted);
+    PushPaintArtifactToCompositor(paint_controller.has_value());
   }
 
   size_t total_animations_count = 0;
@@ -2782,7 +2783,9 @@ void LocalFrameView::EnqueueScrollEvents() {
   });
 }
 
-bool LocalFrameView::PaintTree(PaintBenchmarkMode benchmark_mode) {
+void LocalFrameView::PaintTree(
+    PaintBenchmarkMode benchmark_mode,
+    std::optional<PaintController>& paint_controller) {
   SCOPED_UMA_AND_UKM_TIMER(GetUkmAggregator(), LocalFrameUkmAggregator::kPaint);
 
   DCHECK(GetFrame().IsLocalRoot());
@@ -2826,19 +2829,18 @@ bool LocalFrameView::PaintTree(PaintBenchmarkMode benchmark_mode) {
   ForAllThrottledLocalFrameViews(
       [](LocalFrameView& frame_view) { frame_view.MarkIneligibleToPaint(); });
 
-  bool repainted = false;
   bool needs_clear_repaint_flags = false;
 
-  const PaintArtifact& previous_artifact =
-      paint_controller_->GetPaintArtifact();
-
-  PaintController::ScopedBenchmarkMode scoped_benchmark(*paint_controller_,
-                                                        benchmark_mode);
-
-  if (paint_controller_->ShouldForcePaintForBenchmark() ||
+  if (benchmark_mode >= PaintBenchmarkMode::kForcePaint ||
+      !paint_controller_persistent_data_ ||
       GetLayoutView()->Layer()->SelfOrDescendantNeedsRepaint() ||
       visual_viewport_or_overlay_needs_repaint_) {
-    GraphicsContext graphics_context(*paint_controller_);
+    const PaintArtifact& previous_artifact =
+        EnsurePaintControllerPersistentData().GetPaintArtifact();
+    paint_controller.emplace(PaintDebugInfoEnabled(),
+                             paint_controller_persistent_data_.Get(),
+                             benchmark_mode);
+    GraphicsContext graphics_context(*paint_controller);
 
     // Draw the WebXR DOM overlay if present.
     if (PaintLayer* full_screen_layer = GetXROverlayLayer()) {
@@ -2864,18 +2866,18 @@ bool LocalFrameView::PaintTree(PaintBenchmarkMode benchmark_mode) {
     // Link highlights paint after all other paintings.
     GetPage()->GetLinkHighlight().Paint(graphics_context);
 
-    paint_controller_->CommitNewDisplayItems();
+    paint_controller->CommitNewDisplayItems();
 
-    repainted = true;
+    needs_clear_repaint_flags = true;
     if (paint_artifact_compositor_) {
       paint_artifact_compositor_->SetNeedsFullUpdateAfterPaintIfNeeded(
-          previous_artifact, paint_controller_->GetPaintArtifact());
+          previous_artifact,
+          paint_controller_persistent_data_->GetPaintArtifact());
     }
   }
 
   visual_viewport_or_overlay_needs_repaint_ = false;
 
-  needs_clear_repaint_flags |= repainted;
   ForAllNonThrottledLocalFrameViews(
       [needs_clear_repaint_flags](LocalFrameView& frame_view) {
         frame_view.Lifecycle().AdvanceTo(DocumentLifecycle::kPaintClean);
@@ -2885,8 +2887,6 @@ bool LocalFrameView::PaintTree(PaintBenchmarkMode benchmark_mode) {
         }
         frame_view.GetPaintTimingDetector().NotifyPaintFinished();
       });
-
-  return repainted;
 }
 
 cc::Layer* LocalFrameView::RootCcLayer() {
@@ -2945,7 +2945,7 @@ void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
   if (!paint_artifact_compositor_->NeedsUpdate()) {
     if (repainted) {
       paint_artifact_compositor_->UpdateRepaintedLayers(
-          paint_controller_->GetPaintArtifact());
+          paint_controller_persistent_data_->GetPaintArtifact());
       CreatePaintTimelineEvents();
     }
     // TODO(pdr): Should we clear the property tree state change bits (
@@ -2980,18 +2980,29 @@ void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
     }
   }
 
-  Vector<const TransformPaintPropertyNode*> scroll_translation_nodes;
+  PaintArtifactCompositor::StackScrollTranslationVector
+      scroll_translation_nodes;
   ForAllNonThrottledLocalFrameViews(
       [&scroll_translation_nodes](LocalFrameView& frame_view) {
-        frame_view.GetUserScrollTranslationNodes(scroll_translation_nodes);
+        if (const auto* scrollable_areas = frame_view.UserScrollableAreas()) {
+          for (const auto& area : scrollable_areas->Values()) {
+            const auto* paint_properties =
+                area->GetLayoutBox()->FirstFragment().PaintProperties();
+            if (paint_properties && paint_properties->Scroll()) {
+              scroll_translation_nodes.push_back(
+                  paint_properties->ScrollTranslation());
+            }
+          }
+        }
       });
 
   WTF::Vector<std::unique_ptr<ViewTransitionRequest>> view_transition_requests;
   AppendViewTransitionRequests(view_transition_requests);
 
   paint_artifact_compositor_->Update(
-      paint_controller_->GetPaintArtifact(), viewport_properties,
-      scroll_translation_nodes, std::move(view_transition_requests));
+      paint_controller_persistent_data_->GetPaintArtifact(),
+      viewport_properties, scroll_translation_nodes,
+      std::move(view_transition_requests));
 
   CreatePaintTimelineEvents();
 }
@@ -3574,14 +3585,15 @@ void LocalFrameView::AddUserScrollableArea(
     PaintLayerScrollableArea* scrollable_area) {
   DCHECK(scrollable_area);
   if (!user_scrollable_areas_)
-    user_scrollable_areas_ = MakeGarbageCollected<ScrollableAreaSet>();
-  user_scrollable_areas_->insert(scrollable_area);
+    user_scrollable_areas_ = MakeGarbageCollected<ScrollableAreaMap>();
+  user_scrollable_areas_->insert(scrollable_area->GetScrollElementId(),
+                                 scrollable_area);
 }
 
 void LocalFrameView::RemoveUserScrollableArea(
     PaintLayerScrollableArea* scrollable_area) {
   if (user_scrollable_areas_) {
-    user_scrollable_areas_->erase(scrollable_area);
+    user_scrollable_areas_->erase(scrollable_area->GetScrollElementId());
   }
 }
 
@@ -3735,12 +3747,9 @@ ScrollableArea* LocalFrameView::ScrollableAreaWithElementId(
     return viewport;
 
   if (user_scrollable_areas_) {
-    // This requires iterating over all user-scrollable areas. We may want to
-    // store a map of ElementId to ScrollableArea if this is an issue for
-    // performance.
-    for (ScrollableArea* scrollable_area : *user_scrollable_areas_) {
-      if (id == scrollable_area->GetScrollElementId())
-        return scrollable_area;
+    auto it = user_scrollable_areas_->find(id);
+    if (it != user_scrollable_areas_->end()) {
+      return it->value;
     }
   }
   return nullptr;
@@ -3856,11 +3865,13 @@ LocalFrameView::ForceThrottlingScope::ForceThrottlingScope(
       value_(&frame_view.GetFrame().LocalFrameRoot().View()->force_throttling_,
              true) {}
 
-PaintController& LocalFrameView::EnsurePaintController() {
-  if (!paint_controller_) {
-    paint_controller_ = MakeGarbageCollected<PaintController>();
+PaintControllerPersistentData&
+LocalFrameView::EnsurePaintControllerPersistentData() {
+  if (!paint_controller_persistent_data_) {
+    paint_controller_persistent_data_ =
+        MakeGarbageCollected<PaintControllerPersistentData>();
   }
-  return *paint_controller_;
+  return *paint_controller_persistent_data_;
 }
 
 bool LocalFrameView::CapturePaintPreview(
@@ -3931,11 +3942,11 @@ void LocalFrameView::PaintFrame(GraphicsContext& context,
 }
 
 void LocalFrameView::PrintPage(GraphicsContext& context,
-                               wtf_size_t page_number,
+                               wtf_size_t page_index,
                                const CullRect& cull_rect) {
   DCHECK(GetFrame().GetDocument()->Printing());
   if (pagination_state_) {
-    pagination_state_->SetCurrentPageNumber(page_number);
+    pagination_state_->SetCurrentPageIndex(page_index);
   }
   const PaintFlags flags =
       PaintFlag::kOmitCompositingInfo | PaintFlag::kAddUrlMetadata;
@@ -3975,8 +3986,7 @@ void LocalFrameView::PaintOutsideOfLifecycle(GraphicsContext& context,
     bool disable_expansion = paint_flags & PaintFlag::kOmitCompositingInfo;
     OverriddenCullRectScope force_cull_rect(*GetLayoutView()->Layer(),
                                             cull_rect, disable_expansion);
-    PaintControllerCycleScope cycle_scope(context.GetPaintController(),
-                                          PaintDebugInfoEnabled());
+    context.GetPaintController().SetRecordDebugInfo(PaintDebugInfoEnabled());
     PaintFrame(context, paint_flags);
   }
 
@@ -3997,10 +4007,9 @@ void LocalFrameView::PaintForTest(const CullRect& cull_rect) {
   AllowThrottlingScope allow_throttling(*this);
   Lifecycle().AdvanceTo(DocumentLifecycle::kInPaint);
   CullRectUpdater(*GetLayoutView()->Layer()).UpdateForTesting(cull_rect);
-  PaintController& paint_controller = EnsurePaintController();
   if (GetLayoutView()->Layer()->SelfOrDescendantNeedsRepaint()) {
-    PaintControllerCycleScope cycle_scope(paint_controller,
-                                          PaintDebugInfoEnabled());
+    PaintController paint_controller(PaintDebugInfoEnabled(),
+                                     &EnsurePaintControllerPersistentData());
     GraphicsContext graphics_context(paint_controller);
     PaintFrame(graphics_context);
     paint_controller.CommitNewDisplayItems();
@@ -4013,18 +4022,18 @@ void LocalFrameView::PaintForTest(const CullRect& cull_rect) {
 PaintRecord LocalFrameView::GetPaintRecord(const gfx::Rect* cull_rect) const {
   DCHECK_EQ(DocumentLifecycle::kPaintClean, Lifecycle().GetState());
   DCHECK(frame_->IsLocalRoot());
-  DCHECK(paint_controller_);
-  return paint_controller_->GetPaintArtifact().GetPaintRecord(
+  DCHECK(paint_controller_persistent_data_);
+  return paint_controller_persistent_data_->GetPaintArtifact().GetPaintRecord(
       PropertyTreeState::Root(), cull_rect);
 }
 
-const PaintArtifact* LocalFrameView::GetPaintArtifact() const {
+const PaintArtifact& LocalFrameView::GetPaintArtifact() const {
   CHECK_EQ(DocumentLifecycle::kPaintClean, Lifecycle().GetState());
-  return &GetFrame()
-              .LocalFrameRoot()
-              .View()
-              ->EnsurePaintController()
-              .GetPaintArtifact();
+  return GetFrame()
+      .LocalFrameRoot()
+      .View()
+      ->EnsurePaintControllerPersistentData()
+      .GetPaintArtifact();
 }
 
 gfx::Rect LocalFrameView::ConvertToRootFrame(
@@ -4313,6 +4322,13 @@ void LocalFrameView::VisibilityForThrottlingChanged() {
 void LocalFrameView::VisibilityChanged(
     blink::mojom::FrameVisibility visibility) {
   frame_->GetLocalFrameHostRemote().VisibilityChanged(visibility);
+
+  // LocalFrameClient member may not be valid in some tests.
+  if (frame_->Client() && frame_->Client()->GetWebFrame() &&
+      frame_->Client()->GetWebFrame()->Client()) {
+    frame_->Client()->GetWebFrame()->Client()->OnFrameVisibilityChanged(
+        visibility);
+  }
 }
 
 void LocalFrameView::RenderThrottlingStatusChanged() {
@@ -4740,21 +4756,6 @@ LocalFrameView::EnsureOverlayInterstitialAdDetector() {
   return *overlay_interstitial_ad_detector_.get();
 }
 
-void LocalFrameView::GetUserScrollTranslationNodes(
-    Vector<const TransformPaintPropertyNode*>& scroll_translation_nodes) {
-  const auto* scrollable_areas = UserScrollableAreas();
-  if (!scrollable_areas)
-    return;
-
-  for (const auto& area : *scrollable_areas) {
-    const auto* paint_properties =
-        area->GetLayoutBox()->FirstFragment().PaintProperties();
-    if (paint_properties && paint_properties->Scroll()) {
-      scroll_translation_nodes.push_back(paint_properties->ScrollTranslation());
-    }
-  }
-}
-
 StickyAdDetector& LocalFrameView::EnsureStickyAdDetector() {
   if (!sticky_ad_detector_) {
     sticky_ad_detector_ = std::make_unique<StickyAdDetector>();
@@ -4838,7 +4839,7 @@ void LocalFrameView::SetCullRectNeedsUpdateForFrames(bool disable_expansion) {
         // invalidate all cull rects affected by disable_expansion but it
         // doesn't affect correctness.
         if (disable_expansion && frame_view.UserScrollableAreas()) {
-          for (const auto& area : *frame_view.UserScrollableAreas()) {
+          for (const auto& area : frame_view.UserScrollableAreas()->Values()) {
             area->Layer()->SetNeedsCullRectUpdate();
           }
         }
@@ -4889,9 +4890,9 @@ void LocalFrameView::RunPaintBenchmark(int repeat_count,
       run_benchmark(PaintBenchmarkMode::kForcePaintArtifactCompositorUpdate);
 
   result.painter_memory_usage = 0;
-  if (paint_controller_) {
+  if (paint_controller_persistent_data_) {
     result.painter_memory_usage +=
-        paint_controller_->ApproximateUnsharedMemoryUsage();
+        paint_controller_persistent_data_->ApproximateUnsharedMemoryUsage();
   }
   if (paint_artifact_compositor_) {
     result.painter_memory_usage +=

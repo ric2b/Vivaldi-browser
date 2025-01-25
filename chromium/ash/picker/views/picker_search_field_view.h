@@ -11,11 +11,13 @@
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/metadata/view_factory.h"
 #include "ui/views/view.h"
+#include "ui/views/view_tracker.h"
 
 namespace views {
 class Textfield;
@@ -38,6 +40,11 @@ class ASH_EXPORT PickerSearchFieldView : public views::BoxLayoutView,
   using SearchCallback =
       base::RepeatingCallback<void(const std::u16string& query)>;
   using BackCallback = base::RepeatingClosure;
+
+  // The delay before notifying the initial active descendant when the textfield
+  // is focused. Same value as Launcher.
+  static constexpr base::TimeDelta kNotifyInitialActiveDescendantA11yDelay =
+      base::Milliseconds(1500);
 
   // `search_callback` is called asynchronously whenever the contents of the
   // search field changes (with debouncing logic to avoid unnecessary calls).
@@ -70,6 +77,10 @@ class ASH_EXPORT PickerSearchFieldView : public views::BoxLayoutView,
   void OnWillChangeFocus(View* focused_before, View* focused_now) override;
   void OnDidChangeFocus(View* focused_before, View* focused_now) override;
 
+  // Should be called every time the contents of the text field changes, even
+  // if the search callback should not be called.
+  void ContentsChangedInternal(std::u16string_view new_contents);
+
   // Gets or sets the placeholder text to show when the textfield is empty.
   const std::u16string& GetPlaceholderText() const;
   void SetPlaceholderText(const std::u16string& new_placeholder_text);
@@ -79,14 +90,30 @@ class ASH_EXPORT PickerSearchFieldView : public views::BoxLayoutView,
   // cleared.
   void SetTextfieldActiveDescendant(views::View* view);
 
-  // Gets or sets the current search query text.
+  // Gets the current search query text.
   std::u16string_view GetQueryText() const;
+  // Sets the current search query text. Does not call the search callback.
   void SetQueryText(std::u16string text);
 
   // Sets whether the back button is visible.
   void SetBackButtonVisible(bool visible);
 
   void SetShouldShowFocusIndicator(bool should_show_focus_indicator);
+
+  // Returns the view directly to the left / right of `view`, or nullptr if
+  // there is no such view in the PickerSearchFieldView.
+  views::View* GetViewLeftOf(views::View* view);
+  views::View* GetViewRightOf(views::View* view);
+
+  // Returns true if a left / right key event should move the cursor rather than
+  // moving the currently pseudo focused view.
+  bool LeftEventShouldMoveCursor(views::View* pseudo_focused_view);
+  bool RightEventShouldMoveCursor(views::View* pseudo_focused_view);
+
+  // Should be called when the search field or one of its child views gains
+  // pseudo focus after a left / right key event.
+  void OnGainedPseudoFocusFromLeftEvent(views::View* pseudo_focused_view);
+  void OnGainedPseudoFocusFromRightEvent(views::View* pseudo_focused_view);
 
   PickerSearchBarTextfield* textfield() { return textfield_; }
 
@@ -99,6 +126,17 @@ class ASH_EXPORT PickerSearchFieldView : public views::BoxLayoutView,
 
   // Updates the textfield border when the clear button visibility changes.
   void UpdateTextfieldBorder();
+  // Schedules a delayed announcement of the initial active descendant.
+  void ScheduleNotifyInitialActiveDescendantForA11y();
+  // Notifies the initial active descendant for the screen reader.
+  void NotifyInitialActiveDescendantForA11y();
+
+  // Gets the start and end indices of the current search query text, to use
+  // when moving pseudo focus to and from the textfield. Note that the start and
+  // end are swapped in RTL locales since we swapped left and right key events
+  // when traversing the Picker UI in RTL.
+  size_t GetQueryStartIndexForTraversal();
+  size_t GetQueryEndIndexForTraversal();
 
   bool should_show_focus_indicator_ = false;
 
@@ -108,6 +146,11 @@ class ASH_EXPORT PickerSearchFieldView : public views::BoxLayoutView,
   raw_ptr<PickerSearchBarTextfield> textfield_ = nullptr;
   raw_ptr<views::ImageButton> back_button_ = nullptr;
   raw_ptr<views::ImageButton> clear_button_ = nullptr;
+
+  // Tracks pending active descendant change when the textfield is not focused.
+  views::ViewTracker active_descendant_tracker_;
+  // Delay the initial active descendant change notification for a query.
+  base::OneShotTimer notify_initial_active_descendant_timer_;
 };
 
 BEGIN_VIEW_BUILDER(ASH_EXPORT, PickerSearchFieldView, views::BoxLayoutView)

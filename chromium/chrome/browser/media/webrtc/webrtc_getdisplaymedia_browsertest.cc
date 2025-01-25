@@ -154,7 +154,7 @@ std::string DisplaySurfaceTypeAsString(
     case DisplaySurfaceType::kScreen:
       return "screen";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void RunGetDisplayMedia(content::WebContents* tab,
@@ -180,7 +180,7 @@ void RunGetDisplayMedia(content::WebContents* tab,
 #if BUILDFLAG(IS_MAC)
   if (!is_fake_ui && !is_tab_capture &&
       system_media_permissions::CheckSystemScreenCapturePermission() !=
-          system_media_permissions::SystemPermission::kAllowed) {
+          system_permission_settings::SystemPermission::kAllowed) {
     expect_success = false;
   }
 #endif
@@ -899,7 +899,7 @@ class GetDisplayMediaVideoTrackBrowserTest
       case DisplaySurfaceType::kScreen:
         return "MediaStreamTrack";
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
  protected:
@@ -1743,7 +1743,7 @@ class CaptureSessionDetails {
       case CapturedTab::kCapturingTab:
         return capturing_tab_;
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   // Get the tab that's neither capturing nor being captured.
@@ -1865,7 +1865,7 @@ class GetDisplayMediaCapturedSurfaceControlTest : public WebRtcTestBase {
       case Action::kGetZoomLevel:
         return false;
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   GetDisplayMediaCapturedSurfaceControlTest() = default;
@@ -1884,7 +1884,7 @@ class GetDisplayMediaCapturedSurfaceControlTest : public WebRtcTestBase {
         capture_session.GetZoomLevel();
         return;
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   void SetUpInProcessBrowserTestFixture() override {

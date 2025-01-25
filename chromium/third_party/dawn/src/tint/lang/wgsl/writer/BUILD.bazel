@@ -77,6 +77,7 @@ cc_library(
     "//src/tint/utils/symbol",
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
+    "//src/utils",
   ] + select({
     ":tint_build_wgsl_writer": [
       "//src/tint/lang/wgsl/writer/ast_printer",
@@ -123,6 +124,7 @@ cc_library(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@gtest",
+    "//src/utils",
   ] + select({
     ":tint_build_wgsl_writer": [
       "//src/tint/lang/wgsl/writer",
@@ -139,7 +141,6 @@ cc_library(
     "writer_bench.cc",
   ],
   deps = [
-    "//src/tint/cmd/bench:bench",
     "//src/tint/lang/core",
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/type",
@@ -164,7 +165,13 @@ cc_library(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@benchmark",
+    "//src/utils",
   ] + select({
+    ":tint_build_wgsl_reader": [
+      "//src/tint/cmd/bench:bench",
+    ],
+    "//conditions:default": [],
+  }) + select({
     ":tint_build_wgsl_writer": [
       "//src/tint/lang/wgsl/writer",
     ],
@@ -182,5 +189,13 @@ alias(
 alias(
   name = "tint_build_wgsl_writer",
   actual = "//src/tint:tint_build_wgsl_writer_true",
+)
+
+selects.config_setting_group(
+    name = "tint_build_wgsl_writer_and_tint_build_wgsl_reader",
+    match_all = [
+        ":tint_build_wgsl_writer",
+        ":tint_build_wgsl_reader",
+    ],
 )
 

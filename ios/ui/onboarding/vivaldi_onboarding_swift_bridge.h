@@ -15,6 +15,7 @@
 #import "ios/ui/onboarding/vivaldi_onboarding_background_view.h"
 #import "ios/ui/onboarding/vivaldi_onboarding_promo_view.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
+#import "ios/ui/site_tracker_prefs/site_tracker_prefs_view_swift.h"
 #import "ui/base/l10n/l10n_util_mac_bridge.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 

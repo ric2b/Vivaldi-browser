@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {assertExists, assertTrue} from '../base/logging';
 import {Duration, time, Time, TimeSpan} from '../base/time';
 import {Actions, DeferredAction} from '../common/actions';
@@ -23,12 +22,7 @@ import {
   isMetatracingEnabled,
 } from '../common/metatracing';
 import {pluginManager} from '../common/plugins';
-import {
-  EngineConfig,
-  EngineMode,
-  PendingDeeplinkState,
-  ProfileType,
-} from '../common/state';
+import {EngineConfig, EngineMode, PendingDeeplinkState} from '../common/state';
 import {featureFlags, Flag} from '../core/feature_flags';
 import {globals, QuantizedLoad, ThreadDesc} from '../frontend/globals';
 import {
@@ -56,7 +50,6 @@ import {
   WasmEngineProxy,
 } from '../trace_processor/wasm_engine_proxy';
 import {showModal} from '../widgets/modal';
-
 import {CounterAggregationController} from './aggregation/counter_aggregation_controller';
 import {CpuAggregationController} from './aggregation/cpu_aggregation_controller';
 import {CpuByProcessAggregationController} from './aggregation/cpu_by_process_aggregation_controller';
@@ -69,23 +62,11 @@ import {WattsonPackageAggregationController} from './aggregation/wattson/package
 import {ThreadAggregationController} from './aggregation/thread_aggregation_controller';
 import {Child, Children, Controller} from './controller';
 import {
-  CpuProfileController,
-  CpuProfileControllerArgs,
-} from './cpu_profile_controller';
-import {
   FlowEventsController,
   FlowEventsControllerArgs,
 } from './flow_events_controller';
 import {LoadingManager} from './loading_manager';
-import {
-  PIVOT_TABLE_REDUX_FLAG,
-  PivotTableController,
-} from './pivot_table_controller';
-import {SearchController} from './search_controller';
-import {
-  SelectionController,
-  SelectionControllerArgs,
-} from './selection_controller';
+import {PivotTableController} from './pivot_table_controller';
 import {TraceErrorController} from './trace_error_controller';
 import {
   TraceBufferStream,
@@ -94,13 +75,12 @@ import {
   TraceStream,
 } from '../core/trace_stream';
 import {decideTracks} from './track_decider';
-import {profileType} from '../frontend/legacy_flamegraph_panel';
-import {LegacyFlamegraphCache} from '../core/legacy_flamegraph_cache';
 import {
   deserializeAppStatePhase1,
   deserializeAppStatePhase2,
 } from '../common/state_serialization';
-import {TraceContext} from '../frontend/trace_context';
+import {ProfileType, profileType} from '../public/selection';
+import {TraceInfo} from '../public/trace_info';
 
 type States = 'init' | 'loading_trace' | 'ready';
 
@@ -265,19 +245,9 @@ export class TraceController extends Controller<States> {
         const engine = assertExists(this.engine);
         const childControllers: Children = [];
 
-        const selectionArgs: SelectionControllerArgs = {engine};
-        childControllers.push(
-          Child('selection', SelectionController, selectionArgs),
-        );
-
         const flowEventsArgs: FlowEventsControllerArgs = {engine};
         childControllers.push(
           Child('flowEvents', FlowEventsController, flowEventsArgs),
-        );
-
-        const cpuProfileArgs: CpuProfileControllerArgs = {engine};
-        childControllers.push(
-          Child('cpuProfile', CpuProfileController, cpuProfileArgs),
         );
 
         childControllers.push(
@@ -298,73 +268,67 @@ export class TraceController extends Controller<States> {
             kind: 'cpu_by_process_aggregation',
           }),
         );
-        if (!PIVOT_TABLE_REDUX_FLAG.get()) {
-          // Pivot table is supposed to handle the use cases the slice
-          // aggregation panel is used right now. When a flag to use pivot
-          // tables is enabled, do not add slice aggregation controller.
-          childControllers.push(
-            Child('slice_aggregation', SliceAggregationController, {
-              engine,
-              kind: 'slice_aggregation',
-            }),
-          );
-        }
+        // Pivot table is supposed to handle the use cases the slice
+        // aggregation panel is used right now. When a flag to use pivot
+        // tables is enabled, do not add slice aggregation controller.
+        childControllers.push(
+          Child('slice_aggregation', SliceAggregationController, {
+            engine,
+            kind: 'slice_aggregation',
+          }),
+        );
         childControllers.push(
           Child('counter_aggregation', CounterAggregationController, {
             engine,
             kind: 'counter_aggregation',
           }),
         );
-        childControllers.push(
-          Child(
-            'wattson_estimate_aggregation',
-            WattsonEstimateAggregationController,
-            {
-              engine,
-              kind: 'wattson_estimate_aggregation',
-            },
-          ),
-        );
-        childControllers.push(
-          Child(
-            'wattson_thread_aggregation',
-            WattsonThreadAggregationController,
-            {
-              engine,
-              kind: 'wattson_thread_aggregation',
-            },
-          ),
-        );
-        childControllers.push(
-          Child(
-            'wattson_process_aggregation',
-            WattsonProcessAggregationController,
-            {
-              engine,
-              kind: 'wattson_process_aggregation',
-            },
-          ),
-        );
-        childControllers.push(
-          Child(
-            'wattson_package_aggregation',
-            WattsonPackageAggregationController,
-            {
-              engine,
-              kind: 'wattson_package_aggregation',
-            },
-          ),
-        );
+        if (pluginManager.isActive('org.kernel.Wattson')) {
+          childControllers.push(
+            Child(
+              'wattson_estimate_aggregation',
+              WattsonEstimateAggregationController,
+              {
+                engine,
+                kind: 'wattson_estimate_aggregation',
+              },
+            ),
+          );
+          childControllers.push(
+            Child(
+              'wattson_thread_aggregation',
+              WattsonThreadAggregationController,
+              {
+                engine,
+                kind: 'wattson_thread_aggregation',
+              },
+            ),
+          );
+          childControllers.push(
+            Child(
+              'wattson_process_aggregation',
+              WattsonProcessAggregationController,
+              {
+                engine,
+                kind: 'wattson_process_aggregation',
+              },
+            ),
+          );
+          childControllers.push(
+            Child(
+              'wattson_package_aggregation',
+              WattsonPackageAggregationController,
+              {
+                engine,
+                kind: 'wattson_package_aggregation',
+              },
+            ),
+          );
+        }
         childControllers.push(
           Child('frame_aggregation', FrameAggregationController, {
             engine,
             kind: 'frame_aggregation',
-          }),
-        );
-        childControllers.push(
-          Child('search', SearchController, {
-            engine,
-            app: globals,
           }),
         );
         childControllers.push(
@@ -386,10 +350,6 @@ export class TraceController extends Controller<States> {
   onDestroy() {
     pluginManager.onTraceClose();
     globals.engines.delete(this.engineId);
-
-    // Invalidate the flamegraph cache.
-    // TODO(stevegolton): migrate this to the new system when it's ready.
-    globals.areaFlamegraphCache = new LegacyFlamegraphCache('area');
   }
 
   private async loadTrace(): Promise<EngineMode> {
@@ -486,6 +446,9 @@ export class TraceController extends Controller<States> {
       assertTrue(this.engine instanceof HttpRpcEngine);
       await this.engine.restoreInitialTables();
     }
+    for (const p of globals.extraSqlPackages) {
+      await this.engine.registerSqlModules(p);
+    }
 
     // traceUuid will be '' if the trace is not cacheable (URL or RPC).
     const traceUuid = await this.cacheCurrentTrace();
@@ -494,6 +457,7 @@ export class TraceController extends Controller<States> {
     if (traceDetails.traceTitle) {
       document.title = `${traceDetails.traceTitle} - Perfetto UI`;
     }
+
     await globals.onTraceLoad(this.engine, traceDetails);
 
     const shownJsonWarning =
@@ -515,15 +479,9 @@ export class TraceController extends Controller<States> {
       }
     }
 
-    const emptyOmniboxState = {
-      omnibox: '',
-      mode: globals.state.omniboxState.mode || 'SEARCH',
-    };
-
-    const actions: DeferredAction[] = [
-      Actions.setOmnibox(emptyOmniboxState),
-      Actions.setTraceUuid({traceUuid}),
-    ];
+    globals.omnibox.reset();
+    globals.searchManager.reset();
+    const actions: DeferredAction[] = [Actions.setTraceUuid({traceUuid})];
 
     const visibleTimeSpan = await computeVisibleTime(
       traceDetails.start,
@@ -551,13 +509,7 @@ export class TraceController extends Controller<States> {
       this.updateStatus(`Running plugin: ${id}`);
     });
 
-    {
-      // When we reload from a permalink don't create extra tracks:
-      const {pinnedTracks, tracks} = globals.state;
-      if (!pinnedTracks.length && !Object.keys(tracks).length) {
-        await this.listTracks();
-      }
-    }
+    await this.listTracks();
 
     this.decideTabs();
 
@@ -577,9 +529,6 @@ export class TraceController extends Controller<States> {
       const res = await engine.query(query);
       publishHasFtrace(res.numRows() > 0);
     }
-
-    globals.dispatch(Actions.sortThreadTracks({}));
-    globals.dispatch(Actions.maybeExpandOnlyTrackGroup({}));
 
     await this.selectFirstHeapProfile();
     await this.selectPerfSample(traceDetails);
@@ -605,20 +554,16 @@ export class TraceController extends Controller<States> {
       }
     }
 
-    globals.dispatch(Actions.maybeExpandOnlyTrackGroup({}));
-
     // Trace Processor doesn't support the reliable range feature for JSON
     // traces.
     if (!isJsonTrace && ENABLE_CHROME_RELIABLE_RANGE_ANNOTATION_FLAG.get()) {
       const reliableRangeStart = await computeTraceReliableRangeStart(engine);
       if (reliableRangeStart > 0) {
-        globals.dispatch(
-          Actions.addNote({
-            timestamp: reliableRangeStart,
-            color: '#ff0000',
-            text: 'Reliable Range Start',
-          }),
-        );
+        globals.noteManager.addNote({
+          timestamp: reliableRangeStart,
+          color: '#ff0000',
+          text: 'Reliable Range Start',
+        });
       }
     }
 
@@ -631,55 +576,61 @@ export class TraceController extends Controller<States> {
       globals.restoreAppStateAfterTraceLoad = undefined;
     }
 
+    await pluginManager.onTraceReady();
+
     return engineMode;
   }
 
   private async selectPerfSample(traceTime: {start: time; end: time}) {
-    const query = `select upid
-        from perf_sample
-        join thread using (utid)
-        where callsite_id is not null
-        order by ts desc limit 1`;
-    const profile = await assertExists(this.engine).query(query);
+    const profile = await assertExists(this.engine).query(`
+      select upid
+      from perf_sample
+      join thread using (utid)
+      where callsite_id is not null
+      order by ts desc
+      limit 1
+    `);
     if (profile.numRows() !== 1) return;
     const row = profile.firstRow({upid: NUM});
     const upid = row.upid;
     const leftTs = traceTime.start;
     const rightTs = traceTime.end;
-    globals.dispatch(
-      Actions.selectPerfSamples({
-        id: 0,
-        upid,
-        leftTs,
-        rightTs,
-        type: ProfileType.PERF_SAMPLE,
-      }),
-    );
+    globals.selectionManager.setPerfSamples({
+      id: 0,
+      upid,
+      leftTs,
+      rightTs,
+      type: ProfileType.PERF_SAMPLE,
+    });
   }
 
   private async selectFirstHeapProfile() {
-    const query = `select * from (
-      select
-        min(ts) AS ts,
-        'heap_profile:' || group_concat(distinct heap_name) AS type,
-        upid
-      from heap_profile_allocation
-      group by upid
-      union
-      select distinct graph_sample_ts as ts, 'graph' as type, upid
-      from heap_graph_object)
-      order by ts limit 1`;
+    const query = `
+      select * from (
+        select
+          min(ts) AS ts,
+          'heap_profile:' || group_concat(distinct heap_name) AS type,
+          upid
+        from heap_profile_allocation
+        group by upid
+        union
+        select distinct graph_sample_ts as ts, 'graph' as type, upid
+        from heap_graph_object
+      )
+      order by ts
+      limit 1
+    `;
     const profile = await assertExists(this.engine).query(query);
     if (profile.numRows() !== 1) return;
     const row = profile.firstRow({ts: LONG, type: STR, upid: NUM});
     const ts = Time.fromRaw(row.ts);
-    let profType = row.type;
-    if (profType == 'heap_profile:libc.malloc,com.android.art') {
-      profType = 'heap_profile:com.android.art,libc.malloc';
-    }
-    const type = profileType(profType);
     const upid = row.upid;
-    globals.dispatch(Actions.selectHeapProfile({id: 0, upid, ts, type}));
+    globals.selectionManager.setHeapProfile({
+      id: 0,
+      upid,
+      ts,
+      type: profileType(row.type),
+    });
   }
 
   private async selectPendingDeeplink(link: PendingDeeplinkState) {
@@ -715,19 +666,20 @@ export class TraceController extends Controller<States> {
       });
 
       const id = row.traceProcessorTrackId;
-      const trackKey = globals.trackManager.trackKeyByTrackId.get(id);
-      if (trackKey === undefined) {
+      const track = globals.workspace.flatTracks.find((t) =>
+        globals.trackManager.getTrack(t.uri)?.tags?.trackIds?.includes(id),
+      );
+      if (track === undefined) {
         return;
       }
-      globals.setLegacySelection(
+      globals.selectionManager.setLegacy(
         {
           kind: 'SLICE',
           id: row.id,
-          trackKey,
+          trackUri: track.uri,
           table: 'slice',
         },
         {
-          clearSearch: true,
           pendingScrollId: row.id,
           switchToCurrentSelectionTab: false,
         },
@@ -737,15 +689,13 @@ export class TraceController extends Controller<States> {
 
   private async listTracks() {
     this.updateStatus('Loading tracks');
-    const engine = assertExists(this.engine);
-    const actions = await decideTracks(engine);
-    globals.dispatchMultiple(actions);
+    await decideTracks();
   }
 
   // Show the list of default tabs, but don't make them active!
   private decideTabs() {
     for (const tabUri of globals.tabManager.defaultTabs) {
-      globals.dispatch(Actions.showTab({uri: tabUri}));
+      globals.tabManager.showTab(tabUri);
     }
   }
 
@@ -1166,7 +1116,7 @@ async function computeVisibleTime(
 async function getTraceTimeDetails(
   engine: Engine,
   engineCfg: EngineConfig,
-): Promise<TraceContext> {
+): Promise<TraceInfo> {
   const traceTime = await getTraceTimeBounds(engine);
 
   // Find the first REALTIME or REALTIME_COARSE clock snapshot.
@@ -1269,6 +1219,7 @@ async function getTraceTimeDetails(
     traceTzOffset,
     cpus: await getCpus(engine),
     gpuCount: await getNumberOfGpus(engine),
+    source: engineCfg.source,
   };
 }
 

@@ -36,6 +36,7 @@
 #include "printing/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/local_interface_provider.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "v8/include/v8-forward.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -50,7 +51,10 @@ class ChromeRenderThreadObserver;
 #if BUILDFLAG(ENABLE_SPELLCHECK)
 class SpellCheck;
 #endif
+
+namespace sampling_profiler {
 class ThreadProfiler;
+}  // namespace sampling_profiler
 
 namespace blink {
 class WebServiceWorkerContextProxy;
@@ -170,6 +174,8 @@ class ChromeContentRendererClient
   bool IsOriginIsolatedPepperPlugin(const base::FilePath& plugin_path) override;
   std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
   CreateWebSocketHandshakeThrottleProvider() override;
+  bool ShouldUseCodeCacheWithHashing(
+      const blink::WebURL& request_url) const override;
   bool ShouldReportDetailedMessageForSource(
       const std::u16string& source) override;
   std::unique_ptr<blink::WebContentSettingsClient>
@@ -199,7 +205,8 @@ class ChromeContentRendererClient
       v8::Local<v8::Context> v8_context,
       int64_t service_worker_version_id,
       const GURL& service_worker_scope,
-      const GURL& script_url) override;
+      const GURL& script_url,
+      const blink::ServiceWorkerToken& service_worker_token) override;
   void DidStartServiceWorkerContextOnWorkerThread(
       int64_t service_worker_version_id,
       const GURL& service_worker_scope,
@@ -282,7 +289,7 @@ class ChromeContentRendererClient
 #endif
 
   // Used to profile main thread.
-  std::unique_ptr<ThreadProfiler> main_thread_profiler_;
+  std::unique_ptr<sampling_profiler::ThreadProfiler> main_thread_profiler_;
 
   std::unique_ptr<ChromeRenderThreadObserver> chrome_observer_;
   std::unique_ptr<web_cache::WebCacheImpl> web_cache_impl_;

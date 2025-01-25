@@ -18,11 +18,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAnimatedImageResume);
 CC_BASE_EXPORT extern bool IsImpulseScrollAnimationEnabled();
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSynchronizedScrolling);
 
-// When enabled, the double tap to zoom will be disabled when the viewport
-// meta tag is properly set for mobile using content=width=device-width
-// or content=initial-scale=1.0
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kRemoveMobileViewportDoubleTap);
-
 // When enabled, scrolling within a covering snap area avoids or snaps to inner
 // nested areas, avoiding resting on positions which do not snap the inner area.
 // E.g. when scrolling within snap area A, it will stop either before/after
@@ -51,9 +46,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kScrollSnapPreferCloserCovering);
 // unified scroll with main-thread repaint reasons.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMainRepaintScrollPrefersNewContent);
 
-// When enabled, cc will show blink's Web-Vital metrics inside its heads up
-// display.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kHudDisplayForPerformanceMetrics);
 
 // Whether RenderSurface::common_ancestor_clip_id() is used to clip to the
 // common ancestor clip when any contributing layer escapes the clip of the
@@ -193,6 +185,12 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kDontAlwaysPushPictureLayerImpls);
 // to be used when prerender initial navigation is happening in background.
 // Please see crbug.com/41496019 for more details.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kWarmUpCompositor);
+
+// Kill switch for a bunch of optimizations for cc-slimming project.
+// Please see crbug.com/335450599 for more details.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kCCSlimming);
+// Check if the above feature is enabled. For performance purpose.
+CC_BASE_EXPORT bool IsCCSlimmingEnabled();
 
 // Modes for `kWaitForLateScrollEvents` changing event dispatch. Where the
 // default is to just always enqueue scroll events.

@@ -74,10 +74,16 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
       return "notifications";
     case WEB_VIEW_PERMISSION_TYPE_CAMERA:
       return "camera";
+    case WEB_VIEW_PERMISSION_TYPE_CLIPBOARD:
+      return "clipboard";
     case WEB_VIEW_PERMISSION_TYPE_MICROPHONE:
       return "microphone";
     case WEB_VIEW_PERMISSION_TYPE_MICROPHONE_AND_CAMERA:
       return "microphone_and_camera";
+    case WEB_VIEW_PERMISSION_TYPE_MIDI_SYSEX:
+      return "midi-sysex";
+    case WEB_VIEW_PERMISSION_TYPE_IDLE_DETECTION:
+      return "idle_detection";
     case WEB_VIEW_PERMISSION_TYPE_SENSORS:
       return "sensors";
     case WEB_VIEW_PROTOCOL_HANDLING:
@@ -189,8 +195,7 @@ void RecordUserInitiatedUMA(
 
 WebViewPermissionHelper::WebViewPermissionHelper(WebViewGuest* web_view_guest)
     : next_permission_request_id_(guest_view::kInstanceIDNone),
-      web_view_guest_(web_view_guest),
-      default_media_access_permission_(false) {
+      web_view_guest_(web_view_guest) {
   web_view_permission_helper_delegate_.reset(
       ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(this));
 }
@@ -339,7 +344,16 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
       request_type, std::move(request_info),
       base::BindOnce(&WebViewPermissionHelper::OnMediaPermissionResponse,
                      weak_factory_.GetWeakPtr(), request, std::move(callback)),
-      default_media_access_permission_);
+      /*allowed_by_default=*/false);
+}
+
+void WebViewPermissionHelper::RequestMediaAccessPermissionForControlledFrame(
+    content::WebContents* source,
+    const content::MediaStreamRequest& request,
+    content::MediaResponseCallback callback) {
+  web_view_permission_helper_delegate_
+      ->RequestMediaAccessPermissionForControlledFrame(source, request,
+                                                       std::move(callback));
 }
 
 bool WebViewPermissionHelper::CheckMediaAccessPermission(
@@ -366,6 +380,15 @@ bool WebViewPermissionHelper::CheckMediaAccessPermission(
                                        ->GetGuestMainFrame()
                                        ->GetParentOrOuterDocumentOrEmbedder(),
                                    security_origin, type);
+}
+
+bool WebViewPermissionHelper::CheckMediaAccessPermissionForControlledFrame(
+    content::RenderFrameHost* render_frame_host,
+    const url::Origin& security_origin,
+    blink::mojom::MediaStreamType type) {
+  return web_view_permission_helper_delegate_
+      ->CheckMediaAccessPermissionForControlledFrame(render_frame_host,
+                                                     security_origin, type);
 }
 
 void WebViewPermissionHelper::OnMediaPermissionResponse(
@@ -465,6 +488,13 @@ void WebViewPermissionHelper::RequestFileSystemPermission(
     base::OnceCallback<void(bool)> callback) {
   web_view_permission_helper_delegate_->RequestFileSystemPermission(
       url, allowed_by_default, std::move(callback));
+}
+
+void WebViewPermissionHelper::RequestFullscreenPermission(
+    const url::Origin& requesting_origin,
+    PermissionResponseCallback callback) {
+  web_view_permission_helper_delegate_->RequestFullscreenPermission(
+      requesting_origin, std::move(callback));
 }
 
 int WebViewPermissionHelper::RequestPermission(

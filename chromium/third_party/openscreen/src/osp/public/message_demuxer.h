@@ -47,13 +47,21 @@ class MessageDemuxer {
                  bool is_default,
                  uint64_t instance_id,
                  msgs::Type message_type);
+    MessageWatch(const MessageWatch&) = delete;
+    MessageWatch& operator=(const MessageWatch&) = delete;
     MessageWatch(MessageWatch&&) noexcept;
-    ~MessageWatch();
     MessageWatch& operator=(MessageWatch&&) noexcept;
+    ~MessageWatch();
 
     explicit operator bool() const { return parent_; }
+    // Stop this MessageWatch by calling `StopWatching()` and reset its members.
+    void Reset();
 
    private:
+    // Stop this MessageWatch if `parent_` is not empty. Otherwise, this is a
+    // no-op.
+    void StopWatching();
+
     MessageDemuxer* parent_ = nullptr;
     bool is_default_ = false;
     uint64_t instance_id_ = 0u;
@@ -116,10 +124,6 @@ class MessageDemuxer {
   // Map<instance_id, Map<connection_id, data_buffer>>
   std::map<uint64_t, std::map<uint64_t, std::vector<uint8_t>>> buffers_;
 };
-
-// TODO(btolsch): Make sure all uses of MessageWatch are converted to this
-// resest function for readability.
-void StopWatching(MessageDemuxer::MessageWatch* watch);
 
 class MessageTypeDecoder {
  public:

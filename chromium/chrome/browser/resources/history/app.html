@@ -38,6 +38,11 @@
         font-weight: 400;
       }
 
+      #historyEmbeddingsDisclaimer[narrow] {
+        padding-inline: 24px;
+        max-width: none;
+      }
+
       cr-history-embeddings-filter-chips {
         margin: 0 auto;
         padding: 16px 8px;
@@ -79,6 +84,7 @@
 
       :host([enable-history-embeddings_]) #tabsScrollContainer {
         overflow: auto;
+        scrollbar-gutter: stable;
       }
 
       :host(:not([enable-history-embeddings_])) #tabs-content {
@@ -150,10 +156,14 @@
           on-iron-select="updateScrollTarget_">
         <div id="tabs-container" path="history">
           <div id="historyEmbeddingsDisclaimer" class="history-cards"
-              hidden$="[[!enableHistoryEmbeddings_]]">
+              hidden$="[[!enableHistoryEmbeddings_]]"
+              narrow$="[[hasDrawer_]]">
             $i18n{historyEmbeddingsDisclaimer}
-            <a href="$i18n{historyEmbeddingsHelpArticleUrl}" target="_blank"
-                aria-describedby="historyEmbeddingsDisclaimer">
+            <a id="historyEmbeddingsDisclaimerLink"
+                href="$i18n{historyEmbeddingsSettingsUrl}" target="_blank"
+                aria-describedby="historyEmbeddingsDisclaimer"
+                on-click="onHistoryEmbeddingsDisclaimerLinkClick_"
+                on-auxclick="onHistoryEmbeddingsDisclaimerLinkClick_">
               $i18n{learnMore}
             </a>
           </div>
@@ -186,7 +196,8 @@
                       num-chars-for-query="[[numCharsTypedInSearch_]]"
                       on-more-from-site-click="onHistoryEmbeddingsItemMoreFromSiteClick_"
                       on-remove-item-click="onHistoryEmbeddingsItemRemoveClick_"
-                      on-is-empty-changed="onHistoryEmbeddingsIsEmptyChanged_">
+                      on-is-empty-changed="onHistoryEmbeddingsIsEmptyChanged_"
+                      force-suppress-logging="[[historyEmbeddingsDisclaimerLinkClicked_]]">
                   </cr-history-embeddings>
                 </template>
               </div>
@@ -224,13 +235,13 @@
           </history-synced-device-manager>
         </template>
         <template is="dom-if"
-            if="[[productSpecificationsListsSelected_(selectedPage_)]]">
+            if="[[comparisonTablesSelected_(selectedPage_)]]">
           <product-specifications-lists id="productSpecificationsLists"
-              path="productSpecificationsLists"
+              path="comparisonTables"
               search-term="[[queryState_.searchTerm]]">
           </product-specifications-lists>
         </template>
-      </iron-pages>
+      </cr-page-selector>
     </div>
 
     <cr-lazy-render id="drawer">

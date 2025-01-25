@@ -23,13 +23,13 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="Profile.AddNewUser" enum="ProfileAddNewUser"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>rogerta@chromium.org</owner>
   <summary>The frequency of ways that new user profiles are added.</summary>
 </histogram>
 
 <histogram name="Profile.AddSignInFlowOutcome"
-    enum="ProfileSignedInFlowOutcome" expires_after="2025-01-05">
+    enum="ProfileSignedInFlowOutcome" expires_after="2025-03-09">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -39,7 +39,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.AllAccounts.Names" enum="ProfileAllAccountsNames"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -61,20 +61,20 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.Avatar" enum="ProfileAvatar"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>The frequency of selection of each avatar.</summary>
 </histogram>
 
-<histogram name="Profile.BookmarksSize" units="MB" expires_after="2024-12-08">
+<histogram name="Profile.BookmarksSize" units="MB" expires_after="2025-02-10">
   <owner>etienneb@chromium.org</owner>
   <owner>gab@chromium.org</owner>
   <summary>Size of the bookmarks database.</summary>
 </histogram>
 
 <histogram name="Profile.BrowserActive.PerProfile" enum="Profile"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>msarda@chromium.org</owner>
   <owner>tangltom@chromium.org</owner>
   <summary>
@@ -111,7 +111,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.DeleteProfileContext" enum="ProfileDeleteContext"
-    expires_after="2024-12-24">
+    expires_after="2025-02-23">
   <owner>alexilin@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <owner>msalama@chromium.org</owner>
@@ -168,7 +168,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.Guest.OTR.Lifetime" units="minutes"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>arabm@google.com</owner>
   <owner>chrome-incognito@google.com</owner>
   <summary>
@@ -178,7 +178,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.Guest.TypeCreated" enum="GuestProfileCreatedType"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>dgn@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -189,7 +189,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.Incognito.Lifetime" units="minutes"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>rhalavati@chromium.org</owner>
   <owner>chrome-incognito@google.com</owner>
   <summary>
@@ -201,7 +201,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.Incognito.MainFrameNavigationsPerSession"
-    units="navigations" expires_after="2024-12-08">
+    units="navigations" expires_after="2025-02-10">
   <owner>rhalavati@chromium.org</owner>
   <owner>chrome-incognito@google.com</owner>
   <summary>
@@ -213,7 +213,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.Incognito.MovedToBackgroundAfterDuration"
-    units="minutes" expires_after="2024-12-15">
+    units="minutes" expires_after="2025-02-16">
   <owner>arabm@google.com</owner>
   <owner>chrome-incognito@google.com</owner>
   <summary>
@@ -257,7 +257,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.KeyedService.Count.SystemProfile{ProfileType}"
-    units="services" expires_after="2024-11-27">
+    units="services" expires_after="2025-01-26">
   <owner>droger@chromium.org</owner>
   <owner>rsult@google.com</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -286,29 +286,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Profile.LacrosPrimaryProfileFirstRunEntryPoint"
-    enum="FirstRunEntryPoint" expires_after="M130">
-  <owner>dgn@chromium.org</owner>
-  <owner>droger@chromium.org</owner>
-  <summary>
-    Records the entry point that triggered the lacros first run for the primary
-    profile being shown. This is recorded when the first run is shown. If the
-    FRE is skipped, this is never recorded. If the FRE is exited early and needs
-    to be shown again, or if the user re-triggers the FRE while it is already
-    shown, there would be more than one record for that install.
-  </summary>
-</histogram>
-
-<histogram name="Profile.LacrosPrimaryProfileFirstRunOutcome"
-    enum="ProfileSignedInFlowOutcome" expires_after="M130">
-  <owner>dgn@chromium.org</owner>
-  <owner>droger@chromium.org</owner>
-  <summary>
-    Records the outcome of the lacros first run for the primary profile (also in
-    the case it gets skipped silently).
-  </summary>
-</histogram>
-
 <histogram name="Profile.LiveProfileCount" units="profiles"
     expires_after="2024-12-30">
   <owner>nicolaso@chromium.org</owner>
@@ -327,19 +304,25 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Profile.Menu.ClickedActionableItem"
+<histogram name="Profile.Menu.ClickedActionableItem{ProfileType}"
     enum="ProfileMenuActionableItem" expires_after="2024-11-27">
   <owner>droger@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
-    Recorded when an actionable item(e.g. button, link) in the profile menu is
-    clicked.
+    Recorded when an actionable item (e.g. button, link) in the profile menu is
+    clicked. {ProfileType}.
   </summary>
+  <token key="ProfileType">
+    <variant name="" summary="Output for all profile types"/>
+    <variant name="_Supervised"
+        summary="Output only for profiles which are subject to parental
+                 controls"/>
+  </token>
 </histogram>
 
 <histogram name="Profile.NetUserCount" enum="ProfileNetUserCount"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>rogerta@chromium.org</owner>
   <summary>
     Counts of users added and deleted. Percentages are not meaningful. Please
@@ -365,7 +348,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.NumberOfAccountsPerProfile" units="units"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <summary>
@@ -376,7 +359,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.NumberOfActiveProfiles" units="profiles"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>droger@chromium.org</owner>
   <owner>feuunk@chromium.org</owner>
   <summary>
@@ -385,9 +368,10 @@ chromium-metrics-reviews@google.com.
     used in the last 28 days. As such, it differs Profile.NumberOfProfiles.
 
     However, as of Feb 2024 intention is not reality. Chrome on Android assumes
-    the (sole) profile is active, even if it is not, and Chrome on iOS assumes
-    the (sole) profile is inactive, even if it is active. On desktop platforms
-    the activity detection is believed to work reliably.
+    the (sole) profile is active, even if it is not. Before M129, Chrome on iOS
+    assumed the (sole) profile is inactive, even if it is active. On desktop
+    platforms (all milestones) and on iOS M129+, the activity detection is
+    believed to work reliably.
 
     Also of note: ChromeOS has a notion of &quot;users&quot;. A ChromeOS device
     may have multiple users. Users are an entirely different concept than
@@ -397,7 +381,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.NumberOfManagedProfiles" units="profiles"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -411,7 +395,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.NumberOfProfiles" units="profiles"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -423,8 +407,22 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Profile.NumberOfProfilesAtProfileInit" units="profiles"
+    expires_after="2025-02-02">
+  <owner>alexilin@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <summary>
+    Records the count of profiles every time a new profile is initialized,
+    including the newly initialized profile. Only recorded for on-disk profiles
+    (Incognito and Guest are excluded, for example).
+
+    The total histogram count can be used to estimate how many profiles were
+    initialized in total.
+  </summary>
+</histogram>
+
 <histogram name="Profile.NumberOfProfilesAtProfileSwitch" units="profiles"
-    expires_after="2024-12-01">
+    expires_after="2025-02-02">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -436,7 +434,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.NumberOfSignedInProfiles" units="profiles"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -448,7 +446,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.NumberOfUnusedProfiles" units="profiles"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <summary>
@@ -458,7 +456,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.PercentageOfManagedProfiles" units="units"
-    expires_after="2024-11-01">
+    expires_after="2025-03-09">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <summary>
@@ -478,7 +476,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Profile.SessionDuration.PerProfile" enum="Profile"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>msarda@chromium.org</owner>
   <owner>alexilin@chromium.org</owner>
   <summary>
@@ -499,19 +497,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram base="true" name="Profile.State.Avatar" enum="ProfileAvatarState"
-    expires_after="2024-09-01">
-  <owner>droger@chromium.org</owner>
-  <owner>chrome-signin-team@google.com</owner>
-  <summary>
-    The state of profile avatars as would be displayed to the user in the
-    profile picker. Recorded on startup of Chrome and whenever Chrome is used
-    after at least 30 minutes of inactivity.
-  </summary>
-</histogram>
-
 <histogram base="true" name="Profile.State.LastUsed" units="days"
-    expires_after="2024-12-08">
+    expires_after="2025-03-09">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -521,7 +508,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="Profile.State.SyncEnabled" enum="BooleanEnabled"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -531,7 +518,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="Profile.State.UnconsentedPrimaryAccountType"
-    enum="ProfileUnconsentedPrimaryAccountType" expires_after="2025-01-05">
+    enum="ProfileUnconsentedPrimaryAccountType" expires_after="2025-03-09">
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -540,14 +527,14 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Profile.TotalSize" units="MB" expires_after="2025-01-05">
+<histogram name="Profile.TotalSize" units="MB" expires_after="2025-03-09">
   <owner>etienneb@chromium.org</owner>
   <owner>gab@chromium.org</owner>
   <summary>Total size of the profile data (excluding sub-folders).</summary>
 </histogram>
 
 <histogram name="Profile.TotalSizeRecursive" units="MB"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>anthonyvd@chromium.org</owner>
   <owner>chrome-catan@google.com</owner>
   <summary>
@@ -622,7 +609,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Profile.{Database}Size" units="MB" expires_after="2024-11-17">
+<histogram name="Profile.{Database}Size" units="MB" expires_after="2025-01-26">
   <owner>etienneb@chromium.org</owner>
   <owner>gab@chromium.org</owner>
   <summary>
@@ -644,7 +631,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfileChooser.HasProfilesShown" enum="BooleanShown"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>vasilii@chromium.org</owner>
   <owner>ewald@chromium.org</owner>
   <summary>
@@ -707,7 +694,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.FirstRun.DefaultBrowser"
-    enum="FirstRunDefaultBrowserChoice" expires_after="2024-12-08">
+    enum="FirstRunDefaultBrowserChoice" expires_after="2025-02-10">
   <owner>dgn@chromium.org</owner>
   <owner>gabolvr@google.com</owner>
   <owner>for-you-fre@google.com</owner>
@@ -718,7 +705,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.FirstRun.EntryPoint" enum="FirstRunEntryPoint"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>dgn@chromium.org</owner>
   <owner>for-you-fre@google.com</owner>
   <summary>
@@ -728,14 +715,11 @@ chromium-metrics-reviews@google.com.
     (relevant only on Lacros where we support showing the FRE more than once),
     or if the user re-triggers the FRE while it is already shown, there would be
     more than one record for that install.
-
-    Note: Profile.LacrosPrimaryProfileFirstRunEntryPoint on Lacros records the
-    same data.
   </summary>
 </histogram>
 
 <histogram name="ProfilePicker.FirstRun.ExitStatus" enum="FirstRunExitStatus"
-    expires_after="2024-11-03">
+    expires_after="2025-02-02">
   <owner>dgn@chromium.org</owner>
   <owner>for-you-fre@google.com</owner>
   <summary>
@@ -746,7 +730,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.FirstRun.FinishReason"
-    enum="FirstRunFinishReason" expires_after="2025-01-05">
+    enum="FirstRunFinishReason" expires_after="2025-03-09">
   <owner>dgn@chromium.org</owner>
   <owner>for-you-fre@google.com</owner>
   <summary>
@@ -758,7 +742,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.FirstRun.OrganizationAvailableTiming" units="ms"
-    expires_after="2024-11-03">
+    expires_after="2025-02-02">
   <owner>dgn@chromium.org</owner>
   <owner>jyammine@google.com</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -785,7 +769,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.FirstRun.ServiceCreated" enum="BooleanCreated"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>dgn@chromium.org</owner>
   <owner>for-you-fre@google.com</owner>
   <summary>
@@ -808,7 +792,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.Shown" enum="ProfilePickerEntryPoint"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>msalama@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -818,7 +802,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.StartupMode.{StartupStep}"
-    enum="ProfilePickerStartupProfileMode" expires_after="2025-01-05">
+    enum="ProfilePickerStartupProfileMode" expires_after="2025-03-09">
   <owner>droger@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -835,7 +819,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.StartupReason.{StartupStep}"
-    enum="ProfilePickerStartupProfileReason" expires_after="2025-01-05">
+    enum="ProfilePickerStartupProfileReason" expires_after="2025-03-09">
   <owner>droger@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -862,7 +846,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.StartupTime.FirstPaint" units="ms"
-    expires_after="2024-12-30">
+    expires_after="2025-03-02">
   <owner>alexilin@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -920,7 +904,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ProfilePicker.UserAction" enum="ProfilePickerAction"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>msalama@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>

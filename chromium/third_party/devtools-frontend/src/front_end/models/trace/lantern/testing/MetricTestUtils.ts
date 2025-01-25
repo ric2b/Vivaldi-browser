@@ -2,14 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Why can other tests import this directly but we get yelled at here?
-// eslint-disable-next-line rulesdir/es_modules_import
-import {TraceLoader} from '../../../../testing/TraceLoader.js';
 import * as TraceModel from '../../trace.js';
 import * as Lantern from '../lantern.js';
 
-async function loadTrace(context: Mocha.Context|Mocha.Suite|null, name: string): Promise<Lantern.Types.Trace> {
-  const traceEvents = await TraceLoader.rawEvents(context, name);
+function toLanternTrace(traceEvents: readonly TraceModel.Types.TraceEvents.TraceEventData[]): Lantern.Types.Trace {
   return {
     traceEvents: traceEvents as unknown as Lantern.Types.TraceEvent[],
   };
@@ -36,16 +32,22 @@ async function getComputationDataFromFixture({trace, settings, url}: {
   const traceEngineData = await runTraceEngine(trace);
   const requests = TraceModel.LanternComputationData.createNetworkRequests(trace, traceEngineData);
   const networkAnalysis = Lantern.Core.NetworkAnalyzer.analyze(requests);
+  const frameId = traceEngineData.Meta.mainFrameId;
+  const navigationId = traceEngineData.Meta.mainFrameNavigations[0].args.data?.navigationId;
+  if (!navigationId) {
+    throw new Error('no navigation id found');
+  }
 
   return {
     simulator: Lantern.Simulation.Simulator.createSimulator({...settings, networkAnalysis}),
     graph: TraceModel.LanternComputationData.createGraph(requests, trace, traceEngineData, url),
-    processedNavigation: TraceModel.LanternComputationData.createProcessedNavigation(traceEngineData),
+    processedNavigation:
+        TraceModel.LanternComputationData.createProcessedNavigation(traceEngineData, frameId, navigationId),
   };
 }
 
 export {
-  loadTrace,
+  toLanternTrace,
   runTraceEngine,
   getComputationDataFromFixture,
 };

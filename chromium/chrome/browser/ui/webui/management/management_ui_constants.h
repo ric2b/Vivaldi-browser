@@ -21,6 +21,7 @@ extern const char kManagementDeviceSignalsDisclosure[];
 
 #if BUILDFLAG(IS_CHROMEOS)
 extern const char kManagementLogUploadEnabled[];
+extern const char kManagementLogUploadEnabledNoLink[];
 extern const char kManagementReportActivityTimes[];
 extern const char kManagementReportDeviceAudioStatus[];
 extern const char kManagementReportDeviceGraphicsStatus[];
@@ -43,6 +44,7 @@ extern const char kManagementReportExtensions[];
 extern const char kManagementReportAndroidApplications[];
 extern const char kManagementOnFileTransferEvent[];
 extern const char kManagementOnFileTransferVisibleData[];
+extern const char kManagementReportFileEvents[];
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 extern const char kOnPremReportingExtensionStableId[];
@@ -74,8 +76,11 @@ extern const char kManagementOnPrintEvent[];
 extern const char kManagementOnPrintVisibleData[];
 extern const char kManagementOnPageVisitedEvent[];
 extern const char kManagementOnPageVisitedVisibleData[];
+extern const char kManagementOnExtensionTelemetryEvent[];
+extern const char kManagementOnExtensionTelemetryVisibleData[];
 
 extern const char kManagementLegacyTechReport[];
+extern const char kManagementLegacyTechReportNoLink[];
 
 extern const char kPolicyKeyReportMachineIdData[];
 extern const char kPolicyKeyReportUserIdData[];

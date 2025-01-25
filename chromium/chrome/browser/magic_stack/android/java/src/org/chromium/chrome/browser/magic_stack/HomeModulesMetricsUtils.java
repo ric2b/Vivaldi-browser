@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.magic_stack;
 
+import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.EDUCATIONAL_TIP;
 import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.PRICE_CHANGE;
 import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.SAFETY_HUB;
 import static org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType.SINGLE_TAB;
@@ -120,6 +121,8 @@ public class HomeModulesMetricsUtils {
                 return "TabResumption";
             case (SAFETY_HUB):
                 return "SafetyHub";
+            case (EDUCATIONAL_TIP):
+                return "EducationalTip";
             default:
                 assert false : "Module type not supported!";
                 return null;
@@ -157,6 +160,8 @@ public class HomeModulesMetricsUtils {
                 return ModuleType.TAB_RESUMPTION;
             case "SafetyHub":
                 return ModuleType.SAFETY_HUB;
+            case "EducationalTip":
+                return ModuleType.EDUCATIONAL_TIP;
             default:
                 assert false : "Module type not supported!";
                 return ModuleType.NUM_ENTRIES;

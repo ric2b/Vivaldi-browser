@@ -249,11 +249,6 @@
 #define IDC_CARET_BROWSING_TOGGLE      40260
 #define IDC_CHROME_TIPS                40263
 #define IDC_CHROME_WHATS_NEW           40264
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#define IDC_LACROS_DATA_MIGRATION      40265
-#endif
-
 #define IDC_PERFORMANCE                             40266
 #define IDC_EXTENSIONS_SUBMENU                         40267
 #define IDC_EXTENSIONS_SUBMENU_MANAGE_EXTENSIONS       40268
@@ -529,6 +524,7 @@
 // Autofill feedback.
 #define IDC_CONTENT_CONTEXT_AUTOFILL_FEEDBACK 52990
 // Autofill context menu commands
+#define IDC_CONTENT_CONTEXT_AUTOFILL_PREDICTION_IMPROVEMENTS 52993
 #define IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PLUS_ADDRESS 52994
 #define IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_ADDRESS 52995
 #define IDC_CONTENT_CONTEXT_AUTOFILL_FALLBACK_PAYMENTS 52996
@@ -547,6 +543,9 @@
 
 // Default browser prompt
 #define IDC_SET_BROWSER_AS_DEFAULT 53300
+
+// Enable / Disable compact mode for the browser
+#define IDC_COMPACT_MODE 53301
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

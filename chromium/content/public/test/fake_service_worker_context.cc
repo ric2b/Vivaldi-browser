@@ -39,7 +39,7 @@ void FakeServiceWorkerContext::RegisterServiceWorker(
 void FakeServiceWorkerContext::UnregisterServiceWorker(
     const GURL& scope,
     const blink::StorageKey& key,
-    ResultCallback callback) {
+    StatusCodeCallback callback) {
   NOTREACHED_IN_MIGRATION();
 }
 void FakeServiceWorkerContext::UnregisterServiceWorkerImmediately(
@@ -126,18 +126,18 @@ bool FakeServiceWorkerContext::IsLiveRunningServiceWorker(
 service_manager::InterfaceProvider&
 FakeServiceWorkerContext::GetRemoteInterfaces(
     int64_t service_worker_version_id) {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 blink::AssociatedInterfaceProvider&
 FakeServiceWorkerContext::GetRemoteAssociatedInterfaces(
     int64_t service_worker_version_id) {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void FakeServiceWorkerContext::SetForceUpdateOnPageLoadForTesting(
     bool force_update_on_page_load) {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void FakeServiceWorkerContext::StartServiceWorkerForNavigationHint(

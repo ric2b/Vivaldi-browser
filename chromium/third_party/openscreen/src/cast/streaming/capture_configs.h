@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "cast/streaming/constants.h"
+#include "cast/streaming/public/constants.h"
 #include "cast/streaming/resolution.h"
 #include "util/simple_fraction.h"
 

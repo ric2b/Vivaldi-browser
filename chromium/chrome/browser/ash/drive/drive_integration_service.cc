@@ -51,6 +51,7 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/drivefs/drivefs_bootstrap.h"
 #include "chromeos/ash/components/drivefs/drivefs_pinning_manager.h"
+#include "chromeos/ash/components/drivefs/drivefs_search_query.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom-shared.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/ash/components/drivefs/mojom/notifications.mojom-forward.h"
@@ -1054,8 +1055,7 @@ void DriveIntegrationService::MaybeRemountFileSystem(
 
   if (!remount_delay) {
     if (failed_to_mount && !is_online_) {
-      logger_.Log(logging::LOGGING_WARNING,
-                  "DriveFs failed to start; will retry when online");
+      LOG(WARNING) << "DriveFs failed to start; will retry when online";
       remount_when_online_ = true;
       return;
     }
@@ -1065,8 +1065,7 @@ void DriveIntegrationService::MaybeRemountFileSystem(
     ++drivefs_total_failures_count_;
     if (drivefs_total_failures_count_ > 10) {
       mount_failed_ = true;
-      logger_.Log(logging::LOGGING_ERROR,
-                  "DriveFs is too crashy. Leaving it alone.");
+      LOG(ERROR) << "DriveFs is too crashy. Leaving it alone";
       RecordBulkPinningMountFailureReason(
           profile_, BulkPinningMountFailureReason::kMoreThanTenTotalFailures);
       for (Observer& observer : observers_) {
@@ -1077,8 +1076,7 @@ void DriveIntegrationService::MaybeRemountFileSystem(
     }
     if (drivefs_consecutive_failures_count_ > 3) {
       mount_failed_ = true;
-      logger_.Log(logging::LOGGING_ERROR,
-                  "DriveFs keeps failing at start. Giving up.");
+      LOG(ERROR) << "DriveFs keeps failing at start. Giving up";
       RecordBulkPinningMountFailureReason(
           profile_, BulkPinningMountFailureReason::kThreeConsecutiveFailures);
       for (Observer& observer : observers_) {
@@ -1089,8 +1087,7 @@ void DriveIntegrationService::MaybeRemountFileSystem(
     }
     remount_delay =
         Seconds(5 * (1 << (drivefs_consecutive_failures_count_ - 1)));
-    logger_.Log(logging::LOGGING_WARNING, "DriveFs died, retry in %d seconds",
-                static_cast<int>(remount_delay.value().InSeconds()));
+    LOG(WARNING) << "DriveFs died, retry in " << remount_delay.value();
   }
 
   SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
@@ -1377,11 +1374,7 @@ void DriveIntegrationService::GetQuickAccessItems(
       base::BindOnce(&DriveIntegrationService::OnGetQuickAccessItems,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
 
-  GetDriveFsHost()->PerformSearch(
-      std::move(query),
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          std::move(on_response), FILE_ERROR_ABORT,
-          std::optional<std::vector<drivefs::mojom::QueryItemPtr>>()));
+  GetDriveFsHost()->PerformSearch(std::move(query), std::move(on_response));
 }
 
 void DriveIntegrationService::OnGetQuickAccessItems(
@@ -1420,27 +1413,28 @@ void DriveIntegrationService::SearchDriveByFileName(
   drive_query->sort_direction = sort_direction;
   drive_query->query_source = query_source;
 
-  auto on_response = base::BindOnce(
-      &DriveIntegrationService::OnSearchDriveByFileName,
-      weak_ptr_factory_.GetMutableWeakPtr(), std::move(callback));
-
-  GetDriveFsHost()->PerformSearch(
-      std::move(drive_query),
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          std::move(on_response), FILE_ERROR_ABORT,
-          std::optional<std::vector<drivefs::mojom::QueryItemPtr>>()));
+  GetDriveFsHost()->PerformSearch(std::move(drive_query), std::move(callback));
 }
 
-void DriveIntegrationService::OnSearchDriveByFileName(
-    SearchDriveByFileNameCallback callback,
-    FileError error,
-    std::optional<std::vector<drivefs::mojom::QueryItemPtr>> items) {
-  if (error != FILE_ERROR_OK || !items.has_value()) {
-    std::move(callback).Run(error, {});
-    return;
+std::unique_ptr<drivefs::DriveFsSearchQuery>
+DriveIntegrationService::CreateSearchQueryByFileName(
+    std::string query,
+    int max_results,
+    drivefs::mojom::QueryParameters::SortField sort_field,
+    drivefs::mojom::QueryParameters::SortDirection sort_direction,
+    drivefs::mojom::QueryParameters::QuerySource query_source) const {
+  if (!GetDriveFsHost()) {
+    return nullptr;
   }
 
-  std::move(callback).Run(error, std::move(items.value()));
+  auto drive_query = drivefs::mojom::QueryParameters::New();
+  drive_query->title = query;
+  drive_query->page_size = max_results;
+  drive_query->sort_field = sort_field;
+  drive_query->sort_direction = sort_direction;
+  drive_query->query_source = query_source;
+
+  return GetDriveFsHost()->CreateSearchQuery(std::move(drive_query));
 }
 
 void DriveIntegrationService::OnEnableMirroringStatusUpdate(

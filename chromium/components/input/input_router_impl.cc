@@ -15,10 +15,11 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/input/gesture_event_queue.h"
-#include "components/input/web_touch_event_traits.h"
 #include "components/input/input_disposition_handler.h"
-#include "components/input/input_router_client.h"
 #include "components/input/input_event_ack_state.h"
+#include "components/input/input_router_client.h"
+#include "components/input/utils.h"
+#include "components/input/web_touch_event_traits.h"
 #include "services/tracing/public/cpp/perfetto/flow_event_utils.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
@@ -43,6 +44,7 @@ using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
 using blink::WebTouchEvent;
 using perfetto::protos::pbzero::ChromeLatencyInfo;
+using perfetto::protos::pbzero::ChromeLatencyInfo2;
 using perfetto::protos::pbzero::TrackEvent;
 using ui::WebInputEventTraits;
 
@@ -578,16 +580,12 @@ void InputRouterImpl::FilterAndSendWebInputEvent(
   TRACE_EVENT1("input", "InputRouterImpl::FilterAndSendWebInputEvent", "type",
                WebInputEvent::GetName(input_event.GetType()));
   TRACE_EVENT("input,benchmark,devtools.timeline,latencyInfo",
-              "LatencyInfo.Flow", [&latency_info](perfetto::EventContext ctx) {
-                ChromeLatencyInfo* info =
-                    ctx.event()->set_chrome_latency_info();
-                info->set_trace_id(latency_info.trace_id());
-                info->set_step(ChromeLatencyInfo::STEP_SEND_INPUT_EVENT_UI);
-
-                tracing::FillFlowEvent(ctx,
-                                       perfetto::protos::pbzero::TrackEvent::
-                                           LegacyEvent::FLOW_INOUT,
-                                       latency_info.trace_id());
+              "LatencyInfo.Flow", [&](perfetto::EventContext ctx) {
+                ui::LatencyInfo::EmitIntermediateLatencyInfoStep(
+                    ctx, latency_info.trace_id(),
+                    perfetto::protos::pbzero::ChromeLatencyInfo2::Step::
+                        STEP_SEND_INPUT_EVENT_UI,
+                    InputEventTypeToProto(input_event.GetType()));
               });
 
   output_stream_validator_.Validate(input_event);
@@ -696,9 +694,15 @@ void InputRouterImpl::TouchEventHandled(
     blink::mojom::InputEventResultState state,
     blink::mojom::DidOverscrollParamsPtr overscroll,
     blink::mojom::TouchActionOptionalPtr touch_action) {
-  TRACE_EVENT2("input", "InputRouterImpl::TouchEventHandled", "type",
-               WebInputEvent::GetName(touch_event.event.GetType()), "ack",
-               InputEventResultStateToString(state));
+  TRACE_EVENT("input,benchmark,latencyInfo", "LatencyInfo.Flow",
+              [&](perfetto::EventContext ctx) {
+                ui::LatencyInfo::EmitIntermediateLatencyInfoStep(
+                    ctx, latency.trace_id(),
+                    ChromeLatencyInfo2::Step::STEP_TOUCH_EVENT_HANDLED,
+                    InputEventTypeToProto(touch_event.event.GetType()),
+                    InputEventResultStateToProto(state));
+              });
+
   if (source != blink::mojom::InputEventResultSource::kBrowser)
     client_->DecrementInFlightEventCount(source);
   touch_event.latency.AddNewLatencyFrom(latency);
@@ -727,9 +731,15 @@ void InputRouterImpl::GestureEventHandled(
     blink::mojom::InputEventResultState state,
     blink::mojom::DidOverscrollParamsPtr overscroll,
     blink::mojom::TouchActionOptionalPtr touch_action) {
-  TRACE_EVENT2("input", "InputRouterImpl::GestureEventHandled", "type",
-               WebInputEvent::GetName(gesture_event.event.GetType()), "ack",
-               InputEventResultStateToString(state));
+  TRACE_EVENT("input,benchmark,latencyInfo", "LatencyInfo.Flow",
+              [&](perfetto::EventContext ctx) {
+                ui::LatencyInfo::EmitIntermediateLatencyInfoStep(
+                    ctx, latency.trace_id(),
+                    ChromeLatencyInfo2::Step::STEP_GESTURE_EVENT_HANDLED,
+                    InputEventTypeToProto(gesture_event.event.GetType()),
+                    InputEventResultStateToProto(state));
+              });
+
   if (source != blink::mojom::InputEventResultSource::kBrowser)
     client_->DecrementInFlightEventCount(source);
 

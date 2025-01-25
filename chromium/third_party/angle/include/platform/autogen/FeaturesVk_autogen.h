@@ -424,6 +424,21 @@ struct FeaturesVk : FeatureSetBase
         &members, "http://anglebug.com/42263158"
     };
 
+    FeatureInfo supportsShaderInt8 = {
+        "supportsShaderInt8",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the VK_KHR_shader_float16_int8 extension "
+        "and has the shaderInt8 feature",
+        &members,
+    };
+
+    FeatureInfo supportsShaderFloat64 = {
+        "supportsShaderFloat64",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the shaderFloat64 bit of VkPhysicalDeviceFeatures",
+        &members,
+    };
+
     FeatureInfo allowGenerateMipmapWithCompute = {
         "allowGenerateMipmapWithCompute",
         FeatureCategory::VulkanFeatures,
@@ -935,6 +950,13 @@ struct FeaturesVk : FeatureSetBase
         "supportsFoveatedRendering",
         FeatureCategory::VulkanFeatures,
         "Use VK_KHR_fragment_shading_rate extension to implement QCOM foveated rendering extensions",
+        &members, "http://anglebug.com/42266906"
+    };
+
+    FeatureInfo generateFragmentShadingRateAttchementWithCpu = {
+        "generateFragmentShadingRateAttchementWithCpu",
+        FeatureCategory::VulkanFeatures,
+        "Generate the fragment shading rates on the CPU instead of a compute shader",
         &members, "http://anglebug.com/42266906"
     };
 
@@ -1485,6 +1507,118 @@ struct FeaturesVk : FeatureSetBase
         FeatureCategory::VulkanFeatures,
         "Prefer host cached + non-coherent memory for buffers with dynamic/stream usage.",
         &members, "https://issuetracker.google.com/347601787"
+    };
+
+    FeatureInfo supportsRoundingModeRteFp16 = {
+        "supportsRoundingModeRteFp16",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the RTEFloat16 rounding mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsRoundingModeRteFp32 = {
+        "supportsRoundingModeRteFp32",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the RTEFloat32 rounding mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsRoundingModeRteFp64 = {
+        "supportsRoundingModeRteFp64",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the RTEFloat64 rounding mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsRoundingModeRtzFp16 = {
+        "supportsRoundingModeRtzFp16",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the RTZFloat16 rounding mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsRoundingModeRtzFp32 = {
+        "supportsRoundingModeRtzFp32",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the RTZFloat32 rounding mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsRoundingModeRtzFp64 = {
+        "supportsRoundingModeRtzFp64",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the RTZFloat64 rounding mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsDenormPreserveFp16 = {
+        "supportsDenormPreserveFp16",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the DenormPreserveFloat16 mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsDenormPreserveFp32 = {
+        "supportsDenormPreserveFp32",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the DenormPreserveFloat32 mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsDenormPreserveFp64 = {
+        "supportsDenormPreserveFp64",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the DenormPreserveFloat64 mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsDenormFtzFp16 = {
+        "supportsDenormFtzFp16",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the DenormFlushToZeroFloat16 mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsDenormFtzFp32 = {
+        "supportsDenormFtzFp32",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the DenormFlushToZeroFloat32 mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsDenormFtzFp64 = {
+        "supportsDenormFtzFp64",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports the DenormFlushToZeroFloat64 mode from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsSignedZeroInfNanPreserveFp16 = {
+        "supportsSignedZeroInfNanPreserveFp16",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports SignedZeroInfNanPreserve execution mode for 16-bit floating point from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsSignedZeroInfNanPreserveFp32 = {
+        "supportsSignedZeroInfNanPreserveFp32",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports SignedZeroInfNanPreserve execution mode for 32-bit floating point from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo supportsSignedZeroInfNanPreserveFp64 = {
+        "supportsSignedZeroInfNanPreserveFp64",
+        FeatureCategory::VulkanFeatures,
+        "VkDevice supports SignedZeroInfNanPreserve execution mode for 64-bit floating point from VK_KHR_shader_float_controls extension",
+        &members, "https://anglebug.com/360031000"
+    };
+
+    FeatureInfo preferDoubleBufferSwapchainOnFifoMode = {
+        "preferDoubleBufferSwapchainOnFifoMode",
+        FeatureCategory::VulkanFeatures,
+        "allow create double buffer swapchain for fifo present mode",
+        &members, "https://issuetracker.google.com/311022968"
     };
 
 };

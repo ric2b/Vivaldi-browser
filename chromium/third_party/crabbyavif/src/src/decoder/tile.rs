@@ -32,7 +32,7 @@ impl DecodeSample {
         io: &'a mut Box<impl decoder::IO + ?Sized>,
         buffer: &'a Option<Vec<u8>>,
         size: usize,
-    ) -> AvifResult<&[u8]> {
+    ) -> AvifResult<&'a [u8]> {
         match buffer {
             Some(x) => {
                 let start_offset = usize_from_u64(self.offset)?;
@@ -56,7 +56,7 @@ impl DecodeSample {
         &'a self,
         io: &'a mut Box<impl decoder::IO + ?Sized>,
         buffer: &'a Option<Vec<u8>>,
-    ) -> AvifResult<&[u8]> {
+    ) -> AvifResult<&'a [u8]> {
         self.partial_data(io, buffer, self.size)
     }
 }

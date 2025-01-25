@@ -137,6 +137,7 @@ struct nouveau_bo {
 int nouveau_bo_new(struct nouveau_device *, uint32_t flags, uint32_t align,
 		   uint64_t size, union nouveau_bo_config *,
 		   struct nouveau_bo **);
+void nouveau_bo_make_global(struct nouveau_bo *);
 int nouveau_bo_wrap(struct nouveau_device *, uint32_t handle,
 		    struct nouveau_bo **);
 int nouveau_bo_name_ref(struct nouveau_device *v, uint32_t name,

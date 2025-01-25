@@ -21,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
@@ -47,7 +48,10 @@ class MahiPanelWidgetTest : public AshTestBase {
  public:
   // AshTestBase:
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(chromeos::features::kMahi);
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{chromeos::features::kMahi,
+                              chromeos::features::kFeatureManagementMahi},
+        /*disabled_features=*/{});
     AshTestBase::SetUp();
 
     fake_mahi_manager_ = std::make_unique<FakeMahiManager>();
@@ -240,7 +244,8 @@ TEST_F(MahiPanelWidgetTest, WidgetDoesNotHideOnFullScreen) {
 
   // Create a fullscreen window. The panel widget should still be visible.
   auto window = CreateTestWindow();
-  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_FULLSCREEN);
+  window->SetProperty(aura::client::kShowStateKey,
+                      ui::mojom::WindowShowState::kFullscreen);
   EXPECT_TRUE(widget->IsVisible());
 
   // Expect the mahi panel widget to be in the top-most window compared to the

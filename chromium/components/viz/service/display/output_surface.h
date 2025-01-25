@@ -11,6 +11,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/threading/thread_checker.h"
 #include "components/viz/common/display/update_vsync_parameters_callback.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/service/display/pending_swap_params.h"
@@ -58,6 +59,18 @@ class VIZ_SERVICE_EXPORT OutputSurface {
                 // the user.
     kHardware,  // The orientation same to the hardware.
   };
+
+  // Level of DComp support. Each value implies support for the features
+  // provided by the values before it.
+  enum class DCSupportLevel {
+    // Direct composition is not supported.
+    kNone,
+    // Support for presenting |IDXGISwapChain| and |IDCompositionSurface|.
+    kDCLayers,
+    // Support for presenting |IDCompositionTexture|.
+    kDCompTexture,
+  };
+
   struct Capabilities {
     Capabilities();
     ~Capabilities();
@@ -65,10 +78,9 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     Capabilities& operator=(const Capabilities& capabilities);
 
     PendingSwapParams pending_swap_params{1};
-    // The number of buffers for the SkiaOutputDevice. If the
-    // |supports_post_sub_buffer| true, SkiaOutputSurfaceImpl will track target
-    // damaged area based on this number.
-    int number_of_buffers = 2;
+    // The number of primary plane buffers. This value is only used when
+    // `renderer_allocates_images` is true.
+    int number_of_buffers = 0;
     // Whether this output surface renders to the default OpenGL zero
     // framebuffer or to an offscreen framebuffer.
     bool uses_default_gl_framebuffer = true;
@@ -83,15 +95,11 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     // OutputSurface's orientation mode.
     OrientationMode orientation_mode = OrientationMode::kLogic;
     // Whether this OutputSurface supports direct composition layers.
-    bool supports_dc_layers = false;
+    DCSupportLevel dc_support_level = DCSupportLevel::kNone;
     // Whether this OutputSurface should skip DrawAndSwap(). This is true for
     // the unified display on Chrome OS. All drawing is handled by the physical
     // displays so the unified display should skip that work.
     bool skips_draw = false;
-    // Indicates whether this surface will invalidate only the damage rect.
-    // When this is false contents outside the damaged area might need to be
-    // recomposited to the surface.
-    bool only_invalidates_damage_rect = true;
     // Whether OutputSurface::GetTargetDamageBoundingRect is implemented and
     // will return a bounding rectangle of the target buffer invalidated area.
     bool supports_target_damage = false;
@@ -101,8 +109,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     // This is copied over from gpu feature info since there is no easy way to
     // share that out of skia output surface.
     bool android_surface_control_feature_enabled = false;
-    // True if the buffer content will be preserved after presenting.
-    bool preserve_buffer_content = false;
     // True if the SkiaOutputDevice will set
     // SwapBuffersCompleteParams::frame_buffer_damage_area for every
     // SwapBuffers complete callback.
@@ -186,12 +192,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   virtual void EnsureBackbuffer() = 0;
   virtual void DiscardBackbuffer() = 0;
 
-  // Returns true if a main image overlay plane should be scheduled.
-  virtual bool IsDisplayedAsOverlayPlane() const = 0;
-
-  // Returns the |mailbox| corresponding to the main image's overlay.
-  virtual gpu::Mailbox GetOverlayMailbox() const;
-
   // Reshape the output surface.
   struct ReshapeParams {
     gfx::Size size;
@@ -272,6 +272,13 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   virtual void InitDelegatedInkPointRendererReceiver(
       mojo::PendingReceiver<gfx::mojom::DelegatedInkPointRenderer>
           pending_receiver);
+
+  // Read back the contents of this output surface. This reads back the root
+  // render pass and does not affect rendering in the ways that a copy request
+  // might (e.g. damage, overlays, etc). This uses |CopyOutputRequestCallback|
+  // to be able to be used with code that consumes copy output responses.
+  virtual void ReadbackForTesting(
+      CopyOutputRequest::CopyOutputRequestCallback result_callback);
 
  protected:
   struct OutputSurface::Capabilities capabilities_;

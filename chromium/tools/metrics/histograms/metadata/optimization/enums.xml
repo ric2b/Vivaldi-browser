@@ -389,7 +389,7 @@ chromium-metrics-reviews@google.com.
     The feature is enabled, and on-device execution is available, but it is not
     enabled for this feature.
   </int>
-  <int value="12" label="On-device model adaptation not available">
+  <int value="12" label="DEPRECATED: On-device model adaptation not available">
     The feature is enabled with model adaptation, and on-device foundation model
     is available, but model adaptation is not available for this feature.
   </int>
@@ -715,6 +715,12 @@ chromium-metrics-reviews@google.com.
   <int value="63" label="AUTOFILL_ABLATION_SITES_LIST4"/>
   <int value="64" label="AUTOFILL_ABLATION_SITES_LIST5"/>
   <int value="65" label="AUTOFILL_ABLATION_SITES_LIST6"/>
+  <int value="67" label="AMOUNT_EXTRACTION_ALLOWLIST"/>
+  <int value="68" label="AUTOFILL_PREDICTION_IMPROVEMENTS_ALLOWLIST"/>
+  <int value="69" label="BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM"/>
+  <int value="70" label="BUY_NOW_PAY_LATER_ALLOWLIST_ZIP"/>
+  <int value="71" label="SAVED_TAB_GROUP"/>
+  <int value="73" label="FORMS_ANNOTATIONS"/>
 </enum>
 
 <enum name="PageContentAnnotationsStorageStatus">

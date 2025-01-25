@@ -5,18 +5,16 @@
 #import "ios/chrome/browser/price_insights/ui/price_insights_cell.h"
 
 #import "base/strings/sys_string_conversions.h"
-#import "components/commerce/core/commerce_constants.h"
-#import "components/payments/core/currency_formatter.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/price_insights/ui/price_history_swift.h"
 #import "ios/chrome/browser/price_insights/ui/price_insights_constants.h"
 #import "ios/chrome/browser/price_insights/ui/price_insights_mutator.h"
-#import "ios/chrome/browser/price_insights/ui/price_ranger_slider.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
+#import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
 
@@ -46,9 +44,6 @@ const CGFloat kIconSize = 20.0f;
 // Size of the space between the graph and the text in Price History.
 const CGFloat kPriceHistoryContentSpacing = 12.0f;
 
-// Size of the space between the graph and the text in Price Range.
-const CGFloat kPriceRangeContentSpacing = 16.0f;
-
 // Height of Price History graph.
 const CGFloat kPriceHistoryGraphHeight = 186.0f;
 
@@ -59,19 +54,7 @@ const float kCornerRadius = 24;
 const CGFloat kTrackButtonHorizontalPadding = 14.0f;
 
 // The vertical padding for the track button.
-const CGFloat kTrackButtonVerticalPadding = 3.0f;
-
-// Formats a price amount in micro-units into a localized string representation
-// for display.
-std::u16string getFormattedCurrentPrice(int64_t amount_micro,
-                                        std::string currency_code,
-                                        std::string country_code) {
-  float price = static_cast<float>(amount_micro) /
-                static_cast<float>(commerce::kToMicroCurrency);
-  payments::CurrencyFormatter formatter(currency_code, country_code);
-  formatter.SetMaxFractionalDigits(2);
-  return formatter.Format(base::NumberToString(price));
-}
+const CGFloat kTrackButtonVerticalPadding = 4.0f;
 
 }  // namespace
 
@@ -87,9 +70,9 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   UIStackView* _buyingOptionsStackView;
   UIStackView* _contentStackView;
   UIStackView* _priceHistoryStackView;
-  UIStackView* _priceRangeStackView;
   UIButton* _trackButton;
   NSLayoutConstraint* _trackButtonWidthConstraint;
+  UILabel* _priceTrackingSubtitle;
 }
 
 #pragma mark - Public
@@ -105,6 +88,7 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
     _contentStackView.alignment = UIStackViewAlignmentFill;
     _contentStackView.clipsToBounds = YES;
     _contentStackView.layer.cornerRadius = kCornerRadius;
+    _contentStackView.insetsLayoutMarginsFromSafeArea = NO;
     [_contentStackView setAccessibilityIdentifier:kContentStackViewIdentifier];
 
     [self.contentView addSubview:_contentStackView];
@@ -118,10 +102,9 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
 - (void)configureWithItem:(PriceInsightsItem*)item {
   self.item = item;
 
-  // Configure Price Trancking and Price Range.
-  if (self.item.canPriceTrack ||
-      ([self hasPriceRange] && [self hasPriceHistory])) {
-    [self configurePriceTrackingAndRange];
+  // Configure Price Trancking.
+  if (self.item.canPriceTrack) {
+    [self configurePriceTracking];
     [_contentStackView addArrangedSubview:_priceTrackingStackView];
   }
 
@@ -131,21 +114,25 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
     NSString* primarySubtitle;
     NSString* secondarySubtitle;
 
-    bool hasPriceTrackOrPriceRange =
-        self.item.canPriceTrack || [self hasPriceRange];
-    title = hasPriceTrackOrPriceRange
-                ? l10n_util::GetNSString(IDS_PRICE_HISTORY_TITLE_SINGLE_OPTION)
+    title = self.item.canPriceTrack
+                ? [self hasVariants]
+                      ? l10n_util::GetNSString(
+                            IDS_PRICE_HISTORY_TITLE_WITH_VARIANTS)
+                      : l10n_util::GetNSString(
+                            IDS_PRICE_HISTORY_TITLE_SINGLE_OPTION)
                 : self.item.title;
-    NSString* priceHistoryDescription =
-        hasPriceTrackOrPriceRange
-            ? nil
-            : l10n_util::GetNSString(IDS_PRICE_HISTORY_TITLE_SINGLE_OPTION);
 
     if ([self hasVariants]) {
       primarySubtitle = self.item.variants;
-      secondarySubtitle = priceHistoryDescription;
+      secondarySubtitle =
+          self.item.canPriceTrack
+              ? nil
+              : l10n_util::GetNSString(IDS_PRICE_HISTORY_TITLE_WITH_VARIANTS);
     } else {
-      primarySubtitle = priceHistoryDescription;
+      primarySubtitle =
+          self.item.canPriceTrack
+              ? nil
+              : l10n_util::GetNSString(IDS_PRICE_HISTORY_TITLE_SINGLE_OPTION);
       secondarySubtitle = nil;
     }
 
@@ -156,30 +143,16 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
     [_contentStackView addArrangedSubview:_priceHistoryStackView];
   }
 
-  // Configure Price Range
-  if ([self hasPriceRange] && ![self hasPriceHistory]) {
-    NSString* variantTitle =
-        [self hasVariants]
-            ? l10n_util::GetNSString(
-                  IDS_PRICE_INSIGHTS_PRICE_RANGE_TITLE_VARIANT)
-            : l10n_util::GetNSString(
-                  IDS_PRICE_INSIGHTS_PRICE_RANGE_TITLE_NO_VARIANT);
-    NSString* title = self.item.canPriceTrack ? variantTitle : self.item.title;
-    NSString* subtitle = self.item.canPriceTrack ? nil : variantTitle;
-    [self configurePriceRangeWithTitle:title subtitle:subtitle];
-    [_contentStackView addArrangedSubview:_priceRangeStackView];
-  }
-
   // Configure Buying options.
-  if ([self hasPriceHistory] && [self hasPriceRange] &&
-      self.item.buyingOptionsURL.is_valid()) {
+  if ([self hasPriceHistory] && self.item.buyingOptionsURL.is_valid()) {
     [self configureBuyingOptions];
     [_contentStackView addArrangedSubview:_buyingOptionsStackView];
   }
 }
 
-- (void)updateTrackButton:(BOOL)isTracking {
+- (void)updateTrackStatus:(BOOL)isTracking {
   self.item.isPriceTracked = isTracking;
+  [self setOrUpdateTrackingSubtitleText];
   [self setOrUpdateTrackButton];
 }
 
@@ -191,18 +164,11 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   }
 }
 
+- (PriceInsightsItem*)priceInsightsItem {
+  return self.item;
+}
+
 #pragma mark - Private
-
-// Returns whether or not price range is available.
-- (BOOL)hasPriceRange {
-  return self.item.lowPrice > 0 && self.item.highPrice > 0;
-}
-
-// Returns whether or not price has one typical price. If there is only one
-// typical price, the high and low price are equal.
-- (BOOL)hasPriceOneTypicalPrice {
-  return [self hasPriceRange] ? self.item.highPrice == self.item.lowPrice : NO;
-}
 
 // Returns whether or not there are any variants.
 - (BOOL)hasVariants {
@@ -214,9 +180,8 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   return self.item.priceHistory && [self.item.priceHistory count] > 0;
 }
 
-// Method that creates a view for both price tracking and price range, or solely
-// for price tracking or price range when price history is also available.
-- (void)configurePriceTrackingAndRange {
+// Method that creates a view for price tracking.
+- (void)configurePriceTracking {
   UILabel* priceTrackingTitle = [self createLabel];
   [priceTrackingTitle setAccessibilityIdentifier:kPriceTrackingTitleIdentifier];
   priceTrackingTitle.font =
@@ -225,45 +190,22 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   priceTrackingTitle.text = self.item.title;
   priceTrackingTitle.accessibilityTraits = UIAccessibilityTraitHeader;
 
-  UILabel* priceTrackingSubtitle = [self createLabel];
-  [priceTrackingSubtitle
+  _priceTrackingSubtitle = [self createLabel];
+  [_priceTrackingSubtitle
       setAccessibilityIdentifier:kPriceTrackingSubtitleIdentifier];
-  priceTrackingSubtitle.font =
+  _priceTrackingSubtitle.font =
       CreateDynamicFont(UIFontTextStyleSubheadline, UIFontWeightRegular);
-  priceTrackingSubtitle.textColor = [UIColor colorNamed:kTextSecondaryColor];
-  if ([self hasPriceRange] && [self hasPriceHistory]) {
-    std::u16string lowPrice = getFormattedCurrentPrice(
-        self.item.lowPrice, self.item.currency, self.item.country);
-    std::u16string highPrice = getFormattedCurrentPrice(
-        self.item.highPrice, self.item.currency, self.item.country);
-
-    priceTrackingSubtitle.numberOfLines = 2;
-    priceTrackingSubtitle.text =
-        [self hasVariants]
-            ? ([self hasPriceOneTypicalPrice]
-                   ? l10n_util::GetNSStringF(
-                         IDS_PRICE_RANGE_ALL_OPTIONS_ONE_TYPICAL_PRICE,
-                         lowPrice)
-                   : l10n_util::GetNSStringF(IDS_PRICE_RANGE_ALL_OPTIONS,
-                                             lowPrice, highPrice))
-            : ([self hasPriceOneTypicalPrice]
-                   ? l10n_util::GetNSStringF(
-                         IDS_PRICE_RANGE_SINGLE_OPTION_ONE_TYPICAL_PRICE,
-                         lowPrice)
-                   : l10n_util::GetNSStringF(IDS_PRICE_RANGE_SINGLE_OPTION,
-                                             lowPrice, highPrice));
-  } else {
-    priceTrackingSubtitle.numberOfLines = 2;
-    priceTrackingSubtitle.text =
-        l10n_util::GetNSString(IDS_PRICE_TRACKING_DESCRIPTION);
-  }
+  _priceTrackingSubtitle.textColor = [UIColor colorNamed:kTextSecondaryColor];
+  _priceTrackingSubtitle.numberOfLines = 2;
+  [self setOrUpdateTrackingSubtitleText];
 
   UIStackView* verticalStack = [[UIStackView alloc]
-      initWithArrangedSubviews:@[ priceTrackingTitle, priceTrackingSubtitle ]];
+      initWithArrangedSubviews:@[ priceTrackingTitle, _priceTrackingSubtitle ]];
   verticalStack.axis = UILayoutConstraintAxisVertical;
   verticalStack.distribution = UIStackViewDistributionFill;
   verticalStack.alignment = UIStackViewAlignmentLeading;
   verticalStack.spacing = kPriceTrackingVerticalStackViewSpacing;
+  verticalStack.translatesAutoresizingMaskIntoConstraints = NO;
 
   _priceTrackingStackView = [[UIStackView alloc] init];
   [_priceTrackingStackView
@@ -290,6 +232,7 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   _priceTrackingStackView.layoutMargins =
       UIEdgeInsets(kContentVerticalInset, kContentHorizontalInset,
                    kContentVerticalInset, kContentHorizontalInset);
+  _priceTrackingStackView.insetsLayoutMarginsFromSafeArea = NO;
 }
 
 // Method that creates a view for the buying options module.
@@ -317,11 +260,13 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   verticalStack.alignment = UIStackViewAlignmentLeading;
   verticalStack.spacing = kPriceTrackingVerticalStackViewSpacing;
   verticalStack.isAccessibilityElement = NO;
+  verticalStack.translatesAutoresizingMaskIntoConstraints = NO;
 
   UIImage* icon = DefaultSymbolWithPointSize(kOpenImageActionSymbol, kIconSize);
   UIImageView* iconView = [[UIImageView alloc] initWithImage:icon];
   iconView.tintColor = [UIColor colorNamed:kGrey500Color];
   iconView.isAccessibilityElement = NO;
+  iconView.translatesAutoresizingMaskIntoConstraints = NO;
 
   _buyingOptionsStackView = [[UIStackView alloc]
       initWithArrangedSubviews:@[ verticalStack, iconView ]];
@@ -340,6 +285,7 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
                    kContentVerticalInset, kContentHorizontalInset);
   _buyingOptionsStackView.isAccessibilityElement = YES;
   _buyingOptionsStackView.accessibilityTraits = UIAccessibilityTraitLink;
+  _buyingOptionsStackView.insetsLayoutMarginsFromSafeArea = NO;
   _buyingOptionsStackView.accessibilityLabel =
       l10n_util::GetNSString(IDS_BUYING_OPTIONS_ACCESSIBILITY_DESCRIPTION);
   [_buyingOptionsStackView
@@ -360,6 +306,7 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   verticalStack.distribution = UIStackViewDistributionFill;
   verticalStack.alignment = UIStackViewAlignmentLeading;
   verticalStack.spacing = kPriceTrackingVerticalStackViewSpacing;
+  verticalStack.translatesAutoresizingMaskIntoConstraints = NO;
 
   UILabel* title = [self createLabel];
   [title setAccessibilityIdentifier:kPriceHistoryTitleIdentifier];
@@ -394,10 +341,16 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
     }
   }
 
+  NSString* currency = base::SysUTF8ToNSString(self.item.currency);
+
   UIViewController* priceHistoryViewController = [PriceHistoryProvider
       makeViewControllerWithHistory:self.item.priceHistory
-                           currency:base::SysUTF8ToNSString(
-                                        self.item.currency)];
+                           currency:currency
+            graphAccessibilityLabel:
+                l10n_util::GetNSStringF(
+                    IDS_PRICE_INSIGHTS_GRAPH_ACCESSIBILITY_LABEL,
+                    base::SysNSStringToUTF16(currency),
+                    base::SysNSStringToUTF16(self.item.title))];
   priceHistoryViewController.view.translatesAutoresizingMaskIntoConstraints =
       NO;
   [self.viewController addChildViewController:priceHistoryViewController];
@@ -423,75 +376,7 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   _priceHistoryStackView.layoutMargins =
       UIEdgeInsets(kContentVerticalInset, kContentHorizontalInset,
                     kContentVerticalInset, kContentHorizontalInset);
-}
-
-- (void)configurePriceRangeWithTitle:(NSString*)titleText
-                            subtitle:(NSString*)primarySubtitleText {
-  UIStackView* labelStackView = [[UIStackView alloc] init];
-  labelStackView.axis = UILayoutConstraintAxisVertical;
-  labelStackView.distribution = UIStackViewDistributionFill;
-  labelStackView.alignment = UIStackViewAlignmentLeading;
-  labelStackView.spacing = kPriceTrackingVerticalStackViewSpacing;
-  labelStackView.isAccessibilityElement = NO;
-
-  UILabel* title = [self createLabel];
-  [title setAccessibilityIdentifier:kPriceRangeTitleIdentifier];
-  title.font =
-      CreateDynamicFont(UIFontTextStyleSubheadline, UIFontWeightSemibold);
-  title.text = titleText;
-  title.numberOfLines = 2;
-  title.textColor = [UIColor colorNamed:kTextPrimaryColor];
-  [labelStackView addArrangedSubview:title];
-
-  if (primarySubtitleText.length) {
-    UILabel* primarySubtitle = [self createLabel];
-    [primarySubtitle setAccessibilityIdentifier:kPriceRangeSubtitleIdentifier];
-    primarySubtitle.font =
-        CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightRegular);
-    primarySubtitle.text = primarySubtitleText;
-    primarySubtitle.textColor = [UIColor colorNamed:kTextSecondaryColor];
-    [labelStackView addArrangedSubview:primarySubtitle];
-  }
-
-  std::u16string lowPriceFormatted = getFormattedCurrentPrice(
-      self.item.lowPrice, self.item.currency, self.item.country);
-  std::u16string highPriceFormatted = getFormattedCurrentPrice(
-      self.item.highPrice, self.item.currency, self.item.country);
-  CGRect contentArea = [UIScreen mainScreen].bounds;
-  CGFloat sliderViewWidth = contentArea.size.width -
-                            (kContentHorizontalInset * 2) -
-                            (kHorizontalInset * 2);
-
-  PriceRangeSliderView* sliderStackView = [[PriceRangeSliderView alloc]
-      initWithMinimumLabelText:base::SysUTF16ToNSString(lowPriceFormatted)
-              maximumLabelText:base::SysUTF16ToNSString(highPriceFormatted)
-                  minimumValue:self.item.lowPrice
-                  maximumValue:self.item.highPrice
-                  currentValue:self.item.currentPrice
-               sliderViewWidth:sliderViewWidth];
-  sliderStackView.isAccessibilityElement = NO;
-
-  _priceRangeStackView = [[UIStackView alloc]
-      initWithArrangedSubviews:@[ labelStackView, sliderStackView ]];
-  [_priceRangeStackView
-      setAccessibilityIdentifier:kPriceRangeStackViewIdentifier];
-  _priceRangeStackView.axis = UILayoutConstraintAxisVertical;
-  _priceRangeStackView.spacing = kPriceRangeContentSpacing;
-  _priceRangeStackView.distribution = UIStackViewDistributionFill;
-  _priceRangeStackView.translatesAutoresizingMaskIntoConstraints = NO;
-  _priceRangeStackView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-  _priceRangeStackView.layoutMarginsRelativeArrangement = YES;
-  _priceRangeStackView.layoutMargins =
-      UIEdgeInsets(kContentVerticalInset, kContentHorizontalInset,
-                   kContentVerticalInset, kContentHorizontalInset);
-  _priceRangeStackView.isAccessibilityElement = YES;
-  std::u16string currentPriceFormatted = getFormattedCurrentPrice(
-      self.item.currentPrice, self.item.currency, self.item.country);
-  _priceRangeStackView.accessibilityLabel = l10n_util::GetNSStringF(
-      IDS_PRICE_RANGE_ACCESSIBILITY_DESCRIPTION,
-      base::SysNSStringToUTF16(self.item.title), lowPriceFormatted,
-      highPriceFormatted, currentPriceFormatted);
-  _priceRangeStackView.accessibilityTraits = UIAccessibilityTraitImage;
+  _priceHistoryStackView.insetsLayoutMarginsFromSafeArea = NO;
 }
 
 // Creates and configures a UILabel with default settings.
@@ -506,9 +391,16 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
   return label;
 }
 
+- (void)setOrUpdateTrackingSubtitleText {
+  _priceTrackingSubtitle.text =
+      self.item.isPriceTracked
+          ? l10n_util::GetNSString(IDS_PRICE_TRACKING_DESCRIPTION_TRACKED)
+          : l10n_util::GetNSString(IDS_PRICE_TRACKING_DESCRIPTION);
+}
+
 - (void)setOrUpdateTrackButton {
   UIFont* font =
-      CreateDynamicFont(UIFontTextStyleSubheadline, UIFontWeightBold);
+      CreateDynamicFont(UIFontTextStyleSubheadline, UIFontWeightSemibold);
   NSDictionary* attributes = @{NSFontAttributeName : font};
   NSString* titleText =
       self.item.isPriceTracked
@@ -534,11 +426,6 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
     _trackButton.pointerInteractionEnabled = YES;
   }
 
-  if (!self.item.isPriceTracked) {
-    _trackButton.accessibilityLabel = l10n_util::GetNSString(
-        IDS_PRICE_TRACKING_NOT_TRACKING_ACCESSIBILITY_DESCRIPTION);
-  }
-
   [_trackButton setAttributedTitle:title forState:UIControlStateNormal];
   CGSize stringSize = [titleText sizeWithAttributes:attributes];
   _trackButtonWidthConstraint.constant =
@@ -553,7 +440,7 @@ std::u16string getFormattedCurrentPrice(int64_t amount_micro,
     return;
   }
 
-  [self.mutator priceInsightsTrackItem:self.item];
+  [self.mutator tryPriceInsightsTrackItem:self.item];
 }
 
 - (void)handleBuyingOptionsTap:(UITapGestureRecognizer*)sender {

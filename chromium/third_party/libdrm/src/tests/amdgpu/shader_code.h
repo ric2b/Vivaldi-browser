@@ -75,13 +75,13 @@ struct shader_test_cs_shader {
 struct shader_test_ps_shader {
 	const uint32_t *shader;
 	unsigned shader_size;
-	const uint32_t patchinfo_code_size;
+	uint32_t patchinfo_code_size;
 	const uint32_t *patchinfo_code;
 	const uint32_t *patchinfo_code_offset;
 	const struct reg_info *sh_reg;
-	const uint32_t num_sh_reg;
+	uint32_t num_sh_reg;
 	const struct reg_info *context_reg;
-	const uint32_t num_context_reg;
+	uint32_t num_context_reg;
 };
 
 struct shader_test_vs_shader {
@@ -111,7 +111,7 @@ static const struct shader_test_cs_shader shader_test_cs[AMDGPU_TEST_GFX_MAX][2]
 #define SHADER_PS_INFO(_ps, _n) \
 	{ps_##_ps##_shader_gfx##_n, sizeof(ps_##_ps##_shader_gfx##_n), \
 	ps_##_ps##_shader_patchinfo_code_size_gfx##_n, \
-	ps_##_ps##_shader_patchinfo_code_gfx##_n, \
+	&(ps_##_ps##_shader_patchinfo_code_gfx##_n)[0][0][0], \
 	ps_##_ps##_shader_patchinfo_offset_gfx##_n, \
 	ps_##_ps##_sh_registers_gfx##_n, ps_##_ps##_num_sh_registers_gfx##_n, \
 	ps_##_ps##_context_registers_gfx##_n, ps_##_ps##_num_context_registers_gfx##_n}

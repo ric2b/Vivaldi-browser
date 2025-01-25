@@ -133,7 +133,7 @@ bindings](#bindings) via the child security policy.
 
 ```c++
 // RenderFrameHostImpl::AllowBindings():
-if (bindings_flags & BINDINGS_POLICY_WEB_UI) {
+if (bindings_flags.Has(BindingsPolicyValue::kWebUi)) {
   ChildProcessSecurityPolicyImpl::GetInstance()->GrantWebUIBindings(
       GetProcess()->GetID());
 }
@@ -1057,7 +1057,7 @@ bindings](#bindings).
 
 ```c++
 // RenderFrameImpl::DidClearWindowObject():
-if (enabled_bindings_ & BINDINGS_POLICY_WEB_UI)
+if (enabled_bindings_.Has(BindingsPolicyValue::kWebUi))
   WebUIExtension::Install(frame_);
 ```
 
@@ -1270,13 +1270,13 @@ TypeScript for a WebUI-based chrome:// page does one of the following:
 * Calls `console.error()`.
 
 Such errors will appear alongside other crashes in the
-`product_name=Chrome_ChromeOS`, `product_name=Chrome_Lacros`, or
-`product_name=Chrome_Linux` lists on [go/crash](http://go/crash).
+`product_name=Chrome_ChromeOS` or `product_name=Chrome_Linux` lists on
+[go/crash](http://go/crash).
 
 The signature of the error is the error message followed by the URL on which the
 error appeared. For example, if chrome://settings/lazy_load.js throws a
 TypeError with a message `Cannot read properties of null (reading 'select')` and
-does not catch it, the magic signature would be 
+does not catch it, the magic signature would be
 ```
 Uncaught TypeError: Cannot read properties of null (reading 'select') (chrome://settings)
 ```
@@ -1316,8 +1316,7 @@ error, JavaScript errors are currently all classified as "WARNING" level when
 computing stability metrics.
 
 ### Known issues
-1. Error reporting is currently enabled only on ChromeOS (ash and Lacros) and
-   Linux.
+1. Error reporting is currently enabled only on ChromeOS and Linux.
 2. Errors are only reported for chrome:// URLs.
 3. Unhandled promise rejections do not have a good stack.
 4. The line numbers and column numbers in the stacks are for the minified

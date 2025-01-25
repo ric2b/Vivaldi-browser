@@ -10,7 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
+import org.chromium.chrome.browser.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.merchant_viewer.PageInfoStoreInfoController.StoreInfoActionHandler;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.profiles.ProfileManager;
@@ -22,6 +22,11 @@ import org.chromium.components.page_info.PageInfoController.OpenedFromSource;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
+// Vivaldi
+import android.view.View;
+import androidx.appcompat.app.AppCompatActivity;
+import org.vivaldi.browser.adblock.VivaldiTrackerBlockerPopup;
+
 /** Helper class showing page info dialog for Clank. */
 public class ChromePageInfo {
     private final @NonNull Supplier<ModalDialogManager> mModalDialogManagerSupplier;
@@ -30,6 +35,9 @@ public class ChromePageInfo {
     private final @Nullable Supplier<StoreInfoActionHandler> mStoreInfoActionHandlerSupplier;
     private final @Nullable Supplier<EphemeralTabCoordinator> mEphemeralTabCoordinatorSupplier;
     private final @Nullable TabCreator mTabCreator;
+
+    // Vivaldi
+    private static VivaldiTrackerBlockerPopup mTrackerBlockerPopup;
 
     /**
      * @param modalDialogManagerSupplier Supplier of modal dialog manager.
@@ -79,5 +87,18 @@ public class ChromePageInfo {
                         pageInfoHighlight,
                         mTabCreator),
                 pageInfoHighlight);
+
+        // Vivaldi - Combined Site prefs and Tracker blocker popup
+        View pageInfoContainer = PageInfoController.getPageInfoContainer();
+        if (mTrackerBlockerPopup == null) mTrackerBlockerPopup = new VivaldiTrackerBlockerPopup();
+        mTrackerBlockerPopup.setCurrentTab(tab);
+        mTrackerBlockerPopup.setSitePrefsContainer(pageInfoContainer);
+        if (activity instanceof AppCompatActivity)
+            mTrackerBlockerPopup.show(
+                    ((AppCompatActivity) activity).getSupportFragmentManager(), "TrackerBlocker");
+    }
+
+    public static VivaldiTrackerBlockerPopup getPopupInstance() {
+        return mTrackerBlockerPopup;
     }
 }

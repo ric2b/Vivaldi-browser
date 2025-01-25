@@ -11,6 +11,7 @@
 #include "ash/webui/boca_ui/url_constants.h"
 #include "ash/webui/common/chrome_os_webui_config.h"
 #include "ash/webui/system_apps/public/system_web_app_ui_config.h"
+#include "content/public/browser/web_ui.h"
 #include "content/public/browser/webui_config.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -23,7 +24,7 @@ namespace ui {
 class ColorChangeHandler;
 }  // namespace ui
 
-namespace ash {
+namespace ash::boca {
 class BocaUI;
 class BocaAppHandler;
 
@@ -36,7 +37,6 @@ class BocaUI : public ui::UntrustedWebUIController,
   BocaUI(const BocaUI&) = delete;
   BocaUI& operator=(const BocaUI&) = delete;
   ~BocaUI() override;
-
   void BindInterface(
       mojo::PendingReceiver<boca::mojom::BocaPageHandlerFactory> factory);
 
@@ -51,6 +51,7 @@ class BocaUI : public ui::UntrustedWebUIController,
               mojo::PendingRemote<boca::mojom::Page> page) override;
 
  private:
+  raw_ptr<content::WebUI> web_ui_;
   mojo::Receiver<boca::mojom::BocaPageHandlerFactory> receiver_{this};
   std::unique_ptr<BocaAppHandler> page_handler_impl_;
 
@@ -59,6 +60,6 @@ class BocaUI : public ui::UntrustedWebUIController,
   WEB_UI_CONTROLLER_TYPE_DECL();
 };
 
-}  // namespace ash
+}  // namespace ash::boca
 
 #endif  // ASH_WEBUI_BOCA_UI_BOCA_UI_H_

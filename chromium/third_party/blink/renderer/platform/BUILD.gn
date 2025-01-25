@@ -16,6 +16,7 @@ import("//third_party/blink/public/public_features.gni")
 import("//third_party/blink/renderer/build/scripts/scripts.gni")
 import("//third_party/blink/renderer/config.gni")
 import("//third_party/blink/renderer/platform/platform_generated.gni")
+import("//third_party/jinja2/jinja2.gni")
 import("//third_party/libgav1/options.gni")
 import("//third_party/webrtc/webrtc.gni")
 import("//ui/gl/features.gni")
@@ -49,6 +50,7 @@ blink_python_runner("runtime_enabled_features") {
   runtime_enabled_features_json5 = "runtime_enabled_features.json5"
   inputs = scripts_for_json5_files + [
              runtime_enabled_features_json5,
+             "../build/scripts/make_runtime_features_utilities.py",
              "../build/scripts/templates/runtime_enabled_features.cc.tmpl",
              "../build/scripts/templates/runtime_enabled_features.h.tmpl",
              "../build/scripts/templates/runtime_enabled_features_test_helpers.h.tmpl",
@@ -80,7 +82,8 @@ blink_python_runner("runtime_feature_state_override_context") {
   script = "../build/scripts/make_runtime_feature_state_override_context.py"
 
   inputs = scripts_for_json5_files + [
-             "../build/scripts/make_runtime_feature_state_override_context.py",
+             "../build/scripts/make_runtime_features_utilities.py",
+             "../build/scripts/make_runtime_features.py",
              "runtime_enabled_features.json5",
              "../build/scripts/templates/runtime_feature_state_override_context.h.tmpl",
              "../build/scripts/templates/runtime_feature_state_override_context.cc.tmpl",
@@ -102,7 +105,10 @@ blink_python_runner("color_data") {
   script = "../build/scripts/gperf.py"
 
   color_data_gperf = "color_data.gperf"
-  inputs = [ color_data_gperf ]
+  inputs = [
+             "../build/scripts/template_expander.py",
+             color_data_gperf,
+           ] + jinja2_sources
 
   output_file = "$blink_platform_output_dir/color_data.cc"
   outputs = [ output_file ]
@@ -521,6 +527,7 @@ component("platform") {
     "bindings/v8_dom_activity_logger.h",
     "bindings/v8_dom_wrapper.cc",
     "bindings/v8_dom_wrapper.h",
+    "bindings/v8_external_memory_accounter.h",
     "bindings/v8_global_value_map.h",
     "bindings/v8_histogram_accumulator.cc",
     "bindings/v8_histogram_accumulator.h",
@@ -652,7 +659,6 @@ component("platform") {
     "fonts/font_fallback_list.h",
     "fonts/font_fallback_map.cc",
     "fonts/font_fallback_map.h",
-    "fonts/font_fallback_priority.cc",
     "fonts/font_fallback_priority.h",
     "fonts/font_family.cc",
     "fonts/font_family.h",
@@ -820,6 +826,8 @@ component("platform") {
     "geometry/calculation_expression_node.h",
     "geometry/calculation_value.cc",
     "geometry/calculation_value.h",
+    "geometry/color_channel_keyword.h",
+    "geometry/evaluation_input.h",
     "geometry/float_polygon.cc",
     "geometry/float_polygon.h",
     "geometry/float_rounded_rect.cc",
@@ -829,10 +837,6 @@ component("platform") {
     "geometry/infinite_int_rect.h",
     "geometry/layout_point.cc",
     "geometry/layout_point.h",
-    "geometry/layout_rect.cc",
-    "geometry/layout_rect.h",
-    "geometry/layout_size.cc",
-    "geometry/layout_size.h",
     "geometry/layout_unit.cc",
     "geometry/layout_unit.h",
     "geometry/length.cc",
@@ -1022,6 +1026,8 @@ component("platform") {
     "graphics/gpu/webgpu_swap_buffer_provider.h",
     "graphics/gpu/webgpu_texture_alpha_clearer.cc",
     "graphics/gpu/webgpu_texture_alpha_clearer.h",
+    "graphics/gpu/webgraphics_shared_image_interface_provider_impl.cc",
+    "graphics/gpu/webgraphics_shared_image_interface_provider_impl.h",
     "graphics/gpu/xr_frame_transport.cc",
     "graphics/gpu/xr_frame_transport.h",
     "graphics/gpu/xr_webgl_drawing_buffer.cc",
@@ -1140,7 +1146,6 @@ component("platform") {
     "graphics/paint/raster_invalidation_tracking.h",
     "graphics/paint/raster_invalidator.cc",
     "graphics/paint/raster_invalidator.h",
-    "graphics/paint/ref_counted_property_tree_state.h",
     "graphics/paint/region_capture_data.cc",
     "graphics/paint/region_capture_data.h",
     "graphics/paint/scoped_display_item_fragment.h",
@@ -1226,7 +1231,7 @@ component("platform") {
     "graphics/web_graphics_context_3d_provider_wrapper.h",
     "graphics/web_graphics_context_3d_video_frame_pool.cc",
     "graphics/web_graphics_context_3d_video_frame_pool.h",
-    "heap_observer_set.h",
+    "heap_observer_list.h",
     "image-encoders/image_encoder.cc",
     "image-encoders/image_encoder.h",
     "image-encoders/image_encoder_utils.cc",
@@ -1238,6 +1243,8 @@ component("platform") {
     "keyboard_codes.h",
     "language.cc",
     "language.h",
+    "language_detection/detect.cc",
+    "language_detection/detect.h",
     "link_hash.cc",
     "link_hash.h",
     "media/web_audio_source_provider_client.h",
@@ -1424,6 +1431,7 @@ component("platform") {
     "restriction_target_id.h",
     "search_engine_utils.cc",
     "search_engine_utils.h",
+    "sparse_vector.h",
     "storage/blink_storage_key.cc",
     "storage/blink_storage_key.h",
     "storage/blink_storage_key_hash.h",
@@ -1734,6 +1742,7 @@ component("platform") {
     "//third_party/fdlibm",
     "//third_party/pffft:pffft",
     "//ui/base/cursor",
+    "//ui/base/mojom:ui_base_types_blink",
     "//ui/gfx",
     "//ui/native_theme:features",
   ]
@@ -1745,8 +1754,10 @@ component("platform") {
     "//cc",
     "//cc/ipc",
     "//cc/mojo_embedder",
+    "//components/language_detection/core:language_detection",
     "//components/paint_preview/common",
     "//components/search_engines:search_engine_utils",
+    "//components/translate/core/language_detection:language_detection",
     "//components/viz/client",
     "//components/viz/common",
     "//components/webrtc:net_address_utils",
@@ -1939,6 +1950,7 @@ static_library("test_support") {
     "graphics/test/mock_image_decoder.h",
     "graphics/test/mock_paint_canvas.h",
     "graphics/test/stub_image.h",
+    "graphics/test/test_webgraphics_shared_image_interface_provider.h",
     "testing/compositor_test.cc",
     "testing/compositor_test.h",
     "testing/empty_web_media_player.cc",
@@ -2180,7 +2192,6 @@ source_set("blink_platform_unittests_sources") {
     "geometry/calculation_expression_node_test.cc",
     "geometry/float_polygon_test.cc",
     "geometry/float_rounded_rect_test.cc",
-    "geometry/layout_rect_test.cc",
     "geometry/layout_unit_test.cc",
     "geometry/length_functions_test.cc",
     "geometry/length_test.cc",
@@ -2234,7 +2245,7 @@ source_set("blink_platform_unittests_sources") {
     "graphics/video_frame_image_util_test.cc",
     "graphics/video_frame_sink_bundle_test.cc",
     "graphics/video_frame_submitter_test.cc",
-    "heap_observer_set_test.cc",
+    "heap_observer_list_test.cc",
     "json/json_parser_test.cc",
     "json/json_values_test.cc",
     "media/web_audio_source_provider_impl_test.cc",
@@ -2292,6 +2303,7 @@ source_set("blink_platform_unittests_sources") {
     "peerconnection/webrtc_video_track_source_test.cc",
     "region_capture_crop_id_test.cc",
     "runtime_enabled_features_test.cc",
+    "sparse_vector_test.cc",
     "storage/blink_storage_key_mojom_traits_test.cc",
     "storage/blink_storage_key_test.cc",
     "text/bidi_paragraph_test.cc",
@@ -2613,6 +2625,18 @@ source_set("blink_fuzzer_test_support") {
   ]
 }
 
+# This source set is used by image decoder fuzzers to initialize their decoders.
+source_set("blink_image_decoder_fuzzer_test_support") {
+  testonly = true
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "*" ]
+  sources = [
+    "image-decoders/image_decoder_fuzzer_utils.cc",
+    "image-decoders/image_decoder_fuzzer_utils.h",
+  ]
+  deps = [ ":platform" ]
+}
+
 # Fuzzer for WTF::unicode::MathVariant.
 fuzzer_test("math_transform_fuzzer") {
   sources = [ "math_transform_fuzzer.cc" ]
@@ -2762,6 +2786,7 @@ fuzzer_test("blink_png_decoder_fuzzer") {
   sources = [ "image-decoders/png/png_image_decoder_fuzzer.cc" ]
   deps = [
     ":blink_fuzzer_test_support",
+    ":blink_image_decoder_fuzzer_test_support",
     ":platform",
     "//third_party/libpng",
   ]
@@ -2778,10 +2803,25 @@ fuzzer_test("blink_jpeg_decoder_fuzzer") {
   sources = [ "image-decoders/jpeg/jpeg_image_decoder_fuzzer.cc" ]
   deps = [
     ":blink_fuzzer_test_support",
+    ":blink_image_decoder_fuzzer_test_support",
     ":platform",
   ]
   seed_corpuses = [ "//third_party/blink/web_tests/images/resources/jpegfuzz" ]
   libfuzzer_options = [ "rss_limit_mb=8192" ]
+}
+
+fuzzer_test("blink_bmp_decoder_fuzzer") {
+  sources = [ "image-decoders/bmp/bmp_image_decoder_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":blink_image_decoder_fuzzer_test_support",
+    ":platform",
+  ]
+  seed_corpuses = [ "//third_party/blink/web_tests/images/bmp-suite/good" ]
+
+  # TODO: crbug.com/324586211 - raise the memory limit to avoid OOMs in the
+  # fuzzer harness. This can be removed once the global memory limit is raised.
+  libfuzzer_options = [ "rss_limit_mb=4096" ]
 }
 
 # Fuzzer for blink::WEBPImageDecoder.

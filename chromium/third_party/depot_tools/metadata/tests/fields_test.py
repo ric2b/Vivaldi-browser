@@ -120,13 +120,13 @@ class FieldValidationTest(unittest.TestCase):
                 "GPL v2 or later",
                 "LGPL2 with the classpath exception",
                 "Apache, Version 2 and Public domain",
+                "Public domain or MPL 2",
+                "APSL 2 and the MIT license",
             ],
             error_values=["", "\n", ",", "Apache 2.0 / MIT / "],
             warning_values=[
                 "Custom license",
                 "Custom / MIT",
-                "Public domain or MPL 2",
-                "APSL 2 and the MIT license",
             ],
         )
 

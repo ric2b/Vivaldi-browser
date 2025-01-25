@@ -100,6 +100,7 @@ TEST(SourceRegistrationTest, Parse) {
                     mojom::TriggerDataMatching::kModulus),
               Field(&SourceRegistration::aggregatable_debug_reporting_config,
                     SourceAggregatableDebugReportingConfig()),
+              Field(&SourceRegistration::attribution_scopes_data, std::nullopt),
               Field(&SourceRegistration::destination_limit_priority, 0))),
       },
       {
@@ -148,7 +149,17 @@ TEST(SourceRegistrationTest, Parse) {
           ValueIs(Field(&SourceRegistration::expiry, base::Seconds(172800))),
       },
       {
+          "expiry_valid_int_trailing_zero",
+          R"json({"expiry":172800.0,"destination":"https://d.example"})json",
+          ValueIs(Field(&SourceRegistration::expiry, base::Seconds(172800))),
+      },
+      {
           "expiry_wrong_type",
+          R"json({"expiry":false,"destination":"https://d.example"})json",
+          ErrorIs(SourceRegistrationError::kExpiryValueInvalid),
+      },
+      {
+          "expiry_not_int",
           R"json({"expiry":1728000.1,"destination":"https://d.example"})json",
           ErrorIs(SourceRegistrationError::kExpiryValueInvalid),
       },
@@ -175,6 +186,11 @@ TEST(SourceRegistrationTest, Parse) {
       {
           "expiry_clamped_max",
           R"json({"expiry":2592001,"destination":"https://d.example"})json",
+          ValueIs(Field(&SourceRegistration::expiry, base::Days(30))),
+      },
+      {
+          "expiry_clamped_gt_max_int32",
+          R"json({"expiry": 2147483648, "destination": "https://d.example"})json",
           ValueIs(Field(&SourceRegistration::expiry, base::Days(30))),
       },
       {
@@ -237,7 +253,21 @@ TEST(SourceRegistrationTest, Parse) {
                         base::Seconds(86401))),
       },
       {
+          "aggregatable_report_window_valid_int_trailing_zero",
+          R"json({"aggregatable_report_window":86401.0,
+          "destination":"https://d.example"})json",
+          ValueIs(Field(&SourceRegistration::aggregatable_report_window,
+                        base::Seconds(86401))),
+      },
+      {
           "aggregatable_report_window_wrong_type",
+          R"json({"aggregatable_report_window":false,
+          "destination":"https://d.example"})json",
+          ErrorIs(
+              SourceRegistrationError::kAggregatableReportWindowValueInvalid),
+      },
+      {
+          "aggregatable_report_window_not_int",
           R"json({"aggregatable_report_window":86401.1,
           "destination":"https://d.example"})json",
           ErrorIs(
@@ -275,6 +305,14 @@ TEST(SourceRegistrationTest, Parse) {
           R"json({"aggregatable_report_window":259200,"expiry":172800,"destination":"https://d.example"})json",
           ValueIs(Field(&SourceRegistration::aggregatable_report_window,
                         base::Seconds(172800))),
+      },
+      {
+          "aggregatable_report_window_clamped_gt_max_int32",
+          R"json({
+            "aggregatable_report_window": 2147483648,
+            "expiry": 127800,
+            "destination":"https://d.example"})json",
+          ValueIs(Field(&SourceRegistration::expiry, base::Seconds(127800))),
       },
       {
           "debug_key_valid",
@@ -381,10 +419,6 @@ TEST(SourceRegistrationTest, ToJson) {
             "source_event_id": "0",
             "trigger_data_matching": "modulus",
             "trigger_specs": [],
-            "aggregatable_debug_reporting": {
-              "budget": 0,
-              "key_piece": "0x0"
-            },
             "destination_limit_priority": "0"
           })json",
       },
@@ -541,10 +575,6 @@ TEST(SourceRegistrationTest, SerializeDestinationLimit) {
               "source_event_id": "0",
               "trigger_data_matching": "modulus",
               "trigger_specs": [],
-              "aggregatable_debug_reporting": {
-                "budget": 0,
-                "key_piece": "0x0"
-              },
               "destination_limit_priority": "0"
           })json",
       },
@@ -564,10 +594,6 @@ TEST(SourceRegistrationTest, SerializeDestinationLimit) {
               "source_event_id": "0",
               "trigger_data_matching": "modulus",
               "trigger_specs": [],
-              "aggregatable_debug_reporting": {
-                "budget": 0,
-                "key_piece": "0x0"
-              },
               "destination_limit_priority": "123"
           })json",
       },
@@ -730,10 +756,12 @@ TEST(SourceRegistrationTest, ParseAttributionScopesConfig) {
       {
           "valid",
           R"json({
-            "attribution_scope_limit": 1,
-            "max_event_states": 1,
-            "attribution_scopes": ["1"],
-            "destination": "https://d.example"
+            "destination": "https://d.example",
+            "attribution_scopes": {
+              "limit": 1,
+              "max_event_states": 1,
+              "values": ["1"]
+            }
           })json",
           ValueIs(Field(
               &SourceRegistration::attribution_scopes_data,
@@ -742,11 +770,21 @@ TEST(SourceRegistrationTest, ParseAttributionScopesConfig) {
                                              /*max_event_states=*/1))),
       },
       {
+          "no_scopes",
+          R"json({
+            "destination": "https://d.example"
+          })json",
+          ValueIs(Field(&SourceRegistration::attribution_scopes_data,
+                        std::nullopt)),
+      },
+      {
           "invalid",
           R"json({
-            "max_event_states": 1,
-            "attribution_scopes": ["1"],
-            "destination": "https://d.example"
+              "destination": "https://d.example",
+            "attribution_scopes": {
+              "max_event_states": 1,
+              "values": ["1"]
+            }
           })json",
           ErrorIs(SourceRegistrationError::kAttributionScopeLimitRequired),
       },
@@ -756,11 +794,18 @@ TEST(SourceRegistrationTest, ParseAttributionScopesConfig) {
       features::kAttributionScopes);
 
   for (const auto& test_case : kTestCases) {
+    base::HistogramTester histograms;
     SCOPED_TRACE(test_case.desc);
 
-    EXPECT_THAT(
-        SourceRegistration::Parse(test_case.json, SourceType::kNavigation),
-        test_case.matches);
+    auto source =
+        SourceRegistration::Parse(test_case.json, SourceType::kNavigation);
+    EXPECT_THAT(source, test_case.matches);
+
+    if (source.has_value()) {
+      histograms.ExpectUniqueSample(
+          "Conversions.ScopesPerSourceRegistration",
+          source->attribution_scopes_data.has_value() ? 1 : 0, 1);
+    }
   }
 }
 

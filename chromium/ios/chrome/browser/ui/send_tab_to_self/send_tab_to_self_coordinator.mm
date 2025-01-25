@@ -26,7 +26,7 @@
 #import "components/sync/service/sync_service_observer.h"
 #import "ios/chrome/browser/send_tab_to_self/model/send_tab_to_self_browser_agent.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
@@ -52,6 +52,11 @@
 #import "ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_table_view_controller.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
+// End Vivaldi
 
 namespace {
 
@@ -294,6 +299,20 @@ void OpenManageDevicesTab(CommandDispatcher* dispatcher) {
       // This modal should not be launched in incognito mode where syncService
       // is undefined.
       DCHECK(syncService);
+
+      if (vivaldi::IsVivaldiRunning()) {
+        VivaldiAccountSyncManager* syncManager =
+            [[VivaldiAccountSyncManager alloc] initWithBrowser:self.browser];
+        DCHECK([syncManager hasSyncConsent])
+            << "The user must be signed in to share a tab";
+        self.sendTabToSelfViewController =
+            [[SendTabToSelfTableViewController alloc]
+                initWithDeviceList:syncService->GetSendTabToSelfModel()
+                                       ->GetTargetDeviceInfoSortedList()
+                          delegate:self
+                     accountAvatar:[syncManager accountUserAvatar]
+                      accountEmail:[syncManager accountUsername]];
+      } else {
       ChromeAccountManagerService* accountManagerService =
           ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
       DCHECK(accountManagerService);
@@ -311,6 +330,8 @@ void OpenManageDevicesTab(CommandDispatcher* dispatcher) {
                                          account,
                                          IdentityAvatarSize::TableViewIcon)
                     accountEmail:account.userEmail];
+      } // End Vivaldi
+
       UINavigationController* navigationController =
           [[UINavigationController alloc]
               initWithRootViewController:self.sendTabToSelfViewController];

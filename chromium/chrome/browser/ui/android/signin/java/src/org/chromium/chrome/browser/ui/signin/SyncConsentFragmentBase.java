@@ -26,7 +26,6 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Lifecycle;
 
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
 import org.chromium.chrome.browser.consent_auditor.ConsentAuditorFeature;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -50,13 +49,12 @@ import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.AccountsChangeObserver;
-import org.chromium.components.signin.SigninFeatureMap;
-import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.AccountInfoServiceProvider;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+import org.chromium.components.sync.SyncFirstSetupCompleteSource;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.base.WindowAndroid;
@@ -767,9 +765,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
 
                         SigninManager signinManager =
                                 IdentityServicesProvider.get().getSigninManager(getProfile());
-                        if (acceptedAccountManagement
-                                && SigninFeatureMap.isEnabled(
-                                        SigninFeatures.ENTERPRISE_POLICY_ON_SIGNIN)) {
+                        if (acceptedAccountManagement) {
                             signinManager.setUserAcceptedAccountManagement(true);
                         }
 
@@ -782,10 +778,7 @@ public abstract class SyncConsentFragmentBase extends Fragment
 
                                     @Override
                                     public void onSignInAborted() {
-                                        if (acceptedAccountManagement
-                                                && SigninFeatureMap.isEnabled(
-                                                        SigninFeatures
-                                                                .ENTERPRISE_POLICY_ON_SIGNIN)) {
+                                        if (acceptedAccountManagement) {
                                             signinManager.setUserAcceptedAccountManagement(false);
                                         }
                                         mIsSigninInProgress = false;

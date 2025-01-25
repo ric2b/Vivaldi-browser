@@ -5,7 +5,6 @@
 #include "content/browser/worker_host/shared_worker_service_impl.h"
 
 #include <stddef.h>
-
 #include <algorithm>
 #include <iterator>
 #include <string>
@@ -22,7 +21,6 @@
 #include "content/browser/renderer_host/private_network_access_util.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/storage_partition_impl.h"
-#include "content/browser/url_loader_factory_getter.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/worker_host/shared_worker_host.h"
 #include "content/browser/worker_host/worker_script_fetcher.h"
@@ -403,7 +401,7 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
       << " should be the same.";
   WorkerScriptFetcher::CreateAndStart(
       worker_process_host->GetID(), host->token(), host->instance().url(),
-      &creator, &creator,
+      creator, &creator,
       host->instance().DoesRequireCrossSiteRequestForCookies()
           ? net::SiteForCookies()
           : host->instance().storage_key().ToNetSiteForCookies(),

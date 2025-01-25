@@ -7,11 +7,13 @@
 <translation id="1158211211994409885">El sitio <ph name="HOST_NAME" /> ha cerrado inesperadamente la conexión.</translation>
 <translation id="1161325031994447685">Reconectarte a una red Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Imprimir...</translation>
+<translation id="132390688737681464">Guardar y autocompletar direcciones</translation>
 <translation id="1375198122581997741">Información de la versión</translation>
 <translation id="139305205187523129">El sitio <ph name="HOST_NAME" /> no envió datos.</translation>
 <translation id="1559528461873125649">No existe el archivo o carpeta</translation>
 <translation id="1640244768702815859">Prueba a <ph name="BEGIN_LINK" />visitar la página principal del sitio<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo no admitido</translation>
+<translation id="1662550410081243962">Guardar y autocompletar métodos de pago</translation>
 <translation id="1710259589646384581">Sistema operativo</translation>
 <translation id="1728677426644403582">Estás viendo el código fuente de una página web</translation>
 <translation id="1734878702283171397">Prueba a contactar con el administrador del sistema.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Este sitio no puede proporcionar una conexión segura</translation>
 <translation id="2187317261103489799">Detectar (por defecto)</translation>
 <translation id="2224337661447660594">Sin conexión a internet</translation>
+<translation id="2283340219607151381">Guardar y autocompletar direcciones</translation>
 <translation id="2292556288342944218">Tu acceso a internet está bloqueado</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requiere un nombre de usuario y contraseña.</translation>
 <translation id="2337852623177822836">Ajuste controlado por tu administrador</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">La conexión se cifró y autenticó con <ph name="CIPHER" /> y usa <ph name="KX" /> como mecanismo de intercambio de claves.</translation>
 <translation id="2909946352844186028">Se ha detectado un cambio de red.</translation>
 <translation id="2948083400971632585">Puedes desactivar cualquier proxy configurado para una conexión desde los ajustes de red de Vivaldi.</translation>
+<translation id="2954624054936281172">Tabla de métodos de pago guardados</translation>
 <translation id="2991571918955627853">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web usa HSTS. Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="3005723025932146533">Mostrar copia guardada</translation>
 <translation id="301521992641321250">Bloqueado automáticamente</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Detectar siempre contenido importante en este sitio</translation>
 <translation id="3308738399950580893">anuncios</translation>
 <translation id="3384522979010096022">Tu organización no te permite ver este sitio</translation>
+<translation id="3387261909427947069">Métodos de pago</translation>
 <translation id="3422472998109090673">No se puede acceder a <ph name="HOST_NAME" /> en este momento.</translation>
 <translation id="3427092606871434483">Permitir (por defecto)</translation>
 <translation id="3447661539832366887">El propietario de este dispositivo desactivó el juego del dinosaurio.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">La cadena de certificados de este sitio contiene un certificado firmado con SHA-1.</translation>
 <translation id="5452270690849572955">No se puede encontrar el sitio (<ph name="HOST_NAME" />)</translation>
 <translation id="5457113250005438886">No válido</translation>
+<translation id="5490432419156082418">Direcciones y más</translation>
 <translation id="5492298309214877701">Este sitio en la intranet de la empresa, organización o centro educativo tiene la misma URL que un sitio web externo.
     <ph name="LINE_BREAK" />
     Prueba a contactar con tu administrador del sistema.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Permitido por una extensión</translation>
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Guardar y autocompletar métodos de pago</translation>
 <translation id="7210863904660874423">El sitio <ph name="HOST_NAME" /> no cumple con los estándares de seguridad.</translation>
 <translation id="7219179957768738017">La conexión usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostrar notificaciones</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">Si tienes alguna duda, contacta con tu administrador de red.</translation>
 <translation id="8332188693563227489">Se le ha denegado el acceso a <ph name="HOST_NAME" /></translation>
 <translation id="8422228580902424274">Visitando este sitio puedes ser víctima de un ataque donde se te pida que instales software o proporciones información como tu contraseña o tu número de teléfono o tarjeta de crédito.</translation>
+<translation id="8473863474539038330">Direcciones y más</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha tardado demasiado tiempo en responder.</translation>
 <translation id="8503813439785031346">Nombre de usuario</translation>
 <translation id="8703575177326907206">Tu conexión con <ph name="DOMAIN" /> no está cifrada.</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="8940028675168378100">Bloqueada por el <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir a los ajustes del sitio</translation>
+<translation id="8975012916872825179">Incluye información como números de teléfono, direcciones de correo electrónico y direcciones de envío</translation>
 <translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> requiere un nombre de usuario y contraseña.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9025348182339809926">(No válido)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419">El sitio <ph name="HOST_NAME" /> usa un protocolo no admitido.</translation>
 <translation id="936602727769022409">Podrías perder el acceso a tu cuenta de Google. Te recomendamos que cambies tu contraseña ahora. Se te solicitará que inicies sesión.</translation>
 <translation id="969892804517981540">Compilación oficial</translation>
+<translation id="984275831282074731">Métodos de pago</translation>
 <translation id="988159990683914416">Compilación para desarrolladores</translation>
 </translationbundle>

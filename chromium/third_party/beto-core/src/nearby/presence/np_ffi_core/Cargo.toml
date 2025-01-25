@@ -3,6 +3,7 @@ name = "np_ffi_core"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [lints]
 workspace = true
@@ -25,3 +26,5 @@ strum_macros.workspace = true
 default = ["rustcrypto"]
 rustcrypto = ["crypto_provider_default/rustcrypto", "crypto_provider_default/std"]
 boringssl = ["crypto_provider_default/boringssl"]
+testing = ["np_adv/testing"]
+std = []

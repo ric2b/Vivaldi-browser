@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {Tab} from 'chrome://new-tab-page/history_types.mojom-webui.js';
-import {DeviceType} from 'chrome://new-tab-page/history_types.mojom-webui.js';
 import type {DismissModuleElementEvent, DismissModuleInstanceEvent, MostRelevantTabResumptionModuleElement} from 'chrome://new-tab-page/lazy_load.js';
 import {mostRelevantTabResumptionDescriptor, MostRelevantTabResumptionProxyImpl} from 'chrome://new-tab-page/lazy_load.js';
 import {PageHandlerRemote, ScoredURLUserAction} from 'chrome://new-tab-page/most_relevant_tab_resumption.mojom-webui.js';
 import {$$} from 'chrome://new-tab-page/new_tab_page.js';
+import {DecorationType, FormFactor, VisitSource} from 'chrome://new-tab-page/url_visit_types.mojom-webui.js';
+import type {URLVisit} from 'chrome://new-tab-page/url_visit_types.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
@@ -18,18 +18,21 @@ import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 import {installMock} from '../../../test_support.js';
 
-function createSampleTabs(count: number): Tab[] {
+function createSampleURLVisits(count: number): URLVisit[] {
   return new Array(count).fill(0).map(
-      (_, i) => createSampleTab({sessionName: i.toString()}));
+      (_, i) => createSampleURLVisit({sessionName: i.toString()}));
 }
 
-function createSampleTab(
-    overrides?: Partial<Tab>,
-    ): Tab {
-  const tab: Tab = Object.assign(
+function createSampleURLVisit(
+    overrides?: Partial<URLVisit>,
+    ): URLVisit {
+  const url_visit: URLVisit = Object.assign(
       {
-        decorator: null,
-        deviceType: DeviceType.kDesktop,
+        decoration: {
+          type: DecorationType.kVisitedXAgo,
+          displayString: 'You visited 0 seconds ago',
+        },
+        formFactor: FormFactor.kDesktop,
         sessionName: 'Test Device',
         url: {url: 'https://www.foo.com'},
         urlKey: '',
@@ -38,10 +41,11 @@ function createSampleTab(
         trainingRequestId: 0,
         relativeTime: {microseconds: BigInt(0)},
         relativeTimeText: '0 seconds ago',
+        source: VisitSource.kTab,
       },
       overrides);
 
-  return tab;
+  return url_visit;
 }
 
 suite('NewTabPageModulesMostRelevantTabResumptionModuleTest', () => {
@@ -63,9 +67,9 @@ suite('NewTabPageModulesMostRelevantTabResumptionModuleTest', () => {
     metrics = fakeMetricsPrivate();
   });
 
-  async function initializeModule(tabs: Tab[]):
+  async function initializeModule(urlVisits: URLVisit[]):
       Promise<MostRelevantTabResumptionModuleElement> {
-    handler.setResultFor('getTabs', Promise.resolve({tabs}));
+    handler.setResultFor('getURLVisits', Promise.resolve({urlVisits}));
     const moduleElement = await mostRelevantTabResumptionDescriptor.initialize(
                               0) as MostRelevantTabResumptionModuleElement;
     document.body.append(moduleElement);
@@ -84,13 +88,13 @@ suite('NewTabPageModulesMostRelevantTabResumptionModuleTest', () => {
     });
 
     test('Module instance created successfully', async () => {
-      const moduleElement = await initializeModule(createSampleTabs(1));
+      const moduleElement = await initializeModule(createSampleURLVisits(1));
       assertTrue(!!moduleElement);
     });
 
     test('Header element populated with correct data', async () => {
       // Arrange.
-      const moduleElement = await initializeModule(createSampleTabs(1));
+      const moduleElement = await initializeModule(createSampleURLVisits(1));
 
       // Assert.
       assertTrue(!!moduleElement);
@@ -111,7 +115,7 @@ suite('NewTabPageModulesMostRelevantTabResumptionModuleTest', () => {
 
     test('Header info button click opens info dialog', async () => {
       // Arrange.
-      const moduleElement = await initializeModule(createSampleTabs(1));
+      const moduleElement = await initializeModule(createSampleURLVisits(1));
 
       // Assert.
       assertTrue(!!moduleElement);
@@ -124,7 +128,7 @@ suite('NewTabPageModulesMostRelevantTabResumptionModuleTest', () => {
 
     test('Header dismiss button dispatches dismiss module event', async () => {
       // Arrange.
-      const moduleElement = await initializeModule(createSampleTabs(1));
+      const moduleElement = await initializeModule(createSampleURLVisits(1));
 
       // Assert.
       assertTrue(!!moduleElement);
@@ -146,7 +150,7 @@ suite('NewTabPageModulesMostRelevantTabResumptionModuleTest', () => {
 
     test('Tab dismiss button dispatches dismiss tab event', async () => {
       // Arrange.
-      const moduleElement = await initializeModule(createSampleTabs(1));
+      const moduleElement = await initializeModule(createSampleURLVisits(1));
 
       // Assert.
       assertTrue(!!moduleElement);
@@ -158,31 +162,56 @@ suite('NewTabPageModulesMostRelevantTabResumptionModuleTest', () => {
 
       const dismissEvent: DismissModuleElementEvent = await waitForDismissEvent;
       assertEquals(`Tabs hidden`, dismissEvent.detail.message);
+      assertEquals(
+          1, metrics.count(`NewTabPage.TabResumption.VisitDismissIndex`, 0));
 
       // Act.
       const restoreCallback = dismissEvent.detail.restoreCallback!;
       restoreCallback();
       assertTrue(!!moduleElement);
+      assertEquals(
+          1, metrics.count(`NewTabPage.TabResumption.VisitRestoreIndex`, 0));
     });
 
     test('Tab click fires usage event', async () => {
       // Arrange.
-      const moduleElement = await initializeModule(createSampleTabs(1));
+      const moduleElement = await initializeModule(createSampleURLVisits(1));
 
       // Assert.
       assertTrue(!!moduleElement);
-      const tabElement = $$<HTMLElement>(moduleElement, '.tab');
-      assertTrue(!!tabElement);
+      const urlVisitElement = $$<HTMLElement>(moduleElement, '.url-visit');
+      assertTrue(!!urlVisitElement);
       const waitForUsageEvent = eventToPromise('usage', moduleElement);
-      tabElement!.removeAttribute('href');
-      tabElement!.click();
+      urlVisitElement!.removeAttribute('href');
+      urlVisitElement!.click();
       assertEquals(1, metrics.count(`NewTabPage.TabResumption.ClickIndex`));
+      assertEquals(
+          1,
+          metrics.count(
+              `NewTabPage.TabResumption.Visit.ClickSource`, VisitSource.kTab));
       assertEquals(
           ScoredURLUserAction.kSeen, handler.getArgs('recordAction')[0][0]);
       assertEquals(
           ScoredURLUserAction.kActivated,
           handler.getArgs('recordAction')[1][0]);
 
+      await waitForUsageEvent;
+    });
+
+    test('See More click fires usage event', async () => {
+      // Arrange.
+      const moduleElement = await initializeModule(createSampleURLVisits(1));
+
+      // Assert.
+      assertTrue(!!moduleElement);
+      const seeMoreButtonElement =
+          ($$(moduleElement,
+              '#seeMoreButtonContainer'))!.querySelector<HTMLElement>('a');
+      assertTrue(!!seeMoreButtonElement);
+      const waitForUsageEvent = eventToPromise('usage', moduleElement);
+      seeMoreButtonElement!.removeAttribute('href');
+      seeMoreButtonElement!.click();
+      assertEquals(1, metrics.count(`NewTabPage.TabResumption.SeeMoreClick`));
       await waitForUsageEvent;
     });
   });

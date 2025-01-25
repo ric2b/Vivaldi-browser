@@ -16,6 +16,7 @@
 #include "components/mirroring/mojom/session_parameters.mojom.h"
 #include "components/mirroring/service/media_remoter.h"
 #include "components/mirroring/service/mirror_settings.h"
+#include "components/mirroring/service/mirroring_logger.h"
 #include "components/mirroring/service/openscreen_message_port.h"
 #include "components/mirroring/service/openscreen_stats_client.h"
 #include "components/mirroring/service/rpc_dispatcher.h"
@@ -30,7 +31,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/network_context.mojom.h"
-#include "third_party/openscreen/src/cast/streaming/sender_session.h"
+#include "third_party/openscreen/src/cast/streaming/public/sender_session.h"
 
 using openscreen::cast::capture_recommendations::Recommendations;
 
@@ -139,10 +140,6 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
   friend class OpenscreenSessionHostTest;
   FRIEND_TEST_ALL_PREFIXES(OpenscreenSessionHostTest, ChangeTargetPlayoutDelay);
   FRIEND_TEST_ALL_PREFIXES(OpenscreenSessionHostTest, UpdateBandwidthEstimate);
-  FRIEND_TEST_ALL_PREFIXES(OpenscreenSessionHostTest,
-                           ShouldEnableHardwareVp8EncodingIfSupported);
-  FRIEND_TEST_ALL_PREFIXES(OpenscreenSessionHostTest,
-                           ShouldEnableHardwareH264EncodingIfSupported);
   class AudioCapturingCallback;
   using SupportedProfiles = media::VideoEncodeAccelerator::SupportedProfiles;
 
@@ -150,11 +147,8 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
   // to software rendering being used.
   void OnAsyncInitialized(const SupportedProfiles& profiles);
 
-  // Notify `observer_` of a relevant logging message.
-  void LogInfoMessage(const std::string& message);
-
   // Notify `observer_` that error occurred and close the session.
-  void ReportAndLogError(mojom::SessionError error, const std::string& message);
+  void ReportAndLogError(mojom::SessionError error, std::string_view message);
 
   // Stops the current streaming session. If not called from StopSession(), a
   // new streaming session will start later after exchanging OFFER/ANSWER
@@ -182,7 +176,8 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
       uint32_t shared_memory_count);
 
   // Callback by Audio/VideoSender to indicate encoder status change.
-  void OnEncoderStatusChange(media::cast::OperationalStatus status);
+  void OnEncoderStatusChange(const media::cast::FrameSenderConfig& config,
+                             media::cast::OperationalStatus status);
 
   // Callback by media::cast::VideoSender to report resource utilization.
   void ProcessFeedback(const media::VideoCaptureFeedback& feedback);
@@ -247,6 +242,9 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) OpenscreenSessionHost final
   // Implements an Open Screen message port and wraps inbound and outbound mojom
   // channels.
   OpenscreenMessagePort message_port_;
+
+  // Utility object for logging.
+  MirroringLogger logger_;
 
   // Used to initialize video and audio capture clients.
   MirrorSettings mirror_settings_;

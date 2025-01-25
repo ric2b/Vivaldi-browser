@@ -27,6 +27,8 @@
 #include "url/gurl.h"
 
 namespace optimization_guide {
+
+class MqlsFeatureMetadata;
 namespace features {
 
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
@@ -37,8 +39,6 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kRemoteOptimizationGuideFetchingAnonymousDataConsent);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kOptimizationGuideFetchingForSRP);
-COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-BASE_DECLARE_FEATURE(kContextMenuPerformanceInfoAndRemoteHintFetching);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kOptimizationTargetPrediction);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
@@ -150,11 +150,6 @@ bool IsRemoteFetchingEnabled();
 // anonymous data collection is enabled but are not Data Saver users.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 bool IsRemoteFetchingForAnonymousDataConsentEnabled();
-
-// Returns true if a feature that explicitly allows remote fetching has been
-// enabled.
-COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-bool IsRemoteFetchingExplicitlyAllowedForPerformanceInfo();
 
 // Returns true if the feature to use push notifications is enabled.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
@@ -344,7 +339,7 @@ bool IsModelQualityLoggingEnabled();
 
 // Whether model quality logging is enabled for a feature.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-bool IsModelQualityLoggingEnabledForFeature(UserVisibleFeatureKey feature);
+bool IsModelQualityLoggingEnabledForFeature(const MqlsFeatureMetadata*);
 
 // Returns whether the `model_version` for `opt_target` is part of emergency
 // killswitch, and this model should be stopped serving immediately.
@@ -495,6 +490,8 @@ bool GetOnDeviceModelRetractRepeats();
 // Settings to control output sampling.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 int GetOnDeviceModelDefaultTopK();
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+int GetOnDeviceModelMaxTopK();
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 double GetOnDeviceModelDefaultTemperature();
 

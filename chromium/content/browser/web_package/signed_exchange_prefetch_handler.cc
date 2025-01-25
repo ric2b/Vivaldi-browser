@@ -23,7 +23,7 @@
 namespace content {
 
 SignedExchangePrefetchHandler::SignedExchangePrefetchHandler(
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     const network::ResourceRequest& resource_request,
     network::mojom::URLResponseHeadPtr response_head,
     mojo::ScopedDataPipeConsumerHandle response_body,
@@ -56,8 +56,8 @@ SignedExchangePrefetchHandler::SignedExchangePrefetchHandler(
       network::mojom::kURLLoadOptionNone,
       false /* should_redirect_to_fallback */, std::move(devtools_proxy),
       std::move(reporter), std::move(url_loader_factory),
-      loader_throttles_getter, network_anonymization_key, frame_tree_node_id,
-      accept_langs, keep_entry_for_prefetch_cache);
+      loader_throttles_getter, frame_tree_node_id, accept_langs,
+      keep_entry_for_prefetch_cache);
 }
 
 SignedExchangePrefetchHandler::~SignedExchangePrefetchHandler() = default;

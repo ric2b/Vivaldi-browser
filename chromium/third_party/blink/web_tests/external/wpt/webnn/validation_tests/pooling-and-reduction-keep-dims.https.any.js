@@ -1,5 +1,8 @@
 // META: title=validation tests for pooling and reduction operators keep dimensions
 // META: global=window,dedicatedworker
+// META: variant=?cpu
+// META: variant=?gpu
+// META: variant=?npu
 // META: script=../resources/utils.js
 // META: script=../resources/utils_validation.js
 // META: timeout=long
@@ -18,6 +21,8 @@
 //         |
 //     [output]
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
+
   const avgPool2dInputShape = [1, 7, 7, 2048];
   const avgPool2dInput = builder.input(
       `avgPool2dInput`, {dataType: 'float32', dimensions: avgPool2dInputShape});
@@ -61,6 +66,8 @@ promise_test(async t => {
 //         |
 //     [output]
 promise_test(async t => {
+  const builder = new MLGraphBuilder(context);
+
   const reduceMeanInputShape = [1, 7, 7, 2048];
   const reduceMeanInput = builder.input(
       `reduceMeanInput`,

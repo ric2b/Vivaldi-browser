@@ -63,10 +63,18 @@ bool TriggerNeedsOptInForCollection(const TriggerType trigger_type) {
 
 bool CanSendReport(const SBErrorOptions& error_display_options,
                    const TriggerType trigger_type) {
+  // SafeBrowsingExtendedReportingOptInAllowed policy was deprecated.
+  // trigger_manager will not depend on the is_extended_reporting_opt_in_allowed
+  // value when the extended reporting is deprecated. We will remove the feature
+  // flag check when the feature is fully rolled out.
+  bool is_extended_reporting_opt_in_allowed =
+      base::FeatureList::IsEnabled(kExtendedReportingRemovePrefDependency)
+          ? true
+          : error_display_options.is_extended_reporting_opt_in_allowed;
   // Reports are only sent for non-incoginito users who are allowed to modify
   // the Extended Reporting setting and have opted-in to Extended Reporting.
   return !error_display_options.is_off_the_record &&
-         error_display_options.is_extended_reporting_opt_in_allowed &&
+         is_extended_reporting_opt_in_allowed &&
          error_display_options.is_extended_reporting_enabled;
 }
 
@@ -141,13 +149,21 @@ bool TriggerManager::CanStartDataCollectionWithReason(
   bool optin_required_check_ok =
       !TriggerNeedsOptInForCollection(trigger_type) ||
       error_display_options.is_extended_reporting_enabled;
-  // We start data collection as long as user is not incognito and is able to
-  // change the Extended Reporting opt-in, and the |trigger_type| has available
-  // quota. For some triggers we also require extended reporting opt-in in
-  // order to start data collection.
+
+  // SafeBrowsingExtendedReportingOptInAllowed policy was deprecated.
+  // trigger_manager will not depend on the is_extended_reporting_opt_in_allowed
+  // value when the extended reporting is deprecated. We will remove the feature
+  // flag check when the feature is fully rolled out.
+  bool is_extended_reporting_opt_in_allowed =
+      base::FeatureList::IsEnabled(kExtendedReportingRemovePrefDependency)
+          ? true
+          : error_display_options.is_extended_reporting_opt_in_allowed;
+
+  // We start data collection as long as user is not incognito, and the
+  // |trigger_type| has available quota. For some triggers we also require
+  // extended reporting opt-in in order to start data collection.
   if (!error_display_options.is_off_the_record &&
-      error_display_options.is_extended_reporting_opt_in_allowed &&
-      optin_required_check_ok) {
+      is_extended_reporting_opt_in_allowed && optin_required_check_ok) {
     bool quota_ok = trigger_throttler_->TriggerCanFire(trigger_type);
     if (!quota_ok)
       *out_reason = TriggerManagerReason::DAILY_QUOTA_EXCEEDED;
@@ -190,11 +206,7 @@ bool TriggerManager::StartCollectingThreatDetailsWithReason(
   // entry in the map for this |web_contents| if it's not there already.
   DataCollectorsContainer* collectors =
       &data_collectors_map_[GetWebContentsKey(web_contents)];
-  bool collection_in_progress = collectors->threat_details != nullptr;
-  base::UmaHistogramBoolean(
-      "SafeBrowsing.ClientSafeBrowsingReport.HasThreatDetailsAtStart.Mainframe",
-      collection_in_progress);
-  if (collection_in_progress) {
+  if (collectors->threat_details) {
     return false;
   }
 
@@ -229,16 +241,12 @@ TriggerManager::FinishCollectingThreatDetails(
   bool has_threat_details_in_map =
       base::Contains(data_collectors_map_, web_contents_key);
 
-  if (should_send_report) {
+  if (should_send_report &&
+      trigger_type == TriggerType::SECURITY_INTERSTITIAL) {
     base::UmaHistogramBoolean(
-        "SafeBrowsing.ClientSafeBrowsingReport.HasThreatDetailsForTab",
+        "SafeBrowsing.ClientSafeBrowsingReport.HasThreatDetailsForTab."
+        "SecurityInterstitial",
         has_threat_details_in_map);
-    if (trigger_type == TriggerType::SECURITY_INTERSTITIAL) {
-      base::UmaHistogramBoolean(
-          "SafeBrowsing.ClientSafeBrowsingReport.HasThreatDetailsForTab."
-          "SecurityInterstitial",
-          has_threat_details_in_map);
-    }
   }
 
   // Make sure there's a ThreatDetails collector running on this tab.
@@ -248,14 +256,6 @@ TriggerManager::FinishCollectingThreatDetails(
         /*are_threat_details_available=*/false);
   DataCollectorsContainer* collectors = &data_collectors_map_[web_contents_key];
   bool has_threat_details = !!collectors->threat_details;
-
-  if (should_send_report &&
-      trigger_type == TriggerType::SECURITY_INTERSTITIAL) {
-    base::UmaHistogramBoolean(
-        "SafeBrowsing.ClientSafeBrowsingReport.HasThreatDetailsInContainer."
-        "SecurityInterstitial",
-        has_threat_details);
-  }
 
   if (!has_threat_details) {
     return FinishCollectingThreatDetailsResult(

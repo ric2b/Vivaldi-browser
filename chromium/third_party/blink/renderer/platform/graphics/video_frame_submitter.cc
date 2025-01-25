@@ -10,7 +10,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/platform_thread.h"
@@ -71,6 +71,22 @@ viz::BeginFrameAck CreateManualAckWithDamageAndPreferredFrameInterval(
       video_frame_provider ? video_frame_provider->GetPreferredRenderInterval()
                            : viz::BeginFrameArgs::MinInterval();
   return begin_frame_ack;
+}
+
+void RecordUmaPreSubmitBufferingDelay(bool is_media_stream,
+                                      base::TimeDelta delay) {
+  if (is_media_stream) {
+    base::UmaHistogramTimes("Media.VideoFrameSubmitter.Rtc.PreSubmitBuffering",
+                            delay);
+  } else {
+    base::UmaHistogramTimes(
+        "Media.VideoFrameSubmitter.Video.PreSubmitBuffering", delay);
+  }
+
+  // TODO(crbug.com/364352012): This will be removed once expired, kept for now
+  // due to internal dependencies.
+  base::UmaHistogramTimes("Media.VideoFrameSubmitter.PreSubmitBuffering",
+                          delay);
 }
 
 }  // namespace
@@ -274,6 +290,8 @@ void VideoFrameSubmitter::Initialize(cc::VideoFrameProvider* provider,
   DCHECK(!video_frame_provider_);
   video_frame_provider_ = provider;
   is_media_stream_ = is_media_stream;
+  roughness_reporter_->set_is_media_stream(is_media_stream_);
+
   task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
   context_provider_callback_.Run(
       nullptr, base::BindOnce(&VideoFrameSubmitter::OnReceivedContextProvider,
@@ -416,8 +434,10 @@ void VideoFrameSubmitter::OnBeginFrame(
   for (const auto& frame_token : frame_tokens) {
     if (viz::FrameTokenGT(frame_token, *next_frame_token_))
       continue;
-    auto& feedback =
-        timing_details.find(frame_token)->value.presentation_feedback;
+
+    auto& details = timing_details.find(frame_token)->value;
+    auto& feedback = details.presentation_feedback;
+
 #if BUILDFLAG(IS_LINUX)
     // TODO: On Linux failure flag is unreliable, and perfectly rendered frames
     // are reported as failures all the time.
@@ -447,6 +467,32 @@ void VideoFrameSubmitter::OnBeginFrame(
         bool reliable_timestamp = feedback.flags & reliable_feedback_mask;
         roughness_reporter_->FramePresented(frame_token, feedback.timestamp,
                                             reliable_timestamp);
+        // Compute the delta between the time the frame was received by the
+        // compositor and when it was presented.
+        auto delta_between_receive_and_present =
+            details.presentation_feedback.timestamp -
+            details.received_compositor_frame_timestamp;
+
+        // We compute the average delta between frames being received at the
+        // compositor to them being presented using an exponential moving
+        // average with a smoothing factor
+        // emea_smoothing_factor_for_average_delta_ which defaults to 0.2.
+        // The exponential moving average formula for reference is as below:
+        // EMEA_Delta = (Delta_New * smoothing_factor) +
+        //     (EMEA_PreviousDelta * (1 - smoothing_factor)
+        if (average_delta_between_receive_and_present_.is_zero()) {
+          average_delta_between_receive_and_present_ =
+              delta_between_receive_and_present;
+        } else {
+          // Smoothing factor for the exponential moving average for the delta.
+          constexpr double emea_smoothing_factor_for_average_delta = 0.2;
+
+          average_delta_between_receive_and_present_ =
+              delta_between_receive_and_present *
+                  emea_smoothing_factor_for_average_delta +
+              average_delta_between_receive_and_present_ *
+                  (1 - emea_smoothing_factor_for_average_delta);
+        }
       }
       if (pending_frames_.contains(frame_token)) {
         frame_sorter_.AddFrameResult(pending_frames_[frame_token],
@@ -460,6 +506,26 @@ void VideoFrameSubmitter::OnBeginFrame(
         TRACE_ID_WITH_SCOPE("VideoFrameSubmitter", frame_token),
         feedback.timestamp);
   }
+
+  base::TimeTicks deadline_min = args.frame_time + args.interval;
+  base::TimeTicks deadline_max = args.frame_time + 2 * args.interval;
+  // The default value for the expected display time of the frame is the
+  // same as the deadline_max.
+  base::TimeTicks frame_expected_display_time = deadline_max;
+  // The expected display time of a frame can be computed from the average delta
+  // between the frame arriving at the compositor and being presented. We
+  // use the average delta computed above and add it to the current time, which
+  // gives us an approximate time for when we can expect the frame to actually
+  // be presented.
+  if (!average_delta_between_receive_and_present_.is_zero()) {
+    frame_expected_display_time =
+        base::TimeTicks::Now() + average_delta_between_receive_and_present_;
+  }
+
+  TRACE_EVENT_INSTANT1("media", "FrameExpectedDisplayTime",
+                       TRACE_EVENT_SCOPE_THREAD, "frame_expected_display_time",
+                       frame_expected_display_time);
+
   frame_trackers_.NotifyBeginImplFrame(args);
   frame_sorter_.AddNewFrame(args);
 
@@ -489,9 +555,8 @@ void VideoFrameSubmitter::OnBeginFrame(
   // frame yet. That probably signals a dropped frame, and this will let the
   // provider know that it happened, since we won't PutCurrentFrame this one.
   // Note that we should DidNotProduceFrame with or without the ack.
-  if (!video_frame_provider_ || !video_frame_provider_->UpdateCurrentFrame(
-                                    args.frame_time + args.interval,
-                                    args.frame_time + 2 * args.interval)) {
+  if (!video_frame_provider_ ||
+      !video_frame_provider_->UpdateCurrentFrame(deadline_min, deadline_max)) {
     compositor_frame_sink_->DidNotProduceFrame(current_begin_frame_ack);
     frame_sorter_.AddFrameResult(
         args,
@@ -857,6 +922,15 @@ viz::CompositorFrame VideoFrameSubmitter::CreateCompositorFrame(
   viz::CompositorFrame compositor_frame;
   compositor_frame.metadata.begin_frame_ack = begin_frame_ack;
   compositor_frame.metadata.frame_token = frame_token;
+  if (video_frame_provider_) {
+    compositor_frame.metadata.frame_interval_inputs.frame_time =
+        last_begin_frame_args_.frame_time;
+    compositor_frame.metadata.frame_interval_inputs.content_interval_info
+        .push_back({viz::ContentFrameIntervalType::kVideo,
+                    video_frame_provider_->GetPreferredRenderInterval()});
+    compositor_frame.metadata.frame_interval_inputs
+        .has_only_content_frame_interval_updates = true;
+  }
 
   if (video_frame && video_frame->metadata().decode_end_time.has_value()) {
     base::TimeTicks value = *video_frame->metadata().decode_end_time;
@@ -877,8 +951,8 @@ viz::CompositorFrame VideoFrameSubmitter::CreateCompositorFrame(
       pending_frames_[frame_token] = last_begin_frame_args_;
     }
 
-    UMA_HISTOGRAM_TIMES("Media.VideoFrameSubmitter.PreSubmitBuffering",
-                        base::TimeTicks::Now() - value);
+    RecordUmaPreSubmitBufferingDelay(is_media_stream_,
+                                     base::TimeTicks::Now() - value);
   } else {
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
         "media", "VideoFrameSubmitter",

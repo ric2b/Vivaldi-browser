@@ -10,8 +10,8 @@
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -38,6 +38,7 @@ using signin_metrics::PromoAction;
   self = [super initWithBaseViewController:viewController browser:browser];
   if (self) {
     _accessPoint = accessPoint;
+    _creationTimeTicks = base::TimeTicks::Now();
   }
   return self;
 }
@@ -45,6 +46,7 @@ using signin_metrics::PromoAction;
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   // ConsistencyPromoSigninCoordinator.
   registry->RegisterIntegerPref(prefs::kSigninWebSignDismissalCount, 0);
+  registry->RegisterDictionaryPref(prefs::kSigninHasAcceptedManagementDialog);
 }
 
 + (instancetype)
@@ -143,6 +145,10 @@ using signin_metrics::PromoAction;
                                                            intent:
                                                                (SigninTrustedVaultDialogIntent)
                                                                    intent
+                                                 securityDomainID:
+                                                     (trusted_vault::
+                                                          SecurityDomainId)
+                                                         securityDomainID
                                                           trigger:
                                                               (syncer::
                                                                    TrustedVaultUserActionTriggerForUMA)
@@ -156,6 +162,7 @@ using signin_metrics::PromoAction;
       initWithBaseViewController:viewController
                          browser:browser
                           intent:intent
+                securityDomainID:securityDomainID
                          trigger:trigger
                      accessPoint:accessPoint];
 }

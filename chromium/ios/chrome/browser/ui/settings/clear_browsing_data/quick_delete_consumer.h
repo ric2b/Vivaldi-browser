@@ -11,9 +11,9 @@ namespace browsing_data {
 enum class TimePeriod;
 }
 
-// Consumer for the QuickDeleteMediator to update the
+// Consumer for the QuickDeleteMediator to set the
 // QuickDeleteViewController.
-@protocol QuickDeleteConsumer
+@protocol QuickDeleteConsumer <NSObject>
 
 // Sets the ViewController with initial value for the deletion `timeRange`.
 - (void)setTimeRange:(browsing_data::TimePeriod)timeRange;
@@ -25,14 +25,44 @@ enum class TimePeriod;
 // footer string or not.
 - (void)setShouldShowFooter:(BOOL)shouldShowFooter;
 
-// Updates the ViewController with the result of browsing data counter.
-- (void)updateAutofillWithResult:
-    (const browsing_data::BrowsingDataCounter::Result&)result;
+// Sets the ViewController with the history summary.
+- (void)setHistorySummary:(NSString*)historySummary;
+
+// Sets the ViewController with the tabs summary.
+- (void)setTabsSummary:(NSString*)tabsSummary;
+
+// Sets the ViewController with the cache summary.
+- (void)setCacheSummary:(NSString*)cacheSummary;
+
+// Sets the ViewController with the passwords summary.
+- (void)setPasswordsSummary:(NSString*)passwordsSummary;
+
+// Sets the ViewController with the autofill summary.
+- (void)setAutofillSummary:(NSString*)autofillSummary;
+
+// Sets the boolean value for the history pref selection.
+- (void)setHistorySelection:(BOOL)selected;
+
+// Sets the boolean value for the tabs pref selection.
+- (void)setTabsSelection:(BOOL)selected;
+
+// Sets the boolean value for the site data pref selection.
+- (void)setSiteDataSelection:(BOOL)selected;
+
+// Sets the boolean value for the cache pref selection.
+- (void)setCacheSelection:(BOOL)selected;
+
+// Sets the boolean value for the passwords pref selection.
+- (void)setPasswordsSelection:(BOOL)selected;
 
 // Sets the boolean value for the autofill pref selection.
 - (void)setAutofillSelection:(BOOL)selected;
 
-// TODO(crbug.com/341107834): Add other browsing data type methods here.
+// Shows a loading UI while the deletion is in progress.
+- (void)deletionInProgress;
+
+// Shows a confirmation UI after the deletion is finished.
+- (void)deletionFinished;
 
 @end
 

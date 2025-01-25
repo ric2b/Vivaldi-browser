@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       filter_decoder.c
 /// \brief      Filter ID mapping to filter-specific functions
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -35,7 +34,8 @@ typedef struct {
 	/// \return     - LZMA_OK: Properties decoded successfully.
 	///             - LZMA_OPTIONS_ERROR: Unsupported properties
 	///             - LZMA_MEM_ERROR: Memory allocation failed.
-	lzma_ret (*props_decode)(void **options, lzma_allocator *allocator,
+	lzma_ret (*props_decode)(
+			void **options, const lzma_allocator *allocator,
 			const uint8_t *props, size_t props_size);
 
 } lzma_filter_decoder;
@@ -45,6 +45,12 @@ static const lzma_filter_decoder decoders[] = {
 #ifdef HAVE_DECODER_LZMA1
 	{
 		.id = LZMA_FILTER_LZMA1,
+		.init = &lzma_lzma_decoder_init,
+		.memusage = &lzma_lzma_decoder_memusage,
+		.props_decode = &lzma_lzma_props_decode,
+	},
+	{
+		.id = LZMA_FILTER_LZMA1EXT,
 		.init = &lzma_lzma_decoder_init,
 		.memusage = &lzma_lzma_decoder_memusage,
 		.props_decode = &lzma_lzma_props_decode,
@@ -98,10 +104,26 @@ static const lzma_filter_decoder decoders[] = {
 		.props_decode = &lzma_simple_props_decode,
 	},
 #endif
+#ifdef HAVE_DECODER_ARM64
+	{
+		.id = LZMA_FILTER_ARM64,
+		.init = &lzma_simple_arm64_decoder_init,
+		.memusage = NULL,
+		.props_decode = &lzma_simple_props_decode,
+	},
+#endif
 #ifdef HAVE_DECODER_SPARC
 	{
 		.id = LZMA_FILTER_SPARC,
 		.init = &lzma_simple_sparc_decoder_init,
+		.memusage = NULL,
+		.props_decode = &lzma_simple_props_decode,
+	},
+#endif
+#ifdef HAVE_DECODER_RISCV
+	{
+		.id = LZMA_FILTER_RISCV,
+		.init = &lzma_simple_riscv_decoder_init,
 		.memusage = NULL,
 		.props_decode = &lzma_simple_props_decode,
 	},
@@ -128,6 +150,16 @@ decoder_find(lzma_vli id)
 }
 
 
+// lzma_filter_coder begins with the same members as lzma_filter_decoder.
+// This function is a wrapper with a type that is compatible with the
+// typedef of lzma_filter_find in filter_common.h.
+static const lzma_filter_coder *
+coder_find(lzma_vli id)
+{
+	return (const lzma_filter_coder *)decoder_find(id);
+}
+
+
 extern LZMA_API(lzma_bool)
 lzma_filter_decoder_is_supported(lzma_vli id)
 {
@@ -136,11 +168,11 @@ lzma_filter_decoder_is_supported(lzma_vli id)
 
 
 extern lzma_ret
-lzma_raw_decoder_init(lzma_next_coder *next, lzma_allocator *allocator,
+lzma_raw_decoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter *options)
 {
 	return lzma_raw_coder_init(next, allocator,
-			options, (lzma_filter_find)(&decoder_find), false);
+			options, &coder_find, false);
 }
 
 
@@ -159,13 +191,12 @@ lzma_raw_decoder(lzma_stream *strm, const lzma_filter *options)
 extern LZMA_API(uint64_t)
 lzma_raw_decoder_memusage(const lzma_filter *filters)
 {
-	return lzma_raw_coder_memusage(
-			(lzma_filter_find)(&decoder_find), filters);
+	return lzma_raw_coder_memusage(&coder_find, filters);
 }
 
 
 extern LZMA_API(lzma_ret)
-lzma_properties_decode(lzma_filter *filter, lzma_allocator *allocator,
+lzma_properties_decode(lzma_filter *filter, const lzma_allocator *allocator,
 		const uint8_t *props, size_t props_size)
 {
 	// Make it always NULL so that the caller can always safely free() it.

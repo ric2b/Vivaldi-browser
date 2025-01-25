@@ -778,19 +778,26 @@ bool WillDrawImage(
     const PropertyTreeStateOrAlias& current_paint_chunk_properties,
     const gfx::RectF& image_rect) {
   Node* generating_node = GeneratingNode(node);
-  if (!generating_node || !style_image.IsImageResource())
+
+  //  StyleFetchedImage and StyleImageSet are the only two that could be passed
+  //  here that could have a non-null CachedImage.
+  if (!generating_node || !style_image.CachedImage() ||
+      (!style_image.IsImageResource() && !style_image.IsImageResourceSet())) {
     return false;
+  }
+
   const gfx::Rect enclosing_rect = gfx::ToEnclosingRect(image_rect);
+
   bool image_may_be_lcp_candidate =
       PaintTimingDetector::NotifyBackgroundImagePaint(
-          *generating_node, image, To<StyleFetchedImage>(style_image),
-          current_paint_chunk_properties, enclosing_rect);
+          *generating_node, image, style_image, current_paint_chunk_properties,
+          enclosing_rect);
 
   LocalDOMWindow* window = node->GetDocument().domWindow();
   DCHECK(window);
   ImageElementTiming::From(*window).NotifyBackgroundImagePainted(
-      *generating_node, To<StyleFetchedImage>(style_image),
-      current_paint_chunk_properties, enclosing_rect);
+      *generating_node, style_image, current_paint_chunk_properties,
+      enclosing_rect);
   return image_may_be_lcp_candidate;
 }
 
@@ -860,6 +867,7 @@ inline bool PaintFastBottomLayer(const Document& document,
   FloatRoundedRect color_border =
       info.is_rounded_fill ? border_rect
                            : FloatRoundedRect(ToPixelSnappedRect(rect));
+
   // When the layer has an image, figure out whether it is covered by a single
   // tile. The border for painting images may not be the same as the color due
   // to optimizations for the image painting destination that avoid painting
@@ -1256,7 +1264,9 @@ void BoxPainterBase::PaintFillLayer(
     clip_to_border.emplace(context, rect, border_rect);
   }
 
-  if (bg_layer.Clip() == EFillBox::kText) {
+  EFillBox effective_clip = bg_paint_context.EffectiveClip(bg_layer);
+
+  if (effective_clip == EFillBox::kText) {
     DCHECK(!bg_paint_context.CanCompositeBackgroundAttachmentFixed());
     PaintFillLayerTextFillBox(paint_info, fill_layer_info, image.get(),
                               composite_op, geometry, rect, scrolled_paint_rect,
@@ -1267,7 +1277,7 @@ void BoxPainterBase::PaintFillLayer(
   // We use BackgroundClip paint property when CanFastScrollFixedAttachment().
   std::optional<GraphicsContextStateSaver> background_clip_state_saver;
   if (!bg_paint_context.CanCompositeBackgroundAttachmentFixed()) {
-    switch (bg_layer.Clip()) {
+    switch (effective_clip) {
       case EFillBox::kFillBox:
       // Spec: For elements with associated CSS layout box, the used values for
       // fill-box compute to content-box.
@@ -1280,8 +1290,8 @@ void BoxPainterBase::PaintFillLayer(
 
         // Clip to the padding or content boxes as necessary.
         PhysicalBoxStrut outsets = border;
-        if (bg_layer.Clip() == EFillBox::kFillBox ||
-            bg_layer.Clip() == EFillBox::kContent) {
+        if (effective_clip == EFillBox::kFillBox ||
+            effective_clip == EFillBox::kContent) {
           outsets += padding;
         }
         outsets.TruncateSides(fill_layer_info.sides_to_include);
@@ -1375,8 +1385,9 @@ void BoxPainterBase::PaintMaskImages(
     const ImageResourceObserver& obj,
     const BoxBackgroundPaintContext& bg_paint_context,
     PhysicalBoxSides sides_to_include) {
-  if (!style_.HasMask() || style_.Visibility() != EVisibility::kVisible)
+  if (!style_.HasMask() || style_.UsedVisibility() != EVisibility::kVisible) {
     return;
+  }
 
   PaintFillLayers(paint_info, Color::kTransparent, style_.MaskLayers(),
                   paint_rect, bg_paint_context);

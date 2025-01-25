@@ -86,7 +86,7 @@ class ExecutionInput {
 
   ~ExecutionInput();
 
-  ExecutionInput& operator=(ExecutionInput&&) = default;
+  ExecutionInput& operator=(ExecutionInput&&) noexcept = default;
 
   const Shape& shape() const {
     return dynamic_shape_ != nullptr ? *dynamic_shape_ : buffers_.shape();
@@ -157,13 +157,16 @@ class ExecutionOutput {
         to_be_released_(std::move(to_be_released)) {}
   // TODO(b/170310047): remove this overload.
   ExecutionOutput(Shape on_host_shape, Shape on_device_shape,
-                  se::DeviceMemoryAllocator* allocator, int device_ordinal)
-      : result_(std::move(on_device_shape), allocator, device_ordinal) {}
+                  se::DeviceMemoryAllocator* allocator, int device_ordinal,
+                  int physical_device_ordinal = -1)
+      : result_(std::move(on_device_shape), allocator, device_ordinal,
+                physical_device_ordinal) {}
   ExecutionOutput(Shape on_device_shape, se::DeviceMemoryAllocator* allocator,
-                  int device_ordinal)
-      : result_(std::move(on_device_shape), allocator, device_ordinal) {}
-  ExecutionOutput(ExecutionOutput&&) = default;
-  ExecutionOutput& operator=(ExecutionOutput&&) = default;
+                  int device_ordinal, int physical_device_ordinal = -1)
+      : result_(std::move(on_device_shape), allocator, device_ordinal,
+                physical_device_ordinal) {}
+  ExecutionOutput(ExecutionOutput&&) noexcept = default;
+  ExecutionOutput& operator=(ExecutionOutput&&) noexcept = default;
 
   ~ExecutionOutput() {
     // If the ExecutionOutput has not been committed, and if there are aliased

@@ -21,7 +21,7 @@
 
 using std::sqrt;
 
-// tolerance for chekcing number of iterations
+// tolerance for checking number of iterations
 #define LM_EVAL_COUNT_TOL 2
 
 struct lmder_functor : DenseFunctor<double> {

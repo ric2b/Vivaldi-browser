@@ -11,9 +11,10 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/views/side_panel/side_panel_action_callback.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_action_callback.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
 #include "content/public/browser/browser_context.h"
@@ -22,9 +23,9 @@
 #include "extensions/common/extension_features.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "third_party/abseil-cpp/absl/memory/memory.h"
 #include "ui/actions/actions.h"
 #include "ui/base/ui_base_features.h"
-#include "third_party/abseil-cpp/absl/memory/memory.h"
 
 namespace extensions {
 
@@ -39,11 +40,13 @@ ExtensionSidePanelManager::ExtensionSidePanelManager(
     Profile* profile,
     Browser* browser,
     content::WebContents* web_contents,
-    SidePanelRegistry* registry)
+    SidePanelRegistry* registry,
+    bool for_tab)
     : profile_(profile),
       browser_(browser),
       web_contents_(web_contents),
-      registry_(registry) {
+      registry_(registry),
+      for_tab_(for_tab) {
   side_panel_registry_observation_.Observe(registry_);
   profile_observation_.Observe(profile);
 
@@ -54,43 +57,45 @@ ExtensionSidePanelManager::ExtensionSidePanelManager(
 ExtensionSidePanelManager::~ExtensionSidePanelManager() = default;
 
 // static
-ExtensionSidePanelManager* ExtensionSidePanelManager::GetOrCreateForBrowser(
-    Browser* browser) {
-  ExtensionSidePanelManager* manager = static_cast<ExtensionSidePanelManager*>(
-      browser->GetUserData(kExtensionSidePanelManagerKey));
-  if (!manager) {
-    // Use absl::WrapUnique(new ExtensionSidePanelManager(...)) instead of
-    // std::make_unique<ExtensionSidePanelManager> to access a private
-    // constructor.
-    auto new_manager = absl::WrapUnique(new ExtensionSidePanelManager(
-        browser->profile(), browser, /*web_contents=*/nullptr,
-        SidePanelCoordinator::GetGlobalSidePanelRegistry(browser)));
-    manager = new_manager.get();
-    browser->SetUserData(kExtensionSidePanelManagerKey, std::move(new_manager));
-  }
-  return manager;
+void ExtensionSidePanelManager::CreateForBrowser(
+    Browser* browser,
+    SidePanelRegistry* window_registry) {
+  // Use absl::WrapUnique(new ExtensionSidePanelManager(...)) instead of
+  // std::make_unique<ExtensionSidePanelManager> to access a private
+  // constructor.
+  auto manager = absl::WrapUnique(new ExtensionSidePanelManager(
+      browser->profile(), browser, /*web_contents=*/nullptr, window_registry,
+      /*for_tab=*/false));
+  browser->SetUserData(kExtensionSidePanelManagerKey, std::move(manager));
 }
 
 // static
-ExtensionSidePanelManager* ExtensionSidePanelManager::GetOrCreateForWebContents(
-    Profile* profile,
-    content::WebContents* web_contents) {
+ExtensionSidePanelManager* ExtensionSidePanelManager::GetForBrowserForTesting(
+    Browser* browser) {
+  return static_cast<ExtensionSidePanelManager*>(
+      browser->GetUserData(kExtensionSidePanelManagerKey));
+}
+
+// static
+void ExtensionSidePanelManager::CreateForTab(Profile* profile,
+                                             content::WebContents* web_contents,
+                                             SidePanelRegistry* tab_registry) {
   DCHECK(web_contents);
 
-  ExtensionSidePanelManager* manager = static_cast<ExtensionSidePanelManager*>(
+  // Use absl::WrapUnique(new ExtensionSidePanelManager(...)) instead of
+  // std::make_unique<ExtensionSidePanelManager> to access a private
+  // constructor.
+  auto manager = absl::WrapUnique(
+      new ExtensionSidePanelManager(profile, /*browser=*/nullptr, web_contents,
+                                    tab_registry, /*for_tab=*/true));
+  web_contents->SetUserData(kExtensionSidePanelManagerKey, std::move(manager));
+}
+
+// static
+ExtensionSidePanelManager* ExtensionSidePanelManager::GetForTabForTesting(
+    content::WebContents* web_contents) {
+  return static_cast<ExtensionSidePanelManager*>(
       web_contents->GetUserData(kExtensionSidePanelManagerKey));
-  if (!manager) {
-    // Use absl::WrapUnique(new ExtensionSidePanelManager(...)) instead of
-    // std::make_unique<ExtensionSidePanelManager> to access a private
-    // constructor.
-    auto new_manager = absl::WrapUnique(new ExtensionSidePanelManager(
-        profile, /*browser=*/nullptr, web_contents,
-        SidePanelRegistry::Get(web_contents)));
-    manager = new_manager.get();
-    web_contents->SetUserData(kExtensionSidePanelManagerKey,
-                              std::move(new_manager));
-  }
-  return manager;
 }
 
 ExtensionSidePanelCoordinator*
@@ -188,7 +193,11 @@ void ExtensionSidePanelManager::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
     UnloadedExtensionReason reason) {
-  coordinators_.erase(extension->id());
+  auto it = coordinators_.find(extension->id());
+  if (it != coordinators_.end()) {
+    it->second->DeregisterEntry();
+    coordinators_.erase(extension->id());
+  }
   MaybeRemoveActionItemForExtension(extension);
 }
 
@@ -197,6 +206,12 @@ void ExtensionSidePanelManager::OnRegistryDestroying(
   coordinators_.clear();
   side_panel_registry_observation_.Reset();
   registry_ = nullptr;
+}
+
+void ExtensionSidePanelManager::WillDiscard() {
+  for (auto& it : coordinators_) {
+    it.second->DeregisterEntry();
+  }
 }
 
 void ExtensionSidePanelManager::OnProfileWillBeDestroyed(Profile* profile) {
@@ -216,7 +231,7 @@ void ExtensionSidePanelManager::MaybeCreateExtensionSidePanelCoordinator(
     coordinators_.emplace(
         extension->id(),
         std::make_unique<ExtensionSidePanelCoordinator>(
-            profile_, browser_, web_contents_, extension, registry_));
+            profile_, browser_, web_contents_, extension, registry_, for_tab_));
   }
 }
 

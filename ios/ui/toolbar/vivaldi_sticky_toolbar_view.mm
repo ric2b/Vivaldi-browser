@@ -28,6 +28,9 @@ const CGFloat locationImageViewRightPadding = 2;
 // Boolean to determine if the full address should be shown.
 @property(nonatomic, assign) BOOL showFullAddress;
 
+// Tint color for the location text
+@property(nonatomic, strong) UIColor* localLabelTintColor;
+
 // Constraints to hide the location image view.
 @property(nonatomic, strong)
     NSArray<NSLayoutConstraint*>* hideLocationImageConstraints;
@@ -47,7 +50,8 @@ const CGFloat locationImageViewRightPadding = 2;
 
 #pragma mark - INITIALIZER
 - (instancetype)init {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     self.backgroundColor = UIColor.clearColor;
     [self setUpUI];
   }
@@ -92,6 +96,7 @@ const CGFloat locationImageViewRightPadding = 2;
     [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   locationLabel.backgroundColor = UIColor.clearColor;
   locationLabel.textColor = UIColor.labelColor;
+  self.localLabelTintColor = UIColor.labelColor;
 
   [locationContainer addSubview:locationLabel];
   [locationLabel anchorTop:locationContainer.topAnchor
@@ -140,6 +145,10 @@ const CGFloat locationImageViewRightPadding = 2;
 
 
 #pragma mark - SETTERS
+- (void)updateBackgroundColor:(UIColor*)backgroundColor {
+  self.backgroundColor = backgroundColor;
+}
+
 - (void)updateLocationText:(NSString*)text
                     domain:(NSString*)domain
                   showFull:(BOOL)showFull {
@@ -163,7 +172,7 @@ const CGFloat locationImageViewRightPadding = 2;
     self.locationLabel.attributedText = attributedString;
   } else {
     self.locationLabel.text = text;
-    self.locationLabel.textColor = [UIColor labelColor];
+    self.locationLabel.textColor = self.localLabelTintColor;
   }
   [self updateAccessibility];
 }
@@ -188,6 +197,7 @@ const CGFloat locationImageViewRightPadding = 2;
 }
 
 - (void)setTintColor:(UIColor*)tintColor {
+  self.localLabelTintColor = tintColor;
   self.locationLabel.textColor = tintColor;
   self.locationIconImageView.tintColor = tintColor;
 }

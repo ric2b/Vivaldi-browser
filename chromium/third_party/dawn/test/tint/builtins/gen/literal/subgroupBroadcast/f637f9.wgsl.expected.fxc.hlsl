@@ -1,9 +1,24 @@
-SKIP: FAILED
+SKIP: INVALID
 
-/build/dawn/src/tint/lang/hlsl/writer/ast_printer/ast_printer.cc:2510 internal compiler error: TINT_UNREACHABLE unexpected subgroup builtin type subgroupBroadcast
-********************************************************************
-*  The tint shader compiler has encountered an unexpected error.   *
-*                                                                  *
-*  Please help us fix this issue by submitting a bug report at     *
-*  crbug.com/tint with the source program that triggered the bug.  *
-********************************************************************
+RWByteAddressBuffer prevent_dce : register(u0);
+
+int4 subgroupBroadcast_f637f9() {
+  int4 res = WaveReadLaneAt((1).xxxx, 1u);
+  return res;
+}
+
+void fragment_main() {
+  prevent_dce.Store4(0u, asuint(subgroupBroadcast_f637f9()));
+  return;
+}
+
+[numthreads(1, 1, 1)]
+void compute_main() {
+  prevent_dce.Store4(0u, asuint(subgroupBroadcast_f637f9()));
+  return;
+}
+FXC validation failure:
+<scrubbed_path>(4,14-41): error X3004: undeclared identifier 'WaveReadLaneAt'
+
+
+tint executable returned error: exit status 1

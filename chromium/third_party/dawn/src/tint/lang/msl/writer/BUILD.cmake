@@ -81,6 +81,10 @@ tint_target_add_dependencies(tint_lang_msl_writer lib
   tint_utils_traits
 )
 
+tint_target_add_external_dependencies(tint_lang_msl_writer lib
+  "src_utils"
+)
+
 if(TINT_BUILD_MSL_WRITER)
   tint_target_add_dependencies(tint_lang_msl_writer lib
     tint_lang_msl_writer_ast_printer
@@ -105,6 +109,7 @@ tint_add_target(tint_lang_msl_writer_test test
   lang/msl/writer/helper_test.h
   lang/msl/writer/if_test.cc
   lang/msl/writer/let_test.cc
+  lang/msl/writer/loop_test.cc
   lang/msl/writer/return_test.cc
   lang/msl/writer/type_test.cc
   lang/msl/writer/var_test.cc
@@ -135,6 +140,7 @@ tint_target_add_dependencies(tint_lang_msl_writer_test test
 
 tint_target_add_external_dependencies(tint_lang_msl_writer_test test
   "gtest"
+  "src_utils"
 )
 
 if(TINT_BUILD_MSL_WRITER)
@@ -146,11 +152,11 @@ if(TINT_BUILD_MSL_WRITER)
 endif(TINT_BUILD_MSL_WRITER)
 
 endif(TINT_BUILD_MSL_WRITER)
-if(TINT_BUILD_MSL_WRITER)
+if(TINT_BUILD_MSL_WRITER AND TINT_BUILD_WGSL_READER)
 ################################################################################
 # Target:    tint_lang_msl_writer_bench
 # Kind:      bench
-# Condition: TINT_BUILD_MSL_WRITER
+# Condition: TINT_BUILD_MSL_WRITER AND TINT_BUILD_WGSL_READER
 ################################################################################
 tint_add_target(tint_lang_msl_writer_bench bench
   lang/msl/writer/writer_bench.cc
@@ -158,13 +164,15 @@ tint_add_target(tint_lang_msl_writer_bench bench
 
 tint_target_add_dependencies(tint_lang_msl_writer_bench bench
   tint_api_common
-  tint_cmd_bench_bench
   tint_lang_core
   tint_lang_core_constant
+  tint_lang_core_ir
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
+  tint_lang_wgsl_common
   tint_lang_wgsl_features
+  tint_lang_wgsl_helpers
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
   tint_utils_containers
@@ -184,6 +192,7 @@ tint_target_add_dependencies(tint_lang_msl_writer_bench bench
 
 tint_target_add_external_dependencies(tint_lang_msl_writer_bench bench
   "google-benchmark"
+  "src_utils"
 )
 
 if(TINT_BUILD_MSL_WRITER)
@@ -194,7 +203,14 @@ if(TINT_BUILD_MSL_WRITER)
   )
 endif(TINT_BUILD_MSL_WRITER)
 
-endif(TINT_BUILD_MSL_WRITER)
+if(TINT_BUILD_WGSL_READER)
+  tint_target_add_dependencies(tint_lang_msl_writer_bench bench
+    tint_cmd_bench_bench
+    tint_lang_wgsl_reader
+  )
+endif(TINT_BUILD_WGSL_READER)
+
+endif(TINT_BUILD_MSL_WRITER AND TINT_BUILD_WGSL_READER)
 if(TINT_BUILD_MSL_WRITER)
 ################################################################################
 # Target:    tint_lang_msl_writer_fuzz
@@ -202,12 +218,15 @@ if(TINT_BUILD_MSL_WRITER)
 # Condition: TINT_BUILD_MSL_WRITER
 ################################################################################
 tint_add_target(tint_lang_msl_writer_fuzz fuzz
+  lang/msl/writer/writer_fuzz.cc
 )
 
 tint_target_add_dependencies(tint_lang_msl_writer_fuzz fuzz
   tint_api_common
+  tint_cmd_fuzz_ir_fuzz
   tint_lang_core
   tint_lang_core_constant
+  tint_lang_core_ir
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
@@ -228,6 +247,10 @@ tint_target_add_dependencies(tint_lang_msl_writer_fuzz fuzz
   tint_utils_symbol
   tint_utils_text
   tint_utils_traits
+)
+
+tint_target_add_external_dependencies(tint_lang_msl_writer_fuzz fuzz
+  "src_utils"
 )
 
 if(TINT_BUILD_MSL_WRITER)

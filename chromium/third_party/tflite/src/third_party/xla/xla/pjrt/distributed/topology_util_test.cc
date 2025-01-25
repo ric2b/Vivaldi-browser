@@ -24,7 +24,7 @@ limitations under the License.
 #include "xla/pjrt/distributed/in_memory_key_value_store.h"
 #include "xla/pjrt/distributed/protocol.pb.h"
 #include "xla/test_helpers.h"
-#include "tsl/lib/core/status_test_util.h"
+#include "xla/tsl/lib/core/status_test_util.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/platform/test.h"
@@ -99,12 +99,16 @@ TEST(TopologyTest, BuildGpuTopology) {
   // Adds 2 devices to host 0 and 2 devices to host 1.
   DeviceProto* d0 = locals[0].add_devices();
   d0->set_local_device_ordinal(0);
+  d0->set_core_count(20);
   DeviceProto* d1 = locals[0].add_devices();
   d1->set_local_device_ordinal(1);
+  d1->set_core_count(20);
   DeviceProto* d2 = locals[1].add_devices();
   d2->set_local_device_ordinal(0);
+  d2->set_core_count(20);
   DeviceProto* d3 = locals[1].add_devices();
   d3->set_local_device_ordinal(1);
+  d3->set_core_count(20);
 
   GlobalTopologyProto global =
       BuildGlobalTopology(absl::Span<LocalTopologyProto>(locals),

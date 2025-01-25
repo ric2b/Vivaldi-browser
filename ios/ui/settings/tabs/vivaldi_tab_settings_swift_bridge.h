@@ -10,6 +10,7 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/settings/tabs/vivaldi_ntp_type.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_consumer.h"
 #import "ui/base/l10n/l10n_util_mac_bridge.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"

@@ -10,7 +10,7 @@
 
 #include "src/gpu/Blend.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
-#include "src/gpu/graphite/PipelineDataCache.h"
+#include "src/gpu/graphite/PipelineData.h"
 
 #include <optional>
 #include <tuple>
@@ -38,30 +38,38 @@ struct RenderPassDesc;
 class RenderStep;
 class RuntimeEffectDictionary;
 class ShaderNode;
+class UniformManager;
 class UniquePaintParamsID;
 
 struct ResourceBindingRequirements;
 
 struct VertSkSLInfo {
     std::string fSkSL;
-
     std::string fLabel;
+
+    bool fHasStepUniforms = false;
 };
 
 struct FragSkSLInfo {
     std::string fSkSL;
-    BlendInfo fBlendInfo;
-
     std::string fLabel;
+
+    // This represents the HW blending of the final program, and not the logical blending that was
+    // defined on the SkPaint.
+    BlendInfo fBlendInfo;
+    DstReadRequirement fDstReadReq = DstReadRequirement::kNone;
 
     bool fRequiresLocalCoords = false;
     int  fNumTexturesAndSamplers = 0;
     bool fHasPaintUniforms = false;
     bool fHasGradientBuffer = false;
+    // Note that fData is currently only used to store SamplerDesc information for shaders that have
+    // the option of using immutable samplers. However, other snippets could leverage this field to
+    // convey other information once data can be tied to snippetIDs (b/347072931).
     skia_private::TArray<uint32_t> fData = {};
 };
 
-std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*> ExtractPaintData(
+std::tuple<UniquePaintParamsID, UniformDataBlock, TextureDataBlock> ExtractPaintData(
         Recorder*,
         PipelineDataGatherer* gatherer,
         PaintParamsKeyBuilder* builder,
@@ -73,13 +81,24 @@ std::tuple<UniquePaintParamsID, const UniformDataBlock*, const TextureDataBlock*
         SkIPoint dstOffset,
         const SkColorInfo& targetColorInfo);
 
-std::tuple<const UniformDataBlock*, const TextureDataBlock*> ExtractRenderStepData(
+std::tuple<UniformDataBlock, TextureDataBlock> ExtractRenderStepData(
         UniformDataCache* uniformDataCache,
         TextureDataCache* textureDataCache,
         PipelineDataGatherer* gatherer,
         const Layout layout,
         const RenderStep* step,
         const DrawParams& params);
+
+// `viewport` should hold the actual viewport set as backend state (defining the NDC -> pixel
+// transform).
+// `replayTranslation` should hold the replay translation provided on insertRecording().
+// It is assumed that `dstCopyOffset` has already accounted for the replay translation.
+void CollectIntrinsicUniforms(
+        const Caps* caps,
+        SkIRect viewport,
+        SkIPoint replayTranslation,
+        SkIPoint dstCopyOffset,
+        UniformManager*);
 
 DstReadRequirement GetDstReadRequirement(const Caps*, std::optional<SkBlendMode>, Coverage);
 
@@ -122,7 +141,9 @@ std::string EmitRenderStepStorageBuffer(int bufferID,
 std::string EmitUniformsFromStorageBuffer(const char* bufferNamePrefix,
                                           const char* ssboIndex,
                                           SkSpan<const Uniform> uniforms);
-
+std::string EmitStorageBufferAccess(const char* bufferNamePrefix,
+                                    const char* ssboIndex,
+                                    const char* uniformName);
 std::string EmitTexturesAndSamplers(const ResourceBindingRequirements&,
                                     SkSpan<const ShaderNode*> nodes,
                                     int* binding);

@@ -59,7 +59,9 @@
 #include "extensions/common/extension.h"
 #include "net/base/filename_util.h"
 #include "storage/browser/file_system/external_mount_points.h"
+#include "storage/common/file_system/file_system_types.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
+#include "third_party/cros_system_api/dbus/fusebox/dbus-constants.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/clipboard/file_info.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
@@ -83,6 +85,7 @@ constexpr char kCrostiniMapLinuxFiles[] = "LinuxFiles";
 constexpr char kCrostiniMapMyDrive[] = "MyDrive";
 constexpr char kCrostiniMapPlayFiles[] = "PlayFiles";
 constexpr char kCrostiniMapSmbFs[] = "SMB";
+constexpr char kCrostiniMapFusebox[] = "Fusebox";
 constexpr char kCrostiniMapTeamDrives[] = "SharedDrives";
 constexpr char kCrostiniMapSharedWithMe[] = "SharedWithMe";
 constexpr char kCrostiniMapShortcutsSharedWithMe[] = "ShortcutsSharedWithMe";
@@ -241,6 +244,17 @@ bool AppendRelativePath(const FilePath& parent,
                         const FilePath& child,
                         FilePath* path) {
   return child == parent || parent.AppendRelativePath(child, path);
+}
+
+// Same as parent.AppendRelativePath(child, path) except that the relative path
+// to the child is just set to `path` (instead of being appended).
+// Note that `path` is always cleared at the beginning, so it becomes empty when
+// parent.IsParent(child) does not hold.
+bool SetRelativePath(const FilePath& parent,
+                     const FilePath& child,
+                     FilePath* path) {
+  path->clear();
+  return parent.AppendRelativePath(child, path);
 }
 
 // Translates known DriveFS folders into their localized message id.
@@ -599,6 +613,14 @@ bool ConvertFileSystemURLToPathInsideVM(
     // mount ID.
     *inside = vm_mount.Append(kCrostiniMapSmbFs);
     *inside = inside->Append(id);
+  } else if (file_system_url.type() == storage::kFileSystemTypeFuseBox) {
+    // `inside` should be of the form <vm_mount>/Fusebox/<subdir>/foo/bar.
+    // Since <subdir> is not available in either `id` or `path`, we look up
+    // `file_system_url.path()` (the raw VFS path), which is of the form
+    // /media/fuse/fusebox/<subdir>/foo/bar.
+    *inside = vm_mount.Append(kCrostiniMapFusebox);
+    return base::FilePath(kFuseBoxMediaPath)
+        .AppendRelativePath(file_system_url.path(), inside);
   } else {
     return false;
   }
@@ -612,6 +634,20 @@ bool ConvertFileSystemURLToPathInsideCrostini(
   return ConvertFileSystemURLToPathInsideVM(
       profile, file_system_url, crostini::ContainerChromeOSBaseDirectory(),
       /*map_crostini_home=*/true, inside);
+}
+
+bool ConvertFuseboxMonikerPathToPathInsideVM(const base::FilePath& path,
+                                             const base::FilePath& vm_mount,
+                                             base::FilePath* inside) {
+  base::FilePath relative_path;
+  if (!base::FilePath(fusebox::kMonikerFilenamePrefixWithTrailingSlash)
+           .AppendRelativePath(path, &relative_path)) {
+    return false;
+  }
+  *inside = vm_mount.Append(kCrostiniMapFusebox)
+                .Append(fusebox::kMonikerSubdir)
+                .Append(relative_path);
+  return true;
 }
 
 bool ConvertPathInsideVMToFileSystemURL(
@@ -710,6 +746,23 @@ bool ConvertPathInsideVMToFileSystemURL(
     mount_name = components[0];
     path.clear();
     FilePath(mount_name).AppendRelativePath(relative_path, &path);
+  } else if (FilePath(kCrostiniMapFusebox)
+                 .AppendRelativePath(path, &relative_path)) {
+    // For Fusebox files, `mount_name` is the first component of the virtual
+    // path, and `path` is the remaining part of the virtual path.
+    const FilePath absolute_path =
+        FilePath(kFuseBoxMediaPath).Append(relative_path);
+    FilePath virtual_path;
+    if (!mount_points->GetVirtualPath(absolute_path, &virtual_path)) {
+      return false;
+    }
+    const std::vector<FilePath::StringType> components =
+        virtual_path.GetComponents();
+    if (components.size() < 1) {
+      return false;
+    }
+    mount_name = components[0];
+    SetRelativePath(FilePath(mount_name), virtual_path, &path);
   } else {
     return false;
   }
@@ -755,7 +808,7 @@ bool ConvertPathToArcUrl(const FilePath& path,
 
   // Convert paths under /media/removable.
   FilePath relative_path;
-  if (FilePath(kRemovableMediaPath).AppendRelativePath(path, &relative_path)) {
+  if (SetRelativePath(FilePath(kRemovableMediaPath), path, &relative_path)) {
     const std::string volume_name =
         ExtractVolumeNameFromRelativePathForRemovableMedia(relative_path);
     if (volume_name.empty()) {
@@ -780,8 +833,8 @@ bool ConvertPathToArcUrl(const FilePath& path,
   }
 
   // Convert paths under MyFiles.
-  if (GetMyFilesFolderForProfile(primary_profile)
-          .AppendRelativePath(path, &relative_path)) {
+  if (SetRelativePath(GetMyFilesFolderForProfile(primary_profile), path,
+                      &relative_path)) {
     *arc_url_out = GURL(kArcMyFilesContentUrlPrefix)
                        .Resolve(base::EscapePath(relative_path.AsUTF8Unsafe()));
     return true;
@@ -792,8 +845,8 @@ bool ConvertPathToArcUrl(const FilePath& path,
   const DriveIntegrationService* integration_service =
       drive::util::GetIntegrationServiceByProfile(primary_profile);
   if (integration_service &&
-      integration_service->GetMountPointPath().AppendRelativePath(
-          path, &relative_path)) {
+      SetRelativePath(integration_service->GetMountPointPath(), path,
+                      &relative_path)) {
     // TODO(b/157297349) Remove this condition.
     if (arc::IsArcVmEnabled()) {
       *arc_url_out =
@@ -808,14 +861,25 @@ bool ConvertPathToArcUrl(const FilePath& path,
     force_external = true;
   }
 
-  // Force external URL for Crostini.
-  if (GetCrostiniMountDirectory(primary_profile)
-          .AppendRelativePath(path, &relative_path)) {
+  // Convert paths under /media/fuse/crostini_...
+  if (SetRelativePath(GetCrostiniMountDirectory(primary_profile), path,
+                      &relative_path)) {
+    if (arc::IsArcVmEnabled()) {
+      // For ARCVM, we can use ArcVolumeProvider URL and ask Seneschal to share
+      // the path to ARCVM so ARCVM does not need to talk through Chrome.
+      *arc_url_out =
+          GURL("content://org.chromium.arc.volumeprovider/crostini/")
+              .Resolve(base::EscapePath(relative_path.AsUTF8Unsafe()));
+      *requires_sharing_out = true;
+      return true;
+    }
+
+    // Use ChromeContentProvider for ARC++ Container to proxy through Chrome.
     force_external = true;
   }
 
   // Convert path under /media/archive.
-  if (FilePath(kArchiveMountPath).AppendRelativePath(path, &relative_path)) {
+  if (SetRelativePath(FilePath(kArchiveMountPath), path, &relative_path)) {
     // TODO(b/157297349) Remove this condition.
     if (arc::IsArcVmEnabled()) {
       *arc_url_out =
@@ -833,7 +897,7 @@ bool ConvertPathToArcUrl(const FilePath& path,
           ash::smb_client::SmbServiceFactory::Get(primary_profile)) {
     if (const ash::smb_client::SmbFsShare* const share =
             service->GetSmbFsShareForPath(path)) {
-      if (share->mount_path().AppendRelativePath(path, &relative_path)) {
+      if (SetRelativePath(share->mount_path(), path, &relative_path)) {
         // TODO(b/157297349) Remove this condition.
         if (arc::IsArcVmEnabled()) {
           *arc_url_out =
@@ -849,10 +913,22 @@ bool ConvertPathToArcUrl(const FilePath& path,
     }
   }
 
+  // Convert path under /media/fuse/fusebox.
+  if (SetRelativePath(FilePath(kFuseBoxMediaPath), path, &relative_path)) {
+    if (arc::IsArcVmEnabled()) {
+      *arc_url_out =
+          GURL("content://org.chromium.arc.volumeprovider/fusebox/")
+              .Resolve(base::EscapePath(relative_path.AsUTF8Unsafe()));
+      *requires_sharing_out = true;
+      return true;
+    }
+    // Use ChromeContentProvider for ARC++ container.
+    force_external = true;
+  }
+
   // ShareCache files are not available as mount-passthrough and must be shared
   // through ChromeContentProvider.
-  if (GetShareCacheFilePath(primary_profile)
-          .AppendRelativePath(path, &relative_path)) {
+  if (GetShareCacheFilePath(primary_profile).IsParent(path)) {
     force_external = true;
   }
 
@@ -867,6 +943,18 @@ bool ConvertPathToArcUrl(const FilePath& path,
 
   // TODO(kinaba): Add conversion logic once other file systems are supported.
   return false;
+}
+
+base::FilePath ConvertFileSystemURLToPathForSharingWithArc(
+    const storage::FileSystemURL& file_system_url) {
+  switch (file_system_url.type()) {
+    // Use Fusebox path for FSP and MTP.
+    case storage::kFileSystemTypeProvided:
+    case storage::kFileSystemTypeDeviceMediaAsFileStorage:
+      return fusebox::Server::SubstituteFuseboxFilePath(file_system_url);
+    default:
+      return file_system_url.path();
+  }
 }
 
 void ConvertToContentUrls(
@@ -915,16 +1003,18 @@ void ConvertToContentUrls(
       }
     }
 
-    GURL arc_url;
-    bool requires_sharing = false;
-    if (file_system_url.mount_type() == storage::kFileSystemTypeExternal &&
-        ConvertPathToArcUrl(file_system_url.path(), &arc_url,
-                            &requires_sharing)) {
-      if (requires_sharing) {
-        paths_to_share_ptr->push_back(file_system_url.path());
+    if (file_system_url.mount_type() == storage::kFileSystemTypeExternal) {
+      const base::FilePath path =
+          ConvertFileSystemURLToPathForSharingWithArc(file_system_url);
+      GURL arc_url;
+      bool requires_sharing = false;
+      if (ConvertPathToArcUrl(path, &arc_url, &requires_sharing)) {
+        if (requires_sharing) {
+          paths_to_share_ptr->push_back(path);
+        }
+        single_content_url_callback.Run(index, arc_url);
+        continue;
       }
-      single_content_url_callback.Run(index, arc_url);
-      continue;
     }
 
     single_content_url_callback.Run(index, GURL());

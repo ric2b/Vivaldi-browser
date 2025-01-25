@@ -34,6 +34,7 @@ import java.lang.annotation.Retention;
 public final class DeserializeResult<M extends CredentialBook.MatchedMetadata>
     implements AutoCloseable {
 
+  /** The kind of result. Negative values are errors and do not contain advertisement instances. */
   @IntDef({
     Kind.UNKNOWN_ERROR,
     Kind.V0_ADVERTISEMENT,
@@ -52,8 +53,8 @@ public final class DeserializeResult<M extends CredentialBook.MatchedMetadata>
     return kind <= 0;
   }
 
-  private final @Kind int kind;
-  private final @Nullable DeserializedAdvertisement advertisement;
+  @Kind private final int kind;
+  @Nullable private final DeserializedAdvertisement advertisement;
 
   /** Create a DeserializeResult containing an error code */
   /* package */ DeserializeResult(@Kind int errorKind) {
@@ -66,13 +67,13 @@ public final class DeserializeResult<M extends CredentialBook.MatchedMetadata>
   }
 
   /** Create a DeserializeResult containing a V0 advertisement */
-  /* package */ DeserializeResult(DeserializedV0Advertisement advertisement) {
+  /* package */ DeserializeResult(DeserializedV0Advertisement<M> advertisement) {
     this.kind = Kind.V0_ADVERTISEMENT;
     this.advertisement = advertisement;
   }
 
   /** Create a DeserializeResult containing a V1 advertisement */
-  /* package */ DeserializeResult(DeserializedV1Advertisement advertisement) {
+  /* package */ DeserializeResult(DeserializedV1Advertisement<M> advertisement) {
     this.kind = Kind.V1_ADVERTISEMENT;
     this.advertisement = advertisement;
   }
@@ -93,6 +94,7 @@ public final class DeserializeResult<M extends CredentialBook.MatchedMetadata>
    *
    * @return the contained V0 advertisement or {@code null} if not present
    */
+  @SuppressWarnings("unchecked")
   @Nullable
   public DeserializedV0Advertisement<M> getAsV0() {
     if (this.kind != Kind.V0_ADVERTISEMENT) {
@@ -106,12 +108,13 @@ public final class DeserializeResult<M extends CredentialBook.MatchedMetadata>
    *
    * @return the contained V1 advertisement or {@code null} if not present
    */
+  @SuppressWarnings("unchecked")
   @Nullable
   public DeserializedV1Advertisement<M> getAsV1() {
     if (this.kind != Kind.V1_ADVERTISEMENT) {
       return null;
     }
-    return (DeserializedV1Advertisement) this.advertisement;
+    return (DeserializedV1Advertisement<M>) this.advertisement;
   }
 
   /** Closes the contained advertisement if it exists. */

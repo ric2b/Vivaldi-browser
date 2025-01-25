@@ -17,11 +17,13 @@ extern NSString* const vVivaldiFirstRunUrl;
 extern NSString* const vVivaldiPrivacyAndSecurity;
 extern NSString* const vVivaldiRecoverUsernameUrl;
 extern NSString* const vVivaldiRecoverPasswordUrl;
+extern NSString* const vVivaldiDirectMatchLearnMoreUrl;
 
 extern const char vVivaldiBugReportURL[];
 
 // Help
 extern const char vVivaldiHelpCopyLinkToHightlightUrl[];
+extern const char vVivaldiHelpPreloadWebpagUrl[];
 
 
 #endif // IOS_UI_COMMON_VIVALDI_URL_CONSTANTS_H_

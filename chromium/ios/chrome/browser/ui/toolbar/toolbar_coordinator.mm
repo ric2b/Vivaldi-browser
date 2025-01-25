@@ -1,4 +1,4 @@
-// Copyright 2023 The Chromium Authors
+ // Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,14 +7,17 @@
 #import "base/apple/foundation_util.h"
 #import "base/memory/raw_ptr.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/location_bar/ui_bundled/location_bar_coordinator.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_position_browser_agent.h"
+#import "ios/chrome/browser/orchestrator/ui_bundled/omnibox_focus_orchestrator.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presentation_context.h"
 #import "ios/chrome/browser/prerender/model/prerender_service.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
 #import "ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -25,8 +28,6 @@
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/location_bar/location_bar_coordinator.h"
-#import "ios/chrome/browser/ui/orchestrator/omnibox_focus_orchestrator.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller_delegate.h"
@@ -42,15 +43,16 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/location_bar/ui_bundled/location_bar_steady_view_consumer.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_consumer.h"
-#import "ios/chrome/browser/ui/tabs/tab_strip_constants.h"
+#import "ios/chrome/browser/tabs/ui_bundled/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller.h"
+#import "ios/chrome/browser/ui/toolbar/secondary_toolbar_view.h"
 #import "ios/chrome/browser/ui/toolbar/secondary_toolbar_view_controller.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
@@ -178,7 +180,7 @@ using vivaldi::IsVivaldiRunning;
   if (!browser->GetBrowserState()->IsOffTheRecord()) {
     deviceSwitcherResult =
         segmentation_platform::SegmentationPlatformServiceFactory::
-            GetDispatcherForBrowserState(browser->GetBrowserState());
+            GetDispatcherForProfile(browser->GetProfile());
   }
   self.toolbarMediator = [[ToolbarMediator alloc]
       initWithWebStateList:browser->GetWebStateList()
@@ -208,6 +210,8 @@ using vivaldi::IsVivaldiRunning;
       self.locationBarCoordinator.toolbarOmniboxConsumer;
 
   self.primaryToolbarCoordinator.viewControllerDelegate = self;
+  self.primaryToolbarCoordinator.toolbarHeightDelegate =
+      self.toolbarHeightDelegate;
   [self.primaryToolbarCoordinator start];
   self.secondaryToolbarCoordinator.toolbarHeightDelegate =
       self.toolbarHeightDelegate;
@@ -458,17 +462,6 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (CGFloat)expandedPrimaryToolbarHeight {
-  if (_omniboxPosition == ToolbarType::kSecondary) {
-    // TODO(crbug.com/40279063): Find out why primary toolbar height cannot be
-    // zero. This is a temporary fix for the pdf bug.
-
-    if (IsVivaldiRunning()) {
-      return 0.0;
-    } // End Vivaldi
-
-    return 1.0;
-  }
-
   CGFloat height =
       self.primaryToolbarViewController.view.intrinsicContentSize.height;
   if (!IsSplitToolbarMode(self.traitEnvironment)) {
@@ -586,8 +579,10 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
-- (void)resetToolbarAfterSideSwipeSnapshot {
-  [self.locationBarCoordinator.locationBarViewController.view setHidden:NO];
+- (void)setOverflowMenuBlueDot:(BOOL)hasBlueDot {
+  for (id<ToolbarCoordinatee> coordinator in self.coordinators) {
+    [coordinator.popupMenuUIUpdater setOverflowMenuBlueDot:hasBlueDot];
+  }
 }
 
 #pragma mark - PrimaryToolbarViewControllerDelegate
@@ -717,18 +712,22 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)transitionOmniboxToToolbarType:(ToolbarType)toolbarType {
   _omniboxPosition = toolbarType;
+  OmniboxPositionBrowserAgent* positionBrowserAgent =
+      OmniboxPositionBrowserAgent::FromBrowser(self.browser);
   switch (toolbarType) {
     case ToolbarType::kPrimary:
       [self.primaryToolbarCoordinator
           setLocationBarViewController:self.locationBarCoordinator
                                            .locationBarViewController];
       [self.secondaryToolbarCoordinator setLocationBarViewController:nil];
+      positionBrowserAgent->SetIsCurrentLayoutBottomOmnibox(false);
       break;
     case ToolbarType::kSecondary:
       [self.secondaryToolbarCoordinator
           setLocationBarViewController:self.locationBarCoordinator
                                            .locationBarViewController];
       [self.primaryToolbarCoordinator setLocationBarViewController:nil];
+      positionBrowserAgent->SetIsCurrentLayoutBottomOmnibox(true);
       break;
   }
   [self.toolbarHeightDelegate toolbarsHeightChanged];
@@ -808,7 +807,7 @@ using vivaldi::IsVivaldiRunning;
     // display depends on the location of the share button to anchor the IPH,
     // doing it in the middle of the animtion will lead to the anchoring point
     // being off.
-    [_helpHandler presentShareButtonHelpBubbleIfEligible];
+    [_helpHandler presentInProductHelpWithType:InProductHelpType::kShareButton];
     _showShareButtonIPHOnNextLocationBarUnfocus = NO;
   }
   if (completion) {
@@ -818,6 +817,11 @@ using vivaldi::IsVivaldiRunning;
 }
 
 #pragma mark - VIVALDI
+
+- (void)resetToolbarAfterSideSwipeSnapshot {
+  [self.locationBarCoordinator.locationBarViewController.view setHidden:NO];
+}
+
 - (PrimaryToolbarView*)primaryToolbarView {
   if (_omniboxPosition == ToolbarType::kPrimary) {
     PrimaryToolbarView* primaryView =
@@ -828,6 +832,13 @@ using vivaldi::IsVivaldiRunning;
       (PrimaryToolbarView*)[self.primaryToolbarCoordinator.viewController view];
     return primaryView;
   }
+}
+
+- (SecondaryToolbarView*)secondaryToolbarView {
+  SecondaryToolbarView* secondaryView =
+    (SecondaryToolbarView*)
+      [self.secondaryToolbarCoordinator.viewController view];
+  return secondaryView;
 }
 
 // Returns the toolbar button stack view for Secondary Toolbar. This is hidden
@@ -930,9 +941,17 @@ using vivaldi::IsVivaldiRunning;
     primaryView.bottomOmniboxEnabled = bottomOmniboxEnabled;
     primaryView.tabBarEnabled = tabBarEnabled;
     [primaryView redrawToolbarButtons];
-    primaryView.atbSettingForActiveWebState =
-        [self atbSettingsForActiveWebState];
     primaryView.toolsMenuButton.guideName = kToolsMenuGuide;
+
+    // Add guide to omnibox view to track omnibox position in the subviews.
+    [self.layoutGuideCenter referenceView:primaryView.locationBarContainer
+                                underName:kTopOmniboxGuide];
+  }
+
+  SecondaryToolbarView* secondaryView = [self secondaryToolbarView];
+  if (secondaryView) {
+    secondaryView.bottomOmniboxEnabled = bottomOmniboxEnabled;
+    secondaryView.tabBarEnabled = tabBarEnabled;
   }
 }
 
@@ -970,11 +989,9 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)updateVivaldiShieldState {
-  PrimaryToolbarView* primaryView = [self primaryToolbarView];
-  if (primaryView) {
-    primaryView.atbSettingForActiveWebState =
-        [self atbSettingsForActiveWebState];
-  }
+  [self.locationBarCoordinator
+      setTrackerBlockerSettingForActiveWebState:
+          [self atbSettingsForActiveWebState]];
 }
 
 - (ATBSettingType)atbSettingsForActiveWebState {

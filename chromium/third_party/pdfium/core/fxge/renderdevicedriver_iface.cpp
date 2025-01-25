@@ -24,16 +24,14 @@ bool RenderDeviceDriverIface::SetClip_PathStroke(
 
 void RenderDeviceDriverIface::SetBaseClip(const FX_RECT& rect) {}
 
-bool RenderDeviceDriverIface::FillRectWithBlend(const FX_RECT& rect,
-                                                uint32_t fill_color,
-                                                BlendMode blend_type) {
+bool RenderDeviceDriverIface::FillRect(const FX_RECT& rect,
+                                       uint32_t fill_color) {
   return false;
 }
 
 bool RenderDeviceDriverIface::DrawCosmeticLine(const CFX_PointF& ptMoveTo,
                                                const CFX_PointF& ptLineTo,
-                                               uint32_t color,
-                                               BlendMode blend_type) {
+                                               uint32_t color) {
   return false;
 }
 
@@ -66,15 +64,14 @@ int RenderDeviceDriverIface::GetDriverType() const {
   return 0;
 }
 
-bool RenderDeviceDriverIface::DrawShading(const CPDF_ShadingPattern* pPattern,
-                                          const CFX_Matrix* pMatrix,
+#if defined(PDF_USE_SKIA)
+bool RenderDeviceDriverIface::DrawShading(const CPDF_ShadingPattern& pattern,
+                                          const CFX_Matrix& matrix,
                                           const FX_RECT& clip_rect,
-                                          int alpha,
-                                          bool bAlphaMode) {
+                                          int alpha) {
   return false;
 }
 
-#if defined(PDF_USE_SKIA)
 bool RenderDeviceDriverIface::SetBitsWithMask(
     RetainPtr<const CFX_DIBBase> bitmap,
     RetainPtr<const CFX_DIBBase> mask,
@@ -87,14 +84,12 @@ bool RenderDeviceDriverIface::SetBitsWithMask(
 
 void RenderDeviceDriverIface::SetGroupKnockout(bool group_knockout) {}
 
-bool RenderDeviceDriverIface::SyncInternalBitmaps() {
-  return true;
-}
-#endif
+void RenderDeviceDriverIface::SyncInternalBitmaps() {}
+#endif  // defined(PDF_USE_SKIA)
 
 RenderDeviceDriverIface::StartResult::StartResult(
-    bool success,
+    Result result,
     std::unique_ptr<CFX_AggImageRenderer> agg_image_renderer)
-    : success(success), agg_image_renderer(std::move(agg_image_renderer)) {}
+    : result(result), agg_image_renderer(std::move(agg_image_renderer)) {}
 
 RenderDeviceDriverIface::StartResult::~StartResult() = default;

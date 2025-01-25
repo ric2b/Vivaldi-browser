@@ -25,8 +25,18 @@ BASE_FEATURE(kMigrateSyncingUserToSignedIn,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kMinDelayToMigrateSyncPaused,
+                   &switches::kMigrateSyncingUserToSignedIn,
+                   "min_delay_to_migrate_sync_paused",
+                   base::Days(7));
+
 BASE_FEATURE(kUndoMigrationOfSyncingUserToSignedIn,
              "UndoMigrationOfSyncingUserToSignedIn",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kForceMigrateSyncingUserToSignedIn,
+             "ForceMigrateSyncingUserToSignedIn",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace switches

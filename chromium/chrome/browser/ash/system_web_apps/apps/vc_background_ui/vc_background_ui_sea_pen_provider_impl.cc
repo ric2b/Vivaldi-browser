@@ -95,9 +95,26 @@ void VcBackgroundUISeaPenProviderImpl::SetSeaPenObserverInternal() {
 
 void VcBackgroundUISeaPenProviderImpl::SelectRecentSeaPenImageInternal(
     const uint32_t id,
+    const bool preview_mode,
     SelectRecentSeaPenImageCallback callback) {
+  if (preview_mode) {
+    sea_pen_receiver_.ReportBadMessage(
+        "Preview mode is only used for wallpaper");
+    return;
+  }
   GetCameraEffectsController()->SetBackgroundImage(
       CameraEffectsController::SeaPenIdToRelativePath(id), std::move(callback));
+}
+
+bool VcBackgroundUISeaPenProviderImpl::IsManagedSeaPenEnabledInternal() {
+  return ::ash::personalization_app::IsManagedSeaPenVcBackgroundEnabled(
+      profile_);
+}
+
+bool VcBackgroundUISeaPenProviderImpl::
+    IsManagedSeaPenFeedbackEnabledInternal() {
+  return ::ash::personalization_app::IsManagedSeaPenVcBackgroundFeedbackEnabled(
+      profile_);
 }
 
 void VcBackgroundUISeaPenProviderImpl::GetRecentSeaPenImageIdsInternal(
@@ -167,7 +184,13 @@ void VcBackgroundUISeaPenProviderImpl::OnCameraEffectChanged(
 void VcBackgroundUISeaPenProviderImpl::OnFetchWallpaperDoneInternal(
     const SeaPenImage& sea_pen_image,
     const ash::personalization_app::mojom::SeaPenQueryPtr& query,
+    const bool preview_mode,
     base::OnceCallback<void(bool success)> callback) {
+  if (preview_mode) {
+    sea_pen_receiver_.ReportBadMessage(
+        "Preview mode is only used for wallpaper");
+    return;
+  }
   const std::optional<std::string> metadata =
       base::WriteJson(SeaPenQueryToDict(query));
   if (!metadata.has_value()) {

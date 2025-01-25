@@ -1,9 +1,4 @@
 include_rules = [
-  # `#include "partition_alloc/..."` is prefered to
-  # `#include "base/allocator/partition_allocator/src/partition_alloc/..."`.
-  "+partition_alloc",
-  "-base/allocator/partition_allocator",
-
   "+third_party/ashmem",
   "+third_party/apple_apsl",
   "+third_party/boringssl/src/include",
@@ -11,7 +6,6 @@ include_rules = [
   # We are moving the old jni_generator to jni_zero, some references will remain
   # in //base.
   "+third_party/jni_zero",
-  "+third_party/libevent",
   "+third_party/libunwindstack/src/libunwindstack/include",
   "+third_party/lss",
   "+third_party/modp_b64",

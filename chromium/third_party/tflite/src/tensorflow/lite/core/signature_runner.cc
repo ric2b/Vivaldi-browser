@@ -56,6 +56,30 @@ const TfLiteTensor* SignatureRunner::output_tensor(
   return subgraph_->tensor(it->second);
 }
 
+TfLiteStatus SignatureRunner::SetInputBufferHandle(
+    const char* input_name, TfLiteBufferHandle buffer_handle,
+    TfLiteDelegate* delegate, bool release_existing_buffer_handle) {
+  const auto& it = signature_def_->inputs.find(input_name);
+  if (it == signature_def_->inputs.end()) {
+    subgraph_->ReportError("Input name %s was not found", input_name);
+    return kTfLiteError;
+  }
+  return subgraph_->SetBufferHandle(it->second, buffer_handle, delegate,
+                                    release_existing_buffer_handle);
+}
+
+TfLiteStatus SignatureRunner::SetOutputBufferHandle(
+    const char* output_name, TfLiteBufferHandle buffer_handle,
+    TfLiteDelegate* delegate, bool release_existing_buffer_handle) {
+  const auto& it = signature_def_->outputs.find(output_name);
+  if (it == signature_def_->outputs.end()) {
+    subgraph_->ReportError("Output name %s was not found", output_name);
+    return kTfLiteError;
+  }
+  return subgraph_->SetBufferHandle(it->second, buffer_handle, delegate,
+                                    release_existing_buffer_handle);
+}
+
 TfLiteStatus SignatureRunner::ResizeInputTensor(
     const char* input_name, const std::vector<int>& new_size) {
   const auto& it = signature_def_->inputs.find(input_name);

@@ -25,7 +25,6 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "content/public/browser/notification_observer.h"
 
 #include "contact/contact_backend.h"
 #include "contact/contact_database_params.h"

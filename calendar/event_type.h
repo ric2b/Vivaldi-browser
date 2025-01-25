@@ -147,6 +147,14 @@ class EventResultCB {
   EventResult event;
 };
 
+class StatusCB {
+ public:
+  StatusCB() = default;
+
+  bool success;
+  std::string message;
+};
+
 class CreateEventsResult {
  public:
   CreateEventsResult() = default;

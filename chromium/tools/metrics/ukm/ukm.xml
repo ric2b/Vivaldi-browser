@@ -22,7 +22,10 @@ be describing additional metrics about the same event.
   <owner>rakina@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
-    Metrics recorded each time a SRP navigation/page load is abandoned.
+    Metrics recorded each time a SRP navigation/page load is abandoned (e.g. the
+    navigation got cancelled, or the user backgrounded the app while the page
+    load is not finished yet, etc. See AbandonedPageLoadMetricsObserver for more
+    details).
   </summary>
   <metric name="AbandonReason">
     <summary>
@@ -53,9 +56,15 @@ be describing additional metrics about the same event.
       navigation start.
     </summary>
   </metric>
-  <metric name="BodyChunkTime">
+  <metric name="BodyChunkEndTime">
     <summary>
-      The time when the body chunk is processed for the page load, relative to
+      The timestamp of the body chunk end event for the page load, relative to
+      navigation start.
+    </summary>
+  </metric>
+  <metric name="BodyChunkStartTime">
+    <summary>
+      The timestamp of the body chunk start event for the page load, relative to
       navigation start.
     </summary>
   </metric>
@@ -104,6 +113,21 @@ be describing additional metrics about the same event.
   <metric name="FirstRedirectResponseReceived">
     <summary>
       Whether the first redirect response is received yet.
+    </summary>
+  </metric>
+  <metric name="HeaderChunkEndTime">
+    <summary>
+      The timestamp of the header chunk end event for the page load, relative to
+      navigation start.
+
+      Note that this event is randomly sampled based on the JavaScript in the
+      page, recorded at the frequency of 1%.
+    </summary>
+  </metric>
+  <metric name="HeaderChunkStartTime">
+    <summary>
+      The timestamp of the header chunk start event for the page load, relative
+      to navigation start.
     </summary>
   </metric>
   <metric name="LargestContentfulPaintTime">
@@ -3683,36 +3707,6 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
-<event name="Blink.AutomaticLazyLoadFrame" singular="True">
-  <owner>chikamune@google.com</owner>
-  <owner>sisidovski@google.com</owner>
-  <owner>kouhei@google.com</owner>
-  <summary>
-    Records metrics for LazyAds and LazyEmbeds Interventions. LazyAds and
-    LazyEmbeds Interventions will automatically apply lazy loading to ad's
-    frames and embedded web applications so that we can automatically improve
-    Core Web Vitals for many sites. These metrics help us to know to what degree
-    these Interventions can improve Core Web Vitals when the sites are eligible
-    for LazyAds or LazyEmbeds.
-  </summary>
-  <metric name="LazyAdsFrameCount">
-    <summary>
-      Records the total number of per-page ad frames that are eligible for the
-      LazyAds interventions by AutomaticLazyFrameLoadingToAds. The exponential
-      bucketing is applied for privacy reasons by using
-      ukm::GetExponentialBucketMinForCounts1000().
-    </summary>
-  </metric>
-  <metric name="LazyEmbedsFrameCount">
-    <summary>
-      Records the total number of per-page frames that are eligible for the
-      LazyEmbeds interventions by AutomaticLazyFrameLoadingToEmbeds. The
-      exponential bucketing is applied for privacy reasons by using
-      ukm::GetExponentialBucketMinForCounts1000().
-    </summary>
-  </metric>
-</event>
-
 <event name="Blink.ContentManagementSystem.Versions" singular="True">
   <owner>felixarntz@google.com</owner>
   <owner>nrosenthal@chromium.org</owner>
@@ -5590,6 +5584,23 @@ be describing additional metrics about the same event.
     <summary>
       The number of unique context domains have requested the topics. Rounded to
       the nearest exponential bucket (with a bucket ratio of 1.15).
+    </summary>
+  </metric>
+</event>
+
+<event name="BrowsingTopics.TopicsRedirectChainDetected">
+  <owner>yaoxia@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    Records the redirect state related to Topics. Recorded when a page is
+    detected to have initiated a chain of redirects, and at least two pages
+    within that chain invoke the Topics API, suggesting potential misuse of the
+    API. This event can be logged multiple times for the same page if the
+    redirect chain continues to grow.
+  </summary>
+  <metric name="NumberOfPagesCallingTopics">
+    <summary>
+      The number of pages that invoked the Topics API in the redirect chain.
     </summary>
   </metric>
 </event>
@@ -7660,6 +7671,19 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Enterprise.Profile.Enrollment">
+  <owner>cbe-device-trust-team@google.com</owner>
+  <summary>
+    Metrics related to Profiles enrolling into Enterprise cloud management.
+  </summary>
+  <metric name="IsUntrustedOidcRedirect">
+    <summary>
+      A boolean capturing that a Profile enrollment flow was blocked due to a
+      lack of trust in the chain of navigation redirects.
+    </summary>
+  </metric>
+</event>
+
 <event name="Event.Scroll">
   <owner>woa-performance@google.com</owner>
   <summary>
@@ -7811,6 +7835,29 @@ be describing additional metrics about the same event.
     <summary>
       Dummy Boolean as UKM does not support events with no metrics.
     </summary>
+  </metric>
+</event>
+
+<event name="Extensions.MV2ExtensionHandledInSoftDisable">
+  <owner>rdevlin.cronin@chromium.org</owner>
+  <owner>emiliapaz@chromium.org</owner>
+  <summary>
+    Recorded each time a user either re-enables or removes an extension affected
+    by the Manifest V2 deprecation during the &quot;soft disable&quot;
+    deprecation phase. Recorded when the user takes this action. This is only
+    recorded for extensions that update from the Chrome Web Store.
+  </summary>
+  <metric name="Action" enum="ExtensionMV2DeprecationAction">
+    <summary>
+      The action the user took on the extension.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -8123,6 +8170,31 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="FamilyLinkUser.ReauthenticationInterstitial">
+  <owner>chrome-kids-eng@google.com</owner>
+  <summary>
+    These metrics are logged when an unauthenticated Family Link user tries to
+    navigate to YouTube in the main frame, prompting a re-authentication
+    interstitial.
+  </summary>
+  <metric name="InterstitialShown" enum="BooleanHit">
+    <summary>
+      Recorded when the re-authentication interstitial is displayed.
+    </summary>
+  </metric>
+  <metric name="ReauthenticationCompleted" enum="BooleanHit">
+    <summary>
+      Recorded when users successfully re-authenticates and can continue
+      navigation, and vice-versa for failed reauthentication.
+    </summary>
+  </metric>
+  <metric name="ReauthenticationStarted" enum="BooleanHit">
+    <summary>
+      Recorded when users initiate re-authentication from the interstitial.
+    </summary>
+  </metric>
+</event>
+
 <event name="FastCheckout.FormStatus">
   <owner>bwolfgang@google.com</owner>
   <owner>jkeitel@google.com</owner>
@@ -8173,6 +8245,75 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Feedback.HappinessTrackingSurvey">
+  <owner>zhouzj@google.com</owner>
+  <owner>fjacky@google.com</owner>
+  <summary>
+    Recorded when a user completes a HaTS survey.
+  </summary>
+  <metric name="SurveyAnswerToQuestion1">
+    <summary>
+      The answer the user has provided to survey question number 1.
+    </summary>
+  </metric>
+  <metric name="SurveyAnswerToQuestion2">
+    <summary>
+      The answer the user has provided to survey question number 2.
+    </summary>
+  </metric>
+  <metric name="SurveyAnswerToQuestion3">
+    <summary>
+      The answer the user has provided to survey question number 3.
+    </summary>
+  </metric>
+  <metric name="SurveyAnswerToQuestion4">
+    <summary>
+      The answer the user has provided to survey question number 4.
+    </summary>
+  </metric>
+  <metric name="SurveyAnswerToQuestion5">
+    <summary>
+      The answer the user has provided to survey question number 5.
+    </summary>
+  </metric>
+  <metric name="SurveyAnswerToQuestion6">
+    <summary>
+      The answer the user has provided to survey question number 6.
+    </summary>
+  </metric>
+  <metric name="SurveyAnswerToQuestion7">
+    <summary>
+      The answer the user has provided to survey question number 7.
+    </summary>
+  </metric>
+  <metric name="SurveyAnswerToQuestion8">
+    <summary>
+      The answer the user has provided to survey question number 8.
+    </summary>
+  </metric>
+  <metric name="SurveyAnswerToQuestion9">
+    <summary>
+      The answer the user has provided to survey question number 9.
+    </summary>
+  </metric>
+  <metric name="SurveyCompleted" enum="Boolean">
+    <summary>
+      Boolean that records if a survey has been successfully completed.
+    </summary>
+  </metric>
+  <metric name="SurveyId">
+    <summary>
+      Survey ID associated with HaTS. This ID should be unique per HaTS survey
+      and should be separate from any existing IDs.
+    </summary>
+  </metric>
+  <metric name="SurveyLoaded" enum="Boolean">
+    <summary>
+      Boolean that records if a survey has been successfully loaded.
+    </summary>
+  </metric>
+</event>
+
 <event name="FileSystemAPI.WebRequest">
   <owner>mek@chromium.org</owner>
   <owner>rhalavatigit@chromium.org</owner>
@@ -8207,6 +8348,13 @@ be describing additional metrics about the same event.
       indicates that subresource filtering was activated. All other reasons
       indicate that subresource filtering was not activated.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="AllowlistSource">
     <summary>
@@ -8214,6 +8362,13 @@ be describing additional metrics about the same event.
       allowlist entry. 0 = Unknown, 1 = UserBypass, 2 = Enterprise. Recorded
       only when `ActivationDecision` is &quot;URL allowlisted&quot;
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="DryRun">
     <summary>
@@ -8222,6 +8377,13 @@ be describing additional metrics about the same event.
       is evaluated against resources loaded on the page, but subresource
       blocking is not actually applied.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -12267,6 +12429,11 @@ be describing additional metrics about the same event.
       </history>
     </aggregation>
   </metric>
+  <metric name="IsFromMediaCapabilities" enum="Boolean">
+    <summary>
+      Whether called by MediaCapabilities or not.
+    </summary>
+  </metric>
   <metric name="IsTopFrame" enum="Boolean">
     <summary>
       Whether the frame is the main frame.
@@ -12305,6 +12472,63 @@ be describing additional metrics about the same event.
     <summary>
       Whether there are any &quot;videoCapabilities&quot; with robustness being
       &quot;HW_SECURE_ALL&quot;.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="Media.EME.Usage">
+  <owner>jrummell@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Event recorded when an Encrypted Media Extensions (EME) API is called.
+  </summary>
+  <metric name="Api" enum="EmeApiType">
+    <summary>
+      The EME API that is called.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="IsPersistentSession" enum="Boolean">
+    <summary>
+      For EME API calls done on MediaKeySession, whether the session is
+      persistent or not.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="KeySystem" enum="MediaKeySystem">
+    <summary>
+      The key system associated with the current CDM.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="UseHardwareSecureCodecs" enum="Boolean">
+    <summary>
+      Whether hardware secure codecs are required for the current CDM.
     </summary>
     <aggregation>
       <history>
@@ -14934,6 +15158,13 @@ be describing additional metrics about the same event.
       crbug.com/897837 crbug.com/897840
     </summary>
   </metric>
+  <metric name="Experimental.TotalForegroundDuration">
+    <summary>
+      Re-adding experimental version of TotalForegroundDuration to allow for an
+      analysis of the now obsolete field. This will help inform a discrepency
+      found when switching to the PageTiming.TotalForegroundDuration field.
+    </summary>
+  </metric>
   <metric name="HourOfDay">
     <summary>
       The hour of the day when the page load was initiated. The time is measured
@@ -15313,6 +15544,12 @@ be describing additional metrics about the same event.
     <summary>
       True if the socket was reused when establishing connection to the origin
       of the main frame request.
+    </summary>
+  </metric>
+  <metric name="Navigation.InitiatorLocation">
+    <summary>
+      page_load_metrics::NavigationHandleUserData::InitiatorLocation enum value.
+      This field is used for identifying the types of prerender trigger.
     </summary>
   </metric>
   <metric name="Navigation.PageEndReason3" enum="PageEndReason">
@@ -16210,6 +16447,28 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="PasswordManager.FirstCCTPageLoad" singular="True">
+  <owner>ioanap@chromium.org</owner>
+  <owner>kazinova@google.com</owner>
+  <summary>
+    Logged on Android for the first page that a Chrome Custom Tab loads.
+    Recorded when the primary page changes away from the first loaded one or
+    when the WebContents is destroyed.
+  </summary>
+  <metric name="HasPasswordForm" enum="Boolean">
+    <summary>
+      True if there was a password form detected on the page.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="PasswordManager.LeakWarningDialog">
   <owner>jkeitel@google.com</owner>
   <owner>chrome-duplex@google.com</owner>
@@ -16768,6 +17027,14 @@ be describing additional metrics about the same event.
     <summary>
       The estimated private footprint of the page, in kilobytes.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="RecentCPUUsage">
     <summary>
@@ -16775,11 +17042,27 @@ be describing additional metrics about the same event.
       as 100% usage of 1 full core. (The same scale as the
       PerformanceMonitor.AverageCPU8.* histograms.)
     </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="ResidentSetSizeEstimate">
     <summary>
       The estimated resident set size of the page, in kilobytes.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="TotalRecentCPUUsageAllPages">
     <summary>
@@ -16788,6 +17071,14 @@ be describing additional metrics about the same event.
       PerformanceMonitor.AverageCPU8.* histograms.) RecentCPUUsage can be
       compared to this to find how the page compares to other open tabs.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -19906,6 +20197,13 @@ be describing additional metrics about the same event.
     <summary>
       A boolean signaling that data is available. Only records true values.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -19919,6 +20217,13 @@ be describing additional metrics about the same event.
     <summary>
       A boolean signaling that message is clicked. Only records true values.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -19932,6 +20237,13 @@ be describing additional metrics about the same event.
     <summary>
       A boolean signaling that message is displayed. Only records true values.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -19946,6 +20258,13 @@ be describing additional metrics about the same event.
       A boolean signaling that store info row is clicked. Only records true
       values.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -19960,6 +20279,13 @@ be describing additional metrics about the same event.
       A boolean signaling that store info row is displayed. Only records true
       values.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -20268,6 +20594,39 @@ be describing additional metrics about the same event.
         </statistics>
       </history>
     </aggregation>
+  </metric>
+</event>
+
+<event name="SiteFamiliarityHeuristicResult">
+  <owner>pkotwicz@chromium.org</owner>
+  <owner>chrome-counter-abuse-core@google.com</owner>
+  <summary>
+    Recorded when a toplevel page navigates. This records which
+    user-page-familiarity-heuristics would trigger for a given site, if any.
+  </summary>
+  <metric name="AnyHeuristicsMatch" enum="Boolean">
+    <summary>
+      Whether any familiarity heuristics would trigger on the site.
+    </summary>
+  </metric>
+  <metric name="OnHighConfidenceAllowlist" enum="Boolean">
+    <summary>
+      Whether the site is on the safe browsing high confidence allowlist.
+    </summary>
+  </metric>
+  <metric name="SiteEngagementScore">
+    <summary>
+      Site engagement score in the range [0, 100], rounded down to a multiple of
+      10 to limit granularity.
+    </summary>
+  </metric>
+  <metric name="SiteFamiliarityHistoryHeuristic"
+      enum="SiteFamiliarityHistoryHeuristicName">
+    <summary>
+      The most stringent navigation-history related familiarity heuristic that
+      would trigger on the site. If no navigation-history heuristic matches then
+      the value NO_HEURISTIC_MATCH is recorded.
+    </summary>
   </metric>
 </event>
 
@@ -21134,144 +21493,6 @@ be describing additional metrics about the same event.
       The time when the tab was closed, expressed as the amount of time in MS
       that has elapsed since the main frame navigation providing the content of
       the tab.
-    </summary>
-  </metric>
-</event>
-
-<event name="TabManager.TabMetrics">
-  <owner>michaelpg@chromium.org</owner>
-  <summary>
-    Collects tab information for a tab after navigations, activations and close
-    events.
-  </summary>
-  <metric name="HasBeforeUnloadHandler">
-    <summary>
-      Boolean value indicating whether the page has a beforeunload JavaScript
-      event handler.
-    </summary>
-  </metric>
-  <metric name="HasFormEntry">
-    <summary>
-      Boolean value indicating whether the page has any user-input text.
-    </summary>
-  </metric>
-  <metric name="IsPinned">
-    <summary>
-      Boolean value indicating whether the tab is pinned in the tabstrip.
-    </summary>
-  </metric>
-  <metric name="KeyEventCount">
-    <summary>
-      Number of key events that were sent to the page.
-    </summary>
-  </metric>
-  <metric name="LabelId">
-    <summary>
-      An int64 random number generated at logging time. The same number will
-      also be logged to the TabManager.Background.ForegroundedOrClosed event, so
-      that feature label can be paired.
-    </summary>
-  </metric>
-  <metric name="MouseEventCount">
-    <summary>
-      Number of mouse events that were sent to the page.
-    </summary>
-  </metric>
-  <metric name="MRUIndex">
-    <summary>
-      Index of the tab in most-recently-used order. A value of N means there are
-      N tabs more recently used than the one that is being foregrounded or
-      closed.
-    </summary>
-  </metric>
-  <metric name="NavigationEntryCount">
-    <summary>
-      Number of navigation entries in the tab's NavigationController.
-      Corresponds to the size of the tab's back/forward list.
-    </summary>
-  </metric>
-  <metric name="NumReactivationBefore">
-    <summary>
-      Number of reactivations that this tab had till now.
-    </summary>
-  </metric>
-  <metric name="PageTransitionCoreType">
-    <summary>
-      Type of the page transition for this navigation. Uses the core values from
-      ui::PageTransition.
-    </summary>
-  </metric>
-  <metric name="PageTransitionFromAddressBar">
-    <summary>
-      True if the page transition came from interacting with the address bar,
-      such as by typing a URL or performing a search.
-    </summary>
-  </metric>
-  <metric name="PageTransitionIsRedirect">
-    <summary>
-      True if the page transition type is a redirect, in which case the
-      PageTransition type may not be accurate.
-    </summary>
-  </metric>
-  <metric name="QueryId">
-    <summary>
-      An int64 random number generated at query time of
-      TabManager::GetSortedLifecycleUnitsFromTabRanker. Tabs with the same
-      QueryId will be later on combined in one full list for further analysis.
-    </summary>
-  </metric>
-  <metric name="SiteEngagementScore">
-    <summary>
-      Site engagement score in the range [0, 100], rounded down to a multiple of
-      10 to limit granularity.
-    </summary>
-  </metric>
-  <metric name="TimeFromBackgrounded">
-    <summary>
-      Duration in MS from when the tab is backgrounded to when it is brought to
-      foreground or closed.
-    </summary>
-  </metric>
-  <metric name="TotalTabCount">
-    <summary>
-      Total number of tabs open across all non-incognito browser windows. Helps
-      contextualize the MRUIndex value.
-    </summary>
-  </metric>
-  <metric name="TouchEventCount">
-    <summary>
-      Number of touch events that were sent to the page.
-    </summary>
-  </metric>
-  <metric name="WasRecentlyAudible">
-    <summary>
-      Boolean value indicating whether the tab has played audio within the last
-      two seconds.
-    </summary>
-  </metric>
-  <metric name="WindowIsActive">
-    <summary>
-      Boolean value indicating whether the window is the active (frontmost)
-      window.
-    </summary>
-  </metric>
-  <metric name="WindowShowState">
-    <summary>
-      Enumeration of the window show state, such as fullscreen or minimized.
-      Values are enumerated in metrics::WindowMetricsEvent::ShowState.
-    </summary>
-  </metric>
-  <metric name="WindowTabCount">
-    <summary>
-      Number of tabs in the tab strip. Rounded down to the nearest exponential
-      bucket (with a bucket spacing factor of 1.5). Will be 1 for windows with
-      only one top-level WebContents, such as app windows.
-    </summary>
-  </metric>
-  <metric name="WindowType">
-    <summary>
-      Enumeration for the type of the window. Values are enumerated in
-      metrics::WindowMetricsEvent::Type.
     </summary>
   </metric>
 </event>
@@ -24201,6 +24422,29 @@ be describing additional metrics about the same event.
         <index fields="profile.system_ram"/>
         <statistics>
           <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="WebAuthn.ConditionalUiGetCall">
+  <owner>kenrb@chromium.org</owner>
+  <owner>chrome-webauthn@google.com</owner>
+  <summary>
+    Information about a WebAuthn Get Assertion API call with conditional
+    mediation enabled.
+  </summary>
+  <metric name="TimeSinceDomContentLoaded">
+    <summary>
+      The amount of time (ms) that has elapsed between a page's DOMContentLoaded
+      event and the API call being handled. This is only recorded for the first
+      conditional request on the page.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
         </statistics>
       </history>
     </aggregation>

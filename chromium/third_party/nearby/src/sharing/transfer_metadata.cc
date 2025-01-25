@@ -31,39 +31,28 @@ namespace sharing {
 // static
 bool TransferMetadata::IsFinalStatus(Status status) {
   switch (status) {
-    case Status::kAwaitingRemoteAcceptanceFailed:
     case Status::kCancelled:
     case Status::kComplete:
-    case Status::kDecodeAdvertisementFailed:
-    case Status::kExternalProviderLaunched:
     case Status::kFailed:
-    case Status::kFailedToCreateShareTarget:
-    case Status::kFailedToInitiateOutgoingConnection:
-    case Status::kFailedToReadOutgoingConnectionResponse:
     case Status::kIncompletePayloads:
-    case Status::kInvalidIntroductionFrame:
     case Status::kMediaUnavailable:
-    case Status::kMissingEndpointId:
-    case Status::kMissingPayloads:
-    case Status::kMissingShareTarget:
     case Status::kNotEnoughSpace:
-    case Status::kPairedKeyVerificationFailed:
+    case Status::kDeviceAuthenticationFailed:
     case Status::kRejected:
     case Status::kTimedOut:
-    case Status::kUnexpectedDisconnection:
     case Status::kUnsupportedAttachmentType:
       return true;
     case Status::kAwaitingLocalConfirmation:
     case Status::kAwaitingRemoteAcceptance:
     case Status::kConnecting:
     case Status::kInProgress:
-    case Status::kMediaDownloading:
     case Status::kUnknown:
       return false;
   }
 }
 
 // static
+// LINT.IfChange()
 std::string TransferMetadata::StatusToString(Status status) {
   switch (status) {
     case Status::kConnecting:
@@ -74,8 +63,6 @@ std::string TransferMetadata::StatusToString(Status status) {
       return "kAwaitingLocalConfirmation";
     case Status::kAwaitingRemoteAcceptance:
       return "kAwaitingRemoteAcceptance";
-    case Status::kAwaitingRemoteAcceptanceFailed:
-      return "kAwaitingRemoteAcceptanceFailed";
     case Status::kInProgress:
       return "kInProgress";
     case Status::kComplete:
@@ -90,38 +77,17 @@ std::string TransferMetadata::StatusToString(Status status) {
       return "kTimedOut";
     case Status::kMediaUnavailable:
       return "kMediaUnavailable";
-    case Status::kMediaDownloading:
-      return "kMediaDownloading";
     case Status::kNotEnoughSpace:
       return "kNotEnoughSpace";
     case Status::kUnsupportedAttachmentType:
       return "kUnsupportedAttachmentType";
-    case Status::kExternalProviderLaunched:
-      return "kExternalProviderLaunched";
-    case Status::kDecodeAdvertisementFailed:
-      return "kDecodeAdvertisementFailed";
-    case Status::kMissingShareTarget:
-      return "kMissingShareTarget";
-    case Status::kMissingEndpointId:
-      return "kMissingEndpointId";
-    case Status::kMissingPayloads:
-      return "kMissingPayloads";
-    case Status::kPairedKeyVerificationFailed:
-      return "kPairedKeyVerificationFailed";
-    case Status::kInvalidIntroductionFrame:
-      return "kInvalidIntroductionFrame";
+    case Status::kDeviceAuthenticationFailed:
+      return "kDeviceAuthenticationFailed";
     case Status::kIncompletePayloads:
       return "kIncompletePayloads";
-    case Status::kFailedToCreateShareTarget:
-      return "kFailedToCreateShareTarget";
-    case Status::kFailedToInitiateOutgoingConnection:
-      return "kFailedToInitiateOutgoingConnection";
-    case Status::kFailedToReadOutgoingConnectionResponse:
-      return "kFailedToReadOutgoingConnectionResponse";
-    case Status::kUnexpectedDisconnection:
-      return "kUnexpectedDisconnection";
   }
 }
+// LINT.ThenChange(//depot/google3/location/nearby/cpp/sharing/clients/dart/platform/lib/types/transfer_status.dart)
 
 TransferMetadata::TransferMetadata(
     Status status, float progress, std::optional<std::string> token,

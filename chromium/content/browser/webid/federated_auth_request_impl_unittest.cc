@@ -13,6 +13,7 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -48,7 +49,6 @@
 
 using blink::mojom::FederatedAuthRequestResult;
 using blink::mojom::RequestTokenStatus;
-using AccountList = content::IdpNetworkRequestManager::AccountList;
 using ApiPermissionStatus =
     content::FederatedIdentityApiPermissionContextDelegate::PermissionStatus;
 using AuthRequestCallbackHelper =
@@ -57,6 +57,7 @@ using DismissReason = content::IdentityRequestDialogController::DismissReason;
 using FedCmEntry = ukm::builders::Blink_FedCm;
 using FedCmIdpEntry = ukm::builders::Blink_FedCmIdp;
 using FetchStatus = content::IdpNetworkRequestManager::FetchStatus;
+using Field = content::IdentityRequestDialogDisclosureField;
 using TokenError = content::IdentityCredentialTokenError;
 using ParseStatus = content::IdpNetworkRequestManager::ParseStatus;
 using TokenStatus = content::FedCmRequestIdTokenStatus;
@@ -124,133 +125,25 @@ constexpr char kLoginHintNoMatchMessage[] =
 constexpr char kDomainHintNoMatchMessage[] =
     "Accounts were received, but none matched the domainHint.";
 
-static const std::vector<IdentityRequestAccount> kSingleAccount{{
-    kAccountId,                  // id
-    kEmail,                      // email
-    "Ken R. Example",            // name
-    "Ken",                       // given_name
-    GURL(),                      // picture
-    std::vector<std::string>(),  // login_hints
-    std::vector<std::string>(),  // domain_hints
-    std::vector<std::string>()   // labels
-}};
+static const std::vector<std::string> kDomainHintVector = {kDomainHint};
+static const std::vector<std::string> kLabelVector = {"label"};
+static const std::vector<std::string> kLoginHints = {kAccountId, kEmail};
+static const std::vector<std::string> kNicolasHints = {kAccountIdNicolas,
+                                                       kAccountEmailNicolas};
+static const std::vector<std::string> kPeterHints = {kAccountIdPeter,
+                                                     kAccountEmailPeter};
+static const std::vector<std::string> kTwoDomainHints = {kDomainHint,
+                                                         kOtherDomainHint};
+static const std::vector<std::string> kZachHints = {kAccountIdZach,
+                                                    kAccountEmailZach};
 
-static const std::vector<IdentityRequestAccount> kSingleAccountWithHint{{
-    kAccountId,                  // id
-    kEmail,                      // email
-    "Ken R. Example",            // name
-    "Ken",                       // given_name
-    GURL(),                      // picture
-    {kAccountId, kEmail},        // login_hints
-    std::vector<std::string>(),  // domain_hints
-    std::vector<std::string>()   // labels
-}};
-
-static const std::vector<IdentityRequestAccount> kSingleAccountWithDomainHint{{
-    kAccountId,                  // id
-    kEmail,                      // email
-    "Ken R. Example",            // name
-    "Ken",                       // given_name
-    GURL(),                      // picture
-    std::vector<std::string>(),  // login_hints
-    {kDomainHint},               // domain_hints
-    std::vector<std::string>()   // labels
-}};
-
-static const std::vector<IdentityRequestAccount> kTwoAccounts{
-    {
-        kAccountIdNicolas,           // id
-        kAccountEmailNicolas,        // email
-        "Nicolas P",                 // name
-        "Nicolas",                   // given_name
-        GURL(),                      // picture
-        std::vector<std::string>(),  // login_hints
-        std::vector<std::string>(),  // domain_hints
-        std::vector<std::string>(),  // labels
-        LoginState::kSignUp          // login_state
-    },
-    {
-        kAccountIdZach,              // id
-        "zach@email.com",            // email
-        "Zachary T",                 // name
-        "Zach",                      // given_name
-        GURL(),                      // picture
-        std::vector<std::string>(),  // login_hints
-        std::vector<std::string>(),  // domain_hints
-        std::vector<std::string>(),  // labels
-        LoginState::kSignUp          // login_state
-    }};
-
-static const std::vector<IdentityRequestAccount> kMultipleAccounts{
-    {
-        kAccountIdNicolas,           // id
-        kAccountEmailNicolas,        // email
-        "Nicolas P",                 // name
-        "Nicolas",                   // given_name
-        GURL(),                      // picture
-        std::vector<std::string>(),  // login_hints
-        std::vector<std::string>(),  // domain_hints
-        std::vector<std::string>(),  // labels
-        LoginState::kSignUp          // login_state
-    },
-    {
-        kAccountIdPeter,             // id
-        kAccountEmailPeter,          // email
-        "Peter K",                   // name
-        "Peter",                     // given_name
-        GURL(),                      // picture
-        std::vector<std::string>(),  // login_hints
-        std::vector<std::string>(),  // domain_hints
-        std::vector<std::string>(),  // labels
-        LoginState::kSignIn          // login_state
-    },
-    {
-        kAccountIdZach,              // id
-        "zach@email.com",            // email
-        "Zachary T",                 // name
-        "Zach",                      // given_name
-        GURL(),                      // picture
-        std::vector<std::string>(),  // login_hints
-        std::vector<std::string>(),  // domain_hints
-        std::vector<std::string>(),  // labels
-        LoginState::kSignUp          // login_state
-    }};
-
-static const std::vector<IdentityRequestAccount>
-    kMultipleAccountsWithHintsAndDomains{
-        {
-            kAccountIdNicolas,                          // id
-            kAccountEmailNicolas,                       // email
-            "Nicolas P",                                // name
-            "Nicolas",                                  // given_name
-            GURL(),                                     // picture
-            {kAccountIdNicolas, kAccountEmailNicolas},  // login_hints
-            {kDomainHint},                              // domain_hints
-            std::vector<std::string>(),                 // labels
-            LoginState::kSignUp                         // login_state
-        },
-        {
-            kAccountIdPeter,                        // id
-            kAccountEmailPeter,                     // email
-            "Peter K",                              // name
-            "Peter",                                // given_name
-            GURL(),                                 // picture
-            {kAccountIdPeter, kAccountEmailPeter},  // login_hints
-            std::vector<std::string>(),             // domain_hints
-            {"label"},                              // labels
-            LoginState::kSignIn                     // login_state
-        },
-        {
-            kAccountIdZach,                       // id
-            kAccountEmailZach,                    // email
-            "Zachary T",                          // name
-            "Zach",                               // given_name
-            GURL(),                               // picture
-            {kAccountIdZach, kAccountEmailZach},  // login_hints
-            {kDomainHint, kOtherDomainHint},      // domain_hints
-            std::vector<std::string>(),           // labels
-            LoginState::kSignUp                   // login_state
-        }};
+static std::vector<IdentityRequestAccountPtr> kMultipleAccounts;
+static std::vector<IdentityRequestAccountPtr>
+    kMultipleAccountsWithHintsAndDomains;
+static std::vector<IdentityRequestAccountPtr> kSingleAccount;
+static std::vector<IdentityRequestAccountPtr> kSingleAccountWithDomainHint;
+static std::vector<IdentityRequestAccountPtr> kSingleAccountWithHint;
+static std::vector<IdentityRequestAccountPtr> kTwoAccounts;
 
 static const std::set<std::string> kWellKnown{kProviderUrlFull};
 
@@ -320,7 +213,7 @@ struct MockIdpInfo {
   MockConfig config;
   MockClientIdConfiguration client_metadata;
   FetchStatus accounts_response;
-  AccountList accounts;
+  std::vector<IdentityRequestAccountPtr> accounts;
 };
 
 // Action on accounts dialog taken by TestDialogController. Does not indicate a
@@ -391,50 +284,15 @@ static const RequestParameters kDefaultRequestParameters{
         kDefaultIdentityProviderRequestOptions},
     blink::mojom::RpContext::kSignIn, blink::mojom::RpMode::kWidget};
 
-static const MockIdpInfo kDefaultIdentityProviderInfo{
-    {kWellKnown, {ParseStatus::kSuccess, net::HTTP_OK}},
-    {{ParseStatus::kSuccess, net::HTTP_OK},
-     kAccountsEndpoint,
-     kTokenEndpoint,
-     kClientMetadataEndpoint,
-     kMetricsEndpoint,
-     kIdpLoginUrl,
-     kIdpDisconnectUrl,
-     /*brand_background_color=*/std::nullopt,
-     /*brand_text_color=*/std::nullopt},
-    kDefaultClientMetadata,
-    {ParseStatus::kSuccess, net::HTTP_OK},
-    kSingleAccount,
-};
+static MockIdpInfo kDefaultIdentityProviderInfo;
+static MockIdpInfo kProviderTwoInfo;
 
-static const base::flat_map<std::string, MockIdpInfo> kSingleProviderInfo{
-    {kProviderUrlFull, kDefaultIdentityProviderInfo}};
+static base::flat_map<std::string, MockIdpInfo> kSingleProviderInfo;
 
 constexpr char kProviderTwoUrlFull[] = "https://idp2.example/fedcm.json";
-static const MockIdpInfo kProviderTwoInfo{
-    {{kProviderTwoUrlFull}},
-    {{ParseStatus::kSuccess, net::HTTP_OK},
-     "https://idp2.example/accounts",
-     "https://idp2.example/token",
-     "https://idp2.example/client_metadata",
-     "https://idp2.example/metrics",
-     "https://idp2.example/login_url",
-     "https://idp2.example/disconnect",
-     /*brand_background_color=*/std::nullopt,
-     /*brand_text_color=*/std::nullopt},
-    kDefaultClientMetadata,
-    {ParseStatus::kSuccess, net::HTTP_OK},
-    kMultipleAccounts};
 
-static const MockConfiguration kConfigurationValid{
-    kToken,
-    kSingleProviderInfo,
-    {ParseStatus::kSuccess, net::HTTP_OK},
-    /*delay_token_response=*/false,
-    AccountsDialogAction::kSelectFirstAccount,
-    IdpSigninStatusMismatchDialogAction::kNone,
-    ErrorDialogAction::kClose,
-    LoadingDialogAction::kNone};
+static MockConfiguration kConfigurationValid;
+static MockConfiguration kConfigurationMultiIdpValid;
 
 static const RequestExpectations kExpectationSuccess{
     RequestTokenStatus::kSuccess, FederatedAuthRequestResult::kSuccess,
@@ -448,17 +306,6 @@ static const RequestParameters kDefaultMultiIdpRequestParameters{
          /*domain_hint=*/""}},
     /*rp_context=*/blink::mojom::RpContext::kSignIn,
     /*rp_mode=*/blink::mojom::RpMode::kWidget};
-
-MockConfiguration kConfigurationMultiIdpValid{
-    kToken,
-    {{kProviderUrlFull, kDefaultIdentityProviderInfo},
-     {kProviderTwoUrlFull, kProviderTwoInfo}},
-    {ParseStatus::kSuccess, net::HTTP_OK},
-    false /* delay_token_response */,
-    AccountsDialogAction::kSelectFirstAccount,
-    IdpSigninStatusMismatchDialogAction::kNone,
-    ErrorDialogAction::kClose,
-    LoadingDialogAction::kNone};
 
 url::Origin OriginFromString(const std::string& url_string) {
   return url::Origin::Create(GURL(url_string));
@@ -647,7 +494,7 @@ class TestIdpNetworkRequestManager : public MockIdpNetworkRequestManager {
 
   // If non-empty, the accounts endpoint will return this accounts list instead
   // of the accounts list in the `config_`.
-  AccountList accounts_list_;
+  std::vector<IdentityRequestAccountPtr> accounts_list_;
 
  protected:
   MockConfiguration config_{kConfigurationValid};
@@ -719,10 +566,10 @@ class TestDialogController
   struct State {
     // State related to ShowAccountsDialog().
     // The list of all accounts passed to the UI.
-    AccountList all_accounts_for_display;
+    std::vector<IdentityRequestAccountPtr> all_accounts_for_display;
     std::optional<IdentityRequestAccount::SignInMode> sign_in_mode;
     blink::mojom::RpContext rp_context;
-    AccountList new_idp_accounts;
+    std::vector<IdentityRequestAccountPtr> new_accounts;
     // The last seen background/text color from IdP metadata.
     std::optional<SkColor> brand_background_color;
     std::optional<SkColor> brand_text_color;
@@ -757,10 +604,11 @@ class TestDialogController
 
   bool ShowAccountsDialog(
       const std::string& rp_for_display,
-      const std::vector<IdentityProviderData>& identity_provider_data,
+      const std::vector<IdentityProviderDataPtr>& idp_list,
+      const std::vector<IdentityRequestAccountPtr>& accounts,
       IdentityRequestAccount::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
-      const std::optional<content::IdentityProviderData>& new_accounts_idp,
+      const std::vector<IdentityRequestAccountPtr>& new_accounts,
       IdentityRequestDialogController::AccountSelectionCallback on_selected,
       IdentityRequestDialogController::LoginToIdPCallback on_add_account,
       IdentityRequestDialogController::DismissCallback dismiss_callback,
@@ -772,40 +620,29 @@ class TestDialogController
     state_->all_accounts_for_display.clear();
 
     state_->sign_in_mode = sign_in_mode;
-    state_->rp_context = identity_provider_data[0].rp_context;
+    state_->rp_context = idp_list[0]->rp_context;
 
-    DCHECK(!new_accounts_idp || new_accounts_idp->accounts.size());
-    state_->new_idp_accounts.clear();
-    if (new_accounts_idp) {
-      state_->new_idp_accounts = new_accounts_idp->accounts;
-    }
+    state_->new_accounts = new_accounts;
 
-    for (const auto& idp_data : identity_provider_data) {
-      state_->all_accounts_for_display.insert(
-          state_->all_accounts_for_display.end(), idp_data.accounts.begin(),
-          idp_data.accounts.end());
-      if (idp_data.has_login_status_mismatch) {
-        state_->displayed_mismatch_idps.push_back(idp_data.idp_for_display);
+    state_->all_accounts_for_display = accounts;
+    for (const auto& idp_data : idp_list) {
+      if (idp_data->has_login_status_mismatch) {
+        state_->displayed_mismatch_idps.push_back(idp_data->idp_for_display);
       }
       state_->brand_background_color =
-          idp_data.idp_metadata.brand_background_color;
-      state_->brand_text_color = idp_data.idp_metadata.brand_text_color;
+          idp_data->idp_metadata.brand_background_color;
+      state_->brand_text_color = idp_data->idp_metadata.brand_text_color;
     }
 
     switch (accounts_dialog_action_) {
       case AccountsDialogAction::kSelectFirstAccount: {
-        for (const auto& idp_data : identity_provider_data) {
-          if (idp_data.accounts.empty()) {
-            continue;
-          }
-          base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-              FROM_HERE,
-              base::BindOnce(
-                  std::move(on_selected), idp_data.idp_metadata.config_url,
-                  idp_data.accounts[0].id,
-                  idp_data.accounts[0].login_state == LoginState::kSignIn));
-          break;
-        }
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                std::move(on_selected),
+                accounts[0]->identity_provider->idp_metadata.config_url,
+                accounts[0]->id,
+                accounts[0]->login_state == LoginState::kSignIn));
         break;
       }
       case AccountsDialogAction::kClose:
@@ -815,11 +652,9 @@ class TestDialogController
         break;
       case AccountsDialogAction::kAddAccount:
         base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-            FROM_HERE,
-            base::BindOnce(
-                std::move(on_add_account),
-                identity_provider_data.data()->idp_metadata.config_url,
-                identity_provider_data.data()->idp_metadata.idp_login_url));
+            FROM_HERE, base::BindOnce(std::move(on_add_account),
+                                      idp_list[0]->idp_metadata.config_url,
+                                      idp_list[0]->idp_metadata.idp_login_url));
         // Set `accounts_dialog_action_` such that subsequent calls will select
         // the first account.
         accounts_dialog_action_ = AccountsDialogAction::kSelectFirstAccount;
@@ -1037,14 +872,188 @@ class TestIdentityRegistry : public NiceMock<MockIdentityRegistry> {
 
 class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
  protected:
-  FederatedAuthRequestImplTest(std::string_view rp_url = kRpUrl)
+  explicit FederatedAuthRequestImplTest(std::string_view rp_url = kRpUrl)
       : rp_url_(rp_url) {
     ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
   }
   ~FederatedAuthRequestImplTest() override = default;
 
+  void InitConstants() {
+    kSingleAccount = {base::MakeRefCounted<IdentityRequestAccount>(
+        kAccountId,                  // id
+        kEmail,                      // email
+        "Ken R. Example",            // name
+        "Ken",                       // given_name
+        GURL(),                      // picture
+        std::vector<std::string>(),  // login_hints
+        std::vector<std::string>(),  // domain_hints
+        std::vector<std::string>()   // labels
+        )};
+    kDefaultIdentityProviderInfo = {
+        {kWellKnown, {ParseStatus::kSuccess, net::HTTP_OK}},
+        {{ParseStatus::kSuccess, net::HTTP_OK},
+         kAccountsEndpoint,
+         kTokenEndpoint,
+         kClientMetadataEndpoint,
+         kMetricsEndpoint,
+         kIdpLoginUrl,
+         kIdpDisconnectUrl,
+         /*brand_background_color=*/std::nullopt,
+         /*brand_text_color=*/std::nullopt},
+        kDefaultClientMetadata,
+        {ParseStatus::kSuccess, net::HTTP_OK},
+        kSingleAccount,
+    };
+    kSingleProviderInfo = {{kProviderUrlFull, kDefaultIdentityProviderInfo}};
+    kSingleAccountWithHint = {base::MakeRefCounted<IdentityRequestAccount>(
+        kAccountId,                  // id
+        kEmail,                      // email
+        "Ken R. Example",            // name
+        "Ken",                       // given_name
+        GURL(),                      // picture
+        kLoginHints,                 // login_hints
+        std::vector<std::string>(),  // domain_hints
+        std::vector<std::string>()   // labels
+        )};
+    kSingleAccountWithDomainHint = {
+        base::MakeRefCounted<IdentityRequestAccount>(
+            kAccountId,                  // id
+            kEmail,                      // email
+            "Ken R. Example",            // name
+            "Ken",                       // given_name
+            GURL(),                      // picture
+            std::vector<std::string>(),  // login_hints
+            kDomainHintVector,           // domain_hints
+            std::vector<std::string>()   // labels
+            )};
+    kTwoAccounts = {base::MakeRefCounted<IdentityRequestAccount>(
+                        kAccountIdNicolas,           // id
+                        kAccountEmailNicolas,        // email
+                        "Nicolas P",                 // name
+                        "Nicolas",                   // given_name
+                        GURL(),                      // picture
+                        std::vector<std::string>(),  // login_hints
+                        std::vector<std::string>(),  // domain_hints
+                        std::vector<std::string>(),  // labels
+                        LoginState::kSignUp          // login_state
+                        ),
+                    base::MakeRefCounted<IdentityRequestAccount>(
+                        kAccountIdZach,              // id
+                        "zach@email.com",            // email
+                        "Zachary T",                 // name
+                        "Zach",                      // given_name
+                        GURL(),                      // picture
+                        std::vector<std::string>(),  // login_hints
+                        std::vector<std::string>(),  // domain_hints
+                        std::vector<std::string>(),  // labels
+                        LoginState::kSignUp          // login_state
+                        )};
+    kMultipleAccounts = {base::MakeRefCounted<IdentityRequestAccount>(
+                             kAccountIdNicolas,           // id
+                             kAccountEmailNicolas,        // email
+                             "Nicolas P",                 // name
+                             "Nicolas",                   // given_name
+                             GURL(),                      // picture
+                             std::vector<std::string>(),  // login_hints
+                             std::vector<std::string>(),  // domain_hints
+                             std::vector<std::string>(),  // labels
+                             LoginState::kSignUp          // login_state
+                             ),
+                         base::MakeRefCounted<IdentityRequestAccount>(
+                             kAccountIdPeter,             // id
+                             kAccountEmailPeter,          // email
+                             "Peter K",                   // name
+                             "Peter",                     // given_name
+                             GURL(),                      // picture
+                             std::vector<std::string>(),  // login_hints
+                             std::vector<std::string>(),  // domain_hints
+                             std::vector<std::string>(),  // labels
+                             LoginState::kSignIn          // login_state
+                             ),
+                         base::MakeRefCounted<IdentityRequestAccount>(
+                             kAccountIdZach,              // id
+                             "zach@email.com",            // email
+                             "Zachary T",                 // name
+                             "Zach",                      // given_name
+                             GURL(),                      // picture
+                             std::vector<std::string>(),  // login_hints
+                             std::vector<std::string>(),  // domain_hints
+                             std::vector<std::string>(),  // labels
+                             LoginState::kSignUp          // login_state
+                             )};
+    kMultipleAccountsWithHintsAndDomains = {
+        base::MakeRefCounted<IdentityRequestAccount>(
+            kAccountIdNicolas,           // id
+            kAccountEmailNicolas,        // email
+            "Nicolas P",                 // name
+            "Nicolas",                   // given_name
+            GURL(),                      // picture
+            kNicolasHints,               // login_hints
+            kDomainHintVector,           // domain_hints
+            std::vector<std::string>(),  // labels
+            LoginState::kSignUp          // login_state
+            ),
+        base::MakeRefCounted<IdentityRequestAccount>(
+            kAccountIdPeter,             // id
+            kAccountEmailPeter,          // email
+            "Peter K",                   // name
+            "Peter",                     // given_name
+            GURL(),                      // picture
+            kPeterHints,                 // login_hints
+            std::vector<std::string>(),  // domain_hints
+            kLabelVector,                // labels
+            LoginState::kSignIn          // login_state
+            ),
+        base::MakeRefCounted<IdentityRequestAccount>(
+            kAccountIdZach,              // id
+            kAccountEmailZach,           // email
+            "Zachary T",                 // name
+            "Zach",                      // given_name
+            GURL(),                      // picture
+            kZachHints,                  // login_hints
+            kTwoDomainHints,             // domain_hints
+            std::vector<std::string>(),  // labels
+            LoginState::kSignUp          // login_state
+            )};
+    kProviderTwoInfo = {{{kProviderTwoUrlFull}},
+                        {{ParseStatus::kSuccess, net::HTTP_OK},
+                         "https://idp2.example/accounts",
+                         "https://idp2.example/token",
+                         "https://idp2.example/client_metadata",
+                         "https://idp2.example/metrics",
+                         "https://idp2.example/login_url",
+                         "https://idp2.example/disconnect",
+                         /*brand_background_color=*/std::nullopt,
+                         /*brand_text_color=*/std::nullopt},
+                        kDefaultClientMetadata,
+                        {ParseStatus::kSuccess, net::HTTP_OK},
+                        kMultipleAccounts};
+    kConfigurationValid = {kToken,
+                           kSingleProviderInfo,
+                           {ParseStatus::kSuccess, net::HTTP_OK},
+                           /*delay_token_response=*/false,
+                           AccountsDialogAction::kSelectFirstAccount,
+                           IdpSigninStatusMismatchDialogAction::kNone,
+                           ErrorDialogAction::kClose,
+                           LoadingDialogAction::kNone};
+    kConfigurationMultiIdpValid = {
+        kToken,
+        {{kProviderUrlFull, kDefaultIdentityProviderInfo},
+         {kProviderTwoUrlFull, kProviderTwoInfo}},
+        {ParseStatus::kSuccess, net::HTTP_OK},
+        false /* delay_token_response */,
+        AccountsDialogAction::kSelectFirstAccount,
+        IdpSigninStatusMismatchDialogAction::kNone,
+        ErrorDialogAction::kClose,
+        LoadingDialogAction::kNone};
+  }
+
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
+    // Initialize the accounts and account-dependent constants on SetUp() to
+    // ensure they are initialized correctly in every test.
+    InitConstants();
+
     test_api_permission_delegate_ =
         std::make_unique<TestApiPermissionDelegate>();
     test_permission_delegate_ = std::make_unique<TestPermissionDelegate>();
@@ -1236,13 +1245,12 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
     request_remote_.set_disconnect_handler(base::OnceClosure());
   }
 
-  base::span<const content::IdentityRequestAccount> all_accounts_for_display()
-      const {
+  base::span<const IdentityRequestAccountPtr> all_accounts_for_display() const {
     return dialog_controller_state_.all_accounts_for_display;
   }
 
-  base::span<const content::IdentityRequestAccount> new_idp_accounts() const {
-    return dialog_controller_state_.new_idp_accounts;
+  base::span<const IdentityRequestAccountPtr> new_accounts() const {
+    return dialog_controller_state_.new_accounts;
   }
 
   std::vector<std::string> displayed_mismatch_idps() const {
@@ -1268,7 +1276,7 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
   int CountNumLoginStateIsSignin() {
     int num_sign_in_login_state = 0;
     for (const auto& account : all_accounts_for_display()) {
-      if (account.login_state == LoginState::kSignIn) {
+      if (account->login_state == LoginState::kSignIn) {
         ++num_sign_in_login_state;
       }
     }
@@ -1628,9 +1636,10 @@ class FederatedAuthRequestImplTest : public RenderViewHostImplTestHarness {
     return options;
   }
 
-  // Helper to call ShouldMediateAuthzFor with the desired fields.
-  bool ShouldMediateAuthz(const std::vector<std::string>& fields) {
-    return federated_auth_request_impl_->ShouldMediateAuthzFor(
+  // Helper to call GetDisclosureFields with the desired fields.
+  std::vector<Field> GetDisclosureFields(
+      const std::vector<std::string>& fields) {
+    return federated_auth_request_impl_->GetDisclosureFields(
         *NewIDPWithFields(fields));
   }
 
@@ -2081,7 +2090,7 @@ TEST_F(FederatedAuthRequestImplTest, AllInvalidEndpoints) {
 TEST_F(FederatedAuthRequestImplTest, LoginStateShouldBeSignUpForFirstTimeUser) {
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess,
               kConfigurationValid);
-  EXPECT_EQ(LoginState::kSignUp, all_accounts_for_display()[0].login_state);
+  EXPECT_EQ(LoginState::kSignUp, all_accounts_for_display()[0]->login_state);
 }
 
 TEST_F(FederatedAuthRequestImplTest, LoginStateShouldBeSignInForReturningUser) {
@@ -2094,7 +2103,7 @@ TEST_F(FederatedAuthRequestImplTest, LoginStateShouldBeSignInForReturningUser) {
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess,
               kConfigurationValid);
-  EXPECT_EQ(LoginState::kSignIn, all_accounts_for_display()[0].login_state);
+  EXPECT_EQ(LoginState::kSignIn, all_accounts_for_display()[0]->login_state);
 
   // CLIENT_METADATA only needs to be fetched for obtaining links to display in
   // the disclosure text. The disclosure text is not displayed for returning
@@ -2177,7 +2186,7 @@ TEST_F(FederatedAuthRequestImplTest, AutoReauthnEmbargo) {
   RunAuthTest(kDefaultRequestParameters, expectation, kConfigurationValid);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignIn);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignIn);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kAuto);
   EXPECT_TRUE(test_auto_reauthn_permission_delegate_->embargoed_origins_.count(
       OriginFromString(kRpUrl)));
@@ -2217,7 +2226,7 @@ TEST_F(FederatedAuthRequestImplTest,
   RunAuthTest(kDefaultRequestParameters, expectation, kConfigurationValid);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignIn);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignIn);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kAuto);
 
   ExpectAutoReauthnMetrics(FedCmMetrics::NumAccounts::kOne,
@@ -2268,7 +2277,7 @@ TEST_F(FederatedAuthRequestImplTest,
   RunAuthTest(kDefaultRequestParameters, expectation, configuration);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdPeter);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdPeter);
   EXPECT_EQ(CountNumLoginStateIsSignin(), 1);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kAuto);
 
@@ -2314,8 +2323,8 @@ TEST_F(FederatedAuthRequestImplTest,
               IsAutoReauthnEmbargoed(OriginFromString(kRpUrl)))
       .WillOnce(Return(false));
 
-  AccountList multiple_accounts = kMultipleAccounts;
-  multiple_accounts[0].login_state = LoginState::kSignIn;
+  std::vector<IdentityRequestAccountPtr> multiple_accounts = kMultipleAccounts;
+  multiple_accounts[0]->login_state = LoginState::kSignIn;
   MockConfiguration configuration = kConfigurationValid;
   configuration.idp_info[kProviderUrlFull].accounts = multiple_accounts;
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
@@ -2356,7 +2365,7 @@ TEST_F(FederatedAuthRequestImplTest, AutoReauthnForZeroReturningUsers) {
               kConfigurationValid);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignUp);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kExplicit);
 
   ExpectAutoReauthnMetrics(FedCmMetrics::NumAccounts::kZero,
@@ -2486,7 +2495,7 @@ TEST_F(FederatedAuthRequestImplTest,
 
   // Set IDP claims user is signed in.
   MockConfiguration configuration = kConfigurationValid;
-  configuration.idp_info[kProviderUrlFull].accounts[0].login_state =
+  configuration.idp_info[kProviderUrlFull].accounts[0]->login_state =
       LoginState::kSignIn;
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
@@ -2531,7 +2540,7 @@ TEST_F(FederatedAuthRequestImplTest,
 
   // Set IDP claims user is signed in.
   MockConfiguration configuration = kConfigurationValid;
-  configuration.idp_info[kProviderUrlFull].accounts[0].login_state =
+  configuration.idp_info[kProviderUrlFull].accounts[0]->login_state =
       LoginState::kSignIn;
   RequestExpectations expectation = kExpectationSuccess;
   expectation.is_auto_selected = true;
@@ -2557,7 +2566,7 @@ TEST_F(FederatedAuthRequestImplTest, AutoReauthnForFirstTimeUser) {
               kConfigurationValid);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignUp);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kExplicit);
 }
 
@@ -2582,7 +2591,7 @@ TEST_F(FederatedAuthRequestImplTest,
               kConfigurationValid);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignIn);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignIn);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kExplicit);
 
   ExpectAutoReauthnMetrics(FedCmMetrics::NumAccounts::kOne,
@@ -2619,7 +2628,7 @@ TEST_F(FederatedAuthRequestImplTest, AutoReauthnWithCooldown) {
   RunAuthTest(kDefaultRequestParameters, expectations, kConfigurationValid);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignIn);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignIn);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kExplicit);
 
   ExpectAutoReauthnMetrics(FedCmMetrics::NumAccounts::kOne,
@@ -2852,9 +2861,9 @@ TEST_F(FederatedAuthRequestImplTest,
       /*selected_idp_config_url=*/std::nullopt};
   MockConfiguration configuration = kConfigurationValid;
   configuration.mediation_requirement = MediationRequirement::kSilent;
-  AccountList multiple_accounts = kMultipleAccounts;
-  multiple_accounts[0].login_state = LoginState::kSignIn;
-  multiple_accounts[1].login_state = LoginState::kSignIn;
+  std::vector<IdentityRequestAccountPtr> multiple_accounts = kMultipleAccounts;
+  multiple_accounts[0]->login_state = LoginState::kSignIn;
+  multiple_accounts[1]->login_state = LoginState::kSignIn;
   configuration.idp_info[kProviderUrlFull].accounts = multiple_accounts;
 
   RunAuthTest(kDefaultRequestParameters, expectations, configuration);
@@ -2882,14 +2891,14 @@ TEST_F(FederatedAuthRequestImplTest, AutoReauthnMediationRequired) {
       .WillRepeatedly(Return(std::nullopt));
 
   MockConfiguration configuration = kConfigurationValid;
-  configuration.idp_info[kProviderUrlFull].accounts[0].login_state =
+  configuration.idp_info[kProviderUrlFull].accounts[0]->login_state =
       LoginState::kSignIn;
   configuration.mediation_requirement = MediationRequirement::kRequired;
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignIn);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignIn);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kExplicit);
 
   ExpectStatusMetrics(TokenStatus::kSuccessUsingTokenInHttpResponse,
@@ -2910,7 +2919,7 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForSuccessfulSignInCase) {
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess,
               kConfigurationValid);
-  EXPECT_EQ(LoginState::kSignIn, all_accounts_for_display()[0].login_state);
+  EXPECT_EQ(LoginState::kSignIn, all_accounts_for_display()[0]->login_state);
 
   ukm_loop.Run();
 
@@ -2980,7 +2989,7 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForUIExplicitlyDismissed) {
   ukm_loop.Run();
 
   ASSERT_TRUE(did_show_accounts_dialog());
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignUp);
 
   histogram_tester_.ExpectTotalCount(
       "Blink.FedCm.Timing.ShowAccountsDialogBreakdown.WellKnownAndConfigFetch",
@@ -3071,7 +3080,7 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForWebContentsVisible) {
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess,
               kConfigurationValid);
-  EXPECT_EQ(LoginState::kSignIn, all_accounts_for_display()[0].login_state);
+  EXPECT_EQ(LoginState::kSignIn, all_accounts_for_display()[0]->login_state);
 
   histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsVisible", 1, 1);
   histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsActive", 1, 1);
@@ -3099,7 +3108,7 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForWebContentsInvisible) {
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess,
               kConfigurationValid);
-  EXPECT_EQ(LoginState::kSignIn, all_accounts_for_display()[0].login_state);
+  EXPECT_EQ(LoginState::kSignIn, all_accounts_for_display()[0]->login_state);
 
   histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsVisible", 0, 1);
   histogram_tester_.ExpectUniqueSample("Blink.FedCm.WebContentsActive", 1, 1);
@@ -3174,9 +3183,10 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForSignedInOnBothIdpAndBrowser) {
 
   // Set IDP claims user is signed in.
   MockConfiguration configuration = kConfigurationValid;
-  AccountList all_accounts_for_display =
-      AccountList(kSingleAccount.begin(), kSingleAccount.end());
-  all_accounts_for_display[0].login_state = LoginState::kSignIn;
+  std::vector<IdentityRequestAccountPtr> all_accounts_for_display =
+      std::vector<IdentityRequestAccountPtr>(kSingleAccount.begin(),
+                                             kSingleAccount.end());
+  all_accounts_for_display[0]->login_state = LoginState::kSignIn;
   configuration.idp_info[kProviderUrlFull].accounts = all_accounts_for_display;
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
   EXPECT_FALSE(DidFetch(FetchedEndpoint::CLIENT_METADATA));
@@ -3231,9 +3241,10 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForOnlyIdpClaimedSignIn) {
 
   // Set IDP claims user is signed in.
   MockConfiguration configuration = kConfigurationValid;
-  AccountList all_accounts_for_display =
-      AccountList(kSingleAccount.begin(), kSingleAccount.end());
-  all_accounts_for_display[0].login_state = LoginState::kSignIn;
+  std::vector<IdentityRequestAccountPtr> all_accounts_for_display =
+      std::vector<IdentityRequestAccountPtr>(kSingleAccount.begin(),
+                                             kSingleAccount.end());
+  all_accounts_for_display[0]->login_state = LoginState::kSignIn;
   configuration.idp_info[kProviderUrlFull].accounts = all_accounts_for_display;
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
   EXPECT_FALSE(DidFetch(FetchedEndpoint::CLIENT_METADATA));
@@ -3388,10 +3399,11 @@ class DisableApiWhenDialogShownDialogController : public TestDialogController {
 
   bool ShowAccountsDialog(
       const std::string& rp_for_display,
-      const std::vector<IdentityProviderData>& identity_provider_data,
+      const std::vector<IdentityProviderDataPtr>& idp_list,
+      const std::vector<IdentityRequestAccountPtr>& accounts,
       SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
-      const std::optional<content::IdentityProviderData>& new_accounts_idp,
+      const std::vector<IdentityRequestAccountPtr>& new_accounts,
       IdentityRequestDialogController::AccountSelectionCallback on_selected,
       IdentityRequestDialogController::LoginToIdPCallback on_add_account,
       IdentityRequestDialogController::DismissCallback dismiss_callback,
@@ -3403,10 +3415,9 @@ class DisableApiWhenDialogShownDialogController : public TestDialogController {
 
     // Call parent class method in order to store callback parameters.
     return TestDialogController::ShowAccountsDialog(
-        rp_for_display, std::move(identity_provider_data), sign_in_mode,
-        rp_mode, new_accounts_idp, std::move(on_selected),
-        std::move(on_add_account), std::move(dismiss_callback),
-        std::move(accounts_displayed_callback));
+        rp_for_display, idp_list, accounts, sign_in_mode, rp_mode, new_accounts,
+        std::move(on_selected), std::move(on_add_account),
+        std::move(dismiss_callback), std::move(accounts_displayed_callback));
   }
 
  private:
@@ -3514,7 +3525,8 @@ TEST_F(FederatedAuthRequestImplTest, DisclosureTextNotShownForReturningUser) {
 TEST_F(FederatedAuthRequestImplTest, TokenEndpointPostDataEscaping) {
   const std::string kAccountIdWithSpace("account id");
   MockConfiguration configuration = kConfigurationValid;
-  configuration.idp_info[kProviderUrlFull].accounts[0].id = kAccountIdWithSpace;
+  configuration.idp_info[kProviderUrlFull].accounts[0]->id =
+      kAccountIdWithSpace;
 
   std::unique_ptr<IdpNetworkRequestManagerParamChecker> checker =
       std::make_unique<IdpNetworkRequestManagerParamChecker>();
@@ -3744,9 +3756,9 @@ TEST_F(FederatedAuthRequestImplTest, ReorderMultipleAccounts) {
 
   // Check the account order using the account ids.
   ASSERT_EQ(all_accounts_for_display().size(), 3u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdPeter);
-  EXPECT_EQ(all_accounts_for_display()[1].id, kAccountIdNicolas);
-  EXPECT_EQ(all_accounts_for_display()[2].id, kAccountIdZach);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdPeter);
+  EXPECT_EQ(all_accounts_for_display()[1]->id, kAccountIdNicolas);
+  EXPECT_EQ(all_accounts_for_display()[2]->id, kAccountIdZach);
 }
 
 // Test that first API call with a given IDP is not affected by the
@@ -3882,8 +3894,8 @@ class ParseStatusOverrideIdpNetworkRequestManager
 
       FetchStatus fetch_status{accounts_parse_status_, net::HTTP_OK};
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(std::move(callback), fetch_status, AccountList()));
+          FROM_HERE, base::BindOnce(std::move(callback), fetch_status,
+                                    std::vector<IdentityRequestAccountPtr>()));
       return;
     }
 
@@ -4268,7 +4280,7 @@ TEST_F(FederatedAuthRequestImplTest,
   // selected account should be that one (second IDP also has returning accounts
   // and no reordering should happen).
   MockConfiguration config = kConfigurationMultiIdpValid;
-  config.idp_info[kProviderUrlFull].accounts[0].login_state =
+  config.idp_info[kProviderUrlFull].accounts[0]->login_state =
       LoginState::kSignIn;
   RunAuthTest(kDefaultMultiIdpRequestParameters, kExpectationSuccess, config);
   EXPECT_EQ(2u, NumFetched(FetchedEndpoint::ACCOUNTS));
@@ -4515,7 +4527,7 @@ TEST_F(FederatedAuthRequestImplTest, MultiIdpLoginToOneIdp) {
   // The first IDP only has a single account, and the total of accounts is
   // now 4.
   EXPECT_EQ(all_accounts_for_display().size(), 4u);
-  EXPECT_EQ(new_idp_accounts().size(), 1u);
+  EXPECT_EQ(new_accounts().size(), 1u);
 }
 
 // Test that API can succeed with multiple IdPs, if all IDPs have login status
@@ -5197,7 +5209,7 @@ TEST_F(FederatedAuthRequestImplTest, AccountsSortedWithTimestamps) {
       .WillRepeatedly(Return(std::nullopt));
   // The third account is marked sign (as is the second), but since it has a
   // timestamp it should show first.
-  configuration.idp_info[kProviderUrlFull].accounts[2].login_state =
+  configuration.idp_info[kProviderUrlFull].accounts[2]->login_state =
       LoginState::kSignIn;
   EXPECT_CALL(
       *test_permission_delegate_,
@@ -5209,9 +5221,9 @@ TEST_F(FederatedAuthRequestImplTest, AccountsSortedWithTimestamps) {
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 3u);
   // Account order should be: accounts[2], accounts[1], accounts[0].
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdZach);
-  EXPECT_EQ(all_accounts_for_display()[1].id, kAccountIdPeter);
-  EXPECT_EQ(all_accounts_for_display()[2].id, kAccountIdNicolas);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdZach);
+  EXPECT_EQ(all_accounts_for_display()[1]->id, kAccountIdPeter);
+  EXPECT_EQ(all_accounts_for_display()[2]->id, kAccountIdNicolas);
 }
 
 TEST_F(FederatedAuthRequestImplTest, AccountLabelMultipleAccountsNoMatch) {
@@ -5255,7 +5267,7 @@ TEST_F(FederatedAuthRequestImplTest, AccountLabelMultipleAccountsOneMatch) {
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdPeter);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdPeter);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.AccountLabel.NumMatchingAccounts",
@@ -5271,7 +5283,7 @@ TEST_F(FederatedAuthRequestImplTest, LoginHintSingleAccountIdMatch) {
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountId);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountId);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.LoginHint.NumMatchingAccounts",
@@ -5287,7 +5299,7 @@ TEST_F(FederatedAuthRequestImplTest, LoginHintSingleAccountEmailMatch) {
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].email, kEmail);
+  EXPECT_EQ(all_accounts_for_display()[0]->email, kEmail);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.LoginHint.NumMatchingAccounts",
@@ -5324,8 +5336,9 @@ TEST_F(FederatedAuthRequestImplTest, LoginHintFirstAccountMatch) {
       kMultipleAccountsWithHintsAndDomains;
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
+
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdNicolas);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdNicolas);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.LoginHint.NumMatchingAccounts",
@@ -5342,7 +5355,7 @@ TEST_F(FederatedAuthRequestImplTest, LoginHintLastAccountMatch) {
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdZach);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdZach);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.LoginHint.NumMatchingAccounts",
@@ -5387,7 +5400,7 @@ TEST_F(FederatedAuthRequestImplTest, DomainHintSingleAccountMatch) {
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountId);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountId);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.DomainHint.NumMatchingAccounts",
@@ -5405,7 +5418,7 @@ TEST_F(FederatedAuthRequestImplTest, DomainHintSingleAccountStarMatch) {
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountId);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountId);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.DomainHint.NumMatchingAccounts",
@@ -5486,7 +5499,7 @@ TEST_F(FederatedAuthRequestImplTest, DomainHintMultipleAccountsSingleMatch) {
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdZach);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdZach);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.DomainHint.NumMatchingAccounts",
@@ -5507,8 +5520,8 @@ TEST_F(FederatedAuthRequestImplTest,
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 2u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdNicolas);
-  EXPECT_EQ(all_accounts_for_display()[1].id, kAccountIdZach);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdNicolas);
+  EXPECT_EQ(all_accounts_for_display()[1]->id, kAccountIdZach);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.DomainHint.NumMatchingAccounts",
@@ -5529,8 +5542,8 @@ TEST_F(FederatedAuthRequestImplTest, DomainHintMultipleAccountsStar) {
 
   RunAuthTest(parameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 2u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdNicolas);
-  EXPECT_EQ(all_accounts_for_display()[1].id, kAccountIdZach);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdNicolas);
+  EXPECT_EQ(all_accounts_for_display()[1]->id, kAccountIdZach);
 
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.DomainHint.NumMatchingAccounts",
@@ -5561,45 +5574,45 @@ TEST_F(FederatedAuthRequestImplTest, DomainHintMultipleAccountsNoMatch) {
 
 TEST_F(FederatedAuthRequestImplTest, PictureFetch) {
   MockConfiguration configuration = kConfigurationValid;
-  configuration.idp_info[kProviderUrlFull].accounts[0].picture =
+  configuration.idp_info[kProviderUrlFull].accounts[0]->picture =
       GURL(kAccountPicture);
   // This ensures we don't fetch client metadata, to test a different codepath.
-  configuration.idp_info[kProviderUrlFull].accounts[0].login_state =
+  configuration.idp_info[kProviderUrlFull].accounts[0]->login_state =
       LoginState::kSignIn;
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountId);
-  EXPECT_FALSE(all_accounts_for_display()[0].decoded_picture.IsEmpty());
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountId);
+  EXPECT_FALSE(all_accounts_for_display()[0]->decoded_picture.IsEmpty());
   EXPECT_EQ(kAccountPictureSize,
-            all_accounts_for_display()[0].decoded_picture.Width());
+            all_accounts_for_display()[0]->decoded_picture.Width());
   EXPECT_EQ(kAccountPictureSize,
-            all_accounts_for_display()[0].decoded_picture.Height());
+            all_accounts_for_display()[0]->decoded_picture.Height());
 }
 
 TEST_F(FederatedAuthRequestImplTest, PictureFetchMultipleAccounts) {
   MockConfiguration configuration = kConfigurationValid;
   configuration.idp_info[kProviderUrlFull].accounts = kMultipleAccounts;
-  configuration.idp_info[kProviderUrlFull].accounts[0].picture =
+  configuration.idp_info[kProviderUrlFull].accounts[0]->picture =
       GURL(kAccountPicture);
-  configuration.idp_info[kProviderUrlFull].accounts[1].picture =
+  configuration.idp_info[kProviderUrlFull].accounts[1]->picture =
       GURL(kAccountPicture);
-  configuration.idp_info[kProviderUrlFull].accounts[2].picture =
+  configuration.idp_info[kProviderUrlFull].accounts[2]->picture =
       GURL(kAccountPicture404);
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess, configuration);
   ASSERT_EQ(all_accounts_for_display().size(), 3u);
-  EXPECT_FALSE(all_accounts_for_display()[0].decoded_picture.IsEmpty());
+  EXPECT_FALSE(all_accounts_for_display()[0]->decoded_picture.IsEmpty());
   EXPECT_EQ(kAccountPictureSize,
-            all_accounts_for_display()[0].decoded_picture.Width());
+            all_accounts_for_display()[0]->decoded_picture.Width());
   EXPECT_EQ(kAccountPictureSize,
-            all_accounts_for_display()[0].decoded_picture.Height());
-  EXPECT_FALSE(all_accounts_for_display()[1].decoded_picture.IsEmpty());
+            all_accounts_for_display()[0]->decoded_picture.Height());
+  EXPECT_FALSE(all_accounts_for_display()[1]->decoded_picture.IsEmpty());
   EXPECT_EQ(kAccountPictureSize,
-            all_accounts_for_display()[1].decoded_picture.Width());
+            all_accounts_for_display()[1]->decoded_picture.Width());
   EXPECT_EQ(kAccountPictureSize,
-            all_accounts_for_display()[1].decoded_picture.Height());
-  EXPECT_TRUE(all_accounts_for_display()[2].decoded_picture.IsEmpty());
+            all_accounts_for_display()[1]->decoded_picture.Height());
+  EXPECT_TRUE(all_accounts_for_display()[2]->decoded_picture.IsEmpty());
 }
 
 // Test that when FedCmRpContext flag is enabled and rp_context is specified,
@@ -5772,7 +5785,10 @@ TEST_F(FederatedAuthRequestImplTest, SuccessfulAuthZRequestNoPopUpWindow) {
 // windows.
 TEST_F(FederatedAuthRequestImplTest, SuccessfulAuthZRequestWithPopUpWindow) {
   base::test::ScopedFeatureList list;
-  list.InitAndEnableFeature(features::kFedCmAuthz);
+  list.InitWithFeatures(
+      /*enabled_features=*/{features::kFedCmAuthz,
+                            features::kFedCmMetricsEndpoint},
+      /*disabled_features=*/{});
 
   RequestParameters parameters = kDefaultRequestParameters;
   parameters.identity_providers[0].fields = {"non_default_field"};
@@ -5785,6 +5801,12 @@ TEST_F(FederatedAuthRequestImplTest, SuccessfulAuthZRequestWithPopUpWindow) {
   // rather than the typical idtoken response.
   GURL continue_on = GURL(kProviderUrlFull).Resolve("/more-permissions.php");
   config.continue_on = std::move(continue_on);
+
+  std::unique_ptr<IdpNetworkRequestMetricsRecorder> unique_metrics_recorder =
+      std::make_unique<IdpNetworkRequestMetricsRecorder>();
+  IdpNetworkRequestMetricsRecorder* metrics_recorder =
+      unique_metrics_recorder.get();
+  SetNetworkRequestManager(std::move(unique_metrics_recorder));
 
   // Set up the UI dialog controller to show a pop-up window, rather
   // than the typical mediated authorization prompt that generates
@@ -5821,6 +5843,11 @@ TEST_F(FederatedAuthRequestImplTest, SuccessfulAuthZRequestWithPopUpWindow) {
       "Blink.FedCm.Timing.ContinueOn.TurnaroundTime", 1);
   histogram_tester_.ExpectTotalCount("Blink.FedCm.Timing.IdTokenResponse", 0);
   histogram_tester_.ExpectTotalCount("Blink.FedCm.Timing.TurnaroundTime", 0);
+
+  EXPECT_THAT(metrics_recorder->get_metrics_endpoints_notified_success(),
+              ElementsAre("https://idp.example/metrics"));
+  EXPECT_TRUE(
+      metrics_recorder->get_metrics_endpoints_notified_failure().empty());
 
   // When the authorization is delegated and the feature is enabled
   // we don't fetch the client metadata endpoint (which is used to
@@ -6128,38 +6155,53 @@ TEST_F(FederatedAuthRequestImplTest, CloseModalDialogView) {
   EXPECT_TRUE(test_identity_registry_->notified_);
 }
 
-TEST_F(FederatedAuthRequestImplTest, ShouldNotMediateAuthz) {
+TEST_F(FederatedAuthRequestImplTest, GetDisclosureFieldsEmpty) {
   base::test::ScopedFeatureList list;
   list.InitAndEnableFeature(features::kFedCmAuthz);
   // An unknown field is being requested.
-  EXPECT_FALSE(ShouldMediateAuthz({"phone"}));
+  EXPECT_THAT(GetDisclosureFields({"phone"}), ElementsAre());
   // Nothing is requested.
-  EXPECT_FALSE(ShouldMediateAuthz({}));
+  EXPECT_THAT(GetDisclosureFields({}), ElementsAre());
 }
 
-TEST_F(FederatedAuthRequestImplTest, ShouldMediateAuthz) {
+TEST_F(FederatedAuthRequestImplTest, GetDisclosureFields) {
   base::test::ScopedFeatureList list;
   list.InitAndEnableFeature(features::kFedCmAuthz);
   // When no fields are passed, we use the default.
-  EXPECT_TRUE(federated_auth_request_impl_->ShouldMediateAuthzFor(
-      *NewIDPWithFields(std::nullopt)));
-  // When the default fields are explicitly passed, we should mediate.
-  EXPECT_TRUE(ShouldMediateAuthz({"name", "email", "picture"}));
-  // When a superset of the default fields is passed, we should mediate.
-  EXPECT_TRUE(
-      ShouldMediateAuthz({"name", "email", "picture", "locale", "phone"}));
+  EXPECT_THAT(federated_auth_request_impl_->GetDisclosureFields(
+                  *NewIDPWithFields(std::nullopt)),
+              ElementsAre(Field::kName, Field::kEmail, Field::kPicture));
+  // When the default fields are explicitly passed, we should mediate them.
+  EXPECT_THAT(GetDisclosureFields({"name", "email", "picture"}),
+              ElementsAre(Field::kName, Field::kEmail, Field::kPicture));
+  // When a superset of the default fields is passed, we should mediate the
+  // default fields.
+  EXPECT_THAT(
+      GetDisclosureFields({"name", "email", "picture", "locale", "phone"}),
+      ElementsAre(Field::kName, Field::kEmail, Field::kPicture));
 }
 
-TEST_F(FederatedAuthRequestImplTest, ShouldMediateAuthzWithoutFeatureEnabled) {
-  // Assert that we always mediate the authorization when the kFedCmAuthz
+TEST_F(FederatedAuthRequestImplTest, GetDisclosureFieldsSubsetOfDefault) {
+  base::test::ScopedFeatureList list;
+  list.InitWithFeatures({features::kFedCmAuthz, features::kFedCmFlexibleFields},
+                        {});
+  // Subsets of the default fields should work.
+  EXPECT_THAT(GetDisclosureFields({"name", "locale"}),
+              ElementsAre(Field::kName));
+}
+
+TEST_F(FederatedAuthRequestImplTest, GetDisclosureFieldsWithoutFeatureEnabled) {
+  // Assert that we always mediate the default fields when the kFedCmAuthz flag
   // is not enabled.
-  EXPECT_TRUE(ShouldMediateAuthz({"locale"}));
+  EXPECT_THAT(GetDisclosureFields({"locale"}),
+              ElementsAre(Field::kName, Field::kEmail, Field::kPicture));
 }
 
 class FederatedAuthRequestImplNewTabTest : public FederatedAuthRequestImplTest {
  protected:
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
+    InitConstants();
     test_api_permission_delegate_ =
         std::make_unique<TestApiPermissionDelegate>();
     test_permission_delegate_ = std::make_unique<TestPermissionDelegate>();
@@ -7128,7 +7170,7 @@ TEST_F(FederatedAuthRequestImplTest, AutoReauthnInButtonMode) {
   RunAuthDontWaitForCallback(parameters, kConfigurationValid);
 
   ASSERT_EQ(all_accounts_for_display().size(), 1u);
-  EXPECT_EQ(all_accounts_for_display()[0].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[0]->browser_trusted_login_state,
             LoginState::kSignIn);
   EXPECT_EQ(CountNumLoginStateIsSignin(), 1);
   EXPECT_EQ(dialog_controller_state_.sign_in_mode, SignInMode::kAuto);
@@ -7161,14 +7203,14 @@ TEST_F(FederatedAuthRequestImplTest,
 
   ASSERT_EQ(all_accounts_for_display().size(), 3u);
   // Accounts are reordered to have sign-in users displayed first.
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignIn);
-  EXPECT_EQ(all_accounts_for_display()[0].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignIn);
+  EXPECT_EQ(all_accounts_for_display()[0]->browser_trusted_login_state,
             LoginState::kSignIn);
-  EXPECT_EQ(all_accounts_for_display()[1].login_state, LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[1].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[1]->login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[1]->browser_trusted_login_state,
             LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[2].login_state, LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[2].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[2]->login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[2]->browser_trusted_login_state,
             LoginState::kSignUp);
 }
 
@@ -7197,15 +7239,15 @@ TEST_F(FederatedAuthRequestImplTest,
   RunAuthDontWaitForCallback(parameters, configuration);
 
   ASSERT_EQ(all_accounts_for_display().size(), 3u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignIn);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignIn);
   // This should be kSignUp regardless of IdP's claim.
-  EXPECT_EQ(all_accounts_for_display()[0].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[0]->browser_trusted_login_state,
             LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[1].login_state, LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[1].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[1]->login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[1]->browser_trusted_login_state,
             LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[2].login_state, LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[2].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[2]->login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[2]->browser_trusted_login_state,
             LoginState::kSignUp);
 }
 
@@ -7241,15 +7283,15 @@ TEST_F(FederatedAuthRequestImplTest,
   RunAuthDontWaitForCallback(parameters, configuration);
 
   ASSERT_EQ(all_accounts_for_display().size(), 3u);
-  EXPECT_EQ(all_accounts_for_display()[0].login_state, LoginState::kSignIn);
+  EXPECT_EQ(all_accounts_for_display()[0]->login_state, LoginState::kSignIn);
   // This should be kSignIn to match IdP's claim due to it has 3PC access.
-  EXPECT_EQ(all_accounts_for_display()[0].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[0]->browser_trusted_login_state,
             LoginState::kSignIn);
-  EXPECT_EQ(all_accounts_for_display()[1].login_state, LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[1].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[1]->login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[1]->browser_trusted_login_state,
             LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[2].login_state, LoginState::kSignUp);
-  EXPECT_EQ(all_accounts_for_display()[2].browser_trusted_login_state,
+  EXPECT_EQ(all_accounts_for_display()[2]->login_state, LoginState::kSignUp);
+  EXPECT_EQ(all_accounts_for_display()[2]->browser_trusted_login_state,
             LoginState::kSignUp);
 }
 
@@ -7389,10 +7431,11 @@ class TestDialogControllerWithImmediateDismiss : public TestDialogController {
 
   bool ShowAccountsDialog(
       const std::string& rp_for_display,
-      const std::vector<IdentityProviderData>& identity_provider_data,
+      const std::vector<IdentityProviderDataPtr>& idp_list,
+      const std::vector<IdentityRequestAccountPtr>& accounts,
       IdentityRequestAccount::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
-      const std::optional<content::IdentityProviderData>& new_accounts_idp,
+      const std::vector<IdentityRequestAccountPtr>& new_accounts,
       IdentityRequestDialogController::AccountSelectionCallback on_selected,
       IdentityRequestDialogController::LoginToIdPCallback on_add_account,
       IdentityRequestDialogController::DismissCallback dismiss_callback,
@@ -7485,18 +7528,18 @@ TEST_F(FederatedAuthRequestImplTest, UseOtherAccountAccountOrder) {
   RunAuthDontWaitForCallback(kDefaultRequestParameters, configuration);
 
   ASSERT_EQ(all_accounts_for_display().size(), 3u);
-  ASSERT_EQ(new_idp_accounts().size(), 1u);
+  ASSERT_EQ(new_accounts().size(), 1u);
 
   // Accounts are reordered to have the most recently signed in account,
   // kAccountIdPeter, displayed first.
-  EXPECT_EQ(all_accounts_for_display()[0].id, kAccountIdPeter);
-  EXPECT_EQ(all_accounts_for_display()[1].id, kAccountIdNicolas);
-  EXPECT_EQ(all_accounts_for_display()[2].id, kAccountIdZach);
-  EXPECT_EQ(new_idp_accounts()[0].id, kAccountIdPeter);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kAccountIdPeter);
+  EXPECT_EQ(all_accounts_for_display()[1]->id, kAccountIdNicolas);
+  EXPECT_EQ(all_accounts_for_display()[2]->id, kAccountIdZach);
+  EXPECT_EQ(new_accounts()[0]->id, kAccountIdPeter);
 }
 
 // Tests that when use a different account is used and multiple accounts are
-// logged in at once, all the new accounts are part of the new_idp_accounts().
+// logged in at once, all the new accounts are part of the new_accounts().
 TEST_F(FederatedAuthRequestImplTest, UseOtherAccountMultipleNewAccounts) {
   base::test::ScopedFeatureList list;
   list.InitAndEnableFeature(features::kFedCmUseOtherAccount);
@@ -7525,15 +7568,15 @@ TEST_F(FederatedAuthRequestImplTest, UseOtherAccountMultipleNewAccounts) {
   RunAuthDontWaitForCallback(kDefaultRequestParameters, configuration);
 
   ASSERT_EQ(all_accounts_for_display().size(), 3u);
-  ASSERT_EQ(new_idp_accounts().size(), 2u);
+  ASSERT_EQ(new_accounts().size(), 2u);
 
   // Accounts are reordered to have the most recently signed in accounts
   // displayed first.
-  EXPECT_EQ(all_accounts_for_display()[0].id, kTwoAccounts[0].id);
-  EXPECT_EQ(all_accounts_for_display()[1].id, kTwoAccounts[1].id);
-  EXPECT_EQ(all_accounts_for_display()[2].id, kSingleAccount[0].id);
-  EXPECT_EQ(new_idp_accounts()[0].id, kTwoAccounts[0].id);
-  EXPECT_EQ(new_idp_accounts()[1].id, kTwoAccounts[1].id);
+  EXPECT_EQ(all_accounts_for_display()[0]->id, kTwoAccounts[0]->id);
+  EXPECT_EQ(all_accounts_for_display()[1]->id, kTwoAccounts[1]->id);
+  EXPECT_EQ(all_accounts_for_display()[2]->id, kSingleAccount[0]->id);
+  EXPECT_EQ(new_accounts()[0]->id, kTwoAccounts[0]->id);
+  EXPECT_EQ(new_accounts()[1]->id, kTwoAccounts[1]->id);
 }
 
 }  // namespace content

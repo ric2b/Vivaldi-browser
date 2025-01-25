@@ -89,7 +89,7 @@ Beyond the basic functions rows() and cols(), there are some useful functions th
   sm1.nonZeros();     // Number of non zero values   
   sm1.outerSize();    // Number of columns (resp. rows) for a column major (resp. row major )
   sm1.innerSize();    // Number of rows (resp. columns) for a row major (resp. column major)
-  sm1.norm();         // Euclidian norm of the matrix
+  sm1.norm();         // Euclidean norm of the matrix
   sm1.squaredNorm();  // Squared norm of the matrix
   sm1.blueNorm();
   sm1.isVector();     // Check if sm1 is a sparse vector or a sparse matrix

@@ -16,11 +16,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <thread>  // NOLINT: For `std::this_thread::get_id()` only.
+#include <utility>
+#include <vector>
 
 #include "gtest/gtest.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "./centipede/logging.h"
+#include "./common/logging.h"
 
 namespace centipede {
 namespace {
@@ -33,7 +38,7 @@ TEST(PeriodicActionTest, OnlyPeriodicInvocations) {
   int count = 0;
   PeriodicAction action{
       [&count]() { ++count; },
-      {.delay = absl::ZeroDuration(), .interval = kPeriodicInterval},
+      PeriodicAction::ZeroDelayConstInterval(kPeriodicInterval),
   };
   absl::SleepFor(kDuration);
   action.Stop();
@@ -47,16 +52,18 @@ TEST(PeriodicActionTest, OnlyNudgedInvocations) {
   int count = 0;
   PeriodicAction action{
       [&count]() { ++count; },
-      // Effectively disable invocations done periodically: only explicit
-      // `Nudge()` calls below will trigger them.
-      {.delay = absl::InfiniteDuration(), .interval = absl::InfiniteDuration()},
+      {
+          // Effectively disable periodic invocations: only `Nudge()` calls
+          // below will trigger them.
+          .sleep_before_each = [](size_t) { return absl::InfiniteDuration(); },
+      },
   };
   int expected_count = 0;
   const absl::Time end_time = absl::Now() + kDuration;
   while (absl::Now() < end_time) {
     action.Nudge();
-    // Sleep after a nudge, not before, to guarantee that the action has time to
-    // finish and increment `count`.
+    // Sleep after a nudge, not before, to guarantee that the action has time
+    // to finish and increment `count`.
     absl::SleepFor(kNudgeInterval);
     ++expected_count;
   }
@@ -82,7 +89,7 @@ TEST(PeriodicActionTest, PeriodicAndNudgedInvocations) {
   int count = 0;
   PeriodicAction action{
       [&count]() { ++count; },
-      {.delay = absl::ZeroDuration(), .interval = kPeriodicInterval},
+      PeriodicAction::ZeroDelayConstInterval(kPeriodicInterval),
   };
   const absl::Time end_time = absl::Now() + kDuration;
   while (absl::Now() < end_time) {
@@ -111,7 +118,7 @@ TEST(PeriodicActionTest, ClashingPeriodicAndNudgedInvocations) {
   int count = 0;
   PeriodicAction action{
       [&count]() { ++count; },
-      {.delay = absl::ZeroDuration(), .interval = kPeriodicInterval},
+      PeriodicAction::ZeroDelayConstInterval(kPeriodicInterval),
   };
   const absl::Time end_time = absl::Now() + kDuration;
   while (absl::Now() < end_time) {
@@ -128,6 +135,93 @@ TEST(PeriodicActionTest, ClashingPeriodicAndNudgedInvocations) {
       << VV(kMaxPeriodicCount) << VV(kMaxNudgedCount);
   EXPECT_LE(count, kMaxPeriodicCount + kMaxNudgedCount)
       << VV(kMaxPeriodicCount) << VV(kMaxNudgedCount);
+}
+
+// Test that a `Nudge()` immediately followed by an explicit `Stop()` still
+// runs the action.
+TEST(PeriodicActionTest, NudgeThenStopStillRunsAction) {
+  int count = 0;
+  absl::Mutex count_mu;
+  PeriodicAction action{
+      [&count, &count_mu]() {
+        absl::MutexLock lock{&count_mu};
+        ++count;
+      },
+      PeriodicAction::ZeroDelayConstInterval(absl::InfiniteDuration()),
+  };
+  absl::SleepFor(absl::Seconds(1));
+  {
+    absl::MutexLock lock{&count_mu};
+    EXPECT_EQ(count, 1);
+  }
+  action.Nudge();
+  action.Stop();
+  {
+    absl::MutexLock lock{&count_mu};
+    EXPECT_EQ(count, 2);
+  }
+}
+
+// Test that a `Nudge()` immediately followed by an implicit `Stop()` in
+// `~PeriodicAction()` still runs the action.
+TEST(PeriodicActionTest, NudgeThenDtorStillRunsAction) {
+  int count = 0;
+  absl::Mutex count_mu;
+  {
+    PeriodicAction action{
+        [&count, &count_mu]() {
+          absl::MutexLock lock{&count_mu};
+          ++count;
+        },
+        PeriodicAction::ZeroDelayConstInterval(absl::InfiniteDuration()),
+    };
+    absl::SleepFor(absl::Seconds(1));
+    {
+      absl::MutexLock lock{&count_mu};
+      EXPECT_EQ(count, 1);
+    }
+    EXPECT_EQ(count, 1);
+    action.Nudge();
+  }
+  {
+    absl::MutexLock lock{&count_mu};
+    EXPECT_EQ(count, 2);
+  }
+}
+
+// The main purpose of this test is to make sure that a `PeriodicAction` object
+// can be moved to another such that the original object's dtor doesn't blow up
+// when it runs.
+TEST(PeriodicActionTest, ActionIsMoveable) {
+  absl::Mutex mu;
+  std::vector<std::thread::id> thread_ids;
+  {
+    PeriodicAction moved_from{
+        [&mu, &thread_ids]() {
+          absl::WriterMutexLock lock{&mu};
+          thread_ids.push_back(std::this_thread::get_id());
+        },
+        PeriodicAction::ZeroDelayConstInterval(absl::Milliseconds(10)),
+    };
+    absl::SleepFor(absl::Milliseconds(100));
+    // Sanity check that the action is running and is healthy.
+    moved_from.Nudge();
+    absl::SleepFor(absl::Milliseconds(100));
+    // Move the action to another object.
+    PeriodicAction moved_to = std::move(moved_from);
+    absl::SleepFor(absl::Milliseconds(100));
+    // The moved object should now be running the run-loop thread.
+    moved_to.Nudge();
+    absl::SleepFor(absl::Milliseconds(100));
+    moved_to.Stop();
+  }  // The dtors for both moved-from and moved-to objects run here.
+  // If we reached this point, at least the dtors ran without blowing up.
+  ASSERT_GT(thread_ids.size(), 1);
+  // A single instance of the run-loop thread should have been running
+  // throughout the whole process, including the move: the moved-from object
+  // should have just handed over the thread to the moved-to object.
+  std::sort(thread_ids.begin(), thread_ids.end());
+  ASSERT_EQ(thread_ids.front(), thread_ids.back());
 }
 
 }  // namespace

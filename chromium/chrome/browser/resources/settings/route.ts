@@ -38,11 +38,7 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
     r.PRIVACY_SANDBOX = r.PRIVACY.createChild('/adPrivacy');
     r.PRIVACY_SANDBOX_TOPICS =
         r.PRIVACY_SANDBOX.createChild('/adPrivacy/interests');
-    // Manage Topics Route should only be created if PTB is enabled. If user is
-    // in Mode B, only create it if include-mode-b param is true.
-    if (loadTimeData.getBoolean('isProactiveTopicsBlockingEnabled') &&
-        (loadTimeData.getBoolean('proactiveTopicsBlockingIncludesModeB') ||
-         !loadTimeData.getBoolean('isInCookieDeprecationFacilitatedTesting'))) {
+    if (loadTimeData.getBoolean('isProactiveTopicsBlockingEnabled')) {
       r.PRIVACY_SANDBOX_MANAGE_TOPICS =
           r.PRIVACY_SANDBOX_TOPICS.createChild('/adPrivacy/interests/manage');
     }
@@ -94,6 +90,10 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
     r.SITE_SETTINGS_CAPTURED_SURFACE_CONTROL =
         r.SITE_SETTINGS.createChild('capturedSurfaceControl');
   }
+  if (loadTimeData.getBoolean('enableSmartCardReadersContentSetting')) {
+    r.SITE_SETTINGS_SMART_CARD_READERS =
+        r.SITE_SETTINGS.createChild('smartCardReaders');
+  }
   if (loadTimeData.getBoolean('privateStateTokensEnabled')) {
     r.SITE_SETTINGS_AUTO_VERIFY = r.SITE_SETTINGS.createChild('autoVerify');
   }
@@ -105,11 +105,14 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
       r.SITE_SETTINGS.createChild('backgroundSync');
   r.SITE_SETTINGS_CAMERA = r.SITE_SETTINGS.createChild('camera');
   r.SITE_SETTINGS_CLIPBOARD = r.SITE_SETTINGS.createChild('clipboard');
+  if (loadTimeData.getBoolean('enableHandTrackingContentSetting')) {
+    r.SITE_SETTINGS_HAND_TRACKING = r.SITE_SETTINGS.createChild('handTracking');
+  }
   r.SITE_SETTINGS_IDLE_DETECTION = r.SITE_SETTINGS.createChild('idleDetection');
   r.SITE_SETTINGS_IMAGES = r.SITE_SETTINGS.createChild('images');
   r.SITE_SETTINGS_MIXEDSCRIPT = r.SITE_SETTINGS.createChild('insecureContent');
   r.SITE_SETTINGS_JAVASCRIPT = r.SITE_SETTINGS.createChild('javascript');
-  r.SITE_SETTINGS_JAVASCRIPT_JIT = r.SITE_SETTINGS.createChild('v8');
+  r.SITE_SETTINGS_JAVASCRIPT_OPTIMIZER = r.SITE_SETTINGS.createChild('v8');
   if (loadTimeData.getBoolean('enableKeyboardAndPointerLockPrompt')) {
     r.SITE_SETTINGS_KEYBOARD_LOCK = r.SITE_SETTINGS.createChild('keyboardLock');
     r.SITE_SETTINGS_POINTER_LOCK = r.SITE_SETTINGS.createChild('pointerLock');
@@ -162,6 +165,10 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
     r.SITE_SETTINGS_AUTOMATIC_FULLSCREEN =
         r.SITE_SETTINGS.createChild('automaticFullScreen');
   }
+  if (loadTimeData.getBoolean('enableWebAppInstallation')) {
+    r.SITE_SETTINGS_WEB_APP_INSTALLATION =
+        r.SITE_SETTINGS.createChild('webApplications');
+  }
 
   // Vivaldi:
   r.SITE_SETTINGS_AUTOPLAY = r.SITE_SETTINGS.createChild('autoplay');
@@ -206,6 +213,10 @@ function createRoutes(): SettingsRoutes {
       loadTimeData.getBoolean('showAdvancedFeaturesMainControl')) {
     r.AI = r.BASIC.createSection(
         '/ai', 'ai', loadTimeData.getString('aiPageTitle'));
+    if (loadTimeData.getBoolean('enableAiSettingsPageRefresh') &&
+        loadTimeData.getBoolean('showTabOrganizationControl')) {
+      r.AI_TAB_ORGANIZATION = r.AI.createChild('/ai/tabOrganizer');
+    }
   }
 
   // <if expr="not chromeos_ash">
@@ -227,6 +238,11 @@ function createRoutes(): SettingsRoutes {
         '/autofill', 'autofill', loadTimeData.getString('autofillPageTitle'));
     r.PAYMENTS = r.AUTOFILL.createChild('/payments');
     r.ADDRESSES = r.AUTOFILL.createChild('/addresses');
+
+    if (loadTimeData.getBoolean('autofillPredictionImprovementsEnabled')) {
+      r.AUTOFILL_PREDICTION_IMPROVEMENTS =
+          r.AUTOFILL.createChild('/autofillPredictionImprovements');
+    }
 
     // <if expr="is_win or is_macosx">
     r.PASSKEYS = r.AUTOFILL.createChild('/passkeys');
@@ -306,15 +322,6 @@ function createRoutes(): SettingsRoutes {
           '/performance', 'performance',
           loadTimeData.getString('performancePageTitle'));
     }
-
-    // <if expr="_google_chrome">
-    if (visibility.getMostChrome !== false &&
-        loadTimeData.getBoolean('showGetTheMostOutOfChromeSection')) {
-      r.GET_MOST_CHROME = r.ADVANCED.createSection(
-          '/getMostChrome', 'getMostChrome',
-          loadTimeData.getString('getTheMostOutOfChrome'));
-    }
-    // </if>
   }
   return r as unknown as SettingsRoutes;
 }

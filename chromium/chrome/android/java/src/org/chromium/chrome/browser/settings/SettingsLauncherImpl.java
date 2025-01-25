@@ -4,15 +4,12 @@
 
 package org.chromium.chrome.browser.settings;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-
-import org.jni_zero.CalledByNative;
 
 import org.chromium.base.IntentUtils;
 import org.chromium.chrome.browser.accessibility.settings.AccessibilitySettings;
@@ -32,13 +29,9 @@ import org.chromium.components.browser_ui.site_settings.SiteSettings;
 
 /** Implementation class for launching a {@link SettingsActivity}. */
 public class SettingsLauncherImpl implements SettingsLauncher {
-    /** Can be used by native code to inject SettingsLauncher in modularized Java code. */
-    @CalledByNative
-    private static SettingsLauncher create() {
-        return new SettingsLauncherImpl();
-    }
 
-    public SettingsLauncherImpl() {}
+    /** Instantiated through SettingsLauncherFactory. */
+    public SettingsLauncherImpl() {} // Vivaldi
 
     @Override
     public void launchSettingsActivity(Context context) {
@@ -103,19 +96,8 @@ public class SettingsLauncherImpl implements SettingsLauncher {
             Context context,
             @Nullable Class<? extends Fragment> fragment,
             @Nullable Bundle fragmentArgs) {
-        Intent intent = new Intent();
-        intent.setClass(context, SettingsActivity.class);
-        if (!(context instanceof Activity)) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        }
-        if (fragment != null) {
-            intent.putExtra(SettingsActivity.EXTRA_SHOW_FRAGMENT, fragment.getName());
-        }
-        if (fragmentArgs != null) {
-            intent.putExtra(SettingsActivity.EXTRA_SHOW_FRAGMENT_ARGUMENTS, fragmentArgs);
-        }
-        return intent;
+        String fragmentName = fragment == null ? null : fragment.getName();
+        return SettingsIntentUtil.createIntent(context, fragmentName, fragmentArgs);
     }
 
     @Override

@@ -51,6 +51,7 @@ class OobeMetricsTest : public OobeBaseTest {
   }
 
   void SetUpOnMainThread() override {
+    fake_gaia_.SetupFakeGaiaForLoginWithDefaults();
     structured_metrics_recorder_ =
         std::make_unique<metrics::structured::TestStructuredMetricsRecorder>();
     structured_metrics_recorder_->Initialize();
@@ -173,8 +174,7 @@ IN_PROC_BROWSER_TEST_F(OobeMetricsTest, PageSkipped) {
   ValidateEventRecorded(page_skipped_event);
 }
 
-// TODO(crbug.com/337379954): Flaky on linux-chromeos-chrome.
-IN_PROC_BROWSER_TEST_F(OobeMetricsTest, DISABLED_SignInEvents) {
+IN_PROC_BROWSER_TEST_F(OobeMetricsTest, SignInEvents) {
   // `login_manager_mixin_.LoginAsNewRegularUser()` can not be used in this test
   // since a simulation of login steps are required to get Sign-in events
   // recorded.
@@ -340,6 +340,8 @@ IN_PROC_BROWSER_TEST_F(FirstUserOobeMetricsTest, ClientIdNotReset) {
               ElementsAre(base::Bucket(0, 1)));
   EXPECT_THAT(histogram_tester_.GetAllSamples("OOBE.MetricsClientIdReset"),
               ElementsAre(base::Bucket(0, 1)));
+  EXPECT_THAT(histogram_tester_.GetAllSamples("OOBE.MetricsClientIdReset2"),
+              ElementsAre(base::Bucket(0, 1)));
 
   // Verify that `kOobeMetricsClientIdAtOobeStart` preference was cleared.
   EXPECT_FALSE(g_browser_process->local_state()->HasPrefPath(
@@ -377,6 +379,8 @@ IN_PROC_BROWSER_TEST_F(FirstUserOobeMetricsTest, ClientIdReset) {
                   "OOBE.StatsReportingControllerReportedReset"),
               ElementsAre(base::Bucket(1, 1)));
   EXPECT_THAT(histogram_tester_.GetAllSamples("OOBE.MetricsClientIdReset"),
+              ElementsAre(base::Bucket(1, 1)));
+  EXPECT_THAT(histogram_tester_.GetAllSamples("OOBE.MetricsClientIdReset2"),
               ElementsAre(base::Bucket(1, 1)));
 
   // Verify that `kOobeMetricsClientIdAtOobeStart` preference was cleared.

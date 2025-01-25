@@ -20,8 +20,8 @@ void BookmarkSupport::initIcons(const std::vector<std::string>& src_icons) {
       std::string png_data;
       if (base::Base64Decode(src_icons.at(i), &png_data)) {
         icons[i] = gfx::Image::CreateFrom1xPNGBytes(
-            reinterpret_cast<const unsigned char*>(png_data.c_str()),
-            png_data.length());
+            base::span(reinterpret_cast<const unsigned char*>(png_data.c_str()),
+                       png_data.length()));
       }
     }
   }

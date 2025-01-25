@@ -20,7 +20,7 @@
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
@@ -90,7 +90,7 @@ void GridMediatorTestClass::SetUp() {
   builder.AddTestingFactory(
       tab_groups::TabGroupSyncServiceFactory::GetInstance(),
       base::BindRepeating(&CreateMockTabGroupSyncService));
-  browser_state_ = builder.Build();
+  browser_state_ = std::move(builder).Build();
   AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
       browser_state_.get(),
       std::make_unique<FakeAuthenticationServiceDelegate>());

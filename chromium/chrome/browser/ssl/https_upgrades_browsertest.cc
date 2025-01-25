@@ -14,12 +14,13 @@
 #include "build/build_config.h"
 #include "chrome/browser/captive_portal/captive_portal_service_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/extensions/api/settings_private/generated_prefs.h"
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ssl/generated_https_first_mode_pref.h"
 #include "chrome/browser/ssl/https_first_mode_settings_tracker.h"
 #include "chrome/browser/ssl/https_upgrades_interceptor.h"
 #include "chrome/browser/ssl/https_upgrades_navigation_throttle.h"
-#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -38,6 +39,7 @@
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/security_interstitials/core/https_only_mode_metrics.h"
 #include "components/security_interstitials/core/metrics_helper.h"
+#include "components/security_state/content/security_state_tab_helper.h"
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/variations/active_field_trials.h"
@@ -58,9 +60,11 @@
 #include "net/test/test_data_directory.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/url_constants.h"
 
+using chrome_browser_interstitials::HFMInterstitialType;
 using security_interstitials::https_only_mode::Event;
 using security_interstitials::https_only_mode::InterstitialReason;
 using security_interstitials::https_only_mode::kEventHistogram;
@@ -298,6 +302,10 @@ class HttpsUpgradesBrowserTest
     if (IsHttpsFirstModePrefEnabled()) {
       SetPref(true);
     }
+
+    if (InBalancedMode()) {
+      SetBalancedPref(true);
+    }
   }
 
   void TearDownOnMainThread() override {
@@ -307,6 +315,7 @@ class HttpsUpgradesBrowserTest
     browser()->profile()->GetPrefs()->ClearPref(prefs::kHttpsUpgradeFallbacks);
     browser()->profile()->GetPrefs()->ClearPref(
         prefs::kHttpsUpgradeNavigations);
+    browser()->profile()->GetPrefs()->ClearPref(prefs::kHttpsFirstBalancedMode);
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -333,6 +342,10 @@ class HttpsUpgradesBrowserTest
     incognito_browser_ = CreateIncognitoBrowser();
   }
   bool IsIncognito() const { return incognito_browser_ != nullptr; }
+  bool OnlyInBalancedMode() const {
+    return https_upgrades_test_type() ==
+           HttpsUpgradesTestType::kHttpsFirstBalancedMode;
+  }
   bool InBalancedMode() const {
     return https_upgrades_test_type() ==
                HttpsUpgradesTestType::kHttpsFirstBalancedMode ||
@@ -350,6 +363,16 @@ class HttpsUpgradesBrowserTest
   bool GetPref() const {
     auto* prefs = browser()->profile()->GetPrefs();
     return prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled);
+  }
+
+  void SetBalancedPref(bool enabled) {
+    auto* prefs = browser()->profile()->GetPrefs();
+    prefs->SetBoolean(prefs::kHttpsFirstBalancedMode, enabled);
+  }
+
+  bool GetBalancedPref() const {
+    auto* prefs = browser()->profile()->GetPrefs();
+    return prefs->GetBoolean(prefs::kHttpsFirstBalancedMode);
   }
 
   void ProceedThroughInterstitial(content::WebContents* tab) {
@@ -443,13 +466,8 @@ class HttpsUpgradesBrowserTest
 
   // Verifies that an HFM interstitial is shown.
   void ExpectInterstitial(content::WebContents* contents) {
-    EXPECT_TRUE(
-        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
-            contents));
-    EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-        contents->GetPrimaryMainFrame(),
-        "You are seeing this warning because this site does not support "
-        "HTTPS."));
+    EXPECT_EQ(HFMInterstitialType::kStandard,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
   }
 
   // Verifies that an HFM interstitial is shown only if the HFM-pref is enabled
@@ -632,6 +650,58 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
       NavigationRequestSecurityLevel::kNonUniqueHostname, 1);
 }
 
+// Test that unique single-label hostnames (e.g. gTLDs) are upgraded in all
+// modes, but warnings are only shown in strict and incognito modes.
+IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
+                       UniqueSingleLabel_NoWarnInBalancedMode) {
+  // Disable the testing port configuration, as this test doesn't use the
+  // EmbeddedTestServer.
+  HttpsUpgradesInterceptor::SetHttpsPortForTesting(0);
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(0);
+  GURL singlelabel_url = http_server()->GetURL("cl", "/simple.html");
+
+  auto* contents = GetBrowser()->tab_strip_model()->GetActiveWebContents();
+
+  if (IsHttpsFirstModePrefEnabled() || IsIncognito()) {
+    // HFM should attempt the upgrade, fail, and fallback to the interstitial.
+    EXPECT_FALSE(content::NavigateToURL(contents, singlelabel_url));
+    EXPECT_TRUE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 2);
+  } else {
+    // Otherwise, the request should attempt the upgrade, fail, and fallback to
+    // HTTP _without_ an interstitial.
+    NavigateAndWaitForFallback(contents, singlelabel_url);
+    EXPECT_EQ(singlelabel_url, contents->GetLastCommittedURL());
+    EXPECT_FALSE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                    NavigationRequestSecurityLevel::kInsecure,
+                                    1);
+    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 3);
+  }
+
+  // Verify that upgrade events were recorded because an upgrade was attempted
+  // and failed no matter what.
+  histograms()->ExpectTotalCount(kEventHistogram, 3);
+  histograms()->ExpectBucketCount(
+      kEventHistogram,
+      security_interstitials::https_only_mode::Event::kUpgradeAttempted, 1);
+  histograms()->ExpectBucketCount(
+      kEventHistogram,
+      security_interstitials::https_only_mode::Event::kUpgradeFailed, 1);
+  histograms()->ExpectBucketCount(
+      kEventHistogram,
+      security_interstitials::https_only_mode::Event::kUpgradeTimedOut, 1);
+
+  histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                  NavigationRequestSecurityLevel::kUpgraded, 1);
+  histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                  NavigationRequestSecurityLevel::kSecure, 1);
+}
+
 // If the user navigates to a non-unique hostname, the navigation should be
 // upgraded, but record insecure metrics.
 IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest, NonUniqueHost_RecordsMetrics) {
@@ -661,6 +731,64 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest, NonUniqueHost_RecordsMetrics) {
   histograms()->ExpectBucketCount(
       kNavigationRequestSecurityLevelHistogram,
       NavigationRequestSecurityLevel::kNonUniqueHostname, 2);
+}
+
+// Test that non-default ports (e.g. not HTTP80) are upgraded in all
+// modes, but warnings are only shown in strict and incognito modes.
+IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
+                       NonDefaultPorts_NoWarnInBalancedMode) {
+  // Disable the testing port configuration, as this test doesn't use the
+  // EmbeddedTestServer.
+  HttpsUpgradesInterceptor::SetHttpsPortForTesting(0);
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(0);
+
+  // Set up an interceptor so we can test non-default (and non-testing) ports.
+  GURL non_default_http_url = GURL("http://example.com:8080/simple.html");
+  auto url_loader_interceptor =
+      content::URLLoaderInterceptor::ServeFilesFromDirectoryAtOrigin(
+          GetChromeTestDataDir().MaybeAsASCII(),
+          non_default_http_url.GetWithEmptyPath());
+
+  auto* contents = GetBrowser()->tab_strip_model()->GetActiveWebContents();
+
+  if (IsHttpsFirstModePrefEnabled() || IsIncognito()) {
+    // HFM should attempt the upgrade, fail, and fallback to the interstitial.
+    EXPECT_FALSE(content::NavigateToURL(contents, non_default_http_url));
+    EXPECT_TRUE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 2);
+  } else {
+    // Otherwise, the request should attempt the upgrade, fail, and fallback to
+    // HTTP _without_ an interstitial.
+    NavigateAndWaitForFallback(contents, non_default_http_url);
+    EXPECT_EQ(non_default_http_url, contents->GetLastCommittedURL());
+    EXPECT_FALSE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+    histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                    NavigationRequestSecurityLevel::kInsecure,
+                                    1);
+    histograms()->ExpectTotalCount(kNavigationRequestSecurityLevelHistogram, 3);
+  }
+
+  // Verify that upgrade events were recorded because an upgrade was attempted
+  // and failed no matter what.
+  histograms()->ExpectTotalCount(kEventHistogram, 3);
+  histograms()->ExpectBucketCount(
+      kEventHistogram,
+      security_interstitials::https_only_mode::Event::kUpgradeAttempted, 1);
+  histograms()->ExpectBucketCount(
+      kEventHistogram,
+      security_interstitials::https_only_mode::Event::kUpgradeFailed, 1);
+  histograms()->ExpectBucketCount(
+      kEventHistogram,
+      security_interstitials::https_only_mode::Event::kUpgradeNetError, 1);
+
+  histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                  NavigationRequestSecurityLevel::kUpgraded, 1);
+  histograms()->ExpectBucketCount(kNavigationRequestSecurityLevelHistogram,
+                                  NavigationRequestSecurityLevel::kSecure, 1);
 }
 
 // If the user navigates to an HTTPS URL, the navigation should end up on that
@@ -722,13 +850,12 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
   EXPECT_EQ(http_url, contents->GetLastCommittedURL());
 
   if (IsHttpsFirstModePrefEnabled()) {
-    EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-        contents->GetPrimaryMainFrame(), "this site does not support HTTPS."));
+    EXPECT_EQ(HFMInterstitialType::kStandard,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
   } else if (IsIncognito()) {
     // Test that HFM-in-Incognito overrides the default interstitial text.
-    EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-        contents->GetPrimaryMainFrame(),
-        "this site does not support HTTPS and you are in Incognito mode."));
+    EXPECT_EQ(HFMInterstitialType::kIncognito,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
   }
 }
 
@@ -827,16 +954,13 @@ IN_PROC_BROWSER_TEST_P(
     bool is_interstitial_due_to_se_heuristic =
         IsSiteEngagementHeuristicEnabled() && !IsHttpsFirstModePrefEnabled() &&
         !InBalancedMode();
-    EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-        contents->GetPrimaryMainFrame(),
-        is_interstitial_due_to_se_heuristic
-            ? "You usually connect to this site securely"
-            : "You are seeing this warning because this site does not support "
-              "HTTPS."));
+    EXPECT_EQ(is_interstitial_due_to_se_heuristic
+                  ? HFMInterstitialType::kSiteEngagement
+                  : HFMInterstitialType::kStandard,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
   } else {
-    EXPECT_FALSE(
-        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
-            contents));
+    EXPECT_EQ(HFMInterstitialType::kNone,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
   }
 
   // Verify that navigation event metrics were correctly recorded.
@@ -1031,18 +1155,13 @@ IN_PROC_BROWSER_TEST_P(
   NavigateAndWaitForFallback(contents, navigated_url);
   EXPECT_EQ(navigated_url, contents->GetLastCommittedURL());
 
-  if (IsHttpsFirstModeInterstitialEnabledAcrossSites()) {
-    EXPECT_TRUE(
-        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
-            contents));
-    EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-        contents->GetPrimaryMainFrame(),
-        "You are seeing this warning because this site does not support "
-        "HTTPS."));
+  // Balanced Mode also exempts non-default ports.
+  if (IsHttpsFirstModePrefEnabled() || IsIncognito()) {
+    EXPECT_EQ(HFMInterstitialType::kStandard,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
   } else {
-    EXPECT_FALSE(
-        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
-            contents));
+    EXPECT_EQ(HFMInterstitialType::kNone,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
   }
 
   // Verify that navigation event metrics were correctly recorded.
@@ -1104,7 +1223,7 @@ IN_PROC_BROWSER_TEST_P(
       GetBrowser()->tab_strip_model()->GetActiveWebContents();
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
 
-  if (!IsHttpsFirstModePrefEnabled()) {
+  if (!IsHttpsFirstModePrefEnabled() && !InBalancedMode()) {
     // When HFM is not enabled via pref, these should never be set in this test.
     EXPECT_FALSE(
         profile->GetPrefs()->HasPrefPath(prefs::kHttpsOnlyModeEnabled));
@@ -1171,7 +1290,7 @@ IN_PROC_BROWSER_TEST_P(
   }
   CheckInterstitialReasonHistogram(expected_reasons);
 
-  if (!IsHttpsFirstModePrefEnabled()) {
+  if (!IsHttpsFirstModePrefEnabled() && !InBalancedMode()) {
     EXPECT_FALSE(
         profile->GetPrefs()->HasPrefPath(prefs::kHttpsOnlyModeEnabled));
     EXPECT_FALSE(
@@ -1238,15 +1357,10 @@ IN_PROC_BROWSER_TEST_P(
 
   ExpectedInterstitialReasons expected_reasons;
   if (expect_interstitial) {
-    EXPECT_TRUE(
-        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
-            contents));
-    EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-        contents->GetPrimaryMainFrame(),
-        expect_typically_secure_user_interstitial_text
-            ? "You usually connect to sites securely"
-            : "You are seeing this warning because this site does not support "
-              "HTTPS."));
+    EXPECT_EQ(expect_typically_secure_user_interstitial_text
+                  ? HFMInterstitialType::kTypicallySecure
+                  : HFMInterstitialType::kStandard,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
 
     if (expect_typically_secure_user_interstitial_text) {
       expected_reasons.typically_secure_user++;
@@ -1273,15 +1387,10 @@ IN_PROC_BROWSER_TEST_P(
             hfm_service->GetRecentNavigationCount());
 
   if (expect_interstitial) {
-    EXPECT_TRUE(
-        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
-            contents));
-    EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-        contents->GetPrimaryMainFrame(),
-        expect_typically_secure_user_interstitial_text
-            ? "You usually connect to sites securely"
-            : "You are seeing this warning because this site does not support "
-              "HTTPS."));
+    EXPECT_EQ(expect_typically_secure_user_interstitial_text
+                  ? HFMInterstitialType::kTypicallySecure
+                  : HFMInterstitialType::kStandard,
+              chrome_browser_interstitials::GetHFMInterstitialType(contents));
 
     if (expect_typically_secure_user_interstitial_text) {
       expected_reasons.typically_secure_user++;
@@ -1322,12 +1431,8 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(initial_navigation_count + 4u,
             hfm_service->GetRecentNavigationCount());
 
-  EXPECT_TRUE(chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
-      contents));
-  EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      contents->GetPrimaryMainFrame(),
-      "You are seeing this warning because this site does not support "
-      "HTTPS."));
+  EXPECT_EQ(HFMInterstitialType::kStandard,
+            chrome_browser_interstitials::GetHFMInterstitialType(contents));
   expected_reasons.pref++;
 
   CheckInterstitialReasonHistogram(expected_reasons);
@@ -1685,6 +1790,52 @@ IN_PROC_BROWSER_TEST_P(
       http_url.host(), contents->GetPrimaryMainFrame()->GetStoragePartition()));
 }
 
+// If the upgraded HTTPS URL is not available due to an exempted net error but
+// is to a single-label unique hostname (i.e. a TLD) don't show the net error
+// page. This is the same as
+// ExemptNetErrorOnUpgrade_NonUniqueHostname_ShouldFallback except with a unique
+// one-label hostname.
+// (Partial regression test for impact of crrev.com/c/5507613 on b/348330182.)
+IN_PROC_BROWSER_TEST_P(
+    HttpsUpgradesBrowserTest,
+    ExemptNetErrorOnUpgrade_UniqueSingleLabelHostname_ShouldFallback) {
+  // This test is only interesting when HTTPS-First Mode is enabled.
+  if (!IsHttpsFirstModeInterstitialEnabledAcrossSites()) {
+    return;
+  }
+
+  GURL http_url = http_server()->GetURL("cl", "/simple.html");
+  GURL https_url = https_server()->GetURL("cl", "/simple.html");
+  auto* contents = GetBrowser()->tab_strip_model()->GetActiveWebContents();
+
+  // Set up an interceptor that will return ERR_NAME_NOT_RESOLVED. Navigating
+  // to the HTTP URL should get upgraded to HTTPS, and then fallback to HTTP
+  // and the HFM interstitial.
+  auto dns_failure_interceptor =
+      std::make_unique<content::URLLoaderInterceptor>(base::BindRepeating(
+          [](content::URLLoaderInterceptor::RequestParams* params) {
+            params->client->OnComplete(
+                network::URLLoaderCompletionStatus(net::ERR_NAME_NOT_RESOLVED));
+            return true;
+          }));
+  EXPECT_FALSE(content::NavigateToURL(contents, http_url));
+
+  // Balanced mode doesn't show the interstitial on any single-label hosts.
+  if (OnlyInBalancedMode()) {
+    EXPECT_FALSE(chrome_browser_interstitials::IsShowingInterstitial(contents));
+  } else {
+    EXPECT_TRUE(chrome_browser_interstitials::IsShowingInterstitial(contents));
+    ProceedThroughInterstitial(contents);
+  }
+
+  // Should now be on the HTTP URL and it should be allowlisted.
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  content::SSLHostStateDelegate* state = profile->GetSSLHostStateDelegate();
+  EXPECT_TRUE(state->IsHttpAllowedForHost(
+      http_url.host(), contents->GetPrimaryMainFrame()->GetStoragePartition()));
+}
+
 // Navigations in subframes should not get upgraded by HTTPS-Only Mode. They
 // should be blocked as mixed content.
 IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
@@ -1747,7 +1898,7 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
 // HTTPS-Only Mode interstitial.
 IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest, SlowHttps_ShouldInterstitial) {
   // Set timeout to zero so that HTTPS upgrades immediately timeout.
-  HttpsUpgradesNavigationThrottle::set_timeout_for_testing(0);
+  HttpsUpgradesNavigationThrottle::set_timeout_for_testing(base::TimeDelta());
 
   // Set up a custom HTTPS server that times out without sending a response.
   net::EmbeddedTestServer timeout_server{net::EmbeddedTestServer::TYPE_HTTPS};
@@ -1845,6 +1996,178 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
   EXPECT_EQ("bar.com", contents->GetLastCommittedURL().host());
 }
 
+// Regression test for crbug.com/41488861.
+// Tests that a slow fallback load is not cancelled with timeout.
+// bad-ssl.com is configured to return a slow load over http. Navigating to
+// http://bad-ssl.com should upgrade and immediately fall back, then display the
+// http response without cancelling it for timeout.
+IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
+                       CancelTimeoutForFallbackNavigations) {
+  net::EmbeddedTestServer http_server;
+  net::EmbeddedTestServer https_server{net::EmbeddedTestServer::TYPE_HTTPS};
+
+  // Make the HTTP server return a slow response.
+  http_server.RegisterRequestHandler(base::BindRepeating(
+      [](const net::test_server::HttpRequest& request)
+          -> std::unique_ptr<net::test_server::HttpResponse> {
+        // The HTTP load needs to be slower than the 1 second timeout configured
+        // by the the test.
+        auto slow_http_response =
+            std::make_unique<net::test_server::DelayedHttpResponse>(
+                base::Seconds(2));
+        slow_http_response->set_content_type("text/html");
+        slow_http_response->set_content("hello from http");
+        return std::move(slow_http_response);
+      }));
+  ASSERT_TRUE(http_server.Start());
+  ASSERT_TRUE(https_server.Start());
+
+  // Set the timeout short enough, but not zero. We can't set it to zero
+  // because it'll cancel the HTTPS load with timeout instead of an error.
+  HttpsUpgradesNavigationThrottle::set_timeout_for_testing(base::Seconds(1));
+
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(http_server.port());
+  HttpsUpgradesInterceptor::SetHttpsPortForTesting(https_server.port());
+
+  GURL http_url(http_server.GetURL("bad-https.com", "/"));
+  auto* contents = GetBrowser()->tab_strip_model()->GetActiveWebContents();
+  NavigateAndWaitForFallback(contents, http_url);
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+
+  if (IsHttpsFirstModeInterstitialEnabledAcrossSites()) {
+    EXPECT_TRUE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+    histograms()->ExpectTotalCount("Net.ErrorCodesForMainFrame4", 1);
+    histograms()->ExpectBucketCount("Net.ErrorCodesForMainFrame4",
+                                    -net::ERR_ABORTED, 1);
+  } else {
+    // Shouldn't record any net errors.
+    EXPECT_FALSE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+    histograms()->ExpectTotalCount("Net.ErrorCodesForMainFrame4", 0);
+  }
+
+  histograms()->ExpectTotalCount(kEventHistogram, 3);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeAttempted, 1);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeFailed, 1);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeCertError, 1);
+}
+
+// Creates a redirect response.
+std::unique_ptr<net::test_server::HttpResponse> RedirectResponseHandler(
+    const GURL& dest_url,
+    const net::test_server::HttpRequest& request) {
+  std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
+      new net::test_server::BasicHttpResponse);
+  http_response->set_code(net::HTTP_TEMPORARY_REDIRECT);
+  http_response->AddCustomHeader("Location", dest_url.spec());
+  return std::move(http_response);
+}
+
+// Creates a response that causes a redirect loop over https and returns a slow
+// response over http.
+std::unique_ptr<net::test_server::HttpResponse> RedirectLoopResponse(
+    int& http_port,
+    int& https_port,
+    const net::test_server::HttpRequest& request) {
+  if (request.GetURL().path() == "/redirect") {
+    // Over https, this URL redirects to itself.
+    if (request.GetURL().SchemeIs("https")) {
+      GURL url(base::StringPrintf("http://a.com:%d/redirect", http_port));
+      return RedirectResponseHandler(url, request);
+    }
+    // Over http, it prints a slow hello. This should delay longer than the
+    // HTTPS upgrade timeout which is set to 1 second.
+    auto slow_http_response =
+        std::make_unique<net::test_server::DelayedHttpResponse>(
+            base::Seconds(2));
+    slow_http_response->set_content_type("text/html");
+    slow_http_response->set_content("hello from http");
+    return std::move(slow_http_response);
+  }
+  return nullptr;
+}
+
+// Another regression test for crbug.com/41488861.
+// Tests that a slow load that's detected as a redirect loop will not display
+// a flash of a net error page.
+//
+// Assume that a.com/redirect:
+// - Shows a slow loading response when loaded over http
+// - Redirects to http://a.com/redirect when loaded over https.
+//
+// The flow of the test is as follows:
+// 1. Load http://a.com/redirect.
+// 2. http://a.com/redirect is upgraded to http.
+// 3. https://a.com/redirect redirects to http://a.com/redirect
+// 4. This triggers a redirect loop (the URL was seen at step 1).
+// 5. a.com is allowlisted and http://a.com/redirect is loaded as fallback.
+// 6. http://a.com/redirect prints a message after a slow load.
+//
+// This flow should never display a net error page with ERR_TIMED_OUT to the
+// user. If the interstitial is enabled, it should be displayed at the final
+// step.
+IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
+                       RedirectLoopWithSlowRedirect_ShouldInterstitial) {
+  net::EmbeddedTestServer redirect_server_http;
+  net::EmbeddedTestServer redirect_server_https{
+      net::EmbeddedTestServer::TYPE_HTTPS};
+
+  // Set the timeout short enough, but not zero. We can't set it to zero
+  // because it'll cancel the HTTPS load with timeout instead of an error.
+  // The HTTP load in this test needs to be slower than this timeout for the
+  // test to be meaningful.
+  HttpsUpgradesNavigationThrottle::set_timeout_for_testing(base::Seconds(1));
+
+  // We don't know the ports without starting the servers and we can't start
+  // the servers without registering request handlers. Pass them as refs so
+  // that we can change them later.
+  int http_port = 0;
+  int https_port = 0;
+  redirect_server_http.RegisterRequestHandler(base::BindRepeating(
+      &RedirectLoopResponse, std::ref(http_port), std::ref(https_port)));
+  redirect_server_https.RegisterRequestHandler(base::BindRepeating(
+      &RedirectLoopResponse, std::ref(http_port), std::ref(https_port)));
+
+  ASSERT_TRUE(redirect_server_http.Start());
+  ASSERT_TRUE(redirect_server_https.Start());
+
+  http_port = redirect_server_http.port();
+  https_port = redirect_server_https.port();
+
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(redirect_server_http.port());
+  HttpsUpgradesInterceptor::SetHttpsPortForTesting(
+      redirect_server_https.port());
+
+  GURL http_url(redirect_server_http.GetURL("a.com", "/redirect"));
+  auto* contents = GetBrowser()->tab_strip_model()->GetActiveWebContents();
+  NavigateAndWaitForFallback(contents, http_url);
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+
+  if (IsHttpsFirstModeInterstitialEnabledAcrossSites()) {
+    EXPECT_TRUE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+    histograms()->ExpectTotalCount("Net.ErrorCodesForMainFrame4", 1);
+    histograms()->ExpectBucketCount("Net.ErrorCodesForMainFrame4",
+                                    -net::ERR_ABORTED, 1);
+  } else {
+    // Shouldn't record any net errors.
+    EXPECT_FALSE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+    histograms()->ExpectTotalCount("Net.ErrorCodesForMainFrame4", 0);
+  }
+
+  histograms()->ExpectTotalCount(kEventHistogram, 3);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeAttempted, 1);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeFailed, 1);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeRedirectLoop,
+                                  1);
+}
+
 // Tests that navigating to an HTTPS page that downgrades to HTTP on the same
 // host will fail and trigger the HTTPS-Only Mode interstitial (due to
 // interceptor detecting a redirect loop and triggering fallback).
@@ -1873,6 +2196,7 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
         return response;
       }));
   ASSERT_TRUE(downgrading_server.Start());
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(downgrading_server.port());
   HttpsUpgradesInterceptor::SetHttpsPortForTesting(downgrading_server.port());
 
   GURL url = downgrading_server.GetURL("foo.com", "/");
@@ -1981,8 +2305,8 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
                 "/simple.html");
         return response;
       }));
-  HttpsUpgradesInterceptor::SetHttpPortForTesting(upgrading_server.port());
   ASSERT_TRUE(upgrading_server.Start());
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(upgrading_server.port());
 
   GURL http_url = upgrading_server.GetURL("bad-https.com", "/simple.html");
   // HTTPS server will have a cert error.
@@ -2415,6 +2739,7 @@ IN_PROC_BROWSER_TEST_P(HttpsUpgradesBrowserTest,
         return response;
       }));
   ASSERT_TRUE(downgrading_server.Start());
+  HttpsUpgradesInterceptor::SetHttpPortForTesting(downgrading_server.port());
   HttpsUpgradesInterceptor::SetHttpsPortForTesting(downgrading_server.port());
 
   GURL downgrading_https_url = downgrading_server.GetURL("site2.com", "/");
@@ -3205,14 +3530,19 @@ IN_PROC_BROWSER_TEST_P(
 class HttpsUpgradesPrefsBrowserTest : public InProcessBrowserTest {
  public:
   HttpsUpgradesPrefsBrowserTest() {
-    feature_list_.InitAndDisableFeature(features::kHttpsFirstModeIncognito);
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{},
+        /*disabled_features=*/{features::kHttpsFirstModeIncognito,
+                               features::kHttpsFirstBalancedMode});
   }
   ~HttpsUpgradesPrefsBrowserTest() override = default;
 
  protected:
-  void SetPref(bool enabled) {
-    auto* prefs = browser()->profile()->GetPrefs();
-    prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, enabled);
+  void SetUISetting(HttpsFirstModeSetting setting) {
+    extensions::settings_private::GeneratedPrefs prefs(browser()->profile());
+    prefs.SetPref(
+        kGeneratedHttpsFirstModePref,
+        std::make_unique<base::Value>(static_cast<int>(setting)).get());
   }
 
   bool GetPref() const {
@@ -3227,7 +3557,7 @@ class HttpsUpgradesPrefsBrowserTest : public InProcessBrowserTest {
   base::HistogramTester histograms_;
 };
 
-// Tests that the HTTPS-First Mode pref is recorded at startup and when
+// Tests that the HTTPS-First Mode state is recorded at startup and when
 // changed. This test requires restarting the browser to test the "at startup"
 // metric in order for the preference state to be set up before the
 // HttpsFirstModeService is created.
@@ -3235,13 +3565,15 @@ IN_PROC_BROWSER_TEST_F(HttpsUpgradesPrefsBrowserTest, PRE_PrefStatesRecorded) {
   // The default pref state is `false`, which should get recorded when the
   // initial browser instance is started here.
   histograms()->ExpectUniqueSample(
-      "Security.HttpsFirstMode.SettingEnabledAtStartup", false, 1);
+      "Security.HttpsFirstMode.SettingEnabledAtStartup2",
+      HttpsFirstModeSetting::kDisabled, 1);
 
   EXPECT_TRUE(variations::IsInSyntheticTrialGroup("HttpsFirstModeClientSetting",
                                                   "Disabled"));
 
-  // Change the pref to true. This should get recorded in the histogram.
-  SetPref(true);
+  // Emulate changing the UI setting to Enabled. This should get recorded
+  // in the histogram.
+  SetUISetting(HttpsFirstModeSetting::kEnabledFull);
   histograms()->ExpectUniqueSample("Security.HttpsFirstMode.SettingChanged",
                                    true, 1);
   EXPECT_TRUE(variations::IsInSyntheticTrialGroup("HttpsFirstModeClientSetting",
@@ -3249,83 +3581,7 @@ IN_PROC_BROWSER_TEST_F(HttpsUpgradesPrefsBrowserTest, PRE_PrefStatesRecorded) {
 }
 
 IN_PROC_BROWSER_TEST_F(HttpsUpgradesPrefsBrowserTest, PrefStatesRecorded) {
-  // Restarting the browser from the PRE_ test should record the startup pref
-  // histogram. Checking the unique count also ensures that other profile
-  // types (e.g. the ChromeOS sign-in profile) don't cause double-counting.
-  EXPECT_TRUE(GetPref());
-  histograms()->ExpectUniqueSample(
-      "Security.HttpsFirstMode.SettingEnabledAtStartup", true, 1);
-  EXPECT_TRUE(variations::IsInSyntheticTrialGroup("HttpsFirstModeClientSetting",
-                                                  "Enabled"));
-
-  // Open an Incognito window. Startup metrics should not get recorded.
-  CreateIncognitoBrowser();
-  histograms()->ExpectTotalCount(
-      "Security.HttpsFirstMode.SettingEnabledAtStartup", 1);
-}
-
-// A simple test fixture that constructs a HistogramTester (so that it gets
-// initialized before browser startup). Used for testing pref tracking logic.
-// Variant of HttpsUpgradesPrefsBrowserTest but with the
-// HttpsFirstModeIncognito feature enabled.
-class HttpsUpgradesPrefsIncognitoEnabledBrowserTest
-    : public InProcessBrowserTest {
- public:
-  HttpsUpgradesPrefsIncognitoEnabledBrowserTest() = default;
-  ~HttpsUpgradesPrefsIncognitoEnabledBrowserTest() override = default;
-
- protected:
-  void SetUp() override {
-    // Feature flag must be enabled before SetUp() continues.
-    feature_list_.InitAndEnableFeature(features::kHttpsFirstModeIncognito);
-    InProcessBrowserTest::SetUp();
-  }
-
-  void SetPref(bool enabled) {
-    auto* prefs = browser()->profile()->GetPrefs();
-    prefs->SetBoolean(prefs::kHttpsOnlyModeEnabled, enabled);
-  }
-
-  bool GetPref() const {
-    auto* prefs = browser()->profile()->GetPrefs();
-    return prefs->GetBoolean(prefs::kHttpsOnlyModeEnabled);
-  }
-
-  base::HistogramTester* histograms() { return &histograms_; }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-  base::HistogramTester histograms_;
-};
-
-// Tests that the HTTPS-First Mode pref is recorded at startup and when
-// changed, when the HFM-in-Incognito feature flag is enabled. This test
-// requires restarting the browser to test the "at startup" metric in order
-// for the preference state to be set up before the HttpsFirstModeService is
-// created.
-IN_PROC_BROWSER_TEST_F(HttpsUpgradesPrefsIncognitoEnabledBrowserTest,
-                       PRE_PrefStatesRecorded) {
-  // The default pref states is true in Incognito, which should get recorded
-  // when the initial browser instance is started here.
-  histograms()->ExpectUniqueSample(
-      "Security.HttpsFirstMode.SettingEnabledAtStartup2",
-      HttpsFirstModeSetting::kEnabledIncognito, 1);
-
-  EXPECT_TRUE(variations::IsInSyntheticTrialGroup("HttpsFirstModeClientSetting",
-                                                  "Incognito"));
-
-  // Change the full HFM pref to true. This should get recorded in the
-  // histogram.
-  SetPref(true);
-  histograms()->ExpectUniqueSample("Security.HttpsFirstMode.SettingChanged2",
-                                   HttpsFirstModeSetting::kEnabledFull, 1);
-  EXPECT_TRUE(variations::IsInSyntheticTrialGroup("HttpsFirstModeClientSetting",
-                                                  "Enabled"));
-}
-
-IN_PROC_BROWSER_TEST_F(HttpsUpgradesPrefsIncognitoEnabledBrowserTest,
-                       PrefStatesRecorded) {
-  // Restarting the browser from the PRE_ test should record the startup pref
+  // Restarting the browser from the PRE_ test should record the startup setting
   // histogram. Checking the unique count also ensures that other profile
   // types (e.g. the ChromeOS sign-in profile) don't cause double-counting.
   EXPECT_TRUE(GetPref());
@@ -3334,6 +3590,129 @@ IN_PROC_BROWSER_TEST_F(HttpsUpgradesPrefsIncognitoEnabledBrowserTest,
       HttpsFirstModeSetting::kEnabledFull, 1);
   EXPECT_TRUE(variations::IsInSyntheticTrialGroup("HttpsFirstModeClientSetting",
                                                   "Enabled"));
+
+  // Open an Incognito window. Startup metrics should not get recorded.
+  CreateIncognitoBrowser();
+  histograms()->ExpectTotalCount(
+      "Security.HttpsFirstMode.SettingEnabledAtStartup2", 1);
+}
+
+enum class BalancedModeParam {
+  kNotAutoEnabled,
+  kAutoEnabled,
+};
+
+// A simple test fixture that constructs a HistogramTester (so that it gets
+// initialized before browser startup). Used for testing pref tracking logic.
+// Variant of HttpsUpgradesPrefsBrowserTest but with the
+// HttpsFirstBalancedMode feature enabled.
+class HttpsUpgradesBalancedModePrefsBrowserTest
+    : public testing::WithParamInterface<BalancedModeParam>,
+      public InProcessBrowserTest {
+ protected:
+  void SetUp() override {
+    // Feature flag must be enabled before SetUp() continues.
+    switch (GetParam()) {
+      case BalancedModeParam::kNotAutoEnabled:
+        feature_list()->InitWithFeatures(
+            /*enabled_features=*/{features::kHttpsFirstBalancedMode},
+            /*disabled_features=*/{
+                features::kHttpsFirstBalancedModeAutoEnable});
+        break;
+
+      case BalancedModeParam::kAutoEnabled:
+        feature_list()->InitWithFeatures(
+            /*enabled_features=*/{features::kHttpsFirstBalancedMode,
+                                  features::kHttpsFirstBalancedModeAutoEnable},
+            /*disabled_features=*/{});
+        break;
+    }
+    InProcessBrowserTest::SetUp();
+  }
+
+  void SetUISetting(HttpsFirstModeSetting setting) {
+    extensions::settings_private::GeneratedPrefs prefs(browser()->profile());
+    prefs.SetPref(
+        kGeneratedHttpsFirstModePref,
+        std::make_unique<base::Value>(static_cast<int>(setting)).get());
+  }
+
+  bool GetPref() const {
+    auto* prefs = browser()->profile()->GetPrefs();
+    return prefs->GetBoolean(prefs::kHttpsFirstBalancedMode);
+  }
+
+  base::test::ScopedFeatureList* feature_list() { return &feature_list_; }
+  base::HistogramTester* histograms() { return &histograms_; }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+  base::HistogramTester histograms_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    HttpsUpgradesBalancedModePrefsBrowserTest,
+    ::testing::Values(BalancedModeParam::kNotAutoEnabled,
+                      BalancedModeParam::kAutoEnabled),
+    // Map param to a human-readable string for better test output.
+    [](testing::TestParamInfo<BalancedModeParam> input_type) -> std::string {
+      switch (input_type.param) {
+        case BalancedModeParam::kNotAutoEnabled:
+          return "BalancedModeNotAutoEnabled";
+        case BalancedModeParam::kAutoEnabled:
+          return "BalancedModeAutoEnabled";
+      }
+    });
+
+// Tests that the HTTPS-First Mode setting is recorded at startup and when
+// changed, when the HFM-Balanced-Mode feature flag is enabled. This test
+// requires restarting the browser to test the "at startup" metric in order
+// for the preference state to be set up before the HttpsFirstModeService is
+// created.
+IN_PROC_BROWSER_TEST_P(HttpsUpgradesBalancedModePrefsBrowserTest,
+                       PRE_PrefStatesRecorded) {
+  if (GetParam() == BalancedModeParam::kNotAutoEnabled) {
+    // The default Balanced Mode pref state is false, which should get recorded
+    // when the initial browser instance is started here.
+    histograms()->ExpectUniqueSample(
+        "Security.HttpsFirstMode.SettingEnabledAtStartup2",
+        HttpsFirstModeSetting::kDisabled, 1);
+
+    EXPECT_TRUE(variations::IsInSyntheticTrialGroup(
+        "HttpsFirstModeClientSetting", "Disabled"));
+  } else if (GetParam() == BalancedModeParam::kAutoEnabled) {
+    // The default Balanced Mode pref state is false, but Balanced Mode is auto
+    // enabled.
+    histograms()->ExpectUniqueSample(
+        "Security.HttpsFirstMode.SettingEnabledAtStartup2",
+        HttpsFirstModeSetting::kEnabledBalanced, 1);
+
+    EXPECT_TRUE(variations::IsInSyntheticTrialGroup(
+        "HttpsFirstModeClientSetting", "Balanced"));
+  }
+
+  // Emulate changing the UI setting to Balanced Mode. This should get recorded
+  // in the histogram.
+  SetUISetting(HttpsFirstModeSetting::kEnabledBalanced);
+  EXPECT_TRUE(GetPref());
+  histograms()->ExpectUniqueSample("Security.HttpsFirstMode.SettingChanged2",
+                                   HttpsFirstModeSetting::kEnabledBalanced, 1);
+  EXPECT_TRUE(variations::IsInSyntheticTrialGroup("HttpsFirstModeClientSetting",
+                                                  "Balanced"));
+}
+
+IN_PROC_BROWSER_TEST_P(HttpsUpgradesBalancedModePrefsBrowserTest,
+                       PrefStatesRecorded) {
+  // Restarting the browser from the PRE_ test should record the startup setting
+  // histogram. Checking the unique count also ensures that other profile
+  // types (e.g. the ChromeOS sign-in profile) don't cause double-counting.
+  EXPECT_TRUE(GetPref());
+  histograms()->ExpectUniqueSample(
+      "Security.HttpsFirstMode.SettingEnabledAtStartup2",
+      HttpsFirstModeSetting::kEnabledBalanced, 1);
+  EXPECT_TRUE(variations::IsInSyntheticTrialGroup("HttpsFirstModeClientSetting",
+                                                  "Balanced"));
 
   // Open an Incognito window. Startup metrics should not get recorded.
   CreateIncognitoBrowser();

@@ -6,18 +6,16 @@
 
 #include <utility>
 
-#include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "base/check.h"
 #include "base/memory/ptr_util.h"
-#include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
+#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/service/sync_service.h"
 #include "ui/android/window_android.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
-#include "chrome/android/chrome_jni_headers/SettingsLauncherImpl_jni.h"
 #include "chrome/browser/password_manager/android/account_storage_notice/jni/AccountStorageNoticeCoordinator_jni.h"
 
 using base::android::AttachCurrentThread;
@@ -32,17 +30,14 @@ std::unique_ptr<AccountStorageNotice> AccountStorageNotice::MaybeShow(
       AttachCurrentThread(),
       sync_service ? sync_service->HasSyncConsent() : false,
       password_manager::sync_util::HasChosenToSyncPasswords(sync_service),
-      password_manager::IsGmsCoreUpdateRequired(
-          pref_service, sync_service,
-          base::android::BuildInfo::GetInstance()->gms_version_code()),
+      password_manager::IsGmsCoreUpdateRequired(pref_service, sync_service),
       pref_service->GetJavaObject(),
       window_android ? window_android->GetJavaObject() : nullptr);
   if (can_show) {
     base::android::ScopedJavaLocalRef<jobject> java_coordinator =
         Java_AccountStorageNoticeCoordinator_createAndShow(
             AttachCurrentThread(), window_android->GetJavaObject(),
-            pref_service->GetJavaObject(),
-            Java_SettingsLauncherImpl_create(AttachCurrentThread()));
+            pref_service->GetJavaObject());
     return base::WrapUnique(
         new AccountStorageNotice(java_coordinator, std::move(done_cb)));
   }

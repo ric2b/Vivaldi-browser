@@ -6,8 +6,8 @@
 
 #include <chrono>
 
-#include "cast/streaming/constants.h"
-#include "cast/streaming/mock_environment.h"
+#include "cast/streaming/public/constants.h"
+#include "cast/streaming/testing/mock_environment.h"
 #include "cast/streaming/testing/simple_socket_subscriber.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

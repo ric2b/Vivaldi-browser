@@ -420,14 +420,6 @@
             "issue": "http://anglebug.com/40096869"
         },
         {
-            "name": "require_msl_2_1",
-            "category": "Features",
-            "description": [
-                "MSL 2.1 is required to support all the features of OpenGL ES 2.0"
-            ],
-            "issue": "http://anglebug.com/42266694"
-        },
-        {
             "name": "rescope_global_variables",
             "category": "Features",
             "description": [
@@ -436,12 +428,20 @@
             "issue": "http://anglebug.com/42266744"
         },
         {
-            "name": "always_resolve_multisample_render_buffers",
+            "name": "enable_multisampled_render_to_texture_on_non_tilers",
             "category": "Features",
             "description": [
-                "Always automatically resolve MSAA render buffers to single sampled texture."
+                "Enable EXT_multisampled_render_to_texture on non tiled GPUs."
             ],
-            "issue": "http://crbug.com/1486094"
+            "issue": "http://anglebug.com/42261786"
+        },
+        {
+            "name": "emulate_dont_care_load_with_random_clear",
+            "category": "Features",
+            "description": [
+                "Emulate DontCare loadAction with Clear loadAction. The clear values will be randomized."
+            ],
+            "issue": "http://anglebug.com/42261786"
         },
         {
             "name": "inject_asm_statement_into_loop_bodies",

@@ -27,7 +27,12 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
         ...traceData.UserTimings.timestampEvents,
         ...traceData.UserTimings.performanceMarks,
         ...traceData.UserTimings.performanceMeasures,
-        ...traceData.PageLoadMetrics.allMarkerEvents,
+        ...traceData.PageLoadMetrics.allMarkerEvents.toSorted((m1, m2) => {
+          // These get sorted based on the metric so we have to replicate
+          // that for this assertion.
+          return Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m1.name] -
+              Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m2.name];
+        }),
       ].sort((a, b) => a.ts - b.ts);
       assert.deepEqual(groupTreeEvents, allTimingEvents);
     });
@@ -70,24 +75,42 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
           'Frames',
           'Timings',
           'Interactions',
-          'A track group — Custom Track',
+          'A track group — Custom track',
           'Another Extension Track',
-          'An Extension Track — Custom Track',
+          'An Extension Track — Custom track',
           'Main — http://localhost:3000/',
-          'Thread Pool',
-          'Thread Pool Worker 1',
-          'Thread Pool Worker 2',
-          'Thread Pool Worker 3',
+          'Thread pool',
+          'Thread pool worker 1',
+          'Thread pool worker 2',
+          'Thread pool worker 3',
           'StackSamplingProfiler',
           'GPU',
         ],
     );
   });
+
+  it('can return the FlameChart group for a given event', async function() {
+    setupIgnoreListManagerEnvironment();
+    const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
+    const {traceData} = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
+    dataProvider.setModel(traceData);
+    // Force the track appenders to run and populate the chart data.
+    dataProvider.timelineData();
+
+    const longest = traceData.UserInteractions.longestInteractionEvent;
+    assert.isOk(longest);
+    const index = dataProvider.indexForEvent(longest);
+    assert.isNotNull(index);
+    const group = dataProvider.groupForEvent(index);
+    assert.strictEqual(group?.name, 'Interactions');
+  });
+
   it('adds candy stripe and triangle decorations to long tasks in the main thread', async function() {
     setupIgnoreListManagerEnvironment();
     const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
     const {traceData} = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
     dataProvider.setModel(traceData);
+    dataProvider.timelineData();
 
     const {entryDecorations} = dataProvider.timelineData();
     const stripingTitles: string[] = [];
@@ -129,10 +152,10 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     const screenshotsLevel = framesLevel + 1;
     // The frames track first shows the frames, and then shows screenhots just below it.
     assert.strictEqual(
-        dataProvider.getEntryTypeForLevel(framesLevel), Timeline.TimelineFlameChartDataProvider.EntryType.Frame);
+        dataProvider.getEntryTypeForLevel(framesLevel), Timeline.TimelineFlameChartDataProvider.EntryType.FRAME);
     assert.strictEqual(
         dataProvider.getEntryTypeForLevel(screenshotsLevel),
-        Timeline.TimelineFlameChartDataProvider.EntryType.Screenshot);
+        Timeline.TimelineFlameChartDataProvider.EntryType.SCREENSHOT);
 
     // There are 5 screenshots in this trace, so we expect there to be 5 events on the screenshots track level.
     const eventsOnScreenshotsLevel = dataProvider.timelineData().entryLevels.filter(e => e === screenshotsLevel);
@@ -180,5 +203,17 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     assert.isTrue(navigationEvents.every(navEvent => {
       return navEvent.args.frame === mainFrameID;
     }));
+  });
+
+  it('can search for entries within a given time-range', async function() {
+    const dataProvider = new Timeline.TimelineFlameChartDataProvider.TimelineFlameChartDataProvider();
+    const {traceData} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+    dataProvider.setModel(traceData);
+
+    const bounds = traceData.Meta.traceBounds;
+    const filter = new Timeline.TimelineFilters.TimelineRegExp(/Evaluate script/);
+    const results = dataProvider.search(bounds, filter);
+    assert.lengthOf(results, 12);
+    assert.deepEqual(results[0], {index: 154, startTimeMilli: 122411041.395, provider: 'main'});
   });
 });

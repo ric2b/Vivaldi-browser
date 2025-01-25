@@ -97,7 +97,9 @@ void CosmeticFilter::ShouldAllowWebRTC(const ::GURL& document_url,
               is_third_party,
               (activations[flat::ActivationType_GENERIC_BLOCK]
                    .GetDecision()
-                   .value_or(flat::Decision_MODIFY) == flat::Decision_PASS));
+                   .value_or(flat::Decision_MODIFY) == flat::Decision_PASS),
+              base::BindRepeating(
+                  [](std::string_view, std::string_view) { return false; }));
       if (request_filter_rule)
         break;
     }

@@ -318,6 +318,9 @@ class DebugOptions:
   xla_gpu_dump_autotune_results_to: str
   xla_gpu_load_autotune_results_from: str
   xla_gpu_dump_autotune_logs_to: str
+  xla_gpu_kernel_cache_file: str
+  xla_gpu_enable_llvm_module_compilation_parallelism: bool
+  xla_gpu_per_fusion_autotune_cache_dir: str
 
 class CompiledMemoryStats:
   generated_code_size_in_bytes: int
@@ -346,6 +349,7 @@ class ExecutableBuildOptions:
   use_auto_spmd_partitioning: bool
   auto_spmd_partitioning_mesh_shape: List[int]
   auto_spmd_partitioning_mesh_ids: List[int]
+  use_shardy_partitioner: bool
 
 class PrecisionConfig_Precision(enum.IntEnum):
   DEFAULT: int
@@ -422,10 +426,10 @@ class HloSharding:
   def to_proto(self) -> OpSharding: ...
 
 class FftType(enum.IntEnum):
-  FFT: int
-  IFFT: int
-  RFFT: int
-  IRFFT: int
+  FFT: FftType
+  IFFT: FftType
+  RFFT: FftType
+  IRFFT: FftType
 
 # === END xla_compiler.cc
 
@@ -750,12 +754,19 @@ class Frame:
   function_name: str
   function_line_start: int
   line_num: int
+  def __init__(self,
+               file_name: str,
+               function_name: str,
+               function_line_start: int,
+               line_num: int): ...
   def __repr__(self) -> str: ...
 
 class Traceback:
   enabled: ClassVar[bool]
   @staticmethod
   def get_traceback() -> Traceback: ...
+  @staticmethod
+  def traceback_from_frames(frames: Sequence[Frame]) -> Any: ...
   frames: Sequence[Frame]
   def __str__(self) -> str: ...
   def as_python_traceback(self) -> Any: ...

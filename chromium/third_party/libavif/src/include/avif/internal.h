@@ -419,31 +419,6 @@ avifBool avifIsAlpha(avifItemCategory itemCategory);
 #endif
 
 // ---------------------------------------------------------------------------
-
-#if defined(AVIF_ENABLE_EXPERIMENTAL_METAV1)
-// HEIF pixel_format field meaning in MetaBox with version 1
-typedef enum avifMetaV1PixelFormat
-{
-    AVIF_METAV1_PIXEL_FORMAT_FLOAT16 = 0, // binary16 as defined by IEEE 754-2008
-    AVIF_METAV1_PIXEL_FORMAT_FLOAT32 = 1, // binary32 as defined by IEEE 754-2008
-    AVIF_METAV1_PIXEL_FORMAT_FLOAT64 = 2, // binary64 as defined by IEEE 754-2008
-    AVIF_METAV1_PIXEL_FORMAT_UINT4 = 3,
-    AVIF_METAV1_PIXEL_FORMAT_UINT5 = 4,
-    AVIF_METAV1_PIXEL_FORMAT_UINT6 = 5,
-    AVIF_METAV1_PIXEL_FORMAT_UINT7 = 6,
-    AVIF_METAV1_PIXEL_FORMAT_UINT8 = 7,
-    AVIF_METAV1_PIXEL_FORMAT_UINT9 = 8,
-    AVIF_METAV1_PIXEL_FORMAT_UINT10 = 9,
-    AVIF_METAV1_PIXEL_FORMAT_UINT11 = 10,
-    AVIF_METAV1_PIXEL_FORMAT_UINT12 = 11,
-    AVIF_METAV1_PIXEL_FORMAT_UINT13 = 12,
-    AVIF_METAV1_PIXEL_FORMAT_UINT14 = 13,
-    AVIF_METAV1_PIXEL_FORMAT_UINT15 = 14,
-    AVIF_METAV1_PIXEL_FORMAT_UINT16 = 15,
-} avifMetaV1PixelFormat;
-#endif // AVIF_ENABLE_EXPERIMENTAL_METAV1
-
-// ---------------------------------------------------------------------------
 // Grid AVIF images
 
 // Returns false if the tiles in a grid image violate any standards.
@@ -462,11 +437,11 @@ AVIF_NODISCARD avifBool avifAreGridDimensionsValid(avifPixelFormat yuvFormat,
 // image->imir on success. Returns AVIF_RESULT_INVALID_EXIF_PAYLOAD on failure.
 avifResult avifImageExtractExifOrientationToIrotImir(avifImage * image);
 
-#if defined(AVIF_ENABLE_EXPERIMENTAL_METAV1)
+#if defined(AVIF_ENABLE_EXPERIMENTAL_MINI)
 // Returns the Exif orientation in [1-8] as defined in JEITA CP-3451C section 4.6.4.A Orientation
 // corresponding to image->irot and image->imir.
 uint8_t avifImageIrotImirToExifOrientation(const avifImage * image);
-#endif // AVIF_ENABLE_EXPERIMENTAL_METAV1
+#endif // AVIF_ENABLE_EXPERIMENTAL_MINI
 
 // ---------------------------------------------------------------------------
 // avifCodecDecodeInput
@@ -573,7 +548,6 @@ typedef enum avifEncoderChange
 typedef int avifEncoderChanges;
 
 typedef avifBool (*avifCodecGetNextImageFunc)(struct avifCodec * codec,
-                                              struct avifDecoder * decoder,
                                               const avifDecodeSample * sample,
                                               avifBool alpha,
                                               avifBool * isLimitedRangeAlpha,
@@ -618,9 +592,12 @@ typedef struct avifCodec
     struct avifCodecInternal * internal;  // up to each codec to use how it wants
                                           //
     avifDiagnostics * diag;               // Shallow copy; owned by avifEncoder or avifDecoder
-                                          //
-    uint8_t operatingPoint;               // Operating point, defaults to 0.
-    avifBool allLayers;                   // if true, the underlying codec must decode all layers, not just the best layer
+
+    // Decoder options (for getNextImage):
+    int maxThreads;          // See avifDecoder::maxThreads.
+    uint32_t imageSizeLimit; // See avifDecoder::imageSizeLimit.
+    uint8_t operatingPoint;  // Operating point, defaults to 0.
+    avifBool allLayers;      // if true, the underlying codec must decode all layers, not just the best layer
 
     avifCodecGetNextImageFunc getNextImage;
     avifCodecEncodeImageFunc encodeImage;
@@ -715,7 +692,7 @@ AVIF_NODISCARD avifBool avifROStreamReadBoxHeader(avifROStream * stream, avifBox
 AVIF_NODISCARD avifBool avifROStreamReadBoxHeaderPartial(avifROStream * stream, avifBoxHeader * header, avifBool topLevel); // This doesn't require that the full box can fit in the stream
 AVIF_NODISCARD avifBool avifROStreamReadVersionAndFlags(avifROStream * stream, uint8_t * version, uint32_t * flags); // version and flags ptrs are both optional
 AVIF_NODISCARD avifBool avifROStreamReadAndEnforceVersion(avifROStream * stream, uint8_t enforcedVersion); // currently discards flags
-// The following functions can write non-aligned bits.
+// The following functions can read non-aligned bits.
 AVIF_NODISCARD avifBool avifROStreamReadBits8(avifROStream * stream, uint8_t * v, size_t bitCount);
 AVIF_NODISCARD avifBool avifROStreamReadBits(avifROStream * stream, uint32_t * v, size_t bitCount);
 

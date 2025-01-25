@@ -162,7 +162,7 @@ bool BookmarkPermanentNode::IsTypeVisibleWhenEmpty(Type type) {
 
   switch (type) {
     case BookmarkNode::URL:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case BookmarkNode::FOLDER:
       // Managed node.
       return false;
@@ -179,7 +179,7 @@ bool BookmarkPermanentNode::IsTypeVisibleWhenEmpty(Type type) {
     case BookmarkNode::TRASH:
       return true;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 BookmarkPermanentNode::~BookmarkPermanentNode() = default;

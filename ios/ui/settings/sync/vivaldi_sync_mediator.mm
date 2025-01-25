@@ -13,12 +13,12 @@
 #import "components/language/core/browser/pref_names.h"
 #import "components/os_crypt/sync/os_crypt.h"
 #import "components/prefs/pref_service.h"
-#import "components/sync_device_info/local_device_info_util.h"
 #import "components/sync/base/command_line_switches.h"
 #import "components/sync/base/user_selectable_type.h"
-#import "components/sync/service/sync_service_observer.h"
 #import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_service_observer.h"
 #import "components/sync/service/sync_user_settings.h"
+#import "components/sync_device_info/local_device_info_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
@@ -31,8 +31,8 @@
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_simplified_state.h"
-#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
+#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
 #import "ios/ui/settings/sync/manager/vivaldi_sync_simplified_state.h"
 #import "ios/ui/settings/sync/vivaldi_create_account_ui_helper.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
@@ -41,23 +41,24 @@
 #import "ios/ui/table_view/cells/vivaldi_table_view_text_button_item.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "sync/vivaldi_sync_service_impl.h"
+#import "sync/vivaldi_sync_ui_helpers.h"
 #import "ui/base/l10n/l10n_util.h"
-#import "vivaldi_account/vivaldi_account_manager.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 #import "vivaldi/prefs/vivaldi_gen_prefs.h"
+#import "vivaldi_account/vivaldi_account_manager.h"
 
+using base::SysNSStringToUTF8;
+using base::SysUTF8ToNSString;
 using syncer::ClientAction;
 using syncer::SyncProtocolErrorType;
 using syncer::SyncService;
 using syncer::UserSelectableType;
 using syncer::UserSelectableTypeSet;
-using vivaldi::EngineData;
-using vivaldi::EngineState;
 using vivaldi::VivaldiAccountManager;
-using vivaldi::VivaldiSyncServiceImpl;
-using vivaldi::VivaldiSyncUIHelper;
-using base::SysUTF8ToNSString;
-using base::SysNSStringToUTF8;
+using vivaldi::sync_ui_helpers::CycleData;
+using vivaldi::sync_ui_helpers::CycleStatus;
+using vivaldi::sync_ui_helpers::EngineData;
+using vivaldi::sync_ui_helpers::EngineState;
 
 // Donation Support Tiers
 typedef enum {
@@ -68,17 +69,17 @@ typedef enum {
 } BadgeTier;
 
 struct PendingRegistration {
-std::string username;
-int age;
-std::string recoveryEmailAddress;
-std::string password;
+  std::string username;
+  int age;
+  std::string recoveryEmailAddress;
+  std::string password;
 };
 
 @interface VivaldiSyncMediator () <VivaldiAccountSyncManagerConsumer> {
-PendingRegistration pendingRegistration;
+  PendingRegistration pendingRegistration;
 }
 
-@property(nonatomic, assign) VivaldiSyncServiceImpl* syncService;
+@property(nonatomic, assign) syncer::SyncService* syncService;
 @property(nonatomic, assign) VivaldiAccountManager* vivaldiAccountManager;
 @property(nonatomic, assign) PrefService* prefService;
 @property(nonatomic, strong) VivaldiAccountSyncManager* syncManager;
@@ -95,6 +96,7 @@ PendingRegistration pendingRegistration;
 @property(nonatomic, strong) VivaldiTableViewSyncUserInfoItem* userInfoItem;
 @property(nonatomic, strong) VivaldiTableViewSyncStatusItem* syncStatusItem;
 @property(nonatomic, strong) NSDateFormatter* formatter;
+@property(nonatomic, strong) NSString* localDeviceClientName;
 
 @property(nonatomic, copy) NSURLSessionDataTask* task;
 
@@ -102,7 +104,7 @@ PendingRegistration pendingRegistration;
 
 @interface VivaldiSyncMediator () {
   EngineData engineData;
-  VivaldiSyncUIHelper::CycleData cycleData;
+  CycleData cycleData;
   bool loggingOut;
 }
 
@@ -111,10 +113,9 @@ PendingRegistration pendingRegistration;
 @implementation VivaldiSyncMediator
 
 - (instancetype)initWithAccountManager:
-                  (VivaldiAccountManager*)vivaldiAccountManager
-                syncService:(VivaldiSyncServiceImpl*)syncService
-                prefService:(PrefService*)prefService {
-
+                    (VivaldiAccountManager*)vivaldiAccountManager
+                           syncService:(syncer::SyncService*)syncService
+                           prefService:(PrefService*)prefService {
   self = [super init];
   if (self) {
     _vivaldiAccountManager = vivaldiAccountManager;
@@ -122,10 +123,9 @@ PendingRegistration pendingRegistration;
     _prefService = prefService;
     loggingOut = false;
 
-    VivaldiAccountSyncManager* syncManager =
-        [[VivaldiAccountSyncManager alloc]
-            initWithAccountManager:_vivaldiAccountManager
-                       syncService:_syncService];
+    VivaldiAccountSyncManager* syncManager = [[VivaldiAccountSyncManager alloc]
+        initWithAccountManager:_vivaldiAccountManager
+                   syncService:_syncService];
     _syncManager = syncManager;
     _syncManager.consumer = self;
     [_syncManager start];
@@ -134,10 +134,14 @@ PendingRegistration pendingRegistration;
     [self.formatter setDateFormat:@"dd/MM/yyyy HH:mm:ss"];
 
     // The order must match the SyncType enum
-    self.segmentedControlLabels = [NSArray arrayWithObjects:
-        l10n_util::GetNSString(IDS_VIVALDI_SYNC_AUTOMATIC_TITLE),
-        l10n_util::GetNSString(IDS_VIVALDI_SYNC_DATA_CHOOSE_TITLE),
-        nil];
+    self.segmentedControlLabels =
+        [NSArray arrayWithObjects:l10n_util::GetNSString(
+                                      IDS_VIVALDI_SYNC_AUTOMATIC_TITLE),
+                                  l10n_util::GetNSString(
+                                      IDS_VIVALDI_SYNC_DATA_CHOOSE_TITLE),
+                                  nil];
+
+    [self geLocalDeviceClientName];
   }
   return self;
 }
@@ -171,10 +175,10 @@ PendingRegistration pendingRegistration;
       NSString* errorMessage;
       if (_vivaldiAccountManager->has_encrypted_refresh_token()) {
         errorMessage = l10n_util::GetNSString(
-          IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_ENCRYPTED);
+            IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_ENCRYPTED);
       } else {
         errorMessage = l10n_util::GetNSString(
-          IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_MISSING);
+            IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_MISSING);
       }
       [self.commandHandler loginFailed:errorMessage];
       break;
@@ -187,7 +191,7 @@ PendingRegistration pendingRegistration;
           _vivaldiAccountManager->last_token_fetch_error().error_code;
 
       NSMutableParagraphStyle* paragraphStyle =
-        [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+          [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
       paragraphStyle.alignment = NSTextAlignmentCenter;
       NSDictionary* textAttributes = @{
         NSForegroundColorAttributeName :
@@ -198,21 +202,23 @@ PendingRegistration pendingRegistration;
       };
       if (!serverMessage.empty()) {
         NSAttributedString* errorMsg = [[NSAttributedString alloc]
-          initWithString:l10n_util::GetNSStringF(
-                IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_REJECTED_1,
-              base::UTF8ToUTF16(serverMessage),
-              base::SysNSStringToUTF16([@(errorCode) stringValue]))
-          attributes:textAttributes];
+            initWithString:l10n_util::GetNSStringF(
+                               IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_REJECTED_1,
+                               base::UTF8ToUTF16(serverMessage),
+                               base::SysNSStringToUTF16(
+                                   [@(errorCode) stringValue]))
+                attributes:textAttributes];
         errorMessage = [errorMsg string];
       } else if (errorCode == -1) {
-        errorMessage = l10n_util::GetNSString(
-            IDS_VIVALDI_ACCOUNT_ERROR_WRONG_DOMAIN);
+        errorMessage =
+            l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_ERROR_WRONG_DOMAIN);
       } else {
         NSAttributedString* errorMsg = [[NSAttributedString alloc]
-          initWithString:l10n_util::GetNSStringF(
-                IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_REJECTED_2,
-              base::SysNSStringToUTF16([@(errorCode) stringValue]))
-          attributes:textAttributes];
+            initWithString:l10n_util::GetNSStringF(
+                               IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_REJECTED_2,
+                               base::SysNSStringToUTF16(
+                                   [@(errorCode) stringValue]))
+                attributes:textAttributes];
         errorMessage = [errorMsg string];
       }
       [self.commandHandler loginFailed:errorMessage];
@@ -231,21 +237,21 @@ PendingRegistration pendingRegistration;
   }
   self.commandHandler = nil;
   self.settingsConsumer = nil;
+  self.localDeviceClientName = nil;
 }
-
 
 - (void)requestPendingRegistrationLogin {
   [self login:pendingRegistration.username
-      password:pendingRegistration.password
-          deviceName:[self sessionName]
-              save_password:false];
+           password:pendingRegistration.password
+         deviceName:[self sessionName]
+      save_password:false];
 }
 
 - (NSString*)getPendingRegistrationUsername {
   return SysUTF8ToNSString(pendingRegistration.username);
 }
 
-- (NSString*)getPendingRegistrationEmail{
+- (NSString*)getPendingRegistrationEmail {
   return SysUTF8ToNSString(pendingRegistration.recoveryEmailAddress);
 }
 
@@ -258,9 +264,9 @@ PendingRegistration pendingRegistration;
 }
 
 - (void)login:(std::string)username
-        password:(std::string)password
-      deviceName:(NSString*)deviceName
-        save_password:(BOOL)save_password {
+         password:(std::string)password
+       deviceName:(NSString*)deviceName
+    save_password:(BOOL)save_password {
   // If the user has started registration on another device, and tries to log in
   // here, we store the username and password in case we get a NOT_ACTIVE
   // reply from the server. There will not be a pending registration in prefs
@@ -274,12 +280,13 @@ PendingRegistration pendingRegistration;
 }
 
 - (BOOL)setEncryptionPassword:(std::string)password {
-  return _syncService->ui_helper()->SetEncryptionPassword(password);
+  return vivaldi::sync_ui_helpers::SetEncryptionPassword(_syncService,
+                                                         password);
 }
 
 - (void)importEncryptionPassword:(NSURL*)file
-         completionHandler:(void (^)(NSString* errorMessage))completionHandler {
-
+               completionHandler:
+                   (void (^)(NSString* errorMessage))completionHandler {
   __weak __typeof(self) weakSelf = self;
   void (^readingAccessor)(NSURL*) = ^(NSURL* newURL) {
     if (!weakSelf) {
@@ -296,8 +303,8 @@ PendingRegistration pendingRegistration;
       [[NSFileCoordinator alloc] initWithFilePresenter:nil];
   [readingCoordinator
       coordinateReadingItemAtURL:file
-                        options:NSFileCoordinatorReadingWithoutChanges
-                          error:&error
+                         options:NSFileCoordinatorReadingWithoutChanges
+                           error:&error
                       byAccessor:readingAccessor];
 
   if (error) {
@@ -307,17 +314,16 @@ PendingRegistration pendingRegistration;
 
 - (void)receivedData:(NSData*)data
       withCompletion:(void (^)(NSString* message))completionHandler {
-    NSString* key = [[NSString alloc]
-        initWithBytes:data.bytes
-               length:data.length
-             encoding:NSUTF8StringEncoding];
-    BOOL success = _syncService->ui_helper()->RestoreEncryptionToken(
-        base::SysNSStringToUTF8(key));
-    if (success && [key length]) {
-      completionHandler(@"");
-      return;
-    }
-    completionHandler(
+  NSString* key = [[NSString alloc] initWithBytes:data.bytes
+                                           length:data.length
+                                         encoding:NSUTF8StringEncoding];
+  BOOL success = vivaldi::sync_ui_helpers::RestoreEncryptionToken(
+      _syncService, base::SysNSStringToUTF8(key));
+  if (success && [key length]) {
+    completionHandler(@"");
+    return;
+  }
+  completionHandler(
       l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_WRONG));
 }
 
@@ -335,15 +341,17 @@ PendingRegistration pendingRegistration;
       wantsNewsletter:(BOOL)wantsNewsletter {
   pendingRegistration.password = [password UTF8String];
   __weak __typeof__(self) weakSelf = self;
-  [self sendCreateAccountRequestToServer:wantsNewsletter
-    completionHandler:^(NSData* data,NSURLResponse* response, NSError* error) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [weakSelf onCreateAccountResponse:data
-                                response:response
-                                  error:error
-                             deviceName:deviceName];
-    });
-  }];
+  [self
+      sendCreateAccountRequestToServer:wantsNewsletter
+                     completionHandler:^(NSData* data, NSURLResponse* response,
+                                         NSError* error) {
+                       dispatch_async(dispatch_get_main_queue(), ^{
+                         [weakSelf onCreateAccountResponse:data
+                                                  response:response
+                                                     error:error
+                                                deviceName:deviceName];
+                       });
+                     }];
 }
 
 #pragma mark - VivaldiAccountSyncManagerConsumer
@@ -353,12 +361,13 @@ PendingRegistration pendingRegistration;
     return;
   }
 
-  engineData = _syncService->ui_helper()->GetEngineData();
-  cycleData = _syncService->ui_helper()->GetCycleData();
+  engineData = vivaldi::sync_ui_helpers::GetEngineData(_syncService);
+  cycleData = vivaldi::sync_ui_helpers::GetCycleData(_syncService);
 
   if ([self getSimplifiedAccountState] == NOT_ACTIVATED ||
-      (_vivaldiAccountManager->last_token_fetch_error().server_message.empty()
-      && [self hasPendingRegistration])) {
+      (_vivaldiAccountManager->last_token_fetch_error()
+           .server_message.empty() &&
+       [self hasPendingRegistration])) {
     if ([self getSimplifiedAccountState] == NOT_ACTIVATED &&
         ![self hasPendingRegistration] &&
         !pendingRegistration.username.empty()) {
@@ -374,7 +383,7 @@ PendingRegistration pendingRegistration;
   // from VivaldiAccountSyncManager. That will help avoid duplication of sync
   // and account state management in different places.
 
-  switch(engineData.engine_state) {
+  switch (engineData.engine_state) {
     case EngineState::STOPPED:
       if ([self getSimplifiedAccountState] != LOGGED_IN) {
         [self.commandHandler showSyncLoginView];
@@ -390,7 +399,7 @@ PendingRegistration pendingRegistration;
     case EngineState::STARTING:
     case EngineState::STARTING_SERVER_ERROR:
       if (!engineData.disable_reasons.Has(
-        SyncService::DISABLE_REASON_NOT_SIGNED_IN)) {
+              SyncService::DISABLE_REASON_NOT_SIGNED_IN)) {
         // We might enter this state for a brief moment after login while
         // the credentials are being passed to sync itself.
         // Don't show the UI just yet in this case.
@@ -425,11 +434,11 @@ PendingRegistration pendingRegistration;
   }
 }
 
--(void)onVivaldiSyncCycleCompleted {
+- (void)onVivaldiSyncCycleCompleted {
   [self onVivaldiSyncStateChanged];
 }
 
--(void)onVivaldiAccountUpdated {
+- (void)onVivaldiAccountUpdated {
   if (!loggingOut) {
     [self onVivaldiSyncStateChanged];
   }
@@ -438,14 +447,14 @@ PendingRegistration pendingRegistration;
   }
 }
 
--(void)onTokenFetchSucceeded {
+- (void)onTokenFetchSucceeded {
   [self onVivaldiSyncStateChanged];
 }
 
--(void)onTokenFetchFailed {
+- (void)onTokenFetchFailed {
   if ([self getSimplifiedAccountState] == LOGIN_FAILED) {
-    [self.commandHandler loginFailed:l10n_util::GetNSString(
-        IDS_VIVALDI_ACCOUNT_LOG_IN_FAILED)];
+    [self.commandHandler
+        loginFailed:l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_IN_FAILED)];
     return;
   }
   [self onVivaldiSyncStateChanged];
@@ -469,7 +478,7 @@ PendingRegistration pendingRegistration;
       stringByAppendingPathComponent:@"BackupEncryptionKey.txt"];
 
   NSString* key = SysUTF8ToNSString(
-    _syncService->ui_helper()->GetBackupEncryptionToken());
+      vivaldi::sync_ui_helpers::GetBackupEncryptionToken(_syncService));
   [key writeToFile:filePath
         atomically:YES
           encoding:NSUTF8StringEncoding
@@ -509,24 +518,24 @@ PendingRegistration pendingRegistration;
       [self removeItemsFromUI:self.syncSelectedItems];
       self.segmentedControlItem.selectedItem = SyncAll;
       [self addItemsToUI:self.syncAllItems
-          toSection:SectionIdentifierSyncItems];
+               toSection:SectionIdentifierSyncItems];
       [self updateStartSyncingSection];
       [self.settingsConsumer reloadSection:SectionIdentifierSyncItems];
       [self.settingsConsumer reloadSection:SectionIdentifierSyncStartSyncing];
     }
-    completion:nil];
+                                              completion:nil];
   } else {
     [self.settingsConsumer.tableView performBatchUpdates:^{
       [self removeItemsFromUI:self.syncAllItems];
       self.segmentedControlItem.selectedItem = SyncSelected;
       [self refreshSyncSelectedItems];
       [self addItemsToUI:self.syncSelectedItems
-          toSection:SectionIdentifierSyncItems];
+               toSection:SectionIdentifierSyncItems];
       [self updateStartSyncingSection];
       [self.settingsConsumer reloadSection:SectionIdentifierSyncItems];
       [self.settingsConsumer reloadSection:SectionIdentifierSyncStartSyncing];
     }
-    completion:nil];
+                                              completion:nil];
   }
 }
 
@@ -537,7 +546,7 @@ PendingRegistration pendingRegistration;
 }
 
 - (BOOL)getSyncStatusFor:(NSInteger)type {
-    return [self syncStatusForItemType:type];
+  return [self syncStatusForItemType:type];
 }
 
 #pragma mark - VivaldiSyncSettingsViewControllerModelDelegate
@@ -579,7 +588,7 @@ PendingRegistration pendingRegistration;
       statusText = @"Sync was disabled from the command line";
       color = kSyncStatusYellowBackgroundColor;
     } else if (engineData.disable_reasons.Has(
-        SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR)) {
+                   SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR)) {
       switch (engineData.protocol_error_client_action) {
         case ClientAction::UPGRADE_CLIENT:
           statusText =
@@ -587,27 +596,29 @@ PendingRegistration pendingRegistration;
           break;
         default:
           statusText = @"Sync must be restarted: ";
-          statusText = [statusText stringByAppendingString:
-              SysUTF8ToNSString(engineData.protocol_error_description)];
+          statusText = [statusText
+              stringByAppendingString:SysUTF8ToNSString(
+                                          engineData
+                                              .protocol_error_description)];
       }
     }
   } else if (engineData.engine_state == EngineState::CLEARING_DATA) {
     statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_CLEARING_SERVER_DATA);
     color = kSyncStatusBlueBackgroundColor;
   } else if (engineData.engine_state == EngineState::CONFIGURATION_PENDING) {
-    statusText = l10n_util::GetNSString(IDS_SYNC_ALL_SET_TEXT);;
+    statusText = l10n_util::GetNSString(IDS_SYNC_ALL_SET_TEXT);
+    ;
     color = kSyncStatusBlueBackgroundColor;
   } else if (engineData.engine_state == EngineState::STARTED) {
-    if (cycleData.download_updates_status ==
-            VivaldiSyncUIHelper::CycleStatus::SUCCESS &&
-        cycleData.commit_status == VivaldiSyncUIHelper::CycleStatus::SUCCESS) {
-      statusText = l10n_util::GetNSString([self getCycleStatusMessageId:
-          cycleData.commit_status]);
+    if (cycleData.download_updates_status == CycleStatus::SUCCESS &&
+        cycleData.commit_status == CycleStatus::SUCCESS) {
+      statusText = l10n_util::GetNSString(
+          [self getCycleStatusMessageId:cycleData.commit_status]);
       color = [self getCycleStatusColor:cycleData.commit_status];
       lastSyncDate = cycleData.cycle_start_time.ToNSDate();
     } else {
-      statusText = l10n_util::GetNSString([self getCycleStatusMessageId:
-          cycleData.download_updates_status]);
+      statusText = l10n_util::GetNSString(
+          [self getCycleStatusMessageId:cycleData.download_updates_status]);
       color = [self getCycleStatusColor:cycleData.download_updates_status];
     }
   } else if (engineData.engine_state == EngineState::STARTING_SERVER_ERROR) {
@@ -623,28 +634,32 @@ PendingRegistration pendingRegistration;
         ClientAction::DISABLE_SYNC_ON_CLIENT) {
       // TODO(tomas@vivaldi.com): These strings are not used on the
       // android side, only on desktop. Should they be used on iOS?
-      statusText = [statusText stringByAppendingString:
-          @"Sync was stopped following a request from the server: "];
+      statusText = [statusText
+          stringByAppendingString:
+              @"Sync was stopped following a request from the server: "];
       if (engineData.protocol_error_type ==
           SyncProtocolErrorType::NOT_MY_BIRTHDAY) {
-        statusText = [statusText stringByAppendingString:
-            @"Sync server data was reset"];
+        statusText =
+            [statusText stringByAppendingString:@"Sync server data was reset"];
       } else {
-        statusText = [statusText stringByAppendingString:
-            SysUTF8ToNSString(engineData.protocol_error_description)];
+        statusText = [statusText
+            stringByAppendingString:SysUTF8ToNSString(
+                                        engineData.protocol_error_description)];
       }
     } else {
-      statusText = [statusText stringByAppendingString:
-            SysUTF8ToNSString(engineData.protocol_error_description)];
+      statusText = [statusText
+          stringByAppendingString:SysUTF8ToNSString(
+                                      engineData.protocol_error_description)];
     }
   } else {
     NOTREACHED();
   }
 
   if (lastSyncDate) {
-    self.syncStatusItem.lastSyncDateString = [NSString stringWithFormat:@"%@ %@",
-        l10n_util::GetNSString(IDS_VIVALDI_IOS_SYNC_LAST_SYNC),
-        [self.formatter stringFromDate:lastSyncDate]];
+    self.syncStatusItem.lastSyncDateString = [NSString
+        stringWithFormat:@"%@ %@",
+                         l10n_util::GetNSString(IDS_VIVALDI_IOS_SYNC_LAST_SYNC),
+                         [self.formatter stringFromDate:lastSyncDate]];
   } else {
     self.syncStatusItem.lastSyncDateString = nil;
   }
@@ -658,19 +673,19 @@ PendingRegistration pendingRegistration;
 
 - (int)getCycleStatusMessageId:(int)status {
   switch (status) {
-    case VivaldiSyncUIHelper::CycleStatus::NOT_SYNCED:
+    case CycleStatus::NOT_SYNCED:
       return IDS_VIVALDI_SYNC_NOT_SYNCED_CYCLE;
-    case VivaldiSyncUIHelper::CycleStatus::SUCCESS:
+    case CycleStatus::SUCCESS:
       return IDS_VIVALDI_SYNC_SUCCESS;
-    case VivaldiSyncUIHelper::CycleStatus::AUTH_ERROR:
+    case CycleStatus::AUTH_ERROR:
       return IDS_VIVALDI_SYNC_AUTH_ERROR;
-    case VivaldiSyncUIHelper::CycleStatus::SERVER_ERROR:
+    case CycleStatus::SERVER_ERROR:
       return IDS_VIVALDI_SYNC_SERVER_ERROR;
-    case VivaldiSyncUIHelper::CycleStatus::NETWORK_ERROR:
+    case CycleStatus::NETWORK_ERROR:
       return IDS_VIVALDI_SYNC_NETWORK_ERROR;
-    case VivaldiSyncUIHelper::CycleStatus::CONFLICT:
+    case CycleStatus::CONFLICT:
       return IDS_VIVALDI_SYNC_CONFLICT;
-    case VivaldiSyncUIHelper::CycleStatus::THROTTLED:
+    case CycleStatus::THROTTLED:
       return IDS_VIVALDI_SYNC_THROTTLED;
     default:
       return IDS_VIVALDI_SYNC_OTHER_ERROR;
@@ -679,21 +694,21 @@ PendingRegistration pendingRegistration;
 
 - (int)getCycleStatusColor:(int)status {
   switch (status) {
-    case VivaldiSyncUIHelper::CycleStatus::SUCCESS:
+    case CycleStatus::SUCCESS:
       return kSyncStatusGreenBackgroundColor;
-    case VivaldiSyncUIHelper::CycleStatus::NOT_SYNCED:
-    case VivaldiSyncUIHelper::CycleStatus::NETWORK_ERROR:
-    case VivaldiSyncUIHelper::CycleStatus::THROTTLED:
+    case CycleStatus::NOT_SYNCED:
+    case CycleStatus::NETWORK_ERROR:
+    case CycleStatus::THROTTLED:
       return kSyncStatusYellowBackgroundColor;
-    case VivaldiSyncUIHelper::CycleStatus::AUTH_ERROR:
-    case VivaldiSyncUIHelper::CycleStatus::SERVER_ERROR:
-    case VivaldiSyncUIHelper::CycleStatus::CONFLICT:
+    case CycleStatus::AUTH_ERROR:
+    case CycleStatus::SERVER_ERROR:
+    case CycleStatus::CONFLICT:
     default:
       return kSyncStatusRedBackgroundColor;
   }
 }
 
-- (void) reloadSyncStatusItem {
+- (void)reloadSyncStatusItem {
   if (!self.settingsConsumer) {
     return;
   }
@@ -702,7 +717,7 @@ PendingRegistration pendingRegistration;
   [self.settingsConsumer reloadItem:self.syncStatusItem];
 
   if ([self.settingsConsumer.tableViewModel
-      hasSectionForSectionIdentifier:SectionIdentifierSyncStartSyncing] &&
+          hasSectionForSectionIdentifier:SectionIdentifierSyncStartSyncing] &&
       self.startSyncingButton.enabled != [self getStartSyncingButtonEnabled]) {
     self.startSyncingButton.enabled = [self getStartSyncingButtonEnabled];
     [self.settingsConsumer reloadSection:SectionIdentifierSyncStartSyncing];
@@ -710,12 +725,12 @@ PendingRegistration pendingRegistration;
 }
 
 - (BOOL)getStartSyncingButtonEnabled {
-    BOOL isPending =
+  BOOL isPending =
       engineData.engine_state == EngineState::CONFIGURATION_PENDING ? YES : NO;
-    return isPending || !engineData.sync_everything;
+  return isPending || !engineData.sync_everything;
 }
 
-- (void) addUserInfoSection {
+- (void)addUserInfoSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSyncUserInfo];
   VivaldiAccountManager::AccountInfo account_info =
@@ -724,10 +739,10 @@ PendingRegistration pendingRegistration;
       initWithType:ItemTypeSyncUserInfo];
 
   // Checking & Setting Donation Badges
-  NSString *donationTierString = SysUTF8ToNSString(account_info.donation_tier);
+  NSString* donationTierString = SysUTF8ToNSString(account_info.donation_tier);
   if (donationTierString != nil && ![donationTierString isEqualToString:@""]) {
     NSUInteger badgeTier = [donationTierString integerValue];
-    [self setBadgeWithTier: (BadgeTier)badgeTier];
+    [self setBadgeWithTier:(BadgeTier)badgeTier];
   }
 
   // Add a default avatar image
@@ -735,57 +750,58 @@ PendingRegistration pendingRegistration;
       [UIImage systemImageNamed:@"person.circle.fill"];
   self.userInfoItem.userName = SysUTF8ToNSString(account_info.username);
   self.userInfoItem.sessionName = self.sessionName;
-  [self.settingsConsumer.tableViewModel setHeader:self.userInfoItem
+  [self.settingsConsumer.tableViewModel
+                     setHeader:self.userInfoItem
       forSectionWithIdentifier:SectionIdentifierSyncUserInfo];
 
   __weak VivaldiSyncMediator* weakSelf = self;
   NSURL* profileImageURL =
       [NSURL URLWithString:SysUTF8ToNSString(account_info.picture_url)];
   [self fetchProfilePicture:profileImageURL
-    completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
-    if (error) {
-      return;
-    }
+          completionHandler:^(NSData* data, NSURLResponse* response,
+                              NSError* error) {
+            if (error) {
+              return;
+            }
 
-    dispatch_async(dispatch_get_main_queue(), ^{
-      weakSelf.userInfoItem.userAvatar = [UIImage imageWithData:data];
-      [weakSelf.settingsConsumer reloadSection:SectionIdentifierSyncUserInfo];
-    });
-  }];
+            dispatch_async(dispatch_get_main_queue(), ^{
+              weakSelf.userInfoItem.userAvatar = [UIImage imageWithData:data];
+              [weakSelf.settingsConsumer
+                  reloadSection:SectionIdentifierSyncUserInfo];
+            });
+          }];
 }
 
--(void) fetchProfilePicture:(NSURL*)url
+- (void)fetchProfilePicture:(NSURL*)url
           completionHandler:(ServerRequestCompletionHandler)handler {
-  NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:url
-                          cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                                      timeoutInterval:vConnectionTimeout];
+  NSMutableURLRequest* request = [NSMutableURLRequest
+       requestWithURL:url
+          cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+      timeoutInterval:vConnectionTimeout];
   [request setHTTPMethod:@"GET"];
   [request setHTTPBody:nil];
 
   NSURLSession* session = [NSURLSession sharedSession];
-  _task =
-      [session dataTaskWithRequest:request
-                completionHandler:handler];
+  _task = [session dataTaskWithRequest:request completionHandler:handler];
   [_task resume];
 }
 
-- (void) addSyncStatusSection {
+- (void)addSyncStatusSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSyncStatus];
   self.syncStatusItem =
-      [[VivaldiTableViewSyncStatusItem alloc]
-          initWithType:ItemTypeSyncStatus];
+      [[VivaldiTableViewSyncStatusItem alloc] initWithType:ItemTypeSyncStatus];
 
   [self updateSyncStatusItem];
   [model addItem:self.syncStatusItem
-       toSectionWithIdentifier:SectionIdentifierSyncStatus];
+      toSectionWithIdentifier:SectionIdentifierSyncStatus];
 }
 
-- (void) addSyncSwitchesSection {
+- (void)addSyncSwitchesSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSyncItems];
   self.segmentedControlItem = [[VivaldiTableViewSegmentedControlItem alloc]
-        initWithType:ItemTypeSyncWhatSegmentedControl];
+      initWithType:ItemTypeSyncWhatSegmentedControl];
 
   bool syncAllData = _syncService->GetUserSettings()->IsSyncEverythingEnabled();
   self.segmentedControlItem.labels = self.segmentedControlLabels;
@@ -795,15 +811,14 @@ PendingRegistration pendingRegistration;
   [self initSyncItemArrays];
 
   if (syncAllData) {
-    [self addItemsToUI:self.syncAllItems
-        toSection:SectionIdentifierSyncItems];
+    [self addItemsToUI:self.syncAllItems toSection:SectionIdentifierSyncItems];
   } else {
     [self addItemsToUI:self.syncSelectedItems
-        toSection:SectionIdentifierSyncItems];
+             toSection:SectionIdentifierSyncItems];
   }
 }
 
-- (void) addStartSyncingSection {
+- (void)addStartSyncingSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   self.startSyncingButton = [[VivaldiTableViewTextButtonItem alloc]
       initWithType:ItemTypeStartSyncingButton];
@@ -820,7 +835,7 @@ PendingRegistration pendingRegistration;
   [self updateStartSyncingSection];
 }
 
-- (void) addEncryptionSection {
+- (void)addEncryptionSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSyncEncryption];
   TableViewLinkHeaderFooterItem* encryptionHeaderItem =
@@ -828,7 +843,7 @@ PendingRegistration pendingRegistration;
   encryptionHeaderItem.text =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_TITLE);
   [model setHeader:encryptionHeaderItem
-        forSectionWithIdentifier:SectionIdentifierSyncEncryption];
+      forSectionWithIdentifier:SectionIdentifierSyncEncryption];
 
   TableViewDetailTextItem* encryptionPasswordItem =
       [[TableViewDetailTextItem alloc]
@@ -841,8 +856,8 @@ PendingRegistration pendingRegistration;
       toSectionWithIdentifier:SectionIdentifierSyncEncryption];
 
   TableViewDetailTextItem* backupRecoveryKeyItem =
-      [[TableViewDetailTextItem alloc] initWithType:
-          ItemTypeBackupRecoveryKeyButton];
+      [[TableViewDetailTextItem alloc]
+          initWithType:ItemTypeBackupRecoveryKeyButton];
   backupRecoveryKeyItem.text =
       l10n_util::GetNSString(IDS_VIVALDI_BACKUP_ENCRYPTION_KEY);
   backupRecoveryKeyItem.accessorySymbol =
@@ -851,11 +866,11 @@ PendingRegistration pendingRegistration;
       toSectionWithIdentifier:SectionIdentifierSyncEncryption];
 }
 
-- (void) addSignOutSection {
+- (void)addSignOutSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSyncSignOut];
-  self.logOutButton = [[TableViewTextButtonItem alloc]
-      initWithType:ItemTypeLogOutButton];
+  self.logOutButton =
+      [[TableViewTextButtonItem alloc] initWithType:ItemTypeLogOutButton];
   self.logOutButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_OUT);
   self.logOutButton.textAlignment = NSTextAlignmentNatural;
@@ -867,11 +882,11 @@ PendingRegistration pendingRegistration;
       toSectionWithIdentifier:SectionIdentifierSyncSignOut];
 }
 
-- (void) addDeleteDataSection {
+- (void)addDeleteDataSection {
   TableViewModel* model = self.settingsConsumer.tableViewModel;
   [model addSectionWithIdentifier:SectionIdentifierSyncDeleteData];
-  self.deleteDataButton = [[TableViewTextButtonItem alloc]
-      initWithType:ItemTypeDeleteDataButton];
+  self.deleteDataButton =
+      [[TableViewTextButtonItem alloc] initWithType:ItemTypeDeleteDataButton];
   self.deleteDataButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_TITLE);
   self.deleteDataButton.textAlignment = NSTextAlignmentNatural;
@@ -884,9 +899,9 @@ PendingRegistration pendingRegistration;
 }
 
 - (void)addItemsToUI:(NSArray*)items toSection:(NSInteger)sectionIdentifier {
-  for (TableViewItem* item: items) {
+  for (TableViewItem* item : items) {
     [self.settingsConsumer.tableViewModel addItem:item
-        toSectionWithIdentifier:sectionIdentifier];
+                          toSectionWithIdentifier:sectionIdentifier];
   }
 }
 
@@ -895,7 +910,7 @@ PendingRegistration pendingRegistration;
     return;
   }
   NSMutableArray* indexPaths = [[NSMutableArray alloc] init];
-  for (TableViewItem* item: items) {
+  for (TableViewItem* item : items) {
     NSIndexPath* itemIndexPath =
         [self.settingsConsumer.tableViewModel indexPathForItem:item];
     if (itemIndexPath) {
@@ -906,11 +921,12 @@ PendingRegistration pendingRegistration;
     return;
   }
   LegacyChromeTableViewController* tableViewController =
-      base::apple::ObjCCast<LegacyChromeTableViewController>
-        (self.settingsConsumer);
+      base::apple::ObjCCast<LegacyChromeTableViewController>(
+          self.settingsConsumer);
   [tableViewController removeFromModelItemAtIndexPaths:indexPaths];
-  [self.settingsConsumer.tableView deleteRowsAtIndexPaths:indexPaths
-                      withRowAnimation:UITableViewRowAnimationAutomatic];
+  [self.settingsConsumer.tableView
+      deleteRowsAtIndexPaths:indexPaths
+            withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
 - (void)updateStartSyncingSection {
@@ -923,17 +939,18 @@ PendingRegistration pendingRegistration;
   }
 
   BOOL hasButton = [self.settingsConsumer.tableViewModel
-                        hasItem:self.startSyncingButton
-        inSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
+                      hasItem:self.startSyncingButton
+      inSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
   if (self.segmentedControlItem.selectedItem == SyncAll) {
     if (!hasButton) {
-      [self.settingsConsumer.tableViewModel addItem:self.startSyncingButton
+      [self.settingsConsumer.tableViewModel
+                          addItem:self.startSyncingButton
           toSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
     }
   } else {
     if (hasButton) {
       [self.settingsConsumer.tableViewModel
-          removeItemWithType:ItemTypeStartSyncingButton
+                 removeItemWithType:ItemTypeStartSyncingButton
           fromSectionWithIdentifier:SectionIdentifierSyncStartSyncing];
     }
   }
@@ -948,10 +965,10 @@ PendingRegistration pendingRegistration;
   syncAllInfoTextbox.textAlignment = NSTextAlignmentLeft;
   syncAllInfoTextbox.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_EVERYTHING);
 
-  _syncAllItems = @[syncAllInfoTextbox];
+  _syncAllItems = @[ syncAllInfoTextbox ];
 
   TableViewSwitchItem* switchItemBookmarks =
-    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncBookmarksSwitch];
+      [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncBookmarksSwitch];
   switchItemBookmarks.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_BOOKMARKS);
   switchItemBookmarks.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_BOOKMARKS_SUBTITLE);
@@ -959,15 +976,16 @@ PendingRegistration pendingRegistration;
   switchItemBookmarks.iconImage = [UIImage imageNamed:@"sync_bookmarks"];
 
   TableViewSwitchItem* switchItemSettings =
-    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncSettingsSwitch];
-  switchItemSettings.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_PREFERENCES);
+      [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncSettingsSwitch];
+  switchItemSettings.text =
+      l10n_util::GetNSString(IDS_VIVALDI_SYNC_PREFERENCES);
   switchItemSettings.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_PREFERENCES_SUBTITLE);
   switchItemSettings.on = [_syncManager isSyncSettingsEnabled];
   switchItemSettings.iconImage = [UIImage imageNamed:@"sync_settings"];
 
   TableViewSwitchItem* switchItemPasswords =
-    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncPasswordsSwitch];
+      [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncPasswordsSwitch];
   switchItemPasswords.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_PASSWORDS);
   switchItemPasswords.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_PASSWORDS_SUBTITLE);
@@ -975,7 +993,7 @@ PendingRegistration pendingRegistration;
   switchItemPasswords.iconImage = [UIImage imageNamed:@"sync_passwords"];
 
   TableViewSwitchItem* switchItemAutofill =
-    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncAutofillSwitch];
+      [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncAutofillSwitch];
   switchItemAutofill.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_AUTOFILL);
   switchItemAutofill.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_AUTOFILL_SUBTITLE);
@@ -983,7 +1001,7 @@ PendingRegistration pendingRegistration;
   switchItemAutofill.iconImage = [UIImage imageNamed:@"sync_autofill"];
 
   TableViewSwitchItem* switchItemTabs =
-    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncTabsSwitch];
+      [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncTabsSwitch];
   switchItemTabs.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_TABS);
   switchItemTabs.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_TABS_SUBTITLE);
@@ -991,7 +1009,7 @@ PendingRegistration pendingRegistration;
   switchItemTabs.iconImage = [UIImage imageNamed:@"sync_tabs"];
 
   TableViewSwitchItem* switchItemHistory =
-    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncHistorySwitch];
+      [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncHistorySwitch];
   switchItemHistory.text = l10n_util::GetNSString(IDS_VIVALDI_SYNC_TYPED_URLS);
   switchItemHistory.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_TYPED_URLS_SUBTITLE);
@@ -999,7 +1017,7 @@ PendingRegistration pendingRegistration;
   switchItemHistory.iconImage = [UIImage imageNamed:@"sync_history"];
 
   TableViewSwitchItem* switchItemReadingList =
-    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncReadingListSwitch];
+      [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncReadingListSwitch];
   switchItemReadingList.text =
       l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_READING_LIST);
   switchItemReadingList.detailText =
@@ -1008,7 +1026,7 @@ PendingRegistration pendingRegistration;
   switchItemReadingList.iconImage = [UIImage imageNamed:@"sync_readinglist"];
 
   TableViewSwitchItem* switchItemNotes =
-    [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncNotesSwitch];
+      [[TableViewSwitchItem alloc] initWithType:ItemTypeSyncNotesSwitch];
   switchItemNotes.text = l10n_util::GetNSString(IDS_VIVALDI_TOOLS_MENU_NOTES);
   switchItemNotes.detailText =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_NOTES_LIST_SUBTITLE);
@@ -1060,7 +1078,7 @@ PendingRegistration pendingRegistration;
   }
 }
 
--(NSInteger)getSimplifiedAccountState {
+- (NSInteger)getSimplifiedAccountState {
   if (!_syncManager)
     return LOGGED_OUT;
 
@@ -1069,12 +1087,13 @@ PendingRegistration pendingRegistration;
 
 #pragma mark Private - Create Account Server Request Handling
 - (void)sendCreateAccountRequestToServer:(BOOL)wantsNewsletter
-                    completionHandler:(ServerRequestCompletionHandler)handler {
+                       completionHandler:
+                           (ServerRequestCompletionHandler)handler {
   PrefService* pref_service = GetApplicationContext()->GetLocalState();
   std::string locale =
-    pref_service->HasPrefPath(language::prefs::kApplicationLocale)
-        ? pref_service->GetString(language::prefs::kApplicationLocale)
-        : GetApplicationContext()->GetApplicationLocale();
+      pref_service->HasPrefPath(language::prefs::kApplicationLocale)
+          ? pref_service->GetString(language::prefs::kApplicationLocale)
+          : GetApplicationContext()->GetApplicationLocale();
 
   base::Value::Dict dict;
   dict.Set(vParamUsername, pendingRegistration.username);
@@ -1107,14 +1126,13 @@ PendingRegistration pendingRegistration;
     // NOTE(tomas@vivaldi.com): The login request fails since the account is
     // not verified yet. This will trigger the activation process
     // and be handled accordingly
-    _vivaldiAccountManager->Login(
-        pendingRegistration.username, pendingRegistration.password, false);
+    _vivaldiAccountManager->Login(pendingRegistration.username,
+                                  pendingRegistration.password, false);
     _syncService->SetSyncFeatureRequested();
   } else {
     const std::string* err = dict.FindString(vErrorKey);
     [self.commandHandler createAccountFailed:SysUTF8ToNSString(*err)];
   }
-
 }
 
 - (void)handleNotActivated {
@@ -1122,7 +1140,8 @@ PendingRegistration pendingRegistration;
   if (pr) {
     pendingRegistration.username = *pr->FindString(kUsernameKey);
     pendingRegistration.password = *pr->FindString(kPasswordKey);
-    pendingRegistration.recoveryEmailAddress = *pr->FindString(kRecoveryEmailKey);
+    pendingRegistration.recoveryEmailAddress =
+        *pr->FindString(kRecoveryEmailKey);
   }
   [self.commandHandler showActivateAccountView];
 }
@@ -1130,8 +1149,8 @@ PendingRegistration pendingRegistration;
 - (void)setPendingRegistration {
   std::string encrypted_password;
   // iOS uses the posix implementation, which is non-blocking.
-  if (!OSCrypt::EncryptString(
-        pendingRegistration.password, &encrypted_password)) {
+  if (!OSCrypt::EncryptString(pendingRegistration.password,
+                              &encrypted_password)) {
     return;
   }
 
@@ -1140,20 +1159,20 @@ PendingRegistration pendingRegistration;
   base::Value pending_registration(base::Value::Type::DICT);
 
   pending_registration.GetDict().Set(kRecoveryEmailKey,
-      pendingRegistration.recoveryEmailAddress);
-  pending_registration.GetDict().Set(kUsernameKey, pendingRegistration.username);
+                                     pendingRegistration.recoveryEmailAddress);
+  pending_registration.GetDict().Set(kUsernameKey,
+                                     pendingRegistration.username);
   pending_registration.GetDict().Set(kPasswordKey, encoded_password);
 
   _prefService->Set(vivaldiprefs::kVivaldiAccountPendingRegistration,
-              pending_registration);
+                    pending_registration);
 }
 
 - (std::unique_ptr<base::Value::Dict>)getPendingRegistration {
-  const base::Value& pref_value = _prefService->GetValue(
-      vivaldiprefs::kVivaldiAccountPendingRegistration);
+  const base::Value& pref_value =
+      _prefService->GetValue(vivaldiprefs::kVivaldiAccountPendingRegistration);
 
-  const std::string* username =
-      pref_value.GetDict().FindString(kUsernameKey);
+  const std::string* username = pref_value.GetDict().FindString(kUsernameKey);
   const std::string* encoded_password =
       pref_value.GetDict().FindString(kPasswordKey);
   const std::string* recovery_email =
@@ -1192,15 +1211,13 @@ PendingRegistration pendingRegistration;
     sessionName = [self localDeviceClientName];
   }
 
-  _prefService->SetString(
-      vivaldiprefs::kSyncSessionName, SysNSStringToUTF8(sessionName));
+  _prefService->SetString(vivaldiprefs::kSyncSessionName,
+                          SysNSStringToUTF8(sessionName));
 }
 
 - (NSString*)sessionName {
-
-  NSString *sessionName =
-      base::SysUTF8ToNSString(
-            _prefService->GetString(vivaldiprefs::kSyncSessionName));
+  NSString* sessionName = base::SysUTF8ToNSString(
+      _prefService->GetString(vivaldiprefs::kSyncSessionName));
 
   // If sessionName is nil or empty, return client_name.
   // This is a fallback for the users without a custom session name from iOS
@@ -1212,26 +1229,36 @@ PendingRegistration pendingRegistration;
   return sessionName;
 }
 
-- (NSString*)localDeviceClientName {
-  return base::SysUTF8ToNSString(syncer::GetPersonalizableDeviceNameBlocking());
+- (void)geLocalDeviceClientName {
+  __weak __typeof(self) weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(
+    DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),^{
+
+    std::string deviceName = syncer::GetPersonalizableDeviceNameBlocking();
+    NSString *deviceNameNSString = base::SysUTF8ToNSString(deviceName);
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+      weakSelf.localDeviceClientName = deviceNameNSString;
+    });
+  });
 }
 
 #pragma mark Private - Donation Tier Methods
 
 - (void)setBadgeWithTier:(BadgeTier)tier {
-  UIImage *badgeImage = nil;
+  UIImage* badgeImage = nil;
   switch (tier) {
     case BadgeTierNone:
       badgeImage = nil;
       break;
     case BadgeTierSupporter:
-      badgeImage = [UIImage imageNamed: kVivaldiSupporterBadge];
+      badgeImage = [UIImage imageNamed:kVivaldiSupporterBadge];
       break;
     case BadgeTierPatron:
-      badgeImage = [UIImage imageNamed: kVivaldiPatronBadge];
+      badgeImage = [UIImage imageNamed:kVivaldiPatronBadge];
       break;
     case BadgeTierAdvocate:
-      badgeImage = [UIImage imageNamed: kVivaldiAdvocateBadge];
+      badgeImage = [UIImage imageNamed:kVivaldiAdvocateBadge];
       break;
     default:
       badgeImage = nil;

@@ -164,6 +164,7 @@ declare global {
         y: number;
         touchAccessibility?: boolean;
         mouseButton?: SyntheticMouseEventButton;
+        isDoubleClick?: boolean;
       }
 
       export enum SelectToSpeakState {
@@ -212,6 +213,7 @@ declare global {
         DICTATION_CONTEXT_CHECKING = 'dictationContextChecking',
         FACE_GAZE = 'faceGaze',
         GOOGLE_TTS_HIGH_QUALITY_VOICES = 'googleTtsHighQualityVoices',
+        FACE_GAZE_GRAVITY_WELLS = 'faceGazeGravityWells',
       }
 
       export enum SelectToSpeakPanelAction {
@@ -324,6 +326,39 @@ declare global {
       export interface FaceGazeAssets {
         model: ArrayBuffer;
         wasm: ArrayBuffer;
+      }
+
+      export enum ScrollDirection {
+        UP = 'up',
+        DOWN = 'down',
+        LEFT = 'left',
+        RIGHT = 'right',
+      }
+
+      export enum FacialGesture {
+        BROW_INNER_UP = 'browInnerUp',
+        BROWS_DOWN = 'browsDown',
+        EYE_SQUINT_LEFT = 'eyeSquintLeft',
+        EYE_SQUINT_RIGHT = 'eyeSquintRight',
+        EYES_BLINK = 'eyesBlink',
+        EYES_LOOK_DOWN = 'eyesLookDown',
+        EYES_LOOK_LEFT = 'eyesLookLeft',
+        EYES_LOOK_RIGHT = 'eyesLookRight',
+        EYES_LOOK_UP = 'eyesLookUp',
+        JAW_LEFT = 'jawLeft',
+        JAW_OPEN = 'jawOpen',
+        JAW_RIGHT = 'jawRight',
+        MOUTH_FUNNEL = 'mouthFunnel',
+        MOUTH_LEFT = 'mouthLeft',
+        MOUTH_PUCKER = 'mouthPucker',
+        MOUTH_RIGHT = 'mouthRight',
+        MOUTH_SMILE = 'mouthSmile',
+        MOUTH_UPPER_UP = 'mouthUpperUp',
+      }
+
+      export interface GestureInfo {
+        gesture: FacialGesture;
+        confidence: number;
       }
 
       export function getDisplayNameForLocale(
@@ -443,6 +478,12 @@ declare global {
 
       export function showToast(type: ToastType): void;
 
+      export function scrollAtPoint(
+          target: ScreenPoint, direction: ScrollDirection): void;
+
+      export function sendGestureInfoToSettings(gestureInfo: GestureInfo[]):
+          void;
+
       export const onIntroduceChromeVox: ChromeEvent<() => void>;
 
       export const onChromeVoxFocusChanged:
@@ -491,6 +532,8 @@ declare global {
 
       export const onToggleDictation: ChromeEvent<(activated: boolean) => void>;
 
+      export const onToggleGestureInfoForSettings:
+          ChromeEvent<(enabled: boolean) => void>;
     }
   }
 }

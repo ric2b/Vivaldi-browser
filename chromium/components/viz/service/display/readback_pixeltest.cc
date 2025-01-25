@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <memory>
 #include <tuple>
 
@@ -47,7 +52,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkYUVAPixmaps.h"
-#include "third_party/skia/include/gpu/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSemaphore.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/color_transform.h"
 #include "ui/gfx/geometry/rect.h"
@@ -129,7 +134,7 @@ size_t GetRowBytesForColorType(int width, SkColorType color_type) {
       row_bytes *= 4;
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
   return row_bytes;
 }
@@ -593,7 +598,7 @@ TEST_P(ReadbackPixelTestRGBA, ExecutesCopyRequest) {
     }
 #endif
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 
   base::FilePath expected_path = GetExpectedPath();

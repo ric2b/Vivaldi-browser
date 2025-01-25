@@ -41,11 +41,11 @@
 #import "ios/chrome/browser/bookmarks/model/bookmark_storage_type.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/undo_manager_wrapper.h"
+#import "ios/chrome/browser/ntp/shared/metrics/home_metrics.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
-#import "ios/chrome/browser/ui/ntp/metrics/home_metrics.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "third_party/skia/include/core/SkColor.h"
@@ -55,6 +55,8 @@
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -242,6 +244,15 @@ NSString* messageForAddingBookmarksInFolder(
       std::u16string pattern = l10n_util::GetStringUTF16(
           (showCount) ? IDS_IOS_BOOKMARK_PAGE_BULK_SAVED_FOLDER
                       : IDS_IOS_BOOKMARK_PAGE_SAVED_FOLDER);
+
+      if (IsVivaldiRunning() && vivaldi_bookmark_kit::IsTrash(folder)) {
+        // When bookmarks moved to trash, show 'Moved to {Trash}' message
+        // instead of 'Saved to {Folder}'
+        pattern = l10n_util::GetStringUTF16(
+            (showCount) ? IDS_IOS_BOOKMARK_PAGE_BULK_MOVED_TO_TRASH
+                        : IDS_IOS_BOOKMARK_PAGE_MOVED_TO_TRASH);
+      } // End Vivaldi
+
       return base::SysUTF16ToNSString(
           base::i18n::MessageFormatter::FormatWithNamedArgs(
               pattern, "count", count, "title", title));

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import functools
 import http.cookiejar
 import json
 import logging
@@ -58,7 +59,8 @@ import subprocess2
 #
 # Changes:
 #   * all string literals changed to bytes literals.
-#   * all __symbols changed to _socksocket__symbols.
+#   * added more http methods to recognize.
+#   * all __symbols changed to _socksocket__symbols (Python __ munging).
 #   * Type annotations added to function signature.
 def __fixed_rewrite_proxy(self: httplib2.socks.socksocket, header: bytes):
     """ rewrite HTTP request headers to support non-tunneling proxies
@@ -70,7 +72,8 @@ def __fixed_rewrite_proxy(self: httplib2.socks.socksocket, header: bytes):
     for hdr in hdrs:
         if hdr.lower().startswith(b"host:"):
             host = hdr
-        elif hdr.lower().startswith(b"get") or hdr.lower().startswith(b"post"):
+        elif hdr.lower().split(b" ")[0] in (b"get", b"head", b"post", b"put",
+                                            b"patch"):
             endpt = hdr
     if host and endpt:
         hdrs.remove(host)
@@ -120,9 +123,9 @@ def time_time():
     return time.time()
 
 
-def log_retry_and_sleep(seconds, attempt):
+def log_retry_and_sleep(seconds, attempt, try_limit):
     LOGGER.info('Will retry in %d seconds (%d more times)...', seconds,
-                TRY_LIMIT - attempt - 1)
+                try_limit - attempt - 1)
     time_sleep(seconds)
     return seconds * random.uniform(MIN_BACKOFF, MAX_BACKOFF)
 
@@ -171,11 +174,15 @@ class SSOHelper(object):
 ssoHelper = SSOHelper()
 
 
+@functools.lru_cache(maxsize=None)
 def ShouldUseSSO(host: str, email: str) -> bool:
     """Return True if we should use SSO for the given Gerrit host and user."""
     LOGGER.debug("Determining whether we should use SSO...")
     if not newauth.Enabled():
         LOGGER.debug("SSO=False: not opted in")
+        return False
+    if not host.endswith('.googlesource.com'):
+        LOGGER.debug("SSO=False: non-googlesource host %r", host)
         return False
     if newauth.SkipSSO():
         LOGGER.debug("SSO=False: set skip SSO config")
@@ -495,9 +502,22 @@ class SSOAuthenticator(_Authenticator):
     @classmethod
     def _get_sso_info(cls) -> SSOInfo:
         with cls._sso_info_lock:
+
             info = cls._sso_info
             if not info:
                 info = cls._launch_sso_helper()
+                # HACK: `git-remote-sso` doesn't always properly warm up the
+                # cookies - in this case, run a canned git operation against
+                # a public repo to cause `git-remote-sso` to warm the cookies
+                # up, and then try pulling config again.
+                #
+                # BUG: b/342644760
+                if not any(c.domain == '.google.com' for c in info.cookies):
+                    LOGGER.debug('SSO: Refreshing .google.com cookies.')
+                    scm.GIT.Capture(['ls-remote', 'sso://chromium/All-Projects'])
+                    info = cls._launch_sso_helper()
+                    if not any(c.domain == '.google.com' for c in info.cookies):
+                        raise ValueError('Unable to extract .google.com cookie.')
                 cls._sso_info = info
             return info
 
@@ -525,9 +545,7 @@ class SSOAuthenticator(_Authenticator):
         # Finally, add cookies
         sso_info.cookies.add_cookie_header(conn)
         assert 'Cookie' in conn.req_headers, (
-            'sso_info.cookies.add_cookie_header failed to add Cookie'
-            ' (try running `git ls-remote sso://chromium/All-Projects` and retrying)'
-        )
+            'sso_info.cookies.add_cookie_header failed to add Cookie.')
 
     def debug_summary_state(self) -> str:
         return ''
@@ -746,7 +764,8 @@ class GceAuthenticator(_Authenticator):
             # Retry server error status codes.
             LOGGER.warning('Encountered server error')
             if TRY_LIMIT - i > 1:
-                next_delay_sec = log_retry_and_sleep(next_delay_sec, i)
+                next_delay_sec = log_retry_and_sleep(next_delay_sec, i,
+                                                     TRY_LIMIT)
         return None, None
 
     @classmethod
@@ -900,8 +919,8 @@ class HttpConn(httplib2.Http):
         return self.req_host
 
 
-def CreateHttpConn(host,
-                   path,
+def CreateHttpConn(host: str,
+                   path: str,
                    reqtype='GET',
                    headers: Optional[Dict[str, str]] = None,
                    body: Optional[Dict] = None,
@@ -957,25 +976,27 @@ def CreateHttpConn(host,
 
 
 def ReadHttpResponse(conn: HttpConn,
-                     accept_statuses: Container[int] = frozenset([200])):
+                     accept_statuses: Container[int] = frozenset([200]),
+                     max_tries=TRY_LIMIT):
     """Reads an HTTP response from a connection into a string buffer.
 
     Args:
         conn: An Http object created by CreateHttpConn above.
         accept_statuses: Treat any of these statuses as success. Default: [200]
             Common additions include 204, 400, and 404.
+        max_tries: The maximum number of times the request should be attempted.
     Returns:
         A string buffer containing the connection's reply.
     """
     response = contents = None
     sleep_time = SLEEP_TIME
-    for idx in range(TRY_LIMIT):
+    for idx in range(max_tries):
         before_response = time.time()
         try:
             response, contents = conn.request(**conn.req_params)
         except socket.timeout:
-            if idx < TRY_LIMIT - 1:
-                sleep_time = log_retry_and_sleep(sleep_time, idx)
+            if idx < max_tries - 1:
+                sleep_time = log_retry_and_sleep(sleep_time, idx, max_tries)
                 continue
             raise
         contents = contents.decode('utf-8', 'replace')
@@ -1013,8 +1034,8 @@ def ReadHttpResponse(conn: HttpConn,
             conn.req_params['uri'], http_version, http_version, response.status,
             response.reason, contents)
 
-        if idx < TRY_LIMIT - 1:
-            sleep_time = log_retry_and_sleep(sleep_time, idx)
+        if idx < max_tries - 1:
+            sleep_time = log_retry_and_sleep(sleep_time, idx, max_tries)
     # end of retries loop
 
     # Help the type checker a bit here - it can't figure out the `except` logic
@@ -1042,10 +1063,11 @@ def ReadHttpResponse(conn: HttpConn,
     raise GerritError(response.status, reason)
 
 
-def ReadHttpJsonResponse(
-    conn, accept_statuses: Container[int] = frozenset([200])) -> Dict:
+def ReadHttpJsonResponse(conn,
+                         accept_statuses: Container[int] = frozenset([200]),
+                         max_tries=TRY_LIMIT) -> dict:
     """Parses an https response as json."""
-    fh = ReadHttpResponse(conn, accept_statuses)
+    fh = ReadHttpResponse(conn, accept_statuses, max_tries)
     # The first line of the response should always be: )]}'
     s = fh.readline()
     if s and s.rstrip() != ")]}'":
@@ -1242,7 +1264,7 @@ def GetChangeDetail(host, change, o_params=None):
     return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
-def GetChangeCommit(host, change, revision='current'):
+def GetChangeCommit(host: str, change: str, revision: str = 'current') -> dict:
     """Query a Gerrit server for a revision associated with a change."""
     path = 'changes/%s/revisions/%s/commit?links' % (change, revision)
     return ReadHttpJsonResponse(CreateHttpConn(host, path))
@@ -1315,6 +1337,17 @@ def RestoreChange(host, change, msg=''):
     return ReadHttpJsonResponse(conn)
 
 
+def RebaseChange(host, change, base=None):
+    """Rebases a change."""
+    path = f'changes/{change}/rebase'
+    body = {'base': base} if base else {}
+    conn = CreateHttpConn(host, path, reqtype='POST', body=body)
+    # If a rebase fails due to a merge conflict, Gerrit returns 409. Retrying
+    # more than once probably won't help since the merge conflict will still
+    # exist.
+    return ReadHttpJsonResponse(conn, max_tries=2)
+
+
 def SubmitChange(host, change):
     """Submits a Gerrit change via Gerrit."""
     path = 'changes/%s/submit' % change
@@ -1376,14 +1409,20 @@ def DeletePendingChangeEdit(host, change):
     ReadHttpResponse(conn, accept_statuses=[204, 404])
 
 
-def CherryPick(host, change, destination, revision='current'):
+def CherryPick(host, change, destination, revision='current', message=None):
     """Create a cherry-pick commit from the given change, onto the given
     destination.
     """
     path = 'changes/%s/revisions/%s/cherrypick' % (change, revision)
     body = {'destination': destination}
+    if message:
+        body['message'] = message
     conn = CreateHttpConn(host, path, reqtype='POST', body=body)
-    return ReadHttpJsonResponse(conn)
+
+    # If a cherry pick fails due to a merge conflict, Gerrit returns 409.
+    # Retrying more than once probably won't help since the merge conflict will
+    # still exist.
+    return ReadHttpJsonResponse(conn, max_tries=2)
 
 
 def CherryPickCommit(host, project, commit, destination):

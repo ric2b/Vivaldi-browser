@@ -25,7 +25,8 @@ UIEdgeInsets searchBarPadding = UIEdgeInsetsMake(8, 12, 8, 12);
 
 #pragma mark - INITIALIZER
 - (instancetype)init {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     self.backgroundColor = UIColor.clearColor;
     [self setUpUI];
   }

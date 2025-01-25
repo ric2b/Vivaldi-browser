@@ -15,21 +15,19 @@
  */
 
 import m from 'mithril';
-
 import {SortDirection} from '../base/comparison_utils';
 import {sqliteString} from '../base/string_utils';
 import {Actions} from '../common/actions';
 import {DropDirection} from '../common/dragndrop_logic';
 import {COUNT_AGGREGATION} from '../common/empty_state';
-import {Area, PivotTableResult} from '../common/state';
+import {PivotTableResult} from '../common/state';
+import {Area} from '../public/selection';
 import {raf} from '../core/raf_scheduler';
 import {ColumnType} from '../trace_processor/query_result';
-
 import {globals} from './globals';
 import {
   aggregationIndex,
   areaFilters,
-  extractArgumentExpression,
   sliceAggregationColumns,
   tables,
 } from './pivot_table_query_generator';
@@ -44,8 +42,11 @@ import {PopupMenuButton, popupMenuIcon, PopupMenuItem} from './popup_menu';
 import {ReorderableCell, ReorderableCellGroup} from './reorderable_cells';
 import {AttributeModalHolder} from './tables/attribute_modal_holder';
 import {DurationWidget} from './widgets/duration';
-import {SqlTables} from './well_known_sql_tables';
-import {addSqlTableTab} from './sql_table_tab';
+import {addSqlTableTab} from './sql_table_tab_command';
+import {getSqlTableDescription} from './widgets/sql/table/sql_table_registry';
+import {assertExists, assertFalse} from '../base/logging';
+import {Filter, SqlColumn} from './widgets/sql/table/column';
+import {argSqlColumn} from './widgets/sql/table/well_known_columns';
 
 interface PathItem {
   tree: PivotTree;
@@ -61,28 +62,30 @@ interface DrillFilter {
   value: ColumnType;
 }
 
-function drillFilterColumnName(column: TableColumn): string {
+function drillFilterColumnName(column: TableColumn): SqlColumn {
   switch (column.kind) {
     case 'argument':
-      return extractArgumentExpression(column.argument, SqlTables.slice.name);
+      return argSqlColumn('arg_set_id', column.argument);
     case 'regular':
       return `${column.column}`;
   }
 }
 
 // Convert DrillFilter to SQL condition to be used in WHERE clause.
-function renderDrillFilter(filter: DrillFilter): string {
+function renderDrillFilter(filter: DrillFilter): Filter {
   const column = drillFilterColumnName(filter.column);
-  if (filter.value === null) {
-    return `${column} IS NULL`;
-  } else if (typeof filter.value === 'number') {
-    return `${column} = ${filter.value}`;
-  } else if (filter.value instanceof Uint8Array) {
+  const value = filter.value;
+  if (value === null) {
+    return {op: (cols) => `${cols[0]} IS NULL`, columns: [column]};
+  } else if (typeof value === 'number' || typeof value === 'bigint') {
+    return {op: (cols) => `${cols[0]} = ${filter.value}`, columns: [column]};
+  } else if (value instanceof Uint8Array) {
     throw new Error(`BLOB as DrillFilter not implemented`);
-  } else if (typeof filter.value === 'bigint') {
-    return `${column} = ${filter.value}`;
   }
-  return `${column} = ${sqliteString(filter.value)}`;
+  return {
+    op: (cols) => `${cols[0]} = ${sqliteString(value)}`,
+    columns: [column],
+  };
 }
 
 function readableColumnName(column: TableColumn) {
@@ -136,7 +139,8 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
               queryFilters.push(...areaFilters(area));
             }
             addSqlTableTab({
-              table: SqlTables.slice,
+              table: assertExists(getSqlTableDescription('slice')),
+              // TODO(altimin): this should properly reference the required columns, but it works for now (until the pivot table is going to be rewritten to be more flexible).
               filters: queryFilters,
             });
           },
@@ -201,6 +205,8 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
     ) {
       if (typeof value === 'bigint') {
         return m(DurationWidget, {dur: value});
+      } else if (typeof value === 'number') {
+        return m(DurationWidget, {dur: BigInt(Math.round(value))});
       }
     }
     return `${value}`;
@@ -438,7 +444,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
     }
 
     const sliceAggregationsItem = this.aggregationPopupTableGroup(
-      SqlTables.slice.name,
+      assertExists(getSqlTableDescription('slice')).name,
       sliceAggregationColumns,
       index,
     );
@@ -541,12 +547,10 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
     const queryResult: PivotTableResult = state.queryResult;
 
     const renderedRows: m.Vnode[] = [];
-    const tree = state.queryResult.tree;
 
-    if (tree.children.size === 0 && tree.rows.length === 0) {
-      // Empty result, render a special message
-      return m('.empty-result', 'No slices in the current selection.');
-    }
+    // We should not even be showing the tab if there's no results.
+    const tree = state.queryResult.tree;
+    assertFalse(tree.children.size === 0 && tree.rows.length === 0);
 
     this.renderTree(
       attrs.selectionArea,

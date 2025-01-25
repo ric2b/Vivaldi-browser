@@ -60,6 +60,6 @@ test(
   args : [
     '--lib', libdrm_nouveau,
     '--symbols-file', files('nouveau-symbols.txt'),
-    '--nm', prog_nm.path(),
+    '--nm', prog_nm.full_path(),
   ],
 )

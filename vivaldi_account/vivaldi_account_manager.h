@@ -105,27 +105,27 @@ class VivaldiAccountManager : public KeyedService,
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
-  AccountInfo account_info() { return account_info_; }
+  AccountInfo account_info() const { return account_info_; }
   // Wether the account manager has a known valid refresh token available. As
   // long as this is the case, the user is considered logged in and it is
   // possible to request new access tokens
-  bool has_refresh_token() { return !refresh_token_.empty(); }
+  bool has_refresh_token() const { return !refresh_token_.empty(); }
   // Whether an encrypted refresh token was found after a browser restart, but
   // could not be decrypted.
-  bool has_encrypted_refresh_token() { return has_encrypted_refresh_token_; }
+  bool has_encrypted_refresh_token() const { return has_encrypted_refresh_token_; }
 
-  std::string access_token() { return access_token_; }
-  base::Time token_received_time() { return token_received_time_; }
-  FetchError last_token_fetch_error() { return last_token_fetch_error_; }
-  FetchError last_account_info_fetch_error() {
+  std::string access_token() const { return access_token_; }
+  base::Time token_received_time() const { return token_received_time_; }
+  FetchError last_token_fetch_error() const { return last_token_fetch_error_; }
+  FetchError last_account_info_fetch_error() const {
     return last_account_info_fetch_error_;
   }
 
   // The time at which the last request for a token was performed.
-  base::Time GetTokenRequestTime();
+  base::Time GetTokenRequestTime() const;
   // If the last token request failed, this provides the time at which the next
   // attempt will be made (if it can be retried).
-  base::Time GetNextTokenRequestTime();
+  base::Time GetNextTokenRequestTime() const;
 
   VivaldiAccountPasswordHandler* password_handler() {
     return &password_handler_;

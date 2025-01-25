@@ -45,12 +45,6 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "sandbox/mac/seatbelt_exec.h"
-
-#if BUILDFLAG(ENABLE_PPAPI)
-#include <vector>
-
-#include "content/public/common/webplugininfo.h"
-#endif  // BUILDFLAG(ENABLE_PPAPI)
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_FUCHSIA)
@@ -326,10 +320,6 @@ class ChildProcessLauncherHelper
 #if BUILDFLAG(IS_MAC)
   std::unique_ptr<sandbox::SeatbeltExecClient> seatbelt_exec_client_;
   sandbox::mac::SandboxPolicy policy_;
-
-#if BUILDFLAG(ENABLE_PPAPI)
-  std::vector<content::WebPluginInfo> plugins_;
-#endif  // BUILDFLAG(ENABLE_PPAPI)
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_IOS)
@@ -358,6 +348,10 @@ class ChildProcessLauncherHelper
 
   // Startup tracing config shared memory region.
   base::ReadOnlySharedMemoryRegion tracing_config_memory_region_;
+
+  // Creation time of the helper, used for metrics.
+  // TODO(crbug.com/40287847): Remove when parallel launching is finished.
+  base::TimeTicks init_start_time_;
 };
 
 }  // namespace internal

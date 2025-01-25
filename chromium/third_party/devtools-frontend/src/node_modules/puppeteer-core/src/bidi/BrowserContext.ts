@@ -15,6 +15,7 @@ import type {Target} from '../api/Target.js';
 import {EventEmitter} from '../common/EventEmitter.js';
 import {debugError} from '../common/util.js';
 import type {Viewport} from '../common/Viewport.js';
+import {assert} from '../util/assert.js';
 import {bubble} from '../util/decorators.js';
 
 import type {BidiBrowser} from './Browser.js';
@@ -83,7 +84,21 @@ export class BidiBrowserContext extends BrowserContext {
     }
 
     this.userContext.on('browsingcontext', ({browsingContext}) => {
-      this.#createPage(browsingContext);
+      const page = this.#createPage(browsingContext);
+
+      // We need to wait for the DOMContentLoaded as the
+      // browsingContext still may be navigating from the about:blank
+      browsingContext.once('DOMContentLoaded', () => {
+        if (browsingContext.originalOpener) {
+          for (const context of this.userContext.browsingContexts) {
+            if (context.id === browsingContext.originalOpener) {
+              this.#pages
+                .get(context)!
+                .trustedEmitter.emit(PageEvent.Popup, page);
+            }
+          }
+        }
+      });
     });
     this.userContext.on('closed', () => {
       this.trustedEmitter.removeAllListeners();
@@ -161,6 +176,8 @@ export class BidiBrowserContext extends BrowserContext {
   }
 
   override async newPage(): Promise<Page> {
+    using _guard = await this.waitForScreenshotOperations();
+
     const context = await this.userContext.createBrowsingContext(
       Bidi.BrowsingContext.CreateType.Tab
     );
@@ -180,15 +197,18 @@ export class BidiBrowserContext extends BrowserContext {
   }
 
   override async close(): Promise<void> {
-    if (!this.isIncognito()) {
-      throw new Error('Default context cannot be closed!');
-    }
+    assert(
+      this.userContext.id !== UserContext.DEFAULT,
+      'Default BrowserContext cannot be closed!'
+    );
 
     try {
       await this.userContext.remove();
     } catch (error) {
       debugError(error);
     }
+
+    this.#targets.clear();
   }
 
   override browser(): BidiBrowser {
@@ -199,10 +219,6 @@ export class BidiBrowserContext extends BrowserContext {
     return [...this.userContext.browsingContexts].map(context => {
       return this.#pages.get(context)!;
     });
-  }
-
-  override isIncognito(): boolean {
-    return this.userContext.id !== UserContext.DEFAULT;
   }
 
   override async overridePermissions(

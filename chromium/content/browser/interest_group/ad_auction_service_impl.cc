@@ -44,6 +44,7 @@
 #include "content/browser/interest_group/auction_worklet_manager.h"
 #include "content/browser/interest_group/interest_group_features.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
+#include "content/browser/loader/reconnectable_url_loader_factory.h"
 #include "content/browser/loader/url_loader_factory_utils.h"
 #include "content/browser/private_aggregation/private_aggregation_manager.h"
 #include "content/browser/renderer_host/page_impl.h"
@@ -57,13 +58,13 @@
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/network_anonymization_key.h"
 #include "net/http/http_response_headers.h"
 #include "net/third_party/quiche/src/quiche/oblivious_http/oblivious_http_client.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/simple_url_loader.h"
-#include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -256,7 +257,7 @@ void AdAuctionServiceImpl::JoinInterestGroup(
   GetInterestGroupManager().CheckPermissionsAndJoinInterestGroup(
       std::move(updated_group), main_frame_url_, origin(),
       GetFrame()->GetNetworkIsolationKey(), report_result_only,
-      *GetFrameURLLoaderFactory(), GetRefCountedTrustedURLLoaderFactory(),
+      *GetFrameURLLoaderFactory(),
       base::BindRepeating(
           &AreAllowedReportingOriginsAttested,
           base::Unretained(render_frame_host().GetBrowserContext())),
@@ -325,14 +326,6 @@ void AdAuctionServiceImpl::LeaveInterestGroupForDocument() {
     return;
   }
 
-  if (fenced_frame_properties->is_ad_component() &&
-      !base::FeatureList::IsEnabled(
-          blink::features::kFencedFramesM120FeaturesPart2)) {
-    // The ability to leave interest group from an ad component is not supported
-    // before M120.
-    return;
-  }
-
   const blink::FencedFrame::AdAuctionData& auction_data =
       fenced_frame_properties->ad_auction_data()->GetValueIgnoringVisibility();
 
@@ -394,25 +387,6 @@ void AdAuctionServiceImpl::UpdateAdInterestGroups() {
           base::Unretained(render_frame_host().GetBrowserContext())));
 }
 
-void AdAuctionServiceImpl::CreateAuctionNonce(
-    CreateAuctionNonceCallback callback) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kFledgeNegativeTargeting)) {
-    ReportBadMessageAndDeleteThis(
-        "CreateAuctionNonce with FledgeNegativeTargeting off");
-    return;
-  }
-  if (base::FeatureList::IsEnabled(
-          blink::features::kFledgeCreateAuctionNonceSynchronousResolution)) {
-    ReportBadMessageAndDeleteThis(
-        "CreateAuctionNonce with FledgeCreateAuctionNonceSynchronousResolution "
-        "on");
-    return;
-  }
-  std::move(callback).Run(
-      static_cast<base::Uuid>(auction_nonce_manager_->CreateAuctionNonce()));
-}
-
 void AdAuctionServiceImpl::RunAdAuction(
     const blink::AuctionConfig& config,
     mojo::PendingReceiver<blink::mojom::AbortableAdAuction> abort_receiver,
@@ -452,22 +426,6 @@ void AdAuctionServiceImpl::RunAdAuction(
     return;
   }
 
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kFledgeNegativeTargeting)) {
-    if (config.non_shared_params.auction_nonce) {
-      ReportBadMessageAndDeleteThis(
-          "auction_nonce set with FledgeNegativeTargeting off");
-      return;
-    }
-    for (const auto& component : config.non_shared_params.component_auctions) {
-      if (component.non_shared_params.auction_nonce) {
-        ReportBadMessageAndDeleteThis(
-            "auction_nonce set with FledgeNegativeTargeting off");
-        return;
-      }
-    }
-  }
-
   FencedFrameURLMapping& fenced_frame_urls_map =
       GetFrame()->GetPage().fenced_frame_urls_map();
   auto urn_uuid = fenced_frame_urls_map.GeneratePendingMappedURN();
@@ -486,8 +444,23 @@ void AdAuctionServiceImpl::RunAdAuction(
                           base::Unretained(this));
 
   base::trace_event::EmitNamedTrigger("fledge-top-level-auction-start");
+
+  // Try to preconnect to owner and bidding signals origins if this is an
+  // on-device auction.
+  if (base::FeatureList::IsEnabled(features::kFledgeUsePreconnectCache) &&
+      !config.server_response.has_value()) {
+    PreconnectToBuyerOrigins(config);
+    for (const blink::AuctionConfig& component_config :
+         config.non_shared_params.component_auctions) {
+      if (!component_config.server_response.has_value()) {
+        PreconnectToBuyerOrigins(component_config);
+      }
+    }
+  }
+
   std::unique_ptr<AuctionRunner> auction = AuctionRunner::CreateAndStart(
-      &auction_worklet_manager_, auction_nonce_manager_.get(),
+      auction_metrics_recorder_manager_.CreateAuctionMetricsRecorder(),
+      &auction_worklet_manager_, &auction_nonce_manager_,
       &GetInterestGroupManager(), render_frame_host().GetBrowserContext(),
       private_aggregation_manager_, std::move(ad_auction_page_data_callback),
       // Unlike other callbacks, this needs to be safe to call after destruction
@@ -495,8 +468,7 @@ void AdAuctionServiceImpl::RunAdAuction(
       base::BindRepeating(
           &AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures,
           weak_ptr_factory_.GetWeakPtr()),
-      config, main_frame_origin_, origin(),
-      render_frame_host().GetPageUkmSourceId(), GetClientSecurityState(),
+      config, main_frame_origin_, origin(), GetClientSecurityState(),
       GetRefCountedTrustedURLLoaderFactory(),
       base::BindRepeating(&AdAuctionServiceImpl::IsInterestGroupAPIAllowed,
                           base::Unretained(this)),
@@ -648,6 +620,7 @@ void AdAuctionServiceImpl::GetInterestGroupAdAuctionData(
   state.callback = std::move(callback);
   state.seller = seller;
   state.coordinator = coordinator;
+  state.timestamp = base::Time::Now();
   state.config = std::move(config);
 
   ba_data_callbacks_.push(std::move(state));
@@ -699,36 +672,26 @@ AdAuctionServiceImpl::GetTrustedURLLoaderFactory() {
   // GetPageUkmSourceId() doesn't work with prerendering pages.
   CHECK(!render_frame_host().IsInLifecycleState(
       RenderFrameHost::LifecycleState::kPrerendering));
+  return ref_counted_trusted_url_loader_factory_.get();
+}
 
-  if (!trusted_url_loader_factory_ ||
-      !trusted_url_loader_factory_.is_connected()) {
-    trusted_url_loader_factory_.reset();
-
-    // TODO(mmenke): Should this have its own URLLoaderFactoryType? FLEDGE
-    // requests are very different from subresource requests.
-    //
-    // TODO(mmenke): Hook up devtools.
-    url_loader_factory::CreateAndConnectToPendingReceiver(
-        trusted_url_loader_factory_.BindNewPipeAndPassReceiver(),
-        ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
-        url_loader_factory::TerminalParams::ForBrowserProcess(
-            static_cast<RenderFrameHostImpl&>(render_frame_host())
-                .GetStoragePartition()),
-        url_loader_factory::ContentClientParams(
-            render_frame_host().GetSiteInstance()->GetBrowserContext(),
-            &render_frame_host(), render_frame_host().GetProcess()->GetID(),
-            url::Origin(), net::IsolationInfo(),
-            ukm::SourceIdObj::FromInt64(
-                render_frame_host().GetPageUkmSourceId())));
-
-    mojo::Remote<network::mojom::URLLoaderFactory> shared_remote;
-    trusted_url_loader_factory_->Clone(
-        shared_remote.BindNewPipeAndPassReceiver());
-    ref_counted_trusted_url_loader_factory_ =
-        base::MakeRefCounted<network::WrapperSharedURLLoaderFactory>(
-            std::move(shared_remote));
-  }
-  return trusted_url_loader_factory_.get();
+void AdAuctionServiceImpl::CreateUnderlyingTrustedURLLoaderFactory(
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory) {
+  // TODO(mmenke): Should this have its own URLLoaderFactoryType? FLEDGE
+  // requests are very different from subresource requests.
+  //
+  // TODO(mmenke): Hook up devtools.
+  *out_factory = url_loader_factory::CreatePendingRemote(
+      ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
+      url_loader_factory::TerminalParams::ForBrowserProcess(
+          static_cast<RenderFrameHostImpl&>(render_frame_host())
+              .GetStoragePartition()),
+      url_loader_factory::ContentClientParams(
+          render_frame_host().GetSiteInstance()->GetBrowserContext(),
+          &render_frame_host(), render_frame_host().GetProcess()->GetID(),
+          url::Origin(), net::IsolationInfo(),
+          ukm::SourceIdObj::FromInt64(
+              render_frame_host().GetPageUkmSourceId())));
 }
 
 void AdAuctionServiceImpl::PreconnectSocket(
@@ -742,9 +705,8 @@ void AdAuctionServiceImpl::PreconnectSocket(
                           network_anonymization_key);
 }
 
-scoped_refptr<network::WrapperSharedURLLoaderFactory>
+scoped_refptr<network::SharedURLLoaderFactory>
 AdAuctionServiceImpl::GetRefCountedTrustedURLLoaderFactory() {
-  GetTrustedURLLoaderFactory();
   return ref_counted_trusted_url_loader_factory_;
 }
 
@@ -785,14 +747,23 @@ AdAuctionServiceImpl::AdAuctionServiceImpl(
       main_frame_origin_(
           render_frame_host.GetMainFrame()->GetLastCommittedOrigin()),
       main_frame_url_(render_frame_host.GetMainFrame()->GetLastCommittedURL()),
+      auction_metrics_recorder_manager_(render_frame_host.GetPageUkmSourceId()),
       auction_worklet_manager_(
           &GetInterestGroupManager().auction_process_manager(),
           GetTopWindowOrigin(),
           origin(),
           this),
-      auction_nonce_manager_(CreateAuctionNonceManager(GetFrame())),
+      auction_nonce_manager_(GetFrame()),
       private_aggregation_manager_(PrivateAggregationManager::GetManager(
           *render_frame_host.GetBrowserContext())) {
+  // Construct `ref_counted_trusted_url_loader_factory_` here because
+  // `weak_ptr_factory_` is not yet initialized during the member initializer
+  // list above.
+  ref_counted_trusted_url_loader_factory_ =
+      base::MakeRefCounted<ReconnectableURLLoaderFactory>(base::BindRepeating(
+          &AdAuctionServiceImpl::CreateUnderlyingTrustedURLLoaderFactory,
+          weak_ptr_factory_.GetWeakPtr()));
+
   // Throughout the auction, the `PageImpl` of the frame which initiates the
   // auction should stay the same. When an inconsistency is detected, the
   // auction must be aborted. This is done by storing a weak pointer to the
@@ -905,7 +876,10 @@ void AdAuctionServiceImpl::OnAuctionComplete(
     std::optional<blink::AdDescriptor> ad_descriptor,
     std::vector<blink::AdDescriptor> ad_component_descriptors,
     std::vector<std::string> errors,
-    std::unique_ptr<InterestGroupAuctionReporter> reporter) {
+    std::unique_ptr<InterestGroupAuctionReporter> reporter,
+    bool contained_server_auction,
+    bool contained_on_device_auction,
+    AuctionResult result) {
   // Remove `auction` from `auctions_` but temporarily keep it alive - on
   // success, it owns a AuctionWorkletManager::WorkletHandle for the top-level
   // auction, which `reporter` can reuse once started. Fine to delete after
@@ -940,6 +914,10 @@ void AdAuctionServiceImpl::OnAuctionComplete(
   if (!ad_descriptor) {
     DCHECK(!reporter);
 
+    GetContentClient()->browser()->OnAuctionComplete(
+        &render_frame_host(), /*winner_data_key=*/std::nullopt,
+        contained_server_auction, contained_on_device_auction, result);
+
     std::move(callback).Run(aborted_by_script, /*config=*/std::nullopt);
     if (auction_result_metrics) {
       // `auction_result_metrics` can be null since PageUserData like
@@ -966,7 +944,8 @@ void AdAuctionServiceImpl::OnAuctionComplete(
           reporter->winning_bid_info()
               .storage_interest_group->interest_group.owner,
           reporter->winning_bid_info().storage_interest_group->joining_origin,
-      });
+      },
+      contained_server_auction, contained_on_device_auction, result);
 
   content::AdAuctionData ad_auction_data{winning_group_key->owner,
                                          winning_group_key->name};
@@ -1104,7 +1083,7 @@ void AdAuctionServiceImpl::LoadAuctionDataAndKeyForNextQueuedRequest() {
 
   GetInterestGroupManager().GetInterestGroupAdAuctionData(
       GetTopWindowOrigin(),
-      /* generation_id=*/base::Uuid::GenerateRandomV4(),
+      /* generation_id=*/base::Uuid::GenerateRandomV4(), state.timestamp,
       std::move(state.config),
       base::BindOnce(&AdAuctionServiceImpl::OnGotAuctionData,
                      weak_ptr_factory_.GetWeakPtr(), state.request_id));
@@ -1112,7 +1091,7 @@ void AdAuctionServiceImpl::LoadAuctionDataAndKeyForNextQueuedRequest() {
   // GetBiddingAndAuctionServerKey can call its callback synchronously, so we
   // need to call it last in case it invalidates `state`.
   GetInterestGroupManager().GetBiddingAndAuctionServerKey(
-      GetRefCountedTrustedURLLoaderFactory(), std::move(state.coordinator),
+      std::move(state.coordinator),
       base::BindOnce(&AdAuctionServiceImpl::OnGotBiddingAndAuctionServerKey,
                      weak_ptr_factory_.GetWeakPtr(), state.request_id));
 }
@@ -1208,7 +1187,8 @@ void AdAuctionServiceImpl::OnGotAuctionDataAndKey(base::Uuid request_id) {
 
   AdAuctionRequestContext context(
       state.seller, std::move(state.data->group_names),
-      std::move(*maybe_request).ReleaseContext(), state.start_time);
+      std::move(*maybe_request).ReleaseContext(), state.start_time,
+      std::move(state.data->group_pagg_coordinators));
   ad_auction_page_data->RegisterAdAuctionRequestContext(state.request_id,
                                                         std::move(context));
   // Pre-warm data decoder.
@@ -1267,6 +1247,30 @@ AdAuctionPageData* AdAuctionServiceImpl::GetAdAuctionPageData() {
 
   return PageUserData<AdAuctionPageData>::GetOrCreateForPage(
       render_frame_host().GetPage());
+}
+
+void AdAuctionServiceImpl::PreconnectToBuyerOrigins(
+    const blink::AuctionConfig& config) {
+  if (!config.non_shared_params.interest_group_buyers) {
+    return;
+  }
+  for (const auto& buyer : *config.non_shared_params.interest_group_buyers) {
+    std::optional<url::Origin> signals_origin;
+    if (GetInterestGroupManager().GetCachedOwnerAndSignalsOrigins(
+            buyer, signals_origin)) {
+      net::NetworkAnonymizationKey network_anonymization_key =
+          net::NetworkAnonymizationKey::CreateSameSite(
+              net::SchemefulSite(buyer));
+      PreconnectSocket(buyer.GetURL(), network_anonymization_key);
+      if (signals_origin) {
+        // We preconnect to the signals origin and not the full signals URL so
+        // that we do not need to store the full URL in memory. Preconnecting
+        // to the origin will be roughly equivalent to preconnecting to the
+        // full URL.
+        PreconnectSocket(signals_origin->GetURL(), network_anonymization_key);
+      }
+    }
+  }
 }
 
 }  // namespace content

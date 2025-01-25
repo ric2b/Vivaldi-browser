@@ -99,9 +99,10 @@ void RecordTriggerRegistrationError(TriggerRegistrationError error) {
                                 error);
 }
 
-// static
-base::expected<TriggerRegistration, TriggerRegistrationError>
-TriggerRegistration::Parse(base::Value::Dict dict) {
+namespace {
+
+base::expected<TriggerRegistration, TriggerRegistrationError> ParseDict(
+    base::Value::Dict dict) {
   TriggerRegistration registration;
 
   ASSIGN_OR_RETURN(
@@ -138,8 +139,10 @@ TriggerRegistration::Parse(base::Value::Dict dict) {
       registration.aggregatable_values,
       AggregatableValues::FromJSON(dict.Find(kAggregatableValues)));
 
-  ASSIGN_OR_RETURN(registration.attribution_scopes,
-                   AttributionScopesSet::FromJSON(dict));
+  if (base::FeatureList::IsEnabled(features::kAttributionScopes)) {
+    ASSIGN_OR_RETURN(registration.attribution_scopes,
+                     AttributionScopesSet::FromJSON(dict));
+  }
 
   registration.debug_key = ParseDebugKey(dict);
   registration.debug_reporting = ParseDebugReporting(dict);
@@ -163,7 +166,22 @@ TriggerRegistration::Parse(base::Value::Dict dict) {
             : TriggerRegistrationError::kAggregatableValuesValueInvalid);
   }
 
+  base::UmaHistogramCounts100("Conversions.ScopesPerTriggerRegistration",
+                              registration.attribution_scopes.scopes().size());
+
   return registration;
+}
+
+}  // namespace
+
+// static
+base::expected<TriggerRegistration, TriggerRegistrationError>
+TriggerRegistration::Parse(base::Value value) {
+  if (base::Value::Dict* dict = value.GetIfDict()) {
+    return ParseDict(std::move(*dict));
+  } else {
+    return base::unexpected(TriggerRegistrationError::kRootWrongType);
+  }
 }
 
 // static
@@ -172,15 +190,9 @@ TriggerRegistration::Parse(std::string_view json) {
   base::expected<TriggerRegistration, TriggerRegistrationError> trigger =
       base::unexpected(TriggerRegistrationError::kInvalidJson);
 
-  std::optional<base::Value> value =
-      base::JSONReader::Read(json, base::JSON_PARSE_RFC);
-
-  if (value) {
-    if (base::Value::Dict* dict = value->GetIfDict()) {
-      trigger = Parse(std::move(*dict));
-    } else {
-      trigger = base::unexpected(TriggerRegistrationError::kRootWrongType);
-    }
+  if (std::optional<base::Value> value =
+          base::JSONReader::Read(json, base::JSON_PARSE_RFC)) {
+    trigger = Parse(*std::move(value));
   }
 
   if (!trigger.has_value()) {
@@ -230,8 +242,9 @@ base::Value::Dict TriggerRegistration::ToJson() const {
 
   aggregatable_debug_reporting_config.Serialize(dict);
 
-  attribution_scopes.Serialize(dict);
-
+  if (base::FeatureList::IsEnabled(features::kAttributionScopes)) {
+    attribution_scopes.SerializeForTrigger(dict);
+  }
   return dict;
 }
 

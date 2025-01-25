@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "cast/streaming/constants.h"
-#include "cast/streaming/rpc_messenger.h"
+#include "cast/streaming/public/constants.h"
+#include "cast/streaming/public/rpc_messenger.h"
 
 namespace openscreen::cast {
 

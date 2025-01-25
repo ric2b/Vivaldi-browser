@@ -26,8 +26,8 @@
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
-#include "components/autofill/core/browser/data_model/autofill_metadata.h"
 #include "components/autofill/core/browser/data_model/data_model_utils.h"
+#include "components/autofill/core/browser/data_model/payments_metadata.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/payments/constants.h"
@@ -54,8 +54,8 @@ constexpr char16_t kWhiteSpaceSeparator = ' ';
 
 constexpr int kMaxNicknameLength = 25;
 
-constexpr std::array<int, 3> k15DigitAmexNumberSegmentations = {4, 6, 5};
-constexpr std::array<int, 4> k16DigitNumberSegmentations = {4, 4, 4, 4};
+constexpr auto k15DigitAmexNumberSegmentations = std::to_array({4, 6, 5});
+constexpr auto k16DigitNumberSegmentations = std::to_array({4, 4, 4, 4});
 
 // Suffix for GUID of a virtual card to differentiate it from it's corresponding
 // masked server card..
@@ -300,6 +300,7 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
     case Suggestion::Icon::kEdit:
     case Suggestion::Icon::kEmail:
     case Suggestion::Icon::kEmpty:
+    case Suggestion::Icon::kError:
     case Suggestion::Icon::kGlobe:
     case Suggestion::Icon::kGoogle:
     case Suggestion::Icon::kGoogleMonochrome:
@@ -319,9 +320,9 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
     case Suggestion::Icon::kUndo:
     case Suggestion::Icon::kPlusAddress:
     case Suggestion::Icon::kIban:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // static
@@ -377,53 +378,64 @@ void CreditCard::SetNetworkForMaskedCard(std::string_view network) {
   network_ = std::string(network);
 }
 
-AutofillMetadata CreditCard::GetMetadata() const {
-  AutofillMetadata metadata = AutofillDataModel::GetMetadata();
+PaymentsMetadata CreditCard::GetMetadata() const {
+  PaymentsMetadata metadata(*this);
   metadata.id = (record_type_ == RecordType::kLocalCard ? guid() : server_id_);
   metadata.billing_address_id = billing_address_id_;
   return metadata;
 }
 
-double CreditCard::GetRankingScore(base::Time current_time) const {
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableRankingFormulaCreditCards)) {
-    int virtual_card_boost =
-        virtual_card_enrollment_state_ != VirtualCardEnrollmentState::kEnrolled
-            ? 0
-            : features::kAutofillRankingFormulaVirtualCardBoost.Get() *
-                  exp(-GetDaysSinceLastUse(current_time) /
-                      features::kAutofillRankingFormulaVirtualCardBoostHalfLife
-                          .Get());
-
-    // Exponentially decay the use count by the days since the data model was
-    // last used. Add a virtual card boost if the model is a virtual card.
-    return (log10(use_count() + 1) *
-            exp(-GetDaysSinceLastUse(current_time) /
-                features::kAutofillRankingFormulaCreditCardsUsageHalfLife
-                    .Get())) +
-           virtual_card_boost;
+double CreditCard::GetRankingScore(base::Time current_time,
+                                   bool use_frecency) const {
+  if (use_frecency || !base::FeatureList::IsEnabled(
+                          features::kAutofillEnableRankingFormulaCreditCards)) {
+    // Default to legacy frecency scoring.
+    return AutofillDataModel::GetRankingScore(current_time);
   }
 
-  // Default to legacy frecency scoring.
-  return AutofillDataModel::GetRankingScore(current_time);
+  // Calculate score with new ranking algorithm. The new algorithm is only used
+  // when `use_frecency` is false and the new ranking experiment is enabled.
+  const int virtual_card_boost =
+      virtual_card_enrollment_state_ != VirtualCardEnrollmentState::kEnrolled
+          ? 0
+          : features::kAutofillRankingFormulaVirtualCardBoost.Get() *
+                exp(-GetDaysSinceLastUse(current_time) /
+                    features::kAutofillRankingFormulaVirtualCardBoostHalfLife
+                        .Get());
+
+  // Exponentially decay the use count by the days since the data model was
+  // last used. Add a virtual card boost if the model is a virtual card.
+  return (log10(use_count() + 1) *
+          exp(-GetDaysSinceLastUse(current_time) /
+              features::kAutofillRankingFormulaCreditCardsUsageHalfLife
+                  .Get())) +
+         virtual_card_boost;
 }
 
-bool CreditCard::SetMetadata(const AutofillMetadata& metadata) {
+bool CreditCard::HasGreaterRankingThan(const CreditCard& other,
+                                       base::Time comparison_time,
+                                       bool use_frecency) const {
+  const double score = GetRankingScore(comparison_time, use_frecency);
+  const double other_score =
+      other.GetRankingScore(comparison_time, use_frecency);
+  return AutofillDataModel::CompareRankingScores(score, other_score,
+                                                 other.use_date());
+}
+
+bool CreditCard::SetMetadata(const PaymentsMetadata& metadata) {
   // Make sure the ids matches.
   if (metadata.id !=
       (record_type_ == RecordType::kLocalCard ? guid() : server_id_)) {
     return false;
   }
-
-  if (!AutofillDataModel::SetMetadata(metadata))
-    return false;
-
+  set_use_count(metadata.use_count);
+  set_use_date(metadata.use_date);
   billing_address_id_ = metadata.billing_address_id;
   return true;
 }
 
 bool CreditCard::IsDeletable() const {
-  return AutofillDataModel::IsDeletable() &&
+  return IsAutofillEntryWithUseDateDeletable(use_date()) &&
          IsExpired(AutofillClock::Now() - kDisusedDataModelDeletionTimeDelta);
 }
 
@@ -554,10 +566,13 @@ void CreditCard::SetRawInfoWithVerificationStatus(FieldType type,
   }
 }
 
-void CreditCard::GetMatchingTypes(const std::u16string& text,
-                                  const std::string& app_locale,
-                                  FieldTypeSet* matching_types) const {
-  FormGroup::GetMatchingTypes(text, app_locale, matching_types);
+void CreditCard::GetMatchingTypesWithProfileSources(
+    const std::u16string& text,
+    const std::string& app_locale,
+    FieldTypeSet* matching_types,
+    PossibleProfileValueSources* profile_value_sources) const {
+  FormGroup::GetMatchingTypesWithProfileSources(
+      text, app_locale, matching_types, profile_value_sources);
 
   std::u16string card_number = GetInfo(CREDIT_CARD_NUMBER, app_locale);
   if (!card_number.empty()) {
@@ -1159,7 +1174,7 @@ void CreditCard::SetNumber(const std::u16string& number) {
 void CreditCard::RecordAndLogUse() {
   UMA_HISTOGRAM_COUNTS_1000("Autofill.DaysSinceLastUse.CreditCard",
                             (AutofillClock::Now() - use_date()).InDays());
-  set_use_date(AutofillClock::Now());
+  RecordUseDate(AutofillClock::Now());
   set_use_count(use_count() + 1);
 }
 

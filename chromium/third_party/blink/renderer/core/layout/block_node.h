@@ -27,6 +27,7 @@ class PhysicalBoxFragment;
 class PhysicalFragment;
 enum class BaselineAlgorithmType;
 enum class MathScriptType;
+enum class SizeType;
 struct LayoutAlgorithmParams;
 
 // Represents a node to be laid out.
@@ -108,7 +109,7 @@ class CORE_EXPORT BlockNode : public LayoutInputNode {
   // space is not optional.
   MinMaxSizesResult ComputeMinMaxSizes(
       WritingMode container_writing_mode,
-      const MinMaxSizesType,
+      const SizeType,
       const ConstraintSpace&,
       const MinMaxSizesFloatInput float_input = MinMaxSizesFloatInput()) const;
 
@@ -116,8 +117,6 @@ class CORE_EXPORT BlockNode : public LayoutInputNode {
 
   BlockNode GetRenderedLegend() const;
   BlockNode GetFieldsetContent() const;
-
-  bool IsTableCell() const { return box_->IsTableCell(); }
 
   bool IsFrameSet() const { return box_->IsFrameSet(); }
   bool IsParentNGFrameSet() const { return box_->Parent()->IsFrameSet(); }

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -74,10 +79,10 @@ std::string TreeToString(const AXTree& tree) {
 }
 
 AXTreeUpdate SerializeEntireTree(AXSerializableTree& tree) {
-  std::unique_ptr<AXTreeSource<const AXNode*, ui::AXTreeData*, ui::AXNodeData>>
+  std::unique_ptr<AXTreeSource<const AXNode*, AXTreeData*, AXNodeData>>
       tree_source(tree.CreateTreeSource());
-  AXTreeSerializer<const AXNode*, std::vector<const AXNode*>, ui::AXTreeUpdate*,
-                   ui::AXTreeData*, ui::AXNodeData>
+  AXTreeSerializer<const AXNode*, std::vector<const AXNode*>, AXTreeUpdate*,
+                   AXTreeData*, AXNodeData>
       serializer(tree_source.get());
   AXTreeUpdate update;
   CHECK(serializer.SerializeChanges(tree.root(), &update));
@@ -271,11 +276,10 @@ TEST_P(SerializeGeneratedTreesTest, SerializeGeneratedTrees) {
 
           // Start by serializing tree0 and unserializing it into a new
           // empty tree |dst_tree|.
-          std::unique_ptr<
-              AXTreeSource<const AXNode*, ui::AXTreeData*, ui::AXNodeData>>
+          std::unique_ptr<AXTreeSource<const AXNode*, AXTreeData*, AXNodeData>>
               tree0_source(tree0.CreateTreeSource());
           AXTreeSerializer<const AXNode*, std::vector<const AXNode*>,
-                           ui::AXTreeUpdate*, ui::AXTreeData*, ui::AXNodeData>
+                           AXTreeUpdate*, AXTreeData*, AXNodeData>
               serializer(tree0_source.get());
           AXTreeUpdate update0;
           ASSERT_TRUE(serializer.SerializeChanges(tree0.root(), &update0));
@@ -290,8 +294,7 @@ TEST_P(SerializeGeneratedTreesTest, SerializeGeneratedTrees) {
           EXPECT_EQ(TreeToString(tree0), TreeToString(dst_tree));
 
           // Next, pretend that tree0 turned into tree1.
-          std::unique_ptr<
-              AXTreeSource<const AXNode*, ui::AXTreeData*, ui::AXNodeData>>
+          std::unique_ptr<AXTreeSource<const AXNode*, AXTreeData*, AXNodeData>>
               tree1_source(tree1.CreateTreeSource());
           serializer.ChangeTreeSourceForTesting(tree1_source.get());
 

@@ -36,9 +36,17 @@ bool IsAccessibilityPruneRedundantInlineTextEnabled() {
       ::features::kAccessibilityPruneRedundantInlineText);
 }
 
+BASE_FEATURE(kAccessibilityPruneRedundantInlineConnectivity,
+             "AccessibilityPruneRedundantInlineConnectivity",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsAccessibilityPruneRedundantInlineConnectivityEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityPruneRedundantInlineConnectivity);
+}
+
 BASE_FEATURE(kImageDescriptionsAlternateRouting,
              "ImageDescriptionsAlternateRouting",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsImageDescriptionsAlternateRoutingEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kImageDescriptionsAlternateRouting);
@@ -105,14 +113,6 @@ bool IsUseAXPositionForDocumentMarkersEnabled() {
       ::features::kUseAXPositionForDocumentMarkers);
 }
 
-BASE_FEATURE(kUseMoveNotCopyInAXTreeCombiner,
-             "UseMoveNotCopyInAXTreeCombiner",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-bool IsUseMoveNotCopyInAXTreeCombinerEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kUseMoveNotCopyInAXTreeCombiner);
-}
-
 BASE_FEATURE(kUseMoveNotCopyInMergeTreeUpdate,
              "UseMoveNotCopyInMergeTreeUpdate",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -147,7 +147,7 @@ bool IsDictationOfflineAvailable() {
 
 BASE_FEATURE(kAccessibilityAccelerator,
              "AccessibilityAccelerator",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsAccessibilityAcceleratorEnabled() {
   return base::FeatureList::IsEnabled(::features::kAccessibilityAccelerator);
 }
@@ -165,6 +165,14 @@ BASE_FEATURE(kAccessibilityFaceGaze,
              base::FEATURE_DISABLED_BY_DEFAULT);
 bool IsAccessibilityFaceGazeEnabled() {
   return base::FeatureList::IsEnabled(::features::kAccessibilityFaceGaze);
+}
+
+BASE_FEATURE(kAccessibilityFaceGazeGravityWells,
+             "AccessibilityFaceGazeGravityWells",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsAccessibilityFaceGazeGravityWellsEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityFaceGazeGravityWells);
 }
 
 BASE_FEATURE(kAccessibilityReducedAnimationsInKiosk,
@@ -232,7 +240,7 @@ bool IsAccessibilityOverscrollSettingFeatureEnabled() {
 
 BASE_FEATURE(kAccessibilitySelectToSpeakShortcut,
              "AccessibilitySelectToSpeakShortcut",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsAccessibilitySelectToSpeakShortcutEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kAccessibilitySelectToSpeakShortcut);
@@ -244,6 +252,21 @@ BASE_FEATURE(kAccessibilityDisableTrackpad,
 bool IsAccessibilityDisableTrackpadEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kAccessibilityDisableTrackpad);
+}
+
+BASE_FEATURE(kAccessibilityFlashScreenFeature,
+             "AccessibilityFlashScreenFeature",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsAccessibilityFlashScreenFeatureEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityFlashScreenFeature);
+}
+
+BASE_FEATURE(kAccessibilityFilterKeys,
+             "AccessibilityFilterKeys",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsAccessibilityFilterKeysEnabled() {
+  return base::FeatureList::IsEnabled(::features::kAccessibilityFilterKeys);
 }
 
 BASE_FEATURE(kAccessibilityShakeToLocate,
@@ -308,36 +331,29 @@ bool IsMainNodeAnnotationsEnabled() {
   return base::FeatureList::IsEnabled(::features::kMainNodeAnnotations);
 }
 
-BASE_FEATURE(kPdfOcr,
-             "PdfOcr",
-#if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_CHROMEOS)
-);
+// This feature has a 10% holdback to measure memory impact.
+BASE_FEATURE(kPdfOcr, "PdfOcr", base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsPdfOcrEnabled() {
   return base::FeatureList::IsEnabled(::features::kPdfOcr);
 }
 
-BASE_FEATURE(kReadAnythingLocalSidePanel,
-             "ReadAnythingLocalSidePanel",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-bool IsReadAnythingLocalSidePanelEnabled() {
-  return base::FeatureList::IsEnabled(::features::kReadAnythingLocalSidePanel);
-}
-
 BASE_FEATURE(kReadAnythingReadAloud,
              "ReadAnythingReadAloud",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+);
+
 bool IsReadAnythingReadAloudEnabled() {
   return base::FeatureList::IsEnabled(::features::kReadAnythingReadAloud);
 }
 
 BASE_FEATURE(kReadAloudAutoVoiceSwitching,
              "ReadAloudAutoVoiceSwitching",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsReadAloudAutoVoiceSwitchingEnabled() {
   return IsReadAnythingReadAloudEnabled() &&
          base::FeatureList::IsEnabled(::features::kReadAloudAutoVoiceSwitching);
@@ -345,7 +361,7 @@ bool IsReadAloudAutoVoiceSwitchingEnabled() {
 
 BASE_FEATURE(kReadAloudLanguagePackDownloading,
              "ReadAloudLanguagePackDownloading",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 bool IsReadAloudLanguagePackDownloadingEnabled() {
   return IsReadAnythingReadAloudEnabled() &&
          base::FeatureList::IsEnabled(
@@ -366,6 +382,8 @@ BASE_FEATURE(kReadAnythingReadAloudPhraseHighlighting,
              base::FEATURE_DISABLED_BY_DEFAULT);
 bool IsReadAnythingReadAloudPhraseHighlightingEnabled() {
   return base::FeatureList::IsEnabled(::features::kReadAnythingReadAloud) &&
+         base::FeatureList::IsEnabled(
+             ::features::kReadAnythingReadAloudAutomaticWordHighlighting) &&
          base::FeatureList::IsEnabled(
              ::features::kReadAnythingReadAloudPhraseHighlighting);
 }
@@ -397,7 +415,16 @@ BASE_FEATURE(kReadAnythingDocsIntegration,
              "ReadAnythingDocsIntegration",
              base::FEATURE_DISABLED_BY_DEFAULT);
 bool IsReadAnythingDocsIntegrationEnabled() {
-  return base::FeatureList::IsEnabled(::features::kReadAnythingDocsIntegration);
+  return base::FeatureList::IsEnabled(
+      ax::mojom::features::kReadAnythingDocsIntegration);
+}
+
+BASE_FEATURE(kReadAnythingDocsLoadMoreButton,
+             "ReadAnythingDocsLoadMoreButton",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+bool IsReadAnythingDocsLoadMoreButtonEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kReadAnythingDocsLoadMoreButton);
 }
 
 // This feature is only for debug purposes and for security/privacy reasons,

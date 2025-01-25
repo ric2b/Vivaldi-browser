@@ -14,6 +14,10 @@
 #include "core/fxcrt/zip.h"
 #include "core/fxge/calculate_pitch.h"
 
+#if defined(PDF_USE_SKIA)
+#include "core/fxcrt/notreached.h"
+#endif
+
 namespace {
 
 CFX_DIBBase::kPlatformRGBStruct MakePlatformRGBStruct(uint8_t red,
@@ -53,7 +57,9 @@ FXDIB_Format CPDF_TransferFuncDIB::GetDestFormat() const {
   }
 
   if (src_->IsAlphaFormat()) {
-    return FXDIB_Format::kArgb;
+    // TODO(crbug.com/355676038): Consider adding support for
+    // `FXDIB_Format::kBgraPremul`
+    return FXDIB_Format::kBgra;
   }
 
   return CFX_DIBBase::kPlatformRGBFormat;
@@ -113,7 +119,7 @@ void CPDF_TransferFuncDIB::TranslateScanline(
       }
       break;
     }
-    case FXDIB_Format::kRgb: {
+    case FXDIB_Format::kBgr: {
       auto src =
           fxcrt::reinterpret_span<const FX_BGR_STRUCT<uint8_t>>(src_span);
       auto dest = fxcrt::reinterpret_span<kPlatformRGBStruct>(scanline_span);
@@ -124,7 +130,7 @@ void CPDF_TransferFuncDIB::TranslateScanline(
       }
       break;
     }
-    case FXDIB_Format::kRgb32: {
+    case FXDIB_Format::kBgrx: {
       auto src =
           fxcrt::reinterpret_span<const FX_BGRA_STRUCT<uint8_t>>(src_span);
       auto dest = fxcrt::reinterpret_span<kPlatformRGBStruct>(scanline_span);
@@ -135,7 +141,7 @@ void CPDF_TransferFuncDIB::TranslateScanline(
       }
       break;
     }
-    case FXDIB_Format::kArgb: {
+    case FXDIB_Format::kBgra: {
       auto src =
           fxcrt::reinterpret_span<const FX_BGRA_STRUCT<uint8_t>>(src_span);
       auto dest =
@@ -150,6 +156,13 @@ void CPDF_TransferFuncDIB::TranslateScanline(
       }
       break;
     }
+#if defined(PDF_USE_SKIA)
+    case FXDIB_Format::kBgraPremul: {
+      // TODO(crbug.com/355676038): Consider adding support for
+      // `FXDIB_Format::kBgraPremul`
+      NOTREACHED_NORETURN();
+    }
+#endif
   }
 }
 

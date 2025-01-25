@@ -9,7 +9,7 @@
 
 #include <vector>
 
-#include "cast/streaming/receiver.h"
+#include "cast/streaming/public/receiver.h"
 #include "platform/api/task_runner.h"
 #include "platform/api/time.h"
 

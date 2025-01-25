@@ -53,7 +53,9 @@ class IntegrationTestCommands
       const std::string& tag,
       const std::string& child_window_text_to_find,
       bool always_launch_cmd,
-      bool verify_app_logo_loaded) const = 0;
+      bool verify_app_logo_loaded,
+      bool expect_success,
+      bool wait_for_the_installer) const = 0;
   virtual void SetActive(const std::string& app_id) const = 0;
   virtual void ExpectActive(const std::string& app_id) const = 0;
   virtual void ExpectNotActive(const std::string& app_id) const = 0;
@@ -80,7 +82,8 @@ class IntegrationTestCommands
                                     const std::string& install_data_index,
                                     UpdateService::Priority priority,
                                     const base::Version& from_version,
-                                    const base::Version& to_version) const = 0;
+                                    const base::Version& to_version,
+                                    bool do_fault_injection) const = 0;
   virtual void ExpectUpdateSequenceBadHash(
       ScopedServer* test_server,
       const std::string& app_id,
@@ -93,7 +96,8 @@ class IntegrationTestCommands
                                      const std::string& install_data_index,
                                      UpdateService::Priority priority,
                                      const base::Version& from_version,
-                                     const base::Version& to_version) const = 0;
+                                     const base::Version& to_version,
+                                     bool do_fault_injection) const = 0;
   virtual void ExpectVersionActive(const std::string& version) const = 0;
   virtual void ExpectVersionNotActive(const std::string& version) const = 0;
   virtual void Uninstall() const = 0;
@@ -172,6 +176,12 @@ class IntegrationTestCommands
   virtual void DeleteLegacyUpdater() const = 0;
   virtual void ExpectPrepareToRunBundleSuccess(
       const base::FilePath& bundle_path) const = 0;
+  virtual void ExpectKSAdminFetchTag(
+      bool elevate,
+      const std::string& product_id,
+      const base::FilePath& xc_path,
+      std::optional<UpdaterScope> store_flag,
+      std::optional<std::string> want_tag) const = 0;
 #endif  // BUILDFLAG(IS_WIN)
   virtual void ExpectLegacyUpdaterMigrated() const = 0;
   virtual void RunRecoveryComponent(const std::string& app_id,
@@ -187,6 +197,9 @@ class IntegrationTestCommands
   virtual void DMPushEnrollmentToken(const std::string& enrollment_token) = 0;
   virtual void DMDeregisterDevice() = 0;
   virtual void DMCleanup() = 0;
+  virtual void InstallEnterpriseCompanionApp(
+      const base::Value::Dict& external_overrides) = 0;
+  virtual void UninstallEnterpriseCompanionApp() = 0;
 
  protected:
   friend class base::RefCountedThreadSafe<IntegrationTestCommands>;

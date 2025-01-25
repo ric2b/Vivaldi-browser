@@ -53,6 +53,7 @@ verify_error() {
 generate_and_compare "code" "example.xml" "example-code.c"
 generate_and_compare "client-header" "example.xml" "example-client.h"
 generate_and_compare "server-header" "example.xml" "example-server.h"
+generate_and_compare "enum-header" "example.xml" "example-enum.h"
 
 generate_and_compare "code" "small.xml" "small-code.c"
 generate_and_compare "client-header" "small.xml" "small-client.h"
@@ -66,6 +67,10 @@ generate_and_compare "-c server-header" "small.xml" "small-server-core.h"
 generate_and_compare "code" "small.xml" "small-code.c"
 generate_and_compare "public-code" "small.xml" "small-code.c"
 generate_and_compare "private-code" "small.xml" "small-private-code.c"
+
+generate_and_compare "code" "empty.xml" "empty-code.c"
+generate_and_compare "client-header" "empty.xml" "empty-client.h"
+generate_and_compare "server-header" "empty.xml" "empty-server.h"
 
 verify_error "bad-identifier-arg.xml" "bad-identifier-arg.log" 7
 verify_error "bad-identifier-entry.xml" "bad-identifier-entry.log" 8

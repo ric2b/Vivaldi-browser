@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as SDK from '../../core/sdk/sdk.js';
+import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 
 export class ExecutionError extends Error {}
@@ -85,23 +85,26 @@ export class FreestylerEvaluateAction {
         },
         /* userGesture */ false, /* awaitPromise */ true);
 
-    if (!response) {
-      throw new Error('Response is not found');
-    }
-
-    if ('error' in response) {
-      throw new ExecutionError(response.error);
-    }
-
-    if (response.exceptionDetails) {
-      const exceptionDescription = response.exceptionDetails.exception?.description;
-      if (exceptionDescription?.startsWith('EvalError: Possible side-effect in debug-evaluate')) {
-        throw new SideEffectError(exceptionDescription);
+    try {
+      if (!response) {
+        throw new Error('Response is not found');
       }
 
-      throw new ExecutionError(exceptionDescription || 'JS exception');
-    }
+      if ('error' in response) {
+        throw new ExecutionError(response.error);
+      }
 
-    return stringifyRemoteObject(response.object);
+      if (response.exceptionDetails) {
+        const exceptionDescription = response.exceptionDetails.exception?.description;
+        if (SDK.RuntimeModel.RuntimeModel.isSideEffectFailure(response)) {
+          throw new SideEffectError(exceptionDescription);
+        }
+        throw new ExecutionError(exceptionDescription || 'JS exception');
+      }
+
+      return stringifyRemoteObject(response.object);
+    } finally {
+      executionContext.runtimeModel.releaseEvaluationResult(response);
+    }
   }
 }

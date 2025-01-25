@@ -12,7 +12,7 @@ module.exports = {
       category: 'Possible Errors',
     },
     messages: {
-      'moreThanOneScreenshotAssertionFound': 'A test must only have a single screenshot assertion inside.',
+      moreThanOneScreenshotAssertionFound: 'A test must only have a single screenshot assertion inside.',
     },
     fixable: 'code',
     schema: []  // no options
@@ -62,7 +62,7 @@ module.exports = {
       const totalScreenshotAssertions = countScreenshotAssertions(bodyNodes);
       if (totalScreenshotAssertions > 1) {
         context.report({
-          node: node,
+          node,
           messageId: 'moreThanOneScreenshotAssertionFound',
         });
       }

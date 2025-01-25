@@ -137,12 +137,30 @@ class CONTENT_EXPORT WebAuthenticationDelegate {
 
   // DeletePasskey removes a passkey from the credential storage provider using
   // the provided credential ID and relying party ID.
-  virtual void DeletePasskey(BrowserContext* browser_context,
+  virtual void DeletePasskey(content::WebContents* web_contents,
                              const std::vector<uint8_t>& passkey_credential_id,
                              const std::string& relying_party_id);
 
-  // Invokes the callback with true when passkeys provided by browser sync are
-  // available for use, and false otherwise. The callback can be invoked
+  // DeleteUnacceptedPasskeys removes any non-appearing credential in the
+  // all_accepted_credentials_ids list from the credential storage provider for
+  // the given relying party ID and user ID.
+  virtual void DeleteUnacceptedPasskeys(
+      content::WebContents* web_contents,
+      const std::string& relying_party_id,
+      const std::vector<uint8_t>& user_id,
+      const std::vector<std::vector<uint8_t>>& all_accepted_credentials_ids);
+
+  // UpdateUserPasskeys updates the name and display name of a passkey for the
+  // given relying party ID and user ID.
+  virtual void UpdateUserPasskeys(content::WebContents* web_contents,
+                                  const url::Origin& origin,
+                                  const std::string& relying_party_id,
+                                  std::vector<uint8_t>& user_id,
+                                  const std::string& name,
+                                  const std::string& display_name);
+
+  // Invokes the callback with true when passkeys provided by browser sync
+  // are available for use, and false otherwise. The callback can be invoked
   // synchronously or asynchronously.
   virtual void BrowserProvidedPasskeysAvailable(
       BrowserContext* browser_context,
@@ -275,23 +293,6 @@ class CONTENT_EXPORT AuthenticatorRequestClientDelegate
       base::RepeatingCallback<
           void(device::FidoRequestHandlerBase::BlePermissionCallback)>
           request_ble_permission_callback);
-
-  // Invokes |callback| with |true| if the given relying party ID is permitted
-  // to receive attestation certificates from the provided FidoAuthenticator.
-  // Otherwise invokes |callback| with |false|.
-  //
-  // If |is_enterprise_attestation| is true then that authenticator has asserted
-  // that |relying_party_id| is known to it and the attesation has no
-  // expectations of privacy.
-  //
-  // Since these certificates may uniquely identify the authenticator, the
-  // embedder may choose to show a permissions prompt to the user, and only
-  // invoke |callback| afterwards. This may hairpin |callback|.
-  virtual void ShouldReturnAttestation(
-      const std::string& relying_party_id,
-      const device::FidoAuthenticator* authenticator,
-      bool is_enterprise_attestation,
-      base::OnceCallback<void(bool)> callback);
 
   // ConfigureDiscoveries optionally configures |fido_discovery_factory|.
   //

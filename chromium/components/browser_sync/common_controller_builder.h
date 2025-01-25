@@ -16,10 +16,12 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "components/supervised_user/core/common/buildflags.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 
 class GoogleGroupsManager;
 class PrefService;
+class SharingMessageBridge;
+class TemplateURLService;
 
 namespace autofill {
 class AutofillWebDataService;
@@ -94,12 +96,16 @@ class SessionSyncService;
 
 namespace syncer {
 class DeviceInfoSyncService;
-class ModelTypeController;
-class ModelTypeControllerDelegate;
-class ModelTypeStoreService;
+class DataTypeController;
+class DataTypeControllerDelegate;
+class DataTypeStoreService;
 class SyncService;
 class UserEventService;
 }  // namespace syncer
+
+namespace tab_groups {
+class TabGroupSyncService;
+}  // namespace tab_groups
 
 namespace version_info {
 enum class Channel;
@@ -115,7 +121,7 @@ class NoteSyncService;
 
 namespace browser_sync {
 
-// Class responsible for instantiating sync controllers (ModelTypeController)
+// Class responsible for instantiating sync controllers (DataTypeController)
 // for most sync datatypes / features. This includes datatypes that are
 // supported or planned on all major platforms. Users of this class need to
 // inject dependencies by invoking all setters (more on this below) and finally
@@ -129,7 +135,6 @@ class CommonControllerBuilder {
   // before invoking `Build()`. In some cases it is allowed to inject nullptr.
   void SetAutofillWebDataService(
       const scoped_refptr<base::SequencedTaskRunner>& ui_thread,
-      const scoped_refptr<base::SequencedTaskRunner>& db_thread,
       const scoped_refptr<autofill::AutofillWebDataService>&
           web_data_service_on_disk,
       const scoped_refptr<autofill::AutofillWebDataService>&
@@ -148,8 +153,8 @@ class CommonControllerBuilder {
   void SetGoogleGroupsManager(GoogleGroupsManager* google_groups_manager);
   void SetHistoryService(history::HistoryService* history_service);
   void SetIdentityManager(signin::IdentityManager* identity_manager);
-  void SetModelTypeStoreService(
-      syncer::ModelTypeStoreService* model_type_store_service);
+  void SetDataTypeStoreService(
+      syncer::DataTypeStoreService* data_type_store_service);
 
 #if !BUILDFLAG(IS_ANDROID)
   void SetPasskeyModel(webauthn::PasskeyModel* passkey_model);
@@ -181,6 +186,7 @@ class CommonControllerBuilder {
                                        send_tab_to_self_sync_service);
   void SetSessionSyncService(
       sync_sessions::SessionSyncService* session_sync_service);
+  void SetSharingMessageBridge(SharingMessageBridge* sharing_message_bridge);
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   void SetSupervisedUserSettingsService(
@@ -188,12 +194,15 @@ class CommonControllerBuilder {
           supervised_user_settings_service);
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
+  void SetTabGroupSyncService(
+      tab_groups::TabGroupSyncService* tab_group_sync_service);
+  void SetTemplateURLService(TemplateURLService* template_url_service);
   void SetUserEventService(syncer::UserEventService* user_event_service);
 
   // Actually builds the controllers. All setters above must have been called
   // beforehand (null may or may not be allowed).
-  std::vector<std::unique_ptr<syncer::ModelTypeController>> Build(
-      syncer::ModelTypeSet disabled_types,
+  std::vector<std::unique_ptr<syncer::DataTypeController>> Build(
+      syncer::DataTypeSet disabled_types,
       syncer::SyncService* sync_service,
       version_info::Channel channel);
 
@@ -220,22 +229,20 @@ class CommonControllerBuilder {
       return ptr_.value();
     }
 
-    void Reset() { ptr_.reset(); }
-
    private:
     std::optional<Ptr> ptr_;
   };
 
-  // Factory function for ModelTypeController instances for wallet-related
+  // Factory function for DataTypeController instances for wallet-related
   // datatypes, which live in `db_thread_` and have a delegate accessible via
   // AutofillWebDataService.
   // If `with_transport_mode_support` is true, the controller will support
   // transport mode, implemented via an independent AutofillWebDataService,
   // namely `web_data_service_in_memory_`.
-  std::unique_ptr<syncer::ModelTypeController> CreateWalletModelTypeController(
-      syncer::ModelType type,
+  std::unique_ptr<syncer::DataTypeController> CreateWalletDataTypeController(
+      syncer::DataType type,
       const base::RepeatingCallback<
-          base::WeakPtr<syncer::ModelTypeControllerDelegate>(
+          base::WeakPtr<syncer::DataTypeControllerDelegate>(
               autofill::AutofillWebDataService*)>& delegate_from_web_data,
       syncer::SyncService* sync_service,
       bool with_transport_mode_support);
@@ -249,8 +256,7 @@ class CommonControllerBuilder {
   SafeOptional<raw_ptr<favicon::FaviconService>> favicon_service_;
   SafeOptional<raw_ptr<GoogleGroupsManager>> google_groups_manager_;
   SafeOptional<raw_ptr<history::HistoryService>> history_service_;
-  SafeOptional<raw_ptr<syncer::ModelTypeStoreService>>
-      model_type_store_service_;
+  SafeOptional<raw_ptr<syncer::DataTypeStoreService>> data_type_store_service_;
   SafeOptional<raw_ptr<webauthn::PasskeyModel>> passkey_model_;
   SafeOptional<raw_ptr<password_manager::PasswordReceiverService>>
       password_receiver_service_;
@@ -268,8 +274,6 @@ class CommonControllerBuilder {
   SafeOptional<raw_ptr<syncer::UserEventService>> user_event_service_;
   SafeOptional<scoped_refptr<base::SequencedTaskRunner>>
       autofill_web_data_ui_thread_;
-  SafeOptional<scoped_refptr<base::SequencedTaskRunner>>
-      autofill_web_data_db_thread_;
   SafeOptional<scoped_refptr<autofill::AutofillWebDataService>>
       autofill_web_data_service_on_disk_;
   SafeOptional<scoped_refptr<autofill::AutofillWebDataService>>
@@ -294,6 +298,10 @@ class CommonControllerBuilder {
   SafeOptional<raw_ptr<commerce::ProductSpecificationsService>>
       product_specifications_service_;
   SafeOptional<raw_ptr<data_sharing::DataSharingService>> data_sharing_service_;
+  SafeOptional<raw_ptr<SharingMessageBridge>> sharing_message_bridge_;
+  SafeOptional<raw_ptr<tab_groups::TabGroupSyncService>>
+      tab_group_sync_service_;
+  SafeOptional<raw_ptr<TemplateURLService>> template_url_service_;
 
   // Vivaldi
   SafeOptional<raw_ptr<sync_notes::NoteSyncService>> note_sync_service_;

@@ -1,21 +1,23 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       auto_decoder.c
-/// \brief      Autodetect between .xz Stream and .lzma (LZMA_Alone) formats
+/// \brief      Autodetect between .xz, .lzma (LZMA_Alone), and .lz (lzip)
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "stream_decoder.h"
 #include "alone_decoder.h"
+#ifdef HAVE_LZIP_DECODER
+#	include "lzip_decoder.h"
+#endif
 
 
-struct lzma_coder_s {
-	/// Stream decoder or LZMA_Alone decoder
+typedef struct {
+	/// .xz Stream decoder, LZMA_Alone decoder, or lzip decoder
 	lzma_next_coder next;
 
 	uint64_t memlimit;
@@ -26,15 +28,17 @@ struct lzma_coder_s {
 		SEQ_CODE,
 		SEQ_FINISH,
 	} sequence;
-};
+} lzma_auto_coder;
 
 
 static lzma_ret
-auto_decode(lzma_coder *coder, lzma_allocator *allocator,
+auto_decode(void *coder_ptr, const lzma_allocator *allocator,
 		const uint8_t *restrict in, size_t *restrict in_pos,
 		size_t in_size, uint8_t *restrict out,
 		size_t *restrict out_pos, size_t out_size, lzma_action action)
 {
+	lzma_auto_coder *coder = coder_ptr;
+
 	switch (coder->sequence) {
 	case SEQ_INIT:
 		if (*in_pos >= in_size)
@@ -44,14 +48,22 @@ auto_decode(lzma_coder *coder, lzma_allocator *allocator,
 		// SEQ_CODE even if we return some LZMA_*_CHECK.
 		coder->sequence = SEQ_CODE;
 
-		// Detect the file format. For now this is simple, since if
-		// it doesn't start with 0xFD (the first magic byte of the
-		// new format), it has to be LZMA_Alone, or something that
-		// we don't support at all.
+		// Detect the file format. .xz files start with 0xFD which
+		// cannot be the first byte of .lzma (LZMA_Alone) format.
+		// The .lz format starts with 0x4C which could be the
+		// first byte of a .lzma file but luckily it would mean
+		// lc/lp/pb being 4/3/1 which liblzma doesn't support because
+		// lc + lp > 4. So using just 0x4C to detect .lz is OK here.
 		if (in[*in_pos] == 0xFD) {
 			return_if_error(lzma_stream_decoder_init(
 					&coder->next, allocator,
 					coder->memlimit, coder->flags));
+#ifdef HAVE_LZIP_DECODER
+		} else if (in[*in_pos] == 0x4C) {
+			return_if_error(lzma_lzip_decoder_init(
+					&coder->next, allocator,
+					coder->memlimit, coder->flags));
+#endif
 		} else {
 			return_if_error(lzma_alone_decoder_init(&coder->next,
 					allocator, coder->memlimit, true));
@@ -84,8 +96,8 @@ auto_decode(lzma_coder *coder, lzma_allocator *allocator,
 	// Fall through
 
 	case SEQ_FINISH:
-		// When LZMA_DECODE_CONCATENATED was used and we were decoding
-		// LZMA_Alone file, we need to check check that there is no
+		// When LZMA_CONCATENATED was used and we were decoding
+		// a LZMA_Alone file, we need to check that there is no
 		// trailing garbage and wait for LZMA_FINISH.
 		if (*in_pos < in_size)
 			return LZMA_DATA_ERROR;
@@ -100,8 +112,9 @@ auto_decode(lzma_coder *coder, lzma_allocator *allocator,
 
 
 static void
-auto_decoder_end(lzma_coder *coder, lzma_allocator *allocator)
+auto_decoder_end(void *coder_ptr, const lzma_allocator *allocator)
 {
+	lzma_auto_coder *coder = coder_ptr;
 	lzma_next_end(&coder->next, allocator);
 	lzma_free(coder, allocator);
 	return;
@@ -109,8 +122,10 @@ auto_decoder_end(lzma_coder *coder, lzma_allocator *allocator)
 
 
 static lzma_check
-auto_decoder_get_check(const lzma_coder *coder)
+auto_decoder_get_check(const void *coder_ptr)
 {
+	const lzma_auto_coder *coder = coder_ptr;
+
 	// It is LZMA_Alone if get_check is NULL.
 	return coder->next.get_check == NULL ? LZMA_CHECK_NONE
 			: coder->next.get_check(coder->next.coder);
@@ -118,9 +133,11 @@ auto_decoder_get_check(const lzma_coder *coder)
 
 
 static lzma_ret
-auto_decoder_memconfig(lzma_coder *coder, uint64_t *memusage,
+auto_decoder_memconfig(void *coder_ptr, uint64_t *memusage,
 		uint64_t *old_memlimit, uint64_t new_memlimit)
 {
+	lzma_auto_coder *coder = coder_ptr;
+
 	lzma_ret ret;
 
 	if (coder->next.memconfig != NULL) {
@@ -132,7 +149,10 @@ auto_decoder_memconfig(lzma_coder *coder, uint64_t *memusage,
 		// the current memory usage.
 		*memusage = LZMA_MEMUSAGE_BASE;
 		*old_memlimit = coder->memlimit;
+
 		ret = LZMA_OK;
+		if (new_memlimit != 0 && new_memlimit < *memusage)
+			ret = LZMA_MEMLIMIT_ERROR;
 	}
 
 	if (ret == LZMA_OK && new_memlimit != 0)
@@ -143,32 +163,31 @@ auto_decoder_memconfig(lzma_coder *coder, uint64_t *memusage,
 
 
 static lzma_ret
-auto_decoder_init(lzma_next_coder *next, lzma_allocator *allocator,
+auto_decoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		uint64_t memlimit, uint32_t flags)
 {
 	lzma_next_coder_init(&auto_decoder_init, next, allocator);
 
-	if (memlimit == 0)
-		return LZMA_PROG_ERROR;
-
 	if (flags & ~LZMA_SUPPORTED_FLAGS)
 		return LZMA_OPTIONS_ERROR;
 
-	if (next->coder == NULL) {
-		next->coder = lzma_alloc(sizeof(lzma_coder), allocator);
-		if (next->coder == NULL)
+	lzma_auto_coder *coder = next->coder;
+	if (coder == NULL) {
+		coder = lzma_alloc(sizeof(lzma_auto_coder), allocator);
+		if (coder == NULL)
 			return LZMA_MEM_ERROR;
 
+		next->coder = coder;
 		next->code = &auto_decode;
 		next->end = &auto_decoder_end;
 		next->get_check = &auto_decoder_get_check;
 		next->memconfig = &auto_decoder_memconfig;
-		next->coder->next = LZMA_NEXT_CODER_INIT;
+		coder->next = LZMA_NEXT_CODER_INIT;
 	}
 
-	next->coder->memlimit = memlimit;
-	next->coder->flags = flags;
-	next->coder->sequence = SEQ_INIT;
+	coder->memlimit = my_max(1, memlimit);
+	coder->flags = flags;
+	coder->sequence = SEQ_INIT;
 
 	return LZMA_OK;
 }

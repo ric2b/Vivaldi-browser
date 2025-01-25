@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android x86 Builder (dbg)",
-              "project": "chromium-m128"
+              "project": "chromium-m130"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -39,10 +39,11 @@
         {
           "bucket": "ci",
           "builder": "Android x86 Builder (dbg)",
-          "project": "chromium-m128"
+          "project": "chromium-m130"
         }
       ],
-      "is_compile_only": true
+      "is_compile_only": true,
+      "targets_spec_directory": "src/infra/config/generated/builders/try/android_compile_x86_dbg/targets"
     }
   },
   "$build/flakiness": {

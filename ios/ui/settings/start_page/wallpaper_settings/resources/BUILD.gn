@@ -1,26 +1,71 @@
 # Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-group("imagesets") {
-  deps = [
-    ":add_image_plus",
-    ":pinch"
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
+  sources = [
+    # add_image_plus
+    "Assets.xcassets/add_image_plus.imageset/Contents.json",
+    "Assets.xcassets/add_image_plus.imageset/add_image_plus.pdf",
+
+    # pinch
+    "Assets.xcassets/pinch.imageset/Contents.json",
+    "Assets.xcassets/pinch.imageset/pinch.png",
+    "Assets.xcassets/pinch.imageset/pinch@2x.png",
+    "Assets.xcassets/pinch.imageset/pinch@3x.png",
   ]
 }
 
-imageset("add_image_plus") {
+bundle_data_xcassets("wallpaper_assets") {
+  catalog = "Wallpapers.xcassets"
   sources = [
-    "add_image_plus.imageset/Contents.json",
-    "add_image_plus.imageset/add_image_plus.pdf"
-  ]
-}
+    # ios_background_01
+    "Wallpapers.xcassets/ios_background_01.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_01.imageset/ios_background_01.jpg",
 
-imageset("pinch") {
-  sources = [
-    "pinch.imageset/Contents.json",
-    "pinch.imageset/pinch.png",
-    "pinch.imageset/pinch@2x.png",
-    "pinch.imageset/pinch@3x.png"
+    # ios_background_02
+    "Wallpapers.xcassets/ios_background_02.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_02.imageset/ios_background_02.jpg",
+
+    # ios_background_03
+    "Wallpapers.xcassets/ios_background_03.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_03.imageset/ios_background_03.jpg",
+
+    # ios_background_04
+    "Wallpapers.xcassets/ios_background_04.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_04.imageset/ios_background_04.jpg",
+
+    # ios_background_05
+    "Wallpapers.xcassets/ios_background_05.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_05.imageset/ios_background_05.jpg",
+
+    # ios_background_06
+    "Wallpapers.xcassets/ios_background_06.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_06.imageset/ios_background_06.jpg",
+
+    # ios_background_07
+    "Wallpapers.xcassets/ios_background_07.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_07.imageset/ios_background_07.jpg",
+
+    # ios_background_08
+    "Wallpapers.xcassets/ios_background_08.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_08.imageset/ios_background_08.jpg",
+
+    # ios_background_09
+    "Wallpapers.xcassets/ios_background_09.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_09.imageset/ios_background_09.jpg",
+
+    # ios_background_10
+    "Wallpapers.xcassets/ios_background_10.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_10.imageset/ios_background_10.jpg",
+
+    # ios_background_11
+    "Wallpapers.xcassets/ios_background_11.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_11.imageset/ios_background_11.jpg",
+
+    # ios_background_12
+    "Wallpapers.xcassets/ios_background_12.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_12.imageset/ios_background_12.jpg",
   ]
 }

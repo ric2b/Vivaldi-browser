@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <memory>
 #include <sstream>
 #include <vector>
@@ -25,16 +30,20 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/cert_verifier_browser_test.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
+#include "chrome/browser/ui/passwords/passwords_model_delegate.h"
+#include "chrome/browser/webauthn/authenticator_request_dialog_controller.h"
 #include "chrome/browser/webauthn/authenticator_transport.h"
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
 #include "chrome/browser/webauthn/test_util.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/password_manager/core/common/password_manager_ui.h"
 #include "components/sync/base/features.h"
 #include "components/sync/protocol/webauthn_credential_specifics.pb.h"
+#include "components/webauthn/core/browser/passkey_change_quota_tracker.h"
 #include "components/webauthn/core/browser/test_passkey_model.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/render_frame_host.h"
@@ -210,8 +219,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, ChromeExtensions) {
   </body>
 </html>
 )";
-  WriteFile(temp_dir.GetPath().AppendASCII(kPageFile), kContents,
-            sizeof(kContents) - 1);
+  WriteFile(temp_dir.GetPath().AppendASCII(kPageFile), kContents);
 
   static constexpr char kExtensionSite[] = "https://extension-site.com/";
   static constexpr char kWebAccessibleResources[] =
@@ -431,9 +439,28 @@ class WebAuthnGpmPasskeyTest : public WebAuthnBrowserTest {
     WebAuthnBrowserTest::PostRunTestOnMainThread();
   }
 
+  void SetUpInProcessBrowserTestFixture() override {
+    WebAuthnBrowserTest::SetUpInProcessBrowserTestFixture();
+    subscription_ =
+        BrowserContextDependencyManager::GetInstance()
+            ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
+                &WebAuthnGpmPasskeyTest::OnWillCreateBrowserContextServices,
+                base::Unretained(this)));
+  }
+
  protected:
+  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
+    PasskeyModelFactory::GetInstance()->SetTestingFactory(
+        context,
+        base::BindRepeating(
+            [](content::BrowserContext*) -> std::unique_ptr<KeyedService> {
+              return std::make_unique<webauthn::TestPasskeyModel>();
+            }));
+  }
+
   std::unique_ptr<Observer> observer_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  base::CallbackListSubscription subscription_;
 };
 
 // Tests that chrome filters out GPM passkeys that don't appear on a request
@@ -444,12 +471,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest, FilterGPMPasskeys) {
 
   // Set up two GPM passkeys.
   auto* passkey_model = static_cast<webauthn::TestPasskeyModel*>(
-      PasskeyModelFactory::GetInstance()->SetTestingFactoryAndUse(
-          browser()->profile(),
-          base::BindRepeating(
-              [](content::BrowserContext*) -> std::unique_ptr<KeyedService> {
-                return std::make_unique<webauthn::TestPasskeyModel>();
-              })));
+      PasskeyModelFactory::GetForProfile(browser()->profile()));
   passkey_model->AddNewPasskeyForTesting(CreateWebAuthnCredentialSpecifics(
       kCredentialID, kUserId1, kUsername1, kDisplayName1));
   passkey_model->AddNewPasskeyForTesting(CreateWebAuthnCredentialSpecifics(
@@ -489,31 +511,23 @@ IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest, FilterGPMPasskeys) {
               testing::ElementsAre(expected));
 }
 
-IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest, ReportGPMPasskeys) {
+IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest,
+                       SignalUnknownCredentialGPMPasskeys) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_.GetURL("www.example.com", "/title1.html")));
 
-  // Set up GPM Passkey
+  // Set up GPM Passkey.
   auto* passkey_model = static_cast<webauthn::TestPasskeyModel*>(
-      PasskeyModelFactory::GetInstance()->SetTestingFactoryAndUse(
-          browser()->profile(),
-          base::BindRepeating(
-              [](content::BrowserContext*) -> std::unique_ptr<KeyedService> {
-                return std::make_unique<webauthn::TestPasskeyModel>();
-              })));
-
+      PasskeyModelFactory::GetForProfile(browser()->profile()));
   passkey_model->AddNewPasskeyForTesting(CreateWebAuthnCredentialSpecifics(
       kCredentialID, kUserId1, kUsername1, kDisplayName1));
 
   // Reports the credential ID matching the passkey created.
   EXPECT_TRUE(ExecJs(browser()->tab_strip_model()->GetActiveWebContents(),
                      R"(
-  navigator.credentials.report({
-    publicKey: {
-      rpId: "www.example.com",
-      unknownCredentialId:
-        new Uint8Array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]),
-    }
+  PublicKeyCredential.signalUnknownCredential({
+    rpId: "www.example.com",
+    credentialId: "AQIDBAUGBwgJCgsMDQ4PEA",
   }).then(c => 'webauthn: OK', e => 'error ' + e);
   )"));
 
@@ -521,6 +535,269 @@ IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest, ReportGPMPasskeys) {
   // list, so the vector of passkeys matching the relying party should be empty.
   EXPECT_TRUE(
       passkey_model->GetPasskeysForRelyingPartyId("www.example.com").empty());
+}
+
+IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest,
+                       SignalAllAcceptedCredsNoPasskeyDeletion) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("www.example.com", "/title1.html")));
+  // Set up GPM Passkey.
+  auto* passkey_model = static_cast<webauthn::TestPasskeyModel*>(
+      PasskeyModelFactory::GetForProfile(browser()->profile()));
+  passkey_model->AddNewPasskeyForTesting(CreateWebAuthnCredentialSpecifics(
+      kCredentialID, kUserId1, kUsername1, kDisplayName1));
+
+  // Reports the user ID and credential ID matching the created passkey.
+  // The passkey will not be deleted.
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      R"(
+  PublicKeyCredential.signalAllAcceptedCredentials({
+    rpId: "www.example.com",
+    userId: "AQIDBA",
+    allAcceptedCredentialIds: ["AQIDBAUGBwgJCgsMDQ4PEA"],
+  }).then(c => 'webauthn: OK', e => 'error ' + e);
+  )"));
+
+  // Check that the passkey with kCredentialID was not deleted.
+  EXPECT_TRUE(passkey_model->GetPasskeyByCredentialId(
+      "www.example.com",
+      std::string(reinterpret_cast<const char*>(kCredentialID), 16)));
+
+  password_manager::ui::State model_state =
+      PasswordsModelDelegateFromWebContents(
+          browser()->tab_strip_model()->GetActiveWebContents())
+          ->GetState();
+
+  // If the model_state is INACTIVE_STATE, it means that DeletePasskey didn't
+  // run, and hence the Passkey Not Accepted bubble did not show up.
+  EXPECT_EQ(model_state, password_manager::ui::INACTIVE_STATE);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest,
+                       SignalAllAcceptedCredsPasskeyDeletion) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("www.example.com", "/title1.html")));
+  // Set up GPM Passkey.
+  auto* passkey_model = static_cast<webauthn::TestPasskeyModel*>(
+      PasskeyModelFactory::GetForProfile(browser()->profile()));
+  passkey_model->AddNewPasskeyForTesting(CreateWebAuthnCredentialSpecifics(
+      kCredentialID2, kUserId2, kUsername2, kDisplayName2));
+
+  // Reports the user ID that matches the passkey created with an empty
+  // allCurrentCredentialIds. The passkey will be deleted.
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      R"(
+  PublicKeyCredential.signalAllAcceptedCredentials({
+    rpId: "www.example.com",
+    userId: "BQYHCA",
+    allAcceptedCredentialIds: [],
+  }).then(c => 'webauthn: OK', e => 'error ' + e);
+  )"));
+
+  // Check that the passkey with kCredentialID2 was deleted.
+  EXPECT_FALSE(passkey_model->GetPasskeyByCredentialId(
+      "www.example.com",
+      std::string(reinterpret_cast<const char*>(kCredentialID2), 16)));
+
+  password_manager::ui::State model_state =
+      PasswordsModelDelegateFromWebContents(
+          browser()->tab_strip_model()->GetActiveWebContents())
+          ->GetState();
+
+  // Check if the Passkey Not Accepted bubble showed up.
+  EXPECT_EQ(model_state, password_manager::ui::PASSKEY_NOT_ACCEPTED_STATE);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest, ReportInvalidStrings) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("www.example.com", "/title1.html")));
+
+  // This should fail with a TypeError due to an invalid base64url
+  // string in the userId.
+  EXPECT_THAT(
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(), R"(
+  PublicKeyCredential.signalAllAcceptedCredentials({
+      rpId: "www.example.com",
+      userId: "a/+c+/c",
+      allAcceptedCredentialIds: ["AQIDBAUGBwgJCgsMDQ4PEA"],
+  }).then(c => 'webauthn: OK', e => 'error ' + e);
+  )")
+          .ExtractString(),
+      testing::HasSubstr("Invalid base64url string for userId."));
+
+  // This should fail with a TypeError due to an invalid base64url
+  // string in the allAcceptedCredentialIds list.
+  EXPECT_THAT(
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(), R"(
+  PublicKeyCredential.signalAllAcceptedCredentials({
+    rpId: "www.example.com",
+    userId: "BQYHCA",
+    allAcceptedCredentialIds: ["/a+/b+/c"],
+  }).then(c => 'webauthn: OK', e => 'error ' + e);
+  )")
+          .ExtractString(),
+      testing::HasSubstr(
+          "Invalid base64url string for allAcceptedCredentialIds."));
+
+  // This should fail with a TypeError due to an invalid base64url
+  // string in the userId of signalCurrentUserDetails;
+  EXPECT_THAT(
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      R"(
+  PublicKeyCredential.signalCurrentUserDetails({
+    rpId: "www.example.com",
+    userId: "A+/+A",
+    name: "Pepito",
+    displayName: "Pepito The Cat",
+  }).then(c => 'webauthn: OK', e => 'error ' + e);
+  )")
+          .ExtractString(),
+      testing::HasSubstr("Invalid base64url string for userId."));
+
+  // This should fail with a TypeError due to an invalid base64url
+  // string in the credentialId report.
+  EXPECT_THAT(
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      R"(
+  PublicKeyCredential.signalUnknownCredential({
+    rpId: "www.example.com",
+    credentialId: "A+/+A",
+  }).then(c => 'webauthn: OK', e => 'error ' + e);
+  )")
+          .ExtractString(),
+      testing::HasSubstr("Invalid base64url string for credentialId."));
+}
+
+IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest,
+                       SignalCurrentUserDetailsGPMPasskeys) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("www.example.com", "/title1.html")));
+
+  // Set up GPM Passkey.
+  auto* passkey_model = static_cast<webauthn::TestPasskeyModel*>(
+      PasskeyModelFactory::GetForProfile(browser()->profile()));
+  passkey_model->AddNewPasskeyForTesting(CreateWebAuthnCredentialSpecifics(
+      kCredentialID, kUserId1, kUsername1, kDisplayName1));
+
+  // Reports the user ID that matches the passkey created with the
+  // current user details.
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      R"(
+  PublicKeyCredential.signalCurrentUserDetails({
+    rpId: "www.example.com",
+    userId: "AQIDBA",
+    name: "Pepito",
+    displayName: "Pepito The Cat",
+  }).then(c => 'webauthn: OK', e => 'error ' + e);
+  )"));
+
+  auto passkey = passkey_model->GetPasskeyByCredentialId(
+      "www.example.com",
+      std::string(reinterpret_cast<const char*>(kCredentialID), 16));
+
+  // Check if the name and displayName of the passkey reported was updated.
+  EXPECT_EQ(passkey->user_name(), "Pepito");
+  EXPECT_EQ(passkey->user_display_name(), "Pepito The Cat");
+
+  password_manager::ui::State model_state =
+      PasswordsModelDelegateFromWebContents(
+          browser()->tab_strip_model()->GetActiveWebContents())
+          ->GetState();
+
+  // Check if the Passkey Updated bubble showed up.
+  EXPECT_EQ(model_state,
+            password_manager::ui::PASSKEY_UPDATED_CONFIRMATION_STATE);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest, SignalCurrentUserDetailsQuota) {
+  constexpr char kRequest[] = R"(
+    PublicKeyCredential.signalCurrentUserDetails({
+      rpId: "www.example.com",
+      userId: "AQIDBA",
+      name: "$1",
+      displayName: "Pepito The Cat",
+    }).then(c => 'webauthn: OK', e => 'error ' + e);
+    )";
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("www.example.com", "/title1.html")));
+
+  // Set up GPM Passkey.
+  auto* passkey_model = static_cast<webauthn::TestPasskeyModel*>(
+      PasskeyModelFactory::GetForProfile(browser()->profile()));
+  passkey_model->AddNewPasskeyForTesting(CreateWebAuthnCredentialSpecifics(
+      kCredentialID, kUserId1, kUsername1, kDisplayName1));
+
+  // Call the signal methods enough that we run into the quota.
+  for (int i = 0; i < webauthn::PasskeyChangeQuotaTracker::kMaxTokensPerRP;
+       ++i) {
+    EXPECT_EQ(
+        "webauthn: OK",
+        content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                        base::ReplaceStringPlaceholders(
+                            kRequest, {base::NumberToString(i)}, nullptr)));
+  }
+
+  // This request should be silently dropped now.
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(
+          browser()->tab_strip_model()->GetActiveWebContents(),
+          base::ReplaceStringPlaceholders(kRequest, {kUsername1}, nullptr)));
+
+  // Check that the name hasn't been updated.
+  auto passkey = passkey_model->GetPasskeyByCredentialId(
+      "www.example.com",
+      std::string(reinterpret_cast<const char*>(kCredentialID), 16));
+  EXPECT_NE(passkey->user_name(), kUsername1);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAuthnGpmPasskeyTest,
+                       SignalCurrentUserDetailsWithNoChanges) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("www.example.com", "/title1.html")));
+
+  // Set up GPM Passkey.
+  auto* passkey_model = static_cast<webauthn::TestPasskeyModel*>(
+      PasskeyModelFactory::GetForProfile(browser()->profile()));
+  passkey_model->AddNewPasskeyForTesting(CreateWebAuthnCredentialSpecifics(
+      kCredentialID, kUserId1, kUsername1, kDisplayName1));
+
+  // Reports the user ID that matches the passkey created with the
+  // current user details.
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      R"(
+  PublicKeyCredential.signalCurrentUserDetails({
+    rpId: "www.example.com",
+    userId: "AQIDBA",
+    name: "flandre",
+    displayName: "Flandre Scarlet",
+  }).then(c => 'webauthn: OK', e => 'error ' + e);
+  )"));
+
+  auto passkey = passkey_model->GetPasskeyByCredentialId(
+      "www.example.com",
+      std::string(reinterpret_cast<const char*>(kCredentialID), 16));
+
+  // Check if the name and displayName of the passkey reported did not change.
+  EXPECT_EQ(passkey->user_name(), kUsername1);
+  EXPECT_EQ(passkey->user_display_name(), kDisplayName1);
+
+  password_manager::ui::State model_state =
+      PasswordsModelDelegateFromWebContents(
+          browser()->tab_strip_model()->GetActiveWebContents())
+          ->GetState();
+
+  // If the model_state is INACTIVE_STATE, it means that UpdatePasskey didn't
+  // run, and hence the Passkey Updated bubble did not show up.
+  EXPECT_EQ(model_state, password_manager::ui::INACTIVE_STATE);
 }
 
 class WebAuthnHintsTest : public WebAuthnBrowserTest {

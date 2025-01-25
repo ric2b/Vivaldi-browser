@@ -96,7 +96,7 @@ export class Model extends EventTarget {
     // progress (if they have any updates).
     const onTraceUpdate = (event: Event): void => {
       const {data} = event as TraceParseProgressEvent;
-      this.dispatchEvent(new ModelUpdateEvent({type: ModelUpdateType.PROGRESS_UPDATE, data: data}));
+      this.dispatchEvent(new ModelUpdateEvent({type: ModelUpdateType.PROGRESS_UPDATE, data}));
     };
 
     this.#processor.addEventListener(TraceParseProgressEvent.eventName, onTraceUpdate);
@@ -112,7 +112,7 @@ export class Model extends EventTarget {
     try {
       // Wait for all outstanding promises before finishing the async execution,
       // but perform all tasks in parallel.
-      const syntheticEventsManager = Helpers.SyntheticEvents.SyntheticEventsManager.initAndActivate(traceEvents);
+      const syntheticEventsManager = Helpers.SyntheticEvents.SyntheticEventsManager.createAndActivate(traceEvents);
       await this.#processor.parse(traceEvents, isFreshRecording);
       this.#storeParsedFileData(file, this.#processor.traceParsedData, this.#processor.insights);
       // We only push the file onto this.#traces here once we know it's valid
@@ -193,6 +193,7 @@ export class Model extends EventTarget {
 
     return this.#traces[index].traceEvents;
   }
+
   syntheticTraceEventsManager(index: number = this.#traces.length - 1): Helpers.SyntheticEvents.SyntheticEventsManager
       |null {
     if (!this.#syntheticEventsManagerByTrace[index]) {
@@ -247,8 +248,7 @@ export type ModelUpdateEventProgress = {
 };
 
 export type TraceParseEventProgressData = {
-  index: number,
-  total: number,
+  percent: number,
 };
 
 export class ModelUpdateEvent extends Event {

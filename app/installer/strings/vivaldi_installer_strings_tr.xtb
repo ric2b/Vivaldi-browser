@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Taşınabilir olarak yükle</translation>
 <translation id="1682285232070778125">Vivaldi'yi varsayılan tarayıcı olarak ayarla</translation>
 <translation id="1974060860693918893">Gelişmiş</translation>
+<translation id="2053560788696003312">Vivaldi Windows 10 ve daha yukarısını gerektiriyor.</translation>
 <translation id="2134216661302048561">Vivaldi Yükleyicisi, Vivaldi Tarayıcısını yükleme işlemini bitiremedi. Şimdi çıkmak istediğinize emin misiniz?</translation>
 <translation id="2286454467119466181">Basit</translation>
 <translation id="237789874664518125">Telif Hakkı <ph name="YEAR" /> Vivaldi Technologies AS. Tüm hakları saklıdır. &lt;a&gt;Gizlilik Politikası&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Kabul Et ve Güncelle</translation>
 <translation id="5302048478445481009">Dil</translation>
 <translation id="694714344624446243">Vivaldi Yükleyicisi</translation>
+<translation id="7467493612551448880">Kurmak üzere olduğunuz Vivaldi sürümü kullandığınız Windows sürümü ile en iyi şekilde çalışmamaktadır
+
+vivaldi.com/download adresine gidin ve Arm üzerindeki Windows sürümünü indirin.</translation>
 <translation id="7658239707568436148">İptal</translation>
 <translation id="8773751185824654197">Not: Çalışan bir Vivaldi tarayıcısını güncelliyorsanız, tarayıcı kapatılıp yeniden başlatılacaktır</translation>
 <translation id="933060950687965486">Kurulum Türü</translation>

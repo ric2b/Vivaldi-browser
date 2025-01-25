@@ -1409,7 +1409,7 @@ TEST_F(DragDropControllerTest, DragTabDoesNotCrashOnSourceWindowDestruction) {
             generator.ReleaseLeftButton();
             break;
           default:
-            NOTREACHED_IN_MIGRATION();
+            NOTREACHED();
         }
       }),
       base::DoNothing());
@@ -1703,6 +1703,29 @@ TEST_F(DragDropControllerTest, DragImageWidgetNotCreatedIfNoImage) {
       std::move(data), window->GetRootWindow(), window, gfx::Point(5, 5),
       ui::DragDropTypes::DRAG_MOVE, ui::mojom::DragEventSource::kMouse);
   EXPECT_TRUE(GetDragImageWindow());
+}
+
+TEST_F(DragDropControllerTest, ObserverNotifiedOfDestruction) {
+  NiceMock<MockDragDropObserver> drag_drop_observer(
+      drag_drop_controller_.get());
+  EXPECT_CALL(drag_drop_observer, OnDragDropClientDestroying).WillOnce([&]() {
+    drag_drop_observer.ResetObservation();
+  });
+
+  std::unique_ptr<views::Widget> widget = CreateFramelessWidget();
+  DragTestView* drag_view = new DragTestView;
+  AddViewToWidgetAndResize(widget.get(), drag_view);
+  ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(),
+                                     widget->GetNativeView());
+  generator.PressLeftButton();
+
+  int num_drags = 17;
+  for (int i = 0; i < num_drags; ++i) {
+    generator.MoveMouseBy(0, 1);
+  }
+
+  aura::client::SetDragDropClient(Shell::GetPrimaryRootWindow(), NULL);
+  drag_drop_controller_.reset();
 }
 
 // Verifies drag-and-drop with a data transfer policy controller.

@@ -14,7 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/algorithm/container.h"
 #include "util/stringprintf.h"
 
 namespace openscreen {
@@ -69,7 +68,8 @@ void RemoveValueFromMap(std::map<Key, Value*>* map, Value* value) {
 
 template <typename ForwardIteratingContainer>
 bool AreElementsSortedAndUnique(const ForwardIteratingContainer& c) {
-  return absl::c_is_sorted(c) && (absl::c_adjacent_find(c) == c.end());
+  return std::is_sorted(c.begin(), c.end()) &&
+         std::adjacent_find(c.begin(), c.end()) == c.end();
 }
 
 template <typename RandomAccessContainer>

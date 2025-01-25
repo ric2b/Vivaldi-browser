@@ -272,8 +272,11 @@ void ManifestDemuxer::OnEnabledAudioTracksChanged(
     base::TimeDelta curr_time,
     TrackChangeCB change_completed_cb) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  chunk_demuxer_->OnEnabledAudioTracksChanged(track_ids, curr_time,
-                                              std::move(change_completed_cb));
+  chunk_demuxer_->OnEnabledAudioTracksChanged(
+      MapTrackIds(track_ids), curr_time,
+      base::BindOnce(&ManifestDemuxer::MapDemuxerStreams,
+                     weak_factory_.GetWeakPtr(),
+                     std::move(change_completed_cb)));
 }
 
 void ManifestDemuxer::OnSelectedVideoTrackChanged(
@@ -281,8 +284,11 @@ void ManifestDemuxer::OnSelectedVideoTrackChanged(
     base::TimeDelta curr_time,
     TrackChangeCB change_completed_cb) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  chunk_demuxer_->OnSelectedVideoTrackChanged(track_ids, curr_time,
-                                              std::move(change_completed_cb));
+  chunk_demuxer_->OnSelectedVideoTrackChanged(
+      MapTrackIds(track_ids), curr_time,
+      base::BindOnce(&ManifestDemuxer::MapDemuxerStreams,
+                     weak_factory_.GetWeakPtr(),
+                     std::move(change_completed_cb)));
 }
 
 void ManifestDemuxer::SetPlaybackRate(double rate) {
@@ -376,7 +382,6 @@ void ManifestDemuxer::EvictCodedFrames(std::string_view role,
 }
 
 bool ManifestDemuxer::AppendAndParseData(std::string_view role,
-                                         base::TimeDelta start,
                                          base::TimeDelta end,
                                          base::TimeDelta* offset,
                                          base::span<const uint8_t> data) {
@@ -385,8 +390,8 @@ bool ManifestDemuxer::AppendAndParseData(std::string_view role,
     return false;
   }
   while (true) {
-    switch (chunk_demuxer_->RunSegmentParserLoop(std::string(role), start, end,
-                                                 offset)) {
+    switch (chunk_demuxer_->RunSegmentParserLoop(
+        std::string(role), base::TimeDelta(), end, offset)) {
       case StreamParser::ParseStatus::kSuccess:
         return true;
       case StreamParser::ParseStatus::kSuccessHasMoreData:
@@ -395,6 +400,14 @@ bool ManifestDemuxer::AppendAndParseData(std::string_view role,
         return false;
     }
   }
+}
+
+void ManifestDemuxer::ResetParserState(std::string_view role,
+                                       base::TimeDelta end,
+                                       base::TimeDelta* offset) {
+  CHECK(chunk_demuxer_);
+  return chunk_demuxer_->ResetParserState(std::string(role), base::TimeDelta(),
+                                          end, offset);
 }
 
 void ManifestDemuxer::OnError(PipelineStatus error) {
@@ -590,15 +603,21 @@ void ManifestDemuxer::OnChunkDemuxerParseWarning(
 void ManifestDemuxer::OnChunkDemuxerTracksChanged(
     std::string role,
     std::unique_ptr<MediaTracks> tracks) {
-  MEDIA_LOG(WARNING, media_log_) << "TracksChanged for role: " << role;
+  for (const auto& track : tracks->tracks()) {
+    if (track->enabled()) {
+      if (track->type() == MediaTrack::Type::kVideo) {
+        internal_video_track_id_ = track->track_id();
+      } else if (track->type() == MediaTrack::Type::kAudio) {
+        internal_audio_track_id_ = track->track_id();
+      }
+    }
+  }
 }
 
 void ManifestDemuxer::OnEncryptedMediaData(EmeInitDataType type,
                                            const std::vector<uint8_t>& data) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  // TODO(crbug.com/40057824): This will be required for iOS support in the
-  // future.
-  NOTIMPLEMENTED();
+  OnError(PIPELINE_ERROR_INVALID_STATE);
 }
 
 void ManifestDemuxer::OnDemuxerStreamRead(
@@ -616,6 +635,32 @@ void ManifestDemuxer::OnDemuxerStreamRead(
   }
 
   std::move(wrapped_read_cb).Run(status, std::move(buffers));
+}
+
+void ManifestDemuxer::MapDemuxerStreams(
+    TrackChangeCB cb,
+    const std::vector<DemuxerStream*>& streams) {
+  std::vector<DemuxerStream*> mapped_streams;
+  for (const auto* const stream : streams) {
+    mapped_streams.push_back(streams_.at(stream).get());
+  }
+  std::move(cb).Run(mapped_streams);
+}
+
+std::vector<MediaTrack::Id> ManifestDemuxer::MapTrackIds(
+    const std::vector<MediaTrack::Id>& track_ids) {
+  std::vector<MediaTrack::Id> chunk_demuxer_ids;
+  for (const auto& track_id : track_ids) {
+    // TODO(crbug/40057824): replace track binding when we expose multiple
+    // tracks for renditions and variants.
+    if (track_id.value() == "audio" && internal_audio_track_id_.has_value()) {
+      chunk_demuxer_ids.push_back(*internal_audio_track_id_);
+    }
+    if (track_id.value() == "video" && internal_video_track_id_.has_value()) {
+      chunk_demuxer_ids.push_back(*internal_video_track_id_);
+    }
+  }
+  return chunk_demuxer_ids;
 }
 
 }  // namespace media

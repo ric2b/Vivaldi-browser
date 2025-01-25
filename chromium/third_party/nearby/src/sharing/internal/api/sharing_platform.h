@@ -15,8 +15,10 @@
 #ifndef THIRD_PARTY_NEARBY_SHARING_INTERNAL_API_SHARING_PLATFORM_H_
 #define THIRD_PARTY_NEARBY_SHARING_INTERNAL_API_SHARING_PLATFORM_H_
 
+#include <filesystem>  // NOLINT
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -32,7 +34,6 @@
 #include "sharing/internal/api/preference_manager.h"
 #include "sharing/internal/api/public_certificate_database.h"
 #include "sharing/internal/api/sharing_rpc_client.h"
-#include "sharing/internal/api/shell.h"
 #include "sharing/internal/api/system_info.h"
 #include "sharing/internal/api/wifi_adapter.h"
 
@@ -44,6 +45,10 @@ constexpr char kSharingPreferencesFilePath[] = "Google/Nearby/Sharing";
 class SharingPlatform {
  public:
   virtual ~SharingPlatform() = default;
+
+  // Provide a function ptr that is used to retrieve the Omaha product ID.
+  virtual void InitProductIdGetter(
+      absl::string_view (*product_id_getter)()) = 0;
 
   // This function should only be called once.
   virtual void InitLogging(absl::string_view log_file_base_name) = 0;
@@ -59,24 +64,9 @@ class SharingPlatform {
 
   virtual WifiAdapter& GetWifiAdapter() = 0;
 
-  virtual void LaunchDefaultBrowserFromURL(
-      absl::string_view url, std::function<void(absl::Status)> callback) = 0;
-
-  virtual nearby::api::Shell& GetShell() = 0;
-
   virtual nearby::api::FastInitBleBeacon& GetFastInitBleBeacon() = 0;
 
   virtual nearby::api::FastInitiationManager& GetFastInitiationManager() = 0;
-
-  // Make calls to OS to copy text to clipboard
-  //
-  // @param text is a text to copy to clipboard.
-  // @param callback
-  //
-  // If it is successfully copied, callback provided is executed with
-  // absl::OkStatus. Otherwise, absl::InternalError.
-  virtual void CopyText(absl::string_view text,
-                        std::function<void(absl::Status)> callback) = 0;
 
   // Creates system information class. SystemInfo provides APIs to access
   // system information.
@@ -96,6 +86,12 @@ class SharingPlatform {
   virtual std::unique_ptr<SharingRpcClientFactory>
   CreateSharingRpcClientFactory(
       nearby::sharing::analytics::AnalyticsRecorder* analytics_recorder) = 0;
+
+  // On platforms where it is supported, tag the transferred files as
+  // originating from an untrusted source.
+  // Returns true on success.
+  virtual bool UpdateFileOriginMetadata(
+      std::vector<std::filesystem::path>& file_paths) = 0;
 };
 }  // namespace nearby::sharing::api
 

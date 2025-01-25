@@ -38,7 +38,7 @@ struct short_circuit_eval_impl<Visitor, true> {
 // unrolled inner-outer traversal
 template <typename Visitor, typename Derived, int UnrollCount, bool Vectorize, bool ShortCircuitEvaluation>
 struct visitor_impl<Visitor, Derived, UnrollCount, Vectorize, false, ShortCircuitEvaluation> {
-  // don't use short circuit evaulation for unrolled version
+  // don't use short circuit evaluation for unrolled version
   using Scalar = typename Derived::Scalar;
   using Packet = typename packet_traits<Scalar>::type;
   static constexpr bool RowMajor = Derived::IsRowMajor;
@@ -93,7 +93,7 @@ struct visitor_impl<Visitor, Derived, UnrollCount, Vectorize, false, ShortCircui
 // unrolled linear traversal
 template <typename Visitor, typename Derived, int UnrollCount, bool Vectorize, bool ShortCircuitEvaluation>
 struct visitor_impl<Visitor, Derived, UnrollCount, Vectorize, true, ShortCircuitEvaluation> {
-  // don't use short circuit evaulation for unrolled version
+  // don't use short circuit evaluation for unrolled version
   using Scalar = typename Derived::Scalar;
   using Packet = typename packet_traits<Scalar>::type;
   static constexpr int PacketSize = packet_traits<Scalar>::size;

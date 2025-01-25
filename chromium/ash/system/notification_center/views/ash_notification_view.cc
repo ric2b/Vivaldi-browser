@@ -102,7 +102,6 @@
 #include "ui/views/metadata/view_factory_internal.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/view.h"
-#include "ui/views/view_class_properties.h"
 
 namespace {
 
@@ -188,7 +187,8 @@ views::Builder<views::View> CreateMainRightViewBuilder() {
       .SetLayoutManager(std::move(layout_manager))
       .SetProperty(
           views::kFlexBehaviorKey,
-          views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+          views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                                   views::MinimumFlexSizeRule::kScaleToZero,
                                    views::MaximumFlexSizeRule::kUnbounded));
 }
 
@@ -292,8 +292,6 @@ using Orientation = views::BoxLayout::Orientation;
 
 BEGIN_METADATA(AshNotificationView, NotificationTitleRow)
 END_METADATA
-
-DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(AshNotificationView, kBubbleIdForTesting);
 
 void AshNotificationView::AddedToWidget() {
   MessageView::AddedToWidget();
@@ -460,8 +458,6 @@ AshNotificationView::AshNotificationView(
     set_drag_controller(
         Shell::Get()->message_center_controller()->drag_controller());
   }
-
-  SetProperty(views::kElementIdentifierKey, kBubbleIdForTesting);
 
   message_center_observer_.Observe(message_center::MessageCenter::Get());
   // TODO(crbug.com/40780100): fix views and layout to match spec.
@@ -1527,6 +1523,11 @@ AshNotificationView::GetActionButtonsForTest() {
 
 views::Label* AshNotificationView::GetTitleRowLabelForTest() {
   return title_row_->title_view();
+}
+
+message_center::NotificationInputContainer*
+AshNotificationView::GetInlineReplyForTest() {
+  return inline_reply();
 }
 
 void AshNotificationView::OnNotificationRemoved(

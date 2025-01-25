@@ -32,8 +32,8 @@ import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
-import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityCredentialTokenError;
+import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderData;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderMetadata;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerItemDecoration;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -108,7 +108,10 @@ public class AccountSelectionCoordinator
         // Setup the bottom sheet content view.
         mBottomSheetContent =
                 new AccountSelectionBottomSheetContent(
-                        contentView, mSheetItemListView::computeVerticalScrollOffset, rpMode);
+                        contentView,
+                        mBottomSheetController,
+                        mSheetItemListView::computeVerticalScrollOffset,
+                        rpMode);
 
         ImageFetcher imageFetcher =
                 ImageFetcherFactory.createImageFetcher(
@@ -202,20 +205,11 @@ public class AccountSelectionCoordinator
             String rpEtldPlusOne,
             String idpEtldPlusOne,
             List<Account> accounts,
-            IdentityProviderMetadata idpMetadata,
-            ClientIdMetadata clientMetadata,
+            IdentityProviderData idpData,
             boolean isAutoReauthn,
-            @RpContext.EnumType int rpContext,
-            boolean requestPermission) {
+            List<Account> newAccounts) {
         mMediator.showAccounts(
-                rpEtldPlusOne,
-                idpEtldPlusOne,
-                accounts,
-                idpMetadata,
-                clientMetadata,
-                isAutoReauthn,
-                rpContext,
-                requestPermission);
+                rpEtldPlusOne, idpEtldPlusOne, accounts, idpData, isAutoReauthn, newAccounts);
     }
 
     @Override

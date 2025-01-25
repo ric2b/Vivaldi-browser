@@ -23,6 +23,7 @@
 <translation id="1325473901257014816">Вы можете синхронизировать все вкладки Vivaldi между всеми устройствами.</translation>
 <translation id="132683371494960526">Двойное касание для смены родительский папки.</translation>
 <translation id="1341156196125040601">Выберите размещение адресной панели.</translation>
+<translation id="1344236299365524156">Нравится Vivaldi?</translation>
 <translation id="1354002567845495520">Синхронизировать заметки (без вложений)</translation>
 <translation id="1365181765792690850">Включение опции может привести к поломке некоторых веб-сайтов или изображений. Требуется перезагрузка.</translation>
 <translation id="1379470994139227452">Назначить Vivaldi основным</translation>
@@ -30,6 +31,7 @@
 <translation id="1383876407941801731">Поиск</translation>
 <translation id="1397515084080510783">Нет вкладок для синхронизации</translation>
 <translation id="1410197035576869800">Иконка приложения</translation>
+<translation id="1430308140197327248">Показать полный адрес</translation>
 <translation id="1430638949087011281">Отключена</translation>
 <translation id="1446108955355168157">Для защиты синхронизированных данных (пароли, закладки, заметки и прочее) создайте Мастер-пароль. Мы не будем иметь к нему доступа.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> заметок</translation>
@@ -46,6 +48,7 @@
 <translation id="1751280147639351837">Блокировщик слежки и рекламы</translation>
 <translation id="1752547299766512813">Сохранить пароли</translation>
 <translation id="1754797958074421486">Условия использования</translation>
+<translation id="1763111582687651119">Включить префиксы поисковиков</translation>
 <translation id="1771413903824396513">По короткому имени</translation>
 <translation id="1804522390855853698">Китайский (<ph name="ORIGIN" />)</translation>
 <translation id="1807246157184219062">Светлая</translation>
@@ -53,7 +56,6 @@
 <translation id="1813686536470127172">Другая папка</translation>
 <translation id="1828800626900562968">Коснитесь значка плюса ниже для создания новой вкладки.</translation>
 <translation id="1861262398884155592">Эта папка пуста</translation>
-<translation id="1887193815546011584">Новая Экспресс-панель</translation>
 <translation id="1929299157575856072">УРОВЕНЬ БЛОКИРОВКИ</translation>
 <translation id="2030706494969937066">Ошибка получения данных. Повторите вход.</translation>
 <translation id="2034405583989639424">Править ссылку</translation>
@@ -66,6 +68,7 @@
 <translation id="2272338747456392228">Учётная запись заблокирована</translation>
 <translation id="2273327106802955778">Больше опций</translation>
 <translation id="2324160330092901720">Код подтверждения отправлен на <ph name="EMAIL_ID" /></translation>
+<translation id="2330644510603114741">Поведение вкладки</translation>
 <translation id="2336309953058658733">Очистить корзину</translation>
 <translation id="2359808026110333948">Дальше</translation>
 <translation id="2386793615875593361">Выбрана 1 заметка</translation>
@@ -92,6 +95,7 @@
 <translation id="2678542925523700624">Эстонский (<ph name="ORIGIN" />)</translation>
 <translation id="2709516037105925701">Данные форм</translation>
 <translation id="271033894570825754">Новая</translation>
+<translation id="2725892265692641195">Новый <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Мастер-пароль</translation>
 <translation id="276436995507680929">Синхронизировать список чтения</translation>
 <translation id="2765217105034171413">Маленький</translation>
@@ -103,18 +107,21 @@
 <translation id="2874111661876416905">Искать используя Vivaldi</translation>
 <translation id="2884735088411646852">Сортировка</translation>
 <translation id="2898963176829412617">Новая папка…</translation>
+<translation id="2918704853620385162">Открывать новую вкладку при закрытии последней</translation>
 <translation id="2924890236896835588">Имя группы</translation>
 <translation id="2961573414320947355">Хотите открывать все ссылки в Vivaldi? Назначьте его основным.</translation>
 <translation id="3006429105107822794">Вам не нужно запоминать пароль. Он будет сохранён в менеджере паролей Vivaldi.</translation>
 <translation id="3018244467214569202">Греческий (<ph name="ORIGIN" />)</translation>
 <translation id="3029426144711327484">На Экспресс-панель</translation>
 <translation id="3039671569659952257">Удалить папку</translation>
+<translation id="3065031457538473619">Приоритет закладок при подсказках автозавершения</translation>
 <translation id="3073196329485613487">Войти в учётную запись</translation>
 <translation id="307859903981308731">Продолжая вы принимаете</translation>
 <translation id="3086746722712840547">заметка</translation>
 <translation id="3087734570205094154">Внизу</translation>
 <translation id="3091563570137981919">Блокировка слежки и рекламы</translation>
 <translation id="3134385238404760368">Нет закрытых вкладок</translation>
+<translation id="3142562627629111859">Новая группа</translation>
 <translation id="3157931365184549694">Восстановить</translation>
 <translation id="3159285901314605198">Фоновый рисунок</translation>
 <translation id="3177673846235066154">Сервер не принял ваши данные.</translation>
@@ -135,7 +142,6 @@
 <translation id="3513566764071045027">Выйти</translation>
 <translation id="3527085408025491307">Папка</translation>
 <translation id="3530991200302302959">Болгарский (<ph name="ORIGIN" />)</translation>
-<translation id="3536029647154100190">Добавить группу</translation>
 <translation id="3601414719864711130">По дате</translation>
 <translation id="3602290021589620013">Предпросмотр</translation>
 <translation id="3607176258839749451">Произошла ошибка регистрации. Повторите позже.</translation>
@@ -227,8 +233,10 @@
 <translation id="4852383705713307704">Реклама блокирована</translation>
 <translation id="4903325570808402486">Синхронизировать настройки Vivaldi (пока не все)</translation>
 <translation id="4929196061847506605">Мощный. Персональный. Приватный.</translation>
+<translation id="4935075658237181291">Стань спонсором!</translation>
 <translation id="4936710149174207991">Не синхронизировано</translation>
 <translation id="4943266325467647391">Встроенный в Vivaldi блокировщик защищает вас от слежки и рекламы.</translation>
+<translation id="4950266778127803750">Показать кнопку X для фоновых вкладок</translation>
 <translation id="495421405224926623">Я прочитал и согласен с Условиями использования и Политикой приватности</translation>
 <translation id="497942794017668482">Блокировано слежки и рекламы</translation>
 <translation id="4993477362660748586">Синхронизация</translation>
@@ -247,11 +255,11 @@
 <translation id="5245732982828228444">Ваши заметки будут здесь</translation>
 <translation id="5249199221558969362">Введите правдоподобный возраст.</translation>
 <translation id="5271549068863921519">Сохранить пароль</translation>
-<translation id="5273620430932404871">Включить совпадение с именем закладки</translation>
 <translation id="5290452628447338707">Заметок нет</translation>
 <translation id="5317780077021120954">Сохранить</translation>
 <translation id="5349678548463426691">По описанию</translation>
 <translation id="5350737901534958404">Разрешить рекламу партнёров (поддержка Vivaldi)</translation>
+<translation id="5350868038818774118">Совпадение с закладками</translation>
 <translation id="5351912500249789547">Vivaldi.net не принял ваши данные: Код ошибки <ph name="ERROR_CODE" /></translation>
 <translation id="5378841821586202982">Корзина</translation>
 <translation id="5398772614898833570">Реклам блокировано</translation>
@@ -261,6 +269,7 @@
 <translation id="5494016731375030300">Недавно закрытые вкладки</translation>
 <translation id="5564687523685713029">Показать только группы</translation>
 <translation id="5600792731098584229">Размер ячеек</translation>
+<translation id="5607445917275004427">Показывать весь адрес целиком.</translation>
 <translation id="5639137028584114536">Ваша организация требует, чтобы вы работали в сети приватно. Вкладки не сохраняются в приватном режиме.
         <ph name="BEGIN_LINK" />Подробнее<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Список</translation>
@@ -274,6 +283,7 @@
 <translation id="5859825823508296659">Изменить веб-сайт</translation>
 <translation id="5867841422488265304">Введите адрес или поисковый запрос</translation>
 <translation id="5869217094746242845">Подробнее о приватности и безопасности</translation>
+<translation id="587130020764788326">Совпадение по имени</translation>
 <translation id="5871497086027727873">1 заметка перемещена</translation>
 <translation id="5898502570200301364">Вы можете использовать пароли, сохранённые в Менеджере паролей Vivaldi, в других приложениях на iPhone.</translation>
 <translation id="5900160494089383343">Имя пользователя уже занято.</translation>
@@ -294,7 +304,6 @@
 <translation id="6517411226162529295">Запасной ключ шифрования</translation>
 <translation id="6527303717912515753">Поделиться</translation>
 <translation id="6535988230515403205">Польский (<ph name="ORIGIN" />)</translation>
-<translation id="6566198107563125484">Включить совпадение с закладками</translation>
 <translation id="659351303388691480">Удалить данные просмотра...</translation>
 <translation id="6602272356389933803">Внешний вид и темы</translation>
 <translation id="6614744450826097546">Подробности</translation>
@@ -322,6 +331,7 @@
 <translation id="6951948201878750661">Коснитесь, чтобы выбрать цвет</translation>
 <translation id="6967884871145366229">Настройки приватности</translation>
 <translation id="6973630695168034713">Папки</translation>
+<translation id="6976865195058364361">Приоритет имени закладки при подсказках автозавершения</translation>
 <translation id="7006864796794806241">Восстановление пароля</translation>
 <translation id="7029809446516969842">Пароли</translation>
 <translation id="7041964446309059643">Вручную</translation>
@@ -346,6 +356,7 @@
 <translation id="7454640759045234067">Слежек блокировано</translation>
 <translation id="7461899062138731833">СПИСКИ</translation>
 <translation id="7490291412537629707">Открыть в новой фоновой вкладке</translation>
+<translation id="749277285729135008">Фокус в адресной строке на новой вкладке</translation>
 <translation id="750493650310597496">Выбрано 0 заметок</translation>
 <translation id="7525067979554623046">Создать</translation>
 <translation id="753732157349120914">Менеджер вкладок</translation>

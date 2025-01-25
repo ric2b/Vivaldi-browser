@@ -464,7 +464,8 @@ Error BuildValue(Cursor<CharType>* cursor,
                  const CharType* end,
                  int max_depth,
                  JSONCommentState& comment_state,
-                 std::unique_ptr<JSONValue>* result) {
+                 std::unique_ptr<JSONValue>* result,
+                 Vector<String>* duplicate_keys) {
   if (max_depth == 0)
     return Error::kTooMuchNesting;
 
@@ -486,8 +487,11 @@ Error BuildValue(Cursor<CharType>* cursor,
       break;
     case kNumber: {
       bool ok;
-      double value = CharactersToDouble(token_start.pos,
-                                        cursor->pos - token_start.pos, &ok);
+      double value = CharactersToDouble(
+          base::span<const CharType>(
+              token_start.pos.get(),
+              static_cast<size_t>(cursor->pos - token_start.pos)),
+          &ok);
       if (!ok || std::isinf(value)) {
         *cursor = token_start;
         return Error::kSyntaxError;
@@ -518,8 +522,8 @@ Error BuildValue(Cursor<CharType>* cursor,
       while (token != kArrayEnd) {
         *cursor = before_token;
         std::unique_ptr<JSONValue> array_node;
-        error =
-            BuildValue(cursor, end, max_depth - 1, comment_state, &array_node);
+        error = BuildValue(cursor, end, max_depth - 1, comment_state,
+                           &array_node, duplicate_keys);
         if (error != Error::kNoError)
           return error;
         array->PushValue(std::move(array_node));
@@ -574,10 +578,14 @@ Error BuildValue(Cursor<CharType>* cursor,
         }
 
         std::unique_ptr<JSONValue> value;
-        error = BuildValue(cursor, end, max_depth - 1, comment_state, &value);
+        error = BuildValue(cursor, end, max_depth - 1, comment_state, &value,
+                           duplicate_keys);
         if (error != Error::kNoError)
           return error;
-        object->SetValue(key, std::move(value));
+        if (!object->SetValue(key, std::move(value)) &&
+            !duplicate_keys->Contains(key)) {
+          duplicate_keys->push_back(key);
+        }
 
         // After a key/value pair, we expect a comma or the end of the
         // object.
@@ -627,7 +635,8 @@ JSONParseError ParseJSONInternal(const CharType* start_ptr,
   cursor.line_start = start_ptr;
   const CharType* end = start_ptr + length;
   JSONParseError error;
-  error.type = BuildValue(&cursor, end, max_depth, comment_state, result);
+  error.type = BuildValue(&cursor, end, max_depth, comment_state, result,
+                          &error.duplicate_keys);
   error.line = cursor.line;
   error.column = static_cast<int>(cursor.pos - cursor.line_start);
   if (error.type != Error::kNoError) {

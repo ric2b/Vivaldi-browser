@@ -1,8 +1,9 @@
-SKIP: FAILED
+SKIP: INVALID
 
 cbuffer cbuffer_a : register(b0) {
   uint4 a[4];
 };
+RWByteAddressBuffer s : register(u1);
 
 matrix<float16_t, 4, 2> a_load_1(uint offset) {
   const uint scalar_offset = ((offset + 0u)) / 4;
@@ -29,9 +30,15 @@ a_load_ret a_load(uint offset) {
 
 [numthreads(1, 1, 1)]
 void f() {
-  const matrix<float16_t, 4, 2> l_a[4] = a_load(0u);
-  const matrix<float16_t, 4, 2> l_a_i = a_load_1(32u);
+  matrix<float16_t, 4, 2> l_a[4] = a_load(0u);
+  matrix<float16_t, 4, 2> l_a_i = a_load_1(32u);
   uint ubo_load_4 = a[2].y;
-  const vector<float16_t, 2> l_a_i_i = vector<float16_t, 2>(float16_t(f16tof32(ubo_load_4 & 0xFFFF)), float16_t(f16tof32(ubo_load_4 >> 16)));
+  vector<float16_t, 2> l_a_i_i = vector<float16_t, 2>(float16_t(f16tof32(ubo_load_4 & 0xFFFF)), float16_t(f16tof32(ubo_load_4 >> 16)));
+  s.Store<float16_t>(0u, (((float16_t(f16tof32(((a[2].y) & 0xFFFF))) + l_a[0][0].x) + l_a_i[0].x) + l_a_i_i.x));
   return;
 }
+FXC validation failure:
+<scrubbed_path>(6,8-16): error X3000: syntax error: unexpected token 'float16_t'
+
+
+tint executable returned error: exit status 1

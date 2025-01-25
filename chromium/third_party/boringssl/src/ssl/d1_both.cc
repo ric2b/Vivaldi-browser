@@ -584,6 +584,11 @@ bool dtls1_add_message(SSL *ssl, Array<uint8_t> data) {
 }
 
 bool dtls1_add_change_cipher_spec(SSL *ssl) {
+  // DTLS 1.3 disables compatibility mode, which means that DTLS 1.3 never sends
+  // a ChangeCipherSpec message.
+  if (ssl_protocol_version(ssl) > TLS1_2_VERSION) {
+    return true;
+  }
   return add_outgoing(ssl, true /* ChangeCipherSpec */, Array<uint8_t>());
 }
 
@@ -624,16 +629,8 @@ static enum seal_result_t seal_next_message(SSL *ssl, uint8_t *out,
   assert(ssl->d1->outgoing_written < ssl->d1->outgoing_messages_len);
   assert(msg == &ssl->d1->outgoing_messages[ssl->d1->outgoing_written]);
 
-  enum dtls1_use_epoch_t use_epoch = dtls1_use_current_epoch;
-  if (ssl->d1->w_epoch >= 1 && msg->epoch == ssl->d1->w_epoch - 1) {
-    use_epoch = dtls1_use_previous_epoch;
-  } else if (msg->epoch != ssl->d1->w_epoch) {
-    OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
-    return seal_error;
-  }
-
-  size_t overhead = dtls_max_seal_overhead(ssl, use_epoch);
-  size_t prefix = dtls_seal_prefix_len(ssl, use_epoch);
+  size_t overhead = dtls_max_seal_overhead(ssl, msg->epoch);
+  size_t prefix = dtls_seal_prefix_len(ssl, msg->epoch);
 
   if (msg->is_ccs) {
     // Check there is room for the ChangeCipherSpec.
@@ -644,7 +641,7 @@ static enum seal_result_t seal_next_message(SSL *ssl, uint8_t *out,
 
     if (!dtls_seal_record(ssl, out, out_len, max_out,
                           SSL3_RT_CHANGE_CIPHER_SPEC, kChangeCipherSpec,
-                          sizeof(kChangeCipherSpec), use_epoch)) {
+                          sizeof(kChangeCipherSpec), msg->epoch)) {
       return seal_error;
     }
 
@@ -697,7 +694,7 @@ static enum seal_result_t seal_next_message(SSL *ssl, uint8_t *out,
                       MakeSpan(frag, frag_len));
 
   if (!dtls_seal_record(ssl, out, out_len, max_out, SSL3_RT_HANDSHAKE,
-                        out + prefix, frag_len, use_epoch)) {
+                        out + prefix, frag_len, msg->epoch)) {
     return seal_error;
   }
 

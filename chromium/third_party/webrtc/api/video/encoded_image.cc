@@ -13,6 +13,13 @@
 #include <stdlib.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <optional>
+
+#include "api/make_ref_counted.h"
+#include "api/scoped_refptr.h"
+#include "api/units/timestamp.h"
+#include "rtc_base/checks.h"
 
 namespace webrtc {
 
@@ -81,14 +88,14 @@ webrtc::Timestamp EncodedImage::CaptureTime() const {
                               : Timestamp::MinusInfinity();
 }
 
-absl::optional<size_t> EncodedImage::SpatialLayerFrameSize(
+std::optional<size_t> EncodedImage::SpatialLayerFrameSize(
     int spatial_index) const {
   RTC_DCHECK_GE(spatial_index, 0);
   RTC_DCHECK_LE(spatial_index, spatial_index_.value_or(0));
 
   auto it = spatial_layer_frame_size_bytes_.find(spatial_index);
   if (it == spatial_layer_frame_size_bytes_.end()) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   return it->second;

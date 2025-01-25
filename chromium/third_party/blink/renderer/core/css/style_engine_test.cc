@@ -81,7 +81,7 @@
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
-#include "ui/base/ui_base_types.h"
+#include "ui/base/mojom/window_show_state.mojom-blink.h"
 #include "ui/gfx/geometry/size_f.h"
 
 namespace blink {
@@ -2914,7 +2914,8 @@ TEST_F(StyleEngineTest, ColorSchemeBaseBackgroundChange) {
   mojom::blink::ColorScheme color_scheme = mojom::blink::ColorScheme::kLight;
   Color system_background_color = LayoutTheme::GetTheme().SystemColor(
       CSSValueID::kCanvas, color_scheme,
-      GetDocument().GetColorProviderForPainting(color_scheme));
+      GetDocument().GetColorProviderForPainting(color_scheme),
+      GetDocument().IsInWebAppScope());
 
   EXPECT_EQ(system_background_color,
             GetDocument().View()->BaseBackgroundColor());
@@ -4017,10 +4018,13 @@ TEST_F(StyleEngineTest, MediaQueriesChangeDisplayState) {
             GetDocument().body()->GetComputedStyle()->VisitedDependentColor(
                 GetCSSPropertyBackgroundColor()));
 
-  WTF::Vector<std::pair<ui::WindowShowState, Color>> test_cases = {
-      {ui::SHOW_STATE_MINIMIZED, Color::FromRGB(/*cyan*/ 0, 255, 255)},
-      {ui::SHOW_STATE_MAXIMIZED, Color::FromRGB(/*red*/ 255, 0, 0)},
-      {ui::SHOW_STATE_FULLSCREEN, Color::FromRGB(/*blue*/ 0, 0, 255)}};
+  WTF::Vector<std::pair<ui::mojom::blink::WindowShowState, Color>> test_cases =
+      {{ui::mojom::blink::WindowShowState::kMinimized,
+        Color::FromRGB(/*cyan*/ 0, 255, 255)},
+       {ui::mojom::blink::WindowShowState::kMaximized,
+        Color::FromRGB(/*red*/ 255, 0, 0)},
+       {ui::mojom::blink::WindowShowState::kFullscreen,
+        Color::FromRGB(/*blue*/ 0, 0, 255)}};
 
   for (const auto& [show_state, color] : test_cases) {
     GetFrame().GetSettings()->SetWindowShowState(show_state);
@@ -4229,6 +4233,56 @@ TEST_F(StyleEngineSimTest, ColorSchemeBaseBackgroundWhileRenderBlocking) {
 
   main_resource.Finish();
   css_resource.Finish();
+}
+
+TEST_F(StyleEngineSimTest, IFramePreferredColorScheme) {
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
+
+  SimRequest main_resource("https://example.com", "text/html");
+  SimRequest frame_resource("https://example.com/frame.html", "text/html");
+
+  LoadURL("https://example.com");
+
+  main_resource.Complete(R"HTML(
+    <!doctype html>
+    <iframe id="frame" src="https://example.com/frame.html"></iframe>
+  )HTML");
+
+  frame_resource.Complete(R"HTML(
+    <!doctype html>
+    <style>
+      @media (prefers-color-scheme: light) {
+        body { background: lime; }
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: green; }
+      }
+    </style>
+  )HTML");
+
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+
+  auto* frame_element = To<HTMLIFrameElement>(
+      GetDocument().getElementById(AtomicString("frame")));
+  auto* frame_document = frame_element->contentDocument();
+  ASSERT_TRUE(frame_document);
+  EXPECT_EQ(mojom::blink::PreferredColorScheme::kLight,
+            GetDocument().GetStyleEngine().GetPreferredColorScheme());
+  EXPECT_EQ(mojom::blink::PreferredColorScheme::kLight,
+            frame_document->GetStyleEngine().GetPreferredColorScheme());
+
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
+  test::RunPendingTasks();
+  Compositor().BeginFrame();
+
+  EXPECT_EQ(mojom::blink::PreferredColorScheme::kDark,
+            GetDocument().GetStyleEngine().GetPreferredColorScheme());
+  EXPECT_EQ(mojom::blink::PreferredColorScheme::kDark,
+            frame_document->GetStyleEngine().GetPreferredColorScheme());
 }
 
 TEST_F(StyleEngineContainerQueryTest, UpdateStyleAndLayoutTreeForContainer) {
@@ -6851,8 +6905,6 @@ TEST_F(StyleEngineTest, InitialStyleCount_EnsureComputedStyle) {
 }
 
 TEST_F(StyleEngineTest, UseCountCSSAnchorPositioning) {
-  ScopedCSSAnchorPositioningForTest enabled(true);
-
   EXPECT_FALSE(IsUseCounted(WebFeature::kCSSAnchorPositioning));
 
   SetBodyInnerHTML("<style>#foo { top: anchor(top); }");
@@ -6867,426 +6919,7 @@ TEST_F(StyleEngineTest, UseCountCSSAnchorPositioning) {
   EXPECT_TRUE(IsUseCounted(WebFeature::kCSSAnchorPositioning));
 }
 
-TEST_F(StyleEngineTest, UseCountCSSDeclarationAfterNestedRule) {
-  //
-  // The use-counter should not trigger for the following cases:
-  //
-
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-    </style>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-      }
-    </style>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        & {
-          top: 10px;
-        }
-      }
-    </style>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  // Relative selector.
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        > .a {
-          top: 10px;
-        }
-      }
-    </style>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  // Relaxed nesting.
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        div {
-          top: 10px;
-        }
-      }
-    </style>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  // Nested group rule.
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        @media (width) {
-          top: 10px;
-        }
-      }
-    </style>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  // Deep nesting.
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        .a {
-          .b {
-            left: 10px;
-          }
-        }
-      }
-    </style>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  //
-  // The use-counter should trigger for the following cases:
-  //
-
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        & {
-          top: 10px;
-        }
-        background-color: red;
-      }
-    </style>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  // Relative selector.
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        > .a {
-          top: 10px;
-        }
-        background-color: red;
-      }
-    </style>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  // Nested group rule.
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        @media (width) {
-          top: 10px;
-        }
-        background-color: red;
-      }
-    </style>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  // Relaxed nesting.
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        span {
-          top: 10px;
-        }
-        background-color: red;
-      }
-    </style>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-
-  // Deep nesting.
-  ClearUseCounter(WebFeature::kCSSDeclarationAfterNestedRule);
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-        .a {
-          .b {
-            left: 10px;
-          }
-          top: 10px;
-        }
-      }
-    </style>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSDeclarationAfterNestedRule));
-}
-
-TEST_F(StyleEngineTest, UseCountCSSBareDeclarationRequiresShift_Empty) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest, UseCountCSSBareDeclarationRequiresShift_NoNesting) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        color: green;
-      }
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest,
-       UseCountCSSBareDeclarationRequiresShift_TrailingUncontested) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        & { color: pink; }
-        width: 100px;
-      }
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest,
-       UseCountCSSBareDeclarationRequiresShift_TrailingDuplicate) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        width: 50px;
-        & { color: pink; }
-        width: 100px;
-      }
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest, UseCountCSSBareDeclarationRequiresShift_LaterRuleWins) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        & { color: red; }
-        width: 100px;
-      }
-      div {
-        width: 42px;
-      }
-    </style>
-    <div id=a></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest,
-       UseCountCSSBareDeclarationRequiresShift_HigherSpecificityWins) {
-  // Rule with higher specificity overwrites the invisible rule.
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      #a {
-        width: 42px;
-      }
-      div {
-        & { width: 33px; }
-        width: 100px;
-      }
-    </style>
-    <div id=a></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest,
-       UseCountCSSBareDeclarationRequiresShift_ExplicitAmpersand) {
-  // The explicit '&' rule matches with specificity equal to :is(.a,.x.y.z),
-  // but the invisible rule expanded into the full/unwrapped selector list
-  // at parse time, and matches with the specificity of just '.a'.
-  // Therefore the invisible rule doesn't make a difference here.
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      .a, .x.y.z {
-        & { width: 33px; }
-        width: 100px;
-      }
-    </style>
-    <div class=a></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest, UseCountCSSBareDeclarationRequiresShift_TrailingWin) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        & { width: 33px; }
-        width: 100px;
-      }
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest,
-       UseCountCSSBareDeclarationRequiresShift_TrailingWinMedia) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div {
-        @media (width) {
-          width: 33px;
-        }
-        width: 100px;
-      }
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest,
-       UseCountCSSBareDeclarationRequiresShift_TrailingWinSelectorList) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      h1, h2, h3, div {
-        & { width: 33px; }
-        width: 100px;
-      }
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest, UseCountCSSBareDeclarationRequiresShift_DeeplyNested) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      .a {
-        &.b {
-          &.c {
-            & { width: 33px; }
-            width: 100px;
-          }
-        }
-      }
-    </style>
-    <div class="a b c"></div>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest, UseCountCSSNestedGroupRuleSpecificity_NoNesting) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSNestedGroupRuleSpecificity));
-}
-
-TEST_F(StyleEngineTest, UseCountCSSNestedGroupRuleSpecificity_NoContest) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div, .x.y.z {
-        @media (width) {
-          width: 33px;
-        }
-      }
-    </style>
-    <div></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSNestedGroupRuleSpecificity));
-}
-
-TEST_F(StyleEngineTest, UseCountCSSNestedGroupRuleSpecificity_LaterRuleWins) {
-  // Lowering the specificity of the implicit &-rule does not matter here,
-  // because there is anyway another rule with even higher specificity that
-  // wins the cascade.
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div, .x.y.z {
-        @media (width) {
-          width: 33px;
-        }
-      }
-      :is(div, .x.y.z.w) {
-        width: 100px;
-      }
-    </style>
-    <div class=a></div>
-  )HTML");
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSNestedGroupRuleSpecificity));
-}
-
-TEST_F(StyleEngineTest,
-       UseCountCSSNestedGroupRuleSpecificity_LaterRuleIsAffected) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div, .x.y.z {
-        @media (width) {
-          width: 33px;
-        }
-      }
-      div {
-        width: 100px;
-      }
-    </style>
-    <div class=a></div>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSNestedGroupRuleSpecificity));
-}
-
-TEST_F(StyleEngineTest,
-       UseCountCSSNestedGroupRuleSpecificity_NoBareDeclarationShift) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      div, .x.y.z {
-        @media (width) {
-          width: 33px;
-          div:where(&) {
-            width: 100px;
-          }
-        }
-      }
-    </style>
-    <div class=a></div>
-  )HTML");
-  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSNestedGroupRuleSpecificity));
-
-  // The kBareDeclarationShift should at no point have been set
-  // by nested group rules.
-  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSBareDeclarationShift));
-}
-
-TEST_F(StyleEngineTest, EnsureDraggableRegionTriggersRelayout) {
+TEST_F(StyleEngineTest, EnsureAppRegionTriggersRelayout) {
   frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view_impl = web_view_helper.Initialize();
   web_view_impl->SetSupportsDraggableRegions(true);
@@ -7314,7 +6947,7 @@ TEST_F(StyleEngineTest, EnsureDraggableRegionTriggersRelayout) {
   Element* drag_element = document->getElementById(AtomicString("drag-region"));
 
   auto regions = document->DraggableRegions();
-  auto* it =
+  auto it =
       std::find_if(regions.begin(), regions.end(),
                    [](blink::DraggableRegionValue s) { return s.draggable; });
   EXPECT_EQ(it, regions.end()) << "There should be no drag regions";

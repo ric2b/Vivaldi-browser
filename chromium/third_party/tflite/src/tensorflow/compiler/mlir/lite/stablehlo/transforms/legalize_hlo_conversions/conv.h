@@ -15,39 +15,44 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_MLIR_LITE_STABLEHLO_TRANSFORMS_LEGALIZE_HLO_CONVERSIONS_CONV_H_
 #define TENSORFLOW_COMPILER_MLIR_LITE_STABLEHLO_TRANSFORMS_LEGALIZE_HLO_CONVERSIONS_CONV_H_
 
+#include "mlir/IR/PatternMatch.h"  // from @llvm-project
 #include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
-#include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
 
 namespace mlir::odml {
 
-// Legalizes mhlo.convolution to the corresponding tfl op.
+// Prepares mhlo.convolutions and legalizes to the corresponding tfl op.
 //
-// Only considers convolutions with nhwc_ohwi_nhwc layout and trivial (no)
-// padding. It is expected that convolutions will re-layouted in upstream
-// prepare pass. Additionally it is expected that padding will be pulled out
-// into an explicit mhlo.pad op in said prepare pass.
+// Note: "tfl-native" layouts are as follows:
+// 2D             : [b, 0, 1, f]x[o, 0, 1, i]->[b, 0, 1, f]
+// 3D             : [b, 0, 1, 2, f]x[0, 1, 2, i, o]->[b, 0, 1, 2, f]
+// 2D (depthwise) : [b, 0, 1, f]x[i, 0, 1, o]->[b, 0, 1, f]
 //
 // Matches: mhlo.convolution
-//   layout:        nhwc_ohwi_nhwc
-//.  padding:       trivial (all 0)
-//   lhs_dilations: trivial (all 1) TODO: b/351437662 - Add support.
-//   rhs_dilations: trivial (all 1)
-//   strides:       trivial (all 1) TODO: b/351437662 - Add support.
-//.  feature_group: trivial (1) TODO: b/351437662 - Add support.
+//   layout:        any (will transpose to tfl-native)
+//   padding:       any (will pull into explicit pad_op)
+//   lhs_dilations: trivial (all 1)
+//   rhs_dilations: any
+//   strides:       any
+//   feature_group: see decision tree below
 //   batch_group:   trivial (1)
 //   reversal:      trivial (all False)
-//.  shape:         static TODO: b/351437662 - Add support for dyn batch.
+//   shape:         static, rank 4 or 5
 //
-// Emits: tfl.conv_2d
-class LegalizeConv : public OpConversionPattern<mhlo::ConvolutionOp> {
- public:
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult matchAndRewrite(
-      mhlo::ConvolutionOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter& rewriter) const final;
-};
+// This pattern emits TFL convs based on the following decision tree:
+// if lhs_dilations are trivial && kernel_out_features == output_features
+//   if feature_group == 1:
+//      if rank == 5: tfl.conv_3D
+//      if rank == 4: tfl.conv_2D
+//   else if input_features == feature_group:
+//      if rank == 4: tfl.depthwise_conv TODO: b/352954597 - Add support.
+//   else:
+//      if rank == 4: tfl.conv_2D
+// else:
+//   tfl.transpose_conv TODO: b/352954597 - Add support.
+void PopulateLegalizeConvPatterns(MLIRContext* ctx, RewritePatternSet& patterns,
+                                  ConversionTarget& target);
 
-bool IsConvLegal(mhlo::ConvolutionOp op);
+void PopulatePrepareConvPatterns(MLIRContext* ctx, RewritePatternSet& patterns);
 
 }  // namespace mlir::odml
 

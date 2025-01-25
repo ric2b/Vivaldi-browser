@@ -44,16 +44,6 @@ FakeFwupdClient* g_fake_instance = nullptr;
 const char kCabFileExtension[] = ".cab";
 const int kSha256Length = 64;
 
-// "1" is the bitflag for an internal device. Defined here:
-// https://github.com/fwupd/fwupd/blob/main/libfwupd/fwupd-enums.h
-const uint64_t kInternalDeviceFlag = 1;
-// "100000000"(9th bit) is the bit release flag for a trusted report.
-// Defined here: https://github.com/fwupd/fwupd/blob/main/libfwupd/fwupd-enums.h
-const uint64_t kTrustedReportsReleaseFlag = 1llu << 8;
-// "10000"(5th bit) is the fwupd feature flag to allow interactive requests.
-// Defined here: https://github.com/fwupd/fwupd/blob/main/libfwupd/fwupd-enums.h
-const uint64_t kRequestsFeatureFlag = 1llu << 4;
-
 // Dict key for the IsInternal device flag.
 const char kIsInternalKey[] = "IsInternal";
 // Dict key for the HasTrustedReport release flag.
@@ -393,6 +383,12 @@ class FwupdClientImpl : public FwupdClient {
       can_parse = false;
     }
 
+    const bool needs_trusted_report =
+        base::FeatureList::IsEnabled(
+            features::kUpstreamTrustedReportsFirmware) &&
+        !features::IsFlexFirmwareUpdateEnabled();
+    FIRMWARE_LOG(DEBUG) << "Trusted reports required: " << needs_trusted_report;
+
     FwupdUpdateList updates;
     while (can_parse && array_reader.HasMoreData()) {
       // Parse update description.
@@ -410,11 +406,11 @@ class FwupdClientImpl : public FwupdClient {
       const std::string* checksum = dict.FindString("Checksum");
       const std::string* remote_id = dict.FindString("RemoteId");
       std::optional<bool> trusted_report = dict.FindBool(kHasTrustedReportKey);
-      bool has_trusted_report =
-          !base::FeatureList::IsEnabled(
-              features::kUpstreamTrustedReportsFirmware) ||
-          (trusted_report.has_value() && trusted_report.value());
+      const bool has_trusted_report =
+          trusted_report.has_value() && trusted_report.value();
       FIRMWARE_LOG(DEBUG) << "Trusted Reports: " << has_trusted_report;
+      const bool missing_trusted_report =
+          needs_trusted_report && !has_trusted_report;
 
       // Skip release if its coming from LVFS and feature flag not enabled
       if (remote_id && *remote_id == "lvfs" &&
@@ -451,7 +447,7 @@ class FwupdClientImpl : public FwupdClient {
       int priority_value = priority.value_or(UpdatePriority::kLow);
 
       const bool success = version && !filepath.empty() &&
-                           !sha_checksum.empty() && has_trusted_report;
+                           !sha_checksum.empty() && !missing_trusted_report;
       // TODO(michaelcheco): Confirm that this is the expected behavior.
       if (success) {
         FIRMWARE_LOG(USER) << "fwupd: Found update version for device: "
@@ -508,7 +504,9 @@ class FwupdClientImpl : public FwupdClient {
 
       std::optional<bool> is_internal = dict.FindBool(kIsInternalKey);
       const std::string* name = dict.FindString("Name");
-      if (is_internal.has_value() && is_internal.value()) {
+      // Ignore internal devices unless firmware updates for Flex are enabled.
+      if (is_internal.has_value() && is_internal.value() &&
+          !features::IsFlexFirmwareUpdateEnabled()) {
         if (name) {
           FIRMWARE_LOG(DEBUG) << "Ignoring internal device: " << *name;
         } else {

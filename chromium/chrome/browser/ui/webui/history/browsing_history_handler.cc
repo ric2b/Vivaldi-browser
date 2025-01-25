@@ -97,8 +97,15 @@ void GetDeviceNameAndType(const syncer::DeviceInfoTracker* tracker,
       case syncer::DeviceInfo::FormFactor::kTablet:
         *type = kDeviceTypeTablet;
         break;
+      // return the laptop icon as default.
       case syncer::DeviceInfo::FormFactor::kUnknown:
-        [[fallthrough]];  // return the laptop icon as default.
+        [[fallthrough]];
+      case syncer::DeviceInfo::FormFactor::kAutomotive:
+        [[fallthrough]];
+      case syncer::DeviceInfo::FormFactor::kWearable:
+        [[fallthrough]];
+      case syncer::DeviceInfo::FormFactor::kTv:
+        [[fallthrough]];
       case syncer::DeviceInfo::FormFactor::kDesktop:
         *type = kDeviceTypeLaptop;
     }
@@ -256,7 +263,7 @@ base::Value::Dict HistoryEntryToValue(
   result.Set("deviceName", device_name);
   result.Set("deviceType", device_type);
 
-  if (supervised_user::IsSubjectToParentalControls(*profile.GetPrefs())) {
+  if (profile.IsChild()) {
     supervised_user::SupervisedUserService* supervised_user_service =
         SupervisedUserServiceFactory::GetForProfile(&profile);
     supervised_user::SupervisedUserURLFilter* url_filter =

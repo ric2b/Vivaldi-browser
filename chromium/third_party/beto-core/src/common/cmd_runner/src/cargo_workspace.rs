@@ -40,9 +40,9 @@ impl CargoWorkspaceSubcommand {
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct CargoOptions {
     #[arg(long, help = "whether to run cargo with --locked")]
-    locked: bool,
+    pub locked: bool,
     #[arg(long, help = "gather coverage metrics")]
-    coverage: bool,
+    pub coverage: bool,
 }
 
 impl CargoOptions {

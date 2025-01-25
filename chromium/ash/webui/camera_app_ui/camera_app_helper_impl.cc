@@ -17,6 +17,7 @@
 #include "chromeos/ash/components/mojo_service_manager/connection.h"
 #include "components/onc/onc_constants.h"
 #include "content/public/browser/web_contents.h"
+#include "media/capture/video/chromeos/camera_sw_privacy_switch_state_observer.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "net/base/url_util.h"
 #include "third_party/cros_system_api/mojo/service_constants.h"
@@ -39,7 +40,7 @@ camera_app::mojom::ScreenState ToMojoScreenState(ScreenBacklightState s) {
     case ScreenBacklightState::OFF_AUTO:
       return camera_app::mojom::ScreenState::kOffAuto;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -52,8 +53,7 @@ camera_app::mojom::LidState ToMojoLidState(cros::mojom::LidState state) {
     case cros::mojom::LidState::kNotPresent:
       return camera_app::mojom::LidState::kNotPresent;
     default:
-      NOTREACHED_IN_MIGRATION()
-          << "Unexpected Lid type: " << static_cast<int>(state);
+      NOTREACHED() << "Unexpected Lid type: " << static_cast<int>(state);
   }
 }
 
@@ -67,7 +67,7 @@ camera_app::mojom::FileMonitorResult ToMojoFileMonitorResult(
     case CameraAppUIDelegate::FileMonitorResult::kError:
       return camera_app::mojom::FileMonitorResult::kError;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -99,8 +99,8 @@ std::string FromMojoSecurityType(
     case camera_app::mojom::WifiSecurityType::kWpa:
       return onc::wifi::kWPA_PSK;
     default:
-      NOTREACHED_IN_MIGRATION()
-          << "Unexpected security type: " << static_cast<int>(security_type);
+      NOTREACHED() << "Unexpected security type: "
+                   << static_cast<int>(security_type);
   }
 }
 
@@ -115,8 +115,7 @@ std::string FromMojoEapMethod(camera_app::mojom::WifiEapMethod eap_method) {
     case camera_app::mojom::WifiEapMethod::kPeap:
       return onc::eap::kPEAP;
     default:
-      NOTREACHED_IN_MIGRATION()
-          << "Unexpected EAP method: " << static_cast<int>(eap_method);
+      NOTREACHED() << "Unexpected EAP method: " << static_cast<int>(eap_method);
   }
 }
 
@@ -138,8 +137,8 @@ std::string FromMojoEapPhase2Method(
     case camera_app::mojom::WifiEapPhase2Method::kPap:
       return onc::eap::kPAP;
     default:
-      NOTREACHED_IN_MIGRATION() << "Unexpected EAP Phase2 method: "
-                                << static_cast<int>(eap_phase2_method);
+      NOTREACHED() << "Unexpected EAP Phase2 method: "
+                   << static_cast<int>(eap_phase2_method);
   }
 }
 
@@ -217,6 +216,11 @@ CameraAppHelperImpl::CameraAppHelperImpl(
   window->SetProperty(kCanConsumeSystemKeysKey, true);
   ScreenBacklight::Get()->AddObserver(this);
   ash::SessionManagerClient::Get()->AddObserver(this);
+  sw_privacy_switch_state_observer_ =
+      std::make_unique<media::CrosCameraSWPrivacySwitchStateObserver>(
+          base::BindRepeating(
+              &CameraAppHelperImpl::OnSWPrivacySwitchStateChanged,
+              weak_factory_.GetWeakPtr()));
 }
 
 CameraAppHelperImpl::~CameraAppHelperImpl() {
@@ -405,7 +409,7 @@ void CameraAppHelperImpl::ScanDocumentCorners(
     std::move(callback).Run({});
     return;
   }
-  memcpy(memory.mapping.memory(), jpeg_data.data(), jpeg_data.size());
+  base::span(memory.mapping).copy_from(jpeg_data);
 
   // Since |this| owns |document_scanner_service|, and the callback will be
   // posted to other sequence with weak pointer of |document_scanner_service|.
@@ -435,7 +439,7 @@ void CameraAppHelperImpl::ConvertToDocument(
     std::move(callback).Run({});
     return;
   }
-  memcpy(memory.mapping.memory(), jpeg_data.data(), jpeg_data.size());
+  base::span(memory.mapping).copy_from(jpeg_data);
 
   // Since |this| owns |document_scanner_service|, and the callback will be
   // posted to other sequence with weak pointer of |document_scanner_service|.
@@ -545,12 +549,28 @@ void CameraAppHelperImpl::SetLidStateMonitor(
   monitor_->AddLidObserver(lid_observer_receiver_.BindNewPipeAndPassRemote());
 }
 
+void CameraAppHelperImpl::SetSWPrivacySwitchMonitor(
+    mojo::PendingRemote<SWPrivacySwitchMonitor> monitor,
+    SetSWPrivacySwitchMonitorCallback callback) {
+  sw_privacy_switch_monitor_ =
+      mojo::Remote<SWPrivacySwitchMonitor>(std::move(monitor));
+  std::move(callback).Run(is_sw_privacy_switch_on_);
+}
+
 void CameraAppHelperImpl::OnLidStateChanged(cros::mojom::LidState state) {
   auto lid_state = ToMojoLidState(state);
   if (!lid_callback_.is_null()) {
     std::move(lid_callback_).Run(lid_state);
   } else if (lid_state_monitor_.is_bound()) {
     lid_state_monitor_->Update(lid_state);
+  }
+}
+
+void CameraAppHelperImpl::OnSWPrivacySwitchStateChanged(
+    cros::mojom::CameraPrivacySwitchState state) {
+  is_sw_privacy_switch_on_ = state == cros::mojom::CameraPrivacySwitchState::ON;
+  if (sw_privacy_switch_monitor_.is_bound()) {
+    sw_privacy_switch_monitor_->Update(is_sw_privacy_switch_on_);
   }
 }
 

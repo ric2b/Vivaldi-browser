@@ -63,11 +63,54 @@ constexpr char kFindElementWithTextActionJs[] = R"(
   })";
 
 // This JavaScript defines a function "action" that returns `true` if `el`
+// and a sibling of the element contains the expected inner texts.
+constexpr char kFindMatchingTextsInElementAndSibling[] = R"(
+  function action(el) {
+    if (!el) {
+      return false;
+    }
+
+    var textElement = el.shadowRoot.querySelector(%s);
+    if (!textElement || textElement.innerText.indexOf(%s) == -1) {
+      return false;
+    }
+
+    var siblingElement = el.shadowRoot.querySelector(%s);
+    if (!siblingElement || siblingElement.innerText.indexOf(%s) == -1) {
+      return false;
+    }
+
+    return true;
+  }
+)";
+
+// This JavaScript defines a function "action" that returns `true` if `el`
 // contains the expected inner text. Before returning `el` is clicked.
 constexpr char kClickElementWithTextActionJs[] = R"(
   function action(el) {
     if (el && el.innerText.indexOf(%s) >= 0) {
       el.click();
+      return true;
+    }
+    return false;
+  })";
+
+// This JavaScript defines a function "action" that returns `true` if `el`
+// has a child element that contains the expected text and matches the
+// provided selectors, and if the child element has a sibling that matches
+// the provided selectors. The sibling element is clicked before returning.
+constexpr char kClickChildOfElementWithTextActionJs[] = R"(
+  function action(el) {
+    if (!el) {
+      return false;
+    }
+    var text = el.shadowRoot.querySelector(%s);
+    if (!text || text.innerText.indexOf(%s) == -1) {
+      return false;
+    }
+    var child = el.shadowRoot.querySelector(%s);
+    if (child) {
+      child.click();
       return true;
     }
     return false;
@@ -241,9 +284,132 @@ InteractiveAshTest::OpenAddCustomApnDetailsDialog(
 }
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::OpenApnSelectionDialog(
+    const ui::ElementIdentifier& element_id) {
+  return Steps(
+      WaitForElementEnabled(
+          element_id, ash::settings::cellular::ApnSubpageActionMenuButton()),
+      ClickElement(element_id,
+                   ash::settings::cellular::ApnSubpageActionMenuButton()),
+      WaitForElementEnabled(
+          element_id, ash::settings::cellular::ApnSubpageShowKnownApnsButton()),
+      ClickElement(element_id,
+                   ash::settings::cellular::ApnSubpageShowKnownApnsButton()),
+      WaitForElementExists(element_id,
+                           ash::settings::cellular::ApnSelectionDialog()));
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::OpenAddBuiltInVpnDialog(
+    const ui::ElementIdentifier& element_id) {
+  return Steps(
+      WaitForElementEnabled(element_id,
+                            ash::settings::AddConnectionsExpandButton()),
+      ClickElement(element_id, ash::settings::AddConnectionsExpandButton()),
+      WaitForElementExpanded(element_id,
+                             ash::settings::AddConnectionsExpandButton()),
+      WaitForElementEnabled(element_id, ash::settings::AddBuiltInVpnRow()),
+      ClickElement(element_id, ash::settings::AddBuiltInVpnRow()));
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::OpenAddWifiDialog(const ui::ElementIdentifier& element_id) {
+  return Steps(
+      NavigateSettingsToNetworkSubpage(element_id,
+                                       ash::NetworkTypePattern::WiFi()),
+      WaitForElementExists(element_id, ash::settings::wifi::AddWifiButton()),
+      ClickElement(element_id, ash::settings::wifi::AddWifiButton()),
+      WaitForElementExists(element_id,
+                           ash::settings::wifi::ConfigureWifiDialog()));
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::CompleteAddWifiDialog(
+    const ui::ElementIdentifier& element_id,
+    const WifiDialogConfig& config) {
+  CHECK(!config.ssid.empty());
+  ui::test::internal::InteractiveTestPrivate::MultiStep steps = Steps(
+      Log(base::StringPrintf("Entering SSID \"%s\" for the network",
+                             config.ssid.c_str())),
+      WaitForElementExists(element_id,
+                           ash::settings::wifi::ConfigureWifiDialogSsidInput()),
+      ClearInputAndEnterText(
+          element_id, ash::settings::wifi::ConfigureWifiDialogSsidInput(),
+          config.ssid.c_str()),
+      Log("Ensuring the network has the correct security"));
+
+  if (config.security_type !=
+      ::chromeos::network_config::mojom::SecurityType::kNone) {
+    // TODO(cros-connectivity@google.com): Add logic for selecting security type
+    // and filling out the relevant fields.
+    NOTREACHED();
+  }
+
+  AddStep(steps,
+          Log(base::StringPrintf("Configuring the network as %s",
+                                 config.is_shared ? "shared" : "not shared")));
+  if (config.security_type ==
+      ::chromeos::network_config::mojom::SecurityType::kNone) {
+    AddStep(steps, WaitForElementChecked(
+                       element_id,
+                       ash::settings::wifi::ConfigureWifiDialogShareToggle()));
+    if (!config.is_shared) {
+      AddStep(
+          steps,
+          Steps(ClickElement(
+                    element_id,
+                    ash::settings::wifi::ConfigureWifiDialogShareToggle()),
+                WaitForElementUnchecked(
+                    element_id,
+                    ash::settings::wifi::ConfigureWifiDialogShareToggle())));
+    }
+  } else {
+    // TODO(cros-connectivity@google.com): Add logic for marking the network as
+    // that it is shared.
+    NOTREACHED();
+  }
+
+  AddStep(steps,
+          Steps(Log("Clicking the connect button and waiting for the dialog "
+                    "to disappear"),
+                WaitForElementEnabled(
+                    element_id,
+                    ash::settings::wifi::ConfigureWifiDialogConnectButton()),
+                ClickElement(
+                    element_id,
+                    ash::settings::wifi::ConfigureWifiDialogConnectButton()),
+                WaitForElementDoesNotExist(
+                    element_id, ash::settings::wifi::ConfigureWifiDialog())));
+  return steps;
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
 InteractiveAshTest::NavigateQuickSettingsToHotspotPage() {
   return NavigateQuickSettingsToPage(
       ash::kHotspotFeatureTileDrillInArrowElementId);
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::NavigateSettingsToNetworkSubpage(
+    const ui::ElementIdentifier& element_id,
+    const ash::NetworkTypePattern network_pattern) {
+  WebContentsInteractionTestUtil::DeepQuery internet_summary_row;
+
+  if (network_pattern.MatchesPattern(ash::NetworkTypePattern::Mobile())) {
+    internet_summary_row = ash::settings::cellular::CellularSummaryItem();
+  } else if (network_pattern.MatchesPattern(ash::NetworkTypePattern::VPN())) {
+    internet_summary_row = ash::settings::vpn::VpnSummaryItem();
+  } else if (network_pattern.MatchesPattern(ash::NetworkTypePattern::WiFi())) {
+    internet_summary_row = ash::settings::wifi::WifiSummaryItem();
+  } else {
+    // Unsupported Network pattern.
+    NOTREACHED();
+  }
+
+  return Steps(NavigateSettingsToInternetPage(element_id),
+               WaitForElementExists(element_id, internet_summary_row),
+               ScrollIntoView(element_id, internet_summary_row),
+               MoveMouseTo(element_id, internet_summary_row), ClickMouse());
 }
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
@@ -251,37 +417,91 @@ InteractiveAshTest::NavigateToInternetDetailsPage(
     const ui::ElementIdentifier& element_id,
     const ash::NetworkTypePattern network_pattern,
     const std::string& network_name) {
-  WebContentsInteractionTestUtil::DeepQuery internet_summary_row;
   WebContentsInteractionTestUtil::DeepQuery network_list;
-  WebContentsInteractionTestUtil::DeepQuery network_list_item_title;
+  WebContentsInteractionTestUtil::DeepQuery network_list_item(
+      {"network-list-item"});
+  WebContentsInteractionTestUtil::DeepQuery network_list_item_title(
+      {"div#divText"});
+  WebContentsInteractionTestUtil::DeepQuery network_list_item_subpage_arrow(
+      {"cr-icon-button#subpageButton"});
   std::string element_selector;
 
   // TODO: Add other network types.
   if (network_pattern.MatchesPattern(ash::NetworkTypePattern::Mobile())) {
-    internet_summary_row = ash::settings::cellular::CellularSummaryItem();
     network_list = ash::settings::cellular::CellularNetworksList();
-    network_list_item_title = WebContentsInteractionTestUtil::DeepQuery({{
-        "network-list",
-        "network-list-item",
-        "div#divText",
-    }});
+    network_list_item = WebContentsInteractionTestUtil::DeepQuery(
+        {"network-list", "network-list-item"});
+  } else if (network_pattern.MatchesPattern(ash::NetworkTypePattern::VPN())) {
+    network_list = ash::settings::vpn::VpnNetworksList();
   } else {
     // Unsupported Network pattern.
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
+  return Steps(NavigateSettingsToNetworkSubpage(element_id, network_pattern),
+               FindElementAndDoActionOnChildren(
+                   element_id, network_list, network_list_item,
+                   ClickElementWithSiblingContainsText(
+                       network_list_item_title, network_name,
+                       network_list_item_subpage_arrow)),
+               WaitForElementTextContains(
+                   element_id, ash::settings::InternetSettingsSubpageTitle(),
+                   /*text=*/network_name.c_str()));
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::NavigateToBluetoothDeviceDetailsPage(
+    const ui::ElementIdentifier& element_id,
+    const std::string& device_name) {
+  const WebContentsInteractionTestUtil::DeepQuery bluetooth_device_item_title(
+      {"os-settings-paired-bluetooth-list-item", "div#deviceName"});
+
+  return Steps(NavigateSettingsToBluetoothPage(element_id),
+               WaitForAnyElementTextContains(
+                   element_id, ash::settings::bluetooth::BluetoothDeviceList(),
+                   bluetooth_device_item_title, device_name),
+               ClickAnyElementTextContains(
+                   element_id, ash::settings::bluetooth::BluetoothDeviceList(),
+                   bluetooth_device_item_title, device_name),
+               WaitForElementTextContains(
+                   element_id, ash::settings::bluetooth::BluetoothDeviceName(),
+                   device_name));
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::NavigateToKnownNetworksPage(
+    const ui::ElementIdentifier& element_id) {
   return Steps(
       NavigateSettingsToInternetPage(element_id),
-      WaitForElementExists(element_id, internet_summary_row),
-      ScrollIntoView(element_id, internet_summary_row),
-      MoveMouseTo(element_id, internet_summary_row), ClickMouse(),
-      WaitForAnyElementTextContains(element_id, network_list,
-                                    network_list_item_title, network_name),
-      ClickAnyElementTextContains(element_id, network_list,
-                                  network_list_item_title, network_name),
+      WaitForElementEnabled(element_id, ash::settings::wifi::WifiSummaryItem()),
+      ClickElement(element_id, ash::settings::wifi::WifiSummaryItem()),
+      WaitForElementEnabled(
+          element_id, ash::settings::wifi::WifiKnownNetworksSubpageButton()),
+      ClickElement(element_id,
+                   ash::settings::wifi::WifiKnownNetworksSubpageButton()),
+      WaitForElementExists(element_id,
+                           ash::settings::wifi::KnownNetworksSubpage()));
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::NavigateToPasspointSubscriptionSubpage(
+    const ui::ElementIdentifier& element_id,
+    const std::string& passpoint_name) {
+  const WebContentsInteractionTestUtil::DeepQuery
+      passpoint_subscription_item_name(
+          {"cr-link-row#subscriptionItem", "div#label"});
+
+  return Steps(
+      NavigateToKnownNetworksPage(element_id),
+      WaitForElementExists(
+          element_id,
+          ash::settings::wifi::KnownNetworksSubpagePasspointSubsciptions()),
+      ClickAnyElementTextContains(
+          element_id, ash::settings::wifi::KnownNetworksSubpage(),
+          passpoint_subscription_item_name, passpoint_name),
       WaitForElementTextContains(element_id,
-                                 ash::settings::SettingsSubpageTitle(),
-                                 /*text=*/network_name.c_str()));
+                                 ash::settings::InternetSettingsSubpageTitle(),
+                                 /*text=*/passpoint_name.c_str()));
 }
 
 Profile* InteractiveAshTest::GetActiveUserProfile() {
@@ -317,13 +537,13 @@ InteractiveAshTest::WaitForWindowWithTitle(aura::Env* env,
   return Steps(
       ObserveState(kTitleObserver,
                    std::make_unique<AuraWindowTitleObserver>(env, title)),
-      WaitForState(kTitleObserver, true));
+      WaitForState(kTitleObserver, true), StopObservingState(kTitleObserver));
 }
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
 InteractiveAshTest::WaitForElementExists(
     const ui::ElementIdentifier& element_id,
-    const DeepQuery& query) {
+    const WebContentsInteractionTestUtil::DeepQuery& query) {
   DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementExists);
   StateChange element_exists;
   element_exists.event = kElementExists;
@@ -334,7 +554,7 @@ InteractiveAshTest::WaitForElementExists(
 ui::test::internal::InteractiveTestPrivate::MultiStep
 InteractiveAshTest::WaitForElementDoesNotExist(
     const ui::ElementIdentifier& element_id,
-    const DeepQuery& query) {
+    const WebContentsInteractionTestUtil::DeepQuery& query) {
   DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementDoesNotExist);
   StateChange does_not_exist;
   does_not_exist.type = StateChange::Type::kDoesNotExist;
@@ -355,6 +575,29 @@ InteractiveAshTest::WaitForElementEnabled(
   state_change.type = StateChange::Type::kExistsAndConditionTrue;
   state_change.test_function = "(el) => { return !el.disabled; }";
   return WaitForStateChange(element_id, state_change);
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::WaitForElementWithManagedPropertyBoolean(
+    const ui::ElementIdentifier& element_id,
+    const WebContentsInteractionTestUtil::DeepQuery& query,
+    const std::string& property,
+    bool expected_value) {
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kManagedBooleanChange);
+  StateChange managed_boolean_change;
+  managed_boolean_change.event = kManagedBooleanChange;
+  managed_boolean_change.where = query;
+  managed_boolean_change.type = StateChange::Type::kExistsAndConditionTrue;
+  managed_boolean_change.test_function =
+      base::StringPrintf(R"(
+    (el) => {
+      return el &&
+             el.managedProperties_ &&
+             el.managedProperties_.%s.activeValue === %s;
+    }
+  )",
+                         property.c_str(), expected_value ? "true" : "false");
+  return WaitForStateChange(element_id, managed_boolean_change);
 }
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
@@ -386,9 +629,65 @@ InteractiveAshTest::WaitForElementChecked(
 }
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::WaitForElementUnchecked(
+    const ui::ElementIdentifier& element_id,
+    WebContentsInteractionTestUtil::DeepQuery element) {
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementUnchecked);
+
+  WebContentsInteractionTestUtil::StateChange state_change;
+  state_change.event = kElementUnchecked;
+  state_change.where = element;
+  state_change.type = StateChange::Type::kExistsAndConditionTrue;
+  state_change.test_function = "(el) => { return !el.checked; }";
+  return WaitForStateChange(element_id, state_change);
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::WaitForElementExpanded(
+    const ui::ElementIdentifier& element_id,
+    WebContentsInteractionTestUtil::DeepQuery element) {
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementExpanded);
+
+  WebContentsInteractionTestUtil::StateChange state_change;
+  state_change.event = kElementExpanded;
+  state_change.where = element;
+  state_change.type = StateChange::Type::kExistsAndConditionTrue;
+  state_change.test_function = "(el) => { return el.expanded; }";
+  return WaitForStateChange(element_id, state_change);
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::WaitForElementOpened(
+    const ui::ElementIdentifier& element_id,
+    WebContentsInteractionTestUtil::DeepQuery element) {
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementOpened);
+
+  WebContentsInteractionTestUtil::StateChange state_change;
+  state_change.event = kElementOpened;
+  state_change.where = element;
+  state_change.type = StateChange::Type::kExistsAndConditionTrue;
+  state_change.test_function = "(el) => { return el.opened || el.open; }";
+  return WaitForStateChange(element_id, state_change);
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::WaitForElementUnopened(
+    const ui::ElementIdentifier& element_id,
+    WebContentsInteractionTestUtil::DeepQuery element) {
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementUnopened);
+
+  WebContentsInteractionTestUtil::StateChange state_change;
+  state_change.event = kElementUnopened;
+  state_change.where = element;
+  state_change.type = StateChange::Type::kExistsAndConditionTrue;
+  state_change.test_function = "(el) => { return !el.opened && !el.open; }";
+  return WaitForStateChange(element_id, state_change);
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
 InteractiveAshTest::WaitForElementFocused(
     const ui::ElementIdentifier& element_id,
-    const DeepQuery& query) {
+    const WebContentsInteractionTestUtil::DeepQuery& query) {
   DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementFocused);
   StateChange element_focused;
   element_focused.event = kElementFocused;
@@ -422,10 +721,26 @@ InteractiveAshTest::WaitForAnyElementTextContains(
     const WebContentsInteractionTestUtil::DeepQuery& root,
     const WebContentsInteractionTestUtil::DeepQuery& selectors,
     const std::string& expected) {
-  return FindElementWithTextAndDoAction(
+  return FindElementAndDoActionOnChildren(
       element_id, root, selectors,
       base::StringPrintf(kFindElementWithTextActionJs,
                          base::GetQuotedJSONString(expected).c_str()));
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::WaitForAnyElementAndSiblingTextContains(
+    const ui::ElementIdentifier& element_id,
+    const WebContentsInteractionTestUtil::DeepQuery& root,
+    const WebContentsInteractionTestUtil::DeepQuery& selectors,
+    const WebContentsInteractionTestUtil::DeepQuery& element_with_text,
+    const std::string& expected_text,
+    const WebContentsInteractionTestUtil::DeepQuery& sibling_element,
+    const std::string& sibling_expected_text) {
+  return FindElementAndDoActionOnChildren(
+      element_id, root, selectors,
+      FindMatchingTextsInElementAndSibling(element_with_text, expected_text,
+                                           sibling_element,
+                                           sibling_expected_text));
 }
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
@@ -441,6 +756,37 @@ InteractiveAshTest::WaitForElementHasAttribute(
   state_change.type = StateChange::Type::kExistsAndConditionTrue;
   state_change.test_function = base::StringPrintf(
       "(el) => { return el.hasAttribute('%s'); }", attribute.c_str());
+  return WaitForStateChange(element_id, state_change);
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::WaitForElementDoesNotHaveAttribute(
+    const ui::ElementIdentifier& element_id,
+    WebContentsInteractionTestUtil::DeepQuery element,
+    const std::string& attribute) {
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementHasAttribute);
+
+  WebContentsInteractionTestUtil::StateChange state_change;
+  state_change.event = kElementHasAttribute;
+  state_change.where = element;
+  state_change.type = StateChange::Type::kExistsAndConditionTrue;
+  state_change.test_function = base::StringPrintf(
+      "(el) => { return !el.hasAttribute('%s'); }", attribute.c_str());
+  return WaitForStateChange(element_id, state_change);
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::WaitForElementDisplayNone(
+    const ui::ElementIdentifier& element_id,
+    WebContentsInteractionTestUtil::DeepQuery element) {
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementHasDisplayNone);
+
+  WebContentsInteractionTestUtil::StateChange state_change;
+  state_change.event = kElementHasDisplayNone;
+  state_change.where = element;
+  state_change.type = StateChange::Type::kExistsAndConditionTrue;
+  state_change.test_function =
+      "(el) => { return el.style.display === 'none'; }";
   return WaitForStateChange(element_id, state_change);
 }
 
@@ -480,7 +826,7 @@ InteractiveAshTest::ClearInputFieldValue(
 ui::test::internal::InteractiveTestPrivate::MultiStep
 InteractiveAshTest::WaitForElementToRender(
     const ui::ElementIdentifier& element_id,
-    const DeepQuery& query) {
+    const WebContentsInteractionTestUtil::DeepQuery& query) {
   DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementRenders);
   StateChange element_renders;
   element_renders.event = kElementRenders;
@@ -492,8 +838,9 @@ InteractiveAshTest::WaitForElementToRender(
 }
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
-InteractiveAshTest::ClickElement(const ui::ElementIdentifier& element_id,
-                                 const DeepQuery& query) {
+InteractiveAshTest::ClickElement(
+    const ui::ElementIdentifier& element_id,
+    const WebContentsInteractionTestUtil::DeepQuery& query) {
   return Steps(MoveMouseTo(element_id, query), ClickMouse());
 }
 
@@ -503,7 +850,7 @@ InteractiveAshTest::ClickAnyElementTextContains(
     const WebContentsInteractionTestUtil::DeepQuery& root,
     const WebContentsInteractionTestUtil::DeepQuery& selectors,
     const std::string& expected) {
-  return FindElementWithTextAndDoAction(
+  return FindElementAndDoActionOnChildren(
       element_id, root, selectors,
       base::StringPrintf(kClickElementWithTextActionJs,
                          base::GetQuotedJSONString(expected).c_str()));
@@ -512,7 +859,7 @@ InteractiveAshTest::ClickAnyElementTextContains(
 ui::test::internal::InteractiveTestPrivate::MultiStep
 InteractiveAshTest::SelectDropdownElementOption(
     const ui::ElementIdentifier& element_id,
-    const DeepQuery& query,
+    const WebContentsInteractionTestUtil::DeepQuery& query,
     const std::string& option) {
   return Steps(
       WaitForElementExists(element_id, query),
@@ -564,6 +911,8 @@ InteractiveAshTest::SendTextAsKeyEvents(const ui::ElementIdentifier& element_id,
       modifiers = ui::EF_SHIFT_DOWN;
     } else if (c == '\n') {
       key_code = ui::VKEY_RETURN;
+    } else if (c == ' ') {
+      key_code = ui::VKEY_SPACE;
     }
 
     if (!key_code.has_value()) {
@@ -581,12 +930,23 @@ InteractiveAshTest::SendTextAsKeyEvents(const ui::ElementIdentifier& element_id,
 }
 
 ui::test::internal::InteractiveTestPrivate::MultiStep
-InteractiveAshTest::FindElementWithTextAndDoAction(
+InteractiveAshTest::ClearInputAndEnterText(
+    const ui::ElementIdentifier& element_id,
+    const WebContentsInteractionTestUtil::DeepQuery& query,
+    const std::string& text) {
+  return Steps(WaitForElementExists(element_id, query),
+               ClearInputFieldValue(element_id, query),
+               ClickElement(element_id, query),
+               SendTextAsKeyEvents(element_id, text));
+}
+
+ui::test::internal::InteractiveTestPrivate::MultiStep
+InteractiveAshTest::FindElementAndDoActionOnChildren(
     const ui::ElementIdentifier& element_id,
     const WebContentsInteractionTestUtil::DeepQuery& root,
     const WebContentsInteractionTestUtil::DeepQuery& selectors,
     const std::string& action) {
-  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementWithTextFound);
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementWithActionReturnTrue);
 
   WebContentsInteractionTestUtil::StateChange state_change;
   state_change.type = WebContentsInteractionTestUtil::StateChange::Type::
@@ -595,7 +955,7 @@ InteractiveAshTest::FindElementWithTextAndDoAction(
   state_change.test_function =
       base::StringPrintf(kFindElementAndDoActionJs, action.c_str(),
                          DeepQueryToSelectors(selectors).c_str());
-  state_change.event = kElementWithTextFound;
+  state_change.event = kElementWithActionReturnTrue;
   return WaitForStateChange(element_id, state_change);
 }
 
@@ -617,6 +977,28 @@ InteractiveAshTest::NavigateQuickSettingsToPage(
   // This function assumes that the drill-in arrow is or will become visible
   // without any action.
   return Steps(WaitForShow(ash::kQuickSettingsViewElementId),
-               WaitForShow(element_id), MoveMouseTo(element_id), ClickMouse(),
-               FlushEvents());
+               WaitForShow(element_id), MoveMouseTo(element_id), ClickMouse());
+}
+
+const std::string InteractiveAshTest::ClickElementWithSiblingContainsText(
+    const WebContentsInteractionTestUtil::DeepQuery& element_with_text,
+    const std::string& expected,
+    const WebContentsInteractionTestUtil::DeepQuery& element_to_click) {
+  return base::StringPrintf(kClickChildOfElementWithTextActionJs,
+                            DeepQueryToSelectors(element_with_text).c_str(),
+                            base::GetQuotedJSONString(expected).c_str(),
+                            DeepQueryToSelectors(element_to_click).c_str());
+}
+
+const std::string InteractiveAshTest::FindMatchingTextsInElementAndSibling(
+    const WebContentsInteractionTestUtil::DeepQuery& element_with_text,
+    const std::string& expected_text,
+    const WebContentsInteractionTestUtil::DeepQuery& sibling_element,
+    const std::string& sibling_expected_text) {
+  return base::StringPrintf(
+      kFindMatchingTextsInElementAndSibling,
+      DeepQueryToSelectors(element_with_text).c_str(),
+      base::GetQuotedJSONString(expected_text).c_str(),
+      DeepQueryToSelectors(sibling_element).c_str(),
+      base::GetQuotedJSONString(sibling_expected_text).c_str());
 }

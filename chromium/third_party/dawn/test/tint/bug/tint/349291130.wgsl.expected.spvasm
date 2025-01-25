@@ -1,6 +1,6 @@
 ; SPIR-V
 ; Version: 1.3
-; Generator: Google Tint Compiler; 0
+; Generator: Google Tint Compiler; 1
 ; Bound: 25
 ; Schema: 0
                OpCapability Shader
@@ -11,40 +11,41 @@
                OpName %texture "texture"
                OpName %e "e"
                OpName %level "level"
-               OpDecorate %texture Binding 0
                OpDecorate %texture DescriptorSet 0
+               OpDecorate %texture Binding 0
       %float = OpTypeFloat 32
           %3 = OpTypeImage %float 2D 0 0 0 1 Unknown
 %_ptr_UniformConstant_3 = OpTypePointer UniformConstant %3
     %texture = OpVariable %_ptr_UniformConstant_3 UniformConstant
        %void = OpTypeVoid
-          %5 = OpTypeFunction %void
+          %7 = OpTypeFunction %void
        %uint = OpTypeInt 32 0
 %_ptr_Function_uint = OpTypePointer Function %uint
-         %14 = OpConstantNull %uint
+     %uint_0 = OpConstant %uint 0
        %bool = OpTypeBool
-          %e = OpFunction %void None %5
+          %e = OpFunction %void None %7
           %8 = OpLabel
-      %level = OpVariable %_ptr_Function_uint Function %14
-         %11 = OpLoad %3 %texture
-          %9 = OpImageQueryLevels %uint %11
-               OpStore %level %9
-               OpBranch %15
-         %15 = OpLabel
-               OpLoopMerge %16 %17 None
-               OpBranch %18
-         %18 = OpLabel
-         %20 = OpLoad %uint %level
-         %21 = OpUGreaterThan %bool %20 %14
-         %19 = OpLogicalNot %bool %21
+      %level = OpVariable %_ptr_Function_uint Function
+               OpBranch %9
+          %9 = OpLabel
+         %14 = OpLoad %3 %texture None
+         %15 = OpImageQueryLevels %uint %14
+               OpStore %level %15
+               OpBranch %12
+         %12 = OpLabel
+               OpLoopMerge %13 %11 None
+               OpBranch %10
+         %10 = OpLabel
+         %19 = OpLoad %uint %level None
+         %20 = OpUGreaterThan %bool %19 %uint_0
                OpSelectionMerge %23 None
-               OpBranchConditional %19 %24 %23
+               OpBranchConditional %20 %23 %24
          %24 = OpLabel
-               OpBranch %16
+               OpBranch %13
          %23 = OpLabel
-               OpBranch %17
-         %17 = OpLabel
-               OpBranch %15
-         %16 = OpLabel
+               OpBranch %11
+         %11 = OpLabel
+               OpBranch %12
+         %13 = OpLabel
                OpReturn
                OpFunctionEnd

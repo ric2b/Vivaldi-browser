@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -31,6 +32,7 @@
 #include "chrome/browser/ui/views/tabs/tab_style_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/vector_icons/vector_icons.h"
@@ -106,6 +108,7 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
       ->SetOrientation(views::LayoutOrientation::kHorizontal);
 
   GetViewAccessibility().SetRole(ax::mojom::Role::kTabList);
+  GetViewAccessibility().SetIsMultiselectable(true);
 
   tab_strip_ = tab_strip.get();
   const Browser* browser = tab_strip_->GetBrowser();
@@ -115,7 +118,8 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
   if (browser && browser->is_type_normal()) {
     tab_search_container = std::make_unique<TabSearchContainer>(
         tab_strip_->controller(), browser->tab_strip_model(),
-        render_tab_search_before_tab_strip_, this);
+        render_tab_search_before_tab_strip_, this,
+        browser->browser_window_features()->tab_declutter_controller());
     tab_search_container->SetProperty(views::kCrossAxisAlignmentKey,
                                       views::LayoutAlignment::kCenter);
   }
@@ -188,7 +192,7 @@ TabStripRegionView::TabStripRegionView(std::unique_ptr<TabStrip> tab_strip)
             tab_strip_->controller(),
             base::BindRepeating(&TabStrip::NewTabButtonPressed,
                                 base::Unretained(tab_strip_)),
-            vector_icons::kAddChromeRefreshIcon);
+            vector_icons::kAddIcon);
     tab_strip_control_button->SetProperty(views::kElementIdentifierKey,
                                           kNewTabButtonElementId);
 
@@ -367,12 +371,17 @@ void TabStripRegionView::Layout(PassKey) {
     gfx::Size new_tab_button_size = new_tab_button_->GetPreferredSize();
 
     // The y position is measured from the bottom of the tabstrip, and then
-    // pading and button height are removed.
-    gfx::Point new_tab_button_new_position =
-        gfx::Point(tab_strip_container_->bounds().right() -
-                       TabStyle::Get()->GetBottomCornerRadius() +
-                       GetLayoutConstant(TAB_STRIP_PADDING),
-                   0);
+    // padding and button height are removed.
+    int x = tab_strip_container_->bounds().right() -
+            TabStyle::Get()->GetBottomCornerRadius() +
+            GetLayoutConstant(TAB_STRIP_PADDING);
+
+    if (base::FeatureList::IsEnabled(features::kCompactMode)) {
+      if (profile_->GetPrefs()->GetBoolean(prefs::kCompactModeEnabled)) {
+        x -= GetLayoutConstant(TAB_STRIP_PADDING);
+      }
+    }
+    gfx::Point new_tab_button_new_position = gfx::Point(x, 0);
 
     gfx::Rect new_tab_button_new_bounds =
         gfx::Rect(new_tab_button_new_position, new_tab_button_size);
@@ -485,8 +494,14 @@ void TabStripRegionView::UpdateButtonBorders() {
   if (tab_search_container_) {
     tab_search_container_->tab_search_button()->SetBorder(
         views::CreateEmptyBorder(border_insets));
-    if (tab_search_container_->tab_organization_button()) {
-      tab_search_container_->tab_organization_button()->SetBorder(
+
+    if (tab_search_container_->auto_tab_group_button()) {
+      tab_search_container_->auto_tab_group_button()->SetBorder(
+          views::CreateEmptyBorder(border_insets));
+    }
+
+    if (tab_search_container_->tab_declutter_button()) {
+      tab_search_container_->tab_declutter_button()->SetBorder(
           views::CreateEmptyBorder(border_insets));
     }
   }
@@ -574,7 +589,7 @@ class TabSearchPositionMetricsLogger {
   // Logs the UMA metric for the tab search position.
   void LogMetrics() {
     base::UmaHistogramEnumeration(
-        "Tabs.TabSearch.IsTrailingTabstrip",
+        "Tabs.TabSearch.PositionInTabstrip",
         tabs::GetTabSearchTrailingTabstrip(profile_)
             ? TabStripRegionView::TabSearchPositionEnum::kTrailing
             : TabStripRegionView::TabSearchPositionEnum::kLeading);

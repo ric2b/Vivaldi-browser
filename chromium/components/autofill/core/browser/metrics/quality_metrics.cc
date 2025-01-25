@@ -16,6 +16,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
 #include "components/autofill/core/browser/metrics/field_filling_stats_and_score_metrics.h"
 #include "components/autofill/core/browser/metrics/granular_filling_metrics_utils.h"
@@ -46,6 +47,11 @@ void LogNumericQuantityMetrics(const FormStructure& form) {
     // Log if there was a colliding server prediction.
     AutofillMetrics::LogNumericQuantityCollidesWithServerPrediction(
         field_has_non_empty_server_prediction);
+    if (field_has_non_empty_server_prediction) {
+      base::UmaHistogramBoolean(
+          "Autofill.NumericQuantity.DidTriggerSuggestions",
+          field->did_trigger_suggestions());
+    }
     // If there was a collision, log if the NUMERIC_QUANTITY was a false
     // positive since the field was correctly filled.
     if ((field->is_autofilled() || field->previously_autofilled()) &&
@@ -70,7 +76,7 @@ void LogPerfectFillingMetric(const FormStructure& form) {
           {}, [&form](FillingProduct filling_product) {
             return std::make_pair(
                 filling_product,
-                base::ranges::any_of(
+                std::ranges::any_of(
                     form, [&filling_product](const auto& field) {
                       return field->filling_product() == filling_product;
                     }));
@@ -80,7 +86,7 @@ void LogPerfectFillingMetric(const FormStructure& form) {
   // scenario, a field is either autofilled, empty, has value at page load or
   // has value set by JS.
   const bool perfect_filling =
-      base::ranges::none_of(form, [](const auto& field) {
+      std::ranges::none_of(form, [](const auto& field) {
         return field->is_user_edited() && !field->is_autofilled();
       });
   // The perfect filling metric is only recorded if Autofill was used on at
@@ -111,9 +117,10 @@ void LogPreFillMetrics(const FormStructure& form) {
       LogPreFilledFieldStatus(form_type_name, field->initial_value_changed(),
                               field->Type().GetStorableType());
       LogPreFilledValueChanged(
-          form_type_name, field->initial_value_changed(), field->value(),
-          field->field_log_events(), field->possible_types(),
-          field->Type().GetStorableType(), field->is_autofilled());
+          form_type_name, field->initial_value_changed(),
+          field->value(ValueSemantics::kCurrent), field->field_log_events(),
+          field->possible_types(), field->Type().GetStorableType(),
+          field->is_autofilled());
       LogPreFilledFieldClassifications(form_type_name,
                                        field->initial_value_changed(),
                                        field->may_use_prefilled_placeholder());
@@ -130,10 +137,10 @@ void LogDurationMetrics(const FormStructure& form,
   size_t num_detected_field_types =
       base::ranges::count_if(form, &FieldHasMeaningfulPossibleFieldTypes,
                              &std::unique_ptr<AutofillField>::operator*);
-  bool form_has_autofilled_fields = base::ranges::any_of(
+  bool form_has_autofilled_fields = std::ranges::any_of(
       form, [](const auto& field) { return field->is_autofilled(); });
   bool has_observed_one_time_code_field =
-      base::ranges::any_of(form, [](const auto& field) {
+      std::ranges::any_of(form, [](const auto& field) {
         return field->Type().html_type() == HtmlFieldType::kOneTimeCode;
       });
   if (num_detected_field_types >= kMinRequiredFieldsForHeuristics ||
@@ -201,7 +208,8 @@ void LogPredictionMetrics(
     AutofillMetrics::LogOverallPredictionQualityMetrics(
         form_interactions_ukm_logger, form, *field, metric_type);
     AutofillMetrics::LogEmailFieldPredictionMetrics(*field);
-    autofill_metrics::LogShadowPredictionComparison(*field);
+    autofill_metrics::LogShadowPredictionComparison(*field,
+                                                    GetActiveHeuristicSource());
   }
 }
 

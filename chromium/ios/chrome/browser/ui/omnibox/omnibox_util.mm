@@ -48,6 +48,7 @@ OmniboxSuggestionIconType GetOmniboxSuggestionIconTypeForAutocompleteMatchType(
 
     // Vivaldi
     case AutocompleteMatchType::BOOKMARK_NICKNAME:
+    case AutocompleteMatchType::DIRECT_MATCH:
 
       return OmniboxSuggestionIconType::kDefaultFavicon;
     case AutocompleteMatchType::CLIPBOARD_IMAGE:

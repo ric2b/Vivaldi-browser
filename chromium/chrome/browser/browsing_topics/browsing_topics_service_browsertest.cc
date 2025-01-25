@@ -383,11 +383,15 @@ class BrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTestBase {
       : prerender_helper_(
             base::BindRepeating(&BrowsingTopicsBrowserTest::web_contents,
                                 base::Unretained(this))) {
-    scoped_feature_list_.InitWithFeatures(
+    // Configure a long epoch_retention_duration to prevent epochs from expiring
+    // during tests where expiration is irrelevant.
+    scoped_feature_list_.InitWithFeaturesAndParameters(
         /*enabled_features=*/
-        {blink::features::kBrowsingTopics,
-         blink::features::kBrowsingTopicsBypassIPIsPubliclyRoutableCheck,
-         features::kPrivacySandboxAdsAPIsOverride},
+        {{blink::features::kBrowsingTopics, {}},
+         {blink::features::kBrowsingTopicsParameters,
+          {{"epoch_retention_duration", "3650000d"}}},
+         {blink::features::kBrowsingTopicsBypassIPIsPubliclyRoutableCheck, {}},
+         {features::kPrivacySandboxAdsAPIsOverride, {}}},
         /*disabled_features=*/{});
   }
 
@@ -1115,7 +1119,8 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   GURL prerender_url =
       https_server_.GetURL("a.test", "/browsing_topics/empty_page.html");
 
-  int host_id = prerender_helper().AddPrerender(prerender_url);
+  content::FrameTreeNodeId host_id =
+      prerender_helper().AddPrerender(prerender_url);
 
   content::RenderFrameHost* prerender_host =
       prerender_helper().GetPrerenderedMainFrameHost(host_id);
@@ -2122,6 +2127,12 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
       kRedirectWithTopicsInvokedCountHistogramId,
       /*sample=*/0,
       /*expected_bucket_count=*/1);
+
+  // The redirect chain has only one page calling topics. We need at least two
+  // for this `TopicsRedirectChainDetected` event, so it's not being logged.
+  auto entries = ukm_recorder_->GetEntriesByName(
+      ukm::builders::BrowsingTopics_TopicsRedirectChainDetected::kEntryName);
+  EXPECT_EQ(0u, entries.size());
 }
 
 IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
@@ -2151,6 +2162,13 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
   histogram_tester.ExpectBucketCount(kRedirectWithTopicsInvokedCountHistogramId,
                                      /*sample=*/1,
                                      /*expected_count=*/1);
+
+  auto entries = ukm_recorder_->GetEntriesByName(
+      ukm::builders::BrowsingTopics_TopicsRedirectChainDetected::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  ukm_recorder_->ExpectEntrySourceHasUrl(entries.back(), main_frame_url1);
+  ukm_recorder_->ExpectEntryMetric(entries.back(), "NumberOfPagesCallingTopics",
+                                   2);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
@@ -2431,15 +2449,6 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsBrowserTest,
 // Tests that the Topics API abides by the Privacy Sandbox Enrollment framework.
 class AttestationBrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTest {
  public:
-  AttestationBrowsingTopicsBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/
-        {blink::features::kBrowsingTopics,
-         blink::features::kBrowsingTopicsBypassIPIsPubliclyRoutableCheck,
-         features::kPrivacySandboxAdsAPIsOverride},
-        /*disabled_features=*/{});
-  }
-
   void SetUpOnMainThread() override {
     // This test suite tests Privacy Sandbox Attestations related behaviors,
     // turn off the setting that makes all APIs considered attested.
@@ -2449,9 +2458,6 @@ class AttestationBrowsingTopicsBrowserTest : public BrowsingTopicsBrowserTest {
   }
 
   ~AttestationBrowsingTopicsBrowserTest() override = default;
-
- protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Site a.test is attested for Topics, so it should receive a valid response.

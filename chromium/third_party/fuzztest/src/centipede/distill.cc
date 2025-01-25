@@ -36,21 +36,23 @@
 #include "absl/strings/str_join.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
-#include "./centipede/blob_file.h"
 #include "./centipede/corpus_io.h"
-#include "./centipede/defs.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
 #include "./centipede/feature_set.h"
-#include "./centipede/logging.h"
 #include "./centipede/periodic_action.h"
-#include "./centipede/remote_file.h"
 #include "./centipede/resource_pool.h"
 #include "./centipede/rusage_profiler.h"
 #include "./centipede/rusage_stats.h"
 #include "./centipede/thread_pool.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
+#include "./common/blob_file.h"
+#include "./common/defs.h"
+#include "./common/hash.h"
+#include "./common/logging.h"
+#include "./common/remote_file.h"
+#include "./common/status_macros.h"
 
 namespace centipede {
 
@@ -115,8 +117,10 @@ class InputCorpusShardReader {
   perf::MemSize EstimateRamFootprint(size_t shard_idx) const {
     const auto corpus_path = workdir_.CorpusFiles().ShardPath(shard_idx);
     const auto features_path = workdir_.FeaturesFiles().ShardPath(shard_idx);
-    const perf::MemSize corpus_file_size = RemoteFileGetSize(corpus_path);
-    const perf::MemSize features_file_size = RemoteFileGetSize(features_path);
+    const perf::MemSize corpus_file_size =
+        ValueOrDie(RemoteFileGetSize(corpus_path));
+    const perf::MemSize features_file_size =
+        ValueOrDie(RemoteFileGetSize(features_path));
     // Conservative compression factors for the two file types. These have been
     // observed empirically for the Riegeli blob format. The legacy format is
     // approximately 1:1, but use the stricter Riegeli numbers, as the legacy
@@ -420,14 +424,13 @@ int Distill(const Environment &env, const DistillOptions &opts) {
                     << " unique: " << stats.num_byte_unique_elts
                     << " distilled: " << stats.num_feature_unique_elts;
         },
-        {
-            // Seeing 0's at the beginning is not interesting, unless debugging.
-            .delay = absl::Seconds(ABSL_VLOG_IS_ON(1) ? 0 : 60),
-            // Again, increase the frequency with --v >= 1 to aid debugging.
-            .interval = absl::Seconds(ABSL_VLOG_IS_ON(1) ? 10 : 60),
-        },
+        // Seeing 0's at the beginning is not interesting, unless debugging.
+        // Likewise, increase the frequency --v >= 1 to aid debugging.
+        PeriodicAction::ConstDelayConstInterval(
+            absl::Seconds(ABSL_VLOG_IS_ON(1) ? 0 : 60),
+            absl::Seconds(ABSL_VLOG_IS_ON(1) ? 10 : 60)),
     };
-    // The RAM pool shared between all the `DistillTask()` threads.
+    // The RAM pool shared between all the `DistillToOneOutputShard()` threads.
     perf::ResourcePool ram_pool{kRamQuota};
     const size_t num_threads = std::min(env.num_threads, kMaxWritingThreads);
     ThreadPool threads{static_cast<int>(num_threads)};

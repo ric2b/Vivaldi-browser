@@ -93,7 +93,13 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   bool InShadowTree() const override;
   void WillBeDetached() override;
   void Detached(FrameDetachType) override;
-  void DispatchWillSendRequest(ResourceRequest&) override;
+  void DispatchFinalizeRequest(ResourceRequest&) override;
+  std::optional<KURL> DispatchWillSendRequest(
+      const KURL& requested_url,
+      const scoped_refptr<const SecurityOrigin>& requestor_origin,
+      const net::SiteForCookies& site_for_cookies,
+      bool has_redirect_info,
+      const KURL& upstream_url) override;
   void DispatchDidLoadResourceFromMemoryCache(const ResourceRequest&,
                                               const ResourceResponse&) override;
   void DispatchDidHandleOnloadEvents() override;
@@ -216,7 +222,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
 
   void NotifyUserActivation() override;
 
-  void AbortClientNavigation() override;
+  void AbortClientNavigation(bool for_new_navigation) override;
 
   WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const override;
 
@@ -292,7 +298,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
 
  private:
   bool IsLocalFrameClientImpl() const override { return true; }
-  WebDevToolsAgentImpl* DevToolsAgent();
+  WebDevToolsAgentImpl* DevToolsAgent(bool create_if_necessary);
 
   // The WebFrame that owns this object and manages its lifetime. Therefore,
   // the web frame object is guaranteed to exist.

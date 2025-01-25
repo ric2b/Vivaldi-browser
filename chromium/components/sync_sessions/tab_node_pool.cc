@@ -10,7 +10,7 @@
 
 #include "base/logging.h"
 #include "base/not_fatal_until.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync_sessions/synced_tab_delegate.h"
 
@@ -21,6 +21,7 @@ TabNodePool::TabNodePool() : max_used_tab_node_id_(kInvalidTabNodeID) {}
 // static
 // We start vending tab node IDs at 0.
 const int TabNodePool::kInvalidTabNodeID = -1;
+const int TabNodePool::kVivaldiTabNodeID = -2;
 
 TabNodePool::~TabNodePool() = default;
 

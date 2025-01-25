@@ -16,7 +16,7 @@
 #import "ios/chrome/browser/search_engines/model/search_engine_choice_service_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/ui/search_engine_choice/search_engine_choice_ui_util.h"
 #import "ios/public/provider/chrome/browser/signin/choice_api.h"
 
@@ -24,7 +24,7 @@ namespace {
 // Whether the choice screen might be displayed. The choice screen is by default
 // disabled for tests or for non-branded builds. This method eliminates those
 // cases, unless it is force-enabled by flag.
-bool IsChoiceEnabled(search_engines::ChoicePromo promo) {
+bool IsChoiceEnabled() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceSearchEngineChoiceScreen)) {
     return true;
@@ -37,15 +37,15 @@ bool IsChoiceEnabled(search_engines::ChoicePromo promo) {
     // Outside of tests, this view should be disabled upstream.
     return false;
   }
-  return search_engines::IsChoiceScreenFlagEnabled(promo);
+  return true;
 }
 }  // namespace
 
 bool ShouldDisplaySearchEngineChoiceScreen(
     ChromeBrowserState& browser_state,
-    search_engines::ChoicePromo promo,
+    bool is_first_run_entrypoint,
     bool app_started_via_external_intent) {
-  if (!IsChoiceEnabled(promo)) {
+  if (!IsChoiceEnabled()) {
     // This build is not eligible for the choice screen.
     return false;
   }
@@ -76,8 +76,7 @@ bool ShouldDisplaySearchEngineChoiceScreen(
 
   // If the app has been started via an external intent, and skip the Dialog
   // promo up to switches::kSearchEngineChoiceMaximumSkipCount() times.
-  if (app_started_via_external_intent &&
-      promo == search_engines::ChoicePromo::kDialog &&
+  if (app_started_via_external_intent && !is_first_run_entrypoint &&
       condition ==
           search_engines::SearchEngineChoiceScreenConditions::kEligible) {
     PrefService* pref_service = original_browser_state->GetPrefs();

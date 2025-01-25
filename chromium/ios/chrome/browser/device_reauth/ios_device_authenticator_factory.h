@@ -5,12 +5,12 @@
 #ifndef IOS_CHROME_BROWSER_DEVICE_REAUTH_IOS_DEVICE_AUTHENTICATOR_FACTORY_H_
 #define IOS_CHROME_BROWSER_DEVICE_REAUTH_IOS_DEVICE_AUTHENTICATOR_FACTORY_H_
 
-#include <memory>
+#import <memory>
 
-#include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "base/no_destructor.h"
+#import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
 class DeviceAuthenticatorProxy;
 class IOSDeviceAuthenticator;
 
@@ -21,13 +21,14 @@ class DeviceAuthParams;
 @protocol ReauthenticationProtocol;
 
 // Singleton that owns all DeviceAuthenticatorProxy and associates them with
-// ChromeBrowserState.
+// profiles.
 class DeviceAuthenticatorProxyFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static DeviceAuthenticatorProxyFactory* GetInstance();
+  // TODO(crbug.com/358301380): remove this method.
+  static DeviceAuthenticatorProxy* GetForBrowserState(ProfileIOS* profile);
 
-  static DeviceAuthenticatorProxy* GetForBrowserState(
-      ChromeBrowserState* browser_state);
+  static DeviceAuthenticatorProxy* GetForProfile(ProfileIOS* profile);
+  static DeviceAuthenticatorProxyFactory* GetInstance();
 
  private:
   friend class base::NoDestructor<DeviceAuthenticatorProxyFactory>;

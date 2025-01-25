@@ -7,6 +7,7 @@
 
 #include "browser/vivaldi_default_bookmarks.h"
 #include "browser/vivaldi_default_bookmarks_updater_client_impl.h"
+#include "components/direct_match/direct_match_service_factory.h"
 
 VivaldiBrowserMainExtraPartsAndroid::VivaldiBrowserMainExtraPartsAndroid() =
     default;
@@ -24,7 +25,17 @@ void VivaldiBrowserMainExtraPartsAndroid::PostProfileInit(
     vivaldi_default_bookmarks::UpdatePartners(
         vivaldi_default_bookmarks::UpdaterClientImpl::Create(profile));
   }
+    direct_match::DirectMatchServiceFactory::GetInstance();
 }
+
+//void VivaldiBrowserMainExtraPartsAndroid::PreProfileInit() {
+  //EnsureBrowserContextKeyedServiceFactoriesBuilt();
+//}
+
+//void VivaldiBrowserMainExtraPartsAndroid::
+    //EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+  //direct_match::DirectMatchServiceFactory::GetInstance();
+//}
 
 std::unique_ptr<VivaldiBrowserMainExtraParts>
 VivaldiBrowserMainExtraParts::Create() {

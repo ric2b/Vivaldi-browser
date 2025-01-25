@@ -34,8 +34,6 @@
 #                       Do not modify this file directly
 ################################################################################
 
-include(lang/spirv/writer/ast_printer/BUILD.cmake)
-include(lang/spirv/writer/ast_raise/BUILD.cmake)
 include(lang/spirv/writer/common/BUILD.cmake)
 include(lang/spirv/writer/helpers/BUILD.cmake)
 include(lang/spirv/writer/printer/BUILD.cmake)
@@ -61,11 +59,6 @@ tint_target_add_dependencies(tint_lang_spirv_writer lib
   tint_lang_core_constant
   tint_lang_core_ir
   tint_lang_core_type
-  tint_lang_wgsl
-  tint_lang_wgsl_ast
-  tint_lang_wgsl_features
-  tint_lang_wgsl_program
-  tint_lang_wgsl_sem
   tint_utils_containers
   tint_utils_diagnostic
   tint_utils_ice
@@ -81,6 +74,10 @@ tint_target_add_dependencies(tint_lang_spirv_writer lib
   tint_utils_traits
 )
 
+tint_target_add_external_dependencies(tint_lang_spirv_writer lib
+  "src_utils"
+)
+
 if(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)
   tint_target_add_external_dependencies(tint_lang_spirv_writer lib
     "spirv-headers"
@@ -89,7 +86,6 @@ endif(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)
 
 if(TINT_BUILD_SPV_WRITER)
   tint_target_add_dependencies(tint_lang_spirv_writer lib
-    tint_lang_spirv_writer_ast_printer
     tint_lang_spirv_writer_common
     tint_lang_spirv_writer_printer
     tint_lang_spirv_writer_raise
@@ -150,6 +146,7 @@ tint_target_add_dependencies(tint_lang_spirv_writer_test test
 
 tint_target_add_external_dependencies(tint_lang_spirv_writer_test test
   "gtest"
+  "src_utils"
 )
 
 if(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)
@@ -161,19 +158,18 @@ endif(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)
 
 if(TINT_BUILD_SPV_WRITER)
   tint_target_add_dependencies(tint_lang_spirv_writer_test test
+    tint_lang_spirv_writer
     tint_lang_spirv_writer_common
     tint_lang_spirv_writer_common_test
-    tint_lang_spirv_writer_printer
-    tint_lang_spirv_writer_raise
   )
 endif(TINT_BUILD_SPV_WRITER)
 
 endif(TINT_BUILD_SPV_WRITER)
-if(TINT_BUILD_SPV_WRITER)
+if(TINT_BUILD_SPV_WRITER AND TINT_BUILD_WGSL_READER)
 ################################################################################
 # Target:    tint_lang_spirv_writer_bench
 # Kind:      bench
-# Condition: TINT_BUILD_SPV_WRITER
+# Condition: TINT_BUILD_SPV_WRITER AND TINT_BUILD_WGSL_READER
 ################################################################################
 tint_add_target(tint_lang_spirv_writer_bench bench
   lang/spirv/writer/writer_bench.cc
@@ -181,7 +177,6 @@ tint_add_target(tint_lang_spirv_writer_bench bench
 
 tint_target_add_dependencies(tint_lang_spirv_writer_bench bench
   tint_api_common
-  tint_cmd_bench_bench
   tint_lang_core
   tint_lang_core_constant
   tint_lang_core_ir
@@ -209,6 +204,7 @@ tint_target_add_dependencies(tint_lang_spirv_writer_bench bench
 
 tint_target_add_external_dependencies(tint_lang_spirv_writer_bench bench
   "google-benchmark"
+  "src_utils"
 )
 
 if(TINT_BUILD_SPV_WRITER)
@@ -220,11 +216,12 @@ endif(TINT_BUILD_SPV_WRITER)
 
 if(TINT_BUILD_WGSL_READER)
   tint_target_add_dependencies(tint_lang_spirv_writer_bench bench
+    tint_cmd_bench_bench
     tint_lang_wgsl_reader
   )
 endif(TINT_BUILD_WGSL_READER)
 
-endif(TINT_BUILD_SPV_WRITER)
+endif(TINT_BUILD_SPV_WRITER AND TINT_BUILD_WGSL_READER)
 if(TINT_BUILD_SPV_WRITER)
 ################################################################################
 # Target:    tint_lang_spirv_writer_fuzz
@@ -256,6 +253,10 @@ tint_target_add_dependencies(tint_lang_spirv_writer_fuzz fuzz
   tint_utils_symbol
   tint_utils_text
   tint_utils_traits
+)
+
+tint_target_add_external_dependencies(tint_lang_spirv_writer_fuzz fuzz
+  "src_utils"
 )
 
 if(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)

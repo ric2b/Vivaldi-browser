@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #ifndef BASE_MEMORY_REF_COUNTED_MEMORY_H_
 #define BASE_MEMORY_REF_COUNTED_MEMORY_H_
 
@@ -17,7 +12,6 @@
 #include <vector>
 
 #include "base/base_export.h"
-#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory_mapping.h"
@@ -85,10 +79,6 @@ class BASE_EXPORT RefCountedStaticMemory : public RefCountedMemory {
   RefCountedStaticMemory();
   explicit RefCountedStaticMemory(base::span<const uint8_t> bytes);
 
-  // TODO(crbug.com/40284755): Remove this overload, use the span ctor instead.
-  RefCountedStaticMemory(const void* data, size_t length)
-      : UNSAFE_BUFFERS(bytes_(static_cast<const uint8_t*>(data), length)) {}
-
   RefCountedStaticMemory(const RefCountedStaticMemory&) = delete;
   RefCountedStaticMemory& operator=(const RefCountedStaticMemory&) = delete;
 
@@ -107,17 +97,14 @@ class BASE_EXPORT RefCountedBytes : public RefCountedMemory {
  public:
   RefCountedBytes();
 
-  // Constructs a RefCountedBytes object by copying from |initializer|.
+  // Constructs a RefCountedBytes object by taking `initializer`.
   explicit RefCountedBytes(std::vector<uint8_t> initializer);
+
+  // Constructs a RefCountedBytes object by copying from `initializer`.
   explicit RefCountedBytes(base::span<const uint8_t> initializer);
 
-  // Constructs a RefCountedBytes object by copying |size| bytes from |p|.
-  //
-  // TODO(crbug.com/40284755): Remove this overload, use the span ctor instead.
-  RefCountedBytes(const uint8_t* p, size_t size);
-
   // Constructs a RefCountedBytes object by zero-initializing a new vector of
-  // |size| bytes.
+  // `size` bytes.
   explicit RefCountedBytes(size_t size);
 
   RefCountedBytes(const RefCountedBytes&) = delete;

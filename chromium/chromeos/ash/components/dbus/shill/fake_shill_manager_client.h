@@ -85,6 +85,7 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
                        ErrorCallback error_callback) override;
   void DisableTethering(StringCallback callback,
                         ErrorCallback error_callback) override;
+  void OnDisableTetheringSuccess(const std::string& result);
   void CheckTetheringReadiness(StringCallback callback,
                                ErrorCallback error_callback) override;
   void SetLOHSEnabled(bool enabled,
@@ -136,6 +137,7 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
   void AddManagerService(const std::string& service_path,
                          bool notify_observers) override;
   void RemoveManagerService(const std::string& service_path) override;
+  void RestartTethering() override;
   void ClearManagerServices() override;
   void ServiceStateChanged(const std::string& service_path,
                            const std::string& state) override;
@@ -148,6 +150,8 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
   bool GetFastTransitionStatus() override;
   void SetSimulateConfigurationResult(
       FakeShillSimulatedResult configuration_result) override;
+  void SetSimulateConfigurationError(std::string_view error_name,
+                                     std::string_view error_message) override;
   void SetSimulateTetheringEnableResult(
       FakeShillSimulatedResult tethering_enable_result,
       const std::string& result_string) override;
@@ -178,6 +182,12 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
   static const char kFakeEthernetNetworkGuid[];
 
  private:
+  // Error message for configure service failure.
+  struct ConfigurationError {
+    std::string name;
+    std::string message;
+  };
+
   using ConnectToBestServicesCallbacks =
       std::tuple<base::OnceClosure, ErrorCallback>;
 
@@ -245,6 +255,8 @@ class COMPONENT_EXPORT(SHILL_CLIENT) FakeShillManagerClient
 
   FakeShillSimulatedResult simulate_configuration_result_ =
       FakeShillSimulatedResult::kSuccess;
+  ConfigurationError simulate_configuration_error_ = {"Error",
+                                                      "Simulated failure"};
   FakeShillSimulatedResult simulate_tethering_enable_result_ =
       FakeShillSimulatedResult::kSuccess;
   std::string simulate_enable_tethering_result_string_;

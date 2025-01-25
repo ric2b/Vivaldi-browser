@@ -27,6 +27,7 @@
 #include "components/datasource/vivaldi_data_source.h"
 #include "components/datasource/vivaldi_web_source.h"
 #include "components/db/mail_client/mail_client_service_factory.h"
+#include "components/direct_match/direct_match_service_factory.h"
 #include "components/notes/notes_factory.h"
 #include "components/notes/notes_model.h"
 #include "components/notes/notes_model_loaded_observer.h"
@@ -169,7 +170,7 @@ void VivaldiInitProfile(Profile* profile) {
         vivaldi::NotesModelFactory::GetForBrowserContext(profile);
     // `BookmarkModelLoadedObserver` destroys itself eventually, when loading
     // completes.
-      new vivaldi::NotesModelLoadedObserver(profile, notes_model);
+    new vivaldi::NotesModelLoadedObserver(profile, notes_model);
   }
   PerformUpdates(profile);
 
@@ -184,8 +185,8 @@ void VivaldiInitProfile(Profile* profile) {
     // Workaround for VB-105645. The menu configuration code is located in a
     // module that does not link to prefs and more.
     if (!profile->IsGuestSession()) {
-      bool compact = profile->GetPrefs()->GetBoolean(
-          vivaldiprefs::kMenuCompact);
+      bool compact =
+          profile->GetPrefs()->GetBoolean(vivaldiprefs::kMenuCompact);
       vivaldi::SetUsingCompactLegacyMenu(compact);
     }
 #endif
@@ -234,6 +235,7 @@ void VivaldiInitProfile(Profile* profile) {
       mail_client::MailClientServiceFactory::GetForProfile(profile);
   mail_client_service->AddObserver(new mail_client::MailClientModelObserver());
 
+  direct_match::DirectMatchServiceFactory::GetForBrowserContext(profile);
   vivaldi::LazyLoadServiceFactory::GetForProfile(profile);
 
   if (pref_service->GetBoolean(vivaldiprefs::kWebpagesSmoothScrollingEnabled) ==

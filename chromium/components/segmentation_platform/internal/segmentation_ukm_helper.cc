@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/segmentation_platform/internal/segmentation_ukm_helper.h"
 
 #include "base/bit_cast.h"
@@ -19,6 +24,7 @@
 #include "components/segmentation_platform/public/local_state_helper.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 #define CALL_MEMBER_FN(obj, func) ((obj).*(func))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x)[0])
@@ -203,12 +209,15 @@ ukm::SourceId SegmentationUkmHelper::RecordModelExecutionResult(
 ukm::SourceId SegmentationUkmHelper::RecordTrainingData(
     SegmentId segment_id,
     int64_t model_version,
+    ukm::SourceId ukm_source_id,
     const ModelProvider::Request& input_tensor,
     const ModelProvider::Response& outputs,
     const std::vector<int>& output_indexes,
     std::optional<proto::PredictionResult> prediction_result,
     std::optional<SelectedSegment> selected_segment) {
-  ukm::SourceId source_id = ukm::NoURLSourceId();
+  ukm::SourceId source_id = ukm_source_id != ukm::kInvalidSourceId
+                                ? ukm_source_id
+                                : ukm::NoURLSourceId();
   ukm::builders::Segmentation_ModelExecution execution_result(source_id);
   if (!AddInputsToUkm(&execution_result, segment_id, model_version,
                       input_tensor)) {

@@ -107,7 +107,6 @@ export class AppearanceElement extends AppearanceElementBase {
       loadTimeData.getBoolean('wallpaperSearchEnabled');
   protected isSourceTabFirstPartyNtp_: boolean = true;
   protected ntpManagedByName_: string = '';
-
   private setThemeListenerId_: number|null = null;
   private attachedTabStateUpdatedId_: number|null = null;
   private ntpManagedByNameUpdatedId_: number|null = null;
@@ -319,7 +318,7 @@ export class AppearanceElement extends AppearanceElementBase {
   }
 
   protected onNewTabPageManageByButtonClicked_() {
-    this.pageHandler_.openSettingsSearchEnginePage();
+    this.pageHandler_.openNtpManagedByPage();
   }
 
   private handleClickForManagedThemes_(): boolean {

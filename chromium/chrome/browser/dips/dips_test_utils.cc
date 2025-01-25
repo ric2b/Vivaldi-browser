@@ -8,6 +8,7 @@
 
 #include "base/test/bind.h"
 #include "chrome/browser/dips/dips_cleanup_service_factory.h"
+#include "chrome/browser/dips/dips_service.h"
 #include "chrome/browser/dips/dips_service_factory.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
@@ -92,7 +93,7 @@ void CreateImageAndWaitForCookieAccess(content::WebContents* web_contents,
   observer.Wait();
 }
 
-std::optional<StateValue> GetDIPSState(DIPSService* dips_service,
+std::optional<StateValue> GetDIPSState(DIPSServiceImpl* dips_service,
                                        const GURL& url) {
   std::optional<StateValue> state;
 
@@ -262,25 +263,7 @@ ScopedInitFeature::ScopedInitFeature(const base::Feature& feature,
 ScopedInitDIPSFeature::ScopedInitDIPSFeature(
     bool enable,
     const base::FieldTrialParams& params)
-    // DIPSServiceFactory and DIPSCleanupServiceFactory are singletons, and we
-    // want to create them *before* constructing `init_feature_`, so that they
-    // are initialized using the default value of features::kDIPS. We only want
-    // `init_feature_` to affect CreateProfileSelections(). We do this
-    // concisely by using the comma operator in the arguments to
-    // `init_feature_` to call DIPSServiceFactory::GetInstance() and
-    // DIPSCleanupServiceFactory::GetInstance() while ignoring their return
-    // values.
-    : init_feature_((DIPSServiceFactory::GetInstance(),
-                     DIPSCleanupServiceFactory::GetInstance(),
-                     features::kDIPS),
-                    enable,
-                    params),
-      override_profile_selections_for_dips_service_(
-          DIPSServiceFactory::GetInstance(),
-          DIPSServiceFactory::CreateProfileSelections()),
-      override_profile_selections_for_dips_cleanup_service_(
-          DIPSCleanupServiceFactory::GetInstance(),
-          DIPSCleanupServiceFactory::CreateProfileSelections()) {}
+    : init_feature_(features::kDIPS, enable, params) {}
 
 OpenedWindowObserver::OpenedWindowObserver(
     content::WebContents* web_contents,
@@ -313,4 +296,61 @@ void SimulateMouseClickAndWait(WebContents* web_contents) {
 
 UrlAndSourceId MakeUrlAndId(std::string_view url) {
   return UrlAndSourceId(GURL(url), ukm::AssignNewSourceId());
+}
+
+testing::AssertionResult SimulateDipsBounce(content::WebContents* web_contents,
+                                            const GURL& initial_url,
+                                            const GURL& bounce_url,
+                                            const GURL& final_url,
+                                            const GURL& next_initial_url) {
+  if (web_contents->GetLastCommittedURL() == initial_url) {
+    return testing::AssertionFailure() << "Already on " << initial_url;
+  }
+
+  DIPSService* dips_service =
+      DIPSService::Get(web_contents->GetBrowserContext());
+  RedirectChainObserver initial_observer(dips_service, initial_url);
+  if (!content::NavigateToURL(web_contents, initial_url)) {
+    return testing::AssertionFailure()
+           << "Failed to navigate to " << initial_url;
+  }
+  initial_observer.Wait();
+
+  if (testing::Test::HasFailure()) {
+    return testing::AssertionFailure()
+           << "Failure generated while waiting for the previous redirect chain "
+              "to be reported";
+  }
+
+  if (!content::NavigateToURLFromRenderer(web_contents, bounce_url)) {
+    return testing::AssertionFailure()
+           << "Failed to navigate to " << bounce_url;
+  }
+
+  testing::AssertionResult js_result =
+      content::ExecJs(web_contents, "document.cookie = 'bounce=stateful';",
+                      content::EXECUTE_SCRIPT_NO_USER_GESTURE);
+  if (!js_result) {
+    return js_result;
+  }
+
+  RedirectChainObserver final_observer(dips_service, final_url);
+  if (!content::NavigateToURLFromRendererWithoutUserGesture(web_contents,
+                                                            final_url)) {
+    return testing::AssertionFailure() << "Failed to navigate to " << final_url;
+  }
+
+  // End redirect chain by navigating with a user gesture.
+  if (!content::NavigateToURLFromRenderer(web_contents, next_initial_url)) {
+    return testing::AssertionFailure()
+           << "Failed to navigate to " << next_initial_url;
+  }
+  final_observer.Wait();
+
+  if (testing::Test::HasFailure()) {
+    return testing::AssertionFailure() << "Failure generated while waiting for "
+                                          "the redirect chain to be reported";
+  }
+
+  return testing::AssertionSuccess();
 }

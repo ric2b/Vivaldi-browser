@@ -17,7 +17,6 @@
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
-#include "components/viz/common/quads/yuv_video_draw_quad.h"
 #include "components/viz/common/resources/resource_id.h"
 
 namespace viz {
@@ -104,6 +103,12 @@ RenderPassBuilder& RenderPassBuilder::AddFilter(
 RenderPassBuilder& RenderPassBuilder::AddBackdropFilter(
     const cc::FilterOperation& filter) {
   pass_->backdrop_filters.Append(filter);
+  return *this;
+}
+
+RenderPassBuilder& RenderPassBuilder::SetTransformToRootTarget(
+    const gfx::Transform& transform) {
+  pass_->transform_to_root_target = transform;
   return *this;
 }
 
@@ -251,9 +256,6 @@ RenderPassBuilder& RenderPassBuilder::SetQuadDamageRect(
   if (quad->material == DrawQuad::Material::kTextureContent) {
     auto* texture_quad = static_cast<TextureDrawQuad*>(quad);
     texture_quad->damage_rect = damage_rect;
-  } else if (quad->material == DrawQuad::Material::kYuvVideoContent) {
-    auto* yuv_video_quad = static_cast<YUVVideoDrawQuad*>(quad);
-    yuv_video_quad->damage_rect = damage_rect;
   } else {
     NOTREACHED_IN_MIGRATION();
   }
@@ -450,6 +452,12 @@ CompositorFrameBuilder& CompositorFrameBuilder::SetSendFrameTokenToEmbedder(
   return *this;
 }
 
+CompositorFrameBuilder& CompositorFrameBuilder::SetIsHandlingInteraction(
+    bool is_handling_interaction) {
+  frame_->metadata.is_handling_interaction = is_handling_interaction;
+  return *this;
+}
+
 CompositorFrameBuilder& CompositorFrameBuilder::AddDelegatedInkMetadata(
     const gfx::DelegatedInkMetadata& metadata) {
   frame_->metadata.delegated_ink_metadata =
@@ -512,6 +520,14 @@ AggregatedFrame MakeDefaultAggregatedFrame(size_t num_render_passes) {
                                           kDefaultDamageRect, gfx::Transform());
   }
   return frame;
+}
+
+CompositorFrame MakeDefaultInteractiveCompositorFrame(uint64_t source_id) {
+  return CompositorFrameBuilder()
+      .AddDefaultRenderPass()
+      .SetBeginFrameSourceId(source_id)
+      .SetIsHandlingInteraction(true)
+      .Build();
 }
 
 CompositorFrame MakeEmptyCompositorFrame() {

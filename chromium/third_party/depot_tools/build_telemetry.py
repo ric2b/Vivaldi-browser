@@ -5,6 +5,7 @@
 
 import argparse
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -44,11 +45,14 @@ class Config:
 
         if not config:
             config = {
-                "is_googler": is_googler(),
+                "user": check_auth().get("email", ""),
                 "status": None,
                 "countdown": self._countdown,
                 "version": VERSION,
             }
+        if not config.get("user"):
+            config["user"] = check_auth().get("email", "")
+
 
         self._config = config
 
@@ -62,9 +66,14 @@ class Config:
 
     @property
     def is_googler(self):
+        return self.user.endswith("@google.com")
+
+    @property
+    def user(self):
         if not self._config:
             return
-        return self._config.get("is_googler") == True
+        return self._config.get("user", "")
+
 
     @property
     def countdown(self):
@@ -84,7 +93,7 @@ class Config:
                   self._config_path,
                   file=sys.stderr)
             return False
-        if not self._config.get("is_googler"):
+        if not self.is_googler:
             return False
         if self._config.get("status") == "opt-out":
             return False
@@ -127,6 +136,9 @@ class Config:
         self.save()
         print("build telemetry collection is opted out")
 
+    def status(self):
+        return self._config["status"]
+
 
 def load_config(cfg_path=_DEFAULT_CONFIG_PATH, countdown=_DEFAULT_COUNTDOWN):
     """Loads the config from the default location."""
@@ -135,25 +147,23 @@ def load_config(cfg_path=_DEFAULT_CONFIG_PATH, countdown=_DEFAULT_COUNTDOWN):
     return cfg
 
 
-def is_googler():
-    """Checks whether this user is Googler or not."""
-    p = subprocess.run(
-        "cipd auth-info",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        shell=True,
-    )
-    if p.returncode != 0:
-        return False
-    lines = p.stdout.splitlines()
-    if len(lines) == 0:
-        return False
-    l = lines[0]
-    # |l| will be like 'Logged in as <user>@google.com.' for googler using
-    # reclient.
-    return l.startswith("Logged in as ") and l.endswith("@google.com.")
-
+def check_auth():
+    """Checks auth information."""
+    try:
+        out = subprocess.check_output(
+            "cipd auth-info --json-output -",
+            text=True,
+            shell=True,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+    except Exception as e:
+        return {}
+    try:
+        return json.loads(out)
+    except json.JSONDecodeError as e:
+        logging.error(e)
+        return {}
 
 def enabled():
     """Checks whether the build can upload build telemetry."""
@@ -161,9 +171,22 @@ def enabled():
     return cfg.enabled()
 
 
+def print_status(cfg):
+    status = cfg.status()
+    if status == "opt-in":
+        print("build telemetry collection is enabled. You have opted in.")
+    elif status == "opt-out":
+        print("build telemetry collection is disabled. You have opted out.")
+    else:
+        print("build telemetry collection is enabled.")
+    print("")
+
+
 def main():
-    parser = argparse.ArgumentParser(prog="Build Telemetry util")
-    parser.add_argument('status', nargs=1, choices=['opt-in', 'opt-out'])
+    parser = argparse.ArgumentParser(prog="build_telemetry")
+    parser.add_argument('status',
+                        nargs='?',
+                        choices=["opt-in", "opt-out", "status"])
     args = parser.parse_args()
 
     cfg = load_config()
@@ -178,6 +201,12 @@ def main():
     if args.status == "opt-out":
         cfg.opt_out()
         return
+    if args.status == "status":
+        print_status(cfg)
+        return
+
+    print_status(cfg)
+    parser.print_help()
 
 
 if __name__ == "__main__":

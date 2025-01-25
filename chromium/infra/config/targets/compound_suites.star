@@ -12,15 +12,6 @@
 load("//lib/targets.star", "targets")
 
 targets.legacy_compound_suite(
-    name = "android_10_rel_gtests",
-    basic_suites = [
-        "android_trichrome_smoke_tests",
-        "android_ar_gtests",
-        "vr_android_specific_chromium_tests",
-    ],
-)
-
-targets.legacy_compound_suite(
     name = "android_12_dbg_emulator_gtests",
     basic_suites = [
         "android_trichrome_smoke_tests",
@@ -32,20 +23,6 @@ targets.legacy_compound_suite(
     basic_suites = [
         "cronet_clang_coverage_additional_gtests",
         "cronet_gtests",
-    ],
-)
-
-targets.legacy_compound_suite(
-    name = "android_marshmallow_gtests",
-    basic_suites = [
-        "android_smoke_tests",
-        "android_specific_chromium_gtests",  # Already includes gl_gtests.
-        "chromium_gtests",
-        "chromium_gtests_for_devices_with_graphical_output",
-        "chrome_public_tests",
-        "linux_flavor_specific_chromium_gtests",
-        "vr_android_specific_chromium_tests",
-        "vr_platform_specific_chromium_gtests",
     ],
 )
 
@@ -64,6 +41,7 @@ targets.legacy_compound_suite(
         "system_webview_shell_instrumentation_tests",  # Not an experimental test
         "webview_cts_tests_gtest",
         "webview_ui_instrumentation_tests",
+        "webview_instrumentation_test_apk_single_process_mode_gtests",
     ],
 )
 
@@ -94,6 +72,7 @@ targets.legacy_compound_suite(
         "system_webview_shell_instrumentation_tests",  # Not an experimental test
         "webview_cts_tests_gtest",
         "webview_ui_instrumentation_tests",
+        "webview_instrumentation_test_apk_single_process_mode_gtests",
     ],
 )
 
@@ -114,17 +93,8 @@ targets.legacy_compound_suite(
         # "vr_android_specific_chromium_tests",
         # "vr_platform_specific_chromium_gtests",
         "webview_64_cts_tests_gtest",
+        "webview_instrumentation_test_apk_single_process_mode_gtests",
         "webview_ui_instrumentation_tests",
-    ],
-)
-
-targets.legacy_compound_suite(
-    name = "bfcache_android_gtests",
-    basic_suites = [
-        "bfcache_android_specific_gtests",
-        "bfcache_generic_gtests",
-        "webview_bot_instrumentation_test_apk_bfcache_mutations_gtest",
-        "webview_cts_tests_bfcache_mutations_gtest",
     ],
 )
 
@@ -145,52 +115,11 @@ targets.legacy_compound_suite(
 )
 
 targets.legacy_compound_suite(
-    name = "chrome_wpt_tests_three_modes",
-    basic_suites = [
-        "chromium_wpt_tests_isolated_scripts",
-        "chromium_wpt_tests_headful_isolated_scripts",
-        "headless_shell_wpt_tests_isolated_scripts",
-    ],
-)
-
-targets.legacy_compound_suite(
-    name = "chromeos_device_no_gtests",
-    basic_suites = [
-        "chromeos_browser_all_tast_tests",
-        "chromeos_browser_criticalstaging_tast_tests",
-        "chromeos_browser_disabled_tast_tests",
-        "chromeos_browser_integration_tests",
-    ],
-)
-
-targets.legacy_compound_suite(
     name = "chromeos_vm_gtests",
     basic_suites = [
         "chromeos_system_friendly_gtests",
         "chromeos_vaapi_fakelib_gtests",
         "chromeos_integration_tests_suite",
-    ],
-)
-
-targets.legacy_compound_suite(
-    name = "chromeos_vm_gtests_and_tast",
-    basic_suites = [
-        "chromeos_browser_all_tast_tests",
-        "chromeos_browser_criticalstaging_tast_tests",
-        "chromeos_browser_disabled_tast_tests",
-        "chromeos_browser_integration_tests",
-        "chromeos_system_friendly_gtests",
-        "chromeos_vaapi_fakelib_gtests",
-        "chromeos_integration_tests_suite",
-    ],
-)
-
-targets.legacy_compound_suite(
-    name = "chromeos_vm_preuprev_tast",
-    basic_suites = [
-        "chromeos_browser_cq_medium_tast_tests",
-        "chromeos_integration_tests_suite",
-        "chromeos_device_only_gtests",
     ],
 )
 
@@ -215,6 +144,7 @@ targets.legacy_compound_suite(
         "linux_flavor_specific_chromium_gtests",
         "vr_android_specific_chromium_tests",
         "vr_platform_specific_chromium_gtests",
+        "webview_instrumentation_test_apk_single_process_mode_gtests",
     ],
 )
 
@@ -280,15 +210,6 @@ targets.legacy_compound_suite(
     ],
 )
 
-targets.legacy_compound_suite(
-    name = "chromium_linux_cast_receiver_gtests",
-    basic_suites = [
-        "cast_receiver_gtests",
-        "chromium_gtests",
-        "linux_flavor_specific_chromium_gtests",
-    ],
-)
-
 # When changing something here, change chromium_linux_and_gl_gtests,
 # chromium_linux_and_gl_and_vulkan_gtests in the same way.
 targets.legacy_compound_suite(
@@ -320,10 +241,6 @@ targets.legacy_compound_suite(
         "telemetry_perf_unittests_isolated_scripts",
         "vulkan_swiftshader_isolated_scripts",
         "chromium_web_tests_high_dpi_isolated_scripts",
-        # TODO(crbug.com/328079854): we should eventually run chrome_wpt_tests where
-        # blink_wpt_tests runs on Linux. There should not have any resource
-        # concern on this because those are all CI builders.
-        #"chromium_wpt_tests_isolated_scripts",
     ],
 )
 
@@ -362,7 +279,6 @@ targets.legacy_compound_suite(
         # TODO(crbug.com/40287410): Remove this once the BackgroundResourceFetch
         # feature launches.
         "chromium_web_tests_brfetch_isolated_scripts",
-        "chromium_wpt_tests_isolated_scripts",
     ],
 )
 
@@ -549,21 +465,6 @@ targets.legacy_compound_suite(
 )
 
 targets.legacy_compound_suite(
-    name = "cronet_dbg_isolated_scripts",
-    basic_suites = [
-        "cronet_sizes_suite",
-    ],
-)
-
-targets.legacy_compound_suite(
-    name = "cronet_rel_isolated_scripts",
-    basic_suites = [
-        "cronet_resource_sizes",
-        "cronet_sizes_suite",
-    ],
-)
-
-targets.legacy_compound_suite(
     name = "devtools_gtests",
     basic_suites = [
         "devtools_browser_tests_suite",
@@ -694,6 +595,16 @@ targets.legacy_compound_suite(
     ],
 )
 
+# Same as gpu_dawn_compat_telemetry_tests, but without SwiftShader tests since
+# SwiftShader is not used on Android.
+targets.legacy_compound_suite(
+    name = "gpu_dawn_android_compat_telemetry_tests",
+    basic_suites = [
+        "gpu_dawn_webgpu_compat_cts",
+        "gpu_dawn_webgpu_cts",
+    ],
+)
+
 # Same as gpu_dawn_telemetry_tests, but without SwiftShader tests since
 # SwiftShader is not used on Android.
 targets.legacy_compound_suite(
@@ -753,6 +664,17 @@ targets.legacy_compound_suite(
     ],
 )
 
+# TODO(crbug.com/364675466): Remove this when Tint IR is launched on macOS.
+targets.legacy_compound_suite(
+    name = "gpu_dawn_integration_gtests_passthrough_macos",
+    basic_suites = [
+        "gpu_dawn_gtests",
+        "gpu_dawn_gtests_with_validation",
+        "gpu_dawn_gtests_use_tint_ir",
+        "gpu_common_gtests_passthrough",
+    ],
+)
+
 targets.legacy_compound_suite(
     name = "gpu_dawn_isolated_scripts",
     basic_suites = [
@@ -801,13 +723,6 @@ targets.legacy_compound_suite(
         "gpu_angle_unit_gtests",
         "gpu_common_gtests_passthrough",
         "gpu_desktop_specific_gtests",
-    ],
-)
-
-targets.legacy_compound_suite(
-    name = "gpu_fuchsia_telemetry_tests",
-    basic_suites = [
-        "gpu_validating_telemetry_tests",
     ],
 )
 
@@ -1203,11 +1118,9 @@ targets.legacy_compound_suite(
     ],
 )
 
-# This is:
-#   linux_chromeos_gtests
-#   + 'linux_chromeos_browser_tests_require_lacros'
+# This is for linux-chromeos-rel CQ builder.
 targets.legacy_compound_suite(
-    name = "linux_chromeos_specific_and_lacros_dependent_gtests",
+    name = "linux_chromeos_rel_cq",
     basic_suites = [
         "aura_gtests",
         "chromium_gtests",
@@ -1216,7 +1129,6 @@ targets.legacy_compound_suite(
         "chromium_gtests_for_win_and_linux_only",
         "linux_chromeos_lacros_gtests",
         "linux_chromeos_specific_gtests",
-        "linux_chromeos_browser_tests_require_lacros",
         "linux_flavor_specific_chromium_gtests",
         "non_android_chromium_gtests",
         "pixel_experimental_browser_tests_gtests",

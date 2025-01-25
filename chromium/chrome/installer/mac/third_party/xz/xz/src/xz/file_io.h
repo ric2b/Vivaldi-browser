@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       file_io.h
 /// \brief      I/O types and functions
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -18,9 +17,22 @@
 #	define IO_BUFFER_SIZE (BUFSIZ & ~7U)
 #endif
 
+#ifdef _MSC_VER
+	// The first one renames both "struct stat" -> "struct _stat64"
+	// and stat() -> _stat64(). The documentation mentions only
+	// "struct __stat64", not "struct _stat64", but the latter
+	// works too.
+#	define stat _stat64
+#	define fstat _fstat64
+#	define off_t __int64
+#endif
+
 
 /// is_sparse() accesses the buffer as uint64_t for maximum speed.
-/// Use an union to make sure that the buffer is properly aligned.
+/// The u32 and u64 members must only be access through this union
+/// to avoid strict aliasing violations. Taking a pointer of u8
+/// should be fine as long as uint8_t maps to unsigned char which
+/// can alias anything.
 typedef union {
 	uint8_t u8[IO_BUFFER_SIZE];
 	uint32_t u32[IO_BUFFER_SIZE / sizeof(uint32_t)];
@@ -46,6 +58,13 @@ typedef struct {
 	/// True once end of the source file has been detected.
 	bool src_eof;
 
+	/// For --flush-timeout: True if at least one byte has been read
+	/// since the previous flush or the start of the file.
+	bool src_has_seen_input;
+
+	/// For --flush-timeout: True when flushing is needed.
+	bool flush_needed;
+
 	/// If true, we look for long chunks of zeros and try to create
 	/// a sparse file.
 	bool dest_try_sparse;
@@ -66,6 +85,14 @@ typedef struct {
 
 /// \brief      Initialize the I/O module
 extern void io_init(void);
+
+
+#ifndef TUKLIB_DOSLIKE
+/// \brief      Write a byte to user_abort_pipe[1]
+///
+/// This is called from a signal handler.
+extern void io_write_to_user_abort_pipe(void);
+#endif
 
 
 /// \brief      Disable creation of sparse files when decompressing
@@ -94,12 +121,38 @@ extern void io_close(file_pair *pair, bool success);
 ///
 /// \param      pair    File pair having the source file open for reading
 /// \param      buf     Destination buffer to hold the read data
-/// \param      size    Size of the buffer; assumed be smaller than SSIZE_MAX
+/// \param      size    Size of the buffer; must be at most IO_BUFFER_SIZE
 ///
 /// \return     On success, number of bytes read is returned. On end of
 ///             file zero is returned and pair->src_eof set to true.
 ///             On error, SIZE_MAX is returned and error message printed.
 extern size_t io_read(file_pair *pair, io_buf *buf, size_t size);
+
+
+/// \brief      Fix the position in src_fd
+///
+/// This is used when --single-thream has been specified and decompression
+/// is successful. If the input file descriptor supports seeking, this
+/// function fixes the input position to point to the next byte after the
+/// decompressed stream.
+///
+/// \param      pair        File pair having the source file open for reading
+/// \param      rewind_size How many bytes of extra have been read i.e.
+///                         how much to seek backwards.
+extern void io_fix_src_pos(file_pair *pair, size_t rewind_size);
+
+
+/// \brief      Seek to the given absolute position in the source file
+///
+/// This calls lseek() and also clears pair->src_eof.
+///
+/// \param      pair    Seekable source file
+/// \param      pos     Offset relative to the beginning of the file,
+///                     from which the data should be read.
+///
+/// \return     On success, false is returned. On error, error message
+///             is printed and true is returned.
+extern bool io_seek_src(file_pair *pair, uint64_t pos);
 
 
 /// \brief      Read from source file from given offset to a buffer
@@ -115,14 +168,14 @@ extern size_t io_read(file_pair *pair, io_buf *buf, size_t size);
 ///
 /// \return     On success, false is returned. On error, error message
 ///             is printed and true is returned.
-extern bool io_pread(file_pair *pair, io_buf *buf, size_t size, off_t pos);
+extern bool io_pread(file_pair *pair, io_buf *buf, size_t size, uint64_t pos);
 
 
 /// \brief      Writes a buffer to the destination file
 ///
 /// \param      pair    File pair having the destination file open for writing
 /// \param      buf     Buffer containing the data to be written
-/// \param      size    Size of the buffer; assumed be smaller than SSIZE_MAX
+/// \param      size    Size of the buffer; must be at most IO_BUFFER_SIZE
 ///
 /// \return     On success, zero is returned. On error, -1 is returned
 ///             and error message printed.

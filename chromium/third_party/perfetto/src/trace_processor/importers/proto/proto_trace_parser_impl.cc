@@ -16,21 +16,24 @@
 
 #include "src/trace_processor/importers/proto/proto_trace_parser_impl.h"
 
-#include <string.h>
-
-#include <cinttypes>
+#include <cstdint>
+#include <cstring>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "perfetto/base/logging.h"
+#include "perfetto/base/status.h"
 #include "perfetto/ext/base/metatrace_events.h"
 #include "perfetto/ext/base/string_utils.h"
 #include "perfetto/ext/base/string_view.h"
 #include "perfetto/ext/base/string_writer.h"
-#include "perfetto/ext/base/uuid.h"
-
+#include "perfetto/trace_processor/trace_blob_view.h"
+#include "src/trace_processor/containers/null_term_string_view.h"
 #include "src/trace_processor/importers/common/args_tracker.h"
 #include "src/trace_processor/importers/common/cpu_tracker.h"
 #include "src/trace_processor/importers/common/event_tracker.h"
+#include "src/trace_processor/importers/common/legacy_v8_cpu_profile_tracker.h"
 #include "src/trace_processor/importers/common/metadata_tracker.h"
 #include "src/trace_processor/importers/common/parser_types.h"
 #include "src/trace_processor/importers/common/process_tracker.h"
@@ -39,8 +42,8 @@
 #include "src/trace_processor/importers/etw/etw_module.h"
 #include "src/trace_processor/importers/ftrace/ftrace_module.h"
 #include "src/trace_processor/importers/proto/track_event_module.h"
-#include "src/trace_processor/storage/metadata.h"
 #include "src/trace_processor/storage/stats.h"
+#include "src/trace_processor/storage/trace_storage.h"
 #include "src/trace_processor/types/trace_processor_context.h"
 #include "src/trace_processor/types/variadic.h"
 
@@ -49,8 +52,7 @@
 #include "protos/perfetto/trace/perfetto/perfetto_metatrace.pbzero.h"
 #include "protos/perfetto/trace/trace_packet.pbzero.h"
 
-namespace perfetto {
-namespace trace_processor {
+namespace perfetto::trace_processor {
 
 ProtoTraceParserImpl::ProtoTraceParserImpl(TraceProcessorContext* context)
     : context_(context),
@@ -109,8 +111,8 @@ void ProtoTraceParserImpl::ParseTrackEvent(int64_t ts, TrackEventData data) {
 }
 
 void ProtoTraceParserImpl::ParseEtwEvent(uint32_t cpu,
-                                     int64_t ts,
-                                     TracePacketData data) {
+                                         int64_t ts,
+                                         TracePacketData data) {
   PERFETTO_DCHECK(context_->etw_module);
   context_->etw_module->ParseEtwEventData(cpu, ts, data);
 
@@ -121,8 +123,8 @@ void ProtoTraceParserImpl::ParseEtwEvent(uint32_t cpu,
 }
 
 void ProtoTraceParserImpl::ParseFtraceEvent(uint32_t cpu,
-                                        int64_t ts,
-                                        TracePacketData data) {
+                                            int64_t ts,
+                                            TracePacketData data) {
   PERFETTO_DCHECK(context_->ftrace_module);
   context_->ftrace_module->ParseFtraceEventData(cpu, ts, data);
 
@@ -133,8 +135,8 @@ void ProtoTraceParserImpl::ParseFtraceEvent(uint32_t cpu,
 }
 
 void ProtoTraceParserImpl::ParseInlineSchedSwitch(uint32_t cpu,
-                                              int64_t ts,
-                                              InlineSchedSwitch data) {
+                                                  int64_t ts,
+                                                  InlineSchedSwitch data) {
   PERFETTO_DCHECK(context_->ftrace_module);
   context_->ftrace_module->ParseInlineSchedSwitch(cpu, ts, data);
 
@@ -145,14 +147,26 @@ void ProtoTraceParserImpl::ParseInlineSchedSwitch(uint32_t cpu,
 }
 
 void ProtoTraceParserImpl::ParseInlineSchedWaking(uint32_t cpu,
-                                              int64_t ts,
-                                              InlineSchedWaking data) {
+                                                  int64_t ts,
+                                                  InlineSchedWaking data) {
   PERFETTO_DCHECK(context_->ftrace_module);
   context_->ftrace_module->ParseInlineSchedWaking(cpu, ts, data);
 
   // TODO(lalitm): maybe move this to the flush method in the trace processor
   // once we have it. This may reduce performance in the ArgsTracker though so
   // needs to be handled carefully.
+  context_->args_tracker->Flush();
+}
+
+void ProtoTraceParserImpl::ParseLegacyV8ProfileEvent(
+    int64_t ts,
+    LegacyV8CpuProfileEvent event) {
+  base::Status status = context_->legacy_v8_cpu_profile_tracker->AddSample(
+      ts, event.session_id, event.pid, event.tid, event.callsite_id);
+  if (!status.ok()) {
+    context_->storage->IncrementStats(
+        stats::legacy_v8_cpu_profile_invalid_sample);
+  }
   context_->args_tracker->Flush();
 }
 
@@ -373,5 +387,4 @@ StringId ProtoTraceParserImpl::GetMetatraceInternedString(uint64_t iid) {
   return *maybe_id;
 }
 
-}  // namespace trace_processor
-}  // namespace perfetto
+}  // namespace perfetto::trace_processor

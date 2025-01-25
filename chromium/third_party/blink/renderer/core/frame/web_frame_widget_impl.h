@@ -82,7 +82,7 @@
 #include "third_party/blink/renderer/platform/widget/widget_base_client.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
-#include "ui/base/ui_base_types.h"
+#include "ui/base/mojom/window_show_state.mojom-blink-forward.h"
 #include "ui/gfx/ca_layer_result.h"
 
 namespace gfx {
@@ -246,24 +246,16 @@ class CORE_EXPORT WebFrameWidgetImpl
   cc::EventListenerProperties EventListenerProperties(
       cc::EventListenerClass) const final;
   mojom::blink::DisplayMode DisplayMode() const override;
-  ui::WindowShowState WindowShowState() const override;
+  ui::mojom::blink::WindowShowState WindowShowState() const override;
   bool Resizable() const override;
   const WebVector<gfx::Rect>& ViewportSegments() const override;
   void SetDelegatedInkMetadata(
       std::unique_ptr<gfx::DelegatedInkMetadata> metadata) final;
-  void DidOverscroll(const gfx::Vector2dF& overscroll_delta,
-                     const gfx::Vector2dF& accumulated_overscroll,
-                     const gfx::PointF& position,
-                     const gfx::Vector2dF& velocity) override;
   void InjectScrollbarGestureScroll(const gfx::Vector2dF& delta,
                                     ui::ScrollGranularity granularity,
                                     cc::ElementId scrollable_area_element_id,
                                     WebInputEvent::Type injected_type) override;
   void DidChangeCursor(const ui::Cursor&) override;
-#if BUILDFLAG(IS_ANDROID)
-  void PassImeRenderWidgetHost(
-      mojo::PendingRemote<mojom::blink::ImeRenderWidgetHost>) override;
-#endif
   void GetCompositionCharacterBoundsInWindow(
       Vector<gfx::Rect>* bounds_in_dips) override;
   // Return the last calculated line bounds.
@@ -431,6 +423,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   void SetHandlingInputEvent(bool handling) override;
   void ProcessInputEventSynchronouslyForTesting(
       const WebCoalescedInputEvent&) override;
+  void DispatchNonBlockingEventForTesting(
+      std::unique_ptr<WebCoalescedInputEvent> event) override;
   WebInputEventResult DispatchBufferedTouchEvents() override;
   WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&) override;
   void UpdateTextInputState() override;
@@ -477,6 +471,10 @@ class CORE_EXPORT WebFrameWidgetImpl
                          ui::mojom::blink::DragOperation,
                          base::OnceClosure callback) override;
   void OnStartStylusWriting(OnStartStylusWritingCallback callback) override;
+#if BUILDFLAG(IS_ANDROID)
+  void PassImeRenderWidgetHost(
+      mojo::PendingRemote<mojom::blink::ImeRenderWidgetHost>) override;
+#endif
   void NotifyClearedDisplayedGraphics() override;
 
   // mojom::blink::FrameWidgetInputHandler overrides:
@@ -489,7 +487,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   void SetDisplayMode(mojom::blink::DisplayMode);
 
   // Sets the window show state.
-  void SetWindowShowState(ui::WindowShowState);
+  void SetWindowShowState(ui::mojom::blink::WindowShowState);
 
   void SetResizable(bool);
 
@@ -508,6 +506,7 @@ class CORE_EXPORT WebFrameWidgetImpl
 
   double GetZoomLevel() override;
   void SetZoomLevel(double zoom_level) override;
+  double GetCSSZoomFactor() const override;
 
   // Called when the View has auto resized.
   virtual void DidAutoResize(const gfx::Size& size);
@@ -701,10 +700,16 @@ class CORE_EXPORT WebFrameWidgetImpl
   // Return if there is a pending scale animation.
   bool HasPendingPageScaleAnimation();
 
-  // Set the source URL and the `primary_main_frame_item_sequence_number`
-  // (if the compositor is rendering the primary main frame) for the compositor.
+  // Set the source URL (if the compositor is rendering the primary main frame).
+  // Also propagates the history sequence number (equivalent to a
+  // `PropagateHistorySequenceNumberToCompositor()` call).
   void UpdateNavigationStateForCompositor(ukm::SourceId source_id,
                                           const KURL& url);
+
+  // Propagates the HistoryItem's ItemSequenceNumber to the compositor. This is
+  // used as part of a RenderFrameMetadata which is sent to the browser when the
+  // compositor submits a frame.
+  void PropagateHistorySequenceNumberToCompositor();
 
   // Ask compositor to create the shared memory for smoothness ukm region.
   base::ReadOnlySharedMemoryRegion CreateSharedMemoryForSmoothnessUkm();
@@ -774,7 +779,6 @@ class CORE_EXPORT WebFrameWidgetImpl
       cc::ActiveFrameSequenceTrackers trackers) override;
   std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
       override;
-  std::unique_ptr<cc::WebVitalMetrics> GetWebVitalMetrics() override;
   void BeginUpdateLayers() override;
   void EndUpdateLayers() override;
   void DidCommitAndDrawCompositorFrame() override;
@@ -918,6 +922,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   WebInputEventResult HandleMouseWheel(LocalFrame&,
                                        const WebMouseWheelEvent&) override;
   WebInputEventResult HandleCharEvent(const WebKeyboardEvent&) override;
+
+  void SetZoomInternal(double zoom_level, double css_zoom_factor);
 
   WebInputEventResult HandleCapturedMouseEvent(const WebCoalescedInputEvent&);
   void MouseContextMenu(const WebMouseEvent&);
@@ -1086,7 +1092,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   Member<WebLocalFrameImpl> local_root_;
 
   mojom::blink::DisplayMode display_mode_;
-  ui::WindowShowState window_show_state_;
+  ui::mojom::blink::WindowShowState window_show_state_;
   bool resizable_;
 
   WebVector<gfx::Rect> viewport_segments_;
@@ -1238,6 +1244,7 @@ class CORE_EXPORT WebFrameWidgetImpl
       input_handler_weak_ptr_factory_{this};
 
   double zoom_level_ = 0;
+  double css_zoom_factor_ = 1;
 };
 
 }  // namespace blink

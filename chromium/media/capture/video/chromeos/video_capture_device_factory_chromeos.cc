@@ -8,6 +8,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/task/single_thread_task_runner.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "media/capture/video/chromeos/camera_app_device_bridge_impl.h"
 #include "media/capture/video/chromeos/camera_hal_dispatcher_impl.h"
 
@@ -16,6 +18,8 @@ namespace media {
 namespace {
 
 gpu::GpuMemoryBufferManager* g_gpu_buffer_manager = nullptr;
+scoped_refptr<gpu::SharedImageInterface> g_shared_image_interface = nullptr;
+scoped_refptr<gpu::GpuChannelHost> gpu_channel_host_ = nullptr;
 
 }  // namespace
 
@@ -79,6 +83,37 @@ VideoCaptureDeviceFactoryChromeOS::GetBufferManager() {
 void VideoCaptureDeviceFactoryChromeOS::SetGpuBufferManager(
     gpu::GpuMemoryBufferManager* buffer_manager) {
   g_gpu_buffer_manager = buffer_manager;
+}
+
+// static
+void VideoCaptureDeviceFactoryChromeOS::SetGpuChannelHost(
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
+  gpu_channel_host_ = std::move(gpu_channel_host);
+}
+
+// static
+scoped_refptr<gpu::GpuChannelHost>
+VideoCaptureDeviceFactoryChromeOS::GetGpuChannelHost() {
+  return gpu_channel_host_;
+}
+
+// static
+gpu::SharedImageInterface*
+VideoCaptureDeviceFactoryChromeOS::GetSharedImageInterface() {
+  return g_shared_image_interface.get();
+}
+
+// static
+void VideoCaptureDeviceFactoryChromeOS::SetSharedImageInterface(
+    scoped_refptr<gpu::SharedImageInterface> shared_image_interface) {
+  // If both SharedImageInterface have a valid pointer, then making sure they
+  // are same in order to catch any issues caused from setting it to different
+  // values multiple times in a given process.
+  if (shared_image_interface && g_shared_image_interface) {
+    CHECK_EQ(shared_image_interface.get(), g_shared_image_interface.get());
+    return;
+  }
+  g_shared_image_interface = std::move(shared_image_interface);
 }
 
 bool VideoCaptureDeviceFactoryChromeOS::Init() {

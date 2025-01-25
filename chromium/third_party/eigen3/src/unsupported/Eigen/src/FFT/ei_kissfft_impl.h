@@ -27,12 +27,14 @@ struct kiss_cpx_fft {
   std::vector<Complex> m_scratchBuf;
   bool m_inverse;
 
+  static const Scalar m_pi4;  // constant pi / 4
+
   inline void make_twiddles(int nfft, bool inverse) {
     using numext::cos;
     using numext::sin;
     m_inverse = inverse;
     m_twiddles.resize(nfft);
-    double phinc = 0.25 * double(EIGEN_PI) / nfft;
+    Scalar phinc = m_pi4 / nfft;
     Scalar flip = inverse ? Scalar(1) : Scalar(-1);
     m_twiddles[0] = Complex(Scalar(1), Scalar(0));
     if ((nfft & 1) == 0) m_twiddles[nfft / 2] = Complex(Scalar(-1), Scalar(0));
@@ -278,6 +280,10 @@ struct kiss_cpx_fft {
     }
   }
 };
+
+template <typename _Scalar>
+const typename kiss_cpx_fft<_Scalar>::Scalar kiss_cpx_fft<_Scalar>::m_pi4 =
+    numext::atan(kiss_cpx_fft<_Scalar>::Scalar(1));
 
 template <typename Scalar_>
 struct kissfft_impl {

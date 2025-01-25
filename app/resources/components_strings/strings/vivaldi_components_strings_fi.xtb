@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> katkaisi yhteyden yllättäen.</translation>
 <translation id="1161325031994447685">Yhdistä langaton verkko uudelleen</translation>
 <translation id="1175364870820465910">Tulo&amp;sta…</translation>
+<translation id="132390688737681464">Tallenna ja täytä osoitteet</translation>
 <translation id="1375198122581997741">Tietoja versiosta</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> ei lähettänyt tietoa.</translation>
 <translation id="1559528461873125649">Tiedostoa tai hakemistoa ei ole olemassa</translation>
 <translation id="1640244768702815859">Yritä <ph name="BEGIN_LINK" />avata sivuston etusivu<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Yhteysprotokollaa ei tueta</translation>
+<translation id="1662550410081243962">Tallenna ja täytä maksutavat</translation>
 <translation id="1710259589646384581">Käyttöjärjestelmä</translation>
 <translation id="1728677426644403582">Tämä on verkkosivun lähdekoodi</translation>
 <translation id="1734878702283171397">Pyri tavoittamaan järjestelmän ylläpito.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Tämä sivusto ei voi tarjota suojattua yhteyttä</translation>
 <translation id="2187317261103489799">Tunnista (oletus)</translation>
 <translation id="2224337661447660594">Ei internetyhteyttä</translation>
+<translation id="2283340219607151381">Tallenna ja täytä osoitteet</translation>
 <translation id="2292556288342944218">Internet-yhteytesi on estetty</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> vaatii käyttäjätunnuksen ja salasanan.</translation>
 <translation id="2337852623177822836">Ylläpidon hallinnoima asetus</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Yhteyden salaus- ja todennusmenetelmänä on <ph name="CIPHER" /> ja avainvaihtomekanismina <ph name="KX" />.</translation>
 <translation id="2909946352844186028">Verkossa havaittiin muutos.</translation>
 <translation id="2948083400971632585">Voit poistaa yhteydelle asetetut välityspalvelimet käytöstä asetussivulta.</translation>
+<translation id="2954624054936281172">Taulukko tallennetuista maksutavoista</translation>
 <translation id="2991571918955627853"><ph name="SITE" /> ei ole juuri nyt käytettävissä, koska se käyttää HSTS:ää. Verkkovirheet ja hyökkäykset ovat yleensä väliaikaisia, joten sivu luultavasti toimii myöhemmin.</translation>
 <translation id="3005723025932146533">Näytä tallennettu kopio</translation>
 <translation id="301521992641321250">Automaattisesti estetty</translation>
@@ -58,6 +62,7 @@ välityspalvelinta:
 <translation id="3234666976984236645">Tunnista aina tärkeä sisältö tällä sivustolla</translation>
 <translation id="3308738399950580893">mainokset</translation>
 <translation id="3384522979010096022">Organisaatiosi ei salli sinun avata tätä sivustoa</translation>
+<translation id="3387261909427947069">Maksutavat</translation>
 <translation id="3422472998109090673">Sivustoon <ph name="HOST_NAME" /> ei ole tällä hetkellä tavoitettavissa.</translation>
 <translation id="3427092606871434483">Salli (oletus)</translation>
 <translation id="3447661539832366887">Tämän laitteen omistaja on poistanut dinosauruspelin käytöstä.</translation>
@@ -115,6 +120,7 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="5386426401304769735">Sivuston varmenneketjussa on SHA-1:llä allekirjoitettu varmenne.</translation>
 <translation id="5452270690849572955">Tätä sivuston <ph name="HOST_NAME" /> sivua ei löydy</translation>
 <translation id="5457113250005438886">Virheellinen</translation>
+<translation id="5490432419156082418">Osoitteet ja muuta</translation>
 <translation id="5492298309214877701">Tällä yrityksen, organisaation tai oppilaitoksen intranetissä olevalla sivustolla on sama URL-osoite kuin ulkoisella verkkosivustolla.
 <ph name="LINE_BREAK" />
 Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
@@ -131,7 +137,8 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{1 käytössä}other{# käytössä}}</translation>
 <translation id="5932224571077948991">Sivustolla on häiritseviä tai harhaanjohtavia mainoksia</translation>
 <translation id="6051221802930200923"><ph name="SITE" /> ei juuri nyt ole käytettävissä, koska se käyttää varmenteiden kiinnittämistä. Verkkovirheet ja hyökkäykset ovat yleensä väliaikaisia, joten sivu luultavasti toimii myöhemmin.</translation>
-<translation id="6146055958333702838">Tarkista kaikki kaapelit ja käynnistä reitittimet, modeemit ja muut käytössä olevat verkkolaitteet uudelleen.</translation>
+<translation id="6146055958333702838">Tarkista kaikki kaapelit ja käynnistä reitittimet, modeemit ja muut
+    käytössä olevat verkkolaitteet uudelleen.</translation>
 <translation id="614940544461990577">Kokeile:</translation>
 <translation id="6165508094623778733">Lisätietoja</translation>
 <translation id="6177128806592000436">Yhteys sivustoon ei ole suojattu</translation>
@@ -158,6 +165,7 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="7108819624672055576">Laajennuksen sallima</translation>
 <translation id="7111012039238467737">(voimassa)</translation>
 <translation id="7113310725918019676">Salli <ph name="BLOCKED_TYPE" /> verkkotunnukselta <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Tallenna ja täytä maksutavat</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata suojausstandardeja.</translation>
 <translation id="7219179957768738017">Yhteys käyttää salauksen versiota <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Näytä ilmoitukset</translation>
@@ -196,6 +204,7 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="8289355894181816810">Jos et ole varma tämän tarkoituksesta, ole yhteydessä verkkosi ylläpitoon.</translation>
 <translation id="8332188693563227489">Osoitteen <ph name="HOST_NAME" /> käyttö estettiin</translation>
 <translation id="8422228580902424274">Hyökkääjät sivustolla, jolle yrität siirtyä, voivat yrittää huijata sinua asentamaan ohjelmistoja tai paljastamaan esimerkiksi salasanasi, puhelinnumerosi tai luottokorttinumerosi.</translation>
+<translation id="8473863474539038330">Osoitteet ja muuta</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ei vastannut riittävän nopeasti.</translation>
 <translation id="8503813439785031346">Käyttäjätunnus</translation>
 <translation id="8703575177326907206">Yhteyttäsi verkkotunnukseen <ph name="DOMAIN" /> ei ole salattu.</translation>
@@ -203,6 +212,7 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="8820817407110198400">Kirjanmerkit</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> estänyt</translation>
 <translation id="8963117664422609631">Siirry sivustoasetuksiin</translation>
+<translation id="8975012916872825179">Sisältää puhelinnumeroiden, sähköpostiosoitteiden ja toimitusosoitteiden tapaisia tietoja</translation>
 <translation id="9001074447101275817">Välityspalvelin <ph name="DOMAIN" /> edellyttää käyttäjätunnusta ja salasanaa.</translation>
 <translation id="9008201768610948239">Ohita</translation>
 <translation id="9025348182339809926">(virheellinen)</translation>
@@ -215,5 +225,6 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> käyttää protokollaa, jota ei tueta.</translation>
 <translation id="936602727769022409">Saatat menettää pääsyn Google-tiliisi. Chromium suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>
 <translation id="969892804517981540">Virallinen koontiversio</translation>
+<translation id="984275831282074731">Maksutavat</translation>
 <translation id="988159990683914416">Kehittäjän koontiversio</translation>
 </translationbundle>

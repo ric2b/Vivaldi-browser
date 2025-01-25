@@ -36,8 +36,8 @@ void CSSModsDataClassHandler::GetData(
 
     scoped_refptr<base::RefCountedMemory> memory =
         base::MakeRefCounted<base::RefCountedBytes>(
-            reinterpret_cast<const unsigned char*>(data.data()),
-            (size_t)data.length());
+            base::span(reinterpret_cast<const unsigned char*>(data.data()),
+                       (size_t)data.length()));
 
     std::move(callback).Run(std::move(memory));
     return;
@@ -84,8 +84,8 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
       data.append("{}");
     }
     return base::MakeRefCounted<base::RefCountedBytes>(
-        reinterpret_cast<const unsigned char*>(data.data()),
-        (size_t)data.length());
+        base::span(reinterpret_cast<const unsigned char*>(data.data()),
+        (size_t)data.length()));
   } else {
     base::FilePath file_path = dir_path.AppendASCII(data_id);
     return vivaldi_data_url_utils::ReadFileOnBlockingThread(file_path);

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as Helpers from '../helpers/helpers.js';
 import type * as TraceModel from '../trace.js';
@@ -33,11 +34,13 @@ function getInsight(insights: TraceModel.Insights.Types.TraceInsightData, naviga
 // Root cause invalidation window.
 const INVALIDATION_WINDOW = Helpers.Timing.secondsToMicroseconds(Types.Timing.Seconds(0.5));
 
-describe('CumulativeLayoutShift', function() {
+describeWithEnvironment('CumulativeLayoutShift', function() {
   describe('non composited animations', function() {
     it('gets the correct non composited animations', async function() {
       const {data, insights} = await processTrace(this, 'non-composited-animation.json.gz');
-      const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
+      const navId = data.Meta.navigationsByNavigationId.keys().next().value;
+      assert.isOk(navId);
+      const insight = getInsight(insights, navId);
       const {animationFailures} = insight;
 
       const expected: InsightRunners.CumulativeLayoutShift.NoncompositedAnimationFailure[] = [
@@ -56,7 +59,9 @@ describe('CumulativeLayoutShift', function() {
     });
     it('returns no insights when there are no non-composited animations', async function() {
       const {data, insights} = await processTrace(this, 'lcp-images.json.gz');
-      const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
+      const navId = data.Meta.navigationsByNavigationId.keys().next().value;
+      assert.isOk(navId);
+      const insight = getInsight(insights, navId);
       const {animationFailures} = insight;
 
       assert.isEmpty(animationFailures);
@@ -65,7 +70,9 @@ describe('CumulativeLayoutShift', function() {
   describe('layout shifts', function() {
     it('returns correct layout shifts', async function() {
       const {data, insights} = await processTrace(this, 'cls-single-frame.json.gz');
-      const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
+      const navId = data.Meta.navigationsByNavigationId.keys().next().value;
+      assert.isOk(navId);
+      const insight = getInsight(insights, navId);
       const {shifts} = insight;
 
       assert.exists(shifts);
@@ -76,33 +83,42 @@ describe('CumulativeLayoutShift', function() {
       it('handles potential iframe root cause correctly', async function() {
         // Trace has a single iframe that gets created before the first layout shift and causes a layout shift.
         const {data, insights} = await processTrace(this, 'iframe-shift.json.gz');
-        const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
+        const navId = data.Meta.navigationsByNavigationId.keys().next().value;
+        assert.isOk(navId);
+        const insight = getInsight(insights, navId);
         const {shifts} = insight;
 
         assert.exists(shifts);
         assert.strictEqual(shifts.size, 3);
 
         const shift1 = Array.from(shifts)[0][0];
-        const shiftIframes = shifts.get(shift1)?.iframes;
+        const shiftIframes = shifts.get(shift1)?.iframeIds;
         assert.exists(shiftIframes);
         assert.strictEqual(shiftIframes.length, 1);
 
         const iframe = shiftIframes[0];
-        const iframeEndTime = iframe.dur ? iframe.ts + iframe.dur : iframe.ts;
-        // Ensure the iframe happens within the invalidation window.
-        assert.isTrue(iframeEndTime < shift1.ts && iframeEndTime >= shift1.ts - INVALIDATION_WINDOW);
 
+        // Find the event with the matching frame id to make sure we got the right id.
+        const dlEvent = data.LayoutShifts.domLoadingEvents.find(e => {
+          return e.args.frame === iframe;
+        });
+        assert.exists(dlEvent);
+
+        // Ensure the iframe happens within the invalidation window.
+        assert.isTrue(dlEvent.ts < shift1.ts && dlEvent.ts >= shift1.ts - INVALIDATION_WINDOW);
         // Other shifts should not have iframe root causes.
         const shift2 = Array.from(shifts)[1][0];
-        assert.isEmpty(shifts.get(shift2)?.iframes);
+        assert.isEmpty(shifts.get(shift2)?.iframeIds);
         const shift3 = Array.from(shifts)[2][0];
-        assert.isEmpty(shifts.get(shift3)?.iframes);
+        assert.isEmpty(shifts.get(shift3)?.iframeIds);
       });
 
       it('handles potential font root cause correctly', async function() {
         // Trace has font load before the second layout shift.
         const {data, insights} = await processTrace(this, 'iframe-shift.json.gz');
-        const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
+        const navId = data.Meta.navigationsByNavigationId.keys().next().value;
+        assert.isOk(navId);
+        const insight = getInsight(insights, navId);
         const {shifts} = insight;
 
         assert.exists(shifts);
@@ -132,6 +148,25 @@ describe('CumulativeLayoutShift', function() {
         assert.isOk(shift3);
         assert.isEmpty(shift3[1].fontRequests);
       });
+    });
+  });
+  describe('clusters', function() {
+    it('returns clusters correctly', async function() {
+      const {data, insights} = await processTrace(this, 'iframe-shift.json.gz');
+      const navId = data.Meta.navigationsByNavigationId.keys().next().value;
+      assert.isOk(navId);
+      const insight = getInsight(insights, navId);
+      const {shifts, clusters} = insight;
+
+      assert.exists(clusters);
+      assert.exists(shifts);
+      assert.strictEqual(clusters.length, 2);
+      for (const cluster of clusters) {
+        // Check that the cluster events exist in shifts map.
+        for (const shiftEvent of cluster.events) {
+          assert.exists(shifts.get(shiftEvent));
+        }
+      }
     });
   });
 });

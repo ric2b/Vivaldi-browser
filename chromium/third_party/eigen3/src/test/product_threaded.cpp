@@ -19,6 +19,7 @@ void test_parallelize_gemm() {
   c.noalias() = a * b;
 
   ThreadPool pool(num_threads);
+  Eigen::setGemmThreadPool(&pool);
   MatrixXf c_threaded(n, n);
   c_threaded.noalias() = a * b;
 

@@ -43,6 +43,8 @@
   E_CPONLY(kColorAvatarButtonIncognitoHover) \
   E_CPONLY(kColorAvatarButtonNormalRipple) \
   E_CPONLY(kColorAvatarStrokeLight) \
+  E_CPONLY(kColorAvatarStroke) \
+  E_CPONLY(kColorAvatarFillForContrast) \
   /* Bookmark bar colors. */ \
   E_CPONLY(kColorBookmarkBarBackground) \
   E_CPONLY(kColorBookmarkBarForeground) \
@@ -133,7 +135,7 @@
   E_CPONLY(kColorExtensionMenuIconDisabled) \
   E_CPONLY(kColorExtensionMenuPinButtonIcon) \
   E_CPONLY(kColorExtensionMenuPinButtonIconDisabled) \
-  E_CPONLY(kColorExtensionsMenuHighlightedBackground) \
+  E_CPONLY(kColorExtensionsMenuContainerBackground) \
   E_CPONLY(kColorExtensionsToolbarControlsBackground) \
   E_CPONLY(kColorExtensionsMenuText) \
   E_CPONLY(kColorExtensionsMenuSecondaryText) \
@@ -170,6 +172,8 @@
   /* Intent Picker colors. */ \
   E_CPONLY(kColorIntentPickerItemBackgroundHovered) \
   E_CPONLY(kColorIntentPickerItemBackgroundSelected) \
+  /* Hover Button colors */ \
+  E_CPONLY(kColorHoverButtonBackgroundHovered) \
   /* Lens overlay colors. */ \
   E_CPONLY(kColorLensOverlayToastBackground) \
   E_CPONLY(kColorLensOverlayToastButtonText) \
@@ -392,13 +396,20 @@
   E_CPONLY(kColorPipWindowSkipAdButtonBorder) \
   /* Product Specifications colors */ \
   E_CPONLY(kColorProductSpecificationsButtonBackground) \
+  E_CPONLY(kColorProductSpecificationsCitationBackground) \
+  E_CPONLY(kColorProductSpecificationsDetailChipBackground) \
   E_CPONLY(kColorProductSpecificationsDisclosureBackground) \
   E_CPONLY(kColorProductSpecificationsDisclosureForeground) \
   E_CPONLY(kColorProductSpecificationsDisclosureGradientEnd) \
   E_CPONLY(kColorProductSpecificationsDisclosureGradientStart) \
   E_CPONLY(kColorProductSpecificationsDisclosureSummaryBackground) \
   E_CPONLY(kColorProductSpecificationsDivider) \
+  E_CPONLY(kColorProductSpecificationsGradientIcon) \
+  E_CPONLY(kColorProductSpecificationsHorizontalCarouselScrollbarThumb) \
   E_CPONLY(kColorProductSpecificationsIcon) \
+  E_CPONLY(kColorProductSpecificationsIconButtonBackground) \
+  E_CPONLY(kColorProductSpecificationsIconButtonHoveredBackground) \
+  E_CPONLY(kColorProductSpecificationsLink) \
   E_CPONLY(kColorProductSpecificationsPageBackground) \
   E_CPONLY(kColorProductSpecificationsPrimaryTitle) \
   E_CPONLY(kColorProductSpecificationsSecondaryTitle) \
@@ -495,33 +506,33 @@
   E_CPONLY(kColorReadAnythingPreviousReadAloudHighlightLight) \
   E_CPONLY(kColorReadAnythingPreviousReadAloudHighlightYellow) \
   /* Realbox colors. */ \
-  E_CPONLY(kColorRealboxAnswerIconBackground) \
-  E_CPONLY(kColorRealboxAnswerIconForeground) \
-  E_CPONLY(kColorRealboxBackground) \
-  E_CPONLY(kColorRealboxBackgroundHovered) \
-  E_CPONLY(kColorRealboxBorder) \
-  E_CPONLY(kColorRealboxForeground) \
-  E_CPONLY(kColorRealboxLensVoiceIconBackground) \
-  E_CPONLY(kColorRealboxPlaceholder) \
-  E_CPONLY(kColorRealboxResultsActionChip) \
-  E_CPONLY(kColorRealboxResultsActionChipIcon) \
-  E_CPONLY(kColorRealboxResultsActionChipFocusOutline) \
-  E_CPONLY(kColorRealboxResultsBackground) \
-  E_CPONLY(kColorRealboxResultsBackgroundHovered) \
-  E_CPONLY(kColorRealboxResultsButtonHover) \
-  E_CPONLY(kColorRealboxResultsDimSelected) \
-  E_CPONLY(kColorRealboxResultsFocusIndicator) \
-  E_CPONLY(kColorRealboxResultsForeground) \
-  E_CPONLY(kColorRealboxResultsForegroundDimmed) \
-  E_CPONLY(kColorRealboxResultsIcon) \
-  E_CPONLY(kColorRealboxResultsIconFocusedOutline) \
-  E_CPONLY(kColorRealboxResultsIconSelected) \
-  E_CPONLY(kColorRealboxResultsUrl) \
-  E_CPONLY(kColorRealboxResultsUrlSelected) \
-  E_CPONLY(kColorRealboxSearchIconBackground) \
-  E_CPONLY(kColorRealboxSelectionBackground) \
-  E_CPONLY(kColorRealboxSelectionForeground) \
-  E_CPONLY(kColorRealboxShadow) \
+  E_CPONLY(kColorSearchboxAnswerIconBackground) \
+  E_CPONLY(kColorSearchboxAnswerIconForeground) \
+  E_CPONLY(kColorSearchboxBackground) \
+  E_CPONLY(kColorSearchboxBackgroundHovered) \
+  E_CPONLY(kColorSearchboxBorder) \
+  E_CPONLY(kColorSearchboxForeground) \
+  E_CPONLY(kColorSearchboxLensVoiceIconBackground) \
+  E_CPONLY(kColorSearchboxPlaceholder) \
+  E_CPONLY(kColorSearchboxResultsActionChip) \
+  E_CPONLY(kColorSearchboxResultsActionChipIcon) \
+  E_CPONLY(kColorSearchboxResultsActionChipFocusOutline) \
+  E_CPONLY(kColorSearchboxResultsBackground) \
+  E_CPONLY(kColorSearchboxResultsBackgroundHovered) \
+  E_CPONLY(kColorSearchboxResultsButtonHover) \
+  E_CPONLY(kColorSearchboxResultsDimSelected) \
+  E_CPONLY(kColorSearchboxResultsFocusIndicator) \
+  E_CPONLY(kColorSearchboxResultsForeground) \
+  E_CPONLY(kColorSearchboxResultsForegroundDimmed) \
+  E_CPONLY(kColorSearchboxResultsIcon) \
+  E_CPONLY(kColorSearchboxResultsIconFocusedOutline) \
+  E_CPONLY(kColorSearchboxResultsIconSelected) \
+  E_CPONLY(kColorSearchboxResultsUrl) \
+  E_CPONLY(kColorSearchboxResultsUrlSelected) \
+  E_CPONLY(kColorSearchboxSearchIconBackground) \
+  E_CPONLY(kColorSearchboxSelectionBackground) \
+  E_CPONLY(kColorSearchboxSelectionForeground) \
+  E_CPONLY(kColorSearchboxShadow) \
   /* The colors used for saved tab group chips on the bookmark bar. */ \
   E_CPONLY(kColorSavedTabGroupForegroundGrey) \
   E_CPONLY(kColorSavedTabGroupForegroundBlue) \
@@ -720,6 +731,7 @@
   E_CPONLY(kColorTabThrobber) \
   E_CPONLY(kColorTabThrobberPreconnect) \
   /* Tab Search colors */ \
+  E_CPONLY(kColorTabSearchButtonBackground) \
   E_CPONLY(kColorTabSearchBackground) \
   E_CPONLY(kColorTabSearchButtonCRForegroundFrameActive) \
   E_CPONLY(kColorTabSearchButtonCRForegroundFrameInactive) \

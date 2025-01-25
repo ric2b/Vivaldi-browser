@@ -8,36 +8,76 @@
 #ifndef GrVkGpu_DEFINED
 #define GrVkGpu_DEFINED
 
+#include "include/core/SkDrawable.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/GpuTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/vk/GrVkBackendSurface.h"
-#include "include/gpu/vk/GrVkTypes.h"
-#include "include/gpu/vk/VulkanBackendContext.h"
+#include "include/gpu/vk/VulkanTypes.h"
+#include "include/private/base/SkSpan_impl.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "include/private/gpu/vk/SkiaVulkan.h"
 #include "src/gpu/ganesh/GrGpu.h"
+#include "src/gpu/ganesh/GrOpsRenderPass.h"
+#include "src/gpu/ganesh/GrSamplerState.h"
 #include "src/gpu/ganesh/GrStagingBufferManager.h"
+#include "src/gpu/ganesh/GrXferProcessor.h"
 #include "src/gpu/ganesh/vk/GrVkCaps.h"
 #include "src/gpu/ganesh/vk/GrVkMSAALoadManager.h"
 #include "src/gpu/ganesh/vk/GrVkResourceProvider.h"
 #include "src/gpu/ganesh/vk/GrVkSemaphore.h"
-#include "src/gpu/ganesh/vk/GrVkUtil.h"
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string_view>
+
+class GrAttachment;
+class GrBackendSemaphore;
 class GrDirectContext;
-class GrPipeline;
+class GrGpuBuffer;
+class GrManagedResource;
+class GrProgramDesc;
+class GrProgramInfo;
+class GrRenderTarget;
+class GrSemaphore;
+class GrSurface;
+class GrSurfaceProxy;
+class GrTexture;
+class GrThreadSafePipelineBuilder;
 class GrVkBuffer;
+class GrVkCommandBuffer;
 class GrVkCommandPool;
 class GrVkFramebuffer;
+class GrVkImage;
 class GrVkOpsRenderPass;
-class GrVkPipeline;
-class GrVkPipelineState;
 class GrVkPrimaryCommandBuffer;
 class GrVkRenderPass;
+class GrVkRenderTarget;
 class GrVkSecondaryCommandBuffer;
-class GrVkTexture;
 enum class SkTextureCompressionType;
+struct GrContextOptions;
+struct GrVkDrawableInfo;
+struct GrVkImageInfo;
+struct SkIPoint;
+struct SkIRect;
+struct SkISize;
+struct SkImageInfo;
+
+namespace SkSurfaces {
+enum class BackendSurfaceAccess;
+}
 
 namespace skgpu {
+class MutableTextureState;
+class RefCntedCallback;
 class VulkanMemoryAllocator;
-class VulkanMutableTextureState;
+struct VulkanBackendContext;
 struct VulkanInterface;
-}
+}  // namespace skgpu
 
 class GrVkGpu : public GrGpu {
 public:
@@ -100,7 +140,7 @@ public:
 
     bool compile(const GrProgramDesc&, const GrProgramInfo&) override;
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     bool isTestingOnlyBackendTexture(const GrBackendTexture&) const override;
 
     GrBackendRenderTarget createTestingOnlyBackendRenderTarget(SkISize dimensions,

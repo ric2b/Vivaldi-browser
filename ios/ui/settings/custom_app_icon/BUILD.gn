@@ -1,16 +1,16 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/swift_source_set.gni")
+import("//build/config/apple/swift_source_set.gni")
 
 source_set("vivaldi_custom_app_icon") {
   sources = []
 
   deps = [
-    "resources/imagesets:imagesets",
     ":vivaldi_custom_app_icon_swift",
-    "cells:vivaldi_app_icon_settings_table_view_cells",
     "//base",
     "//ui/base",
+    "cells:vivaldi_app_icon_settings_table_view_cells",
+    "resources:appicons_assets",
   ]
 
   frameworks = [

@@ -191,8 +191,8 @@ void GPU::OnRequestAdapterCallback(
   GPUAdapter* gpu_adapter = nullptr;
   switch (status) {
     case wgpu::RequestAdapterStatus::Success:
-      gpu_adapter = MakeGarbageCollected<GPUAdapter>(this, std::move(adapter),
-                                                     dawn_control_client_);
+      gpu_adapter = MakeGarbageCollected<GPUAdapter>(
+          this, std::move(adapter), dawn_control_client_, options);
       break;
 
     // Note: requestAdapter never rejects, but we print a console warning if
@@ -279,6 +279,16 @@ void GPU::RequestAdapterImpl(
     const GPURequestAdapterOptions* options,
     ScriptPromiseResolver<IDLNullable<GPUAdapter>>* resolver) {
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
+
+  // Validate that the featureLevel is undefined. If not return a null adapter.
+  // This logic will evolve as feature levels are added in the future.
+  if (options->hasFeatureLevel()) {
+    OnRequestAdapterCallback(script_state, options, resolver,
+                             wgpu::RequestAdapterStatus::Error, nullptr,
+                             "Unknown feature level");
+    return;
+  }
+
   if (!dawn_control_client_ || dawn_control_client_->IsContextLost()) {
     dawn_control_client_initialized_callbacks_.push_back(WTF::BindOnce(
         [](GPU* gpu, ScriptState* script_state,

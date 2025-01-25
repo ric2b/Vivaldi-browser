@@ -25,7 +25,7 @@ let UI: typeof UIModule;
 let uniqueTargetId = 0;
 
 export function createTarget(
-    {id, name, type = SDK.Target.Type.Frame, parentTarget, subtype, url = 'http://example.com'}: {
+    {id, name, type = SDK.Target.Type.FRAME, parentTarget, subtype, url = 'http://example.com'}: {
       id?: Protocol.Target.TargetID,
       name?: string,
       type?: SDK.Target.Type,
@@ -122,15 +122,17 @@ const REGISTERED_EXPERIMENTS = [
   Root.Runtime.ExperimentName.USE_SOURCE_MAP_SCOPES,
   'font-editor',
   Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
-  Root.Runtime.ExperimentName.INDENTATION_MARKERS_TEMP_DISABLE,
   Root.Runtime.ExperimentName.AUTOFILL_VIEW,
-  Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS_OVERLAYS,
-  Root.Runtime.ExperimentName.TIMELINE_SIDEBAR,
+  Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS,
+  Root.Runtime.ExperimentName.TIMELINE_INSIGHTS,
   Root.Runtime.ExperimentName.TIMELINE_DEBUG_MODE,
   Root.Runtime.ExperimentName.TIMELINE_OBSERVATIONS,
+  Root.Runtime.ExperimentName.TIMELINE_SERVER_TIMINGS,
   Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE,
   Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
   Root.Runtime.ExperimentName.TIMELINE_ENHANCED_TRACES,
+  Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL,
+  Root.Runtime.ExperimentName.TIMELINE_LAYOUT_SHIFT_DETAILS,
 ];
 
 export async function initializeGlobalVars({reset = true} = {}) {
@@ -161,6 +163,7 @@ export async function initializeGlobalVars({reset = true} = {}) {
     createSettingValue(Common.Settings.SettingCategory.ELEMENTS, 'show-detailed-inspect-tooltip', true),
     createSettingValue(Common.Settings.SettingCategory.ELEMENTS, 'show-html-comments', true),
     createSettingValue(Common.Settings.SettingCategory.ELEMENTS, 'show-ua-shadow-dom', false),
+    createSettingValue(Common.Settings.SettingCategory.PERFORMANCE, 'annotations-hidden', false),
     createSettingValue(Common.Settings.SettingCategory.NETWORK, 'cache-disabled', false),
     createSettingValue(Common.Settings.SettingCategory.RENDERING, 'avif-format-disabled', false),
     createSettingValue(
@@ -289,6 +292,13 @@ export async function initializeGlobalVars({reset = true} = {}) {
     createSettingValue(
         Common.Settings.SettingCategory.NONE, 'freestyler-dogfood-consent-onboarding-finished', false,
         Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(
+        Common.Settings.SettingCategory.CONSOLE, 'freestyler-enabled', false, Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(
+        Common.Settings.SettingCategory.MOBILE, 'emulation.show-device-outline', false,
+        Common.Settings.SettingType.BOOLEAN),
+    createSettingValue(
+        Common.Settings.SettingCategory.APPEARANCE, 'chrome-theme-colors', true, Common.Settings.SettingType.BOOLEAN),
   ];
 
   Common.Settings.registerSettingsForTest(settings, reset);
@@ -490,28 +500,33 @@ export function expectConsoleLogs(expectedLogs: {warn?: string[], log?: string[]
   });
 }
 
-export function getGetHostConfigStub(config: RecursivePartial<Root.Runtime.HostConfig>): sinon.SinonStub {
+export function getGetHostConfigStub(config: Root.Runtime.HostConfig): sinon.SinonStub {
   const settings = Common.Settings.Settings.instance();
   return sinon.stub(settings, 'getHostConfig').returns({
+    aidaAvailability: {
+      disallowLogging: false,
+      ...config.aidaAvailability,
+    },
     devToolsConsoleInsights: {
       enabled: false,
-      aidaModelId: '',
-      aidaTemperature: 0.2,
+      modelId: '',
+      temperature: 0.2,
       ...config.devToolsConsoleInsights,
     } as Root.Runtime.HostConfigConsoleInsights,
     devToolsFreestylerDogfood: {
-      aidaModelId: '',
-      aidaTemperature: 0,
+      modelId: '',
+      temperature: 0,
       enabled: false,
       ...config.devToolsFreestylerDogfood,
-    },
+    } as Root.Runtime.HostConfigFreestylerDogfood,
     devToolsVeLogging: {
       enabled: true,
       testing: false,
     },
+    devToolsPrivacyUI: {
+      enabled: false,
+      ...config.devToolsPrivacyUI,
+    } as Root.Runtime.HostConfigPrivacyUI,
+    isOffTheRecord: false,
   });
 }
-
-type RecursivePartial<T> = {
-  [P in keyof T]?: RecursivePartial<T[P]>;
-};

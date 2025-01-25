@@ -6,13 +6,17 @@ package org.chromium.chrome.browser.safety_hub;
 
 import android.content.Context;
 
+import androidx.annotation.NonNull;
+
+import org.chromium.base.Callback;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.magic_stack.ModuleDelegate;
 import org.chromium.chrome.browser.magic_stack.ModuleProvider;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** Coordinator for the Safety Hub Magic Stack module. */
@@ -20,22 +24,25 @@ class SafetyHubMagicStackCoordinator implements ModuleProvider {
     private final SafetyHubMagicStackMediator mMediator;
 
     SafetyHubMagicStackCoordinator(
-            Context context,
-            Profile profile,
-            TabModelSelector tabModelSelector,
-            ModuleDelegate moduleDelegate,
-            SettingsLauncher settingsLauncher) {
+            @NonNull Context context,
+            @NonNull Profile profile,
+            @NonNull TabModelSelector tabModelSelector,
+            @NonNull ModuleDelegate moduleDelegate,
+            @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            @NonNull Callback<String> showSurveyCallback) {
         PropertyModel model = new PropertyModel(SafetyHubMagicStackViewProperties.ALL_KEYS);
         mMediator =
                 new SafetyHubMagicStackMediator(
                         context,
+                        profile,
                         UserPrefs.get(profile),
                         model,
                         MagicStackBridge.getForProfile(profile),
                         tabModelSelector,
                         moduleDelegate,
-                        settingsLauncher,
-                        new PrefChangeRegistrar());
+                        new PrefChangeRegistrar(),
+                        modalDialogManagerSupplier,
+                        showSurveyCallback);
     }
 
     @Override

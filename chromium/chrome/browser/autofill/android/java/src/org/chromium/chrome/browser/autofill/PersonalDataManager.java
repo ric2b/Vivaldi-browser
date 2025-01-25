@@ -6,6 +6,9 @@ package org.chromium.chrome.browser.autofill;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.text.TextUtils;
+
+import androidx.annotation.Nullable;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
@@ -19,6 +22,7 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.autofill.AutofillProfile;
 import org.chromium.components.autofill.IbanRecordType;
+import org.chromium.components.autofill.ImageSize;
 import org.chromium.components.autofill.VirtualCardEnrollmentState;
 import org.chromium.components.autofill.payments.BankAccount;
 import org.chromium.components.image_fetcher.ImageFetcher;
@@ -57,7 +61,6 @@ public class PersonalDataManager implements Destroyable {
         private String mGUID;
         private String mOrigin;
         private boolean mIsLocal;
-        private boolean mIsCached;
         private boolean mIsVirtual;
         private String mName;
         private String mNumber;
@@ -86,7 +89,6 @@ public class PersonalDataManager implements Destroyable {
                 String guid,
                 String origin,
                 boolean isLocal,
-                boolean isCached,
                 boolean isVirtual,
                 String name,
                 String number,
@@ -110,7 +112,6 @@ public class PersonalDataManager implements Destroyable {
                     guid,
                     origin,
                     isLocal,
-                    isCached,
                     isVirtual,
                     name,
                     number,
@@ -136,7 +137,6 @@ public class PersonalDataManager implements Destroyable {
                 String guid,
                 String origin,
                 boolean isLocal,
-                boolean isCached,
                 String name,
                 String number,
                 String networkAndLastFourDigits,
@@ -150,7 +150,6 @@ public class PersonalDataManager implements Destroyable {
                     guid,
                     origin,
                     isLocal,
-                    isCached,
                     /* isVirtual= */ false,
                     name,
                     number,
@@ -176,7 +175,6 @@ public class PersonalDataManager implements Destroyable {
                 String guid,
                 String origin,
                 boolean isLocal,
-                boolean isCached,
                 boolean isVirtual,
                 String name,
                 String number,
@@ -199,7 +197,6 @@ public class PersonalDataManager implements Destroyable {
             mGUID = guid;
             mOrigin = origin;
             mIsLocal = isLocal;
-            mIsCached = isCached;
             mIsVirtual = isVirtual;
             mName = name;
             mNumber = number;
@@ -226,7 +223,6 @@ public class PersonalDataManager implements Destroyable {
                     /* guid= */ "",
                     /* origin= */ AutofillEditorBase.SETTINGS_ORIGIN,
                     /* isLocal= */ true,
-                    /* isCached= */ false,
                     /* name= */ "",
                     /* number= */ "",
                     /* networkAndLastFourDigits= */ "",
@@ -291,11 +287,6 @@ public class PersonalDataManager implements Destroyable {
         @CalledByNative("CreditCard")
         public boolean getIsLocal() {
             return mIsLocal;
-        }
-
-        @CalledByNative("CreditCard")
-        public boolean getIsCached() {
-            return mIsCached;
         }
 
         @CalledByNative("CreditCard")
@@ -436,13 +427,16 @@ public class PersonalDataManager implements Destroyable {
 
     /** Autofill IBAN information. */
     public static class Iban {
-        private String mGuid;
-        private Long mInstrumentId;
+        @Nullable private String mGuid;
+        @Nullable private Long mInstrumentId;
+
         // Obfuscated IBAN value. This is used for displaying the IBAN in the Payment methods page.
         private String mLabel;
+
         private String mNickname;
         private @IbanRecordType int mRecordType;
-        private String mValue;
+        // Value is empty for server IBAN.
+        @Nullable private String mValue;
 
         private Iban(
                 String guid,
@@ -453,8 +447,8 @@ public class PersonalDataManager implements Destroyable {
                 String value) {
             mGuid = guid;
             mInstrumentId = instrumentId;
-            mLabel = label;
-            mNickname = nickname;
+            mLabel = Objects.requireNonNull(label, "Label can't be null");
+            mNickname = Objects.requireNonNull(nickname, "Nickname can't be null");
             mRecordType = recordType;
             mValue = value;
         }
@@ -465,7 +459,6 @@ public class PersonalDataManager implements Destroyable {
         @CalledByNative("Iban")
         public static Iban createEphemeral(String label, String nickname, String value) {
             return new Iban.Builder()
-                    .setGuid("")
                     .setLabel(label)
                     .setNickname(nickname)
                     .setRecordType(IbanRecordType.UNKNOWN)
@@ -600,15 +593,21 @@ public class PersonalDataManager implements Destroyable {
             public Iban build() {
                 switch (mRecordType) {
                     case IbanRecordType.UNKNOWN:
-                        assert mGuid.isEmpty()
-                                : "IBANs with 'UNKNOWN' record type must have an empty GUID.";
+                        assert mGuid == null && mInstrumentId == null
+                                : "IBANs with 'UNKNOWN' record type must have an empty GUID and"
+                                        + " InstrumentId.";
                         break;
                     case IbanRecordType.LOCAL_IBAN:
-                        assert !mGuid.isEmpty() : "Local IBANs must have a non-empty GUID.";
+                        assert !TextUtils.isEmpty(mGuid) && mInstrumentId == null
+                                : "Local IBANs must have a non-empty GUID and null InstrumentID.";
                         break;
                     case IbanRecordType.SERVER_IBAN:
-                        assert mInstrumentId != null && mInstrumentId != 0L
-                                : "Server IBANs must have a non-zero instrumentId.";
+                        assert mInstrumentId != null
+                                        && mInstrumentId != 0L
+                                        && TextUtils.isEmpty(mGuid)
+                                        && TextUtils.isEmpty(mValue)
+                                : "Server IBANs must have a non-zero instrumentId, empty GUID and"
+                                        + " empty value.";
                         break;
                 }
                 return new Iban(mGuid, mInstrumentId, mLabel, mNickname, mRecordType, mValue);
@@ -1173,13 +1172,15 @@ public class PersonalDataManager implements Destroyable {
         mImageFetcher.prefetchImages(
                 getCreditCardsToSuggest().stream()
                         .map(card -> card.getCardArtUrl())
-                        .toArray(GURL[]::new));
+                        .toArray(GURL[]::new),
+                new int[] {ImageSize.SMALL, ImageSize.LARGE});
     }
 
     /**
      * Return the card art image for the given `customImageUrl`.
-     * @param customImageUrl  URL of the image. If the image is available, it is returned, otherwise
-     *         it is fetched from this URL.
+     *
+     * @param customImageUrl URL of the image. If the image is available, it is returned, otherwise
+     *     it is fetched from this URL.
      * @param cardIconSpecs {@code CardIconSpecs} instance containing the specs for the card icon.
      * @return Bitmap image if found in the local cache, else return an empty object.
      */

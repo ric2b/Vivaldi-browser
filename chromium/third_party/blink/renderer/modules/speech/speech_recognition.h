@@ -29,6 +29,9 @@
 #include "media/mojo/mojom/speech_recognizer.mojom-blink.h"
 #include "third_party/blink/public/platform/web_private_ptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
+#include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
@@ -86,11 +89,18 @@ class MODULES_EXPORT SpeechRecognition final
   }
   bool allowCloudFallback() const { return allow_cloud_fallback_; }
 
-  // Callable by the user.
+  // Callable by the user. Methods may be called after the execution context is
+  // destroyed.
   void start(ExceptionState&);
   void start(MediaStreamTrack*, ExceptionState&);
   void stopFunction();
   void abort();
+  ScriptPromise<IDLBoolean> onDeviceWebSpeechAvailable(ScriptState*,
+                                                       const String& lang,
+                                                       ExceptionState&);
+  ScriptPromise<IDLBoolean> installOnDeviceSpeechRecognition(ScriptState*,
+                                                             const String& lang,
+                                                             ExceptionState&);
 
   // media::mojom::blink::SpeechRecognitionSessionClient
   void ResultRetrieved(

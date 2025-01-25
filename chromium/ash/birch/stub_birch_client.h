@@ -26,6 +26,8 @@ class StubBirchClient : public BirchClient {
       return did_request_birch_data_fetch_;
     }
 
+    void RunDataProviderChangedCallback();
+
     // BirchDataProvider:
     void RequestBirchDataFetch() override;
 
@@ -39,9 +41,6 @@ class StubBirchClient : public BirchClient {
   ~StubBirchClient() override;
 
   bool did_get_favicon_image() const { return did_get_favicon_image_; }
-  bool did_get_favicon_image_for_page() const {
-    return did_get_favicon_image_for_page_;
-  }
   bool did_wait_for_refresh_tokens() const {
     return did_wait_for_refresh_tokens_;
   }
@@ -72,12 +71,11 @@ class StubBirchClient : public BirchClient {
   void WaitForRefreshTokens(base::OnceClosure callback) override;
   base::FilePath GetRemovedItemsFilePath() override;
   void RemoveFileItemFromLauncher(const base::FilePath& path) override;
-  void GetFaviconImageForIconURL(
+  void GetFaviconImage(
       const GURL& url,
+      const bool is_page_url,
       base::OnceCallback<void(const ui::ImageModel&)> callback) override;
-  void GetFaviconImageForPageURL(
-      const GURL& url,
-      base::OnceCallback<void(const ui::ImageModel&)> callback) override;
+  ui::ImageModel GetChromeBackupIcon() override;
 
  private:
   std::unique_ptr<StubDataProvider> calendar_provider_;
@@ -94,7 +92,6 @@ class StubBirchClient : public BirchClient {
 
   bool did_wait_for_refresh_tokens_ = false;
   bool did_get_favicon_image_ = false;
-  bool did_get_favicon_image_for_page_ = false;
 };
 
 }  // namespace ash

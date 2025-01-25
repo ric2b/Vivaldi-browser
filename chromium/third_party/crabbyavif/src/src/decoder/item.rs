@@ -53,10 +53,23 @@ macro_rules! find_property {
 }
 
 impl Item {
-    pub fn stream<'a>(&'a mut self, io: &'a mut GenericIO) -> AvifResult<IStream> {
+    pub fn stream<'a>(&'a mut self, io: &'a mut GenericIO) -> AvifResult<IStream<'a>> {
         if !self.idat.is_empty() {
-            // TODO: assumes idat offset is 0.
-            return Ok(IStream::create(self.idat.as_slice()));
+            match self.extents.len() {
+                0 => return Err(AvifError::UnknownError("no extent".into())),
+                1 => {
+                    let idat = self.idat.as_slice();
+                    let offset = usize_from_u64(self.extents[0].offset)?;
+                    let range = offset..checked_add!(offset, self.size)?;
+                    check_slice_range(idat.len(), &range)?;
+                    return Ok(IStream::create(&idat[range]));
+                }
+                _ => {
+                    return Err(AvifError::UnknownError(
+                        "idat with multiple extents is not supported".into(),
+                    ));
+                }
+            }
         }
 
         let io_data = match self.extents.len() {
@@ -121,6 +134,11 @@ impl Item {
         if !check_limits(grid.width, grid.height, size_limit, dimension_limit) {
             return Err(AvifError::InvalidImageGrid(
                 "grid dimensions too large".into(),
+            ));
+        }
+        if stream.has_bytes_left()? {
+            return Err(AvifError::InvalidImageGrid(
+                "found unknown extra bytes in the grid box".into(),
             ));
         }
         Ok(())
@@ -435,6 +453,19 @@ pub fn construct_items(meta: &MetaBox) -> AvifResult<Items> {
                 // derived images refer in the opposite direction.
                 insert_item_if_not_exists(reference.to_item_id, &mut items);
                 let dimg_item = items.get_mut(&reference.to_item_id).unwrap();
+                if dimg_item.dimg_for_id != 0 {
+                    return Err(if dimg_item.dimg_for_id == reference.from_item_id {
+                        // Section 8.11.12.1 of ISO/IEC 14496-12:
+                        //   The items linked to are then represented by an array of to_item_IDs;
+                        //   within a given array, a given value shall occur at most once.
+                        AvifError::BmffParseFailed(format!(
+                            "multiple dimg references for item ID {}",
+                            dimg_item.dimg_for_id
+                        ))
+                    } else {
+                        AvifError::NotImplemented
+                    });
+                }
                 dimg_item.dimg_for_id = reference.from_item_id;
                 dimg_item.dimg_index = reference.index;
             }

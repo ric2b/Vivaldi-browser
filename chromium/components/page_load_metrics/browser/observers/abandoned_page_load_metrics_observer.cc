@@ -44,6 +44,8 @@ AbandonReason DiscardReasonToAbandonReason(
       return AbandonReason::kNeverStarted;
     case content::NavigationDiscardReason::kFailedSecurityCheck:
       return AbandonReason::kFailedSecurityCheck;
+    case content::NavigationDiscardReason::kNewDuplicateNavigation:
+      return AbandonReason::kNewDuplicateNavigation;
       // Other cases like kCommittedNavigation and kRenderFrameHostDestruction
       // should be obsolete, so just use "other" as the reason.
     case content::NavigationDiscardReason::kCommittedNavigation:
@@ -63,12 +65,18 @@ namespace internal {
 const char kAbandonedPageLoadMetricsHistogramPrefix[] =
     "PageLoad.Clients.Leakage2.";
 
+const char kMilestoneToAbandon[] = "ToAbandon";
+const char kLastMilestoneBeforeAbandon[] = "LastMilestoneBeforeAbandon";
+const char kTimeToAbandonFromNavigationStart[] =
+    "TimeToAbandonFromNavigationStart.";
+
 const char kAbandonReasonNewReloadNavigation[] = "NewReloadNavigation";
 const char kAbandonReasonNewHistoryNavigation[] = "NewHistoryNavigation";
 const char kAbandonReasonNewOtherNavigationBrowserInitiated[] =
     "NewOtherNavigationBrowserInitiated";
 const char kAbandonReasonNewOtherNavigationRendererInitiated[] =
     "NewOtherNavigationRendererInitiated";
+const char kAbandonReasonNewDuplicateNavigation[] = "NewDuplicateNavigation";
 const char kAbandonReasonFrameRemoved[] = "FrameRemoved";
 const char kAbandonReasonExplicitCancellation[] = "ExplicitCancellation";
 const char kAbandonReasonInternalCancellation[] = "InternalCancellation";
@@ -80,8 +88,13 @@ const char kAbandonReasonHidden[] = "Hidden";
 const char kAbandonReasonErrorPage[] = "ErrorPage";
 const char kAbandonReasonAppBackgrounded[] = "AppBackgrounded";
 
-const char kSuffixWasBackgrounded[] = ".WasBackgrounded";
-const char kSuffixWasHidden[] = ".WasHidden";
+const char kSuffixWasAppBackgrounded[] = ".WasAppBackgrounded";
+const char kSuffixTabWasHiddenAtStartStaysHidden[] =
+    ".TabWasHiddenAtStartStaysHidden";
+const char kSuffixTabWasHiddenAtStartLaterShown[] =
+    ".TabWasHiddenAtStartLaterShown";
+const char kSuffixTabWasHiddenStaysHidden[] = ".TabWasHiddenStaysHidden";
+const char kSuffixTabWasHiddenLaterShown[] = ".TabWasHiddenLaterShown";
 
 const char kMilestoneNavigationStart[] = "NavigationStart";
 const char kMilestoneLoaderStart[] = "LoaderStart";
@@ -103,16 +116,24 @@ const char kFirstContentfulPaint[] = "FirstContentfulPaint";
 const char kDOMContentLoaded[] = "DOMContentLoaded";
 const char kLoadEventStarted[] = "LoadStarted";
 const char kLargestContentfulPaint[] = "LargestContentfulPaint";
+
 const char kAFTStart[] = "AFTStart";
 const char kAFTEnd[] = "AFTEnd";
+const char kHeaderChunkStart[] = "HeaderChunkStart";
+const char kHeaderChunkEnd[] = "HeaderChunkEnd";
+const char kBodyChunkStart[] = "BodyChunkStart";
+const char kBodyChunkEnd[] = "BodyChunkEnd";
 
 const char kRendererProcessCreatedBeforeNavHistogramName[] =
     "RendererProcessCreatedBeforeNav";
 const char kRendererProcessInitHistogramName[] =
     "NavigationStartToRendererProcessInit";
 
-// TODO(https://crbug.com/347706997): Record more milestones related to loading
-// and process creation timing.
+const char kNavigationTypeHistoryNav[] = "HistoryNav";
+const char kNavigationTypeReloadNav[] = "ReloadNav";
+const char kNavigationTypeRestoreNav[] = "RestoreNav";
+const char kNavigationTypeBrowserNav[] = "BrowserNav";
+const char kNavigationTypeRendererNav[] = "RendererNav";
 
 }  // namespace internal
 
@@ -127,6 +148,8 @@ std::string AbandonedPageLoadMetricsObserver::AbandonReasonToString(
       return internal::kAbandonReasonNewOtherNavigationBrowserInitiated;
     case AbandonReason::kNewOtherNavigationRendererInitiated:
       return internal::kAbandonReasonNewOtherNavigationRendererInitiated;
+    case AbandonReason::kNewDuplicateNavigation:
+      return internal::kAbandonReasonNewDuplicateNavigation;
     case AbandonReason::kFrameRemoved:
       return internal::kAbandonReasonFrameRemoved;
     case AbandonReason::kExplicitCancellation:
@@ -189,6 +212,14 @@ std::string AbandonedPageLoadMetricsObserver::NavigationMilestoneToString(
       return internal::kAFTStart;
     case NavigationMilestone::kAFTEnd:
       return internal::kAFTEnd;
+    case NavigationMilestone::kHeaderChunkStart:
+      return internal::kHeaderChunkStart;
+    case NavigationMilestone::kHeaderChunkEnd:
+      return internal::kHeaderChunkEnd;
+    case NavigationMilestone::kBodyChunkStart:
+      return internal::kBodyChunkStart;
+    case NavigationMilestone::kBodyChunkEnd:
+      return internal::kBodyChunkEnd;
   }
 }
 
@@ -245,10 +276,26 @@ std::string AbandonedPageLoadMetricsObserver::GetHistogramSuffix(
   // backgrounding the navigation before it starts shouldn't count anyways).
   if (milestone != NavigationMilestone::kNavigationStart) {
     if (WasBackgrounded() && event_time > first_backgrounded_timestamp_) {
-      suffix += internal::kSuffixWasBackgrounded;
+      suffix += internal::kSuffixWasAppBackgrounded;
     }
-    if (WasHidden() && event_time > first_hidden_timestamp_) {
-      suffix += internal::kSuffixWasHidden;
+
+    if (!started_in_foreground_) {
+      if (!first_shown_timestamp_.is_null() &&
+          event_time > first_shown_timestamp_) {
+        suffix += internal::kSuffixTabWasHiddenAtStartLaterShown;
+      } else {
+        suffix += internal::kSuffixTabWasHiddenAtStartStaysHidden;
+      }
+    } else if (WasHidden() && event_time > first_hidden_timestamp_) {
+      if (!last_shown_timestamp_.is_null() &&
+          event_time > last_shown_timestamp_ &&
+          last_shown_timestamp_ > first_hidden_timestamp_) {
+        // Hidden after navigation start, then shown.
+        suffix += internal::kSuffixTabWasHiddenLaterShown;
+      } else {
+        // Stays hidden.
+        suffix += internal::kSuffixTabWasHiddenStaysHidden;
+      }
     }
   }
 
@@ -259,26 +306,31 @@ std::string AbandonedPageLoadMetricsObserver::
     GetMilestoneToAbandonHistogramNameWithoutPrefixSuffix(
         NavigationMilestone milestone,
         std::optional<AbandonReason> abandon_reason) {
-  return NavigationMilestoneToString(milestone) + "ToAbandon." +
-         (abandon_reason.has_value()
-              ? AbandonReasonToString(abandon_reason.value())
-              : "");
+  const std::string milestone_to_abandon = base::StrCat(
+      {NavigationMilestoneToString(milestone), internal::kMilestoneToAbandon});
+  if (abandon_reason.has_value()) {
+    return base::StrCat({milestone_to_abandon, ".",
+                         AbandonReasonToString(abandon_reason.value())});
+  }
+  return milestone_to_abandon;
 }
 
 std::string AbandonedPageLoadMetricsObserver::
     GetAbandonReasonAtMilestoneHistogramNameWithoutPrefixSuffix(
         NavigationMilestone milestone) {
-  return std::string("AbandonReasonAt.") +
-         NavigationMilestoneToString(milestone);
+  return base::StrCat(
+      {"AbandonReasonAt.", NavigationMilestoneToString(milestone)});
 }
 
 std::string AbandonedPageLoadMetricsObserver::
     GetLastMilestoneBeforeAbandonHistogramNameWithoutPrefixSuffix(
         std::optional<AbandonReason> abandon_reason) {
-  return std::string("LastMilestoneBeforeAbandon.") +
-         (abandon_reason.has_value()
-              ? AbandonReasonToString(abandon_reason.value())
-              : "");
+  if (abandon_reason.has_value()) {
+    return base::StrCat(
+        {std::string_view(internal::kLastMilestoneBeforeAbandon), ".",
+         AbandonReasonToString(abandon_reason.value())});
+  }
+  return internal::kLastMilestoneBeforeAbandon;
 }
 
 std::string
@@ -287,8 +339,25 @@ AbandonedPageLoadMetricsObserver::GetMilestoneHistogramNameWithoutPrefixSuffix(
   if (milestone == NavigationMilestone::kNavigationStart) {
     return std::string(internal::kMilestoneNavigationStart);
   }
-  return std::string(internal::kMilestoneNavigationStart) + "To" +
-         NavigationMilestoneToString(milestone);
+  return base::StrCat({std::string_view(internal::kMilestoneNavigationStart),
+                       "To", NavigationMilestoneToString(milestone)});
+}
+
+std::string AbandonedPageLoadMetricsObserver::
+    GetTimeToAbandonFromNavigationStartWithoutPrefixSuffix(
+        NavigationMilestone milestone) {
+  return base::StrCat({internal::kTimeToAbandonFromNavigationStart,
+                       NavigationMilestoneToString(milestone)});
+}
+
+std::string
+AbandonedPageLoadMetricsObserver::GetNavigationTypeToAbandonWithoutPrefixSuffix(
+    const std::string_view& tracked_navigation_type,
+    std::optional<AbandonReason> abandon_reason) {
+  return base::StrCat({tracked_navigation_type, "To",
+                       (abandon_reason.has_value()
+                            ? AbandonReasonToString(abandon_reason.value())
+                            : "")});
 }
 
 void AbandonedPageLoadMetricsObserver::LogMilestoneHistogram(
@@ -319,25 +388,51 @@ void AbandonedPageLoadMetricsObserver::LogAbandonHistograms(
     base::TimeTicks relative_start_time) {
   std::string base_suffix = GetHistogramSuffix(milestone, event_time);
   for (std::string additional_suffix : GetAdditionalSuffixes()) {
-    std::string suffix = base_suffix + additional_suffix;
+    std::string suffix = base::StrCat({base_suffix, additional_suffix});
     PAGE_LOAD_HISTOGRAM(
-        GetHistogramPrefix() +
-            GetMilestoneToAbandonHistogramNameWithoutPrefixSuffix(
-                milestone, abandon_reason) +
-            suffix,
+        base::StrCat({GetHistogramPrefix(),
+                      GetMilestoneToAbandonHistogramNameWithoutPrefixSuffix(
+                          milestone, abandon_reason),
+                      suffix}),
         event_time - relative_start_time);
-    std::string milestone_string = NavigationMilestoneToString(milestone);
+    PAGE_LOAD_HISTOGRAM(
+        base::StrCat({GetHistogramPrefix(),
+                      GetMilestoneToAbandonHistogramNameWithoutPrefixSuffix(
+                          milestone, std::nullopt),
+                      suffix}),
+        event_time - relative_start_time);
+    PAGE_LOAD_HISTOGRAM(
+        base::StrCat(
+            {GetHistogramPrefix(),
+             GetTimeToAbandonFromNavigationStartWithoutPrefixSuffix(milestone),
+             suffix}),
+        event_time - navigation_start_time_);
+    PAGE_LOAD_HISTOGRAM(
+        base::StrCat({GetHistogramPrefix(),
+                      GetNavigationTypeToAbandonWithoutPrefixSuffix(
+                          navigation_type_, abandon_reason),
+                      suffix}),
+        event_time - navigation_start_time_);
     base::UmaHistogramEnumeration(
-        GetHistogramPrefix() +
-            GetAbandonReasonAtMilestoneHistogramNameWithoutPrefixSuffix(
-                milestone) +
-            suffix,
+        base::StrCat(
+            {GetHistogramPrefix(),
+             GetAbandonReasonAtMilestoneHistogramNameWithoutPrefixSuffix(
+                 milestone),
+             suffix}),
         abandon_reason);
     base::UmaHistogramEnumeration(
-        GetHistogramPrefix() +
-            GetLastMilestoneBeforeAbandonHistogramNameWithoutPrefixSuffix(
-                abandon_reason) +
-            suffix,
+        base::StrCat(
+            {GetHistogramPrefix(),
+             GetLastMilestoneBeforeAbandonHistogramNameWithoutPrefixSuffix(
+                 abandon_reason),
+             suffix}),
+        milestone);
+    base::UmaHistogramEnumeration(
+        base::StrCat(
+            {GetHistogramPrefix(),
+             GetLastMilestoneBeforeAbandonHistogramNameWithoutPrefixSuffix(
+                 std::nullopt),
+             suffix}),
         milestone);
   }
 
@@ -443,35 +538,58 @@ void AbandonedPageLoadMetricsObserver::LogAbandonHistograms(
                       loading_milestone.second + navigation_start_time_)) {
       continue;
     }
-    if (loading_milestone.first == NavigationMilestone::kParseStart) {
-      builder.SetParseStartTime(loading_milestone.second.InMilliseconds());
-    } else if (loading_milestone.first ==
-               NavigationMilestone::kFirstContentfulPaint) {
-      builder.SetFirstContentfulPaintTime(
-          loading_milestone.second.InMilliseconds());
-    } else if (loading_milestone.first ==
-               NavigationMilestone::kDOMContentLoaded) {
-      builder.SetDOMContentLoadedTime(
-          loading_milestone.second.InMilliseconds());
-    } else if (loading_milestone.first ==
-               NavigationMilestone::kLoadEventStarted) {
-      builder.SetLoadEventStartedTime(
-          loading_milestone.second.InMilliseconds());
-    } else if (loading_milestone.first ==
-               NavigationMilestone::kLargestContentfulPaint) {
-      builder.SetLargestContentfulPaintTime(
-          loading_milestone.second.InMilliseconds());
-    } else if (loading_milestone.first == NavigationMilestone::kAFTStart) {
-      builder.SetAFTStartTime(loading_milestone.second.InMilliseconds());
-    } else if (loading_milestone.first == NavigationMilestone::kAFTEnd) {
-      builder.SetAFTEndTime(loading_milestone.second.InMilliseconds());
+    auto time = loading_milestone.second.InMilliseconds();
+    switch (loading_milestone.first) {
+      case NavigationMilestone::kParseStart:
+        builder.SetParseStartTime(time);
+        break;
+      case NavigationMilestone::kFirstContentfulPaint:
+        builder.SetFirstContentfulPaintTime(time);
+        break;
+      case NavigationMilestone::kDOMContentLoaded:
+        builder.SetDOMContentLoadedTime(time);
+        break;
+      case NavigationMilestone::kLoadEventStarted:
+        builder.SetLoadEventStartedTime(time);
+        break;
+      case NavigationMilestone::kLargestContentfulPaint:
+        builder.SetLargestContentfulPaintTime(time);
+        break;
+      case NavigationMilestone::kAFTStart:
+        builder.SetAFTStartTime(time);
+        break;
+      case NavigationMilestone::kAFTEnd:
+        builder.SetAFTEndTime(time);
+        break;
+      case NavigationMilestone::kHeaderChunkStart:
+        builder.SetHeaderChunkStartTime(time);
+        break;
+      case NavigationMilestone::kHeaderChunkEnd:
+        builder.SetHeaderChunkEndTime(time);
+        break;
+      case NavigationMilestone::kBodyChunkStart:
+        builder.SetBodyChunkStartTime(time);
+        break;
+      case NavigationMilestone::kBodyChunkEnd:
+        builder.SetBodyChunkEndTime(time);
+        break;
+      case NavigationMilestone::kNavigationStart:
+      case NavigationMilestone::kLoaderStart:
+      case NavigationMilestone::kFirstRedirectedRequestStart:
+      case NavigationMilestone::kFirstRedirectResponseStart:
+      case NavigationMilestone::kFirstRedirectResponseLoaderCallback:
+      case NavigationMilestone::kNonRedirectedRequestStart:
+      case NavigationMilestone::kNonRedirectResponseStart:
+      case NavigationMilestone::kNonRedirectResponseLoaderCallback:
+      case NavigationMilestone::kCommitSent:
+      case NavigationMilestone::kCommitReceived:
+      case NavigationMilestone::kDidCommit:
+        break;
     }
   }
 
   AddSRPMetricsToUKMIfNeeded(builder);
 
-  // TODO(https://crbug.com/347706997): Record more milestones, including
-  // loading milestones.
   builder.Record(ukm::UkmRecorder::Get());
 }
 
@@ -489,6 +607,19 @@ AbandonedPageLoadMetricsObserver::OnStart(
     bool started_in_foreground) {
   navigation_id_ = navigation_handle->GetNavigationId();
   navigation_start_time_ = GetDelegate().GetNavigationStart();
+  started_in_foreground_ = started_in_foreground;
+  if (navigation_handle->IsHistory()) {
+    navigation_type_ = internal::kNavigationTypeHistoryNav;
+  } else if (navigation_handle->GetReloadType() != content::ReloadType::NONE) {
+    navigation_type_ = internal::kNavigationTypeReloadNav;
+  } else if (navigation_handle->GetRestoreType() !=
+             content::RestoreType::kNotRestored) {
+    navigation_type_ = internal::kNavigationTypeRestoreNav;
+  } else if (navigation_handle->IsRendererInitiated()) {
+    navigation_type_ = internal::kNavigationTypeRendererNav;
+  } else {
+    navigation_type_ = internal::kNavigationTypeBrowserNav;
+  }
 
   page_load_metrics::PageLoadMetricsObserver::ObservePolicy
       navigation_handling_result = OnNavigationEvent(navigation_handle);
@@ -497,8 +628,7 @@ AbandonedPageLoadMetricsObserver::OnStart(
   }
 
   if (!started_in_foreground) {
-    page_load_metrics::mojom::PageLoadTiming empty_timing;
-    FlushMetricsOnAppEnterBackground(empty_timing);
+    OnHiddenInternal();
   }
 
   return CONTINUE_OBSERVING;
@@ -554,6 +684,13 @@ AbandonedPageLoadMetricsObserver::OnNavigationHandleTimingUpdated(
                               suffix,
                           renderer_process_init_time_ - navigation_start_time_);
     }
+  }
+
+  // Check if the response came from http cache or not.
+  if (!latest_navigation_handle_timing_.non_redirect_response_start_time
+           .is_null() &&
+      latest_navigation_handle_timing_.navigation_commit_sent_time.is_null()) {
+    was_cached_ = navigation_handle->WasResponseCached();
   }
 
   if (navigation_handle->GetNetErrorCode() != net::OK) {
@@ -648,6 +785,9 @@ void AbandonedPageLoadMetricsObserver::OnCustomUserTimingMarkObserved(
 }
 
 void AbandonedPageLoadMetricsObserver::FinalizeLCP() {
+  if (is_lcp_finalized_) {
+    return;
+  }
   const page_load_metrics::ContentfulPaintTimingInfo& largest_contentful_paint =
       GetDelegate()
           .GetLargestContentfulPaintHandler()
@@ -661,6 +801,7 @@ void AbandonedPageLoadMetricsObserver::FinalizeLCP() {
     // regular LCP condition. Otherwise it will be less reliable.
     LogLoadingMilestone(NavigationMilestone::kLargestContentfulPaint,
                         largest_contentful_paint.Time().value());
+    is_lcp_finalized_ = true;
   }
 }
 
@@ -710,6 +851,11 @@ AbandonedPageLoadMetricsObserver::FlushMetricsOnAppEnterBackground(
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 AbandonedPageLoadMetricsObserver::OnHidden(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
+  OnHiddenInternal();
+  return CONTINUE_OBSERVING;
+}
+
+void AbandonedPageLoadMetricsObserver::OnHiddenInternal() {
   if (first_hidden_timestamp_.is_null()) {
     first_hidden_timestamp_ = base::TimeTicks::Now();
 
@@ -724,6 +870,14 @@ AbandonedPageLoadMetricsObserver::OnHidden(
     // the navigation eventually is allowed to log metrics and we log the
     // milestone metrics, we can note that this abandonment happened.
   }
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+AbandonedPageLoadMetricsObserver::OnShown() {
+  if (first_shown_timestamp_.is_null()) {
+    first_shown_timestamp_ = base::TimeTicks::Now();
+  }
+  last_shown_timestamp_ = base::TimeTicks::Now();
   return CONTINUE_OBSERVING;
 }
 

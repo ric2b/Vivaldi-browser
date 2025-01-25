@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       lzma_common.h
@@ -5,9 +7,6 @@
 ///
 //  Authors:    Igor Pavlov
 //              Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -84,6 +83,20 @@ typedef enum {
 				? (state) - 3 \
 				: (state) - 6))
 
+/// Like update_literal(state) but when it is already known that
+/// is_literal_state(state) is true.
+#define update_literal_normal(state) \
+	state = ((state) <= STATE_SHORTREP_LIT_LIT \
+			? STATE_LIT_LIT \
+			: (state) - 3);
+
+/// Like update_literal(state) but when it is already known that
+/// is_literal_state(state) is false.
+#define update_literal_matched(state) \
+	state = ((state) <= STATE_LIT_SHORTREP \
+			? (state) - 3 \
+			: (state) - 6);
+
 /// Indicate that the latest state was a match.
 #define update_match(state) \
 	state = ((state) < LIT_STATES ? STATE_LIT_MATCH : STATE_NONLIT_MATCH)
@@ -112,30 +125,33 @@ typedef enum {
 ///
 /// Match byte is used when the previous LZMA symbol was something else than
 /// a literal (that is, it was some kind of match).
-#define LITERAL_CODER_SIZE 0x300
+#define LITERAL_CODER_SIZE UINT32_C(0x300)
 
 /// Maximum number of literal coders
 #define LITERAL_CODERS_MAX (1 << LZMA_LCLP_MAX)
+
+/// Calculates the literal_mask that literal_subcoder() needs.
+#define literal_mask_calc(lc, lp) \
+	((UINT32_C(0x100) << (lp)) - (UINT32_C(0x100) >> (lc)))
 
 /// Locate the literal coder for the next literal byte. The choice depends on
 ///   - the lowest literal_pos_bits bits of the position of the current
 ///     byte; and
 ///   - the highest literal_context_bits bits of the previous byte.
-#define literal_subcoder(probs, lc, lp_mask, pos, prev_byte) \
-	((probs)[(((pos) & lp_mask) << lc) + ((prev_byte) >> (8 - lc))])
+#define literal_subcoder(probs, lc, literal_mask, pos, prev_byte) \
+	((probs) + UINT32_C(3) * \
+		(((((pos) << 8) + (prev_byte)) & (literal_mask)) << (lc)))
 
 
 static inline void
-literal_init(probability (*probs)[LITERAL_CODER_SIZE],
-		uint32_t lc, uint32_t lp)
+literal_init(probability *probs, uint32_t lc, uint32_t lp)
 {
 	assert(lc + lp <= LZMA_LCLP_MAX);
 
-	const uint32_t coders = 1U << (lc + lp);
+	const size_t coders = LITERAL_CODER_SIZE << (lc + lp);
 
-	for (uint32_t i = 0; i < coders; ++i)
-		for (uint32_t j = 0; j < LITERAL_CODER_SIZE; ++j)
-			bit_reset(probs[i][j]);
+	for (size_t i = 0; i < coders; ++i)
+		bit_reset(probs[i]);
 
 	return;
 }
@@ -171,53 +187,54 @@ literal_init(probability (*probs)[LITERAL_CODER_SIZE],
 // Match distance //
 ////////////////////
 
-// Different set of probabilities is used for match distances that have very
+// Different sets of probabilities are used for match distances that have very
 // short match length: Lengths of 2, 3, and 4 bytes have a separate set of
 // probabilities for each length. The matches with longer length use a shared
 // set of probabilities.
-#define LEN_TO_POS_STATES 4
+#define DIST_STATES 4
 
 // Macro to get the index of the appropriate probability array.
-#define get_len_to_pos_state(len) \
-	((len) < LEN_TO_POS_STATES + MATCH_LEN_MIN \
+#define get_dist_state(len) \
+	((len) < DIST_STATES + MATCH_LEN_MIN \
 		? (len) - MATCH_LEN_MIN \
-		: LEN_TO_POS_STATES - 1)
+		: DIST_STATES - 1)
 
-// The highest two bits of a match distance (pos slot) are encoded using six
-// bits. See fastpos.h for more explanation.
-#define POS_SLOT_BITS 6
-#define POS_SLOTS (1 << POS_SLOT_BITS)
+// The highest two bits of a match distance (distance slot) are encoded
+// using six bits. See fastpos.h for more explanation.
+#define DIST_SLOT_BITS 6
+#define DIST_SLOTS (1 << DIST_SLOT_BITS)
 
 // Match distances up to 127 are fully encoded using probabilities. Since
-// the highest two bits (pos slot) are always encoded using six bits, the
-// distances 0-3 don't need any additional bits to encode, since the pos
-// slot itself is the same as the actual distance. START_POS_MODEL_INDEX
-// indicates the first pos slot where at least one additional bit is needed.
-#define START_POS_MODEL_INDEX 4
+// the highest two bits (distance slot) are always encoded using six bits,
+// the distances 0-3 don't need any additional bits to encode, since the
+// distance slot itself is the same as the actual distance. DIST_MODEL_START
+// indicates the first distance slot where at least one additional bit is
+// needed.
+#define DIST_MODEL_START 4
 
 // Match distances greater than 127 are encoded in three pieces:
-//   - pos slot: the highest two bits
+//   - distance slot: the highest two bits
 //   - direct bits: 2-26 bits below the highest two bits
 //   - alignment bits: four lowest bits
 //
 // Direct bits don't use any probabilities.
 //
-// The pos slot value of 14 is for distances 128-191 (see the table in
+// The distance slot value of 14 is for distances 128-191 (see the table in
 // fastpos.h to understand why).
-#define END_POS_MODEL_INDEX 14
+#define DIST_MODEL_END 14
 
-// Pos slots that indicate a distance <= 127.
-#define FULL_DISTANCES_BITS (END_POS_MODEL_INDEX / 2)
+// Distance slots that indicate a distance <= 127.
+#define FULL_DISTANCES_BITS (DIST_MODEL_END / 2)
 #define FULL_DISTANCES (1 << FULL_DISTANCES_BITS)
 
 // For match distances greater than 127, only the highest two bits and the
 // lowest four bits (alignment) is encoded using probabilities.
 #define ALIGN_BITS 4
-#define ALIGN_TABLE_SIZE (1 << ALIGN_BITS)
-#define ALIGN_MASK (ALIGN_TABLE_SIZE - 1)
+#define ALIGN_SIZE (1 << ALIGN_BITS)
+#define ALIGN_MASK (ALIGN_SIZE - 1)
 
 // LZMA remembers the four most recent match distances. Reusing these distances
 // tends to take less space than re-encoding the actual distance value.
-#define REP_DISTANCES 4
+#define REPS 4
 
 #endif

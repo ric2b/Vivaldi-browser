@@ -11,6 +11,7 @@
 #include "base/containers/contains.h"
 #include "base/i18n/break_iterator.h"
 #include "base/strings/string_util.h"
+#include "base/time/time.h"
 #include "chromeos/components/mahi/public/mojom/content_extraction.mojom.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -24,6 +25,9 @@ namespace {
 
 using ::base::i18n::BreakIterator;
 
+// Time after which an idle connection to Screen AI service is disconnected.
+constexpr base::TimeDelta kScreenAIIdleDisconnectDelay = base::Minutes(5);
+
 static const ax::mojom::Role kContentRoles[]{
     ax::mojom::Role::kHeading,
     ax::mojom::Role::kParagraph,
@@ -31,16 +35,11 @@ static const ax::mojom::Role kContentRoles[]{
 };
 
 static const ax::mojom::Role kRolesToSkip[]{
-    ax::mojom::Role::kAudio,
-    ax::mojom::Role::kBanner,
-    ax::mojom::Role::kButton,
-    ax::mojom::Role::kComplementary,
-    ax::mojom::Role::kContentInfo,
-    ax::mojom::Role::kFooter,
-    ax::mojom::Role::kFooterAsNonLandmark,
-    ax::mojom::Role::kImage,
-    ax::mojom::Role::kLabelText,
-    ax::mojom::Role::kNavigation,
+    ax::mojom::Role::kAudio,       ax::mojom::Role::kBanner,
+    ax::mojom::Role::kButton,      ax::mojom::Role::kComplementary,
+    ax::mojom::Role::kContentInfo, ax::mojom::Role::kFooter,
+    ax::mojom::Role::kImage,       ax::mojom::Role::kLabelText,
+    ax::mojom::Role::kNavigation,  ax::mojom::Role::kSectionFooter,
 };
 
 // Recurse through the root node, searching for content nodes (any node whose
@@ -122,7 +121,13 @@ void AXTreeExtractor::OnScreen2xReady(
   if (screen2x_main_content_extractor_.is_bound()) {
     return;
   }
+  // Etablish a connection with screen AI service is not already made and set
+  // it to reset if it stays idle for `kScreenAIIdleDisconnectDelay` to release
+  // resources.
   screen2x_main_content_extractor_.Bind(std::move(screen2x_content_extractor));
+  screen2x_main_content_extractor_.reset_on_disconnect();
+  screen2x_main_content_extractor_.reset_on_idle_timeout(
+      kScreenAIIdleDisconnectDelay);
 }
 
 void AXTreeExtractor::ExtractContent(

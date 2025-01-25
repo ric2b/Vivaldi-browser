@@ -10,6 +10,7 @@ namespace {
 
 // Keys used to serialize properties.
 NSString* const kACFaviconKey = @"favicon";
+NSString* const kACGaiaKey = @"gaia";
 NSString* const kACPasswordKey = @"password";
 NSString* const kACRankKey = @"rank";
 NSString* const kACRecordIdentifierKey = @"recordIdentifier";
@@ -25,6 +26,7 @@ NSString* const kACRpIdKey = @"rpId";
 NSString* const kACPrivateKeyKey = @"privateKey";
 NSString* const kACEncryptedKey = @"encrypted";
 NSString* const kACCreationTimeKey = @"creationTime";
+NSString* const kACLastUsedTimeKey = @"lastUsedTime";
 
 // Returns whether the strings are the same (including if both are nil) or if
 // both strings have the same contents.
@@ -55,6 +57,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
 @implementation ArchivableCredential
 
 @synthesize favicon = _favicon;
+@synthesize gaia = _gaia;
 @synthesize password = _password;
 @synthesize rank = _rank;
 @synthesize recordIdentifier = _recordIdentifier;
@@ -70,12 +73,14 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
 @synthesize privateKey = _privateKey;
 @synthesize encrypted = _encrypted;
 @synthesize creationTime = _creationTime;
+@synthesize lastUsedTime = _lastUsedTime;
 
 - (instancetype)initWithFavicon:(NSString*)favicon
                      credential:(id<Credential>)credential {
   if (credential.isPasskey) {
     // Use the passkey initilizer
     self = [self initWithFavicon:credential.favicon
+                            gaia:credential.gaia
                 recordIdentifier:credential.recordIdentifier
                           syncId:credential.syncId
                         username:credential.username
@@ -85,10 +90,12 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
                             rpId:credential.rpId
                       privateKey:credential.privateKey
                        encrypted:credential.encrypted
-                    creationTime:credential.creationTime];
+                    creationTime:credential.creationTime
+                    lastUsedTime:credential.lastUsedTime];
   } else {
     // Use the password initializer
     self = [self initWithFavicon:credential.favicon
+                            gaia:credential.gaia
                         password:credential.password
                             rank:credential.rank
                 recordIdentifier:credential.recordIdentifier
@@ -101,6 +108,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
 }
 
 - (instancetype)initWithFavicon:(NSString*)favicon
+                           gaia:(NSString*)gaia
                        password:(NSString*)password
                            rank:(int64_t)rank
                recordIdentifier:(NSString*)recordIdentifier
@@ -111,6 +119,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
   self = [super init];
   if (self) {
     _favicon = favicon;
+    _gaia = gaia;
     _password = password;
     _rank = rank;
     _recordIdentifier = recordIdentifier;
@@ -123,6 +132,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
 }
 
 - (instancetype)initWithFavicon:(NSString*)favicon
+                           gaia:(NSString*)gaia
                recordIdentifier:(NSString*)recordIdentifier
                          syncId:(NSData*)syncId
                        username:(NSString*)username
@@ -132,11 +142,13 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
                            rpId:(NSString*)rpId
                      privateKey:(NSData*)privateKey
                       encrypted:(NSData*)encrypted
-                   creationTime:(int64_t)creationTime {
+                   creationTime:(int64_t)creationTime
+                   lastUsedTime:(int64_t)lastUsedTime {
   CHECK(credentialId.length > 0);
   self = [super init];
   if (self) {
     _favicon = favicon;
+    _gaia = gaia;
     _recordIdentifier = recordIdentifier;
     _syncId = syncId;
     _username = username;
@@ -147,6 +159,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
     _privateKey = privateKey;
     _encrypted = encrypted;
     _creationTime = creationTime;
+    _lastUsedTime = lastUsedTime;
   }
   return self;
 }
@@ -176,6 +189,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
     }
     ArchivableCredential* otherCredential = (ArchivableCredential*)other;
     return stringsAreEqual(self.favicon, otherCredential.favicon) &&
+           stringsAreEqual(self.gaia, otherCredential.gaia) &&
            stringsAreEqual(self.password, otherCredential.password) &&
            self.rank == otherCredential.rank &&
            stringsAreEqual(self.recordIdentifier,
@@ -193,7 +207,8 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
            stringsAreEqual(self.rpId, otherCredential.rpId) &&
            dataAreEqual(self.privateKey, otherCredential.privateKey) &&
            dataAreEqual(self.encrypted, otherCredential.encrypted) &&
-           self.creationTime == otherCredential.creationTime;
+           self.creationTime == otherCredential.creationTime &&
+           self.lastUsedTime == otherCredential.lastUsedTime;
   }
 }
 
@@ -211,6 +226,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
 
 - (void)encodeWithCoder:(NSCoder*)coder {
   [coder encodeObject:self.favicon forKey:kACFaviconKey];
+  [coder encodeObject:self.gaia forKey:kACGaiaKey];
   [coder encodeObject:self.recordIdentifier forKey:kACRecordIdentifierKey];
   [coder encodeObject:self.username forKey:kACUserKey];
   if (self.isPasskey) {
@@ -222,6 +238,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
     [coder encodeObject:self.privateKey forKey:kACPrivateKeyKey];
     [coder encodeObject:self.encrypted forKey:kACEncryptedKey];
     [coder encodeInt64:self.creationTime forKey:kACCreationTimeKey];
+    [coder encodeInt64:self.lastUsedTime forKey:kACLastUsedTimeKey];
   } else {
     [coder encodeObject:self.password forKey:kACPasswordKey];
     [coder encodeInt64:self.rank forKey:kACRankKey];
@@ -238,6 +255,7 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
     // Use the passkey initilizer
     return [self
          initWithFavicon:[coder decodeNSStringForKey:kACFaviconKey]
+                    gaia:[coder decodeNSStringForKey:kACGaiaKey]
         recordIdentifier:[coder decodeNSStringForKey:kACRecordIdentifierKey]
                   syncId:[coder decodeNSDataForKey:kACSyncIdKey]
                 username:[coder decodeNSStringForKey:kACUserKey]
@@ -247,11 +265,14 @@ BOOL dataAreEqual(NSData* lhs, NSData* rhs) {
                     rpId:[coder decodeNSStringForKey:kACRpIdKey]
               privateKey:[coder decodeNSDataForKey:kACPrivateKeyKey]
                encrypted:[coder decodeNSDataForKey:kACEncryptedKey]
-            creationTime:[coder decodeInt64ForKey:kACCreationTimeKey]];
+            creationTime:[coder decodeInt64ForKey:kACCreationTimeKey]
+            lastUsedTime:[coder decodeInt64ForKey:kACLastUsedTimeKey]];
+
   } else {
     // Use the password initializer
     return [self
           initWithFavicon:[coder decodeNSStringForKey:kACFaviconKey]
+                     gaia:[coder decodeNSStringForKey:kACGaiaKey]
                  password:[coder decodeNSStringForKey:kACPasswordKey]
                      rank:[coder decodeInt64ForKey:kACRankKey]
          recordIdentifier:[coder decodeNSStringForKey:kACRecordIdentifierKey]

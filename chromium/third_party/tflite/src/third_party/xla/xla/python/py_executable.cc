@@ -31,13 +31,14 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
-#include "third_party/nanobind/include/nanobind/nanobind.h"
+#include "nanobind/nanobind.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/pjrt/pjrt_executable.h"
 #include "xla/pjrt/pjrt_future.h"
 #include "xla/pjrt/pjrt_layout.h"
 #include "xla/python/ifrt/array.h"
 #include "xla/python/ifrt/device.h"
+#include "xla/python/ifrt/device_list.h"
 #include "xla/python/ifrt/executable.h"
 #include "xla/python/ifrt/future.h"
 #include "xla/python/ifrt/memory.h"
@@ -152,13 +153,14 @@ struct ShardedBufferAdapter<ExecuteShardedArg> {
     // shape information is unused.
     std::vector<tsl::RCReference<ifrt::Array>> ifrt_arrays;
     ifrt_arrays.reserve(arg_vector.size());
-    ifrt::DeviceList::Devices devices;
+    ifrt::BasicDeviceList::Devices devices;
     devices.reserve(arg_vector.size());
     for (auto& arr : arg_vector) {
-      CHECK_EQ(arr.ifrt_array()->sharding().devices().size(), 1)
+      CHECK_EQ(arr.ifrt_array()->sharding().devices()->size(), 1)
           << arr.ifrt_array()->sharding().DebugString();
       ifrt_arrays.push_back(tsl::FormRef(arr.ifrt_array()));
-      devices.push_back(arr.ifrt_array()->sharding().devices().front());
+      devices.push_back(
+          arr.ifrt_array()->sharding().devices()->devices().front());
     }
     CHECK(!ifrt_arrays.empty());
     // Use a dummy shape.
@@ -167,8 +169,9 @@ struct ShardedBufferAdapter<ExecuteShardedArg> {
     auto ifrt_array =
         ifrt_arrays.front()->client()->AssembleArrayFromSingleDeviceArrays(
             ifrt_arrays.front()->shape(),
-            ifrt::OpaqueSharding::Create(ifrt::DeviceList(std::move(devices)),
-                                         ifrt::MemoryKind()),
+            ifrt::OpaqueSharding::Create(
+                ifrt::BasicDeviceList::Create(std::move(devices)),
+                ifrt::MemoryKind()),
             absl::MakeSpan(ifrt_arrays), ifrt::ArrayCopySemantics::kReuseInput);
     TF_CHECK_OK(ifrt_array.status());
     return *ifrt_array;

@@ -15,6 +15,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "base/types/expected.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/bank_account.h"
@@ -149,9 +150,10 @@ class MockFacilitatedPaymentsClient : public FacilitatedPaymentsClient {
               GetCoreAccountInfo,
               (),
               (override));
+  MOCK_METHOD(bool, IsInLandscapeMode, (), (override));
   MOCK_METHOD(bool,
               ShowPixPaymentPrompt,
-              (base::span<autofill::BankAccount> pix_account_suggestions,
+              (base::span<const autofill::BankAccount> pix_account_suggestions,
                base::OnceCallback<void(bool, int64_t)>),
               (override));
   MOCK_METHOD(void, ShowProgressScreen, (), (override));
@@ -211,9 +213,9 @@ class FacilitatedPaymentsManagerTest : public testing::Test {
     payments_data_manager_->SetSyncServiceForTest(&sync_service_);
     ON_CALL(*client_, GetPaymentsDataManager)
         .WillByDefault(testing::Return(payments_data_manager_.get()));
-
     ON_CALL(*client_, GetFacilitatedPaymentsNetworkInterface)
         .WillByDefault(testing::Return(&payments_network_interface_));
+    ON_CALL(*client_, IsInLandscapeMode).WillByDefault(testing::Return(false));
   }
 
   void TearDown() override {
@@ -320,7 +322,6 @@ class FacilitatedPaymentsManagerTest : public testing::Test {
   }
 
  protected:
-  base::test::ScopedFeatureList features_;
   optimization_guide::OptimizationGuideDecision allowlist_result_;
   mojom::PixCodeDetectionResult pix_code_detection_result_;
   std::unique_ptr<MockOptimizationGuideDecider> optimization_guide_decider_;
@@ -898,38 +899,57 @@ TEST_F(FacilitatedPaymentsManagerTest, ShowsPixPaymentPrompt_HistogramLogged) {
       /*expected_bucket_count=*/1);
 }
 
-// If the API is not available, request for risk data is not made.
+// If the user does not select a payment account in the payment prompt, request
+// for risk data is not made.
 TEST_F(FacilitatedPaymentsManagerTest,
-       ApiClientNotAvailable_RiskDataNotLoaded_DoesNotTriggerLoadRiskData) {
+       PixPaymentPromptNotAccepted_LoadRiskDataNotTriggered) {
   EXPECT_CALL(*client_, LoadRiskData(testing::_)).Times(0);
 
-  manager_->OnApiAvailabilityReceived(false);
+  manager_->OnPixPaymentPromptResult(/*is_prompt_accepted=*/false,
+                                     /*selected_instrument_id=*/0);
 }
 
-// If the API is available, and the risk data has already loaded from a previous
-// call, request for risk data is not made.
+// If the user selects a payment account in the payment prompt, request for risk
+// data is made.
 TEST_F(FacilitatedPaymentsManagerTest,
-       ApiClientAvailable_RiskDataLoaded_DoesNotTriggerLoadRiskData) {
-  EXPECT_CALL(*client_, LoadRiskData(testing::_)).Times(0);
-
-  manager_->OnRiskDataLoaded("seems pretty risky");
-  manager_->OnApiAvailabilityReceived(true);
-}
-
-// If the API is available, and the risk data is empty, request for risk data is
-// made.
-TEST_F(FacilitatedPaymentsManagerTest,
-       ApiClientAvailable_RiskDataNotLoaded_TriggersLoadRiskData) {
+       PixPaymentPromptAccepted_TriggersLoadRiskData) {
   EXPECT_CALL(*client_, LoadRiskData(testing::_));
 
-  manager_->OnApiAvailabilityReceived(true);
+  manager_->OnPixPaymentPromptResult(/*is_prompt_accepted=*/true,
+                                     /*selected_instrument_id=*/0);
+}
+
+// Verify risk data metrics are logged when risk data is fetched successfully.
+TEST_F(FacilitatedPaymentsManagerTest, RiskDataNotEmpty_HistogramsLogged) {
+  base::HistogramTester histogram_tester;
+
+  manager_->OnRiskDataLoaded(base::TimeTicks::Now() - base::Seconds(2),
+                             "seems pretty risky");
+
+  histogram_tester.ExpectUniqueSample(
+      "FacilitatedPayments.Pix.LoadRiskData.Success.Latency",
+      /*sample=*/2000,
+      /*expected_bucket_count=*/1);
+}
+
+// Verify risk data metrics are logged when risk data is empty.
+TEST_F(FacilitatedPaymentsManagerTest, RiskDataEmpty_HistogramsLogged) {
+  base::HistogramTester histogram_tester;
+
+  manager_->OnRiskDataLoaded(base::TimeTicks::Now() - base::Seconds(2), "");
+
+  histogram_tester.ExpectUniqueSample(
+      "FacilitatedPayments.Pix.LoadRiskData.Failure.Latency",
+      /*sample=*/2000,
+      /*expected_bucket_count=*/1);
 }
 
 // If the risk data is empty, then the PaymentNotOfferedReason histogram should
 // be logged.
 TEST_F(FacilitatedPaymentsManagerTest, PaymentNotOfferedReason_RiskDataEmpty) {
   base::HistogramTester histogram_tester;
-  manager_->OnRiskDataLoaded("");
+
+  manager_->OnRiskDataLoaded(base::TimeTicks::Now(), "");
 
   histogram_tester.ExpectUniqueSample(
       "FacilitatedPayments.Pix.PaymentNotOfferedReason",
@@ -937,35 +957,35 @@ TEST_F(FacilitatedPaymentsManagerTest, PaymentNotOfferedReason_RiskDataEmpty) {
       /*expected_bucket_count=*/1);
 }
 
-// If a user has rejected the PIX payment prompt, then the manager does not
-// retrieve a client token from the facilitated payments API client.
+// If the risk data is empty, then the manager does not retrieve a client token
+// from the facilitated payments API client.
 TEST_F(FacilitatedPaymentsManagerTest,
-       DoesNotRetrieveClientTokenIfPixPaymentPromptRejected) {
+       RiskDataEmpty_GetClientTokenNotCalled_ErrorScreenShown) {
   EXPECT_CALL(GetApiClient(), GetClientToken(testing::_)).Times(0);
+  EXPECT_CALL(*client_, ShowErrorScreen());
 
-  manager_->OnPixPaymentPromptResult(/*is_prompt_accepted=*/false,
-                                     /*selected_instrument_id=*/-1);
+  manager_->OnRiskDataLoaded(/*start_time=*/base::TimeTicks::Now(),
+                             /*risk_data=*/"");
 }
 
-// If a user has accepted the PIX payment prompt, then the manager retrieves a
-// client token from the facilitated payments API client.
-TEST_F(FacilitatedPaymentsManagerTest,
-       RetrievesClientTokenIfPixPaymentPromptAccepted) {
+// If the risk data is not empty, then the manager retrieves a client token from
+// the facilitated payments API client.
+TEST_F(FacilitatedPaymentsManagerTest, RiskDataNotEmpty_GetClientTokenCalled) {
   EXPECT_CALL(GetApiClient(), GetClientToken(testing::_));
 
-  manager_->OnPixPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                     /*selected_instrument_id=*/-1);
+  manager_->OnRiskDataLoaded(/*start_time=*/base::TimeTicks::Now(),
+                             /*risk_data=*/"seems pretty risky");
 }
 
-// The GetClientToken async call is made after the user has accepted the payment
-// prompt. This test verifies that the result and latency of the GetClientToken
-// call is logged correctly.
+// The GetClientToken async call is made after fetching the risk data. This test
+// verifies that the result and latency of the GetClientToken call is logged
+// correctly.
 TEST_F(FacilitatedPaymentsManagerTest,
        GetClientTokenHistogram_ClientTokenNotEmpty) {
   base::HistogramTester histogram_tester;
   EXPECT_CALL(GetApiClient(), GetClientToken(testing::_));
-  manager_->OnPixPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                     /*selected_instrument_id=*/-1);
+  manager_->OnRiskDataLoaded(/*start_time=*/base::TimeTicks::Now(),
+                             /*risk_data=*/"seems pretty risky");
   FastForwardBy(base::Seconds(2));
 
   manager_->OnGetClientToken(std::vector<uint8_t>{'t', 'o', 'k', 'e', 'n'});
@@ -980,15 +1000,15 @@ TEST_F(FacilitatedPaymentsManagerTest,
       /*expected_bucket_count=*/1);
 }
 
-// The GetClientToken async call is made after the user has accepted the payment
-// prompt. This test verifies that the result and latency of the GetClientToken
-// call is logged correctly.
+// The GetClientToken async call is made after fetching the risk data. This test
+// verifies that the result and latency of the GetClientToken call is logged
+// correctly.
 TEST_F(FacilitatedPaymentsManagerTest,
        GetClientTokenHistogram_ClientTokenEmpty) {
   base::HistogramTester histogram_tester;
   EXPECT_CALL(GetApiClient(), GetClientToken(testing::_));
-  manager_->OnPixPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                     /*selected_instrument_id=*/-1);
+  manager_->OnRiskDataLoaded(/*start_time=*/base::TimeTicks::Now(),
+                             /*risk_data=*/"seems pretty risky");
   FastForwardBy(base::Seconds(2));
 
   manager_->OnGetClientToken(std::vector<uint8_t>{});
@@ -1028,7 +1048,8 @@ TEST_F(FacilitatedPaymentsManagerTest,
 
 TEST_F(FacilitatedPaymentsManagerTest,
        TriggerPixDetectionOnDomContentLoadedExpDisabled_Ukm) {
-  features_.InitAndDisableFeature(kEnablePixDetectionOnDomContentLoaded);
+  base::test::ScopedFeatureList features;
+  features.InitAndDisableFeature(kEnablePixDetectionOnDomContentLoaded);
 
   manager_->ProcessPixCodeDetectionResult(
       mojom::PixCodeDetectionResult::kValidPixCodeFound, std::string());
@@ -1046,7 +1067,8 @@ TEST_F(FacilitatedPaymentsManagerTest,
 
 TEST_F(FacilitatedPaymentsManagerTest,
        TriggerPixDetectionOnDomContentLoadedExpEnabled_Ukm) {
-  features_.InitAndEnableFeature(kEnablePixDetectionOnDomContentLoaded);
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(kEnablePixDetectionOnDomContentLoaded);
 
   manager_->ProcessPixCodeDetectionResult(
       mojom::PixCodeDetectionResult::kValidPixCodeFound, std::string());
@@ -1082,44 +1104,7 @@ TEST_F(FacilitatedPaymentsManagerTest, ResettingPreventsPayment) {
       manager_->initiate_payment_request_details_->IsReadyForPixPayment());
 }
 
-// A test fixture for the facilitated payment manager with the
-// kEnablePixPayments feature flag disabled.
-class FacilitatedPaymentsManagerWithPixPaymentsDisabledTest
-    : public FacilitatedPaymentsManagerTest {
- public:
-  FacilitatedPaymentsManagerWithPixPaymentsDisabledTest() {
-    features_.InitAndDisableFeature(kEnablePixPayments);
-  }
-
-  ~FacilitatedPaymentsManagerWithPixPaymentsDisabledTest() override = default;
-};
-
-// If the kEnablePixPayments flag is disabled, and if a valid PIX code is
-// detected for a user with PIX accounts, the manager does not check whether the
-// facilitated payment API is available.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsDisabledTest,
-       ValidPixCodeDetectionResult_HasPixAccounts_ApiClientNotTriggered) {
-  payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
-
-  EXPECT_CALL(GetApiClient(), IsAvailable(testing::_)).Times(0);
-
-  manager_->ProcessPixCodeDetectionResult(
-      mojom::PixCodeDetectionResult::kValidPixCodeFound, std::string());
-}
-
-// A test fixture for the facilitated payment manager with the
-// kEnablePixPayments feature flag enabled.
-class FacilitatedPaymentsManagerWithPixPaymentsEnabledTest
-    : public FacilitatedPaymentsManagerTest {
- public:
-  FacilitatedPaymentsManagerWithPixPaymentsEnabledTest() {
-    features_.InitAndEnableFeature(kEnablePixPayments);
-  }
-
-  ~FacilitatedPaymentsManagerWithPixPaymentsEnabledTest() override = default;
-};
-
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        CopyTrigger_UrlInAllowlist_PixValidationTriggered) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
   GURL url("https://example.com/");
@@ -1147,7 +1132,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
   task_environment_.RunUntilIdle();
 }
 
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        CopyTrigger_UrlNotInAllowlist_PixValidationNotTriggered) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
   GURL url("https://example.com/");
@@ -1175,13 +1160,11 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
   task_environment_.RunUntilIdle();
 }
 
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       CopyTriggerHappenedBeforeDOMSearch_ApiClientIsAvailableCalledOnlyOnce) {
+TEST_F(FacilitatedPaymentsManagerTest,
+       TestPayFlowCanBeTriggeredOnlyOncePerPageLoad) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
   GURL url("https://example.com/");
-  // Mock allowlist check result. This is only called for the copy trigger. The
-  // DOM Search method `ProcessPixCodeDetectionResult` already assumes that the
-  // URL is in the allowlist.
+  // Mock allowlist check result.
   SetAllowlistDecision(optimization_guide::OptimizationGuideDecision::kTrue);
   EXPECT_CALL(*optimization_guide_decider_,
               CanApplyOptimization(
@@ -1190,78 +1173,16 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
                       testing::Eq(nullptr))))
       .WillOnce(testing::ReturnPointee(&allowlist_result_));
 
-  // Pix code is found via copy trigger. This should trigger the Pix code
-  // validation which can be verified with the IsAvailable call.
+  // Even if there are multiple copy events, the payflow should be initiated
+  // only once. This can be verified with a single IsAvailable call.
   EXPECT_CALL(GetApiClient(), IsAvailable(testing::_));
+
   std::string pix_code =
       "00020126370014br.gov.bcb.pix2515www.example.com6304EA3F";
   manager_->OnPixCodeCopiedToClipboard(url, pix_code,
                                        ukm::UkmRecorder::GetNewSourceID());
-  // The DataDecoder (utility process) validates the PIX code string
-  // asynchronously.
-  task_environment_.RunUntilIdle();
-
-  // Pix code is found again via DOM Search. However, since Pix code validation
-  // was already run above, it should not be run again. This can be verified
-  // with IsAvailable not being called again.
-  EXPECT_CALL(GetApiClient(), IsAvailable(testing::_)).Times(0);
-  manager_->ProcessPixCodeDetectionResult(
-      mojom::PixCodeDetectionResult::kValidPixCodeFound, pix_code);
-
-  // The DataDecoder (utility process) validates the PIX code string
-  // asynchronously.
-  task_environment_.RunUntilIdle();
-}
-
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       DOMSearchHappenedBeforeCopyTrigger_ApiClientIsAvailableCalledOnlyOnce) {
-  payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
-  GURL url("https://example.com/");
-  // Mock allowlist check result. This is only called for the copy trigger. The
-  // DOM Search method `ProcessPixCodeDetectionResult` already assumes that the
-  // URL is in the allowlist.
-  SetAllowlistDecision(optimization_guide::OptimizationGuideDecision::kTrue);
-  EXPECT_CALL(*optimization_guide_decider_,
-              CanApplyOptimization(
-                  testing::Eq(url), testing::_,
-                  testing::Matcher<optimization_guide::OptimizationMetadata*>(
-                      testing::Eq(nullptr))))
-      .WillOnce(testing::ReturnPointee(&allowlist_result_));
-
-  // Pix code is found again via DOM Search. This should trigger the Pix code
-  // validation which can be verified with the IsAvailable call.
-  EXPECT_CALL(GetApiClient(), IsAvailable(testing::_));
-  std::string pix_code =
-      "00020126370014br.gov.bcb.pix2515www.example.com6304EA3F";
-  manager_->ProcessPixCodeDetectionResult(
-      mojom::PixCodeDetectionResult::kValidPixCodeFound, pix_code);
-  // The DataDecoder (utility process) validates the PIX code string
-  // asynchronously.
-  task_environment_.RunUntilIdle();
-
-  // Pix code is found again via copy trigger. However, since Pix code
-  // validation was already run above, it should not be run again. This can be
-  // verified with IsAvailable not being called again.
-  EXPECT_CALL(GetApiClient(), IsAvailable(testing::_)).Times(0);
   manager_->OnPixCodeCopiedToClipboard(url, pix_code,
                                        ukm::UkmRecorder::GetNewSourceID());
-  // The DataDecoder (utility process) validates the PIX code string
-  // asynchronously.
-  task_environment_.RunUntilIdle();
-}
-
-// If a valid PIX code is detected, and the user has PIX accounts, the manager
-// checks whether the facilitated payment API is available.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       ValidPixCodeDetectionResult_HasPixAccounts_ApiClientTriggered) {
-  payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
-
-  EXPECT_CALL(GetApiClient(), IsAvailable(testing::_));
-
-  manager_->ProcessPixCodeDetectionResult(
-      mojom::PixCodeDetectionResult::kValidPixCodeFound,
-      "00020126370014br.gov.bcb.pix2515www.example.com6304EA3F");
-
   // The DataDecoder (utility process) validates the PIX code string
   // asynchronously.
   task_environment_.RunUntilIdle();
@@ -1270,7 +1191,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 // If the renderer indicates that a valid PIX code is detected, but sends an
 // invalid code to the browser, the manager does not proceed to check whether
 // the API is available.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        ValidPixCodeDetectionResult_InvalidPixCodeString_ApiClientNotTriggered) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
 
@@ -1286,7 +1207,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // When an invalid PIX code is detected, the manager does not check whether the
 // facilitated payment API is available.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        InvalidPixCodeDetectionResultDoesNotTriggerApiClient) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
 
@@ -1297,34 +1218,37 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 }
 
 // The manager checks for API availability after validating the PIX code.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        ApiClientTriggeredAfterPixCodeValidation) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
 
   EXPECT_CALL(GetApiClient(), IsAvailable(testing::_));
 
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/true);
 }
 
 // If the PIX code validation in the utility process has returned `false`, then
 // the manager does not check the API for availability.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        PixCodeValidationFailed_NoApiClientTriggered) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
 
   EXPECT_CALL(GetApiClient(), IsAvailable(testing::_)).Times(0);
 
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/false);
 }
 
 // If the PIX code validation in the utility process has returned `false`, then
 // the PaymentNotOfferedReason histogram should be logged.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        PaymentNotOfferedReason_CodeValidatorReturnsFalse) {
   base::HistogramTester histogram_tester;
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/false);
 
   histogram_tester.ExpectUniqueSample(
@@ -1336,28 +1260,28 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 // If the validation utility process has disconnected (e.g., due to a crash in
 // the validation code), then the manager does not check the API for
 // availability.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        PixCodeValidatorTerminatedUnexpectedly_NoApiClientTriggered) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
 
   EXPECT_CALL(GetApiClient(), IsAvailable(testing::_)).Times(0);
 
   manager_->OnPixCodeValidated(
-      /*pix_code=*/std::string(),
-      /*is_pix_code_valid=*/base::unexpected(
-          "Data Decoder terminated unexpectedly"));
+      /*pix_code=*/std::string(), base::TimeTicks::Now(),
+      /*is_pix_code_valid=*/
+      base::unexpected("Data Decoder terminated unexpectedly"));
 }
 
 // If the validation utility process has disconnected (e.g., due to a crash in
 // the validation code), then the PaymentNotOfferedReason histogram should be
 // logged.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        PaymentNotOfferedReason_CodeValidatorFailed) {
   base::HistogramTester histogram_tester;
   manager_->OnPixCodeValidated(
-      /*pix_code=*/std::string(),
-      /*is_pix_code_valid=*/base::unexpected(
-          "Data Decoder terminated unexpectedly"));
+      /*pix_code=*/std::string(), base::TimeTicks::Now(),
+      /*is_pix_code_valid=*/
+      base::unexpected("Data Decoder terminated unexpectedly"));
 
   histogram_tester.ExpectUniqueSample(
       "FacilitatedPayments.Pix.PaymentNotOfferedReason",
@@ -1367,8 +1291,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // If the PIX payment user pref is turned off, the manager does not check
 // whether the facilitated payment API is available.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       PixPrefTurnedOff_NoApiClientTriggered) {
+TEST_F(FacilitatedPaymentsManagerTest, PixPrefTurnedOff_NoApiClientTriggered) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
   // Turn off PIX pref.
   autofill::prefs::SetFacilitatedPaymentsPix(pref_service_.get(), false);
@@ -1376,22 +1299,23 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
   EXPECT_CALL(GetApiClient(), IsAvailable(testing::_)).Times(0);
 
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/true);
 }
 
 // If the user doesn't have any linked PIX accounts, the manager does not check
 // whether the facilitated payment API is available.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       NoPixAccounts_NoApiClientTriggered) {
+TEST_F(FacilitatedPaymentsManagerTest, NoPixAccounts_NoApiClientTriggered) {
   EXPECT_CALL(GetApiClient(), IsAvailable(testing::_)).Times(0);
 
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/true);
 }
 
 // If payments data manager is unavailable, the manager does not check
 // whether the facilitated payment API is available.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        NoPaymentsDataManager_NoApiClientTriggered) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
   ON_CALL(*client_, GetPaymentsDataManager)
@@ -1400,42 +1324,13 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
   EXPECT_CALL(GetApiClient(), IsAvailable(testing::_)).Times(0);
 
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/true);
-}
-
-// If a valid PIX code is detected, and the user has PIX accounts, and API
-// client is available, then the manager will show a UI prompt for selecting a
-// PIX account.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       ValidPixDetectionResultToPixPaymentPromptShown) {
-  autofill::BankAccount pix_account1 =
-      CreatePixBankAccount(/*instrument_id=*/1);
-  autofill::BankAccount pix_account2 =
-      CreatePixBankAccount(/*instrument_id=*/2);
-  payments_data_manager_->AddMaskedBankAccountForTest(pix_account1);
-  payments_data_manager_->AddMaskedBankAccountForTest(pix_account2);
-  ON_CALL(GetApiClient(), IsAvailable)
-      .WillByDefault([](base::OnceCallback<void(bool)> callback) {
-        std::move(callback).Run(true);
-      });
-
-  EXPECT_CALL(*client_, ShowPixPaymentPrompt(testing::UnorderedElementsAreArray(
-                                                 {pix_account1, pix_account2}),
-                                             testing::_));
-
-  manager_->ProcessPixCodeDetectionResult(
-      mojom::PixCodeDetectionResult::kValidPixCodeFound,
-      "00020126370014br.gov.bcb.pix2515www.example.com6304EA3F");
-
-  // The DataDecoder (utility process) validates the PIX code string
-  // asynchronously.
-  task_environment_.RunUntilIdle();
 }
 
 // Test that SendInitiatePaymentRequest initiates payment using the
 // FacilitatedPaymentsNetworkInterface.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       SendInitiatePaymentRequest) {
+TEST_F(FacilitatedPaymentsManagerTest, SendInitiatePaymentRequest) {
   EXPECT_CALL(payments_network_interface_,
               InitiatePayment(testing::_, testing::_, testing::_));
 
@@ -1445,7 +1340,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 // Test that if the response from
 // `FacilitatedPaymentsNetworkInterface::InitiatePayment` call has failure
 // result, purchase action is not invoked. Instead, an error message is shown.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        OnInitiatePaymentResponseReceived_FailureResponse_ErrorScreenShown) {
   ON_CALL(*client_, GetCoreAccountInfo)
       .WillByDefault(testing::Return(CreateLoggedInAccountInfo()));
@@ -1466,7 +1361,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 // Test that if the response from
 // `FacilitatedPaymentsNetworkInterface::InitiatePayment` has empty action
 // token, purchase action is not invoked. Instead, an error message is shown.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        OnInitiatePaymentResponseReceived_NoActionToken_ErrorScreenShown) {
   ON_CALL(*client_, GetCoreAccountInfo)
       .WillByDefault(testing::Return(CreateLoggedInAccountInfo()));
@@ -1483,7 +1378,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that if the core account is std::nullopt, purchase action is not
 // invoked. Instead, an error message is shown.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        OnInitiatePaymentResponseReceived_NoCoreAccountInfo_ErrorScreenShown) {
   ON_CALL(*client_, GetCoreAccountInfo)
       .WillByDefault(testing::Return(std::nullopt));
@@ -1502,7 +1397,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that if the user is logged out, purchase action is not invoked. Instead,
 // an error message is shown.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        OnInitiatePaymentResponseReceived_LoggedOutProfile_ErrorScreenShown) {
   ON_CALL(*client_, GetCoreAccountInfo)
       .WillByDefault(testing::Return(CoreAccountInfo()));
@@ -1521,7 +1416,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that the puchase action is invoked after receiving a success response
 // from the `FacilitatedPaymentsNetworkInterface::InitiatePayment` call.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        OnInitiatePaymentResponseReceived_InvokePurchaseActionTriggered) {
   ON_CALL(*client_, GetCoreAccountInfo)
       .WillByDefault(testing::Return(CreateLoggedInAccountInfo()));
@@ -1539,7 +1434,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that when a positive puchase action result is received, the UI prompt is
 // dismissed.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        OnPurchaseActionPositiveResult_UiPromptDismissed) {
   // `DismissPrompt` is called once when the purchase action result is received,
   // and again when the test fixture destroys the `manager_`.
@@ -1551,7 +1446,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that when a negative puchase action result is received, the UI prompt is
 // dismissed.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        OnPurchaseActionNegativeResult_UiPromptDismissed) {
   // `DismissPrompt` is called once when the purchase action result is received,
   // and again when the test fixture destroys the `manager_`.
@@ -1564,12 +1459,12 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 // The `IsAvailable` async call is made after a valid Pix code has been
 // detected. This test verifies that the result and latency are logged after the
 // async call is completed.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       ApiAvailabilityHistogram) {
+TEST_F(FacilitatedPaymentsManagerTest, ApiAvailabilityHistogram) {
   base::HistogramTester histogram_tester;
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
   EXPECT_CALL(GetApiClient(), IsAvailable(testing::_));
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/true);
   FastForwardBy(base::Seconds(2));
 
@@ -1588,7 +1483,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 // The `IsAvailable` async call is made after a valid Pix code has been
 // detected. This test verifies that if the api available result is false, the
 // PaymentNotOfferedReason histogram is logged.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        PaymentNotOfferedReason_ApiNotAvailable) {
   base::HistogramTester histogram_tester;
 
@@ -1602,7 +1497,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that once the purchase action response is received, the result and
 // latency of the invoke purchase action is logged.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        InvokePurchaseActionCompleted_HistogramLogged) {
   base::HistogramTester histogram_tester;
   ON_CALL(*client_, GetCoreAccountInfo)
@@ -1632,7 +1527,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that once the InitiatePayment response is received, the result and
 // latency of the network call is logged.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        OnInitiatePaymentResponseReceived_HistogramLogged) {
   base::HistogramTester histogram_tester;
   manager_->SendInitiatePaymentRequest();
@@ -1658,8 +1553,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that once the purchase action response is received, the transaction
 // result and latency is logged.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       TransactionSuccess_HistogramLogged) {
+TEST_F(FacilitatedPaymentsManagerTest, TransactionSuccess_HistogramLogged) {
   base::HistogramTester histogram_tester;
   autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
   payments_data_manager_->AddMaskedBankAccountForTest(pix_account);
@@ -1685,7 +1579,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that once the purchase action response is received as result canceled,
 // the transaction result is logged as abandoned and the latency is logged.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        TransactionAbandonedAfterInvokePurchaseAction_HistogramLogged) {
   base::HistogramTester histogram_tester;
   autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
@@ -1712,7 +1606,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Test that if the purchase action was unable to be invoked, the transaction
 // result is logged as failed and the latency is logged.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        TransactionFailedAfterInvokePurchaseAction_HistogramLogged) {
   base::HistogramTester histogram_tester;
   autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
@@ -1737,7 +1631,7 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
       /*expected_bucket_count=*/1);
 }
 
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        FOPSelectorNotShown_TransactionResultHistogramNotLogged) {
   base::HistogramTester histogram_tester;
   autofill::BankAccount pix_account = CreatePixBankAccount(/*instrument_id=*/1);
@@ -1760,20 +1654,20 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
 
 // Verify that the API client is initialized lazily, so it does not take up
 // space in memory unless it's being used.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
-       ApiClientInitializedLazily) {
+TEST_F(FacilitatedPaymentsManagerTest, ApiClientInitializedLazily) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
 
   EXPECT_EQ(nullptr, manager_->api_client_.get());
 
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/true);
 
   EXPECT_NE(nullptr, manager_->api_client_.get());
 }
 
 // Verify that a failure to lazily initialize the API client is not fatal.
-TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
+TEST_F(FacilitatedPaymentsManagerTest,
        HandlesFailureToLazilyInitializeApiClient) {
   payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
   manager_->api_client_creator_.Reset();
@@ -1781,9 +1675,67 @@ TEST_F(FacilitatedPaymentsManagerWithPixPaymentsEnabledTest,
   EXPECT_EQ(nullptr, manager_->api_client_.get());
 
   manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
                                /*is_pix_code_valid=*/true);
 
   EXPECT_EQ(nullptr, manager_->api_client_.get());
+}
+
+// Test class for devices being used in the landscape mode.
+class FacilitatedPaymentsManagerTestInLandscapeMode
+    : public FacilitatedPaymentsManagerTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  FacilitatedPaymentsManagerTestInLandscapeMode() {
+    scoped_feature_list_.InitWithFeatureState(kEnablePixPaymentsInLandscapeMode,
+                                              GetParam());
+  }
+
+  void SetUp() override {
+    FacilitatedPaymentsManagerTest::SetUp();
+    ON_CALL(*client_, IsInLandscapeMode).WillByDefault(testing::Return(true));
+  }
+
+  bool IsPaymentEnabledInLandscapeMode() { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         FacilitatedPaymentsManagerTestInLandscapeMode,
+                         testing::Bool());
+
+TEST_P(FacilitatedPaymentsManagerTestInLandscapeMode,
+       PixPayflowBlockedWhenFlagDisabled) {
+  payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
+
+  // In landscape mode, checking the API client's availability (which is part of
+  // Pix payflow) is only done if the `EnablePixPaymentsInLandscapeMode` flag is
+  // enabled.
+  EXPECT_CALL(GetApiClient(), IsAvailable(testing::_))
+      .Times(IsPaymentEnabledInLandscapeMode() ? 1 : 0);
+
+  manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
+                               /*is_pix_code_valid=*/true);
+}
+
+TEST_P(FacilitatedPaymentsManagerTestInLandscapeMode,
+       HistogramForPaymentNotOfferedReason) {
+  base::HistogramTester histogram_tester;
+  payments_data_manager_->AddMaskedBankAccountForTest(CreatePixBankAccount(1));
+
+  manager_->OnPixCodeValidated(/*pix_code=*/std::string(),
+                               base::TimeTicks::Now(),
+                               /*is_pix_code_valid=*/true);
+
+  // In landscape mode, if the `EnablePixPaymentsInLandscapeMode` flag is
+  // disabled, Pix payment is not offered, and a histogram should be logged.
+  histogram_tester.ExpectUniqueSample(
+      "FacilitatedPayments.Pix.PaymentNotOfferedReason",
+      /*sample=*/PaymentNotOfferedReason::kLandscapeScreenOrientation,
+      /*expected_bucket_count=*/IsPaymentEnabledInLandscapeMode() ? 0 : 1);
 }
 
 }  // namespace payments::facilitated

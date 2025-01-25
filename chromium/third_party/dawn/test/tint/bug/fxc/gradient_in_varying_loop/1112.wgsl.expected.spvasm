@@ -1,130 +1,137 @@
 ; SPIR-V
 ; Version: 1.3
-; Generator: Google Tint Compiler; 0
-; Bound: 76
+; Generator: Google Tint Compiler; 1
+; Bound: 78
 ; Schema: 0
                OpCapability Shader
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Fragment %main "main" %vUV_1 %value
+               OpEntryPoint Fragment %main "main" %main_loc0_Input %main_loc0_Output
                OpExecutionMode %main OriginUpperLeft
-               OpName %vUV_1 "vUV_1"
-               OpName %value "value"
                OpName %Sampler "Sampler"
                OpName %randomTexture "randomTexture"
                OpName %depthTexture "depthTexture"
+               OpName %main_loc0_Input "main_loc0_Input"
+               OpName %main_loc0_Output "main_loc0_Output"
                OpName %main_inner "main_inner"
                OpName %vUV "vUV"
+               OpName %random "random"
                OpName %i "i"
+               OpName %offset "offset"
+               OpName %sampleDepth "sampleDepth"
                OpName %main "main"
-               OpDecorate %vUV_1 Location 0
-               OpDecorate %value Location 0
                OpDecorate %Sampler DescriptorSet 0
                OpDecorate %Sampler Binding 0
                OpDecorate %randomTexture DescriptorSet 0
                OpDecorate %randomTexture Binding 1
                OpDecorate %depthTexture DescriptorSet 0
                OpDecorate %depthTexture Binding 2
+               OpDecorate %main_loc0_Input Location 0
+               OpDecorate %main_loc0_Output Location 0
+          %3 = OpTypeSampler
+%_ptr_UniformConstant_3 = OpTypePointer UniformConstant %3
+    %Sampler = OpVariable %_ptr_UniformConstant_3 UniformConstant
       %float = OpTypeFloat 32
+          %6 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%_ptr_UniformConstant_6 = OpTypePointer UniformConstant %6
+%randomTexture = OpVariable %_ptr_UniformConstant_6 UniformConstant
+%depthTexture = OpVariable %_ptr_UniformConstant_6 UniformConstant
     %v2float = OpTypeVector %float 2
 %_ptr_Input_v2float = OpTypePointer Input %v2float
-      %vUV_1 = OpVariable %_ptr_Input_v2float Input
+%main_loc0_Input = OpVariable %_ptr_Input_v2float Input
     %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
-          %8 = OpConstantNull %v4float
-      %value = OpVariable %_ptr_Output_v4float Output %8
-         %11 = OpTypeSampler
-%_ptr_UniformConstant_11 = OpTypePointer UniformConstant %11
-    %Sampler = OpVariable %_ptr_UniformConstant_11 UniformConstant
-         %14 = OpTypeImage %float 2D 0 0 0 1 Unknown
-%_ptr_UniformConstant_14 = OpTypePointer UniformConstant %14
-%randomTexture = OpVariable %_ptr_UniformConstant_14 UniformConstant
-%depthTexture = OpVariable %_ptr_UniformConstant_14 UniformConstant
-         %16 = OpTypeFunction %v4float %v2float
-         %23 = OpTypeSampledImage %14
+%main_loc0_Output = OpVariable %_ptr_Output_v4float Output
+         %17 = OpTypeFunction %v4float %v2float
+         %22 = OpTypeSampledImage %6
     %v3float = OpTypeVector %float 3
         %int = OpTypeInt 32 1
-         %28 = OpConstantNull %int
 %_ptr_Function_int = OpTypePointer Function %int
+      %int_0 = OpConstant %int 0
       %int_1 = OpConstant %int 1
        %bool = OpTypeBool
-         %45 = OpConstantNull %float
+%sampleDepth = OpConstant %float 0
+       %true = OpConstantTrue %bool
     %float_1 = OpConstant %float 1
-         %69 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
+         %71 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
        %void = OpTypeVoid
-         %70 = OpTypeFunction %void
- %main_inner = OpFunction %v4float None %16
+         %74 = OpTypeFunction %void
+ %main_inner = OpFunction %v4float None %17
         %vUV = OpFunctionParameter %v2float
-         %19 = OpLabel
-          %i = OpVariable %_ptr_Function_int Function %28
-         %21 = OpLoad %11 %Sampler
-         %22 = OpLoad %14 %randomTexture
-         %24 = OpSampledImage %23 %22 %21
-         %20 = OpImageSampleImplicitLod %v4float %24 %vUV
-         %26 = OpVectorShuffle %v3float %20 %20 0 1 2
-               OpStore %i %28
-               OpBranch %31
-         %31 = OpLabel
-               OpLoopMerge %32 %33 None
-               OpBranch %34
-         %34 = OpLabel
-         %35 = OpLoad %int %i
-         %37 = OpSLessThan %bool %35 %int_1
-               OpSelectionMerge %39 None
-               OpBranchConditional %37 %40 %41
-         %40 = OpLabel
-               OpBranch %39
-         %41 = OpLabel
+         %18 = OpLabel
+          %i = OpVariable %_ptr_Function_int Function
+         %19 = OpLoad %6 %randomTexture None
+         %20 = OpLoad %3 %Sampler None
+         %21 = OpSampledImage %22 %19 %20
+         %23 = OpImageSampleImplicitLod %v4float %21 %vUV None
+     %random = OpVectorShuffle %v3float %23 %23 0 1 2
+               OpStore %i %int_0
                OpBranch %32
+         %32 = OpLabel
+               OpLoopMerge %33 %31 None
+               OpBranch %30
+         %30 = OpLabel
+         %34 = OpLoad %int %i None
+         %35 = OpSLessThan %bool %34 %int_1
+               OpSelectionMerge %38 None
+               OpBranchConditional %35 %38 %39
          %39 = OpLabel
-         %42 = OpCompositeExtract %float %26 0
-         %43 = OpCompositeConstruct %v3float %42 %42 %42
-         %44 = OpCompositeExtract %float %43 0
-         %46 = OpFOrdLessThan %bool %44 %45
-               OpSelectionMerge %47 None
-               OpBranchConditional %46 %47 %48
-         %48 = OpLabel
-         %49 = OpCompositeExtract %float %43 1
-         %50 = OpFOrdLessThan %bool %49 %45
-               OpBranch %47
+               OpBranch %33
+         %38 = OpLabel
+         %40 = OpCompositeExtract %float %random 0
+     %offset = OpCompositeConstruct %v3float %40 %40 %40
+         %42 = OpCompositeExtract %float %offset 0
+         %43 = OpFOrdLessThan %bool %42 %sampleDepth
+               OpSelectionMerge %45 None
+               OpBranchConditional %43 %46 %47
+         %46 = OpLabel
+               OpBranch %45
          %47 = OpLabel
-         %51 = OpPhi %bool %46 %39 %50 %48
+         %48 = OpCompositeExtract %float %offset 1
+         %49 = OpFOrdLessThan %bool %48 %sampleDepth
+               OpBranch %45
+         %45 = OpLabel
+         %50 = OpPhi %bool %true %46 %49 %47
                OpSelectionMerge %52 None
-               OpBranchConditional %51 %52 %53
+               OpBranchConditional %50 %53 %54
          %53 = OpLabel
-         %54 = OpCompositeExtract %float %43 0
-         %56 = OpFOrdGreaterThan %bool %54 %float_1
+               OpBranch %52
+         %54 = OpLabel
+         %55 = OpCompositeExtract %float %offset 0
+         %56 = OpFOrdGreaterThan %bool %55 %float_1
                OpBranch %52
          %52 = OpLabel
-         %57 = OpPhi %bool %51 %47 %56 %53
-               OpSelectionMerge %58 None
-               OpBranchConditional %57 %58 %59
+         %58 = OpPhi %bool %true %53 %56 %54
+               OpSelectionMerge %59 None
+               OpBranchConditional %58 %60 %61
+         %60 = OpLabel
+               OpBranch %59
+         %61 = OpLabel
+         %62 = OpCompositeExtract %float %offset 1
+         %63 = OpFOrdGreaterThan %bool %62 %float_1
+               OpBranch %59
          %59 = OpLabel
-         %60 = OpCompositeExtract %float %43 1
-         %61 = OpFOrdGreaterThan %bool %60 %float_1
-               OpBranch %58
-         %58 = OpLabel
-         %62 = OpPhi %bool %57 %52 %61 %59
-               OpSelectionMerge %63 None
-               OpBranchConditional %62 %64 %63
-         %64 = OpLabel
-         %65 = OpLoad %int %i
-         %66 = OpIAdd %int %65 %int_1
-               OpStore %i %66
-               OpBranch %33
-         %63 = OpLabel
-         %67 = OpLoad %int %i
+         %64 = OpPhi %bool %true %60 %63 %61
+               OpSelectionMerge %65 None
+               OpBranchConditional %64 %66 %65
+         %66 = OpLabel
+         %67 = OpLoad %int %i None
          %68 = OpIAdd %int %67 %int_1
-               OpStore %i %68
-               OpBranch %33
-         %33 = OpLabel
+               OpStore %i %68 None
                OpBranch %31
-         %32 = OpLabel
-               OpReturnValue %69
+         %65 = OpLabel
+         %69 = OpLoad %int %i None
+         %70 = OpIAdd %int %69 %int_1
+               OpStore %i %70 None
+               OpBranch %31
+         %31 = OpLabel
+               OpBranch %32
+         %33 = OpLabel
+               OpReturnValue %71
                OpFunctionEnd
-       %main = OpFunction %void None %70
-         %73 = OpLabel
-         %75 = OpLoad %v2float %vUV_1
-         %74 = OpFunctionCall %v4float %main_inner %75
-               OpStore %value %74
+       %main = OpFunction %void None %74
+         %75 = OpLabel
+         %76 = OpLoad %v2float %main_loc0_Input None
+         %77 = OpFunctionCall %v4float %main_inner %76
+               OpStore %main_loc0_Output %77 None
                OpReturn
                OpFunctionEnd

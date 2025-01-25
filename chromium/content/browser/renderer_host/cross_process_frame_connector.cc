@@ -189,6 +189,7 @@ void CrossProcessFrameConnector::SynchronizeVisualProperties(
     const blink::FrameVisualProperties& visual_properties,
     bool propagate) {
   last_received_zoom_level_ = visual_properties.zoom_level;
+  last_received_css_zoom_factor_ = visual_properties.css_zoom_factor;
   last_received_local_frame_size_ = visual_properties.local_frame_size;
   screen_infos_ = visual_properties.screen_infos;
   local_surface_id_ = visual_properties.local_surface_id;
@@ -361,7 +362,8 @@ void CrossProcessFrameConnector::OnSynchronizeVisualProperties(
   if ((last_received_local_frame_size_ != visual_properties.local_frame_size ||
        screen_infos_.current() != visual_properties.screen_infos.current() ||
        capture_sequence_number() != visual_properties.capture_sequence_number ||
-       last_received_zoom_level_ != visual_properties.zoom_level) &&
+       last_received_zoom_level_ != visual_properties.zoom_level ||
+       last_received_css_zoom_factor_ != visual_properties.css_zoom_factor) &&
       local_surface_id_ == visual_properties.local_surface_id) {
     bad_message::ReceivedBadMessage(
         frame_proxy_in_parent_renderer_->GetProcess(),
@@ -406,6 +408,12 @@ void CrossProcessFrameConnector::UpdateViewportIntersectionInternal(
     bool include_visual_properties) {
   intersection_state_ = intersection_state;
   if (view_) {
+    CHECK(current_child_frame_host());
+    current_child_frame_host()
+        ->delegate()
+        ->OnRemoteSubframeViewportIntersectionStateChanged(
+            current_child_frame_host(), intersection_state);
+
     // Only ship over the visual properties if they were included in the update
     // viewport intersection message.
     view_->UpdateViewportIntersection(

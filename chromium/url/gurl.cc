@@ -165,7 +165,7 @@ const std::string& GURL::spec() const {
     return spec_;
 
   // TODO(crbug.com/40580068): Make sure this no longer hits before making
-  // NOTREACHED_NORETURN();
+  // NOTREACHED();
   DUMP_WILL_BE_NOTREACHED() << "Trying to get the spec of an invalid URL!";
   return base::EmptyString();
 }
@@ -399,8 +399,8 @@ int GURL::IntPort() const {
 int GURL::EffectiveIntPort() const {
   int int_port = IntPort();
   if (int_port == url::PORT_UNSPECIFIED && IsStandard())
-    return url::DefaultPortForScheme(spec_.data() + parsed_.scheme.begin,
-                                     parsed_.scheme.len);
+    return url::DefaultPortForScheme(std::string_view(
+        spec_.data() + parsed_.scheme.begin, parsed_.scheme.len));
   return int_port;
 }
 

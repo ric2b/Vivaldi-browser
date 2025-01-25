@@ -65,7 +65,7 @@ jobs:
       run: |
         git clone https://github.com/AOMediaCodec/av1-avif.git
         cd av1-avif
-        git checkout 77bd20d59d7cade4ab98f276ff4828433ebd089b
+        git checkout aa906e00c9d8655a8b97718aa16d379970678663
 
     - name: Clone libavif
       if: steps.cache-ext-with-libavif.outputs.cache-hit != 'true'
@@ -114,8 +114,7 @@ jobs:
         toolchain: stable
 
     - name: Build and run the Rust tests
-      # TODO: https://github.com/AOMediaCodec/av1-avif/issues/217 - Enable test 166
-      run: cargo test -- test_conformance --skip test_conformance::_166_expects
+      run: cargo test -- test_conformance
 
     - name: Build GoogleTest
       if: steps.cache-ext-with-libavif.outputs.cache-hit != 'true' && runner.os == 'Linux'

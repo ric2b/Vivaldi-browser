@@ -48,7 +48,7 @@ using perfetto::protos::pbzero::RendererMainThreadTaskExecution;
 
 namespace {
 
-// When enabled, the main thread's type is reduced from `kCompositing` to
+// When enabled, the main thread's type is reduced from `kDisplayCritical` to
 // `kDefault` when WebRTC is in use within the renderer. This is a simple
 // workaround meant to be merged to higher channels while we're working on a
 // more refined solution. See crbug.com/1513904.
@@ -117,7 +117,7 @@ TaskPriority GetLowPriorityAsyncScriptTaskPriority() {
     case features::AsyncScriptPrioritisationType::kBestEffort:
       return TaskPriority::kBestEffortPriority;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace
@@ -613,7 +613,8 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
               QueueTraits::PrioritisationType::kPostMessageForwarding);
     case TaskType::kDeprecatedNone:
     case TaskType::kMainThreadTaskQueueV8:
-    case TaskType::kMainThreadTaskQueueV8LowPriority:
+    case TaskType::kMainThreadTaskQueueV8UserVisible:
+    case TaskType::kMainThreadTaskQueueV8BestEffort:
     case TaskType::kMainThreadTaskQueueCompositor:
     case TaskType::kMainThreadTaskQueueDefault:
     case TaskType::kMainThreadTaskQueueInput:
@@ -659,6 +660,8 @@ scoped_refptr<base::SingleThreadTaskRunner> FrameSchedulerImpl::GetTaskRunner(
 scoped_refptr<MainThreadTaskQueue> FrameSchedulerImpl::GetTaskQueue(
     TaskType type) {
   QueueTraits queue_traits = CreateQueueTraitsForTaskType(type);
+  queue_traits = queue_traits.SetCanBeDeferredForRendering(
+      ComputeCanBeDeferredForRendering(queue_traits.can_be_deferred, type));
   return frame_task_queue_controller_->GetTaskQueue(queue_traits);
 }
 
@@ -756,11 +759,17 @@ void FrameSchedulerImpl::OnStartedUsingNonStickyFeature(
     DisableAlignWakeUpsForProcess();
   }
 
-  if (feature == SchedulingPolicy::Feature::kWebRTC &&
-      base::FeatureList::IsEnabled(kRendererMainIsDefaultThreadTypeForWebRTC) &&
-      base::PlatformThread::GetCurrentThreadType() ==
-          base::ThreadType::kCompositing) {
-    base::PlatformThread::SetCurrentThreadType(base::ThreadType::kDefault);
+  if (feature == SchedulingPolicy::Feature::kWebRTC) {
+    if (base::FeatureList::IsEnabled(
+            kRendererMainIsDefaultThreadTypeForWebRTC) &&
+        base::PlatformThread::GetCurrentThreadType() ==
+            base::ThreadType::kDisplayCritical) {
+      base::PlatformThread::SetCurrentThreadType(base::ThreadType::kDefault);
+    }
+
+    if (auto* rc = delegate_->GetDocumentResourceCoordinator()) {
+      rc->OnStartedUsingWebRTC();
+    }
   }
 }
 
@@ -786,6 +795,12 @@ void FrameSchedulerImpl::OnStoppedUsingNonStickyFeature(
   if (handle->GetPolicy().disable_back_forward_cache) {
     back_forward_cache_disabling_feature_tracker_.Remove(
         handle->GetFeatureAndJSLocationBlockingBFCache());
+  }
+
+  if (handle->GetFeature() == SchedulingPolicy::Feature::kWebRTC) {
+    if (auto* rc = delegate_->GetDocumentResourceCoordinator()) {
+      rc->OnStoppedUsingWebRTC();
+    }
   }
 }
 
@@ -1333,6 +1348,10 @@ std::unique_ptr<WebSchedulingTaskQueue>
 FrameSchedulerImpl::CreateWebSchedulingTaskQueue(
     WebSchedulingQueueType queue_type,
     WebSchedulingPriority priority) {
+  bool can_be_deferred_for_rendering = ComputeCanBeDeferredForRendering(
+      /*is_deferrable_for_touchstart=*/true,
+      TaskType::kWebSchedulingPostedTask);
+
   // The QueueTraits for scheduler.postTask() are similar to those of
   // setTimeout() (deferrable queue traits + throttling for delayed tasks), with
   // the following differences:
@@ -1342,7 +1361,9 @@ FrameSchedulerImpl::CreateWebSchedulingTaskQueue(
   //     WebSchedulingPriority, which is only set for these task queues)
   scoped_refptr<MainThreadTaskQueue> immediate_task_queue =
       frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-          DeferrableTaskQueueTraits(), queue_type, priority);
+          DeferrableTaskQueueTraits().SetCanBeDeferredForRendering(
+              can_be_deferred_for_rendering),
+          queue_type, priority);
   // Continuation task queues can only be used for immediate tasks since there
   // the yield API doesn't support delayed continuations.
   if (queue_type == WebSchedulingQueueType::kContinuationQueue) {
@@ -1353,7 +1374,8 @@ FrameSchedulerImpl::CreateWebSchedulingTaskQueue(
       frame_task_queue_controller_->NewWebSchedulingTaskQueue(
           DeferrableTaskQueueTraits()
               .SetCanBeThrottled(true)
-              .SetCanBeIntensivelyThrottled(true),
+              .SetCanBeIntensivelyThrottled(true)
+              .SetCanBeDeferredForRendering(can_be_deferred_for_rendering),
           queue_type, priority);
   return std::make_unique<MainThreadWebSchedulingTaskQueueImpl>(
       immediate_task_queue->AsWeakPtr(), delayed_task_queue->AsWeakPtr());
@@ -1363,6 +1385,7 @@ void FrameSchedulerImpl::OnWebSchedulingTaskQueuePriorityChanged(
     MainThreadTaskQueue* queue) {
   UpdateQueuePolicy(queue,
                     frame_task_queue_controller_->GetQueueEnabledVoter(queue));
+  main_thread_scheduler_->OnWebSchedulingTaskQueuePriorityChanged(queue);
 }
 
 void FrameSchedulerImpl::OnWebSchedulingTaskQueueDestroyed(
@@ -1387,6 +1410,33 @@ const base::UnguessableToken& FrameSchedulerImpl::GetAgentClusterId() const {
 
 base::TimeDelta FrameSchedulerImpl::UnreportedTaskTime() const {
   return unreported_task_time_;
+}
+
+bool FrameSchedulerImpl::ComputeCanBeDeferredForRendering(
+    bool is_deferrable_for_touchstart,
+    TaskType task_type) const {
+  if (!base::FeatureList::IsEnabled(features::kDeferRendererTasksAfterInput)) {
+    return false;
+  }
+  std::optional<features::TaskDeferralPolicy> policy =
+      main_thread_scheduler_->scheduling_settings()
+          .discrete_input_task_deferral_policy;
+  CHECK(policy);
+  switch (*policy) {
+    case features::TaskDeferralPolicy::kMinimalTypes:
+      return task_type == TaskType::kDOMManipulation ||
+             task_type == TaskType::kIdleTask ||
+             task_type == TaskType::kWebSchedulingPostedTask;
+    case features::TaskDeferralPolicy::kNonUserBlockingDeferrableTypes:
+    case features::TaskDeferralPolicy::kAllDeferrableTypes:
+      // kPosteMessaged is used for scheduling, so unlike touchstart deferral,
+      // consider this a deferrable type.
+      return is_deferrable_for_touchstart ||
+             task_type == TaskType::kPostedMessage;
+    case features::TaskDeferralPolicy::kNonUserBlockingTypes:
+    case features::TaskDeferralPolicy::kAllTypes:
+      return true;
+  }
 }
 
 // static

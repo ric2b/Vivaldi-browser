@@ -39,7 +39,6 @@
 #include "./fuzztest/internal/domains/absl_helpers.h"
 #include "./fuzztest/internal/meta.h"
 #include "./fuzztest/internal/printer.h"
-#include "google/protobuf/text_format.h"
 
 namespace fuzztest::internal {
 
@@ -161,7 +160,8 @@ struct StringPrinter {
         const std::string input(v.data(), v.data() + v.size());
         const std::string escaped = absl::CEscape(input);
         if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
-          absl::Format(out, "fuzztest::ToByteArray(\"%s\")", escaped);
+          absl::Format(out, "fuzztest::ToByteArray(std::string(\"%s\", %d))",
+                       escaped, v.size());
         } else if (absl::StrContains(input, '\0')) {
           absl::Format(out, "std::string(\"%s\", %d)", escaped, v.size());
         } else {
@@ -257,12 +257,8 @@ struct ProtobufPrinter {
       return PrintUserValue(*val, out, mode);
     } else {
       static constexpr absl::string_view kProtoParser = "ParseTestProto";
-      std::string textproto;
-      if (!google::protobuf::TextFormat::PrintToString(val, &textproto)) {
-        // Fall-back to debug printing, which is on purpose not parseable but at
-        // least gives some idea about the contents of the proto.
-        textproto = absl::StrCat(val);
-      }
+
+      std::string textproto = absl::StrCat(val);
       switch (mode) {
         case domain_implementor::PrintMode::kHumanReadable:
           absl::Format(out, "(%s)", textproto);

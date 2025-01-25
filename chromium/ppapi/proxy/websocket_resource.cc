@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ppapi/proxy/websocket_resource.h"
 
 #include <stddef.h>
@@ -352,7 +357,7 @@ void WebSocketResource::OnReplyReceived(
     PPAPI_DISPATCH_PLUGIN_RESOURCE_CALL(
         PpapiPluginMsg_WebSocket_ClosedReply,
         OnPluginMsgClosedReply)
-    PPAPI_DISPATCH_PLUGIN_RESOURCE_CALL_UNHANDLED(NOTREACHED_IN_MIGRATION())
+    PPAPI_DISPATCH_PLUGIN_RESOURCE_CALL_UNHANDLED(NOTREACHED())
   PPAPI_END_MESSAGE_MAP()
 }
 

@@ -2063,18 +2063,6 @@
       ]
     },
     {
-      "id": 332,
-      "cr_bugs": [1045586],
-      "description": "Send empty video hdr metadata due to crashes on AMD",
-      "os": {
-        "type": "win"
-      },
-      "vendor_id": "0x1002",
-      "features": [
-        "use_empty_video_hdr_metadata"
-      ]
-    },
-    {
       "id": 334,
       "description": "Some drivers seem to require as to use original texture whenever possible",
       "cr_bugs": [1052114, 1117370],
@@ -3375,6 +3363,64 @@
       "vendor_id": "0x4d4f4351",
       "features": [
         "disable_webnn_for_gpu"
+      ]
+    },
+    {
+      "id": 434,
+      "cr_bugs": [41480904],
+      "description": "Disable CBR encoding of HEVC on Intel GPUs with older drivers",
+      "comment":[
+        "Intel HEVC HMFT will stop accepting inputs if you configure it to encode",
+        "at CBR mode and later change the target bitrate during encoding. This issue",
+        "has been fixed on driver version 32.0.101.5762."
+      ],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x8086",
+      "multi_gpu_category": "any",
+      "driver_version": {
+            "op": "<",
+            "value": "32.0.101.5762"
+      },
+      "features": [
+        "disable_hevc_hmft_cbr_encoding"
+      ]
+    },
+    {
+      "id": 435,
+      "cr_bugs": [356448335],
+      "description": "Disable video accelerated encoding on certain AMD GPUs using r600",
+      "os": {
+        "type": "chromeos"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x6821", "0x9900", "0x9992", "0x9997"],
+      "features": [
+        "disable_accelerated_h264_encode"
+      ]
+    },
+    {
+      "id": 436,
+      "cr_bugs": [40677119],
+      "description": "Disable overlay promotion for clear video quads when their MPO quads would move",
+      "os": {
+        "type" : "win"
+      },
+      "exceptions": [
+        {
+          "vendor_id": "0x8086",
+          "os": {
+            "type" : "win"
+          },
+          "driver_version": {
+            "op": ">=",
+            "value": "31.0.101.4471"
+          }
+        }
+      ],
+      "features": [
+        "disable_video_overlay_if_moving"
       ]
     }
   ]

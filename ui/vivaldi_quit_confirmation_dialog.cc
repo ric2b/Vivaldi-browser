@@ -98,8 +98,8 @@ void VivaldiQuitConfirmationDialog::RunCallback(bool accepted) {
   std::move(quit_callback_).Run(accepted, stop_asking);
 }
 
-ui::ModalType VivaldiQuitConfirmationDialog::GetModalType() const {
-  return ui::MODAL_TYPE_SYSTEM;
+ui::mojom::ModalType VivaldiQuitConfirmationDialog::GetModalType() const {
+  return ui::mojom::ModalType::kSystem;
 }
 
 std::u16string VivaldiQuitConfirmationDialog::GetWindowTitle() const {

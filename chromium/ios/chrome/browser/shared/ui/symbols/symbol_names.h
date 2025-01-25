@@ -62,7 +62,9 @@ extern NSString* const kIncognitoSymbol;
 extern NSString* const kSquareNumberSymbol;
 extern NSString* const kTranslateSymbol;
 extern NSString* const kPasswordManagerSymbol;
+extern NSString* const kEnterpriseSymbol;
 extern NSString* const kPopupBadgeMinusSymbol;
+extern NSString* const kPhotoSymbol;
 extern NSString* const kPhotoBadgeArrowDownSymbol;
 extern NSString* const kPhotoBadgePlusSymbol;
 extern NSString* const kPhotoBadgeMagnifyingglassSymbol;
@@ -91,6 +93,10 @@ extern NSString* const kBottomOmniboxOptionSymbol;
 extern NSString* const kDangerousOmniboxSymbol;
 extern NSString* const kArrowDownSymbol;
 extern NSString* const kArrowUpSymbol;
+extern NSString* const kFamilylinkSymbol;
+extern NSString* const kMyDriveSymbol;
+extern NSString* const kSharedDrivesSymbol;
+extern NSString* const kEllipsisSquareFillSymbol;
 
 // Custom symbol names which can be configured with a color palette. iOS 15+
 // only.
@@ -197,6 +203,7 @@ extern NSString* const kDocSymbol;
 extern NSString* const kOpenInDownloadsSymbol;
 extern NSString* const kExternalLinkSymbol;
 extern NSString* const kChevronDownSymbol;
+extern NSString* const kChevronUpSymbol;
 extern NSString* const kChevronBackwardSymbol;
 extern NSString* const kChevronForwardSymbol;
 extern NSString* const kChevronUpDown;
@@ -249,6 +256,9 @@ extern NSString* const kTurnUpRightDiamondFillSymbol;
 extern NSString* const kPencilSymbol;
 extern NSString* const kMagicStackSymbol;
 extern NSString* const kDiscoverFeedSymbol;
+extern NSString* const kFilterSymbol;
+extern NSString* const kPersonTwoSymbol;
+extern NSString* const kSquareFilledOnSquareSymbol;
 
 // Names of the default symbol being non-monochrome by default. When using them,
 // you probably want to set their color to monochrome.

@@ -23,6 +23,7 @@ enum class SharingScenario {
   ShareChrome = 10,
   OmniboxMostVisitedEntry = 11,
   TabStripItem = 12,
+  ShareInWebContextMenu = 13,
 
   // Vivaldi
   VivaldiNote,
@@ -31,6 +32,6 @@ enum class SharingScenario {
   // Highest enumerator. Recommended by Histogram metrics best practices.
   kMaxValue = VivaldiNote
 };
-// LINT.ThenChange(/tools/metrics/histograms/enums.xml)
+// LINT.ThenChange(/tools/metrics/histograms/metadata/mobile/enums.xml)
 
 #endif  // IOS_CHROME_BROWSER_UI_SHARING_SHARING_SCENARIO_H_

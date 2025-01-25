@@ -99,9 +99,7 @@ skia_graphite_sources = [
   "$_src/PaintParamsKey.h",
   "$_src/PathAtlas.cpp",
   "$_src/PathAtlas.h",
-  "$_src/PipelineData.cpp",
   "$_src/PipelineData.h",
-  "$_src/PipelineDataCache.h",
   "$_src/ProxyCache.cpp",
   "$_src/ProxyCache.h",
   "$_src/QueueManager.cpp",
@@ -163,6 +161,7 @@ skia_graphite_sources = [
   "$_src/compute/DispatchGroup.h",
   "$_src/geom/AnalyticBlurMask.cpp",
   "$_src/geom/AnalyticBlurMask.h",
+  "$_src/geom/AnalyticClip.h",
   "$_src/geom/BoundsManager.h",
   "$_src/geom/CoverageMaskShape.h",
   "$_src/geom/EdgeAAQuad.h",
@@ -237,9 +236,9 @@ skia_graphite_dawn_public = [
 ]
 
 skia_graphite_dawn_sources = [
-  "$_include_private/DawnTypesPriv.h",
   "$_src/dawn/DawnAsyncWait.cpp",
   "$_src/dawn/DawnAsyncWait.h",
+  "$_src/dawn/DawnBackendTexture.cpp",
   "$_src/dawn/DawnBuffer.cpp",
   "$_src/dawn/DawnBuffer.h",
   "$_src/dawn/DawnCaps.cpp",
@@ -252,6 +251,8 @@ skia_graphite_dawn_sources = [
   "$_src/dawn/DawnErrorChecker.h",
   "$_src/dawn/DawnGraphicsPipeline.cpp",
   "$_src/dawn/DawnGraphicsPipeline.h",
+  "$_src/dawn/DawnGraphiteTypesPriv.cpp",
+  "$_src/dawn/DawnGraphiteTypesPriv.h",
   "$_src/dawn/DawnGraphiteUtils.cpp",
   "$_src/dawn/DawnGraphiteUtilsPriv.h",
   "$_src/dawn/DawnQueueManager.cpp",
@@ -264,7 +265,7 @@ skia_graphite_dawn_sources = [
   "$_src/dawn/DawnSharedContext.h",
   "$_src/dawn/DawnTexture.cpp",
   "$_src/dawn/DawnTexture.h",
-  "$_src/dawn/DawnTypesPriv.cpp",
+  "$_src/dawn/DawnTextureInfo.cpp",
   "$_src/dawn/DawnUtils.cpp",
   "$_src/dawn/DawnUtilsPriv.h",
 ]
@@ -313,7 +314,8 @@ skia_graphite_vk_public = [
 ]
 
 skia_graphite_vk_sources = [
-  "$_include_private/VulkanGraphiteTypesPriv.h",
+  "$_src/vk/VulkanBackendSemaphore.cpp",
+  "$_src/vk/VulkanBackendTexture.cpp",
   "$_src/vk/VulkanBuffer.cpp",
   "$_src/vk/VulkanBuffer.h",
   "$_src/vk/VulkanCaps.cpp",
@@ -329,6 +331,7 @@ skia_graphite_vk_sources = [
   "$_src/vk/VulkanGraphicsPipeline.cpp",
   "$_src/vk/VulkanGraphicsPipeline.h",
   "$_src/vk/VulkanGraphiteTypes.cpp",
+  "$_src/vk/VulkanGraphiteTypesPriv.h",
   "$_src/vk/VulkanGraphiteUtils.cpp",
   "$_src/vk/VulkanGraphiteUtilsPriv.h",
   "$_src/vk/VulkanImageView.cpp",
@@ -345,6 +348,7 @@ skia_graphite_vk_sources = [
   "$_src/vk/VulkanSharedContext.h",
   "$_src/vk/VulkanTexture.cpp",
   "$_src/vk/VulkanTexture.h",
+  "$_src/vk/VulkanTextureInfo.cpp",
   "$_src/vk/VulkanYcbcrConversion.cpp",
   "$_src/vk/VulkanYcbcrConversion.h",
 ]

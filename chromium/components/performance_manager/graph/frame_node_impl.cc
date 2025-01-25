@@ -9,6 +9,7 @@
 #include "base/containers/contains.h"
 #include "base/dcheck_is_on.h"
 #include "base/functional/bind.h"
+#include "base/functional/overloaded.h"
 #include "base/memory/raw_ptr.h"
 #include "components/performance_manager/graph/graph_impl.h"
 #include "components/performance_manager/graph/initializing_frame_node_observer.h"
@@ -17,6 +18,8 @@
 #include "components/performance_manager/graph/worker_node_impl.h"
 #include "components/performance_manager/public/v8_memory/web_memory.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
+#include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom.h"
 
 namespace performance_manager {
 
@@ -109,6 +112,16 @@ void FrameNodeImpl::SetHadUserEdits() {
   document_.had_user_edits.SetAndMaybeNotify(this, true);
 }
 
+void FrameNodeImpl::OnStartedUsingWebRTC() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  document_.uses_web_rtc.SetAndMaybeNotify(this, true);
+}
+
+void FrameNodeImpl::OnStoppedUsingWebRTC() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  document_.uses_web_rtc.SetAndMaybeNotify(this, false);
+}
+
 void FrameNodeImpl::OnNonPersistentNotificationCreated() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (auto& observer : GetObservers()) {
@@ -178,7 +191,7 @@ const std::optional<url::Origin>& FrameNodeImpl::GetOrigin() const {
 
 bool FrameNodeImpl::IsCurrent() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return is_current_.value();
+  return is_current_;
 }
 
 const PriorityAndReason& FrameNodeImpl::GetPriorityAndReason() const {
@@ -206,6 +219,16 @@ bool FrameNodeImpl::IsHoldingIndexedDBLock() const {
   return is_holding_indexeddb_lock_.value();
 }
 
+bool FrameNodeImpl::UsesWebRTC() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return document_.uses_web_rtc.value();
+}
+
+bool FrameNodeImpl::HadUserActivation() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return had_user_activation_.value();
+}
+
 bool FrameNodeImpl::HadFormInteraction() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return document_.had_form_interaction.value();
@@ -226,12 +249,13 @@ bool FrameNodeImpl::IsCapturingMediaStream() const {
   return is_capturing_media_stream_.value();
 }
 
-std::optional<bool> FrameNodeImpl::IntersectsViewport() const {
+std::optional<ViewportIntersectionState>
+FrameNodeImpl::GetViewportIntersectionState() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // The intersection with the viewport of the outermost main frame or embedder
   // is not tracked.
   DCHECK(parent_or_outer_document_or_embedder());
-  return intersects_viewport_.value();
+  return viewport_intersection_state_.value();
 }
 
 FrameNode::Visibility FrameNodeImpl::GetVisibility() const {
@@ -314,9 +338,35 @@ FrameNode::NodeSetView<WorkerNodeImpl*> FrameNodeImpl::child_worker_nodes()
   return NodeSetView<WorkerNodeImpl*>(child_worker_nodes_);
 }
 
-void FrameNodeImpl::SetIsCurrent(bool is_current) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  is_current_.SetAndMaybeNotify(this, is_current);
+// static
+void FrameNodeImpl::UpdateCurrentFrame(FrameNodeImpl* previous_frame_node,
+                                       FrameNodeImpl* current_frame_node,
+                                       GraphImpl* graph) {
+  if (previous_frame_node) {
+    bool did_change = previous_frame_node->SetIsCurrent(false);
+    // Don't notify if the frame was already not current.
+    if (!did_change) {
+      previous_frame_node = nullptr;
+    }
+  }
+
+  if (current_frame_node) {
+    bool did_change = current_frame_node->SetIsCurrent(true);
+    // Don't notify if the frame was already current.
+    if (!did_change) {
+      current_frame_node = nullptr;
+    }
+  }
+
+  // No need to notify observers.
+  if (!previous_frame_node && !current_frame_node) {
+    return;
+  }
+
+  // Notify observers.
+  for (auto& observer : graph->GetObservers<FrameNodeObserver>()) {
+    observer.OnCurrentFrameChanged(previous_frame_node, current_frame_node);
+  }
 
   // TODO(crbug.com/40182881): We maintain an invariant that of all sibling
   // frame nodes in the same FrameTreeNode, at most one may be current. We used
@@ -331,6 +381,11 @@ void FrameNodeImpl::SetIsCurrent(bool is_current) {
   // here. (altimin suggests simply relying on RFH::GetLifecycleState to
   // correctly track "active" frame nodes instead of using "current", and not
   // checking this invariant.)
+}
+
+void FrameNodeImpl::SetHadUserActivation() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  had_user_activation_.SetAndMaybeNotify(this, true);
 }
 
 void FrameNodeImpl::SetIsHoldingWebLock(bool is_holding_weblock) {
@@ -357,12 +412,43 @@ void FrameNodeImpl::SetIsCapturingMediaStream(bool is_capturing_media_stream) {
   is_capturing_media_stream_.SetAndMaybeNotify(this, is_capturing_media_stream);
 }
 
-void FrameNodeImpl::SetIntersectsViewport(bool intersects_viewport) {
+void FrameNodeImpl::SetViewportIntersectionState(
+    const blink::mojom::ViewportIntersectionState&
+        viewport_intersection_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // The intersection with the viewport of the outermost main frame or embedder
-  // is not tracked.
-  DCHECK(parent_or_outer_document_or_embedder());
-  intersects_viewport_.SetAndMaybeNotify(this, intersects_viewport);
+
+  has_viewport_intersection_updates_ = true;
+
+  auto new_viewport_intersection_state =
+      viewport_intersection_state.viewport_intersection.IsEmpty()
+          ? ViewportIntersectionState::kNotIntersecting
+          : ViewportIntersectionState::kIntersecting;
+
+  SetViewportIntersectionStateImpl(new_viewport_intersection_state);
+}
+
+void FrameNodeImpl::SetViewportIntersectionState(
+    blink::mojom::FrameVisibility frame_visibility) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // If this frame is getting blink::mojom::ViewportIntersectionState updates,
+  // then ignore blink::mojom::FrameVisibility updates. The latter is basically
+  // a subset of the former.
+  if (has_viewport_intersection_updates_) {
+    return;
+  }
+
+  auto new_viewport_intersection_state = [&]() {
+    switch (frame_visibility) {
+      case blink::mojom::FrameVisibility::kNotRendered:
+      case blink::mojom::FrameVisibility::kRenderedOutOfViewport:
+        return ViewportIntersectionState::kNotIntersecting;
+      case blink::mojom::FrameVisibility::kRenderedInViewport:
+        return ViewportIntersectionState::kIntersecting;
+    }
+  }();
+
+  SetViewportIntersectionStateImpl(new_viewport_intersection_state);
 }
 
 void FrameNodeImpl::SetInitialVisibility(Visibility visibility) {
@@ -386,9 +472,11 @@ void FrameNodeImpl::SetPrivateFootprintKbEstimate(
   private_footprint_kb_estimate_ = private_footprint_estimate;
 }
 
-void FrameNodeImpl::OnNavigationCommitted(GURL url,
-                                          url::Origin origin,
-                                          bool same_document) {
+void FrameNodeImpl::OnNavigationCommitted(
+    GURL url,
+    url::Origin origin,
+    bool same_document,
+    bool is_served_from_back_forward_cache) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (same_document) {
@@ -400,6 +488,14 @@ void FrameNodeImpl::OnNavigationCommitted(GURL url,
       }
     }
 
+    return;
+  }
+
+  // If this frame is being served from the back-forward cache, then this frame
+  // does not host a new document. We don't need to reset the document's
+  // properties, and more importantly, we can't reset the `receiver_` as there
+  // won't be another Bind() request to rebind it.
+  if (is_served_from_back_forward_cache) {
     return;
   }
 
@@ -709,6 +805,22 @@ bool FrameNodeImpl::HasFrameNodeInDescendants(FrameNodeImpl* frame_node) const {
 bool FrameNodeImpl::HasFrameNodeInTree(FrameNodeImpl* frame_node) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetFrameTreeRoot() == frame_node->GetFrameTreeRoot();
+}
+
+bool FrameNodeImpl::SetIsCurrent(bool is_current) {
+  CHECK(CanSetAndNotifyProperty());
+  bool was_current = std::exchange(is_current_, is_current);
+  return was_current != is_current_;
+}
+
+void FrameNodeImpl::SetViewportIntersectionStateImpl(
+    ViewportIntersectionState viewport_intersection_state) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // The intersection with the viewport of the outermost main frame or embedder
+  // is not tracked.
+  DCHECK(parent_or_outer_document_or_embedder());
+  viewport_intersection_state_.SetAndMaybeNotify(this,
+                                                 viewport_intersection_state);
 }
 
 FrameNodeImpl::DocumentProperties::DocumentProperties() = default;

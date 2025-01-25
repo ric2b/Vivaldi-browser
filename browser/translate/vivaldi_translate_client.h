@@ -31,10 +31,12 @@ class WebContents;
 class PrefService;
 
 namespace translate {
+class AutoTranslateSnackbarController;
 class LanguageState;
 class TranslateAcceptLanguages;
 class TranslatePrefs;
 class TranslateManager;
+class TranslateMessage;
 
 struct LanguageDetectionDetails;
 }  // namespace translate
@@ -106,8 +108,6 @@ class VivaldiTranslateClient
       std::unique_ptr<translate::TranslateInfoBarDelegate> delegate)
       const override;
 
-  int GetInfobarIconID() const override;
-
   // Trigger a manual translation when the necessary state (e.g. source
   // language) is ready.
   void ManualTranslateWhenReady();
@@ -128,6 +128,15 @@ class VivaldiTranslateClient
   // Whether to trigger a manual translation when ready.
   // See ChromeTranslateClient::ManualTranslateOnReady
   bool manual_translate_on_ready_ = false;
+
+  std::unique_ptr<translate::TranslateMessage> translate_message_;
+  std::unique_ptr<translate::AutoTranslateSnackbarController>
+      auto_translate_snackbar_controller_;
+
+  // content::WebContentsObserver implementation on Android only. Used for the
+  // auto-translate Snackbar.
+  void PrimaryPageChanged(content::Page& page) override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
 #endif
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();

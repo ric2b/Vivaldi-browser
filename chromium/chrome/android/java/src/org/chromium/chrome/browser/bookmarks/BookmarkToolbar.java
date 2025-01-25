@@ -28,9 +28,11 @@ import java.util.function.Function;
 import android.text.SpannableString;
 import android.text.style.AbsoluteSizeSpan;
 import android.text.style.ForegroundColorSpan;
+import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.read_later.ReadingListUtils;
+import org.chromium.components.bookmarks.BookmarkType;
 // End Vivaldi
 
 /**
@@ -60,17 +62,6 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
 
     // Vivaldi
     private ChromeTabbedActivity mChromeTabbedActivity;
-
-    // Vivaldi
-    private BookmarkModelObserver mVivaldiBookmarkModelObserver = new BookmarkModelObserver() {
-
-        @Override
-        public void bookmarkModelChanged() {
-            /*boolean isReadingListFolder = mCurrentFolder != null &&
-                    mCurrentFolder.getId().equals(mBookmarkModel.getDefaultReadingListFolder());
-            setAddToReadingListButtonVisible(isReadingListFolder);*/ // TODO CHR128: Check this
-        }
-    };
 
     public BookmarkToolbar(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -277,11 +268,12 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         if (activity.getActivityTab() == null) return false;
         if (!ReadingListUtils.isReadingListSupported(activity.getActivityTab().getUrl()))
             return false;
-        /*BookmarkId existingBookmark =
-                mBookmarkModel.getUserBookmarkIdForTab(activity.getActivityTab());
+        BookmarkModel model = BookmarkModel.getForProfile(
+                    ProfileManager.getLastUsedRegularProfile());
+        BookmarkId existingBookmark =
+                model.getUserBookmarkIdForTab(activity.getActivityTab());
         if (existingBookmark == null) return true;
-        return existingBookmark.getType() != BookmarkType.READING_LIST;*/ // TODO CHR128: Check this.
-        return false;
+        return existingBookmark.getType() != BookmarkType.READING_LIST;
     }
 
     void setSortButtonVisible(boolean visible) {

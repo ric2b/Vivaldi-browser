@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <utility>
 
-#include "cast/streaming/constants.h"
-#include "cast/streaming/packet_util.h"
+#include "cast/streaming/impl/packet_util.h"
+#include "cast/streaming/public/constants.h"
 #include "platform/base/span.h"
 #include "util/chrono_helpers.h"
 #include "util/osp_logging.h"

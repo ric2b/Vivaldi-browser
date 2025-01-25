@@ -28,7 +28,6 @@ class D3DSharedFence;
 namespace gpu {
 class DXGISharedHandleManager;
 class SharedImageRepresentationFactoryRef;
-class VaapiDependenciesFactory;
 
 class GPU_GLES2_EXPORT SharedImageManager
     : public base::trace_event::MemoryDumpProvider {
@@ -89,21 +88,22 @@ class GPU_GLES2_EXPORT SharedImageManager
       wgpu::BackendType backend_type,
       std::vector<wgpu::TextureFormat> view_formats,
       scoped_refptr<SharedContextState> context_state);
+  std::unique_ptr<DawnBufferRepresentation> ProduceDawnBuffer(
+      const Mailbox& mailbox,
+      MemoryTypeTracker* ref,
+      const wgpu::Device& device,
+      wgpu::BackendType backend_type);
   std::unique_ptr<OverlayImageRepresentation> ProduceOverlay(
       const Mailbox& mailbox,
       MemoryTypeTracker* ref);
-  std::unique_ptr<VaapiImageRepresentation> ProduceVASurface(
-      const Mailbox& mailbox,
-      MemoryTypeTracker* ref,
-      VaapiDependenciesFactory* dep_factory);
   std::unique_ptr<MemoryImageRepresentation> ProduceMemory(
       const Mailbox& mailbox,
       MemoryTypeTracker* ref);
   std::unique_ptr<RasterImageRepresentation> ProduceRaster(
       const Mailbox& mailbox,
       MemoryTypeTracker* ref);
-  std::unique_ptr<VideoDecodeImageRepresentation> ProduceVideoDecode(
-      VideoDecodeDevice device,
+  std::unique_ptr<VideoImageRepresentation> ProduceVideo(
+      VideoDevice device,
       const Mailbox& mailbox,
       MemoryTypeTracker* ref);
 

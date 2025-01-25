@@ -65,7 +65,8 @@ class SessionRestorationService : public KeyedService {
 
   // Asynchronously loads data for `web_state` owned by `browser` that is
   // unrealized. Invokes `callback` with the data loaded from disk on the
-  // calling sequence.
+  // calling sequence. It is an error to call this method with a realized
+  // WebState.
   //
   // If the method `SetSessionID(...)` has not been called for `browser`,
   // or if the method `Disconnect(...)` has already been called, then the
@@ -123,9 +124,6 @@ class SessionRestorationService : public KeyedService {
   // Removes any persisted data that is no longer needed and invokes
   // `closure` on the calling sequence when done.
   virtual void PurgeUnassociatedData(base::OnceClosure closure) = 0;
-
-  // Returns whether placeholder tabs support is enabled.
-  virtual bool PlaceholderTabsEnabled() const = 0;
 
   // Asynchronously loads data for all WebStates in `browser`, invoking
   // `parse` for each of them in order to extract the interesting part.

@@ -7,6 +7,9 @@
 
 #pragma mark - ICONS
 
+// URL to share when user selects "Share Vivaldi"
+extern const char kVivaldiAppStoreUrl[];
+
 extern NSString* vOverflowShare;
 extern NSString* vOverflowRecentTabs;
 extern NSString* vOverflowPasswords;
@@ -18,6 +21,10 @@ extern NSString* vOverflowNewTab;
 extern NSString* vOverflowNewPrivateTab;
 extern NSString* vOverflowNewWindow; // iPad only.
 
+extern NSString* vOverflowAddTo;
+extern NSString* vOverflowEdit;
+extern NSString* vOverflowAddStartPage;
+extern NSString* vOverflowEditStartPage;
 extern NSString* vOverflowAddBookmark;
 extern NSString* vOverflowEditBookmark;
 extern NSString* vOverflowAddReadingList;

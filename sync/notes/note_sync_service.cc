@@ -13,13 +13,13 @@ namespace sync_notes {
 NoteSyncService::NoteSyncService(file_sync::SyncedFileStore* synced_file_store,
                                  syncer::WipeModelUponSyncDisabledBehavior
                                      wipe_model_upon_sync_disabled_behavior)
-    : note_model_type_processor_(synced_file_store,
-                                 wipe_model_upon_sync_disabled_behavior) {}
+    : note_data_type_processor_(synced_file_store,
+                                wipe_model_upon_sync_disabled_behavior) {}
 
 NoteSyncService::~NoteSyncService() = default;
 
 std::string NoteSyncService::EncodeNoteSyncMetadata() {
-  return note_model_type_processor_.EncodeSyncMetadata();
+  return note_data_type_processor_.EncodeSyncMetadata();
 }
 
 void NoteSyncService::DecodeNoteSyncMetadata(
@@ -27,17 +27,17 @@ void NoteSyncService::DecodeNoteSyncMetadata(
     const base::RepeatingClosure& schedule_save_closure,
     std::unique_ptr<sync_notes::NoteModelView> model) {
   note_model_view_ = std::move(model);
-  note_model_type_processor_.ModelReadyToSync(
+  note_data_type_processor_.ModelReadyToSync(
       metadata_str, schedule_save_closure, note_model_view_.get());
 }
 
-base::WeakPtr<syncer::ModelTypeControllerDelegate>
+base::WeakPtr<syncer::DataTypeControllerDelegate>
 NoteSyncService::GetNoteSyncControllerDelegate() {
-  return note_model_type_processor_.GetWeakPtr();
+  return note_data_type_processor_.GetWeakPtr();
 }
 
 bool NoteSyncService::IsTrackingMetadata() const {
-  return note_model_type_processor_.IsTrackingMetadata() ||
+  return note_data_type_processor_.IsTrackingMetadata() ||
          is_tracking_metadata_for_testing_;
 }
 
@@ -50,7 +50,7 @@ void NoteSyncService::SetIsTrackingMetadataForTesting() {
 }
 
 void NoteSyncService::SetNotesLimitForTesting(size_t limit) {
-  note_model_type_processor_.SetMaxNotesTillSyncEnabledForTest(  // IN-TEST
+  note_data_type_processor_.SetMaxNotesTillSyncEnabledForTest(  // IN-TEST
       limit);
 }
 

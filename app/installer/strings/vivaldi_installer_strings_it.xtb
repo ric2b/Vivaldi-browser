@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Installa indipendente</translation>
 <translation id="1682285232070778125">Imposta Vivaldi come browser predefinito</translation>
 <translation id="1974060860693918893">Avanzate</translation>
+<translation id="2053560788696003312">Vivaldi richiede Windows 10 o superiore.</translation>
 <translation id="2134216661302048561">Il programma di installazione non ha finito di installare il Browser Vivaldi. Sei sicuro di voler uscire adesso?</translation>
 <translation id="2286454467119466181">Semplice</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tutti i diritti riservati. &lt;a&gt;Informativa sulla privacy&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Accetta e aggiorna</translation>
 <translation id="5302048478445481009">Lingua</translation>
 <translation id="694714344624446243">Programma di installazione di Vivaldi</translation>
+<translation id="7467493612551448880">La versione di Vivaldi che stai installando non è ottimizzata per la versione di Windows che stai usando.
+
+Visita vivaldi.com/download per scaricare la versione Windows per ARM.</translation>
 <translation id="7658239707568436148">Annulla</translation>
 <translation id="8773751185824654197">Nota: Se si aggiorna il browser Vivaldi mentre è in esecuzione, l'istanza sarà chiusa e riavviata</translation>
 <translation id="933060950687965486">Tipo di installazione</translation>

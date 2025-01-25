@@ -47,6 +47,14 @@ bool GetIsEnabled(int action, bool hasWindow, bool* enabled) {
 #endif
 }
 
+bool GetIsSupportedInSettings(int action) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  return extensions::MenubarAPI::GetIsSupportedInSettings(action);
+#else
+  return false;
+#endif
+}
+
 bool HasActiveWindow() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   return extensions::MenubarAPI::HasActiveWindow();

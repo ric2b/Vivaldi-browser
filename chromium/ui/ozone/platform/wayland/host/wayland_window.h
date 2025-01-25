@@ -60,6 +60,7 @@ class OSExchangeData;
 class WaylandBubble;
 class WaylandConnection;
 class WaylandSubsurface;
+class WaylandDataDragController;
 class WaylandWindowDragController;
 class WaylandFrameManager;
 class WaylandPopup;
@@ -198,6 +199,7 @@ class WaylandWindow : public PlatformWindow,
                  mojom::DragEventSource source,
                  gfx::NativeCursor cursor,
                  bool can_grab_pointer,
+                 base::OnceClosure drag_started_callback,
                  WmDragHandler::DragFinishedCallback drag_finished_callback,
                  WmDragHandler::LocationDelegate* delegate) override;
   void CancelDrag() override;
@@ -415,6 +417,10 @@ class WaylandWindow : public PlatformWindow,
   // destroyed.
   void OnChannelDestroyed();
 
+  // Triggers window UI resize and relayout in reaction to system-wide font
+  // scale changes, eg: accessibility's "large text" setting.
+  void OnFontScaleFactorChanged(float new_font_scale);
+
   virtual void DumpState(std::ostream& out) const;
 
 #if DCHECK_IS_ON()
@@ -550,13 +556,15 @@ class WaylandWindow : public PlatformWindow,
   virtual bool OnInitialize(PlatformWindowInitProperties properties,
                             PlatformWindowDelegate::State* state) = 0;
 
-  // WaylandWindowDragController might need to take ownership of the wayland
-  // surface whether the window that originated the DND session gets destroyed
-  // in the middle of that session (e.g: when it is snapped into a tab strip).
-  // Surface ownership is allowed to be taken only when the window is under
-  // destruction, i.e: |shutting_down_| is set. This can be done, for example,
-  // by implementing |WaylandWindowObserver::OnWindowRemoved|.
+  // Drag controllers might need to take ownership of the dnd origin surface
+  // when its associated window gets closed in the middle of the session (e.g:
+  // in the process of being snapped into a tab strip) to prevent the drag
+  // session from getting cancelled abruptly by the Wayland compositor. Surface
+  // ownership is allowed to be transferred only when the window is already
+  // under destruction (i.e: |shutting_down_| is set) which can be done, for
+  // example, by implementing |WaylandWindowObserver::OnWindowRemoved|.
   friend WaylandWindowDragController;
+  friend WaylandDataDragController;
   std::unique_ptr<WaylandSurface> TakeWaylandSurface();
 
   void UpdateCursorShape(scoped_refptr<BitmapCursor> cursor);

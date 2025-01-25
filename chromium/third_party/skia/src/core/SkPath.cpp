@@ -528,10 +528,6 @@ bool SkPath::isRRect(SkRRect* rrect) const {
     return SkPathPriv::IsRRect(*this, rrect, nullptr, nullptr);
 }
 
-bool SkPath::isArc(SkArc* arc) const {
-    return fPathRef->isArc(arc);
-}
-
 int SkPath::countPoints() const {
     return fPathRef->countPoints();
 }
@@ -1137,13 +1133,12 @@ SkPath& SkPath::addOval(const SkRect &oval, SkPathDirection dir, unsigned startP
 
     SkPath_OvalPointIterator ovalIter(oval, dir, startPointIndex);
     // The corner iterator pts are tracking "behind" the oval/radii pts.
-    SkPath_RectPointIterator rectIter(
-            oval, dir, startPointIndex + (dir == SkPathDirection::kCW ? 0 : 1));
-    const SkScalar kConicWeight = SK_ScalarRoot2Over2;
+    SkPath_RectPointIterator rectIter(oval, dir, startPointIndex + (dir == SkPathDirection::kCW ? 0 : 1));
+    const SkScalar weight = SK_ScalarRoot2Over2;
 
     this->moveTo(ovalIter.current());
     for (unsigned i = 0; i < 4; ++i) {
-        this->conicTo(rectIter.next(), ovalIter.next(), kConicWeight);
+        this->conicTo(rectIter.next(), ovalIter.next(), weight);
     }
     this->close();
 
@@ -1153,59 +1148,7 @@ SkPath& SkPath::addOval(const SkRect &oval, SkPathDirection dir, unsigned startP
 
     if (isOval) {
         SkPathRef::Editor ed(&fPathRef);
-        ed.setIsOval(SkPathDirection::kCCW == dir, startPointIndex % 4, /*isClosed=*/true);
-    }
-    return *this;
-}
-
-SkPath& SkPath::addOpenOval(const SkRect &oval, SkPathDirection dir, unsigned startPointIndex) {
-    assert_known_direction(dir);
-
-    // Canvas2D semantics are different than our standard addOval. In the case of an empty
-    // initial path, we inject a moveTo. In any other case, we actually start with a lineTo
-    // (as if we simply called arcTo). Thus, we only treat the result as an (open) oval for
-    // future queries if we started out empty.
-    bool wasEmpty = this->isEmpty();
-    if (wasEmpty) {
-        this->setFirstDirection((SkPathFirstDirection)dir);
-    } else {
-        this->setFirstDirection(SkPathFirstDirection::kUnknown);
-    }
-
-    SkAutoDisableDirectionCheck addc(this);
-    SkAutoPathBoundsUpdate apbu(this, oval);
-
-    SkDEBUGCODE(int initialVerbCount = fPathRef->countVerbs());
-    SkDEBUGCODE(int initialPointCount = fPathRef->countPoints());
-    SkDEBUGCODE(int initialWeightCount = fPathRef->countWeights());
-    // We reserve space for one extra verb. The caller usually adds kClose immediately
-    const int kVerbs = 6; // moveTo/lineTo + 4x conicTo + (kClose)?
-    const int kPoints = 9;
-    const int kWeights = 4;
-    this->incReserve(kPoints, kVerbs, kWeights);
-
-    SkPath_OvalPointIterator ovalIter(oval, dir, startPointIndex);
-    // The corner iterator pts are tracking "behind" the oval/radii pts.
-    SkPath_RectPointIterator rectIter(
-            oval, dir, startPointIndex + (dir == SkPathDirection::kCW ? 0 : 1));
-    const SkScalar kConicWeight = SK_ScalarRoot2Over2;
-
-    if (wasEmpty) {
-        this->moveTo(ovalIter.current());
-    } else {
-        this->lineTo(ovalIter.current());
-    }
-    for (unsigned i = 0; i < 4; ++i) {
-        this->conicTo(rectIter.next(), ovalIter.next(), kConicWeight);
-    }
-
-    SkASSERT(fPathRef->countVerbs() == initialVerbCount + kVerbs - 1); // See comment above
-    SkASSERT(fPathRef->countPoints() == initialPointCount + kPoints);
-    SkASSERT(fPathRef->countWeights() == initialWeightCount + kWeights);
-
-    if (wasEmpty) {
-        SkPathRef::Editor ed(&fPathRef);
-        ed.setIsOval(SkPathDirection::kCCW == dir, startPointIndex % 4, /*isClosed=*/false);
+        ed.setIsOval(SkPathDirection::kCCW == dir, startPointIndex % 4);
     }
     return *this;
 }
@@ -1240,12 +1183,10 @@ SkPath& SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAng
 
     SkPoint singlePt;
 
-    bool isArc = this->hasOnlyMoveTos();
-
     // Adds a move-to to 'pt' if forceMoveTo is true. Otherwise a lineTo unless we're sufficiently
     // close to 'pt' currently. This prevents spurious lineTos when adding a series of contiguous
     // arcs from the same oval.
-    auto addPt = [&forceMoveTo, &isArc, this](const SkPoint& pt) {
+    auto addPt = [&forceMoveTo, this](const SkPoint& pt) {
         SkPoint lastPt;
         if (forceMoveTo) {
             this->moveTo(pt);
@@ -1253,7 +1194,6 @@ SkPath& SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAng
                    !SkScalarNearlyEqual(lastPt.fX, pt.fX) ||
                    !SkScalarNearlyEqual(lastPt.fY, pt.fY)) {
             this->lineTo(pt);
-            isArc = false;
         }
     };
 
@@ -1282,10 +1222,6 @@ SkPath& SkPath::arcTo(const SkRect& oval, SkScalar startAngle, SkScalar sweepAng
         addPt(pt);
         for (int i = 0; i < count; ++i) {
             this->conicTo(conics[i].fPts[1], conics[i].fPts[2], conics[i].fW);
-        }
-        if (isArc) {
-            SkPathRef::Editor ed(&fPathRef);
-            ed.setIsArc(SkArc::Make(oval, startAngle, sweepAngle, SkArc::Type::kArc));
         }
     } else {
         addPt(singlePt);

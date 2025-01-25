@@ -129,7 +129,7 @@ public class RecentTabsPage
                 newHeight ->
                         mView.setPadding(
                                 mView.getPaddingLeft(),
-                                newHeight,
+                                !ChromeApplicationImpl.isVivaldi() ? newHeight : 0, // Vivaldi VAB-9753
                                 mView.getPaddingRight(),
                                 mView.getPaddingBottom());
         mTabStripHeightSupplier.addObserver(mTabStripHeightChangeCallback);
@@ -194,6 +194,11 @@ public class RecentTabsPage
 
     @Override
     public void updateForUrl(String url) {}
+
+    @Override
+    public int getHeightOverlappedWithTopControls() {
+        return mBrowserControlsStateProvider.getTopControlsHeight();
+    }
 
     // View.OnAttachStateChangeListener
     @Override

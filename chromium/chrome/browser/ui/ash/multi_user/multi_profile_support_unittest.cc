@@ -42,11 +42,11 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings_holder.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
-#include "chrome/browser/ui/ash/chrome_new_window_client.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
-#include "chrome/browser/ui/ash/session_controller_client_impl.h"
-#include "chrome/browser/ui/ash/session_util.h"
+#include "chrome/browser/ui/ash/new_window/chrome_new_window_client.h"
+#include "chrome/browser/ui/ash/session/session_controller_client_impl.h"
+#include "chrome/browser/ui/ash/session/session_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -64,6 +64,7 @@
 #include "ui/aura/test/env_test_helper.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/manager/display_manager.h"
@@ -1423,10 +1424,12 @@ TEST_F(MultiProfileSupportTest, TransientWindowActivationTest) {
   multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
 
   ::wm::AddTransientChild(window(0), window(1));
-  window(1)->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
+  window(1)->SetProperty(aura::client::kModalKey,
+                         ui::mojom::ModalType::kWindow);
 
   ::wm::AddTransientChild(window(1), window(2));
-  window(2)->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
+  window(2)->SetProperty(aura::client::kModalKey,
+                         ui::mojom::ModalType::kWindow);
 
   ::wm::ActivationClient* activation_client =
       ::wm::GetActivationClient(window(0)->GetRootWindow());
@@ -1447,11 +1450,11 @@ TEST_F(MultiProfileSupportTest, TransientWindowActivationTest) {
   EXPECT_FALSE(::wm::CanActivateWindow(window(1)));
 
   // Test that switching user doesn't change the property of the windows.
-  EXPECT_EQ(ui::MODAL_TYPE_NONE,
+  EXPECT_EQ(ui::mojom::ModalType::kNone,
             window(0)->GetProperty(aura::client::kModalKey));
-  EXPECT_EQ(ui::MODAL_TYPE_WINDOW,
+  EXPECT_EQ(ui::mojom::ModalType::kWindow,
             window(1)->GetProperty(aura::client::kModalKey));
-  EXPECT_EQ(ui::MODAL_TYPE_WINDOW,
+  EXPECT_EQ(ui::mojom::ModalType::kWindow,
             window(2)->GetProperty(aura::client::kModalKey));
 
   ::wm::RemoveTransientChild(window(0), window(1));

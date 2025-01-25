@@ -197,7 +197,7 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
         this.focusNavigationBar.bind(this);
 
     SDK.TargetManager.TargetManager.instance().addEventListener(
-        SDK.TargetManager.Events.SuspendStateChanged, this.onSuspendStateChange, this);
+        SDK.TargetManager.Events.SUSPEND_STATE_CHANGED, this.onSuspendStateChange, this);
     this.updateGlasspane();
   }
 
@@ -646,7 +646,7 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
     const bordersSize = BORDERS_SIZE;
     const width = this.element.offsetWidth - bordersSize - gutterSize;
     const height = this.element.offsetHeight - bordersSize - gutterSize - NAVBAR_HEIGHT;
-    return {width: width, height: height};
+    return {width, height};
   }
 
   setInspectMode(mode: Protocol.Overlay.InspectMode, config: Protocol.Overlay.HighlightConfig): Promise<void> {

@@ -14,12 +14,13 @@ import android.view.ViewGroup;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.chrome.browser.autofill.helpers.FaviconHelper;
 import org.chromium.chrome.browser.keyboard_accessory.R;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData;
 import org.chromium.chrome.browser.keyboard_accessory.data.UserInfoField;
-import org.chromium.chrome.browser.keyboard_accessory.helper.FaviconHelper;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AccessorySheetTabItemsModel.AccessorySheetDataPiece;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AccessorySheetTabViewBinder.ElementViewHolder;
+import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AddressAccessorySheetViewBinder.PlusAddressInfoViewHolder;
 import org.chromium.chrome.browser.keyboard_accessory.utils.InsecureFillingDialogUtils;
 import org.chromium.components.browser_ui.widget.chips.ChipView;
 import org.chromium.ui.modelutil.ListModel;
@@ -40,13 +41,14 @@ class PasswordAccessorySheetViewBinder {
             @AccessorySheetDataPiece.Type int viewType,
             UiConfiguration uiConfiguration) {
         switch (viewType) {
+            case AccessorySheetDataPiece.Type.PLUS_ADDRESS_SECTION:
+                return new PlusAddressInfoViewHolder(parent, uiConfiguration.faviconHelper);
             case AccessorySheetDataPiece.Type.PASSKEY_SECTION:
                 return new PasskeyChipViewHolder(parent);
             case AccessorySheetDataPiece.Type.PASSWORD_INFO:
                 return new PasswordInfoViewHolder(parent, uiConfiguration.faviconHelper);
             case AccessorySheetDataPiece.Type.TITLE:
-                return new AccessorySheetTabViewBinder.TitleViewHolder(
-                        parent, R.layout.keyboard_accessory_sheet_tab_title);
+                return new AccessorySheetTabViewBinder.TitleViewHolder(parent);
             case AccessorySheetDataPiece.Type.FOOTER_COMMAND:
             case AccessorySheetDataPiece.Type.OPTION_TOGGLE:
                 return AccessorySheetTabViewBinder.create(parent, viewType);
@@ -111,6 +113,9 @@ class PasswordAccessorySheetViewBinder {
                             field.isObfuscated() ? new PasswordTransformationMethod() : null);
             chip.getPrimaryTextView().setText(field.getDisplayText());
             chip.getPrimaryTextView().setContentDescription(field.getA11yDescription());
+            if (field.getIconId() != 0) {
+                chip.setIcon(field.getIconId(), /* tintWithTextColor= */ true);
+            }
             View.OnClickListener listener = null;
             if (field.isSelectable()) {
                 listener = src -> field.triggerSelection();

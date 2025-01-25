@@ -114,8 +114,6 @@ class Lock {
     // Evict on contention is only enabled when both FSA Locking Scheme and
     // BFCache are enabled.
     bool evict_on_contention =
-        base::FeatureList::IsEnabled(
-            blink::features::kFileSystemAccessLockingScheme) &&
         base::FeatureList::IsEnabled(features::kFileSystemAccessBFCache);
 
     // Start eviction if we can. Otherwise, we can not take this lock since it
@@ -458,7 +456,7 @@ class Lock {
 class RootLock : public Lock {
  public:
   explicit RootLock(
-      base::WeakPtr<FileSystemAccessLockManager> lock_manager,
+      scoped_refptr<FileSystemAccessLockManager> lock_manager,
       const FileSystemAccessLockManager::RootLocator& root_locator)
       : Lock({},
              lock_manager->ancestor_lock_type_,
@@ -470,7 +468,7 @@ class RootLock : public Lock {
  private:
   void DestroySelf() override { lock_manager_->ReleaseRoot(root_locator_); }
 
-  base::WeakPtr<FileSystemAccessLockManager> lock_manager_;
+  scoped_refptr<FileSystemAccessLockManager> lock_manager_;
   FileSystemAccessLockManager::RootLocator root_locator_;
 };
 
@@ -539,7 +537,9 @@ LockHandle::~LockHandle() {
 }
 
 FileSystemAccessLockManager::FileSystemAccessLockManager(
-    base::PassKey<FileSystemAccessManagerImpl> /*pass_key*/) {}
+    base::PassKey<FileSystemAccessManagerImpl> /*pass_key*/)
+    : base::RefCountedDeleteOnSequence<FileSystemAccessLockManager>(
+          base::SequencedTaskRunner::GetCurrentDefault()) {}
 
 FileSystemAccessLockManager::~FileSystemAccessLockManager() = default;
 
@@ -620,6 +620,8 @@ void FileSystemAccessLockManager::TakeLock(
 void FileSystemAccessLockManager::ReleaseRoot(const RootLocator& root_locator) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  // May destroy `this` if `FileSystemAccessManagerImpl` no longer holds a
+  // `scoped_refptr` to `this`, and this is the last root lock.
   size_t count_removed = root_locks_.erase(root_locator);
 
   DCHECK_EQ(1u, count_removed);
@@ -638,7 +640,7 @@ RootLock* FileSystemAccessLockManager::GetOrCreateRootLock(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RootLock* root_lock = GetRootLock(root_locator);
   if (!root_lock) {
-    root_lock = new RootLock(weak_factory_.GetWeakPtr(), root_locator);
+    root_lock = new RootLock(this, root_locator);
     root_locks_.emplace(std::move(root_locator),
                         base::WrapUnique<RootLock>(root_lock));
   }
@@ -658,6 +660,12 @@ FileSystemAccessLockManager::GetExclusiveLockType() {
 FileSystemAccessLockManager::LockType
 FileSystemAccessLockManager::GetAncestorLockTypeForTesting() {
   return ancestor_lock_type_;
+}
+
+base::WeakPtr<FileSystemAccessLockManager>
+FileSystemAccessLockManager::GetWeakPtrForTesting() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return weak_factory_.GetWeakPtr();
 }
 
 }  // namespace content

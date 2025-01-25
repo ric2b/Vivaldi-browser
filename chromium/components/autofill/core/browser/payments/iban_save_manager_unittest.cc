@@ -25,9 +25,9 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
+namespace {
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-namespace {
 
 constexpr char kLegalMessageLines[] =
     "{"
@@ -55,8 +55,6 @@ constexpr char kInvalidLegalMessageLines[] =
 
 constexpr char16_t kCapitalizedIbanRegex[] =
     u"^[A-Z]{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}[A-Z0-9]{0,18}$";
-
-}  // namespace
 
 class IbanSaveManagerTest : public testing::Test {
  public:
@@ -190,7 +188,6 @@ TEST_F(IbanSaveManagerTest, ShouldOfferUploadSave_MaxServerIban) {
     server_iban.set_prefix(u"DE");
     server_iban.set_suffix(
         (base::UTF8ToUTF16(base::NumberToString(10 + num_server_ibans))));
-    server_iban.set_length(22);
     personal_data().test_payments_data_manager().AddServerIban(server_iban);
     EXPECT_EQ(num_server_ibans <= kMaxNumServerIbans
                   ? IbanSaveManager::TypeOfOfferToSave::kOfferServerSave
@@ -229,7 +226,6 @@ TEST_F(IbanSaveManagerTest, ShouldOfferUploadSave_LocalAndServerIban) {
   Iban server_iban(Iban::InstrumentId(1234567));
   server_iban.set_prefix(u"DE91");
   server_iban.set_suffix(u"6789");
-  server_iban.set_length(22);
   personal_data().test_payments_data_manager().AddServerIban(server_iban);
 
   // Creates an unknown IBAN with the same prefix, suffix and length as the
@@ -244,7 +240,6 @@ TEST_F(IbanSaveManagerTest, ShouldOfferUploadSave_ServerIban) {
   Iban iban(Iban::InstrumentId(1234567));
   iban.set_prefix(u"DE91");
   iban.set_suffix(u"6789");
-  iban.set_length(22);
   personal_data().test_payments_data_manager().AddServerIban(iban);
 
   // Creates an unknown IBAN with the same prefix, suffix and length as the
@@ -1007,4 +1002,5 @@ TEST_F(
 
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
+}  // namespace
 }  // namespace autofill

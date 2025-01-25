@@ -354,23 +354,27 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
      * presented suggestions in the event where Native counterpart is not yet initialized.
      *
      * <p>Note: the only supported page context right now is the ANDROID_SEARCH_WIDGET.
+     *
+     * @param isOnFocusContext Whether the request is made on focus (as opposed to on a text
+     *     change).
      */
-    void startCachedZeroSuggest() {
+    void startCachedZeroSuggest(boolean isOnFocusContext) {
         maybeServeCachedResult();
-        postAutocompleteRequest(this::startZeroSuggest, SCHEDULE_FOR_IMMEDIATE_EXECUTION);
+        postAutocompleteRequest(
+                () -> startZeroSuggest(isOnFocusContext), SCHEDULE_FOR_IMMEDIATE_EXECUTION);
     }
 
     private void maybeCacheResult(@NonNull AutocompleteResult result) {
         if (mIsInZeroPrefixContext
                 && !result.isFromCachedResult()
-                && mDataProvider.getPageClassification(false, false)
+                && mDataProvider.getPageClassification(false)
                         == PageClassification.ANDROID_SEARCH_WIDGET_VALUE) {
             CachedZeroSuggestionsManager.saveToCache(result);
         }
     }
 
     private void maybeServeCachedResult() {
-        int pageClass = mDataProvider.getPageClassification(false, false);
+        int pageClass = mDataProvider.getPageClassification(false);
 
         // Vivaldi
         // Note(Nagamani): Search engine suggestion layout is loaded after the native
@@ -436,10 +440,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
             mRefineActionUsage = RefineActionUsage.NOT_USED;
             mOmniboxFocusResultedInNavigation = false;
             mSuggestionsListScrolled = false;
-            mPageClassification =
-                    OptionalInt.of(
-                            mDataProvider.getPageClassification(
-                                    mDelegate.didFocusUrlFromFakebox(), /* isPrefetch= */ false));
+            mPageClassification = OptionalInt.of(mDataProvider.getPageClassification(false));
             mUrlFocusTime = System.currentTimeMillis();
 
             // Ask directly for zero-suggestions related to current input, unless the user is
@@ -452,13 +453,15 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
             // metric.
             // Note(david@vivaldi.com): Trigger directly for zero-suggestions related to current
             // input. See ref. VAB-9411.
-            if (mDataProvider.getPageClassification(false, false)
+            if (mDataProvider.getPageClassification(false)
                     != PageClassification.ANDROID_SEARCH_WIDGET_VALUE) {
-                postAutocompleteRequest(this::startZeroSuggest, SCHEDULE_FOR_IMMEDIATE_EXECUTION);
+                postAutocompleteRequest(
+                        () -> startZeroSuggest(false), SCHEDULE_FOR_IMMEDIATE_EXECUTION);
             } else {
             String text = mUrlBarEditingTextProvider.getTextWithoutAutocomplete();
-            onTextChanged(text);
-            }
+            onTextChanged(
+                    text, /* isOnFocusContext= */ OmniboxFeatures.shouldRetainOmniboxOnFocus());
+            } // End Vivaldi
         } else {
             mDeferredIMEWindowInsetApplicationCallback.detach();
             stopMeasuringSuggestionRequestToUiModelTime();
@@ -630,7 +633,9 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         if (isSearchSuggestion) refineText = TextUtils.concat(refineText, " ").toString();
 
         mDelegate.setOmniboxEditingText(refineText);
-        onTextChanged(mUrlBarEditingTextProvider.getTextWithoutAutocomplete());
+        onTextChanged(
+                mUrlBarEditingTextProvider.getTextWithoutAutocomplete(),
+                /* isOnFocusContext= */ false);
 
         if (isSearchSuggestion) {
             // Note: the logic below toggles assumes individual values to be represented by
@@ -848,8 +853,11 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
     /**
      * Notifies the autocomplete system that the text has changed that drives autocomplete and the
      * autocomplete suggestions should be updated.
+     *
+     * @param textWithoutAutocomplete The text that does not include autocomplete information.
+     * @param isOnFocusContext Whether the request is made on focus (as opposed to on text change).
      */
-    public void onTextChanged(@NonNull String textWithoutAutocomplete) {
+    public void onTextChanged(@NonNull String textWithoutAutocomplete, boolean isOnFocusContext) {
         if (mShouldPreventOmniboxAutocomplete) return;
 
         mIgnoreOmniboxItemSelection = true;
@@ -862,11 +870,14 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         }
 
         stopAutocomplete(false);
-        mIsInZeroPrefixContext = TextUtils.isEmpty(textWithoutAutocomplete);
+
+        boolean isTextWithoutAutocompleteEmpty = TextUtils.isEmpty(textWithoutAutocomplete);
+        mIsInZeroPrefixContext = isOnFocusContext || isTextWithoutAutocompleteEmpty;
+        isOnFocusContext = isOnFocusContext && !isTextWithoutAutocompleteEmpty;
 
         if (mIsInZeroPrefixContext) {
             clearSuggestions();
-            startCachedZeroSuggest();
+            startCachedZeroSuggest(isOnFocusContext);
         } else if (mDataProvider.hasTab()) {
             boolean preventAutocomplete = !mUrlBarEditingTextProvider.shouldAutocomplete();
             int cursorPosition =
@@ -1072,9 +1083,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
 
     /** Sends a zero suggest request to the server in order to pre-populate the result cache. */
     /* package */ void startPrefetch() {
-        int pageClassification =
-                mDataProvider.getPageClassification(
-                        /* isFocusedFromFakebox= */ false, /* isPrefetch= */ true);
+        int pageClassification = mDataProvider.getPageClassification(true);
         postAutocompleteRequest(
                 () ->
                         mAutocomplete.ifPresent(
@@ -1089,8 +1098,10 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
      * Make a zero suggest request if: - The URL bar has focus. - The the tab/overview is not
      * incognito. This method should not be called directly. Schedule execution using
      * postAutocompleteRequest.
+     *
+     * @param isOnFocusContext Whether the request is made on focus (as opposed to on text change).
      */
-    private void startZeroSuggest() {
+    private void startZeroSuggest(boolean isOnFocusContext) {
         // Note(david@vivaldi.com): Do nothing if we focus the address field on a new tab. The
         // suggestion will only appear after typing.
         if (shouldFocusAddressBarOnNewTab()) return;
@@ -1108,7 +1119,8 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
                                 mUrlBarEditingTextProvider.getTextWithAutocomplete(),
                                 mDataProvider.getCurrentGurl(),
                                 mPageClassification.getAsInt(),
-                                mDataProvider.getTitle());
+                                mDataProvider.getTitle(),
+                                isOnFocusContext);
                     });
         }
     }
@@ -1177,9 +1189,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
                     a ->
                             a.start(
                                     mDataProvider.getCurrentGurl(),
-                                    mDataProvider.getPageClassification(
-                                            /* isFocusedFromFakebox= */ false,
-                                            /* isPrefetch= */ false),
+                                    mDataProvider.getPageClassification(false),
                                     query,
                                     -1,
                                     false));

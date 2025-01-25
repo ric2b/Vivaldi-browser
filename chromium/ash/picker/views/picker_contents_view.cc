@@ -50,7 +50,7 @@ class PickerScrollView : public views::ScrollView {
 
  public:
   PickerScrollView()
-      : views::ScrollView(views::ScrollView::ScrollWithLayers::kDisabled) {
+      : views::ScrollView(views::ScrollView::ScrollWithLayers::kEnabled) {
     views::Builder<views::ScrollView>(this)
         .ClipHeightTo(0, std::numeric_limits<int>::max())
         .SetDrawOverflowIndicator(false)
@@ -61,9 +61,6 @@ class PickerScrollView : public views::ScrollView {
   PickerScrollView(const PickerScrollView&) = delete;
   PickerScrollView& operator=(const PickerScrollView&) = delete;
   ~PickerScrollView() override = default;
-
-  // TODO: b/330785264 - Add back gradient helper once the flickering issue is
-  // resolved.
 };
 
 BEGIN_METADATA(PickerScrollView)
@@ -78,6 +75,7 @@ PickerContentsView::PickerContentsView(PickerLayoutType layout_type) {
   auto vertical_scroll_bar = std::make_unique<RoundedScrollBar>(
       views::ScrollBar::Orientation::kVertical);
   vertical_scroll_bar->SetInsets(GetPickerScrollBarInsets(layout_type));
+  vertical_scroll_bar->SetAlwaysShowThumb(true);
   scroll_view->SetVerticalScrollBar(std::move(vertical_scroll_bar));
 
   page_container_ = scroll_view->SetContents(

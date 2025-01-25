@@ -206,3 +206,60 @@ TEST(free_without_remove)
 	assert(a.link.next == a.link.prev && a.link.next == NULL);
 	assert(b.link.next == b.link.prev && b.link.next == NULL);
 }
+
+static enum wl_iterator_result
+client_resource_check(struct wl_resource* resource, void* data)
+{
+	/* Ensure there is no iteration over already freed resources. */
+	assert(!wl_resource_get_user_data(resource));
+	return WL_ITERATOR_CONTINUE;
+}
+
+static void
+resource_destroy_notify(struct wl_listener *l, void *data)
+{
+	struct wl_resource* resource = data;
+	struct wl_client* client = resource->client;
+
+	wl_client_for_each_resource(client, client_resource_check, NULL);
+
+	/* Set user data to flag the resource has been deleted. The resource should
+	 * not be accessible from this point forward. */
+	wl_resource_set_user_data(resource, client);
+}
+
+TEST(resource_destroy_iteration)
+{
+	struct wl_display *display;
+	struct wl_client *client;
+	struct wl_resource *resource1;
+	struct wl_resource *resource2;
+	int s[2];
+
+	struct wl_listener destroy_listener1 = {
+		.notify = &resource_destroy_notify
+	};
+	struct wl_listener destroy_listener2 = {
+		.notify = &resource_destroy_notify
+	};
+
+	assert(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, s) == 0);
+	display = wl_display_create();
+	assert(display);
+	client = wl_client_create(display, s[0]);
+	assert(client);
+	resource1 = wl_resource_create(client, &wl_callback_interface, 1, 0);
+	resource2 = wl_resource_create(client, &wl_callback_interface, 1, 0);
+	assert(resource1);
+	assert(resource2);
+
+	wl_resource_add_destroy_listener(resource1, &destroy_listener1);
+	wl_resource_add_destroy_listener(resource2, &destroy_listener2);
+
+	wl_client_destroy(client);
+
+	close(s[0]);
+	close(s[1]);
+
+	wl_display_destroy(display);
+}

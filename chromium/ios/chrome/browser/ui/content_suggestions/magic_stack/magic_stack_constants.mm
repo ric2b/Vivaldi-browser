@@ -31,18 +31,3 @@ NSString* const kMagicStackEditButtonContainerAccessibilityIdentifier =
 NSString* const kMagicStackEditButtonAccessibilityIdentifier =
     @"MagicStackEditButtonAccessibilityIdentifier";
 
-CGFloat ModuleNarrowerWidthToAllowPeekingForTraitCollection(
-    UITraitCollection* traitCollection) {
-  BOOL isLandscape = [[UIDevice currentDevice] orientation] ==
-                         UIDeviceOrientationLandscapeRight ||
-                     [[UIDevice currentDevice] orientation] ==
-                         UIDeviceOrientationLandscapeLeft;
-  BOOL isLargerWidthLayout =
-      traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular ||
-      isLandscape;
-  // For the narrow width layout, make the module just slightly narrower than
-  // the inter-module spacing so the UICollectionView renders the adjacent
-  // module(s).
-  return isLargerWidthLayout ? kMagicStackPeekInsetLandscape
-                             : kMagicStackSpacing + 1;
-}

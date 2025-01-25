@@ -42,6 +42,7 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityUtils;
 import org.chromium.chrome.browser.ChromeActionModeHandler;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.app.tabmodel.ArchivedTabModelOrchestrator;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.bookmarks.AddToBookmarksToolbarButtonController;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
@@ -49,20 +50,24 @@ import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
+import org.chromium.chrome.browser.commerce.CommerceBottomSheetContentController;
+import org.chromium.chrome.browser.commerce.CommerceBottomSheetContentCoordinator;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
+import org.chromium.chrome.browser.commerce.coupons.DiscountsButtonController;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
-import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager.ContextualSearchTabPromotionDelegate;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagerSupplier;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchObserver;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
+import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.device_lock.DeviceLockActivityLauncherImpl;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeToolbarButtonController;
+import org.chromium.chrome.browser.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.findinpage.FindToolbarManager;
 import org.chromium.chrome.browser.findinpage.FindToolbarObserver;
@@ -70,8 +75,6 @@ import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
-import org.chromium.chrome.browser.gsa.ContextReporter;
-import org.chromium.chrome.browser.gsa.GSAContextDisplaySelection;
 import org.chromium.chrome.browser.identity_disc.IdentityDiscController;
 import org.chromium.chrome.browser.image_descriptions.ImageDescriptionsController;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
@@ -93,6 +96,7 @@ import org.chromium.chrome.browser.messages.ChromeMessageQueueMediator;
 import org.chromium.chrome.browser.messages.MessageContainerCoordinator;
 import org.chromium.chrome.browser.messages.MessageContainerObserver;
 import org.chromium.chrome.browser.messages.MessagesResourceMapperInitializer;
+import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.omnibox.suggestions.action.OmniboxActionDelegateImpl;
@@ -115,11 +119,12 @@ import org.chromium.chrome.browser.readaloud.ReadAloudToolbarButtonController;
 import org.chromium.chrome.browser.recent_tabs.RestoreTabsFeatureHelper;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.segmentation_platform.ContextualPageActionController;
-import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareButtonController;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.share.ShareUtils;
+import org.chromium.chrome.browser.share.page_info_sheet.PageInfoSharingControllerImpl;
+import org.chromium.chrome.browser.share.page_info_sheet.PageSummaryButtonController;
 import org.chromium.chrome.browser.share.qrcode.QrCodeDialog;
 import org.chromium.chrome.browser.share.scroll_capture.ScrollCaptureManager;
 import org.chromium.chrome.browser.tab.AccessibilityVisibilityHandler;
@@ -152,6 +157,7 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuBlocker;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinatorFactory;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuObserver;
 import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
@@ -209,7 +215,6 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.vivaldi.browser.panels.PanelManager;
 import org.vivaldi.browser.panels.PanelUtils;
-import org.vivaldi.browser.toolbar.adaptive.TrackerShieldButtonController;
 
 /**
  * The root UI coordinator. This class will eventually be responsible for inflating and managing
@@ -260,8 +265,7 @@ public class RootUiCoordinator
     private LayoutStateProvider.LayoutStateObserver mLayoutStateObserver;
 
     /**
-     * A controller which is used to show an Incognito re-auth dialog when the feature is
-     * available.
+     * A controller which is used to show an Incognito re-auth dialog when the feature is available.
      */
     private @Nullable IncognitoReauthController mIncognitoReauthController;
 
@@ -338,7 +342,7 @@ public class RootUiCoordinator
     private final Supplier<TabContentManager> mTabContentManagerSupplier;
     private final IntentRequestTracker mIntentRequestTracker;
     private final boolean mInitializeUiWithIncognitoColors;
-    private final Supplier<EphemeralTabCoordinator> mEphemeralTabCoordinatorSupplier;
+    protected final OneshotSupplierImpl<EphemeralTabCoordinator> mEphemeralTabCoordinatorSupplier;
     @Nullable protected final BackPressManager mBackPressManager;
     private final boolean mIsIncognitoReauthPendingOnRestore;
     protected final ExpandedSheetHelper mExpandedBottomSheetHelper;
@@ -359,6 +363,7 @@ public class RootUiCoordinator
     private @Nullable BoardingPassController mBoardingPassController;
     private @Nullable ObservableSupplier<Integer> mOverviewColorSupplier;
     private @Nullable View mBaseChromeLayout;
+    private CommerceBottomSheetContentCoordinator mCommerceBottomSheetContentCoordinator;
 
     /** Vivaldi **/
     protected PanelManager mPanelManager;
@@ -448,7 +453,7 @@ public class RootUiCoordinator
             @NonNull AppMenuDelegate appMenuDelegate,
             @NonNull StatusBarColorProvider statusBarColorProvider,
             @NonNull IntentRequestTracker intentRequestTracker,
-            @NonNull Supplier<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier,
+            @NonNull OneshotSupplierImpl<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier,
             boolean initializeUiWithIncognitoColors,
             @Nullable BackPressManager backPressManager,
             @Nullable Bundle savedInstanceState,
@@ -944,6 +949,23 @@ public class RootUiCoordinator
                 mLayoutManager);
         initBoardingPassDetector();
 
+        if (EphemeralTabCoordinator.isSupported()) {
+            Supplier<TabCreator> tabCreator =
+                    () ->
+                            mTabCreatorManagerSupplier
+                                    .get()
+                                    .getTabCreator(
+                                            mTabModelSelectorSupplier.get().isIncognitoSelected());
+            mEphemeralTabCoordinatorSupplier.set(
+                    new EphemeralTabCoordinator(
+                            mActivity,
+                            mWindowAndroid,
+                            mActivity.getWindow().getDecorView(),
+                            mActivityTabProvider,
+                            tabCreator,
+                            getBottomSheetController(),
+                            canPreviewPromoteToTab()));
+        }
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.READALOUD)) {
             TabModelSelector tabModelSelector = mTabModelSelectorSupplier.get();
             ReadAloudController controller =
@@ -956,13 +978,13 @@ public class RootUiCoordinator
                             mBottomControlsStacker,
                             mLayoutManagerSupplier,
                             mWindowAndroid,
-                            mActivityLifecycleDispatcher);
+                            mActivityLifecycleDispatcher,
+                            mLayoutStateProviderOneShotSupplier);
             mReadAloudControllerSupplier.set(controller);
             mReadAloudContextualSearchObserver =
                     new ContextualSearchObserver() {
                         @Override
-                        public void onShowContextualSearch(
-                                @Nullable GSAContextDisplaySelection selectionContext) {
+                        public void onShowContextualSearch() {
                             controller.maybeHidePlayer();
                         }
 
@@ -977,6 +999,11 @@ public class RootUiCoordinator
                 contextualSearchManager.addObserver(mReadAloudContextualSearchObserver);
             }
         }
+    }
+
+    /** Preview Tab can be promoted to a normal tab by default. */
+    protected boolean canPreviewPromoteToTab() {
+        return true;
     }
 
     protected boolean isContextualSearchEnabled() {
@@ -1038,22 +1065,6 @@ public class RootUiCoordinator
                     .get()
                     .hideContextualSearch(OverlayPanel.StateChangeReason.UNKNOWN);
         }
-    }
-
-    public ContextReporter.SelectionReporter getContextReporter() {
-        return getContextualSearchManagerSupplier().hasValue()
-                ? new ContextReporter.SelectionReporter() {
-                    @Override
-                    public void enable(Callback<GSAContextDisplaySelection> callback) {
-                        getContextualSearchManagerSupplier().get().enableContextReporting(callback);
-                    }
-
-                    @Override
-                    public void disable() {
-                        getContextualSearchManagerSupplier().get().disableContextReporting();
-                    }
-                }
-                : null;
     }
 
     /**
@@ -1423,15 +1434,21 @@ public class RootUiCoordinator
             mCurrentTabPriceTrackingStateSupplier =
                     new CurrentTabPriceTrackingStateSupplier(
                             mActivityTabProvider, mProfileSupplier);
+
             PriceInsightsButtonController priceInsightsButtonController =
                     new PriceInsightsButtonController(
                             mActivity,
                             mActivityTabProvider,
+                            mTabModelSelectorSupplier,
+                            () -> ShoppingServiceFactory.getForProfile(mProfileSupplier.get()),
                             mModalDialogManagerSupplier.get(),
                             getBottomSheetController(),
                             mSnackbarManagerSupplier.get(),
+                            new PriceInsightsDelegateImpl(
+                                    mActivity, mCurrentTabPriceTrackingStateSupplier),
                             AppCompatResources.getDrawable(
-                                    mActivity, R.drawable.ic_trending_down_24dp));
+                                    mActivity, R.drawable.ic_trending_down_24dp),
+                            this::getCommerceBottomSheetContentController);
             PriceTrackingButtonController priceTrackingButtonController =
                     new PriceTrackingButtonController(
                             mActivity,
@@ -1523,17 +1540,30 @@ public class RootUiCoordinator
             AdaptiveToolbarButtonController adaptiveToolbarButtonController =
                     new AdaptiveToolbarButtonController(
                             mActivity,
-                            new SettingsLauncherImpl(),
                             mActivityLifecycleDispatcher,
                             mProfileSupplier,
                             new AdaptiveButtonActionMenuCoordinator(),
                             mWindowAndroid,
                             ChromeSharedPreferences.getInstance());
-            // Vivaldi
-            TrackerShieldButtonController trackerShieldButtonController =
-                    new TrackerShieldButtonController(
+            PageSummaryButtonController pageSummaryButtonController =
+                    new PageSummaryButtonController(
+                            mActivity,
+                            mBottomSheetController,
+                            mModalDialogManagerSupplier.get(),
                             mActivityTabProvider,
-                            mActivity);
+                            PageInfoSharingControllerImpl.getInstance());
+
+            if (ChromeFeatureList.sEnableDiscountInfoApi.isEnabled()) {
+                DiscountsButtonController discountsButtonController =
+                        new DiscountsButtonController(
+                                mActivity,
+                                mActivityTabProvider,
+                                mModalDialogManagerSupplier.get(),
+                                this::getCommerceBottomSheetContentController);
+                adaptiveToolbarButtonController.addButtonVariant(
+                        AdaptiveToolbarButtonVariant.DISCOUNTS, discountsButtonController);
+            }
+
             adaptiveToolbarButtonController.addButtonVariant(
                     AdaptiveToolbarButtonVariant.NEW_TAB, newTabButtonController);
             adaptiveToolbarButtonController.addButtonVariant(
@@ -1553,9 +1583,9 @@ public class RootUiCoordinator
                     AdaptiveToolbarButtonVariant.READER_MODE, readerModeToolbarButtonController);
             adaptiveToolbarButtonController.addButtonVariant(
                     AdaptiveToolbarButtonVariant.READ_ALOUD, readAloudButtonController);
-	    // Vivaldi
             adaptiveToolbarButtonController.addButtonVariant(
-                    AdaptiveToolbarButtonVariant.TRACKER_SHIELD, trackerShieldButtonController);
+                    AdaptiveToolbarButtonVariant.PAGE_SUMMARY, pageSummaryButtonController);
+
             mContextualPageActionController =
                     new ContextualPageActionController(
                             mProfileSupplier,
@@ -1570,7 +1600,6 @@ public class RootUiCoordinator
                     new OmniboxActionDelegateImpl(
                             mActivity,
                             mActivityTabProvider,
-                            new SettingsLauncherImpl(),
                             // TODO(ender): phase out callbacks when the modules below are
                             // components.
                             // Open URL in an existing, else new regular tab.
@@ -1606,7 +1635,10 @@ public class RootUiCoordinator
                                         mModalDialogManagerSupplier.get(),
                                         mSnackbarManagerSupplier.get(),
                                         mLayoutManager,
-                                        mTabModelSelectorSupplier.get());
+                                        mTabModelSelectorSupplier.get(),
+                                        ArchivedTabModelOrchestrator.getForProfile(
+                                                        mProfileSupplier.get())
+                                                .getTabModelSelector());
                             });
 
             mToolbarManager =
@@ -1643,9 +1675,9 @@ public class RootUiCoordinator
                             mAppMenuDelegate,
                             mActivityLifecycleDispatcher,
                             mBottomSheetController,
+                            getDataSharingTabManager(),
                             mTabContentManagerSupplier.get(),
                             mTabCreatorManagerSupplier.get(),
-                            mSnackbarManagerSupplier.get(),
                             getMerchantTrustSignalsCoordinatorSupplier(),
                             omniboxActionDelegate,
                             mEphemeralTabCoordinatorSupplier,
@@ -1667,6 +1699,17 @@ public class RootUiCoordinator
             }
             mToolbarManagerOneshotSupplier.set(mToolbarManager);
         }
+    }
+
+    @Nullable
+    private CommerceBottomSheetContentController getCommerceBottomSheetContentController() {
+        if (mCommerceBottomSheetContentCoordinator == null
+                && ChromeFeatureList.sEnableDiscountInfoApi.isEnabled()) {
+            mCommerceBottomSheetContentCoordinator =
+                    new CommerceBottomSheetContentCoordinator(mActivity, mBottomSheetController);
+        }
+
+        return mCommerceBottomSheetContentCoordinator;
     }
 
     /**
@@ -1981,7 +2024,11 @@ public class RootUiCoordinator
             ObservableSupplierImpl<EdgeToEdgeController> supplier,
             BrowserControlsManager browserControlsManager,
             LayoutManager layoutManager) {
-        EdgeToEdgeUtils.recordEligibility(activity);
+        boolean eligible = EdgeToEdgeUtils.recordEligibility(activity);
+
+        UmaSessionStats.registerSyntheticFieldTrial(
+                "EdgeToEdgeChinEligibility", eligible ? "Eligible" : "Not Eligible");
+
         if (supportsEdgeToEdge()) {
             mEdgeToEdgeController =
                     EdgeToEdgeControllerFactory.create(
@@ -1989,7 +2036,8 @@ public class RootUiCoordinator
                             mWindowAndroid,
                             activityTabProvider,
                             browserControlsManager,
-                            layoutManager);
+                            layoutManager,
+                            mFullscreenManager);
             supplier.set(mEdgeToEdgeController);
 
             if (EdgeToEdgeUtils.isEdgeToEdgeBottomChinEnabled()) {
@@ -2143,14 +2191,22 @@ public class RootUiCoordinator
         return mReadAloudControllerSupplier;
     }
 
+    /** Returns the {@link AppMenuHandler}. */
+    public @Nullable AppMenuHandler getAppMenuHandler() {
+        if (mAppMenuCoordinator != null) {
+            return mAppMenuCoordinator.getAppMenuHandler();
+        }
+        return null;
+    }
+
     /**
      * Saves relevant information that will be used to restore the UI state after the activity is
      * recreated. This is expected to be invoked in {@code Activity#onSaveInstanceState(Bundle)}.
      *
      * @param outState The {@link Bundle} that is used to save state information.
      * @param isRecreatingForTabletModeChange Whether the activity is recreated due to a fold
-     *         configuration change. {@code true} if the fold configuration changed, {@code false}
-     *         otherwise.
+     *     configuration change. {@code true} if the fold configuration changed, {@code false}
+     *     otherwise.
      */
     public void onSaveInstanceState(Bundle outState, boolean isRecreatingForTabletModeChange) {
         assert mTabModelSelectorSupplier.hasValue();
@@ -2225,9 +2281,19 @@ public class RootUiCoordinator
         mActivity = null;
     }
 
+    public BottomControlsStacker getBottomControlsStackerForTesting() {
+        return mBottomControlsStacker;
+    }
+
+    public DataSharingTabManager getDataSharingTabManager() {
+        // This should only be called on an instance of TabbedRootUiCoordinator.
+        return null;
+    }
+
     // Vivaldi
     public PanelManager getPanelManager() {
         return mPanelManager;
     }
+    // End Vivaldi
 
 }

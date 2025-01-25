@@ -27,11 +27,13 @@
 //*
 //*
 {% include 'BSD_LICENSE' %}
+
 {% if 'dawn' in enabled_tags %}
     #ifdef __EMSCRIPTEN__
     #error "Do not include this header. Emscripten already provides headers needed for {{metadata.api}}."
     #endif
 {% endif %}
+
 #ifndef {{metadata.api.upper()}}_H_
 #define {{metadata.api.upper()}}_H_
 
@@ -70,6 +72,8 @@
 #define {{API}}_NULLABLE
 #endif
 
+#define WGPU_BREAKING_CHANGE_DROP_DESCRIPTOR
+
 #include <stdint.h>
 #include <stddef.h>
 
@@ -97,7 +101,7 @@ typedef uint32_t {{API}}Bool;
 {% endfor %}
 
 // Structure forward declarations
-{% for type in by_category["structure"] %}
+{% for type in by_category["structure"] if type.name.get() != "nullable string view" %}
     struct {{as_cType(type.name)}};
 {% endfor %}
 
@@ -111,15 +115,10 @@ typedef uint32_t {{API}}Bool;
 {% endfor %}
 
 {% for type in by_category["bitmask"] %}
-    //* TODO(crbug.com/42241186): Remove one of these, based on resolution of what the name is:
-    //* https://github.com/webgpu-native/webgpu-headers/issues/273#issuecomment-2195951806
     typedef {{API}}Flags {{as_cType(type.name)}};
-    typedef {{API}}Flags {{as_cType(type.name)}}Flags;
     {% for value in type.values %}
         static const {{as_cType(type.name)}} {{as_cEnum(type.name, value.name)}} = 0x{{format(value.value, "016X")}};
     {% endfor %}
-    //* TODO(crbug.com/42241186): Remove Force32 values
-    static const {{as_cType(type.name)}} {{as_cEnum(type.name, Name("force32"))}} = 0x7FFFFFFF;
 {% endfor -%}
 
 {% for type in by_category["function pointer"] %}
@@ -196,7 +195,8 @@ typedef struct {{API}}ChainedStructOut {
     })
 
 {% endfor %}
-{% for type in by_category["structure"] %}
+
+{% for type in by_category["structure"] if type.name.get() != "nullable string view" %}
     {% for root in type.chain_roots %}
         // Can be chained in {{as_cType(root.name)}}
     {% endfor %}

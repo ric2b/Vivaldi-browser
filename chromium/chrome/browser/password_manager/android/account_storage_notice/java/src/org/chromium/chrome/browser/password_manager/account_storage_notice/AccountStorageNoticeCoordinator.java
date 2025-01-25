@@ -20,11 +20,11 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_manager.account_storage_toggle.AccountStorageToggleFragmentArgs;
 import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.SettingsLauncher.SettingsFragment;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.ui.base.WindowAndroid;
@@ -63,7 +63,6 @@ class AccountStorageNoticeCoordinator extends EmptyBottomSheetObserver {
     public static final String CLOSE_REASON_METRIC =
             "PasswordManager.AndroidAccountStorageNotice.CloseReason";
 
-    private final SettingsLauncher mSettingsLauncher;
     private final WindowAndroid mWindowAndroid;
     private final AccountStorageNoticeView mView;
 
@@ -96,20 +95,16 @@ class AccountStorageNoticeCoordinator extends EmptyBottomSheetObserver {
 
     @CalledByNative
     public static AccountStorageNoticeCoordinator createAndShow(
-            WindowAndroid windowAndroid,
-            PrefService prefService,
-            SettingsLauncher settingsLauncher) {
+            WindowAndroid windowAndroid, PrefService prefService) {
         AccountStorageNoticeCoordinator coordinator =
-                new AccountStorageNoticeCoordinator(windowAndroid, settingsLauncher);
+                new AccountStorageNoticeCoordinator(windowAndroid);
         BottomSheetControllerProvider.from(windowAndroid)
                 .requestShowContent(coordinator.mView, /* animate= */ true);
         prefService.setBoolean(Pref.ACCOUNT_STORAGE_NOTICE_SHOWN, true);
         return coordinator;
     }
 
-    private AccountStorageNoticeCoordinator(
-            WindowAndroid windowAndroid, SettingsLauncher settingsLauncher) {
-        mSettingsLauncher = settingsLauncher;
+    private AccountStorageNoticeCoordinator(WindowAndroid windowAndroid) {
         mWindowAndroid = windowAndroid;
         // Was checked in canShow() before.
         assert mWindowAndroid != null;
@@ -190,7 +185,8 @@ class AccountStorageNoticeCoordinator extends EmptyBottomSheetObserver {
                         ? SettingsFragment.MANAGE_SYNC
                         : SettingsFragment.GOOGLE_SERVICES;
         Intent intent =
-                mSettingsLauncher.createSettingsActivityIntent(context, fragment, fragmentArgs);
+                SettingsLauncherFactory.createSettingsLauncher()
+                        .createSettingsActivityIntent(context, fragment, fragmentArgs);
         mWindowAndroid.showIntent(intent, this::onSettingsClosed, /* errorId= */ null);
     }
 

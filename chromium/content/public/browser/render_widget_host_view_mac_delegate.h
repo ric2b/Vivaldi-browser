@@ -82,6 +82,11 @@ enum AcceptMouseEventsOption {
 // By default, only active window accepts mouse events. The content embedder may
 // override this method to override the default behavior.
 - (AcceptMouseEventsOption)acceptsMouseEventsOption;
+
+// Vivaldi Additions
+- (AcceptMouseEventsOption)acceptsMouseEventsOptionVivaldi:(NSPoint)point;
+// End Vivaldi Additions
+
 @end
 
 #endif  // CONTENT_PUBLIC_BROWSER_RENDER_WIDGET_HOST_VIEW_MAC_DELEGATE_H_

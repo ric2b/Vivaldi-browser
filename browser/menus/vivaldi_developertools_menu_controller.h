@@ -37,6 +37,10 @@ class DeveloperToolsMenuController {
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) const;
 
+  void SetHandleInspectElement(bool handle_inspect_element) {
+    handle_inspect_element_ = handle_inspect_element;
+  }
+
  private:
   bool HasFeature();
   const extensions::Extension* GetExtension() const;
@@ -45,6 +49,11 @@ class DeveloperToolsMenuController {
   const raw_ptr<Browser> browser_;
   gfx::Point location_;
   bool enabled_;
+  // Tweak for the vivadi render view menu. We let this controller set up the
+  // menu element, but defer handling the action to chrome code which serves as
+  // fallback for that menu. Chrome code holds proper coordinates for the
+  // element to inspect.
+  bool handle_inspect_element_ = true;
 };
 
 }  // namespace vivaldi

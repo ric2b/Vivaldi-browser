@@ -6,15 +6,17 @@
 
 #include <memory>
 
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/mahi/mahi_constants.h"
-#include "ash/system/mahi/mahi_panel_drag_controller.h"
 #include "ash/system/mahi/mahi_panel_widget.h"
 #include "ash/system/mahi/mahi_ui_update.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
+#include "components/account_id/account_id.h"
 #include "ui/views/view.h"
 
 namespace ash {
@@ -53,8 +55,7 @@ MahiUiController::Delegate::~Delegate() = default;
 
 // MahiUiController ------------------------------------------------------------
 
-MahiUiController::MahiUiController()
-    : drag_controller_(std::make_unique<MahiPanelDragController>(this)) {
+MahiUiController::MahiUiController() {
   // The shell may not be available in tests if using a plain object for the UI
   // controller, which means the session will not be observed.
   if (Shell::HasInstance()) {
@@ -145,7 +146,7 @@ void MahiUiController::Retry(VisibilityState origin_state) {
           MahiUiUpdate(MahiUiUpdateType::kSummaryAndOutlinesReloaded));
       return;
     case VisibilityState::kError:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -169,10 +170,20 @@ void MahiUiController::SendQuestion(const std::u16string& question,
       VisibilityState::kQuestionAndAnswer,
       MahiUiUpdate(MahiUiUpdateType::kQuestionPosted, question));
 
-  chromeos::MahiManager::Get()->AnswerQuestion(
-      question, current_panel_content,
-      base::BindOnce(&MahiUiController::OnAnswerLoaded,
-                     weak_ptr_factory_.GetWeakPtr()));
+  // If Mahi Manager Implementation allows for repeating answers, then the
+  // callback function should be bound as a repeating callback. Else, a BindOnce
+  // callback will be used.
+  if (chromeos::MahiManager::Get()->AllowRepeatingAnswers()) {
+    chromeos::MahiManager::Get()->AnswerQuestionRepeating(
+        question, current_panel_content,
+        base::BindRepeating(&MahiUiController::OnAnswerLoaded,
+                            weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    chromeos::MahiManager::Get()->AnswerQuestion(
+        question, current_panel_content,
+        base::BindOnce(&MahiUiController::OnAnswerLoaded,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void MahiUiController::UpdateSummaryAndOutlines() {
@@ -188,7 +199,12 @@ void MahiUiController::OnSessionStateChanged(
     session_manager::SessionState state) {
   if (state != session_manager::SessionState::ACTIVE) {
     RecordTimesPanelOpenedMetric();
+    CloseMahiPanel();
   }
+}
+
+void MahiUiController::OnActiveUserSessionChanged(const AccountId& account_id) {
+  CloseMahiPanel();
 }
 
 void MahiUiController::RecordTimesPanelOpenedMetric() {

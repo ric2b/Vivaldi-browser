@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/formats/webm/webm_cluster_parser.h"
 
 #include <memory>
@@ -355,7 +360,7 @@ bool WebMClusterParser::OnBinary(int id, const uint8_t* data_ptr, int size) {
   auto data =
       // TODO(crbug.com/40284755): This function should receive a span, not a
       // pointer/size pair.
-      UNSAFE_BUFFERS(base::span(data_ptr, base::checked_cast<size_t>(size)));
+      UNSAFE_TODO(base::span(data_ptr, base::checked_cast<size_t>(size)));
   switch (id) {
     case kWebMIdSimpleBlock:
       return ParseBlock(true, data.data(), data.size(), nullptr, 0, -1, 0,

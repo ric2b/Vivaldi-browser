@@ -84,7 +84,7 @@ ContextMenuContentTypeFactory::CreateInternal(
     content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  if (chrome::IsRunningInForcedAppMode()) {
+  if (IsRunningInForcedAppMode()) {
     return base::WrapUnique(new ContextMenuContentTypeAppMode(params));
   }
 

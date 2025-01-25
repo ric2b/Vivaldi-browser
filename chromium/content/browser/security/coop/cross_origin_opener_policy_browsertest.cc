@@ -234,6 +234,13 @@ class CrossOriginOpenerPolicyBrowserTest
       feature_list_for_back_forward_cache_.InitWithFeatures(
           {}, {features::kBackForwardCache});
     }
+
+    // Set the speculative RFH creation delay to 0 so that the speculative RFH
+    // is always created before receiving the response. Otherwise the RFH will
+    // always be created with the correct COOP header.
+    feature_list_for_defer_speculative_rfh_.InitAndEnableFeatureWithParameters(
+        features::kDeferSpeculativeRFHCreation,
+        {{"create_speculative_rfh_delay_ms", "0"}});
   }
 
   // Provides meaningful param names instead of /0, /1, ...
@@ -326,6 +333,7 @@ class CrossOriginOpenerPolicyBrowserTest
   base::test::ScopedFeatureList feature_list_;
   base::test::ScopedFeatureList feature_list_for_render_document_;
   base::test::ScopedFeatureList feature_list_for_back_forward_cache_;
+  base::test::ScopedFeatureList feature_list_for_defer_speculative_rfh_;
   net::EmbeddedTestServer https_server_;
 };
 
@@ -3726,8 +3734,7 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
     SiteInstanceImpl* iframe_si = iframe_rfh->GetSiteInstance();
     EXPECT_TRUE(iframe_si->IsCrossOriginIsolated());
     EXPECT_TRUE(iframe_si->IsRelatedSiteInstance(main_si));
-    if (base::FeatureList::IsEnabled(
-            features::kOriginKeyedProcessesByDefault)) {
+    if (SiteIsolationPolicy::AreOriginKeyedProcessesEnabledByDefault()) {
       // In this case, the main frame and the child frame have different
       // origins, so when OriginKeyedProcessesByDefault is enabled they will
       // be placed into different processes.
@@ -4814,7 +4821,8 @@ IN_PROC_BROWSER_TEST_P(ProcessReuseOnPrerenderCOOPSwapBrowserTest,
   // with new BrowsingInstance / SiteInstance, and a new process will be
   // assigned to it accordingly.
   ASSERT_TRUE(navigation_manager.WaitForRequestStart());
-  int prerender_host_id = prerender_helper().GetHostForUrl(prerender_page);
+  FrameTreeNodeId prerender_host_id =
+      prerender_helper().GetHostForUrl(prerender_page);
   RenderFrameHostImpl* rfh_2 =
       web_contents()->UnsafeFindFrameByFrameTreeNodeId(prerender_host_id);
   ASSERT_TRUE(rfh_2);
@@ -10186,7 +10194,7 @@ IN_PROC_BROWSER_TEST_P(CoopRestrictPropertiesAccessBrowserTest, Prerender) {
   // TODO(crbug.com/40917339): This is an undesired consequence of
   // always starting the prerendering in another BrowsingInstance. See if this
   // should be fixed.
-  int host_id = prerender_helper().AddPrerender(coop_rp_page);
+  FrameTreeNodeId host_id = prerender_helper().AddPrerender(coop_rp_page);
   RenderFrameHostImpl* prerender_frame_host = static_cast<RenderFrameHostImpl*>(
       prerender_helper().GetPrerenderedMainFrameHost(host_id));
   ASSERT_TRUE(prerender_frame_host);

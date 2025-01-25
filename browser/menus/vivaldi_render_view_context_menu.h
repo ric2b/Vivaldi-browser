@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 
+#include "browser/menus/vivaldi_developertools_menu_controller.h"
 #include "build/build_config.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "extensions/schema/context_menu.h"
@@ -90,14 +91,17 @@ protected:
   void MenuClosed(ui::SimpleMenuModel* source) override;
   bool GetAcceleratorForCommandId(int command_id,
                                   ui::Accelerator* accelerator) const override;
+  void VivaldiCommandIdHighlighted(int command_id) override;
 
   int GetStaticIdForAction(std::string command);
   ui::ImageModel GetImageForAction(std::string command);
+  ui::ImageModel GetImageForContainer(const Container& container);
 
   void ContainerWillOpen(ui::SimpleMenuModel* menu_model);
   bool HasContainerContent(const Container& container);
   void PopulateContainer(const Container& container,
                          int id,
+                         bool dark_text_color,
                          ui::SimpleMenuModel* menu_model);
 
   // RenderViewContextMenu (we do not use the menu part, just handler functions)
@@ -126,6 +130,9 @@ protected:
     model_delegate_ = delegate;
   }
   void SetMenuDelegate(Delegate* delegate) { menu_delegate_ = delegate; }
+  void SetWindowId(int window_id) { window_id_ = window_id; }
+
+  void OnGetMobile();
 
  private:
   enum ActionChain {
@@ -148,7 +155,9 @@ protected:
   raw_ptr<ui::SimpleMenuModel::Delegate> model_delegate_ = nullptr;
   raw_ptr<Delegate> menu_delegate_ = nullptr;
   bool is_executing_command_ = false;
+  bool is_webpage_widget_ = false;
   raw_ptr<ui::SimpleMenuModel> populating_menu_model_ = nullptr;
+  int window_id_ = -1;
 
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
   std::unique_ptr<ProfileMenuController> link_profile_controller_;
@@ -161,6 +170,7 @@ protected:
 #if BUILDFLAG(IS_MAC)
   std::unique_ptr<SpeechMenuController> speech_controller_;
 #endif
+  std::unique_ptr<DeveloperToolsMenuController> developertools_controller_;
 
   ActionChain HandleCommand(int command_id, int event_state);
 

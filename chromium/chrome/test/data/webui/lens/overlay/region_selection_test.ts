@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome-untrusted://lens/selection_overlay.js';
+import 'chrome-untrusted://lens-overlay/selection_overlay.js';
 
 import type {Point, RectF} from '//resources/mojo/ui/gfx/geometry/mojom/geometry.mojom-webui.js';
-import {BrowserProxyImpl} from 'chrome-untrusted://lens/browser_proxy.js';
-import {CenterRotatedBox_CoordinateType} from 'chrome-untrusted://lens/geometry.mojom-webui.js';
-import type {CenterRotatedBox} from 'chrome-untrusted://lens/geometry.mojom-webui.js';
-import {UserAction} from 'chrome-untrusted://lens/lens.mojom-webui.js';
-import type {SelectionOverlayElement} from 'chrome-untrusted://lens/selection_overlay.js';
+import {BrowserProxyImpl} from 'chrome-untrusted://lens-overlay/browser_proxy.js';
+import {CenterRotatedBox_CoordinateType} from 'chrome-untrusted://lens-overlay/geometry.mojom-webui.js';
+import type {CenterRotatedBox} from 'chrome-untrusted://lens-overlay/geometry.mojom-webui.js';
+import {UserAction} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
+import type {SelectionOverlayElement} from 'chrome-untrusted://lens-overlay/selection_overlay.js';
 import {loadTimeData} from 'chrome-untrusted://resources/js/load_time_data.js';
-import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 import type {MetricsTracker} from 'chrome-untrusted://webui-test/metrics_test_support.js';
 import {fakeMetricsPrivate} from 'chrome-untrusted://webui-test/metrics_test_support.js';
 import {flushTasks, waitAfterNextRender} from 'chrome-untrusted://webui-test/polymer_test_util.js';
@@ -20,8 +20,8 @@ import {getImageBoundingRect, simulateClick, simulateDrag} from '../utils/select
 
 import {TestLensOverlayBrowserProxy} from './test_overlay_browser_proxy.js';
 
-const TAP_REGION_WIDTH = 300;
-const TAP_REGION_HEIGHT = 300;
+const TAP_REGION_WIDTH = 200;
+const TAP_REGION_HEIGHT = 200;
 
 suite('ManualRegionSelection', function() {
   let testBrowserProxy: TestLensOverlayBrowserProxy;
@@ -39,7 +39,7 @@ suite('ManualRegionSelection', function() {
     });
   }
 
-  setup(() => {
+  setup(async () => {
     // Resetting the HTML needs to be the first thing we do in setup to
     // guarantee that any singleton instances don't change while any UI is still
     // attached to the DOM.
@@ -61,11 +61,14 @@ suite('ManualRegionSelection', function() {
     selectionOverlayElement = document.createElement('lens-selection-overlay');
     document.body.appendChild(selectionOverlayElement);
 
-    // Set image size manually in order to force the selection overlay visible.
-    selectionOverlayElement.$.backgroundImage.style.height = '100vh';
-    selectionOverlayElement.$.backgroundImage.style.width = '100vw';
     metrics = fakeMetricsPrivate();
 
+    // Wait for the flash animation to finish to avoid racing against the
+    // selection overlay setting the canvas size.
+    await waitForEvent('initial-flash-animation-end');
+    // The first frame triggers our resize handler. Wait another frame for us
+    // the changes made by our resize handler to take effect.
+    await waitAfterNextRender(selectionOverlayElement);
     return waitAfterNextRender(selectionOverlayElement);
   });
 
@@ -107,7 +110,8 @@ suite('ManualRegionSelection', function() {
         testBrowserProxy.handler.getArgs('issueLensRegionRequest')[0][0];
     const isClick =
         testBrowserProxy.handler.getArgs('issueLensRegionRequest')[0][1];
-    assertDeepEquals(expectedRect, requestRegion);
+    assertEquivalentRectangles(
+        expectedRect, requestRegion, /*precision=*/ 0.001);
     assertFalse(isClick);
     assertEquals(1, metrics.count('Lens.Overlay.Overlay.UserAction'));
     assertEquals(
@@ -142,7 +146,7 @@ suite('ManualRegionSelection', function() {
     // slight inaccuracies in our expected rectangle, compare the rectangles to
     // a degree of precision rather than a deep equals.
     assertEquivalentRectangles(
-        expectedRect, requestRegion, /*precision=*/ 0.0001);
+        expectedRect, requestRegion, /*precision=*/ 0.001);
     assertTrue(isClick);
     assertEquals(1, metrics.count('Lens.Overlay.Overlay.UserAction'));
     assertEquals(
@@ -199,11 +203,8 @@ suite('ManualRegionSelection', function() {
     await assertClickSendsRequest(pointInOverlay, expectedRect);
 
     // Resize the selection overlay but keep its proportions.
-    selectionOverlayElement.$.backgroundImage.style.display = 'block';
-    selectionOverlayElement.$.backgroundImage.style.width =
-        'calc(100vw - 100px)';
-    selectionOverlayElement.$.backgroundImage.style.height =
-        'calc(100vh - 100px)';
+    selectionOverlayElement.style.width = 'calc(100vw - 100px)';
+    selectionOverlayElement.style.height = 'calc(100vh - 100px)';
     await waitAfterNextRender(selectionOverlayElement);
 
     const newImageBounds = getImageBoundingRect(selectionOverlayElement);
@@ -234,10 +235,11 @@ suite('ManualRegionSelection', function() {
   test('ClickShowsRegionWhenTapRegionLargerThanOverlay', async () => {
     const imageBounds = getImageBoundingRect(selectionOverlayElement);
     // Reset load time values to represent a region larger than our current
-    // bounds.
+    // bounds. Load time data verifies these numbers are always an integer so
+    // we should floor them in case the image bounding rect is not an integer.
     loadTimeData.overrideValues({
-      ['tapRegionWidth']: imageBounds.width + 1,
-      ['tapRegionHeight']: imageBounds.height + 1,
+      ['tapRegionWidth']: Math.floor(imageBounds.width + 1),
+      ['tapRegionHeight']: Math.floor(imageBounds.height + 1),
     });
     await flushTasks();
 
@@ -458,10 +460,6 @@ suite('ManualRegionSelection', function() {
       });
 
   test('verify canvas resizes', async () => {
-    // Wait for the flash animation to finish to avoid racing against the
-    // selection overlay setting the canvas size.
-    await waitForEvent('initial-flash-animation-end');
-
     selectionOverlayElement.$.regionSelectionLayer.setCanvasSizeTo(50, 50);
     await waitAfterNextRender(selectionOverlayElement.$.regionSelectionLayer);
     assertEquals(

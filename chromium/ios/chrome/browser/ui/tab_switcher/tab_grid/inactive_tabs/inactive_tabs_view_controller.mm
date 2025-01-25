@@ -13,6 +13,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -39,7 +40,6 @@ using vivaldi::IsVivaldiRunning;
   if (self) {
     _gridViewController = [[InactiveGridViewController alloc] init];
     _gridViewController.theme = GridThemeLight;
-    _gridViewController.mode = TabGridModeInactive;
 
     if (IsVivaldiRunning()) {
       _gridViewController.view.backgroundColor =

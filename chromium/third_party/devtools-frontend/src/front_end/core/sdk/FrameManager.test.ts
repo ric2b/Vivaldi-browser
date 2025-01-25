@@ -96,7 +96,7 @@ describe('FrameManager', () => {
 
   it('collects frames from a ResourceTreeModel', () => {
     const frameManager = new SDK.FrameManager.FrameManager();
-    const dispatchedEvents = setupEventSink(frameManager, [SDK.FrameManager.Events.FrameAddedToTarget]);
+    const dispatchedEvents = setupEventSink(frameManager, [SDK.FrameManager.Events.FRAME_ADDED_TO_TARGET]);
 
     const mockModel = attachMockModel(frameManager, targetId);
     addMockFrame(mockModel, frameId);
@@ -110,7 +110,7 @@ describe('FrameManager', () => {
   it('handles attachment and detachment of frames', () => {
     const frameManager = new SDK.FrameManager.FrameManager();
     const dispatchedEvents = setupEventSink(
-        frameManager, [SDK.FrameManager.Events.FrameAddedToTarget, SDK.FrameManager.Events.FrameRemoved]);
+        frameManager, [SDK.FrameManager.Events.FRAME_ADDED_TO_TARGET, SDK.FrameManager.Events.FRAME_REMOVED]);
 
     const mockModel = attachMockModel(frameManager, targetId);
     addMockFrame(mockModel, parentFrameId);
@@ -120,12 +120,12 @@ describe('FrameManager', () => {
 
     assert.strictEqual(dispatchedEvents[0].type, 'FrameAddedToTarget');
     assert.deepEqual(mockFrameToObjectForAssertion(dispatchedEvents[0].data.frame), {
-      targetId: targetId,
+      targetId,
       id: parentFrameId,
     });
     assert.strictEqual(dispatchedEvents[1].type, 'FrameAddedToTarget');
     assert.deepEqual(mockFrameToObjectForAssertion(dispatchedEvents[1].data.frame), {
-      targetId: targetId,
+      targetId,
       id: childFrameId,
     });
     assert.strictEqual(dispatchedEvents[2].type, 'FrameRemoved');
@@ -140,7 +140,7 @@ describe('FrameManager', () => {
   it('handles removal of target', () => {
     const frameManager = new SDK.FrameManager.FrameManager();
     const dispatchedEvents = setupEventSink(
-        frameManager, [SDK.FrameManager.Events.FrameAddedToTarget, SDK.FrameManager.Events.FrameRemoved]);
+        frameManager, [SDK.FrameManager.Events.FRAME_ADDED_TO_TARGET, SDK.FrameManager.Events.FRAME_REMOVED]);
 
     const mockModel = attachMockModel(frameManager, targetId);
     addMockFrame(mockModel, parentFrameId);
@@ -149,12 +149,12 @@ describe('FrameManager', () => {
 
     assert.strictEqual(dispatchedEvents[0].type, 'FrameAddedToTarget');
     assert.deepEqual(mockFrameToObjectForAssertion(dispatchedEvents[0].data.frame), {
-      targetId: targetId,
+      targetId,
       id: parentFrameId,
     });
     assert.strictEqual(dispatchedEvents[1].type, 'FrameAddedToTarget');
     assert.deepEqual(mockFrameToObjectForAssertion(dispatchedEvents[1].data.frame), {
-      targetId: targetId,
+      targetId,
       id: childFrameId,
     });
     assert.strictEqual(dispatchedEvents[2].type, 'FrameRemoved');
@@ -171,7 +171,7 @@ describe('FrameManager', () => {
   it('handles a frame transferring to a different target', () => {
     const frameManager = new SDK.FrameManager.FrameManager();
     const dispatchedEvents = setupEventSink(
-        frameManager, [SDK.FrameManager.Events.FrameAddedToTarget, SDK.FrameManager.Events.FrameRemoved]);
+        frameManager, [SDK.FrameManager.Events.FRAME_ADDED_TO_TARGET, SDK.FrameManager.Events.FRAME_REMOVED]);
 
     const mockParentModel = attachMockModel(frameManager, parentTargetId);
     addMockFrame(mockParentModel, parentFrameId);

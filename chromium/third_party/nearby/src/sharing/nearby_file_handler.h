@@ -22,7 +22,9 @@
 #include <memory>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "internal/platform/task_runner.h"
+#include "sharing/internal/api/sharing_platform.h"
 
 namespace nearby {
 namespace sharing {
@@ -39,7 +41,7 @@ class NearbyFileHandler {
   using OpenFilesCallback = std::function<void(std::vector<FileInfo>)>;
   using DeleteFilesFromDiskCallback = std::function<void()>;
 
-  NearbyFileHandler();
+  explicit NearbyFileHandler(nearby::sharing::api::SharingPlatform& platform);
   ~NearbyFileHandler();
 
   // Open the files given in |file_paths| and return the opened files sizes via
@@ -50,7 +52,14 @@ class NearbyFileHandler {
   void DeleteFilesFromDisk(std::vector<std::filesystem::path> file_paths,
                            DeleteFilesFromDiskCallback callback);
 
+  // On platforms where it is supported, tag the transferred files as
+  // originating from an untrusted source.
+  void UpdateFilesOriginMetadata(
+      std::vector<std::filesystem::path> file_paths,
+      absl::AnyInvocable<void(bool success)> callback);
+
  private:
+  nearby::sharing::api::SharingPlatform& platform_;
   std::unique_ptr<TaskRunner> sequenced_task_runner_;
 };
 

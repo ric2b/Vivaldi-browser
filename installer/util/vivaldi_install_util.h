@@ -3,9 +3,10 @@
 #ifndef INSTALLER_UTIL_VIVALDI_INSTALL_UTIL_H_
 #define INSTALLER_UTIL_VIVALDI_INSTALL_UTIL_H_
 
+#include <string_view>
+
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/strings/string_piece.h"
 #include "base/version.h"
 #include "base/win/registry.h"
 #include "chrome/installer/util/app_command.h"

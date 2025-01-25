@@ -15,6 +15,7 @@
 #include <cstring>
 #include <optional>
 
+#include "base/check.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/notreached.h"
@@ -258,16 +259,12 @@ bool StackCopierSignal::CopyStack(StackBuffer* stack_buffer,
 
     if (syscall(SYS_tgkill, getpid(), thread_delegate_->GetThreadId(),
                 SIGURG) != 0) {
-      NOTREACHED_IN_MIGRATION();
-      return false;
+      NOTREACHED();
     }
     bool finished_waiting = wait_event.Wait();
     TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("cpu_profiler.debug"),
                      "StackCopierSignal copy stack");
-    if (!finished_waiting) {
-      NOTREACHED_IN_MIGRATION();
-      return false;
-    }
+    CHECK(finished_waiting);
     // Ideally, an accurate timestamp is captured while the sampled thread is
     // paused. In rare cases, this may fail, in which case we resort to
     // capturing an delayed timestamp here instead.

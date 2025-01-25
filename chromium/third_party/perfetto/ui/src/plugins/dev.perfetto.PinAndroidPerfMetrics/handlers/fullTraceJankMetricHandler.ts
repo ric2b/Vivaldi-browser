@@ -18,13 +18,9 @@ import {
   JankType,
   MetricHandler,
 } from './metricUtils';
-import {PluginContextTrace} from '../../../public';
-import {
-  addAndPinSliceTrack,
-  TrackType,
-} from '../../dev.perfetto.AndroidCujs/trackUtils';
+import {Trace} from '../../../public/trace';
+import {addAndPinSliceTrack} from '../../dev.perfetto.AndroidCujs/trackUtils';
 import {SimpleSliceTrackConfig} from '../../../frontend/simple_slice_track';
-import {PLUGIN_ID} from '../pluginId';
 
 class FullTraceJankMetricHandler implements MetricHandler {
   /**
@@ -49,29 +45,20 @@ class FullTraceJankMetricHandler implements MetricHandler {
 
   /**
    * Adds the debug track for full trace jank metrics
-   * The track contains missed sf/app frames for the process
-   * registerStaticTrack used when plugin adds tracks onTraceload()
-   * addDebugSliceTrack used for adding tracks using the command
    *
    * @param {FullTraceMetricData} metricData Parsed metric data for the full trace jank
-   * @param {PluginContextTrace} ctx PluginContextTrace for trace related properties and methods
-   * @param {TrackType} type 'static' for onTraceload and 'debug' for command
+   * @param {Trace} ctx PluginContextTrace for trace related properties and methods
    * @returns {void} Adds one track for Jank slice
    */
-  public async addMetricTrack(
-    metricData: FullTraceMetricData,
-    ctx: PluginContextTrace,
-    type: TrackType,
-  ) {
+  public async addMetricTrack(metricData: FullTraceMetricData, ctx: Trace) {
     const INCLUDE_PREQUERY = `
     INCLUDE PERFETTO MODULE android.frames.jank_type;
     INCLUDE PERFETTO MODULE slices.slices;
     `;
-    const uri = `${PLUGIN_ID}#FullTraceJank#${metricData}`;
     const {config: fullTraceJankConfig, trackName: trackName} =
       this.fullTraceJankConfig(metricData);
     await ctx.engine.query(INCLUDE_PREQUERY);
-    addAndPinSliceTrack(ctx, fullTraceJankConfig, trackName, type, uri);
+    addAndPinSliceTrack(ctx, fullTraceJankConfig, trackName);
   }
 
   private fullTraceJankConfig(metricData: FullTraceMetricData): {
@@ -79,13 +66,16 @@ class FullTraceJankMetricHandler implements MetricHandler {
     trackName: string;
   } {
     let jankTypeFilter;
-    let jankTypeDisplayName = 'all';
+    let jankTypeDisplayName;
     if (metricData.jankType?.includes('app')) {
       jankTypeFilter = ' android_is_app_jank_type(display_value)';
       jankTypeDisplayName = 'app';
     } else if (metricData.jankType?.includes('sf')) {
       jankTypeFilter = ' android_is_sf_jank_type(display_value)';
       jankTypeDisplayName = 'sf';
+    } else {
+      jankTypeFilter = " display_value != 'None'";
+      jankTypeDisplayName = 'all';
     }
     const processName = metricData.process;
 

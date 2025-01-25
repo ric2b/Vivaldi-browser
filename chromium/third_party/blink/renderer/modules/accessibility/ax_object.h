@@ -37,6 +37,7 @@
 #include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ref.h"
+#include "base/memory/stack_allocated.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
@@ -191,8 +192,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // Iterator for the ancestors of an |AXObject|.
   // Walks through all the unignored parents of the object up to the root.
   // Does not include the object itself in the list of ancestors.
-  class MODULES_EXPORT AncestorsIterator final
-      : public GarbageCollected<AncestorsIterator> {
+  class MODULES_EXPORT AncestorsIterator final {
+    STACK_ALLOCATED();
+
    public:
     using iterator_category = std::forward_iterator_tag;
     using value_type = AXObject;
@@ -233,8 +235,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
       return static_cast<AXObject*>(current_);
     }
 
-    void Trace(Visitor* visitor) const { visitor->Trace(current_); }
-
     MODULES_EXPORT friend void swap(AncestorsIterator& left,
                                     AncestorsIterator& right) {
       std::swap(left.current_, right.current_);
@@ -258,7 +258,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
     friend class AXObject;
     friend class AXObjectCacheImpl;
 
-    Member<AXObject> current_;
+    AXObject* current_;
   };
 
  protected:
@@ -983,6 +983,15 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool IsProhibited(ax::mojom::blink::StringAttribute attribute) const;
   bool IsProhibited(ax::mojom::blink::IntListAttribute attribute) const;
 
+  // Helpers for menulist, aka <select size=1>.
+  bool IsMenuList() const;
+  bool ComputeIsInMenuListSubtree();
+  bool IsInMenuListSubtree() const { return cached_is_in_menu_list_subtree_; }
+  bool IsInMenuListSubtree();
+  // Find first ancestor or |this| that matches.
+  const AXObject* AncestorMenuListOption() const;
+  const AXObject* AncestorMenuList() const;
+
   // ARIA live-region features.
   bool IsLiveRegionRoot() const;  // Any live region, including polite="off".
   bool IsActiveLiveRegionRoot() const;  // Live region that is not polite="off".
@@ -1290,18 +1299,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // Works for all nodes.
   AXObject* ParentObjectUnignored() const;
 
-  // Get or create the first ancestor that's not accessibility ignored and also
-  // does not have a role of kGenericContainer nor kNone. Works for all nodes.
-  // Used to check for required context for certain roles.
-  AXObject* ParentObjectUnignoredNonGeneric() const;
-
   // Get or create the first ancestor that's included in the accessibility tree.
   // Works for all nodes, and may return nodes that are accessibility ignored.
   AXObject* ParentObjectIncludedInTree() const;
-
-  // Looks for the first ancestor AXObject (inclusive) that has an element, and
-  // returns that element.
-  Element* GetClosestElement() const;
 
   AXObject* ContainerWidget() const;
   bool IsContainerWidget() const;
@@ -1342,6 +1342,14 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // returns a pseudoelement. It does not return the node that generated the
   // content or the list marker.
   virtual Node* GetNode() const;
+  // Looks for the first ancestor AXObject (inclusive) that has a node, and
+  // returns that node.
+  Node* GetClosestNode() const {
+    return GetNode() ? GetNode() : ParentObject()->GetClosestNode();
+  }
+  // Looks for the first ancestor AXObject (inclusive) that has an element, and
+  // returns that element.
+  Element* GetClosestElement() const;
 
   // Returns the associated layout object if any.
   virtual LayoutObject* GetLayoutObject() const;
@@ -1453,8 +1461,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Static helper functions.
   // TODO(accessibility) Move these to a static helper util class.
-  static bool IsARIAControl(ax::mojom::blink::Role);
-  static bool IsARIAInput(ax::mojom::blink::Role);
   static bool IsFrame(const Node*);
   static bool HasARIAOwns(Element* element);
   // Should this own a child tree (e.g. an iframe).
@@ -1473,9 +1479,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
                                               const AXObject& second,
                                               int* index_in_ancestor1,
                                               int* index_in_ancestor2);
-
-  // Blink-internal DOM Node ID. Currently used for PDF exporting.
-  int GetDOMNodeId() const;
 
   bool IsHiddenForTextAlternativeCalculation(
       const AXObject* aria_label_or_description_root) const;
@@ -1570,8 +1573,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   void SerializeHTMLTagAndClass(ui::AXNodeData* node_data) const;
   void SerializeHTMLId(ui::AXNodeData* node_data) const;
   void SerializeHTMLAttributes(ui::AXNodeData* node_data) const;
-  void SerializeInlineTextBoxAttributes(ui::AXNodeData* node_data) const;
+  void SerializeInlineTextBox(ui::AXNodeData* node_data) const;
   void SerializeLangAttribute(ui::AXNodeData* node_data) const;
+  void SerializeLineAttributes(ui::AXNodeData* node_data) const;
   void SerializeListAttributes(ui::AXNodeData* node_data) const;
   void SerializeListMarkerAttributes(ui::AXNodeData* dst) const;
   void SerializeLiveRegionAttributes(ui::AXNodeData* node_data) const;
@@ -1626,6 +1630,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool cached_is_used_for_label_or_description_ : 1;
   bool cached_is_descendant_of_disabled_node_ : 1 = false;
   bool cached_can_set_focus_attribute_ : 1 = false;
+  bool cached_is_in_menu_list_subtree_ : 1 = false;
 
   Member<AXObject> cached_live_region_root_;
   gfx::RectF cached_local_bounding_box_;

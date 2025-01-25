@@ -66,8 +66,9 @@ void ChromeExtensionWebContentsObserver::RenderFrameCreated(
   // This logic should match
   // ChromeContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories.
   const Extension* extension = GetExtensionFromFrame(render_frame_host, false);
-  if (!extension)
+  if (!extension) {
     return;
+  }
 
   int process_id = render_frame_host->GetProcess()->GetID();
   auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
@@ -132,8 +133,9 @@ void ChromeExtensionWebContentsObserver::ReloadIfTerminated(
     content::RenderFrameHost* render_frame_host) {
   DCHECK(initialized());
   std::string extension_id = util::GetExtensionIdFromFrame(render_frame_host);
-  if (extension_id.empty())
+  if (extension_id.empty()) {
     return;
+  }
 
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context());
 

@@ -5,7 +5,7 @@
 
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_health_indicators.star", "health_spec")
-load("//lib/builders.star", "os", "siso")
+load("//lib/builders.star", "builders", "os", "siso")
 load("//lib/branches.star", "branches")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
@@ -125,6 +125,8 @@ ci.builder(
     targets = targets.bundle(
         additional_compile_targets = "all",
     ),
+    ssd = True,
+    free_space = builders.free_space.high,
     console_view_entry = consoles.console_view_entry(
         category = "builder|arm64",
         short_name = "rel",
@@ -214,8 +216,57 @@ ci.builder(
     targets = targets.bundle(
         additional_compile_targets = "all",
     ),
+    ssd = True,
+    free_space = builders.free_space.high,
     console_view_entry = consoles.console_view_entry(
         category = "builder|x64",
+        short_name = "rel",
+    ),
+    cq_mirrors_console_view = "mirrors",
+)
+
+ci.thin_tester(
+    name = "android-desktop-x64-rel-14-tests",
+    branch_selector = branches.selector.MAIN,
+    description_html = "Android desktop x64 release tests on Android 14.",
+    triggered_by = ["ci/android-desktop-x64-compile-rel"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "android",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "android",
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.ANDROID,
+        ),
+        android_config = builder_config.android_config(
+            config = "x64_builder_mb",
+        ),
+        build_gs_bucket = "chromium-android-desktop-archive",
+    ),
+    targets = targets.bundle(
+        targets = [
+            "android_desktop_junit_tests",
+            targets.bundle(
+                targets = "android_desktop_tests",
+                mixins = [
+                    "14-desktop-x64-emulator",
+                    "emulator-8-cores",
+                ],
+            ),
+        ],
+    ),
+    targets_settings = targets.settings(
+        os_type = targets.os_type.ANDROID,
+    ),
+    console_view_entry = consoles.console_view_entry(
+        category = "tester|x64",
         short_name = "rel",
     ),
     cq_mirrors_console_view = "mirrors",

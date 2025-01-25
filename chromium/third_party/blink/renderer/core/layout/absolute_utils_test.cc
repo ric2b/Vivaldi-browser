@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/layout/length_utils.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
 namespace {
@@ -109,9 +110,10 @@ class AbsoluteUtilsTest : public RenderingTest {
         container_writing_direction,
         ToPhysicalSize(space.AvailableSize(),
                        container_writing_direction.GetWritingMode()));
-    LogicalAnchorQuery anchor_query;
+    LogicalAnchorQuery* anchor_query =
+        MakeGarbageCollected<LogicalAnchorQuery>();
     AnchorEvaluatorImpl anchor_evaluator(
-        *node.GetLayoutBox(), anchor_query,
+        *node.GetLayoutBox(), *anchor_query,
         /* implicit_anchor */ nullptr, container_converter,
         /* self_writing_direction */
         {WritingMode::kHorizontalTb, TextDirection::kLtr},
@@ -127,11 +129,12 @@ class AbsoluteUtilsTest : public RenderingTest {
     const InsetModifiedContainingBlock imcb =
         ComputeInsetModifiedContainingBlock(
             node, space.AvailableSize(), LogicalAlignment(), insets,
-            static_position, LogicalAnchorCenterPosition(),
-            container_writing_direction, node.Style().GetWritingDirection());
-    ComputeOofInlineDimensions(node, node.Style(), space, imcb,
-                               LogicalAlignment(), border_padding, std::nullopt,
-                               container_writing_direction, dimensions);
+            static_position, container_writing_direction,
+            node.Style().GetWritingDirection());
+    ComputeOofInlineDimensions(
+        node, node.Style(), space, imcb, LogicalAnchorCenterPosition(),
+        LogicalAlignment(), border_padding, std::nullopt, BoxStrut(),
+        container_writing_direction, dimensions);
     GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kAfterPerformLayout);
     GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kLayoutClean);
   }
@@ -150,9 +153,10 @@ class AbsoluteUtilsTest : public RenderingTest {
         container_writing_direction,
         ToPhysicalSize(space.AvailableSize(),
                        container_writing_direction.GetWritingMode()));
-    LogicalAnchorQuery anchor_query;
+    LogicalAnchorQuery* anchor_query =
+        MakeGarbageCollected<LogicalAnchorQuery>();
     AnchorEvaluatorImpl anchor_evaluator(
-        *node.GetLayoutBox(), anchor_query,
+        *node.GetLayoutBox(), *anchor_query,
         /* implicit_anchor */ nullptr, container_converter,
         /* self_writing_direction */
         {WritingMode::kHorizontalTb, TextDirection::kLtr},
@@ -168,10 +172,11 @@ class AbsoluteUtilsTest : public RenderingTest {
     const InsetModifiedContainingBlock imcb =
         ComputeInsetModifiedContainingBlock(
             node, space.AvailableSize(), LogicalAlignment(), insets,
-            static_position, LogicalAnchorCenterPosition(),
-            container_writing_direction, node.Style().GetWritingDirection());
+            static_position, container_writing_direction,
+            node.Style().GetWritingDirection());
     ComputeOofBlockDimensions(node, node.Style(), space, imcb,
-                              LogicalAlignment(), border_padding, std::nullopt,
+                              LogicalAnchorCenterPosition(), LogicalAlignment(),
+                              border_padding, std::nullopt, BoxStrut(),
                               container_writing_direction, dimensions);
     GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kAfterPerformLayout);
     GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kLayoutClean);

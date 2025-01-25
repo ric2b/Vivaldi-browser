@@ -6,13 +6,17 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
+#include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
-#include "ash/picker/picker_clipboard_provider.h"
+#include "ash/picker/picker_clipboard_history_provider.h"
 #include "ash/picker/search/picker_action_search.h"
 #include "ash/picker/search/picker_date_search.h"
 #include "ash/picker/search/picker_editor_search.h"
@@ -25,6 +29,8 @@
 #include "base/check.h"
 #include "base/check_deref.h"
 #include "base/containers/contains.h"
+#include "base/containers/fixed_flat_set.h"
+#include "base/containers/flat_set.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
@@ -37,10 +43,15 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "url/gurl.h"
 
 namespace ash {
 
 namespace {
+
+// TODO: b/330936766 - Prioritise "earlier" domains in this list.
+constexpr auto kGoogleCorpGotoHosts = base::MakeFixedFlatSet<std::string_view>(
+    {"goto2.corp.google.com", "goto.corp.google.com", "goto.google.com", "go"});
 
 const char* SearchSourceToHistogram(PickerSearchSource source) {
   switch (source) {
@@ -63,6 +74,34 @@ const char* SearchSourceToHistogram(PickerSearchSource source) {
       return "Ash.Picker.Search.EditorProvider.QueryTime";
   }
   NOTREACHED() << "Unexpected search source " << base::to_underlying(source);
+}
+
+[[nodiscard]] std::vector<PickerSearchResult> DeduplicateGoogleCorpGotoDomains(
+    std::vector<PickerSearchResult> omnibox_results) {
+  std::set<std::string, std::less<>> seen;
+  std::vector<PickerSearchResult> deduped_results;
+  std::vector<PickerSearchResult*> results_to_remove;
+
+  for (PickerSearchResult& link : omnibox_results) {
+    auto* link_data = std::get_if<PickerBrowsingHistoryResult>(&link);
+    if (link_data == nullptr) {
+      deduped_results.push_back(std::move(link));
+      continue;
+    }
+    const GURL& url = link_data->url;
+    if (!url.has_host() || !url.has_path() ||
+        !kGoogleCorpGotoHosts.contains(url.host_piece())) {
+      deduped_results.push_back(std::move(link));
+      continue;
+    }
+
+    auto [it, inserted] = seen.emplace(url.path_piece());
+    if (inserted) {
+      deduped_results.push_back(std::move(link));
+    }
+  }
+
+  return deduped_results;
 }
 
 }  // namespace
@@ -112,7 +151,7 @@ PickerSearchRequest::PickerSearchRequest(std::u16string_view query,
 
   if ((!category.has_value() || category == PickerCategory::kClipboard) &&
       base::Contains(available_categories, PickerCategory::kClipboard)) {
-    clipboard_provider_ = std::make_unique<PickerClipboardProvider>();
+    clipboard_provider_ = std::make_unique<PickerClipboardHistoryProvider>();
     MarkSearchStarted(PickerSearchSource::kClipboard);
     clipboard_provider_->FetchResults(
         base::BindOnce(&PickerSearchRequest::HandleClipboardSearchResults,
@@ -149,8 +188,7 @@ PickerSearchRequest::PickerSearchRequest(std::u16string_view query,
       MarkSearchStarted(PickerSearchSource::kEditorWrite);
       HandleEditorSearchResults(
           PickerSearchSource::kEditorWrite,
-          PickerEditorSearch(PickerSearchResult::EditorData::Mode::kWrite,
-                             query));
+          PickerEditorSearch(PickerEditorResult::Mode::kWrite, query));
     }
 
     if (base::Contains(available_categories, PickerCategory::kEditorRewrite)) {
@@ -158,8 +196,7 @@ PickerSearchRequest::PickerSearchRequest(std::u16string_view query,
       MarkSearchStarted(PickerSearchSource::kEditorRewrite);
       HandleEditorSearchResults(
           PickerSearchSource::kEditorRewrite,
-          PickerEditorSearch(PickerSearchResult::EditorData::Mode::kRewrite,
-                             query));
+          PickerEditorSearch(PickerEditorResult::Mode::kRewrite, query));
     }
   }
 
@@ -206,6 +243,7 @@ void PickerSearchRequest::HandleCrosSearchResults(
     std::vector<PickerSearchResult> results) {
   switch (type) {
     case AppListSearchResultType::kOmnibox: {
+      results = DeduplicateGoogleCorpGotoDomains(std::move(results));
       size_t results_to_remove = is_category_specific_search_
                                      ? 0
                                      : std::max<size_t>(results.size(), 3) - 3;

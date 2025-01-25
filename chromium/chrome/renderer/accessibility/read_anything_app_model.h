@@ -8,6 +8,7 @@
 #include <map>
 
 #include "base/containers/contains.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "chrome/common/accessibility/read_anything.mojom.h"
 #include "chrome/common/accessibility/read_anything_constants.h"
@@ -69,18 +70,20 @@ class ReadAnythingAppModel {
     // is added.
   };
 
-  bool requires_distillation() { return requires_distillation_; }
+  bool requires_distillation() const { return requires_distillation_; }
   void set_requires_distillation(bool value) { requires_distillation_ = value; }
-  bool requires_post_process_selection() {
+  bool requires_post_process_selection() const {
     return requires_post_process_selection_;
   }
   void set_requires_post_process_selection(bool value) {
     requires_post_process_selection_ = value;
   }
-  bool reset_draw_timer() { return reset_draw_timer_; }
+  bool reset_draw_timer() const { return reset_draw_timer_; }
   void set_reset_draw_timer(bool value) { reset_draw_timer_ = value; }
 
-  const ui::AXNodeID& last_expanded_node_id() { return last_expanded_node_id_; }
+  const ui::AXNodeID& last_expanded_node_id() const {
+    return last_expanded_node_id_;
+  }
 
   void set_last_expanded_node_id(const ui::AXNodeID& node_id) {
     last_expanded_node_id_ = node_id;
@@ -90,16 +93,9 @@ class ReadAnythingAppModel {
     set_last_expanded_node_id(ui::kInvalidAXNodeID);
   }
 
-  bool redraw_required() { return redraw_required_; }
+  bool redraw_required() const { return redraw_required_; }
   void reset_redraw_required() { redraw_required_ = false; }
-
-  const ui::AXNodeID& image_to_update_node_id() {
-    return image_to_update_node_id_;
-  }
-  void reset_image_to_update_node_id() {
-    image_to_update_node_id_ = ui::kInvalidAXNodeID;
-  }
-  bool selection_from_action() { return selection_from_action_; }
+  bool selection_from_action() const { return selection_from_action_; }
   void set_selection_from_action(bool value) { selection_from_action_ = value; }
 
   const std::string& base_language_code() const { return base_language_code_; }
@@ -112,11 +108,17 @@ class ReadAnythingAppModel {
   const std::string& font_name() const { return font_name_; }
   void set_font_name(const std::string& font) { font_name_ = font; }
   float font_size() const { return font_size_; }
+  void set_font_size(float font_size) { font_size_ = font_size; }
   bool links_enabled() const { return links_enabled_; }
   bool images_enabled() const { return images_enabled_; }
-  float letter_spacing() const { return letter_spacing_; }
-  float line_spacing() const { return line_spacing_; }
+  int letter_spacing() const { return letter_spacing_; }
+  void set_letter_spacing(int letter_spacing) {
+    letter_spacing_ = letter_spacing;
+  }
+  int line_spacing() const { return line_spacing_; }
+  void set_line_spacing(int line_spacing) { line_spacing_ = line_spacing; }
   int color_theme() const { return color_theme_; }
+  void set_color_theme(int color_theme) { color_theme_ = color_theme; }
 
   // Selection.
   bool has_selection() const { return has_selection_; }
@@ -130,25 +132,21 @@ class ReadAnythingAppModel {
     return display_node_ids_.empty() && selection_node_ids_.empty();
   }
 
-  bool screen_ai_service_ready_for_data_collection() {
-    return screen_ai_service_ready_for_data_collection_;
-  }
-  void set_screen_ai_service_ready_for_data_collection(bool value) {
-    screen_ai_service_ready_for_data_collection_ = value;
-  }
-  bool page_finished_loading_for_data_collection() {
-    return page_finished_loading_for_data_collection_;
-  }
-  void set_page_finished_loading_for_data_collection(bool value) {
-    page_finished_loading_for_data_collection_ = value;
-  }
-  bool page_finished_loading() {
-    return page_finished_loading_;
-  }
+  // The following methods are used for the screen2x data collection pipeline.
+  // They all have CHECKs to ensure that the DataCollectionModeForScreen2x
+  // feature flag is enabled.
+  bool ScreenAIServiceReadyForDataColletion() const;
+  void SetScreenAIServiceReadyForDataColletion(bool value);
+  bool PageFinishedLoadingForDataCollection() const;
+  void SetPageFinishedLoadingForDataCollection(bool value);
+  void SetDataCollectionForScreen2xCallback(
+      base::RepeatingCallback<void()> callback);
+
+  bool page_finished_loading() const { return page_finished_loading_; }
   void set_page_finished_loading(bool value) {
     page_finished_loading_ = value;
   }
-  bool requires_tree_lang() { return requires_tree_lang_; }
+  bool requires_tree_lang() const { return requires_tree_lang_; }
   void set_requires_tree_lang(bool value) { requires_tree_lang_ = value; }
 
   const std::vector<ui::AXNodeID>& content_node_ids() const {
@@ -162,18 +160,16 @@ class ReadAnythingAppModel {
   }
 
   const ui::AXTreeID& active_tree_id() const { return active_tree_id_; }
-  void set_active_tree_id(const ui::AXTreeID& active_tree_id) {
-    active_tree_id_ = active_tree_id;
-  }
+  void SetActiveTreeId(const ui::AXTreeID& active_tree_id);
 
-  void SetDistillationInProgress(bool distillation) {
+  void set_distillation_in_progress(bool distillation) {
     distillation_in_progress_ = distillation;
   }
 
-  const ukm::SourceId& ukm_source_id();
-  void set_ukm_source_id(const ukm::SourceId ukm_source_id);
-  int32_t num_selections();
-  void set_num_selections(const int32_t& num_selections);
+  const ukm::SourceId& UkmSourceId();
+  void SetUkmSourceId(const ukm::SourceId ukm_source_id);
+  int32_t NumSelections();
+  void SetNumSelections(const int32_t& num_selections);
 
   void AddUrlInformationForTreeId(const ui::AXTreeID& tree_id);
   bool IsDocs() const;
@@ -273,6 +269,11 @@ class ReadAnythingAppModel {
                               size_t prev_tree_size,
                               size_t tree_size);
 
+  // Runs the data collection for screen2x pipeline, provided in the form of a
+  // callback from the ReadAnythingAppController. This should only be called
+  // when the DataCollectionModeForScreen2x feature is enabled.
+  void MaybeRunDataCollectionForScreen2xCallback();
+
   // State.
   std::map<ui::AXTreeID, std::unique_ptr<ReadAnythingAppModel::AXTreeInfo>>
       tree_infos_;
@@ -330,9 +331,8 @@ class ReadAnythingAppModel {
   float font_size_ = kReadAnythingDefaultFontScale;
   bool links_enabled_ = kReadAnythingDefaultLinksEnabled;
   bool images_enabled_ = kReadAnythingDefaultImagesEnabled;
-  float letter_spacing_ =
-      (int)read_anything::mojom::LetterSpacing::kDefaultValue;
-  float line_spacing_ = (int)read_anything::mojom::LineSpacing::kDefaultValue;
+  int letter_spacing_ = (int)read_anything::mojom::LetterSpacing::kDefaultValue;
+  int line_spacing_ = (int)read_anything::mojom::LineSpacing::kDefaultValue;
   int color_theme_ = (int)read_anything::mojom::Colors::kDefaultValue;
 
   // Selection information.
@@ -344,15 +344,17 @@ class ReadAnythingAppModel {
   bool requires_distillation_ = false;
   bool reset_draw_timer_ = false;
   bool requires_post_process_selection_ = false;
-  ui::AXNodeID image_to_update_node_id_ = ui::kInvalidAXNodeID;
   bool selection_from_action_ = false;
 
   // For screen2x data collection, Chrome is launched from the CLI to open one
   // webpage. We record the result of the distill() call for this entire
   // webpage, so we only make the call once the webpage finished loading and
   // screen ai has loaded.
-  bool screen_ai_service_ready_for_data_collection_ = false;
-  bool page_finished_loading_for_data_collection_ = false;
+  bool ScreenAIServiceReadyForDataColletion_ = false;
+  bool PageFinishedLoadingForDataCollection_ = false;
+  base::OneShotTimer timer_since_page_load_for_data_collection_;
+  base::RetainingOneShotTimer timer_since_tree_changed_for_data_collection_;
+  base::RepeatingCallback<void()> data_collection_for_screen2x_callback_;
 
   // Whether the webpage has finished loading or not.
   bool page_finished_loading_ = false;
@@ -364,6 +366,8 @@ class ReadAnythingAppModel {
   // asynchronously from the language determination so we need to keep track of
   // that here.
   bool requires_tree_lang_ = false;
+
+  base::WeakPtrFactory<ReadAnythingAppModel> weak_ptr_factory_{this};
 };
 
 #endif  // CHROME_RENDERER_ACCESSIBILITY_READ_ANYTHING_APP_MODEL_H_

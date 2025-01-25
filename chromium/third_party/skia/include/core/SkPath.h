@@ -26,7 +26,6 @@
 #include <tuple>
 #include <type_traits>
 
-struct SkArc;
 class SkData;
 class SkPathRef;
 class SkRRect;
@@ -280,16 +279,6 @@ public:
         example: https://fiddle.skia.org/c/@Path_isRRect
     */
     bool isRRect(SkRRect* rrect) const;
-
-    /** Returns true if path is representable as an oval arc. In other words, could this
-        path be drawn using SkCanvas::drawArc.
-
-        arc  receives parameters of arc
-
-       @param arc  storage for arc; may be nullptr
-       @return     true if SkPath contains only a single arc from an oval
-    */
-    bool isArc(SkArc* arc) const;
 
     /** Sets SkPath to its initial state.
         Removes verb array, SkPoint array, and weights, and sets FillType to kWinding.
@@ -1138,14 +1127,6 @@ private:
         example: https://fiddle.skia.org/c/@Path_addOval_2
     */
     SkPath& addOval(const SkRect& oval, SkPathDirection dir, unsigned start);
-
-    /** Experimental, subject to change or removal.
-
-        Adds an "open" oval to SkPath. This follows canvas2D semantics: The oval is not
-        a separate contour. If the path was empty, then kMove_Verb is appended. Otherwise,
-        kLine_Verb is appended. Four kConic_Verbs are appended. kClose_Verb is not appended.
-    */
-    SkPath& addOpenOval(const SkRect& oval, SkPathDirection dir, unsigned start);
 
     /** Adds circle centered at (x, y) of size radius to SkPath, appending kMove_Verb,
         four kConic_Verb, and kClose_Verb. Circle begins at: (x + radius, y), continuing

@@ -28,6 +28,8 @@ import sys
 import tempfile
 import textwrap
 import time
+import typing
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -35,6 +37,7 @@ import webbrowser
 import zlib
 
 from typing import Any
+from typing import AnyStr
 from typing import Callable
 from typing import List
 from typing import Mapping
@@ -48,6 +51,7 @@ import clang_format
 import gclient_paths
 import gclient_utils
 import gerrit_util
+import git_auth
 import git_common
 import git_footers
 import git_new_branch
@@ -855,7 +859,7 @@ class Settings(object):
                     '"git cl config".')
         return self.tree_status_url
 
-    def GetViewVCUrl(self):
+    def GetViewVCUrl(self) -> str:
         if not self.viewvc_url:
             self.viewvc_url = self._GetConfig('rietveld.viewvc-url')
         return self.viewvc_url
@@ -925,23 +929,23 @@ class Settings(object):
 
     def GetFormatFullByDefault(self):
         if self.format_full_by_default is None:
-            self._LazyUpdateIfNeeded()
-            result = (RunGit(
-                ['config', '--bool', 'rietveld.format-full-by-default'],
-                error_ok=True).strip())
-            self.format_full_by_default = (result == 'true')
+            self.format_full_by_default = self._GetConfigBool(
+                'rietveld.format-full-by-default')
         return self.format_full_by_default
 
     def IsStatusCommitOrderByDate(self):
         if self.is_status_commit_order_by_date is None:
-            result = (RunGit(['config', '--bool', 'cl.date-order'],
-                             error_ok=True).strip())
-            self.is_status_commit_order_by_date = (result == 'true')
+            self.is_status_commit_order_by_date = self._GetConfigBool(
+                'cl.date-order')
         return self.is_status_commit_order_by_date
 
     def _GetConfig(self, key, default=''):
         self._LazyUpdateIfNeeded()
         return scm.GIT.GetConfig(self.GetRoot(), key, default)
+
+    def _GetConfigBool(self, key) -> bool:
+        self._LazyUpdateIfNeeded()
+        return scm.GIT.GetConfigBool(self.GetRoot(), key)
 
 
 settings = Settings()
@@ -1729,19 +1733,22 @@ class Changelist(object):
         return args
 
     def RunHook(self,
-                committing,
-                may_prompt,
-                verbose,
-                parallel,
-                upstream,
-                description,
-                all_files,
-                files=None,
-                resultdb=False,
-                realm=None):
+                committing: bool,
+                may_prompt: bool,
+                verbose: bool,
+                parallel: bool,
+                upstream: str,
+                description: str,
+                all_files: bool,
+                files: Optional[Sequence[str]] = None,
+                resultdb: Optional[bool] = None,
+                realm: Optional[str] = None,
+                end_commit: Optional[str] = None) -> Mapping[str, Any]:
         """Calls sys.exit() if the hook fails; returns a HookResults otherwise."""
         args = self._GetCommonPresubmitArgs(verbose, upstream)
         args.append('--commit' if committing else '--upload')
+        if end_commit:
+            args.extend(['--end_commit', end_commit])
         if may_prompt:
             args.append('--may_prompt')
         if parallel:
@@ -2064,7 +2071,8 @@ class Changelist(object):
                                         parallel=options.parallel,
                                         upstream=parent,
                                         description=change_desc.description,
-                                        all_files=False)
+                                        all_files=False,
+                                        end_commit=end_commit)
             self.ExtendCC(hook_results['more_cc'])
 
         # Update the change description and ensure we have a Change Id.
@@ -2237,7 +2245,7 @@ class Changelist(object):
             # Still raise exception so that stack trace is printed.
             raise
 
-    def GetGerritHost(self):
+    def GetGerritHost(self) -> Optional[str]:
         # Populate self._gerrit_host
         self.GetCodereviewServer()
 
@@ -2258,7 +2266,7 @@ class Changelist(object):
             return None
         return urllib.parse.urlparse(remote_url).netloc
 
-    def _GetGerritHostFromRemoteUrl(self):
+    def _GetGerritHostFromRemoteUrl(self) -> str:
         url = urllib.parse.urlparse(self.GetRemoteUrl())
         parts = url.netloc.split('.')
 
@@ -2274,7 +2282,7 @@ class Changelist(object):
 
         return '.'.join(parts)
 
-    def GetCodereviewServer(self):
+    def GetCodereviewServer(self) -> str:
         if not self._gerrit_server:
             # If we're on a branch then get the server potentially associated
             # with that branch.
@@ -2345,23 +2353,7 @@ class Changelist(object):
             return
 
         if newauth.Enabled():
-            latestVer: int = GitAuthConfigChanger.VERSION
-            v: int = 0
-            try:
-                v = int(
-                    scm.GIT.GetConfig(settings.GetRoot(),
-                                      'depot-tools.gitauthautoconfigured',
-                                      default='0'))
-            except ValueError:
-                v = 0
-            if v < latestVer:
-                logging.debug(
-                    'Automatically configuring Git repo authentication (current version: %r, latest: %r)',
-                    v, latestVer)
-                ConfigureGitRepoAuth()
-                scm.GIT.SetConfig(settings.GetRoot(),
-                                  'depot-tools.gitAuthAutoConfigured',
-                                  str(latestVer))
+            git_auth.AutoConfigure(os.getcwd(), Changelist())
             return
 
         # Lazy-loader to identify Gerrit and Git hosts.
@@ -2709,12 +2701,11 @@ class Changelist(object):
         self._detail_cache.setdefault(cache_key, []).append((options_set, data))
         return data
 
-    def _GetChangeCommit(self, revision='current'):
+    def _GetChangeCommit(self, revision: str = 'current') -> dict:
         assert self.GetIssue(), 'issue must be set to query Gerrit'
         try:
-            data = gerrit_util.GetChangeCommit(self.GetGerritHost(),
-                                               self._GerritChangeIdentifier(),
-                                               revision)
+            data: dict = gerrit_util.GetChangeCommit(
+                self.GetGerritHost(), self._GerritChangeIdentifier(), revision)
         except gerrit_util.GerritError as e:
             if e.http_status == 404:
                 raise GerritChangeNotExists(self.GetIssue(),
@@ -2933,7 +2924,8 @@ class Changelist(object):
         shutil.make_archive(traces_zip, 'zip', traces_dir)
 
         # Collect and compress the git config and gitcookies.
-        git_config = RunGit(['config', '-l'])
+        git_config = '\n'.join(
+            f'{k}={v}' for k, v in scm.GIT.YieldConfigRegexp(settings.GetRoot()))
         gclient_utils.FileWrite(os.path.join(git_info_dir, 'git-config'),
                                 git_config)
 
@@ -3321,7 +3313,7 @@ class Changelist(object):
                 upstream_branch_name, change_desc)
         return parent
 
-    def _UpdateWithExternalChanges(self):
+    def _UpdateWithExternalChanges(self) -> Optional[str]:
         """Updates workspace with external changes.
 
         Returns the commit hash that should be used as the merge base on upload.
@@ -3366,9 +3358,9 @@ class Changelist(object):
 
         # Get latest Gerrit merge base. Use the first parent even if multiple
         # exist.
-        external_parent = self._GetChangeCommit(
+        external_parent: dict = self._GetChangeCommit(
             revision=external_ps)['parents'][0]
-        external_base = external_parent['commit']
+        external_base: str = external_parent['commit']
 
         branch = git_common.current_branch()
         local_base = self.GetCommonAncestorWithUpstream()
@@ -3575,54 +3567,45 @@ def FindCodereviewSettingsFile(filename='codereview.settings'):
 def LoadCodereviewSettingsFromFile(fileobj):
     """Parses a codereview.settings file and updates hooks."""
     keyvals = gclient_utils.ParseCodereviewSettingsContent(fileobj.read())
+    root = settings.GetRoot()
 
-    def SetProperty(name, setting, unset_error_ok=False):
+    def SetProperty(name, setting):
         fullname = 'rietveld.' + name
         if setting in keyvals:
-            RunGit(['config', fullname, keyvals[setting]])
+            scm.GIT.SetConfig(root, fullname, keyvals[setting])
         else:
-            RunGit(['config', '--unset-all', fullname], error_ok=unset_error_ok)
+            scm.GIT.SetConfig(root, fullname, None, modify_all=True)
 
     if not keyvals.get('GERRIT_HOST', False):
         SetProperty('server', 'CODE_REVIEW_SERVER')
     # Only server setting is required. Other settings can be absent.
     # In that case, we ignore errors raised during option deletion attempt.
-    SetProperty('cc', 'CC_LIST', unset_error_ok=True)
-    SetProperty('tree-status-url', 'STATUS', unset_error_ok=True)
-    SetProperty('viewvc-url', 'VIEW_VC', unset_error_ok=True)
-    SetProperty('bug-prefix', 'BUG_PREFIX', unset_error_ok=True)
-    SetProperty('cpplint-regex', 'LINT_REGEX', unset_error_ok=True)
-    SetProperty('cpplint-ignore-regex',
-                'LINT_IGNORE_REGEX',
-                unset_error_ok=True)
-    SetProperty('run-post-upload-hook',
-                'RUN_POST_UPLOAD_HOOK',
-                unset_error_ok=True)
-    SetProperty('format-full-by-default',
-                'FORMAT_FULL_BY_DEFAULT',
-                unset_error_ok=True)
+    SetProperty('cc', 'CC_LIST')
+    SetProperty('tree-status-url', 'STATUS')
+    SetProperty('viewvc-url', 'VIEW_VC')
+    SetProperty('bug-prefix', 'BUG_PREFIX')
+    SetProperty('cpplint-regex', 'LINT_REGEX')
+    SetProperty('cpplint-ignore-regex', 'LINT_IGNORE_REGEX')
+    SetProperty('run-post-upload-hook', 'RUN_POST_UPLOAD_HOOK')
+    SetProperty('format-full-by-default', 'FORMAT_FULL_BY_DEFAULT')
 
     if 'GERRIT_HOST' in keyvals:
-        RunGit(['config', 'gerrit.host', keyvals['GERRIT_HOST']])
+        scm.GIT.SetConfig(root, 'gerrit.host', keyvals['GERRIT_HOST'])
 
     if 'GERRIT_SQUASH_UPLOADS' in keyvals:
-        RunGit([
-            'config', 'gerrit.squash-uploads', keyvals['GERRIT_SQUASH_UPLOADS']
-        ])
+        scm.GIT.SetConfig(root, 'gerrit.squash-uploads',
+                          keyvals['GERRIT_SQUASH_UPLOADS'])
 
     if 'GERRIT_SKIP_ENSURE_AUTHENTICATED' in keyvals:
-        RunGit([
-            'config', 'gerrit.skip-ensure-authenticated',
-            keyvals['GERRIT_SKIP_ENSURE_AUTHENTICATED']
-        ])
+        scm.GIT.SetConfig('gerrit.skip-ensure-authenticated',
+                          keyvals['GERRIT_SKIP_ENSURE_AUTHENTICATED'])
 
     if 'PUSH_URL_CONFIG' in keyvals and 'ORIGIN_URL_CONFIG' in keyvals:
         # should be of the form
         # PUSH_URL_CONFIG: url.ssh://gitrw.chromium.org.pushinsteadof
         # ORIGIN_URL_CONFIG: http://src.chromium.org/git
-        RunGit([
-            'config', keyvals['PUSH_URL_CONFIG'], keyvals['ORIGIN_URL_CONFIG']
-        ])
+        scm.GIT.SetConfig(keyvals['PUSH_URL_CONFIG'],
+                          keyvals['ORIGIN_URL_CONFIG'])
 
 
 def urlretrieve(source, destination):
@@ -3669,216 +3652,6 @@ def DownloadGerritHook(force):
                          'chmod +x .git/hooks/commit-msg' % src)
 
 
-def ConfigureGitRepoAuth() -> None:
-    """Configure the current Git repo authentication."""
-    logging.debug('Configuring current Git repo authentication...')
-    cwd = os.getcwd()
-    c = GitAuthConfigChanger.new_from_env(cwd)
-    c.apply(cwd)
-
-
-def ClearGitRepoAuth() -> None:
-    """Clear the current Git repo authentication."""
-    logging.debug('Clearing current Git repo authentication...')
-    c = GitAuthConfigChanger.new_from_env(cwd)
-    c.mode = GitAuthMode.OLD_AUTH
-    c.apply(cwd)
-
-
-class GitAuthMode(enum.Enum):
-    """Modes to pass to GitAuthConfigChanger"""
-    NEW_AUTH = 1
-    NEW_AUTH_SSO = 2
-    OLD_AUTH = 3
-
-
-class GitAuthConfigChanger(object):
-    """Changes Git auth config as needed for Gerrit."""
-
-    # Can be used to determine whether this version of the config has
-    # been applied to a Git repo.
-    #
-    # Increment this when making changes to the config, so that reliant
-    # code can determine whether the config needs to be re-applied.
-    VERSION: int = 2
-
-    def __init__(
-        self,
-        *,
-        mode: GitAuthMode,
-        remote_url: str,
-        set_config_func: Callable[..., None] = scm.GIT.SetConfig,
-    ):
-        """Create a new GitAuthConfigChanger.
-
-        Args:
-            mode: How to configure auth
-            remote_url: Git repository's remote URL, e.g.,
-                https://chromium.googlesource.com/chromium/tools/depot_tools.git
-            set_config_func: Function used to set configuration.  Used
-                for testing.
-        """
-        self.mode: GitAuthMode = mode
-
-        self._remote_url: str = remote_url
-        self._set_config_func: Callable[..., str] = set_config_func
-
-    @functools.cached_property
-    def _shortname(self) -> str:
-        parts: urllib.parse.SplitResult = urllib.parse.urlsplit(
-            self._remote_url)
-        name: str = parts.netloc.split('.')[0]
-        if name.endswith('-review'):
-            name = name[:-len('-review')]
-        return name
-
-    @functools.cached_property
-    def _base_url(self) -> str:
-        # Base URL looks like https://chromium.googlesource.com/
-        parts: urllib.parse.SplitResult = urllib.parse.urlsplit(
-            self._remote_url)
-        return parts._replace(path='/', query='', fragment='').geturl()
-
-    @classmethod
-    def new_from_env(cls, cwd: str) -> 'GitAuthConfigChanger':
-        """Create a GitAuthConfigChanger by inferring from env.
-
-        The Gerrit host is inferred from the current repo/branch.
-        The user, which is used to determine the mode, is inferred using
-        git-config(1) in the given `cwd`.
-        """
-        cl = Changelist()
-        # This is determined either from the branch or repo config.
-        #
-        # Example: chromium-review.googlesource.com
-        gerrit_host: str = cl.GetGerritHost()
-        # This depends on what the user set for their remote.
-        # There are a couple potential variations for the same host+repo.
-        #
-        # Example: https://chromium.googlesource.com/chromium/tools/depot_tools.git
-        remote_url: str = cl.GetRemoteUrl()
-
-        return cls(
-            mode=cls._infer_mode(cwd, gerrit_host),
-            remote_url=remote_url,
-        )
-
-    @staticmethod
-    def _infer_mode(cwd: str, gerrit_host: str) -> GitAuthMode:
-        """Infer default mode to use."""
-        if not newauth.Enabled():
-            return GitAuthMode.OLD_AUTH
-        email: str = scm.GIT.GetConfig(cwd, 'user.email', default='')
-        if gerrit_util.ShouldUseSSO(gerrit_host, email):
-            return GitAuthMode.NEW_AUTH_SSO
-        return GitAuthMode.NEW_AUTH
-
-    def apply(self, cwd: str) -> None:
-        """Apply config changes to the Git repo directory."""
-        self._apply_cred_helper(cwd)
-        self._apply_sso(cwd)
-        self._apply_gitcookies(cwd)
-
-    def apply_global(self, cwd: str) -> None:
-        """Apply config changes to the global (user) Git config.
-
-        This will make the instance's mode (e.g., SSO or not) the global
-        default for the Gerrit host, if not overridden by a specific Git repo.
-        """
-        self._apply_global_cred_helper(cwd)
-        self._apply_global_sso(cwd)
-
-    def _apply_cred_helper(self, cwd: str) -> None:
-        """Apply config changes relating to credential helper."""
-        cred_key: str = f'credential.{self._base_url}.helper'
-        if self.mode == GitAuthMode.NEW_AUTH:
-            self._set_config(cwd, cred_key, '', modify_all=True)
-            self._set_config(cwd, cred_key, 'luci', append=True)
-        elif self.mode == GitAuthMode.NEW_AUTH_SSO:
-            self._set_config(cwd, cred_key, None, modify_all=True)
-        elif self.mode == GitAuthMode.OLD_AUTH:
-            self._set_config(cwd, cred_key, None, modify_all=True)
-        else:
-            raise TypeError(f'Invalid mode {self.mode!r}')
-
-    def _apply_sso(self, cwd: str) -> None:
-        """Apply config changes relating to SSO."""
-        sso_key: str = f'url.sso://{self._shortname}/.insteadOf'
-        if self.mode == GitAuthMode.NEW_AUTH:
-            self._set_config(cwd, 'protocol.sso.allow', None)
-            self._set_config(cwd, sso_key, None, modify_all=True)
-        elif self.mode == GitAuthMode.NEW_AUTH_SSO:
-            self._set_config(cwd, 'protocol.sso.allow', 'always')
-            self._set_config(cwd, sso_key, self._base_url, modify_all=True)
-        elif self.mode == GitAuthMode.OLD_AUTH:
-            self._set_config(cwd, 'protocol.sso.allow', None)
-            self._set_config(cwd, sso_key, None, modify_all=True)
-        else:
-            raise TypeError(f'Invalid mode {self.mode!r}')
-
-    def _apply_gitcookies(self, cwd: str) -> None:
-        """Apply config changes relating to gitcookies."""
-        # TODO(ayatane): Clear invalid setting.  Remove line after a few weeks
-        self._set_config(cwd, 'http.gitcookies', None, modify_all=True)
-        if self.mode == GitAuthMode.NEW_AUTH:
-            # Override potential global setting
-            self._set_config(cwd, 'http.cookieFile', '', modify_all=True)
-        elif self.mode == GitAuthMode.NEW_AUTH_SSO:
-            # Override potential global setting
-            self._set_config(cwd, 'http.cookieFile', '', modify_all=True)
-        elif self.mode == GitAuthMode.OLD_AUTH:
-            self._set_config(cwd, 'http.cookieFile', None, modify_all=True)
-        else:
-            raise TypeError(f'Invalid mode {self.mode!r}')
-
-    def _apply_global_cred_helper(self, cwd: str) -> None:
-        """Apply config changes relating to credential helper."""
-        cred_key: str = f'credential.{self._base_url}.helper'
-        if self.mode == GitAuthMode.NEW_AUTH:
-            self._set_config(cwd, cred_key, '', scope='global', modify_all=True)
-            self._set_config(cwd, cred_key, 'luci', scope='global', append=True)
-        elif self.mode == GitAuthMode.NEW_AUTH_SSO:
-            # Avoid editing the user's config in case they manually
-            # configured something.
-            pass
-        elif self.mode == GitAuthMode.OLD_AUTH:
-            # Avoid editing the user's config in case they manually
-            # configured something.
-            pass
-        else:
-            raise TypeError(f'Invalid mode {self.mode!r}')
-
-    def _apply_global_sso(self, cwd: str) -> None:
-        """Apply config changes relating to SSO."""
-        sso_key: str = f'url.sso://{self._shortname}/.insteadOf'
-        if self.mode == GitAuthMode.NEW_AUTH:
-            # Do not unset protocol.sso.allow because it may be used by other hosts.
-            self._set_config(cwd,
-                             sso_key,
-                             None,
-                             scope='global',
-                             modify_all=True)
-        elif self.mode == GitAuthMode.NEW_AUTH_SSO:
-            self._set_config(cwd,
-                             'protocol.sso.allow',
-                             'always',
-                             scope='global')
-            self._set_config(cwd,
-                             sso_key,
-                             self._base_url,
-                             scope='global',
-                             modify_all=True)
-        elif self.mode == GitAuthMode.OLD_AUTH:
-            # Avoid editing the user's config in case they manually
-            # configured something.
-            pass
-        else:
-            raise TypeError(f'Invalid mode {self.mode!r}')
-
-    def _set_config(self, *args, **kwargs) -> None:
-        self._set_config_func(*args, **kwargs)
-
-
 class _GitCookiesChecker(object):
     """Provides facilities for validating and suggesting fixes to .gitcookies."""
     def __init__(self):
@@ -3890,8 +3663,8 @@ class _GitCookiesChecker(object):
         """Runs checks and suggests fixes to make git use .gitcookies from default
         path."""
         default = gerrit_util.CookiesAuthenticator.get_gitcookies_path()
-        configured_path = RunGitSilent(
-            ['config', '--global', 'http.cookiefile']).strip()
+        configured_path = scm.GIT.GetConfig(settings.GetRoot(),
+                                            'http.cookiefile', '')
         configured_path = os.path.expanduser(configured_path)
         if configured_path:
             self._ensure_default_gitcookies_path(configured_path, default)
@@ -3914,7 +3687,10 @@ class _GitCookiesChecker(object):
             print('However, your configured .gitcookies file is missing.')
             confirm_or_exit('Reconfigure git to use default .gitcookies?',
                             action='reconfigure')
-            RunGit(['config', '--global', 'http.cookiefile', default_path])
+            scm.GIT.SetConfig(settings.GetRoot(),
+                              'http.cookiefile',
+                              default_path,
+                              scope='global')
             return
 
         if os.path.exists(default_path):
@@ -3927,7 +3703,10 @@ class _GitCookiesChecker(object):
         confirm_or_exit('Move existing .gitcookies to default location?',
                         action='move')
         shutil.move(configured_path, default_path)
-        RunGit(['config', '--global', 'http.cookiefile', default_path])
+        scm.GIT.SetConfig(settings.GetRoot(),
+                          'http.cookiefile',
+                          default_path,
+                          scope='global')
         print('Moved and reconfigured git to use .gitcookies from %s' %
               default_path)
 
@@ -3941,7 +3720,10 @@ class _GitCookiesChecker(object):
             '  git config --global --unset http.cookiefile\n'
             '  mv %s %s.backup\n\n' % (default_path, default_path))
         confirm_or_exit(action='setup .gitcookies')
-        RunGit(['config', '--global', 'http.cookiefile', default_path])
+        scm.GIT.SetConfig(settings.GetRoot(),
+                          'http.cookiefile',
+                          default_path,
+                          scope='global')
         print('Configured git to use .gitcookies from %s' % default_path)
 
     def get_hosts_with_creds(self):
@@ -4099,10 +3881,10 @@ def CMDcreds_check(parser, args):
     _, _ = parser.parse_args(args)
 
     if newauth.Enabled():
-        ConfigureGitRepoAuth()
+        git_auth.Configure(os.getcwd(), Changelist())
         return 0
     if newauth.ExplicitlyDisabled():
-        ClearGitRepoAuth()
+        git_auth.ClearRepoConfig(os.getcwd(), Changelist())
 
     # Code below checks .gitcookies. Abort if using something else.
     auth_name, _ = gerrit_util.debug_auth()
@@ -4143,12 +3925,14 @@ def CMDbaseurl(parser, args):
     branch = scm.GIT.ShortBranchName(branchref)
     if not args:
         print('Current base-url:')
-        return RunGit(['config', 'branch.%s.base-url' % branch],
-                      error_ok=False).strip()
+        url = scm.GIT.GetConfig(settings.GetRoot(), f'branch.{branch}.base-url')
+        if url is None:
+            raise ValueError('Missing base URL.')
+        return url
 
     print('Setting base-url to %s' % args[0])
-    return RunGit(['config', 'branch.%s.base-url' % branch, args[0]],
-                  error_ok=False).strip()
+    scm.GIT.SetConfig(settings.GetRoot(), f'branch.{branch}.base-url', args[0])
+    return 0
 
 
 def color_for_status(status):
@@ -4674,9 +4458,8 @@ def CMDissue(parser, args):
         issue_branch_map = {}
 
         git_config = {}
-        for config in RunGit(['config', '--get-regexp',
-                              r'branch\..*issue']).splitlines():
-            name, _space, val = config.partition(' ')
+        for name, val in scm.GIT.YieldConfigRegexp(
+                settings.GetRoot(), re.compile(r'branch\..*issue')):
             git_config[name] = val
 
         for branch in branches:
@@ -4722,6 +4505,127 @@ def CMDissue(parser, args):
                 'issue_url': cl.GetIssueURL(),
                 'issue': cl.GetIssue(),
             })
+    return 0
+
+
+def _create_commit_message(orig_message, bug=None):
+    """Returns a commit message for the cherry picked CL."""
+    orig_message_lines = orig_message.splitlines()
+    subj_line = orig_message_lines[0]
+    new_message = (f'Cherry pick "{subj_line}"\n\n'
+                   "Original change's description:\n")
+    for line in orig_message_lines:
+        new_message += f'> {line}\n'
+    new_message += '\n'
+    if bug:
+        new_message += f'Bug: {bug}\n'
+    if change_id := git_footers.get_footer_change_id(orig_message):
+        new_message += f'Change-Id: {change_id[0]}\n'
+    return new_message
+
+
+# TODO(b/341792235): Add metrics.
+@subcommand.usage('[revisions ...]')
+def CMDcherry_pick(parser, args):
+    """Upload a chain of cherry picks to Gerrit.
+
+    This must be run inside the git repo you're trying to make changes to.
+    """
+    if gclient_utils.IsEnvCog():
+        print('cherry-pick command is not supported in non-git environment',
+              file=sys.stderr)
+        return 1
+
+    parser.add_option('--branch', help='Gerrit branch, e.g. refs/heads/main')
+    parser.add_option('--bug',
+                      help='Bug to add to the description of each change.')
+    parser.add_option('--parent-change-num',
+                      type='int',
+                      help='The parent change of the first cherry-pick CL, '
+                      'i.e. the start of the CL chain.')
+    options, args = parser.parse_args(args)
+
+    if not options.branch:
+        parser.error('Branch is required.')
+    if not args:
+        parser.error('No revisions to cherry pick.')
+
+    # TODO(b/341792235): Consider using GetCommitMessage after b/362567930 is
+    # fixed so this command can be run outside of a git workspace.
+    host = Changelist().GetGerritHost()
+    change_ids_to_message = {}
+    change_ids_to_commit = {}
+
+    # Gerrit needs a change ID for each commit we cherry pick.
+    for commit in args:
+        # Don't use the ChangeId in the commit message since it may not be
+        # unique. Gerrit will error with "Multiple changes found" if we use a
+        # non-unique ID. Instead, query Gerrit with the hash and verify it
+        # corresponds to a unique CL.
+        changes = gerrit_util.QueryChanges(host, [('commit', commit)])
+        if not changes:
+            raise RuntimeError(f'No changes found for {commit}.')
+        if len(changes) > 1:
+            raise RuntimeError(f'Multiple changes found for {commit}.')
+
+        change_id = changes[0]['id']
+        change_ids_to_commit[change_id] = commit
+
+        message = git_common.run('show', '-s', '--format=%B', commit).strip()
+        change_ids_to_message[change_id] = message
+
+    print(f'Creating chain of {len(change_ids_to_message)} cherry pick(s)...')
+
+    def print_any_remaining_commits():
+        if not change_ids_to_commit:
+            return
+        print('Remaining commit(s) to cherry pick:')
+        for commit in change_ids_to_commit.values():
+            print(f'  {commit}')
+
+    # Gerrit only supports cherry picking one commit per change, so we have
+    # to cherry pick each commit individually and create a chain of CLs.
+    parent_change_num = options.parent_change_num
+    for change_id, orig_message in change_ids_to_message.items():
+        message = _create_commit_message(orig_message, options.bug)
+        orig_subj_line = orig_message.splitlines()[0]
+
+        # Create a cherry pick first, then rebase. If we create a chained CL
+        # then cherry pick, the change will lose its relation to the parent.
+        try:
+            new_change_info = gerrit_util.CherryPick(host,
+                                                     change_id,
+                                                     options.branch,
+                                                     message=message)
+        except gerrit_util.GerritError as e:
+            print(f'Failed to create cherry pick "{orig_subj_line}": {e}. '
+                  'Please resolve any merge conflicts.')
+            print_any_remaining_commits()
+            return 1
+
+        change_ids_to_commit.pop(change_id)
+        new_change_id = new_change_info['id']
+        new_change_num = new_change_info['_number']
+        new_change_url = gerrit_util.GetChangePageUrl(host, new_change_num)
+        print(f'Created cherry pick of "{orig_subj_line}": {new_change_url}')
+
+        if parent_change_num:
+            try:
+                gerrit_util.RebaseChange(host, new_change_id, parent_change_num)
+            except gerrit_util.GerritError as e:
+                parent_change_url = gerrit_util.GetChangePageUrl(
+                    host, parent_change_num)
+                print(f'Failed to rebase {new_change_url} on '
+                      f'{parent_change_url}: {e}. Please resolve any merge '
+                      'conflicts.')
+                print('Once resolved, you can continue the CL chain with '
+                      f'`--parent-change-num={new_change_num}` to specify '
+                      'which change the chain should start with.\n')
+                print_any_remaining_commits()
+                return 1
+
+        parent_change_num = new_change_num
+
     return 0
 
 
@@ -5362,6 +5266,18 @@ def CMDupload(parser, args):
                        if opt.help != optparse.SUPPRESS_HELP))
         return
 
+    cl = Changelist(branchref=options.target_branch)
+
+    # Do a quick RPC to Gerrit to ensure that our authentication is all working
+    # properly. Otherwise `git cl upload` will:
+    #   * run `git status` (slow for large repos)
+    #   * run presubmit tests (likely slow)
+    #   * ask the user to edit the CL description (requires thinking)
+    #
+    # And then attempt to push the change up to Gerrit, which can fail if
+    # authentication is not working properly.
+    gerrit_util.GetAccountDetails(cl.GetGerritHost())
+
     # TODO(crbug.com/1475405): Warn users if the project uses submodules and
     # they have fsmonitor enabled.
     if os.path.isfile('.gitmodules'):
@@ -5408,8 +5324,6 @@ def CMDupload(parser, args):
     if options.squash is None:
         # Load default for user, repo, squash=true, in this order.
         options.squash = settings.GetSquashGerritUploads()
-
-    cl = Changelist(branchref=options.target_branch)
 
     # Warm change details cache now to avoid RPCs later, reducing latency for
     # developers.
@@ -5484,9 +5398,9 @@ def UploadAllSquashed(options: optparse.Values,
         cl = ordered_cls[0]
         # We can only support external changes when we're only uploading one
         # branch.
-        parent = cl._UpdateWithExternalChanges() if len(
+        parent: Optional[str] = cl._UpdateWithExternalChanges() if len(
             ordered_cls) == 1 else None
-        orig_parent = None
+        orig_parent: Optional[str] = None
         if parent is None:
             origin = '.'
             branch = cl.GetBranch()
@@ -6976,8 +6890,8 @@ def CMDformat(parser, args):
         DieWithError('Could not find base commit for this branch. '
                      'Are you in detached state?')
 
-    # Filter out copied/renamed/deleted files
-    diff_output = RunGitDiffCmd(['--name-only', '--diff-filter=crd'],
+    # Filter out deleted files
+    diff_output = RunGitDiffCmd(['--name-only', '--diff-filter=d'],
                                 upstream_commit, files)
     diff_files = diff_output.splitlines()
 
@@ -7047,13 +6961,11 @@ def CMDcheckout(parser, args):
 
     target_issue = str(issue_arg.issue)
 
-    output = RunGit([
-        'config', '--local', '--get-regexp', r'branch\..*\.' + ISSUE_CONFIG_KEY
-    ],
-                    error_ok=True)
+    output = scm.GIT.YieldConfigRegexp(settings.GetRoot(),
+                                       r'branch\..*\.' + ISSUE_CONFIG_KEY)
 
     branches = []
-    for key, issue in [x.split() for x in output.splitlines()]:
+    for key, issue in output:
         if issue == target_issue:
             branches.append(
                 re.sub(r'branch\.(.*)\.' + ISSUE_CONFIG_KEY, r'\1', key))
@@ -7108,7 +7020,23 @@ class OptionParser(optparse.OptionParser):
                         default=0,
                         help='Use 2 times for more debugging info')
 
-    def parse_args(self, args=None, _values=None):
+    @typing.overload
+    def parse_args(
+        self,
+        args: None = None,
+        values: Optional[optparse.Values] = None
+    ) -> tuple[optparse.Values, list[str]]:
+        ...
+
+    @typing.overload
+    def parse_args(  # pylint: disable=signature-differs
+        self,
+        args: Sequence[AnyStr],
+        values: Optional[optparse.Values] = None
+    ) -> tuple[optparse.Values, list[AnyStr]]:
+        ...
+
+    def parse_args(self, args: Sequence[AnyStr] | None = None, values=None):
         try:
             return self._parse_args(args)
         finally:
@@ -7124,11 +7052,22 @@ class OptionParser(optparse.OptionParser):
                     # executed in a repo, it will be raised later.
                     pass
 
-    def _parse_args(self, args=None):
+    @typing.overload
+    def _parse_args(self, args: None) -> tuple[optparse.Values, list[str]]:
+        ...
+
+    @typing.overload
+    def _parse_args(
+            self,
+            args: Sequence[AnyStr]) -> tuple[optparse.Values, list[AnyStr]]:
+        ...
+
+    def _parse_args(self, args: Sequence[AnyStr] | None):
         # Create an optparse.Values object that will store only the actual
         # passed options, without the defaults.
         actual_options = optparse.Values()
-        _, args = optparse.OptionParser.parse_args(self, args, actual_options)
+        _, argslist = optparse.OptionParser.parse_args(self, args,
+                                                       actual_options)
         # Create an optparse.Values object with the default options.
         options = optparse.Values(self.get_default_values().__dict__)
         # Update it with the options passed by the user.
@@ -7145,7 +7084,7 @@ class OptionParser(optparse.OptionParser):
             format='[%(levelname).1s%(asctime)s %(process)d %(thread)d '
             '%(filename)s] %(message)s')
 
-        return options, args
+        return options, argslist
 
 
 def main(argv):

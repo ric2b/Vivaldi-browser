@@ -10,9 +10,10 @@
 #import "base/time/time.h"
 #import "components/commerce/core/mock_shopping_service.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_prefs.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_item.h"
 #import "ios/chrome/browser/url_loading/model/fake_url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
@@ -64,17 +65,22 @@ class ParcelTrackingMediatorTest : public PlatformTest {
 
   ~ParcelTrackingMediatorTest() override { [mediator_ disconnect]; }
 
+  PrefService* local_state() {
+    return GetApplicationContext()->GetLocalState();
+  }
+
  protected:
   void SetupMediator() {
     mediator_ = [[ParcelTrackingMediator alloc]
         initWithShoppingService:shopping_service_.get()
-         URLLoadingBrowserAgent:url_loader_];
+         URLLoadingBrowserAgent:url_loader_
+                    prefService:local_state()];
     delegate_ = OCMProtocolMock(@protocol(ParcelTrackingMediatorDelegate));
     mediator_.delegate = delegate_;
   }
 
   web::WebTaskEnvironment task_environment_;
-  IOSChromeScopedTestingLocalState local_state_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<TestBrowser> browser_;
   FakeUrlLoadingBrowserAgent* url_loader_;
@@ -88,10 +94,8 @@ class ParcelTrackingMediatorTest : public PlatformTest {
 // consumer and includes the parcel tracking module type correctly in the magic
 // stack order.
 TEST_F(ParcelTrackingMediatorTest, TestParcelTrackingReceived) {
-  int parcel_tracking_freshness_impression_count =
-      local_state_.Get()->GetInteger(
-          prefs::
-              kIosMagicStackSegmentationParcelTrackingImpressionsSinceFreshness);
+  int parcel_tracking_freshness_impression_count = local_state()->GetInteger(
+      prefs::kIosMagicStackSegmentationParcelTrackingImpressionsSinceFreshness);
   EXPECT_EQ(parcel_tracking_freshness_impression_count, -1);
 
   // One of the parcels should be untracked since it was delivered more than two
@@ -112,7 +116,7 @@ TEST_F(ParcelTrackingMediatorTest, TestParcelTrackingReceived) {
   EXPECT_EQ(outForDeliveryItem.status, ParcelState::kOutForDelivery);
   EXPECT_TRUE(outForDeliveryItem.shouldShowSeeMore);
 
-  parcel_tracking_freshness_impression_count = local_state_.Get()->GetInteger(
+  parcel_tracking_freshness_impression_count = local_state()->GetInteger(
       prefs::kIosMagicStackSegmentationParcelTrackingImpressionsSinceFreshness);
   EXPECT_EQ(parcel_tracking_freshness_impression_count, 0);
 }
@@ -134,7 +138,7 @@ TEST_F(ParcelTrackingMediatorTest, TestModuleDisabled) {
   OCMExpect([delegate_ parcelTrackingDisabled]);
 
   // Disable the pref.
-  DisableParcelTracking(local_state_.Get());
+  DisableParcelTracking(local_state());
 
   // Verify the delegate callback.
   EXPECT_OCMOCK_VERIFY(delegate_);

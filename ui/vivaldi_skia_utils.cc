@@ -183,10 +183,7 @@ base::FilePath EncodeBitmapToFile(base::FilePath directory,
 
   base_path = base::GetUniquePath(base_path.AppendASCII(filename));
 
-  int bytes =
-      base::WriteFile(base_path, reinterpret_cast<const char*>(&image_bytes[0]),
-                      static_cast<int>(image_bytes.size()));
-  if (bytes < 0 || static_cast<size_t>(bytes) != image_bytes.size()) {
+  if(base::WriteFile(base_path, image_bytes)) {
     LOG(ERROR) << "Error writing to file: " << base_path.value();
     return base::FilePath();
   }

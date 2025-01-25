@@ -7,11 +7,13 @@
 #include <cstdint>
 
 #include "ash/constants/ash_pref_names.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/functional/bind.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "chrome/browser/ash/input_method/editor_mediator_factory.h"
 #include "chrome/browser/ash/input_method/editor_panel_manager.h"
+#include "chrome/browser/ash/mahi/mahi_availability.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/crosapi/mojom/editor_panel.mojom.h"
 #include "components/prefs/pref_service.h"
@@ -43,6 +45,22 @@ void MagicBoostStateAsh::OnActiveUserPrefServiceChanged(
   RegisterPrefChanges(pref_service);
 }
 
+bool MagicBoostStateAsh::IsMagicBoostAvailable() {
+  return mahi_availability::IsMahiAvailable();
+}
+
+bool MagicBoostStateAsh::CanShowNoticeBannerForHMR() {
+  PrefService* pref = pref_change_registrar_->prefs();
+
+  // Only show the notice when:
+  //  1. HMR is forced ON by the admin, and
+  //  2. The consent status is currently disabled.
+  return pref->IsManagedPreference(ash::prefs::kHmrEnabled) &&
+         pref->GetBoolean(ash::prefs::kHmrEnabled) &&
+         hmr_consent_status().has_value() &&
+         hmr_consent_status().value() == chromeos::HMRConsentStatus::kDeclined;
+}
+
 int32_t MagicBoostStateAsh::AsyncIncrementHMRConsentWindowDismissCount() {
   int32_t incremented_count = hmr_consent_window_dismiss_count() + 1;
   pref_change_registrar_->prefs()->SetInteger(
@@ -60,6 +78,21 @@ void MagicBoostStateAsh::AsyncWriteHMREnabled(bool enabled) {
   pref_change_registrar_->prefs()->SetBoolean(ash::prefs::kHmrEnabled, enabled);
 }
 
+void MagicBoostStateAsh::ShouldIncludeOrcaInOptIn(
+    base::OnceCallback<void(bool)> callback) {
+  GetEditorPanelManager()->GetEditorPanelContext(base::BindOnce(
+      [](base::OnceCallback<void(bool)> callback,
+         crosapi::mojom::EditorPanelContextPtr panel_context) {
+        // If the mode is not `kHardBlocked` and consent status is not set, it
+        // means that we should include Orca in this opt-in flow.
+        bool should_include_orca =
+            panel_context->editor_panel_mode !=
+                crosapi::mojom::EditorPanelMode::kHardBlocked &&
+            !panel_context->consent_status_settled;
+        std::move(callback).Run(should_include_orca);
+      },
+      std::move(callback)));
+}
 
 void MagicBoostStateAsh::DisableOrcaFeature() {
   GetEditorPanelManager()->OnMagicBoostPromoCardDeclined();
@@ -113,6 +146,10 @@ void MagicBoostStateAsh::RegisterPrefChanges(PrefService* pref_service) {
           &MagicBoostStateAsh::OnHMRConsentWindowDismissCountUpdated,
           base::Unretained(this)));
 
+  // Initializes the `magic_boost_enabled_` based on the current prefs settings.
+  UpdateMagicBoostEnabled(pref_change_registrar_->prefs()->GetBoolean(
+      ash::prefs::kMagicBoostEnabled));
+
   OnHMREnabledUpdated();
   OnHMRConsentStatusUpdated();
   OnHMRConsentWindowDismissCountUpdated();
@@ -121,6 +158,8 @@ void MagicBoostStateAsh::RegisterPrefChanges(PrefService* pref_service) {
 void MagicBoostStateAsh::OnMagicBoostEnabledUpdated() {
   bool enabled = pref_change_registrar_->prefs()->GetBoolean(
       ash::prefs::kMagicBoostEnabled);
+
+  UpdateMagicBoostEnabled(enabled);
 
   // Update both HMR and Orca accordingly when `kMagicBoostEnabled` is changed.
   AsyncWriteHMREnabled(enabled);
@@ -143,7 +182,7 @@ void MagicBoostStateAsh::OnHMREnabledUpdated() {
   // disclaimer UI.
   if (enabled && (consent_status == chromeos::HMRConsentStatus::kUnset ||
                   consent_status == chromeos::HMRConsentStatus::kDeclined)) {
-    AsyncWriteConsentStatus(chromeos::HMRConsentStatus::kPending);
+    AsyncWriteConsentStatus(chromeos::HMRConsentStatus::kPendingDisclaimer);
   }
 }
 

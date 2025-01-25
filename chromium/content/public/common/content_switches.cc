@@ -311,8 +311,9 @@ const char kEnableCaretBrowsing[] = "enable-caret-browsing";
 //
 // At present this turns on:
 //   net::features::kSameSiteDefaultChecksMethodRigorously
-//   net::features::kSchemefulSameSite
 //   net::features::kCookieSameSiteConsidersRedirectChain
+//   net::features::kEnablePortBoundCookies
+//   net::features::kEnableSchemeBoundCookies
 const char kEnableExperimentalCookieFeatures[] =
     "enable-experimental-cookie-features";
 
@@ -526,10 +527,6 @@ const char kMessageLoopTypeUi[] = "message-loop-type-ui";
 const char kMockCertVerifierDefaultResultForTesting[] =
     "mock-cert-verifier-default-result-for-testing";
 
-// Initializes Mojo Core from a shared library at the specified path, rather
-// than using the version of Mojo Core embedded within the Content executable.
-const char kMojoCoreLibraryPath[] = "mojo-core-library-path";
-
 // Use a Mojo-based LocalStorage implementation.
 const char kMojoLocalStorage[]              = "mojo-local-storage";
 
@@ -600,14 +597,6 @@ const char kProcessType[]                   = "type";
 // okay to log information about this user's auction to help with debugging.
 const char kProtectedAudiencesConsentedDebugToken[] =
     "protected-audiences-consented-debug-token";
-
-// Uses a specified proxy server, overrides system settings. This switch only
-// affects HTTP and HTTPS requests. ARC-apps use only HTTP proxy server with the
-// highest priority.
-// TODO(yzshen): Move this switch back to chrome/common/chrome_switches.{h,cc},
-// once the network service is able to access the corresponding setting via the
-// pref service.
-const char kProxyServer[] = "proxy-server";
 
 // Enables or disables pull-to-refresh gesture in response to vertical
 // overscroll.

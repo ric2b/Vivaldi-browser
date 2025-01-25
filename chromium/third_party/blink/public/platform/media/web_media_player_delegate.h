@@ -37,6 +37,15 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerDelegate {
     // switching).
     virtual void OnPageShown() = 0;
 
+    // Called when the host frame is not rendered on the host page. This should
+    // be called whenever the host frame's:
+    // - 'display' property is set to 'none';
+    // - 'visibility' property is set to 'hidden';
+    virtual void OnFrameHidden() = 0;
+
+    // Called when the host frame is rendered on the host page.
+    virtual void OnFrameShown() = 0;
+
     // Called when an idle player has become stale, usually interpreted to mean
     // that it is unlikely to be interacted with in the near future.
     //
@@ -47,6 +56,10 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerDelegate {
 
   // Returns true if the hosting page (WebView) is hidden or closed.
   virtual bool IsPageHidden() = 0;
+
+  // Returns true if the WebMediaPlayer's host frame is hidden or destroyed in
+  // the document. Returns false otherwise.
+  virtual bool IsFrameHidden() = 0;
 
   // Subscribe to observer callbacks. A player must use the returned |player_id|
   // for the rest of the calls below.

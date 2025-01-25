@@ -35,6 +35,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/isolated_web_apps/error/uma_logging.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_apply_update_command.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_command_helper.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_source.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_storage_location.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_apply_task.h"
@@ -133,7 +134,7 @@ IsolatedWebAppUpdateManager::IsolatedWebAppUpdateManager(
           // Similar to extensions, we don't do any automatic updates in guest
           // sessions.
           !profile.IsGuestSession() &&
-          // Web Apps are not a thing in off the record profiles, but have this
+          // Web Apps are not a thing in off the record profiles, but have
           // here just in case - we also wouldn't want to automatically update
           // IWAs in incognito windows.
           !profile.IsOffTheRecord() &&
@@ -162,6 +163,8 @@ void IsolatedWebAppUpdateManager::Start() {
 
   has_started_ = true;
   install_manager_observation_.Observe(&provider_->install_manager());
+  key_distribution_info_observation_.Observe(
+      IwaKeyDistributionInfoProvider::GetInstance());
 
   if (!IsAnyIwaInstalled()) {
     // If no IWA is installed, then we do not need to regularly check for
@@ -315,17 +318,16 @@ void IsolatedWebAppUpdateManager::OnWebAppUninstalled(
 
 bool IsolatedWebAppUpdateManager::MaybeDiscoverUpdatesForApp(
     const webapps::AppId& app_id) {
-  const WebApp* web_app = provider_->registrar_unsafe().GetAppById(app_id);
-  if (!web_app || !web_app->isolation_data().has_value()) {
-    return false;
-  }
+  ASSIGN_OR_RETURN(const WebApp& iwa,
+                   GetIsolatedWebAppById(provider_->registrar_unsafe(), app_id),
+                   [](const std::string&) { return false; });
 
   base::flat_map<web_package::SignedWebBundleId, GURL>
       id_to_update_manifest_map =
           GetForceInstalledBundleIdToUpdateManifestUrlMap();
 
   bool queued_update_discovery_task =
-      MaybeQueueUpdateDiscoveryTask(*web_app, id_to_update_manifest_map);
+      MaybeQueueUpdateDiscoveryTask(iwa, id_to_update_manifest_map);
   if (queued_update_discovery_task) {
     task_queue_.MaybeStartNextTask();
   }
@@ -351,6 +353,40 @@ void IsolatedWebAppUpdateManager::DiscoverApplyAndPrioritizeLocalDevModeUpdate(
       base::BindOnce(&IsolatedWebAppUpdateManager::OnLocalUpdateDiscovered,
                      weak_factory_.GetWeakPtr(), url_info,
                      std::move(callback)));
+}
+
+void IsolatedWebAppUpdateManager::OnComponentUpdateSuccess(
+    const base::Version& component_version) {
+  // The corresponding observer is added during `Start()`.
+  CHECK(has_started_);
+
+  if (!automatic_updates_enabled_) {
+    return;
+  }
+
+  base::flat_map<web_package::SignedWebBundleId,
+                 std::reference_wrapper<const WebApp>>
+      installed_iwas = GetInstalledIwas(provider_->registrar_unsafe());
+
+  // Queue updates for all apps affected by key rotation.
+  for (const auto& [web_bundle_id, iwa] : installed_iwas) {
+    auto result = LookupRotatedKey(web_bundle_id);
+    // If the rotated key is null, there's no point in updating the
+    // app (as the update won't succeed anyway).
+    if (result != KeyRotationLookupResult::kKeyFound) {
+      continue;
+    }
+
+    KeyRotationData data =
+        GetKeyRotationData(web_bundle_id, *iwa.get().isolation_data());
+    // If either the bundle or the pending update already includes the rotated
+    // key, there's no need to rush with updates.
+    if (data.current_installation_has_rk || data.pending_update_has_rk) {
+      continue;
+    }
+
+    MaybeDiscoverUpdatesForApp(iwa.get().app_id());
+  }
 }
 
 bool IsolatedWebAppUpdateManager::IsAnyIwaInstalled() {

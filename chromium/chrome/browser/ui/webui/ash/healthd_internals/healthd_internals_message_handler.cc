@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/webui/ash/healthd_internals/healthd_internals_message_handler.h"
 
+#include <cstdint>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -45,6 +48,29 @@ std::string Convert(mojom::CpuArchitectureEnum source) {
       return "armv7l";
     case mojom::CpuArchitectureEnum::kUnknown:
       return "Unknown";
+  }
+}
+
+std::string Convert(mojom::ProcessState state) {
+  switch (state) {
+    case mojom::ProcessState::kUnknown:
+      return "Unknown";
+    case mojom::ProcessState::kRunning:
+      return "Running";
+    case mojom::ProcessState::kSleeping:
+      return "Sleeping";
+    case mojom::ProcessState::kWaiting:
+      return "Waiting";
+    case mojom::ProcessState::kZombie:
+      return "Zombie";
+    case mojom::ProcessState::kStopped:
+      return "Stopped";
+    case mojom::ProcessState::kTracingStop:
+      return "TracingStop";
+    case mojom::ProcessState::kDead:
+      return "Dead";
+    case mojom::ProcessState::kIdle:
+      return "Idle";
   }
 }
 
@@ -148,6 +174,15 @@ base::Value::List ConvertFanValue(const std::vector<mojom::FanInfoPtr>& info) {
   return out_fans;
 }
 
+// Set the value to `output` for optional uint64 value.
+void SetValue(std::string_view field_name,
+              std::optional<uint64_t> value,
+              base::Value::Dict& output) {
+  if (value.has_value()) {
+    output.Set(field_name, base::NumberToString(value.value()));
+  }
+}
+
 base::Value::Dict ConvertMemoryValue(const mojom::MemoryInfoPtr& info) {
   base::Value::Dict out_memory;
   if (info) {
@@ -157,8 +192,52 @@ base::Value::Dict ConvertMemoryValue(const mojom::MemoryInfoPtr& info) {
                    base::NumberToString(info->free_memory_kib));
     out_memory.Set("totalMemoryKib",
                    base::NumberToString(info->total_memory_kib));
+    SetValue("buffersKib", info->buffers_kib, out_memory);
+    SetValue("pageCacheKib", info->page_cache_kib, out_memory);
+    SetValue("sharedMemoryKib", info->shared_memory_kib, out_memory);
+
+    SetValue("activeMemoryKib", info->active_memory_kib, out_memory);
+    SetValue("inactiveMemoryKib", info->inactive_memory_kib, out_memory);
+
+    SetValue("totalSwapMemoryKib", info->total_swap_memory_kib, out_memory);
+    SetValue("freeSwapMemoryKib", info->free_swap_memory_kib, out_memory);
+    SetValue("cachedSwapMemoryKib", info->cached_swap_memory_kib, out_memory);
+
+    SetValue("totalSlabMemoryKib", info->total_slab_memory_kib, out_memory);
+    SetValue("reclaimableSlabMemoryKib", info->reclaimable_slab_memory_kib,
+             out_memory);
+    SetValue("unreclaimableSlabMemoryKib", info->unreclaimable_slab_memory_kib,
+             out_memory);
   }
   return out_memory;
+}
+
+base::Value::Dict ConvertProcessValue(const mojom::ProcessInfoPtr& info) {
+  base::Value::Dict out_process;
+  if (info) {
+    out_process.Set("command", info->command);
+    out_process.Set("userId", base::NumberToString(info->user_id));
+    out_process.Set("priority", info->priority);
+    out_process.Set("nice", info->nice);
+    out_process.Set("uptimeTicks", base::NumberToString(info->uptime_ticks));
+    out_process.Set("state", Convert(info->state));
+    out_process.Set("residentMemoryKib",
+                    base::NumberToString(info->resident_memory_kib));
+    out_process.Set("readSystemCallsCount",
+                    base::NumberToString(info->read_system_calls));
+    out_process.Set("writeSystemCallsCount",
+                    base::NumberToString(info->write_system_calls));
+    if (info->name.has_value()) {
+      out_process.Set("name", info->name.value());
+    }
+    out_process.Set("parentProcessId",
+                    base::NumberToString(info->parent_process_id));
+    out_process.Set("processGroupId",
+                    base::NumberToString(info->process_group_id));
+    out_process.Set("threadsNumber", base::NumberToString(info->threads));
+    out_process.Set("processId", base::NumberToString(info->process_id));
+  }
+  return out_process;
 }
 
 base::Value::List ConvertThermalValue(const mojom::ThermalInfoPtr& info) {
@@ -191,6 +270,11 @@ void HealthdInternalsMessageHandler::RegisterMessages() {
       "getHealthdTelemetryInfo",
       base::BindRepeating(
           &HealthdInternalsMessageHandler::HandleGetHealthdTelemetryInfo,
+          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "getHealthdProcessInfo",
+      base::BindRepeating(
+          &HealthdInternalsMessageHandler::HandleGetHealthdProcessInfo,
           weak_ptr_factory_.GetWeakPtr()));
 }
 
@@ -264,6 +348,50 @@ void HealthdInternalsMessageHandler::HandleTelemetryResult(
     result.Set("thermals",
                ConvertThermalValue(info->thermal_result->get_thermal_info()));
   }
+
+  ReplyHealthdInternalInfo(std::move(callback_id), std::move(result));
+}
+
+void HealthdInternalsMessageHandler::HandleGetHealthdProcessInfo(
+    const base::Value::List& list) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  AllowJavascript();
+  if (list.size() != 1 || !list[0].is_string()) {
+    NOTREACHED_IN_MIGRATION();
+    return;
+  }
+
+  base::Value callback_id = list[0].Clone();
+  auto* service = GetProbeService();
+  if (!service) {
+    HandleMultipleProcessResult(std::move(callback_id), nullptr);
+    return;
+  }
+
+  service->ProbeMultipleProcessInfo(
+      /*process_ids=*/std::nullopt, /*ignore_single_process_error=*/true,
+      base::BindOnce(
+          &HealthdInternalsMessageHandler::HandleMultipleProcessResult,
+          weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
+}
+
+void HealthdInternalsMessageHandler::HandleMultipleProcessResult(
+    base::Value callback_id,
+    mojom::MultipleProcessResultPtr process_result) {
+  base::Value::Dict result;
+  if (!process_result) {
+    LOG(WARNING) << "Unable to access process info from Healthd";
+    result.Set("processes", base::Value::List());
+    ReplyHealthdInternalInfo(std::move(callback_id), std::move(result));
+    return;
+  }
+
+  base::Value::List out_processes;
+  for (const auto& [_, process_info] : process_result->process_infos) {
+    out_processes.Append(ConvertProcessValue(process_info));
+  }
+  result.Set("processes", std::move(out_processes));
 
   ReplyHealthdInternalInfo(std::move(callback_id), std::move(result));
 }

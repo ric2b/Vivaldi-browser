@@ -17,6 +17,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -62,6 +63,7 @@
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store/mock_password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/password_store_consumer.h"
+#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/common/features.h"
@@ -104,7 +106,6 @@
 #include "chrome/browser/keyboard_accessory/test_utils/android/mock_payment_method_accessory_controller.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/android/password_generation_controller.h"
-#include "chrome/common/chrome_switches.h"
 #else
 #include "chrome/browser/ui/hats/hats_service_factory.h"
 #include "chrome/browser/ui/hats/mock_hats_service.h"
@@ -256,6 +257,17 @@ class FakePasswordAutofillAgent
   void FillPasswordSuggestion(const std::u16string& username,
                               const std::u16string& password) override {}
 
+  void FillPasswordSuggestionById(autofill::FieldRendererId username_element_id,
+                                  autofill::FieldRendererId password_element_id,
+                                  const std::u16string& username,
+                                  const std::u16string& password) override {}
+
+  void PreviewPasswordSuggestionById(
+      autofill::FieldRendererId username_element_id,
+      autofill::FieldRendererId password_element_id,
+      const std::u16string& username,
+      const std::u16string& password) override {}
+
   void InformNoSavedCredentials(
       bool should_show_popup_without_passwords) override {}
 
@@ -304,11 +316,12 @@ class MockPasswordAccessoryControllerImpl
                                         mf_controller,
                                         password_client,
                                         driver_supplier,
-                                        base::DoNothing()) {}
+                                        base::DoNothing(),
+                                        nullptr) {}
 
   MOCK_METHOD(void,
               RefreshSuggestionsForField,
-              (autofill::mojom::FocusedFieldType, bool),
+              (autofill::mojom::FocusedFieldType),
               (override));
   MOCK_METHOD(void,
               UpdateCredManReentryUi,
@@ -348,14 +361,14 @@ class ChromePasswordManagerClientTest : public ChromeRenderViewHostTestHarness {
         profile(), base::BindRepeating([](content::BrowserContext* context)
                                            -> std::unique_ptr<KeyedService> {
           return std::make_unique<
-              NiceMock<MockPasswordManagerSettingsService>>();
+              NiceMock<password_manager::MockPasswordManagerSettingsService>>();
         }));
   }
 
  protected:
   ChromePasswordManagerClient* GetClient();
-  MockPasswordManagerSettingsService& settings_service() {
-    return static_cast<MockPasswordManagerSettingsService&>(
+  password_manager::MockPasswordManagerSettingsService& settings_service() {
+    return static_cast<password_manager::MockPasswordManagerSettingsService&>(
         *PasswordManagerSettingsServiceFactory::GetForProfile(profile()));
   }
   syncer::TestSyncService* sync_service() {
@@ -735,7 +748,7 @@ TEST_F(ChromePasswordManagerClientTest,
       GURL("https://passwords.google.com/path?query=1")));
 }
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 // Test that authentication is not possible if the `authenticator` is `nullptr`.
 TEST_F(ChromePasswordManagerClientTest, CanUseBiometricAuthNoAuthenticator) {
   EXPECT_FALSE(GetClient()->IsReauthBeforeFillingRequired(
@@ -1221,7 +1234,8 @@ void ChromePasswordManagerClientAndroidTest::SetUp() {
       GetBrowserContext(),
       base::BindRepeating([](content::BrowserContext* context)
                               -> std::unique_ptr<KeyedService> {
-        return std::make_unique<NiceMock<MockPasswordManagerSettingsService>>();
+        return std::make_unique<
+            NiceMock<password_manager::MockPasswordManagerSettingsService>>();
       }));
 }
 
@@ -1386,8 +1400,7 @@ TEST_F(ChromePasswordManagerClientAndroidTest,
 
   EXPECT_CALL(
       *weak_mock_pwd_controller,
-      RefreshSuggestionsForField(FocusedFieldType::kFillablePasswordField,
-                                 /*is_manual_generation_available=*/false));
+      RefreshSuggestionsForField(FocusedFieldType::kFillablePasswordField));
   GetClient()->FocusedInputChanged(driver.get(),
                                    observed_form_data.fields()[0].renderer_id(),
                                    FocusedFieldType::kFillablePasswordField);
@@ -1437,8 +1450,7 @@ TEST_F(ChromePasswordManagerClientAndroidTest,
       SetUpMockPwdAccessoryForClientUse(driver.get());
   EXPECT_CALL(
       *weak_mock_pwd_controller,
-      RefreshSuggestionsForField(FocusedFieldType::kFillablePasswordField,
-                                 /*is_manual_generation_available=*/true));
+      RefreshSuggestionsForField(FocusedFieldType::kFillablePasswordField));
   GetClient()->FocusedInputChanged(driver.get(),
                                    observed_form_data.fields()[0].renderer_id(),
                                    FocusedFieldType::kFillablePasswordField);
@@ -1478,8 +1490,7 @@ TEST_F(ChromePasswordManagerClientAndroidTest,
       SetUpMockPwdAccessoryForClientUse(driver.get());
   EXPECT_CALL(
       *weak_mock_pwd_controller,
-      RefreshSuggestionsForField(FocusedFieldType::kFillablePasswordField,
-                                 /*is_manual_generation_available=*/true));
+      RefreshSuggestionsForField(FocusedFieldType::kFillablePasswordField));
   GetClient()->FocusedInputChanged(driver.get(),
                                    observed_form_data.fields()[0].renderer_id(),
                                    FocusedFieldType::kFillablePasswordField);
@@ -1621,14 +1632,10 @@ TEST_F(ChromePasswordManagerClientAndroidTest,
 class ChromePasswordManagerClientWithAccountStoreAndroidTest
     : public ChromePasswordManagerClientAndroidTest {
   void SetUp() override {
-    // Using the account store on Android requires enabling the flag for UPM
-    // support of local passwords. Skip the Gms version check, otherwise the
-    // flag won't do anything in bots that have outdated GmsCore.
-    feature_list_.InitAndEnableFeature(
-        password_manager::features::
-            kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration);
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kSkipLocalUpmGmsCoreVersionCheckForTesting);
+    // Override the GMS version to be big enough for local UPM support, so these
+    // tests still pass in bots with an outdated version.
+    base::android::BuildInfo::GetInstance()->set_gms_version_code_for_test(
+        base::NumberToString(password_manager::GetLocalUpmMinGmsVersion()));
 
     ChromePasswordManagerClientAndroidTest::SetUp();
 
@@ -1638,9 +1645,6 @@ class ChromePasswordManagerClientWithAccountStoreAndroidTest
             &password_manager::BuildPasswordStoreInterface<
                 content::BrowserContext, MockPasswordStoreInterface>));
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 TEST_F(ChromePasswordManagerClientWithAccountStoreAndroidTest,

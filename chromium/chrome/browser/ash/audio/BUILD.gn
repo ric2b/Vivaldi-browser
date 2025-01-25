@@ -16,6 +16,7 @@ static_library("audio") {
 
   public_deps = [
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chromeos/ash/components/audio",
   ]
 
@@ -30,15 +31,42 @@ static_library("audio") {
   ]
 }
 
+source_set("browser_tests") {
+  testonly = true
+
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  sources = [ "volume_controller_browsertest.cc" ]
+
+  deps = [
+    "//ash",
+    "//ash/constants",
+    "//base",
+    "//chrome/browser:browser_process",
+    "//chrome/browser/ash/accessibility",
+    "//chrome/test:test_support_ui",
+    "//chromeos/ash/components/audio",
+    "//content/test:test_support",
+    "//services/audio/public/cpp",
+    "//ui/base",
+    "//ui/events:test_support",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
 
-  sources = [ "audio_survey_handler_unittest.cc" ]
+  sources = [
+    "audio_survey_handler_unittest.cc",
+    "cras_audio_handler_delegate_impl_unittest.cc",
+  ]
 
   deps = [
     "//base/test:test_support",
     "//chrome/browser/ash/audio",
     "//chrome/browser/ash/hats",
+    "//chrome/browser/ui",
+    "//chrome/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]

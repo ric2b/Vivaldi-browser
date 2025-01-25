@@ -9,32 +9,38 @@
 
 @class PriceInsightsItem;
 
+namespace commerce {
+enum class PriceBucket;
+}
+
 // Consumer for the Price Insights.
 @protocol PriceInsightsConsumer <NSObject>
 
 // Notifies the modulator that the user successfully tracked a price with or
-// without notifications being granted by the user.
-- (void)didStartPriceTrackingWithNotification:(BOOL)granted;
+// without notifications being granted by the user. It also can show a snackbar
+// to inform the user of the completion of the tracking status.
+- (void)didStartPriceTrackingWithNotification:(BOOL)granted
+                               showCompletion:(BOOL)showCompletion;
 
 // Notifies the modulator that the trackable item was successfully unsubscribed
 // to.
 - (void)didStopPriceTracking;
 
-// Notifies the modulator that webpage navigation has started, prompting the
-// contextual panel to dismiss itself.
-- (void)didStartNavigationToWebpage;
+// Notifies the modulator that webpage navigation has started.
+- (void)didStartNavigationToWebpageWithPriceBucket:
+    (commerce::PriceBucket)bucket;
 
 // Displays a UIAlert in the modulator that directs the user to the OS
 // permission settings to enable push notification permissions.
 - (void)presentPushNotificationPermissionAlert;
 
-// Displays a UIAlert in the modulator that indicates to the user that an error
+// Displays a snackbar in the modulator that indicates to the user that an error
 // has occurred during the price tracking subscription process.
-- (void)presentStartPriceTrackingErrorAlertForItem:(PriceInsightsItem*)item;
+- (void)presentStartPriceTrackingErrorSnackbar;
 
-// Displays a UIAlert in the modulator that indicates to the user that an error
+// Displays a snackbar in the modulator that indicates to the user that an error
 // has occurred during the price tracking subscription cancellation process.
-- (void)presentStopPriceTrackingErrorAlertForItem:(PriceInsightsItem*)item;
+- (void)presentStopPriceTrackingErrorSnackbar;
 
 @end
 

@@ -19,13 +19,17 @@
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/commerce_types.h"
 #include "components/commerce/core/commerce_utils.h"
+#include "components/commerce/core/feature_utils.h"
 #include "components/commerce/core/metrics/metrics_utils.h"
+#include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/price_tracking_utils.h"
 #include "components/commerce/core/shopping_service.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/commerce/core/webui/webui_utils.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/optimization_guide/core/model_quality/feature_type_map.h"
 #include "components/optimization_guide/core/model_quality/model_quality_logs_uploader_service.h"
+#include "components/optimization_guide/proto/features/product_specifications.pb.h"
 #include "components/payments/core/currency_formatter.h"
 #include "components/power_bookmarks/core/power_bookmark_utils.h"
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
@@ -213,6 +217,7 @@ shopping_service::mojom::ProductSpecificationsPtr ProductSpecsToMojo(
     product_ptr->product_cluster_id = product.product_cluster_id;
     product_ptr->title = product.title;
     product_ptr->image_url = product.image_url;
+    product_ptr->buying_options_url = product.buying_options_url;
 
     // Top-level product summaries.
     for (const auto& summary : product.summary) {
@@ -295,6 +300,98 @@ PrepareQualityLogEntry(optimization_guide::ModelQualityLogsUploaderService*
   return log_entry;
 }
 
+void ConvertDescriptionTextToProto(
+    ProductSpecifications::DescriptionText description_text,
+    optimization_guide::proto::DescriptionText* description_proto) {
+  description_proto->set_text(description_text.text);
+  for (auto url_info : description_text.urls) {
+    optimization_guide::proto::DescriptionText::ReferenceUrl* reference_url =
+        description_proto->add_urls();
+    reference_url->set_url(url_info.url.spec());
+    reference_url->set_title(base::UTF16ToUTF8(url_info.title));
+    if (url_info.favicon_url.has_value()) {
+      reference_url->set_favicon_url(url_info.favicon_url->spec());
+    }
+    if (url_info.thumbnail_url.has_value()) {
+      reference_url->set_thumbail_image_url(url_info.thumbnail_url->spec());
+    }
+  }
+}
+
+void ConvertProductSpecificationsToProto(
+    ProductSpecifications specs,
+    optimization_guide::proto::ProductSpecificationData* product_spec_data) {
+  for (auto pair : specs.product_dimension_map) {
+    optimization_guide::proto::ProductSpecificationSection* section =
+        product_spec_data->add_product_specification_sections();
+    section->set_key(base::NumberToString(pair.first));
+    section->set_title(pair.second);
+  }
+
+  for (auto product : specs.products) {
+    optimization_guide::proto::ProductSpecification* product_spec =
+        product_spec_data->add_product_specifications();
+    product_spec->mutable_identifiers()->set_gpc_id(product.product_cluster_id);
+    product_spec->mutable_identifiers()->set_mid(product.mid);
+    product_spec->set_title(product.title);
+    product_spec->set_image_url(product.image_url.spec());
+
+    for (auto pair : product.product_dimension_values) {
+      optimization_guide::proto::ProductSpecificationValue*
+          product_specification_value =
+              product_spec->add_product_specification_values();
+      product_specification_value->set_key(base::NumberToString(pair.first));
+
+      for (auto description : pair.second.descriptions) {
+        optimization_guide::proto::ProductSpecificationDescription*
+            product_specification_description =
+                product_specification_value->add_specification_descriptions();
+        product_specification_description->set_label(description.label);
+        product_specification_description->set_alternative_text(
+            description.alt_text);
+        for (auto option : description.options) {
+          optimization_guide::proto::ProductSpecificationDescription::Option*
+              option_proto = product_specification_description->add_options();
+          for (auto option_description : option.descriptions) {
+            optimization_guide::proto::DescriptionText* description_text =
+                option_proto->add_description();
+            ConvertDescriptionTextToProto(option_description, description_text);
+          }
+        }
+      }
+
+      for (auto summary : pair.second.summary) {
+        optimization_guide::proto::DescriptionText* summary_description =
+            product_specification_value->add_summary_description();
+        ConvertDescriptionTextToProto(summary, summary_description);
+      }
+    }
+
+    for (auto description_text : product.summary) {
+      optimization_guide::proto::DescriptionText* summary_description =
+          product_spec->add_summary_description();
+      ConvertDescriptionTextToProto(description_text, summary_description);
+    }
+  }
+}
+
+// TODO(b/347064310): Move this method to some lower-level layers instead of
+// here which is only usable in WebUI.
+void RecordQualityEntry(
+    optimization_guide::proto::ProductSpecificationsQuality* quality_proto,
+    std::vector<GURL> input_urls,
+    ProductSpecifications specs) {
+  // Record input.
+  for (auto url : input_urls) {
+    optimization_guide::proto::ProductIdentifier* identifider =
+        quality_proto->add_product_identifiers();
+    identifider->set_product_url(url.spec());
+  }
+  // Record product spec table.
+  optimization_guide::proto::ProductSpecificationData* product_spec_data =
+      quality_proto->mutable_product_specification_data();
+  ConvertProductSpecificationsToProto(specs, product_spec_data);
+}
 }  // namespace
 
 using shopping_service::mojom::BookmarkProductInfo;
@@ -353,10 +450,9 @@ void ShoppingServiceHandler::GetAllPriceTrackedBookmarkProductInfo(
           return;
         }
 
-        service->GetAllPriceTrackedBookmarks(
-            base::BindOnce(
-                &ShoppingServiceHandler::OnFetchPriceTrackedBookmarks,
-                    handler, std::move(callback)));
+        service->GetAllPriceTrackedBookmarks(base::BindOnce(
+            &ShoppingServiceHandler::OnFetchPriceTrackedBookmarks, handler,
+            std::move(callback)));
       },
       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -503,11 +599,12 @@ ShoppingServiceHandler::BookmarkListToMojoList(
 }
 
 void ShoppingServiceHandler::onPriceTrackResult(int64_t bookmark_id,
-                                             bookmarks::BookmarkModel* model,
-                                             bool is_tracking,
-                                             bool success) {
-  if (success)
+                                                bookmarks::BookmarkModel* model,
+                                                bool is_tracking,
+                                                bool success) {
+  if (success) {
     return;
+  }
 
   // We only do work here if price tracking failed. When the UI is interacted
   // with, we assume success. In the event it failed, we switch things back.
@@ -687,11 +784,12 @@ void ShoppingServiceHandler::ShowBookmarkEditorForCurrentUrl() {
 }
 
 void ShoppingServiceHandler::ShowProductSpecificationsSetForUuid(
-    const base::Uuid& uuid) {
+    const base::Uuid& uuid,
+    bool in_new_tab) {
   if (!delegate_) {
     return;
   }
-  delegate_->OpenUrlInNewTab(commerce::GetProductSpecsTabUrlForID(uuid));
+  delegate_->ShowProductSpecificationsSetForUuid(uuid, in_new_tab);
 }
 
 void ShoppingServiceHandler::GetPriceInsightsInfoForCurrentUrl(
@@ -709,6 +807,30 @@ void ShoppingServiceHandler::GetPriceInsightsInfoForCurrentUrl(
           weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
+void ShoppingServiceHandler::GetPriceInsightsInfoForUrl(
+    const GURL& url,
+    GetPriceInsightsInfoForUrlCallback callback) {
+  if (!shopping_service_->IsPriceInsightsEligible()) {
+    std::move(callback).Run(url,
+                            shopping_service::mojom::PriceInsightsInfo::New());
+    return;
+  }
+
+  shopping_service_->GetPriceInsightsInfoForUrl(
+      url, base::BindOnce(
+               [](base::WeakPtr<ShoppingServiceHandler> handler,
+                  GetPriceInsightsInfoForUrlCallback callback, const GURL& url,
+                  const std::optional<PriceInsightsInfo>& info) {
+                 if (!handler) {
+                   return;
+                 }
+
+                 std::move(callback).Run(url, PriceInsightsInfoToMojoObject(
+                                                  info, handler->locale_));
+               },
+               weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
 void ShoppingServiceHandler::GetProductSpecificationsForUrls(
     const std::vector<::GURL>& urls,
     GetProductSpecificationsForUrlsCallback callback) {
@@ -721,25 +843,16 @@ void ShoppingServiceHandler::GetProductSpecificationsForUrls(
   // happen when (1) the page is closed and ShoppingServiceHandler destructs or
   // (2) there is another `GetProductSpecificationsForUrls` call which creates a
   // new current entry and the old one will destruct.
-  current_log_quality_entry_ =
-      PrepareQualityLogEntry(model_quality_logs_uploader_service_);
+  if (kProductSpecificationsEnableQualityLogging.Get() &&
+      IsProductSpecificationsQualityLoggingAllowed(
+          shopping_service_->GetAccountChecker()->GetPrefs())) {
+    current_log_quality_entry_ =
+        PrepareQualityLogEntry(model_quality_logs_uploader_service_);
+  }
   shopping_service_->GetProductSpecificationsForUrls(
       urls, base::BindOnce(
-                [](base::WeakPtr<ShoppingServiceHandler> handler,
-                   GetProductSpecificationsForUrlsCallback callback,
-                   std::vector<uint64_t> ids,
-                   std::optional<ProductSpecifications> specs) {
-                  // TODO(b/347064310): Record response in the current log
-                  // quality entry after the quality proto is added.
-                  if (!handler || !specs.has_value()) {
-                    std::move(callback).Run(
-                        shopping_service::mojom::ProductSpecifications::New());
-                    return;
-                  }
-
-                  std::move(callback).Run(ProductSpecsToMojo(specs.value()));
-                },
-                weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+                &ShoppingServiceHandler::OnGetProductSpecificationsForUrls,
+                weak_ptr_factory_.GetWeakPtr(), urls, std::move(callback)));
 }
 
 void ShoppingServiceHandler::GetUrlInfosForProductTabs(
@@ -851,9 +964,14 @@ void ShoppingServiceHandler::AddProductSpecificationsSet(
     return;
   }
 
+  std::vector<commerce::UrlInfo> url_infos;
+  for (const auto& url : urls) {
+    url_infos.emplace_back(url, std::u16string());
+  }
+
   std::optional<ProductSpecificationsSet> new_set =
       shopping_service_->GetProductSpecificationsService()
-          ->AddProductSpecificationsSet(name, urls);
+          ->AddProductSpecificationsSet(name, url_infos);
 
   std::move(callback).Run(
       new_set.has_value() ? ProductSpecsSetToMojo(new_set.value()) : nullptr);
@@ -897,16 +1015,16 @@ void ShoppingServiceHandler::SetUrlsForProductSpecificationsSet(
   // If an url is valid, but longer than mojo can handle, mojo will replace the
   // url with `GURL().` To avoid passing ShoppingService empty urls, we filter
   // them out before passing the list to `SetUrls.`
-  std::vector<GURL> valid_urls;
+  std::vector<UrlInfo> valid_url_infos;
   for (const auto& url : urls) {
     if (url.is_valid()) {
-      valid_urls.push_back(url);
+      valid_url_infos.emplace_back(url, std::u16string());
     }
   }
 
   const auto& set =
-      shopping_service_->GetProductSpecificationsService()->SetUrls(uuid,
-                                                                    valid_urls);
+      shopping_service_->GetProductSpecificationsService()->SetUrls(
+          uuid, valid_url_infos);
   if (set.has_value()) {
     std::move(callback).Run(ProductSpecsSetToMojo(set.value()));
   } else {
@@ -933,16 +1051,109 @@ void ShoppingServiceHandler::SetProductSpecificationsUserFeedback(
   }
   if (user_feedback ==
       optimization_guide::proto::UserFeedback::USER_FEEDBACK_THUMBS_DOWN) {
-    CHECK(current_log_quality_entry_);
-    // `log_id` of the feedback will be the same as the `execution_id` of the
-    // log entry so that they can be matched later.
-    delegate_->ShowFeedbackForProductSpecifications(
-        /*log_id=*/current_log_quality_entry_->log_ai_data_request()
-            ->model_execution_info()
-            .execution_id());
+    // If quality log is enabled, `log_id` of the feedback will be the same as
+    // the `execution_id` of the log entry so that they can be matched later;
+    // otherwise it will be a random ID.
+    std::string log_id =
+        current_log_quality_entry_
+            ? current_log_quality_entry_->log_ai_data_request()
+                  ->model_execution_info()
+                  .execution_id()
+            : commerce::kProductSpecificationsLoggingPrefix +
+                  base::Uuid::GenerateRandomV4().AsLowercaseString();
+    delegate_->ShowFeedbackForProductSpecifications(std::move(log_id));
   }
-  // TODO(b/347064310): Record user feedback in the current log quality entry
-  // after the quality proto is added.
+  if (!current_log_quality_entry_) {
+    return;
+  }
+  optimization_guide::proto::LogAiDataRequest* request =
+      current_log_quality_entry_->log_ai_data_request();
+  if (!request) {
+    return;
+  }
+  optimization_guide::proto::ProductSpecificationsQuality* quality_proto =
+      optimization_guide::ProductSpecificationsFeatureTypeMap::GetLoggingData(
+          *request)
+          ->mutable_quality();
+  quality_proto->set_user_feedback(user_feedback);
+}
+
+void ShoppingServiceHandler::SetProductSpecificationAcceptedDisclosureVersion(
+    shopping_service::mojom::ProductSpecificationsDisclosureVersion version) {
+  if (!pref_service_) {
+    return;
+  }
+
+  pref_service_->SetInteger(kProductSpecificationsAcceptedDisclosureVersion,
+                            static_cast<int>(version));
+}
+
+void ShoppingServiceHandler::MaybeShowProductSpecificationDisclosure(
+    const std::vector<GURL>& urls,
+    const std::string& name,
+    const std::string& set_id,
+    MaybeShowProductSpecificationDisclosureCallback callback) {
+  bool show =
+      (pref_service_->GetInteger(
+           kProductSpecificationsAcceptedDisclosureVersion) ==
+       static_cast<int>(shopping_service::mojom::
+                            ProductSpecificationsDisclosureVersion::kUnknown));
+  if (show) {
+    delegate_->ShowProductSpecificationsDisclosureDialog(urls, name, set_id);
+  }
+  std::move(callback).Run(show);
+}
+
+void ShoppingServiceHandler::DeclineProductSpecificationDisclosure() {
+  if (!pref_service_) {
+    return;
+  }
+  int current_gap_time = pref_service_->GetInteger(
+      commerce::kProductSpecificationsEntryPointShowIntervalInDays);
+  // Double the gap time for every dismiss, starting from one day.
+  if (current_gap_time == 0) {
+    current_gap_time = 1;
+  } else {
+    current_gap_time = std::min(2 * current_gap_time,
+                                kProductSpecMaxEntryPointTriggeringInterval);
+  }
+  pref_service_->SetInteger(
+      commerce::kProductSpecificationsEntryPointShowIntervalInDays,
+      current_gap_time);
+  pref_service_->SetTime(
+      commerce::kProductSpecificationsEntryPointLastDismissedTime,
+      base::Time::Now());
+}
+
+void ShoppingServiceHandler::GetProductSpecificationsFeatureState(
+    GetProductSpecificationsFeatureStateCallback callback) {
+  if (!shopping_service_) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
+  auto state_ptr =
+      shopping_service::mojom::ProductSpecificationsFeatureState::New();
+  state_ptr->is_syncing_tab_compare = commerce::IsSyncingProductSpecifications(
+      shopping_service_->GetAccountChecker());
+  state_ptr->can_load_full_page_ui =
+      commerce::CanLoadProductSpecificationsFullPageUi(
+          shopping_service_->GetAccountChecker());
+  state_ptr->can_manage_sets = commerce::CanManageProductSpecificationsSets(
+      shopping_service_->GetAccountChecker(),
+      shopping_service_->GetProductSpecificationsService());
+  state_ptr->can_fetch_data = commerce::CanFetchProductSpecificationsData(
+      shopping_service_->GetAccountChecker());
+  state_ptr->is_allowed_for_enterprise =
+      commerce::IsProductSpecificationsAllowedForEnterprise(pref_service_);
+  state_ptr->is_quality_logging_allowed =
+      commerce::IsProductSpecificationsQualityLoggingAllowed(pref_service_);
+  state_ptr->is_signed_in =
+      shopping_service_->GetAccountChecker() &&
+      shopping_service_->GetAccountChecker()->IsSignedIn();
+
+  std::move(callback).Run(std::move(state_ptr));
+  return;
 }
 
 void ShoppingServiceHandler::OnProductSpecificationsSetAdded(
@@ -961,4 +1172,50 @@ void ShoppingServiceHandler::OnProductSpecificationsSetRemoved(
   remote_page_->OnProductSpecificationsSetRemoved(set.uuid());
 }
 
+void ShoppingServiceHandler::OnGetProductSpecificationsForUrls(
+    std::vector<GURL> input_urls,
+    GetProductSpecificationsForUrlsCallback callback,
+    std::vector<uint64_t> ids,
+    std::optional<ProductSpecifications> specs) {
+  if (!specs.has_value()) {
+    std::move(callback).Run(
+        shopping_service::mojom::ProductSpecifications::New());
+    return;
+  }
+  if (current_log_quality_entry_) {
+    // Record response in the current log quality entry.
+    optimization_guide::proto::LogAiDataRequest* request =
+        current_log_quality_entry_->log_ai_data_request();
+    if (!request) {
+      return;
+    }
+    RecordQualityEntry(
+        optimization_guide::ProductSpecificationsFeatureTypeMap::GetLoggingData(
+            *request)
+            ->mutable_quality(),
+        std::move(input_urls), std::move(specs.value()));
+  }
+
+  std::move(callback).Run(ProductSpecsToMojo(specs.value()));
+}
+
+void ShoppingServiceHandler::ShowSyncSetupFlow() {
+  if (delegate_) {
+    delegate_->ShowSyncSetupFlow();
+  }
+}
+
+void ShoppingServiceHandler::GetPageTitleFromHistory(
+    const GURL& url,
+    GetPageTitleFromHistoryCallback callback) {
+  shopping_service_->QueryHistoryForUrl(
+      url,
+      base::BindOnce(
+          [](GetPageTitleFromHistoryCallback callback,
+             history::QueryURLResult result) {
+            std::move(callback).Run(
+                result.success ? base::UTF16ToUTF8(result.row.title()) : "");
+          },
+          std::move(callback)));
+}
 }  // namespace commerce

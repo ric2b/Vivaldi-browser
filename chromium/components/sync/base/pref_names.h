@@ -125,12 +125,34 @@ inline constexpr char kSyncPassphrasePromptMutedProductVersion[] =
 inline constexpr char kSyncFeatureStatusForSyncToSigninMigration[] =
     "sync.feature_status_for_sync_to_signin";
 // Prefix for boolean per-data-type statuses, to be suffixed with "." plus
-// GetModelTypeLowerCaseRootTag().
+// DataTypeToStableLowerCaseString().
 inline constexpr char kSyncDataTypeStatusForSyncToSigninMigrationPrefix[] =
     "sync.data_type_status_for_sync_to_signin";
 
 inline constexpr char kMigrateReadingListFromLocalToAccount[] =
     "sync.migrate_reading_list_from_local_to_account";
+
+// State of SyncPrefs::MaybeMigratePrefsForSyncToSigninPart1() and
+// MaybeMigratePrefsForSyncToSigninPart2(). Should be cleaned up after those
+// migration methods are gone.
+inline constexpr char kSyncToSigninMigrationState[] =
+    "sync.sync_to_signin_migration_state";
+
+// Set only if the kMigrateSyncingUserToSignedIn flag is enabled, reset if the
+// flag is disabled.
+// If the user has sync-the-feature enabled but TransportState::PAUSED, this
+// records the first time MaybeMigrateSyncingUserToSignedIn() is called.
+// This is not written for users who are in TransportState::PAUSED with
+// sync-the-feature disabled.
+inline constexpr char kFirstTimeTriedToMigrateSyncFeaturePausedToSignin[] =
+    "sync.first_time_tried_to_migrate_sync_feature_paused_to_signin";
+
+#if BUILDFLAG(IS_ANDROID)
+// Name of a boolean pref recording whether the WEB_APK data went through a
+// one-off wipe to fix crbug.com/361771496.
+inline constexpr char kWipedWebAPkDataForMigration[] =
+    "sync.wiped_web_apk_data_for_migration";
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace internal
 }  // namespace syncer::prefs

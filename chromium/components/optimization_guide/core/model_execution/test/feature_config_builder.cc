@@ -4,9 +4,12 @@
 
 #include "components/optimization_guide/core/model_execution/test/feature_config_builder.h"
 
+#include <initializer_list>
+
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/proto/descriptors.pb.h"
 #include "components/optimization_guide/proto/features/compose.pb.h"
+#include "components/optimization_guide/proto/model_execution.pb.h"
 #include "components/optimization_guide/proto/on_device_model_execution_config.pb.h"
 #include "components/optimization_guide/proto/text_safety_model_metadata.pb.h"
 
@@ -26,37 +29,32 @@ proto::SafetyCategoryThreshold RequireReasonable() {
   return result;
 }
 
+proto::ProtoField ProtoField(std::initializer_list<int32_t> tags) {
+  proto::ProtoField f;
+  for (int32_t tag : tags) {
+    f.add_proto_descriptors()->set_tag_number(tag);
+  }
+  return f;
+}
+
 proto::ProtoField PageUrlField() {
-  proto::ProtoField result;
-  result.add_proto_descriptors()->set_tag_number(3);
-  result.add_proto_descriptors()->set_tag_number(1);
-  return result;
+  return ProtoField({3, 1});
 }
 
 proto::ProtoField UserInputField() {
-  proto::ProtoField result;
-  result.add_proto_descriptors()->set_tag_number(7);
-  result.add_proto_descriptors()->set_tag_number(1);
-  return result;
+  return ProtoField({7, 1});
 }
 
 proto::ProtoField PreviousResponseField() {
-  proto::ProtoField result;
-  result.add_proto_descriptors()->set_tag_number(8);
-  result.add_proto_descriptors()->set_tag_number(1);
-  return result;
+  return ProtoField({8, 1});
 }
 
 proto::ProtoField OutputField() {
-  proto::ProtoField result;
-  result.add_proto_descriptors()->set_tag_number(1);
-  return result;
+  return ProtoField({1});
 }
 
 proto::ProtoField StringValueField() {
-  proto::ProtoField result;
-  result.add_proto_descriptors()->set_tag_number(1);
-  return result;
+  return ProtoField({1});
 }
 
 proto::SubstitutedString FieldSubstitution(const std::string& tmpl,
@@ -111,6 +109,21 @@ proto::OnDeviceModelExecutionFeatureConfig SimpleComposeConfig() {
   output_config.set_proto_type(proto::ComposeResponse().GetTypeName());
   *output_config.mutable_proto_field() = OutputField();
   return config;
+}
+
+proto::FeatureTextSafetyConfiguration ComposeSafetyConfig() {
+  proto::FeatureTextSafetyConfiguration config;
+  config.set_feature(proto::MODEL_EXECUTION_FEATURE_COMPOSE);
+  return config;
+}
+
+proto::TextSafetyModelMetadata SafetyMetadata(
+    std::initializer_list<proto::FeatureTextSafetyConfiguration> configs) {
+  proto::TextSafetyModelMetadata metadata;
+  for (auto& cfg : configs) {
+    *metadata.add_feature_text_safety_configurations() = std::move(cfg);
+  }
+  return metadata;
 }
 
 }  // namespace optimization_guide

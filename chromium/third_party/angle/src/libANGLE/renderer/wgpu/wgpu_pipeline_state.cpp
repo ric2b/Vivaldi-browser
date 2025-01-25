@@ -79,7 +79,8 @@ bool RenderPipelineDesc::setPrimitiveMode(gl::PrimitiveMode primitiveMode,
         changed = true;
     }
 
-    uint32_t indexFormat = webgpu::IsStripPrimitiveTopology(topology)
+    uint32_t indexFormat = webgpu::IsStripPrimitiveTopology(topology) &&
+                                   indexTypeOrInvalid != gl::DrawElementsType::InvalidEnum
                                ? PackIndexFormat(gl_wgpu::GetIndexFormat(indexTypeOrInvalid))
                                : 0;
     if (mPrimitiveState.stripIndexFormat != static_cast<uint8_t>(indexFormat))
@@ -99,6 +100,22 @@ void RenderPipelineDesc::setFrontFace(GLenum frontFace)
 void RenderPipelineDesc::setCullMode(gl::CullFaceMode cullMode, bool cullFaceEnabled)
 {
     SetBitField(mPrimitiveState.cullMode, gl_wgpu::GetCullMode(cullMode, cullFaceEnabled));
+}
+
+void RenderPipelineDesc::setColorWriteMask(size_t colorIndex, bool r, bool g, bool b, bool a)
+{
+    PackedColorTargetState &colorTarget = mColorTargetStates[colorIndex];
+    SetBitField(colorTarget.writeMask, gl_wgpu::GetColorWriteMask(r, g, b, a));
+}
+
+bool RenderPipelineDesc::setVertexAttributes(const gl::AttribArray<PackedVertexAttribute> &attribs)
+{
+    if (!memcmp(&mVertexAttributes, &attribs, sizeof(mVertexAttributes)))
+    {
+        return false;
+    }
+    memcpy(&mVertexAttributes, &attribs, sizeof(mVertexAttributes));
+    return true;
 }
 
 bool RenderPipelineDesc::setColorAttachmentFormat(size_t colorIndex, wgpu::TextureFormat format)
@@ -123,6 +140,89 @@ bool RenderPipelineDesc::setDepthStencilAttachmentFormat(wgpu::TextureFormat for
     return true;
 }
 
+bool RenderPipelineDesc::setDepthFunc(wgpu::CompareFunction compareFunc)
+{
+    if (mDepthStencilState.depthCompare == static_cast<uint8_t>(compareFunc))
+    {
+        return false;
+    }
+    SetBitField(mDepthStencilState.depthCompare, compareFunc);
+    return true;
+}
+
+bool RenderPipelineDesc::setStencilFrontFunc(wgpu::CompareFunction compareFunc)
+{
+    if (mDepthStencilState.stencilFrontCompare == static_cast<uint8_t>(compareFunc))
+    {
+        return false;
+    }
+    SetBitField(mDepthStencilState.stencilFrontCompare, compareFunc);
+    return true;
+}
+
+bool RenderPipelineDesc::setStencilFrontOps(wgpu::StencilOperation failOp,
+                                            wgpu::StencilOperation depthFailOp,
+                                            wgpu::StencilOperation passOp)
+{
+    if (mDepthStencilState.stencilFrontFailOp == static_cast<uint8_t>(failOp) &&
+        mDepthStencilState.stencilFrontDepthFailOp == static_cast<uint8_t>(depthFailOp) &&
+        mDepthStencilState.stencilFrontPassOp == static_cast<uint8_t>(passOp))
+    {
+        return false;
+    }
+    SetBitField(mDepthStencilState.stencilFrontFailOp, failOp);
+    SetBitField(mDepthStencilState.stencilFrontDepthFailOp, depthFailOp);
+    SetBitField(mDepthStencilState.stencilFrontPassOp, passOp);
+    return true;
+}
+
+bool RenderPipelineDesc::setStencilBackFunc(wgpu::CompareFunction compareFunc)
+{
+    if (mDepthStencilState.stencilBackCompare == static_cast<uint8_t>(compareFunc))
+    {
+        return false;
+    }
+    SetBitField(mDepthStencilState.stencilBackCompare, compareFunc);
+    return true;
+}
+
+bool RenderPipelineDesc::setStencilBackOps(wgpu::StencilOperation failOp,
+                                           wgpu::StencilOperation depthFailOp,
+                                           wgpu::StencilOperation passOp)
+{
+    if (mDepthStencilState.stencilBackFailOp == static_cast<uint8_t>(failOp) &&
+        mDepthStencilState.stencilBackDepthFailOp == static_cast<uint8_t>(depthFailOp) &&
+        mDepthStencilState.stencilBackPassOp == static_cast<uint8_t>(passOp))
+    {
+        return false;
+    }
+    SetBitField(mDepthStencilState.stencilBackFailOp, failOp);
+    SetBitField(mDepthStencilState.stencilBackDepthFailOp, depthFailOp);
+    SetBitField(mDepthStencilState.stencilBackPassOp, passOp);
+    return true;
+}
+
+bool RenderPipelineDesc::setStencilReadMask(uint8_t readMask)
+{
+
+    if (mDepthStencilState.stencilReadMask == readMask)
+    {
+        return false;
+    }
+    mDepthStencilState.stencilReadMask = readMask;
+    return true;
+}
+
+bool RenderPipelineDesc::setStencilWriteMask(uint8_t writeMask)
+{
+    if (mDepthStencilState.stencilWriteMask == writeMask)
+    {
+        return false;
+    }
+    mDepthStencilState.stencilWriteMask = writeMask;
+    return true;
+}
+
 size_t RenderPipelineDesc::hash() const
 {
     return angle::ComputeGenericHash(this, sizeof(*this));
@@ -137,7 +237,7 @@ angle::Result RenderPipelineDesc::createPipeline(ContextWgpu *context,
     pipelineDesc.layout = pipelineLayout;
 
     pipelineDesc.vertex.module        = shaders[gl::ShaderType::Vertex];
-    pipelineDesc.vertex.entryPoint    = "main";
+    pipelineDesc.vertex.entryPoint    = "wgslMain";
     pipelineDesc.vertex.constantCount = 0;
     pipelineDesc.vertex.constants     = nullptr;
     pipelineDesc.vertex.bufferCount   = 0;
@@ -166,7 +266,7 @@ angle::Result RenderPipelineDesc::createPipeline(ContextWgpu *context,
     if (shaders[gl::ShaderType::Fragment])
     {
         fragmentState.module        = shaders[gl::ShaderType::Fragment];
-        fragmentState.entryPoint    = "main";
+        fragmentState.entryPoint    = "wgslMain";
         fragmentState.constantCount = 0;
         fragmentState.constants     = nullptr;
 
@@ -251,7 +351,7 @@ angle::Result RenderPipelineDesc::createPipeline(ContextWgpu *context,
     }
 
     wgpu::Device device = context->getDevice();
-    *pipelineOut        = device.CreateRenderPipeline(&pipelineDesc);
+    ANGLE_WGPU_SCOPED_DEBUG_TRY(context, *pipelineOut = device.CreateRenderPipeline(&pipelineDesc));
 
     return angle::Result::Continue;
 }

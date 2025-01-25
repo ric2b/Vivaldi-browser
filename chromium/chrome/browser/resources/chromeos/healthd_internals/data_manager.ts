@@ -2,23 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {assert} from '//resources/js/assert.js';
 import {sendWithPromise} from '//resources/js/cr.js';
 
 import {LINE_CHART_COLOR_SET} from './constants.js';
 import {CpuUsageHelper} from './cpu_usage_helper.js';
 import type {CpuUsage} from './cpu_usage_helper.js';
-import type {HealthdApiBatteryResult, HealthdApiCpuResult, HealthdApiTelemetryResult, HealthdApiThermalResult} from './externs.js';
+import type {HealthdApiBatteryResult, HealthdApiCpuResult, HealthdApiMemoryResult, HealthdApiTelemetryResult, HealthdApiThermalResult} from './externs.js';
 import {DataSeries} from './line_chart/utils/data_series.js';
-import type {HealthdInternalsBatteryChartElement} from './pages/battery_chart.js';
-import type {HealthdInternalsCpuFrequencyChartElement} from './pages/cpu_frequency_chart.js';
-import type {HealthdInternalsCpuUsageChartElement} from './pages/cpu_usage_chart.js';
+import type {HealthdInternalsGenericChartElement} from './pages/generic_chart.js';
 import type {HealthdInternalsTelemetryElement} from './pages/telemetry.js';
-import type {HealthdInternalsThermalChartElement} from './pages/thermal_chart.js';
 
 const LINE_CHART_BATTERY_HEADERS: string[] = [
   'Voltage (V)',
   'Charge (Ah)',
   'Current (A)',
+];
+
+const LINE_CHART_MEMORY_HEADERS: string[] = [
+  'Available',
+  'Free',
+  'Buffers',
+  'Page Cache',
+  'Shared',
+  'Active',
+  'Inactive',
+  'Total Slab',
+  'Reclaim Slab',
+  'Unreclaim Slab',
 ];
 
 function getLineChartColor(index: number) {
@@ -34,6 +45,14 @@ function sortThermals(
   return first.source.localeCompare(second.source);
 }
 
+export interface LineChartPages {
+  battery: HealthdInternalsGenericChartElement;
+  cpuFrequency: HealthdInternalsGenericChartElement;
+  cpuUsage: HealthdInternalsGenericChartElement;
+  memory: HealthdInternalsGenericChartElement;
+  thermal: HealthdInternalsGenericChartElement;
+}
+
 /**
  * Helper class to collect and maintain the displayed data.
  */
@@ -41,25 +60,22 @@ export class DataManager {
   constructor(
       dataRetentionDuration: number,
       telemetryPage: HealthdInternalsTelemetryElement,
-      batteryChart: HealthdInternalsBatteryChartElement,
-      cpuFrequencyChart: HealthdInternalsCpuFrequencyChartElement,
-      cpuUsageChart: HealthdInternalsCpuUsageChartElement,
-      thermalChart: HealthdInternalsThermalChartElement) {
+      chartPages: LineChartPages) {
     this.dataRetentionDuration = dataRetentionDuration;
 
     this.telemetryPage = telemetryPage;
-    this.batteryChart = batteryChart;
-    this.cpuFrequencyChart = cpuFrequencyChart;
-    this.cpuUsageChart = cpuUsageChart;
-    this.thermalChart = thermalChart;
+    this.chartPages = chartPages;
 
     this.initBatteryDataSeries();
+    this.initMemoryDataSeries();
   }
 
   // Historical data for line chart. The following `DataSeries` collection
   // is fixed and initialized in constructor.
   // - Battery data.
   private batteryDataSeries: DataSeries[] = [];
+  // - Memory data.
+  private memoryDataSeries: DataSeries[] = [];
 
   // Historical data for line chart. The following `DataSeries` collection
   // is dynamic and initialized when the first batch of data is obtained.
@@ -72,10 +88,7 @@ export class DataManager {
 
   // Set in constructor.
   private readonly telemetryPage: HealthdInternalsTelemetryElement;
-  private readonly batteryChart: HealthdInternalsBatteryChartElement;
-  private readonly cpuFrequencyChart: HealthdInternalsCpuFrequencyChartElement;
-  private readonly cpuUsageChart: HealthdInternalsCpuUsageChartElement;
-  private readonly thermalChart: HealthdInternalsThermalChartElement;
+  private readonly chartPages: LineChartPages;
 
   // The helper class for calculating CPU usage.
   private readonly cpuUsageHelper: CpuUsageHelper = new CpuUsageHelper();
@@ -121,6 +134,7 @@ export class DataManager {
       this.updateBatteryData(data.battery, timestamp);
     }
     this.updateCpuFrequencyData(data.cpu, timestamp);
+    this.updateMemoryData(data.memory, timestamp);
     this.updateThermalData(data.thermals, timestamp);
 
     const cpuUsage: CpuUsage[][]|null =
@@ -130,27 +144,33 @@ export class DataManager {
     }
 
     this.removeOutdatedData(timestamp);
-
-    if (data.battery !== undefined) {
-      this.batteryChart.updateEndTime(timestamp);
-    }
-    this.cpuFrequencyChart.updateEndTime(timestamp);
-    this.thermalChart.updateEndTime(timestamp);
-    if (cpuUsage !== null) {
-      this.cpuUsageChart.updateEndTime(timestamp);
-    }
   }
 
   private removeOutdatedData(endTime: number) {
     const newStartTime = endTime - this.dataRetentionDuration;
-    for (const dataSeries of this.batteryDataSeries) {
-      dataSeries.removeOutdatedData(newStartTime);
+    const shouldUpdateChart = (dataSeriesList: DataSeries[]) => {
+      return dataSeriesList.reduce(
+          // The order within `or` expression is important because
+          // `removeOutdatedData` should be called for each `dataSeries`.
+          (isDataRemoved, dataSeries) =>
+              dataSeries.removeOutdatedData(newStartTime) || isDataRemoved,
+          false);
+    };
+
+    if (shouldUpdateChart(this.batteryDataSeries)) {
+      this.chartPages.battery.updateStartTime(newStartTime);
     }
-    for (const dataSeries of this.cpuFrequencyDataSeries) {
-      dataSeries.removeOutdatedData(newStartTime);
+    if (shouldUpdateChart(this.cpuFrequencyDataSeries)) {
+      this.chartPages.cpuFrequency.updateStartTime(newStartTime);
     }
-    for (const dataSeries of this.thermalDataSeries) {
-      dataSeries.removeOutdatedData(newStartTime);
+    if (shouldUpdateChart(this.cpuUsageDataSeries)) {
+      this.chartPages.cpuUsage.updateStartTime(newStartTime);
+    }
+    if (shouldUpdateChart(this.memoryDataSeries)) {
+      this.chartPages.memory.updateStartTime(newStartTime);
+    }
+    if (shouldUpdateChart(this.thermalDataSeries)) {
+      this.chartPages.thermal.updateStartTime(newStartTime);
     }
   }
 
@@ -191,19 +211,48 @@ export class DataManager {
 
     const cpuNumber: number =
         physcialCpuUsage.reduce((acc, item) => acc + item.length, 0);
-    if (cpuNumber !== this.cpuUsageDataSeries.length) {
+    if (cpuNumber !== this.cpuUsageDataSeries.length - 1) {
       console.warn('CPU usage data: Number of CPUs changed.');
       return;
     }
 
-    let count: number = 0;
+    if (cpuNumber === 0) {
+      console.warn('CPU usage data: CPU not found.');
+      return;
+    }
+
+    let sumCpuUsage: number = 0;
+    let count: number = 1;
     for (const logicalCpuUsage of physcialCpuUsage) {
       for (const cpuUsage of logicalCpuUsage) {
         if (cpuUsage.usagePercentage !== null) {
           this.cpuUsageDataSeries[count].addDataPoint(
               cpuUsage.usagePercentage, timestamp);
+          sumCpuUsage += cpuUsage.usagePercentage;
         }
         count += 1;
+      }
+    }
+    this.cpuUsageDataSeries[0].addDataPoint(sumCpuUsage / cpuNumber, timestamp);
+  }
+
+  private updateMemoryData(memory: HealthdApiMemoryResult, timestamp: number) {
+    const itemsInChart: Array<string|undefined> = [
+      memory.availableMemoryKib,
+      memory.freeMemoryKib,
+      memory.buffersKib,
+      memory.pageCacheKib,
+      memory.sharedMemoryKib,
+      memory.activeMemoryKib,
+      memory.inactiveMemoryKib,
+      memory.totalSlabMemoryKib,
+      memory.reclaimableSlabMemoryKib,
+      memory.unreclaimableSlabMemoryKib,
+    ];
+    assert(itemsInChart.length === this.memoryDataSeries.length);
+    for (const [index, item] of itemsInChart.entries()) {
+      if (item !== undefined) {
+        this.memoryDataSeries[index].addDataPoint(parseInt(item), timestamp);
       }
     }
   }
@@ -230,7 +279,7 @@ export class DataManager {
       this.batteryDataSeries.push(
           new DataSeries(header, getLineChartColor(index)));
     }
-    this.batteryChart.addDataSeries(this.batteryDataSeries);
+    this.chartPages.battery.addDataSeries(this.batteryDataSeries);
   }
 
   private initCpuFrequencyDataSeries(cpu: HealthdApiCpuResult) {
@@ -243,11 +292,13 @@ export class DataManager {
         count += 1;
       }
     }
-    this.cpuFrequencyChart.addDataSeries(this.cpuFrequencyDataSeries);
+    this.chartPages.cpuFrequency.addDataSeries(this.cpuFrequencyDataSeries);
   }
 
   private initCpuUsageDataSeries(physcialCpuUsage: CpuUsage[][]) {
-    let count: number = 0;
+    this.cpuUsageDataSeries.push(
+        new DataSeries('Overall', getLineChartColor(0)));
+    let count: number = 1;
     for (const [physicalCpuId, logicalCpuUsage] of physcialCpuUsage.entries()) {
       for (let logicalCpuId: number = 0; logicalCpuId < logicalCpuUsage.length;
            ++logicalCpuId) {
@@ -256,7 +307,15 @@ export class DataManager {
         count += 1;
       }
     }
-    this.cpuUsageChart.addDataSeries(this.cpuUsageDataSeries);
+    this.chartPages.cpuUsage.addDataSeries(this.cpuUsageDataSeries);
+  }
+
+  private initMemoryDataSeries() {
+    for (const [index, header] of LINE_CHART_MEMORY_HEADERS.entries()) {
+      this.memoryDataSeries.push(
+          new DataSeries(header, getLineChartColor(index)));
+    }
+    this.chartPages.memory.addDataSeries(this.memoryDataSeries);
   }
 
   private initThermalDataSeries(thermals: HealthdApiThermalResult[]) {
@@ -264,6 +323,6 @@ export class DataManager {
       this.thermalDataSeries.push(new DataSeries(
           `${thermal.name} (${thermal.source})`, getLineChartColor(index)));
     }
-    this.thermalChart.addDataSeries(this.thermalDataSeries);
+    this.chartPages.thermal.addDataSeries(this.thermalDataSeries);
   }
 }

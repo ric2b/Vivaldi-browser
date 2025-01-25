@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "ash/accessibility/accessibility_controller.h"
+#include "ash/ash_element_identifiers.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/devicetype.h"
 #include "ash/shell.h"
@@ -14,10 +15,12 @@
 #include "ash/system/bluetooth/hid_preserving_controller/disable_bluetooth_dialog_controller.h"
 #include "chromeos/constants/devicetype.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/views/controls/bulleted_label_list/bulleted_label_list_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -87,6 +90,9 @@ void DisableBluetoothDialogControllerImpl::ShowDialog(
                         weak_ptr_factory_.GetWeakPtr()))
                     .Build();
 
+  dialog->SetProperty(views::kElementIdentifierKey,
+                      kWarnBeforeDisconnectingBluetoothDialogElementId);
+
   std::vector<std::u16string> texts;
   const size_t count = std::min(devices.size(), kMaxDeviceListLength);
   for (size_t i = 0; i < count; i++) {
@@ -98,7 +104,7 @@ void DisableBluetoothDialogControllerImpl::ShowDialog(
       std::make_unique<views::BulletedLabelListView>(
           std::move(texts), views::style::TextStyle::STYLE_SECONDARY);
 
-  dialog->SetModalType(ui::MODAL_TYPE_SYSTEM);
+  dialog->SetModalType(ui::mojom::ModalType::kSystem);
   dialog->SetShowCloseButton(false);
   dialog->SetMiddleContentView(std::move(list_view));
   dialog->SetMiddleContentAlignment(views::LayoutAlignment::kStart);

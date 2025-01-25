@@ -19,67 +19,28 @@ import androidx.annotation.Nullable;
 
 import org.jni_zero.CalledByNative;
 
-import java.io.File;
 import java.io.IOException;
 
 /** This class provides methods to access content URI schemes. */
 public abstract class ContentUriUtils {
     private static final String TAG = "ContentUriUtils";
-    private static FileProviderUtil sFileProviderUtil;
-
-    // Guards access to sFileProviderUtil.
-    private static final Object sLock = new Object();
-
-    /**
-     * Provides functionality to translate a file into a content URI for use
-     * with a content provider.
-     */
-    public interface FileProviderUtil {
-        /**
-         * Generate a content URI from the given file.
-         *
-         * @param file The file to be translated.
-         */
-        Uri getContentUriFromFile(File file);
-    }
 
     // Prevent instantiation.
     private ContentUriUtils() {}
 
-    public static void setFileProviderUtil(FileProviderUtil util) {
-        synchronized (sLock) {
-            sFileProviderUtil = util;
-        }
-    }
-
     /**
-     * Get a URI for |file| which has the image capture. This function assumes that path of |file|
-     * is based on the result of UiUtils.getDirectoryForImageCapture().
-     *
-     * @param file image capture file.
-     * @return URI for |file|.
-     * @throws IllegalArgumentException when the given File is outside the paths supported by the
-     *         provider.
-     */
-    public static Uri getContentUriFromFile(File file) {
-        synchronized (sLock) {
-            if (sFileProviderUtil != null) {
-                return sFileProviderUtil.getContentUriFromFile(file);
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Opens the content URI for reading, and returns the file descriptor to
-     * the caller. The caller is responsible for closing the file descriptor.
+     * Opens the content URI for the specified mode, and returns the file descriptor to the caller.
+     * The caller is responsible for closing the file descriptor.
      *
      * @param uriString the content URI to open
+     * @param mode the mode to open. Allows all values from ParcelFileDescriptor#parseMode(): ("r",
+     *     "w", "wt", "wa", "rw" or "rwt"), but disallows "w" which has been the source of android
+     *     security issues.
      * @return file descriptor upon success, or -1 otherwise.
      */
     @CalledByNative
-    public static int openContentUriForRead(String uriString) {
-        AssetFileDescriptor afd = getAssetFileDescriptor(uriString);
+    public static int openContentUri(String uriString, String mode) {
+        AssetFileDescriptor afd = getAssetFileDescriptor(uriString, mode);
         if (afd != null) {
             return afd.getParcelFileDescriptor().detachFd();
         }
@@ -96,7 +57,7 @@ public abstract class ContentUriUtils {
     public static boolean contentUriExists(String uriString) {
         AssetFileDescriptor asf = null;
         try {
-            asf = getAssetFileDescriptor(uriString);
+            asf = getAssetFileDescriptor(uriString, "r");
             return asf != null;
         } finally {
             // Do not use StreamUtil.closeQuietly here, as AssetFileDescriptor
@@ -120,7 +81,7 @@ public abstract class ContentUriUtils {
     @CalledByNative
     public static long getContentUriFileSize(String uriString) {
         long size = -1;
-        AssetFileDescriptor afd = getAssetFileDescriptor(uriString);
+        AssetFileDescriptor afd = getAssetFileDescriptor(uriString, "r");
         if (afd != null) {
             size = afd.getLength();
         }
@@ -149,9 +110,17 @@ public abstract class ContentUriUtils {
      * Helper method to open a content URI and returns the ParcelFileDescriptor.
      *
      * @param uriString the content URI to open.
+     * @param mode the mode to open. Allows all values from ParcelFileDescriptor#parseMode(): ("r",
+     *     "w", "wt", "wa", "rw" or "rwt"), but disallows "w" which has been the source of android
+     *     security issues.
      * @return AssetFileDescriptor of the content URI, or NULL if the file does not exist.
      */
-    private static AssetFileDescriptor getAssetFileDescriptor(String uriString) {
+    private static AssetFileDescriptor getAssetFileDescriptor(String uriString, String mode) {
+        if ("w".equals(mode)) {
+            Log.e(TAG, "Cannot open files with mode 'w'");
+            return null;
+        }
+
         ContentResolver resolver = ContextUtils.getApplicationContext().getContentResolver();
         Uri uri = Uri.parse(uriString);
 
@@ -163,7 +132,7 @@ public abstract class ContentUriUtils {
                     afd = resolver.openTypedAssetFileDescriptor(uri, streamTypes[0], null);
                 }
             } else {
-                afd = resolver.openAssetFileDescriptor(uri, "r");
+                afd = resolver.openAssetFileDescriptor(uri, mode);
             }
             if (afd != null && afd.getStartOffset() != 0) {
                 StreamUtil.closeQuietly(afd);
@@ -308,26 +277,20 @@ public abstract class ContentUriUtils {
         assert isContentUri(uriString);
         Uri parsedUri = Uri.parse(uriString);
         ContentResolver resolver = ContextUtils.getApplicationContext().getContentResolver();
-        return resolver.delete(parsedUri, null, null) > 0;
-    }
-
-    /**
-     * Retrieve the content URI from the file path.
-     *
-     * @param filePathString the file path.
-     * @return content URI or null if the input params are invalid.
-     */
-    @CalledByNative
-    public static String getContentUriFromFilePath(String filePathString) {
         try {
-            Uri contentUri = getContentUriFromFile(new File(filePathString));
-            if (contentUri != null) {
-                return contentUri.toString();
+            if (DocumentsContract.deleteDocument(resolver, parsedUri)) {
+                return true;
             }
-        } catch (IllegalArgumentException e) {
-            // This happens when the given File is outside the paths supported by the provider.
-            Log.e(TAG, "Cannot retrieve content uri from file: %s", filePathString, e);
+        } catch (Exception e) {
+            Log.w(TAG, "DocumentsContract could not delete %s: %s", uriString, e.getMessage());
         }
-        return null;
+        try {
+            if (resolver.delete(parsedUri, null, null) > 0) {
+                return true;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "ContentResolver could not delete %s: %s", uriString, e.getMessage());
+        }
+        return false;
     }
 }

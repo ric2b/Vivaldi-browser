@@ -13,6 +13,7 @@ describe('FreestylerEvaluateAction', () => {
     function executeWithResult(mockResult: SDK.RuntimeModel.EvaluationResult): Promise<string> {
       const executionContextStub = sinon.createStubInstance(SDK.RuntimeModel.ExecutionContext);
       executionContextStub.evaluate.resolves(mockResult);
+      executionContextStub.runtimeModel = sinon.createStubInstance(SDK.RuntimeModel.RuntimeModel);
       return Freestyler.FreestylerEvaluateAction.execute('', executionContextStub, {throwOnSideEffect: false});
     }
 
@@ -85,8 +86,9 @@ describe('FreestylerEvaluateAction', () => {
     }
 
     async function executeForTest(code: string) {
+      const actionExpression = `const scope = {$0, $1, getEventListeners}; with (scope) {${code}}`;
       return Freestyler.FreestylerEvaluateAction.execute(
-          code, await executionContextForTest(), {throwOnSideEffect: false});
+          actionExpression, await executionContextForTest(), {throwOnSideEffect: false});
     }
 
     it('should serialize primitive values correctly', async () => {
@@ -158,11 +160,11 @@ describe('FreestylerEvaluateAction', () => {
     });
 
     it('should serialize objects correctly', async () => {
-      assert.strictEqual(await executeForTest('{const object = {key: "str"}; object}'), '{"key":"str"}');
+      assert.strictEqual(await executeForTest('const object = {key: "str"}; object;'), '{"key":"str"}');
       assert.strictEqual(
-          await executeForTest('{const object = {key: "str", secondKey: "str2"}; object}'),
+          await executeForTest('const object = {key: "str", secondKey: "str2"}; object;'),
           '{"key":"str","secondKey":"str2"}');
-      assert.strictEqual(await executeForTest('{const object = {key: 1}; object}'), '{"key":1}');
+      assert.strictEqual(await executeForTest('const object = {key: 1}; object;'), '{"key":1}');
     });
 
     it('should not continue serializing cycles', async () => {
@@ -170,7 +172,7 @@ describe('FreestylerEvaluateAction', () => {
           await executeForTest(`{
         const obj = { a: 1 };
         obj.itself = obj;
-        obj
+        obj;
       }`),
           '{"a":1,"itself":"(cycle)"}');
     });

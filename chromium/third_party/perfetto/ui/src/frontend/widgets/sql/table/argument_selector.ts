@@ -1,4 +1,4 @@
-// Copyright (C) 2023 The Android Open Source Project
+// Copyright (C) 2024 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,77 +13,125 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {raf} from '../../../../core/raf_scheduler';
-import {Engine} from '../../../../trace_processor/engine';
-import {STR} from '../../../../trace_processor/query_result';
-import {
-  constraintsToQueryPrefix,
-  constraintsToQuerySuffix,
-  SQLConstraints,
-} from '../../../../trace_processor/sql_utils';
-import {FilterableSelect} from '../../../../widgets/select';
 import {Spinner} from '../../../../widgets/spinner';
-
-import {argColumn} from './column';
-import {ArgSetIdColumn} from './table_description';
+import {
+  TableColumn,
+  tableColumnId,
+  TableColumnSet,
+  TableManager,
+} from './column';
+import {TextInput} from '../../../../widgets/text_input';
+import {scheduleFullRedraw} from '../../../../widgets/raf';
+import {hasModKey, modKey} from '../../../../base/hotkeys';
+import {MenuItem} from '../../../../widgets/menu';
+import {uuidv4} from '../../../../base/uuid';
 
 const MAX_ARGS_TO_DISPLAY = 15;
 
 interface ArgumentSelectorAttrs {
-  engine: Engine;
-  argSetId: ArgSetIdColumn;
-  tableName: string;
-  constraints: SQLConstraints;
-  // List of aliases for existing columns by the table.
-  alreadySelectedColumns: Set<string>;
-  onArgumentSelected: (argument: string) => void;
+  tableManager: TableManager;
+  columnSet: TableColumnSet;
+  alreadySelectedColumnIds: Set<string>;
+  onArgumentSelected: (column: TableColumn) => void;
 }
 
-// A widget which allows the user to select a new argument to display.
-// Dinamically queries Trace Processor to find the relevant set of arg_set_ids
-// and which args are present in these arg sets.
+// This class is responsible for rendering a menu which allows user to select which column out of ColumnSet to add.
 export class ArgumentSelector
   implements m.ClassComponent<ArgumentSelectorAttrs>
 {
-  argList?: string[];
+  searchText = '';
+  columns?: {key: string; column: TableColumn | TableColumnSet}[];
 
   constructor({attrs}: m.Vnode<ArgumentSelectorAttrs>) {
     this.load(attrs);
   }
 
   private async load(attrs: ArgumentSelectorAttrs) {
-    const queryResult = await attrs.engine.query(`
-      -- Encapsulate the query in a CTE to avoid clashes between filters
-      -- and columns of the 'args' table.
-      WITH arg_sets AS (
-        ${constraintsToQueryPrefix(attrs.constraints)}
-        SELECT DISTINCT ${attrs.tableName}.${attrs.argSetId.name} as arg_set_id
-        FROM ${attrs.tableName}
-        ${constraintsToQuerySuffix(attrs.constraints)}
-      )
-      SELECT
-        DISTINCT args.key as key
-      FROM arg_sets
-      JOIN args USING (arg_set_id)
-    `);
-    this.argList = [];
-    const it = queryResult.iter({key: STR});
-    for (; it.valid(); it.next()) {
-      const arg = argColumn(attrs.tableName, attrs.argSetId, it.key);
-      if (attrs.alreadySelectedColumns.has(arg.alias)) continue;
-      this.argList.push(it.key);
-    }
+    this.columns = await attrs.columnSet.discover(attrs.tableManager);
     raf.scheduleFullRedraw();
   }
 
   view({attrs}: m.Vnode<ArgumentSelectorAttrs>) {
-    if (this.argList === undefined) return m(Spinner);
-    return m(FilterableSelect, {
-      values: this.argList,
-      onSelected: (value: string) => attrs.onArgumentSelected(value),
-      maxDisplayedItems: MAX_ARGS_TO_DISPLAY,
-      autofocusInput: true,
+    const columns = this.columns;
+    if (columns === undefined) return m(Spinner);
+
+    // Candidates are the columns which have not been selected yet.
+    const candidates = columns.filter(
+      ({column}) =>
+        column instanceof TableColumnSet ||
+        !attrs.alreadySelectedColumnIds.has(tableColumnId(column)),
+    );
+
+    // Filter the candidates based on the search text.
+    const filtered = candidates.filter(({key}) => {
+      return key.toLowerCase().includes(this.searchText.toLowerCase());
     });
+
+    const displayed = filtered.slice(0, MAX_ARGS_TO_DISPLAY);
+
+    const extraItems = Math.max(0, filtered.length - MAX_ARGS_TO_DISPLAY);
+
+    const firstButtonUuid = uuidv4();
+
+    return [
+      m(
+        '.pf-search-bar',
+        m(TextInput, {
+          autofocus: true,
+          oninput: (event: Event) => {
+            const eventTarget = event.target as HTMLTextAreaElement;
+            this.searchText = eventTarget.value;
+            scheduleFullRedraw();
+          },
+          onkeydown: (event: KeyboardEvent) => {
+            if (filtered.length === 0) return;
+            if (event.key === 'Enter') {
+              // If there is only one item or Mod-Enter was pressed, select the first element.
+              if (filtered.length === 1 || hasModKey(event)) {
+                const params = {bubbles: true};
+                if (hasModKey(event)) {
+                  Object.assign(params, modKey());
+                }
+                const pointerEvent = new PointerEvent('click', params);
+                (
+                  document.getElementById(firstButtonUuid) as HTMLElement | null
+                )?.dispatchEvent(pointerEvent);
+              }
+            }
+          },
+          value: this.searchText,
+          placeholder: 'Filter...',
+          className: 'pf-search-box',
+        }),
+      ),
+      ...displayed.map(({key, column}, index) =>
+        m(
+          MenuItem,
+          {
+            id: index === 0 ? firstButtonUuid : undefined,
+            label: key,
+            onclick: (event) => {
+              if (column instanceof TableColumnSet) return;
+              attrs.onArgumentSelected(column);
+              // For Control-Click, we don't want to close the menu to allow the user
+              // to select multiple items in one go.
+              if (hasModKey(event)) {
+                event.stopPropagation();
+              }
+              // Otherwise this popup will be closed.
+            },
+          },
+          column instanceof TableColumnSet &&
+            m(ArgumentSelector, {
+              columnSet: column,
+              alreadySelectedColumnIds: attrs.alreadySelectedColumnIds,
+              onArgumentSelected: attrs.onArgumentSelected,
+              tableManager: attrs.tableManager,
+            }),
+        ),
+      ),
+      Boolean(extraItems) && m('i', `+${extraItems} more`),
+    ];
   }
 }

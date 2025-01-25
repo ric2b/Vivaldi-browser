@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/webauthn/enclave_manager.h"
 
 #include <array>
@@ -360,8 +365,10 @@ cbor::Value BuildRegistrationMessage(
                              : enclave::kSoftwareKey;
   pub_keys.emplace(key_type, identity_key.GetSubjectPublicKeyInfo());
   if (uv_key) {
-    pub_keys.emplace(enclave::kUserVerificationKey,
-                     uv_key->key().GetPublicKey());
+    const char* uv_key_type = uv_key->key().IsHardwareBacked()
+                                  ? enclave::kUserVerificationKey
+                                  : enclave::kSoftwareUserVerificationKey;
+    pub_keys.emplace(uv_key_type, uv_key->key().GetPublicKey());
   }
 
   cbor::Value::MapValue request1;
@@ -894,8 +901,9 @@ base::flat_map<int32_t, std::vector<uint8_t>> GetNewSecretsToStore(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 UserVerifyingKeyProviderConfigChromeos MakeUserVerifyingKeyConfig(
     EnclaveManager::UVKeyOptions options) {
-  UserVerifyingKeyProviderConfigChromeos config{.dialog_controller =
-                                                    options.dialog_controller};
+  UserVerifyingKeyProviderConfigChromeos config{options.dialog_controller,
+                                                /*window=*/nullptr,
+                                                options.rp_id};
   if (options.render_frame_host_id) {
     auto* rfh = content::RenderFrameHost::FromID(options.render_frame_host_id);
     // This is ultimately invoked from GpmEnclaveController, which can't outlive
@@ -1052,8 +1060,8 @@ ParseVaultAndMemberResponse(const int32_t key_version,
   }
   const std::vector<uint8_t>& member_proof = it->second.GetBytestring();
 
-  auto member_keys_source = trusted_vault::PrecomputedMemberKeys(
-      key_version, wrapped_sds, member_proof);
+  auto member_keys_source =
+      trusted_vault::MemberKeys(key_version, wrapped_sds, member_proof);
 
   return std::make_pair(std::move(*vault), std::move(member_keys_source));
 }
@@ -3065,7 +3073,7 @@ enclave::SigningCallback EnclaveManager::UserVerifyingKeySigningCallback(
               uv_signing_key->key().Sign(
                   message_to_be_signed,
                   base::BindOnce(
-                      [](std::string device_id,
+                      [](std::string device_id, const bool is_hardware_backed,
                          base::OnceCallback<void(
                              std::optional<enclave::ClientSignature>)>
                              result_callback,
@@ -3084,11 +3092,15 @@ enclave::SigningCallback EnclaveManager::UserVerifyingKeySigningCallback(
                         client_signature.signature =
                             std::move(maybe_signature.value());
                         client_signature.key_type =
-                            enclave::ClientKeyType::kUserVerified;
+                            is_hardware_backed
+                                ? enclave::ClientKeyType::kUserVerified
+                                : enclave::ClientKeyType::kSoftwareUserVerified;
                         std::move(result_callback)
                             .Run(std::move(client_signature));
                       },
-                      std::move(device_id), std::move(result_callback)));
+                      std::move(device_id),
+                      uv_signing_key->key().IsHardwareBacked(),
+                      std::move(result_callback)));
             },
             enclave_manager->user_->device_id(),
             std::move(message_to_be_signed), std::move(result_callback));

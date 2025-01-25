@@ -37,8 +37,7 @@ namespace {
 // Please update the description of TailoredInfo field in csd.proto when
 // changing this value.
 // LINT.IfChange
-constexpr int kTailoredWarningVersion = 3;
-constexpr int kTailoredWarningVersionDownloadReportWithoutUserDecision = 5;
+constexpr int kTailoredWarningVersion = 5;
 // LINT.ThenChange(/components/safe_browsing/core/common/proto/csd.proto)
 
 DownloadRequestMaker::TabUrls TabUrlsFromWebContents(
@@ -58,8 +57,8 @@ DownloadRequestMaker::TabUrls TabUrlsFromWebContents(
 void SetDownloadItemWarningData(download::DownloadItem* item,
                                 const std::optional<std::string>& password,
                                 const FileAnalyzer::Results& results) {
-  DownloadItemWarningData::SetIsEncryptedArchive(
-      item, results.encryption_info.is_encrypted);
+  DownloadItemWarningData::SetIsTopLevelEncryptedArchive(
+      item, results.encryption_info.is_top_level_encrypted);
   DownloadItemWarningData::SetIsFullyExtractedArchive(
       item, results.archive_summary.parser_status() ==
                     ClientDownloadRequest::ArchiveSummary::VALID &&
@@ -204,10 +203,6 @@ void DownloadRequestMaker::Start(DownloadRequestMaker::Callback callback) {
 
   *request_->mutable_population() =
       GetUserPopulationForProfileWithCookieTheftExperiments(profile);
-  if (base::FeatureList::IsEnabled(kNestedArchives)) {
-    request_->mutable_population()->add_finch_active_groups(
-        "SafeBrowsingArchiveImprovements.Enabled");
-  }
   if (profile && IsEnhancedProtectionEnabled(*profile->GetPrefs()) &&
       base::FeatureList::IsEnabled(kDeepScanningCriteria)) {
     request_->mutable_population()->add_finch_active_groups(
@@ -306,10 +301,7 @@ void DownloadRequestMaker::OnGotTabRedirects(
 
 void DownloadRequestMaker::PopulateTailoredInfo() {
   ClientDownloadRequest::TailoredInfo tailored_info;
-  int version = base::FeatureList::IsEnabled(
-                    safe_browsing::kDownloadReportWithoutUserDecision)
-                    ? kTailoredWarningVersionDownloadReportWithoutUserDecision
-                    : kTailoredWarningVersion;
+  int version = kTailoredWarningVersion;
   tailored_info.set_version(version);
   *request_->mutable_tailored_info() = tailored_info;
 }

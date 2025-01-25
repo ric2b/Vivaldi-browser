@@ -15,11 +15,13 @@ limitations under the License.
 
 #include "xla/tests/exhaustive/exhaustive_op_test_utils.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -30,45 +32,124 @@ limitations under the License.
 #include "absl/meta/type_traits.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "Eigen/Core"  // from @eigen_archive
+#include "Eigen/Core"
 #include "xla/literal.h"
+#include "xla/tsl/lib/core/status_test_util.h"
+#include "xla/tsl/util/command_line_flags.h"
 #include "xla/types.h"
+#include "tsl/platform/env.h"
+#include "tsl/platform/file_system.h"
+#include "tsl/platform/path.h"
+#include "tsl/platform/test.h"
 
 namespace xla {
 namespace exhaustive_op_test {
 
-// For f64, f32, f16, and bf16, we need 17, 9, 5, and 4 decimal places of
-// precision to be guaranteed that we're printing the full number.
-//
-// (The general formula is, given a floating-point number with S significand
-// bits, the number of decimal digits needed to print it to full precision is
-//
-//   ceil(1 + S * log_10(2)) ~= ceil(1 + S * 0.30103).
-//
-// See https://people.eecs.berkeley.edu/~wkahan/Math128/BinDecBin.pdf.)
+int eup_version = 0;
+
+int GetEupVersion() { return eup_version; }
+
+bool dump_values = false;
+
+bool ShouldDumpValues() { return dump_values; }
+
+void AddExhaustiveFlags(std::vector<tsl::Flag>& flag_list) {
+  flag_list.push_back(
+      tsl::Flag("dump_values", &xla::exhaustive_op_test::dump_values,
+                "Include to dump files of the expected and actual results "
+                "(default false)."));
+}
+
+bool IsSubnormalReal(xla::complex64 value) { return IsSubnormal(value.real()); }
+
+bool IsSubnormalReal(xla::complex128 value) {
+  return IsSubnormal(value.real());
+}
+
+bool IsMinNormalReal(xla::complex64 value) { return IsMinNormal(value.real()); }
+
+bool IsMinNormalReal(xla::complex128 value) {
+  return IsMinNormal(value.real());
+}
+
+bool IsSubnormalImaginary(xla::complex64 value) {
+  return IsSubnormal(value.imag());
+}
+
+bool IsSubnormalImaginary(xla::complex128 value) {
+  return IsSubnormal(value.imag());
+}
+
+bool IsMinNormalImaginary(xla::complex64 value) {
+  return IsMinNormal(value.imag());
+}
+
+bool IsMinPositiveImaginary(xla::complex128 value) {
+  return IsMinNormal(value.imag());
+}
+
+/*static*/ ErrorSpec::Builder builder() { return ErrorSpecBuilder(); }
+
+ErrorSpecBuilder& ErrorSpecBuilder::abs_err(double abs_err) & {
+  spec_.abs_err = abs_err;
+  return *this;
+}
+
+ErrorSpecBuilder& ErrorSpecBuilder::rel_err(double rel_err) & {
+  spec_.rel_err = rel_err;
+  return *this;
+}
+
+ErrorSpecBuilder& ErrorSpecBuilder::distance_err(int64_t distance_err) & {
+  spec_.distance_err = distance_err;
+  return *this;
+}
+
+ErrorSpecBuilder& ErrorSpecBuilder::strict_signed_zeros(
+    bool strict_signed_zeros) & {
+  spec_.strict_signed_zeros = strict_signed_zeros;
+  return *this;
+}
+
+ErrorSpecBuilder& ErrorSpecBuilder::skip_comparison(bool skip_comparison) & {
+  spec_.skip_comparison = skip_comparison;
+  return *this;
+}
+
+ErrorSpecBuilder&& ErrorSpecBuilder::abs_err(double abs_err) && {
+  spec_.abs_err = abs_err;
+  return std::move(*this);
+}
+
+ErrorSpecBuilder&& ErrorSpecBuilder::rel_err(double rel_err) && {
+  spec_.rel_err = rel_err;
+  return std::move(*this);
+}
+
+ErrorSpecBuilder&& ErrorSpecBuilder::distance_err(int64_t distance_err) && {
+  spec_.distance_err = distance_err;
+  return std::move(*this);
+}
+
+ErrorSpecBuilder&& ErrorSpecBuilder::strict_signed_zeros(
+    bool strict_signed_zeros) && {
+  spec_.strict_signed_zeros = strict_signed_zeros;
+  return std::move(*this);
+}
+
+ErrorSpecBuilder&& ErrorSpecBuilder::skip_comparison(bool skip_comparison) && {
+  spec_.skip_comparison = skip_comparison;
+  return std::move(*this);
+}
+
+ErrorSpecBuilder::operator ErrorSpec() && { return std::move(*this).build(); }
+
+ErrorSpec ErrorSpecBuilder::build() && { return spec_; }
+
 namespace {
-template <typename T>
-struct ComponentStringifyFormat {
-  static const absl::string_view value;
-};
-
-template <>
-constexpr absl::string_view ComponentStringifyFormat<double>::value =
-    "%0.17g (0x%16x)";
-
-template <>
-constexpr absl::string_view ComponentStringifyFormat<float>::value =
-    "%0.9g (0x%08x)";
-
-template <>
-constexpr absl::string_view ComponentStringifyFormat<Eigen::half>::value =
-    "%0.5g (0x%04x)";
-
-template <>
-constexpr absl::string_view ComponentStringifyFormat<bfloat16>::value =
-    "%0.4g (0x%04x)";
 
 template <typename Type, typename FuncPtr>
 ErrorSpec CallErrorSpec(FuncPtr* func, const std::array<Type, 1>& in) {
@@ -286,8 +367,12 @@ template <
     typename NativeT, typename IntegralType,
     typename std::enable_if<!is_complex_t<NativeT>::value>::type* = nullptr>
 std::string StringifyNum(NativeT x) {
-  return absl::StrFormat(ComponentStringifyFormat<NativeT>::value,
-                         static_cast<double>(x), BitCast<IntegralType>(x));
+  return absl::StrFormat("%0.*g (0x%0*x)",
+                         std::numeric_limits<NativeT>::max_digits10,
+                         static_cast<double>(x),
+                         // N.B.: `|bytes| * 8 / 4` multiplied by 8 for bytes to
+                         // bits and then divided by 4 for bits to hexdigits.
+                         sizeof(IntegralType) * 2, BitCast<IntegralType>(x));
 }
 
 template <
@@ -315,6 +400,22 @@ std::string StringifyNum(const std::array<NativeT, N>& inputs) {
 }
 
 template <typename ErrorGenerator>
+void PrintSkipped(int64_t* skipped, const ErrorGenerator& err_generator) {
+  // We send some fixed amount of skipped messages to the log. The remainder we
+  // squelch unless we're at vlog level 2.
+  constexpr int64_t kMaxMismatchesLoggedToErr = 1000;
+
+  (*skipped)++;
+  if (*skipped < kMaxMismatchesLoggedToErr || VLOG_IS_ON(2)) {
+    LOG(WARNING) << err_generator();
+  } else if (*skipped == kMaxMismatchesLoggedToErr) {
+    LOG(WARNING) << "Not printing any more skipped messages; pass "
+                    "--vmodule=exhaustive_op_test=2 to see "
+                    "all of them.";
+  }
+}
+
+template <typename ErrorGenerator>
 void PrintMismatch(int64_t* mismatches, const ErrorGenerator& err_generator) {
   // We send a few mismatches to gunit so they show up nicely in test logs.
   // Then we send more to LOG(ERROR).  The remainder we squelch unless we're
@@ -333,29 +434,72 @@ void PrintMismatch(int64_t* mismatches, const ErrorGenerator& err_generator) {
                   "all of them.";
   }
 }
+
 }  // namespace
+
+// If we are in debug mode, we fail the test execution at the first
+// comparison failure to avoid dumping too much log data and ensure the
+// relevant debugging information is the last logged data.
+//
+// If we are not in debug mode, we will continue to the next loop iteration.
+#define EXPECT_NEAR_FAIL_OR_CONTINUE() \
+  if (should_emit_debug_logging_) {    \
+    FAIL();                            \
+  } else {                             \
+    continue;                          \
+  }                                    \
+  static_assert(true, "")
 
 template <PrimitiveType T, size_t N>
 void ExhaustiveOpTestBase<T, N>::ExpectNear(
-    const InputLiterals& input_literals, const Literal& result_literal,
+    const LiteralInputs& input_literals, const Literal& result_literal,
     EvaluateOp evaluate_op, ErrorSpecGen error_spec_gen,
     OutputRangeCheck check_valid_range) {
   // Cache for when all components are subnormal testing values.
   std::vector<NativeRefT> pure_subnormal_cache;
-  // Since we take the cross product of all possible test values, and each
-  // component has kNumSubnormalSubstitutionValues possible test values, then
-  // the total number of different cache locations are
-  // kNumSubnormalSubstitutionValues raised to the num_components.
-  // num_components = N for the reals, and 2*N for the complex.
-  int64_t max_cache_size =
-      pow(kNumSubnormalSubstitutionValues, N * (kIsComplex ? 2 : 1));
-  pure_subnormal_cache.reserve(max_cache_size);
-  for (int i = 0; i < max_cache_size; ++i) {
-    pure_subnormal_cache.push_back(CallOperation(
-        evaluate_op, FromCacheLocation<kIsComplex, NativeRefT, N>(i)));
+  // TODO(b/353790524): Subnormal cache does not seem to work properly with
+  // more than 1 input.
+  if constexpr (N == 1) {
+    // Since we take the cross product of all possible test values, and each
+    // component has kNumSubnormalSubstitutionValues possible test values, then
+    // the total number of different cache locations are
+    // kNumSubnormalSubstitutionValues raised to the num_components.
+    // num_components = N for the reals, and 2*N for the complex.
+    int64_t max_cache_size =
+        pow(kNumSubnormalSubstitutionValues, N * (Traits::kIsComplex ? 2 : 1));
+    pure_subnormal_cache.reserve(max_cache_size);
+    for (int i = 0; i < max_cache_size; ++i) {
+      pure_subnormal_cache.push_back(CallOperation(
+          evaluate_op,
+          FromCacheLocation<Traits::kIsComplex, NativeRefT, N>(i)));
+    }
   }
 
-  NativeInputsList inputs_arr;
+  // Dump file for the test. This is unused unless this->should_dump_values is
+  // true.
+  std::unique_ptr<tsl::WritableFile> dump_file;
+  if (should_dump_values_) {
+    auto* env = tsl::Env::Default();
+
+    std::string cleaned_suite_name =
+        absl::StrReplaceAll(SuiteName(), {{"/", "__"}});
+    std::string cleaned_test_name =
+        absl::StrReplaceAll(TestName(), {{"/", "__"}});
+    std::string dump_filename = absl::StrFormat(
+        "%s_%s_dump.txt", cleaned_suite_name, cleaned_test_name);
+
+    std::string outdir;
+    if (tsl::io::GetTestUndeclaredOutputsDir(&outdir)) {
+      dump_filename = tsl::io::JoinPath(outdir, dump_filename);
+    }
+
+    TF_EXPECT_OK(env->NewWritableFile(dump_filename, &dump_file));
+    TF_EXPECT_OK(
+        dump_file->Append("input values -> actual output {expected output}\n"
+                          "-----------------------------------------------\n"));
+  }
+
+  NativeListInputs inputs_arr;
   for (int i = 0; i < N; ++i) {
     const Literal& literal = input_literals[i];
     inputs_arr[i] = literal.data<NativeT>();
@@ -363,6 +507,7 @@ void ExhaustiveOpTestBase<T, N>::ExpectNear(
 
   absl::Span<const NativeT> result_arr = result_literal.data<NativeT>();
 
+  int64_t skipped = 0;
   int64_t mismatches = 0;
 
   for (int64_t i = 0; i < result_arr.size(); ++i) {
@@ -377,7 +522,36 @@ void ExhaustiveOpTestBase<T, N>::ExpectNear(
     NativeT actual = result_arr[i];
     NativeT expected =
         static_cast<NativeT>(CallOperation(evaluate_op, inputs_ref_ty));
+
+    // Dump input, actual, and expected values _before_ we do error checking to
+    // avoid the continues.
+    if (should_dump_values_) {
+      std::string result_string;
+      absl::StrAppend(
+          &result_string,
+          StringifyNum<NativeT, ComponentIntegralNativeT, N>(inputs), " -> ",
+          StringifyNum<NativeT, ComponentIntegralNativeT>(actual));
+      absl::StrAppend(&result_string, " {",
+                      StringifyNum<NativeT, ComponentIntegralNativeT>(expected),
+                      "}");
+      absl::StrAppend(&result_string, "\n");
+      TF_EXPECT_OK(dump_file->Append(result_string));
+    }
+
     ErrorSpec error_spec = CallErrorSpec(error_spec_gen, inputs);
+    ASSERT_GE(error_spec.abs_err, 0.0);
+    ASSERT_GE(error_spec.rel_err, 0.0);
+    ASSERT_GE(error_spec.distance_err, 0.0);
+
+    if (error_spec.skip_comparison) {
+      PrintSkipped(&skipped, [&] {
+        return absl::StrFormat(
+            "skipping tolerance check for input %s due to "
+            "ErrorSpec::skip_comparison",
+            StringifyNum<NativeT, ComponentIntegralNativeT, N>(inputs));
+      });
+      continue;
+    }
 
     if (check_valid_range != nullptr && !check_valid_range(inputs, actual)) {
       PrintMismatch(&mismatches, [&] {
@@ -386,7 +560,7 @@ void ExhaustiveOpTestBase<T, N>::ExpectNear(
             StringifyNum<NativeT, ComponentIntegralNativeT, N>(inputs),
             StringifyNum<NativeT, ComponentIntegralNativeT>(actual));
       });
-      continue;
+      EXPECT_NEAR_FAIL_OR_CONTINUE();
     }
 
     if (IsClose(static_cast<NativeRefT>(expected),
@@ -407,7 +581,7 @@ void ExhaustiveOpTestBase<T, N>::ExpectNear(
             StringifyNum<NativeT, ComponentIntegralNativeT>(expected),
             StringifyNum<NativeT, ComponentIntegralNativeT>(actual));
       });
-      continue;
+      EXPECT_NEAR_FAIL_OR_CONTINUE();
     }
 
     // Otherwise, we need to test the additional subnormal test values.
@@ -417,13 +591,20 @@ void ExhaustiveOpTestBase<T, N>::ExpectNear(
 
     for (NativeRefInputs test_value : subnormal_test_inputs) {
       NativeRefT result;
-      int cache_loc =
-          GetCacheLocation<kIsComplex, typename NativeRefInputs::value_type, N>(
-              test_value);
-      if (cache_loc == kInvalidCacheIndex) {
-        result = CallOperation(evaluate_op, test_value);
+      // TODO(b/353790524): Subnormal cache does not seem to work properly with
+      // more than 1 input.
+      if constexpr (N == 1) {
+        int cache_loc =
+            GetCacheLocation<Traits::kIsComplex,
+                             typename NativeRefInputs::value_type, N>(
+                test_value);
+        if (cache_loc == kInvalidCacheIndex) {
+          result = CallOperation(evaluate_op, test_value);
+        } else {
+          result = pure_subnormal_cache[cache_loc];
+        }
       } else {
-        result = pure_subnormal_cache[cache_loc];
+        result = CallOperation(evaluate_op, test_value);
       }
 
       if (IsClose(result, static_cast<NativeRefT>(actual), error_spec)) {
@@ -445,15 +626,14 @@ void ExhaustiveOpTestBase<T, N>::ExpectNear(
 
     CHECK_EQ(subnormal_test_inputs.size(), subnormal_test_results.size());
     for (int i = 0; i < subnormal_test_inputs.size(); ++i) {
-      using IntegralNativeRefT =
-          typename ExhaustiveOpTestBase<kRef, N>::ComponentIntegralNativeT;
       absl::StrAppend(
           &mismatch,
-          absl::StrFormat("  %10s (evaluated at %s)\n",
-                          StringifyNum<NativeRefT, IntegralNativeRefT>(
-                              subnormal_test_results[i]),
-                          GetSubnormalDescription<kIsComplex, NativeRefT, N>(
-                              subnormal_test_inputs[i], inputs_ref_ty)));
+          absl::StrFormat(
+              "  %10s (evaluated at %s)\n",
+              StringifyNum<NativeRefT, ComponentIntegralNativeRefT>(
+                  subnormal_test_results[i]),
+              GetSubnormalDescription<Traits::kIsComplex, NativeRefT, N>(
+                  subnormal_test_inputs[i], inputs_ref_ty)));
     }
     absl::StrAppend(
         &mismatch,
@@ -462,8 +642,13 @@ void ExhaustiveOpTestBase<T, N>::ExpectNear(
             StringifyNum<NativeT, ComponentIntegralNativeT>(actual)));
 
     PrintMismatch(&mismatches, [mismatch] { return mismatch; });
+    EXPECT_NEAR_FAIL_OR_CONTINUE();
   }
   EXPECT_EQ(mismatches, 0);
+
+  if (should_dump_values_) {
+    TF_EXPECT_OK(dump_file->Close());
+  }
 }
 
 template class ExhaustiveOpTestBase<C128, 1>;

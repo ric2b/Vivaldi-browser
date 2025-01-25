@@ -26,6 +26,7 @@ export class CdpTarget extends Target {
     #targetInfo;
     #targetManager;
     #sessionFactory;
+    #childTargets = new Set();
     _initializedDeferred = Deferred.create();
     _isClosedDeferred = Deferred.create();
     _targetId;
@@ -50,16 +51,25 @@ export class CdpTarget extends Target {
         const session = this._session();
         if (!session) {
             return await this.createCDPSession().then(client => {
-                return CdpPage._create(client, this, false, null);
+                return CdpPage._create(client, this, null);
             });
         }
-        return await CdpPage._create(session, this, false, null);
+        return await CdpPage._create(session, this, null);
     }
     _subtype() {
         return this.#targetInfo.subtype;
     }
     _session() {
         return this.#session;
+    }
+    _addChildTarget(target) {
+        this.#childTargets.add(target);
+    }
+    _removeChildTarget(target) {
+        this.#childTargets.delete(target);
+    }
+    _childTargets() {
+        return this.#childTargets;
     }
     _sessionFactory() {
         if (!this.#sessionFactory) {
@@ -154,10 +164,8 @@ export class CdpTarget extends Target {
 export class PageTarget extends CdpTarget {
     #defaultViewport;
     pagePromise;
-    #ignoreHTTPSErrors;
-    constructor(targetInfo, session, browserContext, targetManager, sessionFactory, ignoreHTTPSErrors, defaultViewport) {
+    constructor(targetInfo, session, browserContext, targetManager, sessionFactory, defaultViewport) {
         super(targetInfo, session, browserContext, targetManager, sessionFactory);
-        this.#ignoreHTTPSErrors = ignoreHTTPSErrors;
         this.#defaultViewport = defaultViewport ?? undefined;
     }
     _initialize() {
@@ -191,7 +199,7 @@ export class PageTarget extends CdpTarget {
             this.pagePromise = (session
                 ? Promise.resolve(session)
                 : this._sessionFactory()(/* isAutoAttachEmulated=*/ false)).then(client => {
-                return CdpPage._create(client, this, this.#ignoreHTTPSErrors, this.#defaultViewport ?? null);
+                return CdpPage._create(client, this, this.#defaultViewport ?? null);
             });
         }
         return (await this.pagePromise) ?? null;

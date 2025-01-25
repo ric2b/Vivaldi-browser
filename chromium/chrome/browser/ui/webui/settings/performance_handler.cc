@@ -7,11 +7,11 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/values.h"
+#include "chrome/browser/feedback/show_feedback_page.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "components/performance_manager/public/features.h"
@@ -79,7 +79,7 @@ base::Value PerformanceHandler::GetCurrentOpenSites() {
       const GURL url = web_contents->GetLastCommittedURL();
       if (url.is_valid() && url.SchemeIsHTTPOrHTTPS()) {
         last_active_time_host_pairs.insert(
-            std::make_pair(web_contents->GetLastActiveTime(), url.host()));
+            std::make_pair(web_contents->GetLastActiveTimeTicks(), url.host()));
       }
     }
   }

@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {BrowserProxy} from 'chrome-untrusted://lens/browser_proxy.js';
-import type {CenterRotatedBox} from 'chrome-untrusted://lens/geometry.mojom-webui.js';
-import type {LensPageHandlerInterface, LensPageRemote, UserAction} from 'chrome-untrusted://lens/lens.mojom-webui.js';
-import {LensPageCallbackRouter} from 'chrome-untrusted://lens/lens.mojom-webui.js';
+import type {BrowserProxy} from 'chrome-untrusted://lens-overlay/browser_proxy.js';
+import type {CenterRotatedBox} from 'chrome-untrusted://lens-overlay/geometry.mojom-webui.js';
+import type {LensPageHandlerInterface, LensPageRemote, SemanticEvent, UserAction} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
+import {LensPageCallbackRouter} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
 import type {ClickModifiers} from 'chrome-untrusted://resources/mojo/ui/base/mojom/window_open_disposition.mojom-webui.js';
 import {TestBrowserProxy} from 'chrome-untrusted://webui-test/test_browser_proxy.js';
 
@@ -30,8 +30,14 @@ export class TestLensOverlayPageHandler extends TestBrowserProxy implements
       'issueLensObjectRequest',
       'issueTextSelectionRequest',
       'issueTranslateSelectionRequest',
+      'issueTranslateFullPageRequest',
+      'issueEndTranslateModeRequest',
+      'notifyOverlayInitialized',
       'copyText',
+      'copyImage',
+      'saveAsImage',
       'recordUkmAndTaskCompletionForLensOverlayInteraction',
+      'recordLensOverlaySemanticEvent',
     ]);
   }
 
@@ -88,13 +94,39 @@ export class TestLensOverlayPageHandler extends TestBrowserProxy implements
     this.methodCalled('issueTranslateSelectionRequest', query);
   }
 
+  issueTranslateFullPageRequest(
+      sourceLanguage: string, targetLanguage: string) {
+    this.methodCalled(
+        'issueTranslateFullPageRequest', sourceLanguage, targetLanguage);
+  }
+
+  issueEndTranslateModeRequest() {
+    this.methodCalled('issueEndTranslateModeRequest');
+  }
+
+  notifyOverlayInitialized() {
+    this.methodCalled('notifyOverlayInitialized');
+  }
+
   copyText(text: string) {
     this.methodCalled('copyText', text);
+  }
+
+  copyImage(region: CenterRotatedBox) {
+    this.methodCalled('copyImage', region);
+  }
+
+  saveAsImage(region: CenterRotatedBox) {
+    this.methodCalled('saveAsImage', region);
   }
 
   recordUkmAndTaskCompletionForLensOverlayInteraction(userAction: UserAction) {
     this.methodCalled(
         'recordUkmAndTaskCompletionForLensOverlayInteraction', userAction);
+  }
+
+  recordLensOverlaySemanticEvent(semanticEvent: SemanticEvent) {
+    this.methodCalled('recordLensOverlaySemanticEvent', semanticEvent);
   }
 }
 

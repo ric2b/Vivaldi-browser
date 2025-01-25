@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/discards/discards_ui.h"
 
 #include <utility>
@@ -147,7 +152,7 @@ class DiscardsDetailsProviderImpl : public discards::mojom::DetailsProvider {
       info->discard_count = lifecycle_unit->GetDiscardCount();
       info->utility_rank = rank++;
       const base::TimeTicks last_focused_time =
-          lifecycle_unit->GetLastFocusedTime();
+          lifecycle_unit->GetLastFocusedTimeTicks();
       const base::TimeDelta elapsed =
           (last_focused_time == base::TimeTicks::Max())
               ? base::TimeDelta()
@@ -163,7 +168,7 @@ class DiscardsDetailsProviderImpl : public discards::mojom::DetailsProvider {
       // lifecycle state. This should be replaced with the actual page lifecycle
       // state information from Blink, but this depends on implementing the
       // passive state and plumbing it to the browser.
-      info->has_focus = lifecycle_unit->GetLastFocusedTime().is_max();
+      info->has_focus = lifecycle_unit->GetLastFocusedTimeTicks().is_max();
 
       infos.push_back(std::move(info));
     }

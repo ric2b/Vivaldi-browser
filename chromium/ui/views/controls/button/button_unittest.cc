@@ -189,7 +189,7 @@ class ButtonTest : public ViewsTestBase {
     // correctly.
     widget_ = std::make_unique<Widget>();
     Widget::InitParams params =
-        CreateParams(Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
+        CreateParams(Widget::InitParams::CLIENT_OWNS_WIDGET,
                      Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     params.bounds = gfx::Rect(0, 0, 650, 650);
     widget_->Init(std::move(params));
@@ -267,9 +267,8 @@ TEST_F(ButtonTest, HoverStateOnVisibilityChange) {
     // If another widget has capture, the button should ignore mouse position
     // and not enter hovered state.
     Widget second_widget;
-    Widget::InitParams params =
-        CreateParams(Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
-                     Widget::InitParams::TYPE_POPUP);
+    Widget::InitParams params = CreateParams(
+        Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
     params.bounds = gfx::Rect(700, 700, 10, 10);
     second_widget.Init(std::move(params));
     second_widget.Show();
@@ -1008,6 +1007,38 @@ TEST_F(ButtonTest, AccessibleRole) {
   EXPECT_EQ(data.role, ax::mojom::Role::kCheckBox);
   EXPECT_EQ(button()->GetViewAccessibility().GetCachedRole(),
             ax::mojom::Role::kCheckBox);
+}
+
+TEST_F(ButtonTest, AccessibleCheckedState) {
+  ui::AXNodeData data;
+  event_generator()->MoveMouseTo(button()->GetBoundsInScreen().CenterPoint());
+  event_generator()->PressLeftButton();
+  EXPECT_EQ(Button::STATE_PRESSED, button()->GetState());
+  button()->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetCheckedState(), ax::mojom::CheckedState::kTrue);
+
+  event_generator()->ReleaseLeftButton();
+  EXPECT_EQ(Button::STATE_HOVERED, button()->GetState());
+  data = ui::AXNodeData();
+  button()->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetCheckedState(), ax::mojom::CheckedState::kNone);
+}
+
+TEST_F(ButtonTest, AccessibleDefaultActionVerb) {
+  ui::AXNodeData data;
+  button()->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetDefaultActionVerb(), ax::mojom::DefaultActionVerb::kPress);
+
+  data = ui::AXNodeData();
+  button()->SetEnabled(false);
+  button()->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(
+      data.HasIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb));
+
+  data = ui::AXNodeData();
+  button()->SetEnabled(true);
+  button()->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetDefaultActionVerb(), ax::mojom::DefaultActionVerb::kPress);
 }
 
 TEST_F(ButtonTest, AnchorHighlightSetsHiglight) {

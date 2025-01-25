@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/feed/core/v2/types.h"
 
 #include <ostream>
@@ -118,10 +123,13 @@ feedwire::ClientInfo RequestMetadata::ToClientInfo() const {
 }
 
 NetworkResponseInfo::NetworkResponseInfo() = default;
-NetworkResponseInfo::~NetworkResponseInfo() = default;
 NetworkResponseInfo::NetworkResponseInfo(const NetworkResponseInfo&) = default;
+NetworkResponseInfo::NetworkResponseInfo(NetworkResponseInfo&&) = default;
 NetworkResponseInfo& NetworkResponseInfo::operator=(
     const NetworkResponseInfo&) = default;
+NetworkResponseInfo& NetworkResponseInfo::operator=(NetworkResponseInfo&&) =
+    default;
+NetworkResponseInfo::~NetworkResponseInfo() = default;
 
 NetworkResponse::NetworkResponse() = default;
 NetworkResponse::NetworkResponse(const std::string& response_bytes,

@@ -17,6 +17,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/image_view.h"
 
 namespace ash {
@@ -26,6 +27,9 @@ NetworkTrayView::NetworkTrayView(Shelf* shelf, ActiveNetworkIcon::Type type)
   Shell::Get()->system_tray_model()->network_state_model()->AddObserver(this);
   Shell::Get()->session_controller()->AddObserver(this);
   CreateImageView();
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kImage);
+
   UpdateConnectionStatus(true /* notify_a11y */);
 }
 
@@ -37,12 +41,7 @@ NetworkTrayView::~NetworkTrayView() {
 }
 
 void NetworkTrayView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  // A valid role must be set prior to setting the name.
-  node_data->role = ax::mojom::Role::kImage;
   node_data->SetNameChecked(accessible_name_);
-  if (!accessible_description_.empty()) {
-    node_data->SetDescription(accessible_description_);
-  }
 }
 
 std::u16string NetworkTrayView::GetAccessibleNameString() const {
@@ -123,6 +122,12 @@ void NetworkTrayView::UpdateConnectionStatus(bool notify_a11y) {
   if (notify_a11y && !accessible_name_.empty() &&
       accessible_name_ != prev_accessible_name) {
     NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+  }
+
+  if (!accessible_description_.empty()) {
+    GetViewAccessibility().SetDescription(accessible_description_);
+  } else {
+    GetViewAccessibility().RemoveDescription();
   }
 }
 

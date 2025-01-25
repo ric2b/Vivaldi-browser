@@ -39,8 +39,8 @@
 #import "ios/chrome/browser/bookmarks/ui_bundled/home/bookmarks_home_consumer.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/home/synced_bookmarks_bridge.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -111,7 +111,7 @@ bool IsABookmarkNodeSectionForIdentifier(
     case BookmarksBatchUploadSectionIdentifier:
       return false;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 @interface BookmarksHomeMediator () <AccountSettingsPresenter,
@@ -335,6 +335,14 @@ bool IsABookmarkNodeSectionForIdentifier(
 
     }
 
+    // Note:(prio@vivaldi.com): Hide mobile bookmarks folder if it does not have
+    // any children.
+    if (IsVivaldiRunning() &&
+        permanentNode == _bookmarkModel->mobile_node()
+        && permanentNode->children().empty()) {
+      continue;
+    } // End Vivaldi
+
     BookmarksHomeNodeItem* item = [[BookmarksHomeNodeItem alloc]
         initWithType:BookmarksHomeItemTypeBookmark
         bookmarkNode:permanentNode];
@@ -471,7 +479,7 @@ bool IsABookmarkNodeSectionForIdentifier(
 
 - (void)triggerBatchUpload {
   self.syncService->TriggerLocalDataMigration(
-      syncer::ModelTypeSet({syncer::BOOKMARKS}));
+      syncer::DataTypeSet({syncer::BOOKMARKS}));
 
   ChromeBrowserState* browserState = [self originalBrowserState];
   PrefService* prefService = browserState->GetPrefs();
@@ -483,8 +491,8 @@ bool IsABookmarkNodeSectionForIdentifier(
                                       std::string user_email))completion {
   std::string user_email = self.syncService->GetAccountInfo().email;
   self.syncService->GetLocalDataDescriptions(
-      syncer::ModelTypeSet({syncer::BOOKMARKS}),
-      base::BindOnce(^(std::map<syncer::ModelType, syncer::LocalDataDescription>
+      syncer::DataTypeSet({syncer::BOOKMARKS}),
+      base::BindOnce(^(std::map<syncer::DataType, syncer::LocalDataDescription>
                            description) {
         auto it = description.find(syncer::BOOKMARKS);
         // GetLocalDataDescriptions() can return an empty result if data type is

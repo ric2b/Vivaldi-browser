@@ -15,6 +15,7 @@
 #include "core/fxcrt/retain_ptr.h"
 #include "core/fxcrt/span.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
+#include "core/fxge/dib/fx_dib.h"
 
 // Support up to 64 MB. This prevents trivial OOM when MSAN is on and
 // time outs.
@@ -29,34 +30,36 @@ class XFACodecFuzzer {
     CFX_DIBAttribute attr;
     FXCODEC_STATUS status =
         decoder->LoadImageInfo(std::move(source), type, &attr, true);
-    if (status != FXCODEC_STATUS::kFrameReady)
+    if (status != FXCODEC_STATUS::kFrameReady) {
       return 0;
+    }
 
     // Skipping very large images, since they will take a long time and may lead
     // to OOM.
     FX_SAFE_UINT32 bitmap_size = decoder->GetHeight();
     bitmap_size *= decoder->GetWidth();
-    bitmap_size *= 4;  // From CFX_DIBitmap impl.
-    if (!bitmap_size.IsValid() ||
+    bitmap_size *= GetCompsFromFormat(decoder->GetBitmapFormat());
+    if (!bitmap_size.IsValid() || bitmap_size.ValueOrDie() == 0 ||
         bitmap_size.ValueOrDie() > kXFACodecFuzzerPixelLimit) {
       return 0;
     }
 
     auto bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
     if (!bitmap->Create(decoder->GetWidth(), decoder->GetHeight(),
-                        FXDIB_Format::kArgb)) {
+                        decoder->GetBitmapFormat())) {
       return 0;
     }
 
     size_t frames;
     std::tie(status, frames) = decoder->GetFrames();
-    if (status != FXCODEC_STATUS::kDecodeReady || frames == 0)
+    if (status != FXCODEC_STATUS::kDecodeReady || frames == 0) {
       return 0;
+    }
 
-    status = decoder->StartDecode(bitmap, 0, 0, bitmap->GetWidth(),
-                                  bitmap->GetHeight());
-    while (status == FXCODEC_STATUS::kDecodeToBeContinued)
+    status = decoder->StartDecode(std::move(bitmap));
+    while (status == FXCODEC_STATUS::kDecodeToBeContinued) {
       status = decoder->ContinueDecode();
+    }
 
     return 0;
   }

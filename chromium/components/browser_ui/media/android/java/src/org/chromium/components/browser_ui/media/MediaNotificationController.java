@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Set;
 
 // Vivaldi
+import android.media.MediaDescription;
 import android.os.Bundle;
 import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.common.VivaldiIntentHandler;
@@ -599,7 +600,9 @@ public class MediaNotificationController {
                     MediaMetadataCompat.METADATA_KEY_DURATION,
                     mMediaNotificationInfo.mediaPosition.getDuration());
         }
-
+        // Note(david@vivaldi.com): This flag will trigger the creation of the extra bundle in the
+        // MediaMetadataCompat description. If not set the bundle is always null.
+        metadataBuilder.putLong(MediaMetadataCompat.METADATA_KEY_DOWNLOAD_STATUS, -1);
         return metadataBuilder.build();
     }
 
@@ -711,19 +714,24 @@ public class MediaNotificationController {
 
         mDelegate.onMediaSessionUpdated(mMediaSession);
 
+        if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+            if (!mMediaNotificationInfo.isPaused) {
+                String referrer = IntentUtils.safeGetStringExtra(
+                        mMediaNotificationInfo.contentIntent,
+                        VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER);
+                Log.i(TAG, "referrer = " + referrer);
+                Bundle bundle = new Bundle();
+                bundle.putString(VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER, referrer);
+                mMediaSession.setExtras(bundle);
+                // Add custom meta data so the compat.
+                MediaMetadataCompat mmd = createMetadata();
+                buildMediaDescription(mmd, bundle);
+                mMediaSession.setMetadata(mmd);
+            }
+        } else
         mMediaSession.setMetadata(createMetadata());
 
         mMediaSession.setPlaybackState(createPlaybackState());
-
-        if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
-            String referrer = IntentUtils.safeGetStringExtra(
-                    mMediaNotificationInfo.contentIntent,
-                    VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER);
-            Log.d(TAG, "referrer = " + referrer);
-            Bundle bundle = new Bundle();
-            bundle.putString(VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER, referrer);
-            mMediaSession.setExtras(bundle);
-        }
     }
 
     @VisibleForTesting
@@ -991,5 +999,18 @@ public class MediaNotificationController {
             return title;
         }
         return getContext().getPackageName();
+    }
+
+    /** Vivaldi **/
+    private void buildMediaDescription(MediaMetadataCompat mediaMetadataCompat, Bundle bundle) {
+        assert BuildConfig.IS_OEM_MERCEDES_BUILD;
+        // Generate the description first. We need to call this otherwise the description is null.
+        mediaMetadataCompat.getDescription();
+        Object mdc = mediaMetadataCompat.getDescription().getMediaDescription();
+        if (mdc instanceof MediaDescription) {
+            // Add our custom referrer to the extra bundle.
+            Bundle extras = ((MediaDescription) mdc).getExtras();
+            if (extras != null) extras.putAll(bundle);
+        }
     }
 }

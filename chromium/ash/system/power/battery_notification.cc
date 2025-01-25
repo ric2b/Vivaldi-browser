@@ -55,8 +55,7 @@ const gfx::VectorIcon& GetBatteryImageMD(
              PowerNotificationController::NOTIFICATION_CRITICAL) {
     return kNotificationBatteryCriticalIcon;
   } else {
-    NOTREACHED_IN_MIGRATION();
-    return gfx::kNoneIcon;
+    NOTREACHED();
   }
 }
 
@@ -70,8 +69,7 @@ message_center::SystemNotificationWarningLevel GetWarningLevelMD(
              PowerNotificationController::NOTIFICATION_CRITICAL) {
     return message_center::SystemNotificationWarningLevel::CRITICAL_WARNING;
   } else {
-    NOTREACHED_IN_MIGRATION();
-    return message_center::SystemNotificationWarningLevel::NORMAL;
+    NOTREACHED();
   }
 }
 
@@ -188,8 +186,6 @@ void CalculateNotificationButtons(
       l10n_util::GetStringUTF16(enable_disable_bsm_token_optional.value())};
   rich_notification_data.buttons =
       std::vector<message_center::ButtonInfo>{bsm_button};
-  rich_notification_data.settings_button_handler =
-      message_center::SettingsButtonHandler::DELEGATE;
 }
 
 void HandlePowerNotificationButtonClick(
@@ -226,7 +222,7 @@ void HandlePowerNotificationButtonClick(
       break;
     }
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

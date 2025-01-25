@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/fuchsia/video/fuchsia_video_decoder.h"
 
 #include <fuchsia/mediacodec/cpp/fidl.h>
@@ -182,11 +187,11 @@ class FakeClientNativePixmap : public gfx::ClientNativePixmap {
   ~FakeClientNativePixmap() override = default;
 
   // gfx::ClientNativePixmap implementation.
-  bool Map() override { NOTREACHED_NORETURN(); }
+  bool Map() override { NOTREACHED(); }
   void Unmap() override { NOTREACHED_IN_MIGRATION(); }
-  size_t GetNumberOfPlanes() const override { NOTREACHED_NORETURN(); }
-  void* GetMemoryAddress(size_t plane) const override { NOTREACHED_NORETURN(); }
-  int GetStride(size_t plane) const override { NOTREACHED_NORETURN(); }
+  size_t GetNumberOfPlanes() const override { NOTREACHED(); }
+  void* GetMemoryAddress(size_t plane) const override { NOTREACHED(); }
+  int GetStride(size_t plane) const override { NOTREACHED(); }
   gfx::NativePixmapHandle CloneHandleForIPC() const override {
     return gfx::CloneHandleForIPC(handle_);
   }

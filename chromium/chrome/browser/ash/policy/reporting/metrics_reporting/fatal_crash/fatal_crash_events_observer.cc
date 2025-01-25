@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "ash/public/cpp/session/session_types.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
@@ -73,7 +74,7 @@ FatalCrashTelemetry::SessionType GetSessionType(
     case user_manager::UserType::kWebKioskApp:
       return FatalCrashTelemetry::SESSION_TYPE_WEB_KIOSK_APP;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -327,8 +328,8 @@ FatalCrashEventsObserver::GetFatalCrashTelemetryCrashType(
     case CrashEventInfo::CrashType::kUnknown:
       [[fallthrough]];
     default:  // Other types added by healthD that are unknown here yet.
-      NOTREACHED_NORETURN()
-          << "Encountered unhandled or unknown crash type " << crash_type;
+      NOTREACHED() << "Encountered unhandled or unknown crash type "
+                   << crash_type;
   }
 }
 

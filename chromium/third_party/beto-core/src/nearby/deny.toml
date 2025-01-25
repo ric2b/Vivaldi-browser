@@ -24,6 +24,9 @@ yanked = "warn"
 ignore = [
     # comment explaining why we have to ignore it
     # "RUSTSEC-FOO",
+
+    # Need a new release of cbindgen: https://github.com/mozilla/cbindgen/issues/983
+    "RUSTSEC-2021-0145",
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -120,7 +123,7 @@ license-files = [
 # published to private registries.
 # To see how to mark a crate as unpublished (to the official registry),
 # visit https://doc.rust-lang.org/cargo/reference/manifest.html#the-publish-field.
-ignore = true
+ignore = false
 # One or more private registries that you might publish crates to, if a crate
 # is only published to private registries, and ignore is true, the crate will
 # not have its license(s) checked

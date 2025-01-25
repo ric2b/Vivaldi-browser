@@ -25,6 +25,7 @@
 #include "ash/capture_mode/folder_selection_dialog_controller.h"
 #include "ash/capture_mode/normal_capture_bar_view.h"
 #include "ash/capture_mode/recording_type_menu_view.h"
+#include "ash/capture_mode/search_results_panel.h"
 #include "ash/capture_mode/user_nudge_controller.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/display/window_tree_host_manager.h"
@@ -76,6 +77,7 @@
 #include "ui/views/animation/animation_builder.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/cursor_util.h"
@@ -403,7 +405,7 @@ gfx::Rect GetHitTestRectForFineTunePosition(
       return gfx::Rect(gfx::Point(vertical_x, vertical_y), vertical_size);
     }
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -701,7 +703,7 @@ void CaptureModeSession::UpdateCursor(const gfx::Point& location_in_screen,
 void CaptureModeSession::HighlightWindowForTab(aura::Window* window) {
   DCHECK(window);
   DCHECK_EQ(CaptureModeSource::kWindow, controller_->source());
-  MaybeChangeRoot(window->GetRootWindow());
+  MaybeChangeRoot(window->GetRootWindow(), /*root_window_will_shutdown=*/false);
   capture_window_observer_->SetSelectedWindow(window, /*a11y_alert_again=*/true,
                                               /*bar_anchored_to_window=*/false);
 }
@@ -1143,7 +1145,8 @@ void CaptureModeSession::MaybeDismissUserNudgeForever() {
   user_nudge_controller_.reset();
 }
 
-void CaptureModeSession::MaybeChangeRoot(aura::Window* new_root) {
+void CaptureModeSession::MaybeChangeRoot(aura::Window* new_root,
+                                         bool root_window_will_shutdown) {
   DCHECK(new_root->IsRootWindow());
 
   if (new_root == current_root_) {
@@ -1161,8 +1164,10 @@ void CaptureModeSession::MaybeChangeRoot(aura::Window* new_root) {
   Observe(ColorUtil::GetColorProviderSourceForWindow(current_root_));
   // Update the bounds of the widgets after setting the new root. For region
   // capture, the capture bar will move at a later time, when the mouse is
-  // released.
-  if (controller_->source() != CaptureModeSource::kRegion) {
+  // released. If the root change is because of a display removal, the mouse
+  // will not be released at a later point.
+  if (root_window_will_shutdown ||
+      controller_->source() != CaptureModeSource::kRegion) {
     RefreshBarWidgetBounds();
   }
 
@@ -1208,6 +1213,20 @@ std::set<aura::Window*> CaptureModeSession::GetWindowsToIgnoreFromWidgets() {
     ignore_windows.insert(capture_toast_widget->GetNativeWindow());
   }
   return ignore_windows;
+}
+
+void CaptureModeSession::ShowSearchResultsPanel(const gfx::ImageSkia& image) {
+  DCHECK_EQ(active_behavior()->behavior_type(), BehaviorType::kSunfish);
+  if (!search_results_panel_widget_) {
+    search_results_panel_widget_ =
+        SearchResultsPanel::CreateWidget(current_root());
+    search_results_panel_widget_->Show();
+  }
+  // TODO(b/359317857): Determine whether to hide or refresh the panel if a new
+  // region selection and/or session is started.
+  auto* search_results_panel = views::AsViewClass<SearchResultsPanel>(
+      search_results_panel_widget_->GetContentsView());
+  search_results_panel->SetSearchBoxImage(image);
 }
 
 void CaptureModeSession::OnPaintLayer(const ui::PaintContext& context) {
@@ -1308,7 +1327,8 @@ void CaptureModeSession::OnKeyEvent(ui::KeyEvent* event) {
           return;
         }
 
-        DoPerformCapture();  // `this` can be deleted after this.
+        active_behavior_
+            ->OnEnterKeyPressed();  // `this` can be deleted after this.
       }
       return;
     }
@@ -1594,8 +1614,10 @@ void CaptureModeSession::MaybeCreateUserNudge() {
     return;
   }
 
-  user_nudge_controller_ = std::make_unique<UserNudgeController>(
-      this, capture_mode_bar_view_->settings_button());
+  auto* settings_button = capture_mode_bar_view_->settings_button();
+  CHECK(settings_button);
+  user_nudge_controller_ =
+      std::make_unique<UserNudgeController>(this, settings_button);
   user_nudge_controller_->SetVisible(true);
 }
 
@@ -1805,6 +1827,17 @@ void CaptureModeSession::OnLocatedEvent(ui::LocatedEvent* event,
   aura::Window* event_target = static_cast<aura::Window*>(event->target());
   wm::ConvertPointToScreen(event_target, &screen_location);
 
+  // Allow events that target the results panel (if present) to go through. This
+  // must be done before running `deferred_cursor_updater` to allow the panel to
+  // update the cursor type.
+  if (capture_mode_util::IsEventTargetedOnWidget(
+          *event, search_results_panel_widget_.get())) {
+    if (cursor_setter_) {
+      cursor_setter_->ResetCursor();
+    }
+    return;
+  }
+
   // For fullscreen/window mode, change the root window as soon as we detect the
   // cursor on a new display. For region mode, wait until the user taps down to
   // try to select a new region on the new display.
@@ -1828,8 +1861,10 @@ void CaptureModeSession::OnLocatedEvent(ui::LocatedEvent* event,
   const bool can_change_root =
       !is_bar_anchored_to_window && (!is_capture_region || is_press_event);
 
-  if (can_change_root)
-    MaybeChangeRoot(capture_mode_util::GetPreferredRootWindow(screen_location));
+  if (can_change_root) {
+    MaybeChangeRoot(capture_mode_util::GetPreferredRootWindow(screen_location),
+                    /*root_window_will_shutdown=*/false);
+  }
 
   // The root may have switched while pressing the mouse down. Move the capture
   // bar to the current display if that is the case and make sure it is stacked
@@ -1887,12 +1922,10 @@ void CaptureModeSession::OnLocatedEvent(ui::LocatedEvent* event,
   // press event, we will use it to dismiss the settings menu, unless it's on
   // the settings button (since in this case, the settings button handler will
   // take care of dismissing the menu).
-  const bool is_event_on_settings_button =
-      capture_mode_bar_view_->settings_button()->GetBoundsInScreen().Contains(
-          screen_location);
-  const bool should_close_settings = is_press_event &&
-                                     !is_event_on_settings_button &&
-                                     capture_mode_settings_widget_;
+  const bool should_close_settings =
+      is_press_event &&
+      !capture_mode_bar_view_->IsEventOnSettingsButton(screen_location) &&
+      capture_mode_settings_widget_;
   if (should_close_settings) {
     // All future located events up to and including a released events will be
     // consumed and ignored (i.e. won't be used to update the capture region,
@@ -2179,6 +2212,15 @@ void CaptureModeSession::OnLocatedEventReleased(
 
   // After first release event, we advance to the next phase.
   is_selecting_region_ = false;
+
+  // Notify the behavior that the region was selected, in case it needs to do
+  // specific handling. Note `this` may be destroyed by `OnRegionSelected()`.
+  auto weak_ptr = weak_ptr_factory_.GetWeakPtr();
+  active_behavior_->OnRegionSelected();
+  if (!weak_ptr) {
+    return;
+  }
+
   UpdateCaptureLabelWidget(CaptureLabelAnimation::kRegionPhaseChange);
 
   A11yAlertCaptureSource(/*trigger_now=*/true);
@@ -2658,7 +2700,7 @@ void CaptureModeSession::UpdateRegionForArrowKeys(ui::KeyboardCode key_code,
       }
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 
   const bool horizontal =

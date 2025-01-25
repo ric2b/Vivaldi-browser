@@ -407,13 +407,6 @@ struct FeaturesMtl : FeatureSetBase
         &members, "http://anglebug.com/40096869"
     };
 
-    FeatureInfo requireMsl21 = {
-        "requireMsl21",
-        FeatureCategory::MetalFeatures,
-        "MSL 2.1 is required to support all the features of OpenGL ES 2.0",
-        &members, "http://anglebug.com/42266694"
-    };
-
     FeatureInfo rescopeGlobalVariables = {
         "rescopeGlobalVariables",
         FeatureCategory::MetalFeatures,
@@ -421,11 +414,18 @@ struct FeaturesMtl : FeatureSetBase
         &members, "http://anglebug.com/42266744"
     };
 
-    FeatureInfo alwaysResolveMultisampleRenderBuffers = {
-        "alwaysResolveMultisampleRenderBuffers",
+    FeatureInfo enableMultisampledRenderToTextureOnNonTilers = {
+        "enableMultisampledRenderToTextureOnNonTilers",
         FeatureCategory::MetalFeatures,
-        "Always automatically resolve MSAA render buffers to single sampled texture.",
-        &members, "http://crbug.com/1486094"
+        "Enable EXT_multisampled_render_to_texture on non tiled GPUs.",
+        &members, "http://anglebug.com/42261786"
+    };
+
+    FeatureInfo emulateDontCareLoadWithRandomClear = {
+        "emulateDontCareLoadWithRandomClear",
+        FeatureCategory::MetalFeatures,
+        "Emulate DontCare loadAction with Clear loadAction. The clear values will be randomized.",
+        &members, "http://anglebug.com/42261786"
     };
 
     FeatureInfo injectAsmStatementIntoLoopBodies = {

@@ -1,0 +1,18 @@
+#include <metal_stdlib>
+
+using namespace metal;
+uint subgroupExclusiveMul_dc51f8() {
+  uint res = simd_prefix_exclusive_product(1u);
+  return res;
+}
+
+fragment void fragment_main(device uint* tint_symbol [[buffer(0)]]) {
+  *(tint_symbol) = subgroupExclusiveMul_dc51f8();
+  return;
+}
+
+kernel void compute_main(device uint* tint_symbol_1 [[buffer(0)]]) {
+  *(tint_symbol_1) = subgroupExclusiveMul_dc51f8();
+  return;
+}
+

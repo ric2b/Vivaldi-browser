@@ -66,7 +66,7 @@ namespace {
 
 struct FactoryParams {
   int render_process_host_id;
-  int frame_tree_node_id;
+  FrameTreeNodeId frame_tree_node_id;
   scoped_refptr<FileSystemContext> file_system_context;
   std::string storage_domain;
   blink::StorageKey storage_key;
@@ -207,11 +207,11 @@ class FileSystemEntryURLLoader : public network::mojom::URLLoader {
       return;
     }
 
-    std::string range_header;
-    if (request.headers.GetHeader(net::HttpRequestHeaders::kRange,
-                                  &range_header)) {
+    if (std::optional<std::string> range_header =
+            request.headers.GetHeader(net::HttpRequestHeaders::kRange);
+        range_header) {
       std::vector<net::HttpByteRange> ranges;
-      if (net::HttpUtil::ParseRangeHeader(range_header, &ranges)) {
+      if (net::HttpUtil::ParseRangeHeader(*range_header, &ranges)) {
         if (ranges.size() == 1) {
           byte_range_ = ranges[0];
         } else {
@@ -227,8 +227,8 @@ class FileSystemEntryURLLoader : public network::mojom::URLLoader {
         params_.file_system_context->CrackURL(request.url, params_.storage_key);
     if (!url_.is_valid()) {
       const storage::FileSystemRequestInfo request_info = {
-          request.url, params_.storage_domain, params_.frame_tree_node_id,
-          params_.storage_key};
+          request.url, params_.storage_domain,
+          params_.frame_tree_node_id.value(), params_.storage_key};
       params_.file_system_context->AttemptAutoMountForURLRequest(
           request_info,
           base::BindOnce(&FileSystemEntryURLLoader::DidAttemptAutoMount,
@@ -701,7 +701,7 @@ class FileSystemURLLoaderFactory
 mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateFileSystemURLLoaderFactory(
     int render_process_host_id,
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     scoped_refptr<FileSystemContext> file_system_context,
     const std::string& storage_domain,
     const blink::StorageKey& storage_key) {

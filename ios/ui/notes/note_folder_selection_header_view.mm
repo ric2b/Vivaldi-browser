@@ -27,7 +27,8 @@ using l10n_util::GetNSString;
 
 #pragma mark - INITIALIZER
 - (instancetype)init {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     self.backgroundColor = UIColor.clearColor;
     [self setUpUI];
   }

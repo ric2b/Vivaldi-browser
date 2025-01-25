@@ -14,9 +14,9 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/autofill/autofill_location_bar_bubble.h"
 #include "chrome/browser/ui/views/autofill/payments/manage_saved_iban_bubble_view.h"
-#include "chrome/browser/ui/views/autofill/payments/save_card_and_virtual_card_enroll_confirmation_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_iban_bubble_view.h"
+#include "chrome/browser/ui/views/autofill/payments/save_payment_method_and_virtual_card_enroll_confirmation_bubble_views.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/strings/grit/components_strings.h"
@@ -48,8 +48,7 @@ SavePaymentIconView::SavePaymentIconView(
   }
   command_id_ = command_id;
   SetUpForInOutAnimation();
-  GetViewAccessibility().SetProperties(/*role*/ std::nullopt,
-                                       GetTextForTooltipAndAccessibleName());
+  GetViewAccessibility().SetName(GetTextForTooltipAndAccessibleName());
 }
 
 SavePaymentIconView::~SavePaymentIconView() = default;
@@ -70,7 +69,9 @@ void SavePaymentIconView::UpdateImpl() {
 
   bool command_enabled =
       SetCommandEnabled(controller && controller->IsIconVisible());
-  SetVisible(command_enabled);
+  const bool should_show =
+      command_enabled && !delegate()->ShouldHidePageActionIcon(this);
+  SetVisible(should_show);
 
   GetViewAccessibility().SetName(GetTextForTooltipAndAccessibleName());
 

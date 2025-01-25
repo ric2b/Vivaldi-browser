@@ -58,13 +58,15 @@ class PasswordAutofillManager : public autofill::AutofillSuggestionDelegate {
   // AutofillSuggestionDelegate implementation.
   absl::variant<autofill::AutofillDriver*, PasswordManagerDriver*> GetDriver()
       override;
-  void OnSuggestionsShown() override;
+  void OnSuggestionsShown(
+      base::span<const autofill::Suggestion> suggestions) override;
   void OnSuggestionsHidden() override;
   void DidSelectSuggestion(const autofill::Suggestion& suggestion) override;
   void DidAcceptSuggestion(const autofill::Suggestion& suggestion,
-                           const SuggestionPosition& position) override;
+                           const SuggestionMetadata& metadata) override;
   void DidPerformButtonActionForSuggestion(
-      const autofill::Suggestion&) override;
+      const autofill::Suggestion&,
+      const autofill::SuggestionButtonAction&) override;
   bool RemoveSuggestion(const autofill::Suggestion& suggestion) override;
   void ClearPreviewedForm() override;
   autofill::FillingProduct GetMainFillingProduct() const override;
@@ -129,14 +131,11 @@ class PasswordAutofillManager : public autofill::AutofillSuggestionDelegate {
   base::WeakPtr<PasswordAutofillManager> GetWeakPtr();
 
  private:
-  // Called just before showing a popup to log which |suggestions| were shown.
-  void LogMetricsForSuggestions(
-      const std::vector<autofill::Suggestion>& suggestions) const;
-
   // Validates and forwards the given objects to the autofill client.
   bool ShowPopup(const gfx::RectF& bounds,
                  base::i18n::TextDirection text_direction,
-                 const std::vector<autofill::Suggestion>& suggestions);
+                 const std::vector<autofill::Suggestion>& suggestions,
+                 bool is_for_webauthn_request);
 
   // Validates and forwards the given objects to the autofill client.
   void UpdatePopup(std::vector<autofill::Suggestion> suggestions);

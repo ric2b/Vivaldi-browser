@@ -11,6 +11,7 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
+#include "base/supports_user_data.h"
 #include "base/task/thread_pool.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -23,7 +24,6 @@
 #include "content/browser/browser_context_impl.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/browsing_topics/browsing_topics_document_host.h"
-#include "content/browser/compute_pressure/pressure_service_for_frame.h"
 #include "content/browser/contacts/contacts_manager_impl.h"
 #include "content/browser/content_index/content_index_service_impl.h"
 #include "content/browser/cookie_store/cookie_store_manager.h"
@@ -58,6 +58,7 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/service_worker_host.h"
+#include "content/browser/shared_storage/shared_storage_worklet_host.h"
 #include "content/browser/speech/speech_recognition_dispatcher_host.h"
 #include "content/browser/storage_access/storage_access_handle.h"
 #include "content/browser/tracing/trace_report/trace_report.mojom.h"
@@ -105,6 +106,7 @@
 #include "media/mojo/services/webrtc_video_perf_recorder.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "net/base/features.h"
+#include "services/device/public/cpp/compute_pressure/buildflags.h"
 #include "services/device/public/mojom/battery_monitor.mojom.h"
 #include "services/device/public/mojom/vibration_manager.mojom.h"
 #include "services/metrics/public/mojom/ukm_interface.mojom.h"
@@ -133,7 +135,6 @@
 #include "third_party/blink/public/mojom/buckets/bucket_manager_host.mojom.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom.h"
-#include "third_party/blink/public/mojom/compute_pressure/web_pressure_manager.mojom.h"
 #include "third_party/blink/public/mojom/contacts/contacts_manager.mojom.h"
 #include "third_party/blink/public/mojom/content_index/content_index.mojom.h"
 #include "third_party/blink/public/mojom/cookie_store/cookie_store.mojom.h"
@@ -207,6 +208,11 @@
 #include "third_party/blink/public/mojom/installedapp/installed_app_provider.mojom.h"
 #include "third_party/blink/public/mojom/serial/serial.mojom.h"
 #endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
+#include "content/browser/compute_pressure/pressure_service_for_frame.h"
+#include "third_party/blink/public/mojom/compute_pressure/web_pressure_manager.mojom.h"
+#endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 #include "content/browser/date_time_chooser/date_time_chooser.h"
@@ -656,6 +662,7 @@ void BindBatteryMonitor(
     GetDeviceService().BindBatteryMonitor(std::move(receiver));
 }
 
+#if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 void BindPressureManager(
     RenderFrameHostImpl* host,
     mojo::PendingReceiver<blink::mojom::WebPressureManager> receiver) {
@@ -689,6 +696,7 @@ void BindPressureManager(
   PressureServiceForFrame::GetOrCreateForCurrentDocument(host)->BindReceiver(
       std::move(receiver));
 }
+#endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 
 VibrationManagerBinder& GetVibrationManagerBinderOverride() {
   static base::NoDestructor<VibrationManagerBinder> binder;
@@ -752,10 +760,12 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::BlobURLStore>(base::BindRepeating(
       &RenderFrameHostImpl::BindBlobUrlStoreReceiver, base::Unretained(host)));
 
+#if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
   if (base::FeatureList::IsEnabled(blink::features::kComputePressure)) {
     map->Add<blink::mojom::WebPressureManager>(
         base::BindRepeating(&BindPressureManager, base::Unretained(host)));
   }
+#endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 
   map->Add<blink::mojom::ContactsManager>(
       base::BindRepeating(ContactsManagerImpl::Create, base::Unretained(host)));
@@ -1121,10 +1131,11 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
 #endif
 
   if (base::FeatureList::IsEnabled(blink::features::kEnableBuiltInAIAPI)) {
-    map->Add<blink::mojom::AIManager>(
-        base::BindRepeating(&ContentBrowserClient::BindAIManager,
-                            base::Unretained(GetContentClient()->browser()),
-                            host->GetBrowserContext()));
+    map->Add<blink::mojom::AIManager>(base::BindRepeating(
+        &ContentBrowserClient::BindAIManager,
+        base::Unretained(GetContentClient()->browser()),
+        host->GetBrowserContext(),
+        base::Unretained(static_cast<RenderFrameHost*>(host))));
   }
 }
 
@@ -1205,7 +1216,7 @@ void PopulateBinderMapWithContext(
   RegisterWebUIControllerInterfaceBinder<attribution_internals::mojom::Factory,
                                          AttributionInternalsUI>(map);
   RegisterWebUIControllerInterfaceBinder<storage::mojom::IdbInternalsHandler,
-                                         IndexedDBInternalsUI>(map);
+                                         indexed_db::IndexedDBInternalsUI>(map);
   RegisterWebUIControllerInterfaceBinder<::mojom::ProcessInternalsHandler,
                                          ProcessInternalsUI>(map);
   RegisterWebUIControllerInterfaceBinder<storage::mojom::QuotaInternalsHandler,
@@ -1235,11 +1246,8 @@ void PopulateBinderMapWithContext(
       base::BindRepeating(&ClipboardHostImpl::Create));
   map->Add<blink::mojom::SpeculationHost>(
       base::BindRepeating(&SpeculationHostImpl::Bind));
-  if (base::FeatureList::IsEnabled(
-          blink::features::kAnchorElementInteraction)) {
-    map->Add<blink::mojom::AnchorElementInteractionHost>(
-        base::BindRepeating(&AnchorElementInteractionHostImpl::Create));
-  }
+  map->Add<blink::mojom::AnchorElementInteractionHost>(
+      base::BindRepeating(&AnchorElementInteractionHostImpl::Create));
   GetContentClient()->browser()->RegisterBrowserInterfaceBindersForFrame(host,
                                                                          map);
 
@@ -1356,10 +1364,12 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
   map->Add<blink::mojom::FileSystemAccessManager>(
       base::BindRepeating(&DedicatedWorkerHost::GetFileSystemAccessManager,
                           base::Unretained(host)));
+#if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
   if (base::FeatureList::IsEnabled(blink::features::kComputePressure)) {
     map->Add<blink::mojom::WebPressureManager>(base::BindRepeating(
         &DedicatedWorkerHost::BindPressureService, base::Unretained(host)));
   }
+#endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 
   // RenderProcessHost binders
   map->Add<media::mojom::VideoDecodePerfHistory>(BindWorkerReceiver(
@@ -1387,10 +1397,11 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
       host));
 
   if (base::FeatureList::IsEnabled(blink::features::kEnableBuiltInAIAPI)) {
-    map->Add<blink::mojom::AIManager>(
-        base::BindRepeating(&ContentBrowserClient::BindAIManager,
-                            base::Unretained(GetContentClient()->browser()),
-                            host->GetProcessHost()->GetBrowserContext()));
+    map->Add<blink::mojom::AIManager>(base::BindRepeating(
+        &ContentBrowserClient::BindAIManager,
+        base::Unretained(GetContentClient()->browser()),
+        host->GetProcessHost()->GetBrowserContext(),
+        base::Unretained(static_cast<base::SupportsUserData*>(host))));
   }
 }
 
@@ -1460,15 +1471,18 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
       &CreateReportingServiceProxyForSharedWorker, base::Unretained(host)));
   map->Add<blink::mojom::BucketManagerHost>(base::BindRepeating(
       &SharedWorkerHost::CreateBucketManagerHost, base::Unretained(host)));
+#if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
   if (base::FeatureList::IsEnabled(blink::features::kComputePressure)) {
     map->Add<blink::mojom::WebPressureManager>(base::BindRepeating(
         &SharedWorkerHost::BindPressureService, base::Unretained(host)));
   }
+#endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
   if (base::FeatureList::IsEnabled(blink::features::kEnableBuiltInAIAPI)) {
-    map->Add<blink::mojom::AIManager>(
-        base::BindRepeating(&ContentBrowserClient::BindAIManager,
-                            base::Unretained(GetContentClient()->browser()),
-                            host->GetProcessHost()->GetBrowserContext()));
+    map->Add<blink::mojom::AIManager>(base::BindRepeating(
+        &ContentBrowserClient::BindAIManager,
+        base::Unretained(GetContentClient()->browser()),
+        host->GetProcessHost()->GetBrowserContext(),
+        base::Unretained(static_cast<base::SupportsUserData*>(host))));
   }
 
   // RenderProcessHost binders
@@ -1511,6 +1525,26 @@ void PopulateBinderMapWithContext(
 
 void PopulateBinderMap(SharedWorkerHost* host, mojo::BinderMap* map) {
   PopulateSharedWorkerBinders(host, map);
+}
+
+// Shared storage worklets
+SharedStorageWorkletHost* GetContextForHost(SharedStorageWorkletHost* host) {
+  return host;
+}
+
+void PopulateSharedStorageWorkletBinders(SharedStorageWorkletHost* host,
+                                         mojo::BinderMap* map) {
+  // Ignore requests to bind UKM recorder, since there is no current plan to
+  // support it for worklets and the renderer always tries to bind it.
+  map->Add<ukm::mojom::UkmRecorderFactory>(base::DoNothing());
+}
+
+void PopulateBinderMapWithContext(
+    SharedStorageWorkletHost* host,
+    mojo::BinderMapWithContext<SharedStorageWorkletHost*>* map) {}
+
+void PopulateBinderMap(SharedStorageWorkletHost* host, mojo::BinderMap* map) {
+  PopulateSharedStorageWorkletBinders(host, map);
 }
 
 // Service workers

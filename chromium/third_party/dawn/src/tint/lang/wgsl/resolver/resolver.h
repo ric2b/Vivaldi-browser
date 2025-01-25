@@ -42,7 +42,6 @@
 #include "src/tint/lang/core/intrinsic/table.h"
 #include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/wgsl/common/allowed_features.h"
-#include "src/tint/lang/wgsl/common/validation_mode.h"
 #include "src/tint/lang/wgsl/intrinsic/dialect.h"
 #include "src/tint/lang/wgsl/program/program_builder.h"
 #include "src/tint/lang/wgsl/resolver/dependency_graph.h"
@@ -101,10 +100,7 @@ class Resolver {
     /// Constructor
     /// @param builder the program builder
     /// @param allowed_features the extensions and features that are allowed to be used
-    /// @param mode the validation mode to use
-    Resolver(ProgramBuilder* builder,
-             const wgsl::AllowedFeatures& allowed_features,
-             wgsl::ValidationMode mode = wgsl::ValidationMode::kFull);
+    Resolver(ProgramBuilder* builder, const wgsl::AllowedFeatures& allowed_features);
 
     /// Destructor
     ~Resolver();
@@ -355,6 +351,16 @@ class Resolver {
     tint::Result<Vector<const core::constant::Value*, N>> ConvertArguments(
         const Vector<const sem::ValueExpression*, N>& args,
         const sem::CallTarget* target);
+
+    /// Converts the value of `args`[`i`] to the type of the `i`th of the `target`.
+    /// Assumes `i` is a valid argument index.  Returns nullptr if the value is not
+    /// a constant, or can't be converted.
+    /// @returns the possibly converted argument
+    template <size_t N>
+    const core::constant::Value* ConvertConstArgument(
+        const Vector<const sem::ValueExpression*, N>& args,
+        const sem::CallTarget* target,
+        unsigned i);
 
     /// @param ty the type that may hold abstract numeric types
     /// @param target_ty the target type for the expression (variable type, parameter type, etc).

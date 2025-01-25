@@ -22,8 +22,8 @@
 #import "ios/chrome/browser/itunes_urls/model/itunes_urls_handler_tab_helper.h"
 #import "ios/chrome/browser/prerender/model/preload_controller_delegate.h"
 #import "ios/chrome/browser/prerender/model/prerender_pref.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/signin/model/account_consistency_service_factory.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities.h"
 #import "ios/chrome/browser/tabs/model/tab_helper_util.h"
@@ -499,7 +499,7 @@ void DestroyPrerenderingWebState(std::unique_ptr<web::WebState> web_state) {
   _policyDeciderBridge.reset();
 
   if (AccountConsistencyService* accountConsistencyService =
-          ios::AccountConsistencyServiceFactory::GetForBrowserState(
+          ios::AccountConsistencyServiceFactory::GetForProfile(
               self.browserState)) {
     accountConsistencyService->RemoveWebStateHandler(webState.get());
   }
@@ -700,7 +700,7 @@ void DestroyPrerenderingWebState(std::unique_ptr<web::WebState> web_state) {
   _webState->SetWebUsageEnabled(true);
 
   if (AccountConsistencyService* accountConsistencyService =
-          ios::AccountConsistencyServiceFactory::GetForBrowserState(
+          ios::AccountConsistencyServiceFactory::GetForProfile(
               self.browserState)) {
     accountConsistencyService->SetWebStateHandler(
         _webState.get(), _manageAccountsDelegate.get());

@@ -86,8 +86,6 @@ update_target("//chrome/browser/ui:ui") {
     sources += [
       "//vivaldi/ui/views/vivaldi_system_menu_model_builder.cc",
       "//vivaldi/ui/views/vivaldi_system_menu_model_builder.h",
-      "//vivaldi/ui/views/vivaldi_menubar_menu_views.h",
-      "//vivaldi/ui/views/vivaldi_menubar_menu_views.cc",
       "//vivaldi/ui/views/vivaldi_window_frame_view_aura.cc",
     ]
   }

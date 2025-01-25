@@ -115,7 +115,7 @@ class CalendarBackend
   // Creates an Calendar
   CreateCalendarResult CreateCalendar(CalendarRow ev);
   CalendarRows GetAllCalendars();
-  bool UpdateCalendar(CalendarID calendar_id, const Calendar& calendar);
+  StatusCB UpdateCalendar(CalendarID calendar_id, const Calendar& calendar);
   bool DeleteCalendar(CalendarID calendar_id);
 
   EventTypeRows GetAllEventTypes();

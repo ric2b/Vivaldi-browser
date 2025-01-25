@@ -22,11 +22,14 @@
 // subscription.
 @property(nonatomic, weak) id<PriceInsightsMutator> mutator;
 
+// PriceInsightsItem object displayed in the cell.
+@property(nonatomic, readonly) PriceInsightsItem* priceInsightsItem;
+
 // Configures the UICollectionViewCell with `PriceInsightsitem`.
 - (void)configureWithItem:(PriceInsightsItem*)item;
 
-// Updates the track button's state based on page tracking status.
-- (void)updateTrackButton:(BOOL)isTracking;
+// Updates the item tracking status in the cell.
+- (void)updateTrackStatus:(BOOL)isTracking;
 
 @end
 

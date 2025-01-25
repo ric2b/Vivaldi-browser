@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" />、意外やけど途中で接続切ってきたわ。</translation>
 <translation id="1161325031994447685">Wi-Fiにもっかい接ぐ</translation>
 <translation id="1175364870820465910">刷るわ... (&amp;P)</translation>
+<translation id="132390688737681464">住所保存して自動入力</translation>
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />からデータ送信されへんかったわ。</translation>
 <translation id="1559528461873125649">そんなファイルとかフォルダーないみたいやわ</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />サイトのトップページにアクセス<ph name="END_LINK" />してみて。</translation>
 <translation id="1645368109819982629">対応してへんプロトコル</translation>
+<translation id="1662550410081243962">支払方法保存して自動入力</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">ウェブページのソースが表示されてるで</translation>
 <translation id="1734878702283171397">システム管理者に聞いてみて。</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">このサイト、安全に接続できへんわ</translation>
 <translation id="2187317261103489799">検出（デフォルト）</translation>
 <translation id="2224337661447660594">ネット繋がってへん</translation>
+<translation id="2283340219607151381">住所保存して自動入力</translation>
 <translation id="2292556288342944218">インターネットアクセスがブロックされてるわ</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />にはユーザー名とパスワードが要るねん。</translation>
 <translation id="2337852623177822836">管理者が指定する設定</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982"><ph name="CIPHER" /> で接続が暗号化・認証されてて、<ph name="KX" /> が鍵交換メカニズムとして使われてるわ。</translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されたわ。</translation>
 <translation id="2948083400971632585">接続用に構成したプロキシー、、設定ページから無効にできるで。</translation>
+<translation id="2954624054936281172">保存した支払方法の表</translation>
 <translation id="2991571918955627853"><ph name="SITE" />はHSTSが使われてるから、今アクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="3005723025932146533">保存したコピー出す</translation>
 <translation id="301521992641321250">自動ブロックされたわ</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
 <translation id="3308738399950580893">広告</translation>
 <translation id="3384522979010096022">このサイトの表示、あんたの組織が許可してへんわ</translation>
+<translation id="3387261909427947069">支払方法</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" />、今アクセスできへんわ。</translation>
 <translation id="3427092606871434483">ええよ（デフォルト）</translation>
 <translation id="3447661539832366887">このデバイスの所有者が恐竜ゲーム無効にしてるわ。</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">このサイトの証明書チェーンには SHA-1 使て署名された証明書が含まれてるわ。</translation>
 <translation id="5452270690849572955">この<ph name="HOST_NAME" />ページ、どこにも見当たらへん</translation>
 <translation id="5457113250005438886">無効</translation>
+<translation id="5490432419156082418">住所、その他</translation>
 <translation id="5492298309214877701">このサイトは企業、団体か学校のイントラネット上にあるんやけどな、外部のウェブサイトと同じURLが使われてるねん。
     <ph name="LINE_BREAK" />
     システム管理者に聞いてみて。</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">拡張機能で許可されとる</translation>
 <translation id="7111012039238467737">（有効）</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />はOKする</translation>
+<translation id="7179323680825933600">支払方法保存して自動入力</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />、セキュリティ規格遵守しとらへんわ。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使うてんで。</translation>
 <translation id="7221855153210829124">通知出す</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">確認方法わからへんかったら、ネットワーク管理者に聞いてみ。</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" />へのアクセス断られたわ</translation>
 <translation id="8422228580902424274">今から行こうとしてるサイトは、有害なソフトウェアをインストールさせようとしたり、あんたのパスワード、電話番号、クレジットカード番号とかを聞き出そうとしてくるかもしれへん。</translation>
+<translation id="8473863474539038330">住所、その他</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" />からの応答がタイムアウトしたわ。</translation>
 <translation id="8503813439785031346">ユーザーの芸名</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> への接続、暗号化されてへんで。</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">ブックマーク</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" />にブロックされたわ</translation>
 <translation id="8963117664422609631">サイト設定に行く</translation>
+<translation id="8975012916872825179">電話番号、メールアドレス、配送先住所なんかが入っとるで</translation>
 <translation id="9001074447101275817">プロキシー <ph name="DOMAIN" />にはユーザー名とパスワードが要るで。</translation>
 <translation id="9008201768610948239">無視する</translation>
 <translation id="9025348182339809926">（無効）</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" />、サポートされていないプロトコル使っとるわ。</translation>
 <translation id="936602727769022409">Googleアカウントにアクセスできへんようになるかも。パスワード変えた方がええかも。変えるんやったら要ログインな。</translation>
 <translation id="969892804517981540">公式ビルド</translation>
+<translation id="984275831282074731">支払方法</translation>
 <translation id="988159990683914416">デベロッパービルド</translation>
 </translationbundle>

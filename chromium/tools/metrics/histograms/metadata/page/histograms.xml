@@ -24,8 +24,17 @@ chromium-metrics-reviews@google.com.
 
 <variants name="BackgroundSuffix">
   <variant name="" summary="never backgrounded during the navigation"/>
+  <variant name=".WasAppBackgrounded"
+      summary="app backgrounded at least once during the navigation"/>
   <variant name=".WasBackgrounded"
-      summary="backgrounded at least once during the navigation"/>
+      summary="backgrounded at least once during the navigation (this was
+               renamed to WasAppBackgrounded)"/>
+</variants>
+
+<variants name="BrowserInitializationStatus">
+  <variant name="" summary="any"/>
+  <variant name=".IsBrowserStarting"
+      summary="browser initilization in progress"/>
 </variants>
 
 <variants name="Gap">
@@ -34,8 +43,19 @@ chromium-metrics-reviews@google.com.
 
 <variants name="HiddenSuffix">
   <variant name="" summary="never hidden during the navigation"/>
+  <variant name=".TabWasHiddenAtStartLaterShown"
+      summary="hidden at navigation start and shown later"/>
+  <variant name=".TabWasHiddenAtStartStaysHidden"
+      summary="hidden at navigation start and stays hidden"/>
+  <variant name=".TabWasHiddenLaterShown"
+      summary="tab hidden at least once during the navigation, after
+               navigation start, and is later shown again"/>
+  <variant name=".TabWasHiddenStaysHidden"
+      summary="tab hidden at least once during the navigation, after
+               navigation start, and stays hidden"/>
   <variant name=".WasHidden"
-      summary="hidden at least once during the navigation"/>
+      summary="hidden at least once during the navigation (this was renamed
+               to TabWasHidden*)"/>
 </variants>
 
 <variants name="LoadedIdleVisibility">
@@ -53,51 +73,74 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <variants name="NavigationAbandonReason">
-  <variant name="AppBackgrounded"/>
-  <variant name="ErrorPage"/>
-  <variant name="ExplicitCancellation"/>
-  <variant name="FailedSecurityCheck"/>
-  <variant name="FrameRemoved"/>
-  <variant name="Hidden"/>
-  <variant name="InternalCancellation"/>
-  <variant name="NeverStarted"/>
-  <variant name="NewHistoryNavigation"/>
-  <variant name="NewOtherNavigationBrowserInitiated"/>
-  <variant name="NewOtherNavigationRendererInitiated"/>
-  <variant name="NewReloadNavigation"/>
-  <variant name="Other"/>
-  <variant name="RenderProcessGone"/>
+  <variant name="" summary="any reason"/>
+  <variant name=".AppBackgrounded" summary="AppBackgrounded"/>
+  <variant name=".ErrorPage" summary="ErrorPage"/>
+  <variant name=".ExplicitCancellation" summary="ExplicitCancellation"/>
+  <variant name=".FrameRemoved" summary="FrameRemoved"/>
+  <variant name=".Hidden" summary="Hidden"/>
+  <variant name=".InternalCancellation" summary="InternalCancellation"/>
+  <variant name=".NewHistoryNavigation" summary="NewHistoryNavigation"/>
+  <variant name=".NewOtherNavigationBrowserInitiated"
+      summary="NewOtherNavigationBrowserInitiated"/>
+  <variant name=".NewOtherNavigationRendererInitiated"
+      summary="NewOtherNavigationRendererInitiated"/>
+  <variant name=".NewReloadNavigation" summary="NewReloadNavigation"/>
+  <variant name=".RenderProcessGone" summary="RenderProcessGone"/>
 </variants>
+
+<variants name="NavigationCountType">
+  <variant name="IsFirstNavigation"
+      summary="first navigation after browser started"/>
+  <variant name="IsSubsequentNavigation"
+      summary="subsequent navigation after browser started"/>
+</variants>
+
+<!-- LINT.IfChange(NavigationMilestone) -->
 
 <variants name="NavigationMilestone">
   <variant name="AFTEnd"/>
   <variant name="AFTStart"/>
+  <variant name="BodyChunkEnd" summary="BodyChunkEnd (added in M129)"/>
+  <variant name="BodyChunkStart" summary="BodyChunkStart (added inM129)"/>
   <variant name="CommitReceived"/>
   <variant name="CommitSent"/>
   <variant name="DidCommit"/>
   <variant name="DOMContentLoaded"/>
   <variant name="FirstContentfulPaint"/>
-  <variant name="FirstRedirectedRequestStart"/>
-  <variant name="FirstRedirectResponseLoaderCallback"/>
-  <variant name="FirstRedirectResponseStart"/>
-  <variant name="LargestContentfulPaint"/>
+  <variant name="HeaderChunkEnd" summary="HeaderChunkEnd (added in M129)"/>
+  <variant name="HeaderChunkStart" summary="HeaderChunkStart (added in M129)"/>
+  <variant name="LargestContentfulPaint"
+      summary="LargestContentfulPaint (Warning: There were some duplicated
+               records in M128-129, crrev.com/c/5802697 for more details)"/>
   <variant name="LoaderStart"/>
   <variant name="LoadEventStarted"/>
+  <variant name="NavigationStart"/>
   <variant name="NonRedirectedRequestStart"/>
   <variant name="NonRedirectResponseLoaderCallback"/>
   <variant name="NonRedirectResponseStart"/>
   <variant name="ParseStart"/>
 </variants>
 
-<variants name="NonSRPSuffix">
-  <variant name="" summary="the navigation never targeted non-SRP URL"/>
-  <variant name=".WasNonSRP"
-      summary="the navigation previously targeted non-SRP URL"/>
+<!-- LINT.ThenChange(//components/page_load_metrics/browser/observers/abandoned_page_load_metrics_observer.h:NavigationMilestone) -->
+
+<variants name="NavigationTypeForAbandonment">
+  <variant name="BrowserNav"/>
+  <variant name="HistoryNav"/>
+  <variant name="ReloadNav"/>
+  <variant name="RendererNav"/>
+  <variant name="RestoreNav"/>
 </variants>
 
 <variants name="ObservedNavigation">
   <variant name="" summary="all navigations"/>
   <variant name=".GoogleSearch" summary="SRP navigations"/>
+</variants>
+
+<variants name="PageLoadType">
+  <variant name="" summary="regular"/>
+  <variant name=".AfterBackForwardCacheRestore" summary="bfcache restoration"/>
+  <variant name=".Prerender" summary="prerendered"/>
 </variants>
 
 <!-- LINT.IfChange(PagePreloadingTriggerType) -->
@@ -156,10 +199,15 @@ chromium-metrics-reviews@google.com.
 
 <variants name="RTTBucketSuffix">
   <variant name="" summary="any"/>
+  <variant name=".ResponseFromCache" summary="resposnse from cache (M130)"/>
   <variant name=".RTT200To450" summary="RTT between 200 to 450ms"/>
   <variant name=".RTTAbove450" summary="RTT greater than 450ms"/>
-  <variant name=".RTTUnder200" summary="RTT less than 200ms"/>
-  <variant name=".RTTUnkown" summary="RTT unkown"/>
+  <variant name=".RTTBelow200" summary="RTT less than 200ms"/>
+</variants>
+
+<variants name="TabInitializationStatus">
+  <variant name="" summary="any"/>
+  <variant name=".FromNewTabPage" summary="navigation from new tab page"/>
 </variants>
 
 <!-- LINT.IfChange(TopChromeWebUIName) -->
@@ -174,8 +222,9 @@ chromium-metrics-reviews@google.com.
   <variant name=".Emoji"/>
   <variant name=".Feed"/>
   <variant name=".HistoryClustersSidePanel"/>
+  <variant name=".LensOverlayUntrusted"/>
   <variant name=".LensSearchBubble"/>
-  <variant name=".LensUntrusted"/>
+  <variant name=".LensSidePanelUntrusted"/>
   <variant name=".MakoUntrusted"/>
   <variant name=".PerformanceSidePanel"/>
   <variant name=".ReadAnythingUntrusted"/>
@@ -219,7 +268,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageActionController.Icon.CTR2" enum="PageActionCTREvent"
-    expires_after="2024-11-17">
+    expires_after="2025-01-26">
   <owner>emshack@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <summary>
@@ -235,7 +284,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageActionController.Icon.NumberActionsShownWhenClicked"
-    units="actions" expires_after="2024-11-17">
+    units="actions" expires_after="2025-01-26">
   <owner>emshack@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <summary>
@@ -245,7 +294,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageActionController.NumberActionsShown2" units="actions"
-    expires_after="2024-11-17">
+    expires_after="2025-01-26">
   <owner>emshack@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <summary>
@@ -256,7 +305,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageActionController.PagesWithActionsShown2"
-    enum="PageActionPageEvent" expires_after="2024-11-17">
+    enum="PageActionPageEvent" expires_after="2025-01-26">
   <owner>emshack@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <summary>
@@ -275,7 +324,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageActionController.{PageActionType}.Icon.CTR2"
-    enum="PageActionCTREvent" expires_after="2024-11-17">
+    enum="PageActionCTREvent" expires_after="2025-01-26">
   <owner>emshack@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <summary>
@@ -292,9 +341,11 @@ chromium-metrics-reviews@google.com.
     <variant name="BookmarksStar"/>
     <variant name="ClickToCall"/>
     <variant name="CookieControls"/>
+    <variant name="Discounts"/>
     <variant name="FileSystemAccess"/>
     <variant name="Find"/>
     <variant name="IntentPicker"/>
+    <variant name="LensOverlay"/>
     <variant name="LocalCardMigration"/>
     <variant name="ManagePasswords"/>
     <variant name="MandatoryReauth"/>
@@ -348,7 +399,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram base="true"
     name="PageLoad.AdPaintTiming.TopFrameNavigationToFirstContentfulPaint"
-    units="ms" expires_after="2024-10-12">
+    units="ms" expires_after="2025-10-12">
   <owner>jkarlin@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <summary>
@@ -366,7 +417,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.BackForwardCache.Event"
-    enum="PageLoadBackForwardCacheEvent" expires_after="2024-11-03">
+    enum="PageLoadBackForwardCacheEvent" expires_after="2025-02-23">
   <owner>altimin@chromium.org</owner>
   <owner>bmcquade@chromium.org</owner>
   <owner>hajimehoshi@chromium.org</owner>
@@ -420,7 +471,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Ads.AdPaintTiming.TopFrameNavigationToFirstAdFirstContentfulPaint"
-    units="ms" expires_after="2024-12-15">
+    units="ms" expires_after="2025-02-16">
   <owner>jkarlin@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <owner>chrome-analysis-team@google.com</owner>
@@ -429,6 +480,61 @@ chromium-metrics-reviews@google.com.
     the page reaches FirstContentfulPaint. Note that offscreen iframes don't
     reach FCP until they're scrolled into view, so it can be long.
   </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.Ads.AdPaintTiming.TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"
+    units="ms" expires_after="2025-02-23">
+  <owner>abigailkatcoff@chromium.org</owner>
+  <owner>chrome-analysis-team@google.com</owner>
+  <summary>
+    Records the time from the top frame navigation until the first ad-frame on
+    the page reaches FirstContentfulPaint. Only recorded if no Fledge auction
+    (on-device or server) was completed before the frame was painted (but an
+    auction could have been aborted). Note that offscreen iframes don't reach
+    FCP until they're scrolled into view, so it can be long.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.Ads.AdPaintTiming.TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAndDeviceAuctions"
+    units="ms" expires_after="2025-02-23">
+  <owner>abigailkatcoff@chromium.org</owner>
+  <owner>chrome-analysis-team@google.com</owner>
+  <summary>
+    Records the time from the top frame navigation until the first ad-frame on
+    the page reaches FirstContentfulPaint. Only recorded if both a server and an
+    on-device Fledge auction completed with or without a winner (and was not
+    aborted). This could have been multiple auctions or a single hybrid auction.
+    Note that offscreen iframes don't reach FCP until they're scrolled into
+    view, so it can be long.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.Ads.AdPaintTiming.TopFrameNavigationToFirstAdFirstContentfulPaintAfter{Result}{AuctionType}Auction"
+    units="ms" expires_after="2025-02-23">
+  <owner>abigailkatcoff@chromium.org</owner>
+  <owner>chrome-analysis-team@google.com</owner>
+  <summary>
+    Records the time from the top frame navigation until the first ad-frame on
+    the page reaches FirstContentfulPaint. Only recorded if a Fledge
+    {AuctionType} auction completed (and was not aborted) and no
+    non-{AuctionType} auction was completed before the frame was painted.
+    {Result} Note that offscreen iframes don't reach FCP until they're scrolled
+    into view, so it can be long.
+  </summary>
+  <token key="AuctionType">
+    <variant name="Device" summary="on-device"/>
+    <variant name="Server" summary="server"/>
+  </token>
+  <token key="Result">
+    <variant name=""
+        summary="Completed auctions may or may not have had winners."/>
+    <variant name="Winning"
+        summary="Only recorded if every completed (non-aborted) auction had a
+                 winner."/>
+  </token>
 </histogram>
 
 <histogram name="PageLoad.Clients.Ads.AllPages.NonAdNetworkBytes" units="KB"
@@ -473,7 +579,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.Ads.AverageViewportAdDensity" units="%"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>yaoxia@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
@@ -488,7 +594,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.Ads.HeavyAds.DisallowedByBlocklist"
-    enum="BooleanBlocked" expires_after="2024-12-15">
+    enum="BooleanBlocked" expires_after="2025-02-16">
   <owner>johnidel@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <owner>chrome-ads-histograms@google.com</owner>
@@ -549,7 +655,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.Ads.Resources.Bytes.Ads2" units="KB"
-    expires_after="2024-10-20">
+    expires_after="2025-02-10">
   <owner>johnidel@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <owner>chrome-ads-histograms@google.com</owner>
@@ -562,7 +668,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.AMP.Experimental.PageTiming.InputToNavigation.Subframe"
-    units="ms" expires_after="2025-01-03">
+    units="ms" expires_after="2025-03-09">
   <owner>bmcquade@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -613,7 +719,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.AMP.InteractiveTiming.NumInteractions.Subframe"
-    units="Count" expires_after="2025-01-03">
+    units="Count" expires_after="2025-03-09">
   <owner>iclelland@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -717,7 +823,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.AMP.PaintTiming.InputToFirstContentfulPaint.Subframe"
-    units="ms" expires_after="2025-01-03">
+    units="ms" expires_after="2025-03-09">
   <owner>iclelland@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -748,7 +854,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.AMP.PaintTiming.InputToLargestContentfulPaint.Subframe"
-    units="ms" expires_after="2025-01-03">
+    units="ms" expires_after="2025-03-09">
   <owner>iclelland@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -789,7 +895,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.FencedFrames.InteractiveTiming.FirstInputDelay4"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-10-08">
   <owner>lbrady@google.com</owner>
   <owner>shivanisha@chromium.org</owner>
   <owner>dom@chromium.org</owner>
@@ -817,7 +923,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.FencedFrames.LayoutInstability.CumulativeShiftScore.MainFrame"
-    units="scorex10" expires_after="2024-10-08">
+    units="scorex10" expires_after="2025-10-08">
   <owner>lbrady@google.com</owner>
   <owner>shivanisha@chromium.org</owner>
   <owner>dom@chromium.org</owner>
@@ -831,7 +937,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.FencedFrames.PaintTiming.NavigationToFirstContentfulPaint"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-23">
   <owner>toyoshim@chromium.org</owner>
   <owner>mparch-dev@chromium.org</owner>
   <summary>
@@ -843,7 +949,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.FencedFrames.PaintTiming.NavigationToFirstImagePaint"
-    units="ms" expires_after="2024-10-08">
+    units="ms" expires_after="2025-10-08">
   <owner>lbrady@google.com</owner>
   <owner>shivanisha@chromium.org</owner>
   <owner>dom@chromium.org</owner>
@@ -857,7 +963,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.FencedFrames.PaintTiming.NavigationToFirstPaint"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>toyoshim@chromium.org</owner>
   <owner>mparch-dev@chromium.org</owner>
   <summary>
@@ -963,8 +1069,273 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram
+    name="PageLoad.Clients.GoogleHomepage.DomainLookupTiming.NavigationToDomainLookupEnd.{NavigationCountType}{BrowserInitializationStatus}"
+    units="ms" expires_after="2025-02-01">
+  <owner>suzukikeita@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Measures the time for {NavigationCountType} ({BrowserInitializationStatus})
+    from navigation start to the time the domain lookup ended, for Google
+    Homepage loads. Only recorded for Homepage navigations that start in the
+    foreground and stay in the foreground until domain lookup end. This metric
+    is recorded when the browser finished conducting DNS lookup.
+
+    In cases where navigation start occurs after connect start (e.g. pre-fetch,
+    pre-connect), this metric will contain zero.
+  </summary>
+  <token key="NavigationCountType" variants="NavigationCountType"/>
+  <token key="BrowserInitializationStatus"
+      variants="BrowserInitializationStatus"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleHomepage.DomainLookupTiming.NavigationToDomainLookupStart.{NavigationCountType}{BrowserInitializationStatus}"
+    units="ms" expires_after="2025-02-01">
+  <owner>suzukikeita@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Measures the time for {NavigationCountType} ({BrowserInitializationStatus})
+    from navigation start to the time the domain lookup started, for Google
+    Homepage loads. Only recorded for Homepage navigations that start in the
+    foreground and stay in the foreground until domain lookup start. This metric
+    is recorded when the browser started to conduct DNS lookup.
+
+    In cases where navigation start occurs after connect start (e.g. pre-fetch,
+    pre-connect), this metric will contain zero.
+  </summary>
+  <token key="NavigationCountType" variants="NavigationCountType"/>
+  <token key="BrowserInitializationStatus"
+      variants="BrowserInitializationStatus"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleHomepage.NavigationTiming.NavigationToConnectStart.{NavigationCountType}{BrowserInitializationStatus}"
+    units="ms" expires_after="2025-02-01">
+  <owner>suzukikeita@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Measures the time for {NavigationCountType} ({BrowserInitializationStatus})
+    from navigation start to connect start, for Google Homepage loads. Only
+    recorded for Homepage navigations that start in the foreground and stay in
+    the foreground until connect start. This metric is recorded when the browser
+    started to establish connection.
+
+    In cases where navigation start occurs after connect start (e.g. pre-fetch,
+    pre-connect), this metric will contain zero.
+  </summary>
+  <token key="NavigationCountType" variants="NavigationCountType"/>
+  <token key="BrowserInitializationStatus"
+      variants="BrowserInitializationStatus"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleHomepage.ParseTiming.NavigationToParseStart.{NavigationCountType}{BrowserInitializationStatus}"
+    units="ms" expires_after="2025-02-01">
+  <owner>suzukikeita@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Measures the time for {NavigationCountType} ({BrowserInitializationStatus})
+    from navigation start to parse start, for Google Homepage loads. Only
+    recorded for Homepage navigations that start in the foreground and stay in
+    the foreground until parse start. This metric is recorded when the parser
+    started.
+
+    In cases where navigation start occurs after connect start (e.g. pre-fetch,
+    pre-connect), this metric will contain zero.
+  </summary>
+  <token key="NavigationCountType" variants="NavigationCountType"/>
+  <token key="BrowserInitializationStatus"
+      variants="BrowserInitializationStatus"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.ConnectTiming.FinalRequestConnectDelay"
+    units="ms" expires_after="2025-02-10">
+  <owner>horo@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The delay caused by connection establishment for the final HTTP request
+    which is sent for the main resource of a main frame navigation, for Google
+    Search page loads. Only recorded for Search navigations that happen entirely
+    in the foreground. The metric is emitted when the navigation is completed or
+    the app is backgrounded on Android.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.ConnectTiming.FinalRequestDomainLookupDelay"
+    units="ms" expires_after="2025-02-10">
+  <owner>horo@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The delay caused by domain lookup for the final HTTP request which is sent
+    for the main resource of a main frame navigation, for Google Search page
+    loads. Only recorded for Search navigations that happen entirely in the
+    foreground. The metric is emitted when the navigation is completed or the
+    app is backgrounded on Android.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.ConnectTiming.FinalRequestSslDelay"
+    units="ms" expires_after="2025-02-10">
+  <owner>horo@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The delay caused by SSL handshake for the final HTTP request which is sent
+    for the main resource of a main frame navigation, for Google Search page
+    loads. Only recorded for Search navigations that happen entirely in the
+    foreground. The metric is emitted when the navigation is completed or the
+    app is backgrounded on Android.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.ConnectTiming.FirstRequestConnectDelay"
+    units="ms" expires_after="2025-02-10">
+  <owner>horo@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The delay caused by connection establishment for the first HTTP request
+    which is sent for the main resource of a main frame navigation, for Google
+    Search page loads. Only recorded for Search navigations that happen entirely
+    in the foreground. The metric is emitted when the navigation is completed or
+    the app is backgrounded on Android.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.ConnectTiming.FirstRequestDomainLookupDelay"
+    units="ms" expires_after="2025-02-10">
+  <owner>horo@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The delay caused by domain lookup for the first HTTP request which is sent
+    for the main resource of a main frame navigation, for Google Search page
+    loads. Only recorded for Search navigations that happen entirely in the
+    foreground. The metric is emitted when the navigation is completed or the
+    app is backgrounded on Android.
+  </summary>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.ConnectTiming.FirstRequestSslDelay"
+    units="ms" expires_after="2025-02-10">
+  <owner>horo@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The delay caused by SSL handshake for the first HTTP request which is sent
+    for the main resource of a main frame navigation, for Google Search page
+    loads. Only recorded for Search navigations that happen entirely in the
+    foreground. The metric is emitted when the navigation is completed or the
+    app is backgrounded on Android.
+  </summary>
+</histogram>
+
+<histogram name="PageLoad.Clients.GoogleSearch.CSI.{Event}" units="ms"
+    expires_after="2025-03-09">
+  <owner>sisidovski@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Measures the time {Event}, for Google Search page loads. The recorded values
+    are calculated based on the metrics recorded by the JavaScript, which is
+    done after the naivagation commit phase in Search. The metric is emitted
+    when the navigation is completed or the app is backgrounded on Android. This
+    is onlly recorded in the outermost main frame.
+
+    Note that this event is randomly sampled based on the JavaScript in the
+    page, recorded at the frequency of 1%.
+  </summary>
+  <token key="Event">
+    <variant name="HeadChunkContentTime" summary="to process header chunk"/>
+    <variant name="SearchContentTime"
+        summary="from the server response time to receive the body chunk"/>
+    <variant name="TimeBetweenHCTAndSCT"
+        summary="between HeadChunkContentTime and SearchContentTime"/>
+  </token>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.DomainLookupTiming.NavigationToDomainLookupEnd2.{NavigationCountType}{BrowserInitializationStatus}{TabInitializationStatus}"
+    units="ms" expires_after="2025-08-01">
+  <owner>suzukikeita@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Measures the time from navigation timing's navigation start to the time the
+    domain lookup ended of {NavigationCountType} ({BrowserInitializationStatus},
+    {TabInitializationStatus}), for Google Search page loads. Only recorded for
+    Search navigations that start in the foreground and stay in the foreground
+    until domain lookup end.
+
+    In cases where navigation start occurs after connect start (e.g. pre-fetch,
+    pre-connect), this metric will contain zero.
+  </summary>
+  <token key="NavigationCountType" variants="NavigationCountType"/>
+  <token key="BrowserInitializationStatus"
+      variants="BrowserInitializationStatus"/>
+  <token key="TabInitializationStatus" variants="TabInitializationStatus"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.DomainLookupTiming.NavigationToDomainLookupStart2.{NavigationCountType}{BrowserInitializationStatus}{TabInitializationStatus}"
+    units="ms" expires_after="2025-08-01">
+  <owner>suzukikeita@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Measures the time from navigation timing's navigation start to the time the
+    domain lookup started of {NavigationCountType}
+    ({BrowserInitializationStatus}, {TabInitializationStatus}), for Google
+    Search page loads. Only recorded for Search navigations that start in the
+    foreground and stay in the foreground until domain lookup start.
+
+    In cases where navigation start occurs after connect start (e.g. pre-fetch,
+    pre-connect), this metric will contain zero.
+  </summary>
+  <token key="NavigationCountType" variants="NavigationCountType"/>
+  <token key="BrowserInitializationStatus"
+      variants="BrowserInitializationStatus"/>
+  <token key="TabInitializationStatus" variants="TabInitializationStatus"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients.GoogleSearch.Leakage2.{NavigationMilestone}ToAbandon{NavigationAbandonReason}{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
+    units="ms" expires_after="2025-02-10">
+  <owner>rakina@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The time relative to the milestone {NavigationMilestone} that a navigation
+    gets abandoned due to {NavigationAbandonReason}, on a main frame navigation
+    for SRP navigations. Abandonment from backgrounding or hiding are
+    non-terminal, while other abandonment for other reasons are terminal. This
+    means this metric might be recorded multiple times if the navigation is only
+    abandoned non-terminally before, but only once for each abandonment reason.
+    Metrics logged after non-terminal abandonment will be marked with the
+    suffixes {BackgroundSuffix} and/or {HiddenSuffix}. The milestone recorded
+    will be the latest milestone (if there are multiple milestones reached
+    before the abandonment). The metric is emitted when the navigation gets
+    abandoned.
+  </summary>
+  <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
+  <token key="HiddenSuffix" variants="HiddenSuffix"/>
+  <token key="NavigationAbandonReason" variants="NavigationAbandonReason"/>
+  <token key="NavigationMilestone" variants="NavigationMilestone"/>
+  <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
+</histogram>
+
+<histogram name="PageLoad.Clients.GoogleSearch.NavigationSourceType"
+    enum="NavigationSourceTypeEnum" expires_after="2025-08-01">
+  <owner>suzukikeita@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The type of source which the navigation started from, for Google Search page
+    loads. This is only recorded for Search navigations and is recorded once
+    after navigation commit.
+  </summary>
+</histogram>
+
+<histogram
     name="PageLoad.Clients.GoogleSearch.NavigationTiming.NavigationStartToFinalLoaderCallback"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-09">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -978,7 +1349,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.GoogleSearch.NavigationTiming.NavigationStartToFinalRequestStart"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-09">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -992,7 +1363,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.GoogleSearch.NavigationTiming.NavigationStartToFinalResponseStart"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-09">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1006,7 +1377,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.GoogleSearch.NavigationTiming.NavigationStartToFirstLoaderCallback"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-09">
   <owner>kouhei@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1020,7 +1391,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.GoogleSearch.NavigationTiming.NavigationStartToFirstRequestStart"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-09">
   <owner>kouhei@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1034,7 +1405,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.GoogleSearch.NavigationTiming.NavigationStartToFirstResponseStart"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-09">
   <owner>kouhei@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1048,7 +1419,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.GoogleSearch.NavigationTiming.NavigationStartToOnComplete"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>suzukikeita@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1059,8 +1430,29 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram
+    name="PageLoad.Clients.GoogleSearch.NavigationTiming.NavigationToConnectStart2.{NavigationCountType}{BrowserInitializationStatus}{TabInitializationStatus}"
+    units="ms" expires_after="2025-08-01">
+  <owner>suzukikeita@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Measures the time from navigation timing's navigation start to the time the
+    navigation start of {NavigationCountType} ({BrowserInitializationStatus},
+    {TabInitializationStatus}), for Google Search page loads. Only recorded for
+    Search navigations that start in the foreground and stay in the foreground
+    until connect start.
+
+    In cases where navigation start occurs after connect start (e.g. pre-fetch,
+    pre-connect), this metric will contain zero.
+  </summary>
+  <token key="NavigationCountType" variants="NavigationCountType"/>
+  <token key="BrowserInitializationStatus"
+      variants="BrowserInitializationStatus"/>
+  <token key="TabInitializationStatus" variants="TabInitializationStatus"/>
+</histogram>
+
+<histogram
     name="PageLoad.Clients.GoogleSearch.PaintTiming.NavigationToFirstContentfulPaint"
-    units="ms" expires_after="2024-12-01">
+    units="ms" expires_after="2025-02-02">
   <owner>spelchat@chromium.org</owner>
   <owner>chrome-brapp-loading@google.com</owner>
   <summary>
@@ -1074,7 +1466,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.GoogleSearch.PaintTiming.NavigationToLargestContentfulPaint"
-    units="ms" expires_after="2024-12-01">
+    units="ms" expires_after="2025-02-02">
   <owner>spelchat@chromium.org</owner>
   <owner>chrome-brapp-loading@google.com</owner>
   <summary>
@@ -1090,7 +1482,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.GoogleSearch.PaintTiming.{MileStone}"
-    units="ms" expires_after="2024-12-30">
+    units="ms" expires_after="2025-08-01">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1104,12 +1496,18 @@ chromium-metrics-reviews@google.com.
   <token key="MileStone">
     <variant name="AFTEnd" summary="AFT end event is sent"/>
     <variant name="AFTStart" summary="AFT start event is sent"/>
+    <variant name="BodyChunkEnd"
+        summary="end of the header chunk start event is sent"/>
+    <variant name="BodyChunkStart" summary="beginning of the body chunk"/>
+    <variant name="HeaderChunkEnd"
+        summary="end of the header chunk start event is sent"/>
+    <variant name="HeaderChunkStart" summary="beginning of the header chunk"/>
   </token>
 </histogram>
 
 <histogram
     name="PageLoad.Clients.GoogleSearch.ParseTiming.NavigationToParseStart"
-    units="ms" expires_after="2024-10-01">
+    units="ms" expires_after="2025-08-01">
   <owner>kouhei@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1123,7 +1521,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.LCPP.PaintTiming.ActualLCPIndex"
-    units="Index(1 origin)" expires_after="2024-12-08">
+    units="Index(1 origin)" expires_after="2025-02-10">
   <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -1140,7 +1538,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.LCPP.PaintTiming.NavigationToFirstContentfulPaint"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>kouhei@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -1154,7 +1552,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.LCPP.PaintTiming.NavigationToLargestContentfulPaint"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-09">
   <owner>kouhei@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -1167,7 +1565,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.LCPP.PaintTiming.PredictHitIndex"
-    units="Index(1 origin)" expires_after="2024-12-08">
+    units="Index(1 origin)" expires_after="2025-02-10">
   <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -1182,7 +1580,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.LCPP.PaintTiming.PredictLCPResult"
-    enum="LcppPredictResult" expires_after="2024-12-08">
+    enum="LcppPredictResult" expires_after="2025-02-09">
   <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -1206,7 +1604,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.MultiTabLoading{OtherLoadingCount}.{Timing}{Background}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>chikamune@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>{Timing} {OtherLoadingCount} {Background}</summary>
@@ -1283,9 +1681,23 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="PageLoad.Clients.NavigationToFirstContentfulPaint.Timeout"
+    enum="Boolean" expires_after="2025-06-01">
+  <owner>awillia@chromium.org</owner>
+  <owner>sergiog@microsoft.com</owner>
+  <owner>src/components/page_load_metrics/OWNERS</owner>
+  <summary>
+    Determines if a navigation has not been completed due to not resulting in
+    painted content before the maximum timeout allowed. The histogram will be
+    emitted with true value once timeout expires and first contentful paint is
+    not reached, and it will be emitted with false value if first contentful
+    paint is reached before expiring the timeout.
+  </summary>
+</histogram>
+
 <histogram
     name="PageLoad.Clients.PerformanceManager.LCPToLoadedIdle{LoadedIdleVisibility}"
-    units="ms" expires_after="2024-12-05">
+    units="ms" expires_after="2025-02-10">
   <owner>joenotcharles@google.com</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -1300,7 +1712,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.PerformanceManager.LCPWithoutLoadedIdle{LoadedIdleVisibility}"
-    units="ms" expires_after="2024-12-05">
+    units="ms" expires_after="2025-02-10">
   <owner>joenotcharles@google.com</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -1318,7 +1730,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.PerformanceManager.LoadedIdleWithoutLCP{LoadedIdleVisibility}"
-    units="ms" expires_after="2024-12-05">
+    units="ms" expires_after="2025-02-10">
   <owner>joenotcharles@google.com</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -1335,7 +1747,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Prerender.InteractiveTiming.FirstInputDelay4{PreloadingTriggerType}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>nhiroki@chromium.org</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
   <summary>
@@ -1348,7 +1760,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Prerender.LayoutInstability.CumulativeShiftScore.MainFrame{PreloadingTriggerType}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>nhiroki@chromium.org</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
   <summary>
@@ -1362,7 +1774,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Prerender.LayoutInstability.CumulativeShiftScore{PreloadingTriggerType}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>nhiroki@chromium.org</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
   <summary>
@@ -1389,7 +1801,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Prerender.NavigationToActivation{PreloadingTriggerType}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>nhiroki@chromium.org</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
   <summary>
@@ -1403,7 +1815,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Prerender.PaintTiming.ActivationToFirstContentfulPaint{PreloadingTriggerType}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>nhiroki@chromium.org</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
   <summary>
@@ -1418,7 +1830,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Prerender.PaintTiming.ActivationToFirstPaint{PreloadingTriggerType}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>nhiroki@chromium.org</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
   <summary>
@@ -1432,7 +1844,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Prerender.PaintTiming.ActivationToLargestContentfulPaint2{PreloadingTriggerType}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>nhiroki@chromium.org</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
   <summary>
@@ -1447,7 +1859,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.PrivacySandboxAds.InteractiveTiming.FirstInputDelay4.{PrivacySandboxAdsApi}"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>linnan@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <owner>measurement-api-dev+metrics@google.com</owner>
@@ -1460,7 +1872,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.PrivacySandboxAds.LayoutInstability.MaxCumulativeShiftScore.SessionWindow.Gap1000ms.Max5000ms2.{PrivacySandboxAdsApi}"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>linnan@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <owner>measurement-api-dev+metrics@google.com</owner>
@@ -1473,7 +1885,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.PrivacySandboxAds.PaintTiming.NavigationToFirstContentfulPaint.{PrivacySandboxAdsApi}"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>linnan@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <owner>measurement-api-dev+metrics@google.com</owner>
@@ -1486,7 +1898,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.PrivacySandboxAds.PaintTiming.NavigationToLargestContentfulPaint2.{PrivacySandboxAdsApi}"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>linnan@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <owner>measurement-api-dev+metrics@google.com</owner>
@@ -1515,7 +1927,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.ServiceWorker2.PaintTiming.{Timing}.{HandlerType}"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
   <summary>
@@ -1595,7 +2007,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.ThirdParty.Frames.NavigationToFirstContentfulPaint3"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>jkarlin@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <summary>
@@ -1611,7 +2023,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.ThirdParty.Frames.Opaque.NavigationToFirstContentfulPaint"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>awillia@chromium.org</owner>
   <owner>djmitche@chromium.org</owner>
   <summary>
@@ -1628,7 +2040,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.ThirdParty.Frames.Opaque.NavigationToLargestContentfulPaint"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>awillia@chromium.org</owner>
   <owner>djmitche@chromium.org</owner>
   <summary>
@@ -1643,7 +2055,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.ThirdParty.Origins.CookieRead2" units="Count"
-    expires_after="2024-11-17">
+    expires_after="2025-01-26">
   <owner>jkarlin@chromium.org</owner>
   <owner>yaoxia@chromium.org</owner>
   <summary>
@@ -1667,7 +2079,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.TPCD.AdTPCAccess.BlockedByExperiment2"
-    enum="Boolean" expires_after="2025-01-05">
+    enum="Boolean" expires_after="2025-03-09">
   <owner>johnidel@chromium.org</owner>
   <owner>victortan@chromium.org</owner>
   <owner>src/chrome/browser/tpcd/OWNERS</owner>
@@ -1681,7 +2093,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.TPCD.CookieAccess.ThirdPartyCookieAllowMechanism3"
-    enum="ThirdPartyCookieAllowMechanism" expires_after="2025-01-05">
+    enum="ThirdPartyCookieAllowMechanism" expires_after="2025-03-09">
   <owner>victortan@chromium.org</owner>
   <owner>src/chrome/browser/tpcd/OWNERS</owner>
   <summary>
@@ -1696,7 +2108,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.TPCD.ThirdPartyCookieAccessBlockedByExperiment2"
-    enum="Boolean" expires_after="2025-01-05">
+    enum="Boolean" expires_after="2025-03-09">
   <owner>victortan@chromium.org</owner>
   <owner>src/chrome/browser/tpcd/OWNERS</owner>
   <summary>
@@ -1709,7 +2121,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.TPCD.TopLevelTpcd.CrossSiteTrialChange"
-    enum="OriginTrialStatusChange" expires_after="2024-09-30">
+    enum="OriginTrialStatusChange" expires_after="2025-02-28">
   <owner>jdh@chromium.org</owner>
   <owner>src/chrome/browser/tpcd/OWNERS</owner>
   <summary>
@@ -1728,7 +2140,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.TPCD.TPCAccess.BlockedByExperiment.IsAdOrNonAd2"
-    enum="Boolean" expires_after="2025-01-05">
+    enum="Boolean" expires_after="2025-03-09">
   <owner>johnidel@chromium.org</owner>
   <owner>victortan@chromium.org</owner>
   <owner>src/chrome/browser/tpcd/OWNERS</owner>
@@ -1741,7 +2153,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.TPCD.TPCAccess.CookieReadStatus2"
-    enum="CookieReadStatus" expires_after="2025-01-05">
+    enum="CookieReadStatus" expires_after="2025-03-09">
   <owner>johnidel@chromium.org</owner>
   <owner>src/chrome/browser/tpcd/OWNERS</owner>
   <summary>
@@ -1774,7 +2186,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Zstd.PaintTiming.NavigationToFirstContentfulPaint"
-    units="ms" expires_after="2024-12-01">
+    units="ms" expires_after="2025-02-02">
   <owner>nidhijaju@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1788,7 +2200,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Clients.Zstd.PaintTiming.NavigationToLargestContentfulPaint"
-    units="ms" expires_after="2024-12-01">
+    units="ms" expires_after="2025-02-02">
   <owner>nidhijaju@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1804,7 +2216,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.Zstd.ParseTiming.NavigationToParseStart"
-    units="ms" expires_after="2024-12-01">
+    units="ms" expires_after="2025-02-02">
   <owner>nidhijaju@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1816,7 +2228,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Clients.{Origin}.{MetricName}" units="ms"
-    expires_after="2024-11-17">
+    expires_after="2025-01-26">
   <owner>chikamune@chromium.org</owner>
   <owner>loading-dev@chromium.org</owner>
   <summary>{MetricName}, but recorded only for {Origin} navigations.</summary>
@@ -1839,48 +2251,46 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram
-    name="PageLoad.Clients{ObservedNavigation}.Leakage2.AbandonReasonAt.{NavigationMilestone}{BackgroundSuffix}{HiddenSuffix}{NonSRPSuffix}{RTTBucketSuffix}"
-    enum="NavigationAbandonReasonEnum" expires_after="2024-12-08">
+    name="PageLoad.Clients{ObservedNavigation}.Leakage2.AbandonReasonAt.{NavigationMilestone}{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
+    enum="NavigationAbandonReasonEnum" expires_after="2025-02-10">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
     Logs the navigation abandonment reason that happens when the last milestone
     is {NavigationMilestone} on a main frame navigation for {ObservedNavigation}
     with {RTTBucketSuffix} connection, with potentially some suffixes detaling
-    the navigation {BackgroundSuffix}, {HiddenSuffix}, and/or {NonSRPSuffix}.
+    the navigation {BackgroundSuffix} and/or {HiddenSuffix} .
 
     The metric is emitted when the navigation gets abandoned.
   </summary>
   <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
   <token key="HiddenSuffix" variants="HiddenSuffix"/>
   <token key="NavigationMilestone" variants="NavigationMilestone"/>
-  <token key="NonSRPSuffix" variants="NonSRPSuffix"/>
   <token key="ObservedNavigation" variants="ObservedNavigation"/>
   <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
 </histogram>
 
 <histogram
-    name="PageLoad.Clients{ObservedNavigation}.Leakage2.LastMilestoneBeforeAbandon.{NavigationAbandonReason}{BackgroundSuffix}{HiddenSuffix}{NonSRPSuffix}{RTTBucketSuffix}"
-    enum="NavigationMilestoneEnum2" expires_after="2024-12-08">
+    name="PageLoad.Clients{ObservedNavigation}.Leakage2.LastMilestoneBeforeAbandon{NavigationAbandonReason}{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
+    enum="NavigationMilestoneEnum2" expires_after="2025-02-10">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
     Logs the last navigation milestone reason that was reached when a main frame
     navigation for {ObservedNavigation} is abandoned due to
     {NavigationAbandonReason}, with potentially some suffixes detaling the
-    navigation {BackgroundSuffix}, {HiddenSuffix}, and/or {NonSRPSuffix}. The
-    metric is emitted when the navigation gets abandoned.
+    navigation {BackgroundSuffix} and/or {HiddenSuffix} . The metric is emitted
+    when the navigation gets abandoned.
   </summary>
   <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
   <token key="HiddenSuffix" variants="HiddenSuffix"/>
   <token key="NavigationAbandonReason" variants="NavigationAbandonReason"/>
-  <token key="NonSRPSuffix" variants="NonSRPSuffix"/>
   <token key="ObservedNavigation" variants="ObservedNavigation"/>
   <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
 </histogram>
 
 <histogram
-    name="PageLoad.Clients{ObservedNavigation}.Leakage2.NavigationStartToRendererProcessInit{BackgroundSuffix}{HiddenSuffix}{NonSRPSuffix}{RTTBucketSuffix}"
+    name="PageLoad.Clients{ObservedNavigation}.Leakage2.NavigationStartToRendererProcessInit{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
     units="ms" expires_after="2024-12-08">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -1888,27 +2298,26 @@ chromium-metrics-reviews@google.com.
     The time relative to the navigation start that the final renderer process is
     created for a main frame navigation for {ObservedNavigation} with
     potentially some suffixes detaling the navigation {BackgroundSuffix},
-    {HiddenSuffix}, {NonSRPSuffix}, and {RTTBucketSuffix}. The metric is emitted
-    when the navigation's commit IPC is just sent out, if the renderer process
-    is created after the navigation started.
+    {HiddenSuffix}, {RTTBucketSuffix}. The metric is emitted when the
+    navigation's commit IPC is just sent out, if the renderer process is created
+    after the navigation started.
   </summary>
   <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
   <token key="HiddenSuffix" variants="HiddenSuffix"/>
-  <token key="NonSRPSuffix" variants="NonSRPSuffix"/>
   <token key="ObservedNavigation" variants="ObservedNavigation"/>
   <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
 </histogram>
 
 <histogram
-    name="PageLoad.Clients{ObservedNavigation}.Leakage2.NavigationStartTo{NavigationMilestone}{BackgroundSuffix}{HiddenSuffix}{NonSRPSuffix}{RTTBucketSuffix}"
-    units="ms" expires_after="2024-12-08">
+    name="PageLoad.Clients{ObservedNavigation}.Leakage2.NavigationStartTo{NavigationMilestone}{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
+    units="ms" expires_after="2025-02-10">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
     The time relative to navigation start that a navigation reaches the the
     milestone {NavigationMilestone} on a main frame navigation for
     {ObservedNavigation}, with potentially some suffixes detaling the navigation
-    {BackgroundSuffix}, {HiddenSuffix}, and/or {NonSRPSuffix}. Only recorded for
+    {BackgroundSuffix}, {HiddenSuffix}, {RTTBucketSuffix}. Only recorded for
     Search navigations that didn't get terminally abandoned at least until the
     relevant milestone. Note that abandonment from backgrounding or hiding are
     non-terminal, so milestones after those types of abandonments will still be
@@ -1920,14 +2329,13 @@ chromium-metrics-reviews@google.com.
   <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
   <token key="HiddenSuffix" variants="HiddenSuffix"/>
   <token key="NavigationMilestone" variants="NavigationMilestone"/>
-  <token key="NonSRPSuffix" variants="NonSRPSuffix"/>
   <token key="ObservedNavigation" variants="ObservedNavigation"/>
   <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
 </histogram>
 
 <histogram
-    name="PageLoad.Clients{ObservedNavigation}.Leakage2.NavigationStart{NonSRPSuffix}{RTTBucketSuffix}"
-    units="ms" expires_after="2024-12-08">
+    name="PageLoad.Clients{ObservedNavigation}.Leakage2.NavigationStart{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
+    units="ms" expires_after="2025-02-10">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1936,13 +2344,14 @@ chromium-metrics-reviews@google.com.
     emitted when the navigation finishes committing or it gets abandoned for the
     first time.
   </summary>
-  <token key="NonSRPSuffix" variants="NonSRPSuffix"/>
+  <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
+  <token key="HiddenSuffix" variants="HiddenSuffix"/>
   <token key="ObservedNavigation" variants="ObservedNavigation"/>
   <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
 </histogram>
 
 <histogram
-    name="PageLoad.Clients{ObservedNavigation}.Leakage2.RendererProcessCreatedBeforeNav{BackgroundSuffix}{HiddenSuffix}{NonSRPSuffix}{RTTBucketSuffix}"
+    name="PageLoad.Clients{ObservedNavigation}.Leakage2.RendererProcessCreatedBeforeNav{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
     enum="Boolean" expires_after="2024-12-08">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -1950,40 +2359,58 @@ chromium-metrics-reviews@google.com.
     Whether the renderer process for the navigation is already created before
     the navigation start or not, for a main frame navigation for
     {ObservedNavigation} with potentially some suffixes detaling the navigation
-    {BackgroundSuffix}, {HiddenSuffix}, {NonSRPSuffix}, and {RTTBucketSuffix}.
-    The metric is emitted when the navigation's commit IPC is just sent out.
+    {BackgroundSuffix}, {HiddenSuffix}, {RTTBucketSuffix}. The metric is emitted
+    when the navigation's commit IPC is just sent out.
   </summary>
   <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
   <token key="HiddenSuffix" variants="HiddenSuffix"/>
-  <token key="NonSRPSuffix" variants="NonSRPSuffix"/>
   <token key="ObservedNavigation" variants="ObservedNavigation"/>
   <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
 </histogram>
 
 <histogram
-    name="PageLoad.Clients{ObservedNavigation}.Leakage2.{NavigationMilestone}ToAbandon.{NavigationAbandonReason}{BackgroundSuffix}{HiddenSuffix}{NonSRPSuffix}{RTTBucketSuffix}"
+    name="PageLoad.Clients{ObservedNavigation}.Leakage2.TimeToAbandonFromNavigationStart.{NavigationMilestone}{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
     units="ms" expires_after="2024-12-08">
+  <owner>sisidovski@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The Duration from the navigation start time to the time that a navigation
+    gets abandoned after the milestone {NavigationMilestone} on a main frame
+    navigation for {ObservedNavigation} with {RTTBucketSuffix}. Only the
+    abandonments due to backgrounding and hiding are non-terminal, and other
+    abandonments are terminal. This means this metric might be recorded multiple
+    times if the navigation is only abandoned non-terminally before, but only
+    once for each abandonment reason. &quot;This is logged after non-terminal
+    abandonment of pages which were {BackgroundSuffix} and {HiddenSuffix}. The
+    milestone recorded will be the latest milestone (if there are multiple
+    milestones reached before the abandonment). The metric is emitted when the
+    navigation gets abandoned.
+  </summary>
+  <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
+  <token key="HiddenSuffix" variants="HiddenSuffix"/>
+  <token key="NavigationMilestone" variants="NavigationMilestone"/>
+  <token key="ObservedNavigation" variants="ObservedNavigation"/>
+  <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
+</histogram>
+
+<histogram
+    name="PageLoad.Clients{ObservedNavigation}.Leakage2.{NavigationType}To{NavigationAbandonReason}.{BackgroundSuffix}{HiddenSuffix}{RTTBucketSuffix}"
+    units="ms" expires_after="2025-02-10">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
-    The time relative to the milestone {NavigationMilestone} that a navigation
-    gets abandoned due to {NavigationAbandonReason}, on a main frame navigation
-    for {ObservedNavigation}. Abandonment from backgrounding or hiding are
-    non-terminal, while other abandonment for other reasons are terminal. This
-    means this metric might be recorded multiple times if the navigation is only
-    abandoned non-terminally before, but only once for each abandonment reason.
-    Metrics logged after non-terminal abandonment will be marked with the
-    suffixes {BackgroundSuffix} and/or {HiddenSuffix}, and if the navigation
-    involves a non-SRP URL but then redirected to SRP URL, the logged metric
-    will be marked with {NonSRPSuffix}. The milestone recorded will be the
-    latest milestone (if there are multiple milestones reached before the
-    abandonment). The metric is emitted when the navigation gets abandoned.
+    For a navigation of type {NavigationType} that gets abandoned due to
+    {NavigationAbandonReason} from the navigation's start time, for a main frame
+    navigation for {ObservedNavigation} with {RTTBucketSuffix} connection, with
+    potentially some suffixes detaling the navigation {BackgroundSuffix} and/or
+    {HiddenSuffix}.
+
+    The metric is emitted when the navigation gets abandoned.
   </summary>
   <token key="BackgroundSuffix" variants="BackgroundSuffix"/>
   <token key="HiddenSuffix" variants="HiddenSuffix"/>
   <token key="NavigationAbandonReason" variants="NavigationAbandonReason"/>
-  <token key="NavigationMilestone" variants="NavigationMilestone"/>
-  <token key="NonSRPSuffix" variants="NonSRPSuffix"/>
+  <token key="NavigationType" variants="NavigationTypeForAbandonment"/>
   <token key="ObservedNavigation" variants="ObservedNavigation"/>
   <token key="RTTBucketSuffix" variants="RTTBucketSuffix"/>
 </histogram>
@@ -2007,7 +2434,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="PageLoad.Cpu.TotalUsage" units="ms" expires_after="2024-12-08">
+<histogram name="PageLoad.Cpu.TotalUsage" units="ms" expires_after="2025-02-10">
   <owner>alexmt@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <summary>
@@ -2019,7 +2446,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Cpu.TotalUsageForegrounded" units="ms"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>alexmt@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <summary>
@@ -2031,7 +2458,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.DocumentTiming.NavigationToDOMContentLoadedEventFired"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>bmcquade@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
   <summary>
@@ -2041,7 +2468,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.DocumentTiming.NavigationToLoadEventFired" units="ms"
-    expires_after="2024-11-17">
+    expires_after="2025-01-19">
   <owner>bmcquade@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
   <improvement direction="LOWER_IS_BETTER"/>
@@ -2052,7 +2479,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Experimental.ClickInputBurst" units="count"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>dougarnett@chromium.org</owner>
   <owner>tbansal@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
@@ -2067,7 +2494,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Experimental.InputTiming.InputToNavigationStart"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>spelchat@chromium.org</owner>
   <owner>chrome-brapp-loading@google.com</owner>
   <summary>
@@ -2227,7 +2654,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToFinalLoaderCallback"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2251,7 +2678,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToFinalResponseStart"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-23">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2277,7 +2704,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToFirstRequestStart"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2288,7 +2715,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToFirstResponseStart"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2299,7 +2726,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Experimental.NavigationTiming.NavigationStartToNavigationCommitSent"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-23">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2325,7 +2752,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Experimental.PageTiming.CommitSentToFirstSubresourceLoadStart"
-    units="ms" expires_after="2024-12-30">
+    units="ms" expires_after="2025-03-02">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -2339,7 +2766,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Experimental.PageTiming.NavigationToFirstSubresourceLoadStart"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -2350,7 +2777,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Experimental.PageTiming.ResourceLoadTime.{RequestDestination}"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -2388,7 +2815,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Experimental.PageVisitType2" enum="PageVisitType"
-    expires_after="2024-11-17">
+    expires_after="2025-01-26">
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -2410,7 +2837,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Experimental.PaintTiming.InputToFirstContentfulPaint"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>sullivan@chromium.org</owner>
   <summary>
     The time between the OS-level input event that initiated a navigation, and
@@ -2419,7 +2846,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Experimental.PreviewFinalStatus"
-    enum="PreviewFinalStatus" expires_after="2024-12-08">
+    enum="PreviewFinalStatus" expires_after="2025-02-10">
   <owner>toyoshim@chromium.org</owner>
   <owner>src/chrome/browser/preloading/preview/OWNERS</owner>
   <summary>
@@ -2443,7 +2870,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Experimental.TotalForegroundDuration{PageVisitType}"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>npm@chromium.org</owner>
   <owner>toyoshim@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -2514,6 +2941,17 @@ chromium-metrics-reviews@google.com.
     marked as indeterminate. Frames that are render-throttled will not have an
     FCP. Ad frames with indeterminate creative origin status are broken out as
     throttled or not.
+  </summary>
+</histogram>
+
+<histogram name="PageLoad.FrameCounts.AdFrames.PerFrame.DeferredForTagging"
+    enum="Boolean" expires_after="2025-02-05">
+  <owner>jdh@chromium.org</owner>
+  <owner>src/chrome/browser/tpcd/OWNERS</owner>
+  <summary>
+    Records whether the start of a child frame navigation was deferred to allow
+    ad tagging to be completed first or not. Recorded only when the
+    TPCDAdHeuristicSubframeRequestTagging feature is enabled.
   </summary>
 </histogram>
 
@@ -2712,7 +3150,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.InteractiveTiming.FirstInputTimestamp4" units="ms"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -2723,7 +3161,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.InteractiveTiming.INPOffset" units="offset"
-    expires_after="2024-11-15">
+    expires_after="2025-01-26">
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -2774,22 +3212,20 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="PageLoad.InteractiveTiming.NumInteractions{Bfcache}"
-    units="Count" expires_after="2024-12-01">
+<histogram name="PageLoad.InteractiveTiming.NumInteractions{PageLoadType}"
+    units="Count" expires_after="2025-02-02">
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
-    The number of user interactions in a page load. Definition of interaction:
+    The number of user interactions in a {PageLoadType} page load. Definition of
+    interaction:
     https://web.dev/better-responsiveness-metric/#group-events-into-interactions
   </summary>
-  <token key="Bfcache">
-    <variant name=""/>
-    <variant name=".AfterBackForwardCacheRestore"/>
-  </token>
+  <token key="PageLoadType" variants="PageLoadType"/>
 </histogram>
 
 <histogram name="PageLoad.InteractiveTiming.ProcessingTime" units="ms"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -2802,7 +3238,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.InteractiveTiming.TimeToNextPaint" units="ms"
-    expires_after="2024-11-24">
+    expires_after="2025-01-26">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -2817,11 +3253,11 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.InteractiveTiming.{NormalizedResponsivenessMetric}.{UserInteractionLatency}{PageLoadType}"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
-    The {NormalizedResponsivenessMetric} of a page load {PageLoadType}, in ms.
+    The {NormalizedResponsivenessMetric} of a {PageLoadType} page load, in ms.
     For this metric, we measure the latency of a user interaction by the
     {UserInteractionLatency} within the user interaction.
 
@@ -2833,11 +3269,7 @@ chromium-metrics-reviews@google.com.
     record the INP values which are not able to be recorded in
     UserInteractionLatency.HighPercentile2 for some reasons.
   </summary>
-  <token key="PageLoadType">
-    <variant name=""/>
-    <variant name=".AfterBackForwardCacheRestore"/>
-    <variant name=".Prerender"/>
-  </token>
+  <token key="PageLoadType" variants="PageLoadType"/>
   <token key="NormalizedResponsivenessMetric">
     <variant name="UserInteractionLatency.HighPercentile2"/>
     <variant name="UserInteractionLatencyAtFirstOnHidden.HighPercentile2"/>
@@ -2849,7 +3281,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.ErrorCode" enum="InternalErrorLoadEvent"
-    expires_after="2024-11-24">
+    expires_after="2025-01-26">
   <owner>csharrison@chromium.org</owner>
   <owner>bmcquade@chromium.org</owner>
   <summary>
@@ -2858,7 +3290,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.EventTiming.ClickInteractionEvents"
-    enum="EventTimingClickInteractionEvents" expires_after="2024-12-17">
+    enum="EventTimingClickInteractionEvents" expires_after="2025-02-16">
   <owner>zuoaoyuan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -2879,7 +3311,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.PageLoadTimingStatus{Condition}"
-    enum="PageLoadTimingStatus" expires_after="2025-01-05">
+    enum="PageLoadTimingStatus" expires_after="2025-03-09">
   <owner>toyoshim@chromium.org</owner>
   <owner>src/components/page_load_metrics/OWNERS</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
@@ -2900,7 +3332,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.PageType" enum="PageLoadTrackerPageType"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>toyoshim@chromium.org</owner>
   <owner>mparch-dev@chromium.org</owner>
   <summary>
@@ -2911,7 +3343,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Internal.PaintTiming.LargestContentfulPaint.ContentType"
-    enum="LargestContentType" expires_after="2024-11-17">
+    enum="LargestContentType" expires_after="2025-01-26">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -2949,7 +3381,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.Internal.Prerender2.ActivatedPageLoaderStatus{PreloadingTriggerType}"
-    enum="NetErrorCodes" expires_after="2025-01-05">
+    enum="NetErrorCodes" expires_after="2025-03-09">
   <owner>lingqi@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -2964,7 +3396,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.Prerender2.Event"
-    enum="PageLoadPrerenderEvent" expires_after="2024-12-08">
+    enum="PageLoadPrerenderEvent" expires_after="2025-02-10">
   <owner>kenoss@chromium.org</owner>
   <owner>src/content/browser/preloading/prerender/OWNERS</owner>
   <summary>
@@ -2974,29 +3406,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="PageLoad.Internal.Prerender2.ObserverEvent"
-    enum="PageLoadPrerenderObserverEvent" expires_after="2024-09-15">
-  <owner>nhiroki@chromium.org</owner>
-  <owner>src/content/browser/preloading/prerender/OWNERS</owner>
-  <summary>
-    Counts page load observer events related to Prerender2, like
-    FirstContentfulPaint. Recorded when those events are observed in
-    PrerenderPageLoaderMetricsObserver.
-  </summary>
-</histogram>
-
-<histogram name="PageLoad.Internal.Prerender2.VisibilityAtActivation"
-    enum="PageLoadPrerenderVisibilityAtActivation" expires_after="2024-02-04">
-  <owner>nhiroki@chromium.org</owner>
-  <owner>src/content/browser/preloading/prerender/OWNERS</owner>
-  <summary>
-    Records the visibility of an initiator page in PageLoadTracker when a
-    prerendered page gets activated.
-  </summary>
-</histogram>
-
 <histogram name="PageLoad.Internal.SoftNavigationOutcome"
-    enum="SoftNavigationOutcome" expires_after="2024-12-24">
+    enum="SoftNavigationOutcome" expires_after="2025-02-23">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -3013,7 +3424,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.SuppressedEventsBeforeMissingFirstPaint"
-    enum="Boolean" expires_after="2024-11-17">
+    enum="Boolean" expires_after="2025-01-26">
   <owner>mustaq@chromium.org</owner>
   <owner>blink-interactions-team@google.com</owner>
   <summary>
@@ -3023,7 +3434,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.SuppressedEventsCountBeforePaint3"
-    units="count" expires_after="2024-11-17">
+    units="count" expires_after="2025-01-26">
   <owner>mustaq@chromium.org</owner>
   <owner>blink-interactions-team@google.com</owner>
   <summary>
@@ -3043,7 +3454,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.SuppressedEventsTimingBeforePaint3"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>mustaq@chromium.org</owner>
   <owner>blink-interactions-team@google.com</owner>
   <summary>
@@ -3069,7 +3480,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.Internal.SuppressedInteractionsCountBeforePaint3"
-    units="count" expires_after="2024-11-17">
+    units="count" expires_after="2025-01-26">
   <owner>mustaq@chromium.org</owner>
   <owner>blink-interactions-team@google.com</owner>
   <summary>
@@ -3092,7 +3503,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.LayoutInstability.CumulativeShiftScore"
-    units="scorex10" expires_after="2024-12-08">
+    units="scorex10" expires_after="2025-02-09">
   <owner>bmcquade@chromium.org</owner>
   <owner>skobes@chromium.org</owner>
   <summary>
@@ -3226,37 +3637,6 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram
-    name="PageLoad.LayoutInstability.MaxCumulativeShiftScore.{Bfcache}{Window}.Gap{Gap}.Max{MaxWindowSize}"
-    units="scorex10" expires_after="2024-09-29">
-  <owner>iclelland@chromium.org</owner>
-  <owner>speed-metrics-dev@chromium.org</owner>
-  <summary>
-    Measures the maximum cumulative layout shift (bit.ly/cls-explainer) that has
-    occurred in a {Window}. The gap between two consecutive shifts in a window
-    is not bigger than {Gap} and the maximum window size is {MaxWindowSize}.
-    This metric's integral value is 10x the fractional cumulative layout shift
-    score described in the explainer. If {Bfcache} is triggered, we record the
-    metric when the user navigates away or closes the page after the page was
-    restored from back-forward cache. Otherwise, we record it at the end of the
-    page lifetime, such as when the page is being navigated away from or when a
-    tab is being closed.
-  </summary>
-  <token key="Window" variants="Window">
-    <variant name=""/>
-  </token>
-  <token key="Bfcache">
-    <variant name=""/>
-    <variant name="AfterBackForwardCacheRestore."/>
-  </token>
-  <token key="Gap" variants="Gap">
-    <variant name=""/>
-  </token>
-  <token key="MaxWindowSize" variants="MaxWindowSize">
-    <variant name=""/>
-  </token>
-</histogram>
-
-<histogram
     name="PageLoad.LayoutInstability.MaxCumulativeShiftScoreAtFirstOnHidden.SessionWindow.Gap1000ms.Max5000ms"
     units="scorex10000" expires_after="never">
 <!-- expires-never: used in server pipeline to derive additional metrics -->
@@ -3283,7 +3663,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.PageTiming.ForegroundDuration" units="ms"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>bmcquade@chromium.org</owner>
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -3311,7 +3691,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.PageTiming.NavigationToFirstForeground" units="ms"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>bmcquade@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
   <summary>
@@ -3322,7 +3702,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.PaintTiming.ForegroundToFirstContentfulPaint"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -3384,7 +3764,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint.NonTabWebUI{WebUIName}"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>anthonyvd@chromium.org</owner>
   <owner>chrome-catan@chromium.org</owner>
   <summary>
@@ -3421,7 +3801,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.PaintTiming.NavigationToFirstImagePaint" units="ms"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -3432,7 +3812,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.PaintTiming.NavigationToFirstPaint" units="ms"
-    expires_after="2024-11-17">
+    expires_after="2025-01-19">
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -3490,61 +3870,8 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram
-    name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint.ImageLCPLessThanLoadEnd"
-    enum="Boolean" expires_after="2024-12-30">
-  <owner>haoliuk@chromium.org</owner>
-  <owner>speed-metrics-dev@chromium.org</owner>
-  <summary>
-    Records the count of cases where an LCP image candidate has an LCP less than
-    its LoadEnd. This is counted once per LCP candidate in the
-    PageLoadTracker::OnTimingChanged() method when the LCP candiate changes.
-  </summary>
-</histogram>
-
-<histogram
-    name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint.ImageLoadEndLessThanLoadStart"
-    enum="Boolean" expires_after="2024-08-24">
-  <owner>haoliuk@chromium.org</owner>
-  <owner>speed-metrics-dev@chromium.org</owner>
-  <summary>
-    Records the count of cases where an LCP image candidate has a LoadEnd less
-    than its LoadStart. This is counted once per LCP candidate in the
-    PageLoadTracker::OnTimingChanged() method when the LCP candiate changes.
-  </summary>
-</histogram>
-
-<histogram
-    name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint.ImageLoadStartLessThanDocumentTTFB"
-    enum="Boolean" expires_after="2024-12-30">
-  <owner>haoliuk@chromium.org</owner>
-  <owner>speed-metrics-dev@chromium.org</owner>
-  <summary>
-    Records the count of cases where an LCP image candidate has a LoadStart less
-    than the document TTFB. This is counted once per LCP candidate in the
-    PageLoadTracker::OnTimingChanged() method when the LCP candiate changes.
-  </summary>
-</histogram>
-
-<histogram
-    name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint.ImageLoadStartLessThanDocumentTtfbCauses"
-    enum="LargestContentfulPaintImageLoadStartLessThanDocumentTtfbCauses"
-    expires_after="2024-12-30">
-  <owner>haoliuk@chromium.org</owner>
-  <owner>speed-metrics-dev@chromium.org</owner>
-  <summary>
-    Records the count of 'causes' of LCP image load timings being less than
-    document Time-To-First-Byte(TTFB) to diagnose crbug.com/1431906. This is
-    recorded at most once per image, only when the image's load start was
-    recorded as being before its associated document's TTFB. Recorded in the
-    page load tracker when the LCP candidate changes. Unexplained instances are
-    recorded in the 'Unknown' bucket, and these are expected to diminish over
-    time as additional causes are uncovered.
-  </summary>
-</histogram>
-
 <histogram name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint2"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>iclelland@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -3606,7 +3933,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint2.CrossSiteSubFrame"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>sisidovski@google.com</owner>
   <owner>kouhei@chromium.org</owner>
   <summary>
@@ -3619,7 +3946,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint2.MainFrame"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>iclelland@chromium.org</owner>
   <owner>sullivan@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -3633,7 +3960,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint2.NonTabWebUI{WebUIName}"
-    units="ms" expires_after="2024-11-17">
+    units="ms" expires_after="2025-01-26">
   <owner>anthonyvd@chromium.org</owner>
   <owner>chrome-catan@chromium.org</owner>
   <summary>
@@ -3648,7 +3975,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint2.SetSpeculationRulesPrerender"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>yoichio@chromium.org</owner>
   <owner>loading-dev@chromium.org</owner>
   <summary>
@@ -3690,7 +4017,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PageLoad.PaintTiming.NavigationToLargestContentfulPaint2AtFirstOnHidden"
-    units="ms" expires_after="2024-12-08">
+    units="ms" expires_after="2025-02-10">
   <owner>lanwei@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -3713,7 +4040,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.PaintTiming.ParseStartToFirstContentfulPaint"
-    units="ms" expires_after="2025-01-05">
+    units="ms" expires_after="2025-03-09">
   <owner>bmcquade@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
@@ -3724,7 +4051,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PageLoad.ParseTiming.NavigationToParseStart" units="ms"
-    expires_after="2024-11-17">
+    expires_after="2025-01-19">
   <owner>bmcquade@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
   <summary>

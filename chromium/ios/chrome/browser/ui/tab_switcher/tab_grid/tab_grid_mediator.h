@@ -11,6 +11,7 @@
 
 @protocol GridToolbarsMutator;
 @protocol TabGridConsumer;
+@class TabGridModeHolder;
 @protocol TabGridPageMutator;
 
 namespace feature_engagement {
@@ -50,14 +51,13 @@ class PrefService;
                     (signin::IdentityManager*)identityManager
                             prefService:(PrefService*)prefService
                featureEngagementTracker:(feature_engagement::Tracker*)tracker
+                             modeHolder:(TabGridModeHolder*)modeHolder
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
-// Set the current displayed page (incognito, regular or remote).
-- (void)setPage:(TabGridPage)page;
-// Set the current mode (normal/selection/search/inactive) on the currently
-// displayed page.
-- (void)setModeOnCurrentPage:(TabGridMode)mode;
+
+// Set the active page (incognito, regular or remote).
+- (void)setActivePage:(TabGridPage)page;
 // Stops mediating and disconnects from backend models.
 - (void)disconnect;
 

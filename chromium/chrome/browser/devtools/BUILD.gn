@@ -100,12 +100,17 @@ static_library("devtools") {
     "//build/config:precompiled_headers",
   ]
 
-  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+  public_deps = [
+    "//chrome/browser:browser_public_dependencies",
+    "//chrome/browser:primitives",
+  ]
 
   deps = [
     "//base",
+    "//chrome/browser/search",
     "//chrome/browser/search_engines",
     "//chrome/browser/sync",
+    "//chrome/browser/ui/autofill",
 
     # To prevent circular GN dependencies, this target does not depend on
     # //chrome/browser:browser, even though it has a real build dependency on
@@ -134,6 +139,10 @@ static_library("devtools") {
   ]
 
   if (!is_android) {
+    public_deps += [
+      "//chrome/browser/ui:browser_list",
+      "//chrome/browser/ui/tabs:tab_strip_model_observer",
+    ]
     deps += [
       "//build:chromeos_buildflags",
       "//chrome:extra_resources",
@@ -144,10 +153,13 @@ static_library("devtools") {
       "//chrome/browser/apps/app_service:constants",
       "//chrome/browser/media/router:media_router_feature",
       "//chrome/browser/profiles:profile",
+      "//chrome/browser/task_manager",
       "//chrome/browser/themes",
+      "//chrome/browser/ui:browser_navigator_params_headers",
       "//chrome/browser/ui/exclusive_access",
       "//chrome/browser/web_applications",
       "//chrome/common",
+      "//components/flags_ui",
       "//components/guest_view/browser",
       "//components/infobars/content",
       "//components/infobars/core",
@@ -167,7 +179,7 @@ static_library("devtools") {
       "//components/viz/host",
       "//components/web_modal",
       "//components/zoom",
-      "//net/server:http_server",
+      "//net",
       "//skia",
       "//third_party/icu",
       "//third_party/leveldatabase",

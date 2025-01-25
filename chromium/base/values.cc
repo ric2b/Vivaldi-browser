@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "base/values.h"
 
+#include <array>
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -42,10 +38,10 @@ namespace base {
 
 namespace {
 
-const char* const kTypeNames[] = {"null",   "boolean", "integer",    "double",
-                                  "string", "binary",  "dictionary", "list"};
-static_assert(std::size(kTypeNames) ==
-                  static_cast<size_t>(Value::Type::LIST) + 1,
+constexpr auto kTypeNames =
+    std::to_array<const char*>({"null", "boolean", "integer", "double",
+                                "string", "binary", "dictionary", "list"});
+static_assert(kTypeNames.size() == static_cast<size_t>(Value::Type::LIST) + 1,
               "kTypeNames Has Wrong Size");
 
 // Helper class to enumerate the path components from a std::string_view
@@ -263,6 +259,10 @@ const Value::BlobStorage* Value::GetIfBlob() const {
   return absl::get_if<BlobStorage>(&data_);
 }
 
+Value::BlobStorage* Value::GetIfBlob() {
+  return absl::get_if<BlobStorage>(&data_);
+}
+
 const Value::Dict* Value::GetIfDict() const {
   return absl::get_if<Dict>(&data_);
 }
@@ -315,6 +315,11 @@ const Value::BlobStorage& Value::GetBlob() const {
   return absl::get<BlobStorage>(data_);
 }
 
+Value::BlobStorage& Value::GetBlob() {
+  DCHECK(is_blob());
+  return absl::get<BlobStorage>(data_);
+}
+
 const Value::Dict& Value::GetDict() const {
   DCHECK(is_dict());
   return absl::get<Dict>(data_);
@@ -337,6 +342,10 @@ Value::List& Value::GetList() {
 
 std::string Value::TakeString() && {
   return std::move(GetString());
+}
+
+Value::BlobStorage Value::TakeBlob() && {
+  return std::move(GetBlob());
 }
 
 Value::Dict Value::TakeDict() && {
@@ -462,6 +471,11 @@ std::string* Value::Dict::FindString(std::string_view key) {
 
 const Value::BlobStorage* Value::Dict::FindBlob(std::string_view key) const {
   const Value* v = Find(key);
+  return v ? v->GetIfBlob() : nullptr;
+}
+
+Value::BlobStorage* Value::Dict::FindBlob(std::string_view key) {
+  Value* v = Find(key);
   return v ? v->GetIfBlob() : nullptr;
 }
 
@@ -682,6 +696,11 @@ std::string* Value::Dict::FindStringByDottedPath(std::string_view path) {
 const Value::BlobStorage* Value::Dict::FindBlobByDottedPath(
     std::string_view path) const {
   const Value* v = FindByDottedPath(path);
+  return v ? v->GetIfBlob() : nullptr;
+}
+
+Value::BlobStorage* Value::Dict::FindBlobByDottedPath(std::string_view path) {
+  Value* v = FindByDottedPath(path);
   return v ? v->GetIfBlob() : nullptr;
 }
 
@@ -967,36 +986,42 @@ size_t Value::List::size() const {
 }
 
 Value::List::iterator Value::List::begin() {
-  return iterator(base::to_address(storage_.begin()),
-                  base::to_address(storage_.end()));
+  // SAFETY: Both iterators point to a single allocation.
+  return UNSAFE_BUFFERS(iterator(base::to_address(storage_.begin()),
+                                 base::to_address(storage_.end())));
 }
 
 Value::List::const_iterator Value::List::begin() const {
-  return const_iterator(base::to_address(storage_.begin()),
-                        base::to_address(storage_.end()));
+  // SAFETY: Both iterators point to a single allocation.
+  return UNSAFE_BUFFERS(const_iterator(base::to_address(storage_.begin()),
+                                       base::to_address(storage_.end())));
 }
 
 Value::List::const_iterator Value::List::cbegin() const {
-  return const_iterator(base::to_address(storage_.cbegin()),
-                        base::to_address(storage_.cend()));
+  // SAFETY: Both iterators point to a single allocation.
+  return UNSAFE_BUFFERS(const_iterator(base::to_address(storage_.cbegin()),
+                                       base::to_address(storage_.cend())));
 }
 
 Value::List::iterator Value::List::end() {
-  return iterator(base::to_address(storage_.begin()),
-                  base::to_address(storage_.end()),
-                  base::to_address(storage_.end()));
+  // SAFETY: All iterators point to a single allocation.
+  return UNSAFE_BUFFERS(iterator(base::to_address(storage_.begin()),
+                                 base::to_address(storage_.end()),
+                                 base::to_address(storage_.end())));
 }
 
 Value::List::const_iterator Value::List::end() const {
-  return const_iterator(base::to_address(storage_.begin()),
-                        base::to_address(storage_.end()),
-                        base::to_address(storage_.end()));
+  // SAFETY: All iterators point to a single allocation.
+  return UNSAFE_BUFFERS(const_iterator(base::to_address(storage_.begin()),
+                                       base::to_address(storage_.end()),
+                                       base::to_address(storage_.end())));
 }
 
 Value::List::const_iterator Value::List::cend() const {
-  return const_iterator(base::to_address(storage_.cbegin()),
-                        base::to_address(storage_.cend()),
-                        base::to_address(storage_.cend()));
+  // SAFETY: All iterators point to a single allocation.
+  return UNSAFE_BUFFERS(const_iterator(base::to_address(storage_.cbegin()),
+                                       base::to_address(storage_.cend()),
+                                       base::to_address(storage_.cend())));
 }
 
 Value::List::reverse_iterator Value::List::rend() {
@@ -1059,31 +1084,37 @@ void Value::List::clear() {
 
 Value::List::iterator Value::List::erase(iterator pos) {
   auto next_it = storage_.erase(storage_.begin() + (pos - begin()));
-  return iterator(base::to_address(storage_.begin()), base::to_address(next_it),
-                  base::to_address(storage_.end()));
+  // SAFETY: All iterators point to a single allocation.
+  return UNSAFE_BUFFERS(iterator(base::to_address(storage_.begin()),
+                                 base::to_address(next_it),
+                                 base::to_address(storage_.end())));
 }
 
 Value::List::const_iterator Value::List::erase(const_iterator pos) {
   auto next_it = storage_.erase(storage_.begin() + (pos - begin()));
-  return const_iterator(base::to_address(storage_.begin()),
-                        base::to_address(next_it),
-                        base::to_address(storage_.end()));
+  // SAFETY: All iterators point to a single allocation.
+  return UNSAFE_BUFFERS(const_iterator(base::to_address(storage_.begin()),
+                                       base::to_address(next_it),
+                                       base::to_address(storage_.end())));
 }
 
 Value::List::iterator Value::List::erase(iterator first, iterator last) {
   auto next_it = storage_.erase(storage_.begin() + (first - begin()),
                                 storage_.begin() + (last - begin()));
-  return iterator(base::to_address(storage_.begin()), base::to_address(next_it),
-                  base::to_address(storage_.end()));
+  // SAFETY: All iterators point to a single allocation.
+  return UNSAFE_BUFFERS(iterator(base::to_address(storage_.begin()),
+                                 base::to_address(next_it),
+                                 base::to_address(storage_.end())));
 }
 
 Value::List::const_iterator Value::List::erase(const_iterator first,
                                                const_iterator last) {
   auto next_it = storage_.erase(storage_.begin() + (first - begin()),
                                 storage_.begin() + (last - begin()));
-  return const_iterator(base::to_address(storage_.begin()),
-                        base::to_address(next_it),
-                        base::to_address(storage_.end()));
+  // SAFETY: All iterators point to a single allocation.
+  return UNSAFE_BUFFERS(const_iterator(base::to_address(storage_.begin()),
+                                       base::to_address(next_it),
+                                       base::to_address(storage_.end())));
 }
 
 Value::List Value::List::Clone() const {
@@ -1201,9 +1232,10 @@ Value::List&& Value::List::Append(List&& value) && {
 Value::List::iterator Value::List::Insert(const_iterator pos, Value&& value) {
   auto inserted_it =
       storage_.insert(storage_.begin() + (pos - begin()), std::move(value));
-  return iterator(base::to_address(storage_.begin()),
-                  base::to_address(inserted_it),
-                  base::to_address(storage_.end()));
+  // SAFETY: All pointers point to a single allocation.
+  return UNSAFE_BUFFERS(iterator(base::to_address(storage_.begin()),
+                                 base::to_address(inserted_it),
+                                 base::to_address(storage_.end())));
 }
 
 size_t Value::List::EraseValue(const Value& value) {

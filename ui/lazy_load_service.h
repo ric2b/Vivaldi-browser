@@ -5,6 +5,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_source_observer.h"
+#include "chrome/browser/sessions/session_restore.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 class Profile;
@@ -13,7 +14,8 @@ namespace vivaldi {
 
 class LazyLoadService
     : public KeyedService,
-      public resource_coordinator::LifecycleUnitSourceObserver {
+      public resource_coordinator::LifecycleUnitSourceObserver,
+      public SessionRestoreObserver {
  public:
   explicit LazyLoadService(Profile* profile);
   ~LazyLoadService() override = default;
@@ -25,8 +27,12 @@ class LazyLoadService
   // Called from shutdown service before shutting down the browser
   void Shutdown() override;
 
+  // LifecycleUnitSourceObserver implementation:
   void OnLifecycleUnitCreated(
       resource_coordinator::LifecycleUnit* lifecycle_unit) override;
+
+  // SessionRestoreObserver implementation:
+  void OnWillRestoreTab(content::WebContents* web_contents) override;
 
  private:
   const raw_ptr<Profile> profile_;

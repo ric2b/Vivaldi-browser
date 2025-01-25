@@ -33,7 +33,6 @@
 #include "chrome/browser/ash/app_list/app_list_sync_model_sanitizer.h"
 #include "chrome/browser/ash/app_list/app_service/app_service_app_model_builder.h"
 #include "chrome/browser/ash/app_list/app_service/app_service_promise_app_model_builder.h"
-#include "chrome/browser/ash/app_list/app_service/app_service_shortcut_model_builder.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/app_list/chrome_app_list_item.h"
@@ -584,10 +583,6 @@ void AppListSyncableService::BuildModel() {
     app_service_promise_apps_builder_ =
         std::make_unique<AppServicePromiseAppModelBuilder>(controller);
   }
-  if (chromeos::features::IsCrosWebAppShortcutUiUpdateEnabled()) {
-    app_service_shortcuts_builder_ =
-        std::make_unique<AppServiceShortcutModelBuilder>(controller);
-  }
 
   DCHECK(profile_);
   SyncStarted();
@@ -596,10 +591,6 @@ void AppListSyncableService::BuildModel() {
   if (ash::features::ArePromiseIconsEnabled()) {
     app_service_promise_apps_builder_->Initialize(this, profile_,
                                                   model_updater_.get());
-  }
-  if (chromeos::features::IsCrosWebAppShortcutUiUpdateEnabled()) {
-    app_service_shortcuts_builder_->Initialize(this, profile_,
-                                               model_updater_.get());
   }
 
   HandleUpdateFinished(false /* clean_up_after_init_sync */);
@@ -1337,7 +1328,7 @@ void AppListSyncableService::WaitUntilReadyToSync(base::OnceClosure done) {
 
 std::optional<syncer::ModelError>
 AppListSyncableService::MergeDataAndStartSyncing(
-    syncer::ModelType type,
+    syncer::DataType type,
     const syncer::SyncDataList& initial_sync_data,
     std::unique_ptr<syncer::SyncChangeProcessor> sync_processor) {
   DCHECK(!sync_processor_.get());
@@ -1475,7 +1466,7 @@ AppListSyncableService::MergeDataAndStartSyncing(
   return std::nullopt;
 }
 
-void AppListSyncableService::StopSyncing(syncer::ModelType type) {
+void AppListSyncableService::StopSyncing(syncer::DataType type) {
   DCHECK_EQ(type, syncer::APP_LIST);
 
   sync_processor_.reset();
@@ -1529,9 +1520,6 @@ void AppListSyncableService::Shutdown() {
   app_service_apps_builder_.reset();
   if (ash::features::ArePromiseIconsEnabled()) {
     app_service_promise_apps_builder_.reset();
-  }
-  if (chromeos::features::IsCrosWebAppShortcutUiUpdateEnabled()) {
-    app_service_shortcuts_builder_.reset();
   }
 }
 
@@ -1596,12 +1584,12 @@ ash::AppListSortOrder AppListSyncableService::GetPermanentSortingOrder() const {
 
 // AppListSyncableService private
 
-bool AppListSyncableService::ProcessSyncItemSpecifics(
+void AppListSyncableService::ProcessSyncItemSpecifics(
     const sync_pb::AppListSpecifics& specifics) {
   const std::string& item_id = specifics.item_id();
   if (item_id.empty()) {
     LOG(ERROR) << "AppList item with empty ID";
-    return false;
+    return;
   }
   SyncItem* sync_item = FindSyncItem(item_id);
   if (sync_item) {
@@ -1611,7 +1599,7 @@ bool AppListSyncableService::ProcessSyncItemSpecifics(
       ProcessExistingSyncItem(sync_item);
       UpdateSyncItemInLocalStorage(profile_, sync_item);
       VLOG(2) << this << " <- SYNC UPDATE: " << sync_item->ToString();
-      return false;
+      return;
     }
     // Otherwise, one of the entries should be TYPE_REMOVE_DEFAULT_APP.
     if (sync_item->item_type !=
@@ -1633,7 +1621,6 @@ bool AppListSyncableService::ProcessSyncItemSpecifics(
   ProcessNewSyncItem(sync_item);
   UpdateSyncItemInLocalStorage(profile_, sync_item);
   VLOG(2) << this << " <- SYNC ADD: " << sync_item->ToString();
-  return true;
 }
 
 void AppListSyncableService::ProcessNewSyncItem(SyncItem* sync_item) {

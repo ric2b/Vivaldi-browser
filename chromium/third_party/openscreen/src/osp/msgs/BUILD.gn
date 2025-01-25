@@ -26,10 +26,7 @@ if (!is_win) {
   }
 
   config("msgs_internal_config") {
-    cflags = [
-      "-Wall",
-      "-Werror",
-    ]
+    cflags = [ "-Wall" ]
 
     if (is_clang) {
       cflags += [ "-Wno-shadow" ]

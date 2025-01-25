@@ -15,7 +15,7 @@
 mod unencrypted {
     extern crate std;
 
-    use rand::prelude::SliceRandom;
+    use rand::seq::IteratorRandom;
     use std::{prelude::rust_2021::*, vec};
     use strum::IntoEnumIterator;
 
@@ -193,8 +193,13 @@ mod unencrypted {
             let mut des = Vec::new();
             let mut builder = AdvBuilder::new(UnencryptedEncoder);
 
+            let mut possible_de_types = de_types.clone();
             loop {
-                let de_type = *de_types.choose(&mut rng).unwrap();
+                if possible_de_types.is_empty() {
+                    break;
+                }
+                let (i, _) = possible_de_types.iter().enumerate().choose(&mut rng).unwrap();
+                let de_type = possible_de_types.remove(i);
                 let de = build_de(de_type, &mut rng);
 
                 let add_res = add_de(&mut builder, de.clone());
@@ -257,6 +262,7 @@ mod unencrypted {
 mod ldt {
     use crate::credential::matched::HasIdentityMatch;
     use crate::legacy::data_elements::actions::CallTransfer;
+    use crate::legacy::data_elements::de_type::MAX_DE_ENCODED_LEN;
     use crate::{
         credential::v0::V0BroadcastCredential,
         header::V0Encoding,
@@ -264,7 +270,7 @@ mod ldt {
             data_elements::{
                 actions::{ActionBits, ActionsDataElement, NearbyShare},
                 de_type::DataElementType,
-                tests::test_des::{random_test_de, TestDataElementType},
+                tests::test_des::TestDataElementType,
                 tests::test_des::{TestDataElement, TestDeDeserializer},
                 tx_power::TxPowerDataElement,
                 DataElementSerializationBuffer, DynamicSerializeDataElement, SerializeDataElement,
@@ -288,7 +294,7 @@ mod ldt {
     use alloc::vec::Vec;
     use crypto_provider_default::CryptoProviderImpl;
     use ldt_np_adv::{V0IdentityToken, V0Salt, V0_IDENTITY_TOKEN_LEN};
-    use rand::prelude::SliceRandom;
+    use rand::seq::IteratorRandom;
     use rand::Rng;
     use strum::IntoEnumIterator;
 
@@ -384,8 +390,13 @@ mod ldt {
     #[test]
     fn random_test_des_roundtrip() {
         do_random_roundtrip_test::<TestDeDeserializer, _>(
-            TestDataElementType::iter().collect(),
-            random_test_de,
+            vec![TestDataElementType::Short],
+            |_, rng| {
+                let len = rng.gen_range(3_usize..MAX_DE_ENCODED_LEN.into());
+                let mut data = vec![0; len];
+                rng.fill(&mut data[..]);
+                TestDataElement::Short(ShortDataElement::new(data))
+            },
             |builder, de| builder.add_data_element(de),
             serialized_len,
         )
@@ -408,12 +419,12 @@ mod ldt {
     {
         let mut rng = rand_ext::seeded_rng();
 
-        for _ in 0..10_000 {
+        for _ in 0..1_000 {
             let mut added_des = Vec::new();
             let mut current_len = 0;
 
             let key_seed: [u8; 32] = rng.gen();
-            let salt: ldt_np_adv::V0Salt = rng.gen::<[u8; 2]>().into();
+            let salt: V0Salt = rng.gen::<[u8; 2]>().into();
             let identity_token = V0IdentityToken::from(rng.gen::<[u8; V0_IDENTITY_TOKEN_LEN]>());
 
             let broadcast_cred = V0BroadcastCredential::new(key_seed, identity_token);
@@ -421,8 +432,13 @@ mod ldt {
             let mut builder =
                 AdvBuilder::new(LdtEncoder::<CryptoProviderImpl>::new(salt, &broadcast_cred));
 
+            let mut possible_de_types = de_types.clone();
             loop {
-                let de_type = *de_types.choose(&mut rng).unwrap();
+                if possible_de_types.is_empty() {
+                    break;
+                }
+                let (i, _) = possible_de_types.iter().enumerate().choose(&mut rng).unwrap();
+                let de_type = possible_de_types.remove(i);
                 let de = build_de(de_type, &mut rng);
 
                 if let Err(e) = add_de(&mut builder, de.clone()) {
@@ -432,6 +448,7 @@ mod ldt {
                                 < ldt_np_adv::VALID_INPUT_LEN.start - V0_IDENTITY_TOKEN_LEN
                             {
                                 // keep trying, not enough for LDT
+                                possible_de_types.push(de_type);
                                 continue;
                             }
                             // out of room

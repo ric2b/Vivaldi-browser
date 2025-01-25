@@ -12,7 +12,7 @@
 #include "av1/encoder/firstpass.h"
 #include "av1/encoder/ratectrl.h"
 #include "av1/encoder/tpl_model.h"
-#include "third_party/googletest/src/googletest/include/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 namespace {
 

@@ -18,7 +18,7 @@
 #include "chrome/browser/fast_checkout/fast_checkout_client_impl.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/plus_addresses/plus_address_service_factory.h"
-#include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/browser/ssl/chrome_security_state_tab_helper.h"
 #include "chrome/browser/ui/autofill/autofill_field_promo_controller.h"
 #include "chrome/browser/ui/autofill/edit_address_profile_dialog_controller_impl.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -29,8 +29,9 @@
 #include "components/autofill/content/browser/test_content_autofill_driver.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/autofill_profile_test_api.h"
+#include "components/autofill/core/browser/password_form_classification.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
-#include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/test_autofill_manager_waiter.h"
 #include "components/autofill/core/browser/test_browser_autofill_manager.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
@@ -110,6 +111,7 @@ class MockSaveCardBubbleController : public SaveCardBubbleControllerImpl {
        std::optional<
            payments::PaymentsAutofillClient::OnConfirmationClosedCallback>),
       (override));
+  MOCK_METHOD(void, HideSaveCardBubble, (), (override));
 };
 #endif
 
@@ -148,6 +150,10 @@ class TestChromeAutofillClient : public ChromeAutofillClient {
 
 class ChromeAutofillClientTest : public ChromeRenderViewHostTestHarness {
  public:
+  ChromeAutofillClientTest()
+      : ChromeRenderViewHostTestHarness(
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     PreparePersonalDataManager();
@@ -162,7 +168,7 @@ class ChromeAutofillClientTest : public ChromeRenderViewHostTestHarness {
         std::move(autofill_field_promo_controller_manual_fallback));
 
 #if !BUILDFLAG(IS_ANDROID)
-    SecurityStateTabHelper::CreateForWebContents(web_contents());
+    ChromeSecurityStateTabHelper::CreateForWebContents(web_contents());
 
     auto save_card_bubble_controller =
         std::make_unique<MockSaveCardBubbleController>(web_contents());
@@ -258,10 +264,13 @@ TEST_F(ChromeAutofillClientTest, ClassifiesLoginFormOnMainFrame) {
     ASSERT_TRUE(waiter.Wait(/*num_awaiting_calls=*/1));
   }
 
+  const auto expected = PasswordFormClassification{
+      .type = PasswordFormClassification::Type::kLoginForm,
+      .username_field = form.fields()[0].global_id()};
   EXPECT_EQ(client()->ClassifyAsPasswordForm(
                 autofill_driver->GetAutofillManager(), form.global_id(),
                 form.fields()[0].global_id()),
-            AutofillClient::PasswordFormType::kLoginForm);
+            expected);
 }
 
 // Tests that `ClassifyAsPasswordForm()` correctly recognizes a login form on
@@ -315,62 +324,53 @@ TEST_F(ChromeAutofillClientTest, ClassifiesLoginFormOnChildFrame) {
   EXPECT_EQ(client()->ClassifyAsPasswordForm(main_driver->GetAutofillManager(),
                                              main_form.global_id(),
                                              main_form.fields()[0].global_id()),
-            AutofillClient::PasswordFormType::kNoPasswordForm);
+            PasswordFormClassification());
   // The form fields in the child frame form a login form.
+  const auto expected = PasswordFormClassification{
+      .type = PasswordFormClassification::Type::kLoginForm,
+      .username_field = child_form.fields()[0].global_id()};
   EXPECT_EQ(client()->ClassifyAsPasswordForm(
                 main_driver->GetAutofillManager(), main_form.global_id(),
                 child_form.fields()[0].global_id()),
-            AutofillClient::PasswordFormType::kLoginForm);
+            expected);
 }
 
 TEST_F(ChromeAutofillClientTest, GetFormInteractionsFlowId_BelowMaxFlowTime) {
-  // Arbitrary fixed date to avoid using Now().
-  base::Time july_2022 = base::Time::FromSecondsSinceUnixEpoch(1658620440);
   base::TimeDelta below_max_flow_time = base::Minutes(10);
-
-  autofill::TestAutofillClock test_clock(july_2022);
 
   FormInteractionsFlowId first_interaction_flow_id =
       client()->GetCurrentFormInteractionsFlowId();
 
-  test_clock.Advance(below_max_flow_time);
+  task_environment()->FastForwardBy(below_max_flow_time);
 
   EXPECT_EQ(first_interaction_flow_id,
             client()->GetCurrentFormInteractionsFlowId());
 }
 
 TEST_F(ChromeAutofillClientTest, GetFormInteractionsFlowId_AboveMaxFlowTime) {
-  // Arbitrary fixed date to avoid using Now().
-  base::Time july_2022 = base::Time::FromSecondsSinceUnixEpoch(1658620440);
   base::TimeDelta above_max_flow_time = base::Minutes(21);
-
-  autofill::TestAutofillClock test_clock(july_2022);
 
   FormInteractionsFlowId first_interaction_flow_id =
       client()->GetCurrentFormInteractionsFlowId();
 
-  test_clock.Advance(above_max_flow_time);
+  task_environment()->FastForwardBy(above_max_flow_time);
 
   EXPECT_NE(first_interaction_flow_id,
             client()->GetCurrentFormInteractionsFlowId());
 }
 
 TEST_F(ChromeAutofillClientTest, GetFormInteractionsFlowId_AdvancedTwice) {
-  // Arbitrary fixed date to avoid using Now().
-  base::Time july_2022 = base::Time::FromSecondsSinceUnixEpoch(1658620440);
   base::TimeDelta above_half_max_flow_time = base::Minutes(15);
-
-  autofill::TestAutofillClock test_clock(july_2022);
 
   FormInteractionsFlowId first_interaction_flow_id =
       client()->GetCurrentFormInteractionsFlowId();
 
-  test_clock.Advance(above_half_max_flow_time);
+  task_environment()->FastForwardBy(above_half_max_flow_time);
 
   FormInteractionsFlowId second_interaction_flow_id =
       client()->GetCurrentFormInteractionsFlowId();
 
-  test_clock.Advance(above_half_max_flow_time);
+  task_environment()->FastForwardBy(above_half_max_flow_time);
 
   EXPECT_EQ(first_interaction_flow_id, second_interaction_flow_id);
   EXPECT_NE(first_interaction_flow_id,
@@ -434,7 +434,8 @@ TEST_F(ChromeAutofillClientTest,
                   true, A<std::optional<payments::PaymentsAutofillClient::
                                             OnConfirmationClosedCallback>>()));
   client()->GetPaymentsAutofillClient()->CreditCardUploadCompleted(
-      true, /*on_confirmation_closed_callback=*/std::nullopt);
+      payments::PaymentsAutofillClient::PaymentsRpcResult::kSuccess,
+      /*on_confirmation_closed_callback=*/std::nullopt);
 }
 
 TEST_F(ChromeAutofillClientTest,
@@ -444,7 +445,23 @@ TEST_F(ChromeAutofillClientTest,
                   false, A<std::optional<payments::PaymentsAutofillClient::
                                              OnConfirmationClosedCallback>>()));
   client()->GetPaymentsAutofillClient()->CreditCardUploadCompleted(
-      false, /*on_confirmation_closed_callback=*/std::nullopt);
+      payments::PaymentsAutofillClient::PaymentsRpcResult::kPermanentFailure,
+      /*on_confirmation_closed_callback=*/std::nullopt);
+}
+
+// Test that on getting client-side timeout, save card dialog is dismissed and
+// confirmation dialog is not shown.
+TEST_F(ChromeAutofillClientTest,
+       CreditCardUploadCompleted_NoConfirmationBubbleView_OnRequestTimeout) {
+  EXPECT_CALL(save_card_bubble_controller(), HideSaveCardBubble());
+  EXPECT_CALL(save_card_bubble_controller(),
+              ShowConfirmationBubbleView(
+                  false, A<std::optional<payments::PaymentsAutofillClient::
+                                             OnConfirmationClosedCallback>>()))
+      .Times(0);
+  client()->GetPaymentsAutofillClient()->CreditCardUploadCompleted(
+      payments::PaymentsAutofillClient::PaymentsRpcResult::kClientSideTimeout,
+      /*on_confirmation_closed_callback=*/std::nullopt);
 }
 
 TEST_F(ChromeAutofillClientTest, EditAddressDialogFooter) {
@@ -463,7 +480,7 @@ TEST_F(ChromeAutofillClientTest, EditAddressDialogFooter) {
 
   // Account profile
   AutofillProfile profile2 = test::GetFullProfile();
-  profile2.set_source_for_testing(AutofillProfile::Source::kAccount);
+  test_api(profile2).set_record_type(AutofillProfile::RecordType::kAccount);
   client()->ShowEditAddressProfileDialog(profile2, base::DoNothing());
   std::optional<AccountInfo> account = GetPrimaryAccountInfoFromBrowserContext(
       web_contents()->GetBrowserContext());

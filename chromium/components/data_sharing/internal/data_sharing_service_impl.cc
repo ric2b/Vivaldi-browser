@@ -15,18 +15,23 @@
 #include "components/data_sharing/internal/group_data_proto_utils.h"
 #include "components/data_sharing/public/data_sharing_sdk_delegate.h"
 #include "components/data_sharing/public/data_sharing_service.h"
+#include "components/data_sharing/public/features.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/data_sharing/public/protocol/data_sharing_sdk.pb.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/base/report_unrecoverable_error.h"
-#include "components/sync/model/client_tag_based_model_type_processor.h"
-#include "components/sync/model/model_type_store.h"
-#include "components/sync/model/model_type_sync_bridge.h"
+#include "components/sync/model/client_tag_based_data_type_processor.h"
+#include "components/sync/model/data_type_store.h"
+#include "components/sync/model/data_type_sync_bridge.h"
+#include "net/base/url_util.h"
 #include "third_party/abseil-cpp/absl/status/status.h"
 
 namespace data_sharing {
 
 namespace {
+
+const char kGroupIdKey[] = "group_id";
+const char kTokenBlobKey[] = "token_blob";
 
 // Should not be called with kOk StatusCode, unless SDK delegate misbehaves by
 // passing it as an error value.
@@ -79,7 +84,7 @@ DataSharingService::PeopleGroupActionOutcome StatusToPeopleGroupActionOutcome(
 DataSharingServiceImpl::DataSharingServiceImpl(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     signin::IdentityManager* identity_manager,
-    syncer::OnceModelTypeStoreFactory model_type_store_factory,
+    syncer::OnceDataTypeStoreFactory data_type_store_factory,
     version_info::Channel channel,
     std::unique_ptr<DataSharingSDKDelegate> sdk_delegate,
     std::unique_ptr<DataSharingUIDelegate> ui_delegate)
@@ -87,18 +92,33 @@ DataSharingServiceImpl::DataSharingServiceImpl(
           std::make_unique<DataSharingNetworkLoaderImpl>(url_loader_factory,
                                                          identity_manager)),
       sdk_delegate_(std::move(sdk_delegate)),
-      ui_delegate_(std::move(ui_delegate)) {
+      ui_delegate_(std::move(ui_delegate)),
+      preview_server_proxy_(
+          std::make_unique<PreviewServerProxy>(identity_manager,
+                                               url_loader_factory)) {
   auto change_processor =
-      std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
+      std::make_unique<syncer::ClientTagBasedDataTypeProcessor>(
           syncer::COLLABORATION_GROUP,
           base::BindRepeating(&syncer::ReportUnrecoverableError, channel));
   collaboration_group_sync_bridge_ =
       std::make_unique<CollaborationGroupSyncBridge>(
-          std::move(change_processor), std::move(model_type_store_factory));
+          std::move(change_processor), std::move(data_type_store_factory));
   collaboration_group_sync_bridge_->AddObserver(this);
   if (sdk_delegate_) {
     sdk_delegate_->Initialize(data_sharing_network_loader_.get());
   }
+
+  // Initialize ServiceStatus.
+  current_status_.collaboration_status = CollaborationStatus::kDisabled;
+  if (base::FeatureList::IsEnabled(features::kDataSharingFeature)) {
+    current_status_.collaboration_status =
+        CollaborationStatus::kEnabledCreateAndJoin;
+  }
+
+  // TODO(b/360184707): Add identity manager and sync service to observe state
+  // changes.
+  current_status_.signin_status = SigninStatus::kNotSignedIn;
+  current_status_.sync_status = SyncStatus::kNotSyncing;
 }
 
 DataSharingServiceImpl::~DataSharingServiceImpl() {
@@ -124,7 +144,7 @@ DataSharingServiceImpl::GetDataSharingNetworkLoader() {
   return data_sharing_network_loader_.get();
 }
 
-base::WeakPtr<syncer::ModelTypeControllerDelegate>
+base::WeakPtr<syncer::DataTypeControllerDelegate>
 DataSharingServiceImpl::GetCollaborationGroupControllerDelegate() {
   return collaboration_group_sync_bridge_->change_processor()
       ->GetControllerDelegate();
@@ -248,6 +268,28 @@ void DataSharingServiceImpl::InviteMember(
           weak_ptr_factory_.GetWeakPtr(), group_id, std::move(callback)));
 }
 
+void DataSharingServiceImpl::AddMember(
+    const GroupId& group_id,
+    const std::string& access_token,
+    base::OnceCallback<void(PeopleGroupActionOutcome)> callback) {
+  if (!sdk_delegate_) {
+    // Reply in a posted task to avoid reentrance on the calling side.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback),
+                       PeopleGroupActionOutcome::kPersistentFailure));
+    return;
+  }
+
+  data_sharing_pb::AddMemberParams params;
+  params.set_group_id(group_id.value());
+  params.set_access_token(access_token);
+  sdk_delegate_->AddMember(
+      params,
+      base::BindOnce(&DataSharingServiceImpl::OnSimpleGroupActionCompleted,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
 void DataSharingServiceImpl::RemoveMember(
     const GroupId& group_id,
     const std::string& member_email,
@@ -341,6 +383,12 @@ void DataSharingServiceImpl::OnDataLoaded() {
           weak_ptr_factory_.GetWeakPtr(), /*added_group_ids=*/
           std::set<GroupId>(group_ids.begin(), group_ids.end()),
           /*updated_group_ids=*/std::set<GroupId>()));
+}
+
+void DataSharingServiceImpl::Shutdown() {
+  if (sdk_delegate_) {
+    sdk_delegate_->Shutdown();
+  }
 }
 
 void DataSharingServiceImpl::OnReadSingleGroupCompleted(
@@ -448,13 +496,13 @@ void DataSharingServiceImpl::OnReadGroupsToNotifyObserversCompleted(
        read_groups_result.value().group_data()) {
     GroupData group_data = GroupDataFromProto(group_data_proto);
 
-    if (added_group_ids.count(group_data.group_id) > 0) {
+    if (added_group_ids.count(group_data.group_token.group_id) > 0) {
       for (auto& observer : observers_) {
         observer.OnGroupAdded(group_data);
       }
     }
 
-    if (updated_group_ids.count(group_data.group_id) > 0) {
+    if (updated_group_ids.count(group_data.group_token.group_id) > 0) {
       for (auto& observer : observers_) {
         observer.OnGroupChanged(group_data);
       }
@@ -475,9 +523,7 @@ DataSharingServiceImpl::GetCollaborationGroupSyncBridgeForTesting() {
 
 bool DataSharingServiceImpl::ShouldInterceptNavigationForShareURL(
     const GURL& url) {
-  // TODO(b/336873603): Implement logic to filter URL.
-  NOTIMPLEMENTED();
-  return false;
+  return ParseDataSharingURL(url).has_value();
 }
 
 void DataSharingServiceImpl::HandleShareURLNavigationIntercepted(
@@ -486,6 +532,92 @@ void DataSharingServiceImpl::HandleShareURLNavigationIntercepted(
     return;
   }
   ui_delegate_->HandleShareURLIntercepted(url);
+}
+
+std::unique_ptr<GURL> DataSharingServiceImpl::GetDataSharingURL(
+    const GroupData& group_data) {
+  if (!group_data.group_token.IsValid()) {
+    return nullptr;
+  }
+
+  GURL url = GURL(data_sharing::features::kDataSharingURL.Get());
+
+  url = net::AppendQueryParameter(url, kGroupIdKey,
+                                  group_data.group_token.group_id.value());
+  url = net::AppendQueryParameter(url, kTokenBlobKey,
+                                  group_data.group_token.access_token);
+  return std::make_unique<GURL>(url);
+}
+
+DataSharingService::ParseURLResult DataSharingServiceImpl::ParseDataSharingURL(
+    const GURL& url) {
+  GURL data_sharing_url = GURL(data_sharing::features::kDataSharingURL.Get());
+  if (url.host() != data_sharing_url.host() ||
+      url.path() != data_sharing_url.path()) {
+    return base::unexpected(ParseURLStatus::kHostOrPathMismatchFailure);
+  }
+
+  std::string group_id;
+  std::string access_token;
+  net::GetValueForKeyInQuery(url, kGroupIdKey, &group_id);
+  net::GetValueForKeyInQuery(url, kTokenBlobKey, &access_token);
+
+  if (group_id.empty() || access_token.empty()) {
+    return base::unexpected(ParseURLStatus::kQueryMissingFailure);
+  }
+
+  return GroupToken(GroupId(group_id), access_token);
+}
+
+void DataSharingServiceImpl::EnsureGroupVisibility(
+    const GroupId& group_id,
+    base::OnceCallback<void(const GroupDataOrFailureOutcome&)> callback) {
+  if (!sdk_delegate_) {
+    // Reply in a posted task to avoid reentrance on the calling side.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            std::move(callback),
+            base::unexpected(PeopleGroupActionFailure::kPersistentFailure)));
+    return;
+  }
+
+  // TODO(ritikagup@): If a token was added recently then skip adding and return
+  // read group.
+  data_sharing_pb::AddAccessTokenParams params;
+  params.set_group_id(group_id.value());
+  sdk_delegate_->AddAccessToken(
+      params,
+      base::BindOnce(&DataSharingServiceImpl::OnAccessTokenAdded,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void DataSharingServiceImpl::GetSharedEntitiesPreview(
+    const GroupToken& group_token,
+    base::OnceCallback<void(const SharedDataPreviewOrFailureOutcome&)>
+        callback) {
+  preview_server_proxy_->GetSharedDataPreview(group_token, std::move(callback));
+}
+
+DataSharingUIDelegate* DataSharingServiceImpl::GetUIDelegate() {
+  return ui_delegate_.get();
+}
+
+ServiceStatus DataSharingServiceImpl::GetServiceStatus() {
+  return current_status_;
+}
+
+void DataSharingServiceImpl::OnAccessTokenAdded(
+    base::OnceCallback<void(const GroupDataOrFailureOutcome&)> callback,
+    const base::expected<data_sharing_pb::AddAccessTokenResult, absl::Status>&
+        result) {
+  if (result.has_value()) {
+    std::move(callback).Run(GroupDataFromProto(result.value().group_data()));
+    return;
+  }
+
+  std::move(callback).Run(
+      base::unexpected(StatusToPeopleGroupActionFailure(result.error())));
 }
 
 }  // namespace data_sharing

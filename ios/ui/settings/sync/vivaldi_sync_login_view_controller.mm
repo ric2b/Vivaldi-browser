@@ -85,6 +85,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self showErrorCellWithMessage:errorMessage
                          section:SectionIdentifierUsernamePassword
                         itemType:ItemTypeError];
+
+  self.loginButton.activityInProgress = NO;
+  [self reloadCellsForItems:@[ self.loginButton ]
+           withRowAnimation:UITableViewRowAnimationNone];
 }
 
 - (void)setupLeftCancelButton {
@@ -93,8 +97,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
           initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
                                target:self
                                action:@selector(dismissView)];
-  self.backButtonItem = cancelButton;
-  self.navigationItem.leftBarButtonItem = self.backButtonItem;
+  self.customLeftBarButtonItem = cancelButton;
+  self.navigationItem.leftBarButtonItem = self.customLeftBarButtonItem;
 }
 
 #pragma mark - TableViewModel

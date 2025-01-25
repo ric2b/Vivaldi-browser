@@ -54,7 +54,8 @@
 #import "ios/chrome/browser/infobars/model/infobar_manager_impl.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/password_controller.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/web/model/chrome_web_client.h"
 #import "ios/chrome/browser/webdata_services/model/web_data_service_factory.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
@@ -245,20 +246,20 @@ class TestConsumer : public WebDataServiceConsumer {
 class AutofillControllerTest : public PlatformTest {
  public:
   AutofillControllerTest() : web_client_(std::make_unique<ChromeWebClient>()) {
-    TestChromeBrowserState::Builder builder;
+    TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
         IOSChromeProfilePasswordStoreFactory::GetInstance(),
         base::BindRepeating(&password_manager::BuildPasswordStoreInterface<
                             web::BrowserState,
                             password_manager::MockPasswordStoreInterface>));
     // Profile import requires a PersonalDataManager which itself needs the
-    // WebDataService; this is not initialized on a TestChromeBrowserState by
+    // WebDataService; this is not initialized on a TestProfileIOS by
     // default.
     builder.AddTestingFactory(ios::WebDataServiceFactory::GetInstance(),
                               ios::WebDataServiceFactory::GetDefaultFactory());
-    browser_state_ = builder.Build();
+    profile_ = std::move(builder).Build();
 
-    web::WebState::CreateParams params(browser_state_.get());
+    web::WebState::CreateParams params(profile_.get());
     web_state_ = web::WebState::Create(params);
     web_state_->GetView();
     web_state_->SetKeepRenderProcessAlive(true);
@@ -336,13 +337,17 @@ class AutofillControllerTest : public PlatformTest {
                 ->GetAutofillManager();
   }
 
+  PrefService* local_state() {
+    return GetApplicationContext()->GetLocalState();
+  }
+
  protected:
   web::WebState* web_state() { return web_state_.get(); }
 
   web::ScopedTestingWebClient web_client_;
   web::WebTaskEnvironment task_environment_;
-  IOSChromeScopedTestingLocalState local_state_;
-  std::unique_ptr<TestChromeBrowserState> browser_state_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
+  std::unique_ptr<TestProfileIOS> profile_;
   std::unique_ptr<web::WebState> web_state_;
   bool processed_a_task_ = false;
   // Histogram tester for these tests.
@@ -374,7 +379,7 @@ void AutofillControllerTest::SetUp() {
       [[PasswordController alloc] initWithWebState:web_state()];
 
   autofill_agent_ =
-      [[AutofillAgent alloc] initWithPrefService:browser_state_->GetPrefs()
+      [[AutofillAgent alloc] initWithPrefService:profile_->GetPrefs()
                                         webState:web_state()];
   suggestion_controller_ =
       [[TestSuggestionController alloc] initWithWebState:web_state()
@@ -384,12 +389,12 @@ void AutofillControllerTest::SetUp() {
   infobars::InfoBarManager* infobar_manager =
       InfoBarManagerImpl::FromWebState(web_state());
   autofill_client_ = std::make_unique<TestAutofillClient>(
-      browser_state_.get(), web_state(), infobar_manager, autofill_agent_);
+      profile_.get(), web_state(), infobar_manager, autofill_agent_);
 
   autofill_client_->GetPersonalDataManager()
       ->address_data_manager()
       .get_alternative_state_name_map_updater_for_testing()
-      ->set_local_state_for_testing(local_state_.Get());
+      ->set_local_state_for_testing(local_state());
 
   std::string locale("en");
   autofill::AutofillDriverIOSFactory::CreateForWebState(
@@ -600,8 +605,8 @@ TEST_F(AutofillControllerTest, ReadFormName) {
 // successfully imported into the PersonalDataManager.
 TEST_F(AutofillControllerTest, ProfileImport) {
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(browser_state_.get()));
+      PersonalDataManagerFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(profile_.get()));
   test_api(personal_data_manager->address_data_manager())
       .set_auto_accept_address_imports(true);
   // Check there are no registered profiles already.
@@ -639,8 +644,8 @@ void AutofillControllerTest::SetUpForSuggestions(
     NSString* data,
     size_t expected_number_of_forms) {
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(browser_state_.get()));
+      PersonalDataManagerFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(profile_.get()));
   AutofillProfile profile(
       autofill::i18n_model_definition::kLegacyHierarchyCountryCode);
   profile.SetRawInfo(NAME_FULL, u"Homer Simpson");
@@ -729,8 +734,8 @@ TEST_F(AutofillControllerTest, MultipleProfileSuggestions) {
   }
 
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(browser_state_.get()));
+      PersonalDataManagerFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(profile_.get()));
   personal_data_manager->SetSyncServiceForTest(nullptr);
 
   AutofillProfile profile(
@@ -775,8 +780,8 @@ TEST_F(AutofillControllerTest, KeyValueImport) {
   web::test::ExecuteJavaScript(@"document.forms[0].greeting.value = 'Hello'",
                                web_state());
   scoped_refptr<AutofillWebDataService> web_data_service =
-      ios::WebDataServiceFactory::GetAutofillWebDataForBrowserState(
-          browser_state_.get(), ServiceAccessType::EXPLICIT_ACCESS);
+      ios::WebDataServiceFactory::GetAutofillWebDataForProfile(
+          profile_.get(), ServiceAccessType::EXPLICIT_ACCESS);
   TestConsumer consumer;
   const int limit = 1;
   consumer.result_ = {CreateAutocompleteEntry(u"Should"),
@@ -807,8 +812,8 @@ TEST_F(AutofillControllerTest, KeyValueImport) {
 
 void AutofillControllerTest::SetUpKeyValueData() {
   scoped_refptr<AutofillWebDataService> web_data_service =
-      ios::WebDataServiceFactory::GetAutofillWebDataForBrowserState(
-          browser_state_.get(), ServiceAccessType::EXPLICIT_ACCESS);
+      ios::WebDataServiceFactory::GetAutofillWebDataForProfile(
+          profile_.get(), ServiceAccessType::EXPLICIT_ACCESS);
   // Load value into database.
   std::vector<FormFieldData> values;
   FormFieldData fieldData;
@@ -915,8 +920,8 @@ TEST_F(AutofillControllerTest, NoKeyValueSuggestionsWithoutTyping) {
 TEST_F(AutofillControllerTest, CreditCardImport) {
   InfoBarManagerImpl::CreateForWebState(web_state());
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(browser_state_.get()));
+      PersonalDataManagerFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(profile_.get()));
   personal_data_manager->SetSyncServiceForTest(nullptr);
 
   // Check there are no registered profiles already.
@@ -972,12 +977,10 @@ TEST_F(AutofillControllerTest, CreditCardImport) {
 // submitted with scripts (simulating form removal) results in a credit
 // card being successfully imported into the PersonalDataManager.
 TEST_F(AutofillControllerTest, CreditCardImportAfterFormRemoval) {
-  ScopedFeatureList feature_list(
-      features::kAutofillEnableXHRSubmissionDetectionIOS);
   InfoBarManagerImpl::CreateForWebState(web_state());
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(browser_state_.get()));
+      PersonalDataManagerFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(profile_.get()));
   personal_data_manager->SetSyncServiceForTest(nullptr);
 
   // Check there are no registered profiles already.
@@ -1044,12 +1047,10 @@ TEST_F(AutofillControllerTest, CreditCardImportAfterFormRemoval) {
 // the submitted form.
 TEST_F(AutofillControllerTest,
        CreditCardImportWithFieldDataManagerValuesAfterFormRemoval) {
-  ScopedFeatureList feature_list(
-      features::kAutofillEnableXHRSubmissionDetectionIOS);
   InfoBarManagerImpl::CreateForWebState(web_state());
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(browser_state_.get()));
+      PersonalDataManagerFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(profile_.get()));
   personal_data_manager->SetSyncServiceForTest(nullptr);
 
   // Check there are no registered profiles already.
@@ -1133,11 +1134,9 @@ TEST_F(AutofillControllerTest,
 // submitted with scripts (simulating form removal) results in a profile being
 // successfully imported into the PersonalDataManager.
 TEST_F(AutofillControllerTest, ProfileImportAfterFormlessFormRemoval) {
-  ScopedFeatureList feature_list(
-      features::kAutofillEnableXHRSubmissionDetectionIOS);
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(browser_state_.get()));
+      PersonalDataManagerFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(profile_.get()));
   test_api(personal_data_manager->address_data_manager())
       .set_auto_accept_address_imports(true);
   // Check there are no registered profiles already.

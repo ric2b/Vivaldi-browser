@@ -614,6 +614,7 @@ class SharedStorageWorkletTest : public PageTestBase {
             /*devtools_worker_token=*/base::UnguessableToken(),
             std::move(pending_devtools_host_remote),
             std::move(pending_code_cache_host_remote),
+            mojo::PendingRemote<mojom::blink::BrowserInterfaceBroker>(),
             /*wait_for_debugger=*/false),
         worklet_terminated_future_.GetCallback());
 
@@ -2571,7 +2572,7 @@ TEST_F(SharedStorageWorkletTest, Entries_FirstBatchError_Failure) {
 
   RunResult run_result{run_future.Get<0>(), run_future.Get<1>()};
   EXPECT_FALSE(run_result.success);
-  EXPECT_EQ(run_result.error_message, "Error: Internal error 12345");
+  EXPECT_EQ(run_result.error_message, "OperationError: Internal error 12345");
 
   EXPECT_EQ(test_client_->observed_console_log_messages_.size(), 0u);
 }
@@ -2664,7 +2665,7 @@ TEST_F(SharedStorageWorkletTest, Entries_SecondBatchError_Failure) {
 
   RunResult run_result{run_future.Get<0>(), run_future.Get<1>()};
   EXPECT_FALSE(run_result.success);
-  EXPECT_EQ(run_result.error_message, "Error: Internal error 12345");
+  EXPECT_EQ(run_result.error_message, "OperationError: Internal error 12345");
 
   EXPECT_EQ(test_client_->observed_console_log_messages_.size(), 1u);
 }

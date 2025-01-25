@@ -4,15 +4,13 @@
 
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as TraceEngine from '../../../../models/trace/trace.js';
-import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
 import type * as Overlays from '../../overlays/overlays.js';
 
-import sidebarInsightStyles from './sidebarInsight.css.js';
+import {BaseInsight, shouldRenderForCategory} from './Helpers.js';
 import * as SidebarInsight from './SidebarInsight.js';
-import {type ActiveInsight, InsightsCategories} from './types.js';
-
-export const InsightName = 'lcp-phases';
+import {Table, type TableData} from './Table.js';
+import {InsightsCategories} from './types.js';
 
 const UIStrings = {
   /**
@@ -24,9 +22,9 @@ const UIStrings = {
    */
   resourceLoadDelay: 'Resource load delay',
   /**
-   *@description Resource load time title for the Largest Contentful Paint phases timespan breakdown.
+   *@description Resource load duration title for the Largest Contentful Paint phases timespan breakdown.
    */
-  resourceLoadTime: 'Resource load time',
+  resourceLoadDuration: 'Resource load duration',
   /**
    *@description Element render delay title for the Largest Contentful Paint phases timespan breakdown.
    */
@@ -41,35 +39,11 @@ interface PhaseData {
   percent: string;
 }
 
-export class LCPPhases extends HTMLElement {
+export class LCPPhases extends BaseInsight {
   static readonly litTagName = LitHtml.literal`devtools-performance-lcp-by-phases`;
-  readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
-  #insightTitle: string = 'LCP by Phase';
-  #insights: TraceEngine.Insights.Types.TraceInsightData|null = null;
-  #navigationId: string|null = null;
-  #activeInsight: ActiveInsight|null = null;
-  #activeCategory: InsightsCategories = InsightsCategories.ALL;
-
-  set insights(insights: TraceEngine.Insights.Types.TraceInsightData|null) {
-    this.#insights = insights;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
-  }
-
-  set navigationId(navigationId: string|null) {
-    this.#navigationId = navigationId;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
-  }
-
-  set activeInsight(activeInsight: ActiveInsight) {
-    this.#activeInsight = activeInsight;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
-  }
-
-  set activeCategory(activeCategory: InsightsCategories) {
-    this.#activeCategory = activeCategory;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
-  }
+  override insightCategory: InsightsCategories = InsightsCategories.LCP;
+  override internalName: string = 'lcp-by-phase';
+  override userVisibleTitle: string = 'LCP by phase';
 
   #getPhaseData(insights: TraceEngine.Insights.Types.TraceInsightData|null, navigationId: string|null): PhaseData[] {
     if (!insights || !navigationId) {
@@ -95,33 +69,50 @@ export class LCPPhases extends HTMLElement {
 
     if (loadDelay && loadTime) {
       const phaseData = [
-        {phase: 'Time to first byte', timing: ttfb, percent: `${(100 * ttfb / timing).toFixed(0)}%`},
-        {phase: 'Resource load delay', timing: loadDelay, percent: `${(100 * loadDelay / timing).toFixed(0)}%`},
-        {phase: 'Resource load duration', timing: loadTime, percent: `${(100 * loadTime / timing).toFixed(0)}%`},
-        {phase: 'Resource render delay', timing: renderDelay, percent: `${(100 * renderDelay / timing).toFixed(0)}%`},
+        {phase: i18nString(UIStrings.timeToFirstByte), timing: ttfb, percent: `${(100 * ttfb / timing).toFixed(0)}%`},
+        {
+          phase: i18nString(UIStrings.resourceLoadDelay),
+          timing: loadDelay,
+          percent: `${(100 * loadDelay / timing).toFixed(0)}%`,
+        },
+        {
+          phase: i18nString(UIStrings.resourceLoadDuration),
+          timing: loadTime,
+          percent: `${(100 * loadTime / timing).toFixed(0)}%`,
+        },
+        {
+          phase: i18nString(UIStrings.elementRenderDelay),
+          timing: renderDelay,
+          percent: `${(100 * renderDelay / timing).toFixed(0)}%`,
+        },
       ];
       return phaseData;
     }
 
     // If the lcp is text, we only have ttfb and render delay.
     const phaseData = [
-      {phase: 'Time to first byte', timing: ttfb, percent: `${(100 * ttfb / timing).toFixed(0)}%`},
-      {phase: 'Resource render delay', timing: renderDelay, percent: `${(100 * renderDelay / timing).toFixed(0)}%`},
+      {phase: i18nString(UIStrings.timeToFirstByte), timing: ttfb, percent: `${(100 * ttfb / timing).toFixed(0)}%`},
+      {
+        phase: i18nString(UIStrings.elementRenderDelay),
+        timing: renderDelay,
+        percent: `${(100 * renderDelay / timing).toFixed(0)}%`,
+      },
     ];
     return phaseData;
   }
 
-  #createLCPPhasesOverlay(): Array<Overlays.Overlays.TimelineOverlay> {
-    if (!this.#insights || !this.#navigationId) {
+  override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
+    if (!this.data.insights || !this.data.navigationId) {
       return [];
     }
+    const {navigationId, insights} = this.data;
 
-    const insightsByNavigation = this.#insights.get(this.#navigationId);
+    const insightsByNavigation = insights.get(navigationId);
     if (!insightsByNavigation) {
       return [];
     }
 
-    const lcpInsight: Error|TraceEngine.Insights.Types.LCPInsightResult = insightsByNavigation.LargestContentfulPaint;
+    const lcpInsight = insightsByNavigation.LargestContentfulPaint;
     if (lcpInsight instanceof Error) {
       return [];
     }
@@ -151,8 +142,8 @@ export class LCPPhases extends HTMLElement {
           renderBegin,
       );
       sections.push(
-          {bounds: ttfb, label: i18nString(UIStrings.timeToFirstByte)},
-          {bounds: renderDelay, label: i18nString(UIStrings.elementRenderDelay)});
+          {bounds: ttfb, label: i18nString(UIStrings.timeToFirstByte), showDuration: true},
+          {bounds: renderDelay, label: i18nString(UIStrings.elementRenderDelay), showDuration: true});
     } else if (phases?.loadDelay && phases?.loadTime) {
       const renderBegin: TraceEngine.Types.Timing.MicroSeconds = TraceEngine.Types.Timing.MicroSeconds(
           lcpMicroseconds - TraceEngine.Helpers.Timing.millisecondsToMicroseconds(phases.renderDelay));
@@ -183,10 +174,10 @@ export class LCPPhases extends HTMLElement {
       );
 
       sections.push(
-          {bounds: ttfb, label: i18nString(UIStrings.timeToFirstByte)},
-          {bounds: loadDelay, label: i18nString(UIStrings.resourceLoadDelay)},
-          {bounds: loadTime, label: i18nString(UIStrings.resourceLoadTime)},
-          {bounds: renderDelay, label: i18nString(UIStrings.elementRenderDelay)},
+          {bounds: ttfb, label: i18nString(UIStrings.timeToFirstByte), showDuration: true},
+          {bounds: loadDelay, label: i18nString(UIStrings.resourceLoadDelay), showDuration: true},
+          {bounds: loadTime, label: i18nString(UIStrings.resourceLoadDuration), showDuration: true},
+          {bounds: renderDelay, label: i18nString(UIStrings.elementRenderDelay), showDuration: true},
       );
     }
     return [{
@@ -195,78 +186,49 @@ export class LCPPhases extends HTMLElement {
     }];
   }
 
-  #sidebarClicked(): void {
-    // deactivate current insight if already selected.
-    if (this.#isActive()) {
-      this.dispatchEvent(new SidebarInsight.InsightDeactivated());
-      return;
-    }
-    if (!this.#navigationId) {
-      // Shouldn't happen, but needed to satisfy TS.
-      return;
-    }
-
-    this.dispatchEvent(new SidebarInsight.InsightActivated(
-        InsightName,
-        this.#navigationId,
-        this.#createLCPPhasesOverlay.bind(this),
-        ));
-  }
-
   #renderLCPPhases(phaseData: PhaseData[]): LitHtml.LitTemplate {
+    const rows = phaseData.map(({phase, percent}) => [phase, percent]);
+
     // clang-format off
     return LitHtml.html`
-    <div class="insights" @click=${()=>this.#sidebarClicked()}>
+    <div class="insights">
       <${SidebarInsight.SidebarInsight.litTagName} .data=${{
-            title: this.#insightTitle,
-            expanded: this.#isActive(),
-        } as SidebarInsight.InsightDetails}>
+            title: this.userVisibleTitle,
+            expanded: this.isActive(),
+        } as SidebarInsight.InsightDetails}
+        @insighttoggleclick=${this.onSidebarClick}
+      >
         <div slot="insight-description" class="insight-description">
           Each
           <x-link class="link" href="https://web.dev/articles/optimize-lcp#lcp-breakdown">phase has specific recommendations to improve.</x-link>
           In an ideal load, the two delay phases should be quite short.
         </div>
-        <div slot="insight-content" class="table-container">
-          <dl>
-            <dt class="dl-title">Phase</dt>
-            <dd class="dl-title">% of LCP</dd>
-            ${phaseData?.map(phase => LitHtml.html`
-              <dt>${phase.phase}</dt>
-              <dd class="dl-value">${phase.percent}</dd>
-            `)}
-          </dl>
+        <div slot="insight-content">
+          ${LitHtml.html`<${Table.litTagName}
+            .data=${{
+              headers: ['Phase', '% of LCP'],
+              rows,
+            } as TableData}>
+          </${Table.litTagName}>`}
         </div>
       </${SidebarInsight}>
     </div>`;
     // clang-format on
   }
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [sidebarInsightStyles];
-  }
-
-  #shouldRenderForCateogory(): boolean {
-    if (this.#activeCategory === InsightsCategories.ALL) {
-      return true;
-    }
-    return this.#activeCategory === InsightsCategories.LCP;
-  }
-
-  #isActive(): boolean {
-    const isActive = this.#activeInsight && this.#activeInsight.name === InsightName &&
-        this.#activeInsight.navigationId === this.#navigationId;
-    return Boolean(isActive);
-  }
-
   #hasDataToRender(phaseData: PhaseData[]): boolean {
     return phaseData ? phaseData.length > 0 : false;
   }
 
-  #render(): void {
-    const phaseData = this.#getPhaseData(this.#insights, this.#navigationId);
-    const shouldRender = this.#shouldRenderForCateogory() && this.#hasDataToRender(phaseData);
+  override render(): void {
+    const phaseData = this.#getPhaseData(this.data.insights, this.data.navigationId);
+    const matchesCategory = shouldRenderForCategory({
+      activeCategory: this.data.activeCategory,
+      insightCategory: this.insightCategory,
+    });
+    const shouldRender = matchesCategory && this.#hasDataToRender(phaseData);
     const output = shouldRender ? this.#renderLCPPhases(phaseData) : LitHtml.nothing;
-    LitHtml.render(output, this.#shadow, {host: this});
+    LitHtml.render(output, this.shadow, {host: this});
   }
 }
 

@@ -26,6 +26,8 @@ class EchoAITextSession : public blink::mojom::AITextSession {
   void Prompt(const std::string& input,
               mojo::PendingRemote<blink::mojom::ModelStreamingResponder>
                   pending_responder) override;
+  void Fork(mojo::PendingReceiver<blink::mojom::AITextSession> session,
+            ForkCallback callback) override;
   void Destroy() override;
 
  private:
@@ -33,6 +35,7 @@ class EchoAITextSession : public blink::mojom::AITextSession {
                        mojo::RemoteSetElementId responder_id);
 
   bool is_destroyed_ = false;
+  uint64_t current_tokens_ = 0;
   mojo::RemoteSet<blink::mojom::ModelStreamingResponder> responder_set_;
 
   base::WeakPtrFactory<EchoAITextSession> weak_ptr_factory_{this};

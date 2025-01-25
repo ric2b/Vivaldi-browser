@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/error_page/common/localized_error.h"
 
 #include <stddef.h>
@@ -554,7 +559,7 @@ const LocalizedErrorMap* LookupErrorMap(const std::string& error_domain,
     CHECK(map);
     return map;
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 }
 
@@ -1101,7 +1106,7 @@ LocalizedError::PageState LocalizedError::GetPageState(
     // NOP. Link Preview doesn't show error code and describes an error with
     // text only.
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
   result.strings.Set("errorCode", error_code_string);
 

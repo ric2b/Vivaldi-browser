@@ -350,8 +350,7 @@ EventResultCB CalendarBackend::UpdateRecurrenceException(
   } else {
     result.success = false;
     result.message = "Could not find recurrence exception row in DB";
-    NOTREACHED() << "Could not find recurrence exception row in DB";
-    //return result;
+    return result;
   }
 }
 
@@ -421,8 +420,7 @@ NotificationResult CalendarBackend::UpdateNotification(
   } else {
     result.success = false;
     result.message = "Could not find notification  row in DB";
-    NOTREACHED() << "Could not find notification row in DB";
-    //return result;
+    return result;
   }
 }
 
@@ -487,8 +485,7 @@ InviteResult CalendarBackend::UpdateInvite(calendar::UpdateInviteRow row) {
   } else {
     result.success = false;
     result.message = "Could not find invite row in DB";
-    NOTREACHED() << "Could not find invite row in DB";
-    //return result;
+    return result;
   }
 }
 
@@ -661,8 +658,7 @@ EventResultCB CalendarBackend::UpdateEvent(EventID event_id,
   } else {
     result.success = false;
     result.message = "Could not find event row in DB";
-    NOTREACHED() << "Could not find event row in DB";
-    //return result;
+    return result;
   }
 }
 
@@ -709,8 +705,7 @@ bool CalendarBackend::UpdateEventType(EventTypeID event_type_id,
     }
     return result;
   }
-  NOTREACHED() << "Could not find event type row in DB";
-  //return false;
+  return false;
 }
 
 bool CalendarBackend::DeleteEventType(EventTypeID event_type_id) {
@@ -809,72 +804,76 @@ CreateCalendarResult CalendarBackend::CreateCalendar(CalendarRow calendar) {
   return result;
 }
 
-bool CalendarBackend::UpdateCalendar(CalendarID calendar_id,
-                                     const Calendar& calendar) {
+StatusCB CalendarBackend::UpdateCalendar(CalendarID calendar_id,
+                                         const Calendar& calendar) {
+  StatusCB result;
+
   if (!db_) {
-    return false;
+    result.success = false;
+    result.message = "No DB found";
+    return result;
   }
 
   CalendarRow calendar_row;
-  if (db_->GetRowForCalendar(calendar_id, &calendar_row)) {
-    if (calendar.updateFields & calendar::CALENDAR_NAME) {
-      calendar_row.set_name(calendar.name);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_DESCRIPTION) {
-      calendar_row.set_description(calendar.description);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_ORDERINDEX) {
-      calendar_row.set_orderindex(calendar.orderindex);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_COLOR) {
-      calendar_row.set_color(calendar.color);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_HIDDEN) {
-      calendar_row.set_hidden(calendar.hidden);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_ACTIVE) {
-      calendar_row.set_active(calendar.active);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_ICONINDEX) {
-      calendar_row.set_iconindex(calendar.iconindex);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_CTAG) {
-      calendar_row.set_ctag(calendar.ctag);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_LAST_CHECKED) {
-      calendar_row.set_last_checked(calendar.last_checked);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_TIMEZONE) {
-      calendar_row.set_timezone(calendar.timezone);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_SUPPORTED_COMPONENT_SET) {
-      calendar_row.set_supported_component_set(
-          calendar.supported_component_set);
-    }
-
-    bool result = db_->UpdateCalendarRow(calendar_row);
-
-    if (result) {
-      CalendarRow changed_row;
-      if (db_->GetRowForCalendar(calendar_id, &changed_row)) {
-        NotifyCalendarChanged();
-      }
-    }
+  if (!db_->GetRowForCalendar(calendar_id, &calendar_row)) {
+    result.success = false;
+    result.message = "No calendar found to update";
     return result;
-  } else {
-    NOTREACHED() << "Could not find calendar row in DB";
-    //return false;
   }
+
+  if (calendar.updateFields & calendar::CALENDAR_NAME) {
+    calendar_row.set_name(calendar.name);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_DESCRIPTION) {
+    calendar_row.set_description(calendar.description);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_ORDERINDEX) {
+    calendar_row.set_orderindex(calendar.orderindex);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_COLOR) {
+    calendar_row.set_color(calendar.color);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_HIDDEN) {
+    calendar_row.set_hidden(calendar.hidden);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_ACTIVE) {
+    calendar_row.set_active(calendar.active);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_ICONINDEX) {
+    calendar_row.set_iconindex(calendar.iconindex);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_CTAG) {
+    calendar_row.set_ctag(calendar.ctag);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_LAST_CHECKED) {
+    calendar_row.set_last_checked(calendar.last_checked);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_TIMEZONE) {
+    calendar_row.set_timezone(calendar.timezone);
+  }
+
+  if (calendar.updateFields & calendar::CALENDAR_SUPPORTED_COMPONENT_SET) {
+    calendar_row.set_supported_component_set(calendar.supported_component_set);
+  }
+
+  result.success = db_->UpdateCalendarRow(calendar_row);
+
+  if (result.success) {
+    CalendarRow changed_row;
+    if (db_->GetRowForCalendar(calendar_id, &changed_row)) {
+      NotifyCalendarChanged();
+    }
+  }
+  return result;
 }
 
 bool CalendarBackend::DeleteCalendar(CalendarID calendar_id) {

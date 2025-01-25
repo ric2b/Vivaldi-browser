@@ -430,8 +430,8 @@ describeWithMockConnection('NodeCascade', () => {
     const [inheritableProperty, nonInheritableProperty] = style.allProperties();
 
     assert.strictEqual(
-        matchedStyles.propertyState(nonInheritableProperty), SDK.CSSMatchedStyles.PropertyState.Overloaded);
-    assert.strictEqual(matchedStyles.propertyState(inheritableProperty), SDK.CSSMatchedStyles.PropertyState.Active);
+        matchedStyles.propertyState(nonInheritableProperty), SDK.CSSMatchedStyles.PropertyState.OVERLOADED);
+    assert.strictEqual(matchedStyles.propertyState(inheritableProperty), SDK.CSSMatchedStyles.PropertyState.ACTIVE);
   });
 
   it('correctly computes active properties for nested at-rules', async () => {
@@ -440,8 +440,8 @@ describeWithMockConnection('NodeCascade', () => {
     nestedRule.rule.nestingSelectors = ['a'];
     nestedRule.rule.selectorList = {selectors: [], text: '&'};
     nestedRule.rule.supports = [{
-      'text': '(--var:s)',
-      'active': true,
+      text: '(--var:s)',
+      active: true,
       styleSheetId: nestedRule.rule.styleSheetId,
     }];
     const matchedStyles = await createMatchedStyles({

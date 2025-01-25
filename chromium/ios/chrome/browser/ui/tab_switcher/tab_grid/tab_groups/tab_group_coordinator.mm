@@ -7,17 +7,17 @@
 #import "base/check.h"
 #import "base/metrics/user_metrics.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/tab_groups_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/tab_group_grid_view_controller.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_helper.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_idle_status_handler.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_group_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_group_positioner.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_group_view_controller.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_groups_commands.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_helper.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_idle_status_handler.h"
 #import "ios/web/public/web_state_id.h"
 
 namespace {
@@ -72,7 +72,7 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
       self.browser->GetCommandDispatcher(), TabGroupsCommands);
   _viewController = [[TabGroupViewController alloc]
       initWithHandler:handler
-           lightTheme:!self.browser->GetBrowserState()->IsOffTheRecord()
+            incognito:self.browser->GetBrowserState()->IsOffTheRecord()
              tabGroup:_tabGroup];
 
   _viewController.gridViewController.delegate = self;
@@ -81,7 +81,8 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
       initWithWebStateList:self.browser->GetWebStateList()
                   tabGroup:_tabGroup->GetWeakPtr()
                   consumer:_viewController
-              gridConsumer:_viewController.gridViewController];
+              gridConsumer:_viewController.gridViewController
+                modeHolder:self.modeHolder];
   _mediator.browser = self.browser;
   _mediator.tabGroupsHandler = handler;
   _mediator.tabGridIdleStatusHandler = self.tabGridIdleStatusHandler;
@@ -99,6 +100,7 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 }
 
 - (void)stop {
+  [_mediator disconnect];
   _mediator = nil;
   _tabContextMenuHelper = nil;
 
@@ -239,14 +241,14 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 
 - (void)gridViewController:(BaseGridViewController*)gridViewController
             didSelectGroup:(const TabGroup*)group {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // TODO(crbug.com/40273478): Remove once inactive tabs do not depends on it
 // anymore.
 - (void)gridViewController:(BaseGridViewController*)gridViewController
         didCloseItemWithID:(web::WebStateID)itemID {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 - (void)gridViewControllerDidMoveItem:
@@ -255,7 +257,7 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 }
 
 - (void)gridViewController:(BaseGridViewController*)gridViewController
-       didRemoveItemWIthID:(web::WebStateID)itemID {
+       didRemoveItemWithID:(web::WebStateID)itemID {
   // No-op.
 }
 
@@ -276,7 +278,7 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 
 - (void)gridViewControllerScrollViewDidScroll:
     (BaseGridViewController*)gridViewController {
-  // No-op.
+  [self.viewController gridViewControllerDidScroll];
 }
 
 - (void)gridViewControllerDropAnimationWillBegin:
@@ -291,18 +293,28 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 
 - (void)didTapInactiveTabsButtonInGridViewController:
     (BaseGridViewController*)gridViewController {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 - (void)didTapInactiveTabsSettingsLinkInGridViewController:
     (BaseGridViewController*)gridViewController {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 - (void)gridViewControllerDidRequestContextMenu:
     (BaseGridViewController*)gridViewController {
   [self.tabGridIdleStatusHandler
       tabGridDidPerformAction:TabGridActionType::kInPageAction];
+}
+
+- (void)gridViewControllerDropSessionDidEnter:
+    (BaseGridViewController*)gridViewController {
+  // No-op
+}
+
+- (void)gridViewControllerDropSessionDidExit:
+    (BaseGridViewController*)gridViewController {
+  // No-op
 }
 
 @end

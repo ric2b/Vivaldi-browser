@@ -22,7 +22,7 @@ export class AutofillManager extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   private constructor() {
     super();
     SDK.TargetManager.TargetManager.instance().addModelListener(
-        SDK.AutofillModel.AutofillModel, SDK.AutofillModel.Events.AddressFormFilled, this.#addressFormFilled, this,
+        SDK.AutofillModel.AutofillModel, SDK.AutofillModel.Events.ADDRESS_FORM_FILLED, this.#addressFormFilled, this,
         {scoped: true});
     this.#autoOpenViewSetting =
         Common.Settings.Settings.instance().createSetting('auto-open-autofill-view-on-event', true);
@@ -36,9 +36,14 @@ export class AutofillManager extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     return autofillManagerInstance;
   }
 
-  async #addressFormFilled(
-      {data}: Common.EventTarget
-          .EventTargetEvent<SDK.AutofillModel.EventTypes[SDK.AutofillModel.Events.AddressFormFilled]>): Promise<void> {
+  onShowAutofillTestAddressesSettingsChanged(): void {
+    for (const autofillModel of SDK.TargetManager.TargetManager.instance().models(SDK.AutofillModel.AutofillModel)) {
+      autofillModel.setTestAddresses();
+    }
+  }
+
+  async #addressFormFilled({data}: Common.EventTarget.EventTargetEvent<
+                           SDK.AutofillModel.EventTypes[SDK.AutofillModel.Events.ADDRESS_FORM_FILLED]>): Promise<void> {
     if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.AUTOFILL_VIEW) &&
         this.#autoOpenViewSetting.get()) {
       await UI.ViewManager.ViewManager.instance().showView('autofill-view');
@@ -49,7 +54,7 @@ export class AutofillManager extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     this.#autofillModel = data.autofillModel;
     this.#processAddressFormFilledData(data.event);
     if (this.#address) {
-      this.dispatchEventToListeners(Events.AddressFormFilled, {
+      this.dispatchEventToListeners(Events.ADDRESS_FORM_FILLED, {
         address: this.#address,
         filledFields: this.#filledFields,
         matches: this.#matches,
@@ -111,7 +116,7 @@ export interface Match {
 }
 
 export const enum Events {
-  AddressFormFilled = 'AddressFormFilled',
+  ADDRESS_FORM_FILLED = 'AddressFormFilled',
 }
 
 export interface AddressFormFilledEvent {
@@ -122,5 +127,5 @@ export interface AddressFormFilledEvent {
 }
 
 export type EventTypes = {
-  [Events.AddressFormFilled]: AddressFormFilledEvent,
+  [Events.ADDRESS_FORM_FILLED]: AddressFormFilledEvent,
 };

@@ -11,6 +11,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/token.h"
 #include "base/uuid.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/core/model_execution/model_execution_util.h"
@@ -27,6 +28,7 @@
 #include "components/optimization_guide/proto/model_quality_metadata.pb.h"
 #include "components/optimization_guide/proto/string_value.pb.h"
 #include "components/optimization_guide/proto/text_safety_model_metadata.pb.h"
+#include "services/on_device_model/public/mojom/on_device_model.mojom.h"
 
 namespace optimization_guide {
 namespace {
@@ -108,8 +110,8 @@ SamplingParams ResolveSamplingParams(
 class SessionImpl::ContextProcessor
     : public on_device_model::mojom::ContextClient {
  public:
-  ContextProcessor(SessionImpl& session, const std::string& input)
-      : session_(session), input_(input) {
+  ContextProcessor(SessionImpl& session, on_device_model::mojom::InputPtr input)
+      : session_(session), input_(std::move(input)) {
     int min_context = features::GetOnDeviceModelMinTokensForContext();
     if (min_context > 0) {
       AddContext(min_context);
@@ -137,9 +139,7 @@ class SessionImpl::ContextProcessor
     // Once the initial context is complete, we can cancel future context
     // processing.
     can_cancel_ = true;
-    if (tokens_processed_ <
-        static_cast<uint32_t>(
-            features::GetOnDeviceModelMaxTokensForContext())) {
+    if (tokens_processed_ < session_->GetTokenLimits().max_context_tokens) {
       AddContext(features::GetOnDeviceModelContextTokenChunkSize());
     }
   }
@@ -153,7 +153,7 @@ class SessionImpl::ContextProcessor
     return finished_processing_;
   }
 
-  std::string& input() { return input_; }
+  std::string input() { return OnDeviceInputToString(*input_); }
 
   uint32_t tokens_processed() const { return tokens_processed_; }
 
@@ -165,7 +165,7 @@ class SessionImpl::ContextProcessor
       return;
     }
     auto options = on_device_model::mojom::InputOptions::New();
-    options->text = input_;
+    options->input = input_.Clone();
     options->max_tokens = num_tokens;
     options->token_offset = tokens_processed_;
     session_->GetOrCreateSession().AddContext(
@@ -173,7 +173,7 @@ class SessionImpl::ContextProcessor
   }
 
   raw_ref<SessionImpl> session_;
-  std::string input_;
+  on_device_model::mojom::InputPtr input_;
   bool finished_processing_ = false;
   uint32_t expected_tokens_ = 0;
   uint32_t tokens_processed_ = 0;
@@ -235,6 +235,14 @@ SessionImpl::~SessionImpl() {
   }
 }
 
+const TokenLimits& SessionImpl::GetTokenLimits() const {
+  if (!on_device_state_) {
+    static const TokenLimits null_limits{};
+    return null_limits;
+  }
+  return on_device_state_->opts.token_limits;
+}
+
 void SessionImpl::AddContext(
     const google::protobuf::MessageLite& request_metadata) {
   const auto result = AddContextImpl(request_metadata);
@@ -277,7 +285,7 @@ SessionImpl::AddContextResult SessionImpl::AddContextImpl(
   on_device_state_->context_processor.reset();
 
   on_device_state_->context_processor =
-      std::make_unique<ContextProcessor>(*this, input->input_string);
+      std::make_unique<ContextProcessor>(*this, std::move(input->input));
   return AddContextResult::kUsingOnDevice;
 }
 
@@ -396,10 +404,10 @@ void SessionImpl::ExecuteModel(
     logged_request->set_input_context_string(
         on_device_state_->context_processor->input());
   }
-  logged_request->set_execution_string(input->input_string);
+  logged_request->set_execution_string(input->ToString());
   // TODO(b/302327957): Probably do some math to get the accurate number here.
   logged_request->set_execution_num_tokens_processed(
-      features::GetOnDeviceModelMaxTokensForOutput());
+      on_device_state_->opts.token_limits.max_execute_tokens);
 
   if (optimization_guide_logger_ &&
       optimization_guide_logger_->ShouldEnableDebugLogs()) {
@@ -424,10 +432,11 @@ void SessionImpl::ExecuteModel(
       base::BindOnce(&SessionImpl::OnSessionTimedOut, base::Unretained(this)));
 
   auto options = on_device_model::mojom::InputOptions::New();
-  options->text = input->input_string;
-  options->max_tokens = features::GetOnDeviceModelMaxTokensForExecute();
+  options->input = std::move(input->input);
+  options->max_tokens = on_device_state_->opts.token_limits.max_execute_tokens;
   options->ignore_context = input->should_ignore_input_context;
-  options->max_output_tokens = features::GetOnDeviceModelMaxTokensForOutput();
+  options->max_output_tokens =
+      on_device_state_->opts.token_limits.max_output_tokens;
   options->top_k = sampling_params_.top_k;
   options->temperature = sampling_params_.temperature;
 
@@ -451,21 +460,20 @@ void SessionImpl::RunNextRequestSafetyCheckOrBeginExecution(
         ExecuteModelResult::kFailedConstructingMessage);
     return;
   }
+  auto text = check_input->ToString();
   if (on_device_state_->opts.safety_cfg.IsRequestCheckLanguageOnly(
           request_check_idx)) {
     on_device_state_->opts.model_client->GetModelRemote()->DetectLanguage(
-        check_input->input_string,
+        text,
         base::BindOnce(&SessionImpl::OnRequestDetectLanguageResult,
                        on_device_state_->session_weak_ptr_factory_.GetWeakPtr(),
-                       std::move(options), request_check_idx,
-                       check_input->input_string));
+                       std::move(options), request_check_idx, text));
   } else {
     on_device_state_->opts.model_client->GetModelRemote()->ClassifyTextSafety(
-        check_input->input_string,
+        text,
         base::BindOnce(&SessionImpl::OnRequestSafetyResult,
                        on_device_state_->session_weak_ptr_factory_.GetWeakPtr(),
-                       std::move(options), request_check_idx,
-                       check_input->input_string));
+                       std::move(options), request_check_idx, text));
   }
 }
 
@@ -625,12 +633,12 @@ void SessionImpl::RunRawOutputSafetyCheck() {
         ExecuteModelResult::kFailedConstructingMessage);
     return;
   }
+  auto text = check_input->ToString();
   on_device_state_->opts.model_client->GetModelRemote()->ClassifyTextSafety(
-      check_input->input_string,
+      text,
       base::BindOnce(&SessionImpl::OnRawOutputSafetyResult,
                      on_device_state_->session_weak_ptr_factory_.GetWeakPtr(),
-                     check_input->input_string,
-                     on_device_state_->current_response.size()));
+                     text, on_device_state_->current_response.size()));
 }
 
 void SessionImpl::OnRawOutputSafetyResult(
@@ -985,7 +993,30 @@ SessionImpl::ExecuteModelHistogramLogger::~ExecuteModelHistogramLogger() {
 void SessionImpl::GetSizeInTokens(
     const std::string& text,
     OptimizationGuideModelSizeInTokenCallback callback) {
-  GetOrCreateSession().GetSizeInTokens(text, std::move(callback));
+  auto input = on_device_model::mojom::Input::New();
+  input->pieces.push_back(text);
+  GetOrCreateSession().GetSizeInTokens(std::move(input), std::move(callback));
+}
+
+void SessionImpl::GetContextSizeInTokens(
+    const google::protobuf::MessageLite& request,
+    OptimizationGuideModelSizeInTokenCallback callback) {
+  auto input = on_device_state_->opts.adapter->ConstructInputString(
+      request, /*want_input_context=*/true);
+  if (!input) {
+    std::move(callback).Run(0);
+    return;
+  }
+  GetOrCreateSession().GetSizeInTokens(std::move(input->input),
+                                       std::move(callback));
+}
+
+const proto::Any& SessionImpl::GetOnDeviceFeatureMetadata() const {
+  return on_device_state_->opts.adapter->GetFeatureMetadata();
+}
+
+const SamplingParams SessionImpl::GetSamplingParams() const {
+  return sampling_params_;
 }
 
 }  // namespace optimization_guide

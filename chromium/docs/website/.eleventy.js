@@ -39,6 +39,9 @@ module.exports = config => {
 
   config.setLibrary('md', mdlib);
 
+  // Enable indented code blocks.
+  config.amendLibrary("md", (mdLib) => mdLib.enable("code"));
+
   config.addCollection('allSortedByLowerCasedUrl', function(collectionApi) {
     return collectionApi.getAll().sort(function(a, b) {
       let x = a.url.toLowerCase();

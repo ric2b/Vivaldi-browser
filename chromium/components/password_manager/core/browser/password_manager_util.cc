@@ -39,7 +39,7 @@
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
-#include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
+#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -205,7 +205,7 @@ GetLoginMatchType GetMatchType(const password_manager::PasswordForm& form) {
     return GetLoginMatchType::kGrouped;
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 std::vector<PasswordForm> FindBestMatches(base::span<PasswordForm> matches) {
@@ -353,13 +353,15 @@ PasswordForm MakeNormalizedBlocklistedForm(
   return result;
 }
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 bool ShouldBiometricAuthenticationForFillingToggleBeVisible(
     const PrefService* local_state) {
   return local_state->GetBoolean(
       password_manager::prefs::kHadBiometricsAvailable);
 }
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 bool ShouldShowBiometricAuthenticationBeforeFillingPromo(
     password_manager::PasswordManagerClient* client) {
   std::unique_ptr<device_reauth::DeviceAuthenticator> device_authenticator =
@@ -443,9 +445,7 @@ bool IsSpecialSymbol(char16_t c) {
 
 bool IsSingleUsernameType(autofill::FieldType type) {
   return type == autofill::SINGLE_USERNAME ||
-         (type == autofill::SINGLE_USERNAME_FORGOT_PASSWORD &&
-          base::FeatureList::IsEnabled(
-              password_manager::features::kForgotPasswordFormSupport)) ||
+         type == autofill::SINGLE_USERNAME_FORGOT_PASSWORD ||
          (type == autofill::SINGLE_USERNAME_WITH_INTERMEDIATE_VALUES &&
           base::FeatureList::IsEnabled(
               password_manager::features::

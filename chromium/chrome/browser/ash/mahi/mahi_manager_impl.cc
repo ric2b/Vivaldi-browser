@@ -33,12 +33,14 @@
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/magic_boost/magic_boost_controller_ash.h"
+#include "chrome/browser/ash/mahi/mahi_availability.h"
 #include "chrome/browser/ash/mahi/mahi_browser_delegate_ash.h"
 #include "chrome/browser/ash/mahi/mahi_cache_manager.h"
+#include "chrome/browser/feedback/show_feedback_page.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/manta/manta_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chromeos/components/magic_boost/public/cpp/magic_boost_state.h"
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
@@ -67,17 +69,43 @@ using crosapi::mojom::MahiContextMenuActionType;
 
 const char kMahiCacheHit[] = "ChromeOS.Mahi.CacheStateOnAccess";
 const char kMahiResponseStatus[] = "ChromeOS.Mahi.ResponseStatusOnRequest";
+const char kMahiProviderCreationStatus[] =
+    "ChromeOS.Mahi.ProviderCreationStatus";
+const char kMediaAppPDFUrlPrefix[] = "file:///media-app/";
+
+// The following enum classes are persisted to logs. Entries should not be
+// renumbered and numeric values should never be reused.
 
 // CacheHit --------------------------------------------------------------------
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
 enum class CacheHit {
   kNoHit = 0,
   kSummary = 1,
   kContent = 2,
   kMaxValue = kContent,
 };
+
+// Provider creation -----------------------------------------------------------
+enum class ProviderCreationStatus {
+  kOk = 0,
+  kMantaServiceDisabled = 1,
+  kProfileUnavailable = 2,
+  kMantaServiceIsNull = 3,
+  kMantaServiceFailedToCreate = 4,
+  kMaxValue = kMantaServiceFailedToCreate,
+};
+
+void LogProviderCreationStatus(ProviderCreationStatus status) {
+  base::UmaHistogramEnumeration(kMahiProviderCreationStatus, status);
+}
+
+std::optional<std::string> MaybeGetUrl(
+    const crosapi::mojom::MahiPageInfoPtr& mahi_page_info) {
+  // Do not send the fake URL of media app PDF files.
+  return chromeos::features::IsMahiSendingUrl() &&
+                 !mahi_page_info->url.spec().starts_with(kMediaAppPDFUrlPrefix)
+             ? std::make_optional(mahi_page_info->url.spec())
+             : std::nullopt;
+}
 
 // OnConsentStateUpdateClosureRunner -------------------------------------------
 
@@ -91,7 +119,7 @@ class OnConsentStateUpdateClosureRunner
                                     base::OnceClosure on_declined_closure)
       : on_approved_closure_(std::move(on_approved_closure)),
         on_declined_closure_(std::move(on_declined_closure)) {
-    CHECK(chromeos::features::IsMagicBoostEnabled());
+    CHECK(chromeos::MagicBoostState::Get()->IsMagicBoostAvailable());
     magic_boost_state_observation_.Observe(chromeos::MagicBoostState::Get());
   }
 
@@ -113,7 +141,7 @@ class OnConsentStateUpdateClosureRunner
         magic_boost_state_observation_.Reset();
         std::move(on_declined_closure_).Run();
         return;
-      case chromeos::HMRConsentStatus::kPending:
+      case chromeos::HMRConsentStatus::kPendingDisclaimer:
       case chromeos::HMRConsentStatus::kUnset:
         return;
     }
@@ -169,19 +197,30 @@ MahiResponseStatus GetMahiResponseStatusFromMantaStatus(
 
 std::unique_ptr<manta::MahiProvider> CreateProvider() {
   if (!manta::features::IsMantaServiceEnabled()) {
+    LogProviderCreationStatus(ProviderCreationStatus::kMantaServiceDisabled);
     return nullptr;
   }
 
   Profile* profile = ProfileManager::GetActiveUserProfile();
   if (!profile) {
+    LogProviderCreationStatus(ProviderCreationStatus::kProfileUnavailable);
     return nullptr;
   }
 
   if (manta::MantaService* service =
           manta::MantaServiceFactory::GetForProfile(profile)) {
-    return service->CreateMahiProvider();
+    auto provider = service->CreateMahiProvider();
+    if (!provider) {
+      LogProviderCreationStatus(
+          ProviderCreationStatus::kMantaServiceFailedToCreate);
+      return nullptr;
+    }
+
+    LogProviderCreationStatus(ProviderCreationStatus::kOk);
+    return provider;
   }
 
+  LogProviderCreationStatus(ProviderCreationStatus::kMantaServiceIsNull);
   return nullptr;
 }
 
@@ -189,7 +228,7 @@ std::unique_ptr<manta::MahiProvider> CreateProvider() {
 // 1. The magic boost feature is disabled; OR
 // 2. The Mahi feature has been approved before.
 bool IsMahiApproved() {
-  return !chromeos::features::IsMagicBoostEnabled() ||
+  return !chromeos::MagicBoostState::Get()->IsMagicBoostAvailable() ||
          chromeos::MagicBoostState::Get()->hmr_consent_status() ==
              chromeos::HMRConsentStatus::kApproved;
 }
@@ -305,7 +344,9 @@ void MahiManagerImpl::AnswerQuestion(const std::u16string& question,
   if (current_panel_content) {
     mahi_provider_->QuestionAndAnswer(
         base::UTF16ToUTF8(current_panel_content_->page_content),
-        current_panel_qa_, base::UTF16ToUTF8(question),
+        base::UTF16ToUTF8(current_panel_info_->title),
+        MaybeGetUrl(current_page_info_), current_panel_qa_,
+        base::UTF16ToUTF8(question),
         base::BindOnce(&MahiManagerImpl::OnMahiProviderQAResponse,
                        weak_ptr_factory_for_requests_.GetWeakPtr(),
                        current_panel_info_->Clone(), question,
@@ -468,7 +509,7 @@ void MahiManagerImpl::OpenMahiPanel(int64_t display_id,
 }
 
 bool MahiManagerImpl::IsEnabled() {
-  return chromeos::features::IsMahiEnabled() &&
+  return mahi_availability::IsMahiAvailable() &&
          chromeos::MagicBoostState::Get()->hmr_enabled().value_or(false);
 }
 
@@ -489,14 +530,14 @@ void MahiManagerImpl::SetMediaAppPDFFocused() {
 
   // Fits the media app page info into a MahiPageInfoPtr.
   // Particularly, makes up a GURL with the file name.
-  // TODO(b:338140794): Two file with the same name can hit the same cache. Need
-  // to find a way to fix this.
+  // TODO(b:338140794): Two file with the same name can hit the same cache.
+  // Need to find a way to fix this.
   current_page_info_ = crosapi::mojom::MahiPageInfo::New(
       media_app_client_id_,
       /*page_id=*/media_app_client_id_,
-      GURL{base::StrCat({"file:///media-app/", file_name.value()})},
+      GURL{base::StrCat({kMediaAppPDFUrlPrefix, file_name.value()})},
       /*title=*/base::UTF8ToUTF16(file_name.value()), gfx::ImageSkia(),
-      /*distillable=*/true);
+      /*distillable=*/true, /*is_incognito=*/false);
 
   // To avoid refresh banner flicker. This could happen when a new PDF file is
   // opened from file picker dialog in media app.
@@ -533,6 +574,10 @@ std::optional<base::UnguessableToken> MahiManagerImpl::GetMediaAppPDFClientId()
   return std::nullopt;
 }
 
+void MahiManagerImpl::ClearCache() {
+  cache_manager_->ClearCache();
+}
+
 void MahiManagerImpl::NotifyRefreshAvailability(bool available) {
   if (ui_controller_.IsMahiPanelOpen()) {
     ui_controller_.NotifyRefreshAvailabilityChanged(available);
@@ -541,6 +586,20 @@ void MahiManagerImpl::NotifyRefreshAvailability(bool available) {
   // Attempt showing an educational nudge when users visit eligible content.
   if (available) {
     mahi_nudge_controller_->MaybeShowNudge();
+  }
+}
+
+void MahiManagerImpl::OnHistoryDeletions(
+    history::HistoryService* history_service,
+    const history::DeletionInfo& deletion_info) {
+  // If IsAllHistory() returns true, all URLs are deleted and `deleted_rows()`
+  //  and `favicon_urls()` are undefined.
+  if (deletion_info.IsAllHistory()) {
+    cache_manager_->ClearCache();
+  } else {
+    for (const auto& row : deletion_info.deleted_rows()) {
+      cache_manager_->DeleteCacheForUrl(row.url().spec());
+    }
   }
 }
 
@@ -569,12 +628,27 @@ bool MahiManagerImpl::MaybeInitializeAndDiscardPendingRequests() {
     weak_ptr_factory_for_requests_.InvalidateWeakPtrs();
   }
 
+  MaybeObserveHistoryService();
+
   return mahi_provider_ && mahi_browser_delegate_ash_;
+}
+
+void MahiManagerImpl::MaybeObserveHistoryService() {
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  if (!profile) {
+    return;
+  }
+
+  history::HistoryService* service =
+      HistoryServiceFactory::GetForProfileWithoutCreating(profile);
+  if (service && !scoped_history_service_observer_.IsObserving()) {
+    scoped_history_service_observer_.Observe(service);
+  }
 }
 
 void MahiManagerImpl::InterrputRequestHandlingWithDisclaimerView(
     crosapi::mojom::MahiContextMenuRequestPtr context_menu_request) {
-  CHECK(chromeos::features::IsMagicBoostEnabled());
+  CHECK(chromeos::MagicBoostState::Get()->IsMagicBoostAvailable());
 
   // Cache the display id before moving `context_menu_request`.
   const int64_t display_id = context_menu_request->display_id;
@@ -626,17 +700,22 @@ void MahiManagerImpl::OnGetPageContentForSummary(
 
   // Add page content to the cache.
   // TODO(b:338140794): consider adding the QA to the cache.
-  cache_manager_->AddCacheForUrl(
-      request_page_info->url.spec(),
-      MahiCacheManager::MahiData(
-          request_page_info->url.spec(), request_page_info->title,
-          current_panel_content_->page_content,
-          request_page_info->favicon_image, /*summary=*/std::nullopt,
-          /*previous_qa=*/{}));
+  if (!request_page_info->is_incognito) {
+    cache_manager_->AddCacheForUrl(
+        request_page_info->url.spec(),
+        MahiCacheManager::MahiData(
+            request_page_info->url.spec(), request_page_info->title,
+            current_panel_content_->page_content,
+            request_page_info->favicon_image, /*summary=*/std::nullopt,
+            /*previous_qa=*/{}));
+  }
 
   CHECK(mahi_provider_);
+
   mahi_provider_->Summarize(
       base::UTF16ToUTF8(current_panel_content_->page_content),
+      base::UTF16ToUTF8(request_page_info->title),
+      MaybeGetUrl(request_page_info),
       base::BindOnce(&MahiManagerImpl::OnMahiProviderSummaryResponse,
                      weak_ptr_factory_for_requests_.GetWeakPtr(),
                      std::move(request_page_info), std::move(callback)));
@@ -661,17 +740,22 @@ void MahiManagerImpl::OnGetPageContentForQA(
   // Add page content to the cache. The summary would be the summary that
   // is already in the cache (if any).
   // TODO(b:338140794): consider adding the QA to the cache.
-  cache_manager_->AddCacheForUrl(
-      request_page_info->url.spec(),
-      MahiCacheManager::MahiData(
-          request_page_info->url.spec(), request_page_info->title,
-          current_panel_content_->page_content,
-          request_page_info->favicon_image,
-          cache_manager_->GetSummaryForUrl(request_page_info->url.spec()), {}));
+  if (!request_page_info->is_incognito) {
+    cache_manager_->AddCacheForUrl(
+        request_page_info->url.spec(),
+        MahiCacheManager::MahiData(
+            request_page_info->url.spec(), request_page_info->title,
+            current_panel_content_->page_content,
+            request_page_info->favicon_image,
+            cache_manager_->GetSummaryForUrl(request_page_info->url.spec()),
+            {}));
+  }
 
   mahi_provider_->QuestionAndAnswer(
       base::UTF16ToUTF8(current_panel_content_->page_content),
-      current_panel_qa_, base::UTF16ToUTF8(question),
+      base::UTF16ToUTF8(request_page_info->title),
+      MaybeGetUrl(request_page_info), current_panel_qa_,
+      base::UTF16ToUTF8(question),
       base::BindOnce(&MahiManagerImpl::OnMahiProviderQAResponse,
                      weak_ptr_factory_for_requests_.GetWeakPtr(),
                      std::move(request_page_info), question,
@@ -735,7 +819,20 @@ void MahiManagerImpl::OnMahiProviderQAResponse(
   base::UmaHistogramEnumeration(kMahiResponseStatus, latest_response_status_);
 }
 
-// ScopedMahiBrowserDelegateOverrider ------------------------------------------
+// Repeating answers are not allowed for Mahi as all questions must only return
+// one answer.
+bool MahiManagerImpl::AllowRepeatingAnswers() {
+  return false;
+}
+
+// This function will never be called as consecutive answers are not allowed for
+// Mahi.
+void MahiManagerImpl::AnswerQuestionRepeating(
+    const std::u16string& question,
+    bool current_panel_content,
+    MahiAnswerQuestionCallbackRepeating callback) {}
+
+// ScopedMahiBrowserDelegateOverrider----------------------------------------
 
 ScopedMahiBrowserDelegateOverrider::ScopedMahiBrowserDelegateOverrider(
     MahiBrowserDelegateAsh* delegate) {

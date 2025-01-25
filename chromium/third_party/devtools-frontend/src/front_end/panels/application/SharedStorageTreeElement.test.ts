@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import type * as Common from '../../core/common/common.js';
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import {
@@ -26,13 +25,13 @@ class SharedStorageItemsListener {
                   .ObjectWrapper<Application.SharedStorageItemsView.SharedStorageItemsDispatcher.EventTypes>) {
     this.#dispatcher = dispatcher;
     this.#dispatcher.addEventListener(
-        Application.SharedStorageItemsView.SharedStorageItemsDispatcher.Events.ItemsRefreshed, this.#itemsRefreshed,
+        Application.SharedStorageItemsView.SharedStorageItemsDispatcher.Events.ITEMS_REFRESHED, this.#itemsRefreshed,
         this);
   }
 
   dispose(): void {
     this.#dispatcher.removeEventListener(
-        Application.SharedStorageItemsView.SharedStorageItemsDispatcher.Events.ItemsRefreshed, this.#itemsRefreshed,
+        Application.SharedStorageItemsView.SharedStorageItemsDispatcher.Events.ITEMS_REFRESHED, this.#itemsRefreshed,
         this);
   }
 
@@ -43,7 +42,7 @@ class SharedStorageItemsListener {
   async waitForItemsRefreshed(): Promise<void> {
     if (!this.#refreshed) {
       await this.#dispatcher.once(
-          Application.SharedStorageItemsView.SharedStorageItemsDispatcher.Events.ItemsRefreshed);
+          Application.SharedStorageItemsView.SharedStorageItemsDispatcher.Events.ITEMS_REFRESHED);
     }
     this.#refreshed = false;
   }
@@ -82,10 +81,9 @@ describeWithMockConnection('SharedStorageTreeElement', function() {
   beforeEach(async () => {
     stubNoopSettings();
     SDK.ChildTargetManager.ChildTargetManager.install();
-    const tabTarget = createTarget({type: SDK.Target.Type.Tab});
+    const tabTarget = createTarget({type: SDK.Target.Type.TAB});
     createTarget({parentTarget: tabTarget, subtype: 'prerender'});
     target = createTarget({parentTarget: tabTarget});
-    Root.Runtime.experiments.register(Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL, '', false);
 
     sharedStorageModel = target.model(Application.SharedStorageModel.SharedStorageModel) as
         Application.SharedStorageModel.SharedStorageModel;

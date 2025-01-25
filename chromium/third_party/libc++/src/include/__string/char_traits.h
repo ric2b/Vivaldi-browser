@@ -75,10 +75,11 @@ exposition-only to document what members a char_traits specialization should pro
 */
 
 //
-// Temporary extension to provide a base template for std::char_traits.
-// TODO(LLVM-19): Remove this class.
+// Temporary re-introduction for Vivaldis usage of wxWidgets in WinSparkle. VB-109436.
 //
-#if defined(_LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION)
+// Extension to provide a base template for std::char_traits.
+//
+#if defined(VIVALDI_LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION)
 template <class _CharT>
 struct _LIBCPP_DEPRECATED_(
     "char_traits<T> for T not equal to char, wchar_t, char8_t, char16_t or char32_t is non-standard and is provided "
@@ -172,7 +173,7 @@ struct _LIBCPP_DEPRECATED_(
   }
   static inline _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int_type eof() _NOEXCEPT { return int_type(EOF); }
 };
-#endif // !defined(_LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION)
+#endif // !defined(VIVALDI_LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION)
 
 // char_traits<char>
 

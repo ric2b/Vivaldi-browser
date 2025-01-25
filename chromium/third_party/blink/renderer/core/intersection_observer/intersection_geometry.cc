@@ -158,8 +158,8 @@ bool ComputeIsVisible(const LayoutObject* target, const PhysicalRect& rect) {
 // multiple block fragments.
 gfx::Transform ObjectToViewTransform(const LayoutObject& object) {
   // Use faster GeometryMapper when possible.
-  PropertyTreeStateOrAlias container_properties =
-      PropertyTreeState::Uninitialized();
+  PropertyTreeStateOrAlias container_properties(
+      PropertyTreeState::kUninitialized);
   const LayoutObject* property_container =
       IntersectionGeometry::CanUseGeometryMapper(object)
           ? object.GetPropertyContainer(nullptr, &container_properties)
@@ -316,9 +316,9 @@ const LayoutObject* IntersectionGeometry::GetTargetLayoutObject(
     return nullptr;
   }
   // If the target is inside a locked subtree, it isn't ever visible.
-  if (UNLIKELY(target->GetFrameView()->IsDisplayLocked() ||
-               DisplayLockUtilities::IsInLockedSubtreeCrossingFrames(
-                   target_element))) {
+  if (target->GetFrameView()->IsDisplayLocked() ||
+      DisplayLockUtilities::IsInLockedSubtreeCrossingFrames(target_element))
+      [[unlikely]] {
     return nullptr;
   }
 

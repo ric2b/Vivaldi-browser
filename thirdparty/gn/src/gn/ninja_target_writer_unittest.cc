@@ -22,11 +22,11 @@ class TestingNinjaTargetWriter : public NinjaTargetWriter {
   void Run() override {}
 
   // Make this public so the test can call it.
-  std::vector<OutputFile> WriteInputDepsStampAndGetDep(
+  std::vector<OutputFile> WriteInputDepsStampOrPhonyAndGetDep(
       const std::vector<const Target*>& additional_hard_deps,
       size_t num_stamp_uses) {
-    return NinjaTargetWriter::WriteInputDepsStampAndGetDep(additional_hard_deps,
-                                                           num_stamp_uses);
+    return NinjaTargetWriter::WriteInputDepsStampOrPhonyAndGetDep(
+        additional_hard_deps, num_stamp_uses);
   }
 };
 
@@ -74,7 +74,7 @@ TEST(NinjaTargetWriter, ResolvedSetExplicitly) {
   EXPECT_EQ(&resolved, &writer.resolved());
 }
 
-TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
+TEST(NinjaTargetWriter, WriteInputDepsStampOrPhonyAndGetDep) {
   TestWithScope setup;
   Err err;
 
@@ -113,8 +113,8 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   {
     std::ostringstream stream;
     TestingNinjaTargetWriter writer(&base_target, setup.toolchain(), stream);
-    std::vector<OutputFile> dep =
-        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>(), 10u);
+    std::vector<OutputFile> dep = writer.WriteInputDepsStampOrPhonyAndGetDep(
+        std::vector<const Target*>(), 10u);
 
     // Since there is only one dependency, it should just be returned and
     // nothing written to the stream.
@@ -127,8 +127,8 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   {
     std::ostringstream stream;
     TestingNinjaTargetWriter writer(&target, setup.toolchain(), stream);
-    std::vector<OutputFile> dep =
-        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>(), 10u);
+    std::vector<OutputFile> dep = writer.WriteInputDepsStampOrPhonyAndGetDep(
+        std::vector<const Target*>(), 10u);
 
     // Since there is only one dependency, a stamp file will be returned
     // directly without writing any additional rules.
@@ -158,8 +158,8 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   {
     std::ostringstream stream;
     TestingNinjaTargetWriter writer(&action, setup.toolchain(), stream);
-    std::vector<OutputFile> dep =
-        writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>(), 10u);
+    std::vector<OutputFile> dep = writer.WriteInputDepsStampOrPhonyAndGetDep(
+        std::vector<const Target*>(), 10u);
 
     ASSERT_EQ(1u, dep.size());
     EXPECT_EQ("obj/foo/action.inputdeps.stamp", dep[0].value());
@@ -170,8 +170,8 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDep) {
   }
 }
 
-// Tests WriteInputDepsStampAndGetDep when toolchain deps are present.
-TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDepWithToolchainDeps) {
+// Tests WriteInputDepsStampOrPhonyAndGetDep when toolchain deps are present.
+TEST(NinjaTargetWriter, WriteInputDepsStampOrPhonyAndGetDepWithToolchainDeps) {
   TestWithScope setup;
   Err err;
 
@@ -194,8 +194,8 @@ TEST(NinjaTargetWriter, WriteInputDepsStampAndGetDepWithToolchainDeps) {
 
   std::ostringstream stream;
   TestingNinjaTargetWriter writer(&target, setup.toolchain(), stream);
-  std::vector<OutputFile> dep =
-      writer.WriteInputDepsStampAndGetDep(std::vector<const Target*>(), 10u);
+  std::vector<OutputFile> dep = writer.WriteInputDepsStampOrPhonyAndGetDep(
+      std::vector<const Target*>(), 10u);
 
   // Since there is more than one dependency, a stamp file will be returned
   // and the rule for the stamp file will be written to the stream.

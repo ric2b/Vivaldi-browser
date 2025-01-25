@@ -1257,8 +1257,17 @@
     "vivaldi.quick_commands.first_run_tip_dismissed": {
       "id": 318,
       "merge_method": "none"
+    },
+    "vivaldi.startup.active_days": {
+      "id": 319,
+      "merge_method": "none"
+    },
+    "vivaldi.mail.message_list_jump_to_latest": {
+      "id": 321,
+      "merge_method": "none"
     }
   },
+
   "vivaldi": {
     "actions": {
       "description": "Actions with shortcuts and gestures. One section for each OS, all must be maintained.",
@@ -3222,7 +3231,6 @@
           },
           "COMMAND_MAIN_ZOOM_IN": {
             "shortcuts": [
-              "meta+=",
               "meta++",
               "0",
               "+"
@@ -4161,6 +4169,11 @@
           "oAuth": true,
           "Feeds": true
         }
+      },
+      "promote": {
+        "description": "Replace Vivaldia Game button in the StartPage by the Promote button.",
+        "type": "boolean",
+        "default": true
       }
     },
     "calendar": {
@@ -4254,6 +4267,11 @@
           "showCompletedTasks": false,
           "displayMode": "agenda"
         }
+      },
+      "panel_calendar_height": {
+        "description": "Height of mini calendar shown in calendar panel.",
+        "type": "integer",
+        "default": 180
       },
       "show_day_sidebar": {
         "type": "boolean",
@@ -4503,6 +4521,13 @@
             "default": 230
           }
         }
+      }
+    },
+    "context_dialogs": {
+      "seen": {
+        "description": "Dictionary for storing map of context dialog IDs and boolean state of 'seen' property.",
+        "type": "dictionary",
+        "default": {}
       }
     },
     "dot_net": {
@@ -5042,6 +5067,11 @@
       },
       "message_list_preview_vertical_only": {
         "description": "How many lines to preview in the mail list",
+        "type": "boolean",
+        "default": true
+      },
+      "message_list_jump_to_latest": {
+        "description": "Show little overlay at top/bottom of list to jump to latest message",
         "type": "boolean",
         "default": true
       },
@@ -6048,15 +6078,20 @@
           "type": "boolean",
           "default": true
         },
-        "display_top_sites": {
-          "description": "Display top sites. Always in a separate group.",
-          "type": "boolean",
-          "default": true
-        },
         "order": {
           "description": "Top Start Page navigation Speed Dial order",
           "type": "list",
           "default": []
+        },
+        "restore_page": {
+          "description": "Cache and restore last visited SD page",
+          "type": "boolean",
+          "default": true
+        },
+        "restore_page_id": {
+          "description": "Store last visited SD page ID through restart",
+          "type": "string",
+          "default": ""
         },
         "titles_visible": {
           "type": "enum",
@@ -6113,7 +6148,7 @@
         "privacy_stats_show": {
           "description": "Display privacy statistics in the SpeedDial",
           "type": "boolean",
-          "default": true
+          "default": false
         }
       }
     },
@@ -6187,6 +6222,11 @@
         "description": "How many times the crash reporting dialog was shown.",
         "type": "integer",
         "default": 0
+      },
+      "active_days" : {
+        "description": "List of timestamps in which the browser was active in last 14 days (used for the D3D7 marketing)",
+        "type": "list",
+        "default": []
       }
     },
     "status_bar": {
@@ -6352,8 +6392,18 @@
         "type": "boolean",
         "default": false
       },
+      "double_click": {
+        "description": "Tab double-click options",
+        "type": "enum",
+        "enum_values": {
+          "ignore": 0,
+          "rename": 1,
+          "close": 2
+        },
+        "default": "rename"
+      },
       "double_click_close": {
-        "description": "Close tab on double-click",
+        "description": "[DEPRECATED 2024/8] Close tab on double-click",
         "type": "boolean",
         "default": false
       },
@@ -6579,7 +6629,7 @@
       "density": {
         "description": "Spacing in toolbars, tabs, and other UI elements",
         "type": "boolean",
-        "default": false
+        "default": true
       },
       "disable_title_bar": {
         "type": "boolean",
@@ -6780,75 +6830,107 @@
         "default": [
           {
             "engineVersion": 1,
-            "version": 1.1,
             "id": "Vivaldi1",
-            "url": "",
             "name": "Vivaldi",
             "accentFromPage": true,
             "accentOnWindow": true,
             "accentSaturationLimit": 1,
-            "backgroundImage": "/resources/startup-static.svg",
-            "backgroundPosition": "stretch",
-            "radius": 4,
-            "colorAccentBg": "#ef3939",
-            "colorBg": "#f6f6f6",
-            "colorFg": "#222222",
-            "colorHighlightBg": "#4c70f0",
-            "colorWindowBg": "#EDEEF2",
-            "contrast": 0,
-            "preferSystemAccent": false,
             "alpha": 0.85,
-            "blur": 0,
+            "backgroundImage": "/resources/theme/vivaldi/background.webp",
+            "backgroundPosition": "stretch",
+            "blur": 8,
+            "colorAccentBg": "#ef3939",
+            "colorBg": "#f7f7f7",
+            "colorFg": "#2f2d2d",
+            "colorHighlightBg": "#2c78f2",
+            "colorWindowBg": "#f7f7f7",
+            "contrast": 0,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "radius": 14,
+            "simpleScrollbar": true,
+            "transparencyTabBar": false,
             "transparencyTabs": false,
-            "transparencyTabBar": false
+            "url": "",
+            "version": 1
           },
           {
             "engineVersion": 1,
-            "version": 1.0,
             "id": "Vivaldi2",
-            "url": "",
             "name": "Dark",
             "accentFromPage": false,
             "accentOnWindow": true,
             "accentSaturationLimit": 1,
+            "alpha": 1,
             "backgroundImage": "",
             "backgroundPosition": "stretch",
-            "radius": 6,
-            "colorAccentBg": "#44454d",
+            "blur": 0,
+            "colorAccentBg": "#4b4c53",
             "colorBg": "#2e2f37",
             "colorFg": "#d3d9e3",
             "colorHighlightBg": "#6590fd",
-            "colorWindowBg": "#202127",
+            "colorWindowBg": "#1D1E21",
             "contrast": 0,
+            "dimBlurred": false,
             "preferSystemAccent": false,
-            "alpha": 0.75,
-            "blur": 10,
+            "radius": 14,
+            "simpleScrollbar": true,
+            "transparencyTabBar": false,
             "transparencyTabs": false,
-            "transparencyTabBar": false
+            "url": "",
+            "version": 1
           },
           {
             "engineVersion": 1,
-            "version": 1.0,
-            "id": "Vivaldi3",
-            "url": "",
-            "name": "Human",
+            "id": "Vivaldi10",
+            "name": "Paint",
             "accentFromPage": true,
             "accentOnWindow": true,
             "accentSaturationLimit": 1,
-            "backgroundImage": "/resources/bg_alt_7.jpg",
+            "alpha": 0.85,
+            "backgroundImage": "/resources/bg-paint.webp",
             "backgroundPosition": "stretch",
-            "radius": 0,
-            "colorAccentBg": "#e95421",
-            "colorBg": "#41403b",
-            "colorFg": "#e4e4dc",
-            "colorHighlightBg": "#ed773d",
-            "colorWindowBg": "#41403b",
+            "blur": 8,
+            "colorAccentBg": "#ff7452",
+            "colorBg": "#f7f7f7",
+            "colorFg": "#585555",
+            "colorHighlightBg": "#1ab5d1",
+            "colorWindowBg": "#f7f7f7",
             "contrast": 0,
+            "dimBlurred": false,
             "preferSystemAccent": false,
-            "alpha": 0.75,
-            "blur": 10,
+            "radius": 6,
+            "simpleScrollbar": true,
+            "transparencyTabBar": false,
             "transparencyTabs": false,
-            "transparencyTabBar": false
+            "url": "",
+            "version": 1
+          },
+          {
+            "engineVersion": 1,
+            "id": "Vivaldi4",
+            "name": "Soft Pink",
+            "accentFromPage": true,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "alpha": 0.85,
+            "backgroundImage": "/resources/bg-soft-pink.webp",
+            "backgroundPosition": "stretch",
+            "blur": 8,
+            "colorAccentBg": "#9e769a",
+            "colorBg": "#f7f7f7",
+            "colorFg": "#5d4b5a",
+            "colorHighlightBg": "#9e769a",
+            "colorWindowBg": "#f7f7f7",
+            "contrast": 0,
+            "dimBlurred": false,
+            "preferSystemAccent": false,
+            "radius": 14,
+            "simpleScrollbar": true,
+            "transparencyTabBar": false,
+            "transparencyTabs": false,
+            "url": "",
+            "version": 1
           },
           {
             "engineVersion": 1,
@@ -6872,55 +6954,7 @@
             "alpha": 0.80,
             "blur": 10,
             "transparencyTabs": false,
-            "transparencyTabBar": true
-          },
-          {
-            "engineVersion": 1,
-            "version": 1.0,
-            "id": "Vivaldi3x",
-            "url": "",
-            "name": "Issuna",
-            "accentFromPage": false,
-            "accentOnWindow": true,
-            "accentSaturationLimit": 1,
-            "backgroundImage": "",
-            "backgroundPosition": "stretch",
-            "radius": 4,
-            "colorAccentBg": "#404040",
-            "colorBg": "#2f2f2f",
-            "colorFg": "#dbdbdb",
-            "colorHighlightBg": "#579c8e",
-            "colorWindowBg": "#1D1E21",
-            "contrast": 2,
-            "preferSystemAccent": false,
-            "alpha": 0.75,
-            "blur": 0,
-            "transparencyTabs": false,
             "transparencyTabBar": false
-          },
-          {
-            "engineVersion": 1,
-            "version": 1.0,
-            "id": "Vivaldi4",
-            "url": "",
-            "name": "Hot Pink",
-            "accentFromPage": false,
-            "accentOnWindow": true,
-            "accentSaturationLimit": 1,
-            "backgroundImage": "/resources/bg_alt_1.jpg",
-            "backgroundPosition": "stretch",
-            "radius": 4,
-            "colorAccentBg": "#b63e62",
-            "colorBg": "#412d38",
-            "colorFg": "#f5dbef",
-            "colorHighlightBg": "#ff368f",
-            "colorWindowBg": "#412d38",
-            "contrast": 2,
-            "preferSystemAccent": false,
-            "alpha": 0.75,
-            "blur": 0,
-            "transparencyTabs": false,
-            "transparencyTabBar": true
           },
           {
             "engineVersion": 1,
@@ -6943,32 +6977,260 @@
             "preferSystemAccent": true,
             "alpha": 1.0,
             "blur": 0,
+            "buttons": {
+              "Back": "/resources/theme/vivaldi/Back.svg",
+              "BreakMode": "/resources/theme/vivaldi/BreakMode.svg",
+              "CalendarStatus": "/resources/theme/vivaldi/CalendarStatus.svg",
+              "CaptureImages": "/resources/theme/vivaldi/CaptureImages.svg",
+              "Clock": "/resources/theme/vivaldi/Clock.svg",
+              "DownloadButton": "/resources/theme/vivaldi/DownloadButton.svg",
+              "Extensions": "/resources/theme/vivaldi/Extensions.svg",
+              "FastForward": "/resources/theme/vivaldi/FastForward.svg",
+              "Forward": "/resources/theme/vivaldi/Forward.svg",
+              "Home": "/resources/theme/vivaldi/Home.svg",
+              "ImagesToggle": "/resources/theme/vivaldi/ImagesToggle.svg",
+              "MailBack": "/resources/theme/vivaldi/MailBack.svg",
+              "MailCompose": "/resources/theme/vivaldi/MailCompose.svg",
+              "MailForward": "/resources/theme/vivaldi/MailForward.svg",
+              "MailMsgArchive": "/resources/theme/vivaldi/MailMsgArchive.svg",
+              "MailMsgArchiveRestore": "/resources/theme/vivaldi/MailMsgArchiveRestore.svg",
+              "MailMsgAttach": "/resources/theme/vivaldi/MailMsgAttach.svg",
+              "MailMsgDiscard": "/resources/theme/vivaldi/MailMsgDiscard.svg",
+              "MailMsgEdit": "/resources/theme/vivaldi/MailMsgEdit.svg",
+              "MailMsgFlag": "/resources/theme/vivaldi/MailMsgFlag.svg",
+              "MailMsgForward": "/resources/theme/vivaldi/MailMsgForward.svg",
+              "MailMsgLabel": "/resources/theme/vivaldi/MailMsgLabel.svg",
+              "MailMsgMove": "/resources/theme/vivaldi/MailMsgMove.svg",
+              "MailMsgReply": "/resources/theme/vivaldi/MailMsgReply.svg",
+              "MailMsgReplyToAll": "/resources/theme/vivaldi/MailMsgReplyToAll.svg",
+              "MailMsgSend": "/resources/theme/vivaldi/MailMsgSend.svg",
+              "MailMsgShowHeaders": "/resources/theme/vivaldi/MailMsgShowHeaders.svg",
+              "MailMsgSpam": "/resources/theme/vivaldi/MailMsgSpam.svg",
+              "MailMsgSpamRestore": "/resources/theme/vivaldi/MailMsgSpamRestore.svg",
+              "MailMsgStatusRead": "/resources/theme/vivaldi/MailMsgStatusRead.svg",
+              "MailMsgStatusUnread": "/resources/theme/vivaldi/MailMsgStatusUnread.svg",
+              "MailMsgTrash": "/resources/theme/vivaldi/MailMsgTrash.svg",
+              "MailMsgTrashRestore": "/resources/theme/vivaldi/MailMsgTrashRestore.svg",
+              "MailReload": "/resources/theme/vivaldi/MailReload.svg",
+              "MailRenderingMethod": "/resources/theme/vivaldi/MailRenderingMethod.svg",
+              "MailRenderingMethodText": "/resources/theme/vivaldi/MailRenderingMethodText.svg",
+              "MailStatus": "/resources/theme/vivaldi/MailStatus.svg",
+              "MailViewLayout": "/resources/theme/vivaldi/MailViewLayout.svg",
+              "MailViewThreading": "/resources/theme/vivaldi/MailViewThreading.svg",
+              "PageActions": "/resources/theme/vivaldi/PageActions.svg",
+              "PanelBookmarks": "/resources/theme/vivaldi/PanelBookmarks.svg",
+              "PanelCalendar": "/resources/theme/vivaldi/PanelCalendar.svg",
+              "PanelContacts": "/resources/theme/vivaldi/PanelContacts.svg",
+              "PanelDownloads": "/resources/theme/vivaldi/PanelDownloads.svg",
+              "PanelFeeds": "/resources/theme/vivaldi/PanelFeeds.svg",
+              "PanelHistory": "/resources/theme/vivaldi/PanelHistory.svg",
+              "PanelMail": "/resources/theme/vivaldi/PanelMail.svg",
+              "PanelNotes": "/resources/theme/vivaldi/PanelNotes.svg",
+              "PanelReadingList": "/resources/theme/vivaldi/PanelReadingList.svg",
+              "PanelSession": "/resources/theme/vivaldi/PanelSession.svg",
+              "PanelTasks": "/resources/theme/vivaldi/PanelTasks.svg",
+              "PanelToggle": "/resources/theme/vivaldi/PanelToggle.svg",
+              "PanelTranslate": "/resources/theme/vivaldi/PanelTranslate.svg",
+              "PanelWeb": "/resources/theme/vivaldi/PanelWeb.svg",
+              "PanelWindow": "/resources/theme/vivaldi/PanelWindow.svg",
+              "Proxy": "/resources/theme/vivaldi/Proxy.svg",
+              "ReadingList": "/resources/theme/vivaldi/ReadingList.svg",
+              "Reload": "/resources/theme/vivaldi/Reload.svg",
+              "Rewind": "/resources/theme/vivaldi/Rewind.svg",
+              "SearchField": "/resources/theme/vivaldi/SearchField.svg",
+              "Settings": "/resources/theme/vivaldi/Settings.svg",
+              "Stop": "/resources/theme/vivaldi/Stop.svg",
+              "SyncStatus": "/resources/theme/vivaldi/SyncStatus.svg",
+              "TilingToggle": "/resources/theme/vivaldi/TilingToggle.svg",
+              "UpdateButton": "/resources/theme/vivaldi/UpdateButton.svg",
+              "WorkspaceButton": "/resources/theme/vivaldi/WorkspaceButton.svg"
+            },
             "transparencyTabs": false,
             "transparencyTabBar": false
           },
           {
             "engineVersion": 1,
             "version": 1.0,
-            "id": "Vivaldi6",
+            "id": "Vivaldi3x",
             "url": "",
-            "name": "Blueprint",
+            "name": "Issuna",
             "accentFromPage": false,
-            "accentOnWindow": false,
+            "accentOnWindow": true,
             "accentSaturationLimit": 1,
-            "backgroundImage": "/resources/bg_alt_6.webp",
+            "backgroundImage": "",
             "backgroundPosition": "stretch",
-            "radius": 0,
-            "colorAccentBg": "#ffb608",
-            "colorBg": "#2e3a50",
-            "colorFg": "#ffffff",
-            "colorHighlightBg": "#ffb608",
-            "colorWindowBg": "#2e3a50",
-            "contrast": 5,
+            "radius": 4,
+            "colorAccentBg": "#404040",
+            "colorBg": "#2f2f2f",
+            "colorFg": "#dbdbdb",
+            "colorHighlightBg": "#579c8e",
+            "colorWindowBg": "#1D1E21",
+            "contrast": 2,
             "preferSystemAccent": false,
             "alpha": 0.75,
             "blur": 0,
+            "buttons": {
+              "Back": "/resources/theme/vivaldi/Back.svg",
+              "BreakMode": "/resources/theme/vivaldi/BreakMode.svg",
+              "CalendarStatus": "/resources/theme/vivaldi/CalendarStatus.svg",
+              "CaptureImages": "/resources/theme/vivaldi/CaptureImages.svg",
+              "Clock": "/resources/theme/vivaldi/Clock.svg",
+              "DownloadButton": "/resources/theme/vivaldi/DownloadButton.svg",
+              "Extensions": "/resources/theme/vivaldi/Extensions.svg",
+              "FastForward": "/resources/theme/vivaldi/FastForward.svg",
+              "Forward": "/resources/theme/vivaldi/Forward.svg",
+              "Home": "/resources/theme/vivaldi/Home.svg",
+              "ImagesToggle": "/resources/theme/vivaldi/ImagesToggle.svg",
+              "MailBack": "/resources/theme/vivaldi/MailBack.svg",
+              "MailCompose": "/resources/theme/vivaldi/MailCompose.svg",
+              "MailForward": "/resources/theme/vivaldi/MailForward.svg",
+              "MailMsgArchive": "/resources/theme/vivaldi/MailMsgArchive.svg",
+              "MailMsgArchiveRestore": "/resources/theme/vivaldi/MailMsgArchiveRestore.svg",
+              "MailMsgAttach": "/resources/theme/vivaldi/MailMsgAttach.svg",
+              "MailMsgDiscard": "/resources/theme/vivaldi/MailMsgDiscard.svg",
+              "MailMsgEdit": "/resources/theme/vivaldi/MailMsgEdit.svg",
+              "MailMsgFlag": "/resources/theme/vivaldi/MailMsgFlag.svg",
+              "MailMsgForward": "/resources/theme/vivaldi/MailMsgForward.svg",
+              "MailMsgLabel": "/resources/theme/vivaldi/MailMsgLabel.svg",
+              "MailMsgMove": "/resources/theme/vivaldi/MailMsgMove.svg",
+              "MailMsgReply": "/resources/theme/vivaldi/MailMsgReply.svg",
+              "MailMsgReplyToAll": "/resources/theme/vivaldi/MailMsgReplyToAll.svg",
+              "MailMsgSend": "/resources/theme/vivaldi/MailMsgSend.svg",
+              "MailMsgShowHeaders": "/resources/theme/vivaldi/MailMsgShowHeaders.svg",
+              "MailMsgSpam": "/resources/theme/vivaldi/MailMsgSpam.svg",
+              "MailMsgSpamRestore": "/resources/theme/vivaldi/MailMsgSpamRestore.svg",
+              "MailMsgStatusRead": "/resources/theme/vivaldi/MailMsgStatusRead.svg",
+              "MailMsgStatusUnread": "/resources/theme/vivaldi/MailMsgStatusUnread.svg",
+              "MailMsgTrash": "/resources/theme/vivaldi/MailMsgTrash.svg",
+              "MailMsgTrashRestore": "/resources/theme/vivaldi/MailMsgTrashRestore.svg",
+              "MailReload": "/resources/theme/vivaldi/MailReload.svg",
+              "MailRenderingMethod": "/resources/theme/vivaldi/MailRenderingMethod.svg",
+              "MailRenderingMethodText": "/resources/theme/vivaldi/MailRenderingMethodText.svg",
+              "MailStatus": "/resources/theme/vivaldi/MailStatus.svg",
+              "MailViewLayout": "/resources/theme/vivaldi/MailViewLayout.svg",
+              "MailViewThreading": "/resources/theme/vivaldi/MailViewThreading.svg",
+              "PageActions": "/resources/theme/vivaldi/PageActions.svg",
+              "PanelBookmarks": "/resources/theme/vivaldi/PanelBookmarks.svg",
+              "PanelCalendar": "/resources/theme/vivaldi/PanelCalendar.svg",
+              "PanelContacts": "/resources/theme/vivaldi/PanelContacts.svg",
+              "PanelDownloads": "/resources/theme/vivaldi/PanelDownloads.svg",
+              "PanelFeeds": "/resources/theme/vivaldi/PanelFeeds.svg",
+              "PanelHistory": "/resources/theme/vivaldi/PanelHistory.svg",
+              "PanelMail": "/resources/theme/vivaldi/PanelMail.svg",
+              "PanelNotes": "/resources/theme/vivaldi/PanelNotes.svg",
+              "PanelReadingList": "/resources/theme/vivaldi/PanelReadingList.svg",
+              "PanelSession": "/resources/theme/vivaldi/PanelSession.svg",
+              "PanelTasks": "/resources/theme/vivaldi/PanelTasks.svg",
+              "PanelToggle": "/resources/theme/vivaldi/PanelToggle.svg",
+              "PanelTranslate": "/resources/theme/vivaldi/PanelTranslate.svg",
+              "PanelWeb": "/resources/theme/vivaldi/PanelWeb.svg",
+              "PanelWindow": "/resources/theme/vivaldi/PanelWindow.svg",
+              "Proxy": "/resources/theme/vivaldi/Proxy.svg",
+              "ReadingList": "/resources/theme/vivaldi/ReadingList.svg",
+              "Reload": "/resources/theme/vivaldi/Reload.svg",
+              "Rewind": "/resources/theme/vivaldi/Rewind.svg",
+              "SearchField": "/resources/theme/vivaldi/SearchField.svg",
+              "Settings": "/resources/theme/vivaldi/Settings.svg",
+              "Stop": "/resources/theme/vivaldi/Stop.svg",
+              "SyncStatus": "/resources/theme/vivaldi/SyncStatus.svg",
+              "TilingToggle": "/resources/theme/vivaldi/TilingToggle.svg",
+              "UpdateButton": "/resources/theme/vivaldi/UpdateButton.svg",
+              "WorkspaceButton": "/resources/theme/vivaldi/WorkspaceButton.svg"
+            },
             "transparencyTabs": false,
-            "transparencyTabBar": true
+            "transparencyTabBar": false
+          },
+          {
+            "engineVersion": 1,
+            "version": 1.0,
+            "id": "Vivaldi3",
+            "url": "",
+            "name": "Human",
+            "accentFromPage": true,
+            "accentOnWindow": true,
+            "accentSaturationLimit": 1,
+            "backgroundImage": "/resources/bg_martin-martz-7it4_acM-0M-unsplash.webp",
+            "backgroundPosition": "stretch",
+            "radius": 4,
+            "colorAccentBg": "#e95421",
+            "colorBg": "#403c3a",
+            "colorFg": "#d5cbc8",
+            "colorHighlightBg": "#ff8142",
+            "colorWindowBg": "#41403b",
+            "contrast": 0,
+            "preferSystemAccent": false,
+            "alpha": 0.75,
+            "blur": 10,
+            "buttons": {
+              "Back": "/resources/theme/vivaldi/Back.svg",
+              "BreakMode": "/resources/theme/vivaldi/BreakMode.svg",
+              "CalendarStatus": "/resources/theme/vivaldi/CalendarStatus.svg",
+              "CaptureImages": "/resources/theme/vivaldi/CaptureImages.svg",
+              "Clock": "/resources/theme/vivaldi/Clock.svg",
+              "DownloadButton": "/resources/theme/vivaldi/DownloadButton.svg",
+              "Extensions": "/resources/theme/vivaldi/Extensions.svg",
+              "FastForward": "/resources/theme/vivaldi/FastForward.svg",
+              "Forward": "/resources/theme/vivaldi/Forward.svg",
+              "Home": "/resources/theme/vivaldi/Home.svg",
+              "ImagesToggle": "/resources/theme/vivaldi/ImagesToggle.svg",
+              "MailBack": "/resources/theme/vivaldi/MailBack.svg",
+              "MailCompose": "/resources/theme/vivaldi/MailCompose.svg",
+              "MailForward": "/resources/theme/vivaldi/MailForward.svg",
+              "MailMsgArchive": "/resources/theme/vivaldi/MailMsgArchive.svg",
+              "MailMsgArchiveRestore": "/resources/theme/vivaldi/MailMsgArchiveRestore.svg",
+              "MailMsgAttach": "/resources/theme/vivaldi/MailMsgAttach.svg",
+              "MailMsgDiscard": "/resources/theme/vivaldi/MailMsgDiscard.svg",
+              "MailMsgEdit": "/resources/theme/vivaldi/MailMsgEdit.svg",
+              "MailMsgFlag": "/resources/theme/vivaldi/MailMsgFlag.svg",
+              "MailMsgForward": "/resources/theme/vivaldi/MailMsgForward.svg",
+              "MailMsgLabel": "/resources/theme/vivaldi/MailMsgLabel.svg",
+              "MailMsgMove": "/resources/theme/vivaldi/MailMsgMove.svg",
+              "MailMsgReply": "/resources/theme/vivaldi/MailMsgReply.svg",
+              "MailMsgReplyToAll": "/resources/theme/vivaldi/MailMsgReplyToAll.svg",
+              "MailMsgSend": "/resources/theme/vivaldi/MailMsgSend.svg",
+              "MailMsgShowHeaders": "/resources/theme/vivaldi/MailMsgShowHeaders.svg",
+              "MailMsgSpam": "/resources/theme/vivaldi/MailMsgSpam.svg",
+              "MailMsgSpamRestore": "/resources/theme/vivaldi/MailMsgSpamRestore.svg",
+              "MailMsgStatusRead": "/resources/theme/vivaldi/MailMsgStatusRead.svg",
+              "MailMsgStatusUnread": "/resources/theme/vivaldi/MailMsgStatusUnread.svg",
+              "MailMsgTrash": "/resources/theme/vivaldi/MailMsgTrash.svg",
+              "MailMsgTrashRestore": "/resources/theme/vivaldi/MailMsgTrashRestore.svg",
+              "MailReload": "/resources/theme/vivaldi/MailReload.svg",
+              "MailRenderingMethod": "/resources/theme/vivaldi/MailRenderingMethod.svg",
+              "MailRenderingMethodText": "/resources/theme/vivaldi/MailRenderingMethodText.svg",
+              "MailStatus": "/resources/theme/vivaldi/MailStatus.svg",
+              "MailViewLayout": "/resources/theme/vivaldi/MailViewLayout.svg",
+              "MailViewThreading": "/resources/theme/vivaldi/MailViewThreading.svg",
+              "PageActions": "/resources/theme/vivaldi/PageActions.svg",
+              "PanelBookmarks": "/resources/theme/vivaldi/PanelBookmarks.svg",
+              "PanelCalendar": "/resources/theme/vivaldi/PanelCalendar.svg",
+              "PanelContacts": "/resources/theme/vivaldi/PanelContacts.svg",
+              "PanelDownloads": "/resources/theme/vivaldi/PanelDownloads.svg",
+              "PanelFeeds": "/resources/theme/vivaldi/PanelFeeds.svg",
+              "PanelHistory": "/resources/theme/vivaldi/PanelHistory.svg",
+              "PanelMail": "/resources/theme/vivaldi/PanelMail.svg",
+              "PanelNotes": "/resources/theme/vivaldi/PanelNotes.svg",
+              "PanelReadingList": "/resources/theme/vivaldi/PanelReadingList.svg",
+              "PanelSession": "/resources/theme/vivaldi/PanelSession.svg",
+              "PanelTasks": "/resources/theme/vivaldi/PanelTasks.svg",
+              "PanelToggle": "/resources/theme/vivaldi/PanelToggle.svg",
+              "PanelTranslate": "/resources/theme/vivaldi/PanelTranslate.svg",
+              "PanelWeb": "/resources/theme/vivaldi/PanelWeb.svg",
+              "PanelWindow": "/resources/theme/vivaldi/PanelWindow.svg",
+              "Proxy": "/resources/theme/vivaldi/Proxy.svg",
+              "ReadingList": "/resources/theme/vivaldi/ReadingList.svg",
+              "Reload": "/resources/theme/vivaldi/Reload.svg",
+              "Rewind": "/resources/theme/vivaldi/Rewind.svg",
+              "SearchField": "/resources/theme/vivaldi/SearchField.svg",
+              "Settings": "/resources/theme/vivaldi/Settings.svg",
+              "Stop": "/resources/theme/vivaldi/Stop.svg",
+              "SyncStatus": "/resources/theme/vivaldi/SyncStatus.svg",
+              "TilingToggle": "/resources/theme/vivaldi/TilingToggle.svg",
+              "UpdateButton": "/resources/theme/vivaldi/UpdateButton.svg",
+              "WorkspaceButton": "/resources/theme/vivaldi/WorkspaceButton.svg"
+            },
+            "transparencyTabs": false,
+            "transparencyTabBar": false
           },
           {
             "engineVersion": 1,
@@ -6979,7 +7241,7 @@
             "accentFromPage": false,
             "accentOnWindow": true,
             "accentSaturationLimit": 1,
-            "backgroundImage": "/resources/bg_geometric_1.jpg",
+            "backgroundImage": "/resources/bg_geometric_1.webp",
             "backgroundPosition": "stretch",
             "radius": 4,
             "colorAccentBg": "#7F5FEC",
@@ -7010,7 +7272,7 @@
             "colorBg": "#23234f",
             "colorFg": "#c0c0f1",
             "colorHighlightBg": "#5f79fd",
-            "colorWindowBg": "",
+            "colorWindowBg": "#1b1a42",
             "contrast": 2,
             "preferSystemAccent": false,
             "alpha": 1.0,
@@ -7031,6 +7293,7 @@
           "Forward",
           "Reload",
           "AddressField",
+          "SharedLinks",
           "Spacer",
           "UpdateButton",
           "Extensions",
@@ -7053,7 +7316,6 @@
           "PanelTasks",
           "PanelFeeds",
           "PanelContacts",
-          "PanelChat",
           "WEBPANEL_949d4873-deed-4168-b306-92d1848687a5",
           "WEBPANEL_ckmam0bsw00002y5xoafpww5i",
           "WEBPANEL_ckn7fhhqx0000hc2roo8jshm4",
@@ -7480,6 +7742,41 @@
         "default": []
       }
     },
+    "dashboard": {
+      "enabled": {
+        "description": "Enable the start page dashboard.",
+        "type": "boolean",
+        "default": true
+      },
+      "widgets": {
+        "description": "An ordered list of widgets and their options.",
+        "type": "list",
+        "default": [
+          { "id": "1", "type": "date", "size": "regular" },
+          { "id": "2", "type": "sticky-note", "size": "regular" },
+          { "id": "3", "type": "shortcuts", "size": "regular", "folderId": null },
+          { "id": "4", "type": "webpage", "size": "double_height", "url": "https://www.wiktionary.org/" }
+        ]
+      },
+      "sticky_notes": {
+        "description": "Store all note content from sticky-note widget.",
+        "type": "list",
+        "default": [{
+          "widgetId": "2",
+          "content": ""
+        }]
+      },
+      "column_limit": {
+        "description": "The maximum number of columns in the widget grid.",
+        "type": "integer",
+        "default": 4
+      },
+      "top_sites_hide_suggestions": {
+        "description": "Don't show suggested links in the top sites widget.",
+        "type": "boolean",
+        "default": false
+      }
+    },
     "geolocation": {
       "list": {
         "description": "A list of user-specified locations",
@@ -7595,7 +7892,7 @@
             "last_change": {
               "description": "The last version of the search_engines.json (kCurrentDataVersion) that changed default search engine.",
               "type": "integer",
-              "default": 10000153
+              "default": -1
             },
             "index": {
               "description": "The search engine index that is default for user locale.",

@@ -5,7 +5,6 @@
 #ifndef OSP_PUBLIC_PROTOCOL_CONNECTION_H_
 #define OSP_PUBLIC_PROTOCOL_CONNECTION_H_
 
-#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -20,8 +19,6 @@ template <typename T>
 using MessageEncodingFunction =
     std::add_pointer_t<bool(const T&, msgs::CborEncodeBuffer*)>;
 
-struct NetworkMetrics;
-
 // Represents an embedder's view of a connection between an Open Screen
 // controller and a receiver.  Both the controller and receiver will have a
 // ProtocolConnection object, although the information known about the other
@@ -29,23 +26,24 @@ struct NetworkMetrics;
 //
 // A ProtocolConnection supports multiple protocols defined by the Open Screen
 // standard and can be extended by embedders with additional protocols.
-//
-// TODO(jophba): move to sharing underlying QUIC connections between multiple
-// instances of ProtocolConnection.
 class ProtocolConnection {
  public:
   class Observer {
    public:
     virtual ~Observer() = default;
 
-    // Called when |connection| is no longer available, either because the
+    // Called when `connection` is no longer available, either because the
     // underlying transport was terminated, the underying system resource was
     // closed, or data can no longer be exchanged.
     virtual void OnConnectionClosed(const ProtocolConnection& connection) = 0;
   };
 
-  ProtocolConnection(uint64_t instance_id, uint64_t protocol_connection_id);
-  virtual ~ProtocolConnection() = default;
+  ProtocolConnection();
+  ProtocolConnection(const ProtocolConnection&) = delete;
+  ProtocolConnection& operator=(const ProtocolConnection&) = delete;
+  ProtocolConnection(ProtocolConnection&&) noexcept = delete;
+  ProtocolConnection& operator=(ProtocolConnection&&) noexcept = delete;
+  virtual ~ProtocolConnection();
 
   // TODO(mfoltz): Define extension API exposed to embedders.  This would be
   // used, for example, to query for and implement vendor-specific protocols
@@ -62,28 +60,21 @@ class ProtocolConnection {
   template <typename T>
   Error WriteMessage(const T& message, MessageEncodingFunction<T> encoder) {
     msgs::CborEncodeBuffer buffer;
-
     if (!encoder(message, &buffer)) {
-      OSP_LOG_WARN << "failed to properly encode presentation message";
+      OSP_LOG_WARN << "failed to properly encode message";
       return Error::Code::kParseError;
     }
 
     Write(ByteView(buffer.data(), buffer.size()));
-
     return Error::None();
   }
 
-  // TODO(btolsch): This should be derived from the handshake auth identifier
-  // when that is finalized and implemented.
-  uint64_t instance_id() const { return instance_id_; }
-  uint64_t id() const { return id_; }
-
+  virtual uint64_t GetInstanceID() const = 0;
+  virtual uint64_t GetID() const = 0;
   virtual void Write(ByteView bytes) = 0;
   virtual void CloseWriteEnd() = 0;
 
  protected:
-  uint64_t instance_id_ = 0u;
-  uint64_t id_ = 0u;
   Observer* observer_ = nullptr;
 };
 

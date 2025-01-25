@@ -1,9 +1,12 @@
 # Copyright 2022 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/swift_source_set.gni")
+import("//build/config/apple/swift_source_set.gni")
 
 source_set("vivaldi_tab_settings") {
   sources = [
+    "vivaldi_ntp_type.h",
+    "vivaldi_tab_settings_helper.h",
+    "vivaldi_tab_settings_helper.mm",
     "vivaldi_tab_setting_prefs.h",
     "vivaldi_tab_setting_prefs.mm",
     "vivaldi_tab_settings_consumer.h",
@@ -13,7 +16,7 @@ source_set("vivaldi_tab_settings") {
     "vivaldi_tab_settings_mediator.mm",
   ]
   deps = [
-    "resources",
+    "resources:assets",
     ":vivaldi_tab_settings_swift",
     "//base",
     "//ui/base",
@@ -45,6 +48,8 @@ swift_source_set("vivaldi_tab_settings_swift") {
     "//base",
     "//ui/base",
     "//ios/chrome/app/strings",
+    "//ios/chrome/common/ui/colors:swift",
+    "//vivaldi/ios/ui/custom_views:custom_views_swift",
     "//vivaldi/ios/ui/helpers:helpers_swift",
   ]
 

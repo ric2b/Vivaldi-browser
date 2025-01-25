@@ -272,16 +272,17 @@ def SplitCl(description_file, comment_file, changelist, cmd_upload, dry_run,
         print('Will split current branch (' + refactor_branch + ') into ' +
               str(num_cls) + ' CLs.\n')
         if not dry_run and num_cls > CL_SPLIT_FORCE_LIMIT:
-            print(
-                'This will generate "%r" CLs. This many CLs can potentially'
-                ' generate too much load on the build infrastructure.\n\n'
-                'Please email infra-dev@chromium.org to ensure that this won\'t'
-                ' break anything. The infra team reserves the right to cancel'
-                ' your jobs if they are overloading the CQ.\n\n'
-                '(Alternatively, you can reduce the number of CLs created by'
-                ' using the --max-depth option. Pass --dry-run to examine the'
-                ' CLs which will be created until you are happy with the'
-                ' results.)' % num_cls)
+            print('This will generate "%r" CLs. This many CLs may potentially'
+                  ' reach the limit of concurrent runs, imposed on you by the '
+                  'build infrastructure. Your runs may be throttled as a '
+                  'result.\n\nPlease email infra-dev@chromium.org if you '
+                  'have any questions. '
+                  'The infra team reserves the right to cancel'
+                  ' your jobs if they are overloading the CQ.\n\n'
+                  '(Alternatively, you can reduce the number of CLs created by'
+                  ' using the --max-depth option. Pass --dry-run to examine the'
+                  ' CLs which will be created until you are happy with the'
+                  ' results.)' % num_cls)
             answer = gclient_utils.AskForData('Proceed? (y/n):')
             if answer.lower() != 'y':
                 return 0

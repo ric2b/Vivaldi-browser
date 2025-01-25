@@ -15,7 +15,7 @@
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/webdata/autofill_change.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/webdata/common/web_data_results.h"
 #include "components/webdata/common/web_data_service_base.h"
 #include "components/webdata/common/web_data_service_consumer.h"
@@ -40,13 +40,10 @@ class Iban;
 // API for Autofill web data.
 class AutofillWebDataService : public WebDataServiceBase {
  public:
-  AutofillWebDataService(
-      scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
-      scoped_refptr<base::SequencedTaskRunner> db_task_runner);
+  // Runs db tasks on the wdbs db task runner.
   AutofillWebDataService(
       scoped_refptr<WebDatabaseService> wdbs,
-      scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
-      scoped_refptr<base::SequencedTaskRunner> db_task_runner);
+      scoped_refptr<base::SequencedTaskRunner> ui_task_runner);
 
   AutofillWebDataService(const AutofillWebDataService&) = delete;
   AutofillWebDataService& operator=(const AutofillWebDataService&) = delete;
@@ -81,14 +78,12 @@ class AutofillWebDataService : public WebDataServiceBase {
 
   // Schedules a task to remove an Autofill profile from the web database.
   // |guid| is the identifier of the profile to remove.
-  void RemoveAutofillProfile(const std::string& guid,
-                             AutofillProfile::Source profile_source);
+  void RemoveAutofillProfile(const std::string& guid);
 
   // Initiates the request for Autofill profiles. The method
   // OnWebDataServiceRequestDone of |consumer| gets called when the request is
   // finished, with the profiles included in the argument |result|.
   WebDataServiceBase::Handle GetAutofillProfiles(
-      AutofillProfile::Source profile_source,
       WebDataServiceConsumer* consumer);
 
   // Schedules a task to count the number of unique autofill values contained
@@ -207,15 +202,6 @@ class AutofillWebDataService : public WebDataServiceBase {
   // Updates the metadata for a server card (masked or not).
   void UpdateServerCardMetadata(const CreditCard& credit_card);
 
-  // Removes Autofill records from the database.
-  void RemoveAutofillDataModifiedBetween(base::Time delete_begin,
-                                         base::Time delete_end);
-
-  // Removes origin URLs associated with Autofill profiles and credit cards from
-  // the database.
-  void RemoveOriginURLsModifiedBetween(base::Time delete_begin,
-                                       base::Time delete_end);
-
   void AddObserver(AutofillWebDataServiceObserverOnDBSequence* observer);
   void RemoveObserver(AutofillWebDataServiceObserverOnDBSequence* observer);
 
@@ -236,7 +222,7 @@ class AutofillWebDataService : public WebDataServiceBase {
 
   // Returns a task runner that can be used to schedule tasks on the DB
   // sequence.
-  base::SequencedTaskRunner* GetDBTaskRunner();
+  scoped_refptr<base::SequencedTaskRunner> GetDBTaskRunner();
 
   // Triggers an Autocomplete retention policy run which will cleanup data that
   // hasn't been used since over the retention threshold.
@@ -252,7 +238,7 @@ class AutofillWebDataService : public WebDataServiceBase {
  protected:
   ~AutofillWebDataService() override;
 
-  void NotifyOnAutofillChangedBySyncOnUISequence(syncer::ModelType model_type);
+  void NotifyOnAutofillChangedBySyncOnUISequence(syncer::DataType data_type);
 
   base::WeakPtr<AutofillWebDataService> AsWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -264,9 +250,6 @@ class AutofillWebDataService : public WebDataServiceBase {
 
   // The task runner that this class uses for UI tasks.
   scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
-
-  // The task runner that this class uses for DB tasks.
-  scoped_refptr<base::SequencedTaskRunner> db_task_runner_;
 
   scoped_refptr<AutofillWebDataBackendImpl> autofill_backend_;
 

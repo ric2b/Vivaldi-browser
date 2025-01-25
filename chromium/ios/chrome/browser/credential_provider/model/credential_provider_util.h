@@ -7,21 +7,12 @@
 
 #import <Foundation/Foundation.h>
 
-#include "components/password_manager/core/browser/password_form.h"
+#import "components/password_manager/core/browser/password_form.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
 class FaviconLoader;
 
-namespace sync_pb {
-class WebauthnCredentialSpecifics;
-}  // namespace sync_pb
-
 extern const char kSyncStoreHistogramName[];
-
-// Returns the equivalent of a unique record identifier. Built from the unique
-// columns in the logins database.
-NSString* RecordIdentifierForPasskey(
-    const sync_pb::WebauthnCredentialSpecifics& passkey);
 
 // Returns the equivalent of a unique record identifier. Built from the unique
 // columns in the logins database.

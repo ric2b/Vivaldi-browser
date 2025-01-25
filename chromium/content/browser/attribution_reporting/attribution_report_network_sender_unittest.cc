@@ -91,10 +91,10 @@ AttributionReport DefaultEventLevelReport() {
 }
 
 AttributionReport DefaultAggregatableReport(
-    std::optional<std::string> trigger_context_id = std::nullopt) {
-  ReportBuilder builder(
-      AttributionInfoBuilder().Build(),
-      SourceBuilder(SourceBuilder(base::Time())).BuildStored());
+    std::optional<std::string> trigger_context_id = std::nullopt,
+    bool is_null_report = false) {
+  ReportBuilder builder(AttributionInfoBuilder().Build(),
+                        SourceBuilder().BuildStored());
 
   if (trigger_context_id.has_value()) {
     builder.SetTriggerContextId(*std::move(trigger_context_id))
@@ -102,7 +102,8 @@ AttributionReport DefaultAggregatableReport(
             attribution_reporting::mojom::SourceRegistrationTimeConfig::
                 kExclude);
   }
-  return builder.BuildAggregatableAttribution();
+  return is_null_report ? builder.BuildNullAggregatable()
+                        : builder.BuildAggregatableAttribution();
 }
 
 }  // namespace
@@ -518,6 +519,12 @@ TEST_F(AttributionReportNetworkSenderTest, ReportRedirects) {
 
 TEST_F(AttributionReportNetworkSenderTest,
        EventLevelReportSent_MetricsRecorded) {
+  static constexpr char kStatusMetric[] = "Conversions.ReportStatusEventLevel";
+  static constexpr char kErrorCodeMetric[] =
+      "Conversions.HttpResponseOrNetErrorCodeEventLevel";
+  static constexpr char kReportSizeMetric[] =
+      "Conversions.EventLevelReport.ReportBodySize";
+
   // All OK
   {
     base::HistogramTester histograms;
@@ -527,9 +534,9 @@ TEST_F(AttributionReportNetworkSenderTest,
     EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
         kEventLevelReportUrl, ""));
     // kOk = 0.
-    histograms.ExpectUniqueSample("Conversions.ReportStatusEventLevel", 0, 1);
-    histograms.ExpectUniqueSample(
-        "Conversions.HttpResponseOrNetErrorCodeEventLevel", net::HTTP_OK, 1);
+    histograms.ExpectUniqueSample(kStatusMetric, 0, 1);
+    histograms.ExpectUniqueSample(kErrorCodeMetric, net::HTTP_OK, 1);
+    histograms.ExpectTotalCount(kReportSizeMetric, 1);
   }
 
   // Internal error
@@ -543,9 +550,9 @@ TEST_F(AttributionReportNetworkSenderTest,
         GURL(kEventLevelReportUrl), completion_status,
         network::mojom::URLResponseHead::New(), ""));
     // kInternalError = 1.
-    histograms.ExpectUniqueSample("Conversions.ReportStatusEventLevel", 1, 1);
-    histograms.ExpectUniqueSample(
-        "Conversions.HttpResponseOrNetErrorCodeEventLevel", net::ERR_FAILED, 1);
+    histograms.ExpectUniqueSample(kStatusMetric, 1, 1);
+    histograms.ExpectUniqueSample(kErrorCodeMetric, net::ERR_FAILED, 1);
+    histograms.ExpectTotalCount(kReportSizeMetric, 1);
   }
   // External error
   {
@@ -556,10 +563,9 @@ TEST_F(AttributionReportNetworkSenderTest,
     EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
         kEventLevelReportUrl, "", net::HTTP_UNAUTHORIZED));
     // kExternalError = 2.
-    histograms.ExpectUniqueSample("Conversions.ReportStatusEventLevel", 2, 1);
-    histograms.ExpectUniqueSample(
-        "Conversions.HttpResponseOrNetErrorCodeEventLevel",
-        net::HTTP_UNAUTHORIZED, 1);
+    histograms.ExpectUniqueSample(kStatusMetric, 2, 1);
+    histograms.ExpectUniqueSample(kErrorCodeMetric, net::HTTP_UNAUTHORIZED, 1);
+    histograms.ExpectTotalCount(kReportSizeMetric, 1);
   }
   // Retried network change error
   {
@@ -578,6 +584,7 @@ TEST_F(AttributionReportNetworkSenderTest,
 
     histograms.ExpectUniqueSample("Conversions.ReportRetrySucceedEventLevel",
                                   true, 1);
+    histograms.ExpectTotalCount(kReportSizeMetric, 1);
   }
 }
 
@@ -669,9 +676,11 @@ TEST_F(AttributionReportNetworkSenderTest,
     }
   };
 
-  static const char kStatusMetric[] = "ReportStatusAggregatable";
-  static const char kErrorCodeMetric[] =
+  static constexpr char kStatusMetric[] = "ReportStatusAggregatable";
+  static constexpr char kErrorCodeMetric[] =
       "HttpResponseOrNetErrorCodeAggregatable";
+  static constexpr char kReportSizeMetric[] =
+      "Conversions.AggregatableReport.ReportBodySize";
 
   for (const bool has_trigger_context_id : {false, true}) {
     SCOPED_TRACE(has_trigger_context_id);
@@ -693,6 +702,7 @@ TEST_F(AttributionReportNetworkSenderTest,
       verify_histogram(histograms, kStatusMetric, has_trigger_context_id, 0, 1);
       verify_histogram(histograms, kErrorCodeMetric, has_trigger_context_id,
                        net::HTTP_OK, 1);
+      histograms.ExpectTotalCount(kReportSizeMetric, 1);
     }
 
     // Internal error
@@ -709,6 +719,7 @@ TEST_F(AttributionReportNetworkSenderTest,
       verify_histogram(histograms, kStatusMetric, has_trigger_context_id, 1, 1);
       verify_histogram(histograms, kErrorCodeMetric, has_trigger_context_id,
                        net::ERR_FAILED, 1);
+      histograms.ExpectTotalCount(kReportSizeMetric, 1);
     }
     // External error
     {
@@ -722,6 +733,7 @@ TEST_F(AttributionReportNetworkSenderTest,
       verify_histogram(histograms, kStatusMetric, has_trigger_context_id, 2, 1);
       verify_histogram(histograms, kErrorCodeMetric, has_trigger_context_id,
                        net::HTTP_UNAUTHORIZED, 1);
+      histograms.ExpectTotalCount(kReportSizeMetric, 1);
     }
     // Retried network change error
     {
@@ -740,6 +752,7 @@ TEST_F(AttributionReportNetworkSenderTest,
 
       verify_histogram(histograms, "ReportRetrySucceedAggregatable",
                        has_trigger_context_id, 1, 1);
+      histograms.ExpectTotalCount(kReportSizeMetric, 1);
     }
   }
 }
@@ -958,6 +971,50 @@ TEST_F(AttributionReportNetworkSenderTest,
 
   histograms.ExpectUniqueSample(kAggregatableDebugReportMetricName,
                                 net::ERR_CONNECTION_ABORTED, 1);
+}
+
+TEST_F(AttributionReportNetworkSenderTest,
+       NullAggregatableReportSent_MetricsRecorded) {
+  const auto verify_histogram = [](base::HistogramTester& histograms,
+                                   std::string_view suffix,
+                                   bool has_trigger_context_id,
+                                   base::HistogramBase::Sample sample,
+                                   base::HistogramBase::Count count) {
+    histograms.ExpectUniqueSample(base::StrCat({"Conversions.", suffix}),
+                                  sample, count);
+    if (has_trigger_context_id) {
+      histograms.ExpectUniqueSample(
+          base::StrCat({"Conversions.ContextID.", suffix}), sample, count);
+    } else {
+      histograms.ExpectUniqueSample(
+          base::StrCat({"Conversions.NoContextID.", suffix}), sample, count);
+    }
+  };
+
+  for (const bool has_trigger_context_id : {false, true}) {
+    SCOPED_TRACE(has_trigger_context_id);
+
+    std::optional<std::string> trigger_context_id;
+    if (has_trigger_context_id) {
+      trigger_context_id.emplace();
+    }
+
+    base::HistogramTester histograms;
+    network_sender_->SendReport(
+        DefaultAggregatableReport(trigger_context_id,
+                                  /*is_null_report=*/true),
+        /*is_debug_report=*/false, base::DoNothing());
+
+    EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+        kAggregatableReportUrl, ""));
+    // kOk = 0.
+    verify_histogram(histograms, "ReportStatusAggregatableNull",
+                     has_trigger_context_id, 0, 1);
+    verify_histogram(histograms, "HttpResponseOrNetErrorCodeAggregatableNull",
+                     has_trigger_context_id, net::HTTP_OK, 1);
+    histograms.ExpectTotalCount("Conversions.AggregatableReport.ReportBodySize",
+                                1);
+  }
 }
 
 }  // namespace content

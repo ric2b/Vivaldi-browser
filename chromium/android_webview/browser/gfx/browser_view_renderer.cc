@@ -368,14 +368,18 @@ bool BrowserViewRenderer::DoUpdateParentDrawData() {
   viz::FrameTimingDetailsMap new_timing_details;
   viz::FrameSinkId id;
   uint32_t frame_token = 0u;
+  base::TimeDelta preferred_frame_interval;
   current_compositor_frame_consumer_->TakeParentDrawDataOnUI(
-      &new_constraints, &id, &new_timing_details, &frame_token);
+      &new_constraints, &id, &new_timing_details, &frame_token,
+      &preferred_frame_interval);
 
   content::SynchronousCompositor* compositor = FindCompositor(id);
   if (compositor) {
     compositor->DidPresentCompositorFrames(std::move(new_timing_details),
                                            frame_token);
   }
+
+  client_->SetPreferredFrameInterval(preferred_frame_interval);
 
   if (external_draw_constraints_ == new_constraints)
     return false;
@@ -434,6 +438,13 @@ void BrowserViewRenderer::ReturnUsedResources(
 bool BrowserViewRenderer::OnDrawSoftware(SkCanvas* canvas) {
   did_invalidate_since_last_draw_ = false;
   return CanOnDraw() && CompositeSW(canvas, /*software_canvas=*/true);
+}
+
+float BrowserViewRenderer::GetVelocityInPixelsPerSecond() {
+  if (!compositor_) {
+    return 0.f;
+  }
+  return compositor_->GetVelocityInPixelsPerSecond();
 }
 
 bool BrowserViewRenderer::NeedToDrawBackgroundColor() {

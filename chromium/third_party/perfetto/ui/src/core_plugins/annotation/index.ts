@@ -12,28 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  COUNTER_TRACK_KIND,
-  Plugin,
-  PluginContextTrace,
-  PluginDescriptor,
-} from '../../public';
+import {COUNTER_TRACK_KIND} from '../../public/track_kinds';
+import {Trace} from '../../public/trace';
+import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
 import {ThreadSliceTrack} from '../../frontend/thread_slice_track';
-import {NUM, NUM_NULL, STR} from '../../trace_processor/query_result';
+import {NUM, NUM_NULL, STR, STR_NULL} from '../../trace_processor/query_result';
 import {TraceProcessorCounterTrack} from '../counter/trace_processor_counter_track';
-import {THREAD_SLICE_TRACK_KIND} from '../../public';
+import {THREAD_SLICE_TRACK_KIND} from '../../public/track_kinds';
+import {GroupNode, TrackNode, Workspace} from '../../public/workspace';
+import {getOrCreateGroupForProcess} from '../../public/standard_groups';
 
-class AnnotationPlugin implements Plugin {
-  async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
+class AnnotationPlugin implements PerfettoPlugin {
+  async onTraceLoad(ctx: Trace): Promise<void> {
     await this.addAnnotationTracks(ctx);
     await this.addAnnotationCounterTracks(ctx);
   }
 
-  private async addAnnotationTracks(ctx: PluginContextTrace) {
+  private async addAnnotationTracks(ctx: Trace) {
     const {engine} = ctx;
 
     const result = await engine.query(`
-      select id, name
+      select
+        id,
+        name,
+        upid,
+        group_name as groupName
       from annotation_slice_track
       order by name
     `);
@@ -41,42 +44,74 @@ class AnnotationPlugin implements Plugin {
     const it = result.iter({
       id: NUM,
       name: STR,
+      upid: NUM,
+      groupName: STR_NULL,
     });
 
-    for (; it.valid(); it.next()) {
-      const id = it.id;
-      const name = it.name;
+    const groups = new Map<string, GroupNode>();
 
-      ctx.registerTrack({
-        uri: `/annotation_${id}`,
+    for (; it.valid(); it.next()) {
+      const {id, name, upid, groupName} = it;
+
+      const uri = `/annotation_${id}`;
+      ctx.tracks.registerTrack({
+        uri,
         title: name,
         tags: {
           kind: THREAD_SLICE_TRACK_KIND,
+          scope: 'annotation',
+          upid,
         },
         chips: ['metric'],
-        trackFactory: ({trackKey}) => {
-          return new ThreadSliceTrack(
-            {
-              engine: ctx.engine,
-              trackKey,
-            },
-            id,
-            0,
-            'annotation_slice',
-          );
-        },
+        track: new ThreadSliceTrack(
+          {
+            engine: ctx.engine,
+            uri,
+          },
+          id,
+          0,
+          'annotation_slice',
+        ),
       });
+
+      // We want to try and find a group to put this track in. If groupName is
+      // defined, create a new group or place in existing one if it already
+      // exists Otherwise, try upid to see if we can put this in a process
+      // group
+
+      let container: Workspace | GroupNode;
+      if (groupName) {
+        const existingGroup = groups.get(groupName);
+        if (!existingGroup) {
+          const group = new GroupNode(groupName);
+          group.headerTrackUri = uri;
+          container = group;
+          groups.set(groupName, group);
+          ctx.workspace.insertChildInOrder(group);
+        } else {
+          container = existingGroup;
+        }
+      } else {
+        if (upid !== 0) {
+          container = getOrCreateGroupForProcess(ctx.workspace, upid);
+        } else {
+          container = ctx.workspace;
+        }
+      }
+
+      container.insertChildInOrder(new TrackNode(uri, name));
     }
   }
 
-  private async addAnnotationCounterTracks(ctx: PluginContextTrace) {
+  private async addAnnotationCounterTracks(ctx: Trace) {
     const {engine} = ctx;
     const counterResult = await engine.query(`
       SELECT
         id,
         name,
         min_value as minValue,
-        max_value as maxValue
+        max_value as maxValue,
+        upid
       FROM annotation_counter_track`);
 
     const counterIt = counterResult.iter({
@@ -84,28 +119,32 @@ class AnnotationPlugin implements Plugin {
       name: STR,
       minValue: NUM_NULL,
       maxValue: NUM_NULL,
+      upid: NUM,
     });
 
     for (; counterIt.valid(); counterIt.next()) {
-      const trackId = counterIt.id;
-      const name = counterIt.name;
+      const {id: trackId, name, upid} = counterIt;
 
-      ctx.registerTrack({
-        uri: `/annotation_counter_${trackId}`,
+      const uri = `/annotation_counter_${trackId}`;
+      ctx.tracks.registerTrack({
+        uri,
         title: name,
         tags: {
           kind: COUNTER_TRACK_KIND,
+          scope: 'annotation',
+          upid,
         },
         chips: ['metric'],
-        trackFactory: (trackCtx) => {
-          return new TraceProcessorCounterTrack({
-            engine: ctx.engine,
-            trackKey: trackCtx.trackKey,
-            trackId,
-            rootTable: 'annotation_counter',
-          });
-        },
+        track: new TraceProcessorCounterTrack({
+          engine: ctx.engine,
+          uri,
+          trackId,
+          rootTable: 'annotation_counter',
+        }),
       });
+
+      const group = getOrCreateGroupForProcess(ctx.workspace, upid);
+      group.insertChildInOrder(new TrackNode(uri, name));
     }
   }
 }

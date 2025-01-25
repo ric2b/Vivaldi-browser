@@ -1142,18 +1142,13 @@ message AddAuthFactorReply {
 // was already authenticated, it will be authorized for a superset of existing
 // intents and the new intents of the AuthFactor.
 message AuthenticateAuthFactorRequest {
+  reserved 2;
+
   // AuthFactor cannot be authenticated without an active AuthSession running.
   // This id would be used to associate the AuthFactor to an AuthSession.
   bytes auth_session_id = 1;
-  // Deprecated.
-  // TODO(b/265151254): Remove once migration to |auth_factor_labels| is
-  // complete.
-  // The AuthFactor label would be used to determine the AuthFactor that
-  // needs to be authenticated. If the label does not exist, the call would
-  // return an error.
-  string auth_factor_label = 2;
-  // In some cases, such as password, the secret would be user supplied. In
-  // those cases the secret can be passed here.
+  // Inputs that need to be supplied by the user as part of the authentication,
+  // such as the user's secret for password or PIN authentication.
   AuthInput auth_input = 3;
   // The AuthFactor labels would be used to determine the AuthFactors that
   // needs to be authenticated. For the most cases, there should only be one

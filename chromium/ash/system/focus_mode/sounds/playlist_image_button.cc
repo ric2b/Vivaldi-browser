@@ -6,10 +6,15 @@
 
 #include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/style/rounded_rect_cutout_path_builder.h"
+#include "base/i18n/rtl.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/animated_image_view.h"
 #include "ui/views/controls/image_view.h"
 
@@ -23,6 +28,10 @@ constexpr int kSinglePlaylistViewWidth = 72;
 constexpr int kIconSize = 20;
 constexpr int kMediaActionIconSpacing = 6;
 constexpr int kSelectedCurvycutoutSpacing = 4;
+
+// This is the alpha value for the default image that is equivalent to 0.06
+// opacity.
+constexpr U8CPU kDefaultImageAlpha = 15;
 
 std::unique_ptr<lottie::Animation> GetEqualizerAnimation() {
   std::optional<std::vector<uint8_t>> lottie_data =
@@ -39,10 +48,6 @@ std::unique_ptr<lottie::Animation> GetEqualizerAnimation() {
 PlaylistImageButton::PlaylistImageButton() {
   gfx::Size preferred_size(kSinglePlaylistViewWidth, kSinglePlaylistViewWidth);
   SetPreferredSize(preferred_size);
-
-  // Disable the button until we populate it with the correct playlist
-  // information.
-  SetEnabled(false);
 
   image_view_ = AddChildView(std::make_unique<views::ImageView>());
   image_view_->SetImageSize(preferred_size);
@@ -75,17 +80,23 @@ views::ProposedLayout PlaylistImageButton::CalculateProposedLayout(
   layouts.child_layouts.emplace_back(image_view_.get(),
                                      image_view_->GetVisible(), bounds);
 
+  // The cutout on `image_view_` isn't flipped in RTL, so we need to make sure
+  // that the animation and icon are flipped to the correct side.
   layouts.child_layouts.emplace_back(
       lottie_animation_view_.get(), lottie_animation_view_->GetVisible(),
-      gfx::Rect(bounds.right() - kIconSize - kMediaActionIconSpacing,
+      gfx::Rect(base::i18n::IsRTL()
+                    ? kMediaActionIconSpacing
+                    : bounds.right() - kIconSize - kMediaActionIconSpacing,
                 bounds.bottom() - kIconSize - kMediaActionIconSpacing,
                 kIconSize, kIconSize));
 
   layouts.child_layouts.emplace_back(
       selected_curvycutout_icon_.get(),
       selected_curvycutout_icon_->GetVisible(),
-      gfx::Rect(kSelectedCurvycutoutSpacing, kSelectedCurvycutoutSpacing,
-                kIconSize, kIconSize));
+      gfx::Rect(base::i18n::IsRTL()
+                    ? bounds.right() - kIconSize - kSelectedCurvycutoutSpacing
+                    : kSelectedCurvycutoutSpacing,
+                kSelectedCurvycutoutSpacing, kIconSize, kIconSize));
   layouts.host_size =
       gfx::Size(size_bounds.width().value(), size_bounds.height().value());
   return layouts;
@@ -121,11 +132,25 @@ void PlaylistImageButton::SetIsSelected(bool is_selected) {
   }
   image_view_->SetClipPath(builder.Build());
 
+  // Update the accessible description for this view once the selected state
+  // changed.
+  GetViewAccessibility().SetDescription(l10n_util::GetStringUTF16(
+      is_selected
+          ? IDS_ASH_STATUS_TRAY_FOCUS_MODE_SOUNDS_PLAYLIST_SELECTED_ACCESSIBLE_DESCRIPTION
+          : IDS_ASH_STATUS_TRAY_FOCUS_MODE_SOUNDS_PLAYLIST_UNSELECTED_ACCESSIBLE_DESCRIPTION));
+  NotifyAccessibilityEvent(ax::mojom::Event::kStateChanged, true);
+
   OnPropertyChanged(&is_selected_, views::kPropertyEffectsPaint);
 }
 
 void PlaylistImageButton::UpdateContents(const gfx::ImageSkia& image) {
-  SetEnabled(true);
+  if (image.isNull()) {
+    is_default_image_ = true;
+    UpdateToDefaultImage();
+    return;
+  }
+
+  is_default_image_ = false;
   image_view_->SetImage(image);
 }
 
@@ -133,6 +158,33 @@ void PlaylistImageButton::OnSetTooltipText(const std::u16string& tooltip_text) {
   // Set the tooltip text for `image_view_` to show the tooltip when hovering on
   // it.
   image_view_->SetTooltipText(tooltip_text);
+}
+
+void PlaylistImageButton::OnThemeChanged() {
+  views::Button::OnThemeChanged();
+
+  if (is_default_image_) {
+    UpdateToDefaultImage();
+  }
+}
+
+void PlaylistImageButton::UpdateToDefaultImage() {
+  CHECK(is_default_image_);
+
+  const ui::ColorProvider* color_provider = GetColorProvider();
+  if (!image_view_ || !color_provider) {
+    return;
+  }
+
+  // Construct and use the default image.
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(kSinglePlaylistViewWidth, kSinglePlaylistViewWidth,
+                        false);
+  SkCanvas canvas(bitmap);
+  canvas.drawColor(
+      SkColorSetA(color_provider->GetColor(cros_tokens::kCrosSysOnSurface),
+                  kDefaultImageAlpha));
+  image_view_->SetImage(gfx::ImageSkia::CreateFrom1xBitmap(std::move(bitmap)));
 }
 
 BEGIN_METADATA(PlaylistImageButton)

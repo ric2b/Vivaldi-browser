@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/354829279): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/gfx/x/xproto_types.h"
 
 #include <xcb/xcbext.h>
@@ -99,7 +104,8 @@ void WriteBuffer::AppendBuffer(scoped_refptr<UnsizedRefCountedMemory> buffer,
                                size_t size) {
   AppendCurrentBuffer();
   sized_buffers_.push_back(
-      // SAFETY: This relies on the caller to pass a correct size.
+      // SAFETY: This relies on the caller to pass a correct size, as enforced
+      // by UNSAFE_BUFFER_USAGE in header.
       UNSAFE_BUFFERS(base::span(buffer->bytes(), size)));
   owned_buffers_.push_back(buffer);
   offset_ += size;

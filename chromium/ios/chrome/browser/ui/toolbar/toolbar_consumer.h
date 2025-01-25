@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+enum class ToolbarTabGridButtonStyle;
+
 // ToolbarConsumer sets the current appearance of the Toolbar.
 @protocol ToolbarConsumer
 // Updates the toolbar with the current forward navigation state.
@@ -35,6 +37,8 @@
 - (void)setTabGridButtonIPHHighlighted:(BOOL)iphHighlighted;
 // Sets the IPH highlighted state of the new tab button.
 - (void)setNewTabButtonIPHHighlighted:(BOOL)iphHighlighted;
+// Sets the Tab Grid button style.
+- (void)setTabGridButtonStyle:(ToolbarTabGridButtonStyle)tabGridButtonStyle;
 
 
 // Vivaldi
@@ -51,6 +55,8 @@
 - (void)setIsDynamicAccentColorEnabled:(BOOL)enabled;
 // Sets the custom accent color for toolbars.
 - (void)setCustomAccentColor:(UIColor*)accentColor;
+// Sets homepage is enabled
+- (void)setIsHomepageEnabled:(BOOL)enabled;
 // End Vivaldi
 
 @end

@@ -6,6 +6,7 @@
 #define IOS_CHROME_BROWSER_AUTOFILL_UI_BUNDLED_MANUAL_FILL_MANUAL_FILL_PASSWORD_COORDINATOR_H_
 
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/fallback_coordinator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/plus_address_coordinator_delegate.h"
 
 class GURL;
 
@@ -13,8 +14,11 @@ namespace password_manager {
 struct CredentialUIEntry;
 }
 
+@class ManualFillPlusAddressMediator;
+
 // Delegate for the coordinator actions.
-@protocol PasswordCoordinatorDelegate <FallbackCoordinatorDelegate>
+@protocol PasswordCoordinatorDelegate <FallbackCoordinatorDelegate,
+                                       PlusAddressCoordinatorDelegate>
 
 // Opens the password manager.
 - (void)openPasswordManager;
@@ -48,6 +52,8 @@ struct CredentialUIEntry;
 // form.
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
+             manualFillPlusAddressMediator:
+                 (ManualFillPlusAddressMediator*)manualFillPlusAddressMediator
                                        URL:(const GURL&)URL
                           injectionHandler:
                               (ManualFillInjectionHandler*)injectionHandler

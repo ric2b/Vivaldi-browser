@@ -29,6 +29,7 @@
 #include "src/core/SkBlenderBase.h"
 #include "src/core/SkBlurEngine.h"
 #include "src/core/SkCanvasPriv.h"
+#include "src/core/SkColorSpacePriv.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkImageFilterCache.h"
 #include "src/core/SkImageFilter_Base.h"
@@ -199,7 +200,16 @@ public:
         return SkImages::RasterFromBitmap(data);
     }
 
+#if defined(SK_USE_LEGACY_BLUR_RASTER)
     const SkBlurEngine* getBlurEngine() const override { return nullptr; }
+#else
+    bool useLegacyFilterResultBlur() const override { return false; }
+
+    const SkBlurEngine* getBlurEngine() const override {
+        return SkBlurEngine::GetRasterBlurEngine();
+    }
+#endif
+
 };
 
 } // anonymous namespace
@@ -942,6 +952,9 @@ FilterResult FilterResult::applyColorFilter(const Context& ctx,
                 SkPaint paint;
                 paint.setColor4f(SkColors::kTransparent, /*colorSpace=*/nullptr);
                 paint.setColorFilter(std::move(colorFilter));
+#if !defined(SK_USE_SRCOVER_FOR_FILTERS)
+                paint.setBlendMode(SkBlendMode::kSrc);
+#endif
                 surface->drawPaint(paint);
             }
             FilterResult solidColor = surface.snap();
@@ -955,8 +968,7 @@ FilterResult FilterResult::applyColorFilter(const Context& ctx,
             // image to avoid losing the effect of the current 'fLayerBounds'.
             newLayerBounds.outset(LayerSpace<SkISize>({1, 1}));
             SkAssertResult(newLayerBounds.intersect(ctx.desiredOutput()));
-            FilterResult filtered = this->resolve(ctx, newLayerBounds,
-                                                  /*preserveDstBounds=*/true);
+            FilterResult filtered = this->resolve(ctx, newLayerBounds, /*preserveDstBounds=*/true);
             filtered.fColorFilter = std::move(colorFilter);
             filtered.updateTileMode(ctx, SkTileMode::kClamp);
             return filtered;
@@ -1250,10 +1262,24 @@ void FilterResult::draw(const Context& ctx,
         // covered by the draw and either resolve tiling into the image, color filter transparent
         // black, apply the blend mode to the dst, or any combination thereof.
         SkPaint paint;
-        paint.setBlender(sk_ref_sp(blender));
+        if (!preserveDeviceState && !blender) {
+            // When we don't care about the device's prior contents, the default blender can be kSrc
+#if !defined(SK_USE_SRCOVER_FOR_FILTERS)
+            paint.setBlendMode(SkBlendMode::kSrc);
+#endif
+        } else {
+            paint.setBlender(sk_ref_sp(blender));
+        }
         paint.setShader(this->getAnalyzedShaderView(ctx, sampling, analysis));
         device->drawPaint(paint);
     } else {
+#if !defined(SK_USE_SRCOVER_FOR_FILTERS)
+        if (preserveDeviceState && !blender) {
+            // Explicitly pass in a non-null blender when cannot let drawAnalyzedImage() convert the
+            // default blender to kSrc.
+            blender = SkBlender::Mode(SkBlendMode::kSrcOver).get();
+        }
+#endif
         this->drawAnalyzedImage(ctx, device, sampling, analysis, blender);
     }
 
@@ -1284,6 +1310,13 @@ void FilterResult::drawAnalyzedImage(const Context& ctx,
         SkASSERT(!(analysis & BoundsAnalysis::kRequiresShaderTiling));
         // Draw non-AA with a 1px outset image so that the transparent boundary filtering is
         // not multiplied with the AA (which creates a harsher AA transition).
+        if (!blender) {
+            // Since this is a non-AA draw, kSrc can be more efficient if we are the default blend
+            // mode and can assume the prior dst pixels were transparent black.
+#if !defined(SK_USE_SRCOVER_FOR_FILTERS)
+            paint.setBlendMode(SkBlendMode::kSrc);
+#endif
+        }
         netTransform.preTranslate(-1.f, -1.f);
         device->drawSpecial(fImage->makePixelOutset().get(), netTransform, finalSampling, paint,
                             SkCanvas::kFast_SrcRectConstraint);
@@ -1474,8 +1507,8 @@ int downscale_step_count(float netScaleFactor) {
 }
 
 PixelSpace<SkRect> scale_about_center(const PixelSpace<SkRect> src, float sx, float sy) {
-    float cx = 0.5f * src.left() + 0.5f * src.right();
-    float cy = 0.5f * src.top()  + 0.5f * src.bottom();
+    float cx = sx == 1.f ? 0.f : (0.5f * src.left() + 0.5f * src.right());
+    float cy = sy == 1.f ? 0.f : (0.5f * src.top()  + 0.5f * src.bottom());
     return LayerSpace<SkRect>({(src.left()  - cx) * sx, (src.top()    - cy) * sy,
                                (src.right() - cx) * sx, (src.bottom() - cy) * sy});
 }
@@ -1486,6 +1519,10 @@ void draw_color_filtered_border(SkCanvas* canvas,
     SkPaint cfOnly;
     cfOnly.setColor4f(SkColors::kTransparent);
     cfOnly.setColorFilter(std::move(colorFilter));
+#if !defined(SK_USE_SRCOVER_FOR_FILTERS)
+    cfOnly.setBlendMode(SkBlendMode::kSrc);
+#endif
+
     canvas->drawIRect({border.left(),      border.top(),
                        border.right(),     border.top() + 1},
                        cfOnly); // Top (with corners)
@@ -1607,11 +1644,16 @@ FilterResult FilterResult::rescale(const Context& ctx,
             !(analysis & BoundsAnalysis::kRequiresLayerCrop) &&
             !(enforceDecal && (analysis & BoundsAnalysis::kHasLayerFillingEffect));
 
+    // To match legacy color space conversion logic, treat a null src as sRGB and a null dst as
+    // as the src CS.
+    const SkColorSpace* srcCS = fImage->getColorSpace() ? fImage->getColorSpace()
+                                                        : sk_srgb_singleton();
+    const SkColorSpace* dstCS = ctx.colorSpace() ? ctx.colorSpace() : srcCS;
     const bool hasEffectsToApply =
             !canDeferTiling ||
             SkToBool(fColorFilter) ||
             fImage->colorType() != ctx.backend()->colorType() ||
-            !SkColorSpace::Equals(fImage->getColorSpace(), ctx.colorSpace());
+            !SkColorSpace::Equals(srcCS, dstCS);
 
     int xSteps = downscale_step_count(scale.width());
     int ySteps = downscale_step_count(scale.height());
@@ -1697,8 +1739,8 @@ FilterResult FilterResult::rescale(const Context& ctx,
     // are pixel aligned. This is because the tiling is applied at the pixel level in SkImageShader,
     // and we need the period of the low-res image to align with the original high-resolution period
     // If/when SkImageShader supports shader-tiling over fractional bounds, this can relax.
-    float finalScaleX = scale.width();
-    float finalScaleY = scale.height();
+    float finalScaleX = xSteps > 0 ? scale.width() : 1.f;
+    float finalScaleY = ySteps > 0 ? scale.height() : 1.f;
     if (deferPeriodicTiling) {
         PixelSpace<SkRect> dstBoundsF = scale_about_center(stepBoundsF, finalScaleX, finalScaleY);
         // Use a pixel bounds that's smaller than what was requested to ensure any post-blur amount
@@ -1781,6 +1823,10 @@ FilterResult FilterResult::rescale(const Context& ctx,
                 // Primary fill that will cover all of 'sampleBounds'
                 SkPaint paint;
                 paint.setShader(image.getAnalyzedShaderView(ctx, image.sampling(), analysis));
+#if !defined(SK_USE_SRCOVER_FOR_FILTERS)
+                paint.setBlendMode(SkBlendMode::kSrc);
+#endif
+
                 PixelSpace<SkRect> srcSampled;
                 SkAssertResult(scaleXform.inverseMapRect(PixelSpace<SkRect>(sampleBounds),
                                                          &srcSampled));
@@ -1887,6 +1933,9 @@ FilterResult FilterResult::MakeFromShader(const Context& ctx,
         SkPaint paint;
         paint.setShader(shader);
         paint.setDither(dither);
+#if !defined(SK_USE_SRCOVER_FOR_FILTERS)
+        paint.setBlendMode(SkBlendMode::kSrc);
+#endif
         surface->drawPaint(paint);
     }
     return surface.snap();
@@ -2016,6 +2065,9 @@ FilterResult FilterResult::Builder::drawShader(sk_sp<SkShader> shader,
     if (surface) {
         SkPaint paint;
         paint.setShader(std::move(shader));
+#if !defined(SK_USE_SRCOVER_FOR_FILTERS)
+        paint.setBlendMode(SkBlendMode::kSrc);
+#endif
         surface->drawPaint(paint);
     }
     return surface.snap();
@@ -2101,7 +2153,6 @@ FilterResult FilterResult::Builder::blur(const LayerSpace<SkSize>& sigma) {
 
     float sx = sigma.width()  > algorithm->maxSigma() ? algorithm->maxSigma()/sigma.width()  : 1.f;
     float sy = sigma.height() > algorithm->maxSigma() ? algorithm->maxSigma()/sigma.height() : 1.f;
-
     // For identity scale factors, this rescale() is a no-op when possible, but otherwise it will
     // also handle resolving any color filters or transform similar to a resolve() except that it
     // can defer the tile mode.
@@ -2156,7 +2207,8 @@ FilterResult FilterResult::Builder::blur(const LayerSpace<SkSize>& sigma) {
     sk_sp<SkSpecialImage> lowResBlur = lowResImage.refImage();
     SkIRect blurOutputBounds = SkIRect(srcRelativeOutput);
     SkTileMode tileMode = lowResImage.tileMode();
-    if (lowResImage.canClampToTransparentBoundary(BoundsAnalysis::kSimple)) {
+    if (!algorithm->supportsOnlyDecalTiling() &&
+        lowResImage.canClampToTransparentBoundary(BoundsAnalysis::kSimple)) {
         // Have to manage this manually since the BlurEngine isn't aware of the known pixel padding.
         lowResBlur = lowResBlur->makePixelOutset();
         blurOutputBounds.offset(1, 1);

@@ -6,7 +6,7 @@ source_set("context_menu") {
     "vivaldi_context_menu_constants.mm",
   ]
 
-  deps = ["resources"]
+  deps = ["resources:vivaldi_context_menu_assets"]
 
   frameworks = [
     "Foundation.framework",

@@ -4,6 +4,7 @@
 
 #include "ui/views/controls/button/image_button.h"
 
+#include <string>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -295,12 +296,27 @@ const gfx::Point ImageButton::ComputeImagePaintPosition(
 // ToggleImageButton, public:
 
 ToggleImageButton::ToggleImageButton(PressedCallback callback)
-    : ImageButton(std::move(callback)) {}
+    : ImageButton(std::move(callback)) {
+  UpdateAccessibleCheckedState();
+}
 
 ToggleImageButton::~ToggleImageButton() = default;
 
 bool ToggleImageButton::GetToggled() const {
   return toggled_;
+}
+
+void ToggleImageButton::UpdateAccessibleCheckedState() {
+  // Use the visual pressed image as a cue for making this control into an
+  // accessible toggle button.
+  if ((toggled_ && !images_[ButtonState::STATE_NORMAL].IsEmpty()) ||
+      (!toggled_ && !alternate_images_[ButtonState::STATE_NORMAL].IsEmpty())) {
+    GetViewAccessibility().SetCheckedState(
+        toggled_ ? ax::mojom::CheckedState::kTrue
+                 : ax::mojom::CheckedState::kFalse);
+  } else {
+    GetViewAccessibility().RemoveCheckedState();
+  }
 }
 
 void ToggleImageButton::SetToggled(bool toggled) {
@@ -312,9 +328,10 @@ void ToggleImageButton::SetToggled(bool toggled) {
   }
   toggled_ = toggled;
 
+  UpdateAccessibleCheckedState();
   OnPropertyChanged(&toggled_, kPropertyEffectsPaint);
   UpdateAccessibleRoleIfNeeded();
-  NotifyAccessibilityEvent(ax::mojom::Event::kCheckedStateChanged, true);
+  UpdateAccessibleName();
 }
 
 void ToggleImageButton::SetToggledImage(ButtonState image_state,
@@ -333,7 +350,7 @@ void ToggleImageButton::SetToggledImageModel(
   } else {
     alternate_images_[image_state] = image_model;
   }
-
+  UpdateAccessibleCheckedState();
   UpdateAccessibleRoleIfNeeded();
 }
 
@@ -350,6 +367,7 @@ void ToggleImageButton::SetToggledTooltipText(const std::u16string& tooltip) {
   if (tooltip == toggled_tooltip_text_)
     return;
   toggled_tooltip_text_ = tooltip;
+  UpdateAccessibleName();
   OnPropertyChanged(&toggled_tooltip_text_, kPropertyEffectsNone);
 }
 
@@ -361,6 +379,7 @@ void ToggleImageButton::SetToggledAccessibleName(const std::u16string& name) {
   if (name == toggled_accessible_name_)
     return;
   toggled_accessible_name_ = name;
+  UpdateAccessibleName();
   OnPropertyChanged(&toggled_accessible_name_, kPropertyEffectsNone);
 }
 
@@ -383,7 +402,7 @@ void ToggleImageButton::SetImageModel(ButtonState image_state,
       SchedulePaint();
   }
   PreferredSizeChanged();
-
+  UpdateAccessibleCheckedState();
   UpdateAccessibleRoleIfNeeded();
 }
 
@@ -405,23 +424,15 @@ std::u16string ToggleImageButton::GetTooltipText(const gfx::Point& p) const {
              : toggled_tooltip_text_;
 }
 
-void ToggleImageButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  ImageButton::GetAccessibleNodeData(node_data);
-  if (!toggled_)
-    return;
-
-  if (!toggled_accessible_name_.empty()) {
-    node_data->SetName(toggled_accessible_name_);
-  } else if (!toggled_tooltip_text_.empty()) {
-    node_data->SetName(toggled_tooltip_text_);
-  }
-
-  // Use the visual pressed image as a cue for making this control into an
-  // accessible toggle button.
-  if ((toggled_ && !images_[ButtonState::STATE_NORMAL].IsEmpty()) ||
-      (!toggled_ && !alternate_images_[ButtonState::STATE_NORMAL].IsEmpty())) {
-    node_data->SetCheckedState(toggled_ ? ax::mojom::CheckedState::kTrue
-                                        : ax::mojom::CheckedState::kFalse);
+void ToggleImageButton::UpdateAccessibleName() {
+  if (toggled_) {
+    if (!toggled_accessible_name_.empty()) {
+      GetViewAccessibility().SetName(toggled_accessible_name_);
+    } else if (!toggled_tooltip_text_.empty()) {
+      GetViewAccessibility().SetName(toggled_tooltip_text_);
+    }
+  } else {
+    GetViewAccessibility().SetName(Button::GetTooltipText());
   }
 }
 

@@ -1,35 +1,34 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
-# Temporarily commenting this out until it can be properly reimplemented.
-#source_set("invalidation") {
-#  sources = [
-#    "invalidation/vivaldi_invalidation_service.cc",
-#    "invalidation/vivaldi_invalidation_service.h",
-#    "invalidation/invalidation_service_stomp_websocket.cc",
-#    "invalidation/invalidation_service_stomp_websocket.h",
-#  ]
-#
-#  deps = [
-#    "//components/invalidation/impl",
-#    "//vivaldi/vivaldi_account"
-#  ]
-#
-#  if(!is_ios) {
-#    sources += [
-#      "invalidation/vivaldi_invalidation_service_factory.cc",
-#      "invalidation/vivaldi_invalidation_service_factory.h",
-#    ]
-#    deps += [
-#      "//chrome/common:buildflags",
-#      "//chrome/browser:browser_process",
-#      "//chrome/browser/profiles:profile",
-#      "//components/keyed_service/content",
-#      "//components/prefs",
-#      "//content/public/common",
-#      "//vivaldi/prefs:prefs_strings",
-#    ]
-#  }
-#}
+source_set("invalidations") {
+  sources = [
+    "invalidations/vivaldi_sync_invalidations_service.cc",
+    "invalidations/vivaldi_sync_invalidations_service.h",
+    "invalidations/invalidation_service_stomp_websocket.cc",
+    "invalidations/invalidation_service_stomp_websocket.h",
+  ]
+
+  deps = [
+    "//components/invalidation/impl",
+    "//vivaldi/vivaldi_account"
+  ]
+
+  if(!is_ios) {
+    sources += [
+      "invalidations/vivaldi_sync_invalidations_service_factory.cc",
+      "invalidations/vivaldi_sync_invalidations_service_factory.h",
+    ]
+    deps += [
+      "//chrome/common:buildflags",
+      "//chrome/browser:browser_process",
+      "//chrome/browser/profiles:profile",
+      "//components/keyed_service/content",
+      "//components/prefs",
+      "//content/public/common",
+      "//vivaldi/prefs:prefs_strings",
+    ]
+  }
+}
 
 source_set("browser") {
   sources = [
@@ -37,8 +36,8 @@ source_set("browser") {
     "vivaldi_device_info_utils.h",
     "vivaldi_sync_auth_manager.cc",
     "vivaldi_sync_auth_manager.h",
-    "vivaldi_sync_ui_helper.cc",
-    "vivaldi_sync_ui_helper.h",
+    "vivaldi_sync_ui_helpers.cc",
+    "vivaldi_sync_ui_helpers.h",
     "vivaldi_sync_service_impl.cc",
     "vivaldi_sync_service_impl.h",
   ]
@@ -87,10 +86,9 @@ source_set("browser") {
     sources += [
       "note_sync_service_factory.cc",
       "note_sync_service_factory.h",
-      "vivaldi_sync_service_factory.h",
-      "vivaldi_sync_service_factory.cc",
     ]
     deps += [
+      ":invalidations",
       "//chrome/browser/ui",
       "//chrome/common:buildflags",
       "//chrome/common:channel_info",
@@ -107,6 +105,7 @@ source_set("browser") {
       "//components/keyed_service/ios",
       "//vivaldi/ios/vivaldi_account",
       "//vivaldi/ios/notes",
+      "//vivaldi/ios/sync:invalidations",
     ]
   }
 }

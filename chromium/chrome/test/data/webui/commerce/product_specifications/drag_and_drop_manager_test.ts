@@ -47,8 +47,10 @@ suite('ProductSpecificationsTableTest', () => {
         productDetails: [
           {
             title: 'foo',
-            description: 'bar',
-            summary: '',
+            content: {
+              attributes: [{label: '', value: 'bar'}],
+              summary: [],
+            },
           },
         ],
       });
@@ -102,7 +104,8 @@ suite('ProductSpecificationsTableTest', () => {
     const dragRgba = 'rgb(255, 0, 0)';
     tableElement.style.setProperty(
         '--color-product-specifications-summary-background-dragging', dragRgba);
-    assertStyle(element, 'background-color', dragRgba);
+    assertStyleOnPseudoElement(
+        element, ':before', 'background-color', dragRgba);
   }
 
   function assertTitleVisible(element: HTMLElement) {
@@ -117,6 +120,13 @@ suite('ProductSpecificationsTableTest', () => {
     const title = element.querySelector('.detail-title span');
     assertTrue(!!title);
     assertStyle(title!, 'visibility', 'hidden');
+  }
+
+  function assertStyleOnPseudoElement(
+      element: HTMLElement, pseudoSelector: string, property: string,
+      expected: string) {
+    return window.getComputedStyle(element, pseudoSelector)
+               .getPropertyValue(property) === expected;
   }
 
   [true, false].forEach(dropNotLeave => {

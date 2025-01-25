@@ -18,7 +18,7 @@ constexpr char kLocalFileSuggestionPrefix[] = "zero_state_file://";
 
 // The number of days within which a file must be modified, or viewed to be
 // considered as a file suggestion.
-constexpr int kDefaultMaxRecencyInDays = 8;
+constexpr int kDefaultMaxRecencyInDays = 30;
 
 // Returns the prefix that matches `type`.
 std::string GetPrefixFromSuggestionType(FileSuggestionType type) {
@@ -80,6 +80,7 @@ double ToTimestampBasedScore(const FileSuggestData& data,
 FileSuggestData::FileSuggestData(
     FileSuggestionType new_type,
     const base::FilePath& new_file_path,
+    const std::optional<std::string>& title,
     const std::optional<std::u16string>& new_prediction_reason,
     const std::optional<base::Time>& modified_time,
     const std::optional<base::Time>& viewed_time,
@@ -89,6 +90,7 @@ FileSuggestData::FileSuggestData(
     const std::optional<std::string>& icon_url)
     : type(new_type),
       file_path(new_file_path),
+      title(title),
       id(CalculateSuggestionId(type, file_path)),
       prediction_reason(new_prediction_reason),
       modified_time(modified_time),

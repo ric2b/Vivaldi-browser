@@ -9,6 +9,7 @@
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
+#include "ash/system/focus_mode/focus_mode_controller.h"
 #include "ash/system/focus_mode/focus_mode_detailed_view.h"
 #include "ash/system/focus_mode/sounds/focus_mode_sounds_view.h"
 #include "ash/system/unified/quick_settings_view.h"
@@ -29,11 +30,20 @@ namespace {
 class FocusModePolicyTest : public policy::PolicyTest {
  public:
   FocusModePolicyTest() {
-    scoped_feature_list_.InitAndEnableFeature(features::kFocusMode);
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kFocusMode, features::kFocusModeYTM},
+        /*disabled_features=*/{});
   }
   ~FocusModePolicyTest() override = default;
 
  protected:
+  void SetUpOnMainThread() override {
+    policy::PolicyTest::SetUpOnMainThread();
+    FocusModeController::Get()
+        ->focus_mode_sounds_controller()
+        ->SetIsMinorUserForTesting(false);
+  }
+
   void SetPolicyValue(std::string_view value) {
     policy::PolicyMap policies;
     SetPolicy(&policies, policy::key::kFocusModeSoundsEnabled,
@@ -90,8 +100,10 @@ IN_PROC_BROWSER_TEST_F(FocusModePolicyTest, FocusModeSounds_FocusSoundsOnly) {
   ClickOnFocusTile(quick_settings);
   FocusModeSoundsView* sounds_view = GetSoundsView(quick_settings);
   EXPECT_THAT(sounds_view->GetVisible(), testing::Eq(true));
+  // For this case, we will show a label for the soundscape playlists instead of
+  // a `TabSliderButton`.
   EXPECT_THAT(sounds_view->soundscape_views(),
-              testing::Pair(testing::NotNull(), testing::NotNull()));
+              testing::Pair(testing::IsNull(), testing::NotNull()));
   EXPECT_THAT(sounds_view->youtube_music_views(),
               testing::Pair(testing::IsNull(), testing::IsNull()));
 }

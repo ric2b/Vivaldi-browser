@@ -34,6 +34,7 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
@@ -43,7 +44,6 @@ import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -61,10 +61,9 @@ public class TabGroupUiOneshotSupplierUnitTest {
     @Mock private IncognitoStateProvider mIncognitoStateProvider;
     @Mock private ScrimCoordinator mScrimCoordinator;
     @Mock private BottomSheetController mBottomSheetController;
+    @Mock private DataSharingTabManager mDataSharingTabManager;
     @Mock private TabContentManager mTabContentManager;
-    @Mock private ViewGroup mRootView;
     @Mock private TabCreatorManager mTabCreatorManager;
-    @Mock private SnackbarManager mSnackbarManager;
     @Mock private ModalDialogManager mModalDialogManager;
 
     @Mock private Tab mTab;
@@ -99,15 +98,15 @@ public class TabGroupUiOneshotSupplierUnitTest {
                         mScrimCoordinator,
                         mOmniboxFocusStateSupplier,
                         mBottomSheetController,
+                        mDataSharingTabManager,
                         mTabContentManager,
-                        mRootView,
                         mTabCreatorManager,
                         mLayoutStateProviderSupplier,
-                        mSnackbarManager,
-                        mModalDialogManager);
+                        mModalDialogManager,
+                        null); // Vivaldi
         when(mTabManagementDelegate.createTabGroupUi(
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                        any(), any(), any()))
+                        any(), any()))
                 .thenReturn(mTabGroupUi);
         TabManagementDelegateProvider.setTabManagementDelegateForTesting(mTabManagementDelegate);
 
@@ -144,12 +143,11 @@ public class TabGroupUiOneshotSupplierUnitTest {
                         mScrimCoordinator,
                         mOmniboxFocusStateSupplier,
                         mBottomSheetController,
+                        mDataSharingTabManager,
                         mTabModelSelector,
                         mTabContentManager,
-                        mRootView,
                         mTabCreatorManager,
                         mLayoutStateProviderSupplier,
-                        mSnackbarManager,
                         mModalDialogManager);
         assertNotNull(mTabGroupUiOneshotSupplier.get());
     }
@@ -174,12 +172,11 @@ public class TabGroupUiOneshotSupplierUnitTest {
                         mScrimCoordinator,
                         mOmniboxFocusStateSupplier,
                         mBottomSheetController,
+                        mDataSharingTabManager,
                         mTabModelSelector,
                         mTabContentManager,
-                        mRootView,
                         mTabCreatorManager,
                         mLayoutStateProviderSupplier,
-                        mSnackbarManager,
                         mModalDialogManager);
         assertNotNull(mTabGroupUiOneshotSupplier.get());
     }

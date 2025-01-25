@@ -76,6 +76,7 @@ bool IsFeatureSupported(WGPUFeatureName feature) {
         case WGPUFeatureName_DepthClipControl:
         case WGPUFeatureName_DawnInternalUsages:
         case WGPUFeatureName_DawnMultiPlanarFormats:
+        case WGPUFeatureName_MultiDrawIndirect:
         case WGPUFeatureName_MultiPlanarFormatExtendedUsages:
         case WGPUFeatureName_MultiPlanarFormatP010:
         case WGPUFeatureName_MultiPlanarFormatP210:
@@ -108,8 +109,10 @@ bool IsFeatureSupported(WGPUFeatureName feature) {
         case WGPUFeatureName_YCbCrVulkanSamplers:
         case WGPUFeatureName_ShaderModuleCompilationOptions:
         case WGPUFeatureName_DawnLoadResolveTexture:
+        case WGPUFeatureName_DawnPartialLoadResolveTexture:
         case WGPUFeatureName_Subgroups:
         case WGPUFeatureName_SubgroupsF16:
+        case WGPUFeatureName_ClipDistances:
             return true;
     }
 

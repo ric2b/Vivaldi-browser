@@ -80,7 +80,7 @@ PA_NOINLINE void HandlePoolAllocFailure() {
 
 }  // namespace
 
-PartitionAddressSpace::PoolSetup PartitionAddressSpace::setup_;
+PA_CONSTINIT PartitionAddressSpace::PoolSetup PartitionAddressSpace::setup_;
 
 #if PA_CONFIG(ENABLE_SHADOW_METADATA)
 std::ptrdiff_t PartitionAddressSpace::regular_pool_shadow_offset_ = 0;
@@ -146,15 +146,15 @@ PA_ALWAYS_INLINE size_t PartitionAddressSpace::BRPPoolSize() {
 
 #if PA_CONFIG(ENABLE_SHADOW_METADATA)
 size_t PartitionAddressSpace::RegularPoolShadowSize() {
-  return (RegularPoolSize() >> kSuperPageShift) << SystemPageShift();
+  return RegularPoolSize();
 }
 
 size_t PartitionAddressSpace::BRPPoolShadowSize() {
-  return (BRPPoolSize() >> kSuperPageShift) << SystemPageShift();
+  return BRPPoolSize();
 }
 
 size_t PartitionAddressSpace::ConfigurablePoolShadowSize() {
-  return (kConfigurablePoolMaxSize >> kSuperPageShift) << SystemPageShift();
+  return kConfigurablePoolMaxSize;
 }
 #endif  // PA_CONFIG(ENABLE_SHADOW_METADATA)
 
@@ -533,7 +533,7 @@ void PartitionAddressSpace::MapMetadata(uintptr_t super_page,
   PA_CHECK(ptr != MAP_FAILED);
   PA_CHECK(ptr == reinterpret_cast<void*>(writable_metadata));
 
-  if (PA_UNLIKELY(copy_metadata)) {
+  if (copy_metadata) [[unlikely]] {
     // Copy the metadata from the private and copy-on-write page to
     // the shared page. (=update the memory file)
     memcpy(reinterpret_cast<void*>(writable_metadata),

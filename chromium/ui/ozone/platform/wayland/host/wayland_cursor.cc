@@ -5,9 +5,11 @@
 #include "ui/ozone/platform/wayland/host/wayland_cursor.h"
 
 #include <wayland-cursor.h>
+
 #include <memory>
 #include <vector>
 
+#include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/point.h"
@@ -128,8 +130,11 @@ void WaylandCursor::SetPlatformShapeInternal() {
   if (current_image_index_ >= cursor_data_->image_count)
     current_image_index_ = 0;
 
-  wl_cursor_image* const cursor_image =
-      cursor_data_->images[current_image_index_];
+  // SAFETY: Wayland ensures that `images` and `image_count` describes a
+  // valid span.
+  auto image_span = UNSAFE_BUFFERS(
+      base::span(cursor_data_->images, cursor_data_->image_count));
+  wl_cursor_image* const cursor_image = image_span[current_image_index_];
 
   AttachAndCommit(wl_cursor_image_get_buffer(cursor_image), cursor_image->width,
                   cursor_image->height, cursor_image->hotspot_x / buffer_scale_,

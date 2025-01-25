@@ -7,11 +7,13 @@
 <translation id="1158211211994409885">Serwer <ph name="HOST_NAME" /> nieoczekiwanie zakończył połączenie.</translation>
 <translation id="1161325031994447685">Ponownie połącz się z siecią Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Drukuj...</translation>
+<translation id="132390688737681464">Zapisuj i automatycznie uzupełniaj adresy</translation>
 <translation id="1375198122581997741">Wersja Vivaldi – informacje</translation>
 <translation id="139305205187523129">Serwer <ph name="HOST_NAME" /> nie wysłał żadnych danych.</translation>
 <translation id="1559528461873125649">Podany plik lub folder nie istnieje</translation>
 <translation id="1640244768702815859">Otwórz <ph name="BEGIN_LINK" />stronę główną witryny<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nieobsługiwany protokół</translation>
+<translation id="1662550410081243962">Zapisuj i automatycznie uzupełniaj informacje o formach płatności</translation>
 <translation id="1710259589646384581">System operacyjny</translation>
 <translation id="1728677426644403582">Przeglądasz źródło strony internetowej</translation>
 <translation id="1734878702283171397">Skontaktuj się z administratorem systemu.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Ta witryna nie umożliwia bezpiecznego połączenia</translation>
 <translation id="2187317261103489799">Wykrywaj (domyślnie)</translation>
 <translation id="2224337661447660594">Brak internetu</translation>
+<translation id="2283340219607151381">Zapisuj i automatycznie uzupełniaj adresy</translation>
 <translation id="2292556288342944218">Masz zablokowany dostęp do Internetu</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> wymaga nazwy użytkownika i hasła.</translation>
 <translation id="2337852623177822836">Ustawienie kontrolowane przez administratora</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Połączenie jest szyfrowane i uwierzytelniane algorytmem <ph name="CIPHER" /> a mechanizm wymiany kluczy to <ph name="KX" />.</translation>
 <translation id="2909946352844186028">Wykryto zmianę sieci.</translation>
 <translation id="2948083400971632585">Możesz wyłączyć serwery proxy skonfigurowane dla połączenia w ustawieniach przeglądarki.</translation>
+<translation id="2954624054936281172">Tabela zapisanych form płatności</translation>
 <translation id="2991571918955627853">Nie możesz teraz wejść na stronę <ph name="SITE" />, ponieważ używa ona HSTS. Błędy sieciowe i ataki są zazwyczaj tymczasowe, więc prawdopodobnie strona będzie dostępna później.</translation>
 <translation id="3005723025932146533">Pokaż zapisaną kopię</translation>
 <translation id="301521992641321250">Automatycznie zablokowane</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Zawsze wykrywaj ważną treść na tej stronie</translation>
 <translation id="3308738399950580893">reklamy</translation>
 <translation id="3384522979010096022">Twoja organizacja nie zezwala na wyświetlanie tej strony</translation>
+<translation id="3387261909427947069">Formy płatności</translation>
 <translation id="3422472998109090673">Strona <ph name="HOST_NAME" /> jest obecnie nieosiągalna.</translation>
 <translation id="3427092606871434483">Zezwalaj (domyślnie)</translation>
 <translation id="3447661539832366887">Właściciel tego urządzenia wyłączył grę z dinozaurem.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">Łańcuch certyfikatów tej witryny zawiera certyfikat podpisany za pomocą SHA-1.</translation>
 <translation id="5452270690849572955">Nie można znaleźć tej strony na <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Nieważny</translation>
+<translation id="5490432419156082418">Adresy i ustawienia</translation>
 <translation id="5492298309214877701">Ta witryna w intranecie firmy, organizacji czy szkoły ma ten sam adres URL co zewnętrzna strona internetowa.
     <ph name="LINE_BREAK" />
     Skontaktuj się z administratorem systemu.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Dozwolone przez rozszerzenie</translation>
 <translation id="7111012039238467737">(Ważny)</translation>
 <translation id="7113310725918019676">Zezwalaj na <ph name="BLOCKED_TYPE" /> z <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Zapisuj i automatycznie uzupełniaj informacje o formach płatności</translation>
 <translation id="7210863904660874423">Serwer <ph name="HOST_NAME" /> nie spełnia norm bezpieczeństwa.</translation>
 <translation id="7219179957768738017">Połączenie z szyfrowaniem <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Pokazywać powiadomienia</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">Jeśli nie masz pewności co to oznacza, skontaktuj się z administratorem sieci.</translation>
 <translation id="8332188693563227489">Odmowa dostępu do <ph name="HOST_NAME" /></translation>
 <translation id="8422228580902424274">Osoby przeprowadzające atak na stronie, którą próbujesz otworzyć, mogą podstępem nakłonić Cię do zainstalowania oprogramowania lub ujawnienia takich danych jak Twoje hasło, numer telefonu czy numer karty kredytowej.</translation>
+<translation id="8473863474539038330">Adresy i ustawienia</translation>
 <translation id="8498891568109133222">Serwer <ph name="HOST_NAME" /> potrzebował zbyt wiele czasu na odpowiedź.</translation>
 <translation id="8503813439785031346">Nazwa użytkownika</translation>
 <translation id="8703575177326907206">Połączenie z witryną <ph name="DOMAIN" /> nie jest szyfrowane.</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">Zakładki</translation>
 <translation id="8940028675168378100">Zablokowano przez <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Przejdź do ustawień strony</translation>
+<translation id="8975012916872825179">Obejmuje numery telefonów, adresy e-mail i adresy dostawy</translation>
 <translation id="9001074447101275817">Serwer proxy <ph name="DOMAIN" /> wymaga nazwy użytkownika i hasła.</translation>
 <translation id="9008201768610948239">Ignoruj</translation>
 <translation id="9025348182339809926">(Nieważny)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419">Serwer <ph name="HOST_NAME" /> używa nieobsługiwanego protokołu.</translation>
 <translation id="936602727769022409">Możesz stracić dostęp do swojego konta Vivaldi. Zalecamy natychmiastową zmianę hasła. Zobaczysz prośbę o ponowne zalogowanie się.</translation>
 <translation id="969892804517981540">Oficjalna wersja</translation>
+<translation id="984275831282074731">Formy płatności</translation>
 <translation id="988159990683914416">Wersja rozwojowa</translation>
 </translationbundle>

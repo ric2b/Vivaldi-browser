@@ -239,9 +239,11 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
 }
 
 - (void)acceptSuggestion:(CWVAutofillSuggestion*)suggestion
+                 atIndex:(NSInteger)index
        completionHandler:(nullable void (^)(void))completionHandler {
   if (suggestion.isPasswordSuggestion) {
     [_passwordController didSelectSuggestion:suggestion.formSuggestion
+                                     atIndex:index
                                         form:suggestion.formName
                               formRendererID:_lastFormActivityFormRendererID
                              fieldIdentifier:suggestion.fieldIdentifier
@@ -254,6 +256,7 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
                            }];
   } else {
     [_autofillAgent didSelectSuggestion:suggestion.formSuggestion
+                                atIndex:index
                                    form:suggestion.formName
                          formRendererID:_lastFormActivityFormRendererID
                         fieldIdentifier:suggestion.fieldIdentifier
@@ -338,8 +341,8 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
     confirmSaveCreditCardToCloud:(const autofill::CreditCard&)creditCard
                legalMessageLines:(autofill::LegalMessageLines)legalMessageLines
            saveCreditCardOptions:
-               (autofill::AutofillClient::SaveCreditCardOptions)
-                   saveCreditCardOptions
+               (autofill::payments::PaymentsAutofillClient::
+                    SaveCreditCardOptions)saveCreditCardOptions
                         callback:(autofill::payments::PaymentsAutofillClient::
                                       UploadSaveCardPromptCallback)callback {
   if (![_delegate respondsToSelector:@selector(autofillController:

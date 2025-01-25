@@ -11,6 +11,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "components/user_manager/fake_user_manager_delegate.h"
 #include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
@@ -45,7 +46,9 @@ FakeUserManager::FakeUserManager(PrefService* local_state)
     : UserManagerBase(std::make_unique<FakeUserManagerDelegate>(),
                       new FakeTaskRunner(),
                       local_state,
-                      /*cros_settings=*/nullptr) {}
+                      ash::CrosSettings::IsInitialized()
+                          ? ash::CrosSettings::Get()
+                          : nullptr) {}
 
 FakeUserManager::~FakeUserManager() = default;
 
@@ -104,24 +107,6 @@ const user_manager::User* FakeUserManager::AddPublicAccountUser(
   return user;
 }
 
-void FakeUserManager::RemoveUserFromList(const AccountId& account_id) {
-  const UserList::iterator it =
-      base::ranges::find(users_, account_id, &User::GetAccountId);
-  if (it != users_.end()) {
-    DeleteUser(*it);
-  }
-}
-
-void FakeUserManager::RemoveUserFromListForRecreation(
-    const AccountId& account_id) {
-  RemoveUserFromList(account_id);
-}
-
-void FakeUserManager::CleanStaleUserInformationFor(
-    const AccountId& account_id) {
-  RemoveUserFromList(account_id);
-}
-
 const UserList& FakeUserManager::GetUsers() const {
   return users_;
 }
@@ -164,6 +149,12 @@ void FakeUserManager::SetUserNonCryptohomeDataEphemeral(
   } else {
     accounts_with_ephemeral_non_cryptohome_data_.erase(account_id);
   }
+}
+
+void FakeUserManager::SetUserCryptohomeDataEphemeral(
+    const AccountId& account_id,
+    bool is_ephemeral) {
+  accounts_with_ephemeral_cryptohome_data_.insert({account_id, is_ephemeral});
 }
 
 void FakeUserManager::UserLoggedIn(const AccountId& account_id,
@@ -323,6 +314,19 @@ bool FakeUserManager::IsUserNonCryptohomeDataEphemeral(
     const AccountId& account_id) const {
   return base::Contains(accounts_with_ephemeral_non_cryptohome_data_,
                         account_id);
+}
+
+bool FakeUserManager::IsUserCryptohomeDataEphemeral(
+    const AccountId& account_id) const {
+  auto is_ephemeral_overriden =
+      base::Contains(accounts_with_ephemeral_cryptohome_data_, account_id);
+
+  if (!is_ephemeral_overriden) {
+    // Otherwise fall back to default behavior.
+    return UserManagerBase::IsUserCryptohomeDataEphemeral(account_id);
+  }
+
+  return accounts_with_ephemeral_cryptohome_data_.at(account_id);
 }
 
 bool FakeUserManager::IsGuestSessionAllowed() const {

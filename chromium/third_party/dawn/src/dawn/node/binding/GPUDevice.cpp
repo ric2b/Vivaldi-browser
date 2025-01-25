@@ -184,6 +184,15 @@ interop::Interface<interop::GPUSupportedFeatures> GPUDevice::getFeatures(Napi::E
 
 interop::Interface<interop::GPUSupportedLimits> GPUDevice::getLimits(Napi::Env env) {
     wgpu::SupportedLimits limits{};
+    wgpu::DawnExperimentalSubgroupLimits subgroupLimits{};
+
+    // Query the subgroup limits only if subgroups feature is enabled on the device.
+    // TODO(349125474): Remove deprecated ChromiumExperimentalSubgroups.
+    if (device_.HasFeature(wgpu::FeatureName::Subgroups) ||
+        device_.HasFeature(wgpu::FeatureName::ChromiumExperimentalSubgroups)) {
+        limits.nextInChain = &subgroupLimits;
+    }
+
     if (!device_.GetLimits(&limits)) {
         Napi::Error::New(env, "failed to get device limits").ThrowAsJavaScriptException();
     }
@@ -325,7 +334,7 @@ interop::Interface<interop::GPUShaderModule> GPUDevice::createShaderModule(
     interop::GPUShaderModuleDescriptor descriptor) {
     Converter conv(env);
 
-    wgpu::ShaderModuleWGSLDescriptor wgsl_desc{};
+    wgpu::ShaderSourceWGSL wgsl_desc{};
     wgpu::ShaderModuleDescriptor sm_desc{};
     if (!conv(wgsl_desc.code, descriptor.code) || !conv(sm_desc.label, descriptor.label)) {
         return {};

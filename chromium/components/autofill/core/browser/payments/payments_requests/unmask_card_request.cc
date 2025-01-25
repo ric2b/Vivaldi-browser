@@ -289,7 +289,9 @@ std::string UnmaskCardRequest::GetRequestContent() {
                    request_details_.user_response.enable_fido_auth);
 
   if (request_details_.selected_challenge_option) {
+    base::Value::Dict selected_idv_challenge_option;
     base::Value::Dict challenge_option;
+    // TODO(crbug.com/356665737): fix selected challenge option for cvc and otp
     if (request_details_.selected_challenge_option->type ==
         CardUnmaskChallengeOptionType::kCvc) {
       challenge_option.Set(
@@ -314,7 +316,8 @@ std::string UnmaskCardRequest::GetRequestContent() {
       }
       challenge_option.Set("cvc_position", cvc_position);
 
-      request_dict.Set("cvc_challenge_option", std::move(challenge_option));
+      selected_idv_challenge_option.Set("cvc_challenge_option",
+                                        std::move(challenge_option));
     } else if (request_details_.selected_challenge_option->type ==
                CardUnmaskChallengeOptionType::kThreeDomainSecure) {
       challenge_option.Set(
@@ -325,9 +328,11 @@ std::string UnmaskCardRequest::GetRequestContent() {
                                ->vcn_3ds_metadata->url_to_open.spec());
       challenge_option.Set("redirect_completion_result",
                            request_details_.redirect_completion_result.value());
-      request_dict.Set("redirect_challenge_option",
-                       std::move(challenge_option));
+      selected_idv_challenge_option.Set("popup_challenge_option",
+                                        std::move(challenge_option));
     }
+    request_dict.Set("selected_idv_challenge_option",
+                     std::move(selected_idv_challenge_option));
   }
 
   bool is_cvc_auth = !request_details_.user_response.cvc.empty();
@@ -537,6 +542,19 @@ bool UnmaskCardRequest::IsRetryableFailure(const std::string& error_code) {
   // If we are in the VCN CVC auth case and there is a flow status present
   // return true, otherwise return false.
   return !response_details_.flow_status.empty();
+}
+
+std::string UnmaskCardRequest::GetHistogramName() const {
+  return "UnmaskCardRequest";
+}
+
+std::optional<base::TimeDelta> UnmaskCardRequest::GetTimeout() const {
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillUnmaskCardRequestTimeout)) {
+    return std::nullopt;
+  }
+  // Hardcode 30s to be consistent with the server side timeout.
+  return base::Seconds(30);
 }
 
 bool UnmaskCardRequest::IsAllCardInformationValidIncludingDcvv() {

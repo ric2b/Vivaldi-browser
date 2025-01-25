@@ -39,8 +39,10 @@
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/fallback_autocomplete_unrecognized_metrics.h"
 #include "components/autofill/core/browser/metrics/form_events/address_form_event_logger.h"
+#include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/log_event.h"
 #include "components/autofill/core/browser/metrics/manual_fallback_metrics.h"
+#include "components/autofill/core/browser/password_form_classification.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
@@ -60,6 +62,10 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
+namespace optimization_guide::proto {
+class UserAnnotationsEntry;
+}
+
 namespace autofill {
 
 class AutofillField;
@@ -75,6 +81,7 @@ struct SuggestionsContext;
 namespace autofill_metrics {
 
 class CreditCardFormEventLogger;
+struct SuggestionRankingContext;
 
 }  // namespace autofill_metrics
 
@@ -93,10 +100,14 @@ class BrowserAutofillManager : public AutofillManager {
  public:
   // Triggered when `GenerateSuggestionsAndMaybeShowUI` is complete.
   // `show_suggestions` indicates whether or not the list of `suggestions`
-  // should be displayed (via the `external_delegate_`).
-  using OnGenerateSuggestionsCallback =
-      base::OnceCallback<void(bool show_suggestions,
-                              std::vector<Suggestion> suggestions)>;
+  // should be displayed (via the `external_delegate_`). `ranking_context`
+  // contains information regarding the ranking of suggestions and is used for
+  // metrics logging.
+  using OnGenerateSuggestionsCallback = base::OnceCallback<void(
+      bool show_suggestions,
+      std::vector<Suggestion> suggestions,
+      std::optional<autofill_metrics::SuggestionRankingContext>
+          ranking_context)>;
 
   BrowserAutofillManager(AutofillDriver* driver,
                          const std::string& app_locale);
@@ -158,7 +169,7 @@ class BrowserAutofillManager : public AutofillManager {
                             const FormFieldData& trigger_field);
   // Virtual for testing
   virtual void DidShowSuggestions(
-      base::span<const SuggestionType> shown_suggestions_types,
+      DenseSet<SuggestionType> shown_suggestion_types,
       const FormData& form,
       const FormFieldData& field);
 
@@ -180,6 +191,20 @@ class BrowserAutofillManager : public AutofillManager {
       const CreditCard& credit_card,
       const AutofillTriggerDetails& trigger_details);
 
+  /////////////////
+  // DO NOT USE! //
+  /////////////////
+  // See `FormFiller::FillOrPreviewFormExperimental()`.
+  // TODO(crbug.com/40227071): Clean up the API.
+  virtual void FillOrPreviewFormExperimental(
+      mojom::ActionPersistence action_persistence,
+      FillingProduct filling_product,
+      const FieldTypeSet& field_types_to_fill,
+      const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons,
+      const FormData& form,
+      const FormFieldData& trigger_field,
+      const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill);
+
   // Remove the credit card or Autofill profile that matches |backend_id|
   // from the database. Returns true if deletion is allowed.
   bool RemoveAutofillProfileOrCreditCard(Suggestion::BackendId backend_id);
@@ -190,11 +215,9 @@ class BrowserAutofillManager : public AutofillManager {
                                           const std::u16string& value,
                                           SuggestionType type);
 
-  // Invoked when the user selected |value| in a suggestions list from single
-  // field filling. `type` is the SuggestionType of the
-  // suggestion.
-  void OnSingleFieldSuggestionSelected(const std::u16string& value,
-                                       SuggestionType type,
+  // Invoked when the user selected the `suggestion` in a suggestions list from
+  // single field filling.
+  void OnSingleFieldSuggestionSelected(const Suggestion& suggestion,
                                        const FormData& form,
                                        const FormFieldData& field);
 
@@ -246,7 +269,7 @@ class BrowserAutofillManager : public AutofillManager {
   // AutofillManager:
   base::WeakPtr<AutofillManager> GetWeakPtr() override;
   bool ShouldClearPreviewedForm() override;
-  void OnFocusOnNonFormFieldImpl(bool had_interacted_form) override;
+  void OnFocusOnNonFormFieldImpl() override;
   void OnFocusOnFormFieldImpl(const FormData& form,
                               const FieldGlobalId& field_id) override;
   void OnDidFillAutofillFormDataImpl(const FormData& form,
@@ -327,11 +350,11 @@ class BrowserAutofillManager : public AutofillManager {
 
   autofill_metrics::AutocompleteUnrecognizedFallbackEventLogger&
   GetAutocompleteUnrecognizedFallbackEventLogger() {
-    return *autocomplete_unrecognized_fallback_logger_;
+    return metrics_->autocomplete_unrecognized_fallback_logger;
   }
 
   autofill_metrics::ManualFallbackEventLogger& GetManualFallbackEventLogger() {
-    return *manual_fallback_logger_;
+    return metrics_->manual_fallback_logger;
   }
 
  protected:
@@ -390,11 +413,101 @@ class BrowserAutofillManager : public AutofillManager {
  private:
   friend class BrowserAutofillManagerTestApi;
 
+  // Utilities for logging form events. The loggers emit metrics during their
+  // destruction, effectively when the BrowserAutofillManager is reset or
+  // destroyed.
+  struct MetricsState {
+    explicit MetricsState(BrowserAutofillManager* owner);
+    ~MetricsState();
+
+    // The address and credit card event loggers are used to emit key and funnel
+    // metrics.
+    autofill_metrics::AddressFormEventLogger address_form_event_logger;
+    autofill_metrics::CreditCardFormEventLogger credit_card_form_event_logger;
+
+    // The autocomplete unrecognized fallback logger is used to collect metrics
+    // around the manual fallback for autocomplete=unrecognized fields.
+    // Since no metrics for autocomplete=unrecognized fields are emitted through
+    // the `address_form_event_logger`, a separate logger specifically for
+    // autocomplete=unrecognized fields is used.
+    autofill_metrics::AutocompleteUnrecognizedFallbackEventLogger
+        autocomplete_unrecognized_fallback_logger;
+
+    // The manual fallback logger is used to collect metrics
+    // around Autofill being triggered on unclassified fields or fields that are
+    // classified differently from the target `FillingProduct` (address or
+    // payments).
+    autofill_metrics::ManualFallbackEventLogger manual_fallback_logger;
+
+    // The (masked) CreditCard last selected by the user.
+    CreditCard last_selected_card;
+
+    // Have we logged whether Autofill is enabled for this page load?
+    bool has_logged_autofill_enabled = false;
+    // Has the user manually edited at least one form field among the
+    // autofillable ones?
+    bool user_did_type = false;
+
+    // TODO(crbug.com/354043809): Move out of BAM.
+    // Does |this| have any parsed forms?
+    bool has_parsed_forms = false;
+    // Is there a field with autocomplete="one-time-code" observed?
+    bool has_observed_one_time_code_field = false;
+    // Is there a field with phone number collection observed?
+    bool has_observed_phone_number_field = false;
+
+    // Should be set at the beginning of the interaction and re-used
+    // throughout the context of this manager.
+    AutofillMetrics::PaymentsSigninState signin_state_for_metrics =
+        AutofillMetrics::PaymentsSigninState::kUnknown;
+
+    // When the user first interacted with a potentially fillable form on this
+    // page.
+    base::TimeTicks initial_interaction_timestamp;
+
+    // When the form was submitted.
+    base::TimeTicks form_submitted_timestamp;
+  };
+
+  // Triggers the possible import of submitted data at submission time.
+  void MaybeImportFromSubmittedForm(
+      const FormData& form,
+      const FormStructure* const form_structure,
+      bool attempt_to_import_into_form_data_importer);
+
+  // Event handler for
+  // `AutofillPredictionImprovementsDelegate::MaybeImportForm()` which is bound
+  // on form submission if the delegate exists.
+  void OnUserAnnotationsMaybeImportableFormFound(
+      const FormData& form,
+      std::unique_ptr<FormStructure> submitted_form,
+      mojom::SubmissionSource source,
+      base::TimeTicks form_submitted_timestamp,
+      std::vector<optimization_guide::proto::UserAnnotationsEntry>
+          to_be_upserted_entries,
+      base::OnceCallback<void(bool prompt_was_accepted)>
+          prompt_acceptance_callback);
+
+  // Method containing logic to be run in `OnFormSubmittedImpl()` after any
+  // import attempts of the submitted form occurred.
+  void OnFormSubmittedAfterImport(const FormData& form,
+                                  std::unique_ptr<FormStructure> submitted_form,
+                                  mojom::SubmissionSource source,
+                                  base::TimeTicks form_submitted_timestamp);
+
+  // Emits all metrics that should be recorded at submission time.
+  void LogSubmissionMetrics(const FormStructure* submitted_form,
+                            const base::TimeTicks& form_submitted_timestamp);
+
   // When `AuthenticateThenFillCreditCardForm()` fetches a credit card, this
   // gets called once the fetching has finished. If successful, the
   // `credit_card` is filled.
-  void OnCreditCardFetched(CreditCardFetchResult result,
-                           const CreditCard* credit_card);
+  void OnCreditCardFetched(
+      const FormData& form,
+      const FormFieldData& field,
+      AutofillTriggerSource fetched_credit_card_trigger_source,
+      CreditCardFetchResult result,
+      const CreditCard* credit_card);
 
   // Updates event loggers with information about data stored for Autofill.
   void UpdateLoggersReadinessData();
@@ -402,6 +515,12 @@ class BrowserAutofillManager : public AutofillManager {
   // Creates a FormStructure using the FormData received from the renderer. Will
   // return an empty scoped_ptr if the data should not be processed for upload
   // or personal data.
+  // Note that the function returns nullptr in incognito mode. Consequently, in
+  // incognito mode Autofill doesn't:
+  // - Import
+  // - Vote
+  // - Collect any key metrics
+  // - Collect profile token quality observations
   std::unique_ptr<FormStructure> ValidateSubmittedForm(const FormData& form);
 
   // Method called after the values present on submitted fields were associated
@@ -429,27 +548,22 @@ class BrowserAutofillManager : public AutofillManager {
       const FormStructure* form_structure,
       const FormFieldData& trigger_field,
       const AutofillField* trigger_autofill_field,
-      AutofillSuggestionTriggerSource trigger_source) const;
+      AutofillSuggestionTriggerSource trigger_source);
 
   // Returns a list of values from the stored credit cards that match
   // `trigger_field_type` and the value of `trigger_field` and returns the
-  // labels of the matching credit cards.
+  // labels of the matching credit cards. `ranking_context` contains information
+  // regarding the ranking of suggestions and is used for metrics logging.
   std::vector<Suggestion> GetCreditCardSuggestions(
       const FormData& form,
       const FormFieldData& trigger_field,
       FieldType trigger_field_type,
-      AutofillSuggestionTriggerSource trigger_source);
+      AutofillSuggestionTriggerSource trigger_source,
+      autofill_metrics::SuggestionRankingContext& ranking_context);
 
-  // Returns a mapping of credit card guid values to virtual card last fours for
-  // standalone CVC field. Cards will only be added to the returned map if they
-  // have usage data on the webpage and the VCN last four was found on webpage
-  // DOM.
-  base::flat_map<std::string, VirtualCardUsageData::VirtualCardLastFour>
-  GetVirtualCreditCardsForStandaloneCvcField(const url::Origin& origin) const;
-
-  // If |initial_interaction_timestamp_| is unset or is set to a later time than
-  // |interaction_timestamp|, updates the cached timestamp.  The latter check is
-  // needed because IPC messages can arrive out of order.
+  // If `metrics_->initial_interaction_timestamp` is unset or is set to a later
+  // time than `interaction_timestamp`, updates the cached timestamp.  The
+  // latter check is needed because IPC messages can arrive out of order.
   void UpdateInitialInteractionTimestamp(base::TimeTicks interaction_timestamp);
 
   // Examines |form| and returns true if it is in a non-secure context or
@@ -482,7 +596,8 @@ class BrowserAutofillManager : public AutofillManager {
   // Returns a list with the suggestions available for `field`. Which fields of
   // the `form` are filled depends on the `trigger_source`. `context` could
   // contain additional information about the suggestions, such as ablation
-  // study related fields.
+  // study related fields.  `ranking_context` contains information
+  // regarding the ranking of suggestions and is used for metrics logging.
   // TODO(crbug.com/340494671): Move ablation study fields out of the function
   // and make the context a const ref.
   std::vector<Suggestion> GetAvailableAddressAndCreditCardSuggestions(
@@ -491,7 +606,8 @@ class BrowserAutofillManager : public AutofillManager {
       const FormFieldData& field,
       const AutofillField* autofill_field,
       AutofillSuggestionTriggerSource trigger_source,
-      SuggestionsContext& context);
+      SuggestionsContext& context,
+      autofill_metrics::SuggestionRankingContext& ranking_context);
 
   // Generates and prioritizes different kinds of suggestions and
   // suggestion surfaces accordingly (e.g. Fast Checkout,
@@ -519,7 +635,7 @@ class BrowserAutofillManager : public AutofillManager {
   // `OnGenerateSuggestionsCallback`.
   void OnGeneratedPlusAddressAndSingleFieldFormFillSuggestions(
       AutofillPlusAddressDelegate::SuggestionContext suggestions_context,
-      AutofillClient::PasswordFormType password_form_type,
+      PasswordFormClassification::Type password_form_type,
       const FormData& form,
       const FormFieldData& field,
       OnGenerateSuggestionsCallback callback,
@@ -537,17 +653,21 @@ class BrowserAutofillManager : public AutofillManager {
   // `GenerateSuggestionsAndMaybeShowUI` and displays them if `show_suggestions`
   // is true (via the `external_delegate_`). It also logs whether there is a
   // suggestion for the user and whether the suggestion is shown.
+  // `ranking_context` contains information regarding the ranking of suggestions
+  // and is used for metrics logging.
   void OnGenerateSuggestionsComplete(
       const FormData& form,
       const FormFieldData& field,
       AutofillSuggestionTriggerSource trigger_source,
       const SuggestionsContext& context,
       bool show_suggestions,
-      std::vector<Suggestion> suggestions);
+      std::vector<Suggestion> suggestions,
+      std::optional<autofill_metrics::SuggestionRankingContext>
+          ranking_context);
 
   void OnGetPlusAddressSuggestions(
       AutofillPlusAddressDelegate::SuggestionContext suggestions_context,
-      AutofillClient::PasswordFormType password_form_type,
+      PasswordFormClassification::Type password_form_type,
       const FormData& form,
       const FormFieldData& field,
       std::vector<Suggestion> address_suggestions,
@@ -565,7 +685,7 @@ class BrowserAutofillManager : public AutofillManager {
   // Returns an appropriate EventFormLogger, depending on the given `field`'s
   // type. May return nullptr.
   autofill_metrics::FormEventLoggerBase* GetEventFormLogger(
-      const AutofillField& field) const;
+      const AutofillField& field);
 
   // Iterate through all the fields in the form to process the log events for
   // each field and record into FieldInfo UKM event.
@@ -591,7 +711,8 @@ class BrowserAutofillManager : public AutofillManager {
 
   // Delegates to perform external processing (display, selection) on
   // our behalf.
-  std::unique_ptr<AutofillExternalDelegate> external_delegate_;
+  std::unique_ptr<AutofillExternalDelegate> external_delegate_ =
+      std::make_unique<AutofillExternalDelegate>(this);
   std::unique_ptr<TouchToFillDelegate> touch_to_fill_delegate_;
   std::unique_ptr<FastCheckoutDelegate> fast_checkout_delegate_;
 
@@ -605,72 +726,26 @@ class BrowserAutofillManager : public AutofillManager {
           client().GetPaymentsAutofillClient()->GetIbanManager(),
           client().GetPaymentsAutofillClient()->GetMerchantPromoCodeManager());
 
-  // Utilities for logging form events. The loggers emit metrics during their
-  // destruction, effectively when the BrowserAutofillManager is reset or
-  // destroyed.
-  // The address and credit card event loggers are used to emit key and funnel
-  // metrics.
-  std::unique_ptr<autofill_metrics::AddressFormEventLogger>
-      address_form_event_logger_;
-  std::unique_ptr<autofill_metrics::CreditCardFormEventLogger>
-      credit_card_form_event_logger_;
-  // The autocomplete unrecognized fallback logger is used to collect metrics
-  // around the manual fallback for autocomplete=unrecognized fields.
-  // Since no metrics for autocomplete=unrecognized fields are emitted through
-  // the `address_form_event_logger_`, a separate logger specifically for
-  // autocomplete=unrecognized fields is used.
-  std::unique_ptr<autofill_metrics::AutocompleteUnrecognizedFallbackEventLogger>
-      autocomplete_unrecognized_fallback_logger_;
-  // The manual fallback logger is used to collect metrics
-  // around Autofill being triggered on unclassified fields or fields that are
-  // classified differently from the target `FillingProduct` (address or
-  // payments).
-  std::unique_ptr<autofill_metrics::ManualFallbackEventLogger>
-      manual_fallback_logger_;
+  // This is always non-nullopt except very briefly during Reset().
+  std::optional<MetricsState> metrics_ = std::make_optional<MetricsState>(this);
 
-  // Have we logged whether Autofill is enabled for this page load?
-  bool has_logged_autofill_enabled_ = false;
-  // Has the user manually edited at least one form field among the autofillable
-  // ones?
-  bool user_did_type_ = false;
-
-  // TODO(crbug.com/354043809): Move out of BAM.
-  // Does |this| have any parsed forms?
-  bool has_parsed_forms_ = false;
-  // Is there a field with autocomplete="one-time-code" observed?
-  bool has_observed_one_time_code_field_ = false;
-  // Is there a field with phone number collection observed?
-  bool has_observed_phone_number_field_ = false;
   // If this is true, we consider the form to be secure. (Only use this for
   // testing purposes).
   std::optional<bool> consider_form_as_secure_for_testing_;
 
-  // When the user first interacted with a potentially fillable form on this
-  // page.
-  base::TimeTicks initial_interaction_timestamp_;
-
   // A copy of the currently interacted form data.
-  std::unique_ptr<FormData> pending_form_data_;
+  std::optional<FormData> pending_form_data_;
 
   // The credit card access manager, used to access local and server cards.
   // Lazily initialized: access only through GetCreditCardAccessManager().
   std::unique_ptr<CreditCardAccessManager> credit_card_access_manager_;
 
   // Helper class to autofill forms and fields. Do not use directly, use
-  // form_filler() instead.
-  std::unique_ptr<FormFiller> form_filler_;
+  // form_filler() instead, because tests inject test objects.
+  std::unique_ptr<FormFiller> form_filler_ =
+      std::make_unique<FormFiller>(*this, log_manager(), app_locale_);
 
-  // Collected information about the autofill form where a credit card will be
-  // filled.
-  FormData credit_card_form_;
-  FormFieldData credit_card_field_;
-  CreditCard credit_card_;
   std::u16string last_unlocked_credit_card_cvc_;
-
-  // Used to record metrics. This should be set at the beginning of the
-  // interaction and re-used throughout the context of this manager.
-  AutofillMetrics::PaymentsSigninState signin_state_for_metrics_ =
-      AutofillMetrics::PaymentsSigninState::kUnknown;
 
   // List of callbacks to be called for sending blur votes. Only one callback is
   // stored per FormSignature. We rely on FormSignatures rather than
@@ -694,12 +769,6 @@ class BrowserAutofillManager : public AutofillManager {
   // processed before form submission votes. This is important so that a
   // submission can trigger the upload of blur votes.
   scoped_refptr<base::SequencedTaskRunner> vote_upload_task_runner_;
-
-  // When the form was submitted.
-  base::TimeTicks form_submitted_timestamp_;
-
-  // The source that triggered unlocking a server card with the CVC.
-  std::optional<AutofillTriggerSource> fetched_credit_card_trigger_source_;
 
   // Contains a list of four digit combinations that were found in the webpage
   // DOM. Populated after a standalone cvc field is processed on a form. Used to

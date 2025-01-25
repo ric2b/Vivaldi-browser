@@ -21,26 +21,28 @@ std::unique_ptr<QuicProtocolConnection> QuicProtocolConnection::FromExisting(
     uint64_t instance_id) {
   OSP_VLOG << "QUIC stream created for instance " << instance_id;
   QuicStream* stream = connection.MakeOutgoingStream(manager);
-  auto pc = std::make_unique<QuicProtocolConnection>(
-      owner, *stream, instance_id, stream->GetStreamId());
-  manager.AddStreamPair(ServiceStreamPair{stream, pc->id(), pc.get()});
+  auto pc =
+      std::make_unique<QuicProtocolConnection>(owner, *stream, instance_id);
+  manager.AddStreamPair(ServiceStreamPair{stream, pc.get()});
   return pc;
 }
 
 QuicProtocolConnection::QuicProtocolConnection(Owner& owner,
                                                QuicStream& stream,
-                                               uint64_t instance_id,
-                                               uint64_t connection_id)
-    : ProtocolConnection(instance_id, connection_id),
-      owner_(owner),
-      stream_(&stream) {}
+                                               uint64_t instance_id)
+    : owner_(owner), instance_id_(instance_id), stream_(&stream) {}
 
 QuicProtocolConnection::~QuicProtocolConnection() {
   if (stream_) {
     stream_->CloseWriteEnd();
+    // Only need to notify `owner_` when `stream_` is still working.
+    // Otherwise, it is already handled when `stream_` is closed.
     owner_.OnConnectionDestroyed(*this);
-    stream_ = nullptr;
   }
+}
+
+uint64_t QuicProtocolConnection::GetID() const {
+  return stream_ ? stream_->GetStreamId() : 0;
 }
 
 void QuicProtocolConnection::Write(ByteView bytes) {
@@ -56,6 +58,10 @@ void QuicProtocolConnection::CloseWriteEnd() {
 }
 
 void QuicProtocolConnection::OnClose() {
+  // This is called when the underlying QuicStream is closed. `observer_` can be
+  // notified by OnConnectionClosed interface and it can delete this instance at
+  // this time. Otherwise, this instance will exist without a underlying
+  // QuicStream serving it.
   stream_ = nullptr;
   if (observer_) {
     observer_->OnConnectionClosed(*this);

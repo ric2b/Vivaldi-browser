@@ -5,27 +5,29 @@
 import './read_anything_toolbar.js';
 import './strings.m.js';
 import '//read-anything-side-panel.top-chrome/shared/sp_empty_state.js';
-import '//read-anything-side-panel.top-chrome/shared/sp_shared_style.css.js';
-import '//resources/cr_elements/cr_hidden_style.css.js';
-import '//resources/cr_elements/cr_shared_vars.css.js';
+import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_toast/cr_toast.js';
 
 import {ColorChangeUpdater} from '//resources/cr_components/color_change_listener/colors_css_updater.js';
 import type {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
-import {WebUiListenerMixin} from '//resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixinLit} from '//resources/cr_elements/web_ui_listener_mixin_lit.js';
 import {assert} from '//resources/js/assert.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
 import {listenOnce} from '//resources/js/util.js';
-import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {PropertyValues} from '//resources/lit/v3_0/lit.rollup.js';
+import {CrLitElement} from '//resources/lit/v3_0/lit.rollup.js';
 
-import {getTemplate} from './app.html.js';
+import {getCss} from './app.css.js';
+import {getHtml} from './app.html.js';
+import {AppStyleUpdater} from './app_style_updater.js';
+import type {SettingsPrefs} from './common.js';
 import {getCurrentSpeechRate, minOverflowLengthToScroll, playFromSelectionTimeout, toastDurationMs} from './common.js';
 import {ReadAnythingLogger, TimeFrom, TimeTo} from './read_anything_logger.js';
 import type {ReadAnythingToolbarElement} from './read_anything_toolbar.js';
 import type {VoicePackStatus} from './voice_language_util.js';
-import {areVoicesEqual, AVAILABLE_GOOGLE_TTS_LOCALES, convertLangOrLocaleForVoicePackManager, convertLangOrLocaleToExactVoicePackLocale, convertLangToAnAvailableLangIfPresent, createInitialListOfEnabledLanguages, doesLanguageHaveNaturalVoices, getFilteredVoiceList, getVoicePackConvertedLangIfExists, isEspeak, isNatural, isVoicePackStatusError, isVoicePackStatusSuccess, isWaitingForInstallLocally, mojoVoicePackStatusToVoicePackStatusEnum, VoiceClientSideStatusCode, VoicePackServerStatusErrorCode, VoicePackServerStatusSuccessCode} from './voice_language_util.js';
+import {areVoicesEqual, AVAILABLE_GOOGLE_TTS_LOCALES, convertLangOrLocaleForVoicePackManager, convertLangOrLocaleToExactVoicePackLocale, convertLangToAnAvailableLangIfPresent, createInitialListOfEnabledLanguages, doesLanguageHaveNaturalVoices, getFilteredVoiceList, getNaturalVoiceOrDefault, getVoicePackConvertedLangIfExists, isEspeak, isNatural, isVoicePackStatusError, isVoicePackStatusSuccess, isWaitingForInstallLocally, mojoVoicePackStatusToVoicePackStatusEnum, VoiceClientSideStatusCode, VoicePackServerStatusErrorCode, VoicePackServerStatusSuccessCode} from './voice_language_util.js';
 
-const ReadAnythingElementBase = WebUiListenerMixin(PolymerElement);
+const AppElementBase = WebUiListenerMixinLit(CrLitElement);
 
 interface UtteranceSettings {
   lang: string;
@@ -33,9 +35,6 @@ interface UtteranceSettings {
   pitch: number;
   rate: number;
 }
-
-const darkThemeEmptyStateBodyColor = 'var(--google-grey-500)';
-const defaultThemeEmptyStateBodyColor = 'var(--google-grey-700)';
 
 export const previousReadHighlightClass = 'previous-read-highlight';
 export const currentReadHighlightClass = 'current-read-highlight';
@@ -46,12 +45,6 @@ const linkDataAttribute = 'link';
 // Characters that should be ignored for word highlighting when not accompanied
 // by other characters.
 const IGNORED_HIGHLIGHT_CHARACTERS_REGEX: RegExp = /^[.,!?'"(){}\[\]]+$/;
-
-// Constants for styling the app when page zoom changes.
-const overflowXTypical = 'hidden';
-const overflowXScroll = 'scroll';
-const minWidthTypical = 'auto';
-const minWidthOverflow = 'fit-content';
 
 // A two-way map where each key is unique and each value is unique. The keys are
 // DOM nodes and the values are numbers, representing AXNodeIDs.
@@ -91,11 +84,12 @@ export enum WordBoundaryMode {
 }
 
 export interface SpeechPlayingState {
-  // The first time the user presses `play` on a page, we initialize the tree
-  // traversal used for speech.
+  // If the speech tree for the current page has been initialized. This happens
+  // in updateContent before speech has been initiated by users but it can
+  // also be set to true via a play from selection.
   isSpeechTreeInitialized: boolean;
   // True when the user presses play, regardless of if audio has actually
-  // started yet.
+  // started yet. This will be false when speech is paused.
   isSpeechActive: boolean;
   // When `isSpeechActive` is false, this indicates how it became false. e.g.
   // via pause button click or because other speech settings were changed.
@@ -105,6 +99,12 @@ export interface SpeechPlayingState {
   // `isAudioCurrentlyPlaying` will tell us whether audio actually started
   // playing yet. This is a separate state because audio starting has a delay.
   isAudioCurrentlyPlaying: boolean;
+  // Indicates if speech has been triggered on the current page by a play
+  // button press. This will be true throughout the lifetime of reading
+  // the content on the page. It will only be reset when speech has completely
+  // stopped from reaching the end of content or changing pages. Pauses will
+  // not update it.
+  hasSpeechBeenTriggered: boolean;
 }
 
 export interface WordBoundaryState {
@@ -122,18 +122,13 @@ export interface WordBoundaryState {
   speechUtteranceStartIndex: number;
 }
 
-export interface ReadAnythingElement {
+export interface AppElement {
   $: {
     toolbar: ReadAnythingToolbarElement,
     appFlexParent: HTMLElement,
     container: HTMLElement,
+    containerParent: HTMLElement,
   };
-}
-
-interface PendingImageRequest {
-  resolver: (dataUrl: string) => void;
-  cancel: () => void;
-  nodeId: number;
 }
 
 function isInvalidHighlightForWordHighlighting(textToHighlight: string|
@@ -144,40 +139,43 @@ function isInvalidHighlightForWordHighlighting(textToHighlight: string|
       IGNORED_HIGHLIGHT_CHARACTERS_REGEX.test(textToHighlight);
 }
 
-export class ReadAnythingElement extends ReadAnythingElementBase {
+export class AppElement extends AppElementBase {
   static get is() {
     return 'read-anything-app';
   }
 
-  static get template() {
-    return getTemplate();
+  static override get styles() {
+    return getCss();
   }
 
-  static get properties() {
-    return {
-      speechPlayingState: {
-        type: Object,
-        observer: 'onSpeechPlayingStateChanged_',
-      },
+  override render() {
+    return getHtml.bind(this)();
+  }
 
-      imagesEnabled: {
-        type: Boolean,
-        reflectToAttribute: true,
-        value: false,
-      },
+  static override get properties() {
+    return {
+      speechPlayingState: {type: Object},
+      imagesEnabled: {type: Boolean, reflect: true},
+      enabledLangs: {type: Array},
+      settingsPrefs_: {type: Object},
+      selectedVoice_: {type: Object},
+      availableVoices_: {type: Array},
+      voiceStatusLocalState_: {type: Object},
+      previewVoicePlaying_: {type: Object},
+      localeToDisplayName_: {type: Object},
+      lastDownloadedLang_: {type: String},
+      hasContent_: {type: Boolean},
+      speechEngineLoaded_: {type: Boolean},
+      willDrawAgainSoon_: {type: Boolean},
+      emptyStateImagePath_: {type: String},
+      emptyStateDarkImagePath_: {type: String},
+      emptyStateHeading_: {type: String},
+      emptyStateSubheading_: {type: String},
     };
   }
 
   private startTime = Date.now();
   private constructorTime: number;
-
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  override _attachDom(dom: Node|null): ShadowRoot|null {
-    if (dom) {
-      this.appendChild(dom);
-    }
-    return null;
-  }
 
   // Maps a DOM node to the AXNodeID that was used to create it. DOM nodes and
   // AXNodeIDs are unique, so this is a two way map where either DOM node or
@@ -190,29 +188,27 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   // index down the pipeline, so we store that info here.
   private highlightedNodeToOffsetInParent: Map<Node, number> = new Map();
   private imageNodeIdsToFetch_: Set<number> = new Set();
-  private pendingImageRequest_?: PendingImageRequest;
 
-  private scrollingOnSelection_: boolean;
-  private hasContent_: boolean;
-  private emptyStateImagePath_: string;
-  private emptyStateDarkImagePath_: string;
-  private emptyStateHeading_: string;
-  private lastDownloadedLang: string;
-  private toastDuration_: number = toastDurationMs;
-  private emptyStateSubheading_: string;
+  private scrollingOnSelection_ = false;
+  protected hasContent_ = false;
+  protected emptyStateImagePath_?: string;
+  protected emptyStateDarkImagePath_?: string;
+  protected emptyStateHeading_?: string;
+  protected lastDownloadedLang_?: string;
+  protected toastDuration_: number = toastDurationMs;
+  protected emptyStateSubheading_ = '';
 
   private previousHighlights_: HTMLElement[] = [];
-  private currentColorSuffix_: string;
-  private isHighlightOn_: boolean = true;
   private previousRootId_: number;
 
   private isReadAloudEnabled_: boolean;
+  protected isDocsLoadMoreButtonVisible_: boolean = false;
 
   // If the speech engine is considered "loaded." If it is, we should display
   // the play / pause buttons normally. Otherwise, we should disable the
   // Read Aloud controls until the engine has loaded in order to provide
   // visual feedback that a voice is about to be spoken.
-  private speechEngineLoaded: boolean = true;
+  private speechEngineLoaded_: boolean = true;
 
   // Sometimes distillations are queued up while distillation is happening so
   // when the current distillation finishes, we re-distill immediately. In that
@@ -227,25 +223,25 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
   synth = window.speechSynthesis;
 
-  private selectedVoice_: SpeechSynthesisVoice|undefined;
+  protected selectedVoice_: SpeechSynthesisVoice|undefined;
   // The set of languages currently enabled for use by Read Aloud. This
   // includes user-enabled languages and auto-downloaded languages. The former
   // are stored in preferences. The latter are not.
   enabledLangs: string[] = [];
 
   // All possible available voices for the current speech engine.
-  private availableVoices_: SpeechSynthesisVoice[];
+  protected availableVoices_: SpeechSynthesisVoice[] = [];
   // The set of languages found in availableVoices.
   private availableLangs_: string[] = [];
   // If a preview is playing, this is set to the voice the preview is playing.
   // Otherwise, this is undefined.
-  private previewVoicePlaying: SpeechSynthesisVoice|null;
+  protected previewVoicePlaying_?: SpeechSynthesisVoice;
 
-  private localeToDisplayName: {[locale: string]: string};
+  protected localeToDisplayName_: {[locale: string]: string};
 
   // Our local representation of the status of voice pack downloads and
   // availability
-  private voiceStatusLocalState_:
+  protected voiceStatusLocalState_:
       {[language: string]: VoiceClientSideStatusCode} = {};
 
   // Cache of responses from LanguagePackManager
@@ -260,6 +256,8 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   private playSessionStartTime: number = -1;
 
   private logger_: ReadAnythingLogger = ReadAnythingLogger.getInstance();
+  private styleUpdater_: AppStyleUpdater;
+  protected settingsPrefs_: SettingsPrefs;
 
   // State for speech synthesis paused/play state needs to be tracked explicitly
   // because there are bugs with window.speechSynthesis.paused and
@@ -269,11 +267,12 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     isSpeechActive: false,
     pauseSource: PauseActionSource.DEFAULT,
     isAudioCurrentlyPlaying: false,
+    hasSpeechBeenTriggered: false,
   };
 
-  private imagesEnabled: boolean;
+  private imagesEnabled: boolean = false;
 
-  maxSpeechLength = 175;
+  maxSpeechLength: number = 175;
 
   wordBoundaryState: WordBoundaryState = {
     mode: WordBoundaryMode.BOUNDARIES_NOT_SUPPORTED,
@@ -287,6 +286,26 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
   speechSynthesisLanguage: string;
 
+  // If we weren't able to restore language preferences successfully and we
+  // should attempt to restore settings if voices refresh.
+  // Sometimes, the speech synthesis engine hasn't refreshed available
+  // voices by the time we restore settings, which means we end up
+  // ignoring previous settings if we get an onvoiceschanged callback
+  // a few seconds later. By keeping track of whether or not preferences
+  // were successfully restored, we can re-attempt to restore voice and
+  // language preferences from settings in onVoicesChanged.
+  shouldAttemptLanguageSettingsRestore: boolean = true;
+
+
+  override willUpdate(changedProperties: PropertyValues<this>) {
+    super.willUpdate(changedProperties);
+
+    if (changedProperties.has('speechPlayingState')) {
+      chrome.readingMode.onSpeechPlayingStateChanged(
+          this.speechPlayingState.isSpeechActive);
+    }
+  }
+
   constructor() {
     super();
     this.constructorTime = Date.now();
@@ -294,6 +313,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
         TimeFrom.APP, TimeTo.CONSTRUCTOR, this.startTime, this.constructorTime);
     this.isReadAloudEnabled_ = chrome.readingMode.isReadAloudEnabled;
     this.speechSynthesisLanguage = chrome.readingMode.baseLanguageForSpeech;
+    this.styleUpdater_ = new AppStyleUpdater(this);
     ColorChangeUpdater.forDocument().start();
   }
 
@@ -338,6 +358,15 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       };
     }
 
+    this.settingsPrefs_ = {
+      letterSpacing: chrome.readingMode.letterSpacing,
+      lineSpacing: chrome.readingMode.lineSpacing,
+      theme: chrome.readingMode.colorTheme,
+      speechRate: chrome.readingMode.speechRate,
+      font: chrome.readingMode.fontName,
+      highlightGranularity: chrome.readingMode.highlightGranularity,
+    };
+
     document.onselectionchange = () => {
       // When Read Aloud is playing, user-selection is disabled on the Read
       // Anything panel, so don't attempt to update selection, as this can
@@ -364,8 +393,8 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       // If there's been a selection, clear the current
       // Read Aloud highlight.
       const elements =
-          document.querySelectorAll('.' + currentReadHighlightClass);
-      if (elements.length > 0 && anchorNodeId && focusNodeId) {
+          this.shadowRoot?.querySelectorAll('.' + currentReadHighlightClass);
+      if (elements && anchorNodeId && focusNodeId) {
         elements.forEach(el => el.classList.remove(currentReadHighlightClass));
       }
 
@@ -381,7 +410,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       this.previousHighlights_ = [];
     };
 
-    document.onscroll = () => {
+    this.$.containerParent.onscroll = () => {
       chrome.readingMode.onScroll(this.scrollingOnSelection_);
       this.scrollingOnSelection_ = false;
     };
@@ -401,15 +430,15 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     };
 
     chrome.readingMode.updateLinks = () => {
-      this.updateLinks();
+      this.updateLinks_();
     };
 
     chrome.readingMode.updateImages = () => {
-      this.updateImages();
+      this.updateImages_();
     };
 
-    chrome.readingMode.updateImage = (nodeId) => {
-      this.updateImage(nodeId);
+    chrome.readingMode.onImageDownloaded = (nodeId) => {
+      this.onImageDownloaded(nodeId);
     };
 
     chrome.readingMode.updateSelection = () => {
@@ -445,28 +474,6 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     chrome.readingMode.onLockScreen = () => {
       this.onLockScreen();
     };
-  }
-
-  // Record metrics
-  private recordPlayClick() {
-    this.incrementMetricCount('Play');
-  }
-
-  private recordPauseClick() {
-    this.incrementMetricCount('Pause');
-  }
-
-  private recordNextClick() {
-    this.incrementMetricCount('NextButton');
-  }
-
-  private recordPreviousClick() {
-    this.incrementMetricCount('PreviousButton');
-  }
-
-  private incrementMetricCount(action: string) {
-    chrome.readingMode.incrementMetricCount(
-        'Accessibility.ReadAnything.ReadAloud' + action + 'SessionCount');
   }
 
   private getOffsetInAncestor(node: Node): number {
@@ -520,6 +527,11 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       htmlTag = 'div';
     }
 
+    // Images will be written to a canvas.
+    if (htmlTag === 'img') {
+      htmlTag = 'canvas';
+    }
+
     const url = chrome.readingMode.getUrl(nodeId);
 
     if (!this.shouldShowLinks() && htmlTag === 'a') {
@@ -538,14 +550,11 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       element.setAttribute('dir', direction);
     }
 
-    if (element.nodeName === 'IMG') {
-      const dataUrl = chrome.readingMode.getImageDataUrl(nodeId);
-      if (!dataUrl) {
-        this.imageNodeIdsToFetch_.add(nodeId);
-      }
-      element.setAttribute('src', dataUrl);
+    if (element.nodeName === 'CANVAS') {
+      this.imageNodeIdsToFetch_.add(nodeId);
       const altText = chrome.readingMode.getAltText(nodeId);
       element.setAttribute('alt', altText);
+      element.classList.add('downloaded-image');
     }
 
     if (url && element.nodeName === 'A') {
@@ -582,10 +591,9 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     // node id to call InitAXPosition in playSpeech. If it's not saved here,
     // we have to retrieve it through a DOM search such as createTreeWalker,
     // which can be computationally expensive.
-    // However, since updateContent may be called after speech starts playing,
-    // don't call InitAXPosition from here to avoid interrupting current speech.
     if (!this.firstTextNodeSetForReadAloud) {
       this.firstTextNodeSetForReadAloud = nodeId;
+      this.initializeSpeechTree();
     }
 
     const textContent = chrome.readingMode.getTextContent(nodeId);
@@ -686,23 +694,34 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       this.logger_.logNewPage(/*speechPlayed=*/ false);
     }
 
-    if (chrome.readingMode.imagesFeatureEnabled) {
-      // Always load images even if they are disabled to ensure a fast response
-      // when toggling.
-      this.loadImages_();
-    }
+    // Always load images even if they are disabled to ensure a fast response
+    // when toggling.
+    this.loadImages_();
+
+    this.isDocsLoadMoreButtonVisible_ =
+        chrome.readingMode.isDocsLoadMoreButtonVisible;
 
     container.scrollTop = 0;
     this.hasContent_ = true;
     container.appendChild(node);
-    this.updateImages();
+    this.updateImages_();
   }
 
-  updateImage(nodeId: number) {
-    const dataurl = chrome.readingMode.getImageDataUrl(nodeId);
-    if (this.pendingImageRequest_ &&
-        this.pendingImageRequest_.nodeId === nodeId) {
-      this.pendingImageRequest_.resolver(dataurl);
+  async onImageDownloaded(nodeId: number) {
+    const data = chrome.readingMode.getImageBitmap(nodeId);
+    const element = this.domNodeToAxNodeIdMap_.keyFrom(nodeId);
+    if (data && element && element instanceof HTMLCanvasElement) {
+      element.width = data.width;
+      element.height = data.height;
+      const context = element.getContext('2d');
+      // Context should not be null unless another was already requested.
+      assert(context);
+      const imgData = new ImageData(data.data, data.width);
+      const bitmap = await createImageBitmap(imgData, {
+        colorSpaceConversion: 'none',
+        premultiplyAlpha: 'premultiply',
+      });
+      context.drawImage(bitmap, 0, 0);
     }
   }
 
@@ -716,38 +735,20 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   }
 
   private async loadImages_() {
-    // Content was updated while a request was still pending.
-    if (this.pendingImageRequest_) {
-      this.pendingImageRequest_.cancel();
+    if (!chrome.readingMode.imagesFeatureEnabled) {
+      return;
     }
 
     for (const nodeId of this.imageNodeIdsToFetch_) {
-      // Create a promise that will be resolved on image updated.
-      try {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          this.pendingImageRequest_ = {
-            resolver: resolve,
-            cancel: reject,
-            nodeId: nodeId,
-          };
-          chrome.readingMode.requestImageDataUrl(nodeId);
-        });
-        const node = this.domNodeToAxNodeIdMap_.keyFrom(nodeId);
-        if (node instanceof HTMLImageElement) {
-          node.src = dataUrl;
-        }
-      } catch {
-        // This catch will be called if cancel is called on the image request.
-        this.pendingImageRequest_ = undefined;
-        break;
-      }
+      chrome.readingMode.requestImageData(nodeId);
     }
+
     this.imageNodeIdsToFetch_.clear();
   }
 
   getSelection(): any {
-    const selection = document.getSelection();
-    return selection;
+    assert(this.shadowRoot, 'no shadow root');
+    return this.shadowRoot.getSelection();
   }
 
   updateSelection() {
@@ -829,13 +830,18 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     startElement.scrollIntoViewIfNeeded();
   }
 
-  updateLinks(shouldRehighlightCurrentNodes: boolean = true) {
+  protected updateLinks_(shouldRehighlightCurrentNodes: boolean = true) {
+    if (!this.shadowRoot) {
+      return;
+    }
+
     const originallyHadHighlights =
-        document.querySelectorAll<HTMLElement>('.' + currentReadHighlightClass)
+        this.shadowRoot
+            .querySelectorAll<HTMLElement>('.' + currentReadHighlightClass)
             .length > 0;
 
     const selector = this.shouldShowLinks() ? 'span[data-link]' : 'a';
-    const elements = this.querySelectorAll(selector);
+    const elements = this.shadowRoot.querySelectorAll(selector);
 
     for (const elem of elements) {
       assert(elem instanceof HTMLElement, 'link is not an HTMLElement');
@@ -853,8 +859,24 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     }
   }
 
-  updateImages() {
+  protected updateImages_() {
+    if (!this.shadowRoot) {
+      return;
+    }
+
     this.imagesEnabled = chrome.readingMode.imagesEnabled;
+    // There is some strange issue where the HTML css application does not work
+    // on canvases.
+    for (const canvas of this.shadowRoot.querySelectorAll('canvas')) {
+      canvas.style.display = this.imagesEnabled ? '' : 'none';
+    }
+    for (const canvas of this.shadowRoot.querySelectorAll('figure')) {
+      canvas.style.display = this.imagesEnabled ? '' : 'none';
+    }
+  }
+
+  protected onDocsLoadMoreButtonClick_() {
+    chrome.readingMode.onScrolledToBottom();
   }
 
   updateVoicePackStatusFromInstallResponse(lang: string, status: string) {
@@ -953,7 +975,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
                 convertLangOrLocaleToExactVoicePackLocale(
                     genericVoicePackLanguage);
 
-            this.lastDownloadedLang = exactVoicePackLanguage ?
+            this.lastDownloadedLang_ = exactVoicePackLanguage ?
                 exactVoicePackLanguage :
                 genericVoicePackLanguage;
 
@@ -1018,8 +1040,8 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   }
 
 
-  private getLanguageDownloadedTitle_(lang: string) {
-    const langDisplayName = this.getLangDisplayName(lang);
+  protected getLanguageDownloadedTitle_() {
+    const langDisplayName = this.getLangDisplayName(this.lastDownloadedLang_);
 
     return loadTimeData.getStringF(
         'readingModeVoiceDownloadedTitle', langDisplayName);
@@ -1027,25 +1049,19 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
   // TODO(b/325962407): replace toast with system notification
   private showToast_(): void {
-    let toast: CrToastElement;
+    assert(this.shadowRoot);
     // Tests don't have menus and dialogs set up, no need to check
-    if (this.$.toolbar.shadowRoot!.querySelector('voice-selection-menu')) {
-      const isLanguageMenuOpen =
-          this.$.toolbar.shadowRoot!.querySelector('voice-selection-menu')!
-              .shadowRoot!.querySelector('language-menu') ?
-          this.$.toolbar.shadowRoot!.querySelector('voice-selection-menu')!
-              .shadowRoot!.querySelector('language-menu')!.shadowRoot!
-              .querySelector('cr-dialog')!.open :
-          false;
-      toast = isLanguageMenuOpen ?
-          this.$.toolbar.shadowRoot!.querySelector('voice-selection-menu')!
-              .shadowRoot!.querySelector('language-menu')!.shadowRoot!
-              .querySelector('cr-dialog')!.querySelector<CrToastElement>(
-                  '#toast-in-dialog')! :
-          document.querySelector<CrToastElement>('#toast')!;
-    } else {
-      toast = document.querySelector<CrToastElement>('#toast')!;
-    }
+    const voiceSelectionMenu =
+        this.$.toolbar.shadowRoot?.querySelector('voice-selection-menu');
+    const languageMenu =
+        voiceSelectionMenu?.shadowRoot?.querySelector('language-menu');
+    const languageMenuToast =
+        languageMenu?.shadowRoot?.querySelector('cr-dialog')
+            ?.querySelector<CrToastElement>('#toast-in-dialog');
+
+    const toast = languageMenuToast ||
+        this.shadowRoot!.querySelector<CrToastElement>('#toast')!;
+    assert(toast);
 
     if (toast.open) {
       toast.hide();
@@ -1054,9 +1070,18 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   }
 
   onVoicesChanged() {
+    const previousSize = this.availableVoices_.length;
     // Get a new list of voices. This should be done before we call
     // refreshVoicePackStatuses();
     this.getVoices_(/*refresh =*/ true);
+
+    if (this.shouldAttemptLanguageSettingsRestore && previousSize === 0 &&
+        this.availableVoices_.length > 0) {
+      // If we go from having no available voices to having voices available,
+      // restore voice settings from preferences.
+      this.restoreEnabledLanguagesFromPref();
+      this.selectPreferredVoice();
+    }
 
     // If voice was selected automatically and not by the user, check if
     // there's a higher quality voice available now.
@@ -1081,6 +1106,9 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
         !this.availableVoices_.some(
             voice => areVoicesEqual(voice, this.selectedVoice_!))) {
       this.selectedVoice_ = undefined;
+    }
+
+    if (!this.selectedVoice_) {
       this.getSpeechSynthesisVoice();
     }
   }
@@ -1101,9 +1129,8 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     if (!voicesForLanguage || (voicesForLanguage.length === 0)) {
       // Stay with the current voice if no voices are available for this
       // language.
-      return this.selectedVoice_ ?
-          this.selectedVoice_ :
-          this.getNaturalVoiceOrDefault_(allPossibleVoices);
+      return this.selectedVoice_ ? this.selectedVoice_ :
+                                   getNaturalVoiceOrDefault(allPossibleVoices);
     }
 
     // First try to choose a voice only from currently enabled locales for this
@@ -1122,23 +1149,11 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
         // can disable the play button.
         return undefined;
       } else {
-        return this.getNaturalVoiceOrDefault_(allVoicesForEnabledLocales);
+        return getNaturalVoiceOrDefault(allVoicesForEnabledLocales);
       }
     }
 
-    return this.getNaturalVoiceOrDefault_(voicesForCurrentEnabledLocale);
-  }
-
-  private getNaturalVoiceOrDefault_(voices: SpeechSynthesisVoice[]):
-      SpeechSynthesisVoice {
-    const naturalVoice = voices.find(v => isNatural(v));
-    if (naturalVoice) {
-      return naturalVoice;
-    }
-
-    const defaultVoice =
-        voices.find(({default: isDefaultVoice}) => isDefaultVoice);
-    return defaultVoice ? defaultVoice : voices[0];
+    return getNaturalVoiceOrDefault(voicesForCurrentEnabledLocale);
   }
 
   // Attempt to get a new voice using the current language. In theory, the
@@ -1147,7 +1162,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   // the previously unavailable voice as an extra measure. This method should
   // only be called when speech synthesis returns an error.
   getAlternativeVoice(unavailableVoice: SpeechSynthesisVoice|
-                      null): SpeechSynthesisVoice|null {
+                      undefined): SpeechSynthesisVoice|undefined {
     const newVoice = this.defaultVoice();
 
     // If the default voice is not the same as the original, unavailable voice,
@@ -1170,7 +1185,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     // attempt to fallback to the browser language, if we're using the page
     // language.
     if (!voicesForLanguage || (voicesForLanguage.length === 0)) {
-      return null;
+      return undefined;
     }
 
     let voiceIndex = 0;
@@ -1185,11 +1200,11 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
     // TODO(b/336596926): Handle language updates if there aren't any available
     // voices in the current language other than the unavailable voice.
-    return null;
+    return undefined;
   }
 
   private getVoices_(refresh: boolean = false): SpeechSynthesisVoice[] {
-    if (!this.availableVoices_ || refresh) {
+    if (!this.availableVoices_.length || refresh) {
       this.availableVoices_ = getFilteredVoiceList(this.synth.getVoices());
       this.availableLangs_ =
           [...new Set(this.availableVoices_.map(({lang}) => lang))];
@@ -1206,13 +1221,16 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     }
   }
 
-  private getLangDisplayName(lang: string): string {
+  private getLangDisplayName(lang?: string): string {
+    if (!lang) {
+      return '';
+    }
     const langLower = lang.toLowerCase();
-    return this.localeToDisplayName[langLower] || langLower;
+    return this.localeToDisplayName_[langLower] || langLower;
   }
 
   private populateDisplayNamesForLocaleCodes() {
-    this.localeToDisplayName = {};
+    this.localeToDisplayName_ = {};
 
     // Get display names for all the pack manager supported locales, only on
     // ChromeOS.
@@ -1230,12 +1248,12 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
   private maybeAddDisplayName(lang: string) {
     const langLower = lang.toLowerCase();
-    if (!(langLower in this.localeToDisplayName)) {
+    if (!(langLower in this.localeToDisplayName_)) {
       const langDisplayName =
           chrome.readingMode.getDisplayNameForLocale(langLower, langLower);
       if (langDisplayName) {
-        this.localeToDisplayName =
-            {...this.localeToDisplayName, [langLower]: langDisplayName};
+        this.localeToDisplayName_ =
+            {...this.localeToDisplayName_, [langLower]: langDisplayName};
       }
     }
   }
@@ -1252,7 +1270,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     current.replaceWith(replacer);
   }
 
-  private onPreviewVoice_(
+  protected onPreviewVoice_(
       event: CustomEvent<{previewVoice: SpeechSynthesisVoice}>) {
     event.preventDefault();
     event.stopPropagation();
@@ -1261,7 +1279,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
     // If there's no previewVoice, return after stopping the current preview
     if (!event.detail) {
-      this.previewVoicePlaying = null;
+      this.previewVoicePlaying_ = undefined;
       return;
     }
 
@@ -1276,11 +1294,11 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     utterance.rate = defaultUtteranceSettings.rate;
 
     utterance.onstart = event => {
-      this.previewVoicePlaying = event.utterance.voice;
+      this.previewVoicePlaying_ = event.utterance.voice || undefined;
     };
 
     utterance.onend = () => {
-      this.previewVoicePlaying = null;
+      this.previewVoicePlaying_ = undefined;
     };
 
     // TODO(b/40927698): There should probably be more sophisticated error
@@ -1288,13 +1306,13 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     // voice to null should be sufficient to reset state if an error is
     // encountered during a preview.
     utterance.onerror = () => {
-      this.previewVoicePlaying = null;
+      this.previewVoicePlaying_ = undefined;
     };
 
     this.synth.speak(utterance);
   }
 
-  private onVoiceMenuClose_(
+  protected onVoiceMenuClose_(
       event: CustomEvent<{voicePlayingWhenMenuOpened: boolean}>) {
     event.preventDefault();
     event.stopPropagation();
@@ -1306,21 +1324,15 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       this.playSpeech();
     }
   }
-  private onPlayPauseClick_() {
+
+  protected onPlayPauseClick_() {
     if (this.speechPlayingState.isSpeechActive) {
       this.logSpeechPlaySession_();
-      this.recordPauseClick();
       this.stopSpeech(PauseActionSource.BUTTON_CLICK);
     } else {
       this.playSessionStartTime = Date.now();
-      this.recordPlayClick();
       this.playSpeech();
     }
-  }
-
-  private onSpeechPlayingStateChanged_() {
-    chrome.readingMode.onSpeechPlayingStateChanged(
-        this.speechPlayingState.isSpeechActive);
   }
 
   stopSpeech(pauseSource: PauseActionSource) {
@@ -1353,7 +1365,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     // if it's paused from a non-pause button (e.g. voice previews) so the links
     // don't flash off and on.
     if (chrome.readingMode.linksEnabled && pausedFromButton) {
-      this.updateLinks();
+      this.updateLinks_();
     }
   }
 
@@ -1367,8 +1379,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     }
   }
 
-  private playNextGranularity_() {
-    this.recordNextClick();
+  protected playNextGranularity_() {
     this.synth.cancel();
     this.resetPreviousHighlight_();
     // Reset the word boundary index whenever we move the granularity position.
@@ -1380,8 +1391,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     }
   }
 
-  private playPreviousGranularity_() {
-    this.recordPreviousClick();
+  protected playPreviousGranularity_() {
     this.synth.cancel();
     // This must be called BEFORE calling
     // chrome.readingMode.movePositionToPreviousGranularity so we can accurately
@@ -1402,7 +1412,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
         this.getSelection();
     const hasSelection =
         anchorNode !== focusNode || anchorOffset !== focusOffset;
-    if (this.speechPlayingState.isSpeechTreeInitialized &&
+    if (this.speechPlayingState.hasSpeechBeenTriggered &&
         !this.speechPlayingState.isSpeechActive) {
       const pausedFromButton = this.speechPlayingState.pauseSource ===
           PauseActionSource.BUTTON_CLICK;
@@ -1410,7 +1420,6 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       let playedFromSelection = false;
       if (hasSelection) {
         this.synth.cancel();
-        chrome.readingMode.onRestartReadAloud();
         this.resetToDefaultWordBoundaryState();
         playedFromSelection = this.playFromSelection();
       }
@@ -1434,17 +1443,19 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       }
 
       this.speechPlayingState = {
+        isSpeechTreeInitialized:
+            this.speechPlayingState.isSpeechTreeInitialized,
         isSpeechActive: true,
-        isSpeechTreeInitialized: true,
         isAudioCurrentlyPlaying:
             this.speechPlayingState.isAudioCurrentlyPlaying,
+        hasSpeechBeenTriggered: this.speechPlayingState.hasSpeechBeenTriggered,
       };
 
       // Hide links when speech resumes. We only hide links when the page was
       // paused from the play/pause button.
       if (chrome.readingMode.linksEnabled && pausedFromButton) {
         // Toggle links and ensure that the new nodes are also highlighted.
-        this.updateLinks(
+        this.updateLinks_(
             /* shouldRehiglightCurrentNodes= */ !playedFromSelection);
       }
 
@@ -1465,28 +1476,51 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       // inflate the speech played number.
       this.logger_.logNewPage(/*speechPlayed=*/ true);
       this.speechPlayingState = {
+        isSpeechTreeInitialized:
+            this.speechPlayingState.isSpeechTreeInitialized,
         isSpeechActive: true,
-        isSpeechTreeInitialized: true,
         isAudioCurrentlyPlaying:
             this.speechPlayingState.isAudioCurrentlyPlaying,
+        hasSpeechBeenTriggered: true,
       };
       // Hide links when speech begins playing.
       if (chrome.readingMode.linksEnabled) {
-        this.updateLinks();
+        this.updateLinks_();
       }
 
       const playedFromSelection = hasSelection && this.playFromSelection();
       if (!playedFromSelection && this.firstTextNodeSetForReadAloud) {
-        // TODO(crbug.com/40927698): There should be a way to use AXPosition so
-        // that this step can be skipped.
-        chrome.readingMode.initAxPositionWithNode(
-            this.firstTextNodeSetForReadAloud);
+        if (!this.speechPlayingState.isSpeechTreeInitialized) {
+          this.initializeSpeechTree();
+        }
         if (!this.highlightAndPlayMessage()) {
           // Ensure we're updating Read Aloud state if there's no text to speak.
           this.onSpeechFinished();
         }
       }
     }
+  }
+
+  initializeSpeechTree() {
+    if (this.firstTextNodeSetForReadAloud) {
+      // TODO(crbug.com/40927698): There should be a way to use AXPosition so
+      // that this step can be skipped.
+      chrome.readingMode.initAxPositionWithNode(
+          this.firstTextNodeSetForReadAloud);
+      this.speechPlayingState = {
+        isAudioCurrentlyPlaying:
+            this.speechPlayingState.isAudioCurrentlyPlaying,
+        isSpeechActive: this.speechPlayingState.isSpeechActive,
+        isSpeechTreeInitialized: true,
+        hasSpeechBeenTriggered: this.speechPlayingState.hasSpeechBeenTriggered,
+      };
+
+      this.preprocessTextForSpeech();
+    }
+  }
+
+  async preprocessTextForSpeech() {
+    chrome.readingMode.preprocessTextForSpeech();
   }
 
   private getSelectedIds(): {
@@ -1548,8 +1582,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     // Iterate through the page from the beginning until we get to the
     // selection. This is so clicking previous works before the selection and
     // so the previous highlights are properly set.
-    chrome.readingMode.initAxPositionWithNode(
-        this.firstTextNodeSetForReadAloud);
+    chrome.readingMode.resetGranularityIndex();
 
     // Iterate through the nodes asynchronously so that we can show the spinner
     // in the toolbar while we move up to the selection.
@@ -1651,12 +1684,26 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   // Highlights or rehighlights the current granularity, sentence or word.
   highlightCurrentGranularity(
       axNodeIds: number[], scrollIntoView: boolean = true) {
-    if (this.wordBoundaryState.mode ===
-            WordBoundaryMode.BOUNDARIES_NOT_SUPPORTED ||
-        !this.shouldUseWordHighlighting()) {
-      this.highlightCurrentSentence(axNodeIds, scrollIntoView);
-    } else {
-      this.highlightCurrentWord();
+    const highlightGranularity = this.getEffectiveHighlightingGranularity_();
+    switch (highlightGranularity) {
+      case chrome.readingMode.noHighlighting:
+      // Even without highlighting, we still calculate the sentence highlight,
+      // so that it's visible as soon as the user turns on sentence
+      // highlighting. The highlight will not be visible, since the highlight
+      // color in this case will be transparent.
+      case chrome.readingMode.sentenceHighlighting:
+        this.highlightCurrentSentence(axNodeIds, scrollIntoView);
+        break;
+      case chrome.readingMode.wordHighlighting:
+        this.highlightCurrentWord();
+        break;
+      case chrome.readingMode.phraseHighlighting:
+        this.highlightCurrentPhrase();
+        break;
+      case chrome.readingMode.autoHighlighting:
+      default:
+        // This cannot happen, but ensures the switch statement is exhaustive.
+        assert(false, 'invalid value for effective highlight');
     }
   }
 
@@ -1712,7 +1759,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       // to prevent trapping users in a state where they can no longer play
       // Read Aloud, as this is preferable to a long delay before speech
       // with no feedback.
-      this.speechEngineLoaded = true;
+      this.speechEngineLoaded_ = true;
 
       if (error.error === 'interrupted') {
         // SpeechSynthesis.cancel() was called, therefore, do nothing.
@@ -1756,7 +1803,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       // The voice designated in SpeechSynthesisUtterance voice attribute
       // is not available.
       if (error.error === 'voice-unavailable') {
-        let newVoice = this.selectedVoice_ ? this.selectedVoice_ : null;
+        let newVoice = this.selectedVoice_ ? this.selectedVoice_ : undefined;
         this.selectedVoice_ = undefined;
         newVoice = this.getAlternativeVoice(newVoice);
 
@@ -1780,10 +1827,25 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       if (event.name === 'word') {
         this.updateBoundary(event.charIndex);
 
-        // Only update the highlighting with word highlights if they should be
-        // used.
-        if (this.shouldUseWordHighlighting()) {
-          this.highlightCurrentWord();
+        const highlightGranularity =
+            this.getEffectiveHighlightingGranularity_();
+        switch (highlightGranularity) {
+          case chrome.readingMode.noHighlighting:
+          case chrome.readingMode.sentenceHighlighting:
+            // No need to update the highlight on word boundary events if
+            // highlighting is off or if sentence highlighting is used.
+            break;
+          case chrome.readingMode.wordHighlighting:
+            this.highlightCurrentWord();
+            break;
+          case chrome.readingMode.phraseHighlighting:
+            this.highlightCurrentPhrase();
+            break;
+          case chrome.readingMode.autoHighlighting:
+          default:
+            // This cannot happen, but ensures the switch statement is
+            // exhaustive.
+            assert(false, 'invalid value for effective highlight');
         }
       }
     });
@@ -1791,7 +1853,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     message.onstart = () => {
       // We've gotten the signal that the speech engine has loaded, therefore
       // we can enable the Read Aloud buttons.
-      this.speechEngineLoaded = true;
+      this.speechEngineLoaded_ = true;
 
       if (!this.speechPlayingState.isAudioCurrentlyPlaying) {
         this.speechPlayingState = {
@@ -1844,7 +1906,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
 
     if (!this.firstUtteranceSpoken_) {
-      this.speechEngineLoaded = false;
+      this.speechEngineLoaded_ = false;
       this.firstUtteranceSpoken_ = true;
     }
     this.synth.speak(message);
@@ -1898,33 +1960,47 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     return utteranceText;
   }
 
-  // TODO(b/301131238): Verify all edge cases.
   highlightCurrentWord() {
+    this.highlightCurrentWordOrPhrase_(false);
+  }
+
+  highlightCurrentPhrase() {
+    this.highlightCurrentWordOrPhrase_(true);
+  }
+
+  // TODO(b/301131238): Verify all edge cases.
+  private highlightCurrentWordOrPhrase_(highlightPhrases: boolean) {
     // Word highlights can be called quite frequently which can create some
-    // misordering, so just make sure we've cleared the previous word highlight
-    // before showing the next one.
-    this.removeCurrentHighlight();
+    // misordering, so just make sure we've cleared the prior current word
+    // highlight before showing the next one.
+    this.resetCurrentHighlight();
+    this.resetPreviousHighlight_();
     const index = this.wordBoundaryState.speechUtteranceStartIndex +
         this.wordBoundaryState.previouslySpokenIndex;
-    const highlightNode: number =
-        chrome.readingMode.getNodeIdForCurrentSegmentIndex(index);
-    const highlightLength: number =
-        chrome.readingMode.getNextWordHighlightLength(index);
-    const element = this.domNodeToAxNodeIdMap_.keyFrom(highlightNode);
-    const highlightStartIndex =
-        chrome.readingMode.getHighlightStartIndex(highlightNode, index);
-    const endIndex = highlightStartIndex + highlightLength;
-    if (!element ||
-        isInvalidHighlightForWordHighlighting(
-            element.textContent?.substring(highlightStartIndex, endIndex)
-                .trim())) {
-      return;
+    const highlightNodes =
+        chrome.readingMode.getHighlightForCurrentSegmentIndex(
+            index, highlightPhrases);
+    let anyHighlighted: boolean = false;
+    for (let i = 0; i < highlightNodes.length; i++) {
+      const highlightNode = highlightNodes[i].nodeId;
+      const highlightLength: number = highlightNodes[i].length;
+      const highlightStartIndex = highlightNodes[i].start;
+      const endIndex = highlightStartIndex + highlightLength;
+      const element = this.domNodeToAxNodeIdMap_.keyFrom(highlightNode);
+      if (!element ||
+          isInvalidHighlightForWordHighlighting(
+              element.textContent?.substring(highlightStartIndex, endIndex)
+                  .trim())) {
+        continue;
+      }
+      anyHighlighted = true;
+      this.highlightCurrentText_(
+          highlightStartIndex, endIndex, element as HTMLElement);
     }
-
-    this.highlightCurrentText_(
-        highlightStartIndex, endIndex, element as HTMLElement);
-
-    this.scrollHighlightIntoView();
+    if (anyHighlighted) {
+      // Only scroll if at least one node was highlighted.
+      this.scrollHighlightIntoView();
+    }
   }
 
   highlightCurrentSentence(
@@ -1962,9 +2038,10 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     // of the window (e.g. when font size is very large). Possibly using word
     // boundaries to know when we've reached the bottom of the window and need
     // to scroll so the rest of the current highlight is showing.
-    const currentHighlights =
-        document.querySelectorAll<HTMLElement>('.' + currentReadHighlightClass);
-    if (!currentHighlights.length) {
+    assert(this.shadowRoot);
+    const currentHighlights = this.shadowRoot!.querySelectorAll<HTMLElement>(
+        '.' + currentReadHighlightClass);
+    if (!currentHighlights) {
       return;
     }
     const firstHighlight = currentHighlights.item(0);
@@ -2049,7 +2126,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
     // Show links when speech finishes playing.
     if (chrome.readingMode.linksEnabled) {
-      this.updateLinks();
+      this.updateLinks_();
     }
     // Clear the formatting we added for highlighting.
     this.updateContent();
@@ -2062,20 +2139,63 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       pauseSource: PauseActionSource.DEFAULT,
       isSpeechTreeInitialized: false,
       isAudioCurrentlyPlaying: false,
+      hasSpeechBeenTriggered: false,
     };
     this.previousHighlights_ = [];
     this.resetToDefaultWordBoundaryState();
   }
 
-  private shouldUseWordHighlighting(): boolean {
-    // Word highlighting should only be used for speech rates less than or
-    // equal to 1x speed. It should be skipped on espeak voices, since espeak
-    // boundaries are different than Google TTS word boundaries.
-    return chrome.readingMode.isAutomaticWordHighlightingEnabled &&
-        getCurrentSpeechRate() <= 1 && !isEspeak(this.selectedVoice_);
+  private getEffectiveHighlightingGranularity_(): number {
+    // Parse all of the conditions that control highlighting and return the
+    // effective highlighting granularity.
+    const highlight = chrome.readingMode.highlightGranularity;
+
+    if (highlight === chrome.readingMode.noHighlighting ||
+        highlight === chrome.readingMode.sentenceHighlighting) {
+      return highlight;
+    }
+
+    if (!chrome.readingMode.isAutomaticWordHighlightingEnabled ||
+        this.wordBoundaryState.mode ===
+            WordBoundaryMode.BOUNDARIES_NOT_SUPPORTED ||
+        isEspeak(this.selectedVoice_)) {
+      // Fall back where word highlighting is not possible. Since espeak
+      // boundaries are different than Google TTS word boundaries, fall back to
+      // sentence boundaries in that case too.
+      return chrome.readingMode.sentenceHighlighting;
+    }
+
+    const currentSpeechRate: number = getCurrentSpeechRate();
+
+    if (!chrome.readingMode.isPhraseHighlightingEnabled) {
+      // Choose sentence highlighting for fast voices.
+      if (currentSpeechRate > 1.2 &&
+          highlight === chrome.readingMode.autoHighlighting) {
+        return chrome.readingMode.sentenceHighlighting;
+      }
+
+      // In other cases where phrase highilghting is off, choose word
+      // highlighting.
+      return chrome.readingMode.wordHighlighting;
+    }
+
+    // TODO(crbug.com/364327601): Check that the language of the page should
+    // be English for phrase highlighting.
+    if (highlight === chrome.readingMode.autoHighlighting) {
+      if (currentSpeechRate <= 0.8) {
+        return chrome.readingMode.wordHighlighting;
+      } else if (currentSpeechRate >= 2.0) {
+        return chrome.readingMode.sentenceHighlighting;
+      } else {
+        return chrome.readingMode.phraseHighlighting;
+      }
+    }
+
+    // In other cases, return what the user selected (i.e. word/phrase).
+    return highlight;
   }
 
-  private onSelectVoice_(
+  protected onSelectVoice_(
       event: CustomEvent<{selectedVoice: SpeechSynthesisVoice}>) {
     event.preventDefault();
     event.stopPropagation();
@@ -2101,7 +2221,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     this.resetSpeechPostSettingChange_();
   }
 
-  private onVoiceLanguageToggle_(event: CustomEvent<{language: string}>) {
+  protected onVoiceLanguageToggle_(event: CustomEvent<{language: string}>) {
     event.preventDefault();
     event.stopPropagation();
     const toggledLanguage = event.detail.language;
@@ -2134,9 +2254,11 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     }
   }
 
-  private resetSpeechPostSettingChange_() {
-    // Don't call stopSpeech() if initAxPositionWithNode hasn't been called
-    if (!this.speechPlayingState.isSpeechTreeInitialized) {
+  protected resetSpeechPostSettingChange_() {
+    // Don't call stopSpeech() if the speech tree hasn't been initialized or
+    // if speech hasn't been triggered yet.
+    if (!this.speechPlayingState.isSpeechTreeInitialized ||
+        !this.speechPlayingState.hasSpeechBeenTriggered) {
       return;
     }
 
@@ -2151,12 +2273,6 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     }
   }
 
-  private getEmptyStateBodyColor_(colorSuffix: string): string {
-    const isDark = colorSuffix.includes('dark');
-    return isDark ? darkThemeEmptyStateBodyColor :
-                    defaultThemeEmptyStateBodyColor;
-  }
-
   // This must be called BEFORE calling
   // chrome.readingMode.movePositionToPreviousGranularity so we can accurately
   // determine what's currently being highlighted.
@@ -2165,6 +2281,8 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     this.resetPreviousHighlight_();
   }
 
+  // Resets formatting on the current highlight, including previous highlight
+  // formatting.
   private removeCurrentHighlight() {
     // The most recent highlight could have been spread across multiple segments
     // so clear the formatting for all of the segments.
@@ -2174,6 +2292,16 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
         lastElement.classList.remove(currentReadHighlightClass);
       }
     }
+  }
+
+  // Resets the current highlight. Does not change how this element will
+  // be considered for previous highlighting.
+  private resetCurrentHighlight() {
+    const elements =
+        this.shadowRoot?.querySelectorAll('.' + currentReadHighlightClass);
+    elements?.forEach(element => {
+      element.classList.remove(currentReadHighlightClass);
+    });
   }
 
   private resetPreviousHighlight_() {
@@ -2192,40 +2320,32 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       this.restoreEnabledLanguagesFromPref();
       this.selectPreferredVoice();
     }
-    this.updateLineSpacing_(chrome.readingMode.lineSpacing);
-    this.updateLetterSpacing_(chrome.readingMode.letterSpacing);
-    this.updateFont_(chrome.readingMode.fontName);
-    this.updateFontSize_();
-    let colorSuffix: string|undefined;
-    switch (chrome.readingMode.colorTheme) {
-      case chrome.readingMode.defaultTheme:
-        colorSuffix = '';
-        break;
-      case chrome.readingMode.lightTheme:
-        colorSuffix = '-light';
-        break;
-      case chrome.readingMode.darkTheme:
-        colorSuffix = '-dark';
-        break;
-      case chrome.readingMode.yellowTheme:
-        colorSuffix = '-yellow';
-        break;
-      case chrome.readingMode.blueTheme:
-        colorSuffix = '-blue';
-        break;
-      default:
-        // Do nothing
-    }
-    if (colorSuffix !== undefined) {
-      this.updateTheme_(colorSuffix);
-    }
-    this.$.toolbar.restoreSettingsFromPrefs(colorSuffix);
+    this.settingsPrefs_ = {
+      ...this.settingsPrefs_,
+      letterSpacing: chrome.readingMode.letterSpacing,
+      lineSpacing: chrome.readingMode.lineSpacing,
+      theme: chrome.readingMode.colorTheme,
+      speechRate: chrome.readingMode.speechRate,
+      font: chrome.readingMode.fontName,
+      highlightGranularity: chrome.readingMode.highlightGranularity,
+    };
+    this.styleUpdater_.setAllTextStyles();
+    // TODO(crbug.com/40927698): Remove this call. Using this.settingsPrefs_
+    // should replace this direct call to the toolbar.
+    this.$.toolbar.restoreSettingsFromPrefs();
   }
 
   restoreEnabledLanguagesFromPref() {
     // We need to make sure the languages we choose correspond to voices, so
     // refresh the list of voices and available langs
     this.getVoices_();
+
+    // If there are no available languages or voices yet, we might not be
+    // able to restore voice settings yet, so signal that we should attempt
+    // to restore settings the next time onVoicesChanged is called with
+    // available voices.
+    this.shouldAttemptLanguageSettingsRestore =
+        !(this.availableLangs_ && this.availableLangs_.length > 0);
 
     const storedLanguagesPref: string[] =
         chrome.readingMode.getLanguagesEnabledInPref();
@@ -2276,7 +2396,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     // shouldn't happen often, so just skip selecting a new voice for now.
     // Another option would be to update the voice and the call
     // resetSpeechPostSettingsChange(), but that could be jarring.
-    if (this.speechPlayingState.isSpeechTreeInitialized) {
+    if (this.speechPlayingState.hasSpeechBeenTriggered) {
       return;
     }
 
@@ -2299,150 +2419,49 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     }
   }
 
-  private onLineSpacingChange_(event: CustomEvent<{data: number}>) {
-    this.updateLineSpacing_(event.detail.data);
+  protected onLineSpacingChange_() {
+    this.styleUpdater_.setLineSpacing();
   }
 
-  private updateLineSpacing_(newLineHeight: number) {
-    this.updateStyles({
-      '--line-height': newLineHeight,
-    });
+  protected onLetterSpacingChange_() {
+    this.styleUpdater_.setLetterSpacing();
   }
 
-  private onLetterSpacingChange_(event: CustomEvent<{data: number}>) {
-    this.updateLetterSpacing_(event.detail.data);
+  protected onFontChange_() {
+    this.styleUpdater_.setFont();
   }
 
-  private updateLetterSpacing_(newLetterSpacing: number) {
-    this.updateStyles({
-      '--letter-spacing': newLetterSpacing + 'em',
-    });
+  protected onFontSizeChange_() {
+    this.styleUpdater_.setFontSize();
   }
 
-  private onFontChange_(event: CustomEvent<{fontName: string}>) {
-    this.updateFont_(event.detail.fontName);
+  protected onThemeChange_() {
+    this.styleUpdater_.setTheme();
   }
 
-  private updateFont_(fontName: string) {
-    const validFontName = chrome.readingMode.getValidatedFontName(fontName);
-    this.updateStyles({
-      '--font-family': validFontName,
-    });
+  protected onResetToolbar_() {
+    this.styleUpdater_.resetToolbar();
   }
 
-  private updateFontSize_() {
-    this.updateStyles({
-      '--font-size': chrome.readingMode.fontSize + 'em',
-    });
-  }
-
-  private onHighlightToggle_(event: CustomEvent<{highlightOn: boolean}>) {
-    this.isHighlightOn_ = event.detail.highlightOn;
-    this.updateStyles({
-      '--current-highlight-bg-color':
-          this.getCurrentHighlightColorVar(this.currentColorSuffix_),
-    });
-  }
-
-  private onThemeChange_(event: CustomEvent<{data: string}>) {
-    this.updateTheme_(event.detail.data);
-  }
-
-  private onResetToolbar_() {
-    this.updateStyles({
-      '--app-overflow-x': overflowXTypical,
-      '--container-min-width': minWidthTypical,
-    });
-  }
-
-  private onToolbarOverflow_(event: CustomEvent<{overflowLength: number}>) {
+  protected onToolbarOverflow_(event: CustomEvent<{overflowLength: number}>) {
     const shouldScroll =
         (event.detail.overflowLength >= minOverflowLengthToScroll);
-    this.updateStyles({
-      '--app-overflow-x': shouldScroll ? overflowXScroll : overflowXTypical,
-      // When we scroll, we should allow the container to expand and scroll
-      // horizontally.
-      '--container-min-width': shouldScroll ? minWidthOverflow :
-                                              minWidthTypical,
-    });
+    this.styleUpdater_.overflowToolbar(shouldScroll);
   }
 
-  private updateTheme_(colorSuffix: string) {
-    this.currentColorSuffix_ = colorSuffix;
-    const emptyStateBodyColor = colorSuffix ?
-        this.getEmptyStateBodyColor_(colorSuffix) :
-        'var(--color-side-panel-card-secondary-foreground)';
-    this.updateStyles({
-      '--background-color': this.getBackgroundColorVar(colorSuffix),
-      '--foreground-color': this.getForegroundColorVar(colorSuffix),
-      '--selection-color': this.getSelectionColorVar(colorSuffix),
-      '--current-highlight-bg-color':
-          this.getCurrentHighlightColorVar(colorSuffix),
-      '--previous-highlight-color':
-          this.getPreviousHighlightColorVar(colorSuffix),
-      '--sp-empty-state-heading-color':
-          `var(--color-read-anything-foreground${colorSuffix})`,
-      '--sp-empty-state-body-color': emptyStateBodyColor,
-      '--link-color': `var(--color-read-anything-link-default${colorSuffix})`,
-      '--visited-link-color':
-          `var(--color-read-anything-link-visited${colorSuffix})`,
-    });
-    document.documentElement.style.setProperty(
-        '--selection-color', this.getSelectionColorVar(colorSuffix));
-    document.documentElement.style.setProperty(
-        '--selection-text-color', this.getSelectionTextColorVar(colorSuffix));
-  }
+  protected onHighlightChange_(event: CustomEvent<{data: number}>) {
+    // Handler for HIGHLIGHT_CHANGE.
+    const changedHighlight = event.detail.data;
+    chrome.readingMode.onHighlightGranularityChanged(changedHighlight);
+    // Apply highlighting changes to the DOM.
+    this.styleUpdater_.setHighlight();
 
-  getCurrentHighlightColorVar(colorSuffix: string) {
-    if (!this.isHighlightOn_) {
-      return 'transparent';
-    }
-    if (colorSuffix === '') {
-      return 'var(--color-text-selection-background)';
-    }
-    return `var(--color-read-anything-current-read-aloud-highlight${
-        colorSuffix})`;
-  }
+    // TODO(crbug.com/366002886): Re-highlight with the new granularity. In
+    // particular, when switching from word or phrase to sentence, the sentence
+    // highlight needs to be recalculated.
 
-  getPreviousHighlightColorVar(colorSuffix: string) {
-    if (colorSuffix === '') {
-      return 'var(--color-sys-on-surface-subtle)';
-    }
-    return `var(--color-read-anything-previous-read-aloud-highlight${
-        colorSuffix})`;
-  }
-
-  getBackgroundColorVar(colorSuffix: string) {
-    if (colorSuffix === '') {
-      return 'var(--color-sys-base-container-elevated)';
-    }
-    return `var(--color-read-anything-background${colorSuffix})`;
-  }
-
-  getForegroundColorVar(colorSuffix: string) {
-    if (colorSuffix === '') {
-      return 'var(--color-sys-on-surface)';
-    }
-    return `var(--color-read-anything-foreground${colorSuffix})`;
-  }
-
-  getSelectionColorVar(colorSuffix: string) {
-    if (colorSuffix === '') {
-      return 'var(--color-text-selection-background)';
-    }
-    return `var(--color-read-anything-text-selection${colorSuffix})`;
-  }
-
-  getSelectionTextColorVar(colorSuffix: string) {
-    if (colorSuffix === '') {
-      return 'var(--color-text-selection-foreground)';
-    }
-
-    if (window.matchMedia('(prefers-color-schme: dark)').matches) {
-      return `var(--google-grey-900)`;
-    }
-
-    return `var(--google-grey-800)`;
+    // TODO(crbug.com/364546547): Log these highlight granularity changes when
+    // the phrase menu is shown. (Toggles are already logged in the toolbar.)
   }
 
   // If the screen is locked during speech, we should stop speaking.
@@ -2462,15 +2481,9 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
         /* retryIfPreviousInstallFailed= */ false);
   }
 
-  // Include parameters in order to force a re-render whenever the values
-  // change.
-  isReadAloudPlayable(
-      hasContent: boolean = this.hasContent_,
-      selectedVoice: SpeechSynthesisVoice|undefined = this.selectedVoice_,
-      speechEngineLoaded: boolean = this.speechEngineLoaded,
-      willDrawAgainSoon: boolean = this.willDrawAgainSoon_): boolean {
-    return hasContent && speechEngineLoaded && (selectedVoice !== undefined) &&
-        !willDrawAgainSoon;
+  protected computeIsReadAloudPlayable(): boolean {
+    return this.hasContent_ && this.speechEngineLoaded_ &&
+        !!this.selectedVoice_ && !this.willDrawAgainSoon_;
   }
 
   private autoSwitchVoice_(lang: string) {
@@ -2595,7 +2608,7 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     chrome.readingMode.sendInstallVoicePackRequest(langCodeForVoicePackManager);
   }
 
-  private onKeyDown_(e: KeyboardEvent) {
+  protected onKeyDown_(e: KeyboardEvent) {
     if (e.key === 'k') {
       e.stopPropagation();
       this.onPlayPauseClick_();
@@ -2630,6 +2643,10 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     };
   }
 
+  resetVoiceForTesting() {
+    this.selectedVoice_ = undefined;
+  }
+
   private setVoicePackServerStatus_(lang: string, status: VoicePackStatus) {
     // Convert the language string to ensure consistency across
     // languages and locales when setting the status.
@@ -2643,8 +2660,8 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'read-anything-app': ReadAnythingElement;
+    'read-anything-app': AppElement;
   }
 }
 
-customElements.define(ReadAnythingElement.is, ReadAnythingElement);
+customElements.define(AppElement.is, AppElement);

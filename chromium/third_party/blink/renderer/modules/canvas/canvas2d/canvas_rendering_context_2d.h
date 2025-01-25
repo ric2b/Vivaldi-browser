@@ -85,7 +85,6 @@ class Element;
 class ExceptionState;
 class ExecutionContext;
 class FontSelector;
-class FormattedText;
 class ImageData;
 class ImageDataSettings;
 class MemoryManagedPaintRecorder;
@@ -138,9 +137,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   bool ShouldAntialias() const;
   void SetShouldAntialias(bool) override;
 
-  void scrollPathIntoView();
-  void scrollPathIntoView(Path2D*);
-
   void clearRect(double x, double y, double width, double height);
   void ClearRect(double x, double y, double width, double height) override {
     clearRect(x, y, width, height);
@@ -149,11 +145,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void Reset() override;
 
   void setFontForTesting(const String& new_font) override;
-
-  void drawFormattedText(FormattedText* formatted_text,
-                         double x,
-                         double y,
-                         ExceptionState&);
 
   CanvasRenderingContext2DSettings* getContextAttributes() const;
 
@@ -269,6 +260,10 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
  private:
   friend class CanvasRenderingContext2DAutoRestoreSkCanvas;
+  FRIEND_TEST_ALL_PREFIXES(CanvasRenderingContext2DTest,
+                           PrepareMailboxWhenContextIsLostWithFailedRestore);
+
+  bool Restore();
 
   void PruneLocalFontCache(size_t target_size);
 

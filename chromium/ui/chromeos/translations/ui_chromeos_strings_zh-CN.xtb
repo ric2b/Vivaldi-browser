@@ -163,7 +163,7 @@
 <translation id="2288278176040912387">电唱机</translation>
 <translation id="2291538123825441971">正在打开 <ph name="NUMBER_OF_FILES" /> 个文件。</translation>
 <translation id="2303301624314357662">正在打开文件“<ph name="FILE_NAME" />”</translation>
-<translation id="2304820083631266885">星球</translation>
+<translation id="2304820083631266885">行星</translation>
 <translation id="2305020378527873881">已移除 <ph name="VOLUME_NAME" />。</translation>
 <translation id="2307462900900812319">配置网络</translation>
 <translation id="2312704192806647271">{COUNT,plural, =1{找不到以下 ID 对应的扩展程序：<ph name="BEGIN_LIST" /><ph name="END_LIST" />。请联系您的管理员。}other{找不到以下 ID 对应的扩展程序：<ph name="BEGIN_LIST" /><ph name="END_LIST" />。请联系您的管理员。}}</translation>
@@ -377,7 +377,6 @@
 <translation id="3999574733850440202">最近打开的 Microsoft 文件已移至 OneDrive</translation>
 <translation id="4002066346123236978">标题</translation>
 <translation id="4017788180641807848">英语（美国）Workman 键盘</translation>
-<translation id="4019998208269143058">固定到“快捷文件”空间</translation>
 <translation id="4040753847560036377">PUK 不正确</translation>
 <translation id="4057991113334098539">正在激活...</translation>
 <translation id="4092890906744441904">爱尔兰语</translation>
@@ -691,7 +690,6 @@
 <translation id="6320212353742551423"><ph name="ARCHIVE_TYPE" /> 归档文件</translation>
 <translation id="6321303798550928047">挥手</translation>
 <translation id="6327785803543103246">网络代理自动发现</translation>
-<translation id="6337014272874260727">取消固定到“快捷文件”空间</translation>
 <translation id="6339145975392024142">美式国际 (PC) 键盘</translation>
 <translation id="6356685157277930264">文件反馈窗口</translation>
 <translation id="6358884629796491903">龙</translation>

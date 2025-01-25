@@ -96,6 +96,25 @@ BASE_FEATURE(kPartitionAllocLargeEmptySlotSpanRing,
              FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
+BASE_FEATURE(kPartitionAllocWithAdvancedChecks,
+             "PartitionAllocWithAdvancedChecks",
+             FEATURE_DISABLED_BY_DEFAULT);
+constexpr FeatureParam<PartitionAllocWithAdvancedChecksEnabledProcesses>::Option
+    kPartitionAllocWithAdvancedChecksEnabledProcessesOptions[] = {
+        {PartitionAllocWithAdvancedChecksEnabledProcesses::kBrowserOnly,
+         "browser-only"},
+        {PartitionAllocWithAdvancedChecksEnabledProcesses::kBrowserAndRenderer,
+         "browser-and-renderer"},
+        {PartitionAllocWithAdvancedChecksEnabledProcesses::kNonRenderer,
+         "non-renderer"},
+        {PartitionAllocWithAdvancedChecksEnabledProcesses::kAllProcesses,
+         "all-processes"}};
+const base::FeatureParam<PartitionAllocWithAdvancedChecksEnabledProcesses>
+    kPartitionAllocWithAdvancedChecksEnabledProcessesParam{
+        &kPartitionAllocWithAdvancedChecks, "enabled-processes",
+        PartitionAllocWithAdvancedChecksEnabledProcesses::kBrowserOnly,
+        &kPartitionAllocWithAdvancedChecksEnabledProcessesOptions};
+
 BASE_FEATURE(kPartitionAllocSchedulerLoopQuarantine,
              "PartitionAllocSchedulerLoopQuarantine",
              FEATURE_DISABLED_BY_DEFAULT);
@@ -112,10 +131,7 @@ BASE_FEATURE(kPartitionAllocZappingByFreeFlags,
 
 BASE_FEATURE(kPartitionAllocBackupRefPtr,
              "PartitionAllocBackupRefPtr",
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS) ||     \
-    (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS)) ||                  \
-    PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_FEATURE_FLAG)
+#if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_FEATURE_FLAG)
              FEATURE_ENABLED_BY_DEFAULT
 #else
              FEATURE_DISABLED_BY_DEFAULT
@@ -133,7 +149,11 @@ constexpr FeatureParam<BackupRefPtrEnabledProcesses>::Option
 const base::FeatureParam<BackupRefPtrEnabledProcesses>
     kBackupRefPtrEnabledProcessesParam{
         &kPartitionAllocBackupRefPtr, "enabled-processes",
+#if PA_BUILDFLAG(IS_MAC) && PA_BUILDFLAG(PA_ARCH_CPU_ARM64)
         BackupRefPtrEnabledProcesses::kNonRenderer,
+#else
+        BackupRefPtrEnabledProcesses::kAllProcesses,
+#endif
         &kBackupRefPtrEnabledProcessesOptions};
 
 constexpr FeatureParam<BackupRefPtrMode>::Option kBackupRefPtrModeOptions[] = {
@@ -166,6 +186,15 @@ const base::FeatureParam<MemtagMode> kMemtagModeParam{
     MemtagMode::kAsync,
 #endif
     &kMemtagModeOptions};
+
+constexpr FeatureParam<RetagMode>::Option kRetagModeOptions[] = {
+    {RetagMode::kIncrement, "increment"},
+    {RetagMode::kRandom, "random"},
+};
+
+const base::FeatureParam<RetagMode> kRetagModeParam{
+    &kPartitionAllocMemoryTagging, "retag-mode", RetagMode::kIncrement,
+    &kRetagModeOptions};
 
 constexpr FeatureParam<MemoryTaggingEnabledProcesses>::Option
     kMemoryTaggingEnabledProcessesOptions[] = {
@@ -392,7 +421,12 @@ BASE_FEATURE(kUsePoolOffsetFreelists,
 
 BASE_FEATURE(kPartitionAllocMakeFreeNoOpOnShutdown,
              "PartitionAllocMakeFreeNoOpOnShutdown",
-             FEATURE_DISABLED_BY_DEFAULT);
+#if PA_BUILDFLAG(IS_CHROMEOS)
+             FEATURE_ENABLED_BY_DEFAULT
+#else
+             FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 constexpr FeatureParam<WhenFreeBecomesNoOp>::Option
     kPartitionAllocMakeFreeNoOpOnShutdownOptions[] = {
@@ -416,7 +450,7 @@ constexpr FeatureParam<WhenFreeBecomesNoOp>::Option
 const base::FeatureParam<WhenFreeBecomesNoOp>
     kPartitionAllocMakeFreeNoOpOnShutdownParam{
         &kPartitionAllocMakeFreeNoOpOnShutdown, "callsite",
-        WhenFreeBecomesNoOp::kBeforeShutDownThreads,
+        WhenFreeBecomesNoOp::kBeforePreShutdown,
         &kPartitionAllocMakeFreeNoOpOnShutdownOptions};
 
 void MakeFreeNoOp(WhenFreeBecomesNoOp callsite) {

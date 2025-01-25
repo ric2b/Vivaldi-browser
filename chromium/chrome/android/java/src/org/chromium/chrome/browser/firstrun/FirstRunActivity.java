@@ -3,9 +3,8 @@
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.firstrun;
-
 import android.app.Activity;
-import android.content.res.Configuration;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.View;
@@ -32,7 +31,10 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.SigninCheckerProvider;
 import org.chromium.chrome.browser.signin.SigninFirstRunFragment;
+import org.chromium.chrome.browser.ui.signin.DialogWhenLargeContentLayout;
+import org.chromium.chrome.browser.ui.signin.SigninUtils;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncHelper;
+import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.metrics.LowEntropySource;
@@ -185,8 +187,8 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
             mFreProgressStates.add(MobileFreProgress.DEFAULT_SEARCH_ENGINE_SHOWN);
         }
 
-        // An optional sync consent page, the visibility of this page will be decided on the fly
-        // according to the situation.
+        // An optional history sync opt-in page, the visibility of this page will be decided on the
+        // fly according to the situation.
         if (ChromeFeatureList.isEnabled(
                 ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
             BooleanSupplier showHistorySync =
@@ -198,12 +200,13 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
                 historySyncHelper.recordHistorySyncNotShown(SigninAccessPoint.START_PAGE);
             }
             mPages.add(new FirstRunPage<>(HistorySyncFirstRunFragment.class, showHistorySync));
+            mFreProgressStates.add(MobileFreProgress.HISTORY_SYNC_OPT_IN_SHOWN);
         } else {
             BooleanSupplier showSyncConsent =
                     () -> mFreProperties.getBoolean(SHOW_SYNC_CONSENT_PAGE);
             mPages.add(new FirstRunPage<>(SyncConsentFirstRunFragment.class, showSyncConsent));
+            mFreProgressStates.add(MobileFreProgress.SYNC_CONSENT_SHOWN);
         }
-        mFreProgressStates.add(MobileFreProgress.SYNC_CONSENT_SHOWN);
 
         if (mPagerAdapter != null) {
             mPagerAdapter.notifyDataSetChanged();
@@ -213,6 +216,25 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         if (sObserver != null) {
             sObserver.onCreatePostNativeAndPoliciesPageSequence(FirstRunActivity.this);
         }
+    }
+
+    @Override
+    protected void onPreCreate() {
+        // On tablets, where FRE activity is a dialog, transitions from fullscreen activities
+        // (the ones that use Theme.Chromium.TabbedMode, e.g. ChromeTabbedActivity) look ugly,
+        // because when FRE is started from CTA.onCreate(), currently running animation for CTA
+        // window is aborted. This is perceived as a flash of white and doesn't look good.
+        //
+        // To solve this, we apply Theme.Chromium.TabbedMode on Tablet and Automotive here, to use
+        // the same window background as other tabbed mode activities using the same theme.
+        if (SigninUtils.isTabletOrAuto(this)) {
+            setTheme(R.style.Theme_Chromium_TabbedMode);
+        } else if (DialogWhenLargeContentLayout.shouldShowAsDialog(this)) {
+            // For consistency with tablets, the status bar should be black on phones with large
+            // screen, where the FRE is shown as dialog.
+            StatusBarColorController.setStatusBarColor(getWindow(), Color.BLACK);
+        }
+        super.onPreCreate();
     }
 
     @Override
@@ -231,9 +253,8 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     }
 
     /**
-     * Creates the content view for this activity.
-     * The only thing subclasses can do is wrapping the view returned by super implementation
-     * in some extra layout.
+     * Creates the content view for this activity. The only thing subclasses can do is wrapping the
+     * view returned by super implementation in some extra layout.
      */
     @CallSuper
     protected View createContentView() {
@@ -244,7 +265,10 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
 
         mPager.setId(R.id.fre_pager);
         mPager.setOffscreenPageLimit(3);
-        return mPager;
+        if (ChromeApplicationImpl.isVivaldi()) { // Vivaldi VAB-10188
+            return mPager;
+        } // End Vivaldi
+        return SigninUtils.wrapInDialogWhenLargeLayout(mPager);
     }
 
     @Override
@@ -496,7 +520,8 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         if (!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
             createNotificationChannel();
             long timeStampNow = System.currentTimeMillis();
-            for (int i =1; i<=3; i++) {
+            // Note(nagamani@vivaldi.com): Disabling the Day1 notification for now. Ref: VAB-9818
+            for (int i =2; i<=3; i++) {
                 schedulePushNotification(i, timeStampNow);
             }
         }
@@ -686,13 +711,6 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     @Override
     public Promise<Void> getNativeInitializationPromise() {
         return mNativeInitializationPromise;
-    }
-
-    @Override
-    public boolean canUseLandscapeLayout() {
-        return !getResources()
-                .getConfiguration()
-                .isLayoutSizeAtLeast(Configuration.SCREENLAYOUT_SIZE_LARGE);
     }
 
     public FirstRunFragment getCurrentFragmentForTesting() {

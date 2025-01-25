@@ -14,13 +14,13 @@ struct tint_array {
 };
 
 struct Matrix {
-  tint_array<uint, 1> numbers;
+  /* 0x0000 */ tint_array<uint, 1> numbers;
 };
 
 struct Uniforms {
-  uint2 aShape;
-  uint2 bShape;
-  uint2 outShape;
+  /* 0x0000 */ uint2 aShape;
+  /* 0x0008 */ uint2 bShape;
+  /* 0x0010 */ uint2 outShape;
 };
 
 struct tint_module_vars_struct {
@@ -30,6 +30,10 @@ struct tint_module_vars_struct {
   const constant Uniforms* uniforms;
 };
 
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
 void tint_symbol_inner(uint3 global_id, tint_module_vars_struct tint_module_vars) {
   uint2 const resultCell = uint2(global_id[1u], global_id[0u]);
   uint const dimInner = (*tint_module_vars.uniforms).aShape[1u];
@@ -37,7 +41,7 @@ void tint_symbol_inner(uint3 global_id, tint_module_vars_struct tint_module_vars
   uint result = 0u;
   {
     uint i = 0u;
-    while(true) {
+    TINT_ISOLATE_UB(tint_volatile_true) while(true) {
       if ((i < dimInner)) {
       } else {
         break;

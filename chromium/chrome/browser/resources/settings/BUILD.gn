@@ -63,13 +63,16 @@ build_webui("build") {
   web_component_files = [
     "a11y_page/a11y_page.ts",
     "about_page/about_page.ts",
+    "ai_page/ai_info_card.ts",
     "ai_page/ai_page.ts",
+    "ai_page/ai_tab_organization_subpage.ts",
     "appearance_page/appearance_fonts_page.ts",
     "appearance_page/appearance_page.ts",
     "appearance_page/home_url_input.ts",
     "autofill_page/address_edit_dialog.ts",
     "autofill_page/address_remove_confirmation_dialog.ts",
     "autofill_page/autofill_page.ts",
+    "autofill_page/autofill_prediction_improvements_section.ts",
     "autofill_page/autofill_section.ts",
     "autofill_page/credit_card_edit_dialog.ts",
     "autofill_page/credit_card_list_entry.ts",
@@ -202,6 +205,7 @@ build_webui("build") {
     "site_settings_page/site_settings_page.ts",
     "site_settings_page/unused_site_permissions.ts",
     "site_settings/offer_writing_help_page.ts",
+    "site_settings/smart_card_readers_page.ts",
     "site_settings/pdf_documents.ts",
     "site_settings/protocol_handlers.ts",
     "site_settings/settings_category_default_radio_group.ts",
@@ -263,26 +267,6 @@ build_webui("build") {
   if (is_win || is_mac || is_linux) {
     web_component_files += [ "a11y_page/ax_annotations_section.ts" ]
   }
-  if (is_chrome_branded) {
-    static_files += [
-      "images/gtmooc_computer_dark.svg",
-      "images/gtmooc_computer.svg",
-      "images/gtmooc_cookie_dark.svg",
-      "images/gtmooc_cookie.svg",
-      "images/gtmooc_diagram_cookie_dark.svg",
-      "images/gtmooc_diagram_cookie.svg",
-      "images/gtmooc_diagram_history_dark.svg",
-      "images/gtmooc_diagram_history.svg",
-      "images/gtmooc_diagram_search_dark.svg",
-      "images/gtmooc_diagram_search.svg",
-      "images/gtmooc_search_dark.svg",
-      "images/gtmooc_search.svg",
-    ]
-    web_component_files += [
-      "about_page/get_most_chrome_section.ts",
-      "get_most_chrome_page/get_most_chrome_page.ts",
-    ]
-  }
 
   # -----------------web_component_files end ----------------------------------
 
@@ -296,6 +280,7 @@ build_webui("build") {
     "autofill_page/autofill_manager_proxy.ts",
     "autofill_page/password_manager_proxy.ts",
     "autofill_page/payments_manager_proxy.ts",
+    "autofill_page/user_annotations_manager_proxy.ts",
     "base_mixin.ts",
     "clear_browsing_data_dialog/clear_browsing_data_browser_proxy.ts",
     "controls/settings_idle_load.ts",
@@ -372,6 +357,7 @@ build_webui("build") {
 
   icons_html_files = [
     "icons.html",
+    "privacy_icons.html",
     "privacy_page/fingerprint_icons.html",
     "privacy_sandbox/privacy_sandbox_icons.html",
     "site_settings/all_sites_icons.html",

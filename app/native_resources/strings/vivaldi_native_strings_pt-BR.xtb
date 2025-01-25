@@ -12,6 +12,7 @@
 <translation id="1454726940098520109">Não pedir confirmação novamente</translation>
 <translation id="1462666970065907900">Deseja realmente fechar esta janela?</translation>
 <translation id="1480046233931937785">Créditos</translation>
+<translation id="1521774566618522728">Ativado hoje</translation>
 <translation id="1526344461589023948">Ocorreu um erro ao tentar salvar a atualização baixada. Por favor, cheque se o computador tem espaço em disco suficiente e tente novamente mais tarde.</translation>
 <translation id="1635542496948266458">Alternar perfis</translation>
 <translation id="1657174850639146440">Monstro 9</translation>
@@ -97,6 +98,7 @@
 <translation id="4430019312045809116">Volume</translation>
 <translation id="443008484043213881">Ferramentas</translation>
 <translation id="4456211719108566931">Monstro 6</translation>
+<translation id="4459169140545916303">Ativado há <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dias</translation>
 <translation id="4512900838580567989">Abrir link em segundo p&amp;lano</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Abrir imagem em segundo p&amp;lano</translation>

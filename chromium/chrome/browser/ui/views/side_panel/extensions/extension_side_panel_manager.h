@@ -45,10 +45,14 @@ class ExtensionSidePanelManager : public SidePanelRegistryObserver,
       delete;
   ~ExtensionSidePanelManager() override;
 
-  static ExtensionSidePanelManager* GetOrCreateForBrowser(Browser* browser);
+  static void CreateForBrowser(Browser* browser,
+                               SidePanelRegistry* window_registry);
+  static ExtensionSidePanelManager* GetForBrowserForTesting(Browser* browser);
 
-  static ExtensionSidePanelManager* GetOrCreateForWebContents(
-      Profile* profile,
+  static void CreateForTab(Profile* profile,
+                           content::WebContents* web_contents,
+                           SidePanelRegistry* tab_registry);
+  static ExtensionSidePanelManager* GetForTabForTesting(
       content::WebContents* web_contents);
 
   ExtensionSidePanelCoordinator* GetExtensionCoordinatorForTesting(
@@ -70,6 +74,9 @@ class ExtensionSidePanelManager : public SidePanelRegistryObserver,
   // SidePanelRegistryObserver implementation.
   void OnRegistryDestroying(SidePanelRegistry* registry) override;
 
+  // Called when the tab is about to be discarded.
+  void WillDiscard();
+
   // ProfileObserver implementation.
   // OTR profiles for a browser window can be destroyed before the browser's
   // UserData, so the profile may need to be reset to prevent a dangling
@@ -80,7 +87,8 @@ class ExtensionSidePanelManager : public SidePanelRegistryObserver,
   ExtensionSidePanelManager(Profile* profile,
                             Browser* browser,
                             content::WebContents* web_contents,
-                            SidePanelRegistry* registry);
+                            SidePanelRegistry* registry,
+                            bool for_tab);
 
   // Creates an ExtensionSidePanelCoordinator for `extension` and adds it to
   // `coordinators_` if the extension is capable of hosting side panel content.
@@ -118,6 +126,9 @@ class ExtensionSidePanelManager : public SidePanelRegistryObserver,
 
   base::flat_map<ExtensionId, std::unique_ptr<ExtensionSidePanelCoordinator>>
       coordinators_;
+
+  // Whether this class is tab-scoped or window-scoped.
+  const bool for_tab_;
 
   base::ScopedObservation<ExtensionRegistry, ExtensionRegistryObserver>
       extension_registry_observation_{this};

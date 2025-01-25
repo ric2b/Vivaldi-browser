@@ -64,6 +64,8 @@ using profile_management::features::kOidcAuthStubUserName;
 using profile_management::features::kOidcAuthForceErrorUi;
 using profile_management::features::kOidcAuthForceTimeoutUi;
 
+using profile_management::features::kOidcEnrollRegistrationTimeout;
+
 using enterprise::ProfileIdServiceFactory;
 
 namespace {
@@ -314,9 +316,14 @@ void OidcAuthenticationSigninInterceptor::StartOidcRegistration() {
                      base::Unretained(this), std::move(client),
                      preset_profile_guid, registration_start_time);
 
+  base::TimeDelta timeout_duration =
+      (base::FeatureList::IsEnabled(
+          profile_management::features::kOidcEnrollmentTimeout))
+          ? kOidcEnrollRegistrationTimeout.Get()
+          : base::TimeDelta();
   registration_helper_for_temporary_client_->StartRegistrationWithOidcTokens(
       oidc_tokens_.auth_token, oidc_tokens_.id_token, std::string(),
-      oidc_tokens_.state, std::move(registration_callback));
+      oidc_tokens_.state, timeout_duration, std::move(registration_callback));
 }
 
 void OidcAuthenticationSigninInterceptor::OnClientRegistered(
@@ -536,19 +543,19 @@ void OidcAuthenticationSigninInterceptor::OnNewSignedInProfileCreated(
       base::BindOnce(&OidcAuthenticationSigninInterceptor::
                          OnPolicyFetchCompleteInNewProfile,
                      weak_factory_.GetWeakPtr()));
-}
 
-void OidcAuthenticationSigninInterceptor::OnPolicyFetchCompleteInNewProfile(
-    bool success) {
   if (user_choice_handling_done_callback_) {
     std::move(user_choice_handling_done_callback_)
-        .Run((success && !kOidcAuthForceTimeoutUi.Get())
-                 ? signin::SigninChoiceOperationResult::SIGNIN_CONFIRM_SUCCESS
-                 : signin::SigninChoiceOperationResult::SIGNIN_TIMEOUT);
+        .Run((kOidcAuthForceTimeoutUi.Get())
+                 ? signin::SigninChoiceOperationResult::SIGNIN_TIMEOUT
+                 : signin::SigninChoiceOperationResult::SIGNIN_CONFIRM_SUCCESS);
   } else {
     FinalizeSigninInterception();
   }
 }
+
+void OidcAuthenticationSigninInterceptor::OnPolicyFetchCompleteInNewProfile(
+    bool success) {}
 
 void OidcAuthenticationSigninInterceptor::FinalizeSigninInterception() {
   if (new_profile_) {
@@ -559,6 +566,11 @@ void OidcAuthenticationSigninInterceptor::FinalizeSigninInterception() {
     OidcAuthenticationSigninInterceptorFactory::GetForProfile(
         new_profile_.get())
         ->CreateBrowserAfterSigninInterception();
+    // Since user has been sent to the newly created profile, the old landing
+    // page is no longer relevant and can be closed.
+    if (web_contents_) {
+      web_contents_->Close();
+    }
   }
   Reset();
 }

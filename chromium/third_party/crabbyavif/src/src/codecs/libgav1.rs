@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::codecs::Decoder;
+use crate::codecs::DecoderConfig;
 use crate::decoder::Category;
 use crate::image::Image;
 use crate::image::YuvRange;
@@ -35,7 +36,7 @@ pub struct Libgav1 {
 // unnecessary cast warnings.
 #[allow(clippy::unnecessary_cast)]
 impl Decoder for Libgav1 {
-    fn initialize(&mut self, operating_point: u8, all_layers: bool) -> AvifResult<()> {
+    fn initialize(&mut self, config: &DecoderConfig) -> AvifResult<()> {
         if self.decoder.is_some() {
             return Ok(()); // Already initialized.
         }
@@ -44,9 +45,9 @@ impl Decoder for Libgav1 {
             Libgav1DecoderSettingsInitDefault(settings_uninit.as_mut_ptr());
         }
         let mut settings = unsafe { settings_uninit.assume_init() };
-        settings.threads = 8;
-        settings.operating_point = operating_point as i32;
-        settings.output_all_layers = if all_layers { 1 } else { 0 };
+        settings.threads = i32::try_from(config.max_threads).unwrap_or(1);
+        settings.operating_point = config.operating_point as i32;
+        settings.output_all_layers = if config.all_layers { 1 } else { 0 };
         unsafe {
             let mut dec = MaybeUninit::uninit();
             let ret = Libgav1DecoderCreate(&settings, dec.as_mut_ptr());
@@ -68,7 +69,7 @@ impl Decoder for Libgav1 {
         category: Category,
     ) -> AvifResult<()> {
         if self.decoder.is_none() {
-            self.initialize(0, true)?;
+            self.initialize(&DecoderConfig::default())?;
         }
         unsafe {
             let ret = Libgav1DecoderEnqueueFrame(
@@ -127,11 +128,13 @@ impl Decoder for Libgav1 {
                     image.width = gav1_image.displayed_width[0] as u32;
                     image.height = gav1_image.displayed_height[0] as u32;
                     image.depth = gav1_image.bitdepth as u8;
+                    image.row_bytes[3] = gav1_image.stride[0] as u32;
                     image.planes[3] = Some(Pixels::from_raw_pointer(
                         gav1_image.plane[0],
                         image.depth as u32,
-                    ));
-                    image.row_bytes[3] = gav1_image.stride[0] as u32;
+                        image.height,
+                        image.row_bytes[3],
+                    )?);
                     image.image_owns_planes[3] = false;
                     image.yuv_range =
                         if gav1_image.color_range == Libgav1ColorRange_kLibgav1ColorRangeStudio {
@@ -167,11 +170,13 @@ impl Decoder for Libgav1 {
                     image.matrix_coefficients = (gav1_image.matrix_coefficients as u16).into();
 
                     for plane in 0usize..image.yuv_format.plane_count() {
+                        image.row_bytes[plane] = gav1_image.stride[plane] as u32;
                         image.planes[plane] = Some(Pixels::from_raw_pointer(
                             gav1_image.plane[plane],
                             image.depth as u32,
-                        ));
-                        image.row_bytes[plane] = gav1_image.stride[plane] as u32;
+                            image.height,
+                            image.row_bytes[plane],
+                        )?);
                         image.image_owns_planes[plane] = false;
                     }
                     if image.yuv_format == PixelFormat::Yuv400 {

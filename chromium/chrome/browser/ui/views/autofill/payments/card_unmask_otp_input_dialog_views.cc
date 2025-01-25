@@ -17,6 +17,8 @@
 #include "components/autofill/core/browser/ui/payments/card_unmask_otp_input_dialog_controller.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/color/color_id.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
@@ -36,11 +38,11 @@ CardUnmaskOtpInputDialogViews::CardUnmaskOtpInputDialogViews(
     base::WeakPtr<CardUnmaskOtpInputDialogController> controller)
     : controller_(controller) {
   SetShowTitle(true);
-  SetButtonLabel(ui::DIALOG_BUTTON_OK, controller_->GetOkButtonLabel());
-  SetButtonEnabled(ui::DIALOG_BUTTON_OK, false);
-  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
-                 GetDialogButtonLabel(ui::DIALOG_BUTTON_CANCEL));
-  SetModalType(ui::MODAL_TYPE_CHILD);
+  SetButtonLabel(ui::mojom::DialogButton::kOk, controller_->GetOkButtonLabel());
+  SetButtonEnabled(ui::mojom::DialogButton::kOk, false);
+  SetButtonLabel(ui::mojom::DialogButton::kCancel,
+                 GetDialogButtonLabel(ui::mojom::DialogButton::kCancel));
+  SetModalType(ui::mojom::ModalType::kChild);
   SetShowCloseButton(false);
   set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
@@ -62,7 +64,7 @@ void CardUnmaskOtpInputDialogViews::ShowPendingState() {
   otp_input_view_->SetVisible(false);
   progress_view_->SetVisible(true);
   progress_throbber_->Start();
-  SetButtonEnabled(ui::DIALOG_BUTTON_OK, false);
+  SetButtonEnabled(ui::mojom::DialogButton::kOk, false);
 }
 
 void CardUnmaskOtpInputDialogViews::ShowInvalidState(
@@ -70,7 +72,7 @@ void CardUnmaskOtpInputDialogViews::ShowInvalidState(
   otp_input_view_->SetVisible(true);
   progress_view_->SetVisible(false);
   progress_throbber_->Stop();
-  SetButtonEnabled(ui::DIALOG_BUTTON_OK, false);
+  SetButtonEnabled(ui::mojom::DialogButton::kOk, false);
   otp_input_textfield_->SetInvalid(true);
   otp_input_textfield_invalid_label_->SetVisible(true);
   otp_input_textfield_invalid_label_->SetText(invalid_label_text);
@@ -135,7 +137,7 @@ void CardUnmaskOtpInputDialogViews::ContentsChanged(
     HideInvalidState();
 
   SetButtonEnabled(
-      ui::DIALOG_BUTTON_OK,
+      ui::mojom::DialogButton::kOk,
       /*enabled=*/controller_ && controller_->IsValidOtp(new_contents));
 }
 

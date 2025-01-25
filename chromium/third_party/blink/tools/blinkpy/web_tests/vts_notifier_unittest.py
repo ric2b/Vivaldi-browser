@@ -15,18 +15,20 @@ from blinkpy.w3c.buganizer import (
     Severity,
     Status,
 )
+from blinkpy.w3c.directory_owners_extractor import WPTDirMetadata
 from blinkpy.web_tests.port.base import VirtualTestSuite
-from blinkpy.web_tests.vts_notifier import (BLINK_INFRA_COMPONENT_ID,
-                                            VTSNotifier)
+from blinkpy.web_tests.vts_notifier import (BLINK_COMPONENT_ID, VTSNotifier)
 
 
 class VTSNotifierTest(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        host = MockHost()
+        self.host = MockHost()
+        self.host.filesystem.maybe_make_directory(
+            '/mock-checkout/third_party/blink/web_tests/wpt_internal')
         mock_buganizer_client = mock.create_autospec(BuganizerClient)
-        self.notifier = VTSNotifier(host,
+        self.notifier = VTSNotifier(self.host,
                                     buganizer_client=mock_buganizer_client)
         fake_datetime = mock.Mock(wraps=datetime.datetime)
         fake_datetime.now.return_value = datetime.datetime(2024, 1, 1)
@@ -37,10 +39,14 @@ class VTSNotifierTest(unittest.TestCase):
     def tearDown(self):
         self.patcher.stop()
 
-    def create_mock_vts(self, prefix='test-vts', expires=None, owners=[]):
+    def create_mock_vts(self,
+                        prefix='test-vts',
+                        expires=None,
+                        owners=[],
+                        bases=['wpt_internal']):
         return VirtualTestSuite(prefix=prefix,
                                 platforms=['Linux'],
-                                bases=['wpt_internal'],
+                                bases=bases,
                                 args=['--enable-features=FakeFeature'],
                                 expires=expires,
                                 owners=owners)
@@ -96,7 +102,7 @@ class VTSNotifierTest(unittest.TestCase):
         self.assertIn(mock_vts.prefix, draft_bug.description)
         self.assertIn(mock_vts.expires, draft_bug.description)
         self.assertEqual(draft_bug.status, Status.NEW)
-        self.assertEqual(draft_bug.component_id, BLINK_INFRA_COMPONENT_ID)
+        self.assertEqual(draft_bug.component_id, BLINK_COMPONENT_ID)
         self.assertEqual(draft_bug.cc, [])
         self.assertEqual(draft_bug.priority, Priority.P1)
         self.assertEqual(draft_bug.severity, Severity.S4)
@@ -114,7 +120,7 @@ class VTSNotifierTest(unittest.TestCase):
         self.assertIn(mock_vts.prefix, draft_bug.description)
         self.assertIn(mock_vts.expires, draft_bug.description)
         self.assertEqual(draft_bug.status, Status.NEW)
-        self.assertEqual(draft_bug.component_id, BLINK_INFRA_COMPONENT_ID)
+        self.assertEqual(draft_bug.component_id, BLINK_COMPONENT_ID)
         self.assertEqual(draft_bug.cc, test_owners)
         self.assertEqual(draft_bug.priority, Priority.P1)
         self.assertEqual(draft_bug.severity, Severity.S4)
@@ -160,3 +166,86 @@ class VTSNotifierTest(unittest.TestCase):
     def test_check_expired_vts_invalid_dateformat(self):
         vts = self.create_mock_vts(expires='3000/01/01')
         self.assertFalse(self.notifier.check_expired_vts(vts))
+
+    def test_resolve_component_id_with_no_dir_metadata(self):
+        bases = ['1', '2', '3', '4']
+        for base in bases:
+            base_path = self.notifier.path_finder.path_from_web_tests(base)
+            self.notifier.host.filesystem.maybe_make_directory(base_path)
+        mock_vts = self.create_mock_vts(bases=bases)
+        with mock.patch.object(self.notifier.owners_extractor,
+                               'read_dir_metadata',
+                               return_value=None) as mock_owner_extractor:
+            self.assertEqual(self.notifier.resolve_component_id(mock_vts),
+                             BLINK_COMPONENT_ID)
+            # check virtual/{prefix} and all bases before defaulting to
+            # BLINK_COMPONENT_ID
+            mock_calls = [
+                mock.call(self.notifier.path_finder.path_from_web_tests(path))
+                for path in ['virtual/test-vts/', *bases]
+            ]
+            mock_owner_extractor.assert_has_calls(mock_calls)
+
+    def test_resolve_component_id_with_directory_as_base(self):
+        base_path = self.notifier.path_finder.path_from_web_tests(
+            'wpt_internal/a')
+        self.notifier.host.filesystem.maybe_make_directory(base_path)
+        mock_vts = self.create_mock_vts(bases=['wpt_internal/a'])
+        dir_metadata = {
+            base_path: WPTDirMetadata(buganizer_public_component='123')
+        }
+        with mock.patch.object(self.notifier.owners_extractor,
+                               'read_dir_metadata', dir_metadata.get):
+            self.assertEqual(self.notifier.resolve_component_id(mock_vts),
+                             '123')
+
+    def test_resolve_component_id_with_file_as_base(self):
+        base_path = self.notifier.path_finder.path_from_web_tests(
+            'wpt_internal/a')
+        self.notifier.host.filesystem.maybe_make_directory(base_path)
+        mock_vts = self.create_mock_vts(bases=['wpt_internal/a/file'])
+        dir_metadata = {
+            base_path: WPTDirMetadata(buganizer_public_component='123')
+        }
+        with mock.patch.object(self.notifier.owners_extractor,
+                               'read_dir_metadata', dir_metadata.get):
+            self.assertEqual(self.notifier.resolve_component_id(mock_vts),
+                             '123')
+
+    def test_resolve_component_id_with_dir_metadata_from_second_base(self):
+        mock_vts = self.create_mock_vts(bases=['foo', 'bar'])
+        dir_metadata = {
+            self.notifier.path_finder.path_from_web_tests('foo'):
+            WPTDirMetadata(buganizer_public_component=BLINK_COMPONENT_ID),
+            self.notifier.path_finder.path_from_web_tests('bar'):
+            WPTDirMetadata(buganizer_public_component='123'),
+        }
+        self.notifier.host.filesystem.write_text_file(
+            self.notifier.path_finder.path_from_web_tests(
+                'foo', 'DIR_METADATA'), '')
+        self.notifier.host.filesystem.write_text_file(
+            self.notifier.path_finder.path_from_web_tests(
+                'bar', 'DIR_METADATA'), '')
+        # bar/DIR_METADATA will be used since foo uses default component ID
+        with mock.patch.object(self.notifier.owners_extractor,
+                               'read_dir_metadata', dir_metadata.get):
+            self.assertEqual(self.notifier.resolve_component_id(mock_vts),
+                             '123')
+
+    def test_resolve_component_id_with_dir_metadata_from_vts_dir(self):
+        mock_vts = self.create_mock_vts(
+            bases=['wpt_internal', 'wpt_internal/nested'])
+        dir_metadata = {
+            self.notifier.path_finder.path_from_web_tests('virtual/test-vts/'):
+            WPTDirMetadata(buganizer_public_component='123')
+        }
+        self.notifier.host.filesystem.write_text_file(
+            self.notifier.path_finder.path_from_web_tests(
+                'virtual', 'test-vts', 'DIR_METADATA'), '')
+        self.notifier.host.filesystem.write_text_file(
+            self.notifier.path_finder.path_from_web_tests(
+                'wpt_internal/nested', 'DIR_METADATA'), '')
+        with mock.patch.object(self.notifier.owners_extractor,
+                               'read_dir_metadata', dir_metadata.get):
+            self.assertEqual(self.notifier.resolve_component_id(mock_vts),
+                             '123')

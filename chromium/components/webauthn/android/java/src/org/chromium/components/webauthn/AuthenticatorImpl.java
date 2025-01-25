@@ -176,6 +176,7 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
                 /* maybeClientDataHash= */ null,
                 maybeCreateBrowserOptions(),
                 mOrigin,
+                mTopOrigin,
                 this::onRegisterResponse,
                 this::onError);
     }
@@ -242,6 +243,11 @@ public final class AuthenticatorImpl implements Authenticator, AuthenticationCon
         getFido2CredentialRequest()
                 .handleIsUserVerifyingPlatformAuthenticatorAvailableRequest(
                         this::onIsUserVerifyingPlatformAuthenticatorAvailableResponse);
+    }
+
+    @Override
+    public void getClientCapabilities(final GetClientCapabilities_Response callback) {
+        // TODO(crbug.com/360327828): Implement.
     }
 
     /**

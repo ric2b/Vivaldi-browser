@@ -9,41 +9,41 @@
 #import "components/lens/lens_overlay_permission_utils.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/test/testing_application_context.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
+#import "ui/base/device_form_factor.h"
 
 namespace {
 
 class LensOverlayTabHelperTest : public PlatformTest {
  public:
-  LensOverlayTabHelperTest() {
-    browser_state_manager_ = std::make_unique<TestChromeBrowserStateManager>(
-        TestChromeBrowserState::Builder().Build());
-  }
-
   void SetUp() override {
     PlatformTest::SetUp();
 
+    if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_PHONE) {
+      GTEST_SKIP() << "Feature unsupported on iPad";
+    }
+
+    browser_state_ = profile_manager_.AddProfileWithBuilder(
+        TestChromeBrowserState::Builder());
+
     feature_list_.InitAndEnableFeature(kEnableLensOverlay);
 
-    TestingApplicationContext::GetGlobal()->SetChromeBrowserStateManager(
-        browser_state_manager_.get());
     GetApplicationContext()->GetLocalState()->SetInteger(
         lens::prefs::kLensOverlaySettings,
         static_cast<int>(
             lens::prefs::LensOverlaySettingsPolicyValue::kEnabled));
 
-    web::WebState::CreateParams params(
-        browser_state_manager_->GetLastUsedBrowserStateForTesting());
+    web::WebState::CreateParams params(browser_state_.get());
     web_state_ = web::WebState::Create(params);
 
     id dispatcher = [[CommandDispatcher alloc] init];
@@ -61,10 +61,12 @@ class LensOverlayTabHelperTest : public PlatformTest {
   }
 
  protected:
-  std::unique_ptr<TestChromeBrowserStateManager> browser_state_manager_;
-  std::unique_ptr<web::WebState> web_state_;
   web::WebTaskEnvironment task_environment_{
       web::WebTaskEnvironment::MainThreadType::IO};
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
+  TestProfileManagerIOS profile_manager_;
+  raw_ptr<ChromeBrowserState> browser_state_;
+  std::unique_ptr<web::WebState> web_state_;
   raw_ptr<LensOverlayTabHelper> helper_ = nullptr;
   id handler_;
   id dispatcher_;

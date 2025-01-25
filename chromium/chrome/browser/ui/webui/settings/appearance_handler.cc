@@ -60,6 +60,10 @@ void AppearanceHandler::RegisterMessages() {
         base::BindRepeating(&AppearanceHandler::ResetPinnedToolbarActions,
                             base::Unretained(this)));
   }
+  web_ui()->RegisterMessageCallback(
+      "pinnedToolbarActionsAreDefault",
+      base::BindRepeating(&AppearanceHandler::PinnedToolbarActionsAreDefault,
+                          base::Unretained(this)));
 }
 
 void AppearanceHandler::HandleUseTheme(ui::SystemTheme system_theme,
@@ -85,19 +89,19 @@ void AppearanceHandler::OpenCustomizeChromeToolbarSection(
 
 void AppearanceHandler::ResetPinnedToolbarActions(
     const base::Value::List& args) {
-  // Home and forward buttons are special-case, and handled separately from
-  // PinnedToolbarActionsModel.
-  PrefService* prefs = profile_->GetPrefs();
-  prefs->ClearPref(prefs::kShowHomeButton);
-  prefs->ClearPref(prefs::kShowForwardButton);
+  PinnedToolbarActionsModel::Get(profile_)->ResetToDefault();
+}
 
-  PinnedToolbarActionsModel* const actions_model =
-      PinnedToolbarActionsModel::Get(profile_);
-  const std::vector<actions::ActionId> pinned_ids =
-      actions_model->PinnedActionIds();
-  for (auto& id : pinned_ids) {
-    actions_model->UpdatePinnedState(id, false);
-  }
+void AppearanceHandler::PinnedToolbarActionsAreDefault(
+    const base::Value::List& args) {
+  CHECK_EQ(1U, args.size());
+  const base::Value& callback_id = args[0];
+  const bool are_default =
+      !features::IsToolbarPinningEnabled() ||
+      PinnedToolbarActionsModel::Get(profile_)->IsDefault();
+
+  AllowJavascript();
+  ResolveJavascriptCallback(callback_id, base::Value(are_default));
 }
 
 }  // namespace settings

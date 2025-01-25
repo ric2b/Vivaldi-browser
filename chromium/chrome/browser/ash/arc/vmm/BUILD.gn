@@ -22,6 +22,8 @@ static_library("vmm") {
     "vmm_metrics_provider.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash",
     "//ash/components/arc",
@@ -32,6 +34,7 @@ static_library("vmm") {
     "//chrome/browser/profiles:profile",
     "//chromeos/ash/components/dbus/concierge",
     "//chromeos/ash/components/dbus/concierge:concierge_proto",
+    "//chromeos/ash/components/throttle",
     "//components/keyed_service/core",
     "//components/metrics",
     "//content/public/browser",
@@ -58,8 +61,7 @@ source_set("unit_tests") {
     "//ash/components/arc:arc_test_support",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/ash",
-    "//chrome/browser/ash:test_support",
+    "//chrome/browser/ash/app_list/arc:test_support",
     "//chrome/browser/ash/arc/idle_manager",
     "//chrome/browser/ash/arc/instance_throttle",
     "//chrome/browser/ash/arc/session",

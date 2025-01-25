@@ -2,15 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include <string>
+
+#include "base/functional/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/login/app_mode/test/web_kiosk_base_test.h"
 #include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features_generated.h"
+#include "ui/base/metadata/base_type_conversion.h"
 
 namespace {
 
@@ -58,7 +66,7 @@ class WebKioskDirectSocketsTest : public WebKioskBaseTest {
  public:
   void SetUpOnMainThread() override {
     InitAppServer();
-    SetAppInstallUrl(web_app_server_.base_url().spec());
+    SetAppInstallUrl(web_app_server_.base_url());
     WebKioskBaseTest::SetUpOnMainThread();
   }
 
@@ -82,7 +90,8 @@ class WebKioskDirectSocketsTest : public WebKioskBaseTest {
   base::test::ScopedFeatureList feature_list_{blink::features::kDirectSockets};
 };
 
-IN_PROC_BROWSER_TEST_F(WebKioskDirectSocketsTest, ApiAvailability) {
+// TODO(crbug.com/355290700): Re-enable this test
+IN_PROC_BROWSER_TEST_F(WebKioskDirectSocketsTest, DISABLED_ApiAvailability) {
   InitializeRegularOnlineKiosk();
   SelectFirstBrowser();
 

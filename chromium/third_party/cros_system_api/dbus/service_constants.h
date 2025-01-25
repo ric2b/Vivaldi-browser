@@ -608,6 +608,14 @@ constexpr char kArcTracingStartMethod[] = "StartTrace";
 constexpr char kArcTracingGetStatusMethod[] = "GetStatus";
 }  // namespace tracing
 
+namespace crosh {
+constexpr char kArcCroshServiceName[] = "org.chromium.ArcCrosh";
+constexpr char kArcCroshServicePath[] = "/org/chromium/ArcCrosh";
+constexpr char kArcCroshInterfaceName[] = "org.chromium.ArcCrosh";
+
+constexpr char kArcCroshRequest[] = "ArcCroshRequest";
+}  // namespace crosh
+
 }  // namespace arc
 
 namespace libvda {

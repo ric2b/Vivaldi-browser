@@ -73,8 +73,7 @@ class NotesBridge : public vivaldi::NotesModelObserver {
       const base::android::JavaParamRef<jobject>& obj);
 
   base::android::ScopedJavaLocalRef<jobject> GetTrashFolderId(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
+      JNIEnv* env);
 
   base::android::ScopedJavaLocalRef<jobject> GetOtherFolderId(
       JNIEnv* env,

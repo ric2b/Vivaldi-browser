@@ -18,7 +18,6 @@
 #include "components/omnibox/browser/shortcuts_backend.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
-#include "components/query_tiles/tile_service.h"
 #include "components/search_engines/search_engines_test_environment.h"
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
@@ -27,7 +26,7 @@
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 
 #if !BUILDFLAG(IS_IOS)
-#include "components/history_embeddings/history_embeddings_service.h"
+#include "components/history_embeddings/history_embeddings_service.h"  // nogncheck
 #endif  // IS_IOS
 
 namespace bookmarks {
@@ -79,7 +78,6 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
   InMemoryURLIndex* GetInMemoryURLIndex() override;
   scoped_refptr<ShortcutsBackend> GetShortcutsBackend() override;
   scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() override;
-  query_tiles::TileService* GetQueryTileService() const override;
   const TabMatcher& GetTabMatcher() const override;
   scoped_refptr<history::TopSites> GetTopSites() override;
 
@@ -125,10 +123,6 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
     shortcuts_backend_ = std::move(backend);
   }
 
-  void set_tile_service(std::unique_ptr<query_tiles::TileService> tile_svc) {
-    tile_service_ = std::move(tile_svc);
-  }
-
  private:
   search_engines::SearchEnginesTestEnvironment search_engines_test_enviroment_;
   base::ScopedTempDir history_dir_;
@@ -143,7 +137,6 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
       history_embeddings_service_;
 #endif
   scoped_refptr<ShortcutsBackend> shortcuts_backend_;
-  std::unique_ptr<query_tiles::TileService> tile_service_;
   FakeTabMatcher fake_tab_matcher_;
   scoped_refptr<history::TopSites> top_sites_;
 
@@ -151,6 +144,9 @@ class FakeAutocompleteProviderClient : public MockAutocompleteProviderClient {
   std::unique_ptr<FakeOnDeviceTailModelService> on_device_tail_model_service_;
   std::unique_ptr<FakeAutocompleteScoringModelService> scoring_model_service_;
 #endif
+
+  // Vivaldi
+  direct_match::DirectMatchService* GetDirectMatchService() override;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_FAKE_AUTOCOMPLETE_PROVIDER_CLIENT_H_

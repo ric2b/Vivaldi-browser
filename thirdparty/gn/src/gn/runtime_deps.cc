@@ -177,7 +177,7 @@ bool CollectRuntimeDepsFromFlag(const BuildSettings* build_settings,
       return false;
     }
 
-    OutputFile output_file;
+    std::optional<OutputFile> output_file;
     const char extension[] = ".runtime_deps";
     if (target->output_type() == Target::SHARED_LIBRARY ||
         target->output_type() == Target::LOADABLE_MODULE) {
@@ -186,11 +186,20 @@ bool CollectRuntimeDepsFromFlag(const BuildSettings* build_settings,
       CHECK(!target->computed_outputs().empty());
       output_file =
           OutputFile(target->computed_outputs()[0].value() + extension);
-    } else {
+    } else if (target->has_dependency_output_file()) {
       output_file =
           OutputFile(target->dependency_output_file().value() + extension);
+    } else {
+      // If there is no dependency_output_file, this target's dependency output
+      // is either a phony alias or was elided entirely (due to lack of real
+      // inputs). In either case, there is no file to add an additional
+      // extension to, so we should compute our own name in the OBJ BuildDir.
+      output_file = GetBuildDirForTargetAsOutputFile(target, BuildDirType::OBJ);
+      output_file->value().append(target->GetComputedOutputName());
+      output_file->value().append(extension);
     }
-    files_to_write->push_back(std::make_pair(output_file, target));
+    if (output_file)
+      files_to_write->push_back(std::make_pair(*output_file, target));
   }
   return true;
 }

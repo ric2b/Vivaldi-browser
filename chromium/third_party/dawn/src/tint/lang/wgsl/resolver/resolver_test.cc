@@ -667,7 +667,7 @@ TEST_F(ResolverTest, Expr_Initializer_Type_Vec2) {
 
     ASSERT_NE(TypeOf(tc), nullptr);
     ASSERT_TRUE(TypeOf(tc)->Is<core::type::Vector>());
-    EXPECT_TRUE(TypeOf(tc)->As<core::type::Vector>()->type()->Is<core::type::F32>());
+    EXPECT_TRUE(TypeOf(tc)->As<core::type::Vector>()->Type()->Is<core::type::F32>());
     EXPECT_EQ(TypeOf(tc)->As<core::type::Vector>()->Width(), 2u);
 }
 
@@ -679,7 +679,7 @@ TEST_F(ResolverTest, Expr_Initializer_Type_Vec3) {
 
     ASSERT_NE(TypeOf(tc), nullptr);
     ASSERT_TRUE(TypeOf(tc)->Is<core::type::Vector>());
-    EXPECT_TRUE(TypeOf(tc)->As<core::type::Vector>()->type()->Is<core::type::F32>());
+    EXPECT_TRUE(TypeOf(tc)->As<core::type::Vector>()->Type()->Is<core::type::F32>());
     EXPECT_EQ(TypeOf(tc)->As<core::type::Vector>()->Width(), 3u);
 }
 
@@ -691,7 +691,7 @@ TEST_F(ResolverTest, Expr_Initializer_Type_Vec4) {
 
     ASSERT_NE(TypeOf(tc), nullptr);
     ASSERT_TRUE(TypeOf(tc)->Is<core::type::Vector>());
-    EXPECT_TRUE(TypeOf(tc)->As<core::type::Vector>()->type()->Is<core::type::F32>());
+    EXPECT_TRUE(TypeOf(tc)->As<core::type::Vector>()->Type()->Is<core::type::F32>());
     EXPECT_EQ(TypeOf(tc)->As<core::type::Vector>()->Width(), 4u);
 }
 
@@ -1300,7 +1300,7 @@ TEST_F(ResolverTest, Expr_MemberAccessor_VectorSwizzle) {
 
     ASSERT_NE(TypeOf(mem), nullptr);
     ASSERT_TRUE(TypeOf(mem)->Is<core::type::Vector>());
-    EXPECT_TRUE(TypeOf(mem)->As<core::type::Vector>()->type()->Is<core::type::F32>());
+    EXPECT_TRUE(TypeOf(mem)->As<core::type::Vector>()->Type()->Is<core::type::F32>());
     EXPECT_EQ(TypeOf(mem)->As<core::type::Vector>()->Width(), 4u);
     auto* sma = Sem().Get(mem)->As<sem::Swizzle>();
     ASSERT_NE(sma, nullptr);
@@ -1352,7 +1352,7 @@ TEST_F(ResolverTest, Expr_Accessor_MultiLevel) {
 
     ASSERT_NE(TypeOf(mem), nullptr);
     ASSERT_TRUE(TypeOf(mem)->Is<core::type::Vector>());
-    EXPECT_TRUE(TypeOf(mem)->As<core::type::Vector>()->type()->Is<core::type::F32>());
+    EXPECT_TRUE(TypeOf(mem)->As<core::type::Vector>()->Type()->Is<core::type::F32>());
     EXPECT_EQ(TypeOf(mem)->As<core::type::Vector>()->Width(), 2u);
     ASSERT_TRUE(Sem().Get(mem)->Is<sem::Swizzle>());
 }
@@ -1864,11 +1864,11 @@ TEST_P(UnaryOpExpressionTest, Expr_UnaryOp) {
     ASSERT_NE(TypeOf(der), nullptr);
     ASSERT_TRUE(TypeOf(der)->Is<core::type::Vector>());
     if (op == core::UnaryOp::kNot) {
-        EXPECT_TRUE(TypeOf(der)->As<core::type::Vector>()->type()->Is<core::type::Bool>());
+        EXPECT_TRUE(TypeOf(der)->As<core::type::Vector>()->Type()->Is<core::type::Bool>());
     } else if (op == core::UnaryOp::kNegation || op == core::UnaryOp::kComplement) {
-        EXPECT_TRUE(TypeOf(der)->As<core::type::Vector>()->type()->Is<core::type::I32>());
+        EXPECT_TRUE(TypeOf(der)->As<core::type::Vector>()->Type()->Is<core::type::I32>());
     } else {
-        EXPECT_TRUE(TypeOf(der)->As<core::type::Vector>()->type()->Is<core::type::F32>());
+        EXPECT_TRUE(TypeOf(der)->As<core::type::Vector>()->Type()->Is<core::type::F32>());
     }
     EXPECT_EQ(TypeOf(der)->As<core::type::Vector>()->Width(), 4u);
 }
@@ -2339,27 +2339,13 @@ TEST_F(ResolverTest, TextureSampler_UnusedTextureSampleInFunctionPassedAsArgumen
     EXPECT_TRUE(r()->Resolve()) << r()->error();
 
     auto inner_pairs = Sem().Get(inner_func)->TextureSamplerPairs();
-    ASSERT_EQ(inner_pairs.Length(), 2u);
-    auto* inner_pair_texture = As<sem::Parameter>(inner_pairs[0].first);
-    ASSERT_NE(inner_pair_texture, nullptr);
-    EXPECT_EQ(inner_pair_texture->Index(), 1u);
-    auto* inner_pair_sampler = As<sem::Parameter>(inner_pairs[1].second);
-    ASSERT_NE(inner_pair_sampler, nullptr);
-    EXPECT_EQ(inner_pair_sampler->Index(), 2u);
+    ASSERT_EQ(inner_pairs.Length(), 0u);
 
     auto middle_pairs = Sem().Get(middle_func)->TextureSamplerPairs();
-    ASSERT_EQ(middle_pairs.Length(), 2u);
-    auto* middle_pair_texture = As<sem::Parameter>(middle_pairs[0].first);
-    ASSERT_NE(middle_pair_texture, nullptr);
-    EXPECT_EQ(middle_pair_texture->Index(), 2u);
-    auto* middle_pair_sampler = As<sem::Parameter>(middle_pairs[1].second);
-    ASSERT_NE(middle_pair_sampler, nullptr);
-    EXPECT_EQ(middle_pair_sampler->Index(), 1u);
+    ASSERT_EQ(middle_pairs.Length(), 0u);
 
     auto outer_pairs = Sem().Get(outer_func)->TextureSamplerPairs();
-    ASSERT_EQ(outer_pairs.Length(), 2u);
-    EXPECT_TRUE(outer_pairs[0].first != nullptr);
-    EXPECT_TRUE(outer_pairs[1].second != nullptr);
+    ASSERT_EQ(outer_pairs.Length(), 0u);
 }
 
 TEST_F(ResolverTest, TextureSampler_TextureDimensions) {

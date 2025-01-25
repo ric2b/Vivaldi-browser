@@ -170,6 +170,10 @@ impl IStream<'_> {
         Ok(self.read_u32()? as i32)
     }
 
+    pub fn skip_u16(&mut self) -> AvifResult<()> {
+        self.skip(2)
+    }
+
     pub fn skip_u32(&mut self) -> AvifResult<()> {
         self.skip(4)
     }

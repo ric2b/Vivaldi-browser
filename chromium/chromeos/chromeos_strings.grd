@@ -249,17 +249,32 @@
       <message name="IDS_QUICK_ANSWERS_USER_NOTICE_VIEW_A11Y_INFO_DESC_TEMPLATE" desc="A11y description template for the Quick Answers user notice view.">
         <ph name="DESC_TEXT">$1<ex>With a right-click or a long press, Assistant shows info such as the definition, translation or unit conversion for your selection.</ex></ph> Use Left or Right arrow keys to manage this feature.
       </message>
+      <message name="IDS_QUICK_ANSWERS_USER_CONSENT_TITLE_DEFINITION_INTENT" desc="Title text of the dialog that opens up to seek user-consent for the Quick Answers feature when the supported intent is generated from the query.">
+        Define "<ph name="query">$1<ex>unfathomable</ex></ph>"
+      </message>
+      <message name="IDS_QUICK_ANSWERS_USER_CONSENT_TITLE_TRANSLATION_INTENT" desc="Title text of the dialog that opens up to seek user-consent for the Quick Answers feature when the supported intent is generated from the query.">
+        Translate "<ph name="query">$1<ex>信息</ex></ph>"
+      </message>
+      <message name="IDS_QUICK_ANSWERS_USER_CONSENT_TITLE_UNIT_CONVERSION_INTENT" desc="Title text of the dialog that opens up to seek user-consent for the Quick Answers feature when the supported intent is generated from the query.">
+        Convert "<ph name="query">$1<ex>1kg</ex></ph>"
+      </message>
       <message name="IDS_QUICK_ANSWERS_USER_CONSENT_VIEW_TITLE_TEXT_WITH_INTENT" desc="Title text of the dialog that opens up to seek user-consent for the Quick Answers feature when supported intent is generated.">
         Get the <ph name="intent">$1<ex>definition</ex></ph> for "<ph name="query">$2<ex>unfathomable</ex></ph>" and more
       </message>
       <message name="IDS_QUICK_ANSWERS_USER_CONSENT_VIEW_DESC_TEXT" desc="Description in the dialog that opens up to seek user-consent for the Quick Answers feature.">
         Get definitions, translations, or unit conversions when you right-click or touch &amp; hold text
       </message>
+      <message name="IDS_QUICK_ANSWERS_USER_CONSENT_VIEW_DESCRIPTION_TEXT" desc="Description in the dialog that opens up to seek user-consent for the Quick Answers feature. This string is used for a refreshed design.">
+        Right-click or press and hold to get definitions, translations, or unit conversions
+      </message>
       <message name="IDS_QUICK_ANSWERS_USER_CONSENT_VIEW_NO_THANKS_BUTTON" desc="Display text on the no thanks button in the dialog that opens up to seek user-consent for the Quick Answers feature.">
         No thanks
       </message>
       <message name="IDS_QUICK_ANSWERS_USER_CONSENT_VIEW_ALLOW_BUTTON" desc="Display text on the allow button in the dialog that opens up to seek user-consent for the Quick Answers feature.">
         Allow
+      </message>
+      <message name="IDS_QUICK_ANSWERS_USER_CONSENT_VIEW_TRY_IT_BUTTON" desc="Display text on the try it button in the dialog that opens up to seek user-consent for the Quick Answers feature.">
+        Try it
       </message>
       <message name="IDS_QUICK_ANSWERS_VIEW_LOADING" desc="Display text when the Quick Answers view is loading.">
         Loading...
@@ -297,6 +312,15 @@
       </message>
       <message name="IDS_QUICK_ANSWERS_VIEW_REPORT_QUERY_REPORT_LABEL" desc="Description text of the report query button for the Quick Answers view.">
         Report this query
+      </message>
+      <message name="IDS_QUICK_ANSWERS_RESULT_HEADER_INTENT_DEFINITION" desc="Header text shown in a definition result card">
+        Define
+      </message>
+      <message name="IDS_QUICK_ANSWERS_RESULT_HEADER_INTENT_TRANSLATION" desc="Header text shown in a translation result card">
+        Translate
+      </message>
+      <message name="IDS_QUICK_ANSWERS_RESULT_HEADER_INTENT_UNIT_CONVERSION" desc="Header text shown in a unit conversion result card">
+        Convert
       </message>
 
       <!-- Rich Answers -->
@@ -338,7 +362,6 @@
       </message>
 
       <!-- Editor Menu -->
-      <!-- TODO(b/286268215): Finalize these strings. -->
       <message name="IDS_EDITOR_MENU_PROMO_CARD_TITLE" desc="Title text in the dialog that is shown to introduce the Editor Menu feature.">
         Write faster and with more confidence
       </message>
@@ -374,6 +397,12 @@
       </message>
       <message name="IDS_EDITOR_MENU_EXPERIMENT_BADGE" desc="Label on the badge shown next to the Editor Menu title to indicate that it is an experimental feature.">
         Experiment
+      </message>
+      <message name="IDS_EDITOR_ANNOUNCEMENT_TEXT_FOR_FEEDBACK" desc="The announcement made when users submitted a feedback for a result received from Editor.">
+        Feedback submitted
+      </message>
+      <message name="IDS_EDITOR_ANNOUNCEMENT_TEXT_FOR_INSERTION" desc="The announcement made when users insert the text suggestion or replace the current selected text with the text suggestion from Editor.">
+        Replacing selected text with suggestion
       </message>
 
       <!-- Mahi -->
@@ -649,6 +678,20 @@
 
         <message name="IDS_IME_SERVICE_DISPLAY_NAME" desc="The display name (in the system task manager, etc) of the service process providing the input methods.">
           ChromeOS Input Method Service
+        </message>
+
+        <!-- Graduation App -->
+        <message name="IDS_GRADUATION_APP_TITLE" desc="Name of the Graduation app in the app shelf. Graduation allows user to transfer data from their EDU account to their consumer account.">
+          Graduation
+        </message>
+        <message name="IDS_GRADUATION_APP_BACK_BUTTON_LABEL" desc="Text for a button that navigates to the previous step of the Graduation flow.">
+          Back
+        </message>
+        <message name="IDS_GRADUATION_APP_DONE_BUTTON_LABEL" desc="Text for a button that is clicked to indicate that the Graduation flow is complete.">
+          Done
+        </message>
+        <message name="IDS_GRADUATION_APP_WEBVIEW_LOADING_MESSAGE" desc="Message shown while the Takeout webview is loading.">
+          Please wait...
         </message>
 
         <!-- Help App -->
@@ -2552,6 +2595,9 @@
         <message name="IDS_PERSONALIZATION_APP_THEME_GEOLOCATION_WARNING_TEXT_FOR_WEATHER" desc="In Personalization > Screen saver, the warning text that tells users that system geolocation permission is needed for displaying local weather info">
           OFF - To display local weather <ph name="BEGIN_LINK">&lt;a href="#"&gt;</ph>turn on system location access<ph name="END_LINK">&lt;/a&gt;</ph>
         </message>
+        <message name="IDS_PERSONALIZATION_APP_THEME_GEOLOCATION_WARNING_MANAGED_TEXT_FOR_WEATHER" desc="In Personalization > Screen saver, the warning text that tells users that system geolocation permission is needed (but is managed by the admin) for displaying local weather info">
+          OFF - This setting is managed by your administrator.
+        </message>
         <message name="IDS_PERSONALIZATION_APP_THEME_GEOLOCATION_DIALOG_BODY" desc="Description of the dialog that prompts the user to enable system geolocation access. This gives detailed explanation of the outcomes of enabling system geolocation access for system services.">
           Current schedule is set to <ph name="SUNRISE">$1<ex>6am</ex></ph>-<ph name="SUNSET">$2<ex>6pm</ex></ph>. To automatically update the sunset and sunrise schedule, turn on system location access.
         </message>
@@ -2751,6 +2797,9 @@
         <message name="IDS_PERSONALIZATION_APP_AMBIENT_MODE_NETWORK_ERROR" desc="Error message displayed when screen saver information cannot be downloaded.">
           Please connect to a network and reload the page to view screen saver.
         </message>
+        <message name="IDS_PERSONALIZATION_APP_MANAGED_FEATURE" desc="Message to show in the personalization hub for a feature which is enterprise managed by administrators.">
+          This feature is managed by your administrators
+        </message>
         <message name="IDS_PERSONALIZATION_APP_MANAGED_SETTING" desc="Message to show in the personalization hub for a setting which is enterprise managed by administrators.">
           This setting is managed by your administrators
         </message>
@@ -2777,6 +2826,9 @@
         </message>
         <message name="IDS_PERSONALIZATION_APP_ERROR_TOOLTIP_AUTO_COLOR_MODE" desc="Tooltip for the button to enable auto color mode.">
           Time based changes may not be accurate. Turn on system location access in settings.
+        </message>
+        <message name="IDS_PERSONALIZATION_APP_MANAGED_ERROR_TOOLTIP_AUTO_COLOR_MODE" desc="Tooltip text for auto color mode, when geolocation is disabled by the admin.">
+          Time based changes may not be accurate. This setting is managed by your administrator.
         </message>
         <message name="IDS_PERSONALIZATION_APP_ARIA_LABEL_GO_TO_ACCOUNT_SETTINGS" desc="Aria label for the link to account settings.">
           Go to account settings
@@ -3138,50 +3190,87 @@
         </message>
 
         <!-- Sanitize UI -->
-        <message name="IDS_OS_SANITIZE_APP_NAME" desc="Name of the Sanitize web app" translateable="false">
-          Sanitize
+        <message name="IDS_SANITIZE" desc="Name of the Safety reset web app">
+          Safety reset
         </message>
-        <message name="IDS_SANITIZE_DONE_HEADING" desc="Name of the 'Safety reset done' window" translateable="false">
-          Your device is sanitized
+        <message name="IDS_SANITIZE_DONE_HEADING" desc="Name of the 'Safety reset done' window">
+          Safety reset has been completed
         </message>
-        <message name="IDS_SANITIZE_DONE_DESCRIPTION" desc="Description of the safety reset done dialog" translateable="false">
-          Your ChromeOS device was reset to safe defaults.
+        <message name="IDS_SANITIZE_DONE_DESCRIPTION" desc="Description of the safety reset done dialog">
+          Your Chromebook was reset to safe defaults. You can adjust these changes anytime in Settings.
         </message>
-        <message name="IDS_SANITIZE_DONE_ROLLBACK" desc="Description of how the user can roll back changes" translateable="false">
-          We made changes to make your device more secure, you can undo some of our changes below.
+        <message name="IDS_SANITIZE_DONE_ROLLBACK" desc="Summary title">
+          Summary
         </message>
-        <message name="IDS_SANITIZE_DONE" desc="Name of the button that will close the sanitize done dialog" translateable="false">
+        <message name="IDS_SANITIZE_DONE" desc="Name of the button that will close the safety reset done dialog">
           Done
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_EXTENSIONS_TITLE" translateable="false">
-          Your Extensions
+        <message name="IDS_SANITIZE_DONE_ACCORDION_EXTENSIONS_TITLE" desc="Accordion title for extension resets">
+          Extensions
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_EXTENSIONS_REENABLE" translateable="false">
-          Re-enable extensions you trust
+        <message name="IDS_SANITIZE_DONE_ACCORDION_EXTENSIONS_REENABLE" desc="Instructions to re-enable extensions">
+          Only turn on extensions you trust
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROMEOS_TITLE" translateable="false">
-          Your ChromeOS Settings
+        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROMEOS_TITLE" desc="Accordion title for ChromeOS resets">
+          ChromeOS Settings
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROMEOS_INPUT" translateable="false">
-          Verify your input method
+        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROMEOS_INPUT" desc="Instructions to adjust ChromeOS Inputs">
+          Input method
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROMEOS_NETWORK" translateable="false">
-          Check your current network
+        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROMEOS_NETWORK" desc="Instructions to adjust ChromeOS Network">
+          Network
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROME_TITLE" translateable="false">
-          Your Chrome Settings
+        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROME_TITLE" desc="Accordion title for Chrome resets">
+          Chrome Settings
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROME_SITE_CONTENT" translateable="false">
-          Verify your site content settings
+        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROME_SITE_CONTENT" desc="Instructions to adjust Chrome site content settings">
+          Site content
         </message>
-        <message name="IDS_SANITZIE_DONE_ACCORDION_CHROME_STARTUP" translateable="false">
-          Check your Chrome startup preferences
+        <message name="IDS_SANITZIE_DONE_ACCORDION_CHROME_STARTUP" desc="Instruction to adjust Chrome startup settings">
+          Startup preferences
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROME_HOMEPAGE" translateable="false">
-          Verify the status of your homepage
+        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROME_HOMEPAGE" desc="Instructions to adjust Chrome homepage settings">
+          Homepage
         </message>
-        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROME_LANGUAGES" translateable="false">
-          Verify your language settings
+        <message name="IDS_SANITIZE_DONE_ACCORDION_CHROME_LANGUAGES" desc="Instruction to adjust Chrome language settings">
+          Language
+        </message>
+        <message name="IDS_SANITIZE_DONE_BUTTON_EXTENSIONS" desc="Button label to redirect to Chrome Extensions page">
+          Extensions
+        </message>
+        <message name="IDS_SANITIZE_DONE_BUTTON_CHROMEOS_INPUT" desc="Button label to redirect to ChromeOS Input Settings">
+          Input settings
+        </message>
+        <message name="IDS_SANITIZE_DONE_BUTTON_CHROMEOS_NETWORK" desc="Button label to redirect to ChromeOS Network Settings">
+          Network settings
+        </message>
+        <message name="IDS_SANITIZE_DONE_BUTTON_CHROME_SITE_CONTENT" desc="Button label to redirect to Chrome Site Content Settings">
+          Site content settings
+        </message>
+        <message name="IDS_SANITIZE_DONE_BUTTON_CHROME_STARTUP" desc="Button label to redirect to Chrome Startup Settings">
+          Startup settings
+        </message>
+        <message name="IDS_SANITIZE_DONE_BUTTON_CHROME_HOMEPAGE" desc="Button label to redirect to Chrome Homepage Settings">
+          Homepage settings
+        </message>
+        <message name="IDS_SANITIZE_DONE_BUTTON_CHROME_LANGUAGES" desc="Button label to redirecto to Chrome Language Settings">
+          Language settings
+        </message>
+        <message name="IDS_SANITIZE_HEADING" desc="Name of the 'Safety reset' window">
+          Safety reset
+        </message>
+        <message name="IDS_SANITIZE_DESCRIPTION" desc="Description of the safety reset feature">
+          Safety reset can help remove unwanted pop-ups, fix network issues, and address other unexpected issues.
+        </message>
+        <message name="IDS_SANITIZE_WARNING" desc="Warning text in the safety reset">
+          Safety reset turns off Chrome browser extensions and resets network and other settings to safe defaults.
+          Your tabs, files, cookies, and history won’t be changed.
+        </message>
+        <message name="IDS_SANITIZE_FEEDBACK" translateable="false" desc="Feedback label in the Reset Profile Settings dialog">
+          Help make ChromeOS better by reporting the current settings
+        </message>
+        <message name="IDS_SANITIZE_CANCEL" desc="Button label to cancel proceeding with the safety reset">
+          Cancel
         </message>
 
         <!-- Sea Pen UI -->
@@ -3353,10 +3442,16 @@
           Shuffle
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_INPUT_PLACEHOLDER" desc="Default text for an input field that is used to generate AI images.">
-          Describe the wallpaper you want to create or use a sample prompt
+        Describe the wallpaper you want to create
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_ERROR_NO_INTERNET" desc="Error message displayed when there is no internet connection.">
           Make sure you're connected to the internet and try again.
+        </message>
+        <message name="IDS_SEA_PEN_FREEFORM_ERROR_UNSUPPORTED_LANGUAGE" desc="Error message displayed when the search query uses an unsupported language.">
+          This language isn't supported at this time
+        </message>
+        <message name="IDS_SEA_PEN_FREEFORM_ERROR_BLOCKED_OUTPUTS" desc="Error message displayed when the search results were blocked.">
+          Can't create images of this. Try another prompt.
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_POWERED_BY_GOOGLE" desc="Section heading that indicates Google made these wallpapers.">
           Powered by Google AI
@@ -3371,7 +3466,7 @@
           More
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_PROMPTING_GUIDE" desc="A link to a guide with instructions on how to write a prompt to generate AI images.">
-          Prompting guide
+          Try one of these prompts or see the <ph name="BEGIN_LINK_PROMPTING_GUIDE">&lt;a target="_blank" href="https://cloud.google.com/vertex-ai/generative-ai/docs/image/img-gen-prompt-guide"&gt;</ph>prompting guide<ph name="END_LINK_PROMPTING_GUIDE">&lt;/a&gt;</ph>
         </message>
         <message name="IDS_SEA_PEN_FREEFORM_NAVIGATION_DESCRIPTION" desc="Description shown in each template page to help users navigate to freeform page.">
           You can also <ph name="BEGIN_LINK_FREEFORM_SUBPAGE">&lt;a href="chrome://personalization/wallpaper/sea-pen/freeform"&gt;</ph>write your own prompt<ph name="END_LINK_FREEFORM_SUBPAGE">&lt;/a&gt;</ph>
@@ -4843,7 +4938,7 @@
           Reset
         </message>
         <message name="IDS_TRAFFIC_COUNTERS_DATA_USAGE_RESET_LABEL" desc="Settings > Network > Mobile data > SIM > Data usage, text to reset data usage">
-          Manually reset data usage
+          Reset data usage
         </message>
         <message name="IDS_TRAFFIC_COUNTERS_DATA_USAGE_LAST_RESET_DATE_UNAVAILABLE_LABEL" desc="Settings > Network > Mobile data > SIM > Data usage, text to show missing last reset information">
           Date of last data reset is unavailable
@@ -4865,6 +4960,15 @@
         </message>
         <message name="IDS_TRAFFIC_COUNTERS_DATA_USAGE_RESET_DAY_TOOLTIP_TEXT" desc="Settings > Network > Mobile data > SIM > Data usage, text explaining what happens if last day of the month is before selected day">
           If the last day of the month is before this day, data will be reset on the last day of the month
+        </message>
+        <message name="IDS_TRAFFIC_COUNTERS_DATA_USAGE_DROPDOWN_LABEL" desc="Settings > Network > Mobile data > SIM > Data usage, text describing the reset days to choose from">
+          Select an auto reset day ranging from 1 to 31, inclusive
+        </message>
+        <message name="IDS_TRAFFIC_COUNTERS_DATA_USAGE_RESET_DAY_TOOLTIP_A11Y_LABEL" desc="Settings > Network > Mobile data > SIM > Data usage, accessible label for reset button help tooltip icon">
+          More info on Reset date
+        </message>
+        <message name="IDS_TRAFFIC_COUNTERS_DATA_USAGE_RESET_BUTTON_PRESSED_A11Y_MESSAGE" desc="Settings > Network > Mobile data > SIM > Data usage, accessible message to indicate reset data usage button pressed">
+          Data usage has been reset
         </message>
 
         <!-- Bluetooth -->
@@ -5778,8 +5882,8 @@
         <message name="IDS_FEEDBACK_TOOL_BLUETOOTH_LOGS_CHECKBOX" translateable="false" desc="Checkbox for Google internal account to attach bluetooth logs from the current session.">
           Attach bluetooth history and information. <ph name="BEGIN_LINK1">&lt;a id="bluetoothLogsInfoLink"&gt;</ph>View more details<ph name="END_LINK1">&lt;/a&gt;</ph>.
         </message>
-        <message name="IDS_FEEDBACK_TOOL_BLUETOOTH_LOGS_MESSAGE" translateable="false" desc="Message shown after user clicks on the bluetooth logs hyperlink">
-          Include bluetooth logs which captures information such as btsnoop and HCI logs from your current session. The logs will be filtered to remove as much personal identifiable information as possible.&#10;&#10;The information is stored for up to 90 days and access is restricted to the team working on this issue.
+        <message name="IDS_FEEDBACK_TOOL_BLUETOOTH_LOGS_MESSAGE" translateable="false" desc="Message shown after user (Googlers only) clicks on the bluetooth logs hyperlink">
+          Include bluetooth logs which capture information such as btsnoop and HCI logs from your current session. The logs will be filtered to remove as much personal identifiable information as possible. The information is stored for up to one year and access is restricted to the team working on this issue.&#10;&#10;Additionally, if you have consented to extended bluetooth debugging via go/fw-dump-consent: If a problem with the bluetooth controller is detected, a firmware dump will be included, which may include unencrypted bluetooth packet data, over a very short time frame. This data may be shared with the controller's (third-party) manufacturer for troubleshooting controller issues.
         </message>
         <message name="IDS_FEEDBACK_TOOL_WIFI_DEBUG_LOGS_CHECKBOX" translateable="false" desc="Checkbox for Google internal account to attach Wifi debug logs from the current session.">
           Attach additional Wi-Fi information. <ph name="BEGIN_LINK1">&lt;a id="wifiDebugLogsInfoLink"&gt;</ph>View more details<ph name="END_LINK1">&lt;/a&gt;</ph>.
@@ -6270,6 +6374,10 @@
         <message name="IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_ZOOM_TOGGLE" desc="The text read aloud by the screen reader describing the keyboard icon 'full screen'.">
           full screen
         </message>
+        <message name="IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_ACCESSIBILITY" desc="The text read aloud by the screen reader describing the keyboard icon 'accessibility'.">
+          accessibility options
+        </message>
+
         <!-- End of Shortcut Customization -->
 
         <!-- APN -->

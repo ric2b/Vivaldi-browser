@@ -21,8 +21,8 @@
 
 namespace webnn::dml {
 
-class BufferImplDml;
 class CommandQueue;
+class TensorImplDml;
 
 // CommandRecorder is mainly responsible for the initialization and execution of
 // a DirectML graph. It wraps a DirectML command recorder, and manages the
@@ -32,7 +32,7 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) CommandRecorder final {
  public:
   static base::expected<std::unique_ptr<CommandRecorder>, HRESULT> Create(
       scoped_refptr<CommandQueue> queue,
-      Microsoft::WRL::ComPtr<IDMLDevice> dml_device);
+      Microsoft::WRL::ComPtr<IDMLDevice1> dml_device);
 
   ~CommandRecorder();
   CommandRecorder(const CommandRecorder&) = delete;
@@ -76,16 +76,16 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) CommandRecorder final {
                         uint64_t src_offset,
                         uint64_t byte_length);
 
-  // Helper function to upload buffer data from GPU to CPU.
-  void UploadBufferWithBarrier(
-      BufferImplDml* dst_buffer,
+  // Helper function to upload tensor data from GPU to CPU.
+  void UploadTensorWithBarrier(
+      TensorImplDml* dst_tensor,
       Microsoft::WRL::ComPtr<ID3D12Resource> src_buffer,
       size_t buffer_size);
 
-  // Helper function to readback buffer data from GPU to CPU.
-  void ReadbackBufferWithBarrier(
+  // Helper function to readback tensor data from GPU to CPU.
+  void ReadbackTensorWithBarrier(
       Microsoft::WRL::ComPtr<ID3D12Resource> dst_buffer,
-      BufferImplDml* src_buffer,
+      TensorImplDml* src_tensor,
       size_t buffer_size);
 
   // Initialize a compiled DirectML operator, which may also represent a
@@ -148,18 +148,18 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) CommandRecorder final {
 
   CommandQueue* command_queue() const { return command_queue_.get(); }
 
-  // Called when a WebNNBuffer requires tracking of GPU progress
+  // Called when a WebNNTensor requires tracking of GPU progress
   // because a recorded command will modify the data which could be accessed
   // by the CPU. The last submission fence will be updated during
   // recording to ensure the CPU can safely use the buffer.
-  void OnBufferAccessed(BufferImplDml* buffer);
+  void OnTensorAccessed(TensorImplDml* tensor);
 
   void ReferenceCommandResources(Microsoft::WRL::ComPtr<IUnknown> object);
 
  private:
   CommandRecorder(
       scoped_refptr<CommandQueue> command_queue,
-      Microsoft::WRL::ComPtr<IDMLDevice> dml_device,
+      Microsoft::WRL::ComPtr<IDMLDevice1> dml_device,
       Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator,
       Microsoft::WRL::ComPtr<IDMLCommandRecorder> command_recorder);
 
@@ -173,7 +173,7 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) CommandRecorder final {
   uint64_t last_submitted_fence_value_ = UINT64_MAX;
 
   scoped_refptr<CommandQueue> command_queue_;
-  Microsoft::WRL::ComPtr<IDMLDevice> dml_device_;
+  Microsoft::WRL::ComPtr<IDMLDevice1> dml_device_;
   Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device_;
   Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator_;
   Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list_;
@@ -184,12 +184,12 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) CommandRecorder final {
   // the execution of these commands on GPU.
   std::vector<Microsoft::WRL::ComPtr<IUnknown>> command_resources_;
 
-  // Keep WebNNBuffers used in recorded commands pending execution. The key is
+  // Keep WebNNTensors used in recorded commands pending execution. The key is
   // a strong pointer to the underlying ID3D12Resource to ensure the recorded
   // buffer entry will always remain valid until Open() is called again to reset
   // it.
-  std::map<Microsoft::WRL::ComPtr<ID3D12Resource>, base::WeakPtr<BufferImplDml>>
-      command_buffer_impls_;
+  std::map<Microsoft::WRL::ComPtr<ID3D12Resource>, base::WeakPtr<TensorImplDml>>
+      command_tensor_impls_;
 };
 
 }  // namespace webnn::dml

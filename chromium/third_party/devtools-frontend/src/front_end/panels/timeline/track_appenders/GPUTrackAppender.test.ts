@@ -45,7 +45,7 @@ describeWithEnvironment('GPUTrackAppender', function() {
       const levelCount = 1;
       assert.strictEqual(entryTypeByLevel.length, levelCount);
       const allEntriesAreTrackAppender =
-          entryTypeByLevel.every(type => type === Timeline.TimelineFlameChartDataProvider.EntryType.TrackAppender);
+          entryTypeByLevel.every(type => type === Timeline.TimelineFlameChartDataProvider.EntryType.TRACK_APPENDER);
       assert.isTrue(allEntriesAreTrackAppender);
     });
 
@@ -109,18 +109,8 @@ describeWithEnvironment('GPUTrackAppender', function() {
     it('returns the correct color and title for GPU tasks', () => {
       const gpuEvents = traceData.GPU.mainGPUThreadTasks;
       for (const event of gpuEvents) {
-        assert.strictEqual(gpuTrackAppender.titleForEvent(event), 'GPU');
         assert.strictEqual(gpuTrackAppender.colorForEvent(event), 'rgb(6 6 6)');
       }
-    });
-  });
-
-  describe('highlightedEntryInfo', () => {
-    it('returns the info for a entry correctly', () => {
-      const gpuEvents = traceData.GPU.mainGPUThreadTasks;
-      const highlightedEntryInfo = gpuTrackAppender.highlightedEntryInfo(gpuEvents[0]);
-      // The i18n encodes spaces using the u00A0 unicode character.
-      assert.strictEqual(highlightedEntryInfo.formattedTime, '52.37\u00A0ms');
     });
   });
 });

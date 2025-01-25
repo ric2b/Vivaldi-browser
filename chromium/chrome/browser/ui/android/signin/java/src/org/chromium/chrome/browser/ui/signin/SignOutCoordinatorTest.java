@@ -55,11 +55,10 @@ import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.metrics.SignoutReason;
-import org.chromium.components.sync.ModelType;
+import org.chromium.components.sync.DataType;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.components.user_prefs.UserPrefsJni;
-import org.chromium.ui.accessibility.UiAccessibilityFeatures;
 import org.chromium.ui.test.util.BlankUiTestActivity;
 
 import java.util.HashSet;
@@ -68,10 +67,7 @@ import java.util.Set;
 /** Instrumentation tests for {@link SignOutDialogCoordinator}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Batch(Batch.PER_CLASS)
-@EnableFeatures({
-    ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS,
-    UiAccessibilityFeatures.START_SURFACE_ACCESSIBILITY_CHECK
-})
+@EnableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
 public class SignOutCoordinatorTest {
     @Rule
     public final BaseActivityTestRule<BlankUiTestActivity> mActivityTestRule =
@@ -115,6 +111,26 @@ public class SignOutCoordinatorTest {
         startSignOutFlow(SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS, mOnSignOut, false);
 
         onView(withText(R.string.signout_title)).inRoot(isDialog()).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
+    public void testLegacyDialogWithRevokeSyncConsentReason_replaceSyncPromosFeatureEnabled() {
+        setUpMocks();
+        doReturn(true).when(mIdentityManagerMock).hasPrimaryAccount(ConsentLevel.SYNC);
+        mocker.mock(PasswordManagerUtilBridgeJni.TEST_HOOKS, mPasswordManagerUtilBridgeNativeMock);
+        mocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsNatives);
+        when(mUserPrefsNatives.get(mProfile)).thenReturn(mPrefService);
+        when(mProfile.isChild()).thenReturn(true);
+        when(mPrefService.getBoolean(Pref.ALLOW_DELETING_BROWSER_HISTORY)).thenReturn(true);
+
+        startSignOutFlow(
+                SignoutReason.USER_CLICKED_REVOKE_SYNC_CONSENT_SETTINGS, mOnSignOut, false);
+
+        onView(withText(R.string.turn_off_sync_title))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
     }
 
     @Test
@@ -177,7 +193,7 @@ public class SignOutCoordinatorTest {
     @MediumTest
     public void testUnsavedDataDialog() {
         setUpMocks();
-        mUnsyncedDataTypes.add(ModelType.BOOKMARKS);
+        mUnsyncedDataTypes.add(DataType.BOOKMARKS);
 
         startSignOutFlow(SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS, mOnSignOut, false);
 
@@ -197,7 +213,7 @@ public class SignOutCoordinatorTest {
     @MediumTest
     public void testUnsavedDataDialogPrimaryButtonClick() {
         setUpMocks();
-        mUnsyncedDataTypes.add(ModelType.BOOKMARKS);
+        mUnsyncedDataTypes.add(DataType.BOOKMARKS);
         @SignoutReason int signOutReason = SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS;
         doReturn(true).when(mSigninManagerMock).isSignOutAllowed();
         doAnswer(
@@ -231,7 +247,7 @@ public class SignOutCoordinatorTest {
     @MediumTest
     public void testUnsavedDataDialogSecondaryButtonClick() {
         setUpMocks();
-        mUnsyncedDataTypes.add(ModelType.BOOKMARKS);
+        mUnsyncedDataTypes.add(DataType.BOOKMARKS);
         @SignoutReason int signOutReason = SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS;
         startSignOutFlow(signOutReason, mOnSignOut, false);
         onView(withText(R.string.sign_out_unsaved_data_title))
@@ -315,7 +331,7 @@ public class SignOutCoordinatorTest {
     @MediumTest
     public void testSignOutConfirmDialogNowShownIfHasUnsavedData() {
         setUpMocks();
-        mUnsyncedDataTypes.add(ModelType.BOOKMARKS);
+        mUnsyncedDataTypes.add(DataType.BOOKMARKS);
 
         startSignOutFlow(SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS, mOnSignOut, true);
 

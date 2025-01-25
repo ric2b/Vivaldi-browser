@@ -14,6 +14,96 @@ ReadAloudCurrentGranularity::ReadAloudCurrentGranularity(
     const ReadAloudCurrentGranularity& other) = default;
 
 ReadAloudCurrentGranularity::~ReadAloudCurrentGranularity() = default;
+
+void ReadAloudCurrentGranularity::AddText(ui::AXNodeID id,
+                                          int text_start,
+                                          int text_end,
+                                          const std::u16string& text_to_add) {
+  DCHECK((text_end - text_start) == (int)text_to_add.size());
+
+  ReadAloudTextSegment segment{id, text_start, text_end};
+  segments[segment.id] = segment;
+  node_ids.push_back(segment.id);
+
+  int current_text_length = text.length();
+  text += text_to_add;
+  index_map.insert({{current_text_length, text.length()}, id});
+}
+
+std::vector<ReadAloudTextSegment>
+ReadAloudCurrentGranularity::GetSegmentsForRange(int start_index,
+                                                 int end_index) {
+  if (start_index >= end_index) {
+    return {};
+  }
+
+  auto start = index_map.upper_bound({start_index, INT_MAX});
+  if (start == index_map.begin()) {
+    // start_index is too low
+    return {};
+  }
+  // Rewind by 1 to find the actual start from the upper_bound
+  --start;
+
+  auto end = index_map.upper_bound({end_index, INT_MAX});
+  if (end == index_map.begin()) {
+    // end_index is too low
+    return {};
+  }
+
+  std::vector<ReadAloudTextSegment> ret;
+  while (start != end) {
+    auto range = start->first;
+    if ((start_index >= range.second) || (end_index <= range.first)) {
+      break;
+    }
+    ui::AXNodeID node = start->second;
+    auto segment = segments[node];
+
+    // For the first and last segments, we need to adjust the appropriate
+    // boundary to take start_index and end_index into account. For middle
+    // segments, we simply add the entire segment.
+    int text_start = (start_index >= range.first)
+                         ? (segment.text_start + start_index - range.first)
+                         : segment.text_start;
+    int text_end = (end_index < range.second)
+                       ? (segment.text_start + end_index - range.first)
+                       : segment.text_end;
+
+    ret.push_back(ReadAloudTextSegment(node, text_start, text_end));
+    ++start;
+  }
+
+  return ret;
+}
+
+void ReadAloudCurrentGranularity::CalculatePhrases() {
+  if (text.size() == 0) {
+    phrase_boundaries.clear();
+    return;
+  }
+
+  // Add a phrase boundary every 3 words. TODO(crbug.com/330749762): replace
+  // with the correct phrase calculation.
+  std::size_t start = 0;
+  int count = 0;
+  do {
+    if (count % 3 == 0) {
+      phrase_boundaries.push_back(start);
+    }
+    int next_word = GetNextWord(text.substr(start));
+    if (next_word == 0) {
+      break;
+    }
+    start += next_word;
+    ++count;
+    if (start >= text.size()) {
+      break;
+    }
+  } while (start);
+  phrase_boundaries.push_back(text.size());
+}
+
 }  // namespace a11y
 
 namespace {

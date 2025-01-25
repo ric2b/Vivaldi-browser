@@ -3,7 +3,15 @@
 # found in the LICENSE file.
 
 include_rules = [
-  '+cast',
+  '+cast/common/channel',
+  '+cast/common/public',
+  '+cast/receiver/public',
+  '+cast/receiver/application_agent.h',  # FIXME: Move to public/
+  '+cast/receiver/channel/static_credentials.h',  # FIXME: Move to public/
+  '+cast/receiver/receiver.h',  # FIXME: Move to public/
+  '+cast/streaming/public',
+  '+cast/streaming/message_fields.h',
+  '+cast/streaming/remoting.pb.h',
   '+platform/impl',
   '+discovery/common',
   '+discovery/public',

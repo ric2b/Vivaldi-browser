@@ -6,6 +6,7 @@
 #define IOS_CHROME_BROWSER_SHARED_PUBLIC_COMMANDS_ACTIVITY_SERVICE_COMMANDS_H_
 
 @class ShareHighlightCommand;
+@class ActivityServiceShareURLCommand;
 
 @protocol ActivityServiceCommands <NSObject>
 
@@ -23,9 +24,12 @@
 // Shows the share sheet for the page and currently highlighted text.
 - (void)shareHighlight:(ShareHighlightCommand*)command;
 
+// Shows the share sheet for the URL sharing flow for the given command.
+- (void)shareURLFromContextMenu:(ActivityServiceShareURLCommand*)command;
+
 // Vivaldi
-// Shows the site information for the current page.
-- (void)showSiteInfo;
+// Shows the tracker blocker manager that also contains site info.
+- (void)showTrackerBlockerManager;
 // Reload current page from location bar.
 - (void)reloadPage;
 // Stop loading current page from location bar.

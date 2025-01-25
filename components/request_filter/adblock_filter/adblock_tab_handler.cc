@@ -2,6 +2,8 @@
 
 #include "components/request_filter/adblock_filter/adblock_tab_handler.h"
 
+#include <optional>
+
 #include "base/stl_util.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter_tab_helper.h"
 #include "content/public/browser/browser_context.h"
@@ -10,7 +12,40 @@
 namespace adblock_filter {
 namespace {
 const int kSecondsBetweenNotifications = 1;
+
+struct FrameInfo {
+  content::WebContents* web_contents;
+  bool is_off_the_record;
+  RequestFilterTabHelper* tab_helper;
+};
+
+std::optional<FrameInfo> GetFrameInfo(content::RenderFrameHost* frame,
+                                      bool allow_off_the_record) {
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(frame);
+  if (!web_contents) {
+    // Don't keep stats on blocked urls not tied to a WebContents for now.
+    return std::nullopt;
+  }
+
+  bool is_off_the_record = web_contents->GetBrowserContext()->IsOffTheRecord();
+
+  if (is_off_the_record && !allow_off_the_record) {
+    return std::nullopt;
+  }
+
+  // Create it if it doesn't exist yet.
+  RequestFilterTabHelper::CreateForWebContents(web_contents);
+  RequestFilterTabHelper* tab_helper =
+      RequestFilterTabHelper::FromWebContents(web_contents);
+
+  if (!tab_helper) {
+    return std::nullopt;
+  }
+
+  return FrameInfo{web_contents, is_off_the_record, tab_helper};
 }
+}  // namespace
 
 TabHandler::Observer::~Observer() = default;
 
@@ -54,23 +89,37 @@ const std::map<uint32_t, base::Value>* TabHandler::GetTrackerInfo(
     return &tracker_info->second;
 }
 
+void TabHandler::SetFrameBlockState(RuleGroup group,
+                                    content::RenderFrameHost* frame) {
+  std::optional<FrameInfo> frame_info = GetFrameInfo(frame, false);
+  if (!frame_info) {
+    return;
+  }
+
+  frame_info->tab_helper->SetFrameBlockState(group,
+                                             frame->GetFrameTreeNodeId());
+}
+
+void TabHandler::ResetFrameBlockState(RuleGroup group,
+                                      content::RenderFrameHost* frame) {
+  std::optional<FrameInfo> frame_info = GetFrameInfo(frame, false);
+  if (!frame_info) {
+    return;
+  }
+
+  frame_info->tab_helper->ResetFrameBlockState(group,
+                                               frame->GetFrameTreeNodeId());
+}
+
 void TabHandler::OnUrlBlocked(RuleGroup group,
                               url::Origin origin,
                               GURL url,
                               content::RenderFrameHost* frame) {
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(frame);
-  if (!web_contents) {
-    // Don't keep stats on blocked urls not tied to a WebContents for now.
+  std::optional<FrameInfo> frame_info = GetFrameInfo(frame, true);
+  if (!frame_info) {
     return;
   }
-
-  bool is_off_the_record = web_contents->GetBrowserContext()->IsOffTheRecord();
-
-  // Create it if it doesn't exist yet.
-  RequestFilterTabHelper::CreateForWebContents(web_contents);
-  RequestFilterTabHelper* tab_helper =
-      RequestFilterTabHelper::FromWebContents(web_contents);
+  auto [web_contents, is_off_the_record, tab_helper] = *frame_info;
 
   bool is_known_tracker = false;
 
@@ -109,23 +158,47 @@ void TabHandler::OnUrlBlocked(RuleGroup group,
 
   tabs_with_new_blocks_[static_cast<size_t>(group)].insert(web_contents);
 
-  if (next_notifiaction_timer_.IsRunning())
-    return;
+  PrepareNewNotifications();
+}
 
-  base::TimeDelta time_since_last_notification =
-      base::Time::Now() - last_notification_time_;
-  if (time_since_last_notification >
-      base::Seconds(kSecondsBetweenNotifications)) {
-    NotifyOfNewBlockedUrls();
+void TabHandler::SetAdAttributionState(bool enabled,
+                                       content::RenderFrameHost* frame) {
+  std::optional<FrameInfo> frame_info = GetFrameInfo(frame, false);
+  if (!frame_info || frame_info->web_contents->GetPrimaryMainFrame() != frame) {
     return;
   }
+  frame_info->tab_helper->SetAdAttributionState(enabled);
+}
 
-  next_notifiaction_timer_.Start(
-      FROM_HERE,
-      base::Seconds(kSecondsBetweenNotifications) -
-          time_since_last_notification,
-      base::BindOnce(&TabHandler::NotifyOfNewBlockedUrls,
-                     weak_factory_.GetWeakPtr()));
+void TabHandler::SetTabAdQueryTriggers(
+    const GURL& ad_url,
+    std::vector<std::string> ad_query_triggers,
+    content::RenderFrameHost* frame) {
+  std::optional<FrameInfo> frame_info = GetFrameInfo(frame, false);
+  if (!frame_info || frame_info->web_contents->GetPrimaryMainFrame() != frame) {
+    return;
+  }
+  frame_info->tab_helper->SetAdQueryTriggers(ad_url,
+                                             std::move(ad_query_triggers));
+}
+
+bool TabHandler::DoesAdAttributionMatch(
+    content::RenderFrameHost* frame,
+    std::string_view tracker_url_spec,
+    std::string_view ad_domain_and_query_trigger) {
+  std::optional<FrameInfo> frame_info = GetFrameInfo(frame, false);
+  if (!frame_info) {
+    return false;
+  }
+  bool result = frame_info->tab_helper->DoesAdAttributionMatch(
+      tracker_url_spec, ad_domain_and_query_trigger);
+
+  if (result) {
+    tabs_with_new_attribution_trackers_.insert(frame_info->web_contents);
+    PrepareNewNotifications();
+  }
+
+  return result;
 }
 
 void TabHandler::AddToCounter(CounterGroup& counter_group,
@@ -147,9 +220,26 @@ void TabHandler::ClearBlockedCounters() {
   reporting_start_ = base::Time::Now();
 }
 
+bool TabHandler::WasFrameBlocked(RuleGroup group,
+                                 content::RenderFrameHost* frame) const {
+  std::optional<FrameInfo> frame_info = GetFrameInfo(frame, false);
+  if (!frame_info) {
+    return false;
+  }
+
+  return frame_info->tab_helper->WasFrameBlocked(group,
+                                                 frame->GetFrameTreeNodeId());
+}
+
 void TabHandler::OnTabRemoved(content::WebContents* contents) {
   for (size_t group = 0; group < kRuleGroupCount; group++)
     tabs_with_new_blocks_[group].erase(contents);
+}
+
+void TabHandler::OnAllowAttributionChanged(content::WebContents* contents) {
+  for (Observer& observer : observers_) {
+    observer.OnAllowAttributionChanged(contents);
+  }
 }
 
 void TabHandler::AddObserver(Observer* observer) {
@@ -160,15 +250,43 @@ void TabHandler::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void TabHandler::NotifyOfNewBlockedUrls() {
+void TabHandler::PrepareNewNotifications() {
+  if (next_notification_timer_.IsRunning())
+    return;
+
+  base::TimeDelta time_since_last_notification =
+      base::Time::Now() - last_notification_time_;
+  if (time_since_last_notification >
+      base::Seconds(kSecondsBetweenNotifications)) {
+    SendNotifications();
+    return;
+  }
+
+  next_notification_timer_.Start(FROM_HERE,
+                                 base::Seconds(kSecondsBetweenNotifications) -
+                                     time_since_last_notification,
+                                 base::BindOnce(&TabHandler::SendNotifications,
+                                                weak_factory_.GetWeakPtr()));
+}
+
+void TabHandler::SendNotifications() {
   schedule_save_.Run();
-  for (size_t group = 0; group < kRuleGroupCount; group++)
+  for (size_t group = 0; group < kRuleGroupCount; group++) {
     if (!tabs_with_new_blocks_[group].empty()) {
       for (Observer& observer : observers_)
         observer.OnNewBlockedUrlsReported(RuleGroup(group),
                                           tabs_with_new_blocks_[group]);
       tabs_with_new_blocks_[group].clear();
     }
+  }
+
+  if (!tabs_with_new_attribution_trackers_.empty()) {
+    for (Observer& observer : observers_) {
+      observer.OnNewAttributionTrackerAllowed(
+          tabs_with_new_attribution_trackers_);
+    }
+    tabs_with_new_attribution_trackers_.clear();
+  }
 }
 
 }  // namespace adblock_filter

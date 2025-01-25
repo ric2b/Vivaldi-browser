@@ -8,3 +8,8 @@ void main() {
   tint_symbol_1.Store<float16_t>(0u, tint_symbol.Load<float16_t>(0u));
   return;
 }
+FXC validation failure:
+<scrubbed_path>(6,3-21): error X3018: invalid subscript 'Store'
+
+
+tint executable returned error: exit status 1

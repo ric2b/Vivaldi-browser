@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/display/manager/test/action_logger_util.h"
 
 #include <stddef.h>
@@ -24,7 +29,7 @@ std::string GetCrtcAction(
       display_config_params.id, display_config_params.origin.x(),
       display_config_params.origin.y(),
       display_config_params.mode
-          ? display_config_params.mode->ToString().c_str()
+          ? display_config_params.mode->ToStringForTest().c_str()
           : "NULL",
       display_config_params.enable_vrr);
 }

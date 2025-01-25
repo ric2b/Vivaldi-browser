@@ -19,9 +19,13 @@ public class SuggestionEntry implements Comparable<SuggestionEntry> {
     public final GURL url;
     public final String title;
     public final long lastActiveTime;
-    public final int localTabId;
+
     @Nullable public final String appId;
+    @Nullable public String reasonToShowTab;
     @Nullable public TrainingInfo trainingInfo;
+
+    private int mLocalTabId;
+    private boolean mNeedMatchLocalTab;
 
     /**
      * @param type Type of the entry, one of the enum {@link SuggestionEntryType}.
@@ -32,6 +36,8 @@ public class SuggestionEntry implements Comparable<SuggestionEntry> {
      * @param localTabId For local tab only, the Tab ID. Defaults to INVALID_TAB_ID.
      * @param appId The ID of the app that opened this entry. {@code null} if the type is not {@link
      *     SuggestionEntryType.HISTORY} or it was opened by BrApp.
+     * @param reasonToShowTab The reason why a Tab is chosen.
+     * @param needMatchLocalTab Whether to check a matched local Tab for the suggestion.
      */
     SuggestionEntry(
             int type,
@@ -40,14 +46,18 @@ public class SuggestionEntry implements Comparable<SuggestionEntry> {
             String title,
             long lastActiveTime,
             int localTabId,
-            String appId) {
+            String appId,
+            @Nullable String reasonToShowTab,
+            boolean needMatchLocalTab) {
         this.type = type;
+        mNeedMatchLocalTab = needMatchLocalTab;
         this.sourceName = sourceName;
         this.url = url;
         this.title = title;
         this.lastActiveTime = lastActiveTime;
-        this.localTabId = localTabId;
+        mLocalTabId = localTabId;
         this.appId = appId;
+        this.reasonToShowTab = reasonToShowTab;
         // this.trainingInfo defaults to null, and gets assigned separately.
     }
 
@@ -62,7 +72,9 @@ public class SuggestionEntry implements Comparable<SuggestionEntry> {
                 title,
                 lastActiveTime,
                 Tab.INVALID_TAB_ID,
-                null);
+                null,
+                null,
+                /* needMatchLocalTab= */ false);
     }
 
     /** Instantiates from `sourceName` and ForeignSessionTab. */
@@ -84,7 +96,9 @@ public class SuggestionEntry implements Comparable<SuggestionEntry> {
                 /* title= */ localTab.getTitle(),
                 /* lastActiveTime= */ localTab.getTimestampMillis(),
                 /* localTabId= */ localTab.getId(),
-                /* appId= */ null);
+                /* appId= */ null,
+                /* reasonToShowTab= */ null,
+                /* needMatchLocalTab= */ false);
     }
 
     /** Suggestion comparator that favors recency, and uses other fields for tie-breaking. */
@@ -102,11 +116,36 @@ public class SuggestionEntry implements Comparable<SuggestionEntry> {
         if (compareResult != 0) {
             return compareResult;
         }
-        return Integer.compare(this.localTabId, other.localTabId);
+        return Integer.compare(mLocalTabId, other.mLocalTabId);
     }
 
     /** Returns whether the entry represents a Local Tab suggestion. */
     public boolean isLocalTab() {
-        return this.type == SuggestionEntryType.LOCAL_TAB && this.localTabId != Tab.INVALID_TAB_ID;
+        return mLocalTabId != Tab.INVALID_TAB_ID;
+    }
+
+    /** Gets the local Tab Id. */
+    public int getLocalTabId() {
+        return mLocalTabId;
+    }
+
+    /**
+     * Sets the local Tab id.
+     *
+     * @param tabId The new Tab Id.
+     */
+    public void setLocalTabId(int tabId) {
+        assert mLocalTabId == Tab.INVALID_TAB_ID;
+        mLocalTabId = tabId;
+    }
+
+    /** Gets whether need to match a local Tab for this SuggestionEntry. */
+    public boolean getNeedMatchLocalTab() {
+        return mNeedMatchLocalTab;
+    }
+
+    /** Reset the mNeedMatchLocalTab. */
+    public void resetNeedMatchLocalTab() {
+        mNeedMatchLocalTab = false;
     }
 }

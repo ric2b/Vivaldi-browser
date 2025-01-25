@@ -17,14 +17,13 @@
 import {arrayEquals} from '../base/array_utils';
 import {Actions} from '../common/actions';
 import {
-  Area,
-  AreaSelection,
   PivotTableAreaState,
   PivotTableQuery,
   PivotTableQueryMetadata,
   PivotTableResult,
   PivotTableState,
 } from '../common/state';
+import {Area, AreaSelection} from '../public/selection';
 import {featureFlags} from '../core/feature_flags';
 import {globals} from '../frontend/globals';
 import {
@@ -34,7 +33,6 @@ import {
 import {Aggregation, PivotTree} from '../frontend/pivot_table_types';
 import {Engine} from '../trace_processor/engine';
 import {ColumnType} from '../trace_processor/query_result';
-
 import {Controller} from './controller';
 
 export const PIVOT_TABLE_REDUX_FLAG = featureFlags.register({
@@ -217,7 +215,7 @@ export class PivotTableController extends Controller<{}> {
       return false;
     }
 
-    const newTracks = new Set(selection.tracks);
+    const newTracks = new Set(selection.trackUris);
     if (
       this.lastQueryArea !== state.selectionArea ||
       !this.sameTracks(newTracks)
@@ -279,7 +277,7 @@ export class PivotTableController extends Controller<{}> {
     }
 
     const pivotTableState = globals.state.nonSerializableState.pivotTable;
-    const selection = globals.state.selection;
+    const selection = globals.selectionManager.selection;
 
     if (
       pivotTableState.queryRequested ||
@@ -308,6 +306,6 @@ export class PivotTableController extends Controller<{}> {
 function areasEqual(a: Area, b: Area): boolean {
   if (a.start !== b.start) return false;
   if (a.end !== b.end) return false;
-  if (!arrayEquals(a.tracks, b.tracks)) return false;
+  if (!arrayEquals(a.trackUris, b.trackUris)) return false;
   return true;
 }

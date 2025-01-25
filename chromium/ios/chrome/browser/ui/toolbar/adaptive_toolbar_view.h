@@ -11,6 +11,7 @@
 @class ToolbarButton;
 @class ToolbarTabGridButton;
 @class ToolbarToolsMenuButton;
+enum class ToolbarTabGridButtonStyle;
 
 // Protocol defining the interface for interacting with a view of the adaptive
 // toolbar.
@@ -51,9 +52,13 @@
 // Sets the location bar view containing the omnibox.
 - (void)setLocationBarView:(UIView*)locationBarView;
 
+// Sets the style on the Tab Grid button.
+- (void)setTabGridButtonStyle:(ToolbarTabGridButtonStyle)tabGridButtonStyle;
+
 // Vivaldi
 @property(nonatomic, assign, readwrite) BOOL bottomOmniboxEnabled;
 @property(nonatomic, assign, readwrite) BOOL tabBarEnabled;
+@property(nonatomic, assign, readwrite) BOOL homePageEnabled;
 // Booleans that controls the toolbar overflow menu actions.
 @property(nonatomic, assign, readwrite) BOOL canShowBack;
 @property(nonatomic, assign, readwrite) BOOL canShowForward;

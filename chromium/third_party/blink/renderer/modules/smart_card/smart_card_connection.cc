@@ -96,7 +96,7 @@ class TransactionFulfilledFunction : public ScriptFunction::Callable {
 
   ScriptValue Call(ScriptState* script_state, ScriptValue value) override {
     ExceptionState exception_state(script_state->GetIsolate(),
-                                   ExceptionContextType::kOperationInvoke,
+                                   v8::ExceptionContext::kOperation,
                                    "SmartCardConnection", "startTransaction");
 
     if (value.IsUndefined()) {
@@ -399,8 +399,7 @@ ScriptPromise<DOMArrayBuffer> SmartCardConnection::control(
   // Note that there are control codes which require no input data.
   // Thus sending an empty data vector is fine.
   if (!data.IsDetached() && !data.IsNull() && data.ByteLength() > 0u) {
-    data_vector.Append(data.Bytes(),
-                       static_cast<wtf_size_t>(data.ByteLength()));
+    data_vector.AppendSpan(data.ByteSpan());
   }
 
   connection_->Control(
@@ -451,7 +450,7 @@ ScriptPromise<IDLUndefined> SmartCardConnection::setAttribute(
   SetOperationInProgress(resolver);
 
   Vector<uint8_t> data_vector;
-  data_vector.Append(data.Bytes(), static_cast<wtf_size_t>(data.ByteLength()));
+  data_vector.AppendSpan(data.ByteSpan());
 
   connection_->SetAttrib(
       tag, data_vector,
@@ -613,9 +612,7 @@ void SmartCardConnection::OnDataResult(
     return;
   }
 
-  const Vector<uint8_t>& data = result->get_data();
-
-  resolver->Resolve(DOMArrayBuffer::Create(data.data(), data.size()));
+  resolver->Resolve(DOMArrayBuffer::Create(result->get_data()));
 }
 
 void SmartCardConnection::OnStatusDone(
@@ -644,8 +641,7 @@ void SmartCardConnection::OnStatusDone(
   status->setState(connection_state.value());
   if (!mojo_status->answer_to_reset.empty()) {
     status->setAnswerToReset(
-        DOMArrayBuffer::Create(mojo_status->answer_to_reset.data(),
-                               mojo_status->answer_to_reset.size()));
+        DOMArrayBuffer::Create(mojo_status->answer_to_reset));
   }
   resolver->Resolve(status);
 }

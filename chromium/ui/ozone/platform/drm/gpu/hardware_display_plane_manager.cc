@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager.h"
 
 #include <drm_fourcc.h>
@@ -232,7 +237,8 @@ void HardwareDisplayPlaneManager::BeginFrame(
 bool HardwareDisplayPlaneManager::AssignOverlayPlanes(
     HardwareDisplayPlaneList* plane_list,
     const DrmOverlayPlaneList& overlay_list,
-    uint32_t crtc_id) {
+    uint32_t crtc_id,
+    std::optional<gfx::Point> crtc_offset) {
   auto hw_planes_iter = planes_.begin();
   for (const auto& plane : overlay_list) {
     HardwareDisplayPlane* hw_plane = nullptr;
@@ -250,7 +256,7 @@ bool HardwareDisplayPlaneManager::AssignOverlayPlanes(
       return false;
     }
 
-    if (!SetPlaneData(plane_list, hw_plane, plane, crtc_id,
+    if (!SetPlaneData(plane_list, hw_plane, plane, crtc_id, crtc_offset,
                       OverlayPlaneToDrmSrcRect(plane))) {
       RestoreCurrentPlaneList(plane_list);
       return false;

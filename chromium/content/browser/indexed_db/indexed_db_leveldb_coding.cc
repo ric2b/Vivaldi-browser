@@ -34,7 +34,7 @@
 using blink::IndexedDBKey;
 using blink::IndexedDBKeyPath;
 
-namespace content {
+namespace content::indexed_db {
 
 namespace {
 
@@ -452,7 +452,7 @@ void EncodeSortableIDBKey(const IndexedDBKey& value, std::string* into) {
     case blink::mojom::IDBKeyType::Invalid:
     case blink::mojom::IDBKeyType::Min:
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -896,7 +896,7 @@ static blink::mojom::IDBKeyType KeyTypeByteToKeyType(unsigned char type) {
       return blink::mojom::IDBKeyType::Min;
   }
 
-  NOTREACHED_IN_MIGRATION() << "Got invalid type " << type;
+  DUMP_WILL_BE_NOTREACHED() << "Got invalid type " << type;
   return blink::mojom::IDBKeyType::Invalid;
 }
 
@@ -1458,7 +1458,7 @@ std::string IndexedDBKeyToDebugString(std::string_view key) {
           }
           result << sub_key.DebugString();
           break;
-        }  // namespace content
+        }
         case kIndexNamesKeyTypeByte: {
           IndexNamesKey sub_key;
           if (!IndexNamesKey::Decode(&key_with_prefix_preserved, &sub_key)) {
@@ -2211,9 +2211,6 @@ int64_t IndexFreeListKey::IndexId() const {
   return index_id_;
 }
 
-// TODO(jsbell): We never use this to look up object store ids,
-// because a mapping is kept in the IndexedDBDatabase. Can the
-// mapping become unreliable?  Can we remove this?
 bool ObjectStoreNamesKey::Decode(std::string_view* slice,
                                  ObjectStoreNamesKey* result) {
   KeyPrefix prefix;
@@ -2645,4 +2642,4 @@ std::unique_ptr<IndexedDBKey> IndexDataKey::primary_key() const {
   return key;
 }
 
-}  // namespace content
+}  // namespace content::indexed_db

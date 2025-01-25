@@ -18,8 +18,8 @@
 #include "chrome/browser/password_manager/android/password_settings_updater_android_bridge_helper.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_manager_setting.h"
-#include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
 #include "components/password_manager/core/browser/password_sync_util.h"
+#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -118,10 +118,7 @@ bool ShouldMigrateLocalSettings(PrefService* pref_service,
   return !is_password_sync_enabled &&
          !pref_service->GetBoolean(
              password_manager::prefs::kSettingsMigratedToUPMLocal) &&
-         DoesUpmPrefAllowForSettingsMigration(pref_service) &&
-         base::FeatureList::IsEnabled(
-             password_manager::features::
-                 kUnifiedPasswordManagerLocalPasswordsAndroidWithMigration);
+         DoesUpmPrefAllowForSettingsMigration(pref_service);
 }
 
 // This function is called after a setting is fetched from

@@ -39,6 +39,7 @@ limitations under the License.
 #include "xla/python/ifrt/array.h"
 #include "xla/python/ifrt/client.h"
 #include "xla/python/ifrt/device.h"
+#include "xla/python/ifrt/device_list.h"
 #include "xla/python/ifrt/dtype.h"
 #include "xla/python/ifrt/future.h"
 #include "xla/python/ifrt/index.h"
@@ -382,11 +383,11 @@ CreateArrayFromHostTensorForSingleDevice(xla::ifrt::Client& ifrt_client,
 }
 
 absl::StatusOr<tsl::RCReference<xla::ifrt::Array>>
-MakeAssembledArrayFromHostBuffer(xla::ifrt::Client& ifrt_client,
-                                 const tensorflow::Tensor& input_tensor,
-                                 const xla::HloSharding& hlo_sharding,
-                                 const xla::ifrt::DeviceList& device_list,
-                                 const tsl::thread::ThreadPool& thread_pool) {
+MakeAssembledArrayFromHostBuffer(
+    xla::ifrt::Client& ifrt_client, const tensorflow::Tensor& input_tensor,
+    const xla::HloSharding& hlo_sharding,
+    const tsl::RCReference<xla::ifrt::DeviceList>& device_list,
+    const tsl::thread::ThreadPool& thread_pool) {
   // TODO(b/316959894): use xla::HloSharding to identifying sharding axis.
   auto sharding = xla::ifrt::HloSharding::Create(
       device_list, xla::ifrt::MemoryKind(), hlo_sharding);
@@ -418,17 +419,17 @@ MakeAssembledArrayFromHostBuffer(xla::ifrt::Client& ifrt_client,
     num_partitions_per_axis.push_back(num_partitions);
   }
 
-  if (total_num_partitions > sharding->devices().size() ||
-      sharding->devices().size() % total_num_partitions != 0) {
+  if (total_num_partitions > sharding->devices()->size() ||
+      sharding->devices()->size() % total_num_partitions != 0) {
     return absl::UnimplementedError(absl::StrCat(
-        "Number of devices ", sharding->devices().size(),
+        "Number of devices ", sharding->devices()->size(),
         " not a multiple of number of partitions", total_num_partitions));
   }
 
   // Assume index domains are non-overlapping and each index domain appears
   // exactly num_replicates times. This allows us to rely on
   // lexicographical sorting to replicate slices in the correct order.
-  int num_replicas = sharding->devices().size() / total_num_partitions;
+  int num_replicas = sharding->devices()->size() / total_num_partitions;
   if (index_domain_replicas != num_replicas) {
     return absl::FailedPreconditionError(
         absl::StrCat("IndexDomain indicates ", index_domain_replicas,
@@ -448,9 +449,10 @@ MakeAssembledArrayFromHostBuffer(xla::ifrt::Client& ifrt_client,
   };
   std::vector<IndexDomainDevice> index_domain_devices;
   index_domain_devices.reserve(index_domains.size());
+  const absl::Span<xla::ifrt::Device* const> sharding_devices =
+      sharding->devices()->devices();
   for (int i = 0; i < index_domains.size(); ++i) {
-    index_domain_devices.push_back(
-        {index_domains[i], sharding->devices()[i], i});
+    index_domain_devices.push_back({index_domains[i], sharding_devices[i], i});
   }
   std::sort(index_domain_devices.begin(), index_domain_devices.end(),
             [](const IndexDomainDevice& a, const IndexDomainDevice& b) {
@@ -490,19 +492,21 @@ MakeAssembledArrayFromHostBuffer(xla::ifrt::Client& ifrt_client,
       xla::ifrt::ArrayCopySemantics::kDonateInput);
 }
 
-}  // namespace
-
-absl::StatusOr<tensorflow::Tensor> MakeTensorFromArray(
+absl::StatusOr<xla::ifrt::Future<tensorflow::Tensor>> MakeTensorFromArrayHelper(
     xla::ifrt::Client& ifrt_client, xla::ifrt::Array& input_array,
     const xla::HloSharding& hlo_sharding,
-    const xla::ifrt::DeviceList& device_list,
-    const tsl::thread::ThreadPool& thread_pool) {
+    const tsl::RCReference<xla::ifrt::DeviceList>& device_list,
+    tsl::thread::ThreadPool& thread_pool) {
   TF_ASSIGN_OR_RETURN(tensorflow::DataType data_type,
                       ToTensorDataType(input_array.dtype()));
   tensorflow::TensorShape tensor_shape = ToTensorShape(input_array.shape());
 
   VLOG(2) << "Create tensor from array based on sharding: "
           << hlo_sharding.ToString();
+
+  xla::ifrt::Promise<tensorflow::Tensor> promise =
+      xla::ifrt::Future<tensorflow::Tensor>::CreatePromise();
+  xla::ifrt::Future<tensorflow::Tensor> output_tensor_future(promise);
 
   if (hlo_sharding.IsReplicated()) {
     VLOG(1) << "Fast path for replication";
@@ -516,14 +520,22 @@ absl::StatusOr<tensorflow::Tensor> MakeTensorFromArray(
           "Not fully replicated output. Expected ", tensor_shape.DebugString(),
           " but got ", fully_replicated_array->shape().DebugString()));
     }
+
     tensorflow::Tensor output_tensor(data_type, tensor_shape);
-    TF_RETURN_IF_ERROR(
-        fully_replicated_array
-            ->CopyToHostBuffer(output_tensor.data(),
-                               GetByteStrides(data_type, tensor_shape),
-                               xla::ifrt::ArrayCopySemantics::kAlwaysCopy)
-            .Await());
-    return output_tensor;
+    fully_replicated_array
+        ->CopyToHostBuffer(output_tensor.data(),
+                           GetByteStrides(data_type, tensor_shape),
+                           xla::ifrt::ArrayCopySemantics::kAlwaysCopy)
+        .OnReady([promise = std::move(promise),
+                  output_tensor =
+                      std::move(output_tensor)](absl::Status status) mutable {
+          if (!status.ok()) {
+            std::move(promise).Set(status);
+            return;
+          }
+          std::move(promise).Set(std::move(output_tensor));
+        });
+    return output_tensor_future;
   } else if (hlo_sharding.IsTileMaximal()) {
     // Maximal implies single device
     VLOG(1) << "Fast path for maximal";
@@ -535,13 +547,20 @@ absl::StatusOr<tensorflow::Tensor> MakeTensorFromArray(
     int64_t device_id = hlo_sharding.GetUniqueDevice();
 
     tensorflow::Tensor output_tensor(data_type, tensor_shape);
-    TF_RETURN_IF_ERROR(
-        disassembled_array[device_id]
-            ->CopyToHostBuffer(output_tensor.data(),
-                               GetByteStrides(data_type, tensor_shape),
-                               xla::ifrt::ArrayCopySemantics::kAlwaysCopy)
-            .Await());
-    return output_tensor;
+    disassembled_array[device_id]
+        ->CopyToHostBuffer(output_tensor.data(),
+                           GetByteStrides(data_type, tensor_shape),
+                           xla::ifrt::ArrayCopySemantics::kAlwaysCopy)
+        .OnReady([promise = std::move(promise),
+                  output_tensor =
+                      std::move(output_tensor)](absl::Status status) mutable {
+          if (!status.ok()) {
+            std::move(promise).Set(status);
+            return;
+          }
+          std::move(promise).Set(std::move(output_tensor));
+        });
+    return output_tensor_future;
   }
 
   auto ifrt_sharding = xla::ifrt::HloSharding::Create(
@@ -646,17 +665,48 @@ absl::StatusOr<tensorflow::Tensor> MakeTensorFromArray(
     arrays_copy_status.push_back(std::move(copy_status));
   }
 
-  TF_RETURN_IF_ERROR(
-      xla::ifrt::JoinFutures(absl::MakeSpan(arrays_copy_status)).Await());
+  xla::ifrt::JoinFutures(absl::MakeSpan(arrays_copy_status))
+      .OnReady([promise = std::move(promise), &ifrt_client,
+                input_tensors = std::move(input_tensors), num_concats,
+                data_type, tensor_shape,
+                &thread_pool](absl::Status status) mutable {
+        if (!status.ok()) {
+          std::move(promise).Set(status);
+          return;
+        }
+        thread_pool.Schedule(
+            [promise = std::move(promise), &ifrt_client,
+             input_tensors = std::move(input_tensors),
+             num_concats = std::move(num_concats), data_type = data_type,
+             tensor_shape = tensor_shape, &thread_pool]() mutable {
+              std::move(promise).Set(MakeTensorFromDisassembledTensors(
+                  ifrt_client, absl::MakeSpan(input_tensors), num_concats,
+                  data_type, tensor_shape, thread_pool));
+            });
+      });
+  return output_tensor_future;
+}
 
-  return MakeTensorFromDisassembledTensors(
-      ifrt_client, absl::MakeSpan(input_tensors), num_concats, data_type,
-      tensor_shape, thread_pool);
+}  // namespace
+
+xla::ifrt::Future<tensorflow::Tensor> MakeTensorFromArray(
+    xla::ifrt::Client& ifrt_client, xla::ifrt::Array& input_array,
+    const xla::HloSharding& hlo_sharding,
+    const tsl::RCReference<xla::ifrt::DeviceList>& device_list,
+    tsl::thread::ThreadPool& thread_pool) {
+  absl::StatusOr<xla::ifrt::Future<tensorflow::Tensor>> output_tensor_future =
+      MakeTensorFromArrayHelper(ifrt_client, input_array, hlo_sharding,
+                                device_list, thread_pool);
+  if (!output_tensor_future.ok()) {
+    return xla::ifrt::Future<tensorflow::Tensor>(
+        std::move(output_tensor_future).status());
+  }
+  return *std::move(output_tensor_future);
 }
 
 absl::StatusOr<tsl::RCReference<xla::ifrt::Array>> MakeArrayFromTensor(
     xla::ifrt::Client& ifrt_client, const tensorflow::Tensor& input_tensor,
-    const xla::ifrt::DeviceList& device_list,
+    const tsl::RCReference<xla::ifrt::DeviceList>& device_list,
     const xla::HloSharding& hlo_sharding,
     const tsl::thread::ThreadPool& thread_pool) {
   VLOG(3) << "IsTiled: " << hlo_sharding.IsTiled();
@@ -670,11 +720,11 @@ absl::StatusOr<tsl::RCReference<xla::ifrt::Array>> MakeArrayFromTensor(
   }
 
   VLOG(1) << "Hlo sharding: " << hlo_sharding.ToString();
-  VLOG(1) << "Device list size: " << device_list.size();
+  VLOG(1) << "Device list size: " << device_list->size();
 
-  if (device_list.size() == 1) {
+  if (device_list->size() == 1) {
     return CreateArrayFromHostTensorForSingleDevice(ifrt_client, input_tensor,
-                                                    device_list[0]);
+                                                    device_list->devices()[0]);
   }
 
   // IsTileMaximal() also returns true for a replicate sharding created by
@@ -687,6 +737,24 @@ absl::StatusOr<tsl::RCReference<xla::ifrt::Array>> MakeArrayFromTensor(
                                     xla::ifrt::DeviceId(unique_device_id)));
     return CreateArrayFromHostTensorForSingleDevice(ifrt_client, input_tensor,
                                                     device);
+  }
+
+  // Fast path for replicated sharding.
+  if (hlo_sharding.IsReplicated()) {
+    VLOG(1) << "Fast path for replicated tensor";
+    auto ifrt_sharding = xla::ifrt::HloSharding::Create(
+        device_list, xla::ifrt::MemoryKind(), hlo_sharding);
+
+    TF_ASSIGN_OR_RETURN(xla::ifrt::DType ifrt_dtype,
+                        ToIfrtDType(input_tensor.dtype()));
+    return ifrt_client.MakeArrayFromHostBuffer(
+        input_tensor.data(), ifrt_dtype, ToIfrtShape(input_tensor.shape()),
+        GetByteStrides(input_tensor.dtype(), input_tensor.shape()),
+        std::move(ifrt_sharding),
+        xla::ifrt::Client::HostBufferSemantics::
+            kImmutableUntilTransferCompletes,
+        [input_tensor]() {  // keep tensor alive
+        });
   }
 
   return MakeAssembledArrayFromHostBuffer(ifrt_client, input_tensor,
@@ -709,8 +777,9 @@ absl::StatusOr<tsl::RCReference<xla::ifrt::Array>> MakeArrayFromTensor(
         ifrt_client.LookupDevice(xla::ifrt::DeviceId(device_id)));
     devices.push_back(device);
   }
-  xla::ifrt::DeviceList device_list(
-      xla::ifrt::DeviceList::Devices(devices.begin(), devices.end()));
+  tsl::RCReference<xla::ifrt::DeviceList> device_list(
+      xla::ifrt::BasicDeviceList::Create(
+          xla::ifrt::BasicDeviceList::Devices(devices.begin(), devices.end())));
 
   return MakeArrayFromTensor(ifrt_client, input_tensor, device_list,
                              hlo_sharding, thread_pool);

@@ -5,6 +5,8 @@
 const detachedArrayBuffer = new ArrayBuffer(4);
 var b = detachedArrayBuffer.transferToFixedLength();
 
+const emptyArrayBuffer = new ArrayBuffer(0);
+
 const invalidConfigs = [
   {
     comment: 'Missing codec',
@@ -52,12 +54,54 @@ const invalidConfigs = [
     },
   },
   {
+    comment: 'Opus with >2 channels but no description',
+    config: {
+      codec: 'opus',
+      sampleRate: 48000,
+      numberOfChannels: 6,
+    }
+  },
+  {
     comment: 'Valid configuration except detached description',
     config: {
       codec: 'opus',
       sampleRate: 8000,
       numberOfChannels: 1,
       description: detachedArrayBuffer
+    },
+  },
+  {
+    comment: 'Vorbis without description',
+    config: {
+      codec: 'vorbis',
+      sampleRate: 48000,
+      numberOfChannels: 2,
+    },
+  },
+  {
+    comment: 'Vorbis with empty description',
+    config: {
+      codec: 'vorbis',
+      sampleRate: 48000,
+      numberOfChannels: 2,
+      description: emptyArrayBuffer,
+    },
+  },
+  {
+    comment: 'Flac without description',
+    config: {
+      codec: 'flac',
+      sampleRate: 48000,
+      numberOfChannels: 2,
+    },
+  },
+  {
+    comment: 'Flac with empty description',
+    config: {
+      codec: 'flac',
+      sampleRate: 48000,
+      numberOfChannels: 2,
+      description: emptyArrayBuffer,
     },
   },
 ];

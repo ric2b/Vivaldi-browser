@@ -20,9 +20,8 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.search_engines.settings.SearchEngineAdapter;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
@@ -200,10 +199,7 @@ public class TemplateUrlServiceTest {
         // Ensure known state of default search index before running test.
         TemplateUrl defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
         SearchEngineAdapter.sortAndFilterUnnecessaryTemplateUrl(
-                searchEngines,
-                defaultSearchEngine,
-                /* isEeaChoiceCountry= */ false,
-                mTemplateUrlService.shouldShowUpdatedSettings());
+                searchEngines, defaultSearchEngine, /* isEeaChoiceCountry= */ false);
 
         // Outside of the EEA, where prepopulated engines are always sorted by ID, Google has the
         // lowest ID and will be at the index 0 in the sorted list.
@@ -243,8 +239,7 @@ public class TemplateUrlServiceTest {
                         PLAY_API_IMAGE_POST_PARAM,
                         PLAY_API_IMAGE_TRANSLATE_URL,
                         PLAY_API_IMAGE_TRANSLATE_SOURCE_KEY,
-                        PLAY_API_IMAGE_TRANSLATE_DEST_KEY,
-                        true));
+                        PLAY_API_IMAGE_TRANSLATE_DEST_KEY));
 
         TemplateUrl defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
         Assert.assertEquals("keyword1", defaultSearchEngine.getKeyword());
@@ -257,18 +252,23 @@ public class TemplateUrlServiceTest {
     @SmallTest
     @Feature({"SearchEngines"})
     public void testSetPlayAPISearchEngine_UpdatePrepopulated() {
+        // TODO(b/360885010) Do not run the test on chrome-branded builds because these don't
+        // use fieldtrial testing.
+        if (BuildConfig.IS_CHROME_BRANDED) return;
+
         waitForTemplateUrlServiceToLoad();
 
-        TemplateUrl defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
-        String originalKeyword = defaultSearchEngine.getKeyword();
-        Assert.assertTrue(defaultSearchEngine.getIsPrepopulated());
+        TemplateUrl originalSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
+        String originalKeyword = originalSearchEngine.getKeyword();
+        Assert.assertTrue(originalSearchEngine.getIsPrepopulated());
         int searchEnginesCountBefore = getSearchEngineCount(mTemplateUrlService);
 
         // Adding Play API search engine with the same keyword should succeed.
         Assert.assertTrue(
                 setPlayAPISearchEngine(
                         mTemplateUrlService,
-                        defaultSearchEngine.getShortName(),
+                        originalSearchEngine.getShortName(),
+                        // Note: matching keyword should trigger reconciliation.
                         originalKeyword,
                         PLAY_API_SEARCH_URL,
                         PLAY_API_SUGGEST_URL,
@@ -278,14 +278,14 @@ public class TemplateUrlServiceTest {
                         null,
                         null,
                         null,
-                        null,
-                        true));
+                        null));
 
-        defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
-        Assert.assertEquals(originalKeyword, defaultSearchEngine.getKeyword());
-        Assert.assertEquals(PLAY_API_SEARCH_URL, defaultSearchEngine.getURL());
+        TemplateUrl updatedSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
+        Assert.assertEquals(originalKeyword, updatedSearchEngine.getKeyword());
+        // Chrome should promote built-in definitions.
+        Assert.assertEquals(originalSearchEngine.getURL(), updatedSearchEngine.getURL());
         // Still appears as prepopulated.
-        Assert.assertTrue(defaultSearchEngine.getIsPrepopulated());
+        Assert.assertTrue(updatedSearchEngine.getIsPrepopulated());
 
         // We need to ensure that from perspective of Java, the number of search engines is the same
         // even though the update didn't happen in place.
@@ -296,63 +296,6 @@ public class TemplateUrlServiceTest {
     @Test
     @SmallTest
     @Feature({"SearchEngines"})
-    @Features.DisableFeatures(ChromeFeatureList.PERSISTENT_SEARCH_ENGINE_CHOICE_IMPORT)
-    public void testSetPlayAPISearchEngine_UpdateExisting_NoPersistentImport() {
-        waitForTemplateUrlServiceToLoad();
-
-        // Add regular search engine. It will be used to test conflict with Play API search engine.
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mTemplateUrlService.addSearchEngineForTesting("keyword1", 0);
-                });
-
-        // Adding Play API search engine with the same keyword should succeed.
-        Assert.assertTrue(
-                setPlayAPISearchEngine(
-                        mTemplateUrlService,
-                        "SearchEngine1",
-                        "keyword1",
-                        PLAY_API_SEARCH_URL,
-                        PLAY_API_SUGGEST_URL,
-                        PLAY_API_FAVICON_URL,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        true));
-
-        TemplateUrl defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
-        Assert.assertEquals("keyword1", defaultSearchEngine.getKeyword());
-        Assert.assertTrue(defaultSearchEngine.getIsPrepopulated());
-        Assert.assertEquals(PLAY_API_SEARCH_URL, defaultSearchEngine.getURL());
-
-        // Adding Play API search engine again should fail.
-        Assert.assertFalse(
-                setPlayAPISearchEngine(
-                        mTemplateUrlService,
-                        "SearchEngine2",
-                        "keyword2",
-                        PLAY_API_SEARCH_URL,
-                        PLAY_API_SUGGEST_URL,
-                        PLAY_API_FAVICON_URL,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        true));
-
-        defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
-        Assert.assertEquals("keyword1", defaultSearchEngine.getKeyword());
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"SearchEngines"})
-    @Features.EnableFeatures(ChromeFeatureList.PERSISTENT_SEARCH_ENGINE_CHOICE_IMPORT)
     public void testSetPlayAPISearchEngine_UpdateExisting() {
         waitForTemplateUrlServiceToLoad();
 
@@ -376,8 +319,7 @@ public class TemplateUrlServiceTest {
                         null,
                         null,
                         null,
-                        null,
-                        true));
+                        null));
 
         TemplateUrl defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
         Assert.assertEquals("keyword1", defaultSearchEngine.getKeyword());
@@ -399,8 +341,7 @@ public class TemplateUrlServiceTest {
                         null,
                         null,
                         null,
-                        null,
-                        true));
+                        null));
 
         defaultSearchEngine = getDefaultSearchEngine(mTemplateUrlService);
         Assert.assertEquals("keyword2", defaultSearchEngine.getKeyword());
@@ -448,8 +389,7 @@ public class TemplateUrlServiceTest {
             String imageUrlPostParams,
             String imageTranslateUrl,
             String imageTranslateSourceLanguageParamKey,
-            String imageTranslateTargetLanguageParamKey,
-            boolean setAsDefault) {
+            String imageTranslateTargetLanguageParamKey) {
         return ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     return templateUrlService.setPlayAPISearchEngine(
@@ -463,8 +403,7 @@ public class TemplateUrlServiceTest {
                             imageUrlPostParams,
                             imageTranslateUrl,
                             imageTranslateSourceLanguageParamKey,
-                            imageTranslateTargetLanguageParamKey,
-                            setAsDefault);
+                            imageTranslateTargetLanguageParamKey);
                 });
     }
 

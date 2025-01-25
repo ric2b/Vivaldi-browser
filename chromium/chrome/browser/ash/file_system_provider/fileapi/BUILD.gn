@@ -23,6 +23,8 @@ static_library("fileapi") {
     "watcher_manager.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//base",
     "//chrome/browser/ash/file_system_provider",
@@ -48,9 +50,9 @@ source_set("unit_tests") {
     ":fileapi",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/ash",
     "//chrome/browser/ash/file_system_provider",
     "//chrome/browser/ash/file_system_provider:test_support",
+    "//chrome/browser/ash/fileapi",
     "//chrome/test:test_support",
     "//content/test:test_support",
     "//extensions/browser",

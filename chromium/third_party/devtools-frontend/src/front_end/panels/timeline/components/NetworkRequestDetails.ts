@@ -6,6 +6,7 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import * as TraceEngine from '../../../models/trace/trace.js';
+import * as RequestLinkIcon from '../../../ui/components/request_link_icon/request_link_icon.js';
 import * as PerfUI from '../../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as LegacyComponents from '../../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../../ui/legacy/legacy.js';
@@ -21,11 +22,11 @@ const UIStrings = {
   /**
    *@description Text that refers to updated priority of network request
    */
-  initialPriority: 'Initial Priority',
+  initialPriority: 'Initial priority',
   /**
    *@description Text that refers to the network request method
    */
-  requestMethod: 'Request Method',
+  requestMethod: 'Request method',
   /**
    *@description Text to show the priority of an item
    */
@@ -33,11 +34,11 @@ const UIStrings = {
   /**
    *@description Text used when referring to the data sent in a network request that is encoded as a particular file format.
    */
-  encodedData: 'Encoded Data',
+  encodedData: 'Encoded data',
   /**
    *@description Text used to refer to the data sent in a network request that has been decoded.
    */
-  decodedBody: 'Decoded Body',
+  decodedBody: 'Decoded body',
   /**
    *@description Text in Timeline indicating that input has happened recently
    */
@@ -65,7 +66,7 @@ const UIStrings = {
   /**
    *@description Text used to show the mime-type of the data transferred with a network request (e.g. "application/json").
    */
-  mimeType: 'Mime Type',
+  mimeType: 'MIME type',
   /**
    *@description Text used to show the user that a request was served from the browser's in-memory cache.
    */
@@ -114,6 +115,7 @@ export class NetworkRequestDetails extends HTMLElement {
   #maybeTarget: SDK.Target.Target|null = null;
   #requestPreviewElements = new WeakMap<TraceEngine.Types.TraceEvents.SyntheticNetworkRequest, HTMLImageElement>();
   #linkifier: LegacyComponents.Linkifier.Linkifier;
+  #traceParsedData: TraceEngine.Handlers.Types.TraceParseData|null = null;
   constructor(linkifier: LegacyComponents.Linkifier.Linkifier) {
     super();
     this.#linkifier = linkifier;
@@ -124,11 +126,13 @@ export class NetworkRequestDetails extends HTMLElement {
   }
 
   async setData(
+      traceParsedData: TraceEngine.Handlers.Types.TraceParseData,
       networkRequest: TraceEngine.Types.TraceEvents.SyntheticNetworkRequest,
       maybeTarget: SDK.Target.Target|null): Promise<void> {
-    if (this.#networkRequest === networkRequest) {
+    if (this.#networkRequest === networkRequest && traceParsedData === this.#traceParsedData) {
       return;
     }
+    this.#traceParsedData = traceParsedData;
     this.#networkRequest = networkRequest;
     this.#maybeTarget = maybeTarget;
     await this.#render();
@@ -170,19 +174,36 @@ export class NetworkRequestDetails extends HTMLElement {
     };
     const linkifiedURL = LegacyComponents.Linkifier.Linkifier.linkifyURL(
         this.#networkRequest.args.data.url as Platform.DevToolsPath.UrlString, options);
-    linkifiedURL.addEventListener('contextmenu', (event: MouseEvent) => {
-      if (!this.#networkRequest) {
-        return;
-      }
-      // Add a wrapper class here. The reason is the `Reveal in Network panel` option is handled by the context menu
-      // provider, which will add this option for all supporting types. And there are a lot of context menu providers that
-      // support `SDK.NetworkRequest.NetworkRequest`, for example `Override content` by PersistenceActions, but we so far
-      // just want the one to reveal in network panel, so add a new class which will only be supported by Network panel.
-      const request = new TimelineUtils.NetworkRequest.TimelineNetworkRequest(this.#networkRequest);
-      const contextMenu = new UI.ContextMenu.ContextMenu(event, {useSoftMenu: true});
-      contextMenu.appendApplicableItems(request);
-      void contextMenu.show();
-    });
+
+    const networkRequest = TimelineUtils.NetworkRequest.getNetworkRequest(this.#networkRequest);
+    if (networkRequest) {
+      linkifiedURL.addEventListener('contextmenu', (event: MouseEvent) => {
+        if (!this.#networkRequest) {
+          return;
+        }
+        // Add a wrapper class here.
+        // The main reason is the `Reveal in Network panel` option is handled by the context menu provider, which will
+        // add this option for all supporting types. And there are a lot of context menu providers that support
+        // `SDK.NetworkRequest.NetworkRequest`, for example `Override content` by PersistenceActions, but we so far just
+        // want the one to reveal in network panel, so add a new class which will only be supported by Network panel.
+        // Also we want to have a different behavior(select the network request) from the
+        // `SDK.NetworkRequest.NetworkRequest` (highlight the network request once).
+        const contextMenu = new UI.ContextMenu.ContextMenu(event, {useSoftMenu: true});
+        contextMenu.appendApplicableItems(new TimelineUtils.NetworkRequest.TimelineNetworkRequest(networkRequest));
+        void contextMenu.show();
+      });
+
+      // clang-format off
+      const urlElement = LitHtml.html`
+        ${linkifiedURL}
+        <${RequestLinkIcon.RequestLinkIcon.RequestLinkIcon.litTagName}
+          .data=${{request: networkRequest} as RequestLinkIcon.RequestLinkIcon.RequestLinkIconData} >
+        </${RequestLinkIcon.RequestLinkIcon.RequestLinkIcon.litTagName}>
+      `;
+      // clang-format on
+      return this.#renderRow(i18n.i18n.lockedString('URL'), urlElement);
+    }
+
     return this.#renderRow(i18n.i18n.lockedString('URL'), linkifiedURL);
   }
 
@@ -242,14 +263,33 @@ export class NetworkRequestDetails extends HTMLElement {
       return null;
     }
 
-    const topFrame = TraceEngine.Helpers.Trace.getZeroIndexedStackTraceForEvent(this.#networkRequest)?.at(0) ?? null;
-    if (topFrame) {
-      const link = this.#linkifier.maybeLinkifyConsoleCallFrame(
-          this.#maybeTarget, topFrame, {tabStop: true, inlineFrameIndex: 0, showColumnNumber: true});
+    const hasStackTrace = TraceEngine.Helpers.Trace.stackTraceForEvent(this.#networkRequest) !== null;
+
+    // If we have a stack trace, that is the most reliable way to get the initiator data and display a link to the source.
+    if (hasStackTrace) {
+      const topFrame = TraceEngine.Helpers.Trace.getZeroIndexedStackTraceForEvent(this.#networkRequest)?.at(0) ?? null;
+      if (topFrame) {
+        const link = this.#linkifier.maybeLinkifyConsoleCallFrame(
+            this.#maybeTarget, topFrame, {tabStop: true, inlineFrameIndex: 0, showColumnNumber: true});
+        if (link) {
+          return this.#renderRow(i18nString(UIStrings.initiatedBy), link);
+        }
+      }
+    }
+    // If we do not, we can see if the network handler found an initiator and try to link by URL
+    const initiator = this.#traceParsedData?.NetworkRequests.eventToInitiator.get(this.#networkRequest);
+    if (initiator) {
+      const link = this.#linkifier.maybeLinkifyScriptLocation(
+          this.#maybeTarget,
+          null,  // this would be the scriptId, but we don't have one. The linkifier will fallback to using the URL.
+          initiator.args.data.url as Platform.DevToolsPath.UrlString,
+          undefined,  // line number
+      );
       if (link) {
         return this.#renderRow(i18nString(UIStrings.initiatedBy), link);
       }
     }
+
     return null;
   }
 
@@ -265,6 +305,7 @@ export class NetworkRequestDetails extends HTMLElement {
                  imageAltText: LegacyComponents.ImagePreview.ImagePreview.defaultAltTextForImageURL(
                      this.#networkRequest.args.data.url as Platform.DevToolsPath.UrlString),
                  precomputedFeatures: undefined,
+                 align: LegacyComponents.ImagePreview.Align.START,
                }) as HTMLImageElement);
 
       this.#requestPreviewElements.set(this.#networkRequest, previewElement);

@@ -7,45 +7,47 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "gpu/config/gpu_feature_info.h"
-#include "services/webnn/public/mojom/webnn_buffer.mojom-forward.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom-forward.h"
+#include "services/webnn/public/mojom/webnn_tensor.mojom-forward.h"
 #include "services/webnn/webnn_context_impl.h"
 #include "services/webnn/webnn_graph_impl.h"
+#include "third_party/microsoft_dxheaders/include/directml.h"
 #include "third_party/microsoft_dxheaders/src/include/directx/d3d12.h"
 
 namespace webnn::dml {
 
 class Adapter;
-class BufferImplDml;
 class CommandRecorder;
+class TensorImplDml;
 
 // `ContextImplDml` is created by `WebNNContextProviderImpl` and responsible for
-// creating `GraphImplDml` and `BufferImplDml` of DirectML backend for Windows
+// creating `GraphImplDml` and `TensorImplDml` of DirectML backend for Windows
 // platform. The `Adapter` instance is shared by all `GraphImplDml` and
-// `BufferImplDml` created by this context.
+// `TensorImplDml` created by this context.
 class ContextImplDml final : public WebNNContextImpl {
  public:
   ContextImplDml(scoped_refptr<Adapter> adapter,
                  mojo::PendingReceiver<mojom::WebNNContext> receiver,
-                 mojo::PendingRemote<mojom::WebNNContextClient> client_remote,
                  WebNNContextProviderImpl* context_provider,
                  mojom::CreateContextOptionsPtr options,
                  std::unique_ptr<CommandRecorder> command_recorder,
-                 const gpu::GpuFeatureInfo& gpu_feature_info,
-                 base::UnguessableToken context_handle);
+                 const gpu::GpuFeatureInfo& gpu_feature_info);
 
   ContextImplDml(const WebNNContextImpl&) = delete;
   ContextImplDml& operator=(const ContextImplDml&) = delete;
 
   ~ContextImplDml() override;
 
+  // static
+  static ContextProperties GetProperties(DML_FEATURE_LEVEL feature_level);
+
   // WebNNContextImpl:
   base::WeakPtr<WebNNContextImpl> AsWeakPtr() override;
 
-  void ReadBuffer(BufferImplDml* src_buffer,
-                  mojom::WebNNBuffer::ReadBufferCallback callback);
+  void ReadTensor(TensorImplDml* src_tensor,
+                  mojom::WebNNTensor::ReadTensorCallback callback);
 
-  void WriteBuffer(BufferImplDml* dst_buffer, mojo_base::BigBuffer src_buffer);
+  void WriteTensor(TensorImplDml* dst_tensor, mojo_base::BigBuffer src_buffer);
 
   // Some errors like `E_OUTOFMEMORY`, `DXGI_ERROR_DEVICE_REMOVED` and
   // `DXGI_ERROR_DEVICE_RESET` are treated as `context lost` errors, other
@@ -61,10 +63,10 @@ class ContextImplDml final : public WebNNContextImpl {
       WebNNGraphImpl::ComputeResourceInfo compute_resource_info,
       CreateGraphImplCallback callback) override;
 
-  std::unique_ptr<WebNNBufferImpl> CreateBufferImpl(
-      mojo::PendingAssociatedReceiver<mojom::WebNNBuffer> receiver,
-      mojom::BufferInfoPtr buffer_info,
-      const base::UnguessableToken& buffer_handle) override;
+  void CreateTensorImpl(
+      mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
+      mojom::TensorInfoPtr tensor_info,
+      CreateTensorImplCallback callback) override;
 
   // Begins recording commands needed for context operations.
   // If recording failed, calling this function will recreate the recorder to
@@ -81,7 +83,7 @@ class ContextImplDml final : public WebNNContextImpl {
   void OnReadbackComplete(
       Microsoft::WRL::ComPtr<ID3D12Resource> download_buffer,
       size_t read_byte_size,
-      mojom::WebNNBuffer::ReadBufferCallback callback,
+      mojom::WebNNTensor::ReadTensorCallback callback,
       HRESULT hr);
 
   // After the upload completes, tell the queue to immediately

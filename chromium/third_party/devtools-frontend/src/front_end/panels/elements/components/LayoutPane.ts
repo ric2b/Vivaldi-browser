@@ -196,17 +196,17 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
 
   modelAdded(domModel: SDK.DOMModel.DOMModel): void {
     const overlayModel = domModel.overlayModel();
-    overlayModel.addEventListener(SDK.OverlayModel.Events.PersistentGridOverlayStateChanged, this.render, this);
+    overlayModel.addEventListener(SDK.OverlayModel.Events.PERSISTENT_GRID_OVERLAY_STATE_CHANGED, this.render, this);
     overlayModel.addEventListener(
-        SDK.OverlayModel.Events.PersistentFlexContainerOverlayStateChanged, this.render, this);
+        SDK.OverlayModel.Events.PERSISTENT_FLEX_CONTAINER_OVERLAY_STATE_CHANGED, this.render, this);
     this.#domModels.push(domModel);
   }
 
   modelRemoved(domModel: SDK.DOMModel.DOMModel): void {
     const overlayModel = domModel.overlayModel();
-    overlayModel.removeEventListener(SDK.OverlayModel.Events.PersistentGridOverlayStateChanged, this.render, this);
+    overlayModel.removeEventListener(SDK.OverlayModel.Events.PERSISTENT_GRID_OVERLAY_STATE_CHANGED, this.render, this);
     overlayModel.removeEventListener(
-        SDK.OverlayModel.Events.PersistentFlexContainerOverlayStateChanged, this.render, this);
+        SDK.OverlayModel.Events.PERSISTENT_FLEX_CONTAINER_OVERLAY_STATE_CHANGED, this.render, this);
     this.#domModels = this.#domModels.filter(model => model !== domModel);
   }
 
@@ -473,7 +473,7 @@ export class LayoutPane extends LegacyWrapper.LegacyWrapper.WrappableComponent {
         <input @change=${onColorChange} @input=${onColorChange} title=${i18nString(UIStrings.chooseElementOverlayColor)} tabindex="0" class="color-picker" type="color" value=${element.color} />
       </label>
       <${Buttons.Button.Button.litTagName} class="show-element"
-                                           title=${i18nString(UIStrings.showElementInTheElementsPanel)}
+                                           .title=${i18nString(UIStrings.showElementInTheElementsPanel)}
                                            aria-label=${i18nString(UIStrings.showElementInTheElementsPanel)}
                                            .iconName=${'select-element'}
                                            .jslogContext=${'elements.select-element'}

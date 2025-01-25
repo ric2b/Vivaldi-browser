@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.facilitated_payments;
 
-import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties.DESCRIPTION_1_ID;
-import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties.DESCRIPTION_2_ID;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties.SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_DRAWABLE_ID;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_ICON_BITMAP;
@@ -31,6 +29,7 @@ import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymen
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.VisibleState.SWAPPING_SCREEN;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 
 import androidx.annotation.VisibleForTesting;
@@ -43,6 +42,7 @@ import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPayme
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.FooterProperties;
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.HeaderProperties;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.components.autofill.ImageSize;
 import org.chromium.components.autofill.payments.AccountType;
 import org.chromium.components.autofill.payments.BankAccount;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
@@ -71,6 +71,11 @@ class FacilitatedPaymentsPaymentMethodsMediator {
         mModel = model;
         mDelegate = delegate;
         mProfile = profile;
+    }
+
+    boolean isInLandscapeMode() {
+        return mContext.getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE;
     }
 
     boolean showSheet(List<BankAccount> bankAccounts) {
@@ -153,7 +158,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
                 new PropertyModel.Builder(FooterProperties.ALL_KEYS)
                         .with(
                                 FooterProperties.SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK,
-                                () -> mDelegate.showFinancialAccountsManagementSettings(mContext))
+                                () -> mDelegate.showManagePaymentMethodsSettings(mContext))
                         .build());
     }
 
@@ -163,9 +168,8 @@ class FacilitatedPaymentsPaymentMethodsMediator {
                 FacilitatedPaymentsPaymentMethodsProperties.ItemType.ADDITIONAL_INFO,
                 new PropertyModel.Builder(AdditionalInfoProperties.ALL_KEYS)
                         .with(
-                                DESCRIPTION_1_ID,
-                                R.string.pix_payment_transaction_exceeding_balance_note)
-                        .with(DESCRIPTION_2_ID, R.string.pix_payment_turn_off_pix_note)
+                                AdditionalInfoProperties.DESCRIPTION_ID,
+                                R.string.pix_payment_consent_note)
                         .with(
                                 SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK,
                                 () -> mDelegate.showFinancialAccountsManagementSettings(mContext))
@@ -190,7 +194,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
                             .getCustomImageForAutofillSuggestionIfAvailable(
                                     bankAccount.getDisplayIconUrl(),
                                     AutofillUiUtils.CardIconSpecs.create(
-                                            context, AutofillUiUtils.CardIconSize.LARGE));
+                                            context, ImageSize.SQUARE));
         }
         if (bankIconOptional.isPresent()) {
             bankAccountModelBuilder.with(BANK_ACCOUNT_ICON_BITMAP, bankIconOptional.get());

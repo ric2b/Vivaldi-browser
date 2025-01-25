@@ -1,4 +1,6 @@
 */src/
+clang-format
 llvm-build
 modp_b64
-ninja/ninja*
+ninja
+

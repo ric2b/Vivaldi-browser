@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Napaka</translation>
 <translation id="1175364870820465910">&amp;Natisni...</translation>
 <translation id="1181037720776840403">Odstrani</translation>
+<translation id="1184037892196730210">Zaslona ni mogoče predvajati</translation>
 <translation id="1187722533808055681">Prekinitev mirovanja</translation>
 <translation id="122082903575839559">Algoritem podpisa certifikata</translation>
 <translation id="1221825588892235038">Samo izbor</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Vrednost polja</translation>
 <translation id="2662876636500006917">Spletna trgovina Chrome</translation>
 <translation id="2678063897982469759">Znova omogoči</translation>
-<translation id="2678100101831051676">Ni mogoče predvajati.</translation>
 <translation id="2719936478972253983">Blokirani so bili naslednji piškotki</translation>
 <translation id="2721037002783622288">&amp;Išči sliko tu <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Ne po</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Ta razširitev je morda poškodovana.</translation>
 <translation id="3387614642886316601">Uporabi izboljšano preverjanje črkovanja</translation>
 <translation id="3390013585654699824">Podrobnosti o aplikaciji</translation>
-<translation id="3393582007140394275">Zaslona ni mogoče predvajati.</translation>
 <translation id="345693547134384690">Odpri &amp;sliko v novem zavihku</translation>
 <translation id="3493881266323043047">Veljavnost</translation>
 <translation id="3511307672085573050">Kopiraj naslov pov&amp;ezave</translation>
@@ -347,6 +346,7 @@ Javni eksponent (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bitov):
 <translation id="6812841287760418429">Obdrži spremembe</translation>
 <translation id="6824564591481349393">Kopiraj &amp;e-poštni naslov</translation>
 <translation id="6840155290835956714">Vprašaj pred pošiljanjem</translation>
+<translation id="6878862640969460273">Ležeče</translation>
 <translation id="6886871292305414135">Odpri povezavo v novem &amp;zavihku</translation>
 <translation id="6892812721183419409">Odpri povezavo kot <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikacija v ozadju: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@ Javni eksponent (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bitov):
 <translation id="7287143125007575591">Dostop zavrnjen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Preveri črkovanje med tipkanjem</translation>
+<translation id="7359680654975233185">Zavihka ni mogoče predvajati</translation>
 <translation id="7385854874724088939">Napaka pri tiskanju. Preverite tiskalnik in poskusite znova.</translation>
 <translation id="7412226954991670867">GPU pomnilnik</translation>
 <translation id="7421925624202799674">&amp;Prikaz izvorne kode strani</translation>
@@ -380,6 +381,7 @@ Javni eksponent (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bitov):
 <translation id="7661259717474717992">Spletnim mestom dovoli shranjevanje in branje podatkov piškotkov</translation>
 <translation id="7663719505383602579">Sprejemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Namestil skrbnik</translation>
+<translation id="7685038817958445325">Ni mogoče predvajati</translation>
 <translation id="7685049629764448582">JavaScript pomnilnik</translation>
 <translation id="7701869757853594372">USER ročaji</translation>
 <translation id="7704305437604973648">Opravilo</translation>
@@ -410,7 +412,6 @@ Datoteka s ključem: <ph name="KEY_FILE" />
 Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih različic razširitev.</translation>
 <translation id="8004582292198964060">Brskalnik</translation>
 <translation id="8018313076035239964">Nadzirajte, katere podatke lahko uporabijo spletna mesta in katero vsebino vam lahko pokažejo</translation>
-<translation id="8032244173881942855">Zavihka ni mogoče predvajati.</translation>
 <translation id="8071432093239591881">Natisni kot sliko</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,¸
@@ -466,7 +467,6 @@ Datoteko s ključem shranite na varnem. Potrebovali jo boste za izdelavo novih r
 <translation id="9218430445555521422">Nastavi kot privzeto</translation>
 <translation id="93766956588638423">Popravi razširitev</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Ležeče</translation>
 <translation id="994289308992179865">&amp;Zanka</translation>
 <translation id="998747458861718449">Preglej</translation>
 </translationbundle>

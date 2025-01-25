@@ -10,14 +10,17 @@
 #include "ash/public/mojom/input_device_settings.mojom-forward.h"
 #include "ash/public/mojom/input_device_settings.mojom-shared.h"
 #include "ash/public/mojom/input_device_settings.mojom.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/input_device_settings/input_device_settings_metrics_manager.h"
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
 #include "ash/system/toast/anchored_nudge.h"
 #include "ash/system/toast/anchored_nudge_manager_impl.h"
 #include "ash/test/ash_test_base.h"
 #include "base/containers/contains.h"
 #include "base/run_loop.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -127,35 +130,37 @@ class InputDeviceSettingsNotificationControllerTest : public AshTestBase {
   }
 
   void NotifyMouseIsCustomizable(const mojom::Mouse& mouse,
-                                 gfx::Image image = gfx::Image()) {
+                                 gfx::ImageSkia image = gfx::ImageSkia()) {
     controller()->NotifyMouseIsCustomizable(mouse, image);
   }
 
   void NotifyMouseFirstTimeConnected(const mojom::Mouse& mouse,
-                                     gfx::Image image = gfx::Image()) {
+                                     gfx::ImageSkia image = gfx::ImageSkia()) {
     controller()->NotifyMouseFirstTimeConnected(mouse, image);
   }
 
-  void NotifyTouchpadFirstTimeConnected(const mojom::Touchpad& touchpad,
-                                        gfx::Image image = gfx::Image()) {
+  void NotifyTouchpadFirstTimeConnected(
+      const mojom::Touchpad& touchpad,
+      gfx::ImageSkia image = gfx::ImageSkia()) {
     controller()->NotifyTouchpadFirstTimeConnected(touchpad, image);
   }
 
   void NotifyGraphicsTabletIsCustomizable(
       const mojom::GraphicsTablet& graphics_tablet,
-      gfx::Image image = gfx::Image()) {
+      gfx::ImageSkia image = gfx::ImageSkia()) {
     controller()->NotifyGraphicsTabletIsCustomizable(graphics_tablet, image);
   }
 
   void NotifyGraphicsTabletFirstTimeConnected(
       const mojom::GraphicsTablet& graphics_tablet,
-      gfx::Image image = gfx::Image()) {
+      gfx::ImageSkia image = gfx::ImageSkia()) {
     controller()->NotifyGraphicsTabletFirstTimeConnected(graphics_tablet,
                                                          image);
   }
 
-  void NotifyKeyboardFirstTimeConnected(const mojom::Keyboard& keyboard,
-                                        gfx::Image image = gfx::Image()) {
+  void NotifyKeyboardFirstTimeConnected(
+      const mojom::Keyboard& keyboard,
+      gfx::ImageSkia image = gfx::ImageSkia()) {
     controller()->NotifyKeyboardFirstTimeConnected(keyboard, image);
   }
 
@@ -322,25 +327,24 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
 TEST_F(InputDeviceSettingsNotificationControllerTest,
        ShowPeripheralSettingsOnCustomizationNotificationClick) {
   NotifyMouseIsCustomizable(kMouse1);
-  message_center()->ClickOnNotification("peripheral_customization_mouse_1");
+  message_center()->ClickOnNotification("welcome_experience_1");
   EXPECT_EQ(GetSystemTrayClient()->show_mouse_settings_count(), 1);
 
   NotifyGraphicsTabletIsCustomizable(kGraphicsTablet2);
-  message_center()->ClickOnNotification(
-      "peripheral_customization_graphics_tablet_2");
+  message_center()->ClickOnNotification("welcome_experience_2");
   EXPECT_EQ(GetSystemTrayClient()->show_graphics_tablet_settings_count(), 1);
 }
 
 TEST_F(InputDeviceSettingsNotificationControllerTest,
        ShowPeripheralSettingsOnCustomizationNotificationButtonClick) {
   NotifyMouseIsCustomizable(kMouse1);
-  message_center()->ClickOnNotificationButton(
-      "peripheral_customization_mouse_1", /*button_index=*/0);
+  message_center()->ClickOnNotificationButton("welcome_experience_1",
+                                              /*button_index=*/0);
   EXPECT_EQ(GetSystemTrayClient()->show_mouse_settings_count(), 1);
 
   NotifyGraphicsTabletIsCustomizable(kGraphicsTablet2);
-  message_center()->ClickOnNotificationButton(
-      "peripheral_customization_graphics_tablet_2", /*button_index=*/0);
+  message_center()->ClickOnNotificationButton("welcome_experience_2",
+                                              /*button_index=*/0);
   EXPECT_EQ(GetSystemTrayClient()->show_graphics_tablet_settings_count(), 1);
 }
 
@@ -428,22 +432,6 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
 }
 
 TEST_F(InputDeviceSettingsNotificationControllerTest,
-       NotifyPeripheralCustomization) {
-  size_t expected_notification_count = 1;
-  NotifyMouseIsCustomizable(kMouse1);
-  EXPECT_EQ(expected_notification_count++,
-            message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_mouse_1"));
-
-  NotifyGraphicsTabletIsCustomizable(kGraphicsTablet2);
-  EXPECT_EQ(expected_notification_count++,
-            message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_graphics_tablet_2"));
-}
-
-TEST_F(InputDeviceSettingsNotificationControllerTest,
        SixPackRewriteNotificationOnlyShownForActiveUserSessions) {
   GetSessionControllerClient()->LockScreen();
   controller()->NotifySixPackRewriteBlockedBySetting(
@@ -479,32 +467,33 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
 
   PrefService* prefs =
       Shell::Get()->session_controller()->GetActivePrefService();
-
-  EXPECT_TRUE(prefs->GetList(prefs::kPeripheralNotificationMiceSeen).empty());
-  NotifyMouseFirstTimeConnected(*mojom_mouse);
-  EXPECT_EQ(prefs->GetList(prefs::kPeripheralNotificationMiceSeen).size(), 1u);
   EXPECT_TRUE(
-      base::Contains(prefs->GetList(prefs::kPeripheralNotificationMiceSeen),
+      prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).empty());
+  NotifyMouseFirstTimeConnected(*mojom_mouse);
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            1u);
+  EXPECT_TRUE(
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
                      base::Value("0001:0001")));
   NotifyMouseFirstTimeConnected(*mojom_mouse);
-  EXPECT_EQ(prefs->GetList(prefs::kPeripheralNotificationMiceSeen).size(), 1u);
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            1u);
   EXPECT_EQ(expected_notification_count++,
             message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_mouse_1"));
-
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_1"));
   mojom_mouse->id = 2;
   mojom_mouse->device_key = "0001:0002";
 
   NotifyMouseFirstTimeConnected(*mojom_mouse);
-  EXPECT_EQ(prefs->GetList(prefs::kPeripheralNotificationMiceSeen).size(), 2u);
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            2u);
   EXPECT_TRUE(
-      base::Contains(prefs->GetList(prefs::kPeripheralNotificationMiceSeen),
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
                      base::Value("0001:0002")));
   EXPECT_EQ(expected_notification_count, message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_mouse_2"));
-
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_2"));
   mojom_mouse->id = 3;
   mojom_mouse->device_key = "0001:0003";
   mojom_mouse->settings->button_remappings.push_back(
@@ -514,13 +503,14 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
               mojom::CustomizableButton::kBack),
           /*remapping_action=*/nullptr));
   NotifyMouseFirstTimeConnected(*mojom_mouse);
-  EXPECT_EQ(prefs->GetList(prefs::kPeripheralNotificationMiceSeen).size(), 3u);
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            3u);
   EXPECT_TRUE(
-      base::Contains(prefs->GetList(prefs::kPeripheralNotificationMiceSeen),
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
                      base::Value("0001:0003")));
   EXPECT_EQ(expected_notification_count, message_center()->NotificationCount());
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_mouse_3"));
+  EXPECT_FALSE(
+      message_center()->FindVisibleNotificationById("welcome_experience_3"));
 }
 
 TEST_F(InputDeviceSettingsNotificationControllerTest,
@@ -532,40 +522,33 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
   mojom_graphics_tablet->settings = mojom::GraphicsTabletSettings::New();
   PrefService* prefs =
       Shell::Get()->session_controller()->GetActivePrefService();
-
-  EXPECT_TRUE(prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen)
-                  .empty());
+  EXPECT_TRUE(
+      prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).empty());
   NotifyGraphicsTabletFirstTimeConnected(*mojom_graphics_tablet);
-  EXPECT_EQ(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen).size(),
-      1u);
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            1u);
   EXPECT_EQ(expected_notification_count++,
             message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_graphics_tablet_1"));
-
-  EXPECT_TRUE(base::Contains(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen),
-      base::Value("0002:0001")));
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_1"));
+  EXPECT_TRUE(
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
+                     base::Value("0002:0001")));
   NotifyGraphicsTabletFirstTimeConnected(*mojom_graphics_tablet);
-  EXPECT_EQ(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen).size(),
-      1u);
-
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            1u);
   mojom_graphics_tablet->id = 2;
   mojom_graphics_tablet->device_key = "0002:0002";
 
   NotifyGraphicsTabletFirstTimeConnected(*mojom_graphics_tablet);
-  EXPECT_EQ(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen).size(),
-      2u);
-  EXPECT_TRUE(base::Contains(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen),
-      base::Value("0002:0002")));
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            2u);
+  EXPECT_TRUE(
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
+                     base::Value("0002:0002")));
   EXPECT_EQ(expected_notification_count, message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_graphics_tablet_2"));
-
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_2"));
   mojom_graphics_tablet->id = 3;
   mojom_graphics_tablet->device_key = "0002:0003";
   mojom_graphics_tablet->settings->pen_button_remappings.push_back(
@@ -576,16 +559,14 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
           /*remapping_action=*/nullptr));
 
   NotifyGraphicsTabletFirstTimeConnected(*mojom_graphics_tablet);
-  EXPECT_EQ(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen).size(),
-      3u);
-  EXPECT_TRUE(base::Contains(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen),
-      base::Value("0002:0003")));
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            3u);
+  EXPECT_TRUE(
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
+                     base::Value("0002:0003")));
   EXPECT_EQ(expected_notification_count, message_center()->NotificationCount());
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_graphics_tablet_3"));
-
+  EXPECT_FALSE(
+      message_center()->FindVisibleNotificationById("welcome_experience_3"));
   mojom_graphics_tablet->id = 4;
   mojom_graphics_tablet->device_key = "0002:0004";
   mojom_graphics_tablet->settings->pen_button_remappings.clear();
@@ -597,15 +578,14 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
           /*remapping_action=*/nullptr));
 
   NotifyGraphicsTabletFirstTimeConnected(*mojom_graphics_tablet);
-  EXPECT_EQ(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen).size(),
-      4u);
-  EXPECT_TRUE(base::Contains(
-      prefs->GetList(prefs::kPeripheralNotificationGraphicsTabletsSeen),
-      base::Value("0002:0004")));
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            4u);
+  EXPECT_TRUE(
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
+                     base::Value("0002:0004")));
   EXPECT_EQ(expected_notification_count, message_center()->NotificationCount());
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_graphics_tablet_4"));
+  EXPECT_FALSE(
+      message_center()->FindVisibleNotificationById("welcome_experience_4"));
 }
 
 TEST_F(InputDeviceSettingsNotificationControllerTest,
@@ -664,18 +644,6 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
   AnchoredNudgeManagerImpl* nudge_manager =
       Shell::Get()->anchored_nudge_manager();
   ASSERT_TRUE(nudge_manager);
-
-  // Display nudge for VKEY_INSERT.
-  controller()->ShowSixPackKeyRewritingNudge(
-      ui::VKEY_INSERT, ui::mojom::SixPackShortcutModifier::kSearch);
-
-  EXPECT_TRUE(nudge_manager->GetNudgeIfShown(kSixPackKeyNoMatchNudgeId));
-  EXPECT_EQ(
-      nudge_manager->GetNudgeBodyTextForTest(kSixPackKeyNoMatchNudgeId),
-      l10n_util::GetStringUTF16(
-          IDS_ASH_SETTINGS_KEYBOARD_USE_FN_KEY_FOR_INSERT_NUDGE_DESCRIPTION));
-  CancelNudge(kSixPackKeyNoMatchNudgeId);
-  EXPECT_FALSE(nudge_manager->GetNudgeIfShown(kSixPackKeyNoMatchNudgeId));
 
   // Display nudge for VKEY_DELETE.
   controller()->ShowSixPackKeyRewritingNudge(
@@ -797,6 +765,7 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
 
 TEST_F(InputDeviceSettingsNotificationControllerTest,
        NotifyKeyboardFirstTimeConnected) {
+  base::HistogramTester histogram_tester;
   size_t expected_notification_count = 1;
   mojom::KeyboardPtr mojom_keyboard = mojom::Keyboard::New();
   mojom_keyboard->device_key = "0001:0001";
@@ -807,59 +776,44 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
   PrefService* prefs =
       Shell::Get()->session_controller()->GetActivePrefService();
 
-  EXPECT_TRUE(prefs->GetList(prefs::kKeyboardsWelcomeNotificationSeen).empty());
+  EXPECT_TRUE(
+      prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).empty());
   NotifyKeyboardFirstTimeConnected(*mojom_keyboard);
-  EXPECT_EQ(prefs->GetList(prefs::kKeyboardsWelcomeNotificationSeen).size(),
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
             1u);
   EXPECT_TRUE(
-      base::Contains(prefs->GetList(prefs::kKeyboardsWelcomeNotificationSeen),
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
                      base::Value("0001:0001")));
   NotifyKeyboardFirstTimeConnected(*mojom_keyboard);
-  EXPECT_EQ(prefs->GetList(prefs::kKeyboardsWelcomeNotificationSeen).size(),
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
             1u);
   EXPECT_EQ(expected_notification_count++,
             message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "welcome_experience_keyboards_1"));
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_1"));
+  histogram_tester.ExpectBucketCount(
+      "ChromeOS.WelcomeExperienceNotificationEvent",
+      InputDeviceSettingsMetricsManager::
+          WelcomeExperienceNotificationEventType::kShown,
+      /*expected_count=*/1u);
 
   mojom_keyboard->id = 2;
   mojom_keyboard->device_key = "0001:0002";
 
   NotifyKeyboardFirstTimeConnected(*mojom_keyboard);
-  EXPECT_EQ(prefs->GetList(prefs::kKeyboardsWelcomeNotificationSeen).size(),
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
             2u);
   EXPECT_TRUE(
-      base::Contains(prefs->GetList(prefs::kKeyboardsWelcomeNotificationSeen),
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
                      base::Value("0001:0002")));
   EXPECT_EQ(expected_notification_count, message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "welcome_experience_keyboards_2"));
-}
-
-TEST_F(InputDeviceSettingsNotificationControllerTest,
-       CorrectNotificationPrefUsed) {
-  mojom::MousePtr mojom_mouse = mojom::Mouse::New();
-  mojom_mouse->device_key = "0001:0001";
-  mojom_mouse->id = 1;
-  mojom_mouse->settings = mojom::MouseSettings::New();
-  NotifyMouseIsCustomizable(*mojom_mouse);
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_mouse_1"));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(
-      "welcome_experience_mouse_1"));
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kWelcomeExperience);
-  mojom_mouse->id = 2;
-  mojom_mouse->device_key = "0001:0002";
-  NotifyMouseIsCustomizable(*mojom_mouse);
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "welcome_experience_mouse_2"));
-  EXPECT_FALSE(message_center()->FindVisibleNotificationById(
-      "peripheral_customization_mouse_2"));
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_2"));
 }
 
 TEST_F(InputDeviceSettingsNotificationControllerTest,
        NotifyTouchpadFirstTimeConnected) {
+  base::HistogramTester histogram_tester;
   size_t expected_notification_count = 1;
   mojom::TouchpadPtr mojom_touchpad = mojom::Touchpad::New();
   mojom_touchpad->device_key = "0001:0001";
@@ -870,33 +824,38 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
   PrefService* prefs =
       Shell::Get()->session_controller()->GetActivePrefService();
 
-  EXPECT_TRUE(prefs->GetList(prefs::kTouchpadsWelcomeNotificationSeen).empty());
+  EXPECT_TRUE(
+      prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).empty());
   NotifyTouchpadFirstTimeConnected(*mojom_touchpad);
-  EXPECT_EQ(prefs->GetList(prefs::kTouchpadsWelcomeNotificationSeen).size(),
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
             1u);
   EXPECT_TRUE(
-      base::Contains(prefs->GetList(prefs::kTouchpadsWelcomeNotificationSeen),
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
                      base::Value("0001:0001")));
   NotifyTouchpadFirstTimeConnected(*mojom_touchpad);
-  EXPECT_EQ(prefs->GetList(prefs::kTouchpadsWelcomeNotificationSeen).size(),
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
             1u);
   EXPECT_EQ(expected_notification_count++,
             message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "welcome_experience_touchpad_1"));
-
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_1"));
+  histogram_tester.ExpectBucketCount(
+      "ChromeOS.WelcomeExperienceNotificationEvent",
+      InputDeviceSettingsMetricsManager::
+          WelcomeExperienceNotificationEventType::kShown,
+      /*expected_count=*/1u);
   mojom_touchpad->id = 2;
   mojom_touchpad->device_key = "0001:0002";
 
   NotifyTouchpadFirstTimeConnected(*mojom_touchpad);
-  EXPECT_EQ(prefs->GetList(prefs::kTouchpadsWelcomeNotificationSeen).size(),
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
             2u);
   EXPECT_TRUE(
-      base::Contains(prefs->GetList(prefs::kTouchpadsWelcomeNotificationSeen),
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
                      base::Value("0001:0002")));
   EXPECT_EQ(expected_notification_count, message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "welcome_experience_touchpad_2"));
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_2"));
 }
 
 TEST_F(InputDeviceSettingsNotificationControllerTest,
@@ -912,33 +871,33 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
       Shell::Get()->session_controller()->GetActivePrefService();
 
   EXPECT_TRUE(
-      prefs->GetList(prefs::kPointingSticksWelcomeNotificationSeen).empty());
+      prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).empty());
   controller()->NotifyPointingStickFirstTimeConnected(*mojom_pointing_stick);
-  EXPECT_EQ(
-      prefs->GetList(prefs::kPointingSticksWelcomeNotificationSeen).size(), 1u);
-  EXPECT_TRUE(base::Contains(
-      prefs->GetList(prefs::kPointingSticksWelcomeNotificationSeen),
-      base::Value("0001:0001")));
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            1u);
+  EXPECT_TRUE(
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
+                     base::Value("0001:0001")));
   controller()->NotifyPointingStickFirstTimeConnected(*mojom_pointing_stick);
-  EXPECT_EQ(
-      prefs->GetList(prefs::kPointingSticksWelcomeNotificationSeen).size(), 1u);
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            1u);
   EXPECT_EQ(expected_notification_count++,
             message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "welcome_experience_pointing_stick_1"));
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_1"));
 
   mojom_pointing_stick->id = 2;
   mojom_pointing_stick->device_key = "0001:0002";
 
   controller()->NotifyPointingStickFirstTimeConnected(*mojom_pointing_stick);
-  EXPECT_EQ(
-      prefs->GetList(prefs::kPointingSticksWelcomeNotificationSeen).size(), 2u);
-  EXPECT_TRUE(base::Contains(
-      prefs->GetList(prefs::kPointingSticksWelcomeNotificationSeen),
-      base::Value("0001:0002")));
+  EXPECT_EQ(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen).size(),
+            2u);
+  EXPECT_TRUE(
+      base::Contains(prefs->GetList(prefs::kWelcomeExperienceNotificationSeen),
+                     base::Value("0001:0002")));
   EXPECT_EQ(expected_notification_count, message_center()->NotificationCount());
-  EXPECT_TRUE(message_center()->FindVisibleNotificationById(
-      "welcome_experience_pointing_stick_2"));
+  EXPECT_TRUE(
+      message_center()->FindVisibleNotificationById("welcome_experience_2"));
 }
 
 TEST_F(InputDeviceSettingsNotificationControllerTest,
@@ -955,8 +914,8 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
   NotifyMouseFirstTimeConnected(*mojom_mouse);
   EXPECT_EQ(expected_notification_count++,
             message_center()->NotificationCount());
-  const auto* notification = message_center()->FindVisibleNotificationById(
-      "peripheral_customization_mouse_1");
+  const auto* notification =
+      message_center()->FindVisibleNotificationById("welcome_experience_1");
   ASSERT_TRUE(notification);
   EXPECT_EQ(
       l10n_util::GetStringFUTF16(
@@ -977,11 +936,11 @@ TEST_F(InputDeviceSettingsNotificationControllerTest,
 
   NotifyMouseFirstTimeConnected(
       *mojom_mouse,
-      gfx::test::CreateImage(/*width=*/300, /*height=*/300, SK_ColorRED));
+      gfx::test::CreateImageSkia(/*width=*/300, /*height=*/300, SK_ColorRED));
   EXPECT_EQ(expected_notification_count++,
             message_center()->NotificationCount());
-  const auto* notification = message_center()->FindVisibleNotificationById(
-      "peripheral_customization_mouse_1");
+  const auto* notification =
+      message_center()->FindVisibleNotificationById("welcome_experience_1");
   EXPECT_FALSE(notification->image().IsEmpty());
 }
 

@@ -7,12 +7,14 @@
 #include "base/check.h"
 #include "base/ranges/algorithm.h"
 #include "base/uuid.h"
+#include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/webdata/addresses/contact_info_sync_util.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/autofill/core/common/dense_set.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/base/deletion_origin.h"
 #include "components/sync/base/features.h"
-#include "components/sync/base/model_type.h"
-#include "components/sync/model/client_tag_based_model_type_processor.h"
+#include "components/sync/model/client_tag_based_data_type_processor.h"
 #include "components/sync/model/in_memory_metadata_change_list.h"
 #include "components/sync/model/sync_metadata_store_change_list.h"
 
@@ -23,16 +25,23 @@ namespace {
 // The address of this variable is used as the user data key.
 static int kContactInfoSyncBridgeUserDataKey = 0;
 
+// Different types of account profiles exist, all of which are synced through
+// CONTACT_INFO.
+DenseSet<AutofillProfile::RecordType> kAccountRecordTypes = {
+    AutofillProfile::RecordType::kAccount,
+    AutofillProfile::RecordType::kAccountHome,
+    AutofillProfile::RecordType::kAccountWork};
+
 }  // namespace
 
 ContactInfoSyncBridge::ContactInfoSyncBridge(
-    std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor,
+    std::unique_ptr<syncer::DataTypeLocalChangeProcessor> change_processor,
     AutofillWebDataBackend* backend)
-    : ModelTypeSyncBridge(std::move(change_processor)),
+    : DataTypeSyncBridge(std::move(change_processor)),
       web_data_backend_(backend) {
   if (!web_data_backend_ || !web_data_backend_->GetDatabase() ||
       !GetAutofillTable()) {
-    ModelTypeSyncBridge::change_processor()->ReportError(
+    DataTypeSyncBridge::change_processor()->ReportError(
         {FROM_HERE, "Failed to load AutofillWebDatabase."});
     return;
   }
@@ -49,14 +58,14 @@ void ContactInfoSyncBridge::CreateForWebDataServiceAndBackend(
   web_data_service->GetDBUserData()->SetUserData(
       &kContactInfoSyncBridgeUserDataKey,
       std::make_unique<ContactInfoSyncBridge>(
-          std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
+          std::make_unique<syncer::ClientTagBasedDataTypeProcessor>(
               syncer::CONTACT_INFO,
               /*dump_stack=*/base::DoNothing()),
           web_data_backend));
 }
 
 // static
-syncer::ModelTypeSyncBridge* ContactInfoSyncBridge::FromWebDataService(
+syncer::DataTypeSyncBridge* ContactInfoSyncBridge::FromWebDataService(
     AutofillWebDataService* web_data_service) {
   return static_cast<ContactInfoSyncBridge*>(
       web_data_service->GetDBUserData()->GetUserData(
@@ -68,7 +77,7 @@ ContactInfoSyncBridge::CreateMetadataChangeList() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return std::make_unique<syncer::SyncMetadataStoreChangeList>(
       GetSyncMetadataStore(), syncer::CONTACT_INFO,
-      base::BindRepeating(&syncer::ModelTypeChangeProcessor::ReportError,
+      base::BindRepeating(&syncer::DataTypeLocalChangeProcessor::ReportError,
                           change_processor()->GetWeakPtr()));
 }
 
@@ -92,8 +101,7 @@ ContactInfoSyncBridge::ApplyIncrementalSyncChanges(
   for (const std::unique_ptr<syncer::EntityChange>& change : entity_changes) {
     switch (change->type()) {
       case syncer::EntityChange::ACTION_DELETE:
-        if (!GetAutofillTable()->RemoveAutofillProfile(
-                change->storage_key(), AutofillProfile::Source::kAccount)) {
+        if (!GetAutofillTable()->RemoveAutofillProfile(change->storage_key())) {
           return syncer::ModelError(FROM_HERE,
                                     "Failed to delete profile from table.");
         }
@@ -102,7 +110,7 @@ ContactInfoSyncBridge::ApplyIncrementalSyncChanges(
       case syncer::EntityChange::ACTION_UPDATE: {
         // Deserialize the ContactInfoSpecifics and add/update them in the DB.
         DCHECK(change->data().specifics.has_contact_info());
-        std::unique_ptr<AutofillProfile> remote =
+        std::optional<AutofillProfile> remote =
             CreateAutofillProfileFromContactInfoSpecifics(
                 change->data().specifics.contact_info());
         // Since the specifics are guaranteed to be valid by
@@ -112,8 +120,7 @@ ContactInfoSyncBridge::ApplyIncrementalSyncChanges(
         // we check the existence of the profile manually and act accordingly.
         // TODO(crbug.com/40100455): Consider adding an AddOrUpdate() function
         // to AutofillTable's API.
-        if (GetAutofillTable()->GetAutofillProfile(
-                remote->guid(), AutofillProfile::Source::kAccount)) {
+        if (GetAutofillTable()->GetAutofillProfile(remote->guid())) {
           if (!GetAutofillTable()->UpdateAutofillProfile(*remote)) {
             return syncer::ModelError(FROM_HERE,
                                       "Failed to update profile in table.");
@@ -178,7 +185,7 @@ void ContactInfoSyncBridge::AutofillProfileChanged(
     const AutofillProfileChange& change) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!change_processor()->IsTrackingMetadata() ||
-      change.data_model().source() != AutofillProfile::Source::kAccount) {
+      !change.data_model().IsAccountProfile()) {
     return;
   }
 
@@ -210,8 +217,7 @@ void ContactInfoSyncBridge::AutofillProfileChanged(
 
 void ContactInfoSyncBridge::ApplyDisableSyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> delete_metadata_change_list) {
-  if (!GetAutofillTable()->RemoveAllAutofillProfiles(
-          AutofillProfile::Source::kAccount)) {
+  if (!GetAutofillTable()->RemoveAllAutofillProfiles(kAccountRecordTypes)) {
     change_processor()->ReportError(
         {FROM_HERE, "Failed to delete profiles from table."});
   }
@@ -285,21 +291,20 @@ AutofillSyncMetadataTable* ContactInfoSyncBridge::GetSyncMetadataStore() {
 std::unique_ptr<syncer::MutableDataBatch>
 ContactInfoSyncBridge::GetDataAndFilter(
     base::RepeatingCallback<bool(const std::string&)> filter) {
-  std::vector<std::unique_ptr<AutofillProfile>> profiles;
-  if (!GetAutofillTable()->GetAutofillProfiles(
-          AutofillProfile::Source::kAccount, &profiles)) {
+  std::vector<AutofillProfile> profiles;
+  if (!GetAutofillTable()->GetAutofillProfiles(kAccountRecordTypes, profiles)) {
     change_processor()->ReportError(
         {FROM_HERE, "Failed to load profiles from table."});
     return nullptr;
   }
   auto batch = std::make_unique<syncer::MutableDataBatch>();
-  for (const std::unique_ptr<AutofillProfile>& profile : profiles) {
-    const std::string& guid = profile->guid();
+  for (const AutofillProfile& profile : profiles) {
+    const std::string& guid = profile.guid();
     if (filter.Run(guid)) {
       batch->Put(
           guid,
           CreateContactInfoEntityDataFromAutofillProfile(
-              *profile,
+              profile,
               GetPossiblyTrimmedContactInfoSpecificsDataFromProcessor(guid)));
     }
   }
@@ -321,7 +326,7 @@ void ContactInfoSyncBridge::LoadMetadata() {
     // we should force the initial sync flow to propagate the cached data into
     // the local model.
     GetSyncMetadataStore()->DeleteAllSyncMetadata(
-        syncer::ModelType::CONTACT_INFO);
+        syncer::DataType::CONTACT_INFO);
 
     batch = std::make_unique<syncer::MetadataBatch>();
   }

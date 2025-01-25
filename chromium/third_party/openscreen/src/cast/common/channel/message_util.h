@@ -9,7 +9,6 @@
 #include <string_view>
 
 #include "cast/common/channel/proto/cast_channel.pb.h"
-#include "util/enum_name_table.h"
 
 namespace Json {
 class Value;

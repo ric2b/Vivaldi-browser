@@ -98,19 +98,11 @@ It2MeDesktopEnvironment::It2MeDesktopEnvironment(
 
 std::string It2MeDesktopEnvironment::GetCapabilities() const {
   std::string capabilities = BasicDesktopEnvironment::GetCapabilities();
-  if (desktop_environment_options().enable_file_transfer()) {
-    capabilities += " ";
-    capabilities += protocol::kFileTransferCapability;
-  }
 
   // TODO: joedow - Move MultiStream capability to a shared base
   // class once all platforms and connection modes support it.
-  // TODO: b/353279144 - Fix VideoLayout generation, and mouse-injection in
-  // ChromeOS when multi-stream is enabled.
-#if !BUILDFLAG(IS_CHROMEOS)
   capabilities += " ";
   capabilities += protocol::kMultiStreamCapability;
-#endif
 
   return capabilities;
 }

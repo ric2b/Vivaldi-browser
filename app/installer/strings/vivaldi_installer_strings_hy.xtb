@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Անկախ</translation>
 <translation id="1682285232070778125">Vivaldi-ն դարձնել հիմնական բրաուզեր</translation>
 <translation id="1974060860693918893">Ընդլայնված</translation>
+<translation id="2053560788696003312">Vivaldi-ի համար անհրաժեշտ է Windows 10 կամ ավելի բարձր։</translation>
 <translation id="2134216661302048561">Տեղակայիչը չի ավարտել Vivaldi բրաուզերի տեղակայումը։ Վստա՞հ եք, որ ցանկանում եք դուրս գալ։</translation>
 <translation id="2286454467119466181">Պարզ</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS։ Բոլոր իրավունքները պաշտպանված են։ &lt;a&gt;Գաղտնիության դրույթներ&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Ընդունել և թարմացնել</translation>
 <translation id="5302048478445481009">Լեզու</translation>
 <translation id="694714344624446243">Vivaldi-ի տեղակայիչ</translation>
+<translation id="7467493612551448880">Vivaldi-ի տարբերակը, որը տեղադրում եք, օպտիմալացված չէ Windows-ի այն տարբերակի համար, որն օգտագործում եք:
+
+Անցեք vivaldi.com/download, որպեսզի ներբեռնեք Windows-ի Arm տարբերակի համար։</translation>
 <translation id="7658239707568436148">Չեղարկել</translation>
 <translation id="8773751185824654197">Նշում. բացված Vivaldi բրաուզերը թարմացնելու պարագայում այն կփակվի և կվերաբացվի</translation>
 <translation id="933060950687965486">Տեղակայման տեսակ</translation>

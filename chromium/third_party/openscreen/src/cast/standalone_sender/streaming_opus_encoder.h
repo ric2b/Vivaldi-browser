@@ -9,8 +9,8 @@
 
 #include <memory>
 
-#include "cast/streaming/encoded_frame.h"
-#include "cast/streaming/sender.h"
+#include "cast/streaming/public/encoded_frame.h"
+#include "cast/streaming/public/sender.h"
 #include "platform/api/time.h"
 
 extern "C" {

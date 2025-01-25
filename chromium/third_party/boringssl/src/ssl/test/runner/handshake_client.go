@@ -583,6 +583,10 @@ func (hs *clientHandshakeState) createClientHello(innerHello *clientHelloMsg, ec
 		hello.serverName = c.config.ServerName
 	}
 
+	if !isInner && c.config.Bugs.OmitPublicName {
+		hello.serverName = ""
+	}
+
 	disableEMS := c.config.Bugs.NoExtendedMasterSecret
 	if c.cipherSuite != nil {
 		disableEMS = c.config.Bugs.NoExtendedMasterSecretOnRenegotiation
@@ -658,16 +662,13 @@ func (hs *clientHandshakeState) createClientHello(innerHello *clientHelloMsg, ec
 				if !ok {
 					continue
 				}
-				publicKey, err := kem.generate(c.config.rand())
+				publicKey, err := kem.generate(c.config)
 				if err != nil {
 					return nil, err
 				}
 
 				if c.config.Bugs.SendCurve != 0 {
 					curveID = c.config.Bugs.SendCurve
-				}
-				if c.config.Bugs.InvalidECDHPoint {
-					publicKey[0] ^= 0xff
 				}
 
 				hello.keyShares = append(hello.keyShares, keyShareEntry{
@@ -999,12 +1000,16 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 	hs.finishedHash.discardHandshakeBuffer()
 
 	// The first server message must be followed by a ChangeCipherSpec.
-	c.expectTLS13ChangeCipherSpec = true
+	c.expectTLS13ChangeCipherSpec = !c.isDTLS
 
+	expectedSessionID := hs.hello.sessionID
+	if c.isDTLS {
+		expectedSessionID = nil
+	}
 	if haveHelloRetryRequest {
 		hs.writeServerHash(helloRetryRequest.marshal())
 
-		if !bytes.Equal(hs.hello.sessionID, helloRetryRequest.sessionID) {
+		if !bytes.Equal(expectedSessionID, helloRetryRequest.sessionID) {
 			return errors.New("tls: ClientHello and HelloRetryRequest session IDs did not match.")
 		}
 
@@ -1107,7 +1112,7 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		}
 	}
 
-	if !bytes.Equal(hs.hello.sessionID, hs.serverHello.sessionID) {
+	if !bytes.Equal(expectedSessionID, hs.serverHello.sessionID) {
 		return errors.New("tls: ClientHello and ServerHello session IDs did not match.")
 	}
 
@@ -1145,7 +1150,7 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		c.curveID = hs.serverHello.keyShare.group
 
 		var err error
-		ecdheSecret, err = kem.decap(hs.serverHello.keyShare.keyExchange)
+		ecdheSecret, err = kem.decap(c.config, hs.serverHello.keyShare.keyExchange)
 		if err != nil {
 			return err
 		}
@@ -1392,7 +1397,7 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		}
 	}
 
-	if !c.config.Bugs.SkipChangeCipherSpec && !hs.hello.hasEarlyData {
+	if !c.config.Bugs.SkipChangeCipherSpec && !hs.hello.hasEarlyData && !c.isDTLS {
 		c.writeRecord(recordTypeChangeCipherSpec, []byte{1})
 	}
 
@@ -1554,7 +1559,7 @@ func (hs *clientHandshakeState) applyHelloRetryRequest(helloRetryRequest *helloR
 		if !ok {
 			return errors.New("tls: Unable to get curve requested in HelloRetryRequest")
 		}
-		publicKey, err := kem.generate(c.config.rand())
+		publicKey, err := kem.generate(c.config)
 		if err != nil {
 			return err
 		}

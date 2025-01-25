@@ -26,6 +26,7 @@ static_library("live_caption") {
   public_deps = [
     "//ash",
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/profiles:profile",
     "//chromeos/ash/components/audio",
     "//components/soda",
@@ -38,10 +39,7 @@ source_set("browser_tests") {
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
-  sources = [
-    "live_caption_ui_remote_driver_browsertest.cc",
-    "system_live_caption_service_browsertest.cc",
-  ]
+  sources = [ "system_live_caption_service_browsertest.cc" ]
 
   deps = [
     ":live_caption",

@@ -11,9 +11,11 @@
 #include "base/functional/callback_forward.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/ui/extensions/mv2_disabled_dialog_controller.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_id.h"
 #include "ui/base/interaction/element_identifier.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -31,7 +33,6 @@ class Profile;
 
 namespace content {
 class WebContents;
-class BrowserContext;
 }
 
 namespace gfx {
@@ -79,18 +80,18 @@ void ShowExtensionMultipleUninstallDialog(
     base::OnceClosure accept_callback,
     base::OnceClosure cancel_callback);
 
-// Shows a dialog when `extension_ids` were disabled due to the MV2 deprecation.
+// Shows a dialog with `extensions_info` when those extensions were disabled due
+// to the MV2 deprecation.
 void ShowMv2DeprecationDisabledDialog(
-    Profile* profile,
-    gfx::NativeWindow parent,
-    const std::vector<ExtensionId>& extension_ids,
+    Browser* browser,
+    std::vector<Mv2DisabledDialogController::ExtensionInfo>& extensions_info,
     base::OnceClosure remove_callback,
-    base::OnceClosure manage_callback);
+    base::OnceClosure manage_callback,
+    base::OnceClosure close_callback);
 
 // Shows a dialog when the user triggers the warning dismissal for an extension
 // affected by the MV2 deprecation.
-void ShowMv2DeprecationKeepDialog(content::BrowserContext* browser_context,
-                                  gfx::NativeWindow parent,
+void ShowMv2DeprecationKeepDialog(Browser* browser,
                                   const Extension& extension,
                                   base::OnceClosure accept_callback,
                                   base::OnceClosure cancel_callback);
@@ -164,7 +165,7 @@ void ShowRequestFileSystemDialog(
     const std::string& extension_name,
     const std::string& volume_label,
     bool writable,
-    base::OnceCallback<void(ui::DialogButton)> callback);
+    base::OnceCallback<void(ui::mojom::DialogButton)> callback);
 
 // Shows the print job confirmation dialog bubble anchored to the toolbar icon
 // for the extension.  If there's no toolbar icon or parent, it will display a

@@ -259,8 +259,6 @@ struct GPU_EXPORT
     out->enable_gpu_service_logging = prefs.enable_gpu_service_logging();
     out->enable_gpu_service_tracing = prefs.enable_gpu_service_tracing();
     out->use_passthrough_cmd_decoder = prefs.use_passthrough_cmd_decoder();
-    out->disable_biplanar_gpu_memory_buffers_for_video_frames =
-        prefs.disable_biplanar_gpu_memory_buffers_for_video_frames();
 
     out->ignore_gpu_blocklist = prefs.ignore_gpu_blocklist();
     out->watchdog_starts_backgrounded = prefs.watchdog_starts_backgrounded();
@@ -309,11 +307,6 @@ struct GPU_EXPORT
 
     out->enable_native_gpu_memory_buffers =
         prefs.enable_native_gpu_memory_buffers();
-
-#if BUILDFLAG(IS_CHROMEOS)
-    out->enable_chromeos_direct_video_decoder =
-        prefs.enable_chromeos_direct_video_decoder();
-#endif
 
     out->force_separate_egl_display_for_webgl_testing =
         prefs.force_separate_egl_display_for_webgl_testing();
@@ -420,10 +413,6 @@ struct GPU_EXPORT
   static bool use_passthrough_cmd_decoder(const gpu::GpuPreferences& prefs) {
     return prefs.use_passthrough_cmd_decoder;
   }
-  static bool disable_biplanar_gpu_memory_buffers_for_video_frames(
-      const gpu::GpuPreferences& prefs) {
-    return prefs.disable_biplanar_gpu_memory_buffers_for_video_frames;
-  }
   static bool ignore_gpu_blocklist(const gpu::GpuPreferences& prefs) {
     return prefs.ignore_gpu_blocklist;
   }
@@ -508,12 +497,6 @@ struct GPU_EXPORT
       const gpu::GpuPreferences& prefs) {
     return prefs.enable_native_gpu_memory_buffers;
   }
-#if BUILDFLAG(IS_CHROMEOS)
-  static bool enable_chromeos_direct_video_decoder(
-      const gpu::GpuPreferences& prefs) {
-    return prefs.enable_chromeos_direct_video_decoder;
-  }
-#endif
   static bool force_separate_egl_display_for_webgl_testing(
       const gpu::GpuPreferences& prefs) {
     return prefs.force_separate_egl_display_for_webgl_testing;

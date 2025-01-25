@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/device_reauth/device_reauth_metrics_util.h"
@@ -51,6 +52,12 @@ enum UIDisplayDisposition {
   AUTOMATIC_RELAUNCH_CHROME_BUBBLE = 19,
   AUTOMATIC_DEFAULT_STORE_CHANGED_BUBBLE = 20,
   AUTOMATIC_PASSKEY_SAVED_CONFIRMATION = 21,
+  AUTOMATIC_PASSKEY_DELETED_CONFIRMATION = 22,
+  MANUAL_PASSKEY_DELETED_CONFIRMATION = 23,
+  AUTOMATIC_PASSKEY_UPDATED_CONFIRMATION = 24,
+  MANUAL_PASSKEY_UPDATED_CONFIRMATION = 25,
+  AUTOMATIC_PASSKEY_NOT_ACCEPTED_BUBBLE = 26,
+  MANUAL_PASSKEY_NOT_ACCEPTED_BUBBLE = 27,
   NUM_DISPLAY_DISPOSITIONS,
 };
 
@@ -74,6 +81,7 @@ enum UIDismissalReason {
   CLICKED_BRAND_NAME_OBSOLETE = 11,         // obsolete.
   CLICKED_PASSWORDS_DASHBOARD = 12,
   CLICKED_MANAGE_PASSWORD = 13,
+  CLICKED_GOT_IT = 14,
   NUM_UI_RESPONSES,
 };
 
@@ -712,10 +720,11 @@ enum class TouchToFillPasswordGenerationTriggerOutcome {
 // numeric values should never be reused.
 enum class PasswordManagerCredentialRemovalReason {
   // TODO(crbug.com/342519805): Add reasons.
-  kSettings = 0,           // Stored as (1<<0) in the bit vector.
-  kClearBrowsingData = 1,  // Stored as (1<<1) in the bit vector.
-  kSync = 2,               // Stored as (1<<2) in the bit vector.
-  kMaxValue = kSync,
+  kSettings = 0,                        // Stored as (1<<0) in the bit vector.
+  kClearBrowsingData = 1,               // Stored as (1<<1) in the bit vector.
+  kSync = 2,                            // Stored as (1<<2) in the bit vector.
+  kDeletingUndecryptablePasswords = 3,  // Stored as (1<<3) in the bit vector.
+  kMaxValue = kDeletingUndecryptablePasswords,
 };
 
 std::string GetPasswordAccountStorageUsageLevelHistogramSuffix(
@@ -815,7 +824,8 @@ void LogPasswordReuse(int saved_passwords,
                       PasswordType reused_password_type);
 
 // Log the type of the password dropdown when it's shown.
-void LogPasswordDropdownShown(PasswordDropdownState state);
+void LogPasswordDropdownShown(
+    const std::vector<autofill::Suggestion>& suggestions);
 
 // Log the type of the password dropdown suggestion when chosen.
 void LogPasswordDropdownItemSelected(PasswordDropdownSelectedOption type,
@@ -957,6 +967,12 @@ void AddPasswordRemovalReason(
     PrefService* prefs,
     IsAccountStore is_account_store,
     PasswordManagerCredentialRemovalReason removal_reason);
+
+// Emits histograms for the number of password and webauthn credentials in the
+// passwords popup / dropdown.
+void MaybeLogMetricsForPasswordAndWebauthnCounts(
+    const std::vector<autofill::Suggestion>& suggestions,
+    bool is_for_webauthn_request);
 
 }  // namespace password_manager::metrics_util
 

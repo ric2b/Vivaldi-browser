@@ -19,9 +19,11 @@
 // Data source for images.
 @property(nonatomic, weak) id<TableViewFaviconDataSource> imageDataSource;
 
-// Header item displayed when there are no data items to show.
+// Header item displayed when there are no data items to show amongst passwords,
+// cards and addresses and independent of plus address. Needs to be explicitly
+// set to `nil` if should not be shown.
 @property(nonatomic, strong)
-    TableViewTextHeaderFooterItem* noDataItemsToShowHeaderItem;
+    TableViewTextHeaderFooterItem* noRegularDataItemsToShowHeaderItem;
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
 
@@ -35,6 +37,10 @@
 
 // Presents given action items in 'actions' section.
 - (void)presentActionItems:(NSArray<TableViewItem*>*)actions;
+
+// Presents given plus address action items in the `plus address actions`
+// section.
+- (void)presentPlusAddressActionItems:(NSArray<TableViewItem*>*)actions;
 
 @end
 

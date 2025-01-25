@@ -16,7 +16,6 @@
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/policy_container_host.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
-#include "content/browser/url_loader_factory_getter.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_loader_throttles.h"
@@ -216,7 +215,7 @@ class KeepAliveURLLoaderService::KeepAliveURLLoaderFactoriesBase {
         /*wc_getter=*/base::BindRepeating([]() -> WebContents* {
           return nullptr;
         }),
-        FrameTreeNode::kFrameTreeNodeInvalidId);
+        FrameTreeNodeId());
   }
 
   void OnLoaderDisconnected() {

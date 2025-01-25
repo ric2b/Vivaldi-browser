@@ -81,6 +81,8 @@ pub enum DataElementDeserializeError {
         /// The invalid length
         len: DeEncodedLength,
     },
+    /// The same de type code was encountered more than once in an advertisement
+    DuplicateDeTypes,
     /// Other parse error, e.g. the adv is truncated
     InvalidStructure,
 }

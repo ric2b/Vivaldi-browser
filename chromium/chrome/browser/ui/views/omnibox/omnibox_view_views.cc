@@ -196,6 +196,9 @@ OmniboxViewViews::OmniboxViewViews(std::unique_ptr<OmniboxClient> client,
   // effect over the entire location bar.
   RemoveHoverEffect();
 
+  GetViewAccessibility().SetRole(ax::mojom::Role::kTextField);
+  GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF8(IDS_ACCNAME_LOCATION));
   // Sometimes there are additional ignored views, such as a View representing
   // the cursor, inside the address bar's text field. These should always be
   // ignored by accessibility since a plain text field should always be a leaf
@@ -306,20 +309,26 @@ void OmniboxViewViews::OnTabChanged(content::WebContents* web_contents) {
 }
 
 void OmniboxViewViews::ResetTabState(content::WebContents* web_contents) {
-    web_contents->SetUserData(OmniboxState::kKey, nullptr);
+  web_contents->SetUserData(OmniboxState::kKey, nullptr);
 }
 
 void OmniboxViewViews::InstallPlaceholderText() {
-  const TemplateURL* const default_provider = controller()
-                                                  ->client()
-                                                  ->GetTemplateURLService()
-                                                  ->GetDefaultSearchProvider();
-  if (default_provider) {
+  // If `keyword_placeholder()` is set, then the user is in a keyword mode that
+  // has placeholder text. Use that instead of the DSE placeholder text.
+  if (!model()->keyword_placeholder().empty()) {
+    SetPlaceholderText(model()->keyword_placeholder());
+  } else if (const auto* default_provider = controller()
+                                                ->client()
+                                                ->GetTemplateURLService()
+                                                ->GetDefaultSearchProvider()) {
+    // Otherwise, if a DSE is set, use the DSE placeholder text.
     SetPlaceholderText(l10n_util::GetStringFUTF16(
         IDS_OMNIBOX_PLACEHOLDER_TEXT, default_provider->short_name()));
   } else {
     SetPlaceholderText(std::u16string());
   }
+
+  UpdatePlaceholderTextColor();
 }
 
 bool OmniboxViewViews::GetSelectionAtEnd() const {
@@ -619,7 +628,7 @@ void OmniboxViewViews::UpdateSchemeStyle(const gfx::Range& range) {
 void OmniboxViewViews::OnThemeChanged() {
   views::Textfield::OnThemeChanged();
 
-  set_placeholder_text_color(GetColorProvider()->GetColor(kColorOmniboxText));
+  UpdatePlaceholderTextColor();
   SetSelectionBackgroundColor(
       GetColorProvider()->GetColor(kColorOmniboxSelectionBackground));
   SetSelectionTextColor(
@@ -830,7 +839,8 @@ void OmniboxViewViews::ClearAccessibilityLabel() {
     return;
   friendly_suggestion_text_.clear();
   friendly_suggestion_text_prefix_length_ = 0;
-  NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
+
+  UpdateAccessibleValue();
 }
 
 void OmniboxViewViews::SetAccessibilityLabel(const std::u16string& display_text,
@@ -856,8 +866,7 @@ void OmniboxViewViews::SetAccessibilityLabel(const std::u16string& display_text,
         model()->MaybeGetPopupAccessibilityLabelForIPHSuggestion();
   }
 
-  if (notify_text_changed)
-    NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
+  UpdateAccessibleValue();
 
 #if BUILDFLAG(IS_MAC)
   // On macOS, the only way to get VoiceOver to speak the friendly suggestion
@@ -981,6 +990,10 @@ bool OmniboxViewViews::OnAfterPossibleChange(bool allow_keyword_ui_change) {
     EmphasizeURLComponents();
 
   return something_changed;
+}
+
+void OmniboxViewViews::OnKeywordPlaceholderTextChange() {
+  InstallPlaceholderText();
 }
 
 gfx::NativeView OmniboxViewViews::GetNativeView() const {
@@ -1258,8 +1271,6 @@ bool OmniboxViewViews::SkipDefaultKeyEventProcessing(
 
 void OmniboxViewViews::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Textfield::GetAccessibleNodeData(node_data);
-  node_data->role = ax::mojom::Role::kTextField;
-  node_data->SetNameChecked(l10n_util::GetStringUTF8(IDS_ACCNAME_LOCATION));
   node_data->AddStringAttribute(ax::mojom::StringAttribute::kAutoComplete,
                                 "both");
 // Expose keyboard shortcut where it makes sense.
@@ -1270,19 +1281,6 @@ void OmniboxViewViews::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->AddStringAttribute(ax::mojom::StringAttribute::kKeyShortcuts,
                                 "Ctrl+L");
 #endif
-  if (friendly_suggestion_text_.empty()) {
-    // While user edits text, use the exact text displayed in the omnibox.
-    node_data->SetValue(GetText());
-  } else {
-    // While user navigates omnibox suggestions, use the current editable
-    // text decorated with additional friendly labelling text, such as the
-    // title of the page and the type of autocomplete, for example:
-    // "Google https://google.com location from history".
-    // The edited text is always a substring of the friendly label, so that
-    // users can navigate to specific characters in the friendly version using
-    // Braille display routing keys or other assistive technologies.
-    node_data->SetValue(friendly_suggestion_text_);
-  }
   node_data->html_attributes.push_back(std::make_pair("type", "url"));
 
   if (model()->PopupIsOpen()) {
@@ -1441,7 +1439,6 @@ void OmniboxViewViews::OnBlur() {
 
   // |location_bar_view_| can be null in tests.
   if (location_bar_view_) {
-
     location_bar_view_->OnOmniboxBlurred();
 
     // The location bar needs to repaint without a focus ring.
@@ -1547,8 +1544,29 @@ void OmniboxViewViews::ExecuteTextEditCommand(ui::TextEditCommand command) {
 }
 
 bool OmniboxViewViews::ShouldShowPlaceholderText() const {
+  // The DSE placeholder text is visible only if the omnibox is blurred. The
+  // keyword placeholder text is visible even if the omnibox is focused, because
+  // users won't enter keyword mode, blur the omnibox, read the placeholder
+  // text, refocus the omnibox, and begin typing.
   return Textfield::ShouldShowPlaceholderText() &&
-         !model()->is_caret_visible() && !model()->is_keyword_selected();
+         (!model()->is_caret_visible() ||
+          !model()->keyword_placeholder().empty());
+}
+
+void OmniboxViewViews::UpdateAccessibleValue() {
+  if (friendly_suggestion_text_.empty()) {
+    // While user edits text, use the exact text displayed in the omnibox.
+    GetViewAccessibility().SetValue(GetText());
+  } else {
+    // While user navigates omnibox suggestions, use the current editable
+    // text decorated with additional friendly labelling text, such as the
+    // title of the page and the type of autocomplete, for example:
+    // "Google https://google.com location from history".
+    // The edited text is always a substring of the friendly label, so that
+    // users can navigate to specific characters in the friendly version using
+    // Braille display routing keys or other assistive technologies.
+    GetViewAccessibility().SetValue(friendly_suggestion_text_);
+  }
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1896,7 +1914,9 @@ void OmniboxViewViews::OnCompositingStarted(ui::Compositor* compositor,
     latency_histogram_state_ = COMPOSITING_STARTED;
 }
 
-void OmniboxViewViews::OnCompositingAckDeprecated(ui::Compositor* compositor) {
+void OmniboxViewViews::OnDidPresentCompositorFrame(
+    uint32_t frame_token,
+    const gfx::PresentationFeedback& feedback) {
   if (latency_histogram_state_ == COMPOSITING_STARTED) {
     DCHECK(!insert_char_time_.is_null());
     UMA_HISTOGRAM_TIMES("Omnibox.CharTypedToRepaintLatency",
@@ -1982,6 +2002,18 @@ void OmniboxViewViews::OnPopupOpened() {
     promo_controller->DismissNonCriticalBubbleInRegion(GetBoundsInScreen());
   }
 #endif
+}
+
+void OmniboxViewViews::UpdatePlaceholderTextColor() {
+  // Keyword placeholders are dim to differentiate from user input. DSE
+  // placeholders are not dim to draw attention to the omnibox and because the
+  // omnibox is unfocused so there's less risk of confusion with user input.
+  // Null in tests.
+  if (!GetColorProvider())
+    return;
+  set_placeholder_text_color(GetColorProvider()->GetColor(
+      model()->keyword_placeholder().empty() ? kColorOmniboxText
+                                             : kColorOmniboxTextDimmed));
 }
 
 BEGIN_METADATA(OmniboxViewViews)

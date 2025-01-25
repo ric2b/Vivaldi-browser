@@ -153,7 +153,7 @@ bool WebAppsIntentPickerDelegate::ShouldLaunchAppDirectly(
   if (entry_type == PickerEntryType::kWeb) {
     // Launch app directly only if |url| is in the scope of |app_id|.
     if (base::FeatureList::IsEnabled(
-            ::features::kDesktopPWAsLinkCapturingWithScopeExtensions)) {
+            ::features::kPwaNavigationCapturingWithScopeExtensions)) {
       return provider_->registrar_unsafe().IsUrlInAppExtendedScope(url, app_id);
     } else {
       return provider_->registrar_unsafe().IsUrlInAppScope(url, app_id);
@@ -192,7 +192,7 @@ void WebAppsIntentPickerDelegate::RecordOutputMetrics(
     case apps::IntentPickerCloseReason::PREFERRED_APP_FOUND:
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -201,7 +201,7 @@ void WebAppsIntentPickerDelegate::RecordOutputMetrics(
 void WebAppsIntentPickerDelegate::PersistIntentPreferencesForApp(
     PickerEntryType entry_type,
     const std::string& app_id) {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void WebAppsIntentPickerDelegate::LaunchApp(content::WebContents* web_contents,
@@ -217,7 +217,7 @@ void WebAppsIntentPickerDelegate::LaunchApp(content::WebContents* web_contents,
       provider_->ui_manager().MaybeCreateEnableSupportedLinksInfobar(
           web_contents, launch_name);
       provider_->ui_manager().MaybeShowIPHPromoForAppsLaunchedViaLinkCapturing(
-          web_contents, &profile_.get(), launch_name);
+          /*browser=*/nullptr, &profile_.get(), launch_name);
     }
   } else if (entry_type == apps::PickerEntryType::kMacOs) {
 #if BUILDFLAG(IS_MAC)

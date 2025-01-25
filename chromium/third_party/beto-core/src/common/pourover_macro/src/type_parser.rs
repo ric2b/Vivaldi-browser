@@ -90,7 +90,7 @@ impl<'a> From<Primitive> for JavaType<'a> {
     }
 }
 
-#[cfg(jni)]
+#[cfg(feature = "jni")]
 impl<'a> From<JavaType<'a>> for jni::signature::ReturnType {
     fn from(ty: JavaType<'a>) -> Self {
         match ty {
@@ -221,7 +221,7 @@ impl fmt::Display for Primitive {
     }
 }
 
-#[cfg(jni)]
+#[cfg(feature = "jni")]
 impl From<Primitive> for jni::signature::Primitive {
     fn from(p: Primitive) -> Self {
         match p {
@@ -275,7 +275,7 @@ impl<'a> From<JavaType<'a>> for ReturnType<'a> {
     }
 }
 
-#[cfg(jni)]
+#[cfg(feature = "jni")]
 impl<'a> From<ReturnType<'a>> for jni::signature::ReturnType {
     fn from(ty: ReturnType<'a>) -> Self {
         match ty {

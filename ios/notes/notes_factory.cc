@@ -7,7 +7,7 @@
 #include "components/notes/note_node.h"
 #include "components/notes/notes_model.h"
 #include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #include "ios/sync/file_store_factory.h"
 #include "ios/sync/note_sync_service_factory.h"
 #include "sync/notes/note_sync_service.h"

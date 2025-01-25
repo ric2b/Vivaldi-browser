@@ -31,10 +31,10 @@
 #include "include/core/SkString.h"
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
 #include "include/gpu/graphite/Image.h"
 #include "include/private/base/SkTArray.h"
@@ -48,6 +48,7 @@
 #include "src/core/SkYUVMath.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrRecordingContextPriv.h"
+#include "src/image/SkImage_Base.h"
 #include "tools/DecodeUtils.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/FontToolUtils.h"
@@ -1251,12 +1252,10 @@ protected:
 
                     SkBitmap readBack;
                     readBack.allocPixels(yuv->imageInfo());
-#if defined(GRAPHITE_TEST_UTILS)
                     if (recorder) {
-                        SkAssertResult(yuv->readPixelsGraphite(recorder, readBack.pixmap(), 0, 0));
-                    } else
-#endif
-                    {
+                        SkAssertResult(
+                                as_IB(yuv)->readPixelsGraphite(recorder, readBack.pixmap(), 0, 0));
+                    } else {
                         SkAssertResult(yuv->readPixels(dContext, readBack.pixmap(), 0, 0));
                     }
                     canvas->drawImage(readBack.asImage(), x, y);

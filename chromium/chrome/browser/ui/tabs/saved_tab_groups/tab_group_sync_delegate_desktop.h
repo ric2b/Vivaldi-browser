@@ -11,7 +11,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/uuid.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_service_wrapper.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_service_proxy.h"
 #include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/saved_tab_groups/tab_group_sync_delegate.h"
 #include "components/saved_tab_groups/types.h"
@@ -20,9 +20,9 @@ class Browser;
 class Profile;
 class TabStripModel;
 
-namespace content {
-class WebContents;
-}  // namespace content
+namespace tabs {
+class TabModel;
+}
 
 namespace tab_groups {
 class TabGroupSyncService;
@@ -50,18 +50,22 @@ class TabGroupSyncDelegateDesktop : public TabGroupSyncDelegate {
 
  private:
   // Opens the tabs in `saved_group` in `browser`. These tabs are not grouped.
-  std::map<content::WebContents*, base::Uuid>
-  OpenTabsAndMapWebcontentsToTabUUIDs(Browser* const browser,
-                                      const SavedTabGroup& saved_group);
-  // Adds the opened tabs from OpenTabsAndMapWebcontentsToTabUUIDs into a tab
+  std::map<tabs::TabModel*, base::Uuid> OpenTabsAndMapToUuids(
+      Browser* const browser,
+      const SavedTabGroup& saved_group);
+
+  // Adds the opened tabs from OpenTabsAndMapToUuids into a tab
   // group and links it to `saved_group`.
   TabGroupId AddOpenedTabsToGroup(
       TabStripModel* tab_strip_model,
-      const std::map<content::WebContents*, base::Uuid>&
-          opened_web_contents_to_uuid,
+      const std::map<tabs::TabModel*, base::Uuid>& opened_web_contents_to_uuid,
       const SavedTabGroup& saved_group);
 
-  std::unique_ptr<TabGroupServiceWrapper> wrapper_service_;
+  // The service used to query and manage SavedTabGroups.
+  raw_ptr<TabGroupSyncService> service_ = nullptr;
+
+  // Listener layer which observes and manages the state of open SavedTabGroups
+  // across browsers.
   std::unique_ptr<SavedTabGroupModelListener> listener_;
 };
 

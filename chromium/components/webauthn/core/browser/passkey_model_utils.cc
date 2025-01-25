@@ -211,7 +211,7 @@ bool DecryptWebauthnCredentialSpecificsData(
       DVLOG(1) << "WebauthnCredentialSpecifics.encrypted_data not set";
       return false;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 bool EncryptWebauthnCredentialSpecificsData(
@@ -285,6 +285,11 @@ std::optional<std::vector<uint8_t>> GenerateEcSignature(
     return std::nullopt;
   }
   return signature;
+}
+
+bool IsSupportedAlgorithm(int32_t algorithm) {
+  return algorithm ==
+         base::strict_cast<int32_t>(device::CoseAlgorithmIdentifier::kEs256);
 }
 
 }  // namespace webauthn::passkey_model_utils

@@ -15,6 +15,7 @@
 class AuthenticationService;
 class ChromeAccountManagerService;
 @protocol ManageSyncSettingsCommandHandler;
+class PrefService;
 namespace signin {
 class IdentityManager;
 }  // namespace signin
@@ -32,17 +33,12 @@ class SyncService;
 // The delegate of the mediator.
 @property(nonatomic, weak) id<AccountMenuMediatorDelegate> delegate;
 
-// Whether the signout-flow is currently in progress.
-@property(nonatomic) BOOL signOutFlowInProgress;
-
-// Whether the add-account-flow is currently in progress.
-@property(nonatomic) BOOL addAccountOperationInProgress;
-
 - (instancetype)initWithSyncService:(syncer::SyncService*)syncService
               accountManagerService:
                   (ChromeAccountManagerService*)accountManagerService
                         authService:(AuthenticationService*)authService
                     identityManager:(signin::IdentityManager*)identityManager
+                              prefs:(PrefService*)prefs
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 

@@ -12,13 +12,14 @@
 #include "ash/ash_export.h"
 #include "ash/picker/views/picker_category_type.h"
 #include "ash/picker/views/picker_page_view.h"
-#include "ash/picker/views/picker_preview_bubble_controller.h"
 #include "ash/picker/views/picker_submenu_controller.h"
 #include "ash/public/cpp/picker/picker_category.h"
+#include "ash/public/cpp/picker/picker_search_result.h"
 #include "base/containers/span.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 
 namespace views {
@@ -28,8 +29,8 @@ class View;
 namespace ash {
 
 class PickerAssetFetcher;
-class PickerClipboardProvider;
-class PickerSearchResult;
+class PickerClipboardHistoryProvider;
+class PickerPreviewBubbleController;
 class PickerSectionListView;
 class PickerSectionView;
 class PickerZeroStateViewDelegate;
@@ -38,14 +39,15 @@ class ASH_EXPORT PickerZeroStateView : public PickerPageView {
   METADATA_HEADER(PickerZeroStateView, PickerPageView)
 
  public:
-  // `delegate`, `asset_fetcher` and `submenu_controller` must remain valid for
-  // the lifetime of this class.
+  // `delegate`, `asset_fetcher`, `submenu_controller`, `preview_controller`
+  // must remain valid for the lifetime of this class.
   explicit PickerZeroStateView(
       PickerZeroStateViewDelegate* delegate,
       base::span<const PickerCategory> available_categories,
       int picker_view_width,
       PickerAssetFetcher* asset_fetcher,
-      PickerSubmenuController* submenu_controller);
+      PickerSubmenuController* submenu_controller,
+      PickerPreviewBubbleController* preview_controller);
   PickerZeroStateView(const PickerZeroStateView&) = delete;
   PickerZeroStateView& operator=(const PickerZeroStateView&) = delete;
   ~PickerZeroStateView() override;
@@ -71,6 +73,7 @@ class ASH_EXPORT PickerZeroStateView : public PickerPageView {
  private:
   void OnCategorySelected(PickerCategory category);
   void OnResultSelected(const PickerSearchResult& result);
+  void RecordCapsLockIgnored(bool ignored);
 
   // Gets or creates the category type section for `category_type`.
   PickerSectionView* GetOrCreateSectionView(PickerCategoryType category_type);
@@ -79,10 +82,12 @@ class ASH_EXPORT PickerZeroStateView : public PickerPageView {
   PickerSectionView* GetOrCreateSectionView(PickerCategory category);
 
   void OnFetchSuggestedResults(std::vector<PickerSearchResult> result);
+  void AddResultToSection(const PickerSearchResult& result,
+                          PickerSectionView* section);
 
   raw_ptr<PickerZeroStateViewDelegate> delegate_;
-  PickerPreviewBubbleController preview_controller_;
   raw_ptr<PickerSubmenuController> submenu_controller_;
+  raw_ptr<PickerPreviewBubbleController> preview_controller_;
 
   // The section list view, contains the section views.
   raw_ptr<PickerSectionListView> section_list_view_ = nullptr;
@@ -96,7 +101,10 @@ class ASH_EXPORT PickerZeroStateView : public PickerPageView {
   std::map<PickerCategoryType, raw_ptr<PickerSectionView>>
       category_section_views_;
 
-  std::unique_ptr<PickerClipboardProvider> clipboard_provider_;
+  std::unique_ptr<PickerClipboardHistoryProvider> clipboard_provider_;
+
+  // Timer used to put caps lock toggle to the end of the primary section.
+  base::OneShotTimer add_caps_lock_delay_timer_;
 
   base::WeakPtrFactory<PickerZeroStateView> weak_ptr_factory_{this};
 };

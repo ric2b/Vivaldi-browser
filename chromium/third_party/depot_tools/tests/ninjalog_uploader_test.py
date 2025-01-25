@@ -18,56 +18,95 @@ import ninjalog_uploader
 class NinjalogUploaderTest(unittest.TestCase):
 
     def test_parse_gn_args(self):
-        self.assertEqual(ninjalog_uploader.ParseGNArgs(json.dumps([])), {})
+        gn_args, explicit_keys = ninjalog_uploader.ParseGNArgs(json.dumps([]))
+        self.assertEqual(gn_args, {})
+        self.assertEqual(explicit_keys, [])
 
         # Extract current configs from GN's output json.
-        self.assertEqual(
-            ninjalog_uploader.ParseGNArgs(
-                json.dumps([
-                    {
-                        'current': {
-                            'value': 'true'
-                        },
-                        'default': {
-                            'value': 'false'
-                        },
-                        'name': 'is_component_build'
+        gn_args, explicit_keys = ninjalog_uploader.ParseGNArgs(
+            json.dumps([
+                {
+                    'current': {
+                        'value': 'true',
+                        'file': '//path/to/args.gn',
                     },
-                    {
-                        'default': {
-                            'value': '"x64"'
-                        },
-                        'name': 'host_cpu'
+                    'default': {
+                        'value': 'false'
                     },
-                ])), {
-                    'is_component_build': 'true',
-                    'host_cpu': '"x64"',
-                })
+                    'name': 'is_component_build'
+                },
+                {
+                    'default': {
+                        'value': '"x64"'
+                    },
+                    'name': 'host_cpu'
+                },
+            ]))
 
-        self.assertEqual(
-            ninjalog_uploader.ParseGNArgs(
+        self.assertEqual(gn_args, {
+            'is_component_build': 'true',
+            'host_cpu': 'x64',
+        })
+        self.assertEqual(explicit_keys, ['is_component_build'])
+
+        gn_args, explicit_keys = ninjalog_uploader.ParseGNArgs(
+            json.dumps([
+                {
+                    'current': {
+                        'value': 'true',
+                        'file': '//.gn',
+                    },
+                    'default': {
+                        'value': 'false'
+                    },
+                    'name': 'is_component_build'
+                },
+                {
+                    'current': {
+                        'value': 'false',
+                        'file': '//path/to/args.gn',
+                    },
+                    'default': {
+                        'value': 'false'
+                    },
+                    'name': 'use_remoteexec'
+                },
+            ]))
+        self.assertEqual(gn_args, {
+            'is_component_build': 'true',
+            'use_remoteexec': 'false'
+        })
+        self.assertEqual(explicit_keys, ['use_remoteexec'])
+
+        # Do not include sensitive information.
+        with unittest.mock.patch('getpass.getuser', return_value='bob'):
+            gn_args, explicit_keys = ninjalog_uploader.ParseGNArgs(
                 json.dumps([
                     {
                         'current': {
-                            'value': 'true'
+                            'value': 'xyz',
+                            'file': '//path/to/args.gn',
                         },
                         'default': {
-                            'value': 'false'
+                            'value': ''
                         },
-                        'name': 'is_component_build'
+                        'name': 'google_api_key'
                     },
                     {
                         'current': {
-                            'value': 'false'
+                            'value': '/home/bob/bobo',
+                            'file': '//path/to/args.gn',
                         },
                         'default': {
-                            'value': 'false'
+                            'value': ''
                         },
-                        'name': 'use_remoteexec'
+                        'name': 'path_with_homedir'
                     },
-                ])), {
-                    'is_component_build': 'true',
-                    'use_remoteexec': 'false'
+                ]))
+            self.assertEqual(
+                gn_args, {
+                    'google_api_key': '<omitted>',
+                    'path_with_homedir': '/home/$USER/bobo',
                 })
 
     def test_get_ninjalog(self):

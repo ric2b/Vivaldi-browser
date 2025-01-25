@@ -9,8 +9,8 @@
 #include <string>
 
 #include "base/memory/singleton.h"
-#include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
+#include "chrome/browser/extensions/commands/command_service.h"
 #include "chrome/browser/extensions/external_install_error.h"
 #include "chrome/browser/extensions/extension_error_ui.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
@@ -111,8 +111,6 @@ class ExtensionActionUtil : public KeyedService,
   void GetExtensionsInfo(const ExtensionSet& extensions,
                          extensions::ToolbarExtensionInfoList* extension_list);
 
-  void NotifyTabSelectionChange(content::WebContents* selected_contents);
-
   ExtensionToIdProvider& GetExtensionToIdProvider() { return id_provider_; }
 
   void AddGlobalError(
@@ -126,9 +124,6 @@ class ExtensionActionUtil : public KeyedService,
   std::vector<std::unique_ptr<VivaldiExtensionDisabledGlobalError>>& errors() {
     return errors_;
   }
-
-  // Fires update events for the extensions where user-set visibility has changed.
-  void ExtensionVisibilityChanged();
 
  private:
   ~ExtensionActionUtil() override;
@@ -159,14 +154,9 @@ class ExtensionActionUtil : public KeyedService,
   void OnExtensionCommandRemoved(const std::string& extension_id,
                                  const Command& removed_command) override;
 
-  // Cached settings
-  base::Value::List user_hidden_extensions_;
-
   std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
 
   const raw_ptr<Profile> profile_;
-
-  SessionID last_active_tab_window_ = SessionID::InvalidValue();
 
   // Lookup between extension id and command-id.
   ExtensionToIdProvider id_provider_;
@@ -198,22 +188,6 @@ class ExtensionActionUtilsExecuteExtensionActionFunction
 
  private:
   ~ExtensionActionUtilsExecuteExtensionActionFunction() override = default;
-
-  // ExtensionFunction:
-  ResponseAction Run() override;
-};
-
-class ExtensionActionUtilsToggleBrowserActionVisibilityFunction
-    : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION(
-      "extensionActionUtils.toggleBrowserActionVisibility",
-      TOGGLE_BROWSERACTIONVISIBILITY)
-  ExtensionActionUtilsToggleBrowserActionVisibilityFunction() = default;
-
- private:
-  ~ExtensionActionUtilsToggleBrowserActionVisibilityFunction() override =
-      default;
 
   // ExtensionFunction:
   ResponseAction Run() override;

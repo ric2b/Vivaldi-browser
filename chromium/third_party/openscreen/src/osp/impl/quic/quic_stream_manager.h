@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "osp/impl/quic/quic_connection.h"
@@ -19,7 +18,6 @@ namespace openscreen::osp {
 
 struct ServiceStreamPair {
   QuicStream* stream = nullptr;
-  uint64_t protocol_connection_id = 0u;
   QuicProtocolConnection* protocol_connection = nullptr;
 };
 
@@ -50,14 +48,14 @@ class QuicStreamManager final : public QuicStream::Delegate {
   void OnReceived(QuicStream* stream, ByteView bytes) override;
   void OnClose(uint64_t stream_id) override;
 
-  void CreateProtocolConnection(uint64_t stream_id);
   std::unique_ptr<QuicProtocolConnection> OnIncomingStream(QuicStream* stream);
   void AddStreamPair(const ServiceStreamPair& stream_pair);
+  // This is called when `connection` is about to be destroyed. However, the
+  // underlying QuicStream of `connection` is still working. So we should not
+  // remove the corresponding item from `streams_`.
+  // As a comparison, OnClose is called when a underlying QuicStream is about to
+  // be closed. So we should remove the corresponding item from `streams_`.
   void DropProtocolConnection(QuicProtocolConnection& connection);
-  // This should be called at the end of each event loop that effects this
-  // connection so streams that were closed by the other endpoint can be
-  // destroyed properly.
-  void DestroyClosedStreams();
 
   void set_quic_connection(QuicConnection* quic_connection) {
     quic_connection_ = quic_connection;
@@ -68,7 +66,6 @@ class QuicStreamManager final : public QuicStream::Delegate {
   // This class manages all QuicStreams for `quic_connection_`;
   QuicConnection* quic_connection_ = nullptr;
   std::map<uint64_t, ServiceStreamPair> streams_;
-  std::vector<ServiceStreamPair> closed_streams_;
 };
 
 }  // namespace openscreen::osp

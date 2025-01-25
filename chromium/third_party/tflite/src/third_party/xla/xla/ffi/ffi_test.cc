@@ -37,12 +37,37 @@ limitations under the License.
 #include "xla/ffi/ffi_api.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/stream.h"
+#include "xla/tsl/lib/core/status_test_util.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/lib/core/status_test_util.h"
 #include "tsl/platform/status_matchers.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/platform/test.h"
 #include "tsl/platform/test_benchmark.h"
+
+namespace xla::ffi {
+
+struct PairOfI32AndF32 {
+  int32_t i32;
+  float f32;
+};
+
+struct TupleOfI32 {
+  int32_t i32_0;
+  int32_t i32_1;
+  int32_t i32_2;
+  int32_t i32_3;
+};
+
+}  // namespace xla::ffi
+
+XLA_FFI_REGISTER_STRUCT_ATTR_DECODING(::xla::ffi::PairOfI32AndF32,
+                                      ::xla::ffi::StructMember<int32_t>("i32"),
+                                      ::xla::ffi::StructMember<float>("f32"));
+XLA_FFI_REGISTER_STRUCT_ATTR_DECODING(
+    ::xla::ffi::TupleOfI32, ::xla::ffi::StructMember<int32_t>("i32_0"),
+    ::xla::ffi::StructMember<int32_t>("i32_1"),
+    ::xla::ffi::StructMember<int32_t>("i32_2"),
+    ::xla::ffi::StructMember<int32_t>("i32_3"));
 
 namespace xla::ffi {
 
@@ -56,14 +81,14 @@ TEST(FfiTest, StaticHandlerRegistration) {
   static constexpr auto* noop = +[] { return absl::OkStatus(); };
 
   // Use explicit binding specification.
-  XLA_FFI_DEFINE_HANDLER(NoOp0, noop, Ffi::Bind());
+  XLA_FFI_DEFINE_HANDLER(NoOp0, noop, Ffi::Bind(),
+                         {Traits::kCmdBufferCompatible});
 
   // Automatically infer binding specification from function signature.
   XLA_FFI_DEFINE_HANDLER(NoOp1, noop);
 
   XLA_FFI_REGISTER_HANDLER(GetXlaFfiApi(), "no-op-0", "Host", NoOp0);
-  XLA_FFI_REGISTER_HANDLER(GetXlaFfiApi(), "no-op-1", "Host", NoOp1,
-                           XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
+  XLA_FFI_REGISTER_HANDLER(GetXlaFfiApi(), "no-op-1", "Host", NoOp1);
 
   auto handler0 = FindHandler("no-op-0", "Host");
   auto handler1 = FindHandler("no-op-1", "Host");
@@ -71,11 +96,24 @@ TEST(FfiTest, StaticHandlerRegistration) {
   TF_ASSERT_OK(handler0.status());
   TF_ASSERT_OK(handler1.status());
 
-  ASSERT_EQ(handler0->traits, 0);
-  ASSERT_EQ(handler1->traits, XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
+  ASSERT_EQ(handler0->traits, XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
+  ASSERT_EQ(handler1->traits, 0);
 
-  EXPECT_THAT(StaticRegisteredHandlers("Host"),
+  // Check that platform name was canonicalized an we can find handlers
+  // registered for "Host" platform as "Cpu" handlers.
+  TF_ASSERT_OK_AND_ASSIGN(auto handlers, StaticRegisteredHandlers("Cpu"));
+  EXPECT_THAT(handlers,
               UnorderedElementsAre(Pair("no-op-0", _), Pair("no-op-1", _)));
+}
+
+TEST(FfiTest, RegistrationTraitsBackwardsCompatibility) {
+  static constexpr auto* noop = +[] { return absl::OkStatus(); };
+  XLA_FFI_DEFINE_HANDLER(NoOp, noop, Ffi::Bind());
+  XLA_FFI_REGISTER_HANDLER(GetXlaFfiApi(), "traits-bwd-compat", "Host", NoOp,
+                           XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
+  auto handler = FindHandler("traits-bwd-compat", "Host");
+  TF_ASSERT_OK(handler.status());
+  ASSERT_EQ(handler->traits, XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
 }
 
 // Declare XLA FFI handler as a function (extern "C" declaration).
@@ -87,17 +125,12 @@ XLA_FFI_DEFINE_HANDLER_SYMBOL(NoOpHandler, NoOp, Ffi::Bind());
 
 TEST(FfiTest, StaticHandlerSymbolRegistration) {
   XLA_FFI_REGISTER_HANDLER(GetXlaFfiApi(), "no-op-sym-0", "Host", NoOpHandler);
-  XLA_FFI_REGISTER_HANDLER(GetXlaFfiApi(), "no-op-sym-1", "Host", NoOpHandler,
-                           XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
 
-  auto handler0 = FindHandler("no-op-sym-0", "Host");
-  auto handler1 = FindHandler("no-op-sym-1", "Host");
+  // Use "Cpu" platform to check that platform name was canonicalized.
+  auto handler0 = FindHandler("no-op-sym-0", "Cpu");
 
   TF_ASSERT_OK(handler0.status());
-  TF_ASSERT_OK(handler1.status());
-
   ASSERT_EQ(handler0->traits, 0);
-  ASSERT_EQ(handler1->traits, XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
 }
 
 TEST(FfiTest, ForwardError) {
@@ -313,21 +346,21 @@ TEST(FfiTest, AttrsAsDictionary) {
     EXPECT_TRUE(dict.contains("f32"));
     EXPECT_TRUE(dict.contains("str"));
 
-    auto i32 = dict.get<int32_t>("i32");
-    auto f32 = dict.get<float>("f32");
-    auto str = dict.get<std::string_view>("str");
+    absl::StatusOr<int32_t> i32 = dict.get<int32_t>("i32");
+    absl::StatusOr<float> f32 = dict.get<float>("f32");
+    absl::StatusOr<std::string_view> str = dict.get<std::string_view>("str");
 
-    EXPECT_TRUE(i32.has_value());
-    EXPECT_TRUE(f32.has_value());
-    EXPECT_TRUE(str.has_value());
+    EXPECT_TRUE(i32.ok());
+    EXPECT_TRUE(f32.ok());
+    EXPECT_TRUE(str.ok());
 
-    if (i32) EXPECT_EQ(*i32, 42);
-    if (f32) EXPECT_EQ(*f32, 42.0f);
-    if (str) EXPECT_EQ(*str, "foo");
+    if (i32.ok()) EXPECT_EQ(*i32, 42);
+    if (f32.ok()) EXPECT_EQ(*f32, 42.0f);
+    if (str.ok()) EXPECT_EQ(*str, "foo");
 
     EXPECT_FALSE(dict.contains("i64"));
-    EXPECT_FALSE(dict.get<int64_t>("i32").has_value());
-    EXPECT_FALSE(dict.get<int64_t>("i64").has_value());
+    EXPECT_FALSE(dict.get<int64_t>("i32").ok());
+    EXPECT_FALSE(dict.get<int64_t>("i64").ok());
 
     return absl::OkStatus();
   };
@@ -360,14 +393,14 @@ TEST(FfiTest, DictionaryAttr) {
     EXPECT_TRUE(dict0.contains("i32"));
     EXPECT_TRUE(dict1.contains("f32"));
 
-    auto i32 = dict0.get<int32_t>("i32");
-    auto f32 = dict1.get<float>("f32");
+    absl::StatusOr<int32_t> i32 = dict0.get<int32_t>("i32");
+    absl::StatusOr<float> f32 = dict1.get<float>("f32");
 
-    EXPECT_TRUE(i32.has_value());
-    EXPECT_TRUE(f32.has_value());
+    EXPECT_TRUE(i32.ok());
+    EXPECT_TRUE(f32.ok());
 
-    if (i32) EXPECT_EQ(*i32, 42);
-    if (f32) EXPECT_EQ(*f32, 42.0f);
+    if (i32.ok()) EXPECT_EQ(*i32, 42);
+    if (f32.ok()) EXPECT_EQ(*f32, 42.0f);
 
     return absl::OkStatus();
   };
@@ -379,15 +412,6 @@ TEST(FfiTest, DictionaryAttr) {
 
   TF_ASSERT_OK(status);
 }
-
-struct PairOfI32AndF32 {
-  int32_t i32;
-  float f32;
-};
-
-XLA_FFI_REGISTER_STRUCT_ATTR_DECODING(PairOfI32AndF32,
-                                      StructMember<int32_t>("i32"),
-                                      StructMember<float>("f32"));
 
 TEST(FfiTest, StructAttr) {
   CallFrameBuilder::FlatAttributesMap dict;
@@ -627,8 +651,14 @@ TEST(FfiTest, RemainingArgs) {
 
   auto fn = [&](RemainingArgs args) {
     EXPECT_EQ(args.size(), 1);
-    EXPECT_TRUE(args.get<AnyBuffer>(0).has_value());
-    EXPECT_FALSE(args.get<AnyBuffer>(1).has_value());
+
+    absl::StatusOr<AnyBuffer> arg0 = args.get<AnyBuffer>(0);
+    absl::StatusOr<AnyBuffer> arg1 = args.get<AnyBuffer>(1);
+
+    EXPECT_TRUE(arg0.ok());
+    EXPECT_THAT(arg1.status(), StatusIs(absl::StatusCode::kInvalidArgument,
+                                        HasSubstr("Index out of range")));
+
     return absl::OkStatus();
   };
 
@@ -647,17 +677,146 @@ TEST(FfiTest, RemainingRets) {
   builder.AddBufferRet(memory, PrimitiveType::F32, /*dims=*/{2, 2});
   auto call_frame = builder.Build();
 
-  auto fn = [&](Result<AnyBuffer> ret, RemainingResults rets) {
+  auto fn = [&](Result<AnyBuffer> ret, RemainingRets rets) {
     EXPECT_EQ(rets.size(), 1);
-    EXPECT_TRUE(rets.get<AnyBuffer>(0).has_value());
-    EXPECT_FALSE(rets.get<AnyBuffer>(1).has_value());
+
+    absl::StatusOr<Result<AnyBuffer>> ret0 = rets.get<AnyBuffer>(0);
+    absl::StatusOr<Result<AnyBuffer>> ret1 = rets.get<AnyBuffer>(1);
+
+    EXPECT_TRUE(ret0.ok());
+    EXPECT_THAT(ret1.status(), StatusIs(absl::StatusCode::kInvalidArgument,
+                                        HasSubstr("Index out of range")));
+
     return absl::OkStatus();
   };
 
-  auto handler = Ffi::Bind().Ret<AnyBuffer>().RemainingResults().To(fn);
+  auto handler = Ffi::Bind().Ret<AnyBuffer>().RemainingRets().To(fn);
   auto status = Call(*handler, call_frame);
 
   TF_ASSERT_OK(status);
+}
+
+TEST(FfiTest, OptionalArgs) {
+  std::vector<float> storage(4, 0.0f);
+  se::DeviceMemoryBase memory(storage.data(), 4 * sizeof(float));
+
+  CallFrameBuilder builder(/*num_args=*/1, /*num_rets=*/0);
+  builder.AddBufferArg(memory, PrimitiveType::F32, /*dims=*/{2, 2});
+  auto call_frame = builder.Build();
+
+  {  // Single optional argument.
+    auto fn = [&](std::optional<AnyBuffer> arg0) {
+      EXPECT_TRUE(arg0.has_value());
+      return absl::OkStatus();
+    };
+
+    auto handler = Ffi::Bind().OptionalArg<AnyBuffer>().To(fn);
+    auto status = Call(*handler, call_frame);
+
+    TF_ASSERT_OK(status);
+  }
+
+  {  // Two optional arguments.
+    auto fn = [&](std::optional<AnyBuffer> arg0,
+                  std::optional<AnyBuffer> arg1) {
+      EXPECT_TRUE(arg0.has_value());
+      EXPECT_FALSE(arg1.has_value());
+      return absl::OkStatus();
+    };
+
+    auto handler =
+        Ffi::Bind().OptionalArg<AnyBuffer>().OptionalArg<AnyBuffer>().To(fn);
+    auto status = Call(*handler, call_frame);
+
+    TF_ASSERT_OK(status);
+  }
+
+  {  // Optional argument after a regular one.
+    auto fn = [&](AnyBuffer arg0, std::optional<AnyBuffer> arg1) {
+      EXPECT_FALSE(arg1.has_value());
+      return absl::OkStatus();
+    };
+
+    auto handler = Ffi::Bind().Arg<AnyBuffer>().OptionalArg<AnyBuffer>().To(fn);
+    auto status = Call(*handler, call_frame);
+
+    TF_ASSERT_OK(status);
+  }
+
+  {  // Remaining arguments after optional one.
+    auto fn = [&](std::optional<AnyBuffer> arg0, RemainingArgs args) {
+      EXPECT_TRUE(arg0.has_value());
+      EXPECT_EQ(args.size(), 0);
+      return absl::OkStatus();
+    };
+
+    auto handler = Ffi::Bind().OptionalArg<AnyBuffer>().RemainingArgs().To(fn);
+    auto status = Call(*handler, call_frame);
+
+    TF_ASSERT_OK(status);
+  }
+}
+
+TEST(FfiTest, OptionalRets) {
+  std::vector<float> storage(4, 0.0f);
+  se::DeviceMemoryBase memory(storage.data(), 4 * sizeof(float));
+
+  CallFrameBuilder builder(/*num_args=*/0, /*num_rets=*/1);
+  builder.AddBufferRet(memory, PrimitiveType::F32, /*dims=*/{2, 2});
+  auto call_frame = builder.Build();
+
+  {  // Single optional result.
+    auto fn = [&](std::optional<Result<AnyBuffer>> ret0) {
+      EXPECT_TRUE(ret0.has_value());
+      return absl::OkStatus();
+    };
+
+    auto handler = Ffi::Bind().OptionalRet<AnyBuffer>().To(fn);
+    auto status = Call(*handler, call_frame);
+
+    TF_ASSERT_OK(status);
+  }
+
+  {  // Two optional results.
+    auto fn = [&](std::optional<Result<AnyBuffer>> ret0,
+                  std::optional<Result<AnyBuffer>> ret1) {
+      EXPECT_TRUE(ret0.has_value());
+      EXPECT_FALSE(ret1.has_value());
+      return absl::OkStatus();
+    };
+
+    auto handler =
+        Ffi::Bind().OptionalRet<AnyBuffer>().OptionalRet<AnyBuffer>().To(fn);
+    auto status = Call(*handler, call_frame);
+
+    TF_ASSERT_OK(status);
+  }
+
+  {  // Optional result after a regular one.
+    auto fn = [&](Result<AnyBuffer> ret0,
+                  std::optional<Result<AnyBuffer>> ret1) {
+      EXPECT_FALSE(ret1.has_value());
+      return absl::OkStatus();
+    };
+
+    auto handler = Ffi::Bind().Ret<AnyBuffer>().OptionalRet<AnyBuffer>().To(fn);
+    auto status = Call(*handler, call_frame);
+
+    TF_ASSERT_OK(status);
+  }
+
+  {  // Remaining results after optional one.
+    auto fn = [&](std::optional<Result<AnyBuffer>> ret0, RemainingRets rets) {
+      EXPECT_TRUE(ret0.has_value());
+      EXPECT_EQ(rets.size(), 0);
+      return absl::OkStatus();
+    };
+
+    auto handler = Ffi::Bind().OptionalRet<AnyBuffer>().RemainingRets().To(fn);
+    auto status = Call(*handler, call_frame);
+
+    TF_ASSERT_OK(status);
+  }
 }
 
 TEST(FfiTest, RunOptionsCtx) {
@@ -670,7 +829,7 @@ TEST(FfiTest, RunOptionsCtx) {
   };
 
   CallOptions options;
-  options.stream = expected;
+  options.backend_options = CallOptions::GpuOptions{expected};
 
   auto handler = Ffi::Bind().Ctx<Stream>().To(fn);
   auto status = Call(*handler, call_frame, options);
@@ -804,11 +963,12 @@ TEST(FfiTest, UpdateBufferArgumentsAndResults) {
 
 TEST(FfiTest, DuplicateHandlerTraits) {
   static constexpr auto* noop = +[] { return absl::OkStatus(); };
-  XLA_FFI_DEFINE_HANDLER(NoOp, noop, Ffi::Bind());
-  XLA_FFI_REGISTER_HANDLER(GetXlaFfiApi(), "duplicate-traits", "Host", NoOp,
-                           XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
+  XLA_FFI_DEFINE_HANDLER(NoOp1, noop, Ffi::Bind());
+  XLA_FFI_DEFINE_HANDLER(NoOp2, noop, Ffi::Bind(),
+                         {Traits::kCmdBufferCompatible});
+  XLA_FFI_REGISTER_HANDLER(GetXlaFfiApi(), "duplicate-traits", "Host", NoOp1);
   auto status = TakeStatus(Ffi::RegisterStaticHandler(
-      GetXlaFfiApi(), "duplicate-traits", "Host", NoOp));
+      GetXlaFfiApi(), "duplicate-traits", "Host", NoOp2));
   EXPECT_TRUE(
       absl::StrContains(status.message(), "Duplicate FFI handler registration"))
       << "status.message():\n"
@@ -837,6 +997,29 @@ TEST(FfiTest, AllowRegisterDuplicateWhenEqual) {
   auto status = TakeStatus(Ffi::RegisterStaticHandler(
       GetXlaFfiApi(), "duplicate-when-equal", "Host", NoOp));
   TF_ASSERT_OK(status);
+}
+
+TEST(FfiTest, Metadata) {
+  static constexpr auto* noop = +[] { return absl::OkStatus(); };
+  XLA_FFI_DEFINE_HANDLER(handler, noop, Ffi::Bind());
+  auto maybe_metadata = GetMetadata(handler);
+  EXPECT_TRUE(maybe_metadata.ok());
+  auto metadata = maybe_metadata.value();
+  EXPECT_EQ(metadata.traits, 0);
+  EXPECT_EQ(metadata.api_version.major_version, XLA_FFI_API_MAJOR);
+  EXPECT_EQ(metadata.api_version.minor_version, XLA_FFI_API_MINOR);
+}
+
+TEST(FfiTest, MetadataTraits) {
+  static constexpr auto* noop = +[] { return absl::OkStatus(); };
+  XLA_FFI_DEFINE_HANDLER(handler, noop, Ffi::Bind(),
+                         {Traits::kCmdBufferCompatible});
+  auto maybe_metadata = GetMetadata(handler);
+  EXPECT_TRUE(maybe_metadata.ok());
+  auto metadata = maybe_metadata.value();
+  EXPECT_EQ(metadata.traits, XLA_FFI_HANDLER_TRAITS_COMMAND_BUFFER_COMPATIBLE);
+  EXPECT_EQ(metadata.api_version.major_version, XLA_FFI_API_MAJOR);
+  EXPECT_EQ(metadata.api_version.minor_version, XLA_FFI_API_MINOR);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1021,19 +1204,6 @@ BENCHMARK(BM_BufferArgX8);
 //===----------------------------------------------------------------------===//
 // BM_TupleOfI32Attrs
 //===----------------------------------------------------------------------===//
-
-struct TupleOfI32 {
-  int64_t i32_0;
-  int64_t i32_1;
-  int64_t i32_2;
-  int64_t i32_3;
-};
-
-XLA_FFI_REGISTER_STRUCT_ATTR_DECODING(TupleOfI32,
-                                      StructMember<int32_t>("i32_0"),
-                                      StructMember<int32_t>("i32_1"),
-                                      StructMember<int32_t>("i32_2"),
-                                      StructMember<int32_t>("i32_3"));
 
 void BM_TupleOfI32Attrs(benchmark::State& state) {
   CallFrameBuilder::AttributesBuilder attrs;

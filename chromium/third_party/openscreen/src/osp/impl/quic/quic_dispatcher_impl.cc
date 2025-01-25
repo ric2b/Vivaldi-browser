@@ -24,7 +24,6 @@ QuicDispatcherImpl::QuicDispatcherImpl(
     const quic::QuicCryptoServerConfig* crypto_server_config,
     std::unique_ptr<quic::QuicVersionManager> version_manager,
     std::unique_ptr<quic::QuicConnectionHelperInterface> helper,
-    std::unique_ptr<quic::QuicCryptoServerStreamBase::Helper> session_helper,
     std::unique_ptr<quic::QuicAlarmFactory> alarm_factory,
     uint8_t expected_server_connection_id_length,
     quic::ConnectionIdGeneratorInterface& generator,
@@ -33,7 +32,7 @@ QuicDispatcherImpl::QuicDispatcherImpl(
                      crypto_server_config,
                      version_manager.get(),
                      std::move(helper),
-                     std::move(session_helper),
+                     /*session_helper*/ nullptr,
                      std::move(alarm_factory),
                      expected_server_connection_id_length,
                      generator),
@@ -52,7 +51,7 @@ std::unique_ptr<quic::QuicSession> QuicDispatcherImpl::CreateQuicSession(
     quic::ConnectionIdGeneratorInterface& connection_id_generator) {
   auto connection = std::make_unique<quic::QuicConnection>(
       connection_id, self_address, peer_address, helper(), alarm_factory(),
-      writer(), /* owns_writer */ false, quic::Perspective::IS_SERVER,
+      writer(), /*owns_writer*/ false, quic::Perspective::IS_SERVER,
       quic::ParsedQuicVersionVector{version}, connection_id_generator);
 
   auto connection_impl = std::make_unique<QuicConnectionImpl>(
@@ -66,10 +65,7 @@ std::unique_ptr<quic::QuicSession> QuicDispatcherImpl::CreateQuicSession(
 
   std::unique_ptr<OpenScreenSessionBase> session =
       std::make_unique<OpenScreenServerSession>(
-          std::move(connection),
-          std::make_unique<quic::QuicCompressedCertsCache>(
-              quic::QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
-          *connection_impl, *crypto_config(), config(),
+          std::move(connection), *connection_impl, *crypto_config(), config(),
           quic::ParsedQuicVersionVector{version});
   connection_impl->set_session(session.get(), /*owns_session*/ false);
 

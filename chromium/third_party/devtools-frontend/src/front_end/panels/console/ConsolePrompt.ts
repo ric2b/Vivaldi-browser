@@ -189,10 +189,10 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
       const asSoonAsPossible = !TextEditor.Config.contentIncludingHint(this.editor.editor);
       this.previewRequestForTest = this.textChangeThrottler.schedule(
           this.requestPreviewBound,
-          asSoonAsPossible ? Common.Throttler.Scheduling.AsSoonAsPossible : Common.Throttler.Scheduling.Default);
+          asSoonAsPossible ? Common.Throttler.Scheduling.AS_SOON_AS_POSSIBLE : Common.Throttler.Scheduling.DEFAULT);
     }
     this.updatePromptIcon();
-    this.dispatchEventToListeners(Events.TextChanged);
+    this.dispatchEventToListeners(Events.TEXT_CHANGED);
   }
 
   private async requestPreview(): Promise<void> {
@@ -314,7 +314,7 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
   showSelfXssWarning(): void {
     Common.Console.Console.instance().warn(
         i18nString(UIStrings.selfXssWarning, {PH1: i18nString(UIStrings.allowPasting)}),
-        Common.Console.FrontendMessageSource.SelfXss);
+        Common.Console.FrontendMessageSource.SELF_XSS);
     this.#selfXssWarningShown = true;
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.SelfXssWarningConsoleMessageShown);
     this.#updateJavaScriptCompletionCompartment();
@@ -328,7 +328,7 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
         scrollIntoView: true,
       });
       Common.Settings.Settings.instance()
-          .createSetting('disable-self-xss-warning', false, Common.Settings.SettingStorageType.Synced)
+          .createSetting('disable-self-xss-warning', false, Common.Settings.SettingStorageType.SYNCED)
           .set(true);
       this.#selfXssWarningShown = false;
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.SelfXssAllowPastingInConsole);
@@ -412,9 +412,9 @@ export class ConsolePrompt extends Common.ObjectWrapper.eventMixin<EventTypes, t
 }
 
 export const enum Events {
-  TextChanged = 'TextChanged',
+  TEXT_CHANGED = 'TextChanged',
 }
 
 export type EventTypes = {
-  [Events.TextChanged]: void,
+  [Events.TEXT_CHANGED]: void,
 };

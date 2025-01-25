@@ -11,11 +11,14 @@
 #include "ash/ash_export.h"
 #include "ash/auth/views/auth_container_view.h"
 #include "ash/auth/views/auth_header_view.h"
+#include "ash/public/cpp/login_types.h"
 #include "ash/style/icon_button.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "base/scoped_observation.h"
+#include "chromeos/ash/components/cryptohome/auth_factor.h"
 #include "components/account_id/account_id.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -24,13 +27,18 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view.h"
 
+namespace cryptohome {
+class PinStatus;
+}  // namespace cryptohome
+
 namespace ash {
 
 // ActiveSessionAuthView is a view that contains a header view: close button,
 // user avatar, title and description. Below the header view it also shows the
 // authtentication container.
 class ASH_EXPORT ActiveSessionAuthView : public views::View,
-                                         public AuthContainerView::Observer {
+                                         public AuthContainerView::Observer,
+                                         public AuthHeaderView::Observer {
   METADATA_HEADER(ActiveSessionAuthView, views::View)
  public:
   // Observer Interface: Notifies about events within the ActiveSessionAuthView
@@ -74,7 +82,6 @@ class ASH_EXPORT ActiveSessionAuthView : public views::View,
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void ChildPreferredSizeChanged(views::View* child) override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   std::string GetObjectName() const override;
   void RequestFocus() override;
 
@@ -94,12 +101,24 @@ class ASH_EXPORT ActiveSessionAuthView : public views::View,
 
   void SetHasPin(bool has_pin);
   bool HasPin() const;
+  void SetPinStatus(std::unique_ptr<cryptohome::PinStatus> pin_status);
+  const std::u16string& GetPinStatusMessage() const;
+
+  // Enables or disables the input area of the view. The header area (e.g.,
+  // close button) remains accessible even in the disabled state.
+  void SetInputEnabled(bool enabled);
 
   // Actions:
   void Close();
   void SetErrorTitle(const std::u16string& error_str);
   // Reset the input fields text and visibility.
   void ResetInputfields();
+
+  void OnTitleChanged(const std::u16string& error_str) override;
+
+  // FingerprintView actions:
+  void SetFingerprintState(FingerprintState state);
+  void NotifyFingerprintAuthFailure();
 
  private:
   // Internal methods for managing views.
@@ -116,6 +135,9 @@ class ASH_EXPORT ActiveSessionAuthView : public views::View,
   const AccountId account_id_;
 
   base::ObserverList<Observer> observers_;
+
+  base::ScopedObservation<AuthHeaderView, AuthHeaderView::Observer>
+      header_observation_{this};
 
   base::WeakPtrFactory<ActiveSessionAuthView> weak_ptr_factory_{this};
 };

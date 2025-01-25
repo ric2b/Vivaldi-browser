@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
+<translation id="2947471979790858922">Sellest seadmest eemaldatakse nende privaatsete kaartidega seotud toimingud</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Suletud kaartide leidmiseks vali Vivaldi põhimenüüst „Viimatised kaardid”. Sinu privaatset kaarti seal ei näidata.}
+        other {Suletud kaartide leidmiseks vali Vivaldi põhimenüüst „Viimatised kaardid”. Sinu # privaatset kaarti seal ei näidata.}}</translation>
+<translation id="4871187110787939393">Kas sulgeda kõik privaatsed kaardid?</translation>
 </translationbundle>

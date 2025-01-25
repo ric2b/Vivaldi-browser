@@ -8,8 +8,8 @@ namespace openscreen::osp {
 
 bool ServicePublisher::Config::IsValid() const {
   return !friendly_name.empty() && !instance_name.empty() &&
-         !fingerprint.empty() && connection_server_port > 0 &&
-         !network_interfaces.empty();
+         !fingerprint.empty() && !auth_token.empty() &&
+         connection_server_port > 0 && !network_interfaces.empty();
 }
 
 ServicePublisher::~ServicePublisher() = default;

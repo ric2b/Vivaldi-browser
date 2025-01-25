@@ -37,11 +37,6 @@ limitations under the License.
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "llvm/ADT/APInt.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "xla/executable_run_options.h"
 #include "xla/hlo/ir/hlo_input_output_alias_config.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -57,11 +52,10 @@ limitations under the License.
 #include "xla/service/gpu/runtime/for_all_thunks.h"
 #include "xla/service/gpu/runtime/nccl_clique.h"
 #include "xla/service/gpu/runtime/nccl_clique_key.h"
+#include "xla/service/gpu/runtime/sequential_thunk.h"
 #include "xla/service/gpu/runtime/thunk.h"
 #include "xla/service/gpu/stream_executor_util.h"
 #include "xla/service/hlo_execution_profile.h"
-#include "xla/service/hlo_module_config.h"
-#include "xla/service/hlo_parser.h"
 #include "xla/service/hlo_value.h"
 #include "xla/service/maybe_owning_device_memory.h"
 #include "xla/service/rendezvous.h"
@@ -76,49 +70,31 @@ limitations under the License.
 #include "xla/stream_executor/device_description.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/device_memory_allocator.h"
+#include "xla/stream_executor/event_based_timer.h"
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#include "xla/stream_executor/gpu/gpu_activation.h"
+#include "xla/stream_executor/gpu/gpu_executor.h"
+#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 #include "xla/stream_executor/module_spec.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/rocm/rocm_platform_id.h"
+#include "xla/stream_executor/scoped_module_handle.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/util.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
+#include "tsl/platform/random.h"
 #include "tsl/platform/status.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/profiler/lib/scoped_annotation.h"
 #include "tsl/profiler/lib/traceme.h"
 
-#if TENSORFLOW_USE_ROCM
-#include "tsl/platform/random.h"
-#endif
-
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-#include "xla/stream_executor/gpu/gpu_activation.h"
-#include "xla/stream_executor/gpu/gpu_executor.h"
-#include "xla/stream_executor/gpu/gpu_stream.h"
-#include "xla/stream_executor/gpu/gpu_timer.h"
-#else
-namespace stream_executor::gpu {
-class GpuTimer {};
-}  // namespace stream_executor::gpu
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-
 namespace xla {
 namespace gpu {
 
 using ::tsl::profiler::ScopedAnnotation;
-
-static bool NeedsAsyncCommsStream(Thunk& thunk) {
-  switch (thunk.kind()) {
-    case Thunk::Kind::kNcclAllReduceStart:
-    case Thunk::Kind::kNcclAllReduceDone:
-      return true;
-    default:
-      return false;
-  }
-}
 
 // Returns the set of `ExecutionStreamIds` requested by all `Thunks` in the
 // `GpuExecutable`. At run time `Thunks` may use additional streams to launch
@@ -355,10 +331,9 @@ class ResourceRequests : public Thunk::ResourceRequests {
   absl::flat_hash_map<NcclCliqueKey, CliqueRequest> cliques_;
 };
 
-absl::Status MaybeSyncAndProfile(
-    const ServiceExecutableRunOptions* run_options,
-    std::optional<se::gpu::GpuTimer> execution_timer,
-    se::Stream* stream_to_sync);
+absl::Status MaybeSyncAndProfile(const ServiceExecutableRunOptions* run_options,
+                                 se::EventBasedTimer* execution_timer,
+                                 se::Stream* stream_to_sync);
 
 absl::Status RendezvousAfterInitialization(
     const ServiceExecutableRunOptions* run_options);
@@ -436,16 +411,13 @@ absl::Status ExecuteThunks(
       [&] { return absl::StrCat(module_name, ":XLA GPU module"); },
       tsl::profiler::TraceMeLevel::kInfo);
 
-  std::optional<se::gpu::GpuTimer> execution_timer;
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+  std::unique_ptr<se::EventBasedTimer> execution_timer;
   if (ExecutionProfile* profile =
           run_options->run_options().execution_profile();
       profile) {
-    TF_ASSIGN_OR_RETURN(
-        execution_timer,
-        se::gpu::GpuTimer::Create(main_stream, profile->warmup_run_executed()));
+    TF_ASSIGN_OR_RETURN(execution_timer, main_stream->CreateEventBasedTimer(
+                                             profile->warmup_run_executed()));
   }
-#endif
 
   // Parameters for executing collective operations.
   TF_ASSIGN_OR_RETURN(Thunk::CollectiveExecuteParams collective_params,
@@ -481,7 +453,8 @@ absl::Status ExecuteThunks(
         command_buffer_trace_stream,
         &collective_params,
         &collective_cliques,
-        run_options->run_options().ffi_execution_context()};
+        run_options->run_options().ffi_execution_context(),
+        run_options->local_device_count()};
 
     tsl::profiler::TraceMe trace([&] { return "Thunks::Initialize"; });
     TF_RETURN_IF_ERROR(thunk_sequence.Initialize(initialize_params));
@@ -502,7 +475,7 @@ absl::Status ExecuteThunks(
 
   TF_RETURN_IF_ERROR(thunk_sequence.ExecuteOnStream(execute_params));
 
-  return MaybeSyncAndProfile(run_options, std::move(execution_timer),
+  return MaybeSyncAndProfile(run_options, execution_timer.get(),
                              block_host_until_done ? main_stream : nullptr);
 }
 
@@ -582,23 +555,19 @@ absl::Status RendezvousAfterInitialization(
   return absl::OkStatus();
 }
 
-absl::Status MaybeSyncAndProfile(
-    const ServiceExecutableRunOptions* run_options,
-    std::optional<se::gpu::GpuTimer> execution_timer,
-    se::Stream* stream_to_sync = nullptr) {
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+absl::Status MaybeSyncAndProfile(const ServiceExecutableRunOptions* run_options,
+                                 se::EventBasedTimer* execution_timer,
+                                 se::Stream* stream_to_sync = nullptr) {
   // If we're measuring the execution time then it's important to queue the
   // stop event before triggering any synchronization.
   if (ExecutionProfile* profile =
           run_options->run_options().execution_profile();
       profile) {
-    CHECK(execution_timer.has_value());
     TF_ASSIGN_OR_RETURN(absl::Duration elapsed,
                         execution_timer->GetElapsedDuration());
     profile->set_compute_time_ns(
         std::max(absl::ToDoubleNanoseconds(elapsed), 1.0));
   }
-#endif
 
   // Make sure kernels are completed before deallocating temporary buffers or
   // the profiler state.
@@ -843,7 +812,7 @@ absl::StatusOr<ExecutionOutput> GpuExecutable::ExecuteAsyncOnStreamImpl(
   std::variant<absl::ReaderMutexLock, absl::WriterMutexLock> gpu_lock(
       std::in_place_index_t<0>{}, &GetGpuMutex(executor));
 
-  // Maybe update to a writer lock to get exlcusive acess to underlying GPU.
+  // Maybe update to a writer lock to get exclusive access to underlying GPU.
   if (auto* gpu_opts = run_options->run_options().gpu_executable_run_options();
       gpu_opts && gpu_opts->requires_exclusive_lock_on_gpu()) {
     gpu_lock.emplace<1>(&GetGpuMutex(executor));
@@ -858,9 +827,14 @@ absl::StatusOr<ExecutionOutput> GpuExecutable::ExecuteAsyncOnStreamImpl(
     TF_ASSIGN_OR_RETURN(globals, ResolveConstantGlobals(run_options->stream()));
   }
 
-  auto device_ordinal = executor->device_ordinal();
+  // Use the `device_ordinal` from the `run_options` if it is provided. This is
+  // the ordinal of the logical devices (e.g., virtual GPUs). If it is not
+  // provided, the ordinals of the logical and physical devices are the same.
+  const int device_ordinal = run_options->device_ordinal() != -1
+                                 ? run_options->device_ordinal()
+                                 : executor->device_ordinal();
   ExecutionOutput result(/*on_device_shape=*/output_shape_, memory_allocator,
-                         device_ordinal);
+                         device_ordinal, executor->device_ordinal());
 
   TF_ASSIGN_OR_RETURN(
       BufferAllocations buffer_allocations,
@@ -890,9 +864,7 @@ absl::StatusOr<ExecutionOutput> GpuExecutable::ExecuteAsyncOnStreamImpl(
         }
         module_allocations_[executor][i] =
             buffer_allocations.GetDeviceAddress(i);
-        VLOG(5) << "Gpu address changed for module " << module_name_
-                << ", allocation info: \n"
-                << allocations[i].ToShortString();
+        VLOG(5) << "Gpu address changed for module " << module_name_;
       }
     }
   }

@@ -23,7 +23,7 @@ namespace download {
 class DownloadItem;
 }
 
-namespace content {
+namespace content::indexed_db {
 
 class IndexedDBInternalsUI;
 
@@ -62,8 +62,7 @@ class IndexedDBInternalsUI : public WebUIController,
                               StartMetadataRecordingCallback callback) override;
   void StopMetadataRecording(storage::BucketId bucket_id,
                              StopMetadataRecordingCallback callback) override;
-  void InspectClient(storage::BucketId bucket_id,
-                     const std::string& client_token,
+  void InspectClient(const storage::BucketClientInfo& client_info,
                      InspectClientCallback callback) override;
 
  private:
@@ -88,6 +87,6 @@ class IndexedDBInternalsUI : public WebUIController,
   WEB_UI_CONTROLLER_TYPE_DECL();
 };
 
-}  // namespace content
+}  // namespace content::indexed_db
 
 #endif  // CONTENT_BROWSER_INDEXED_DB_INDEXED_DB_INTERNALS_UI_H_

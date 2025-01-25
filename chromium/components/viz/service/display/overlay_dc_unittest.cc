@@ -57,23 +57,6 @@ const gfx::Rect kOverlayBottomRightRect(128, 128, 128, 128);
 // by the test suites and helper functions.
 const AggregatedRenderPassId kDefaultRootPassId{1};
 
-class MockDCLayerOutputSurface : public FakeSkiaOutputSurface {
- public:
-  static std::unique_ptr<MockDCLayerOutputSurface> Create() {
-    auto provider = TestContextProvider::Create();
-    provider->BindToCurrentSequence();
-    return std::make_unique<MockDCLayerOutputSurface>(std::move(provider));
-  }
-
-  explicit MockDCLayerOutputSurface(scoped_refptr<ContextProvider> provider)
-      : FakeSkiaOutputSurface(std::move(provider)) {
-    capabilities_.supports_dc_layers = true;
-  }
-
-  // OutputSurface implementation.
-  MOCK_METHOD1(SetEnableDCLayers, void(bool));
-};
-
 std::unique_ptr<AggregatedRenderPass> CreateRenderPass(
     AggregatedRenderPassId render_pass_id = kDefaultRootPassId) {
   gfx::Rect output_rect(0, 0, 256, 256);
@@ -237,17 +220,11 @@ class OverlayProcessorTestBase : public testing::Test {
     std::vector<base::test::FeatureRef> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
 
-    // With DisableVideoOverlayIfMoving, videos are required to be stable for a
-    // certain number of frames to be considered for overlay promotion. This
-    // complicates tests since it adds behavior dependent on the number of times
-    // |Process| is called.
-    disabled_features.push_back(features::kDisableVideoOverlayIfMoving);
-
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   void SetUp() override {
-    output_surface_ = MockDCLayerOutputSurface::Create();
+    output_surface_ = FakeSkiaOutputSurface::Create3d();
     output_surface_->BindToClient(&output_surface_client_);
 
     resource_provider_ = std::make_unique<DisplayResourceProviderSkia>();
@@ -269,7 +246,7 @@ class OverlayProcessorTestBase : public testing::Test {
   }
 
   base::test::ScopedFeatureList feature_list_;
-  std::unique_ptr<MockDCLayerOutputSurface> output_surface_;
+  std::unique_ptr<FakeSkiaOutputSurface> output_surface_;
   cc::FakeOutputSurfaceClient output_surface_client_;
   std::unique_ptr<DisplayResourceProviderSkia> resource_provider_;
   std::optional<DisplayResourceProviderSkia::LockSetForExternalUse>
@@ -282,8 +259,14 @@ class DCLayerOverlayProcessorTest : public OverlayProcessorTestBase {
  protected:
   void InitializeDCLayerOverlayProcessor(int allowed_yuv_overlay_count = 1) {
     CHECK(!dc_layer_overlay_processor_);
+
+    // With disable_video_overlay_if_moving enabled, videos are required to be
+    // stable for a certain number of frames to be considered for overlay
+    // promotion. This complicates tests since it adds behavior dependent on
+    // the number of times |Process| is called.
     dc_layer_overlay_processor_ = std::make_unique<DCLayerOverlayProcessor>(
         allowed_yuv_overlay_count,
+        /*disable_video_overlay_if_moving=*/false,
         /*skip_initialization_for_testing=*/true);
 
     dc_layer_overlay_processor_
@@ -332,7 +315,7 @@ class DCLayerOverlayProcessorTest : public OverlayProcessorTestBase {
   std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor_;
 };
 
-TEST_F(DCLayerOverlayProcessorTest, DisableVideoOverlayIfMovingFeature) {
+TEST_F(DCLayerOverlayProcessorTest, DisableVideoOverlayIfMovingWorkaround) {
   InitializeDCLayerOverlayProcessor();
   auto ProcessForOverlaysSingleVideoRectWithOffset =
       [&](gfx::Vector2d video_rect_offset, bool is_hdr = false,
@@ -410,17 +393,15 @@ TEST_F(DCLayerOverlayProcessorTest, DisableVideoOverlayIfMovingFeature) {
       };
 
   {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndDisableFeature(
-        features::kDisableVideoOverlayIfMoving);
+    dc_layer_overlay_processor_
+        ->set_disable_video_overlay_if_moving_for_testing(false);
     EXPECT_EQ(1U, ProcessForOverlaysSingleVideoRectWithOffset({0, 0}).size());
     EXPECT_EQ(1U, ProcessForOverlaysSingleVideoRectWithOffset({1, 0}).size());
   }
 
   {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        features::kDisableVideoOverlayIfMoving);
+    dc_layer_overlay_processor_
+        ->set_disable_video_overlay_if_moving_for_testing(true);
     // We expect an overlay promotion after a couple frames of no movement
     for (int i = 0; i < 10; i++) {
       ProcessForOverlaysSingleVideoRectWithOffset({0, 0}).size();
@@ -438,9 +419,8 @@ TEST_F(DCLayerOverlayProcessorTest, DisableVideoOverlayIfMovingFeature) {
   }
 
   {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        features::kDisableVideoOverlayIfMoving);
+    dc_layer_overlay_processor_
+        ->set_disable_video_overlay_if_moving_for_testing(true);
     // We expect an overlay promotion after a couple frames of no movement
     for (int i = 0; i < 10; i++) {
       ProcessForOverlaysSingleVideoRectWithOffset({0, 0}, /*is_hdr=*/false,
@@ -459,9 +439,8 @@ TEST_F(DCLayerOverlayProcessorTest, DisableVideoOverlayIfMovingFeature) {
   }
 
   {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        features::kDisableVideoOverlayIfMoving);
+    dc_layer_overlay_processor_
+        ->set_disable_video_overlay_if_moving_for_testing(true);
     // We expect an overlay promotion after a couple frames of no movement
     for (int i = 0; i < 10; i++) {
       ProcessForOverlaysSingleVideoRectWithOffset({0, 0}, /*is_hdr=*/true)
@@ -2277,12 +2256,13 @@ TEST_F(OverlayProcessorWinStaticTest,
 
 class TestOverlayProcessorWin : public OverlayProcessorWin {
  public:
-  TestOverlayProcessorWin(OutputSurface* output_surface,
-                          int allowed_yuv_overlay_count)
-      : OverlayProcessorWin(output_surface,
+  explicit TestOverlayProcessorWin(int allowed_yuv_overlay_count,
+                                   bool disable_video_overlay_if_moving)
+      : OverlayProcessorWin(OutputSurface::DCSupportLevel::kDCompTexture,
                             &debug_settings_,
                             std::make_unique<DCLayerOverlayProcessor>(
                                 allowed_yuv_overlay_count,
+                                disable_video_overlay_if_moving,
                                 /*skip_initialization_for_testing=*/true)) {}
   DebugRendererSettings debug_settings_;
 };
@@ -2292,8 +2272,13 @@ class OverlayProcessorWinTest : public OverlayProcessorTestBase {
   void SetUp() override {
     OverlayProcessorTestBase::SetUp();
 
+    // With disable_video_overlay_if_moving enabled, videos are required to be
+    // stable for a certain number of frames to be considered for overlay
+    // promotion. This complicates tests since it adds behavior dependent on
+    // the number of times |Process| is called.
     overlay_processor_ = std::make_unique<TestOverlayProcessorWin>(
-        output_surface_.get(), /*allowed_yuv_overlay_count=*/1);
+        /*allowed_yuv_overlay_count=*/1,
+        /*disable_video_overlay_if_moving=*/false);
     overlay_processor_->SetUsingDCLayersForTesting(kDefaultRootPassId, true);
     overlay_processor_->SetViewportSize(gfx::Size(256, 256));
 
@@ -2346,17 +2331,13 @@ class OverlayProcessorWinSurfacePlaneTest
 
  protected:
   OverlayProcessorWinSurfacePlaneTest() {
-    const std::vector<base::test::FeatureRef> partially_delegated_compositing =
-        {
-            features::kDelegatedCompositing,
-            features::kDelegatedCompositingLimitToUi,
-        };
     switch (GetParam()) {
       case SurfaceTestMode::RootSurface:
-        feature_list_.InitWithFeatures({}, partially_delegated_compositing);
+        feature_list_.InitAndDisableFeature(features::kDelegatedCompositing);
         break;
       case SurfaceTestMode::SimulatePartiallyDelegated:
-        feature_list_.InitWithFeatures(partially_delegated_compositing, {});
+        feature_list_.InitAndEnableFeatureWithParameters(
+            features::kDelegatedCompositing, {{"mode", "limit_to_ui"}});
         break;
     }
   }
@@ -2555,7 +2536,7 @@ TEST_P(OverlayProcessorWinSurfacePlaneTest, ForceSwapChainForCapture) {
   }
 }
 
-TEST_P(OverlayProcessorWinSurfacePlaneTest, SetEnableDCLayers) {
+TEST_P(OverlayProcessorWinSurfacePlaneTest, UseDCompSurfaceWithVideo) {
   overlay_processor_->SetUsingDCLayersForTesting(kDefaultRootPassId, false);
   // Draw 60 frames with overlay video quads.
   for (int i = 0; i < 60; i++) {
@@ -2578,12 +2559,9 @@ TEST_P(OverlayProcessorWinSurfacePlaneTest, SetEnableDCLayers) {
     SurfaceDamageRectList surface_damage_rect_list;
     damage_rect_ = gfx::Rect(1, 1, 10, 10);
 
-    // There will be full damage and SetEnableDCLayers(true) will be called on
-    // the first frame.
+    // Full damage on the first frame.
     const gfx::Rect expected_damage =
         (i == 0) ? pass_list.back()->output_rect : gfx::Rect();
-
-    EXPECT_CALL(*output_surface_.get(), SetEnableDCLayers(_)).Times(0);
 
     ProcessForOverlays(&pass_list, render_pass_filters,
                        render_pass_backdrop_filters, SurfaceDamageRectList(),
@@ -2627,16 +2605,14 @@ TEST_P(OverlayProcessorWinSurfacePlaneTest, SetEnableDCLayers) {
 
     damage_rect_ = gfx::Rect(1, 1, 10, 10);
 
-    // There will be full damage and SetEnableDCLayers(false) will be called
-    // after 60 consecutive frames with no overlays. The first frame without
-    // overlays will also have full damage, but no call to SetEnableDCLayers.
+    // There will be full damage and needs_synchronous_dcomp_commit will be
+    // false after 60 consecutive frames with no overlays. The first frame
+    // without overlays will also have full damage.
     const gfx::Rect expected_damage = (i == 0 || (i + 1) == 60)
                                           ? pass_list.back()->output_rect
                                           : damage_rect_;
 
     const bool in_dc_layer_hysteresis = i + 1 < 60;
-
-    EXPECT_CALL(*output_surface_.get(), SetEnableDCLayers(_)).Times(0);
 
     ProcessForOverlays(&pass_list, render_pass_filters,
                        render_pass_backdrop_filters, SurfaceDamageRectList(),
@@ -2664,9 +2640,6 @@ TEST_P(OverlayProcessorWinSurfacePlaneTest, SetEnableDCLayers) {
 // Tests that Delegated Ink in the frame correctly sets
 // needs_synchronous_dcomp_commit on the render pass.
 TEST_P(OverlayProcessorWinSurfacePlaneTest, FrameHasDelegatedInk) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kUseDCompSurfacesForDelegatedInk);
   overlay_processor_->SetUsingDCLayersForTesting(kDefaultRootPassId, false);
   // Test that needs_synchronous_dcomp_commit on the render pass gets set to
   // false as default.
@@ -2713,9 +2686,6 @@ TEST_P(OverlayProcessorWinSurfacePlaneTest, FrameHasDelegatedInk) {
 // kNumberOfFramesBeforeDisablingDCLayers in
 // components/viz/service/display/overlay_processor_win.cc.
 TEST_P(OverlayProcessorWinSurfacePlaneTest, DelegatedInkSurfaceHysteresis) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kUseDCompSurfacesForDelegatedInk);
   overlay_processor_->SetUsingDCLayersForTesting(kDefaultRootPassId, false);
 
   overlay_processor_->SetFrameHasDelegatedInk();
@@ -2754,8 +2724,8 @@ class OverlayProcessorWinDelegatedCompositingTest
     : public OverlayProcessorWinTest {
  protected:
   OverlayProcessorWinDelegatedCompositingTest() {
-    feature_list_.InitWithFeatures({features::kDelegatedCompositing},
-                                   {features::kDelegatedCompositingLimitToUi});
+    feature_list_.InitAndEnableFeatureWithParameters(
+        features::kDelegatedCompositing, {{"mode", "full"}});
   }
 
   class DelegationResult {
@@ -2858,6 +2828,43 @@ TEST_F(OverlayProcessorWinDelegatedCompositingTest, SingleQuad) {
               }));
 }
 
+// Check that we don't try delegated compositing when there are too many quads.
+TEST_F(OverlayProcessorWinDelegatedCompositingTest, TooManyQuads) {
+  AggregatedRenderPassList pass_list;
+
+  auto pass = CreateRenderPass();
+  auto* sqs = pass->CreateAndAppendSharedQuadState();
+  for (int i = 0; i < 2049; i++) {
+    CreateSolidColorQuadAt(sqs, SkColors::kRed, pass.get(),
+                           gfx::Rect(i, 0, 50, 50));
+  }
+  pass_list.push_back(std::move(pass));
+
+  auto result = TryProcessForDelegatedOverlays(pass_list);
+  result.ExpectDelegationFailure();
+  EXPECT_THAT(result.candidates(), testing::IsEmpty());
+}
+
+// Check that we don't try delegated compositing when there are too many complex
+// quads. This limit is lower since they have a larger performance hit in DWM.
+TEST_F(OverlayProcessorWinDelegatedCompositingTest, TooManyComplexQuads) {
+  AggregatedRenderPassList pass_list;
+
+  auto pass = CreateRenderPass();
+  auto* sqs = pass->CreateAndAppendSharedQuadState();
+  sqs->mask_filter_info =
+      gfx::MaskFilterInfo(gfx::RRectF(gfx::RectF(0, 0, 50, 50), 50));
+  for (int i = 0; i < 257; i++) {
+    CreateSolidColorQuadAt(sqs, SkColors::kRed, pass.get(),
+                           gfx::Rect(i, 0, 50, 50));
+  }
+  pass_list.push_back(std::move(pass));
+
+  auto result = TryProcessForDelegatedOverlays(pass_list);
+  result.ExpectDelegationFailure();
+  EXPECT_THAT(result.candidates(), testing::IsEmpty());
+}
+
 // Check that, when delegated compositing fails, we still successfully promote
 // videos to overlay.
 TEST_F(OverlayProcessorWinDelegatedCompositingTest,
@@ -2865,15 +2872,28 @@ TEST_F(OverlayProcessorWinDelegatedCompositingTest,
   AggregatedRenderPassList pass_list;
 
   auto pass = CreateRenderPass();
-  // Non-overlay candidate resource will prevent delegation
-  CreateTextureQuadAt(resource_provider_.get(), child_resource_provider_.get(),
-                      child_provider_.get(),
-                      pass->shared_quad_state_list.back(), pass.get(),
-                      gfx::Rect(0, 0, 50, 50), /*is_overlay_candidate=*/false);
+
+  // Add a video quad we expect to go to overlay.
   auto* video_quad = CreateFullscreenCandidateYUVTextureQuad(
       resource_provider_.get(), child_resource_provider_.get(),
       child_provider_.get(), pass->shared_quad_state_list.back(), pass.get());
   ResourceId video_resource_id = video_quad->resource_id();
+
+  {
+    // A RPDQ with a backdrop filter occluding another quad will cause delegated
+    // compositing to fail.
+    auto child_pass = CreateRenderPass(AggregatedRenderPassId(2));
+    child_pass->backdrop_filters.Append(
+        cc::FilterOperation::CreateBlurFilter(1.f));
+    CreateRenderPassDrawQuadAt(pass.get(), pass->shared_quad_state_list.back(),
+                               gfx::Rect(0, 0, 50, 50), child_pass->id);
+    pass_list.push_back(std::move(child_pass));
+
+    CreateSolidColorQuadAt(pass->shared_quad_state_list.back(),
+                           SkColors::kGreen, pass.get(),
+                           gfx::Rect(0, 0, 50, 50));
+  }
+
   pass_list.push_back(std::move(pass));
 
   auto result = TryProcessForDelegatedOverlays(pass_list);
@@ -3067,8 +3087,8 @@ class OverlayProcessorWinPartiallyDelegatedCompositingTest
     : public OverlayProcessorWinDelegatedCompositingTest {
  protected:
   OverlayProcessorWinPartiallyDelegatedCompositingTest() {
-    feature_list_.InitAndEnableFeature(
-        features::kDelegatedCompositingLimitToUi);
+    feature_list_.InitAndEnableFeatureWithParameters(
+        features::kDelegatedCompositing, {{"mode", "limit_to_ui"}});
   }
 
   TextureDrawQuad* CreateOverlayQuadWithSurfaceDamageAt(

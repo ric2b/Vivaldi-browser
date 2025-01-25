@@ -67,33 +67,8 @@ const FontName CommonFontNames[] = {
 const char* FamiliesWithBoldItalicFaces[] = {"Baskerville", "Cochin", "Georgia",
                                              "GillSans"};
 
-ScopedCFTypeRef<CTFontRef> MatchCTFontFamily(const AtomicString& font_name,
-                                             FontSelectionValue desired_weight,
-                                             FontSelectionValue desired_slant,
-                                             FontSelectionValue desired_width,
-                                             float size) {
-  if (RuntimeEnabledFeatures::FontMatchingCTMigrationEnabled()) {
-    return MatchFontFamily(font_name, desired_weight, desired_slant,
-                           desired_width, size);
-  }
-
-  NSFontTraitMask traits = 0;
-  if (desired_slant != kNormalSlopeValue) {
-    traits |= NSFontItalicTrait;
-  }
-  if (desired_width > kNormalWidthValue) {
-    traits |= NSFontExpandedTrait;
-  }
-  if (desired_width < kNormalWidthValue) {
-    traits |= NSFontCondensedTrait;
-  }
-
-  return ScopedCFTypeRef<CTFontRef>(NSToCFOwnershipCast(
-      MatchNSFontFamily(font_name, traits, desired_weight, size)));
-}
-
 void TestFontWithBoldAndItalicTraits(const AtomicString& font_name) {
-  ScopedCFTypeRef<CTFontRef> font_italic = MatchCTFontFamily(
+  ScopedCFTypeRef<CTFontRef> font_italic = MatchFontFamily(
       font_name, kNormalWeightValue, kItalicSlopeValue, kNormalWidthValue, 11);
   EXPECT_TRUE(font_italic);
 
@@ -101,7 +76,7 @@ void TestFontWithBoldAndItalicTraits(const AtomicString& font_name) {
       CTFontGetSymbolicTraits(font_italic.get());
   EXPECT_TRUE(italic_font_traits & kCTFontTraitItalic);
 
-  ScopedCFTypeRef<CTFontRef> font_bold_italic = MatchCTFontFamily(
+  ScopedCFTypeRef<CTFontRef> font_bold_italic = MatchFontFamily(
       font_name, kBoldWeightValue, kItalicSlopeValue, kNormalWidthValue, 11);
   EXPECT_TRUE(font_bold_italic);
 
@@ -113,8 +88,8 @@ void TestFontWithBoldAndItalicTraits(const AtomicString& font_name) {
 
 void TestFontMatchingByFamilyName(const char* font_name) {
   ScopedCFTypeRef<CTFontRef> font =
-      MatchCTFontFamily(AtomicString(font_name), kNormalWeightValue,
-                        kNormalSlopeValue, kNormalWidthValue, 11);
+      MatchFontFamily(AtomicString(font_name), kNormalWeightValue,
+                      kNormalSlopeValue, kNormalWidthValue, 11);
   EXPECT_TRUE(font);
   ScopedCFTypeRef<CFStringRef> matched_family_name(
       CTFontCopyFamilyName(font.get()));
@@ -128,8 +103,8 @@ void TestFontMatchingByFamilyName(const char* font_name) {
 
 void TestFontMatchingByPostscriptName(const char* font_name) {
   ScopedCFTypeRef<CTFontRef> font =
-      MatchCTFontFamily(AtomicString(font_name), kNormalWeightValue,
-                        kNormalSlopeValue, kNormalWidthValue, 11);
+      MatchFontFamily(AtomicString(font_name), kNormalWeightValue,
+                      kNormalSlopeValue, kNormalWidthValue, 11);
   EXPECT_TRUE(font);
   ScopedCFTypeRef<CFStringRef> matched_postscript_name(
       CTFontCopyPostScriptName(font.get()));
@@ -217,35 +192,30 @@ TEST(FontMatcherMacTest, MatchSystemFontWithWeightVariations) {
 }
 
 TEST(FontMatcherMacTest, MatchSystemFontWithWidthVariations) {
-  // Font width variations are supported from Mac OS 11 and later.
-  if (@available(macos 11, *)) {
-    // Mac SystemUI font supports width variations between 30 and 150.
-    int min_width = 30;
-    int max_width = 150;
-    FourCharCode wdth_tag = 'wdth';
-    for (int width = min_width - 10; width <= max_width + 10; width += 10) {
-      if (width != kNormalWidthValue) {
-        ScopedCFTypeRef<CTFontRef> font =
-            MatchSystemUIFont(kNormalWidthValue, kNormalSlopeValue,
-                              FontSelectionValue(width), 11);
-        EXPECT_TRUE(font);
+  // Mac SystemUI font supports width variations between 30 and 150.
+  int min_width = 30;
+  int max_width = 150;
+  FourCharCode wdth_tag = 'wdth';
+  for (int width = min_width - 10; width <= max_width + 10; width += 10) {
+    if (width != kNormalWidthValue) {
+      ScopedCFTypeRef<CTFontRef> font = MatchSystemUIFont(
+          kNormalWidthValue, kNormalSlopeValue, FontSelectionValue(width), 11);
+      EXPECT_TRUE(font);
 
-        NSDictionary* variations =
-            CFToNSOwnershipCast(CTFontCopyVariation(font.get()));
-        NSNumber* actual_width_num =
-            ObjCCast<NSNumber>(variations[@(wdth_tag)]);
-        EXPECT_TRUE(actual_width_num);
+      NSDictionary* variations =
+          CFToNSOwnershipCast(CTFontCopyVariation(font.get()));
+      NSNumber* actual_width_num = ObjCCast<NSNumber>(variations[@(wdth_tag)]);
+      EXPECT_TRUE(actual_width_num);
 
-        float actual_width = actual_width_num.floatValue;
-        float expected_width = std::max(min_width, std::min(max_width, width));
-        EXPECT_EQ(actual_width, expected_width);
-      }
+      float actual_width = actual_width_num.floatValue;
+      float expected_width = std::max(min_width, std::min(max_width, width));
+      EXPECT_EQ(actual_width, expected_width);
     }
   }
 }
 
 TEST(FontMatcherMacTest, FontFamilyMatchingUnavailableFont) {
-  ScopedCFTypeRef<CTFontRef> font = MatchCTFontFamily(
+  ScopedCFTypeRef<CTFontRef> font = MatchFontFamily(
       AtomicString(
           "ThisFontNameDoesNotExist07F444B9-4DDF-4A41-8F30-C80D4ED4CCA2"),
       kNormalWeightValue, kNormalSlopeValue, kNormalWidthValue, 12);
@@ -254,13 +224,13 @@ TEST(FontMatcherMacTest, FontFamilyMatchingUnavailableFont) {
 
 TEST(FontMatcherMacTest, FontFamilyMatchingLastResortFont) {
   ScopedCFTypeRef<CTFontRef> last_resort_font =
-      MatchCTFontFamily(AtomicString("lastresort"), kNormalWeightValue,
-                        kNormalSlopeValue, kNormalWidthValue, 11);
+      MatchFontFamily(AtomicString("lastresort"), kNormalWeightValue,
+                      kNormalSlopeValue, kNormalWidthValue, 11);
   EXPECT_FALSE(last_resort_font);
 
   ScopedCFTypeRef<CTFontRef> last_resort_font_bold =
-      MatchCTFontFamily(AtomicString("lastresort"), kBoldWeightValue,
-                        kNormalSlopeValue, kNormalWidthValue, 11);
+      MatchFontFamily(AtomicString("lastresort"), kBoldWeightValue,
+                      kNormalSlopeValue, kNormalWidthValue, 11);
   EXPECT_FALSE(last_resort_font_bold);
 }
 
@@ -370,8 +340,8 @@ TEST_P(TestFontWithTraitsMatching, FontFamilyMatchingWithBoldItalicTraits) {
 TEST(FontMatcherMacTest, FontFamilyMatchingWithBoldCondensedTraits) {
   AtomicString family_name = AtomicString("American Typewriter");
   ScopedCFTypeRef<CTFontRef> font_condensed =
-      MatchCTFontFamily(family_name, kNormalWeightValue, kNormalSlopeValue,
-                        kCondensedWidthValue, 11);
+      MatchFontFamily(family_name, kNormalWeightValue, kNormalSlopeValue,
+                      kCondensedWidthValue, 11);
   EXPECT_TRUE(font_condensed);
 
   CTFontSymbolicTraits condensed_font_traits =
@@ -379,8 +349,8 @@ TEST(FontMatcherMacTest, FontFamilyMatchingWithBoldCondensedTraits) {
   EXPECT_TRUE(condensed_font_traits & NSFontCondensedTrait);
 
   ScopedCFTypeRef<CTFontRef> font_bold_condensed =
-      MatchCTFontFamily(family_name, kBoldWeightValue, kNormalSlopeValue,
-                        kCondensedWidthValue, 11);
+      MatchFontFamily(family_name, kBoldWeightValue, kNormalSlopeValue,
+                      kCondensedWidthValue, 11);
   EXPECT_TRUE(font_bold_condensed.get());
 
   CTFontSymbolicTraits bold_condensed_font_traits =
@@ -411,8 +381,8 @@ TEST(FontMatcherMacTest, MatchFamilyWithWeightVariations) {
   AtomicString family_name = AtomicString("Noto Sans Myanmar");
   for (int weight = 100; weight <= 900; weight += 100) {
     ScopedCFTypeRef<CTFontRef> font =
-        MatchCTFontFamily(family_name, FontSelectionValue(weight),
-                          kNormalSlopeValue, kNormalWidthValue, 11);
+        MatchFontFamily(family_name, FontSelectionValue(weight),
+                        kNormalSlopeValue, kNormalWidthValue, 11);
     NSDictionary* traits = CFToNSOwnershipCast(CTFontCopyTraits(font.get()));
     NSNumber* actual_weight_num =
         ObjCCast<NSNumber>(traits[CFToNSPtrCast(kCTFontWeightTrait)]);

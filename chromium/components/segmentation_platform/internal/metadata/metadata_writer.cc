@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/segmentation_platform/internal/metadata/metadata_writer.h"
 
 #include <cstddef>
@@ -35,13 +40,15 @@ void FillCustomInput(const MetadataWriter::CustomInput feature,
   }
 }
 
+template <typename StringVector>
 void PopulateMultiClassClassifier(
     proto::Predictor::MultiClassClassifier* multi_class_classifier,
-    base::span<const char* const> class_labels,
+    const StringVector& class_labels,
     int top_k_outputs) {
   multi_class_classifier->set_top_k_outputs(top_k_outputs);
-  for (auto* class_label : class_labels) {
-    multi_class_classifier->mutable_class_labels()->Add(class_label);
+  for (const auto& class_label : class_labels) {
+    multi_class_classifier->mutable_class_labels()->Add(
+        std::string(class_label));
   }
 }
 
@@ -205,6 +212,22 @@ void MetadataWriter::SetIgnorePreviousModelTTLInOutputConfig() {
 
 void MetadataWriter::AddOutputConfigForMultiClassClassifier(
     base::span<const char* const> class_labels,
+    int top_k_outputs,
+    std::optional<float> threshold) {
+  proto::Predictor::MultiClassClassifier* multi_class_classifier =
+      metadata_->mutable_output_config()
+          ->mutable_predictor()
+          ->mutable_multi_class_classifier();
+
+  PopulateMultiClassClassifier(multi_class_classifier, class_labels,
+                               top_k_outputs);
+  if (threshold.has_value()) {
+    multi_class_classifier->set_threshold(threshold.value());
+  }
+}
+
+void MetadataWriter::AddOutputConfigForMultiClassClassifier(
+    const std::vector<std::string>& class_labels,
     int top_k_outputs,
     std::optional<float> threshold) {
   proto::Predictor::MultiClassClassifier* multi_class_classifier =

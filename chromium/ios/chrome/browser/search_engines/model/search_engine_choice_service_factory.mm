@@ -12,7 +12,7 @@
 #import "components/variations/service/variations_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/web/public/browser_state.h"
 
 namespace ios {
@@ -33,10 +33,15 @@ SearchEngineChoiceServiceFactory::GetInstance() {
 
 // static
 search_engines::SearchEngineChoiceService*
-SearchEngineChoiceServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+SearchEngineChoiceServiceFactory::GetForBrowserState(ProfileIOS* profile) {
+  return GetForProfile(profile);
+}
+
+// static
+search_engines::SearchEngineChoiceService*
+SearchEngineChoiceServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<search_engines::SearchEngineChoiceService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 std::unique_ptr<KeyedService>

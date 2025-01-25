@@ -179,6 +179,8 @@ class AttributionInteropParser {
         ParseBool(dict, "needs_source_destination_limit").value_or(false);
     interop_config.needs_aggregatable_filtering_ids =
         ParseBool(dict, "needs_aggregatable_filtering_ids").value_or(false);
+    interop_config.needs_attribution_scopes =
+        ParseBool(dict, "needs_attribution_scopes").value_or(false);
 
     AttributionConfig& config = interop_config.attribution_config;
 
@@ -206,9 +208,18 @@ class AttributionInteropParser {
              required);
 
     ParseDouble(dict, "max_event_level_channel_capacity_navigation",
-                config.event_level_limit.max_navigation_info_gain, required);
+                config.privacy_math_config.max_channel_capacity_navigation,
+                required);
     ParseDouble(dict, "max_event_level_channel_capacity_event",
-                config.event_level_limit.max_event_info_gain, required);
+                config.privacy_math_config.max_channel_capacity_event,
+                required);
+    ParseDouble(
+        dict, "max_event_level_channel_capacity_scopes_navigation",
+        config.privacy_math_config.max_channel_capacity_scopes_navigation,
+        required);
+    ParseDouble(dict, "max_event_level_channel_capacity_scopes_event",
+                config.privacy_math_config.max_channel_capacity_scopes_event,
+                required);
 
     ParseUInt32(dict, "max_trigger_state_cardinality",
                 interop_config.max_trigger_state_cardinality, required);

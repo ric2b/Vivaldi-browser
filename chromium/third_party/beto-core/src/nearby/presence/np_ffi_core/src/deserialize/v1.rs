@@ -545,14 +545,14 @@ pub struct DeserializedV1IdentityDetails {
     verification_mode: V1VerificationMode,
     /// The ID of the credential which
     /// matched the deserialized section.
-    cred_id: u32,
+    cred_id: i64,
     /// The 16-byte metadata key.
     identity_token: [u8; 16],
 }
 
 impl DeserializedV1IdentityDetails {
     pub(crate) fn new(
-        cred_id: u32,
+        cred_id: i64,
         verification_mode: np_adv::extended::deserialize::VerificationMode,
         identity_token: np_adv::extended::V1IdentityToken,
     ) -> Self {
@@ -560,7 +560,7 @@ impl DeserializedV1IdentityDetails {
         Self { cred_id, verification_mode, identity_token: identity_token.into_bytes() }
     }
     /// Returns the ID of the credential which matched the deserialized section.
-    pub fn cred_id(&self) -> u32 {
+    pub fn cred_id(&self) -> i64 {
         self.cred_id
     }
     /// Returns the verification mode (MIC/Signature) employed for the decrypted section.

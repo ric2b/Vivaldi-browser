@@ -264,6 +264,12 @@ class Command(object):
   RUN_BOUNCE_TRACKING_MITIGATIONS = (
         _Method.DELETE,
         '/session/:sessionId/storage/run_bounce_tracking_mitigations')
+  CREATE_VIRTUAL_PRESSURE_SOURCE = (
+      _Method.POST, '/session/:sessionId/pressuresource')
+  UPDATE_VIRTUAL_PRESSURE_SOURCE = (
+      _Method.POST, '/session/:sessionId/pressuresource/:type')
+  REMOVE_VIRTUAL_PRESSURE_SOURCE = (
+      _Method.DELETE, '/session/:sessionId/pressuresource/:type')
 
   # Custom Chrome commands.
   IS_LOADING = (_Method.GET, '/session/:sessionId/is_loading')
@@ -275,7 +281,7 @@ class CommandExecutor(object):
     self._http_timeout = 10
     # see https://crbug.com/1045241: short timeout seems to introduce flakiness
     if util.IsMac() or util.IsWindows():
-      self._http_timeout = 30
+      self._http_timeout = 60
     if http_timeout is not None:
       self._http_timeout = http_timeout
     self._http_client = http.client.HTTPConnection(

@@ -6,6 +6,7 @@
 #define IOS_CHROME_TEST_APP_CHROME_TEST_UTIL_H_
 
 #import "base/ios/block_types.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 
@@ -14,7 +15,6 @@
 @protocol UnitConversionCommands;
 
 class Browser;
-class ChromeBrowserState;
 @class MainController;
 @class NewTabPageController;
 @class SceneController;
@@ -36,10 +36,18 @@ SceneController* GetForegroundActiveSceneController();
 NSUInteger RegularBrowserCount();
 
 // Returns the current, non-incognito ChromeBrowserState.
+// TODO(crbug.com/358299863): Remove when fully migrated.
 ChromeBrowserState* GetOriginalBrowserState();
 
 // Returns the current incognito ChromeBrowserState
+// TODO(crbug.com/358299863): Remove when fully migrated.
 ChromeBrowserState* GetCurrentIncognitoBrowserState();
+
+// Returns the current, non-incognito Profile.
+ProfileIOS* GetOriginalProfile();
+
+// Returns the current incognito Profile
+ProfileIOS* GetCurrentIncognitoProfile();
 
 // Returns the browser for the main interface.
 Browser* GetMainBrowser();
@@ -75,15 +83,11 @@ void PresentSignInAccountsViewControllerIfNecessary();
 // TODO(crbug.com/41275546): Clean up other tests that use this helper function.
 void SetBooleanLocalStatePref(const char* pref_name, bool value);
 
-// Sets the value of a boolean user pref in the given browser state.
-void SetBooleanUserPref(ChromeBrowserState* browser_state,
-                        const char* pref_name,
-                        bool value);
+// Sets the value of a boolean user pref in the given profile.
+void SetBooleanUserPref(ProfileIOS* profile, const char* pref_name, bool value);
 
-// Sets the value of an integer user pref in the given browser state.
-void SetIntegerUserPref(ChromeBrowserState* browser_state,
-                        const char* pref_name,
-                        int value);
+// Sets the value of an integer user pref in the given profile.
+void SetIntegerUserPref(ProfileIOS* profile, const char* pref_name, int value);
 
 // Checks whether metrics recording is enabled or not.
 bool IsMetricsRecordingEnabled();

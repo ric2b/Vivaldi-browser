@@ -72,10 +72,16 @@ CommandIterator::CommandIterator(CommandAllocator allocator) : mBlocks(allocator
 void CommandIterator::AcquireCommandBlocks(std::vector<CommandAllocator> allocators) {
     DAWN_ASSERT(IsEmpty());
     mBlocks.clear();
+
+    size_t totalBlocksCount = 0;
+    for (CommandAllocator& allocator : allocators) {
+        totalBlocksCount += allocator.GetCommandBlocksCount();
+    }
+
+    mBlocks.reserve(totalBlocksCount);
     for (CommandAllocator& allocator : allocators) {
         CommandBlocks blocks = allocator.AcquireBlocks();
         if (!blocks.empty()) {
-            mBlocks.reserve(mBlocks.size() + blocks.size());
             for (BlockDef& block : blocks) {
                 mBlocks.push_back(std::move(block));
             }
@@ -174,6 +180,10 @@ bool CommandAllocator::IsEmpty() const {
     return mCurrentPtr == reinterpret_cast<const char*>(&mPlaceholderSpace[0]);
 }
 
+size_t CommandAllocator::GetCommandBlocksCount() const {
+    return mBlocks.size();
+}
+
 CommandBlocks&& CommandAllocator::AcquireBlocks() {
     DAWN_ASSERT(mCurrentPtr != nullptr && mEndPtr != nullptr);
     DAWN_ASSERT(IsPtrAligned(mCurrentPtr, alignof(uint32_t)));
@@ -226,6 +236,17 @@ bool CommandAllocator::GetNewBlock(size_t minimumSize) {
 void CommandAllocator::ResetPointers() {
     mCurrentPtr = reinterpret_cast<char*>(&mPlaceholderSpace[0]);
     mEndPtr = reinterpret_cast<char*>(&mPlaceholderSpace[1]);
+}
+
+const char* CommandAllocator::CopyAsNullTerminatedString(std::string_view in) {
+    // Include extra null-terminator character. The string_view may not be
+    // null-terminated. It also may already have a null-terminator inside of
+    // it, in which case adding the null-terminator is unnecessary. However,
+    // this is unlikely, so always include the extra character.
+    char* out = AllocateData<char>(in.length() + 1);
+    memcpy(out, in.data(), in.length());
+    out[in.length()] = '\0';
+    return out;
 }
 
 }  // namespace dawn::native

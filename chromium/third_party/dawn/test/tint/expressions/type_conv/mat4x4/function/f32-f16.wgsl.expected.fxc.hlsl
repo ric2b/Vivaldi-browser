@@ -1,4 +1,4 @@
-SKIP: FAILED
+SKIP: INVALID
 
 [numthreads(1, 1, 1)]
 void unused_entry_point() {
@@ -13,6 +13,11 @@ float4x4 m() {
 }
 
 void f() {
-  const float4x4 tint_symbol = m();
+  float4x4 tint_symbol = m();
   matrix<float16_t, 4, 4> v = matrix<float16_t, 4, 4>(tint_symbol);
 }
+FXC validation failure:
+<scrubbed_path>(15,10-18): error X3000: syntax error: unexpected token 'float16_t'
+
+
+tint executable returned error: exit status 1

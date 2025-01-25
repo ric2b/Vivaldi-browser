@@ -198,6 +198,23 @@ const TestParam kTestParams[] = {
         .with_explicit_browser_signin_design = true,
     },
 
+    // Supervised user sign-in intercept bubble, no accounts in chrome.
+    {
+        .test_suffix = "ChromeSignInSupervisedUserIntercepted",
+        .interception_type =
+            WebSigninInterceptor::SigninInterceptionType::kChromeSignin,
+        .intercepted_account_management_state =
+            ManagedAccountState::kSupervisedAccount,
+    },
+    // Profile switch for supervised user.
+    {
+        .test_suffix = "SupervisedUserProfileSwitch",
+        .interception_type =
+            WebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
+        .intercepted_account_management_state =
+            ManagedAccountState::kSupervisedAccount,
+    },
+
     // Chrome Signin bubble: no accounts in chrome, and signing triggers this
     // intercept bubble.
     {
@@ -263,12 +280,12 @@ class DiceWebSigninInterceptionBubblePixelTest
 
     SkColor primary_highlight_color =
         GetParam().primary_profile_color.toSkColor();
+    DefaultAvatarColors avatar_colors = GetDefaultAvatarColors(
+        *browser()->window()->GetColorProvider(), primary_highlight_color);
     ProfileThemeColors colors = {
         /*profile_highlight_color=*/primary_highlight_color,
-        /*default_avatar_fill_color=*/primary_highlight_color,
-        /*default_avatar_stroke_color=*/
-        GetAvatarStrokeColor(*browser()->window()->GetColorProvider(),
-                             primary_highlight_color)};
+        /*default_avatar_fill_color=*/avatar_colors.fill_color,
+        /*default_avatar_stroke_color=*/avatar_colors.stroke_color};
     ProfileAttributesEntry* entry =
         g_browser_process->profile_manager()
             ->GetProfileAttributesStorage()

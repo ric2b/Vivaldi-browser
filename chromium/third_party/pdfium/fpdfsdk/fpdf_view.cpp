@@ -533,11 +533,11 @@ RetainPtr<CFX_DIBitmap> GetMaskBitmap(CPDF_Page* pPage,
   // Create a new bitmap to transfer part of the page bitmap to.
   RetainPtr<CFX_DIBitmap> pDst = pdfium::MakeRetain<CFX_DIBitmap>();
   if (!pDst->Create(bitmap_area->Width(), bitmap_area->Height(),
-                    FXDIB_Format::kArgb)) {
+                    FXDIB_Format::kBgra)) {
     return nullptr;
   }
   pDst->Clear(0x00ffffff);
-  pDst->TransferBitmap(0, 0, bitmap_area->Width(), bitmap_area->Height(),
+  pDst->TransferBitmap(bitmap_area->Width(), bitmap_area->Height(),
                        std::move(source), bitmap_area->left, bitmap_area->top);
   return pDst;
 }
@@ -552,7 +552,7 @@ void RenderBitmap(CFX_RenderDevice* device,
 
   // Create a new bitmap from the old one
   RetainPtr<CFX_DIBitmap> dest = pdfium::MakeRetain<CFX_DIBitmap>();
-  if (!dest->Create(size_x_bm, size_y_bm, FXDIB_Format::kRgb32)) {
+  if (!dest->Create(size_x_bm, size_y_bm, FXDIB_Format::kBgrx)) {
     return;
   }
 
@@ -610,7 +610,7 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPage(HDC dc,
   }
 
   RetainPtr<CFX_DIBitmap> pBitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  CHECK(pBitmap->Create(size_x, size_y, FXDIB_Format::kArgb));
+  CHECK(pBitmap->Create(size_x, size_y, FXDIB_Format::kBgra));
   if (!CFX_DefaultRenderDevice::UseSkiaRenderer()) {
     // Not needed by Skia. Call it for AGG to preserve pre-existing behavior.
     pBitmap->Clear(0x00ffffff);
@@ -629,18 +629,12 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPage(HDC dc,
                                 /*need_to_restore=*/true,
                                 /*pause=*/nullptr);
 
-#if defined(PDF_USE_SKIA)
-  if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-    pBitmap->UnPreMultiply();
-  }
-#endif
-
   if (!bHasMask) {
     CPDF_WindowsRenderDevice win_dc(dc, render_data->GetPSFontTracker());
     bool bitsStretched = false;
     if (win_dc.GetDeviceType() == DeviceType::kPrinter) {
       auto dest_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-      if (dest_bitmap->Create(size_x, size_y, FXDIB_Format::kRgb32)) {
+      if (dest_bitmap->Create(size_x, size_y, FXDIB_Format::kBgrx)) {
         fxcrt::Fill(dest_bitmap->GetWritableBuffer().first(pBitmap->GetPitch() *
                                                            size_y),
                     -1);
@@ -703,33 +697,35 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPageBitmap(FPDF_BITMAP bitmap,
                                                      int size_y,
                                                      int rotate,
                                                      int flags) {
-  if (!bitmap)
-    return;
-
   CPDF_Page* pPage = CPDFPageFromFPDFPage(page);
-  if (!pPage)
+  if (!pPage) {
     return;
+  }
+
+  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+  if (!pBitmap) {
+    return;
+  }
+  CHECK(!pBitmap->IsPremultiplied());
 
   auto owned_context = std::make_unique<CPDF_PageRenderContext>();
   CPDF_PageRenderContext* context = owned_context.get();
   CPDF_Page::RenderContextClearer clearer(pPage);
   pPage->SetRenderContext(std::move(owned_context));
 
-  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+#if defined(PDF_USE_SKIA)
+  CFX_DIBitmap::ScopedPremultiplier scoped_premultiplier(
+      pBitmap, CFX_DefaultRenderDevice::UseSkiaRenderer());
+#endif
   auto device = std::make_unique<CFX_DefaultRenderDevice>();
-  device->AttachWithRgbByteOrder(pBitmap, !!(flags & FPDF_REVERSE_BYTE_ORDER));
+  device->AttachWithRgbByteOrder(std::move(pBitmap),
+                                 !!(flags & FPDF_REVERSE_BYTE_ORDER));
   context->m_pDevice = std::move(device);
 
   CPDFSDK_RenderPageWithContext(context, pPage, start_x, start_y, size_x,
                                 size_y, rotate, flags, /*color_scheme=*/nullptr,
                                 /*need_to_restore=*/true,
                                 /*pause=*/nullptr);
-
-#if defined(PDF_USE_SKIA)
-  if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-    pBitmap->UnPreMultiply();
-  }
-#endif
 }
 
 FPDF_EXPORT void FPDF_CALLCONV
@@ -738,19 +734,26 @@ FPDF_RenderPageBitmapWithMatrix(FPDF_BITMAP bitmap,
                                 const FS_MATRIX* matrix,
                                 const FS_RECTF* clipping,
                                 int flags) {
-  if (!bitmap)
-    return;
-
   CPDF_Page* pPage = CPDFPageFromFPDFPage(page);
-  if (!pPage)
+  if (!pPage) {
     return;
+  }
+
+  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+  if (!pBitmap) {
+    return;
+  }
+  CHECK(!pBitmap->IsPremultiplied());
 
   auto owned_context = std::make_unique<CPDF_PageRenderContext>();
   CPDF_PageRenderContext* context = owned_context.get();
   CPDF_Page::RenderContextClearer clearer(pPage);
   pPage->SetRenderContext(std::move(owned_context));
 
-  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+#if defined(PDF_USE_SKIA)
+  CFX_DIBitmap::ScopedPremultiplier scoped_premultiplier(
+      pBitmap, CFX_DefaultRenderDevice::UseSkiaRenderer());
+#endif
   auto device = std::make_unique<CFX_DefaultRenderDevice>();
   device->AttachWithRgbByteOrder(std::move(pBitmap),
                                  !!(flags & FPDF_REVERSE_BYTE_ORDER));
@@ -774,7 +777,8 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPageSkia(FPDF_SKIA_CANVAS canvas,
                                                    FPDF_PAGE page,
                                                    int size_x,
                                                    int size_y) {
-  if (!canvas) {
+  SkCanvas* sk_canvas = SkCanvasFromFPDFSkiaCanvas(canvas);
+  if (!sk_canvas) {
     return;
   }
 
@@ -789,7 +793,9 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPageSkia(FPDF_SKIA_CANVAS canvas,
   cpdf_page->SetRenderContext(std::move(owned_context));
 
   auto device = std::make_unique<CFX_DefaultRenderDevice>();
-  device->AttachCanvas(reinterpret_cast<SkCanvas*>(canvas));
+  if (!device->AttachCanvas(*sk_canvas)) {
+    return;
+  }
   context->m_pDevice = std::move(device);
 
   CPDFSDK_RenderPageWithContext(context, cpdf_page, 0, 0, size_x, size_y, 0, 0,
@@ -879,9 +885,13 @@ FPDF_EXPORT FPDF_BITMAP FPDF_CALLCONV FPDFBitmap_Create(int width,
                                                         int alpha) {
   auto pBitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   if (!pBitmap->Create(width, height,
-                       alpha ? FXDIB_Format::kArgb : FXDIB_Format::kRgb32)) {
+                       alpha ? FXDIB_Format::kBgra : FXDIB_Format::kBgrx)) {
     return nullptr;
   }
+
+  CHECK(!pBitmap->IsPremultiplied());
+
+  // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(pBitmap.Leak());
 }
 
@@ -890,86 +900,134 @@ FPDF_EXPORT FPDF_BITMAP FPDF_CALLCONV FPDFBitmap_CreateEx(int width,
                                                           int format,
                                                           void* first_scan,
                                                           int stride) {
-  FXDIB_Format fx_format;
-  switch (format) {
-    case FPDFBitmap_Gray:
-      fx_format = FXDIB_Format::k8bppRgb;
-      break;
-    case FPDFBitmap_BGR:
-      fx_format = FXDIB_Format::kRgb;
-      break;
-    case FPDFBitmap_BGRx:
-      fx_format = FXDIB_Format::kRgb32;
-      break;
-    case FPDFBitmap_BGRA:
-      fx_format = FXDIB_Format::kArgb;
-      break;
-    default:
-      return nullptr;
+  FXDIB_Format fx_format = FXDIBFormatFromFPDFFormat(format);
+  if (fx_format == FXDIB_Format::kInvalid) {
+    return nullptr;
   }
 
   // Ensure external memory is good at least for the duration of this call.
   UnownedPtr<uint8_t> pChecker(static_cast<uint8_t*>(first_scan));
   auto pBitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  if (!pBitmap->Create(width, height, fx_format, pChecker, stride))
+  if (!pBitmap->Create(width, height, fx_format, pChecker, stride)) {
     return nullptr;
+  }
 
+  CHECK(!pBitmap->IsPremultiplied());
+
+  // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(pBitmap.Leak());
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFBitmap_GetFormat(FPDF_BITMAP bitmap) {
-  if (!bitmap)
+  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+  if (!pBitmap) {
     return FPDFBitmap_Unknown;
+  }
 
-  FXDIB_Format format = CFXDIBitmapFromFPDFBitmap(bitmap)->GetFormat();
-  switch (format) {
+  switch (pBitmap->GetFormat()) {
     case FXDIB_Format::k8bppRgb:
     case FXDIB_Format::k8bppMask:
       return FPDFBitmap_Gray;
-    case FXDIB_Format::kRgb:
+    case FXDIB_Format::kBgr:
       return FPDFBitmap_BGR;
-    case FXDIB_Format::kRgb32:
+    case FXDIB_Format::kBgrx:
       return FPDFBitmap_BGRx;
-    case FXDIB_Format::kArgb:
+    case FXDIB_Format::kBgra:
       return FPDFBitmap_BGRA;
     default:
       return FPDFBitmap_Unknown;
   }
 }
 
-FPDF_EXPORT void FPDF_CALLCONV FPDFBitmap_FillRect(FPDF_BITMAP bitmap,
-                                                   int left,
-                                                   int top,
-                                                   int width,
-                                                   int height,
-                                                   FPDF_DWORD color) {
-  if (!bitmap)
-    return;
-
-  CFX_DefaultRenderDevice device;
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFBitmap_FillRect(FPDF_BITMAP bitmap,
+                                                        int left,
+                                                        int top,
+                                                        int width,
+                                                        int height,
+                                                        FPDF_DWORD color) {
   RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
-  device.Attach(pBitmap);
-  if (!pBitmap->IsAlphaFormat())
+  if (!pBitmap) {
+    return false;
+  }
+  CHECK(!pBitmap->IsPremultiplied());
+
+  FX_SAFE_INT32 right = left;
+  right += width;
+  if (!right.IsValid()) {
+    return false;
+  }
+
+  FX_SAFE_INT32 bottom = top;
+  bottom += height;
+  if (!bottom.IsValid()) {
+    return false;
+  }
+
+  FX_RECT fill_rect(left, top, right.ValueOrDie(), bottom.ValueOrDie());
+
+  if (!pBitmap->IsAlphaFormat()) {
     color |= 0xFF000000;
-  device.FillRect(FX_RECT(left, top, left + width, top + height),
-                  static_cast<uint32_t>(color));
+  }
+
+  // Let CFX_DefaultRenderDevice handle the 8-bit case.
+  const int bpp = pBitmap->GetBPP();
+  if (bpp == 8) {
+    CFX_DefaultRenderDevice device;
+    device.Attach(std::move(pBitmap));
+    return device.FillRect(fill_rect, static_cast<uint32_t>(color));
+  }
+
+  // Handle filling 24/32-bit bitmaps directly without CFX_DefaultRenderDevice.
+  // When CFX_DefaultRenderDevice is using Skia, this avoids extra work to
+  // change `pBitmap` to be premultiplied and back, or extra work to change
+  // `pBitmap` to 32 BPP and back.
+  fill_rect.Intersect(FX_RECT(0, 0, pBitmap->GetWidth(), pBitmap->GetHeight()));
+  if (fill_rect.IsEmpty()) {
+    // CFX_DefaultRenderDevice treats this as success. Match that.
+    return true;
+  }
+
+  const int row_end = fill_rect.top + fill_rect.Height();
+  if (bpp == 32) {
+    for (int row = fill_rect.top; row < row_end; ++row) {
+      auto span32 = pBitmap->GetWritableScanlineAs<uint32_t>(row).subspan(
+          fill_rect.left, fill_rect.Width());
+      fxcrt::Fill(span32, static_cast<uint32_t>(color));
+    }
+    return true;
+  }
+
+  CHECK_EQ(bpp, 24);
+  const FX_BGR_STRUCT<uint8_t> bgr = {.blue = FXARGB_B(color),
+                                      .green = FXARGB_G(color),
+                                      .red = FXARGB_R(color)};
+  for (int row = fill_rect.top; row < row_end; ++row) {
+    auto bgr_span =
+        pBitmap->GetWritableScanlineAs<FX_BGR_STRUCT<uint8_t>>(row).subspan(
+            fill_rect.left, fill_rect.Width());
+    fxcrt::Fill(bgr_span, bgr);
+  }
+  return true;
 }
 
 FPDF_EXPORT void* FPDF_CALLCONV FPDFBitmap_GetBuffer(FPDF_BITMAP bitmap) {
-  return bitmap ? CFXDIBitmapFromFPDFBitmap(bitmap)->GetWritableBuffer().data()
-                : nullptr;
+  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+  return pBitmap ? pBitmap->GetWritableBuffer().data() : nullptr;
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFBitmap_GetWidth(FPDF_BITMAP bitmap) {
-  return bitmap ? CFXDIBitmapFromFPDFBitmap(bitmap)->GetWidth() : 0;
+  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+  return pBitmap ? pBitmap->GetWidth() : 0;
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFBitmap_GetHeight(FPDF_BITMAP bitmap) {
-  return bitmap ? CFXDIBitmapFromFPDFBitmap(bitmap)->GetHeight() : 0;
+  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+  return pBitmap ? pBitmap->GetHeight() : 0;
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFBitmap_GetStride(FPDF_BITMAP bitmap) {
-  return bitmap ? CFXDIBitmapFromFPDFBitmap(bitmap)->GetPitch() : 0;
+  RetainPtr<CFX_DIBitmap> pBitmap(CFXDIBitmapFromFPDFBitmap(bitmap));
+  return pBitmap ? pBitmap->GetPitch() : 0;
 }
 
 FPDF_EXPORT void FPDF_CALLCONV FPDFBitmap_Destroy(FPDF_BITMAP bitmap) {

@@ -79,10 +79,12 @@ chromium-metrics-reviews@google.com.
   <variant name="DeviceSwitcher"/>
   <variant name="DeviceTier"/>
   <variant name="DummyFeature"/>
+  <variant name="EphemeralHomeModuleBackend"/>
   <variant name="FeedUserSegment"/>
   <variant name="FrequentFeatureUser"/>
   <variant name="IntentionalUser"/>
   <variant name="IosModuleRanker"/>
+  <variant name="MetricsClustering"/>
   <variant name="MostVisitedTilesUser"/>
   <variant name="PasswordManagerUser"/>
   <variant name="PowerUser"/>
@@ -111,11 +113,13 @@ chromium-metrics-reviews@google.com.
   <variant name="DeviceSwitcher"/>
   <variant name="DeviceTierSegment"/>
   <variant name="Dummy"/>
+  <variant name="EphemeralHomeModuleBackend"/>
   <variant name="FeedUser"/>
   <variant name="FrequentFeatureUserSegment"/>
   <variant name="IntentionalUserSegment"/>
   <variant name="IosModuleRanker"/>
   <variant name="IosModuleRankerTest"/>
+  <variant name="MetricsClustering"/>
   <variant name="MostVisitedTilesUser"/>
   <variant name="NewTab"/>
   <variant name="PasswordManagerUser"/>

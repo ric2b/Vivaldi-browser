@@ -86,7 +86,7 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
                         ui::PageTransitionGetQualifier(transitionType);
     bool is_redirect = ui::PageTransitionIsRedirect(transitionType) &&
                         !(has_chain_start || has_chain_end);
-    if (!is_redirect) {
+    if (!is_redirect && url.is_valid()) {
       hosts.push_back(
         Visit(id, visit_time, url, title, transitionType));
     }

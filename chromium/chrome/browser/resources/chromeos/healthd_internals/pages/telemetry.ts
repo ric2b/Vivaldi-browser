@@ -18,6 +18,8 @@ import type {HealthdInternalsPowerCardElement} from '../info_card/power_card.js'
 import type {HealthdInternalsThermalCardElement} from '../info_card/thermal_card.js';
 
 import {getTemplate} from './telemetry.html.js';
+import {HealthdInternalsPage} from './utils/page_interface.js';
+import {UiUpdateHelper} from './utils/ui_update_helper.js';
 
 export interface HealthdInternalsTelemetryElement {
   $: {
@@ -29,7 +31,8 @@ export interface HealthdInternalsTelemetryElement {
   };
 }
 
-export class HealthdInternalsTelemetryElement extends PolymerElement {
+export class HealthdInternalsTelemetryElement extends PolymerElement implements
+    HealthdInternalsPage {
   static get is() {
     return 'healthd-internals-telemetry';
   }
@@ -38,12 +41,46 @@ export class HealthdInternalsTelemetryElement extends PolymerElement {
     return getTemplate();
   }
 
+  override connectedCallback() {
+    super.connectedCallback();
+
+    this.updateHelper = new UiUpdateHelper(() => {
+      this.refreshTelemetryPage();
+    });
+  }
+
+  // Latest raw data from healthd.
+  private healthdData?: HealthdApiTelemetryResult = undefined;
+
+  // Helper for updating UI regularly. Init in `connectedCallback`.
+  private updateHelper: UiUpdateHelper;
+
   updateTelemetryData(data: HealthdApiTelemetryResult) {
-    this.$.cpuCard.updateTelemetryData(data);
-    this.$.fanCard.updateTelemetryData(data);
-    this.$.memoryCard.updateTelemetryData(data);
-    this.$.powerCard.updateTelemetryData(data);
-    this.$.thermalCard.updateTelemetryData(data);
+    const isInitilized: boolean = this.healthdData !== undefined;
+    this.healthdData = data;
+    if (!isInitilized) {
+      // Display data as soon as we first receive it.
+      this.refreshTelemetryPage();
+    }
+  }
+
+  updateVisibility(isVisible: boolean) {
+    this.updateHelper.updateVisibility(isVisible);
+  }
+
+  updateUiUpdateInterval(intervalSeconds: number) {
+    this.updateHelper.updateUiUpdateInterval(intervalSeconds);
+  }
+
+  private refreshTelemetryPage() {
+    if (this.healthdData === undefined) {
+      return;
+    }
+    this.$.cpuCard.updateTelemetryData(this.healthdData);
+    this.$.fanCard.updateTelemetryData(this.healthdData);
+    this.$.memoryCard.updateTelemetryData(this.healthdData);
+    this.$.powerCard.updateTelemetryData(this.healthdData);
+    this.$.thermalCard.updateTelemetryData(this.healthdData);
   }
 }
 

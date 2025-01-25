@@ -37,6 +37,7 @@
 #include "internal/platform/byte_array.h"
 #include "internal/platform/flags/nearby_platform_feature_flags.h"
 #include "internal/platform/implementation/ble_v2.h"
+#include "internal/platform/implementation/windows/bluetooth_adapter.h"
 #include "internal/platform/implementation/windows/utils.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/uuid.h"
@@ -101,28 +102,33 @@ std::string GattCommunicationStatusToString(GattCommunicationStatus status) {
 
 BleGattClient::BleGattClient(BluetoothLEDevice ble_device)
     : ble_device_(ble_device) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": GATT client is created.";
+  if (ble_device_ == nullptr) {
+    NEARBY_LOGS(WARNING) << __func__ << ": ble_device is null.";
+  } else {
+    NEARBY_LOGS(INFO) << __func__ << ": GATT client is created, address: "
+                      << uint64_to_mac_address_string(
+                             ble_device_.BluetoothAddress());
+  }
 }
 
 BleGattClient::~BleGattClient() {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": GATT client is released.";
+  NEARBY_LOGS(INFO) << __func__ << ": GATT client is released.";
   Disconnect();
 }
 
 bool BleGattClient::DiscoverServiceAndCharacteristics(
     const Uuid& service_uuid, const std::vector<Uuid>& characteristic_uuids) {
+  absl::MutexLock lock(&mutex_);
   if (!NearbyFlags::GetInstance().GetBoolFlag(
           platform::config_package_nearby::nearby_platform_feature::
               kEnableBleV2Gatt)) {
-    auto windows_bluetooth_adapter_ = ::winrt::Windows::Devices::Bluetooth::
-                                          BluetoothAdapter::GetDefaultAsync()
-                                              .get();
-    if (windows_bluetooth_adapter_.IsExtendedAdvertisingSupported()) {
+    BluetoothAdapter bluetooth_adapter;
+    if (bluetooth_adapter.IsExtendedAdvertisingSupported()) {
       NEARBY_LOGS(WARNING) << __func__ << ": GATT is disabled.";
       return false;
     }
 
-    if (!windows_bluetooth_adapter_.IsCentralRoleSupported()) {
+    if (!bluetooth_adapter.IsCentralRoleSupported()) {
       NEARBY_LOGS(ERROR) << __func__
                          << ": Bluetooth Hardware does not support Central "
                             "Role, which is required to start GATT client.";
@@ -142,9 +148,9 @@ bool BleGattClient::DiscoverServiceAndCharacteristics(
         absl::StrAppend(out, std::string(uuid));
       });
 
-  NEARBY_LOGS(VERBOSE) << __func__ << ": Discover service_uuid="
-                       << std::string(service_uuid)
-                       << " with characteristic_uuids=" << flat_characteristics;
+  NEARBY_VLOG(1) << __func__
+                 << ": Discover service_uuid=" << std::string(service_uuid)
+                 << " with characteristic_uuids=" << flat_characteristics;
 
   try {
     if (ble_device_ == nullptr) {
@@ -192,9 +198,8 @@ bool BleGattClient::DiscoverServiceAndCharacteristics(
                           winrt::to_string(winrt::to_hstring(service.Uuid())));
         });
 
-    NEARBY_LOGS(VERBOSE) << __func__
-                         << ": Found GATT services=" << flat_services
-                         << " from BLE device.";
+    NEARBY_LOGS(INFO) << __func__ << ": Found GATT services=" << flat_services
+                      << " from BLE device.";
 
     // Needs to check each service to make sure it includes all characteristic
     // uuids. Services may include duplicate service UUID, but each of them may
@@ -203,8 +208,7 @@ bool BleGattClient::DiscoverServiceAndCharacteristics(
       winrt::guid uuid = service.Uuid();
       std::string uuid_string = winrt::to_string(winrt::to_hstring(uuid));
 
-      NEARBY_LOGS(VERBOSE) << __func__
-                           << ": Found service UUID=" << uuid_string;
+      NEARBY_VLOG(1) << __func__ << ": Found service UUID=" << uuid_string;
       if (!is_nearby_uuid_equal_to_winrt_guid(service_uuid, uuid)) {
         NEARBY_LOGS(WARNING)
             << __func__
@@ -234,8 +238,8 @@ bool BleGattClient::DiscoverServiceAndCharacteristics(
                                      gatt_characteristic.Uuid())));
           });
 
-      NEARBY_LOGS(VERBOSE) << __func__ << ": Found GATT characteristics="
-                           << flat_characteristics;
+      NEARBY_VLOG(1) << __func__
+                     << ": Found GATT characteristics=" << flat_characteristics;
 
       bool found_all = true;
 
@@ -265,12 +269,12 @@ bool BleGattClient::DiscoverServiceAndCharacteristics(
       }
 
       // found all characteristics.
-      NEARBY_LOGS(VERBOSE) << __func__ << ": Found all characteristics.";
+      NEARBY_VLOG(1) << __func__ << ": Found all characteristics.";
       return true;
     }
 
-    NEARBY_LOGS(VERBOSE) << __func__
-                         << ": Failed to find service and all characteristics.";
+    NEARBY_LOGS(ERROR) << __func__
+                       << ": Failed to find service and all characteristics.";
   } catch (std::exception exception) {
     NEARBY_LOGS(ERROR) << __func__
                        << ": Failed to get GATT services. exception: "
@@ -288,10 +292,10 @@ bool BleGattClient::DiscoverServiceAndCharacteristics(
 absl::optional<api::ble_v2::GattCharacteristic>
 BleGattClient::GetCharacteristic(const Uuid& service_uuid,
                                  const Uuid& characteristic_uuid) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": Stared to get characteristic UUID="
-                       << std::string(characteristic_uuid)
-                       << " in service UUID=" << std::string(service_uuid);
   absl::MutexLock lock(&mutex_);
+  NEARBY_VLOG(1) << __func__ << ": Stared to get characteristic UUID="
+                 << std::string(characteristic_uuid)
+                 << " in service UUID=" << std::string(service_uuid);
   try {
     std::optional<GattCharacteristic> gatt_characteristic =
         GetNativeCharacteristic(service_uuid, characteristic_uuid);
@@ -336,8 +340,8 @@ BleGattClient::GetCharacteristic(const Uuid& service_uuid,
     native_characteristic_map_[result].native_characteristic =
         gatt_characteristic;
 
-    NEARBY_LOGS(VERBOSE) << __func__ << ": Return Characteristic. uuid="
-                         << std::string(characteristic_uuid);
+    NEARBY_VLOG(1) << __func__ << ": Return Characteristic. uuid="
+                   << std::string(characteristic_uuid);
 
     return result;
   } catch (std::exception exception) {
@@ -355,8 +359,9 @@ BleGattClient::GetCharacteristic(const Uuid& service_uuid,
 
 absl::optional<std::string> BleGattClient::ReadCharacteristic(
     const api::ble_v2::GattCharacteristic& characteristic) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": Read characteristic="
-                       << std::string(characteristic.uuid);
+  absl::MutexLock lock(&mutex_);
+  NEARBY_VLOG(1) << __func__ << ": Read characteristic="
+                 << std::string(characteristic.uuid);
   try {
     std::optional<GattCharacteristic> gatt_characteristic =
         GetNativeCharacteristic(characteristic.service_uuid,
@@ -391,8 +396,8 @@ absl::optional<std::string> BleGattClient::ReadCharacteristic(
       data.push_back(static_cast<char>(data_reader.ReadByte()));
     }
 
-    NEARBY_LOGS(VERBOSE) << __func__
-                         << ": Got characteristic value length=" << data.size();
+    NEARBY_VLOG(1) << __func__
+                   << ": Got characteristic value length=" << data.size();
 
     return data;
   } catch (std::exception exception) {
@@ -411,9 +416,9 @@ absl::optional<std::string> BleGattClient::ReadCharacteristic(
 bool BleGattClient::WriteCharacteristic(
     const api::ble_v2::GattCharacteristic& characteristic,
     absl::string_view value, api::ble_v2::GattClient::WriteType write_type) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": write characteristic: "
-                       << std::string(characteristic.uuid);
   absl::MutexLock lock(&mutex_);
+  NEARBY_VLOG(1) << __func__ << ": write characteristic: "
+                 << std::string(characteristic.uuid);
   try {
     std::optional<GattCharacteristic> gatt_characteristic =
         native_characteristic_map_[characteristic].native_characteristic;
@@ -443,10 +448,9 @@ bool BleGattClient::WriteCharacteristic(
                          << GattCommunicationStatusToString(status);
       return false;
     } else {
-      NEARBY_LOGS(VERBOSE) << __func__
-                           << ": Write data to GATT characteristic: "
-                           << std::string(characteristic.uuid)
-                           << ", bytes count: " << value.size();
+      NEARBY_VLOG(1) << __func__ << ": Write data to GATT characteristic: "
+                     << std::string(characteristic.uuid)
+                     << ", bytes count: " << value.size();
       return true;
     }
   } catch (std::exception exception) {
@@ -466,8 +470,8 @@ bool BleGattClient::SetCharacteristicSubscription(
     const api::ble_v2::GattCharacteristic& characteristic, bool enable,
     absl::AnyInvocable<void(absl::string_view value)>
         on_characteristic_changed_cb) {
-  NEARBY_LOGS(VERBOSE) << __func__
-                       << ": Started to set Characteristic Subscription.";
+  absl::MutexLock lock(&mutex_);
+  NEARBY_VLOG(1) << __func__ << ": Started to set Characteristic Subscription.";
   GattClientCharacteristicConfigurationDescriptorValue gcccd_value =
       GattClientCharacteristicConfigurationDescriptorValue::None;
   if ((characteristic.property & Property::kNotify) != Property::kNone) {
@@ -484,11 +488,9 @@ bool BleGattClient::SetCharacteristicSubscription(
   }
 
   std::optional<GattCharacteristic> gatt_characteristic;
-  {
-    absl::MutexLock lock(&mutex_);
-    gatt_characteristic =
-        native_characteristic_map_[characteristic].native_characteristic;
-  }
+
+  gatt_characteristic =
+      native_characteristic_map_[characteristic].native_characteristic;
 
   if (!gatt_characteristic.has_value()) {
     NEARBY_LOGS(ERROR) << __func__
@@ -505,7 +507,6 @@ bool BleGattClient::SetCharacteristicSubscription(
     return false;
   }
 
-  absl::MutexLock lock(&mutex_);
   // Set value changed handler
   try {
     if (enable) {
@@ -548,7 +549,7 @@ bool BleGattClient::SetCharacteristicSubscription(
 void BleGattClient::Disconnect() {
   absl::MutexLock lock(&mutex_);
   try {
-    NEARBY_LOGS(VERBOSE) << __func__ << ": Disconnect is called.";
+    NEARBY_VLOG(1) << __func__ << ": Disconnect is called.";
     if (ble_device_ != nullptr) {
       ble_device_.Close();
       ble_device_ = nullptr;
@@ -567,10 +568,9 @@ void BleGattClient::Disconnect() {
 
 std::optional<GattCharacteristic> BleGattClient::GetNativeCharacteristic(
     const Uuid& service_uuid, const Uuid& characteristic_uuid) {
-  NEARBY_LOGS(VERBOSE) << __func__
-                       << ": Stared to get native characteristic UUID="
-                       << std::string(characteristic_uuid)
-                       << " in service UUID=" << std::string(service_uuid);
+  NEARBY_VLOG(1) << __func__ << ": Stared to get native characteristic UUID="
+                 << std::string(characteristic_uuid)
+                 << " in service UUID=" << std::string(service_uuid);
 
   try {
     if (ble_device_ == nullptr) {
@@ -600,9 +600,9 @@ std::optional<GattCharacteristic> BleGattClient::GetNativeCharacteristic(
              gatt_characteristics_result.Characteristics()) {
           if (is_nearby_uuid_equal_to_winrt_guid(characteristic_uuid,
                                                  characteristic.Uuid())) {
-            NEARBY_LOGS(VERBOSE)
-                << __func__ << ": Return native Characteristic. uuid="
-                << std::string(characteristic_uuid);
+            NEARBY_VLOG(1) << __func__
+                           << ": Return native Characteristic. uuid="
+                           << std::string(characteristic_uuid);
 
             return characteristic;
           }
@@ -628,9 +628,8 @@ std::optional<GattCharacteristic> BleGattClient::GetNativeCharacteristic(
 bool BleGattClient::WriteCharacteristicConfigurationDescriptor(
     GattCharacteristic& characteristic,
     GattClientCharacteristicConfigurationDescriptorValue value) {
-  NEARBY_LOGS(VERBOSE)
-      << __func__
-      << ": Stared to write characteristic configuration descriptor";
+  NEARBY_VLOG(1) << __func__
+                 << ": Stared to write characteristic configuration descriptor";
 
   try {
     GattCommunicationStatus status =
@@ -638,15 +637,15 @@ bool BleGattClient::WriteCharacteristicConfigurationDescriptor(
             .WriteClientCharacteristicConfigurationDescriptorAsync(value)
             .get();
     if (status == GattCommunicationStatus::Success) {
-      NEARBY_LOGS(VERBOSE) << __func__
-                           << ": Successfully write client characteristic "
-                              "configuration descriptor";
+      NEARBY_VLOG(1) << __func__
+                     << ": Successfully write client characteristic "
+                        "configuration descriptor";
       return true;
     }
-    NEARBY_LOGS(VERBOSE) << __func__
-                         << ": Failed to write client characteristic "
-                            "configuration descriptor with error: "
-                         << GattCommunicationStatusToString(status);
+    NEARBY_LOGS(ERROR) << __func__
+                       << ": Failed to write client characteristic "
+                          "configuration descriptor with error: "
+                       << GattCommunicationStatusToString(status);
   } catch (std::exception exception) {
     // This usually happens when a device reports that it support notify, but
     // it actually doesn't.
@@ -666,7 +665,7 @@ bool BleGattClient::WriteCharacteristicConfigurationDescriptor(
 void BleGattClient::OnCharacteristicValueChanged(
     const api::ble_v2::GattCharacteristic& characteristic,
     GattValueChangedEventArgs args) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": Gatt Characteristic value changed.";
+  NEARBY_VLOG(1) << __func__ << ": Gatt Characteristic value changed.";
   IBuffer buffer = args.CharacteristicValue();
   int size = buffer.Length();
   DataReader data_reader = DataReader::FromBuffer(buffer);
@@ -675,8 +674,8 @@ void BleGattClient::OnCharacteristicValueChanged(
   for (int i = 0; i < size; ++i) {
     data.push_back(static_cast<char>(data_reader.ReadByte()));
   }
-  NEARBY_LOGS(VERBOSE) << __func__
-                       << ": Got characteristic value length= " << data.size();
+  NEARBY_VLOG(1) << __func__
+                 << ": Got characteristic value length= " << data.size();
 
   absl::AnyInvocable<void(absl::string_view value)>
       on_characteristic_changed_cb;

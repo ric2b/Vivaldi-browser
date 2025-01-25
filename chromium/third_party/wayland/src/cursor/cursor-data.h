@@ -551,4 +551,19 @@ static struct cursor_metadata {
 	{ "xterm", 9, 16, 4, 8, 2400 },
 	{ "hand1", 13, 16, 12, 0, 2544 },
 	{ "watch", 16, 16, 15, 9, 2752 },
+
+	/* https://www.freedesktop.org/wiki/Specifications/cursor-spec/ */
+	{ "sw-resize", 16, 16, 1, 14, 0 },
+	{ "se-resize", 16, 16, 14, 14, 256 },
+	{ "s-resize", 15, 16, 7, 14, 512 },
+	{ "all-scroll", 16, 16, 8, 8, 752 },
+	{ "default", 10, 16, 1, 1, 1008 },
+	{ "w-resize", 16, 15, 1, 7, 1168 },
+	{ "e-resize", 16, 15, 14, 7, 1408 },
+	{ "nw-resize", 16, 16, 1, 1, 1648 },
+	{ "ne-resize", 16, 16, 14, 1, 1904 },
+	{ "n-resize", 15, 16, 7, 1, 2160 },
+	{ "text", 9, 16, 4, 8, 2400 },
+	{ "pointer", 13, 16, 12, 0, 2544 },
+	{ "wait", 16, 16, 15, 9, 2752 },
 };

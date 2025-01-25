@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager_atomic.h"
 
 #include <sync/sync.h>
@@ -490,6 +495,7 @@ bool HardwareDisplayPlaneManagerAtomic::SetPlaneData(
     HardwareDisplayPlane* hw_plane,
     const DrmOverlayPlane& overlay,
     uint32_t crtc_id,
+    std::optional<gfx::Point> crtc_offset,
     const gfx::Rect& src_rect) {
   HardwareDisplayPlaneAtomic* atomic_plane =
       static_cast<HardwareDisplayPlaneAtomic*>(hw_plane);
@@ -503,8 +509,15 @@ bool HardwareDisplayPlaneManagerAtomic::SetPlaneData(
     fence_fd = gpu_fence_handle.Peek();
   }
 
+  gfx::Rect crtc_rect = overlay.display_bounds;
+  if (crtc_offset.has_value()) {
+    // Move the CRTC offset by |crtc_offset|. Note that |crtc_offset.origin()|
+    // may not be (0,0).
+    crtc_rect += {crtc_offset->x(), crtc_offset->y()};
+  }
+
   if (!atomic_plane->AssignPlaneProps(
-          drm_, crtc_id, framebuffer_id, overlay.display_bounds, src_rect,
+          drm_, crtc_id, framebuffer_id, crtc_rect, src_rect,
           overlay.damage_rect, overlay.plane_transform, overlay.color_space,
           fence_fd, overlay.buffer->framebuffer_pixel_format(),
           overlay.buffer->is_original_buffer())) {

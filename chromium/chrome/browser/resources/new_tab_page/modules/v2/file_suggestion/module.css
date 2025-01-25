@@ -45,9 +45,7 @@ a:focus-visible {
 .file {
   align-items: center;
   display: flex;
-  height: 52px;
-  padding-bottom: 2px;
-  padding-top: 2px;
+  height: 56px;
   position: relative;
   text-decoration: none;
   overflow: hidden;
@@ -74,13 +72,25 @@ a:focus-visible {
 .file:last-of-type {
   border-radius: 0 0 var(--ntp-module-item-border-radius)
       var(--ntp-module-item-border-radius);
+  padding-bottom: var(--ntp-module-first-element-top-padding);
+}
+
+.icon-container {
+  align-items: center;
+  background-color: var(--color-new-tab-page-module-icon-background);
+  border-radius: 8px;
+  display: flex;
+  flex-shrink: 0;
+  height: var(--ntp-module-icon-size);
+  justify-content: center;
+  margin-inline: 8px;
+  position: relative;
+  width: var(--ntp-module-icon-size);
 }
 
 .file-icon {
-  height: 18px;
-  margin-inline-end: 17px;
-  margin-inline-start: 17px;
-  width: 18px;
+  height: 24px;
+  width: 24px;
 }
 
 .file-info {
@@ -90,18 +100,20 @@ a:focus-visible {
 
 .file-title,
 .file-description {
-  color: var(--color-new-tab-page-primary-foreground);
   overflow: hidden;
+  position: relative;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .file-title {
+  color: var(--color-new-tab-page-primary-foreground);
   font-size: var(--ntp-module-text-size);
   line-height: var(--ntp-module-line-height);
 }
 
 .file-description {
+  color: var(--color-new-tab-page-secondary-foreground);
   font-size: var(--ntp-module-secondary-text-size);
   line-height: var(--ntp-module-secondary-line-height);
 }

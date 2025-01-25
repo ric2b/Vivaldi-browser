@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/* eslint-disable quotes, quote-props */
 export const generatedProperties = [
  {
   "longhands": [
@@ -121,6 +122,9 @@ export const generatedProperties = [
   "name": "-webkit-line-break"
  },
  {
+  "keywords": [
+   "none"
+  ],
   "name": "-webkit-line-clamp"
  },
  {
@@ -298,6 +302,471 @@ export const generatedProperties = [
   "name": "alignment-baseline"
  },
  {
+  "longhands": [
+   "-webkit-border-horizontal-spacing",
+   "-webkit-border-vertical-spacing",
+   "-webkit-box-align",
+   "-webkit-box-decoration-break",
+   "-webkit-box-direction",
+   "-webkit-box-flex",
+   "-webkit-box-ordinal-group",
+   "-webkit-box-orient",
+   "-webkit-box-pack",
+   "-webkit-box-reflect",
+   "-webkit-font-smoothing",
+   "-webkit-line-break",
+   "-webkit-line-clamp",
+   "-webkit-locale",
+   "-webkit-mask-box-image-outset",
+   "-webkit-mask-box-image-repeat",
+   "-webkit-mask-box-image-slice",
+   "-webkit-mask-box-image-source",
+   "-webkit-mask-box-image-width",
+   "-webkit-mask-position-x",
+   "-webkit-mask-position-y",
+   "-webkit-print-color-adjust",
+   "-webkit-rtl-ordering",
+   "-webkit-ruby-position",
+   "-webkit-tap-highlight-color",
+   "-webkit-text-combine",
+   "-webkit-text-decorations-in-effect",
+   "-webkit-text-fill-color",
+   "-webkit-text-orientation",
+   "-webkit-text-security",
+   "-webkit-text-stroke-color",
+   "-webkit-text-stroke-width",
+   "-webkit-user-drag",
+   "-webkit-writing-mode",
+   "accent-color",
+   "additive-symbols",
+   "align-content",
+   "align-items",
+   "align-self",
+   "alignment-baseline",
+   "anchor-name",
+   "anchor-scope",
+   "animation-composition",
+   "animation-delay",
+   "animation-direction",
+   "animation-duration",
+   "animation-fill-mode",
+   "animation-iteration-count",
+   "animation-name",
+   "animation-play-state",
+   "animation-range-end",
+   "animation-range-start",
+   "animation-timeline",
+   "animation-timing-function",
+   "app-region",
+   "appearance",
+   "ascent-override",
+   "aspect-ratio",
+   "backdrop-filter",
+   "backface-visibility",
+   "background-attachment",
+   "background-blend-mode",
+   "background-clip",
+   "background-color",
+   "background-image",
+   "background-origin",
+   "background-position-x",
+   "background-position-y",
+   "background-repeat",
+   "background-size",
+   "base-palette",
+   "baseline-shift",
+   "baseline-source",
+   "block-size",
+   "border-block-end-color",
+   "border-block-end-style",
+   "border-block-end-width",
+   "border-block-start-color",
+   "border-block-start-style",
+   "border-block-start-width",
+   "border-bottom-color",
+   "border-bottom-left-radius",
+   "border-bottom-right-radius",
+   "border-bottom-style",
+   "border-bottom-width",
+   "border-collapse",
+   "border-end-end-radius",
+   "border-end-start-radius",
+   "border-image-outset",
+   "border-image-repeat",
+   "border-image-slice",
+   "border-image-source",
+   "border-image-width",
+   "border-inline-end-color",
+   "border-inline-end-style",
+   "border-inline-end-width",
+   "border-inline-start-color",
+   "border-inline-start-style",
+   "border-inline-start-width",
+   "border-left-color",
+   "border-left-style",
+   "border-left-width",
+   "border-right-color",
+   "border-right-style",
+   "border-right-width",
+   "border-start-end-radius",
+   "border-start-start-radius",
+   "border-top-color",
+   "border-top-left-radius",
+   "border-top-right-radius",
+   "border-top-style",
+   "border-top-width",
+   "bottom",
+   "box-decoration-break",
+   "box-shadow",
+   "box-sizing",
+   "break-after",
+   "break-before",
+   "break-inside",
+   "buffered-rendering",
+   "caption-side",
+   "caret-color",
+   "clear",
+   "clip",
+   "clip-path",
+   "clip-rule",
+   "color",
+   "color-interpolation",
+   "color-interpolation-filters",
+   "color-rendering",
+   "color-scheme",
+   "column-count",
+   "column-fill",
+   "column-gap",
+   "column-rule-color",
+   "column-rule-style",
+   "column-rule-width",
+   "column-span",
+   "column-width",
+   "contain",
+   "contain-intrinsic-block-size",
+   "contain-intrinsic-height",
+   "contain-intrinsic-inline-size",
+   "contain-intrinsic-width",
+   "container-name",
+   "container-type",
+   "content",
+   "content-visibility",
+   "counter-increment",
+   "counter-reset",
+   "counter-set",
+   "cursor",
+   "cx",
+   "cy",
+   "d",
+   "descent-override",
+   "display",
+   "dominant-baseline",
+   "dynamic-range-limit",
+   "empty-cells",
+   "fallback",
+   "field-sizing",
+   "fill",
+   "fill-opacity",
+   "fill-rule",
+   "filter",
+   "flex-basis",
+   "flex-direction",
+   "flex-grow",
+   "flex-shrink",
+   "flex-wrap",
+   "float",
+   "flood-color",
+   "flood-opacity",
+   "font-display",
+   "font-family",
+   "font-feature-settings",
+   "font-kerning",
+   "font-optical-sizing",
+   "font-palette",
+   "font-size",
+   "font-size-adjust",
+   "font-stretch",
+   "font-style",
+   "font-synthesis-small-caps",
+   "font-synthesis-style",
+   "font-synthesis-weight",
+   "font-variant-alternates",
+   "font-variant-caps",
+   "font-variant-east-asian",
+   "font-variant-emoji",
+   "font-variant-ligatures",
+   "font-variant-numeric",
+   "font-variant-position",
+   "font-variation-settings",
+   "font-weight",
+   "forced-color-adjust",
+   "grid-auto-columns",
+   "grid-auto-flow",
+   "grid-auto-rows",
+   "grid-column-end",
+   "grid-column-start",
+   "grid-row-end",
+   "grid-row-start",
+   "grid-template-areas",
+   "grid-template-columns",
+   "grid-template-rows",
+   "height",
+   "hyphenate-character",
+   "hyphenate-limit-chars",
+   "hyphens",
+   "image-orientation",
+   "image-rendering",
+   "inherits",
+   "initial-letter",
+   "initial-value",
+   "inline-size",
+   "inset-area",
+   "inset-block-end",
+   "inset-block-start",
+   "inset-inline-end",
+   "inset-inline-start",
+   "interpolate-size",
+   "isolation",
+   "justify-content",
+   "justify-items",
+   "justify-self",
+   "left",
+   "letter-spacing",
+   "lighting-color",
+   "line-break",
+   "line-clamp",
+   "line-gap-override",
+   "line-height",
+   "list-style-image",
+   "list-style-position",
+   "list-style-type",
+   "margin-block-end",
+   "margin-block-start",
+   "margin-bottom",
+   "margin-inline-end",
+   "margin-inline-start",
+   "margin-left",
+   "margin-right",
+   "margin-top",
+   "marker-end",
+   "marker-mid",
+   "marker-start",
+   "mask-clip",
+   "mask-composite",
+   "mask-image",
+   "mask-mode",
+   "mask-origin",
+   "mask-repeat",
+   "mask-size",
+   "mask-type",
+   "masonry-slack",
+   "masonry-template-tracks",
+   "masonry-track-end",
+   "masonry-track-start",
+   "math-depth",
+   "math-shift",
+   "math-style",
+   "max-block-size",
+   "max-height",
+   "max-inline-size",
+   "max-width",
+   "min-block-size",
+   "min-height",
+   "min-inline-size",
+   "min-width",
+   "mix-blend-mode",
+   "navigation",
+   "negative",
+   "object-fit",
+   "object-position",
+   "object-view-box",
+   "offset-anchor",
+   "offset-distance",
+   "offset-path",
+   "offset-position",
+   "offset-rotate",
+   "opacity",
+   "order",
+   "origin-trial-test-property",
+   "orphans",
+   "outline-color",
+   "outline-offset",
+   "outline-style",
+   "outline-width",
+   "overflow-anchor",
+   "overflow-block",
+   "overflow-clip-margin",
+   "overflow-inline",
+   "overflow-wrap",
+   "overflow-x",
+   "overflow-y",
+   "overlay",
+   "override-colors",
+   "overscroll-behavior-block",
+   "overscroll-behavior-inline",
+   "overscroll-behavior-x",
+   "overscroll-behavior-y",
+   "pad",
+   "padding-block-end",
+   "padding-block-start",
+   "padding-bottom",
+   "padding-inline-end",
+   "padding-inline-start",
+   "padding-left",
+   "padding-right",
+   "padding-top",
+   "page",
+   "page-orientation",
+   "paint-order",
+   "perspective",
+   "perspective-origin",
+   "pointer-events",
+   "popover-hide-delay",
+   "popover-show-delay",
+   "position",
+   "position-anchor",
+   "position-area",
+   "position-try-fallbacks",
+   "position-try-options",
+   "position-try-order",
+   "position-visibility",
+   "prefix",
+   "quotes",
+   "r",
+   "range",
+   "reading-flow",
+   "resize",
+   "right",
+   "rotate",
+   "row-gap",
+   "ruby-align",
+   "ruby-position",
+   "rx",
+   "ry",
+   "scale",
+   "scroll-behavior",
+   "scroll-margin-block-end",
+   "scroll-margin-block-start",
+   "scroll-margin-bottom",
+   "scroll-margin-inline-end",
+   "scroll-margin-inline-start",
+   "scroll-margin-left",
+   "scroll-margin-right",
+   "scroll-margin-top",
+   "scroll-marker-group",
+   "scroll-padding-block-end",
+   "scroll-padding-block-start",
+   "scroll-padding-bottom",
+   "scroll-padding-inline-end",
+   "scroll-padding-inline-start",
+   "scroll-padding-left",
+   "scroll-padding-right",
+   "scroll-padding-top",
+   "scroll-snap-align",
+   "scroll-snap-stop",
+   "scroll-snap-type",
+   "scroll-start-block",
+   "scroll-start-inline",
+   "scroll-start-target-block",
+   "scroll-start-target-inline",
+   "scroll-start-target-x",
+   "scroll-start-target-y",
+   "scroll-start-x",
+   "scroll-start-y",
+   "scroll-timeline-axis",
+   "scroll-timeline-name",
+   "scrollbar-color",
+   "scrollbar-gutter",
+   "scrollbar-width",
+   "shape-image-threshold",
+   "shape-margin",
+   "shape-outside",
+   "shape-rendering",
+   "size",
+   "size-adjust",
+   "speak",
+   "speak-as",
+   "src",
+   "stop-color",
+   "stop-opacity",
+   "stroke",
+   "stroke-dasharray",
+   "stroke-dashoffset",
+   "stroke-linecap",
+   "stroke-linejoin",
+   "stroke-miterlimit",
+   "stroke-opacity",
+   "stroke-width",
+   "suffix",
+   "symbols",
+   "syntax",
+   "system",
+   "tab-size",
+   "table-layout",
+   "text-align",
+   "text-align-last",
+   "text-anchor",
+   "text-autospace",
+   "text-box-edge",
+   "text-box-trim",
+   "text-combine-upright",
+   "text-decoration-color",
+   "text-decoration-line",
+   "text-decoration-skip-ink",
+   "text-decoration-style",
+   "text-decoration-thickness",
+   "text-emphasis-color",
+   "text-emphasis-position",
+   "text-emphasis-style",
+   "text-indent",
+   "text-orientation",
+   "text-overflow",
+   "text-rendering",
+   "text-shadow",
+   "text-size-adjust",
+   "text-spacing-trim",
+   "text-transform",
+   "text-underline-offset",
+   "text-underline-position",
+   "text-wrap-mode",
+   "text-wrap-style",
+   "timeline-scope",
+   "top",
+   "touch-action",
+   "transform",
+   "transform-box",
+   "transform-origin",
+   "transform-style",
+   "transition-behavior",
+   "transition-delay",
+   "transition-duration",
+   "transition-property",
+   "transition-timing-function",
+   "translate",
+   "types",
+   "unicode-range",
+   "user-select",
+   "vector-effect",
+   "vertical-align",
+   "view-timeline-axis",
+   "view-timeline-inset",
+   "view-timeline-name",
+   "view-transition-class",
+   "view-transition-group",
+   "view-transition-name",
+   "visibility",
+   "white-space-collapse",
+   "widows",
+   "width",
+   "will-change",
+   "word-break",
+   "word-spacing",
+   "writing-mode",
+   "x",
+   "y",
+   "z-index",
+   "zoom"
+  ],
   "name": "all"
  },
  {
@@ -1410,7 +1879,9 @@ export const generatedProperties = [
    "flow",
    "math",
    "ruby",
-   "ruby-text"
+   "ruby-text",
+   "masonry",
+   "inline-masonry"
   ],
   "name": "display"
  },
@@ -2317,6 +2788,34 @@ export const generatedProperties = [
   "name": "mask-type"
  },
  {
+  "keywords": [
+   "normal"
+  ],
+  "name": "masonry-slack"
+ },
+ {
+  "name": "masonry-template-tracks"
+ },
+ {
+  "longhands": [
+   "masonry-track-start",
+   "masonry-track-end"
+  ],
+  "name": "masonry-track"
+ },
+ {
+  "keywords": [
+   "auto"
+  ],
+  "name": "masonry-track-end"
+ },
+ {
+  "keywords": [
+   "auto"
+  ],
+  "name": "masonry-track-start"
+ },
+ {
   "inherited": true,
   "name": "math-depth"
  },
@@ -2770,6 +3269,26 @@ export const generatedProperties = [
    "auto"
   ],
   "name": "position-anchor"
+ },
+ {
+  "keywords": [
+   "none",
+   "top",
+   "bottom",
+   "center",
+   "left",
+   "right",
+   "x-start",
+   "x-end",
+   "y-start",
+   "y-end",
+   "start",
+   "end",
+   "self-start",
+   "self-end",
+   "all"
+  ],
+  "name": "position-area"
  },
  {
   "longhands": [
@@ -3313,15 +3832,22 @@ export const generatedProperties = [
   "name": "text-autospace"
  },
  {
+  "longhands": [
+   "text-box-trim",
+   "text-box-edge"
+  ],
+  "name": "text-box"
+ },
+ {
   "inherited": true,
   "name": "text-box-edge"
  },
  {
   "keywords": [
    "none",
-   "start",
-   "end",
-   "both"
+   "trim-start",
+   "trim-end",
+   "trim-both"
   ],
   "name": "text-box-trim"
  },
@@ -3503,13 +4029,29 @@ export const generatedProperties = [
  },
  {
   "inherited": true,
-  "keywords": [
-   "wrap",
-   "nowrap",
-   "balance",
-   "pretty"
+  "longhands": [
+   "text-wrap-mode",
+   "text-wrap-style"
   ],
   "name": "text-wrap"
+ },
+ {
+  "inherited": true,
+  "keywords": [
+   "wrap",
+   "nowrap"
+  ],
+  "name": "text-wrap-mode"
+ },
+ {
+  "inherited": true,
+  "keywords": [
+   "auto",
+   "balance",
+   "pretty",
+   "stable"
+  ],
+  "name": "text-wrap-style"
  },
  {
   "name": "timeline-scope"
@@ -3680,6 +4222,14 @@ export const generatedProperties = [
  },
  {
   "keywords": [
+   "normal",
+   "contain",
+   "nearest"
+  ],
+  "name": "view-transition-group"
+ },
+ {
+  "keywords": [
    "none"
   ],
   "name": "view-transition-name"
@@ -3689,7 +4239,8 @@ export const generatedProperties = [
   "keywords": [
    "visible",
    "hidden",
-   "collapse"
+   "collapse",
+   "inert"
   ],
   "name": "visibility"
  },
@@ -3697,7 +4248,7 @@ export const generatedProperties = [
   "inherited": true,
   "longhands": [
    "white-space-collapse",
-   "text-wrap"
+   "text-wrap-mode"
   ],
   "name": "white-space"
  },
@@ -3819,6 +4370,11 @@ export const generatedPropertyValues = {
    "strict",
    "after-white-space",
    "anywhere"
+  ]
+ },
+ "-webkit-line-clamp": {
+  "values": [
+   "none"
   ]
  },
  "-webkit-print-color-adjust": {
@@ -4509,7 +5065,9 @@ export const generatedPropertyValues = {
    "flow",
    "math",
    "ruby",
-   "ruby-text"
+   "ruby-text",
+   "masonry",
+   "inline-masonry"
   ]
  },
  "dominant-baseline": {
@@ -5022,6 +5580,21 @@ export const generatedPropertyValues = {
    "alpha"
   ]
  },
+ "masonry-slack": {
+  "values": [
+   "normal"
+  ]
+ },
+ "masonry-track-end": {
+  "values": [
+   "auto"
+  ]
+ },
+ "masonry-track-start": {
+  "values": [
+   "auto"
+  ]
+ },
  "math-shift": {
   "values": [
    "normal",
@@ -5249,6 +5822,25 @@ export const generatedPropertyValues = {
  "position-anchor": {
   "values": [
    "auto"
+  ]
+ },
+ "position-area": {
+  "values": [
+   "none",
+   "top",
+   "bottom",
+   "center",
+   "left",
+   "right",
+   "x-start",
+   "x-end",
+   "y-start",
+   "y-end",
+   "start",
+   "end",
+   "self-start",
+   "self-end",
+   "all"
   ]
  },
  "position-try-fallbacks": {
@@ -5543,9 +6135,9 @@ export const generatedPropertyValues = {
  "text-box-trim": {
   "values": [
    "none",
-   "start",
-   "end",
-   "both"
+   "trim-start",
+   "trim-end",
+   "trim-both"
   ]
  },
  "text-combine-upright": {
@@ -5659,12 +6251,18 @@ export const generatedPropertyValues = {
    "right"
   ]
  },
- "text-wrap": {
+ "text-wrap-mode": {
   "values": [
    "wrap",
-   "nowrap",
+   "nowrap"
+  ]
+ },
+ "text-wrap-style": {
+  "values": [
+   "auto",
    "balance",
-   "pretty"
+   "pretty",
+   "stable"
   ]
  },
  "top": {
@@ -5772,6 +6370,13 @@ export const generatedPropertyValues = {
    "none"
   ]
  },
+ "view-transition-group": {
+  "values": [
+   "normal",
+   "contain",
+   "nearest"
+  ]
+ },
  "view-transition-name": {
   "values": [
    "none"
@@ -5781,7 +6386,8 @@ export const generatedPropertyValues = {
   "values": [
    "visible",
    "hidden",
-   "collapse"
+   "collapse",
+   "inert"
   ]
  },
  "white-space-collapse": {

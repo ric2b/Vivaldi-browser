@@ -22,6 +22,7 @@
           <ph name="PROXIES_TITLE" />
           y asegúrate de que la configuración seleccionada sea "sin proxy" o "directa"</translation>
 <translation id="5248344925342018662">Estás viendo una página segura de Vivaldi</translation>
+<translation id="6690242244468452299">Esta página muestra la información de tus errores recientes si habilitaste reporte de errores.</translation>
 <translation id="7023871570427738255">Ve
           al menú de Vivaldi &gt;
           <ph name="SETTINGS_TITLE" />
@@ -30,6 +31,7 @@
           y anula la selección de "<ph name="NO_PREFETCH_DESCRIPTION" />."
           Si esto no resuelve el problema, vuelve a habilitar esta opción
           para obtener un rendimiento mayor.</translation>
+<translation id="7496505986576158197">Vivaldi es posible por <ph name="BEGIN_LINK_CHROMIUM" /> Chromium <ph name="END_LINK_CHROMIUM" /> y otros <ph name="BEGIN_LINK_OSS" /> proyectos de código abierto <ph name="END_LINK_OSS" />.</translation>
 <translation id="8187289872471304532">Ve a
           Aplicaciones &gt; Preferencias del Sistema &gt; Red &gt; Avanzado &gt; Proxies
           y desmarca las casillas de verificación de los proxis que se hayan seleccionado.</translation>

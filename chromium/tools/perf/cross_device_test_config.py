@@ -93,10 +93,10 @@ TARGET_DEVICES = {
             'JetStream2': 5,
         },
         'speedometer2': {
-            'Speedometer2': 20,
+            'Speedometer2': 5,
         },
         'speedometer3': {
-            'Speedometer3': 20,
+            'Speedometer3': 5,
         },
     },
     'android-pixel6-perf-pgo': {
@@ -104,10 +104,10 @@ TARGET_DEVICES = {
             'JetStream2': 5,
         },
         'speedometer2': {
-            'Speedometer2': 20,
+            'Speedometer2': 5,
         },
         'speedometer3': {
-            'Speedometer3': 20,
+            'Speedometer3': 8,
         },
     },
     'linux-perf': {
@@ -236,16 +236,16 @@ TARGET_DEVICES = {
         },
         'jetstream2.crossbench': 5,
         'speedometer2': {
-            'Speedometer2': 20,
+            'Speedometer2': 28,
         },
         'speedometer2-minorms': {
-            'Speedometer2': 20,
+            'Speedometer2': 28,
         },
         'speedometer3': {
-            'Speedometer3': 20,
+            'Speedometer3': 28,
         },
         'speedometer3-minorms': {
-            'Speedometer3': 20,
+            'Speedometer3': 28,
         },
         'speedometer3.crossbench': 20,
         'rendering.desktop.notracing': 20,
@@ -257,10 +257,10 @@ TARGET_DEVICES = {
         },
         'jetstream2.crossbench': 4,
         'speedometer2': {
-            'Speedometer2': 4,
+            'Speedometer2': 7,
         },
         'speedometer3': {
-            'Speedometer3': 4,
+            'Speedometer3': 7,
         },
         'speedometer3.crossbench': 4,
     },
@@ -272,5 +272,9 @@ TARGET_DEVICES = {
             'Speedometer3': 20,
         },
         'rendering.desktop.notracing': 20,
+    },
+    'mac-m1-pro-perf': {
+        'speedometer3': 4,
+        'speedometer3.crossbench': 4,
     },
 }

@@ -61,16 +61,20 @@ type outputFormat string
 const (
 	testTimeout = 2 * time.Minute
 
-	glsl    = outputFormat("glsl")
-	hlslFXC = outputFormat("hlsl-fxc")
-	hlslDXC = outputFormat("hlsl-dxc")
-	msl     = outputFormat("msl")
-	spvasm  = outputFormat("spvasm")
-	wgsl    = outputFormat("wgsl")
+	glsl      = outputFormat("glsl")
+	glslIR    = outputFormat("glsl-ir")
+	hlslFXC   = outputFormat("hlsl-fxc")
+	hlslFXCIR = outputFormat("hlsl-fxc-ir")
+	hlslDXC   = outputFormat("hlsl-dxc")
+	hlslDXCIR = outputFormat("hlsl-dxc-ir")
+	msl       = outputFormat("msl")
+	mslIR     = outputFormat("msl-ir")
+	spvasm    = outputFormat("spvasm")
+	wgsl      = outputFormat("wgsl")
 )
 
 // allOutputFormats holds all the supported outputFormats
-var allOutputFormats = []outputFormat{wgsl, spvasm, msl, hlslDXC, hlslFXC, glsl}
+var allOutputFormats = []outputFormat{wgsl, spvasm, msl, mslIR, hlslDXC, hlslDXCIR, hlslFXC, hlslFXCIR, glsl, glslIR}
 
 // The root directory of the dawn project
 var dawnRoot = fileutils.DawnRoot()
@@ -135,15 +139,14 @@ func run() error {
 	var formatList, ignore, dxcPath, fxcPath, tintPath, xcrunPath string
 	var maxTableWidth int
 	numCPU := runtime.NumCPU()
-	verbose, useIr, generateExpected, generateSkip := false, false, false, false
-	flag.StringVar(&formatList, "format", "all", "comma separated list of formats to emit. Possible values are: all, wgsl, spvasm, msl, hlsl, hlsl-dxc, hlsl-fxc, glsl")
+	verbose, generateExpected, generateSkip := false, false, false
+	flag.StringVar(&formatList, "format", "all", "comma separated list of formats to emit. Possible values are: all, wgsl, spvasm, msl, msl-ir, hlsl, hlsl-ir, hlsl-dxc, hlsl-dxc-ir, hlsl-fxc, hlsl-fxc-ir, glsl, glsl-ir")
 	flag.StringVar(&ignore, "ignore", "**.expected.*", "files to ignore in globs")
 	flag.StringVar(&dxcPath, "dxcompiler", "", "path to DXC DLL for validating HLSL output")
 	flag.StringVar(&fxcPath, "fxc", "", "path to FXC DLL for validating HLSL output")
 	flag.StringVar(&tintPath, "tint", defaultTintPath(), "path to the tint executable")
 	flag.StringVar(&xcrunPath, "xcrun", "", "path to xcrun executable for validating MSL output")
 	flag.BoolVar(&verbose, "verbose", false, "print all run tests, including rows that all pass")
-	flag.BoolVar(&useIr, "use-ir", false, "generate with the IR enabled")
 	flag.BoolVar(&generateExpected, "generate-expected", false, "create or update all expected outputs")
 	flag.BoolVar(&generateSkip, "generate-skip", false, "create or update all expected outputs that fail with SKIP")
 	flag.IntVar(&numCPU, "j", numCPU, "maximum number of concurrent threads to run tests")
@@ -227,7 +230,7 @@ func run() error {
 		formats = allOutputFormats
 	} else {
 		for _, f := range strings.Split(formatList, ",") {
-			parsed, err := parseOutputFormats(strings.TrimSpace(f))
+			parsed, err := parseOutputFormat(strings.TrimSpace(f))
 			if err != nil {
 				return err
 			}
@@ -319,7 +322,6 @@ func run() error {
 		dxcPath:          dxcPath,
 		fxcPath:          fxcPath,
 		xcrunPath:        xcrunPath,
-		useIr:            useIr,
 		generateExpected: generateExpected,
 		generateSkip:     generateSkip,
 		validationCache:  validationCache,
@@ -364,8 +366,8 @@ func run() error {
 	}
 
 	type stats struct {
-		numTests, numPass, numSkip, numFail int
-		timeTaken                           time.Duration
+		numTests, numPass, numSkip, numFail, numValidTests, numInvalid int
+		timeTaken                                                      time.Duration
 	}
 
 	// Statistics per output format
@@ -476,6 +478,10 @@ func run() error {
 				yellow.Fprintf(row, alignCenter("SKIP", columnWidth))
 				rowAllPassed = false
 				stats.numSkip++
+			case invalid:
+				yellow.Fprintf(row, alignCenter("INVALID", columnWidth))
+				rowAllPassed = false
+				stats.numInvalid++
 			default:
 				fmt.Fprintf(row, alignCenter(result.code, columnWidth))
 				rowAllPassed = false
@@ -542,6 +548,7 @@ func run() error {
 	}
 	printStat(green, "PASS", func(s *stats) int { return s.numPass })
 	printStat(yellow, "SKIP", func(s *stats) int { return s.numSkip })
+	printStat(yellow, "INVALID", func(s *stats) int { return s.numInvalid })
 	printStat(red, "FAIL", func(s *stats) int { return s.numFail })
 
 	cyan.Printf(alignRight("TIME", filenameColumnWidth))
@@ -573,10 +580,15 @@ func run() error {
 		allStats.numTests += stats.numTests
 		allStats.numPass += stats.numPass
 		allStats.numSkip += stats.numSkip
+		allStats.numInvalid += stats.numInvalid
 		allStats.numFail += stats.numFail
 	}
 
-	fmt.Printf("%d tests run", allStats.numTests)
+	// Remove the invalid tests from the test count
+	allStats.numValidTests = allStats.numTests - allStats.numInvalid
+
+	fmt.Printf("%d tests run, ", allStats.numTests)
+	fmt.Printf("%d valid tests", allStats.numValidTests)
 	if allStats.numPass > 0 {
 		fmt.Printf(", ")
 		color.Set(color.FgGreen)
@@ -592,6 +604,14 @@ func run() error {
 		color.Unset()
 	} else {
 		fmt.Printf(", %d tests skipped", allStats.numSkip)
+	}
+	if allStats.numInvalid > 0 {
+		fmt.Printf(", ")
+		color.Set(color.FgYellow)
+		fmt.Printf("%d invalid tests", allStats.numInvalid)
+		color.Unset()
+	} else {
+		fmt.Printf(", %d invalid tests", allStats.numInvalid)
 	}
 	if allStats.numFail > 0 {
 		fmt.Printf(", ")
@@ -615,9 +635,10 @@ func run() error {
 type statusCode string
 
 const (
-	fail statusCode = "FAIL"
-	pass statusCode = "PASS"
-	skip statusCode = "SKIP"
+	fail    statusCode = "FAIL"
+	pass    statusCode = "PASS"
+	skip    statusCode = "SKIP"
+	invalid statusCode = "INVALID"
 )
 
 type status struct {
@@ -639,26 +660,35 @@ type runConfig struct {
 	dxcPath          string
 	fxcPath          string
 	xcrunPath        string
-	useIr            bool
 	generateExpected bool
 	generateSkip     bool
 	validationCache  validationCache
 }
+
+// Skips the path portion of FXC warning/error strings, matching the rest.
+// We use this to scrub the path to avoid generating needless diffs.
+var reFXCErrorStringHash = regexp.MustCompile(`(?:.*?)(\(.*?\): (?:warning|error).*)`)
 
 func (j job) run(cfg runConfig) {
 	j.result <- func() status {
 		// expectedFilePath is the path to the expected output file for the given test
 		expectedFilePath := j.file + ".expected."
 
-		if cfg.useIr {
-			expectedFilePath += "ir."
-		}
+		useIr := j.format == hlslDXCIR || j.format == hlslFXCIR || j.format == mslIR || j.format == glslIR
 
 		switch j.format {
 		case hlslDXC:
 			expectedFilePath += "dxc.hlsl"
+		case hlslDXCIR:
+			expectedFilePath += "ir.dxc.hlsl"
 		case hlslFXC:
 			expectedFilePath += "fxc.hlsl"
+		case hlslFXCIR:
+			expectedFilePath += "ir.fxc.hlsl"
+		case mslIR:
+			expectedFilePath += "ir.msl"
+		case glslIR:
+			expectedFilePath += "ir.glsl"
 		default:
 			expectedFilePath += string(j.format)
 		}
@@ -674,6 +704,10 @@ func (j job) run(cfg runConfig) {
 		if strings.HasPrefix(expected, "SKIP") { // Special SKIP token
 			skipped = true
 		}
+		invalid_test := false
+		if strings.HasPrefix(expected, "SKIP: INVALID") { // Special invalid test case token
+			invalid_test = true
+		}
 
 		expected = strings.ReplaceAll(expected, "\r\n", "\n")
 
@@ -683,7 +717,7 @@ func (j job) run(cfg runConfig) {
 			"--print-hash",
 		}
 
-		if cfg.useIr {
+		if useIr {
 			args = append(args, "--use-ir")
 		}
 
@@ -700,20 +734,23 @@ func (j job) run(cfg runConfig) {
 		case wgsl:
 			args = append(args, "--validate") // wgsl validation uses Tint, so is always available
 			validate = true
-		case spvasm, glsl:
+		case spvasm, glsl, glslIR:
 			args = append(args, "--validate") // spirv-val and glslang are statically linked, always available
 			validate = true
 		case hlslDXC:
+		case hlslDXCIR:
 			if cfg.dxcPath != "" {
 				args = append(args, "--dxc", cfg.dxcPath)
 				validate = true
 			}
 		case hlslFXC:
+		case hlslFXCIR:
 			if cfg.fxcPath != "" {
 				args = append(args, "--fxc", cfg.fxcPath)
 				validate = true
 			}
 		case msl:
+		case mslIR:
 			if cfg.xcrunPath != "" {
 				args = append(args, "--xcrun", cfg.xcrunPath)
 				validate = true
@@ -761,23 +798,38 @@ func (j job) run(cfg runConfig) {
 			matched = true // test passed and matched expectations
 		}
 
+		var skip_str string = "FAILED"
+		if invalid_test {
+			skip_str = "INVALID"
+		}
+
+		passed := ok && matched
+		if !passed {
+			if j.format == hlslFXC || j.format == hlslFXCIR {
+				out = reFXCErrorStringHash.ReplaceAllString(out, `<scrubbed_path>${1}`)
+			}
+		}
+
 		switch {
 		case ok && matched:
 			// Test passed
 			return status{code: pass, timeTaken: timeTaken, passHashes: hashes}
 
 			//       --- Below this point the test has failed ---
-
 		case skipped:
 			if cfg.generateSkip {
-				saveExpectedFile(expectedFilePath, "SKIP: FAILED\n\n"+out)
+				saveExpectedFile(expectedFilePath, "SKIP: "+skip_str+"\n\n"+out)
 			}
-			return status{code: skip, timeTaken: timeTaken}
+			if invalid_test {
+				return status{code: invalid, timeTaken: timeTaken}
+			} else {
+				return status{code: skip, timeTaken: timeTaken}
+			}
 
 		case !ok:
 			// Compiler returned non-zero exit code
 			if cfg.generateSkip {
-				saveExpectedFile(expectedFilePath, "SKIP: FAILED\n\n"+out)
+				saveExpectedFile(expectedFilePath, "SKIP: "+skip_str+"\n\n"+out)
 			}
 			err := fmt.Errorf("%s", out)
 			return status{code: fail, err: err, timeTaken: timeTaken}
@@ -785,7 +837,7 @@ func (j job) run(cfg runConfig) {
 		default:
 			// Compiler returned zero exit code, or output was not as expected
 			if cfg.generateSkip {
-				saveExpectedFile(expectedFilePath, "SKIP: FAILED\n\n"+out)
+				saveExpectedFile(expectedFilePath, "SKIP: "+skip_str+"\n\n"+out)
 			}
 
 			// Expected output did not match
@@ -914,6 +966,7 @@ func invoke(exe string, args ...string) (ok bool, output string) {
 			return false, fmt.Sprintf("test timed out after %v", testTimeout)
 		}
 		if str != "" {
+			str += fmt.Sprintf("\ntint executable returned error: %v\n", err.Error())
 			return false, str
 		}
 		return false, err.Error()
@@ -947,11 +1000,18 @@ func parseFlags(path string) ([]cmdLineFlags, error) {
 		if len(m) == 3 {
 			formats := allOutputFormats
 			if m[1] != "" {
-				fmts, err := parseOutputFormats(strings.Trim(m[1], "[]"))
+				matchedFormat := strings.Trim(m[1], "[]")
+				fmts, err := parseOutputFormat(matchedFormat)
 				if err != nil {
 					return nil, err
 				}
 				formats = fmts
+
+				// Apply the same flags to "-ir" format, if it exists
+				fmts, err = parseOutputFormat(matchedFormat + "-ir")
+				if err == nil {
+					formats = append(formats, fmts...)
+				}
 			}
 			out = append(out, cmdLineFlags{
 				formats: container.NewSet(formats...),
@@ -966,8 +1026,9 @@ func parseFlags(path string) ([]cmdLineFlags, error) {
 	return out, nil
 }
 
-// parseOutputFormats parses the outputFormat(s) from s.
-func parseOutputFormats(s string) ([]outputFormat, error) {
+// parseOutputFormat parses the outputFormat(s) from s, and
+// returns an array of the single parsed format.
+func parseOutputFormat(s string) ([]outputFormat, error) {
 	switch s {
 	case "wgsl":
 		return []outputFormat{wgsl}, nil
@@ -975,14 +1036,24 @@ func parseOutputFormats(s string) ([]outputFormat, error) {
 		return []outputFormat{spvasm}, nil
 	case "msl":
 		return []outputFormat{msl}, nil
+	case "msl-ir":
+		return []outputFormat{mslIR}, nil
 	case "hlsl":
 		return []outputFormat{hlslDXC, hlslFXC}, nil
 	case "hlsl-dxc":
 		return []outputFormat{hlslDXC}, nil
 	case "hlsl-fxc":
 		return []outputFormat{hlslFXC}, nil
+	case "hlsl-ir":
+		return []outputFormat{hlslDXCIR, hlslFXCIR}, nil
+	case "hlsl-dxc-ir":
+		return []outputFormat{hlslDXCIR}, nil
+	case "hlsl-fxc-ir":
+		return []outputFormat{hlslFXCIR}, nil
 	case "glsl":
 		return []outputFormat{glsl}, nil
+	case "glsl-ir":
+		return []outputFormat{glslIR}, nil
 	default:
 		return nil, fmt.Errorf("unknown format '%s'", s)
 	}

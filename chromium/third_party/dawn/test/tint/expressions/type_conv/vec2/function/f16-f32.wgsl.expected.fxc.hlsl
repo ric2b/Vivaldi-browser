@@ -1,4 +1,4 @@
-SKIP: FAILED
+SKIP: INVALID
 
 [numthreads(1, 1, 1)]
 void unused_entry_point() {
@@ -13,6 +13,11 @@ vector<float16_t, 2> m() {
 }
 
 void f() {
-  const vector<float16_t, 2> tint_symbol = m();
+  vector<float16_t, 2> tint_symbol = m();
   float2 v = float2(tint_symbol);
 }
+FXC validation failure:
+<scrubbed_path>(6,8-16): error X3000: unrecognized identifier 'float16_t'
+
+
+tint executable returned error: exit status 1

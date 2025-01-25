@@ -20,6 +20,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_ablation_study.h"
 #include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/country_type.h"
@@ -30,11 +31,9 @@
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/mock_autocomplete_history_manager.h"
 #include "components/autofill/core/browser/mock_autofill_optimization_guide.h"
+#include "components/autofill/core/browser/mock_autofill_prediction_improvements_delegate.h"
 #include "components/autofill/core/browser/mock_merchant_promo_code_manager.h"
-#include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/local_card_migration_manager.h"
-#include "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
-#include "components/autofill/core/browser/payments/test/mock_mandatory_reauth_manager.h"
 #include "components/autofill/core/browser/payments/test_payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/test_payments_network_interface.h"
 #include "components/autofill/core/browser/strike_databases/payments/test_strike_database.h"
@@ -61,11 +60,6 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
-#endif
-
-#if !BUILDFLAG(IS_IOS)
-#include "components/autofill/core/browser/payments/test_internal_authenticator.h"
-#include "components/webauthn/core/browser/internal_authenticator.h"
 #endif
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
@@ -134,6 +128,11 @@ class TestAutofillClientTemplate : public T {
     mock_autofill_optimization_guide_.reset();
   }
 
+  MockAutofillPredictionImprovementsDelegate*
+  GetAutofillPredictionImprovementsDelegate() override {
+    return mock_autofill_prediction_improvements_delegate_.get();
+  }
+
   AutocompleteHistoryManager* GetAutocompleteHistoryManager() override {
     return &mock_autocomplete_history_manager_;
   }
@@ -197,10 +196,6 @@ class TestAutofillClientTemplate : public T {
     return &test_address_normalizer_;
   }
 
-  AutofillOfferManager* GetAutofillOfferManager() override {
-    return autofill_offer_manager_.get();
-  }
-
   FastCheckoutClient* GetFastCheckoutClient() override {
     return &mock_fast_checkout_client_;
   }
@@ -241,51 +236,12 @@ class TestAutofillClientTemplate : public T {
     return variation_config_country_code_;
   }
 
-#if !BUILDFLAG(IS_IOS)
-  std::unique_ptr<webauthn::InternalAuthenticator>
-  CreateCreditCardInternalAuthenticator(AutofillDriver* driver) override {
-    return std::make_unique<TestInternalAuthenticator>();
-  }
-#endif
-
   void ShowAutofillSettings(SuggestionType suggestion_type) override {}
-
-  payments::MockMandatoryReauthManager*
-  GetOrCreatePaymentsMandatoryReauthManager() override {
-    if (!mock_payments_mandatory_reauth_manager_) {
-      mock_payments_mandatory_reauth_manager_ = std::make_unique<
-          testing::NiceMock<payments::MockMandatoryReauthManager>>();
-    }
-    return mock_payments_mandatory_reauth_manager_.get();
-  }
-
-#if BUILDFLAG(IS_ANDROID)
-  // Set up a mock to simulate successful mandatory reauth when autofilling
-  // payment methods.
-  void SetUpDeviceBiometricAuthenticatorSuccessOnAutomotive() {
-    if (!base::android::BuildInfo::GetInstance()->is_automotive()) {
-      return;
-    }
-
-    payments::MockMandatoryReauthManager& mandatory_reauth_manager =
-        *GetOrCreatePaymentsMandatoryReauthManager();
-
-    ON_CALL(mandatory_reauth_manager, GetAuthenticationMethod)
-        .WillByDefault(testing::Return(
-            payments::MandatoryReauthAuthenticationMethod::kBiometric));
-
-    ON_CALL(mandatory_reauth_manager, Authenticate)
-        .WillByDefault(testing::WithArg<0>(
-            testing::Invoke([](base::OnceCallback<void(bool)> callback) {
-              std::move(callback).Run(true);
-            })));
-  }
-#endif
 
   void ConfirmSaveAddressProfile(
       const AutofillProfile& profile,
       const AutofillProfile* original_profile,
-      AutofillClient::SaveAddressProfilePromptOptions options,
+      bool is_migration_to_account,
       AutofillClient::AddressProfileSavePromptCallback callback) override {}
 
   void ShowEditAddressProfileDialog(
@@ -298,25 +254,12 @@ class TestAutofillClientTemplate : public T {
       AutofillClient::AddressProfileDeleteDialogCallback delete_dialog_callback)
       override {}
 
-  bool ShowTouchToFillCreditCard(
-      base::WeakPtr<TouchToFillDelegate> delegate,
-      base::span<const autofill::CreditCard> cards_to_suggest,
-      const std::vector<bool>& card_acceptabilities) override {
-    return false;
-  }
-
-  bool ShowTouchToFillIban(
-      base::WeakPtr<TouchToFillDelegate> delegate,
-      base::span<const autofill::Iban> ibans_to_suggest) override {
-    return false;
-  }
-
-  void HideTouchToFillCreditCard() override {}
-
-  void ShowAutofillSuggestions(
+  AutofillClient::SuggestionUiSessionId ShowAutofillSuggestions(
       const AutofillClient::PopupOpenArgs& open_args,
       base::WeakPtr<AutofillSuggestionDelegate> delegate) override {
     is_showing_popup_ = true;
+    static AutofillClient::SuggestionUiSessionId::Generator generator;
+    return generator.GenerateNextId();
   }
 
   void UpdateAutofillDataListValues(
@@ -328,9 +271,15 @@ class TestAutofillClientTemplate : public T {
 
   void PinAutofillSuggestions() override {}
 
-  void UpdatePopup(const std::vector<Suggestion>& suggestions,
-                   FillingProduct main_filling_product,
-                   AutofillSuggestionTriggerSource trigger_source) override {}
+  void UpdateAutofillSuggestions(
+      const std::vector<Suggestion>& suggestions,
+      FillingProduct main_filling_product,
+      AutofillSuggestionTriggerSource trigger_source) override {}
+
+  std::optional<AutofillClient::SuggestionUiSessionId>
+  GetSessionIdForCurrentAutofillSuggestions() const override {
+    return suggestion_ui_session_id_;
+  }
 
   void HideAutofillSuggestions(SuggestionHidingReason reason) override {
     popup_hidden_reason_ = reason;
@@ -485,11 +434,6 @@ class TestAutofillClientTemplate : public T {
     return &mock_autocomplete_history_manager_;
   }
 
-  void set_autofill_offer_manager(
-      std::unique_ptr<AutofillOfferManager> autofill_offer_manager) {
-    autofill_offer_manager_ = std::move(autofill_offer_manager);
-  }
-
   void set_channel_for_testing(const version_info::Channel channel) {
     channel_for_testing_ = channel;
   }
@@ -513,6 +457,11 @@ class TestAutofillClientTemplate : public T {
     plus_address_delegate_ = std::move(plus_address_delegate);
   }
 
+  void set_suggestion_ui_session_id(
+      std::optional<AutofillClient::SuggestionUiSessionId> session_id) {
+    suggestion_ui_session_id_ = session_id;
+  }
+
   GURL form_origin() { return form_origin_; }
 
   ukm::TestUkmRecorder* GetTestUkmRecorder() { return &test_ukm_recorder_; }
@@ -530,11 +479,13 @@ class TestAutofillClientTemplate : public T {
   std::unique_ptr<::testing::NiceMock<MockAutofillOptimizationGuide>>
       mock_autofill_optimization_guide_ =
           std::make_unique<testing::NiceMock<MockAutofillOptimizationGuide>>();
+  std::unique_ptr<
+      ::testing::NiceMock<MockAutofillPredictionImprovementsDelegate>>
+      mock_autofill_prediction_improvements_delegate_ = std::make_unique<
+          testing::NiceMock<MockAutofillPredictionImprovementsDelegate>>();
   ::testing::NiceMock<MockAutocompleteHistoryManager>
       mock_autocomplete_history_manager_;
   ::testing::NiceMock<MockFastCheckoutClient> mock_fast_checkout_client_;
-  std::unique_ptr<::testing::NiceMock<payments::MockMandatoryReauthManager>>
-      mock_payments_mandatory_reauth_manager_;
   std::unique_ptr<device_reauth::MockDeviceAuthenticator>
       device_authenticator_ = nullptr;
 
@@ -550,7 +501,6 @@ class TestAutofillClientTemplate : public T {
   std::unique_ptr<TestPersonalDataManager> test_personal_data_manager_;
   // The below objects must be destroyed before `TestPersonalDataManager`
   // because they keep a reference to it.
-  std::unique_ptr<AutofillOfferManager> autofill_offer_manager_;
   std::unique_ptr<payments::TestPaymentsAutofillClient>
       payments_autofill_client_;
   std::unique_ptr<FormDataImporter> form_data_importer_;
@@ -595,6 +545,9 @@ class TestAutofillClientTemplate : public T {
   // constructor.
   GURL last_committed_primary_main_frame_url_{"https://example.test"};
 
+  std::optional<AutofillClient::SuggestionUiSessionId>
+      suggestion_ui_session_id_;
+
   LogRouter log_router_;
   struct LogToTerminal {
     explicit LogToTerminal(LogRouter& log_router) {
@@ -615,6 +568,11 @@ class TestAutofillClientTemplate : public T {
 class TestAutofillClient : public TestAutofillClientTemplate<AutofillClient> {
  public:
   using TestAutofillClientTemplate<AutofillClient>::TestAutofillClientTemplate;
+
+  AutofillDriverFactory& GetAutofillDriverFactory() override;
+
+ private:
+  AutofillDriverFactory autofill_driver_factory_;
 };
 
 }  // namespace autofill

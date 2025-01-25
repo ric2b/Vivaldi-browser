@@ -90,11 +90,62 @@ struct TooltipView: View {
   }
 }
 
+/// A view modifier that conditionally applies different gestures based on the iOS version for the graph.
+struct GraphGesture: ViewModifier {
+  let geometry: GeometryProxy
+  let proxy: ChartProxy
+  let updateSelectionData: (CGPoint, GeometryProxy, ChartProxy) -> Void
+  let updateTooltipPosition: (GeometryProxy, ChartProxy) -> Void
+  let recordGraphInteraction: () -> Void
+
+  func body(content: Content) -> some View {
+    // The minimum distance amount here allows scrolling to take precedence over
+    // dragging when the user is scrolling vertically.
+    // There are 3 gestures interacting here: dragging on the graph, scrolling
+    // the panel, and dragging to expand the panel. The solution uses 2
+    // different methods to handle the graph drag's interaction with each of
+    // the other two gestures. First, vs scrolling the panel, using a
+    // DragGesture with a minimum distance allows the scrolling to supercede
+    // the drag if the user moves their finger vertically, but still allows the
+    // drag to go off if the user moves their finger horizontally. The scroll
+    // view looks like it requires the user to move their finger some short
+    // distance vertically before scrolling begins. So if the user moves
+    // vertically, the scroll gesture activates before the minimum distance is
+    // hit. But if the user moves horiztonally, the graph's minimum distance
+    // is hit first, activating that one.
+    //
+    // For the interaction with the gesture to expand the sheet,
+    // UIGestureRecognizerDelegate methods are used elsewhere to add a
+    // hierarchical relationship. This makes sure that the expansion gesture
+    // doesn't activate until after the graph drag gesture fails. It doesn't
+    // matter whether the graph gesture actually fails or not because the sheet
+    // expand gesture should never activate when dragging on the graph.
+    let gesture = DragGesture(minimumDistance: 15, coordinateSpace: .local)
+      .onChanged { value in
+        updateSelectionData(value.location, geometry, proxy)
+        updateTooltipPosition(geometry, proxy)
+      }
+      .onEnded { _ in
+        recordGraphInteraction()
+      }
+    #if swift(>=6.0)
+      if #available(iOS 18, *) {
+        content.gesture(gesture, name: kPanelContentGestureRecognizerName)
+      } else {
+        content.gesture(gesture)
+      }
+    #else
+      content.gesture(gesture)
+    #endif
+  }
+}
+
 /// Represents a view displaying a historical graph.
 struct HistoryGraph: View {
   /// The price history data consisting of dates and corresponding prices.
   let history: [Date: NSNumber]
   let currency: String
+  let graphAccessibilityLabel: String
 
   /// Graph gradient color.
   static let graphGradientColor = "graph_gradient_color"
@@ -120,13 +171,8 @@ struct HistoryGraph: View {
   /// The width of the entire chart.
   @State private var chartWidth: CGFloat?
 
-  /// If the user is currently dragging on the graph. This lets the hover code
-  /// know if the user is also dragging for any necessary adjustments.
-  @State private var dragging = false
-
-  //. If the user is currently hovering over the graph. This lets the drag code
-  /// know if the user is also hovering for any necessary adjustments.
-  @State private var hovering = false
+  /// Indicates whether the graph has been interacted with for the current session.
+  @State private var hasGraphInteracted: Bool = false
 
   /// Color scheme environment value .
   @Environment(\.colorScheme) var colorScheme
@@ -154,26 +200,7 @@ struct HistoryGraph: View {
     /// TODO(b/333894542): Configure audio graph for accessibility and ensure labels
     /// for line marks and rule marks are accessible.
     Chart {
-      /// Displaying the dashed line and point mark for selected date on the graph.
-      if let selectedDate = selectedDate, let selectedPrice = history[selectedDate] {
-        RuleMark(
-          x: .value("Date", selectedDate)
-        )
-        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3]))
-        PointMark(
-          x: .value("Date", selectedDate),
-          y: .value("Price", selectedPrice.doubleValue)
-        )
-        .foregroundStyle(Color(uiColor: Self.blue600))
-      }
-
       ForEach(sortedHistoryDates, id: \.key) { date, price in
-        // Displaying the line mark on the graph.
-        LineMark(
-          x: .value("Date", date),
-          y: .value("Price", price.doubleValue)
-        ).foregroundStyle(Color(uiColor: Self.blue600))
-
         /// Displaying the area mark under the line mark.
         AreaMark(
           x: .value("Date", date),
@@ -181,8 +208,40 @@ struct HistoryGraph: View {
           yEnd: .value("Price", price.doubleValue)
         )
         .foregroundStyle(linearGradient)
+        .accessibilityHidden(true)
+
+        // Displaying the line mark on the graph.
+        LineMark(
+          x: .value("Date", date),
+          y: .value("Price", price.doubleValue)
+        ).foregroundStyle(Color(uiColor: Self.blue600))
       }
       .interpolationMethod(.stepEnd)
+
+      /// Displaying the dashed line and point mark for selected date on the graph.
+      if let selectedDate = selectedDate, let selectedPrice = history[selectedDate] {
+        RuleMark(
+          x: .value("Date", selectedDate)
+        )
+        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3]))
+        .accessibilityHidden(true)
+
+        PointMark(
+          x: .value("Date", selectedDate),
+          y: .value("Price", selectedPrice.doubleValue)
+        )
+        .symbol {
+          Circle()
+            .fill(Color(uiColor: Self.blue600))
+            .frame(width: 8, height: 8)
+            .overlay(
+              Circle()
+                .stroke(Color(uiColor: Self.backgroundColor), lineWidth: 2)
+            )
+        }
+        .foregroundStyle(Color(uiColor: Self.blue600))
+        .accessibilityHidden(true)
+      }
     }
     .chartBackground { chartProxy in
       Color(uiColor: Self.backgroundColor)
@@ -213,33 +272,30 @@ struct HistoryGraph: View {
       /// Gesture for selecting date on the graph.
       GeometryReader { geometry in
         Rectangle().fill(.clear).contentShape(Rectangle())
+          .onAppear {
+            if selectedDate == nil {
+              selectedDate = sortedHistoryDates.last?.key
+              updateTooltipPosition(geometry: geometry, chart: proxy)
+            }
+          }
           .onContinuousHover(perform: { phase in
             switch phase {
             case .active(let location):
-              hovering = true
               updateSelectionData(location: location, geometry: geometry, chart: proxy)
+              updateTooltipPosition(geometry: geometry, chart: proxy)
             case .ended:
-              hovering = false
-              if dragging {
-                return
-              }
-              selectedDate = nil
+              recordGraphInteraction()
+              break
             }
           })
-          .gesture(
-            DragGesture()
-              .onChanged { value in
-                dragging = true
-                updateSelectionData(location: value.location, geometry: geometry, chart: proxy)
-              }
-              .onEnded { _ in
-                dragging = false
-                if hovering {
-                  return
-                }
-                selectedDate = nil
-              }
-          )
+          .modifier(
+            GraphGesture(
+              geometry: geometry,
+              proxy: proxy,
+              updateSelectionData: updateSelectionData,
+              updateTooltipPosition: updateTooltipPosition,
+              recordGraphInteraction: recordGraphInteraction
+            ))
       }
     }
     .overlay(
@@ -256,7 +312,10 @@ struct HistoryGraph: View {
           )
         }
       }
+      .accessibilityHidden(true)
     )
+    .edgesIgnoringSafeArea(.all)
+    .accessibilityLabel(graphAccessibilityLabel)
   }
 
   /// Updates the selected data when the given `location` is selected inside the given
@@ -267,8 +326,21 @@ struct HistoryGraph: View {
     if let index: Date = chart.value(atX: currentX) {
       selectedDate = closestDate(to: index, in: history)
     }
+  }
 
+  // Records user interactions with the history graph.
+  private func recordGraphInteraction() {
+    if !hasGraphInteracted {
+      hasGraphInteracted = true
+      UserMetricsUtils.recordAction("Commerce.PriceInsights.HistoryGraphInteraction")
+    }
+  }
+
+  /// Calculates and updates the tooltip's position based on the selected date
+  /// and chart geometry.
+  private func updateTooltipPosition(geometry: GeometryProxy, chart: ChartProxy) {
     if let selectedDate = selectedDate {
+      let startX = geometry[chart.plotAreaFrame].origin.x
       if let xPosition = chart.position(forX: selectedDate) {
         selectedXPosition = xPosition + startX
       }

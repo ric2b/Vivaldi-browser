@@ -304,12 +304,12 @@ class EgtestsAppTest(test_runner_test.TestCase):
     mock_listdir.return_value = [
         'random_file', 'main_binary', 'libclang_rt.asan_iossim_dynamic.dylib'
     ]
-    egtest = test_apps.EgtestsApp(_TEST_APP_PATH, _ALL_EG_TEST_NAMES)
-    self.assertEqual([
-        '__PLATFORMS__/iPhoneSimulator.platform/Developer/usr/lib/' +
-        'libXCTestBundleInject.dylib',
-        '@executable_path/libclang_rt.asan_iossim_dynamic.dylib'
-    ], egtest._additional_inserted_libs())
+    egtest = test_apps.EgtestsApp(
+        _TEST_APP_PATH,
+        _ALL_EG_TEST_NAMES,
+        host_app_path='/path/to/host_app.app')
+    self.assertEqual(['@executable_path/libclang_rt.asan_iossim_dynamic.dylib'],
+                     egtest._additional_inserted_libs())
 
   def test_xctestRunNode_without_filter(self):
     self.mock(xcode_util, 'xctest_path', lambda _: 'xctest-path')

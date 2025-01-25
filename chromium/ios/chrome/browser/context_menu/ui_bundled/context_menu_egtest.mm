@@ -7,9 +7,13 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
+#import "base/ios/ios_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/url_formatter/url_formatter.h"
+#import "ios/chrome/browser/context_menu/ui_bundled/constants.h"
+#import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/chrome/browser/ui/fullscreen/test/fullscreen_app_interface.h"
@@ -28,6 +32,7 @@
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/web/common/features.h"
 #import "ios/web/public/test/element_selector.h"
+#import "net/base/apple/url_conversions.h"
 #import "net/test/embedded_test_server/embedded_test_server.h"
 #import "net/test/embedded_test_server/http_request.h"
 #import "net/test/embedded_test_server/http_response.h"
@@ -82,6 +87,11 @@ const char kInitialPageDestinationLinkId[] = "link";
 // The text of the link to the destination page.
 const char kInitialPageDestinationLinkText[] = "link";
 
+// The DOM element ID of the long link to the destination page.
+const char kInitialPageDestinationLongLinkID[] = "LongLink";
+// The text of the long link to the destination page.
+const char kInitialPageDestinationLongLinkText[] = "LongLink";
+
 // URL to a page with a link with a javascript: scheme.
 const char kJavaScriptPageUrl[] = "/scenarionContextMenuJavaScript";
 // HTML content of a page with a javascript link.
@@ -120,6 +130,8 @@ const char kShortTruncationPageUrl[] = "/shortTruncation";
 
 const char kLongTruncationPageUrl[] = "/longTruncation";
 
+const char kLongLinkPageURL[] = "/longLink";
+
 NSString* const kShortLinkHref = @"/destination";
 
 NSString* const kShortImgTitle = @"Chromium logo with a short title";
@@ -155,6 +167,18 @@ NSString* const kLongImgTitle =
      "characters, so formulated as to thest the very limits of the context "
      "menu layout system, and to ensure that all users can enjoy the full "
      "majesty of image titles, however sesquipedalian they may be!";
+
+// Template HTML, URLs, and link and title values for title truncation tests.
+// (Use NSString for easier format printing and matching).
+// Template params:
+//    [0] NSString - link href.
+//    [1] char[]   - link element ID.
+NSString* const kLongLinkTestPageTemplateHtml =
+    @"<html><head><meta name='viewport' content='width=device-width, "
+     "initial-scale=1.0, maximum-scale=1.0, user-scalable=no' "
+     "/></head><body><p style='margin-bottom:50px'>Short title test.</p>"
+     "<p><a style='margin-left:150px' href='%@' id='%s'>LongLink</a></p>"
+     "</body></html>";
 
 // Matcher for the open image button in the context menu.
 id<GREYMatcher> OpenImageButton() {
@@ -221,6 +245,11 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
                                    kInitialPageDestinationLinkId,
                                    kShortImgTitle, kLogoPageChromiumImageId];
     http_response->set_content(base::SysNSStringToUTF8(content));
+  } else if (request.relative_url == kLongLinkPageURL) {
+    NSString* content =
+        [NSString stringWithFormat:kLongLinkTestPageTemplateHtml, kLongLinkHref,
+                                   kInitialPageDestinationLongLinkText];
+    http_response->set_content(base::SysNSStringToUTF8(content));
   } else {
     return nullptr;
   }
@@ -266,6 +295,7 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
 // Context menu tests for Chrome.
 @interface ContextMenuTestCase : ChromeTestCase {
   std::unique_ptr<ScopedBlockPopupsPref> _blockPopupsPref;
+  bool _setUpHistogramTesterCalled;
 }
 
 @end
@@ -277,6 +307,7 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
   config.features_enabled.push_back(kTabGroupsInGrid);
   config.features_enabled.push_back(kTabGroupsIPad);
   config.features_enabled.push_back(kModernTabStrip);
+  config.features_enabled.push_back(kShareInWebContextMenuIOS);
   config.features_disabled.push_back(web::features::kSmoothScrollingDefault);
   return config;
 }
@@ -288,6 +319,20 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
   self.testServer->RegisterRequestHandler(
       base::BindRepeating(&StandardResponse));
   GREYAssertTrue(self.testServer->Start(), @"Server did not start.");
+}
+
+- (void)setUpHistogramTester {
+  GREYAssertNil([MetricsAppInterface setupHistogramTester],
+                @"Failed to set up histogram tester.");
+  _setUpHistogramTesterCalled = true;
+}
+
+- (void)tearDown {
+  if (_setUpHistogramTesterCalled) {
+    GREYAssertNil([MetricsAppInterface releaseHistogramTester],
+                  @"Failed to release histogram tester.");
+  }
+  [super tearDown];
 }
 
 // Tests that selecting "Open Image" from the context menu properly opens the
@@ -414,11 +459,7 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
   ClearContextMenu();
 
   LongPressElement(kInitialPageDestinationLinkId);
-  // Expect the link to be truncated, so the matcher for the full text of the
-  // link returns nil.
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::ContainsPartialText(
-                                          kLongLinkHref)]
-      assertWithMatcher:grey_nil()];
+
   // But expect that some of the link is visible in the title.
   NSString* startOfTitle = [kLongLinkHref substringToIndex:30];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::ContainsPartialText(
@@ -548,6 +589,15 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
       assertWithMatcher:grey_sufficientlyVisible()];
   [[EarlGrey selectElementWithMatcher:ContextMenuItemWithAccessibilityLabelId(
                                           IDS_IOS_COPY_LINK_ACTION_TITLE)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(
+                                   grey_ancestor(grey_kindOfClassName(
+                                       @"_UIContextMenuCell")),
+                                   ContextMenuItemWithAccessibilityLabelId(
+                                       IDS_IOS_SHARE_BUTTON_LABEL),
+                                   nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 
@@ -732,4 +782,102 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
+
+// Tests "Share URL" action in the web context menu when long
+// pressing a link in a web page, and tests that triggering the
+// action does present the Share menu as expected.
+- (void)testShareInWebContextMenu {
+  [self setUpHistogramTester];
+  const GURL pageURL = self.testServer->GetURL(kInitialPageUrl);
+  NSString* pageTitle = base::SysUTF8ToNSString(pageURL.GetContent());
+  [ChromeEarlGrey loadURL:pageURL];
+  [ChromeEarlGrey
+      waitForWebStateContainingText:kInitialPageDestinationLinkText];
+  [ChromeEarlGrey waitForWebStateZoomScale:1.0];
+
+  LongPressElement(kInitialPageDestinationLinkId);
+
+  [ChromeEarlGrey verifyShareActionWithURL:pageURL pageTitle:pageTitle];
+
+  // Ensure that UMA was logged correctly.
+  NSError* error = [MetricsAppInterface
+       expectCount:1
+         forBucket:13  // Number refering to
+                       // SharingScenario::ShareInWebContextMenu
+      forHistogram:@"Mobile.Share.EntryPoints"];
+  if (error) {
+    GREYFail([error description]);
+  }
+}
+
+// Tests that one (and only one, meaning the menu title is not present) button
+// partially containing the url is present and tapping on it shows an alert
+// showing the full URL.
+- (void)testShowFullURLInWebContextMenu {
+  const GURL pageURL = self.testServer->GetURL(kLongLinkPageURL);
+  const GURL longURL =
+      self.testServer->GetURL(base::SysNSStringToUTF8(kLongLinkHref));
+
+  [ChromeEarlGrey loadURL:pageURL];
+  [ChromeEarlGrey
+      waitForWebStateContainingText:kInitialPageDestinationLongLinkText];
+  [ChromeEarlGrey waitForWebStateZoomScale:1.0];
+
+  LongPressElement(kInitialPageDestinationLongLinkID);
+
+  std::u16string formattedURL = url_formatter::FormatUrl(longURL);
+  NSString* stringURL = base::SysUTF16ToNSString(formattedURL);
+
+  [ChromeEarlGrey waitForForegroundWindowCount:1];
+  [[EarlGrey selectElementWithMatcher:
+                 chrome_test_util::ContextMenuButtonContainingText([stringURL
+                     substringToIndex:20])] performAction:grey_tap()];
+
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(grey_ancestor(grey_accessibilityID(
+                                              @"AlertAccessibilityIdentifier")),
+                                          grey_text(stringURL), nil)]
+      assertWithMatcher:grey_notNil()];
+}
+
+// Tests "Share Image" action in the web context menu when long
+// pressing an image in a web page, and tests that triggering the
+// action does present the Share menu as expected.
+- (void)testShareImageInWebContextMenu {
+  [self setUpHistogramTester];
+
+  const GURL shortTitleURL = self.testServer->GetURL(kShortTruncationPageUrl);
+
+  [ChromeEarlGrey loadURL:shortTitleURL];
+  [ChromeEarlGrey waitForPageToFinishLoading];
+  [ChromeEarlGrey waitForWebStateZoomScale:1.0];
+
+  LongPressElement(kLogoPageChromiumImageId);
+  [ChromeEarlGrey waitForForegroundWindowCount:1];
+  [[EarlGrey selectElementWithMatcher:grey_text(kShortImgTitle)]
+      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:
+                      grey_accessibilityID(
+                          kContextMenuImagePreviewAccessibilityIdentifier)];
+
+  [ChromeEarlGrey verifyShareActionWithURL:shortTitleURL pageTitle:@"Image"];
+  // Ensure that UMA was logged correctly.
+  NSError* error = [MetricsAppInterface
+       expectCount:1
+         forBucket:13  // Number refering to
+                       // SharingScenario::ShareInWebContextMenu
+      forHistogram:@"Mobile.Share.EntryPoints"];
+  if (error) {
+    GREYFail([error description]);
+  }
+
+  error = [MetricsAppInterface
+       expectCount:1
+         forBucket:1  // success
+      forHistogram:@"IOS.ContextMenu.ImagePreviewDisplayed"];
+  if (error) {
+    GREYFail([error description]);
+  }
+}
+
 @end

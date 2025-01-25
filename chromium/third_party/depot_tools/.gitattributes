@@ -42,6 +42,9 @@
 /metadata/**       recipes
 /metadata/tests/** -recipes
 
+# Libraries for reuse between depot_tools and dependent repos
+/infra_lib                         recipes
+
 # TODO: There are some really junky dependencies in here that we should probably
 # move to vpython/cipd.
 /third_party/**     recipes

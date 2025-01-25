@@ -41,6 +41,8 @@
 #include "services/device/public/mojom/usb_device.mojom.h"
 #endif
 
+#include "ui/content/vivaldi_tab_check.h"
+
 namespace {
 
 using ::content::UsbChooser;
@@ -267,6 +269,10 @@ std::unique_ptr<UsbChooser> ChromeUsbDelegate::RunChooser(
 bool ChromeUsbDelegate::PageMayUseUsb(content::Page& page) {
   content::RenderFrameHost& main_rfh = page.GetMainDocument();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+  // Vivaldi can show permission prompts inside webviews showing tab-content.
+  // Added for VB-101499.
+  if (!VivaldiTabCheck::IsVivaldiTab(
+          content::WebContents::FromRenderFrameHost(&main_rfh))) {
   // WebViewGuests have no mechanism to show permission prompts and their
   // embedder can't grant USB access through its permissionrequest API. Also
   // since webviews use a separate StoragePartition, they must not gain access
@@ -274,6 +280,7 @@ bool ChromeUsbDelegate::PageMayUseUsb(content::Page& page) {
   if (extensions::WebViewGuest::FromRenderFrameHost(&main_rfh)) {
     return false;
   }
+  } // !IsVivaldiTab
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   // USB permissions are scoped to a BrowserContext instead of a

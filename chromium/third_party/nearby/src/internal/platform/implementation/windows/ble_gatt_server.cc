@@ -15,6 +15,7 @@
 #include "internal/platform/implementation/windows/ble_gatt_server.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <memory>
@@ -25,15 +26,21 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/log/check.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "absl/types/optional.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/implementation/ble_v2.h"
+#include "internal/platform/implementation/bluetooth_adapter.h"
+#include "internal/platform/implementation/windows/bluetooth_adapter.h"
 #include "internal/platform/implementation/windows/utils.h"
 #include "internal/platform/logging.h"
+#include "internal/platform/uuid.h"
 #include "winrt/Windows.Foundation.Collections.h"
 #include "winrt/Windows.Storage.Streams.h"
 #include "winrt/base.h"
@@ -81,6 +88,9 @@ using ::winrt::Windows::Storage::Streams::DataWriter;
 using Permission = api::ble_v2::GattCharacteristic::Permission;
 using Property = api::ble_v2::GattCharacteristic::Property;
 
+constexpr absl::Duration kGattServerTimeout = absl::Milliseconds(500);
+constexpr int kGattServerCheckIntervalInMills = 50;
+
 std::string ConvertGattStatusToString(
     GattServiceProviderAdvertisementStatus status) {
   switch (status) {
@@ -106,16 +116,19 @@ BleGattServer::BleGattServer(api::BluetoothAdapter* adapter,
                              api::ble_v2::ServerGattConnectionCallback callback)
     : adapter_(dynamic_cast<BluetoothAdapter*>(adapter)),
       peripheral_(adapter_->GetMacAddress()),
-      gatt_connection_callback_(std::move(callback)) {}
+      gatt_connection_callback_(std::move(callback)) {
+  DCHECK(adapter_ != nullptr);
+}
 
 absl::optional<api::ble_v2::GattCharacteristic>
 BleGattServer::CreateCharacteristic(
     const Uuid& service_uuid, const Uuid& characteristic_uuid,
     api::ble_v2::GattCharacteristic::Permission permission,
     api::ble_v2::GattCharacteristic::Property property) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": create characteristic, service_uuid: "
-                       << std::string(service_uuid) << ", characteristic_uuid: "
-                       << std::string(characteristic_uuid);
+  absl::MutexLock lock(&mutex_);
+  NEARBY_LOGS(INFO) << __func__ << ": create characteristic, service_uuid: "
+                    << std::string(service_uuid) << ", characteristic_uuid: "
+                    << std::string(characteristic_uuid);
 
   if (!service_uuid_.IsEmpty() && service_uuid_ != service_uuid) {
     NEARBY_LOGS(ERROR) << __func__
@@ -142,8 +155,9 @@ BleGattServer::CreateCharacteristic(
 bool BleGattServer::UpdateCharacteristic(
     const api::ble_v2::GattCharacteristic& characteristic,
     const nearby::ByteArray& value) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": update characteristic: "
-                       << std::string(characteristic.uuid);
+  absl::MutexLock lock(&mutex_);
+  NEARBY_LOGS(INFO) << __func__ << ": update characteristic: "
+                    << std::string(characteristic.uuid);
 
   if (characteristic.service_uuid != service_uuid_) {
     NEARBY_LOGS(ERROR) << __func__ << ": Cannot found the GATT service.";
@@ -152,8 +166,7 @@ bool BleGattServer::UpdateCharacteristic(
 
   for (auto& it : gatt_characteristic_datas_) {
     if (it.gatt_characteristic.uuid == characteristic.uuid) {
-      NEARBY_LOGS(VERBOSE) << __func__
-                           << ": Found the characteristic to update.";
+      NEARBY_VLOG(1) << __func__ << ": Found the characteristic to update.";
       it.data = value;
 
       // If it is in running, notify the value changed.
@@ -184,42 +197,51 @@ bool BleGattServer::UpdateCharacteristic(
 absl::Status BleGattServer::NotifyCharacteristicChanged(
     const api::ble_v2::GattCharacteristic& characteristic, bool confirm,
     const ByteArray& new_value) {
+  absl::MutexLock lock(&mutex_);
   // Currently, the method is not hooked up at platform layer.
-  NEARBY_LOGS(VERBOSE) << __func__ << ": Notify characteristic="
-                       << std::string(characteristic.uuid) << " changed.";
+  NEARBY_VLOG(1) << __func__ << ": Notify characteristic="
+                 << std::string(characteristic.uuid) << " changed.";
   return absl::OkStatus();
 }
 
 void BleGattServer::Stop() {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": Start to stop GATT server.";
-  try {
-    if (gatt_service_provider_ == nullptr) {
-      NEARBY_LOGS(WARNING) << __func__ << ": GATT server already stopped.";
-      return;
-    }
+  absl::AnyInvocable<void()> close_notifier = nullptr;
+  {
+    absl::MutexLock lock(&mutex_);
+    NEARBY_VLOG(1) << __func__ << ": Start to stop GATT server.";
+    if (gatt_service_provider_ != nullptr) {
+      try {
+        if (is_advertising_) {
+          gatt_service_provider_.StopAdvertising();
+        }
 
-    if (is_advertising_) {
-      gatt_service_provider_.StopAdvertising();
+        gatt_characteristic_datas_.clear();
+        service_uuid_ = Uuid();
+        gatt_service_provider_ = nullptr;
+      } catch (std::exception exception) {
+        NEARBY_LOGS(ERROR) << __func__ << ": Exception: " << exception.what();
+      } catch (const winrt::hresult_error& error) {
+        NEARBY_LOGS(ERROR) << __func__ << ": WinRT exception: " << error.code()
+                           << ": " << winrt::to_string(error.message());
+      } catch (...) {
+        NEARBY_LOGS(ERROR) << __func__ << ": Unknown exception.";
+      }
+    } else {
+      NEARBY_LOGS(WARNING) << __func__ << ": no GATT server is running.";
     }
+    close_notifier = std::move(close_notifier_);
+  }
 
-    gatt_characteristic_datas_.clear();
-    service_uuid_ = Uuid();
-    gatt_service_provider_ = nullptr;
-  } catch (std::exception exception) {
-    NEARBY_LOGS(ERROR) << __func__ << ": Exception: " << exception.what();
-  } catch (const winrt::hresult_error& error) {
-    NEARBY_LOGS(ERROR) << __func__ << ": WinRT exception: " << error.code()
-                       << ": " << winrt::to_string(error.message());
-  } catch (...) {
-    NEARBY_LOGS(ERROR) << __func__ << ": Unknown exception.";
+  if (close_notifier != nullptr) {
+    close_notifier();
   }
 }
 
 bool BleGattServer::InitializeGattServer() {
   try {
     // Create and advertise GATT service.
-    NEARBY_LOGS(VERBOSE) << __func__ << ": Create GATT service service_uuid="
-                         << std::string(service_uuid_);
+    NEARBY_VLOG(1) << __func__ << ": Create GATT service service_uuid="
+                   << std::string(service_uuid_);
 
     if (adapter_ == nullptr) {
       NEARBY_LOGS(ERROR) << __func__ << ": Bluetooth adapter is absent.";
@@ -235,6 +257,14 @@ bool BleGattServer::InitializeGattServer() {
       NEARBY_LOGS(ERROR) << __func__
                          << ": Bluetooth adapter does not support BLE, which "
                             "is needed to start GATT server.";
+      return false;
+    }
+
+    if (!adapter_->IsPeripheralRoleSupported()) {
+      NEARBY_LOGS(ERROR)
+          << __func__
+          << ": Bluetooth Hardware does not support Peripheral Role, which is "
+             "required to start GATT server.";
       return false;
     }
 
@@ -288,12 +318,10 @@ bool BleGattServer::InitializeGattServer() {
         is_notify_supported = true;
       }
 
-      NEARBY_LOGS(VERBOSE) << __func__
-                           << ": GATT characteristic properties: read="
-                           << is_read_supported
-                           << ",write=" << is_write_supported
-                           << ",indicate=" << is_indicate_supported
-                           << ",notify=" << is_notify_supported;
+      NEARBY_VLOG(1) << __func__ << ": GATT characteristic properties: read="
+                     << is_read_supported << ",write=" << is_write_supported
+                     << ",indicate=" << is_indicate_supported
+                     << ",notify=" << is_notify_supported;
 
       gatt_characteristic_parameters.CharacteristicProperties(properties);
       gatt_characteristic_parameters.WriteProtectionLevel(
@@ -302,10 +330,10 @@ bool BleGattServer::InitializeGattServer() {
       winrt::guid characteristic_uuid = nearby_uuid_to_winrt_guid(
           characteristic_data.gatt_characteristic.uuid);
 
-      NEARBY_LOGS(VERBOSE) << __func__
-                           << ": Create characteristic characteristic_uuid="
-                           << winrt::to_string(
-                                  winrt::to_hstring(characteristic_uuid));
+      NEARBY_VLOG(1) << __func__
+                     << ": Create characteristic characteristic_uuid="
+                     << winrt::to_string(
+                            winrt::to_hstring(characteristic_uuid));
 
       GattLocalCharacteristicResult result =
           gatt_service_provider_.Service()
@@ -324,9 +352,9 @@ bool BleGattServer::InitializeGattServer() {
 
       ::winrt::guid local_characteristic_guid =
           characteristic_data.local_characteristic.Uuid();
-      NEARBY_LOGS(VERBOSE) << __func__ << ": Local GATT characteristic. uuid: "
-                           << winrt::to_string(
-                                  winrt::to_hstring(local_characteristic_guid));
+      NEARBY_VLOG(1) << __func__ << ": Local GATT characteristic. uuid: "
+                     << winrt::to_string(
+                            winrt::to_hstring(local_characteristic_guid));
 
       // Setup gatt local characteristic events.
       if (is_read_supported) {
@@ -373,10 +401,12 @@ bool BleGattServer::InitializeGattServer() {
 
 bool BleGattServer::StartAdvertisement(const ByteArray& service_data,
                                        bool is_connectable) {
+  absl::MutexLock lock(&mutex_);
+
   try {
-    NEARBY_LOGS(VERBOSE) << __func__ << ": service_data="
-                         << absl::BytesToHexString(service_data.AsStringView())
-                         << ", is_connectable=" << is_connectable;
+    NEARBY_VLOG(1) << __func__ << ": service_data="
+                   << absl::BytesToHexString(service_data.AsStringView())
+                   << ", is_connectable=" << is_connectable;
 
     if (is_advertising_) {
       NEARBY_LOGS(ERROR) << ": GATT server is already in advertising.";
@@ -385,13 +415,11 @@ bool BleGattServer::StartAdvertisement(const ByteArray& service_data,
 
     if (!is_gatt_server_inited_ && !InitializeGattServer()) {
       NEARBY_LOGS(ERROR) << ":Failed to initalize GATT service.";
-      is_advertising_ = false;
       return false;
     }
 
     if (gatt_service_provider_ == nullptr) {
       NEARBY_LOGS(WARNING) << __func__ << ": no GATT server is running.";
-      is_advertising_ = false;
       return false;
     }
 
@@ -399,20 +427,8 @@ bool BleGattServer::StartAdvertisement(const ByteArray& service_data,
         GattServiceProviderAdvertisementStatus::Started) {
       NEARBY_LOGS(WARNING) << __func__
                            << ": GATT server is already in advertising.";
-      is_advertising_ = true;
       return false;
     }
-
-    if (!adapter_->IsPeripheralRoleSupported()) {
-      NEARBY_LOGS(ERROR)
-          << __func__
-          << ": Bluetooth Hardware does not support Peripheral Role, which is "
-             "required to start GATT server.";
-      is_advertising_ = false;
-      return false;
-    }
-
-    is_advertising_ = true;
 
     // Start the GATT server advertising
     GattServiceProviderAdvertisingParameters advertisement_parameters;
@@ -427,6 +443,21 @@ bool BleGattServer::StartAdvertisement(const ByteArray& service_data,
     advertisement_parameters.ServiceData(data_writer.DetachBuffer());
 
     gatt_service_provider_.StartAdvertising(advertisement_parameters);
+
+    // Wait for the advertising to start.
+    int wait_milliseconds = 0;
+    while (gatt_service_provider_.AdvertisementStatus() !=
+           GattServiceProviderAdvertisementStatus::Started) {
+      absl::SleepFor(absl::Milliseconds(kGattServerCheckIntervalInMills));
+      wait_milliseconds += kGattServerCheckIntervalInMills;
+      if (absl::Milliseconds(wait_milliseconds) > kGattServerTimeout) {
+        NEARBY_LOGS(ERROR)
+            << __func__ << ": Failed to start GATT advertising due to timeout.";
+        return false;
+      }
+    }
+
+    is_advertising_ = true;
     NEARBY_LOGS(INFO) << __func__ << ": GATT server started.";
 
     return true;
@@ -445,6 +476,8 @@ bool BleGattServer::StartAdvertisement(const ByteArray& service_data,
 }
 
 bool BleGattServer::StopAdvertisement() {
+  absl::MutexLock lock(&mutex_);
+
   try {
     NEARBY_LOGS(INFO) << __func__ << ": stop advertisement.";
 
@@ -467,6 +500,11 @@ bool BleGattServer::StopAdvertisement() {
     }
 
     gatt_service_provider_.StopAdvertising();
+
+    // Don't wait for the advertising to stop, because the advertisement status
+    // cannot back to stopped. Based on the observation, the advertisement
+    // status is stopped after the stop advertising is called.
+
     is_advertising_ = false;
     NEARBY_LOGS(INFO) << __func__ << ": GATT server stopped.";
     return true;
@@ -482,14 +520,19 @@ bool BleGattServer::StopAdvertisement() {
   return false;
 }
 
+void BleGattServer::SetCloseNotifier(absl::AnyInvocable<void()> notifier) {
+  absl::MutexLock lock(&mutex_);
+  close_notifier_ = std::move(notifier);
+}
+
 ::winrt::fire_and_forget BleGattServer::Characteristic_ReadRequestedAsync(
     ::winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::
         GattLocalCharacteristic const& gatt_local_characteristic,
     ::winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::
         GattReadRequestedEventArgs args) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": Read characteristic. uuid: "
-                       << winrt::to_string(winrt::to_hstring(
-                              gatt_local_characteristic.Uuid()));
+  NEARBY_LOGS(INFO) << __func__ << ": Read characteristic. uuid: "
+                    << winrt::to_string(
+                           winrt::to_hstring(gatt_local_characteristic.Uuid()));
 
   auto deferral = args.GetDeferral();
 
@@ -520,7 +563,7 @@ bool BleGattServer::StopAdvertisement() {
     request.RespondWithValue(buffer);
     deferral.Complete();
 
-    NEARBY_LOGS(VERBOSE) << __func__ << ": Sent data to remote device.";
+    NEARBY_VLOG(1) << __func__ << ": Sent data to remote device.";
     return {};
   } catch (std::exception exception) {
     NEARBY_LOGS(ERROR) << __func__ << ": Exception: " << exception.what();
@@ -542,7 +585,7 @@ bool BleGattServer::StopAdvertisement() {
         GattLocalCharacteristic const& gatt_local_characteristic,
     ::winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::
         GattWriteRequestedEventArgs args) {
-  // In Nearby Connctions, don't support write charaterisctics right now.
+  // In Nearby Connections, don't support write characteristics right now.
   throw std::logic_error("Not implemented.");
 }
 
@@ -550,10 +593,10 @@ void BleGattServer::Characteristic_SubscribedClientsChanged(
     ::winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::
         GattLocalCharacteristic const& gatt_local_characteristic,
     ::winrt::Windows::Foundation::IInspectable const& args) {
-  NEARBY_LOGS(VERBOSE) << __func__
-                       << ": Subscribed clients changed. characteristic="
-                       << ::winrt::to_string(::winrt::to_hstring(
-                              gatt_local_characteristic.Uuid()));
+  NEARBY_LOGS(INFO) << __func__
+                    << ": Subscribed clients changed. characteristic="
+                    << ::winrt::to_string(::winrt::to_hstring(
+                           gatt_local_characteristic.Uuid()));
 
   try {
     std::vector<api::ble_v2::GattCharacteristic>
@@ -637,8 +680,9 @@ void BleGattServer::ServiceProvider_AdvertisementStatusChanged(
         GattServiceProvider const& sender,
     ::winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::
         GattServiceProviderAdvertisementStatusChangedEventArgs const& args) {
-  NEARBY_LOGS(VERBOSE) << __func__ << ": Advertisement status changed. status="
-                       << ConvertGattStatusToString(args.Status());
+  NEARBY_LOGS(INFO) << __func__ << ": Advertisement status changed. status="
+                    << ConvertGattStatusToString(args.Status())
+                    << ", error=" << static_cast<int>(args.Error());
 }
 
 void BleGattServer::NotifyValueChanged(

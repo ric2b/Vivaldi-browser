@@ -15,9 +15,9 @@
 #include "core/fxcrt/check_op.h"
 #include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
-#include "core/fxcrt/notreached.h"
 #include "core/fxcrt/numerics/checked_math.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
+#include "fpdfsdk/cpdfsdk_helpers.h"
 #include "public/cpp/fpdf_scopers.h"
 #include "public/fpdf_dataavail.h"
 #include "public/fpdf_edit.h"
@@ -596,7 +596,9 @@ ScopedFPDFBitmap EmbedderTest::RenderPageWithFlags(FPDF_PAGE page,
   int alpha = FPDFPage_HasTransparency(page) ? 1 : 0;
   ScopedFPDFBitmap bitmap(FPDFBitmap_Create(width, height, alpha));
   FPDF_DWORD fill_color = alpha ? 0x00000000 : 0xFFFFFFFF;
-  FPDFBitmap_FillRect(bitmap.get(), 0, 0, width, height, fill_color);
+  if (!FPDFBitmap_FillRect(bitmap.get(), 0, 0, width, height, fill_color)) {
+    return nullptr;
+  }
   FPDF_RenderPageBitmap(bitmap.get(), page, 0, 0, width, height, 0, flags);
   FPDF_FFLDraw(handle, bitmap.get(), page, 0, 0, width, height, 0, flags);
   return bitmap;
@@ -676,17 +678,9 @@ FPDF_DOCUMENT EmbedderTest::OpenSavedDocument() {
 
 // static
 int EmbedderTest::BytesPerPixelForFormat(int format) {
-  switch (format) {
-    case FPDFBitmap_Gray:
-      return 1;
-    case FPDFBitmap_BGR:
-      return 3;
-    case FPDFBitmap_BGRx:
-    case FPDFBitmap_BGRA:
-      return 4;
-    default:
-      NOTREACHED_NORETURN();
-  }
+  FXDIB_Format fx_format = FXDIBFormatFromFPDFFormat(format);
+  CHECK_NE(fx_format, FXDIB_Format::kInvalid);
+  return GetCompsFromFormat(fx_format);
 }
 
 FPDF_DOCUMENT EmbedderTest::OpenSavedDocumentWithPassword(
@@ -899,6 +893,20 @@ EmbedderTest::ScopedEmbedderTestPage::ScopedEmbedderTestPage(EmbedderTest* test,
                                                              int page_index)
     : test_(test), page_(test->LoadPage(page_index)) {}
 
+EmbedderTest::ScopedEmbedderTestPage::ScopedEmbedderTestPage(
+    EmbedderTest::ScopedEmbedderTestPage&& that) noexcept
+    : test_(std::move(that.test_)), page_(std::exchange(that.page_, nullptr)) {}
+
+EmbedderTest::ScopedEmbedderTestPage&
+EmbedderTest::ScopedEmbedderTestPage::operator=(
+    EmbedderTest::ScopedEmbedderTestPage&& that) noexcept {
+  test_ = std::move(that.test_);
+  page_ = std::exchange(that.page_, nullptr);
+  return *this;
+}
+
 EmbedderTest::ScopedEmbedderTestPage::~ScopedEmbedderTestPage() {
-  test_->UnloadPage(page_);
+  if (page_) {
+    test_->UnloadPage(page_);
+  }
 }

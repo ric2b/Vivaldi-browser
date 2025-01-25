@@ -32,7 +32,6 @@ class VivaldiLocationBar : public LocationBar {
   void SaveStateToContents(content::WebContents* contents) override {}
   void Revert() override {}
 
-  const OmniboxView* GetOmniboxView() const override;
   OmniboxView* GetOmniboxView() override;
 
   content::WebContents* GetWebContents() override;

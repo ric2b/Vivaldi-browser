@@ -48,9 +48,11 @@ class PinTextfield : public views::Textfield {
   void OnThemeChanged() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
- private:
-  void UpdateAccessibleTextSelection();
+ protected:
+  // views::Textfield:
+  void UpdateAccessibleTextSelection() override;
 
+ private:
   // Returns true for the first empty cell or the last cell when the full pin is
   // typed (when the whole view has focus).
   bool HasCellFocus(int cell) const;
@@ -58,6 +60,9 @@ class PinTextfield : public views::Textfield {
   // Updates the current selection and notifies that it changed along with the
   // pin value.
   void UpdateAccessibilityAfterPinChange();
+
+  // Updates text color based on the current state of `disabled_`.
+  void UpdateTextColor();
 
   // Render text for each of the pin cells.
   std::vector<std::unique_ptr<gfx::RenderText>> render_texts_;

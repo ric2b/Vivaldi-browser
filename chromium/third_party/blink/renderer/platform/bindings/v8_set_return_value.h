@@ -326,7 +326,7 @@ void V8SetReturnValue(const CallbackInfo& info,
                       const ScriptWrappable* value,
                       V8ReturnValue::MainWorld) {
   DCHECK(DOMWrapperWorld::Current(info.GetIsolate()).IsMainWorld());
-  if (UNLIKELY(!value)) {
+  if (!value) [[unlikely]] {
     info.GetReturnValue().SetNull();
     return;
   }
@@ -337,7 +337,8 @@ void V8SetReturnValue(const CallbackInfo& info,
   }
   V8ReturnValue::SetWrapper(
       info, wrappable,
-      V8ReturnValue::GetReceiver(info)->GetCreationContextChecked());
+      V8ReturnValue::GetReceiver(info)->GetCreationContextChecked(
+          info.GetIsolate()));
 }
 
 template <FunctionCallbackInfoOrPropertyCallbackInfo CallbackInfo>
@@ -352,15 +353,17 @@ void V8SetReturnValue(const CallbackInfo& info,
   }
   V8ReturnValue::SetWrapper(
       info, wrappable,
-      V8ReturnValue::GetReceiver(info)->GetCreationContextChecked());
+      V8ReturnValue::GetReceiver(info)->GetCreationContextChecked(
+          info.GetIsolate()));
 }
 
 template <FunctionCallbackInfoOrPropertyCallbackInfo CallbackInfo>
 void V8SetReturnValue(const CallbackInfo& info,
                       const ScriptWrappable* value,
                       const ScriptWrappable* receiver) {
-  if (UNLIKELY(!value))
+  if (!value) [[unlikely]] {
     return info.GetReturnValue().SetNull();
+  }
   ScriptWrappable* wrappable = const_cast<ScriptWrappable*>(value);
   if (DOMDataStore::SetReturnValueFast(info.GetReturnValue(), wrappable,
                                        V8ReturnValue::GetReceiver(info),
@@ -369,7 +372,8 @@ void V8SetReturnValue(const CallbackInfo& info,
   }
   V8ReturnValue::SetWrapper(
       info, wrappable,
-      V8ReturnValue::GetReceiver(info)->GetCreationContextChecked());
+      V8ReturnValue::GetReceiver(info)->GetCreationContextChecked(
+          info.GetIsolate()));
 }
 
 template <FunctionCallbackInfoOrPropertyCallbackInfo CallbackInfo>
@@ -384,7 +388,8 @@ void V8SetReturnValue(const CallbackInfo& info,
   }
   V8ReturnValue::SetWrapper(
       info, wrappable,
-      V8ReturnValue::GetReceiver(info)->GetCreationContextChecked());
+      V8ReturnValue::GetReceiver(info)->GetCreationContextChecked(
+          info.GetIsolate()));
 }
 
 template <FunctionCallbackInfoOrPropertyCallbackInfo CallbackInfo>
@@ -392,8 +397,9 @@ void V8SetReturnValue(const CallbackInfo& info,
                       const ScriptWrappable* value,
                       const ScriptWrappable* receiver,
                       V8ReturnValue::MaybeCrossOrigin) {
-  if (UNLIKELY(!value))
+  if (!value) [[unlikely]] {
     return info.GetReturnValue().SetNull();
+  }
   ScriptWrappable* wrappable = const_cast<ScriptWrappable*>(value);
   if (DOMDataStore::SetReturnValueFast(info.GetReturnValue(), wrappable,
                                        V8ReturnValue::GetReceiver(info),
@@ -453,8 +459,9 @@ template <FunctionCallbackInfoOrPropertyCallbackInfo CallbackInfo>
 void V8SetReturnValue(const CallbackInfo& info,
                       const ScriptWrappable* value,
                       v8::Local<v8::Context> creation_context) {
-  if (UNLIKELY(!value))
+  if (!value) [[unlikely]] {
     return info.GetReturnValue().SetNull();
+  }
   ScriptWrappable* wrappable = const_cast<ScriptWrappable*>(value);
   if (DOMDataStore::SetReturnValue(info.GetReturnValue(), wrappable))
     return;

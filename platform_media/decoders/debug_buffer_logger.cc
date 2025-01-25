@@ -45,7 +45,7 @@ void DebugBufferLogger::Log(const DecoderBuffer& buffer) {
   base::WriteFile(
       log_directory_.AppendASCII(
           base::NumberToString(buffer.timestamp().InMilliseconds())),
-      reinterpret_cast<const char*>(buffer.data()), buffer.size());
+      buffer);
 #endif  // NDEBUG
 }
 

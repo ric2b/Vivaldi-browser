@@ -6,6 +6,7 @@
 
 #include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/fake_video_source_provider.h"
+#include "ash/public/cpp/ash_web_view_factory.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/files/file_util.h"
@@ -117,7 +118,9 @@ void TestCaptureModeDelegate::StopObservingRestrictedContent(
 }
 
 void TestCaptureModeDelegate::OnCaptureImageAttempted(aura::Window const*,
-                                                      gfx::Rect const&) {}
+                                                      gfx::Rect const&) {
+  ++num_capture_image_attempts_;
+}
 
 mojo::Remote<recording::mojom::RecordingService>
 TestCaptureModeDelegate::LaunchRecordingService() {
@@ -200,13 +203,20 @@ void TestCaptureModeDelegate::NotifyDeviceUsedWhileDisabled(
 
 void TestCaptureModeDelegate::FinalizeSavedFile(
     base::OnceCallback<void(bool, const base::FilePath&)> callback,
-    const base::FilePath& path) {
+    const base::FilePath& path,
+    const gfx::Image& thumbnail) {
   std::move(callback).Run(/*success=*/true, path);
 }
 
 base::FilePath TestCaptureModeDelegate::RedirectFilePath(
     const base::FilePath& path) {
   return path;
+}
+
+std::unique_ptr<AshWebView> TestCaptureModeDelegate::CreateSearchResultsView()
+    const {
+  // In ash unit and pixel tests we only need an `AshWebView` instance.
+  return AshWebViewFactory::Get()->Create(AshWebView::InitParams());
 }
 
 }  // namespace ash

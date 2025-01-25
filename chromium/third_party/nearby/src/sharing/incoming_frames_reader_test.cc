@@ -24,9 +24,11 @@
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "internal/test/fake_clock.h"
+#include "internal/test/fake_device_info.h"
 #include "internal/test/fake_task_runner.h"
-#include "sharing/fake_nearby_connection.h"
-#include "sharing/nearby_sharing_decoder_impl.h"
+#include "sharing/fake_nearby_connections_manager.h"
+#include "sharing/internal/public/logging.h"
+#include "sharing/nearby_connection_impl.h"
 #include "sharing/proto/wire_format.pb.h"
 
 namespace nearby {
@@ -80,16 +82,22 @@ std::optional<std::vector<uint8_t>> GetInvalidFrame() {
 
 class IncomingFramesReaderTest : public testing::Test {
  public:
-  IncomingFramesReaderTest() = default;
+  IncomingFramesReaderTest() {
+    nearby_connection_ = std::make_unique<NearbyConnectionImpl>(
+        fake_device_info_, &fake_nearby_connections_manager_, "endpoint_id");
+  }
   ~IncomingFramesReaderTest() override = default;
 
   void SetUp() override {
     FakeTaskRunner::ResetPendingTasksCount();
     frames_reader_ = std::make_shared<IncomingFramesReader>(
-        fake_task_runner_, nearby_sharing_decoder_, &fake_nearby_connection_);
+        fake_task_runner_, nearby_connection_.get());
   }
 
-  FakeNearbyConnection& connection() { return fake_nearby_connection_; }
+  NearbyConnectionImpl& connection() {
+    NL_CHECK(nearby_connection_);
+    return *nearby_connection_;
+  }
 
   IncomingFramesReader* frames_reader() { return frames_reader_.get(); }
 
@@ -102,12 +110,16 @@ class IncomingFramesReaderTest : public testing::Test {
   }
 
   void ReleaseFrameReader() { frames_reader_.reset(); }
+  void CloseConnection() {
+    nearby_connection_ = nullptr;
+  }
 
  private:
   FakeClock fake_clock_;
   FakeTaskRunner fake_task_runner_ {&fake_clock_, 1};
-  FakeNearbyConnection fake_nearby_connection_;
-  NearbySharingDecoderImpl nearby_sharing_decoder_;
+  FakeDeviceInfo fake_device_info_;
+  FakeNearbyConnectionsManager fake_nearby_connections_manager_;
+  std::unique_ptr<NearbyConnectionImpl> nearby_connection_;
   std::shared_ptr<IncomingFramesReader> frames_reader_ = nullptr;
 };
 
@@ -123,18 +135,13 @@ TEST_F(IncomingFramesReaderTest, ReadTimedOut) {
   Sync();
   FastForward(kTimeout);
   EXPECT_TRUE(notification.WaitForNotificationWithTimeout(kTimeout));
-  // Ensure that the OnDataReadFromConnection callback is not run since the
-  // read timed out.
-  EXPECT_FALSE(connection().has_read_callback_been_run());
-  // Ensure that the IncomingFramesReader does not close the connection.
-  EXPECT_FALSE(connection().IsClosed());
 }
 
 TEST_F(IncomingFramesReaderTest, ReadAnyFrameSuccessful) {
   std::optional<std::vector<uint8_t>> introduction_frame =
       GetIntroductionFrame();
   ASSERT_TRUE(introduction_frame.has_value());
-  connection().AppendReadableData(*introduction_frame);
+  connection().WriteMessage(*introduction_frame);
 
   absl::Notification notification;
   frames_reader()->ReadFrame([&](std::optional<V1Frame> frame) {
@@ -148,7 +155,7 @@ TEST_F(IncomingFramesReaderTest, ReadSuccessful) {
   std::optional<std::vector<uint8_t>> introduction_frame =
       GetIntroductionFrame();
   ASSERT_TRUE(introduction_frame.has_value());
-  connection().AppendReadableData(*introduction_frame);
+  connection().WriteMessage(*introduction_frame);
 
   absl::Notification notification;
   frames_reader()->ReadFrame(
@@ -164,12 +171,12 @@ TEST_F(IncomingFramesReaderTest, ReadSuccessful) {
 TEST_F(IncomingFramesReaderTest, ReadSuccessful_JumbledFramesOrdering) {
   std::optional<std::vector<uint8_t>> cancel_frame = GetCancelFrame();
   ASSERT_TRUE(cancel_frame.has_value());
-  connection().AppendReadableData(*cancel_frame);
+  connection().WriteMessage(*cancel_frame);
 
   std::optional<std::vector<uint8_t>> introduction_frame =
       GetIntroductionFrame();
   ASSERT_TRUE(introduction_frame.has_value());
-  connection().AppendReadableData(*introduction_frame);
+  connection().WriteMessage(*introduction_frame);
 
   absl::Notification notification;
   frames_reader()->ReadFrame(
@@ -185,12 +192,12 @@ TEST_F(IncomingFramesReaderTest, ReadSuccessful_JumbledFramesOrdering) {
 TEST_F(IncomingFramesReaderTest, JumbledFramesOrdering_ReadFromCache) {
   std::optional<std::vector<uint8_t>> cancel_frame = GetCancelFrame();
   ASSERT_TRUE(cancel_frame.has_value());
-  connection().AppendReadableData(*cancel_frame);
+  connection().WriteMessage(*cancel_frame);
 
   std::optional<std::vector<uint8_t>> introduction_frame =
       GetIntroductionFrame();
   ASSERT_TRUE(introduction_frame.has_value());
-  connection().AppendReadableData(*introduction_frame);
+  connection().WriteMessage(*introduction_frame);
 
   absl::Notification notification;
   frames_reader()->ReadFrame(
@@ -222,7 +229,7 @@ TEST_F(IncomingFramesReaderTest, ReadAfterConnectionClosed) {
       },
       kTimeout);
   Sync();
-  connection().Close();
+  CloseConnection();
   EXPECT_TRUE(notification.WaitForNotificationWithTimeout(kTimeout));
 }
 
@@ -244,12 +251,12 @@ TEST_F(IncomingFramesReaderTest, ReadTwoFramesWithTimeoutSuccessfully) {
 
   std::optional<std::vector<uint8_t>> cancel_frame = GetCancelFrame();
   ASSERT_TRUE(cancel_frame.has_value());
-  connection().AppendReadableData(*cancel_frame);
+  connection().WriteMessage(*cancel_frame);
 
   std::optional<std::vector<uint8_t>> introduction_frame =
       GetIntroductionFrame();
   ASSERT_TRUE(introduction_frame.has_value());
-  connection().AppendReadableData(*introduction_frame);
+  connection().WriteMessage(*introduction_frame);
 
   Sync();
   EXPECT_TRUE(notification.WaitForNotificationWithTimeout(kTimeout));
@@ -268,11 +275,11 @@ TEST_F(IncomingFramesReaderTest, ReadTwoFramesWithoutTimeoutSuccessfully) {
   std::optional<std::vector<uint8_t>> introduction_frame =
       GetIntroductionFrame();
   ASSERT_TRUE(introduction_frame.has_value());
-  connection().AppendReadableData(*introduction_frame);
+  connection().WriteMessage(*introduction_frame);
 
   std::optional<std::vector<uint8_t>> cancel_frame = GetCancelFrame();
   ASSERT_TRUE(cancel_frame.has_value());
-  connection().AppendReadableData(*cancel_frame);
+  connection().WriteMessage(*cancel_frame);
 
   Sync();
   EXPECT_TRUE(notification.WaitForNotificationWithTimeout(kTimeout));
@@ -300,7 +307,7 @@ TEST_F(IncomingFramesReaderTest, ReadInvalidFrame) {
 
   std::optional<std::vector<uint8_t>> invalid_frame = GetInvalidFrame();
   ASSERT_TRUE(invalid_frame.has_value());
-  connection().AppendReadableData(*invalid_frame);
+  connection().WriteMessage(*invalid_frame);
 
   Sync();
   EXPECT_TRUE(notification.WaitForNotificationWithTimeout(kTimeout));

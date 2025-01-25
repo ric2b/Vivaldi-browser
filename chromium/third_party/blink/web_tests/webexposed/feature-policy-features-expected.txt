@@ -54,11 +54,13 @@ join-ad-interest-group
 keyboard-map
 local-fonts
 magnetometer
+media-playback-while-not-visible
 microphone
 midi
 otp-credentials
 payment
 picture-in-picture
+popins
 private-aggregation
 private-state-token-issuance
 private-state-token-redemption
@@ -76,6 +78,7 @@ sync-xhr
 unload
 usb
 vertical-scroll
+web-app-installation
 window-management
 xr-spatial-tracking
 

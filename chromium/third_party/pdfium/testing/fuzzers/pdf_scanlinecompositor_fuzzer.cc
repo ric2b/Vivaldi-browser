@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "core/fxcrt/fx_safe_types.h"
-#include "core/fxge/cfx_cliprgn.h"
+#include "core/fxge/agg/cfx_agg_cliprgn.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/fx_dib.h"
 #include "testing/fuzzers/pdfium_fuzzer_util.h"
@@ -20,13 +20,13 @@ constexpr FXDIB_Format kFormat[] = {
     FXDIB_Format::kInvalid,
     FXDIB_Format::k1bppRgb,
     FXDIB_Format::k8bppRgb,
-    FXDIB_Format::kRgb,
-    FXDIB_Format::kRgb32,
+    FXDIB_Format::kBgr,
+    FXDIB_Format::kBgrx,
     FXDIB_Format::k1bppMask,
     FXDIB_Format::k8bppMask,
     FXDIB_Format::kInvalid /* Was FXDIB_Format::k8bppRgba */,
-    FXDIB_Format::kInvalid /* Was FXDIB_Format::kRgba */,
-    FXDIB_Format::kArgb,
+    FXDIB_Format::kInvalid /* Was FXDIB_Format::kBgra */,
+    FXDIB_Format::kBgra,
     FXDIB_Format::kInvalid /* Was FXDIB_Format::k1bppCmyk */,
     FXDIB_Format::kInvalid /* Was FXDIB_Format::k8bppCmyk */,
     FXDIB_Format::kInvalid /* Was FXDIB_Format::kCmyk */,
@@ -75,9 +75,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return 0;
   }
 
-  std::unique_ptr<CFX_ClipRgn> clip_rgn;
+  std::unique_ptr<CFX_AggClipRgn> clip_rgn;
   if (is_clip)
-    clip_rgn = std::make_unique<CFX_ClipRgn>(width, height);
+    clip_rgn = std::make_unique<CFX_AggClipRgn>(width, height);
   if (src_bitmap->IsMaskFormat()) {
     dest_bitmap->CompositeMask(dest_left, dest_top, width, height,
                                std::move(src_bitmap), argb, src_left, src_top,

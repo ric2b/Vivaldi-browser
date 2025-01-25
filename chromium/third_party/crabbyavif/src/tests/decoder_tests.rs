@@ -277,8 +277,8 @@ fn color_grid_gainmap_different_grid() {
     assert_eq!(decoder.gainmap().image.width, 64 * 2);
     assert_eq!(decoder.gainmap().image.height, 80 * 2);
     assert_eq!(decoder.gainmap().image.depth, 8);
-    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.0, 6);
-    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.1, 2);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 6);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.1, 2);
     if !HAS_DECODER {
         return;
     }
@@ -304,8 +304,8 @@ fn color_grid_alpha_grid_gainmap_nogrid() {
     assert_eq!(decoder.gainmap().image.width, 64);
     assert_eq!(decoder.gainmap().image.height, 80);
     assert_eq!(decoder.gainmap().image.depth, 8);
-    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.0, 6);
-    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.1, 2);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 6);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.1, 2);
     if !HAS_DECODER {
         return;
     }
@@ -331,13 +331,108 @@ fn color_nogrid_alpha_nogrid_gainmap_grid() {
     assert_eq!(decoder.gainmap().image.width, 64 * 2);
     assert_eq!(decoder.gainmap().image.height, 80 * 2);
     assert_eq!(decoder.gainmap().image.depth, 8);
-    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.0, 6);
-    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.1, 2);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 6);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.1, 2);
     if !HAS_DECODER {
         return;
     }
     let res = decoder.next_image();
     assert!(res.is_ok());
+}
+
+// From avifgainmaptest.cc
+#[test]
+fn gainmap_oriented() {
+    let mut decoder = get_decoder("gainmap_oriented.avif");
+    decoder.settings.enable_decoding_gainmap = true;
+    decoder.settings.enable_parsing_gainmap_metadata = true;
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    let image = decoder.image().expect("image was none");
+    assert_eq!(image.irot_angle, Some(1));
+    assert_eq!(image.imir_axis, Some(0));
+    assert!(decoder.gainmap_present());
+    assert_eq!(decoder.gainmap().image.irot_angle, None);
+    assert_eq!(decoder.gainmap().image.imir_axis, None);
+}
+
+// The two test files should produce the same results:
+// One has an unsupported 'version' field, the other an unsupported
+// 'minimum_version' field, but the behavior of these two files is the same.
+// From avifgainmaptest.cc
+#[test_case::test_case("unsupported_gainmap_version.avif")]
+#[test_case::test_case("unsupported_gainmap_minimum_version.avif")]
+fn decode_unsupported_version(filename: &str) {
+    // Parse with various enable_decoding_gainmap and
+    // enable_parsing_gainmap_metadata settings.
+    let mut decoder = get_decoder(filename);
+    decoder.settings.enable_decoding_gainmap = false;
+    decoder.settings.enable_parsing_gainmap_metadata = false;
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    // Gain map not found since enable_parsing_gainmap_metadata is false.
+    assert!(!decoder.gainmap_present());
+    assert_eq!(decoder.gainmap().image.width, 0);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 0);
+    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.0, 0);
+
+    decoder = get_decoder(filename);
+    decoder.settings.enable_decoding_gainmap = false;
+    decoder.settings.enable_parsing_gainmap_metadata = true;
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    // Gain map marked as not present because the metadata is not supported.
+    assert!(!decoder.gainmap_present());
+    assert_eq!(decoder.gainmap().image.width, 0);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 0);
+    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.0, 0);
+
+    decoder = get_decoder(filename);
+    decoder.settings.enable_decoding_gainmap = true;
+    decoder.settings.enable_parsing_gainmap_metadata = false;
+    let res = decoder.parse();
+    // Invalid enableDecodingGainMap=true and enable_parsing_gainmap_metadata
+    // combination.
+    assert_eq!(res.err(), Some(AvifError::InvalidArgument));
+
+    decoder = get_decoder(filename);
+    decoder.settings.enable_decoding_gainmap = true;
+    decoder.settings.enable_parsing_gainmap_metadata = true;
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    // Gainmap not found: its metadata is not supported.
+    assert!(!decoder.gainmap_present());
+    assert_eq!(decoder.gainmap().image.width, 0);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 0);
+    assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.0, 0);
+}
+
+// From avifgainmaptest.cc
+#[test]
+fn decode_unsupported_writer_version_with_extra_bytes() {
+    let mut decoder = get_decoder("unsupported_gainmap_writer_version_with_extra_bytes.avif");
+    decoder.settings.enable_decoding_gainmap = false;
+    decoder.settings.enable_parsing_gainmap_metadata = true;
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    // Decodes successfully: there are extra bytes at the end of the gain map
+    // metadata but that's expected as the writer_version field is higher
+    // that supported.
+    assert!(decoder.gainmap_present());
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 6);
+    assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.1, 2);
+}
+
+// From avifgainmaptest.cc
+#[test]
+fn decode_supported_writer_version_with_extra_bytes() {
+    let mut decoder = get_decoder("supported_gainmap_writer_version_with_extra_bytes.avif");
+    decoder.settings.enable_decoding_gainmap = false;
+    decoder.settings.enable_parsing_gainmap_metadata = true;
+    let res = decoder.parse();
+    // Fails to decode: there are extra bytes at the end of the gain map metadata
+    // that shouldn't be there.
+    assert!(matches!(res, Err(AvifError::InvalidToneMappedImage(_))));
 }
 
 // From avifcllitest.cc
@@ -372,9 +467,11 @@ fn raw_io() {
     let data =
         std::fs::read(get_test_file("colors-animated-8bpc.avif")).expect("Unable to read file");
     let mut decoder = decoder::Decoder::default();
-    let _ = decoder
-        .set_io_raw(data.as_ptr(), data.len())
-        .expect("Failed to set IO");
+    let _ = unsafe {
+        decoder
+            .set_io_raw(data.as_ptr(), data.len())
+            .expect("Failed to set IO")
+    };
     assert!(decoder.parse().is_ok());
     assert_eq!(decoder.image_count(), 5);
     if !HAS_DECODER {
@@ -712,4 +809,44 @@ fn white_1x1_ftyp_size0() -> AvifResult<()> {
         Err(AvifError::BmffParseFailed(_))
     ));
     Ok(())
+}
+
+#[test]
+fn dimg_repetition() {
+    let mut decoder = get_decoder("sofa_grid1x5_420_dimg_repeat.avif");
+    assert_eq!(
+        decoder.parse(),
+        Err(AvifError::BmffParseFailed(
+            "multiple dimg references for item ID 1".into()
+        ))
+    );
+}
+
+#[test]
+fn dimg_shared() {
+    let mut decoder = get_decoder("color_grid_alpha_grid_tile_shared_in_dimg.avif");
+    assert_eq!(decoder.parse(), Err(AvifError::NotImplemented));
+}
+
+#[test]
+fn dimg_ordering() {
+    if !HAS_DECODER {
+        return;
+    }
+    let mut decoder1 = get_decoder("sofa_grid1x5_420.avif");
+    let res = decoder1.parse();
+    assert!(res.is_ok());
+    let res = decoder1.next_image();
+    assert!(res.is_ok());
+    let mut decoder2 = get_decoder("sofa_grid1x5_420_random_dimg_order.avif");
+    let res = decoder2.parse();
+    assert!(res.is_ok());
+    let res = decoder2.next_image();
+    assert!(res.is_ok());
+    let image1 = decoder1.image().expect("image1 was none");
+    let image2 = decoder2.image().expect("image2 was none");
+    // Ensure that the pixels in image1 and image2 are not the same.
+    let row1 = image1.row(Plane::Y, 0).expect("row1 was none");
+    let row2 = image2.row(Plane::Y, 0).expect("row2 was none");
+    assert_ne!(row1, row2);
 }

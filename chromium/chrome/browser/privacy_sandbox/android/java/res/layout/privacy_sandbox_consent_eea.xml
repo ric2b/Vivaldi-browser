@@ -162,7 +162,7 @@ found in the LICENSE file.
             android:drawableEnd="@drawable/ic_arrow_down"
             android:drawableTint="?attr/globalFilledButtonTextColor"
             android:drawablePadding="@dimen/privacy_sandbox_more_button_drawable_padding"
-            style="@style/FilledButton.Flat" />
+            style="@style/FilledButton" />
 
         <LinearLayout
             android:id="@+id/action_buttons"
@@ -193,5 +193,21 @@ found in the LICENSE file.
                 style="@style/OutlinedButton" />
 
         </LinearLayout>
+    </org.chromium.components.browser_ui.widget.BoundedLinearLayout>
+
+   <org.chromium.components.browser_ui.widget.BoundedLinearLayout
+        android:id="@+id/privacy_policy_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:id="@+id/privacy_policy_content"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+        </FrameLayout>
     </org.chromium.components.browser_ui.widget.BoundedLinearLayout>
 </LinearLayout>

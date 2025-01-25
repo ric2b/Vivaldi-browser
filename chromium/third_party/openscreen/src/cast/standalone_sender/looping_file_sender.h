@@ -15,7 +15,7 @@
 #include "cast/standalone_sender/simulated_capturer.h"
 #include "cast/standalone_sender/streaming_opus_encoder.h"
 #include "cast/standalone_sender/streaming_video_encoder.h"
-#include "cast/streaming/sender_session.h"
+#include "cast/streaming/public/sender_session.h"
 
 namespace openscreen::cast {
 

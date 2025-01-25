@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/354307328): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/test/chromedriver/net/websocket.h"
 
 #include <stddef.h>
@@ -14,6 +19,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/hash/sha1.h"
@@ -140,11 +146,11 @@ bool WebSocket::Send(const std::string& message) {
   header_str.resize(header_size);
   CHECK_EQ(header_size,
            base::checked_cast<size_t>(net::WriteWebSocketFrameHeader(
-               header, &masking_key, &header_str[0], header_str.length())));
+               header, &masking_key, base::as_writable_byte_span(header_str))));
 
   std::string masked_message = message;
-  net::MaskWebSocketFramePayload(
-      masking_key, 0, &masked_message[0], masked_message.length());
+  net::MaskWebSocketFramePayload(masking_key, 0,
+                                 base::as_writable_byte_span(masked_message));
   Write(header_str + masked_message);
   return true;
 }
@@ -306,7 +312,13 @@ void WebSocket::OnReadDuringHandshake(const char* data, int len) {
 
 void WebSocket::OnReadDuringOpen(const char* data, int len) {
   std::vector<std::unique_ptr<net::WebSocketFrameChunk>> frame_chunks;
-  CHECK(parser_.Decode(data, len, &frame_chunks));
+  CHECK(parser_.Decode(
+      base::as_bytes(
+          // TODO(crbug.com/354307328): It's not possible to construct this span
+          // soundedly here. OnReadDuringOpen() should receive a span instead of
+          // a pointer and length.
+          UNSAFE_TODO(base::span(data, base::checked_cast<size_t>(len)))),
+      &frame_chunks));
   for (size_t i = 0; i < frame_chunks.size(); ++i) {
     const auto& header = frame_chunks[i]->header;
     if (header) {
@@ -334,7 +346,7 @@ void WebSocket::OnReadDuringOpen(const char* data, int len) {
     std::vector<char> payload(buffer.begin(), buffer.end());
     if (is_current_frame_masked_) {
       MaskWebSocketFramePayload(current_masking_key_, current_frame_offset_,
-                                payload.data(), payload.size());
+                                base::as_writable_byte_span(payload));
     }
     next_message_ += std::string(payload.data(), payload.size());
     current_frame_offset_ += payload.size();

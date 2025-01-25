@@ -27,13 +27,14 @@
 #import "components/sync/service/sync_service.h"
 #import "ios/chrome/browser/browsing_data/model/browsing_data_features.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
+#import "ios/chrome/browser/incognito_interstitial/ui_bundled/incognito_interstitial_constants.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -49,7 +50,6 @@
 #import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities.h"
 #import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
-#import "ios/chrome/browser/ui/incognito_interstitial/incognito_interstitial_constants.h"
 #import "ios/chrome/browser/ui/settings/elements/enterprise_info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/settings/elements/info_popover_view_controller.h"
 #import "ios/chrome/browser/ui/settings/elements/supervised_user_info_popover_view_controller.h"
@@ -71,6 +71,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/settings/bandwidth/dataplan_usage_table_view_controller.h"
+#import "ios/ui/common/vivaldi_url_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -86,6 +88,11 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierIncognitoInterstitial,
   SectionIdentifierLockdownMode,
   SectionIdentifierPrivacyGuide,
+
+  // Vivaldi
+  SectionIdentifierPreloadWebpage,
+  // End Vivaldi
+
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
@@ -101,6 +108,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeIncognitoInterstitialDisabled,
   ItemTypeLockdownMode,
   ItemTypePrivacyGuide,
+
+  // Vivaldi
+  ItemTypePreloadWebpage,
+  ItemTypePreloadWebpageFooter,
+  // End Vivaldi
+
 };
 
 // Used to open the Sync and Google Services settings.
@@ -132,6 +145,14 @@ const char kSyncSettingsURL[] = "settings://open_sync";
 
   // Whether Settings have been dismissed.
   BOOL _settingsAreDismissed;
+
+  // Registrar for local pref changes notifications.
+  PrefChangeRegistrar _localStateChangeRegistrar;
+
+  // Vivaldi
+  // Updatable Items.
+  TableViewDetailIconItem* _preloadWebpagesDetailItem;
+  // End Vivaldi
 }
 
 // Accessor for the incognito reauth pref.
@@ -174,6 +195,8 @@ const char kSyncSettingsURL[] = "settings://open_sync";
     PrefService* prefService = _browserState->GetPrefs();
 
     _prefChangeRegistrar.Init(prefService);
+    _localStateChangeRegistrar.Init(GetApplicationContext()->GetLocalState());
+
     _prefObserverBridge.reset(new PrefObserverBridge(self));
     // Register to observe any changes on Perf backed values displayed by the
     // screen.
@@ -184,7 +207,7 @@ const char kSyncSettingsURL[] = "settings://open_sync";
     _prefObserverBridge->ObserveChangesForPreference(
         prefs::kSafeBrowsingEnhanced, &_prefChangeRegistrar);
     _prefObserverBridge->ObserveChangesForPreference(
-        prefs::kBrowserLockdownModeEnabled, &_prefChangeRegistrar);
+        prefs::kBrowserLockdownModeEnabled, &_localStateChangeRegistrar);
     _syncObserver.reset(new SyncObserverBridge(
         self, SyncServiceFactory::GetForBrowserState(_browserState)));
 
@@ -202,6 +225,15 @@ const char kSyncSettingsURL[] = "settings://open_sync";
         initWithPrefService:browser->GetBrowserState()->GetPrefs()
                    prefName:prefs::kIncognitoInterstitialEnabled];
     [_incognitoInterstitialPref setObserver:self];
+
+    if (IsVivaldiRunning()) {
+      // Register to observe any changes on Perf backed values displayed by the
+      // screen.
+      _prefObserverBridge->ObserveChangesForPreference(
+          prefs::kNetworkPredictionSetting,
+          &_prefChangeRegistrar);
+    } // End Vivaldi
+
   }
   return self;
 }
@@ -296,8 +328,15 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   [model addItem:[self lockdownModeDetailItem]
       toSectionWithIdentifier:SectionIdentifierLockdownMode];
 
-  // Note:(prio@vivaldi.com) Skip Google Service Footer
-  if (!IsVivaldiRunning()) {
+  // Note:(prio@vivaldi.com) Skip Google Service Footer and add other Vivaldi
+  // specific settings if needed.
+  if (IsVivaldiRunning()) {
+    [model addSectionWithIdentifier:SectionIdentifierPreloadWebpage];
+    [model addItem:[self preloadWebpagesItem]
+        toSectionWithIdentifier:SectionIdentifierPreloadWebpage];
+    [model setFooter:[self footerItem]
+        forSectionWithIdentifier:SectionIdentifierPreloadWebpage];
+  } else {
   [model setFooter:[self showPrivacyFooterItem]
       forSectionWithIdentifier:SectionIdentifierLockdownMode];
   } // End Vivaldi
@@ -439,10 +478,10 @@ const char kSyncSettingsURL[] = "settings://open_sync";
 }
 
 - (TableViewItem*)lockdownModeDetailItem {
-  NSString* detailText =
-      _browserState->GetPrefs()->GetBoolean(prefs::kBrowserLockdownModeEnabled)
-          ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
-          : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+  NSString* detailText = GetApplicationContext()->GetLocalState()->GetBoolean(
+                             prefs::kBrowserLockdownModeEnabled)
+                             ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+                             : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
   _lockdownModeDetailItem =
       [self detailItemWithType:ItemTypeLockdownMode
                           titleId:IDS_IOS_LOCKDOWN_MODE_TITLE
@@ -524,6 +563,7 @@ const char kSyncSettingsURL[] = "settings://open_sync";
 
   // Remove pref changes registrations.
   _prefChangeRegistrar.RemoveAll();
+  _localStateChangeRegistrar.Reset();
 
   // Remove observer bridges.
   _prefObserverBridge.reset();
@@ -573,6 +613,14 @@ const char kSyncSettingsURL[] = "settings://open_sync";
     case ItemTypePrivacyGuide:
       [self.handler showPrivacyGuide];
       break;
+
+    // Vivaldi
+    case ItemTypePreloadWebpage: {
+      [self showPreloadWebpageSettings];
+      break;
+    }
+    // End Vivaldi
+
     default:
       break;
   }
@@ -652,13 +700,26 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   }
 
   if (preferenceName == prefs::kBrowserLockdownModeEnabled) {
-    NSString* detailText = _browserState->GetPrefs()->GetBoolean(preferenceName)
-                               ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
-                               : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
+    NSString* detailText =
+        GetApplicationContext()->GetLocalState()->GetBoolean(preferenceName)
+            ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
+            : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
     _lockdownModeDetailItem.detailText = detailText;
     [self reconfigureCellsForItems:@[ _lockdownModeDetailItem ]];
     return;
   }
+
+  if (IsVivaldiRunning() &&
+      preferenceName == prefs::kNetworkPredictionSetting) {
+    NSString* detailText = [DataplanUsageTableViewController
+        currentLabelForPreference:_browserState->GetPrefs()
+                      settingPref:prefs::kNetworkPredictionSetting];
+
+    _preloadWebpagesDetailItem.detailText = detailText;
+
+    [self reconfigureCellsForItems:@[ _preloadWebpagesDetailItem ]];
+  } // End Vivaldi
+
 }
 
 #pragma mark - BooleanObserver
@@ -851,7 +912,8 @@ const char kSyncSettingsURL[] = "settings://open_sync";
 
 - (void)enhancedSafeBrowsingInlinePromoTriggerCriteriaMet {
   if (!base::FeatureList::IsEnabled(
-          feature_engagement::kIPHiOSInlineEnhancedSafeBrowsingPromoFeature)) {
+          feature_engagement::kIPHiOSInlineEnhancedSafeBrowsingPromoFeature) ||
+      !_browserState) {
     return;
   }
   feature_engagement::Tracker* tracker =
@@ -859,5 +921,52 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   tracker->NotifyEvent(
       feature_engagement::events::kEnhancedSafeBrowsingPromoCriterionMet);
 }
+
+#pragma mark - Vivaldi
+
+// Returns a newly created TableViewDetailIconItem for the preload webpages
+// menu.
+- (TableViewDetailIconItem*)preloadWebpagesItem {
+  NSString* detailText = [DataplanUsageTableViewController
+      currentLabelForPreference:_browserState->GetPrefs()
+                    settingPref:prefs::kNetworkPredictionSetting];
+  _preloadWebpagesDetailItem =
+      [[TableViewDetailIconItem alloc] initWithType:ItemTypePreloadWebpage];
+
+  _preloadWebpagesDetailItem.text =
+      l10n_util::GetNSString(IDS_IOS_OPTIONS_PRELOAD_WEBPAGES);
+  _preloadWebpagesDetailItem.detailText = detailText;
+  _preloadWebpagesDetailItem.accessoryType =
+      UITableViewCellAccessoryDisclosureIndicator;
+  _preloadWebpagesDetailItem.accessibilityTraits |= UIAccessibilityTraitButton;
+  _preloadWebpagesDetailItem.accessibilityIdentifier = kSettingsPreloadCellId;
+  return _preloadWebpagesDetailItem;
+}
+
+// Returns a newly created item for the footer of the section, describing how
+// the bandwidth management is done.
+- (TableViewLinkHeaderFooterItem*)footerItem {
+  TableViewLinkHeaderFooterItem* item =
+      [[TableViewLinkHeaderFooterItem alloc]
+          initWithType:ItemTypePreloadWebpageFooter];
+
+  item.text = l10n_util::GetNSString(
+      IDS_IOS_BANDWIDTH_MANAGEMENT_DESCRIPTION_LEARN_MORE);
+  item.urls = @[ [[CrURL alloc]
+      initWithGURL:GURL(vVivaldiHelpPreloadWebpagUrl)] ];
+  item.accessibilityTraits |= UIAccessibilityTraitButton;
+  return item;
+}
+
+- (void)showPreloadWebpageSettings {
+  NSString* preloadTitle =
+      l10n_util::GetNSString(IDS_IOS_OPTIONS_PRELOAD_WEBPAGES);
+  UIViewController* controller = [[DataplanUsageTableViewController alloc]
+      initWithPrefs:_browserState->GetPrefs()
+        settingPref:prefs::kNetworkPredictionSetting
+              title:preloadTitle];
+  [self.navigationController pushViewController:controller animated:YES];
+}
+// End Vivaldi
 
 @end

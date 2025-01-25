@@ -8,7 +8,7 @@
 #import "components/safe_browsing/core/common/features.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
@@ -50,14 +50,8 @@
 
 - (void)start {
   SafeBrowsingEnhancedProtectionViewController* viewController = nil;
-  if (base::FeatureList::IsEnabled(
-          safe_browsing::kFriendlierSafeBrowsingSettingsEnhancedProtection)) {
     viewController = [[SafeBrowsingEnhancedProtectionViewController alloc]
         initWithStyle:UITableViewStyleGrouped];
-  } else {
-    viewController = [[SafeBrowsingEnhancedProtectionViewController alloc]
-        initWithStyle:ChromeTableViewStyle()];
-  }
   self.viewController = viewController;
 
   viewController.presentationDelegate = self;

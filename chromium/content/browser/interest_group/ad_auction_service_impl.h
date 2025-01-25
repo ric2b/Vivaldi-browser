@@ -14,6 +14,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/uuid.h"
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
@@ -28,7 +29,7 @@
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom-forward.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/blink/public/common/interest_group/auction_config.h"
@@ -42,10 +43,11 @@
 namespace content {
 
 class InterestGroupManagerImpl;
-struct BiddingAndAuctionServerKey;
+class PrivateAggregationManager;
+class ReconnectableURLLoaderFactory;
 class RenderFrameHost;
 class RenderFrameHostImpl;
-class PrivateAggregationManager;
+struct BiddingAndAuctionServerKey;
 
 // Implements the AdAuctionService service called by Blink code.
 class CONTENT_EXPORT AdAuctionServiceImpl final
@@ -70,7 +72,6 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
       const std::vector<std::string>& interest_groups_to_keep,
       ClearOriginJoinedInterestGroupsCallback callback) override;
   void UpdateAdInterestGroups() override;
-  void CreateAuctionNonce(CreateAuctionNonceCallback callback) override;
   void RunAdAuction(
       const blink::AuctionConfig& config,
       mojo::PendingReceiver<blink::mojom::AbortableAdAuction> abort_receiver,
@@ -95,7 +96,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
                   const blink::AuctionConfig& config,
                   FinalizeAdCallback callback) override;
 
-  scoped_refptr<network::WrapperSharedURLLoaderFactory>
+  scoped_refptr<network::SharedURLLoaderFactory>
   GetRefCountedTrustedURLLoaderFactory();
 
   // AuctionWorkletManager::Delegate implementation:
@@ -122,12 +123,13 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
         BiddingAndAuctionDataConstructionState&& other);
     ~BiddingAndAuctionDataConstructionState();
 
-    base::TimeTicks start_time;
+    base::TimeTicks start_time;  // time used for metrics
     std::unique_ptr<BiddingAndAuctionServerKey> key;
     std::unique_ptr<BiddingAndAuctionData> data;
     base::Uuid request_id;
     url::Origin seller;
     std::optional<url::Origin> coordinator;
+    base::Time timestamp;  // timestamp to include in the request.
     blink::mojom::AuctionDataConfigPtr config;
     GetInterestGroupAdAuctionDataCallback callback;
   };
@@ -174,7 +176,10 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
       std::optional<blink::AdDescriptor> ad_descriptor,
       std::vector<blink::AdDescriptor> ad_component_descriptors,
       std::vector<std::string> errors,
-      std::unique_ptr<InterestGroupAuctionReporter> reporter);
+      std::unique_ptr<InterestGroupAuctionReporter> reporter,
+      bool contained_server_auction,
+      bool contained_on_device_auction,
+      AuctionResult result);
 
   void OnReporterComplete(ReporterList::iterator reporter_it);
 
@@ -197,7 +202,16 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
 
   url::Origin GetTopWindowOrigin() const;
 
+  void CreateUnderlyingTrustedURLLoaderFactory(
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory);
+
   AdAuctionPageData* GetAdAuctionPageData();
+
+  // For each buyer in `config`, preconnect to its origin and bidding signals
+  // origin if the origins have been cached from previous interest group joins
+  // or auctions. This function needs to be called separately to preconnect to
+  // origins for `config`'s component auctions.
+  void PreconnectToBuyerOrigins(const blink::AuctionConfig& config);
 
   // To avoid race conditions associated with top frame navigations (mentioned
   // in document_service.h), we need to save the values of the main frame
@@ -206,13 +220,19 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   const GURL main_frame_url_;
 
   mojo::Remote<network::mojom::URLLoaderFactory> frame_url_loader_factory_;
-  mojo::Remote<network::mojom::URLLoaderFactory> trusted_url_loader_factory_;
 
-  // Ref counted wrapper of `trusted_url_loader_factory_`. This will be used for
-  // reporting requests, which might happen after the frame is destroyed, when
-  // `trusted_url_loader_factory_` no longer being available.
-  scoped_refptr<network::WrapperSharedURLLoaderFactory>
+  // A URLLoaderFactory connecting to the underlying factory created by
+  // CreateUnderlyingTrustedURLLoaderFactory(), with reconnecting support. This
+  // can be used for reporting requests, which might happen after the frame is
+  // destroyed.
+  scoped_refptr<ReconnectableURLLoaderFactory>
       ref_counted_trusted_url_loader_factory_;
+
+  // Used to create AuctionMetricsRecorders, which store data needed to record
+  // UKM. This must be before `auction_worklet_manager_`, since worklet owners
+  // may keep references to the AuctionMetricsRecorders owned by the
+  // `auction_metrics_recorder_manager_`.
+  AuctionMetricsRecorderManager auction_metrics_recorder_manager_;
 
   // This must be before `auctions_`, since auctions may own references to
   // worklets it manages.
@@ -220,7 +240,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
 
   // Manages auction nonces issued by prior calls to CreateAuctionNonce,
   // which are used by subsequent calls to RunAdAuction.
-  std::unique_ptr<AuctionNonceManager> auction_nonce_manager_;
+  AuctionNonceManager auction_nonce_manager_;
 
   // Use a map instead of a list so can remove entries without destroying them.
   // TODO(mmenke): Switch to std::set() and use extract() once that's allowed.

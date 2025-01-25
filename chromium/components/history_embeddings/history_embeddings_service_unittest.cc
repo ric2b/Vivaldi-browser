@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/test/bind.h"
@@ -22,6 +23,7 @@
 #include "components/history/core/test/history_service_test_util.h"
 #include "components/history_embeddings/answerer.h"
 #include "components/history_embeddings/history_embeddings_features.h"
+#include "components/history_embeddings/search_strings_update_listener.h"
 #include "components/history_embeddings/vector_database.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
 #include "components/optimization_guide/core/test_optimization_guide_decider.h"
@@ -37,7 +39,18 @@
 
 namespace history_embeddings {
 
+namespace {
+
 using optimization_guide::OptimizationGuideModelExecutor;
+
+base::FilePath GetTestFilePath(const std::string& file_name) {
+  base::FilePath test_data_dir;
+  base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &test_data_dir);
+  return test_data_dir.AppendASCII("components/test/data/history_embeddings")
+      .AppendASCII(file_name);
+}
+
+}  // namespace
 
 class HistoryEmbeddingsServicePublic : public HistoryEmbeddingsService {
  public:
@@ -63,6 +76,7 @@ class HistoryEmbeddingsServicePublic : public HistoryEmbeddingsService {
 
   using HistoryEmbeddingsService::OnPassagesEmbeddingsComputed;
   using HistoryEmbeddingsService::OnSearchCompleted;
+  using HistoryEmbeddingsService::QueryIsFiltered;
 
   using HistoryEmbeddingsService::answerer_;
   using HistoryEmbeddingsService::embedder_metadata_;
@@ -77,9 +91,7 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
           {{"UseMlEmbedder", "false"},
            {"SearchPassageMinimumWordCount", "3"},
            {"UseMlAnswerer", "false"},
-           {"EnableAnswers", "true"},
-           {"FilterTerms", "term1,term2,Filter Phrase,TeRm3"},
-           {"FilterHashes", "3962775614,4220142007,430397466"}}},
+           {"EnableAnswers", "true"}}},
 #if BUILDFLAG(IS_CHROMEOS)
          {chromeos::features::kFeatureManagementHistoryEmbedding, {{}}}
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -108,6 +120,14 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
         optimization_guide_decider_.get(),
         /*service_controller=*/nullptr, os_crypt_.get(),
         /*optimization_guide_model_executor=*/nullptr);
+
+    ASSERT_TRUE(listener()->filter_words_hashes().empty());
+    listener()->OnSearchStringsUpdate(
+        GetTestFilePath("fake_search_strings_file"));
+    task_environment_.RunUntilIdle();
+    ASSERT_EQ(
+        listener()->filter_words_hashes(),
+        std::unordered_set<uint32_t>({3962775614, 4220142007, 430397466}));
   }
 
   void TearDown() override {
@@ -115,6 +135,7 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
       service_->storage_.SynchronouslyResetForTest();
       service_->Shutdown();
     }
+    listener()->ResetForTesting();
   }
 
   void OverrideVisibilityScoresForTesting(
@@ -170,6 +191,10 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
 
   Answerer* GetAnswerer() { return service_->answerer_.get(); }
 
+  SearchStringsUpdateListener* listener() {
+    return SearchStringsUpdateListener::GetInstance();
+  }
+
  protected:
   void AddTestHistoryPage(const std::string& url) {
     history_service_->AddPage(GURL(url), base::Time::Now() - base::Days(4), 0,
@@ -180,8 +205,7 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
 
   base::test::ScopedFeatureList feature_list_;
 
-  base::test::TaskEnvironment task_environment_{
-      base::test::SingleThreadTaskEnvironment::TimeSource::MOCK_TIME};
+  base::test::TaskEnvironment task_environment_;
 
   base::ScopedTempDir history_dir_;
   std::unique_ptr<os_crypt_async::OSCryptAsync> os_crypt_;
@@ -437,31 +461,18 @@ TEST_F(HistoryEmbeddingsServiceTest, StaticHashVerificationTest) {
   EXPECT_EQ(history_embeddings::HashString("hello world"), 430397466u);
 }
 
-TEST_F(HistoryEmbeddingsServiceTest, FilterTerms) {
+TEST_F(HistoryEmbeddingsServiceTest, FilterWordsHashes) {
   AddTestHistoryPage("http://test1.com");
   OnPassagesEmbeddingsComputed(UrlPassages(1, 1, base::Time::Now()),
-                               {"term1", "term2", "Filter Phrase", "TeRm3"},
+                               {"passage1", "passage2", "passage3", "passage4"},
                                {Embedding(std::vector<float>(768, 1.0f)),
                                 Embedding(std::vector<float>(768, 1.0f)),
                                 Embedding(std::vector<float>(768, 1.0f)),
                                 Embedding(std::vector<float>(768, 1.0f))},
                                ComputeEmbeddingsStatus::SUCCESS);
   OverrideVisibilityScoresForTesting({
-      {"term1", 0.99},
-      {"term2", 0.99},
-      {"Filter Phrase", 0.99},
-      {"TeRm3", 0.99},
       {"query without terms", 0.99},
-      {"term1 in query", 0.99},
-      {"query ending with term2", 0.99},
-      {"query ending with tErM2", 0.99},
-      {"query containing filTer phrAse", 0.99},
-      {"query containing thefilter phrase-and-more", 0.99},
-      {"query containing the filterphrase inexactly", 0.99},
-      {"query with term3 in the middle", 0.99},
-      {"query with TERM3 in the middle", 0.99},
-      {"query with inexact te'rm3 in the middle", 0.99},
-      {"query with 'term3', surrounded by punctuation", 0.99},
+      {"query with inexact spe'cial in the middle", 0.99},
       {"query with non-ASCII ∅ character but no terms", 0.99},
       {"the word 'special' has its hash filtered", 0.99},
       {"the phrase 'something something' is also hash filtered", 0.99},
@@ -480,92 +491,12 @@ TEST_F(HistoryEmbeddingsServiceTest, FilterTerms) {
   }
   {
     base::test::TestFuture<SearchResult> future;
-    service_->Search("term1 in query", {}, 3, future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "term1 in query");
-    EXPECT_EQ(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query ending with term2", {}, 3,
+    service_->Search("query with inexact spe'cial in the middle", {}, 3,
                      future.GetRepeatingCallback());
     SearchResult result = future.Take();
     EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query ending with term2");
-    EXPECT_EQ(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query ending with tErM2", {}, 3,
-                     future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query ending with tErM2");
-    EXPECT_EQ(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query containing filTer phrAse", {}, 3,
-                     future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query containing filTer phrAse");
-    EXPECT_EQ(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query containing thefilter phrase-and-more", {}, 3,
-                     future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query containing thefilter phrase-and-more");
-    EXPECT_EQ(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query containing the filterphrase inexactly", {}, 3,
-                     future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query containing the filterphrase inexactly");
+    EXPECT_EQ(result.query, "query with inexact spe'cial in the middle");
     EXPECT_GT(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query with term3 in the middle", {}, 3,
-                     future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query with term3 in the middle");
-    EXPECT_EQ(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query with TERM3 in the middle", {}, 3,
-                     future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query with TERM3 in the middle");
-    EXPECT_EQ(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query with inexact te'rm3 in the middle", {}, 3,
-                     future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query with inexact te'rm3 in the middle");
-    EXPECT_GT(result.count, 0u);
-  }
-  {
-    base::test::TestFuture<SearchResult> future;
-    service_->Search("query with 'term3', surrounded by punctuation", {}, 3,
-                     future.GetRepeatingCallback());
-    SearchResult result = future.Take();
-    EXPECT_FALSE(result.session_id.empty());
-    EXPECT_EQ(result.query, "query with 'term3', surrounded by punctuation");
-    EXPECT_EQ(result.count, 0u);
   }
   {
     base::test::TestFuture<SearchResult> future;
@@ -638,6 +569,18 @@ TEST_F(HistoryEmbeddingsServiceTest, AnswerMocked) {
   EXPECT_EQ(result.status, ComputeAnswerStatus::SUCCESS);
   EXPECT_EQ(result.query, "test query");
   EXPECT_EQ(result.answer.text(), "This is the answer to query 'test query'.");
+}
+
+TEST_F(HistoryEmbeddingsServiceTest, StopWordsExcludedFromQueryTerms) {
+  SearchParams search_params;
+  bool filtered = service_->QueryIsFiltered(
+      "the stop and words, the, and, and, and and.", search_params);
+  EXPECT_EQ(filtered, false);
+  EXPECT_EQ(search_params.query_terms.size(), 2u);
+  // Hash for "the" is 2374167618; hash for "and" is 754760635. These are stop
+  // words in `fake_search_strings_file` test proto.
+  EXPECT_EQ(search_params.query_terms,
+            std::vector<std::string>({"stop", "words"}));
 }
 
 }  // namespace history_embeddings

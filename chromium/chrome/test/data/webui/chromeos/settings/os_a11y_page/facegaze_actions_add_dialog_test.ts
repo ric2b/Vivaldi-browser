@@ -4,23 +4,39 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {FaceGazeAddActionDialogElement} from 'chrome://os-settings/lazy_load.js';
-import {CrButtonElement, CrSliderElement, IronListElement, Router, routes} from 'chrome://os-settings/os_settings.js';
+import {AddDialogPage, FaceGazeAddActionDialogElement} from 'chrome://os-settings/lazy_load.js';
+import {CrButtonElement, CrSettingsPrefs, CrSliderElement, FaceGazeSubpageBrowserProxyImpl, IronListElement, Router, routes, SettingsPrefsElement} from 'chrome://os-settings/os_settings.js';
 import {FacialGesture} from 'chrome://resources/ash/common/accessibility/facial_gestures.js';
 import {MacroName} from 'chrome://resources/ash/common/accessibility/macro_names.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
+import {pressAndReleaseKeyOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {assertFalse, assertNull, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assertEquals, assertFalse, assertNull, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
 
 import {clearBody} from '../utils.js';
 
+import {TestFaceGazeSubpageBrowserProxy} from './test_facegaze_subpage_browser_proxy.js';
+
 suite('<facegaze-actions-add-dialog>', () => {
   let faceGazeAddActionDialog: FaceGazeAddActionDialogElement;
+  let browserProxy: TestFaceGazeSubpageBrowserProxy;
+  let prefElement: SettingsPrefsElement;
 
   async function initPage() {
+    prefElement = document.createElement('settings-prefs');
+    document.body.appendChild(prefElement);
+
+    await CrSettingsPrefs.initialized;
     faceGazeAddActionDialog =
         document.createElement('facegaze-actions-add-dialog');
+    faceGazeAddActionDialog.prefs = prefElement.prefs;
     document.body.appendChild(faceGazeAddActionDialog);
+
+    // Assume default open to SELECT_ACTION page.
+    assertEquals(
+        AddDialogPage.SELECT_ACTION,
+        faceGazeAddActionDialog.getCurrentPageForTest());
     flush();
   }
 
@@ -48,10 +64,9 @@ suite('<facegaze-actions-add-dialog>', () => {
 
   function setActionsListSelection() {
     const actionList = assertActionsList();
-    actionList.selectedItem = {
-      action: MacroName.MOUSE_CLICK_LEFT,
-      displayText: 'Click a mouse button',
-    };
+
+    // Cast to Object to satisfy typing for IronListElement.selectedItem.
+    actionList.selectedItem = MacroName.MOUSE_CLICK_LEFT as Object;
   }
 
   function getGesturesList(): IronListElement|null {
@@ -80,10 +95,8 @@ suite('<facegaze-actions-add-dialog>', () => {
   function setGesturesListSelection() {
     const gestureList = assertGesturesList();
 
-    gestureList.selectedItem = {
-      value: FacialGesture.BROW_INNER_UP,
-      displayText: 'Brow inner up',
-    };
+    // Cast to Object to satisfy typing for IronListElement.selectedItem.
+    gestureList.selectedItem = FacialGesture.BROW_INNER_UP as Object;
   }
 
   function getGestureSlider(): CrSliderElement|null {
@@ -93,14 +106,40 @@ suite('<facegaze-actions-add-dialog>', () => {
     return gestureSlider;
   }
 
-  function assertGestureSlider() {
+  function assertGestureSlider(): CrSliderElement {
     const gestureSlider = getGestureSlider();
     assertTrue(!!gestureSlider);
+    return gestureSlider;
   }
 
   function assertNullGestureSlider() {
     const gestureSlider = getGestureSlider();
     assertNull(gestureSlider);
+  }
+
+  function assertGestureDynamicBar(): HTMLElement {
+    const slider = assertGestureSlider();
+    const sliderBar = slider.shadowRoot!.querySelector<HTMLElement>('#bar');
+    assertTrue(!!sliderBar);
+    return sliderBar;
+  }
+
+  function getGestureCountDiv(): HTMLElement {
+    const gestureCountDiv =
+        faceGazeAddActionDialog.shadowRoot!.querySelector<HTMLElement>(
+            '#faceGazeGestureCount');
+    assertTrue(!!gestureCountDiv);
+    return gestureCountDiv;
+  }
+
+  function isThresholdValueSetInPref(value: number): boolean {
+    const gesturesToConfidence = faceGazeAddActionDialog.prefs.settings.a11y
+                                     .face_gaze.gestures_to_confidence.value;
+    if (FacialGesture.BROW_INNER_UP in gesturesToConfidence) {
+      return gesturesToConfidence[FacialGesture.BROW_INNER_UP] === value;
+    }
+
+    return false;
   }
 
   function getButton(id: string): CrButtonElement {
@@ -109,6 +148,10 @@ suite('<facegaze-actions-add-dialog>', () => {
     assertTrue(!!button);
     assertTrue(isVisible(button));
     return button;
+  }
+
+  function getCancelButton(): CrButtonElement {
+    return getButton('.cancel-button');
   }
 
   function getActionNextButton(): CrButtonElement {
@@ -131,13 +174,44 @@ suite('<facegaze-actions-add-dialog>', () => {
     return previousButton;
   }
 
+  function getSaveButton(): CrButtonElement {
+    const saveButton = getButton('#faceGazeActionDialogSaveButton');
+    assertFalse(saveButton.disabled);
+    return saveButton;
+  }
+
+  function navigateToThresholdPage(): void {
+    assertActionsListNoSelection();
+    setActionsListSelection();
+
+    const actionNextButton = getActionNextButton();
+    assertFalse(actionNextButton.disabled);
+    actionNextButton.click();
+    flush();
+
+    assertGesturesListNoSelection();
+    setGesturesListSelection();
+
+    const gestureNextButton = getGestureNextButton();
+    assertFalse(gestureNextButton.disabled);
+    gestureNextButton.click();
+    flush();
+
+    assertGestureSlider();
+    assertNullGesturesList();
+  }
+
   setup(() => {
+    browserProxy = new TestFaceGazeSubpageBrowserProxy();
+    FaceGazeSubpageBrowserProxyImpl.setInstanceForTesting(browserProxy);
     clearBody();
     Router.getInstance().navigateTo(routes.MANAGE_FACEGAZE_SETTINGS);
   });
 
   teardown(() => {
+    prefElement.remove();
     Router.getInstance().resetRouteForTesting();
+    browserProxy.reset();
   });
 
   test(
@@ -209,53 +283,16 @@ suite('<facegaze-actions-add-dialog>', () => {
       });
 
   test(
+      'gesture page next button changes dialog to threshold page', async () => {
+        await initPage();
+        navigateToThresholdPage();
+      });
+
+  test(
       'threshold page previous button changes dialog to gesture page',
       async () => {
         await initPage();
-        assertActionsListNoSelection();
-        setActionsListSelection();
-
-        const actionNextButton = getActionNextButton();
-        assertFalse(actionNextButton.disabled);
-
-        actionNextButton.click();
-        flush();
-
-        assertGesturesListNoSelection();
-        setGesturesListSelection();
-
-        const gestureNextButton = getGestureNextButton();
-        assertFalse(gestureNextButton.disabled);
-
-        gestureNextButton.click();
-        flush();
-
-        assertGestureSlider();
-        assertNullGesturesList();
-      });
-  test(
-      'gesture page next button changes dialog to threshold page', async () => {
-        await initPage();
-        assertActionsListNoSelection();
-        setActionsListSelection();
-
-        const actionNextButton = getActionNextButton();
-        assertFalse(actionNextButton.disabled);
-
-        actionNextButton.click();
-        flush();
-
-        assertGesturesListNoSelection();
-        setGesturesListSelection();
-
-        const gestureNextButton = getGestureNextButton();
-        assertFalse(gestureNextButton.disabled);
-
-        gestureNextButton.click();
-        flush();
-
-        assertGestureSlider();
-        assertNullGesturesList();
+        navigateToThresholdPage();
 
         const previousButton = getThresholdPreviousButton();
         assertFalse(previousButton.disabled);
@@ -265,5 +302,198 @@ suite('<facegaze-actions-add-dialog>', () => {
 
         assertGesturesList();
         assertNullGestureSlider();
+      });
+
+  test('threshold page cancel button closes dialog', async () => {
+    await initPage();
+    navigateToThresholdPage();
+
+    const cancelButton = getCancelButton();
+    cancelButton.click();
+    flush();
+
+    assertFalse(faceGazeAddActionDialog.$.dialog.open);
+  });
+
+  test(
+      'threshold page slider changes gesture confidence pref on save',
+      async () => {
+        await initPage();
+        navigateToThresholdPage();
+
+        const gestureSlider = getGestureSlider();
+        assertTrue(!!gestureSlider);
+
+        pressAndReleaseKeyOn(gestureSlider, 39 /* right */, [], 'ArrowRight');
+        flush();
+
+        const saveButton = getSaveButton();
+        saveButton.click();
+        flush();
+
+        assertTrue(isThresholdValueSetInPref(65));
+        assertFalse(faceGazeAddActionDialog.$.dialog.open);
+      });
+
+  test(
+      'threshold page slider button changes gesture confidence pref on save',
+      async () => {
+        await initPage();
+        navigateToThresholdPage();
+
+        const gestureSlider = getGestureSlider();
+        assertTrue(!!gestureSlider);
+
+        const decrementButton =
+            getButton('#faceGazeGestureThresholdDecrementButton');
+        decrementButton.click();
+        flush();
+
+        const saveButton = getSaveButton();
+        saveButton.click();
+        flush();
+
+        assertTrue(isThresholdValueSetInPref(55));
+        assertFalse(faceGazeAddActionDialog.$.dialog.open);
+      });
+
+  test(
+      'action page switches to gesture page when initialPage value is set',
+      async () => {
+        await initPage();
+
+        faceGazeAddActionDialog.actionToAssignGesture =
+            MacroName.MOUSE_CLICK_LEFT;
+        faceGazeAddActionDialog.initialPage = AddDialogPage.SELECT_GESTURE;
+        flush();
+
+        assertGesturesListNoSelection();
+
+        const previousButton =
+            faceGazeAddActionDialog.shadowRoot!.querySelector<CrButtonElement>(
+                '#faceGazeGesturePreviousButton');
+        assertNull(previousButton);
+      });
+
+  test(
+      'action page switches to threshold page when initialPage value is set',
+      async () => {
+        await initPage();
+
+        faceGazeAddActionDialog.gestureToConfigure = FacialGesture.BROWS_DOWN;
+        faceGazeAddActionDialog.initialPage = AddDialogPage.GESTURE_THRESHOLD;
+        flush();
+
+        assertGestureSlider();
+
+        // Previous button should not be shown.
+        const previousButton =
+            faceGazeAddActionDialog.shadowRoot!.querySelector<CrButtonElement>(
+                '#faceGazeThresholdPreviousButton');
+        assertNull(previousButton);
+      });
+
+  test(
+      'browser proxy sends event when page changes to and from threshold page',
+      async () => {
+        await initPage();
+        assertActionsListNoSelection();
+        setActionsListSelection();
+
+        const actionNextButton = getActionNextButton();
+        assertFalse(actionNextButton.disabled);
+        actionNextButton.click();
+        flush();
+        assertGesturesListNoSelection();
+        setGesturesListSelection();
+        assertEquals(
+            0, browserProxy.getCallCount('toggleGestureInfoForSettings'));
+
+        const gestureNextButton = getGestureNextButton();
+        assertFalse(gestureNextButton.disabled);
+        gestureNextButton.click();
+        flush();
+        assertEquals(
+            1, browserProxy.getCallCount('toggleGestureInfoForSettings'));
+        assertTrue(browserProxy.getArgs('toggleGestureInfoForSettings')[0][0]);
+        assertGestureSlider();
+        assertNullGesturesList();
+
+        const previousButton = getThresholdPreviousButton();
+        assertFalse(previousButton.disabled);
+        previousButton.click();
+        flush();
+        assertEquals(
+            2, browserProxy.getCallCount('toggleGestureInfoForSettings'));
+        assertFalse(browserProxy.getArgs('toggleGestureInfoForSettings')[1][0]);
+      });
+
+  test(
+      'gesture detection count updates when gesture info received with selected gesture over threshold',
+      async () => {
+        await initPage();
+        navigateToThresholdPage();
+
+        webUIListenerCallback('settings.sendGestureInfoToSettings', [
+          {gesture: FacialGesture.BROW_INNER_UP, confidence: 70},
+          {gesture: FacialGesture.BROW_INNER_UP, confidence: 50},
+        ]);
+
+        const gestureCountDiv = getGestureCountDiv();
+
+        // Default confidence threshold is 60, so only one gesture should
+        // register as detected.
+        assertEquals(`Detected 1 time`, gestureCountDiv.innerText);
+      });
+
+  test(
+      'gesture detection count updates when gesture info received with multiple selected gestures over threshold',
+      async () => {
+        await initPage();
+        navigateToThresholdPage();
+
+        webUIListenerCallback('settings.sendGestureInfoToSettings', [
+          {gesture: FacialGesture.BROW_INNER_UP, confidence: 70},
+          {gesture: FacialGesture.BROW_INNER_UP, confidence: 80},
+        ]);
+
+        const gestureCountDiv = getGestureCountDiv();
+
+        // Default confidence threshold is 60, so two gestures should register
+        // as detected.
+        assertEquals(`Detected 2 times`, gestureCountDiv.innerText);
+      });
+
+  test(
+      'gesture detection count does not update when gesture info received with non-selected gesture',
+      async () => {
+        await initPage();
+        navigateToThresholdPage();
+
+        webUIListenerCallback('settings.sendGestureInfoToSettings', [
+          {gesture: FacialGesture.JAW_LEFT, confidence: 70},
+          {gesture: FacialGesture.EYES_BLINK, confidence: 50},
+        ]);
+
+        const gestureCountDiv = getGestureCountDiv();
+        assertEquals(`Not detected`, gestureCountDiv.innerText);
+      });
+  test(
+      'gesture threshold dynamic bar updates when gesture info received with selected gesture info at any confidence',
+      async () => {
+        await initPage();
+        navigateToThresholdPage();
+
+        const sliderBar = assertGestureDynamicBar();
+
+        webUIListenerCallback('settings.sendGestureInfoToSettings', [
+          {gesture: FacialGesture.BROW_INNER_UP, confidence: 70},
+        ]);
+        assertEquals('70%', sliderBar.style.width);
+
+        webUIListenerCallback('settings.sendGestureInfoToSettings', [
+          {gesture: FacialGesture.BROW_INNER_UP, confidence: 30},
+        ]);
+        assertEquals('30%', sliderBar.style.width);
       });
 });

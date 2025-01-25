@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Սխալ</translation>
 <translation id="1175364870820465910">Տ&amp;պել…</translation>
 <translation id="1181037720776840403">Հեռացնել</translation>
+<translation id="1184037892196730210">Չհաջողվեց հեռարձակել էկրանը</translation>
 <translation id="1187722533808055681">Պարապուրդից արթնացումներ</translation>
 <translation id="122082903575839559">Վկայագրի ստորագրության ալգորիթմ</translation>
 <translation id="1221825588892235038">Միայն նշված մասը</translation>
@@ -37,6 +38,7 @@
 <translation id="1601560923496285236">Կիրառել</translation>
 <translation id="1603914832182249871">(Գաղտնի)</translation>
 <translation id="1627276047960621195">Ֆայլերի դեսկրիպտորներ</translation>
+<translation id="1654713139320245449">Հեռարձակման նպատակակետեր չեն գտնվել։ Օգնության կարիք ունե՞ք։</translation>
 <translation id="166278006618318542">Սուբյեկտի հանրային բանալու ալգորիթմ</translation>
 <translation id="1682548588986054654">Նոր գաղտնի պատուհան</translation>
 <translation id="1708338024780164500">(Ոչ ակտիվ)</translation>
@@ -64,7 +66,7 @@
 <translation id="2142328300403846845">Բացել հղումը որպես</translation>
 <translation id="2144536955299248197">Վկայագրի ցուցադրիչ՝ <ph name="CERTIFICATE_NAME" /></translation>
 <translation id="2148892889047469596">Հեռարձակել ներդիրը</translation>
-<translation id="2150139952286079145">Փնտրել վերջնակետեր</translation>
+<translation id="2150139952286079145">Փնտրել նպատակակետեր</translation>
 <translation id="215753907730220065">Ելք լիաէկրան ռեժիմից</translation>
 <translation id="2158475082070321257">Պատճենել հղումը տեքստն ընդգծելու համար</translation>
 <translation id="2177950615300672361">Ներդիր՝ գաղտնի ռեժիմում. <ph name="TAB_NAME" /></translation>
@@ -98,7 +100,6 @@
 <translation id="265390580714150011">Դաշտի արժեք</translation>
 <translation id="2662876636500006917">Chrome Վեբ-խանութ</translation>
 <translation id="2678063897982469759">Կրկին միացնել</translation>
-<translation id="2678100101831051676">Չի հաջողվում հեռարձակել։</translation>
 <translation id="2719936478972253983">Հետևյալ քուքիներն արգելափակվել են</translation>
 <translation id="2721037002783622288">&amp;Որոնել պատկերը <ph name="SEARCH_ENGINE" />-ով</translation>
 <translation id="2738771556149464852">Ոչ ուշ, քան</translation>
@@ -148,7 +149,6 @@
 <translation id="3378572629723696641">Այս ընդլայնումը կարող է վնասված լինել։</translation>
 <translation id="3387614642886316601">Ուղղագրության ընդլայնված ստուգում</translation>
 <translation id="3390013585654699824">Հավելվածի մանրամասներ</translation>
-<translation id="3393582007140394275">Չի ստացվում էկրանը հեռարձակել։</translation>
 <translation id="345693547134384690">Բացել պա&amp;տկերը նոր ներդիրում</translation>
 <translation id="3493881266323043047">Վավերականություն</translation>
 <translation id="3511307672085573050">Պատճենել հղման հաս&amp;ցեն</translation>
@@ -346,6 +346,7 @@
 <translation id="6812841287760418429">Պահել փոփոխությունները</translation>
 <translation id="6824564591481349393">Պատճենել &amp;էլ. փոստի հասցեն</translation>
 <translation id="6840155290835956714">Հարցնել մինչ ուղարկելը</translation>
+<translation id="6878862640969460273">Հորիզոնական</translation>
 <translation id="6886871292305414135">Բացել հղումը նոր &amp;ներդիրում</translation>
 <translation id="6892812721183419409">Բացել հղումը որպես <ph name="USER" /></translation>
 <translation id="6900284862687837908">Հետին հավելված. <ph name="BACKGROUND_APP_URL" /></translation>
@@ -366,6 +367,7 @@
 <translation id="7287143125007575591">Մուտքն արգելված է։</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Ստուգել քերականությունը մուտքագրման ընթացքում</translation>
+<translation id="7359680654975233185">Չհաջողվեց հեռարձակել ներդիրը</translation>
 <translation id="7385854874724088939">Տպել փորձելիս ինչ-որ սխալ տեղի ունեցավ։ Խնդրում ենք ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
 <translation id="7412226954991670867">GPU-ի հիշողություն</translation>
 <translation id="7421925624202799674">&amp;Դիտել էջի կոդը</translation>
@@ -379,6 +381,7 @@
 <translation id="7661259717474717992">Թույլ տալ կայքերին պահպանել և կարդալ քուքի տվյալներ</translation>
 <translation id="7663719505383602579">Ստացող. <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Տեղակայված է Ձեր ադմինիստրատորի կողմից</translation>
+<translation id="7685038817958445325">Չհաջողվեց հեռարձակել</translation>
 <translation id="7685049629764448582">JavaScript-ի հիշողություն</translation>
 <translation id="7701869757853594372">USER մշակիչներ</translation>
 <translation id="7704305437604973648">Խնդիր</translation>
@@ -409,7 +412,6 @@
 Պահեք բանալիի ֆայլն ապահով վայրում։ Այն Ձեզ պետք կգա ընդլայնման նոր տարբերակներ ստեղծելու համար։</translation>
 <translation id="8004582292198964060">Բրաուզեր</translation>
 <translation id="8018313076035239964">Կառավարեք՝ ինչ տեղեկույթ կարող են վեբ կայքերն օգտագործել և ինչ բովանդակություն կարող են Ձեզ ցույց տալ</translation>
-<translation id="8032244173881942855">Չի հաջողվում հեռարձակել ներդիրը։</translation>
 <translation id="8071432093239591881">Տպել որպես պատկեր</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> ԿԲ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -427,7 +429,7 @@
 <translation id="8512476990829870887">Ավարտել գործընթացը</translation>
 <translation id="8523493869875972733">Պահել փոփոխությունները</translation>
 <translation id="8546306075665861288">Պատկերների քեշ</translation>
-<translation id="8569682776816196752">Վերջնակետեր չեն գտնվել</translation>
+<translation id="8569682776816196752">Նպատակակետեր չեն գտնվել</translation>
 <translation id="8584280235376696778">&amp;Բացել տեսանյութը նոր ներդիրում</translation>
 <translation id="8605428685123651449">SQLite-ի հիշողություն</translation>
 <translation id="8615618338313291042">Հավելված՝ գաղտնի ռեժիմում. <ph name="APP_NAME" /></translation>
@@ -465,7 +467,6 @@
 <translation id="9218430445555521422">Դարձնել ստանդարտ</translation>
 <translation id="93766956588638423">Վերանորոգել ընդլայնումը</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Հորիզոնական</translation>
 <translation id="994289308992179865">Կրկնե&amp;լ</translation>
 <translation id="998747458861718449">Հետա&amp;զոտել</translation>
 </translationbundle>

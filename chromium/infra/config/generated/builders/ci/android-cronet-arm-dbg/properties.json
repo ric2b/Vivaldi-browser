@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-cronet-arm-dbg",
-              "project": "chromium-m128"
+              "project": "chromium-m130"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -43,7 +43,7 @@
         {
           "bucket": "ci",
           "builder": "android-cronet-arm-dbg",
-          "project": "chromium-m128"
+          "project": "chromium-m130"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -51,7 +51,8 @@
           "builder": "android-cronet-arm-dbg",
           "group": "tryserver.chromium.android"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/android-cronet-arm-dbg/targets"
     }
   },
   "$build/reclient": {

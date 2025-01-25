@@ -16,27 +16,21 @@
 
 package com.google.android.nearby.presence.rust;
 
-import static java.lang.annotation.RetentionPolicy.SOURCE;
-
-import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import com.google.android.nearby.presence.rust.credential.CredentialBook;
-import java.lang.annotation.Retention;
 import java.util.Iterator;
 
+/**
+ * A section from a deserialized V1 advertisement. This object is valid for only as long as the
+ * containing advertisement object is valid; it is backed by the same {@link LegibleV1Sections}
+ * instance.
+ */
 public final class DeserializedV1Section<M extends CredentialBook.MatchedMetadata> {
-
-  @IntDef({VerificationMode.MIC, VerificationMode.SIGNATURE})
-  @Retention(SOURCE)
-  public @interface VerificationMode {
-    public static final int MIC = 0;
-    public static final int SIGNATURE = 1;
-  }
 
   private final LegibleV1Sections legibleSections;
   private final int legibleSectionsIndex;
   private final int numDataElements;
-  private final @IdentityKind int identityTag;
+  @IdentityKind private final int identityTag;
   private final CredentialBook<M> credentialBook;
 
   /* package */ DeserializedV1Section(
@@ -66,7 +60,6 @@ public final class DeserializedV1Section<M extends CredentialBook.MatchedMetadat
   /**
    * Gets the data element at the given {@code index} in this advertisement.
    *
-   * @throws IllegalStateException if the advertisement is not legible ({@link #isLegible()}).
    * @throws IndexOutOfBoundsException if the index is invalid
    */
   public V1DataElement getDataElement(int index) {
@@ -148,7 +141,7 @@ public final class DeserializedV1Section<M extends CredentialBook.MatchedMetadat
 
     @Override
     public boolean hasNext() {
-      return position < (numDataElements - 1);
+      return position < numDataElements;
     }
 
     @Override

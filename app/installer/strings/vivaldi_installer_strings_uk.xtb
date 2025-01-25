@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Установити автономно</translation>
 <translation id="1682285232070778125">Установити Vivaldi як типовий браузер</translation>
 <translation id="1974060860693918893">Докладно</translation>
+<translation id="2053560788696003312">Vivaldi потребує Windows 10 або новіше.</translation>
 <translation id="2134216661302048561">Програма установки Vivaldi не завершила встановлення браузера. Ви точно бажаєте вийти зараз?</translation>
 <translation id="2286454467119466181">Просто</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Усі права захищено. &lt;a&gt;Політика конфіденційності&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Прийняти та оновити</translation>
 <translation id="5302048478445481009">Мова</translation>
 <translation id="694714344624446243">Програма установки Vivaldi</translation>
+<translation id="7467493612551448880">Версія Vivaldi, яку ви встановлюєте, не оптимізована для вашої версії Windows.
+
+Відвідайте vivaldi.com/download, щоб встановити Windows для ARM.</translation>
 <translation id="7658239707568436148">Скасувати</translation>
 <translation id="8773751185824654197">Увага! Якщо ви оновлюєте запущений браузер, його буде закрито та перезапущено</translation>
 <translation id="933060950687965486">Тип установки</translation>

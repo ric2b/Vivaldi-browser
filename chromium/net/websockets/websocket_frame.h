@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -58,7 +59,7 @@ struct NET_EXPORT WebSocketFrameHeader {
 
   // Contains four-byte data representing "masking key" of WebSocket frames.
   struct WebSocketMaskingKey {
-    uint8_t key[WebSocketFrameHeader::kMaskingKeyLength];
+    std::array<uint8_t, WebSocketFrameHeader::kMaskingKeyLength> key;
   };
 
   // Constructor to avoid a lot of repetitive initialisation.
@@ -178,8 +179,7 @@ GetWebSocketFrameHeaderSize(const WebSocketFrameHeader& header);
 // ERR_INVALID_ARGUMENT and does not write any data to |buffer|.
 NET_EXPORT int WriteWebSocketFrameHeader(const WebSocketFrameHeader& header,
                                          const WebSocketMaskingKey* masking_key,
-                                         char* buffer,
-                                         int buffer_size);
+                                         base::span<uint8_t> buffer);
 
 // Generates a masking key suitable for use in a new WebSocket frame.
 NET_EXPORT WebSocketMaskingKey GenerateWebSocketMaskingKey();
@@ -199,8 +199,7 @@ NET_EXPORT WebSocketMaskingKey GenerateWebSocketMaskingKey();
 NET_EXPORT void MaskWebSocketFramePayload(
     const WebSocketMaskingKey& masking_key,
     uint64_t frame_offset,
-    char* data,
-    int data_size);
+    base::span<uint8_t> data);
 
 }  // namespace net
 

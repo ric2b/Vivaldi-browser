@@ -23,29 +23,27 @@ limitations under the License.
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/LogicalResult.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/IR/AffineMap.h"  // from @llvm-project
-#include "mlir/IR/Attributes.h"  // from @llvm-project
-#include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "mlir/IR/Diagnostics.h"  // from @llvm-project
-#include "mlir/IR/DialectRegistry.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/IR/SymbolTable.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/Pass/Pass.h"  // from @llvm-project
-#include "mlir/Pass/PassManager.h"  // from @llvm-project
-#include "mlir/Pass/PassRegistry.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
-#include "mlir/Support/TypeID.h"  // from @llvm-project
-#include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
-#include "shardy/dialect/sdy/ir/constants.h"  // from @shardy
-#include "shardy/dialect/sdy/ir/dialect.h"  // from @shardy
-#include "shardy/dialect/sdy/ir/utils.h"  // from @shardy
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/AffineMap.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/DialectRegistry.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Operation.h"
+#include "mlir/IR/Value.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassRegistry.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
+#include "mlir/Support/TypeID.h"
+#include "mlir/Transforms/DialectConversion.h"
+#include "shardy/dialect/sdy/ir/constants.h"
+#include "shardy/dialect/sdy/ir/dialect.h"
+#include "shardy/dialect/sdy/ir/utils.h"
 #include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "xla/service/spmd/shardy/constants.h"
 #include "xla/service/spmd/shardy/utils.h"
@@ -66,7 +64,6 @@ using ::mlir::Pass;
 using ::mlir::PassWrapper;
 using ::mlir::SmallVector;
 using ::mlir::StringRef;
-using ::mlir::SymbolTable;
 using ::mlir::Value;
 using ::mlir::func::FuncOp;
 
@@ -92,7 +89,6 @@ LogicalResult exportFunc(FuncOp funcOp, OpBuilder& builder) {
     if (auto oldSharding = funcOp.getArgAttrOfType<TensorShardingAttr>(
             argNum, kShardingAttr)) {
       addFrontendAttribute(funcOp, kShardingRoundTripAttr, oldSharding, argNum);
-      funcOp.removeArgAttr(argNum, kShardingAttr);
     }
   }
 
@@ -122,7 +118,6 @@ LogicalResult exportFunc(FuncOp funcOp, OpBuilder& builder) {
           TensorShardingPerValueAttr::get(customCallOp.getContext(), sharding),
           builder);
       returnOperand.set(customCallOp.getResult(0));
-      funcOp.removeResultAttr(resultNum, builder.getStringAttr(kShardingAttr));
     }
   }
 
@@ -130,7 +125,6 @@ LogicalResult exportFunc(FuncOp funcOp, OpBuilder& builder) {
     if (auto oldShardingPerValue =
             op->getAttrOfType<TensorShardingPerValueAttr>(kShardingAttr)) {
       saveOpShardingPerValueAttr(op, oldShardingPerValue, builder);
-      op->removeAttr(kShardingAttr);
     }
   });
 
@@ -155,16 +149,10 @@ class SdyRoundTripExportShardingsPass
     }
 
     SmallVector<NamedAttribute> mhloMeshes;
-    mlir::SymbolTableCollection symbolTableCollection;
-    SymbolTable& symbolTable = symbolTableCollection.getSymbolTable(moduleOp);
     // Saves the MeshOps for MHLO<->HLO round-trip and removes them from the
     // ModuleOp.
-    for (MeshOp meshOp :
-         llvm::make_early_inc_range(moduleOp.getOps<MeshOp>())) {
-      mhloMeshes.emplace_back(
-          meshOp.getSymNameAttr(),
-          getStringAttribute(meshOp.getMeshAttr(), builder));
-      symbolTable.erase(meshOp);
+    for (MeshOp meshOp : moduleOp.getOps<MeshOp>()) {
+      mhloMeshes.emplace_back(meshOp.getSymNameAttr(), meshOp.getMeshAttr());
     }
     addFrontendAttribute(moduleOp, kMeshesRoundTripAttr,
                          DictionaryAttr::get(context, mhloMeshes));

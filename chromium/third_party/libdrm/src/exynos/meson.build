@@ -56,6 +56,6 @@ test(
   args : [
     '--lib', libdrm_exynos,
     '--symbols-file', files('exynos-symbols.txt'),
-    '--nm', prog_nm.path(),
+    '--nm', prog_nm.full_path(),
   ],
 )

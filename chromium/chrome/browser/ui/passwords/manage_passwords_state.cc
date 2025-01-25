@@ -16,6 +16,8 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 using password_manager::PasswordForm;
 using password_manager::PasswordFormManagerForUI;
@@ -198,7 +200,7 @@ void ManagePasswordsState::OnPasswordAutofilled(
     base::span<const PasswordForm> password_forms,
     url::Origin origin,
     base::span<const PasswordForm> federated_matches) {
-  DCHECK(!password_forms.empty() || !federated_matches.empty());
+  CHECK(!password_forms.empty() || !federated_matches.empty());
   auto local_credentials_forms = DeepCopyNonPSLVector(password_forms);
   AppendDeepCopyVector(federated_matches, &local_credentials_forms);
 
@@ -240,12 +242,25 @@ void ManagePasswordsState::OnKeychainError() {
   SetState(password_manager::ui::KEYCHAIN_ERROR_STATE);
 }
 
-void ManagePasswordsState::OnPasskeySaved(const std::u16string& username,
-                                          bool gpm_pin_created) {
+void ManagePasswordsState::OnPasskeySaved(bool gpm_pin_created) {
   ClearData();
-  recently_saved_passkey_username_ = username;
   gpm_pin_created_during_recent_passkey_creation_ = gpm_pin_created;
   SetState(password_manager::ui::PASSKEY_SAVED_CONFIRMATION_STATE);
+}
+
+void ManagePasswordsState::OnPasskeyDeleted() {
+  ClearData();
+  SetState(password_manager::ui::PASSKEY_DELETED_CONFIRMATION_STATE);
+}
+
+void ManagePasswordsState::OnPasskeyUpdated() {
+  ClearData();
+  SetState(password_manager::ui::PASSKEY_UPDATED_CONFIRMATION_STATE);
+}
+
+void ManagePasswordsState::OnPasskeyNotAccepted() {
+  ClearData();
+  SetState(password_manager::ui::PASSKEY_NOT_ACCEPTED_STATE);
 }
 
 void ManagePasswordsState::TransitionToState(
@@ -322,11 +337,19 @@ void ManagePasswordsState::ChooseCredential(const PasswordForm* form) {
   std::move(credentials_callback_).Run(form);
 }
 
+void ManagePasswordsState::OpenPasswordDetailsBubble(
+    const password_manager::PasswordForm& form) {
+  single_credential_mode_credential_ = form;
+  SetState(password_manager::ui::State::MANAGE_STATE);
+}
+
 void ManagePasswordsState::ClearData() {
   form_manager_.reset();
+  clear_selected_password();
   local_credentials_forms_.clear();
   credentials_callback_.Reset();
   unsynced_credentials_.clear();
+  single_credential_mode_credential_.reset();
 }
 
 bool ManagePasswordsState::AddForm(const PasswordForm& form) {

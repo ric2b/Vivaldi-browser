@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       block_encoder.h
 /// \brief      Encodes .xz Blocks
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -42,6 +41,6 @@
 
 
 extern lzma_ret lzma_block_encoder_init(lzma_next_coder *next,
-		lzma_allocator *allocator, lzma_block *block);
+		const lzma_allocator *allocator, lzma_block *block);
 
 #endif

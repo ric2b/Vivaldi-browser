@@ -19,19 +19,16 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
-#include "absl/types/span.h"
 #include "internal/base/observer_list.h"
 #include "internal/platform/clock.h"
 #include "internal/platform/device_info.h"
-#include "internal/platform/mutex.h"
-#include "internal/platform/timer.h"
 #include "proto/sharing_enums.pb.h"
 #include "sharing/analytics/analytics_recorder.h"
 #include "sharing/common/nearby_share_enums.h"
@@ -40,32 +37,11 @@
 #include "sharing/internal/public/logging.h"
 #include "sharing/local_device_data/nearby_share_local_device_data_manager.h"
 #include "sharing/proto/settings_observer_data.pb.h"
+#include "sharing/thread_timer.h"
 
 namespace nearby {
 namespace sharing {
 
-// Provides a type safe wrapper/abstraction over prefs for both C++ and
-// Javascript (over mojo) to interact with Nearby user settings. This class
-// always reads directly from prefs and relies on preference's memory cache.
-// It is designed to be contained within the Nearby Sharing Service with an
-// instance per user profile. This class also helps to keep some prefs
-// logic out of |NearbyShareServiceImpl|.
-//
-// This class is also used to expose device properties that affect the settings
-// UI, but cannot be added at load time because they need to be re-computed. See
-// GetIsFastInitiationHardwareSupported() as an example.
-//
-// The mojo interface is intended to be exposed in settings, os_settings, and
-// the nearby WebUI.
-//
-// NOTE: The pref-change registrar only notifies observers of pref value
-// changes; observers are not notified if the pref value is set but does not
-// change. This class inherits this behavior.
-//
-// NOTE: Because the observer interface is over mojo, setting a value directly
-// will not synchronously trigger the observer event. Generally this is not a
-// problem because these settings should only be changed by user interaction,
-// but this is necessary to know when writing unit-tests.
 class NearbyShareSettings
     : nearby::sharing::NearbyShareLocalDeviceDataManager::Observer {
  public:
@@ -156,10 +132,13 @@ class NearbyShareSettings
         bool is_supported) = 0;
   };
 
+  struct FallbackVisibilityInfo {
+    proto::DeviceVisibility visibility;
+    absl::Time fallback_time;
+  };
+
   NearbyShareSettings(
-      Context* context,
-      nearby::Clock* clock,
-      nearby::DeviceInfo& device_info,
+      Context* context, nearby::Clock* clock, nearby::DeviceInfo& device_info,
       nearby::sharing::api::PreferenceManager& preference_manager,
       NearbyShareLocalDeviceDataManager* local_device_data_manager,
       analytics::AnalyticsRecorder* analytics_recorder = nullptr);
@@ -168,17 +147,17 @@ class NearbyShareSettings
   // Internal synchronous getters for C++ clients
   proto::FastInitiationNotificationState GetFastInitiationNotificationState()
       const;
-  bool is_fast_initiation_hardware_supported();
-  void SetIsFastInitiationHardwareSupported(bool is_supported);
+  bool is_fast_initiation_hardware_supported() ABSL_LOCKS_EXCLUDED(mutex_);
+  void SetIsFastInitiationHardwareSupported(bool is_supported)
+      ABSL_LOCKS_EXCLUDED(mutex_);
   std::string GetDeviceName() const;
   proto::DataUsage GetDataUsage() const;
   proto::DeviceVisibility GetVisibility() const;
   // Gets the timestamp of last visibility change. Need the timestamp to decide
   // whether need to send optional signature data during key pairing.
-  absl::Time GetLastVisibilityTimestamp() const;
-  proto::DeviceVisibility GetLastVisibility() const;
+  absl::Time GetLastVisibilityTimestamp() const ABSL_LOCKS_EXCLUDED(mutex_);
+  proto::DeviceVisibility GetLastVisibility() const ABSL_LOCKS_EXCLUDED(mutex_);
 
-  bool IsOnboardingComplete() const;
   std::string GetCustomSavePath() const;
 
   // Returns true if the feature is disabled by policy.
@@ -187,25 +166,18 @@ class NearbyShareSettings
   // Asynchronous APIs exposed by NearbyShareSettings
   void AddSettingsObserver(Observer* observer);
   void RemoveSettingsObserver(Observer* observer);
-  void GetFastInitiationNotificationState(
-      std::function<void(proto::FastInitiationNotificationState)> callback);
-  void GetIsFastInitiationHardwareSupported(std::function<void(bool)> callback);
   void SetFastInitiationNotificationState(
       proto::FastInitiationNotificationState state);
-  void IsOnboardingComplete(std::function<void(bool)> callback);
-  void SetIsOnboardingComplete(bool completed, std::function<void()> callback);
-  void GetDeviceName(std::function<void(absl::string_view)> callback);
   void ValidateDeviceName(
       absl::string_view device_name,
       std::function<void(DeviceNameValidationResult)> callback);
   void SetDeviceName(absl::string_view device_name,
                      std::function<void(DeviceNameValidationResult)> callback);
-  void GetDataUsage(std::function<void(proto::DataUsage)> callback);
   void SetDataUsage(proto::DataUsage data_usage);
   // Returns the fallback visibility if the current visibility is temporary,
   // otherwise returning |DEVICE_VISIBILITY_UNSPECIFIED|.
-  proto::DeviceVisibility GetFallbackVisibility() const;
-  void GetVisibility(std::function<void(proto::DeviceVisibility)> callback);
+  FallbackVisibilityInfo GetFallbackVisibility() const
+      ABSL_LOCKS_EXCLUDED(mutex_);
   // Sets the visibility for the Nearby Sharing service. If the expiration is
   // not zero, the visibility will be set temporarily and a fallback will be
   // set. If the expiration is zero, the visibility will be set permanently.
@@ -214,16 +186,14 @@ class NearbyShareSettings
   // temporary timer expires, the fallback visibility will be restored and
   // cleared.
   void SetVisibility(proto::DeviceVisibility visibility,
-                     absl::Duration expiration = absl::ZeroDuration()) const;
-  bool GetIsReceiving();
-  void SetIsReceiving(bool is_receiving) const;
-  bool GetIsAnalyticsEnabled();
-  void SetIsAnalyticsEnabled(bool is_analytics_enabled) const;
+                     absl::Duration expiration = absl::ZeroDuration())
+      ABSL_LOCKS_EXCLUDED(mutex_);
+  bool GetIsAnalyticsEnabled() const;
+  void SetIsAnalyticsEnabled(bool is_analytics_enabled);
 
-  void GetCustomSavePathAsync(
-      const std::function<void(absl::string_view)>& callback) const;
   void SetCustomSavePathAsync(absl::string_view save_path,
-                              const std::function<void()>& callback);
+                              const std::function<void()>& callback)
+      ABSL_LOCKS_EXCLUDED(mutex_);
 
   // NearbyShareLocalDeviceDataManager::Observer:
   void OnLocalDeviceDataChanged(bool did_device_name_change,
@@ -233,29 +203,25 @@ class NearbyShareSettings
   std::string Dump() const;
 
  private:
-  bool GetIsTemporarilyVisible() const;
-  void SetFallbackVisibility(proto::DeviceVisibility visibility) const;
-  void OnEnabledPrefChanged();
-  void OnFastInitiationNotificationStatePrefChanged();
-  void OnDataUsagePrefChanged();
-  void OnVisibilityPrefChanged();
-  void OnIsReceivingPrefChanged();
-  void OnAllowedContactsPrefChanged();
-  void OnIsOnboardingCompletePrefChanged();
-  void OnCustomSavePathChanged();
+  void SetFallbackVisibility(proto::DeviceVisibility visibility)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void OnPreferenceChanged(absl::string_view key);
 
-  void NotifyAllObservers(absl::string_view key, Observer::Data value)
+  void NotifyAllObservers(absl::string_view key, Observer::Data value);
+
+  void StartVisibilityTimer(absl::Duration expiration)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  void StartVisibilityTimer(absl::Duration expiration) const
+  FallbackVisibilityInfo GetRawFallbackVisibility() const
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Restore/Save fallback visibility
-  void RestoreFallbackVisibility();
+  void RestoreFallbackVisibility()
+      ABSL_NO_THREAD_SAFETY_ANALYSIS;  // called from c'tor only
 
   // Make sure thread safe to access Nearby settings
-  mutable RecursiveMutex mutex_;
+  mutable absl::Mutex mutex_;
+  Context* context_;
   nearby::Clock* const clock_;
   nearby::DeviceInfo& device_info_;
   nearby::sharing::api::PreferenceManager& preference_manager_;
@@ -265,15 +231,15 @@ class NearbyShareSettings
 
   std::shared_ptr<bool> is_desctructing_ = nullptr;
   bool is_fast_initiation_hardware_supported_ ABSL_GUARDED_BY(mutex_) = false;
-  ObserverList<Observer> observers_set_ ABSL_GUARDED_BY(mutex_);
-  std::unique_ptr<Timer> visibility_expiration_timer_ ABSL_GUARDED_BY(mutex_);
-  mutable std::optional<proto::DeviceVisibility> fallback_visibility_
+  ObserverList<Observer> observers_set_;
+  std::unique_ptr<ThreadTimer> visibility_expiration_timer_
       ABSL_GUARDED_BY(mutex_);
+  proto::DeviceVisibility fallback_visibility_ ABSL_GUARDED_BY(mutex_);
 
   // Used to track the timestamp of visibility change.
-  mutable absl::Time last_visibility_timestamp_ ABSL_GUARDED_BY(mutex_) =
+  absl::Time last_visibility_timestamp_ ABSL_GUARDED_BY(mutex_) =
       absl::InfinitePast();
-  mutable proto::DeviceVisibility last_visibility_ ABSL_GUARDED_BY(mutex_) =
+  proto::DeviceVisibility last_visibility_ ABSL_GUARDED_BY(mutex_) =
       proto::DeviceVisibility::DEVICE_VISIBILITY_UNSPECIFIED;
 };
 

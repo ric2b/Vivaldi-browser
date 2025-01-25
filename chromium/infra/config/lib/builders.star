@@ -27,16 +27,16 @@ through `builders.cpu` and `builders.os` respectively.
 
 load("//project.star", "settings")
 load("./args.star", "args")
+load("./bootstrap.star", "register_bootstrap")
 load("./branches.star", "branches")
+load("./builder_config.star", "register_builder_config")
+load("./builder_exemptions.star", "exempted_from_description_builders")
+load("./builder_health_indicators.star", "register_health_spec")
 load("./consoles.star", "register_builder_to_console_view")
 load("./gn_args.star", "register_gn_args")
-load("./bootstrap.star", "register_bootstrap")
-load("./builder_config.star", "register_builder_config")
-load("./builder_health_indicators.star", "register_health_spec")
 load("./nodes.star", "nodes")
 load("./recipe_experiments.star", "register_recipe_experiments_ref")
 load("./sheriff_rotations.star", "register_gardener_builder")
-load("./description_exceptions.star", "exempted_from_description_builders")
 
 ################################################################################
 # Constants for use with the builder function                                  #
@@ -88,7 +88,10 @@ os = struct(
     MAC_14 = os_enum(os_category.MAC, "Mac-14"),
     MAC_DEFAULT = os_enum(os_category.MAC, "Mac-14"),
     MAC_ANY = os_enum(os_category.MAC, "Mac"),
-    MAC_BETA = os_enum(os_category.MAC, "Mac-15"),
+    MAC_BETA = os_enum(
+        os_category.MAC,
+        "Mac-15" if settings.project.startswith("chromium") else "Mac-14",
+    ),
     WINDOWS_10 = os_enum(os_category.WINDOWS, "Windows-10"),
     # TODO(crbug.com/41492657): remove after slow compile issue resolved.
     WINDOWS_10_1909 = os_enum(os_category.WINDOWS, "Windows-10-18363"),
@@ -103,6 +106,11 @@ siso = struct(
         TEST_TRUSTED = "rbe-chromium-trusted-test",
         DEFAULT_UNTRUSTED = "rbe-chromium-untrusted",
         TEST_UNTRUSTED = "rbe-chromium-untrusted-test",
+    ) if settings.project.startswith("chromium") else struct(
+        DEFAULT_TRUSTED = "rbe-chrome-trusted",
+        TEST_TRUSTED = "rbe-chrome-trusted-test",
+        DEFAULT_UNTRUSTED = "rbe-chrome-untrusted",
+        TEST_UNTRUSTED = "rbe-chrome-untrusted-test",
     ),
     remote_jobs = struct(
         DEFAULT = 250,
@@ -110,7 +118,7 @@ siso = struct(
         HIGH_JOBS_FOR_CI = 500,
         LOW_JOBS_FOR_CQ = 150,
         # Calculated based on the number of CPUs inside Siso.
-        HIGH_JOBS_FOR_CQ = -1,
+        HIGH_JOBS_FOR_CQ = -1 if settings.project.startswith("chromium") else 300,
     ),
 )
 
@@ -365,6 +373,7 @@ defaults = args.defaults(
     siso_experiments = [],
     siso_remote_jobs = None,
     siso_fail_if_reapi_used = None,
+    siso_output_local_strategy = None,
     health_spec = None,
     builder_config_settings = None,
 
@@ -390,6 +399,15 @@ defaults = args.defaults(
 # in different buckets that use the same builder group since lucicfg will check
 # that there aren't two graphs with the same ID
 _BUILDER_GROUP_ID_NODE = nodes.create_unscoped_node_type("builder-group-id")
+
+# For staging, we specifically want to reuse the same builder group so that the
+# staging builders look up the same GN args and targets that the prod official
+# builders use
+_BUILDER_GROUP_REUSE_BUCKET_ALLOWLIST = [
+    "official.diffs.staging",
+    "official.infra.staging",
+    "official.staging",
+] if settings.project.startswith("chrome") else []
 
 def builder(
         *,
@@ -450,6 +468,7 @@ def builder(
         siso_experiments = args.DEFAULT,
         siso_remote_jobs = args.DEFAULT,
         siso_fail_if_reapi_used = None,
+        siso_output_local_strategy = args.DEFAULT,
         skip_profile_upload = args.DEFAULT,
         health_spec = args.DEFAULT,
         shadow_builderless = args.DEFAULT,
@@ -658,6 +677,8 @@ def builder(
             to run when building with Siso.
         siso_fail_if_reapi_used: If True, check siso_metrics.json to see if the build
             used remote execution and fail the build if any step used it.
+        siso_output_local_strategy: a string indicating the output strategy
+            for `--output_local_strategy`. full, greedy or minimum.
         health_spec: a health spec instance describing the threshold for when
             the builder should be considered unhealthy.
         shadow_builderless: If set to True, then led builds created for this
@@ -770,6 +791,8 @@ def builder(
 
     if not kwargs.get("description_html", "").strip() and name not in exempted_from_description_builders.get(bucket, []) and not mirrors:
         fail("Builder " + name + " must have a description_html. All new builders must specify a description.")
+    elif kwargs.get("description_html", "").strip() and name in exempted_from_description_builders.get(bucket, []):
+        fail("Need to remove builder " + bucket + "/" + name + " from exempted_from_description_builders")
 
     cores = defaults.get_value("cores", cores)
     if cores != None:
@@ -824,9 +847,9 @@ def builder(
         reclient_scandeps_server,
     )
 
-    # Enable scandeps_server by default.
+    # Enable scandeps_server by default for Chromium.
     if reclient_scandeps_server == args.COMPUTE:
-        reclient_scandeps_server = True
+        reclient_scandeps_server = settings.project.startswith("chromium") or (os and os.category == os_category.MAC)
 
     rbe_project = defaults.get_value("siso_project", siso_project)
     shadow_rbe_project = defaults.get_value("shadow_siso_project", shadow_siso_project)
@@ -876,6 +899,9 @@ def builder(
             siso["remote_jobs"] = remote_jobs
         if siso_fail_if_reapi_used:
             siso["fail_if_reapi_used"] = siso_fail_if_reapi_used
+        siso_output_local_strategy = defaults.get_value("siso_output_local_strategy", siso_output_local_strategy)
+        if siso_output_local_strategy:
+            siso["output_local_strategy"] = siso_output_local_strategy
         properties["$build/siso"] = siso
         if shadow_rbe_project:
             shadow_siso = dict(siso)
@@ -961,7 +987,7 @@ def builder(
 
     # Define a node to ensure there's only one builder using the
     # (builder_group, builder)
-    if builder_group != None:
+    if builder_group != None and bucket not in _BUILDER_GROUP_REUSE_BUCKET_ALLOWLIST:
         _BUILDER_GROUP_ID_NODE.add("{}:{}".format(builder_group, name))
 
     register_gardener_builder(bucket, name, gardener_rotations)

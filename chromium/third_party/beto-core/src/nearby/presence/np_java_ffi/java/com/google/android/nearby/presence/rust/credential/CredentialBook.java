@@ -17,11 +17,17 @@
 package com.google.android.nearby.presence.rust.credential;
 
 import androidx.annotation.Nullable;
+import com.google.android.nearby.presence.rust.CooperativeCleaner;
 import com.google.android.nearby.presence.rust.NpAdv;
 import com.google.android.nearby.presence.rust.OwnedHandle;
-import java.lang.ref.Cleaner;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.util.ArrayList;
 
+/**
+ * A set of credentials used for deserialization. Create a credential book using the builder from
+ * {@link #builder()}. An empty credential book ({@link #empty()}) can be used to deserialize public
+ * advertisements and sections.
+ */
 public final class CredentialBook<M extends CredentialBook.MatchedMetadata> extends OwnedHandle {
 
   static {
@@ -68,7 +74,7 @@ public final class CredentialBook<M extends CredentialBook.MatchedMetadata> exte
    * {@code getMatchedMetadata()} method on their {@code DeserializedAdvertisement} instance.
    */
   public static final class Builder<M extends MatchedMetadata> {
-    private Cleaner cleaner;
+    private CooperativeCleaner cleaner;
     private CredentialSlab slab;
 
     /**
@@ -79,19 +85,22 @@ public final class CredentialBook<M extends CredentialBook.MatchedMetadata> exte
 
     /**
      * Create a builder instance. The {@link CredentialBook#builder()} factory method can be used to
-     * create a {@code Builder} with the default {@link Cleaner}. This can fail if there isn't room
-     * to create a new {@code CredentialSlab} handle.
+     * create a {@code Builder} with the default {@link CooperativeCleaner}.
+     *
+     * <p>This can fail if there isn't room to create a new {@code CredentialSlab} handle with
+     * {@link OwnedHandle.NoSpaceLeftException}.
      *
      * @param cleaner The cleaner instance to use for the {@link CredentialSlab} and {@code
      *     CredentialBook}.
      */
-    public Builder(Cleaner cleaner) {
+    private Builder(CooperativeCleaner cleaner) {
       this.cleaner = cleaner;
       this.slab = new CredentialSlab(cleaner);
       this.matchDataList = new ArrayList<>();
     }
 
     /** Add a {@link V0DiscoveryCredential} to the book. */
+    @CanIgnoreReturnValue
     public Builder<M> addDiscoveryCredential(V0DiscoveryCredential credential, M matchData) {
       int credIdx = matchDataList.size();
       matchDataList.add(matchData);
@@ -104,6 +113,7 @@ public final class CredentialBook<M extends CredentialBook.MatchedMetadata> exte
      * CredentialBook.InvalidPublicKeyException} if the key inside {@code credential} is improperly
      * formatted.
      */
+    @CanIgnoreReturnValue
     public Builder<M> addDiscoveryCredential(V1DiscoveryCredential credential, M matchData) {
       int credIdx = matchDataList.size();
       matchDataList.add(matchData);
@@ -116,7 +126,7 @@ public final class CredentialBook<M extends CredentialBook.MatchedMetadata> exte
      * CredentialBook} handle.
      */
     public CredentialBook<M> build() {
-      return new CredentialBook(slab, matchDataList, cleaner);
+      return new CredentialBook<>(slab, matchDataList, cleaner);
     }
   }
 
@@ -140,7 +150,8 @@ public final class CredentialBook<M extends CredentialBook.MatchedMetadata> exte
    * from {@code Builder}. {@code matchData} is formatted so that each credential is given an id of
    * the index of its metadata in {@code matchData}.
    */
-  private CredentialBook(CredentialSlab slab, ArrayList<M> matchData, Cleaner cleaner) {
+  @SuppressWarnings("NonApiType")
+  private CredentialBook(CredentialSlab slab, ArrayList<M> matchData, CooperativeCleaner cleaner) {
     super(allocate(slab.move()), cleaner, CredentialBook::deallocate);
     this.matchData = matchData;
   }

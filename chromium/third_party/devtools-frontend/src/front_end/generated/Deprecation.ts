@@ -47,13 +47,13 @@ export const UIStrings = {
    */
   CSSCustomStateDeprecatedSyntax: "`:--customstatename` is deprecated. Please use the `:state(customstatename)` syntax instead.",
   /**
+   * @description Warning displayed to developers when their website uses `inset-area` in CSS. They can simply switch their CSS to `position-area` and it will function in the same way.
+   */
+  CSSInsetAreaProperty: "The `inset-area` property is deprecated. Please use the `position-area` property instead.",
+  /**
    * @description Warning displayed to developers when they hide the Cast button on a video element using the deprecated CSS selector instead of using the disableRemotePlayback attribute on the element.
    */
   CSSSelectorInternalMediaControlsOverlayCastButton: "The `disableRemotePlayback` attribute should be used in order to disable the default Cast integration instead of using `-internal-media-controls-overlay-cast-button` selector.",
-  /**
-   * @description Warning displayed to developers to let them know the CSS appearance property values they used are deprecated and will be removed.
-   */
-  CSSValueAppearanceNonStandard: "CSS appearance values  `inner-spin-button`, `media-slider`, `media-sliderthumb`, `media-volume-slider`, `media-volume-sliderthumb`, `push-button`, `searchfield-cancel-button`, `slider-horizontal`, `sliderthumb-horizontal`, `sliderthumb-vertical`, `square-button` are not standardized and will be removed.",
   /**
    * @description Warning displayed to developers to let them know the CSS appearance property value they used is not standard and will be removed.
    */
@@ -62,14 +62,6 @@ export const UIStrings = {
    * @description Warning displayed to developers when a data: URL is assigned to SVGUseElement to let them know that the support is deprecated.
    */
   DataUrlInSvgUse: "Support for data: URLs in SVGUseElement is deprecated and it will be removed in the future.",
-  /**
-   * @description Warning displayed to developers that they should not be using `DelegatedInkTrailPresenter.expectedImprovement`.
-   */
-  DelegatedInkExpectedImprovement: "`DelegatedInkTrailPresenter.expectedImprovement` is deprecated due to potential fingerprinting concerns.",
-  /**
-   * @description This warning occurs when a script modifies `document.domain` without having set on `Origin-Agent-Cluster` http header. In other words, when a script relies on the default behaviour of `Origin-Agent-Cluster` when setting document.domain.
-   */
-  DocumentDomainSettingWithoutOriginAgentClusterHeader: "Relaxing the same-origin policy by setting `document.domain` is deprecated, and will be disabled by default. To continue using this feature, please opt-out of origin-keyed agent clusters by sending an `Origin-Agent-Cluster: ?0` header along with the HTTP response for the document and frames. See https://developer.chrome.com/blog/immutable-document-domain/ for more details.",
   /**
    * @description Warning displayed to developers when non-standard Mutation Events are used. These are deprecated and will be removed.
    */
@@ -231,6 +223,10 @@ export const UIStrings = {
    */
   UnloadHandler: "Unload event listeners are deprecated and will be removed.",
   /**
+   * @description This warning occurs when the website attempts to invoke the deprecated GPUAdapter `requestAdapterInfo()` method.
+   */
+  V8GPUAdapter_RequestAdapterInfo_Method: "The GPUAdapter `requestAdapterInfo()` method is deprecated, instead use the GPUAdapter `info` attribute.",
+  /**
    * @description A deprecation warning shown in the DevTools Issues tab. The placeholder is always the noun 'SharedArrayBuffer' which refers to a JavaScript construct. 'Extensions' refers to Chrome extensions. The warning is shown when Chrome Extensions attempt to use 'SharedArrayBuffer's under insecure circumstances.
    */
   V8SharedArrayBufferConstructedInExtensionWithoutIsolation: "Extensions should opt into cross-origin isolation to continue using `SharedArrayBuffer`. See https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/.",
@@ -265,11 +261,12 @@ export const DEPRECATIONS_METADATA: Partial<Record<string, DeprecationDescriptor
     "chromeStatusFeature": 5140610730426368,
     "milestone": 122
   },
+  "CSSInsetAreaProperty": {
+    "chromeStatusFeature": 5142143019253760,
+    "milestone": 129
+  },
   "CSSSelectorInternalMediaControlsOverlayCastButton": {
     "chromeStatusFeature": 5714245488476160
-  },
-  "CSSValueAppearanceNonStandard": {
-    "chromeStatusFeature": 5066630972833792
   },
   "CSSValueAppearanceSliderVertical": {
     "chromeStatusFeature": 6001359429566464
@@ -299,9 +296,6 @@ export const DEPRECATIONS_METADATA: Partial<Record<string, DeprecationDescriptor
   "DataUrlInSvgUse": {
     "chromeStatusFeature": 5128825141198848,
     "milestone": 119
-  },
-  "DocumentDomainSettingWithoutOriginAgentClusterHeader": {
-    "milestone": 115
   },
   "GetInnerHTML": {
     "chromeStatusFeature": 5081733588582400
@@ -375,6 +369,9 @@ export const DEPRECATIONS_METADATA: Partial<Record<string, DeprecationDescriptor
   },
   "UnloadHandler": {
     "chromeStatusFeature": 5579556305502208
+  },
+  "V8GPUAdapter_RequestAdapterInfo_Method": {
+    "chromeStatusFeature": 5140787340509184
   },
   "V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
     "milestone": 96

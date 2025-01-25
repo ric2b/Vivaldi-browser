@@ -38,15 +38,11 @@ class CGdiDeviceDriver : public RenderDeviceDriverIface {
                 const CFX_GraphStateData* pGraphState,
                 uint32_t fill_color,
                 uint32_t stroke_color,
-                const CFX_FillRenderOptions& fill_options,
-                BlendMode blend_type) override;
-  bool FillRectWithBlend(const FX_RECT& rect,
-                         uint32_t fill_color,
-                         BlendMode blend_type) override;
+                const CFX_FillRenderOptions& fill_options) override;
+  bool FillRect(const FX_RECT& rect, uint32_t fill_color) override;
   bool DrawCosmeticLine(const CFX_PointF& ptMoveTo,
                         const CFX_PointF& ptLineTo,
-                        uint32_t color,
-                        BlendMode blend_type) override;
+                        uint32_t color) override;
   FX_RECT GetClipBox() const override;
   bool MultiplyAlpha(float alpha) override;
   bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) override;

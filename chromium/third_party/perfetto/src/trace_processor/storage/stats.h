@@ -17,11 +17,9 @@
 #ifndef SRC_TRACE_PROCESSOR_STORAGE_STATS_H_
 #define SRC_TRACE_PROCESSOR_STORAGE_STATS_H_
 
-#include <stddef.h>
+#include <cstddef>
 
-namespace perfetto {
-namespace trace_processor {
-namespace stats {
+namespace perfetto::trace_processor::stats {
 
 // Compile time list of parsing and processing stats.
 // clang-format off
@@ -269,7 +267,7 @@ namespace stats {
   F(perf_chosen_process_shard,            kIndexed, kInfo,     kTrace,    ""), \
   F(perf_guardrail_stop_ts,               kIndexed, kDataLoss, kTrace,    ""), \
   F(perf_unknown_record_type,             kIndexed, kInfo,     kAnalysis, ""), \
-  F(perf_record_skipped,                  kSingle,  kError,    kAnalysis, ""), \
+  F(perf_record_skipped,                  kIndexed, kError,    kAnalysis, ""), \
   F(perf_samples_skipped,                 kSingle,  kError,    kAnalysis, ""), \
   F(perf_counter_skipped_because_no_cpu,  kSingle,  kError,    kAnalysis, ""), \
   F(perf_features_skipped,                kIndexed, kInfo,     kAnalysis, ""), \
@@ -277,6 +275,11 @@ namespace stats {
   F(perf_samples_skipped_dataloss,        kSingle,  kDataLoss, kTrace,    ""), \
   F(perf_dummy_mapping_used,              kSingle,  kInfo,     kAnalysis, ""), \
   F(perf_invalid_event_id,                kSingle,  kError,    kTrace,    ""), \
+  F(perf_aux_missing,                     kSingle,  kDataLoss, kTrace,    ""), \
+  F(perf_aux_ignored,                     kSingle,  kInfo,     kTrace,    ""), \
+  F(perf_aux_lost,                        kSingle,  kDataLoss, kTrace,    ""), \
+  F(perf_auxtrace_missing,                kSingle,  kDataLoss, kTrace,    ""), \
+  F(perf_unknown_aux_data,                kIndexed, kDataLoss, kTrace,    ""), \
   F(memory_snapshot_parser_failure,       kSingle,  kError,    kAnalysis, ""), \
   F(thread_time_in_state_out_of_order,    kSingle,  kError,    kAnalysis, ""), \
   F(thread_time_in_state_unknown_cpu_freq,                                     \
@@ -355,6 +358,12 @@ namespace stats {
   F(winscope_protolog_missing_interned_stacktrace_parse_errors,                \
                                           kSingle,  kInfo,     kAnalysis,      \
       "Failed to find interned ProtoLog stacktrace."),                         \
+  F(winscope_protolog_message_decoding_failed,                                 \
+                                          kSingle,  kInfo,     kAnalysis,      \
+      "Failed to decode ProtoLog message."),                                   \
+  F(winscope_protolog_view_config_collision,                                   \
+                                          kSingle,  kInfo,     kAnalysis,      \
+      "Got a viewer config collision!"),                                       \
   F(winscope_viewcapture_parse_errors,                                         \
                                           kSingle,  kInfo,     kAnalysis,      \
       "ViewCapture packet has unknown fields, which results in some "          \
@@ -379,7 +388,14 @@ namespace stats {
       "in some arguments missing. You may need a newer version of trace "      \
       "processor to parse them."),                                             \
   F(mali_unknown_mcu_state_id,            kSingle,  kError,   kAnalysis,       \
-      "An invalid Mali GPU MCU state ID was detected.")
+      "An invalid Mali GPU MCU state ID was detected."),                       \
+  F(pixel_modem_negative_timestamp,       kSingle,  kError,   kAnalysis,       \
+      "A negative timestamp was received from a Pixel modem event."),          \
+  F(legacy_v8_cpu_profile_invalid_callsite, kSingle,  kInfo,  kAnalysis,       \
+      "Indicates a callsite in legacy v8 CPU profiling is invalid."),          \
+  F(legacy_v8_cpu_profile_invalid_sample, kSingle,  kError,  kAnalysis,        \
+      "Indicates a sample in legacy v8 CPU profile is invalid. This will "     \
+      "cause CPU samples to be missing in the UI.")
 // clang-format on
 
 enum Type {
@@ -433,8 +449,6 @@ constexpr Source kSources[] = {PERFETTO_TP_STATS(PERFETTO_TP_STATS_SOURCE)};
 constexpr char const* kDescriptions[] = {
     PERFETTO_TP_STATS(PERFETTO_TP_STATS_DESCRIPTION)};
 
-}  // namespace stats
-}  // namespace trace_processor
-}  // namespace perfetto
+}  // namespace perfetto::trace_processor::stats
 
 #endif  // SRC_TRACE_PROCESSOR_STORAGE_STATS_H_

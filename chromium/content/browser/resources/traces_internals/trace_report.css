@@ -9,12 +9,12 @@
  * #include=cr-hidden-style-lit
  * #css_wrapper_metadata_end */
 
-.trace-card {
+:host {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 3fr auto auto auto;
+  grid-template-columns: repeat(3, 1fr) 3fr auto 250px auto;
   grid-auto-flow: column;
   grid-column-gap: 12px;
-  grid-row-gap: 0px;
+  grid-row-gap: 0;
   padding: 8px 16px;
   margin-bottom: 12px;
   background-color: var(--cr-card-background-color);
@@ -26,7 +26,7 @@
   position: relative;
 }
 
-.trace-card > div {
+:host > div {
   overflow: hidden;
   min-width: 0;
 }
@@ -114,7 +114,7 @@
     background-color: transparent;
   }
 
-  .action-button:hover {
+  .action-button:not([disabled]):hover {
     --cr-icon-button-fill-color: var(--cr-card-background-color);
     background-color: DarkGray;
   }
@@ -127,25 +127,27 @@
     background-color: rgb(239, 239, 239);
   }
 
-  .action-button:hover {
+  .action-button:not([disabled]):hover {
     --cr-icon-button-fill-color: black;
   }
 }
 
 .actions-container {
   width: 150px;
+  justify-content: end;
+  display: flex;
 }
 
 .action-button {
   height: 40px;
   width: 40px;
-  cursor: pointer;
   border-radius: 100%;
-  pointer-events: auto;
+  margin-inline-start: 0px;
+  margin-inline-end: 8px;
 }
 
-.action-button:active {
-  background-color: WhiteSmoke;
+.action-button.download {
+  pointer-events: visible;
 }
 
 .info {
@@ -171,7 +173,19 @@
   border-radius: 4px;
 }
 
-.trace-spinner > paper-spinner-lite {
-  width: 20px;
-  height: 20px;
+.spinner {
+  --spinner-size: 20px;
+  mask-image: url(chrome://resources/images/throbber_small.svg);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  background-color: var(--google-blue-500);
+  mask-size: var(--spinner-size) var(--spinner-size);
+  height: var(--spinner-size);
+  width: var(--spinner-size);
+}
+
+@media (prefers-color-scheme: dark) {
+  .spinner {
+    background-color: var(--google-blue-300);
+  }
 }

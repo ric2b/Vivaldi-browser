@@ -43,7 +43,7 @@ void WebViewPermissionHelper::RegisterProtocolHandler(
   }
 
   auto* page_content_settings_delegate =
-    chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+    PageSpecificContentSettingsDelegate::FromWebContents(
       web_view_guest()->web_contents());
 
   page_content_settings_delegate->set_pending_protocol_handler(handler);
@@ -63,7 +63,7 @@ void WebViewPermissionHelper::RegisterProtocolHandler(
     request_type, std::move(request_info),
     base::BindOnce(&WebViewPermissionHelper::OnProtocolPermissionResponse,
       weak_factory_.GetWeakPtr()),
-    default_media_access_permission_);
+    false);
 }
 
 void WebViewPermissionHelper::OnProtocolPermissionResponse(
@@ -74,7 +74,7 @@ void WebViewPermissionHelper::OnProtocolPermissionResponse(
       web_view_guest()->web_contents()->GetBrowserContext());
 
   auto* content_settings =
-    chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+    PageSpecificContentSettingsDelegate::FromWebContents(
       web_view_guest()->web_contents());
 
   auto pending_handler = content_settings->pending_protocol_handler();
@@ -83,14 +83,14 @@ void WebViewPermissionHelper::OnProtocolPermissionResponse(
     registry->RemoveIgnoredHandler(pending_handler);
 
     registry->OnAcceptRegisterProtocolHandler(pending_handler);
-    chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+    PageSpecificContentSettingsDelegate::FromWebContents(
       web_view_guest()->web_contents())
       ->set_pending_protocol_handler_setting(CONTENT_SETTING_ALLOW);
 
   }
   else {
     registry->OnIgnoreRegisterProtocolHandler(pending_handler);
-    chrome::PageSpecificContentSettingsDelegate::FromWebContents(
+    PageSpecificContentSettingsDelegate::FromWebContents(
       web_view_guest()->web_contents())
       ->set_pending_protocol_handler_setting(CONTENT_SETTING_BLOCK);
 

@@ -28,6 +28,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "tensorflow/compiler/mlir/lite/allocation.h"
 #include "tensorflow/lite/allocation.h"
 #include "tensorflow/lite/array.h"
 #include "tensorflow/lite/c/common_internal.h"
@@ -946,6 +947,25 @@ class Subgraph {
   // Checks the options for releasing dynamic tensors and release dynamic
   // tensors if configured.
   void MaybeReleaseDynamicTensors(const TfLiteNode& node, size_t node_index);
+
+  // Set the buffer handle to a tensor.
+  // The method is used to implement Interpreter::SetBufferHandle and
+  // SignatureRunner::SetInputBufferHandle/SetOutputBufferHandle APIs.
+  // `release_existing_buffer_handle`: If true, the existing buffer handle
+  // will be released by TfLiteDelegate::FreeBufferHandle.
+  static TfLiteStatus SetBufferHandleImpl(
+      TfLiteContext* context, TfLiteTensor* tensor,
+      TfLiteBufferHandle buffer_handle, TfLiteDelegate* delegate,
+      bool release_existing_buffer_handle = true);
+
+  // SetBufferHandleImpl with tensor index.
+  TfLiteStatus SetBufferHandle(int tensor_index,
+                               TfLiteBufferHandle buffer_handle,
+                               TfLiteDelegate* delegate,
+                               bool release_existing_buffer_handle = true) {
+    return SetBufferHandleImpl(&context_, tensor(tensor_index), buffer_handle,
+                               delegate, release_existing_buffer_handle);
+  }
 
   // The state of the Subgraph.
   enum State {

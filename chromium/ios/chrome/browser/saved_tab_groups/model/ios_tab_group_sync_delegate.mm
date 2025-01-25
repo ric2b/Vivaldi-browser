@@ -7,14 +7,18 @@
 #import <vector>
 
 #import "base/check.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/uuid.h"
 #import "components/saved_tab_groups/saved_tab_group_tab.h"
 #import "components/saved_tab_groups/tab_group_sync_service.h"
 #import "components/saved_tab_groups/types.h"
+#import "components/saved_tab_groups/utils.h"
 #import "components/tab_groups/tab_group_id.h"
 #import "components/tab_groups/tab_group_visual_data.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_action_context.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_local_update_observer.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
@@ -26,6 +30,10 @@
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_utils.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/tab_grid_commands.h"
+#import "ios/chrome/browser/shared/public/commands/tab_groups_commands.h"
 #import "ios/chrome/browser/tab_insertion/model/tab_insertion_browser_agent.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state.h"
@@ -80,21 +88,106 @@ IOSTabGroupSyncDelegate::~IOSTabGroupSyncDelegate() {}
 void IOSTabGroupSyncDelegate::HandleOpenTabGroupRequest(
     const base::Uuid& sync_tab_group_id,
     std::unique_ptr<TabGroupActionContext> context) {
+  IOSTabGroupActionContext* ios_context =
+      static_cast<IOSTabGroupActionContext*>(context.get());
   const auto saved_tab_group = sync_service_->GetGroup(sync_tab_group_id);
-  if (!saved_tab_group) {
-    // The group doesn't exist.
+  Browser* origin_browser = ios_context->browser;
+
+  if (!saved_tab_group || !origin_browser) {
+    // The group doesn't exist or there is no origin browser.
     return;
   }
 
+  Browser* target_browser = origin_browser;
+
   LocalTabGroupInfo tab_group_info =
       GetLocalTabGroupInfo(browser_list_, *saved_tab_group);
-  if (tab_group_info.tab_group) {
-    // TODO(crbug.com/329626315): Focus the window it belongs to and open the
-    // group in the UI.
+  const TabGroup* group = tab_group_info.tab_group;
+  if (group) {
+    if (!tab_group_info.browser) {
+      return;
+    }
+    target_browser = tab_group_info.browser;
+
+    if (target_browser != origin_browser) {
+      base::RecordAction(
+          base::UserMetricsAction("MobileOpenGroupOpenInOtherBrowser"));
+      // The group is in another window.
+      SceneState* target_scene_state = target_browser->GetSceneState();
+      UISceneActivationRequestOptions* options =
+          [[UISceneActivationRequestOptions alloc] init];
+      options.requestingScene = origin_browser->GetSceneState().scene;
+
+      if (@available(iOS 17, *)) {
+        UISceneSessionActivationRequest* request =
+            [UISceneSessionActivationRequest
+                requestWithSession:target_scene_state.scene.session];
+        request.options = options;
+        [[UIApplication sharedApplication]
+            activateSceneSessionForRequest:request
+                              errorHandler:^(NSError* error) {
+                                LOG(ERROR) << base::SysNSStringToUTF8(
+                                    error.localizedDescription);
+                                NOTREACHED();
+                              }];
+
+      } else {
+        [[UIApplication sharedApplication]
+            requestSceneSessionActivation:target_scene_state.scene.session
+                             userActivity:nil
+                                  options:options
+                             errorHandler:^(NSError* error) {
+                               LOG(ERROR) << base::SysNSStringToUTF8(
+                                   error.localizedDescription);
+                               NOTREACHED();
+                             }];
+      }
+
+      if (!target_scene_state.UIEnabled) {
+        return;
+      }
+
+      CommandDispatcher* dispatcher = target_browser->GetCommandDispatcher();
+      id<ApplicationCommands> applicationHandler =
+          HandlerForProtocol(dispatcher, ApplicationCommands);
+      [applicationHandler displayTabGridInMode:TabGridOpeningMode::kRegular];
+      id<TabGroupsCommands> tabGroupsHandler =
+          HandlerForProtocol(dispatcher, TabGroupsCommands);
+      [tabGroupsHandler showTabGroup:group];
+
+      return;
+    }
+    base::RecordAction(base::UserMetricsAction("MobileOpenGroupOpenInBrowser"));
   } else {
-    CreateLocalTabGroup(*saved_tab_group);
-    // TODO(crbug.com/329626315): Open the group in the UI.
+    base::RecordAction(base::UserMetricsAction("MobileOpenGroupClosed"));
+
+    std::optional<LocalTabGroupID> tab_group_id =
+        CreateLocalTabGroupImpl(*saved_tab_group, origin_browser);
+    if (!tab_group_id) {
+      return;
+    }
+    LocalTabGroupInfo new_tab_group_info =
+        GetLocalTabGroupInfo(browser_list_, tab_group_id.value());
+    group = new_tab_group_info.tab_group;
   }
+
+  CommandDispatcher* dispatcher = target_browser->GetCommandDispatcher();
+  id<ApplicationCommands> applicationHandler =
+      HandlerForProtocol(dispatcher, ApplicationCommands);
+  [applicationHandler displayTabGridInMode:TabGridOpeningMode::kRegular];
+
+  id<TabGroupsCommands> tabGroupsHandler =
+      HandlerForProtocol(dispatcher, TabGroupsCommands);
+  [tabGroupsHandler showTabGroup:group];
+
+  // Moves back to the grid containing the group after it has been opened.
+  dispatch_after(
+      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+      dispatch_get_main_queue(), ^{
+        id<TabGridCommands> tabGridHandler =
+            HandlerForProtocol(dispatcher, TabGridCommands);
+        [tabGridHandler bringGroupIntoView:group animated:NO];
+      });
 }
 
 std::unique_ptr<ScopedLocalObservationPauser>
@@ -105,56 +198,7 @@ IOSTabGroupSyncDelegate::CreateScopedLocalObserverPauser() {
 
 void IOSTabGroupSyncDelegate::CreateLocalTabGroup(
     const SavedTabGroup& saved_tab_group) {
-  if (saved_tab_group.saved_tabs().size() == 0) {
-    return;
-  }
-
-  LocalTabGroupInfo tab_group_info =
-      GetLocalTabGroupInfo(browser_list_, saved_tab_group);
-  if (tab_group_info.tab_group) {
-    // This group already exists locally.
-    return;
-  }
-
-  Browser* browser = GetMostActiveSceneBrowser();
-  if (!browser) {
-    return;
-  }
-
-  auto lock = CreateScopedLocalObserverPauser();
-  WebStateList* web_state_list = browser->GetWebStateList();
-
-  TabInsertionBrowserAgent* tab_insertion_browser_agent =
-      TabInsertionBrowserAgent::FromBrowser(browser);
-  int insertion_index = web_state_list->count();
-  std::set<int> inserted_indexes;
-  // To do the mapping on the service, the local group ID is necessary. Keep a
-  // temporary mapping until the group is created.
-  std::map<const base::Uuid, const LocalTabID> sync_to_local_tab_mapping;
-
-  for (const SavedTabGroupTab& tab : saved_tab_group.saved_tabs()) {
-    web::WebState* web_state =
-        InsertDistantTab(tab, tab_insertion_browser_agent, insertion_index,
-                         /*web_state_index=*/nil);
-    sync_to_local_tab_mapping.insert(
-        {tab.saved_tab_guid(), web_state->GetUniqueIdentifier().identifier()});
-    inserted_indexes.insert(insertion_index);
-    insertion_index++;
-  }
-
-  TabGroupVisualData visual_data = {saved_tab_group.title(),
-                                    saved_tab_group.color()};
-  TabGroupId local_group_id = TabGroupId::GenerateNew();
-
-  // Do the association on the server before creating it in the WebStateList to
-  // avoid creating another group in the service.
-  sync_service_->UpdateLocalTabGroupMapping(saved_tab_group.saved_guid(),
-                                            local_group_id);
-  for (auto const& [sync_tab_id, local_tab_id] : sync_to_local_tab_mapping) {
-    sync_service_->UpdateLocalTabId(local_group_id, sync_tab_id, local_tab_id);
-  }
-
-  web_state_list->CreateGroup(inserted_indexes, visual_data, local_group_id);
+  CreateLocalTabGroupImpl(saved_tab_group, nullptr);
 }
 
 void IOSTabGroupSyncDelegate::CloseLocalTabGroup(
@@ -371,12 +415,19 @@ web::WebState* IOSTabGroupSyncDelegate::InsertDistantTab(
     TabInsertionBrowserAgent* tab_insertion_browser_agent,
     int web_state_index,
     const TabGroup* tab_group) {
-  web::NavigationManager::WebLoadParams web_params(tab.url());
+  GURL url_to_open = tab.url();
+  std::u16string title = tab.title();
+  if (!IsURLValidForSavedTabGroups(url_to_open)) {
+    url_to_open = GetDefaultUrlAndTitle().first;
+    title = GetDefaultUrlAndTitle().second;
+  }
+
+  web::NavigationManager::WebLoadParams web_params(url_to_open);
   TabInsertion::Params tab_insertion_params;
   tab_insertion_params.index = web_state_index;
   tab_insertion_params.in_background = true;
   tab_insertion_params.instant_load = false;
-  tab_insertion_params.placeholder_title = tab.title();
+  tab_insertion_params.placeholder_title = title;
   if (tab_group) {
     tab_insertion_params.insert_in_group = true;
     tab_insertion_params.tab_group = tab_group->GetWeakPtr();
@@ -397,11 +448,19 @@ void IOSTabGroupSyncDelegate::UpdateLocalWebState(
     return;
   }
 
+  // Dont navigate to the new URL if its not valid for sync. We allow local
+  // state to differ from sync in this case, especially since we want to honor
+  // the local URL after restarts.
+  if (!IsURLValidForSavedTabGroups(saved_tab.url())) {
+    return;
+  }
+
   WebStateList* web_state_list = tab_group_info.web_state_list;
 
   // If the `web_state` is the active index, open and load the updated URL.
   if (web_state_list->active_index() == web_state_index) {
     local_update_observer_->IgnoreNavigationForWebState(web_state);
+
     web_state->OpenURL(web::WebState::OpenURLParams(
         saved_tab.url(), web::Referrer(), WindowOpenDisposition::CURRENT_TAB,
         ui::PAGE_TRANSITION_GENERATED, /*is_renderer_initiated=*/false));
@@ -445,4 +504,62 @@ void IOSTabGroupSyncDelegate::UpdateLocalGroupVisualData(
                                                        visual_data);
 }
 
+std::optional<LocalTabGroupID> IOSTabGroupSyncDelegate::CreateLocalTabGroupImpl(
+    const SavedTabGroup& saved_tab_group,
+    Browser* browser) {
+  if (saved_tab_group.saved_tabs().size() == 0) {
+    return std::nullopt;
+  }
+
+  LocalTabGroupInfo tab_group_info =
+      GetLocalTabGroupInfo(browser_list_, saved_tab_group);
+  if (tab_group_info.tab_group) {
+    // This group already exists locally.
+    return std::nullopt;
+  }
+
+  // If no browser was passed, get the most active one.
+  browser = browser ? browser : GetMostActiveSceneBrowser();
+
+  if (!browser) {
+    return std::nullopt;
+  }
+
+  auto lock = CreateScopedLocalObserverPauser();
+  WebStateList* web_state_list = browser->GetWebStateList();
+
+  TabInsertionBrowserAgent* tab_insertion_browser_agent =
+      TabInsertionBrowserAgent::FromBrowser(browser);
+  int insertion_index = web_state_list->count();
+  std::set<int> inserted_indexes;
+  // To do the mapping on the service, the local group ID is necessary. Keep a
+  // temporary mapping until the group is created.
+  std::map<const base::Uuid, const LocalTabID> sync_to_local_tab_mapping;
+
+  for (const SavedTabGroupTab& tab : saved_tab_group.saved_tabs()) {
+    web::WebState* web_state =
+        InsertDistantTab(tab, tab_insertion_browser_agent, insertion_index,
+                         /*web_state_index=*/nil);
+    sync_to_local_tab_mapping.insert(
+        {tab.saved_tab_guid(), web_state->GetUniqueIdentifier().identifier()});
+    inserted_indexes.insert(insertion_index);
+    insertion_index++;
+  }
+
+  TabGroupVisualData visual_data = {saved_tab_group.title(),
+                                    saved_tab_group.color()};
+  TabGroupId local_group_id = TabGroupId::GenerateNew();
+
+  // Do the association on the server before creating it in the WebStateList to
+  // avoid creating another group in the service.
+  sync_service_->UpdateLocalTabGroupMapping(saved_tab_group.saved_guid(),
+                                            local_group_id);
+  for (auto const& [sync_tab_id, local_tab_id] : sync_to_local_tab_mapping) {
+    sync_service_->UpdateLocalTabId(local_group_id, sync_tab_id, local_tab_id);
+  }
+
+  web_state_list->CreateGroup(inserted_indexes, visual_data, local_group_id);
+
+  return std::make_optional(local_group_id);
+}
 }  // namespace tab_groups

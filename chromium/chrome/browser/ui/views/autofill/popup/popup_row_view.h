@@ -12,6 +12,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "chrome/browser/ui/autofill/next_idle_barrier.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -92,7 +93,8 @@ class PopupRowView : public views::View, public views::ViewObserver {
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnPaint(gfx::Canvas* canvas) override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  bool GetNeedsNotificationWhenVisibleBoundsChange() const override;
+  void OnVisibleBoundsChanged() override;
 
   // views::ViewObserver:
   void OnViewFocused(views::View* focused_now) override;
@@ -112,6 +114,9 @@ class PopupRowView : public views::View, public views::ViewObserver {
   // Attempts to process a key press `event`. Returns true if it did (and the
   // parent no longer needs to handle it).
   virtual bool HandleKeyPressEvent(const input::NativeWebKeyboardEvent& event);
+
+  // Returns if the popup row is available for selection.
+  virtual bool IsSelectable() const;
 
   // Returns the view representing the content area of the row.
   PopupRowContentView& GetContentView() { return *content_view_; }
@@ -150,6 +155,12 @@ class PopupRowView : public views::View, public views::ViewObserver {
   // TODO(crbug.com/40274514): Maybe remove this method once experiment is
   // complete.
   void UpdateOpenSubPopupIconVisibility();
+
+  // This method is just a getter for the `barrier_for_accepting_` which is
+  // set `true` when the view's visible part is big enough and was present on
+  // the screen long enough, see `OnVisibleBoundsChanged()` implementation for
+  // what these "enough"s mean.
+  bool IsViewVisibleEnough() const;
 
   // The delegate used for accessibility announcements (implemented by the
   // parent view).
@@ -207,10 +218,21 @@ class PopupRowView : public views::View, public views::ViewObserver {
   // displayed in a sub-popup.
   bool child_suggestions_displayed_ = false;
 
+  // This is used to protected users from accepting suggestions too quickly.
+  // This is often used in various attacks against their data when the user is
+  // tricked to press a key combination or click a specific place on the screen
+  // (e.g. in a game). Having a delay gives the user a chance to notice/overview
+  // what they are about to expose to the website.
+  // The timer starts in `OnVisibleBoundsChanged()` only when the view is
+  // visible enough and checked before triggering acceptance on the controller.
+  std::optional<NextIdleBarrier> barrier_for_accepting_;
+
   // Has the same value as `Suggestion::is_acceptable` of the underlying
   // suggestion. If `false` the content part is not highlighted separately,
   // but the whole row is highlighted instead as for the control view.
   const bool suggestion_is_acceptable_;
+
+  const bool highlight_on_select_;
 };
 
 }  // namespace autofill

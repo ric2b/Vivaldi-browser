@@ -95,6 +95,7 @@ source_set("chrome_public_test_apk_filters") {
     "//testing/buildbot/filters/android.emulator_12.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_12l.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_12l_landscape.chrome_public_test_apk.filter",
+    "//testing/buildbot/filters/android.emulator_12l_rel.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_13.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_14.chrome_public_test_apk.filter",
     "//testing/buildbot/filters/android.emulator_15.chrome_public_test_apk.filter",
@@ -186,6 +187,7 @@ source_set("content_browsertests_filters") {
     "//testing/buildbot/filters/android.emulator_12l.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_13.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_14.content_browsertests.filter",
+    "//testing/buildbot/filters/android.emulator_15.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_o.content_browsertests.filter",
     "//testing/buildbot/filters/android.emulator_p.content_browsertests.filter",
     "//testing/buildbot/filters/android.device_14.content_browsertests.filter",
@@ -342,6 +344,7 @@ source_set("gl_tests_filters") {
     "//testing/buildbot/filters/android.emulator_11.gl_tests.filter",
     "//testing/buildbot/filters/android.emulator_12_12l_13.gl_tests.filter",
     "//testing/buildbot/filters/android.emulator_o_p.gl_tests.filter",
+    "//testing/buildbot/filters/android.moto_g_power_5g.gl_tests.filter",
     "//testing/buildbot/filters/android.pie_arm64_rel.gl_tests.filter",
     "//testing/buildbot/filters/android.pie_tot.gl_tests.filter",
     "//testing/buildbot/filters/android.samsung_a13.gl_tests.filter",
@@ -397,6 +400,7 @@ source_set("linux_trusty_rel_browser_tests_filters") {
 source_set("media_unittests_filters") {
   data = [
     "//testing/buildbot/filters/android.emulator.media_unittests.filter",
+    "//testing/buildbot/filters/android.emulator_11.media_unittests.filter",
     "//testing/buildbot/filters/fuchsia.debug.media_unittests.filter",
     "//testing/buildbot/filters/android.device.media_unittests.filter",
   ]
@@ -452,6 +456,7 @@ source_set("webview_instrumentation_test_apk_filters") {
   data = [
     "//testing/buildbot/filters/android.emulator.webview_instrumentation_test_apk.filter",
     "//testing/buildbot/filters/android.14.webview_instrumentation_test_apk.filter",
+    "//testing/buildbot/filters/android.emulator_15.webview_instrumentation_test_apk.filter",
   ]
 }
 

@@ -9,7 +9,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
@@ -17,6 +16,8 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LevelListDrawable;
 import android.util.AttributeSet;
 import android.util.TypedValue;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
@@ -67,6 +68,8 @@ import java.util.Collection;
 import java.util.function.BooleanSupplier;
 
 // Vivaldi
+import android.app.Activity;
+
 import org.chromium.build.BuildConfig;
 
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -98,7 +101,7 @@ public class ToolbarTablet extends ToolbarLayout
     private ImageButton mReloadButton;
     private ImageButton mBookmarkButton;
     private ImageButton mSaveOfflineButton;
-    private ToggleTabStackButton mSwitcherButton;
+    private View mIncognitoIndicator;
 
     private OnClickListener mBookmarkListener;
 
@@ -122,6 +125,8 @@ public class ToolbarTablet extends ToolbarLayout
     private ObservableSupplier<Integer> mTabCountSupplier;
     private TabletCaptureStateToken mLastCaptureStateToken;
     private @DrawableRes int mBookmarkButtonImageRes;
+    private OnTouchListener mReloadButtonTouchListener;
+    private boolean mIsShiftDownForReload;
 
     /** Vivaldi **/
     public static ChromeImageButton sPanelButton;
@@ -175,7 +180,8 @@ public class ToolbarTablet extends ToolbarLayout
         if (BuildConfig.IS_VIVALDI) {
             mReloadButton.setVisibility(View.GONE);
             mVivaldiReloadButton = findViewById(R.id.reload_button);
-            mVivaldiReloadButton.setOnClickListener(view -> stopOrReloadCurrentTab());
+            mVivaldiReloadButton.setOnClickListener(
+                    view -> stopOrReloadCurrentTab(mIsShiftDownForReload));
             sPanelButton = findViewById(R.id.panel_button);
             mBackButton.setImageDrawable(getResources()
                     .getDrawable(R.drawable.vivaldi_bottom_nav_back_56dp));
@@ -227,9 +233,9 @@ public class ToolbarTablet extends ToolbarLayout
         reloadIcon.addLevel(stopLevel, stopLevel, stopLevelDrawable);
         mReloadButton.setImageDrawable(reloadIcon);
 
-        mSwitcherButton = findViewById(R.id.tab_switcher_button);
         mBookmarkButton = findViewById(R.id.bookmark_button);
         mSaveOfflineButton = findViewById(R.id.save_offline_button);
+        setIncognitoIndicatorVisibility();
 
         // Initialize values needed for showing/hiding toolbar buttons when the activity size
         // changes.
@@ -385,6 +391,7 @@ public class ToolbarTablet extends ToolbarLayout
                         }
                     }
                 });
+        initReloadButtonTouchListener();
         } // End Vivaldi
 
         mBookmarkButton.setOnClickListener(this);
@@ -411,6 +418,28 @@ public class ToolbarTablet extends ToolbarLayout
 
         mSaveOfflineButton.setOnClickListener(this);
         mSaveOfflineButton.setOnLongClickListener(this);
+    }
+
+    /**
+     * Initializes the reload button's touch listener, which exists to detect shift clicks for
+     * reload ignoring cache. Suppress lint ClickableViewAccessibility for the call to
+     * setOnTouchListener.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private void initReloadButtonTouchListener() {
+        mReloadButtonTouchListener =
+                new OnTouchListener() {
+                    @Override
+                    @SuppressLint("ClickableViewAccessibility")
+                    public boolean onTouch(View view, MotionEvent event) {
+                        // For mouse clicks the framework calls onTouch() before onClick(). Capture
+                        // the shift key state to determine reload vs. reload ignoring cache.
+                        mIsShiftDownForReload =
+                                (event.getMetaState() & KeyEvent.META_SHIFT_ON) != 0;
+                        return false;
+                    }
+                };
+        mReloadButton.setOnTouchListener(mReloadButtonTouchListener);
     }
 
     @Override
@@ -468,7 +497,7 @@ public class ToolbarTablet extends ToolbarLayout
             forward();
             RecordUserAction.record("MobileToolbarForward");
         } else if (mReloadButton == v) {
-            stopOrReloadCurrentTab();
+            stopOrReloadCurrentTab(/* ignoreCache= */ mIsShiftDownForReload);
         } else if (mBookmarkButton == v) {
             if (mBookmarkListener != null) {
                 mBookmarkListener.onClick(mBookmarkButton);
@@ -587,6 +616,7 @@ public class ToolbarTablet extends ToolbarLayout
 
             mIsIncognitoBranded = incognitoBranded;
         }
+        setIncognitoIndicatorVisibility();
 
         updateNtp();
 
@@ -607,7 +637,9 @@ public class ToolbarTablet extends ToolbarLayout
         // The tint of the |mSaveOfflineButton| should not be affected by an activity focus change.
         ImageViewCompat.setImageTintList(mSaveOfflineButton, tint);
         ImageViewCompat.setImageTintList(mReloadButton, activityFocusTint);
-        ImageViewCompat.setImageTintList(mSwitcherButton, activityFocusTint);
+        ImageViewCompat.setImageTintList(
+                (ImageView) getTabSwitcherButtonCoordinator().getContainerView(),
+                activityFocusTint);
 
         // Vivaldi
         ImageViewCompat.setImageTintList(mModelSelectorButton, tint);
@@ -660,6 +692,7 @@ public class ToolbarTablet extends ToolbarLayout
                 .setVisibility(mIsInTabSwitcherMode ? INVISIBLE : VISIBLE);
         if (getToolbarDataProvider().getTab() != null) mVivaldiReloadButton.setVisibility(
                         getToolbarDataProvider().getTab().isNativePage() ? GONE : VISIBLE);
+
         mLocationBar.updateButtonVisibility();
     }
 
@@ -721,7 +754,6 @@ public class ToolbarTablet extends ToolbarLayout
     @Override
     void setTabSwitcherMode(boolean inTabSwitcherMode) {
         mIsInTabSwitcherMode = inTabSwitcherMode;
-        mSwitcherButton.setClickable(!inTabSwitcherMode);
         int importantForAccessibility =
                 inTabSwitcherMode
                         ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -739,6 +771,7 @@ public class ToolbarTablet extends ToolbarLayout
             ToolbarDataProvider toolbarDataProvider,
             ToolbarTabController tabController,
             MenuButtonCoordinator menuButtonCoordinator,
+            ToggleTabStackButtonCoordinator tabSwitcherButtonCoordinator,
             HistoryDelegate historyDelegate,
             BooleanSupplier partnerHomepageEnabledSupplier,
             OfflineDownloader offlineDownloader,
@@ -748,6 +781,7 @@ public class ToolbarTablet extends ToolbarLayout
                 toolbarDataProvider,
                 tabController,
                 menuButtonCoordinator,
+                tabSwitcherButtonCoordinator,
                 historyDelegate,
                 partnerHomepageEnabledSupplier,
                 offlineDownloader,
@@ -770,25 +804,12 @@ public class ToolbarTablet extends ToolbarLayout
 
     @Override
     void setTabCountSupplier(ObservableSupplier<Integer> tabCountSupplier) {
-        mSwitcherButton.setTabCountSupplier(tabCountSupplier, this::isIncognito);
         mTabCountSupplier = tabCountSupplier;
     }
 
     @Override
     void setBookmarkClickHandler(OnClickListener listener) {
         mBookmarkListener = listener;
-    }
-
-    @Override
-    void setOnTabSwitcherClickHandler(OnClickListener listener) {
-        mSwitcherButton.setOnTabSwitcherClickHandler(listener);
-    }
-
-    @Override
-    void setOnTabSwitcherLongClickHandler(OnLongClickListener listener) {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.TABLET_TAB_SWITCHER_LONG_PRESS_MENU)) {
-            mSwitcherButton.setOnTabSwitcherLongClickHandler(listener);
-        }
     }
 
     @Override
@@ -895,9 +916,17 @@ public class ToolbarTablet extends ToolbarLayout
         return mHomeButton;
     }
 
-    @Override
-    public ToggleTabStackButton getTabSwitcherButton() {
-        return mSwitcherButton;
+    private void setIncognitoIndicatorVisibility() {
+        if (mIsIncognitoBranded == null
+                || !ChromeFeatureList.sTabStripIncognitoMigration.isEnabled()) return;
+        if (mIncognitoIndicator == null && mIsIncognitoBranded) {
+            ViewStub stub = findViewById(R.id.incognito_indicator_stub);
+            mIncognitoIndicator = stub.inflate();
+        }
+        if (mIncognitoIndicator != null) {
+            mIncognitoIndicator.setVisibility(
+                    mIsIncognitoBranded && mToolbarButtonsVisible ? VISIBLE : GONE);
+        }
     }
 
     private void setToolbarButtonsVisible(boolean visible) {
@@ -913,6 +942,7 @@ public class ToolbarTablet extends ToolbarLayout
             }
             mLocationBar.setShouldShowButtonsWhenUnfocusedForTablet(visible);
             setStartPaddingBasedOnButtonVisibility(visible);
+            setIncognitoIndicatorVisibility();
         }
     }
 
@@ -977,6 +1007,7 @@ public class ToolbarTablet extends ToolbarLayout
                         // Set the padding at the start of the animation so the toolbar buttons
                         // don't jump when the animation ends.
                         setStartPaddingBasedOnButtonVisibility(true);
+                        setIncognitoIndicatorVisibility();
                     }
 
                     @Override
@@ -1014,6 +1045,8 @@ public class ToolbarTablet extends ToolbarLayout
                     @Override
                     public void onAnimationStart(Animator animation) {
                         keepControlsShownForAnimation();
+
+                        setIncognitoIndicatorVisibility();
                     }
 
                     @Override
@@ -1054,6 +1087,10 @@ public class ToolbarTablet extends ToolbarLayout
         return mBookmarkButton;
     }
 
+    OnTouchListener getReloadButtonTouchListenerForTest() {
+        return mReloadButtonTouchListener;
+    }
+
     // Vivaldi
     @Override
     public void onUrlFocusChange(final boolean hasFocus) {
@@ -1077,4 +1114,5 @@ public class ToolbarTablet extends ToolbarLayout
         if (!ChromeSharedPreferences.getInstance().readBoolean("homepage", true)) visible = GONE;
         mHomeButton.setVisibility(visible);
     }
+    // End Vivaldi
 }

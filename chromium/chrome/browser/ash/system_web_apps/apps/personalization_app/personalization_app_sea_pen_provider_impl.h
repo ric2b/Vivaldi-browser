@@ -49,13 +49,20 @@ class PersonalizationAppSeaPenProviderImpl
   // WallpaperControllerObserver:
   void OnWallpaperChanged() override;
 
+  void OnWallpaperPreviewEnded() override;
+
  private:
   // ::ash::personalization_app::PersonalizationAppSeaPenProviderBase:
   void SetSeaPenObserverInternal() override;
 
   void SelectRecentSeaPenImageInternal(
       uint32_t id,
+      bool preview_mode,
       SelectRecentSeaPenImageCallback callback) override;
+
+  bool IsManagedSeaPenEnabledInternal() override;
+
+  bool IsManagedSeaPenFeedbackEnabledInternal() override;
 
   void GetRecentSeaPenImageIdsInternal(
       GetRecentSeaPenImageIdsCallback callback) override;
@@ -72,6 +79,7 @@ class PersonalizationAppSeaPenProviderImpl
   void OnFetchWallpaperDoneInternal(
       const SeaPenImage& sea_pen_image,
       const mojom::SeaPenQueryPtr& query,
+      bool preview_mode,
       base::OnceCallback<void(bool success)> callback) override;
 
   base::ScopedObservation<WallpaperController, WallpaperControllerObserver>

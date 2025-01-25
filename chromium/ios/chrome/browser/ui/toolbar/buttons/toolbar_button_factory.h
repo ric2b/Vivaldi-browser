@@ -9,10 +9,6 @@
 
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_style.h"
 
-// Vivaldi
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
-// End Vivaldi
-
 @class ToolbarButton;
 @class ToolbarButtonActionsHandler;
 @class ToolbarButtonVisibilityConfiguration;
@@ -61,23 +57,22 @@
 // Vivaldi
 // Panel toolbar button.
 - (ToolbarButton*)panelButton;
-// Tracker blocker shield button.
-- (ToolbarButton*)shieldButton;
 // Visible only in iPhone portrait + Tab bar enabled + bottom omnibox enabled
 // state.
 - (ToolbarButton*)vivaldiMoreButton;
 // Vivaldi search button -> Visible only on new tab page.
 - (ToolbarButton*)vivaldiSearchButton;
+/// Vivaldi home button, Visible only on web page if iOS topbar enabled
+/// It will be always be visible on iPad, landscape mode & if iOS bottom bar enabled
+- (ToolbarButton*)vivaldiHomeButton;
 
 /// Returns the context menu for overflow action for
 /// tab bar enabled + bottom omnibox + iPhone portrait state.
 /// For NTP only panel and tab switcher button is visible.
-/// For valid browsing state ad and tracker blocker, and navigation buttons
+/// For valid browsing state navigation buttons
 /// are present too.
-- (UIMenu*)overflowMenuWithTrackerBlocker:(BOOL)trackerBlockerEnabled
-                           atbSettingType:(ATBSettingType)type
-                 navigationForwardEnabled:(BOOL)navigationForwardEnabled
-                navigationBackwordEnabled:(BOOL)navigationBackwordEnabled;
+- (UIMenu*)overflowMenuWithNavForwardEnabled:(BOOL)navigationForwardEnabled
+                         navBackwordEnabled:(BOOL)navigationBackwordEnabled;
 // End Vivaldi
 @end
 

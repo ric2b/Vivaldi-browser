@@ -24,6 +24,10 @@ var PERMISSION_TYPES = ['media',
                         'microphone_and_camera',
                         'notifications',
                         'protocol_handling',
+                        'midi-sysex',
+                        'idle_detection',
+                        'sensors',
+                        'clipboard',
                         // Vivaldi end
                         'fullscreen',
                         'hid'];
@@ -196,8 +200,10 @@ NewWindow.prototype.getInterfaceObject = function() {
   return {
     attach: $Function.bind(function(webview) {
       this.validateCall();
-      if (!webview || !webview.tagName || webview.tagName != 'WEBVIEW') {
-        throw new Error(ERROR_MSG_WEBVIEW_EXPECTED);
+      if (!webview || !webview.tagName ||
+          (webview.tagName != 'WEBVIEW' &&
+           webview.tagName != 'CONTROLLEDFRAME')) {
+        throw new Error('Cannot attach to invalid container element.');
       }
 
       var webViewImpl = privates(webview).internal;

@@ -16,7 +16,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_impl.h"
 #include "chrome/browser/download/download_request_limiter.h"
-#include "chrome/browser/global_desktop_features.h"
+#include "chrome/browser/global_features.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/media/webrtc/webrtc_log_uploader.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
@@ -40,7 +40,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/subresource_filter/content/shared/browser/ruleset_service.h"
 #include "content/public/browser/network_service_instance.h"
-#include "content/public/browser/notification_service.h"
 #include "extensions/buildflags/buildflags.h"
 #include "media/media_buildflags.h"
 #include "printing/buildflags/buildflags.h"
@@ -150,11 +149,6 @@ TestingBrowserProcess::TestingBrowserProcess()
     : app_locale_("en"),
       platform_part_(std::make_unique<TestingBrowserProcessPlatformPart>()),
       os_crypt_async_(os_crypt_async::GetTestOSCryptAsyncForTesting()) {
-  // TestingBrowserProcess is used in unit_tests which sets this up through
-  // content::UnitTestTestSuite but also through other test binaries which don't
-  // use that test suite in which case we have to set it up.
-  notification_service_ =
-      content::NotificationService::CreateIfNecessaryForTesting();
 }
 
 TestingBrowserProcess::~TestingBrowserProcess() {
@@ -202,9 +196,10 @@ void TestingBrowserProcess::Init() {
   hid_system_tray_icon_ = std::make_unique<HidStatusIcon>();
   usb_system_tray_icon_ = std::make_unique<UsbStatusIcon>();
 #endif  // BUILDFLAG(IS_CHROMEOS)
-  desktop_features_ = GlobalDesktopFeatures::CreateGlobalDesktopFeatures();
-  desktop_features_->Init();
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+  features_ = GlobalFeatures::CreateGlobalFeatures();
+  features_->Init();
 }
 
 void TestingBrowserProcess::FlushLocalStateAndReply(base::OnceClosure reply) {
@@ -282,6 +277,11 @@ void TestingBrowserProcess::SetVariationsService(
 
 PrefService* TestingBrowserProcess::local_state() {
   return local_state_;
+}
+
+signin::ActivePrimaryAccountsMetricsRecorder*
+TestingBrowserProcess::active_primary_accounts_metrics_recorder() {
+  return nullptr;
 }
 
 variations::VariationsService* TestingBrowserProcess::variations_service() {
@@ -376,11 +376,6 @@ TestingBrowserProcess::fingerprinting_protection_ruleset_service() {
 
 BrowserProcessPlatformPart* TestingBrowserProcess::platform_part() {
   return platform_part_.get();
-}
-
-extensions::EventRouterForwarder*
-TestingBrowserProcess::extension_event_router_forwarder() {
-  return nullptr;
 }
 
 NotificationUIManager* TestingBrowserProcess::notification_ui_manager() {
@@ -536,10 +531,6 @@ HidSystemTrayIcon* TestingBrowserProcess::hid_system_tray_icon() {
 UsbSystemTrayIcon* TestingBrowserProcess::usb_system_tray_icon() {
   return usb_system_tray_icon_.get();
 }
-
-GlobalDesktopFeatures* TestingBrowserProcess::GetDesktopFeatures() {
-  return desktop_features_.get();
-}
 #endif
 
 os_crypt_async::OSCryptAsync* TestingBrowserProcess::os_crypt_async() {
@@ -559,6 +550,10 @@ BuildState* TestingBrowserProcess::GetBuildState() {
 #else
   return nullptr;
 #endif
+}
+
+GlobalFeatures* TestingBrowserProcess::GetFeatures() {
+  return features_.get();
 }
 
 resource_coordinator::TabManager* TestingBrowserProcess::GetTabManager() {

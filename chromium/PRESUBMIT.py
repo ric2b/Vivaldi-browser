@@ -11,6 +11,7 @@ for more details about the presubmit API built into depot_tools.
 from typing import Callable
 from typing import Optional
 from typing import Sequence
+from typing import Tuple
 from dataclasses import dataclass
 
 PRESUBMIT_VERSION = '2.0.0'
@@ -49,6 +50,8 @@ _EXCLUDED_PATHS = (
     r"tools/perf/page_sets/webrtc_cases.*",
     # Test file compared with generated output.
     r"tools/polymer/tests/html_to_wrapper/.*.html.ts$",
+    # Third-party dependency frozen at a fixed version.
+    r"chrome/test/data/webui/chromeos/chai_v4.js$",
 )
 
 _EXCLUDED_SET_NO_PARENT_PATHS = (
@@ -133,7 +136,7 @@ class BanRule:
     pattern: str
     # Explanation as a sequence of strings. Each string in the sequence will be
     # printed on its own line.
-    explanation: Sequence[str]
+    explanation: Tuple[str, ...]
     # Whether or not to treat this ban as a fatal error. If unspecified,
     # defaults to true.
     treat_as_error: Optional[bool] = None
@@ -913,6 +916,7 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
             _THIRD_PARTY_EXCEPT_BLINK,
             # Various tools which build outside of Chrome.
             r'testing/libfuzzer',
+            r'testing/perf/confidence',
             r'tools/android/io_benchmark/',
             # Fuzzers are allowed to use standard library random number generators
             # since fuzzing speed + reproducibility is important.
@@ -1008,6 +1012,14 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
         [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
     BanRule(
+        pattern=
+        r'/\babsl::(optional|nullopt|make_optional)\b',
+        explanation=('absl::optional is banned. Use std::optional instead.', ),
+        treat_as_error=True,
+        excluded_paths=[
+            _THIRD_PARTY_EXCEPT_BLINK,
+        ]),
+    BanRule(
         r'/(\babsl::Span\b|#include <span>|\bstd::span\b)',
         (
             'absl::Span and std::span are not allowed ',
@@ -1023,7 +1035,7 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
             r'base/numerics/.*'
 
             # Needed to use QUICHE API.
-            r'android_webview/browser/aw_ip_protection_config_provider.*',
+            r'android_webview/browser/ip_protection/.*',
             r'chrome/browser/ip_protection/.*',
             r'components/ip_protection/.*',
             r'net/third_party/quiche/overrides/quiche_platform_impl/quiche_stack_trace_impl\.*',
@@ -1045,7 +1057,7 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
             r'third_party/blink/renderer/modules/manifest/manifest_parser\.cc',
 
             # Needed to use QUICHE API.
-            r'android_webview/browser/aw_ip_protection_config_provider.*',
+            r'android_webview/browser/ip_protection/.*',
             r'chrome/browser/ip_protection/.*',
             r'components/ip_protection/.*',
 
@@ -1085,7 +1097,7 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
         True,
         [
             # Needed to use QUICHE API.
-            r'android_webview/browser/aw_ip_protection_config_provider.*',
+            r'android_webview/browser/ip_protection/.*',
             r'chrome/browser/ip_protection/.*',
             r'components/ip_protection/.*',
 
@@ -1229,7 +1241,7 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
         r'/\bstd::execution::(par|seq)\b',
         ('std::execution::(par|seq) is banned; they do not fit into '
          ' Chrome\'s threading model, and libc++ doesn\'t have full '
-         'support.'),
+         'support.', ),
         True,
         [_THIRD_PARTY_EXCEPT_BLINK],
     ),
@@ -1979,27 +1991,6 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
             '^chrome/browser/web_applications/isolated_web_apps/isolated_web_app_features.cc',
         )),
     BanRule(
-        pattern=
-        r'/\babsl::(optional|nullopt|make_optional|in_place|in_place_t)\b',
-        explanation=('Don\'t use `absl::optional`. Use `std::optional`.', ),
-        # TODO(b/40288126): Enforce after completing the rewrite.
-        treat_as_error=False,
-        excluded_paths=[
-            _THIRD_PARTY_EXCEPT_BLINK,
-        ]),
-    BanRule(
-        pattern=r'(base::)?\bStringPiece\b',
-        explanation=(
-            'Don\'t use `base::StringPiece`. Use `std::string_view`.', ),
-        treat_as_error=False,
-    ),
-    BanRule(
-        pattern=r'(base::)?\bStringPiece16\b',
-        explanation=(
-            'Don\'t use `base::StringPiece16`. Use `std::u16string_view`.', ),
-        treat_as_error=False,
-    ),
-    BanRule(
         pattern='/(CUIAutomation|AccessibleObjectFromWindow)',
         explanation=
         ('Direct usage of UIAutomation or IAccessible2 in client code is '
@@ -2038,6 +2029,7 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
                  r'FindTabbedBrowser|'
                  r'FindAnyBrowser|'
                  r'FindBrowserWithProfile|'
+                 r'FindLastActive|'
                  r'FindBrowserWithActiveWindow'),
         explanation=
         ('Most code should already be scoped to a Browser. Pass in a Browser* '
@@ -2055,7 +2047,91 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
          'rather than implicit. See BrowserUserData header file for more '
          'details.', ),
         treat_as_error=False,
+        excluded_paths=(
+          # Exclude iOS as the iOS implementation of BrowserUserData is separate
+          # and still in use.
+          '^ios/',
+        ),
     ),
+    BanRule(
+        pattern=r'UNSAFE_TODO(',
+        explanation=
+        ('Do not use UNSAFE_TODO() to write new unsafe code. Use only when '
+         'removing a pre-existing file-wide allow_unsafe_buffers pragma, or '
+         'when incrementally converting code off of unsafe interfaces',
+        ),
+        treat_as_error=False,
+    ),
+    BanRule(
+        pattern=r'UNSAFE_BUFFERS(',
+        explanation=
+        ('Try to avoid using UNSAFE_BUFFERS() if at all possible. Otherwise, '
+         'be sure to justify in a // SAFETY comment why other options are not '
+         'available, and why the code is safe.',
+        ),
+        treat_as_error=False,
+    ),
+    BanRule(
+        pattern='BrowserWithTestWindowTest',
+        explanation=
+        ('Do not use BrowserWithTestWindowTest. By instantiating an instance '
+         'of class Browser, the test is no longer a unit test but is instead a '
+         'browser test. The class BrowserWithTestWindowTest forces production '
+         'logic to take on test-only conditionals, which is an anti-pattern. '
+         'Features should be performing dependency injection rather than '
+         'directly using class Browser. See '
+         'docs/chrome_browser_design_principles.md for more details.',
+        ),
+        treat_as_error=False,
+    ),
+    BanRule(
+        pattern='TestWithBrowserView',
+        explanation=
+         ('Do not use TestWithBrowserView. See '
+          'docs/chrome_browser_design_principles.md for details. If you want '
+          'to write a test that has both a Browser and a BrowserView, create '
+          'a browser_test. If you want to write a unit_test, your code must '
+          'not reference Browser*.'
+         ),
+        treat_as_error=False,
+    ),
+    BanRule(
+        pattern='RunUntilIdle',
+        explanation=
+        ('Do not RunUntilIdle. If possible, explicitly quit the run loop using '
+         'run_loop.Quit() or run_loop.QuitClosure() if completion can be '
+         'observed using a lambda or callback. Otherwise, wait for the '
+         'condition to be true via base::test::RunUntil().',
+        ),
+        treat_as_error=False,
+    ),
+    BanRule(
+        pattern=r'/\bstd::(literals|string_literals|string_view_literals)\b',
+        explanation = (
+            'User-defined literals are banned by the Google C++ style guide. '
+            'Exceptions are provided in Chrome for string and string_view '
+            'literals that embed \\0.',
+        ),
+        treat_as_error=True,
+        excluded_paths=(
+            # Various tests or test helpers that embed NUL in strings or
+            # string_views.
+            r'^ash/components/arc/session/serial_number_util_unittest\.cc',
+            r'^base/strings/string_util_unittest\.cc',
+            r'^base/strings/utf_string_conversions_unittest\.cc',
+            r'^chrome/browser/ash/crosapi/browser_data_back_migrator_unittest\.cc',
+            r'^chrome/browser/ash/crosapi/browser_data_migrator_util_unittest\.cc',
+            r'^chrome/browser/ash/crosapi/move_migrator_unittest\.cc',
+            r'^components/history/core/browser/visit_annotations_database\.cc',
+            r'^components/history/core/browser/visit_annotations_database_unittest\.cc',
+            r'^components/os_crypt/sync/os_crypt_unittest\.cc',
+            r'^components/password_manager/core/browser/credentials_cleaner_unittest\.cc',
+            r'^content/browser/file_system_access/file_system_access_file_writer_impl_unittest\.cc',
+            r'^net/cookies/parsed_cookie_unittest\.cc',
+            r'^third_party/blink/renderer/modules/webcodecs/test_helpers\.cc',
+            r'^third_party/blink/renderer/modules/websockets/websocket_channel_impl_test\.cc',
+        ),
+    )
 )
 
 _DEPRECATED_SYNC_CONSENT_FUNCTION_WARNING = (
@@ -2174,7 +2250,6 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
 
 
 _GENERIC_PYDEPS_FILES = [
-    'android_webview/test/components/run_webview_component_smoketest.pydeps',
     'android_webview/tools/run_cts.pydeps',
     'build/android/apk_operations.pydeps',
     'build/android/devil_chromium.pydeps',
@@ -2219,6 +2294,7 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/prepare_resources.pydeps',
     'build/android/gyp/process_native_prebuilt.pydeps',
     'build/android/gyp/proguard.pydeps',
+    'build/android/gyp/rename_java_classes.pydeps',
     'build/android/gyp/system_image_apks.pydeps',
     'build/android/gyp/trace_event_bytecode_rewriter.pydeps',
     'build/android/gyp/turbine.pydeps',
@@ -3682,6 +3758,9 @@ def CheckSpamLogging(input_api, output_api):
             r"^chrome/browser/diagnostics/diagnostics_writer\.cc$",
             r"^chrome/chrome_elf/dll_hash/dll_hash_main\.cc$",
             r"^chrome/installer/setup/.*",
+            # crdmg runs as a separate binary which intentionally does
+            # not depend on base logging.
+            r"^chrome/utility/safe_browsing/mac/crdmg\.cc$",
             r"^chromecast/",
             r"^components/cast",
             r"^components/media_control/renderer/media_playback_options\.cc$",
@@ -3708,6 +3787,7 @@ def CheckSpamLogging(input_api, output_api):
             r"^services/webnn/tflite/graph_impl_tflite\.cc$",
             r"^services/webnn/coreml/graph_impl_coreml\.mm$",
             r"^storage/browser/file_system/dump_file_system\.cc$",
+            r"^testing/perf/",
             r"^tools/",
             r"^ui/base/resource/data_pack\.cc$",
             r"^ui/aura/bench/bench_main\.cc$",
@@ -4881,6 +4961,7 @@ def _CheckAndroidWebkitImports(input_api, output_api):
         files_to_skip=(_EXCLUDED_PATHS + _TEST_CODE_EXCLUDED_PATHS + input_api.
                        DEFAULT_FILES_TO_SKIP + (
                            r'^android_webview/glue/.*',
+                           r'^android_webview/support_library/.*',
                            r'^weblayer/.*',
                        )),
         files_to_check=[r'.*\.java$'])
@@ -5105,7 +5186,35 @@ def CheckPydepsNeedsUpdating(input_api, output_api, checker_for_tests=None):
     if results:
         return results
 
-    is_android = _ParseGclientArgs().get('checkout_android', 'false') == 'true'
+    try:
+        parsed_args = _ParseGclientArgs()
+    except FileNotFoundError:
+        message = (
+            'build/config/gclient_args.gni not found. Please make sure your '
+            'workspace has been initialized with gclient sync.'
+        )
+        import sys
+        original_sys_path = sys.path
+        try:
+            sys.path = sys.path + [
+                input_api.os_path.join(input_api.PresubmitLocalPath(),
+                                    'third_party', 'depot_tools')
+            ]
+            import gclient_utils
+            if gclient_utils.IsEnvCog():
+                # Users will always hit this when they run presubmits before cog
+                # workspace initialization finishes. The check shouldn't fail in
+                # this case. This is an unavoidable workaround that's needed for
+                # good presubmit UX for cog.
+                results.append(output_api.PresubmitPromptWarning(message))
+            else:
+                results.append(output_api.PresubmitError(message))
+            return results
+        finally:
+            # Restore sys.path to what it was before.
+            sys.path = original_sys_path
+
+    is_android = parsed_args.get('checkout_android', 'false') == 'true'
     checker = checker_for_tests or PydepsChecker(input_api, _ALL_PYDEPS_FILES)
     affected_pydeps = set(checker.ComputeAffectedPydeps())
     affected_android_pydeps = affected_pydeps.intersection(

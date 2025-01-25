@@ -84,6 +84,11 @@ IN_PROC_BROWSER_TEST_F(SettingsTest, AutofillSection) {
   RunTest("settings/autofill_section_test.js", "mocha.run()");
 }
 
+IN_PROC_BROWSER_TEST_F(SettingsTest, AutofillPredictionImprovementsSection) {
+  RunTest("settings/autofill_prediction_improvements_section_test.js",
+          "mocha.run()");
+}
+
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
 IN_PROC_BROWSER_TEST_F(SettingsTest, AxAnnotationsSection) {
   RunTest("settings/ax_annotations_section_test.js", "mocha.run()");
@@ -154,8 +159,21 @@ IN_PROC_BROWSER_TEST_F(SettingsTest, EditDictionaryPage) {
 }
 #endif
 
-IN_PROC_BROWSER_TEST_F(SettingsTest, ExperimentalAdvancedPage) {
-  RunTest("settings/ai_page_test.js", "mocha.run()");
+class SettingsAiPageTest : public SettingsBrowserTest {
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kAiSettingsPageRefresh};
+};
+
+IN_PROC_BROWSER_TEST_F(SettingsAiPageTest, ExperimentalAdvancedPage) {
+  RunTest("settings/ai_page_test.js",
+          "runMochaSuite('ExperimentalAdvancedPage')");
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsAiPageTest,
+                       ExperimentalAdvancedPageRefreshDisabled) {
+  RunTest("settings/ai_page_test.js",
+          "runMochaSuite('ExperimentalAdvancedPageRefreshDisabled')");
 }
 
 IN_PROC_BROWSER_TEST_F(SettingsTest, ExtensionControlledIndicator) {
@@ -177,12 +195,6 @@ IN_PROC_BROWSER_TEST_F(SettingsTest, FileSystemSettingsListEntries) {
 IN_PROC_BROWSER_TEST_F(SettingsTest, FileSystemSettingsListEntryItems) {
   RunTest("settings/file_system_site_entry_item_test.js", "mocha.run()");
 }
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-IN_PROC_BROWSER_TEST_F(SettingsTest, GetMostChromePage) {
-  RunTest("settings/get_most_chrome_page_test.js", "mocha.run()");
-}
-#endif
 
 IN_PROC_BROWSER_TEST_F(SettingsTest, HelpPage) {
   RunTest("settings/help_page_test.js", "mocha.run()");
@@ -528,14 +540,14 @@ IN_PROC_BROWSER_TEST_F(SettingsAboutPageTest, OfficialBuild) {
 
 using SettingsAllSitesTest = SettingsBrowserTest;
 
-IN_PROC_BROWSER_TEST_F(SettingsAllSitesTest, EnableFirstPartySets) {
+IN_PROC_BROWSER_TEST_F(SettingsAllSitesTest, EnableRelatedWebsiteSets) {
   RunTest("settings/all_sites_test.js",
-          "runMochaSuite('EnableFirstPartySets')");
+          "runMochaSuite('EnableRelatedWebsiteSets')");
 }
 
-IN_PROC_BROWSER_TEST_F(SettingsAllSitesTest, DisableFirstPartySets) {
+IN_PROC_BROWSER_TEST_F(SettingsAllSitesTest, DisableRelatedWebsiteSets) {
   RunTest("settings/all_sites_test.js",
-          "runMochaSuite('DisableFirstPartySets')");
+          "runMochaSuite('DisableRelatedWebsiteSets')");
 }
 
 class SettingsBasicPageTest : public SettingsBrowserTest {
@@ -633,25 +645,13 @@ IN_PROC_BROWSER_TEST_F(SettingsCookiesPageTest, FirstPartySetsUIDisabled) {
           "runMochaSuite('FirstPartySetsUIDisabled')");
 }
 
-IN_PROC_BROWSER_TEST_F(SettingsCookiesPageTest, IpProtectionToggle) {
-  RunTest("settings/cookies_page_test.js",
-          "runMochaSuite('IpProtectionToggle')");
-}
-
-IN_PROC_BROWSER_TEST_F(SettingsCookiesPageTest,
-                       FingerprintingProtectionToggle) {
-  RunTest("settings/cookies_page_test.js",
-          "runMochaSuite('FingerprintingProtectionToggle')");
-}
-
 IN_PROC_BROWSER_TEST_F(SettingsCookiesPageTest, TrackingProtectionSettings) {
   RunTest("settings/cookies_page_test.js",
           "runMochaSuite('TrackingProtectionSettings')");
 }
 
-IN_PROC_BROWSER_TEST_F(SettingsCookiesPageTest, TrackingProtectionRolloutUx) {
-  RunTest("settings/cookies_page_test.js",
-          "runMochaSuite('TrackingProtectionRolloutUx')");
+IN_PROC_BROWSER_TEST_F(SettingsCookiesPageTest, ActSettings) {
+  RunTest("settings/cookies_page_test.js", "runMochaSuite('ActSettings')");
 }
 
 // Test with --enable-pixel-output-in-tests enabled, required by fingerprint
@@ -700,19 +700,7 @@ IN_PROC_BROWSER_TEST_F(SettingsPerformancePageTest, TabDiscardExceptionList) {
           "runMochaSuite('TabDiscardExceptionList')");
 }
 
-class SettingsPerformancePageDiscardIndicatorTest : public SettingsBrowserTest {
- protected:
-  SettingsPerformancePageDiscardIndicatorTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        performance_manager::features::kDiscardRingImprovements);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(SettingsPerformancePageDiscardIndicatorTest,
-                       DiscardIndicator) {
+IN_PROC_BROWSER_TEST_F(SettingsBrowserTest, DiscardIndicator) {
   RunTest("settings/performance_page_test.js",
           "runMochaSuite('DiscardIndicator')");
 }
@@ -736,19 +724,7 @@ IN_PROC_BROWSER_TEST_F(SettingsMemoryPageTest, MemorySaver) {
   RunTest("settings/memory_page_test.js", "runMochaSuite('MemorySaver')");
 }
 
-class SettingsMemoryPageAggressivenessTest : public SettingsBrowserTest {
- protected:
-  SettingsMemoryPageAggressivenessTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        performance_manager::features::kMemorySaverModeAggressiveness);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(SettingsMemoryPageAggressivenessTest,
-                       MemorySaverAggressiveness) {
+IN_PROC_BROWSER_TEST_F(SettingsBrowserTest, MemorySaverAggressiveness) {
   RunTest("settings/memory_page_test.js",
           "runMochaSuite('MemorySaverAggressiveness')");
 }
@@ -789,8 +765,7 @@ class SettingsPrivacyGuideTest : public SettingsBrowserTest {
   SettingsPrivacyGuideTest() {
     scoped_feature_list_.InitWithFeatures(
         {features::kPrivacyGuideForceAvailable,
-         content_settings::features::kTrackingProtection3pcd,
-         privacy_sandbox::kTrackingProtectionSettingsLaunch},
+         content_settings::features::kTrackingProtection3pcd},
         {});
   }
 
@@ -893,12 +868,6 @@ IN_PROC_BROWSER_TEST_F(SettingsPrivacyGuideTest,
                        CompletionFragmentPrivacySandboxRestricted) {
   RunTest("settings/privacy_guide_completion_fragment_test.js",
           "runMochaSuite('CompletionFragmentPrivacySandboxRestricted')");
-}
-
-IN_PROC_BROWSER_TEST_F(SettingsPrivacyGuideTest,
-                       CompletionFragmentWithTrackingProtection) {
-  RunTest("settings/privacy_guide_completion_fragment_test.js",
-          "runMochaSuite('CompletionFragmentWithoutTrackingProtection')");
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -1132,12 +1101,8 @@ IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest, AdMeasurementSubpage) {
 class ProactiveTopicsBlockingTest : public SettingsPrivacySandboxPageTest {
  protected:
   ProactiveTopicsBlockingTest() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{privacy_sandbox::kPrivacySandboxProactiveTopicsBlocking,
-          {{privacy_sandbox::
-                kPrivacySandboxProactiveTopicsBlockingIncludeModeBName,
-            "false"}}}},
-        {{features::kCookieDeprecationFacilitatedTesting}});
+    scoped_feature_list_.InitAndEnableFeature(
+        privacy_sandbox::kPrivacySandboxProactiveTopicsBlocking);
   }
 
  private:
@@ -1183,64 +1148,8 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxPageRedesign, RedesignToggles) {
           "runMochaSuite('PrivacySandboxPageRedesignToggles')");
 }
 
-class PrivacySandboxPTBIncludesModeB : public SettingsPrivacySandboxPageTest {
- protected:
-  PrivacySandboxPTBIncludesModeB() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{privacy_sandbox::kPrivacySandboxProactiveTopicsBlocking,
-          {{privacy_sandbox::
-                kPrivacySandboxProactiveTopicsBlockingIncludeModeBName,
-            "true"}}},
-         {features::kCookieDeprecationFacilitatedTesting, {{}}}},
-        {});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(PrivacySandboxPTBIncludesModeB,
-                       TopicsSubpagePTBEnabledIncludesModeB) {
-  RunTest("settings/privacy_sandbox_page_test.js",
-          "runMochaSuite('TopicsSubpagePTBEnabledIncludesModeB')");
-}
-
-IN_PROC_BROWSER_TEST_F(PrivacySandboxPTBIncludesModeB,
-                       FledgeSubpagePTBEnabledIncludesModeB) {
-  RunTest("settings/privacy_sandbox_page_test.js",
-          "runMochaSuite('FledgeSubpagePTBEnabledIncludesModeB')");
-}
-
 IN_PROC_BROWSER_TEST_F(SettingsTest, ReviewNotificationPermissions) {
   RunTest("settings/review_notification_permissions_test.js", "mocha.run()");
-}
-
-class PrivacySandboxPTBExcludesModeB : public SettingsPrivacySandboxPageTest {
- protected:
-  PrivacySandboxPTBExcludesModeB() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{privacy_sandbox::kPrivacySandboxProactiveTopicsBlocking,
-          {{privacy_sandbox::
-                kPrivacySandboxProactiveTopicsBlockingIncludeModeBName,
-            "false"}}},
-         {features::kCookieDeprecationFacilitatedTesting, {{}}}},
-        {});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(PrivacySandboxPTBExcludesModeB,
-                       TopicsSubpagePTBEnabledExcludesModeB) {
-  RunTest("settings/privacy_sandbox_page_test.js",
-          "runMochaSuite('TopicsSubpagePTBEnabledExcludesModeB')");
-}
-
-IN_PROC_BROWSER_TEST_F(PrivacySandboxPTBExcludesModeB,
-                       FledgeSubpagePTBEnabledExcludesModeB) {
-  RunTest("settings/privacy_sandbox_page_test.js",
-          "runMochaSuite('FledgeSubpagePTBEnabledExcludesModeB')");
 }
 
 using SettingsRouteTest = SettingsBrowserTest;
@@ -1349,8 +1258,6 @@ class SettingsSecurityPageTest : public SettingsBrowserTest {
   SettingsSecurityPageTest() {
     scoped_feature_list_.InitWithFeatures(
         {
-            safe_browsing::kFriendlierSafeBrowsingSettingsEnhancedProtection,
-            safe_browsing::kFriendlierSafeBrowsingSettingsStandardProtection,
             features::kEnableCertManagementUIV2,
         },
         {});
@@ -1416,6 +1323,7 @@ IN_PROC_BROWSER_TEST_F(SettingsSpellCheckPageTest, OfficialBuild) {
           "runMochaSuite('SpellCheck OfficialBuild')");
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 class SettingsSiteDetailsTest : public SettingsBrowserTest {
  private:
@@ -1542,6 +1450,7 @@ IN_PROC_BROWSER_TEST_F(
           "AbusiveNotificationsEnabledUnusedSitePermissionsDisabled')");
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 using SettingsTranslatePageTest = SettingsBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(SettingsTranslatePageTest, TranslateSettings) {

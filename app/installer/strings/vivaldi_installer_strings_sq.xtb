@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Instaloj më vete</translation>
 <translation id="1682285232070778125">Caktoj Vivaldin si shfletuesin standard të internetit</translation>
 <translation id="1974060860693918893">E avancuar</translation>
+<translation id="2053560788696003312">Vivaldi ka nevojë për Windows 10 e lart.</translation>
 <translation id="2134216661302048561">Nuk ka përfunduar instalimi i shfletuesit Vivaldi. Jeni të sigurt për daljen tani?</translation>
 <translation id="2286454467119466181">E thjeshtë</translation>
 <translation id="237789874664518125">Kopirajti <ph name="YEAR" /> Vivaldi Technologies AS. Gjithë të drejtat janë rezervuar. &lt;a&gt;Politika e privatësisë&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Pranoj dhe përditësoj</translation>
 <translation id="5302048478445481009">Gjuha</translation>
 <translation id="694714344624446243">Instaluesi i Vivaldit</translation>
+<translation id="7467493612551448880">Ky version i Vivaldit, që po e instaloni, nuk është optimizuar për versionin e Windows-it që keni.
+
+Vizitoni vivaldi.com/download për të shkarkuar versionin për Windows me procesor Arm.</translation>
 <translation id="7658239707568436148">Anuloj</translation>
 <translation id="8773751185824654197">Vini re: Kur e instaloni Vivaldin ndërsa shfletoni internetin, dritarja do të mbyllet e hapet vetë</translation>
 <translation id="933060950687965486">Lloji i instalimit</translation>

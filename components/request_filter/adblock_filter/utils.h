@@ -4,9 +4,9 @@
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_UTILS_H_
 
 #include <string>
+#include <string_view>
 
 #include "base/containers/span.h"
-#include "base/strings/string_piece.h"
 
 namespace flatbuffers {
 struct String;
@@ -31,7 +31,7 @@ std::string GetRulesListVersionHeader();
 
 std::string CalculateBufferChecksum(base::span<const uint8_t> data);
 
-int CompareDomains(std::string_view lhs_domain, std::string_view rhs_domain);
+int SizePrioritizedStringCompare(std::string_view lhs, std::string_view rhs);
 std::string_view ToStringPiece(const flatbuffers::String* string);
 int GetRulePriority(const flat::RequestFilterRule& rule);
 int GetMaxRulePriority();

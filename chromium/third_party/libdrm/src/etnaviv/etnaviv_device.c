@@ -25,8 +25,7 @@
  */
 
 #include <stdlib.h>
-#include <linux/stddef.h>
-#include <linux/types.h>
+#include <sys/types.h>
 #include <errno.h>
 #include <sys/mman.h>
 #include <fcntl.h>

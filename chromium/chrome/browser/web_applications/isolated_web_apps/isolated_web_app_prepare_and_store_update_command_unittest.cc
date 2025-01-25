@@ -21,7 +21,6 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_storage_location.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_trust_checker.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
-#include "chrome/browser/web_applications/isolated_web_apps/iwa_identity_validator.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/test_signed_web_bundle_builder.h"
 #include "chrome/browser/web_applications/test/fake_web_contents_manager.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
@@ -92,7 +91,6 @@ MATCHER_P(IsErrorWithMessage, message_matcher, "") {
 class IsolatedWebAppUpdatePrepareAndStoreCommandTest : public WebAppTest {
  protected:
   void SetUp() override {
-    IwaIdentityValidator::CreateSingleton();
     ASSERT_THAT(scoped_temp_dir_.CreateUniqueTempDir(), IsTrue());
     update_bundle_path_ = scoped_temp_dir_.GetPath().Append(
         base::FilePath::FromASCII("update-bundle.swbn"));
@@ -198,7 +196,7 @@ class IsolatedWebAppUpdatePrepareAndStoreCommandTest : public WebAppTest {
   data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
   base::ScopedTempDir scoped_temp_dir_;
 
-  web_package::WebBundleSigner::Ed25519KeyPair key_pair_ =
+  web_package::test::Ed25519KeyPair key_pair_ =
       test::GetDefaultEd25519KeyPair();
   web_package::SignedWebBundleId web_bundle_id_ =
       test::GetDefaultEd25519WebBundleId();

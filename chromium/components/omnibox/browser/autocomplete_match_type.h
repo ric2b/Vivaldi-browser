@@ -96,8 +96,10 @@ struct AutocompleteMatchType {
                                        // similar embeddings to the query.
     FEATURED_ENTERPRISE_SEARCH  = 37,  // Site search engines featured by
                                        // Enterprise policy.
-    BOOKMARK_NICKNAME           = 38,  // Vivaldi. A bookmark whose nickname
+    // Vivaldi
+    BOOKMARK_NICKNAME           = 38,  // A bookmark whose nickname
                                        // contains the input.
+    DIRECT_MATCH                = 39,  // A direct match
     NUM_TYPES,
   };
   // clang-format on

@@ -24,7 +24,8 @@ void GraphImplCrOS::CreateAndBuild(
     ComputeResourceInfo compute_resource_info,
     WebNNContextImpl::CreateGraphImplCallback callback) {
   base::expected<flatbuffers::DetachedBuffer, std::string> conversion_result =
-      GraphBuilderTflite::CreateAndBuild(*graph_info);
+      GraphBuilderTflite::CreateAndBuild(context_impl->properties(),
+                                         *graph_info);
   if (!conversion_result.has_value()) {
     std::move(callback).Run(base::unexpected(mojom::Error::New(
         mojom::Error::Code::kUnknownError, conversion_result.error())));
@@ -107,9 +108,9 @@ void GraphImplCrOS::ComputeImpl(
 }
 
 void GraphImplCrOS::DispatchImpl(
-    const base::flat_map<std::string_view, WebNNBufferImpl*>& named_inputs,
-    const base::flat_map<std::string_view, WebNNBufferImpl*>& named_outputs) {
-  // TODO(crbug.com/40278771): Implement MLBuffer for TFLite. Involve
+    const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs,
+    const base::flat_map<std::string_view, WebNNTensorImpl*>& named_outputs) {
+  // TODO(crbug.com/40278771): Implement MLTensor for TFLite. Involve
   // an IPC security reviewer.
   NOTIMPLEMENTED();
 }

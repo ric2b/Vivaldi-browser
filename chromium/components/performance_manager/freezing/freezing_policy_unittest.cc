@@ -42,8 +42,11 @@ class LenientMockFreezer : public Freezer {
   LenientMockFreezer(const LenientMockFreezer& other) = delete;
   LenientMockFreezer& operator=(const LenientMockFreezer&) = delete;
 
-  MOCK_METHOD1(MaybeFreezePageNode, void(const PageNode* page_node));
-  MOCK_METHOD1(UnfreezePageNode, void(const PageNode* page_node));
+  MOCK_METHOD(void,
+              MaybeFreezePageNode,
+              (const PageNode* page_node),
+              (override));
+  MOCK_METHOD(void, UnfreezePageNode, (const PageNode* page_node), (override));
 };
 using MockFreezer = ::testing::StrictMock<LenientMockFreezer>;
 
@@ -618,6 +621,28 @@ TEST_F(FreezingPolicyTest, StartsCapturingDisplayWhenFrozen) {
   EXPECT_CALL(*freezer(), UnfreezePageNode(page_node()));
   PageLiveStateDecorator::Data::GetOrCreateForPageNode(page_node())
       ->SetIsCapturingDisplayForTesting(true);
+  VerifyFreezerExpectations();
+}
+
+TEST_F(FreezingPolicyTest, FreezeVoteWhenUsingWebRTC) {
+  page_node()->SetUsesWebRTCForTesting(true);
+
+  // Don't expect freezing.
+  policy()->AddFreezeVote(page_node());
+
+  // Expect freezing after stopping capture.
+  EXPECT_CALL(*freezer(), MaybeFreezePageNode(page_node()));
+  page_node()->SetUsesWebRTCForTesting(false);
+  VerifyFreezerExpectations();
+}
+
+TEST_F(FreezingPolicyTest, StartsUsingWebRTCWhenFrozen) {
+  EXPECT_CALL(*freezer(), MaybeFreezePageNode(page_node()));
+  policy()->AddFreezeVote(page_node());
+  VerifyFreezerExpectations();
+
+  EXPECT_CALL(*freezer(), UnfreezePageNode(page_node()));
+  page_node()->SetUsesWebRTCForTesting(true);
   VerifyFreezerExpectations();
 }
 

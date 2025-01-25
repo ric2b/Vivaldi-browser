@@ -35,8 +35,10 @@
 #include "src/tint/lang/core/fluent_types.h"
 #include "src/tint/lang/core/number.h"
 #include "src/tint/lang/core/type/atomic.h"
+#include "src/tint/lang/core/type/external_texture.h"
 #include "src/tint/lang/core/type/sampler.h"
 #include "src/tint/lang/core/type/struct.h"
+#include "src/tint/lang/core/type/subgroup_matrix.h"
 #include "src/tint/lang/core/type/type.h"
 #include "src/tint/lang/core/type/unique_node.h"
 #include "src/tint/utils/containers/unique_allocator.h"
@@ -50,11 +52,13 @@ class Array;
 class Bool;
 class F16;
 class F32;
+class I8;
 class I32;
 class Invalid;
 class Matrix;
 class Pointer;
 class Reference;
+class U8;
 class U32;
 class Vector;
 class Void;
@@ -135,8 +139,12 @@ class Manager final {
             return Get<core::type::AbstractInt>(std::forward<ARGS>(args)...);
         } else if constexpr (std::is_same_v<T, tint::core::AFloat>) {
             return Get<core::type::AbstractFloat>(std::forward<ARGS>(args)...);
+        } else if constexpr (std::is_same_v<T, tint::core::i8>) {
+            return Get<core::type::I8>(std::forward<ARGS>(args)...);
         } else if constexpr (std::is_same_v<T, tint::core::i32>) {
             return Get<core::type::I32>(std::forward<ARGS>(args)...);
+        } else if constexpr (std::is_same_v<T, tint::core::u8>) {
+            return Get<core::type::U8>(std::forward<ARGS>(args)...);
         } else if constexpr (std::is_same_v<T, tint::core::u32>) {
             return Get<core::type::U32>(std::forward<ARGS>(args)...);
         } else if constexpr (std::is_same_v<T, tint::core::f32>) {
@@ -185,8 +193,14 @@ class Manager final {
     /// @returns a bool type
     const core::type::Bool* bool_();
 
+    /// @returns an i8 type
+    const core::type::I8* i8();
+
     /// @returns an i32 type
     const core::type::I32* i32();
+
+    /// @returns a u8 type
+    const core::type::U8* u8();
 
     /// @returns a u32 type
     const core::type::U32* u32();
@@ -412,6 +426,56 @@ class Manager final {
         return mat(Get<T>(), C, R);
     }
 
+    /// @param kind the subgroup matrix kind
+    /// @param inner the inner type
+    /// @param rows the number of rows
+    /// @param cols the number of columns
+    /// @returns the subgroup_matrix type
+    const core::type::SubgroupMatrix* subgroup_matrix(SubgroupMatrixKind kind,
+                                                      const core::type::Type* inner,
+                                                      uint32_t rows,
+                                                      uint32_t cols);
+
+    /// @param inner the inner type
+    /// @param rows the number of rows
+    /// @param cols the number of columns
+    /// @returns the subgroup_matrix type
+    const core::type::SubgroupMatrix* subgroup_matrix_left(const core::type::Type* inner,
+                                                           uint32_t rows,
+                                                           uint32_t cols) {
+        return subgroup_matrix(SubgroupMatrixKind::kLeft, inner, rows, cols);
+    }
+
+    /// @param inner the inner type
+    /// @param rows the number of rows
+    /// @param cols the number of columns
+    /// @returns the subgroup_matrix type
+    const core::type::SubgroupMatrix* subgroup_matrix_right(const core::type::Type* inner,
+                                                            uint32_t rows,
+                                                            uint32_t cols) {
+        return subgroup_matrix(SubgroupMatrixKind::kRight, inner, rows, cols);
+    }
+
+    /// @param inner the inner type
+    /// @param rows the number of rows
+    /// @param cols the number of columns
+    /// @returns the subgroup_matrix type
+    const core::type::SubgroupMatrix* subgroup_matrix_result(const core::type::Type* inner,
+                                                             uint32_t rows,
+                                                             uint32_t cols) {
+        return subgroup_matrix(SubgroupMatrixKind::kResult, inner, rows, cols);
+    }
+
+    /// @tparam K the kind of the matrix
+    /// @tparam T the element type
+    /// @tparam R the number of rows in the matrix
+    /// @tparam C the number of columns in the matrix
+    /// @returns a matrix with the given number of columns and rows
+    template <SubgroupMatrixKind K, typename T, uint32_t R, uint32_t C>
+    const core::type::SubgroupMatrix* subgroup_matrix() {
+        return subgroup_matrix(K, Get<T>(), C, R);
+    }
+
     /// @param elem_ty the array element type
     /// @param count the array element count
     /// @param stride the optional array element stride
@@ -532,6 +596,9 @@ class Manager final {
     core::type::Struct* Struct(Symbol name, std::initializer_list<StructMemberDesc> members) {
         return Struct(name, tint::Vector<StructMemberDesc, 4>(members));
     }
+
+    /// @returns the external texture type
+    core::type::ExternalTexture* external_texture() { return Get<core::type::ExternalTexture>(); }
 
     /// @returns an iterator to the beginning of the types
     TypeIterator begin() const { return types_.begin(); }

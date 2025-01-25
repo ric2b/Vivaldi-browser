@@ -19,6 +19,7 @@
 #import "ios/chrome/common/material_timing.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/image_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/grit/ios_theme_resources.h"
@@ -35,6 +36,17 @@ using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
+
+/// Width of the thumbnail.
+const CGFloat kThumbnailWidth = 48;
+/// Height of the thumbnail.
+const CGFloat kThumbnailHeight = 40;
+/// Corner radius of the thumbnail image.
+const CGFloat kThumbnailImageCornerRadius = 12;
+/// Space between the thumbnail image and the omnibox text.
+const CGFloat kThumbnailImageTrailingMargin = 10;
+/// Space between the leading icon and the thumbnail image.
+const CGFloat kThumbnailImageLeadingMargin = 10;
 
 /// Space between the clear button and the edge of the omnibox.
 const CGFloat kTextFieldClearButtonTrailingOffset = 4;
@@ -62,10 +74,12 @@ const CGFloat kClearButtonSize = 28.5f;
 @implementation OmniboxContainerView {
   /// The leading image view. Used for autocomplete icons.
   UIImageView* _leadingImageView;
+  /// Thumbnail image used in image search.
+  UIImageView* _thumbnailImageView;
   /// UILabel for additional text.
   FadeTruncatingLabel* _additionalTextLabel;
   /// Horizontal stack view containing the `_leadingImageView` ,
-  /// `_textScrollView` and `clearButton`.
+  /// `_thumbnailImageView`, `_textScrollView` and `clearButton`.
   UIStackView* _stackView;
 
   /// Horizontal scroll view containing `_textStackView`.
@@ -113,6 +127,50 @@ const CGFloat kClearButtonSize = 28.5f;
         _stackView, self,
         NSDirectionalEdgeInsetsMake(0, kOmniboxLeadingImageViewEdgeOffset, 0,
                                     kTextFieldClearButtonTrailingOffset));
+
+    // Thumbnail image view.
+    if (base::FeatureList::IsEnabled(kEnableLensOverlay)) {
+      _thumbnailImageView = [[UIImageView alloc] init];
+      _thumbnailImageView.translatesAutoresizingMaskIntoConstraints = NO;
+      _thumbnailImageView.contentMode = UIViewContentModeCenter;
+      _thumbnailImageView.backgroundColor = UIColor.clearColor;
+      _thumbnailImageView.layer.cornerRadius = kThumbnailImageCornerRadius;
+      _thumbnailImageView.clipsToBounds = YES;
+      _thumbnailImageView.hidden = YES;
+      [NSLayoutConstraint activateConstraints:@[
+        [_thumbnailImageView.widthAnchor
+            constraintEqualToConstant:kThumbnailWidth],
+        [_thumbnailImageView.heightAnchor
+            constraintEqualToConstant:kThumbnailHeight],
+      ]];
+      [_stackView addArrangedSubview:_thumbnailImageView];
+      // Spacing between thumbnail and text field.
+      [_stackView setCustomSpacing:kThumbnailImageTrailingMargin
+                         afterView:_thumbnailImageView];
+
+      // Button to delete the thumbnail.
+      _thumbnailButton = [[UIButton alloc] init];
+      _thumbnailButton.translatesAutoresizingMaskIntoConstraints = NO;
+      _thumbnailButton.backgroundColor = UIColor.clearColor;
+      _thumbnailButton.tintColor = UIColor.whiteColor;
+      [NSLayoutConstraint activateConstraints:@[
+        [_thumbnailButton.widthAnchor
+            constraintEqualToConstant:kThumbnailWidth],
+        [_thumbnailButton.heightAnchor
+            constraintEqualToConstant:kThumbnailHeight],
+      ]];
+      UIImage* selectedImage = MakeSymbolMonochrome(
+          DefaultSymbolWithPointSize(kXMarkSymbol, kSymbolActionPointSize));
+      [_thumbnailButton setImage:selectedImage forState:UIControlStateSelected];
+      [_thumbnailButton
+          setBackgroundImage:ImageWithColor([UIColor.systemBlueColor
+                                 colorWithAlphaComponent:0.5])
+                    forState:UIControlStateSelected];
+      [_thumbnailImageView addSubview:_thumbnailButton];
+      AddSameCenterConstraints(_thumbnailButton, _thumbnailImageView);
+
+      _thumbnailImageView.userInteractionEnabled = YES;
+    }
 
     if (IsRichAutocompletionEnabled(RichAutocompletionImplementation::kLabel)) {
       // Text scroll view.
@@ -232,6 +290,24 @@ const CGFloat kClearButtonSize = 28.5f;
       CGAffineTransformMakeScale(scaleValue, scaleValue);
 }
 
+- (void)setThumbnailImage:(UIImage*)image {
+  _thumbnailImage = image;
+  if (image) {
+    image = ResizeImage(image, CGSizeMake(kThumbnailWidth, kThumbnailHeight),
+                        ProjectionMode::kAspectFill);
+  }
+  _thumbnailImageView.image = image;
+  _thumbnailImageView.hidden = !image;
+
+  if (image) {
+    [_stackView setCustomSpacing:kThumbnailImageLeadingMargin
+                       afterView:_leadingImageView];
+  } else {
+    [_stackView setCustomSpacing:kOmniboxTextFieldLeadingOffsetImage
+                       afterView:_leadingImageView];
+  }
+}
+
 - (void)setLayoutGuideCenter:(LayoutGuideCenter*)layoutGuideCenter {
   _layoutGuideCenter = layoutGuideCenter;
   [_layoutGuideCenter referenceView:_leadingImageView
@@ -254,8 +330,6 @@ const CGFloat kClearButtonSize = 28.5f;
   [super setSemanticContentAttribute:semanticContentAttribute];
   _stackView.semanticContentAttribute = semanticContentAttribute;
 }
-
-#pragma mark - OmniboxAdditionalTextConsumer
 
 - (void)updateAdditionalText:(NSString*)additionalText {
   CHECK(IsRichAutocompletionEnabled(RichAutocompletionImplementation::kAny));

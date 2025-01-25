@@ -15,7 +15,7 @@
 #include <string>
 #include <tuple>
 
-#include "third_party/googletest/src/googletest/include/gtest/gtest.h"
+#include "gtest/gtest.h"
 
 #include "config/aom_config.h"
 #include "config/av1_rtcd.h"
@@ -488,6 +488,7 @@ class CDEFCopyRect8to16Test
 };
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(CDEFCopyRect8to16Test);
 
+#if CONFIG_AV1_HIGHBITDEPTH
 using CDEFCopyRect16To16 = void (*)(uint16_t *dst, int dstride,
                                     const uint16_t *src, int sstride, int width,
                                     int height);
@@ -571,6 +572,7 @@ class CDEFCopyRect16to16Test
   CDEFCopyRect16To16 ref_func_;
 };
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(CDEFCopyRect16to16Test);
+#endif  // CONFIG_AV1_HIGHBITDEPTH
 
 TEST_P(CDEFBlockTest, TestSIMDNoMismatch) {
   test_cdef(bsize, 1, cdef, ref_cdef, boundary, depth);
@@ -608,9 +610,11 @@ TEST_P(CDEFCopyRect8to16Test, TestSIMDNoMismatch) {
   test_copy_rect_8_to_16(test_func_, ref_func_);
 }
 
+#if CONFIG_AV1_HIGHBITDEPTH
 TEST_P(CDEFCopyRect16to16Test, TestSIMDNoMismatch) {
   test_copy_rect_16_to_16(test_func_, ref_func_);
 }
+#endif  // CONFIG_AV1_HIGHBITDEPTH
 
 using std::make_tuple;
 
@@ -663,10 +667,12 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(make_tuple(&cdef_copy_rect8_8bit_to_16bit_c,
                                  &cdef_copy_rect8_8bit_to_16bit_ssse3)));
 
+#if CONFIG_AV1_HIGHBITDEPTH
 INSTANTIATE_TEST_SUITE_P(
     SSSE3, CDEFCopyRect16to16Test,
     ::testing::Values(make_tuple(&cdef_copy_rect8_16bit_to_16bit_c,
                                  &cdef_copy_rect8_16bit_to_16bit_ssse3)));
+#endif  // CONFIG_AV1_HIGHBITDEPTH
 #endif
 
 #if HAVE_SSE4_1
@@ -707,10 +713,12 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(make_tuple(&cdef_copy_rect8_8bit_to_16bit_c,
                                  &cdef_copy_rect8_8bit_to_16bit_sse4_1)));
 
+#if CONFIG_AV1_HIGHBITDEPTH
 INSTANTIATE_TEST_SUITE_P(
     SSE4_1, CDEFCopyRect16to16Test,
     ::testing::Values(make_tuple(&cdef_copy_rect8_16bit_to_16bit_c,
                                  &cdef_copy_rect8_16bit_to_16bit_sse4_1)));
+#endif  // CONFIG_AV1_HIGHBITDEPTH
 #endif
 
 #if HAVE_AVX2
@@ -750,10 +758,12 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(make_tuple(&cdef_copy_rect8_8bit_to_16bit_c,
                                  &cdef_copy_rect8_8bit_to_16bit_avx2)));
 
+#if CONFIG_AV1_HIGHBITDEPTH
 INSTANTIATE_TEST_SUITE_P(
     AVX2, CDEFCopyRect16to16Test,
     ::testing::Values(make_tuple(&cdef_copy_rect8_16bit_to_16bit_c,
                                  &cdef_copy_rect8_16bit_to_16bit_avx2)));
+#endif  // CONFIG_AV1_HIGHBITDEPTH
 #endif
 
 #if HAVE_NEON
@@ -793,10 +803,12 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(make_tuple(&cdef_copy_rect8_8bit_to_16bit_c,
                                  &cdef_copy_rect8_8bit_to_16bit_neon)));
 
+#if CONFIG_AV1_HIGHBITDEPTH
 INSTANTIATE_TEST_SUITE_P(
     NEON, CDEFCopyRect16to16Test,
     ::testing::Values(make_tuple(&cdef_copy_rect8_16bit_to_16bit_c,
                                  &cdef_copy_rect8_16bit_to_16bit_neon)));
+#endif  // CONFIG_AV1_HIGHBITDEPTH
 #endif
 
 // Test speed for all supported architectures

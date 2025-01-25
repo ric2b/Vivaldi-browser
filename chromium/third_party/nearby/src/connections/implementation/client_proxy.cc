@@ -442,10 +442,9 @@ void ClientProxy::OnEndpointLost(const std::string& service_id,
   NEARBY_LOGS(INFO) << "ClientProxy [Endpoint Lost]: [enter] id=" << endpoint_id
                     << "; service=" << service_id;
   if (!IsDiscoveringServiceId(service_id)) {
-    NEARBY_LOG(INFO,
-               "ClientProxy [Endpoint Lost]: Ignoring event for id=%s because "
-               "this client is not discovering",
-               endpoint_id.c_str());
+    NEARBY_LOGS(INFO) << "ClientProxy [Endpoint Lost]: Ignoring event for id="
+                      << endpoint_id
+                      << " because this client is not discovering.";
     return;
   }
 
@@ -757,15 +756,14 @@ bool ClientProxy::HasRemoteEndpointResponded(
 void ClientProxy::LocalEndpointAcceptedConnection(
     const std::string& endpoint_id, PayloadListener listener) {
   MutexLock lock(&mutex_);
-
   if (HasLocalEndpointResponded(endpoint_id)) {
     NEARBY_LOGS(INFO)
         << "ClientProxy [Local Accepted]: local endpoint has responded; id="
         << endpoint_id;
     return;
   }
-
   AppendConnectionStatus(endpoint_id, Connection::kLocalEndpointAccepted);
+  NEARBY_LOGS(INFO) << "ClientProxy [Local Accepted]: id=" << endpoint_id;
   ConnectionPair* item = LookupConnection(endpoint_id);
   if (item != nullptr) {
     item->second = std::move(listener);
@@ -1028,11 +1026,10 @@ void ClientProxy::OnPayloadProgress(const std::string& endpoint_id,
       item->second.payload_progress_cb(endpoint_id, info);
 
       if (info.status == PayloadProgressInfo::Status::kInProgress) {
-        NEARBY_LOGS(VERBOSE)
-            << "ClientProxy [reporting onPayloadProgress]: client="
-            << GetClientId() << "; endpoint_id=" << endpoint_id
-            << "; payload_id=" << info.payload_id
-            << ", payload_status=" << ToString(info.status);
+        NEARBY_VLOG(1) << "ClientProxy [reporting onPayloadProgress]: client="
+                       << GetClientId() << "; endpoint_id=" << endpoint_id
+                       << "; payload_id=" << info.payload_id
+                       << ", payload_status=" << ToString(info.status);
       } else {
         NEARBY_LOGS(INFO)
             << "ClientProxy [reporting onPayloadProgress]: client="
@@ -1135,16 +1132,16 @@ void ClientProxy::ScheduleClearCachedEndpointIdAlarm() {
   CancelClearCachedEndpointIdAlarm();
 
   if (cached_endpoint_id_.empty()) {
-    NEARBY_LOGS(VERBOSE) << "ClientProxy [There is no cached local high power "
-                            "advertising endpoint Id]: client="
-                         << GetClientId();
+    NEARBY_VLOG(1) << "ClientProxy [There is no cached local high power "
+                      "advertising endpoint Id]: client="
+                   << GetClientId();
     return;
   }
 
   if (IsFeatureUseStableEndpointIdEnabled() && HasOngoingConnection()) {
-    NEARBY_LOGS(VERBOSE) << "ClientProxy [Handle clearing cached endpoint ID "
-                            "during disconnection]: client="
-                         << GetClientId();
+    NEARBY_VLOG(1) << "ClientProxy [Handle clearing cached endpoint ID "
+                      "during disconnection]: client="
+                   << GetClientId();
     return;
   }
 
@@ -1196,6 +1193,8 @@ std::int32_t ClientProxy::GetLocalMultiplexSocketBitmask() const {
   if (NearbyFlags::GetInstance().GetBoolFlag(
           config_package_nearby::nearby_connections_feature::
               kEnableMultiplex)) {
+    NEARBY_LOGS(INFO) << "ClientProxy [GetLocalMultiplexSocketBitmask]: "
+                      << kBtMultiplexEnabled;
     return kBtMultiplexEnabled;
   }
   return 0;
@@ -1203,33 +1202,47 @@ std::int32_t ClientProxy::GetLocalMultiplexSocketBitmask() const {
 
 void ClientProxy::SetRemoteMultiplexSocketBitmask(
     absl::string_view endpoint_id, int remote_multiplex_socket_bitmask) {
-  MutexLock lock(&mutex_);
   ConnectionPair* item = LookupConnection(endpoint_id);
   if (item != nullptr) {
     item->first.remote_multiplex_socket_bitmask =
         remote_multiplex_socket_bitmask;
+    NEARBY_LOGS(INFO) << "ClientProxy [SetRemoteMultiplexSocketBitmask]: "
+                      << remote_multiplex_socket_bitmask;
+  }
+}
+
+bool ClientProxy::IsLocalMultiplexSocketSupported(Medium medium) {
+  int bitmask = GetLocalMultiplexSocketBitmask();
+  switch (medium) {
+    case Medium::BLUETOOTH:
+      NEARBY_LOGS(INFO) << "ClientProxy [IsLocalMultiplexSocketSupported]: "
+                        << (bitmask & kBtMultiplexEnabled);
+      return (bitmask & kBtMultiplexEnabled) != 0;
+    case Medium::WIFI_LAN:
+      return (bitmask & kWifiLanMultiplexEnabled) != 0;
+    default:
+      return false;
   }
 }
 
 std::optional<std::int32_t> ClientProxy::GetRemoteMultiplexSocketBitmask(
     absl::string_view endpoint_id) const {
-  MutexLock lock(&mutex_);
   const ConnectionPair* item = LookupConnection(endpoint_id);
   if (item != nullptr) {
     return item->first.remote_multiplex_socket_bitmask;
   }
   return std::nullopt;
 }
+
 bool ClientProxy::IsMultiplexSocketSupported(absl::string_view endpoint_id,
                                              Medium medium) {
-  MutexLock lock(&mutex_);
   ConnectionPair* item = LookupConnection(endpoint_id);
   if (item == nullptr) {
     return false;
   }
-
   int combined_result = GetLocalMultiplexSocketBitmask() &
                         item->first.remote_multiplex_socket_bitmask;
+
   switch (medium) {
     case Medium::BLUETOOTH:
       return (combined_result & kBtMultiplexEnabled) != 0;

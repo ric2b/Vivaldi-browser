@@ -10,6 +10,7 @@
 #include "base/containers/extend.h"
 #include "base/containers/to_vector.h"
 #include "base/functional/overloaded.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/types/expected_macros.h"
 #include "components/cbor/values.h"
@@ -17,15 +18,12 @@
 #include "components/web_package/signed_web_bundles/constants.h"
 #include "components/web_package/signed_web_bundles/ecdsa_p256_public_key.h"
 #include "components/web_package/signed_web_bundles/ed25519_public_key.h"
+#include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_utils.h"
+#include "components/web_package/signed_web_bundles/types.h"
 #include "crypto/secure_hash.h"
-#include "crypto/sha2.h"
-#include "third_party/boringssl/src/include/openssl/curve25519.h"
-#include "third_party/boringssl/src/include/openssl/ec_key.h"
-#include "third_party/boringssl/src/include/openssl/ecdsa.h"
-#include "third_party/boringssl/src/include/openssl/mem.h"
 
-namespace web_package {
+namespace web_package::test {
 
 namespace {
 
@@ -35,13 +33,6 @@ using IntegritySignatureErrorForTesting =
     WebBundleSigner::IntegritySignatureErrorForTesting;
 using IntegritySignatureErrorsForTesting =
     WebBundleSigner::IntegritySignatureErrorsForTesting;
-
-using PublicKey = absl::variant<Ed25519PublicKey, EcdsaP256PublicKey>;
-
-// Nonce for obtaining deterministic ECDSA P-256 SHA-256 signatures. Taken from
-// third_party/boringssl/src/crypto/fipsmodule/ecdsa/ecdsa_sign_tests.txt.
-constexpr std::string_view kEcdsaP256SHA256NonceForTestingOnly =
-    "36f853b5c54b1ec61588c9c6137eb56e7a708f09c57513093e4ecf6d739900e5";
 
 cbor::Value CreateSignatureStackEntryAttributes(
     const PublicKey& public_key,
@@ -64,9 +55,8 @@ cbor::Value CreateSignatureStackEntryAttributes(
                                    kMultipleValidPublicKeyAttributes)) {
       attributes.emplace(kEd25519PublicKeyAttributeName, public_key_bytes);
 
-      attributes.emplace(
-          kEcdsaP256PublicKeyAttributeName,
-          WebBundleSigner::EcdsaP256KeyPair::CreateRandom().public_key.bytes());
+      attributes.emplace(kEcdsaP256PublicKeyAttributeName,
+                         EcdsaP256KeyPair::CreateRandom().public_key.bytes());
     } else if (errors_for_testing.Has(
                    IntegritySignatureErrorForTesting::
                        kWrongSignatureStackEntryAttributeName)) {
@@ -145,81 +135,11 @@ cbor::Value CreateSignatureStackEntry(
   return cbor::Value(entry);
 }
 
-std::vector<uint8_t> SignMessage(
-    base::span<const uint8_t> message,
-    const WebBundleSigner::Ed25519KeyPair& key_pair) {
-  std::vector<uint8_t> signature(ED25519_SIGNATURE_LEN);
-  CHECK_EQ(key_pair.private_key.size(),
-           static_cast<size_t>(ED25519_PRIVATE_KEY_LEN));
-  CHECK_EQ(ED25519_sign(signature.data(), message.data(), message.size(),
-                        key_pair.private_key.data()),
-           1);
-  if (key_pair.produce_invalid_signature) {
-    signature[0] ^= 0xff;
-  }
-  return signature;
-}
-
-std::vector<uint8_t> SignMessage(
-    base::span<const uint8_t> message,
-    const WebBundleSigner::EcdsaP256KeyPair& key_pair) {
-  std::vector<uint8_t> signature = [&] {
-    bssl::UniquePtr<EC_KEY> ec_key(EC_KEY_new());
-    CHECK(ec_key);
-    EC_KEY_set_group(ec_key.get(), EC_group_p256());
-    CHECK_EQ(EC_KEY_oct2priv(ec_key.get(), key_pair.private_key.data(),
-                             key_pair.private_key.size()),
-             1);
-    std::array<uint8_t, crypto::kSHA256Length> digest =
-        crypto::SHA256Hash(message);
-
-    // ECDSA signing with a fixed nonce is considered unsafe and is only
-    // suitable for test scenarios.
-    CHECK_IS_TEST();
-
-    std::array<uint8_t, kEcdsaP256SHA256NonceForTestingOnly.size() / 2> nonce;
-    CHECK(base::HexStringToSpan(kEcdsaP256SHA256NonceForTestingOnly, nonce));
-
-    bssl::UniquePtr<ECDSA_SIG> sig(
-        ECDSA_sign_with_nonce_and_leak_private_key_for_testing(
-            digest.data(), digest.size(), ec_key.get(), nonce.data(),
-            nonce.size()));
-    CHECK(sig);
-
-    uint8_t* signature_bytes;
-    size_t signature_size;
-    CHECK_EQ(ECDSA_SIG_to_bytes(&signature_bytes, &signature_size, sig.get()),
-             1);
-    bssl::UniquePtr<uint8_t> signature_bytes_deleter(signature_bytes);
-
-    return std::vector<uint8_t>(signature_bytes,
-                                signature_bytes + signature_size);
-  }();
-
-  if (key_pair.produce_invalid_signature) {
-    signature[0] ^= 0xff;
-  }
-  return signature;
-}
-
-}  // namespace
-
-WebBundleSigner::ErrorsForTesting::ErrorsForTesting(
-    IntegrityBlockErrorsForTesting bundle_errors,
-    const std::vector<IntegritySignatureErrorsForTesting>& signatures_errors)
-    : integrity_block_errors(std::move(bundle_errors)),
-      signatures_errors(signatures_errors) {}
-
-WebBundleSigner::ErrorsForTesting::ErrorsForTesting(
-    const ErrorsForTesting& other) = default;
-WebBundleSigner::ErrorsForTesting& WebBundleSigner::ErrorsForTesting::operator=(
-    const ErrorsForTesting& other) = default;
-WebBundleSigner::ErrorsForTesting::~ErrorsForTesting() = default;
-
-cbor::Value WebBundleSigner::CreateIntegrityBlock(
+cbor::Value CreateIntegrityBlock(
     const cbor::Value::ArrayValue& signature_stack,
-    const std::optional<IntegrityBlockAttributes>& ib_attributes,
-    IntegrityBlockErrorsForTesting errors_for_testing) {
+    const std::optional<WebBundleSigner::IntegrityBlockAttributes>&
+        ib_attributes,
+    WebBundleSigner::IntegrityBlockErrorsForTesting errors_for_testing) {
   cbor::Value::ArrayValue integrity_block;
   // magic bytes
   integrity_block.emplace_back(kIntegrityBlockMagicBytes);
@@ -227,6 +147,7 @@ cbor::Value WebBundleSigner::CreateIntegrityBlock(
   if (errors_for_testing.Has(IntegrityBlockErrorForTesting::kInvalidVersion)) {
     integrity_block.emplace_back(
         cbor::Value::BinaryValue({'1', 'p', '\0', '\0'}));  // Invalid.
+    integrity_block.emplace_back(cbor::Value::MapValue{});
   } else if (ib_attributes) {
     // Presence of `ib_attributes` indicates integrity block v2.
     integrity_block.emplace_back(kIntegrityBlockV2VersionBytes);
@@ -234,9 +155,17 @@ cbor::Value WebBundleSigner::CreateIntegrityBlock(
     attributes.emplace(web_package::kWebBundleIdAttributeName,
                        ib_attributes->web_bundle_id);
     integrity_block.emplace_back(std::move(attributes));
+  } else if (errors_for_testing.Has(
+                 IntegrityBlockErrorForTesting::kNoSignedWebBundleId)) {
+    integrity_block.emplace_back(kIntegrityBlockV2VersionBytes);
+    integrity_block.emplace_back(cbor::Value::MapValue{});
+  } else if (errors_for_testing.Has(
+                 IntegrityBlockErrorForTesting::kNoAttributes)) {
+    integrity_block.emplace_back(kIntegrityBlockV2VersionBytes);
   } else {
-    // Absence of `ib_attributes` indicates integrity block v1.
-    integrity_block.emplace_back(kIntegrityBlockV1VersionBytes);
+    NOTREACHED()
+        << "Absence of `ib_attributes` indicates integrity block v1, which "
+           "shouldn't be used in tests.";
   }
   // signature stack
   integrity_block.emplace_back(signature_stack);
@@ -249,11 +178,12 @@ cbor::Value WebBundleSigner::CreateIntegrityBlock(
   return cbor::Value(integrity_block);
 }
 
-cbor::Value WebBundleSigner::CreateIntegrityBlockForBundle(
+cbor::Value CreateIntegrityBlockForBundle(
     base::span<const uint8_t> unsigned_bundle,
-    const std::vector<KeyPair>& key_pairs,
-    const std::optional<IntegrityBlockAttributes>& ib_attributes,
-    ErrorsForTesting errors_for_testing) {
+    const KeyPairs& key_pairs,
+    const std::optional<WebBundleSigner::IntegrityBlockAttributes>&
+        ib_attributes,
+    WebBundleSigner::ErrorsForTesting errors_for_testing) {
   CHECK(errors_for_testing.signatures_errors.empty() ||
         errors_for_testing.signatures_errors.size() == key_pairs.size());
   auto use_signatures_errors = !errors_for_testing.signatures_errors.empty();
@@ -301,11 +231,61 @@ cbor::Value WebBundleSigner::CreateIntegrityBlockForBundle(
                               errors_for_testing.integrity_block_errors);
 }
 
+// If `web_bundle_id` is not provided explicitly, infer it from the first
+// public key.
+void FillIdAttributesIfPossibleAndNecessary(
+    const KeyPairs& key_pairs,
+    std::optional<WebBundleSigner::IntegrityBlockAttributes>& ib_attributes,
+    const WebBundleSigner::IntegrityBlockErrorsForTesting& errors_for_testing) {
+  if (ib_attributes || key_pairs.empty() ||
+      errors_for_testing.Has(
+          IntegrityBlockErrorForTesting::kNoSignedWebBundleId) ||
+      errors_for_testing.Has(IntegrityBlockErrorForTesting::kNoAttributes)) {
+    return;
+  }
+  ib_attributes = {.web_bundle_id = absl::visit(
+                       [](const auto& key_pair) {
+                         return SignedWebBundleId::CreateForPublicKey(
+                                    key_pair.public_key)
+                             .id();
+                       },
+                       key_pairs[0])};
+}
+}  // namespace
+
+WebBundleSigner::ErrorsForTesting::ErrorsForTesting(
+    IntegrityBlockErrorsForTesting bundle_errors,
+    const std::vector<IntegritySignatureErrorsForTesting>& signatures_errors)
+    : integrity_block_errors(std::move(bundle_errors)),
+      signatures_errors(signatures_errors) {}
+
+WebBundleSigner::ErrorsForTesting::ErrorsForTesting(
+    const ErrorsForTesting& other) = default;
+WebBundleSigner::ErrorsForTesting& WebBundleSigner::ErrorsForTesting::operator=(
+    const ErrorsForTesting& other) = default;
+WebBundleSigner::ErrorsForTesting::~ErrorsForTesting() = default;
+
 std::vector<uint8_t> WebBundleSigner::SignBundle(
     base::span<const uint8_t> unsigned_bundle,
-    const std::vector<KeyPair>& key_pairs,
-    const std::optional<IntegrityBlockAttributes>& ib_attributes,
+    const KeyPair& key_pair,
     ErrorsForTesting errors_for_testing) {
+  return SignBundle(std::move(unsigned_bundle), {key_pair}, std::nullopt,
+                    std::move(errors_for_testing));
+}
+
+std::vector<uint8_t> WebBundleSigner::SignBundle(
+    base::span<const uint8_t> unsigned_bundle,
+    const KeyPairs& key_pairs,
+    std::optional<IntegrityBlockAttributes> ib_attributes,
+    ErrorsForTesting errors_for_testing) {
+  CHECK(!key_pairs.empty() !=
+        errors_for_testing.integrity_block_errors.Has(
+            IntegrityBlockErrorForTesting::kEmptySignatureList))
+      << "At least one signing key must be specified unless overriden by "
+         "IntegrityBlockErrorForTesting::kEmptySignatureList.";
+
+  FillIdAttributesIfPossibleAndNecessary(
+      key_pairs, ib_attributes, errors_for_testing.integrity_block_errors);
   std::optional<std::vector<uint8_t>> integrity_block =
       cbor::Writer::Write(CreateIntegrityBlockForBundle(
           unsigned_bundle, key_pairs, ib_attributes, errors_for_testing));
@@ -317,81 +297,4 @@ std::vector<uint8_t> WebBundleSigner::SignBundle(
   return signed_web_bundle;
 }
 
-// static
-WebBundleSigner::Ed25519KeyPair WebBundleSigner::Ed25519KeyPair::CreateRandom(
-    bool produce_invalid_signature) {
-  std::array<uint8_t, ED25519_PUBLIC_KEY_LEN> public_key;
-  std::array<uint8_t, ED25519_PRIVATE_KEY_LEN> private_key;
-  ED25519_keypair(public_key.data(), private_key.data());
-  return Ed25519KeyPair(std::move(public_key), std::move(private_key),
-                        produce_invalid_signature);
-}
-
-WebBundleSigner::Ed25519KeyPair::Ed25519KeyPair(
-    base::span<const uint8_t, ED25519_PUBLIC_KEY_LEN> public_key_bytes,
-    base::span<const uint8_t, ED25519_PRIVATE_KEY_LEN> private_key_bytes,
-    bool produce_invalid_signature)
-    : public_key(Ed25519PublicKey::Create(public_key_bytes)),
-      produce_invalid_signature(produce_invalid_signature) {
-  std::array<uint8_t, ED25519_PRIVATE_KEY_LEN> private_key_array;
-  base::ranges::copy(private_key_bytes, private_key_array.begin());
-  private_key = std::move(private_key_array);
-}
-
-WebBundleSigner::Ed25519KeyPair::Ed25519KeyPair(
-    const WebBundleSigner::Ed25519KeyPair&) = default;
-WebBundleSigner::Ed25519KeyPair& WebBundleSigner::Ed25519KeyPair::operator=(
-    const Ed25519KeyPair&) = default;
-
-WebBundleSigner::Ed25519KeyPair::Ed25519KeyPair(Ed25519KeyPair&&) noexcept =
-    default;
-WebBundleSigner::Ed25519KeyPair& WebBundleSigner::Ed25519KeyPair::operator=(
-    WebBundleSigner::Ed25519KeyPair&&) noexcept = default;
-
-WebBundleSigner::Ed25519KeyPair::~Ed25519KeyPair() = default;
-
-// static
-WebBundleSigner::EcdsaP256KeyPair
-WebBundleSigner::EcdsaP256KeyPair::CreateRandom(
-    bool produce_invalid_signature) {
-  bssl::UniquePtr<EC_KEY> ec_key(EC_KEY_new());
-  CHECK(ec_key);
-  EC_KEY_set_group(ec_key.get(), EC_group_p256());
-  CHECK_EQ(EC_KEY_generate_key(ec_key.get()), 1);
-
-  std::array<uint8_t, EcdsaP256PublicKey::kLength> public_key;
-  size_t export_length =
-      EC_POINT_point2oct(EC_group_p256(), EC_KEY_get0_public_key(ec_key.get()),
-                         POINT_CONVERSION_COMPRESSED, public_key.data(),
-                         public_key.size(), /*ctx=*/nullptr);
-  CHECK_EQ(export_length, EcdsaP256PublicKey::kLength);
-
-  std::array<uint8_t, 32> private_key;
-  CHECK_EQ(32u, EC_KEY_priv2oct(ec_key.get(), private_key.data(),
-                                private_key.size()));
-
-  return EcdsaP256KeyPair(public_key, private_key, produce_invalid_signature);
-}
-
-WebBundleSigner::EcdsaP256KeyPair::EcdsaP256KeyPair(
-    base::span<const uint8_t, EcdsaP256PublicKey::kLength> public_key_bytes,
-    base::span<const uint8_t, 32> private_key_bytes,
-    bool produce_invalid_signature)
-    : public_key(*EcdsaP256PublicKey::Create(public_key_bytes)),
-      produce_invalid_signature(produce_invalid_signature) {
-  base::ranges::copy(private_key_bytes, private_key.begin());
-}
-
-WebBundleSigner::EcdsaP256KeyPair::EcdsaP256KeyPair(
-    const WebBundleSigner::EcdsaP256KeyPair&) = default;
-WebBundleSigner::EcdsaP256KeyPair& WebBundleSigner::EcdsaP256KeyPair::operator=(
-    const EcdsaP256KeyPair&) = default;
-
-WebBundleSigner::EcdsaP256KeyPair::EcdsaP256KeyPair(
-    EcdsaP256KeyPair&&) noexcept = default;
-WebBundleSigner::EcdsaP256KeyPair& WebBundleSigner::EcdsaP256KeyPair::operator=(
-    WebBundleSigner::EcdsaP256KeyPair&&) noexcept = default;
-
-WebBundleSigner::EcdsaP256KeyPair::~EcdsaP256KeyPair() = default;
-
-}  // namespace web_package
+}  // namespace web_package::test

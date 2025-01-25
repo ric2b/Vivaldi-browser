@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_priority.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_queue_type.h"
+#include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
 namespace base::sequence_manager {
@@ -47,7 +48,7 @@ class WakeUpBudgetPool;
 // TODO(crbug.com/1143007): Remove ref-counting of MainThreadTaskQueues as it's
 // no longer needed.
 class PLATFORM_EXPORT MainThreadTaskQueue
-    : public base::RefCountedThreadSafe<MainThreadTaskQueue> {
+    : public ThreadSafeRefCounted<MainThreadTaskQueue> {
  public:
   enum class QueueType {
     // Keep MainThreadTaskQueue::NameForQueueType in sync.
@@ -75,7 +76,8 @@ class PLATFORM_EXPORT MainThreadTaskQueue
     kFramePausable = 14,
     kFrameUnpausable = 15,
     kV8 = 16,
-    kV8LowPriority = 27,
+    kV8UserVisible = 27,
+    kV8BestEffort = 28,
     // 17 : kIPC, obsolete
     kInput = 18,
 
@@ -95,7 +97,7 @@ class PLATFORM_EXPORT MainThreadTaskQueue
 
     // Used to group multiple types when calculating Expected Queueing Time.
     kOther = 23,
-    kCount = 28
+    kCount = 29
   };
 
   // The ThrottleHandle controls throttling and unthrottling the queue. When
@@ -196,6 +198,11 @@ class PLATFORM_EXPORT MainThreadTaskQueue
       return *this;
     }
 
+    QueueTraits SetCanBeDeferredForRendering(bool value) {
+      can_be_deferred_for_rendering = value;
+      return *this;
+    }
+
     QueueTraits SetCanBeThrottled(bool value) {
       can_be_throttled = value;
       return *this;
@@ -245,6 +252,7 @@ class PLATFORM_EXPORT MainThreadTaskQueue
       int offset = 0;
       int key = 1 << (offset++);
       key |= can_be_deferred << (offset++);
+      key |= can_be_deferred_for_rendering << (offset++);
       key |= can_be_throttled << (offset++);
       key |= can_be_intensively_throttled << (offset++);
       key |= can_be_paused << (offset++);
@@ -260,6 +268,7 @@ class PLATFORM_EXPORT MainThreadTaskQueue
     void WriteIntoTrace(perfetto::TracedValue context) const;
 
     bool can_be_deferred : 1 = false;
+    bool can_be_deferred_for_rendering : 1 = false;
     bool can_be_throttled : 1 = false;
     bool can_be_intensively_throttled : 1 = false;
     bool can_be_paused : 1 = false;
@@ -301,6 +310,12 @@ class PLATFORM_EXPORT MainThreadTaskQueue
 
     QueueCreationParams SetCanBeDeferred(bool value) {
       queue_traits = queue_traits.SetCanBeDeferred(value);
+      ApplyQueueTraitsToSpec();
+      return *this;
+    }
+
+    QueueCreationParams SetCanBeDeferredForRendering(bool value) {
+      queue_traits = queue_traits.SetCanBeDeferredForRendering(value);
       ApplyQueueTraitsToSpec();
       return *this;
     }
@@ -387,6 +402,10 @@ class PLATFORM_EXPORT MainThreadTaskQueue
   QueueType queue_type() const { return queue_type_; }
 
   bool CanBeDeferred() const { return queue_traits_.can_be_deferred; }
+
+  bool CanBeDeferredForRendering() const {
+    return queue_traits_.can_be_deferred_for_rendering;
+  }
 
   bool CanBeThrottled() const { return queue_traits_.can_be_throttled; }
 
@@ -538,7 +557,7 @@ class PLATFORM_EXPORT MainThreadTaskQueue
   ~MainThreadTaskQueue();
 
  private:
-  friend class base::RefCountedThreadSafe<MainThreadTaskQueue>;
+  friend class ThreadSafeRefCounted<MainThreadTaskQueue>;
   friend class blink::scheduler::main_thread_scheduler_impl_unittest::
       MainThreadSchedulerImplTest;
 

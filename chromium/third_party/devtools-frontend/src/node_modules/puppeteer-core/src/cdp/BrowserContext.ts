@@ -60,10 +60,6 @@ export class CdpBrowserContext extends BrowserContext {
     });
   }
 
-  override isIncognito(): boolean {
-    return !!this.#id;
-  }
-
   override async overridePermissions(
     origin: string,
     permissions: Permission[]
@@ -89,8 +85,9 @@ export class CdpBrowserContext extends BrowserContext {
     });
   }
 
-  override newPage(): Promise<Page> {
-    return this.#browser._createPageInContext(this.#id);
+  override async newPage(): Promise<Page> {
+    using _guard = await this.waitForScreenshotOperations();
+    return await this.#browser._createPageInContext(this.#id);
   }
 
   override browser(): CdpBrowser {
@@ -98,7 +95,7 @@ export class CdpBrowserContext extends BrowserContext {
   }
 
   override async close(): Promise<void> {
-    assert(this.#id, 'Non-incognito profiles cannot be closed!');
+    assert(this.#id, 'Default BrowserContext cannot be closed!');
     await this.#browser._disposeContext(this.#id);
   }
 }

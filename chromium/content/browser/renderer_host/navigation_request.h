@@ -348,13 +348,14 @@ class CONTENT_EXPORT NavigationRequest
   bool IsSameOrigin() override;
   bool WasServerRedirect() override;
   const std::vector<GURL>& GetRedirectChain() override;
-  int GetFrameTreeNodeId() override;
+  FrameTreeNodeId GetFrameTreeNodeId() override;
   RenderFrameHostImpl* GetParentFrame() override;
   RenderFrameHostImpl* GetParentFrameOrOuterDocument() override;
   base::TimeTicks NavigationStart() override;
   base::TimeTicks NavigationInputStart() override;
   const NavigationHandleTiming& GetNavigationHandleTiming() override;
   bool IsPost() override;
+  std::string GetRequestMethod() override;
   const blink::mojom::Referrer& GetReferrer() override;
   void SetReferrer(blink::mojom::ReferrerPtr referrer) override;
   bool HasUserGesture() override;
@@ -434,6 +435,7 @@ class CONTENT_EXPORT NavigationRequest
   bool IsPdf() override;
   void WriteIntoTrace(perfetto::TracedProto<TraceProto> context) const override;
   bool SetNavigationTimeout(base::TimeDelta timeout) override;
+  void CancelNavigationTimeout() override;
   void SetAllowCookiesFromBrowser(bool allow_cookies_from_browser) override;
   void GetResponseBody(ResponseBodyCallback callback) override;
   PreloadingTriggerType GetPrerenderTriggerType() override;
@@ -503,7 +505,7 @@ class CONTENT_EXPORT NavigationRequest
     return dest_site_instance_.get();
   }
 
-  int bindings() const { return bindings_; }
+  std::optional<BindingsPolicySet> bindings() const { return bindings_; }
 
   bool browser_initiated() const {
     return commit_params_->is_browser_initiated;
@@ -984,6 +986,12 @@ class CONTENT_EXPORT NavigationRequest
   // the BackForwardCache or Prerender)
   bool IsPageActivation() const override;
 
+  // Returns whether the navigation type is a restore navigation.
+  bool IsRestore() const;
+
+  // Returns whether the navigation type is a reload navigation.
+  bool IsReload() const;
+
   // Sets state pertaining to prerender activations. This is only called if
   // this navigation is a prerender activation.
   void SetPrerenderActivationNavigationState(
@@ -1055,7 +1063,7 @@ class CONTENT_EXPORT NavigationRequest
     return is_running_potential_prerender_activation_checks_;
   }
 
-  int prerender_frame_tree_node_id() const {
+  FrameTreeNodeId prerender_frame_tree_node_id() const {
     DCHECK(prerender_frame_tree_node_id_.has_value())
         << "Must be called after StartNavigation()";
     return prerender_frame_tree_node_id_.value();
@@ -1357,6 +1365,9 @@ class CONTENT_EXPORT NavigationRequest
     navigation_discard_reason_ = navigation_discard_reason;
   }
 
+  // Returns the type of this navigation (e.g. history, browser-initiated, etc)
+  // to set as a discard reason on another navigation that is being discarded
+  // because this navigation is taking its place in the FrameTreeNode.
   NavigationDiscardReason GetTypeForNavigationDiscardReason();
 
   void set_force_no_https_upgrade() { force_no_https_upgrade_ = true; }
@@ -1404,7 +1415,7 @@ class CONTENT_EXPORT NavigationRequest
   // activating a prerendered page.
   void OnPrerenderingActivationChecksComplete(
       CommitDeferringCondition::NavigationType navigation_type,
-      std::optional<int> candidate_prerender_frame_tree_node_id);
+      std::optional<FrameTreeNodeId> candidate_prerender_frame_tree_node_id);
 
   // Get the `FencedFrameURLMapping` associated with the current page.
   FencedFrameURLMapping& GetFencedFrameURLMap();
@@ -1443,9 +1454,6 @@ class CONTENT_EXPORT NavigationRequest
   // Note that an origin-keyed process may be used if this returns true, if
   // kOriginKeyedProcessesByDefault is enabled.
   bool IsIsolationImplied();
-
-  // Returns whether the navigation type is a restore navigation.
-  bool IsRestore() const;
 
   // The Origin-Agent-Cluster end result is determined early in the lifecycle of
   // a NavigationRequest, but used late. In particular, we want to trigger use
@@ -1530,7 +1538,8 @@ class CONTENT_EXPORT NavigationRequest
   // navigation can proceed to commit.
   void OnCommitDeferringConditionChecksComplete(
       CommitDeferringCondition::NavigationType navigation_type,
-      std::optional<int> candidate_prerender_frame_tree_node_id) override;
+      std::optional<FrameTreeNodeId> candidate_prerender_frame_tree_node_id)
+      override;
 
   // Called either by OnFailureChecksComplete() or OnRequestFailed() directly.
   // |error_page_content| contains the content of the error page (i.e. flattened
@@ -1548,20 +1557,18 @@ class CONTENT_EXPORT NavigationRequest
   void CommitPageActivation();
 
   // Checks if the specified CSP context's relevant CSP directive
-  // allows the navigation. This is called to perform the frame-src
-  // and navigate-to checks.
+  // allows the navigation. This is called to perform the frame-src check.
   bool IsAllowedByCSPDirective(
       const std::vector<network::mojom::ContentSecurityPolicyPtr>& policies,
       network::CSPContext* context,
       network::mojom::CSPDirectiveName directive,
       bool has_followed_redirect,
       bool url_upgraded_after_redirect,
-      bool is_response_check,
       bool is_opaque_fenced_frame,
       network::CSPContext::CheckCSPDisposition disposition);
 
-  // Checks if CSP allows the navigation. This will check the frame-src,
-  // fenced-frame-src and navigate-to directives. Returns net::OK if the checks
+  // Checks if CSP allows the navigation. This will check the frame-src and
+  // fenced-frame-src directives. Returns net::OK if the checks
   // pass, and net::ERR_ABORTED or net::ERR_BLOCKED_BY_CSP depending on which
   // checks fail.
   net::Error CheckCSPDirectives(
@@ -2170,7 +2177,7 @@ class CONTENT_EXPORT NavigationRequest
   const RestoreType restore_type_;
   const ReloadType reload_type_;
   const int nav_entry_id_;
-  int bindings_ = FrameNavigationEntry::kInvalidBindings;
+  std::optional<BindingsPolicySet> bindings_;
 
   scoped_refptr<SiteInstanceImpl> starting_site_instance_;
 
@@ -2574,12 +2581,12 @@ class CONTENT_EXPORT NavigationRequest
   base::TimeTicks fenced_frame_url_mapping_start_time_;
 
   // The root frame tree node id of the prerendered page. This will be a valid
-  // FrameTreeNode id when this navigation will activate a prerendered page.
-  // For all other navigations this will be
-  // RenderFrameHost::kNoFrameTreeNodeId. We only know whether this is the case
-  // when BeginNavigation is called so the optional will be empty until then
-  // and callers must not query its value before it's been computed.
-  std::optional<int> prerender_frame_tree_node_id_;
+  // FrameTreeNodeId value when this navigation will activate a prerendered
+  // page. For all other navigations this will be an invalid FrameTreeNodeId. We
+  // only know whether this is the case when BeginNavigation is called so the
+  // optional will be empty until then and callers must not query its value
+  // before it's been computed.
+  std::optional<FrameTreeNodeId> prerender_frame_tree_node_id_;
 
   // Contains state pertaining to a prerender activation. This is only used if
   // this navigation is a prerender activation.
@@ -2913,6 +2920,9 @@ class CONTENT_EXPORT NavigationRequest
 
   // If true, HTTPS Upgrades will be disabled on this navigation request.
   bool force_no_https_upgrade_ = false;
+
+  // The initial request method of the request, before any redirects.
+  std::string request_method_;
 
   base::WeakPtrFactory<NavigationRequest> weak_factory_{this};
 };

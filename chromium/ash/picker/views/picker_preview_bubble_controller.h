@@ -13,6 +13,7 @@
 #include "base/files/file.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
 #include "ui/views/widget/widget_observer.h"
@@ -32,6 +33,12 @@ class PickerPreviewBubbleView;
 
 class ASH_EXPORT PickerPreviewBubbleController : public views::WidgetObserver {
  public:
+  class Observer : public base::CheckedObserver {
+   public:
+    // Called when the bubble is shown or hidden.
+    virtual void OnPreviewBubbleVisibilityChanged(bool visible) = 0;
+  };
+
   PickerPreviewBubbleController();
   PickerPreviewBubbleController(const PickerPreviewBubbleController&) = delete;
   PickerPreviewBubbleController& operator=(
@@ -52,24 +59,30 @@ class ASH_EXPORT PickerPreviewBubbleController : public views::WidgetObserver {
   // the bubble view shown by a different anchor view.
   void CloseBubble();
 
+  bool IsBubbleVisible() const;
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
+  // Updates the bubble view labels for the currently open bubble.
+  // If the bubble is not shown, this does nothing.
+  // If `text` is empty, then the bubble view labels are hidden.
+  void SetBubbleMainText(const std::u16string& text);
+
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
   void ShowBubbleImmediatelyForTesting(
       HoldingSpaceImage* async_preview_image,
-      base::OnceCallback<std::optional<base::File::Info>()> get_file_info,
       views::View* anchor_view);
 
   PickerPreviewBubbleView* bubble_view_for_testing() const;
 
  private:
   void UpdateBubbleImage();
-  void UpdateBubbleMetadata(std::optional<base::File::Info> info);
 
-  // `get_file_info` is run in a `base::MayBlock()` task.
   void CreateBubbleWidget(
       HoldingSpaceImage* async_preview_image,
-      base::OnceCallback<std::optional<base::File::Info>()> get_file_info,
       views::View* anchor_view);
 
   // Shows the bubble if one has been created. Does nothing if the bubble is
@@ -83,6 +96,8 @@ class ASH_EXPORT PickerPreviewBubbleController : public views::WidgetObserver {
 
   // Owned by the bubble widget.
   raw_ptr<PickerPreviewBubbleView> bubble_view_;
+
+  base::ObserverList<Observer> observers_;
 
   base::CallbackListSubscription image_subscription_;
   base::ScopedObservation<views::Widget, views::WidgetObserver>

@@ -79,6 +79,7 @@ tint_target_add_dependencies(tint_cmd_fuzz_ir_fuzz_cmd fuzz_cmd
 
 tint_target_add_external_dependencies(tint_cmd_fuzz_ir_fuzz_cmd fuzz_cmd
   "libprotobuf-mutator"
+  "src_utils"
 )
 
 if(TINT_BUILD_GLSL_WRITER)
@@ -121,7 +122,6 @@ endif(TINT_BUILD_SPV_WRITER)
 if(TINT_BUILD_WGSL_READER)
   tint_target_add_dependencies(tint_cmd_fuzz_ir_fuzz_cmd fuzz_cmd
     tint_cmd_fuzz_wgsl_fuzz
-    tint_lang_wgsl_ast_transform_fuzz
   )
 endif(TINT_BUILD_WGSL_READER)
 
@@ -173,6 +173,7 @@ tint_target_add_dependencies(tint_cmd_fuzz_ir_fuzz fuzz
 )
 
 tint_target_add_external_dependencies(tint_cmd_fuzz_ir_fuzz fuzz
+  "src_utils"
   "thread"
 )
 

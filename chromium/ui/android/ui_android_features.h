@@ -33,9 +33,16 @@ UI_ANDROID_EXPORT BASE_DECLARE_FEATURE(kMirrorBackForwardGesturesInRTL);
 // rather than just the first one detected.
 UI_ANDROID_EXPORT BASE_DECLARE_FEATURE(kReportAllAvailablePointerTypes);
 
+// Reports bottom overscrolls on the web page.
+UI_ANDROID_EXPORT BASE_DECLARE_FEATURE(kReportBottomOverscrolls);
+
 // Kill switch to turn off validation in TextViewWithLeading that requires a
 // leading value to be configured.
 UI_ANDROID_EXPORT BASE_DECLARE_FEATURE(kRequireLeadingInTextViewWithLeading);
+
+// Use ACTION_OPEN_DOCUMENT rather than ACTION_GET_CONTENT when selecting a
+// file.
+UI_ANDROID_EXPORT BASE_DECLARE_FEATURE(kSelectFileOpenDocument);
 
 // TODO(b/328601354): Cleanup flag after investigating nothing is broken after
 // changing the default behavior for EventForwarder observers.

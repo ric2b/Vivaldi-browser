@@ -3,19 +3,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from __future__ import print_function
-
-import copy
 import json
 import os
 import re
 import subprocess
 import sys
 
-# Add src/testing/ into sys.path for importing common without pylint errors.
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
-from scripts import common
+import common
 
 CHROMIUM_ROOT = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
 BUILD_DIR = os.path.join(CHROMIUM_ROOT, 'build')
@@ -56,6 +50,11 @@ _MAC_SI_FILE_ALLOWLIST = [
     'iostream\\.cpp',  # Used to setup std::cin/cout/cerr.
     '000100',  # Used to setup std::cin/cout/cerr
 ]
+
+# The minimum for Mac is:
+# _GLOBAL__I_000100
+# InitializeDefaultMallocZoneWithPartitionAlloc()
+FALLBACK_MIN_MAC_SI_COUNT = 2
 
 # Two static initializers are needed on Mac for libc++ to set up
 # std::cin/cout/cerr before main() runs. Only iostream.cpp needs to be counted
@@ -134,12 +133,14 @@ def main_mac(src_dir, hermetic_xcode_path, allow_coverage_initializer=False):
       stdout, si_count = get_mod_init_count(src_dir,
                                             chromium_framework_executable,
                                             hermetic_xcode_path)
-      min_si_count = allowed_si_count = FALLBACK_EXPECTED_MAC_SI_COUNT
+      min_si_count = FALLBACK_MIN_MAC_SI_COUNT
+      allowed_si_count = FALLBACK_EXPECTED_MAC_SI_COUNT
       if allow_coverage_initializer:
         allowed_si_count = COVERAGE_BUILD_FALLBACK_EXPECTED_MAC_SI_COUNT
       if si_count > allowed_si_count or si_count < min_si_count:
-        print('Expected %d static initializers in %s, but found %d' %
-              (allowed_si_count, chromium_framework_executable, si_count))
+        print('Expected [%d, %d] static initializers in %s, but found %d' %
+              (min_si_count, allowed_si_count, chromium_framework_executable,
+               si_count))
         print(stdout)
         ret = 1
   return ret
@@ -161,7 +162,7 @@ def main_linux(src_dir):
       # Get the basename and remove line number suffix.
       basename = os.path.basename(e['filename']).split(':')[0]
       symbol = e['symbol_name']
-      descriptor = f"{basename} : {symbol}"
+      descriptor = f'{basename} : {symbol}'
       if not any(re.match(p, descriptor) for p in allowlist[binary_name]):
         ret = 1
         print(('Error: file "%s" is not expected to have static initializers in'
@@ -178,18 +179,13 @@ def main_linux(src_dir):
 
 
 def main_run(args):
-  if args.build_dir:
-    with open(os.path.join(args.build_dir, 'args.gn')) as f:
-      gn_args = gn_helpers.FromGNArgs(f.read())
-    if gn_args.get('is_debug') or gn_args.get('is_official_build'):
-      raise Exception('Only release builds are supported')
-  elif args.build_config_fs != 'Release':
+  with open(os.path.join(args.build_dir, 'args.gn')) as f:
+    gn_args = gn_helpers.FromGNArgs(f.read())
+  if gn_args.get('is_debug') or gn_args.get('is_official_build'):
     raise Exception('Only release builds are supported')
 
   src_dir = args.paths['checkout']
-  build_dir = args.build_dir or os.path.join(src_dir, 'out',
-                                             args.build_config_fs)
-  os.chdir(build_dir)
+  os.chdir(args.build_dir)
 
   if sys.platform.startswith('darwin'):
     # If the checkout uses the hermetic xcode binaries, then otool must be
@@ -210,7 +206,7 @@ def main_run(args):
     # TODO(crbug.com/40285648): Delete this assert if it's not seen to fail
     # anywhere.
     assert not check_if_chromeos(args), (
-        "This script is no longer supported for CrOS")
+        'This script is no longer supported for CrOS')
     rc = main_linux(src_dir)
   else:
     sys.stderr.write('Unsupported platform %s.\n' % repr(sys.platform))
@@ -233,7 +229,8 @@ def main_compile_targets(args):
   else:
     compile_targets = []
 
-  json.dump(compile_targets, args.output)
+  with open(args.output.name, 'w') as fd:
+    json.dump(compile_targets, fd)
 
   return 0
 

@@ -33,7 +33,7 @@ namespace browser_sync {
 
 namespace {
 
-const syncer::ModelTypeSet kSupportedTypes = {
+const syncer::DataTypeSet kSupportedTypes = {
     syncer::PASSWORDS, syncer::BOOKMARKS, syncer::READING_LIST};
 
 template <typename ContainerT, typename F>
@@ -74,8 +74,8 @@ base::Time GetLatestOfTimeLastUsedOrModifiedOrCreated(
 // ongoing or failed). In these cases, a sensible fallback is to exclude the
 // affected types. This function returns the set of types that are usable,
 // i.e. their dependent services are available and ready.
-syncer::ModelTypeSet FilterUsableTypes(
-    syncer::ModelTypeSet types,
+syncer::DataTypeSet FilterUsableTypes(
+    syncer::DataTypeSet types,
     password_manager::PasswordStoreInterface* profile_password_store,
     password_manager::PasswordStoreInterface* account_password_store,
     sync_bookmarks::BookmarkModelView* local_bookmark_model_view,
@@ -107,9 +107,9 @@ class LocalDataQueryHelper::LocalDataQueryRequest
  public:
   LocalDataQueryRequest(
       LocalDataQueryHelper* helper,
-      syncer::ModelTypeSet types,
+      syncer::DataTypeSet types,
       base::OnceCallback<void(
-          std::map<syncer::ModelType, syncer::LocalDataDescription>)> callback)
+          std::map<syncer::DataType, syncer::LocalDataDescription>)> callback)
       : helper_(helper), types_(base::Intersection(types, kSupportedTypes)) {
     if (types_ != types) {
       DVLOG(1) << "Only PASSWORDS, BOOKMARKS and READING_LIST are supported.";
@@ -195,7 +195,7 @@ class LocalDataQueryHelper::LocalDataQueryRequest
     barrier_callback_.Run();
   }
 
-  const std::map<syncer::ModelType, syncer::LocalDataDescription>& result()
+  const std::map<syncer::DataType, syncer::LocalDataDescription>& result()
       const {
     CHECK(result_.size() == types_.size()) << "Request is still on-going.";
     return result_;
@@ -203,12 +203,12 @@ class LocalDataQueryHelper::LocalDataQueryRequest
 
  private:
   raw_ptr<LocalDataQueryHelper> helper_;
-  syncer::ModelTypeSet types_;
+  syncer::DataTypeSet types_;
   // A barrier closure to trigger the callback once the local data for all the
   // types has been fetched.
   base::RepeatingClosure barrier_callback_;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> result_;
+  std::map<syncer::DataType, syncer::LocalDataDescription> result_;
 
   base::WeakPtrFactory<LocalDataQueryRequest> weak_ptr_factory_{this};
 };
@@ -238,10 +238,10 @@ LocalDataQueryHelper::LocalDataQueryHelper(
 LocalDataQueryHelper::~LocalDataQueryHelper() = default;
 
 void LocalDataQueryHelper::Run(
-    syncer::ModelTypeSet types,
+    syncer::DataTypeSet types,
     base::OnceCallback<void(
-        std::map<syncer::ModelType, syncer::LocalDataDescription>)> callback) {
-  syncer::ModelTypeSet usable_types = FilterUsableTypes(
+        std::map<syncer::DataType, syncer::LocalDataDescription>)> callback) {
+  syncer::DataTypeSet usable_types = FilterUsableTypes(
       types, profile_password_store_, account_password_store_,
       local_bookmark_model_view_.get(), account_bookmark_model_view_.get(),
       dual_reading_list_model_);
@@ -257,7 +257,7 @@ void LocalDataQueryHelper::Run(
 void LocalDataQueryHelper::OnRequestComplete(
     LocalDataQueryRequest* request,
     base::OnceCallback<void(
-        std::map<syncer::ModelType, syncer::LocalDataDescription>)> callback) {
+        std::map<syncer::DataType, syncer::LocalDataDescription>)> callback) {
   // Execute the callback.
   std::move(callback).Run(request->result());
   // Remove the request from the list of ongoing requests.
@@ -272,7 +272,7 @@ class LocalDataMigrationHelper::LocalDataMigrationRequest
     : public password_manager::PasswordStoreConsumer {
  public:
   LocalDataMigrationRequest(LocalDataMigrationHelper* helper,
-                            syncer::ModelTypeSet types)
+                            syncer::DataTypeSet types)
       : helper_(helper), types_(base::Intersection(types, kSupportedTypes)) {
     if (types_ != types) {
       DVLOG(1) << "Only PASSWORDS, BOOKMARKS and READING_LIST are supported.";
@@ -281,13 +281,13 @@ class LocalDataMigrationHelper::LocalDataMigrationRequest
 
   ~LocalDataMigrationRequest() override = default;
 
-  const syncer::ModelTypeSet& types() const { return types_; }
+  const syncer::DataTypeSet& types() const { return types_; }
 
   // This runs the query for the requested data types.
   void Run() {
-    for (syncer::ModelType type : types_) {
+    for (syncer::DataType type : types_) {
       base::UmaHistogramEnumeration("Sync.BatchUpload.Requests2",
-                                    syncer::ModelTypeHistogramValue(type));
+                                    syncer::DataTypeHistogramValue(type));
     }
 
     if (types_.Has(syncer::BOOKMARKS)) {
@@ -414,7 +414,7 @@ class LocalDataMigrationHelper::LocalDataMigrationRequest
 
  private:
   raw_ptr<LocalDataMigrationHelper> helper_;
-  const syncer::ModelTypeSet types_;
+  const syncer::DataTypeSet types_;
 
   std::optional<std::vector<std::unique_ptr<password_manager::PasswordForm>>>
       profile_passwords_;
@@ -448,8 +448,8 @@ LocalDataMigrationHelper::LocalDataMigrationHelper(
 
 LocalDataMigrationHelper::~LocalDataMigrationHelper() = default;
 
-void LocalDataMigrationHelper::Run(syncer::ModelTypeSet types) {
-  syncer::ModelTypeSet usable_types = FilterUsableTypes(
+void LocalDataMigrationHelper::Run(syncer::DataTypeSet types) {
+  syncer::DataTypeSet usable_types = FilterUsableTypes(
       types, profile_password_store_, account_password_store_,
       local_bookmark_model_view_.get(), account_bookmark_model_view_.get(),
       dual_reading_list_model_);
@@ -462,9 +462,9 @@ void LocalDataMigrationHelper::Run(syncer::ModelTypeSet types) {
   request.Run();
 }
 
-syncer::ModelTypeSet LocalDataMigrationHelper::GetTypesWithOngoingMigrations()
+syncer::DataTypeSet LocalDataMigrationHelper::GetTypesWithOngoingMigrations()
     const {
-  syncer::ModelTypeSet types;
+  syncer::DataTypeSet types;
   for (const auto& request : request_list_) {
     types.PutAll(request->types());
   }

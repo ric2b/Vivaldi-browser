@@ -19,6 +19,7 @@
 #include "base/hash/md5.h"
 #include "base/mac/launch_application.h"
 #include "base/mac/mac_util.h"
+#include "base/mac/scoped_mach_msg_destroy.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_param_associator.h"
@@ -195,7 +196,7 @@ AppShimController::AppShimController(const Params& params)
   // need it is that we might miss some notification actions, which again is
   // harmless.
   if (base::FeatureList::IsEnabled(features::kAppShimNotificationAttribution) &&
-      app_mode::UseAdHocSigningForWebAppShims()) {
+      WebAppIsAdHocSigned()) {
     // `notification_service_` needs to be created early during start up to make
     // sure it is able to install its delegate before the OS attempts to inform
     // it of any notification actions that might have happened.
@@ -284,7 +285,7 @@ void AppShimController::PreInitFeatureState(
        "StandardCompliantHostCharacters",
        "StandardCompliantNonSpecialSchemeURLParsing",
        "UseAdHocSigningForWebAppShims", "UseIDNA2008NonTransitional",
-       "SonomaAccessibilityActivationRefinements"});
+       "SonomaAccessibilityActivationRefinements", "FeatureParamWithCache"});
 }
 
 // static
@@ -544,6 +545,7 @@ mojo::PlatformChannelEndpoint AppShimController::ConnectToBrowser(
 
   mojo::PlatformChannel channel;
   mach_msg_base_t message{};
+  base::ScopedMachMsgDestroy scoped_message(&message.header);
   message.header.msgh_id = app_mode::kBootstrapMsgId;
   message.header.msgh_bits =
       MACH_MSGH_BITS(MACH_MSG_TYPE_MOVE_SEND, MACH_MSG_TYPE_MOVE_SEND);
@@ -553,7 +555,9 @@ mojo::PlatformChannelEndpoint AppShimController::ConnectToBrowser(
   message.header.msgh_remote_port =
       server_endpoint.TakePlatformHandle().ReleaseMachSendRight();
   kern_return_t kr = mach_msg_send(&message.header);
-  if (kr != KERN_SUCCESS) {
+  if (kr == KERN_SUCCESS) {
+    scoped_message.Disarm();
+  } else {
     MACH_LOG(ERROR, kr) << "mach_msg_send";
     return mojo::PlatformChannelEndpoint();
   }
@@ -798,7 +802,7 @@ void AppShimController::BindNotificationService(
   // default on supported platforms, change this to always use the
   // UNUserNotification API (and not support notification attribution on other
   // platforms at all).
-  if (app_mode::UseAdHocSigningForWebAppShims()) {
+  if (WebAppIsAdHocSigned()) {
     // While the constructor should have created the `notification_service_`
     // instance already, it is possible that the base::FeatureList state at the
     // time did not match the current Chrome state, so make sure to create the
@@ -822,16 +826,21 @@ void AppShimController::BindNotificationService(
     // TODO(crbug.com/40616749): Determine when to ask for permissions.
     notification_service_un()->RequestPermission(base::DoNothing());
   } else {
+    // NSUserNotificationCenter is in the process of being replaced, and
+    // warnings about its deprecation are not helpful. https://crbug.com/1127306
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     notification_service_ =
         std::make_unique<mac_notifications::MacNotificationServiceNS>(
             std::move(service), std::move(handler),
             [NSUserNotificationCenter defaultUserNotificationCenter]);
+#pragma clang diagnostic pop
   }
 }
 
 mac_notifications::MacNotificationServiceUN*
 AppShimController::notification_service_un() {
-  if (!app_mode::UseAdHocSigningForWebAppShims()) {
+  if (!WebAppIsAdHocSigned()) {
     return nullptr;
   }
   return static_cast<mac_notifications::MacNotificationServiceUN*>(
@@ -934,4 +943,10 @@ void AppShimController::BindChildHistogramFetcherFactory(
     mojo::PendingReceiver<metrics::mojom::ChildHistogramFetcherFactory>
         receiver) {
   metrics::ChildHistogramFetcherFactoryImpl::Create(std::move(receiver));
+}
+
+bool AppShimController::WebAppIsAdHocSigned() const {
+  NSNumber* isAdHocSigned =
+      NSBundle.mainBundle.infoDictionary[app_mode::kCrAppModeIsAdHocSignedKey];
+  return isAdHocSigned.boolValue;
 }

@@ -11,9 +11,9 @@
 #include <utility>
 
 #include "cast/standalone_sender/streaming_encoder_util.h"
-#include "cast/streaming/encoded_frame.h"
-#include "cast/streaming/environment.h"
-#include "cast/streaming/sender.h"
+#include "cast/streaming/public/encoded_frame.h"
+#include "cast/streaming/public/environment.h"
+#include "cast/streaming/public/sender.h"
 #include "util/chrono_helpers.h"
 #include "util/osp_logging.h"
 #include "util/saturate_cast.h"

@@ -14,15 +14,6 @@ const int kSupervisedUserURLFilteringResultHistogramMax = 800;
 
 namespace {
 
-GURL KidsManagementBaseURL() {
-  return GURL("https://kidsmanagement-pa.googleapis.com/kidsmanagement/v1/");
-}
-
-const char kGetFamilyProfileURL[] = "families/mine?alt=json";
-const char kGetFamilyMembersURL[] = "families/mine/members?alt=json";
-const char kPermissionRequestsURL[] = "people/me/permissionRequests";
-const char kClassifyURLRequestURL[] = "people/me:classifyUrl";
-
 const int kHistogramPageTransitionMaxKnownValue =
     static_cast<int>(ui::PAGE_TRANSITION_KEYWORD_GENERATED);
 const int kHistogramPageTransitionFallbackValue =
@@ -47,7 +38,7 @@ std::string WebFilterTypeToDisplayString(WebFilterType web_filter_type) {
     case WebFilterType::kTryToBlockMatureSites:
       return "block_mature_sites";
     case WebFilterType::kMixed:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -101,22 +92,6 @@ const base::FilePath::CharType kSupervisedUserSettingsFilename[] =
 const char kSyncGoogleDashboardURL[] =
     "https://www.google.com/settings/chrome/sync";
 
-GURL KidsManagementGetFamilyProfileURL() {
-  return KidsManagementBaseURL().Resolve(kGetFamilyProfileURL);
-}
-
-GURL KidsManagementGetFamilyMembersURL() {
-  return KidsManagementBaseURL().Resolve(kGetFamilyMembersURL);
-}
-
-GURL KidsManagementPermissionRequestsURL() {
-  return KidsManagementBaseURL().Resolve(kPermissionRequestsURL);
-}
-
-GURL KidsManagementClassifyURLRequestURL() {
-  return KidsManagementBaseURL().Resolve(kClassifyURLRequestURL);
-}
-
 const char kFamilyLinkUserLogSegmentHistogramName[] =
     "FamilyLinkUser.LogSegment";
 
@@ -143,4 +118,12 @@ const char kDefaultEmptyFamilyMemberRole[] = "not_in_family";
 // LINT.IfChange
 const char kFamilyMemberRoleFeedbackTag[] = "Family_Member_Role";
 // LINT.ThenChange(//chrome/browser/feedback/android/java/src/org/chromium/chrome/browser/feedback/FamilyInfoFeedbackSource.java)
+
+const char kClassifiedEarlierThanContentResponseHistogramName[] =
+    "SupervisedUsers.ClassifyUrlThrottle.EarlierThanContentResponse";
+const char kClassifiedLaterThanContentResponseHistogramName[] =
+    "SupervisedUsers.ClassifyUrlThrottle.LaterThanContentResponse";
+extern const char kClassifyUrlThrottleStatusHistogramName[] =
+    "SupervisedUsers.ClassifyUrlThrottle.Status";
+
 }  // namespace supervised_user

@@ -19,56 +19,8 @@ import {
   PivotTree,
   TableColumn,
 } from '../frontend/pivot_table_types';
-
-import {
-  selectionToLegacySelection,
-  Selection,
-  LegacySelection,
-} from '../core/selection_manager';
-
-export {
-  Selection,
-  SelectionKind,
-  NoteSelection,
-  SliceSelection,
-  HeapProfileSelection,
-  PerfSamplesSelection,
-  LegacySelection,
-  AreaSelection,
-  ProfileType,
-  ThreadSliceSelection,
-  CpuProfileSampleSelection,
-} from '../core/selection_manager';
-
-// Tracks within track groups (usually corresponding to processes) are sorted.
-// As we want to group all tracks related to a given thread together, we use
-// two keys:
-// - Primary key corresponds to a priority of a track block (all tracks related
-//   to a given thread or a single track if it's not thread-associated).
-// - Secondary key corresponds to a priority of a given thread-associated track
-//   within its thread track block.
-// Each track will have a sort key, which either a primary sort key
-// (for non-thread tracks) or a tid and secondary sort key (mapping of tid to
-// primary sort key is done independently).
-export enum PrimaryTrackSortKey {
-  DEBUG_TRACK,
-  NULL_TRACK,
-  PROCESS_SCHEDULING_TRACK,
-  PROCESS_SUMMARY_TRACK,
-  EXPECTED_FRAMES_SLICE_TRACK,
-  ACTUAL_FRAMES_SLICE_TRACK,
-  PERF_SAMPLES_PROFILE_TRACK,
-  HEAP_PROFILE_TRACK,
-  MAIN_THREAD,
-  RENDER_THREAD,
-  GPU_COMPLETION_THREAD,
-  CHROME_IO_THREAD,
-  CHROME_COMPOSITOR_THREAD,
-  ORDINARY_THREAD,
-  COUNTER_TRACK,
-  ASYNC_SLICE_TRACK,
-  ORDINARY_TRACK,
-}
+import {Area} from '../public/selection';
+import {TraceSource} from '../public/trace_info';
 
 /**
  * A plain js object, holding objects of type |Class| keyed by string id.
@@ -82,20 +34,6 @@ export interface ObjectById<Class extends {id: string}> {
 // Same as ObjectById but the key parameter is called `key` rather than `id`.
 export interface ObjectByKey<Class extends {key: string}> {
   [key: string]: Class;
-}
-
-export type OmniboxMode = 'SEARCH' | 'COMMAND';
-
-export interface OmniboxState {
-  omnibox: string;
-  mode: OmniboxMode;
-  force?: boolean;
-}
-
-export interface Area {
-  start: time;
-  end: time;
-  tracks: string[];
 }
 
 export const MAX_TIME = 180;
@@ -175,94 +113,6 @@ export type EngineMode = 'WASM' | 'HTTP_RPC';
 
 export type NewEngineMode = 'USE_HTTP_RPC_IF_AVAILABLE' | 'FORCE_BUILTIN_WASM';
 
-// Key that is used to sort tracks within a block of tracks associated with a
-// given thread.
-export enum InThreadTrackSortKey {
-  THREAD_COUNTER_TRACK,
-  THREAD_SCHEDULING_STATE_TRACK,
-  CPU_STACK_SAMPLES_TRACK,
-  VISUALISED_ARGS_TRACK,
-  ORDINARY,
-  DEFAULT_TRACK,
-}
-
-// Sort key used for sorting tracks associated with a thread.
-export type ThreadTrackSortKey = {
-  utid: number;
-  priority: InThreadTrackSortKey;
-};
-
-// Sort key for all tracks: both thread-associated and non-thread associated.
-export type TrackSortKey = PrimaryTrackSortKey | ThreadTrackSortKey;
-
-// Mapping which defines order for threads within a given process.
-export type UtidToTrackSortKey = {
-  [utid: number]: {
-    tid?: number;
-    sortKey: PrimaryTrackSortKey;
-  };
-};
-
-export interface TraceFileSource {
-  type: 'FILE';
-  file: File;
-}
-
-export interface TraceArrayBufferSource {
-  type: 'ARRAY_BUFFER';
-  buffer: ArrayBuffer;
-  title: string;
-  url?: string;
-  fileName?: string;
-
-  // |uuid| is set only when loading via ?local_cache_key=1234. When set,
-  // this matches global.state.traceUuid, with the exception of the following
-  // time window: When a trace T1 is loaded and the user loads another trace T2,
-  // this |uuid| will be == T2, but the globals.state.traceUuid will be
-  // temporarily == T1 until T2 has been loaded (consistently to what happens
-  // with all other state fields).
-  uuid?: string;
-  // if |localOnly| is true then the trace should not be shared or downloaded.
-  localOnly?: boolean;
-
-  // The set of extra args, keyed by plugin, that can be passed when opening the
-  // trace via postMessge deep-linking. See post_message_handler.ts for details.
-  pluginArgs?: {[pluginId: string]: {[key: string]: unknown}};
-}
-
-export interface TraceUrlSource {
-  type: 'URL';
-  url: string;
-}
-
-export interface TraceHttpRpcSource {
-  type: 'HTTP_RPC';
-}
-
-export type TraceSource =
-  | TraceFileSource
-  | TraceArrayBufferSource
-  | TraceUrlSource
-  | TraceHttpRpcSource;
-
-export interface TrackState {
-  uri: string;
-  key: string;
-  name: string;
-  trackSortKey: TrackSortKey;
-  trackGroup?: string;
-  closeable?: boolean;
-}
-
-export interface TrackGroupState {
-  key: string;
-  name: string;
-  collapsed: boolean;
-  tracks: string[]; // Child track ids.
-  fixedOrdering?: boolean; // Render tracks without sorting.
-  summaryTrack: string | undefined;
-}
-
 export interface EngineConfig {
   id: string;
   mode?: EngineMode; // Is undefined until |ready| is true.
@@ -280,23 +130,6 @@ export interface QueryConfig {
 export interface Status {
   msg: string;
   timestamp: number; // Epoch in seconds (Date.now() / 1000).
-}
-
-export interface Note {
-  noteType: 'DEFAULT';
-  id: string;
-  timestamp: time;
-  color: string;
-  text: string;
-}
-
-export interface SpanNote {
-  noteType: 'SPAN';
-  id: string;
-  start: time;
-  end: time;
-  color: string;
-  text: string;
 }
 
 export interface Pagination {
@@ -348,11 +181,7 @@ export interface PivotTableResult {
 }
 
 // Input parameters to check whether the pivot table needs to be re-queried.
-export interface PivotTableAreaState {
-  start: time;
-  end: time;
-  tracks: string[];
-}
+export type PivotTableAreaState = Area;
 
 export interface PivotTableState {
   // Currently selected area, if null, pivot table is not going to be visible.
@@ -411,11 +240,6 @@ export interface PendingDeeplinkState {
   visEnd?: string;
 }
 
-export interface TabsV2State {
-  openTabs: string[];
-  currentTab: string;
-}
-
 export interface State {
   version: number;
   nextId: string;
@@ -433,18 +257,12 @@ export interface State {
   newEngineMode: NewEngineMode;
   engine?: EngineConfig;
   traceUuid?: string;
-  trackGroups: ObjectByKey<TrackGroupState>;
-  tracks: ObjectByKey<TrackState>;
-  utidToThreadSortKey: UtidToTrackSortKey;
+
   aggregatePreferences: ObjectById<AggregationState>;
-  scrollingTracks: string[];
-  pinnedTracks: string[];
   debugTrackId?: string;
   lastTrackReloadRequest?: number;
   queries: ObjectById<QueryConfig>;
-  notes: ObjectById<Note | SpanNote>;
   status: Status;
-  selection: Selection;
   traceConversionInProgress: boolean;
   flamegraphModalDismissed: boolean;
 
@@ -462,11 +280,6 @@ export interface State {
   highlightedSliceId: number;
   focusedFlowIdLeft: number;
   focusedFlowIdRight: number;
-  pendingScrollId?: number;
-
-  searchIndex: number;
-
-  tabs: TabsV2State;
 
   /**
    * Trace recording
@@ -487,9 +300,6 @@ export interface State {
   // be serialized at the moment, such as ES6 Set and Map.
   nonSerializableState: NonSerializableState;
 
-  // Omnibox info.
-  omniboxState: OmniboxState;
-
   // Pending deeplink which will happen when we first finish opening a
   // trace.
   pendingDeeplink?: PendingDeeplinkState;
@@ -497,6 +307,12 @@ export interface State {
   // Individual plugin states
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plugins: {[key: string]: any};
+
+  trackFilterTerm: string | undefined;
+
+  // TODO(primiano): this is a hack to force-re-run controllers required for the
+  // controller->managers migration. Remove once controllers are gone.
+  forceRunControllers: number;
 }
 
 export declare type RecordMode =
@@ -859,23 +675,4 @@ export function getBuiltinChromeCategoryList(): string[] {
     'disabled-by-default-worker.scheduler',
     'disabled-by-default-xr.debug',
   ];
-}
-
-export function getContainingGroupKey(
-  state: State,
-  trackKey: string,
-): null | string {
-  const track = state.tracks[trackKey];
-  if (track === undefined) {
-    return null;
-  }
-  const parentGroupKey = track.trackGroup;
-  if (!parentGroupKey) {
-    return null;
-  }
-  return parentGroupKey;
-}
-
-export function getLegacySelection(state: State): LegacySelection | null {
-  return selectionToLegacySelection(state.selection);
 }

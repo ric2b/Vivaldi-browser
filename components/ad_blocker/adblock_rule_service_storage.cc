@@ -35,6 +35,8 @@ const char kSourceUrlKey[] = "source-url";
 const char kSourceFileKey[] = "source-file";
 const char kAllowAbpSnippets[] = "allow-abp-snippets";
 const char kNakedHostnameIsPureHost[] = "naked-hostname-is-pure-host";
+const char kUseWholeDocumentAllow[] = "use-whole-document-allow";
+const char kAllowAttributionTrackerRules[] = "allow-attribution-tracker-rules";
 const char kRulesListChecksumKey[] = "rules-list-checksum";
 const char kLastUpdateKey[] = "last-upate";
 const char kNextFetchKey[] = "next-fetch";
@@ -56,7 +58,7 @@ const char kBlockedReportingStartKey[] = "blocked-reporting-start";
 
 const char kPresetIdKey[] = "preset-id";
 
-const int kCurrentStorageVersion = 7;
+const int kCurrentStorageVersion = 8;
 
 const base::FilePath::CharType kSourcesFileName[] =
     FILE_PATH_LITERAL("AdBlockState");
@@ -114,6 +116,18 @@ std::optional<RuleSourceCore> LoadRuleSourceCore(
   // Enabled by default.
   settings.naked_hostname_is_pure_host =
       !naked_hostname_is_pure_host || naked_hostname_is_pure_host.value();
+
+  std::optional<bool> use_whole_document_allow =
+      source_dict.FindBool(kUseWholeDocumentAllow);
+  // Enabled by default.
+  settings.use_whole_document_allow =
+      !use_whole_document_allow || use_whole_document_allow.value();
+
+  std::optional<bool> allow_attribution_tracker_rules =
+      source_dict.FindBool(kAllowAttributionTrackerRules);
+  settings.allow_attribution_tracker_rules =
+      allow_attribution_tracker_rules &&
+      allow_attribution_tracker_rules.value();
 
   core->set_settings(settings);
 
@@ -365,6 +379,8 @@ base::Value::Dict SerializeRuleCore(const RuleSourceCore& core) {
   core_dict.Set(kAllowAbpSnippets, core.settings().allow_abp_snippets);
   core_dict.Set(kNakedHostnameIsPureHost,
                 core.settings().naked_hostname_is_pure_host);
+  core_dict.Set(kAllowAttributionTrackerRules,
+                core.settings().allow_attribution_tracker_rules);
 
   return core_dict;
 }
@@ -386,12 +402,15 @@ base::Value::List SerializeSourcesList(
                     static_cast<int>(rule_source.last_fetch_result));
     source_dict.Set(kHasTrackerInfosKey, rule_source.has_tracker_infos);
     source_dict.Set(kTitleKey, rule_source.unsafe_adblock_metadata.title);
-    source_dict.Set(kHomePageKey,
-                    rule_source.unsafe_adblock_metadata.homepage.spec());
-    source_dict.Set(kLicenseKey,
-                    rule_source.unsafe_adblock_metadata.license.spec());
-    source_dict.Set(kRedirectKey,
-                    rule_source.unsafe_adblock_metadata.redirect.spec());
+    source_dict.Set(
+        kHomePageKey,
+        rule_source.unsafe_adblock_metadata.homepage.possibly_invalid_spec());
+    source_dict.Set(
+        kLicenseKey,
+        rule_source.unsafe_adblock_metadata.license.possibly_invalid_spec());
+    source_dict.Set(
+        kRedirectKey,
+        rule_source.unsafe_adblock_metadata.redirect.possibly_invalid_spec());
     source_dict.Set(
         kVersionKey,
         base::Int64ToValue(rule_source.unsafe_adblock_metadata.version));

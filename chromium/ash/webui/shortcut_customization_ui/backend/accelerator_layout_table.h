@@ -237,7 +237,6 @@ std::optional<AcceleratorLayoutDetails> GetAcceleratorLayout(uint32_t id);
 // been added to `kAcceleratorLayouts` or here.
 constexpr auto kAshAcceleratorsWithoutLayout =
     base::MakeFixedFlatSet<AcceleratorAction>({
-        AcceleratorAction::kAccessibilityAction,
         AcceleratorAction::kCycleBackwardMru,
         AcceleratorAction::kCycleForwardMru,
         AcceleratorAction::kDisableCapsLock,
@@ -293,7 +292,6 @@ inline constexpr uint32_t kAcceleratorLayouts[] = {
     AcceleratorAction::kExit,
     AcceleratorAction::kSwitchToNextUser,
     AcceleratorAction::kSwitchToPreviousUser,
-    AcceleratorAction::kEnableOrToggleDictation,
     AcceleratorAction::kStartAssistant,
 
     // General > Apps
@@ -425,6 +423,7 @@ inline constexpr uint32_t kAcceleratorLayouts[] = {
     // Text > Text editing
     AcceleratorAction::kToggleCapsLock,
     AcceleratorAction::kShowEmojiPicker,
+    AcceleratorAction::kTogglePicker,
     NonConfigurableActions::kAmbientCopy,
     NonConfigurableActions::kAmbientCut,
     NonConfigurableActions::kAmbientPaste,
@@ -482,6 +481,7 @@ inline constexpr uint32_t kAcceleratorLayouts[] = {
     AcceleratorAction::kToggleMouseKeys,
 
     // Accessibility > Visibility
+    AcceleratorAction::kEnableOrToggleDictation,
     AcceleratorAction::kEnableSelectToSpeak,
     AcceleratorAction::kToggleHighContrast,
     AcceleratorAction::kToggleDockedMagnifier,
@@ -490,6 +490,7 @@ inline constexpr uint32_t kAcceleratorLayouts[] = {
     AcceleratorAction::kMagnifierZoomOut,
 
     // Accessibility > Accessbility navigation
+    AcceleratorAction::kAccessibilityAction,
     NonConfigurableActions::kAmbientSwitchFocusForwards,
     NonConfigurableActions::kAmbientSwitchFocusBackwards,
     NonConfigurableActions::kAmbientCaretBrowsing,

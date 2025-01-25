@@ -10,18 +10,21 @@
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
+#include "base/strings/strcat.h"
 #include "base/values.h"
 #include "chrome/browser/companion/core/constants.h"
 #include "chrome/browser/companion/core/features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/views/side_panel/companion/companion_utils.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/side_panel/companion/companion_utils.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
@@ -86,10 +89,21 @@ void PinnedToolbarActionsModel::UpdatePinnedState(
   }
 
   const bool is_pinned = Contains(action_id);
+  const std::optional<std::string> metrics_name =
+      actions::ActionIdMap::ActionIdToString(action_id);
+  CHECK(metrics_name.has_value());
   if (!is_pinned && should_pin) {
     PinAction(action_id);
+    base::RecordComputedAction(base::StrCat(
+        {"Actions.PinnedToolbarButton.Pinned.", metrics_name.value()}));
+    base::RecordAction(
+        base::UserMetricsAction("Actions.PinnedToolbarButton.Pinned"));
   } else if (is_pinned && !should_pin) {
     UnpinAction(action_id);
+    base::RecordComputedAction(base::StrCat(
+        {"Actions.PinnedToolbarButton.Unpinned.", metrics_name.value()}));
+    base::RecordAction(
+        base::UserMetricsAction("Actions.PinnedToolbarButton.Unpinned"));
   }
 }
 
@@ -140,7 +154,7 @@ void PinnedToolbarActionsModel::MovePinnedAction(
 
   // Notify observers the action was moved.
   for (Observer& observer : observers_) {
-    observer.OnActionMoved(action_id, start_index, target_index);
+    observer.OnActionMovedLocally(action_id, start_index, target_index);
   }
 }
 
@@ -154,7 +168,7 @@ void PinnedToolbarActionsModel::PinAction(const actions::ActionId& action_id) {
 
   // Notify observers the action was added.
   for (Observer& observer : observers_) {
-    observer.OnActionAdded(action_id);
+    observer.OnActionAddedLocally(action_id);
   }
 }
 
@@ -168,7 +182,7 @@ void PinnedToolbarActionsModel::UnpinAction(
 
   // Notify observers the action was removed.
   for (Observer& observer : observers_) {
-    observer.OnActionRemoved(action_id);
+    observer.OnActionRemovedLocally(action_id);
   }
 }
 
@@ -240,6 +254,39 @@ void PinnedToolbarActionsModel::MaybeUpdateSearchCompanionPinnedState(
                     /*should_pin=*/pref_service_->GetBoolean(
                         prefs::kSidePanelCompanionEntryPinnedToToolbar));
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+}
+
+void PinnedToolbarActionsModel::ResetToDefault() {
+  pref_service_->ClearPref(prefs::kShowHomeButton);
+  pref_service_->ClearPref(prefs::kShowForwardButton);
+  pref_service_->ClearPref(prefs::kPinnedActions);
+}
+
+bool PinnedToolbarActionsModel::IsDefault() const {
+  const bool action_are_default =
+      pref_service_->GetDefaultPrefValue(prefs::kPinnedActions)->GetList() ==
+      pref_service_->GetList(prefs::kPinnedActions);
+  const bool home_is_default =
+      pref_service_->GetDefaultPrefValue(prefs::kShowHomeButton)->GetBool() ==
+      pref_service_->GetBoolean(prefs::kShowHomeButton);
+  const bool forward_is_default =
+      pref_service_->GetDefaultPrefValue(prefs::kShowForwardButton)
+          ->GetBool() == pref_service_->GetBoolean(prefs::kShowForwardButton);
+  return action_are_default && home_is_default && forward_is_default;
+}
+
+void PinnedToolbarActionsModel::MaybeMigrateChromeLabsPinnedState() {
+  if (!features::IsToolbarPinningEnabled()) {
+    return;
+  }
+  if (pref_service_->GetBoolean(prefs::kPinnedChromeLabsMigrationComplete)) {
+    return;
+  }
+
+  if (CanUpdate()) {
+    UpdatePinnedState(kActionShowChromeLabs, true);
+    pref_service_->SetBoolean(prefs::kPinnedChromeLabsMigrationComplete, true);
+  }
 }
 
 const std::vector<actions::ActionId>&

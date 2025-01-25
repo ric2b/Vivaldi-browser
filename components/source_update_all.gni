@@ -42,15 +42,31 @@ update_target("//components/omnibox/browser:browser") {
     "//vivaldi/components/omnibox/bookmark_nickname_match_utils.cc",
     "//vivaldi/components/omnibox/bookmark_nickname_provider.h",
     "//vivaldi/components/omnibox/bookmark_nickname_provider.cc",
-    "//vivaldi/components/omnibox/relevance_multiplier_constants.h",
+    "//vivaldi/components/omnibox/direct_match_provider.h",
+    "//vivaldi/components/omnibox/direct_match_provider.cc",
   ]
+
+  if (is_ios) {
+    deps += [
+      "//vivaldi/components/direct_match",
+      "//vivaldi/ios/direct_match",
+    ]
+  }
 }
 
 update_target("//components/sync_sessions:sync_sessions") {
   sources += [
     "//vivaldi/components/sync_sessions/vivaldi_local_session_event_handler_impl.cc",
     "//vivaldi/components/sync_sessions/vivaldi_synced_session.cc",
+    "//vivaldi/components/sync_sessions/vivaldi_specific.cc",
+    "//vivaldi/components/sync_sessions/vivaldi_specific.h",
   ]
+  if (!is_ios) {
+    sources += [
+      "//vivaldi/components/sync_sessions/vivaldi_specific_observer.cc",
+      "//vivaldi/components/sync_sessions/vivaldi_specific_observer.h",
+    ]
+  }
 }
 
 update_target("//components/sessions:shared") {
@@ -175,9 +191,23 @@ if (vivaldi_build_tests) {
 
   update_target("//chrome/test:unit_tests") {
     sources -= [
-      "../browser/search_engine_choice/search_engine_choice_dialog_service_unittest.cc",
       "../browser/ui/webui/settings/search_engines_handler_unittest.cc",
     ]
+  }
+
+  update_target("//chrome/browser/search_engine_choice:unit_tests") {
+    sources -= [
+      "search_engine_choice_dialog_service_unittest.cc",
+    ]
+  }
+
+
+  if (!is_chrome_for_testing) {
+    update_target("//chrome/browser/search_engine_choice:browser_tests") {
+      sources -= [
+        "search_engine_choice_dialog_browsertest.cc",
+      ]
+    }
   }
 
   update_template_instance("//chrome/test:browser_tests") {
@@ -189,11 +219,6 @@ if (vivaldi_build_tests) {
     if (is_win || is_linux || is_mac) {
       sources -= [
         "../browser/search_engines/template_url_service_browsertest.cc",
-      ]
-    }
-    if (!is_chrome_for_testing) {
-      sources -= [
-        "../browser/search_engine_choice/search_engine_choice_dialog_browsertest.cc",
       ]
     }
   }

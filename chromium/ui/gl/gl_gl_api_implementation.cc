@@ -4,6 +4,7 @@
 
 #include "ui/gl/gl_gl_api_implementation.h"
 
+#include <array>
 #include <vector>
 
 #include "base/command_line.h"
@@ -436,8 +437,8 @@ void RealGLApi::glDepthRangeFn(GLclampd z_near, GLclampd z_far) {
 void RealGLApi::glUseProgramFn(GLuint program) {
   ShaderTracking* shader_tracking = ShaderTracking::GetInstance();
   if (shader_tracking) {
-    std::vector<char> buffers[2];
-    char* strings[2] = {nullptr, nullptr};
+    std::array<std::vector<char>, 2> buffers;
+    std::array<char*, 2> strings = {};
     if (program) {
       // The following only works with ANGLE backend because ANGLE makes sure
       // a program's shaders are not actually deleted and source can still be
@@ -446,8 +447,8 @@ void RealGLApi::glUseProgramFn(GLuint program) {
       // Also, in theory, different shaders can be attached to the program
       // after the last link, but for now, ignore such corner case patterns.
       GLsizei count = 0;
-      GLuint shaders[2] = {0};
-      glGetAttachedShadersFn(program, 2, &count, shaders);
+      std::array<GLuint, 2> shaders = {};
+      glGetAttachedShadersFn(program, 2, &count, shaders.data());
       for (GLsizei ii = 0; ii < std::min(2, count); ++ii) {
         buffers[ii].resize(ShaderTracking::kMaxShaderSize);
         glGetShaderSourceFn(shaders[ii], ShaderTracking::kMaxShaderSize,

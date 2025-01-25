@@ -93,9 +93,9 @@ class TouchSelectionControllerImplTest : public ViewsTestBase {
     textfield_ = nullptr;
     test_cursor_client_.reset();
 
-    auto close_widget = [](raw_ptr<Widget>& widget) {
+    auto close_widget = [](std::unique_ptr<Widget>& widget) {
       if (widget && !widget->IsClosed()) {
-        widget.ExtractAsDangling()->Close();
+        widget->Close();
       }
     };
     close_widget(textfield_widget_);
@@ -105,9 +105,9 @@ class TouchSelectionControllerImplTest : public ViewsTestBase {
   }
 
   void CreateTextfield() {
-    textfield_widget_ = new Widget;
+    textfield_widget_ = std::make_unique<Widget>();
     Widget::InitParams params =
-        CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+        CreateParams(Widget::InitParams::CLIENT_OWNS_WIDGET,
                      Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     params.bounds = gfx::Rect(0, 0, 200, 200);
     textfield_widget_->Init(std::move(params));
@@ -126,10 +126,9 @@ class TouchSelectionControllerImplTest : public ViewsTestBase {
   }
 
   void CreateWidget() {
-    widget_ = new Widget;
-    Widget::InitParams params =
-        CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
-                     Widget::InitParams::TYPE_POPUP);
+    widget_ = std::make_unique<Widget>();
+    Widget::InitParams params = CreateParams(
+        Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
     params.bounds = gfx::Rect(0, 0, 200, 200);
     widget_->Init(std::move(params));
     widget_->Show();
@@ -343,8 +342,8 @@ class TouchSelectionControllerImplTest : public ViewsTestBase {
         views::Widget::ClosedReason::kUnspecified);
   }
 
-  raw_ptr<Widget> textfield_widget_ = nullptr;
-  raw_ptr<Widget> widget_ = nullptr;
+  std::unique_ptr<Widget> textfield_widget_;
+  std::unique_ptr<Widget> widget_;
 
   raw_ptr<Textfield> textfield_ = nullptr;
   std::unique_ptr<aura::test::TestCursorClient> test_cursor_client_;
@@ -1093,13 +1092,13 @@ class TestTouchEditable : public ui::TouchEditable {
 
  private:
   // Overridden from ui::TouchEditable.
-  void MoveCaret(const gfx::Point& position) override { NOTREACHED_NORETURN(); }
+  void MoveCaret(const gfx::Point& position) override { NOTREACHED(); }
   void MoveRangeSelectionExtent(const gfx::Point& extent) override {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
   void SelectBetweenCoordinates(const gfx::Point& base,
                                 const gfx::Point& extent) override {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
   void GetSelectionEndPoints(gfx::SelectionBound* anchor,
                              gfx::SelectionBound* focus) override {
@@ -1120,20 +1119,14 @@ class TestTouchEditable : public ui::TouchEditable {
     if (screen_position_client)
       screen_position_client->ConvertPointFromScreen(window_, point);
   }
-  void OpenContextMenu(const gfx::Point& anchor) override {
-    NOTREACHED_NORETURN();
-  }
-  void DestroyTouchSelection() override { NOTREACHED_NORETURN(); }
+  void OpenContextMenu(const gfx::Point& anchor) override { NOTREACHED(); }
+  void DestroyTouchSelection() override { NOTREACHED(); }
 
   // Overridden from ui::SimpleMenuModel::Delegate.
-  bool IsCommandIdChecked(int command_id) const override {
-    NOTREACHED_NORETURN();
-  }
-  bool IsCommandIdEnabled(int command_id) const override {
-    NOTREACHED_NORETURN();
-  }
+  bool IsCommandIdChecked(int command_id) const override { NOTREACHED(); }
+  bool IsCommandIdEnabled(int command_id) const override { NOTREACHED(); }
   void ExecuteCommand(int command_id, int event_flags) override {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   raw_ptr<aura::Window> window_;

@@ -11,13 +11,13 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/saved_tab_groups/tab_group_sync_service.h"
 #import "components/saved_tab_groups/types.h"
+#import "components/saved_tab_groups/utils.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
 #import "ios/chrome/browser/sessions/model/session_restoration_service.h"
 #import "ios/chrome/browser/sessions/model/session_restoration_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/web_state_list/browser_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -118,9 +118,9 @@ void TabGroupLocalUpdateObserver::WebStateListDidChange(
       const TabGroup* group =
           web_state_list->GetGroupOfWebStateAt(replace.index());
       if (group) {
-        RemoveLocalWebStateFromSyncedGroup(replace.replaced_web_state(), group);
         AddLocalWebStateToSyncedGroup(replace.inserted_web_state(),
                                       web_state_list);
+        RemoveLocalWebStateFromSyncedGroup(replace.replaced_web_state(), group);
       }
     } break;
     case WebStateListChange::Type::kInsert: {
@@ -172,6 +172,17 @@ void TabGroupLocalUpdateObserver::WebStateListDidChange(
     case WebStateListChange::Type::kGroupMove:
       break;
   }
+
+  web::WebState* web_state = status.new_active_web_state;
+  if (status.active_web_state_change() && web_state) {
+    const TabGroup* tab_group =
+        web_state_list->GetGroupOfWebStateAt(web_state_list->active_index());
+    if (tab_group) {
+      sync_service_->OnTabSelected(
+          tab_group->tab_group_id(),
+          web_state->GetUniqueIdentifier().identifier());
+    }
+  }
 }
 
 void TabGroupLocalUpdateObserver::WebStateListDestroyed(
@@ -206,6 +217,10 @@ void TabGroupLocalUpdateObserver::DidFinishNavigation(
   web::WebStateID identifier = web_state->GetUniqueIdentifier();
   if (ignored_web_state_identifiers_.contains(identifier)) {
     ignored_web_state_identifiers_.erase(identifier);
+    return;
+  }
+
+  if (!utils::IsSaveableNavigation(navigation_context)) {
     return;
   }
 
@@ -282,10 +297,19 @@ void TabGroupLocalUpdateObserver::UpdateLocalWebStateInSyncedGroup(
   LocalTabInfo tab_info =
       utils::GetLocalTabInfo(browser_list_, web_state->GetUniqueIdentifier());
 
+  GURL url = web_state->GetVisibleURL();
+  std::u16string title = web_state->GetTitle();
+  if (!IsURLValidForSavedTabGroups(url)) {
+    url = GetDefaultUrlAndTitle().first;
+    title = GetDefaultUrlAndTitle().second;
+  }
+
+  SavedTabGroupTabBuilder tab_builder;
+  tab_builder.SetURL(url);
+  tab_builder.SetTitle(title);
   sync_service_->UpdateTab(tab_info.tab_group->tab_group_id(),
                            web_state->GetUniqueIdentifier().identifier(),
-                           web_state->GetTitle(), web_state->GetVisibleURL(),
-                           std::nullopt);
+                           std::move(tab_builder));
 }
 
 void TabGroupLocalUpdateObserver::AddLocalWebStateToSyncedGroup(

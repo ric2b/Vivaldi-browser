@@ -1835,6 +1835,28 @@
         }
       },
       {
+        "name": "hasCommandLineSwitch",
+        "type": "function",
+        "description": "Check if the command line has switch present for the given argument.",
+        "parameters": [
+          {
+            "name": "value",
+            "type": "string",
+            "description": "Name of the command line switch without initial dashes eg. translate-server-url."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean",
+              "description": "A boolean variable representing is the switch present."
+            }
+          ]
+        }
+      },
+      {
         "name": "osCrypt",
         "type": "function",
         "parameters": [

@@ -122,16 +122,6 @@ chromium-metrics-reviews@google.com.
              tracking a relevant committed load"/>
 </enum>
 
-<enum name="LargestContentfulPaintImageLoadStartLessThanDocumentTtfbCauses">
-  <int value="0" label="Unknown"/>
-  <int value="1" label="Image is loaded from memory cache"/>
-  <int value="2"
-      label="Image is preloaded after receiving a 103 (Early Hints) response"/>
-  <int value="3"
-      label="Image is loaded from memory and preloaded after receiving a 103
-             (Early Hints) response"/>
-</enum>
-
 <enum name="LcppPredictResult">
   <int value="0" label="Success">Prediction is success.</int>
   <int value="1" label="Failure: No hit">
@@ -189,11 +179,12 @@ chromium-metrics-reviews@google.com.
   <int value="11" label="kNewHistoryNavigation"/>
   <int value="12" label="kNewOtherNavigationBrowserInitiated"/>
   <int value="13" label="kNewOtherNavigationRendererInitiated"/>
+  <int value="14" label="kNewDuplicateNavigation"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/page_load_metrics/browser/observers/abandoned_page_load_metrics_observer.h:AbandonReason) -->
 
-<!-- LINT.IfChange(NavigationMilestoneEnum) -->
+<!-- LINT.IfChange(NavigationMilestoneEnum2) -->
 
 <enum name="NavigationMilestoneEnum2">
   <int value="0" label="kNavigationStart"/>
@@ -214,9 +205,24 @@ chromium-metrics-reviews@google.com.
   <int value="15" label="kLargestContentfulPaint"/>
   <int value="16" label="kAFTStart"/>
   <int value="17" label="kAFTEnd"/>
+  <int value="18" label="kHeaderChunkStart"/>
+  <int value="19" label="kHeaderChunkEnd"/>
+  <int value="20" label="kBodyChunkStart"/>
+  <int value="21" label="kBodyChunkEnd"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/page_load_metrics/browser/observers/abandoned_page_load_metrics_observer.h:NavigationMilestone) -->
+
+<!-- LINT.IfChange(NavigationSourceTypeEnum) -->
+
+<enum name="NavigationSourceTypeEnum">
+  <int value="0" label="kUnknown"/>
+  <int value="1" label="kFromNewTabPage"/>
+  <int value="2" label="kStartedInBackground"/>
+  <int value="3" label="kStartedInBackgroundFromNewTabPage"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/page_load_metrics/browser/observers/gws_page_load_metrics_observer.h:NavigationSourceType) -->
 
 <enum name="OriginTrialStatusChange">
   <int value="0"
@@ -288,24 +294,7 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Prerender Activation Navigation"/>
 </enum>
 
-<enum name="PageLoadPrerenderObserverEvent">
-  <int value="0" label="OnPrerenderStart"/>
-  <int value="1" label="DidActivatePrerenderedPage"/>
-  <int value="2" label="OnFirstPaintInPage"/>
-  <int value="3" label="OnFirstContentfulPaintInPage"/>
-  <int value="4" label="OnFirstInputInPage"/>
-  <int value="5" label="OnComplete"/>
-  <int value="6" label="FlushMetricsOnAppEnterBackground"/>
-  <int value="7" label="RecordSessionEndHistograms"/>
-  <int value="8" label="RecordLayoutShiftScoreMetrics"/>
-  <int value="9" label="RecordNormalizedResponsivenessMetrics"/>
-</enum>
-
-<enum name="PageLoadPrerenderVisibilityAtActivation">
-  <int value="0" label="Hidden"/>
-  <int value="1" label="Occluded"/>
-  <int value="2" label="Visible"/>
-</enum>
+<!-- LINT.IfChange(PageLoadTimingStatus) -->
 
 <enum name="PageLoadTimingStatus">
   <summary>Status of PageLoadTimings received from the render process</summary>
@@ -323,23 +312,26 @@ chromium-metrics-reviews@google.com.
   <int value="8" label="Invalid order - parse start / parse stop"/>
   <int value="9" label="Invalid order - parse stop / dom content loaded"/>
   <int value="10" label="Invalid order - dom content loaded / load"/>
-  <int value="11" label="Invalid order - parse start / first layout"/>
-  <int value="12" label="Invalid order - first layout / first paint"/>
-  <int value="13" label="Invalid order - first paint / first text paint"/>
-  <int value="14" label="Invalid order - first paint / first image paint"/>
-  <int value="15" label="Invalid order - first paint / first contentful paint"/>
-  <int value="16" label="Invalid order - first paint / first meaningful paint"/>
-  <int value="17" label="Invalid order - first meaningful paint / interactive"/>
-  <int value="18" label="First input delay without first input timestamp"/>
-  <int value="19" label="First input timestamp without first input delay"/>
-  <int value="20" label="Longest input delay without longest input timestamp"/>
-  <int value="21" label="Longest input timestamp without longest input delay"/>
-  <int value="22"
+  <int value="11" label="Invalid order - parse start / first paint"/>
+  <int value="12" label="Invalid order - first paint / first text paint"/>
+  <int value="13" label="Invalid order - first paint / first image paint"/>
+  <int value="14" label="Invalid order - first paint / first contentful paint"/>
+  <int value="15" label="Invalid order - first paint / first meaningful paint"/>
+  <int value="16" label="Invalid order - first meaningful paint / interactive"/>
+  <int value="17" label="First input delay without first input timestamp"/>
+  <int value="18" label="First input timestamp without first input delay"/>
+  <int value="19" label="Longest input delay without longest input timestamp"/>
+  <int value="20" label="Longest input timestamp without longest input delay"/>
+  <int value="21" label="First scroll delay without first scroll timestamp"/>
+  <int value="22" label="First scroll timestamp without first scroll delay"/>
+  <int value="23"
       label="Longest input timestamp earlier than first input timestamp"/>
-  <int value="23" label="Longest input delay less than first input delay"/>
-  <int value="24" label="Invalid order - parse start / activation start"/>
-  <int value="25" label="Invalid order - activation start / first paint"/>
+  <int value="24" label="Longest input delay less than first input delay"/>
+  <int value="25" label="Invalid order - parse start / activation start"/>
+  <int value="26" label="Invalid order - activation start / first paint"/>
 </enum>
+
+<!-- LINT.ThenChange(//components/page_load_metrics/browser/page_load_metrics_update_dispatcher.h:PageLoadTimingStatus) -->
 
 <enum name="PageLoadTrackerPageType">
   <int value="0" label="Primary Page"/>

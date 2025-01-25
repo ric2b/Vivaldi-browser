@@ -5,6 +5,7 @@ import * as Handlers from './handlers/handlers.js';
 import * as Insights from './insights/insights.js';
 import * as Lantern from './lantern/lantern.js';
 import * as LanternComputationData from './LanternComputationData.js';
+import type * as Model from './ModelImpl.js';
 import * as Types from './types/types.js';
 
 const enum Status {
@@ -14,17 +15,33 @@ const enum Status {
   ERRORED_WHILE_PARSING = 'ERRORED_WHILE_PARSING',
 }
 
-export type TraceParseEventProgressData = {
-  index: number,
-  total: number,
-};
-
 export class TraceParseProgressEvent extends Event {
   static readonly eventName = 'traceparseprogress';
-  constructor(public data: TraceParseEventProgressData, init: EventInit = {bubbles: true}) {
+  constructor(public data: Model.TraceParseEventProgressData, init: EventInit = {bubbles: true}) {
     super(TraceParseProgressEvent.eventName, init);
   }
 }
+
+/**
+ * Parsing a trace can take time. On large traces we see a breakdown of time like so:
+ *   - handleEvent() loop:  ~20%
+ *   - finalize() loop:     ~60%
+ *   - shallowClone calls:  ~20%
+ * The numbers below are set so we can report a progress percentage of [0...1]
+ */
+const enum ProgressPhase {
+  HANDLE_EVENT = 0.2,
+  FINALIZE = 0.8,
+  CLONE = 1.0,
+}
+function calculateProgress(value: number, phase: ProgressPhase): number {
+  // Finalize values should be [0.2...0.8]
+  if (phase === ProgressPhase.FINALIZE) {
+    return (value * (ProgressPhase.FINALIZE - ProgressPhase.HANDLE_EVENT)) + ProgressPhase.HANDLE_EVENT;
+  }
+  return value * phase;
+}
+
 declare global {
   interface HTMLElementEventMap {
     [TraceParseProgressEvent.eventName]: TraceParseProgressEvent;
@@ -183,7 +200,8 @@ export class TraceProcessor extends EventTarget {
       // Every so often we take a break just to render.
       if (i % eventsPerChunk === 0 && i) {
         // Take the opportunity to provide status update events.
-        this.dispatchEvent(new TraceParseProgressEvent({index: i, total: traceEvents.length}));
+        const percent = calculateProgress(i / traceEvents.length, ProgressPhase.HANDLE_EVENT);
+        this.dispatchEvent(new TraceParseProgressEvent({percent}));
         // TODO(paulirish): consider using `scheduler.yield()` or `scheduler.postTask(() => {}, {priority: 'user-blocking'})`
         await new Promise(resolve => setTimeout(resolve, 0));
       }
@@ -194,13 +212,15 @@ export class TraceProcessor extends EventTarget {
     }
 
     // Finalize.
-    for (const handler of sortedHandlers) {
+    for (const [i, handler] of sortedHandlers.entries()) {
       if (handler.finalize) {
         // Yield to the UI because finalize() calls can be expensive
         // TODO(jacktfranklin): consider using `scheduler.yield()` or `scheduler.postTask(() => {}, {priority: 'user-blocking'})`
         await new Promise(resolve => setTimeout(resolve, 0));
         await handler.finalize();
       }
+      const percent = calculateProgress(i / sortedHandlers.length, ProgressPhase.FINALIZE);
+      this.dispatchEvent(new TraceParseProgressEvent({percent}));
     }
 
     // Handlers that depend on other handlers do so via .data(), which used to always
@@ -234,6 +254,7 @@ export class TraceProcessor extends EventTarget {
       const data = shallowClone(handler.data());
       Object.assign(traceParsedData, {[name]: data});
     }
+    this.dispatchEvent(new TraceParseProgressEvent({percent: ProgressPhase.CLONE}));
 
     this.#data = traceParsedData as Handlers.Types.TraceParseData;
   }
@@ -255,8 +276,8 @@ export class TraceProcessor extends EventTarget {
   }
 
   #createLanternContext(
-      traceParsedData: Handlers.Types.TraceParseData,
-      traceEvents: readonly Types.TraceEvents.TraceEventData[]): Insights.Types.LanternContext|undefined {
+      traceParsedData: Handlers.Types.TraceParseData, traceEvents: readonly Types.TraceEvents.TraceEventData[],
+      frameId: string, navigationId: string): Insights.Types.LanternContext|undefined {
     // Check for required handlers.
     if (!traceParsedData.NetworkRequests || !traceParsedData.Workers || !traceParsedData.PageLoadMetrics) {
       return;
@@ -265,15 +286,26 @@ export class TraceProcessor extends EventTarget {
       throw new Lantern.Core.LanternError('No network requests found in trace');
     }
 
+    const navStarts = traceParsedData.Meta.navigationsByFrameId.get(frameId);
+    const navStartIndex = navStarts?.findIndex(n => n.args.data?.navigationId === navigationId);
+    if (!navStarts || navStartIndex === undefined || navStartIndex === -1) {
+      throw new Lantern.Core.LanternError('Could not find navigation start');
+    }
+
+    const startTime = navStarts[navStartIndex].ts;
+    const endTime = navStartIndex + 1 < navStarts.length ? navStarts[navStartIndex + 1].ts : Number.POSITIVE_INFINITY;
+    const boundedTraceEvents = traceEvents.filter(e => e.ts >= startTime && e.ts < endTime);
+
     // Lantern.Types.TraceEvent and Types.TraceEvents.TraceEventData represent the same
     // object - a trace event - but one is more flexible than the other. It should be safe to cast between them.
     const trace: Lantern.Types.Trace = {
-      traceEvents: traceEvents as unknown as Lantern.Types.TraceEvent[],
+      traceEvents: boundedTraceEvents as unknown as Lantern.Types.TraceEvent[],
     };
 
-    const requests = LanternComputationData.createNetworkRequests(trace, traceParsedData);
+    const requests = LanternComputationData.createNetworkRequests(trace, traceParsedData, startTime, endTime);
     const graph = LanternComputationData.createGraph(requests, trace, traceParsedData);
-    const processedNavigation = LanternComputationData.createProcessedNavigation(traceParsedData);
+    const processedNavigation =
+        LanternComputationData.createProcessedNavigation(traceParsedData, frameId, navigationId);
 
     const networkAnalysis = Lantern.Core.NetworkAnalyzer.analyze(requests);
     const simulator: Lantern.Simulation.Simulator<Types.TraceEvents.SyntheticNetworkRequest> =
@@ -306,43 +338,45 @@ export class TraceProcessor extends EventTarget {
 
     const enabledInsightRunners = TraceProcessor.getEnabledInsightRunners(traceParsedData);
 
-    // The lantern sub-context is optional on NavigationInsightContext, so not setting it is OK.
-    // This is also a hedge against an error inside Lantern resulting in breaking the entire performance panel.
-    // Additionally, many trace fixtures are too old to be processed by Lantern.
-    // TODO(crbug.com/313905799): should be created and scoped per-navigation.
-    let lantern;
-    try {
-      lantern = this.#createLanternContext(traceParsedData, traceEvents);
-    } catch (e) {
-      // Don't allow an error in constructing the Lantern graphs to break the rest of the trace processor.
-      // Log unexpected errors, but suppress anything that occurs from a trace being too old.
-      // Otherwise tests using old fixtures become way too noisy.
-      const expectedErrors = [
-        'mainDocumentRequest not found',
-        'missing metric scores for main frame',
-        'missing metric: FCP',
-        'missing metric: LCP',
-        'No network requests found in trace',
-        'Trace is too old',
-      ];
-      if (!(e instanceof Lantern.Core.LanternError)) {
-        // If this wasn't a managed LanternError, the stack trace is likely needed for debugging.
-        console.error(e);
-      } else if (!expectedErrors.some(err => e.message === err)) {
-        // To reduce noise from tests, only print errors that are not expected to occur because a trace is
-        // too old (for which there is no single check).
-        console.error(e.message);
-      }
-    }
-
-    for (const nav of traceParsedData.Meta.mainFrameNavigations) {
-      if (!nav.args.frame || !nav.args.data?.navigationId) {
+    for (const navigation of traceParsedData.Meta.mainFrameNavigations) {
+      const frameId = navigation.args.frame;
+      const navigationId = navigation.args.data?.navigationId;
+      if (!frameId || !navigationId) {
         continue;
       }
 
+      // The lantern sub-context is optional on NavigationInsightContext, so not setting it is OK.
+      // This is also a hedge against an error inside Lantern resulting in breaking the entire performance panel.
+      // Additionally, many trace fixtures are too old to be processed by Lantern.
+      let lantern;
+      try {
+        lantern = this.#createLanternContext(traceParsedData, traceEvents, frameId, navigationId);
+      } catch (e) {
+        // Don't allow an error in constructing the Lantern graphs to break the rest of the trace processor.
+        // Log unexpected errors, but suppress anything that occurs from a trace being too old.
+        // Otherwise tests using old fixtures become way too noisy.
+        const expectedErrors = [
+          'mainDocumentRequest not found',
+          'missing metric scores for main frame',
+          'missing metric: FCP',
+          'missing metric: LCP',
+          'No network requests found in trace',
+          'Trace is too old',
+        ];
+        if (!(e instanceof Lantern.Core.LanternError)) {
+          // If this wasn't a managed LanternError, the stack trace is likely needed for debugging.
+          console.error(e);
+        } else if (!expectedErrors.some(err => e.message === err)) {
+          // To reduce noise from tests, only print errors that are not expected to occur because a trace is
+          // too old (for which there is no single check).
+          console.error(e.message);
+        }
+      }
+
       const context: Insights.Types.NavigationInsightContext = {
-        frameId: nav.args.frame,
-        navigationId: nav.args.data.navigationId,
+        frameId,
+        navigation,
+        navigationId,
         lantern,
       };
 

@@ -265,6 +265,9 @@ export class ShortcutRegistry {
       }
       for (const action of actions) {
         let handled;
+        if (event) {
+          void VisualLogging.logKeyDown(null, event, action.id());
+        }
         if (handlers && handlers[action.id()]) {
           handled = await handlers[action.id()]();
         }
@@ -273,9 +276,6 @@ export class ShortcutRegistry {
         }
         if (handled) {
           Host.userMetrics.keyboardShortcutFired(action.id());
-          if (event) {
-            void VisualLogging.logKeyDown(null, event, action.id());
-          }
           return true;
         }
       }
@@ -303,8 +303,8 @@ export class ShortcutRegistry {
   }
 
   removeShortcut(shortcut: KeyboardShortcut): void {
-    if (shortcut.type === Type.DefaultShortcut || shortcut.type === Type.KeybindSetShortcut) {
-      this.addShortcutToSetting(shortcut.changeType(Type.DisabledDefault));
+    if (shortcut.type === Type.DEFAULT_SHORTCUT || shortcut.type === Type.KEYBIND_SET_SHORTCUT) {
+      this.addShortcutToSetting(shortcut.changeType(Type.DISABLED_DEFAULT));
     } else {
       this.removeShortcutFromSetting(shortcut);
     }
@@ -347,7 +347,7 @@ export class ShortcutRegistry {
     const userShortcuts = this.userShortcutsSetting.get();
     for (const userShortcut of userShortcuts) {
       const shortcut = KeyboardShortcut.createShortcutFromSettingObject(userShortcut);
-      if (shortcut.type === Type.DisabledDefault) {
+      if (shortcut.type === Type.DISABLED_DEFAULT) {
         this.disabledDefaultShortcutsForAction.set(shortcut.action, shortcut);
       } else {
         if (ForwardedActions.has(shortcut.action)) {
@@ -379,13 +379,13 @@ export class ShortcutRegistry {
           }
           if (!keybindSets) {
             this.devToolsDefaultShortcutActions.add(actionId);
-            this.registerShortcut(new KeyboardShortcut(shortcutDescriptors, actionId, Type.DefaultShortcut));
+            this.registerShortcut(new KeyboardShortcut(shortcutDescriptors, actionId, Type.DEFAULT_SHORTCUT));
           } else {
             if (keybindSets.includes(KeybindSet.DEVTOOLS_DEFAULT)) {
               this.devToolsDefaultShortcutActions.add(actionId);
             }
             this.registerShortcut(
-                new KeyboardShortcut(shortcutDescriptors, actionId, Type.KeybindSetShortcut, new Set(keybindSets)));
+                new KeyboardShortcut(shortcutDescriptors, actionId, Type.KEYBIND_SET_SHORTCUT, new Set(keybindSets)));
           }
         }
       }

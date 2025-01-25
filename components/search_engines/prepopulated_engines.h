@@ -11,8 +11,16 @@
 
 #include <cstddef>
 #include "components/search_engines/search_engine_type.h"
+#include "components/search_engines/regulatory_extension_type.h"
 
 namespace TemplateURLPrepopulateData {
+
+struct RegulatoryExtension {
+  //RegulatoryExtension();
+  RegulatoryExtensionType variant = RegulatoryExtensionType::kDefault;
+  const char* search_params = nullptr;
+  const char* suggest_params = nullptr;
+};
 
 struct PrepopulatedEngine {
   PrepopulatedEngine();
@@ -43,6 +51,8 @@ struct PrepopulatedEngine {
   SearchEngineType type = SEARCH_ENGINE_UNKNOWN;
   const char* preconnect_to_search_url = nullptr;
   const char* prefetch_likely_navigations = nullptr;
+  const RegulatoryExtension* regulatory_extensions = nullptr;
+  size_t regulatory_extensions_size = 0;
   int id = 0;
 };
 

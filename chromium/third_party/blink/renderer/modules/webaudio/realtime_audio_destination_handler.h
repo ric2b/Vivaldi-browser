@@ -25,14 +25,16 @@ class ExceptionState;
 class WebAudioLatencyHint;
 class WebAudioSinkDescriptor;
 
-class RealtimeAudioDestinationHandler final : public AudioDestinationHandler,
-                                              public AudioIOCallback {
+class MODULES_EXPORT RealtimeAudioDestinationHandler final
+    : public AudioDestinationHandler,
+      public AudioIOCallback {
  public:
   static scoped_refptr<RealtimeAudioDestinationHandler> Create(
       AudioNode&,
       const WebAudioSinkDescriptor&,
       const WebAudioLatencyHint&,
-      std::optional<float> sample_rate);
+      std::optional<float> sample_rate,
+      bool update_echo_cancellation_on_first_start);
   ~RealtimeAudioDestinationHandler() override;
 
   // For AudioHandler.
@@ -89,12 +91,15 @@ class RealtimeAudioDestinationHandler final : public AudioDestinationHandler,
 
   // Methods for unit tests.
   void invoke_onrendererror_from_platform_for_testing();
+  bool get_platform_destination_is_playing_for_testing();
 
  private:
-  explicit RealtimeAudioDestinationHandler(AudioNode&,
-                                           const WebAudioSinkDescriptor&,
-                                           const WebAudioLatencyHint&,
-                                           std::optional<float> sample_rate);
+  explicit RealtimeAudioDestinationHandler(
+      AudioNode&,
+      const WebAudioSinkDescriptor&,
+      const WebAudioLatencyHint&,
+      std::optional<float> sample_rate,
+      bool update_echo_cancellation_on_first_start);
 
   // Sets the detect silence flag for the platform destination.
   void SetDetectSilence(bool detect_silence);
@@ -117,6 +122,9 @@ class RealtimeAudioDestinationHandler final : public AudioDestinationHandler,
   void DisablePullingAudioGraph() {
     allow_pulling_audio_graph_.store(false, std::memory_order_release);
   }
+
+  // https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/media/capture/README.md#logs
+  void SendLogMessage(const char* const func, const String& message) const;
 
   // Stores a sink descriptor for sink transition.
   WebAudioSinkDescriptor sink_descriptor_;
@@ -145,6 +153,10 @@ class RealtimeAudioDestinationHandler final : public AudioDestinationHandler,
   // Represents the current condition of silence detection. By default, the
   // silence detection is active.
   bool is_detecting_silence_ = true;
+
+  // If true, attempt to update the echo cancellation reference the next time
+  // the platform destination is started.
+  bool update_echo_cancellation_on_next_start_ = false;
 
   base::WeakPtrFactory<RealtimeAudioDestinationHandler> weak_ptr_factory_{this};
 };

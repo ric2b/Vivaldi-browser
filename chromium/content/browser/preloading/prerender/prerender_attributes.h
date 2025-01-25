@@ -5,9 +5,11 @@
 #ifndef CONTENT_BROWSER_PRELOADING_PRERENDER_PRERENDER_ATTRIBUTES_H_
 #define CONTENT_BROWSER_PRELOADING_PRERENDER_PRERENDER_ATTRIBUTES_H_
 
+#include <optional>
 #include <string>
 
 #include "content/common/content_export.h"
+#include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/preloading.h"
 #include "content/public/browser/preloading_trigger_type.h"
 #include "content/public/browser/web_contents.h"
@@ -35,11 +37,13 @@ struct CONTENT_EXPORT PrerenderAttributes {
       int initiator_process_id,
       base::WeakPtr<WebContents> initiator_web_contents,
       std::optional<blink::LocalFrameToken> initiator_frame_token,
-      int initiator_frame_tree_node_id,
+      FrameTreeNodeId initiator_frame_tree_node_id,
       ukm::SourceId initiator_ukm_id,
       ui::PageTransition transition_type,
       bool should_warm_up_compositor,
-      base::RepeatingCallback<bool(const GURL&)> url_match_predicate,
+      base::RepeatingCallback<bool(const GURL&,
+                                   const std::optional<UrlMatchType>&)>
+          url_match_predicate,
       base::RepeatingCallback<void(NavigationHandle&)>
           prerender_navigation_handle_callback,
       // TODO(crbug.com/40246462): use pattern other than default parameter.
@@ -90,9 +94,8 @@ struct CONTENT_EXPORT PrerenderAttributes {
   // This is std::nullopt when prerendering is initiated by the browser.
   std::optional<blink::LocalFrameToken> initiator_frame_token;
 
-  // This is RenderFrameHost::kNoFrameTreeNodeId when prerendering is initiated
-  // by the browser.
-  int initiator_frame_tree_node_id = RenderFrameHost::kNoFrameTreeNodeId;
+  // This is invalid when prerendering is initiated by the browser.
+  FrameTreeNodeId initiator_frame_tree_node_id;
 
   // This is ukm::kInvalidSourceId when prerendering is initiated by the
   // browser.
@@ -114,7 +117,8 @@ struct CONTENT_EXPORT PrerenderAttributes {
   // Triggers can specify their own predicate judging whether two URLs are
   // considered as pointing to the same destination. The URLs must be in
   // same-origin.
-  base::RepeatingCallback<bool(const GURL&)> url_match_predicate;
+  base::RepeatingCallback<bool(const GURL&, const std::optional<UrlMatchType>&)>
+      url_match_predicate;
 
   base::RepeatingCallback<void(NavigationHandle&)>
       prerender_navigation_handle_callback;

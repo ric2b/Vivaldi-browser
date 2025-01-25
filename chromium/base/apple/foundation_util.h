@@ -14,6 +14,8 @@
 
 #include "base/apple/scoped_cftyperef.h"
 #include "base/base_export.h"
+#include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 
@@ -273,11 +275,23 @@ BASE_EXPORT FilePath NSURLToFilePath(NSURL* url);
 
 #endif  // __OBJC__
 
-// Converts a non-null |path| to a CFURLRef. |path| must not be empty.
-//
-// This function only uses manually-owned resources, so it does not depend on an
-// NSAutoreleasePool being set up on the current thread.
+// CoreFoundation versions of the above calls. These only uses manually-owned
+// resources, so they do not depend on an NSAutoreleasePool being set up on the
+// current thread.
+
+// Converts |path| to a CFURLRef. Returns nil if |path| is empty.
 BASE_EXPORT ScopedCFTypeRef<CFURLRef> FilePathToCFURL(const FilePath& path);
+
+// Converts |path| to a CFStringRef. Returns nil if |path| is empty.
+BASE_EXPORT ScopedCFTypeRef<CFStringRef> FilePathToCFString(
+    const FilePath& path);
+
+// Converts |str| to a FilePath. Returns an empty path if |str| is nil.
+BASE_EXPORT FilePath CFStringToFilePath(CFStringRef str);
+
+// Converts |url| to a FilePath. Returns an empty path if |url| is nil or if
+// |url| is not of scheme "file".
+BASE_EXPORT FilePath CFURLToFilePath(CFURLRef url);
 
 #if defined(__OBJC__)
 // Converts |range| to an NSRange, returning the new range in |range_out|.
@@ -285,7 +299,37 @@ BASE_EXPORT ScopedCFTypeRef<CFURLRef> FilePathToCFURL(const FilePath& path);
 // could not be converted to NSUIntegers.
 [[nodiscard]] BASE_EXPORT bool CFRangeToNSRange(CFRange range,
                                                 NSRange* range_out);
+
+// Returns an immutable `base::span<const uint8_t>` pointing to the memory
+// owned by `data`. `data` must outlive the returned span.
+// Returns an empty span if `data` is nil or empty.
+inline span<const uint8_t> NSDataToSpan(NSData* data) {
+  // SAFETY: `NSData` guarantees that `bytes` is exactly `length` in size.
+  return UNSAFE_BUFFERS(
+      make_span(static_cast<const uint8_t*>(data.bytes), data.length));
+}
+
+// Returns a mutable `base::span<uint8_t>` pointing to the memory
+// owned by `data`. `data` must outlive the returned span.
+// Returns an empty span if `data` is nil or empty.
+inline span<uint8_t> NSMutableDataToSpan(NSMutableData* data) {
+  // SAFETY: `NSMutableData` guarantees that `mutableBytes` is exactly `length`
+  // in size.
+  return UNSAFE_BUFFERS(
+      make_span(static_cast<uint8_t*>(data.mutableBytes), data.length));
+}
+
 #endif  // defined(__OBJC__)
+
+// Returns an immutable `base::span<const uint8_t>` pointing to the memory
+// owned by `data`. `data` must outlive the returned span.
+// Returns an empty span if `data` is null or empty.
+BASE_EXPORT span<const uint8_t> CFDataToSpan(CFDataRef data);
+
+// Returns a mutable `base::span<uint8_t>` pointing to the memory
+// owned by `data`. `data` must outlive the returned span.
+// Returns an empty span if `data` is null or empty.
+BASE_EXPORT span<uint8_t> CFMutableDataToSpan(CFMutableDataRef data);
 
 }  // namespace base::apple
 

@@ -43,42 +43,35 @@
 #include "src/tint/api/tint.h"
 #include "src/tint/cmd/common/helper.h"
 #include "src/tint/lang/core/ir/disassembler.h"
-#include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/wgsl/ast/module.h"
 #include "src/tint/lang/wgsl/ast/transform/first_index_offset.h"
 #include "src/tint/lang/wgsl/ast/transform/manager.h"
 #include "src/tint/lang/wgsl/ast/transform/renamer.h"
 #include "src/tint/lang/wgsl/ast/transform/single_entry_point.h"
 #include "src/tint/lang/wgsl/ast/transform/substitute_override.h"
-#include "src/tint/lang/wgsl/common/validation_mode.h"
 #include "src/tint/lang/wgsl/helpers/flatten_bindings.h"
 #include "src/tint/utils/cli/cli.h"
 #include "src/tint/utils/command/command.h"
 #include "src/tint/utils/containers/transform.h"
 #include "src/tint/utils/diagnostic/formatter.h"
 #include "src/tint/utils/macros/defer.h"
-#include "src/tint/utils/system/env.h"
-#include "src/tint/utils/system/terminal.h"
 #include "src/tint/utils/text/string.h"
 #include "src/tint/utils/text/string_stream.h"
 #include "src/tint/utils/text/styled_text.h"
 #include "src/tint/utils/text/styled_text_printer.h"
-#include "src/tint/utils/text/styled_text_theme.h"
 
 #if TINT_BUILD_WGSL_READER
 #include "src/tint/lang/wgsl/reader/program_to_ir/program_to_ir.h"
 #include "src/tint/lang/wgsl/reader/reader.h"
 
 #if TINT_BUILD_IR_BINARY
-#include "src/tint/lang/core/ir/binary/encode.h"
-#include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/wgsl/helpers/apply_substitute_overrides.h"
 #endif  // TINT_BUILD_IR_BINARY
 
 #endif  // TINT_BUILD_WGSL_READER
 
 #if TINT_BUILD_SPV_WRITER
-#include "src/tint/lang/spirv/writer/helpers/ast_generate_bindings.h"
+#include "src/tint/lang/spirv/writer/helpers/generate_bindings.h"
 #include "src/tint/lang/spirv/writer/writer.h"
 #endif  // TINT_BUILD_SPV_WRITER
 
@@ -187,7 +180,6 @@ struct Options {
     bool parse_only = false;
     bool disable_workgroup_init = false;
     bool validate = false;
-    bool compatibility_mode = false;
     bool print_hash = false;
     bool dump_inspector_bindings = false;
     bool enable_robustness = false;
@@ -367,11 +359,6 @@ When specified, automatically enables MSL validation)",
     auto& parse_only =
         options.Add<BoolOption>("parse-only", "Stop after parsing the input", Default{false});
     TINT_DEFER(opts->parse_only = *parse_only.value);
-
-    auto& compatibility_mode = options.Add<BoolOption>(
-        "compatibility-mode", "Validate WGSL input using \"compatibility mode\"",
-        ShortName{"compat"}, Default{false});
-    TINT_DEFER(opts->compatibility_mode = *compatibility_mode.value);
 
 #if TINT_BUILD_SPV_READER
     auto& allow_nud =
@@ -695,29 +682,24 @@ std::string Disassemble(const std::vector<uint32_t>& data) {
 /// @returns true on success
 bool GenerateSpirv(const tint::Program& program, const Options& options) {
 #if TINT_BUILD_SPV_WRITER
-    // TODO(jrprice): Provide a way for the user to set non-default options.
+    // Convert the AST program to an IR module.
+    auto ir = tint::wgsl::reader::ProgramToLoweredIR(program);
+    if (ir != tint::Success) {
+        std::cerr << "Failed to generate IR: " << ir << "\n";
+        return false;
+    }
+
     tint::spirv::writer::Options gen_options;
     gen_options.disable_robustness = !options.enable_robustness;
     gen_options.disable_workgroup_init = options.disable_workgroup_init;
     gen_options.use_storage_input_output_16 = options.use_storage_input_output_16;
-    gen_options.bindings = tint::spirv::writer::GenerateBindings(program);
+    gen_options.bindings = tint::spirv::writer::GenerateBindings(ir.Get());
 
-    tint::Result<tint::spirv::writer::Output> result;
-    if (options.use_ir) {
-        // Convert the AST program to an IR module.
-        auto ir = tint::wgsl::reader::ProgramToLoweredIR(program);
-        if (ir != tint::Success) {
-            std::cerr << "Failed to generate IR: " << ir << "\n";
-            return false;
-        }
-        result = tint::spirv::writer::Generate(ir.Get(), gen_options);
-    } else {
-        result = tint::spirv::writer::Generate(program, gen_options);
-    }
-
+    // Generate SPIR-V from Tint IR.
+    auto result = tint::spirv::writer::Generate(ir.Get(), gen_options);
     if (result != tint::Success) {
         tint::cmd::PrintWGSL(std::cerr, program);
-        std::cerr << "Failed to generate: " << result.Failure() << "\n";
+        std::cerr << "Failed to generate SPIR-V: " << result.Failure() << "\n";
         return false;
     }
 
@@ -872,12 +854,12 @@ bool GenerateMsl([[maybe_unused]] const tint::Program& program,
     }
 
     // Default to validating against MSL 1.2.
-    // If subgroups are used, bump the version to 2.1.
+    // If subgroups are used, bump the version to 2.2.
     auto msl_version = tint::msl::validate::MslVersion::kMsl_1_2;
     for (auto* enable : program.AST().Enables()) {
         if (enable->HasExtension(tint::wgsl::Extension::kChromiumExperimentalSubgroups) ||
             enable->HasExtension(tint::wgsl::Extension::kSubgroups)) {
-            msl_version = std::max(msl_version, tint::msl::validate::MslVersion::kMsl_2_1);
+            msl_version = std::max(msl_version, tint::msl::validate::MslVersion::kMsl_2_2);
         }
         if (enable->HasExtension(tint::wgsl::Extension::kChromiumExperimentalPixelLocal) ||
             enable->HasExtension(tint::wgsl::Extension::kChromiumExperimentalFramebufferFetch)) {
@@ -1067,6 +1049,23 @@ bool GenerateGlsl([[maybe_unused]] const tint::Program& program,
 
     auto generate = [&](const tint::Program& prg, const std::string entry_point_name,
                         [[maybe_unused]] tint::ast::PipelineStage stage) -> bool {
+        // The GLSL backend assumes single entry point
+        tint::ast::transform::Manager transform_manager;
+        tint::ast::transform::DataMap transform_inputs;
+
+        if (options.use_ir && !entry_point_name.empty()) {
+            transform_manager.append(std::make_unique<tint::ast::transform::SingleEntryPoint>());
+            transform_inputs.Add<tint::ast::transform::SingleEntryPoint::Config>(entry_point_name);
+        }
+
+        tint::ast::transform::DataMap outputs;
+        auto single_prog = transform_manager.Run(prg, std::move(transform_inputs), outputs);
+        if (!single_prog.IsValid()) {
+            tint::cmd::PrintWGSL(std::cerr, single_prog);
+            std::cerr << single_prog.Diagnostics() << "\n";
+            return 1;
+        }
+
         tint::glsl::writer::Options gen_options;
         gen_options.disable_robustness = !options.enable_robustness;
         gen_options.bindings = tint::glsl::writer::GenerateBindings(program);
@@ -1100,9 +1099,20 @@ bool GenerateGlsl([[maybe_unused]] const tint::Program& program,
             offset += 8;
         }
 
-        auto result = tint::glsl::writer::Generate(prg, gen_options, entry_point_name);
+        tint::Result<tint::glsl::writer::Output> result;
+        if (options.use_ir) {
+            // Convert the AST program to an IR module.
+            auto ir = tint::wgsl::reader::ProgramToLoweredIR(single_prog);
+            if (ir != tint::Success) {
+                std::cerr << "Failed to generate IR: " << ir << "\n";
+                return false;
+            }
+            result = tint::glsl::writer::Generate(ir.Get(), gen_options, "");
+        } else {
+            result = tint::glsl::writer::Generate(single_prog, gen_options, entry_point_name);
+        }
         if (result != tint::Success) {
-            tint::cmd::PrintWGSL(std::cerr, prg);
+            tint::cmd::PrintWGSL(std::cerr, single_prog);
             std::cerr << "Failed to generate: " << result.Failure() << "\n";
             return false;
         }
@@ -1293,8 +1303,6 @@ int main(int argc, const char** argv) {
 
     tint::cmd::LoadProgramOptions opts;
     opts.filename = options.input_filename;
-    opts.mode = options.compatibility_mode ? tint::wgsl::ValidationMode::kCompat
-                                           : tint::wgsl::ValidationMode::kFull;
     opts.printer = options.printer.get();
 #if TINT_BUILD_SPV_READER
     opts.use_ir = options.use_ir_reader;

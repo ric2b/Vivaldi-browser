@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/parsers/jpeg_parser.h"
 
 #include <cstring>
@@ -550,7 +555,7 @@ bool ParseJpegPicture(base::span<const uint8_t> buffer,
   }
   base::span<const uint8_t> result_span = base::as_bytes(
       // TODO(crbug.com/40284755): Make this span part of JpegParseResult.
-      UNSAFE_BUFFERS(base::span(result->data, result->data_size)));
+      UNSAFE_TODO(base::span(result->data, result->data_size)));
 
   // Update the sizes: |result->data_size| should not include the EOI marker or
   // beyond.

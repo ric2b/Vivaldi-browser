@@ -15,7 +15,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/algorithm/container.h"
 #include "tools/cddl/parse.h"
 
 struct CddlGroup;
@@ -208,6 +207,7 @@ struct CppType {
     kUninitialized = 0,
     kBool,
     kFloat,
+    kFloat64,
     kInt64,
     kUint64,
     kString,
@@ -327,6 +327,9 @@ inline std::ostream& operator<<(std::ostream& os, const CppType::Which& which) {
       break;
     case CppType::Which::kFloat:
       os << "kFloat";
+      break;
+    case CppType::Which::kFloat64:
+      os << "kFloat64";
       break;
     case CppType::Which::kInt64:
       os << "kInt64";

@@ -298,26 +298,9 @@ ToProtoEnum(ScriptTimingInfo::InvokerType type) {
 
 perfetto::protos::pbzero::AnimationFrameScriptTimingInfo::ThirdPartyTechnology
 ToProtoEnum(ThirdPartyScriptDetector::Technology technology) {
-  // The technology detector is a bitset so that multiple technologies can be
-  // reported to UKM for all the scripts that ran in a long animation frame.
-  // But for tracing, we report the detected technology of each script. So we
-  // return the first technology found in the bitset, or none if none are found.
-  using ProtoType = perfetto::protos::pbzero::AnimationFrameScriptTimingInfo::
-      ThirdPartyTechnology;
-  uint64_t technology_bits = static_cast<uint64_t>(technology);
-  if (technology_bits &
-      static_cast<uint64_t>(ThirdPartyScriptDetector::Technology::kWordPress)) {
-    return ProtoType::WORD_PRESS;
-  } else if (technology_bits &
-             static_cast<uint64_t>(
-                 ThirdPartyScriptDetector::Technology::kGoogleAnalytics)) {
-    return ProtoType::GOOGLE_ANALYTICS;
-  } else if (technology_bits &
-             static_cast<uint64_t>(
-                 ThirdPartyScriptDetector::Technology::kGoogleFontApi)) {
-    return ProtoType::GOOGLE_FONT_API;
-  }
-  return ProtoType::NONE;
+  return static_cast<perfetto::protos::pbzero::AnimationFrameScriptTimingInfo::
+                         ThirdPartyTechnology>(
+      std::bit_width(static_cast<uint64_t>(technology)) + 1);
 }
 
 }  // namespace
@@ -446,8 +429,8 @@ void AnimationFrameTimingMonitor::RecordLongAnimationFrameUKMAndTrace(
   base::TimeDelta script_type_duration_event_listener;
   base::TimeDelta script_type_duration_promise_handler;
   base::TimeDelta script_type_duration_script_block;
-  int64_t third_party_script_callback_contributors = 0;
-  int64_t third_party_script_execution_contributors = 0;
+  uint64_t third_party_script_callback_contributors = 0;
+  uint64_t third_party_script_execution_contributors = 0;
   for (const Member<ScriptTimingInfo>& script : info.Scripts()) {
     total_compilation_duration +=
         (script->ExecutionStartTime() - script->StartTime());
@@ -459,28 +442,25 @@ void AnimationFrameTimingMonitor::RecordLongAnimationFrameUKMAndTrace(
     ThirdPartyScriptDetector::Technology third_party_technology =
         ThirdPartyScriptDetector::From(window).Detect(
             script->GetSourceLocation().url);
+    uint64_t technology_bits = static_cast<uint64_t>(third_party_technology);
     switch (script->GetInvokerType()) {
       case ScriptTimingInfo::InvokerType::kClassicScript:
       case ScriptTimingInfo::InvokerType::kModuleScript:
         script_type_duration_script_block += execution_duration;
-        third_party_script_execution_contributors |=
-            static_cast<int64_t>(third_party_technology);
+        third_party_script_execution_contributors |= technology_bits;
         break;
       case ScriptTimingInfo::InvokerType::kEventHandler:
         script_type_duration_event_listener += execution_duration;
-        third_party_script_callback_contributors |=
-            static_cast<int64_t>(third_party_technology);
+        third_party_script_callback_contributors |= technology_bits;
         break;
       case ScriptTimingInfo::InvokerType::kPromiseResolve:
       case ScriptTimingInfo::InvokerType::kPromiseReject:
         script_type_duration_promise_handler += execution_duration;
-        third_party_script_callback_contributors |=
-            static_cast<int64_t>(third_party_technology);
+        third_party_script_callback_contributors |= technology_bits;
         break;
       case ScriptTimingInfo::InvokerType::kUserCallback:
         script_type_duration_user_callback += execution_duration;
-        third_party_script_callback_contributors |=
-            static_cast<int64_t>(third_party_technology);
+        third_party_script_callback_contributors |= technology_bits;
         break;
     }
   }
@@ -537,8 +517,6 @@ ScriptTimingInfo* AnimationFrameTimingMonitor::PopScriptEntryPoint(
     ScriptState* script_state,
     const probe::ProbeBase* probe,
     base::TimeTicks end_time) {
-  CHECK(script_state);
-  ExecutionContext* context = ToExecutionContext(script_state);
   if (!entry_point_depth_) {
     return nullptr;
   }
@@ -549,6 +527,11 @@ ScriptTimingInfo* AnimationFrameTimingMonitor::PopScriptEntryPoint(
 
   std::optional<PendingScriptInfo> script_info;
   std::swap(script_info, pending_script_info_);
+
+  // script_state can be null in situations such as the frame being in a
+  // provisional state.
+  ExecutionContext* context =
+      script_state ? ToExecutionContext(script_state) : nullptr;
 
   if (!enabled_ || !context || !context->IsWindow() ||
       !client_.ShouldReportLongAnimationFrameTiming()) {
@@ -581,9 +564,15 @@ ScriptTimingInfo* AnimationFrameTimingMonitor::PopScriptEntryPoint(
         AtomicString(script_info->class_like_name));
   }
 
-  if (!script_info->property_like_name.IsNull()) {
-    script_timing_info->SetPropertyLikeName(
-        AtomicString(script_info->property_like_name));
+  if (const auto* property_name =
+          std::get_if<const char*>(&script_info->property_like_name)) {
+    script_timing_info->SetPropertyLikeName(AtomicString(*property_name));
+  } else if (auto* property_name_string =
+                 std::get_if<String>(&script_info->property_like_name)) {
+    if (!property_name_string->IsNull()) {
+      script_timing_info->SetPropertyLikeName(
+          AtomicString(*property_name_string));
+    }
   }
 
   script_timing_info->SetPauseDuration(script_info->pause_duration);
@@ -596,7 +585,7 @@ void AnimationFrameTimingMonitor::WillHandlePromise(
     ScriptState* script_state,
     bool resolving,
     const char* class_like_name,
-    const String& property_like_name,
+    std::variant<const char*, String> property_like_name,
     const String& script_url) {
   // Unlike other script entry points, promise resolvers don't have a "Did"
   // probe, so we keep its depth at 1 and reset only at task end.
@@ -694,18 +683,19 @@ ScriptTimingInfo::ScriptSourceLocation CaptureScriptSourceLocation(
 
   v8::ScriptOrigin origin = function->GetScriptOrigin();
 
-  // Opaque scripts don't report source locations.
+  ScriptTimingInfo::ScriptSourceLocation source_location{
+      .url =
+          ToCoreStringWithUndefinedOrNullCheck(isolate, origin.ResourceName())};
+
+  // Opaque scripts don't report character index/function name.
   if (origin.Options().IsOpaque()) {
-    return ScriptTimingInfo::ScriptSourceLocation();
+    return source_location;
   }
 
-  v8::Local<v8::Value> source_location = origin.ResourceName();
-
-  return ScriptTimingInfo::ScriptSourceLocation{
-      .url = ToCoreStringWithUndefinedOrNullCheck(isolate, source_location),
-      .function_name =
-          ToCoreStringWithUndefinedOrNullCheck(isolate, function->GetName()),
-      .char_position = function->GetScriptStartPosition()};
+  source_location.function_name =
+      ToCoreStringWithUndefinedOrNullCheck(isolate, function->GetName());
+  source_location.char_position = function->GetScriptStartPosition();
+  return source_location;
 }
 
 }  // namespace

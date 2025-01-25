@@ -120,6 +120,25 @@ export class CursorTooltipElement extends CursorTooltipElementBase {
     }
   }
 
+  isTooltipVisible(): boolean {
+    // Force hidden hides the cursor no matter what, so exit early.
+    if (this.forceTooltipHidden) {
+      return false;
+    }
+
+    // If the user is hovering over the live page, we want to show the tooltip
+    // despite what the user prefs are set to.
+    if (this.currentTooltip === CursorTooltipType.LIVE_PAGE &&
+        this.isPointerInsideViewport) {
+      return true;
+    }
+
+    // In all other cases, show the tooltip if the users prefs allows it, the
+    // cursor is in the viewport, and the tooltip is set to a valid tooltip.
+    return this.isPointerInsideViewport && this.canShowTooltipFromPrefs &&
+        this.currentTooltip !== CursorTooltipType.NONE;
+  }
+
   private setTooltipImmediately(tooltipType: CursorTooltipType) {
     this.currentTooltip = tooltipType;
 
@@ -148,8 +167,8 @@ export class CursorTooltipElement extends CursorTooltipElementBase {
         offsetLeftPx += 3;
         tooltipMessage = this.i18n('cursorTooltipTextHighlightMessage');
       } else if (tooltipType === CursorTooltipType.CLICK_SEARCH) {
-        offsetTopPx += 8;
-        offsetLeftPx += 4;
+        offsetTopPx += 17;
+        offsetLeftPx += 11;
         tooltipMessage = this.i18n('cursorTooltipClickMessage');
       }
       // LINT.ThenChange(//chrome/browser/resources/lens/overlay/selection_overlay.ts:CursorOffsetValues)
@@ -161,24 +180,7 @@ export class CursorTooltipElement extends CursorTooltipElementBase {
   }
 
   private getHiddenCursorClass(): string {
-    // Force hidden hides the cursor no matter what, so exit early.
-    if (this.forceTooltipHidden) {
-      return 'hidden';
-    }
-
-    // If the user is hovering over the live page, we want to show the tooltip
-    // despite what the user prefs are set to.
-    if (this.currentTooltip === CursorTooltipType.LIVE_PAGE &&
-        this.isPointerInsideViewport) {
-      return '';
-    }
-
-    // In all other cases, show the tooltip if the users prefs allows it, the
-    // cursor is in the viewport, and the tooltip is set to a valid tooltip.
-    return (this.isPointerInsideViewport && this.canShowTooltipFromPrefs &&
-            this.currentTooltip !== CursorTooltipType.NONE) ?
-        '' :
-        'hidden';
+    return this.isTooltipVisible() ? '' : 'hidden';
   }
 }
 

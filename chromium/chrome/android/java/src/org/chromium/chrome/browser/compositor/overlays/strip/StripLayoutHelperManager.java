@@ -34,6 +34,8 @@ import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.cc.input.BrowserControlsOffsetTagsInfo;
+import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
@@ -42,11 +44,13 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton;
-import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton.CompositorOnClickHandler;
+import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton.ButtonType;
 import org.chromium.chrome.browser.compositor.layouts.components.TintedCompositorButton;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.AreaMotionEventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.MotionEventHandler;
+import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutView.StripLayoutViewOnClickHandler;
 import org.chromium.chrome.browser.compositor.scene_layer.TabStripSceneLayer;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.EventFilter;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -87,6 +91,7 @@ import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
@@ -115,6 +120,7 @@ import org.chromium.ui.listmenu.ListMenuButton;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
 
 import android.view.Gravity;
 import android.view.View;
@@ -189,7 +195,7 @@ public class StripLayoutHelperManager
             };
 
     // Model selector buttons constants.
-    private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP = 10.f; // Vivaldi
+    private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP = 5.f; // Vivaldi
     private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP = 24.f; // Vivaldi
     private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_HEIGHT_DP = 24.f; // Vivaldi
     private static final float MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_PRESSED_OPACITY = 0.12f;
@@ -227,6 +233,7 @@ public class StripLayoutHelperManager
     private float mWidth; // in dp units
     private float mHeight; // Height of the entire tab strip compositor layer in DP.
     private final float mScrollableStripHeight; // Height of the scrollable tab strip layer in DP.
+    private boolean mIsVerticalScrollInProgress; // Is the tab strip is being scrolled by a gesture.
 
     // Padding regions that tabs should remain untouchable.
     private float mLeftPadding; // in dp units
@@ -234,7 +241,7 @@ public class StripLayoutHelperManager
     private float mTopPadding; // in dp units
     private final float mDensity;
     private int mOrientation;
-    private TintedCompositorButton mModelSelectorButton;
+    @Nullable private TintedCompositorButton mModelSelectorButton;
     private Context mContext;
     private boolean mTabStripObscured;
     private float mStripTransitionScrimOpacity;
@@ -262,12 +269,9 @@ public class StripLayoutHelperManager
     private float mStripEndPadding;
     private TabModelSelectorTabModelObserver mTabModelSelectorTabModelObserver;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
-    private final TabModelSelectorObserver mTabModelSelectorObserver =
-            new TabModelSelectorObserver() {
-                @Override
-                public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                    tabModelSwitched(newModel.isIncognito());
-                }
+    private final Callback<TabModel> mCurrentTabModelObserver =
+            (tabModel) -> {
+                tabModelSwitched(tabModel.isIncognito());
             };
 
     private TabModelObserver mTabModelObserver;
@@ -300,7 +304,8 @@ public class StripLayoutHelperManager
             // toolbar is at the bottom in order to handle the input events.
             if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
 
-            if (mModelSelectorButton.onDown(x, y, fromMouse, buttons)) {
+            if (mModelSelectorButton != null
+                    && mModelSelectorButton.onDown(x, y, fromMouse, buttons)) {
                 return;
             }
             getActiveStripLayoutHelper().onDown(time(), x, y, fromMouse, buttons);
@@ -311,7 +316,9 @@ public class StripLayoutHelperManager
             if (ChromeApplicationImpl.isVivaldi())
                 if (mModelSelectorButton.onUpOrCancel()) return;
             else
-            if (mModelSelectorButton.onUpOrCancel() && mTabModelSelector != null) {
+            if (mModelSelectorButton != null
+                    && mModelSelectorButton.onUpOrCancel()
+                    && mTabModelSelector != null) {
                 getActiveStripLayoutHelper().finishAnimationsAndPushTabUpdates();
                 if (!mModelSelectorButton.isVisible()) return;
                 mTabModelSelector.selectModel(!mTabModelSelector.isIncognitoSelected());
@@ -325,7 +332,9 @@ public class StripLayoutHelperManager
             if (DragDropGlobalState.hasValue()) {
                 return;
             }
-            mModelSelectorButton.drag(x, y);
+            if (mModelSelectorButton != null) {
+                mModelSelectorButton.drag(x, y);
+            }
             getActiveStripLayoutHelper().drag(time(), x, y, dx);
         }
 
@@ -338,7 +347,8 @@ public class StripLayoutHelperManager
             // Vivaldi - consider the offset of y when the toolbar is at the bottom
             if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
             long time = time();
-            if (mModelSelectorButton.click(x, y, fromMouse, buttons)) {
+            if (mModelSelectorButton != null
+                    && mModelSelectorButton.click(x, y, fromMouse, buttons)) {
                 mModelSelectorButton.handleClick(time);
                 return;
             }
@@ -512,74 +522,13 @@ public class StripLayoutHelperManager
                 };
         mStripVisibilityStateSupplier.addObserver(mStripVisibilityStateObserver);
 
-        CompositorOnClickHandler selectorClickHandler = time -> handleModelSelectorButtonClick();
-        createModelSelectorButton(context, selectorClickHandler);
-        // Model selector button background color.
-        // Default bg color is surface inverse.
-        @ColorInt
-        int backgroundDefaultColor = context.getColor(R.color.model_selector_button_bg_color);
-
-        // Incognito bg color is surface 1 baseline.
-        @ColorInt
-        int backgroundIncognitoColor =
-                context.getColor(R.color.default_bg_color_dark_elev_1_baseline);
-
-        @ColorInt
-        int apsBackgroundHoveredColor =
-                ColorUtils.setAlphaComponentWithFloat(
-                        SemanticColorUtils.getDefaultTextColor(context),
-                        MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_DEFAULT_OPACITY);
-        @ColorInt
-        int apsBackgroundPressedColor =
-                ColorUtils.setAlphaComponentWithFloat(
-                        SemanticColorUtils.getDefaultTextColor(context),
-                        MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_PRESSED_OPACITY);
-        @ColorInt
-        int apsBackgroundHoveredIncognitoColor =
-                ColorUtils.setAlphaComponentWithFloat(
-                        context.getColor(R.color.tab_strip_button_hover_bg_color),
-                        MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_DEFAULT_OPACITY);
-        @ColorInt
-        int apsBackgroundPressedIncognitoColor =
-                ColorUtils.setAlphaComponentWithFloat(
-                        context.getColor(R.color.tab_strip_button_hover_bg_color),
-                        MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_PRESSED_OPACITY);
-
-        @ColorInt
-        int iconDefaultColor =
-                AppCompatResources.getColorStateList(context, R.color.default_icon_color_tint_list)
-                        .getDefaultColor();
-        @ColorInt
-        int iconIncognitoColor = context.getColor(R.color.default_icon_color_secondary_light);
-
-        mModelSelectorButton.setTint(
-                iconDefaultColor, iconDefaultColor, iconIncognitoColor, iconIncognitoColor);
-
-        mModelSelectorButton.setBackgroundTint(
-                backgroundDefaultColor,
-                backgroundDefaultColor,
-                backgroundIncognitoColor,
-                backgroundIncognitoColor,
-                apsBackgroundHoveredColor,
-                apsBackgroundPressedColor,
-                apsBackgroundHoveredIncognitoColor,
-                apsBackgroundPressedIncognitoColor);
-
-        // y-offset for folio = lowered tab container + (tab container size - bg size)/2 -
-        // folio tab title y-offset = 2 + (38 - 32)/2 - 2 = 3dp
-        mModelSelectorButton.setDrawY(MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP + mTopPadding);
-
+        if (!ChromeFeatureList.sTabStripIncognitoMigration.isEnabled()) {
+            StripLayoutViewOnClickHandler selectorClickHandler =
+                    (time, view) -> handleModelSelectorButtonClick();
+            createModelSelectorButton(context, selectorClickHandler);
+        }
         // Use toolbar menu button padding to align MSB with menu button.
         mStripEndPadding = res.getDimension(R.dimen.button_end_padding) / mDensity;
-
-        mModelSelectorButton.setIncognito(false);
-        mModelSelectorButton.setVisible(false);
-        // Pressed resources are the same as the unpressed resources.
-        mModelSelectorButton.setClickSlop(MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP);
-
-        mModelSelectorButton.setAccessibilityDescription(
-                res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
-                res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_incognito));
 
         mTabStripObscured = false;
 
@@ -689,10 +638,12 @@ public class StripLayoutHelperManager
 
     // Incognito button for Tab Strip Redesign.
     private void createModelSelectorButton(
-            Context context, CompositorOnClickHandler selectorClickHandler) {
+            Context context, StripLayoutViewOnClickHandler selectorClickHandler) {
         mModelSelectorButton =
                 new TintedCompositorButton(
                         context,
+                        ButtonType.INCOGNITO_SWITCHER,
+                        null,
                         MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP,
                         MODEL_SELECTOR_BUTTON_BACKGROUND_HEIGHT_DP,
                         selectorClickHandler,
@@ -702,6 +653,72 @@ public class StripLayoutHelperManager
         mModelSelectorButton.setBackgroundResourceId(R.drawable.bg_circle_tab_strip_button);
 
         mModelSelectorWidth = MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP;
+
+        // Model selector button background color.
+        // Default bg color is surface inverse.
+        @ColorInt
+        int backgroundDefaultColor = context.getColor(R.color.model_selector_button_bg_color);
+
+        // Incognito bg color is surface 1 baseline.
+        @ColorInt
+        int backgroundIncognitoColor =
+                context.getColor(R.color.default_bg_color_dark_elev_1_baseline);
+
+        @ColorInt
+        int apsBackgroundHoveredColor =
+                ColorUtils.setAlphaComponentWithFloat(
+                        SemanticColorUtils.getDefaultTextColor(context),
+                        MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_DEFAULT_OPACITY);
+        @ColorInt
+        int apsBackgroundPressedColor =
+                ColorUtils.setAlphaComponentWithFloat(
+                        SemanticColorUtils.getDefaultTextColor(context),
+                        MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_PRESSED_OPACITY);
+        @ColorInt
+        int apsBackgroundHoveredIncognitoColor =
+                ColorUtils.setAlphaComponentWithFloat(
+                        context.getColor(R.color.tab_strip_button_hover_bg_color),
+                        MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_DEFAULT_OPACITY);
+        @ColorInt
+        int apsBackgroundPressedIncognitoColor =
+                ColorUtils.setAlphaComponentWithFloat(
+                        context.getColor(R.color.tab_strip_button_hover_bg_color),
+                        MODEL_SELECTOR_BUTTON_HOVER_BACKGROUND_PRESSED_OPACITY);
+
+        @ColorInt
+        int iconDefaultColor =
+                AppCompatResources.getColorStateList(context, R.color.default_icon_color_tint_list)
+                        .getDefaultColor();
+        @ColorInt
+        int iconIncognitoColor = context.getColor(R.color.default_icon_color_secondary_light);
+
+        mModelSelectorButton.setTint(
+                iconDefaultColor, iconDefaultColor, iconIncognitoColor, iconIncognitoColor);
+
+        mModelSelectorButton.setBackgroundTint(
+                backgroundDefaultColor,
+                backgroundDefaultColor,
+                backgroundIncognitoColor,
+                backgroundIncognitoColor,
+                apsBackgroundHoveredColor,
+                apsBackgroundPressedColor,
+                apsBackgroundHoveredIncognitoColor,
+                apsBackgroundPressedIncognitoColor);
+
+        // y-offset for folio = lowered tab container + (tab container size - bg size)/2 -
+        // folio tab title y-offset = 2 + (38 - 32)/2 - 2 = 3dp
+        mModelSelectorButton.setDrawY(MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP + mTopPadding);
+
+        mModelSelectorButton.setIncognito(false);
+        mModelSelectorButton.setVisible(false);
+        // Pressed resources are the same as the unpressed resources.
+        mModelSelectorButton.setClickSlop(MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP);
+
+        mModelSelectorButton.setAccessibilityDescription(
+                context.getResources()
+                        .getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
+                context.getResources()
+                        .getString(R.string.accessibility_tabstrip_btn_incognito_toggle_incognito));
     }
 
     /** Cleans up internal state. */
@@ -716,7 +733,7 @@ public class StripLayoutHelperManager
                     .getTabModelFilterProvider()
                     .removeTabModelFilterObserver(mTabModelObserver);
 
-            mTabModelSelector.removeObserver(mTabModelSelectorObserver);
+            mTabModelSelector.getCurrentTabModelSupplier().removeObserver(mCurrentTabModelObserver);
             mTabModelSelectorTabModelObserver.destroy();
             mTabModelSelectorTabObserver.destroy();
         }
@@ -725,7 +742,6 @@ public class StripLayoutHelperManager
             mDesktopWindowStateProvider.removeObserver(this);
         }
         mStripVisibilityStateSupplier.removeObserver(mStripVisibilityStateObserver);
-        mStripVisibilityStateSupplier = null;
     }
 
     /** Mark whether tab strip is hidden by a height transition. */
@@ -820,7 +836,7 @@ public class StripLayoutHelperManager
         int hoveredTabId =
                 getActiveStripLayoutHelper().getLastHoveredTab() == null
                         ? TabModel.INVALID_TAB_INDEX
-                        : getActiveStripLayoutHelper().getLastHoveredTab().getId();
+                        : getActiveStripLayoutHelper().getLastHoveredTab().getTabId();
 
         // When tab strip is hiding, animation will trigger the toolbar moving up and tab
         // strip fade-out in place. In this case the tab strip should not move at all.
@@ -837,6 +853,12 @@ public class StripLayoutHelperManager
             mStatusBarColorController.setTabStripColorOverlay(
                     getStripTransitionScrimColor(), mStripTransitionScrimOpacity);
 
+            yOffset = 0;
+        } else if (ToolbarFeatures.isBrowserControlsInVizEnabled(
+                        DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext))
+                && mIsVerticalScrollInProgress) {
+            // With bciv, we don't want anything else controlling the offset while scrolling.
+            // Tabstrip currently has no min height, so setting to 0 is ok.
             yOffset = 0;
         } else if (getStripVisibilityState() == StripVisibilityState.GONE) {
             // When the tab strip is hidden by a height transition, the stable offset of this scene
@@ -886,20 +908,22 @@ public class StripLayoutHelperManager
             mOrientation = orientation;
             orientationChanged = true;
         }
-        mModelSelectorButton.setDrawY(mTopPadding + MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP);
-        if (!LocalizationUtils.isLayoutRtl()) {
-            // Vivaldi Ref. VAB-8862
-            int offset = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext) ?
-                    (int) mContext.getResources().getDimension(R.dimen.new_tab_padding_tablet) :
-                    (int) mContext.getResources().getDimension(R.dimen.new_tab_padding);
-            mModelSelectorButton.setDrawX(
-                    mWidth - mRightPadding - getModelSelectorButtonWidthWithEndPadding()
-                            - offset);
-        } else {
-            mModelSelectorButton.setDrawX(
-                    mLeftPadding
-                            + getModelSelectorButtonWidthWithEndPadding()
-                            - mModelSelectorWidth);
+        if (mModelSelectorButton != null) {
+            mModelSelectorButton.setDrawY(
+                    mTopPadding + MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP);
+            if (!LocalizationUtils.isLayoutRtl()) {
+                // Vivaldi Ref. VAB-8862
+                int offset = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext) ?
+                        (int) mContext.getResources().getDimension(R.dimen.new_tab_padding_tablet) :
+                        (int) mContext.getResources().getDimension(R.dimen.new_tab_padding);
+                mModelSelectorButton.setDrawX(
+                        mWidth - mRightPadding - getModelSelectorButtonWidthWithEndPadding() - offset /* Vivaldi*/);
+            } else {
+                mModelSelectorButton.setDrawX(
+                        mLeftPadding
+                                + getModelSelectorButtonWidthWithEndPadding()
+                                - mModelSelectorWidth);
+            }
         }
 
         // Note(david@vivaldi.com): We need to take the orientation into account.
@@ -1079,7 +1103,7 @@ public class StripLayoutHelperManager
      *     for touch target.
      */
     private float getButtonStartPaddingForTouchTarget() {
-        if (mModelSelectorButton.isVisible()) {
+        if (mModelSelectorButton != null && mModelSelectorButton.isVisible()) {
             return BUTTON_DESIRED_TOUCH_TARGET_SIZE
                     - mModelSelectorButton.getWidth()
                     - mStripEndPadding;
@@ -1122,7 +1146,9 @@ public class StripLayoutHelperManager
         if (mBrowserControlsStateProvider.getTopControlOffset() < 0) return;
 
         getActiveStripLayoutHelper().getVirtualViews(views);
-        if (mModelSelectorButton.isVisible()) views.add(mModelSelectorButton);
+        if (mModelSelectorButton != null && mModelSelectorButton.isVisible()) {
+            views.add(mModelSelectorButton);
+        }
     }
 
     @Override
@@ -1165,7 +1191,7 @@ public class StripLayoutHelperManager
                         (int) Math.ceil(tabStripRectDp.bottom * mDensity));
         rects.add(tabStripRect);
 
-        if (mModelSelectorButton.isVisible()) {
+        if (mModelSelectorButton != null && mModelSelectorButton.isVisible()) {
             var msbTouchRect = new RectF();
             mModelSelectorButton.getTouchTarget(msbTouchRect);
             Rect msbRect =
@@ -1196,7 +1222,7 @@ public class StripLayoutHelperManager
     public int getLeftFadeDrawable() {
         int leftFadeDrawable;
         if (LocalizationUtils.isLayoutRtl()) {
-            if (mModelSelectorButton.isVisible()) {
+            if (mModelSelectorButton != null && mModelSelectorButton.isVisible()) {
                 leftFadeDrawable = R.drawable.tab_strip_fade_long;
                 mNormalHelper.setLeftFadeWidth(FADE_LONG_WIDTH_DP);
                 mIncognitoHelper.setLeftFadeWidth(FADE_LONG_WIDTH_DP);
@@ -1218,7 +1244,7 @@ public class StripLayoutHelperManager
     public @DrawableRes int getRightFadeDrawable() {
         @DrawableRes int rightFadeDrawable;
         if (!LocalizationUtils.isLayoutRtl()) {
-            if (mModelSelectorButton.isVisible()) {
+            if (mModelSelectorButton != null && mModelSelectorButton.isVisible()) {
                 rightFadeDrawable = R.drawable.tab_strip_fade_short; // Vivaldi
                 mNormalHelper.setRightFadeWidth(FADE_SHORT_WIDTH_DP); // Vivaldi
                 mIncognitoHelper.setRightFadeWidth(FADE_SHORT_WIDTH_DP); // Vivaldi
@@ -1352,7 +1378,8 @@ public class StripLayoutHelperManager
 
                     @Override
                     public void willCloseTab(Tab tab, boolean didCloseAlone) {
-                        getStripLayoutHelper(tab.isIncognito()).willCloseTab(time(), tab);
+                        getStripLayoutHelper(tab.isIncognitoBranded()).willCloseTab(time(), tab);
+
                         // Vivaldi
                         // Make sure we update the title of all related tabs.
                         List<Tab> tabs = modelSelector.getTabModelFilterProvider()
@@ -1363,7 +1390,8 @@ public class StripLayoutHelperManager
 
                     @Override
                     public void tabRemoved(Tab tab) {
-                        getStripLayoutHelper(tab.isIncognito()).tabClosed(time(), tab.getId());
+                        getStripLayoutHelper(tab.isIncognitoBranded())
+                                .tabClosed(time(), tab.getId());
                         updateModelSwitcherButton();
                     }
 
@@ -1371,7 +1399,7 @@ public class StripLayoutHelperManager
                     public void didMoveTab(Tab tab, int newIndex, int curIndex) {
                         // For right-direction move, layout helper re-ordering logic
                         // expects destination index = position + 1
-                        getStripLayoutHelper(tab.isIncognito())
+                        getStripLayoutHelper(tab.isIncognitoBranded())
                                 .tabMoved(
                                         time(),
                                         tab.getId(),
@@ -1381,7 +1409,7 @@ public class StripLayoutHelperManager
 
                     @Override
                     public void tabClosureUndone(Tab tab) {
-                        getStripLayoutHelper(tab.isIncognito())
+                        getStripLayoutHelper(tab.isIncognitoBranded())
                                 .tabClosureCancelled(time(), tab.getId());
                         updateModelSwitcherButton();
 
@@ -1399,13 +1427,23 @@ public class StripLayoutHelperManager
 
                     @Override
                     public void tabPendingClosure(Tab tab) {
-                        getStripLayoutHelper(tab.isIncognito()).tabClosed(time(), tab.getId());
+                        getStripLayoutHelper(tab.isIncognitoBranded())
+                                .tabClosed(time(), tab.getId());
+                        updateModelSwitcherButton();
+                    }
+
+                    @Override
+                    public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
+                        if (tabs.isEmpty()) return;
+                        getStripLayoutHelper(tabs.get(0).isIncognitoBranded())
+                                .multipleTabsClosed(tabs);
                         updateModelSwitcherButton();
                     }
 
                     @Override
                     public void onFinishingTabClosure(Tab tab) {
-                        getStripLayoutHelper(tab.isIncognito()).tabClosed(time(), tab.getId());
+                        getStripLayoutHelper(tab.isIncognitoBranded())
+                                .tabClosed(time(), tab.getId());
                         updateModelSwitcherButton();
                     }
 
@@ -1418,7 +1456,7 @@ public class StripLayoutHelperManager
                     @Override
                     public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
                         if (tab.getId() == lastId) return;
-                        getStripLayoutHelper(tab.isIncognito())
+                        getStripLayoutHelper(tab.isIncognitoBranded())
                                 .tabSelected(time(), tab.getId(), lastId, false);
 
                         // Vivaldi
@@ -1431,7 +1469,7 @@ public class StripLayoutHelperManager
                     public void didAddTab(
                             Tab tab, int type, int creationState, boolean markedForSelection) {
                         boolean onStartup = type == TabLaunchType.FROM_RESTORE;
-                        getStripLayoutHelper(tab.isIncognito())
+                        getStripLayoutHelper(tab.isIncognitoBranded())
                                 .tabCreated(
                                         time(),
                                         tab.getId(),
@@ -1482,13 +1520,32 @@ public class StripLayoutHelperManager
                     public void onFaviconUpdated(Tab tab, Bitmap icon, GURL iconUrl) {
                         updateTitleForTab(tab);
                     }
+
+                    @Override
+                    public void onBrowserControlsConstraintsChanged(
+                            Tab tab,
+                            BrowserControlsOffsetTagsInfo oldOffsetTagsInfo,
+                            BrowserControlsOffsetTagsInfo offsetTagsInfo,
+                            @BrowserControlsState int constraints) {
+                        if (ToolbarFeatures.isBrowserControlsInVizEnabled(
+                                DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext))) {
+                            mTabStripTreeProvider.updateOffsetTag(
+                                    offsetTagsInfo.getTopControlsOffsetTag());
+                        }
+                    }
+
+                    @Override
+                    public void onContentViewScrollingStateChanged(boolean scrolling) {
+                        mIsVerticalScrollInProgress = scrolling;
+                    }
+
                     // Vivaldi
                     @Override
                     public void onDidChangeThemeColor(Tab tab, int color) {
                         if (mTabModelSelector.getCurrentTab() == tab)
                             mTabStripTreeProvider.setTabStripBackgroundColor(
                                     getBackgroundStripColor(color));
-                    }
+                    } // End Vivaldi
                 };
 
         // Vivaldi
@@ -1499,9 +1556,9 @@ public class StripLayoutHelperManager
                     mTabStripTreeProvider.setTabStripBackgroundColor(
                             getBackgroundStripColor(tab.getThemeColor()));
             }
-        };
+        }; // End Vivaldi
 
-        mTabModelSelector.addObserver(mTabModelSelectorObserver);
+        mTabModelSelector.getCurrentTabModelSupplier().addObserver(mCurrentTabModelObserver);
         if (mTabDragSource != null) {
             mTabDragSource.setTabModelSelector(mTabModelSelector);
         }
@@ -1619,6 +1676,7 @@ public class StripLayoutHelperManager
     }
 
     private void updateModelSwitcherButton() {
+        if (mModelSelectorButton == null) return;
         mModelSelectorButton.setIncognito(mIsIncognito);
         if (mTabModelSelector != null) {
             boolean isVisible = mTabModelSelector.getModel(true).getCount() != 0;
@@ -1627,6 +1685,20 @@ public class StripLayoutHelperManager
             if (ChromeApplicationImpl.isVivaldi()) {
                 mModelSelectorButton.setVisible(true);
                 isVisible = false;
+                // Vivaldi VAB-9775
+                @ColorInt
+                int iconIncognitoColor = mContext.getColor(R.color.default_icon_color_secondary_light);
+                if (GlobalNightModeStateProviderHolder.getInstance().isInNightMode()) {
+                    @ColorInt
+                    int iconNightModeColor = mContext.getColor(R.color.default_bg_color_light);
+                    mModelSelectorButton.setTint(iconNightModeColor, iconNightModeColor, iconIncognitoColor, iconIncognitoColor);
+                } else {
+                    @ColorInt
+                    int iconDefaultColor =
+                            AppCompatResources.getColorStateList(mContext, R.color.default_bg_color_baseline)
+                                    .getDefaultColor();
+                    mModelSelectorButton.setTint(iconDefaultColor, iconDefaultColor, iconIncognitoColor, iconIncognitoColor);
+                } // End Vivaldi VAB-9775
             } else {
             if (isVisible == mModelSelectorButton.isVisible()) return;
 
@@ -1763,7 +1835,8 @@ public class StripLayoutHelperManager
         // For now we don't show the popup on the stack strip.
         if (mIsStackStrip) return;
         TabSwitcherActionMenuCoordinator menu = new TabSwitcherActionMenuCoordinator(
-                mTabModelSelector.getCurrentModel().getProfile());
+                mTabModelSelector.getCurrentModel().getProfile(),
+                mActivity.getTabModelSelectorSupplier());
         View anchorView = mActivity.findViewById(R.id.tab_switcher_menu_helper_button);
         // Note(nagamani@vivaldi.com): We are using dummy button with 0dp width and 0dp height as
         // anchorView

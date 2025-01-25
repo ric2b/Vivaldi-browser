@@ -241,6 +241,7 @@ xla_cc_binary(
         "nomsan",
         "notsan",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":pjrt_c_api_cpu",
         ":pjrt_c_api_cpu_version_script.lds",
@@ -317,8 +318,8 @@ xla_cc_binary(
     ],
     linkshared = True,
     tags = [
+        "no_mac",  # No GPU on mac.
         "noasan",
-        "nomac",  # No GPU on mac.
         "nomsan",
         "notsan",
     ],
@@ -376,6 +377,7 @@ xla_test(
         "//xla:literal",
         "//xla:literal_util",
         "//xla:shape_util",
+        "//xla/client:client_library",
         "//xla/ffi:execution_context",
         "//xla/ffi:ffi_api",
         "//xla/ffi:type_id_registry",
@@ -407,13 +409,13 @@ xla_cc_test(
         "//xla/pjrt:pjrt_client",
         "//xla/pjrt:pjrt_common",
         "//xla/pjrt/distributed:in_memory_key_value_store",
+        "//xla/tsl/lib/core:status_test_util",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
-        "@local_tsl//tsl/lib/core:status_test_util",
         "@local_tsl//tsl/platform:status",
         "@local_tsl//tsl/platform:status_matchers",
         "@local_tsl//tsl/platform:statusor",

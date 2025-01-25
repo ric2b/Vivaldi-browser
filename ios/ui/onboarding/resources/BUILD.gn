@@ -1,52 +1,32 @@
 # Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-group("resources") {
-  deps = [
-    ":onboarding_start",
-    ":onboarding_default_browser",
-    ":onboarding_tabs",
-    ":onboarding_tabs_on",
-    ":onboarding_tabs_off",
-  ]
-}
-
-imageset("onboarding_start") {
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
   sources = [
-    "onboarding_start.imageset/Contents.json",
-    "onboarding_start.imageset/onboarding_start.pdf",
-  ]
-}
+    # onboarding_start
+    "Assets.xcassets/onboarding_start.imageset/Contents.json",
+    "Assets.xcassets/onboarding_start.imageset/onboarding_start.pdf",
 
-imageset("onboarding_default_browser") {
-  sources = [
-    "onboarding_default_browser.imageset/Contents.json",
-    "onboarding_default_browser.imageset/onboarding_default_browser.png",
-    "onboarding_default_browser.imageset/onboarding_default_browser@2x.png",
-    "onboarding_default_browser.imageset/onboarding_default_browser@3x.png",
-  ]
-}
+    # onboarding_default_browser
+    "Assets.xcassets/onboarding_default_browser.imageset/Contents.json",
+    "Assets.xcassets/onboarding_default_browser.imageset/onboarding_default_browser.png",
+    "Assets.xcassets/onboarding_default_browser.imageset/onboarding_default_browser@2x.png",
+    "Assets.xcassets/onboarding_default_browser.imageset/onboarding_default_browser@3x.png",
 
-imageset("onboarding_tabs") {
-  sources = [
-    "onboarding_tabs.imageset/Contents.json",
-    "onboarding_tabs.imageset/onboarding_tabs.pdf",
-  ]
-}
+    # onboarding_tabs
+    "Assets.xcassets/onboarding_tabs.imageset/Contents.json",
+    "Assets.xcassets/onboarding_tabs.imageset/onboarding_tabs.pdf",
 
-imageset("onboarding_tabs_on") {
-  sources = [
-    "onboarding_tabs_on.imageset/Contents.json",
-    "onboarding_tabs_on.imageset/onboarding_tabs_on.pdf",
-    "onboarding_tabs_on.imageset/onboarding_tabs_on_dark.pdf",
-  ]
-}
+    # onboarding_tabs_on
+    "Assets.xcassets/onboarding_tabs_on.imageset/Contents.json",
+    "Assets.xcassets/onboarding_tabs_on.imageset/onboarding_tabs_on.pdf",
+    "Assets.xcassets/onboarding_tabs_on.imageset/onboarding_tabs_on_dark.pdf",
 
-imageset("onboarding_tabs_off") {
-  sources = [
-    "onboarding_tabs_off.imageset/Contents.json",
-    "onboarding_tabs_off.imageset/onboarding_tabs_off.pdf",
-    "onboarding_tabs_off.imageset/onboarding_tabs_off_dark.pdf",
+    # onboarding_tabs_off
+    "Assets.xcassets/onboarding_tabs_off.imageset/Contents.json",
+    "Assets.xcassets/onboarding_tabs_off.imageset/onboarding_tabs_off.pdf",
+    "Assets.xcassets/onboarding_tabs_off.imageset/onboarding_tabs_off_dark.pdf",
   ]
 }

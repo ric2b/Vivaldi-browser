@@ -101,7 +101,7 @@ SkColor GetContrastingColorFor(const Element& element,
       // color-scheme to flicker back and forth when the user interacts with it.
       return color_provider->GetColor(ui::kColorWebNativeControlFill);
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -169,15 +169,11 @@ DirectionFlippingScope::DirectionFlippingScope(
     const LayoutObject& layout_object,
     const PaintInfo& paint_info,
     const gfx::Rect& rect)
-    : needs_horizontal_flipping_(
-          IsHorizontalWritingMode(layout_object.StyleRef().GetWritingMode()) &&
-          !layout_object.StyleRef().IsLeftToRightDirection()),
-      needs_vertical_flipping_(
-          !IsHorizontalWritingMode(layout_object.StyleRef().GetWritingMode()) &&
-          RuntimeEnabledFeatures::
-              FormControlsVerticalWritingModeDirectionSupportEnabled() &&
-          layout_object.StyleRef().IsLeftToRightDirection()),
-      paint_info_(paint_info) {
+    : paint_info_(paint_info) {
+  PhysicalDirection inline_end =
+      layout_object.StyleRef().GetWritingDirection().InlineEnd();
+  needs_horizontal_flipping_ = inline_end == PhysicalDirection::kLeft;
+  needs_vertical_flipping_ = inline_end == PhysicalDirection::kUp;
   if (needs_horizontal_flipping_) {
     paint_info_.context.Save();
     paint_info_.context.Translate(2 * rect.x() + rect.width(), 0);
@@ -200,14 +196,12 @@ gfx::Rect DeterminateProgressValueRectFor(const LayoutProgress& layout_progress,
                                           const gfx::Rect& rect) {
   int dx = rect.width();
   int dy = rect.height();
-  int y = rect.y();
-  if (IsHorizontalWritingMode(layout_progress.StyleRef().GetWritingMode())) {
+  if (layout_progress.IsHorizontalWritingMode()) {
     dx *= layout_progress.GetPosition();
   } else {
     dy *= layout_progress.GetPosition();
-    y += rect.height() - dy;
   }
-  return gfx::Rect(rect.x(), y, dx, dy);
+  return gfx::Rect(rect.x(), rect.y(), dx, dy);
 }
 
 gfx::Rect IndeterminateProgressValueRectFor(
@@ -222,7 +216,7 @@ gfx::Rect IndeterminateProgressValueRectFor(
   int value_height = rect.height();
   double progress = layout_progress.AnimationProgress();
 
-  if (IsHorizontalWritingMode(layout_progress.StyleRef().GetWritingMode())) {
+  if (layout_progress.IsHorizontalWritingMode()) {
     value_width = value_width / kProgressActivityBlocks;
     int movable_width = rect.width() - value_width;
     if (movable_width <= 0)
@@ -275,7 +269,8 @@ std::optional<SkColor> GetAccentColor(const ComputedStyle& style,
   if (!document.GetPage()->GetChromeClient().IsIsolatedSVGChromeClient()) {
     mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
     LayoutTheme& layout_theme = LayoutTheme::GetTheme();
-    if (layout_theme.IsAccentColorCustomized(color_scheme)) {
+    if (!document.InForcedColorsMode() &&
+        layout_theme.IsAccentColorCustomized(color_scheme)) {
       return layout_theme.GetSystemAccentColor(color_scheme).Rgb();
     }
   }
@@ -498,7 +493,9 @@ void ThemePainterDefault::SetupMenuListArrow(
     WebThemeEngine::ExtraParams& extra_params) {
   auto& menu_list =
       absl::get<WebThemeEngine::MenuListExtraParams>(extra_params);
-  if (IsHorizontalWritingMode(style.GetWritingMode())) {
+  WritingDirectionMode writing_direction = style.GetWritingDirection();
+  PhysicalDirection block_end = writing_direction.BlockEnd();
+  if (block_end == PhysicalDirection::kDown) {
     menu_list.arrow_direction = WebThemeEngine::ArrowDirection::kDown;
     const int left = rect.x() + floorf(style.BorderLeftWidth());
     const int right =
@@ -513,13 +510,14 @@ void ThemePainterDefault::SetupMenuListArrow(
     // TODO(tkent): This should be 7.0 to match scroll bar buttons.
     float arrow_size = 8.0 * arrow_scale_factor;
     // Put the arrow at the center of paddingForArrow area.
-    // |arrowX| is the left position for Aura theme engine.
-    menu_list.arrow_x = (style.Direction() == TextDirection::kRtl)
-                            ? left + (arrow_box_width - arrow_size) / 2
-                            : right - (arrow_box_width + arrow_size) / 2;
+    // |arrow_x| is the left position for Aura theme engine.
+    menu_list.arrow_x =
+        (writing_direction.InlineEnd() == PhysicalDirection::kLeft)
+            ? left + (arrow_box_width - arrow_size) / 2
+            : right - (arrow_box_width + arrow_size) / 2;
     menu_list.arrow_size = arrow_size;
   } else {
-    if (style.GetWritingMode() == WritingMode::kVerticalLr) {
+    if (block_end == PhysicalDirection::kRight) {
       menu_list.arrow_direction = WebThemeEngine::ArrowDirection::kRight;
     } else {
       menu_list.arrow_direction = WebThemeEngine::ArrowDirection::kLeft;
@@ -536,10 +534,11 @@ void ThemePainterDefault::SetupMenuListArrow(
     // TODO(tkent): This should be 7.0 to match scroll bar buttons.
     float arrow_size = 8.0 * arrow_scale_factor;
     // Put the arrow at the center of paddingForArrow area.
-    // |arrowY| is the bottom position for Aura theme engine.
-    menu_list.arrow_y = (style.Direction() == TextDirection::kRtl)
-                            ? bottom + (arrow_box_height - arrow_size) / 2
-                            : top - (arrow_box_height + arrow_size) / 2;
+    // |arrow_y| is the bottom position for Aura theme engine.
+    menu_list.arrow_y =
+        (writing_direction.InlineEnd() == PhysicalDirection::kUp)
+            ? bottom + (arrow_box_height - arrow_size) / 2
+            : top - (arrow_box_height + arrow_size) / 2;
     menu_list.arrow_size = arrow_size;
   }
 
@@ -575,9 +574,7 @@ bool ThemePainterDefault::PaintSliderTrack(const Element& element,
   // bottom-to-top.
   slider.right_to_left =
       (IsHorizontalWritingMode(writing_mode) && !is_slider_vertical) ||
-              (RuntimeEnabledFeatures::
-                   FormControlsVerticalWritingModeDirectionSupportEnabled() &&
-               is_writing_mode_vertical)
+              is_writing_mode_vertical
           ? !style.IsLeftToRightDirection()
           : true;
   if (writing_mode == WritingMode::kSidewaysLr) {
@@ -630,7 +627,7 @@ bool ThemePainterDefault::PaintSliderThumb(const Element& element,
                                            const PaintInfo& paint_info,
                                            const gfx::Rect& rect) {
   WebThemeEngine::SliderExtraParams slider;
-  slider.vertical = !IsHorizontalWritingMode(style.GetWritingMode()) ||
+  slider.vertical = !style.IsHorizontalWritingMode() ||
                     (RuntimeEnabledFeatures::
                          NonStandardAppearanceValueSliderVerticalEnabled() &&
                      style.EffectiveAppearance() == kSliderThumbVerticalPart);
@@ -691,7 +688,7 @@ bool ThemePainterDefault::PaintInnerSpinButton(const Element& element,
   inner_spin.spin_up = spin_up;
   inner_spin.read_only = read_only;
   inner_spin.spin_arrows_direction =
-      IsHorizontalWritingMode(style.GetWritingMode())
+      style.IsHorizontalWritingMode()
           ? WebThemeEngine::SpinArrowsDirection::kUpDown
           : WebThemeEngine::SpinArrowsDirection::kLeftRight;
 
@@ -726,8 +723,7 @@ bool ThemePainterDefault::PaintProgressBar(const Element& element,
   progress_bar.value_rect_width = value_rect.width();
   progress_bar.value_rect_height = value_rect.height();
   progress_bar.zoom = style.EffectiveZoom();
-  progress_bar.is_horizontal =
-      IsHorizontalWritingMode(layout_progress->StyleRef().GetWritingMode());
+  progress_bar.is_horizontal = layout_progress->IsHorizontalWritingMode();
   WebThemeEngine::ExtraParams extra_params(progress_bar);
   DirectionFlippingScope scope(layout_object, paint_info, rect);
   mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
@@ -786,13 +782,14 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
   // Center the button inline.  Round up though, so if it has to be one
   // pixel off-center, it will be one pixel closer to the bottom of the field.
   // This tends to look better with the text.
+  const bool is_horizontal = cancel_button_object.IsHorizontalWritingMode();
   const LayoutUnit cancel_button_rect_left =
-      IsHorizontalWritingMode(cancel_button_object.StyleRef().GetWritingMode())
+      is_horizontal
           ? cancel_button_object.OffsetFromAncestor(&input_layout_box).left
           : input_content_box.X() +
                 (input_content_box.Width() - cancel_button_size + 1) / 2;
   const LayoutUnit cancel_button_rect_top =
-      IsHorizontalWritingMode(cancel_button_object.StyleRef().GetWritingMode())
+      is_horizontal
           ? input_content_box.Y() +
                 (input_content_box.Height() - cancel_button_size + 1) / 2
           : cancel_button_object.OffsetFromAncestor(&input_layout_box).top;

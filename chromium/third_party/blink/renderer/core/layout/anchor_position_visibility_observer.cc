@@ -16,9 +16,7 @@ namespace blink {
 
 AnchorPositionVisibilityObserver::AnchorPositionVisibilityObserver(
     Element& anchored_element)
-    : anchored_element_(anchored_element) {
-  CHECK(RuntimeEnabledFeatures::CSSPositionVisibilityEnabled());
-}
+    : anchored_element_(anchored_element) {}
 
 void AnchorPositionVisibilityObserver::MonitorAnchor(const Element* anchor) {
   if (anchor_element_) {
@@ -66,7 +64,7 @@ void AnchorPositionVisibilityObserver::UpdateForCssAnchorVisibility() {
   bool invisible = false;
   if (anchor_element_) {
     if (LayoutObject* anchor = anchor_element_->GetLayoutObject()) {
-      invisible = anchor->StyleRef().Visibility() != EVisibility::kVisible;
+      invisible = anchor->StyleRef().UsedVisibility() != EVisibility::kVisible;
     }
   }
   SetLayerInvisible(LayerPositionVisibility::kAnchorsCssVisible, invisible);

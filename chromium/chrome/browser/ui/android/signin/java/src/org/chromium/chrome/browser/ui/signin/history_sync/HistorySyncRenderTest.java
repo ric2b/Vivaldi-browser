@@ -8,7 +8,6 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.hamcrest.Matchers.allOf;
-import static org.mockito.Mockito.when;
 
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 
@@ -35,7 +34,9 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
@@ -104,7 +105,7 @@ public class HistorySyncRenderTest {
     public final RenderTestRule mRenderTestRule =
             RenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(RenderTestRule.Component.SERVICES_SIGN_IN)
-                    .setRevision(2)
+                    .setRevision(3)
                     .setDescription("Update button stacking")
                     .build();
 
@@ -131,7 +132,6 @@ public class HistorySyncRenderTest {
     @Before
     public void setUp() {
         NativeLibraryTestUtils.loadNativeLibraryAndInitBrowserProcess();
-        when(mHistorySyncDelegateMock.isLargeScreen()).thenReturn(false);
         mActivityTestRule.launchActivity(null);
         SyncServiceFactory.setInstanceForTesting(mSyncServiceMock);
     }
@@ -163,6 +163,23 @@ public class HistorySyncRenderTest {
         onViewWaiting(withId(R.id.button_primary));
         mRenderTestRule.render(
                 mHistorySyncCoordinator.getView(), "history_sync_with_minor_mode_enabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @ParameterAnnotations.UseMethodParameter(
+            HistorySyncRenderTest.NightModeAndOrientationParameterProvider.class)
+    @EnableFeatures({ChromeFeatureList.USE_ALTERNATE_HISTORY_SYNC_ILLUSTRATION})
+    public void testHistorySyncViewWithAlternateIllustration(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        mSigninTestRule.addAccountThenSignin(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
+
+        buildHistorySyncCoordinator(orientation);
+
+        onViewWaiting(withId(R.id.button_primary));
+        mRenderTestRule.render(
+                mHistorySyncCoordinator.getView(), "history_sync_alternate_illustration");
     }
 
     private void buildHistorySyncCoordinator(int orientation) {

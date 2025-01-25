@@ -3,7 +3,12 @@
 # found in the LICENSE file.
 
 include_rules = [
-  '+cast',
+  '+cast/common/channel',
+  '+cast/common/public',
+  '+cast/sender/public',
+  '+cast/streaming/public',
+  '+cast/streaming/message_fields.h',
+  '+cast/streaming/rtp_time.h',
   '+discovery',
   '+platform/impl',
 ]

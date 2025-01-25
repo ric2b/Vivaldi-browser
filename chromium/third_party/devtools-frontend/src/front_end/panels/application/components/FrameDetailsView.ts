@@ -403,7 +403,7 @@ export class FrameDetailsReportView extends LegacyWrapper.LegacyWrapper.Wrappabl
         const request = resource.request;
         return renderIconLink('arrow-up-down-circle', i18nString(UIStrings.clickToRevealInNetworkPanel), () => {
           const requestLocation = NetworkForward.UIRequestLocation.UIRequestLocation.tab(
-              request, NetworkForward.UIRequestLocation.UIRequestTabs.HeadersComponent);
+              request, NetworkForward.UIRequestLocation.UIRequestTabs.HEADERS_COMPONENT);
           return Common.Revealer.reveal(requestLocation);
         }, 'reveal-in-network');
       }
@@ -704,8 +704,8 @@ export class FrameDetailsReportView extends LegacyWrapper.LegacyWrapper.Wrappabl
           .variant=${Buttons.Button.Variant.ICON}
           .size=${Buttons.Button.Size.SMALL}
           @click=${()=> {window.location.href = 'https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy-Report-Only';}}
-          jslog=${VisualLogging.link('learn-more.csp-report-only').track({click: true})}>
-        </${Buttons.Button.Button.litTagName}>`
+          jslog=${VisualLogging.link('learn-more.csp-report-only').track({click: true})}
+          ></${Buttons.Button.Button.litTagName}>`
         }
       </${ReportView.ReportView.ReportKey.litTagName}>
       <${ReportView.ReportView.ReportValue.litTagName}>

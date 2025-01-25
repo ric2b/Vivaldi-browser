@@ -267,12 +267,8 @@ OmniboxMatchCellView::~OmniboxMatchCellView() = default;
 
 // static
 bool OmniboxMatchCellView::ShouldDisplayImage(const AutocompleteMatch& match) {
-  if (omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled) {
-    return match.answer_template.has_value() ||
-           match.type == AutocompleteMatchType::CALCULATOR ||
-           !match.image_url.is_empty();
-  }
-  return match.answer || match.type == AutocompleteMatchType::CALCULATOR ||
+  return match.answer_type != omnibox::ANSWER_TYPE_UNSPECIFIED ||
+         match.type == AutocompleteMatchType::CALCULATOR ||
          !match.image_url.is_empty();
 }
 
@@ -308,7 +304,7 @@ void OmniboxMatchCellView::OnMatchUpdate(const OmniboxResultView* result_view,
                                  : icon_view_->GetPreferredSize());
 
   // Used for non-weather answer images (e.g. calc answers).
-  const auto apply_vector_icon = [=](const gfx::VectorIcon& vector_icon) {
+  const auto apply_vector_icon = [=, this](const gfx::VectorIcon& vector_icon) {
     const auto* color_provider = GetColorProvider();
     const auto foreground_color_id =
         OmniboxFieldTrial::kSquareSuggestIconAnswers.Get()
@@ -346,25 +342,13 @@ void OmniboxMatchCellView::OnMatchUpdate(const OmniboxResultView* result_view,
     answer_image_view_->SetSize(gfx::Size());
   } else {
     // Determine if we have a local icon (or else it will be downloaded).
-    if (omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled &&
-        match.answer_template.has_value()) {
-      if (match.answer_type == omnibox::ANSWER_TYPE_WEATHER) {
-        // Weather icons are downloaded. We just need to set the correct size.
-        answer_image_view_->SetImageSize(
-            gfx::Size(GetAnswerImageSize(), GetAnswerImageSize()));
-      } else {
-        apply_vector_icon(
-            AutocompleteMatch::AnswerTypeToAnswerIcon(match.answer_type));
-      }
-    } else if (match.answer) {
-      if (match.answer->type() == omnibox::ANSWER_TYPE_WEATHER) {
-        // Weather icons are downloaded. We just need to set the correct size.
-        answer_image_view_->SetImageSize(
-            gfx::Size(GetAnswerImageSize(), GetAnswerImageSize()));
-      } else {
-        apply_vector_icon(
-            AutocompleteMatch::AnswerTypeToAnswerIcon(match.answer->type()));
-      }
+    if (match.answer_type == omnibox::ANSWER_TYPE_WEATHER) {
+      // Weather icons are downloaded. We just need to set the correct size.
+      answer_image_view_->SetImageSize(
+          gfx::Size(GetAnswerImageSize(), GetAnswerImageSize()));
+    } else if (match.answer_type != omnibox::ANSWER_TYPE_UNSPECIFIED) {
+      apply_vector_icon(
+          AutocompleteMatch::AnswerTypeToAnswerIcon(match.answer_type));
     } else {
       SkColor color = GetColorProvider()->GetColor(
           GetOmniboxBackgroundColorId(result_view->GetThemeState()));
@@ -423,12 +407,7 @@ void OmniboxMatchCellView::SetImage(const gfx::ImageSkia& image,
                                     const AutocompleteMatch& match) {
   // Weather icons are also sourced remotely and therefore fall into this flow.
   // Other answers don't.
-  bool is_weather_answer =
-      omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled
-          ? (match.answer_template.has_value() &&
-             match.answer_type == omnibox::ANSWER_TYPE_WEATHER)
-          : (match.answer &&
-             match.answer->type() == omnibox::ANSWER_TYPE_WEATHER);
+  bool is_weather_answer = match.answer_type == omnibox::ANSWER_TYPE_WEATHER;
 
   int width = image.width();
   int height = image.height();

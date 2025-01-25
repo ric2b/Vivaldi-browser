@@ -10,12 +10,12 @@
 #import "base/ios/ios_util.h"
 #import "base/task/sequenced_task_runner.h"
 #import "base/time/time.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_action_cell.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_styler.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_action_cell.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -24,7 +24,9 @@
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   HeaderSectionIdentifier = kSectionIdentifierEnumZero,
+  NoDataItemsSectionIdentifier,
   ActionsSectionIdentifier,
+  PlusAddressActionsSectionIdentifier,
   // Must be declared last as it is used as the starting point to dynamically
   // create section identifiers for each data item when the
   // kIOSKeyboardAccessoryUpgrade feature is enabled.
@@ -57,6 +59,13 @@ constexpr CGFloat kSectionFooterHeight = 8;
 // Left inset of the table view's section separators.
 constexpr CGFloat kSectionSepatatorLeftInset = 16;
 
+// Represents the different types of items that can be presented.
+enum class ItemType {
+  kItemTypeData = kItemTypeEnumZero,
+  kItemTypeAction,
+  kItemTypePlusAddressAction
+};
+
 }  // namespace
 
 @interface FallbackViewController ()
@@ -68,6 +77,10 @@ constexpr CGFloat kSectionSepatatorLeftInset = 16;
 
 // Action Items to be shown when the loading indicator disappears.
 @property(nonatomic, strong) NSArray<TableViewItem*>* queuedActionItems;
+
+// Plus Address Action Items to be shown when the loading indicator disappears.
+@property(nonatomic, strong)
+    NSArray<TableViewItem*>* queuedPlusAddressActionItems;
 
 @end
 
@@ -111,8 +124,6 @@ constexpr CGFloat kSectionSepatatorLeftInset = 16;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.separatorInset = UIEdgeInsetsMake(0, 0, 0, 0);
   }
-  self.tableView.sectionHeaderHeight = kSectionHeaderHeight;
-  self.tableView.sectionFooterHeight = kSectionFooterHeight;
   self.tableView.estimatedRowHeight = 1;
   self.tableView.allowsSelection = NO;
   self.definesPresentationContext = YES;
@@ -156,37 +167,15 @@ constexpr CGFloat kSectionSepatatorLeftInset = 16;
 }
 
 - (void)presentDataItems:(NSArray<TableViewItem*>*)items {
-  if (![self shouldPresentItems]) {
-    if (self.queuedDataItems) {
-      self.queuedDataItems = items;
-      return;
-    }
-    self.queuedDataItems = items;
-    __weak __typeof(self) weakSelf = self;
-    [self presentItemsAfterMinimumLoadingTime:^{
-      [weakSelf presentQueuedDataItems];
-    }];
-    return;
-  }
-  self.queuedDataItems = items;
-  [self presentQueuedDataItems];
+  [self presentItems:items ofItemType:ItemType::kItemTypeData];
 }
 
 - (void)presentActionItems:(NSArray<TableViewItem*>*)actions {
-  if (![self shouldPresentItems]) {
-    if (self.queuedActionItems) {
-      self.queuedActionItems = actions;
-      return;
-    }
-    self.queuedActionItems = actions;
-    __weak __typeof(self) weakSelf = self;
-    [self presentItemsAfterMinimumLoadingTime:^{
-      [weakSelf presentQueuedActionItems];
-    }];
-    return;
-  }
-  self.queuedActionItems = actions;
-  [self presentQueuedActionItems];
+  [self presentItems:actions ofItemType:ItemType::kItemTypeAction];
+}
+
+- (void)presentPlusAddressActionItems:(NSArray<TableViewItem*>*)actions {
+  [self presentItems:actions ofItemType:ItemType::kItemTypePlusAddressAction];
 }
 
 #pragma mark - UITableViewDelegate
@@ -197,6 +186,23 @@ constexpr CGFloat kSectionSepatatorLeftInset = 16;
     return UITableViewAutomaticDimension;
   }
   return kSectionHeaderHeight;
+}
+
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForFooterInSection:(NSInteger)section {
+  if (self.noRegularDataItemsToShowHeaderItem &&
+      [self.tableViewModel
+          hasSectionForSectionIdentifier:NoDataItemsSectionIdentifier] &&
+      section ==
+          [self.tableViewModel
+              sectionForSectionIdentifier:NoDataItemsSectionIdentifier]) {
+    return 0;
+  }
+
+  if ([self.tableViewModel footerForSectionIndex:section]) {
+    return UITableViewAutomaticDimension;
+  }
+  return kSectionFooterHeight;
 }
 
 - (UIView*)tableView:(UITableView*)tableView
@@ -219,6 +225,59 @@ constexpr CGFloat kSectionSepatatorLeftInset = 16;
 }
 
 #pragma mark - Private
+
+// Presents an array of TableViewItems, handling queuing and delayed
+// presentation if necessary.
+- (void)presentItems:(NSArray<TableViewItem*>*)items
+          ofItemType:(ItemType)itemType {
+  BOOL hasQueuedItems = NO;
+
+  // Queue the items based on their type.
+  switch (itemType) {
+    case ItemType::kItemTypeData:
+      hasQueuedItems = (self.queuedDataItems != nil);
+      self.queuedDataItems = items;
+      break;
+    case ItemType::kItemTypeAction:
+      hasQueuedItems = (self.queuedActionItems != nil);
+      self.queuedActionItems = items;
+      break;
+    case ItemType::kItemTypePlusAddressAction:
+      hasQueuedItems = (self.queuedPlusAddressActionItems != nil);
+      self.queuedPlusAddressActionItems = items;
+      break;
+  }
+
+  if (![self shouldPresentItems]) {
+    if (hasQueuedItems) {
+      return;
+    }
+
+    // Delay presentation until after minimum loading time.
+    __weak __typeof(self) weakSelf = self;
+    [self presentItemsAfterMinimumLoadingTime:^{
+      [weakSelf presentQueuedItemsOfType:itemType];
+    }];
+    return;
+  }
+
+  [self presentQueuedItemsOfType:itemType];
+}
+
+// Presents the queued items based on their type.
+- (void)presentQueuedItemsOfType:(ItemType)itemType {
+  switch (itemType) {
+    case ItemType::kItemTypeData:
+      [self presentQueuedDataItems];
+      break;
+    case ItemType::kItemTypeAction:
+      [self presentQueuedActionItems];
+      break;
+    case ItemType::kItemTypePlusAddressAction:
+      [self presentQueuedPlusAddressActionItems];
+      break;
+  }
+}
 
 // Calls `presentationBlock` to update the items in `tableView` after
 // `kMinimumLoadingTime` has passed.
@@ -294,27 +353,35 @@ constexpr CGFloat kSectionSepatatorLeftInset = 16;
 
 // Presents the action items currently in queue.
 - (void)presentQueuedActionItems {
-  DCHECK(self.queuedActionItems);
+  [self presentActionItems:self.queuedActionItems
+                 inSection:ActionsSectionIdentifier];
+  self.queuedActionItems = nil;
+}
+
+// Presents plus address action items currently in the queue.
+- (void)presentQueuedPlusAddressActionItems {
+  [self presentActionItems:self.queuedPlusAddressActionItems
+                 inSection:PlusAddressActionsSectionIdentifier];
+  self.queuedPlusAddressActionItems = nil;
+}
+
+// Presents action items `items` in the `section`.
+- (void)presentActionItems:(NSArray<TableViewItem*>*)items
+                 inSection:(SectionIdentifier)section {
+  CHECK(items);
 
   [self createModelIfNeeded];
 
-  BOOL sectionExists = [self.tableViewModel
-      hasSectionForSectionIdentifier:ActionsSectionIdentifier];
-  BOOL sectionHasHeader =
-      sectionExists &&
-      [self.tableViewModel
-          headerForSectionWithIdentifier:ActionsSectionIdentifier];
-  // If there are no passed items, remove section if it exists and it doesn't
-  // have a header.
-  if (!self.queuedActionItems.count && sectionExists && !sectionHasHeader) {
-    [self.tableViewModel removeSectionWithIdentifier:ActionsSectionIdentifier];
-  } else if (self.queuedActionItems.count && !sectionExists) {
-    [self.tableViewModel addSectionWithIdentifier:ActionsSectionIdentifier];
+  BOOL sectionExists =
+      [self.tableViewModel hasSectionForSectionIdentifier:section];
+  // If there are no passed items, remove section if it exists.
+  if (!items.count && sectionExists) {
+    [self.tableViewModel removeSectionWithIdentifier:section];
+  } else if (items.count && !sectionExists) {
+    [self.tableViewModel addSectionWithIdentifier:section];
   }
 
-  [self presentFallbackItems:self.queuedActionItems
-                   inSection:ActionsSectionIdentifier];
-  self.queuedActionItems = nil;
+  [self presentFallbackItems:items inSection:section];
 }
 
 // Returns the time elapsed in seconds since the loading indicator started. This
@@ -394,51 +461,35 @@ constexpr CGFloat kSectionSepatatorLeftInset = 16;
   }
 }
 
-// Adds or removes the `noDataItemsToShowHeaderItem` if needed. This header item
-// is displayed to let the user know that there are no data items to show. Given
-// the table view style, `noDataItemsToShowHeaderItem` needs to be set as the
-// actions section's header in order to achieve the desired spacing between this
-// item and the action items.
+// Adds or removes the `noRegularDataItemsToShowHeaderItem` if needed. This
+// header item is displayed to let the user know that there are no data items
+// amongst passwords, cards and addresses to show. However, plus address can
+// still be shown.
 - (void)updateEmptyStateMessage {
   if (!IsKeyboardAccessoryUpgradeEnabled()) {
     return;
   }
 
-  BOOL needsEmptyStateHeader =
-      !self.queuedDataItems.count && self.noDataItemsToShowHeaderItem;
-  BOOL hasActionsSection = [self.tableViewModel
-      hasSectionForSectionIdentifier:ActionsSectionIdentifier];
+  BOOL needsEmptyStateHeader = self.noRegularDataItemsToShowHeaderItem;
+  BOOL hasEmptyStateSection = [self.tableViewModel
+      hasSectionForSectionIdentifier:NoDataItemsSectionIdentifier];
   BOOL hasEmptyStateHeader =
-      hasActionsSection &&
+      hasEmptyStateSection &&
       [self.tableViewModel
-          headerForSectionWithIdentifier:ActionsSectionIdentifier];
+          headerForSectionWithIdentifier:NoDataItemsSectionIdentifier];
 
   if (needsEmptyStateHeader == hasEmptyStateHeader) {
     return;
   }
 
   if (needsEmptyStateHeader) {
-    // The header needs to be added to the model: Add the actions section if it
-    // doesn't already exist. Then, set `noDataItemsToShowHeaderItem` as the
-    // actions section's header.
-    if (!hasActionsSection) {
-      [self.tableViewModel addSectionWithIdentifier:ActionsSectionIdentifier];
-    }
-    [self.tableViewModel setHeader:self.noDataItemsToShowHeaderItem
-          forSectionWithIdentifier:ActionsSectionIdentifier];
+    [self.tableViewModel addSectionWithIdentifier:NoDataItemsSectionIdentifier];
+    [self.tableViewModel setHeader:self.noRegularDataItemsToShowHeaderItem
+          forSectionWithIdentifier:NoDataItemsSectionIdentifier];
   } else {
-    // The header needs to be removed from the model: If the actions section
-    // contains items, set its header to `nil`. Otherwise, remove the whole
-    // section.
-    if ([self.tableViewModel
-            itemsInSectionWithIdentifier:ActionsSectionIdentifier]) {
-      [self.tableViewModel setHeader:nil
-            forSectionWithIdentifier:ActionsSectionIdentifier];
-    } else {
-      [self.tableViewModel
-          removeSectionWithIdentifier:ActionsSectionIdentifier];
-    }
-    self.noDataItemsToShowHeaderItem = nil;
+    [self.tableViewModel
+        removeSectionWithIdentifier:NoDataItemsSectionIdentifier];
+    self.noRegularDataItemsToShowHeaderItem = nil;
   }
 }
 

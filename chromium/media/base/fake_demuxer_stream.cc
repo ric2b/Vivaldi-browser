@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/base/fake_demuxer_stream.h"
 
 #include <stdint.h>
@@ -95,7 +100,7 @@ void FakeDemuxerStream::Read(uint32_t /*count*/, ReadCB read_cb) {
 }
 
 AudioDecoderConfig FakeDemuxerStream::audio_decoder_config() {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 VideoDecoderConfig FakeDemuxerStream::video_decoder_config() {

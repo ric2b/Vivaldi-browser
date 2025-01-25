@@ -181,12 +181,12 @@ found in the LICENSE file.
             <paper-radio-group id="comparison_mode" selected="{{comparisonMode}}">
               <paper-radio-button class="radio" name="try" disabled="[[hasJob(job)]]">Try Job</paper-radio-button>
               <paper-radio-button class="radio" name="performance" disabled="[[hasJob(job)]]">Bisect</paper-radio-button>
-              <paper-input hidden="[[isBisectJob(comparisonMode)]]"
+              <paper-input
                      id="initial_attempt_count"
                      name="initial_attempt_count"
                      placeholder="[[defaultAttemptCount(job, configuration, benchmark)]]"
                      value="{{initial_attempt_count}}"></paper-input>
-              <label hidden="[[isBisectJob(comparisonMode)]]"
+              <label
                      id="initial_attempt_count_label"
                      for="initial_attempt_count">Attempt Count: <attempt-count-help></attempt-count-help></label>
             </paper-radio-group>
@@ -749,7 +749,7 @@ found in the LICENSE file.
             return 64;
           } else if (benchmark.toLowerCase() == 'speedometer2' ||
               benchmark.toLowerCase() == 'speedometer3') {
-            return 128;
+            return 150;
           // MotionMark
           } else if (benchmark.toLowerCase().startsWith('rendering.desktop')) {
             return 96;
@@ -902,13 +902,7 @@ found in the LICENSE file.
         if (benchmark.startsWith('xr')) {
           return 'vr_perf_tests';
         }
-        if (configuration === 'android-pixel2-perf-calibration') {
-          return 'performance_test_suite_android_clank_monochrome_64_32_bundle';
-        } else if (configuration === 'android-pixel2-perf-fyi') {
-          return 'performance_test_suite_android_clank_monochrome';
-        } else if (configuration === 'android-pixel2-perf-aab-fyi') {
-          return 'performance_test_suite_android_clank_monochrome_bundle';
-        } else if (configuration === 'android-go-perf') {
+        if (configuration === 'android-go-perf') {
           return 'performance_test_suite_android_clank_monochrome';
         } else if (configuration === 'android-go-perf-pgo') {
           return 'performance_test_suite_android_clank_monochrome';
@@ -916,10 +910,6 @@ found in the LICENSE file.
           return 'performance_test_suite_android_clank_trichrome_bundle';
         } else if (configuration === 'Android Nexus5 Perf') {
           return 'performance_test_suite_android_chrome';
-        } else if (configuration === 'android-pixel2-perf') {
-          return 'performance_test_suite_android_clank_monochrome_64_32_bundle';
-        } else if (configuration === 'android-pixel2-perf-pgo') {
-          return 'performance_test_suite_android_clank_monochrome_64_32_bundle';
         } else if (configuration === 'android-pixel4-perf') {
           return 'performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle';
         } else if (configuration === 'android-pixel4-perf-pgo') {

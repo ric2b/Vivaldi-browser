@@ -16,11 +16,11 @@ source_set("model") {
     "//components/sync_sessions",
     "//components/tab_groups",
     "//ios/chrome/browser/history/model:utils",
+    "//ios/chrome/browser/history/ui_bundled:history_driver",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/synced_sessions/model",
     "//ios/chrome/browser/tabs/model",
-    "//ios/chrome/browser/ui/history:history_driver",
     "//ios/web/public",
   ]
 }
@@ -40,6 +40,7 @@ source_set("model_factory") {
     "//ios/chrome/browser/sessions/model",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/signin/model",
     "//ios/chrome/browser/sync/model",
   ]
@@ -56,7 +57,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/sessions/model",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser/test:test_support",
-    "//ios/chrome/browser/shared/model/browser_state:test_support",
+    "//ios/chrome/browser/shared/model/profile/test",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/tabs/model",
     "//ios/chrome/test:test_support",

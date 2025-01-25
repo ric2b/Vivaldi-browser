@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Namesti samostojno</translation>
 <translation id="1682285232070778125">Nastavi Vivaldi kot privzeti brskalnik</translation>
 <translation id="1974060860693918893">Napredno</translation>
+<translation id="2053560788696003312">Vivaldi zahteva Windows 10 ali novejši.</translation>
 <translation id="2134216661302048561">Vivaldi Installer ni končal z namestitvijo brskalnika Vivaldi. Ali ste prepričani, da jo želite zdaj zapustiti?</translation>
 <translation id="2286454467119466181">Preprosto</translation>
 <translation id="237789874664518125">Avtorske pravice<ph name="YEAR" /> Vivaldi Technologies AS. Vse pravice pridržane. &lt;a&gt;Politika zasebnosti&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Sprejmi in posodobi</translation>
 <translation id="5302048478445481009">Jezik</translation>
 <translation id="694714344624446243">Vivaldijev namestitveni program</translation>
+<translation id="7467493612551448880">Različica Vivaldija, ki jo nameščate, ni optimizirana za različico sistema Windows, ki jo uporabljate.
+
+Obiščite vivaldi.com/download za prenos različice Windows on Arm.</translation>
 <translation id="7658239707568436148">Prekliči</translation>
 <translation id="8773751185824654197">Opomba: Če posodobite delujoči brskalnik Vivaldi, se ta primerek zapre in znova zažene</translation>
 <translation id="933060950687965486">Vrsta namestitve</translation>

@@ -5,7 +5,8 @@
 #include "content/public/browser/ax_inspect_factory.h"
 
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
-#include "content/browser/accessibility/browser_accessibility_manager.h"
+#include "ui/accessibility/ax_tree_manager.h"
+#include "ui/accessibility/platform/ax_platform_tree_manager.h"
 #include "ui/accessibility/platform/inspect/ax_event_recorder_mac.h"
 #include "ui/accessibility/platform/inspect/ax_tree_formatter_mac.h"
 
@@ -43,7 +44,7 @@ std::unique_ptr<ui::AXTreeFormatter> AXInspectFactory::CreateFormatter(
 // static
 std::unique_ptr<ui::AXEventRecorder> AXInspectFactory::CreateRecorder(
     ui::AXApiType::Type type,
-    ui::AXPlatformTreeManager*,
+    ui::AXPlatformTreeManager* manager,
     base::ProcessId pid,
     const ui::AXTreeSelector& selector) {
   // Developer mode: crash immediately on any accessibility fatal error.
@@ -53,7 +54,8 @@ std::unique_ptr<ui::AXEventRecorder> AXInspectFactory::CreateRecorder(
 
   switch (type) {
     case ui::AXApiType::kMac:
-      return std::make_unique<ui::AXEventRecorderMac>(pid, selector);
+      return std::make_unique<ui::AXEventRecorderMac>(manager->GetWeakPtr(),
+                                                      pid, selector);
     default:
       NOTREACHED_IN_MIGRATION() << "Unsupported API type " << type;
   }

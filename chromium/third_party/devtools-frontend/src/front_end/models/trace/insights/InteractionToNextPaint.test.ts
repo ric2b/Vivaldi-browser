@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as TraceModel from '../trace.js';
 
@@ -14,7 +15,7 @@ export async function processTrace(testContext: Mocha.Suite|Mocha.Context|null, 
   return {data: traceData, insights};
 }
 
-describe('InteractionToNextPaint', function() {
+describeWithEnvironment('InteractionToNextPaint', function() {
   const test = (traceFile: string, longest?: number, highPercentile?: number) => {
     if (highPercentile === undefined) {
       highPercentile = longest;
@@ -27,9 +28,11 @@ describe('InteractionToNextPaint', function() {
       // doesn't account for analyzing stuff outside a navigation bound. So instead of this ...
       //      const insight = getInsight(insights, data.Meta.navigationsByNavigationId.keys().next().value);
       // we manually run the insight.
+      const [navigationId, navigation] = data.Meta.navigationsByNavigationId.entries().next().value ?? [];
       const insight = TraceModel.Insights.InsightRunners.InteractionToNextPaint.generateInsight(data, {
         frameId: data.Meta.mainFrameId,
-        navigationId: data.Meta.navigationsByNavigationId.keys().next().value,
+        navigation,
+        navigationId,
       });
       assert.strictEqual(insight.longestInteractionEvent?.dur, longest);
       assert.strictEqual(insight.highPercentileInteractionEvent?.dur, highPercentile);

@@ -80,11 +80,30 @@ enum intf_A_foo {
 	 * @since 2
 	 */
 	INTF_A_FOO_THIRD = 2,
+	/**
+	 * this is a negative value
+	 * @since 2
+	 */
+	INTF_A_FOO_NEGATIVE = -1,
+	/**
+	 * this is a deprecated value
+	 * @since 2
+	 * @deprecated Deprecated since version 3
+	 */
+	INTF_A_FOO_DEPRECATED = 3,
 };
 /**
  * @ingroup iface_intf_A
  */
 #define INTF_A_FOO_THIRD_SINCE_VERSION 2
+/**
+ * @ingroup iface_intf_A
+ */
+#define INTF_A_FOO_NEGATIVE_SINCE_VERSION 2
+/**
+ * @ingroup iface_intf_A
+ */
+#define INTF_A_FOO_DEPRECATED_SINCE_VERSION 2
 #endif /* INTF_A_FOO_ENUM */
 
 /**
@@ -96,6 +115,12 @@ struct intf_A_listener {
 	 */
 	void (*hey)(void *data,
 		    struct intf_A *intf_A);
+	/**
+	 * @since 2
+	 * @deprecated Deprecated since version 3
+	 */
+	void (*yo)(void *data,
+		   struct intf_A *intf_A);
 };
 
 /**
@@ -117,6 +142,10 @@ intf_A_add_listener(struct intf_A *intf_A,
  * @ingroup iface_intf_A
  */
 #define INTF_A_HEY_SINCE_VERSION 1
+/**
+ * @ingroup iface_intf_A
+ */
+#define INTF_A_YO_SINCE_VERSION 2
 
 /**
  * @ingroup iface_intf_A

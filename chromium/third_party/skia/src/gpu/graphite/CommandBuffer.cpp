@@ -11,8 +11,11 @@
 #include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/ComputePipeline.h"
+#include "src/gpu/graphite/DrawPass.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
+#include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/Sampler.h"
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/TextureProxy.h"
@@ -76,12 +79,51 @@ bool CommandBuffer::addRenderPass(const RenderPassDesc& renderPassDesc,
                                   sk_sp<Texture> colorTexture,
                                   sk_sp<Texture> resolveTexture,
                                   sk_sp<Texture> depthStencilTexture,
-                                  SkRect viewport,
+                                  const Texture* dstCopy,
+                                  SkIRect dstCopyBounds,
+                                  SkIRect viewport,
                                   const DrawPassList& drawPasses) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
-    fRenderPassSize = colorTexture->dimensions();
+    fColorAttachmentSize = colorTexture->dimensions();
+    SkIRect colorAttachmentBounds = SkIRect::MakeSize(fColorAttachmentSize);
+
+    SkIRect renderPassBounds;
+    for (const auto& drawPass : drawPasses) {
+        renderPassBounds.join(drawPass->bounds());
+    }
+    if (renderPassDesc.fColorAttachment.fLoadOp == LoadOp::kClear) {
+        renderPassBounds.join(colorAttachmentBounds);
+    }
+    renderPassBounds.offset(fReplayTranslation.x(), fReplayTranslation.y());
+    if (!renderPassBounds.intersect(colorAttachmentBounds)) {
+        // The entire RenderPass is offscreen given the replay translation so skip adding the pass
+        // at all
+        return true;
+    }
+
+    viewport.offset(fReplayTranslation.x(), fReplayTranslation.y());
+
+    dstCopyBounds.offset(fReplayTranslation.x(), fReplayTranslation.y());
+    if (!dstCopyBounds.intersect(colorAttachmentBounds)) {
+        // The draws within the RenderPass that would sample from the dstCopy have been translated
+        // off screen. Set the bounds to empty and let the GPU clipping do its job.
+        dstCopyBounds = SkIRect::MakeEmpty();
+    }
+    // Save the dstCopy texture so that it can be embedded into texture bind commands later on.
+    fDstCopy.first = dstCopy;
+    fDstCopyOffset = dstCopyBounds.topLeft();
+    if (dstCopy && !fDstCopy.second) {
+        // Only lookup the sampler the first time we require a dstCopy. The texture can change
+        // on subsequent passes but it will always use the same nearest neighbor sampling.
+        sk_sp<Sampler> nearestNeighbor = this->resourceProvider()->findOrCreateCompatibleSampler(
+                {SkFilterMode::kNearest, SkTileMode::kClamp});
+        fDstCopy.second = nearestNeighbor.get();
+        this->trackResource(std::move(nearestNeighbor));
+    }
+
     if (!this->onAddRenderPass(renderPassDesc,
+                               renderPassBounds,
                                colorTexture.get(),
                                resolveTexture.get(),
                                depthStencilTexture.get(),

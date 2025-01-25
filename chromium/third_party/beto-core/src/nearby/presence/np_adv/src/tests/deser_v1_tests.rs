@@ -256,7 +256,7 @@ fn fill_with_encrypted_sections<'a, R: rand::Rng, C: CryptoProvider>(
     adv_builder: &mut AdvBuilder,
 ) -> Vec<SectionConfig<'a>> {
     let mut expected = Vec::new();
-    for _ in 0..rng.gen_range(1..=NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT) {
+    for _ in 0..rng.gen_range(1..=NP_V1_ADV_MAX_SECTION_COUNT) {
         let identity = identities.pick_random_identity(&mut rng);
         let mode: VerificationMode = random();
         let res = match mode {

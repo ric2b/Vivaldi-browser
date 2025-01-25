@@ -284,7 +284,11 @@ FixedLengthCodeInput::FixedLengthCodeInput(int length,
     layout->SetFlexForView(field, 1);
   }
   text_value_for_a11y_ = std::u16string(length, ' ');
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kTextField);
   GetViewAccessibility().SetIsProtected(is_obscure_pin_);
+  GetViewAccessibility().SetValue(text_value_for_a11y_);
+  OnTextSelectionChanged();
 }
 
 FixedLengthCodeInput::~FixedLengthCodeInput() = default;
@@ -365,6 +369,7 @@ views::View* FixedLengthCodeInput::GetSelectedViewForGroup(int group) {
 
 void FixedLengthCodeInput::RequestFocus() {
   ActiveField()->RequestFocus();
+  OnTextSelectionChanged();
 }
 
 void FixedLengthCodeInput::ResetTextValueForA11y() {
@@ -379,6 +384,8 @@ void FixedLengthCodeInput::ResetTextValueForA11y() {
   }
 
   text_value_for_a11y_ = result;
+  GetViewAccessibility().SetValue(text_value_for_a11y_);
+  OnTextSelectionChanged();
 }
 
 gfx::Range FixedLengthCodeInput::GetSelectedRangeOfTextValueForA11y() {
@@ -388,21 +395,20 @@ gfx::Range FixedLengthCodeInput::GetSelectedRangeOfTextValueForA11y() {
   return gfx::Range(text_sel_start, text_sel_end);
 }
 
+void FixedLengthCodeInput::OnTextSelectionChanged() {
+  const gfx::Range& range = GetSelectedRangeOfTextValueForA11y();
+  GetViewAccessibility().SetTextSelStart(range.start());
+  GetViewAccessibility().SetTextSelEnd(range.end());
+}
+
 void FixedLengthCodeInput::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kTextField;
   node_data->AddState(ax::mojom::State::kEditable);
 
-  node_data->SetValue(text_value_for_a11y_);
   node_data->html_attributes.push_back(std::make_pair("type", "tel"));
   node_data->AddStringAttribute(
       ax::mojom::StringAttribute::kName,
       l10n_util::GetStringUTF8(
           IDS_ASH_LOGIN_PARENT_ACCESS_GENERIC_DESCRIPTION));
-  const gfx::Range& range = GetSelectedRangeOfTextValueForA11y();
-  node_data->AddIntAttribute(ax::mojom::IntAttribute::kTextSelStart,
-                             range.start());
-
-  node_data->AddIntAttribute(ax::mojom::IntAttribute::kTextSelEnd, range.end());
 }
 
 bool FixedLengthCodeInput::HandleKeyEvent(views::Textfield* sender,
@@ -564,7 +570,8 @@ void FixedLengthCodeInput::ClearInput() {
   }
   active_input_index_ = 0;
   text_value_for_a11y_.clear();
-  ActiveField()->RequestFocus();
+  GetViewAccessibility().RemoveValue();
+  RequestFocus();
 }
 
 bool FixedLengthCodeInput::IsEmpty() const {
@@ -586,7 +593,7 @@ void FixedLengthCodeInput::FocusPreviousField() {
   }
 
   --active_input_index_;
-  ActiveField()->RequestFocus();
+  RequestFocus();
 }
 
 void FixedLengthCodeInput::FocusNextField() {
@@ -595,7 +602,7 @@ void FixedLengthCodeInput::FocusNextField() {
   }
 
   ++active_input_index_;
-  ActiveField()->RequestFocus();
+  RequestFocus();
 }
 
 bool FixedLengthCodeInput::IsLastFieldActive() const {

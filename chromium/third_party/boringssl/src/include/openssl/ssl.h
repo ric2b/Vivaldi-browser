@@ -478,7 +478,7 @@ OPENSSL_EXPORT int SSL_get_error(const SSL *ssl, int ret_code);
 #define SSL_ERROR_NONE 0
 
 // SSL_ERROR_SSL indicates the operation failed within the library. The caller
-// may inspect the error queue for more information.
+// may inspect the error queue (see |ERR_get_error|) for more information.
 #define SSL_ERROR_SSL 1
 
 // SSL_ERROR_WANT_READ indicates the operation failed attempting to read from
@@ -651,6 +651,17 @@ OPENSSL_EXPORT int DTLSv1_handle_timeout(SSL *ssl);
 
 #define DTLS1_VERSION 0xfeff
 #define DTLS1_2_VERSION 0xfefd
+// DTLS1_3_EXPERIMENTAL_VERSION gates experimental, in-progress code for DTLS
+// 1.3.
+//
+// WARNING: Do not use this value. BoringSSL's DTLS 1.3 implementation is still
+// under development. The code enabled by this value is neither stable nor
+// secure. It does not correspond to any real protocol. It is also incompatible
+// with other DTLS implementations, and it is not compatible with future or past
+// versions of BoringSSL.
+//
+// When the DTLS 1.3 implementation is complete, this symbol will be replaced.
+#define DTLS1_3_EXPERIMENTAL_VERSION 0xfc25
 
 // SSL_CTX_set_min_proto_version sets the minimum protocol version for |ctx| to
 // |version|. If |version| is zero, the default minimum version is used. It
@@ -2537,6 +2548,7 @@ OPENSSL_EXPORT size_t SSL_CTX_get_num_tickets(const SSL_CTX *ctx);
 #define SSL_GROUP_SECP384R1 24
 #define SSL_GROUP_SECP521R1 25
 #define SSL_GROUP_X25519 29
+#define SSL_GROUP_X25519_MLKEM768 0x11ec
 #define SSL_GROUP_X25519_KYBER768_DRAFT00 0x6399
 
 // SSL_CTX_set1_group_ids sets the preferred groups for |ctx| to |group_ids|.
@@ -3635,13 +3647,13 @@ OPENSSL_EXPORT int SSL_CREDENTIAL_set1_delegated_credential(
 // holds for any application protocol state remembered for 0-RTT, e.g. HTTP/3
 // SETTINGS.
 
-// ssl_encryption_level_t represents a specific QUIC encryption level used to
-// transmit handshake messages.
+// ssl_encryption_level_t represents an encryption level in TLS 1.3. Values in
+// this enum match the first 4 epochs used in DTLS 1.3 (section 6.1).
 enum ssl_encryption_level_t BORINGSSL_ENUM_INT {
   ssl_encryption_initial = 0,
-  ssl_encryption_early_data,
-  ssl_encryption_handshake,
-  ssl_encryption_application,
+  ssl_encryption_early_data = 1,
+  ssl_encryption_handshake = 2,
+  ssl_encryption_application = 3,
 };
 
 // ssl_quic_method_st (aka |SSL_QUIC_METHOD|) describes custom QUIC hooks.
@@ -4617,6 +4629,16 @@ enum ssl_select_cert_result_t BORINGSSL_ENUM_INT {
   // ssl_select_cert_error indicates that a fatal error occured and the
   // handshake should be terminated.
   ssl_select_cert_error = -1,
+  // ssl_select_cert_disable_ech indicates that, although an encrypted
+  // ClientHelloInner was decrypted, it should be discarded. The certificate
+  // selection callback will then be called again, passing in the
+  // ClientHelloOuter instead. From there, the handshake will proceed
+  // without retry_configs, to signal to the client to disable ECH.
+  //
+  // This value may only be returned when |SSL_ech_accepted| returnes one. It
+  // may be useful if the ClientHelloInner indicated a service which does not
+  // support ECH, e.g. if it is a TLS-1.2 only service.
+  ssl_select_cert_disable_ech = -2,
 };
 
 // SSL_early_callback_ctx_extension_get searches the extensions in
@@ -5616,6 +5638,14 @@ enum ssl_compliance_policy_t BORINGSSL_ENUM_INT {
   // implementation risks of using a more obscure primitive like P-384
   // dominate other considerations.
   ssl_compliance_policy_wpa3_192_202304,
+
+  // ssl_compliance_policy_cnsa_202407 confingures a TLS connection to use:
+  //   * For TLS 1.3, AES-256-GCM over AES-128-GCM over ChaCha20-Poly1305.
+  //
+  // I.e. it ensures that AES-GCM will be used whenever the client supports it.
+  // The cipher suite configuration mini-language can be used to similarly
+  // configure prior TLS versions if they are enabled.
+  ssl_compliance_policy_cnsa_202407,
 };
 
 // SSL_CTX_set_compliance_policy configures various aspects of |ctx| based on

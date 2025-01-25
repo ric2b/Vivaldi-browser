@@ -8,6 +8,7 @@
 #include "base/strings/strcat.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/new_tab_page/modules/modules_switches.h"
+#include "chrome/browser/new_tab_page/modules/test_support.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chrome/test/interaction/webcontents_interaction_test_util.h"
@@ -15,6 +16,7 @@
 #include "content/public/test/browser_test.h"
 
 namespace {
+
 DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kNewTabPageElementId);
 DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementReadyEvent);
 DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementChildrenReadyEvent);
@@ -33,6 +35,7 @@ struct ModuleLink {
 };
 
 struct ModuleDetails {
+  const base::test::FeatureRef module_feature;
   const std::vector<base::test::FeatureRefAndParams> features;
   const DeepQuery module_query;
   const DeepQuery more_button_query;
@@ -43,6 +46,7 @@ struct ModuleDetails {
 };
 
 ModuleDetails kMostRelevantTabResumptionModuleDetails = {
+    ntp_features::kNtpMostRelevantTabResumptionModule,
     {{ntp_features::kNtpMostRelevantTabResumptionModule,
       {{ntp_features::kNtpMostRelevantTabResumptionModuleDataParam,
         "Fake Data"}}},
@@ -59,11 +63,12 @@ ModuleDetails kMostRelevantTabResumptionModuleDetails = {
     {"ntp-app", "ntp-modules-v2", "ntp-module-wrapper",
      "ntp-most-relevant-tab-resumption", "ntp-module-header-v2", "#disable"},
     {{{"ntp-app", "ntp-modules-v2", "ntp-module-wrapper",
-       "ntp-most-relevant-tab-resumption", "#tabs", "a"},
+       "ntp-most-relevant-tab-resumption", "#urlVisits", "a"},
       kGooglePageUrl}},
 };
 
 ModuleDetails kGoogleCalendarModuleDetails = {
+    ntp_features::kNtpCalendarModule,
     {{ntp_features::kNtpCalendarModule,
       {{ntp_features::kNtpCalendarModuleDataParam, "fake"}}},
      {ntp_features::kNtpModulesRedesigned, {}}},
@@ -216,7 +221,10 @@ class NewTabPageModulesInteractiveUiTest
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kSignedOutNtpModulesSwitch);
 
-    features.InitWithFeaturesAndParameters(ModuleDetails().features, {});
+    features.InitWithFeaturesAndParameters(
+        ModuleDetails().features,
+        /*disabled_features=*/ntp::ComputeDisabledFeaturesList(
+            ntp::kAllModuleFeatures, {ModuleDetails().module_feature}));
     InteractiveBrowserTest::SetUp();
   }
 
@@ -228,15 +236,8 @@ INSTANTIATE_TEST_SUITE_P(All,
                          ::testing::ValuesIn(kAllModules));
 
 // TODO(crbug.com/335214502): Re-enable this test.
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_MAC)
-#define MAYBE_ClickingHideButtonDismissesModule \
-  DISABLED_ClickingHideButtonDismissesModule
-#else
-#define MAYBE_ClickingHideButtonDismissesModule \
-  ClickingHideButtonDismissesModule
-#endif
 IN_PROC_BROWSER_TEST_P(NewTabPageModulesInteractiveUiTest,
-                       MAYBE_ClickingHideButtonDismissesModule) {
+                       DISABLED_ClickingHideButtonDismissesModule) {
   RunTestSequence(
       // 1. Wait for new tab page to load.
       LoadNewTabPage(),

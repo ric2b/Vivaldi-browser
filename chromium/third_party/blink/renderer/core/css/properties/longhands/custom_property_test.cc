@@ -48,12 +48,8 @@ class CustomPropertyTest : public PageTestBase {
   const CSSValue* ParseValue(const CustomProperty& property,
                              const String& value,
                              const CSSParserLocalContext& local_context) {
-    CSSTokenizer tokenizer(value);
-    const auto tokens = tokenizer.TokenizeToEOF();
-    CSSParserTokenRange range(tokens);
     auto* context = MakeGarbageCollected<CSSParserContext>(GetDocument());
-    return property.Parse(CSSTokenizedValue{range, value}, *context,
-                          local_context);
+    return property.Parse(value, *context, local_context);
   }
 };
 
@@ -247,8 +243,6 @@ TEST_F(CustomPropertyTest, HasInitialValue) {
 }
 
 TEST_F(CustomPropertyTest, ParseAnchorQueriesAsLength) {
-  ScopedCSSAnchorPositioningForTest enabled_scope(true);
-
   RegisterProperty(GetDocument(), "--x", "<length>", "0px", false);
   CustomProperty property(AtomicString("--x"), GetDocument());
 
@@ -261,8 +255,6 @@ TEST_F(CustomPropertyTest, ParseAnchorQueriesAsLength) {
 }
 
 TEST_F(CustomPropertyTest, ParseAnchorQueriesAsLengthPercentage) {
-  ScopedCSSAnchorPositioningForTest enabled_scope(true);
-
   RegisterProperty(GetDocument(), "--x", "<length-percentage>", "0px", false);
   CustomProperty property(AtomicString("--x"), GetDocument());
 

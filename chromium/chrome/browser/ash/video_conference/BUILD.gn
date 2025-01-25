@@ -22,6 +22,7 @@ static_library("video_conference") {
     "//ash",
     "//ash/public/cpp",
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/ash/camera_mic",
     "//chromeos/crosapi/mojom",
     "//components/services/app_service",
@@ -36,9 +37,9 @@ static_library("video_conference") {
     "//chrome/browser/apps/app_service",
     "//chrome/browser/ash/borealis",
     "//chrome/browser/ash/camera_mic",
-    "//chrome/browser/ash/crosapi",
     "//chrome/browser/ash/crostini",
     "//chrome/browser/ash/plugin_vm",
+    "//chrome/browser/chromeos/video_conference",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui/ash/system_web_apps",
     "//chromeos/crosapi/mojom:mojom_shared",
@@ -50,7 +51,7 @@ static_library("video_conference") {
 
   allow_circular_includes_from = [
     "//chrome/browser/ash/camera_mic",
-    "//chrome/browser/ash/crosapi",
+    "//chrome/browser/chromeos/video_conference",
   ]
 }
 
@@ -87,13 +88,16 @@ source_set("browser_tests") {
     "//ash/constants",
     "//ash/public/cpp",
     "//ash/webui/common/mojom",
+    "//ash/webui/vc_background_ui",
     "//base",
     "//base/test:test_support",
     "//chrome/browser",
     "//chrome/browser/apps/app_service",
+    "//chrome/browser/ash/borealis",
     "//chrome/browser/ash/crosapi",
+    "//chrome/browser/ash/crostini",
     "//chrome/browser/ash/plugin_vm",
-    "//chrome/browser/chromeos",
+    "//chrome/browser/chromeos/video_conference",
     "//chrome/browser/ui",
     "//chrome/common",
     "//chrome/test:test_support",

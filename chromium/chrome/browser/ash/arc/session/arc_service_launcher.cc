@@ -14,7 +14,6 @@
 #include "ash/components/arc/audio/arc_audio_bridge.h"
 #include "ash/components/arc/camera/arc_camera_bridge.h"
 #include "ash/components/arc/chrome_feature_flags/arc_chrome_feature_flags_bridge.h"
-#include "ash/components/arc/clipboard/arc_clipboard_bridge.h"
 #include "ash/components/arc/compat_mode/arc_resize_lock_manager.h"
 #include "ash/components/arc/crash_collector/arc_crash_collector_bridge.h"
 #include "ash/components/arc/disk_space/arc_disk_space_bridge.h"
@@ -30,7 +29,6 @@
 #include "ash/components/arc/pay/arc_digital_goods_bridge.h"
 #include "ash/components/arc/pay/arc_payment_app_bridge.h"
 #include "ash/components/arc/power/arc_power_bridge.h"
-#include "ash/components/arc/property/arc_property_bridge.h"
 #include "ash/components/arc/sensor/arc_iio_sensor_bridge.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/arc_session.h"
@@ -253,7 +251,6 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcBootErrorNotification::GetForBrowserContext(profile);
   ArcBootPhaseMonitorBridge::GetForBrowserContext(profile);
   ArcCameraBridge::GetForBrowserContext(profile);
-  ArcClipboardBridge::GetForBrowserContext(profile);
   ArcCrashCollectorBridge::GetForBrowserContext(profile);
   ArcDigitalGoodsBridge::GetForBrowserContext(profile);
   ArcDiskSpaceBridge::GetForBrowserContext(profile);
@@ -307,7 +304,6 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcPrintSpoolerBridge::GetForBrowserContext(profile);
   ArcPrivacyItemsBridge::GetForBrowserContext(profile);
   ArcProcessService::GetForBrowserContext(profile);
-  ArcPropertyBridge::GetForBrowserContext(profile);
   ArcProvisionNotificationService::GetForBrowserContext(profile);
   ArcResizeLockManager::GetForBrowserContext(profile);
   ArcScreenCaptureBridge::GetForBrowserContext(profile);
@@ -447,7 +443,6 @@ void ArcServiceLauncher::EnsureFactoriesBuilt() {
   ArcBootErrorNotification::EnsureFactoryBuilt();
   ArcBootPhaseMonitorBridgeFactory::GetInstance();
   ArcCameraBridge::EnsureFactoryBuilt();
-  ArcClipboardBridge::EnsureFactoryBuilt();
   ArcCrashCollectorBridge::EnsureFactoryBuilt();
   ArcDigitalGoodsBridge::EnsureFactoryBuilt();
   ArcDiskSpaceBridge::EnsureFactoryBuilt();
@@ -485,7 +480,6 @@ void ArcServiceLauncher::EnsureFactoriesBuilt() {
   ArcPrintSpoolerBridge::EnsureFactoryBuilt();
   ArcPrivacyItemsBridge::EnsureFactoryBuilt();
   ArcProcessService::EnsureFactoryBuilt();
-  ArcPropertyBridge::EnsureFactoryBuilt();
   ArcProvisionNotificationService::EnsureFactoryBuilt();
   ArcResizeLockManager::EnsureFactoryBuilt();
   ArcScreenCaptureBridge::EnsureFactoryBuilt();

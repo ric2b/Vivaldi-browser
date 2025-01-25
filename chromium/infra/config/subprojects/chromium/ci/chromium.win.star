@@ -7,11 +7,11 @@ load("//lib/args.star", "args")
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_health_indicators.star", "health_spec")
-load("//lib/builder_url.star", "linkify_builder")
 load("//lib/builders.star", "gardener_rotations", "os", "siso")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
+load("//lib/html.star", "linkify_builder")
 
 ci.defaults.set(
     executable = ci.DEFAULT_EXECUTABLE,
@@ -258,6 +258,9 @@ ci.builder(
         short_name = "64",
     ),
     cq_mirrors_console_view = "mirrors",
+    experiments = {
+        "chromium.use_per_builder_build_dir_name": 100,
+    },
 )
 
 ci.builder(
@@ -369,13 +372,15 @@ ci.builder(
     # Can flakily hit the default 3 hour timeout due to inconsistent compile
     # times.
     execution_timeout = 4 * time.hour,
+    # Increase timeout for connecting to dependency scanner
+    reclient_bootstrap_env = {
+        "RBE_depsscan_connect_timeout": "120s",
+    },
 )
 
 ci.thin_tester(
     name = "win11-arm64-rel-tests",
-    # TODO(https://crbug.com/341773363): Until the testing pool is stabilized,
-    # this builder shouldn't be getting branched
-    # branch_selector = branches.selector.WINDOWS_BRANCHES,
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
     description_html = "Windows11 ARM64 Release Tester.",
     triggered_by = ["ci/win-arm64-rel"],
     builder_spec = builder_config.builder_spec(

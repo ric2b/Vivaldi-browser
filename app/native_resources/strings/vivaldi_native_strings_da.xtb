@@ -5,13 +5,15 @@
 <translation id="1118377629180821201">Landskab 12</translation>
 <translation id="1158503667684816647">Vis ikke bekræftelse igen</translation>
 <translation id="1222195720020481779">Starter installationen...</translation>
+<translation id="1224683873953469764">Få Vivaldi til mobilenheder</translation>
 <translation id="1270785070369717623">Desværre er dine Opera GX-indstillinger ikke tilgængelige mens browseren kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Opera GX-vinduer. Klik derefter Fortsæt.</translation>
-<translation id="1276145862619442150">Hurtigkald</translation>
+<translation id="1276145862619442150">Hurtigvalg</translation>
 <translation id="1281950884873973195">Dyr 6</translation>
 <translation id="1411638389238344450">Send link via mail</translation>
 <translation id="1454726940098520109">Vi ikke bekræftelse igen</translation>
 <translation id="1462666970065907900">Vil du virkelig lukke vinduet?</translation>
 <translation id="1480046233931937785">Kredittering</translation>
+<translation id="1521774566618522728">Aktiv i dag</translation>
 <translation id="1526344461589023948">Der opstod en fejl under forsøg på at gemme en downloadet opdatering. Kontrollér venligst at computeren har nok diskplads og prøv igen senere.</translation>
 <translation id="1635542496948266458">Skift profiler</translation>
 <translation id="1657174850639146440">Monster 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Lydstyrke</translation>
 <translation id="443008484043213881">Værktøjer</translation>
 <translation id="4456211719108566931">Monster 6</translation>
+<translation id="4459169140545916303">Aktiv for <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dage siden</translation>
 <translation id="4512900838580567989">Åbn link i ny baggrundsfane</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Åbn billede på ny baggrundsfane</translation>
@@ -107,7 +110,7 @@
 <translation id="4861715717329665002">Automatisk gemte sessioner</translation>
 <translation id="4881695831933465202">Åbn</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> af <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
-<translation id="5014281392052865061">Importerede Kvikknapper</translation>
+<translation id="5014281392052865061">Importerede hurtigvalg</translation>
 <translation id="5092656712000637858">Tilføj side som Net-panel</translation>
 <translation id="5106275083540628394">Dekryptering fejlede: Risiko for datatab</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Opgradering af sikkert nøglearkiv</translation>
 <translation id="7111492742514999492">Landskab 9</translation>
 <translation id="7208252576848052204">Desværre er dine Arc-indstillinger ikke tilgængelige mens browseren kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Arc-vinduer. Klik derefter Fortsæt.</translation>
+<translation id="7321500017121629018">Aktiv i går</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Start af opdaterings-installationsprogramet fejlede. Kontrollér venligst at computeren har nok RAM eller diskplads og prøv igen senere.</translation>
 <translation id="7658239707568436148">Annuller</translation>

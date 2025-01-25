@@ -46,14 +46,14 @@ class ASH_EXPORT FocusModeTray : public TrayBackgroundView,
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void HideBubble(const TrayBubbleView* bubble_view) override;
   TrayBubbleView* GetBubbleView() override;
-  void CloseBubble() override;
+  void CloseBubbleInternal() override;
   void ShowBubble() override;
   void UpdateTrayItemColor(bool is_active) override;
   void OnThemeChanged() override;
   void OnAnimationEnded() override;
 
   // FocusModeController::Observer:
-  void OnFocusModeChanged(bool in_focus_session) override;
+  void OnFocusModeChanged(FocusModeSession::State session_state) override;
   void OnTimerTick(const FocusModeSession::Snapshot& session_snapshot) override;
   void OnActiveSessionDurationChanged(
       const FocusModeSession::Snapshot& session_snapshot) override;
@@ -67,6 +67,11 @@ class ASH_EXPORT FocusModeTray : public TrayBackgroundView,
   void Layout(PassKey) override;
 
   views::ImageView* image_view() { return image_view_; }
+
+  // Triggers the tray bounce in animation. This is used during the ending
+  // moment to notify the user that their session is over. When the animation
+  // finishes, the ending moment nudge is then shown.
+  void MaybePlayBounceInAnimation();
 
   FocusModeCountdownView* countdown_view_for_testing() {
     return countdown_view_;
@@ -164,6 +169,10 @@ class ASH_EXPORT FocusModeTray : public TrayBackgroundView,
   // moment; it will be reset to false when starting or ending a focus session,
   // or extending a focus session during the ending moment.
   bool bounce_in_animation_finished_ = false;
+
+  // The percentage threshold that the session progress needs to exceed in order
+  // to trigger a progress ring paint.
+  double progress_ring_update_threshold_ = 0.0;
 
   base::ScopedObservation<FocusModeTasksModel, FocusModeTasksModel::Observer>
       tasks_observation_{this};

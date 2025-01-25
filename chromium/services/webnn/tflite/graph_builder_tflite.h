@@ -21,7 +21,7 @@
 #include "services/webnn/public/mojom/webnn_context_provider.mojom-forward.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom-forward.h"
 #include "third_party/flatbuffers/src/include/flatbuffers/flatbuffers.h"
-#include "third_party/tflite/src/tensorflow/lite/schema/schema_generated.h"
+#include "third_party/tflite/src/tensorflow/compiler/mlir/lite/schema/schema_generated.h"
 
 namespace webnn::tflite {
 
@@ -35,7 +35,7 @@ namespace internal {
 template <typename T, typename... U>
 concept IsAnyOf = (std::same_as<T, U> || ...);
 template <typename T>
-concept IsSupportedTensorType = IsAnyOf<T, float, int32_t, uint32_t>;
+concept IsSupportedTensorType = IsAnyOf<T, float, int32_t, uint32_t, int64_t>;
 
 }  // namespace internal
 
@@ -55,7 +55,8 @@ class GraphBuilderTflite final {
   // Factory method that creates a GraphBuilderTflite and builds a TFLite
   // Flatbuffer Returns unexpected if it fails.
   [[nodiscard]] static base::expected<flatbuffers::DetachedBuffer, std::string>
-  CreateAndBuild(const mojom::GraphInfo& graph_info);
+  CreateAndBuild(ContextProperties context_properties,
+                 const mojom::GraphInfo& graph_info);
 
   static ContextProperties GetContextProperties();
 
@@ -67,7 +68,8 @@ class GraphBuilderTflite final {
   using TensorOffset = flatbuffers::Offset<::tflite::Tensor>;
   using StringOffset = flatbuffers::Offset<flatbuffers::String>;
 
-  explicit GraphBuilderTflite(const mojom::GraphInfo& graph_info);
+  GraphBuilderTflite(ContextProperties context_properties,
+                     const mojom::GraphInfo& graph_info);
   ~GraphBuilderTflite();
 
   // Serialize tensor for input, constant and output operand. It's output
@@ -140,6 +142,19 @@ class GraphBuilderTflite final {
                                           int32_t rhs_tensor_index,
                                           int32_t output_tensor_index);
 
+  // This function is called by `SerializeConcat` to serialize WebNN
+  // concat operator or used to emulate WebNN operations.
+  OperatorOffset SerializeConcatOperation(
+      base::span<const int32_t> input_tensor_indices,
+      int32_t output_tensor_index,
+      uint32_t axis);
+
+  // This function is called by `SerializeMatmul` to serialize WebNN
+  // matmul operator or used to emulate WebNN operations.
+  OperatorOffset SerializeMatmulOperation(int32_t a_tensor_index,
+                                          int32_t b_tensor_index,
+                                          int32_t output_tensor_index);
+
   // A helper function is used to emulate batch, layer or instance
   // normalization.
   OperatorOffset SerializeNormalizationOperation(
@@ -180,6 +195,14 @@ class GraphBuilderTflite final {
                                            int32_t output_tensor_index,
                                            base::span<const int32_t> new_shape);
 
+  // This function is called by `SerializeSlice` to serialize WebNN
+  // slice operator or used to emulate WebNN operations.
+  base::expected<OperatorOffset, std::string> SerializeSliceOperation(
+      int32_t input_tensor_index,
+      int32_t output_tensor_index,
+      base::span<const int32_t> slice_starts,
+      base::span<const int32_t> slice_sizes);
+
   // This function is called by `SerializeLinear` to serialize WebNN linear or
   // used to emulate WebNN operation that isn't supported in TFLite schema.
   OperatorOffset SerializeLinearOperation(
@@ -212,6 +235,175 @@ class GraphBuilderTflite final {
                                    int32_t input_tensor_index,
                                    base::span<const uint32_t> permutation);
 
+  // Serialize a sub graph (pow appending mul operation) for erf operation.
+  int32_t SerializeSubGraphPowMul(base::span<const int32_t> input_dimensions,
+                                  ::tflite::TensorType input_tensor_type,
+                                  int32_t input_tensor_index,
+                                  float pow_exponent,
+                                  float mul_alpha);
+
+  // Serialize a sub graph (input * weight + bias) for gru cell.
+  int32_t SerializeSubGraphMatmulAdd(base::span<const int32_t> input_dimensions,
+                                     ::tflite::TensorType input_tensor_type,
+                                     int32_t input_tensor_index,
+                                     int32_t weight_tensor_index,
+                                     std::optional<int32_t> bias_tensor_index);
+
+  // Serialize a sub graph (slice appending transpose operation) for gru cell.
+  base::expected<int32_t, std::string> SerializeSubGraphSliceTranspose(
+      ::tflite::TensorType input_tensor_type,
+      int32_t input_tensor_index,
+      base::span<const int32_t> slice_starts,
+      base::span<const int32_t> slice_sizes);
+
+  enum class GruGateType { kUpdate, kReset, kNew };
+
+  // The common attributes between gru and lstm.
+  struct RecurrentNetworkBase {
+    STACK_ALLOCATED();
+
+   public:
+    RecurrentNetworkBase(
+        base::span<const int32_t> input_dimensions,
+        ::tflite::TensorType input_tensor_type,
+        int32_t input_tensor_index,
+        int32_t weight_tensor_index,
+        int32_t recurrent_weight_tensor_index,
+        std::optional<int32_t> bias_tensor_index,
+        std::optional<int32_t> recurrent_bias_tensor_index,
+        int32_t hidden_state_tensor_index,
+        int32_t hidden_size,
+        base::span<const mojom::RecurrentNetworkActivation> activations);
+    ~RecurrentNetworkBase();
+
+    RecurrentNetworkBase(const RecurrentNetworkBase&) = delete;
+    RecurrentNetworkBase& operator=(const RecurrentNetworkBase&) = delete;
+
+    RecurrentNetworkBase(RecurrentNetworkBase&&) = delete;
+    RecurrentNetworkBase& operator=(RecurrentNetworkBase&&) = delete;
+
+    base::span<const int32_t> input_dimensions;
+    const ::tflite::TensorType input_tensor_type;
+    const int32_t input_tensor_index;
+    const int32_t weight_tensor_index;
+    const int32_t recurrent_weight_tensor_index;
+    const std::optional<int32_t> bias_tensor_index;
+    const std::optional<int32_t> recurrent_bias_tensor_index;
+    const int32_t hidden_state_tensor_index;
+    const int32_t hidden_size;
+    const base::span<const mojom::RecurrentNetworkActivation> activations;
+  };
+
+  // The struct maps to mojom::GruCell to use tflite tensor index instead of
+  // the operand id in mojom definition.
+  struct GruCellOperation : public RecurrentNetworkBase {
+    STACK_ALLOCATED();
+
+   public:
+    GruCellOperation(
+        base::span<const int32_t> input_dimensions,
+        ::tflite::TensorType input_tensor_type,
+        int32_t input_tensor_index,
+        int32_t output_tensor_index,
+        int32_t weight_tensor_index,
+        int32_t recurrent_weight_tensor_index,
+        std::optional<int32_t> bias_tensor_index,
+        std::optional<int32_t> recurrent_bias_tensor_index,
+        int32_t hidden_state_tensor_index,
+        int32_t hidden_size,
+        bool reset_after,
+        mojom::GruWeightLayout layout,
+        base::span<const mojom::RecurrentNetworkActivation> activations);
+    ~GruCellOperation();
+
+    const int32_t output_tensor_index;
+    const bool reset_after;
+    const mojom::GruWeightLayout layout;
+  };
+
+  // A helper function for serializing update, reset and new gate, the argument
+  // `reset_gate_tensor_index` only be used for new gate.
+  base::expected<int32_t, std::string> SerializeGruGate(
+      const GruCellOperation& gru_cell,
+      GruGateType type,
+      std::optional<int32_t> reset_gate_tensor_index = std::nullopt);
+
+  // This function is called by `SerializeGruCell` to serialize WebNN gruCell or
+  // used to emulate gru operation.
+  base::expected<OperatorOffset, std::string> SerializeGruCellOperation(
+      const GruCellOperation& gru_cell);
+
+  // A helper function for serializing WebNN gru and lstm operations.
+  template <typename RecurrentNetworkType>
+    requires(std::is_same_v<RecurrentNetworkType, mojom::Gru> ||
+             std::is_same_v<RecurrentNetworkType, mojom::Lstm>)
+  base::expected<OperatorOffset, std::string> SerializeRecurrentNetwork(
+      const RecurrentNetworkType& recurrent_network);
+
+  enum class LstmGateType { kInput, kForget, kCell, kOutput };
+
+  // The struct maps to mojom::LstmCell to use tflite tensor index instead of
+  // the operand id in mojom definition.
+  struct LstmCellOperation : public RecurrentNetworkBase {
+    STACK_ALLOCATED();
+
+   public:
+    LstmCellOperation(
+        base::span<const int32_t> input_dimensions,
+        ::tflite::TensorType input_tensor_type,
+        int32_t input_tensor_index,
+        base::span<const int32_t> output_tensor_indices,
+        int32_t weight_tensor_index,
+        int32_t recurrent_weight_tensor_index,
+        std::optional<int32_t> bias_tensor_index,
+        std::optional<int32_t> recurrent_bias_tensor_index,
+        int32_t hidden_state_tensor_index,
+        int32_t hidden_size,
+        int32_t cell_state_tensor_index,
+        std::optional<int32_t> peephole_weight_tensor_index,
+        mojom::LstmWeightLayout layout,
+        base::span<const mojom::RecurrentNetworkActivation> activations);
+    ~LstmCellOperation();
+
+    base::span<const int32_t> output_tensor_indices;
+    const int32_t cell_state_tensor_index;
+    std::optional<int32_t> peephole_weight_tensor_index;
+    const mojom::LstmWeightLayout layout;
+  };
+
+  // A helper function for serializing input, forget, cell and output gate.
+  base::expected<int32_t, std::string> SerializeLstmGate(
+      const LstmCellOperation& lstm_cell,
+      LstmGateType type);
+
+  // This function is called by `SerializeLstmCell` to serialize WebNN lstmCell
+  // or used to emulate lstm operation.
+  base::expected<OperatorOffset, std::string> SerializeLstmCellOperation(
+      const LstmCellOperation& lstm_cell);
+
+  // Get initial hidden and cell state tensor index if existed or serialize an
+  // empty tensor.
+  int32_t GetInitialHiddenAndCellState(
+      std::optional<uint64_t> state_operand_id,
+      base::span<const int32_t> state_dimensions);
+
+  // Reshape hidden and cell state, concat the reshaped tensor if the input
+  // tensor of concat is provided.
+  int32_t ReshapeHiddenAndCellState(
+      ::tflite::TensorType input_tensor_type,
+      int32_t input_tensor_index,
+      base::span<const int32_t> new_shape,
+      std::optional<int32_t> concat_input_tensor_index,
+      base::span<const int32_t> concat_output_shape);
+
+  // Serialize a sub graph (slice appending squeeze operation) for gru.
+  base::expected<int32_t, std::string> SerializeSubGraphSliceSqueeze(
+      ::tflite::TensorType input_tensor_type,
+      int32_t input_tensor_index,
+      base::span<const int32_t> slice_starts,
+      base::span<const int32_t> slice_sizes,
+      int32_t squeeze_axis);
+
   // Serialize functions for members of the mojom::Operation union. Keep these
   // functions in the same order as in webnn_graph.mojom.
   base::expected<OperatorOffset, std::string> SerializeArgMinMax(
@@ -228,6 +420,8 @@ class GraphBuilderTflite final {
       const mojom::ElementWiseUnary& op);
   base::expected<OperatorOffset, std::string> SerializeElu(
       const mojom::Elu& elu);
+  base::expected<OperatorOffset, std::string> SerializeErf(
+      const mojom::ElementWiseUnary& erf);
   OperatorOffset SerializeExpand(const mojom::Expand& expand);
   base::expected<OperatorOffset, std::string> SerializeGather(
       const mojom::Gather& gather);
@@ -235,6 +429,8 @@ class GraphBuilderTflite final {
       const mojom::Gelu& gelu);
   base::expected<OperatorOffset, std::string> SerializeGemm(
       const mojom::Gemm& gemm);
+  base::expected<OperatorOffset, std::string> SerializeGruCell(
+      const mojom::GruCell& gru_cell);
   OperatorOffset SerializeHardSigmoid(const mojom::HardSigmoid& hard_sigmoid);
   OperatorOffset SerializeHardSwish(const mojom::HardSwish& hard_swish);
   base::expected<OperatorOffset, std::string> SerializeInstanceNormalization(
@@ -245,6 +441,8 @@ class GraphBuilderTflite final {
   OperatorOffset SerializeLinear(const mojom::Linear& linear);
   OperatorOffset SerializeLogicalNot(
       const mojom::ElementWiseUnary& logical_not);
+  base::expected<OperatorOffset, std::string> SerializeLstmCell(
+      const mojom::LstmCell& lstm_cell);
   OperatorOffset SerializeMatmul(const mojom::Matmul& matmul);
   base::expected<OperatorOffset, std::string> SerializePad(
       const mojom::Pad& pad);
@@ -277,6 +475,8 @@ class GraphBuilderTflite final {
       const mojom::Split& split);
   OperatorOffset SerializeTan(const mojom::ElementWiseUnary& tan);
   OperatorOffset SerializeTanh(const mojom::Tanh& tanh);
+  base::expected<OperatorOffset, std::string> SerializeTriangular(
+      const mojom::Triangular& triangular);
   OperatorOffset SerializeTranspose(const mojom::Transpose& transpose);
   OperatorOffset SerializeWhere(const mojom::Where& where);
 
@@ -285,6 +485,8 @@ class GraphBuilderTflite final {
   flatbuffers::DetachedBuffer FinishAndTakeFlatBuffer(
       base::span<const uint64_t> input_operands,
       base::span<const uint64_t> output_operands);
+
+  const ContextProperties context_properties_;
 
   // A reference to the WebNN compute graph that `this` instance is converting
   // to TFLite. The creator of `this` must ensure the GraphInfo reference passed

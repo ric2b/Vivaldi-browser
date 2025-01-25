@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> ha tancat la connexió de manera inesperada.</translation>
 <translation id="1161325031994447685">Reconnectant a la xarxa Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Imprimeix...</translation>
+<translation id="132390688737681464">Desa i omple les adreces</translation>
 <translation id="1375198122581997741">Sobre la versió</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> no ha enviat dades.</translation>
 <translation id="1559528461873125649">No existeix el fitxer o el directori</translation>
 <translation id="1640244768702815859">Prova d'<ph name="BEGIN_LINK" />anar a la pàgina d'inici del lloc<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocol no admès</translation>
+<translation id="1662550410081243962">Desa i omple els mètodes de pagament</translation>
 <translation id="1710259589646384581">SO</translation>
 <translation id="1728677426644403582">Estàs consultant el codi font d'una pàgina web</translation>
 <translation id="1734878702283171397">Prova de contactar amb l'administrador del sistema.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Aquest lloc no pot proporcionar una connexió segura</translation>
 <translation id="2187317261103489799">Detecta (predeterminat)</translation>
 <translation id="2224337661447660594">Sense connexió a internet</translation>
+<translation id="2283340219607151381">Desa i omple les adreces</translation>
 <translation id="2292556288342944218">El teu accés a internet està bloquejat</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requereix un nom d'usuari i contrasenya.</translation>
 <translation id="2337852623177822836">Ajust controlat per l'administrador</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">La connexió s'ha xifrat i autenticat mitjançant <ph name="CIPHER" /> i fa servir <ph name="KX" /> com a mecanisme d'intercanvi clau.</translation>
 <translation id="2909946352844186028">S'ha detectat un canvi a la xarxa.</translation>
 <translation id="2948083400971632585">Pots desactivar qualsevol servidor intermediari configurat per a una connexió des de la pàgina d'ajustos.</translation>
+<translation id="2954624054936281172">Taula de mètodes de pagament desades</translation>
 <translation id="2991571918955627853">En aquest moment no pots visitar la pàgina <ph name="SITE" /> perquè el lloc web fa servir HSTS. Els atacs i els errors de xarxa acostumen a ser temporals, o sigui que probablement la pàgina funcionarà més endavant.</translation>
 <translation id="3005723025932146533">Mostra la còpia desada</translation>
 <translation id="301521992641321250">Bloquejat automàticament</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Detecta sempre el contingut important en aquest lloc</translation>
 <translation id="3308738399950580893">anuncis</translation>
 <translation id="3384522979010096022">La teva organització no et permet veure aquest lloc</translation>
+<translation id="3387261909427947069">Formes de pagament</translation>
 <translation id="3422472998109090673">Actualment no es pot accedir a <ph name="HOST_NAME" />.</translation>
 <translation id="3427092606871434483">Permet (predeterminat)</translation>
 <translation id="3447661539832366887">El propietari d'aquest dispositiu ha desactivat el joc de dinosaures.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">La cadena de certificats d'aquest lloc conté un certificat que s'ha signat amb SHA-1.</translation>
 <translation id="5452270690849572955">No s'ha trobat aquesta pàgina de <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Invàlid</translation>
+<translation id="5490432419156082418">Adreces i més</translation>
 <translation id="5492298309214877701">Aquest lloc de la intranet de l'empresa, organització o centre educatiu té el mateix URL que un lloc web extern.
     <ph name="LINE_BREAK" />
     Prova de contactar amb l'administrador del sistema.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Permès per un complement</translation>
 <translation id="7111012039238467737">(Vàlid)</translation>
 <translation id="7113310725918019676">Permet <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Desa i omple els mètodes de pagament</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> no compleix la normativa de seguretat.</translation>
 <translation id="7219179957768738017">La connexió usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostra les notificacions</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">Si no estàs segur de què significa això, contacta amb l'administrador de la xarxa.</translation>
 <translation id="8332188693563227489">S'ha rebutjat l'accés a <ph name="HOST_NAME" /></translation>
 <translation id="8422228580902424274">Els atacants del lloc que proves de visitar poden enganyar-te perquè instal·lis programari o perquè revelis dades com ara la contrasenya, el telèfon o el número de la targeta de crèdit.</translation>
+<translation id="8473863474539038330">Adreces i més</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha trigat massa a respondre.</translation>
 <translation id="8503813439785031346">Nom d'usuari</translation>
 <translation id="8703575177326907206">La teva connexió a <ph name="DOMAIN" /> no està xifrada.</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">Marcadors</translation>
 <translation id="8940028675168378100">Bloquejat per <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ves als ajustos del lloc web</translation>
+<translation id="8975012916872825179">Inclou informació com ara números de telèfon, adreces electròniques i adreces d'enviament</translation>
 <translation id="9001074447101275817">El servidor intermediari <ph name="DOMAIN" /> requereix un nom d'usuari i una contrasenya.</translation>
 <translation id="9008201768610948239">Ignora</translation>
 <translation id="9025348182339809926">(Invàlid)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> fa servir un protocol no admès.</translation>
 <translation id="936602727769022409">Podries perdre l'accés al compte de Google. Vivaldi et recomana que canviïs la contrasenya ara. Hauràs d'iniciar la sessió.</translation>
 <translation id="969892804517981540">Compilació oficial</translation>
+<translation id="984275831282074731">Formes de pagament</translation>
 <translation id="988159990683914416">Versió del desenvolupador</translation>
 </translationbundle>

@@ -68,9 +68,9 @@
 #include "media/mojo/services/mojo_video_encode_accelerator_provider.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "skia/buildflags.h"
-#include "third_party/skia/include/gpu/GrDirectContext.h"
-#include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
-#include "third_party/skia/include/gpu/gl/GrGLInterface.h"
+#include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLAssembleInterface.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLInterface.h"
 #include "ui/base/ozone_buildflags.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gl/gl_context.h"
@@ -340,7 +340,9 @@ GpuServiceImpl::GpuServiceImpl(
 #if BUILDFLAG(ENABLE_VULKAN)
       vulkan_implementation_(init_params.vulkan_implementation),
 #endif
-      exit_callback_(std::move(init_params.exit_callback)) {
+      exit_callback_(std::move(init_params.exit_callback)),
+      clear_shader_cache_(base::FeatureList::IsEnabled(
+          features::kClearGrShaderDiskCacheOnInvalidPrefix)) {
   DCHECK(!io_runner_->BelongsToCurrentThread());
   DCHECK(exit_callback_);
 
@@ -607,8 +609,7 @@ void GpuServiceImpl::InitializeWithHost(
   if (scheduler) {
     scheduler_ = scheduler;
   } else {
-    owned_scheduler_ =
-        std::make_unique<gpu::Scheduler>(sync_point_manager, gpu_preferences_);
+    owned_scheduler_ = std::make_unique<gpu::Scheduler>(sync_point_manager);
     scheduler_ = owned_scheduler_.get();
   }
 
@@ -815,7 +816,10 @@ void GpuServiceImpl::CreateJpegDecodeAccelerator(
         jda_receiver) {
   DCHECK(io_runner_->BelongsToCurrentThread());
   chromeos_camera::MojoMjpegDecodeAcceleratorService::Create(
-      std::move(jda_receiver));
+      std::move(jda_receiver),
+      base::BindRepeating(
+          &GpuServiceImpl::SetMjpegDecodeAcceleratorBeginFrameCB,
+          base::Unretained(this)));
 }
 
 void GpuServiceImpl::CreateJpegEncodeAccelerator(
@@ -1094,9 +1098,7 @@ void GpuServiceImpl::StoreBlobToDisk(const gpu::GpuDiskCacheHandle& handle,
                                      const std::string& key,
                                      const std::string& shader) {
   std::string prefix_key = key;
-  if (base::FeatureList::IsEnabled(
-          features::kGenGpuDiskCacheKeyPrefixInGpuService) &&
-      GetHandleType(handle) == gpu::GpuDiskCacheType::kGlShaders) {
+  if (GetHandleType(handle) == gpu::GpuDiskCacheType::kGlShaders) {
     std::string prefix = GetShaderPrefixKey();
     prefix_key = prefix + ":" + key;
   }
@@ -1114,12 +1116,7 @@ void GpuServiceImpl::LoadedBlob(const gpu::GpuDiskCacheHandle& handle,
   }
 
   std::string no_prefix_key = key;
-  const bool clear_shader_cache = base::FeatureList::IsEnabled(
-      features::kClearGrShaderDiskCacheOnInvalidPrefix);
-
-  if (base::FeatureList::IsEnabled(
-          features::kGenGpuDiskCacheKeyPrefixInGpuService) &&
-      GetHandleType(handle) == gpu::GpuDiskCacheType::kGlShaders) {
+  if (GetHandleType(handle) == gpu::GpuDiskCacheType::kGlShaders) {
     std::string prefix = GetShaderPrefixKey();
     bool prefix_ok = !key.compare(0, prefix.length(), prefix);
     UMA_HISTOGRAM_BOOLEAN("GPU.ShaderLoadPrefixOK", prefix_ok);
@@ -1131,7 +1128,7 @@ void GpuServiceImpl::LoadedBlob(const gpu::GpuDiskCacheHandle& handle,
       // cache will have prefix that does not matches. Clear the whole disk
       // cache in that case to remove all stale entries and make room for newer
       // entries.
-      if (clear_shader_cache) {
+      if (clear_shader_cache_) {
         gpu_host_->ClearGrShaderDiskCache();
       }
       return;
@@ -1517,6 +1514,38 @@ gpu::Scheduler* GpuServiceImpl::GetGpuScheduler() {
   return scheduler_;
 }
 
+bool GpuServiceImpl::OnBeginFrameDerivedImpl(const BeginFrameArgs& args) {
+  io_runner_->PostTask(FROM_HERE,
+                       base::BindOnce(&GpuServiceImpl::OnBeginFrameOnIO,
+                                      base::Unretained(this), args));
+  return true;
+}
+
+void GpuServiceImpl::OnBeginFrameSourcePausedChanged(bool paused) {}
+
+void GpuServiceImpl::OnBeginFrameOnIO(const BeginFrameArgs& args) {
+  DCHECK(io_runner_->BelongsToCurrentThread());
+
+  if (mjpeg_decode_accelerator_begin_frame_cb_) {
+    mjpeg_decode_accelerator_begin_frame_cb_->Run();
+  }
+}
+
+void GpuServiceImpl::SetRequestBeginFrameForGpuServiceCB(
+    RequestBeginFrameForGpuServiceCB cb) {
+  request_begin_frame_for_gpu_service_cb_ = std::move(cb);
+}
+
+void GpuServiceImpl::SetMjpegDecodeAcceleratorBeginFrameCB(
+    std::optional<base::RepeatingClosure> cb) {
+  DCHECK(io_runner_->BelongsToCurrentThread());
+
+  main_runner_->PostTask(FROM_HERE,
+                         base::BindOnce(request_begin_frame_for_gpu_service_cb_,
+                                        cb ? true : false));
+  mjpeg_decode_accelerator_begin_frame_cb_ = std::move(cb);
+}
+
 #if BUILDFLAG(IS_WIN)
 // Update Overlay and DXGI Info
 void GpuServiceImpl::OnOverlayCapsChanged() {
@@ -1735,11 +1764,7 @@ void GpuServiceImpl::GetDawnInfoOnMain(bool collect_metrics,
   // Pause the watchdog around Dawn info collection since it is known to be
   // slow loading GPU drivers.
   if (watchdog_thread_ && pause_watchdog) {
-    if (report_only_mode) {
-      watchdog_thread_->EnableReportOnlyMode();
-    } else {
-      watchdog_thread_->PauseWatchdog();
-    }
+    watchdog_thread_->PauseWatchdog();
   }
 
   if (report_only_mode) {
@@ -1753,11 +1778,7 @@ void GpuServiceImpl::GetDawnInfoOnMain(bool collect_metrics,
   }
 
   if (watchdog_thread_ && pause_watchdog) {
-    if (report_only_mode) {
-      watchdog_thread_->DisableReportOnlyMode();
-    } else {
-      watchdog_thread_->ResumeWatchdog();
-    }
+    watchdog_thread_->ResumeWatchdog();
   }
 
   io_runner_->PostTask(FROM_HERE,

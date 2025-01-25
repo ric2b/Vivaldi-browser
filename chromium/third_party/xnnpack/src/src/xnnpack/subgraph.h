@@ -85,6 +85,14 @@ struct xnn_value {
         /// Index of the channel dimension with per-channel quantization parameters.
         size_t channel_dimension;
       };
+        struct {
+        /// Per-channel-block multiplication factor to convert quantized elements to real representation, bf16 format.
+        const uint16_t* blockwise_scale;
+        /// Index of the channel dimension with blockwise quantization parameters.
+        size_t channel_dimension_blockwise;
+        /// Block size.
+        size_t block_size;
+      };
       struct {
         /// Number of non-batch dimensions. 1 for FC, 3 for Conv2D.
         size_t num_nonbatch_dims;
@@ -213,6 +221,7 @@ enum xnn_compute_type {
   xnn_compute_type_qs8_to_fp16,
   xnn_compute_type_qs8_to_fp32,
   xnn_compute_type_qu8_to_fp32,
+  xnn_compute_type_s32,
 };
 
 struct xnn_node {
@@ -334,6 +343,10 @@ struct xnn_node {
     float output_min;
     float output_max;
   } activation;
+  struct {
+    int32_t output_min;
+    int32_t output_max;
+  } activation_int;
   /// Value IDs for node inputs.
   uint32_t inputs[XNN_MAX_INPUTS];
   uint32_t num_inputs;

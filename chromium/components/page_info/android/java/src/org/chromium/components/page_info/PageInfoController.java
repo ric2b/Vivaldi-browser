@@ -61,6 +61,7 @@ import java.util.Collection;
 import java.util.List;
 
 // Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.components.embedder_support.util.UrlConstants;
 
 import org.vivaldi.browser.common.VivaldiUrlConstants;
@@ -289,7 +290,7 @@ public class PageInfoController
                         mDelegate,
                         pageInfoHighlight.getHighlightedPermission());
         mSubpageControllers.add(mPermissionsController);
-        if (mDelegate.showTrackingProtectionLaunchUI()) {
+        if (mDelegate.showTrackingProtectionACTFeaturesUI()) {
             mTrackingProtectionLaunchController =
                     new PageInfoTrackingProtectionLaunchController(
                             this, mView.getCookiesRowView(), mDelegate);
@@ -306,7 +307,7 @@ public class PageInfoController
         }
 
         if (source == OpenedFromSource.WEBAPK_SNACKBAR
-                && mDelegate.showTrackingProtectionLaunchUI()) {
+                && mDelegate.showTrackingProtectionACTFeaturesUI()) {
             mContainer.showPage(
                     mTrackingProtectionLaunchController.createViewForSubpage(mContainer),
                     null,
@@ -330,6 +331,8 @@ public class PageInfoController
                     public void navigationEntryCommitted(LoadCommittedDetails details) {
                         // If a navigation is committed (e.g. from in-page redirect), the data we're
                         // showing is stale so dismiss the dialog.
+                        // Vivaldi - Null check
+                        if (mDialog != null)
                         mDialog.dismiss(true);
                     }
 
@@ -337,6 +340,8 @@ public class PageInfoController
                     public void wasHidden() {
                         // The web contents were hidden (potentially by loading another URL via an
                         // intent), so dismiss the dialog).
+                        // Vivaldi - Null check
+                        if (mDialog != null)
                         mDialog.dismiss(true);
                     }
 
@@ -364,6 +369,7 @@ public class PageInfoController
                         isSheet(mContext),
                         delegate.getModalDialogManager(),
                         this);
+        if (!BuildConfig.IS_VIVALDI) // Vivaldi
         mDialog.show();
     }
 
@@ -496,6 +502,8 @@ public class PageInfoController
     public void runAfterDismiss(Runnable task) {
         assert mPendingRunAfterDismissTask == null;
         mPendingRunAfterDismissTask = task;
+        // Vivaldi - Null check
+        if (mDialog != null)
         mDialog.dismiss(true);
     }
 
@@ -684,5 +692,12 @@ public class PageInfoController
         if (mDialog != null) {
             mDialog.dismiss(true);
         }
+    }
+
+    // Vivaldi
+    public static PageInfoContainer getPageInfoContainer() {
+        if (getLastPageInfoControllerForTesting() != null)
+            return getLastPageInfoControllerForTesting().mContainer;
+        return null;
     }
 }

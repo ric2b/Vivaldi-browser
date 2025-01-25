@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Krajobraz 12</translation>
 <translation id="1158503667684816647">Nie pytaj ponownie</translation>
 <translation id="1222195720020481779">Uruchamianie instalatora...</translation>
+<translation id="1224683873953469764">Pobierz Vivaldi na urządzenia mobilne</translation>
 <translation id="1270785070369717623">Niestety, ustawienia Opera GX nie są dostępne podczas działania tej przeglądarki. Aby zaimportować te ustawienia do Vivaldi, zapisz swoją pracę i zamknij wszystkie okna przeglądarki Opera GX. Następnie kliknij przycisk „Kontynuuj”.</translation>
 <translation id="1276145862619442150">Szybkie wybieranie</translation>
 <translation id="1281950884873973195">Zwierzę 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Nie pytaj ponownie</translation>
 <translation id="1462666970065907900">Czy na pewno chcesz zamknąć to okno?</translation>
 <translation id="1480046233931937785">Prawa autorskie</translation>
+<translation id="1521774566618522728">Aktywne dzisiaj</translation>
 <translation id="1526344461589023948">Wystąpił błąd podczas próby zapisania pobranej aktualizacji. Sprawdź, czy komputer ma wystarczającą ilość miejsca na dysku i spróbuj ponownie później.</translation>
 <translation id="1635542496948266458">Przełącz profil</translation>
 <translation id="1657174850639146440">Potwór 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Głośność</translation>
 <translation id="443008484043213881">Narzędzia</translation>
 <translation id="4456211719108566931">Potwór 6</translation>
+<translation id="4459169140545916303">Aktywne <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dni temu</translation>
 <translation id="4512900838580567989">Otwórz link w nowej karcie w tle</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Otwórz obraz w nowej karcie w tle</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Bezpieczna aktualizacja magazynu kluczy</translation>
 <translation id="7111492742514999492">Krajobraz 9</translation>
 <translation id="7208252576848052204">Niestety, ustawienia Arc nie są dostępne podczas działania tej przeglądarki. Aby zaimportować te ustawienia do Vivaldi, zapisz swoją pracę i zamknij wszystkie okna przeglądarki Arc. Następnie kliknij przycisk „Kontynuuj”.</translation>
+<translation id="7321500017121629018">Aktywne wczoraj</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Nie udało się uruchomić instalatora aktualizacji. Sprawdź, czy komputer ma wystarczającą ilość pamięci lub miejsca na dysku i spróbuj ponownie później.</translation>
 <translation id="7658239707568436148">Anuluj</translation>

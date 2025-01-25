@@ -8,46 +8,6 @@ import type * as CodeMirror from '../../third_party/codemirror.next/codemirror.n
 
 import * as Elements from './elements.js';
 
-class TreeSearch extends SDK.CSSPropertyParser.TreeWalker {
-  #found: CodeMirror.SyntaxNode|null = null;
-  #predicate: (node: CodeMirror.SyntaxNode) => boolean;
-
-  constructor(ast: SDK.CSSPropertyParser.SyntaxTree, predicate: (node: CodeMirror.SyntaxNode) => boolean) {
-    super(ast);
-    this.#predicate = predicate;
-  }
-
-  protected override enter({node}: SDK.CSSPropertyParser.SyntaxNodeRef): boolean {
-    if (this.#found) {
-      return false;
-    }
-
-    if (this.#predicate(node)) {
-      this.#found = this.#found ?? node;
-      return false;
-    }
-    return true;
-  }
-
-  static find(ast: SDK.CSSPropertyParser.SyntaxTree, predicate: (node: CodeMirror.SyntaxNode) => boolean):
-      CodeMirror.SyntaxNode|null {
-    return TreeSearch.walk(ast, predicate).#found;
-  }
-
-  static findAll(ast: SDK.CSSPropertyParser.SyntaxTree, predicate: (node: CodeMirror.SyntaxNode) => boolean):
-      CodeMirror.SyntaxNode[] {
-    const foundNodes: CodeMirror.SyntaxNode[] = [];
-    TreeSearch.walk(ast, (node: CodeMirror.SyntaxNode) => {
-      if (predicate(node)) {
-        foundNodes.push(node);
-      }
-
-      return false;
-    });
-    return foundNodes;
-  }
-}
-
 function matchSingleValue<T extends SDK.CSSPropertyParser.Match>(
     name: string, value: string, matcher: SDK.CSSPropertyParser.Matcher<T>):
     {ast: SDK.CSSPropertyParser.SyntaxTree|null, match: T|null, text: string} {
@@ -57,7 +17,8 @@ function matchSingleValue<T extends SDK.CSSPropertyParser.Match>(
   }
 
   const matchedResult = SDK.CSSPropertyParser.BottomUpTreeMatching.walk(ast, [matcher]);
-  const matchedNode = TreeSearch.find(ast, n => matchedResult.getMatch(n) instanceof matcher.matchType);
+  const matchedNode =
+      SDK.CSSPropertyParser.TreeSearch.find(ast, n => matchedResult.getMatch(n) instanceof matcher.matchType);
   const match = matchedNode && matchedResult.getMatch(matchedNode);
 
   return {
@@ -167,7 +128,7 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
       assert.exists(ast, succeed);
       const matching =
           SDK.CSSPropertyParser.BottomUpTreeMatching.walk(ast, [new Elements.PropertyMatchers.ColorMatcher()]);
-      const colorNode = TreeSearch.find(ast, node => ast.text(node) === 'red');
+      const colorNode = SDK.CSSPropertyParser.TreeSearch.find(ast, node => ast.text(node) === 'red');
       assert.exists(colorNode);
       const match = matching.getMatch(colorNode);
       assert.exists(match);
@@ -286,7 +247,7 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
         new Elements.PropertyMatchers.LinkableNameMatcher(),
       ]);
 
-      const matches = TreeSearch.findAll(
+      const matches = SDK.CSSPropertyParser.TreeSearch.findAll(
           ast, node => matchedResult.getMatch(node) instanceof Elements.PropertyMatchers.LinkableNameMatch);
       return matches.map(m => matchedResult.getMatch(m)?.text);
     }
@@ -295,9 +256,9 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
     assert.deepStrictEqual(match('animation-name', 'first'), ['first']);
     assert.deepStrictEqual(match('font-palette', 'first'), ['first']);
     {
-      assert.deepStrictEqual(match('position-try-options', 'flip-block'), []);
-      assert.deepStrictEqual(match('position-try-options', '--one'), ['--one']);
-      assert.deepStrictEqual(match('position-try-options', '--one, --two'), ['--one', '--two']);
+      assert.deepStrictEqual(match('position-try-fallbacks', 'flip-block'), []);
+      assert.deepStrictEqual(match('position-try-fallbacks', '--one'), ['--one']);
+      assert.deepStrictEqual(match('position-try-fallbacks', '--one, --two'), ['--one', '--two']);
     }
     {
       assert.deepStrictEqual(match('position-try', 'flip-block'), []);
@@ -346,8 +307,8 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
           SDK.CSSPropertyParser.BottomUpTreeMatching.walk(ast, [new Elements.PropertyMatchers.StringMatcher()]);
       assert.exists(matchedResult);
 
-      const match =
-          TreeSearch.find(ast, node => matchedResult.getMatch(node) instanceof Elements.PropertyMatchers.StringMatch);
+      const match = SDK.CSSPropertyParser.TreeSearch.find(
+          ast, node => matchedResult.getMatch(node) instanceof Elements.PropertyMatchers.StringMatch);
       assert.exists(match);
     }
     match('quotes', '"\'" "\'"');
@@ -378,8 +339,8 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
           SDK.CSSPropertyParser.BottomUpTreeMatching.walk(ast, [new Elements.PropertyMatchers.FontMatcher()]);
       assert.exists(matchedResult);
 
-      const matches =
-          TreeSearch.findAll(ast, node => matchedResult.getMatch(node) instanceof Elements.PropertyMatchers.FontMatch);
+      const matches = SDK.CSSPropertyParser.TreeSearch.findAll(
+          ast, node => matchedResult.getMatch(node) instanceof Elements.PropertyMatchers.FontMatch);
       assert.deepStrictEqual(matches.map(m => matchedResult.getMatch(m)?.text), ['"Gill Sans"', 'sans-serif']);
     }
   });
@@ -490,14 +451,16 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
       assert.isNull(match, text);
     });
 
-    it('should not match if the anchor() and anchor-size() calls dont have any arguments', () => {
+    it('should not match anchor() call without arguments', () => {
       const {match: anchorMatch} =
           matchSingleValue('left', 'anchor()', new Elements.PropertyMatchers.AnchorFunctionMatcher());
       assert.isNull(anchorMatch);
+    });
 
-      const {match: anchorSizeMatch} =
+    it('should match anchor-size() call without arguments', () => {
+      const {match: anchorSizeMatch, text: anchorSizeText} =
           matchSingleValue('width', 'anchor-size()', new Elements.PropertyMatchers.AnchorFunctionMatcher());
-      assert.isNull(anchorSizeMatch);
+      assert.exists(anchorSizeMatch, anchorSizeText);
     });
 
     it('should match if it is an anchor() or anchor-size() call', () => {
@@ -511,15 +474,27 @@ describe('Matchers for SDK.CSSPropertyParser.BottomUpTreeMatching', () => {
     });
 
     it('should match dashed identifier as name from the first argument', () => {
-      const {ast: anchorAst, match: anchorMatch, text: anchorText} = matchSingleValue(
+      const {match: anchorMatch, text: anchorText} = matchSingleValue(
           'left', 'anchor(--dashed-ident left)', new Elements.PropertyMatchers.AnchorFunctionMatcher());
       assert.exists(anchorMatch, anchorText);
-      assert.strictEqual(anchorAst!.text(anchorMatch.args[0]), '--dashed-ident');
+      assert.strictEqual(anchorMatch.text, '--dashed-ident');
 
-      const {ast: anchorSizeAst, match: anchorSizeMatch, text: anchorSizeText} = matchSingleValue(
+      const {match: anchorSizeMatch, text: anchorSizeText} = matchSingleValue(
           'width', 'anchor-size(--dashed-ident width)', new Elements.PropertyMatchers.AnchorFunctionMatcher());
       assert.exists(anchorSizeMatch, anchorSizeText);
-      assert.strictEqual(anchorSizeAst!.text(anchorSizeMatch.args[0]), '--dashed-ident');
+      assert.strictEqual(anchorSizeMatch.text, '--dashed-ident');
+    });
+
+    it('should match dashed identifier as name from the second argument', () => {
+      const {match: anchorMatch, text: anchorText} = matchSingleValue(
+          'left', 'anchor(right --dashed-ident)', new Elements.PropertyMatchers.AnchorFunctionMatcher());
+      assert.exists(anchorMatch, anchorText);
+      assert.strictEqual(anchorMatch.text, '--dashed-ident');
+
+      const {match: anchorSizeMatch, text: anchorSizeText} = matchSingleValue(
+          'width', 'anchor-size(height --dashed-ident)', new Elements.PropertyMatchers.AnchorFunctionMatcher());
+      assert.exists(anchorSizeMatch, anchorSizeText);
+      assert.strictEqual(anchorSizeMatch.text, '--dashed-ident');
     });
   });
 

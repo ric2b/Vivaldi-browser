@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Önálló telepítés</translation>
 <translation id="1682285232070778125">Vivaldi, mint alapértelmezett böngésző</translation>
 <translation id="1974060860693918893">Haladó</translation>
+<translation id="2053560788696003312">A Vivaldihoz minimum Windows 10 szükséges.</translation>
 <translation id="2134216661302048561">A Vivaldi telepítő nem végzett a Vivaldi böngésző telepítésével. Biztos ki akarsz most lépni?</translation>
 <translation id="2286454467119466181">Egyszerű</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Minden jog fenntartva. &lt;a&gt;Privacy Policy&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Elfogadás és frissítés</translation>
 <translation id="5302048478445481009">Nyelv</translation>
 <translation id="694714344624446243">Vivaldi telepítő</translation>
+<translation id="7467493612551448880">A Vivaldi telepített verziója nincs optimalizálva az általad használt Windows verzióhoz.
+
+A Windows Arm verzió letöltéséhez látogass el a vivaldi.com/download oldalra.</translation>
 <translation id="7658239707568436148">Mégse</translation>
 <translation id="8773751185824654197">Megjegyzés: Ha futó Vivaldi böngészőt frissítesz, az adott példány bezáródik majd újraindul</translation>
 <translation id="933060950687965486">Telepítés típusa</translation>

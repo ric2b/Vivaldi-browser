@@ -27,10 +27,10 @@
 #include "absl/log/log.h"
 #include "./centipede/binary_info.h"
 #include "./centipede/environment.h"
-#include "./centipede/remote_file.h"
 #include "./centipede/symbol_table.h"
 #include "./centipede/test_coverage_util.h"
-#include "./centipede/test_util.h"
+#include "./common/remote_file.h"
+#include "./common/test_util.h"
 
 namespace centipede {
 namespace {
@@ -102,7 +102,7 @@ TEST(DumpCoverageReport, SimpleCoverageResults) {
       std::filesystem::path{test_tmpdir} / "covered_symbol_table";
   DumpCoverageReport(coverage_results, coverage_report_path);
   std::string symbol_table_contents;
-  RemoteFileGetContents(coverage_report_path, symbol_table_contents);
+  ASSERT_OK(RemoteFileGetContents(coverage_report_path, symbol_table_contents));
 
   std::istringstream symbol_table_stream(symbol_table_contents);
   SymbolTable symbols;

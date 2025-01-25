@@ -18,12 +18,13 @@ import {
 } from './AppenderUtils.js';
 import {
   type CompatibilityTracksAppender,
+  entryIsVisibleInTimeline,
   type HighlightedEntryInfo,
   type TrackAppender,
   type TrackAppenderName,
   VisualLoggingTrackName,
 } from './CompatibilityTracksAppender.js';
-import {getCategoryStyles, getEventStyle} from './EventUICategory.js';
+import * as Components from './components/components.js';
 import * as ModificationsManager from './ModificationsManager.js';
 
 const UIStrings = {
@@ -62,10 +63,6 @@ const UIStrings = {
    */
   dedicatedWorker: 'Dedicated `Worker`',
   /**
-   *@description Text for the name of anonymous functions
-   */
-  anonymous: '(anonymous)',
-  /**
    *@description A generic name given for a thread running in the browser (sequence of programmed instructions).
    * The placeholder is an enumeration given to the thread.
    *@example {1} PH1
@@ -78,17 +75,17 @@ const UIStrings = {
   /**
    *@description Threads used for background tasks.
    */
-  threadPool: 'Thread Pool',
+  threadPool: 'Thread pool',
   /**
    *@description Name for a thread that rasterizes graphics in a website.
    *@example {2} PH1
    */
-  rasterizerThreadS: 'Rasterizer Thread {PH1}',
+  rasterizerThreadS: 'Rasterizer thread {PH1}',
   /**
    *@description Text in Timeline Flame Chart Data Provider of the Performance panel
    *@example {2} PH1
    */
-  threadPoolThreadS: 'Thread Pool Worker {PH1}',
+  threadPoolThreadS: 'Thread pool worker {PH1}',
   /**
    *@description Title of a bidder auction worklet with known URL in the timeline flame chart of the Performance panel
    *@example {https://google.com} PH1
@@ -112,7 +109,7 @@ const UIStrings = {
   /**
    *@description Title of control thread of a service process for an auction worklet in the timeline flame chart of the Performance panel with an unknown URL
    */
-  workletService: 'Auction Worklet Service',
+  workletService: 'Auction Worklet service',
 
   /**
    *@description Title of a seller auction worklet with known URL in the timeline flame chart of the Performance panel
@@ -130,12 +127,7 @@ const UIStrings = {
    *@description Title of control thread of a service process for an auction worklet with known URL in the timeline flame chart of the Performance panel
    * @example {https://google.com} PH1
    */
-  workletServiceS: 'Auction Worklet Service — {PH1}',
-  /**
-   *@description Text used to show an EventDispatch event which has a type associated with it
-   *@example {click} PH1
-   */
-  eventDispatchS: 'Event: {PH1}',
+  workletServiceS: 'Auction Worklet service — {PH1}',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/ThreadAppender.ts', UIStrings);
@@ -492,7 +484,7 @@ export class ThreadAppender implements TrackAppender {
       // large). To avoid the extra cost we  add the check in the
       // traversal we already need to append events.
       const entryIsVisible = !invisibleEntries.includes(entry) &&
-          (this.#compatibilityBuilder.entryIsVisibleInTimeline(entry) || this.#showAllEventsEnabled);
+          (entryIsVisibleInTimeline(entry, this.#traceParsedData) || this.#showAllEventsEnabled);
       // For ignore listing support, these two conditions need to be met
       // to not append a profile call to the flame chart:
       // 1. It is ignore listed
@@ -572,19 +564,20 @@ export class ThreadAppender implements TrackAppender {
 
     if (TraceEngine.Types.TraceEvents.isProfileCall(event)) {
       if (event.callFrame.functionName === '(idle)') {
-        return getCategoryStyles().idle.getComputedColorValue();
+        return Components.EntryStyles.getCategoryStyles().idle.getComputedColorValue();
       }
       if (event.callFrame.scriptId === '0') {
         // If we can not match this frame to a script, return the
         // generic "scripting" color.
-        return getCategoryStyles().scripting.getComputedColorValue();
+        return Components.EntryStyles.getCategoryStyles().scripting.getComputedColorValue();
       }
       // Otherwise, return a color created based on its URL.
       return this.#colorGenerator.colorForID(event.callFrame.url);
     }
     const defaultColor =
-        getEventStyle(event.name as TraceEngine.Types.TraceEvents.KnownEventName)?.category.getComputedColorValue();
-    return defaultColor || getCategoryStyles().other.getComputedColorValue();
+        Components.EntryStyles.getEventStyle(event.name as TraceEngine.Types.TraceEvents.KnownEventName)
+            ?.category.getComputedColorValue();
+    return defaultColor || Components.EntryStyles.getCategoryStyles().other.getComputedColorValue();
   }
 
   /**
@@ -594,42 +587,14 @@ export class ThreadAppender implements TrackAppender {
     if (this.isIgnoreListedEntry(entry)) {
       return i18nString(UIStrings.onIgnoreList);
     }
-
-    // If the event is a profile call, we need to look up its name based on its
-    // ProfileNode in the CPUProfile for the trace we are working with.
-    if (TraceEngine.Types.TraceEvents.isProfileCall(entry)) {
-      // In the future traceParsedData.Samples will always be defined, but this
-      // is not the case until the sync tracks migration is fully shipped,
-      // hence this extra check.
-      if (this.#traceParsedData.Samples) {
-        const potentialCallName =
-            TraceEngine.Handlers.ModelHandlers.Samples.getProfileCallFunctionName(this.#traceParsedData.Samples, entry);
-        // We need this extra check because the call name could be the empty
-        // string. If it is, we want to fallback to the "(anonymous)" text.
-        if (potentialCallName) {
-          return potentialCallName;
-        }
-      }
-
-      return entry.callFrame.functionName || i18nString(UIStrings.anonymous);
-    }
-
-    if (TraceEngine.Types.TraceEvents.isTraceEventDispatch(entry)) {
-      // EventDispatch represent user actions such as clicks, so in this case
-      // rather than show the event title (which is always just "Event"), we
-      // add the type ("click") to help the user understand the event.
-      return i18nString(UIStrings.eventDispatchS, {PH1: entry.args.data.type});
-    }
-
-    const defaultName = getEventStyle(entry.name as TraceEngine.Types.TraceEvents.KnownEventName)?.title;
-    return defaultName || entry.name;
+    return Components.EntryName.nameForEntry(entry, this.#traceParsedData);
   }
 
   /**
    * Returns the info shown when an event added by this appender
    * is hovered in the timeline.
    */
-  highlightedEntryInfo(event: TraceEngine.Types.TraceEvents.SyntheticTraceEntry): HighlightedEntryInfo {
+  highlightedEntryInfo(event: TraceEngine.Types.TraceEvents.TraceEventData): HighlightedEntryInfo {
     let title = this.titleForEvent(event);
     if (TraceEngine.Types.TraceEvents.isTraceEventParseHTML(event)) {
       const startLine = event.args['beginData']['startLine'];
@@ -639,6 +604,7 @@ export class ThreadAppender implements TrackAppender {
       const range = (endLine !== -1 || endLine === startLine) ? `${startLine}...${endLine}` : startLine;
       title += ` - ${url} [${range}]`;
     }
-    return {title, formattedTime: getFormattedTime(event.dur, event.selfTime)};
+    const selfTime = this.#traceParsedData.Renderer.entryToNode.get(event)?.selfTime;
+    return {title, formattedTime: getFormattedTime(event.dur, selfTime)};
   }
 }

@@ -14,13 +14,14 @@
 #import "components/optimization_guide/core/optimization_guide_switches.h"
 #import "components/page_info/core/page_info_action.h"
 #import "components/strings/grit/components_branded_strings.h"
+#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/overlays/model/public/web_content_area/alert_constants.h"
+#import "ios/chrome/browser/permissions/ui_bundled/permissions_app_interface.h"
+#import "ios/chrome/browser/permissions/ui_bundled/permissions_constants.h"
 #import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/page_info/page_info_app_interface.h"
 #import "ios/chrome/browser/ui/page_info/page_info_constants.h"
-#import "ios/chrome/browser/ui/permissions/permissions_app_interface.h"
-#import "ios/chrome/browser/ui/permissions/permissions_constants.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
@@ -120,6 +121,7 @@ void ExpectPermissionChangedHistograms(ContentSettingsType type) {
   } else {
     config.features_enabled.push_back(kRevampPageInfoIos);
   }
+  config.features_enabled.push_back(kPageInfoLastVisitedIOS);
   config.additional_args.push_back(
       std::string("-") +
       optimization_guide::switches::kDisableCheckingUserPermissionsForTesting);
@@ -261,16 +263,7 @@ void ExpectPermissionChangedHistograms(ContentSettingsType type) {
 
 // Tests that single accessible permission is shown in Permissions section with
 // toggle.
-// TODO(crbug.com/40222316): Test fails on device due to asking for microphone
-// permission.
-#if !TARGET_IPHONE_SIMULATOR
-#define MAYBE_testShowOneAccessiblePermissionInPageInfo \
-  DISABLED_testShowOneAccessiblePermissionInPageInfo
-#else
-#define MAYBE_testShowOneAccessiblePermissionInPageInfo \
-  testShowOneAccessiblePermissionInPageInfo
-#endif
-- (void)MAYBE_testShowOneAccessiblePermissionInPageInfo {
+- (void)testShowOneAccessiblePermissionInPageInfo {
   // Open a page that requests microphone permissions.
   GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
   [ChromeEarlGrey
@@ -307,16 +300,7 @@ void ExpectPermissionChangedHistograms(ContentSettingsType type) {
 
 // Tests that two accessible permissions are shown in Permissions section with
 // toggle.
-// TODO(crbug.com/40222316): Test fails on device due to asking for microphone
-// permission.
-#if !TARGET_IPHONE_SIMULATOR
-#define MAYBE_testShowTwoAccessiblePermissionsInPageInfo \
-  DISABLED_testShowTwoAccessiblePermissionsInPageInfo
-#else
-#define MAYBE_testShowTwoAccessiblePermissionsInPageInfo \
-  testShowTwoAccessiblePermissionsInPageInfo
-#endif
-- (void)MAYBE_testShowTwoAccessiblePermissionsInPageInfo {
+- (void)testShowTwoAccessiblePermissionsInPageInfo {
   // TODO(crbug.com/342245057): Camera access is broken in the simulator on iOS
   // 17.5.
   if (@available(iOS 17.5, *)) {
@@ -506,6 +490,58 @@ void ExpectPermissionChangedHistograms(ContentSettingsType type) {
   [[EarlGrey selectElementWithMatcher:grey_text(l10n_util::GetNSString(
                                           IDS_IOS_PAGE_INFO_ABOUT_THIS_PAGE))]
       assertWithMatcher:grey_nil()];
+}
+
+// Tests that the Last Visited section is not displayed when there is no
+// previous visit to the current website.
+- (void)testLastVisitedSectionWithNoPreviousVisit {
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  GURL URL("https://www.example.com/");
+
+  AddAboutThisSiteHint(URL);
+  [ChromeEarlGrey loadURL:URL];
+  [ChromeEarlGreyUI openPageInfo];
+
+  // Check that Last Visited section is not displayed.
+  [[EarlGrey selectElementWithMatcher:grey_text(l10n_util::GetNSString(
+                                          IDS_PAGE_INFO_HISTORY))]
+      assertWithMatcher:grey_nil()];
+}
+
+// Tests that the Last Visited section is displayed when there exists a previous
+// visit, and also, it tests that the correct timestamp of the last visit is
+// presented.
+// TODO(crbug.com/366003628): Test is flaky on device.
+#if TARGET_OS_SIMULATOR
+#define MAYBE_testLastVisitedSectionDisplaysYesterday \
+  testLastVisitedSectionDisplaysYesterday
+#else
+#define MAYBE_testLastVisitedSectionDisplaysYesterday \
+  DISABLED_testLastVisitedSectionDisplaysYesterday
+#endif
+- (void)MAYBE_testLastVisitedSectionDisplaysYesterday {
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  GURL URL("https://www.example.com/");
+
+  // Create an entry in History which took place one day ago on `url`.
+  const base::Time oneDayAgo = base::Time::Now() - base::Hours(24);
+  [ChromeEarlGrey addHistoryServiceTypedURL:URL visitTimestamp:oneDayAgo];
+
+  // Visit `url` and open Page Info.
+  AddAboutThisSiteHint(URL);
+  [ChromeEarlGrey loadURL:URL];
+  [ChromeEarlGreyUI openPageInfo];
+
+  // Check that the Last Visited row is displayed.
+  [[EarlGrey selectElementWithMatcher:grey_text(l10n_util::GetNSString(
+                                          IDS_PAGE_INFO_HISTORY))]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Check that the Last Visited summary displays "Yesterday".
+  [[EarlGrey
+      selectElementWithMatcher:grey_text(l10n_util::GetNSString(
+                                   IDS_PAGE_INFO_HISTORY_LAST_VISIT_YESTERDAY))]
+      assertWithMatcher:grey_sufficientlyVisible()];
 }
 
 // Tests that we don't crash when showing the page info twice (prevent

@@ -76,10 +76,11 @@ void AutofillSnackbarControllerImpl::OnActionClicked() {
       break;
     case AutofillSnackbarType::kSaveCardSuccess:
     case AutofillSnackbarType::kVirtualCardEnrollSuccess:
+    case AutofillSnackbarType::kSaveServerIbanSuccess:
       // SnackbarManager.java will dismiss the snackbar after the click.
       break;
     case AutofillSnackbarType::kUnspecified:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -108,8 +109,11 @@ std::u16string AutofillSnackbarControllerImpl::GetMessageText() const {
     case AutofillSnackbarType::kVirtualCardEnrollSuccess:
       return l10n_util::GetStringUTF16(
           IDS_AUTOFILL_VIRTUAL_CARD_ENROLL_CONFIRMATION_SUCCESS_DESCRIPTION_TEXT);
+    case AutofillSnackbarType::kSaveServerIbanSuccess:
+      return l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_SAVE_SERVER_IBAN_SUCCESS_SNACKBAR_MESSAGE_TEXT);
     case AutofillSnackbarType::kUnspecified:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -125,8 +129,11 @@ std::u16string AutofillSnackbarControllerImpl::GetActionButtonText() const {
     case AutofillSnackbarType::kVirtualCardEnrollSuccess:
       return l10n_util::GetStringUTF16(
           IDS_AUTOFILL_SAVE_CARD_AND_VIRTUAL_CARD_ENROLL_CONFIRMATION_BUTTON_TEXT);
+    case AutofillSnackbarType::kSaveServerIbanSuccess:
+      return l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_SAVE_SERVER_IBAN_SUCCESS_SNACKBAR_BUTTON_TEXT);
     case AutofillSnackbarType::kUnspecified:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -156,6 +163,8 @@ std::string AutofillSnackbarControllerImpl::GetSnackbarTypeForLogging() {
       return "SaveCardSuccess";
     case AutofillSnackbarType::kVirtualCardEnrollSuccess:
       return "VirtualCardEnrollSuccess";
+    case AutofillSnackbarType::kSaveServerIbanSuccess:
+      return "SaveServerIbanSuccess";
     case AutofillSnackbarType::kUnspecified:
       return "Unspecified";
   }

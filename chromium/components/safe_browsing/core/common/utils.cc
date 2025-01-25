@@ -23,6 +23,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "base/enterprise_util.h"
@@ -119,6 +120,15 @@ bool CanGetReputationOfUrl(const GURL& url) {
   return true;
 }
 
+void MaybeLogCookieReset(const network::SimpleURLLoader& loader,
+                         SafeBrowsingAuthenticatedEndpoint endpoint) {
+  if (loader.ResponseInfo() &&
+      loader.ResponseInfo()->headers->HasHeader("Set-Cookie")) {
+    base::UmaHistogramEnumeration(
+        "SafeBrowsing.AuthenticatedCookieResetEndpoint", endpoint);
+  }
+}
+
 void SetAccessTokenAndClearCookieInResourceRequest(
     network::ResourceRequest* resource_request,
     const std::string& access_token) {
@@ -149,8 +159,6 @@ bool ErrorIsRetriable(int net_error, int http_error) {
 std::string GetExtraMetricsSuffix(
     security_interstitials::UnsafeResource unsafe_resource) {
   switch (unsafe_resource.threat_source) {
-    case safe_browsing::ThreatSource::REMOTE:
-      return "from_device";
     case safe_browsing::ThreatSource::LOCAL_PVER4:
       return "from_device_v4";
     case safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION:
@@ -166,7 +174,7 @@ std::string GetExtraMetricsSuffix(
     case safe_browsing::ThreatSource::UNKNOWN:
       break;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace safe_browsing

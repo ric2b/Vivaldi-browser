@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/functional/callback.h"
-#include "base/state_transitions.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_url_loader.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "url/gurl.h"
@@ -219,6 +218,8 @@ class SearchPrefetchRequest {
   // Called when there is a network/server error on the prefetch request.
   base::OnceCallback<void(bool)> report_error_callback_;
 
+  base::TimeTicks time_start_prefetch_request_;
+
   // The time at which the prefetched URL was clicked in the Omnibox.
   base::TimeTicks time_clicked_;
 
@@ -230,8 +231,6 @@ class SearchPrefetchRequest {
   // passed to log various metrics. We store WeakPtr as prerender can be deleted
   // before we receive a prefetch response or the prerender is not created.
   base::WeakPtr<content::PreloadingAttempt> prerender_preloading_attempt_;
-
-  raw_ptr<Profile> profile_;
 };
 
 // Used when DCHECK_STATE_TRANSITION triggers.

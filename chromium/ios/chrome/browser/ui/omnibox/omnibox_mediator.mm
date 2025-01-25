@@ -44,11 +44,16 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
+#import "ios/chrome/common/ui/util/image_util.h"
 #import "prefs/vivaldi_pref_names.h"
 
 using vivaldi::IsVivaldiRunning;
 using TemplateURLService::kDefaultSearchMain;
 using TemplateURLService::kDefaultSearchPrivate;
+
+namespace {
+const CGFloat kFaviconSize = 16;
+}  // namespace
 // End Vivaldi
 
 using base::UserMetricsAction;
@@ -113,6 +118,13 @@ using base::UserMetricsAction;
   _consumer = consumer;
 
   [self updateConsumerEmptyTextImage];
+
+  if (IsVivaldiRunning()) {
+    [self.consumer
+        setPreferenceForEnableSearchEngineNickname:
+            [self searchEngineNicknameEnabled]];
+  } // End Vivaldi
+
 }
 
 - (void)setTemplateURLService:(TemplateURLService*)templateURLService {
@@ -210,6 +222,20 @@ using base::UserMetricsAction;
                         kOmniboxLeadingImageDefaultAccessibilityIdentifier];
     }];
   } else if (suggestion.destinationUrl.gurl.is_valid()) {
+
+    if (IsVivaldiRunning() && [suggestion.local_favicon_path length] > 0) {
+      UIImage* image =
+          [[UIImage alloc]
+              initWithContentsOfFile:suggestion.local_favicon_path];
+      UIImage* resized_image =
+          ResizeImage(image,
+                      CGSize(kFaviconSize, kFaviconSize),
+                      ProjectionMode::kAspectFit);
+      NSString* webPageUrl = base::SysUTF8ToNSString(
+            suggestion.destinationUrl.gurl.spec());
+      [weakSelf.consumer updateAutocompleteIcon:resized_image
+                    withAccessibilityIdentifier:webPageUrl];
+    } else {
     // Show url favicon when it's valid.
     [self loadFaviconByPageURL:suggestion.destinationUrl.gurl
                     completion:^(UIImage* image) {
@@ -218,6 +244,8 @@ using base::UserMetricsAction;
                       [weakSelf.consumer updateAutocompleteIcon:image
                                     withAccessibilityIdentifier:webPageUrl];
                     }];
+    } // End Vivaldi
+
   } else if (isFirstUpdate) {
     // When no suggestion is highlighted (aka. isFirstUpdate) show the default
     // browser icon.
@@ -385,6 +413,13 @@ using base::UserMetricsAction;
   [_consumer
       updateSearchByImageSupported:self.searchEngineSupportsSearchByImage];
   [_consumer updateLensImageSupported:self.searchEngineSupportsLens];
+
+  if (self.templateURLService) {
+    if (const TemplateURL* searchProvider =
+            self.templateURLService->GetDefaultSearchProvider()) {
+      [self.consumer setSearchProviderName:searchProvider->short_name()];
+    }
+  }
 
   // Show Default Search Engine favicon.
   // Remember what is the Default Search Engine provider that the icon is

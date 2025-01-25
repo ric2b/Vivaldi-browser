@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "sql/database.h"
 
 #include <limits.h>
@@ -1897,7 +1902,7 @@ bool Database::OpenInternal(const std::string& db_file_path) {
       uri_file_path = base::StrCat({"file:", db_file_path, "?exclusive=true"});
     }
 #else
-    NOTREACHED_NORETURN()
+    NOTREACHED()
         << "exclusive_database_file_lock is only supported on Windows.";
 #endif  // BUILDFLAG(IS_WIN)
   }

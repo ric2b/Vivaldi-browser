@@ -14,11 +14,13 @@
 
 //! Data Elements for v1 advertisements. See `class V1DataElement`.
 
+use array_view::ArrayView;
 use jni::{
     objects::{JByteArray, JObject},
     sys::jlong,
     JNIEnv,
 };
+use np_ffi_core::{common::ByteBuffer, serialize::v1::V1DE127ByteBuffer};
 use pourover::desc::ClassDesc;
 
 static GENERIC_CLASS: ClassDesc =
@@ -47,5 +49,49 @@ impl<'local, Obj: AsRef<JObject<'local>>> Generic<Obj> {
         obj: Obj,
     ) -> jni::errors::Result<Option<Self>> {
         Ok(env.is_instance_of(obj.as_ref(), &GENERIC_CLASS)?.then(|| Self(obj)))
+    }
+
+    /// Get a reference to the inner `jni` crate [`JObject`].
+    pub fn as_obj(&self) -> &JObject<'local> {
+        self.0.as_ref()
+    }
+
+    /// Get the data element's type
+    pub fn get_type<'env>(&self, env: &mut JNIEnv<'env>) -> jni::errors::Result<jlong> {
+        pourover::call_method!(env, &GENERIC_CLASS, "getType", "()J", self.as_obj())
+    }
+
+    /// Get the data element's data. Returns `None` if the data is too long.
+    pub fn get_data<'env>(
+        &self,
+        env: &mut JNIEnv<'env>,
+    ) -> jni::errors::Result<Option<ByteBuffer<127>>> {
+        let data = pourover::call_method!(env, &GENERIC_CLASS, "getData", "()[B", self.as_obj())?;
+        let len = env.get_array_length(&data)? as usize;
+
+        if len > 127 {
+            return Ok(None);
+        }
+
+        // Length is validated above
+        #[allow(clippy::unwrap_used)]
+        {
+            let mut buffer = [0; 127];
+            env.get_byte_array_region(&data, 0, buffer.get_mut(..len).unwrap())?;
+            let buffer = buffer.map(|b| b as u8);
+            Ok(Some(ByteBuffer::from_array_view(ArrayView::try_from_array(buffer, len).unwrap())))
+        }
+    }
+
+    /// Get the data element as a `np_ffi_core` byte buffer. Returns `None` if the data element is
+    /// not valid.
+    pub fn as_core_byte_buffer_de<'env>(
+        &self,
+        env: &mut JNIEnv<'env>,
+    ) -> jni::errors::Result<Option<V1DE127ByteBuffer>> {
+        let Some(payload) = self.get_data(env)? else {
+            return Ok(None);
+        };
+        Ok(Some(V1DE127ByteBuffer { de_type: self.get_type(env)? as u32, payload }))
     }
 }

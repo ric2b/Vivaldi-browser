@@ -6,6 +6,7 @@
 #define COMPONENTS_SEGMENTATION_PLATFORM_PUBLIC_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 
 namespace segmentation_platform::features {
 
@@ -37,8 +38,8 @@ BASE_DECLARE_FEATURE(kSegmentationPlatformPowerUserFeature);
 // Feature flag for enabling frequent feature user segment.
 BASE_DECLARE_FEATURE(kFrequentFeatureUserSegmentFeature);
 
-// Feature flag for enabling contextual page actions. Only effective when at
-// least one action is enabled.
+// Feature flag for enabling contextual page actions. Do not remove this, as all
+// segmentation platform powered functionalities must be behind a base::Feature.
 BASE_DECLARE_FEATURE(kContextualPageActions);
 
 // Feature flag for enabling search user segment.
@@ -46,9 +47,6 @@ BASE_DECLARE_FEATURE(kSegmentationPlatformSearchUser);
 
 // Feature flag for device switcher segment.
 BASE_DECLARE_FEATURE(kSegmentationPlatformDeviceSwitcher);
-
-// Feature flag for enabling reader mode action feature.
-BASE_DECLARE_FEATURE(kContextualPageActionReaderMode);
 
 // Feature flag for enabling reader mode action feature.
 BASE_DECLARE_FEATURE(kContextualPageActionShareModel);
@@ -113,6 +111,16 @@ BASE_DECLARE_FEATURE(kSegmentationPlatformIosModuleRankerSplitBySurface);
 
 // Feature flag for enabling the URL visit resumption ranker.
 BASE_DECLARE_FEATURE(kSegmentationPlatformURLVisitResumptionRanker);
+
+extern const char kEphemeralCardRankerForceShowCardParam[];
+extern const char kEphemeralCardRankerForceHideCardParam[];
+extern const char kPriceTrackingPromoForceOverride[];
+
+// Feature flag for enabling the Emphemeral Card ranker.
+BASE_DECLARE_FEATURE(kSegmentationPlatformEphemeralCardRanker);
+
+BASE_DECLARE_FEATURE(kSegmentationSurveyPage);
+extern const base::FeatureParam<bool> kSegmentationSurveyInternalsPage;
 
 }  // namespace segmentation_platform::features
 

@@ -19,7 +19,6 @@ class QuicDispatcherImpl : public quic::QuicDispatcher {
       const quic::QuicCryptoServerConfig* crypto_server_config,
       std::unique_ptr<quic::QuicVersionManager> version_manager,
       std::unique_ptr<quic::QuicConnectionHelperInterface> helper,
-      std::unique_ptr<quic::QuicCryptoServerStreamBase::Helper> session_helper,
       std::unique_ptr<quic::QuicAlarmFactory> alarm_factory,
       uint8_t expected_server_connection_id_length,
       quic::ConnectionIdGeneratorInterface& generator,

@@ -145,8 +145,8 @@ bool ShouldOfferVirtualCardEnrollment(
 bool HasSynthesizedTypes(
     const base::flat_map<FieldType, std::u16string>& observed_field_values,
     AddressCountryCode country_code) {
-  return base::ranges::any_of(observed_field_values, [country_code](
-                                                         const auto& entry) {
+  return std::ranges::any_of(observed_field_values, [country_code](
+                                                        const auto& entry) {
     return i18n_model_definition::IsSynthesizedType(entry.first, country_code);
   });
 }
@@ -320,8 +320,7 @@ FormDataImporter::ExtractedFormData FormDataImporter::ExtractFormData(
         submitted_form, &extracted_form_data.address_profile_import_candidates);
   }
 
-  if (profile_autofill_enabled && payment_methods_autofill_enabled &&
-      base::FeatureList::IsEnabled(features::kAutofillAssociateForms)) {
+  if (profile_autofill_enabled && payment_methods_autofill_enabled) {
     auto origin = url::Origin::Create(submitted_form.source_url());
     FormSignature form_signature = submitted_form.form_signature();
     // If multiple complete address profiles were extracted, this most likely
@@ -484,13 +483,7 @@ FormDataImporter::GetAddressObservedFieldValues(
 
   // Go through each |form| field and attempt to constitute a valid profile.
   for (const AutofillField* const field : section_fields) {
-    // If `field` has a selected option, we give precedence to the option's text
-    // over its value because the user-visible text is likely more meaningful.
-    // Currently, only <select> elements may have a selected option.
-    base::optional_ref<const SelectOption> selected_option =
-        field->selected_option();
-    std::u16string value =
-        selected_option.has_value() ? selected_option->text : field->value();
+    std::u16string value = field->value_for_import();
     base::TrimWhitespace(value, base::TRIM_ALL, &value);
 
     // If we don't know the type of the field, or the user hasn't entered any
@@ -511,7 +504,9 @@ FormDataImporter::GetAddressObservedFieldValues(
       continue;
     }
     // Don't import from ac=unrecognized fields.
-    if (field->ShouldSuppressSuggestionsAndFillingByDefault()) {
+    if (field->ShouldSuppressSuggestionsAndFillingByDefault() &&
+        !base::FeatureList::IsEnabled(
+            features::kAutofillImportFromAutocompleteUnrecognized)) {
       continue;
     }
 
@@ -743,7 +738,8 @@ bool FormDataImporter::ProcessExtractedCreditCard(
   // didn't update the result that was filled into the form, re-auth opt-in flow
   // might be offered.
   if (auto* mandatory_reauth_manager =
-          client_->GetOrCreatePaymentsMandatoryReauthManager();
+          client_->GetPaymentsAutofillClient()
+              ->GetOrCreatePaymentsMandatoryReauthManager();
       credit_card_import_type_ != CreditCardImportType::kNewCard &&
       mandatory_reauth_manager &&
       mandatory_reauth_manager->ShouldOfferOptin(
@@ -799,7 +795,8 @@ bool FormDataImporter::ProcessIbanImportCandidate(Iban& extracted_iban) {
   // If a flow where there was no interactive authentication was completed,
   // re-auth opt-in flow might be offered.
   if (auto* mandatory_reauth_manager =
-          client_->GetOrCreatePaymentsMandatoryReauthManager();
+          client_->GetPaymentsAutofillClient()
+              ->GetOrCreatePaymentsMandatoryReauthManager();
       mandatory_reauth_manager &&
       mandatory_reauth_manager->ShouldOfferOptin(
           payment_method_type_if_non_interactive_authentication_flow_completed_)) {
@@ -976,13 +973,7 @@ FormDataImporter::ExtractCreditCardFromForm(const FormStructure& form) {
           return user_input;
         }
       }
-      // If `field` has a selected option, we give precedence to the option's
-      // text over its value because the user-visible text is likely more
-      // meaningful. Currently,
-      // only <select> elements may have a selected option.
-      base::optional_ref<const SelectOption> selected_option =
-          field.selected_option();
-      return selected_option ? selected_option->text : field.value();
+      return field.value_for_import();
     }();
     base::TrimWhitespace(value, base::TRIM_ALL);
 
@@ -1060,12 +1051,13 @@ Iban FormDataImporter::ExtractIbanFromForm(const FormStructure& form) {
   // unknown if this IBAN already exists locally or on the server.
   Iban candidate_iban;
   for (const auto& field : form) {
-    if (!field->IsFieldFillable() || field->value().empty()) {
+    const std::u16string& value = field->value_for_import();
+    if (!field->IsFieldFillable() || value.empty()) {
       continue;
     }
     FieldType field_type = field->Type().GetStorableType();
-    if (field_type == IBAN_VALUE && Iban::IsValid(field->value())) {
-      candidate_iban.SetInfo(IBAN_VALUE, field->value(), app_locale_);
+    if (field_type == IBAN_VALUE && Iban::IsValid(value)) {
+      candidate_iban.SetInfo(IBAN_VALUE, value, app_locale_);
       break;
     }
   }

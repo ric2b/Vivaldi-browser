@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/debug/alias.h"
+#include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -22,6 +23,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -35,6 +37,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/v8_value_converter.h"
+#include "extensions/common/api/incognito.h"
 #include "extensions/common/api/messaging/message.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/cors_util.h"
@@ -53,6 +56,7 @@
 #include "extensions/common/features/feature_session_type.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/background_info.h"
+#include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/mojom/host_id.mojom.h"
@@ -88,6 +92,7 @@
 #include "gin/converter.h"
 #include "services/network/public/mojom/cors.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -121,6 +126,16 @@ namespace {
 
 static const char kOnSuspendEvent[] = "runtime.onSuspend";
 static const char kOnSuspendCanceledEvent[] = "runtime.onSuspendCanceled";
+
+enum class ExtensionRendererLoadStatus {
+  // Extension is neither loaded in the registry nor unloaded.
+  kUnknownExtension = 0,
+  // Extension is loaded in the registry.
+  kExtensionLoaded = 1,
+  // Extension was loaded in the registry, but was unloaded.
+  kExtensionUnloaded = 2,
+  kMaxValue = kExtensionUnloaded,
+};
 
 // Returns whether or not extension APIs are allowed for the specified
 // `script_url` and `scope`. The script must be specified in the extension's
@@ -230,7 +245,91 @@ scoped_refptr<Extension> ConvertToExtension(
   return extension;
 }
 
+using IncognitoManifestKeys = api::incognito::ManifestKeys;
+
+base::debug::CrashKeyString* GetCrashKey(const char* key) {
+  static auto* crash_key = base::debug::AllocateCrashKeyString(
+      key, base::debug::CrashKeySize::Size32);
+  return crash_key;
+}
+
+const ExtensionId& GetExtensionIdValue(const Extension& extension) {
+  return extension.id();
+}
+
+std::string GetManifestVersionValue(const Extension& extension) {
+  return base::NumberToString(extension.manifest_version());
+}
+
+const char* GetServiceWorkerBasedValue(const Extension& extension) {
+  return BackgroundInfo::IsServiceWorkerBased(&extension) ? "yes" : "no";
+}
+
+const char* GetIncognitoModeValue(const Extension& extension) {
+  IncognitoInfo* info = static_cast<IncognitoInfo*>(
+      extension.GetManifestData(IncognitoManifestKeys::kIncognito));
+  if (!info) {
+    return "no_incognito_info";
+  }
+  return api::incognito::ToString(info->mode);
+}
+
+const char* GetIncognitoProcessValue(
+    const ExtensionsRendererClient* renderer_client) {
+  if (!renderer_client) {
+    return "no_renderer_client";
+  }
+  return renderer_client->IsIncognitoProcess() ? "yes" : "no";
+}
+
 }  // namespace
+
+namespace debug {
+
+// Helper for adding a set of missing activation token related crash keys.
+//
+// It is created when being notified that an extension worker will evaluate (is
+// in the process of starting) and we might detect that there isn't an
+// activation token recorded for the extension worker.
+//
+// All keys are logged every time this class is instantiated.
+class ScopedActivationTokenMissingCrashKeys {
+ public:
+  explicit ScopedActivationTokenMissingCrashKeys(
+      const Extension& extension,
+      const ExtensionsRendererClient* renderer_client)
+      : extension_id_crash_key_(GetCrashKey("ext_token_id"),
+                                GetExtensionIdValue(extension)),
+        manifest_version_crash_key_(GetCrashKey("ext_token_manifest_version"),
+                                    GetManifestVersionValue(extension)),
+        sw_based_crash_key_(GetCrashKey("ext_token_sw_based"),
+                            GetServiceWorkerBasedValue(extension)),
+        incognito_mode_crash_key_(GetCrashKey("ext_token_incog_mode"),
+                                  GetIncognitoModeValue(extension)),
+        incognito_process_crash_key_(
+            GetCrashKey("ext_token_incog_process"),
+            GetIncognitoProcessValue(renderer_client)) {}
+  ~ScopedActivationTokenMissingCrashKeys() = default;
+
+ private:
+  // ExtensionId of the extension.
+  base::debug::ScopedCrashKeyString extension_id_crash_key_;
+
+  // The manifest version of the extension.
+  base::debug::ScopedCrashKeyString manifest_version_crash_key_;
+
+  // Whether the extension has a service worker background script registered in
+  // the manifest.
+  base::debug::ScopedCrashKeyString sw_based_crash_key_;
+
+  // What the api::incognito::IncognitoMode is for the extension.
+  base::debug::ScopedCrashKeyString incognito_mode_crash_key_;
+
+  // Whether the renderer process for the extension was launched incognito.
+  base::debug::ScopedCrashKeyString incognito_process_crash_key_;
+};
+
+}  // namespace debug
 
 Dispatcher::PendingServiceWorker::PendingServiceWorker(
     blink::WebServiceWorkerContextProxy* context_proxy)
@@ -483,7 +582,8 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
     v8::Local<v8::Context> v8_context,
     int64_t service_worker_version_id,
     const GURL& service_worker_scope,
-    const GURL& script_url) {
+    const GURL& script_url,
+    const blink::ServiceWorkerToken& service_worker_token) {
   const base::TimeTicks start_time = base::TimeTicks::Now();
 
   // TODO(crbug.com/40626913): We may want to give service workers not
@@ -499,6 +599,19 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
 
   const Extension* extension =
       RendererExtensionRegistry::Get()->GetExtensionOrAppByURL(script_url);
+
+  ExtensionRendererLoadStatus load_status =
+      ExtensionRendererLoadStatus::kUnknownExtension;
+  if (extension) {
+    load_status = ExtensionRendererLoadStatus::kExtensionLoaded;
+  } else if (base::Contains(unloaded_extensions_, script_url.host())) {
+    // script_url.host() is the extension's ID.
+    load_status = ExtensionRendererLoadStatus::kExtensionUnloaded;
+  }
+  base::UmaHistogramEnumeration(
+      "Extensions.ServiceWorkerRenderer."
+      "ExtensionLoadStatusInWorkerScriptEvaluation",
+      load_status);
 
   if (!extension) {
     // TODO(kalman): This is no good. Instead we need to either:
@@ -553,10 +666,17 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
   std::unique_ptr<IPCMessageSender> ipc_sender =
       IPCMessageSender::CreateWorkerThreadIPCMessageSender(
           worker_dispatcher, context_proxy, service_worker_version_id);
-  CHECK(worker_activation_token.has_value());
+  {
+    CHECK(extension);
+    // TODO(crbug.com/357889496): Remove these crash keys once bug is resolved.
+    debug::ScopedActivationTokenMissingCrashKeys activation_token_missing_keys(
+        *extension, ExtensionsRendererClient::Get());
+    CHECK(worker_activation_token.has_value());
+  }
   worker_dispatcher->AddWorkerData(
       context_proxy, service_worker_version_id, worker_activation_token,
-      context, CreateBindingsSystem(worker_dispatcher, std::move(ipc_sender)));
+      service_worker_token, context,
+      CreateBindingsSystem(worker_dispatcher, std::move(ipc_sender)));
 
   // TODO(lazyboy): Make sure accessing |source_map_| in worker thread is
   // safe.
@@ -869,25 +989,24 @@ void Dispatcher::LoadExtensions(
 
     RendererExtensionRegistry* extension_registry =
         RendererExtensionRegistry::Get();
-    // TODO(kalman): This test is deliberately not a CHECK (though I wish it
-    // could be) and uses extension->id() not params.id:
-    // 1. For some reason params.id can be empty. I've only seen it with
-    //    the webstore extension, in tests, and I've spent some time trying to
-    //    figure out why - but cost/benefit won.
-    // 2. The browser only sends this IPC to RenderProcessHosts once, but the
-    //    Dispatcher is attached to a RenderThread. Presumably there is a
-    //    mismatch there. In theory one would think it's possible for the
-    //    browser to figure this out itself - but again, cost/benefit.
-    if (!extension_registry->Insert(extension)) {
-      // TODO(devlin): This may be fixed by crbug.com/528026. Monitor, and
-      // consider making this a release CHECK.
-      NOTREACHED_IN_MIGRATION();
-    }
 
+    // The order of setting the token before inserting the extension is
+    // intentional so that DidInitializeServiceWorkerContextOnWorkerThread()
+    // will pause the worker evaluation
+    // (WillEvaluateServiceWorkerOnWorkerThread()) from running before we have
+    // these two necessary pieces of information for setting up the extension
+    // bindings.
     if (worker_activation_token.has_value()) {
       extension_registry->SetWorkerActivationToken(
           extension, std::move(*worker_activation_token));
     }
+    // TODO(jlulejian): This is deliberately a CHECK because other parts of the
+    // renderer assume that an extension has been loaded (e.g. specifically
+    // worker script evaluation process). If this fails, other CHECK()s and
+    // logic will fail too.
+    CHECK(extension_registry->Insert(extension));
+
+    unloaded_extensions_.erase(extension->id());
 
     ExtensionsRendererClient::Get()->OnExtensionLoaded(*extension);
 
@@ -917,14 +1036,11 @@ void Dispatcher::LoadExtensions(
 void Dispatcher::UnloadExtension(const ExtensionId& extension_id) {
   TRACE_RENDERER_EXTENSION_EVENT("Dispatcher::UnloadExtension", extension_id);
 
-  // See comment in OnLoaded for why it would be nice, but perhaps incorrect,
-  // to CHECK here rather than guarding.
-  // TODO(devlin): This may be fixed by crbug.com/528026. Monitor, and
-  // consider making this a release CHECK.
-  if (!RendererExtensionRegistry::Get()->Remove(extension_id)) {
-    NOTREACHED_IN_MIGRATION();
-    return;
-  }
+  // An extension should be in the registry if we are unloading it. Otherwise we
+  // might be doing something out of the expected order.
+  CHECK(RendererExtensionRegistry::Get()->Remove(extension_id));
+
+  unloaded_extensions_.insert(extension_id);
 
   ExtensionsRendererClient::Get()->OnExtensionUnloaded(extension_id);
 
@@ -1035,7 +1151,7 @@ void Dispatcher::UpdateUserScriptWorlds(
 }
 
 void Dispatcher::ClearUserScriptWorldConfig(
-    const std::string& extension_id,
+    const ExtensionId& extension_id,
     const std::optional<std::string>& world_id) {
   IsolatedWorldManager::GetInstance().ClearUserScriptWorldProperties(
       extension_id, world_id);

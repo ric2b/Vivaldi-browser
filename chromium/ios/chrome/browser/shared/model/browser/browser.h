@@ -5,13 +5,13 @@
 #ifndef IOS_CHROME_BROWSER_SHARED_MODEL_BROWSER_BROWSER_H_
 #define IOS_CHROME_BROWSER_SHARED_MODEL_BROWSER_BROWSER_H_
 
-#include <memory>
+#import <memory>
 
-#include "base/memory/weak_ptr.h"
-#include "base/supports_user_data.h"
+#import "base/memory/weak_ptr.h"
+#import "base/supports_user_data.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
 class BrowserObserver;
-class ChromeBrowserState;
 @class CommandDispatcher;
 @class SceneState;
 class WebStateList;
@@ -51,7 +51,12 @@ class Browser : public base::SupportsUserData {
   virtual Type type() const = 0;
 
   // Accessor for the owning ChromeBrowserState.
+  // TODO(crbug.com/358301380): After all usage has changed to GetProfile(),
+  // remove this method.
   virtual ChromeBrowserState* GetBrowserState() = 0;
+
+  // Accessor for the owning Profile.
+  virtual ChromeBrowserState* GetProfile() = 0;
 
   // Accessor for the WebStateList.
   virtual WebStateList* GetWebStateList() = 0;

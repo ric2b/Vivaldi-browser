@@ -47,8 +47,10 @@ mod v0_advertisement_builder;
 mod v0_broadcast_credential;
 mod v0_discovery_credential;
 mod v0_payload;
+mod v1_advertisement_builder;
 mod v1_broadcast_credential;
 mod v1_discovery_credential;
+mod verification_mode;
 
 pub mod v0_data_element;
 pub mod v1_data_element;
@@ -58,16 +60,18 @@ pub use deserialization_exception::{InvalidFormatException, InvalidHeaderExcepti
 pub use deserialize_result::{DeserializeResult, DeserializeResultError};
 pub use deserialized_v0_advertisement::{DeserializedV0Advertisement, V0AdvertisementError};
 pub use deserialized_v1_advertisement::DeserializedV1Advertisement;
-pub use deserialized_v1_section::{DeserializedV1Section, VerificationMode};
+pub use deserialized_v1_section::DeserializedV1Section;
 pub use handle::InvalidHandleException;
 pub use identity_kind::IdentityKind;
 pub use legible_v1_sections::LegibleV1Sections;
 pub use owned_handle::NoSpaceLeftException;
 pub use serialization_exception::{
-    InsufficientSpaceException, InvalidDataElementException, LdtEncryptionException,
-    UnencryptedSizeException,
+    InsufficientSpaceException, InvalidDataElementException, InvalidSectionKindException,
+    LdtEncryptionException, UnclosedActiveSectionException, UnencryptedSizeException,
 };
 pub use v0_broadcast_credential::V0BroadcastCredential;
 pub use v0_discovery_credential::V0DiscoveryCredential;
+pub use v1_advertisement_builder::{V1BuilderHandle, V1SectionBuilder};
 pub use v1_broadcast_credential::V1BroadcastCredential;
 pub use v1_discovery_credential::V1DiscoveryCredential;
+pub use verification_mode::VerificationMode;

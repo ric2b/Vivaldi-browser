@@ -24,7 +24,10 @@ export enum MediapipeFacialGesture {
   EYE_LOOK_UP_RIGHT = 'eyeLookUpRight',
   EYE_SQUINT_LEFT = 'eyeSquintLeft',
   EYE_SQUINT_RIGHT = 'eyeSquintRight',
+  JAW_LEFT = 'jawLeft',
   JAW_OPEN = 'jawOpen',
+  JAW_RIGHT = 'jawRight',
+  MOUTH_FUNNEL = 'mouthFunnel',
   MOUTH_LEFT = 'mouthLeft',
   MOUTH_PUCKER = 'mouthPucker',
   MOUTH_RIGHT = 'mouthRight',
@@ -84,7 +87,10 @@ export const FacialGesturesToMediapipeGestures = new Map([
       MediapipeFacialGesture.EYE_LOOK_UP_RIGHT,
     ],
   ],
+  [FacialGesture.JAW_LEFT, [MediapipeFacialGesture.JAW_LEFT]],
   [FacialGesture.JAW_OPEN, [MediapipeFacialGesture.JAW_OPEN]],
+  [FacialGesture.JAW_RIGHT, [MediapipeFacialGesture.JAW_RIGHT]],
+  [FacialGesture.MOUTH_FUNNEL, [MediapipeFacialGesture.MOUTH_FUNNEL]],
   [FacialGesture.MOUTH_LEFT, [MediapipeFacialGesture.MOUTH_LEFT]],
   [FacialGesture.MOUTH_PUCKER, [MediapipeFacialGesture.MOUTH_PUCKER]],
   [FacialGesture.MOUTH_RIGHT, [MediapipeFacialGesture.MOUTH_RIGHT]],
@@ -107,6 +113,11 @@ export const FacialGesturesToMediapipeGestures = new Map([
 export class GestureDetector {
   private static mediapipeFacialGestureSet_ =
       new Set(Object.values(MediapipeFacialGesture));
+  declare private static shouldSendGestureDetectionInfo_: boolean;
+
+  static toggleSendGestureDetectionInfo(enabled: boolean): void {
+    this.shouldSendGestureDetectionInfo_ = enabled;
+  }
 
   /**
    * Computes which FacialGestures were detected. Note that this will only
@@ -135,11 +146,14 @@ export class GestureDetector {
 
     // Look through the facial gestures to see which were detected by mediapipe.
     const gestures: FacialGesture[] = [];
+    const gestureInfoForSettings:
+        Array<{gesture: FacialGesture, confidence: number}> = [];
     for (const [faceGazeGesture, mediapipeGestures] of
              FacialGesturesToMediapipeGestures) {
       const confidence = confidenceMap.get(faceGazeGesture);
-      if (confidence === undefined) {
-        // This gesture isn't in-use by FaceGaze at the moment.
+      if (!this.shouldSendGestureDetectionInfo_ && !confidence) {
+        // Settings is not requesting gesture detection information and
+        // this gesture is not currently used by FaceGaze.
         continue;
       }
 
@@ -160,17 +174,32 @@ export class GestureDetector {
         continue;
       }
 
-      if (score < confidence) {
+      // For gestures detected with a confidence value over a threshold value of
+      // 1, add the gesture and confidence value to the array of information
+      // that will be sent to settings.
+      if (this.shouldSendGestureDetectionInfo_ && score >= 0.01) {
+        gestureInfoForSettings.push(
+            {gesture: faceGazeGesture, confidence: score * 100});
+      }
+
+      if (confidence && score < confidence) {
         continue;
       }
 
       gestures.push(faceGazeGesture);
     }
+
+    if (this.shouldSendGestureDetectionInfo_ &&
+        gestureInfoForSettings.length > 0) {
+      chrome.accessibilityPrivate.sendGestureInfoToSettings(
+          gestureInfoForSettings);
+    }
+
     return gestures;
   }
 }
 
 TestImportManager.exportForTesting(
-    ['FacialGesture', FacialGesture],
+    GestureDetector, ['FacialGesture', FacialGesture],
     ['MediapipeFacialGesture', MediapipeFacialGesture],
     ['FacialGesturesToMediapipeGestures', FacialGesturesToMediapipeGestures]);

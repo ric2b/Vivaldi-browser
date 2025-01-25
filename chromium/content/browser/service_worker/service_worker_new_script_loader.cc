@@ -176,7 +176,7 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
     throttles = CreateContentBrowserURLLoaderThrottles(
         resource_request, version_->context()->wrapper()->browser_context(),
         std::move(web_contents_getter),
-        /*navigation_ui_data=*/nullptr, RenderFrameHost::kNoFrameTreeNodeId,
+        /*navigation_ui_data=*/nullptr, FrameTreeNodeId(),
         /*navigation_id=*/std::nullopt);
   }
 
@@ -599,7 +599,7 @@ void ServiceWorkerNewScriptLoader::WriteData(
 
   // Cap the buffer size up to |kReadBufferSize|. The remaining will be written
   // next time.
-  base::span<const uint8_t> bytes = base::as_bytes(buffer->span());
+  base::span<const uint8_t> bytes = buffer->span();
   bytes = bytes.first(std::min<size_t>(kReadBufferSize, bytes_available));
 
   size_t bytes_written = 0;

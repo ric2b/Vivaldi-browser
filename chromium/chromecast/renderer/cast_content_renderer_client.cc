@@ -35,8 +35,8 @@
 #include "media/base/audio_parameters.h"
 #include "media/base/key_system_info.h"
 #include "media/base/media.h"
+#include "media/base/remoting_constants.h"
 #include "media/remoting/receiver_controller.h"
-#include "media/remoting/remoting_constants.h"
 #include "media/remoting/stream_provider.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -181,8 +181,7 @@ CastContentRendererClient::GetSupportedKeySystems(
 #else
   ::media::KeySystemInfos key_systems;
   media::AddChromecastKeySystems(&key_systems,
-                                 false /* enable_persistent_license_support */,
-                                 false /* enable_playready */);
+                                 false /* enable_persistent_license_support */);
   std::move(cb).Run(std::move(key_systems));
   return nullptr;
 #endif  // BUILDFLAG(IS_ANDROID)

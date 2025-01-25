@@ -7,7 +7,6 @@
 #import "base/apple/foundation_util.h"
 #import "base/memory/weak_ptr.h"
 #import "components/favicon/ios/web_favicon_driver.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
@@ -16,6 +15,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -100,7 +100,7 @@ const CGFloat kSymbolSize = 16;
   // Use the page favicon.
   favicon::FaviconDriver* faviconDriver =
       favicon::WebFaviconDriver::FromWebState(webState);
-  // The favicon drive may be null during testing.
+  // The favicon driver may be null during testing.
   if (faviconDriver) {
     gfx::Image favicon = faviconDriver->GetFavicon();
     if (!favicon.IsEmpty()) {

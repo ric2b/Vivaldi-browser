@@ -38,12 +38,17 @@ public final class ToolbarFeatures {
         }
         return ChromeFeatureList.sTabStripLayoutOptimization.isEnabled()
                 && isTablet
-                && VERSION.SDK_INT >= VERSION_CODES.VANILLA_ICE_CREAM;
+                && VERSION.SDK_INT >= VERSION_CODES.R;
     }
 
     /** Set the return value for {@link #isTabStripWindowLayoutOptimizationEnabled(boolean)}. */
     public static void setIsTabStripLayoutOptimizationEnabledForTesting(boolean enabled) {
         sTabStripLayoutOptimizationEnabledForTesting = enabled;
         ResettersForTesting.register(() -> sTabStripLayoutOptimizationEnabledForTesting = null);
+    }
+
+    public static boolean isBrowserControlsInVizEnabled(boolean isTablet) {
+        return ChromeFeatureList.sBrowserControlsInViz.isEnabled()
+                && (!ChromeFeatureList.sBcivPhoneOnly.isEnabled() || !isTablet);
     }
 }

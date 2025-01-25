@@ -32,6 +32,7 @@
 #include "ash/system/input_device_settings/input_device_settings_policy_handler.h"
 #include "ash/system/input_device_settings/input_device_settings_pref_names.h"
 #include "ash/system/input_device_settings/input_device_settings_utils.h"
+#include "ash/system/input_device_settings/modifier_split_bypass_checker.h"
 #include "ash/system/input_device_settings/pref_handlers/graphics_tablet_pref_handler_impl.h"
 #include "ash/system/input_device_settings/pref_handlers/keyboard_pref_handler_impl.h"
 #include "ash/system/input_device_settings/pref_handlers/mouse_pref_handler_impl.h"
@@ -40,6 +41,7 @@
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/hash/sha1.h"
@@ -57,6 +59,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_registry_cache_wrapper.h"
 #include "components/services/app_service/public/cpp/types_util.h"
+#include "components/session_manager/session_manager_types.h"
 #include "components/user_manager/known_user.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -263,10 +266,11 @@ mojom::KeyboardPtr BuildMojomKeyboard(const ui::KeyboardDevice& keyboard) {
 mojom::MousePtr BuildMojomMouse(
     const ui::InputDevice& mouse,
     mojom::CustomizationRestriction customization_restriction,
-    mojom::MouseButtonConfig mouse_button_config) {
+    mojom::MouseButtonConfig mouse_button_config,
+    const std::string& name) {
   mojom::MousePtr mojom_mouse = mojom::Mouse::New();
   mojom_mouse->id = mouse.id;
-  mojom_mouse->name = mouse.name;
+  mojom_mouse->name = name;
   mojom_mouse->customization_restriction = customization_restriction;
   mojom_mouse->mouse_button_config = mouse_button_config;
   mojom_mouse->device_key =
@@ -311,7 +315,12 @@ mojom::GraphicsTabletPtr BuildMojomGraphicsTablet(
     mojom::CustomizationRestriction customization_restriction,
     mojom::GraphicsTabletButtonConfig graphics_tablet_button_config) {
   mojom::GraphicsTabletPtr mojom_graphics_tablet = mojom::GraphicsTablet::New();
-  mojom_graphics_tablet->name = graphics_tablet.name;
+  auto* metadata = GetGraphicsTabletMetadata(graphics_tablet);
+  std::string name = features::IsWelcomeExperienceEnabled() && metadata &&
+                             metadata->name.has_value()
+                         ? metadata->name.value()
+                         : graphics_tablet.name;
+  mojom_graphics_tablet->name = name;
   mojom_graphics_tablet->id = graphics_tablet.id;
   mojom_graphics_tablet->customization_restriction = customization_restriction;
   mojom_graphics_tablet->graphics_tablet_button_config =
@@ -665,7 +674,14 @@ void InputDeviceSettingsControllerImpl::Init() {
   CHECK(input_method::InputMethodManager::Get());
   input_method::InputMethodManager::Get()->AddObserver(this);
 
+  if (features::IsModifierSplitEnabled() &&
+      base::FeatureList::IsEnabled(features::kModifierSplitDeviceEnabled)) {
+    modifier_split_bypass_checker_ =
+        std::make_unique<ModifierSplitBypassChecker>();
+  }
+
   if (features::IsWelcomeExperienceEnabled()) {
+    message_center::MessageCenter::Get()->AddObserver(this);
     device::BluetoothAdapterFactory::Get()->GetAdapter(base::BindOnce(
         &InputDeviceSettingsControllerImpl::InitializeOnBluetoothReady,
         weak_ptr_factory_.GetWeakPtr()));
@@ -809,6 +825,10 @@ void InputDeviceSettingsControllerImpl::InitializeOnBluetoothReady(
 
 InputDeviceSettingsControllerImpl::~InputDeviceSettingsControllerImpl() {
   Shell::Get()->session_controller()->RemoveObserver(this);
+  if (features::IsWelcomeExperienceEnabled()) {
+    message_center::MessageCenter::Get()->RemoveObserver(this);
+  }
+
   CHECK(input_method::InputMethodManager::Get());
   input_method::InputMethodManager::Get()->RemoveObserver(this);
   if (bluetooth_adapter_) {
@@ -848,6 +868,9 @@ void InputDeviceSettingsControllerImpl::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   pref_registry->RegisterDictionaryPref(
       prefs::kKeyboardDefaultSplitModifierSettings,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  pref_registry->RegisterBooleanPref(
+      prefs::kKeyboardHasSplitModifierKeyboard, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   pref_registry->RegisterDictionaryPref(
@@ -904,6 +927,27 @@ void InputDeviceSettingsControllerImpl::RegisterProfilePrefs(
                                   base::Time());
 }
 
+void InputDeviceSettingsControllerImpl::OnSessionStateChanged(
+    session_manager::SessionState state) {
+  if (state != session_manager::SessionState::OOBE &&
+      last_session_ == session_manager::SessionState::OOBE) {
+    RefreshCachedKeyboardSettings();
+
+    if (!active_pref_service_) {
+      last_session_ = state;
+      return;
+    }
+
+    for (auto& [id, keyboard] : keyboards_) {
+      if (IsSplitModifierKeyboard(*keyboard)) {
+        active_pref_service_->SetBoolean(
+            prefs::kKeyboardHasSplitModifierKeyboard, true);
+      }
+    }
+  }
+  last_session_ = state;
+}
+
 void InputDeviceSettingsControllerImpl::OnActiveUserPrefServiceChanged(
     PrefService* pref_service) {
   if (!features::IsMouseImposterCheckEnabled()) {
@@ -926,11 +970,7 @@ void InputDeviceSettingsControllerImpl::OnActiveUserPrefServiceChanged(
   }
 
   if (!features::IsWelcomeExperienceEnabled()) {
-    pref_service->ClearPref(prefs::kMiceWelcomeNotificationSeen);
-    pref_service->ClearPref(prefs::kGraphicsTabletsWelcomeNotificationSeen);
-    pref_service->ClearPref(prefs::kKeyboardsWelcomeNotificationSeen);
-    pref_service->ClearPref(prefs::kTouchpadsWelcomeNotificationSeen);
-    pref_service->ClearPref(prefs::kPointingSticksWelcomeNotificationSeen);
+    pref_service->ClearPref(prefs::kWelcomeExperienceNotificationSeen);
     if (local_state_) {
       local_state_->ClearPref(prefs::kDeviceImagesDictPref);
     }
@@ -1066,6 +1106,12 @@ void InputDeviceSettingsControllerImpl::OnActiveUserPrefServiceChanged(
             &InputDeviceSettingsControllerImpl::
                 ForceInitializeDefaultSplitModifierKeyboardSettings,
             weak_ptr_factory_.GetWeakPtr()));
+    pref_change_registrar_->Add(
+        prefs::kKeyboardHasSplitModifierKeyboard,
+        base::BindRepeating(
+            &InputDeviceSettingsControllerImpl::
+                ForceInitializeDefaultSplitModifierKeyboardSettings,
+            weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Device settings must be refreshed when the user pref service is updated,
@@ -1097,6 +1143,16 @@ void InputDeviceSettingsControllerImpl::ShowFirstTimeConnectedNotifications() {
   }
 }
 
+void InputDeviceSettingsControllerImpl::
+    ForceKeyboardSettingRefreshWhenFeatureEnabled() {
+  sequenced_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &InputDeviceSettingsControllerImpl::RefreshMetaAndModifierKeys,
+          weak_ptr_factory_.GetWeakPtr()));
+  ScheduleDeviceSettingsRefresh();
+}
+
 void InputDeviceSettingsControllerImpl::ScheduleDeviceSettingsRefresh() {
   if (settings_refresh_pending_) {
     return;
@@ -1108,8 +1164,9 @@ void InputDeviceSettingsControllerImpl::ScheduleDeviceSettingsRefresh() {
       Shell::Get()->keyboard_capability()->IsModifierSplitEnabled()) {
     sequenced_task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(&InputDeviceSettingsControllerImpl::RefreshModifierKeys,
-                       weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(
+            &InputDeviceSettingsControllerImpl::RefreshMetaAndModifierKeys,
+            weak_ptr_factory_.GetWeakPtr()));
   }
 
   settings_refresh_pending_ = true;
@@ -1502,7 +1559,15 @@ bool InputDeviceSettingsControllerImpl::SetKeyboardSettings(
     return false;
   }
   RecordSetKeyboardSettingsValidMetric(/*is_valid=*/true);
-
+  auto it =
+      welcome_notification_clicked_device_keys_.find(found_keyboard.device_key);
+  if (it != welcome_notification_clicked_device_keys_.end()) {
+    base::UmaHistogramEnumeration(
+        "ChromeOS.WelcomeExperienceNotificationEvent",
+        InputDeviceSettingsMetricsManager::
+            WelcomeExperienceNotificationEventType::kSettingChanged);
+    welcome_notification_clicked_device_keys_.erase(it);
+  }
   const auto old_settings = std::move(found_keyboard.settings);
   found_keyboard.settings = settings.Clone();
   keyboard_pref_handler_->UpdateKeyboardSettings(
@@ -1540,7 +1605,15 @@ bool InputDeviceSettingsControllerImpl::SetTouchpadSettings(
     return false;
   }
   RecordSetTouchpadSettingsValidMetric(/*is_valid=*/true);
-
+  auto it =
+      welcome_notification_clicked_device_keys_.find(found_touchpad.device_key);
+  if (it != welcome_notification_clicked_device_keys_.end()) {
+    base::UmaHistogramEnumeration(
+        "ChromeOS.WelcomeExperienceNotificationEvent",
+        InputDeviceSettingsMetricsManager::
+            WelcomeExperienceNotificationEventType::kSettingChanged);
+    welcome_notification_clicked_device_keys_.erase(it);
+  }
   const auto old_settings = std::move(found_touchpad.settings);
   found_touchpad.settings = settings.Clone();
   touchpad_pref_handler_->UpdateTouchpadSettings(active_pref_service_,
@@ -1577,7 +1650,15 @@ bool InputDeviceSettingsControllerImpl::SetMouseSettings(
     return false;
   }
   RecordSetMouseSettingsValidMetric(/*is_valid=*/true);
-
+  auto it =
+      welcome_notification_clicked_device_keys_.find(found_mouse.device_key);
+  if (it != welcome_notification_clicked_device_keys_.end()) {
+    base::UmaHistogramEnumeration(
+        "ChromeOS.WelcomeExperienceNotificationEvent",
+        InputDeviceSettingsMetricsManager::
+            WelcomeExperienceNotificationEventType::kSettingChanged);
+    welcome_notification_clicked_device_keys_.erase(it);
+  }
   const auto old_settings = std::move(found_mouse.settings);
   found_mouse.settings = settings.Clone();
   mouse_pref_handler_->UpdateMouseSettings(
@@ -1648,6 +1729,15 @@ bool InputDeviceSettingsControllerImpl::SetGraphicsTabletSettings(
     return false;
   }
 
+  auto it = welcome_notification_clicked_device_keys_.find(
+      found_graphics_tablet.device_key);
+  if (it != welcome_notification_clicked_device_keys_.end()) {
+    base::UmaHistogramEnumeration(
+        "ChromeOS.WelcomeExperienceNotificationEvent",
+        InputDeviceSettingsMetricsManager::
+            WelcomeExperienceNotificationEventType::kSettingChanged);
+    welcome_notification_clicked_device_keys_.erase(it);
+  }
   const auto old_settings = std::move(found_graphics_tablet.settings);
   found_graphics_tablet.settings = settings.Clone();
   graphics_tablet_pref_handler_->UpdateGraphicsTabletSettings(
@@ -1839,6 +1929,15 @@ void InputDeviceSettingsControllerImpl::DispatchGraphicsTabletSettingsChanged(
   }
 }
 
+std::string GetMouseName(const ui::InputDevice& mouse) {
+  const auto* mouse_metadata = GetMouseMetadata(mouse);
+  if (!features::IsWelcomeExperienceEnabled() || !mouse_metadata ||
+      !mouse_metadata->name.has_value()) {
+    return mouse.name;
+  }
+  return mouse_metadata->name.value();
+}
+
 mojom::CustomizationRestriction
 InputDeviceSettingsControllerImpl::GetMouseCustomizationRestriction(
     const ui::InputDevice& mouse) {
@@ -1911,6 +2010,7 @@ void InputDeviceSettingsControllerImpl::OnKeyboardListUpdated(
 
   RefreshCachedKeyboardSettings();
   RefreshBatteryInfoForConnectedDevices();
+  RefreshCompanionAppInfoForConnectedDevices();
 }
 
 void InputDeviceSettingsControllerImpl::OnTouchpadListUpdated(
@@ -1932,6 +2032,7 @@ void InputDeviceSettingsControllerImpl::OnTouchpadListUpdated(
 
   RefreshCachedTouchpadSettings();
   RefreshBatteryInfoForConnectedDevices();
+  RefreshCompanionAppInfoForConnectedDevices();
 }
 
 void InputDeviceSettingsControllerImpl::OnMouseListUpdated(
@@ -1940,7 +2041,7 @@ void InputDeviceSettingsControllerImpl::OnMouseListUpdated(
   for (const auto& mouse : mice_to_add) {
     auto mojom_mouse =
         BuildMojomMouse(mouse, GetMouseCustomizationRestriction(mouse),
-                        GetMouseButtonConfig(mouse));
+                        GetMouseButtonConfig(mouse), GetMouseName(mouse));
     InitializeMouseSettings(mojom_mouse.get());
     if (ShouldFetchDeviceImage()) {
       GetDeviceImage(mojom_mouse->device_key, mojom_mouse->id);
@@ -2006,6 +2107,7 @@ void InputDeviceSettingsControllerImpl::OnGraphicsTabletListUpdated(
   }
   RefreshStoredLoginScreenGraphicsTabletSettings();
   RefreshBatteryInfoForConnectedDevices();
+  RefreshCompanionAppInfoForConnectedDevices();
 }
 
 void InputDeviceSettingsControllerImpl::RestoreDefaultKeyboardRemappings(
@@ -2354,6 +2456,10 @@ void InputDeviceSettingsControllerImpl::GetDeviceImageDataUrl(
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
+void InputDeviceSettingsControllerImpl::ResetNotificationDeviceTracking() {
+  welcome_notification_clicked_device_keys_.clear();
+}
+
 void InputDeviceSettingsControllerImpl::OnGraphicsTabletButtonPressed(
     DeviceId device_id,
     const mojom::Button& button) {
@@ -2489,6 +2595,17 @@ void InputDeviceSettingsControllerImpl::OnAppRegistryCacheWillBeDestroyed(
   app_registry_cache_observer_.Reset();
 }
 
+void InputDeviceSettingsControllerImpl::OnNotificationClicked(
+    const std::string& notification_id,
+    const std::optional<int>& button_index,
+    const std::optional<std::u16string>& reply) {
+  const auto device_key =
+      notification_controller_->GetDeviceKeyForNotificationId(notification_id);
+  if (device_key.has_value()) {
+    welcome_notification_clicked_device_keys_.insert(device_key.value());
+  }
+}
+
 void InputDeviceSettingsControllerImpl::OnAppUpdate(
     const apps::AppUpdate& update) {
   auto package_id = update.InstallerPackageId().has_value()
@@ -2503,21 +2620,31 @@ void InputDeviceSettingsControllerImpl::OnAppUpdate(
                    ? mojom::CompanionAppState::kInstalled
                    : mojom::CompanionAppState::kAvailable;
 
+  const bool is_installed = state == mojom::CompanionAppState::kInstalled;
   auto id = it->second;
   if (auto* mouse = FindMouse(id); mouse != nullptr) {
     mouse->app_info->state = state;
+    if (is_installed) {
+      metrics_manager_->RecordCompanionAppInstalled(mouse->device_key);
+    }
     DispatchMouseCompanionAppInfoChanged(*mouse);
     return;
   }
 
   if (auto* keyboard = FindKeyboard(id); keyboard != nullptr) {
     keyboard->app_info->state = state;
+    if (is_installed) {
+      metrics_manager_->RecordCompanionAppInstalled(keyboard->device_key);
+    }
     DispatchKeyboardCompanionAppInfoChanged(*keyboard);
     return;
   }
 
   if (auto* touchpad = FindTouchpad(id); touchpad != nullptr) {
     touchpad->app_info->state = state;
+    if (is_installed) {
+      metrics_manager_->RecordCompanionAppInstalled(touchpad->device_key);
+    }
     DispatchTouchpadCompanionAppInfoChanged(*touchpad);
     return;
   }
@@ -2525,6 +2652,10 @@ void InputDeviceSettingsControllerImpl::OnAppUpdate(
   if (auto* graphics_tablet = FindGraphicsTablet(id);
       graphics_tablet != nullptr) {
     graphics_tablet->app_info->state = state;
+    if (is_installed) {
+      metrics_manager_->RecordCompanionAppInstalled(
+          graphics_tablet->device_key);
+    }
     DispatchGraphicsTabletCompanionAppInfoChanged(*graphics_tablet);
     return;
   }
@@ -2588,6 +2719,24 @@ void InputDeviceSettingsControllerImpl::
   }
 
   for (auto& [id, keyboard] : keyboards_) {
+    // Only forward sync top_row_are_fkeys pref value from ChromeOS keyboard
+    // settings to split modifier keyboard settings.
+    if (IsSplitModifierKeyboard(*keyboard)) {
+      auto top_row_are_fkeys =
+          active_pref_service_->GetDict(prefs::kKeyboardDefaultChromeOSSettings)
+              .FindBool(prefs::kKeyboardSettingTopRowAreFKeys);
+
+      if (!top_row_are_fkeys || active_pref_service_->GetBoolean(
+                                    prefs::kKeyboardHasSplitModifierKeyboard)) {
+        continue;
+      }
+      keyboard->settings->top_row_are_fkeys = top_row_are_fkeys.value();
+      keyboard_pref_handler_->UpdateKeyboardSettings(
+          active_pref_service_, policy_handler_->keyboard_policies(),
+          *keyboard);
+      continue;
+    }
+
     if (!IsChromeOSKeyboard(*keyboard)) {
       continue;
     }
@@ -2638,6 +2787,11 @@ void InputDeviceSettingsControllerImpl::RefreshCachedMouseSettings() {
 }
 
 void InputDeviceSettingsControllerImpl::RefreshCachedKeyboardSettings() {
+  // Only refresh the settings after the OOBE session to avoid a race condition
+  // in the order we receive synced prefs.
+  if (IsOobe()) {
+    return;
+  }
   RefreshStoredLoginScreenKeyboardSettings();
   RefreshKeyboardDefaultSettings();
 }
@@ -2770,26 +2924,26 @@ void InputDeviceSettingsControllerImpl::OnDeviceNotificationImageDownloaded(
     const DeviceImage& device_image) {
   if (auto* kb = FindKeyboard(id); kb != nullptr) {
     notification_controller_->NotifyKeyboardFirstTimeConnected(
-        *kb, device_image.gfx_image());
+        *kb, device_image.gfx_image_skia());
     return;
   }
 
   if (auto* mouse = FindMouse(id); mouse != nullptr) {
     notification_controller_->NotifyMouseFirstTimeConnected(
-        *mouse, device_image.gfx_image());
+        *mouse, device_image.gfx_image_skia());
     return;
   }
 
   if (auto* touchpad = FindTouchpad(id); touchpad != nullptr) {
     notification_controller_->NotifyTouchpadFirstTimeConnected(
-        *touchpad, device_image.gfx_image());
+        *touchpad, device_image.gfx_image_skia());
     return;
   }
 
   if (auto* graphics_tablet = FindGraphicsTablet(id);
       graphics_tablet != nullptr) {
     notification_controller_->NotifyGraphicsTabletFirstTimeConnected(
-        *graphics_tablet, device_image.gfx_image());
+        *graphics_tablet, device_image.gfx_image_skia());
     return;
   }
 }
@@ -2802,8 +2956,10 @@ void InputDeviceSettingsControllerImpl::DeviceBatteryChanged(
   RefreshBatteryInfoForConnectedDevices();
 }
 
-void InputDeviceSettingsControllerImpl::RefreshModifierKeys() {
+void InputDeviceSettingsControllerImpl::RefreshMetaAndModifierKeys() {
   for (auto& [_, keyboard] : keyboards_) {
+    keyboard->meta_key =
+        Shell::Get()->keyboard_capability()->GetMetaKey(keyboard->id);
     keyboard->modifier_keys =
         Shell::Get()->keyboard_capability()->GetModifierKeys(keyboard->id);
   }
@@ -2863,10 +3019,13 @@ void InputDeviceSettingsControllerImpl::SetPeripheralsAppDelegate(
 
 void InputDeviceSettingsControllerImpl::OnCompanionAppInfoReceived(
     DeviceId id,
+    const std::string& device_key,
     const std::optional<mojom::CompanionAppInfo>& info) {
   if (!info) {
     return;
   }
+
+  metrics_manager_->RecordCompanionAppAvailable(device_key);
 
   if (auto* mouse = FindMouse(id); mouse != nullptr) {
     mouse->app_info = info->Clone();
@@ -2912,7 +3071,7 @@ void InputDeviceSettingsControllerImpl::
         mouse->device_key,
         base::BindOnce(
             &InputDeviceSettingsControllerImpl::OnCompanionAppInfoReceived,
-            weak_ptr_factory_.GetWeakPtr(), id));
+            weak_ptr_factory_.GetWeakPtr(), id, mouse->device_key));
   }
 
   for (const auto& [id, touchpad] : touchpads_) {
@@ -2923,7 +3082,7 @@ void InputDeviceSettingsControllerImpl::
         touchpad->device_key,
         base::BindOnce(
             &InputDeviceSettingsControllerImpl::OnCompanionAppInfoReceived,
-            weak_ptr_factory_.GetWeakPtr(), id));
+            weak_ptr_factory_.GetWeakPtr(), id, touchpad->device_key));
   }
 
   for (const auto& [id, keyboard] : keyboards_) {
@@ -2934,7 +3093,7 @@ void InputDeviceSettingsControllerImpl::
         keyboard->device_key,
         base::BindOnce(
             &InputDeviceSettingsControllerImpl::OnCompanionAppInfoReceived,
-            weak_ptr_factory_.GetWeakPtr(), id));
+            weak_ptr_factory_.GetWeakPtr(), id, keyboard->device_key));
   }
 
   for (const auto& [id, graphics_tablet] : graphics_tablets_) {
@@ -2942,7 +3101,7 @@ void InputDeviceSettingsControllerImpl::
         graphics_tablet->device_key,
         base::BindOnce(
             &InputDeviceSettingsControllerImpl::OnCompanionAppInfoReceived,
-            weak_ptr_factory_.GetWeakPtr(), id));
+            weak_ptr_factory_.GetWeakPtr(), id, graphics_tablet->device_key));
   }
 }
 

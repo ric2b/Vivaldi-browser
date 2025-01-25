@@ -7,19 +7,21 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/home_customization/coordinator/home_customization_navigation_delegate.h"
 #import "ios/chrome/browser/home_customization/utils/home_customization_constants.h"
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
 @protocol HomeCustomizationDelegate;
 
 // The coordinator for the Home surface's customization menu.
-@interface HomeCustomizationCoordinator : ChromeCoordinator
+@interface HomeCustomizationCoordinator
+    : ChromeCoordinator <HomeCustomizationNavigationDelegate>
 
 // Delegate for communicating back to the Home surface.
 @property(nonatomic, weak) id<HomeCustomizationDelegate> delegate;
 
-// Opens the customization menu as a sheet.
-- (void)presentCustomizationMenuAtPage:(CustomizationMenuPage)page;
+// Updates the data for all existing menu pages.
+- (void)updateMenuData;
 
 @end
 

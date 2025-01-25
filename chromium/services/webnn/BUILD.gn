@@ -53,16 +53,17 @@ source_set("webnn_switches") {
 component("webnn_service") {
   sources = [
     "error.h",
-    "webnn_buffer_impl.cc",
-    "webnn_buffer_impl.h",
     "webnn_context_impl.cc",
     "webnn_context_impl.h",
     "webnn_context_provider_impl.cc",
     "webnn_context_provider_impl.h",
+    "webnn_graph_builder_impl.cc",
+    "webnn_graph_builder_impl.h",
     "webnn_graph_impl.cc",
     "webnn_graph_impl.h",
-    "webnn_object_impl.cc",
     "webnn_object_impl.h",
+    "webnn_tensor_impl.cc",
+    "webnn_tensor_impl.h",
   ]
 
   deps = [
@@ -80,8 +81,6 @@ component("webnn_service") {
     sources += [
       "dml/adapter.cc",
       "dml/adapter.h",
-      "dml/buffer_impl_dml.cc",
-      "dml/buffer_impl_dml.h",
       "dml/command_queue.cc",
       "dml/command_queue.h",
       "dml/command_recorder.cc",
@@ -97,6 +96,8 @@ component("webnn_service") {
       "dml/platform_functions.h",
       "dml/tensor_desc.cc",
       "dml/tensor_desc.h",
+      "dml/tensor_impl_dml.cc",
+      "dml/tensor_impl_dml.h",
       "dml/utils.cc",
       "dml/utils.h",
     ]
@@ -112,10 +113,16 @@ component("webnn_service") {
 
   if (is_mac) {
     sources += [
+      "coreml/buffer_content.h",
+      "coreml/buffer_content.mm",
       "coreml/context_impl_coreml.h",
       "coreml/context_impl_coreml.mm",
       "coreml/graph_impl_coreml.h",
       "coreml/graph_impl_coreml.mm",
+      "coreml/tensor_impl_coreml.h",
+      "coreml/tensor_impl_coreml.mm",
+      "coreml/utils_coreml.h",
+      "coreml/utils_coreml.mm",
     ]
     frameworks = [
       "CoreFoundation.framework",
@@ -129,12 +136,8 @@ component("webnn_service") {
     sources += [
       "tflite/buffer_content.cc",
       "tflite/buffer_content.h",
-      "tflite/buffer_impl_tflite.cc",
-      "tflite/buffer_impl_tflite.h",
-      "tflite/buffer_state.cc",
-      "tflite/buffer_state.h",
-      "tflite/buffer_task.cc",
-      "tflite/buffer_task.h",
+      "tflite/tensor_impl_tflite.cc",
+      "tflite/tensor_impl_tflite.h",
     ]
 
     if (is_chromeos) {
@@ -171,6 +174,16 @@ component("webnn_service") {
     }
   }
 
+  if (webnn_use_tflite || is_mac) {
+    sources += [
+      "queueable_resource_state.h",
+      "queueable_resource_state_base.cc",
+      "queueable_resource_state_base.h",
+      "resource_task.cc",
+      "resource_task.h",
+    ]
+  }
+
   defines = [ "IS_WEBNN_SERVICE_IMPL" ]
 }
 
@@ -193,6 +206,7 @@ source_set("tests") {
 
   sources = [
     "webnn_context_provider_impl_unittest.cc",
+    "webnn_graph_builder_impl_unittest.cc",
     "webnn_graph_impl_unittest.cc",
     "webnn_test_utils.cc",
     "webnn_test_utils.h",
@@ -214,8 +228,8 @@ source_set("tests") {
 
   if (webnn_use_tflite || is_mac || is_win) {
     sources += [
-      "webnn_buffer_impl_backend_test.cc",
       "webnn_graph_impl_backend_test.cc",
+      "webnn_tensor_impl_backend_test.cc",
     ]
   }
 

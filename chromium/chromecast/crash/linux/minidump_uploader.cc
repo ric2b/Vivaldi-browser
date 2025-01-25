@@ -44,8 +44,6 @@ const char kCrashServerProduction[] = "https://clients2.google.com/cr/report";
 
 const char kVirtualChannel[] = "virtual-channel";
 
-const char kLatestUiVersion[] = "latest-ui-version";
-
 typedef std::vector<std::unique_ptr<DumpInfo>> DumpList;
 
 std::unique_ptr<PrefService> CreatePrefService() {
@@ -57,7 +55,6 @@ std::unique_ptr<PrefService> CreatePrefService() {
   registry->RegisterBooleanPref(prefs::kOptInStats, true);
   registry->RegisterStringPref(::metrics::prefs::kMetricsClientID, "");
   registry->RegisterStringPref(kVirtualChannel, "");
-  registry->RegisterStringPref(kLatestUiVersion, "");
 
   PrefServiceFactory prefServiceFactory;
   prefServiceFactory.SetUserPrefsFile(
@@ -147,9 +144,7 @@ bool MinidumpUploader::DoWork() {
       LOG(INFO) << "OptInStats is false, removing crash dump";
       ignore_and_erase_dump = true;
     } else if (IsDumpObsolete(dump)) {
-      NOTREACHED_IN_MIGRATION();
-      LOG(INFO) << "DumpInfo belongs to older version, removing crash dump";
-      ignore_and_erase_dump = true;
+      NOTREACHED();
     }
 
     // Ratelimiting persists across reboots.
@@ -261,10 +256,6 @@ bool MinidumpUploader::DoWork() {
     g.SetParameter("ro.system.version", system_version_);
     g.SetParameter("release.virtual-channel", virtual_channel);
     g.SetParameter("ro.build.type", GetBuildVariant());
-    if (pref_service->HasPrefPath(kLatestUiVersion)) {
-      g.SetParameter("ui.version",
-                     pref_service->GetString(kLatestUiVersion));
-    }
     // Add app state information
     if (!dump.params().previous_app_name.empty()) {
       g.SetParameter("previous_app", dump.params().previous_app_name);

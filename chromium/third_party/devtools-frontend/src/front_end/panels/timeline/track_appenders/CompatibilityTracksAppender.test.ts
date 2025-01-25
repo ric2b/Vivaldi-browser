@@ -49,10 +49,16 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
           ...traceData.UserTimings.timestampEvents,
           ...traceData.UserTimings.performanceMarks,
           ...traceData.UserTimings.performanceMeasures,
-          ...traceData.PageLoadMetrics.allMarkerEvents,
+          ...traceData.PageLoadMetrics.allMarkerEvents.toSorted((m1, m2) => {
+            // These get sorted based on the metric so we have to replicate
+            // that for this assertion.
+            return Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m1.name] -
+                Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m2.name];
+          }),
         ].sort((a, b) => a.ts - b.ts);
         assert.deepEqual(timingsTrackEvents, allTimingEvents);
       });
+
       it('returns all the events appended by a track with one level', () => {
         const gpuTrack = tracksAppender.gpuTrackAppender();
         const gpuTrackEvents =
@@ -113,7 +119,12 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
           ...traceData.UserTimings.timestampEvents,
           ...traceData.UserTimings.performanceMarks,
           ...traceData.UserTimings.performanceMeasures,
-          ...traceData.PageLoadMetrics.allMarkerEvents,
+          ...traceData.PageLoadMetrics.allMarkerEvents.toSorted((m1, m2) => {
+            // These get sorted based on the metric so we have to replicate
+            // that for this assertion.
+            return Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m1.name] -
+                Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m2.name];
+          }),
         ].sort((a, b) => a.ts - b.ts);
         assert.deepEqual(timingsGroupEvents, allTimingEvents);
       });
@@ -147,6 +158,7 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
       }
       assert.strictEqual(warning?.innerText, 'Long task took 1.30\u00A0s.');
     });
+
     it('shows the correct warning for a forced recalc styles when hovered', async function() {
       await initTrackAppender(this, 'large-layout-small-recalc.json.gz');
       const events = traceData.Warnings.perWarning.get('FORCED_REFLOW') || [];
@@ -214,5 +226,17 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
       }
       assert.strictEqual(warning?.innerText, 'Idle callback execution extended beyond deadline by 79.56\u00A0ms');
     });
+  });
+
+  it('can return the group for a given level', async () => {
+    await initTrackAppender(this, 'web-dev-with-commit.json.gz');
+    // The order of these groups might seem odd, but it's based on the setup in
+    // the initTrackAppender function which does Timings, GPU and then threads.
+    const groupForLevel0 = tracksAppender.groupForLevel(0);
+    assert.strictEqual(groupForLevel0?.name, 'Timings');
+    const groupForLevel1 = tracksAppender.groupForLevel(1);
+    assert.strictEqual(groupForLevel1?.name, 'GPU');
+    const groupForLevel2 = tracksAppender.groupForLevel(2);
+    assert.strictEqual(groupForLevel2?.name, 'Main — https://web.dev/');
   });
 });

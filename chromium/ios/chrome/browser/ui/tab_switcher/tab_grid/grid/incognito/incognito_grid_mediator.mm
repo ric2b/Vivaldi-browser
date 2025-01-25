@@ -16,20 +16,21 @@
 #import "components/supervised_user/core/browser/supervised_user_preferences.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/pref_names.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/commands/tab_groups_commands.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities_observer_bridge.h"
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_toolbars_mutator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/incognito/incognito_grid_mediator_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_idle_status_handler.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_metrics.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mode_holder.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_groups_commands.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_configuration.h"
 #import "ios/web/public/web_state_id.h"
 
@@ -54,8 +55,6 @@
   std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
   // YES if incognito is disabled.
   BOOL _incognitoDisabled;
-  // YES if parental supervision is enabled.
-  BOOL _isSubjectToParentalControl;
   // Whether this grid is currently selected.
   BOOL _selected;
   // Identity manager providing AccountInfo capabilities to determine
@@ -94,19 +93,19 @@
 }
 
 - (void)saveAndCloseAllItems {
-  NOTREACHED_NORETURN() << "Incognito tabs should not be saved before closing.";
+  NOTREACHED() << "Incognito tabs should not be saved before closing.";
 }
 
 - (void)undoCloseAllItems {
-  NOTREACHED_NORETURN() << "Incognito tabs are not saved before closing.";
+  NOTREACHED() << "Incognito tabs are not saved before closing.";
 }
 
 - (void)discardSavedClosedItems {
-  NOTREACHED_NORETURN() << "Incognito tabs cannot be saved.";
+  NOTREACHED() << "Incognito tabs cannot be saved.";
 }
 
 - (void)setPinState:(BOOL)pinState forItemWithID:(web::WebStateID)itemID {
-  NOTREACHED_NORETURN() << "Should not be called in incognito.";
+  NOTREACHED() << "Should not be called in incognito.";
 }
 
 #pragma mark - TabGridPageMutator
@@ -119,6 +118,10 @@
 
     [self configureToolbarsButtons];
   }
+}
+
+- (void)setPageAsActive {
+  [self.gridConsumer setActivePageFromPage:TabGridPageIncognitoTabs];
 }
 
 #pragma mark - TabGridToolbarsGridDelegate
@@ -183,9 +186,8 @@
   TabGridToolbarsConfiguration* toolbarsConfiguration =
       [[TabGridToolbarsConfiguration alloc]
           initWithPage:TabGridPageIncognitoTabs];
-  toolbarsConfiguration.mode = self.currentMode;
 
-  if (self.currentMode == TabGridModeSelection) {
+  if (self.modeHolder.mode == TabGridMode::kSelection) {
     [self configureButtonsInSelectionMode:toolbarsConfiguration];
   } else {
     toolbarsConfiguration.closeAllButton = !self.webStateList->empty();
@@ -274,7 +276,7 @@
   }
   if (_selected) {
     if (isRequired) {
-      self.currentMode = TabGridModeNormal;
+      self.modeHolder.mode = TabGridMode::kNormal;
     }
     [self configureToolbarsButtons];
   }
@@ -287,12 +289,9 @@
   if (base::FeatureList::IsEnabled(
           supervised_user::
               kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS)) {
-    BOOL isSubjectToParentalControl =
-        (capabilityUpdateState ==
-         supervised_user::CapabilityUpdateState::kSetToTrue);
-    if (_isSubjectToParentalControl != isSubjectToParentalControl) {
-      _isSubjectToParentalControl = isSubjectToParentalControl;
-      _incognitoDisabled = [self isIncognitoModeDisabled];
+    BOOL isDisabled = [self isIncognitoModeDisabled];
+    if (_incognitoDisabled != isDisabled) {
+      _incognitoDisabled = isDisabled;
       [self.incognitoDelegate shouldDisableIncognito:_incognitoDisabled];
     }
 

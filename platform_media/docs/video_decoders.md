@@ -34,12 +34,6 @@ that assumes video hardware acceleration is always available.
 
 ## Code details
 
-### Mac
-
-The class that implements decoding on Mac is `VivVideoDecoder` from
-`platform_media/decoders/mac/viv_video_decoder.mm`. There were very
-little changes compared with the original Opera patches.
-
 ### Windows
 
 The Windows decoder is provided by `WMFVideoDecoder` class from

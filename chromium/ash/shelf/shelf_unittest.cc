@@ -15,10 +15,12 @@
 #include "ash/shelf/shelf_app_button.h"
 #include "ash/shelf/shelf_controller.h"
 #include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/system/unified/feature_pod_button.h"
 #include "ash/test/ash_test_base.h"
 #include "base/functional/bind.h"
@@ -29,7 +31,10 @@
 #include "base/test/scoped_feature_list.h"
 #include "components/session_manager/session_manager_types.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_host.h"
 #include "ui/wm/core/window_util.h"
@@ -144,7 +149,8 @@ TEST_F(ShelfTest, CheckHoverAfterMenu) {
 TEST_F(ShelfTest, ToggleAutoHide) {
   std::unique_ptr<aura::Window> window =
       std::make_unique<aura::Window>(nullptr);
-  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
+  window->SetProperty(aura::client::kShowStateKey,
+                      ui::mojom::WindowShowState::kNormal);
   window->SetType(aura::client::WINDOW_TYPE_NORMAL);
   window->Init(ui::LAYER_TEXTURED);
   ParentWindowInPrimaryRootWindow(window.get());
@@ -158,7 +164,8 @@ TEST_F(ShelfTest, ToggleAutoHide) {
   shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kNever);
   EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf->auto_hide_behavior());
 
-  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
+  window->SetProperty(aura::client::kShowStateKey,
+                      ui::mojom::WindowShowState::kMaximized);
   EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf->auto_hide_behavior());
 
   shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
@@ -172,7 +179,8 @@ TEST_F(ShelfTest, ToggleAutoHide) {
 TEST_F(ShelfTest, DisableAutoHide) {
   // Create and activate a `window`.
   auto window = std::make_unique<aura::Window>(nullptr);
-  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
+  window->SetProperty(aura::client::kShowStateKey,
+                      ui::mojom::WindowShowState::kNormal);
   window->SetType(aura::client::WINDOW_TYPE_NORMAL);
   window->Init(ui::LAYER_TEXTURED);
   ParentWindowInPrimaryRootWindow(window.get());
@@ -228,6 +236,19 @@ TEST_F(ShelfTest, ShelfHiddenOnScreenOnSecondaryDisplay) {
     EXPECT_EQ(SHELF_VISIBLE, GetPrimaryShelf()->GetVisibilityState());
     EXPECT_EQ(SHELF_HIDDEN, GetSecondaryShelf()->GetVisibilityState());
   }
+}
+
+TEST_F(ShelfTest, ShelfNavigationWidgetAccessibleProperties) {
+  ShelfNavigationWidget::TestApi widget_api(
+      GetPrimaryShelf()->navigation_widget());
+  ui::AXNodeData data;
+
+  widget_api.GetWidgetDelegateView()
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&data);
+  EXPECT_EQ(ax::mojom::Role::kToolbar, data.role);
+  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_ASH_SHELF_ACCESSIBLE_NAME),
+            data.GetStringAttribute(ax::mojom::StringAttribute::kName));
 }
 
 using NoSessionShelfTest = NoSessionAshTestBase;

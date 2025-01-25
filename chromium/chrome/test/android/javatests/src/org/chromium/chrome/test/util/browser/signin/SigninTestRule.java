@@ -6,6 +6,7 @@ package org.chromium.chrome.test.util.browser.signin;
 
 import static org.hamcrest.Matchers.is;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ThreadUtils;
@@ -14,10 +15,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
-import org.chromium.components.signin.SigninFeatureMap;
-import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.signin.base.AccountInfo;
-import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.test.util.AccountCapabilitiesBuilder;
@@ -37,6 +35,12 @@ import org.chromium.components.sync.SyncService;
 public class SigninTestRule extends AccountManagerTestRule {
     private boolean mIsSignedIn;
 
+    public SigninTestRule() {}
+
+    public SigninTestRule(@NonNull FakeAccountManagerFacade fakeAccountManagerFacade) {
+        super(fakeAccountManagerFacade);
+    }
+
     /** Signs out if user is signed in. */
     @Override
     public void tearDownRule() {
@@ -55,36 +59,6 @@ public class SigninTestRule extends AccountManagerTestRule {
         super.tearDownRule();
     }
 
-    /** Waits for the AccountTrackerService to seed system accounts. */
-    public void waitForSeeding() {
-        if (SigninFeatureMap.isEnabled(SigninFeatures.SEED_ACCOUNTS_REVAMP)) {
-            // Seed accounts happens synchronously so there is nothing to wait for.
-            return;
-        }
-        SigninTestUtil.seedAccounts();
-    }
-
-    /** Adds an account and seeds it in native code. */
-    // TODO(crbug.com/40234741): Replace this with a method that takes AccountInfo instead.
-    @Deprecated
-    public CoreAccountInfo addAccountAndWaitForSeeding(String accountName) {
-        final CoreAccountInfo coreAccountInfo = addAccount(accountName);
-        waitForSeeding();
-        return coreAccountInfo;
-    }
-
-    /** Adds an account and seeds it in native code. */
-    public void addAccountAndWaitForSeeding(AccountInfo accountInfo) {
-        addAccount(accountInfo);
-        waitForSeeding();
-    }
-
-    /** Removes an account and seed it in native code. */
-    public void removeAccountAndWaitForSeeding(CoreAccountId accountId) {
-        removeAccount(accountId);
-        waitForSeeding();
-    }
-
     /**
      * Adds and signs in an account with the default name without sync consent.
      *
@@ -93,7 +67,7 @@ public class SigninTestRule extends AccountManagerTestRule {
     @Deprecated
     public CoreAccountInfo addTestAccountThenSignin() {
         assert !mIsSignedIn : "An account is already signed in!";
-        CoreAccountInfo coreAccountInfo = addAccountAndWaitForSeeding(TEST_ACCOUNT_EMAIL);
+        CoreAccountInfo coreAccountInfo = addAccount(TEST_ACCOUNT_EMAIL);
         SigninTestUtil.signin(coreAccountInfo);
         mIsSignedIn = true;
         return coreAccountInfo;
@@ -108,7 +82,6 @@ public class SigninTestRule extends AccountManagerTestRule {
     public CoreAccountInfo addAccountThenSignin(String email, String name) {
         assert !mIsSignedIn : "An account is already signed in!";
         CoreAccountInfo coreAccountInfo = addAccount(email, name);
-        waitForSeeding();
         SigninTestUtil.signin(coreAccountInfo);
         mIsSignedIn = true;
         return coreAccountInfo;
@@ -118,7 +91,6 @@ public class SigninTestRule extends AccountManagerTestRule {
     public void addAccountThenSignin(AccountInfo accountInfo) {
         assert !mIsSignedIn : "An account is already signed in!";
         addAccount(accountInfo);
-        waitForSeeding();
         SigninTestUtil.signin(accountInfo);
         mIsSignedIn = true;
     }
@@ -132,13 +104,12 @@ public class SigninTestRule extends AccountManagerTestRule {
     /**
      * Adds and signs in an account with the default name and enables sync.
      *
-     * @param syncService SyncService object to set up sync, if null, sync won't
-     *         start.
+     * @param syncService SyncService object to set up sync, if null, sync won't start.
      */
     public CoreAccountInfo addTestAccountThenSigninAndEnableSync(
             @Nullable SyncService syncService) {
         assert !mIsSignedIn : "An account is already signed in!";
-        CoreAccountInfo coreAccountInfo = addAccountAndWaitForSeeding(TEST_ACCOUNT_EMAIL);
+        CoreAccountInfo coreAccountInfo = addAccount(TEST_ACCOUNT_EMAIL);
         SigninTestUtil.signinAndEnableSync(coreAccountInfo, syncService);
         mIsSignedIn = true;
         return coreAccountInfo;
@@ -148,7 +119,6 @@ public class SigninTestRule extends AccountManagerTestRule {
     public CoreAccountInfo addAccountThenSigninAndEnableSync(String email, String name) {
         assert !mIsSignedIn : "An account is already signed in!";
         CoreAccountInfo coreAccountInfo = addAccount(email, name);
-        waitForSeeding();
         SigninTestUtil.signinAndEnableSync(
                 coreAccountInfo, SyncTestUtil.getSyncServiceForLastUsedProfile());
         mIsSignedIn = true;
@@ -186,7 +156,7 @@ public class SigninTestRule extends AccountManagerTestRule {
                         .accountCapabilities(builder.setIsSubjectToParentalControls(true).build())
                         .build();
 
-        addAccountAndWaitForSeeding(testChildAccount);
+        addAccount(testChildAccount);
 
         // The child will be force signed in (by SigninChecker).
         // Wait for this to complete before enabling sync.

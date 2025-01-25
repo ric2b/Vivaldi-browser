@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -308,7 +309,7 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
   gfx::Size GetIconPreferredSize() const;
 
   // Sets the command id of this menu item.
-  void SetCommand(int command) { command_ = command; }
+  void SetCommand(int command);
 
   // Returns the command id of this item.
   int GetCommand() const { return command_; }
@@ -414,6 +415,8 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
 
   // Returns the corresponding border padding from the `MenuConfig`.
   int GetItemHorizontalBorder() const;
+
+  virtual void UpdateAccessibleCheckedState();
 
   void SetTriggerActionWithNonIconChildViews(
       bool trigger_action_with_non_icon_child_views) {
@@ -593,7 +596,9 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
   // `vertical_margin_` is not set.
   int GetVerticalMargin() const;
 
+  void UpdateAccessibleRole();
   void UpdateAccessibleKeyShortcuts();
+  void UpdateAccessibleSelection();
 
   // The delegate. This is only valid for the root menu item. You shouldn't
   // use this directly, instead use GetDelegate() which walks the tree as
@@ -725,6 +730,9 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
   std::optional<ui::ColorId> foreground_color_id_;
   std::optional<MenuItemBackground> menu_item_background_;
   std::optional<ui::ColorId> selected_color_id_;
+
+  base::CallbackListSubscription visible_changed_callback_;
+  base::CallbackListSubscription enabled_changed_callback_;
 };
 
 // EmptyMenuMenuItem ----------------------------------------------------------

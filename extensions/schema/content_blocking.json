@@ -113,6 +113,10 @@
           "naked_hostname_is_pure_host": {
             "description": "If true, any rule that looks like just a host name will be converted to match only the host part of the url.",
             "type": "boolean"
+          },
+          "use_whole_document_allow": {
+            "description": "If true, any allow rule using the document type will cause all resources loaded by matching documents to be allowed (ABP beahvior).",
+            "type": "boolean"
           }
         }
       },
@@ -263,6 +267,39 @@
             "description": "blocked urls for which there is no tracker information.",
             "items": {
               "$ref": "BlockedUrlsInfo"
+            }
+          }
+        }
+      },
+      {
+        "id": "AdAttributionDomain",
+        "description": "Information about which domain ad attribution is enabled for, if any, for a given tab",
+        "type": "object",
+        "properties": {
+          "tab_id": {
+            "type": "integer"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "active": {
+            "description": "True if the tab is currently on the ad attribution domain, causing ad attribution to be enabled.",
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "AllowedAdAttributionTrackers",
+        "description": "Information about which trackers have been allowed for ad attribution, per tab",
+        "type": "object",
+        "properties": {
+          "tab_id": {
+            "type": "integer"
+          },
+          "tracker_urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -791,6 +828,60 @@
             }
           ]
         }
+      },
+      {
+        "name": "getAdAttributionDomain",
+        "description": "Gets the eTLD+1 for which ad attribution is currently active on the given tabs, if any.",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "tab_ids",
+            "type": "array",
+            "description": "A list of tabs for which to retrieve the ad attribution stats.",
+            "items": {
+              "type": "integer"
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "array",
+              "items": {
+                "$ref": "AdAttributionDomain"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "getAdAttributionAllowedTrackers",
+        "description": "Gets the allowed ad attribution trackers for the given tabs, if any.",
+        "type": "function",
+        "parameters": [
+          {
+            "name": "tab_ids",
+            "type": "array",
+            "description": "A list of tabs for which to retrieve allowed ad attribution trackers.",
+            "items": {
+              "type": "integer"
+            }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "tracker_urls",
+              "type": "array",
+              "items": {
+                "$ref": "AllowedAdAttributionTrackers"
+              }
+            }
+          ]
+        }
       }
     ],
     "events": [
@@ -904,6 +995,31 @@
             "name": "rule_group",
             "$ref": "RuleGroup"
           },
+          {
+            "name": "tab_ids",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        ]
+      },
+      {
+        "name": "onAdAttributionDomainChanged",
+        "type": "function",
+        "description": "Fires when the eTLD+s on which ad attribution is active changes or if the tab is navigated away from that domain.",
+        "parameters": [
+          {
+            "name": "tab_id",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "onAdAttributionTrackersAllowed",
+        "type": "function",
+        "description": "Fired when trackers have been allowed on some tabs, as a result of ad attribution.",
+        "parameters": [
           {
             "name": "tab_ids",
             "type": "array",

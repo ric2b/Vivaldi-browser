@@ -20,7 +20,11 @@ constexpr unsigned int kECDSAPublicKeyLen = 158;
 constexpr const char* kECDSAPublicKeyCreationTime = "1709752345";
 
 constexpr const char* kSignedResourceDirectMatch =
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+    "https://downloads.vivaldi.com/directmatch/{}/directmatch-mobile.json";
+#else
     "https://downloads.vivaldi.com/directmatch/{}/directmatch.json";
+#endif
 
 
 // Search engines

@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Cast Android (dbg)",
-              "project": "chromium-m128"
+              "project": "chromium-m130"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -42,7 +42,7 @@
         {
           "bucket": "ci",
           "builder": "Cast Android (dbg)",
-          "project": "chromium-m128"
+          "project": "chromium-m130"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -50,7 +50,8 @@
           "builder": "android-x64-cast",
           "group": "tryserver.chromium.android"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/Cast Android (dbg)/targets"
     }
   },
   "$build/reclient": {

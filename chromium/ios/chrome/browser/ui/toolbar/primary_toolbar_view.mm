@@ -15,16 +15,19 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button_style.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
+#import "ios/chrome/browser/ui/toolbar/tab_groups/ui/tab_group_indicator_constants.h"
+#import "ios/chrome/browser/ui/toolbar/tab_groups/ui/tab_group_indicator_view.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_progress_bar.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/ui_util.h"
 #import "ui/gfx/ios/uikit_util.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
@@ -36,6 +39,7 @@ using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 @interface PrimaryToolbarView ()
+
 // Factory used to create the buttons.
 @property(nonatomic, strong) ToolbarButtonFactory* buttonFactory;
 
@@ -100,20 +104,27 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, strong, readwrite)
     NSMutableArray<NSLayoutConstraint*>* contractedNoMarginConstraints;
 
+// Constraints for the tabGroupIndicator.
+@property(nonatomic, strong, readwrite)
+    NSArray<NSLayoutConstraint*>* tabGroupIndicatorTopOmniboxConstraints;
+@property(nonatomic, strong, readwrite)
+    NSArray<NSLayoutConstraint*>* tabGroupIndicatorBottomOmniboxConstraints;
+
 // Vivaldi
 // Button to open and close panel, redefined as readwrite.
 @property(nonatomic, strong, readwrite) ToolbarButton* panelButton;
-// Button to show tracker blocker summery, this is for iPad only.
-@property(nonatomic, strong, readwrite) ToolbarButton* shieldButton;
 // Button to show more options such as panel, adblocker shield button when
 // tab bar is enabled and address bar is the bottom in portrait orientation on
 // iPhone.
 @property(nonatomic, strong, readwrite) ToolbarButton* vivaldiMoreButton;
-
+// Vivaldi home button
+@property(nonatomic, strong, readwrite) ToolbarButton* vivaldiHomeButton;
 // Leading stackview width constraint when there's no item on the leading stack
 // view, e.g. toolbar on portrait mode for iPhone.
 @property(nonatomic, strong, readwrite)
     NSLayoutConstraint* leadingStackViewWidthNoItems;
+@property(nonatomic, strong, readwrite)
+    NSLayoutConstraint* leadingLocationBarContainerConstraint;
 // End Vivaldi
 
 @end
@@ -152,6 +163,7 @@ using vivaldi::IsVivaldiRunning;
 @synthesize canShowForward = _canShowForward;
 @synthesize canShowAdTrackerBlocker = _canShowAdTrackerBlocker;
 @synthesize isNTP = _isNTP;
+@synthesize homePageEnabled = _homePageEnabled;
 // End Vivaldi
 
 #pragma mark - Public
@@ -201,6 +213,28 @@ using vivaldi::IsVivaldiRunning;
   self.fakeOmniboxTarget = nil;
 }
 
+- (void)updateTabGroupIndicatorAvailability {
+  CHECK(IsTabGroupIndicatorEnabled());
+
+  BOOL isTopOmnibox = self.locationBarView != nil;
+  if (isTopOmnibox) {
+    [NSLayoutConstraint
+        deactivateConstraints:self.tabGroupIndicatorBottomOmniboxConstraints];
+    [NSLayoutConstraint
+        activateConstraints:self.tabGroupIndicatorTopOmniboxConstraints];
+  } else {
+    [NSLayoutConstraint
+        deactivateConstraints:self.tabGroupIndicatorTopOmniboxConstraints];
+    [NSLayoutConstraint
+        activateConstraints:self.tabGroupIndicatorBottomOmniboxConstraints];
+  }
+  self.tabGroupIndicatorView.showSeparator = !isTopOmnibox;
+
+  BOOL canShowTabStrip = IsRegularXRegularSizeClass(self.superview);
+  BOOL isAvailable = !IsCompactHeight(self.superview) && !canShowTabStrip;
+  self.tabGroupIndicatorView.available = isAvailable;
+}
+
 #pragma mark - Properties
 
 - (void)setMatchNTPHeight:(BOOL)matchNTPHeight {
@@ -213,14 +247,72 @@ using vivaldi::IsVivaldiRunning;
   [self.superview layoutIfNeeded];
 }
 
+// Sets tabgroupIndicatorView.
+- (void)setTabGroupIndicatorView:(TabGroupIndicatorView*)view {
+  CHECK(IsTabGroupIndicatorEnabled());
+  _tabGroupIndicatorView = view;
+  _tabGroupIndicatorView.hidden = YES;
+  _tabGroupIndicatorView.translatesAutoresizingMaskIntoConstraints = NO;
+  _tabGroupIndicatorView.backgroundColor =
+      self.buttonFactory.toolbarConfiguration.backgroundColor;
+  [self addSubview:_tabGroupIndicatorView];
+
+  id<LayoutGuideProvider> safeArea = self.safeAreaLayoutGuide;
+  [NSLayoutConstraint activateConstraints:@[
+    [self.tabGroupIndicatorView.leadingAnchor
+        constraintEqualToAnchor:safeArea.leadingAnchor],
+    [self.tabGroupIndicatorView.trailingAnchor
+        constraintEqualToAnchor:safeArea.trailingAnchor],
+    [self.tabGroupIndicatorView.heightAnchor
+        constraintEqualToConstant:kTabGroupIndicatorHeight],
+  ]];
+  self.tabGroupIndicatorTopOmniboxConstraints = @[
+    [self.tabGroupIndicatorView.bottomAnchor
+        constraintEqualToAnchor:self.locationBarContainer.topAnchor
+                       constant:-kAdaptiveLocationBarVerticalMargin],
+  ];
+  self.tabGroupIndicatorBottomOmniboxConstraints = @[
+    [self.tabGroupIndicatorView.bottomAnchor
+        constraintEqualToAnchor:self.bottomAnchor],
+  ];
+
+  [self updateTabGroupIndicatorAvailability];
+}
+
 #pragma mark - UIView
 
 - (CGSize)intrinsicContentSize {
-  CGFloat height = self.matchNTPHeight
-                       ? content_suggestions::FakeToolbarHeight()
-                       : ToolbarExpandedHeight(
-                             self.traitCollection.preferredContentSizeCategory);
-  return CGSizeMake(UIViewNoIntrinsicMetric, height);
+  CGFloat height = 0;
+
+  BOOL isTopOmnibox = self.locationBarView != nil;
+  if (isTopOmnibox) {
+    height += self.matchNTPHeight
+                  ? content_suggestions::FakeToolbarHeight()
+                  : ToolbarExpandedHeight(
+                        self.traitCollection.preferredContentSizeCategory);
+  }
+
+  // If the tab group indicator is visible, add its height to the total height.
+  if (IsTabGroupIndicatorEnabled() && !_tabGroupIndicatorView.hidden) {
+    height += kTabGroupIndicatorHeight;
+    // If the Omnibox is not at the top, remove the top vertical margin to avoid
+    // extra space when the tab group indicator is present.
+    if (!isTopOmnibox) {
+      height -= kTopToolbarUnsplitMargin;
+    } else {
+    }
+  }
+  // TODO(crbug.com/40279063): Find out why primary toolbar height cannot be
+  // zero. This is a temporary fix for the pdf bug.
+  return CGSizeMake(UIViewNoIntrinsicMetric, height > 0 ? height : 1);
+}
+
+- (void)didMoveToSuperview {
+  if (IsTabGroupIndicatorEnabled()) {
+    // Ensure the tab group indicator's visibility aligns with the new
+    // superview's layout context.
+    [self updateTabGroupIndicatorAvailability];
+  }
 }
 
 #pragma mark - Setup
@@ -274,10 +366,7 @@ using vivaldi::IsVivaldiRunning;
 
   if (IsVivaldiRunning()) {
     self.panelButton = [self.buttonFactory panelButton];
-    self.shieldButton = [self.buttonFactory shieldButton];
-    [self.shieldButton setImage:
-        [self shieldIconForSetting:_atbSettingForActiveWebState]
-                          forState:UIControlStateNormal];
+    self.vivaldiHomeButton = [self.buttonFactory vivaldiHomeButton];
     self.leadingStackViewButtons = [self buttonsForLeadingStackView];
   } else {
   self.leadingStackViewButtons = @[
@@ -428,12 +517,14 @@ using vivaldi::IsVivaldiRunning;
   } // End Vivaldi
 
   if (IsVivaldiRunning()) {
+    self.leadingLocationBarContainerConstraint =
+      [self.locationBarContainer.leadingAnchor
+        constraintEqualToAnchor:self.leadingStackView.trailingAnchor];
     [self.contractedNoMarginConstraints addObjectsFromArray:@[
       [self.locationBarContainer.trailingAnchor
           constraintEqualToAnchor:self.trailingStackView.leadingAnchor
                 constant:-vPrimaryToolbarLocationContainerTrailingPadding],
-      [self.locationBarContainer.leadingAnchor
-          constraintEqualToAnchor:self.leadingStackView.trailingAnchor],
+      self.leadingLocationBarContainerConstraint
     ]];
 
     [self.expandedConstraints addObjectsFromArray:@[
@@ -536,6 +627,9 @@ using vivaldi::IsVivaldiRunning;
   locationBarView.translatesAutoresizingMaskIntoConstraints = NO;
   [locationBarView setContentHuggingPriority:UILayoutPriorityDefaultLow
                                      forAxis:UILayoutConstraintAxisHorizontal];
+  if (IsTabGroupIndicatorEnabled()) {
+    [self updateTabGroupIndicatorAvailability];
+  }
 
   if (!self.locationBarContainer || !locationBarView)
     return;
@@ -545,6 +639,10 @@ using vivaldi::IsVivaldiRunning;
   [self.locationBarContainer.trailingAnchor
       constraintGreaterThanOrEqualToAnchor:self.locationBarView.trailingAnchor]
       .active = YES;
+}
+
+- (void)setTabGridButtonStyle:(ToolbarTabGridButtonStyle)tabGridButtonStyle {
+  self.tabGridButton.tabGridButtonStyle = tabGridButtonStyle;
 }
 
 - (NSArray<ToolbarButton*>*)allButtons {
@@ -577,19 +675,26 @@ using vivaldi::IsVivaldiRunning;
             withButtons:self.trailingStackViewButtons];
 }
 
-- (NSArray*)buttonsForLeadingStackView {
+- (NSArray *)buttonsForLeadingStackView {
   BOOL isSplitToolbarMode = IsSplitToolbarMode(self.traitCollection);
+  BOOL splitMode = !VivaldiGlobalHelpers.canShowSidePanel && isSplitToolbarMode;
+  BOOL showHomeButtonInSplitMode =
+    splitMode && self.bottomOmniboxEnabled && _homePageEnabled;
 
-  self.leadingStackViewWidthNoItems.active = NO;
-  if (!VivaldiGlobalHelpers.canShowSidePanel && isSplitToolbarMode) {
-    self.leadingStackViewWidthNoItems.active = YES;
-    return @[];
+  if (splitMode) {
+    self.leadingStackViewWidthNoItems.active = !showHomeButtonInSplitMode;
+    self.leadingLocationBarContainerConstraint.constant =
+      showHomeButtonInSplitMode ?
+        vPrimaryToolbarLocationContainerTrailingPadding : 0;
+    return showHomeButtonInSplitMode ? @[self.vivaldiHomeButton] : @[];
   } else {
-    return @[
-      self.panelButton,
-      self.backButton,
-      self.forwardButton
-    ];
+    self.leadingStackViewWidthNoItems.active = NO;
+    self.leadingLocationBarContainerConstraint.constant = 0;
+    NSArray *buttons = @[self.panelButton, self.backButton, self.forwardButton];
+    if (_homePageEnabled) {
+      buttons = [buttons arrayByAddingObject:self.vivaldiHomeButton];
+    }
+    return buttons;
   }
 }
 
@@ -601,26 +706,14 @@ using vivaldi::IsVivaldiRunning;
     if (self.bottomOmniboxEnabled && self.tabBarEnabled) {
       return @[ self.vivaldiMoreButton, self.toolsMenuButton ];
     } else {
-      if (self.isNTP) {
-        return @[ self.toolsMenuButton ];
-      } else {
-        return @[ self.shieldButton, self.toolsMenuButton ];
-      }
+      return @[ self.toolsMenuButton ];
     }
   } else {
     self.trailingStackView.spacing = kAdaptiveToolbarStackViewSpacing;
-    if (self.isNTP) {
-      return @[
-        self.tabGridButton,
-        self.toolsMenuButton
-      ];
-    } else {
-      return @[
-        self.shieldButton,
-        self.tabGridButton,
-        self.toolsMenuButton
-      ];
-    }
+    return @[
+      self.tabGridButton,
+      self.toolsMenuButton
+    ];
   }
 }
 
@@ -653,14 +746,6 @@ using vivaldi::IsVivaldiRunning;
 }
 
 #pragma mark Setter
-- (void)setAtbSettingForActiveWebState:
-    (ATBSettingType)atbSettingForActiveWebState {
-  _atbSettingForActiveWebState = atbSettingForActiveWebState;
-  [self.shieldButton setImage:
-      [self shieldIconForSetting:atbSettingForActiveWebState]
-                        forState:UIControlStateNormal];
-  [self updateOverflowMenuActions];
-}
 
 - (void)setCanShowBack:(BOOL)canShowBack {
   if (_canShowBack != canShowBack)
@@ -684,31 +769,8 @@ using vivaldi::IsVivaldiRunning;
 - (void)updateOverflowMenuActions {
   self.vivaldiMoreButton.menu =
       [self.buttonFactory
-       overflowMenuWithTrackerBlocker:_canShowAdTrackerBlocker
-                       atbSettingType:_atbSettingForActiveWebState
-             navigationForwardEnabled:_canShowForward
-            navigationBackwordEnabled:_canShowBack];
-}
-
-- (UIImage*)shieldIconForSetting:(ATBSettingType)setting {
-  UIImage* iconImage;
-
-  switch (setting) {
-    case ATBSettingNoBlocking:
-      iconImage = [UIImage imageNamed:vATBShieldNone];
-      break;
-    case ATBSettingBlockTrackers:
-      iconImage = [UIImage imageNamed:vATBShieldTrackers];
-      break;
-    case ATBSettingBlockTrackersAndAds:
-      iconImage = [UIImage imageNamed:vATBShieldTrackesAndAds];
-      break;
-    default:
-      iconImage = [UIImage imageNamed:vATBShieldNone];
-      break;
-  }
-
-  return [iconImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+          overflowMenuWithNavForwardEnabled:_canShowForward
+                         navBackwordEnabled:_canShowBack];
 }
 
 @end

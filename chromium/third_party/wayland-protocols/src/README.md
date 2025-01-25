@@ -12,8 +12,7 @@ containing detailed state and a list of maintainers.
 
 wayland-protocols is a standardization body formed of various Wayland
 compositor and client developers. The governance rules are described in
-[GOVERNANCE.md](GOVERNANCE.md) and the current members are listed in
-[MEMBERS.md](MEMBERS.md).
+[GOVERNANCE.md] and the current members are listed in [MEMBERS.md].
 
 ## Protocol phases
 
@@ -22,23 +21,18 @@ phase, and the stable phase.
 
 In the development phase, a protocol is not officially part of
 wayland-protocols, but is actively being developed, for example by
-iterating over it in a
-[merge
-request](https://gitlab.freedesktop.org/wayland/wayland-protocols/merge_requests),
-or planning it in an
-[issue](https://gitlab.freedesktop.org/wayland/wayland-protocols/issues).
+iterating over it in a [merge request] or planning it in an [issue].
 
 During this phase, patches for clients and compositors are written as a test
 vehicle. Such patches must not be merged in clients and compositors, because
 the protocol can still change.
 
 When a protocol has reached a stage where it is ready for wider adoption,
-and after the [GOVERNANCE section
-2.3](GOVERNANCE.md#2.3-introducing-new-protocols) requirements have been
-met, it enters the "testing" phase. At this point, the protocol is added
-to the `staging/` directory of wayland-protocols and made part of a release.
-What this means is that implementation is encouraged in clients and
-compositors where the functionality it specifies is wanted.
+and after the [GOVERNANCE section 2.3] requirements have been met, it enters
+the "testing" phase. At this point, the protocol is added to the `staging/`
+directory of wayland-protocols and made part of a release. What this means is
+that implementation is encouraged in clients and compositors where the
+functionality it specifies is wanted.
 
 Extensions in staging cannot have backward incompatible changes, in that
 sense they are equal to stable extensions. However, they may be completely
@@ -75,30 +69,28 @@ Stable protocols are placed in the `stable/` directory, staging protocols
 are placed in the `staging/` directory, and deprecated protocols are
 placed in the `deprecated/` directory.
 
-Unstable protocols (see [Legacy protocol phases](#legacy-protocol-phases))
-can be found in the `unstable/` directory, but new ones should never be
-placed here.
+Unstable protocols (see [Legacy protocol phases]) can be found in the
+`unstable/` directory, but new ones should never be placed here.
 
 ## Protocol development procedure
 
 To propose a new protocol, create a GitLab merge request adding the
-relevant files and Makefile.am entry to the repository with the
+relevant files and `meson.build` entry to the repository with the
 explanation and motivation in the commit message. Protocols are
 organized in namespaces describing their scope ("wp", "xdg" and "ext").
 There are different requirements for each namespace, see [GOVERNANCE
-section 2](GOVERNANCE.md#2-protocols) for more information.
+section 2] for more information.
 
 If the new protocol is just an idea, open an issue on the GitLab issue
 tracker. If the protocol isn't ready for complete review yet and is an
-RFC, create a merge request and add the "WIP:" prefix in the title.
+RFC, create a merge request and add the "Draft:" prefix in the title.
 
 To propose changes to existing protocols, create a GitLab merge request.
 
 Please include a `Signed-off-by` line at the end of the commit to certify
 that you wrote it or otherwise have the right to pass it on as an
-open-source patch. See the
-[Developer Certificate of Origin](https://developercertificate.org/) for
-a formal definition.
+open-source patch. See the [Developer Certificate of Origin] for a formal
+definition.
 
 ## Interface naming convention
 
@@ -118,8 +110,7 @@ For operating system specific protocols, the interfaces should be
 prefixed with both `wp_` and the operating system, for example
 `wp_linux_`, or `wp_freebsd_`, etc.
 
-For more information about namespaces, see [GOVERNANCE section 2.1
-](GOVERNANCE.md#21-protocol-namespaces).
+For more information about namespaces, see [GOVERNANCE section 2.1].
 
 Each new protocol XML file must include a major version postfix, starting
 with `-v1`. The purpose of this postfix is to make it possible to
@@ -149,8 +140,7 @@ only be done by creating a new major version of the extension.
 ## Use of RFC 2119 keywords
 
 Descriptions of all new protocols must use (in lowercase) and adhere to the
-proper meaning of the keywords described in
-[RFC 2119](https://www.rfc-editor.org/info/rfc2119).
+proper meaning of the keywords described in [RFC 2119].
 
 All protocol descriptions that follow the guidelines in RFC 2119 must
 incorporate the following text in their toplevel protocol description section:
@@ -219,7 +209,7 @@ Note that the major version of the stable protocol extension, as well as
 all the interface versions and names, must remain unchanged.
 
 There are other requirements for declaring a protocol stable, see
-[GOVERNANCE section 2.3](GOVERNANCE.md#23-introducing-new-protocols).
+[GOVERNANCE section 2.3].
 
 ## Releases
 
@@ -248,7 +238,7 @@ protocol.
 period.
 
 For the meaning and requirement of acknowledgments and available
-implementations, see the [GOVERNANCE.md](GOVERNANCE.md) document.
+implementations, see the [GOVERNANCE.md] document.
 
 ### Managing merge requests
 
@@ -262,3 +252,14 @@ merge request receives all the required acknowledgments, remove the
 
 If the inclusion of a merge request is denied due to one or more Nacks, add
 the ~Nacked label.
+
+[GOVERNANCE.md]: GOVERNANCE.md
+[MEMBERS.md]: MEMBERS.md
+[merge request]: https://gitlab.freedesktop.org/wayland/wayland-protocols/merge_requests
+[issue]: https://gitlab.freedesktop.org/wayland/wayland-protocols/issues
+[GOVERNANCE section 2.3]: GOVERNANCE.md#2.3-introducing-new-protocols
+[Legacy protocol phases]: #legacy-protocol-phases
+[GOVERNANCE section 2]: GOVERNANCE.md#2-protocols
+[Developer Certificate of Origin]: https://developercertificate.org/
+[GOVERNANCE section 2.1]: GOVERNANCE.md#21-protocol-namespaces
+[RFC 2119]: https://www.rfc-editor.org/info/rfc2119

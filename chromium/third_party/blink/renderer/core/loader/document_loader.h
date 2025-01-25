@@ -184,7 +184,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
     return navigation_type_;
   }
   ExtraData* GetExtraData() const override;
-  std::unique_ptr<ExtraData> TakeExtraData() override;
+  std::unique_ptr<ExtraData> CloneExtraData() override;
   void SetExtraData(std::unique_ptr<ExtraData>) override;
   void SetSubresourceFilter(WebDocumentSubresourceFilter*) override;
   void SetServiceWorkerNetworkProvider(
@@ -316,6 +316,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       Element* source_element,
       mojom::blink::TriggeringEventInfo,
       bool is_browser_initiated,
+      bool has_ua_visual_transition,
       std::optional<scheduler::TaskAttributionId>
           soft_navigation_heuristics_task_id);
 
@@ -556,7 +557,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       bool is_synchronously_committed,
       mojom::blink::TriggeringEventInfo,
       std::optional<scheduler::TaskAttributionId>
-          soft_navigation_heuristics_task_id);
+          soft_navigation_heuristics_task_id,
+      bool has_ua_visual_transition);
 
   // Use these method only where it's guaranteed that |m_frame| hasn't been
   // cleared.
@@ -617,9 +619,10 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // exchanges for matching requests.
   void InitializePrefetchedSignedExchangeManager();
 
-  bool IsJavaScriptURLOrXSLTCommit() const {
+  bool IsJavaScriptURLOrXSLTCommitOrDiscard() const {
     return commit_reason_ == CommitReason::kJavascriptUrl ||
-           commit_reason_ == CommitReason::kXSLT;
+           commit_reason_ == CommitReason::kXSLT ||
+           commit_reason_ == CommitReason::kDiscard;
   }
 
   // Computes and creates CSP for this document.

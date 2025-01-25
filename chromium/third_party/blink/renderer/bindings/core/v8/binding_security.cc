@@ -127,18 +127,6 @@ bool CanAccessWindowInternal(
         accessing_window->document(),
         can_access ? WebFeature::kDocumentDomainEnabledCrossOriginAccess
                    : WebFeature::kDocumentDomainBlockedCrossOriginAccess);
-    // Handle deprecation warnings for OriginAgentCluster default:
-    // If the new default is not (yet) enabled, but warnings are, and
-    // access gets allowed for domain-setting reasons (reasons checked in
-    // the if clause above).
-    if (accessing_window->GetAgent()->IsOriginOrSiteKeyedBasedOnDefault() &&
-        base::FeatureList::IsEnabled(
-            blink::features::kOriginAgentClusterDefaultWarning) &&
-        can_access) {
-      UseCounter::CountDeprecation(
-          accessing_window->document(),
-          WebFeature::kCrossOriginAccessBasedOnDocumentDomain);
-    }
   }
   if (!can_access) {
     // Ensure that if we got a cluster mismatch that it was due to a permissions
@@ -291,8 +279,9 @@ bool BindingSecurity::ShouldAllowAccessToV8Context(
   }
 
   // Fast path for the most likely case.
-  if (LIKELY(accessing_context == target_context))
+  if (accessing_context == target_context) [[likely]] {
     return true;
+  }
 
   v8::Isolate* isolate = accessing_context->GetIsolate();
   return ShouldAllowAccessToV8ContextInternal(

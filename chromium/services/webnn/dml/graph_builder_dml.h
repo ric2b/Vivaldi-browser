@@ -132,7 +132,7 @@ class NodeOutput {
 // output.
 class COMPONENT_EXPORT(WEBNN_SERVICE) GraphBuilderDml final {
  public:
-  explicit GraphBuilderDml(Microsoft::WRL::ComPtr<IDMLDevice> device);
+  explicit GraphBuilderDml(Microsoft::WRL::ComPtr<IDMLDevice1> device);
 
   GraphBuilderDml(const GraphBuilderDml& other) = delete;
   GraphBuilderDml& operator=(const GraphBuilderDml& other) = delete;
@@ -161,13 +161,10 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) GraphBuilderDml final {
   // When creation of IDMLOperator succeeds, it creates an operator node
   // stored in `GraphBuilderDml::operator_nodes_` and returns its pointer. When
   // it fails to create IDMLOperator, a nullptr is returned.
-  //
-  // TODO(crbug.com/350540987): Remove the default value of `label` after all
-  // operators have labels.
   const OperatorNode* CreateOperatorNode(DML_OPERATOR_TYPE type,
                                          const void* operator_desc,
                                          base::span<const NodeOutput*> inputs,
-                                         std::string_view label = "");
+                                         std::string_view label);
 
   // Create a node output stored in `GraphBuilderDml::node_outputs_` and return
   // its pointer.
@@ -185,7 +182,7 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) GraphBuilderDml final {
       DML_EXECUTION_FLAGS flags) const;
 
  private:
-  Microsoft::WRL::ComPtr<IDMLDevice> dml_device_;
+  Microsoft::WRL::ComPtr<IDMLDevice1> dml_device_;
 
   std::vector<DML_INPUT_GRAPH_EDGE_DESC> dml_input_edges_;
   std::vector<DML_INTERMEDIATE_GRAPH_EDGE_DESC> dml_intermediate_edges_;

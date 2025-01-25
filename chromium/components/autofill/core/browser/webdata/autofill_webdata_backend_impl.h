@@ -6,6 +6,7 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_WEBDATA_AUTOFILL_WEBDATA_BACKEND_IMPL_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -53,7 +54,7 @@ class AutofillWebDataBackendImpl
       scoped_refptr<WebDatabaseBackend> web_database_backend,
       scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
       scoped_refptr<base::SequencedTaskRunner> db_task_runner,
-      const base::RepeatingCallback<void(syncer::ModelType)>&
+      const base::RepeatingCallback<void(syncer::DataType)>&
           on_autofill_changed_by_sync_callback);
 
   AutofillWebDataBackendImpl(const AutofillWebDataBackendImpl&) = delete;
@@ -73,7 +74,7 @@ class AutofillWebDataBackendImpl
       const AutofillProfileChange& change) override;
   void NotifyOfCreditCardChanged(const CreditCardChange& change) override;
   void NotifyOfIbanChanged(const IbanChange& change) override;
-  void NotifyOnAutofillChangedBySync(syncer::ModelType model_type) override;
+  void NotifyOnAutofillChangedBySync(syncer::DataType data_type) override;
   void NotifyOnServerCvcChanged(const ServerCvcChange& change) override;
   void CommitChanges() override;
 
@@ -123,14 +124,11 @@ class AutofillWebDataBackendImpl
                                            WebDatabase* db);
 
   // Removes an Autofill profile from the web database.
-  WebDatabase::State RemoveAutofillProfile(
-      const std::string& guid,
-      AutofillProfile::Source profile_source,
-      WebDatabase* db);
+  WebDatabase::State RemoveAutofillProfile(const std::string& guid,
+                                           WebDatabase* db);
 
   // Returns the Autofill profiles from the web database.
   std::unique_ptr<WDTypedResult> GetAutofillProfiles(
-      AutofillProfile::Source profile_source,
       WebDatabase* db);
 
   // Returns the number of values such that all for autofill entries with that
@@ -220,18 +218,6 @@ class AutofillWebDataBackendImpl
 
   WebDatabase::State ClearAllServerData(WebDatabase* db);
 
-  // Removes Autofill records from the database. Valid only for local cards and
-  // kLocalOrSyncable profiles.
-  WebDatabase::State RemoveAutofillDataModifiedBetween(base::Time delete_begin,
-                                                       base::Time delete_end,
-                                                       WebDatabase* db);
-
-  // Removes origin URLs associated with local credit cards from the database.
-  // Autofill profiles don't store an origin, so this doesn't apply to them.
-  WebDatabase::State RemoveOriginURLsModifiedBetween(base::Time delete_begin,
-                                                     base::Time delete_end,
-                                                     WebDatabase* db);
-
   // Clears all the credit card benefits from the database.
   WebDatabase::State ClearAllCreditCardBenefits(WebDatabase* db);
 
@@ -278,7 +264,7 @@ class AutofillWebDataBackendImpl
   // TODO(caitkp): Make it so nobody but us needs direct DB access anymore.
   scoped_refptr<WebDatabaseBackend> web_database_backend_;
 
-  base::RepeatingCallback<void(syncer::ModelType)>
+  base::RepeatingCallback<void(syncer::DataType)>
       on_autofill_changed_by_sync_callback_;
   base::RepeatingCallback<void(const AutofillProfileChange&)>
       on_autofill_profile_changed_cb_;

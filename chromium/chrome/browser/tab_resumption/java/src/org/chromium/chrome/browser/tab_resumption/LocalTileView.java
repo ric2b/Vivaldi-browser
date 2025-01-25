@@ -5,10 +5,9 @@
 package org.chromium.chrome.browser.tab_resumption;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Matrix;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
@@ -24,6 +23,7 @@ public class LocalTileView extends LinearLayout {
     private TextView mTitle;
     @Nullable private TabThumbnailView mTabThumbnail;
     @Nullable private TextView mUrl;
+    @Nullable private TextView mReason;
 
     /** Default constructor needed to inflate via XML. */
     public LocalTileView(Context context, AttributeSet attrs) {
@@ -38,6 +38,7 @@ public class LocalTileView extends LinearLayout {
         mTitle = findViewById(R.id.tab_title_view);
         mTabThumbnail = findViewById(R.id.tab_thumbnail);
         mUrl = findViewById(R.id.tab_url_view);
+        mReason = findViewById(R.id.tab_show_reason);
 
         mTabThumbnail.setScaleType(ScaleType.MATRIX);
         mTabThumbnail.updateThumbnailPlaceholder(/* isIncognito= */ false, /* isSelected= */ false);
@@ -47,14 +48,10 @@ public class LocalTileView extends LinearLayout {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
-        Bitmap thumbnail = null;
         Drawable drawable = mTabThumbnail.getDrawable();
-        if (drawable instanceof BitmapDrawable) {
-            thumbnail = ((BitmapDrawable) drawable).getBitmap();
-        }
-        if (thumbnail == null) return;
+        if (drawable == null) return;
 
-        updateThumbnailMatrix(thumbnail);
+        updateThumbnailMatrix(drawable);
     }
 
     /**
@@ -69,14 +66,16 @@ public class LocalTileView extends LinearLayout {
     /**
      * Set the Tab thumbnail.
      *
-     * @param thumbnail The given Tab thumbnail {@link Bitmap}.
+     * @param thumbnail The given Tab thumbnail {@link Drawable}.
      */
-    public void setTabThumbnail(Bitmap thumbnail) {
-        if (thumbnail == null || thumbnail.getWidth() <= 0 || thumbnail.getHeight() <= 0) {
+    public void setTabThumbnail(Drawable thumbnail) {
+        if (thumbnail == null
+                || thumbnail.getIntrinsicWidth() <= 0
+                || thumbnail.getIntrinsicHeight() <= 0) {
             mTabThumbnail.setImageMatrix(new Matrix());
             return;
         }
-        mTabThumbnail.setImageBitmap(thumbnail);
+        mTabThumbnail.setImageDrawable(thumbnail);
 
         updateThumbnailMatrix(thumbnail);
     }
@@ -99,14 +98,26 @@ public class LocalTileView extends LinearLayout {
         mUrl.setText(url);
     }
 
-    private void updateThumbnailMatrix(Bitmap thumbnail) {
+    /** Sets the reason why the tile is shown. */
+    public void setShowReason(String reason) {
+        mReason.setText(reason);
+        boolean showReason = !TextUtils.isEmpty(reason);
+        mReason.setVisibility(showReason ? VISIBLE : GONE);
+    }
+
+    /** Sets the maximum lines of the mTitle View. */
+    public void setMaxLinesForTitle(int maxLines) {
+        mTitle.setMaxLines(maxLines);
+    }
+
+    private void updateThumbnailMatrix(Drawable thumbnail) {
         final int width = mTabThumbnail.getMeasuredWidth();
         final int height = mTabThumbnail.getMeasuredHeight();
         final float scale =
                 Math.max(
-                        (float) width / thumbnail.getWidth(),
-                        (float) height / thumbnail.getHeight());
-        final int xOffset = (int) ((width - thumbnail.getWidth() * scale) / 2);
+                        (float) width / thumbnail.getIntrinsicWidth(),
+                        (float) height / thumbnail.getIntrinsicHeight());
+        final int xOffset = (int) ((width - thumbnail.getIntrinsicWidth() * scale) / 2);
 
         Matrix m = new Matrix();
         m.setScale(scale, scale);

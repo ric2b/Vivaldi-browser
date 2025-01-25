@@ -11,7 +11,7 @@
 #include <string.h>
 
 #include "util/osp_logging.h"
-#include "util/stringutil.h"
+#include "util/string_util.h"
 
 namespace openscreen {
 
@@ -27,7 +27,7 @@ std::vector<std::string> ReadCertificatesFromPemFile(
   unsigned char* data;
   long length;  // NOLINT
   while (PEM_read(fp, &name, &header, &data, &length) == 1) {
-    if (stringutil::starts_with(name, "CERTIFICATE")) {
+    if (string_util::starts_with(name, "CERTIFICATE")) {
       certs.emplace_back(reinterpret_cast<char*>(data), length);
     }
     OPENSSL_free(name);
@@ -49,7 +49,7 @@ bssl::UniquePtr<EVP_PKEY> ReadKeyFromPemFile(std::string_view filename) {
   unsigned char* data;
   long length;  // NOLINT
   while (PEM_read(fp, &name, &header, &data, &length) == 1) {
-    if (stringutil::starts_with(name, "RSA PRIVATE KEY")) {
+    if (string_util::starts_with(name, "RSA PRIVATE KEY")) {
       OSP_CHECK(!pkey);
       CBS cbs;
       CBS_init(&cbs, data, length);

@@ -17,7 +17,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/repost_form_warning_controller.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/ssl/security_state_tab_helper.h"
+#include "chrome/browser/ssl/chrome_security_state_tab_helper.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -75,6 +75,7 @@
 #include "components/guest_view/browser/guest_view_base.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/guest_view/vivaldi_web_view_constants.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/helper/vivaldi_init_helpers.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "ui/content/vivaldi_tab_check.h"
@@ -236,6 +237,12 @@ static std::string ContentSettingsTypeToString(
       return "autoplay";
     case ContentSettingsType::NOTIFICATIONS:
       return "notifications";
+    case ContentSettingsType::IDLE_DETECTION:
+      return "idle-detection";
+    case ContentSettingsType::SENSORS:
+      return "sensors";
+    case ContentSettingsType::CLIPBOARD_READ_WRITE:
+      return "clipboard";
     default:
       // fallthrough
       break;
@@ -365,6 +372,10 @@ bool WebViewGuest::IsVivaldiMail() {
 
 bool WebViewGuest::IsVivaldiWebPanel() {
   return name_.compare("vivaldi-webpanel") == 0;
+}
+
+bool WebViewGuest::IsVivaldiWebPageWidget() {
+  return name_.compare("vivaldi-webpage-widget") == 0;
 }
 
 void WebViewGuest::ShowPageInfo(gfx::Point pos) {
@@ -734,11 +745,7 @@ void WebViewGuest::CapturePaintPreviewOfSubframe(
 }
 
 void WebViewGuest::LoadTabContentsIfNecessary() {
-  // If the content was discarded the loading has already been handled in
-  // resource_coordinator::LifecycleUnit::TabModelObserver.
-  if (!web_contents()->WasDiscarded()) {
-    web_contents()->GetController().LoadIfNecessary();
-  }
+  web_contents()->GetController().LoadIfNecessary();
 
   TabStripModel* tab_strip;
   int tab_index;
@@ -1088,7 +1095,7 @@ void WebViewGuest::VivaldiCreateWebContents(
         // TabHelpers::AttachTabHelpers.
         content_settings::PageSpecificContentSettings::CreateForWebContents(
             new_contents.get(),
-            std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
+            std::make_unique<PageSpecificContentSettingsDelegate>(
                 new_contents.get()));
 
         if (view_name && IsPanelId(*view_name)) {
@@ -1108,7 +1115,7 @@ void WebViewGuest::VivaldiCreateWebContents(
     // NOTE(pettern@vivaldi.com): If the owner is muted it means the webcontents
     // of the AppWindow has been muted due to thumbnail capturing, so we also
     // mute the webview webcontents.
-    chrome::SetTabAudioMuted(
+    SetTabAudioMuted(
         new_contents.get(), true, TabMutedReason::EXTENSION,
         LastMuteMetadata::FromWebContents(owner_web_contents())->extension_id);
   }

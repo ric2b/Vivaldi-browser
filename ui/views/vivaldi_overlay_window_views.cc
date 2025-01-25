@@ -186,7 +186,7 @@ void VideoOverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
     return;
 
   int seek_seconds = 0;
-  if (event->type() == ui::kKeyPressed) {
+  if (event->type() == ui::EventType::kKeyPressed) {
     if (event->key_code() == ui::VKEY_RIGHT) {
       seek_seconds += hSeekInterval;
       event->SetHandled();

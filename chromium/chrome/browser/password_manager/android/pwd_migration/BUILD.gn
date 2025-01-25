@@ -15,6 +15,7 @@ android_library("java") {
     "//chrome/browser/password_manager/android:password_manager_resource_provider_java",
     "//chrome/browser/preferences:java",
     "//chrome/browser/profiles/android:java",
+    "//chrome/browser/settings:factory_java",
     "//chrome/browser/signin/services/android:java",
     "//chrome/browser/sync/android:java",
     "//chrome/browser/ui/android/signin:java",
@@ -35,11 +36,12 @@ android_library("java") {
     "//third_party/jni_zero:jni_zero_java",
     "//ui/android:ui_java",
   ]
+  srcjar_deps = [
+    "//chrome/browser/password_manager/android/buildflags:buildflags_srcjar",
+  ]
 
   sources = [
     "java/src/org/chromium/chrome/browser/pwd_migration/ExportDeletionDialogFragment.java",
-    "java/src/org/chromium/chrome/browser/pwd_migration/ExportFlowInterface.java",
-    "java/src/org/chromium/chrome/browser/pwd_migration/NonCancelableProgressBar.java",
     "java/src/org/chromium/chrome/browser/pwd_migration/PasswordMigrationWarningCoordinator.java",
     "java/src/org/chromium/chrome/browser/pwd_migration/PasswordMigrationWarningIntroFragment.java",
     "java/src/org/chromium/chrome/browser/pwd_migration/PasswordMigrationWarningMediator.java",
@@ -101,6 +103,9 @@ robolectric_library("junit") {
     "//third_party/junit:junit",
     "//third_party/mockito:mockito_java",
     "//ui/android:ui_java",
+  ]
+  srcjar_deps = [
+    "//chrome/browser/password_manager/android/buildflags:buildflags_srcjar",
   ]
 }
 

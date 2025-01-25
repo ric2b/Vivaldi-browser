@@ -48,10 +48,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"  // nogncheck
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
@@ -100,7 +96,43 @@
 
 using content::WebContents;
 
+
+#include "components/send_tab_to_self/send_tab_to_self_bridge.h"
+#include "components/send_tab_to_self/send_tab_to_self_entry.h"
+#include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
+#include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
+#include "chrome/browser/send_tab_to_self/receiving_ui_handler.h"
+#include "chrome/browser/send_tab_to_self/receiving_ui_handler_registry.h"
+
+#include "chrome/browser/sync/device_info_sync_service_factory.h"
+#include "components/sync_device_info/device_info_sync_service.h"
+
 namespace extensions {
+
+
+namespace {
+
+/// Converts the permission content_type to string matchable in our JS
+/// customized version of PermissionUtil::GetPermissionString
+std::string VivaldiGetPermissionString(
+    ContentSettingsType content_type) {
+  blink::PermissionType permission;
+  bool success = permissions::PermissionUtil::GetPermissionType(content_type, &permission);
+  DCHECK(success);
+
+  // Fixup for permissions with non-matching strings
+  switch (permission) {
+  case blink::PermissionType::AUDIO_CAPTURE: return "microphone";
+  case blink::PermissionType::MIDI: return "midi";
+  case blink::PermissionType::MIDI_SYSEX: return "midi-sysex";
+  case blink::PermissionType::IDLE_DETECTION: return "idle_detection";
+  case blink::PermissionType::CLIPBOARD_READ_WRITE: return "clipboard";
+  default:
+    return blink::GetPermissionString(permission);
+  }
+}
+
+} // namespace
 
 const char kVivaldiTabZoom[] = "vivaldi_tab_zoom";
 const char kVivaldiTabMuted[] = "vivaldi_tab_muted";
@@ -162,17 +194,6 @@ Browser* GetWorkspaceBrowser(const double workspace_id) {
     }
   }
   return nullptr;
-}
-
-std::optional<double> GetActiveWorkspaceId(Browser* browser) {
-  base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  std::optional<base::Value> json =
-      base::JSONReader::Read(browser->viv_ext_data(), options);
-  std::optional<double> value;
-  if (json && json->is_dict()) {
-    value = json->GetDict().FindDouble("activeWorkspaceId");
-  }
-  return value;
 }
 
 int CountTabsInWorkspace(TabStripModel* tab_strip,
@@ -278,9 +299,18 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
         types.push_back(
             tabs_private::TabAlertState::kSerialConnected);
         break;
-      default:
-        NOTREACHED() << "Unknown TabAlertState Status:" << (int)status;
-        //break;
+      case TabAlertState::BLUETOOTH_SCAN_ACTIVE:
+        types.push_back(tabs_private::TabAlertState::kBluetoothScan);
+        break;
+      case TabAlertState::HID_CONNECTED:
+        types.push_back(tabs_private::TabAlertState::kHidConnected);
+        break;
+      case TabAlertState::AUDIO_RECORDING:
+        types.push_back(tabs_private::TabAlertState::kAudioRecording);
+        break;
+      case TabAlertState::VIDEO_RECORDING:
+        types.push_back(tabs_private::TabAlertState::kVideoRecording);
+        break;
     }
   }
 
@@ -455,7 +485,7 @@ void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents) {
   UpdateMuting();
 
   std::vector<tabs_private::TabAlertState> states =
-      ConvertTabAlertState(chrome::GetTabAlertStatesForContents(web_contents));
+      ConvertTabAlertState(GetTabAlertStatesForContents(web_contents));
 
   if (web_contents->IsBeingCaptured()) {
     states.push_back(tabs_private::TabAlertState::kCapturing);
@@ -482,19 +512,6 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
     content::WebContents* web_contents)
     : WebContentsObserver(web_contents),
       WebContentsUserData<VivaldiPrivateTabObserver>(*web_contents) {
-  auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents);
-  if (zoom_controller) {
-    zoom_controller->AddObserver(this);
-  }
-  prefs_registrar_.Init(
-      Profile::FromBrowserContext(web_contents->GetBrowserContext())
-          ->GetPrefs());
-
-  prefs_registrar_.Add(
-      vivaldiprefs::kWebpagesFocusTrap,
-      base::BindRepeating(&VivaldiPrivateTabObserver::OnPrefsChanged,
-                          weak_ptr_factory_.GetWeakPtr()));
-
   VivaldiTranslateClient* translate_client =
       VivaldiTranslateClient::FromWebContents(web_contents);
   if (translate_client) {
@@ -503,7 +520,6 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
   }
 
   TabResourceUsageCollector::Get()->AddObserver(this);
-
 }
 
 VivaldiPrivateTabObserver::~VivaldiPrivateTabObserver() {
@@ -519,13 +535,6 @@ void VivaldiPrivateTabObserver::WebContentsDestroyed() {
   }
 }
 
-void VivaldiPrivateTabObserver::OnPrefsChanged(const std::string& path) {
-  if (path == vivaldiprefs::kWebpagesFocusTrap) {
-    UpdateAllowTabCycleIntoUI();
-    CommitSettings();
-  }
-}
-
 void VivaldiPrivateTabObserver::OnTabResourceMetricsRefreshed() {
   int id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
   uint64_t memory_usage;
@@ -537,9 +546,11 @@ void VivaldiPrivateTabObserver::OnTabResourceMetricsRefreshed() {
   bool not_yet_loaded =
       web_contents()->GetUserData(::vivaldi::kVivaldiStartupTabUserDataKey);
 
-  bool was_discarded = web_contents()->WasDiscarded() ||
-                      tab_lifecycle_unit_external->IsDiscarded() ||
-                      not_yet_loaded;
+  bool was_discarded =
+      web_contents()->WasDiscarded() ||
+      (tab_lifecycle_unit_external ? tab_lifecycle_unit_external->IsDiscarded()
+                                   : false) ||
+      not_yet_loaded;
 
   // TODO: (andre@vivaldi.com) GetDiscardedMemorySavingsInBytes does not return
   // anything useful.
@@ -555,7 +566,9 @@ void VivaldiPrivateTabObserver::OnTabResourceMetricsRefreshed() {
   } else {
     auto* const resource_tab_helper =
         TabResourceUsageTabHelper::FromWebContents(web_contents());
-    memory_usage = (resource_tab_helper->GetMemoryUsageInBytes());
+    memory_usage =
+        (resource_tab_helper ? resource_tab_helper->GetMemoryUsageInBytes()
+                             : 0);
   }
 
   tabs_private::TabPerformanceData info;
@@ -569,14 +582,25 @@ void VivaldiPrivateTabObserver::OnTabResourceMetricsRefreshed() {
       web_contents()->GetBrowserContext());
 }
 
+/* static */
 void VivaldiPrivateTabObserver::BroadcastTabInfo(
-    tabs_private::UpdateTabInfo& info) {
-  int id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
-  int windowId = extensions::ExtensionTabUtil::GetWindowIdOfTab(web_contents());
+    tabs_private::UpdateTabInfo& info, content::WebContents* web_contents) {
+
+  const SessionID sessionId = sessions::SessionTabHelper::IdForTab(web_contents);
+  if (sessionId == SessionID::InvalidValue()) {
+    // Not a tab, do we want to have a separate ui for this?
+    return;
+  }
+
+  int id = sessionId.id();
+
+  // todo: check sessionId.window_id()
+  int windowId = extensions::ExtensionTabUtil::GetWindowIdOfTab(web_contents);
+
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabUpdated::kEventName,
       tabs_private::OnTabUpdated::Create(id, windowId, info),
-      web_contents()->GetBrowserContext());
+      web_contents->GetBrowserContext());
 }
 
 const int kThemeColorBufferSize = 8;
@@ -629,198 +653,13 @@ bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id) {
   return false;
 }
 
-
-void VivaldiPrivateTabObserver::RenderFrameCreated(
-    content::RenderFrameHost* render_frame_host) {
-  std::string viv_ext_data = web_contents()->GetVivExtData();
-  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
-  if (::vivaldi::IsTabZoomEnabled(web_contents())) {
-    std::optional<double> zoom =
-        json ? json->GetDict().FindDouble(kVivaldiTabZoom) : std::nullopt;
-    if (zoom) {
-      tab_zoom_level_ = *zoom;
-    } else {
-      content::HostZoomMap* host_zoom_map =
-          content::HostZoomMap::GetDefaultForBrowserContext(
-              web_contents()->GetBrowserContext());
-      tab_zoom_level_ = host_zoom_map->GetDefaultZoomLevel();
-    }
-  }
-
-  // This is not necessary for each RVH-change. And only set when the tab is
-  // marked as muted to avoid interfering with site-settings.
-  if (IsTabMuted(web_contents())) {
-    SetMuted(true);
-  }
-
-  SetLoadFromCacheOnly(load_from_cache_only_);
-  UpdateAllowTabCycleIntoUI();
-  CommitSettings();
-
-  const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
-  if (::vivaldi::IsVivaldiApp(site.host())) {
-    auto* security_policy = content::ChildProcessSecurityPolicy::GetInstance();
-    int process_id = render_frame_host->GetProcess()->GetID();
-    security_policy->GrantRequestScheme(process_id, url::kFileScheme);
-    security_policy->GrantRequestScheme(process_id, content::kViewSourceScheme);
-  }
-}
-
-void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
-  std::string viv_ext_data = web_contents()->GetVivExtData();
-  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
-  if (json) {
-    json->GetDict().Set(kVivaldiTabZoom, zoom_level);
-    std::string json_string;
-    if (ValueToJSONString(*json, json_string)) {
-      web_contents()->SetVivExtData(json_string);
-    }
-  }
-}
-
-void VivaldiPrivateTabObserver::RenderViewHostChanged(
-    content::RenderViewHost* old_host,
-    content::RenderViewHost* new_host) {
-  if (::vivaldi::IsTabZoomEnabled(web_contents())) {
-    content::HostZoomMap* host_zoom_map_ =
-        content::HostZoomMap::GetForWebContents(web_contents());
-    auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-        web_contents()->GetPrimaryMainFrame());
-    if (rfhi) {
-      content::GlobalRenderFrameHostId rfh_id = rfhi->GetGlobalId();
-      host_zoom_map_->SetTemporaryZoomLevel(rfh_id, tab_zoom_level_);
-    }
-  }
-
-  // Set the renderer prefs on the new RenderViewHost too.
-  SetLoadFromCacheOnly(load_from_cache_only_);
-  UpdateAllowTabCycleIntoUI();
-  CommitSettings();
-}
-
-void VivaldiPrivateTabObserver::UpdateAllowTabCycleIntoUI() {
-  blink::RendererPreferences* render_prefs =
-      web_contents()->GetMutableRendererPrefs();
-  DCHECK(render_prefs);
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  render_prefs->allow_tab_cycle_from_webpage_into_ui =
-      !profile->GetPrefs()->GetBoolean(vivaldiprefs::kWebpagesFocusTrap);
-}
-
-void VivaldiPrivateTabObserver::SetShowImages(bool show_images) {
-  if (show_images_ == show_images) {
-    // Make sure we do not call SetImagesEnabled uneccesary. OnUpdated is called
-    // numerous times.
-    return;
-  }
-
-  show_images_ = show_images;
-
-  // This will loop over all images and show or hide them.
-  web_contents()->GetRenderViewHost()->SetImagesEnabled(show_images);
-}
-
-void VivaldiPrivateTabObserver::SetLoadFromCacheOnly(
-    bool load_from_cache_only) {
-  load_from_cache_only_ = load_from_cache_only;
-
-  blink::RendererPreferences* render_prefs =
-      web_contents()->GetMutableRendererPrefs();
-  DCHECK(render_prefs);
-  render_prefs->serve_resources_only_from_cache = load_from_cache_only;
-  web_contents()->GetRenderViewHost()->SetServeResourceFromCacheOnly(
-      load_from_cache_only);
-}
-
-void VivaldiPrivateTabObserver::SetMuted(bool mute) {
-  mute_ = mute;
-  std::string viv_ext_data = web_contents()->GetVivExtData();
-  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
-  if (json) {
-    std::optional<bool> existing = json->GetDict().FindBool(kVivaldiTabMuted);
-    if ((existing && *existing != mute) || (!existing && mute)) {
-      json->GetDict().Set(kVivaldiTabMuted, mute);
-      std::string json_string;
-      if (ValueToJSONString(*json, json_string)) {
-        web_contents()->SetVivExtData(json_string);
-      }
-    }
-  }
-  if (mute_ == web_contents()->IsAudioMuted()) {
-    // NOTE(andre@vivaldi.com) : contentsettings will not be used if muting
-    // reason is set to extension. So only set muting reason to extension when
-    // we actually change the muting state. See
-    // |SoundContentSettingObserver::MuteOrUnmuteIfNecessary|
-    return;
-  }
-  chrome::SetTabAudioMuted(web_contents(), mute, TabMutedReason::EXTENSION,
-                           ::vivaldi::kVivaldiAppId);
-}
-
-void VivaldiPrivateTabObserver::CommitSettings() {
-  blink::RendererPreferences* render_prefs =
-      web_contents()->GetMutableRendererPrefs();
-  DCHECK(render_prefs);
-
-  // We must update from system settings otherwise many settings would fallback
-  // to default values when syncing below.
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  renderer_preferences_util::UpdateFromSystemSettings(render_prefs, profile);
-
-  web_contents()->SyncRendererPrefs();
-  web_contents()->OnWebPreferencesChanged();
-}
-
-void VivaldiPrivateTabObserver::OnZoomControllerDestroyed(
-    zoom::ZoomController* zoom_controller) {
-  DCHECK(zoom_controller);
-  zoom_controller->RemoveObserver(this);
-}
-
-void VivaldiPrivateTabObserver::OnZoomChanged(
-    const zoom::ZoomController::ZoomChangedEventData& data) {
-  content::WebContents* web_contents = data.web_contents;
-  content::StoragePartition* current_partition =
-      web_contents->GetBrowserContext()->GetStoragePartition(
-          web_contents->GetSiteInstance(), false);
-  if (!::vivaldi::IsTabZoomEnabled(web_contents) || tab_zoom_level_ == -1) {
-    return;
-  }
-
-  if (current_partition &&
-      current_partition ==
-          web_contents->GetBrowserContext()->GetDefaultStoragePartition())
-    SetZoomLevelForTab(data.new_zoom_level, data.old_zoom_level);
-}
-
-void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level,
-                                                   double old_level) {
-  // Only update zoomlevel to new level if the tab_level is in sync. This was
-  // added because restoring a tab from a session would fire a zoom-update when
-  // the document finished loading through
-  // ZoomController::DidFinishNavigation().
-  if (old_level == tab_zoom_level_ && new_level != tab_zoom_level_) {
-    tab_zoom_level_ = new_level;
-    SaveZoomLevelToExtData(new_level);
-  } else if (old_level != tab_zoom_level_) {
-    // Make sure the view has the correct zoom level set.
-    content::HostZoomMap* host_zoom_map_ =
-        content::HostZoomMap::GetForWebContents(web_contents());
-
-    host_zoom_map_->SetTemporaryZoomLevel(
-        web_contents()->GetPrimaryMainFrame()->GetGlobalId(), tab_zoom_level_);
-  }
-}
-
 void VivaldiPrivateTabObserver::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url) {
   SetContentsMimeType(web_contents()->GetContentsMimeType());
   tabs_private::UpdateTabInfo info;
   info.mime_type = contents_mime_type();
-  BroadcastTabInfo(info);
+  BroadcastTabInfo(info, web_contents());
 }
 
 void VivaldiPrivateTabObserver::GetAccessKeys(JSAccessKeysCallback callback) {
@@ -892,7 +731,7 @@ void VivaldiPrivateTabObserver::OnPermissionAccessed(
   int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
 
   std::string type_name = base::ToLowerASCII(
-      permissions::PermissionUtil::GetPermissionString(content_settings_type));
+      VivaldiGetPermissionString(content_settings_type));
 
   std::string setting;
   switch (content_setting) {
@@ -1098,22 +937,28 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
 
   tabs_private::UpdateTabInfo* info = &params->tab_info;
   std::string error;
-  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+  VivaldiGuestViewContentObserver* guestviewcontentobserver =
+      VivaldiGuestViewContentObserver::FromTabId(
       browser_context(), params->tab_id, &error);
-  if (!tab_api)
+  if (!guestviewcontentobserver) {
     return RespondNow(Error(error));
+  }
 
   if (info->show_images.has_value()) {
-    tab_api->SetShowImages(info->show_images.value());
+    guestviewcontentobserver->SetShowImages(info->show_images.value());
   }
   if (info->load_from_cache_only.has_value()) {
-    tab_api->SetLoadFromCacheOnly(info->load_from_cache_only.value());
+    guestviewcontentobserver->SetLoadFromCacheOnly(
+        info->load_from_cache_only.value());
   }
   if (info->mute_tab.has_value()) {
-    tab_api->SetMuted(info->mute_tab.value());
+    guestviewcontentobserver->SetMuted(info->mute_tab.value());
   }
-  tab_api->CommitSettings();
-  tab_api->BroadcastTabInfo(*info);
+  // Set the prefs.
+  guestviewcontentobserver->CommitSettings();
+
+  // Inform the JS layer.
+  VivaldiPrivateTabObserver::BroadcastTabInfo(*info, guestviewcontentobserver->web_contents());
 
   return RespondNow(ArgumentList(Results::Create(*info)));
 }
@@ -1126,7 +971,8 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
-  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+  VivaldiGuestViewContentObserver* tab_api =
+      VivaldiGuestViewContentObserver::FromTabId(
       browser_context(), params->tab_id, &error);
   if (!tab_api)
     return RespondNow(Error(error));
@@ -1592,6 +1438,347 @@ TabsPrivateGetTabPerformanceDataFunction::Run() {
 
   }
   return RespondNow(ArgumentList(Results::Create(data)));
+}
+
+/// <summary>
+/// VivaldiGuestViewContentObserver will make sure all renderer prefs are
+/// updated when a renderer is created and navigates.
+/// </summary>
+
+VivaldiGuestViewContentObserver::VivaldiGuestViewContentObserver(
+    content::WebContents* web_contents)
+    : WebContentsObserver(web_contents),
+      content::WebContentsUserData<VivaldiGuestViewContentObserver>(
+          *web_contents) {
+  auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents);
+  if (zoom_controller) {
+    zoom_controller->AddObserver(this);
+  }
+  prefs_registrar_.Init(
+      Profile::FromBrowserContext(web_contents->GetBrowserContext())
+          ->GetPrefs());
+
+  prefs_registrar_.Add(
+      vivaldiprefs::kWebpagesFocusTrap,
+      base::BindRepeating(&VivaldiGuestViewContentObserver::OnPrefsChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
+}
+
+VivaldiGuestViewContentObserver::~VivaldiGuestViewContentObserver() {}
+
+void VivaldiGuestViewContentObserver::WebContentsDestroyed() {}
+
+void VivaldiGuestViewContentObserver::OnPrefsChanged(const std::string& path) {
+  if (path == vivaldiprefs::kWebpagesFocusTrap) {
+    UpdateAllowTabCycleIntoUI();
+    CommitSettings();
+  }
+}
+
+void VivaldiGuestViewContentObserver::CommitSettings() {
+  blink::RendererPreferences* render_prefs =
+      web_contents()->GetMutableRendererPrefs();
+  DCHECK(render_prefs);
+
+  // We must update from system settings otherwise many settings would fallback
+  // to default values when syncing below.
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  renderer_preferences_util::UpdateFromSystemSettings(render_prefs, profile);
+
+  web_contents()->SyncRendererPrefs();
+  web_contents()->OnWebPreferencesChanged();
+}
+
+void VivaldiGuestViewContentObserver::UpdateAllowTabCycleIntoUI() {
+  blink::RendererPreferences* render_prefs =
+      web_contents()->GetMutableRendererPrefs();
+  DCHECK(render_prefs);
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  render_prefs->allow_tab_cycle_from_webpage_into_ui =
+      !profile->GetPrefs()->GetBoolean(vivaldiprefs::kWebpagesFocusTrap);
+}
+
+void VivaldiGuestViewContentObserver::RenderFrameCreated(
+    content::RenderFrameHost* render_frame_host) {
+  std::string viv_ext_data = web_contents()->GetVivExtData();
+  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
+  if (::vivaldi::IsTabZoomEnabled(web_contents())) {
+    std::optional<double> zoom =
+        json ? json->GetDict().FindDouble(kVivaldiTabZoom) : std::nullopt;
+    if (zoom) {
+      tab_zoom_level_ = *zoom;
+    } else {
+      content::HostZoomMap* host_zoom_map =
+          content::HostZoomMap::GetDefaultForBrowserContext(
+              web_contents()->GetBrowserContext());
+      tab_zoom_level_ = host_zoom_map->GetDefaultZoomLevel();
+    }
+  }
+
+  // This is not necessary for each RVH-change. And only set when the tab is
+  // marked as muted to avoid interfering with site-settings.
+  if (IsTabMuted(web_contents())) {
+    SetMuted(true);
+  }
+
+  SetLoadFromCacheOnly(load_from_cache_only_);
+  UpdateAllowTabCycleIntoUI();
+  CommitSettings();
+
+  const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
+  if (::vivaldi::IsVivaldiApp(site.host())) {
+    auto* security_policy = content::ChildProcessSecurityPolicy::GetInstance();
+    int process_id = render_frame_host->GetProcess()->GetID();
+    security_policy->GrantRequestScheme(process_id, url::kFileScheme);
+    security_policy->GrantRequestScheme(process_id, content::kViewSourceScheme);
+  }
+}
+
+void VivaldiGuestViewContentObserver::RenderViewHostChanged(
+    content::RenderViewHost* old_host,
+    content::RenderViewHost* new_host) {
+  if (::vivaldi::IsTabZoomEnabled(web_contents())) {
+    content::HostZoomMap* host_zoom_map_ =
+        content::HostZoomMap::GetForWebContents(web_contents());
+    auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
+        web_contents()->GetPrimaryMainFrame());
+    if (rfhi) {
+      content::GlobalRenderFrameHostId rfh_id = rfhi->GetGlobalId();
+      host_zoom_map_->SetTemporaryZoomLevel(rfh_id, tab_zoom_level_);
+    }
+  }
+
+  // Set the renderer prefs on the new RenderViewHost too.
+  SetLoadFromCacheOnly(load_from_cache_only_);
+  UpdateAllowTabCycleIntoUI();
+  CommitSettings();
+}
+
+void VivaldiGuestViewContentObserver::OnZoomControllerDestroyed(
+    zoom::ZoomController* zoom_controller) {
+  DCHECK(zoom_controller);
+  zoom_controller->RemoveObserver(this);
+}
+
+void VivaldiGuestViewContentObserver::OnZoomChanged(
+    const zoom::ZoomController::ZoomChangedEventData& data) {
+  content::WebContents* web_contents = data.web_contents;
+  content::StoragePartition* current_partition =
+      web_contents->GetBrowserContext()->GetStoragePartition(
+          web_contents->GetSiteInstance(), false);
+  if (!::vivaldi::IsTabZoomEnabled(web_contents) || tab_zoom_level_ == -1) {
+    return;
+  }
+
+  if (current_partition &&
+      current_partition ==
+          web_contents->GetBrowserContext()->GetDefaultStoragePartition())
+    SetZoomLevelForTab(data.new_zoom_level, data.old_zoom_level);
+}
+
+void VivaldiGuestViewContentObserver::SetZoomLevelForTab(double new_level,
+                                                   double old_level) {
+  // Only update zoomlevel to new level if the tab_level is in sync. This was
+  // added because restoring a tab from a session would fire a zoom-update when
+  // the document finished loading through
+  // ZoomController::DidFinishNavigation().
+  if (old_level == tab_zoom_level_ && new_level != tab_zoom_level_) {
+    tab_zoom_level_ = new_level;
+    SaveZoomLevelToExtData(new_level);
+  } else if (!called_host_zoom_ && old_level != tab_zoom_level_) {
+    called_host_zoom_ = true;
+    // Make sure the view has the correct zoom level set.
+    content::HostZoomMap* host_zoom_map_ =
+        content::HostZoomMap::GetForWebContents(web_contents());
+
+    host_zoom_map_->SetTemporaryZoomLevel(
+        web_contents()->GetPrimaryMainFrame()->GetGlobalId(), tab_zoom_level_);
+    called_host_zoom_ = false;
+  }
+}
+
+VivaldiGuestViewContentObserver* VivaldiGuestViewContentObserver::FromTabId(
+    content::BrowserContext* browser_context,
+    int tab_id,
+    std::string* error) {
+  content::WebContents* guest_contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, browser_context,
+                                                      error);
+  if (!guest_contents) {
+    return nullptr;
+  }
+
+  VivaldiGuestViewContentObserver* guestcontent_observer =
+      VivaldiGuestViewContentObserver::FromWebContents(guest_contents);
+  if (!guestcontent_observer) {
+    *error = "Failed to lookup VivaldiGuestViewContentObserver for id:" +
+             std::to_string(tab_id);
+    return nullptr;
+  }
+
+  return guestcontent_observer;
+}
+
+void VivaldiGuestViewContentObserver::SaveZoomLevelToExtData(
+    double zoom_level) {
+  std::string viv_ext_data = web_contents()->GetVivExtData();
+  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
+  if (json) {
+    json->GetDict().Set(kVivaldiTabZoom, zoom_level);
+    std::string json_string;
+    if (ValueToJSONString(*json, json_string)) {
+      web_contents()->SetVivExtData(json_string);
+    }
+  }
+}
+
+void VivaldiGuestViewContentObserver::SetShowImages(bool show_images) {
+  if (show_images_ == show_images) {
+    // Make sure we do not call SetImagesEnabled uneccesary. OnUpdated is called
+    // numerous times.
+    return;
+  }
+
+  show_images_ = show_images;
+
+  // This will loop over all images and show or hide them.
+  web_contents()->GetRenderViewHost()->SetImagesEnabled(show_images);
+}
+
+void VivaldiGuestViewContentObserver::SetLoadFromCacheOnly(
+    bool load_from_cache_only) {
+  load_from_cache_only_ = load_from_cache_only;
+
+  blink::RendererPreferences* render_prefs =
+      web_contents()->GetMutableRendererPrefs();
+  DCHECK(render_prefs);
+  render_prefs->serve_resources_only_from_cache = load_from_cache_only;
+  web_contents()->GetRenderViewHost()->SetServeResourceFromCacheOnly(
+      load_from_cache_only);
+}
+
+void VivaldiGuestViewContentObserver::SetMuted(bool mute) {
+  mute_ = mute;
+  std::string viv_ext_data = web_contents()->GetVivExtData();
+  std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
+  if (json) {
+    std::optional<bool> existing = json->GetDict().FindBool(kVivaldiTabMuted);
+    if ((existing && *existing != mute) || (!existing && mute)) {
+      json->GetDict().Set(kVivaldiTabMuted, mute);
+      std::string json_string;
+      if (ValueToJSONString(*json, json_string)) {
+        web_contents()->SetVivExtData(json_string);
+      }
+    }
+  }
+  if (mute_ == web_contents()->IsAudioMuted()) {
+    // NOTE(andre@vivaldi.com) : contentsettings will not be used if muting
+    // reason is set to extension. So only set muting reason to extension when
+    // we actually change the muting state. See
+    // |SoundContentSettingObserver::MuteOrUnmuteIfNecessary|
+    return;
+  }
+  SetTabAudioMuted(web_contents(), mute, TabMutedReason::EXTENSION,
+                   ::vivaldi::kVivaldiAppId);
+}
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiGuestViewContentObserver);
+
+ExtensionFunction::ResponseAction
+TabsPrivateGetSendTabToSelfEntriesFunction::Run() {
+  namespace Results = tabs_private::GetSendTabToSelfEntries::Results;
+
+  std::vector<extensions::vivaldi::tabs_private::SendTabToSelfEntry> list;
+
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+
+  send_tab_to_self::SendTabToSelfModel* model =
+    SendTabToSelfSyncServiceFactory::GetForProfile(profile)
+      ->GetSendTabToSelfModel();
+  syncer::DeviceInfoTracker* device_info_tracker =
+      DeviceInfoSyncServiceFactory::GetForProfile(profile)
+          ->GetDeviceInfoTracker();
+  if (model->IsReady() && device_info_tracker) {
+    std::vector<std::string> guids = model->GetAllGuids();
+    for (auto guid : guids) {
+      const send_tab_to_self::SendTabToSelfEntry* entry =
+        model->GetEntryByGUID(guid);
+      if (entry) {
+        if (device_info_tracker->IsRecentLocalCacheGuid(
+                entry->GetTargetDeviceSyncCacheGuid()) &&
+            !entry->GetNotificationDismissed() && !entry->IsOpened()) {
+          extensions::vivaldi::tabs_private::SendTabToSelfEntry item;
+          item.guid = entry->GetGUID();
+          item.url = entry->GetURL().spec();
+          item.title = entry->GetTitle();
+          item.device_name = entry->GetDeviceName();
+          item.shared_time = entry->GetSharedTime().InMillisecondsFSinceUnixEpoch();
+          list.push_back(std::move(item));
+        }
+      }
+    }
+  } else {
+    LOG(ERROR) << "SendTabToSelf. Model not ready";
+  }
+
+  return RespondNow(ArgumentList(Results::Create(list)));
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateDismissSendTabToSelfEntriesFunction::Run() {
+  using tabs_private::DismissSendTabToSelfEntries::Params;
+  namespace Results = tabs_private::DismissSendTabToSelfEntries::Results;
+
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+
+  auto* model = SendTabToSelfSyncServiceFactory::GetForProfile(profile)
+                    ->GetSendTabToSelfModel();
+  if (model->IsReady()) {
+    for (const std::string& guid : params->guids) {
+      model->DeleteEntry(guid);
+    }
+  }
+
+  return RespondNow(ArgumentList(Results::Create()));
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateExecSendTabToSelfActionFunction::Run() {
+  using tabs_private::ExecSendTabToSelfAction::Params;
+  namespace Results = tabs_private::ExecSendTabToSelfAction::Results;
+
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+  auto* model = SendTabToSelfSyncServiceFactory::GetForProfile(profile)
+                    ->GetSendTabToSelfModel();
+  if (model->IsReady()) {
+    switch (params->action) {
+      case tabs_private::SendTabToSelfAction::kDelete:
+        for (const std::string& guid : params->guids) {
+          model->DeleteEntry(guid);
+        }
+        break;
+      case vivaldi::tabs_private::SendTabToSelfAction::kDismiss:
+        for (const std::string& guid : params->guids) {
+          model->DismissEntry(guid);
+        }
+        break;
+      case vivaldi::tabs_private::SendTabToSelfAction::kNone:
+      default:
+        break;
+    }
+  }
+  return RespondNow(ArgumentList(Results::Create()));
 }
 
 }  // namespace extensions

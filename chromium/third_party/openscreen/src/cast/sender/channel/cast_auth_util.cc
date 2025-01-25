@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <memory>
 
-#include "absl/strings/str_cat.h"
 #include "cast/common/certificate/cast_cert_validator.h"
 #include "cast/common/certificate/cast_crl.h"
 #include "cast/common/certificate/date_time.h"
@@ -20,6 +19,7 @@
 #include "platform/base/error.h"
 #include "util/osp_logging.h"
 #include "util/span_util.h"
+#include "util/string_util.h"
 
 namespace openscreen::cast {
 
@@ -116,45 +116,47 @@ Error MapToOpenscreenError(const Error& verify_error, bool crl_required) {
   switch (verify_error.code()) {
     case Error::Code::kErrCertsMissing:
       return Error(Error::Code::kCastV2PeerCertEmpty,
-                   absl::StrCat("Failed to locate certificates: ",
-                                verify_error.message()));
+                   string_util::StrCat({"Failed to locate certificates: ",
+                                        verify_error.message()}));
     case Error::Code::kErrCertsParse:
       return Error(Error::Code::kErrCertsParse,
-                   absl::StrCat("Failed to parse certificates: ",
-                                verify_error.message()));
+                   string_util::StrCat({"Failed to parse certificates: ",
+                                        verify_error.message()}));
     case Error::Code::kErrCertsDateInvalid:
-      return Error(
-          Error::Code::kCastV2CertNotSignedByTrustedCa,
-          absl::StrCat("Failed date validity check: ", verify_error.message()));
+      return Error(Error::Code::kCastV2CertNotSignedByTrustedCa,
+                   string_util::StrCat({"Failed date validity check: ",
+                                        verify_error.message()}));
     case Error::Code::kErrCertsVerifyGeneric:
       return Error(
           Error::Code::kCastV2CertNotSignedByTrustedCa,
-          absl::StrCat("Failed with a generic certificate verification error: ",
-                       verify_error.message()));
+          string_util::StrCat(
+              {"Failed with a generic certificate verification error: ",
+               verify_error.message()}));
     case Error::Code::kErrCertsRestrictions:
       return Error(Error::Code::kCastV2CertNotSignedByTrustedCa,
-                   absl::StrCat("Failed certificate restrictions: ",
-                                verify_error.message()));
+                   string_util::StrCat({"Failed certificate restrictions: ",
+                                        verify_error.message()}));
     case Error::Code::kErrCertsVerifyUntrustedCert:
       return Error(Error::Code::kCastV2CertNotSignedByTrustedCa,
-                   absl::StrCat("Failed with untrusted certificate: ",
-                                verify_error.message()));
+                   string_util::StrCat({"Failed with untrusted certificate: ",
+                                        verify_error.message()}));
     case Error::Code::kErrCrlInvalid:
       // This error is only encountered if |crl_required| is true.
       OSP_CHECK(crl_required);
       return Error(Error::Code::kErrCrlInvalid,
-                   absl::StrCat("Failed to provide a valid CRL: ",
-                                verify_error.message()));
+                   string_util::StrCat({"Failed to provide a valid CRL: ",
+                                        verify_error.message()}));
     case Error::Code::kErrCertsRevoked:
       return Error(Error::Code::kErrCertsRevoked,
-                   absl::StrCat("Failed certificate revocation check: ",
-                                verify_error.message()));
+                   string_util::StrCat({"Failed certificate revocation check: ",
+                                        verify_error.message()}));
     case Error::Code::kNone:
       return Error::None();
     default:
-      return Error(Error::Code::kCastV2CertNotSignedByTrustedCa,
-                   absl::StrCat("Failed verifying cast device certificate: ",
-                                verify_error.message()));
+      return Error(
+          Error::Code::kCastV2CertNotSignedByTrustedCa,
+          string_util::StrCat({"Failed verifying cast device certificate: ",
+                               verify_error.message()}));
   }
 }
 

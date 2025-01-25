@@ -26,7 +26,7 @@
 #include "extensions/browser/extension_api_frame_id_map.h"
 #include "extensions/browser/extension_navigation_ui_data.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_id.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/upload_bytes_element_reader.h"
@@ -36,6 +36,10 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/url_loader.h"
+
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+#include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
+#endif
 
 namespace keys = extension_web_request_api_constants;
 
@@ -91,8 +95,9 @@ class FileUploadDataSource : public UploadDataSource {
 bool CreateUploadDataSourcesFromResourceRequest(
     const network::ResourceRequest& request,
     std::vector<std::unique_ptr<UploadDataSource>>* data_sources) {
-  if (!request.request_body)
+  if (!request.request_body) {
     return false;
+  }
 
   for (auto& element : *request.request_body->elements()) {
     switch (element.type()) {
@@ -124,8 +129,9 @@ std::optional<base::Value::Dict> CreateRequestBodyData(
     const std::string& method,
     const net::HttpRequestHeaders& request_headers,
     const std::vector<std::unique_ptr<UploadDataSource>>& data_sources) {
-  if (method != "POST" && method != "PUT")
+  if (method != "POST" && method != "PUT") {
     return std::nullopt;
+  }
 
   base::Value::Dict request_body_data;
 
@@ -142,8 +148,9 @@ std::optional<base::Value::Dict> CreateRequestBodyData(
   bool some_succeeded = false;
   if (!data_sources.empty()) {
     for (size_t i = 0; i < std::size(presenters); ++i) {
-      for (auto& source : data_sources)
+      for (auto& source : data_sources) {
         source->FeedToPresenter(presenters[i]);
+      }
       if (presenters[i]->Succeeded()) {
         request_body_data.Set(kKeys[i], presenters[i]->TakeResult().value());
         some_succeeded = true;
@@ -215,6 +222,7 @@ void WebRequestInfoInitParams::InitializeWebViewAndFrameData(
     frame_data = navigation_ui_data->frame_data();
     parent_routing_id = navigation_ui_data->parent_routing_id();
   } else if (frame_routing_id != MSG_ROUTING_NONE) {
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
     // Grab any WebView-related information if relevant.
     WebViewRendererState::WebViewInfo web_view_info;
     if (WebViewRendererState::GetInstance()->GetInfo(
@@ -224,6 +232,7 @@ void WebRequestInfoInitParams::InitializeWebViewAndFrameData(
       web_view_rules_registry_id = web_view_info.rules_registry_id;
       web_view_embedder_process_id = web_view_info.embedder_process_id;
     }
+#endif
 
     parent_routing_id =
         content::GlobalRenderFrameHostId(render_process_id, frame_routing_id);
@@ -259,8 +268,9 @@ WebRequestInfo::~WebRequestInfo() = default;
 void WebRequestInfo::AddResponseInfoFromResourceResponse(
     const network::mojom::URLResponseHead& response) {
   response_headers = response.headers;
-  if (response_headers)
+  if (response_headers) {
     response_code = response_headers->response_code();
+  }
   response_ip = response.remote_endpoint.ToStringWithoutPort();
   response_from_cache = response.was_fetched_via_cache;
 }

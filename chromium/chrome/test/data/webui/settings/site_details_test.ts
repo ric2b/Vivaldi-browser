@@ -72,7 +72,7 @@ suite('SiteDetails', function() {
               ContentSettingsTypes.JAVASCRIPT,
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
-              ContentSettingsTypes.JAVASCRIPT_JIT,
+              ContentSettingsTypes.JAVASCRIPT_OPTIMIZER,
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
               ContentSettingsTypes.SOUND,
@@ -171,12 +171,6 @@ suite('SiteDetails', function() {
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
               ContentSettingsTypes.CAPTURED_SURFACE_CONTROL,
-              [createRawSiteException('https://foo.com:443')]),
-          createContentSettingTypeToValuePair(
-              ContentSettingsTypes.KEYBOARD_LOCK,
-              [createRawSiteException('https://foo.com:443')]),
-          createContentSettingTypeToValuePair(
-              ContentSettingsTypes.POINTER_LOCK,
               [createRawSiteException('https://foo.com:443')]),
         ],
         [
@@ -486,25 +480,27 @@ suite('SiteDetails', function() {
     await browserProxy.whenCalled('fetchBlockAutoplayStatus');
   });
 
-  test('check first party set membership label empty string', async function() {
-    const origin = 'https://foo.com:443';
-    browserProxy.setPrefs(prefs);
-    testElement = createSiteDetails(origin);
+  test(
+      'check related website set membership label empty string',
+      async function() {
+        const origin = 'https://foo.com:443';
+        browserProxy.setPrefs(prefs);
+        testElement = createSiteDetails(origin);
 
-    const results = await Promise.all([
-      websiteUsageProxy.whenCalled('fetchUsageTotal'),
-    ]);
+        const results = await Promise.all([
+          websiteUsageProxy.whenCalled('fetchUsageTotal'),
+        ]);
 
-    const hostRequested = results[0];
-    assertEquals('https://foo.com:443', hostRequested);
-    webUIListenerCallback(
-        'usage-total-changed', hostRequested, '1 KB', '10 cookies', '');
-    assertTrue(testElement.$.fpsMembership.hidden);
-    assertEquals('', testElement.$.fpsMembership.textContent!.trim());
-  });
+        const hostRequested = results[0];
+        assertEquals('https://foo.com:443', hostRequested);
+        webUIListenerCallback(
+            'usage-total-changed', hostRequested, '1 KB', '10 cookies', '');
+        assertTrue(testElement.$.rwsMembership.hidden);
+        assertEquals('', testElement.$.rwsMembership.textContent!.trim());
+      });
 
   test(
-      'check first party set membership label populated string',
+      'check related website set membership label populated string',
       async function() {
         const origin = 'https://foo.com:443';
         browserProxy.setPrefs(prefs);
@@ -519,19 +515,19 @@ suite('SiteDetails', function() {
         webUIListenerCallback(
             'usage-total-changed', hostRequested, '1 KB', '10 cookies',
             'Allowed for 1 foo.com site', false);
-        assertFalse(testElement.$.fpsMembership.hidden);
+        assertFalse(testElement.$.rwsMembership.hidden);
         assertEquals(
             'Allowed for 1 foo.com site',
-            testElement.$.fpsMembership.textContent!.trim());
+            testElement.$.rwsMembership.textContent!.trim());
         flush();
-        // Assert first party set policy is null.
-        const fpsPolicy =
-            testElement.shadowRoot!.querySelector<HTMLElement>('#fpsPolicy');
-        assertEquals(null, fpsPolicy);
+        // Assert related website set policy is null.
+        const rwsPolicy =
+            testElement.shadowRoot!.querySelector<HTMLElement>('#rwsPolicy');
+        assertEquals(null, rwsPolicy);
       });
 
   test(
-      'first party set policy shown when managed key is set to true',
+      'related website set policy shown when managed key is set to true',
       async function() {
         const origin = 'https://foo.com:443';
         browserProxy.setPrefs(prefs);
@@ -546,15 +542,15 @@ suite('SiteDetails', function() {
         webUIListenerCallback(
             'usage-total-changed', hostRequested, '1 KB', '10 cookies',
             'Allowed for 1 foo.com site', true);
-        assertFalse(testElement.$.fpsMembership.hidden);
+        assertFalse(testElement.$.rwsMembership.hidden);
         assertEquals(
             'Allowed for 1 foo.com site',
-            testElement.$.fpsMembership.textContent!.trim());
+            testElement.$.rwsMembership.textContent!.trim());
         flush();
-        // Assert first party set policy is shown.
-        const fpsPolicy =
-            testElement.shadowRoot!.querySelector<HTMLElement>('#fpsPolicy');
-        assertFalse(fpsPolicy!.hidden);
+        // Assert related website set policy is shown.
+        const rwsPolicy =
+            testElement.shadowRoot!.querySelector<HTMLElement>('#rwsPolicy');
+        assertFalse(rwsPolicy!.hidden);
       });
 
   test(

@@ -950,6 +950,10 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     return false;
   }
+  virtual bool IsLayoutMasonry() const {
+    NOT_DESTROYED();
+    return false;
+  }
   virtual bool IsLayoutMultiColumnSet() const {
     NOT_DESTROYED();
     return false;
@@ -1416,6 +1420,11 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     return bitfields_.HorizontalWritingMode();
   }
+  bool IsHorizontalTypographicMode() const {
+    NOT_DESTROYED();
+    return IsHorizontalWritingMode() ||
+           StyleRef().IsHorizontalTypographicMode();
+  }
   bool HasFlippedBlocksWritingMode() const {
     NOT_DESTROYED();
     return StyleRef().IsFlippedBlocksWritingMode();
@@ -1431,8 +1440,9 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
       const PhysicalOffset& p,
       const LayoutBox* box_for_flipping = nullptr) const {
     NOT_DESTROYED();
-    if (LIKELY(!HasFlippedBlocksWritingMode()))
+    if (!HasFlippedBlocksWritingMode()) [[likely]] {
       return p.ToLayoutPoint();
+    }
     return {FlipForWritingModeInternal(p.left, LayoutUnit(), box_for_flipping),
             p.top};
   }
@@ -1571,6 +1581,11 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     return HasNonVisibleOverflow() && StyleRef().IsScrollContainer();
   }
 
+  bool IsScrollContainerWithScrollMarkerGroup() const {
+    NOT_DESTROYED();
+    return IsScrollContainer() && !Style()->ScrollMarkerGroupNone();
+  }
+
   // Not returning StyleRef().HasTransformRelatedProperty() because some objects
   // ignore the transform-related styles (e.g., LayoutInline).
   bool HasTransformRelatedProperty() const {
@@ -1666,8 +1681,9 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // This function is performance sensitive.
   inline bool IsRenderedLegend() const {
     NOT_DESTROYED();
-    if (LIKELY(!IsRenderedLegendCandidate()))
+    if (!IsRenderedLegendCandidate()) [[likely]] {
       return false;
+    }
 
     return IsRenderedLegendInternal();
   }
@@ -1834,35 +1850,11 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // walk the containing block chain. See e.g. markContainerChainForLayout.
   // It is also used for correctly sizing absolutely positioned elements
   // (point 3 above).
-  LayoutObject* Container(AncestorSkipInfo* skip_info = nullptr) const {
-    NOT_DESTROYED();
-#if DCHECK_IS_ON()
-    if (skip_info) {
-      skip_info->AssertClean();
-    }
-#endif
-
-    if (UNLIKELY(IsColumnSpanAll())) {
-      return ContainerForColumnSpanAll(skip_info);
-    }
-
-    if (IsOutOfFlowPositioned()) {
-      if (style_->GetPosition() == EPosition::kFixed) {
-        return ContainerForFixedPosition(skip_info);
-      }
-      DCHECK_EQ(style_->GetPosition(), EPosition::kAbsolute);
-      return ContainerForAbsolutePosition(skip_info);
-    }
-
-    return Parent();
-  }
-
+  LayoutObject* Container(AncestorSkipInfo* = nullptr) const;
   // Finds the container as if this object is absolute-position.
   LayoutObject* ContainerForAbsolutePosition(AncestorSkipInfo* = nullptr) const;
   // Finds the container as if this object is fixed-position.
   LayoutObject* ContainerForFixedPosition(AncestorSkipInfo* = nullptr) const;
-  // Finds the container as if this object is a column-spanner.
-  LayoutObject* ContainerForColumnSpanAll(AncestorSkipInfo* = nullptr) const;
 
   bool CanContainOutOfFlowPositionedElement(EPosition position) const {
     NOT_DESTROYED();
@@ -2455,10 +2447,20 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // AbsoluteBoundingBoxRectHandlingEmptyInline by ScrollMargin.
   PhysicalRect AbsoluteBoundingBoxRectForScrollIntoView() const;
 
-  // Build an array of quads in absolute coords for line boxes
-  virtual void AbsoluteQuads(Vector<gfx::QuadF>&,
-                             MapCoordinatesFlags mode = 0) const {
+  // Build an array of quads relatively to `ancestor` (which may be nullptr, in
+  // which case they will be in absolute coordinates).
+  void QuadsInAncestor(Vector<gfx::QuadF>& quads,
+                       const LayoutBoxModelObject* ancestor,
+                       MapCoordinatesFlags mode = 0) const {
     NOT_DESTROYED();
+    QuadsInAncestorInternal(quads, ancestor, mode);
+  }
+
+  // Build an array of quads in absolute coords.
+  void AbsoluteQuads(Vector<gfx::QuadF>& quads,
+                     MapCoordinatesFlags mode = 0) const {
+    NOT_DESTROYED();
+    QuadsInAncestor(quads, /*ancestor=*/nullptr, mode);
   }
 
   // The bounding box (see: absoluteBoundingBoxRect) including all descendant
@@ -2536,9 +2538,10 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // SVG transforms instead.
   PhysicalRect LocalVisualRect() const {
     NOT_DESTROYED();
-    if (StyleRef().Visibility() != EVisibility::kVisible &&
-        VisualRectRespectsVisibility())
+    if (StyleRef().UsedVisibility() != EVisibility::kVisible &&
+        VisualRectRespectsVisibility()) {
       return PhysicalRect();
+    }
     return LocalVisualRectIgnoringVisibility();
   }
 
@@ -2558,11 +2561,11 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // and clip. This is even true if the main frame is remote.
   //
   // If VisualRectFlags has the kEdgeInclusive bit set, clipping operations will
-  // use LayoutRect::InclusiveIntersect, and the return value of
+  // use PhysicalRect::InclusiveIntersect, and the return value of
   // InclusiveIntersect will be propagated to the return value of this method.
-  // Otherwise, clipping operations will use LayoutRect::Intersect, and the
+  // Otherwise, clipping operations will use PhysicalRect::Intersect, and the
   // return value will be true only if the clipped rect has non-zero area.
-  // See the documentation for LayoutRect::InclusiveIntersect for more
+  // See the documentation for PhysicalRect::InclusiveIntersect for more
   // information.
   bool MapToVisualRectInAncestorSpace(
       const LayoutBoxModelObject* ancestor,
@@ -2713,7 +2716,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   bool VisibleToHitTestRequest(const HitTestRequest& request) const {
     NOT_DESTROYED();
-    return StyleRef().Visibility() == EVisibility::kVisible &&
+    return StyleRef().UsedVisibility() == EVisibility::kVisible &&
            (request.IgnorePointerEventsNone() ||
             StyleRef().UsedPointerEvents() != EPointerEvents::kNone);
   }
@@ -3101,7 +3104,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
     void UpdatePreviousVisibilityVisible() {
       layout_object_.bitfields_.SetPreviousVisibilityVisible(
-          layout_object_.StyleRef().Visibility() == EVisibility::kVisible);
+          layout_object_.StyleRef().UsedVisibility() == EVisibility::kVisible);
     }
 
     // Same as LayoutObject::SetNeedsPaintPropertyUpdate(), but does not mark
@@ -3338,8 +3341,8 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // Return true if the layout object isn't part of the DOM tree. Such layout
   // objects either have no parent (even if it isn't a LayoutView), or is a
   // descendant of such an object, and are managed by something else than the
-  // regular layout object tree builder. One example of this is formatted text
-  // inside a CANVAS element. Another example is @page margin boxes.
+  // regular layout object tree builder. One example of this is @page margin
+  // boxes.
   bool IsInDetachedNonDomTree() const {
     NOT_DESTROYED();
     return is_in_detached_non_dom_tree_;
@@ -3536,6 +3539,12 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
       MapCoordinatesFlags mode) const;
   PhysicalOffset OffsetFromScrollableContainer(const LayoutObject*,
                                                bool ignore_scroll_offset) const;
+
+  virtual void QuadsInAncestorInternal(Vector<gfx::QuadF>&,
+                                       const LayoutBoxModelObject* ancestor,
+                                       MapCoordinatesFlags) const {
+    NOT_DESTROYED();
+  }
 
   bool BackgroundIsKnownToBeObscured() const {
     NOT_DESTROYED();

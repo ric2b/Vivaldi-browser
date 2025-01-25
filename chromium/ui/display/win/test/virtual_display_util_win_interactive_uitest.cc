@@ -38,11 +38,15 @@ class VirtualDisplayUtilWinInteractiveUitest : public testing::Test {
   display::test::VirtualDisplayUtilWin virtual_display_util_win_;
 };
 
-TEST_F(VirtualDisplayUtilWinInteractiveUitest, IsAPIAvailable) {
+// TODO(crbug.com/371121282): Re-enable the test.
+// TODO(crbug.com/365126887): Re-enable the test.
+TEST_F(VirtualDisplayUtilWinInteractiveUitest, DISABLED_IsAPIAvailable) {
   EXPECT_TRUE(virtual_display_util_win_.IsAPIAvailable());
 }
 
-TEST_F(VirtualDisplayUtilWinInteractiveUitest, AddDisplay) {
+// M130 Only: crrev.com/1356257 changes too many files to be safely merged and
+// crrev.com/1357809 removes this test.
+TEST_F(VirtualDisplayUtilWinInteractiveUitest, DISABLED_AddDisplay) {
   int initial_display_count = screen()->GetNumDisplays();
   int64_t display_id = virtual_display_util_win_.AddDisplay(
       1, display::test::VirtualDisplayUtilWin::k1920x1080);
@@ -61,7 +65,9 @@ TEST_F(VirtualDisplayUtilWinInteractiveUitest, AddDisplay) {
   EXPECT_FALSE(screen()->GetDisplayWithDisplayId(display_id, &d));
 }
 
-TEST_F(VirtualDisplayUtilWinInteractiveUitest, AddRemove) {
+// TODO(crbug.com/371121282): Re-enable the test.
+// TODO(crbug.com/365126887): Re-enable the test.
+TEST_F(VirtualDisplayUtilWinInteractiveUitest, DISABLED_AddRemove) {
   int64_t display_id[3];
   int initial_display_count = screen()->GetNumDisplays();
   display_id[0] = virtual_display_util_win_.AddDisplay(

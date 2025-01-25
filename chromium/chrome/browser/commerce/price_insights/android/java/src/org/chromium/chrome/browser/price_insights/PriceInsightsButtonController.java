@@ -9,15 +9,26 @@ import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 
+import androidx.annotation.NonNull;
+
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.commerce.CommerceBottomSheetContentController;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.price_insights.PriceInsightsBottomSheetCoordinator.PriceInsightsDelegate;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.BaseButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
+import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
@@ -27,17 +38,33 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
  */
 public class PriceInsightsButtonController extends BaseButtonDataProvider {
 
+    private final Context mContext;
     private final SnackbarManager mSnackbarManager;
     private final BottomSheetController mBottomSheetController;
+    private final BottomSheetObserver mBottomSheetObserver;
     private final ButtonSpec mButtonSpec;
+    private final Supplier<ShoppingService> mShoppingServiceSupplier;
+    private final Supplier<TabModelSelector> mTabModelSelectorSupplier;
+    private final Supplier<Tab> mTabSupplier;
+    private final PriceInsightsDelegate mPriceInsightsDelegate;
+    private PriceInsightsBottomSheetCoordinator mBottomSheetCoordinator;
+    private PriceInsightsBottomSheetCoordinator mBottomSheetCoordinatorForTesting;
+
+    @NonNull Supplier<CommerceBottomSheetContentController> mCommerceBottomSheetContentController;
 
     public PriceInsightsButtonController(
             Context context,
             Supplier<Tab> tabSupplier,
+            Supplier<TabModelSelector> tabModelSelectorSupplier,
+            Supplier<ShoppingService> shoppingServiceSupplier,
             ModalDialogManager modalDialogManager,
             BottomSheetController bottomSheetController,
             SnackbarManager snackbarManager,
-            Drawable buttonDrawable) {
+            PriceInsightsDelegate priceInsightsDelegate,
+            Drawable buttonDrawable,
+            @NonNull
+                    Supplier<CommerceBottomSheetContentController>
+                            commerceBottomSheetContentController) {
         super(
                 tabSupplier,
                 modalDialogManager,
@@ -50,14 +77,64 @@ public class PriceInsightsButtonController extends BaseButtonDataProvider {
                 /* tooltipTextResId= */ Resources.ID_NULL,
                 /* showHoverHighlight= */ false);
 
+        mContext = context;
         mButtonSpec = mButtonData.getButtonSpec();
         mSnackbarManager = snackbarManager;
         mBottomSheetController = bottomSheetController;
+        mTabModelSelectorSupplier = tabModelSelectorSupplier;
+        mShoppingServiceSupplier = shoppingServiceSupplier;
+        mTabSupplier = tabSupplier;
+        mPriceInsightsDelegate = priceInsightsDelegate;
+
+        mBottomSheetObserver =
+                new EmptyBottomSheetObserver() {
+                    @Override
+                    public void onSheetStateChanged(int newState, int reason) {
+                        mButtonData.setEnabled(newState == SheetState.HIDDEN);
+                        notifyObservers(mButtonData.canShow());
+                    }
+                };
+        mBottomSheetController.addObserver(mBottomSheetObserver);
+        mCommerceBottomSheetContentController = commerceBottomSheetContentController;
     }
 
     @Override
     public void onClick(View view) {
-        // TODO(b/336825059): Present price insights bottom sheet controller.
+        if (ChromeFeatureList.sEnableDiscountInfoApi.isEnabled()) {
+            assert mCommerceBottomSheetContentController.get() != null;
+            mCommerceBottomSheetContentController.get().requestShowContent();
+        } else {
+            // Close content and destroy previous coordinator.
+            if (mBottomSheetCoordinator != null) {
+                mBottomSheetCoordinator.closeContent();
+                mBottomSheetCoordinator = null;
+            }
+
+            // Create a new coordinator and show content.
+            if (mBottomSheetCoordinatorForTesting != null) {
+                mBottomSheetCoordinator = mBottomSheetCoordinatorForTesting;
+            } else {
+                mBottomSheetCoordinator =
+                        new PriceInsightsBottomSheetCoordinator(
+                                mContext,
+                                mBottomSheetController,
+                                mTabSupplier.get(),
+                                mTabModelSelectorSupplier.get(),
+                                mShoppingServiceSupplier.get(),
+                                mPriceInsightsDelegate);
+            }
+            mBottomSheetCoordinator.requestShowContent();
+        }
+    }
+
+    @Override
+    public void destroy() {
+        super.destroy();
+
+        if (mBottomSheetCoordinator != null) {
+            mBottomSheetCoordinator.closeContent();
+        }
+        mBottomSheetController.removeObserver(mBottomSheetObserver);
     }
 
     @Override
@@ -69,5 +146,11 @@ public class PriceInsightsButtonController extends BaseButtonDataProvider {
                         /* stringId= */ R.string.price_insights_price_is_low_title,
                         /* accessibilityStringId= */ R.string.price_insights_price_is_low_title);
         return iphCommandBuilder;
+    }
+
+    void setPriceInsightsBottomSheetCoordinatorForTesting(
+            PriceInsightsBottomSheetCoordinator coordinator) {
+        mBottomSheetCoordinatorForTesting = coordinator;
+        ResettersForTesting.register(() -> mBottomSheetCoordinatorForTesting = null);
     }
 }

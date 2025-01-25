@@ -47,9 +47,9 @@
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "components/services/app_service/public/cpp/url_handler_info.h"
-#include "components/sync/model/model_type_store.h"
+#include "components/sync/model/data_type_store.h"
 #include "components/sync/protocol/web_app_specifics.pb.h"
-#include "components/sync/test/mock_model_type_change_processor.h"
+#include "components/sync/test/mock_data_type_local_change_processor.h"
 #include "components/web_package/signed_web_bundles/ed25519_public_key.h"
 #include "components/web_package/signed_web_bundles/ed25519_signature.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_signature_stack_entry.h"
@@ -104,7 +104,7 @@ class WebAppDatabaseTest : public WebAppTest {
   }
 
   void WriteBatch(
-      std::unique_ptr<syncer::ModelTypeStore::WriteBatch> write_batch) {
+      std::unique_ptr<syncer::DataTypeStore::WriteBatch> write_batch) {
     base::RunLoop run_loop;
 
     database_factory().GetStore()->CommitWriteBatch(
@@ -201,7 +201,7 @@ class WebAppDatabaseTest : public WebAppTest {
   raw_ptr<FakeWebAppProvider, DanglingUntriaged> provider_ = nullptr;
   base::test::ScopedFeatureList feature_list_;
 
-  testing::NiceMock<syncer::MockModelTypeChangeProcessor> mock_processor_;
+  testing::NiceMock<syncer::MockDataTypeLocalChangeProcessor> mock_processor_;
 };
 
 TEST_F(WebAppDatabaseTest, WriteAndReadRegistry) {
@@ -775,6 +775,29 @@ TEST_F(WebAppDatabaseTest, RemovesFragmentFromSyncProtoManifestIdPath) {
 
   histogram_tester.ExpectUniqueSample("WebApp.CreateWebApp.ManifestIdMatch",
                                       false, 1);
+}
+
+TEST_F(WebAppDatabaseTest, RemovesFragmentAndQueriesFromScopeDuringParsing) {
+  std::unique_ptr<WebApp> app = test::CreateRandomWebApp({});
+  EXPECT_TRUE(app->scope().is_valid());
+  EXPECT_FALSE(app->scope().has_ref());
+  std::string basic_scope_path = app->scope().spec();
+  std::string scope_path_with_queries_and_fragment =
+      base::StrCat({basic_scope_path, "?query=abc", "fragment"});
+
+  // Create a WebAppProto with a scope that has queries and fragments.
+  std::unique_ptr<WebAppProto> proto = WebAppDatabase::CreateWebAppProto(*app);
+  proto->set_scope(scope_path_with_queries_and_fragment);
+  EXPECT_EQ(proto->scope(), scope_path_with_queries_and_fragment);
+
+  // Re-parse the app from the proto.
+  auto reparsed_app = WebAppDatabase::CreateWebApp(*proto);
+  ASSERT_TRUE(reparsed_app);
+
+  // Loaded app should have had the fragment and query stripped.
+  EXPECT_EQ(reparsed_app->scope(), basic_scope_path);
+  EXPECT_FALSE(reparsed_app->scope().has_ref());
+  EXPECT_FALSE(reparsed_app->scope().has_query());
 }
 
 class WebAppDatabaseProtoDataTest : public ::testing::Test {

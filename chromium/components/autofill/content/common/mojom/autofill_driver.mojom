@@ -47,9 +47,8 @@ interface AutofillDriver {
   // Similarly to JavaScript's "input" event, and unlike JavaScript's "change"
   // event, it's fired for each individual alteration of the field.
   //
-  // Fired (only) for text-type input elements and textareas. If
-  // kAutofillContentEditableChangeEvents is enabled, then it is also fired for
-  // contenteditables.
+  // Fired on text-type input elements and textareas. Additionally it is fired
+  // on contenteditables for all non-IOS platforms.
   //
   // `field_id` must identify a field of `form`. This is enforced by
   // ContentAutofillDriver.
@@ -90,11 +89,8 @@ interface AutofillDriver {
   //
   // `field_id` must identify a field of `form`. This is enforced by
   // ContentAutofillDriver.
-  //
-  // TODO(crbug.com/40726656): Remove `had_interacted_form` when cleaning up
-  // `kAutofillNewFocusEvents`.
   FocusOnFormField(FormData form, FieldRendererId field_id);
-  FocusOnNonFormField(bool had_interacted_form);
+  FocusOnNonFormField();
 
   // Queries the browser for Autofill suggestions for a form input field.
   // For autofill this means asking the user which values to fill.

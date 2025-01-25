@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/formats/mp2t/mp2t_stream_parser.h"
 
 #include <memory>
@@ -174,8 +179,7 @@ bool PidState::PushTsPacket(const TsPacket& ts_packet) {
   }
 
   bool status = section_parser_->Parse(ts_packet.payload_unit_start_indicator(),
-                                       ts_packet.payload().data(),
-                                       ts_packet.payload().size());
+                                       ts_packet.payload());
 
   // At the minimum, when parsing failed, auto reset the section parser.
   // Components that use the StreamParser can take further action if needed.

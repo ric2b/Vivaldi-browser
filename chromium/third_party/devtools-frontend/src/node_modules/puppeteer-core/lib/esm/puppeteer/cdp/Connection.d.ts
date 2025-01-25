@@ -13,14 +13,14 @@ import { EventEmitter } from '../common/EventEmitter.js';
 /**
  * @public
  */
-export type { ConnectionTransport, ProtocolMapping };
-/**
- * @public
- */
 export declare class Connection extends EventEmitter<CDPSessionEvents> {
     #private;
     constructor(url: string, transport: ConnectionTransport, delay?: number, timeout?: number);
     static fromSession(session: CDPSession): Connection | undefined;
+    /**
+     * @internal
+     */
+    get delay(): number;
     get timeout(): number;
     /**
      * @internal
@@ -57,7 +57,9 @@ export declare class Connection extends EventEmitter<CDPSessionEvents> {
     /**
      * @internal
      */
-    _createSession(targetInfo: Protocol.Target.TargetInfo, isAutoAttachEmulated?: boolean): Promise<CDPSession>;
+    _createSession(targetInfo: {
+        targetId: string;
+    }, isAutoAttachEmulated?: boolean): Promise<CDPSession>;
     /**
      * @param targetInfo - The target info
      * @returns The CDP session that is created

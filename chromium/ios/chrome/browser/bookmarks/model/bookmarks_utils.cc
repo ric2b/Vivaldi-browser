@@ -12,11 +12,11 @@
 #include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #include "ios/chrome/browser/bookmarks/model/bookmark_storage_type.h"
-#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/shared/model/prefs/pref_names.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
 // End Vivaldi
 
 using bookmarks::BookmarkNode;
@@ -58,7 +58,7 @@ std::vector<const bookmarks::BookmarkNode*> PrimaryPermanentNodes(
       return nodes;
     }
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 bool IsLastUsedBookmarkFolderSet(PrefService* prefs) {
@@ -106,6 +106,17 @@ const bookmarks::BookmarkNode* GetDefaultBookmarkFolder(
               ? DefaultBookmarkFolderOutcomeForMetrics::kExistingLocalFolderSet
               : DefaultBookmarkFolderOutcomeForMetrics::
                     kExistingAccountFolderSet);
+
+      if (vivaldi::IsVivaldiRunning()) {
+        // If the last used node is moved to trash or children of trash return
+        // bookmark bar node as default location.
+        const bool isTrash = vivaldi_bookmark_kit::IsTrash(result);
+        const BookmarkNode* trashFolder = bookmark_model->trash_node();
+        if (isTrash || NodeInTrash(result, trashFolder)) {
+          return bookmark_model->bookmark_bar_node();
+        }
+      } // End Vivaldi
+
       return result;
     } else {
       LogDefaultBookmarkFolderOutcome(
@@ -167,3 +178,16 @@ void MigrateLastUsedBookmarkFolderUponLocalIdsReassigned(
   prefs->SetInt64(prefs::kIosBookmarkLastUsedFolderReceivingBookmarks,
                   new_node_id);
 }
+
+// Vivaldi
+bool NodeInTrash(const bookmarks::BookmarkNode* node,
+                   const bookmarks::BookmarkNode* trashNode) {
+  for (const BookmarkNode* current = node; current != nullptr;
+       current = current->parent()) {
+    if (current == trashNode) {
+      return true;
+    }
+  }
+  return false;
+}
+// End Vivaldi

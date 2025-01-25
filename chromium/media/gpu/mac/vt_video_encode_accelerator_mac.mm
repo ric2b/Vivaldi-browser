@@ -144,7 +144,13 @@ VideoEncoderInfo GetVideoEncoderInfo(VTSessionRef compression_session,
     int32_t frame_delay;
     if (CFNumberGetValue(max_frame_delay_count.get(), kCFNumberSInt32Type,
                          &frame_delay) &&
-        frame_delay != kVTUnlimitedFrameDelayCount) {
+        frame_delay != kVTUnlimitedFrameDelayCount &&
+        // For Apple Silicon Macs using macOS 15.0, it seems we can't
+        // set `kVTCompressionPropertyKey_MaxFrameDelayCount` property
+        // successfully, and its value is always equal to 0 instead of
+        // `kVTUnlimitedFrameDelayCount`, we should use the default
+        // value of `VideoEncoderInfo` instead.
+        frame_delay != 0) {
       max_frame_delay_property = frame_delay;
     }
   }
@@ -158,8 +164,7 @@ VideoEncoderInfo GetVideoEncoderInfo(VTSessionRef compression_session,
     info.frame_delay = 0;
     info.input_capacity = 10;
   } else {
-    info.frame_delay =
-        profile == H264PROFILE_BASELINE || profile == HEVCPROFILE_MAIN ? 0 : 13;
+    info.frame_delay = profile == H264PROFILE_BASELINE ? 0 : 13;
     info.input_capacity = info.frame_delay.value() + 4;
   }
   if (max_frame_delay_property.has_value()) {
@@ -282,42 +287,41 @@ VTVideoEncodeAccelerator::GetSupportedH264Profiles() {
 VideoEncodeAccelerator::SupportedProfiles
 VTVideoEncodeAccelerator::GetSupportedHEVCProfiles() {
   SupportedProfiles profiles;
-  if (!base::FeatureList::IsEnabled(kPlatformHEVCEncoderSupport))
+  if (!base::FeatureList::IsEnabled(kPlatformHEVCEncoderSupport)) {
     return profiles;
-  if (@available(macOS 11.0, *)) {
-    bool supported = CreateCompressionSession(VideoCodec::kHEVC,
-                                              kDefaultSupportedResolution);
-    DestroyCompressionSession();
-    if (!supported) {
-      DVLOG(1) << "Hardware HEVC encode acceleration is not available on this "
-                  "platform.";
-      return profiles;
-    }
-    SupportedProfile profile;
-    profile.max_resolution = kMaxSupportedResolution;
-    profile.max_framerate_numerator = kMaxFrameRateNumerator;
-    profile.max_framerate_denominator = kMaxFrameRateDenominator;
-    // Advertise VBR here, even though the peak bitrate is never actually used.
-    // See RequestEncodingParametersChange() for more details.
-    profile.rate_control_modes = VideoEncodeAccelerator::kConstantMode |
-                                 VideoEncodeAccelerator::kVariableMode;
-    // L1T1 = no additional spatial and temporal layer = always supported.
-    profile.scalability_modes.push_back(SVCScalabilityMode::kL1T1);
-    if (IsSVCSupported(VideoCodec::kHEVC)) {
-      profile.scalability_modes.push_back(SVCScalabilityMode::kL1T2);
-    }
+  }
+  bool supported =
+      CreateCompressionSession(VideoCodec::kHEVC, kDefaultSupportedResolution);
+  DestroyCompressionSession();
+  if (!supported) {
+    DVLOG(1) << "Hardware HEVC encode acceleration is not available on this "
+                "platform.";
+    return profiles;
+  }
+  SupportedProfile profile;
+  profile.max_resolution = kMaxSupportedResolution;
+  profile.max_framerate_numerator = kMaxFrameRateNumerator;
+  profile.max_framerate_denominator = kMaxFrameRateDenominator;
+  // Advertise VBR here, even though the peak bitrate is never actually used.
+  // See RequestEncodingParametersChange() for more details.
+  profile.rate_control_modes = VideoEncodeAccelerator::kConstantMode |
+                               VideoEncodeAccelerator::kVariableMode;
+  // L1T1 = no additional spatial and temporal layer = always supported.
+  profile.scalability_modes.push_back(SVCScalabilityMode::kL1T1);
+  if (IsSVCSupported(VideoCodec::kHEVC)) {
+    profile.scalability_modes.push_back(SVCScalabilityMode::kL1T2);
+  }
 
-    for (const auto& supported_profile : kSupportedProfiles) {
-      if (VideoCodecProfileToVideoCodec(supported_profile) ==
-          VideoCodec::kHEVC) {
-        // macOS doesn't support HEVC software encoding on both Intel and Apple
-        // Silicon Macs.
-        profile.is_software_codec = false;
-        profile.profile = supported_profile;
-        profiles.push_back(profile);
-      }
+  for (const auto& supported_profile : kSupportedProfiles) {
+    if (VideoCodecProfileToVideoCodec(supported_profile) == VideoCodec::kHEVC) {
+      // macOS doesn't support HEVC software encoding on both Intel and Apple
+      // Silicon Macs.
+      profile.is_software_codec = false;
+      profile.profile = supported_profile;
+      profiles.push_back(profile);
     }
   }
+
   return profiles;
 }
 #endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
@@ -859,13 +863,14 @@ bool VTVideoEncodeAccelerator::ConfigureCompressionSession(VideoCodec codec) {
 
   if (session_property_setter.IsSupported(
           kVTCompressionPropertyKey_MaxFrameDelayCount)) {
+    // macOS 15.0 will reject encode if we set max frame delay count to 3,
+    // don't fail the whole encode session if this property can not be set
+    // properly.
     if (!session_property_setter.Set(
             kVTCompressionPropertyKey_MaxFrameDelayCount,
             static_cast<int>(kNumInputBuffers))) {
-      NotifyErrorStatus({EncoderStatus::Codes::kEncoderUnsupportedConfig,
-                         "Failed to set max frame delay count to " +
-                             base::NumberToString(kNumInputBuffers)});
-      return false;
+      DLOG(ERROR) << "Failed to set max frame delay count to "
+                  << base::NumberToString(kNumInputBuffers);
     }
   } else {
     DLOG(WARNING) << "MaxFrameDelayCount is not supported";

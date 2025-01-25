@@ -87,7 +87,7 @@ struct State {
         for (auto* var : var_worklist) {
             auto* result = var->Result(0);
 
-            auto usage_worklist = result->Usages().Vector();
+            auto usage_worklist = result->UsagesSorted();
             auto* var_ty = result->Type()->As<core::type::Pointer>();
             while (!usage_worklist.IsEmpty()) {
                 auto usage = usage_worklist.Pop();
@@ -108,7 +108,7 @@ struct State {
                         // The `let` is, essentially, an alias for the `var` as it's assigned
                         // directly. Gather all the `let` usages into our worklist, and then replace
                         // the `let` with the `var` itself.
-                        for (auto& use : let->Result(0)->Usages()) {
+                        for (auto& use : let->Result(0)->UsagesUnsorted()) {
                             usage_worklist.Push(use);
                         }
                         let->Result(0)->ReplaceAllUsesWith(result);
@@ -173,7 +173,7 @@ struct State {
     void Access(core::ir::Access* a,
                 core::ir::Var* var,
                 const core::type::Type* obj_ty,
-                OffsetData& offset) {
+                OffsetData offset) {
         // Note, because we recurse through the `access` helper, the object passed in isn't
         // necessarily the originating `var` object, but maybe a partially resolved access chain
         // object.
@@ -200,8 +200,8 @@ struct State {
             tint::Switch(
                 obj_ty,
                 [&](const core::type::Vector* v) {
-                    update_offset(idx_value, v->type()->Size());
-                    obj_ty = v->type();
+                    update_offset(idx_value, v->Type()->Size());
+                    obj_ty = v->Type();
                 },
                 [&](const core::type::Matrix* m) {
                     update_offset(idx_value, m->ColumnStride());
@@ -225,7 +225,7 @@ struct State {
                 TINT_ICE_ON_NO_MATCH);
         }
 
-        auto usages = a->Result(0)->Usages().Vector();
+        auto usages = a->Result(0)->UsagesUnsorted().Vector();
         while (!usages.IsEmpty()) {
             auto usage = usages.Pop();
             tint::Switch(
@@ -234,7 +234,7 @@ struct State {
                     // The `let` is essentially an alias to the `access`. So, add the `let`
                     // usages into the usage worklist, and replace the let with the access chain
                     // directly.
-                    for (auto& u : let->Result(0)->Usages()) {
+                    for (auto& u : let->Result(0)->UsagesUnsorted()) {
                         usages.Push(u);
                     }
                     let->Result(0)->ReplaceAllUsesWith(a->Result(0));
@@ -259,7 +259,7 @@ struct State {
         a->Destroy();
     }
 
-    void Load(core::ir::Load* ld, core::ir::Var* var, OffsetData& offset) {
+    void Load(core::ir::Load* ld, core::ir::Var* var, OffsetData offset) {
         b.InsertBefore(ld, [&] {
             auto* byte_idx = OffsetToValue(offset);
             auto* result = MakeLoad(ld, var, ld->Result(0)->Type(), byte_idx);
@@ -270,7 +270,7 @@ struct State {
 
     void LoadVectorElement(core::ir::LoadVectorElement* lve,
                            core::ir::Var* var,
-                           OffsetData& offset) {
+                           OffsetData offset) {
         b.InsertBefore(lve, [&] {
             // Add the byte count from the start of the vector to the requested element to the
             // current offset calculation
@@ -279,7 +279,8 @@ struct State {
                 offset.byte_offset += (cnst->Value()->ValueAs<uint32_t>() * elem_byte_size);
             } else {
                 offset.byte_offset_expr.Push(
-                    b.Multiply(ty.u32(), lve->Index(), u32(elem_byte_size))->Result(0));
+                    b.Multiply(ty.u32(), b.Convert(ty.u32(), lve->Index()), u32(elem_byte_size))
+                        ->Result(0));
             }
 
             auto* byte_idx = OffsetToValue(offset);
@@ -294,10 +295,10 @@ struct State {
                                     core::ir::Var* var,
                                     const core::type::Type* result_ty,
                                     core::ir::Value* byte_idx) {
-        if (result_ty->is_float_scalar() || result_ty->is_integer_scalar()) {
+        if (result_ty->IsFloatScalar() || result_ty->IsIntegerScalar()) {
             return MakeScalarLoad(var, result_ty, byte_idx);
         }
-        if (result_ty->is_scalar_vector()) {
+        if (result_ty->IsScalarVector()) {
             return MakeVectorLoad(var, result_ty->As<core::type::Vector>(), byte_idx);
         }
 
@@ -346,8 +347,8 @@ struct State {
             auto* cond = b.Equal(ty.bool_(), b.Modulo(ty.u32(), byte_idx, 4_u), 0_u);
 
             Vector<core::ir::Value*, 3> args{false_, true_, cond->Result(0)};
-            auto* shift_amt = b.ir.allocators.instructions.Create<hlsl::ir::Ternary>(
-                b.InstructionResult(ty.u32()), args);
+            auto* shift_amt =
+                b.ir.CreateInstruction<hlsl::ir::Ternary>(b.InstructionResult(ty.u32()), args);
             b.Append(shift_amt);
 
             load = b.ShiftRight(ty.u32(), load, shift_amt);
@@ -407,7 +408,7 @@ struct State {
                 Vector<core::ir::Value*, 3> args{sw_rhs->Result(0), sw_lhs->Result(0),
                                                  cond->Result(0)};
 
-                load = b.ir.allocators.instructions.Create<hlsl::ir::Ternary>(
+                load = b.ir.CreateInstruction<hlsl::ir::Ternary>(
                     b.InstructionResult(ty.vec2<u32>()), args);
                 b.Append(load);
             }
@@ -429,7 +430,7 @@ struct State {
         // A vec3 will be stored as a vec4, so we can bitcast as if we're a vec4 and swizzle out the
         // last element
         if (result_ty->Width() == 3) {
-            auto* bc = b.Bitcast(ty.vec4(result_ty->type()), b.Load(access));
+            auto* bc = b.Bitcast(ty.vec4(result_ty->Type()), b.Load(access));
             return b.Swizzle(result_ty, bc, {0, 1, 2});
         }
 
@@ -453,8 +454,8 @@ struct State {
                 Vector<core::ir::Value*, 3> args{sw_rhs->Result(0), sw_lhs->Result(0),
                                                  cond->Result(0)};
 
-                load = b.ir.allocators.instructions.Create<hlsl::ir::Ternary>(
-                    b.InstructionResult(ty.u32()), args);
+                load =
+                    b.ir.CreateInstruction<hlsl::ir::Ternary>(b.InstructionResult(ty.u32()), args);
                 b.Append(load);
             }
             return b.Bitcast(result_ty, load);
@@ -488,7 +489,7 @@ struct State {
 
             b.Append(fn->Block(), [&] {
                 Vector<core::ir::Value*, 4> values;
-                for (size_t i = 0; i < mat->columns(); ++i) {
+                for (size_t i = 0; i < mat->Columns(); ++i) {
                     uint32_t stride = static_cast<uint32_t>(i * mat->ColumnStride());
 
                     OffsetData od{stride, {start_byte_offset}};

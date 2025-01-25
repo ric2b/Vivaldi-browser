@@ -34,6 +34,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.WebContents;
@@ -60,6 +61,7 @@ public class StaticLayout extends Layout {
     private static final int HIDE_DURATION_MS = 500;
 
     private boolean mHandlesTabLifecycles;
+    private boolean mNeedsOffsetTag;
 
     private class UnstallRunnable implements Runnable {
         @Override
@@ -172,9 +174,15 @@ public class StaticLayout extends Layout {
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
             StaticTabSceneLayer testSceneLayer) {
         super(context, updateHost, renderHost);
+
         mContext = context;
+        boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
         // Only handle tab lifecycle on tablets.
-        mHandlesTabLifecycles = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
+        mHandlesTabLifecycles = isTablet;
+        // On tablets, StaticTabSceneLayer is a subtree of TabStripSceneLayer,
+        // and the tag would have been set on the TabStripSceneLayer already.
+        mNeedsOffsetTag = !isTablet;
+
         mViewHost = viewHost;
         mRequestSupplier = requestSupplier;
 
@@ -214,10 +222,15 @@ public class StaticLayout extends Layout {
                             BrowserControlsOffsetTagsInfo oldOffsetTagsInfo,
                             BrowserControlsOffsetTagsInfo offsetTagsInfo,
                             @BrowserControlsState int constraints) {
-                        if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()) {
-                            mModel.set(
-                                    LayoutTab.CONTENT_OFFSET_TAG,
-                                    offsetTagsInfo.getTopControlsOffsetTag());
+                        if (ToolbarFeatures.isBrowserControlsInVizEnabled(
+                                DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext))) {
+                            // On tablets, StaticTabSceneLayer is a subtree of TabStripSceneLayer,
+                            // and the tag would have been set on the TabStripSceneLayer already.
+                            if (mNeedsOffsetTag) {
+                                mModel.set(
+                                        LayoutTab.CONTENT_OFFSET_TAG,
+                                        offsetTagsInfo.getTopControlsOffsetTag());
+                            }
 
                             // With BCIV enabled, scrolling will not update the content offset of
                             // the browser's compositor frame. If we transition to a HIDDEN state
@@ -243,7 +256,8 @@ public class StaticLayout extends Layout {
                             int bottomControlsMinHeightOffset,
                             boolean needsAnimate,
                             boolean isVisibilityForced) {
-                        if (!ChromeFeatureList.sBrowserControlsInViz.isEnabled()
+                        if (!ToolbarFeatures.isBrowserControlsInVizEnabled(
+                                        DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext))
                                 || needsAnimate
                                 || isVisibilityForced) {
                             mModel.set(
@@ -332,6 +346,13 @@ public class StaticLayout extends Layout {
                     @Override
                     public void onDidChangeThemeColor(Tab tab, int color) {
                         updateStaticTab(tab, /* skipUpdateVisibleIds= */ false);
+                    }
+
+                    @Override
+                    public void didBackForwardTransitionAnimationChange() {
+                        updateStaticTab(
+                                tabModelSelector.getCurrentTab(),
+                                /* skipUpdateVisibleIds= */ false);
                     }
                 };
     }

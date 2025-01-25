@@ -63,8 +63,6 @@
 // does not match ours.  Only has an effect on Windows.
 #define _LIBCPP_NO_AUTO_LINK
 
-#define _LIBCPP_REMOVE_TRANSITIVE_INCLUDES
-
 // Don't add ABI tags to libc++ symbols. ABI tags increase mangled name sizes.
 // This only exists to allow multiple // libc++ versions to be linked into a
 // binary, which Chrome doesn't do.
@@ -75,15 +73,8 @@
 // termination function on Apple platforms.
 #define _LIBCPP_VERBOSE_ABORT(...) ::std::__libcpp_verbose_abort(__VA_ARGS__)
 
-// TODO(crbug.com/40272953) Link against compiler-rt's builtins library to
-// enable 128-arithmetic.
-#if defined(_WIN32)
-#define _LIBCPP_HAS_NO_INT128
-#endif
-
-// TODO(thakis): Remove this after LLVM 19's libc++ is rolled in.
 // NOTE(andre@vivaldi.com) : Update notifier are using unsigned int for 32bit
 // chars, and there are no char_traits defined for this. VB-100878 & VB-104892.
-#define _LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION
+#define VIVALDI_LIBCPP_CHAR_TRAITS_REMOVE_BASE_SPECIALIZATION
 
 #endif // _LIBCPP_CONFIG_SITE

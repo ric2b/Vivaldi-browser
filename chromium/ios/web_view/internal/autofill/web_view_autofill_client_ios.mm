@@ -8,6 +8,7 @@
 #import <vector>
 
 #import "base/check.h"
+#import "base/check_deref.h"
 #import "base/functional/bind.h"
 #import "base/functional/callback.h"
 #import "base/memory/ptr_util.h"
@@ -16,6 +17,7 @@
 #import "components/autofill/core/browser/logging/log_router.h"
 #import "components/autofill/core/browser/ui/suggestion_type.h"
 #import "components/autofill/core/common/autofill_prefs.h"
+#import "components/autofill/ios/browser/autofill_driver_ios_factory.h"
 #import "components/autofill/ios/browser/autofill_util.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/security_state/ios/security_state_utils.h"
@@ -90,6 +92,10 @@ scoped_refptr<network::SharedURLLoaderFactory>
 WebViewAutofillClientIOS::GetURLLoaderFactory() {
   return base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
       web_state_->GetBrowserState()->GetURLLoaderFactory());
+}
+
+AutofillDriverFactory& WebViewAutofillClientIOS::GetAutofillDriverFactory() {
+  return CHECK_DEREF(AutofillDriverIOSFactory::FromWebState(web_state_));
 }
 
 AutofillCrowdsourcingManager*
@@ -192,9 +198,8 @@ void WebViewAutofillClientIOS::ShowAutofillSettings(
 void WebViewAutofillClientIOS::ConfirmSaveAddressProfile(
     const AutofillProfile& profile,
     const AutofillProfile* original_profile,
-    SaveAddressProfilePromptOptions options,
+    bool is_migration_to_account,
     AddressProfileSavePromptCallback callback) {
-  // TODO(crbug.com/40164489): Respect SaveAddressProfilePromptOptions.
   [bridge_ confirmSaveAddressProfile:profile
                      originalProfile:original_profile
                             callback:std::move(callback)];
@@ -216,22 +221,12 @@ void WebViewAutofillClientIOS::ShowDeleteAddressProfileDialog(
   NOTREACHED_IN_MIGRATION();
 }
 
-bool WebViewAutofillClientIOS::ShowTouchToFillCreditCard(
-    base::WeakPtr<TouchToFillDelegate> delegate,
-    base::span<const autofill::CreditCard> cards_to_suggest,
-    const std::vector<bool>& card_acceptabilities) {
-  NOTREACHED_IN_MIGRATION();
-  return false;
-}
-
-void WebViewAutofillClientIOS::HideTouchToFillCreditCard() {
-  NOTREACHED_IN_MIGRATION();
-}
-
-void WebViewAutofillClientIOS::ShowAutofillSuggestions(
+AutofillClient::SuggestionUiSessionId
+WebViewAutofillClientIOS::ShowAutofillSuggestions(
     const AutofillClient::PopupOpenArgs& open_args,
     base::WeakPtr<AutofillSuggestionDelegate> delegate) {
   [bridge_ showAutofillPopup:open_args.suggestions suggestionDelegate:delegate];
+  return SuggestionUiSessionId();
 }
 
 void WebViewAutofillClientIOS::UpdateAutofillDataListValues(
@@ -240,13 +235,6 @@ void WebViewAutofillClientIOS::UpdateAutofillDataListValues(
 }
 
 void WebViewAutofillClientIOS::PinAutofillSuggestions() {
-  NOTIMPLEMENTED();
-}
-
-void WebViewAutofillClientIOS::UpdatePopup(
-    const std::vector<Suggestion>& suggestions,
-    FillingProduct main_filling_product,
-    AutofillSuggestionTriggerSource trigger_source) {
   NOTIMPLEMENTED();
 }
 

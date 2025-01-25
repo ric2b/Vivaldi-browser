@@ -178,7 +178,6 @@ CreateAggregatableHistogram(
 std::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
     const AttributionReport& report) {
   base::Time source_time;
-  std::optional<uint64_t> source_debug_key;
   const AttributionReport::CommonAggregatableData* common_aggregatable_data =
       nullptr;
   std::vector<blink::mojom::AggregatableReportHistogramContribution>
@@ -191,7 +190,6 @@ std::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
           },
           [&](const AttributionReport::AggregatableAttributionData& data) {
             source_time = data.source_time;
-            source_debug_key = data.source_debug_key;
             common_aggregatable_data = &data.common_data;
             contributions = data.contributions;
           },
@@ -206,26 +204,22 @@ std::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
   const AttributionInfo& attribution_info = report.attribution_info();
 
   AggregatableReportSharedInfo::DebugMode debug_mode =
-      source_debug_key.has_value() && attribution_info.debug_key.has_value()
+      report.CanDebuggingBeEnabled()
           ? AggregatableReportSharedInfo::DebugMode::kEnabled
           : AggregatableReportSharedInfo::DebugMode::kDisabled;
 
   base::Value::Dict additional_fields;
-  std::string serialized_source_time;
   switch (common_aggregatable_data->aggregatable_trigger_config
               .source_registration_time_config()) {
     case attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude:
-      serialized_source_time =
-          SerializeTimeRoundedDownToWholeDayInSeconds(source_time);
+      additional_fields.Set(
+          "source_registration_time",
+          SerializeTimeRoundedDownToWholeDayInSeconds(source_time));
       break;
     case attribution_reporting::mojom::SourceRegistrationTimeConfig::kExclude:
-      // Use a default valid but impossible value to indicate exclusion of
-      // source registration time.
-      serialized_source_time = "0";
       break;
   }
-  additional_fields.Set("source_registration_time",
-                        std::move(serialized_source_time));
+
   SetAttributionDestination(
       additional_fields, net::SchemefulSite(attribution_info.context_origin));
 

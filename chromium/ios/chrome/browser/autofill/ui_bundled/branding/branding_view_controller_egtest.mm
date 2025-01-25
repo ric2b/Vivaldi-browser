@@ -4,8 +4,11 @@
 
 #import "base/ios/ios_util.h"
 #import "base/test/ios/wait_util.h"
-#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/autofill/ui_bundled/autofill_app_interface.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_matchers.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/common/ui/elements/form_input_accessory_view.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
@@ -14,10 +17,9 @@
 #import "ios/testing/earl_grey/app_launch_manager.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "net/test/embedded_test_server/embedded_test_server.h"
+#import "ui/base/l10n/l10n_util.h"
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
-using chrome_test_util::ManualFallbackKeyboardIconMatcher;
-using chrome_test_util::ManualFallbackPasswordIconMatcher;
 using chrome_test_util::TapWebElementWithId;
 using chrome_test_util::WebViewMatcher;
 
@@ -57,24 +59,13 @@ void DisableManualFillButtonsInProfileStore() {
 void BringUpKeyboard() {
   [[EarlGrey selectElementWithMatcher:WebViewMatcher()]
       performAction:TapWebElementWithId(kFormElementUsername)];
-  ConditionBlock keyboardShown = ^{
-    return [EarlGrey isKeyboardShownWithError:nil];
-  };
-  GREYAssertTrue(base::test::ios::WaitUntilConditionOrTimeout(
-                     base::test::ios::kWaitForUIElementTimeout, keyboardShown),
-                 @"Keyboard not brought up.");
+  [ChromeEarlGrey waitForKeyboardToAppear];
 }
 
 // Dismisses the keyboard, if it exist.
 void DismissKeyboard() {
   [EarlGrey dismissKeyboardWithError:nil];
-  ConditionBlock keyboardDismissed = ^{
-    return ![EarlGrey isKeyboardShownWithError:nil];
-  };
-  GREYAssertTrue(
-      base::test::ios::WaitUntilConditionOrTimeout(
-          base::test::ios::kWaitForUIElementTimeout, keyboardDismissed),
-      @"Keyboard not dismissed.");
+  [ChromeEarlGrey waitForKeyboardToDisappear];
 }
 
 // Check that the branding visibility matches the parameter `visibility`.
@@ -83,6 +74,23 @@ void CheckBrandingHasVisiblity(BOOL visibility) {
       selectElementWithMatcher:grey_accessibilityID(@"kBrandingButtonAXId")]
       assertWithMatcher:visibility ? grey_sufficientlyVisible()
                                    : grey_notVisible()];
+}
+
+// Opens the manual fallback menu by pressing the right keyboard accessory
+// button.
+void OpenManualFallback() {
+  id<GREYMatcher> button_to_tap;
+  if ([AutofillAppInterface isKeyboardAccessoryUpgradeEnabled]) {
+    button_to_tap = grey_allOf(grey_accessibilityLabel(l10n_util::GetNSString(
+                                   IDS_IOS_AUTOFILL_PASSWORD_AUTOFILL_DATA)),
+                               grey_ancestor(grey_accessibilityID(
+                                   kFormInputAccessoryViewAccessibilityID)),
+                               nil);
+  } else {
+    button_to_tap = manual_fill::PasswordIconMatcher();
+  }
+
+  [[EarlGrey selectElementWithMatcher:button_to_tap] performAction:grey_tap()];
 }
 
 }  // namespace
@@ -138,13 +146,11 @@ void CheckBrandingHasVisiblity(BOOL visibility) {
   // First time.
   BringUpKeyboard();
   CheckBrandingHasVisiblity(YES);
-  [[EarlGrey selectElementWithMatcher:ManualFallbackPasswordIconMatcher()]
-      performAction:grey_tap()];
+  OpenManualFallback();
 
   if (!base::ios::IsRunningOnIOS16OrLater() && [ChromeEarlGrey isIPadIdiom]) {
-    [ChromeEarlGreyUI
-        dismissByTappingOnTheWindowOfPopover:
-            chrome_test_util::ManualFallbackPasswordTableViewMatcher()];
+    [ChromeEarlGreyUI dismissByTappingOnTheWindowOfPopover:
+                          manual_fill::PasswordTableViewMatcher()];
   }
 
   DismissKeyboard();

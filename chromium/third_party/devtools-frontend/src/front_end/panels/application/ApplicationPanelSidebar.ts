@@ -36,7 +36,6 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
@@ -222,7 +221,7 @@ function assertNotMainTarget(targetId: Protocol.Target.TargetID|'main'): asserts
 
 export namespace SharedStorageTreeElementDispatcher {
   export const enum Events {
-    SharedStorageTreeElementAdded = 'SharedStorageTreeElementAdded',
+    SHARED_STORAGE_TREE_ELEMENT_ADDED = 'SharedStorageTreeElementAdded',
   }
 
   export interface SharedStorageTreeElementAddedEvent {
@@ -230,7 +229,7 @@ export namespace SharedStorageTreeElementDispatcher {
   }
 
   export type EventTypes = {
-    [Events.SharedStorageTreeElementAdded]: SharedStorageTreeElementAddedEvent,
+    [Events.SHARED_STORAGE_TREE_ELEMENT_ADDED]: SharedStorageTreeElementAddedEvent,
   };
 }
 
@@ -275,8 +274,9 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
 
     this.panel = panel;
 
-    this.sidebarTree = new UI.TreeOutline.TreeOutlineInShadow();
+    this.sidebarTree = new UI.TreeOutline.TreeOutlineInShadow(UI.TreeOutline.TreeVariant.NAVIGATION_TREE);
     this.sidebarTree.element.classList.add('resources-sidebar');
+    this.sidebarTree.hideOverflow();
 
     this.sidebarTree.element.classList.add('filter-all');
     // Listener needs to have been set up before the elements are added
@@ -373,11 +373,9 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
         new BackgroundServiceTreeElement(panel, Protocol.BackgroundService.ServiceName.PeriodicBackgroundSync);
     backgroundServiceTreeElement.appendChild(this.periodicBackgroundSyncTreeElement);
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL)) {
-      this.preloadingSummaryTreeElement = new PreloadingSummaryTreeElement(panel);
-      backgroundServiceTreeElement.appendChild(this.preloadingSummaryTreeElement);
-      this.preloadingSummaryTreeElement.constructChildren(panel);
-    }
+    this.preloadingSummaryTreeElement = new PreloadingSummaryTreeElement(panel);
+    backgroundServiceTreeElement.appendChild(this.preloadingSummaryTreeElement);
+    this.preloadingSummaryTreeElement.constructChildren(panel);
 
     this.pushMessagingTreeElement =
         new BackgroundServiceTreeElement(panel, Protocol.BackgroundService.ServiceName.PushMessaging);
@@ -467,7 +465,8 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
 
     const interestGroupModel = target.model(InterestGroupStorageModel);
     if (interestGroupModel) {
-      interestGroupModel.addEventListener(InterestGroupModelEvents.InterestGroupAccess, this.interestGroupAccess, this);
+      interestGroupModel.addEventListener(
+          InterestGroupModelEvents.INTEREST_GROUP_ACCESS, this.interestGroupAccess, this);
     }
 
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
@@ -500,7 +499,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     const interestGroupModel = target.model(InterestGroupStorageModel);
     if (interestGroupModel) {
       interestGroupModel.removeEventListener(
-          InterestGroupModelEvents.InterestGroupAccess, this.interestGroupAccess, this);
+          InterestGroupModelEvents.INTEREST_GROUP_ACCESS, this.interestGroupAccess, this);
     }
 
     this.resetWithFrames();
@@ -529,25 +528,23 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.pushMessagingTreeElement.initialize(backgroundServiceModel);
     this.storageBucketsTreeElement?.initialize();
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.PRELOADING_STATUS_PANEL)) {
-      const preloadingModel = this.target?.model(SDK.PreloadingModel.PreloadingModel);
-      if (preloadingModel) {
-        this.preloadingSummaryTreeElement?.initialize(preloadingModel);
-      }
+    const preloadingModel = this.target?.model(SDK.PreloadingModel.PreloadingModel);
+    if (preloadingModel) {
+      this.preloadingSummaryTreeElement?.initialize(preloadingModel);
     }
   }
 
   private domStorageModelAdded(model: DOMStorageModel): void {
     model.enable();
     model.storages().forEach(this.addDOMStorage.bind(this));
-    model.addEventListener(DOMStorageModelEvents.DOMStorageAdded, this.domStorageAdded, this);
-    model.addEventListener(DOMStorageModelEvents.DOMStorageRemoved, this.domStorageRemoved, this);
+    model.addEventListener(DOMStorageModelEvents.DOM_STORAGE_ADDED, this.domStorageAdded, this);
+    model.addEventListener(DOMStorageModelEvents.DOM_STORAGE_REMOVED, this.domStorageRemoved, this);
   }
 
   private domStorageModelRemoved(model: DOMStorageModel): void {
     model.storages().forEach(this.removeDOMStorage.bind(this));
-    model.removeEventListener(DOMStorageModelEvents.DOMStorageAdded, this.domStorageAdded, this);
-    model.removeEventListener(DOMStorageModelEvents.DOMStorageRemoved, this.domStorageRemoved, this);
+    model.removeEventListener(DOMStorageModelEvents.DOM_STORAGE_ADDED, this.domStorageAdded, this);
+    model.removeEventListener(DOMStorageModelEvents.DOM_STORAGE_REMOVED, this.domStorageRemoved, this);
   }
 
   private indexedDBModelAdded(model: IndexedDBModel): void {
@@ -561,12 +558,12 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
 
   private interestGroupModelAdded(model: InterestGroupStorageModel): void {
     model.enable();
-    model.addEventListener(InterestGroupModelEvents.InterestGroupAccess, this.interestGroupAccess, this);
+    model.addEventListener(InterestGroupModelEvents.INTEREST_GROUP_ACCESS, this.interestGroupAccess, this);
   }
 
   private interestGroupModelRemoved(model: InterestGroupStorageModel): void {
     model.disable();
-    model.removeEventListener(InterestGroupModelEvents.InterestGroupAccess, this.interestGroupAccess, this);
+    model.removeEventListener(InterestGroupModelEvents.INTEREST_GROUP_ACCESS, this.interestGroupAccess, this);
   }
 
   private async sharedStorageModelAdded(model: SharedStorageModel): Promise<void> {
@@ -574,9 +571,9 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     for (const storage of model.storages()) {
       await this.addSharedStorage(storage);
     }
-    model.addEventListener(SharedStorageModelEvents.SharedStorageAdded, this.sharedStorageAdded, this);
-    model.addEventListener(SharedStorageModelEvents.SharedStorageRemoved, this.sharedStorageRemoved, this);
-    model.addEventListener(SharedStorageModelEvents.SharedStorageAccess, this.sharedStorageAccess, this);
+    model.addEventListener(SharedStorageModelEvents.SHARED_STORAGE_ADDED, this.sharedStorageAdded, this);
+    model.addEventListener(SharedStorageModelEvents.SHARED_STORAGE_REMOVED, this.sharedStorageRemoved, this);
+    model.addEventListener(SharedStorageModelEvents.SHARED_STORAGE_ACCESS, this.sharedStorageAccess, this);
   }
 
   private sharedStorageModelRemoved(model: SharedStorageModel): void {
@@ -584,9 +581,9 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     for (const storage of model.storages()) {
       this.removeSharedStorage(storage);
     }
-    model.removeEventListener(SharedStorageModelEvents.SharedStorageAdded, this.sharedStorageAdded, this);
-    model.removeEventListener(SharedStorageModelEvents.SharedStorageRemoved, this.sharedStorageRemoved, this);
-    model.removeEventListener(SharedStorageModelEvents.SharedStorageAccess, this.sharedStorageAccess, this);
+    model.removeEventListener(SharedStorageModelEvents.SHARED_STORAGE_ADDED, this.sharedStorageAdded, this);
+    model.removeEventListener(SharedStorageModelEvents.SHARED_STORAGE_REMOVED, this.sharedStorageRemoved, this);
+    model.removeEventListener(SharedStorageModelEvents.SHARED_STORAGE_ACCESS, this.sharedStorageAccess, this);
   }
 
   private storageBucketsModelAdded(model: SDK.StorageBucketsModel.StorageBucketsModel): void {
@@ -732,7 +729,7 @@ export class ApplicationPanelSidebar extends UI.Widget.VBox implements SDK.Targe
     this.sharedStorageTreeElements.set(sharedStorage.securityOrigin, sharedStorageTreeElement);
     this.sharedStorageListTreeElement.appendChild(sharedStorageTreeElement);
     this.sharedStorageTreeElementDispatcher.dispatchEventToListeners(
-        SharedStorageTreeElementDispatcher.Events.SharedStorageTreeElementAdded,
+        SharedStorageTreeElementDispatcher.Events.SHARED_STORAGE_TREE_ELEMENT_ADDED,
         {origin: sharedStorage.securityOrigin});
   }
 
@@ -949,7 +946,7 @@ export class AppManifestTreeElement extends ApplicationPanelTreeElement {
     const handleExpansion = (hasManifest: boolean): void => {
       this.setExpandable(hasManifest);
     };
-    this.view.addEventListener(AppManifestViewEvents.ManifestDetected, event => handleExpansion(event.data));
+    this.view.addEventListener(AppManifestViewEvents.MANIFEST_DETECTED, event => handleExpansion(event.data));
   }
 
   override get itemURL(): Platform.DevToolsPath.UrlString {
@@ -1667,22 +1664,22 @@ export class ResourcesSection implements SDK.TargetManager.Observer {
 
     const frameManager = SDK.FrameManager.FrameManager.instance();
     frameManager.addEventListener(
-        SDK.FrameManager.Events.FrameAddedToTarget, event => this.frameAdded(event.data.frame), this);
+        SDK.FrameManager.Events.FRAME_ADDED_TO_TARGET, event => this.frameAdded(event.data.frame), this);
     frameManager.addEventListener(
-        SDK.FrameManager.Events.FrameRemoved, event => this.frameDetached(event.data.frameId), this);
+        SDK.FrameManager.Events.FRAME_REMOVED, event => this.frameDetached(event.data.frameId), this);
     frameManager.addEventListener(
-        SDK.FrameManager.Events.FrameNavigated, event => this.frameNavigated(event.data.frame), this);
+        SDK.FrameManager.Events.FRAME_NAVIGATED, event => this.frameNavigated(event.data.frame), this);
     frameManager.addEventListener(
-        SDK.FrameManager.Events.ResourceAdded, event => this.resourceAdded(event.data.resource), this);
+        SDK.FrameManager.Events.RESOURCE_ADDED, event => this.resourceAdded(event.data.resource), this);
 
     SDK.TargetManager.TargetManager.instance().addModelListener(
-        SDK.ChildTargetManager.ChildTargetManager, SDK.ChildTargetManager.Events.TargetCreated, this.windowOpened, this,
-        {scoped: true});
-    SDK.TargetManager.TargetManager.instance().addModelListener(
-        SDK.ChildTargetManager.ChildTargetManager, SDK.ChildTargetManager.Events.TargetInfoChanged, this.windowChanged,
+        SDK.ChildTargetManager.ChildTargetManager, SDK.ChildTargetManager.Events.TARGET_CREATED, this.windowOpened,
         this, {scoped: true});
     SDK.TargetManager.TargetManager.instance().addModelListener(
-        SDK.ChildTargetManager.ChildTargetManager, SDK.ChildTargetManager.Events.TargetDestroyed, this.windowDestroyed,
+        SDK.ChildTargetManager.ChildTargetManager, SDK.ChildTargetManager.Events.TARGET_INFO_CHANGED,
+        this.windowChanged, this, {scoped: true});
+    SDK.TargetManager.TargetManager.instance().addModelListener(
+        SDK.ChildTargetManager.ChildTargetManager, SDK.ChildTargetManager.Events.TARGET_DESTROYED, this.windowDestroyed,
         this, {scoped: true});
 
     SDK.TargetManager.TargetManager.instance().observeTargets(this, {scoped: true});
@@ -1707,7 +1704,7 @@ export class ResourcesSection implements SDK.TargetManager.Observer {
     if (target.type() === SDK.Target.Type.Worker || target.type() === SDK.Target.Type.ServiceWorker) {
       void this.workerAdded(target);
     }
-    if (target.type() === SDK.Target.Type.Frame && target === target.outermostTarget()) {
+    if (target.type() === SDK.Target.Type.FRAME && target === target.outermostTarget()) {
       // Process existing frames, e.g. after prerendering activation or
       // switching between outermost targets.
       this.initialize();

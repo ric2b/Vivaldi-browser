@@ -1246,11 +1246,8 @@ const CSSValue* ParseCustomProperty(Document& document,
                                     const String& value) {
   const auto* context = MakeGarbageCollected<CSSParserContext>(document);
   CSSParserLocalContext local_context;
-  auto tokens = CSSTokenizer(value).TokenizeToEOF();
-  CSSParserTokenRange range(tokens);
 
-  return property.Parse(CSSTokenizedValue{range, value}, *context,
-                        local_context);
+  return property.Parse(value, *context, local_context);
 }
 
 }  // namespace
@@ -1327,19 +1324,19 @@ TEST_F(StyleResolverTest, TreeScopedReferences) {
     ASSERT_EQ(properties.size(), 4u);
 
     // div { display: block }
-    EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kUserAgent);
+    EXPECT_EQ(properties[0].data_.origin, CascadeOrigin::kUserAgent);
 
     // div { unicode-bidi: isolate; }
-    EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kUserAgent);
+    EXPECT_EQ(properties[1].data_.origin, CascadeOrigin::kUserAgent);
 
     // :host { font-family: myfont }
-    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[2].types_.tree_order),
+    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[2].data_.tree_order),
               root.GetTreeScope());
-    EXPECT_EQ(properties[2].types_.origin, CascadeOrigin::kAuthor);
+    EXPECT_EQ(properties[2].data_.origin, CascadeOrigin::kAuthor);
 
     // #host { animation-name: anim }
-    EXPECT_EQ(properties[3].types_.origin, CascadeOrigin::kAuthor);
-    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[3].types_.tree_order),
+    EXPECT_EQ(properties[3].data_.origin, CascadeOrigin::kAuthor);
+    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[3].data_.tree_order),
               host->GetTreeScope());
   }
 
@@ -1357,13 +1354,13 @@ TEST_F(StyleResolverTest, TreeScopedReferences) {
     ASSERT_EQ(properties.size(), 2u);
 
     // ::slotted(span) { animation-name: anim-inner-slotted }
-    EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kAuthor);
-    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[0].types_.tree_order),
+    EXPECT_EQ(properties[0].data_.origin, CascadeOrigin::kAuthor);
+    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[0].data_.tree_order),
               inner_root.GetTreeScope());
 
     // ::slotted(span) { animation-name: anim-slotted }
-    EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kAuthor);
-    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[1].types_.tree_order),
+    EXPECT_EQ(properties[1].data_.origin, CascadeOrigin::kAuthor);
+    EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[1].data_.tree_order),
               root.GetTreeScope());
   }
 }
@@ -1919,24 +1916,24 @@ TEST_F(StyleResolverTest, NoCascadeLayers) {
 
   // div { display: block; }
   EXPECT_TRUE(properties[0].properties->HasProperty(CSSPropertyID::kDisplay));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[0].types_.layer_order);
-  EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kUserAgent);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[0].data_.layer_order);
+  EXPECT_EQ(properties[0].data_.origin, CascadeOrigin::kUserAgent);
 
   // div { unicode-bidi: isolate; }
   EXPECT_TRUE(
       properties[1].properties->HasProperty(CSSPropertyID::kUnicodeBidi));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].types_.layer_order);
-  EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kUserAgent);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].data_.layer_order);
+  EXPECT_EQ(properties[1].data_.origin, CascadeOrigin::kUserAgent);
 
   // .b { font-size: 16px; }
   EXPECT_TRUE(properties[2].properties->HasProperty(CSSPropertyID::kFontSize));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[2].types_.layer_order);
-  EXPECT_EQ(properties[2].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[2].data_.layer_order);
+  EXPECT_EQ(properties[2].data_.origin, CascadeOrigin::kAuthor);
 
   // #a { color: green; }
   EXPECT_TRUE(properties[3].properties->HasProperty(CSSPropertyID::kColor));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[3].types_.layer_order);
-  EXPECT_EQ(properties[3].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[3].data_.layer_order);
+  EXPECT_EQ(properties[3].data_.origin, CascadeOrigin::kAuthor);
 }
 
 TEST_F(StyleResolverTest, CascadeLayersInDifferentSheets) {
@@ -1973,30 +1970,30 @@ TEST_F(StyleResolverTest, CascadeLayersInDifferentSheets) {
 
   // div { display: block; }
   EXPECT_TRUE(properties[0].properties->HasProperty(CSSPropertyID::kDisplay));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[0].types_.layer_order);
-  EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kUserAgent);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[0].data_.layer_order);
+  EXPECT_EQ(properties[0].data_.origin, CascadeOrigin::kUserAgent);
 
   // div { unicode-bidi: isolate; }
   EXPECT_TRUE(
       properties[1].properties->HasProperty(CSSPropertyID::kUnicodeBidi));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].types_.layer_order);
-  EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kUserAgent);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].data_.layer_order);
+  EXPECT_EQ(properties[1].data_.origin, CascadeOrigin::kUserAgent);
 
   // @layer foo { #a { font-size: 16px } }"
   EXPECT_TRUE(properties[2].properties->HasProperty(CSSPropertyID::kFontSize));
-  EXPECT_EQ(0u, properties[2].types_.layer_order);
-  EXPECT_EQ(properties[2].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(0u, properties[2].data_.layer_order);
+  EXPECT_EQ(properties[2].data_.origin, CascadeOrigin::kAuthor);
 
   // @layer bar { .b { color: green } }"
   EXPECT_TRUE(properties[3].properties->HasProperty(CSSPropertyID::kColor));
-  EXPECT_EQ(1u, properties[3].types_.layer_order);
-  EXPECT_EQ(properties[3].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(1u, properties[3].data_.layer_order);
+  EXPECT_EQ(properties[3].data_.origin, CascadeOrigin::kAuthor);
 
   // style="font-family: custom"
   EXPECT_TRUE(
       properties[4].properties->HasProperty(CSSPropertyID::kFontFamily));
-  EXPECT_TRUE(properties[4].types_.is_inline_style);
-  EXPECT_EQ(properties[4].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_TRUE(properties[4].data_.is_inline_style);
+  EXPECT_EQ(properties[4].data_.origin, CascadeOrigin::kAuthor);
   // There's no layer order for inline style; it's always above all layers.
 }
 
@@ -2036,27 +2033,27 @@ TEST_F(StyleResolverTest, CascadeLayersInDifferentTreeScopes) {
 
   // div { display: block }
   EXPECT_TRUE(properties[0].properties->HasProperty(CSSPropertyID::kDisplay));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[0].types_.layer_order);
-  EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kUserAgent);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[0].data_.layer_order);
+  EXPECT_EQ(properties[0].data_.origin, CascadeOrigin::kUserAgent);
 
   // div { unicode-bidi: isolate; }
   EXPECT_TRUE(
       properties[1].properties->HasProperty(CSSPropertyID::kUnicodeBidi));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].types_.layer_order);
-  EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kUserAgent);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].data_.layer_order);
+  EXPECT_EQ(properties[1].data_.origin, CascadeOrigin::kUserAgent);
 
   // @layer bar { :host { font-size: 16px } }
   EXPECT_TRUE(properties[2].properties->HasProperty(CSSPropertyID::kFontSize));
-  EXPECT_EQ(0u, properties[2].types_.layer_order);
-  EXPECT_EQ(properties[2].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(0u, properties[2].data_.layer_order);
+  EXPECT_EQ(properties[2].data_.origin, CascadeOrigin::kAuthor);
   EXPECT_EQ(
-      match_result.ScopeFromTreeOrder(properties[2].types_.tree_order),
+      match_result.ScopeFromTreeOrder(properties[2].data_.tree_order),
       GetDocument().getElementById(AtomicString("host"))->GetShadowRoot());
 
   // @layer foo { #host { color: green } }
   EXPECT_TRUE(properties[3].properties->HasProperty(CSSPropertyID::kColor));
-  EXPECT_EQ(0u, properties[3].types_.layer_order);
-  EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[3].types_.tree_order),
+  EXPECT_EQ(0u, properties[3].data_.layer_order);
+  EXPECT_EQ(match_result.ScopeFromTreeOrder(properties[3].data_.tree_order),
             &GetDocument());
 }
 
@@ -2099,13 +2096,13 @@ TEST_F(StyleResolverTest, CascadeLayersAfterModifyingAnotherSheet) {
 
   // @layer { target { color: red } }"
   EXPECT_TRUE(properties[0].properties->HasProperty(CSSPropertyID::kColor));
-  EXPECT_EQ(0u, properties[0].types_.layer_order);
-  EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(0u, properties[0].data_.layer_order);
+  EXPECT_EQ(properties[0].data_.origin, CascadeOrigin::kAuthor);
 
   // target { font-size: 10px }
   EXPECT_TRUE(properties[1].properties->HasProperty(CSSPropertyID::kFontSize));
-  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].types_.layer_order);
-  EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(kImplicitOuterLayerOrder, properties[1].data_.layer_order);
+  EXPECT_EQ(properties[1].data_.origin, CascadeOrigin::kAuthor);
 }
 
 // https://crbug.com/1326791
@@ -2144,8 +2141,8 @@ TEST_F(StyleResolverTest, CascadeLayersAddLayersWithImportantDeclarations) {
       properties[0].properties->PropertyIsImportant(CSSPropertyID::kFontSize));
   EXPECT_EQ("20px", properties[0].properties->GetPropertyValue(
                         CSSPropertyID::kFontSize));
-  EXPECT_EQ(0u, properties[0].types_.layer_order);
-  EXPECT_EQ(properties[0].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(0u, properties[0].data_.layer_order);
+  EXPECT_EQ(properties[0].data_.origin, CascadeOrigin::kAuthor);
 
   // @layer { target { font-size: 10px !important } }
   EXPECT_TRUE(properties[1].properties->HasProperty(CSSPropertyID::kFontSize));
@@ -2153,8 +2150,8 @@ TEST_F(StyleResolverTest, CascadeLayersAddLayersWithImportantDeclarations) {
       properties[1].properties->PropertyIsImportant(CSSPropertyID::kFontSize));
   EXPECT_EQ("10px", properties[1].properties->GetPropertyValue(
                         CSSPropertyID::kFontSize));
-  EXPECT_EQ(1u, properties[1].types_.layer_order);
-  EXPECT_EQ(properties[1].types_.origin, CascadeOrigin::kAuthor);
+  EXPECT_EQ(1u, properties[1].data_.layer_order);
+  EXPECT_EQ(properties[1].data_.origin, CascadeOrigin::kAuthor);
 }
 
 TEST_F(StyleResolverTest, BodyPropagationLayoutImageContain) {
@@ -2982,8 +2979,6 @@ TEST_F(StyleResolverTest, LegacyOverlapBorderImageWidth_Last_Style) {
 }
 
 TEST_F(StyleResolverTest, PositionTryStylesBasic_Cascade) {
-  ScopedCSSAnchorPositioningForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @position-try --f1 { left: 100px; }
@@ -3028,8 +3023,6 @@ TEST_F(StyleResolverTest, PositionTryStylesBasic_Cascade) {
 }
 
 TEST_F(StyleResolverTest, PositionTryStylesResolveLogicalProperties_Cascade) {
-  ScopedCSSAnchorPositioningForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @position-try --f1 { inset-inline-start: 100px; }
@@ -3075,8 +3068,6 @@ TEST_F(StyleResolverTest, PositionTryStylesResolveLogicalProperties_Cascade) {
 }
 
 TEST_F(StyleResolverTest, PositionTryStylesResolveRelativeLengthUnits_Cascade) {
-  ScopedCSSAnchorPositioningForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @position-try --f1 { top: 2em; }
@@ -3104,8 +3095,6 @@ TEST_F(StyleResolverTest, PositionTryStylesResolveRelativeLengthUnits_Cascade) {
 }
 
 TEST_F(StyleResolverTest, PositionTryStylesInBeforePseudoElement_Cascade) {
-  ScopedCSSAnchorPositioningForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @position-try --f1 { top: 50px; }
@@ -3137,8 +3126,6 @@ TEST_F(StyleResolverTest, PositionTryStylesInBeforePseudoElement_Cascade) {
 }
 
 TEST_F(StyleResolverTest, PositionTryStylesCSSWideKeywords_Cascade) {
-  ScopedCSSAnchorPositioningForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       /* 'revert' and 'revert-layer' are already rejected by parser */
@@ -3196,8 +3183,6 @@ TEST_F(StyleResolverTest, PositionTryStylesCSSWideKeywords_Cascade) {
 }
 
 TEST_F(StyleResolverTest, PositionTryPropertyValueChange_Cascade) {
-  ScopedCSSAnchorPositioningForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @position-try --foo { top: 100px }
@@ -3246,8 +3231,6 @@ TEST_F(StyleResolverTest, PositionTryPropertyValueChange_Cascade) {
 }
 
 TEST_F(StyleResolverTest, PositionTry_PaintInvalidation) {
-  ScopedCSSAnchorPositioningForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @position-try --f1 { left: 2222222px; }

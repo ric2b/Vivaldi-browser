@@ -154,6 +154,7 @@ class OmniboxSuggestionRowButton : public views::MdTextButton {
     focus_ring->SetColorId(kColorOmniboxResultsFocusIndicator);
 
     GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
+    GetViewAccessibility().SetIsSelected(false);
   }
 
   OmniboxSuggestionRowButton(const OmniboxSuggestionRowButton&) = delete;
@@ -331,10 +332,12 @@ void OmniboxSuggestionButtonRowView::UpdateFromModel() {
                             OmniboxPopupSelection::KEYWORD_MODE);
     if (keyword_button_->GetVisible()) {
       std::u16string keyword;
+      std::u16string keyword_placeholder;
       bool is_keyword_hint = false;
       match().GetKeywordUIState(
           popup_view_->controller()->client()->GetTemplateURLService(),
-          &keyword, &is_keyword_hint);
+          popup_view_->controller()->client()->IsHistoryEmbeddingsEnabled(),
+          &keyword, &keyword_placeholder, &is_keyword_hint);
 
       const auto names = SelectedKeywordView::GetKeywordLabelNames(
           keyword,
@@ -375,9 +378,11 @@ void OmniboxSuggestionButtonRowView::SelectionStateChanged() {
   }
   if (previous_active_button_) {
     views::FocusRing::Get(previous_active_button_)->SchedulePaint();
+    previous_active_button_->GetViewAccessibility().SetIsSelected(false);
   }
   if (active_button) {
     views::FocusRing::Get(active_button)->SchedulePaint();
+    active_button->GetViewAccessibility().SetIsSelected(true);
   }
   previous_active_button_ = active_button;
 }

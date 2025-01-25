@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <atomic>
 
-#include "absl/algorithm/container.h"
 #include "util/osp_logging.h"
 #include "util/std_util.h"
 

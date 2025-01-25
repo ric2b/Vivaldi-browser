@@ -329,7 +329,7 @@ void PaintTiming::ReportPresentationTime(
       SetFirstImagePaintPresentation(timestamp);
       return;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -539,35 +539,6 @@ void PaintTiming::OnRestoredFromBackForwardCache() {
           MakeGarbageCollected<
               RecodingTimeAfterBackForwardCacheRestoreFrameCallback>(this,
                                                                      index));
-}
-
-bool PaintTiming::IsLCPMouseoverDispatchedRecently() const {
-  static constexpr base::TimeDelta kRecencyDelta = base::Milliseconds(500);
-  return (
-      !lcp_mouse_over_dispatch_time_.is_null() &&
-      ((clock_->NowTicks() - lcp_mouse_over_dispatch_time_) < kRecencyDelta));
-}
-
-void PaintTiming::SetLCPMouseoverDispatched() {
-  {
-    // TODO(https://crbug.com/1288027): Code in this scope is added for
-    // debugging purposes only. Remove it once we have a clearer picture on
-    // heuristic failures.
-    static constexpr base::TimeDelta kRecencyDelta = base::Milliseconds(500);
-    LocalFrame* frame = GetFrame();
-    if (frame && RuntimeEnabledFeatures::LCPMouseoverHeuristicsEnabled() &&
-        (lcp_mouse_over_dispatch_time_.is_null() ||
-         (clock_->NowTicks() - lcp_mouse_over_dispatch_time_) >=
-             kRecencyDelta)) {
-      if (Document* document = frame->GetDocument()) {
-        document->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-            mojom::blink::ConsoleMessageSource::kOther,
-            mojom::blink::ConsoleMessageLevel::kVerbose,
-            "Mouseover event over an LCP image happened."));
-      }
-    }
-  }
-  lcp_mouse_over_dispatch_time_ = clock_->NowTicks();
 }
 
 void PaintTiming::SoftNavigationDetected() {

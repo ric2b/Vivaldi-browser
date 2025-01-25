@@ -39,6 +39,10 @@ namespace gcm {
 class GCMDriver;
 }  // namespace gcm
 
+namespace instance_id {
+class InstanceIDDriver;
+}  // namespace instance_id
+
 namespace network {
 class SharedURLLoaderFactory;
 }  // namespace network
@@ -81,6 +85,7 @@ class DeviceSyncImpl : public DeviceSyncBase,
     static std::unique_ptr<DeviceSyncBase> Create(
         signin::IdentityManager* identity_manager,
         gcm::GCMDriver* gcm_driver,
+        instance_id::InstanceIDDriver* instance_id_driver,
         PrefService* profile_prefs,
         const GcmDeviceInfoProvider* gcm_device_info_provider,
         ClientAppMetadataProvider* client_app_metadata_provider,
@@ -96,6 +101,7 @@ class DeviceSyncImpl : public DeviceSyncBase,
     virtual std::unique_ptr<DeviceSyncBase> CreateInstance(
         signin::IdentityManager* identity_manager,
         gcm::GCMDriver* gcm_driver,
+        instance_id::InstanceIDDriver* instance_id_driver,
         PrefService* profile_prefs,
         const GcmDeviceInfoProvider* gcm_device_info_provider,
         ClientAppMetadataProvider* client_app_metadata_provider,
@@ -221,6 +227,7 @@ class DeviceSyncImpl : public DeviceSyncBase,
   DeviceSyncImpl(
       signin::IdentityManager* identity_manager,
       gcm::GCMDriver* gcm_driver,
+      instance_id::InstanceIDDriver* instance_id_driver,
       PrefService* profile_prefs,
       const GcmDeviceInfoProvider* gcm_device_info_provider,
       ClientAppMetadataProvider* client_app_metadata_provider,
@@ -288,6 +295,7 @@ class DeviceSyncImpl : public DeviceSyncBase,
 
   raw_ptr<signin::IdentityManager> identity_manager_;
   raw_ptr<gcm::GCMDriver> gcm_driver_;
+  raw_ptr<instance_id::InstanceIDDriver> instance_id_driver_;
   raw_ptr<PrefService> profile_prefs_;
   raw_ptr<const GcmDeviceInfoProvider> gcm_device_info_provider_;
   raw_ptr<ClientAppMetadataProvider> client_app_metadata_provider_;

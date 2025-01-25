@@ -35,9 +35,7 @@
 #include "base/task/bind_post_task.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/policy/messaging_layer/upload/upload_provider.h"
-#include "chrome/browser/policy/messaging_layer/util/upload_declarations.h"
 #include "components/reporting/encryption/verification.h"
-#include "components/reporting/storage/storage_module_interface.h"
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
 namespace reporting {
@@ -45,7 +43,7 @@ namespace reporting {
 #if !BUILDFLAG(IS_CHROMEOS)
 namespace {
 
-constexpr base::FilePath::CharType kReportingDirectory[] =
+const base::FilePath::CharType kReportingDirectory[] =
     FILE_PATH_LITERAL("reporting");
 
 }  // namespace
@@ -371,7 +369,9 @@ void ReportingClient::DeliverAsyncStartUploader(
     // EncryptedReportingServiceProvider so it does not need to be
     // enabled here.
     if (!StorageSelector::is_uploader_required() ||
-        StorageSelector::is_use_missive()) {
+        StorageSelector::is_use_missive() ||
+        storage() == nullptr  // report queue provider is not (yet?) ready
+    ) {
       std::move(start_uploader_cb)
           .Run(base::unexpected(
               Status(error::UNAVAILABLE, "Uploader not available")));

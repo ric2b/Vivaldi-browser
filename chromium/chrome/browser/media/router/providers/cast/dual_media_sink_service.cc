@@ -19,11 +19,20 @@
 
 namespace media_router {
 
+DualMediaSinkService* g_dual_media_sink_service = nullptr;
+
 // static
 DualMediaSinkService* DualMediaSinkService::GetInstance() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  static DualMediaSinkService* instance = new DualMediaSinkService();
-  return instance;
+  if (!g_dual_media_sink_service) {
+    g_dual_media_sink_service = new DualMediaSinkService();
+  }
+  return g_dual_media_sink_service;
+}
+
+// static
+bool DualMediaSinkService::HasInstance() {
+  return g_dual_media_sink_service;
 }
 
 // static
@@ -46,6 +55,11 @@ base::CallbackListSubscription DualMediaSinkService::AddSinksDiscoveredCallback(
     callback.Run(provider_and_sinks.first, provider_and_sinks.second);
   }
   return sinks_discovered_callbacks_.Add(callback);
+}
+
+void DualMediaSinkService::SetDiscoveryPermissionRejectedCallback(
+    base::RepeatingClosure discovery_permission_rejected_cb) {
+  discovery_permission_rejected_cb_ = discovery_permission_rejected_cb;
 }
 
 void DualMediaSinkService::DiscoverSinksNow() {
@@ -107,6 +121,8 @@ DualMediaSinkService::DualMediaSinkService() {
   cast_media_sink_service_->Initialize(
       base::BindRepeating(&DualMediaSinkService::OnSinksDiscovered,
                           base::Unretained(this), "cast"),
+      base::BindRepeating(&DualMediaSinkService::OnDiscoveryPermissionRejected,
+                          base::Unretained(this)),
       dial_media_sink_service_ ? dial_media_sink_service_->impl() : nullptr);
 
   cast_channel::CastSocketService* cast_socket_service =
@@ -136,12 +152,20 @@ void DualMediaSinkService::OnSinksDiscovered(
   sinks_discovered_callbacks_.Notify(provider_name, sinks_for_provider);
 }
 
+void DualMediaSinkService::OnDiscoveryPermissionRejected() {
+  discovery_permission_rejected_cb_.Run();
+}
+
 void DualMediaSinkService::AddLogger(LoggerImpl* logger_impl) {
   LoggerList::GetInstance()->AddLogger(logger_impl);
 }
 
 void DualMediaSinkService::RemoveLogger(LoggerImpl* logger_impl) {
   LoggerList::GetInstance()->RemoveLogger(logger_impl);
+}
+
+void DualMediaSinkService::StopObservingPrefChanges() {
+  cast_media_sink_service_->StopObservingPrefChanges();
 }
 
 }  // namespace media_router

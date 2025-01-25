@@ -22,6 +22,7 @@
 #include "absl/strings/escaping.h"
 #include "connections/implementation/mediums/ble_v2/ble_advertisement.h"
 #include "connections/implementation/mediums/utils.h"
+#include "internal/platform/byte_array.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/mutex_lock.h"
 #include "internal/platform/prng.h"
@@ -62,10 +63,11 @@ bool Ble::StartAdvertising(const std::string& service_id,
   }
 
   if (advertisement_bytes.size() > kMaxAdvertisementLength) {
-    NEARBY_LOG(INFO,
-               "Refusing to start BLE advertising because the advertisement "
-               "was too long. Expected at most %d bytes but received %d.",
-               kMaxAdvertisementLength, advertisement_bytes.size());
+    NEARBY_LOGS(INFO)
+        << "Refusing to start BLE advertising because the advertisement "
+           "was too long. Expected at most "
+        << kMaxAdvertisementLength << " bytes but received "
+        << advertisement_bytes.size();
     return false;
   }
 
@@ -90,7 +92,7 @@ bool Ble::StartAdvertising(const std::string& service_id,
                     << advertisement_bytes.size() << ")"
                     << ", service id=" << service_id
                     << ", fast advertisement service uuid="
-                    << fast_advertisement_service_uuid;
+                    << absl::BytesToHexString(fast_advertisement_service_uuid);
 
   // Wrap the connections advertisement to the medium advertisement.
   const bool fast_advertisement = !fast_advertisement_service_uuid.empty();
@@ -301,8 +303,7 @@ bool Ble::StopScanning(const std::string& service_id) {
     return false;
   }
 
-  NEARBY_LOG(INFO, "Turned off BLE scanning with service id=%s",
-             service_id.c_str());
+  NEARBY_LOGS(INFO) << "Turned off BLE scanning with service id=" << service_id;
   bool ret = medium_.StopScanning(service_id);
   scanning_info_.Clear();
   return ret;

@@ -43,7 +43,7 @@ impl<'local> IdentityDetails<JObject<'local>> {
     /// Create an IdentityDetails instance
     pub fn construct_from_parts(
         env: &mut JNIEnv<'local>,
-        credential_id: u32,
+        credential_id: i64,
         identity_token: [u8; 14],
         salt: [u8; 2],
     ) -> jni::errors::Result<Self> {

@@ -21,6 +21,15 @@
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ui/base/device_form_factor.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 
 const CGFloat kTextTopMargin = 6.0;
@@ -44,6 +53,11 @@ const CGFloat kTextIconSpace = 14.0f;
 /// Top color opacity of the `_selectedBackgroundView`.
 const CGFloat kTopGradientColorOpacity = 0.85;
 
+// Vivaldi
+const CGFloat sourceLabelContainerRadius = 4.0f;
+const UIEdgeInsets sourceLabelPadding = UIEdgeInsetsMake(4, 6, 4, 6);
+// End Vivaldi
+
 }  // namespace
 
 @implementation OmniboxPopupRowContentView {
@@ -64,6 +78,14 @@ const CGFloat kTopGradientColorOpacity = 0.85;
   /// Constraints changes with popout omnibox.
   NSLayoutConstraint* _leadingConstraint;
   NSLayoutConstraint* _trailingButtonTrailingConstraint;
+
+  // Vivaldi
+  // Container for automcomplete source label.
+  UIView* _sourceLabelContainer;
+  // UILabel for automcomplete source.
+  UILabel* _sourceLabel;
+  // End Vivaldi
+
 }
 
 - (instancetype)initWithConfiguration:
@@ -218,6 +240,10 @@ const CGFloat kTopGradientColorOpacity = 0.85;
     ]];
     [self addInteraction:[[ViewPointerInteraction alloc] init]];
 
+    if (IsVivaldiRunning()) {
+      [self setUpAutocompeteMatchLabel];
+    } // End Vivaldi
+
     self.configuration = configuration;
   }
   return self;
@@ -297,7 +323,13 @@ const CGFloat kTopGradientColorOpacity = 0.85;
 
   // Leading Icon.
   [_leadingIconView prepareForReuse];
+
+  if (vivaldi::IsVivaldiRunning() && configuration.leadingIconLocal != nil) {
+    [_leadingIconView setOmniboxIconFromLocal:configuration.leadingIconLocal];
+  } else {
   [_leadingIconView setOmniboxIcon:configuration.leadingIcon];
+  } // End Vivaldi
+
   _leadingIconView.highlighted = configuration.leadingIconHighlighted;
 
   // Primary Label.
@@ -368,6 +400,16 @@ const CGFloat kTopGradientColorOpacity = 0.85;
   [configuration.delegate
               omniboxPopupRowWithConfiguration:configuration
       didUpdateAccessibilityActionsAtIndexPath:configuration.indexPath];
+
+  if (IsVivaldiRunning()) {
+    _sourceLabelContainer.hidden = !configuration.isDirectMatch;
+    _secondaryLabelFading.alpha = configuration.isDirectMatch ? 0 : 1;
+    _secondaryLabelTruncating.alpha = configuration.isDirectMatch ? 0 : 1;
+    NSString* sourceTitle =
+        l10n_util::GetNSString(
+              IDS_IOS_AUTOCOMPLETE_MATCH_DIRECT_MATCH_TITLE);
+    _sourceLabel.text = configuration.isDirectMatch ? sourceTitle : nil;
+  } // End Vivaldi
 }
 
 /// Handles tap on trailing button.
@@ -376,5 +418,33 @@ const CGFloat kTopGradientColorOpacity = 0.85;
       omniboxPopupRowWithConfiguration:self.configuration
        didTapTrailingButtonAtIndexPath:self.configuration.indexPath];
 }
+
+#pragma mark - Vivaldi
+- (void)setUpAutocompeteMatchLabel {
+  UIView* labelContainer = [UIView new];
+  labelContainer.backgroundColor = UIColor.secondarySystemBackgroundColor;
+  labelContainer.layer.cornerRadius = sourceLabelContainerRadius;
+  labelContainer.clipsToBounds = YES;
+  _sourceLabelContainer = labelContainer;
+  _sourceLabelContainer.hidden = NO;
+
+  UILabel* label = [UILabel new];
+  _sourceLabel = label;
+  label.textColor = UIColor.secondaryLabelColor;
+  label.adjustsFontForContentSizeCategory = YES;
+  label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+  label.numberOfLines = 0;
+  label.textAlignment = NSTextAlignmentCenter;
+
+  [labelContainer addSubview:label];
+  [label fillSuperviewWithPadding:sourceLabelPadding];
+
+  [self addSubview:labelContainer];
+  [labelContainer anchorTop:_secondaryLabelFading.topAnchor
+                    leading:_secondaryLabelFading.leadingAnchor
+                     bottom:_secondaryLabelFading.bottomAnchor
+                   trailing:nil];
+}
+// End Vivaldi
 
 @end

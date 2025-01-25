@@ -28,7 +28,9 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "connections/connection_options.h"
+#include "connections/implementation/analytics/analytics_recorder.h"
 #include "connections/implementation/client_proxy.h"
+#include "connections/implementation/endpoint_channel.h"
 #include "connections/implementation/endpoint_channel_manager.h"
 #include "connections/implementation/flags/nearby_connections_feature_flags.h"
 #include "connections/implementation/offline_frames.h"
@@ -38,7 +40,6 @@
 #include "internal/platform/byte_array.h"
 #include "internal/platform/count_down_latch.h"
 #include "internal/platform/exception.h"
-// #include "internal/platform/feature_flags.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/single_thread_executor.h"
 #include "internal/test/fake_single_thread_executor.h"
@@ -70,6 +71,11 @@ class MockEndpointChannel : public EndpointChannel {
               (override));
   MOCK_METHOD(void, Close, (), (override));
   MOCK_METHOD(void, Close, (DisconnectionReason reason), (override));
+  MOCK_METHOD(void, Close,
+              (DisconnectionReason reason,
+               location::nearby::analytics::proto::ConnectionsLog::
+                   EstablishedConnection::SafeDisconnectionResult result),
+              (override));
   MOCK_METHOD(location::nearby::proto::connections::ConnectionTechnology,
               GetTechnology, (), (const override));
   MOCK_METHOD(location::nearby::proto::connections::ConnectionBand, GetBand, (),
@@ -323,9 +329,9 @@ TEST_F(EndpointManagerTest, SendControlMessageAndPayloadAckWorks) {
   ON_CALL(*endpoint_channel, Read(_))
       .WillByDefault([channel = endpoint_channel.get()]() {
         if (channel->IsClosed()) return ExceptionOr<ByteArray>(Exception::kIo);
-        NEARBY_LOG(INFO, "Simulate read delay: wait");
+        NEARBY_LOGS(INFO) << "Simulate read delay: wait";
         absl::SleepFor(absl::Milliseconds(100));
-        NEARBY_LOG(INFO, "Simulate read delay: done");
+        NEARBY_LOGS(INFO) << "Simulate read delay: done";
         if (channel->IsClosed()) return ExceptionOr<ByteArray>(Exception::kIo);
         return ExceptionOr<ByteArray>(ByteArray{});
       });
@@ -333,7 +339,7 @@ TEST_F(EndpointManagerTest, SendControlMessageAndPayloadAckWorks) {
       .WillByDefault(
           [channel = endpoint_channel.get()](DisconnectionReason reason) {
             channel->DoClose();
-            NEARBY_LOG(INFO, "Channel closed");
+            NEARBY_LOGS(INFO) << "Channel closed";
           });
   EXPECT_CALL(*endpoint_channel, Write(_, _))
       .WillRepeatedly(Return(Exception{Exception::kSuccess}));
@@ -345,9 +351,9 @@ TEST_F(EndpointManagerTest, SendControlMessageAndPayloadAckWorks) {
   auto failed_ids_2 = em_.SendPayloadAck(header.id(),
       std::vector<std::string>{endpoint_id_});
   EXPECT_EQ(failed_ids_2, std::vector<std::string>{});
-  NEARBY_LOG(INFO, "Will unregister endpoint now");
+  NEARBY_LOGS(INFO) << "Will unregister endpoint now";
   em_.UnregisterEndpoint(client_.get(), endpoint_id_);
-  NEARBY_LOG(INFO, "Will call destructors now");
+  NEARBY_LOGS(INFO) << "Will call destructors now";
 }
 
 TEST_F(EndpointManagerTest, SingleReadOnReadError) {

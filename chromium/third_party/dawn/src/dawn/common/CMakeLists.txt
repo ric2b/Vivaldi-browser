@@ -118,6 +118,8 @@ set(sources
     "WeakRefSupport.cpp"
 )
 
+set(conditional_private_depends)
+
 if (WIN32)
     list(APPEND headers
         "windows_with_undefs.h"
@@ -134,9 +136,12 @@ elseif(APPLE)
         "IOSurfaceUtils.cpp"
         "SystemUtils_mac.mm"
     )
+    list(APPEND conditional_private_depends
+        "-framework Foundation"
+        "-framework IOSurface"
+    )
 endif()
 
-set(conditional_private_depends)
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Android")
     find_library(log_lib log)
@@ -155,16 +160,18 @@ list(APPEND conditional_private_depends
 
 dawn_add_library(
     dawn_common
+    ENABLE_EMSCRIPTEN
     UTILITY_TARGET dawn_internal_config
     PRIVATE_HEADERS
         ${private_headers}
     SOURCES
         ${sources}
     DEPENDS
-        dawn::dawn_headers
-        dawn::dawncpp_headers
+        webgpu_c
+        webgpu_cpp
     PRIVATE_DEPENDS
         absl::inlined_vector
         dawn::partition_alloc
+        dawn_shared_utils
         ${conditional_private_depends}
 )

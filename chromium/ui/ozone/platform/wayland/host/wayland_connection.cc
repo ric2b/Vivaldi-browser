@@ -14,6 +14,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -29,6 +30,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/ozone/common/features.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
+#include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/fractional_scale_manager.h"
 #include "ui/ozone/platform/wayland/host/gtk_primary_selection_device_manager.h"
 #include "ui/ozone/platform/wayland/host/gtk_shell1.h"
@@ -37,6 +39,7 @@
 #include "ui/ozone/platform/wayland/host/proxy/wayland_proxy_impl.h"
 #include "ui/ozone/platform/wayland/host/single_pixel_buffer.h"
 #include "ui/ozone/platform/wayland/host/surface_augmenter.h"
+#include "ui/ozone/platform/wayland/host/toplevel_icon_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_cursor.h"
@@ -67,6 +70,7 @@
 #include "ui/ozone/platform/wayland/host/xdg_foreign_wrapper.h"
 #include "ui/ozone/platform/wayland/host/zwp_idle_inhibit_manager.h"
 #include "ui/ozone/platform/wayland/host/zwp_primary_selection_device_manager.h"
+#include "ui/ozone/public/ozone_switches.h"
 #include "ui/platform_window/common/platform_window_defaults.h"
 
 namespace ui {
@@ -88,6 +92,7 @@ constexpr uint32_t kMaxExplicitSyncVersion = 2;
 constexpr uint32_t kMaxAlphaCompositingVersion = 1;
 constexpr uint32_t kMaxXdgDecorationVersion = 1;
 constexpr uint32_t kMaxExtendedDragVersion = 1;
+constexpr uint32_t kMaxXdgToplevelDragVersion = 1;
 constexpr uint32_t kMaxXdgOutputManagerVersion = 3;
 constexpr uint32_t kMaxKeyboardShortcutsInhibitManagerVersion = 1;
 constexpr uint32_t kMaxStylusVersion = 2;
@@ -150,6 +155,8 @@ bool WaylandConnection::Initialize(bool use_threaded_polling) {
                               &SinglePixelBuffer::Instantiate);
   RegisterGlobalObjectFactory(SurfaceAugmenter::kInterfaceName,
                               &SurfaceAugmenter::Instantiate);
+  RegisterGlobalObjectFactory(ToplevelIconManager::kInterfaceName,
+                              &ToplevelIconManager::Instantiate);
   RegisterGlobalObjectFactory(WaylandZAuraOutputManagerV2::kInterfaceName,
                               &WaylandZAuraOutputManagerV2::Instantiate);
   RegisterGlobalObjectFactory(WaylandDataDeviceManager::kInterfaceName,
@@ -227,6 +234,8 @@ bool WaylandConnection::Initialize(bool use_threaded_polling) {
   // Create the buffer factory before registry listener is set so that shm, drm,
   // zwp_linux_dmabuf objects are able to be stored.
   buffer_factory_ = std::make_unique<WaylandBufferFactory>();
+
+  wl::RecordConnectionMetrics(display());
 
   static constexpr wl_registry_listener kRegistryListener = {
       .global = &OnGlobal,
@@ -740,6 +749,15 @@ void WaylandConnection::HandleGlobal(wl_registry* registry,
       LOG(ERROR) << "Failed to bind to zcr_extended_drag_v1 global";
       return;
     }
+  } else if (!xdg_toplevel_drag_manager_v1_ &&
+             strcmp(interface, "xdg_toplevel_drag_manager_v1") == 0 &&
+             IsWaylandXdgToplevelDragEnabled()) {
+    xdg_toplevel_drag_manager_v1_ = wl::Bind<::xdg_toplevel_drag_manager_v1>(
+        registry, name, std::min(version, kMaxXdgToplevelDragVersion));
+    if (!xdg_toplevel_drag_manager_v1_) {
+      LOG(ERROR) << "Failed to bind to xdg_toplevel_drag_manager_v1 global";
+      return;
+    }
   } else if (!xdg_output_manager_ &&
              strcmp(interface, "zxdg_output_manager_v1") == 0) {
     // Responsibilities of zxdg_output_manager_v1 have been subsumed into the
@@ -780,6 +798,8 @@ void WaylandConnection::HandleGlobal(wl_registry* registry,
 }
 
 struct wl_callback* WaylandConnection::GetSyncCallback() {
+  // We use display_wrapped here since we create all the objects against this
+  // display, and the default one is responsible for a different event queue.
   return wl_display_sync(display_wrapper());
 }
 

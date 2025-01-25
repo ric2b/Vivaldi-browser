@@ -9,6 +9,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/containers/span.h"
+#include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
@@ -99,8 +100,7 @@ class Receiver {
     }
 
     if (!buffer.empty()) {
-      data_.Append(base::as_chars(buffer).data(),
-                   base::checked_cast<wtf_size_t>(buffer.size()));
+      data_.AppendSpan(base::as_chars(buffer));
     }
 
     rv = handle_->EndReadData(buffer.size());
@@ -217,7 +217,7 @@ class Internal : public mojom::blink::ServiceWorkerInstalledScriptsManager {
   void OnScriptReceived(mojom::blink::ServiceWorkerScriptInfoPtr script_info) {
     DCHECK_CALLED_ON_VALID_THREAD(io_thread_checker_);
     auto iter = running_receivers_.find(script_info->script_url);
-    DCHECK(iter != running_receivers_.end());
+    CHECK(iter != running_receivers_.end(), base::NotFatalUntil::M130);
     std::unique_ptr<BundledReceivers> receivers = std::move(iter->value);
     DCHECK(receivers);
     if (!receivers->body()->HasReceivedAllData() ||
@@ -313,8 +313,7 @@ ServiceWorkerInstalledScriptsManager::GetScriptData(const KURL& script_url) {
               : WTF::TextEncoding(raw_script_data->Encoding())));
 
   Vector<uint8_t> source_text = raw_script_data->TakeScriptText();
-  String decoded_source_text = decoder->Decode(
-      reinterpret_cast<const char*>(source_text.data()), source_text.size());
+  String decoded_source_text = decoder->Decode(base::span(source_text));
 
   // TODO(crbug.com/946676): Remove the unique_ptr<> wrapper around the Vector
   // as we can just use Vector::IsEmpty() to distinguish missing code cache.

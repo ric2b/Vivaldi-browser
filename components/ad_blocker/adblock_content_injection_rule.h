@@ -3,6 +3,7 @@
 #ifndef COMPONENTS_AD_BLOCKER_ADBLOCK_CONTENT_INJECTION_RULE_H_
 #define COMPONENTS_AD_BLOCKER_ADBLOCK_CONTENT_INJECTION_RULE_H_
 
+#include <set>
 #include <string>
 #include <vector>
 
@@ -20,8 +21,8 @@ struct ContentInjectionRuleCore {
 
   bool is_allow_rule = false;
 
-  std::vector<std::string> included_domains;
-  std::vector<std::string> excluded_domains;
+  std::set<std::string> included_domains;
+  std::set<std::string> excluded_domains;
 
  private:
   ContentInjectionRuleCore(const ContentInjectionRuleCore& other);

@@ -4,6 +4,7 @@
 
 package org.chromium.components.webauthn;
 
+import static org.chromium.components.webauthn.WebauthnModeProvider.is;
 import static org.chromium.components.webauthn.WebauthnModeProvider.isChrome;
 
 import android.app.Activity;
@@ -47,6 +48,7 @@ import org.chromium.components.webauthn.cred_man.CredManSupportProvider;
 import org.chromium.content_public.browser.ClientDataJson;
 import org.chromium.content_public.browser.ClientDataRequestType;
 import org.chromium.content_public.browser.RenderFrameHost;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.net.GURLUtils;
 import org.chromium.url.Origin;
 
@@ -86,7 +88,6 @@ public class Fido2CredentialRequest
     private boolean mAppIdExtensionUsed;
     private boolean mEchoCredProps;
     private WebauthnBrowserBridge mBrowserBridge;
-    private boolean mIsCrossOrigin;
     // mIsHybridRequest is true if this request comes from a hybrid (i.e. cross-device) flow rather
     // than a WebContents. Handling the hybrid protocol can be delegated to Chrome (by Play
     // Services).
@@ -167,6 +168,7 @@ public class Fido2CredentialRequest
      *     from mAuthenticationContextProvider.frameHost is null.
      * @param maybeBrowserOptions Optional set of browser-specific data, like channel or incognito.
      * @param origin The origin that made the WebAuthn call.
+     * @param topOrigin The origin of the main frame.
      * @param callback Success callback.
      * @param errorCallback Failure callback.
      */
@@ -176,6 +178,7 @@ public class Fido2CredentialRequest
             byte[] maybeClientDataHash,
             Bundle maybeBrowserOptions,
             Origin origin,
+            Origin topOrigin,
             MakeCredentialResponseCallback callback,
             FidoErrorResponseCallback errorCallback) {
         RenderFrameHost frameHost = mAuthenticationContextProvider.getRenderFrameHost();
@@ -190,16 +193,26 @@ public class Fido2CredentialRequest
                     origin,
                     options.isPaymentCredentialCreation,
                     (result) -> {
-                        if (result != AuthenticatorStatus.SUCCESS) {
-                            returnErrorAndResetCallback(result);
+                        if (result.securityCheckResult != AuthenticatorStatus.SUCCESS) {
+                            returnErrorAndResetCallback(result.securityCheckResult);
                             return;
                         }
                         continueMakeCredentialRequestAfterRpIdValidation(
-                                options, maybeClientDataHash, maybeBrowserOptions, origin);
+                                options,
+                                maybeClientDataHash,
+                                maybeBrowserOptions,
+                                origin,
+                                topOrigin,
+                                result.isCrossOrigin);
                     });
         } else {
             continueMakeCredentialRequestAfterRpIdValidation(
-                    options, maybeClientDataHash, maybeBrowserOptions, origin);
+                    options,
+                    maybeClientDataHash,
+                    maybeBrowserOptions,
+                    origin,
+                    topOrigin,
+                    /* isCrossOrigin= */ false);
         }
     }
 
@@ -208,13 +221,35 @@ public class Fido2CredentialRequest
             PublicKeyCredentialCreationOptions options,
             byte[] maybeClientDataHash,
             Bundle maybeBrowserOptions,
-            Origin origin) {
+            Origin origin,
+            Origin topOrigin,
+            boolean isCrossOrigin) {
         RenderFrameHost frameHost = mAuthenticationContextProvider.getRenderFrameHost();
         final boolean rkDiscouraged =
                 options.authenticatorSelection == null
                         || options.authenticatorSelection.residentKey
                                 == ResidentKeyRequirement.DISCOURAGED;
         mEchoCredProps = options.credProps;
+
+        byte[] clientDataHash = maybeClientDataHash;
+        if (clientDataHash == null
+                && !is(mAuthenticationContextProvider.getWebContents(), WebauthnMode.APP)) {
+            assert options.challenge != null;
+            final String callerOriginString = convertOriginToString(origin);
+            clientDataHash =
+                    buildClientDataJsonAndComputeHash(
+                            ClientDataRequestType.WEB_AUTHN_CREATE,
+                            callerOriginString,
+                            options.challenge,
+                            isCrossOrigin,
+                            /* paymentOptions= */ null,
+                            options.relyingParty.name,
+                            topOrigin);
+            if (clientDataHash == null) {
+                returnErrorAndResetCallback(AuthenticatorStatus.NOT_ALLOWED_ERROR);
+                return;
+            }
+        }
 
         if (!isChrome(mAuthenticationContextProvider.getWebContents())) {
             if (CredManSupportProvider.getCredManSupportForWebView() == CredManSupport.DISABLED) {
@@ -229,7 +264,7 @@ public class Fido2CredentialRequest
                                     mAuthenticationContextProvider,
                                     options,
                                     Uri.parse(convertOriginToString(origin)),
-                                    maybeClientDataHash,
+                                    clientDataHash,
                                     maybeBrowserOptions,
                                     getMaybeResultReceiver(),
                                     this::onGotPendingIntent,
@@ -244,7 +279,8 @@ public class Fido2CredentialRequest
                     mCredManHelper.startMakeRequest(
                             options,
                             convertOriginToString(origin),
-                            maybeClientDataHash,
+                            mClientDataJson,
+                            clientDataHash,
                             mMakeCredentialCallback,
                             this::returnErrorAndResetCallback);
             if (result != AuthenticatorStatus.SUCCESS) returnErrorAndResetCallback(result);
@@ -282,7 +318,8 @@ public class Fido2CredentialRequest
                     mCredManHelper.startMakeRequest(
                             options,
                             convertOriginToString(origin),
-                            maybeClientDataHash,
+                            mClientDataJson,
+                            clientDataHash,
                             mMakeCredentialCallback,
                             this::returnErrorAndResetCallback);
             if (result != AuthenticatorStatus.SUCCESS) returnErrorAndResetCallback(result);
@@ -301,7 +338,7 @@ public class Fido2CredentialRequest
                             mAuthenticationContextProvider,
                             options,
                             Uri.parse(convertOriginToString(origin)),
-                            maybeClientDataHash,
+                            clientDataHash,
                             maybeBrowserOptions,
                             getMaybeResultReceiver(),
                             this::onGotPendingIntent,
@@ -367,16 +404,24 @@ public class Fido2CredentialRequest
                             returnErrorAndResetCallback(results.securityCheckResult);
                             return;
                         }
-                        mIsCrossOrigin = results.isCrossOrigin;
                         continueGetAssertionRequestAfterRpIdValidation(
-                                options, maybeClientDataHash, origin, topOrigin, payment);
+                                options,
+                                maybeClientDataHash,
+                                origin,
+                                topOrigin,
+                                payment,
+                                results.isCrossOrigin);
                     });
             return;
         }
 
-        mIsCrossOrigin = false;
         continueGetAssertionRequestAfterRpIdValidation(
-                options, maybeClientDataHash, origin, topOrigin, payment);
+                options,
+                maybeClientDataHash,
+                origin,
+                topOrigin,
+                payment,
+                /* isCrossOrigin= */ false);
     }
 
     @SuppressWarnings("NewApi")
@@ -385,7 +430,8 @@ public class Fido2CredentialRequest
             byte[] maybeClientDataHash,
             Origin origin,
             Origin topOrigin,
-            PaymentOptions payment) {
+            PaymentOptions payment,
+            boolean isCrossOrigin) {
         RenderFrameHost frameHost = mAuthenticationContextProvider.getRenderFrameHost();
         boolean hasAllowCredentials =
                 options.allowCredentials != null && options.allowCredentials.length != 0;
@@ -400,6 +446,29 @@ public class Fido2CredentialRequest
         }
 
         final String callerOriginString = convertOriginToString(origin);
+        byte[] clientDataHash = maybeClientDataHash;
+        if (clientDataHash == null
+                && !is(mAuthenticationContextProvider.getWebContents(), WebauthnMode.APP)) {
+            assert options.challenge != null;
+            clientDataHash =
+                    buildClientDataJsonAndComputeHash(
+                            (payment != null)
+                                    ? ClientDataRequestType.PAYMENT_GET
+                                    : ClientDataRequestType.WEB_AUTHN_GET,
+                            callerOriginString,
+                            options.challenge,
+                            isCrossOrigin,
+                            payment,
+                            options.relyingPartyId,
+                            topOrigin);
+            if (clientDataHash == null) {
+                returnErrorAndResetCallback(AuthenticatorStatus.NOT_ALLOWED_ERROR);
+                return;
+            }
+        } else {
+            assert payment == null;
+        }
+
         if (!isChrome(mAuthenticationContextProvider.getWebContents())) {
             if (options.isConditional) {
                 returnErrorAndResetCallback(AuthenticatorStatus.NOT_IMPLEMENTED);
@@ -419,8 +488,8 @@ public class Fido2CredentialRequest
                     mCredManHelper.startGetRequest(
                             options,
                             callerOriginString,
-                            mIsCrossOrigin,
-                            maybeClientDataHash,
+                            mClientDataJson,
+                            clientDataHash,
                             mGetAssertionCallback,
                             this::returnErrorAndResetCallback,
                             /* ignoreGpm= */ false);
@@ -431,6 +500,7 @@ public class Fido2CredentialRequest
         // Payments should still go through Google Play Services. Also, if the request has
         // pre-hashed PRF inputs then we cannot represent that in JSON and so can only forward to
         // Play Services.
+        final byte[] finalClientDataHash = clientDataHash;
         if (payment == null
                 && !options.extensions.prfInputsHashed
                 && getBarrierMode() == Barrier.Mode.ONLY_CRED_MAN) {
@@ -439,8 +509,8 @@ public class Fido2CredentialRequest
                 mCredManHelper.startPrefetchRequest(
                         options,
                         convertOriginToString(origin),
-                        mIsCrossOrigin,
-                        /* maybeClientDataHash= */ null,
+                        mClientDataJson,
+                        clientDataHash,
                         mGetAssertionCallback,
                         this::returnErrorAndResetCallback,
                         mBarrier,
@@ -448,21 +518,26 @@ public class Fido2CredentialRequest
             } else if (hasAllowCredentials && mPlayServicesAvailable) {
                 // If the allowlist contains non-discoverable credentials then
                 // the request needs to be routed directly to Play Services.
-                checkForMatchingCredentials(options, origin, maybeClientDataHash);
+                checkForMatchingCredentials(options, origin, clientDataHash);
             } else {
-                mCredManHelper.setNoCredentialsFallback(
-                        () ->
-                                this.maybeDispatchGetAssertionRequest(
-                                        options,
-                                        convertOriginToString(origin),
-                                        maybeClientDataHash,
-                                        /* credentialId= */ null));
+                // WebauthnMode.CHROME_3PP_ENABLED will keep using CredMan's no credentials UI.
+                if (is(mAuthenticationContextProvider.getWebContents(), WebauthnMode.CHROME)) {
+                    mCredManHelper.setNoCredentialsFallback(
+                            () ->
+                                    this.maybeDispatchGetAssertionRequest(
+                                            options,
+                                            convertOriginToString(origin),
+                                            finalClientDataHash,
+                                            /* credentialId= */ null));
+                } else {
+                    mCredManHelper.setNoCredentialsFallback(null);
+                }
                 int response =
                         mCredManHelper.startGetRequest(
                                 options,
                                 convertOriginToString(origin),
-                                mIsCrossOrigin,
-                                maybeClientDataHash,
+                                mClientDataJson,
+                                clientDataHash,
                                 mGetAssertionCallback,
                                 this::returnErrorAndResetCallback,
                                 /* ignoreGpm= */ false);
@@ -477,37 +552,28 @@ public class Fido2CredentialRequest
             return;
         }
 
-        byte[] clientDataHash = maybeClientDataHash;
-        if (payment != null) {
-            assert options.challenge != null;
-            assert clientDataHash == null;
-            clientDataHash =
-                    buildClientDataJsonAndComputeHash(
-                            ClientDataRequestType.PAYMENT_GET,
-                            callerOriginString,
-                            options.challenge,
-                            mIsCrossOrigin,
-                            payment,
-                            options.relyingPartyId,
-                            topOrigin);
-            if (clientDataHash == null) {
-                returnErrorAndResetCallback(AuthenticatorStatus.NOT_ALLOWED_ERROR);
-                return;
-            }
+        // Conditional requests for Chrome 3rd party PWM mode when CredMan not enabled is not
+        // defined yet.
+        WebContents webContents = mAuthenticationContextProvider.getWebContents();
+        if (options.isConditional && is(webContents, WebauthnMode.CHROME_3PP_ENABLED)) {
+
+            returnErrorAndResetCallback(AuthenticatorStatus.NOT_IMPLEMENTED);
+            return;
         }
 
-        if (frameHost != null && (options.isConditional || !hasAllowCredentials)) {
-            // Enumerate credentials from Play Services so that we can show the
-            // picker in Chrome UI.
-            final byte[] finalClientDataHash = clientDataHash;
-
+        // Enumerate credentials from Play Services so that we can show the picker in Chrome UI.
+        // Chrome 3rd party mode does not support enumeration in Chrome UI, hence use FIDO 2
+        // enumeration for them.
+        if (frameHost != null
+                && (options.isConditional || !hasAllowCredentials)
+                && is(webContents, WebauthnMode.CHROME)) {
             if (getBarrierMode() == Barrier.Mode.BOTH) {
                 mBarrier.resetAndSetWaitStatus(Barrier.Mode.BOTH);
                 mCredManHelper.startPrefetchRequest(
                         options,
                         callerOriginString,
-                        mIsCrossOrigin,
-                        maybeClientDataHash,
+                        mClientDataJson,
+                        clientDataHash,
                         mGetAssertionCallback,
                         this::returnErrorAndResetCallback,
                         mBarrier,
@@ -539,7 +605,7 @@ public class Fido2CredentialRequest
         if (hasAllowCredentials
                 && !options.isConditional
                 && getBarrierMode() == Barrier.Mode.BOTH) {
-            checkForMatchingCredentials(options, origin, maybeClientDataHash);
+            checkForMatchingCredentials(options, origin, clientDataHash);
             return;
         }
         maybeDispatchGetAssertionRequest(options, callerOriginString, clientDataHash, null);
@@ -781,9 +847,7 @@ public class Fido2CredentialRequest
      */
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private void checkForMatchingCredentials(
-            PublicKeyCredentialRequestOptions options,
-            Origin callerOrigin,
-            byte[] maybeClientDataHash) {
+            PublicKeyCredentialRequestOptions options, Origin callerOrigin, byte[] clientDataHash) {
         assert options.allowCredentials != null;
         assert options.allowCredentials.length > 0;
         assert !options.isConditional;
@@ -797,7 +861,7 @@ public class Fido2CredentialRequest
                         options.relyingPartyId,
                         (credentials) ->
                                 checkForMatchingCredentialsReceived(
-                                        options, callerOrigin, maybeClientDataHash, credentials),
+                                        options, callerOrigin, clientDataHash, credentials),
                         (e) -> {
                             Log.e(
                                     TAG,
@@ -808,8 +872,8 @@ public class Fido2CredentialRequest
                             mCredManHelper.startGetRequest(
                                     options,
                                     convertOriginToString(callerOrigin),
-                                    mIsCrossOrigin,
-                                    maybeClientDataHash,
+                                    mClientDataJson,
+                                    clientDataHash,
                                     mGetAssertionCallback,
                                     this::returnErrorAndResetCallback,
                                     mode == Barrier.Mode.BOTH);
@@ -820,7 +884,7 @@ public class Fido2CredentialRequest
     private void checkForMatchingCredentialsReceived(
             PublicKeyCredentialRequestOptions options,
             Origin callerOrigin,
-            byte[] maybeClientDataHash,
+            byte[] clientDataHash,
             List<WebauthnCredentialDetails> retrievedCredentials) {
         assert options.allowCredentials != null;
         assert options.allowCredentials.length > 0;
@@ -847,7 +911,7 @@ public class Fido2CredentialRequest
                     maybeDispatchGetAssertionRequest(
                             options,
                             convertOriginToString(callerOrigin),
-                            maybeClientDataHash,
+                            clientDataHash,
                             /* credentialId= */ null);
                     return;
                 }
@@ -859,7 +923,7 @@ public class Fido2CredentialRequest
                         this.maybeDispatchGetAssertionRequest(
                                 options,
                                 convertOriginToString(callerOrigin),
-                                maybeClientDataHash,
+                                clientDataHash,
                                 /* credentialId= */ null));
 
         // No elements of the allowlist are local, non-discoverable credentials
@@ -867,8 +931,8 @@ public class Fido2CredentialRequest
         mCredManHelper.startGetRequest(
                 options,
                 convertOriginToString(callerOrigin),
-                mIsCrossOrigin,
-                maybeClientDataHash,
+                mClientDataJson,
+                clientDataHash,
                 mGetAssertionCallback,
                 this::returnErrorAndResetCallback,
                 mode == Barrier.Mode.BOTH);
@@ -1110,6 +1174,9 @@ public class Fido2CredentialRequest
                     // `parseIntentResponse` if Play Services provided credProps
                     // information.
                     creationResponse.echoCredProps = true;
+                }
+                if (mClientDataJson != null) {
+                    creationResponse.info.clientDataJson = mClientDataJson;
                 }
                 mMakeCredentialCallback.onRegisterResponse(
                         AuthenticatorStatus.SUCCESS, creationResponse);

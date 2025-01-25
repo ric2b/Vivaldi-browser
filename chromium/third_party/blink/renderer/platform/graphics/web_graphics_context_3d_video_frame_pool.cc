@@ -24,19 +24,24 @@
 #include "media/video/renderable_gpu_memory_buffer_video_frame_pool.h"
 #include "perfetto/tracing/track_event_args.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/web_graphics_context_3d_provider_wrapper.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 namespace blink {
 
 namespace {
 
-#if BUILDFLAG(IS_WIN)
 BASE_FEATURE(kUseCopyToGpuMemoryBufferAsync,
              "UseCopyToGpuMemoryBufferAsync",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_WIN)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
 #endif
+);
 
 class Context : public media::RenderableGpuMemoryBufferVideoFramePool::Context {
  public:
@@ -103,13 +108,18 @@ class Context : public media::RenderableGpuMemoryBufferVideoFramePool::Context {
     return client_shared_image;
   }
 
-  void DestroySharedImage(
-      const gpu::SyncToken& sync_token,
-      scoped_refptr<gpu::ClientSharedImage> shared_image) override {
+  void DestroySharedImage(const gpu::SyncToken& sync_token,
+                          scoped_refptr<gpu::ClientSharedImage> shared_image,
+                          const bool is_mappable_si_enabled) override {
     auto* sii = SharedImageInterface();
     if (!sii)
       return;
-    sii->DestroySharedImage(sync_token, std::move(shared_image));
+    CHECK(shared_image);
+    if (is_mappable_si_enabled) {
+      shared_image->UpdateDestructionSyncToken(sync_token);
+    } else {
+      sii->DestroySharedImage(sync_token, std::move(shared_image));
+    }
   }
 
  private:
@@ -134,7 +144,7 @@ WebGraphicsContext3DVideoFramePool::WebGraphicsContext3DVideoFramePool(
         weak_context_provider)
     : WebGraphicsContext3DVideoFramePool(
           std::move(weak_context_provider),
-          Platform::Current()->GetGpuMemoryBufferManager()) {}
+          SharedGpuContext::GetGpuMemoryBufferManager()) {}
 
 WebGraphicsContext3DVideoFramePool::WebGraphicsContext3DVideoFramePool(
     base::WeakPtr<blink::WebGraphicsContext3DProviderWrapper>
@@ -199,13 +209,14 @@ void SignalGpuCompletion(
                                query_id, std::move(callback)));
 }
 
-#if BUILDFLAG(IS_WIN)
 void CopyToGpuMemoryBuffer(
     base::WeakPtr<blink::WebGraphicsContext3DProviderWrapper> ctx_wrapper,
     media::VideoFrame* dst_frame,
     base::OnceClosure callback) {
   CHECK(dst_frame->HasMappableGpuBuffer());
   CHECK(!dst_frame->HasNativeGpuMemoryBuffer());
+  CHECK_EQ(dst_frame->shared_image_format_type(),
+           media::SharedImageFormatType::kSharedImageFormat);
 
   DCHECK(ctx_wrapper);
   auto* context_provider = ctx_wrapper->ContextProvider();
@@ -221,11 +232,8 @@ void CopyToGpuMemoryBuffer(
   auto* sii = context_provider->SharedImageInterface();
   DCHECK(sii);
 
-  bool use_async_copy =
-      base::FeatureList::IsEnabled(kUseCopyToGpuMemoryBufferAsync) &&
-      dst_frame->shared_image_format_type() ==
-          media::SharedImageFormatType::kSharedImageFormat;
-
+  const bool use_async_copy =
+      base::FeatureList::IsEnabled(kUseCopyToGpuMemoryBufferAsync);
   if (use_async_copy) {
     auto copy_to_gmb_done_lambda = [](base::OnceClosure callback,
                                       bool success) {
@@ -276,7 +284,6 @@ void CopyToGpuMemoryBuffer(
                         std::move(callback));
   }
 }
-#endif
 }  // namespace
 
 bool WebGraphicsContext3DVideoFramePool::CopyRGBATextureToVideoFrame(
@@ -324,34 +331,50 @@ bool WebGraphicsContext3DVideoFramePool::CopyRGBATextureToVideoFrame(
   // VideoFrame::UpdateMailboxHolderSyncToken requires that the video frame have
   // a single owner. So cache the pointer for later use after the std::move().
   [[maybe_unused]] auto* dst_frame_ptr = dst_frame.get();
-  auto wrapped_callback = base::BindOnce(
-      [](scoped_refptr<media::VideoFrame> frame, FrameReadyCallback callback,
-         int flow_id) {
-        TRACE_EVENT_INSTANT("media", "CopyRGBATextureToVideoFrame",
-                            perfetto::TerminatingFlow::ProcessScoped(flow_id));
-        // We can just clear the sync token from the video frame now that we've
-        // synchronized with the GPU.
-        gpu::SyncToken empty_sync_token;
-        media::SimpleSyncTokenClient simple_client(empty_sync_token);
-        for (size_t plane = 0; plane < frame->NumTextures(); ++plane) {
-          frame->UpdateMailboxHolderSyncToken(plane, &simple_client);
-        }
-        frame->UpdateReleaseSyncToken(&simple_client);
-        std::move(callback).Run(std::move(frame));
-      },
-      std::move(dst_frame), std::move(callback), flow_id);
 
-#if BUILDFLAG(IS_WIN)
-  // For shared memory GMBs on Windows we needed to explicitly request a copy
-  // from the shared image GPU texture to the GMB.
-  CopyToGpuMemoryBuffer(weak_context_provider_, dst_frame_ptr,
-                        std::move(wrapped_callback));
-#else
-  // QueryEXT functions are used to make sure that CopyRGBATextureToVideoFrame()
-  // texture copy is complete before we access GMB data.
-  SignalGpuCompletion(weak_context_provider_, GL_COMMANDS_COMPLETED_CHROMIUM,
-                      std::move(wrapped_callback));
-#endif
+  // The worker can be terminated at any time and in such cases `dst_frame`
+  // destructor might be call on mojo IO-thread instead of the worker's thread.
+  // It breaks threading rules for using GPU objects. Using a cancelable
+  // callback ensures that `dst_frame` is dropped when the worker terminates.
+  auto wrapped_callback =
+      std::make_unique<base::CancelableOnceClosure>(base::BindOnce(
+          [](scoped_refptr<media::VideoFrame> frame,
+             FrameReadyCallback callback, int flow_id) {
+            TRACE_EVENT_INSTANT(
+                "media", "CopyRGBATextureToVideoFrame",
+                perfetto::TerminatingFlow::ProcessScoped(flow_id));
+            // We can just clear the sync token from the video frame now that
+            // we've synchronized with the GPU.
+            gpu::SyncToken empty_sync_token;
+            media::SimpleSyncTokenClient simple_client(empty_sync_token);
+            for (size_t plane = 0; plane < frame->NumTextures(); ++plane) {
+              frame->UpdateMailboxHolderSyncToken(plane, &simple_client);
+            }
+            frame->UpdateReleaseSyncToken(&simple_client);
+            std::move(callback).Run(std::move(frame));
+          },
+          std::move(dst_frame), std::move(callback), flow_id));
+
+  if (!dst_frame_ptr->HasNativeGpuMemoryBuffer()) {
+    // For shared memory GMBs we needed to explicitly request a copy
+    // from the shared image GPU texture to the GMB.
+    CopyToGpuMemoryBuffer(weak_context_provider_, dst_frame_ptr,
+                          wrapped_callback->callback());
+  } else {
+    // QueryEXT functions are used to make sure that
+    // CopyRGBATextureToVideoFrame() texture copy is complete before we access
+    // GMB data.
+    SignalGpuCompletion(weak_context_provider_, GL_COMMANDS_COMPLETED_CHROMIUM,
+                        wrapped_callback->callback());
+  }
+
+  // Cleanup stale callbacks before adding a new one. It's ok to loop until the
+  // first non-cancelled callback since they should execute in order anyway.
+  while (!pending_gpu_completion_callbacks_.empty() &&
+         pending_gpu_completion_callbacks_.front()->IsCancelled()) {
+    pending_gpu_completion_callbacks_.pop_front();
+  }
+  pending_gpu_completion_callbacks_.push_back(std::move(wrapped_callback));
 
   return true;
 }

@@ -33,10 +33,14 @@ class MagicBoostStateAsh : public chromeos::MagicBoostState,
   ~MagicBoostStateAsh() override;
 
   // MagicBoostState:
+  bool IsMagicBoostAvailable() override;
+  bool CanShowNoticeBannerForHMR() override;
   int32_t AsyncIncrementHMRConsentWindowDismissCount() override;
   void AsyncWriteConsentStatus(
       chromeos::HMRConsentStatus consent_status) override;
   void AsyncWriteHMREnabled(bool enabled) override;
+  void ShouldIncludeOrcaInOptIn(
+      base::OnceCallback<void(bool)> callback) override;
   void DisableOrcaFeature() override;
 
   // Virtual for testing.

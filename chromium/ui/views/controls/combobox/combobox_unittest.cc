@@ -82,7 +82,7 @@ class TestComboboxModel : public ui::ComboboxModel {
       if (separators_.find(index) == separators_.end())
         return index;
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   void SetSeparators(const std::set<size_t>& separators) {
@@ -217,7 +217,7 @@ class ComboboxTest : public ViewsTestBase {
 
     widget_ = std::make_unique<Widget>();
     Widget::InitParams params =
-        CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+        CreateParams(Widget::InitParams::CLIENT_OWNS_WIDGET,
                      Widget::InitParams::TYPE_WINDOW_FRAMELESS);
     params.bounds = gfx::Rect(200, 200, 200, 200);
     widget_->Init(std::move(params));
@@ -348,7 +348,7 @@ TEST_F(ComboboxTest, DisabilityTest) {
 
   widget_ = std::make_unique<Widget>();
   Widget::InitParams params =
-      CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      CreateParams(Widget::InitParams::CLIENT_OWNS_WIDGET,
                    Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.bounds = gfx::Rect(100, 100, 100, 100);
   widget_->Init(std::move(params));
@@ -694,6 +694,99 @@ TEST_F(ComboboxTest, ExpandedCollapsedAccessibleState) {
   EXPECT_TRUE(node_data.HasState(ax::mojom::State::kCollapsed));
 }
 
+TEST_F(ComboboxTest, AccessibleDefaultActionVerb) {
+  InitCombobox(nullptr);
+  ui::AXNodeData node_data;
+  combobox()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(ax::mojom::DefaultActionVerb::kOpen,
+            node_data.GetDefaultActionVerb());
+
+  node_data = ui::AXNodeData();
+  combobox()->SetEnabled(false);
+  combobox()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_FALSE(
+      node_data.HasIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb));
+
+  node_data = ui::AXNodeData();
+  combobox()->SetEnabled(true);
+  combobox()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(ax::mojom::DefaultActionVerb::kOpen,
+            node_data.GetDefaultActionVerb());
+}
+
+TEST_F(ComboboxTest, SetSizePosInSetAccessibleProperties) {
+  InitCombobox(nullptr);
+
+  // Test an empty model.
+  model_->set_item_count(0);
+  EXPECT_EQ(0u, combobox()->GetRowCount());
+  EXPECT_EQ(0u, combobox()->GetSelectedRow());
+  ui::AXNodeData node_data;
+  combobox()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(0, node_data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+  EXPECT_EQ(0, node_data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+
+  // Update item count and selected index.
+  model_->set_item_count(5);
+  combobox()->SetSelectedIndex(4);
+  EXPECT_EQ(5u, combobox()->GetRowCount());
+  EXPECT_EQ(4u, combobox()->GetSelectedRow());
+  node_data = ui::AXNodeData();
+  combobox()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(5, node_data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+  EXPECT_EQ(4, node_data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+
+  // Update item count.
+  model_->set_item_count(6);
+  EXPECT_EQ(6u, combobox()->GetRowCount());
+  EXPECT_EQ(4u, combobox()->GetSelectedRow());
+  node_data = ui::AXNodeData();
+  combobox()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(6, node_data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+  EXPECT_EQ(4, node_data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+
+  // Update selected index.
+  combobox()->SetSelectedIndex(2);
+  EXPECT_EQ(6u, combobox()->GetRowCount());
+  EXPECT_EQ(2u, combobox()->GetSelectedRow());
+  node_data = ui::AXNodeData();
+  combobox()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(6, node_data.GetIntAttribute(ax::mojom::IntAttribute::kSetSize));
+  EXPECT_EQ(2, node_data.GetIntAttribute(ax::mojom::IntAttribute::kPosInSet));
+}
+
+TEST_F(ComboboxTest, AccessibleValue) {
+  // Empty model kValue check
+  auto simple_model = std::make_unique<ui::SimpleComboboxModel>(
+      std::vector<ui::SimpleComboboxModel::Item>());
+  auto combobox = std::make_unique<Combobox>(simple_model.get());
+
+  ui::AXNodeData node_data;
+  combobox->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(0u, combobox->GetModel()->GetItemCount());
+  EXPECT_EQ(std::nullopt, combobox->GetSelectedIndex());
+  EXPECT_EQ("",
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kValue));
+
+  // Non-empty model.
+  simple_model->UpdateItemList({ui::SimpleComboboxModel::Item(u"Peanut Butter"),
+                                ui::SimpleComboboxModel::Item(u"Yogurt")});
+  node_data = ui::AXNodeData();
+  combobox->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(2u, combobox->GetModel()->GetItemCount());
+  EXPECT_EQ(0u, combobox->GetSelectedIndex());
+  EXPECT_EQ("Peanut Butter",
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kValue));
+
+  // set selected index to 1.
+  node_data = ui::AXNodeData();
+  combobox->SetSelectedIndex(1);
+  EXPECT_EQ(1u, combobox->GetSelectedIndex());
+  combobox->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ("Yogurt",
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kValue));
+}
+
 TEST_F(ComboboxTest, NotifyOnClickWithMouse) {
   InitCombobox(nullptr);
 
@@ -945,6 +1038,8 @@ TEST_F(ComboboxTest, SetTooltipTextNotifiesAccessibilityEvent) {
   const std::string& name =
       data.GetStringAttribute(ax::mojom::StringAttribute::kName);
   EXPECT_EQ(test_tooltip_text, ASCIIToUTF16(name));
+  EXPECT_EQ(u"PEANUT BUTTER",
+            data.GetString16Attribute(ax::mojom::StringAttribute::kValue));
 }
 
 // Regression test for crbug.com/1264288.

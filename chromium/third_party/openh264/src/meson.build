@@ -1,5 +1,5 @@
 project('openh264', ['c', 'cpp'],
-  version : '2.3.0',
+  version : '2.4.1',
   meson_version : '>= 0.52',
   default_options : [ 'warning_level=1',
                       'buildtype=debugoptimized' ])
@@ -42,6 +42,8 @@ cpu_family = host_machine.cpu_family()
 supported_arguments = cpp.get_supported_arguments([
   '-Wno-non-virtual-dtor',
   '-Wno-class-memaccess',
+  '-Werror',
+  '-Wunused-but-set-variable',
   '-Wno-strict-aliasing'])
 
 add_project_arguments(supported_arguments, language: 'cpp')
@@ -88,13 +90,13 @@ if ['linux', 'android', 'ios', 'darwin'].contains(system)
     casm_inc = include_directories(join_paths('codec', 'common', 'arm64'))
   elif cpu_family == 'loongarch32'
     asm_format = asm_format32
-    add_project_arguments('-mlsx', '-mlasx', language: 'c')
+    add_project_arguments('-mlsx', '-DHAVE_LSX', '-mlasx', '-DHAVE_LASX', language: 'c')
     add_project_arguments('-DHAVE_LSX', '-DHAVE_LASX', language: 'cpp')
     casm_inc = include_directories(join_paths('codec', 'common', 'loongarch'))
   elif cpu_family == 'loongarch64'
     asm_format = asm_format64
-    add_project_arguments('-mlsx', '-mlasx', language: 'c')
-    add_project_arguments('-mlsx', '-DHAVE_LSX', '-mlasx', '-DHAVE_LASX', language: 'cpp')
+    add_project_arguments('-mlsx', '-DHAVE_LSX', '-mlasx', '-DHAVE_LASX', language: 'c')
+    add_project_arguments('-DHAVE_LSX', '-DHAVE_LASX', language: 'cpp')
     casm_inc = include_directories(join_paths('codec', 'common', 'loongarch'))
   else
     error('FIXME: unhandled CPU family @0@ for @1@'.format(cpu_family, system))

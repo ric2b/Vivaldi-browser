@@ -82,17 +82,9 @@ suite('CookiesPageTest', function() {
     // Headers
     assertTrue(isChildVisible(page, '#explanationText'));
     assertTrue(isChildVisible(page, '#generalControls'));
-    assertTrue(isChildVisible(page, '#additionalProtectionsHeader'));
+    assertTrue(isChildVisible(page, '#additionalProtections'));
     assertTrue(isChildVisible(page, '#exceptionHeader3pcd'));
     assertTrue(isChildVisible(page, '#allow3pcExceptionsList'));
-    // To be removed with old UI.
-    assertFalse(isChildVisible(page, '#exceptionHeader'));
-    assertFalse(isChildVisible(page, '#exceptionHeaderSubLabel'));
-    // Will only be shown in the TP rollout.
-    assertFalse(isChildVisible(page, '#exceptionHeaderTrackingProtection'));
-    assertFalse(isChildVisible(page, '#trackingProtectionExceptionsList'));
-    assertFalse(isChildVisible(page, '#defaultHeader'));
-
     // Settings
     assertTrue(isChildVisible(page, '#doNotTrack'));
     assertTrue(isChildVisible(page, '#allowThirdParty'));
@@ -228,31 +220,34 @@ suite('CookiesPageTest', function() {
     assertFalse(page.$.toast.open);
   });
 
-  test('disabledFPSToggle', async () => {
+  test('disabledRWSToggle', async () => {
     // Confirm that when the user has not selected the block 3PC setting, the
-    // FPS toggle is disabled.
-    const firstPartySetsToggle =
+    // RWS toggle is disabled.
+    const relatedWebsiteSetsToggle =
         page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
-            '#firstPartySetsToggle')!;
+            '#relatedWebsiteSetsToggle')!;
     blockThirdParty().click();
     await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         CookieControlsMode.BLOCK_THIRD_PARTY,
         page.prefs.profile.cookie_controls_mode.value);
-    assertFalse(firstPartySetsToggle.disabled, 'expect toggle to be enabled');
+    assertFalse(
+        relatedWebsiteSetsToggle.disabled, 'expect toggle to be enabled');
 
     allowThirdParty().click();
     await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         CookieControlsMode.OFF, page.prefs.profile.cookie_controls_mode.value);
-    assertTrue(firstPartySetsToggle.disabled, 'expect toggle to be disabled');
+    assertTrue(
+        relatedWebsiteSetsToggle.disabled, 'expect toggle to be disabled');
 
     blockThirdPartyIncognito().click();
     await eventToPromise('selected-changed', primarySettingGroup());
     assertEquals(
         CookieControlsMode.INCOGNITO_ONLY,
         page.prefs.profile.cookie_controls_mode.value);
-    assertTrue(firstPartySetsToggle.disabled, 'expect toggle to be disabled');
+    assertTrue(
+        relatedWebsiteSetsToggle.disabled, 'expect toggle to be disabled');
   });
 
   test('blockThirdPartyIncognitoSecondBulletPointText', function() {
@@ -262,7 +257,7 @@ suite('CookiesPageTest', function() {
             .querySelector<HTMLElement>(
                 '#blockThirdPartyIncognitoBulTwo')!.innerText.trim();
     assertEquals(
-        loadTimeData.getString('cookiePageBlockThirdIncognitoBulTwoFps'),
+        loadTimeData.getString('cookiePageBlockThirdIncognitoBulTwoRws'),
         cookiesPageBlockThirdPartyIncognitoBulTwoLabel);
   });
 });
@@ -433,15 +428,15 @@ suite('TrackingProtectionSettings', function() {
   });
 });
 
-suite('IpProtectionToggle', function() {
+suite('ActSettings', function() {
   let page: SettingsCookiesPageElement;
   let settingsPrefs: SettingsPrefsElement;
   let testMetricsBrowserProxy: TestMetricsBrowserProxy;
 
   suiteSetup(function() {
     loadTimeData.overrideValues({
-      is3pcdCookieSettingsRedesignEnabled: false,
-      isIpProtectionV1Enabled: true,
+      isIpProtectionUxEnabled: true,
+      isFingerprintingProtectionUxEnabled: true,
     });
     resetRouterForTesting();
 
@@ -462,8 +457,9 @@ suite('IpProtectionToggle', function() {
   });
 
   test('CheckVisibility', function() {
-    // Setting is visible
+    // Settings are visible
     assertTrue(isChildVisible(page, '#ipProtectionToggle'));
+    assertTrue(isChildVisible(page, '#fingerprintingProtectionToggle'));
   });
 
   test('ToggleIpProtection', async function() {
@@ -479,37 +475,6 @@ suite('IpProtectionToggle', function() {
     assertEquals(PrivacyElementInteractions.IP_PROTECTION, result);
     assertEquals(
         page.getPref('tracking_protection.ip_protection_enabled.value'), true);
-  });
-});
-
-suite('FingerprintingProtectionToggle', function() {
-  let page: SettingsCookiesPageElement;
-  let settingsPrefs: SettingsPrefsElement;
-  let testMetricsBrowserProxy: TestMetricsBrowserProxy;
-
-  suiteSetup(function() {
-    loadTimeData.overrideValues({isFingerprintingProtectionEnabled: true});
-    resetRouterForTesting();
-
-    settingsPrefs = document.createElement('settings-prefs');
-    return CrSettingsPrefs.initialized;
-  });
-
-  setup(function() {
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-
-    testMetricsBrowserProxy = new TestMetricsBrowserProxy();
-    MetricsBrowserProxyImpl.setInstance(testMetricsBrowserProxy);
-
-    page = document.createElement('settings-cookies-page');
-    page.prefs = settingsPrefs.prefs!;
-    document.body.appendChild(page);
-    flush();
-  });
-
-  test('CheckVisibility', function() {
-    // Setting is visible
-    assertTrue(isChildVisible(page, '#fingerprintingProtectionToggle'));
   });
 
   test('ToggleFingerprintingProtection', async function() {
@@ -529,38 +494,5 @@ suite('FingerprintingProtectionToggle', function() {
         page.getPref(
             'tracking_protection.fingerprinting_protection_enabled.value'),
         true);
-  });
-});
-
-suite('TrackingProtectionRolloutUx', function() {
-  let page: SettingsCookiesPageElement;
-  let settingsPrefs: SettingsPrefsElement;
-
-  suiteSetup(function() {
-    loadTimeData.overrideValues({
-      enableTrackingProtectionRolloutUx: true,
-      is3pcdCookieSettingsRedesignEnabled: true,
-    });
-    settingsPrefs = document.createElement('settings-prefs');
-    return CrSettingsPrefs.initialized;
-  });
-
-  setup(function() {
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    page = document.createElement('settings-cookies-page');
-    page.prefs = settingsPrefs.prefs!;
-    document.body.appendChild(page);
-    flush();
-  });
-
-  test('TrackingProtectionExceptionsListDisplayed', function() {
-    // Tracking Protection elements are shown
-    assertTrue(isChildVisible(page, '#defaultHeader'));
-    assertTrue(isChildVisible(page, '#exceptionHeaderTrackingProtection'));
-    assertTrue(isChildVisible(page, '#trackingProtectionExceptionsList'));
-    // 3PC elements are hidden
-    assertFalse(isChildVisible(page, '#explanationText'));
-    assertFalse(isChildVisible(page, '#exceptionHeader3pcd'));
-    assertFalse(isChildVisible(page, '#allow3pcExceptionsList'));
   });
 });

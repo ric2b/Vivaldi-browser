@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/viz/test/test_gles2_interface.h"
 
 #include "base/containers/contains.h"
@@ -113,7 +118,7 @@ void TestGLES2Interface::BindTexture(GLenum target, GLuint texture) {
 
 void TestGLES2Interface::GetIntegerv(GLenum pname, GLint* params) {
   if (pname == GL_MAX_TEXTURE_SIZE)
-    *params = test_capabilities_.max_texture_size;
+    *params = test_gl_capabilities_.max_texture_size;
   else if (pname == GL_ACTIVE_TEXTURE)
     *params = GL_TEXTURE0;
   else if (pname == GL_UNPACK_ALIGNMENT)
@@ -441,6 +446,7 @@ void TestGLES2Interface::set_gpu_rasterization(bool gpu_rasterization) {
 }
 
 void TestGLES2Interface::set_max_texture_size(int size) {
+  test_gl_capabilities_.max_texture_size = size;
   test_capabilities_.max_texture_size = size;
 }
 

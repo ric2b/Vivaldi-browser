@@ -4,6 +4,22 @@ import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/rbe.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 
+if (is_ios) {
+  import("//build/config/ios/ios_sdk.gni")
+}
+
+declare_args() {
+  # Enables absolute paths for Windows Visual Studio diganostics
+  # May have consequences for compile caching, so disabled by default
+  windows_use_absolute_path_diagnostics = false
+}
+
+config("diagnostics") {
+  if (is_win && windows_use_absolute_path_diagnostics) {
+    cflags = ["-fdiagnostics-absolute-paths"]
+  }
+}
+
 config("features") {
   defines = [
     "VIVALDI_BUILD",
@@ -76,5 +92,11 @@ config("release_kind") {
 
   if (is_final_build) {
     defines += [ "VIVALDI_FINAL_BUILD" ]
+  }
+}
+
+if (is_ios) {
+  config("vivaldi_build") {
+    swiftflags = [ "-DVIVALDI_BUILD" ]
   }
 }

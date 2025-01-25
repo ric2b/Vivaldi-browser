@@ -9,6 +9,7 @@
 #import "base/check.h"
 #import "base/feature_list.h"
 #import "base/memory/raw_ptr.h"
+#import "components/prefs/pref_service.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/app_state_observer.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
@@ -17,7 +18,8 @@
 #import "ios/chrome/browser/promos_manager/model/promos_manager.h"
 #import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/start_surface/ui_bundled/start_surface_util.h"
 
@@ -82,16 +84,24 @@
     return;
   }
 
-  [self registerPromo];
+  // Record that the user has at least been found eligible once
+  // for the docking promo. This means that it is now possible
+  // to use IsDockingPromoForEligibleUsersOnlyEnabled() and be
+  // sure that the feature will only be A/B tested on users that
+  // are eligible, thus reducing the noise in measurement by not
+  // including ineligible users.
+  GetApplicationContext()->GetLocalState()->SetBoolean(
+      prefs::kIosDockingPromoEligibilityMet, true);
+
+  if (IsDockingPromoForEligibleUsersOnlyEnabled()) {
+    [self registerPromo];
+  }
 }
 
 // Registers the Docking Promo with the PromosManager.
 - (void)registerPromo {
-  std::vector<ChromeBrowserState*> loadedBrowserStates =
-      GetApplicationContext()
-          ->GetChromeBrowserStateManager()
-          ->GetLoadedBrowserStates();
-  for (ChromeBrowserState* browserState : loadedBrowserStates) {
+  for (ChromeBrowserState* browserState :
+       GetApplicationContext()->GetProfileManager()->GetLoadedProfiles()) {
     PromosManager* promosManager =
         PromosManagerFactory::GetForBrowserState(browserState);
     promosManager->RegisterPromoForSingleDisplay(
@@ -101,11 +111,8 @@
 
 // Deregisters the Docking Promo from the PromosManager.
 - (void)deregisterPromo {
-  std::vector<ChromeBrowserState*> loadedBrowserStates =
-      GetApplicationContext()
-          ->GetChromeBrowserStateManager()
-          ->GetLoadedBrowserStates();
-  for (ChromeBrowserState* browserState : loadedBrowserStates) {
+  for (ChromeBrowserState* browserState :
+       GetApplicationContext()->GetProfileManager()->GetLoadedProfiles()) {
     PromosManager* promosManager =
         PromosManagerFactory::GetForBrowserState(browserState);
     promosManager->DeregisterPromo(promos_manager::Promo::DockingPromo);

@@ -16,7 +16,7 @@ import androidx.annotation.StringRes;
 import androidx.core.util.Function;
 
 import org.chromium.base.Callback;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tasks.tab_management.StrictButtonPressController.ButtonClickResult;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
@@ -37,46 +37,96 @@ public class ActionConfirmationDialog {
         void onDismiss(boolean isPositive, boolean stopShowing);
     }
 
-    private final Profile mProfile;
     private final Context mContext;
     private final ModalDialogManager mModalDialogManager;
 
+    /**
+     * @param context The context to use for resources.
+     * @param modalDialogManager The global modal dialog manager.
+     */
     public ActionConfirmationDialog(
-            @NonNull Profile profile,
-            @NonNull Context context,
-            @NonNull ModalDialogManager modalDialogManager) {
-        mProfile = profile;
+            @NonNull Context context, @NonNull ModalDialogManager modalDialogManager) {
         mContext = context;
         mModalDialogManager = modalDialogManager;
     }
 
+    /**
+     * Shows an action confirmation dialog.
+     *
+     * @param titleResolver Resolves a title for the dialog.
+     * @param descriptionResolver Resolves a description for the dialog.
+     * @param positiveButtonRes The string to show for the positive button.
+     * @param supportStopShowing Whether to show a checkbox to permanently disable the dialog via a
+     *     pref.
+     * @param onResult The callback to invoke on exit of the dialog.
+     */
     public void show(
-            @StringRes int titleRes,
+            Function<Resources, String> titleResolver,
             Function<Resources, String> descriptionResolver,
             @StringRes int positiveButtonRes,
+            boolean supportStopShowing,
+            @NonNull ConfirmationDialogResult onResult) {
+        showWithCustomNegativeAction(
+                titleResolver,
+                descriptionResolver,
+                positiveButtonRes,
+                R.string.cancel,
+                supportStopShowing,
+                /* defaultDismissIsPositive= */ false,
+                onResult);
+    }
+
+    /**
+     * Shows an action confirmation dialog with custom negative behavior.
+     *
+     * @param titleResolver Resolves a title for the dialog.
+     * @param descriptionResolver Resolves a description for the dialog.
+     * @param positiveButtonRes The string to show for the positive button.
+     * @param negativeButtonRes The string to show for the negative button.
+     * @param supportStopShowing Whether to show a checkbox to permanently disable the dialog via a
+     *     pref.
+     * @param defaultDismissIsPositive Whether a default dismissal by something other than a button
+     *     is treated as positive instead of a negative.
+     * @param onResult The callback to invoke on exit of the dialog.
+     */
+    public void showWithCustomNegativeAction(
+            Function<Resources, String> titleResolver,
+            Function<Resources, String> descriptionResolver,
+            @StringRes int positiveButtonRes,
+            @StringRes int negativeButtonRes,
+            boolean supportStopShowing,
+            boolean defaultDismissIsPositive,
             @NonNull ConfirmationDialogResult onResult) {
         Resources resources = mContext.getResources();
+
         View customView =
                 LayoutInflater.from(mContext).inflate(R.layout.action_confirmation_dialog, null);
         TextView descriptionTextView = customView.findViewById(R.id.description_text_view);
         CheckBox stopShowingCheckBox = customView.findViewById(R.id.stop_showing_check_box);
+        stopShowingCheckBox.setVisibility(supportStopShowing ? View.VISIBLE : View.GONE);
 
         String descriptionText = descriptionResolver.apply(resources);
         descriptionTextView.setText(descriptionText);
 
-        Callback<Boolean> onDismissWhetherPositive =
-                (isPositive) -> {
-                    // Only remember to stop showing on the positive case. Otherwise the user may
-                    // have just wanted to cancel.
-                    boolean shouldStopShowing = isPositive && stopShowingCheckBox.isChecked();
+        Callback<Integer> onButtonClick =
+                (buttonClickResult) -> {
+                    boolean isPositive =
+                            defaultDismissIsPositive
+                                    ? buttonClickResult != ButtonClickResult.NEGATIVE
+                                    : buttonClickResult == ButtonClickResult.POSITIVE;
+                    // Only remember to stop showing when a button is clicked. Otherwise the user
+                    // may have just wanted to cancel.
+                    boolean shouldStopShowing =
+                            buttonClickResult != ButtonClickResult.NO_CLICK
+                                    && stopShowingCheckBox.isChecked();
                     onResult.onDismiss(isPositive, shouldStopShowing);
                 };
         ModalDialogProperties.Controller dialogController =
-                new WasPositiveController(mModalDialogManager, onDismissWhetherPositive);
+                new StrictButtonPressController(mModalDialogManager, onButtonClick);
 
-        String titleText = resources.getString(titleRes);
+        String titleText = titleResolver.apply(resources);
         String positiveText = resources.getString(positiveButtonRes);
-        String negativeText = resources.getString(R.string.cancel);
+        String negativeText = resources.getString(negativeButtonRes);
 
         PropertyModel model =
                 new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)

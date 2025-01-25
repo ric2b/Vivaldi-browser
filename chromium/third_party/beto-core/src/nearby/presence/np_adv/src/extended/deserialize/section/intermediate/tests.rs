@@ -32,7 +32,7 @@ use crate::{
         },
         salt::{ShortV1Salt, SHORT_SALT_LEN},
         serialize::{AdvBuilder, AdvertisementType},
-        NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT, V1_ENCODING_ENCRYPTED_MIC_WITH_EXTENDED_SALT_AND_TOKEN,
+        NP_V1_ADV_MAX_SECTION_COUNT, V1_ENCODING_ENCRYPTED_MIC_WITH_EXTENDED_SALT_AND_TOKEN,
         V1_ENCODING_ENCRYPTED_MIC_WITH_SHORT_SALT_AND_TOKEN,
         V1_ENCODING_ENCRYPTED_SIGNATURE_WITH_EXTENDED_SALT_AND_TOKEN, V1_ENCODING_UNENCRYPTED,
         V1_IDENTITY_TOKEN_LEN,
@@ -92,7 +92,7 @@ mod happy_path {
     #[test]
     fn do_deserialize_max_number_of_public_sections() {
         let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-        for _ in 0..NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT {
+        for _ in 0..NP_V1_ADV_MAX_SECTION_COUNT {
             let mut section_builder =
                 adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
             section_builder
@@ -110,13 +110,13 @@ mod happy_path {
             panic!("incorrect header");
         };
         let sections = parse_sections(v1_header, remaining).unwrap();
-        assert_eq!(NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT, sections.len());
+        assert_eq!(NP_V1_ADV_MAX_SECTION_COUNT, sections.len());
     }
 
     #[test]
     fn max_number_encrypted_sections_mic() {
         let mut adv_body = vec![];
-        for _ in 0..NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT {
+        for _ in 0..NP_V1_ADV_MAX_SECTION_COUNT {
             let _ = add_mic_short_salt_section_to_adv(&mut adv_body);
         }
         let adv_header = V1AdvHeader::new(0x20);
@@ -126,7 +126,7 @@ mod happy_path {
     #[test]
     fn max_number_encrypted_sections_sig() {
         let mut adv_body = vec![];
-        for _ in 0..NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT {
+        for _ in 0..NP_V1_ADV_MAX_SECTION_COUNT {
             let _ = add_sig_encrpyted_section(&mut adv_body, 5, &[0x55; EXTENDED_SALT_LEN]);
         }
         let adv_header = V1AdvHeader::new(0x20);
@@ -346,26 +346,23 @@ mod error_condition {
         // 2 sections
         let mut adv_body = vec![];
 
-        // section 1 - plaintext - 9 bytes
-        adv_body.push(V1_ENCODING_UNENCRYPTED);
-        adv_body.push(6 + 3); // section len
-                              // de 1 byte header, type 5, len 5
-        adv_body.extend_from_slice(&[0x55, 0x01, 0x02, 0x03, 0x04, 0x05]);
-        // de 2 byte header, type 6, len 1
-        adv_body.extend_from_slice(&[0x81, 0x06, 0x01]);
-
-        // section 2 - plaintext - 10 bytes
-        adv_body.push(V1_ENCODING_UNENCRYPTED);
-        adv_body.push(6 + 3); // section len
-                              // de 1 byte header, type 5, len 5
-        adv_body.extend_from_slice(&[0x55, 0x01, 0x02, 0x03, 0x04, 0x05]);
-        // de 2 byte header, type 6, len 1
-        adv_body.extend_from_slice(&[0x81, 0x06, 0x01]);
+        for _ in 0..=NP_V1_ADV_MAX_SECTION_COUNT {
+            // section 1..=MAX+1 - plaintext - 11 bytes
+            adv_body.push(V1_ENCODING_UNENCRYPTED);
+            adv_body.push(6 + 3); // section len
+                                  // de 1 byte header, type 5, len 5
+            adv_body.extend_from_slice(&[0x55, 0x01, 0x02, 0x03, 0x04, 0x05]);
+            // de 2 byte header, type 6, len 1
+            adv_body.extend_from_slice(&[0x81, 0x06, 0x01]);
+        }
 
         let adv_header = V1AdvHeader::new(0x20);
 
         assert_eq!(
-            nom::Err::Error(error::Error { input: &adv_body[11..], code: error::ErrorKind::Eof }),
+            nom::Err::Error(error::Error {
+                input: &adv_body[(NP_V1_ADV_MAX_SECTION_COUNT * 11)..],
+                code: error::ErrorKind::Eof
+            }),
             parse_sections(adv_header, &adv_body).unwrap_err()
         );
     }
@@ -374,7 +371,7 @@ mod error_condition {
     fn parse_adv_too_many_encrypted() {
         // 3 sections
         let mut adv_body = vec![];
-        for _ in 0..NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT + 1 {
+        for _ in 0..NP_V1_ADV_MAX_SECTION_COUNT + 1 {
             let _ = add_mic_short_salt_section_to_adv(&mut adv_body);
         }
         let adv_header = V1AdvHeader::new(0x20);

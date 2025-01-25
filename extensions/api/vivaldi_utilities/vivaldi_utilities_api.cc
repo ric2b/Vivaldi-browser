@@ -190,8 +190,9 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
   event_router->RegisterObserver(
       this, vivaldi::utilities::OnDownloadManagerReady::kEventName);
 
-  base::PowerMonitor::AddPowerSuspendObserver(this);
-  base::PowerMonitor::AddPowerStateObserver(this);
+  auto* power_monitor = base::PowerMonitor::GetInstance();
+  power_monitor->AddPowerSuspendObserver(this);
+  power_monitor->AddPowerStateObserver(this);
 
   razer_chroma_handler_.reset(
       new RazerChromaHandler(Profile::FromBrowserContext(context)));
@@ -213,8 +214,9 @@ void VivaldiUtilitiesAPI::PostProfileSetup() {
 VivaldiUtilitiesAPI::~VivaldiUtilitiesAPI() {}
 
 void VivaldiUtilitiesAPI::Shutdown() {
-  base::PowerMonitor::RemovePowerStateObserver(this);
-  base::PowerMonitor::RemovePowerSuspendObserver(this);
+  auto* power_monitor = base::PowerMonitor::GetInstance();
+  power_monitor->RemovePowerStateObserver(this);
+  power_monitor->RemovePowerSuspendObserver(this);
 
   if (razer_chroma_handler_ && razer_chroma_handler_->IsAvailable()) {
     razer_chroma_handler_->Shutdown();
@@ -379,7 +381,8 @@ bool VivaldiUtilitiesAPI::SetRazerChromaColors(RazerChromaColors& colors) {
   return true;
 }
 
-void VivaldiUtilitiesAPI::OnPowerStateChange(bool on_battery_power) {
+void VivaldiUtilitiesAPI::OnBatteryPowerStatusChange(
+    base::PowerStateObserver::BatteryPowerStatus battery_power_status) {
   // Implement if needed
 }
 
@@ -939,7 +942,7 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
       std::string mime, charset, data;
       if (net::DataURL::Parse(url, &mime, &charset, &data)) {
         auto bytes = base::MakeRefCounted<base::RefCountedBytes>(
-            reinterpret_cast<const uint8_t*>(data.c_str()), data.size());
+            base::span(reinterpret_cast<const uint8_t*>(data.c_str()), data.size()));
         image_format_ = VivaldiImageStore::FindFormatForMimeType(mime);
         if (!image_format_) {
           return RespondNow(Error("invalid DataURL - unsupported mime type"));
@@ -1201,19 +1204,8 @@ void UtilitiesSetVivaldiAsDefaultBrowserFunction::
         shell_integration::DefaultWebClientState state) {
   namespace Results = vivaldi::utilities::SetVivaldiAsDefaultBrowser::Results;
 
-  if (state == shell_integration::IS_DEFAULT) {
-    Respond(ArgumentList(Results::Create(true)));
-  } else if (state == shell_integration::NOT_DEFAULT) {
-    if (shell_integration::CanSetAsDefaultBrowser() ==
-        shell_integration::SET_DEFAULT_NOT_ALLOWED) {
-    } else {
-      // Not default browser
-      Respond(ArgumentList(Results::Create(false)));
-    }
-  } else if (state == shell_integration::UNKNOWN_DEFAULT) {
-  } else {
-    return;  // Still processing.
-  }
+  Respond(
+      ArgumentList(Results::Create(state == shell_integration::IS_DEFAULT)));
 }
 
 ExtensionFunction::ResponseAction
@@ -1262,19 +1254,8 @@ void UtilitiesIsVivaldiDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
     shell_integration::DefaultWebClientState state) {
   namespace Results = vivaldi::utilities::IsVivaldiDefaultBrowser::Results;
 
-  if (state == shell_integration::IS_DEFAULT) {
-    Respond(ArgumentList(Results::Create(true)));
-  } else if (state == shell_integration::NOT_DEFAULT) {
-    if (shell_integration::CanSetAsDefaultBrowser() ==
-        shell_integration::SET_DEFAULT_NOT_ALLOWED) {
-    } else {
-      // Not default browser
-      Respond(ArgumentList(Results::Create(false)));
-    }
-  } else if (state == shell_integration::UNKNOWN_DEFAULT) {
-  } else {
-    return;  // Still processing.
-  }
+  Respond(
+      ArgumentList(Results::Create(state == shell_integration::IS_DEFAULT)));
 }
 
 ExtensionFunction::ResponseAction
@@ -2567,6 +2548,18 @@ ExtensionFunction::ResponseAction UtilitiesDownloadsDragFunction::Run() {
   }
 
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction UtilitiesHasCommandLineSwitchFunction::Run() {
+  namespace Results = vivaldi::utilities::HasCommandLineSwitch::Results;
+  using vivaldi::utilities::GetCommandLineValue::Params;
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+
+  return RespondNow(
+      ArgumentList(Results::Create(cmd_line.HasSwitch(params->value))));
 }
 
 }  // namespace extensions

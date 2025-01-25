@@ -11,6 +11,7 @@ import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.PackageUtils;
+import org.chromium.chrome.browser.access_loss.PasswordAccessLossWarningType;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.sync.SyncService;
 
@@ -73,14 +74,9 @@ public class PasswordManagerUtilBridge {
         return PasswordManagerUtilBridgeJni.get().areMinUpmRequirementsMet();
     }
 
-    /**
-     * Checks whether the UPM with sync only available in GMS Core is active for this client.
-     *
-     * @return True if UPM with sync only available in GMS Core is active, false otherwise.
-     */
-    public static boolean isUnifiedPasswordManagerSyncOnlyInGMSCoreEnabled() {
-        return PasswordManagerUtilBridgeJni.get()
-                .isUnifiedPasswordManagerSyncOnlyInGMSCoreEnabled();
+    public static @PasswordAccessLossWarningType int getPasswordAccessLossWarningType(
+            PrefService prefService) {
+        return PasswordManagerUtilBridgeJni.get().getPasswordAccessLossWarningType(prefService);
     }
 
     @NativeMethods
@@ -97,6 +93,7 @@ public class PasswordManagerUtilBridge {
 
         boolean areMinUpmRequirementsMet();
 
-        boolean isUnifiedPasswordManagerSyncOnlyInGMSCoreEnabled();
+        @PasswordAccessLossWarningType
+        int getPasswordAccessLossWarningType(@JniType("PrefService*") PrefService prefService);
     }
 }

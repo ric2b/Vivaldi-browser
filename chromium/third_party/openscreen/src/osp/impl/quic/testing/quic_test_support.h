@@ -12,8 +12,8 @@
 #include "osp/impl/quic/quic_client.h"
 #include "osp/impl/quic/quic_server.h"
 #include "osp/impl/quic/testing/fake_quic_connection_factory.h"
-#include "osp/public/message_demuxer.h"
 #include "osp/public/network_metrics.h"
+#include "osp/public/network_service_manager.h"
 #include "osp/public/protocol_connection_client.h"
 #include "osp/public/protocol_connection_server.h"
 #include "osp/public/protocol_connection_service_observer.h"
@@ -54,14 +54,21 @@ class FakeQuicBridge {
   const IPEndpoint kReceiverEndpoint{{192, 168, 1, 17}, 1234};
   const std::string kInstanceName{"test instance name"};
   const std::string kFingerprint{"test fringprint"};
+  const std::string kAuthToken{"test token"};
 
-  std::unique_ptr<MessageDemuxer> controller_demuxer;
-  std::unique_ptr<MessageDemuxer> receiver_demuxer;
-  std::unique_ptr<QuicClient> quic_client;
-  std::unique_ptr<QuicServer> quic_server;
-  std::unique_ptr<FakeQuicConnectionFactoryBridge> fake_bridge;
-  ::testing::NiceMock<MockServiceObserver> mock_client_observer;
-  ::testing::NiceMock<MockServiceObserver> mock_server_observer;
+  void CreateNetworkServiceManager(
+      std::unique_ptr<ServiceListener> service_listener,
+      std::unique_ptr<ServicePublisher> service_publisher);
+  QuicClient* GetQuicClient();
+  QuicServer* GetQuicServer();
+  MessageDemuxer& GetControllerDemuxer();
+  MessageDemuxer& GetReceiverDemuxer();
+  ::testing::NiceMock<MockServiceObserver>& mock_client_observer() {
+    return mock_client_observer_;
+  }
+  ::testing::NiceMock<MockServiceObserver>& mock_server_observer() {
+    return mock_server_observer_;
+  }
 
   void RunTasksUntilIdle();
 
@@ -69,8 +76,17 @@ class FakeQuicBridge {
   void PostClientPacket();
   void PostServerPacket();
   void PostPacketsUntilIdle();
-  FakeTaskRunner& task_runner_;
 
+  // Indicate if this is used together with a NetworkServiceManager. If true, it
+  // means QuicClient and QuicServer are owned by NetworkServiceManager.
+  // Otherwise, they are owned by this class.
+  bool use_network_service_manager_ = false;
+  FakeTaskRunner& task_runner_;
+  std::unique_ptr<QuicClient> quic_client_;
+  std::unique_ptr<QuicServer> quic_server_;
+  std::unique_ptr<FakeQuicConnectionFactoryBridge> fake_bridge_;
+  ::testing::NiceMock<MockServiceObserver> mock_client_observer_;
+  ::testing::NiceMock<MockServiceObserver> mock_server_observer_;
   std::unique_ptr<FakeUdpSocket> client_socket_;
   std::unique_ptr<FakeUdpSocket> server_socket_;
 };

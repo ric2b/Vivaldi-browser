@@ -1,11 +1,10 @@
+# SPDX-License-Identifier: 0BSD
+
 ###############################################################################
 #
 # Makefile to build XZ Utils using DJGPP
 #
 # Author: Lasse Collin
-#
-# This file has been put into the public domain.
-# You can do whatever you want with this file.
 #
 ###############################################################################
 
@@ -18,9 +17,7 @@ CPPFLAGS =
 CFLAGS = -g -Wall -Wextra -Wfatal-errors -march=i386 -mtune=i686 -O2
 LDFLAGS = -lemu
 
-# NOTE: -fgnu89-inline is needed on DJGPP 2.04 beta and GCC >= 4.3.0
-# because time.h uses GNU-style "extern inline".
-ALL_CFLAGS = -std=gnu99 -fgnu89-inline
+ALL_CFLAGS = -std=gnu99
 
 ALL_CPPFLAGS = \
 	-I. \
@@ -64,6 +61,7 @@ SRCS_C = \
 	../src/liblzma/common/block_header_encoder.c \
 	../src/liblzma/common/block_util.c \
 	../src/liblzma/common/common.c \
+	../src/liblzma/common/file_info.c \
 	../src/liblzma/common/filter_common.c \
 	../src/liblzma/common/filter_decoder.c \
 	../src/liblzma/common/filter_encoder.c \
@@ -74,11 +72,13 @@ SRCS_C = \
 	../src/liblzma/common/index_decoder.c \
 	../src/liblzma/common/index_encoder.c \
 	../src/liblzma/common/index_hash.c \
+	../src/liblzma/common/lzip_decoder.c \
 	../src/liblzma/common/stream_decoder.c \
 	../src/liblzma/common/stream_encoder.c \
 	../src/liblzma/common/stream_flags_common.c \
 	../src/liblzma/common/stream_flags_decoder.c \
 	../src/liblzma/common/stream_flags_encoder.c \
+	../src/liblzma/common/string_conversion.c \
 	../src/liblzma/common/vli_decoder.c \
 	../src/liblzma/common/vli_encoder.c \
 	../src/liblzma/common/vli_size.c \
@@ -98,6 +98,7 @@ SRCS_C = \
 	../src/liblzma/lzma/lzma_encoder_presets.c \
 	../src/liblzma/rangecoder/price_table.c \
 	../src/liblzma/simple/arm.c \
+	../src/liblzma/simple/arm64.c \
 	../src/liblzma/simple/armthumb.c \
 	../src/liblzma/simple/ia64.c \
 	../src/liblzma/simple/powerpc.c \
@@ -113,6 +114,7 @@ SRCS_C = \
 	../src/xz/list.c \
 	../src/xz/main.c \
 	../src/xz/message.c \
+	../src/xz/mytime.c \
 	../src/xz/options.c \
 	../src/xz/signals.c \
 	../src/xz/suffix.c \

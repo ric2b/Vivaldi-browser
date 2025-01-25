@@ -49,10 +49,9 @@ namespace autofill {
 namespace {
 
 AccessorySheetData::Builder PaymentMethodAccessorySheetDataBuilder() {
-  return AccessorySheetData::Builder(
-             AccessoryTabType::CREDIT_CARDS,
-             l10n_util::GetStringUTF16(
-                 IDS_MANUAL_FILLING_CREDIT_CARD_SHEET_TITLE))
+  return AccessorySheetData::Builder(AccessoryTabType::CREDIT_CARDS,
+                                     /*user_info_title=*/std::u16string(),
+                                     /*plus_address_title=*/std::u16string())
       .AppendFooterCommand(
           l10n_util::GetStringUTF16(
               IDS_MANUAL_FILLING_CREDIT_CARD_SHEET_ALL_ADDRESSES_LINK),
@@ -247,7 +246,7 @@ class PaymentMethodAccessoryControllerCardUnmaskTest
       }
       case CreditCard::RecordType::kFullServerCard:
         // Full server cards are never unmasked, so they are not tested.
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
   }
 
@@ -264,12 +263,12 @@ TEST_P(PaymentMethodAccessoryControllerCardUnmaskTest, CardUnmask) {
   ASSERT_TRUE(controller());
   controller()->RefreshSuggestions();
 
-  AccessorySheetField field(card.ObfuscatedNumberWithVisibleLastFourDigits(),
-                            /*text_to_fill=*/std::u16string(),
-                            card.ObfuscatedNumberWithVisibleLastFourDigits(),
-                            card.guid(),
-                            /*is_obfuscated=*/false,
-                            /*selectable=*/true);
+  AccessorySheetField field =
+      AccessorySheetField::Builder()
+          .SetDisplayText(card.ObfuscatedNumberWithVisibleLastFourDigits())
+          .SetId(card.guid())
+          .SetSelectable(true)
+          .Build();
 
   CreditCard card_to_unmask;
 
@@ -473,7 +472,8 @@ TEST_F(PaymentMethodAccessoryControllerTest,
   data_manager_.test_payments_data_manager().AddAutofillOfferData(
       promo_code_expired);
   AccessorySheetData result(autofill::AccessoryTabType::CREDIT_CARDS,
-                            std::u16string());
+                            /*user_info_title=*/std::u16string(),
+                            /*plus_address_title=*/std::u16string());
 
   EXPECT_CALL(filling_source_observer_,
               Run(controller(), IsFillingSourceAvailable(true)));
@@ -545,12 +545,12 @@ TEST_F(PaymentMethodAccessoryControllerTest, FetchLocalIban) {
   ASSERT_TRUE(controller());
   controller()->RefreshSuggestions();
 
-  AccessorySheetField field(iban.GetIdentifierStringForAutofillDisplay(),
-                            /*text_to_fill=*/iban.value(),
-                            iban.GetIdentifierStringForAutofillDisplay(),
-                            /*id=*/"",
-                            /*is_obfuscated=*/false,
-                            /*selectable=*/true);
+  AccessorySheetField field =
+      AccessorySheetField::Builder()
+          .SetDisplayText(iban.GetIdentifierStringForAutofillDisplay())
+          .SetTextToFill(iban.value())
+          .SetSelectable(true)
+          .Build();
 
   content::RenderFrameHost* rfh = web_contents()->GetFocusedFrame();
   ASSERT_TRUE(rfh);
@@ -573,12 +573,13 @@ TEST_F(PaymentMethodAccessoryControllerTest, FetchServerIban) {
   ASSERT_TRUE(controller());
   controller()->RefreshSuggestions();
 
-  AccessorySheetField field(iban.GetIdentifierStringForAutofillDisplay(),
-                            /*text_to_fill=*/iban.value(),
-                            iban.GetIdentifierStringForAutofillDisplay(),
-                            /*id=*/base::NumberToString(iban.instrument_id()),
-                            /*is_obfuscated=*/false,
-                            /*selectable=*/true);
+  AccessorySheetField field =
+      AccessorySheetField::Builder()
+          .SetDisplayText(iban.GetIdentifierStringForAutofillDisplay())
+          .SetTextToFill(iban.value())
+          .SetId(base::NumberToString(iban.instrument_id()))
+          .SetSelectable(true)
+          .Build();
 
   content::RenderFrameHost* rfh = web_contents()->GetFocusedFrame();
   ASSERT_TRUE(rfh);

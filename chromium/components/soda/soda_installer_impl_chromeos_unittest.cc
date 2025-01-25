@@ -34,8 +34,10 @@ namespace speech {
 class SodaInstallerImplChromeOSTest : public testing::Test {
  protected:
   void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        ash::features::kOnDeviceSpeechRecognition);
+    // TODO: b/367128558 - Tweak the test logic before removing the Conch flag.
+    scoped_feature_list_.InitWithFeatures(
+        /* enabled_features= */ {ash::features::kOnDeviceSpeechRecognition},
+        /* disabled_features= */ {ash::features::kConch});
     soda_installer_impl_ = std::make_unique<SodaInstallerImplChromeOS>();
     pref_service_ = std::make_unique<TestingPrefServiceSimple>();
     soda_installer_impl_->RegisterLocalStatePrefs(pref_service_->registry());
@@ -158,17 +160,50 @@ TEST_F(SodaInstallerImplChromeOSTest, IsDownloading) {
   ASSERT_FALSE(IsSodaDownloading());
 }
 
-TEST_F(SodaInstallerImplChromeOSTest, OnlyEnglishAvailable) {
-  std::vector<std::string> actual_langs =
-      GetInstance()->GetAvailableLanguages();
-  EXPECT_THAT(actual_langs, ::testing::UnorderedElementsAre("en-US"));
-}
-
 TEST_F(SodaInstallerImplChromeOSTest, SubSetCorrect) {
   std::vector<std::string> actual_langs =
       GetInstance()->GetAvailableLanguages();
-  auto expected_available_langs = speech::GetLiveCaptionEnabledLanguages();
-  EXPECT_THAT(actual_langs, ::testing::IsSubsetOf(expected_available_langs));
+  auto expected_livecaption_langs =
+      GetInstance()->GetLiveCaptionEnabledLanguages();
+  EXPECT_THAT(expected_livecaption_langs, ::testing::IsSubsetOf(actual_langs));
+}
+
+TEST_F(SodaInstallerImplChromeOSTest, ConchAddOns) {
+  base::test::ScopedFeatureList scoped_feature_list_internal;
+  scoped_feature_list_internal.InitWithFeatures(
+      {::speech::kCrosSodaConchLanguages,
+       ::speech::kFeatureManagementCrosSodaConchLanguages},
+      {});
+  auto expected_livecaption_langs =
+      GetInstance()->GetLiveCaptionEnabledLanguages();
+  EXPECT_THAT(expected_livecaption_langs,
+              ::testing::IsSupersetOf({"da-DK", "nb-NO", "nl-NL", "sv-SE"}));
+}
+
+TEST_F(SodaInstallerImplChromeOSTest, ConchInLiveCaptionFullList) {
+  base::test::ScopedFeatureList scoped_feature_list_internal;
+  scoped_feature_list_internal.InitWithFeatures(
+      {::speech::kCrosSodaConchLanguages, ::speech::kCrosExpandSodaLanguages,
+       ::speech::kFeatureManagementCrosSodaConchLanguages},
+      {});
+  soda_installer_impl_.reset();
+  soda_installer_impl_ = std::make_unique<SodaInstallerImplChromeOS>();
+  std::vector<std::string> enabled_and_available_languages;
+  std::vector<base::Value::Dict> available_language_packs;
+  {
+    auto enabled_languages = GetInstance()->GetLiveCaptionEnabledLanguages();
+    auto available_languages = GetInstance()->GetAvailableLanguages();
+    auto available_languages_set = std::unordered_set<std::string>(
+        available_languages.begin(), available_languages.end());
+    for (const auto& enabled_language : enabled_languages) {
+      if (available_languages_set.find(enabled_language) !=
+          available_languages_set.end()) {
+        enabled_and_available_languages.push_back(enabled_language);
+      }
+    }
+  }
+  EXPECT_THAT(enabled_and_available_languages,
+              ::testing::IsSupersetOf({"da-DK", "nb-NO", "nl-NL", "sv-SE"}));
 }
 
 TEST_F(SodaInstallerImplChromeOSTest, MultipleLangsAvailableInExperiment) {

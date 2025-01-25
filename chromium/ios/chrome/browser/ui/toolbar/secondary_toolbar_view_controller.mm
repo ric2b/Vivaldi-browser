@@ -107,6 +107,16 @@ using vivaldi::IsVivaldiRunning;
       [self verticalMarginForLocationBarForFullscreenProgress:progress];
 }
 
+#pragma mark - SecondaryToolbarConsumer
+
+- (void)makeTranslucent {
+  [self.view makeTranslucent];
+}
+
+- (void)makeOpaque {
+  [self.view makeOpaque];
+}
+
 #pragma mark - UIKeyboardNotification
 
 - (void)keyboardWillShow:(NSNotification*)notification {
@@ -217,16 +227,6 @@ using vivaldi::IsVivaldiRunning;
     [self removeFromKeyboard];
     [self.view layoutIfNeeded];
   }
-}
-
-#pragma mark - SecondaryToolbarConsumer
-
-- (void)makeTranslucent {
-  [self.view makeTranslucent];
-}
-
-- (void)makeOpaque {
-  [self.view makeOpaque];
 }
 
 #pragma mark - Vivaldi

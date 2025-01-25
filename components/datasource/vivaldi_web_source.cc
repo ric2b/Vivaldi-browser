@@ -42,11 +42,12 @@ void VivaldiWebSource::StartDataRequest(
 
   ExtractRequestTypeAndData(path, type, data);
 
+  std::vector<std::string> out;
+  out.push_back(kHtmlHeader);
+
   if (type == kStartpageType) {
     // Takes urls of this format:
     // chrome://vivaldi-webui/startpage?section=bookmarks&background-color=#AABBCC
-    std::vector<std::string> out;
-    out.push_back(kHtmlHeader);
     size_t pos = data.find(kBackgroundColorCss);
     if (pos != std::string::npos) {
       color = data.substr(sizeof(kBackgroundColorCss) + pos);
@@ -57,16 +58,16 @@ void VivaldiWebSource::StartDataRequest(
       out.push_back(css);
       out.push_back(kHtmlStyleEnd);
     }
-    out.push_back(kHtmlBody);
-    out.push_back(kHtmlFooter);
-
-    std::string out_html = base::StrCat(out);
-    scoped_refptr<base::RefCountedMemory> out_html_data(
-      new base::RefCountedString(out_html));
-    std::move(callback).Run(out_html_data);
-  } else {
-    NOTREACHED();
   }
+  // else just a blank page (should "never" happen)
+
+  out.push_back(kHtmlBody);
+  out.push_back(kHtmlFooter);
+
+  std::string out_html = base::StrCat(out);
+  scoped_refptr<base::RefCountedMemory> out_html_data(
+      new base::RefCountedString(out_html));
+  std::move(callback).Run(out_html_data);
 }
 
 // In a url such as chrome://vivaldi-data/desktop-image/0 type is

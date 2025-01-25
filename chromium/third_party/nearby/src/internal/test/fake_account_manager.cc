@@ -16,6 +16,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
@@ -46,12 +47,28 @@ void FakeAccountManager::Login(
   login_failure_callback(absl::InternalError("No account."));
 }
 
+void FakeAccountManager::Login(
+    absl::string_view client_id, absl::string_view client_secret,
+    absl::AnyInvocable<void(Account)> login_success_callback,
+    absl::AnyInvocable<void(absl::Status)> login_failure_callback) {
+  if (account_.has_value()) {
+    UpdateCurrentUser(account_->id);
+    NotifyLogin(account_->id);
+    // Invoke callback after all operations have been performed since test cases
+    // may rely on the callback for synchronization.
+    login_success_callback(*account_);
+    return;
+  }
+
+  login_failure_callback(absl::InternalError("No account."));
+}
+
 void FakeAccountManager::Logout(
     absl::AnyInvocable<void(absl::Status)> logout_callback) {
   if (is_logout_success_) {
     std::string account_id = account_->id;
     SetAccount(std::nullopt);
-    NotifyLogout(account_id);
+    NotifyLogout(account_id, /*credential_error=*/false);
     // Invoke callback after all operations have been performed since test cases
     // may rely on the callback for synchronization.
     logout_callback(absl::OkStatus());
@@ -71,6 +88,11 @@ bool FakeAccountManager::GetAccessToken(
   }
   success_callback(account_id);
   return true;
+}
+
+std::pair<std::string, std::string>
+FakeAccountManager::GetOAuthClientCredential() {
+  return {"", ""};
 }
 
 void FakeAccountManager::SetAccount(std::optional<Account> account) {
@@ -107,9 +129,10 @@ void FakeAccountManager::NotifyLogin(absl::string_view account_id) {
   }
 }
 
-void FakeAccountManager::NotifyLogout(absl::string_view account_id) {
+void FakeAccountManager::NotifyLogout(absl::string_view account_id,
+                                      bool credential_error) {
   for (const auto& observer : observers_.GetObservers()) {
-    observer->OnLogoutSucceeded(account_id);
+    observer->OnLogoutSucceeded(account_id, credential_error);
   }
 }
 

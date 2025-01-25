@@ -32,8 +32,6 @@ class VivaldiSyncServiceAndroid : public syncer::SyncServiceObserver {
 
   void ClearServerData(JNIEnv* env);
 
-  void StopAndClear(JNIEnv* env);
-
   jboolean HasServerError(JNIEnv* env);
 
   jboolean IsSetupInProgress(JNIEnv* env);
@@ -51,7 +49,7 @@ class VivaldiSyncServiceAndroid : public syncer::SyncServiceObserver {
   void OnSyncCycleCompleted(syncer::SyncService* sync) override;
 
  private:
-  raw_ptr<vivaldi::VivaldiSyncServiceImpl> sync_service_;
+  raw_ptr<syncer::SyncService> sync_service_;
 
   void SendCycleData();
 

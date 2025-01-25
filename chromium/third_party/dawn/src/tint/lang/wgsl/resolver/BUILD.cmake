@@ -85,6 +85,10 @@ tint_target_add_dependencies(tint_lang_wgsl_resolver lib
   tint_utils_traits
 )
 
+tint_target_add_external_dependencies(tint_lang_wgsl_resolver lib
+  "src_utils"
+)
+
 ################################################################################
 # Target:    tint_lang_wgsl_resolver_test
 # Kind:      test
@@ -106,7 +110,7 @@ tint_add_target(tint_lang_wgsl_resolver_test test
   lang/wgsl/resolver/builtins_validation_test.cc
   lang/wgsl/resolver/call_test.cc
   lang/wgsl/resolver/call_validation_test.cc
-  lang/wgsl/resolver/compatibility_mode_test.cc
+  lang/wgsl/resolver/clip_distances_extension_test.cc
   lang/wgsl/resolver/compound_assignment_validation_test.cc
   lang/wgsl/resolver/compound_statement_test.cc
   lang/wgsl/resolver/const_assert_test.cc
@@ -189,6 +193,7 @@ tint_target_add_dependencies(tint_lang_wgsl_resolver_test test
 
 tint_target_add_external_dependencies(tint_lang_wgsl_resolver_test test
   "gtest"
+  "src_utils"
 )
 
 if(TINT_BUILD_WGSL_READER)

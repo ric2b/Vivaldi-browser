@@ -52,7 +52,7 @@ const DeviceInfo* LocalDeviceInfoProviderImpl::GetLocalDeviceInfo() const {
     local_device_info_->set_fcm_registration_token(*fcm_token);
   }
 
-  const std::optional<ModelTypeSet> interested_data_types =
+  const std::optional<DataTypeSet> interested_data_types =
       sync_client_->GetInterestedDataTypes();
   if (interested_data_types) {
     local_device_info_->set_interested_data_types(*interested_data_types);
@@ -71,7 +71,7 @@ const DeviceInfo* LocalDeviceInfoProviderImpl::GetLocalDeviceInfo() const {
                      &paask_status)) {
     local_device_info_->set_paask_info(std::move(*info));
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   // This check is required to ensure user's who toggle UMA have their
@@ -84,6 +84,12 @@ const DeviceInfo* LocalDeviceInfoProviderImpl::GetLocalDeviceInfo() const {
 
   local_device_info_->set_vivaldi_total_synced_files_size(
       sync_client_->VivaldiGetSyncedFileStorageSize());
+
+  if (!session_name_override_callback_.is_null()) {
+    std::string session_name_override = session_name_override_callback_.Run();
+    if (!session_name_override.empty())
+      local_device_info_->set_client_name(session_name_override);
+  }
 
   return local_device_info_.get();
 }
@@ -119,7 +125,7 @@ void LocalDeviceInfoProviderImpl::Initialize(
   // initialise the object. |GetLocalDeviceInfo| will update them if they have
   // become ready by then.
   std::string last_fcm_registration_token;
-  ModelTypeSet last_interested_data_types;
+  DataTypeSet last_interested_data_types;
   std::optional<DeviceInfo::PhoneAsASecurityKeyInfo> paask_info;
   std::optional<base::Time> floating_workspace_last_signin_timestamp;
   if (device_info_restored_from_store) {
@@ -133,14 +139,10 @@ void LocalDeviceInfoProviderImpl::Initialize(
             ->floating_workspace_last_signin_timestamp();
   }
 
-  std::string session_name_override;
-  if (!session_name_override_callback_.is_null())
-    session_name_override = session_name_override_callback_.Run();
-
   // The local device doesn't have a last updated timestamps. It will be set in
   // the specifics when it will be synced up.
   local_device_info_ = std::make_unique<DeviceInfo>(
-      cache_guid, session_name_override.empty()? client_name : session_name_override, version_, MakeUserAgentForSync(channel_),
+      cache_guid, client_name, version_, MakeUserAgentForSync(channel_),
       GetLocalDeviceType(), GetLocalDeviceOSType(), GetLocalDeviceFormFactor(),
       sync_client_->GetSigninScopedDeviceId(), manufacturer_name, model_name,
       full_hardware_class,

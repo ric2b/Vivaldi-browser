@@ -170,7 +170,28 @@ enum class BuiltinFn : uint8_t {
     kAtomicExchange,
     kAtomicCompareExchangeWeak,
     kSubgroupBallot,
+    kSubgroupElect,
     kSubgroupBroadcast,
+    kSubgroupBroadcastFirst,
+    kSubgroupShuffle,
+    kSubgroupShuffleXor,
+    kSubgroupShuffleUp,
+    kSubgroupShuffleDown,
+    kSubgroupAdd,
+    kSubgroupExclusiveAdd,
+    kSubgroupMul,
+    kSubgroupExclusiveMul,
+    kSubgroupAnd,
+    kSubgroupOr,
+    kSubgroupXor,
+    kSubgroupMin,
+    kSubgroupMax,
+    kSubgroupAll,
+    kSubgroupAny,
+    kQuadBroadcast,
+    kQuadSwapX,
+    kQuadSwapY,
+    kQuadSwapDiagonal,
     kTintMaterialize,
     kNone,
 };
@@ -317,7 +338,28 @@ constexpr BuiltinFn kBuiltinFns[] = {
     BuiltinFn::kAtomicExchange,
     BuiltinFn::kAtomicCompareExchangeWeak,
     BuiltinFn::kSubgroupBallot,
+    BuiltinFn::kSubgroupElect,
     BuiltinFn::kSubgroupBroadcast,
+    BuiltinFn::kSubgroupBroadcastFirst,
+    BuiltinFn::kSubgroupShuffle,
+    BuiltinFn::kSubgroupShuffleXor,
+    BuiltinFn::kSubgroupShuffleUp,
+    BuiltinFn::kSubgroupShuffleDown,
+    BuiltinFn::kSubgroupAdd,
+    BuiltinFn::kSubgroupExclusiveAdd,
+    BuiltinFn::kSubgroupMul,
+    BuiltinFn::kSubgroupExclusiveMul,
+    BuiltinFn::kSubgroupAnd,
+    BuiltinFn::kSubgroupOr,
+    BuiltinFn::kSubgroupXor,
+    BuiltinFn::kSubgroupMin,
+    BuiltinFn::kSubgroupMax,
+    BuiltinFn::kSubgroupAll,
+    BuiltinFn::kSubgroupAny,
+    BuiltinFn::kQuadBroadcast,
+    BuiltinFn::kQuadSwapX,
+    BuiltinFn::kQuadSwapY,
+    BuiltinFn::kQuadSwapDiagonal,
     BuiltinFn::kTintMaterialize,
 };
 
@@ -446,7 +488,28 @@ constexpr const char* kBuiltinFnStrings[] = {
     "atomicExchange",
     "atomicCompareExchangeWeak",
     "subgroupBallot",
+    "subgroupElect",
     "subgroupBroadcast",
+    "subgroupBroadcastFirst",
+    "subgroupShuffle",
+    "subgroupShuffleXor",
+    "subgroupShuffleUp",
+    "subgroupShuffleDown",
+    "subgroupAdd",
+    "subgroupExclusiveAdd",
+    "subgroupMul",
+    "subgroupExclusiveMul",
+    "subgroupAnd",
+    "subgroupOr",
+    "subgroupXor",
+    "subgroupMin",
+    "subgroupMax",
+    "subgroupAll",
+    "subgroupAny",
+    "quadBroadcast",
+    "quadSwapX",
+    "quadSwapY",
+    "quadSwapDiagonal",
     "__tint_materialize",
 };
 
@@ -506,6 +569,11 @@ bool IsPacked4x8IntegerDotProductBuiltin(BuiltinFn f);
 /// @param f the builtin type
 /// @returns true if the given `f` is a subgroup builtin
 bool IsSubgroup(BuiltinFn f);
+
+/// Determines if the given `f` is a quadSwap* builtin.
+/// @param f the builtin type
+/// @returns true if the given `f` is a quadSwap* builtin
+bool IsQuadSwap(BuiltinFn f);
 
 /// Determines if the given `f` may have side-effects (i.e. writes to at least one of its inputs)
 /// @returns true if intrinsic may have side-effects

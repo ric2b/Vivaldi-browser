@@ -27,6 +27,7 @@
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/payments/account_info_getter.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
+#include "components/autofill/core/browser/ui/autofill_image_fetcher_base.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service_observer.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -43,7 +44,6 @@ class SyncService;
 
 namespace autofill {
 
-class AutofillImageFetcherBase;
 class AutofillOptimizationGuide;
 class BankAccount;
 struct CreditCardArtImage;
@@ -98,7 +98,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   void RemoveObserver(Observer* obs) { observers_.RemoveObserver(obs); }
 
   // AutofillWebDataServiceObserverOnUISequence:
-  void OnAutofillChangedBySync(syncer::ModelType model_type) override;
+  void OnAutofillChangedBySync(syncer::DataType data_type) override;
 
   // WebDataServiceConsumer:
   void OnWebDataServiceRequestDone(
@@ -195,7 +195,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Returns true if the user has at least 1 masked bank account.
   bool HasMaskedBankAccounts() const;
   // Returns the masked bank accounts that can be suggested to the user.
-  std::vector<BankAccount> GetMaskedBankAccounts() const;
+  base::span<const BankAccount> GetMaskedBankAccounts() const;
 
   // Returns the Payments customer data. Returns nullptr if no data is present.
   virtual PaymentsCustomerData* GetPaymentsCustomerData() const;
@@ -224,12 +224,15 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
       const GURL& card_art_url) const;
 
   // Returns all virtual card usage data linked to the credit card.
-  virtual std::vector<VirtualCardUsageData*> GetVirtualCardUsageData() const;
+  virtual base::span<const VirtualCardUsageData> GetVirtualCardUsageData()
+      const;
 
   // Returns the credit cards to suggest to the user. Those have been deduped
   // and ordered by frecency with the expired cards put at the end of the
-  // vector.
-  std::vector<CreditCard*> GetCreditCardsToSuggest() const;
+  // vector. `should_use_legacy_algorithm` indicates if we should rank credit
+  // cards using the legacy ranking algorithm.
+  std::vector<CreditCard*> GetCreditCardsToSuggest(
+      bool should_use_legacy_algorithm = false) const;
 
   // Adds `iban` to the web database as a local IBAN. Returns the guid of
   // `iban` if the add is successful, or an empty string otherwise.
@@ -292,6 +295,11 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Removes the credit card or IBAN identified by `guid`.
   // Returns true if something was removed.
   virtual bool RemoveByGUID(const std::string& guid);
+
+  // Removes all local credit cards and CVCs modified on or after `delete_begin`
+  // and strictly before `delete_end`. Used for browsing data deletion purposes.
+  // TODO(crbug.com/310301981): Consider local IBANs?
+  void RemoveLocalDataModifiedBetween(base::Time begin, base::Time end);
 
   // Called to indicate `credit_card` was used (to fill in a form).
   // Updates the database accordingly.
@@ -388,7 +396,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
 
   // Returns whether a row to give the option of showing cards from the user's
   // account should be shown in the dropdown.
-  bool ShouldShowCardsFromAccountOption() const;
+  virtual bool ShouldShowCardsFromAccountOption() const;
 
   // Triggered when a user selects the option to see cards from their account.
   // Records the sync transport consent.
@@ -509,8 +517,13 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // to the query handle.
   void CancelPendingServerQuery(WebDataServiceBase::Handle* handle);
 
-  // Asks `image_fetcher_` to fetch images.
-  void FetchImagesForURLs(base::span<const GURL> updated_urls) const;
+  // Asks `image_fetcher_` to fetch images. Each image represented by an url in
+  // the list `updated_urls` is downloaded in all the sizes specified by
+  // `image_sizes`. The total # of images downloaded is `updated_urls`.size() x
+  // `image_sizes`.size().
+  void FetchImagesForURLs(
+      base::span<const GURL> updated_urls,
+      base::span<const AutofillImageFetcherBase::ImageSize> image_sizes) const;
 
   // The first time this is called, logs a UMA metrics about the user's credit
   // card, offer and IBAN.
@@ -532,7 +545,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   std::vector<std::unique_ptr<Iban>> server_ibans_;
 
   // Cached versions of the masked bank accounts.
-  std::vector<std::unique_ptr<BankAccount>> masked_bank_accounts_;
+  std::vector<BankAccount> masked_bank_accounts_;
 
   // Cached version of the CreditCardCloudTokenData obtained from the database.
   std::vector<std::unique_ptr<CreditCardCloudTokenData>>
@@ -544,8 +557,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
 
   // Virtual card usage data, which contains information regarding usages of a
   // virtual card related to a specific merchant website.
-  std::vector<std::unique_ptr<VirtualCardUsageData>>
-      autofill_virtual_card_usage_data_;
+  std::vector<VirtualCardUsageData> autofill_virtual_card_usage_data_;
 
   // The customized card art images for the URL.
   std::map<GURL, std::unique_ptr<gfx::Image>> credit_card_art_images_;

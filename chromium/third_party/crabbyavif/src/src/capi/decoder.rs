@@ -139,7 +139,7 @@ pub unsafe extern "C" fn crabby_avifDecoderSetIOMemory(
     size: usize,
 ) -> avifResult {
     let rust_decoder = unsafe { &mut (*decoder).rust_decoder };
-    to_avifResult(&rust_decoder.set_io_raw(data, size))
+    to_avifResult(unsafe { &rust_decoder.set_io_raw(data, size) })
 }
 
 #[no_mangle]
@@ -192,6 +192,7 @@ impl From<&avifDecoder> for Settings {
             image_size_limit: decoder.imageSizeLimit,
             image_dimension_limit: decoder.imageDimensionLimit,
             image_count_limit: decoder.imageCountLimit,
+            max_threads: u32::try_from(decoder.maxThreads).unwrap_or(0),
         }
     }
 }
@@ -208,7 +209,7 @@ fn rust_decoder_to_avifDecoder(src: &Decoder, dst: &mut avifDecoder) {
 
     dst.imageTiming = src.image_timing();
     dst.imageCount = src.image_count() as i32;
-    dst.imageIndex = src.image_index() as i32;
+    dst.imageIndex = src.image_index();
     dst.repetitionCount = match src.repetition_count() {
         RepetitionCount::Unknown => AVIF_REPETITION_COUNT_UNKNOWN,
         RepetitionCount::Infinite => AVIF_REPETITION_COUNT_INFINITE,
@@ -261,11 +262,7 @@ pub unsafe extern "C" fn crabby_avifDecoderNextImage(decoder: *mut avifDecoder) 
             if rust_decoder.settings.allow_incremental
                 && matches!(res.as_ref().err().unwrap(), AvifError::WaitingOnIo)
             {
-                if previous_decoded_row_count != rust_decoder.decoded_row_count() {
-                    early_return = false;
-                } else {
-                    early_return = true;
-                }
+                early_return = previous_decoded_row_count == rust_decoder.decoded_row_count();
             }
         }
         if early_return {
@@ -298,10 +295,8 @@ pub unsafe extern "C" fn crabby_avifDecoderNthImage(
             {
                 if image_index != frameIndex {
                     early_return = false;
-                } else if previous_decoded_row_count != rust_decoder.decoded_row_count() {
-                    early_return = false;
                 } else {
-                    early_return = true;
+                    early_return = previous_decoded_row_count == rust_decoder.decoded_row_count();
                 }
             }
         }

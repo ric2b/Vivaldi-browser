@@ -31,8 +31,6 @@ import org.chromium.chrome.browser.privacy_guide.PrivacyGuideUtils.CustomTabInte
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ProfileDependentSetting;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
-import org.chromium.components.browser_ui.settings.FragmentSettingsLauncher;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.ui.widget.ButtonCompat;
 
@@ -46,9 +44,7 @@ import java.util.List;
  * Fragment containing the Privacy Guide (a walk-through of the most important privacy settings).
  */
 public class PrivacyGuideFragment extends Fragment
-        implements BackPressHandler,
-                ProfileDependentSetting,
-                FragmentSettingsLauncher {
+        implements BackPressHandler, ProfileDependentSetting {
     /**
      * The types of fragments supported. Each fragment corresponds to a step in the privacy guide.
      */
@@ -61,8 +57,8 @@ public class PrivacyGuideFragment extends Fragment
         FragmentType.COOKIES,
         FragmentType.SEARCH_SUGGESTIONS,
         FragmentType.PRELOAD,
+        FragmentType.AD_TOPICS,
         FragmentType.DONE,
-        FragmentType.AD_TOPICS
     })
     @interface FragmentType {
         int WELCOME = 0;
@@ -72,9 +68,9 @@ public class PrivacyGuideFragment extends Fragment
         int COOKIES = 4;
         int SEARCH_SUGGESTIONS = 5;
         int PRELOAD = 6;
-        int DONE = 7;
-        int AD_TOPICS = 8;
-        int MAX_VALUE = AD_TOPICS;
+        int AD_TOPICS = 7;
+        int DONE = 8;
+        int MAX_VALUE = DONE;
     }
 
     public static final List<Integer> ALL_FRAGMENT_TYPE_ORDER =
@@ -85,6 +81,7 @@ public class PrivacyGuideFragment extends Fragment
                             FragmentType.HISTORY_SYNC,
                             FragmentType.SAFE_BROWSING,
                             FragmentType.COOKIES,
+                            FragmentType.AD_TOPICS,
                             FragmentType.DONE));
     public static final List<Integer> ALL_FRAGMENT_TYPE_ORDER_PG3 =
             Collections.unmodifiableList(
@@ -102,7 +99,6 @@ public class PrivacyGuideFragment extends Fragment
     private OneshotSupplier<BottomSheetController> mBottomSheetControllerSupplier;
     private ObservableSupplierImpl<Boolean> mHandleBackPressChangedSupplier;
     private CustomTabIntentHelper mCustomTabHelper;
-    private SettingsLauncher mSettingsLauncher;
     private PrivacyGuidePagerAdapter mPagerAdapter;
     private View mView;
     private ViewPager2 mViewPager;
@@ -285,7 +281,6 @@ public class PrivacyGuideFragment extends Fragment
         if (childFragment instanceof DoneFragment) {
             DoneFragment doneFragment = (DoneFragment) childFragment;
             doneFragment.setCustomTabIntentHelper(mCustomTabHelper);
-            doneFragment.setSettingsLauncher(mSettingsLauncher);
         }
     }
 
@@ -333,11 +328,6 @@ public class PrivacyGuideFragment extends Fragment
 
     public void setCustomTabIntentHelper(CustomTabIntentHelper tabHelper) {
         mCustomTabHelper = tabHelper;
-    }
-
-    @Override
-    public void setSettingsLauncher(SettingsLauncher settingsLauncher) {
-        mSettingsLauncher = settingsLauncher;
     }
 
     void setPrivacyGuideMetricsDelegateForTesting(

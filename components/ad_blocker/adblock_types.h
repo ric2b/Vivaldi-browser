@@ -60,6 +60,8 @@ enum class FetchResult {
 struct RuleSourceSettings {
   bool allow_abp_snippets = false;
   bool naked_hostname_is_pure_host = true;
+  bool use_whole_document_allow = true;
+  bool allow_attribution_tracker_rules = false;
 };
 
 class RuleSourceCore {

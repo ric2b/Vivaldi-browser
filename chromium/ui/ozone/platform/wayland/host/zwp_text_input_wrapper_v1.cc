@@ -626,9 +626,8 @@ void ZWPTextInputWrapperV1::OnInsertImageWithLargeURL(
     base::StrAppend(&src, {";charset=", charset});
   }
   base::StrAppend(&src, {";base64,"});
-  base::Base64EncodeAppend(
-      base::make_span((const unsigned char*)(raw_data.data()), raw_data.size()),
-      &src);
+
+  base::Base64EncodeAppend(base::as_byte_span(raw_data), &src);
 
   // Dispatch image insertion request.
   auto* self = static_cast<ZWPTextInputWrapperV1*>(data);

@@ -42,6 +42,7 @@ static_library("signin") {
 
   public_deps = [
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/profiles:profile",
     "//chromeos/ash/components/login/auth",
     "//chromeos/ash/components/login/auth/public:authpublic",
@@ -94,7 +95,6 @@ static_library("signin") {
   allow_circular_includes_from = [
     "//chrome/browser/ash/login",
     "//chrome/browser/ash/login/session",
-    "//chrome/browser/ash/profiles",
   ]
 }
 
@@ -116,11 +116,13 @@ source_set("browser_tests") {
     "//base/test:test_support",
     "//chrome/browser",
     "//chrome/browser:browser_process",
-    "//chrome/browser/ash",
-    "//chrome/browser/ash:test_support",
-    "//chrome/browser/ash/login/ui",
+    "//chrome/browser/ash/login",
+    "//chrome/browser/ash/login/test:test_support",
+    "//chrome/browser/ash/profiles",
     "//chrome/browser/extensions:test_support",
     "//chrome/browser/ui",
+    "//chrome/browser/ui/ash/login",
+    "//chrome/browser/ui/webui/ash/login",
     "//chrome/common:constants",
     "//chrome/common:non_code_constants",
     "//chrome/test:test_support_ui",
@@ -160,8 +162,8 @@ source_set("unit_tests") {
     "//chrome/app:generated_resources_grit",
     "//chrome/browser",
     "//chrome/browser:browser_process",
-    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/login/saml:test_support",
+    "//chrome/browser/ash/login/users:test_support",
     "//chrome/browser/profiles:profile",
     "//chrome/common:constants",
     "//chrome/test:test_support",

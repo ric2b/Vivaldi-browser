@@ -13,31 +13,27 @@
 // limitations under the License.
 
 import {ColumnDef} from '../../common/aggregation_data';
-import {Area, Sorting} from '../../common/state';
+import {Sorting} from '../../common/state';
+import {Area} from '../../public/selection';
 import {globals} from '../../frontend/globals';
 import {Engine} from '../../trace_processor/engine';
-
 import {AggregationController} from './aggregation_controller';
 import {
   ASYNC_SLICE_TRACK_KIND,
   THREAD_SLICE_TRACK_KIND,
-} from '../../core/track_kinds';
+} from '../../public/track_kinds';
 
 export function getSelectedTrackKeys(area: Area): number[] {
   const selectedTrackKeys: number[] = [];
-  for (const trackKey of area.tracks) {
-    const track = globals.state.tracks[trackKey];
-    // Track will be undefined for track groups.
-    if (track?.uri !== undefined) {
-      const trackInfo = globals.trackManager.resolveTrackInfo(track.uri);
-      if (trackInfo?.tags?.kind === THREAD_SLICE_TRACK_KIND) {
-        trackInfo.tags.trackIds &&
-          selectedTrackKeys.push(...trackInfo.tags.trackIds);
-      }
-      if (trackInfo?.tags?.kind === ASYNC_SLICE_TRACK_KIND) {
-        trackInfo.tags.trackIds &&
-          selectedTrackKeys.push(...trackInfo.tags.trackIds);
-      }
+  for (const trackUri of area.trackUris) {
+    const trackInfo = globals.trackManager.getTrack(trackUri);
+    if (trackInfo?.tags?.kind === THREAD_SLICE_TRACK_KIND) {
+      trackInfo.tags.trackIds &&
+        selectedTrackKeys.push(...trackInfo.tags.trackIds);
+    }
+    if (trackInfo?.tags?.kind === ASYNC_SLICE_TRACK_KIND) {
+      trackInfo.tags.trackIds &&
+        selectedTrackKeys.push(...trackInfo.tags.trackIds);
     }
   }
   return selectedTrackKeys;
@@ -45,24 +41,23 @@ export function getSelectedTrackKeys(area: Area): number[] {
 
 export class SliceAggregationController extends AggregationController {
   async createAggregateView(engine: Engine, area: Area) {
-    await engine.query(`drop view if exists ${this.kind};`);
-
     const selectedTrackKeys = getSelectedTrackKeys(area);
 
     if (selectedTrackKeys.length === 0) return false;
 
-    const query = `create view ${this.kind} as
-        SELECT
+    await engine.query(`
+      create or replace perfetto table ${this.kind} as
+      select
         name,
         sum(dur) AS total_dur,
-        sum(dur)/count(1) as avg_dur,
-        count(1) as occurrences
-        FROM slices
-        WHERE track_id IN (${selectedTrackKeys}) AND
-        ts + dur > ${area.start} AND
-        ts < ${area.end} group by name`;
-
-    await engine.query(query);
+        sum(dur)/count() as avg_dur,
+        count() as occurrences
+        from slices
+      where track_id in (${selectedTrackKeys})
+        and ts + dur > ${area.start}
+        and ts < ${area.end}
+      group by name
+    `);
     return true;
   }
 

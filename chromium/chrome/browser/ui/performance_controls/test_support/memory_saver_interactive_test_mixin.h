@@ -33,19 +33,20 @@ class MemorySaverInteractiveTestMixin : public MemorySaverBrowserTestMixin<T> {
       const MemorySaverInteractiveTestMixin&) = delete;
 
   auto CheckTabIsDiscarded(int tab_index, bool is_discarded) {
-    return T::Check([=]() {
+    return T::Check([=, this]() {
       return MemorySaverBrowserTestMixin<T>::IsTabDiscarded(tab_index) ==
              is_discarded;
     });
   }
 
   auto TryDiscardTab(int tab_index) {
-    return T::Do(
-        [=]() { MemorySaverBrowserTestMixin<T>::TryDiscardTabAt(tab_index); });
+    return T::Do([=, this]() {
+      MemorySaverBrowserTestMixin<T>::TryDiscardTabAt(tab_index);
+    });
   }
 
   auto ForceRefreshMemoryMetrics() {
-    return T::Do([=]() {
+    return T::Do([=, this]() {
       MemorySaverBrowserTestMixin<T>::ForceRefreshMemoryMetricsAndWait();
     });
   }
@@ -54,12 +55,11 @@ class MemorySaverInteractiveTestMixin : public MemorySaverBrowserTestMixin<T> {
   // tab and waits for it to reload
   auto DiscardAndReloadTab(int tab_index,
                            const ui::ElementIdentifier& contents_id) {
-    return T::Steps(T::FlushEvents(),
-                    // This has to be done on a fresh message loop to prevent
-                    // a tab being discarded while it is notifying its observers
-                    TryDiscardTab(tab_index), T::WaitForHide(contents_id),
-                    T::SelectTab(kTabStripElementId, tab_index),
-                    T::WaitForShow(contents_id));
+    return T::Steps(  // This has to be done on a fresh message loop to prevent
+                      // a tab being discarded while it is notifying its
+                      // observers
+        TryDiscardTab(tab_index), T::SelectTab(kTabStripElementId, tab_index),
+        T::WaitForShow(contents_id));
   }
 };
 

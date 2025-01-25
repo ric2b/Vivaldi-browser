@@ -48,7 +48,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
     // Clear overview.
     const clearResultsButton = new UI.Toolbar.ToolbarButton(
         i18nString(UIStrings.clearOverview), 'clear', undefined, 'css-overview.clear-overview');
-    clearResultsButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.#reset, this);
+    clearResultsButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.#reset, this);
 
     // Toolbar.
     const toolbarElement = this.containerElement.createChild('div', 'overview-toolbar');
@@ -71,7 +71,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
   }
 
   #reset(): void {
-    this.dispatchEventToListeners(SidebarEvents.Reset);
+    this.dispatchEventToListeners(SidebarEvents.RESET);
   }
 
   #deselectAllItems(): void {
@@ -92,7 +92,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
       return;
     }
     this.select(id, false);
-    this.dispatchEventToListeners(SidebarEvents.ItemSelected, {id, isMouseEvent: true, key: undefined});
+    this.dispatchEventToListeners(SidebarEvents.ITEM_SELECTED, {id, isMouseEvent: true, key: undefined});
   }
 
   #onItemKeyDown(event: KeyboardEvent): void {
@@ -111,7 +111,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
 
     if (event.key === 'Enter') {
       this.select(id, false);
-      this.dispatchEventToListeners(SidebarEvents.ItemSelected, {id, isMouseEvent: false, key: event.key});
+      this.dispatchEventToListeners(SidebarEvents.ITEM_SELECTED, {id, isMouseEvent: false, key: event.key});
     } else {  // arrow up/down key
       const items = this.containerElement.querySelectorAll(`.${ITEM_CLASS_NAME}`);
 
@@ -134,7 +134,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
       }
 
       this.select(nextItemId, true);
-      this.dispatchEventToListeners(SidebarEvents.ItemSelected, {id: nextItemId, isMouseEvent: false, key: event.key});
+      this.dispatchEventToListeners(SidebarEvents.ITEM_SELECTED, {id: nextItemId, isMouseEvent: false, key: event.key});
     }
 
     event.consume(true);
@@ -166,8 +166,8 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
 }
 
 export const enum SidebarEvents {
-  ItemSelected = 'ItemSelected',
-  Reset = 'Reset',
+  ITEM_SELECTED = 'ItemSelected',
+  RESET = 'Reset',
 }
 
 export interface ItemSelectedEvent {
@@ -177,6 +177,6 @@ export interface ItemSelectedEvent {
 }
 
 export type EventTypes = {
-  [SidebarEvents.ItemSelected]: ItemSelectedEvent,
-  [SidebarEvents.Reset]: void,
+  [SidebarEvents.ITEM_SELECTED]: ItemSelectedEvent,
+  [SidebarEvents.RESET]: void,
 };

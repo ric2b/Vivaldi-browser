@@ -175,19 +175,11 @@ bool RuleServiceImpl::IsDocumentBlocked(RuleGroup group,
   if (!url.SchemeIs(url::kFtpScheme) && !url.SchemeIsHTTPOrHTTPS())
     return false;
 
-  auto* index = index_managers_[static_cast<size_t>(group)]->rules_index();
-  if (!index)
+  if (!tab_handler_) {
     return false;
+  }
 
-  // Unretained is safe, since we own the rule_manager_ and this callback should
-  // only be called synchronously.
-  RulesIndex::ActivationResults activations = index->GetActivationsForFrame(
-      base::BindRepeating(&RuleManager::IsExemptOfFiltering,
-                          base::Unretained(&*rule_manager_), group),
-      frame, url);
-
-  return activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
-             flat::Decision_PASS) != flat::Decision_PASS;
+  return tab_handler_->WasFrameBlocked(group, frame);
 }
 
 RuleManager* RuleServiceImpl::GetRuleManager() {

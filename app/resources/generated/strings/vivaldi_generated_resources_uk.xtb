@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Помилка</translation>
 <translation id="1175364870820465910">&amp;Друк...</translation>
 <translation id="1181037720776840403">Видалити</translation>
+<translation id="1184037892196730210">Не вдалося запустити трансляцію екрана</translation>
 <translation id="1187722533808055681">Вихід зі стану неактивності</translation>
 <translation id="122082903575839559">Алгоритм підпису сертифіката</translation>
 <translation id="1221825588892235038">Лише виділене</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Значення поля</translation>
 <translation id="2662876636500006917">Веб-магазин Chrome</translation>
 <translation id="2678063897982469759">Знову ввімкнути</translation>
-<translation id="2678100101831051676">Трансляція недоступна.</translation>
 <translation id="2719936478972253983">Заблоковані файли cookie</translation>
 <translation id="2721037002783622288">&amp;Шукати зображення через <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Не пізніше</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Це розширення могло бути пошкоджено.</translation>
 <translation id="3387614642886316601">Використовувати покращену перевірку орфографії</translation>
 <translation id="3390013585654699824">Дані про додаток</translation>
-<translation id="3393582007140394275">Не вдається транслювати екран.</translation>
 <translation id="345693547134384690">Відкрити &amp;зображення в новій вкладці</translation>
 <translation id="3493881266323043047">Чинність</translation>
 <translation id="3511307672085573050">&amp;Копіювати адресу посилання</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Зберегти зміни</translation>
 <translation id="6824564591481349393">Копіювати &amp;адресу електронної пошти</translation>
 <translation id="6840155290835956714">Запитувати перед надсиланням</translation>
+<translation id="6878862640969460273">Альбомна</translation>
 <translation id="6886871292305414135">Відкрити посилання в новій &amp;вкладці</translation>
 <translation id="6892812721183419409">Відкрити посилання як <ph name="USER" /></translation>
 <translation id="6900284862687837908">Фоновий додаток: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">У доступі відмовлено.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Перевіряти правопис під час вводу</translation>
+<translation id="7359680654975233185">Не вдалося почати трансляцію вкладки</translation>
 <translation id="7385854874724088939">Під час друку виникла помилка. Перевірте свій принтер і спробуйте ще раз.</translation>
 <translation id="7412226954991670867">Пам'ять GPU</translation>
 <translation id="7421925624202799674">&amp;Переглянути джерело сторінки</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Дозволити сайтам зберігати та переглядати дані файлів cookie</translation>
 <translation id="7663719505383602579">Одержувач: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Встановлено адміністратором</translation>
+<translation id="7685038817958445325">Не вдалося запустити трансляцію</translation>
 <translation id="7685049629764448582">Пам'ять Javascript</translation>
 <translation id="7701869757853594372">USER-дескриптори</translation>
 <translation id="7704305437604973648">Завдання</translation>
@@ -410,7 +412,6 @@
 Зберігайте свій файл ключа в безпечному місці. Він знадобиться вам для створення нових версій вашого розширення.</translation>
 <translation id="8004582292198964060">Переглядач</translation>
 <translation id="8018313076035239964">Налаштуйте, яку інформацію можуть використовувати веб-сайти та який вміст вони можуть вам показувати</translation>
-<translation id="8032244173881942855">Не вдається транслювати вкладку.</translation>
 <translation id="8071432093239591881">Друкувати як зображення</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />К</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
@@ -466,7 +467,6 @@
 <translation id="9218430445555521422">Установити за умовчанням</translation>
 <translation id="93766956588638423">Відновити розширення</translation>
 <translation id="961012016278832836">Старий Microsoft Edge</translation>
-<translation id="98515147261107953">Альбомна</translation>
 <translation id="994289308992179865">&amp;Безперервно</translation>
 <translation id="998747458861718449">Перевірити</translation>
 </translationbundle>

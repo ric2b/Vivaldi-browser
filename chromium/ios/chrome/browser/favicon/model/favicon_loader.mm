@@ -128,8 +128,6 @@ void FaviconLoader::FaviconForPageUrl(
                backgroundColor:UIColor.clearColor
         defaultBackgroundColor:result.fallback_icon_style->
                                is_default_background_color];
-
-    [favicon_cache_ setObject:attributes forKey:key];
     favicon_block_handler(attributes);
   };
 
@@ -189,8 +187,6 @@ void FaviconLoader::FaviconForPageUrlOrHost(
                backgroundColor:UIColor.clearColor
         defaultBackgroundColor:result.fallback_icon_style->
                                is_default_background_color];
-
-    [favicon_cache_ setObject:attributes forKey:key];
     favicon_block_handler(attributes);
   };
 
@@ -249,8 +245,6 @@ void FaviconLoader::FaviconForIconUrl(
                backgroundColor:UIColor.clearColor
         defaultBackgroundColor:result.fallback_icon_style->
                                is_default_background_color];
-
-    [favicon_cache_ setObject:attributes forKey:key];
     favicon_block_handler(attributes);
   };
 

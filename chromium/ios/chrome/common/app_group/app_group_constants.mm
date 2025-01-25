@@ -198,7 +198,7 @@ NSString* KeyForOpenExtensionOutcomeType(OpenExtensionOutcome type) {
     case OpenExtensionOutcome::kFailureUnsupportedScheme:
       return kOpenExtensionOutcomeFailureUnsupportedScheme;
     case OpenExtensionOutcome::kInvalid:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

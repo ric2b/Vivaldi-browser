@@ -14,43 +14,42 @@
 
 import {exists} from '../../base/utils';
 import {ColumnDef} from '../../common/aggregation_data';
-import {Area, Sorting} from '../../common/state';
+import {Sorting} from '../../common/state';
+import {Area} from '../../public/selection';
 import {globals} from '../../frontend/globals';
 import {Engine} from '../../trace_processor/engine';
-import {CPU_SLICE_TRACK_KIND} from '../../core/track_kinds';
-
+import {CPU_SLICE_TRACK_KIND} from '../../public/track_kinds';
 import {AggregationController} from './aggregation_controller';
 
 export class CpuByProcessAggregationController extends AggregationController {
   async createAggregateView(engine: Engine, area: Area) {
-    await engine.query(`drop view if exists ${this.kind};`);
-
     const selectedCpus: number[] = [];
-    for (const trackKey of area.tracks) {
-      const track = globals.state.tracks[trackKey];
-      if (track?.uri) {
-        const trackInfo = globals.trackManager.resolveTrackInfo(track.uri);
-        if (trackInfo?.tags?.kind === CPU_SLICE_TRACK_KIND) {
-          exists(trackInfo.tags.cpu) && selectedCpus.push(trackInfo.tags.cpu);
-        }
+    for (const trackUri of area.trackUris) {
+      const trackInfo = globals.trackManager.getTrack(trackUri);
+      if (trackInfo?.tags?.kind === CPU_SLICE_TRACK_KIND) {
+        exists(trackInfo.tags.cpu) && selectedCpus.push(trackInfo.tags.cpu);
       }
     }
     if (selectedCpus.length === 0) return false;
 
-    const query = `create view ${this.kind} as
-        SELECT process.name as process_name, pid,
+    await engine.query(`
+      create or replace perfetto table ${this.kind} as
+      select
+        process.name as process_name,
+        process.pid,
         sum(dur) AS total_dur,
-        sum(dur)/count(1) as avg_dur,
-        count(1) as occurrences
-        FROM process
-        JOIN thread USING(upid)
-        JOIN thread_state USING(utid)
-        WHERE cpu IN (${selectedCpus}) AND
-        state = "Running" AND
-        thread_state.ts + thread_state.dur > ${area.start} AND
-        thread_state.ts < ${area.end} group by upid`;
-
-    await engine.query(query);
+        sum(dur) / count() as avg_dur,
+        count() as occurrences
+      from sched
+      join thread USING (utid)
+      join process USING (upid)
+      where
+        cpu in (${selectedCpus})
+        and ts + dur > ${area.start}
+        and ts < ${area.end}
+        and utid != 0
+      group by upid
+    `);
     return true;
   }
 

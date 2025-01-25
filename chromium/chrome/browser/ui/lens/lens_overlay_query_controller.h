@@ -5,19 +5,22 @@
 #ifndef CHROME_BROWSER_UI_LENS_LENS_OVERLAY_QUERY_CONTROLLER_H_
 #define CHROME_BROWSER_UI_LENS_LENS_OVERLAY_QUERY_CONTROLLER_H_
 
+#include "base/containers/span.h"
 #include "base/functional/callback.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/lens/core/mojom/lens.mojom.h"
 #include "chrome/browser/lens/core/mojom/overlay_object.mojom.h"
 #include "chrome/browser/lens/core/mojom/text.mojom.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/lens/lens_overlay_invocation_source.h"
+#include "chrome/browser/ui/lens/lens_overlay_gen204_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_request_id_generator.h"
 #include "chrome/browser/ui/lens/lens_overlay_url_builder.h"
+#include "chrome/browser/ui/lens/ref_counted_lens_overlay_client_logs.h"
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
 #include "components/lens/proto/server/lens_overlay_response.pb.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/lens_server_proto/lens_overlay_client_context.pb.h"
-#include "third_party/lens_server_proto/lens_overlay_client_logs.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_cluster_info.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_image_crop.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_image_data.pb.h"
@@ -66,7 +69,8 @@ class LensOverlayQueryController {
       signin::IdentityManager* identity_manager,
       Profile* profile,
       lens::LensOverlayInvocationSource invocation_source,
-      bool use_dark_mode);
+      bool use_dark_mode,
+      lens::LensOverlayGen204Controller* gen204_controller);
   virtual ~LensOverlayQueryController();
 
   // Starts a query flow by sending a request to Lens using the screenshot,
@@ -78,10 +82,20 @@ class LensOverlayQueryController {
       std::optional<GURL> page_url,
       std::optional<std::string> page_title,
       std::vector<lens::mojom::CenterRotatedBoxPtr> significant_region_boxes,
+      base::span<const uint8_t> underlying_content_bytes,
+      const std::string& underlying_content_type,
       float ui_scale_factor);
 
   // Clears the state and resets stored values.
   void EndQuery();
+
+  // Sends a full image request to translate the page.
+  virtual void SendFullPageTranslateQuery(const std::string& source_language,
+                                          const std::string& target_language);
+
+  // Sends a full image request with no translate options as a result of
+  // ending translate mode.
+  virtual void SendEndTranslateModeQuery();
 
   // Sends a region search interaction. Expected to be called multiple times. If
   // region_bytes are included, those will be sent to Lens instead of cropping
@@ -111,6 +125,10 @@ class LensOverlayQueryController {
   virtual void SendTaskCompletionGen204IfEnabled(
       lens::mojom::UserAction user_action);
 
+  // Sends a semantic event Gen204 ping.
+  virtual void SendSemanticEventGen204IfEnabled(
+      lens::mojom::SemanticEvent event);
+
  protected:
   // Creates an endpoint fetcher for fetching the request data and fetches
   // the request.
@@ -121,7 +139,8 @@ class LensOverlayQueryController {
       EndpointFetcherCallback fetched_response_callback);
 
   // Sends a latency Gen204 ping if enabled.
-  virtual void SendLatencyGen204IfEnabled(int64_t latency_ms);
+  virtual void SendLatencyGen204IfEnabled(int64_t latency_ms,
+                                          bool is_translate_query);
 
   // The callback for full image requests, including upon query flow start
   // and interaction retries.
@@ -151,6 +170,12 @@ class LensOverlayQueryController {
   // Processes the screenshot and fetches a full image request.
   void PrepareAndFetchFullImageRequest();
 
+  // Continues with fetching the full image request after the screenshot has
+  // been encoded.
+  void OnImageDataReady(
+      scoped_refptr<lens::RefCountedLensOverlayClientLogs> ref_counted_logs,
+      lens::ImageData image_data);
+
   // Creates a client context proto to be attached to a server request.
   lens::LensOverlayClientContext CreateClientContext();
 
@@ -170,6 +195,17 @@ class LensOverlayQueryController {
       std::map<std::string, std::string> additional_search_query_params,
       std::optional<SkBitmap> region_bytes);
 
+  // Continues with SendInteraction after the full image cropping is finished.
+  void OnImageCropReady(
+      int request_index,
+      lens::mojom::CenterRotatedBoxPtr region,
+      std::optional<std::string> query_text,
+      std::optional<std::string> object_id,
+      lens::LensOverlaySelectionType selection_type,
+      std::map<std::string, std::string> additional_search_query_params,
+      scoped_refptr<lens::RefCountedLensOverlayClientLogs> ref_counted_logs,
+      std::optional<lens::ImageCrop> image_crop);
+
   // Fetches the endpoint using the initial image data.
   void FetchFullImageRequest(
       std::unique_ptr<lens::LensOverlayRequestId> request_id,
@@ -179,15 +215,8 @@ class LensOverlayQueryController {
   // Handles the endpoint fetch response for the initial request.
   void FullImageFetchResponseHandler(
       int64_t query_start_time_ms,
+      int request_sequence_id,
       std::unique_ptr<EndpointResponse> response);
-
-  // Handles the response from a latency gen204 request.
-  void OnLatencyGen204LoaderComplete(
-      std::unique_ptr<std::string> response_body);
-
-  // Handles the response from a task completion gen204 request.
-  void OnTaskCompletionGen204LoaderComplete(
-      std::unique_ptr<std::string> response_body);
 
   // Runs the full image callback with empty response data, for errors.
   void RunFullImageCallbackForError();
@@ -261,11 +290,25 @@ class LensOverlayQueryController {
   // The original screenshot image.
   SkBitmap original_screenshot_;
 
+  // The dimensions of the resized bitmap. Needed in case geometry needs to be
+  // recaclulated. For example, in the case of translated words.
+  gfx::Size resized_bitmap_size_;
+
   // The page url, if it is allowed to be shared.
   std::optional<GURL> page_url_;
 
   // The page title, if it is allowed to be shared.
   std::optional<std::string> page_title_;
+
+  // Options needed to send a translate request with the proper parameters.
+  struct TranslateOptions {
+    std::string source_language;
+    std::string target_language;
+
+    TranslateOptions(const std::string& source, const std::string& target)
+        : source_language(source), target_language(target) {}
+  };
+  std::optional<TranslateOptions> translate_options_;
 
   // Bounding boxes for significant regions identified in the original
   // screenshot image.
@@ -303,20 +346,32 @@ class LensOverlayQueryController {
   // earlier unfinished requests.
   std::unique_ptr<EndpointFetcher> interaction_endpoint_fetcher_;
 
-  // Loader used for latency gen204 requests.
-  std::unique_ptr<network::SimpleURLLoader> latency_gen204_loader_;
+  // Task runner used to encode/downscale the JPEG images on a separate thread.
+  scoped_refptr<base::TaskRunner> encoding_task_runner_;
 
-  // Loader used for task completion gen204 requests.
-  std::unique_ptr<network::SimpleURLLoader> task_completion_gen204_loader_;
+  // Tracks the encoding/downscaling tasks currently running for follow up
+  // interactions. Does not track the encoding for the full image request
+  // because it is assumed this request will finish, never need to be
+  // cancelled, and all other tasks will wait on it if needed.
+  std::unique_ptr<base::CancelableTaskTracker> encoding_task_tracker_;
 
   // Owned by Profile, and thus guaranteed to outlive this instance.
-  raw_ptr<variations::VariationsClient> variations_client_;
+  const raw_ptr<variations::VariationsClient> variations_client_;
 
   // Unowned IdentityManager for fetching access tokens. Could be null for
   // incognito profiles.
-  raw_ptr<signin::IdentityManager> identity_manager_;
+  const raw_ptr<signin::IdentityManager> identity_manager_;
 
-  raw_ptr<Profile> profile_;
+  const raw_ptr<Profile> profile_;
+
+  // The bytes of the content the user is viewing. Owned by
+  // LensOverlayController. Will be empty if no bytes to the underlying page
+  // could be provided.
+  base::span<const uint8_t> underlying_content_bytes_;
+
+  // The mime type of underlying_content_bytes. Will be empty if
+  // underlying_content_bytes_ is empty.
+  std::string underlying_content_type_;
 
   // The request counter, used to make sure requests are not sent out of
   // order.
@@ -334,8 +389,16 @@ class LensOverlayQueryController {
   // per session.
   bool use_dark_mode_;
 
+  // The controller for sending gen204 pings. Owned and set by the overlay
+  // controller. Guaranteed to outlive this class.
+  const raw_ptr<lens::LensOverlayGen204Controller> gen204_controller_;
+
   // The current gen204 id for logging, set on each overlay invocation.
   uint64_t gen204_id_;
+
+  // The latest full image request sequence id. Used for cancelling any full
+  // image requests that have been superseded by another.
+  int latest_full_image_sequence_id_;
 
   base::WeakPtrFactory<LensOverlayQueryController> weak_ptr_factory_{this};
 };

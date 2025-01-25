@@ -42,9 +42,11 @@ blink_python_runner("make_runtime_feature_state_contexts_headers") {
   script = "../../renderer/build/scripts/make_runtime_feature_state_contexts_headers.py"
 
   inputs = scripts_for_json5_files + [
-             "../../renderer/platform/runtime_enabled_features.json5",
+             "../../renderer/build/scripts/make_runtime_features_utilities.py",
+             "../../renderer/build/scripts/make_runtime_features.py",
              "../../renderer/build/scripts/templates/runtime_feature_state_context.h.tmpl",
              "../../renderer/build/scripts/templates/runtime_feature_state_read_context.h.tmpl",
+             "../../renderer/platform/runtime_enabled_features.json5",
            ]
 
   outputs = [
@@ -152,7 +154,6 @@ source_set("headers") {
     "frame/frame_visual_properties.h",
     "frame/from_ad_state.h",
     "frame/history_user_activation_state.h",
-    "frame/transient_allow_fullscreen.h",
     "frame/user_activation_state.h",
     "frame/user_activation_update_source.h",
     "frame/view_transition_state.h",
@@ -337,6 +338,7 @@ source_set("headers") {
     "//third_party/blink/public/mojom:web_bluetooth_mojo_bindings_headers",
     "//third_party/blink/public/mojom/origin_trial_feature",
     "//third_party/liburlpattern",
+    "//ui/base/mojom:ui_base_types",
     "//ui/display/mojom",
     "//ui/events:event_constants",
     "//ui/events/types:headers",

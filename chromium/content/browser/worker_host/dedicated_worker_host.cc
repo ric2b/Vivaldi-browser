@@ -74,6 +74,7 @@ DedicatedWorkerHost::DedicatedWorkerHost(
     DedicatedWorkerCreator creator,
     GlobalRenderFrameHostId ancestor_render_frame_host_id,
     const blink::StorageKey& creator_storage_key,
+    const url::Origin& renderer_origin,
     const net::IsolationInfo& isolation_info,
     network::mojom::ClientSecurityStatePtr creator_client_security_state,
     base::WeakPtr<CrossOriginEmbedderPolicyReporter> creator_coep_reporter,
@@ -85,6 +86,7 @@ DedicatedWorkerHost::DedicatedWorkerHost(
       creator_(creator),
       ancestor_render_frame_host_id_(ancestor_render_frame_host_id),
       creator_origin_(creator_storage_key.origin()),
+      renderer_origin_(renderer_origin),
       // TODO(crbug.com/40051700): Calculate the worker origin based on
       // the worker script URL (the worker's storage key should have an opaque
       // origin if the worker script URL's scheme is data:).
@@ -207,7 +209,7 @@ void DedicatedWorkerHost::RenderProcessHostDestroyed(
   // This is never reached as either RenderProcessExited() or
   // InProcessRendererExiting() is guaranteed to be called before this function
   // and `this` is deleted there.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void DedicatedWorkerHost::StartScriptLoad(
@@ -325,7 +327,7 @@ void DedicatedWorkerHost::StartScriptLoad(
       "loading", "WorkerScriptFetcher CreateAndStart", TRACE_ID_LOCAL(this));
   WorkerScriptFetcher::CreateAndStart(
       worker_process_host_->GetID(), token_, script_url,
-      nearest_ancestor_render_frame_host, creator_render_frame_host,
+      *nearest_ancestor_render_frame_host, creator_render_frame_host,
       nearest_ancestor_render_frame_host->ComputeSiteForCookies(),
       creator_origin_, storage_key_,
       nearest_ancestor_render_frame_host->GetIsolationInfoForSubresources(),
@@ -546,6 +548,12 @@ DedicatedWorkerHost::CreateNetworkFactoryForSubresources(
           ancestor_render_frame_host->GetCookieSettingOverrides(),
           "DedicatedWorkerHost::CreateNetworkFactoryForSubresources");
 
+  RenderFrameHost* frame = nullptr;
+  if (base::FeatureList::IsEnabled(
+          blink::features::kUseAncestorRenderFrameForWorker)) {
+    frame = ancestor_render_frame_host;
+  }
+
   return url_loader_factory::CreatePendingRemote(
       ContentBrowserClient::URLLoaderFactoryType::kWorkerSubResource,
       url_loader_factory::TerminalParams::ForNetworkContext(
@@ -554,9 +562,9 @@ DedicatedWorkerHost::CreateNetworkFactoryForSubresources(
           url_loader_factory::HeaderClientOption::kAllow,
           url_loader_factory::FactoryOverrideOption::kAllow),
       url_loader_factory::ContentClientParams(
-          worker_process_host_->GetBrowserContext(),
-          /*frame=*/nullptr, worker_process_host_->GetID(),
-          GetStorageKey().origin(), isolation_info_,
+          worker_process_host_->GetBrowserContext(), frame,
+          worker_process_host_->GetID(), GetStorageKey().origin(),
+          isolation_info_,
           ukm::SourceIdObj::FromInt64(
               ancestor_render_frame_host->GetPageUkmSourceId()),
           bypass_redirect_checks),
@@ -756,7 +764,8 @@ void DedicatedWorkerHost::CreateBlobUrlStoreProvider(
       GetProcessHost()->GetStoragePartition());
 
   storage_partition_impl->GetBlobUrlRegistry()->AddReceiver(
-      GetStorageKey(), std::move(receiver),
+      GetStorageKey(), renderer_origin_, GetProcessHost()->GetID(),
+      std::move(receiver),
       storage::BlobURLValidityCheckBehavior::
           ALLOW_OPAQUE_ORIGIN_STORAGE_KEY_MISMATCH);
 }
@@ -804,11 +813,12 @@ void DedicatedWorkerHost::GetFileSystemAccessManager(
           // URL for workers instead of the origin as source url.
           // This URL will be used for SafeBrowsing checks and for
           // the Quarantine Service.
-          GetStorageKey().origin().GetURL(), GetAssociatedRenderFrameHostId(),
+          GetStorageKey().origin().GetURL(), GetAncestorRenderFrameHostId(),
           /*is_worker=*/true),
       std::move(receiver));
 }
 
+#if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 void DedicatedWorkerHost::BindPressureService(
     mojo::PendingReceiver<blink::mojom::WebPressureManager> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -842,6 +852,7 @@ void DedicatedWorkerHost::BindPressureService(
 
   pressure_service_->BindReceiver(std::move(receiver));
 }
+#endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 
 void DedicatedWorkerHost::ObserveNetworkServiceCrash(
     StoragePartitionImpl* storage_partition_impl) {
@@ -856,16 +867,31 @@ void DedicatedWorkerHost::ObserveNetworkServiceCrash(
           .BindNewPipeAndPassReceiver(),
       std::move(params));
   network_service_connection_error_handler_holder_.set_disconnect_handler(
-      base::BindOnce(&DedicatedWorkerHost::UpdateSubresourceLoaderFactories,
+      base::BindOnce(&DedicatedWorkerHost::OnNetworkServiceCrash,
                      weak_factory_.GetWeakPtr()));
 }
 
-void DedicatedWorkerHost::UpdateSubresourceLoaderFactories() {
+void DedicatedWorkerHost::OnNetworkServiceCrash() {
   DCHECK(IsOutOfProcessNetworkService());
   DCHECK(subresource_loader_updater_.is_bound());
   DCHECK(network_service_connection_error_handler_holder_);
   DCHECK(!network_service_connection_error_handler_holder_.is_connected());
   DCHECK(base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker));
+
+  auto* storage_partition_impl = static_cast<StoragePartitionImpl*>(
+      worker_process_host_->GetStoragePartition());
+  // Start observing Network Service crash again.
+  ObserveNetworkServiceCrash(storage_partition_impl);
+
+  UpdateSubresourceLoaderFactories();
+}
+
+void DedicatedWorkerHost::UpdateSubresourceLoaderFactories() {
+  // Ignore DevTools attempts to update loader factories before
+  // the main script started loading.
+  if (!subresource_loader_updater_.is_bound()) {
+    return;
+  }
 
   auto* storage_partition_impl = static_cast<StoragePartitionImpl*>(
       worker_process_host_->GetStoragePartition());
@@ -880,9 +906,6 @@ void DedicatedWorkerHost::UpdateSubresourceLoaderFactories() {
   auto partition_domain =
       ancestor_render_frame_host->GetSiteInstance()->GetPartitionDomain(
           storage_partition_impl);
-
-  // Start observing Network Service crash again.
-  ObserveNetworkServiceCrash(storage_partition_impl);
 
   // If this is a nested worker, there is no creator frame and
   // |creator_render_frame_host| will be null.
@@ -1089,17 +1112,13 @@ void DedicatedWorkerHost::GetSandboxedFileSystemForBucket(
       bucket.ToBucketLocator(), directory_path_components, std::move(callback));
 }
 
-GlobalRenderFrameHostId DedicatedWorkerHost::GetAssociatedRenderFrameHostId()
-    const {
-  return GetAncestorRenderFrameHostId();
-}
-
-base::UnguessableToken DedicatedWorkerHost::GetDevToolsToken() const {
-  // This method is expected to be called only when PlzDedicatedWorker is
-  // enabled. See code comments on `WorkerDevToolsManager`.
-  CHECK(base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker));
-  return DedicatedWorkerDevToolsAgentHost::GetFor(this)
-      ->devtools_worker_token();
+storage::BucketClientInfo DedicatedWorkerHost::GetBucketClientInfo() const {
+  const auto* ancestor_rfh =
+      RenderFrameHostImpl::FromID(ancestor_render_frame_host_id_);
+  return storage::BucketClientInfo{
+      worker_process_host_->GetID(), GetToken(),
+      ancestor_rfh ? std::optional(ancestor_rfh->GetDocumentToken())
+                   : std::nullopt};
 }
 
 blink::scheduler::WebSchedulerTrackedFeatures

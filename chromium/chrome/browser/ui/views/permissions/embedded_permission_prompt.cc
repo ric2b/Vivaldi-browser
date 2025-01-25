@@ -27,7 +27,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
-#include "chrome/browser/media/webrtc/system_media_capture_permissions_mac.h"
+#include "chrome/browser/permissions/system/system_media_capture_permissions_mac.h"
 #endif
 
 namespace {
@@ -179,12 +179,12 @@ EmbeddedPermissionPrompt::DeterminePromptVariant(
   // whereas the "OS Prompt" view is only higher priority then the views that
   // are associated with a site-level allowed state.
   // TODO(crbug.com/40275129): Handle going to Windows settings.
-  if (SystemPermissionSettings::GetInstance()->IsDenied(type)) {
+  if (system_permission_settings::IsDenied(type)) {
     return Variant::kOsSystemSettings;
   }
 
   if (setting == CONTENT_SETTING_ALLOW &&
-      SystemPermissionSettings::GetInstance()->CanPrompt(type)) {
+      system_permission_settings::CanPrompt(type)) {
     return Variant::kOsPrompt;
   }
 
@@ -304,6 +304,11 @@ void EmbeddedPermissionPrompt::CloseCurrentViewAndMaybeShowNext(
             SkColorSetA(web_contents()->GetColorProvider().GetColor(
                             ui::kColorRefNeutral20),
                         0.8 * SK_AlphaOPAQUE));
+    // If the tab/native view is closed, the `content_scrim_widget_` may be
+    // nullptr. In this scenario, skip showing the prompt.
+    if (!content_scrim_widget_) {
+      return;
+    }
     prompt_view->UpdateAnchor(content_scrim_widget_.get());
     prompt_view->Show();
   }
@@ -376,7 +381,7 @@ void EmbeddedPermissionPrompt::PrecalculateVariantsForMetrics() {
 
   if (os_prompt_variant_ == Variant::kUninitialized) {
     for (const auto& request : delegate()->Requests()) {
-      if (SystemPermissionSettings::GetInstance()->CanPrompt(
+      if (system_permission_settings::CanPrompt(
               request->GetContentSettingsType())) {
         os_prompt_variant_ = Variant::kOsPrompt;
         break;
@@ -386,7 +391,7 @@ void EmbeddedPermissionPrompt::PrecalculateVariantsForMetrics() {
 
   if (os_system_settings_variant_ == Variant::kUninitialized) {
     for (const auto& request : delegate()->Requests()) {
-      if (SystemPermissionSettings::GetInstance()->IsDenied(
+      if (system_permission_settings::IsDenied(
               request->GetContentSettingsType())) {
         os_system_settings_variant_ = Variant::kOsSystemSettings;
         break;
@@ -481,7 +486,7 @@ void EmbeddedPermissionPrompt::ShowSystemSettings() {
   RecordOsMetrics(permissions::OsScreenAction::SYSTEM_SETTINGS);
   RecordPermissionActionUKM(
       permissions::ElementAnchoredBubbleAction::kSystemSettings);
-  SystemPermissionSettings::GetInstance()->OpenSystemSettings(
+  system_permission_settings::OpenSystemSettings(
       delegate()->GetAssociatedWebContents(),
       requests_[0]->GetContentSettingsType());
 }
@@ -516,7 +521,7 @@ void EmbeddedPermissionPrompt::PromptForOsPermission() {
                                          prompt_types_.end());
 
   for (unsigned int idx = 0; idx < types.size(); idx++) {
-    SystemPermissionSettings::GetInstance()->Request(
+    system_permission_settings::Request(
         types[idx],
         base::BindOnce(
             &EmbeddedPermissionPrompt::OnRequestSystemPermissionResponse,
@@ -531,39 +536,39 @@ void EmbeddedPermissionPrompt::OnRequestSystemPermissionResponse(
     const ContentSettingsType request_type,
     const ContentSettingsType other_request_type) {
   bool permission_determined =
-      !SystemPermissionSettings::GetInstance()->CanPrompt(request_type);
+      !system_permission_settings::CanPrompt(request_type);
 
   // `other_permission_determined` is left with true in non-grouped scenario,
   // which would make the final logic fully rely on `permission_determined`.
   auto other_permission_determined = true;
   if (other_request_type != ContentSettingsType::DEFAULT) {
     other_permission_determined =
-        !SystemPermissionSettings::GetInstance()->CanPrompt(other_request_type);
+        !system_permission_settings::CanPrompt(other_request_type);
   }
 
   if (permission_determined) {
 #if BUILDFLAG(IS_MAC)
-    system_media_permissions::SystemPermission permission;
+    system_permission_settings::SystemPermission permission;
 
     if (request_type == ContentSettingsType::MEDIASTREAM_MIC) {
       permission =
-          system_media_permissions::CheckSystemAudioCapturePermission();
+          system_permission_settings::CheckSystemAudioCapturePermission();
     }
     if (request_type == ContentSettingsType::MEDIASTREAM_CAMERA) {
       permission =
-          system_media_permissions::CheckSystemVideoCapturePermission();
+          system_permission_settings::CheckSystemVideoCapturePermission();
     }
 
     switch (permission) {
-      case system_media_permissions::SystemPermission::kRestricted:
+      case system_permission_settings::SystemPermission::kRestricted:
         break;
-      case system_media_permissions::SystemPermission::kDenied:
+      case system_permission_settings::SystemPermission::kDenied:
         RecordOsMetrics(permissions::OsScreenAction::OS_PROMPT_DENIED);
         break;
-      case system_media_permissions::SystemPermission::kAllowed:
+      case system_permission_settings::SystemPermission::kAllowed:
         RecordOsMetrics(permissions::OsScreenAction::OS_PROMPT_ALLOWED);
         break;
-      case system_media_permissions::SystemPermission::kNotDetermined:
+      case system_permission_settings::SystemPermission::kNotDetermined:
         NOTREACHED_IN_MIGRATION();
     }
 #endif  // BUILDFLAG(IS_MAC)
@@ -624,7 +629,6 @@ void EmbeddedPermissionPrompt::CloseView() {
 
   if (content_scrim_widget_) {
     content_scrim_widget_->Close();
-    content_scrim_widget_.reset();
   }
 }
 

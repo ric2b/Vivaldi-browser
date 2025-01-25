@@ -182,9 +182,7 @@ const char kDisableBackgroundNetworking[] = "disable-background-networking";
 const char kDisableComponentExtensionsWithBackgroundPages[] =
     "disable-component-extensions-with-background-pages";
 
-#if BUILDFLAG(ENABLE_COMPONENT_UPDATER)
 const char kDisableComponentUpdate[] = "disable-component-update";
-#endif
 
 // Disables crashpad initialization for testing. The crashpad binary will not
 // run, and thus will not detect and symbolize crashes.
@@ -443,12 +441,14 @@ const char kNoExperiments[] = "no-experiments";
 // switch is used by automation (including performance benchmarks) where it's
 // important only a browser window is shown.
 //
-// This may not actually be the first run or the What's New page. Overridden by
-// kForceFirstRun (for FRE) and kForceWhatsNew (for What's New). This does not
-// drop the First Run sentinel and thus doesn't prevent first run from
-// occurring the next time chrome is launched without this flag. It also does
-// not update the last What's New milestone, so does not prevent What's New
-// from occurring the next time chrome is launched without this flag.
+// This may not actually be the first run or the What's New page. Its effect can
+// be partially ignored by adding kForceFirstRun (for FRE), kForceWhatsNew (for
+// What's New) and/or kIgnoreNoFirstRunForSearchEngineChoiceScreen (for the DSE
+// choice screen). This does not drop the First Run sentinel and thus doesn't
+// prevent first run from occurring the next time chrome is launched without
+// this flag. It also does not update the last What's New milestone, so does not
+// prevent What's New from occurring the next time chrome is launched without
+// this flag.
 const char kNoFirstRun[] = "no-first-run";
 
 // Don't send hyperlink auditing pings
@@ -530,7 +530,10 @@ const char kProxyBypassList[] = "proxy-bypass-list";
 // Uses the pac script at the given URL
 const char kProxyPacUrl[] = "proxy-pac-url";
 
-// Porvides a list of addresses to discover DevTools remote debugging targets.
+// Uses a specified proxy server, overrides system settings.
+const char kProxyServer[] = "proxy-server";
+
+// Provides a list of addresses to discover DevTools remote debugging targets.
 // The format is <host>:<port>,...,<host>:port.
 const char kRemoteDebuggingTargets[] = "remote-debugging-targets";
 
@@ -586,13 +589,6 @@ const char kSimulateUpgrade[] = "simulate-upgrade";
 // possible) for testing purposes.
 const char kSimulateIdleTimeout[] = "simulate-idle-timeout";
 
-// Causes password_manager_android_util::SetUsesSplitStoresAndUPMForLocal() to
-// ignore the min GmsCore version requirement.
-// TODO(crbug.com/324370397): Remove once min GmsCore version running on the
-// bots is above the checked value.
-const char kSkipLocalUpmGmsCoreVersionCheckForTesting[] =
-    "skip-local-upm-gms-core-version-check-for-testing";
-
 // Specifies the maximum SSL/TLS version ("tls1.2" or "tls1.3").
 const char kSSLVersionMax[] = "ssl-version-max";
 
@@ -604,9 +600,6 @@ const char kSSLVersionTLSv12[] = "tls1.2";
 
 // TLS 1.3 mode for |kSSLVersionMax| and |kSSLVersionMin| switches.
 const char kSSLVersionTLSv13[] = "tls1.3";
-
-// Use the thread pool for stack profiler.
-const char kStackProfilerUseThreadPool[] = "stack-profiler-thread-pool";
 
 // Starts the browser maximized, regardless of any previous settings.
 const char kStartMaximized[] = "start-maximized";
@@ -624,11 +617,6 @@ const char kStartStackProfilerBrowserTest[] = "browser-test";
 // amounts of disk space.
 const char kStoragePressureNotificationInterval[] =
     "storage-pressure-notification-interval";
-
-// Sets the supervised user ID for any loaded or newly created profile to the
-// given value. Pass an empty string to mark the profile as non-supervised.
-// Used for testing.
-const char kSupervisedUserId[] = "managed-user-id";
 
 // Frequency in Milliseconds for system log uploads. Should only be used for
 // testing purposes.

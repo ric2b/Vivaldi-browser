@@ -32,6 +32,7 @@
 #include "base/test/task_environment.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "build/branding_buildflags.h"
 #include "components/component_updater/component_updater_paths.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/component_updater_service_internal.h"
@@ -356,7 +357,13 @@ TEST_F(ComponentInstallerTest, RegisterComponent) {
   EXPECT_STREQ("fake name", component.name.c_str());
   EXPECT_EQ(expected_attrs, component.installer_attributes);
   EXPECT_TRUE(component.requires_network_encryption);
+
+#if BUILDFLAG(CHROME_FOR_TESTING)
+  // In Chrome for Testing component updates are disabled.
+  EXPECT_FALSE(component.updates_enabled);
+#else
   EXPECT_TRUE(component.updates_enabled);
+#endif  // BUILDFLAG(CHROME_FOR_TESTING)
 }
 
 // Tests that `ComponentInstallerPolicy::ComponentReady` and the completion
@@ -409,7 +416,8 @@ TEST_F(ComponentInstallerTest, InstallerRegister_CheckSequence) {
         base::DoNothing(),
         base::BindLambdaForTesting(
             [&run_loop](const update_client::CrxInstaller::Result& result) {
-              ASSERT_EQ(result.error, 0);
+              ASSERT_EQ(result.result.category_,
+                        update_client::ErrorCategory::kNone);
               run_loop.QuitClosure().Run();
             }));
     run_loop.Run();
@@ -470,7 +478,7 @@ TEST_F(ComponentInstallerTest, UnpackPathInstallSuccess) {
   installer->Install(
       unpack_path, update_client::jebg_public_key, nullptr, base::DoNothing(),
       base::BindOnce([](const update_client::CrxInstaller::Result& result) {
-        EXPECT_EQ(0, result.error);
+        EXPECT_EQ(result.result.category_, update_client::ErrorCategory::kNone);
       }));
 
   task_environment_.RunUntilIdle();
@@ -500,14 +508,51 @@ TEST_F(ComponentInstallerTest, UnpackPathInstallError) {
   installer->Install(
       unpack_path, update_client::jebg_public_key, nullptr, base::DoNothing(),
       base::BindOnce([](const update_client::CrxInstaller::Result& result) {
-        EXPECT_EQ(static_cast<int>(
-                      update_client::InstallError::NO_DIR_COMPONENT_USER),
-                  result.error);
+        EXPECT_EQ(result.result.category_,
+                  update_client::ErrorCategory::kInstall);
+        EXPECT_EQ(result.result.code_,
+                  static_cast<int>(
+                      update_client::InstallError::NO_DIR_COMPONENT_USER));
       }));
 
   task_environment_.RunUntilIdle();
 
   EXPECT_FALSE(base::PathExists(unpack_path));
+  EXPECT_CALL(update_client(), Stop()).Times(1);
+  EXPECT_CALL(scheduler(), Stop()).Times(1);
+}
+
+TEST_F(ComponentInstallerTest, GetInstalledFile) {
+  auto installer = base::MakeRefCounted<ComponentInstaller>(
+      std::make_unique<MockInstallerPolicy>());
+
+  Unpack(
+      update_client::GetTestFilePath("jebgalgnebhfojomionfpkfelancnnkf.crx"));
+
+  const auto unpack_path = result().unpack_path;
+  EXPECT_TRUE(base::DirectoryExists(unpack_path));
+  EXPECT_EQ(update_client::jebg_public_key, result().public_key);
+
+  base::ScopedPathOverride scoped_path_override(DIR_COMPONENT_USER);
+  base::FilePath base_dir;
+  EXPECT_TRUE(base::PathService::Get(DIR_COMPONENT_USER, &base_dir));
+  base_dir = base_dir.Append(relative_install_dir);
+  EXPECT_TRUE(base::CreateDirectory(base_dir));
+  base::RunLoop runloop;
+  installer->Install(
+      unpack_path, update_client::jebg_public_key, nullptr, base::DoNothing(),
+      base::BindLambdaForTesting(
+          [&](const update_client::CrxInstaller::Result& result) {
+            EXPECT_EQ(result.result.category_,
+                      update_client::ErrorCategory::kNone);
+            runloop.Quit();
+          }));
+  runloop.Run();
+
+  EXPECT_EQ(installer->GetInstalledFile("a"),
+            base_dir.AppendASCII("1.0").AppendASCII("a"));
+  EXPECT_EQ(installer->GetInstalledFile("../a"), std::nullopt);
+
   EXPECT_CALL(update_client(), Stop()).Times(1);
   EXPECT_CALL(scheduler(), Stop()).Times(1);
 }
@@ -624,7 +669,8 @@ TEST_F(ComponentInstallerTest, Uninstall) {
             base::DoNothing(),
             base::BindLambdaForTesting(
                 [&](const update_client::CrxInstaller::Result& result) {
-                  EXPECT_EQ(0, result.error);
+                  EXPECT_EQ(result.result.category_,
+                            update_client::ErrorCategory::kNone);
                   installer->Uninstall();
                 }));
       }));

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/cast/encoding/av1_encoder.h"
 
 #include "base/logging.h"
@@ -13,7 +18,7 @@
 #include "media/cast/constants.h"
 #include "media/cast/encoding/encoding_util.h"
 #include "third_party/libaom/source/libaom/aom/aomcx.h"
-#include "third_party/openscreen/src/cast/streaming/encoded_frame.h"
+#include "third_party/openscreen/src/cast/streaming/public/encoded_frame.h"
 
 namespace media {
 namespace cast {

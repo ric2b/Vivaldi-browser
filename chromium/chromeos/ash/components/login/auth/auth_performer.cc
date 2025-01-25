@@ -353,6 +353,7 @@ void AuthPerformer::HashPasswordAndAuthenticate(
   password_key.SetLabel(key_label);
   password_key.Transform(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF, system_salt);
   context->SetKey(password_key);
+  context->SetIsUsingPin(false);
   AuthenticateUsingKnowledgeKey(std::move(context), std::move(callback));
 }
 
@@ -418,6 +419,26 @@ void AuthPerformer::AuthenticateWithFingerprint(
   for (auto fp_label : fp_labels) {
     request.add_auth_factor_labels(fp_label.value());
   }
+  client_->AuthenticateAuthFactor(
+      request, base::BindOnce(&AuthPerformer::OnAuthenticateAuthFactor,
+                              weak_factory_.GetWeakPtr(), clock_->Now(),
+                              std::move(context), std::move(callback)));
+}
+
+void AuthPerformer::AuthenticateWithLegacyFingerprint(
+    std::unique_ptr<UserContext> context,
+    AuthOperationCallback callback) {
+  CHECK(!context->GetAuthSessionId().empty()) << "Auth session should exist";
+
+  LOGIN_LOG(EVENT) << "Authenticating with legacy fingerprint auth factors";
+
+  user_data_auth::AuthenticateAuthFactorRequest request;
+  request.set_auth_session_id(context->GetAuthSessionId());
+
+  // The legacy fingerprint auth input is not related to any specific
+  // fingerprint auth factor. it is an empty input to signal the auth factor
+  // type.
+  request.mutable_auth_input()->mutable_legacy_fingerprint_input();
   client_->AuthenticateAuthFactor(
       request, base::BindOnce(&AuthPerformer::OnAuthenticateAuthFactor,
                               weak_factory_.GetWeakPtr(), clock_->Now(),

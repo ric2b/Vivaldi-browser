@@ -185,7 +185,7 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
     ++current_;
     for (; current_ != end_; ++current_) {
       const UChar ch = characters_[current_];
-      if (LIKELY(ch == ' ')) {
+      if (ch == ' ') [[likely]] {
         continue;
       } else if (IsHTMLSpecialWhitespace(ch)) {
         whitespace_mode = WhitespaceMode::kAllWhitespace;
@@ -209,8 +209,8 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
   }
 
   void GiveRemainingTo(StringBuilder& recipient) {
-    WTF::VisitCharacters(characters_, [&](const auto* chars, unsigned length) {
-      recipient.Append(chars + current_, end_ - current_);
+    WTF::VisitCharacters(characters_, [&](auto chars) {
+      recipient.Append(chars.data() + current_, end_ - current_);
     });
     current_ = end_;
   }
@@ -928,6 +928,10 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
     case HTMLTag::kSelect:
       if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled() &&
           tree_.OpenElements()->InScope(HTMLTag::kSelect)) {
+        tree_.OpenElements()->TopNode()->AddConsoleMessage(
+            mojom::blink::ConsoleMessageSource::kJavaScript,
+            mojom::blink::ConsoleMessageLevel::kWarning,
+            "A <select> tag was parsed within another <select> tag and was converted into </select><select>. Please add the missing </select> end tag.");
         // Don't allow nested <select>s. This is the exact same logic as
         // <button>s.
         ParseError(token);
@@ -1016,12 +1020,9 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
         tree_.InsertForeignElement(token, svg_names::kNamespaceURI);
       } else {
         tree_.ReconstructTheActiveFormattingElements();
-        if (RuntimeEnabledFeatures::
-                FlushParserBeforeCreatingCustomElementsEnabled()) {
-          // Flush before creating custom elements. NOTE: Flush() can cause any
-          // queued tasks to execute, possibly re-entering the parser.
-          tree_.Flush();
-        }
+        // Flush before creating custom elements. NOTE: Flush() can cause any
+        // queued tasks to execute, possibly re-entering the parser.
+        tree_.Flush();
         tree_.InsertHTMLElement(token);
       }
       break;
@@ -1029,23 +1030,13 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
 }
 
 namespace {
-DeclarativeShadowRootMode DeclarativeShadowRootModeFromToken(
-    AtomicHTMLToken* token,
-    const Document& document,
-    bool include_shadow_roots) {
-  Attribute* type_attribute =
+String DeclarativeShadowRootModeFromToken(AtomicHTMLToken* token,
+                                          const Document& document,
+                                          bool include_shadow_roots) {
+  Attribute* mode_attribute =
       token->GetAttributeItem(html_names::kShadowrootmodeAttr);
-  if (!type_attribute) {
-    return DeclarativeShadowRootMode::kNone;
-  }
-  String shadow_mode = type_attribute->Value();
-
-  if (include_shadow_roots) {
-    if (EqualIgnoringASCIICase(shadow_mode, "open")) {
-      return DeclarativeShadowRootMode::kOpen;
-    } else if (EqualIgnoringASCIICase(shadow_mode, "closed")) {
-      return DeclarativeShadowRootMode::kClosed;
-    }
+  if (!mode_attribute) {
+    return String();
   }
   if (!include_shadow_roots) {
     document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
@@ -1054,14 +1045,9 @@ DeclarativeShadowRootMode DeclarativeShadowRootModeFromToken(
         "Found declarative shadowrootmode attribute on a template, but "
         "declarative Shadow DOM is not being parsed. Use setHTMLUnsafe() "
         "or parseHTMLUnsafe() instead."));
-  } else {
-    document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::blink::ConsoleMessageSource::kOther,
-        mojom::blink::ConsoleMessageLevel::kWarning,
-        "Invalid declarative shadowrootmode attribute value \"" + shadow_mode +
-            "\". Valid values include \"open\" and \"closed\"."));
+    return String();
   }
-  return DeclarativeShadowRootMode::kNone;
+  return mode_attribute->Value();
 }
 }  // namespace
 
@@ -1540,6 +1526,10 @@ void HTMLTreeBuilder::ProcessStartTag(AtomicHTMLToken* token) {
           tree_.InsertSelfClosingHTMLElementDestroyingToken(token);
           return;
         case HTMLTag::kSelect: {
+        tree_.OpenElements()->TopNode()->AddConsoleMessage(
+            mojom::blink::ConsoleMessageSource::kJavaScript,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "A <select> tag was parsed within another <select> tag and was converted into </select>. This behavior will change in a future browser version. Please add the missing </select> end tag.");
           ParseError(token);
           AtomicHTMLToken end_select(HTMLToken::kEndTag, HTMLTag::kSelect);
           ProcessEndTag(&end_select);

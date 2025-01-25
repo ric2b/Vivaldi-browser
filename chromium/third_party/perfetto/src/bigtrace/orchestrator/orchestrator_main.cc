@@ -15,6 +15,7 @@
  */
 
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <mutex>
 
@@ -70,9 +71,8 @@ Options:
                                          -w -p -n EXCLUSIVELY)
  -r --name_resolution_scheme SCHEME     Specify the name resolution
                                         scheme for gRPC (e.g. ipv4:, dns://)
- -t -thread_pool_size POOL_SIZE         Specify the size of the thread pool
-                                        which determines number of concurrent
-                                        gRPCs from the Orchestrator
+ -t -max_query_concurrency              Specify the number of concurrent
+  MAX_QUERY_CONCURRENCY                 queries/gRPCs from the Orchestrator
                                         )",
                 argv[0]);
 }
@@ -156,7 +156,6 @@ base::Status OrchestratorMain(int argc, char** argv) {
   std::string worker_address_list = options->worker_address_list;
   uint64_t worker_count = options->worker_count;
 
-  // TODO(ivankc) Replace with DNS resolver
   std::string target_address = options->name_resolution_scheme.empty()
                                    ? "ipv4:"
                                    : options->name_resolution_scheme;
@@ -183,6 +182,7 @@ base::Status OrchestratorMain(int argc, char** argv) {
   }
   grpc::ChannelArguments args;
   args.SetLoadBalancingPolicyName("round_robin");
+  args.SetMaxReceiveMessageSize(std::numeric_limits<int32_t>::max());
   auto channel = grpc::CreateCustomChannel(
       target_address, grpc::InsecureChannelCredentials(), args);
   auto stub = protos::BigtraceWorker::NewStub(channel);
@@ -190,6 +190,8 @@ base::Status OrchestratorMain(int argc, char** argv) {
 
   // Setup the Orchestrator Server
   grpc::ServerBuilder builder;
+  builder.SetMaxReceiveMessageSize(std::numeric_limits<int32_t>::max());
+  builder.SetMaxMessageSize(std::numeric_limits<int32_t>::max());
   builder.AddListeningPort(server_socket, grpc::InsecureServerCredentials());
   builder.RegisterService(service.get());
   std::unique_ptr<grpc::Server> server(builder.BuildAndStart());

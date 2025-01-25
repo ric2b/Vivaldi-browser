@@ -30,13 +30,13 @@
 #include "absl/strings/string_view.h"
 #include "./centipede/centipede_callbacks.h"
 #include "./centipede/command.h"
-#include "./centipede/defs.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
-#include "./centipede/logging.h"
 #include "./centipede/runner_result.h"
 #include "./centipede/shared_memory_blob_sequence.h"
 #include "./centipede/util.h"
+#include "./common/defs.h"
+#include "./common/logging.h"
 
 namespace centipede {
 namespace {
@@ -78,7 +78,7 @@ void UpdateBatchResult(const bool feature_only_feedback,
     ByteArray content;
     ReadFromLocalFile(std::string(entries[index]), content);
     if (content.empty()) {
-      LOG(WARNING) << "Skip updating batch result with an emtpy output file: "
+      LOG(WARNING) << "Skip updating batch result with an empty output file: "
                    << entries[index];
       continue;
     }

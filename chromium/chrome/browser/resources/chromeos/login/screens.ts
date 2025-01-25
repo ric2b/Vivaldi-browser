@@ -12,14 +12,12 @@ import './screens/common/ai_intro.js';
 import './screens/common/app_downloading.js';
 import './screens/common/app_launch_splash.js';
 import './screens/common/assistant_optin.js';
-import './screens/common/autolaunch.js';
 import './screens/common/categories_selection.js';
 import './screens/common/choobe.js';
 import './screens/common/consolidated_consent.js';
 import './screens/common/device_disabled.js';
 import './screens/common/display_size.js';
 import './screens/common/drive_pinning.js';
-import './screens/common/enable_kiosk.js';
 import './screens/common/error_message.js';
 import './screens/common/family_link_notice.js';
 import './screens/common/gaia_info.js';
@@ -46,6 +44,7 @@ import './screens/common/remote_activity_notification.js';
 import './screens/common/saml_confirm_password.js';
 import './screens/common/signin_fatal_error.js';
 import './screens/common/smart_privacy_protection.js';
+import './screens/common/split_modifier_keyboard_info.js';
 import './screens/common/sync_consent.js';
 import './screens/common/theme_selection.js';
 import './screens/common/touchpad_scroll.js';
@@ -109,7 +108,6 @@ export const commonScreensList: OobeTypes.ScreensList = [
     tag: 'apply-online-password-element',
     id: 'apply-online-password',
   },
-  {tag: 'autolaunch-element', id: 'autolaunch'},
   {
     tag: 'categories-selection-element',
     id: 'categories-selection',
@@ -134,7 +132,6 @@ export const commonScreensList: OobeTypes.ScreensList = [
     id: 'drive-pinning',
     condition: 'isDrivePinningEnabled',
   },
-  {tag: 'enable-kiosk-element', id: 'kiosk-enable'},
   {
     tag: 'enter-old-password-element',
     id: 'enter-old-password',
@@ -207,6 +204,11 @@ export const commonScreensList: OobeTypes.ScreensList = [
   {tag: 'saml-confirm-password-element', id: 'saml-confirm-password'},
   {tag: 'signin-fatal-error-element', id: 'signin-fatal-error'},
   {tag: 'smart-privacy-protection-element', id: 'smart-privacy-protection'},
+  {
+    tag: 'split-modifier-keyboard-info-element',
+    id: 'split-modifier-keyboard-info',
+    condition: 'isSplitModifierKeyboardInfoEnabled',
+  },
   {tag: 'sync-consent-element', id: 'sync-consent'},
   {tag: 'theme-selection-element', id: 'theme-selection'},
   {

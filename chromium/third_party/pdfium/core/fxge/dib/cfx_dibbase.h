@@ -21,7 +21,7 @@
 #include "third_party/skia/include/core/SkRefCnt.h"  // nogncheck
 #endif
 
-class CFX_ClipRgn;
+class CFX_AggClipRgn;
 class CFX_DIBitmap;
 class CFX_Matrix;
 class PauseIndicatorIface;
@@ -36,15 +36,16 @@ class CFX_DIBBase : public Retainable {
  public:
 #if BUILDFLAG(IS_APPLE)
   // Matches Apple's kCGBitmapByteOrder32Little in fx_quartz_device.cpp.
-  static constexpr FXDIB_Format kPlatformRGBFormat = FXDIB_Format::kRgb32;
+  static constexpr FXDIB_Format kPlatformRGBFormat = FXDIB_Format::kBgrx;
   using kPlatformRGBStruct = FX_BGRA_STRUCT<uint8_t>;
 #else   // BUILDFLAG(IS_APPLE)
-  static constexpr FXDIB_Format kPlatformRGBFormat = FXDIB_Format::kRgb;
+  static constexpr FXDIB_Format kPlatformRGBFormat = FXDIB_Format::kBgr;
   using kPlatformRGBStruct = FX_BGR_STRUCT<uint8_t>;
 #endif  // BUILDFLAG(IS_APPLE)
 
   static constexpr uint32_t kPaletteSize = 256;
 
+  // Note that the returned scanline includes unused space at the end, if any.
   virtual pdfium::span<const uint8_t> GetScanline(int line) const = 0;
   virtual bool SkipToScanline(int line, PauseIndicatorIface* pPause) const;
   virtual size_t GetEstimatedImageMemoryBurden() const;
@@ -53,9 +54,12 @@ class CFX_DIBBase : public Retainable {
   virtual RetainPtr<const CFX_DIBitmap> RealizeIfNeeded() const;
 #endif
 
+  // Note that the returned scanline does not include unused space at the end,
+  // if any.
   template <typename T>
   pdfium::span<const T> GetScanlineAs(int line) const {
-    return fxcrt::reinterpret_span<const T>(GetScanline(line));
+    return fxcrt::reinterpret_span<const T>(GetScanline(line))
+        .first(GetWidth());
   }
 
   int GetWidth() const { return width_; }
@@ -63,9 +67,12 @@ class CFX_DIBBase : public Retainable {
   uint32_t GetPitch() const { return pitch_; }
 
   FXDIB_Format GetFormat() const { return format_; }
+
+  // Bits per pixel, not bytes.
   int GetBPP() const { return GetBppFromFormat(GetFormat()); }
+
   bool IsMaskFormat() const { return GetIsMaskFromFormat(GetFormat()); }
-  bool IsAlphaFormat() const { return GetFormat() == FXDIB_Format::kArgb; }
+  bool IsAlphaFormat() const { return GetIsAlphaFromFormat(GetFormat()); }
   bool IsOpaqueImage() const { return !IsMaskFormat() && !IsAlphaFormat(); }
 
   bool HasPalette() const { return !palette_.empty(); }
@@ -82,6 +89,8 @@ class CFX_DIBBase : public Retainable {
 
   RetainPtr<CFX_DIBitmap> Realize() const;
   RetainPtr<CFX_DIBitmap> ClipTo(const FX_RECT& rect) const;
+  // `format` must be different from the existing format.
+  // Only supports `FXDIB_Format::kBgr` and `FXDIB_Format::k8bppRgb`.
   RetainPtr<CFX_DIBitmap> ConvertTo(FXDIB_Format format) const;
   RetainPtr<CFX_DIBitmap> StretchTo(int dest_width,
                                     int dest_height,
@@ -103,7 +112,15 @@ class CFX_DIBBase : public Retainable {
                       int src_height,
                       int& src_left,
                       int& src_top,
-                      const CFX_ClipRgn* pClipRgn) const;
+                      const CFX_AggClipRgn* pClipRgn) const;
+
+  bool IsPremultiplied() const {
+#if defined(PDF_USE_SKIA)
+    return GetFormat() == FXDIB_Format::kBgraPremul;
+#else
+    return false;
+#endif
+  }
 
 #if defined(PDF_USE_SKIA)
   // Realizes an `SkImage` from this DIB.
@@ -111,9 +128,6 @@ class CFX_DIBBase : public Retainable {
   // This may share the underlying pixels, in which case, this DIB should not be
   // modified during the lifetime of the `SkImage`.
   virtual sk_sp<SkImage> RealizeSkImage() const;
-
-  // Whether alpha is premultiplied (if `IsAlphaFormat()`).
-  virtual bool IsPremultiplied() const;
 #endif  // defined(PDF_USE_SKIA)
 
  protected:

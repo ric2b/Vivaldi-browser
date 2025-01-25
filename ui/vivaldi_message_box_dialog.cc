@@ -214,11 +214,12 @@ VivaldiMessageBoxDialog::VivaldiMessageBoxDialog(const Config& config,
   SetModalType(is_system_modal ? ui::MODAL_TYPE_SYSTEM : ui::MODAL_TYPE_WINDOW);
 #else
   DCHECK(!is_system_modal);
-  SetModalType(ui::MODAL_TYPE_WINDOW);
+  SetModalType(ui::mojom::ModalType::kWindow);
 #endif
   SetButtons(type_ == chrome::MESSAGE_BOX_TYPE_QUESTION
-                 ? ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL
-                 : ui::DIALOG_BUTTON_OK);
+                 ? static_cast<int>(ui::mojom::DialogButton::kOk) |
+                       static_cast<int>(ui::mojom::DialogButton::kCancel)
+                 : static_cast<int>(ui::mojom::DialogButton::kOk));
 
   SetAcceptCallback(base::BindOnce(&VivaldiMessageBoxDialog::OnDialogAccepted,
                                    base::Unretained(this)));
@@ -238,23 +239,23 @@ VivaldiMessageBoxDialog::VivaldiMessageBoxDialog(const Config& config,
             ? l10n_util::GetStringUTF16(IDS_CONFIRM_MESSAGEBOX_YES_BUTTON_LABEL)
             : l10n_util::GetStringUTF16(IDS_OK);
   }
-  SetButtonLabel(ui::DIALOG_BUTTON_OK, ok_text);
+  SetButtonLabel(ui::mojom::DialogButton::kOk, ok_text);
 
   // Only MESSAGE_BOX_TYPE_QUESTION has a Cancel button.
   if (type_ == chrome::MESSAGE_BOX_TYPE_QUESTION) {
     std::u16string cancel_text = config.no_text;
     if (cancel_text.empty())
       cancel_text = l10n_util::GetStringUTF16(IDS_CANCEL);
-    SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, cancel_text);
+    SetButtonLabel(ui::mojom::DialogButton::kCancel, cancel_text);
   }
 
   if (!config.checkbox_text.empty()) {
     message_box_view_->SetCheckBoxLabel(config.checkbox_text);
-    SetButtonStyle(ui::DIALOG_BUTTON_OK, ui::ButtonStyle::kTonal);
+    SetButtonStyle(ui::mojom::DialogButton::kOk, ui::ButtonStyle::kTonal);
   }
 
   if (config.cancel_default) {
-    SetDefaultButton(ui::DIALOG_BUTTON_CANCEL);
+    SetDefaultButton(static_cast<int>(ui::mojom::DialogButton::kCancel));
   }
 }
 

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ash/cert_provisioning/cert_provisioning_worker_dynamic.h"
 
 #include <stdint.h>
@@ -479,12 +484,11 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllSteps) {
   base::HistogramTester histogram_tester;
 
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
   const std::string listener_type = MakeInvalidationListenerType(process_id);
-  EXPECT_LE(listener_type.size(), 128u);
   const CertProvisioningClient::ProvisioningProcess provisioning_process(
       process_id, CertScope::kUser, kCertProfileId, kCertProfileVersion,
       GetPublicKeyBin());
@@ -717,7 +721,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllStepsNoWaiting) {
   base::HistogramTester histogram_tester;
 
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -874,7 +878,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, SuccessWithAllStepsNoWaiting) {
 TEST_F(CertProvisioningWorkerDynamicTest, VaChallengeRequired) {
   const CertScope kCertScope = CertScope::kUser;
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -922,7 +926,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, VaChallengeRequired) {
 // Checks that omitting the "proof of possession" step works fine.
 TEST_F(CertProvisioningWorkerDynamicTest, NoProofOfPossession) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1000,7 +1004,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, NoProofOfPossession) {
 // Provides one proof of possession .
 TEST_F(CertProvisioningWorkerDynamicTest, NoVaSuccess) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/false, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1070,7 +1074,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, NoVaSuccess) {
 // proof-of-possession signatures in the "verified access" case.
 TEST_F(CertProvisioningWorkerDynamicTest, VaTooManyTwoProofsOfPossession) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1160,7 +1164,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, VaTooManyTwoProofsOfPossession) {
 TEST_F(CertProvisioningWorkerDynamicTest,
        ProofOfPossessionNoSignatureAlgorithm) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/false, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1236,7 +1240,7 @@ TEST_F(CertProvisioningWorkerDynamicTest,
 // proof-of-possession signatures in the "no verified access" case.
 TEST_F(CertProvisioningWorkerDynamicTest, NoVaTooManyTwoProofsOfPossession) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/false, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1311,7 +1315,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, NoVaTooManyTwoProofsOfPossession) {
 // Provides one proof of possession .
 TEST_F(CertProvisioningWorkerDynamicTest, PublicKeyMismatch) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/false, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1385,7 +1389,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, PublicKeyMismatch) {
 // worker will retry a request when it asked to continue the provisioning.
 TEST_F(CertProvisioningWorkerDynamicTest, TryLaterManualRetry) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1521,7 +1525,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, TryLaterManualRetry) {
 // will automatically retry a request after some time.
 TEST_F(CertProvisioningWorkerDynamicTest, TryLaterWait) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1643,12 +1647,158 @@ TEST_F(CertProvisioningWorkerDynamicTest, TryLaterWait) {
   }
 }
 
+// Test that with kCertProvisioningUseOnlyInvalidationsForTesting feature flag
+// enabled the worker only progresses when it receives an invalidation.
+TEST_F(CertProvisioningWorkerDynamicTest, TryLaterWaitForInvalidation) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kCertProvisioningUseOnlyInvalidationsForTesting};
+
+  const CertProfile cert_profile(
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
+      /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
+      ProtocolVersion::kDynamic);
+  const std::string process_id = GenerateCertProvisioningId();
+  const CertProvisioningClient::ProvisioningProcess provisioning_process(
+      process_id, CertScope::kUser, kCertProfileId, kCertProfileVersion,
+      GetPublicKeyBin());
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  CertProvisioningWorkerDynamic worker(
+      process_id, CertScope::kUser, GetProfile(), &testing_pref_service_,
+      cert_profile, &cert_provisioning_client_, MakeInvalidator(),
+      GetStateChangeCallback(), GetResultCallback());
+
+  const base::TimeDelta very_long_delay = base::Days(7);
+
+  EXPECT_CALL(state_change_callback_observer_, StateChangeCallback)
+      .Times(AtLeast(1));
+  {
+    testing::InSequence seq;
+
+    EXPECT_PREPARE_KEY_OK(*mock_tpm_challenge_key,
+                          StartPrepareKeyStep(::attestation::ENTERPRISE_USER,
+                                              /*will_register_key=*/true,
+                                              ::attestation::KEY_TYPE_RSA,
+                                              GetKeyName(kCertProfileId),
+                                              /*profile=*/_,
+                                              /*callback=*/_, /*signals=*/_));
+
+    EXPECT_START(Start(Eq(std::ref(provisioning_process)), /*callback=*/_),
+                 StartResultOk());
+
+    EXPECT_GET_NEXT_INSTRUCTION(
+        GetNextInstruction(Eq(std::ref(provisioning_process)), /*callback=*/_),
+        base::unexpected(InstructionNotYetAvailable()));
+
+    worker.DoStep();
+    EXPECT_EQ(worker.GetState(),
+              CertProvisioningWorkerState::kReadyForNextOperation);
+  }
+
+  {
+    // Verify that the worker doesn't progress without an invalidation.
+    FastForwardBy(very_long_delay);
+    Mock::VerifyAndClearExpectations(&cert_provisioning_client_);
+  }
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_GET_NEXT_INSTRUCTION(
+        GetNextInstruction(Eq(std::ref(provisioning_process)), /*callback=*/_),
+        NextInstructionAuthorize());
+
+    EXPECT_SIGN_CHALLENGE_OK(*mock_tpm_challenge_key,
+                             StartSignChallengeStep(kChallenge,
+                                                    /*callback=*/_));
+
+    EXPECT_REGISTER_KEY_OK(*mock_tpm_challenge_key, StartRegisterKeyStep);
+
+    EXPECT_CALL(*key_permissions_manager_,
+                AllowKeyForUsage(/*callback=*/_, KeyUsage::kCorporate,
+                                 GetPublicKeyBin()));
+
+    EXPECT_SET_ATTRIBUTE_FOR_KEY_OK(
+        SetAttributeForKey(TokenId::kUser, GetPublicKeyBin(),
+                           KeyAttributeType::kCertificateProvisioningId,
+                           GetCertProfileIdBin(), _));
+
+    EXPECT_AUTHORIZE(
+        Authorize(Eq(std::ref(provisioning_process)), kChallengeResponse,
+                  /*callback=*/_),
+        NoDataResultOk());
+
+    EXPECT_GET_NEXT_INSTRUCTION(
+        GetNextInstruction(Eq(std::ref(provisioning_process)), /*callback=*/_),
+        base::unexpected(InstructionNotYetAvailable()));
+
+    // Emulate an invalidation.
+    worker.DoStep();
+    EXPECT_EQ(worker.GetState(),
+              CertProvisioningWorkerState::kReadyForNextOperation);
+  }
+
+  {
+    // Verify that the worker doesn't progress without an invalidation.
+    FastForwardBy(very_long_delay);
+    Mock::VerifyAndClearExpectations(&cert_provisioning_client_);
+  }
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_GET_NEXT_INSTRUCTION(
+        GetNextInstruction(Eq(std::ref(provisioning_process)), /*callback=*/_),
+        NextInstructionProofOfPossession());
+
+    EXPECT_SIGN_RSAPKC1_RAW_OK(
+        SignRSAPKCS1Raw(::testing::Optional(TokenId::kUser), GetDataToSignBin(),
+                        GetPublicKeyBin(), /*callback=*/_));
+
+    EXPECT_UPLOAD_PROOF_OF_POSSESSION(
+        UploadProofOfPossession(Eq(std::ref(provisioning_process)),
+                                GetSignatureStr(),
+                                /*callback=*/_),
+        NoDataResultOk());
+
+    EXPECT_GET_NEXT_INSTRUCTION(
+        GetNextInstruction(Eq(std::ref(provisioning_process)), /*callback=*/_),
+        base::unexpected(InstructionNotYetAvailable()));
+
+    // Emulate an invalidation.
+    worker.DoStep();
+    EXPECT_EQ(worker.GetState(),
+              CertProvisioningWorkerState::kReadyForNextOperation);
+  }
+
+  {
+    // Verify that the worker doesn't progress without an invalidation.
+    FastForwardBy(very_long_delay);
+    Mock::VerifyAndClearExpectations(&cert_provisioning_client_);
+  }
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_GET_NEXT_INSTRUCTION(
+        GetNextInstruction(Eq(std::ref(provisioning_process)), /*callback=*/_),
+        NextInstructionImportCertificate(kFakeCertificate));
+
+    EXPECT_IMPORT_CERTIFICATE_OK(
+        ImportCertificate(TokenId::kUser, /*certificate=*/_, /*callback=*/_));
+
+    // Emulate an invalidation.
+    worker.DoStep();
+    EXPECT_EQ(worker.GetState(), CertProvisioningWorkerState::kSucceeded);
+  }
+}
+
 // Checks that when the server returns an error in the "DM Status", the worker
 // will enter an error state and stop the provisioning.
 TEST_F(CertProvisioningWorkerDynamicTest, StatusErrorHandling) {
   const CertScope kCertScope = CertScope::kUser;
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1698,7 +1848,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, ResponseErrorHandling) {
   base::HistogramTester histogram_tester;
 
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1752,7 +1902,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, ResponseErrorHandling) {
 TEST_F(CertProvisioningWorkerDynamicTest, InconsistentDataErrorHandling) {
   const CertScope kCertScope = CertScope::kUser;
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1797,7 +1947,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, InconsistentDataErrorHandling) {
 TEST_F(CertProvisioningWorkerDynamicTest, ProfileNotFoundErrorHandling) {
   const CertScope kCertScope = CertScope::kUser;
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1844,7 +1994,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, ProfileNotFoundErrorHandling) {
 // worker will automatically retry a request using exponential backoff strategy.
 TEST_F(CertProvisioningWorkerDynamicTest, BackoffStrategy) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -1915,7 +2065,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, BackoffStrategy) {
 // temporary error.
 TEST_F(CertProvisioningWorkerDynamicTest, RetryAuthorize) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -2001,7 +2151,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, RetryAuthorize) {
 // server-side temporary error.
 TEST_F(CertProvisioningWorkerDynamicTest, RetryUploadProofOfPossession) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/false, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -2085,7 +2235,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, RetryUploadProofOfPossession) {
 // worker will update its BackendServerError attribute.
 TEST_F(CertProvisioningWorkerDynamicTest, ProcessBackendServerErrorResponse) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -2153,7 +2303,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, RemoveRegisteredKey) {
   base::HistogramTester histogram_tester;
 
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -2238,7 +2388,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, RemoveRegisteredKey) {
 
 TEST_F(CertProvisioningWorkerDynamicTest, ResetWorker) {
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -2279,10 +2429,10 @@ class PrefServiceObserver {
   base::WeakPtrFactory<PrefServiceObserver> weak_factory_{this};
 };
 
-TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccess) {
+TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccessWithRsaKeys) {
   const base::TimeDelta kRenewalPeriod = base::Seconds(1200300);
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kRenewalPeriod, ProtocolVersion::kDynamic);
   const CertScope kCertScope = CertScope::kUser;
   const std::string process_id = GenerateCertProvisioningId();
@@ -2331,7 +2481,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccess) {
               "profile_id": "cert_profile_1",
               "va_enabled": true,
               "renewal_period": 1200300,
-              "protocol_version": 2
+              "protocol_version": 2,
+              "key_type": 1
             },
             "cert_scope": 0,
             "invalidation_topic": "",
@@ -2364,7 +2515,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccess) {
               "profile_id": "cert_profile_1",
               "va_enabled": true,
               "renewal_period": 1200300,
-              "protocol_version": 2
+              "protocol_version": 2,
+              "key_type": 1
             },
             "cert_scope": 0,
             "invalidation_topic": "fake_invalidation_topic_1",
@@ -2451,7 +2603,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccess) {
               "profile_id": "cert_profile_1",
               "va_enabled": true,
               "renewal_period": 1200300,
-              "protocol_version": 2
+              "protocol_version": 2,
+              "key_type": 1
             },
             "cert_scope": 0,
             "invalidation_topic": "fake_invalidation_topic_1",
@@ -2514,7 +2667,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccess) {
               "profile_id": "cert_profile_1",
               "va_enabled": true,
               "renewal_period": 1200300,
-              "protocol_version": 2
+              "protocol_version": 2,
+              "key_type": 1
             },
             "cert_scope": 0,
             "invalidation_topic": "fake_invalidation_topic_1",
@@ -2573,7 +2727,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccess) {
               "profile_id": "cert_profile_1",
               "va_enabled": true,
               "renewal_period": 1200300,
-              "protocol_version": 2
+              "protocol_version": 2,
+              "key_type": 1
             },
             "cert_scope": 0,
             "invalidation_topic": "fake_invalidation_topic_1",
@@ -2638,10 +2793,130 @@ TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccess) {
   }
 }
 
+TEST_F(CertProvisioningWorkerDynamicTest, SerializationSuccessWithEcKeys) {
+  const base::TimeDelta kRenewalPeriod = base::Seconds(1200300);
+  const CertProfile cert_profile(
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kEc,
+      /*is_va_enabled=*/true, kRenewalPeriod, ProtocolVersion::kDynamic);
+  const CertScope kCertScope = CertScope::kUser;
+  const std::string process_id = GenerateCertProvisioningId();
+  const std::string listener_type = MakeInvalidationListenerType(process_id);
+  const CertProvisioningClient::ProvisioningProcess provisioning_process(
+      process_id, kCertScope, kCertProfileId, kCertProfileVersion,
+      GetPublicKeyBin());
+
+  std::unique_ptr<MockCertProvisioningInvalidator> mock_invalidator_obj;
+  MockCertProvisioningInvalidator* mock_invalidator = nullptr;
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  std::unique_ptr<CertProvisioningWorker> worker =
+      CertProvisioningWorkerFactory::Get()->Create(
+          process_id, kCertScope, GetProfile(), &testing_pref_service_,
+          cert_profile, &cert_provisioning_client_,
+          MakeInvalidator(&mock_invalidator), GetStateChangeCallback(),
+          GetResultCallback());
+
+  StrictMock<PrefServiceObserver> pref_observer(
+      &testing_pref_service_, GetPrefNameForSerialization(kCertScope));
+  base::Value::Dict pref_val;
+
+  EXPECT_CALL(state_change_callback_observer_, StateChangeCallback)
+      .Times(AtLeast(1));
+
+  // Prepare key, send Start request.
+  {
+    testing::InSequence seq;
+
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(::attestation::ENTERPRISE_USER,
+                            /*will_register_key=*/true,
+                            // TODO(b/364893005): Update key type once support
+                            // for EC keys is ready. This is still ok in this
+                            // test as we're only testing worker serialization.
+                            ::attestation::KEY_TYPE_RSA,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_,
+                            /*callback=*/_, /*signals=*/_));
+
+    // Serialized in kKeypairGenerated = 1 state
+    pref_val = ParseJsonDict(base::StringPrintf(
+        R"({
+          "cert_profile_1": {
+            "cert_profile": {
+              "policy_version": "cert_profile_version_1",
+              "name": "Certificate Profile 1",
+              "profile_id": "cert_profile_1",
+              "va_enabled": true,
+              "renewal_period": 1200300,
+              "protocol_version": 2,
+              "key_type": 2
+            },
+            "cert_scope": 0,
+            "invalidation_topic": "",
+            "key_location": 1,
+            "process_id": "%s",
+            "attempted_va_challenge": false,
+            "attempted_proof_of_possession": false,
+            "proof_of_possession_signature": "",
+            "public_key": "%s",
+            "state": 1
+          }
+        })",
+        // TODO(b/364893005): Update public key once support for EC keys is
+        // ready. This is still ok in this test as we're only testing worker
+        // serialization.
+        process_id.c_str(), kPublicKeyBase64));
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    EXPECT_START(Start(Eq(std::ref(provisioning_process)), /*callback=*/_),
+                 StartResultOk());
+
+    EXPECT_CALL(*mock_invalidator,
+                Register(kInvalidationTopic, listener_type, _))
+        .Times(1);
+
+    // Serialized in kReadyForNextOperation = 12 state
+    pref_val = ParseJsonDict(base::StringPrintf(
+        R"({
+          "cert_profile_1": {
+            "cert_profile": {
+              "policy_version": "cert_profile_version_1",
+              "name": "Certificate Profile 1",
+              "profile_id": "cert_profile_1",
+              "va_enabled": true,
+              "renewal_period": 1200300,
+              "protocol_version": 2,
+              "key_type": 2
+            },
+            "cert_scope": 0,
+            "invalidation_topic": "fake_invalidation_topic_1",
+            "key_location": 1,
+            "process_id": "%s",
+            "attempted_va_challenge": false,
+            "attempted_proof_of_possession": false,
+            "proof_of_possession_signature": "",
+            "public_key": "%s",
+            "state": 12
+          }
+        })",
+        // TODO(b/364893005): Update public key once support for EC keys is
+        // ready. This is still ok in this test as we're only testing worker
+        // serialization.
+        process_id.c_str(), kPublicKeyBase64));
+
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+    EXPECT_GET_NEXT_INSTRUCTION_NO_OP(
+        GetNextInstruction(Eq(std::ref(provisioning_process)), /*callback=*/_));
+
+    worker->DoStep();
+  }
+}
+
 TEST_F(CertProvisioningWorkerDynamicTest, SerializationOnFailure) {
   const CertScope kCertScope = CertScope::kUser;
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -2680,7 +2955,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, SerializationOnFailure) {
               "name": "Certificate Profile 1",
               "profile_id": "cert_profile_1",
               "va_enabled": true,
-              "protocol_version": 2
+              "protocol_version": 2,
+              "key_type": 1
             },
             "cert_scope": 0,
             "invalidation_topic": "",
@@ -2717,7 +2993,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, SerializationOnFailure) {
 TEST_F(CertProvisioningWorkerDynamicTest, InformationalGetters) {
   const CertScope kCertScope = CertScope::kUser;
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -2783,7 +3059,7 @@ TEST_F(CertProvisioningWorkerDynamicTest, CancelDeviceWorker) {
 
   const CertScope kCertScope = CertScope::kDevice;
   const CertProfile cert_profile(
-      kCertProfileId, kCertProfileName, kCertProfileVersion,
+      kCertProfileId, kCertProfileName, kCertProfileVersion, KeyType::kRsa,
       /*is_va_enabled=*/true, kCertProfileRenewalPeriod,
       ProtocolVersion::kDynamic);
   const std::string process_id = GenerateCertProvisioningId();
@@ -2823,7 +3099,8 @@ TEST_F(CertProvisioningWorkerDynamicTest, CancelDeviceWorker) {
               "name": "Certificate Profile 1",
               "profile_id": "cert_profile_1",
               "va_enabled": true,
-              "protocol_version": 2
+              "protocol_version": 2,
+              "key_type": 1
             },
             "cert_scope": 1,
             "invalidation_topic": "",

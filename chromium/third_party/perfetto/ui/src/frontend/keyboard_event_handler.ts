@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {exists} from '../base/utils';
 import {Actions} from '../common/actions';
-import {getLegacySelection} from '../common/state';
-
 import {Flow, globals} from './globals';
-import {focusHorizontalRange, verticalScrollToTrack} from './scroll_helper';
 
 type Direction = 'Forward' | 'Backward';
 
@@ -45,7 +41,7 @@ function findAnotherFlowExcept(boundFlows: Flow[], flowId: number): number {
 
 // Change focus to the next flow event (matching the direction)
 export function focusOtherFlow(direction: Direction) {
-  const currentSelection = getLegacySelection(globals.state);
+  const currentSelection = globals.selectionManager.legacySelection;
   if (!currentSelection || currentSelection.kind !== 'SLICE') {
     return;
   }
@@ -77,7 +73,7 @@ export function focusOtherFlow(direction: Direction) {
 
 // Select the slice connected to the flow in focus
 export function moveByFocusedFlow(direction: Direction): void {
-  const currentSelection = getLegacySelection(globals.state);
+  const currentSelection = globals.selectionManager.legacySelection;
   if (!currentSelection || currentSelection.kind !== 'SLICE') {
     return;
   }
@@ -96,37 +92,24 @@ export function moveByFocusedFlow(direction: Direction): void {
   for (const flow of globals.connectedFlows) {
     if (flow.id === flowId) {
       const flowPoint = direction === 'Backward' ? flow.begin : flow.end;
-      const trackKeyByTrackId = globals.trackManager.trackKeyByTrackId;
-      const trackKey = trackKeyByTrackId.get(flowPoint.trackId);
-      if (trackKey) {
-        globals.setLegacySelection(
+      const track = globals.workspace.flatTracks.find((t) => {
+        return globals.trackManager
+          .getTrack(t.uri)
+          ?.tags?.trackIds?.includes(flowPoint.trackId);
+      });
+      if (track) {
+        globals.selectionManager.setLegacy(
           {
             kind: 'SLICE',
             id: flowPoint.sliceId,
-            trackKey,
+            trackUri: track.uri,
             table: 'slice',
           },
           {
-            clearSearch: true,
             pendingScrollId: flowPoint.sliceId,
-            switchToCurrentSelectionTab: true,
           },
         );
       }
     }
-  }
-}
-
-export async function findCurrentSelection() {
-  const selection = getLegacySelection(globals.state);
-  if (selection === null) return;
-
-  const range = await globals.findTimeRangeOfSelection();
-  if (exists(range)) {
-    focusHorizontalRange(range.start, range.end);
-  }
-
-  if (selection.trackKey) {
-    verticalScrollToTrack(selection.trackKey, true);
   }
 }

@@ -87,13 +87,15 @@ class AutofillPopupControllerImpl
       const override;
   void Hide(SuggestionHidingReason reason) override;
   void ViewDestroyed() override;
-  void Show(std::vector<Suggestion> suggestions,
+  void Show(UiSessionId ui_session_id,
+            std::vector<Suggestion> suggestions,
             AutofillSuggestionTriggerSource trigger_source,
             AutoselectFirstSuggestion autoselect_first_suggestion) override;
-  void DisableThresholdForTesting(bool disable_threshold) override;
+  std::optional<UiSessionId> GetUiSessionId() const override;
   void SetKeepPopupOpenForTesting(bool keep_popup_open_for_testing) override;
   void UpdateDataListValues(base::span<const SelectOption> options) override;
   void PinView() override;
+  bool IsViewVisibilityAcceptingThresholdEnabled() const override;
 
   // AutofillPopupController:
   void SelectSuggestion(int index) override;
@@ -104,7 +106,9 @@ class AutofillPopupControllerImpl
       AutoselectFirstSuggestion autoselect_first_suggestion) override;
   void HideSubPopup() override;
   bool ShouldIgnoreMouseObservedOutsideItemBoundsCheck() const override;
-  void PerformButtonActionForSuggestion(int index) override;
+  void PerformButtonActionForSuggestion(
+      int index,
+      const SuggestionButtonAction& button_action) override;
   const std::vector<SuggestionFilterMatch>& GetSuggestionFilterMatches()
       const override;
   void SetFilter(std::optional<SuggestionFilter> filter) override;
@@ -112,7 +116,6 @@ class AutofillPopupControllerImpl
   bool HandleKeyPressEvent(const input::NativeWebKeyboardEvent& event) override;
   void OnPopupPainted() override;
   base::WeakPtr<AutofillPopupController> GetWeakPtr() override;
-  void SetViewForTesting(base::WeakPtr<AutofillPopupView> view) override;
 
  protected:
   AutofillPopupControllerImpl(
@@ -150,6 +153,7 @@ class AutofillPopupControllerImpl
   virtual void HideViewAndDie();
 
  private:
+  friend class AutofillPopupControllerImplTestApi;
   friend class AutofillSuggestionController;
 
   // Clear the internal state of the controller. This is needed to ensure that
@@ -164,8 +168,14 @@ class AutofillPopupControllerImpl
   // Returns `true` if this popup has no parent, and `false` for sub-popups.
   bool IsRootPopup() const;
 
-  void UpdateFilteredSuggestions(bool notify_suggestions_changed);
+  // Notifies the view that the suggestions provided by the controller changed.
+  // If `prefer_prev_arrow_side` is `true`, the view takes prev arrow side as
+  // the first preferred when recalculating the popup position.
+  void OnSuggestionsChanged(bool prefer_prev_arrow_side);
 
+  void UpdateFilteredSuggestions();
+
+  UiSessionId ui_session_id_;
   base::WeakPtr<content::WebContents> web_contents_;
   PopupControllerCommon controller_common_;
   base::WeakPtr<AutofillPopupView> view_;

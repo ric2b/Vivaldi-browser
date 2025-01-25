@@ -5,18 +5,18 @@
 #ifndef IOS_CHROME_BROWSER_UI_OMNIBOX_CHROME_OMNIBOX_CLIENT_IOS_H_
 #define IOS_CHROME_BROWSER_UI_OMNIBOX_CHROME_OMNIBOX_CLIENT_IOS_H_
 
-#include <memory>
-#include <unordered_map>
+#import <memory>
+#import <unordered_map>
 
 #import "base/memory/raw_ptr.h"
-#include "base/memory/weak_ptr.h"
-#include "base/scoped_multi_source_observation.h"
-#include "components/omnibox/browser/autocomplete_match.h"
-#include "components/omnibox/browser/omnibox_client.h"
-#include "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
-#include "ios/web/public/web_state_observer.h"
+#import "base/memory/weak_ptr.h"
+#import "base/scoped_multi_source_observation.h"
+#import "components/omnibox/browser/autocomplete_match.h"
+#import "components/omnibox/browser/omnibox_client.h"
+#import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
+#import "ios/web/public/web_state_observer.h"
 
-class ChromeBrowserState;
 class WebLocationBar;
 namespace feature_engagement {
 class Tracker;
@@ -62,7 +62,6 @@ class ChromeOmniboxClientIOS final : public OmniboxClient,
   std::u16string GetURLForDisplay() const override;
   GURL GetNavigationEntryURL() const override;
   metrics::OmniboxEventProto::PageClassification GetPageClassification(
-      OmniboxFocusSource focus_source,
       bool is_prefetch) override;
   security_state::SecurityLevel GetSecurityLevel() const override;
   net::CertStatus GetCertStatus() const override;

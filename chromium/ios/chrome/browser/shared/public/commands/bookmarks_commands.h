@@ -42,6 +42,19 @@ class WebState;
 // corresponding to `URL`.
 - (void)openToExternalBookmark:(GURL)URL;
 
+#if defined(VIVALDI_BUILD)
+// Adds StartPage Speed Dial item for the URL.
+// - If it is already added, the "edit speed dial" flow will begin.
+// - If it is not already added:
+// -- If there's a group available, It will be added to that
+// group automatically and an "Edit" button will be provided in the
+// displayed snackbar message.
+// -- If there's no group available, first a group is created as
+// named 'Home', and the URL will be added as an item under that newly created
+// group.
+- (void)createOrEditSpeedDialWithURL:(web::WebState*)webState;
+#endif // End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_SHARED_PUBLIC_COMMANDS_BOOKMARKS_COMMANDS_H_

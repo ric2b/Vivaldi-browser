@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/webauthn/json/value_conversions.h"
 
 #include <iterator>
@@ -301,6 +306,15 @@ base::Value ToValue(
   return base::Value(std::move(value));
 }
 
+base::Value ToValue(const std::vector<std::string>& strings) {
+  base::Value::List ret;
+  ret.reserve(strings.size());
+  for (const auto& string : strings) {
+    ret.Append(string);
+  }
+  return base::Value(std::move(ret));
+}
+
 std::optional<device::FidoTransportProtocol> FidoTransportProtocolFromValue(
     const base::Value& value) {
   if (!value.is_string()) {
@@ -393,6 +407,10 @@ base::Value ToValue(
     value.Set("hints", ToValue(options->hints));
   }
   value.Set("attestation", ToValue(options->attestation));
+
+  if (!options->attestation_formats.empty()) {
+    value.Set("attestationFormats", ToValue(options->attestation_formats));
+  }
 
   base::Value::Dict extensions;
 

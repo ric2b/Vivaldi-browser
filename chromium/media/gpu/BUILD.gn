@@ -85,7 +85,7 @@ component("gpu") {
     "//base",
     "//gpu",
     "//media",
-    "//third_party/mesa_headers",
+    "//third_party/angle:includes",
     "//ui/gfx/geometry",
   ]
   deps = [
@@ -179,6 +179,7 @@ component("gpu") {
       "//gpu/ipc/common",
       "//media/mojo:buildflags",
       "//services/service_manager/public/cpp:cpp",
+      "//third_party/libgav1:libgav1_parser",
       "//ui/gl:gl_jni_headers",
     ]
     if (enable_vulkan) {
@@ -242,8 +243,6 @@ component("gpu") {
       "windows/d3d12_video_decoder_wrapper.h",
       "windows/d3d12_video_processor_wrapper.cc",
       "windows/d3d12_video_processor_wrapper.h",
-      "windows/d3d_accelerator.cc",
-      "windows/d3d_accelerator.h",
       "windows/d3d_com_defs.h",
       "windows/d3d_video_decoder_wrapper.cc",
       "windows/d3d_video_decoder_wrapper.h",
@@ -279,7 +278,6 @@ component("gpu") {
       ]
       deps += [ "//third_party/libaom:libaomrc" ]
     }
-    configs += [ "//third_party/khronos:khronos_headers" ]
     deps += [
       "//gpu/ipc/common:common",
       "//media/base/win:color_space_util_win",
@@ -444,15 +442,6 @@ source_set("command_buffer_helper") {
     "command_buffer_helper.h",
   ]
 
-  if (!is_android) {
-    # This code is used only by the legacy VDA implementation, which is not
-    # supported on Android.
-    sources += [
-      "gles2_decoder_helper.cc",
-      "gles2_decoder_helper.h",
-    ]
-  }
-
   public_deps = [
     "//base",
     "//gpu/command_buffer/common",
@@ -522,6 +511,7 @@ if (is_android) {
       "//media/test:run_all_unittests",
       "//mojo/core/embedder",
       "//testing/gtest",
+      "//third_party/angle:includes",
       "//ui/android:ui_java",
       "//ui/base",
       "//ui/gfx",
@@ -531,8 +521,6 @@ if (is_android) {
       "//ui/gl:test_support",
       "//ui/gl/init",
     ]
-
-    configs += [ "//third_party/khronos:khronos_headers" ]
   }
 }
 
@@ -608,7 +596,6 @@ source_set("unit_tests") {
     "//media:test_support",
     "//media/gpu",
     "//media/gpu:test_support",
-    "//media/gpu/ipc/service:unit_tests",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/gl:test_support",

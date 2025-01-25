@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "gpu/command_buffer/service/shared_image/external_vk_image_backing.h"
 
 #include <utility>
@@ -38,13 +43,13 @@
 #include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPixmap.h"
-#include "third_party/skia/include/gpu/GrBackendSemaphore.h"
-#include "third_party/skia/include/gpu/GrDirectContext.h"
-#include "third_party/skia/include/gpu/GrTypes.h"
 #include "third_party/skia/include/gpu/MutableTextureState.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
+#include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSemaphore.h"
 #include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
-#include "third_party/skia/include/gpu/vk/GrVkTypes.h"
+#include "third_party/skia/include/gpu/ganesh/vk/GrVkTypes.h"
 #include "third_party/skia/include/gpu/vk/VulkanMutableTextureState.h"
 #include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -84,10 +89,6 @@ namespace gpu {
 
 namespace {
 
-BASE_FEATURE(kCorrectColorAttachmentUsageComputationInExternalVk,
-             "CorrectColorAttachmentUsageComputationInExternalVk",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Determine whether to apply the correction of the computation on using the
 // color attachment, which conceptually is "can this backing be written".
 bool CorrectComputationOfUsagesNeedingColorAttachment() {
@@ -97,16 +98,8 @@ bool CorrectComputationOfUsagesNeedingColorAttachment() {
   // backing. Without this invariant, there is no guarantee that a SharedImage
   // with WEBGPU_READ won't require the color attachment (e.g., for lazy
   // clearing).
-  if (!base::FeatureList::IsEnabled(
-          features::kDawnSIRepsUseClientProvidedInternalUsages)) {
-    return false;
-  }
-
-  // This killswitch guards the correction of the computation on using the
-  // color attachment, which conceptually is "can this backing be written".
-  // TODO(crbug.com/333014977): Remove this killswitch post safe rollout.
   return base::FeatureList::IsEnabled(
-      kCorrectColorAttachmentUsageComputationInExternalVk);
+      features::kDawnSIRepsUseClientProvidedInternalUsages);
 }
 
 class ScopedDedicatedMemoryObject {

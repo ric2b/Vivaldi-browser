@@ -246,7 +246,7 @@ TabGridPage ThirdTabGridPage() {
     frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
   } // End Vivaldi
 
-  if (self = [super initWithFrame:frame]) {
+  if ((self = [super initWithFrame:frame])) {
     // Default to the regular tab page as the selected page.
     _selectedPage = TabGridPageRegularTabs;
 
@@ -264,7 +264,10 @@ TabGridPage ThirdTabGridPage() {
     _regularAccessibilityElement.accessibilityTraits =
         UIAccessibilityTraitButton;
     _regularAccessibilityElement.accessibilityLabel =
-        l10n_util::GetNSString(IDS_IOS_TAB_GRID_REGULAR_TABS_TITLE);
+        IsTabGroupInGridEnabled()
+            ? l10n_util::GetNSString(
+                  IDS_IOS_TAB_GRID_REGULAR_TABS_WITH_GROUPS_TITLE)
+            : l10n_util::GetNSString(IDS_IOS_TAB_GRID_REGULAR_TABS_TITLE);
     _regularAccessibilityElement.accessibilityIdentifier =
         kTabGridRegularTabsPageButtonIdentifier;
 

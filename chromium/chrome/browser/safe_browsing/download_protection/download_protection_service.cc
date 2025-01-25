@@ -642,22 +642,19 @@ void DownloadProtectionService::OnDangerousDownloadOpened(
 }
 
 base::TimeDelta DownloadProtectionService::GetDownloadRequestTimeout() const {
-  if (base::FeatureList::IsEnabled(kStrictDownloadTimeout)) {
-    return base::Milliseconds(kStrictDownloadTimeoutMilliseconds.Get());
-  }
-
   return base::Milliseconds(download_request_timeout_ms_);
 }
 
 bool DownloadProtectionService::MaybeBeginFeedbackForDownload(
     Profile* profile,
     download::DownloadItem* download,
-    DownloadCommands::Command download_command) {
+    const std::string& ping_request,
+    const std::string& ping_response) {
   PrefService* prefs = profile->GetPrefs();
   bool is_extended_reporting = IsExtendedReportingEnabled(*prefs);
   if (!profile->IsOffTheRecord() && is_extended_reporting) {
-    feedback_service_->BeginFeedbackForDownload(profile, download,
-                                                download_command);
+    feedback_service_->BeginFeedbackForDownload(profile, download, ping_request,
+                                                ping_response);
     return true;
   }
   return false;

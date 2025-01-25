@@ -88,12 +88,11 @@ using chrome_test_util::SecondarySignInButton;
 // Tests to sign-in with one identity, sign-out, and use the sign-in promo
 // from bookmark to sign-in with a different identity.
 // See http://crbug.com/1428495.
-// TODO(crbug.com/357828862): Test disabled because flakey in M128.
-- (void)DISABLED_testSignInPromoAfterSignOut {
+- (void)testSignInPromoAfterSignOut {
   FakeSystemIdentity* fakeIdentity1 = [FakeSystemIdentity fakeIdentity1];
   // Sign-in with identity1.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity1];
-  [ChromeEarlGrey signOutAndClearIdentitiesAndWaitForCompletion];
+  [ChromeEarlGrey signOutAndClearIdentities];
   // Sign-in with bookmark account storage with identity2.
   FakeSystemIdentity* fakeIdentity2 = [FakeSystemIdentity fakeIdentity2];
   [SigninEarlGrey addFakeIdentity:fakeIdentity2];
@@ -110,8 +109,7 @@ using chrome_test_util::SecondarySignInButton;
 }
 
 // Tests that signin promo is shown even if local data exists.
-// TODO(crbug.com/357828862): Test disabled because flakey in M128.
-- (void)DISABLED_testSignInPromoWhenSyncDataNotRemovedIfBatchUploadEnabled {
+- (void)testSignInPromoWhenSyncDataNotRemovedIfBatchUploadEnabled {
   // Simulate data from a previous account being leftover by setting
   // kGoogleServicesLastSyncingGaiaId.
   FakeSystemIdentity* fakeIdentity1 = [FakeSystemIdentity fakeIdentity1];

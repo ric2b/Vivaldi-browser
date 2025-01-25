@@ -3,8 +3,11 @@
 #ifndef IOS_UI_NTP_VIVALDI_NTP_CONSTANTS_H_
 #define IOS_UI_NTP_VIVALDI_NTP_CONSTANTS_H_
 
-#import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+
+#pragma mark - NOTIFICATION
+extern NSString* vNTPShowOmniboxPopupOnFocus;
+extern NSString* vNTPShowOmniboxPopupOnFocusBoolKey;
 
 #pragma mark - SIZE AND PADDINGS
 // Vivaldi location bar leading padding

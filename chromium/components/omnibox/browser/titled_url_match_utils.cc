@@ -22,6 +22,9 @@
 #include "components/url_formatter/url_formatter.h"
 #include "third_party/metrics_proto/omnibox_scoring_signals.pb.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
 namespace bookmarks {
 namespace {
 
@@ -81,7 +84,23 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
   // Otherwise, display the path, even if the input matches both or neither.
   bool show_path = titled_url_match.has_ancestor_match ||
                    titled_url_match.url_match_positions.empty();
+
+#if defined(VIVALDI_BUILD)
+  bool search_in_title = false;
+  if (base::StartsWith(title, fixed_up_input_text,
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+    search_in_title = true;
+  }
+
+  if (search_in_title) {
+    match.contents = formatted_url;
+  } else {
+    match.contents = show_path ? path : formatted_url;
+  }
+#else
   match.contents = show_path ? path : formatted_url;
+#endif
+
   // The path can become stale (when the bookmark is moved). So persist the URL
   // instead when creating shortcuts.
   if (show_path)
@@ -125,9 +144,21 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
   // applied to |fill_into_edit|.
   size_t inline_autocomplete_offset = URLPrefix::GetInlineAutocompleteOffset(
       input.text(), fixed_up_input_text, false, base::UTF8ToUTF16(url.spec()));
+
+  // Find autocomplete offset for the title if search is within the title.
+  if (vivaldi::IsVivaldiRunning() && search_in_title) {
+    inline_autocomplete_offset = URLPrefix::GetInlineAutocompleteOffset(
+        input.text(), fixed_up_input_text, false, title);
+  } // End Vivaldi
+
   auto fill_into_edit_format_types = url_formatter::kFormatUrlOmitDefaults;
   if (match_in_scheme)
     fill_into_edit_format_types &= ~url_formatter::kFormatUrlOmitHTTP;
+
+  // Autofill the title if search is within the title
+  if (vivaldi::IsVivaldiRunning() && search_in_title) {
+    match.fill_into_edit = title;
+  } else {
   match.fill_into_edit =
       AutocompleteInput::FormattedStringWithEquivalentMeaning(
           url,
@@ -135,6 +166,7 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
                                    base::UnescapeRule::SPACES, nullptr, nullptr,
                                    &inline_autocomplete_offset),
           scheme_classifier, &inline_autocomplete_offset);
+  } // End Vivaldi
 
   if (match.TryRichAutocompletion(match.contents, match.description, input)) {
     // If rich autocompletion applies, we skip trying the alternatives below.
@@ -149,7 +181,7 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
   }
 
   if (OmniboxFieldTrial::IsPopulatingUrlScoringSignalsEnabled() &&
-      AutocompleteScoringSignalsAnnotator::IsEligibleMatch(match)) {
+      match.IsMlSignalLoggingEligible()) {
     match.scoring_signals = std::make_optional<ScoringSignals>();
     // Populate ACMatches with signals for ML model scoring and training.
     if (!titled_url_match.title_match_positions.empty())

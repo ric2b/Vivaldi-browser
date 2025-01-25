@@ -13,9 +13,8 @@
 // limitations under the License.
 
 use jni::{objects::JObject, sys::jint, JNIEnv};
-use np_ffi_core::{deserialize::v1::DeserializedV1IdentityKind, v1::V1VerificationMode};
-use pourover::desc::{ClassDesc, StaticFieldDesc};
-use std::sync::RwLock;
+use np_ffi_core::deserialize::v1::DeserializedV1IdentityKind;
+use pourover::desc::ClassDesc;
 
 use crate::class::{CredentialBook, IdentityKind, LegibleV1Sections};
 
@@ -49,72 +48,5 @@ impl<'local> DeserializedV1Section<JObject<'local>> {
             credential_book.as_obj()
         )
         .map(Self)
-    }
-}
-
-static VERIFICATION_MODE_CLASS: ClassDesc = ClassDesc::new(
-    "com/google/android/nearby/presence/rust/DeserializedV1Section$VerificationMode",
-);
-
-/// Rust representation of `@VerificationMode`. These are `jints` on the Java side, so this type can't
-/// be instantiated.
-pub enum VerificationMode {}
-
-impl VerificationMode {
-    /// Convert a Rust verification mode enum to the Java `jint` representation.
-    pub fn value_for<'local>(
-        env: &mut JNIEnv<'local>,
-        mode: V1VerificationMode,
-    ) -> jni::errors::Result<jint> {
-        match mode {
-            V1VerificationMode::Mic => Self::mic(env),
-            V1VerificationMode::Signature => Self::signature(env),
-        }
-    }
-
-    /// Fetch the `SIGNATURE` constant
-    pub fn signature<'local>(env: &mut JNIEnv<'local>) -> jni::errors::Result<jint> {
-        static SIGNATURE: StaticFieldDesc = VERIFICATION_MODE_CLASS.static_field("SIGNATURE", "I");
-        static VALUE: RwLock<Option<jint>> = RwLock::new(None);
-        Self::lookup_static_value(env, &SIGNATURE, &VALUE)
-    }
-
-    /// Fetch the `MIC` constant
-    pub fn mic<'local>(env: &mut JNIEnv<'local>) -> jni::errors::Result<jint> {
-        static MIC: StaticFieldDesc = VERIFICATION_MODE_CLASS.static_field("MIC", "I");
-        static VALUE: RwLock<Option<jint>> = RwLock::new(None);
-        Self::lookup_static_value(env, &MIC, &VALUE)
-    }
-
-    /// Look up the given field and cache it in the given cache. The lookup will only be performed
-    /// once if successful. This uses `RwLock` instead of `OnceCell` since the fallible `OnceCell`
-    /// APIs are nightly only.
-    fn lookup_static_value<'local>(
-        env: &mut JNIEnv<'local>,
-        field: &StaticFieldDesc,
-        cache: &RwLock<Option<jint>>,
-    ) -> jni::errors::Result<jint> {
-        use jni::signature::{JavaType, Primitive};
-
-        // Read from cache
-        if let Some(value) = *cache.read().unwrap_or_else(|poison| poison.into_inner()) {
-            return Ok(value);
-        }
-
-        // Get exclusive access to the cache for the lookup
-        let mut guard = cache.write().unwrap_or_else(|poison| poison.into_inner());
-
-        // In case of races, only lookup the value once
-        if let Some(value) = *guard {
-            return Ok(value);
-        }
-
-        let value = env
-            .get_static_field_unchecked(field.cls(), field, JavaType::Primitive(Primitive::Int))
-            .and_then(|ret| ret.i())?;
-
-        *guard = Some(value);
-
-        Ok(value)
     }
 }

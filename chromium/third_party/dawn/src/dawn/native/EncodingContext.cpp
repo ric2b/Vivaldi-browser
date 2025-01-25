@@ -41,47 +41,45 @@ EncodingContext::EncodingContext(DeviceBase* device, const ApiObjectBase* initia
     : mDevice(device),
       mTopLevelEncoder(initialEncoder),
       mCurrentEncoder(initialEncoder),
-      mDestroyed(device->IsLost()) {}
+      mStatus(Status::Open) {
+    DAWN_ASSERT(!initialEncoder->IsError());
+}
+
+EncodingContext::EncodingContext(DeviceBase* device, ErrorMonad::ErrorTag tag)
+    : mDevice(device),
+      mTopLevelEncoder(nullptr),
+      mCurrentEncoder(nullptr),
+      mStatus(Status::Error) {}
 
 EncodingContext::~EncodingContext() {
     Destroy();
 }
 
 void EncodingContext::Destroy() {
-    if (mDestroyed) {
-        return;
+    mDebugGroupLabels.clear();
+
+    if (!mWereIndirectDrawMetadataAcquired) {
+        mIndirectDrawMetadata.clear();
     }
     if (!mWereCommandsAcquired) {
-        FreeCommands(GetIterator());
+        CommandIterator commands = AcquireCommands();
+        FreeCommands(&commands);
     }
-    // If we weren't already finished, then we want to handle an error here so that any calls
-    // to Finish after Destroy will return a meaningful error.
-    if (!IsFinished()) {
-        HandleError(DAWN_VALIDATION_ERROR("Destroyed encoder cannot be finished."));
-    }
-    mDestroyed = true;
+
+    mStatus = Status::Destroyed;
+    mTopLevelEncoder = nullptr;
     mCurrentEncoder = nullptr;
 }
 
 CommandIterator EncodingContext::AcquireCommands() {
-    MoveToIterator();
     DAWN_ASSERT(!mWereCommandsAcquired);
     mWereCommandsAcquired = true;
-    return std::move(mIterator);
-}
 
-CommandIterator* EncodingContext::GetIterator() {
-    MoveToIterator();
-    DAWN_ASSERT(!mWereCommandsAcquired);
-    return &mIterator;
-}
-
-void EncodingContext::MoveToIterator() {
     CommitCommands(std::move(mPendingCommands));
-    if (!mWasMovedToIterator) {
-        mIterator.AcquireCommandBlocks(std::move(mAllocators));
-        mWasMovedToIterator = true;
-    }
+
+    CommandIterator commands;
+    commands.AcquireCommandBlocks(std::move(mAllocators));
+    return commands;
 }
 
 void EncodingContext::HandleError(std::unique_ptr<ErrorData> error) {
@@ -91,7 +89,7 @@ void EncodingContext::HandleError(std::unique_ptr<ErrorData> error) {
         error->AppendDebugGroup(*iter);
     }
 
-    if (!IsFinished() && !mDevice->IsImmediateErrorHandlingEnabled()) {
+    if (mStatus == Status::Open && !mDevice->IsImmediateErrorHandlingEnabled()) {
         // TODO(crbug.com/42240579): ASSERT that encoding only generates validation errors.
 
         // If the encoding context is not finished, errors are deferred until
@@ -164,6 +162,8 @@ MaybeError EncodingContext::ExitRenderPass(const ApiObjectBase* passEncoder,
         CommitCommands(std::move(renderCommands));
     }
 
+    mIndirectDrawMetadata.emplace_back(std::move(indirectDrawMetadata));
+
     mRenderPassUsages.push_back(usageTracker.AcquireResourceUsage());
     return {};
 }
@@ -208,7 +208,13 @@ ComputePassUsages EncodingContext::AcquireComputePassUsages() {
     return std::move(mComputePassUsages);
 }
 
-void EncodingContext::PushDebugGroupLabel(const char* groupLabel) {
+std::vector<IndirectDrawMetadata> EncodingContext::AcquireIndirectDrawMetadata() {
+    DAWN_ASSERT(!mWereIndirectDrawMetadataAcquired);
+    mWereIndirectDrawMetadataAcquired = true;
+    return std::move(mIndirectDrawMetadata);
+}
+
+void EncodingContext::PushDebugGroupLabel(std::string_view groupLabel) {
     mDebugGroupLabels.emplace_back(groupLabel);
 }
 
@@ -217,16 +223,27 @@ void EncodingContext::PopDebugGroupLabel() {
 }
 
 MaybeError EncodingContext::Finish() {
-    DAWN_INVALID_IF(IsFinished(), "Command encoding already finished.");
+    switch (mStatus) {
+        case Status::Error:
+        case Status::Destroyed:
+            return {};
 
+        case Status::Finished:
+            return DAWN_VALIDATION_ERROR("Command encoding already finished.");
+
+        case Status::Open:
+            break;
+    }
     const ApiObjectBase* currentEncoder = mCurrentEncoder;
     const ApiObjectBase* topLevelEncoder = mTopLevelEncoder;
 
     // Even if finish validation fails, it is now invalid to call any encoding commands,
     // so we clear the encoders. Note: mTopLevelEncoder == nullptr is used as a flag for
     // if Finish() has been called.
+    mStatus = Status::Finished;
     mCurrentEncoder = nullptr;
     mTopLevelEncoder = nullptr;
+
     CommitCommands(std::move(mPendingCommands));
 
     if (mError != nullptr) {
@@ -241,10 +258,6 @@ void EncodingContext::CommitCommands(CommandAllocator allocator) {
     if (!allocator.IsEmpty()) {
         mAllocators.push_back(std::move(allocator));
     }
-}
-
-bool EncodingContext::IsFinished() const {
-    return mTopLevelEncoder == nullptr;
 }
 
 }  // namespace dawn::native

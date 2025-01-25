@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {Actions} from '../common/actions';
 import {
   AdbRecordingTarget,
@@ -37,7 +36,6 @@ import {
 } from '../controller/record_config_types';
 import {featureFlags} from '../core/feature_flags';
 import {raf} from '../core/raf_scheduler';
-
 import {globals} from './globals';
 import {createPage, PageAttrs} from './pages';
 import {
@@ -418,7 +416,7 @@ function RecordingNotes() {
   const msgWinEtw = m(
     '.note',
     `To trace with Etw on Windows from the Perfetto UI, you to run chrome with`,
-    `administrator permission and you need to install our `,
+    ` administrator permission and you need to install our `,
     m('a', {href: extensionURL, target: '_blank'}, 'Chrome extension'),
     ' and then reload this page.',
   );

@@ -59,11 +59,11 @@ IN_PROC_BROWSER_TEST_P(OSSettingsLockScreenAuthenticationTest,
   base::HistogramTester histograms;
   auto lock_screen_settings = OpenLockScreenSettings();
 
-  if (ash::features::IsUseAuthPanelInSettingsEnabled()) {
+  if (ash::features::IsUseAuthPanelInSessionEnabled()) {
     ASSERT_FALSE(cryptohome_.IsAuthenticated(GetAccountId()));
     lock_screen_settings.AssertAuthenticated(false);
 
-    AuthenticateViaCryptohomePasswordEngine(false);
+    AuthenticateUsingPassword();
 
     ASSERT_TRUE(cryptohome_.IsAuthenticated(GetAccountId()));
     lock_screen_settings.AssertAuthenticated(true);
@@ -84,7 +84,7 @@ IN_PROC_BROWSER_TEST_P(OSSettingsLockScreenAuthenticationTest, FailedUnlock) {
   base::HistogramTester histograms;
   auto lock_screen_settings = OpenLockScreenSettings();
 
-  if (ash::features::IsUseAuthPanelInSettingsEnabled()) {
+  if (ash::features::IsUseAuthPanelInSessionEnabled()) {
     ASSERT_FALSE(cryptohome_.IsAuthenticated(GetAccountId()));
     lock_screen_settings.AssertAuthenticated(false);
 
@@ -93,11 +93,11 @@ IN_PROC_BROWSER_TEST_P(OSSettingsLockScreenAuthenticationTest, FailedUnlock) {
         cryptohome::ErrorWrapper::CreateFromErrorCodeOnly(
             user_data_auth::CRYPTOHOME_ERROR_AUTHORIZATION_KEY_FAILED));
 
-    AuthenticateViaCryptohomePasswordEngine(true);
+    AuthenticateUsingPassword();
     ASSERT_FALSE(cryptohome_.IsAuthenticated(GetAccountId()));
     lock_screen_settings.AssertAuthenticated(false);
 
-    AuthenticateViaCryptohomePasswordEngine(false);
+    AuthenticateUsingPassword();
 
     ASSERT_TRUE(cryptohome_.IsAuthenticated(GetAccountId()));
     lock_screen_settings.AssertAuthenticated(true);

@@ -14,6 +14,9 @@
 #include "xfa/fwl/theme/cfwl_widgettp.h"
 
 class CFGAS_GEPath;
+
+namespace pdfium {
+
 class CFWL_Widget;
 
 class CFWL_CheckBoxTP final : public CFWL_WidgetTP {
@@ -62,5 +65,10 @@ class CFWL_CheckBoxTP final : public CFWL_WidgetTP {
 
   std::unique_ptr<CFGAS_GEPath> m_pCheckPath;
 };
+
+}  // namespace pdfium
+
+// TODO(crbug.com/42271761): Remove.
+using pdfium::CFWL_CheckBoxTP;
 
 #endif  // XFA_FWL_THEME_CFWL_CHECKBOXTP_H_

@@ -267,7 +267,6 @@ void HTMLCanvasElement::Dispose() {
   }
 
   if (canvas2d_bridge_) {
-    canvas2d_bridge_->SetCanvasResourceHost(nullptr);
     canvas2d_bridge_ = nullptr;
   }
 
@@ -757,18 +756,15 @@ void HTMLCanvasElement::Reset() {
     context_->Reset();
     origin_clean_ = true;
   }
+  canvas_is_clear_ = true;
 
   gfx::Size old_size = Size();
   gfx::Size new_size(w, h);
 
-  // If the size of an existing buffer matches, we can just clear it instead of
-  // reallocating.  This optimization is only done for 2D canvases for now.
-  if (ResourceProvider() != nullptr && old_size == new_size &&
-      IsRenderingContext2D()) {
-    if (!canvas_is_clear_) {
-      canvas_is_clear_ = true;
-      context_->ClearRect(0, 0, width(), height());
-    }
+  // If the size of an existing buffer matches, we can reuse that buffer.
+  // This optimization is only done for 2D canvases for now.
+  if (IsRenderingContext2D() && ResourceProvider() != nullptr &&
+      old_size == new_size) {
     return;
   }
 
@@ -1520,7 +1516,7 @@ void HTMLCanvasElement::StyleDidChange(const ComputedStyle* old_style,
   if (new_style.ImageRendering() == EImageRendering::kPixelated)
     filter_quality = cc::PaintFlags::FilterQuality::kNone;
   SetFilterQuality(filter_quality);
-  style_is_visible_ = new_style.Visibility() == EVisibility::kVisible;
+  style_is_visible_ = new_style.UsedVisibility() == EVisibility::kVisible;
   bool is_displayed = GetLayoutObject() && style_is_visible_;
   SetIsDisplayed(is_displayed);
   if (context_) {
@@ -1835,10 +1831,6 @@ void HTMLCanvasElement::ReplaceExisting2dLayerBridge(
     if (!image)
       return;
     old_layer_bridge = std::move(canvas2d_bridge_);
-    // Removing connection between old_layer_bridge and CanvasResourceHost;
-    // otherwise, the CanvasResourceHost checks for the old one before
-    // assigning the new canvas layer bridge.
-    old_layer_bridge->SetCanvasResourceHost(nullptr);
   }
   std::unique_ptr<MemoryManagedPaintRecorder> recorder =
       old_provider->ReleaseRecorder();
@@ -1931,6 +1923,16 @@ bool HTMLCanvasElement::IsHibernating() const {
 
 bool HTMLCanvasElement::IsAccelerated() const {
   return GetRasterMode() == RasterMode::kGPU;
+}
+
+void HTMLCanvasElement::SetHasPlacedElements() {
+  // If this is the first time placeElement() is called, its possible that the
+  // canvas contains fallback content that has been ignored and needs to be
+  // laid out.
+  if (!has_placed_elements_) {
+    has_placed_elements_ = true;
+    SetForceReattachLayoutTree();
+  }
 }
 
 }  // namespace blink

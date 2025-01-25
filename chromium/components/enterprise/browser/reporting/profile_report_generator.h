@@ -31,6 +31,8 @@ class ReportingDelegateFactory;
  */
 class ProfileReportGenerator {
  public:
+  using ExtensionsEnabledCallback = base::RepeatingCallback<bool()>;
+
   class Delegate {
    public:
     Delegate() = default;
@@ -45,7 +47,10 @@ class ProfileReportGenerator {
     // Sets sign-in information in the report, including email and gaia id.
     virtual void GetSigninUserInfo(
         enterprise_management::ChromeUserProfileInfo* report) = 0;
-    // Sets intalled extension information in the report.
+    // Set affiliation information in the report.
+    virtual void GetAffiliationInfo(
+        enterprise_management::ChromeUserProfileInfo* report) = 0;
+    // Sets installed extension information in the report.
     virtual void GetExtensionInfo(
         enterprise_management::ChromeUserProfileInfo* report) = 0;
     // Sets extension requests information in the report.
@@ -69,6 +74,9 @@ class ProfileReportGenerator {
   void set_policies_enabled(bool enabled);
   void set_is_machine_scope(bool is_machine);
 
+  // Pass a callback to enable/disable extension report with dynamic condition.
+  void SetExtensionsEnabledCallback(ExtensionsEnabledCallback callback);
+
   // Generates a report for the profile associated with |path| and |name| if
   // it's activated, and returns the report. The report is null if it can't be
   // generated.
@@ -89,6 +97,8 @@ class ProfileReportGenerator {
   bool extensions_enabled_ = true;
   bool policies_enabled_ = true;
   bool is_machine_scope_ = true;
+
+  base::RepeatingCallback<bool()> extensions_enabled_callback_;
 
   std::unique_ptr<enterprise_management::ChromeUserProfileInfo> report_;
 };

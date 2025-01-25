@@ -10,12 +10,14 @@
 #include <uuid/uuid.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <optional>
 #include <utility>
 
 #include "base/apple/foundation_util.h"
 #include "base/apple/scoped_cftyperef.h"
+#include "base/containers/buffer_iterator.h"
 #include "base/containers/span.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -40,7 +42,7 @@ namespace dmg {
 struct UDIFChecksum {
   uint32_t type;
   uint32_t size;
-  uint32_t data[32];
+  std::array<uint32_t, 32> data;
 };
 
 static void ConvertBigEndian(UDIFChecksum* checksum) {
@@ -171,7 +173,6 @@ struct UDIFBlockData {
   UDIFChecksum checksum;
 
   uint32_t chunk_count;
-  UDIFBlockChunk chunks[0];
 };
 
 static void ConvertBigEndian(UDIFBlockData* block) {
@@ -185,7 +186,6 @@ static void ConvertBigEndian(UDIFBlockData* block) {
   // Reserved fields are skipped.
   ConvertBigEndian(&block->checksum);
   ConvertBigEndian(&block->chunk_count);
-  // Note: This deliberately does not swap the chunks themselves.
 }
 
 // UDIFBlock takes a raw, big-endian block data pointer and stores, in host
@@ -197,15 +197,16 @@ class UDIFBlock {
   UDIFBlock(const UDIFBlock&) = delete;
   UDIFBlock& operator=(const UDIFBlock&) = delete;
 
-  bool ParseBlockData(const UDIFBlockData* block_data,
-                      size_t block_data_size,
+  bool ParseBlockData(base::span<const uint8_t> block_data,
                       uint16_t sector_size) {
-    if (block_data_size < sizeof(block_)) {
+    base::BufferIterator iterator(block_data);
+    const UDIFBlockData* block_header = iterator.Object<UDIFBlockData>();
+    if (!block_header) {
       DLOG(ERROR) << "UDIF block data is smaller than expected";
       return false;
     }
 
-    block_ = *block_data;
+    block_ = *block_header;
     ConvertBigEndian(&block_);
 
     // Make sure the number of sectors doesn't overflow.
@@ -222,17 +223,21 @@ class UDIFBlock {
          block_.chunk_count) +
         sizeof(block_);
     if (!block_and_chunks_size.IsValid() ||
-        block_data_size < block_and_chunks_size.ValueOrDie()) {
+        block_data.size() < block_and_chunks_size.ValueOrDie()) {
       DLOG(ERROR) << "UDIF block does not contain reported number of chunks, "
                   << block_and_chunks_size.ValueOrDie() << " bytes expected, "
-                  << "got " << block_data_size;
+                  << "got " << block_data.size();
       return false;
     }
 
     // Make sure that the chunk data isn't larger than the block reports.
     base::CheckedNumeric<size_t> chunk_sectors(0);
     for (uint32_t i = 0; i < block_.chunk_count; ++i) {
-      chunks_.push_back(block_data->chunks[i]);
+      const UDIFBlockChunk* raw_chunk = iterator.Object<UDIFBlockChunk>();
+      // Total size check above should ensure that the chunk always exists
+      CHECK(raw_chunk);
+      chunks_.push_back(*raw_chunk);
+
       UDIFBlockChunk* chunk = &chunks_[i];
       ConvertBigEndian(chunk);
 
@@ -519,10 +524,12 @@ bool UDIFParser::ParseBlkx() {
 
     // Copy the block table out of the plist.
     auto block = std::make_unique<UDIFBlock>();
-    if (!block->ParseBlockData(
-            reinterpret_cast<const UDIFBlockData*>(CFDataGetBytePtr(data)),
-            base::checked_cast<size_t>(CFDataGetLength(data)),
-            block_size_)) {
+    // SAFETY: CFDataGetBytePtr is provided by Apple and documented to
+    // return CFDataGetLength bytes.
+    if (!block->ParseBlockData(UNSAFE_BUFFERS(
+            base::span(CFDataGetBytePtr(data),
+                       base::checked_cast<size_t>(CFDataGetLength(data))),
+            block_size_))) {
       DLOG(ERROR) << "Failed to parse UDIF block data";
       return false;
     }
@@ -810,7 +817,7 @@ bool UDIFBlockChunkReadStream::CopyOutDecompressed(base::span<uint8_t> buf,
   *bytes_read = std::min(buf.size(), decompress_buffer_.size() - offset_);
   base::span<uint8_t> src_data =
       base::span(decompress_buffer_).subspan(offset_, *bytes_read);
-  buf.first(*bytes_read).copy_from(src_data);
+  buf.copy_prefix_from(src_data);
   offset_ += *bytes_read;
   return true;
 }

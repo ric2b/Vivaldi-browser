@@ -21,7 +21,6 @@
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/startup_utils.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
@@ -37,6 +36,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -191,7 +191,7 @@ bool ConsolidatedConsentScreen::MaybeSkip(WizardContext& context) {
   // Skip the screen if the user is affiliated.
   Profile* profile = ProfileManager::GetActiveUserProfile();
   CHECK(profile);
-  if (chrome::enterprise_util::IsProfileAffiliated(profile)) {
+  if (enterprise_util::IsProfileAffiliated(profile)) {
     exit_callback_.Run(Result::NOT_APPLICABLE);
     return true;
   }
@@ -228,8 +228,7 @@ void ConsolidatedConsentScreen::ShowImpl() {
   data.Set("isChildAccount", is_child_account_);
   // If the user is affiliated with the device management domain, ToS should be
   // hidden.
-  data.Set("isTosHidden",
-           chrome::enterprise_util::IsProfileAffiliated(profile));
+  data.Set("isTosHidden", enterprise_util::IsProfileAffiliated(profile));
 
   // ToS URLs.
   data.Set("googleEulaUrl", GetTosHost(ToS::GOOGLE_EULA));
@@ -247,11 +246,9 @@ void ConsolidatedConsentScreen::ShowImpl() {
 
   view_->Show(std::move(data));
 
-  if (ash::features::AreLocalPasswordsEnabledForConsumers()) {
-    if (context()->extra_factors_token) {
-      session_refresher_ = AuthSessionStorage::Get()->KeepAlive(
-          context()->extra_factors_token.value());
-    }
+  if (context()->extra_factors_token) {
+    session_refresher_ = AuthSessionStorage::Get()->KeepAlive(
+        context()->extra_factors_token.value());
   }
 }
 
@@ -518,8 +515,7 @@ void ConsolidatedConsentScreen::OnAccept(bool enable_stats_usage,
   Profile* profile = ProfileManager::GetActiveUserProfile();
   CHECK(profile);
   consents.record_arc_tos_consent =
-      !chrome::enterprise_util::IsProfileAffiliated(profile) &&
-      !tos_content.empty();
+      !enterprise_util::IsProfileAffiliated(profile) && !tos_content.empty();
   consents.record_backup_consent = !backup_restore_managed_;
   consents.backup_accepted = enable_backup_restore;
   consents.record_location_consent = !location_services_managed_;

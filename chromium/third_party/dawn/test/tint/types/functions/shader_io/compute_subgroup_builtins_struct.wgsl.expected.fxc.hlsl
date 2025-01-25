@@ -1,4 +1,4 @@
-SKIP: FAILED
+SKIP: INVALID
 
 RWByteAddressBuffer output : register(u0);
 
@@ -13,7 +13,12 @@ void main_inner(ComputeInputs inputs) {
 
 [numthreads(1, 1, 1)]
 void main() {
-  const ComputeInputs tint_symbol = {WaveGetLaneIndex(), WaveGetLaneCount()};
+  ComputeInputs tint_symbol = {WaveGetLaneIndex(), WaveGetLaneCount()};
   main_inner(tint_symbol);
   return;
 }
+FXC validation failure:
+<scrubbed_path>(14,32-49): error X3004: undeclared identifier 'WaveGetLaneIndex'
+
+
+tint executable returned error: exit status 1

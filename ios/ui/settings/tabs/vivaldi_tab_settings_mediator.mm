@@ -10,6 +10,7 @@
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/settings/tabs/vivaldi_ntp_type.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 #import "prefs/vivaldi_pref_names.h"
 
@@ -27,6 +28,8 @@
 @implementation VivaldiTabSettingsMediator {
   // Preference service from the application context.
   raw_ptr<PrefService> _local_prefs;
+  // Pref Service
+  PrefService* _prefService;
   // Pref observer to track changes to prefs.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
@@ -38,7 +41,7 @@
   self = [super init];
   if (self) {
     _local_prefs = localPrefService;
-
+    _prefService = originalPrefService;
     _bottomOmniboxEnabled =
         [[PrefBackedBoolean alloc] initWithPrefService:localPrefService
                                               prefName:prefs::kBottomOmnibox];
@@ -73,6 +76,9 @@
             initWithPrefService:originalPrefService
                 prefName:vivaldiprefs::kVivaldiFocusOmniboxOnNTPEnabled];
     [_focusOmniboxOnNTPEnabled setObserver:self];
+
+    [self.consumer setPreferenceForVivaldiNTPType:self.newTabSetting
+                                          withURL:self.newTabURL];
 
     if (IsInactiveTabsAvailable()) {
       _prefChangeRegistrar.Init(_local_prefs);
@@ -163,6 +169,18 @@
   return [_focusOmniboxOnNTPEnabled value];
 }
 
+- (NSString*)homepageURL {
+  return [VivaldiTabSettingPrefs getHomepageUrlWithPrefService: _prefService];
+}
+
+- (VivaldiNTPType)newTabSetting {
+  return [VivaldiTabSettingPrefs getNewTabSettingWithPrefService: _prefService];
+}
+
+- (NSString*)newTabURL {
+  return [VivaldiTabSettingPrefs getNewTabUrlWithPrefService: _prefService];
+}
+
 - (int)defaultThreshold {
   // Use InactiveTabsTimeThreshold() instead of reading the pref value
   // directly as this function also manage flag and default value.
@@ -194,6 +212,9 @@
     [self.consumer
         setPreferenceForInactiveTabsTimeThreshold:[self defaultThreshold]];
   }
+
+  [self.consumer setPreferenceForVivaldiNTPType:self.newTabSetting
+                                        withURL:self.newTabURL];
 }
 
 #pragma mark - VivaldiTabsSettingsConsumer
@@ -229,6 +250,13 @@
 
 - (void)setPreferenceForInactiveTabsTimeThreshold:(int)threshold {
   // No op.
+}
+
+- (void)setPreferenceForVivaldiNTPType:(VivaldiNTPType)setting
+                               withURL:(NSString*)url {
+  [VivaldiTabSettingPrefs setNewTabSettingWithPrefService: _prefService
+                                               andSetting: setting
+                                                  withURL: url];
 }
 
 #pragma mark - BooleanObserver

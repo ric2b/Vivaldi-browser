@@ -41,6 +41,7 @@ group("resources") {
       "key_value_pair_viewer_shared:resources",
       "lens/overlay:resources",
       "lens/overlay/search_bubble:resources",
+      "lens/shared:resources",
       "management:resources",
       "new_tab_page:resources",
       "new_tab_page_instant:resources",
@@ -83,8 +84,6 @@ group("resources") {
       "ash/inline_login:resources",
       "ash/settings:resources",
       "chromeos:resources",
-      "nearby_internals:resources",
-      "nearby_share:resources",
     ]
   }
 
@@ -137,6 +136,10 @@ group("resources") {
       "signin/profile_picker:resources",
       "welcome:resources",
     ]
+  }
+
+  if (enable_dice_support) {
+    public_deps += [ "signin/batch_upload:resources" ]
   }
 
   if (enable_webui_tab_strip) {

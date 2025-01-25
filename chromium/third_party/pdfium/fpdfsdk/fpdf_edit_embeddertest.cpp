@@ -594,24 +594,33 @@ TEST_F(FPDFEditEmbedderTest, AddPaths) {
   EXPECT_TRUE(FPDFPath_BezierTo(blue_path, 375, 330, 390, 360, 400, 400));
   EXPECT_TRUE(FPDFPath_Close(blue_path));
   FPDFPage_InsertObject(page, blue_path);
-  const char* last_checksum = []() {
-    if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-      return "ed14c60702b1489c597c7d46ece7f86d";
-    }
-    return "9823e1a21bd9b72b6a442ba4f12af946";
-  }();
   {
+    const char* blue_path_checksum = []() {
+      if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
+        return "ed14c60702b1489c597c7d46ece7f86d";
+      }
+      return "9823e1a21bd9b72b6a442ba4f12af946";
+    }();
     ScopedFPDFBitmap page_bitmap = RenderPage(page);
-    CompareBitmap(page_bitmap.get(), 612, 792, last_checksum);
+    CompareBitmap(page_bitmap.get(), 612, 792, blue_path_checksum);
   }
 
-  // Now save the result, closing the page and document
+  // Now save the result, closing the page and document.
   EXPECT_TRUE(FPDFPage_GenerateContent(page));
   EXPECT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
   FPDF_ClosePage(page);
 
-  // Render the saved result
-  VerifySavedDocument(612, 792, last_checksum);
+  // Render the saved result. The checksum will change due to floating point
+  // precision error.
+  {
+    const char* last_checksum = []() {
+      if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
+        return "423b20c18c177e78c93d8b67594e49f1";
+      }
+      return "111c38e9bf9e2ba0a57b875cca596fff";
+    }();
+    VerifySavedDocument(612, 792, last_checksum);
+  }
 }
 
 TEST_F(FPDFEditEmbedderTest, ClipPath) {
@@ -2924,6 +2933,7 @@ TEST_F(FPDFEditEmbedderTest, SetTextRenderMode) {
 TEST_F(FPDFEditEmbedderTest, TextFontProperties) {
   // bad object tests
   EXPECT_FALSE(FPDFTextObj_GetFont(nullptr));
+  EXPECT_EQ(0U, FPDFFont_GetBaseFontName(nullptr, nullptr, 5));
   EXPECT_EQ(0U, FPDFFont_GetFamilyName(nullptr, nullptr, 5));
   EXPECT_EQ(-1, FPDFFont_GetFlags(nullptr));
   EXPECT_EQ(-1, FPDFFont_GetWeight(nullptr));
@@ -2974,6 +2984,26 @@ TEST_F(FPDFEditEmbedderTest, TextFontProperties) {
     EXPECT_FLOAT_EQ(a12, 5.316f);
     EXPECT_TRUE(FPDFFont_GetGlyphWidth(font, 'a', 24.0f, &a24));
     EXPECT_FLOAT_EQ(a24, 10.632f);
+  }
+
+  {
+    // FPDFFont_GetBaseFontName() positive testing.
+    size_t size = FPDFFont_GetBaseFontName(font, nullptr, 0);
+    const char kExpectedFontName[] = "LiberationSerif";
+    ASSERT_EQ(sizeof(kExpectedFontName), size);
+    std::vector<char> font_name(size);
+    ASSERT_EQ(size, FPDFFont_GetBaseFontName(font, font_name.data(), size));
+    ASSERT_STREQ(kExpectedFontName, font_name.data());
+
+    // FPDFFont_GetBaseFontName() negative testing.
+    ASSERT_EQ(0U, FPDFFont_GetBaseFontName(nullptr, nullptr, 0));
+
+    font_name.resize(2);
+    font_name[0] = 'x';
+    font_name[1] = '\0';
+    size = FPDFFont_GetBaseFontName(font, font_name.data(), font_name.size());
+    ASSERT_EQ(sizeof(kExpectedFontName), size);
+    ASSERT_STREQ("x", font_name.data());
   }
 
   {
@@ -3083,6 +3113,38 @@ TEST_F(FPDFEditEmbedderTest, NoEmbeddedFontData) {
   EXPECT_EQ(0, FPDFFont_GetIsEmbedded(font));
 
   UnloadPage(page);
+}
+
+TEST_F(FPDFEditEmbedderTest, Type1BaseFontName) {
+  ASSERT_TRUE(OpenDocument("hello_world.pdf"));
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ASSERT_TRUE(page);
+  ASSERT_EQ(2, FPDFPage_CountObjects(page.get()));
+
+  {
+    FPDF_PAGEOBJECT page_object = FPDFPage_GetObject(page.get(), 0);
+    ASSERT_TRUE(page_object);
+    FPDF_FONT font = FPDFTextObj_GetFont(page_object);
+    ASSERT_TRUE(font);
+    size_t size = FPDFFont_GetBaseFontName(font, nullptr, 0);
+    const char kExpectedFontName[] = "Times-Roman";
+    ASSERT_EQ(sizeof(kExpectedFontName), size);
+    std::vector<char> font_name(size);
+    ASSERT_EQ(size, FPDFFont_GetBaseFontName(font, font_name.data(), size));
+    EXPECT_STREQ(kExpectedFontName, font_name.data());
+  }
+  {
+    FPDF_PAGEOBJECT page_object = FPDFPage_GetObject(page.get(), 1);
+    ASSERT_TRUE(page_object);
+    FPDF_FONT font = FPDFTextObj_GetFont(page_object);
+    ASSERT_TRUE(font);
+    size_t size = FPDFFont_GetBaseFontName(font, nullptr, 0);
+    const char kExpectedFontName[] = "Helvetica";
+    ASSERT_EQ(sizeof(kExpectedFontName), size);
+    std::vector<char> font_name(size);
+    ASSERT_EQ(size, FPDFFont_GetBaseFontName(font, font_name.data(), size));
+    ASSERT_STREQ(kExpectedFontName, font_name.data());
+  }
 }
 
 TEST_F(FPDFEditEmbedderTest, GlyphPaths) {
@@ -4582,13 +4644,13 @@ TEST_F(FPDFEditEmbedderTest, GetRenderedBitmapHandlesSMask) {
 
   const char* smask_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-      return "0653a18f3bf9b4d8413a2aa10bc11c38";
+      return "a85ca0183ac6aee8851c30c5bdc2f594";
     }
     return "5a3ae4a660ce919e29c42ec2258142f1";
   }();
   const char* no_smask_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-      return "0da49e63e7d6337aca78b19938e3bf65";
+      return "712f832dcbfb6cefc74f39bef459bea4";
     }
     return "67504e83f5d78214ea00efc19082c5c1";
   }();
@@ -4922,7 +4984,7 @@ TEST_F(FPDFEditEmbedderTest, GetRenderedBitmapForHelloWorldText) {
     const char* checksum = []() {
       if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-        return "5cef5b3e56e91e1a66b6780fb26bb5e3";
+        return "764e3503960ef0b176796faa3543b9c7";
 #elif BUILDFLAG(IS_APPLE)
         return "9e7774173acee966fcaa72e599eb9a93";
 #else
@@ -4978,7 +5040,7 @@ TEST_F(FPDFEditEmbedderTest, GetRenderedBitmapForHelloWorldText) {
     const char* checksum = []() {
       if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-        return "336be21110c795cefcab9bbdbc3afcdd";
+        return "4cdba7492317bcae2643bd4090e18812";
 #elif BUILDFLAG(IS_APPLE)
         return "0b9efedcb8f5aa9246c52e90811cb046";
 #else
@@ -5102,7 +5164,7 @@ TEST_F(FPDFEditEmbedderTest, GetRenderedBitmapForColorText) {
   ASSERT_TRUE(bitmap);
   const char* checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-      return "1d74731d23a056c0e3fb88f2f85b2581";
+      return "9199f0c27c8a61a57189b1b044941e5e";
     }
     return "e8154fa8ededf4d9b8b35b5260897b6c";
   }();
@@ -5128,7 +5190,7 @@ TEST_F(FPDFEditEmbedderTest, GetRenderedBitmapForNewlyCreatedText) {
   const char* checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "ef501232372617a545ae35d7664fd9ec";
+      return "6d88537a49fa2dccfa0f58ac325c5b75";
 #elif BUILDFLAG(IS_APPLE)
       return "a637d62f2e8ae10c3267b2ff5fcc2246";
 #else
@@ -5197,8 +5259,8 @@ TEST_F(FPDFEditEmbedderTest, GetRenderedBitmapForRotatedImage) {
   constexpr int kBitmapWidth = 50;
   constexpr int kBitmapHeight = 100;
   ScopedFPDFBitmap bitmap(FPDFBitmap_Create(kBitmapWidth, kBitmapHeight, 0));
-  FPDFBitmap_FillRect(bitmap.get(), 0, 0, kBitmapWidth, kBitmapHeight,
-                      0x00000000);
+  ASSERT_TRUE(FPDFBitmap_FillRect(bitmap.get(), 0, 0, kBitmapWidth,
+                                  kBitmapHeight, 0x00000000));
   ScopedFPDFPageObject page_image(FPDFPageObj_NewImageObj(doc.get()));
   ASSERT_TRUE(
       FPDFImageObj_SetBitmap(nullptr, 0, page_image.get(), bitmap.get()));

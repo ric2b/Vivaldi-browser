@@ -15,25 +15,19 @@
 import {assertExists} from '../base/logging';
 import {clamp, floatEqual} from '../base/math_utils';
 import {Time, time} from '../base/time';
-import {exists} from '../base/utils';
+import {exists, Optional} from '../base/utils';
 import {Actions} from '../common/actions';
-import {
-  drawIncompleteSlice,
-  drawTrackHoverTooltip,
-} from '../common/canvas_utils';
+import {drawIncompleteSlice, drawTrackHoverTooltip} from '../base/canvas_utils';
 import {cropText} from '../base/string_utils';
-import {colorCompare} from '../core/color';
+import {colorCompare} from '../public/color';
 import {UNEXPECTED_PINK} from '../core/colorizer';
-import {
-  LegacySelection,
-  SelectionKind,
-  getLegacySelection,
-} from '../common/state';
+import {LegacySelection, SelectionKind} from '../public/selection';
 import {featureFlags} from '../core/feature_flags';
 import {raf} from '../core/raf_scheduler';
-import {Engine, Slice, SliceRect, Track} from '../public';
+import {Engine} from '../trace_processor/engine';
+import {Track} from '../public/track';
+import {Slice} from '../public/track';
 import {LONG, NUM} from '../trace_processor/query_result';
-
 import {checkerboardExcept} from './checkerboard';
 import {globals} from './globals';
 import {DEFAULT_SLICE_LAYOUT, SliceLayout} from './slice_layout';
@@ -41,8 +35,8 @@ import {NewTrackArgs} from './track';
 import {BUCKETS_PER_PIXEL, CacheKey} from '../core/timeline_cache';
 import {uuidv4Sql} from '../base/uuid';
 import {AsyncDisposableStack} from '../base/disposable_stack';
-import {TrackMouseEvent, TrackRenderContext} from '../public/tracks';
-import {Vector} from '../base/geom';
+import {TrackMouseEvent, TrackRenderContext} from '../public/track';
+import {Point2D, VerticalBounds} from '../base/geom';
 
 // The common class that underpins all tracks drawing slices.
 
@@ -171,7 +165,7 @@ export abstract class BaseSliceTrack<
 {
   protected sliceLayout: SliceLayout = {...DEFAULT_SLICE_LAYOUT};
   protected engine: Engine;
-  protected trackKey: string;
+  protected uri: string;
   protected trackUuid = uuidv4Sql();
 
   // This is the over-skirted cached bounds:
@@ -194,7 +188,7 @@ export abstract class BaseSliceTrack<
   private extraSqlColumns: string[];
 
   private charWidth = -1;
-  private hoverPos?: Vector;
+  private hoverPos?: Point2D;
   protected hoveredSlice?: SliceT;
   private hoverTooltip: string[] = [];
   private maxDataDepth = 0;
@@ -249,7 +243,7 @@ export abstract class BaseSliceTrack<
 
   constructor(args: NewTrackArgs) {
     this.engine = args.engine;
-    this.trackKey = args.trackKey;
+    this.uri = args.uri;
     // Work out the extra columns.
     // This is the union of the embedder-defined columns and the base columns
     // we know about (ts, dur, ...).
@@ -409,7 +403,7 @@ export abstract class BaseSliceTrack<
       visibleWindow.end.toTime('ceil'),
     );
 
-    let selection = getLegacySelection(globals.state);
+    let selection = globals.selectionManager.legacySelection;
     if (!selection || !this.isSelectionHandled(selection)) {
       selection = null;
     }
@@ -954,28 +948,15 @@ export abstract class BaseSliceTrack<
     return this.computedTrackHeight;
   }
 
-  getSliceRect(
-    {visibleWindow, timescale, size}: TrackRenderContext,
-    tStart: time,
-    tEnd: time,
-    depth: number,
-  ): SliceRect | undefined {
+  getSliceVerticalBounds(depth: number): Optional<VerticalBounds> {
     this.updateSliceAndTrackHeight();
 
-    const pxEnd = size.width;
-    const left = Math.max(timescale.timeToPx(tStart), 0);
-    const right = Math.min(timescale.timeToPx(tEnd), pxEnd);
-
-    const visible = visibleWindow.overlaps(tStart, tEnd);
-
     const totalSliceHeight = this.computedRowSpacing + this.computedSliceHeight;
+    const top = this.sliceLayout.padding + depth * totalSliceHeight;
 
     return {
-      left,
-      width: Math.max(right - left, 1),
-      top: this.sliceLayout.padding + depth * totalSliceHeight,
-      height: this.computedSliceHeight,
-      visible,
+      top,
+      bottom: top + this.computedSliceHeight,
     };
   }
 }

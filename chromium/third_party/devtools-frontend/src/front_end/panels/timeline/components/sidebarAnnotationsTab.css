@@ -4,9 +4,20 @@
  * found in the LICENSE file.
  */
 
-.annotations {
+:host {
   display: block;
+  height: 100%;
+}
+
+.annotations {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   padding: 0;
+}
+
+.visibility-setting {
+  margin-top: auto;
 }
 
 .bin-icon {
@@ -17,6 +28,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 0 10px;
 
   &:hover {
     background-color: var(--sys-color-neutral-container);
@@ -36,13 +48,69 @@
   gap: 6px;
 }
 
-.entry-name {
+.annotation-identifier {
   padding: 4px 8px;
   border-radius: 10px;
   font-weight: bold;
-  background-color: var(--app-color-performance-sidebar-label);
+
+  &.time-range {
+    background-color: var(--app-color-performance-sidebar-time-range);
+    color: var(--app-color-performance-sidebar-time-range-text);
+  }
+}
+
+.entries-link {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  align-items: center;
 }
 
 .label {
   font-size: larger;
+}
+
+.annotation-tutorial-container {
+  padding: 10px;
+}
+
+.tutorial-card {
+  display: block;
+  position: relative;
+  margin: 10px 0;
+  padding: 10px;
+  border-radius: var(--sys-shape-corner-extra-small);
+  overflow: hidden;
+  border: 1px solid var(--sys-color-divider);
+  background-color: var(--sys-color-base);
+}
+
+.tutorial-image {
+  display: flex;
+  justify-content: center;
+
+  & > img {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+.tutorial-title,
+.tutorial-description,
+.tutorial-shortcut {
+  margin: 5px 0;
+}
+
+.tutorial-shortcut {
+  padding: 0.1em 0.6em;
+  border: 1px solid var(--sys-color-neutral-outline);
+  font-size: 11px;
+  background-color: var(--sys-color-neutral-container);
+  color: var(--sys-color-on-surface);
+  border-radius: 3px;
+  display: inline-block;
+  margin: 0 0.1em;
+  text-shadow: 0 1px 0 var(--sys-color-cdt-base-container);
+  line-height: 1.5;
+  white-space: nowrap;
 }

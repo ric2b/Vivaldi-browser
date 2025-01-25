@@ -220,6 +220,7 @@
 <translation id="2490721194269245365">Marrón rosado</translation>
 <translation id="249330843868392562">Abrir la configuración de texto a voz</translation>
 <translation id="2497706219848005458">Amarillo verdoso</translation>
+<translation id="2512979179176933762">mostrar ventanas</translation>
 <translation id="2523609930580546572">Instructivo de ChromeVox</translation>
 <translation id="2525706221823668172">Combinaciones de teclas para Chromebook</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
@@ -497,6 +498,7 @@
 <translation id="4246217262268234757">Azul acero</translation>
 <translation id="4253168017788158739">Nota</translation>
 <translation id="4254798249533888099">Árbol</translation>
+<translation id="4259220820964911921">¿Quieres habilitar el control facial?</translation>
 <translation id="4271220233568730077">Expresión matemática siguiente</translation>
 <translation id="4275397969489577657">Habilitar el acceso para la transmisión de eventos</translation>
 <translation id="4278486392851938658">No hay vínculos visitados anteriores</translation>
@@ -710,6 +712,7 @@
 <translation id="5760594853119905566">Apéndice</translation>
 <translation id="5761219715606611783">¡Bien hecho! Aprendiste los conceptos básicos de los gestos táctiles de ChromeVox. Puedes repetir este instructivo o puedes salir de él con los botones que se encuentran en la parte inferior.</translation>
 <translation id="5776001898637896684">Extensión de texto a voz Google Enhanced Network</translation>
+<translation id="5783252477644995371">El control facial te permite controlar el cursor con el señalamiento facial y realizar acciones, como hacer clic con el botón izquierdo con gestos faciales (por ejemplo sonreír)</translation>
 <translation id="5805940204952508776">Presionar con dos dedos</translation>
 <translation id="5819072574982403430">Elemento de árbol</translation>
 <translation id="5822819874379903994">Turquesa oscuro</translation>
@@ -1073,7 +1076,6 @@
 <translation id="847040613207937740">No hay casillas de verificación siguientes</translation>
 <translation id="8473540203671727883">Pronunciar el texto cuando pasas el puntero del mouse</translation>
 <translation id="8476408756881832830">Pausar la reproducción cuando ChromeVox esté hablando</translation>
-<translation id="8476508772960940536">vista general de ventana</translation>
 <translation id="8480873377842220259">Ya aprendiste algunos aspectos básicos de la navegación. Para desplazarte por la pantalla, mantén presionada la tecla Búsqueda y presiona las flechas. Para continuar, presiona Búsqueda + flecha hacia la derecha.</translation>
 <translation id="8503360654911991865">Disminuir nivel de detalle de navegación</translation>
 <translation id="8520472399088452386">Botón de número</translation>

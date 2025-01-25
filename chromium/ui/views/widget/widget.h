@@ -59,7 +59,7 @@ class ThemeProvider;
 }  // namespace ui
 
 namespace ui_devtools {
-class PageAgentViews;
+class BubbleLocking;
 }
 
 namespace views {
@@ -335,10 +335,6 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // rendered, and that the client area should be equivalent to the window
     // area. Only used on some platforms (Windows and Linux).
     bool remove_standard_frame = false;
-
-    // Only used by ShellWindow on Windows. Specifies that the default icon of
-    // packaged app should be the system default icon.
-    bool use_system_default_icon = false;
 
     // Whether the widget should be maximized or minimized.
     ui::WindowShowState show_state = ui::SHOW_STATE_DEFAULT;
@@ -1292,7 +1288,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   friend class PaintAsActiveLockImpl;
   friend class TextfieldTest;
   friend class ViewAuraTest;
-  friend class ui_devtools::PageAgentViews;
+  friend class ui_devtools::BubbleLocking;
   friend void DisableActivationChangeHandlingForTests();
 
   // Sets/gets the type of disabling widget activation change handling.

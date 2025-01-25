@@ -76,9 +76,12 @@ tint_target_add_dependencies(tint_cmd_tint_cmd cmd
   tint_utils_rtti
   tint_utils_strconv
   tint_utils_symbol
-  tint_utils_system
   tint_utils_text
   tint_utils_traits
+)
+
+tint_target_add_external_dependencies(tint_cmd_tint_cmd cmd
+  "src_utils"
 )
 
 if(TINT_BUILD_GLSL_VALIDATOR)
@@ -101,12 +104,6 @@ if(TINT_BUILD_HLSL_WRITER)
     tint_lang_hlsl_writer
   )
 endif(TINT_BUILD_HLSL_WRITER)
-
-if(TINT_BUILD_IR_BINARY)
-  tint_target_add_dependencies(tint_cmd_tint_cmd cmd
-    tint_lang_core_ir_binary
-  )
-endif(TINT_BUILD_IR_BINARY)
 
 if(TINT_BUILD_MSL_WRITER)
   tint_target_add_dependencies(tint_cmd_tint_cmd cmd

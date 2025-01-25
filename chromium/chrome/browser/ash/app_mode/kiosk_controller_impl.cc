@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "base/check.h"
@@ -21,6 +22,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
@@ -37,9 +39,9 @@
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_data.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/ash/components/kiosk/vision/internals_page_processor.h"
 #include "chromeos/ash/components/kiosk/vision/kiosk_vision.h"
@@ -79,6 +81,7 @@ std::optional<KioskApp> ChromeAppById(const KioskChromeAppManager& manager,
 KioskApp EmptyKioskApp(const KioskAppId& app_id) {
   switch (app_id.type) {
     case KioskAppType::kChromeApp:
+    case KioskAppType::kIsolatedWebApp:
       return KioskApp{app_id,
                       /*name=*/"",
                       /*icon=*/gfx::ImageSkia(),
@@ -89,7 +92,7 @@ KioskApp EmptyKioskApp(const KioskAppId& app_id) {
                       /*icon=*/gfx::ImageSkia(),
                       /*url=*/GURL()};
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace
@@ -102,18 +105,11 @@ KioskControllerImpl::KioskControllerImpl(
 KioskControllerImpl::~KioskControllerImpl() = default;
 
 std::vector<KioskApp> KioskControllerImpl::GetApps() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
   std::vector<KioskApp> apps;
-  for (const KioskAppManagerBase::App& web_app : web_app_manager_.GetApps()) {
-    apps.emplace_back(KioskAppId::ForWebApp(web_app.account_id), web_app.name,
-                      web_app.icon, web_app.url);
-  }
-  for (const KioskAppManagerBase::App& chrome_app :
-       chrome_app_manager_.GetApps()) {
-    apps.emplace_back(
-        KioskAppId::ForChromeApp(chrome_app.app_id, chrome_app.account_id),
-        chrome_app.name, chrome_app.icon);
+  AppendWebApps(apps);
+  AppendChromeApps(apps);
+  if (ash::features::IsIsolatedWebAppKioskEnabled()) {
+    AppendIsolatedWebApps(apps);
   }
   return apps;
 }
@@ -127,6 +123,9 @@ std::optional<KioskApp> KioskControllerImpl::GetAppById(
       return WebAppById(web_app_manager_, app_id.account_id);
     case KioskAppType::kChromeApp:
       return ChromeAppById(chrome_app_manager_, app_id.app_id.value());
+    case KioskAppType::kIsolatedWebApp:
+      // TODO(crbug.com/359774056): add IsolatedWebAppById.
+      return EmptyKioskApp(app_id);
   }
 }
 
@@ -136,9 +135,8 @@ std::optional<KioskApp> KioskControllerImpl::GetAutoLaunchApp() const {
   if (const auto& web_account_id = web_app_manager_.GetAutoLaunchAccountId();
       web_account_id.is_valid()) {
     return WebAppById(web_app_manager_, web_account_id);
-  } else if (chrome_app_manager_.IsAutoLaunchEnabled()) {
-    std::string chrome_app_id = chrome_app_manager_.GetAutoLaunchApp();
-    CHECK(!chrome_app_id.empty());
+  } else if (std::string chrome_app_id = chrome_app_manager_.GetAutoLaunchApp();
+             !chrome_app_id.empty()) {
     return ChromeAppById(chrome_app_manager_, chrome_app_id);
   }
   return std::nullopt;
@@ -161,6 +159,10 @@ void KioskControllerImpl::InitializeKioskSystemSession(
       break;
     case KioskAppType::kChromeApp:
       chrome_app_manager_.OnKioskSessionStarted(kiosk_app_id);
+      break;
+    case KioskAppType::kIsolatedWebApp:
+      // TODO(crbug.com/361017701): add iwa_manager_.OnKioskSessionStarted.
+      NOTIMPLEMENTED();
       break;
   }
 }
@@ -230,6 +232,14 @@ bool KioskControllerImpl::HandleAccelerator(LoginAcceleratorAction action) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return launch_controller_ && launch_controller_->HandleAccelerator(action);
+}
+
+void KioskControllerImpl::OnGuestAdded(
+    content::WebContents* guest_web_contents) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (system_session_.has_value()) {
+    system_session_->OnGuestAdded(guest_web_contents);
+  }
 }
 
 KioskSystemSession* KioskControllerImpl::GetKioskSystemSession() {
@@ -356,6 +366,33 @@ void KioskControllerImpl::OnLaunchCompleteAfterCrash(
 
   // Delete launcher so it doesn't end up with dangling references.
   crash_recovery_launcher_.reset();
+}
+
+void KioskControllerImpl::AppendWebApps(std::vector<KioskApp>& apps) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (const KioskAppManagerBase::App& web_app : web_app_manager_.GetApps()) {
+    apps.emplace_back(KioskAppId::ForWebApp(web_app.account_id), web_app.name,
+                      web_app.icon, web_app.url);
+  }
+}
+
+void KioskControllerImpl::AppendChromeApps(std::vector<KioskApp>& apps) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (const KioskAppManagerBase::App& chrome_app :
+       chrome_app_manager_.GetApps()) {
+    apps.emplace_back(
+        KioskAppId::ForChromeApp(chrome_app.app_id, chrome_app.account_id),
+        chrome_app.name, chrome_app.icon);
+  }
+}
+
+void KioskControllerImpl::AppendIsolatedWebApps(
+    std::vector<KioskApp>& apps) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (const KioskAppManagerBase::App& iwa_app : iwa_manager_.GetApps()) {
+    apps.emplace_back(KioskAppId::ForIsolatedWebApp(iwa_app.account_id),
+                      iwa_app.name, iwa_app.icon);
+  }
 }
 
 }  // namespace ash

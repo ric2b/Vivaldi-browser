@@ -10,6 +10,7 @@
 #include "ash/display/display_move_window_util.h"
 #include "ash/frame/multitask_menu_nudge_delegate_ash.h"
 #include "ash/frame/non_client_frame_view_ash.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_util.h"
@@ -31,6 +32,9 @@
 #include "chromeos/ui/frame/multitask_menu/multitask_button.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_view_test_api.h"
+#include "components/user_manager/fake_user_manager.h"
+#include "components/user_manager/scoped_user_manager.h"
+#include "ui/aura/window.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/size.h"
@@ -229,6 +233,17 @@ TEST_F(MultitaskMenuNudgeControllerTest, NudgeTimeout) {
   ASSERT_TRUE(GetNudgeWidgetForWindow(window.get()));
 
   FireDismissNudgeTimer(window.get());
+  EXPECT_FALSE(GetNudgeWidgetForWindow(window.get()));
+}
+
+TEST_F(MultitaskMenuNudgeControllerTest, NoNudgeForNewUser) {
+  chromeos::MultitaskMenuNudgeController::SetSuppressNudgeForTesting(false);
+
+  user_manager::TypedScopedUserManager<user_manager::FakeUserManager>
+      fake_user_manager{std::make_unique<user_manager::FakeUserManager>()};
+  fake_user_manager->SetIsCurrentUserNew(true);
+
+  auto window = CreateAppWindow(gfx::Rect(300, 300));
   EXPECT_FALSE(GetNudgeWidgetForWindow(window.get()));
 }
 

@@ -408,8 +408,71 @@ BuiltinFn ParseBuiltinFn(std::string_view name) {
     if (name == "subgroupBallot") {
         return BuiltinFn::kSubgroupBallot;
     }
+    if (name == "subgroupElect") {
+        return BuiltinFn::kSubgroupElect;
+    }
     if (name == "subgroupBroadcast") {
         return BuiltinFn::kSubgroupBroadcast;
+    }
+    if (name == "subgroupBroadcastFirst") {
+        return BuiltinFn::kSubgroupBroadcastFirst;
+    }
+    if (name == "subgroupShuffle") {
+        return BuiltinFn::kSubgroupShuffle;
+    }
+    if (name == "subgroupShuffleXor") {
+        return BuiltinFn::kSubgroupShuffleXor;
+    }
+    if (name == "subgroupShuffleUp") {
+        return BuiltinFn::kSubgroupShuffleUp;
+    }
+    if (name == "subgroupShuffleDown") {
+        return BuiltinFn::kSubgroupShuffleDown;
+    }
+    if (name == "subgroupAdd") {
+        return BuiltinFn::kSubgroupAdd;
+    }
+    if (name == "subgroupExclusiveAdd") {
+        return BuiltinFn::kSubgroupExclusiveAdd;
+    }
+    if (name == "subgroupMul") {
+        return BuiltinFn::kSubgroupMul;
+    }
+    if (name == "subgroupExclusiveMul") {
+        return BuiltinFn::kSubgroupExclusiveMul;
+    }
+    if (name == "subgroupAnd") {
+        return BuiltinFn::kSubgroupAnd;
+    }
+    if (name == "subgroupOr") {
+        return BuiltinFn::kSubgroupOr;
+    }
+    if (name == "subgroupXor") {
+        return BuiltinFn::kSubgroupXor;
+    }
+    if (name == "subgroupMin") {
+        return BuiltinFn::kSubgroupMin;
+    }
+    if (name == "subgroupMax") {
+        return BuiltinFn::kSubgroupMax;
+    }
+    if (name == "subgroupAll") {
+        return BuiltinFn::kSubgroupAll;
+    }
+    if (name == "subgroupAny") {
+        return BuiltinFn::kSubgroupAny;
+    }
+    if (name == "quadBroadcast") {
+        return BuiltinFn::kQuadBroadcast;
+    }
+    if (name == "quadSwapX") {
+        return BuiltinFn::kQuadSwapX;
+    }
+    if (name == "quadSwapY") {
+        return BuiltinFn::kQuadSwapY;
+    }
+    if (name == "quadSwapDiagonal") {
+        return BuiltinFn::kQuadSwapDiagonal;
     }
     if (name == "__tint_materialize") {
         return BuiltinFn::kTintMaterialize;
@@ -667,8 +730,50 @@ const char* str(BuiltinFn i) {
             return "atomicCompareExchangeWeak";
         case BuiltinFn::kSubgroupBallot:
             return "subgroupBallot";
+        case BuiltinFn::kSubgroupElect:
+            return "subgroupElect";
         case BuiltinFn::kSubgroupBroadcast:
             return "subgroupBroadcast";
+        case BuiltinFn::kSubgroupBroadcastFirst:
+            return "subgroupBroadcastFirst";
+        case BuiltinFn::kSubgroupShuffle:
+            return "subgroupShuffle";
+        case BuiltinFn::kSubgroupShuffleXor:
+            return "subgroupShuffleXor";
+        case BuiltinFn::kSubgroupShuffleUp:
+            return "subgroupShuffleUp";
+        case BuiltinFn::kSubgroupShuffleDown:
+            return "subgroupShuffleDown";
+        case BuiltinFn::kSubgroupAdd:
+            return "subgroupAdd";
+        case BuiltinFn::kSubgroupExclusiveAdd:
+            return "subgroupExclusiveAdd";
+        case BuiltinFn::kSubgroupMul:
+            return "subgroupMul";
+        case BuiltinFn::kSubgroupExclusiveMul:
+            return "subgroupExclusiveMul";
+        case BuiltinFn::kSubgroupAnd:
+            return "subgroupAnd";
+        case BuiltinFn::kSubgroupOr:
+            return "subgroupOr";
+        case BuiltinFn::kSubgroupXor:
+            return "subgroupXor";
+        case BuiltinFn::kSubgroupMin:
+            return "subgroupMin";
+        case BuiltinFn::kSubgroupMax:
+            return "subgroupMax";
+        case BuiltinFn::kSubgroupAll:
+            return "subgroupAll";
+        case BuiltinFn::kSubgroupAny:
+            return "subgroupAny";
+        case BuiltinFn::kQuadBroadcast:
+            return "quadBroadcast";
+        case BuiltinFn::kQuadSwapX:
+            return "quadSwapX";
+        case BuiltinFn::kQuadSwapY:
+            return "quadSwapY";
+        case BuiltinFn::kQuadSwapDiagonal:
+            return "quadSwapDiagonal";
         case BuiltinFn::kTintMaterialize:
             return "__tint_materialize";
     }
@@ -742,7 +847,45 @@ bool IsPacked4x8IntegerDotProductBuiltin(BuiltinFn f) {
 }
 
 bool IsSubgroup(BuiltinFn f) {
-    return f == BuiltinFn::kSubgroupBallot || f == BuiltinFn::kSubgroupBroadcast;
+    switch (f) {
+        case BuiltinFn::kSubgroupBallot:
+        case BuiltinFn::kSubgroupElect:
+        case BuiltinFn::kSubgroupBroadcast:
+        case BuiltinFn::kSubgroupBroadcastFirst:
+        case BuiltinFn::kSubgroupShuffle:
+        case BuiltinFn::kSubgroupShuffleXor:
+        case BuiltinFn::kSubgroupShuffleUp:
+        case BuiltinFn::kSubgroupShuffleDown:
+        case BuiltinFn::kSubgroupAdd:
+        case BuiltinFn::kSubgroupExclusiveAdd:
+        case BuiltinFn::kSubgroupMul:
+        case BuiltinFn::kSubgroupExclusiveMul:
+        case BuiltinFn::kSubgroupAnd:
+        case BuiltinFn::kSubgroupOr:
+        case BuiltinFn::kSubgroupXor:
+        case BuiltinFn::kSubgroupMin:
+        case BuiltinFn::kSubgroupMax:
+        case BuiltinFn::kSubgroupAll:
+        case BuiltinFn::kSubgroupAny:
+        case BuiltinFn::kQuadBroadcast:
+        case BuiltinFn::kQuadSwapX:
+        case BuiltinFn::kQuadSwapY:
+        case BuiltinFn::kQuadSwapDiagonal:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool IsQuadSwap(BuiltinFn f) {
+    switch (f) {
+        case BuiltinFn::kQuadSwapX:
+        case BuiltinFn::kQuadSwapY:
+        case BuiltinFn::kQuadSwapDiagonal:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool HasSideEffects(BuiltinFn f) {

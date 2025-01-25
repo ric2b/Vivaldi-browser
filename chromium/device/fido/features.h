@@ -39,11 +39,6 @@ inline constexpr base::FeatureParam<bool> kWebAuthnAndroidGpmInCredMan{
     &kWebAuthnAndroidCredMan, "gpm_in_cred_man", false};
 #endif  // BUILDFLAG(IS_ANDROID)
 
-// Advertise hybrid prelinking on Android even if the app doesn't have
-// notifications permission.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnHybridLinkWithoutNotifications);
-
 // These five feature flags control whether iCloud Keychain is the default
 // mechanism for platform credential creation in different situations.
 // "Active" means that the user is an active user of the profile authenticator,
@@ -62,10 +57,6 @@ BASE_DECLARE_FEATURE(kWebAuthnICloudKeychainForInactiveWithDrive);
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnICloudKeychainForInactiveWithoutDrive);
 
-// Allow some sites to experiment with removing caBLE linking in requests.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnLinkingExperimentation);
-
 // Enable use of a cloud enclave authenticator service.
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnEnclaveAuthenticator);
@@ -79,11 +70,6 @@ extern const base::FeatureParam<bool> kWebAuthnGpmPin;
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnPasskeysReset);
 
-// Filter a priori discovered credentials on google.com to those that have a
-// user id that starts with "GOOGLE_ACCOUNT:".
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnFilterGooglePasskeys);
-
 #if BUILDFLAG(IS_CHROMEOS)
 // Enable ChromeOS native passkey support.
 COMPONENT_EXPORT(DEVICE_FIDO)
@@ -93,21 +79,6 @@ BASE_DECLARE_FEATURE(kChromeOsPasskeys);
 // Support cross-domain RP ID assertions.
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnRelatedOrigin);
-
-// Allow extensions to assert WebAuthn relying party identifiers for domains
-// they have host permissions for.
-// Added in M121. Remove in or after M124.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kAllowExtensionsToSetWebAuthnRpIds);
-
-// Send and receive JSON from Play Services.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnAndroidFidoJson);
-
-// Prefer dispatching to a platform (i.e. internal transport) virtual
-// authenticator if available.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnPreferVirtualPlatformAuthenticator);
 
 // Enable the Chrome Android cable authenticator. This lets a Chrome module
 // handle cable requests from scanning a QR code, tapping on an FCM
@@ -135,6 +106,11 @@ BASE_DECLARE_FEATURE(kWebAuthnCredProtectWin10BugWorkaround);
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnICloudRecoveryKey);
 
+// Retrieve and recover from recovery keys on iCloud keychain for the enclave
+// authenticator.
+COMPONENT_EXPORT(DEVICE_FIDO)
+BASE_DECLARE_FEATURE(kWebAuthnRecoverFromICloudRecoveryKey);
+
 // Cache responses from the security domain. To be used if we're overloading the
 // security domain service.
 COMPONENT_EXPORT(DEVICE_FIDO)
@@ -148,6 +124,10 @@ BASE_DECLARE_FEATURE(kWebAuthnAndroidOpenAccessory);
 // Send enclave requests with 5 seconds delay. For development purposes only.
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnEnclaveAuthenticatorDelay);
+
+// Enable non-autofill sign-in UI for conditional mediation.
+COMPONENT_EXPORT(DEVICE_FIDO)
+BASE_DECLARE_FEATURE(kWebAuthnAmbientSignin);
 
 }  // namespace device
 

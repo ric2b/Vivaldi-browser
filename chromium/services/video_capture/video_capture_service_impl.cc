@@ -133,21 +133,27 @@ class VideoCaptureServiceImpl::VizGpuContextProvider
       media::VideoCaptureGpuChannelHost::GetInstance().SetSharedImageInterface(
           viz_gpu_->GetGpuChannel()->CreateClientSharedImageInterface());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-      media::VideoCaptureDeviceFactoryChromeOS::SetGpuBufferManager(
-          media::VideoCaptureGpuChannelHost::GetInstance()
-              .GetGpuMemoryBufferManager());
+      media::VideoCaptureDeviceFactoryChromeOS::SetGpuChannelHost(
+          viz_gpu_->GetGpuChannel());
+      media::VideoCaptureDeviceFactoryChromeOS::SetSharedImageInterface(
+          viz_gpu_->GetGpuChannel()->CreateClientSharedImageInterface());
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     }
   }
   ~VizGpuContextProvider() override {
     // Ensure destroy context provider and not receive callbacks before clear up
-    // |viz_gpu_|
+    // |viz_gpu_|.
     if (context_provider_) {
       // Ensure there are no dangling pointers.
       media::VideoCaptureGpuChannelHost::GetInstance()
           .SetGpuMemoryBufferManager(nullptr);
       media::VideoCaptureGpuChannelHost::GetInstance().SetSharedImageInterface(
           nullptr);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      media::VideoCaptureDeviceFactoryChromeOS::SetGpuChannelHost(nullptr);
+      media::VideoCaptureDeviceFactoryChromeOS::SetSharedImageInterface(
+          nullptr);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
       context_provider_.reset();
     }
   }
@@ -164,6 +170,14 @@ class VideoCaptureServiceImpl::VizGpuContextProvider
           .SetGpuMemoryBufferManager(nullptr);
       media::VideoCaptureGpuChannelHost::GetInstance().SetSharedImageInterface(
           nullptr);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      media::VideoCaptureDeviceFactoryChromeOS::SetGpuChannelHost(nullptr);
+      media::VideoCaptureDeviceFactoryChromeOS::SetSharedImageInterface(
+          nullptr);
+    } else {
+      media::VideoCaptureDeviceFactoryChromeOS::SetGpuChannelHost(
+          viz_gpu_->GetGpuChannel());
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     }
 
     // Notify context lost after new context ready.

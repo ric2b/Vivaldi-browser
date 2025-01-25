@@ -59,6 +59,25 @@ inline int FragmentainerBreakPrecedence(EBreakBetween break_value) {
   }
 }
 
+bool ShouldCloneBlockStartBorderPadding(const BoxFragmentBuilder& builder) {
+  if (builder.Node().Style().BoxDecorationBreak() !=
+      EBoxDecorationBreak::kClone) {
+    return false;
+  }
+  const BlockBreakToken* previous_break_token = builder.PreviousBreakToken();
+  if (!previous_break_token) {
+    return true;
+  }
+  if (previous_break_token->MonolithicOverflow()) {
+    LayoutUnit space_left =
+        FragmentainerSpaceLeft(builder, /*is_for_children=*/false);
+    if (space_left < builder.BorderScrollbarPadding().BlockSum()) {
+      return false;
+    }
+  }
+  return !previous_break_token->IsAtBlockEnd();
+}
+
 }  // anonymous namespace
 
 EBreakBetween JoinFragmentainerBreakValues(EBreakBetween first_value,
@@ -416,20 +435,8 @@ void SetupFragmentBuilderForFragmentation(
   // count as being cloned or not depends on whether the fragment currently
   // being built is known to be the last fragment. If it is, block-end box
   // decorations will behave as normally, so that child content may overflow it.
-  bool clone_box_start_decorations = [&] {
-    if (node.Style().BoxDecorationBreak() != EBoxDecorationBreak::kClone) {
-      return false;
-    }
-    if (!previous_break_token) {
-      return true;
-    }
-    if (previous_break_token->MonolithicOverflow() &&
-        space_left < builder->BorderScrollbarPadding().BlockSum()) {
-      return false;
-    }
-    return !previous_break_token->IsAtBlockEnd();
-  }();
-
+  bool clone_box_start_decorations =
+      ShouldCloneBlockStartBorderPadding(*builder);
   bool clone_box_end_decorations = clone_box_start_decorations;
 
   if (clone_box_start_decorations) {
@@ -455,8 +462,8 @@ void SetupFragmentBuilderForFragmentation(
       // constrained. If it doesn't affect the block size, it means that we can
       // tell before layout how much more space this node needs.
       LayoutUnit max_block_size = ComputeBlockSizeForFragment(
-          space, node.Style(), builder->BorderPadding(), LayoutUnit::Max(),
-          builder->InitialBorderBoxSize().inline_size);
+          space, To<BlockNode>(node), builder->BorderPadding(),
+          LayoutUnit::Max(), builder->InitialBorderBoxSize().inline_size);
       DCHECK(space.HasKnownFragmentainerBlockSize());
 
       // If max_block_size is "infinite", we can't tell for sure that it's going
@@ -482,6 +489,10 @@ void SetupFragmentBuilderForFragmentation(
 
     if (clone_box_end_decorations) {
       builder->SetShouldCloneBoxEndDecorations(true);
+
+      // If block-end border+padding is cloned, they should be repeated in every
+      // fragment, so breaking before them would be wrong and make no sense.
+      builder->SetShouldPreventBreakBeforeBlockEndDecorations(true);
     }
 
     builder->SetRequiresContentBeforeBreaking(requires_content_before_breaking);
@@ -506,6 +517,11 @@ void SetupFragmentBuilderForFragmentation(
   }
 }
 
+bool ShouldIncludeBlockStartBorderPadding(const BoxFragmentBuilder& builder) {
+  return !IsBreakInside(builder.PreviousBreakToken()) ||
+         ShouldCloneBlockStartBorderPadding(builder);
+}
+
 bool ShouldIncludeBlockEndBorderPadding(const BoxFragmentBuilder& builder) {
   if (builder.PreviousBreakToken() &&
       builder.PreviousBreakToken()->IsAtBlockEnd()) {
@@ -526,8 +542,7 @@ bool ShouldIncludeBlockEndBorderPadding(const BoxFragmentBuilder& builder) {
   return !builder.HasInflowChildBreakInside();
 }
 
-BreakStatus FinishFragmentation(LayoutUnit trailing_border_padding,
-                                BoxFragmentBuilder* builder) {
+BreakStatus FinishFragmentation(BoxFragmentBuilder* builder) {
   const BlockNode& node = builder->Node();
   const ConstraintSpace& space = builder->GetConstraintSpace();
   LayoutUnit space_left = FragmentainerSpaceLeft(*builder,
@@ -553,10 +568,18 @@ BreakStatus FinishFragmentation(LayoutUnit trailing_border_padding,
 
   LayoutUnit final_block_size = desired_block_size;
 
+  LayoutUnit trailing_border_padding =
+      builder->BorderScrollbarPadding().block_end;
   LayoutUnit subtractable_border_padding;
-  if ((desired_block_size > trailing_border_padding && !node.IsTableCell()) ||
-      (previous_break_token && previous_break_token->MonolithicOverflow())) {
-    if (!builder->ShouldCloneBoxEndDecorations() || node.IsTable()) {
+  if (!builder->ShouldPreventBreakBeforeBlockEndDecorations()) {
+    if (desired_block_size > trailing_border_padding ||
+        (previous_break_token && previous_break_token->MonolithicOverflow())) {
+      // There is a last-resort breakpoint before trailing border and padding,
+      // if progress can still be guaranteed.
+      //
+      // Note that we're always guaranteed progress if there's incoming
+      // monolithic overflow. We're going to move past monolithic overflow, and
+      // just add as many fragments we need in order to get past the overflow.
       subtractable_border_padding = trailing_border_padding;
     }
   }
@@ -627,16 +650,6 @@ BreakStatus FinishFragmentation(LayoutUnit trailing_border_padding,
     // means that there's something unbreakable (monolithic) inside (or we'd
     // already have broken inside). We'll allow this to overflow the
     // fragmentainer.
-    //
-    // There is a last-resort breakpoint before trailing border and padding, so
-    // first check if we can break there and still make progress. Don't allow a
-    // break here for table cells, though, as that might disturb the row
-    // stretching machinery, causing an infinite loop. We'd add the stretch
-    // amount to the block-size to the content box of the table cell, even
-    // though we're past it. We're always guaranteed progress if there's
-    // incoming monolithic overflow, so in such cases we can always break before
-    // border / padding (and add as many fragments we need in order to get past
-    // the overflow).
     DCHECK_GE(desired_intrinsic_block_size, trailing_border_padding);
     DCHECK_GE(desired_block_size, trailing_border_padding);
 

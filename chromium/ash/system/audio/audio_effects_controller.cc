@@ -65,8 +65,9 @@ bool AudioEffectsController::IsEffectSupported(VcEffectId effect_id) {
     case VcEffectId::kPortraitRelighting:
     case VcEffectId::kCameraFraming:
     case VcEffectId::kTestEffect:
-      NOTREACHED_IN_MIGRATION();
-      return false;
+    case VcEffectId::kFaceRetouch:
+    case VcEffectId::kStudioLook:
+      NOTREACHED();
   }
 }
 
@@ -85,8 +86,9 @@ std::optional<int> AudioEffectsController::GetEffectState(
     case VcEffectId::kPortraitRelighting:
     case VcEffectId::kCameraFraming:
     case VcEffectId::kTestEffect:
-      NOTREACHED_IN_MIGRATION();
-      return std::nullopt;
+    case VcEffectId::kFaceRetouch:
+    case VcEffectId::kStudioLook:
+      NOTREACHED();
   }
 }
 
@@ -121,8 +123,9 @@ void AudioEffectsController::OnEffectControlActivated(
     case VcEffectId::kPortraitRelighting:
     case VcEffectId::kCameraFraming:
     case VcEffectId::kTestEffect:
-      NOTREACHED_IN_MIGRATION();
-      return;
+    case VcEffectId::kFaceRetouch:
+    case VcEffectId::kStudioLook:
+      NOTREACHED();
   }
 }
 

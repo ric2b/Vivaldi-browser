@@ -179,9 +179,14 @@ class ChromeComposeClient
   // AutofillManager::Observer APIs for focus tracking are fixed.
   void OnFocusChangedInPage(content::FocusedNodeDetails* details) override;
 
-  // compose::ProactiveNudgeTracker implementation.
+  // compose::ProactiveNudgeTracker::Delegate implementation.
   void ShowProactiveNudge(autofill::FormGlobalId form,
-                          autofill::FieldGlobalId field) override;
+                          autofill::FieldGlobalId field,
+                          compose::ComposeEntryPoint entry_point) override;
+
+  // Returns the Compose optimization guide hints for the current URL.
+  // compose::ProactiveNudgeTracker::Delegate implementation.
+  compose::ComposeHintMetadata GetComposeHintMetadata() override;
 
   ComposeEnabling& GetComposeEnabling();
 
@@ -252,6 +257,10 @@ class ChromeComposeClient
   // Set the exit reason for a session.
   void SetSessionCloseReason(compose::ComposeSessionCloseReason close_reason);
 
+  // Launch Hats with the active session
+  void LaunchHatsSurveyForActiveSession(
+      compose::ComposeSessionCloseReason close_reason);
+
   // Removes `active_compose_field_id_` from `sessions_` and resets
   // `active_compose_field_id_` and `active_compose_form_id_`
   void RemoveActiveSession();
@@ -266,6 +275,10 @@ class ChromeComposeClient
 
   // Returns nullptr if no such session exists.
   ComposeSession* GetSessionForActiveComposeField();
+
+  // Returns true if the active field has an existing session that is not
+  // expired.
+  bool ActiveFieldHasUnexpiredSession();
 
   // Checks if the page assessed language is supported by Compose.
   bool IsPageLanguageSupported();
@@ -339,6 +352,9 @@ class ChromeComposeClient
   // Time since page load, or time since page has changed if it's not loaded
   // yet.
   base::TimeTicks page_change_time_;
+
+  compose::ComposeEntryPoint most_recent_nudge_entry_point_ =
+      compose::ComposeEntryPoint::kProactiveNudge;
 
   base::WeakPtrFactory<ChromeComposeClient> weak_ptr_factory_{this};
 

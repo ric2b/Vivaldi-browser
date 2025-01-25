@@ -27,8 +27,11 @@ namespace device::enclave {
 // connect to an enclave.
 struct COMPONENT_EXPORT(DEVICE_FIDO) EnclaveIdentity {
   EnclaveIdentity();
-  ~EnclaveIdentity();
   EnclaveIdentity(const EnclaveIdentity&);
+  EnclaveIdentity(EnclaveIdentity&&);
+  EnclaveIdentity& operator=(const EnclaveIdentity&);
+  EnclaveIdentity& operator=(EnclaveIdentity&&);
+  ~EnclaveIdentity();
 
   GURL url;
   std::array<uint8_t, kP256X962Length> public_key;
@@ -45,6 +48,9 @@ enum class ClientKeyType {
   // signing after the user has performed some explicit action such as providing
   // a local biometric or PIN.
   kUserVerified,
+  // kSoftwareUserVerified keys are not hardware-bound, but user verification is
+  // performed before they sign with anything.
+  kSoftwareUserVerified,
 };
 
 // Describes the result of a PIN claim validation by the enclave service.

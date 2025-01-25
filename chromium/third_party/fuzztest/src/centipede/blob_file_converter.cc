@@ -25,12 +25,12 @@
 #include "absl/strings/str_format.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "./centipede/blob_file.h"
 #include "./centipede/config_init.h"
-#include "./centipede/defs.h"
-#include "./centipede/logging.h"
-#include "./centipede/remote_file.h"
 #include "./centipede/rusage_profiler.h"
+#include "./common/blob_file.h"
+#include "./common/defs.h"
+#include "./common/logging.h"
+#include "./common/remote_file.h"
 
 ABSL_FLAG(std::string, in, "", "Input path");
 ABSL_FLAG(std::string, out, "", "Output path");
@@ -99,7 +99,7 @@ void Convert(               //
   // Verify and prepare source and destination.
 
   CHECK(RemotePathExists(in)) << VV(in);
-  RemoteMkdir(std::filesystem::path{out}.parent_path().c_str());
+  CHECK_OK(RemoteMkdir(std::filesystem::path{out}.parent_path().c_str()));
 
   // Open blob file reader and writer.
 

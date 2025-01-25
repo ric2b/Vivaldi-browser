@@ -19,7 +19,7 @@
 #include "aom_dsp/blend.h"
 
 /* Sum the difference between every corresponding element of the buffers. */
-static INLINE unsigned int sad(const uint8_t *a, int a_stride, const uint8_t *b,
+static inline unsigned int sad(const uint8_t *a, int a_stride, const uint8_t *b,
                                int b_stride, int width, int height) {
   int y, x;
   unsigned int sad = 0;
@@ -191,7 +191,7 @@ SAD_MXNX3D(64, 16)
 #endif  // !CONFIG_REALTIME_ONLY
 
 #if CONFIG_AV1_HIGHBITDEPTH
-static INLINE unsigned int highbd_sad(const uint8_t *a8, int a_stride,
+static inline unsigned int highbd_sad(const uint8_t *a8, int a_stride,
                                       const uint8_t *b8, int b_stride,
                                       int width, int height) {
   int y, x;
@@ -209,7 +209,7 @@ static INLINE unsigned int highbd_sad(const uint8_t *a8, int a_stride,
   return sad;
 }
 
-static INLINE unsigned int highbd_sadb(const uint8_t *a8, int a_stride,
+static inline unsigned int highbd_sadb(const uint8_t *a8, int a_stride,
                                        const uint8_t *b8, int b_stride,
                                        int width, int height) {
   int y, x;

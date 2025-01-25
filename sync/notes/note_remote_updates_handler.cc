@@ -288,11 +288,11 @@ void NoteRemoteUpdatesHandler::Process(
 
     // If the received entity has out of date encryption, we schedule another
     // commit to fix it.
-    if (note_tracker_->model_type_state().encryption_key_name() !=
+    if (note_tracker_->data_type_state().encryption_key_name() !=
         update->encryption_key_name) {
       DVLOG(2) << "Notes: Requesting re-encrypt commit "
                << update->encryption_key_name << " -> "
-               << note_tracker_->model_type_state().encryption_key_name();
+               << note_tracker_->data_type_state().encryption_key_name();
       note_tracker_->IncrementSequenceNumber(tracked_entity);
     }
 
@@ -364,7 +364,7 @@ NoteRemoteUpdatesHandler::ReorderValidUpdates(
   // Normally there shouldn't be multiple updates for the same UUID, but let's
   // avoiding dedupping here just in case (e.g. the could in theory be a
   // combination of client-tagged and non-client-tagged updated that
-  // ModelTypeWorker failed to deduplicate.
+  // DataTypeWorker failed to deduplicate.
   std::unordered_multimap<base::Uuid, const syncer::UpdateResponseData*,
                           base::UuidHash>
       uuid_to_updates;
@@ -606,7 +606,7 @@ void NoteRemoteUpdatesHandler::ProcessDelete(
 // This method doesn't explicitly handle conflicts as a result of re-encryption:
 // remote update wins even if there wasn't a real change in specifics. However,
 // this scenario is very unlikely and hence the implementation is less
-// sophisticated than in ClientTagBasedModelTypeProcessor (it would require
+// sophisticated than in ClientTagBasedDataTypeProcessor (it would require
 // introducing base hash specifics to track remote changes).
 const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
     const syncer::UpdateResponseData& update,

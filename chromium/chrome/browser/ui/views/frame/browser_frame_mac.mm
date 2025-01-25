@@ -69,11 +69,9 @@ bool ShouldHandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) {
     return false;
   }
 
-  // If the event was not synthesized it should have an os_event.
-  DCHECK(event.os_event);
-
-  // Do not fire shortcuts on key up.
-  return event.os_event.Get().type == NSEventTypeKeyDown;
+  // Do not fire shortcuts on key up, and only forward shortcuts if we have an
+  // underlying os event.
+  return event.os_event && event.os_event.Get().type == NSEventTypeKeyDown;
 }
 
 }  // namespace
@@ -435,7 +433,7 @@ void BrowserFrameMac::EnabledStateChangedForCommand(int id, bool enabled) {
       GetNSWindowHost()->CanGoForward(enabled);
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

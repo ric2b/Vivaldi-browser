@@ -16,11 +16,16 @@
 
 extern crate std;
 
-use super::*;
+use tinyvec::ArrayVec;
+
+use crypto_provider_default::CryptoProviderImpl;
+
+use crate::extended::data_elements::actions::{ActionId, ActionsDataElement};
 use crate::extended::serialize::{section_tests::SectionBuilderExt, AdvBuilder};
 use crate::extended::serialize::{AdvertisementType, UnencryptedSectionEncoder};
 use crate::extended::V1_ENCODING_UNENCRYPTED;
-use crypto_provider_default::CryptoProviderImpl;
+
+use super::*;
 
 #[test]
 fn serialize_tx_power_de() {
@@ -40,40 +45,33 @@ fn serialize_tx_power_de() {
     );
 }
 
-#[test]
-fn serialize_actions_de_empty() {
-    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-    let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
-
-    section_builder.add_de_res(|_| ActionsDataElement::try_from_actions(&[])).unwrap();
-
-    assert_eq!(
-        &[
-            V1_ENCODING_UNENCRYPTED, //header
-            1,                       // section len
-            0x06,                    // len 0 type 0x06
-        ],
-        section_builder.into_section::<CryptoProviderImpl>().as_slice()
-    );
+fn actions_ids_from_u16_collection<const N: usize>(actions: [u16; N]) -> ArrayVec<[ActionId; 64]> {
+    let mut result = ArrayVec::new();
+    result.extend_from_slice(&actions.map(|x| x.try_into().unwrap()));
+    result
 }
 
-#[rustfmt::skip]
 #[test]
 fn serialize_actions_de_non_empty() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-    let mut section_builder =
-        adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
+    let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
 
     section_builder
-        .add_de_res(|_| ActionsDataElement::try_from_actions(&[1, 1, 2, 3, 5, 8]))
+        .add_de_res(|_| {
+            ActionsDataElement::try_from_actions(actions_ids_from_u16_collection([
+                1, 1, 2, 3, 5, 8, // fibonacci, of course
+            ]))
+        })
         .unwrap();
 
+    #[rustfmt::skip]
     assert_eq!(
         &[
             V1_ENCODING_UNENCRYPTED,
             7, // section len
             0x66, // len 6 type 0x06
-            1, 1, 2, 3, 5, 8 // fibonacci, of course
+            0b00000100, // container type and len TTLLLLLL
+            1, 0, 0, 1, 2 // de-duped delta encoded fibonacci
         ],
         section_builder.into_section::<CryptoProviderImpl>().as_slice()
     );
@@ -196,8 +194,10 @@ fn serialize_connectivity_capabilities_de_wifi_direct() {
 }
 
 mod coverage_gaming {
-    use super::*;
     use alloc::format;
+
+    use super::*;
+
     #[test]
     fn de_type_const_from() {
         let _ = DeType::const_from(3);
@@ -209,13 +209,6 @@ mod coverage_gaming {
     #[test]
     fn generic_de_error_derives() {
         let err = GenericDataElementError::DataTooLong;
-        let _ = format!("{:?}", err);
-        assert_eq!(err, err);
-    }
-
-    #[test]
-    fn actions_de_error_derives() {
-        let err = ActionsDataElementError::ActionsTooLong;
         let _ = format!("{:?}", err);
         assert_eq!(err, err);
     }

@@ -15,27 +15,29 @@
 //! Proc macros for `pourover`. These macros are reexported by the `pourover` crate, so this crate
 //! is an implementation detail.
 
+#[cfg(proc_macro)]
 use proc_macro::TokenStream;
 
 mod call_method;
 mod jni_method;
 mod type_parser;
 
-/// Export a function as a JNI native method. This will attach a `#[export_name = "..."]` attribute that
-/// is formatted with the given parameters. The provided `package`, `class`, and `method_name` will
-/// be combined and formatted in according to the [JNI method name resolution rules][JNI naming].
+/// Export a function as a JNI native method. This will attach a `#[export_name = "..."]` attribute
+/// that is formatted with the given parameters. The provided `package`, `class`, and `method_name`
+/// will be combined and formatted in according to the [JNI method name resolution rules][JNI
+/// naming].
 ///
-/// [JNI naming]: https://docs.oracle.com/javase/8/docs/technotes/guides/jni/spec/design.html#resolving_native_method_names
+/// [JNI naming]:
+///     https://docs.oracle.com/javase/8/docs/technotes/guides/jni/spec/design.html#resolving_native_method_names
 ///
 /// # Parameters
 /// - `package` (LitStr): the Java package for the class being implemented
-/// - `class` (LitStr): the Java class being implemented. Use `Foo.Inner` syntax for inner
-/// classes.
+/// - `class` (LitStr): the Java class being implemented. Use `Foo.Inner` syntax for inner classes.
 /// - `method_name` (*optional* LitStr): the method's name in Java. The Rust function name will be
-/// used if this parameter is not set.
+///   used if this parameter is not set.
 /// - `panic_returns` (*optional* Expr): the value to return when a panic is encountered. This can
-/// not access local variables. This may only be used with `panic=unwind` and will produce a
-/// compile error otherwise.
+///   not access local variables. This may only be used with `panic=unwind` and will produce a
+///   compile error otherwise.
 ///
 /// When using `panic_returns` function arguments must be [`std::panic::UnwindSafe`]. See
 /// [`std::panic::catch_unwind`] for details. In practice this will not cause issues as JNI
@@ -57,6 +59,7 @@ mod type_parser;
 /// ```
 ///
 /// This function will be exported with `#[export_name = "Java_my_package_Foo_getFoo"]`.
+#[cfg(proc_macro)]
 #[proc_macro_attribute]
 pub fn jni_method(meta: TokenStream, item: TokenStream) -> TokenStream {
     use quote::ToTokens;
@@ -75,14 +78,13 @@ pub fn jni_method(meta: TokenStream, item: TokenStream) -> TokenStream {
 /// - `cls` (Expr: `&'static ClassDesc`): The class containing the method.
 /// - `name` (Expr: `&'static str`): The name of the method.
 /// - `sig` (LitStr): The JNI type signature of the method. This needs to be a literal so that it
-/// can be parsed by the macro to type-check args and return a correctly-typed value.
+///   can be parsed by the macro to type-check args and return a correctly-typed value.
 /// - `this` (Expr: `&JObject`): The Java object receiving the method call.
 /// - `args` (Expr ...): A variable number of arguments to be passed to the method.
 ///
 /// # Caching
-/// Each macro callsite will generate a `static` `MethodDesc` to cache the
-/// method id. Due to this, **this macro call should be wrapped in function** instead of being called
-/// multiple times.
+/// Each macro callsite will generate a `static` `MethodDesc` to cache the method id. Due to this,
+/// **this macro call should be wrapped in function** instead of being called multiple times.
 ///
 /// # Type-Safety
 /// The given type signature will be parsed and arguments will be type checked against it. The
@@ -94,8 +96,8 @@ pub fn jni_method(meta: TokenStream, item: TokenStream) -> TokenStream {
 /// Similarly, the return type will be one of the types above.
 ///
 /// # Returns
-/// The macro will evaluate to `jni::errors::Result<R>` where `R` is the return type parsed from
-/// the type signature.
+/// The macro will evaluate to `jni::errors::Result<R>` where `R` is the return type parsed from the
+/// type signature.
 ///
 /// # Example
 /// Let's call `sayHello` from the following class.
@@ -119,6 +121,7 @@ pub fn jni_method(meta: TokenStream, item: TokenStream) -> TokenStream {
 ///     call_method!(env, &MY_CLASS, "sayHello", "(Ljava/lang/String;)I", my_obj, name)
 /// }
 /// ```
+#[cfg(proc_macro)]
 #[proc_macro]
 pub fn call_method(args: TokenStream) -> TokenStream {
     call_method::call_method(args.into())
@@ -134,13 +137,12 @@ pub fn call_method(args: TokenStream) -> TokenStream {
 /// - `cls` (Expr: `&'static ClassDesc`): The class containing the method.
 /// - `name` (Expr: `&'static str`): The name of the method.
 /// - `sig` (LitStr): The JNI type signature of the method. This needs to be a literal so that it
-/// can be parsed by the macro to type-check args and return a correctly-typed value.
+///   can be parsed by the macro to type-check args and return a correctly-typed value.
 /// - `args` (Expr ...): A variable number of arguments to be passed to the method.
 ///
 /// # Caching
-/// Each macro callsite will generate a `static` `StaticMethodDesc` to cache the
-/// method id. Due to this, **this macro call should be wrapped in function** instead of being called
-/// multiple times.
+/// Each macro callsite will generate a `static` `StaticMethodDesc` to cache the method id. Due to
+/// this, **this macro call should be wrapped in function** instead of being called multiple times.
 ///
 /// # Type-Safety
 /// The given type signature will be parsed and arguments will be type checked against it. The
@@ -152,8 +154,8 @@ pub fn call_method(args: TokenStream) -> TokenStream {
 /// Similarly, the return type will be one of the types above.
 ///
 /// # Returns
-/// The macro will evaluate to `jni::errors::Result<R>` where `R` is the return type parsed from
-/// the type signature.
+/// The macro will evaluate to `jni::errors::Result<R>` where `R` is the return type parsed from the
+/// type signature.
 ///
 /// # Example
 /// Let's call `sayHello` from the following class.
@@ -176,6 +178,7 @@ pub fn call_method(args: TokenStream) -> TokenStream {
 ///     call_static_method!(env, &MY_CLASS, "sayHello", "(Ljava/lang/String;)I", name)
 /// }
 /// ```
+#[cfg(proc_macro)]
 #[proc_macro]
 pub fn call_static_method(args: TokenStream) -> TokenStream {
     call_method::call_static_method(args.into())
@@ -189,14 +192,13 @@ pub fn call_static_method(args: TokenStream) -> TokenStream {
 /// `call_constructor!($env, $cls, $sig, $($args),*)`
 /// - `env` (Expr: `&mut jni::JNIEnv`): The JNI environment.
 /// - `cls` (Expr: `&'static ClassDesc`): The class to be constructed.
-/// - `sig` (LitStr): The JNI type signature of the constructor. This needs to be a literal so that it
-/// can be parsed by the macro to type-check args and return a correctly-typed value.
+/// - `sig` (LitStr): The JNI type signature of the constructor. This needs to be a literal so that
+///   it can be parsed by the macro to type-check args and return a correctly-typed value.
 /// - `args` (Expr ...): A variable number of arguments to be passed to the constructor.
 ///
 /// # Caching
-/// Each macro callsite will generate a `static` `MethodDesc` to cache the
-/// method id. Due to this, **this macro call should be wrapped in function** instead of being called
-/// multiple times.
+/// Each macro callsite will generate a `static` `MethodDesc` to cache the method id. Due to this,
+/// **this macro call should be wrapped in function** instead of being called multiple times.
 ///
 /// # Type-Safety
 /// The given type signature will be parsed and arguments will be type checked against it. The
@@ -229,6 +231,7 @@ pub fn call_static_method(args: TokenStream) -> TokenStream {
 ///     call_constructor!(env, &MY_CLASS, "(Ljava/lang/String;)V", name)
 /// }
 /// ```
+#[cfg(proc_macro)]
 #[proc_macro]
 pub fn call_constructor(args: TokenStream) -> TokenStream {
     call_method::call_constructor(args.into())

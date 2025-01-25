@@ -20,14 +20,14 @@ void PaymentsDataManagerTestApi::AddServerCreditCard(
   // Don't add a duplicate.
   // TODO(crbug.com/332562243): Tests shouldn't be adding duplicate cards this
   // way, so convert this logic to a CHECK using exact equality or just remove.
-  if (base::ranges::any_of(payments_data_manager_->server_credit_cards_,
-                           [&](const auto& element) {
-                             return element->guid() == credit_card.guid();
-                           }) ||
-      base::ranges::any_of(payments_data_manager_->server_credit_cards_,
-                           [&](const auto& element) {
-                             return element->Compare(credit_card) == 0;
-                           })) {
+  if (std::ranges::any_of(payments_data_manager_->server_credit_cards_,
+                          [&](const auto& element) {
+                            return element->guid() == credit_card.guid();
+                          }) ||
+      std::ranges::any_of(payments_data_manager_->server_credit_cards_,
+                          [&](const auto& element) {
+                            return element->Compare(credit_card) == 0;
+                          })) {
     return;
   }
 
@@ -47,6 +47,10 @@ void PaymentsDataManagerTestApi::AddOfferData(
 void PaymentsDataManagerTestApi::OnCardArtImagesFetched(
     std::vector<std::unique_ptr<CreditCardArtImage>> images) {
   payments_data_manager_->OnCardArtImagesFetched(std::move(images));
+}
+
+bool PaymentsDataManagerTestApi::ShouldSuggestServerPaymentMethods() {
+  return payments_data_manager_->ShouldSuggestServerPaymentMethods();
 }
 
 }  // namespace autofill

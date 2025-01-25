@@ -26,6 +26,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.transit.CarryOn;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -33,6 +34,7 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.TestAnimations.EnableAnimations;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -47,7 +49,6 @@ import org.chromium.chrome.test.transit.hub.IncognitoTabSwitcherStation;
 import org.chromium.chrome.test.transit.hub.NewTabGroupDialogFacility;
 import org.chromium.chrome.test.transit.hub.RegularTabSwitcherStation;
 import org.chromium.chrome.test.transit.hub.TabSwitcherListEditorFacility;
-import org.chromium.chrome.test.transit.hub.TabSwitcherStation;
 import org.chromium.chrome.test.transit.ntp.RegularNewTabPageStation;
 import org.chromium.chrome.test.transit.page.PageStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
@@ -89,7 +90,7 @@ public class TabSwitcherLayoutPTTest {
 
     private static EmbeddedTestServer sTestServer;
 
-    private PageStation mStartPage;
+    private WebPageStation mStartPage;
     private WeakReference<Bitmap> mBitmap;
 
     @Before
@@ -108,51 +109,61 @@ public class TabSwitcherLayoutPTTest {
         sTestServer = sActivityTestRule.getTestServer();
     }
 
-    /**
-     * Enters the HubTabSwitcher. Like {@link TabUiTestHelper#enterTabSwitcher}, but make sure all
-     * tabs have thumbnail.
-     */
-    private <T extends TabSwitcherStation> T enterHTSWithThumbnailChecking(
-            PageStation currentStation, Class<T> destinationType) {
-        T tabSwitcherStation = currentStation.openHub(destinationType);
-        boolean isIncognito = destinationType.isAssignableFrom(IncognitoTabSwitcherStation.class);
-        CarryOn.pickUp(new TabThumbnailsCapturedCarryOn(isIncognito), /* trigger= */ null);
+    /** Enters the regular Tab Switcher, making sure all tabs have a thumbnail. */
+    private RegularTabSwitcherStation enterRegularHTSWithThumbnailChecking(
+            PageStation currentStation) {
+        RegularTabSwitcherStation tabSwitcherStation = currentStation.openRegularTabSwitcher();
+        CarryOn.pickUp(
+                new TabThumbnailsCapturedCarryOn(/* isIncognito= */ false), /* trigger= */ null);
+        return tabSwitcherStation;
+    }
+
+    /** Enters the Incognito Tab Switcher, making sure all tabs have a thumbnail. */
+    private IncognitoTabSwitcherStation enterIncognitoHTSWithThumbnailChecking(
+            PageStation currentStation) {
+        IncognitoTabSwitcherStation tabSwitcherStation = currentStation.openIncognitoTabSwitcher();
+        CarryOn.pickUp(
+                new TabThumbnailsCapturedCarryOn(/* isIncognito= */ true), /* trigger= */ null);
         return tabSwitcherStation;
     }
 
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @DisabledTest(message = "Test is flaky due to thumbnails not being reliably captured")
     public void testRenderGrid_10WebTabs() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
-        PageStation pageStation = Journeys.prepareTabs(mStartPage, 10, 0, "about:blank");
+        WebPageStation pageStation =
+                Journeys.prepareTabsWithThumbnails(
+                        mStartPage, 10, 0, "about:blank", WebPageStation::newBuilder);
         // Make sure all thumbnails are there before switching tabs.
         RegularTabSwitcherStation tabSwitcherStation =
-                enterHTSWithThumbnailChecking(pageStation, RegularTabSwitcherStation.class);
-        pageStation = tabSwitcherStation.selectTabAtIndex(0);
+                enterRegularHTSWithThumbnailChecking(pageStation);
+        pageStation = tabSwitcherStation.selectTabAtIndex(0, WebPageStation.newBuilder());
 
-        tabSwitcherStation = pageStation.openHub(RegularTabSwitcherStation.class);
+        tabSwitcherStation = pageStation.openRegularTabSwitcher();
         mRenderTestRule.render(cta.findViewById(R.id.pane_frame), "10_web_tabs");
 
-        PageStation previousPage = tabSwitcherStation.leaveHubToPreviousTabViaBack();
+        WebPageStation previousPage =
+                tabSwitcherStation.leaveHubToPreviousTabViaBack(WebPageStation.newBuilder());
         assertFinalDestination(previousPage);
     }
 
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @DisabledTest(message = "Test is flaky due to thumbnails not being reliably captured")
     public void testRenderGrid_10WebTabs_InitialScroll() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
-        PageStation pageStation = Journeys.prepareTabs(mStartPage, 10, 0, "about:blank");
+        WebPageStation pageStation =
+                Journeys.prepareTabsWithThumbnails(
+                        mStartPage, 10, 0, "about:blank", WebPageStation::newBuilder);
         assertEquals(9, cta.getTabModelSelector().getCurrentModel().index());
         RegularTabSwitcherStation tabSwitcherStation =
-                enterHTSWithThumbnailChecking(pageStation, RegularTabSwitcherStation.class);
+                enterRegularHTSWithThumbnailChecking(pageStation);
         // Make sure the grid tab switcher is scrolled down to show the selected tab.
         mRenderTestRule.render(cta.findViewById(R.id.pane_frame), "10_web_tabs-select_last");
 
-        PageStation previousPage = tabSwitcherStation.leaveHubToPreviousTabViaBack();
+        WebPageStation previousPage =
+                tabSwitcherStation.leaveHubToPreviousTabViaBack(WebPageStation.newBuilder());
         assertFinalDestination(previousPage);
     }
 
@@ -162,38 +173,47 @@ public class TabSwitcherLayoutPTTest {
     @DisabledTest(message = "Test is flaky due to thumbnails not being reliably captured")
     public void testRenderGrid_3WebTabs() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
-        PageStation pageStation =
-                Journeys.prepareTabs(mStartPage, 3, 0, sTestServer.getURL(TEST_URL));
+        WebPageStation pageStation =
+                Journeys.prepareTabsWithThumbnails(
+                        mStartPage, 3, 0, sTestServer.getURL(TEST_URL), WebPageStation::newBuilder);
         // Make sure all thumbnails are there before switching tabs.
         RegularTabSwitcherStation tabSwitcherStation =
-                enterHTSWithThumbnailChecking(pageStation, RegularTabSwitcherStation.class);
-        pageStation = tabSwitcherStation.selectTabAtIndex(0);
+                enterRegularHTSWithThumbnailChecking(pageStation);
+        pageStation = tabSwitcherStation.selectTabAtIndex(0, WebPageStation.newBuilder());
 
-        tabSwitcherStation = pageStation.openHub(RegularTabSwitcherStation.class);
+        tabSwitcherStation = pageStation.openRegularTabSwitcher();
 
         mRenderTestRule.render(cta.findViewById(R.id.pane_frame), "3_web_tabs");
 
-        PageStation previousPage = tabSwitcherStation.leaveHubToPreviousTabViaBack();
+        WebPageStation previousPage =
+                tabSwitcherStation.leaveHubToPreviousTabViaBack(WebPageStation.newBuilder());
         assertFinalDestination(previousPage);
     }
 
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @DisabledTest(message = "Test is flaky due to thumbnails not being reliably captured")
     public void testRenderGrid_3NativeTabs() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
-        PageStation pageStation = Journeys.prepareTabs(mStartPage, 3, 0, UrlConstants.NTP_URL);
+        RegularNewTabPageStation pageStation =
+                Journeys.prepareTabsWithThumbnails(
+                        mStartPage,
+                        3,
+                        0,
+                        UrlConstants.NTP_URL,
+                        RegularNewTabPageStation::newBuilder);
         // Make sure all thumbnails are there before switching tabs.
         RegularTabSwitcherStation tabSwitcherStation =
-                enterHTSWithThumbnailChecking(pageStation, RegularTabSwitcherStation.class);
-        pageStation = tabSwitcherStation.selectTabAtIndex(0);
+                enterRegularHTSWithThumbnailChecking(pageStation);
+        pageStation = tabSwitcherStation.selectTabAtIndex(0, RegularNewTabPageStation.newBuilder());
 
-        tabSwitcherStation = pageStation.openHub(RegularTabSwitcherStation.class);
+        tabSwitcherStation = pageStation.openRegularTabSwitcher();
 
         mRenderTestRule.render(cta.findViewById(R.id.pane_frame), "3_native_tabs");
 
-        PageStation previousPage = tabSwitcherStation.leaveHubToPreviousTabViaBack();
+        RegularNewTabPageStation previousPage =
+                tabSwitcherStation.leaveHubToPreviousTabViaBack(
+                        RegularNewTabPageStation.newBuilder());
         assertFinalDestination(previousPage);
     }
 
@@ -201,20 +221,28 @@ public class TabSwitcherLayoutPTTest {
     @MediumTest
     @Feature({"RenderTest"})
     @DisabledTest(message = "Test is flaky due to thumbnails not being reliably captured")
+    @RequiresRestart("Disable batching while re-enabling other tests.")
     public void testRenderGrid_Incognito() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         // Prepare some incognito tabs and enter tab switcher.
-        PageStation pageStation = Journeys.prepareTabs(mStartPage, 1, 3, "about:blank");
+        WebPageStation pageStation =
+                Journeys.createTabsWithThumbnails(
+                        mStartPage,
+                        3,
+                        "about:blank",
+                        /* isIncognito= */ true,
+                        WebPageStation::newBuilder);
         assertTrue(cta.getCurrentTabModel().isIncognito());
         // Make sure all thumbnails are there before switching tabs.
         IncognitoTabSwitcherStation tabSwitcherStation =
-                enterHTSWithThumbnailChecking(pageStation, IncognitoTabSwitcherStation.class);
-        pageStation = tabSwitcherStation.selectTabAtIndex(0);
-        tabSwitcherStation = pageStation.openHub(IncognitoTabSwitcherStation.class);
+                enterIncognitoHTSWithThumbnailChecking(pageStation);
+        pageStation = tabSwitcherStation.selectTabAtIndex(0, WebPageStation.newBuilder());
+        tabSwitcherStation = pageStation.openIncognitoTabSwitcher();
         ChromeRenderTestRule.sanitize(cta.findViewById(R.id.pane_frame));
         mRenderTestRule.render(cta.findViewById(R.id.pane_frame), "3_incognito_web_tabs");
 
-        PageStation previousPage = tabSwitcherStation.leaveHubToPreviousTabViaBack();
+        WebPageStation previousPage =
+                tabSwitcherStation.leaveHubToPreviousTabViaBack(WebPageStation.newBuilder());
         assertFinalDestination(previousPage);
     }
 
@@ -231,8 +259,7 @@ public class TabSwitcherLayoutPTTest {
         RegularNewTabPageStation secondPage = firstPage.openRegularTabAppMenu().openNewTab();
         int secondTabId = secondPage.getLoadedTab().getId();
         // Make sure all thumbnails are there before switching tabs.
-        RegularTabSwitcherStation tabSwitcher =
-                enterHTSWithThumbnailChecking(secondPage, RegularTabSwitcherStation.class);
+        RegularTabSwitcherStation tabSwitcher = enterRegularHTSWithThumbnailChecking(secondPage);
         TabSwitcherListEditorFacility editor = tabSwitcher.openAppMenu().clickSelectTabs();
         editor = editor.addTabToSelection(0, firstTabId);
         editor = editor.addTabToSelection(1, secondTabId);
@@ -247,7 +274,8 @@ public class TabSwitcherLayoutPTTest {
         mRenderTestRule.render(
                 cta.findViewById(R.id.pane_frame), "1_tab_group_GTS_card_item_color_icon");
 
-        PageStation previousPage = tabSwitcher.leaveHubToPreviousTabViaBack();
+        WebPageStation previousPage =
+                tabSwitcher.leaveHubToPreviousTabViaBack(WebPageStation.newBuilder());
         assertFinalDestination(previousPage);
     }
 
@@ -255,10 +283,13 @@ public class TabSwitcherLayoutPTTest {
     @MediumTest
     @EnableAnimations
     public void testTabToGridAndBack_NoReset() {
-        PageStation page = mInitialStateRule.startOnBlankPage();
-        page =
+        WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
+        WebPageStation page =
                 roundtripToHTSWithThumbnailChecks(
-                        page, () -> {}, /* canGarbageCollectBitmaps= */ false);
+                        firstPage,
+                        WebPageStation::newBuilder,
+                        () -> {},
+                        /* canGarbageCollectBitmaps= */ false);
         assertFinalDestination(page);
     }
 
@@ -266,7 +297,7 @@ public class TabSwitcherLayoutPTTest {
     @MediumTest
     @EnableAnimations
     public void testTabToGridAndBack_SoftCleanup() {
-        PageStation page = mInitialStateRule.startOnBlankPage();
+        WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         Runnable resetHTSStateOnUiThread =
                 () -> {
@@ -279,9 +310,12 @@ public class TabSwitcherLayoutPTTest {
                                             .get();
                     tabSwitcherPane.softCleanupForTesting();
                 };
-        page =
+        WebPageStation page =
                 roundtripToHTSWithThumbnailChecks(
-                        page, resetHTSStateOnUiThread, /* canGarbageCollectBitmaps= */ true);
+                        firstPage,
+                        WebPageStation::newBuilder,
+                        resetHTSStateOnUiThread,
+                        /* canGarbageCollectBitmaps= */ true);
         assertFinalDestination(page);
     }
 
@@ -289,8 +323,8 @@ public class TabSwitcherLayoutPTTest {
     @MediumTest
     @EnableAnimations
     public void testTabToGridAndBack_SoftCleanup_Ntp() {
-        WebPageStation page = mInitialStateRule.startOnBlankPage();
-        RegularNewTabPageStation ntp = page.openRegularTabAppMenu().openNewTab();
+        WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
+        RegularNewTabPageStation ntp = firstPage.openRegularTabAppMenu().openNewTab();
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         Runnable resetHTSStateOnUiThread =
                 () -> {
@@ -303,17 +337,20 @@ public class TabSwitcherLayoutPTTest {
                                             .get();
                     tabSwitcherPane.softCleanupForTesting();
                 };
-        PageStation destination =
+        ntp =
                 roundtripToHTSWithThumbnailChecks(
-                        ntp, resetHTSStateOnUiThread, /* canGarbageCollectBitmaps= */ true);
-        assertFinalDestination(destination);
+                        ntp,
+                        RegularNewTabPageStation::newBuilder,
+                        resetHTSStateOnUiThread,
+                        /* canGarbageCollectBitmaps= */ true);
+        assertFinalDestination(ntp);
     }
 
     @Test
     @MediumTest
     @EnableAnimations
     public void testTabToGridAndBack_HardCleanup() {
-        PageStation page = mInitialStateRule.startOnBlankPage();
+        WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         Runnable resetHTSStateOnUiThread =
                 () -> {
@@ -327,9 +364,12 @@ public class TabSwitcherLayoutPTTest {
                     tabSwitcherPane.softCleanupForTesting();
                     tabSwitcherPane.hardCleanupForTesting();
                 };
-        page =
+        WebPageStation page =
                 roundtripToHTSWithThumbnailChecks(
-                        page, resetHTSStateOnUiThread, /* canGarbageCollectBitmaps= */ true);
+                        firstPage,
+                        WebPageStation::newBuilder,
+                        resetHTSStateOnUiThread,
+                        /* canGarbageCollectBitmaps= */ true);
         assertFinalDestination(page);
     }
 
@@ -337,7 +377,7 @@ public class TabSwitcherLayoutPTTest {
     @MediumTest
     @EnableAnimations
     public void testTabToGridAndBack_NoCoordinator() {
-        PageStation page = mInitialStateRule.startOnBlankPage();
+        WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         Runnable resetHTSStateOnUiThread =
                 () -> {
@@ -352,16 +392,21 @@ public class TabSwitcherLayoutPTTest {
                     tabSwitcherPane.hardCleanupForTesting();
                     tabSwitcherPane.destroyCoordinatorForTesting();
                 };
-        page =
+        WebPageStation page =
                 roundtripToHTSWithThumbnailChecks(
-                        page, resetHTSStateOnUiThread, /* canGarbageCollectBitmaps= */ true);
+                        firstPage,
+                        WebPageStation::newBuilder,
+                        resetHTSStateOnUiThread,
+                        /* canGarbageCollectBitmaps= */ true);
         assertFinalDestination(page);
     }
 
-    private PageStation roundtripToHTSWithThumbnailChecks(
-            PageStation page, Runnable resetHTSStateOnUiThread, boolean canGarbageCollectBitmaps) {
-        RegularTabSwitcherStation tabSwitcher =
-                enterHTSWithThumbnailChecking(page, RegularTabSwitcherStation.class);
+    private <T extends PageStation> T roundtripToHTSWithThumbnailChecks(
+            T page,
+            Supplier<PageStation.Builder<T>> destinationBuiderFactory,
+            Runnable resetHTSStateOnUiThread,
+            boolean canGarbageCollectBitmaps) {
+        RegularTabSwitcherStation tabSwitcher = enterRegularHTSWithThumbnailChecking(page);
 
         // TODO(crbug.com/324919909): Migrate this to a HubTabSwitcherCardFacility with a tab
         // thumbnail as a view element.
@@ -377,7 +422,7 @@ public class TabSwitcherLayoutPTTest {
                     assertNotNull(mBitmap.get());
                 });
 
-        page = tabSwitcher.leaveHubToPreviousTabViaBack();
+        page = tabSwitcher.leaveHubToPreviousTabViaBack(destinationBuiderFactory.get());
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -390,7 +435,7 @@ public class TabSwitcherLayoutPTTest {
             assertFalse(canBeGarbageCollected(mBitmap));
         }
 
-        tabSwitcher = enterHTSWithThumbnailChecking(page, RegularTabSwitcherStation.class);
-        return tabSwitcher.leaveHubToPreviousTabViaBack();
+        tabSwitcher = enterRegularHTSWithThumbnailChecking(page);
+        return tabSwitcher.leaveHubToPreviousTabViaBack(destinationBuiderFactory.get());
     }
 }

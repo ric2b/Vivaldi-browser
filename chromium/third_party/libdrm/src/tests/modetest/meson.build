@@ -25,5 +25,6 @@ modetest = executable(
   include_directories : [inc_root, inc_tests, inc_drm],
   dependencies : [dep_threads, dep_cairo],
   link_with : [libdrm, libutil],
+  link_args: '-lm',
   install : with_install_tests,
 )

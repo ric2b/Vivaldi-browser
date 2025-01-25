@@ -35,6 +35,10 @@ enum class URLVisitAggregatesTransformType {
   kRecencyFilter = 6,
   // Set segmenation metrics related fields.
   kSegmentationMetricsData = 7,
+  // Filter based on browser type, on Android only (for now). This may
+  // expand to other platforms when they need filtering based on browser
+  // type as well.
+  kHistoryBrowserTypeFilter = 8,
 };
 
 // The options that may be specified when fetching URL visit data.
@@ -89,6 +93,9 @@ struct FetchOptions {
   // The set of sources that correspond to an origin.
   static constexpr FetchSources kOriginSources = {Source::kLocal,
                                                   Source::kForeign};
+  // Return the desired fetch result types as specified via feature params or
+  // the defaults if not specified.
+  static URLTypeSet GetFetchResultURLTypes();
 
   // Returns the default fetch options for tab resumption use cases.
   static FetchOptions CreateDefaultFetchOptionsForTabResumption();

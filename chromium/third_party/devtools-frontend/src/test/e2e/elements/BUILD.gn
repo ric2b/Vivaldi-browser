@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("../../../third_party/typescript/typescript.gni")
+import("../../../scripts/build/typescript/typescript.gni")
 
 node_ts_library("elements") {
   sources = [
@@ -17,6 +17,7 @@ node_ts_library("elements") {
     "css-hints_test.ts",
     "element-breadcrumbs_test.ts",
     "elements-tree_test.ts",
+    "filter-matched-styles_test.ts",
     "flexbox-editor_test.ts",
     "grid-editor_test.ts",
     "layout-pane_test.ts",

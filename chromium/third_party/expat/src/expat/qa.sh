@@ -9,6 +9,7 @@
 # Copyright (c) 2016-2023 Sebastian Pipping <sebastian@pipping.org>
 # Copyright (c) 2019      Philippe Antoine <contact@catenacyber.fr>
 # Copyright (c) 2019      Hanno Böck <hanno@gentoo.org>
+# Copyright (c) 2024      Alexander Bluhm <alexander.bluhm@gmx.net>
 # Licensed under the MIT license:
 #
 # Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -192,7 +193,7 @@ run_processor() {
         local DOT_FORMAT="${DOT_FORMAT:-svg}"
         local o="callgraph.${DOT_FORMAT}"
         ANNOUNCE "egypt ...... | dot ...... > ${o}"
-        find -name '*.expand' \
+        find . -name '*.expand' \
                 | sort \
                 | xargs -r egypt \
                 | unflatten -c 20 \
@@ -209,7 +210,7 @@ run_processor() {
         )
         done
 
-        RUN find -name '*.gcov' | sort
+        RUN find . -name '*.gcov' | sort
         ;;
     esac
 }

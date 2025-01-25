@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/autofill/test_autofill_keyboard_accessory_controller_autofill_client.h"
 #include "components/autofill/core/browser/address_data_manager.h"
 #include "components/autofill/core/browser/ui/suggestion_hiding_reason.h"
+#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -20,7 +21,6 @@
 #include "ui/base/l10n/l10n_util.h"
 
 namespace autofill {
-
 namespace {
 
 using ::testing::_;
@@ -74,8 +74,6 @@ class AutofillKeyboardAccessoryControllerImplTest
     return local_card;
   }
 };
-
-}  // namespace
 
 TEST_F(AutofillKeyboardAccessoryControllerImplTest,
        AcceptSuggestionRespectsTimeout) {
@@ -321,7 +319,7 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
   ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
 
   // Calls are accepted immediately.
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(1);
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
   EXPECT_CALL(client().show_pwd_migration_warning_callback(),
               Run(_, _,
                   password_manager::metrics_util::
@@ -338,7 +336,7 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
   ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
 
   // Calls are accepted immediately.
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(1);
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
   EXPECT_CALL(client().show_pwd_migration_warning_callback(), Run);
   task_environment()->FastForwardBy(base::Milliseconds(500));
   client().popup_controller(manager()).AcceptSuggestion(0);
@@ -353,7 +351,7 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
   ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
 
   // Calls are accepted immediately.
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(1);
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
   EXPECT_CALL(client().show_pwd_migration_warning_callback(), Run).Times(0);
   task_environment()->FastForwardBy(base::Milliseconds(500));
   client().popup_controller(manager()).AcceptSuggestion(0);
@@ -367,8 +365,91 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
   ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
 
   // Calls are accepted immediately.
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion).Times(1);
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
   EXPECT_CALL(client().show_pwd_migration_warning_callback(), Run).Times(0);
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  client().popup_controller(manager()).AcceptSuggestion(0);
+}
+
+TEST_F(AutofillKeyboardAccessoryControllerImplTest,
+       AcceptPwdSuggestionInvokesAccessLossWarningAndroid) {
+  base::test::ScopedFeatureList scoped_feature_list(
+      password_manager::features::
+          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
+  ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
+
+  // Calls are accepted immediately.
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
+  EXPECT_CALL(*client().access_loss_warning_bridge(),
+              ShouldShowAccessLossNoticeSheet(profile()->GetPrefs(),
+                                              /*called_at_startup=*/false))
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(
+      *client().access_loss_warning_bridge(),
+      MaybeShowAccessLossNoticeSheet(profile()->GetPrefs(), _, profile(),
+                                     /*called_at_startup=*/false));
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  client().popup_controller(manager()).AcceptSuggestion(0);
+}
+
+TEST_F(AutofillKeyboardAccessoryControllerImplTest,
+       AcceptUsernameSuggestionInvokesAccessLossWarningAndroid) {
+  base::test::ScopedFeatureList scoped_feature_list(
+      password_manager::features::
+          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
+  ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
+
+  // Calls are accepted immediately.
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
+  EXPECT_CALL(*client().access_loss_warning_bridge(),
+              ShouldShowAccessLossNoticeSheet(profile()->GetPrefs(),
+                                              /*called_at_startup=*/false))
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(
+      *client().access_loss_warning_bridge(),
+      MaybeShowAccessLossNoticeSheet(profile()->GetPrefs(), _, profile(),
+                                     /*called_at_startup=*/false));
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  client().popup_controller(manager()).AcceptSuggestion(0);
+}
+
+TEST_F(AutofillKeyboardAccessoryControllerImplTest,
+       AcceptPwdSuggestionNoAccessLossWarningIfDisabledAndroid) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      password_manager::features::
+          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
+  ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
+
+  // Calls are accepted immediately.
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
+  EXPECT_CALL(*client().access_loss_warning_bridge(),
+              ShouldShowAccessLossNoticeSheet(profile()->GetPrefs(),
+                                              /*called_at_startup=*/false))
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(*client().access_loss_warning_bridge(),
+              MaybeShowAccessLossNoticeSheet)
+      .Times(0);
+  task_environment()->FastForwardBy(base::Milliseconds(500));
+  client().popup_controller(manager()).AcceptSuggestion(0);
+}
+
+TEST_F(AutofillKeyboardAccessoryControllerImplTest,
+       AcceptAddressNoPwdAccessLossWarningAndroid) {
+  base::test::ScopedFeatureList scoped_feature_list(
+      password_manager::features::
+          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
+  ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
+
+  // Calls are accepted immediately.
+  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
+  EXPECT_CALL(*client().access_loss_warning_bridge(),
+              ShouldShowAccessLossNoticeSheet(profile()->GetPrefs(),
+                                              /*called_at_startup=*/false))
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(*client().access_loss_warning_bridge(),
+              MaybeShowAccessLossNoticeSheet)
+      .Times(0);
   task_environment()->FastForwardBy(base::Milliseconds(500));
   client().popup_controller(manager()).AcceptSuggestion(0);
 }
@@ -443,4 +524,5 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
               label_is(u"***"));
 }
 
+}  // namespace
 }  // namespace autofill

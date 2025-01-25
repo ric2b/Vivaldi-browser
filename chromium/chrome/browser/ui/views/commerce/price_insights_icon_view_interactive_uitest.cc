@@ -163,15 +163,15 @@ IN_PROC_BROWSER_TEST_F(PriceInsightsIconViewInteractiveTest,
       InstrumentTab(kShoppingTab),
       NavigateWebContents(kShoppingTab,
                           embedded_test_server()->GetURL(kShoppingURL)),
-      FlushEvents(),
+
       // Ensure the side panel isn't open
       EnsureNotPresent(kSidePanelElementId),
       // Click on the action chip to open the side panel
       PressButton(kPriceInsightsChipElementId),
-      WaitForShow(kSidePanelElementId), FlushEvents(),
+      WaitForShow(kSidePanelElementId),
       // Click on the action chip again to close the side panel
       PressButton(kPriceInsightsChipElementId),
-      WaitForHide(kSidePanelElementId), FlushEvents());
+      WaitForHide(kSidePanelElementId));
 
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::Shopping_ShoppingAction::kEntryName);
@@ -194,8 +194,8 @@ IN_PROC_BROWSER_TEST_F(PriceInsightsIconViewInteractiveTest,
       InstrumentTab(kShoppingTab),
       NavigateWebContents(kShoppingTab,
                           embedded_test_server()->GetURL(kShoppingURL)),
-      FlushEvents(), EnsurePresent(kPriceInsightsChipElementId),
-      PressButton(kPriceInsightsChipElementId), FlushEvents(),
+      WaitForShow(kPriceInsightsChipElementId),
+      PressButton(kPriceInsightsChipElementId),
       CheckView(
           kPriceInsightsChipElementId,
           [](PriceInsightsIconView* icon) {
@@ -224,7 +224,7 @@ class PriceInsightsIconViewEngagementTest
     RunTestSequence(
         NavigateWebContents(kShoppingTab,
                             embedded_test_server()->GetURL(kNonShoppingURL)),
-        FlushEvents(), EnsureNotPresent(kPriceInsightsChipElementId));
+        WaitForHide(kPriceInsightsChipElementId));
   }
 
   void NavigateToAShoppingPage(bool expected_to_show_label) {
@@ -234,7 +234,7 @@ class PriceInsightsIconViewEngagementTest
     RunTestSequence(
         NavigateWebContents(kShoppingTab,
                             embedded_test_server()->GetURL(kShoppingURL)),
-        FlushEvents(), EnsurePresent(kPriceInsightsChipElementId),
+        WaitForShow(kPriceInsightsChipElementId),
         CheckViewProperty(kPriceInsightsChipElementId,
                           &PriceInsightsIconView::ShouldShowLabel,
                           expected_to_show_label));

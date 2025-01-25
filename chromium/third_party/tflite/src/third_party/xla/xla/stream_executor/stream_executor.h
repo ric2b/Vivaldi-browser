@@ -1,5 +1,3 @@
-#include "absl/functional/any_invocable.h"
-#include "absl/log/log.h"
 /* Copyright 2015 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// The StreamExecutor is a single-device abstraction for:
-//
-// * Loading/launching data-parallel-kernels
-// * Invoking pre-canned high-performance library routines (like matrix
-//   multiply)
-
 #ifndef XLA_STREAM_EXECUTOR_STREAM_EXECUTOR_H_
 #define XLA_STREAM_EXECUTOR_STREAM_EXECUTOR_H_
 
@@ -31,6 +23,7 @@ limitations under the License.
 #include <variant>
 #include <vector>
 
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
@@ -43,7 +36,6 @@ limitations under the License.
 #include "xla/stream_executor/fft.h"
 #include "xla/stream_executor/kernel.h"
 #include "xla/stream_executor/kernel_spec.h"
-#include "xla/stream_executor/launch_dim.h"
 #include "xla/stream_executor/memory_allocation.h"
 #include "xla/stream_executor/module_spec.h"
 #include "xla/stream_executor/platform.h"
@@ -52,19 +44,27 @@ limitations under the License.
 namespace stream_executor {
 
 // Identifies the memory space where an allocation resides.
-enum class MemorySpace { kHost, kDevice };
+enum class MemoryType { kDevice = 0, kUnified, kCollective, kHost = 5 };
 
-inline std::string MemorySpaceString(MemorySpace memory_space) {
-  switch (memory_space) {
-    case MemorySpace::kHost:
-      return "host";
-    case MemorySpace::kDevice:
+inline std::string MemoryTypeString(MemoryType memory_type) {
+  switch (memory_type) {
+    case MemoryType::kDevice:
       return "device";
-    default:
-      LOG(FATAL) << "impossible memory space";
+    case MemoryType::kUnified:
+      return "unified";
+    case MemoryType::kCollective:
+      return "collective";
+    case MemoryType::kHost:
+      return "host";
   }
-};
+}
 
+/// The StreamExecutor is a single-device abstraction for:
+//
+// * Loading/launching data-parallel-kernels
+// * Invoking pre-canned high-performance library routines (like matrix
+//   multiply)
+//
 // Interface which defines the method for interacting with an accelerator device
 // (e.g. GPU, TPU).
 class StreamExecutor {
@@ -82,8 +82,10 @@ class StreamExecutor {
 
   // Creates and initializes a Stream.
   virtual absl::StatusOr<std::unique_ptr<Stream>> CreateStream(
-      std::optional<std::variant<StreamPriority, int>> priority =
-          std::nullopt) = 0;
+      std::optional<std::variant<StreamPriority, int>> priority) = 0;
+  absl::StatusOr<std::unique_ptr<Stream>> CreateStream() {
+    return CreateStream(std::nullopt);
+  }
 
   // Creates and initializes an Event.
   virtual absl::StatusOr<std::unique_ptr<Event>> CreateEvent() = 0;
@@ -105,15 +107,13 @@ class StreamExecutor {
     return AllocateArray<T>(1);
   }
 
-  // Retrieves (loads) a kernel, if one exists.
+  // Loads a kernel from a MultiKernelLoaderSpec.
   //
   // Parameters:
   //   spec: The MultiKernelLoaderSpec is usually generated as a compile-time
   //    constant into an appropriate namespace.
-  //   kernel: Outparam that the kernel is loaded into. A given Kernel
-  //    instantiation should not be loaded into more than once.
-  virtual absl::Status GetKernel(const MultiKernelLoaderSpec& spec,
-                                 Kernel* kernel) {
+  virtual absl::StatusOr<std::unique_ptr<Kernel>> LoadKernel(
+      const MultiKernelLoaderSpec& spec) {
     return absl::UnimplementedError("Not Implemented");
   }
 
@@ -135,35 +135,6 @@ class StreamExecutor {
   CreateOrShareConstant(Stream* stream, absl::Span<const uint8_t> content) {
     return absl::UnimplementedError("Not Implemented");
   }
-
-  // Launches a data parallel kernel with the given thread/block
-  // dimensionality and already-packed args/sizes to pass to the underlying
-  // platform driver.
-
-  virtual absl::Status Launch(Stream* stream, const ThreadDim& thread_dims,
-                              const BlockDim& block_dims, const Kernel& k,
-                              const KernelArgs& args) {
-    return absl::UnimplementedError("Not Implemented");
-  }
-
-  // Launches a data parallel kernel with the given thread/block
-  // dimensionality and already-packed args/sizes to pass to the underlying
-  // platform driver.
-  virtual absl::Status Launch(Stream* stream, const ThreadDim& thread_dims,
-                              const BlockDim& block_dims,
-                              const ClusterDim& cluster_dims, const Kernel& k,
-                              const KernelArgs& args) {
-    return absl::UnimplementedError("Not Implemented");
-  }
-
-  // Submits command buffer for execution to the underlying platform driver.
-  virtual absl::Status Submit(Stream* stream,
-                              const CommandBuffer& command_buffer) {
-    return absl::UnimplementedError("Not Implemented");
-  }
-
-  // Releases any state associated with the previously loaded kernel.
-  virtual void UnloadKernel(const Kernel* kernel) {}
 
   // Synchronously allocates size bytes on the underlying platform and returns
   // a DeviceMemoryBase representing that allocation. In the case of failure,
@@ -210,7 +181,7 @@ class StreamExecutor {
   virtual void HostMemoryDeallocate(void* mem) = 0;
 
   // Returns the memory space of the given pointer.
-  virtual absl::StatusOr<MemorySpace> GetPointerMemorySpace(const void* ptr) {
+  virtual absl::StatusOr<MemoryType> GetPointerMemorySpace(const void* ptr) {
     return absl::UnimplementedError("Not implemented");
   }
 
@@ -241,18 +212,6 @@ class StreamExecutor {
                                     int64_t size, void* host_dst) {
     return SynchronousMemcpy(host_dst, device_src, size);
   }
-
-  // Enqueues an operation onto stream to set 8-bit patterns starting at
-  // location, for byte count given by size.  Returns whether the operation was
-  // successfully enqueued onto the stream.
-  virtual absl::Status Memset(Stream* stream, DeviceMemoryBase* location,
-                              uint8_t pattern, uint64_t size) {
-    return absl::InternalError("Not implemented");
-  }
-
-  // Enqueues on a stream a user-specified function to be run on the host.
-  virtual bool HostCallback(Stream* stream,
-                            absl::AnyInvocable<absl::Status() &&> callback) = 0;
 
   // Deallocates stream resources on the underlying platform.
   virtual void DeallocateStream(Stream* stream) = 0;
@@ -315,12 +274,6 @@ class StreamExecutor {
   // Returns null if there was an error initializing the DNN support for the
   // underlying platform.
   virtual dnn::DnnSupport* AsDnn() { return nullptr; }
-
-  // Creates a new Kernel object.
-  // TODO(klucke) Combine with GetKernel.
-  virtual absl::StatusOr<std::unique_ptr<Kernel>> CreateKernel() {
-    return absl::UnimplementedError("Kernels are not implemented");
-  }
 
   // Creates a new CommandBuffer object.
   virtual absl::StatusOr<std::unique_ptr<CommandBuffer>> CreateCommandBuffer(

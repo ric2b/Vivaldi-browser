@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Error</translation>
 <translation id="1175364870820465910">&amp;Imprimir...</translation>
 <translation id="1181037720776840403">Eliminar</translation>
+<translation id="1184037892196730210">No se puede enviar la pantalla</translation>
 <translation id="1187722533808055681">Activación inactiva</translation>
 <translation id="122082903575839559">Algoritmo de firma de certificado</translation>
 <translation id="1221825588892235038">Solo lo seleccionado</translation>
@@ -44,7 +45,7 @@
 <translation id="1723824996674794290">&amp;Nueva ventana</translation>
 <translation id="1729533290416704613">También controla la página que se muestra al buscar desde Omnibox.</translation>
 <translation id="174123615272205933">Personalizado</translation>
-<translation id="1744108098763830590">página en segundo plano</translation>
+<translation id="1744108098763830590">página de fondo</translation>
 <translation id="176587472219019965">&amp;Nueva ventana</translation>
 <translation id="1769104665586091481">Abrir enlace en una &amp;ventana nueva</translation>
 <translation id="1779468444204342338">Mínimos</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Valor de campo</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Reactivar</translation>
-<translation id="2678100101831051676">No se puede transmitir.</translation>
 <translation id="2719936478972253983">Las siguientes cookies han sido bloqueadas</translation>
 <translation id="2721037002783622288">&amp;Buscar imagen en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Anterior a</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Esta extensión puede estar dañada.</translation>
 <translation id="3387614642886316601">Usar la revisión ortográfica mejorada</translation>
 <translation id="3390013585654699824">Detalles de la aplicación</translation>
-<translation id="3393582007140394275">No se ha podido transmitir la pantalla.</translation>
 <translation id="345693547134384690">Abrir &amp;imagen en una pestaña nueva</translation>
 <translation id="3493881266323043047">Validez</translation>
 <translation id="3511307672085573050">Copi&amp;ar dirección del enlace</translation>
@@ -163,7 +162,7 @@
 <translation id="3711931198657368127">Pe&amp;gar e ir a <ph name="URL" /></translation>
 <translation id="3719826155360621982">Página principal</translation>
 <translation id="3727187387656390258">Inspeccionar ventana emergente</translation>
-<translation id="3760460896538743390">Inspeccionar página en &amp;segundo plano</translation>
+<translation id="3760460896538743390">Inspeccionar página de &amp;fondo</translation>
 <translation id="3786224729726357296">Eliminar datos del sitio y permisos de <ph name="SITE" /></translation>
 <translation id="3797900183766075808">&amp;Buscar <ph name="SEARCH_TERMS" /> en <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Versión</translation>
@@ -238,7 +237,7 @@
 <translation id="4961318399572185831">Transmitir pantalla</translation>
 <translation id="4988526792673242964">Páginas</translation>
 <translation id="49896407730300355">Girar a la &amp;izquierda</translation>
-<translation id="4989966318180235467">Inspeccionar página en &amp;segundo plano</translation>
+<translation id="4989966318180235467">Inspeccionar página de &amp;fondo</translation>
 <translation id="5027562294707732951">Añadir extensión</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5057110919553308744">Al hacer clic en la extensión</translation>
@@ -347,9 +346,10 @@ Exponente público (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bits):
 <translation id="6812841287760418429">Mantener cambios</translation>
 <translation id="6824564591481349393">Copiar &amp;dirección de correo</translation>
 <translation id="6840155290835956714">Preguntar antes de enviar</translation>
+<translation id="6878862640969460273">Apaisado</translation>
 <translation id="6886871292305414135">Abrir enlace en una pes&amp;taña nueva</translation>
 <translation id="6892812721183419409">Abrir enlace como <ph name="USER" /></translation>
-<translation id="6900284862687837908">Aplicación en segundo plano: <ph name="BACKGROUND_APP_URL" /></translation>
+<translation id="6900284862687837908">Aplicación de fondo: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6916590542764765824">Gestionar extensiones</translation>
 <translation id="6945221475159498467">Seleccionar</translation>
 <translation id="6955446738988643816">Inspeccionar ventana emergente</translation>
@@ -367,10 +367,11 @@ Exponente público (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bits):
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7339785458027436441">Revisar ortografía al escribir</translation>
+<translation id="7359680654975233185">No se puede enviar la pestaña</translation>
 <translation id="7385854874724088939">Se ha producido un error al intentar imprimir. Revisa la impresora e inténtalo de nuevo.</translation>
 <translation id="7412226954991670867">Memoria de la GPU</translation>
 <translation id="7421925624202799674">Ver código &amp;fuente de la página</translation>
-<translation id="7427348830195639090">Página en segundo plano: <ph name="BACKGROUND_PAGE_URL" /></translation>
+<translation id="7427348830195639090">Página de fondo: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7453008956351770337">Al seleccionar esta impresora, concedes permiso para que la siguiente extensión acceda a ella:</translation>
 <translation id="7564847347806291057">Finalizar proceso</translation>
 <translation id="7576690715254076113">Intercalar</translation>
@@ -380,6 +381,7 @@ Exponente público (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bits):
 <translation id="7661259717474717992">Permitir a los sitios guardar y leer datos de las cookies</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada por tu administrador</translation>
+<translation id="7685038817958445325">No se puede enviar</translation>
 <translation id="7685049629764448582">Memoria de JavaScript</translation>
 <translation id="7701869757853594372">USUARIO administra</translation>
 <translation id="7704305437604973648">Tarea</translation>
@@ -410,7 +412,6 @@ Archivo de clave: <ph name="KEY_FILE" />
 Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versiones nuevas de tu extensión.</translation>
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controla la información que los sitios web pueden usar y el contenido que pueden mostrarte</translation>
-<translation id="8032244173881942855">No se ha podido transmitir la pestaña.</translation>
 <translation id="8071432093239591881">Imprimir como imagen</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +467,6 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="9218430445555521422">Establecer por defecto</translation>
 <translation id="93766956588638423">Reparar extensión</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Apaisado</translation>
 <translation id="994289308992179865">&amp;En bucle</translation>
 <translation id="998747458861718449">I&amp;nspeccionar</translation>
 </translationbundle>

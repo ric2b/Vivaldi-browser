@@ -11,10 +11,10 @@ import * as Workspace from '../../models/workspace/workspace.js';
 import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {expectCall} from '../../testing/ExpectStubCall.js';
-import {describeWithMockConnection} from '../../testing/MockConnection.js';
+import {describeWithMockConnection, setMockConnectionResponseHandler} from '../../testing/MockConnection.js';
 import * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
 import * as InlineEditor from '../../ui/legacy/components/inline_editor/inline_editor.js';
-import type * as LegacyUI from '../../ui/legacy/legacy.js';
+import * as LegacyUI from '../../ui/legacy/legacy.js';
 
 import * as ElementsComponents from './components/components.js';
 import * as Elements from './elements.js';
@@ -42,6 +42,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
     mockCssStyleDeclaration = sinon.createStubInstance(SDK.CSSStyleDeclaration.CSSStyleDeclaration);
     mockMatchedStyles = sinon.createStubInstance(SDK.CSSMatchedStyles.CSSMatchedStyles);
     mockMatchedStyles.keyframes.returns([]);
+    mockMatchedStyles.availableCSSVariables.returns(Object.keys(mockVariableMap));
     mockMatchedStyles.computeCSSVariable.callsFake((style, name) => {
       return {
         value: mockVariableMap[name],
@@ -237,7 +238,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         const outerColorMix = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-mix-swatch');
         assert.exists(outerColorMix);
         const handler = sinon.fake();
-        outerColorMix.addEventListener(InlineEditor.ColorMixSwatch.Events.ColorChanged, handler);
+        outerColorMix.addEventListener(InlineEditor.ColorMixSwatch.Events.COLOR_CHANGED, handler);
         const innerColorMix = outerColorMix.querySelector('devtools-color-mix-swatch');
         assert.exists(innerColorMix);
         assert.strictEqual(outerColorMix.getText(), 'color-mix(in srgb, color-mix(in oklch, red, green), blue)');
@@ -720,13 +721,18 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const stylePropertyTreeElement = getTreeElement('color', 'hsl(120deg, 50%, 25%)');
       stylePropertyTreeElement.updateTitle();
       const colorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
+
       assert.exists(colorSwatch);
       assert.strictEqual(colorSwatch.getColor()?.asString(Common.Color.Format.HSL), 'hsl(120deg 50% 25%)');
+      const eventHandler = sinon.stub<[InlineEditor.ColorSwatch.ColorChangedEvent]>();
+      colorSwatch.addEventListener(InlineEditor.ColorSwatch.ColorChangedEvent.eventName, eventHandler);
 
       const angleSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-angle');
       assert.exists(angleSwatch);
-      angleSwatch.updateAngle({value: 130, unit: InlineEditor.CSSAngleUtils.AngleUnit.Deg});
+      angleSwatch.updateAngle({value: 130, unit: InlineEditor.CSSAngleUtils.AngleUnit.DEG});
       assert.strictEqual(colorSwatch.getColor()?.asString(Common.Color.Format.HSL), 'hsl(130deg 50% 25%)');
+      assert.isTrue(eventHandler.calledOnce);
+      assert.strictEqual(eventHandler.args[0][0].data.color, colorSwatch.getColor());
     });
 
     it('renders relative colors', () => {
@@ -1084,13 +1090,13 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
           value: blur,
           source: variable,
           expansionContext,
-          propertyType: Elements.StylePropertyTreeElement.ShadowPropertyType.Blur,
+          propertyType: Elements.StylePropertyTreeElement.ShadowPropertyType.BLUR,
         },
         {
           value: spread,
           source: variable,
           expansionContext,
-          propertyType: Elements.StylePropertyTreeElement.ShadowPropertyType.Spread,
+          propertyType: Elements.StylePropertyTreeElement.ShadowPropertyType.SPREAD,
         },
       ];
 
@@ -1121,7 +1127,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         };
       });
       const model = new Elements.StylePropertyTreeElement.ShadowModel(
-          Elements.PropertyMatchers.ShadowType.BoxShadow, properties, renderingContext);
+          Elements.PropertyMatchers.ShadowType.BOX_SHADOW, properties, renderingContext);
 
       const container = document.createElement('div');
       model.renderContents(container);
@@ -1319,24 +1325,24 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         const swatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
         assert.exists(swatch);
         assert.strictEqual(swatch?.textContent, lightDark);
-        const activeColor = colorScheme === SDK.CSSModel.ColorScheme.Light ? lightText : darkText;
+        const activeColor = colorScheme === SDK.CSSModel.ColorScheme.LIGHT ? lightText : darkText;
         assert.strictEqual(
             swatch.getColor()?.getAuthoredText(), mockVariableMap[variableName(activeColor)] ?? activeColor);
         const [light, dark] = swatch.querySelectorAll('devtools-color-swatch');
         assert.exists(light);
         assert.exists(dark);
-        const active = colorScheme === SDK.CSSModel.ColorScheme.Light ? light : dark;
-        const inactive = colorScheme === SDK.CSSModel.ColorScheme.Light ? dark : light;
+        const active = colorScheme === SDK.CSSModel.ColorScheme.LIGHT ? light : dark;
+        const inactive = colorScheme === SDK.CSSModel.ColorScheme.LIGHT ? dark : light;
         assert.strictEqual(inactive.parentElement?.style.textDecoration, 'line-through');
         assert.strictEqual(active.parentElement?.style.textDecoration, '');
       }
 
-      await check(SDK.CSSModel.ColorScheme.Light, 'red', 'blue');
-      await check(SDK.CSSModel.ColorScheme.Dark, 'red', 'blue');
-      await check(SDK.CSSModel.ColorScheme.Light, 'red', 'var(--blue)');
-      await check(SDK.CSSModel.ColorScheme.Dark, 'red', 'var(--blue)');
-      await check(SDK.CSSModel.ColorScheme.Light, 'var(--blue)', 'red');
-      await check(SDK.CSSModel.ColorScheme.Dark, 'var(--blue)', 'red');
+      await check(SDK.CSSModel.ColorScheme.LIGHT, 'red', 'blue');
+      await check(SDK.CSSModel.ColorScheme.DARK, 'red', 'blue');
+      await check(SDK.CSSModel.ColorScheme.LIGHT, 'red', 'var(--blue)');
+      await check(SDK.CSSModel.ColorScheme.DARK, 'red', 'var(--blue)');
+      await check(SDK.CSSModel.ColorScheme.LIGHT, 'var(--blue)', 'red');
+      await check(SDK.CSSModel.ColorScheme.DARK, 'var(--blue)', 'red');
     });
 
     it('renders light-dark correctly if the color scheme cannot be resolved', async () => {
@@ -1397,7 +1403,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
     it('connects inner and outer swatches', async () => {
       const colorSchemeSpy =
           sinon.spy(Elements.StylePropertyTreeElement.LightDarkColorRenderer.prototype, 'applyColorScheme');
-      for (const colorScheme of [SDK.CSSModel.ColorScheme.Light, SDK.CSSModel.ColorScheme.Dark]) {
+      for (const colorScheme of [SDK.CSSModel.ColorScheme.LIGHT, SDK.CSSModel.ColorScheme.DARK]) {
         const lightDark = 'light-dark(red, blue)';
         const stylePropertyTreeElement = getTreeElement('color', lightDark);
         stylePropertyTreeElement.setComputedStyles(new Map([['color-scheme', colorScheme]]));
@@ -1414,7 +1420,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
         lightSwatch.setColor(newLightColor);
         darkSwatch.setColor(newDarkColor);
 
-        if (colorScheme === SDK.CSSModel.ColorScheme.Dark) {
+        if (colorScheme === SDK.CSSModel.ColorScheme.DARK) {
           assert.strictEqual(outerSwatch.getColor(), newDarkColor);
         } else {
           assert.strictEqual(outerSwatch.getColor(), newLightColor);
@@ -1450,6 +1456,84 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       const swatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-length');
       assert.exists(swatch);
+    });
+  });
+
+  describe('Autocompletion', function(this: Mocha.Suite) {
+    let promptStub: sinon.SinonStub<Parameters<Elements.StylesSidebarPane.CSSPropertyPrompt['initialize']>>;
+    beforeEach(async () => {
+      promptStub = sinon.stub(Elements.StylesSidebarPane.CSSPropertyPrompt.prototype, 'initialize').resolves([]);
+      setMockConnectionResponseHandler('CSS.enable', () => ({}));
+
+      const cssModel = new SDK.CSSModel.CSSModel(createTarget());
+      await cssModel.resumeModel();
+      const domModel = cssModel.domModel();
+      const gridNode = new SDK.DOMModel.DOMNode(domModel);
+      gridNode.id = 0 as Protocol.DOM.NodeId;
+      const currentNode = new SDK.DOMModel.DOMNode(domModel);
+      currentNode.id = 1 as Protocol.DOM.NodeId;
+      currentNode.parentNode = gridNode;
+      LegacyUI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, currentNode);
+    });
+
+    function suggestions() {
+      assert.lengthOf(promptStub.args, 1);
+      return promptStub.args[0][0].call(null, '', '');
+    }
+
+    function setParentComputedStyle(style: Record<string, string>) {
+      const computedStyle = Object.keys(style).map(name => ({name, value: style[name]}));
+      setMockConnectionResponseHandler('CSS.getComputedStyleForNode', ({nodeId}) => {
+        if (nodeId === 0) {
+          return {computedStyle};
+        }
+        return {};
+      });
+    }
+
+    it('includes grid row names', async () => {
+      setParentComputedStyle({display: 'grid', 'grid-template-rows': '[row-name] 1fr [row-name-2]'});
+      const stylePropertyTreeElement = getTreeElement('grid-row', 'somename');
+      await stylePropertyTreeElement.onpopulate();
+      stylePropertyTreeElement.updateTitle();
+      stylePropertyTreeElement.startEditingValue();
+      const autocompletions = await suggestions();
+      assert.deepEqual(
+          autocompletions.map(({text}) => text),
+          ['row-name', 'row-name-2', 'auto', 'none', 'inherit', 'initial', 'revert', 'revert-layer', 'unset']);
+    });
+
+    it('includes grid column names', async () => {
+      setParentComputedStyle({display: 'grid', 'grid-template-columns': '[col-name] 1fr [col-name-2]'});
+      const stylePropertyTreeElement = getTreeElement('grid-column', 'somename');
+      await stylePropertyTreeElement.onpopulate();
+      stylePropertyTreeElement.updateTitle();
+      stylePropertyTreeElement.startEditingValue();
+      const autocompletions = await suggestions();
+      assert.deepEqual(
+          autocompletions.map(({text}) => text),
+          ['col-name', 'col-name-2', 'auto', 'none', 'inherit', 'initial', 'revert', 'revert-layer', 'unset']);
+    });
+
+    it('includes grid area names', async () => {
+      setParentComputedStyle({display: 'grid', 'grid-template-areas': '"area-name-a area-name-b" "area-name-c ."'});
+      const stylePropertyTreeElement = getTreeElement('grid-area', 'somename');
+      await stylePropertyTreeElement.onpopulate();
+      stylePropertyTreeElement.updateTitle();
+      stylePropertyTreeElement.startEditingValue();
+      const autocompletions = await suggestions();
+      assert.deepEqual(autocompletions.map(({text}) => text), [
+        'area-name-a',
+        'area-name-b',
+        'area-name-c',
+        'auto',
+        'none',
+        'inherit',
+        'initial',
+        'revert',
+        'revert-layer',
+        'unset',
+      ]);
     });
   });
 });

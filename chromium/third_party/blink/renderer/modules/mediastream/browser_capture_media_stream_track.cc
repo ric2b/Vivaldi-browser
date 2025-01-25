@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "base/metrics/histogram_functions.h"
+#include "base/not_fatal_until.h"
 #include "base/token.h"
 #include "base/types/expected.h"
 #include "base/uuid.h"
@@ -112,30 +113,6 @@ void ResolveApplySubCaptureTargetPromiseHelper(
   NOTREACHED_IN_MIGRATION();
 }
 
-base::expected<MediaStreamVideoSource*, DOMException*> GetNativeVideoSource(
-    MediaStreamComponent* const component) {
-  if (!component) {
-    return base::unexpected(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kUnknownError, "Missing component."));
-  }
-
-  MediaStreamSource* const source = component->Source();
-  if (!source) {
-    return base::unexpected(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kUnknownError, "Missing source."));
-  }
-
-  CHECK_EQ(source->GetType(), MediaStreamSource::kTypeVideo);
-
-  MediaStreamVideoSource* const native_source =
-      MediaStreamVideoSource::GetVideoSource(source);
-  if (!native_source) {
-    return base::unexpected(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kUnknownError, "Missing native source."));
-  }
-  return native_source;
-}
-
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace
@@ -164,35 +141,6 @@ void BrowserCaptureMediaStreamTrack::Trace(Visitor* visitor) const {
   visitor->Trace(pending_promises_);
   MediaStreamTrackImpl::Trace(visitor);
 }
-
-void BrowserCaptureMediaStreamTrack::SendWheel(
-    double relative_x,
-    double relative_y,
-    int wheel_delta_x,
-    int wheel_delta_y,
-    base::OnceCallback<void(DOMException*)> callback) {
-  const base::expected<MediaStreamVideoSource*, DOMException*> native_source =
-      GetNativeVideoSource(Component());
-  if (!native_source.has_value()) {
-    std::move(callback).Run(native_source.error());
-    return;
-  }
-  native_source.value()->SendWheel(relative_x, relative_y, wheel_delta_x,
-                                   wheel_delta_y, std::move(callback));
-}
-
-void BrowserCaptureMediaStreamTrack::SetZoomLevel(
-    int zoom_level,
-    base::OnceCallback<void(DOMException*)> callback) {
-  const base::expected<MediaStreamVideoSource*, DOMException*> native_source =
-      GetNativeVideoSource(Component());
-  if (!native_source.has_value()) {
-    std::move(callback).Run(native_source.error());
-    return;
-  }
-  native_source.value()->SetZoomLevel(zoom_level, std::move(callback));
-}
-
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 ScriptPromise<IDLUndefined> BrowserCaptureMediaStreamTrack::cropTo(
@@ -371,7 +319,7 @@ void BrowserCaptureMediaStreamTrack::OnSubCaptureTargetVersionObserved(
 void BrowserCaptureMediaStreamTrack::MaybeFinalizeCropPromise(
     BrowserCaptureMediaStreamTrack::PromiseMapIterator iter) {
   DCHECK(IsMainThread());
-  DCHECK_NE(iter, pending_promises_.end());
+  CHECK_NE(iter, pending_promises_.end(), base::NotFatalUntil::M130);
 
   PromiseInfo* const info = iter->value;
 

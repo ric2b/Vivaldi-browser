@@ -3,9 +3,12 @@
 # found in the LICENSE file.
 
 import("//build/config/chromeos/ui_mode.gni")
+import("//build/config/features.gni")
 
 component("manta") {
   sources = [
+    "anchovy/anchovy_proto_helper.cc",
+    "anchovy/anchovy_proto_helper.h",
     "anchovy/anchovy_provider.cc",
     "anchovy/anchovy_provider.h",
     "anchovy/anchovy_requests.cc",

@@ -3,18 +3,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from __future__ import print_function
-
 import json
 import os
-import sys
 from typing import Any, Dict, Set, Tuple
 import unittest
-
-if sys.version_info[0] == 2:
-  import mock
-else:
-  import unittest.mock as mock
+from unittest import mock
 
 from pyfakefs import fake_filesystem_unittest
 
@@ -23,6 +16,8 @@ from unexpected_passes_common import constants
 from unexpected_passes_common import data_types
 from unexpected_passes_common import unittest_utils
 
+# Protected access is allowed for unittests.
+# pylint: disable=protected-access
 
 class FakeFilesystemTestCaseWithFileCreation(fake_filesystem_unittest.TestCase):
   def CreateFile(self, *args, **kwargs):

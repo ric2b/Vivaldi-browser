@@ -1,0 +1,13 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+swift_source_set("vivaldi_in_app_rating_manager_swift") {
+  sources = [
+    "vivaldi_in_app_rating_manager.swift",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+  ]
+}

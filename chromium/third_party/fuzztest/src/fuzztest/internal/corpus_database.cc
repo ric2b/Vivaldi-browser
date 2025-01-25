@@ -21,6 +21,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "./fuzztest/internal/configuration.h"
 #include "./fuzztest/internal/io.h"
 
@@ -39,7 +40,6 @@ std::vector<std::string> GetInputs(
 
 CorpusDatabase::CorpusDatabase(absl::string_view database_path,
                                absl::string_view binary_identifier,
-                               bool use_coverage_inputs,
                                bool use_crashing_inputs)
     : corpus_path_for_test_binary_([=] () -> std::string {
         if (database_path.empty()) return "";
@@ -52,15 +52,13 @@ CorpusDatabase::CorpusDatabase(absl::string_view database_path,
         }
         return corpus_path_for_test_binary;
       }()),
-      use_coverage_inputs_(use_coverage_inputs),
       use_crashing_inputs_(use_crashing_inputs) {}
 
 CorpusDatabase::CorpusDatabase(const Configuration& configuration)
-    : CorpusDatabase(
-          configuration.corpus_database, configuration.binary_identifier,
-          /*use_coverage_inputs=*/configuration.replay_coverage_inputs,
-          /*use_crashing_inputs=*/
-          configuration.reproduce_findings_as_separate_tests) {}
+    : CorpusDatabase(configuration.corpus_database,
+                     configuration.binary_identifier,
+                     /*use_crashing_inputs=*/
+                     configuration.reproduce_findings_as_separate_tests) {}
 
 std::vector<std::string> CorpusDatabase::GetRegressionInputs(
     absl::string_view test_name) const {
@@ -75,7 +73,6 @@ std::vector<std::string> CorpusDatabase::GetCrashingInputsIfAny(
 
 std::vector<std::string> CorpusDatabase::GetCoverageInputsIfAny(
     absl::string_view test_name) const {
-  if (!use_coverage_inputs_) return {};
   return GetInputs(corpus_path_for_test_binary_, test_name, "coverage");
 }
 

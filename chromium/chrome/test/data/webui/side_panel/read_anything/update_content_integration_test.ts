@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 
-import type {ReadAnythingElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import type {AppElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals} from 'chrome-untrusted://webui-test/chai_assert.js';
 
 import {suppressInnocuousErrors} from './common.js';
 
 suite('UpdateContentIntegration', () => {
-  let app: ReadAnythingElement;
+  let app: AppElement;
 
   function setTree(rootChildren: number[], nodes: Object[]) {
     const tree = {
@@ -376,7 +376,8 @@ suite('UpdateContentIntegration', () => {
       },
     ];
     const expected =
-        '<div><a>This link does not have a url.</a><img src="" alt=""></div>';
+        '<div><a>This link does not have a url.</a><canvas alt="" ' +
+        'class="downloaded-image"></canvas></div>';
 
     setTree([2, 4], nodes);
 

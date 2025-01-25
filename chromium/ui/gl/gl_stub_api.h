@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_stub_api_base.h"
 
@@ -75,8 +76,10 @@ class GL_EXPORT GLStubApi: public GLStubApiBase {
   // and GPU fuzzers. We get a new GLStubApi for every case executed by
   // fuzzers, so we don't have to worry about ID exhaustion.
   void GenHelper(GLsizei count, GLuint* objects) {
-    for (GLsizei i = 0; i < count; ++i)
-      objects[i] = next_id_++;
+    for (GLsizei i = 0; i < count; ++i) {
+      // SAFETY: required from OpenGL across C API.
+      UNSAFE_BUFFERS(objects[i] = next_id_++);
+    }
   }
 
   std::string version_;

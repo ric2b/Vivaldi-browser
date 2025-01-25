@@ -6,17 +6,18 @@ import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
-import type * as TraceEngine from '../../models/trace/trace.js';
+import * as TraceEngine from '../../models/trace/trace.js';
 import * as DataGrid from '../../ui/components/data_grid/data_grid.js';
 import * as Linkifier from '../../ui/components/linkifier/linkifier.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as LitHtml from '../../ui/lit-html/lit-html.js';
+import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 const UIStrings = {
   /**
    *@description Label for selector stats data table
    */
-  selectorStats: 'Selector Stats',
+  selectorStats: 'Selector stats',
   /**
    *@description Column name and time unit for elapsed time spent computing a style rule
    */
@@ -24,7 +25,7 @@ const UIStrings = {
   /**
    *@description Column name and percentage of slow mach non-matches computing a style rule
    */
-  rejectPercentage: '% of Slow-Path Non-Matches',
+  rejectPercentage: '% of slow-path non-matches',
   /**
    *@description Tooltip description '% of slow-path non-matches'
    */
@@ -33,11 +34,11 @@ const UIStrings = {
   /**
    *@description Column name for count of elements that the engine attempted to match against a style rule
    */
-  matchAttempts: 'Match Attempts',
+  matchAttempts: 'Match attempts',
   /**
    *@description Column name for count of elements that matched a style rule
    */
-  matchCount: 'Match Count',
+  matchCount: 'Match count',
   /**
    *@description Column name for a style rule's CSS selector text
    */
@@ -49,7 +50,7 @@ const UIStrings = {
   /**
    *@description A context menu item in data grids to copy entire table to clipboard
    */
-  copyTable: 'Copy Table',
+  copyTable: 'Copy table',
   /**
    *@description A cell value displayed in table when no source file can be traced via css style
    */
@@ -78,15 +79,7 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/TimelineSelectorStatsView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-export const enum SelectorTimingsKey {
-  Elapsed = 'elapsed (us)',
-  RejectPercentage = 'reject_percentage',
-  FastRejectCount = 'fast_reject_count',
-  MatchAttempts = 'match_attempts',
-  MatchCount = 'match_count',
-  Selector = 'selector',
-  StyleSheetId = 'style_sheet_id',
-}
+const SelectorTimingsKey = TraceEngine.Types.TraceEvents.SelectorTimingsKey;
 
 export class TimelineSelectorStatsView extends UI.Widget.VBox {
   #datagrid: DataGrid.DataGridController.DataGridController;
@@ -107,6 +100,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     super();
 
     this.#datagrid = new DataGrid.DataGridController.DataGridController();
+    this.element.setAttribute('jslog', `${VisualLogging.pane('selector-stats').track({resize: true})}`);
     this.#selectorLocations = new Map<string, Protocol.CSS.SourceRange[]>();
     this.#traceParsedData = traceParsedData;
 
@@ -352,7 +346,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
       }
 
       // get the locations from cache if available
-      const key: string = JSON.stringify({selectorText: selectorText, styleSheetId: styleSheetId});
+      const key: string = JSON.stringify({selectorText, styleSheetId});
       let ranges = selectorLocations.get(key);
       if (!ranges) {
         const result = await cssModel.agent.invoke_getLocationForSelector({styleSheetId, selectorText});
@@ -399,6 +393,8 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
               return LitHtml.html`${elapsedTimeInMs.toFixed(3)}`;
             },
           },
+          {columnId: SelectorTimingsKey.MatchAttempts, value: x[SelectorTimingsKey.MatchAttempts]},
+          {columnId: SelectorTimingsKey.MatchCount, value: x[SelectorTimingsKey.MatchCount]},
           {
             columnId: SelectorTimingsKey.RejectPercentage,
             value: rejectPercentage,
@@ -406,8 +402,6 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
               return LitHtml.html`${rejectPercentage.toFixed(1)}`;
             },
           },
-          {columnId: SelectorTimingsKey.MatchAttempts, value: x[SelectorTimingsKey.MatchAttempts]},
-          {columnId: SelectorTimingsKey.MatchCount, value: x[SelectorTimingsKey.MatchCount]},
           {
             columnId: SelectorTimingsKey.Selector,
             title: x[SelectorTimingsKey.Selector],

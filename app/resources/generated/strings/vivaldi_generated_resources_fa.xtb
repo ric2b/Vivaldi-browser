@@ -98,7 +98,6 @@
 <translation id="265390580714150011">مقدار قسمت</translation>
 <translation id="2662876636500006917">فروشگاه وب کروم</translation>
 <translation id="2678063897982469759">فعال کردن مجدد</translation>
-<translation id="2678100101831051676">پخش محتوا امکان‌پذیر نیست.</translation>
 <translation id="2719936478972253983">کوکی‌های زیر مسدود شدند</translation>
 <translation id="2721037002783622288">&amp;جستجوی <ph name="SEARCH_ENGINE" /> برای تصویر</translation>
 <translation id="2738771556149464852">نه بعد از</translation>
@@ -148,7 +147,6 @@
 <translation id="3378572629723696641">ممکن است این برنامه افزودنی خراب شده باشد.</translation>
 <translation id="3387614642886316601">استفاده از غلط‌گیر املایی بهبودیافته</translation>
 <translation id="3390013585654699824">جزئیات برنامه</translation>
-<translation id="3393582007140394275">اشتراک‌گذاری محتوای صفحه نمایش ممکن نیست.</translation>
 <translation id="345693547134384690">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
 <translation id="3493881266323043047">اعتبار</translation>
 <translation id="3511307672085573050">کپی آدر&amp;س پیوند</translation>
@@ -346,6 +344,7 @@
 <translation id="6812841287760418429">حفظ تغییرات</translation>
 <translation id="6824564591481349393">کپی آدرس &amp;ایمیل</translation>
 <translation id="6840155290835956714">پیش از ارسال سؤال شود</translation>
+<translation id="6878862640969460273">افقی</translation>
 <translation id="6886871292305414135">گشودن پیوند در &amp;زبانه‌ی جدید</translation>
 <translation id="6892812721183419409">گشودن پیوند به‌عنوان <ph name="USER" /></translation>
 <translation id="6900284862687837908">برنامه پس‌زمینه: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -409,7 +408,6 @@
 فایل کلید خود را در جای امن نگه دارید. برای ایجاد نسخه‌های جدید برنامهٔ افزودنی خود به آن نیاز دارید.</translation>
 <translation id="8004582292198964060">مرورگر</translation>
 <translation id="8018313076035239964">اطلاعاتی را که وب‌سایت‌ها می‌توانند استفاده کنند و محتوایی را که می‌توانند به شما نشان دهند کنترل کنید</translation>
-<translation id="8032244173881942855">ارسال محتوای زبانه امکان‌پذیر نیست.</translation>
 <translation id="8071432093239591881">چاپ کردن به‌‌عنوان تصویر</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> کیلوبایت</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -465,7 +463,6 @@
 <translation id="9218430445555521422">تنظیم به‌عنوان پیش‌فرض</translation>
 <translation id="93766956588638423">تعمیر افزونه</translation>
 <translation id="961012016278832836">نسخه‌ی قدیمی مایکروسافت اِج</translation>
-<translation id="98515147261107953">افقی</translation>
 <translation id="994289308992179865">&amp;تکرار پخش</translation>
 <translation id="998747458861718449">بازرسی</translation>
 </translationbundle>

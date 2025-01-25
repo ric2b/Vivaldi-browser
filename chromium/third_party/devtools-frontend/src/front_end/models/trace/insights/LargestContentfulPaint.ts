@@ -6,43 +6,56 @@ import * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
-import {InsightWarning, type LCPInsightResult, type NavigationInsightContext, type RequiredData} from './types.js';
+import {findLCPRequest} from './Common.js';
+import {type InsightResult, InsightWarning, type NavigationInsightContext, type RequiredData} from './types.js';
 
 export function deps(): ['NetworkRequests', 'PageLoadMetrics', 'LargestImagePaint', 'Meta'] {
   return ['NetworkRequests', 'PageLoadMetrics', 'LargestImagePaint', 'Meta'];
 }
 
-export interface LCPPhases {
+interface LCPPhases {
   /**
    * The time between when the user initiates loading the page until when
    * the browser receives the first byte of the html response.
    */
   ttfb: Types.Timing.MilliSeconds;
   /**
-   * The time between ttfb and the LCP resource request being started.
-   * For a text LCP, this is undefined given no resource is loaded.
+   * The time between ttfb and the LCP request request being started.
+   * For a text LCP, this is undefined given no request is loaded.
    */
   loadDelay?: Types.Timing.MilliSeconds;
   /**
-   * The time it takes to load the LCP resource.
+   * The time it takes to load the LCP request.
    */
   loadTime?: Types.Timing.MilliSeconds;
   /**
-   * The time between when the LCP resource finishes loading and when
+   * The time between when the LCP request finishes loading and when
    * the LCP element is rendered.
    */
   renderDelay: Types.Timing.MilliSeconds;
 }
 
+export type LCPInsightResult = InsightResult<{
+  lcpMs?: Types.Timing.MilliSeconds,
+  lcpTs?: Types.Timing.MilliSeconds,
+  phases?: LCPPhases,
+  shouldRemoveLazyLoading?: boolean,
+  shouldIncreasePriorityHint?: boolean,
+  shouldPreloadImage?: boolean,
+  /** The network request for the LCP image, if there was one. */
+  lcpRequest?: Types.TraceEvents.SyntheticNetworkRequest,
+  earliestDiscoveryTimeTs?: Types.Timing.MicroSeconds,
+}>;
+
 function breakdownPhases(
-    nav: Types.TraceEvents.TraceEventNavigationStart, mainRequest: Types.TraceEvents.SyntheticNetworkRequest,
+    nav: Types.TraceEvents.TraceEventNavigationStart, docRequest: Types.TraceEvents.SyntheticNetworkRequest,
     lcpMs: Types.Timing.MilliSeconds, lcpRequest: Types.TraceEvents.SyntheticNetworkRequest|null): LCPPhases {
-  const mainReqTiming = mainRequest.args.data.timing;
-  if (!mainReqTiming) {
-    throw new Error('no timing for main resource');
+  const docReqTiming = docRequest.args.data.timing;
+  if (!docReqTiming) {
+    throw new Error('no timing for document request');
   }
-  const firstDocByteTs = Helpers.Timing.secondsToMicroseconds(mainReqTiming.requestTime) +
-      Helpers.Timing.millisecondsToMicroseconds(mainReqTiming.receiveHeadersStart);
+  const firstDocByteTs = Helpers.Timing.secondsToMicroseconds(docReqTiming.requestTime) +
+      Helpers.Timing.millisecondsToMicroseconds(docReqTiming.receiveHeadersStart);
 
   const firstDocByteTiming = Types.Timing.MicroSeconds(firstDocByteTs - nav.ts);
   const ttfb = Helpers.Timing.microSecondsToMilliseconds(firstDocByteTiming);
@@ -53,14 +66,14 @@ function breakdownPhases(
   }
 
   const lcpStartTs = Types.Timing.MicroSeconds(lcpRequest.ts - nav.ts);
-  const resourceStart = Helpers.Timing.microSecondsToMilliseconds(lcpStartTs);
+  const requestStart = Helpers.Timing.microSecondsToMilliseconds(lcpStartTs);
 
   const lcpReqEndTs = Types.Timing.MicroSeconds(lcpRequest.args.data.syntheticData.finishTime - nav.ts);
-  const resourceEnd = Helpers.Timing.microSecondsToMilliseconds(lcpReqEndTs);
+  const requestEnd = Helpers.Timing.microSecondsToMilliseconds(lcpReqEndTs);
 
-  const loadDelay = Types.Timing.MilliSeconds(resourceStart - ttfb);
-  const loadTime = Types.Timing.MilliSeconds(resourceEnd - resourceStart);
-  renderDelay = Types.Timing.MilliSeconds(lcpMs - resourceEnd);
+  const loadDelay = Types.Timing.MilliSeconds(requestStart - ttfb);
+  const loadTime = Types.Timing.MilliSeconds(requestEnd - requestStart);
+  renderDelay = Types.Timing.MilliSeconds(lcpMs - requestEnd);
 
   return {
     ttfb,
@@ -70,46 +83,9 @@ function breakdownPhases(
   };
 }
 
-function findLCPRequest(
-    traceParsedData: RequiredData<typeof deps>, context: NavigationInsightContext,
-    lcpEvent: Types.TraceEvents.TraceEventLargestContentfulPaintCandidate): Types.TraceEvents.SyntheticNetworkRequest|
-    null {
-  const lcpNodeId = lcpEvent.args.data?.nodeId;
-  if (!lcpNodeId) {
-    throw new Error('no lcp node id');
-  }
-
-  const imagePaint = traceParsedData.LargestImagePaint.get(lcpNodeId);
-  if (!imagePaint) {
-    return null;
-  }
-
-  const lcpUrl = imagePaint.args.data?.imageUrl;
-  if (!lcpUrl) {
-    throw new Error('no lcp url');
-  }
-  // Look for the LCP resource.
-  const lcpResource = traceParsedData.NetworkRequests.byTime.find(req => {
-    const nav =
-        Helpers.Trace.getNavigationForTraceEvent(req, context.frameId, traceParsedData.Meta.navigationsByFrameId);
-    return (nav?.args.data?.navigationId === context.navigationId) && (req.args.data.url === lcpUrl);
-  });
-
-  if (!lcpResource) {
-    throw new Error('no lcp resource found');
-  }
-
-  return lcpResource;
-}
-
 export function generateInsight(
     traceParsedData: RequiredData<typeof deps>, context: NavigationInsightContext): LCPInsightResult {
   const networkRequests = traceParsedData.NetworkRequests;
-
-  const nav = traceParsedData.Meta.navigationsByNavigationId.get(context.navigationId);
-  if (!nav) {
-    throw new Error('no trace navigation');
-  }
 
   const frameMetrics = traceParsedData.PageLoadMetrics.metricScoresByFrameId.get(context.frameId);
   if (!frameMetrics) {
@@ -130,30 +106,38 @@ export function generateInsight(
   const lcpMs = Helpers.Timing.microSecondsToMilliseconds(metricScore.timing);
   // This helps position things on the timeline's UI accurately for a trace.
   const lcpTs = metricScore.event?.ts ? Helpers.Timing.microSecondsToMilliseconds(metricScore.event?.ts) : undefined;
-  const lcpResource = findLCPRequest(traceParsedData, context, lcpEvent);
-  const mainReq = networkRequests.byTime.find(req => req.args.data.requestId === context.navigationId);
-  if (!mainReq) {
+  const lcpRequest = findLCPRequest(traceParsedData, context, lcpEvent);
+  const docRequest = networkRequests.byTime.find(req => req.args.data.requestId === context.navigationId);
+  if (!docRequest) {
     return {lcpMs, lcpTs, warnings: [InsightWarning.NO_DOCUMENT_REQUEST]};
   }
 
-  if (!lcpResource) {
+  if (!lcpRequest) {
     return {
-      lcpMs: lcpMs,
-      lcpTs: lcpTs,
-      phases: breakdownPhases(nav, mainReq, lcpMs, lcpResource),
+      lcpMs,
+      lcpTs,
+      phases: breakdownPhases(context.navigation, docRequest, lcpMs, lcpRequest),
     };
   }
 
   const imageLoadingAttr = lcpEvent.args.data?.loadingAttr;
-  const imagePreloaded = lcpResource?.args.data.isLinkPreload || lcpResource?.args.data.initiator?.type === 'preload';
-  const imageFetchPriorityHint = lcpResource?.args.data.fetchPriorityHint;
+  const imagePreloaded = lcpRequest?.args.data.isLinkPreload || lcpRequest?.args.data.initiator?.type === 'preload';
+  const imageFetchPriorityHint = lcpRequest?.args.data.fetchPriorityHint;
+
+  // This is the earliest discovery time an LCP request could have - it's TTFB.
+  const earliestDiscoveryTime = docRequest && docRequest.args.data.timing ?
+      Helpers.Timing.secondsToMicroseconds(docRequest.args.data.timing.requestTime) +
+          Helpers.Timing.millisecondsToMicroseconds(docRequest.args.data.timing.receiveHeadersStart) :
+      undefined;
 
   return {
-    lcpMs: lcpMs,
-    lcpTs: lcpTs,
-    phases: breakdownPhases(nav, mainReq, lcpMs, lcpResource),
+    lcpMs,
+    lcpTs,
+    phases: breakdownPhases(context.navigation, docRequest, lcpMs, lcpRequest),
     shouldRemoveLazyLoading: imageLoadingAttr === 'lazy',
     shouldIncreasePriorityHint: imageFetchPriorityHint !== 'high',
     shouldPreloadImage: !imagePreloaded,
+    lcpRequest,
+    earliestDiscoveryTimeTs: earliestDiscoveryTime ? Types.Timing.MicroSeconds(earliestDiscoveryTime) : undefined,
   };
 }

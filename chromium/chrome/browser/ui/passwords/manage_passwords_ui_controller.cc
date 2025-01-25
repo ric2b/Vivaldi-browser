@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -12,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
@@ -24,20 +26,13 @@
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
-#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_promo_util.h"
-#include "chrome/browser/signin/signin_ui_util.h"
-#include "chrome/browser/signin/signin_util.h"
-#include "chrome/browser/ui/autofill/autofill_signin_promo_tab_helper.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/hats/hats_service.h"
-#include "chrome/browser/ui/hats/hats_service_factory.h"
-#include "chrome/browser/ui/hats/survey_config.h"
 #include "chrome/browser/ui/hats/trust_safety_sentiment_service.h"
 #include "chrome/browser/ui/hats/trust_safety_sentiment_service_factory.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
@@ -51,6 +46,7 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
@@ -254,6 +250,29 @@ void ManagePasswordsUIController::OnHideManualFallbackForSaving() {
   UpdateBubbleAndIconVisibility();
 }
 
+void ManagePasswordsUIController::OnOpenPasswordDetailsBubble(
+    const password_manager::PasswordForm& form) {
+  std::u16string message;
+#if BUILDFLAG(IS_MAC)
+  message = l10n_util::GetStringUTF16(
+      IDS_PASSWORDS_PAGE_AUTHENTICATION_PROMPT_BIOMETRIC_SUFFIX);
+#elif BUILDFLAG(IS_WIN)
+  message = l10n_util::GetStringUTF16(IDS_PASSWORDS_PAGE_AUTHENTICATION_PROMPT);
+#endif
+
+  AuthenticateUserWithMessage(
+      message, base::BindOnce(
+                   [](ManagePasswordsUIController* self,
+                      password_manager::PasswordForm form, bool auth_success) {
+                     if (auth_success) {
+                       self->passwords_data_.OpenPasswordDetailsBubble(form);
+                       self->bubble_status_ = BubbleStatus::SHOULD_POP_UP;
+                       self->UpdateBubbleAndIconVisibility();
+                     }
+                   },
+                   this, form));
+}
+
 bool ManagePasswordsUIController::OnChooseCredentials(
     std::vector<std::unique_ptr<password_manager::PasswordForm>>
         local_credentials,
@@ -321,16 +340,6 @@ void ManagePasswordsUIController::OnAutomaticPasswordSave(
 
   bubble_status_ = BubbleStatus::SHOULD_POP_UP;
   UpdateBubbleAndIconVisibility();
-
-  HatsService* hats_service = HatsServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
-      /*create_if_necessary=*/true);
-  if (hats_service) {
-    hats_service->LaunchDelayedSurveyForWebContents(
-        kHatsSurveyTriggerSuggestedPasswordsExperiment, web_contents(),
-        /*timeout_ms=*/0, /*product_specific_bits_data=*/
-        {{"Suggested password accepted", true}});
-  }
 }
 
 void ManagePasswordsUIController::OnPasswordAutofilled(
@@ -435,8 +444,10 @@ void ManagePasswordsUIController::OnShowMoveToAccountBubble(
 
 void ManagePasswordsUIController::OnBiometricAuthenticationForFilling(
     PrefService* prefs) {
-  // Existing dialog shouldn't be closed.
-  if (dialog_controller_) {
+  // Existing dialog shouldn't be closed and if the state is inactive do not
+  // transition or show bubble.
+  if (dialog_controller_ ||
+      GetState() == password_manager::ui::INACTIVE_STATE) {
     return;
   }
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
@@ -519,9 +530,26 @@ void ManagePasswordsUIController::OnKeychainError() {
 #endif
 }
 
-void ManagePasswordsUIController::OnPasskeySaved(const std::u16string& username,
-                                                 bool gpm_pin_created) {
-  passwords_data_.OnPasskeySaved(username, gpm_pin_created);
+void ManagePasswordsUIController::OnPasskeySaved(bool gpm_pin_created) {
+  passwords_data_.OnPasskeySaved(gpm_pin_created);
+  bubble_status_ = BubbleStatus::SHOULD_POP_UP;
+  UpdateBubbleAndIconVisibility();
+}
+
+void ManagePasswordsUIController::OnPasskeyDeleted() {
+  passwords_data_.OnPasskeyDeleted();
+  bubble_status_ = BubbleStatus::SHOULD_POP_UP;
+  UpdateBubbleAndIconVisibility();
+}
+
+void ManagePasswordsUIController::OnPasskeyUpdated() {
+  passwords_data_.OnPasskeyUpdated();
+  bubble_status_ = BubbleStatus::SHOULD_POP_UP;
+  UpdateBubbleAndIconVisibility();
+}
+
+void ManagePasswordsUIController::OnPasskeyNotAccepted() {
+  passwords_data_.OnPasskeyNotAccepted();
   bubble_status_ = BubbleStatus::SHOULD_POP_UP;
   UpdateBubbleAndIconVisibility();
 }
@@ -668,6 +696,12 @@ ManagePasswordsUIController::GetCurrentForms() const {
   return passwords_data_.GetCurrentForms();
 }
 
+const std::optional<password_manager::PasswordForm>&
+ManagePasswordsUIController::
+    GetManagePasswordsSingleCredentialDetailsModeCredential() const {
+  return passwords_data_.single_credential_mode_credential();
+}
+
 const password_manager::InteractionsStats*
 ManagePasswordsUIController::GetCurrentInteractionStats() const {
   CHECK(GetState() == password_manager::ui::PENDING_PASSWORD_STATE ||
@@ -700,12 +734,6 @@ bool ManagePasswordsUIController::GpmPinCreatedDuringRecentPasskeyCreation()
   return passwords_data_.gpm_pin_created_during_recent_passkey_creation();
 }
 
-std::u16string ManagePasswordsUIController::GetRecentlySavedPasskeyUsername()
-    const {
-  CHECK_EQ(GetState(), password_manager::ui::PASSKEY_SAVED_CONFIRMATION_STATE);
-  return passwords_data_.recently_saved_passkey_username();
-}
-
 void ManagePasswordsUIController::OnBubbleShown() {
   bubble_status_ = BubbleStatus::SHOWN;
 }
@@ -733,6 +761,15 @@ void ManagePasswordsUIController::OnBubbleHidden() {
              password_manager::ui::MOVE_CREDENTIAL_FROM_MANAGE_BUBBLE_STATE) {
     passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
     passwords_data_.clear_selected_password();
+    update_icon = true;
+  } else if (GetState() == password_manager::ui::MANAGE_STATE &&
+             passwords_data_.single_credential_mode_credential().has_value()) {
+    if (passwords_data_.GetCurrentForms().empty()) {
+      ClearPopUpFlagForBubble();
+      passwords_data_.OnInactive();
+    } else {
+      passwords_data_.ClearSingleCredentialModeCredential();
+    }
     update_icon = true;
   }
   if (update_icon) {
@@ -829,25 +866,16 @@ void ManagePasswordsUIController::SavePassword(const std::u16string& username,
   bubble_status_ = BubbleStatus::SHOWN_PENDING_ICON_UPDATE;
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
   // Do not trigger the IPH if the sign in promo will be shown.
-  if (browser && !signin::ShouldShowSignInPromo(
-                     *browser->profile(),
-                     signin::SignInAutofillBubblePromoType::Passwords)) {
+  if (browser &&
+      !signin::ShouldShowSignInPromo(
+          *browser->profile(),
+          signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE)) {
     if (browser->window()->MaybeShowFeaturePromo(
             feature_engagement::
                 kIPHPasswordsManagementBubbleAfterSaveFeature)) {
       return;
     }
     MaybeShowPasswordManagerShortcutIPH(browser);
-  }
-
-  HatsService* hats_service = HatsServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
-      /*create_if_necessary=*/true);
-  if (hats_service) {
-    hats_service->LaunchDelayedSurveyForWebContents(
-        kHatsSurveyTriggerSuggestedPasswordsExperiment, web_contents(),
-        /*timeout_ms=*/0, /*product_specific_bits_data=*/
-        {{"Suggested password accepted", false}});
   }
 }
 
@@ -962,51 +990,6 @@ void ManagePasswordsUIController::NavigateToPasswordCheckup(
   password_manager::LogPasswordCheckReferrer(referrer);
 }
 
-void ManagePasswordsUIController::SignIn(
-    const AccountInfo& account,
-    const password_manager::PasswordForm& password_to_move) {
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  CHECK(switches::IsExplicitBrowserSigninUIOnDesktopEnabled());
-
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  signin_ui_util::SignInFromSingleAccountPromo(
-      profile, account,
-      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE);
-
-  // If the sign in was already successful, move the password directly.
-  // Otherwise, wait for a sign in event and move the password upon success.
-  signin_util::SignedInState signed_in_state = signin_util::GetSignedInState(
-      IdentityManagerFactory::GetForProfile(profile));
-  if (signed_in_state == signin_util::SignedInState::kSignedIn) {
-    MoveJustSavedPasswordAfterAccountStoreOptIn(
-        password_to_move,
-        password_manager::PasswordManagerClient::ReauthSucceeded(true));
-  } else {
-    if (signed_in_state != signin_util::SignedInState::kSignedOut &&
-        signed_in_state != signin_util::SignedInState::kSignInPending &&
-        signed_in_state != signin_util::SignedInState::kWebOnlySignedIn) {
-      return;
-    }
-    content::WebContents* sign_in_tab_contents =
-        signin_ui_util::GetSignInTabWithAccessPoint(
-            *chrome::FindBrowserWithTab(web_contents()),
-            signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE);
-
-    // SignInFromSingleAccountPromo may fail to open a tab. Do not wait for a
-    // sign in event in that case.
-    if (!sign_in_tab_contents) {
-      return;
-    }
-
-    autofill::AutofillSigninPromoTabHelper::GetForWebContents(
-        *sign_in_tab_contents)
-        ->InitializeDataMoveAfterSignIn(
-            password_to_move,
-            signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE);
-  }
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
-}
 
 void ManagePasswordsUIController::OnDialogHidden() {
   dialog_controller_.reset();

@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Použít</translation>
 <translation id="1603914832182249871">(Soukromý režim)</translation>
 <translation id="1627276047960621195">Popisovače souborů</translation>
+<translation id="1654713139320245449">Nenalezeny žádné cíle pro odesílání. Potřebujete pomoc?</translation>
 <translation id="166278006618318542">Algoritmus veřejného klíče subjektu</translation>
 <translation id="1682548588986054654">Nové soukromé okno</translation>
 <translation id="1708338024780164500">(Nečinný)</translation>
@@ -98,7 +99,6 @@
 <translation id="265390580714150011">Hodnota pole</translation>
 <translation id="2662876636500006917">Internetový obchod Chrome</translation>
 <translation id="2678063897982469759">Znovu aktivovat</translation>
-<translation id="2678100101831051676">Odeslání nelze provést.</translation>
 <translation id="2719936478972253983">Následující soubory cookie byly zablokovány</translation>
 <translation id="2721037002783622288">&amp;Vyhledat obrázek pomocí vyhledávače <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Nikoli po</translation>
@@ -148,7 +148,6 @@
 <translation id="3378572629723696641">Toto rozšíření mohlo být poškozeno.</translation>
 <translation id="3387614642886316601">Použít vylepšenou kontrolu pravopisu</translation>
 <translation id="3390013585654699824">Podrobnosti aplikace</translation>
-<translation id="3393582007140394275">Obrazovku nelze sdílet.</translation>
 <translation id="345693547134384690">Otevřít obrázek v novém l&amp;istu</translation>
 <translation id="3493881266323043047">Platnost</translation>
 <translation id="3511307672085573050">Kopírovat adr&amp;esu odkazu</translation>
@@ -346,6 +345,7 @@
 <translation id="6812841287760418429">Uchovat změny</translation>
 <translation id="6824564591481349393">Kopírovat &amp;e-mailovou adresu</translation>
 <translation id="6840155290835956714">Před odesláním se zeptat</translation>
+<translation id="6878862640969460273">Na šířku</translation>
 <translation id="6886871292305414135">Otevřít odkaz v novém lis&amp;tu</translation>
 <translation id="6892812721183419409">Otevřít odkaz jako <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikace na pozadí: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -409,7 +409,6 @@ Soubor klíče: <ph name="KEY_FILE" />
 Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat při vytváření nových verzí svého rozšíření.</translation>
 <translation id="8004582292198964060">Prohlížeč</translation>
 <translation id="8018313076035239964">Určete, jaký obsah vám webové stránky mohou zobrazovat a jaké údaje mohou během vaší návštěvy využívat</translation>
-<translation id="8032244173881942855">List nelze odeslat.</translation>
 <translation id="8071432093239591881">Vytisknout jako obrázek</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Probíhá stahování}few{Probíhají stahování}many{Probíhají stahování} other {Probíhají stahování}}</translation>
@@ -464,7 +463,6 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="9218430445555521422">Nastavit jako výchozí</translation>
 <translation id="93766956588638423">Opravit rozšíření</translation>
 <translation id="961012016278832836">Zastaralý Microsoft Edge</translation>
-<translation id="98515147261107953">Na šířku</translation>
 <translation id="994289308992179865">&amp;Opakovat</translation>
 <translation id="998747458861718449">&amp;Prozkoumat</translation>
 </translationbundle>

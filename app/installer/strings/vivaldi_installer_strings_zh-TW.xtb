@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">安裝獨立安裝版本</translation>
 <translation id="1682285232070778125">將 Vivaldi 設為預設瀏覽器</translation>
 <translation id="1974060860693918893">進階</translation>
+<translation id="2053560788696003312">Vivaldi 需要 Windows 10 或更新的版本。</translation>
 <translation id="2134216661302048561">Vivaldi 安裝程式尚未完成安裝 Vivaldi 瀏覽器。確定要立即結束嗎？</translation>
 <translation id="2286454467119466181">簡單</translation>
 <translation id="237789874664518125">版權所有 <ph name="YEAR" /> Vivaldi Technologies AS. 保留一切權利。&lt;a&gt;隱私權政策&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">接受並更新</translation>
 <translation id="5302048478445481009">語言</translation>
 <translation id="694714344624446243">Vivaldi 安裝程式</translation>
+<translation id="7467493612551448880">您正在安裝的 Vivaldi 版本並未針對您正在使用的 Windows 版本進行最佳化。
+
+請前往 vivaldi.com/download 下載 Windows on Arm 版本。</translation>
 <translation id="7658239707568436148">取消</translation>
 <translation id="8773751185824654197">注意：如果要更新執行中的 Vivaldi 瀏覽器，該實例將會被關閉並重新啟動</translation>
 <translation id="933060950687965486">安裝類型</translation>

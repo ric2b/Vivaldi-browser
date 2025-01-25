@@ -6,6 +6,7 @@
 #define ASH_PUBLIC_CPP_CAPTURE_MODE_CAPTURE_MODE_DELEGATE_H_
 
 #include "ash/public/cpp/ash_public_export.h"
+#include "ash/public/cpp/ash_web_view.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/unguessable_token.h"
@@ -212,11 +213,15 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
   // success flag and the final file path if successful.
   virtual void FinalizeSavedFile(
       base::OnceCallback<void(bool, const base::FilePath&)> callback,
-      const base::FilePath& path) = 0;
+      const base::FilePath& path,
+      const gfx::Image& thumbnail) = 0;
 
   // Returns a temporary location where a file with the capture should be saved
   // instead of `path`, if needed, e.g. to be uploaded to cloud later.
   virtual base::FilePath RedirectFilePath(const base::FilePath& path) = 0;
+
+  // Returns an instance of the concrete class of `SearchResultsView`.
+  virtual std::unique_ptr<AshWebView> CreateSearchResultsView() const = 0;
 };
 
 }  // namespace ash

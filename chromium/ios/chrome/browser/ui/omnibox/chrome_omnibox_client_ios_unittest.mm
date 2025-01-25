@@ -12,7 +12,7 @@
 #import "components/omnibox/browser/shortcuts_backend.h"
 #import "components/omnibox/common/omnibox_features.h"
 #import "ios/chrome/browser/autocomplete/model/shortcuts_backend_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/ui/omnibox/test_web_location_bar.h"
 #import "ios/chrome/test/block_cleanup_test.h"
 #import "ios/testing/nserror_util.h"
@@ -81,7 +81,7 @@ void ChromeOmniboxClientIOSTest::SetUp() {
   TestChromeBrowserState::Builder builder;
   builder.AddTestingFactory(ios::ShortcutsBackendFactory::GetInstance(),
                             ios::ShortcutsBackendFactory::GetDefaultFactory());
-  browser_state_ = builder.Build();
+  browser_state_ = std::move(builder).Build();
   web_location_bar_ = std::make_unique<TestWebLocationBar>();
   tracker_ = feature_engagement::CreateTestTracker();
   chrome_omnibox_client_ios_ = std::make_unique<ChromeOmniboxClientIOS>(
@@ -93,7 +93,7 @@ void ChromeOmniboxClientIOSTest::SetUp() {
   navigation_context_->SetPageTransition(ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
 
   shortcuts_backend_ =
-      ios::ShortcutsBackendFactory::GetInstance()->GetForBrowserState(
+      ios::ShortcutsBackendFactory::GetInstance()->GetForProfile(
           browser_state_.get());
   ASSERT_TRUE(shortcuts_backend_.get());
   shortcuts_backend_->AddObserver(this);

@@ -5,6 +5,7 @@
 #include "components/plus_addresses/metrics/plus_address_metrics.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "components/autofill/core/browser/autofill_plus_address_delegate.h"
 #include "components/plus_addresses/plus_address_types.h"
@@ -12,25 +13,29 @@
 
 namespace plus_addresses::metrics {
 
-void RecordModalEvent(
-    PlusAddressModalEvent plus_address_modal_event) {
-  base::UmaHistogramEnumeration("PlusAddresses.Modal.Events",
+void RecordModalEvent(PlusAddressModalEvent plus_address_modal_event,
+                      bool is_notice_screen) {
+  base::UmaHistogramEnumeration(is_notice_screen
+                                    ? "PlusAddresses.ModalWithNotice.Events"
+                                    : "PlusAddresses.Modal.Events",
                                 plus_address_modal_event);
 }
 
-void RecordModalShownOutcome(
-    PlusAddressModalCompletionStatus status,
-    base::TimeDelta modal_shown_duration,
-    int refresh_count) {
+void RecordModalShownOutcome(PlusAddressModalCompletionStatus status,
+                             base::TimeDelta modal_shown_duration,
+                             int refresh_count,
+                             bool is_notice_screen) {
   base::UmaHistogramTimes(
       base::ReplaceStringPlaceholders(
-          "PlusAddresses.Modal.$1.ShownDuration",
+          is_notice_screen ? "PlusAddresses.ModalWithNotice.$1.ShownDuration"
+                           : "PlusAddresses.Modal.$1.ShownDuration",
           {PlusAddressModalCompletionStatusToString(status)},
           /*offsets=*/nullptr),
       modal_shown_duration);
   base::UmaHistogramExactLinear(
       base::ReplaceStringPlaceholders(
-          "PlusAddresses.Modal.$1.Refreshes",
+          is_notice_screen ? "PlusAddresses.ModalWithNotice.$1.Refreshes"
+                           : "PlusAddresses.Modal.$1.Refreshes",
           {PlusAddressModalCompletionStatusToString(status)},
           /*offsets=*/nullptr),
       refresh_count, /*exclusive_max=*/31);
@@ -97,7 +102,10 @@ std::string PlusAddressNetworkRequestTypeToString(
       return "List";
     case PlusAddressNetworkRequestType::kReserve:
       return "Reserve";
+    case PlusAddressNetworkRequestType::kPreallocate:
+      return "Preallocate";
   }
+  NOTREACHED();
 }
 
 std::string PlusAddressModalCompletionStatusToString(
@@ -112,6 +120,7 @@ std::string PlusAddressModalCompletionStatusToString(
     case PlusAddressModalCompletionStatus::kConfirmPlusAddressError:
       return "ConfirmError";
   }
+  NOTREACHED();
 }
 
 }  // namespace plus_addresses::metrics

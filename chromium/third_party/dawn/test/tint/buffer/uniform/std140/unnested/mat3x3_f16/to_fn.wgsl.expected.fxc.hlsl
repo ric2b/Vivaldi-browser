@@ -1,4 +1,4 @@
-SKIP: FAILED
+SKIP: INVALID
 
 cbuffer cbuffer_u : register(b0) {
   uint4 u[2];
@@ -50,3 +50,10 @@ void f() {
   c(vector<float16_t, 3>(ubo_load_8_xz[0], ubo_load_8_y, ubo_load_8_xz[1]).zxy.x);
   return;
 }
+FXC validation failure:
+<scrubbed_path>(5,15-23): error X3000: syntax error: unexpected token 'float16_t'
+<scrubbed_path>(8,15-23): error X3000: syntax error: unexpected token 'float16_t'
+<scrubbed_path>(11,8-16): error X3000: unrecognized identifier 'float16_t'
+
+
+tint executable returned error: exit status 1

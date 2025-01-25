@@ -13,6 +13,15 @@
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_icon.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "ios/chrome/common/ui/util/image_util.h"
+
+namespace {
+const CGFloat kFaviconSize = 24;
+}  // namespace
+
+// End Vivaldi
+
 @implementation OmniboxIconView {
   id<OmniboxIcon> _omniboxIcon;
   // The view containing the symbols or the favicons.
@@ -131,5 +140,13 @@
   _colorfulView.symbolTintColor =
       highlighted ? UIColor.whiteColor : _omniboxIcon.iconImageTintColor;
 }
+
+#pragma mark - Vivaldi
+- (void)setOmniboxIconFromLocal:(UIImage*)omniboxIcon {
+  [_colorfulView setSymbol:ResizeImage(
+      omniboxIcon, CGSize(kFaviconSize, kFaviconSize),
+            ProjectionMode::kAspectFit)];
+}
+// End Vivaldi
 
 @end

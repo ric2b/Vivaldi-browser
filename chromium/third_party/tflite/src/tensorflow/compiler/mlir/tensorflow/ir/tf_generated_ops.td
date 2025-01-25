@@ -1137,7 +1137,7 @@ to be batched.}]>:$captured_tensors,
     DefaultValuedOptionalAttr<I64ArrayAttr, "{}">:$low_priority_allowed_batch_sizes,
     DefaultValuedOptionalAttr<I64Attr, "0">:$low_priority_max_enqueued_batches,
     DefaultValuedOptionalAttr<TF_AnyStrAttrOf<["low_priority_padding_with_max_batch_size", "low_priority_padding_with_next_allowed_batch_size", "priority_isolation"]>, "\"low_priority_padding_with_max_batch_size\"">:$mixed_priority_policy,
-    DefaultValuedOptionalAttr<TF_AnyStrAttrOf<["PAD_UP"]>, "\"PAD_UP\"">:$batch_padding_policy,
+    DefaultValuedOptionalAttr<TF_AnyStrAttrOf<["PAD_UP", "BATCH_DOWN", "MINIMIZE_TPU_COST_PER_REQUEST"]>, "\"PAD_UP\"">:$batch_padding_policy,
     DefaultValuedOptionalAttr<BoolAttr, "false">:$enable_large_batch_splitting
   );
 
@@ -11293,6 +11293,7 @@ elements from `input_dataset` in parallel.}]>:$num_parallel_calls,
     DefaultValuedOptionalAttr<BoolAttr, "true">:$use_inter_op_parallelism,
     DefaultValuedOptionalAttr<StrAttr, "\"default\"">:$deterministic,
     DefaultValuedOptionalAttr<BoolAttr, "false">:$preserve_cardinality,
+    DefaultValuedOptionalAttr<BoolAttr, "false">:$use_unbounded_threadpool,
     DefaultValuedOptionalAttr<StrAttr, "\"\"">:$metadata
   );
 
@@ -13837,7 +13838,8 @@ A tensor of indices into ref.}]>:$indices,
     Arg<TF_Tensor, [{A Tensor. Must have the same type as ref. A tensor of
 values to add to ref.}]>:$updates,
 
-    DefaultValuedOptionalAttr<BoolAttr, "true">:$use_locking
+    DefaultValuedOptionalAttr<BoolAttr, "true">:$use_locking,
+    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$bad_indices_policy
   );
 
   let results = (outs);
@@ -13894,7 +13896,8 @@ A tensor of indices into ref.}]>:$indices,
     Arg<TF_Tensor, [{A Tensor. Must have the same type as ref. A tensor of
 values to add to ref.}]>:$updates,
 
-    DefaultValuedOptionalAttr<BoolAttr, "true">:$use_locking
+    DefaultValuedOptionalAttr<BoolAttr, "true">:$use_locking,
+    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$bad_indices_policy
   );
 
   let results = (outs);
@@ -13953,7 +13956,8 @@ A tensor of indices into ref.}]>:$indices,
     Arg<TF_Tensor, [{A Tensor. Must have the same type as ref. A tensor of updated
 values to add to ref.}]>:$updates,
 
-    DefaultValuedOptionalAttr<BoolAttr, "true">:$use_locking
+    DefaultValuedOptionalAttr<BoolAttr, "true">:$use_locking,
+    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$bad_indices_policy
   );
 
   let results = (outs);
@@ -19719,14 +19723,23 @@ numpy=array([[[6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8], [9, 9, 9, 9]],
              [[6, 6, 6, 6], [7, 7, 7, 7], [8, 8, 8, 8], [9, 9, 9, 9]],
              [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]]], dtype=int32)>
 
-Note: on CPU, if an out of bound index is found, an error is returned.
-On GPU, if an out of bound index is found, the index is ignored.
+
+If `indices` contains any out-of-bound indices, depending on
+`bad_indices_policy`, the op will either return an error or ignore the
+out-of-bound indices. `bad_indices_policy` can be one of the following values:
+1. "" or "DEFAULT": raises on CPU and ignore on GPU. This is because
+   historically on CPU and GPU we handle errors in different ways, and for
+   backward compatibility we keep the default behavior.
+2. "ERROR": raises error; GPU does not support this value.
+3. "IGNORE": ignore the bad indices; supported on both CPU and GPU.
   }];
 
   let arguments = (ins
     Arg<TF_Tensor, [{Tensor to copy/update.}]>:$tensor,
     Arg<TF_I32OrI64Tensor, [{Index tensor.}]>:$indices,
-    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates
+    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates,
+
+    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$bad_indices_policy
   );
 
   let results = (outs
@@ -19763,7 +19776,9 @@ Refer to `tf.tensor_scatter_nd_update` for more details.
   let arguments = (ins
     Arg<TF_Tensor, [{Tensor to update.}]>:$tensor,
     Arg<TF_I32OrI64Tensor, [{Index tensor.}]>:$indices,
-    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates
+    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates,
+
+    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$bad_indices_policy
   );
 
   let results = (outs
@@ -19780,7 +19795,9 @@ def TF_TensorScatterMinOp : TF_Op<"TensorScatterMin", [Pure]> {
   let arguments = (ins
     Arg<TF_Tensor, [{Tensor to update.}]>:$tensor,
     Arg<TF_I32OrI64Tensor, [{Index tensor.}]>:$indices,
-    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates
+    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates,
+
+    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$bad_indices_policy
   );
 
   let results = (outs
@@ -19864,7 +19881,9 @@ On GPU, if an out of bound index is found, the index is ignored.
   let arguments = (ins
     Arg<TF_Tensor, [{Tensor to copy/update.}]>:$tensor,
     Arg<TF_I32OrI64Tensor, [{Index tensor.}]>:$indices,
-    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates
+    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates,
+
+    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$bad_indices_policy
   );
 
   let results = (outs
@@ -19889,8 +19908,6 @@ for the existing tensor cannot be re-used, a copy is made and updated.
 
 If `indices` contains duplicates, then we pick the last update for the index.
 
-If an out of bound index is found on CPU, an error is returned.
-
 **WARNING**: There are some GPU specific semantics for this operation.
 - If an out of bound index is found, the index is ignored.
 - The order in which updates are applied is nondeterministic, so the output
@@ -19914,6 +19931,15 @@ The overall shape of `updates` is:
 indices.shape[:-1] + tensor.shape[indices.shape[-1]:]
 ```
 
+If `indices` contains any out-of-bound indices, depending on
+`bad_indices_policy`, the op will either return an error or ignore the
+out-of-bound indices. `bad_indices_policy` can be one of the following values:
+1. "" or "DEFAULT": raises on CPU and ignore on GPU. This is because
+   historically on CPU and GPU we handle errors in different ways, and for
+   backward compatibility we keep the default behavior.
+2. "ERROR": raises error; GPU does not support this value.
+3. "IGNORE": ignore the bad indices; supported on both CPU and GPU.
+
 For usage examples see the python [tf.tensor_scatter_nd_update](
 https://www.tensorflow.org/api_docs/python/tf/tensor_scatter_nd_update) function
   }];
@@ -19921,7 +19947,9 @@ https://www.tensorflow.org/api_docs/python/tf/tensor_scatter_nd_update) function
   let arguments = (ins
     Arg<TF_Tensor, [{Tensor to copy/update.}]>:$tensor,
     Arg<TensorOf<[TF_Int16, TF_Int32, TF_Int64, TF_Uint16]>, [{Index tensor.}]>:$indices,
-    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates
+    Arg<TF_Tensor, [{Updates to scatter into output.}]>:$updates,
+
+    DefaultValuedOptionalAttr<StrAttr, "\"\"">:$bad_indices_policy
   );
 
   let results = (outs

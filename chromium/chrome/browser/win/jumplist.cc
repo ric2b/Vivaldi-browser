@@ -192,7 +192,7 @@ bool UpdateTaskCategory(
     new_tab->GetCommandLine()->AppendArg(vivaldi::kVivaldiNewTabURL);
     std::u16string new_tab_title = l10n_util::GetStringUTF16(IDS_NEW_TAB);
     base::ReplaceSubstringsAfterOffset(
-        &new_tab_title, 0, u"&", base::StringPiece16());
+        &new_tab_title, 0, u"&", std::u16string_view());
     new_tab->set_title(new_tab_title);
     new_tab->set_icon(chrome_path, icon_index);
     items.push_back(new_tab);

@@ -17,6 +17,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -34,6 +35,7 @@
 #include "base/trace_event/typed_macros.h"
 #include "base/types/pass_key.h"
 #include "content/browser/interest_group/bidding_and_auction_server_key_fetcher.h"
+#include "content/browser/interest_group/for_debugging_only_report_util.h"
 #include "content/browser/interest_group/interest_group_features.h"
 #include "content/browser/interest_group/interest_group_k_anonymity_manager.h"
 #include "content/browser/interest_group/interest_group_storage.pb.h"
@@ -52,6 +54,7 @@
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/boringssl/src/include/openssl/curve25519.h"
+#include "third_party/snappy/src/snappy.h"
 #include "third_party/sqlite/sqlite3.h"
 #include "url/origin.h"
 
@@ -63,6 +66,104 @@ using PassKey = base::PassKey<InterestGroupStorage>;
 using auction_worklet::mojom::BiddingBrowserSignalsPtr;
 using auction_worklet::mojom::PreviousWinPtr;
 using SellerCapabilitiesType = blink::SellerCapabilitiesType;
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(AdProtoDecompressionOutcome)
+enum class AdProtoDecompressionOutcome {
+  kSuccess = 0,
+  kFailure = 1,
+
+  kMaxValue = kFailure,
+};
+
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:AdProtoDecompressionOutcome)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(InterestGroupStorageInitializationResult)
+enum class InterestGroupStorageInitializationResult {
+  kSuccessAlreadyCurrent = 0,
+  kSuccessUpgraded = 1,
+  kSuccessCreateSchema = 2,
+  kSuccessCreateSchemaAfterIncompatibleRaze = 3,
+  kSuccessCreateSchemaAfterNoMetaTableRaze = 4,
+  kFailedCreateInMemory = 5,
+  kFailedCreateDirectory = 6,
+  kFailedCreateFile = 7,
+  kFailedToRazeIncompatible = 8,
+  kFailedToRazeNoMetaTable = 9,
+  kFailedMetaTableInit = 10,
+  kFailedCreateSchema = 11,
+  kFailedCreateSchemaAfterIncompatibleRaze = 12,
+  kFailedCreateSchemaAfterNoMetaTableRaze = 13,
+  kFailedUpgradeDB = 14,
+
+  kMaxValue = kFailedUpgradeDB,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:InterestGroupStorageInitializationResult)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(InterestGroupStorageJSONDeserializationResult)
+enum class InterestGroupStorageJSONDeserializationResult {
+  kSucceeded = 0,
+  kFailed = 1,
+
+  kMaxValue = kFailed,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:InterestGroupStorageJSONDeserializationResult)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(InterestGroupStorageJSONSerializationResult)
+enum class InterestGroupStorageJSONSerializationResult {
+  kSucceeded = 0,
+  kFailed = 1,
+
+  kMaxValue = kFailed,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:InterestGroupStorageJSONSerializationResult)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(InterestGroupStorageProtoDeserializationResult)
+enum class InterestGroupStorageProtoDeserializationResult {
+  kSucceeded = 0,
+  kFailed = 1,
+
+  kMaxValue = kFailed,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:InterestGroupStorageProtoDeserializationResult)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(InterestGroupStorageProtoSerializationResult)
+enum class InterestGroupStorageProtoSerializationResult {
+  kSucceeded = 0,
+  kFailed = 1,
+
+  kMaxValue = kFailed,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:InterestGroupStorageProtoSerializationResult)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(InterestGroupStorageVacuumResult)
+enum class InterestGroupStorageVacuumResult {
+  kSucceeded = 0,
+  kFailed = 1,
+
+  kMaxValue = kFailed,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:InterestGroupStorageVacuumResult)
 
 const base::FilePath::CharType kDatabasePath[] =
     FILE_PATH_LITERAL("InterestGroups");
@@ -94,6 +195,9 @@ const base::FilePath::CharType kDatabasePath[] =
 // Version 25 - 2024/04 - crrev.com/c/5497898
 // Version 26 - 2024/05 - crrev.com/c/5555460
 // Version 27 - 2024/05 - crrev.com/c/5521957
+// Version 28 - 2024/06 - crrev.com/c/5647523
+// Version 29 - 2024/06 - crrev.com/c/5753049
+// Version 30 - 2024/08 - crrev.com/c/5707491
 //
 // Version 1 adds a table for interest groups.
 // Version 2 adds a column for rate limiting interest group updates.
@@ -130,11 +234,16 @@ const base::FilePath::CharType kDatabasePath[] =
 // Version 25 uses hashed k-anon keys instead of the unhashed versions.
 // Version 26 runs a VACUUM command.
 // Version 27 stores k-anon values and update times in interest group table.
-const int kCurrentVersionNumber = 27;
+// Version 28 adds trusted bidding signals coordinator.
+// Version 29 adds selectableBuyerAndSellerReportingIds field to ad object.
+// Version 30 compresses the AdsProto field using Snappy compression and runs a
+// VACUUM command.
+
+const int kCurrentVersionNumber = 30;
 
 // Earliest version of the code which can use a |kCurrentVersionNumber| database
 // without failing.
-const int kCompatibleVersionNumber = 27;
+const int kCompatibleVersionNumber = 30;
 
 // Latest version of the database that cannot be upgraded to
 // |kCurrentVersionNumber| without razing the database.
@@ -143,7 +252,16 @@ const int kDeprecatedVersionNumber = 5;
 std::string Serialize(base::ValueView value_view) {
   std::string json_output;
   JSONStringValueSerializer serializer(&json_output);
-  serializer.Serialize(value_view);
+  if (serializer.Serialize(value_view)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.JSONSerializationResult",
+        InterestGroupStorageJSONSerializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.JSONSerializationResult",
+        InterestGroupStorageJSONSerializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
   return json_output;
 }
 std::unique_ptr<base::Value> DeserializeValue(
@@ -152,8 +270,21 @@ std::unique_ptr<base::Value> DeserializeValue(
     return {};
   }
   JSONStringValueDeserializer deserializer(serialized_value);
-  return deserializer.Deserialize(/*error_code=*/nullptr,
-                                  /*error_message=*/nullptr);
+  std::unique_ptr<base::Value> result =
+      deserializer.Deserialize(/*error_code=*/nullptr,
+                               /*error_message=*/nullptr);
+  if (result) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.JSONDeserializationResult",
+        InterestGroupStorageJSONDeserializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.JSONDeserializationResult",
+        InterestGroupStorageJSONDeserializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
+
+  return result;
 }
 
 std::string Serialize(const url::Origin& origin) {
@@ -200,6 +331,17 @@ blink::InterestGroup::Ad FromInterestGroupAdValue(const PassKey& passkey,
     if (maybe_buyer_and_seller_reporting_id) {
       result.buyer_and_seller_reporting_id =
           *maybe_buyer_and_seller_reporting_id;
+    }
+    const auto* maybe_selectable_buyer_and_seller_reporting_ids =
+        dict.FindList("selectable_buyer_and_seller_reporting_ids");
+
+    if (maybe_selectable_buyer_and_seller_reporting_ids) {
+      std::vector<std::string> selectable_buyer_and_seller_reporting_ids;
+      for (const auto& id : *maybe_selectable_buyer_and_seller_reporting_ids) {
+        selectable_buyer_and_seller_reporting_ids.emplace_back(id.GetString());
+      }
+      result.selectable_buyer_and_seller_reporting_ids =
+          std::move(selectable_buyer_and_seller_reporting_ids);
     }
     const auto* maybe_allowed_reporting_origins =
         dict.FindList("allowed_reporting_origins");
@@ -276,6 +418,11 @@ AdProtos GetAdProtosFromAds(std::vector<blink::InterestGroup::Ad> ads) {
       ad_proto->set_buyer_and_seller_reporting_id(
           *ad.buyer_and_seller_reporting_id);
     }
+    if (ad.selectable_buyer_and_seller_reporting_ids.has_value()) {
+      for (const auto& id : *ad.selectable_buyer_and_seller_reporting_ids) {
+        ad_proto->add_selectable_buyer_and_seller_reporting_ids(id);
+      }
+    }
     if (ad.ad_render_id.has_value()) {
       ad_proto->set_ad_render_id(*ad.ad_render_id);
     }
@@ -289,14 +436,49 @@ AdProtos GetAdProtosFromAds(std::vector<blink::InterestGroup::Ad> ads) {
   return ad_protos;
 }
 
-std::string Serialize(
+// Upgrade code needs to serialize without compression -- otherwise, the
+// Serialize() method below is used.
+std::string SerializeUncompressed(
     const std::optional<std::vector<blink::InterestGroup::Ad>>& ads) {
+  base::TimeTicks start = base::TimeTicks::Now();
   std::string serialized_ads;
   AdProtos ad_protos =
       ads.has_value() ? GetAdProtosFromAds(ads.value()) : AdProtos();
 
-  ad_protos.SerializeToString(&serialized_ads);
+  if (ad_protos.SerializeToString(&serialized_ads)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.AdProtos",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.AdProtos",
+        InterestGroupStorageProtoSerializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
+  base::UmaHistogramTimes("Storage.InterestGroup.AdProtoSerializationTime",
+                          base::TimeTicks::Now() - start);
   return serialized_ads;
+}
+
+std::string Serialize(
+    const std::optional<std::vector<blink::InterestGroup::Ad>>& ads) {
+  std::string serialized_ads = SerializeUncompressed(ads);
+
+  std::string compressed;
+  base::TimeTicks start = base::TimeTicks::Now();
+  snappy::Compress(serialized_ads.data(), serialized_ads.size(), &compressed);
+  base::UmaHistogramTimes("Storage.InterestGroup.AdProtoCompressionTime",
+                          base::TimeTicks::Now() - start);
+  if (serialized_ads.size() > 0u) {
+    base::UmaHistogramPercentage(
+        "Storage.InterestGroup.AdProtoCompressionRatio",
+        compressed.size() * 100 / serialized_ads.size());
+  }
+  base::UmaHistogramCounts1M("Storage.InterestGroup.AdProtoSizeUncompressed",
+                             serialized_ads.size());
+  base::UmaHistogramCounts1M("Storage.InterestGroup.AdProtoSizeCompressed",
+                             compressed.size());
+  return compressed;
 }
 
 std::optional<std::vector<blink::InterestGroup::Ad>>
@@ -318,12 +500,26 @@ DeserializeInterestGroupAdVectorJson(const PassKey& passkey,
   return result;
 }
 
+// Upgrade code needs to deserialize without decompression -- otherwise,
+// DecompressAndDeserializeInterestGroupAdVectorProto() is used.
 std::optional<std::vector<blink::InterestGroup::Ad>>
 DeserializeInterestGroupAdVectorProto(const PassKey& passkey,
                                       const std::string& serialized_ads) {
+  base::TimeTicks start = base::TimeTicks::Now();
   AdProtos ad_protos;
 
   bool success = ad_protos.ParseFromString(serialized_ads);
+
+  if (success) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Storage.InterestGroup.ProtoDeserializationResult.AdProtos",
+        InterestGroupStorageProtoDeserializationResult::kSucceeded);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Storage.InterestGroup.ProtoDeserializationResult.AdProtos",
+        InterestGroupStorageProtoDeserializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
 
   if (not success || ad_protos.ads().empty()) {
     return std::nullopt;
@@ -347,6 +543,15 @@ DeserializeInterestGroupAdVectorProto(const PassKey& passkey,
       ad.buyer_and_seller_reporting_id =
           std::move(*ad_proto.mutable_buyer_and_seller_reporting_id());
     }
+    if (!ad_proto.selectable_buyer_and_seller_reporting_ids().empty()) {
+      std::vector<std::string> selectable_buyer_and_seller_reporting_ids;
+      for (const auto& id :
+           ad_proto.selectable_buyer_and_seller_reporting_ids()) {
+        selectable_buyer_and_seller_reporting_ids.emplace_back(id);
+      }
+      ad.selectable_buyer_and_seller_reporting_ids =
+          std::move(selectable_buyer_and_seller_reporting_ids);
+    }
     if (ad_proto.has_ad_render_id()) {
       ad.ad_render_id = std::move(*ad_proto.mutable_ad_render_id());
     }
@@ -363,7 +568,29 @@ DeserializeInterestGroupAdVectorProto(const PassKey& passkey,
           std::move(allowed_reporting_origins_vector);
     }
   }
+  UMA_HISTOGRAM_TIMES("Storage.InterestGroup.AdProtoDeserializationTime",
+                      base::TimeTicks::Now() - start);
   return out;
+}
+
+std::optional<std::vector<blink::InterestGroup::Ad>>
+DecompressAndDeserializeInterestGroupAdVectorProto(
+    const PassKey& passkey,
+    const std::string& compressed) {
+  std::string serialized_ads;
+  base::TimeTicks start = base::TimeTicks::Now();
+  if (!snappy::Uncompress(compressed.data(), compressed.size(),
+                          &serialized_ads)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.AdProtoDecompressionOutcome",
+        AdProtoDecompressionOutcome::kFailure);
+    return std::nullopt;
+  }
+  UMA_HISTOGRAM_TIMES("Storage.InterestGroup.AdProtoDecompressionTime",
+                      base::TimeTicks::Now() - start);
+  UMA_HISTOGRAM_ENUMERATION("Storage.InterestGroup.AdProtoDecompressionOutcome",
+                            AdProtoDecompressionOutcome::kSuccess);
+  return DeserializeInterestGroupAdVectorProto(passkey, serialized_ads);
 }
 
 std::string Serialize(
@@ -616,8 +843,16 @@ std::set<std::string> GetAllKanonKeys(
   if (interest_group.ads.has_value() &&
       interest_group.bidding_url.has_value()) {
     for (auto& ad : *interest_group.ads) {
-      hashed_keys.emplace(
-          blink::HashedKAnonKeyForAdNameReporting(interest_group, ad));
+      hashed_keys.emplace(blink::HashedKAnonKeyForAdNameReporting(
+          interest_group, ad,
+          /*selected_buyer_and_seller_reporting_id=*/std::nullopt));
+      if (ad.selectable_buyer_and_seller_reporting_ids) {
+        for (const std::string& selectable_id :
+             *ad.selectable_buyer_and_seller_reporting_ids) {
+          hashed_keys.emplace(blink::HashedKAnonKeyForAdNameReporting(
+              interest_group, ad, selectable_id));
+        }
+      }
       hashed_keys.emplace(
           blink::HashedKAnonKeyForAdBid(interest_group, ad.render_url()));
     }
@@ -778,7 +1013,7 @@ bool MaybeCreateKAnonEntryForV17DatabaseUpgrade(
 
 // Initializes the tables, returning true on success.
 // The tables cannot exist when calling this function.
-bool CreateV27Schema(sql::Database& db) {
+bool CreateCurrentSchema(sql::Database& db) {
   DCHECK(!db.DoesTableExist("interest_groups"));
   static const char kInterestGroupTableSql[] =
       // clang-format off
@@ -809,6 +1044,7 @@ bool CreateV27Schema(sql::Database& db) {
         "trusted_bidding_signals_keys TEXT NOT NULL,"
         "trusted_bidding_signals_slot_size_mode INTEGER NOT NULL,"
         "max_trusted_bidding_signals_url_length INTEGER NOT NULL,"
+        "trusted_bidding_signals_coordinator TEXT,"
         "user_bidding_signals TEXT,"
         "ads_pb BLOB NOT NULL,"
         "ad_components_pb BLOB NOT NULL,"
@@ -949,8 +1185,200 @@ bool VacuumDB(sql::Database& db) {
   return db.Execute(kVacuum);
 }
 
+bool UpgradeV29SchemaToV30(sql::Database& db, sql::MetaTable& meta_table) {
+  // There are no new columns, but the `ads_pb` and `ad_components_pb` columns
+  // get compressed with Snappy.
+
+  // clang-format off
+  sql::Statement select_prev_groups(
+      db.GetCachedStatement(SQL_FROM_HERE,
+      "SELECT owner,"
+      "name,"
+      "ads_pb,"
+      "ad_components_pb "
+      "FROM interest_groups"));
+      //  clang-format-on
+  if (!select_prev_groups.is_valid()) {
+    return false;
+  }
+
+  // clang-format off
+  sql::Statement update_group(db.GetCachedStatement(SQL_FROM_HERE,
+      "UPDATE interest_groups "
+      "SET ads_pb=?,"
+        "ad_components_pb=? "
+      "WHERE owner=? AND name=?"));
+  // clang-format on
+  if (!update_group.is_valid()) {
+    return false;
+  }
+
+  while (select_prev_groups.Step()) {
+    update_group.Reset(/*clear_bound_vars=*/true);
+
+    // Update the `ads_pb` and `ad_components_pb` columns with their contents
+    // compressed with Snappy.
+    std::string compressed_ads_pb;
+    base::span<const uint8_t> ads_pb = select_prev_groups.ColumnBlob(2);
+    base::TimeTicks start_ads = base::TimeTicks::Now();
+    snappy::Compress(reinterpret_cast<const char*>(ads_pb.data()),
+                     ads_pb.size(), &compressed_ads_pb);
+    UMA_HISTOGRAM_TIMES("Storage.InterestGroup.AdProtoCompressionTime",
+                        base::TimeTicks::Now() - start_ads);
+    update_group.BindBlob(0, base::as_byte_span(compressed_ads_pb));
+    if (ads_pb.size() > 0u) {
+      base::UmaHistogramPercentage(
+          "Storage.InterestGroup.AdProtoCompressionRatio",
+          compressed_ads_pb.size() * 100 / ads_pb.size());
+    }
+    UMA_HISTOGRAM_COUNTS_1M("Storage.InterestGroup.AdProtoSizeUncompressed",
+                            ads_pb.size());
+    UMA_HISTOGRAM_COUNTS_1M("Storage.InterestGroup.AdProtoSizeCompressed",
+                            compressed_ads_pb.size());
+
+    std::string compressed_ad_components_pb;
+    base::span<const uint8_t> ad_components_pb =
+        select_prev_groups.ColumnBlob(3);
+    base::TimeTicks start_ad_components = base::TimeTicks::Now();
+    snappy::Compress(reinterpret_cast<const char*>(ad_components_pb.data()),
+                     ad_components_pb.size(), &compressed_ad_components_pb);
+    UMA_HISTOGRAM_TIMES("Storage.InterestGroup.AdProtoCompressionTime",
+                        base::TimeTicks::Now() - start_ad_components);
+    update_group.BindBlob(1, base::as_byte_span(compressed_ad_components_pb));
+    if (ad_components_pb.size() > 0u) {
+      base::UmaHistogramPercentage(
+          "Storage.InterestGroup.AdProtoCompressionRatio",
+          compressed_ad_components_pb.size() * 100 / ad_components_pb.size());
+    }
+    UMA_HISTOGRAM_COUNTS_1M("Storage.InterestGroup.AdProtoSizeUncompressed",
+                            ad_components_pb.size());
+    UMA_HISTOGRAM_COUNTS_1M("Storage.InterestGroup.AdProtoSizeCompressed",
+                            compressed_ad_components_pb.size());
+
+    update_group.BindString(2, select_prev_groups.ColumnString(0));
+    update_group.BindString(3, select_prev_groups.ColumnString(1));
+
+    if (!update_group.Run()) {
+      return false;
+    }
+  }
+  if (!select_prev_groups.Succeeded()) {
+    return false;
+  }
+
+  return true;
+}
+
+bool UpgradeV27SchemaToV28(sql::Database& db, sql::MetaTable& meta_table) {
+  // Make a table with new columns `trusted_bidding_signals_protocol_version`
+  // and `trusted_bidding_signals_coordinator.`
+  static const char kInterestGroupTableSql[] =
+      // clang-format off
+    "CREATE TABLE new_interest_groups("
+    "expiration INTEGER NOT NULL,"
+    "last_updated INTEGER NOT NULL,"
+    "next_update_after INTEGER NOT NULL,"
+    "owner TEXT NOT NULL,"
+    "joining_origin TEXT NOT NULL,"
+    "exact_join_time INTEGER NOT NULL,"
+    "name TEXT NOT NULL,"
+    "priority DOUBLE NOT NULL,"
+    "enable_bidding_signals_prioritization INTEGER NOT NULL,"
+    "priority_vector TEXT NOT NULL,"
+    "priority_signals_overrides TEXT NOT NULL,"
+    "seller_capabilities TEXT NOT NULL,"
+    "all_sellers_capabilities INTEGER NOT NULL,"
+    "execution_mode INTEGER NOT NULL,"
+    "joining_url TEXT NOT NULL,"
+    "bidding_url TEXT NOT NULL,"
+    "bidding_wasm_helper_url TEXT NOT NULL,"
+    "update_url TEXT NOT NULL,"
+    "trusted_bidding_signals_url TEXT NOT NULL,"
+    "trusted_bidding_signals_keys TEXT NOT NULL,"
+    "trusted_bidding_signals_slot_size_mode INTEGER NOT NULL,"
+    "max_trusted_bidding_signals_url_length INTEGER NOT NULL,"
+    "trusted_bidding_signals_coordinator TEXT,"
+    "user_bidding_signals TEXT,"
+    "ads_pb BLOB NOT NULL,"
+    "ad_components_pb BLOB NOT NULL,"
+    "ad_sizes TEXT NOT NULL,"
+    "size_groups TEXT NOT NULL,"
+    "auction_server_request_flags INTEGER NOT NULL,"
+    "additional_bid_key BLOB NOT NULL,"
+    "aggregation_coordinator_origin TEXT,"
+    "storage_size INTEGER NOT NULL,"
+    "last_k_anon_updated_time INTEGER NOT NULL, "
+    "kanon_keys BLOB NOT NULL,"
+    "PRIMARY KEY(owner,name))";
+
+  // clang-format on
+  if (!db.Execute(kInterestGroupTableSql)) {
+    return false;
+  }
+
+  static const char kCopyInterestGroupTableSql[] =
+      // clang-format off
+      "INSERT INTO new_interest_groups "
+      "SELECT expiration,"
+      "last_updated,"
+      "next_update_after,"
+      "owner,"
+      "joining_origin,"
+      "exact_join_time,"
+      "name,"
+      "priority,"
+      "enable_bidding_signals_prioritization,"
+      "priority_vector,"
+      "priority_signals_overrides,"
+      "seller_capabilities,"
+      "all_sellers_capabilities,"
+      "execution_mode,"
+      "joining_url,"
+      "bidding_url,"
+      "bidding_wasm_helper_url,"
+      "update_url,"
+      "trusted_bidding_signals_url,"
+      "trusted_bidding_signals_keys,"
+      "trusted_bidding_signals_slot_size_mode,"
+      "max_trusted_bidding_signals_url_length,"
+      "NULL," // trusted_bidding_signals_coordinator
+      "user_bidding_signals,"
+      "ads_pb,"
+      "ad_components_pb,"
+      "ad_sizes,"
+      "size_groups,"
+      "auction_server_request_flags,"
+      "additional_bid_key,"
+      "aggregation_coordinator_origin,"
+      "storage_size,"
+      "last_k_anon_updated_time,"
+      "kanon_keys "
+      "FROM interest_groups";
+  // clang-format on
+
+  if (!db.Execute(kCopyInterestGroupTableSql)) {
+    return false;
+  }
+
+  static const char kDropInterestGroupTableSql[] = "DROP TABLE interest_groups";
+  if (!db.Execute(kDropInterestGroupTableSql)) {
+    return false;
+  }
+
+  static const char kRenameInterestGroupTableSql[] =
+      // clang-format off
+    "ALTER TABLE new_interest_groups "
+    "RENAME TO interest_groups";
+  // clang-format on
+  if (!db.Execute(kRenameInterestGroupTableSql)) {
+    return false;
+  }
+
+  return CreateInterestGroupIndices(db);
+}
+
 bool UpgradeV26SchemaToV27(sql::Database& db, sql::MetaTable& meta_table) {
-  // Make a table with new columns `last_k_anon_updated_time` and `kanon_keys.`
+  // Make a table with new columns `last_k_anon_updated_time` and `kanon_keys`.
   static const char kInterestGroupTableSql[] =
       // clang-format off
     "CREATE TABLE new_interest_groups("
@@ -1038,7 +1466,18 @@ bool UpgradeV26SchemaToV27(sql::Database& db, sql::MetaTable& meta_table) {
       ));
 
   copy_interest_groups.BindTime(0, base::Time::Min());
-  copy_interest_groups.BindBlob(1, KAnonKeyProtos().SerializeAsString());
+  std::string kanon_key_protos_str;
+  if (KAnonKeyProtos().SerializeToString(&kanon_key_protos_str)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
+  copy_interest_groups.BindBlob(1, kanon_key_protos_str);
 
   if (!copy_interest_groups.Run()) {
     return false;
@@ -1096,7 +1535,18 @@ bool UpgradeV26SchemaToV27(sql::Database& db, sql::MetaTable& meta_table) {
 
   for (auto [owner_name_pair, keys] : positive_keys) {
     move_positive_kanon_keys.Reset(true);
-    move_positive_kanon_keys.BindBlob(0, keys.SerializeAsString());
+    std::string keys_str;
+    if (keys.SerializeToString(&keys_str)) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+          InterestGroupStorageProtoSerializationResult::kSucceeded);
+    } else {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+          InterestGroupStorageProtoSerializationResult::kFailed);
+      // TODO(crbug.com/355010821): Consider bubbling out the failure.
+    }
+    move_positive_kanon_keys.BindBlob(0, keys_str);
     move_positive_kanon_keys.BindString(1, owner_name_pair.first);
     move_positive_kanon_keys.BindString(2, owner_name_pair.second);
     if (!move_positive_kanon_keys.Run()) {
@@ -1678,7 +2128,10 @@ bool UpgradeV16SchemaToV17(sql::Database& db,
       for (auto& ad : *ig.ads) {
         if (!MaybeCreateKAnonEntryForV17DatabaseUpgrade(
                 db, interest_group_key,
-                blink::DEPRECATED_KAnonKeyForAdNameReporting(ig, ad), now)) {
+                blink::DEPRECATED_KAnonKeyForAdNameReporting(
+                    ig, ad,
+                    /*selected_buyer_and_seller_reporting_id=*/std::nullopt),
+                now)) {
           return false;
         }
         if (!MaybeCreateKAnonEntryForV17DatabaseUpgrade(
@@ -1786,7 +2239,16 @@ bool UpgradeV15SchemaToV16(sql::Database& db,
       "FROM interest_groups"));
   // clang-format on
   std::string empty_ad_proto_value;
-  AdProtos().SerializeToString(&empty_ad_proto_value);
+  if (!AdProtos().SerializeToString(&empty_ad_proto_value)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.AdProtos",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.AdProtos",
+        InterestGroupStorageProtoSerializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
   kCopyInterestGroupTableWithEmptyAdPBsSql.BindBlob(0, empty_ad_proto_value);
   kCopyInterestGroupTableWithEmptyAdPBsSql.BindBlob(1, empty_ad_proto_value);
 
@@ -1810,8 +2272,8 @@ bool UpgradeV15SchemaToV16(sql::Database& db,
                                              kSelectIGsWithAds.ColumnString(3),
                                              /*for_components=*/true);
 
-    std::string serialized_ads = Serialize(ads);
-    std::string serialized_ad_components = Serialize(ad_components);
+    std::string serialized_ads = SerializeUncompressed(ads);
+    std::string serialized_ad_components = SerializeUncompressed(ad_components);
 
     sql::Statement insert_value_into_IG(db.GetCachedStatement(
         SQL_FROM_HERE,
@@ -2443,6 +2905,170 @@ bool UpgradeV6SchemaToV7(sql::Database& db, sql::MetaTable& meta_table) {
   return true;
 }
 
+bool UpgradeDB(sql::Database& db,
+               const int db_version,
+               sql::MetaTable& meta_table,
+               const PassKey& pass_key) {
+  // Whether to vacuum the database after the upgrade. The vacuum must happen
+  // after the transaction is committed.
+  bool vacuum_db_post_upgrade = false;
+  {
+    sql::Transaction transaction(&db);
+    if (!transaction.Begin()) {
+      return false;
+    }
+    switch (db_version) {
+      case 6:
+        if (!UpgradeV6SchemaToV7(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 7:
+        if (!UpgradeV7SchemaToV8(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 8:
+        if (!UpgradeV8SchemaToV9(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 9:
+        if (!UpgradeV9SchemaToV10(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 10:
+        if (!UpgradeV10SchemaToV11(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 11:
+        if (!UpgradeV11SchemaToV12(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 12:
+        if (!UpgradeV12SchemaToV13(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 13:
+        if (!UpgradeV13SchemaToV14(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 14:
+        if (!UpgradeV14SchemaToV15(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 15:
+        if (!UpgradeV15SchemaToV16(db, meta_table, pass_key)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 16:
+        if (!UpgradeV16SchemaToV17(db, meta_table, pass_key)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 17:
+        if (!UpgradeV17SchemaToV18(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 18:
+        if (!UpgradeV18SchemaToV19(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 19:
+        if (!UpgradeV19SchemaToV20(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 20:
+        if (!UpgradeV20SchemaToV21(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 21:
+        if (!UpgradeV21SchemaToV22(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 22:
+        if (!UpgradeV22SchemaToV23(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 23:
+        if (!UpgradeV23SchemaToV24(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 24:
+        if (!UpgradeV24SchemaToV25(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 25:
+        vacuum_db_post_upgrade = true;
+        ABSL_FALLTHROUGH_INTENDED;
+      case 26:
+        vacuum_db_post_upgrade = true;
+        if (!UpgradeV26SchemaToV27(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 27:
+        if (!UpgradeV27SchemaToV28(db, meta_table)) {
+          return false;
+        }
+        ABSL_FALLTHROUGH_INTENDED;
+      case 28:
+        // v29 adds a new field in the IG.ads structure, and so doesn't require
+        // any changes to the InterestGroup table. Existing data is
+        // forwards-compatible because `FromInterestGroupAdValue` correctly
+        // handles the lack of a value for
+        // `selectable_buyer_and_seller_reporting_ids`.
+        ABSL_FALLTHROUGH_INTENDED;
+      case 29:
+        vacuum_db_post_upgrade = true;
+        if (!UpgradeV29SchemaToV30(db, meta_table)) {
+          return false;
+        }
+        if (!meta_table.SetVersionNumber(kCurrentVersionNumber)) {
+          return false;
+        }
+    }
+    bool committed = transaction.Commit();
+    if (!committed) {
+      return false;
+    }
+    if (vacuum_db_post_upgrade) {
+      const bool vacuum_result = VacuumDB(db);
+      if (vacuum_result) {
+        base::UmaHistogramEnumeration(
+            "Storage.InterestGroup.VacuumResult",
+            InterestGroupStorageVacuumResult::kSucceeded);
+      } else {
+        DLOG(ERROR) << "Failed to vacuum: " << db.GetErrorMessage();
+        base::UmaHistogramEnumeration(
+            "Storage.InterestGroup.VacuumResult",
+            InterestGroupStorageVacuumResult::kFailed);
+      }
+    }
+
+    return true;
+  }
+
+  NOTREACHED_IN_MIGRATION();  // Only versions 6 up to the current version
+                              // should have passed RazeIfIncompatible.
+  return false;
+}
+
 bool RemoveJoinHistory(sql::Database& db,
                        const blink::InterestGroupKey& group_key) {
   sql::Statement remove_join_history(
@@ -2630,6 +3256,7 @@ std::optional<std::vector<std::string>> DoClearOriginJoinedInterestGroups(
   "trusted_bidding_signals_keys,"           \
   "trusted_bidding_signals_slot_size_mode," \
   "max_trusted_bidding_signals_url_length," \
+  "trusted_bidding_signals_coordinator,"    \
   "user_bidding_signals," /* opaque data */ \
   "ads_pb,"                                 \
   "ad_components_pb,"                       \
@@ -2680,27 +3307,41 @@ void PopulateInterestGroupFromQueryResult(sql::Statement& load,
   group.interest_group.max_trusted_bidding_signals_url_length =
       load.ColumnInt(17);
   if (load.GetColumnType(18) != sql::ColumnType::kNull) {
-    group.interest_group.user_bidding_signals = load.ColumnString(18);
+    group.interest_group.trusted_bidding_signals_coordinator =
+        DeserializeOrigin(load.ColumnString(18));
   }
-  group.interest_group.ads =
-      DeserializeInterestGroupAdVectorProto(passkey, load.ColumnString(19));
+  if (load.GetColumnType(19) != sql::ColumnType::kNull) {
+    group.interest_group.user_bidding_signals = load.ColumnString(19);
+  }
+  group.interest_group.ads = DecompressAndDeserializeInterestGroupAdVectorProto(
+      passkey, load.ColumnString(20));
   group.interest_group.ad_components =
-      DeserializeInterestGroupAdVectorProto(passkey, load.ColumnString(20));
+      DecompressAndDeserializeInterestGroupAdVectorProto(passkey,
+                                                         load.ColumnString(21));
   group.interest_group.ad_sizes =
-      DeserializeStringSizeMap(load.ColumnString(21));
+      DeserializeStringSizeMap(load.ColumnString(22));
   group.interest_group.size_groups =
-      DeserializeStringStringVectorMap(load.ColumnString(22));
+      DeserializeStringStringVectorMap(load.ColumnString(23));
   group.interest_group.auction_server_request_flags =
-      DeserializeAuctionServerRequestFlags(load.ColumnInt64(23));
+      DeserializeAuctionServerRequestFlags(load.ColumnInt64(24));
   group.interest_group.additional_bid_key =
-      DeserializeAdditionalBidKey(load.ColumnBlob(24));
-  if (load.GetColumnType(25) != sql::ColumnType::kNull) {
+      DeserializeAdditionalBidKey(load.ColumnBlob(25));
+  if (load.GetColumnType(26) != sql::ColumnType::kNull) {
     group.interest_group.aggregation_coordinator_origin =
-        DeserializeOrigin(load.ColumnString(25));
+        DeserializeOrigin(load.ColumnString(26));
   }
-  group.last_k_anon_updated = load.ColumnTime(26);
+  group.last_k_anon_updated = load.ColumnTime(27);
   KAnonKeyProtos keys_proto;
-  keys_proto.ParseFromString(load.ColumnString(27));
+  if (keys_proto.ParseFromString(load.ColumnString(28))) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoDeserializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoDeserializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoDeserializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoDeserializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
   group.hashed_kanon_keys =
       std::vector(keys_proto.keys().begin(), keys_proto.keys().end());
 }
@@ -2877,6 +3518,7 @@ std::optional<InterestGroupKanonUpdateParameter> DoJoinInterestGroup(
           "trusted_bidding_signals_keys,"
           "trusted_bidding_signals_slot_size_mode,"
           "max_trusted_bidding_signals_url_length,"
+          "trusted_bidding_signals_coordinator,"
           "user_bidding_signals,"  // opaque data
           "ads_pb,"
           "ad_components_pb,"
@@ -2889,7 +3531,7 @@ std::optional<InterestGroupKanonUpdateParameter> DoJoinInterestGroup(
           "last_k_anon_updated_time,"
           "kanon_keys) "
         "VALUES("
-          "?, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+          "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
         ));
 
   // clang-format on
@@ -2920,28 +3562,45 @@ std::optional<InterestGroupKanonUpdateParameter> DoJoinInterestGroup(
   join_group.BindInt(
       20, static_cast<int>(data.trusted_bidding_signals_slot_size_mode));
   join_group.BindInt(21, data.max_trusted_bidding_signals_url_length);
-  if (data.user_bidding_signals) {
-    join_group.BindString(22, data.user_bidding_signals.value());
+  if (data.trusted_bidding_signals_coordinator) {
+    join_group.BindString(22,
+                          Serialize(*data.trusted_bidding_signals_coordinator));
   } else {
     join_group.BindNull(22);
   }
-  join_group.BindBlob(23, Serialize(data.ads));
-  join_group.BindBlob(24, Serialize(data.ad_components));
-  join_group.BindString(25, Serialize(data.ad_sizes));
-  join_group.BindString(26, Serialize(data.size_groups));
-  join_group.BindInt64(27, Serialize(data.auction_server_request_flags));
-  join_group.BindBlob(28, Serialize(data.additional_bid_key));
-  if (data.aggregation_coordinator_origin) {
-    join_group.BindString(29, Serialize(*data.aggregation_coordinator_origin));
+  if (data.user_bidding_signals) {
+    join_group.BindString(23, data.user_bidding_signals.value());
   } else {
-    join_group.BindNull(29);
+    join_group.BindNull(23);
   }
-  join_group.BindInt64(30, data.EstimateSize());
-  join_group.BindTime(31, last_k_anon_updated);
+  join_group.BindBlob(24, Serialize(data.ads));
+  join_group.BindBlob(25, Serialize(data.ad_components));
+  join_group.BindString(26, Serialize(data.ad_sizes));
+  join_group.BindString(27, Serialize(data.size_groups));
+  join_group.BindInt64(28, Serialize(data.auction_server_request_flags));
+  join_group.BindBlob(29, Serialize(data.additional_bid_key));
+  if (data.aggregation_coordinator_origin) {
+    join_group.BindString(30, Serialize(*data.aggregation_coordinator_origin));
+  } else {
+    join_group.BindNull(30);
+  }
+  join_group.BindInt64(31, data.EstimateSize());
+  join_group.BindTime(32, last_k_anon_updated);
   KAnonKeyProtos key_proto;
   *key_proto.mutable_keys() = {positive_kanon_keys.begin(),
                                positive_kanon_keys.end()};
-  join_group.BindBlob(32, key_proto.SerializeAsString());
+  std::string key_proto_str;
+  if (key_proto.SerializeToString(&key_proto_str)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
+  join_group.BindBlob(33, key_proto_str);
 
   if (!join_group.Run()) {
     return std::nullopt;
@@ -3002,6 +3661,7 @@ bool DoStoreInterestGroupUpdate(
             "trusted_bidding_signals_keys=?,"
             "trusted_bidding_signals_slot_size_mode=?,"
             "max_trusted_bidding_signals_url_length=?,"
+            "trusted_bidding_signals_coordinator=?,"
             "user_bidding_signals=?,"
             "ads_pb=?,"
             "ad_components_pb=?,"
@@ -3038,32 +3698,49 @@ bool DoStoreInterestGroupUpdate(
   store_group.BindInt(
       14, static_cast<int>(group.trusted_bidding_signals_slot_size_mode));
   store_group.BindInt(15, group.max_trusted_bidding_signals_url_length);
-  if (group.user_bidding_signals) {
-    store_group.BindString(16, group.user_bidding_signals.value());
+  if (group.trusted_bidding_signals_coordinator) {
+    store_group.BindString(
+        16, Serialize(*group.trusted_bidding_signals_coordinator));
   } else {
     store_group.BindNull(16);
   }
-  store_group.BindBlob(17, Serialize(group.ads));
-  store_group.BindBlob(18, Serialize(group.ad_components));
-  store_group.BindString(19, Serialize(group.ad_sizes));
-  store_group.BindString(20, Serialize(group.size_groups));
-  store_group.BindInt64(21, Serialize(group.auction_server_request_flags));
-  store_group.BindBlob(22, Serialize(group.additional_bid_key));
+  if (group.user_bidding_signals) {
+    store_group.BindString(17, group.user_bidding_signals.value());
+  } else {
+    store_group.BindNull(17);
+  }
+  store_group.BindBlob(18, Serialize(group.ads));
+  store_group.BindBlob(19, Serialize(group.ad_components));
+  store_group.BindString(20, Serialize(group.ad_sizes));
+  store_group.BindString(21, Serialize(group.size_groups));
+  store_group.BindInt64(22, Serialize(group.auction_server_request_flags));
+  store_group.BindBlob(23, Serialize(group.additional_bid_key));
   if (group.aggregation_coordinator_origin) {
-    store_group.BindString(23,
+    store_group.BindString(24,
                            Serialize(*group.aggregation_coordinator_origin));
   } else {
-    store_group.BindNull(23);
+    store_group.BindNull(24);
   }
-  store_group.BindInt64(24, group.EstimateSize());
+  store_group.BindInt64(25, group.EstimateSize());
 
   KAnonKeyProtos key_proto;
   *key_proto.mutable_keys() = {positive_kanon_keys.begin(),
                                positive_kanon_keys.end()};
-  store_group.BindBlob(25, key_proto.SerializeAsString());
+  std::string key_proto_str;
+  if (key_proto.SerializeToString(&key_proto_str)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
+  store_group.BindBlob(26, key_proto_str);
 
-  store_group.BindString(26, Serialize(group.owner));
-  store_group.BindString(27, group.name);
+  store_group.BindString(27, Serialize(group.owner));
+  store_group.BindString(28, group.name);
 
   return store_group.Run();
 }
@@ -3153,7 +3830,11 @@ std::optional<InterestGroupKanonUpdateParameter> DoUpdateInterestGroup(
   }
   if (update.max_trusted_bidding_signals_url_length) {
     updated_group.max_trusted_bidding_signals_url_length =
-        std::move(update.max_trusted_bidding_signals_url_length.value());
+        *update.max_trusted_bidding_signals_url_length;
+  }
+  if (update.trusted_bidding_signals_coordinator.has_value()) {
+    updated_group.trusted_bidding_signals_coordinator =
+        std::move(update.trusted_bidding_signals_coordinator.value());
   }
   if (update.user_bidding_signals) {
     updated_group.user_bidding_signals = std::move(update.user_bidding_signals);
@@ -3440,8 +4121,14 @@ bool DoUpdateKAnonymity(sql::Database& db,
       return false;
     }
     std::string k_anon_keys_str = get_existing_keys.ColumnString(1);
-    bool success = keys_to_insert.ParseFromString(k_anon_keys_str);
-    if (!success) {
+    if (keys_to_insert.ParseFromString(k_anon_keys_str)) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.ProtoDeserializationResult.KAnonKeyProtos",
+          InterestGroupStorageProtoDeserializationResult::kSucceeded);
+    } else {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.ProtoDeserializationResult.KAnonKeyProtos",
+          InterestGroupStorageProtoDeserializationResult::kFailed);
       return false;
     }
     existing_keys.insert(keys_to_insert.keys().begin(),
@@ -3461,7 +4148,18 @@ bool DoUpdateKAnonymity(sql::Database& db,
 
   set_values.Reset(true);
   set_values.BindTime(0, update_time_to_insert);
-  set_values.BindBlob(1, keys_to_insert.SerializeAsString());
+  std::string keys_to_insert_str;
+  if (keys_to_insert.SerializeToString(&keys_to_insert_str)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.KAnonKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
+  set_values.BindBlob(1, keys_to_insert_str);
   set_values.BindString(2, Serialize(interest_group_key.owner));
   set_values.BindString(3, interest_group_key.name);
   set_values.BindTime(4, update_time);
@@ -3727,10 +4425,9 @@ bool GetBidCount(sql::Database& db,
   return bid_count.Succeeded();
 }
 
-void DoGetDebugReportLockout(
+std::optional<base::Time> DoGetDebugReportLockout(
     sql::Database& db,
-    std::optional<base::Time> ignore_before,
-    DebugReportLockoutAndCooldowns& debug_report_lockout_and_cooldowns) {
+    std::optional<base::Time> ignore_before) {
   sql::Statement sent_time(
       db.GetCachedStatement(SQL_FROM_HERE,
                             "SELECT last_report_sent_time "
@@ -3739,13 +4436,13 @@ void DoGetDebugReportLockout(
   if (!sent_time.is_valid()) {
     DLOG(ERROR) << "GetLastDebugReportSentDate SQL statement did not compile: "
                 << db.GetErrorMessage();
-    return;
+    return std::nullopt;
   }
   sent_time.BindTime(0, ignore_before.value_or(base::Time::Min()));
   if (sent_time.Step()) {
-    debug_report_lockout_and_cooldowns.last_report_sent_time =
-        sent_time.ColumnTime(0);
+    return sent_time.ColumnTime(0);
   }
+  return std::nullopt;
 }
 
 std::optional<DebugReportCooldown> DoGetDebugReportCooldownForOrigin(
@@ -3989,7 +4686,7 @@ std::optional<std::vector<StorageInterestGroup>> DoGetInterestGroupsForOwner(
     load.BindTime(1, now);
 
     while (load.Step()) {
-      std::string name = load.ColumnString(28);
+      std::string name = load.ColumnString(29);
       StorageInterestGroup& db_interest_group = interest_group_by_name[name];
       db_interest_group.bidding_browser_signals =
           auction_worklet::mojom::BiddingBrowserSignals::New();
@@ -4552,7 +5249,20 @@ bool DoSetBiddingAndAuctionServerKeys(
 
   insert_keys_statement.Reset(true);
   insert_keys_statement.BindString(0, Serialize(coordinator));
-  insert_keys_statement.BindBlob(1, key_protos.SerializeAsString());
+  std::string key_protos_str;
+  if (key_protos.SerializeToString(&key_protos_str)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult."
+        "BiddingAndAuctionServerKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult."
+        "BiddingAndAuctionServerKeyProtos",
+        InterestGroupStorageProtoSerializationResult::kFailed);
+    // TODO(crbug.com/355010821): Consider bubbling out the failure.
+  }
+  insert_keys_statement.BindBlob(1, key_protos_str);
   insert_keys_statement.BindTime(2, expiration);
   return insert_keys_statement.Run();
 }
@@ -4580,6 +5290,18 @@ DoGetBiddingAndAuctionServerKeys(sql::Database& db,
     std::string key_blob = keys_statement.ColumnString(1);
     BiddingAndAuctionServerKeyProtos key_protos;
     bool success = key_protos.ParseFromString(key_blob);
+    if (success) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.ProtoDeserializationResult."
+          "BiddingAndAuctionServerKeyProtos",
+          InterestGroupStorageProtoDeserializationResult::kSucceeded);
+    } else {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.ProtoDeserializationResult."
+          "BiddingAndAuctionServerKeyProtos",
+          InterestGroupStorageProtoDeserializationResult::kFailed);
+      // TODO(crbug.com/355010821): Consider bubbling out the failure.
+    }
 
     if (not success || key_protos.keys().empty()) {
       return {base::Time::Min(), {}};
@@ -4651,6 +5373,75 @@ sql::DatabaseOptions GetDatabaseOptions() {
           features::kFledgeEnableWALForInterestGroupStorage)};
 }
 
+void ReportCreateSchemaResult(
+    bool create_schema_result,
+    sql::RazeIfIncompatibleResult raze_if_incompatible_result,
+    bool missing_metatable_razed) {
+  if (create_schema_result) {
+    if (raze_if_incompatible_result ==
+        sql::RazeIfIncompatibleResult::kRazedSuccessfully) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::
+              kSuccessCreateSchemaAfterIncompatibleRaze);
+    } else if (missing_metatable_razed) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::
+              kSuccessCreateSchemaAfterNoMetaTableRaze);
+    } else {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::kSuccessCreateSchema);
+    }
+  } else {
+    if (raze_if_incompatible_result ==
+        sql::RazeIfIncompatibleResult::kRazedSuccessfully) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::
+              kFailedCreateSchemaAfterIncompatibleRaze);
+    } else if (missing_metatable_razed) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::
+              kFailedCreateSchemaAfterNoMetaTableRaze);
+    } else {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::kFailedCreateSchema);
+    }
+  }
+}
+
+void ReportUpgradeDBResult(bool upgrade_succeeded, int db_version) {
+  if (upgrade_succeeded) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.InitializationResult",
+        InterestGroupStorageInitializationResult::kSuccessUpgraded);
+    static_assert(kCurrentVersionNumber <= 100,
+                  "UmaHistogramExactLinear() only supports 100 buckets -- a "
+                  "new histogram is needed for larger versions.");
+    base::UmaHistogramExactLinear(
+        "Storage.InterestGroup.UpgradeSucceededStartVersion", db_version,
+        /*exclusive_max=*/101);
+    base::UmaHistogramExactLinear(
+        "Storage.InterestGroup.UpgradeSucceededEndVersion",
+        kCurrentVersionNumber,
+        /*exclusive_max=*/101);
+  } else {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.InitializationResult",
+        InterestGroupStorageInitializationResult::kFailedUpgradeDB);
+    base::UmaHistogramExactLinear(
+        "Storage.InterestGroup.UpgradeFailedStartVersion", db_version,
+        /*exclusive_max=*/101);
+    base::UmaHistogramExactLinear(
+        "Storage.InterestGroup.UpgradeFailedEndVersion", kCurrentVersionNumber,
+        /*exclusive_max=*/101);
+  }
+}
+
 }  // namespace
 
 constexpr base::TimeDelta InterestGroupStorage::kHistoryLength;
@@ -4716,6 +5507,9 @@ bool InterestGroupStorage::InitializeDB() {
     if (!db_->OpenInMemory()) {
       DLOG(ERROR) << "Failed to create in-memory interest group database: "
                   << db_->GetErrorMessage();
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::kFailedCreateInMemory);
       return false;
     }
   } else {
@@ -4723,11 +5517,17 @@ bool InterestGroupStorage::InitializeDB() {
 
     if (!base::CreateDirectory(dir)) {
       DLOG(ERROR) << "Failed to create directory for interest group database";
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::kFailedCreateDirectory);
       return false;
     }
     if (db_->Open(path_to_database_) == false) {
       DLOG(ERROR) << "Failed to open interest group database: "
                   << db_->GetErrorMessage();
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::kFailedCreateFile);
       return false;
     }
   }
@@ -4754,27 +5554,51 @@ bool InterestGroupStorage::InitializeSchema() {
     return false;
   }
 
-  if (!sql::MetaTable::RazeIfIncompatible(
+  sql::RazeIfIncompatibleResult raze_if_incompatible_result =
+      sql::MetaTable::RazeIfIncompatible(
           db_.get(), /*lowest_supported_version=*/kDeprecatedVersionNumber + 1,
-          kCurrentVersionNumber)) {
+          kCurrentVersionNumber);
+  if (raze_if_incompatible_result == sql::RazeIfIncompatibleResult::kFailed) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.InitializationResult",
+        InterestGroupStorageInitializationResult::kFailedToRazeIncompatible);
     return false;
   }
 
   sql::MetaTable meta_table;
+  bool missing_metatable_razed = false;
   bool has_metatable = meta_table.DoesTableExist(db_.get());
   if (!has_metatable && db_->DoesTableExist("interest_groups")) {
     // Existing DB with no meta table. We have no idea what version the schema
     // is so we should remove it and start fresh.
-    db_->Raze();
+    missing_metatable_razed = true;
+    // If the incompatible version raze happened and succeeded, it should have
+    // removed the interest_groups table.
+    CHECK_NE(raze_if_incompatible_result,
+             sql::RazeIfIncompatibleResult::kRazedSuccessfully);
+    if (!db_->Raze()) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.InitializationResult",
+          InterestGroupStorageInitializationResult::kFailedToRazeNoMetaTable);
+      return false;
+    }
   }
   const bool new_db = !has_metatable;
   if (!meta_table.Init(db_.get(), kCurrentVersionNumber,
                        kCompatibleVersionNumber)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.InitializationResult",
+        InterestGroupStorageInitializationResult::kFailedMetaTableInit);
     return false;
   }
 
   if (new_db) {
-    return CreateV27Schema(*db_);
+    bool create_schema_result = CreateCurrentSchema(*db_);
+    ReportCreateSchemaResult(
+        /*create_schema_result=*/create_schema_result,
+        /*raze_if_incompatible_result=*/raze_if_incompatible_result,
+        /*missing_metatable_razed=*/missing_metatable_razed);
+    return create_schema_result;
   }
 
   const int db_version = meta_table.GetVersionNumber();
@@ -4784,143 +5608,19 @@ bool InterestGroupStorage::InitializeSchema() {
     // kCurrentVersionNumber >= meta_table.GetCompatibleVersionNumber
     // So DB is either the current database version or a future version that is
     // back-compatible with this version of Chrome.
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.InitializationResult",
+        InterestGroupStorageInitializationResult::kSuccessAlreadyCurrent);
     return true;
   }
-
-  // Whether to vacuum the database after the upgrade. The vacuum must happen
-  // after the transaction is committed.
-  bool vacuum_db_post_upgrade = false;
 
   // Older versions - should be migrated.
   // db_version < kCurrentVersionNumber
   // db_version > kDeprecatedVersionNumber
-  {
-    sql::Transaction transaction(db_.get());
-    if (!transaction.Begin()) {
-      return false;
-    }
-    switch (db_version) {
-      case 6:
-        if (!UpgradeV6SchemaToV7(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 7:
-        if (!UpgradeV7SchemaToV8(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 8:
-        if (!UpgradeV8SchemaToV9(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 9:
-        if (!UpgradeV9SchemaToV10(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 10:
-        if (!UpgradeV10SchemaToV11(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 11:
-        if (!UpgradeV11SchemaToV12(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 12:
-        if (!UpgradeV12SchemaToV13(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 13:
-        if (!UpgradeV13SchemaToV14(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 14:
-        if (!UpgradeV14SchemaToV15(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 15:
-        if (!UpgradeV15SchemaToV16(*db_, meta_table, PassKey())) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 16:
-        if (!UpgradeV16SchemaToV17(*db_, meta_table, PassKey())) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 17:
-        if (!UpgradeV17SchemaToV18(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 18:
-        if (!UpgradeV18SchemaToV19(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 19:
-        if (!UpgradeV19SchemaToV20(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 20:
-        if (!UpgradeV20SchemaToV21(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 21:
-        if (!UpgradeV21SchemaToV22(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 22:
-        if (!UpgradeV22SchemaToV23(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 23:
-        if (!UpgradeV23SchemaToV24(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 24:
-        if (!UpgradeV24SchemaToV25(*db_, meta_table)) {
-          return false;
-        }
-        ABSL_FALLTHROUGH_INTENDED;
-      case 25:
-        vacuum_db_post_upgrade = true;
-        ABSL_FALLTHROUGH_INTENDED;
-      case 26:
-        vacuum_db_post_upgrade = true;
-        if (!UpgradeV26SchemaToV27(*db_, meta_table)) {
-          return false;
-        }
-        if (!meta_table.SetVersionNumber(kCurrentVersionNumber)) {
-          return false;
-        }
-    }
-    bool committed = transaction.Commit();
-    if (!committed) {
-      return false;
-    }
-    if (vacuum_db_post_upgrade && !VacuumDB(*db_)) {
-      DLOG(ERROR) << "Failed to vacuum: " << db_->GetErrorMessage();
-    }
-
-    return true;
-  }
-
-  NOTREACHED_IN_MIGRATION();  // Only versions 6 up to the current version
-                              // should have passed RazeIfIncompatible.
-  return false;
+  bool upgrade_succeeded = UpgradeDB(*db_, db_version, meta_table, PassKey());
+  ReportUpgradeDBResult(/*upgrade_succeeded=*/upgrade_succeeded,
+                        /*db_version=*/db_version);
+  return upgrade_succeeded;
 }
 
 std::optional<InterestGroupKanonUpdateParameter>
@@ -4989,6 +5689,14 @@ std::vector<std::string> InterestGroupStorage::ClearOriginJoinedInterestGroups(
   return std::move(left_interest_groups.value());
 }
 
+std::optional<base::Time> InterestGroupStorage::GetDebugReportLockout() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!EnsureDBInitialized()) {
+    return std::nullopt;
+  }
+  return DoGetDebugReportLockout(*db_, GetSampleDebugReportStartingFrom());
+}
+
 std::optional<DebugReportLockoutAndCooldowns>
 InterestGroupStorage::GetDebugReportLockoutAndCooldowns(
     base::flat_set<url::Origin> origins) {
@@ -4997,22 +5705,12 @@ InterestGroupStorage::GetDebugReportLockoutAndCooldowns(
     return std::nullopt;
   }
   DebugReportLockoutAndCooldowns debug_report_lockout_and_cooldowns;
+
   // Ignore lockout and cooldowns whose start time is before
   // kFledgeEnableFilteringDebugReportStartingFrom.
-  std::optional<base::Time> ignore_before;
-  if (blink::features::kFledgeEnableFilteringDebugReportStartingFrom.Get() !=
-      base::Milliseconds(0)) {
-    // Also ceil kFledgeEnableFilteringDebugReportStartingFrom to its nearest
-    // next hour, in the same way as lockout and cooldown start time are ceiled.
-    // Otherwise, it's possible that the ceiled lockout/cooldowns collected
-    // before this flag being greater than the flag, which caused them not being
-    // ignored when they should be.
-    ignore_before = base::Time::FromDeltaSinceWindowsEpoch(
-        blink::features::kFledgeEnableFilteringDebugReportStartingFrom.Get()
-            .CeilToMultiple(base::Hours(1)));
-  }
-  DoGetDebugReportLockout(*db_, ignore_before,
-                          debug_report_lockout_and_cooldowns);
+  std::optional<base::Time> ignore_before = GetSampleDebugReportStartingFrom();
+  debug_report_lockout_and_cooldowns.last_report_sent_time =
+      DoGetDebugReportLockout(*db_, ignore_before);
   DoGetDebugReportCooldowns(*db_, std::move(origins), ignore_before,
                             debug_report_lockout_and_cooldowns);
   return debug_report_lockout_and_cooldowns;
@@ -5404,6 +6102,10 @@ InterestGroupStorage::GetBiddingAndAuctionServerKeys(
 base::Time InterestGroupStorage::GetLastMaintenanceTimeForTesting() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return last_maintenance_time_;
+}
+
+/* static */ int InterestGroupStorage::GetCurrentVersionNumberForTesting() {
+  return kCurrentVersionNumber;
 }
 
 void InterestGroupStorage::DatabaseErrorCallback(int extended_error,

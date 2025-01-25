@@ -82,6 +82,9 @@ class CONTENT_EXPORT InterestGroupStorage {
       const std::set<std::string>& interest_groups_to_keep,
       const url::Origin& main_frame_origin);
 
+  // Gets lockout for sending forDebuggingOnly reports.
+  std::optional<base::Time> GetDebugReportLockout();
+
   // Gets lockout and cooldowns for sending forDebuggingOnly reports.
   std::optional<DebugReportLockoutAndCooldowns>
   GetDebugReportLockoutAndCooldowns(base::flat_set<url::Origin> origins);
@@ -203,6 +206,8 @@ class CONTENT_EXPORT InterestGroupStorage {
   GetBiddingAndAuctionServerKeys(const url::Origin& coordinator);
 
   base::Time GetLastMaintenanceTimeForTesting() const;
+
+  static int GetCurrentVersionNumberForTesting();
 
  private:
   bool EnsureDBInitialized();

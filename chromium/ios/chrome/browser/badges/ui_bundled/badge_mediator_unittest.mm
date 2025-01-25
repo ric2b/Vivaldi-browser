@@ -10,6 +10,10 @@
 #import "base/memory/raw_ptr.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/task_environment.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_consumer.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_item.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_type.h"
+#import "ios/chrome/browser/badges/ui_bundled/badge_type_util.h"
 #import "ios/chrome/browser/infobars/model/badge_state.h"
 #import "ios/chrome/browser/infobars/model/infobar_badge_tab_helper.h"
 #import "ios/chrome/browser/infobars/model/infobar_badge_tab_helper_delegate.h"
@@ -22,13 +26,9 @@
 #import "ios/chrome/browser/overlays/model/public/overlay_request_queue.h"
 #import "ios/chrome/browser/overlays/model/test/fake_overlay_presentation_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
-#import "ios/chrome/browser/badges/ui_bundled/badge_consumer.h"
-#import "ios/chrome/browser/badges/ui_bundled/badge_item.h"
-#import "ios/chrome/browser/badges/ui_bundled/badge_type.h"
-#import "ios/chrome/browser/badges/ui_bundled/badge_type_util.h"
 #import "ios/chrome/browser/ui/infobars/test_infobar_delegate.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
@@ -80,8 +80,8 @@ class BadgeMediatorTest : public testing::TestWithParam<TestParam> {
  protected:
   BadgeMediatorTest()
       : badge_consumer_([[FakeBadgeConsumer alloc] init]),
-        browser_state_(TestChromeBrowserState::Builder().Build()),
-        browser_(std::make_unique<TestBrowser>(browser_state())) {
+        profile_(TestProfileIOS::Builder().Build()),
+        browser_(std::make_unique<TestBrowser>(profile())) {
     overlay_presenter_ = OverlayPresenter::FromBrowser(
         browser(), OverlayModality::kInfobarBanner);
     overlay_presenter_->SetPresentationContext(&overlay_presentation_context_);
@@ -102,7 +102,7 @@ class BadgeMediatorTest : public testing::TestWithParam<TestParam> {
     auto web_state = std::make_unique<web::FakeWebState>();
     web_state->SetNavigationManager(
         std::make_unique<web::FakeNavigationManager>());
-    web_state->SetBrowserState(browser_state());
+    web_state->SetBrowserState(profile());
     InfoBarManagerImpl::CreateForWebState(web_state.get());
     InfobarBadgeTabHelper::GetOrCreateForWebState(web_state.get());
     web_state_list()->InsertWebState(
@@ -130,10 +130,9 @@ class BadgeMediatorTest : public testing::TestWithParam<TestParam> {
     return GetParam() == TestParam::kOffTheRecord;
   }
   // Returns the BrowserState to use for the test fixture.
-  ChromeBrowserState* browser_state() {
-    return is_off_the_record()
-               ? browser_state_->GetOffTheRecordChromeBrowserState()
-               : browser_state_.get();
+  ProfileIOS* profile() {
+    return is_off_the_record() ? profile_->GetOffTheRecordProfile()
+                               : profile_.get();
   }
   // Returns the Browser to use for the test fixture.
   Browser* browser() { return browser_.get(); }
@@ -152,7 +151,7 @@ class BadgeMediatorTest : public testing::TestWithParam<TestParam> {
 
   base::test::TaskEnvironment environment_;
   FakeBadgeConsumer* badge_consumer_;
-  std::unique_ptr<ChromeBrowserState> browser_state_;
+  std::unique_ptr<ProfileIOS> profile_;
   std::unique_ptr<Browser> browser_;
   FakeOverlayPresentationContext overlay_presentation_context_;
   BadgeMediator* badge_mediator_ = nil;

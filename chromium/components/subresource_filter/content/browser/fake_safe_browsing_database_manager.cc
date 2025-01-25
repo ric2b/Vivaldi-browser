@@ -15,8 +15,7 @@
 
 FakeSafeBrowsingDatabaseManager::FakeSafeBrowsingDatabaseManager()
     : safe_browsing::TestSafeBrowsingDatabaseManager(
-          content::GetUIThreadTaskRunner({}),
-          content::GetIOThreadTaskRunner({})) {}
+          content::GetUIThreadTaskRunner({})) {}
 
 void FakeSafeBrowsingDatabaseManager::AddBlocklistedUrl(
     const GURL& url,
@@ -98,11 +97,6 @@ void FakeSafeBrowsingDatabaseManager::OnCheckUrlForSubresourceFilterComplete(
   // subsequent clients that share an address with this one will CHECK in
   // CheckUrlForSubresourceFilter.
   checks_.erase(client);
-}
-
-bool FakeSafeBrowsingDatabaseManager::CheckResourceUrl(const GURL& url,
-                                                       Client* client) {
-  return true;
 }
 
 void FakeSafeBrowsingDatabaseManager::CancelCheck(Client* client) {

@@ -82,22 +82,22 @@ class NinjaTargetWriter {
                              bool indent,
                              bool always_write);
 
-  // Writes to the output stream a stamp rule for input dependencies, and
+  // Writes to the output stream a phony rule for input dependencies, and
   // returns the file to be appended to source rules that encodes the
   // order-only dependencies for the current target.
-  // If num_stamp_uses is small, this might return all input dependencies
-  // directly, without writing a stamp file.
+  // If num_output_uses is small, this might return all input dependencies
+  // directly, without writing a phony rule.
   // If there are no implicit dependencies and no additional target dependencies
   // are passed in, this returns an empty vector.
-  std::vector<OutputFile> WriteInputDepsStampAndGetDep(
+  std::vector<OutputFile> WriteInputDepsStampOrPhonyAndGetDep(
       const std::vector<const Target*>& additional_hard_deps,
-      size_t num_stamp_uses) const;
+      size_t num_output_uses) const;
 
-  // Writes to the output file a final stamp rule for the target that stamps
-  // the given list of files. This function assumes the stamp is for the target
-  // as a whole so the stamp file is set as the target's dependency output.
-  void WriteStampForTarget(const std::vector<OutputFile>& deps,
-                           const std::vector<OutputFile>& order_only_deps);
+  // Writes to the output file a final phony rule for the target that aliases
+  // the given list of files.
+  void WriteStampOrPhonyForTarget(
+      const std::vector<OutputFile>& deps,
+      const std::vector<OutputFile>& order_only_deps);
 
   const Settings* settings_;  // Non-owning.
   const Target* target_;      // Non-owning.

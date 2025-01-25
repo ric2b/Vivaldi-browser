@@ -9,6 +9,28 @@
 #import <vector>
 
 namespace overflow_menu {
+
+#if defined(VIVALDI_BUILD)
+// LINT.IfChange(destination)
+enum class Destination {
+  vShare = 0,
+  SiteInfo = 1,
+  vFindInPage = 2,
+  Settings = 3,
+  vZoomText = 4,
+  History = 5,
+  Bookmarks = 6,
+  ReadingList = 7,
+  Passwords = 8,
+  RecentTabs = 9,
+  vDesktopSite = 10,
+  Downloads = 11,
+  WhatsNew = 12,
+  SpotlightDebugger = 13,
+  PriceNotifications = 14,
+};
+// LINT.ThenChange(overflow_menu_metrics.h:destination)
+#else
 // LINT.IfChange(destination)
 enum class Destination {
   Bookmarks = 0,
@@ -22,13 +44,9 @@ enum class Destination {
   WhatsNew = 8,
   SpotlightDebugger = 9,
   PriceNotifications = 10,
-
-  // Vivaldi
-  vShare = 11,
-  // End Vivaldi
-
 };
 // LINT.ThenChange(overflow_menu_metrics.h:destination)
+#endif // End Vivaldi
 
 // Represents a type of action (i.e. a row). For example, both the Stop and
 // Reload actions have an `actionType` of `Reload` as they would both take
@@ -40,6 +58,15 @@ enum class ActionType {
   NewIncognitoTab,
   NewWindow,
   Follow,
+
+  // Vivaldi
+  // The order of the actions are important for these and they should be above
+  // Bookmarks(based on their place on the menu). Therefore, they are not
+  // added to the below vivaldi actions group block which is a separate section.
+  vAddPageTo,
+  vEditPage,
+  // End Vivaldi
+
   Bookmark,
   ReadingList,
   ClearBrowsingData,
@@ -51,9 +78,10 @@ enum class ActionType {
   Help,
   ShareChrome,
   EditActions,
+  LensOverlay,
 
   // Vivaldi action groups
-  vSiteInfo,
+  vStartPage,
   vBookmarks,
   vNotes,
   vHistory,

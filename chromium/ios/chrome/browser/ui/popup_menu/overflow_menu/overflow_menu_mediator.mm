@@ -12,6 +12,7 @@
 #import "base/strings/utf_string_conversions.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
+#import "components/browsing_data/core/browsing_data_utils.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/feature_constants.h"
 #import "components/feature_engagement/public/tracker.h"
@@ -24,6 +25,7 @@
 #import "components/profile_metrics/browser_profile_type.h"
 #import "components/reading_list/core/reading_list_model.h"
 #import "components/reading_list/ios/reading_list_model_bridge_observer.h"
+#import "components/search_engines/template_url_service.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "components/sync/service/sync_service.h"
@@ -32,7 +34,6 @@
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/commerce/model/push_notification/push_notification_feature.h"
 #import "ios/chrome/browser/default_browser/model/default_browser_interest_signals.h"
-#import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/find_in_page/model/abstract_find_tab_helper.h"
 #import "ios/chrome/browser/follow/model/follow_browser_agent.h"
 #import "ios/chrome/browser/follow/model/follow_menu_updater.h"
@@ -40,14 +41,19 @@
 #import "ios/chrome/browser/follow/model/follow_util.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
 #import "ios/chrome/browser/iph_for_new_chrome_user/model/tab_based_iph_browser_agent.h"
+#import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
+#import "ios/chrome/browser/ntp/shared/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter_observer_bridge.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request.h"
 #import "ios/chrome/browser/policy/model/browser_policy_connector_ios.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/policy/ui_bundled/user_policy_util.h"
 #import "ios/chrome/browser/reading_list/model/offline_url_utils.h"
+#import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
+#import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/settings/model/sync/utils/identity_error_util.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
@@ -56,6 +62,8 @@
 #import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/find_in_page_commands.h"
+#import "ios/chrome/browser/shared/public/commands/help_commands.h"
+#import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/overflow_menu_customization_commands.h"
 #import "ios/chrome/browser/shared/public/commands/page_info_commands.h"
@@ -65,14 +73,13 @@
 #import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
+#import "ios/chrome/browser/shared/public/commands/whats_new_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities.h"
 #import "ios/chrome/browser/translate/model/chrome_ios_translate_client.h"
-#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
-#import "ios/chrome/browser/ui/policy/user_policy_util.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history/constants.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history/destination_usage_history.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
@@ -104,6 +111,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 #import "ios/ui/notes/note_ui_constants.h"
 #import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
@@ -160,6 +169,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                                     OverlayPresenterObserving,
                                     PrefObserverDelegate,
                                     ReadingListModelBridgeObserver,
+                                    SearchEngineObserving,
                                     WebStateListObserving> {
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
@@ -181,6 +191,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
   std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
+  // Search engine observer.
+  std::unique_ptr<SearchEngineObserverBridge> _searchEngineObserver;
 }
 
 // The current web state.
@@ -238,13 +250,18 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 @property(nonatomic, strong) OverflowMenuAction* shareChromeAction;
 
 @property(nonatomic, strong) OverflowMenuAction* editActionsAction;
+@property(nonatomic, strong) OverflowMenuAction* lensOverlayAction;
 
 // Vivaldi
 @property(nonatomic, strong) OverflowMenuActionGroup* vivaldiActionsGroup;
 
 @property(nonatomic, strong) OverflowMenuDestination* shareDestination;
+@property(nonatomic, strong) OverflowMenuDestination* textZoomDestination;
+@property(nonatomic, strong) OverflowMenuDestination* findInPageDestination;
+@property(nonatomic, strong) OverflowMenuDestination* desktopSiteDestination;
 
-@property(nonatomic, strong) OverflowMenuAction* siteInfoAction;
+@property(nonatomic, strong) OverflowMenuAction* addPageToAction;
+@property(nonatomic, strong) OverflowMenuAction* editPageAction;
 @property(nonatomic, strong) OverflowMenuAction* bookmarksAction;
 @property(nonatomic, strong) OverflowMenuAction* notesAction;
 @property(nonatomic, strong) OverflowMenuAction* historyAction;
@@ -313,6 +330,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.localStatePrefs = nullptr;
 
   self.syncService = nullptr;
+  _searchEngineObserver.reset();
 }
 
 #pragma mark - Property getters/setters
@@ -320,13 +338,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 - (void)setModel:(OverflowMenuModel*)model {
   _model = model;
   if (_model) {
-
-    if (IsVivaldiRunning()) {
-      [self initializeModelVivaldi];
-    } else {
     [self initializeModel];
-    } // End Vivaldi
-
     [self updateModelItemsState];
     // Any state that is required for re-ordering the menu overall (e.g. badges)
     // must be ready by this point. After this, the only order-based changes
@@ -489,6 +501,17 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   [self updateModel];
 }
 
+- (void)setTemplateURLService:(TemplateURLService*)templateURLService {
+  _templateURLService = templateURLService;
+  if (_templateURLService) {
+    _searchEngineObserver =
+        std::make_unique<SearchEngineObserverBridge>(self, _templateURLService);
+    [self searchEngineChanged];
+  } else {
+    _searchEngineObserver.reset();
+  }
+}
+
 #pragma mark - Model Creation
 
 - (void)initializeModel {
@@ -526,13 +549,29 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   // Site Info destination.
   self.siteInfoDestination = [self newSiteInfoDestination];
 
+  if (IsVivaldiRunning()) {
+    self.shareDestination = [self newShareDestination];
+    self.textZoomDestination = [self newZoomTextDestination];
+    self.findInPageDestination = [self newFindInPageDestination];
+    self.desktopSiteDestination =
+        [self userAgentType] != web::UserAgentType::DESKTOP ?
+            [self newDesktopSiteDestination] : [self newMobileSiteDestination];
+  } // End Vivaldi
+
   [self logTranslateAvailability];
 
   self.reloadAction =
       [self createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_RELOAD
                                     actionType:overflow_menu::ActionType::Reload
+
+#if defined(VIVALDI_BUILD)
+                                    symbolName:vOverflowReload
+                                  systemSymbol:NO
+#else
                                     symbolName:kArrowClockWiseSymbol
                                   systemSymbol:NO
+#endif // End Vivaldi
+
                               monochromeSymbol:NO
                                accessibilityID:kToolsMenuReload
                                   hideItemText:nil
@@ -543,8 +582,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.stopLoadAction =
       [self createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_STOP
                                     actionType:overflow_menu::ActionType::Reload
+
+#if defined(VIVALDI_BUILD)
+                                    symbolName:vOverflowStop
+                                  systemSymbol:NO
+#else
                                     symbolName:kXMarkSymbol
                                   systemSymbol:YES
+#endif // End Vivaldi
+
                               monochromeSymbol:NO
                                accessibilityID:kToolsMenuStop
                                   hideItemText:nil
@@ -555,8 +601,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.openTabAction =
       [self createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_NEW_TAB
                                     actionType:overflow_menu::ActionType::NewTab
+
+#if defined(VIVALDI_BUILD)
+                                    symbolName:vOverflowNewTab
+                                  systemSymbol:NO
+#else
                                     symbolName:kPlusInCircleSymbol
                                   systemSymbol:YES
+#endif // End Vivaldi
+
                               monochromeSymbol:NO
                                accessibilityID:kToolsMenuNewTabId
                                   hideItemText:nil
@@ -568,8 +621,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB
                               actionType:overflow_menu::ActionType::
                                              NewIncognitoTab
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowNewPrivateTab
+                            systemSymbol:NO
+#else
                               symbolName:kIncognitoSymbol
                             systemSymbol:NO
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuNewIncognitoTabId
                             hideItemText:nil
@@ -580,8 +640,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.openNewWindowAction = [self
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_NEW_WINDOW
                               actionType:overflow_menu::ActionType::NewWindow
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowNewWindow
+                            systemSymbol:NO
+#else
                               symbolName:kNewWindowActionSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuNewWindowId
                             hideItemText:nil
@@ -605,8 +672,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.editBookmarkAction = [self
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_EDIT_BOOKMARK
                               actionType:overflow_menu::ActionType::Bookmark
+
+#if defined(VIVALDI_BUILD)
+                                    symbolName:vOverflowEditBookmark
+                                  systemSymbol:NO
+#else
                               symbolName:kEditActionSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuEditBookmark
                             hideItemText:editBookmarkHideItemText
@@ -625,8 +699,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.requestMobileAction = [self
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_REQUEST_MOBILE_SITE
                               actionType:overflow_menu::ActionType::DesktopSite
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowMobileSite
+                            systemSymbol:NO
+#else
                               symbolName:kIPhoneSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:YES
                          accessibilityID:kToolsMenuRequestMobileId
                             hideItemText:requestMobileHideItemText
@@ -654,8 +735,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.helpAction =
       [self createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_HELP_MOBILE
                                     actionType:overflow_menu::ActionType::Help
+
+#if defined(VIVALDI_BUILD)
+                                    symbolName:vOverflowHelp
+                                  systemSymbol:NO
+#else
                                     symbolName:kHelpSymbol
                                   systemSymbol:YES
+#endif // End Vivaldi
+
                               monochromeSymbol:NO
                                accessibilityID:kToolsMenuHelpId
                                   hideItemText:nil
@@ -666,8 +754,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.shareChromeAction = [self
       createOverflowMenuActionWithNameID:IDS_IOS_OVERFLOW_MENU_SHARE_CHROME
                               actionType:overflow_menu::ActionType::ShareChrome
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowShare
+                            systemSymbol:NO
+#else
                               symbolName:kShareSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuShareChromeId
                             hideItemText:nil
@@ -686,6 +781,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                                  handler:^{
                                    [weakSelf beginCustomization];
                                  }];
+  if (IsLensOverlayAvailable()) {
+    self.lensOverlayAction = [self openLensOverlayAction];
+  }
   self.editActionsAction.automaticallyUnhighlight = NO;
   self.editActionsAction.useButtonStyling = YES;
 
@@ -716,11 +814,47 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                  footer:nil];
 
   NSMutableArray* actionGroups = [[NSMutableArray alloc] init];
+
+  if (IsVivaldiRunning()) {
+    self.addPageToAction = [self vivaldiAddPageToAction];
+    self.editPageAction = [self vivaldiEditPageAction];
+
+    // The action group for vivaldi that contains the panel items and downloads.
+    self.bookmarksAction = [self vivaldiBookmarksAction];
+    self.notesAction = [self vivaldiNotesAction];
+    self.historyAction = [self vivaldiHistoryAction];
+    self.readingListAction = [self vivaldiReadingListAction];
+    self.downloadsAction = [self vivaldiDownloadsAction];
+
+    NSArray<OverflowMenuAction*>* vivaldiActions = @[
+      self.bookmarksAction,
+      self.notesAction,
+      self.historyAction,
+      self.readingListAction,
+      self.downloadsAction
+    ];
+
+    self.vivaldiActionsGroup =
+        [[OverflowMenuActionGroup alloc] initWithGroupName:@"vivaldi_actions"
+                                                   actions:vivaldiActions
+                                                    footer:nil];
+    self.menuOrderer.vivaldiActionsGroup = self.vivaldiActionsGroup;
+
+    [actionGroups
+        addObjectsFromArray:@[ self.appActionsGroup,
+                               self.pageActionsGroup,
+                               self.vivaldiActionsGroup ]];
+    if (IsOverflowMenuCustomizationEnabled()) {
+      [actionGroups addObject:self.editActionsGroup];
+    }
+  } else {
   [actionGroups
       addObjectsFromArray:@[ self.appActionsGroup, self.pageActionsGroup ]];
   if (IsOverflowMenuCustomizationEnabled()) {
     [actionGroups addObject:self.editActionsGroup];
   }
+  } // End Vivaldi
+
   [actionGroups addObject:self.helpActionsGroup];
 
   self.model.actionGroups = actionGroups;
@@ -749,13 +883,35 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return [self
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_ADD_TO_BOOKMARKS
                               actionType:overflow_menu::ActionType::Bookmark
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowAddBookmark
+                            systemSymbol:NO
+#else
                               symbolName:kAddBookmarkActionSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuAddToBookmarks
                             hideItemText:hideItemText
                                  handler:^{
                                    [weakSelf addOrEditBookmark];
+                                 }];
+}
+
+- (OverflowMenuAction*)openLensOverlayAction {
+  __weak __typeof(self) weakSelf = self;
+  return [self
+      createOverflowMenuActionWithNameID:IDS_IOS_CONTENT_CONTEXT_OPENLENSOVERLAY
+                              actionType:overflow_menu::ActionType::LensOverlay
+                              symbolName:kCameraLensSymbol
+                            systemSymbol:NO
+                        monochromeSymbol:NO
+                         accessibilityID:kToolsMenuOpenLensOverlay
+                            hideItemText:nil
+                                 handler:^{
+                                   [weakSelf startLensOverlay];
                                  }];
 }
 
@@ -767,8 +923,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       createOverflowMenuActionWithNameID:
           IDS_IOS_CONTENT_CONTEXT_ADDTOREADINGLIST
                               actionType:overflow_menu::ActionType::ReadingList
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowAddReadingList
+                            systemSymbol:NO
+#else
                               symbolName:kReadLaterActionSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuReadLater
                             hideItemText:hideItemText
@@ -785,8 +948,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_CLEAR_BROWSING_DATA
                               actionType:overflow_menu::ActionType::
                                              ClearBrowsingData
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowClearHistory
+                            systemSymbol:NO
+#else
                               symbolName:kTrashSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuClearBrowsingData
                             hideItemText:hideItemText
@@ -819,8 +989,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return [self
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_REQUEST_DESKTOP_SITE
                               actionType:overflow_menu::ActionType::DesktopSite
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowDesktopSite
+                            systemSymbol:NO
+#else
                               symbolName:kDesktopSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:YES
                          accessibilityID:kToolsMenuRequestDesktopId
                             hideItemText:hideItemText
@@ -836,8 +1013,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return [self
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_FIND_IN_PAGE
                               actionType:overflow_menu::ActionType::FindInPage
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowFindInPage
+                            systemSymbol:NO
+#else
                               symbolName:kFindInPageActionSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuFindInPageId
                             hideItemText:hideItemText
@@ -851,8 +1035,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return [self
       createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_TEXT_ZOOM
                               actionType:overflow_menu::ActionType::TextZoom
+
+#if defined(VIVALDI_BUILD)
+                              symbolName:vOverflowZoom
+                            systemSymbol:NO
+#else
                               symbolName:kZoomTextActionSymbol
                             systemSymbol:YES
+#endif // End Vivaldi
+
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuTextZoom
                             hideItemText:
@@ -868,8 +1059,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return
       [self createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_BOOKMARKS
                               destination:overflow_menu::Destination::Bookmarks
+
+#if defined(VIVALDI_BUILD)
+                               symbolName:vOverflowBookmarks
+                             systemSymbol:NO
+#else
                                symbolName:kBookmarksSymbol
                              systemSymbol:YES
+#endif // End Vivaldi
+
                           accessibilityID:kToolsMenuBookmarksId
                                   handler:^{
                                     [weakSelf openBookmarks];
@@ -880,8 +1078,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   __weak __typeof(self) weakSelf = self;
   return [self createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_HISTORY
                                  destination:overflow_menu::Destination::History
+
+#if defined(VIVALDI_BUILD)
+                                  symbolName:vOverflowHistory
+                                systemSymbol:NO
+#else
                                   symbolName:kHistorySymbol
                                 systemSymbol:YES
+#endif // End Vivaldi
+
                              accessibilityID:kToolsMenuHistoryId
                                      handler:^{
                                        [weakSelf openHistory];
@@ -893,8 +1098,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return [self
       createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_READING_LIST
                         destination:overflow_menu::Destination::ReadingList
+
+#if defined(VIVALDI_BUILD)
+                         symbolName:vOverflowReadingList
+                       systemSymbol:NO
+#else
                          symbolName:kReadingListSymbol
                        systemSymbol:NO
+#endif // End Vivaldi
+
                     accessibilityID:kToolsMenuReadingListId
                             handler:^{
                               [weakSelf openReadingList];
@@ -906,8 +1118,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return
       [self createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_PASSWORD_MANAGER
                               destination:overflow_menu::Destination::Passwords
+
+#if defined(VIVALDI_BUILD)
+                               symbolName:vOverflowPasswords
+                             systemSymbol:NO
+#else
                                symbolName:kPasswordSymbol
                              systemSymbol:NO
+#endif // End Vivaldi
+
                           accessibilityID:kToolsMenuPasswordsId
                                   handler:^{
                                     [weakSelf openPasswords];
@@ -919,8 +1138,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return
       [self createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_DOWNLOADS
                               destination:overflow_menu::Destination::Downloads
+
+#if defined(VIVALDI_BUILD)
+                               symbolName:vOverflowDownloads
+                             systemSymbol:NO
+#else
                                symbolName:kDownloadSymbol
                              systemSymbol:YES
+#endif // End Vivaldi
+
                           accessibilityID:kToolsMenuDownloadsId
                                   handler:^{
                                     [weakSelf openDownloads];
@@ -932,8 +1158,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return
       [self createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_RECENT_TABS
                               destination:overflow_menu::Destination::RecentTabs
+
+#if defined(VIVALDI_BUILD)
+                               symbolName:vOverflowRecentTabs
+                             systemSymbol:NO
+#else
                                symbolName:kRecentTabsSymbol
                              systemSymbol:NO
+#endif // End Vivaldi
+
                           accessibilityID:kToolsMenuOtherDevicesId
                                   handler:^{
                                     [weakSelf openRecentTabs];
@@ -945,12 +1178,23 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   OverflowMenuDestination* destination =
       [self createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_SITE_INFORMATION
                               destination:overflow_menu::Destination::SiteInfo
+
+#if defined(VIVALDI_BUILD)
+                               symbolName:vATBShield
+                             systemSymbol:NO
+                          accessibilityID:kToolsMenuSiteInformation
+                                  handler:^{
+                                    [weakSelf showSiteTrackerBlockerPrefs];
+                                  }];
+#else
                                symbolName:kTunerSymbol
                              systemSymbol:NO
                           accessibilityID:kToolsMenuSiteInformation
                                   handler:^{
                                     [weakSelf openSiteInformation];
                                   }];
+#endif // End Vivaldi
+
   destination.canBeHidden = NO;
   return destination;
 }
@@ -960,8 +1204,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   OverflowMenuDestination* destination =
       [self createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_SETTINGS
                               destination:overflow_menu::Destination::Settings
+
+#if defined(VIVALDI_BUILD)
+                               symbolName:vOverflowSettings
+                             systemSymbol:NO
+#else
                                symbolName:kSettingsSymbol
                              systemSymbol:YES
+#endif // End Vivaldi
+
                           accessibilityID:kToolsMenuSettingsId
                                   handler:^{
                                     [weakSelf openSettings];
@@ -1036,10 +1287,22 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return l10n_util::GetNSString(
           IDS_IOS_OVERFLOW_MENU_HIDE_DESTINATION_PRICE_NOTIFICATIONS);
 
-    // Vivaldi
+#if defined(VIVALDI_BUILD)
     case overflow_menu::Destination::vShare:
       return nil;
-    // End Vivaldi
+    case overflow_menu::Destination::vZoomText:
+      return l10n_util::GetNSString(
+          IDS_VIVALDI_OVERFLOW_MENU_HIDE_DESTINATION_TEXT_ZOOM);
+    case overflow_menu::Destination::vFindInPage:
+      return l10n_util::GetNSString(
+          IDS_VIVALDI_OVERFLOW_MENU_HIDE_DESTINATION_FIND_IN_PAGE);
+    case overflow_menu::Destination::vDesktopSite:
+      return [self userAgentType] != web::UserAgentType::DESKTOP ?
+          l10n_util::GetNSString(
+              IDS_VIVALDI_OVERFLOW_MENU_HIDE_DESTINATION_DESKTOP_SITE) :
+          l10n_util::GetNSString(
+              IDS_VIVALDI_OVERFLOW_MENU_HIDE_DESTINATION_MOBILE_SITE);
+#endif // End Vivaldi
 
   }
 }
@@ -1143,6 +1406,14 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   action.actionType = static_cast<NSInteger>(actionType);
 
   ActionRanking reorderableActions = [self basePageActions];
+
+  if (IsVivaldiRunning()) {
+      ActionRanking vivaldiActions = [self vivaldiActions];
+      reorderableActions.insert(
+          reorderableActions.end(),
+          vivaldiActions.begin(), vivaldiActions.end());
+  } // End Vivaldi
+
   // If this action is not reorderable, then don't add any longpress items.
   bool actionIsReorderable =
       std::find(reorderableActions.begin(), reorderableActions.end(),
@@ -1239,21 +1510,25 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return result;
 }
 
-// Highlight the Settings destination with a promo badge if needed.
-- (void)maybeHighlightSettingsWithPromoBadge {
-  if (self.syncService &&
-      ShouldIndicateIdentityErrorInOverflowMenu(self.syncService)) {
-    return;
-  }
-
-  if (self.engagementTracker &&
-      ShouldTriggerDefaultBrowserHighlightFeature(self.engagementTracker)) {
-    self.settingsDestination.badge = BadgeTypePromo;
-    RecordDefaultBrowserBlueDotFirstDisplay();
-  }
-}
-
 - (DestinationRanking)baseDestinations {
+
+  if (IsVivaldiRunning()) {
+    std::vector<overflow_menu::Destination> destinations = {
+      overflow_menu::Destination::vShare,
+      overflow_menu::Destination::SiteInfo,
+      overflow_menu::Destination::vFindInPage,
+      overflow_menu::Destination::Settings,
+      overflow_menu::Destination::vZoomText,
+      overflow_menu::Destination::History,
+      overflow_menu::Destination::Bookmarks,
+      overflow_menu::Destination::ReadingList,
+      overflow_menu::Destination::Passwords,
+      overflow_menu::Destination::RecentTabs,
+      overflow_menu::Destination::Downloads,
+      overflow_menu::Destination::vDesktopSite,
+    };
+    return destinations;
+  } else {
   std::vector<overflow_menu::Destination> destinations = {
       overflow_menu::Destination::Bookmarks,
       overflow_menu::Destination::History,
@@ -1272,6 +1547,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   destinations.push_back(overflow_menu::Destination::WhatsNew);
 
   return destinations;
+  } // End Vivaldi
+
 }
 
 // Returns YES if the Overflow Menu should indicate an identity error.
@@ -1353,9 +1630,27 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   self.openIncognitoTabAction.enterpriseDisabled =
       IsIncognitoModeDisabled(self.browserStatePrefs);
 
-  // Vivaldi
-  self.siteInfoAction.enabled = [self currentWebPageSupportsSiteInfo];
-  // End Vivaldi
+  if (IsLensOverlayAvailable()) {
+    self.lensOverlayAction.enabled =
+        search_engines::SupportsSearchImageWithLens(self.templateURLService);
+  }
+
+  if (IsVivaldiRunning()) {
+    self.shareDestination.disabled = ![self currentWebPageSupportsSiteInfo];
+    self.siteInfoDestination.disabled = ![self currentWebPageSupportsSiteInfo];
+    self.textZoomDestination.disabled = ![self isTextZoomEnabled];
+    self.findInPageDestination.disabled = ![self isFindInPageEnabled];
+    self.desktopSiteDestination.disabled =
+        ([self userAgentType] != web::UserAgentType::MOBILE &&
+            [self userAgentType] != web::UserAgentType::DESKTOP);
+
+    self.addPageToAction.submenuActions = [self addToSubmenuActions];
+    self.editPageAction.submenuActions = [self editSubmenuActions];
+
+    self.addPageToAction.enabled =
+        bookmarkEnabled || self.readLaterAction.enabled;
+    self.editPageAction.enabled = bookmarkEnabled;
+  } // End Vivaldi
 
 }
 
@@ -1399,9 +1694,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   }
 
   [helpActions addObject:self.helpAction];
-
-  if (!IsVivaldiRunning()) {
   [helpActions addObject:self.shareChromeAction];
+
+  if (IsVivaldiRunning()) {
+    [self.menuOrderer updateVivaldiActions];
   } // End Vivaldi
 
   self.helpActionsGroup.actions = helpActions;
@@ -1685,6 +1981,16 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   [self updateModel];
 }
 
+#pragma mark - SearchEngineObserving
+
+- (void)searchEngineChanged {
+  [self updateModel];
+}
+
+- (void)templateURLServiceShuttingDown:(TemplateURLService*)urlService {
+  _templateURLService = nullptr;
+}
+
 #pragma mark - FollowMenuUpdater
 
 - (void)updateFollowMenuItemWithWebPage:(WebPageURLs*)webPageURLs
@@ -1808,19 +2114,30 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 
       return self.isIncognito ? nil : self.recentTabsDestination;
 
-    // Vivaldi
+#if defined(VIVALDI_BUILD)
     case overflow_menu::Destination::vShare:
       return self.shareDestination;
-    // End Vivaldi
+    case overflow_menu::Destination::vZoomText:
+      return self.textZoomDestination;
+    case overflow_menu::Destination::vFindInPage:
+      return self.findInPageDestination;
+    case overflow_menu::Destination::vDesktopSite:
+      return self.desktopSiteDestination;
+#endif // End Vivaldi
 
     case overflow_menu::Destination::SiteInfo:
+
+      if (IsVivaldiRunning()) {
+        return self.siteInfoDestination;
+      } // End Vivaldi
+
       return ([self currentWebPageSupportsSiteInfo]) ? self.siteInfoDestination
                                                      : nil;
     case overflow_menu::Destination::Settings:
       if ([self shouldIndicateIdentityError]) {
         self.settingsDestination.badge = BadgeTypeError;
-      } else {
-        [self maybeHighlightSettingsWithPromoBadge];
+      } else if (self.hasSettingsBlueDot) {
+        self.settingsDestination.badge = BadgeTypePromo;
       }
       return self.settingsDestination;
     case overflow_menu::Destination::WhatsNew:
@@ -1884,10 +2201,16 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
     case overflow_menu::Destination::PriceNotifications:
       return [self newPriceNotificationsDestination];
 
-    // Vivaldi
+#if defined(VIVALDI_BUILD)
     case overflow_menu::Destination::vShare:
       return [self newShareDestination];
-    // End Vivaldi
+    case overflow_menu::Destination::vZoomText:
+      return [self newZoomTextDestination];
+    case overflow_menu::Destination::vFindInPage:
+      return [self newFindInPageDestination];
+    case overflow_menu::Destination::vDesktopSite:
+      return [self newDesktopSiteDestination];
+#endif // End Vivaldi
 
   }
 }
@@ -1897,13 +2220,25 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       self.settingsDestination.badge == BadgeTypePromo) {
     self.engagementTracker->NotifyEvent(
         feature_engagement::events::kBlueDotOverflowMenuCustomized);
+    [self.popupMenuHandler updateToolsMenuBlueDotVisibility];
   }
 }
 
 #pragma mark - OverflowMenuActionProvider
 
 - (ActionRanking)basePageActions {
-  return {
+  if (IsVivaldiRunning()) {
+    return {
+      overflow_menu::ActionType::vAddPageTo,
+      overflow_menu::ActionType::vEditPage,
+      overflow_menu::ActionType::ClearBrowsingData,
+      overflow_menu::ActionType::DesktopSite,
+      overflow_menu::ActionType::FindInPage,
+      overflow_menu::ActionType::TextZoom,
+    };
+  } // End Vivaldi
+
+  ActionRanking actions = {
       overflow_menu::ActionType::Follow,
       overflow_menu::ActionType::Bookmark,
       overflow_menu::ActionType::ReadingList,
@@ -1913,6 +2248,12 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       overflow_menu::ActionType::FindInPage,
       overflow_menu::ActionType::TextZoom,
   };
+
+  if (IsLensOverlayAvailable()) {
+    actions.push_back(overflow_menu::ActionType::LensOverlay);
+  }
+
+  return actions;
 }
 
 - (OverflowMenuAction*)actionForActionType:
@@ -1975,10 +2316,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return self.shareChromeAction;
     case overflow_menu::ActionType::EditActions:
       return self.editActionsAction;
+    case overflow_menu::ActionType::LensOverlay:
+      return (self.isIncognito) ? nil : self.lensOverlayAction;
 
     // Vivaldi
-    case overflow_menu::ActionType::vSiteInfo:
-      return self.siteInfoAction;
     case overflow_menu::ActionType::vBookmarks:
       return self.bookmarksAction;
     case overflow_menu::ActionType::vNotes:
@@ -1989,6 +2330,14 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return self.readingListAction;
     case overflow_menu::ActionType::vDownloads:
       return self.downloadsAction;
+    case overflow_menu::ActionType::vAddPageTo:
+      return self.addPageToAction;
+    case overflow_menu::ActionType::vEditPage:
+      // Show edit action only if it has actions.
+      return ([[self editSubmenuActions] count] > 0) ?
+                  self.editPageAction : nil;
+    case overflow_menu::ActionType::vStartPage:
+      return nil;
     // End Vivaldi
 
   }
@@ -2010,18 +2359,28 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
     case overflow_menu::ActionType::Help:
     case overflow_menu::ActionType::ShareChrome:
     case overflow_menu::ActionType::EditActions:
+      NOTREACHED_IN_MIGRATION();
+      return nil;
 
     // Vivaldi
     case overflow_menu::ActionType::vBookmarks:
-    case overflow_menu::ActionType::vSiteInfo:
+      return [self vivaldiBookmarksAction];
     case overflow_menu::ActionType::vNotes:
+      return [self vivaldiNotesAction];
     case overflow_menu::ActionType::vHistory:
+      return [self vivaldiHistoryAction];
     case overflow_menu::ActionType::vReadingList:
+      return [self vivaldiReadingListAction];
     case overflow_menu::ActionType::vDownloads:
+      return [self vivaldiDownloadsAction];
+    case overflow_menu::ActionType::vAddPageTo:
+      return [self vivaldiAddPageToAction];
+    case overflow_menu::ActionType::vEditPage:
+      return [self vivaldiEditPageAction];
+    case overflow_menu::ActionType::vStartPage:
+      return nil;
     // End Vivaldi
 
-      NOTREACHED_IN_MIGRATION();
-      return nil;
     case overflow_menu::ActionType::Follow:
       return [self newFollowAction];
     case overflow_menu::ActionType::Bookmark:
@@ -2038,6 +2397,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return [self newFindInPageAction];
     case overflow_menu::ActionType::TextZoom:
       return [self newTextZoomAction];
+    case overflow_menu::ActionType::LensOverlay:
+      return [self openLensOverlayAction];
   }
 }
 
@@ -2088,9 +2449,15 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 // Dismisses the menu and opens the Clear Browsing Data screen.
 - (void)openClearBrowsingData {
   RecordAction(UserMetricsAction("MobileMenuClearBrowsingData"));
+  base::UmaHistogramEnumeration(
+      browsing_data::kDeleteBrowsingDataDialogHistogram,
+      browsing_data::DeleteBrowsingDataDialogAction::
+          kMenuItemEntryPointSelected);
+
   [self dismissMenu];
   if (IsIosQuickDeleteEnabled()) {
-    [self.quickDeleteHandler showQuickDelete];
+    [self.quickDeleteHandler
+        showQuickDeleteAndCanPerformTabsClosureAnimation:YES];
   } else {
     [self.settingsHandler showClearBrowsingDataSettings];
   }
@@ -2157,7 +2524,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   RecordAction(UserMetricsAction("MobileMenuRequestDesktopSite"));
   [self dismissMenu];
   self.navigationAgent->RequestDesktopSite();
-  [self.browserCoordinatorHandler showDefaultSiteViewIPH];
+  [self.helpHandler
+      presentInProductHelpWithType:InProductHelpType::kDefaultSiteView];
 }
 
 // Dismisses the menu and requests the mobile version of the current page
@@ -2230,7 +2598,30 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       action.shown = NO;
     }
   }
+
+  if (IsVivaldiRunning()) {
+    ActionCustomizationModel* vivaldiActionCustomizationModel =
+         self.menuOrderer.vivaldiActionCustomizationModel;
+     for (OverflowMenuAction* action in
+          vivaldiActionCustomizationModel.shownActions) {
+       if (action.actionType == static_cast<int>(actionType)) {
+         action.shown = NO;
+       }
+     }
+    [self.menuOrderer commitVivaldiActionsUpdate];
+  } // End Vivaldi
+
   [self.menuOrderer commitActionsUpdate];
+}
+
+// Creates and opens the lens overlay UI.
+- (void)startLensOverlay {
+  RecordAction(UserMetricsAction("MobileMenuLensOverlay"));
+  [self dismissMenu];
+  [self.lensOverlayHandler
+      createAndShowLensUI:YES
+               entrypoint:LensOverlayEntrypoint::kOverflowMenu
+               completion:nil];
 }
 
 #pragma mark - Destinations Handlers
@@ -2316,15 +2707,17 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 // Dismisses the menu and opens What's New.
 - (void)openWhatsNew {
   [self dismissMenu];
-  [self.browserCoordinatorHandler showWhatsNew];
+  [self.whatsNewHandler showWhatsNew];
 }
 
 // Dismisses the menu and opens settings.
 - (void)openSettings {
-  if (self.settingsDestination.badge == BadgeTypePromo &&
+  if (!IsBlueDotOnToolsMenuButtoneEnabled() &&
+      self.settingsDestination.badge == BadgeTypePromo &&
       self.engagementTracker) {
     self.engagementTracker->NotifyEvent(
         feature_engagement::events::kBlueDotPromoOverflowMenuDismissed);
+    [self.popupMenuHandler updateToolsMenuBlueDotVisibility];
   }
   [self dismissMenu];
   profile_metrics::BrowserProfileType type =
@@ -2393,10 +2786,13 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
           IDS_IOS_OVERFLOW_MENU_HIDDEN_READING_LIST_SUBTITLE);
       break;
 
-    // Vivaldi
+#if defined(VIVALDI_BUILD)
     case overflow_menu::Destination::vShare:
+    case overflow_menu::Destination::vZoomText:
+    case overflow_menu::Destination::vFindInPage:
+    case overflow_menu::Destination::vDesktopSite:
       return;
-    // End Vivaldi
+#endif // End Vivaldi
 
   }
 
@@ -2407,358 +2803,17 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 
 #pragma mark: VIVALDI
 
-- (NSArray<OverflowMenuDestination*>*)baseDestinationsVivaldi {
-  NSArray<OverflowMenuDestination*>* baseDestinations = @[
-    self.shareDestination,
-    self.recentTabsDestination,
-    self.passwordsDestination,
-    self.settingsDestination,
-  ];
-
-  return baseDestinations;
-}
-
-- (ActionRanking)basePageActionsVivaldi {
+- (ActionRanking)vivaldiActions {
   return {
-      overflow_menu::ActionType::Follow,
-      overflow_menu::ActionType::Bookmark,
-      overflow_menu::ActionType::ReadingList,
-      overflow_menu::ActionType::ClearBrowsingData,
-      overflow_menu::ActionType::DesktopSite,
-      overflow_menu::ActionType::FindInPage,
-      overflow_menu::ActionType::TextZoom,
-      overflow_menu::ActionType::vSiteInfo,
+    overflow_menu::ActionType::vBookmarks,
+    overflow_menu::ActionType::vNotes,
+    overflow_menu::ActionType::vHistory,
+    overflow_menu::ActionType::vReadingList,
+    overflow_menu::ActionType::vDownloads,
   };
 }
 
-- (void)initializeModelVivaldi {
-  __weak __typeof(self) weakSelf = self;
-
-  // Share
-  self.shareDestination = [self newShareDestination];
-  self.shareDestination.disabled = ![self currentWebPageSupportsSiteInfo];
-
-  // Recent tabs
-  self.recentTabsDestination = [self
-      createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_RECENT_TABS
-                        destination:overflow_menu::Destination::RecentTabs
-                         symbolName:vOverflowRecentTabs
-                       systemSymbol:NO
-                    accessibilityID:kToolsMenuOtherDevicesId
-                            handler:^{
-                              [weakSelf openRecentTabs];
-                            }];
-  self.recentTabsDestination.disabled = self.isIncognito;
-
-  // Passwords
-  self.passwordsDestination = [self
-      createOverflowMenuDestination:IDS_IOS_PASSWORD_MANAGER
-                        destination:overflow_menu::Destination::Passwords
-                         symbolName:vOverflowPasswords
-                       systemSymbol:NO
-                    accessibilityID:kToolsMenuPasswordsId
-                            handler:^{
-                              [weakSelf openPasswords];
-                            }];
-
-  // Settings
-  self.settingsDestination = [self
-      createOverflowMenuDestination:IDS_IOS_TOOLS_MENU_SETTINGS
-                        destination:overflow_menu::Destination::Settings
-                         symbolName:vOverflowSettings
-                       systemSymbol:NO
-                    accessibilityID:kToolsMenuSettingsId
-                            handler:^{
-                              [weakSelf openSettings];
-                            }];
-
-
-#pragma mark: PAGE ACTIONS
-
-  self.reloadAction =
-      [self createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_RELOAD
-                                actionType:overflow_menu::ActionType::Reload
-                                symbolName:vOverflowReload
-                              systemSymbol:NO
-                          monochromeSymbol:NO
-                           accessibilityID:kToolsMenuReload
-                                   handler:^{
-                                     [weakSelf reload];
-                                   }];
-
-  self.stopLoadAction =
-      [self createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_STOP
-                                actionType:overflow_menu::ActionType::Reload
-                                symbolName:vOverflowStop
-                              systemSymbol:NO
-                          monochromeSymbol:NO
-                           accessibilityID:kToolsMenuReload
-                                   handler:^{
-                                     [weakSelf reload];
-                                   }];
-
-  self.openTabAction =
-      [self createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_NEW_TAB
-                                    actionType:overflow_menu::ActionType::NewTab
-                                    symbolName:vOverflowNewTab
-                                  systemSymbol:NO
-                              monochromeSymbol:NO
-                               accessibilityID:kToolsMenuNewTabId
-                                       handler:^{
-                                         [weakSelf openTab];
-                                       }];
-
-  self.openIncognitoTabAction = [self
-      createOverflowMenuActionWithNameID:IDS_VIVALDI_TOOLS_MENU_NEW_PRIVATE_TAB
-                              actionType:overflow_menu::ActionType::
-                                             NewIncognitoTab
-                              symbolName:vOverflowNewPrivateTab
-                            systemSymbol:NO
-                        monochromeSymbol:NO
-                         accessibilityID:kToolsMenuNewIncognitoTabId
-                                 handler:^{
-                                   [weakSelf openIncognitoTab];
-                                 }];
-
-  self.openNewWindowAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_NEW_WINDOW
-                              actionType:overflow_menu::ActionType::NewWindow
-                              symbolName:vOverflowNewWindow
-                            systemSymbol:NO
-                        monochromeSymbol:NO
-                         accessibilityID:kToolsMenuNewWindowId
-                                 handler:^{
-                                   [weakSelf openNewWindow];
-                                 }];
-
-  self.clearBrowsingDataAction = [self
-    createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_CLEAR_BROWSING_DATA
-                            actionType:overflow_menu::ActionType::
-                                           ClearBrowsingData
-                            symbolName:vOverflowClearHistory
-                          systemSymbol:NO
-                      monochromeSymbol:NO
-                       accessibilityID:kToolsMenuClearBrowsingData
-                               handler:^{
-                                 [weakSelf openClearBrowsingData];
-                               }];
-
-  self.followAction = [self createFollowActionIfNeeded];
-
-  self.addBookmarkAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_ADD_TO_BOOKMARKS
-                              actionType:overflow_menu::ActionType::Bookmark
-                              symbolName:vOverflowAddBookmark
-                            systemSymbol:NO
-                        monochromeSymbol:NO
-                         accessibilityID:kToolsMenuAddToBookmarks
-                                 handler:^{
-                                   [weakSelf addOrEditBookmark];
-                                 }];
-
-  self.editBookmarkAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_EDIT_BOOKMARK
-                              actionType:overflow_menu::ActionType::Bookmark
-                              symbolName:vOverflowEditBookmark
-                            systemSymbol:NO
-                        monochromeSymbol:NO
-                         accessibilityID:kToolsMenuEditBookmark
-                                 handler:^{
-                                   [weakSelf addOrEditBookmark];
-                                 }];
-
-  self.readLaterAction = [self
-      createOverflowMenuActionWithNameID:
-          IDS_IOS_CONTENT_CONTEXT_ADDTOREADINGLIST
-                              actionType:overflow_menu::ActionType::ReadingList
-                              symbolName:vOverflowAddReadingList
-                            systemSymbol:NO
-                        monochromeSymbol:NO
-                         accessibilityID:kToolsMenuReadLater
-                                 handler:^{
-                                   [weakSelf addToReadingList];
-                                 }];
-
-  self.translateAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_TRANSLATE
-                              actionType:overflow_menu::ActionType::Translate
-                              symbolName:vOverflowTranslate
-                            systemSymbol:NO
-                        monochromeSymbol:NO
-                         accessibilityID:kToolsMenuTranslateId
-                                 handler:^{
-                                   [weakSelf translatePage];
-                                 }];
-
-  self.requestDesktopAction = [self
-     createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_REQUEST_DESKTOP_SITE
-                             actionType:overflow_menu::ActionType::DesktopSite
-                             symbolName:vOverflowDesktopSite
-                           systemSymbol:NO
-                       monochromeSymbol:NO
-                        accessibilityID:kToolsMenuRequestDesktopId
-                                handler:^{
-                                  [weakSelf requestDesktopSite];
-                                }];
-
-  self.requestMobileAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_REQUEST_MOBILE_SITE
-                              actionType:overflow_menu::ActionType::DesktopSite
-                              symbolName:vOverflowMobileSite
-                            systemSymbol:NO
-                        monochromeSymbol:NO
-                         accessibilityID:kToolsMenuRequestMobileId
-                                 handler:^{
-                                   [weakSelf requestMobileSite];
-                                 }];
-
-  self.findInPageAction = [self
-     createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_FIND_IN_PAGE
-                             actionType:overflow_menu::ActionType::FindInPage
-                             symbolName:vOverflowFindInPage
-                           systemSymbol:NO
-                       monochromeSymbol:NO
-                        accessibilityID:kToolsMenuFindInPageId
-                                handler:^{
-                                  [weakSelf openFindInPage];
-                                }];
-
-  self.textZoomAction = [self
-     createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_TEXT_ZOOM
-                             actionType:overflow_menu::ActionType::TextZoom
-                             symbolName:vOverflowZoom
-                           systemSymbol:NO
-                       monochromeSymbol:NO
-                        accessibilityID:kToolsMenuTextZoom
-                                handler:^{
-                                  [weakSelf openTextZoom];
-                                }];
-
-  self.siteInfoAction = [self
-     createOverflowMenuActionWithNameID:IDS_VIVALDI_TOOLS_MENU_PAGE_INFO
-                             actionType:overflow_menu::ActionType::vSiteInfo
-                             symbolName:vOverflowSiteInfo
-                           systemSymbol:NO
-                       monochromeSymbol:NO
-                        accessibilityID:kToolsMenuShareId
-                                handler:^{
-                                  [weakSelf openSiteInformation];
-                                }];
-
-  self.helpAction = [self
-     createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_HELP_MOBILE
-                                  actionType:overflow_menu::ActionType::Help
-                                  symbolName:vOverflowHelp
-                                systemSymbol:NO
-                            monochromeSymbol:NO
-                             accessibilityID:kToolsMenuHelpId
-                                     handler:^{
-                                       [weakSelf openHelp];
-                                                     }];
-  // The app actions vary based on page state, so they are set in
-  // `-updateModel`.
-  self.appActionsGroup =
-      [[OverflowMenuActionGroup alloc] initWithGroupName:@"app_actions"
-                                                 actions:@[]
-                                                  footer:nil];
-
-  // The page actions vary based on page state, so they are set in
-  // `-updateModel`.
-  self.pageActionsGroup =
-      [[OverflowMenuActionGroup alloc] initWithGroupName:@"page_actions"
-                                                 actions:@[]
-                                                  footer:nil];
-
-  // The action group for vivaldi that contains the panel items and downloads.
-  self.bookmarksAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_BOOKMARKS
-                                   actionType:
-                            overflow_menu::ActionType::vBookmarks
-                                   symbolName:vOverflowBookmarks
-                                 systemSymbol:NO
-                             monochromeSymbol:NO
-                              accessibilityID:kToolsMenuBookmarksId
-                                      handler:^{
-                                        [weakSelf openBookmarks];
-                                                      }];
-
-  self.notesAction = [self
-      createOverflowMenuActionWithNameID:IDS_VIVALDI_TOOLS_MENU_NOTES
-                                   actionType:
-                            overflow_menu::ActionType::vNotes
-                                   symbolName:vOverflowNotes
-                                 systemSymbol:NO
-                             monochromeSymbol:NO
-                              accessibilityID:kToolsMenuNotesId
-                                      handler:^{
-                                        [weakSelf openNotes];
-                                                      }];
-
-  self.historyAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_HISTORY
-                                   actionType:
-                            overflow_menu::ActionType::vHistory
-                                   symbolName:vOverflowHistory
-                                 systemSymbol:NO
-                             monochromeSymbol:NO
-                              accessibilityID:kToolsMenuHistoryId
-                                      handler:^{
-                                        [weakSelf openHistory];
-                                                      }];
-
-  self.readingListAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_READING_LIST
-                                   actionType:
-                            overflow_menu::ActionType::vReadingList
-                                   symbolName:vOverflowReadingList
-                                 systemSymbol:NO
-                             monochromeSymbol:NO
-                              accessibilityID:kToolsMenuReadingListId
-                                      handler:^{
-                                        [weakSelf openReadingList];
-                                                      }];
-
-  self.downloadsAction = [self
-      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_DOWNLOADS
-                                   actionType:
-                            overflow_menu::ActionType::vDownloads
-                                   symbolName:vOverflowDownloads
-                                 systemSymbol:NO
-                             monochromeSymbol:NO
-                              accessibilityID:kToolsMenuDownloadsId
-                                      handler:^{
-                                        [weakSelf openDownloads];
-                                                      }];
-
-  NSArray<OverflowMenuAction*>* vivaldiActions = @[
-    self.bookmarksAction,
-    self.notesAction,
-    self.historyAction,
-    self.readingListAction,
-    self.downloadsAction
-  ];
-
-  self.vivaldiActionsGroup =
-      [[OverflowMenuActionGroup alloc] initWithGroupName:@"vivaldi_actions"
-                                                 actions:vivaldiActions
-                                                  footer:nil];
-
-  // Footer and actions vary based on state, so they're set in -updateModel.
-  self.helpActionsGroup =
-      [[OverflowMenuActionGroup alloc] initWithGroupName:@"help_actions"
-                                                 actions:@[]
-                                                  footer:nil];
-
-  // Destinations and footer vary based on state, so they're set in
-  // -updateModel.
-  NSMutableArray* actionGroups = [[NSMutableArray alloc] init];
-  [actionGroups
-      addObjectsFromArray:@[ self.appActionsGroup, self.pageActionsGroup,
-                             self.vivaldiActionsGroup, self.helpActionsGroup ]];
-  self.menuOrderer.pageActionsGroup = self.pageActionsGroup;
-  self.model.actionGroups = actionGroups;
-}
-
+#pragma mark - Destinations
 - (OverflowMenuDestination*)newShareDestination {
   __weak __typeof(self) weakSelf = self;
   OverflowMenuDestination* destination =
@@ -2774,6 +2829,311 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   return destination;
 }
 
+- (OverflowMenuDestination*)newZoomTextDestination {
+  __weak __typeof(self) weakSelf = self;
+  OverflowMenuDestination* destination =
+      [self createOverflowMenuDestination:IDS_VIVALDI_TOOLS_MENU_ZOOM_TEXT
+                              destination:overflow_menu::Destination::vZoomText
+                               symbolName:vOverflowZoom
+                             systemSymbol:NO
+                          accessibilityID:vToolsMenuTextZoomId
+                                  handler:^{
+                                      [weakSelf openTextZoom];
+      }];
+  return destination;
+}
+
+- (OverflowMenuDestination*)newFindInPageDestination {
+  __weak __typeof(self) weakSelf = self;
+  OverflowMenuDestination* destination =
+      [self createOverflowMenuDestination:IDS_VIVALDI_TOOLS_MENU_FIND_IN_PAGE
+                            destination:overflow_menu::Destination::vFindInPage
+                               symbolName:vOverflowFindInPage
+                             systemSymbol:NO
+                          accessibilityID:vToolsMenuFindInPageId
+                                  handler:^{
+                                      [weakSelf openFindInPage];
+      }];
+  return destination;
+}
+
+- (OverflowMenuDestination*)newDesktopSiteDestination {
+  __weak __typeof(self) weakSelf = self;
+  OverflowMenuDestination* destination =
+      [self createOverflowMenuDestination:
+                                IDS_VIVALDI_TOOLS_MENU_DESTINATION_DESKTOP_SITE
+                            destination:overflow_menu::Destination::vDesktopSite
+                               symbolName:vOverflowDesktopSite
+                             systemSymbol:NO
+                          accessibilityID:vToolsMenuDesktopSiteId
+                                  handler:^{
+                                      [weakSelf requestDesktopSite];
+      }];
+  return destination;
+}
+
+- (OverflowMenuDestination*)newMobileSiteDestination {
+  __weak __typeof(self) weakSelf = self;
+  OverflowMenuDestination* destination =
+      [self createOverflowMenuDestination:
+                                  IDS_VIVALDI_TOOLS_MENU_DESTINATION_MOBILE_SITE
+                            destination:overflow_menu::Destination::vDesktopSite
+                               symbolName:vOverflowMobileSite
+                             systemSymbol:NO
+                          accessibilityID:vToolsMenuMobileSiteId
+                                  handler:^{
+                                      [weakSelf requestMobileSite];
+      }];
+  return destination;
+}
+
+#pragma mark - Actions
+- (OverflowMenuAction*)vivaldiBookmarksAction {
+  __weak __typeof(self) weakSelf = self;
+  NSString* hideItemText =
+      l10n_util::GetNSString(IDS_IOS_OVERFLOW_MENU_HIDE_DESTINATION_BOOKMARKS);
+  return [self
+      createOverflowMenuActionWithNameID:IDS_VIVALDI_TOOLS_MENU_ACTION_BOOKMARKS
+                                   actionType:
+                            overflow_menu::ActionType::vBookmarks
+                                   symbolName:vOverflowBookmarks
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:kToolsMenuBookmarksId
+                                 hideItemText:hideItemText
+                                      handler:^{
+                                        [weakSelf openBookmarks];
+                                                      }];
+}
+
+- (OverflowMenuAction*)vivaldiNotesAction {
+  __weak __typeof(self) weakSelf = self;
+  NSString* hideItemText =
+      l10n_util::GetNSString(IDS_IOS_OVERFLOW_MENU_HIDE_ACTIONS_NOTES);
+  return [self
+      createOverflowMenuActionWithNameID:IDS_VIVALDI_TOOLS_MENU_NOTES
+                                   actionType:
+                            overflow_menu::ActionType::vNotes
+                                   symbolName:vOverflowNotes
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:kToolsMenuNotesId
+                                 hideItemText:hideItemText
+                                      handler:^{
+                                        [weakSelf openNotes];
+                                                      }];
+}
+
+- (OverflowMenuAction*)vivaldiHistoryAction {
+  __weak __typeof(self) weakSelf = self;
+  NSString* hideItemText =
+      l10n_util::GetNSString(IDS_IOS_OVERFLOW_MENU_HIDE_DESTINATION_HISTORY);
+  return [self
+      createOverflowMenuActionWithNameID:IDS_VIVALDI_TOOLS_MENU_ACTION_HISTORY
+                                   actionType:
+                            overflow_menu::ActionType::vHistory
+                                   symbolName:vOverflowHistory
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:kToolsMenuHistoryId
+                              hideItemText:hideItemText
+                                      handler:^{
+                                        [weakSelf openHistory];
+                                                      }];
+}
+
+- (OverflowMenuAction*)vivaldiReadingListAction {
+  __weak __typeof(self) weakSelf = self;
+  NSString* hideItemText =
+      l10n_util::GetNSString(
+          IDS_IOS_OVERFLOW_MENU_HIDE_DESTINATION_READING_LIST);
+  return [self
+      createOverflowMenuActionWithNameID:
+                                IDS_VIVALDI_TOOLS_MENU_ACTION_READING_LIST
+                                   actionType:
+                            overflow_menu::ActionType::vReadingList
+                                   symbolName:vOverflowReadingList
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:kToolsMenuReadingListId
+                              hideItemText:hideItemText
+                                      handler:^{
+                                        [weakSelf openReadingList];
+                                                      }];
+}
+
+
+- (OverflowMenuAction*)vivaldiDownloadsAction {
+  __weak __typeof(self) weakSelf = self;
+  NSString* hideItemText =
+      l10n_util::GetNSString(IDS_IOS_OVERFLOW_MENU_HIDE_DESTINATION_DOWNLOADS);
+  return [self
+      createOverflowMenuActionWithNameID:IDS_VIVALDI_TOOLS_MENU_ACTION_DOWNLOADS
+                                   actionType:
+                            overflow_menu::ActionType::vDownloads
+                                   symbolName:vOverflowDownloads
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:kToolsMenuDownloadsId
+                              hideItemText:hideItemText
+                                      handler:^{
+                                        [weakSelf openDownloads];
+                                                      }];
+}
+
+- (OverflowMenuAction*)vivaldiAddPageToAction {
+  NSString* hideItemText =
+      l10n_util::GetNSString(IDS_IOS_OVERFLOW_MENU_HIDE_ACTIONS_ADD_TO);
+  return [self
+      createOverflowMenuActionWithNameID:
+                                IDS_VIVALDI_TOOLS_MENU_ACTION_ADD_PAGE_TO
+                                   actionType:
+                            overflow_menu::ActionType::vAddPageTo
+                                   symbolName:vOverflowAddTo
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:vToolsMenuAddPageToId
+                                 hideItemText:hideItemText
+                                      handler:nil];
+}
+
+- (OverflowMenuAction*)vivaldiEditPageAction {
+  NSString* hideItemText =
+      l10n_util::GetNSString(IDS_IOS_OVERFLOW_MENU_HIDE_ACTIONS_EDIT);
+  return [self
+      createOverflowMenuActionWithNameID:IDS_VIVALDI_TOOLS_MENU_ACTION_EDIT
+                                   actionType:
+                            overflow_menu::ActionType::vEditPage
+                                   symbolName:vOverflowEdit
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:vToolsMenuEditPageId
+                                 hideItemText:hideItemText
+                                      handler:nil];
+}
+
+- (OverflowMenuAction*)vivaldiAddOrEditStartPageAction:(BOOL)isAdded {
+  NSString* symbolName =
+      isAdded ? vOverflowEditStartPage : vOverflowAddStartPage;
+  NSString* accessibilityID =
+      isAdded ? vToolsMenuEditStartPageId : vToolsMenuAddStartPageId;
+
+  __weak __typeof(self) weakSelf = self;
+  return [self
+      createOverflowMenuActionWithNameID:
+                                      IDS_VIVALDI_TOOLS_MENU_ACTION_START_PAGE
+                                   actionType:
+                            overflow_menu::ActionType::vStartPage
+                                   symbolName:symbolName
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:accessibilityID
+                                 hideItemText:nil
+                                      handler:^{
+                                        [weakSelf addOrEditStartPage];
+                                      }];
+}
+
+- (OverflowMenuAction*)vivaldiAddOrEditBookmarksAction:(BOOL)isBookmarked {
+  NSString* symbolName =
+      isBookmarked ? vOverflowEditBookmark : vOverflowAddBookmark;
+  NSString* accessibilityID =
+      isBookmarked ? kToolsMenuEditBookmark : kToolsMenuAddToBookmarks;
+  __weak __typeof(self) weakSelf = self;
+  return [self
+      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_BOOKMARKS
+                              actionType:overflow_menu::ActionType::Bookmark
+                              symbolName:symbolName
+                            systemSymbol:NO
+                        monochromeSymbol:NO
+                        accessibilityID:accessibilityID
+                           hideItemText:nil
+                                handler:^{
+                                  [weakSelf addOrEditBookmark];
+                                }];
+}
+
+- (OverflowMenuAction*)vivaldiAddToReadingListAction {
+  __weak __typeof(self) weakSelf = self;
+  return [self
+      createOverflowMenuActionWithNameID:IDS_IOS_TOOLS_MENU_READING_LIST
+                                   actionType:
+                            overflow_menu::ActionType::ReadingList
+                                   symbolName:vOverflowReadingList
+                                 systemSymbol:NO
+                             monochromeSymbol:NO
+                              accessibilityID:kToolsMenuReadLater
+                              hideItemText:nil
+                                      handler:^{
+                                        [weakSelf addToReadingList];
+                                      }];
+}
+
+#pragma mark - Private
+
+// Returns submenu actions for 'Add page to..' item depending on whether the
+// active Web State URL is already added to start page or bookmarks.
+- (NSArray<OverflowMenuAction*>*)addToSubmenuActions {
+  NSMutableArray<OverflowMenuAction*>* addActions =
+      [[NSMutableArray alloc] init];
+
+  BOOL pageAddedToStartPage = self.webState && self.bookmarkModel &&
+      vivaldi_bookmark_kit::IsURLAddedToStartPage(
+          self.bookmarkModel, self.webState->GetVisibleURL());
+
+  // Add to 'Add' action if page is not already added to startpage.
+  if (!pageAddedToStartPage) {
+    [addActions addObject:
+        [self vivaldiAddOrEditStartPageAction:pageAddedToStartPage]];
+  }
+
+  BOOL pageIsBookmarked =
+      self.webState && self.bookmarkModel &&
+      self.bookmarkModel->IsBookmarked(self.webState->GetVisibleURL());
+
+  // Add to 'Add' action if page is not already added to bookmark.
+  if (!pageIsBookmarked) {
+    [addActions addObject:
+        [self vivaldiAddOrEditBookmarksAction:pageIsBookmarked]];
+  }
+
+  // Reading list should always be on the 'Add' action given that it has no
+  // edit actions available.
+  if (!self.webContentAreaShowingOverlay && [self isCurrentURLWebURL]) {
+    [addActions addObject:[self vivaldiAddToReadingListAction]];
+  }
+
+  return addActions;
+}
+
+// Returns submenu actions for 'Edit' item depending on whether the
+// active Web State URL is already added to start page or bookmarks.
+- (NSArray<OverflowMenuAction*>*)editSubmenuActions {
+  NSMutableArray<OverflowMenuAction*>* editActions =
+      [[NSMutableArray alloc] init];
+
+  BOOL pageAddedToStartPage = self.webState && self.bookmarkModel &&
+      vivaldi_bookmark_kit::IsURLAddedToStartPage(
+          self.bookmarkModel, self.webState->GetVisibleURL());
+
+  // Add to 'Edit' action if page is already added to startpage.
+  if (pageAddedToStartPage) {
+    [editActions addObject:
+        [self vivaldiAddOrEditStartPageAction:pageAddedToStartPage]];
+  }
+
+  BOOL pageIsBookmarked =
+      self.webState && self.bookmarkModel &&
+      self.bookmarkModel->IsBookmarked(self.webState->GetVisibleURL());
+
+  // Add to 'Edit action if page is already added to bookmark.
+  if (pageIsBookmarked) {
+    [editActions addObject:
+        [self vivaldiAddOrEditBookmarksAction:pageIsBookmarked]];
+  }
+  return editActions;
+}
+
 - (void)openNotes {
   [self.popupMenuHandler dismissPopupMenuAnimated:YES];
   [self.browserCoordinatorHandler showNotesManager];
@@ -2784,26 +3144,20 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   [self.activityServiceHandler sharePage];
 }
 
-// Creates an OverflowMenuAction with the given nameID as a localized string ID
-// to be displayed.
-- (OverflowMenuAction*)
-    createOverflowMenuActionWithNameID:(int)nameID
-                            actionType:(overflow_menu::ActionType)actionType
-                            symbolName:(NSString*)symbolName
-                          systemSymbol:(BOOL)systemSymbol
-                      monochromeSymbol:(BOOL)monochromeSymbol
-                       accessibilityID:(NSString*)accessibilityID
-                               handler:(Handler)handler {
-  NSString* name = l10n_util::GetNSString(nameID);
+- (void)showSiteTrackerBlockerPrefs {
+  [self.popupMenuHandler dismissPopupMenuAnimated:YES];
+  [self.activityServiceHandler showTrackerBlockerManager];
+}
 
-  return [self createOverflowMenuActionWithName:name
-                                     actionType:actionType
-                                     symbolName:symbolName
-                                   systemSymbol:systemSymbol
-                               monochromeSymbol:monochromeSymbol
-                                accessibilityID:accessibilityID
-                                   hideItemText:@""
-                                        handler:handler];
+- (void)addOrEditStartPage {
+  // Dismissing the menu disconnects the mediator, so save anything cleaned up
+  // there.
+  web::WebState* currentWebState = self.webState;
+  [self dismissMenu];
+  if (!currentWebState) {
+    return;
+  }
+  [self.bookmarksHandler createOrEditSpeedDialWithURL:currentWebState];
 }
 
 @end

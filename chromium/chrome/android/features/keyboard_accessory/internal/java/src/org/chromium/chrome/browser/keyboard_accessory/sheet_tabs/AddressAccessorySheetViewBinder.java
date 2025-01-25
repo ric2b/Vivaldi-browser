@@ -9,10 +9,10 @@ import android.view.ViewGroup;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.chrome.browser.autofill.helpers.FaviconHelper;
 import org.chromium.chrome.browser.keyboard_accessory.R;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData;
 import org.chromium.chrome.browser.keyboard_accessory.data.UserInfoField;
-import org.chromium.chrome.browser.keyboard_accessory.helper.FaviconHelper;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AccessorySheetTabItemsModel.AccessorySheetDataPiece;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AccessorySheetTabViewBinder.ElementViewHolder;
 import org.chromium.components.browser_ui.widget.chips.ChipView;
@@ -29,8 +29,7 @@ class AddressAccessorySheetViewBinder {
             FaviconHelper faviconHelper) {
         switch (viewType) {
             case AccessorySheetDataPiece.Type.TITLE:
-                return new AccessorySheetTabViewBinder.TitleViewHolder(
-                        parent, R.layout.keyboard_accessory_sheet_tab_title);
+                return new AccessorySheetTabViewBinder.TitleViewHolder(parent);
             case AccessorySheetDataPiece.Type.PLUS_ADDRESS_SECTION:
                 return new PlusAddressInfoViewHolder(parent, faviconHelper);
             case AccessorySheetDataPiece.Type.ADDRESS_INFO:
@@ -43,8 +42,7 @@ class AddressAccessorySheetViewBinder {
     }
 
     static class PlusAddressInfoViewHolder
-            extends ElementViewHolder<
-                    KeyboardAccessoryData.PlusAddressSection, PlusAddressInfoView> {
+            extends ElementViewHolder<KeyboardAccessoryData.PlusAddressInfo, PlusAddressInfoView> {
         private final FaviconHelper mFaviconHelper;
 
         PlusAddressInfoViewHolder(ViewGroup parent, FaviconHelper faviconHelper) {
@@ -54,7 +52,7 @@ class AddressAccessorySheetViewBinder {
 
         @Override
         protected void bind(
-                KeyboardAccessoryData.PlusAddressSection section, PlusAddressInfoView view) {
+                KeyboardAccessoryData.PlusAddressInfo section, PlusAddressInfoView view) {
             UserInfoField plusAddressField = section.getPlusAddress();
             ChipView chip = view.getPlusAddress();
             chip.getPrimaryTextView().setText(plusAddressField.getDisplayText());

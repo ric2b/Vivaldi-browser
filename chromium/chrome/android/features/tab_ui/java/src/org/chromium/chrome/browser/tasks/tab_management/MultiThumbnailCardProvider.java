@@ -15,10 +15,12 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.util.Size;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -29,6 +31,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.chrome.browser.tab_ui.TabContentManagerThumbnailProvider;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider;
 import org.chromium.chrome.browser.tab_ui.TabUiThemeUtils;
 import org.chromium.chrome.browser.tab_ui.ThumbnailProvider;
@@ -43,11 +46,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * A {@link ThumbnailProvider} that will create a single Bitmap Thumbnail for all
- * the related tabs for the given tabs.
+ * A {@link ThumbnailProvider} that will create a single Bitmap Thumbnail for all the related tabs
+ * for the given tabs.
  */
 public class MultiThumbnailCardProvider implements ThumbnailProvider {
     private final TabContentManager mTabContentManager;
+    private final TabContentManagerThumbnailProvider mTabContentManagerThumbnailProvider;
     private final ObservableSupplier<TabModelFilter> mCurrentTabModelFilterSupplier;
     private final Callback<TabModelFilter> mOnTabModelFilterChanged = this::onTabModelFilterChanged;
 
@@ -67,7 +71,7 @@ public class MultiThumbnailCardProvider implements ThumbnailProvider {
 
     private class MultiThumbnailFetcher {
         private final Tab mInitialTab;
-        private final Callback<Bitmap> mFinalCallback;
+        private final Callback<Drawable> mResultCallback;
         private final boolean mIsTabSelected;
         private final List<Tab> mTabs = new ArrayList<>(4);
         private final AtomicInteger mThumbnailsToFetch = new AtomicInteger();
@@ -88,15 +92,15 @@ public class MultiThumbnailCardProvider implements ThumbnailProvider {
          * @see TabContentManager#getTabThumbnailWithCallback
          * @param initialTab Thumbnail is generated for tabs related to initialTab.
          * @param thumbnailSize Desired size of multi-thumbnail.
-         * @param finalCallback Callback which receives generated bitmap.
          * @param isTabSelected Whether the thumbnail is for a currently selected tab.
+         * @param resultCallback Callback which receives generated bitmap.
          */
         MultiThumbnailFetcher(
                 Tab initialTab,
                 Size thumbnailSize,
-                Callback<Bitmap> finalCallback,
-                boolean isTabSelected) {
-            mFinalCallback = finalCallback;
+                boolean isTabSelected,
+                Callback<Drawable> resultCallback) {
+            mResultCallback = resultCallback;
             mInitialTab = initialTab;
             mIsTabSelected = isTabSelected;
 
@@ -328,8 +332,8 @@ public class MultiThumbnailCardProvider implements ThumbnailProvider {
         private void drawFaviconThenMaybeSendBack(Drawable favicon, int index) {
             drawFaviconDrawableOnCanvasWithFrame(favicon, index);
             if (mThumbnailsToFetch.decrementAndGet() == 0) {
-                PostTask.postTask(
-                        TaskTraits.UI_USER_VISIBLE, mFinalCallback.bind(mMultiThumbnailBitmap));
+                BitmapDrawable drawable = new BitmapDrawable(mMultiThumbnailBitmap);
+                PostTask.postTask(TaskTraits.UI_USER_VISIBLE, mResultCallback.bind(drawable));
             }
         }
 
@@ -349,6 +353,8 @@ public class MultiThumbnailCardProvider implements ThumbnailProvider {
         Resources resources = context.getResources();
 
         mTabContentManager = tabContentManager;
+        mTabContentManagerThumbnailProvider =
+                new TabContentManagerThumbnailProvider(tabContentManager);
         mCurrentTabModelFilterSupplier = currentTabModelFilterSupplier;
         mRadius = resources.getDimension(R.dimen.tab_list_mini_card_radius);
         mFaviconFrameCornerRadius =
@@ -405,7 +411,15 @@ public class MultiThumbnailCardProvider implements ThumbnailProvider {
                 resources.getDimension(R.dimen.tab_grid_thumbnail_favicon_background_down_shift),
                 context.getColor(R.color.modern_grey_800_alpha_38));
 
-        mCurrentTabModelFilterSupplier.addObserver(mOnTabModelFilterChanged);
+        // Run this immediately if non-null as in the TabListEditor context we might try to load
+        // tabs thumbnails before the post task normally run by ObservableSupplier#addObserver is
+        // run.
+        @Nullable
+        TabModelFilter currentFilter =
+                mCurrentTabModelFilterSupplier.addObserver(mOnTabModelFilterChanged);
+        if (currentFilter != null) {
+            mOnTabModelFilterChanged.onResult(currentFilter);
+        }
     }
 
     private void onTabModelFilterChanged(TabModelFilter filter) {
@@ -439,16 +453,17 @@ public class MultiThumbnailCardProvider implements ThumbnailProvider {
 
     @Override
     public void getTabThumbnailWithCallback(
-            int tabId, Size thumbnailSize, Callback<Bitmap> finalCallback, boolean isSelected) {
+            int tabId, Size thumbnailSize, boolean isSelected, Callback<Drawable> callback) {
         TabModelFilter filter = mCurrentTabModelFilterSupplier.get();
         assert filter.isTabModelRestored();
         Tab tab = filter.getTabModel().getTabById(tabId);
         boolean useMultiThumbnail = filter.isTabInTabGroup(tab);
         if (useMultiThumbnail) {
             assert tab != null;
-            new MultiThumbnailFetcher(tab, thumbnailSize, finalCallback, isSelected).fetch();
+            new MultiThumbnailFetcher(tab, thumbnailSize, isSelected, callback).fetch();
             return;
         }
-        mTabContentManager.getTabThumbnailWithCallback(tabId, thumbnailSize, finalCallback);
+        mTabContentManagerThumbnailProvider.getTabThumbnailWithCallback(
+                tabId, thumbnailSize, isSelected, callback);
     }
 }

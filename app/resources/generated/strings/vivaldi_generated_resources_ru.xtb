@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Ошибка</translation>
 <translation id="1175364870820465910">&amp;Печать...</translation>
 <translation id="1181037720776840403">Удалить</translation>
+<translation id="1184037892196730210">Не удалось запустить трансляцию экрана</translation>
 <translation id="1187722533808055681">Переходы в активный режим</translation>
 <translation id="122082903575839559">Алгоритм подписи сертификатов</translation>
 <translation id="1221825588892235038">Только выбранные</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Значение поля</translation>
 <translation id="2662876636500006917">Библиотека расширений</translation>
 <translation id="2678063897982469759">Включить снова</translation>
-<translation id="2678100101831051676">Трансляция недоступна.</translation>
 <translation id="2719936478972253983">Заблокированные файлы cookie</translation>
 <translation id="2721037002783622288">&amp;Найти картинку в <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Не позже</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Это расширение могло быть повреждено.</translation>
 <translation id="3387614642886316601">Расширенная проверка правописания</translation>
 <translation id="3390013585654699824">Сведения о приложении</translation>
-<translation id="3393582007140394275">Не удается транслировать экран.</translation>
 <translation id="345693547134384690">Открыть &amp;картинку в новой вкладке</translation>
 <translation id="3493881266323043047">Срок действия</translation>
 <translation id="3511307672085573050">&amp;Копировать адрес ссылки</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Сохранить изменения</translation>
 <translation id="6824564591481349393">&amp;Скопировать адрес электронной почты</translation>
 <translation id="6840155290835956714">Спрашивать разрешение перед отправкой</translation>
+<translation id="6878862640969460273">Альбомная</translation>
 <translation id="6886871292305414135">Открыть ссылку в новой &amp;вкладке</translation>
 <translation id="6892812721183419409">Открыть ссылку как <ph name="USER" /></translation>
 <translation id="6900284862687837908">Фоновое приложение: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Доступ запрещён.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Проверять правописание при наборе текста</translation>
+<translation id="7359680654975233185">Не удалось запустить трансляцию вкладки</translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
 <translation id="7412226954991670867">Память ГП</translation>
 <translation id="7421925624202799674">&amp;Просмотр кода страницы</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Разрешить сайтам сохранять и читать файлы cookie</translation>
 <translation id="7663719505383602579">Получатель: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Установлено администратором</translation>
+<translation id="7685038817958445325">Не удалось запустить трансляцию</translation>
 <translation id="7685049629764448582">Память JavaScript</translation>
 <translation id="7701869757853594372">USER-дескрипторы</translation>
 <translation id="7704305437604973648">Задача</translation>
@@ -410,7 +412,6 @@
 Храните файл ключей в надёжном месте. Он потребуется для создания новых версий расширения.</translation>
 <translation id="8004582292198964060">Браузер</translation>
 <translation id="8018313076035239964">Управляйте отправкой данных сайтам и отображением контента на веб-страницах</translation>
-<translation id="8032244173881942855">Невозможно транслировать вкладку.</translation>
 <translation id="8071432093239591881">Печатать как картинку</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> КБ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -463,10 +464,9 @@
 <translation id="916607977885256133">Картинка в картинке</translation>
 <translation id="9170848237812810038">&amp;Отменить</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" добавлено</translation>
-<translation id="9218430445555521422">Сделать браузером по умолчанию</translation>
+<translation id="9218430445555521422">Назначить основным</translation>
 <translation id="93766956588638423">Восстановить расширение</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Альбомная</translation>
 <translation id="994289308992179865">&amp;Повтор</translation>
 <translation id="998747458861718449">И&amp;нспектировать</translation>
 </translationbundle>

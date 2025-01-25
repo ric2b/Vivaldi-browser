@@ -69,14 +69,6 @@ BASE_FEATURE(kContextualPageActions,
              "ContextualPageActions",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kContextualPageActionReaderMode,
-             "ContextualPageActionReaderMode",
-#if defined(VIVALDI_BUILD)
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif // VIVALDI_BUILD
-
 BASE_FEATURE(kContextualPageActionShareModel,
              "ContextualPageActionShareModel",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -169,5 +161,27 @@ BASE_FEATURE(kSegmentationPlatformIosModuleRankerSplitBySurface,
 BASE_FEATURE(kSegmentationPlatformURLVisitResumptionRanker,
              "SegmentationPlatformURLVisitResumptionRanker",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+const char kEphemeralCardRankerForceShowCardParam[] =
+    "EphemeralCardRankerForceShowCardParam";
+const char kEphemeralCardRankerForceHideCardParam[] =
+    "EphemeralCardRankerForceHideCardParam";
+const char kPriceTrackingPromoForceOverride[] = "price-tracking-promo";
+
+// Feature flag for enabling the Emphemeral Card ranker.
+BASE_FEATURE(kSegmentationPlatformEphemeralCardRanker,
+             "SegmentationPlatformEphemeralCardRanker",
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+BASE_FEATURE(kSegmentationSurveyPage,
+             "SegmentationSurveyPage",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<bool> kSegmentationSurveyInternalsPage{
+    &kSegmentationSurveyPage, "survey_internals_page", /*default_value=*/true};
 
 }  // namespace segmentation_platform::features

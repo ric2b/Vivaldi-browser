@@ -24,7 +24,12 @@
 #[cfg(any(test, feature = "alloc"))]
 extern crate alloc;
 
+#[cfg(feature = "std")]
+extern crate std;
+
+use core::fmt;
 pub use strum;
+pub use tinyvec::ArrayVec;
 
 use crate::credential::matched::MatchedCredential;
 use crate::extended::deserialize::{deser_decrypt_v1, V1AdvertisementContents};
@@ -125,7 +130,7 @@ pub enum AdvDeserializationError {
 }
 
 impl Debug for AdvDeserializationError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AdvDeserializationError::VersionHeaderParseError => {
                 write!(f, "VersionHeaderParseError")
@@ -134,6 +139,20 @@ impl Debug for AdvDeserializationError {
         }
     }
 }
+
+impl fmt::Display for AdvDeserializationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AdvDeserializationError::VersionHeaderParseError => {
+                write!(f, "VersionHeaderParseError")
+            }
+            AdvDeserializationError::ParseError { .. } => write!(f, "ParseError"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for AdvDeserializationError {}
 
 /// Potentially hazardous details about deserialization errors. These error information can
 /// potentially expose side-channel information about the plaintext of the advertisements and/or
@@ -166,6 +185,22 @@ impl From<legacy::deserialize::AdvDeserializeError> for AdvDeserializationError 
         }
     }
 }
+
+// trivial Debug/Display that won't leak anything
+impl Debug for AdvDeserializationErrorDetailsHazmat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "AdvDeserializationErrorDetailsHazmat")
+    }
+}
+
+impl fmt::Display for AdvDeserializationErrorDetailsHazmat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "AdvDeserializationErrorDetailsHazmat")
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for AdvDeserializationErrorDetailsHazmat {}
 
 /// DE length is out of range (e.g. > 4 bits for encoded V0, > max DE size for actual V0, >127 for
 /// V1) or invalid for the relevant DE type.

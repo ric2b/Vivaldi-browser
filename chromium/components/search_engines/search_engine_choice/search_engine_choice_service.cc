@@ -27,6 +27,7 @@
 #include "components/crash/core/common/crash_key.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/policy_constants.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/eea_countries_ids.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_metrics_service_accessor.h"
@@ -199,10 +200,6 @@ SearchEngineChoiceService::SearchEngineChoiceService(
 
 SearchEngineChoiceService::~SearchEngineChoiceService() = default;
 
-bool SearchEngineChoiceService::ShouldShowUpdatedSettings() {
-  return IsChoiceScreenFlagEnabled(ChoicePromo::kAny);
-}
-
 SearchEngineChoiceScreenConditions
 SearchEngineChoiceService::GetStaticChoiceScreenConditions(
     const policy::PolicyService& policy_service,
@@ -213,10 +210,6 @@ SearchEngineChoiceService::GetStaticChoiceScreenConditions(
   // TODO(b/319050536): Remove the function declaration on these platforms.
   return SearchEngineChoiceScreenConditions::kUnsupportedBrowserType;
 #else
-  if (!IsChoiceScreenFlagEnabled(ChoicePromo::kAny)) {
-    return SearchEngineChoiceScreenConditions::kFeatureSuppressed;
-  }
-
   if (!is_regular_profile) {
     // Naming not exactly accurate, but still reflect the fact that incognito,
     // kiosk, etc. are not supported and belongs in this bucked more than in
@@ -289,11 +282,9 @@ SearchEngineChoiceService::GetDynamicChoiceScreenConditions(
   }
   CHECK(default_search_engine);
 
-  if (switches::kSearchEngineChoiceTriggerSkipFor3p.Get()) {
-    if (default_search_engine->GetEngineType(
-            template_url_service.search_terms_data()) != SEARCH_ENGINE_GOOGLE) {
-      return SearchEngineChoiceScreenConditions::kHasNonGoogleSearchEngine;
-    }
+  if (default_search_engine->GetEngineType(
+          template_url_service.search_terms_data()) != SEARCH_ENGINE_GOOGLE) {
+    return SearchEngineChoiceScreenConditions::kHasNonGoogleSearchEngine;
   }
 
   if (!template_url_service.IsPrepopulatedOrDefaultProviderByPolicy(
@@ -338,14 +329,6 @@ int SearchEngineChoiceService::GetCountryId() {
     return country_codes::kCountryIDUnknown;
   }
 
-  bool force_eea_country =
-      switches::kSearchEngineChoiceTriggerWithForceEeaCountry.Get();
-  if (force_eea_country) {
-    // `kSearchEngineChoiceTriggerWithForceEeaCountry` forces the search engine
-    // choice country to Belgium.
-    return country_codes::CountryStringToCountryID("BE");
-  }
-
   if (!country_id_cache_.has_value()) {
     country_id_cache_ = GetCountryIdInternal();
   }
@@ -356,10 +339,6 @@ void SearchEngineChoiceService::RecordChoiceMade(
     ChoiceMadeLocation choice_location,
     TemplateURLService* template_url_service) {
   CHECK_NE(choice_location, ChoiceMadeLocation::kOther);
-
-  if (!IsChoiceScreenFlagEnabled(ChoicePromo::kAny)) {
-    return;
-  }
 
   // Don't modify the pref if the user is not in the EEA region.
   if (!IsEeaChoiceCountry(GetCountryId())) {
@@ -465,10 +444,6 @@ void SearchEngineChoiceService::MaybeRecordChoiceScreenDisplayState(
 }
 
 void SearchEngineChoiceService::PreprocessPrefsForReprompt() {
-  if (!IsChoiceScreenFlagEnabled(ChoicePromo::kAny)) {
-    return;
-  }
-
   // Allow re-triggering the choice screen for testing the screen itself.
   // This flag is deliberately only clearing the prefs instead of more
   // forcefully triggering the screen because this allows to more easily test
@@ -610,16 +585,21 @@ void SearchEngineChoiceService::ProcessPendingChoiceScreenDisplayState(
                                       /*is_from_cached_state=*/true);
 }
 
+// static
+void SearchEngineChoiceService::RegisterLocalStatePrefs(
+    PrefRegistrySimple* registry) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  registry->RegisterInt64Pref(
+      prefs::kDefaultSearchProviderGuestModePrepopulatedId, 0);
+#endif
+}
+
 int SearchEngineChoiceService::GetCountryIdInternal() {
   // `country_codes::kCountryIDAtInstall` may not be set yet.
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   // On Android, ChromeOS and Linux, `country_codes::kCountryIDAtInstall` is
   // computed asynchronously using platform-specific signals, and may not be
   // available yet.
-  if (!IsChoiceScreenFlagEnabled(ChoicePromo::kAny)) {
-    return country_codes::GetCountryIDFromPrefs(&profile_prefs_.get());
-  }
-
   if (profile_prefs_->HasPrefPath(country_codes::kCountryIDAtInstall)) {
     return profile_prefs_->GetInteger(country_codes::kCountryIDAtInstall);
   }

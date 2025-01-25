@@ -99,7 +99,6 @@
 <translation id="265390580714150011">Field Value</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Re-enable</translation>
-<translation id="2678100101831051676">Unable to cast.</translation>
 <translation id="2719936478972253983">The following cookies were blocked</translation>
 <translation id="2721037002783622288">&amp;Search <ph name="SEARCH_ENGINE" /> for image</translation>
 <translation id="2738771556149464852">Not After</translation>
@@ -149,7 +148,6 @@
 <translation id="3378572629723696641">This extension may have been corrupted.</translation>
 <translation id="3387614642886316601">Use enhanced spell check</translation>
 <translation id="3390013585654699824">App details</translation>
-<translation id="3393582007140394275">Unable to cast screen.</translation>
 <translation id="345693547134384690">Open &amp;image in new tab</translation>
 <translation id="3493881266323043047">Validity</translation>
 <translation id="3511307672085573050">Copy Link Addr&amp;ess</translation>
@@ -347,6 +345,7 @@
 <translation id="6812841287760418429">Keep changes</translation>
 <translation id="6824564591481349393">Copy &amp;Email Address</translation>
 <translation id="6840155290835956714">Ask before sending</translation>
+<translation id="6878862640969460273">Landscape</translation>
 <translation id="6886871292305414135">Open link in new &amp;tab</translation>
 <translation id="6892812721183419409">Open Link as <ph name="USER" /></translation>
 <translation id="6900284862687837908">Background App: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -410,7 +409,6 @@ Key File: <ph name="KEY_FILE" />
 Keep your key file in a safe place. You will need it to create new versions of your extension.</translation>
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8018313076035239964">Control what information websites can use and what content they can show you</translation>
-<translation id="8032244173881942855">Unable to cast tab.</translation>
 <translation id="8071432093239591881">Print as image</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +464,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
 <translation id="9218430445555521422">Set as default</translation>
 <translation id="93766956588638423">Repair extension</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Landscape</translation>
 <translation id="994289308992179865">&amp;Loop</translation>
 <translation id="998747458861718449">I&amp;nspect</translation>
 </translationbundle>

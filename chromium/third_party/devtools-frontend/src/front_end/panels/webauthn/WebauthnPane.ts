@@ -150,13 +150,13 @@ const str_ = i18n.i18n.registerUIStrings('panels/webauthn/WebauthnPane.ts', UISt
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 const enum Events {
-  ExportCredential = 'ExportCredential',
-  RemoveCredential = 'RemoveCredential',
+  EXPORT_CREDENTIAL = 'ExportCredential',
+  REMOVE_CREDENTIAL = 'RemoveCredential',
 }
 
 type EventTypes = {
-  [Events.ExportCredential]: Protocol.WebAuthn.Credential,
-  [Events.RemoveCredential]: Protocol.WebAuthn.Credential,
+  [Events.EXPORT_CREDENTIAL]: Protocol.WebAuthn.Credential,
+  [Events.REMOVE_CREDENTIAL]: Protocol.WebAuthn.Credential,
 };
 
 class DataGridNode extends DataGrid.DataGrid.DataGridNode<DataGridNode> {
@@ -178,7 +178,7 @@ class DataGridNode extends DataGrid.DataGrid.DataGridNode<DataGridNode> {
 
     const exportButton = UI.UIUtils.createTextButton(i18nString(UIStrings.export), () => {
       if (this.dataGrid) {
-        (this.dataGrid as WebauthnDataGrid).dispatchEventToListeners(Events.ExportCredential, this.credential);
+        (this.dataGrid as WebauthnDataGrid).dispatchEventToListeners(Events.EXPORT_CREDENTIAL, this.credential);
       }
     }, {jslogContext: 'webauthn.export-credential'});
 
@@ -186,7 +186,7 @@ class DataGridNode extends DataGrid.DataGrid.DataGridNode<DataGridNode> {
 
     const removeButton = UI.UIUtils.createTextButton(i18nString(UIStrings.remove), () => {
       if (this.dataGrid) {
-        (this.dataGrid as WebauthnDataGrid).dispatchEventToListeners(Events.RemoveCredential, this.credential);
+        (this.dataGrid as WebauthnDataGrid).dispatchEventToListeners(Events.REMOVE_CREDENTIAL, this.credential);
       }
     }, {jslogContext: 'webauthn.remove-credential'});
 
@@ -203,7 +203,7 @@ class WebauthnDataGrid extends Common.ObjectWrapper.eventMixin<EventTypes, typeo
 class EmptyDataGridNode extends DataGrid.DataGrid.DataGridNode<DataGridNode> {
   override createCells(element: Element): void {
     element.removeChildren();
-    const td = (this.createTDWithClass(DataGrid.DataGrid.Align.Center) as HTMLTableCellElement);
+    const td = (this.createTDWithClass(DataGrid.DataGrid.Align.CENTER) as HTMLTableCellElement);
     if (this.dataGrid) {
       td.colSpan = this.dataGrid.visibleColumnsArray.length;
     }
@@ -347,7 +347,7 @@ export class WebauthnPaneImpl extends UI.Widget.VBox implements
       {
         id: 'isResidentCredential',
         title: i18nString(UIStrings.isResident),
-        dataType: DataGrid.DataGrid.DataType.Boolean,
+        dataType: DataGrid.DataGrid.DataType.BOOLEAN,
         weight: 10,
       },
       {
@@ -375,8 +375,8 @@ export class WebauthnPaneImpl extends UI.Widget.VBox implements
     const dataGrid = new WebauthnDataGrid(dataGridConfig);
     dataGrid.renderInline();
     dataGrid.setStriped(true);
-    dataGrid.addEventListener(Events.ExportCredential, this.#handleExportCredential, this);
-    dataGrid.addEventListener(Events.RemoveCredential, this.#handleRemoveCredential.bind(this, authenticatorId));
+    dataGrid.addEventListener(Events.EXPORT_CREDENTIAL, this.#handleExportCredential, this);
+    dataGrid.addEventListener(Events.REMOVE_CREDENTIAL, this.#handleRemoveCredential.bind(this, authenticatorId));
     dataGrid.rootNode().appendChild(new EmptyDataGridNode());
 
     this.dataGrids.set(authenticatorId, dataGrid);
@@ -669,10 +669,10 @@ export class WebauthnPaneImpl extends UI.Widget.VBox implements
     this.#updateActiveLabelTitle(activeLabel, nameField.value);
 
     editName.addEventListener(
-        UI.Toolbar.ToolbarButton.Events.Click,
+        UI.Toolbar.ToolbarButton.Events.CLICK,
         () => this.#handleEditNameButton(titleElement, nameField, editName, saveName));
     saveName.addEventListener(
-        UI.Toolbar.ToolbarButton.Events.Click,
+        UI.Toolbar.ToolbarButton.Events.CLICK,
         () => this.#handleSaveNameButton(titleElement, nameField, editName, saveName, activeLabel));
 
     nameField.addEventListener(
@@ -697,9 +697,9 @@ export class WebauthnPaneImpl extends UI.Widget.VBox implements
     dataGrid.asWidget().show(section);
     if (this.#model) {
       this.#model.addEventListener(
-          SDK.WebAuthnModel.Events.CredentialAdded, this.#addCredential.bind(this, authenticatorId));
+          SDK.WebAuthnModel.Events.CREDENTIAL_ADDED, this.#addCredential.bind(this, authenticatorId));
       this.#model.addEventListener(
-          SDK.WebAuthnModel.Events.CredentialAsserted, this.#updateCredential.bind(this, authenticatorId));
+          SDK.WebAuthnModel.Events.CREDENTIAL_ASSERTED, this.#updateCredential.bind(this, authenticatorId));
     }
 
     return section;

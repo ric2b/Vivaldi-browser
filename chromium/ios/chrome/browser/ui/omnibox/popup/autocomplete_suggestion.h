@@ -70,6 +70,11 @@ typedef NS_ENUM(NSUInteger, SuggestTileType) {
 /// Suggestion attached actions in suggest.
 @property(nonatomic, readonly) NSArray<SuggestAction*>* actionsInSuggest;
 
+// Vivaldi
+@property(nonatomic, readonly) NSString* local_favicon_path;
+@property(nonatomic, readonly) BOOL isDirectMatch;
+// End Vivaldi
+
 #pragma mark tail suggest
 
 /// Yes if this is a tail suggestion. Used by the popup to display according to

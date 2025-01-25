@@ -4,6 +4,7 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/chromeos/ui_mode.gni")
+import("//build/config/ui.gni")
 import("//chrome/version.gni")
 import("//components/optimization_guide/features.gni")
 import("//extensions/buildflags/buildflags.gni")
@@ -28,8 +29,6 @@ static_library("autofill") {
     "merchant_promo_code_manager_factory.h",
     "personal_data_manager_factory.cc",
     "personal_data_manager_factory.h",
-    "shopping_service_delegate_impl.cc",
-    "shopping_service_delegate_impl.h",
     "strike_database_factory.cc",
     "strike_database_factory.h",
     "subkey_requester_factory.cc",
@@ -61,7 +60,6 @@ static_library("autofill") {
     "//chrome/browser/sync",
     "//chrome/common:constants",
     "//components/autofill/content/browser",
-    "//components/commerce/core:shopping_service",
     "//components/image_fetcher/core",
     "//components/prefs",
     "//components/strings:components_strings_grit",
@@ -136,6 +134,7 @@ static_library("test_support") {
   deps = [
     "//chrome/browser/autofill:autofill",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/autofill",
     "//components/autofill/content/browser:browser",
     "//components/autofill/content/common/mojom",
     "//components/autofill/core/browser:test_support",
@@ -161,7 +160,6 @@ static_library("test_support") {
       "//chrome/browser/autofill",
       "//chrome/browser/keyboard_accessory/test_utils/android",
     ]
-    public_deps += [ "test:test_support" ]
   }
 }
 
@@ -175,7 +173,6 @@ if (!is_android) {
       "autofill_browsertest.cc",
       "autofill_metrics_browsertest.cc",
       "autofill_server_browsertest.cc",
-      "content_autofill_driver_browsertest.cc",
       "form_structure_browsertest.cc",
     ]
 
@@ -186,6 +183,7 @@ if (!is_android) {
 
     deps = [
       "//chrome/browser/autofill",
+      "//chrome/browser/ui:browser_navigator_params_headers",
       "//chrome/test:test_support",
       "//components/autofill/content/browser:test_support",
       "//components/autofill/core/common:test_support",
@@ -211,6 +209,8 @@ if (!is_android) {
 
     deps = [
       "//chrome/browser/autofill",
+      "//chrome/browser/ui/autofill",
+      "//chrome/browser/ui/autofill:test_support",
       "//chrome/test:test_support",
       "//chrome/test:test_support",
       "//chrome/test:test_support_ui",
@@ -234,6 +234,7 @@ if (!is_android) {
       "//chrome/browser",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/ui",
+      "//chrome/browser/ui/autofill",
       "//chrome/common:chrome_features",
       "//chrome/common:non_code_constants",
       "//chrome/test:test_support",
@@ -263,13 +264,15 @@ if (!is_android) {
 
     if (is_chromeos_ash && enable_extensions) {
       deps += [
-        "//chrome/browser/ash",
-        "//chrome/browser/ash:test_support",
         "//chrome/browser/ash/accessibility",
         "//chrome/browser/ash/accessibility:test_support",
         "//extensions/browser:test_support",
         "//ui/base:test_support",
       ]
+    }
+
+    if (use_aura) {
+      deps += [ "//chrome/browser/ui/aura/accessibility" ]
     }
   }
 }
@@ -284,6 +287,8 @@ if (!is_android) {
 
     deps = [
       "//chrome/browser/autofill:test_support_ui",
+      "//chrome/browser/ui/autofill",
+      "//chrome/browser/ui/autofill:test_support",
       "//chrome/test:test_support",
       "//components/autofill/core/common:autofill_regex",
     ]

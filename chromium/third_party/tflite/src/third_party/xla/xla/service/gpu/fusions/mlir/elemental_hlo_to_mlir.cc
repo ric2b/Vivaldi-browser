@@ -20,7 +20,6 @@ limitations under the License.
 #include <iterator>
 #include <queue>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "absl/algorithm/container.h"
@@ -38,53 +37,47 @@ limitations under the License.
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/MathExtras.h"
-#include "mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
-#include "mlir/Dialect/Affine/LoopUtils.h"  // from @llvm-project
-#include "mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
-#include "mlir/Dialect/Complex/IR/Complex.h"  // from @llvm-project
-#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/Dialect/SCF/IR/SCF.h"  // from @llvm-project
-#include "mlir/Dialect/Tensor/IR/Tensor.h"  // from @llvm-project
-#include "mlir/Dialect/Vector/IR/VectorOps.h"  // from @llvm-project
-#include "mlir/IR/AffineExpr.h"  // from @llvm-project
-#include "mlir/IR/Attributes.h"  // from @llvm-project
-#include "mlir/IR/BuiltinAttributeInterfaces.h"  // from @llvm-project
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypeInterfaces.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "mlir/IR/IRMapping.h"  // from @llvm-project
-#include "mlir/IR/ImplicitLocOpBuilder.h"  // from @llvm-project
-#include "mlir/IR/TypeRange.h"  // from @llvm-project
-#include "mlir/IR/Types.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/IR/ValueRange.h"  // from @llvm-project
-#include "mlir/Interfaces/DataLayoutInterfaces.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Affine/LoopUtils.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Complex/IR/Complex.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributeInterfaces.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/TypeRange.h"
+#include "mlir/IR/Types.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
+#include "mlir/Support/LLVM.h"
 #include "xla/comparison_util.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/mlir/utils/type_util.h"
 #include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "xla/mlir_hlo/mhlo/transforms/map_mhlo_to_scalar_op.h"
-#include "xla/mlir_hlo/mhlo/utils/type_conversion.h"
 #include "xla/primitive_util.h"
 #include "xla/service/algorithm_util.h"
+#include "xla/service/gpu/fusions/ir/xla_gpu_ops.h"
 #include "xla/service/gpu/fusions/mlir/computation_partitioner.h"
-#include "xla/service/gpu/fusions/mlir/ir/xla_gpu_ops.h"
 #include "xla/service/gpu/fusions/mlir/type_util.h"
-#include "xla/service/gpu/hlo_traversal.h"
 #include "xla/service/gpu/model/indexing_analysis.h"
 #include "xla/service/gpu/model/indexing_map.h"
-#include "xla/service/llvm_ir/llvm_util.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
-#include "xla/stream_executor/device_description.h"
 #include "xla/translate/hlo_to_mhlo/hlo_utils.h"
-#include "tsl/platform/errors.h"
 #include "tsl/platform/statusor.h"
 
 namespace xla {
@@ -118,56 +111,56 @@ namespace scf = ::mlir::scf;
 
 // HLO opcodes that we never support.
 static auto& kUnsupportedOps =
-    *new absl::flat_hash_set<HloOpcode>{HloOpcode::kAddDependency,
-                                        HloOpcode::kAfterAll,
-                                        HloOpcode::kAllGather,
-                                        HloOpcode::kAllGatherDone,
-                                        HloOpcode::kAllGatherStart,
-                                        HloOpcode::kAllReduce,
-                                        HloOpcode::kAllReduceDone,
-                                        HloOpcode::kAllReduceStart,
-                                        HloOpcode::kAllToAll,
-                                        HloOpcode::kAsyncDone,
-                                        HloOpcode::kAsyncStart,
-                                        HloOpcode::kAsyncUpdate,
-                                        HloOpcode::kBatchNormGrad,
-                                        HloOpcode::kBatchNormInference,
-                                        HloOpcode::kBatchNormTraining,
-                                        HloOpcode::kCholesky,
-                                        HloOpcode::kCollectivePermute,
-                                        HloOpcode::kCollectivePermuteDone,
-                                        HloOpcode::kCollectivePermuteStart,
-                                        HloOpcode::kCopyDone,
-                                        HloOpcode::kCopyStart,
-                                        HloOpcode::kCustomCall,
-                                        HloOpcode::kDomain,
-                                        HloOpcode::kDynamicReshape,
-                                        HloOpcode::kFft,
-                                        HloOpcode::kFusion,
-                                        HloOpcode::kGetDimensionSize,
-                                        HloOpcode::kOptimizationBarrier,
-                                        HloOpcode::kInfeed,
-                                        HloOpcode::kOutfeed,
-                                        HloOpcode::kPartitionId,
-                                        HloOpcode::kRecv,
-                                        HloOpcode::kRecvDone,
-                                        HloOpcode::kReduceScatter,
-                                        HloOpcode::kReplicaId,
-                                        HloOpcode::kRng,
-                                        HloOpcode::kRngBitGenerator,
-                                        HloOpcode::kRngGetAndUpdateState,
-                                        HloOpcode::kScatter,
-                                        HloOpcode::kSelectAndScatter,
-                                        HloOpcode::kSend,
-                                        HloOpcode::kSendDone,
-                                        HloOpcode::kSetDimensionSize,
-                                        HloOpcode::kSort,
-                                        HloOpcode::kTopK,
-                                        HloOpcode::kTriangularSolve,
-                                        HloOpcode::kWhile,
-                                        HloOpcode::kConditional,
-                                        HloOpcode::kStochasticConvert,
-                                        HloOpcode::kCall};
+    *new llvm::DenseSet<HloOpcode>{HloOpcode::kAddDependency,
+                                   HloOpcode::kAfterAll,
+                                   HloOpcode::kAllGather,
+                                   HloOpcode::kAllGatherDone,
+                                   HloOpcode::kAllGatherStart,
+                                   HloOpcode::kAllReduce,
+                                   HloOpcode::kAllReduceDone,
+                                   HloOpcode::kAllReduceStart,
+                                   HloOpcode::kAllToAll,
+                                   HloOpcode::kAsyncDone,
+                                   HloOpcode::kAsyncStart,
+                                   HloOpcode::kAsyncUpdate,
+                                   HloOpcode::kBatchNormGrad,
+                                   HloOpcode::kBatchNormInference,
+                                   HloOpcode::kBatchNormTraining,
+                                   HloOpcode::kCholesky,
+                                   HloOpcode::kCollectivePermute,
+                                   HloOpcode::kCollectivePermuteDone,
+                                   HloOpcode::kCollectivePermuteStart,
+                                   HloOpcode::kCopyDone,
+                                   HloOpcode::kCopyStart,
+                                   HloOpcode::kCustomCall,
+                                   HloOpcode::kDomain,
+                                   HloOpcode::kDynamicReshape,
+                                   HloOpcode::kFft,
+                                   HloOpcode::kFusion,
+                                   HloOpcode::kGetDimensionSize,
+                                   HloOpcode::kOptimizationBarrier,
+                                   HloOpcode::kInfeed,
+                                   HloOpcode::kOutfeed,
+                                   HloOpcode::kPartitionId,
+                                   HloOpcode::kRecv,
+                                   HloOpcode::kRecvDone,
+                                   HloOpcode::kReduceScatter,
+                                   HloOpcode::kReplicaId,
+                                   HloOpcode::kRng,
+                                   HloOpcode::kRngBitGenerator,
+                                   HloOpcode::kRngGetAndUpdateState,
+                                   HloOpcode::kScatter,
+                                   HloOpcode::kSelectAndScatter,
+                                   HloOpcode::kSend,
+                                   HloOpcode::kSendDone,
+                                   HloOpcode::kSetDimensionSize,
+                                   HloOpcode::kSort,
+                                   HloOpcode::kTopK,
+                                   HloOpcode::kTriangularSolve,
+                                   HloOpcode::kWhile,
+                                   HloOpcode::kConditional,
+                                   HloOpcode::kStochasticConvert,
+                                   HloOpcode::kCall};
 
 bool IsUnsupportedGather(const HloInstruction* instr) {
   // We assume gather simplifier ran, so we don't need to support all gather
@@ -284,43 +277,45 @@ absl::StatusOr<SmallVector<Value, 1>> EmitConcat(
       PrimitiveTypeToMlirType(instr->shape().element_type(), b);
   int concat_dim =
       Cast<HloConcatenateInstruction>(instr)->concatenate_dimension();
-  int64_t offset = 0;
-  IfOp outermost_if = nullptr;
   SmallVector<Value, 3> operand_indices = indices;
-  for (auto [index, operand] : llvm::enumerate(instr->operands())) {
-    int64_t limit = offset + operand->shape().dimensions(concat_dim);
-    auto ins = b.create<CmpIOp>(CmpIPredicate::ult, indices[concat_dim],
-                                b.create<ConstantIndexOp>(limit));
-
-    auto generate_operand = [&, index = index]() {
-      operand_indices[concat_dim] = b.create<arith::SubIOp>(
-          indices[concat_dim], b.create<ConstantIndexOp>(offset));
-      TF_ASSIGN_OR_RETURN(auto operand,
-                          operand_provider(instr, index, operand_indices));
-      b.create<YieldOp>(operand);
-      return absl::OkStatus();
-    };
-
-    if (index < instr->operand_count() - 1) {
-      auto if_op =
-          b.create<IfOp>(mlir::TypeRange{result_element_type}, ins, true, true);
-      if (outermost_if == nullptr) {
-        outermost_if = if_op;
-      } else {
-        b.create<YieldOp>(if_op.getResults());
-      }
-
-      b.setInsertionPointToStart(if_op.getBody(0));
-      TF_RETURN_IF_ERROR(generate_operand());
-      b.setInsertionPointToStart(if_op.getBody(1));
-    } else {
-      TF_RETURN_IF_ERROR(generate_operand());
-    }
-    offset = limit;
+  SmallVector<int64_t, 3> offsets{0};
+  for (auto* operand : instr->operands()) {
+    offsets.push_back(offsets.back() + operand->shape().dimensions(concat_dim));
   }
 
-  b.setInsertionPointAfter(outermost_if);
-  return outermost_if.getResults();
+  std::function<absl::StatusOr<SmallVector<Value, 1>>(int64_t, int64_t)>
+      generate_concat;
+  generate_concat = [&](int64_t begin,
+                        int64_t end) -> absl::StatusOr<SmallVector<Value, 1>> {
+    // If there's just one operand in the range, emit it.
+    if (begin == end - 1) {
+      operand_indices[concat_dim] = b.create<arith::SubIOp>(
+          indices[concat_dim], b.create<ConstantIndexOp>(offsets[begin]));
+      TF_ASSIGN_OR_RETURN(auto operand,
+                          operand_provider(instr, begin, operand_indices));
+      return operand;
+    }
+
+    int64_t mid = (begin + end) / 2;  // No risk of overflow.
+    auto if_op = b.create<IfOp>(
+        mlir::TypeRange{result_element_type},
+        b.create<CmpIOp>(CmpIPredicate::ult, indices[concat_dim],
+                         b.create<ConstantIndexOp>(offsets[mid])),
+        true, true);
+
+    b.setInsertionPointToStart(if_op.getBody(0));
+    TF_ASSIGN_OR_RETURN(auto left_val, generate_concat(begin, mid));
+    b.create<YieldOp>(left_val);
+
+    b.setInsertionPointToStart(if_op.getBody(1));
+    TF_ASSIGN_OR_RETURN(auto right_val, generate_concat(mid, end));
+    b.create<YieldOp>(right_val);
+    b.setInsertionPointAfter(if_op);
+
+    return if_op.getResults();
+  };
+
+  return generate_concat(0, instr->operand_count());
 }
 
 absl::StatusOr<SmallVector<Value, 1>> EmitDynamicSlice(
@@ -665,9 +660,10 @@ Value ApplyAffineExpr(mlir::AffineExpr expr, ValueRange dims,
   return b.createOrFold<mlir::affine::AffineApplyOp>(expr, args);
 }
 
-SmallVector<Value, 3> ApplyIndexing(const IndexingMap& map, ValueRange dims,
+SmallVector<Value, 3> ApplyIndexing(IndexingMap map, ValueRange dims,
                                     ValueRange symbols,
                                     ImplicitLocOpBuilder& b) {
+  map.ClearConstraints();
   SmallVector<Value, 3> results;
   for (unsigned int i = 0; i < map.GetAffineMap().getNumResults(); ++i) {
     SmallVector<Value, 1> result;
@@ -788,8 +784,19 @@ absl::StatusOr<SmallVector<Value, 2>> GetOperands(
     const HloInstruction* instr, ValueRange indices,
     const OperandProvider& operand_provider, ImplicitLocOpBuilder& builder) {
   SmallVector<Value, 2> operands;
-  if (HloInstruction::IsOpElementwise(instr->opcode()) ||
-      instr->opcode() == HloOpcode::kMap) {
+  bool is_elementwise = HloInstruction::IsOpElementwise(instr->opcode()) ||
+                        instr->opcode() == HloOpcode::kMap;
+  if (is_elementwise && instr->shape().IsArray()) {
+    // Check if the instruction is really elementwise. There may be some
+    // broadcasting.
+    int64_t rank = instr->shape().rank();
+    is_elementwise &=
+        absl::c_all_of(instr->operands(), [&](const HloInstruction* operand) {
+          return operand->shape().rank() == rank;
+        });
+  }
+
+  if (is_elementwise) {
     // Avoid materializing the input indices for elementwise ops.
     for (int64_t operand_number = 0; operand_number < instr->operand_count();
          ++operand_number) {
@@ -1165,58 +1172,6 @@ absl::StatusOr<SmallVector<Value, 1>> HloToMlir(
 
 }  // namespace
 
-bool IsHloOpSupported(const HloInstruction* instr,
-                      se::CudaComputeCapability compute_capability) {
-  return !(kUnsupportedOps.contains(instr->opcode()) ||
-           IsUnsupportedGather(instr));
-}
-
-bool IsHloConversionSupported(const HloComputation* computation,
-                              se::GpuComputeCapability compute_capability) {
-  if (!std::holds_alternative<se::CudaComputeCapability>(compute_capability)) {
-    // ROCM is not tested.
-    return false;
-  }
-  auto cuda_compute_capability =
-      std::get<se::CudaComputeCapability>(compute_capability);
-
-  return absl::c_all_of(
-             computation->instructions(),
-             [=](const HloInstruction* instr) {
-               return absl::c_all_of(instr->called_computations(),
-                                     [&](const HloComputation* called) {
-                                       return IsHloConversionSupported(
-                                           called, compute_capability);
-                                     }) &&
-                      IsHloOpSupported(instr, cuda_compute_capability);
-             }) &&
-         (computation->IsFusionComputation() ||
-          (absl::c_all_of(
-              computation->parameter_instructions(), [](auto* param) {
-                return param->shape().IsArray() && param->shape().rank() == 0;
-              })));
-}
-
-bool IsHloConversionSupported(const HloFusionAdaptor& fusion,
-                              se::GpuComputeCapability compute_capability) {
-  if (!std::holds_alternative<se::CudaComputeCapability>(compute_capability)) {
-    // ROCM is not tested.
-    return false;
-  }
-  auto cuda_compute_capability =
-      std::get<se::CudaComputeCapability>(compute_capability);
-
-  return !HloFindIf(
-      fusion.GetRoots(), fusion, [=](HloInstructionAdaptor instr) {
-        return !absl::c_all_of(instr.instruction().called_computations(),
-                               [&](const HloComputation* called) {
-                                 return IsHloConversionSupported(
-                                     called, compute_capability);
-                               }) ||
-               !IsHloOpSupported(&instr.instruction(), cuda_compute_capability);
-      });
-}
-
 ValueRange ProvideParameter(const PartitionedComputation& computation,
                             const HloInstruction* instr, int operand_index,
                             ValueRange indices,
@@ -1455,6 +1410,8 @@ absl::StatusOr<SmallVector<Value>> SubgraphToMlir(
       .Convert();
 }
 
+}  // namespace
+
 void GetLoopBoundsFromIndexingMap(ImplicitLocOpBuilder& b,
                                   const IndexingMap& indexing_map,
                                   SmallVectorImpl<Value>* lbs,
@@ -1468,8 +1425,6 @@ void GetLoopBoundsFromIndexingMap(ImplicitLocOpBuilder& b,
     steps->push_back(c1);
   }
 }
-
-}  // namespace
 
 absl::Status SubgraphToMlirFunction(
     const PartitionedComputation& computation,
@@ -1502,20 +1457,6 @@ absl::Status SubgraphToMlirFunction(
 }
 
 namespace {
-
-bool IsSymbolConstrained(const IndexingMap& map, int symbol_id) {
-  for (const auto& [expr, _] : map.GetConstraints()) {
-    bool result = false;
-    expr.walk([&](mlir::AffineExpr leaf) {
-      auto sym = mlir::dyn_cast<mlir::AffineSymbolExpr>(leaf);
-      if (sym && sym.getPosition() == symbol_id) {
-        result = true;
-      }
-    });
-    if (result) return true;
-  }
-  return false;
-}
 
 ValueRange EmitLoopNestImpl(
     ImplicitLocOpBuilder& b, ValueRange dim_values, ValueRange iter_args_inits,
@@ -1596,6 +1537,57 @@ ValueRange EmitLoopNestImpl(
 
 }  // namespace
 
+ValueRange EmitXlaLoopOp(ImplicitLocOpBuilder& b, ValueRange dim_values,
+                         ValueRange iter_args_inits,
+                         const IndexingMap& indexing_map,
+                         mlir::function_ref<SmallVector<Value>(
+                             ValueRange /*ivs*/, ValueRange /*map_results*/,
+                             ValueRange /*iter_args*/)>
+                             create_body,
+                         bool vectorize) {
+  SmallVector<Value, 4> vector_inits;
+  if (vectorize) {
+    CHECK_EQ(indexing_map.GetSymbolBounds().back().lower, 0);
+    int vector_size = indexing_map.GetSymbolBounds().back().upper + 1;
+    vector_inits = iter_args_inits;
+    for (auto& init : vector_inits) {
+      if (!mlir::isa<mlir::ShapedType>(init.getType())) {
+        auto vector_ty = mlir::VectorType::get({vector_size}, init.getType());
+        init = b.create<mlir::vector::SplatOp>(vector_ty, init);
+      }
+    }
+    iter_args_inits = vector_inits;
+  }
+  auto bb = [&](OpBuilder& nested_builder, Location loc, ValueRange ivs,
+                ValueRange map_results, ValueRange iter_args) {
+    SmallVector<Value, 4> results;
+    if (vectorize) {
+      SmallVector<Value, 4> vector_args;
+      vector_args = iter_args;
+      // Extract the vector elements.
+      for (auto& init : vector_args) {
+        if (mlir::isa<mlir::VectorType>(init.getType())) {
+          init = nested_builder.create<mlir::vector::ExtractOp>(loc, init,
+                                                                ivs.back());
+        }
+      }
+      results = create_body(ivs, map_results, vector_args);
+      // Insert the results.
+      for (auto [index, init] : llvm::enumerate(iter_args)) {
+        if (mlir::isa<mlir::VectorType>(init.getType())) {
+          results[index] = nested_builder.create<mlir::vector::InsertOp>(
+              loc, results[index], iter_args[index], ivs.back());
+        }
+      }
+    } else {
+      results = create_body(ivs, map_results, iter_args);
+    }
+    nested_builder.create<xla::gpu::YieldOp>(loc, results);
+  };
+  return b.create<LoopOp>(indexing_map, dim_values, iter_args_inits, bb)
+      .getResults();
+}
+
 ValueRange EmitLoopNest(ImplicitLocOpBuilder& b, ValueRange dim_values,
                         ValueRange iter_args_inits,
                         const IndexingMap& indexing_map,
@@ -1613,7 +1605,7 @@ ValueRange EmitLoopNest(ImplicitLocOpBuilder& b, ValueRange dim_values,
        sym_index >= 0 && cumulative_loop_size < 64; --sym_index) {
     auto& bound = indexing_map.GetSymbolBound(sym_index);
     cumulative_loop_size *= bound.GetLoopTripCount();
-    if (!IsSymbolConstrained(indexing_map, sym_index)) continue;
+    if (!indexing_map.IsSymbolConstrained(sym_index)) continue;
 
     IndexingMap peeled_map = indexing_map;
     if (bound.upper == bound.lower) continue;
@@ -1622,7 +1614,7 @@ ValueRange EmitLoopNest(ImplicitLocOpBuilder& b, ValueRange dim_values,
     peeled_map.Simplify();
 
     // If the symbol is still constrained, peeling does not help.
-    if (IsSymbolConstrained(peeled_map, sym_index)) continue;
+    if (peeled_map.IsSymbolConstrained(sym_index)) continue;
 
     auto first_results = EmitLoopNestImpl(b, dim_values, iter_args_inits,
                                           peeled_map, create_body, vectorize);
@@ -1637,7 +1629,6 @@ ValueRange EmitLoopNest(ImplicitLocOpBuilder& b, ValueRange dim_values,
     return EmitLoopNestImpl(b, dim_values, first_results, remainder,
                             create_body, vectorize);
   }
-
   return EmitLoopNestImpl(b, dim_values, iter_args_inits, indexing_map,
                           create_body, vectorize);
 }

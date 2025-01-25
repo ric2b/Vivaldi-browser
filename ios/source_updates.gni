@@ -65,7 +65,7 @@ update_template_instance("//ios/chrome/widget_kit_extension/resources:resources"
   ]
 }
 
-update_target("//ios/chrome/browser/ui/tabs:tabs") {
+update_target("//ios/chrome/browser/badges/ui_bundled:ui_bundled") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h",
     "//vivaldi/ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.mm",
@@ -112,14 +112,7 @@ update_target("//ios/chrome/browser/ui/settings:settings") {
 
 update_target("//ios/chrome/browser/ui/popup_menu/overflow_menu:overflow_menu_swift") {
     sources += [
-    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_action_list.swift",
-    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_action_row.swift",
-    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_view.swift",
-    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_provider.swift",
-    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_hosting_view_controller.swift",
-    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_action_section.swift",
-    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_destination_view.swift",
-    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_menu_destination_list.swift",
+    "//vivaldi/ios/ui/vivaldi_overflow_menu/vivaldi_overflow_action_add_to_view.swift",
   ]
 }
 
@@ -219,5 +212,12 @@ update_target("//ios/chrome/browser/default_promo/ui_bundled/resources:animation
     "//vivaldi/ios/chrome/browser/ui/default_promo/resources/default_browser_animation_darkmode.json",
     "//vivaldi/ios/chrome/browser/ui/default_promo/resources/default_browser_animation_rtl.json",
     "//vivaldi/ios/chrome/browser/ui/default_promo/resources/default_browser_animation_rtl_darkmode.json",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/send_tab_to_self:send_tab_to_self_ui") {
+  sources += [
+    "//vivaldi/ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_image_detail_text_cell.h",
+    "//vivaldi/ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_image_detail_text_cell.mm",
   ]
 }

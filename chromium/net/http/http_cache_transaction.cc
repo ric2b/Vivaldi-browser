@@ -52,6 +52,7 @@
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
 #include "net/disk_cache/disk_cache.h"
+#include "net/http/http_cache.h"
 #include "net/http/http_cache_writers.h"
 #include "net/http/http_log_util.h"
 #include "net/http/http_network_session.h"
@@ -90,10 +91,8 @@ bool NonErrorResponse(int status_code) {
 }
 
 bool IsOnBatteryPower() {
-  if (base::PowerMonitor::IsInitialized()) {
-    return base::PowerMonitor::IsOnBatteryPower();
-  }
-  return false;
+  auto* power_monitor = base::PowerMonitor::GetInstance();
+  return power_monitor->IsInitialized() && power_monitor->IsOnBatteryPower();
 }
 
 enum ExternallyConditionalizedType {
@@ -150,8 +149,8 @@ constexpr HeaderNameAndValue kForceValidateHeaders[] = {
 bool HeaderMatches(const HttpRequestHeaders& headers,
                    const HeaderNameAndValue* search) {
   for (; search->name; ++search) {
-    std::string header_value;
-    if (!headers.GetHeader(search->name, &header_value)) {
+    std::optional<std::string> header_value = headers.GetHeader(search->name);
+    if (!header_value) {
       continue;
     }
 
@@ -159,7 +158,7 @@ bool HeaderMatches(const HttpRequestHeaders& headers,
       return true;
     }
 
-    HttpUtil::ValuesIterator v(header_value.begin(), header_value.end(), ',');
+    HttpUtil::ValuesIterator v(header_value->begin(), header_value->end(), ',');
     while (v.GetNext()) {
       if (base::EqualsCaseInsensitiveASCII(v.value_piece(), search->value)) {
         return true;
@@ -1087,8 +1086,18 @@ int HttpCache::Transaction::DoGetBackendComplete(int result) {
   mode_ = NONE;
   const bool should_pass_through = ShouldPassThrough();
 
-  if (!should_pass_through) {
-    cache_key_ = *cache_->GenerateCacheKeyForRequest(request_);
+  std::optional<std::string> cache_key =
+      HttpCache::GenerateCacheKeyForRequest(request_);
+
+  // If no cache key is generated from this request, treat that the same way we
+  // do other pass-through cases. This prevents resources whose origin is opaque
+  // from being cached. Blink's memory cache should take care of reusing
+  // resources within the current page load, but otherwise a resource with an
+  // opaque top-frame origin won’t be used again. Also, if the request does not
+  // have a top frame origin, bypass the cache otherwise resources from
+  // different pages could share a cached entry in such cases.
+  if (!should_pass_through && cache_key.has_value()) {
+    cache_key_ = *cache_key;
 
     // Requested cache access mode.
     if (effective_load_flags_ & LOAD_ONLY_FROM_CACHE) {
@@ -1636,8 +1645,8 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
   read_headers_since_ = TimeTicks::Now();
 
   if (result != read_buf_->size() ||
-      !HttpCache::ParseResponseInfo(base::as_bytes(read_buf_->span()),
-                                    &response_, &truncated_)) {
+      !HttpCache::ParseResponseInfo(read_buf_->span(), &response_,
+                                    &truncated_)) {
     return OnCacheReadError(result, true);
   }
 
@@ -1683,7 +1692,8 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
   }
 
   if (response_.restricted_prefetch &&
-      !(request_->load_flags & LOAD_CAN_USE_RESTRICTED_PREFETCH)) {
+      !(request_->load_flags &
+        LOAD_CAN_USE_RESTRICTED_PREFETCH_FOR_MAIN_FRAME)) {
     TransitionToState(STATE_SEND_REQUEST);
     return OK;
   }
@@ -1691,7 +1701,7 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
   // When a restricted prefetch is reused, we lift its reuse restriction.
   bool restricted_prefetch_reuse =
       response_.restricted_prefetch &&
-      request_->load_flags & LOAD_CAN_USE_RESTRICTED_PREFETCH;
+      request_->load_flags & LOAD_CAN_USE_RESTRICTED_PREFETCH_FOR_MAIN_FRAME;
   DCHECK(!restricted_prefetch_reuse || response_.unused_since_prefetch);
 
   if (response_.unused_since_prefetch !=
@@ -1704,7 +1714,8 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
     updated_prefetch_response_->unused_since_prefetch =
         !response_.unused_since_prefetch;
     if (response_.restricted_prefetch &&
-        request_->load_flags & LOAD_CAN_USE_RESTRICTED_PREFETCH) {
+        request_->load_flags &
+            LOAD_CAN_USE_RESTRICTED_PREFETCH_FOR_MAIN_FRAME) {
       updated_prefetch_response_->restricted_prefetch = false;
     }
 
@@ -2042,7 +2053,9 @@ int HttpCache::Transaction::DoSuccessfulSendRequest() {
       (!HttpCache::IsSplitCacheEnabled() ||
        request_->network_isolation_key.IsFullyPopulated())) {
     cache_->DoomMainEntryForUrl(request_->url, request_->network_isolation_key,
-                                request_->is_subframe_document_resource);
+                                request_->is_subframe_document_resource,
+                                request_->is_main_frame_navigation,
+                                request_->initiator);
   }
 
   if (new_response_->headers->response_code() ==
@@ -2607,13 +2620,14 @@ void HttpCache::Transaction::SetRequest(const NetLogWithSource& net_log) {
   // cache validation request.
   for (size_t i = 0; i < std::size(kValidationHeaders); ++i) {
     const ValidationHeaderInfo& info = kValidationHeaders[i];
-    std::string validation_value;
-    if (request_->extra_headers.GetHeader(info.request_header_name,
-                                          &validation_value)) {
-      if (!external_validation_.values[i].empty() || validation_value.empty()) {
+    if (std::optional<std::string> validation_value =
+            request_->extra_headers.GetHeader(info.request_header_name);
+        validation_value) {
+      if (!external_validation_.values[i].empty() ||
+          validation_value->empty()) {
         external_validation_error = true;
       }
-      external_validation_.values[i] = validation_value;
+      external_validation_.values[i] = std::move(validation_value).value();
       external_validation_.initialized = true;
     }
   }
@@ -2669,16 +2683,6 @@ bool HttpCache::Transaction::ShouldPassThrough() {
   if (!cache_->disk_cache_.get()) {
     cacheable = false;
   } else if (effective_load_flags_ & LOAD_DISABLE_CACHE) {
-    cacheable = false;
-  }
-  // Prevent resources whose origin is opaque from being cached. Blink's memory
-  // cache should take care of reusing resources within the current page load,
-  // but otherwise a resource with an opaque top-frame origin won’t be used
-  // again. Also, if the request does not have a top frame origin, bypass the
-  // cache otherwise resources from different pages could share a cached entry
-  // in such cases.
-  else if (HttpCache::IsSplitCacheEnabled() &&
-           request_->network_isolation_key.IsTransient()) {
     cacheable = false;
   } else if (method_ == "GET" || method_ == "HEAD") {
   } else if (method_ == "POST" && request_->upload_data_stream &&
@@ -3160,10 +3164,13 @@ bool HttpCache::Transaction::ComputeUnusablePerCachingHeaders() {
     return false;
   }
 
-  // If none of the above is true and the entry has zero freshness, then it
-  // won't be usable absent load flag override.
-  return response_.headers->GetFreshnessLifetimes(response_.response_time)
-      .freshness.is_zero();
+  // If none of the above is true and the entry has zero freshness and
+  // no stale-while-revaliate, then it won't be usable absent load flag
+  // override.
+  auto freshness_lifetimes =
+      response_.headers->GetFreshnessLifetimes(response_.response_time);
+  return freshness_lifetimes.freshness.is_zero() &&
+         freshness_lifetimes.staleness.is_zero();
 }
 
 // We just received some headers from the server. We may have asked for a range,

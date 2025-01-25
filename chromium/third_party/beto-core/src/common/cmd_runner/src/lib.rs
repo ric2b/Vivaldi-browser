@@ -17,6 +17,7 @@ use owo_colors::OwoColorize as _;
 use std::{collections, env, ffi, io, io::BufRead, path, process, thread};
 
 pub mod cargo_workspace;
+pub mod fuzzers;
 pub mod license_checker;
 
 pub fn run_cmd_shell(

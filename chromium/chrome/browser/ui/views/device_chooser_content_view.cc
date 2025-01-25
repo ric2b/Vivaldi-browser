@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/views/device_chooser_content_view.h"
 
 #include <string>
@@ -16,6 +21,7 @@
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/point.h"
@@ -348,9 +354,9 @@ std::unique_ptr<views::View> DeviceChooserContentView::CreateExtraView() {
 }
 
 bool DeviceChooserContentView::IsDialogButtonEnabled(
-    ui::DialogButton button) const {
+    ui::mojom::DialogButton button) const {
   return chooser_controller_->BothButtonsAlwaysEnabled() ||
-         button != ui::DIALOG_BUTTON_OK ||
+         button != ui::mojom::DialogButton::kOk ||
          !table_view_->selection_model().empty();
 }
 

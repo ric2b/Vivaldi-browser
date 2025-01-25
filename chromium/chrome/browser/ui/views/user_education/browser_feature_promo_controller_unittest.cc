@@ -35,6 +35,7 @@
 #include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/feature_engagement/public/configuration.h"
 #include "components/feature_engagement/public/feature_list.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/feature_engagement/test/mock_tracker.h"
@@ -446,6 +447,8 @@ class BrowserFeaturePromoControllerTest : public TestWithBrowserView {
     EXPECT_CALL(*tracker, ShouldTriggerHelpUI(_))
         .Times(AnyNumber())
         .WillRepeatedly(Return(false));
+    EXPECT_CALL(*tracker, ListEvents)
+        .WillRepeatedly(Return(feature_engagement::Tracker::EventList()));
 
     return tracker;
   }
@@ -469,6 +472,32 @@ TEST_F(BrowserFeaturePromoControllerTest, NotifyFeatureUsedIfValidIsValid) {
   EXPECT_CALL(*mock_tracker_, NotifyUsedEvent(testing::Ref(kTestIPHFeature)))
       .Times(1);
   controller_->NotifyFeatureUsedIfValid(kTestIPHFeature);
+}
+
+TEST_F(BrowserFeaturePromoControllerTest,
+       FeatureEngagementTrackerEvents_DoNotBlockPromo) {
+  feature_engagement::EventConfig config;
+  config.name = "foo";
+  config.comparator = feature_engagement::Comparator(
+      feature_engagement::ComparatorType::LESS_THAN, 2);
+  EXPECT_CALL(*mock_tracker_, ListEvents(testing::Ref(kTestIPHFeature)))
+      .WillOnce(Return(feature_engagement::Tracker::EventList{{config, 1}}));
+  EXPECT_CALL(*mock_tracker_, WouldTriggerHelpUI(testing::Ref(kTestIPHFeature)))
+      .WillOnce(Return(true));
+  EXPECT_EQ(FeaturePromoResult::Success(),
+            controller_->CanShowPromo(kTestIPHFeature));
+}
+
+TEST_F(BrowserFeaturePromoControllerTest,
+       FeatureEngagementTrackerEvents_DoBlockPromo) {
+  feature_engagement::EventConfig config;
+  config.name = "foo";
+  config.comparator = feature_engagement::Comparator(
+      feature_engagement::ComparatorType::LESS_THAN, 2);
+  EXPECT_CALL(*mock_tracker_, ListEvents(testing::Ref(kTestIPHFeature)))
+      .WillOnce(Return(feature_engagement::Tracker::EventList{{config, 2}}));
+  EXPECT_EQ(FeaturePromoResult::kBlockedByConfig,
+            controller_->CanShowPromo(kTestIPHFeature));
 }
 
 TEST_F(BrowserFeaturePromoControllerTest, AsksBackendIfPromoShouldBeShown) {
@@ -1498,8 +1527,7 @@ class BrowserFeaturePromoControllerViewsTest
         WithView(user_education::HelpBubbleView::kHelpBubbleElementIdForTesting,
                  [](views::View* bubble) { bubble->GetWidget()->Close(); }),
         WaitForHide(
-            user_education::HelpBubbleView::kHelpBubbleElementIdForTesting),
-        FlushEvents());
+            user_education::HelpBubbleView::kHelpBubbleElementIdForTesting));
   }
 };
 
@@ -1706,7 +1734,7 @@ class BrowserFeaturePromoControllerRotatingPromoTest
       std::optional<FeaturePromoClosedReason> last_closed_reason) {
     auto result =
         Steps(WaitForHide(HelpBubbleView::kHelpBubbleElementIdForTesting),
-              FlushEvents(),
+
               CheckResult([this]() { return GetData().show_count; }, show_count,
                           "Check show count."),
               CheckResult([this]() { return GetData().snooze_count; },
@@ -2223,10 +2251,9 @@ TEST_F(BrowserFeaturePromoControllerPriorityTest,
                   ExpectShowingPromo(&kLegalNoticeFeature),
                   // This is required so we don't try to close on the same call
                   // stack as the bubble was shown on.
-                  FlushEvents(), ClosePromo(),
+                  ClosePromo(),
                   WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
-                  ExpectShowingPromo(&kLegalNoticeFeature2), FlushEvents(),
-                  ClosePromo());
+                  ExpectShowingPromo(&kLegalNoticeFeature2), ClosePromo());
 }
 
 TEST_F(BrowserFeaturePromoControllerPriorityTest,
@@ -2247,9 +2274,9 @@ TEST_F(BrowserFeaturePromoControllerPriorityTest,
       ExpectShowingPromo(&kLegalNoticeFeature),
       // This is required so we don't try to close on the same call
       // stack as the bubble was shown on.
-      FlushEvents(), ClosePromo(), WaitForState(kStartupCallbackState, true),
+      ClosePromo(), WaitForState(kStartupCallbackState, true),
       WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
-      ExpectShowingPromo(&kSnoozeIPHFeature), FlushEvents(), ClosePromo());
+      ExpectShowingPromo(&kSnoozeIPHFeature), ClosePromo());
 }
 
 TEST_F(
@@ -2260,19 +2287,18 @@ TEST_F(
                          second_promo_callback);
   user_education::FeaturePromoParams second_params(kTestIPHFeature);
   second_params.queued_promo_callback = second_promo_callback.Get();
-  RunTestSequence(
-      ResetSessionData(kMoreThanGracePeriod),
-      ObserveState(kStartupCallbackState, &second_promo_callback,
-                   FeaturePromoResult::Success()),
-      MaybeShowStartupPromo(kLegalNoticeFeature2),
-      MaybeShowStartupPromo(std::move(second_params)),
-      WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
-      ExpectShowingPromo(&kLegalNoticeFeature2),
-      // This is required so we don't try to close on the same call
-      // stack as the bubble was shown on.
-      FlushEvents(), ClosePromo(), WaitForState(kStartupCallbackState, true),
-      WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
-      ExpectShowingPromo(&kTestIPHFeature), FlushEvents(), ClosePromo());
+  RunTestSequence(ResetSessionData(kMoreThanGracePeriod),
+                  ObserveState(kStartupCallbackState, &second_promo_callback,
+                               FeaturePromoResult::Success()),
+                  MaybeShowStartupPromo(kLegalNoticeFeature2),
+                  MaybeShowStartupPromo(std::move(second_params)),
+                  WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
+                  ExpectShowingPromo(&kLegalNoticeFeature2),
+                  // This is required so we don't try to close on the same call
+                  // stack as the bubble was shown on.
+                  ClosePromo(), WaitForState(kStartupCallbackState, true),
+                  WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
+                  ExpectShowingPromo(&kTestIPHFeature), ClosePromo());
 }
 
 TEST_F(BrowserFeaturePromoControllerPriorityTest,
@@ -2293,7 +2319,7 @@ TEST_F(BrowserFeaturePromoControllerPriorityTest,
       ExpectShowingPromo(&kLegalNoticeFeature2),
       // This is required so we don't try to close on the same call
       // stack as the bubble was shown on.
-      FlushEvents(), ClosePromo(), WaitForState(kStartupCallbackState, true));
+      ClosePromo(), WaitForState(kStartupCallbackState, true));
 }
 
 TEST_F(BrowserFeaturePromoControllerPriorityTest,
@@ -2319,7 +2345,7 @@ TEST_F(BrowserFeaturePromoControllerPriorityTest,
       Do([&notice]() { notice.Release(); }),
       WaitForState(kStartupCallbackState, true),
       WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
-      FlushEvents(), ClosePromo());
+      ClosePromo());
 }
 
 TEST_F(BrowserFeaturePromoControllerPriorityTest,
@@ -2333,8 +2359,8 @@ TEST_F(BrowserFeaturePromoControllerPriorityTest,
                   MaybeShowStartupPromo(kLegalNoticeFeature),
                   WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
                   Do([&notice]() { notice.Request(kRequiredNoticeId); }),
-                  FlushEvents(), WaitForState(kNoticeCallbackState, false),
-                  ClosePromo(), WaitForState(kNoticeCallbackState, true),
+                  WaitForState(kNoticeCallbackState, false), ClosePromo(),
+                  WaitForState(kNoticeCallbackState, true),
                   Do([&notice]() { notice.Release(); }));
 }
 
@@ -2358,7 +2384,7 @@ TEST_F(BrowserFeaturePromoControllerPriorityTest,
       WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
       ExpectShowingPromo(&kLegalNoticeFeature2),
       // Request the notice and verify it doesn't pop.
-      Do([&notice]() { notice.Request(kRequiredNoticeId); }), FlushEvents(),
+      Do([&notice]() { notice.Request(kRequiredNoticeId); }),
       WaitForState(kNoticeCallbackState, false),
       // Close the promo and verify the notice (and not the other promo) pops.
       ClosePromo(), WaitForState(kNoticeCallbackState, true),
@@ -2367,7 +2393,7 @@ TEST_F(BrowserFeaturePromoControllerPriorityTest,
       Do([&notice]() { notice.Release(); }),
       WaitForState(kStartupCallbackState, true),
       WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
-      ExpectShowingPromo(&kTestIPHFeature), FlushEvents(), ClosePromo());
+      ExpectShowingPromo(&kTestIPHFeature), ClosePromo());
 }
 
 TEST_F(BrowserFeaturePromoControllerPriorityTest,
@@ -2395,11 +2421,11 @@ TEST_F(BrowserFeaturePromoControllerPriorityTest,
       MaybeShowStartupPromo(kSnoozeIPHFeature),
       MaybeShowStartupPromo(kTutorialIPHFeature),
       WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting),
-      FlushEvents(),
+
       CheckPromoStatus(kSnoozeIPHFeature, FeaturePromoStatus::kBubbleShowing),
       MaybeShowPromo(kLegalNoticeFeature),
       WaitForShow(HelpBubbleView::kHelpBubbleElementIdForTesting, true),
-      FlushEvents(),
+
       CheckPromoStatus(kLegalNoticeFeature, FeaturePromoStatus::kBubbleShowing),
       CheckPromoStatus(kSnoozeIPHFeature, FeaturePromoStatus::kNotRunning),
       CheckPromoStatus(kTutorialIPHFeature,
@@ -2817,7 +2843,7 @@ TEST_P(BrowserFeaturePromoControllerPolicyTest, SnoozeButtonDisappearsInV2) {
       EnsurePresent(HelpBubbleView::kFirstNonDefaultButtonIdForTesting),
       PressButton(HelpBubbleView::kFirstNonDefaultButtonIdForTesting),
       WaitForHide(HelpBubbleView::kHelpBubbleElementIdForTesting),
-      FlushEvents(),
+
       // Wait until after the snooze period expires. We should now
       // be at N snoozes.
       AdvanceTime(kMoreThanCooldown), AdvanceTime(kMoreThanGracePeriod),
@@ -2843,7 +2869,7 @@ TEST_P(BrowserFeaturePromoControllerPolicyTest,
       EnsurePresent(HelpBubbleView::kFirstNonDefaultButtonIdForTesting),
       PressButton(HelpBubbleView::kFirstNonDefaultButtonIdForTesting),
       WaitForHide(HelpBubbleView::kHelpBubbleElementIdForTesting),
-      FlushEvents(),
+
       // Wait until after the snooze period expires. We should now
       // be at N snoozes.
       AdvanceTime(kMoreThanCooldown), AdvanceTime(kMoreThanGracePeriod),

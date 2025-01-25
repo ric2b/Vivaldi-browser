@@ -1198,10 +1198,15 @@ class UniformityGraph {
                     return false;
                 }
                 if (builtin == core::BuiltinValue::kSubgroupSize) {
-                    // Currently Tint only allow using subgroup_size builtin as a compute shader
-                    // input.
-                    TINT_ASSERT(entry_point->PipelineStage() == ast::PipelineStage::kCompute);
-                    return false;
+                    if (entry_point->PipelineStage() == ast::PipelineStage::kCompute) {
+                        // Subgroup size is uniform in compute.
+                        return false;
+                    } else {
+                        // Currently the only other allowed usage for subgroup_size is in fragment.
+                        TINT_ASSERT(entry_point->PipelineStage() == ast::PipelineStage::kFragment);
+                        // Subgroup size is considered to be varying for fragment.
+                        return true;
+                    }
                 }
             }
             return true;
@@ -1636,7 +1641,7 @@ class UniformityGraph {
                     // Loading from a read-write storage texture may produce a non-uniform value.
                     auto* storage =
                         builtin->Parameters()[0]->Type()->As<core::type::StorageTexture>();
-                    if (storage && storage->access() == core::Access::kReadWrite) {
+                    if (storage && storage->Access() == core::Access::kReadWrite) {
                         callsite_tag = {CallSiteTag::CallSiteNoRestriction};
                         function_tag = ReturnValueMayBeNonUniform;
                     }

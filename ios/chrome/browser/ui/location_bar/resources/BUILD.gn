@@ -1,42 +1,26 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-group("resources") {
-  deps = [
-    ":location_bar_page_info",
-    ":location_bar_reload",
-    ":location_bar_stop",
-    ":location_bar_light_bg_color",
-    ":location_bar_dark_bg_color",
-  ]
-}
-
-imageset("location_bar_page_info") {
+bundle_data_xcassets("location_bar_assets") {
+  catalog = "LocationBarAssets.xcassets"
   sources = [
-    "location_bar_page_info.imageset/Contents.json",
-    "location_bar_page_info.imageset/vivaldi_location_bar_page_info.pdf",
+    # location_bar_page_info
+    "LocationBarAssets.xcassets/location_bar_page_info.imageset/Contents.json",
+    "LocationBarAssets.xcassets/location_bar_page_info.imageset/vivaldi_location_bar_page_info.pdf",
+
+    # location_bar_reload
+    "LocationBarAssets.xcassets/location_bar_reload.imageset/Contents.json",
+    "LocationBarAssets.xcassets/location_bar_reload.imageset/vivaldi_location_bar_reload.pdf",
+
+    # location_bar_stop
+    "LocationBarAssets.xcassets/location_bar_stop.imageset/Contents.json",
+    "LocationBarAssets.xcassets/location_bar_stop.imageset/vivaldi_location_bar_stop.pdf",
+
+    # location_bar_light_bg_color
+    "LocationBarAssets.xcassets/location_bar_light_bg_color.colorset/Contents.json",
+
+    # location_bar_dark_bg_color
+    "LocationBarAssets.xcassets/location_bar_dark_bg_color.colorset/Contents.json",
   ]
-}
-
-imageset("location_bar_reload") {
-  sources = [
-    "location_bar_reload.imageset/Contents.json",
-    "location_bar_reload.imageset/vivaldi_location_bar_reload.pdf",
-  ]
-}
-
-imageset("location_bar_stop") {
-  sources = [
-    "location_bar_stop.imageset/Contents.json",
-    "location_bar_stop.imageset/vivaldi_location_bar_stop.pdf",
-  ]
-}
-
-colorset("location_bar_light_bg_color") {
-  sources = [ "location_bar_light_bg_color.colorset/Contents.json" ]
-}
-
-colorset("location_bar_dark_bg_color") {
-  sources = [ "location_bar_dark_bg_color.colorset/Contents.json" ]
 }

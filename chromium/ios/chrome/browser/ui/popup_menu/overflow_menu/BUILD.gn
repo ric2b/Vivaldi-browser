@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/ios/swift_source_set.gni")
+import("//build/config/apple/swift_source_set.gni")
 
 source_set("overflow_menu_constants") {
   sources = [
@@ -35,6 +35,7 @@ source_set("overflow_menu") {
     "//components/profile_metrics",
     "//components/reading_list/core",
     "//components/reading_list/ios",
+    "//components/search_engines",
     "//components/supervised_user/core/browser",
     "//components/supervised_user/core/common",
     "//components/sync/service",
@@ -51,18 +52,24 @@ source_set("overflow_menu") {
     "//ios/chrome/browser/follow/model:enums",
     "//ios/chrome/browser/follow/model:tab_helper",
     "//ios/chrome/browser/follow/model:utils",
+    "//ios/chrome/browser/follow/ui_bundled",
     "//ios/chrome/browser/intents:intents_donation_helper",
     "//ios/chrome/browser/iph_for_new_chrome_user/model",
+    "//ios/chrome/browser/lens_overlay/coordinator:lens_overlay_availability",
+    "//ios/chrome/browser/ntp/shared/metrics",
     "//ios/chrome/browser/overlays/model",
     "//ios/chrome/browser/policy/model",
     "//ios/chrome/browser/policy/model:policy_util",
+    "//ios/chrome/browser/policy/ui_bundled:user_policy_scene_agent",
     "//ios/chrome/browser/reading_list/model",
+    "//ios/chrome/browser/search_engines/model",
+    "//ios/chrome/browser/search_engines/model:search_engines_util",
     "//ios/chrome/browser/settings/model/sync/utils:identity_error_util",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/model/browser",
-    "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/prefs",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/shared/model/url:constants",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
@@ -73,9 +80,6 @@ source_set("overflow_menu") {
     "//ios/chrome/browser/supervised_user/model:capabilities",
     "//ios/chrome/browser/translate/model",
     "//ios/chrome/browser/ui/browser_container:ui",
-    "//ios/chrome/browser/ui/follow",
-    "//ios/chrome/browser/ui/ntp/metrics",
-    "//ios/chrome/browser/ui/policy:user_policy_scene_agent",
     "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/browser/ui/popup_menu:metrics_protocols",
     "//ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history",
@@ -207,9 +211,9 @@ source_set("unit_tests") {
     "//ios/chrome/browser/search_engines/model:template_url_service_factory",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser/test:test_support",
-    "//ios/chrome/browser/shared/model/browser_state:test_support",
     "//ios/chrome/browser/shared/model/prefs:browser_prefs",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/profile/test",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/ui/symbols",

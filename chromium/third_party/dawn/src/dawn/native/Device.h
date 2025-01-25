@@ -127,12 +127,10 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
 
     MaybeError ValidateObject(const ApiObjectBase* object) const;
 
-    // TODO(dawn:1702) Remove virtual when we mock the adapter.
-    virtual InstanceBase* GetInstance() const;
-
+    InstanceBase* GetInstance() const;
     AdapterBase* GetAdapter() const;
     PhysicalDeviceBase* GetPhysicalDevice() const;
-    virtual dawn::platform::Platform* GetPlatform() const;
+    dawn::platform::Platform* GetPlatform() const;
 
     // Returns the Format corresponding to the wgpu::TextureFormat or an error if the format
     // isn't a valid wgpu::TextureFormat or isn't supported by this device.
@@ -279,7 +277,11 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     SamplerBase* APICreateSampler(const SamplerDescriptor* descriptor);
     ShaderModuleBase* APICreateShaderModule(const ShaderModuleDescriptor* descriptor);
     ShaderModuleBase* APICreateErrorShaderModule(const ShaderModuleDescriptor* descriptor,
-                                                 const char* errorMessage);
+                                                 const char* errorMessage) {
+        return APICreateErrorShaderModule2(descriptor, errorMessage);
+    }
+    ShaderModuleBase* APICreateErrorShaderModule2(const ShaderModuleDescriptor* descriptor,
+                                                  std::string_view errorMessage);
     // TODO(crbug.com/dawn/2320): Remove after deprecation.
     SwapChainBase* APICreateSwapChain(Surface* surface, const SwapChainDescriptor* descriptor);
     TextureBase* APICreateTexture(const TextureDescriptor* descriptor);
@@ -301,7 +303,11 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     wgpu::Status APIGetLimits(SupportedLimits* limits) const;
     bool APIHasFeature(wgpu::FeatureName feature) const;
     size_t APIEnumerateFeatures(wgpu::FeatureName* features) const;
-    void APIInjectError(wgpu::ErrorType type, const char* message);
+    void APIInjectError(wgpu::ErrorType type, const char* message) {
+        // TODO(crbug.com/42241188): Remove const char* version of the method.
+        APIInjectError2(type, message);
+    }
+    void APIInjectError2(wgpu::ErrorType type, std::string_view message);
     bool APITick();
     void APIValidateTextureDescriptor(const TextureDescriptor* desc);
 
@@ -371,7 +377,11 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     void EmitLog(const char* message);
     void EmitLog(WGPULoggingType loggingType, const char* message);
     void EmitCompilationLog(const ShaderModuleBase* module);
-    void APIForceLoss(wgpu::DeviceLostReason reason, const char* message);
+    void APIForceLoss(wgpu::DeviceLostReason reason, const char* message) {
+        // TODO(crbug.com/42241188): Remove const char* version of the method.
+        return APIForceLoss2(reason, message);
+    }
+    void APIForceLoss2(wgpu::DeviceLostReason reason, std::string_view message);
     QueueBase* GetQueue() const;
 
     friend class IgnoreLazyClearCountScope;
@@ -393,6 +403,8 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
 
     virtual bool ShouldDuplicateParametersForDrawIndirect(
         const RenderPipelineBase* renderPipelineBase) const;
+
+    virtual bool BackendWillValidateMultiDraw() const;
 
     // For OpenGL/OpenGL ES, we must apply the index buffer offset from SetIndexBuffer to the
     // firstIndex parameter in indirect buffers. This happens in the validation since it
@@ -419,7 +431,9 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
 
     const CacheKey& GetCacheKey() const;
     const std::string& GetLabel() const;
+    // TODO(crbug.com/42241188): Remove const char* version of the method.
     void APISetLabel(const char* label);
+    void APISetLabel2(std::optional<std::string_view> label);
     void APIDestroy();
 
     virtual void AppendDebugLayerMessages(ErrorData* error) {}
@@ -443,6 +457,8 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     Ref<RenderPipelineBase> AddOrGetCachedRenderPipeline(Ref<RenderPipelineBase> renderPipeline);
 
     void DumpMemoryStatistics(dawn::native::MemoryDump* dump) const;
+    uint64_t ComputeEstimatedMemoryUsage() const;
+    void ReduceMemoryUsage();
 
     ResultOrError<Ref<BufferBase>> GetOrCreateTemporaryUniformBuffer(size_t size);
 
@@ -450,7 +466,6 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     // Constructor used only for mocking and testing.
     DeviceBase();
 
-    void ForceSetToggleForTesting(Toggle toggle, bool isEnabled);
     void ForceEnableFeatureForTesting(Feature feature);
 
     MaybeError Initialize(Ref<QueueBase> defaultQueue);

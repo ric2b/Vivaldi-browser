@@ -157,14 +157,6 @@ class DynamicIIDsImpl : public internal::WrlRuntimeClass<Interface> {
 // NO_ERROR to E_FAIL.
 HRESULT HRESULTFromLastError();
 
-// Checks whether a process is running with the image |executable|. Returns true
-// if a process is found.
-bool IsProcessRunning(const wchar_t* executable);
-
-// Waits until every running instance of |executable| is stopped.
-// Returns true if every running processes are stopped.
-bool WaitForProcessesStopped(const wchar_t* executable);
-
 struct NamedObjectAttributes {
   NamedObjectAttributes(const std::wstring& name, const CSecurityDesc& sd);
   NamedObjectAttributes(const NamedObjectAttributes& other) = delete;
@@ -294,11 +286,6 @@ HResultOr<DWORD> ShellExecuteAndWait(const base::FilePath& file_path,
 // process was created successfully but the exit code is unknown.
 HResultOr<DWORD> RunElevated(const base::FilePath& file_path,
                              const std::wstring& parameters);
-
-// Runs `path` de-elevated. `path` specifies the exe or url to be launched.
-// `parameters` can be an empty string. The function does not wait for the
-// spawned process.
-HRESULT RunDeElevated(const std::wstring& path, const std::wstring& parameters);
 
 // Runs `cmd_line` de-elevated.The function does not wait for the spawned
 // process.

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -55,6 +56,7 @@
 #include "gpu/command_buffer/service/gr_shader_cache.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/scheduler.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
@@ -77,7 +79,7 @@
 #include "third_party/skia/include/core/SkSwizzle.h"
 #include "third_party/skia/include/core/SkYUVAInfo.h"
 #include "third_party/skia/include/gpu/GpuTypes.h"
-#include "third_party/skia/include/gpu/GrTypes.h"
+#include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
 #include "third_party/skia/include/gpu/graphite/Context.h"
@@ -124,11 +126,8 @@
 #include "components/viz/service/display_embedder/skia_output_device_x11.h"
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN)
-#include "gpu/command_buffer/service/dawn_context_provider.h"
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(SKIA_USE_DAWN) && (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID))
 #include "components/viz/service/display_embedder/skia_output_device_dawn.h"
-#endif
 #endif
 
 #if BUILDFLAG(IS_FUCHSIA)
@@ -326,7 +325,6 @@ SkiaOutputSurfaceImplOnGpu::SkiaOutputSurfaceImplOnGpu(
               dependency_,
               shared_gpu_deps_->memory_tracker())),
       vulkan_context_provider_(dependency_->GetVulkanContextProvider()),
-      dawn_context_provider_(dependency_->GetDawnContextProvider()),
       renderer_settings_(renderer_settings),
       did_swap_buffer_complete_callback_(
           std::move(did_swap_buffer_complete_callback)),
@@ -575,7 +573,7 @@ void SkiaOutputSurfaceImplOnGpu::FinishPaintCurrentFrame(
     }
 
     gfx::GpuFenceHandle release_fence;
-    if (!return_release_fence_cb.is_null() && is_using_gl()) {
+    if (!return_release_fence_cb.is_null() && context_state_->IsUsingGL()) {
       DCHECK(release_fence.is_null());
       release_fence = CreateReleaseFenceForGL();
     }
@@ -589,24 +587,11 @@ void SkiaOutputSurfaceImplOnGpu::FinishPaintCurrentFrame(
   }
 }
 
-void SkiaOutputSurfaceImplOnGpu::ScheduleOutputSurfaceAsOverlay(
-    const OverlayProcessorInterface::OutputSurfaceOverlayPlane&
-        output_surface_plane) {
-  DCHECK(!output_surface_plane_);
-  output_surface_plane_ = output_surface_plane;
-}
-
 void SkiaOutputSurfaceImplOnGpu::SwapBuffers(OutputSurfaceFrame frame) {
   TRACE_EVENT0("viz", "SkiaOutputSurfaceImplOnGpu::SwapBuffers");
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   SwapBuffersInternal(std::move(frame));
-}
-
-void SkiaOutputSurfaceImplOnGpu::EnsureMinNumberOfBuffers(int n) {
-  if (!output_device_->EnsureMinNumberOfBuffers(n)) {
-    MarkContextLost(CONTEXT_LOST_ALLOCATE_FRAME_BUFFERS_FAILED);
-  }
 }
 
 void SkiaOutputSurfaceImplOnGpu::SetDependenciesResolvedTimings(
@@ -729,7 +714,10 @@ void SkiaOutputSurfaceImplOnGpu::FinishPaintRenderPass(
       gpu::AddCleanupTaskForGraphiteRecording(std::move(on_finished), &info);
     }
     graphite_context()->insertRecording(info);
-    graphite_context()->submit();
+    if (local_scoped_access &&
+        local_scoped_access->NeedGraphiteContextSubmit()) {
+      graphite_context()->submit();
+    }
     skia_representation->SetCleared();
     return;
   }
@@ -795,7 +783,7 @@ void SkiaOutputSurfaceImplOnGpu::FinishPaintRenderPass(
 
   // If GL is used, create the release fence after flush.
   gfx::GpuFenceHandle release_fence;
-  if (!return_release_fence_cb.is_null() && is_using_gl()) {
+  if (!return_release_fence_cb.is_null() && context_state_->IsUsingGL()) {
     DCHECK(release_fence.is_null());
     release_fence = CreateReleaseFenceForGL();
   }
@@ -1114,9 +1102,11 @@ void SkiaOutputSurfaceImplOnGpu::CopyOutputRGBAInTexture(
     return;
   }
 
-  if (graphite_context() && !graphite_context()->submit()) {
-    DLOG(ERROR) << "CopyOutputRGBA graphite_context->submit() failed";
-    return;
+  if (graphite_context() && scoped_write->NeedGraphiteContextSubmit()) {
+    if (!graphite_context()->submit()) {
+      DLOG(ERROR) << "CopyOutputRGBA graphite_context->submit() failed";
+      return;
+    }
   }
 
   representation->SetCleared();
@@ -1522,9 +1512,12 @@ void SkiaOutputSurfaceImplOnGpu::CopyOutputNV12(
     return;
   }
 
-  if (graphite_context() && !graphite_context()->submit()) {
-    DLOG(ERROR) << "CopyOutputNV12 graphite_context->submit() failed";
-    return;
+  if (graphite_context() &&
+      mailbox_access_data.scoped_write->NeedGraphiteContextSubmit()) {
+    if (!graphite_context()->submit()) {
+      DLOG(ERROR) << "CopyOutputNV12 graphite_context->submit() failed";
+      return;
+    }
   }
 
   if (should_wait_for_gpu_work) {
@@ -1922,11 +1915,11 @@ bool SkiaOutputSurfaceImplOnGpu::Initialize() {
     if (!InitializeForVulkan()) {
       return false;
     }
-  } else if (is_using_graphite_dawn()) {
+  } else if (context_state_->IsGraphiteDawn()) {
     if (!InitializeForDawn()) {
       return false;
     }
-  } else if (is_using_graphite_metal()) {
+  } else if (context_state_->IsGraphiteMetal()) {
     if (!InitializeForMetal()) {
       return false;
     }
@@ -1988,16 +1981,14 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForGL() {
       if (presenter_) {
 #if !BUILDFLAG(IS_WIN)
         output_device_ = std::make_unique<SkiaOutputDeviceBufferQueue>(
-            std::make_unique<OutputPresenterGL>(
-                std::move(presenter), dependency_, shared_image_factory_.get(),
-                shared_image_representation_factory_.get()),
+            std::make_unique<OutputPresenterGL>(std::move(presenter),
+                                                dependency_),
             dependency_, shared_image_representation_factory_.get(),
             shared_gpu_deps_->memory_tracker(),
             GetDidSwapBuffersCompleteCallback(), GetReleaseOverlaysCallback());
 #else   // !BUILDFLAG(IS_WIN)
         AddChildWindowToBrowser(presenter_->GetWindow());
         output_device_ = std::make_unique<SkiaOutputDeviceDComp>(
-            dependency_, shared_image_factory_.get(),
             shared_image_representation_factory_.get(), context_state_.get(),
             std::move(presenter), feature_info_,
             shared_gpu_deps_->memory_tracker(),
@@ -2071,9 +2062,8 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForVulkan() {
   scoped_refptr<gl::Presenter> presenter = dependency_->CreatePresenter();
   presenter_ = presenter.get();
   if (presenter_) {
-    output_presenter = std::make_unique<OutputPresenterGL>(
-        std::move(presenter), dependency_, shared_image_factory_.get(),
-        shared_image_representation_factory_.get());
+    output_presenter =
+        std::make_unique<OutputPresenterGL>(std::move(presenter), dependency_);
   }
 #endif
   if (output_presenter) {
@@ -2148,7 +2138,7 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForDawn() {
         GetDidSwapBuffersCompleteCallback());
     return !!output_device_;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 
 #elif BUILDFLAG(IS_WIN)
   scoped_refptr<gl::Presenter> presenter = dependency_->CreatePresenter();
@@ -2156,7 +2146,6 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForDawn() {
   if (presenter_) {
     AddChildWindowToBrowser(presenter_->GetWindow());
     output_device_ = std::make_unique<SkiaOutputDeviceDComp>(
-        dependency_, shared_image_factory_.get(),
         shared_image_representation_factory_.get(), context_state_.get(),
         std::move(presenter), feature_info_, shared_gpu_deps_->memory_tracker(),
         GetDidSwapBuffersCompleteCallback());
@@ -2197,9 +2186,7 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForDawn() {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   output_device_ = std::make_unique<SkiaOutputDeviceBufferQueue>(
-      std::make_unique<OutputPresenterGL>(
-          std::move(presenter), dependency_, shared_image_factory_.get(),
-          shared_image_representation_factory_.get()),
+      std::make_unique<OutputPresenterGL>(std::move(presenter), dependency_),
       dependency_, shared_image_representation_factory_.get(),
       shared_gpu_deps_->memory_tracker(), GetDidSwapBuffersCompleteCallback(),
       GetReleaseOverlaysCallback());
@@ -2207,16 +2194,16 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForDawn() {
 
 #else  // BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_ANDROID) ||
        // BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 #endif
 #else   // BUILDFLAG(SKIA_USE_DAWN)
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 #endif  // BUILDFLAG(SKIA_USE_DAWN)
 }
 
 bool SkiaOutputSurfaceImplOnGpu::InitializeForMetal() {
 #if !BUILDFLAG(IS_APPLE)
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 #else
   if (dependency_->IsOffscreen()) {
     output_device_ = std::make_unique<SkiaOutputDeviceOffscreen>(
@@ -2233,9 +2220,7 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForMetal() {
     presenter_->SetVSyncDisplayID(renderer_settings_.display_id);
 #endif  // BUILDFLAG(IS_MAC)
     output_device_ = std::make_unique<SkiaOutputDeviceBufferQueue>(
-        std::make_unique<OutputPresenterGL>(
-            std::move(presenter), dependency_, shared_image_factory_.get(),
-            shared_image_representation_factory_.get()),
+        std::make_unique<OutputPresenterGL>(std::move(presenter), dependency_),
         dependency_, shared_image_representation_factory_.get(),
         shared_gpu_deps_->memory_tracker(), GetDidSwapBuffersCompleteCallback(),
         GetReleaseOverlaysCallback());
@@ -2361,6 +2346,18 @@ void SkiaOutputSurfaceImplOnGpu::PostSubmit(
 #endif
 
   if (frame) {
+    TRACE_EVENT(
+        "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
+        perfetto::Flow::Global(frame->data.swap_trace_id),
+        [swap_trace_id =
+             frame->data.swap_trace_id](perfetto::EventContext ctx) {
+          auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+          auto* data = event->set_chrome_graphics_pipeline();
+          data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
+                             StepName::STEP_BUFFER_SWAP_POST_SUBMIT);
+          data->set_display_trace_id(swap_trace_id);
+        });
+
     if (waiting_for_full_damage_) {
       // If we're using partial swap, we need to check whether the sub-buffer
       // rect is actually the entire screen, but otherwise, the damage is
@@ -2369,15 +2366,10 @@ void SkiaOutputSurfaceImplOnGpu::PostSubmit(
           frame->sub_buffer_rect->size() != size_) {
         output_device_->SwapBuffersSkipped(buffer_presented_callback_,
                                            std::move(*frame));
-        output_surface_plane_.reset();
         destroy_after_swap_.clear();
         return;
       }
       waiting_for_full_damage_ = false;
-    }
-
-    if (output_surface_plane_) {
-      DCHECK(output_device_->IsPrimaryPlaneOverlay());
     }
 
     if (frame->sub_buffer_rect) {
@@ -2388,10 +2380,6 @@ void SkiaOutputSurfaceImplOnGpu::PostSubmit(
                                         frame->sub_buffer_rect->y() -
                                         frame->sub_buffer_rect->height());
         }
-      }
-
-      if (output_surface_plane_) {
-        output_surface_plane_->damage_rect = frame->sub_buffer_rect;
       }
     }
 
@@ -2416,28 +2404,13 @@ void SkiaOutputSurfaceImplOnGpu::PostSubmit(
     }
 
     output_device_->SetViewportSize(frame->size);
-    output_device_->SchedulePrimaryPlane(output_surface_plane_);
 
     DCHECK(!frame->sub_buffer_rect || capabilities().supports_post_sub_buffer);
-
-    TRACE_EVENT(
-        "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
-        perfetto::Flow::Global(frame->data.swap_trace_id),
-        [swap_trace_id =
-             frame->data.swap_trace_id](perfetto::EventContext ctx) {
-          auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
-          auto* data = event->set_chrome_graphics_pipeline();
-          data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
-                             StepName::STEP_BUFFER_SWAP_POST_SUBMIT);
-          data->set_display_trace_id(swap_trace_id);
-        });
-
     output_device_->Present(frame->sub_buffer_rect, buffer_presented_callback_,
                             std::move(*frame));
   }
 
   // Reset the overlay plane information even on skipped swap.
-  output_surface_plane_.reset();
   overlays_.clear();
 
   destroy_after_swap_.clear();
@@ -2445,10 +2418,6 @@ void SkiaOutputSurfaceImplOnGpu::PostSubmit(
   UMA_HISTOGRAM_EXACT_LINEAR("Gpu.FenceHandle.CloneCountsPerSubmit",
                              gfx::GpuFenceHandle::GetAndClearNumberOfClones(),
                              200);
-}
-
-bool SkiaOutputSurfaceImplOnGpu::IsDisplayedAsOverlay() {
-  return output_device_->IsPrimaryPlaneOverlay();
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -2724,8 +2693,7 @@ void SkiaOutputSurfaceImplOnGpu::CreateSolidColorSharedImage(
   if (solid_color_image_format_ == SinglePlaneFormat::kBGRA_8888) {
     SkSwapRB(&premul_bytes, &premul_rgba_bytes, 1);
   }
-  auto pixel_span = base::make_span(
-      reinterpret_cast<const uint8_t*>(&premul_bytes), sizeof(uint32_t));
+  auto pixel_span = base::byte_span_from_ref(premul_bytes);
 
   // TODO(crbug.com/40237688) Some work is needed to properly support F16
   // format.
@@ -2856,5 +2824,36 @@ void SkiaOutputSurfaceImplOnGpu::CleanupImageProcessor() {
   vulkan_overlay_adaptor_ = nullptr;
 }
 #endif
+
+void SkiaOutputSurfaceImplOnGpu::ReadbackForTesting(
+    CopyOutputRequest::CopyOutputRequestCallback result_callback) {
+  std::optional<gpu::raster::GrShaderCache::ScopedCacheUse> cache_use;
+  if (dependency_->GetGrShaderCache()) {
+    cache_use.emplace(dependency_->GetGrShaderCache(),
+                      gpu::kDisplayCompositorClientId);
+  }
+
+  output_device_->ReadbackForTesting(base::BindOnce(  // IN-TEST
+      [](std::optional<gpu::raster::GrShaderCache::ScopedCacheUse> cache_use,
+         bool is_emulated_rgbx,
+         CopyOutputRequest::CopyOutputRequestCallback result_callback,
+         SkBitmap bitmap) {
+        // Discard alpha if emulating RGBX.
+        if (is_emulated_rgbx) {
+          SkPaint paint;
+          paint.setColor(SkColors::kBlack);
+          paint.setBlendMode(SkBlendMode::kDstATop);
+          SkCanvas canvas(bitmap);
+          canvas.drawPaint(paint);
+        }
+
+        std::move(result_callback)
+            .Run(std::make_unique<CopyOutputSkBitmapResult>(
+                gfx::Rect(gfx::SkISizeToSize(bitmap.dimensions())),
+                std::move(bitmap)));
+      },
+      std::move(cache_use), output_device_->is_emulated_rgbx(),
+      std::move(result_callback)));
+}
 
 }  // namespace viz

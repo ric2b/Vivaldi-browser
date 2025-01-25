@@ -24,6 +24,11 @@ struct OverflowMenuContainerView: View {
       if let customization = model.customization {
         MenuCustomizationView(
           actionCustomizationModel: customization.actions,
+
+          // Vivaldi
+          vivaldiActionCustomizationModel: customization.vivaldiActions,
+          // End Vivaldi
+
           destinationCustomizationModel: customization.destinations,
           uiConfiguration: uiConfiguration, eventHandler: customizationEventHandler,
           namespace: namespace)

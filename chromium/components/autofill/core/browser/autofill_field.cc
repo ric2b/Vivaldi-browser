@@ -5,6 +5,7 @@
 #include "components/autofill/core/browser/autofill_field.h"
 
 #include <stdint.h>
+
 #include <iterator>
 
 #include "base/containers/contains.h"
@@ -12,6 +13,7 @@
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -128,9 +130,7 @@ bool AreCollapsibleLogEvents(const AutofillField::FieldLogEventType& event1,
 // want to prioritize local heuristics over the autocomplete type.
 bool PreferHeuristicOverHtml(FieldType heuristic_type,
                              HtmlFieldType html_type) {
-  return base::FeatureList::IsEnabled(
-             features::kAutofillLocalHeuristicsOverrides) &&
-         base::Contains(kAutofillHeuristicsVsHtmlOverrides,
+  return base::Contains(kAutofillHeuristicsVsHtmlOverrides,
                         std::make_pair(heuristic_type, html_type));
 }
 
@@ -141,9 +141,7 @@ bool PreferHeuristicOverHtml(FieldType heuristic_type,
 // can help the server to "learn" the correct classification for these fields.
 bool PreferHeuristicOverServer(FieldType heuristic_type,
                                FieldType server_type) {
-  return base::FeatureList::IsEnabled(
-             features::kAutofillLocalHeuristicsOverrides) &&
-         base::Contains(kAutofillHeuristicsVsServerOverrides,
+  return base::Contains(kAutofillHeuristicsVsServerOverrides,
                         std::make_pair(heuristic_type, server_type));
 }
 
@@ -396,6 +394,22 @@ AutofillType AutofillField::ComputedType() const {
           base::FeatureList::IsEnabled(
               features::kAutofillGivePrecedenceToNumericQuantities));
 
+    // Password Manager ignores the computed type - it looks at server
+    // predictions directly. Since many username fields also admit emails, we
+    // can thus give precedence to the EMAIL_ADDRESS classification. This will
+    // not affect Password Manager suggestions, but allow Autofill to provide
+    // email-related suggestions if Password Manager does not have any username
+    // suggestions to show.
+    // TODO: crbug.com/360791229 - Move into
+    // `kAutofillHeuristicsVsServerOverrides` once the feature is cleaned up.
+    const bool server_type_is_username_type =
+        server_type() == USERNAME || server_type() == SINGLE_USERNAME;
+    believe_server =
+        believe_server &&
+        !(heuristic_type() == EMAIL_ADDRESS && server_type_is_username_type &&
+          base::FeatureList::IsEnabled(
+              features::kAutofillGivePrecedenceToEmailOverUsername));
+
     if (believe_server)
       return AutofillType(server_type());
   }
@@ -413,8 +427,47 @@ AutofillType AutofillField::Type() const {
   return ComputedType();
 }
 
-bool AutofillField::IsEmpty() const {
-  return value().empty();
+const std::u16string& AutofillField::value_for_import() const {
+  bool should_consider_value_for_import =
+      IsSelectOrSelectListElement() ||
+      value(ValueSemantics::kInitial) != value(ValueSemantics::kCurrent);
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillFixCurrentValueInImport)) {
+    // If the feature is not enabled, legacy behavior applies:
+    // FormStructure::RetrieveFromCache() has already set the current value to
+    // the empty string for <input> elements whose value did not change. This
+    // special case only exists to ensure that kAutofillFixCurrentValueInImport
+    // is a refactoring w/o side effects.
+    should_consider_value_for_import = true;
+  }
+  if (!should_consider_value_for_import) {
+    return base::EmptyString16();
+  }
+  if (base::optional_ref<const SelectOption> o = selected_option()) {
+    return o->text;
+  }
+  return value(ValueSemantics::kCurrent);
+}
+
+const std::u16string& AutofillField::value(ValueSemantics s) const {
+  if (!base::FeatureList::IsEnabled(features::kAutofillFixValueSemantics)) {
+    return FormFieldData::value();
+  }
+  switch (s) {
+    case ValueSemantics::kCurrent:
+      return FormFieldData::value();
+    case ValueSemantics::kInitial:
+      return initial_value_;
+  }
+}
+
+void AutofillField::set_initial_value(std::u16string initial_value,
+                                      base::PassKey<FormStructure> pass_key) {
+  if (!base::FeatureList::IsEnabled(features::kAutofillFixValueSemantics)) {
+    FormFieldData::set_value(std::move(initial_value));
+    return;
+  }
+  initial_value_ = std::move(initial_value);
 }
 
 FieldSignature AutofillField::GetFieldSignature() const {
@@ -433,11 +486,11 @@ bool AutofillField::IsFieldFillable() const {
 }
 
 bool AutofillField::HasExpirationDateType() const {
-  static constexpr std::array kExpirationDateTypes = {
+  static constexpr DenseSet kExpirationDateTypes = {
       CREDIT_CARD_EXP_MONTH, CREDIT_CARD_EXP_2_DIGIT_YEAR,
       CREDIT_CARD_EXP_4_DIGIT_YEAR, CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR,
       CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR};
-  return base::Contains(kExpirationDateTypes, Type().GetStorableType());
+  return kExpirationDateTypes.contains(Type().GetStorableType());
 }
 
 bool AutofillField::ShouldSuppressSuggestionsAndFillingByDefault() const {

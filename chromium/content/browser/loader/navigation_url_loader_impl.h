@@ -15,6 +15,7 @@
 #include "content/browser/loader/response_head_update_params.h"
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/weak_document_ptr.h"
@@ -165,6 +166,11 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       size_t next_interceptor_index,
       std::optional<NavigationLoaderInterceptor::Result> interceptor_result);
 
+  // Called from `MaybeStartLoader` when the request is elected to be
+  // intercepted. Intercepts the request with `single_request_factory`.
+  void StartInterceptedRequest(
+      scoped_refptr<network::SharedURLLoaderFactory> single_request_factory);
+
   // Start a loader with the default behavior. This should be used when no
   // interceptors have elected to handle the request in the first place.
   void StartNonInterceptedRequest(ResponseHeadUpdateParams head_update_params);
@@ -255,6 +261,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       const net::HttpRequestHeaders& modified_headers,
       const net::HttpRequestHeaders& modified_cors_exempt_headers) override;
   bool SetNavigationTimeout(base::TimeDelta timeout) override;
+  void CancelNavigationTimeout() override;
 
   // Records UKM for the navigation load.
   void RecordReceivedResponseUkmForOutermostMainFrame();
@@ -274,7 +281,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   // Current URL that is being navigated, updated after redirection.
   GURL url_;
 
-  const int frame_tree_node_id_;
+  const FrameTreeNodeId frame_tree_node_id_;
   const GlobalRequestID global_request_id_;
   net::RedirectInfo redirect_info_;
   int redirect_limit_ = net::URLRequest::kMaxRedirects;

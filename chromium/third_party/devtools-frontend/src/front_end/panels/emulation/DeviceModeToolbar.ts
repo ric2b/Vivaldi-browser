@@ -293,9 +293,9 @@ export class DeviceModeToolbar {
 
     this.emulatedDevicesList = EmulationModel.EmulatedDevices.EmulatedDevicesList.instance();
     this.emulatedDevicesList.addEventListener(
-        EmulationModel.EmulatedDevices.Events.CustomDevicesUpdated, this.deviceListChanged, this);
+        EmulationModel.EmulatedDevices.Events.CUSTOM_DEVICES_UPDATED, this.deviceListChanged, this);
     this.emulatedDevicesList.addEventListener(
-        EmulationModel.EmulatedDevices.Events.StandardDevicesUpdated, this.deviceListChanged, this);
+        EmulationModel.EmulatedDevices.Events.STANDARD_DEVICES_UPDATED, this.deviceListChanged, this);
 
     this.persistenceSetting = Common.Settings.Settings.instance().createSetting(
         'emulation.device-mode-value', {device: '', orientation: '', mode: ''});
@@ -373,12 +373,12 @@ export class DeviceModeToolbar {
   private fillModeToolbar(toolbar: UI.Toolbar.Toolbar): void {
     toolbar.appendToolbarItem(this.wrapToolbarItem(this.createEmptyToolbarElement()));
     this.modeButton = new UI.Toolbar.ToolbarButton('', 'screen-rotation', undefined, 'screen-rotation');
-    this.modeButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.modeMenuClicked, this);
+    this.modeButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.modeMenuClicked, this);
     toolbar.appendToolbarItem(this.modeButton);
 
     // Show dual screen toolbar.
     this.spanButton = new UI.Toolbar.ToolbarButton('', 'device-fold', undefined, 'device-fold');
-    this.spanButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.spanClicked, this);
+    this.spanButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.spanClicked, this);
     toolbar.appendToolbarItem(this.spanButton);
 
     // Show posture toolbar menu for foldable devices.
@@ -401,7 +401,7 @@ export class DeviceModeToolbar {
     this.experimentalButton = new UI.Toolbar.ToolbarToggle(title, 'experiment-check');
     this.experimentalButton.setToggled(this.model.webPlatformExperimentalFeaturesEnabled());
     this.experimentalButton.setEnabled(true);
-    this.experimentalButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.experimentalClicked, this);
+    this.experimentalButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.experimentalClicked, this);
 
     toolbar.appendToolbarItem(this.experimentalButton);
   }
@@ -413,9 +413,9 @@ export class DeviceModeToolbar {
 
   private fillOptionsToolbar(toolbar: UI.Toolbar.Toolbar): void {
     toolbar.appendToolbarItem(this.wrapToolbarItem(this.createEmptyToolbarElement()));
-    const moreOptionsButton =
-        new UI.Toolbar.ToolbarMenuButton(this.appendOptionsMenuItems.bind(this), undefined, undefined, 'more-options');
-    setTitleForButton(moreOptionsButton, i18nString(UIStrings.moreOptions));
+    const moreOptionsButton = new UI.Toolbar.ToolbarMenuButton(
+        this.appendOptionsMenuItems.bind(this), true, undefined, 'more-options', 'dots-vertical');
+    moreOptionsButton.setTitle(i18nString(UIStrings.moreOptions));
     toolbar.appendToolbarItem(moreOptionsButton);
   }
 
@@ -471,8 +471,8 @@ export class DeviceModeToolbar {
 
   private appendDeviceScaleMenuItems(contextMenu: UI.ContextMenu.ContextMenu): void {
     const deviceScaleFactorSetting = this.model.deviceScaleFactorSetting();
-    const defaultValue = this.model.uaSetting().get() === EmulationModel.DeviceModeModel.UA.Mobile ||
-            this.model.uaSetting().get() === EmulationModel.DeviceModeModel.UA.MobileNoTouch ?
+    const defaultValue = this.model.uaSetting().get() === EmulationModel.DeviceModeModel.UA.MOBILE ||
+            this.model.uaSetting().get() === EmulationModel.DeviceModeModel.UA.MOBILE_NO_TOUCH ?
         EmulationModel.DeviceModeModel.defaultMobileScaleFactor :
         window.devicePixelRatio;
     appendDeviceScaleFactorItem(
@@ -491,10 +491,10 @@ export class DeviceModeToolbar {
 
   private appendUserAgentMenuItems(contextMenu: UI.ContextMenu.ContextMenu): void {
     const uaSetting = this.model.uaSetting();
-    appendUAItem(EmulationModel.DeviceModeModel.UA.Mobile, EmulationModel.DeviceModeModel.UA.Mobile);
-    appendUAItem(EmulationModel.DeviceModeModel.UA.MobileNoTouch, EmulationModel.DeviceModeModel.UA.MobileNoTouch);
-    appendUAItem(EmulationModel.DeviceModeModel.UA.Desktop, EmulationModel.DeviceModeModel.UA.Desktop);
-    appendUAItem(EmulationModel.DeviceModeModel.UA.DesktopTouch, EmulationModel.DeviceModeModel.UA.DesktopTouch);
+    appendUAItem(EmulationModel.DeviceModeModel.UA.MOBILE, EmulationModel.DeviceModeModel.UA.MOBILE);
+    appendUAItem(EmulationModel.DeviceModeModel.UA.MOBILE_NO_TOUCH, EmulationModel.DeviceModeModel.UA.MOBILE_NO_TOUCH);
+    appendUAItem(EmulationModel.DeviceModeModel.UA.DESKTOP, EmulationModel.DeviceModeModel.UA.DESKTOP);
+    appendUAItem(EmulationModel.DeviceModeModel.UA.DESKTOP_TOUCH, EmulationModel.DeviceModeModel.UA.DESKTOP_TOUCH);
 
     function appendUAItem(title: string, value: EmulationModel.DeviceModeModel.UA): void {
       contextMenu.defaultSection().appendCheckboxItem(

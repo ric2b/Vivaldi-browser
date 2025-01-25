@@ -36,12 +36,14 @@
 #include "src/tint/lang/core/type/f16.h"
 #include "src/tint/lang/core/type/f32.h"
 #include "src/tint/lang/core/type/i32.h"
+#include "src/tint/lang/core/type/i8.h"
 #include "src/tint/lang/core/type/invalid.h"
 #include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/reference.h"
 #include "src/tint/lang/core/type/type.h"
 #include "src/tint/lang/core/type/u32.h"
+#include "src/tint/lang/core/type/u8.h"
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"
 #include "src/tint/utils/macros/compiler.h"
@@ -68,8 +70,16 @@ const core::type::Bool* Manager::bool_() {
     return Get<core::type::Bool>();
 }
 
+const core::type::I8* Manager::i8() {
+    return Get<core::type::I8>();
+}
+
 const core::type::I32* Manager::i32() {
     return Get<core::type::I32>();
+}
+
+const core::type::U8* Manager::u8() {
+    return Get<core::type::U8>();
 }
 
 const core::type::U32* Manager::u32() {
@@ -170,6 +180,13 @@ const core::type::Matrix* Manager::mat4x4(const core::type::Type* inner) {
     return mat(inner, 4, 4);
 }
 
+const core::type::SubgroupMatrix* Manager::subgroup_matrix(SubgroupMatrixKind kind,
+                                                           const core::type::Type* inner,
+                                                           uint32_t rows,
+                                                           uint32_t cols) {
+    return Get<core::type::SubgroupMatrix>(kind, inner, rows, cols);
+}
+
 const core::type::Array* Manager::array(const core::type::Type* elem_ty,
                                         uint32_t count,
                                         uint32_t stride /* = 0*/) {
@@ -219,7 +236,7 @@ const core::type::Reference* Manager::ref(core::AddressSpace address_space,
 }
 
 core::type::Struct* Manager::Struct(Symbol name, VectorRef<const StructMember*> members) {
-    if (auto* existing = Find<type::Struct>(name); TINT_UNLIKELY(existing)) {
+    if (auto* existing = Find<type::Struct>(name); DAWN_UNLIKELY(existing)) {
         TINT_ICE() << "attempting to construct two structs named " << name.NameView();
     }
 
@@ -233,7 +250,7 @@ core::type::Struct* Manager::Struct(Symbol name, VectorRef<const StructMember*> 
 }
 
 core::type::Struct* Manager::Struct(Symbol name, VectorRef<StructMemberDesc> md) {
-    if (auto* existing = Find<type::Struct>(name); TINT_UNLIKELY(existing)) {
+    if (auto* existing = Find<type::Struct>(name); DAWN_UNLIKELY(existing)) {
         TINT_ICE() << "attempting to construct two structs named " << name.NameView();
     }
 

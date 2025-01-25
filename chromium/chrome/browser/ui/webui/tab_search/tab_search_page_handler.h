@@ -69,16 +69,23 @@ class TabSearchPageHandler
 
   // tab_search::mojom::PageHandler:
   void CloseTab(int32_t tab_id) override;
+  void DeclutterTabs(const std::vector<int32_t>& tab_ids) override;
   void AcceptTabOrganization(
       int32_t session_id,
       int32_t organization_id,
-      const std::u16string& name,
       std::vector<tab_search::mojom::TabPtr> tabs) override;
   void RejectTabOrganization(int32_t session_id,
                              int32_t organization_id) override;
+  void RenameTabOrganization(int32_t session_id,
+                             int32_t organization_id,
+                             const std::u16string& name) override;
+  void ExcludeFromStaleTabs(int32_t tab_id) override;
   void GetProfileData(GetProfileDataCallback callback) override;
+  void GetStaleTabs(GetStaleTabsCallback callback) override;
   void GetTabOrganizationSession(
       GetTabOrganizationSessionCallback callback) override;
+  void GetTabOrganizationModelStrategy(
+      GetTabOrganizationModelStrategyCallback callback) override;
   void SwitchToTab(
       tab_search::mojom::SwitchToTabInfoPtr switch_to_tab_info) override;
   void OpenRecentlyClosedEntry(int32_t session_id) override;
@@ -94,6 +101,8 @@ class TabSearchPageHandler
   void TriggerFeedback(int32_t session_id) override;
   void TriggerSignIn() override;
   void OpenHelpPage() override;
+  void SetTabOrganizationModelStrategy(
+      tab_search::mojom::TabOrganizationModelStrategy strategy) override;
   void SetUserFeedback(int32_t session_id,
                        int32_t organization_id,
                        tab_search::mojom::UserFeedback feedback) override;
@@ -164,6 +173,8 @@ class TabSearchPageHandler
   void MaybeShowUI();
 
   tab_search::mojom::ProfileDataPtr CreateProfileData();
+  std::vector<tab_search::mojom::TabPtr> FindStaleTabs(
+      int32_t excluded_id = -1);
 
   // Adds recently closed tabs and tab groups.
   void AddRecentlyClosedEntries(

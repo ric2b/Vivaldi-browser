@@ -1273,11 +1273,11 @@ class CrosNetworkConfigTest : public testing::Test {
   std::string vpn_path() { return vpn_path_; }
 
  protected:
+  base::HistogramTester histogram_tester_;
   sync_preferences::TestingPrefServiceSyncable user_prefs_;
 
  private:
   base::test::SingleThreadTaskEnvironment task_environment_;
-  base::HistogramTester histogram_tester_;
   std::unique_ptr<NetworkHandlerTestHelper> helper_;
   TestingPrefServiceSimple local_state_;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
@@ -3574,7 +3574,7 @@ TEST_F(CrosNetworkConfigTest, ApnOperationsDisallowApnModification) {
   // Set AllowAPNModification to true. Operations should succeed.
   SetAllowApnModification(true);
   EXPECT_TRUE(CreateCustomApn(kCellularGuid, test_apn1.AsMojoApn()));
-  EXPECT_EQ(4u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  EXPECT_EQ(5u, network_config_observer.GetOnConfigurationModifiedCallCount());
 
   custom_apns = network_metadata_store()->GetCustomApnList(kCellularGuid);
   ASSERT_TRUE(custom_apns);
@@ -3584,34 +3584,44 @@ TEST_F(CrosNetworkConfigTest, ApnOperationsDisallowApnModification) {
   // Modifying the APN should succeed.
   test_apn1.id = apn_id;
   ModifyCustomApn(kCellularGuid, test_apn1.AsMojoApn());
-  EXPECT_EQ(5u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  EXPECT_EQ(6u, network_config_observer.GetOnConfigurationModifiedCallCount());
 
   // Removing the APN should succeed.
   RemoveCustomApn(kCellularGuid, apn_id);
-  EXPECT_EQ(6u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  EXPECT_EQ(7u, network_config_observer.GetOnConfigurationModifiedCallCount());
 
   // Add another custom APN.
   EXPECT_TRUE(CreateCustomApn(kCellularGuid, test_apn1.AsMojoApn()));
-  EXPECT_EQ(7u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  EXPECT_EQ(8u, network_config_observer.GetOnConfigurationModifiedCallCount());
 
   custom_apns = network_metadata_store()->GetCustomApnList(kCellularGuid);
   ASSERT_TRUE(custom_apns);
   ASSERT_EQ(1u, custom_apns->size());
   apn_id = *custom_apns->front().GetDict().FindString(::onc::cellular_apn::kId);
 
-  // Set AllowAPNModification to false. Operations should not succeed.
+  // Set AllowAPNModification to false. Operations should not succeed and custom
+  // apn list should be set to empty.
   SetAllowApnModification(false);
   EXPECT_FALSE(CreateCustomApn(kCellularGuid, test_apn1.AsMojoApn()));
-  EXPECT_EQ(7u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  EXPECT_EQ(9u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  histogram_tester_.ExpectBucketCount(
+      "Network.Ash.Cellular.Apn.CreateCustomApn.AllowApnModification", false,
+      1);
 
   // Modifying the APN shouldn't succeed.
   test_apn1.id = apn_id;
   ModifyCustomApn(kCellularGuid, test_apn1.AsMojoApn());
-  EXPECT_EQ(7u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  EXPECT_EQ(9u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  histogram_tester_.ExpectBucketCount(
+      "Network.Ash.Cellular.Apn.ModifyCustomApn.AllowApnModification", false,
+      1);
 
   // Removing the APN shouldn't succeed.
   RemoveCustomApn(kCellularGuid, apn_id);
-  EXPECT_EQ(7u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  EXPECT_EQ(9u, network_config_observer.GetOnConfigurationModifiedCallCount());
+  histogram_tester_.ExpectBucketCount(
+      "Network.Ash.Cellular.Apn.RemoveCustomApn.AllowApnModification", false,
+      1);
 }
 
 TEST_F(CrosNetworkConfigTest, ConnectedAPN_ApnRevampEnabled) {
@@ -4257,7 +4267,7 @@ TEST_F(CrosNetworkConfigTest, GlobalPolicyApplied) {
   base::RunLoop().RunUntilIdle();
   mojom::GlobalPolicyPtr policy = GetGlobalPolicy();
   ASSERT_TRUE(policy);
-  EXPECT_TRUE(policy->allow_apn_modification);
+  EXPECT_FALSE(policy->allow_apn_modification);
   EXPECT_FALSE(policy->allow_cellular_sim_lock);
   EXPECT_FALSE(policy->allow_cellular_hotspot);
   EXPECT_TRUE(policy->allow_only_policy_cellular_networks);
@@ -4272,14 +4282,6 @@ TEST_F(CrosNetworkConfigTest, GlobalPolicyApplied) {
 
   EXPECT_EQ(1, observer()->GetPolicyAppliedCount(/*userhash=*/std::string()));
 
-  policy = GetGlobalPolicy();
-  EXPECT_TRUE(policy->allow_apn_modification);
-
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(/*enabled_features=*/
-                                       {features::kApnRevamp,
-                                        features::kAllowApnModificationPolicy},
-                                       /*disabled_features=*/{});
   policy = GetGlobalPolicy();
   EXPECT_FALSE(policy->allow_apn_modification);
 }

@@ -87,7 +87,8 @@ class MailPrivateGetFilePathsFunction : public ExtensionFunction {
  private:
   ~MailPrivateGetFilePathsFunction() override = default;
   void OnFinished(const std::vector<base::FilePath::StringType>& string_paths);
-
+  void GetFilePaths(bool directory_exists);
+  base::FilePath file_path_;
   // ExtensionFunction:
   ResponseAction Run() override;
 };
@@ -113,7 +114,8 @@ class MailPrivateGetMailFilePathsFunction : public ExtensionFunction {
  private:
   ~MailPrivateGetMailFilePathsFunction() override = default;
   void OnFinished(const std::vector<base::FilePath::StringType>& string_paths);
-
+  void GetMailFilePaths(bool directory_exists);
+  base::FilePath file_path_;
   // ExtensionFunction:
   ResponseAction Run() override;
 };

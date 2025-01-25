@@ -56,6 +56,7 @@ class ASH_EXPORT PickerItemView : public views::Button {
   ~PickerItemView() override;
 
   // views::Button:
+  void StateChanged(ButtonState old_state) override;
   void PaintButtonContents(gfx::Canvas* canvas) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
@@ -68,10 +69,13 @@ class ASH_EXPORT PickerItemView : public views::Button {
   void SetSubmenuController(PickerSubmenuController* submenu_controller);
 
   ItemState GetItemState() const;
-  void SetItemState(ItemState item_state);
+  virtual void SetItemState(ItemState item_state);
 
  private:
   void UpdateClipPathForFocusRingWithInsetGap();
+
+  // Updates the background radius and color based on the item state.
+  void UpdateBackground();
 
   SelectItemCallback select_item_callback_;
 

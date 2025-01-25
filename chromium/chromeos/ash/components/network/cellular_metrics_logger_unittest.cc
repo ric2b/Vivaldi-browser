@@ -308,7 +308,7 @@ class CellularMetricsLoggerTest : public ::testing::Test {
         LoginState::LoggedInUserType::LOGGED_IN_USER_NONE);
     LoginState::Get()->SetLoggedInState(
         LoginState::LoggedInState::LOGGED_IN_ACTIVE,
-        LoginState::LoggedInUserType::LOGGED_IN_USER_OWNER);
+        LoginState::LoggedInUserType::LOGGED_IN_USER_REGULAR);
   }
 
   ShillServiceClient::TestInterface* service_client_test() {
@@ -335,7 +335,7 @@ class CellularMetricsLoggerTest : public ::testing::Test {
   base::test::TaskEnvironment task_environment_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
   NetworkStateTestHelper network_state_test_helper_{
-      false /* use_default_devices_and_services */};
+      /*use_default_devices_and_services=*/false};
   std::unique_ptr<network_config::CrosNetworkConfigTestHelper>
       network_config_helper_;
   std::unique_ptr<CellularInhibitor> cellular_inhibitor_;
@@ -377,6 +377,7 @@ TEST_F(CellularMetricsLoggerTest, NoEuiccCachedProfiles) {
 }
 
 TEST_F(CellularMetricsLoggerTest, ActiveProfileExists) {
+  InitCellular();
   AddESimProfile(hermes::profile::State::kActive, kTestESimCellularServicePath);
   InitMetricsLogger();
   histogram_tester_->ExpectTotalCount(kESimFeatureUsageMetric, 2);
@@ -392,7 +393,7 @@ TEST_F(CellularMetricsLoggerTest, CellularServiceAtLoginWithRestrictedSimLock) {
 
   LoginState::Get()->SetLoggedInState(
       LoginState::LoggedInState::LOGGED_IN_ACTIVE,
-      LoginState::LoggedInUserType::LOGGED_IN_USER_OWNER);
+      LoginState::LoggedInUserType::LOGGED_IN_USER_REGULAR);
   InitCellular();
   task_environment_.FastForwardBy(
       CellularMetricsLogger::kInitializationTimeout);
@@ -408,7 +409,7 @@ TEST_F(CellularMetricsLoggerTest, CellularServiceAtLoginTest) {
   // Should defer logging when there are no cellular networks.
   LoginState::Get()->SetLoggedInState(
       LoginState::LoggedInState::LOGGED_IN_ACTIVE,
-      LoginState::LoggedInUserType::LOGGED_IN_USER_OWNER);
+      LoginState::LoggedInUserType::LOGGED_IN_USER_REGULAR);
   ValidateServiceCount(0, 0);
   histogram_tester_->ExpectTotalCount(kESimPolicyServiceAtLoginHistogram, 0);
 
@@ -427,7 +428,7 @@ TEST_F(CellularMetricsLoggerTest, CellularServiceAtLoginTest) {
       LoginState::LoggedInUserType::LOGGED_IN_USER_NONE);
   LoginState::Get()->SetLoggedInState(
       LoginState::LoggedInState::LOGGED_IN_ACTIVE,
-      LoginState::LoggedInUserType::LOGGED_IN_USER_OWNER);
+      LoginState::LoggedInUserType::LOGGED_IN_USER_REGULAR);
   ValidateServiceCount(0, 2);
   histogram_tester_->ExpectTotalCount(kESimPolicyServiceAtLoginHistogram, 2);
 
@@ -437,6 +438,22 @@ TEST_F(CellularMetricsLoggerTest, CellularServiceAtLoginTest) {
       LoginState::LoggedInUserType::LOGGED_IN_USER_KIOSK);
   ValidateServiceCount(0, 2);
   histogram_tester_->ExpectTotalCount(kESimPolicyServiceAtLoginHistogram, 2);
+}
+
+TEST_F(CellularMetricsLoggerTest, AllowApnModificationTest) {
+  InitMetricsLogger();
+  ON_CALL(*mock_managed_network_configuration_handler_, AllowApnModification())
+      .WillByDefault(::testing::Return(false));
+
+  LoginState::Get()->SetLoggedInState(
+      LoginState::LoggedInState::LOGGED_IN_NONE,
+      LoginState::LoggedInUserType::LOGGED_IN_USER_NONE);
+  LoginState::Get()->SetLoggedInState(
+      LoginState::LoggedInState::LOGGED_IN_ACTIVE,
+      LoginState::LoggedInUserType::LOGGED_IN_USER_REGULAR);
+
+  histogram_tester_->ExpectBucketCount(
+      "Network.Ash.Cellular.Apn.Login.AllowApnModification", false, 1);
 }
 
 TEST_F(CellularMetricsLoggerTest, CellularUsageCountTest) {
@@ -675,7 +692,7 @@ TEST_F(CellularMetricsLoggerTest, CellularESimProfileStatusAtLoginTest) {
   // Should defer logging when there are no cellular networks.
   LoginState::Get()->SetLoggedInState(
       LoginState::LoggedInState::LOGGED_IN_ACTIVE,
-      LoginState::LoggedInUserType::LOGGED_IN_USER_OWNER);
+      LoginState::LoggedInUserType::LOGGED_IN_USER_REGULAR);
   histogram_tester_->ExpectTotalCount(kESimStatusAtLoginHistogram, 0);
 
   // Should wait until initialization timeout before logging status.
@@ -736,7 +753,7 @@ TEST_F(CellularMetricsLoggerTest, CellularPSimActivationStateAtLoginTest) {
   // Should defer logging when there are no cellular networks.
   LoginState::Get()->SetLoggedInState(
       LoginState::LoggedInState::LOGGED_IN_ACTIVE,
-      LoginState::LoggedInUserType::LOGGED_IN_USER_OWNER);
+      LoginState::LoggedInUserType::LOGGED_IN_USER_REGULAR);
   histogram_tester_->ExpectTotalCount(kPSimStatusAtLoginHistogram, 0);
 
   // Should wait until initialization timeout before logging status.

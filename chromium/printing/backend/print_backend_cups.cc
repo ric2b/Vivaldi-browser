@@ -27,6 +27,7 @@
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
 #include "printing/backend/cups_helper.h"
+#include "printing/backend/cups_weak_functions.h"
 #include "printing/backend/print_backend_consts.h"
 #include "printing/backend/print_backend_utils.h"
 #include "printing/mojom/print.mojom.h"
@@ -61,6 +62,13 @@ int CaptureCupsDestCallback(void* data, unsigned flags, cups_dest_t* dest) {
   }
   return 1;  // Keep going.
 }
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
+// This may be removed when Amazon Linux 2 reaches EOL (30 Jun 2025).
+bool AreNewerCupsFunctionsAvailable() {
+  return cupsFindDestDefault && cupsFindDestSupported && ippValidateAttributes;
+}
+#endif
 
 }  // namespace
 
@@ -284,7 +292,8 @@ bool PrintBackendCUPS::IsValidPrinter(const std::string& printer_name) {
 scoped_refptr<PrintBackend> PrintBackend::CreateInstanceImpl(
     const std::string& locale) {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
-  if (base::FeatureList::IsEnabled(features::kCupsIppPrintingBackend)) {
+  if (AreNewerCupsFunctionsAvailable() &&
+      base::FeatureList::IsEnabled(features::kCupsIppPrintingBackend)) {
     return base::MakeRefCounted<PrintBackendCupsIpp>(CupsConnection::Create());
   }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)

@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "cppgc/common.h"
@@ -547,6 +548,7 @@ class V8_EXPORT Isolate {
     kDocumentAllLegacyCall = 141,
     kDocumentAllLegacyConstruct = 142,
     kConsoleContext = 143,
+    kWasmImportedStringsUtf8 = 144,
 
     // If you add new values here, you'll also need to update Chromium's:
     // web_feature.mojom, use_counter_callback.cc, and enums.xml. V8 changes to
@@ -935,6 +937,12 @@ class V8_EXPORT Isolate {
    * https://html.spec.whatwg.org/multipage/webappapis.html#incumbent
    */
   Local<Context> GetIncumbentContext();
+
+  /**
+   * Returns the host defined options set for currently running script or
+   * module, if available.
+   */
+  MaybeLocal<Data> GetCurrentHostDefinedOptions();
 
   /**
    * Schedules a v8::Exception::Error with the given message.
@@ -1717,6 +1725,12 @@ class V8_EXPORT Isolate {
    */
   void LocaleConfigurationChangeNotification();
 
+  /**
+   * Returns the default locale in a string if Intl support is enabled.
+   * Otherwise returns an empty string.
+   */
+  std::string GetDefaultLocale();
+
   Isolate() = delete;
   ~Isolate() = delete;
   Isolate(const Isolate&) = delete;
@@ -1733,7 +1747,7 @@ class V8_EXPORT Isolate {
   friend class PersistentValueMapBase;
 
   internal::Address* GetDataFromSnapshotOnce(size_t index);
-  void ReportExternalAllocationLimitReached();
+  void HandleExternalMemoryInterrupt();
 };
 
 void Isolate::SetData(uint32_t slot, void* data) {

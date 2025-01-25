@@ -35,7 +35,7 @@ void RecordSourceRegistrationError(mojom::SourceRegistrationError);
 struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING) SourceRegistration {
   // Doesn't log metric on parsing failures.
   static base::expected<SourceRegistration, mojom::SourceRegistrationError>
-      Parse(base::Value::Dict, mojom::SourceType);
+      Parse(base::Value, mojom::SourceType);
 
   // Logs metric on parsing failures.
   static base::expected<SourceRegistration, mojom::SourceRegistrationError>
@@ -80,7 +80,7 @@ struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING) SourceRegistration {
   EventLevelEpsilon event_level_epsilon;
   SourceAggregatableDebugReportingConfig aggregatable_debug_reporting_config;
   int64_t destination_limit_priority = 0;
-  AttributionScopesData attribution_scopes_data;
+  std::optional<AttributionScopesData> attribution_scopes_data;
 };
 
 }  // namespace attribution_reporting

@@ -36,7 +36,7 @@ inline constexpr base::TimeDelta kMinReportWindow = base::Hours(1);
 
 static_assert(kMinReportWindow <= kMinSourceExpiry);
 
-inline constexpr int kMaxSettableEventLevelAttributionsPerSource = 20;
+inline constexpr uint8_t kMaxSettableEventLevelAttributionsPerSource = 20;
 
 // https://wicg.github.io/attribution-reporting-api/#max-distinct-trigger-data-per-source
 inline constexpr uint8_t kMaxTriggerDataPerSource = 32;
@@ -59,7 +59,6 @@ inline constexpr char kAggregatableFilteringIdsMaxBytes[] =
 inline constexpr char kAggregatableReportWindow[] =
     "aggregatable_report_window";
 inline constexpr char kAggregationKeys[] = "aggregation_keys";
-inline constexpr char kAttributionScopeLimit[] = "attribution_scope_limit";
 inline constexpr char kAttributionScopes[] = "attribution_scopes";
 inline constexpr char kDestination[] = "destination";
 inline constexpr char kDestinationLimitPriority[] =
@@ -70,6 +69,7 @@ inline constexpr char kEventReportWindow[] = "event_report_window";
 inline constexpr char kEventReportWindows[] = "event_report_windows";
 inline constexpr char kExpiry[] = "expiry";
 inline constexpr char kFilterData[] = "filter_data";
+inline constexpr char kLimit[] = "limit";
 inline constexpr char kMaxEventLevelReports[] = "max_event_level_reports";
 inline constexpr char kMaxEventStates[] = "max_event_states";
 inline constexpr char kPriority[] = "priority";

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/base/audio_buffer.h"
 
 #include <cmath>
@@ -48,15 +53,22 @@ void CopyConvertFromInterleaved(
 class SelfOwnedMemory : public AudioBuffer::ExternalMemory {
  public:
   explicit SelfOwnedMemory(size_t size)
-      : heap_array_(base::HeapArray<uint8_t>::Uninit(size)) {
+      : heap_array_(
+            base::HeapArray<uint8_t, base::AlignedFreeDeleter>::
+                FromOwningPointer(
+                    static_cast<uint8_t*>(
+                        base::AlignedAlloc(size, AudioBus::kChannelAlignment)),
+                    size)) {
     span_ = heap_array_.as_span();
   }
-  SelfOwnedMemory(SelfOwnedMemory&&) = default;
-  ~SelfOwnedMemory() override = default;
 
  private:
-  base::HeapArray<uint8_t> heap_array_;
+  base::HeapArray<uint8_t, base::AlignedFreeDeleter> heap_array_;
 };
+
+std::unique_ptr<AudioBuffer::ExternalMemory> AllocateMemory(size_t size) {
+  return std::make_unique<SelfOwnedMemory>(size);
+}
 
 }  // namespace
 
@@ -153,7 +165,7 @@ AudioBuffer::AudioBuffer(SampleFormat sample_format,
 
   const int bytes_per_channel = SampleFormatToBytesPerChannel(sample_format);
   const int channel_alignment =
-      pool_ ? pool_->GetChannelAlignment() : bytes_per_channel;
+      pool_ ? pool_->GetChannelAlignment() : AudioBus::kChannelAlignment;
   CHECK_LE(bytes_per_channel, channel_alignment);
 
   // Empty buffer?
@@ -271,16 +283,11 @@ AudioBuffer::AudioBuffer(SampleFormat sample_format,
                channel_data_.back() + data_size_per_channel);
     }
   } else {
-    NOTREACHED_NORETURN() << sample_format;
+    NOTREACHED() << sample_format;
   }
 }
 
 AudioBuffer::~AudioBuffer() = default;
-
-std::unique_ptr<AudioBuffer::ExternalMemory> AudioBuffer::AllocateMemory(
-    size_t size) {
-  return std::make_unique<SelfOwnedMemory>(size);
-}
 
 // static
 scoped_refptr<AudioBuffer> AudioBuffer::CopyFrom(

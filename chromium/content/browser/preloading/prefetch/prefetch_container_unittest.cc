@@ -298,7 +298,7 @@ TEST_P(PrefetchContainerTest, CreatePrefetchContainer) {
   EXPECT_TRUE(
       prefetch_container.IsIsolatedNetworkContextRequiredForCurrentPrefetch());
 
-  EXPECT_EQ(prefetch_container.GetPrefetchContainerKey(),
+  EXPECT_EQ(prefetch_container.key(),
             PrefetchContainer::Key(document_token, GURL("https://test.com")));
   EXPECT_FALSE(prefetch_container.GetNonRedirectHead());
 }
@@ -322,7 +322,7 @@ TEST_P(PrefetchContainerTest, CreatePrefetchContainer_Embedder) {
   EXPECT_TRUE(
       prefetch_container.IsIsolatedNetworkContextRequiredForCurrentPrefetch());
 
-  EXPECT_EQ(prefetch_container.GetPrefetchContainerKey(),
+  EXPECT_EQ(prefetch_container.key(),
             PrefetchContainer::Key(std::nullopt, GURL("https://test.com")));
   EXPECT_FALSE(prefetch_container.GetNonRedirectHead());
 }
@@ -643,7 +643,8 @@ TEST_P(PrefetchContainerTest, PrefetchProxyPrefetchedResourceUkm) {
 
   // Simulates the URL of the prefetch being navigated to and the prefetch being
   // considered for serving.
-  prefetch_container->OnReturnPrefetchToServe(/*served=*/true);
+  prefetch_container->OnReturnPrefetchToServe(/*served=*/true,
+                                              GURL("https://test.com"));
 
   // Simulate a successful DNS probe for this prefetch. Not this will also
   // update the status of the prefetch to
@@ -865,6 +866,9 @@ TEST_P(PrefetchContainerTest, IneligibleRedirect) {
 }
 
 TEST_P(PrefetchContainerTest, BlockUntilHeadHistograms) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({}, {features::kPrefetchNewWaitLoop});
+
   struct TestCase {
     blink::mojom::SpeculationEagerness eagerness;
     bool block_until_head;
@@ -894,7 +898,8 @@ TEST_P(PrefetchContainerTest, BlockUntilHeadHistograms) {
     if (test_case.block_until_head) {
       task_environment()->FastForwardBy(test_case.block_until_head_duration);
     }
-    prefetch_container.OnReturnPrefetchToServe(test_case.served);
+    prefetch_container.OnReturnPrefetchToServe(test_case.served,
+                                               GURL("https://test.com"));
   }
 
   histogram_tester.ExpectBucketCount(
@@ -933,6 +938,82 @@ TEST_P(PrefetchContainerTest, BlockUntilHeadHistograms) {
   histogram_tester.ExpectUniqueTimeSample(
       "PrefetchProxy.AfterClick.BlockUntilHeadDuration.NotServed.Conservative",
       base::Milliseconds(40), 1);
+}
+
+TEST_P(PrefetchContainerTest, BlockUntilHeadHistograms2) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({features::kPrefetchNewWaitLoop}, {});
+
+  struct TestCase {
+    blink::mojom::SpeculationEagerness eagerness;
+    bool is_served;
+    std::optional<base::TimeDelta> prefetch_match_resolver_wait_duration;
+  };
+
+  std::vector<TestCase> test_cases{
+      {blink::mojom::SpeculationEagerness::kEager, true, std::nullopt},
+      {blink::mojom::SpeculationEagerness::kModerate, true,
+       base::Milliseconds(10)},
+      {blink::mojom::SpeculationEagerness::kConservative, false,
+       base::Milliseconds(20)}};
+
+  base::HistogramTester histogram_tester;
+  for (const auto& test_case : test_cases) {
+    PrefetchContainer prefetch_container(
+        *main_rfhi(), blink::DocumentToken(),
+        GURL("https://test.com/?nvsparam=1"),
+        PrefetchType(PreloadingTriggerType::kSpeculationRule,
+                     /*use_prefetch_proxy=*/true, test_case.eagerness),
+        blink::mojom::Referrer(),
+        /*no_vary_search_expected=*/std::nullopt,
+        /*prefetch_document_manager=*/nullptr);
+
+    prefetch_container.OnUnregisterCandidate(
+        GURL("https://test.com/"), test_case.is_served,
+        test_case.prefetch_match_resolver_wait_duration);
+  }
+
+  histogram_tester.ExpectBucketCount(
+      "PrefetchProxy.AfterClick.PrefetchMatchingBlockedNavigationWithPrefetch."
+      "Eager",
+      true, 0);
+  histogram_tester.ExpectBucketCount(
+      "PrefetchProxy.AfterClick.PrefetchMatchingBlockedNavigationWithPrefetch."
+      "Eager",
+      false, 1);
+  histogram_tester.ExpectTotalCount(
+      "PrefetchProxy.AfterClick.BlockUntilHeadDuration2.Served.Eager", 0);
+  histogram_tester.ExpectTotalCount(
+      "PrefetchProxy.AfterClick.BlockUntilHeadDuration2.NotServed.Eager", 0);
+
+  histogram_tester.ExpectBucketCount(
+      "PrefetchProxy.AfterClick.PrefetchMatchingBlockedNavigationWithPrefetch."
+      "Moderate",
+      true, 1);
+  histogram_tester.ExpectBucketCount(
+      "PrefetchProxy.AfterClick.PrefetchMatchingBlockedNavigationWithPrefetch."
+      "Moderate",
+      false, 0);
+  histogram_tester.ExpectUniqueTimeSample(
+      "PrefetchProxy.AfterClick.BlockUntilHeadDuration2.Served.Moderate",
+      base::Milliseconds(10), 1);
+  histogram_tester.ExpectTotalCount(
+      "PrefetchProxy.AfterClick.BlockUntilHeadDuration2.NotServed.Moderate", 0);
+
+  histogram_tester.ExpectBucketCount(
+      "PrefetchProxy.AfterClick.PrefetchMatchingBlockedNavigationWithPrefetch."
+      "Conservative",
+      true, 1);
+  histogram_tester.ExpectBucketCount(
+      "PrefetchProxy.AfterClick.PrefetchMatchingBlockedNavigationWithPrefetch."
+      "Conservative",
+      false, 0);
+  histogram_tester.ExpectTotalCount(
+      "PrefetchProxy.AfterClick.BlockUntilHeadDuration2.Served.Conservative",
+      0);
+  histogram_tester.ExpectUniqueTimeSample(
+      "PrefetchProxy.AfterClick.BlockUntilHeadDuration2.NotServed.Conservative",
+      base::Milliseconds(20), 1);
 }
 
 TEST_P(PrefetchContainerTest, RecordRedirectChainSize) {

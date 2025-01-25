@@ -31,8 +31,12 @@ history::DetailedUrlResults URLDatabase::GetVivaldiDetailedHistory(
   sql.append("WHERE hidden = 0 ");
   // Adds a search clause for every word of the input.
   std::string word;
-  for(std::istringstream iterator(query);iterator;iterator>>word){
-  sql.append("AND (urls.url LIKE ? OR urls.title LIKE ?) ");
+  int nb_word = 0;
+  for (std::istringstream iterator(query); iterator; iterator >> word) {
+    sql.append("AND (urls.url LIKE ? OR urls.title LIKE ?) ");
+    // Limit at 100. A search query will most likely not exceed that much words.
+    if (nb_word++ > 100)
+      break;
   };
   sql.append("AND LENGTH(urls.url) < 2048 ");
   sql.append("AND NOT (urls.last_visit_time = 0) ");
@@ -59,12 +63,14 @@ history::DetailedUrlResults URLDatabase::GetVivaldiDetailedHistory(
   sql::Statement statement(GetDB().GetUniqueStatement(sql));
 
   int var = 0;
-for(std::istringstream iterator(query);iterator;iterator>>word){
+  for (std::istringstream iterator(query); iterator; iterator >> word) {
     std::string wild_wrapped = "%" + std::string(word) +"%";
     // This needs to be repeated, the first binding is for url search
     // the second binding is for title search.
     statement.BindString(var++, wild_wrapped );
     statement.BindString(var++, wild_wrapped );
+    if (--nb_word == 0)
+      break;
   };
   statement.BindInt(var, max_results);
 

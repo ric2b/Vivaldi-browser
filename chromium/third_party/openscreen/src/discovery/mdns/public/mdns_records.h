@@ -21,7 +21,7 @@
 #include "platform/base/interface_info.h"
 #include "platform/base/ip_address.h"
 #include "util/osp_logging.h"
-#include "util/stringutil.h"
+#include "util/string_util.h"
 
 namespace openscreen::discovery {
 
@@ -87,7 +87,7 @@ class DomainName {
   friend H AbslHashValue(H h, const DomainName& domain_name) {
     std::vector<std::string> labels_clone = domain_name.labels_;
     for (auto& label : labels_clone) {
-      ::openscreen::stringutil::AsciiStrToLower(label);
+      ::openscreen::string_util::AsciiStrToLower(label);
     }
     return H::combine(std::move(h), std::move(labels_clone));
   }

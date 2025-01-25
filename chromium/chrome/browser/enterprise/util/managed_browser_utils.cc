@@ -54,7 +54,6 @@
 #include "chrome/browser/enterprise/util/jni_headers/ManagedBrowserUtils_jni.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
-namespace chrome {
 namespace enterprise_util {
 
 namespace {
@@ -203,8 +202,9 @@ bool UserAcceptedAccountManagement(Profile* profile) {
 
 bool ProfileCanBeManaged(Profile* profile) {
   // Some tests do not have a profile manager.
-  if (!g_browser_process->profile_manager())
+  if (!g_browser_process->profile_manager() || !profile) {
     return false;
+  }
   ProfileAttributesEntry* entry =
       g_browser_process->profile_manager()
           ->GetProfileAttributesStorage()
@@ -249,7 +249,7 @@ bool CanShowEnterpriseBadging(Profile* profile) {
 }
 
 bool IsKnownConsumerDomain(const std::string& email_domain) {
-  return signin::AccountManagedStatusFinder::IsKnownConsumerDomain(
+  return !signin::AccountManagedStatusFinder::MayBeEnterpriseDomain(
       email_domain);
 }
 
@@ -346,4 +346,3 @@ void GetManagementIcon(const GURL& url,
 }
 
 }  // namespace enterprise_util
-}  // namespace chrome

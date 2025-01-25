@@ -12,23 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Utid} from '../../frontend/sql_types';
+import {Utid} from '../../trace_processor/sql_utils/core_types';
 import {
   CustomSqlDetailsPanelConfig,
   CustomSqlTableDefConfig,
   CustomSqlTableSliceTrack,
 } from '../../frontend/tracks/custom_sql_table_slice_track';
-import {Engine} from '../../public';
-
+import {Engine} from '../../trace_processor/engine';
 import {ChromeTasksDetailsTab} from './details';
 
 export class ChromeTasksThreadTrack extends CustomSqlTableSliceTrack {
   constructor(
     engine: Engine,
-    trackKey: string,
+    uri: string,
     private utid: Utid,
   ) {
-    super({engine, trackKey});
+    super({engine, uri});
   }
 
   getSqlDataSource(): CustomSqlTableDefConfig {

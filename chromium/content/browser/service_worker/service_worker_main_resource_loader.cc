@@ -86,7 +86,7 @@ bool HasAutoPreloadEligibleScript(scoped_refptr<ServiceWorkerVersion> version) {
           .contains(version->sha256_script_checksum());
 }
 
-std::string GetContainerHostClientId(int frame_tree_node_id) {
+std::string GetContainerHostClientId(FrameTreeNodeId frame_tree_node_id) {
   std::string client_uuid;
   auto* frame_tree_node = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
   if (frame_tree_node) {
@@ -142,7 +142,7 @@ class ServiceWorkerMainResourceLoader::StreamWaiter
 ServiceWorkerMainResourceLoader::ServiceWorkerMainResourceLoader(
     NavigationLoaderInterceptor::FallbackCallback fallback_callback,
     base::WeakPtr<ServiceWorkerClient> service_worker_client,
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     base::TimeTicks find_registration_start_time)
     : fallback_callback_(std::move(fallback_callback)),
       service_worker_client_(std::move(service_worker_client)),
@@ -390,7 +390,7 @@ void ServiceWorkerMainResourceLoader::StartRequest(
            network::mojom::RequestDestination::kWorker &&
        base::FeatureList::IsEnabled(blink::features::kPlzDedicatedWorker))) {
     client_uuid = worker_parent_client_uuid_;
-  } else if (frame_tree_node_id_ != FrameTreeNode::kFrameTreeNodeInvalidId) {
+  } else if (frame_tree_node_id_) {
     client_uuid = GetContainerHostClientId(frame_tree_node_id_);
   } else {
     // Unit tests may not set ids.
@@ -431,24 +431,13 @@ void ServiceWorkerMainResourceLoader::MaybeDispatchPreload(
       }
       break;
     case RaceNetworkRequestMode::kDefault:
-      if (base::GetFieldTrialParamByFeatureAsBool(
-              features::kServiceWorkerAutoPreload, "respect_navigation_preload",
-              /*default_value=*/true)) {
-        // Prioritize NavigationPreload than AutoPreload if the
-        // respect_navigation_preload feature param is true.
-        if (MaybeStartNavigationPreload(context_wrapper)) {
-          return;
-        }
-        if (MaybeStartAutoPreload(context_wrapper, version)) {
-          return;
-        }
-      } else {
-        if (MaybeStartAutoPreload(context_wrapper, version)) {
-          return;
-        }
-        if (MaybeStartNavigationPreload(context_wrapper)) {
-          return;
-        }
+      // Prioritize NavigationPreload than AutoPreload.
+      // https://github.com/explainers-by-googlers/service-worker-auto-preload#how-is-it-different-from-the-navigation-preload-api
+      if (MaybeStartNavigationPreload(context_wrapper)) {
+        return;
+      }
+      if (MaybeStartAutoPreload(context_wrapper, version)) {
+        return;
       }
       break;
     case RaceNetworkRequestMode::kSkipped:
@@ -807,7 +796,7 @@ void ServiceWorkerMainResourceLoader::DidDispatchFetchEvent(
         break;
       case FetchResponseFrom::kSubresourceLoaderIsHandlingRedirect:
       case FetchResponseFrom::kAutoPreloadHandlingFallback:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
   }
 
@@ -842,7 +831,7 @@ void ServiceWorkerMainResourceLoader::DidDispatchFetchEvent(
           ->CommitAndCompleteResponseIfDataTransferFinished();
       return;
     case FetchResponseFrom::kSubresourceLoaderIsHandlingRedirect:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 
   // Cancel the in-flight request processing for the fallback.
@@ -993,7 +982,11 @@ void ServiceWorkerMainResourceLoader::StartResponse(
   DCHECK(version->GetMainScriptResponse());
   response_head_->ssl_info = version->GetMainScriptResponse()->ssl_info;
 
-  CHECK(version->policy_container_host(), base::NotFatalUntil::M129);
+#ifndef NDEBUG
+  // This check is failing against real users. If you found out why, please add
+  // a regression test.
+  CHECK(version->policy_container_host());
+#endif
   // TODO(https://crbug.com/339200481): Find out why some ServiceWorker versions
   // have null policy container host.
   if (version->policy_container_host()) {
@@ -1168,29 +1161,22 @@ ServiceWorkerMainResourceLoader::ConvertToServiceWorkerStatus(
     blink::EmbeddedWorkerStatus embedded_status,
     bool is_warming_up,
     bool is_warmed_up) {
-  network::mojom::ServiceWorkerStatus status;
   switch (embedded_status) {
     case blink::EmbeddedWorkerStatus::kRunning:
-      if (is_warming_up) {
-        status = network::mojom::ServiceWorkerStatus::kWarmingUp;
-      } else if (is_warmed_up) {
-        status = network::mojom::ServiceWorkerStatus::kWarmedUp;
-      } else {
-        status = network::mojom::ServiceWorkerStatus::kRunning;
-      }
-      break;
+      return network::mojom::ServiceWorkerStatus::kRunning;
     case blink::EmbeddedWorkerStatus::kStarting:
-      status = network::mojom::ServiceWorkerStatus::kStarting;
-      break;
+      if (is_warming_up) {
+        return network::mojom::ServiceWorkerStatus::kWarmingUp;
+      } else if (is_warmed_up) {
+        return network::mojom::ServiceWorkerStatus::kWarmedUp;
+      } else {
+        return network::mojom::ServiceWorkerStatus::kStarting;
+      }
     case blink::EmbeddedWorkerStatus::kStopping:
-      status = network::mojom::ServiceWorkerStatus::kStopping;
-      break;
+      return network::mojom::ServiceWorkerStatus::kStopping;
     case blink::EmbeddedWorkerStatus::kStopped:
-      status = network::mojom::ServiceWorkerStatus::kStopped;
-      break;
+      return network::mojom::ServiceWorkerStatus::kStopped;
   }
-
-  return status;
 }
 
 std::string

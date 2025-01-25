@@ -277,7 +277,7 @@ class CalendarUpdateFunction : public CalendarFunctionWithCallback {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdateCalendarComplete(bool results);
+  void UpdateCalendarComplete(calendar::StatusCB results);
 };
 
 class CalendarDeleteFunction : public CalendarAsyncFunction {

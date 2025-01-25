@@ -2,18 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome-untrusted://lens/selection_overlay.js';
+import 'chrome-untrusted://lens-overlay/selection_overlay.js';
 
 import type {RectF} from '//resources/mojo/ui/gfx/geometry/mojom/geometry.mojom-webui.js';
-import {BrowserProxyImpl} from 'chrome-untrusted://lens/browser_proxy.js';
-import type {LensPageRemote} from 'chrome-untrusted://lens/lens.mojom-webui.js';
-import {UserAction} from 'chrome-untrusted://lens/lens.mojom-webui.js';
-import type {SelectionOverlayElement} from 'chrome-untrusted://lens/selection_overlay.js';
+import {BrowserProxyImpl} from 'chrome-untrusted://lens-overlay/browser_proxy.js';
+import type {LensPageRemote} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
+import {UserAction} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
+import type {SelectionOverlayElement} from 'chrome-untrusted://lens-overlay/selection_overlay.js';
 import {loadTimeData} from 'chrome-untrusted://resources/js/load_time_data.js';
 import {assertEquals} from 'chrome-untrusted://webui-test/chai_assert.js';
 import type {MetricsTracker} from 'chrome-untrusted://webui-test/metrics_test_support.js';
 import {fakeMetricsPrivate} from 'chrome-untrusted://webui-test/metrics_test_support.js';
-import {flushTasks} from 'chrome-untrusted://webui-test/polymer_test_util.js';
+import {flushTasks, waitAfterNextRender} from 'chrome-untrusted://webui-test/polymer_test_util.js';
 
 import {simulateClick, simulateDrag} from '../utils/selection_utils.js';
 import {createLine, createParagraph, createText, createWord} from '../utils/text_utils.js';
@@ -70,6 +70,10 @@ suite('TextSelection', function() {
     // viewport.
     selectionOverlayElement.$.selectionOverlay.style.width = '100%';
     selectionOverlayElement.$.selectionOverlay.style.height = '100%';
+    // Resize observer does not trigger with flushTasks(), so we need to use
+    // waitAfterNextRender() instead.
+    await waitAfterNextRender(selectionOverlayElement);
+
     metrics = fakeMetricsPrivate();
     await flushTasks();
     await addWords();
@@ -116,7 +120,8 @@ suite('TextSelection', function() {
       ]),
     ]);
     callbackRouterRemote.textReceived(text);
-    return flushTasks();
+    await flushTasks();
+    await waitAfterNextRender(selectionOverlayElement);
   }
 
   function getRenderedWords(): NodeListOf<Element> {
@@ -190,6 +195,7 @@ suite('TextSelection', function() {
               x: getCenterX(secondWordBoundingBox),
               y: getCenterY(secondWordBoundingBox),
             });
+        await waitAfterNextRender(selectionOverlayElement);
 
         const highlightedLines = getHighlightedLines();
         assertEquals(1, highlightedLines.length);
@@ -270,6 +276,7 @@ suite('TextSelection', function() {
               x: firstParagraphLastWordBox.right + 2,
               y: getCenterY(firstParagraphLastWordBox),
             });
+        await waitAfterNextRender(selectionOverlayElement);
 
         const highlightedLines = getHighlightedLines();
         assertEquals(2, highlightedLines.length);

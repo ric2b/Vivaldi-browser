@@ -19,11 +19,11 @@ source_set("magic_boost") {
   deps = [
     ":magic_boost_constants",
     "//base",
-    "//chrome/browser/chromeos",
     "//chrome/browser/resources:component_extension_resources",
     "//chrome/browser/ui/chromeos/read_write_cards",
     "//chrome/browser/ui/views/editor_menu:utils",
     "//chromeos/components/magic_boost/public/cpp:cpp",
+    "//chromeos/components/mahi/public/cpp",
     "//chromeos/crosapi/mojom",
     "//chromeos/strings:strings_grit",
     "//chromeos/ui/vector_icons",
@@ -38,11 +38,7 @@ source_set("magic_boost") {
   }
 
   if (is_chromeos_ash) {
-    deps += [
-      "//chrome/browser/ash",
-      "//chrome/browser/ash/crosapi",
-      "//chrome/browser/ash/magic_boost",
-    ]
+    deps += [ "//chrome/browser/ash/magic_boost" ]
   }
 
   if (is_chromeos_lacros) {

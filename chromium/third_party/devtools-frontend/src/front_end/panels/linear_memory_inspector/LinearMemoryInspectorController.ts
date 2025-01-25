@@ -106,7 +106,7 @@ export class LinearMemoryInspectorController extends SDK.TargetManager.SDKModelO
     SDK.TargetManager.TargetManager.instance().observeModels(SDK.RuntimeModel.RuntimeModel, this);
     SDK.TargetManager.TargetManager.instance().addModelListener(
         SDK.DebuggerModel.DebuggerModel, SDK.DebuggerModel.Events.GlobalObjectCleared, this.#onGlobalObjectClear, this);
-    this.#paneInstance.addEventListener(LmiEvents.ViewClosed, this.#viewClosed.bind(this));
+    this.#paneInstance.addEventListener(LmiEvents.VIEW_CLOSED, this.#viewClosed.bind(this));
 
     SDK.TargetManager.TargetManager.instance().addModelListener(
         SDK.DebuggerModel.DebuggerModel, SDK.DebuggerModel.Events.DebuggerPaused, this.#onDebuggerPause, this);
@@ -116,7 +116,7 @@ export class LinearMemoryInspectorController extends SDK.TargetManager.SDKModelO
     const defaultSettings: SerializableSettings = {
       valueTypes: Array.from(defaultValueTypeModes.keys()),
       valueTypeModes: Array.from(defaultValueTypeModes),
-      endianness: LinearMemoryInspectorComponents.ValueInterpreterDisplayUtils.Endianness.Little,
+      endianness: LinearMemoryInspectorComponents.ValueInterpreterDisplayUtils.Endianness.LITTLE,
     };
     this.#settings = Common.Settings.Settings.instance().createSetting('lmi-interpreter-settings', defaultSettings);
   }
@@ -137,7 +137,7 @@ export class LinearMemoryInspectorController extends SDK.TargetManager.SDKModelO
     const memoryChunkStart = Math.max(0, address - MEMORY_TRANSFER_MIN_CHUNK_SIZE / 2);
     const memoryChunkEnd = memoryChunkStart + MEMORY_TRANSFER_MIN_CHUNK_SIZE;
     const memory = await memoryWrapper.getRange(memoryChunkStart, memoryChunkEnd);
-    return {memory: memory, offset: memoryChunkStart};
+    return {memory, offset: memoryChunkStart};
   }
 
   static async getMemoryRange(memoryWrapper: LazyUint8Array, start: number, end: number): Promise<Uint8Array> {

@@ -17,14 +17,10 @@ import {
   BlockingCallMetricData,
   MetricHandler,
 } from './metricUtils';
-import {PluginContextTrace} from '../../../public';
-import {PLUGIN_ID} from '../pluginId';
+import {Trace} from '../../../public/trace';
 import {SimpleSliceTrackConfig} from '../../../frontend/simple_slice_track';
 import {addJankCUJDebugTrack} from '../../dev.perfetto.AndroidCujs';
-import {
-  addAndPinSliceTrack,
-  TrackType,
-} from '../../dev.perfetto.AndroidCujs/trackUtils';
+import {addAndPinSliceTrack} from '../../dev.perfetto.AndroidCujs/trackUtils';
 
 class BlockingCallMetricHandler implements MetricHandler {
   /**
@@ -51,35 +47,21 @@ class BlockingCallMetricHandler implements MetricHandler {
 
   /**
    * Adds the debug tracks for Blocking Call metrics
-   * registerStaticTrack used when plugin adds tracks onTraceload()
-   * addDebugSliceTrack used for adding tracks using the command
    *
    * @param {BlockingCallMetricData} metricData Parsed metric data for the cuj scoped jank
-   * @param {PluginContextTrace} ctx PluginContextTrace for trace related properties and methods
-   * @param {TrackType} type 'static' when called onTraceload and 'debug' when called through command
+   * @param {Trace} ctx PluginContextTrace for trace related properties and methods
    * @returns {void} Adds one track for Jank CUJ slice and one for Janky CUJ frames
    */
-  public addMetricTrack(
-    metricData: BlockingCallMetricData,
-    ctx: PluginContextTrace,
-    type: TrackType,
-  ): void {
-    this.pinSingleCuj(ctx, metricData, type);
-    const uri = `${PLUGIN_ID}#BlockingCallSlices#${metricData}`;
-    // TODO: b/349502258 - Refactor to single API
+  public addMetricTrack(metricData: BlockingCallMetricData, ctx: Trace): void {
+    this.pinSingleCuj(ctx, metricData);
     const {config: blockingCallMetricConfig, trackName: trackName} =
       this.blockingCallTrackConfig(metricData);
-    addAndPinSliceTrack(ctx, blockingCallMetricConfig, trackName, type, uri);
+    addAndPinSliceTrack(ctx, blockingCallMetricConfig, trackName);
   }
 
-  private pinSingleCuj(
-    ctx: PluginContextTrace,
-    metricData: BlockingCallMetricData,
-    type: TrackType,
-  ) {
-    const uri = `${PLUGIN_ID}#BlockingCallCUJ#${metricData}`;
+  private pinSingleCuj(ctx: Trace, metricData: BlockingCallMetricData) {
     const trackName = `Jank CUJ: ${metricData.cujName}`;
-    addJankCUJDebugTrack(ctx, trackName, type, metricData.cujName, uri);
+    addJankCUJDebugTrack(ctx, trackName, metricData.cujName);
   }
 
   private blockingCallTrackConfig(metricData: BlockingCallMetricData): {

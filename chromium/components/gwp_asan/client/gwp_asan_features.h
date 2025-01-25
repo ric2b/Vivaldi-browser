@@ -18,10 +18,15 @@ GWP_ASAN_EXPORT BASE_DECLARE_FEATURE(kExtremeLightweightUAFDetector);
 GWP_ASAN_EXPORT extern const base::FeatureParam<int>
     kExtremeLightweightUAFDetectorSamplingFrequency;
 GWP_ASAN_EXPORT extern const base::FeatureParam<int>
-    kExtremeLightweightUAFDetectorQuarantineCapacityInBytes;
+    kExtremeLightweightUAFDetectorQuarantineCapacityForSmallObjectsInBytes;
+GWP_ASAN_EXPORT extern const base::FeatureParam<int>
+    kExtremeLightweightUAFDetectorQuarantineCapacityForLargeObjectsInBytes;
+GWP_ASAN_EXPORT extern const base::FeatureParam<int>
+    kExtremeLightweightUAFDetectorObjectSizeThresholdInBytes;
 enum class ExtremeLightweightUAFDetectorTargetProcesses {
   kAllProcesses,
   kBrowserProcessOnly,
+  kNonRendererProcesses,
 };
 GWP_ASAN_EXPORT extern const base::FeatureParam<
     ExtremeLightweightUAFDetectorTargetProcesses>

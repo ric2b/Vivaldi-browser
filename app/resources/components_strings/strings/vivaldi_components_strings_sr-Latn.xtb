@@ -7,11 +7,13 @@
 <translation id="1158211211994409885">Host <ph name="HOST_NAME" /> je neočekivano prekinuo vezu.</translation>
 <translation id="1161325031994447685">da se ponovo povežete na Wi-Fi mrežu</translation>
 <translation id="1175364870820465910">&amp;Odštampaj...</translation>
+<translation id="132390688737681464">Čuvaj i popuni adrese</translation>
 <translation id="1375198122581997741">Osnovni podaci</translation>
 <translation id="139305205187523129">Host <ph name="HOST_NAME" /> nije poslao nikakve podatke.</translation>
 <translation id="1559528461873125649">Nema takve datoteke ili direktorijuma</translation>
 <translation id="1640244768702815859">Pokušajte da <ph name="BEGIN_LINK" />posetite matičnu stranicu sajta<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nepodržani protokol</translation>
+<translation id="1662550410081243962">Čuvaj i popuni načine plaćanja</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Pregledate izvor veb stranice</translation>
 <translation id="1734878702283171397">Obratite se administratoru sistema.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Ovaj sajt ne može da pruži bezbednu vezu</translation>
 <translation id="2187317261103489799">Otkrij (podrazumevano)</translation>
 <translation id="2224337661447660594">Nema interneta</translation>
+<translation id="2283340219607151381">Čuvaj i popuni adrese</translation>
 <translation id="2292556288342944218">Pristup internetu je blokiran</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> zahteva korisničko ime i lozinku.</translation>
 <translation id="2337852623177822836">Podešavanjem upravlja administrator</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Veza je šifrovana i njena autentičnost je potvrđena pomoću <ph name="CIPHER" /> i koristi <ph name="KX" /> kao mehanizam za razmenu šifara.</translation>
 <translation id="2909946352844186028">Otkrivena je promena na mreži.</translation>
 <translation id="2948083400971632585">Možete da onemogućite bilo koji proksi konfigurisan za povezivanje sa stranice podešavanja.</translation>
+<translation id="2954624054936281172">Tabela sačuvanih načina plaćanja</translation>
 <translation id="2991571918955627853">Ne možete posetiti sada <ph name="SITE" /> jer veb-sajt koristi HSTS. Greške i napadi na mreži su obično privremeni, pa će ova stranica verovatno funkcionisati kasnije.</translation>
 <translation id="3005723025932146533">Prikaži sačuvanu kopiju</translation>
 <translation id="301521992641321250">Automatski je blokirano</translation>
@@ -58,6 +62,7 @@ Ako mislite da ne treba da koristite proksi server:
 <translation id="3234666976984236645">Uvek otkrij važan sadržaj na ovom sajtu</translation>
 <translation id="3308738399950580893">reklame</translation>
 <translation id="3384522979010096022">Vaša organizacija vam ne dozvoljava da pregledate ovaj sajt</translation>
+<translation id="3387261909427947069">Načini plaćanja</translation>
 <translation id="3422472998109090673">Host <ph name="HOST_NAME" /> trenutno nije dostupan.</translation>
 <translation id="3427092606871434483">Dozvoli (podrazumevano)</translation>
 <translation id="3447661539832366887">Vlasnik ovog uređaja je isključio ovu zastarelu igru.</translation>
@@ -115,6 +120,7 @@ pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
 <translation id="5386426401304769735">Lanac sertifikata za ovaj sajt sadrži sertifikat potpisan pomoću algoritma SHA-1.</translation>
 <translation id="5452270690849572955">Nije moguće pronaći ovu stranicu na <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Nevažeći</translation>
+<translation id="5490432419156082418">Adrese i ostalo</translation>
 <translation id="5492298309214877701">Ovaj sajt na intranetu kompanije, organizacije ili škole ima isti URL kao i jedan spoljni veb-sajt.
     <ph name="LINE_BREAK" />
     Pokušajte da se obratite administratoru sistema.</translation>
@@ -159,6 +165,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="7108819624672055576">Dozvoljeno proširenjem</translation>
 <translation id="7111012039238467737">(važeći)</translation>
 <translation id="7113310725918019676">Dozvoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Čuvaj i popuni načine plaćanja</translation>
 <translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ne poštuje bezbednosne standarde.</translation>
 <translation id="7219179957768738017">Veza koristi <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">prikazuje obaveštenja</translation>
@@ -197,6 +204,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="8289355894181816810">Obratite se administratoru mreže ako niste sigurni šta to znači.</translation>
 <translation id="8332188693563227489">Pristup hostu <ph name="HOST_NAME" /> je odbijen</translation>
 <translation id="8422228580902424274">Napadači na sajt koji pokušavate da posetite mogu da vas navedu da instalirate softver ili otkrijete stvari poput lozinke, telefona ili broja kreditne kartice.</translation>
+<translation id="8473863474539038330">Adrese i ostalo</translation>
 <translation id="8498891568109133222">Odgovor hosta <ph name="HOST_NAME" /> je trajao predugo.</translation>
 <translation id="8503813439785031346">Korisničko ime</translation>
 <translation id="8703575177326907206">Vaša veza sa domenom <ph name="DOMAIN" /> nije šifrovana.</translation>
@@ -204,6 +212,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="8820817407110198400">Obeleživači</translation>
 <translation id="8940028675168378100">Blokirao <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Idi na podešavanja sajta</translation>
+<translation id="8975012916872825179">Uključuje informacije kao što su brojevi telefona, adrese e-pošte i adrese za isporuku</translation>
 <translation id="9001074447101275817">Proksi <ph name="DOMAIN" /> zahteva korisničko ime i lozinku.</translation>
 <translation id="9008201768610948239">Zanemari</translation>
 <translation id="9025348182339809926">(nevažeći)</translation>
@@ -216,5 +225,6 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> koristi nepodržani protokol.</translation>
 <translation id="936602727769022409">Mogli biste izgubiti pristup svom Google nalogu. Preporučujemo da odmah promenite lozinku. Od vas će se zatražiti da se prijavite.</translation>
 <translation id="969892804517981540">Zvanična verzija</translation>
+<translation id="984275831282074731">Načini plaćanja</translation>
 <translation id="988159990683914416">Verzija za programere</translation>
 </translationbundle>

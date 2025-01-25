@@ -169,7 +169,7 @@ bool IsFieldConditionFulfilledIgnoringLocation(ParsingContext& context,
   if (condition.regex_reference_match.has_value()) {
     base::span<const MatchPatternRef> patterns =
         GetMatchPatterns(condition.regex_reference_match.value(),
-                         context.page_language, context.pattern_source);
+                         context.page_language, context.pattern_file);
     if (!FormFieldParser::FieldMatchesMatchPatternRef(context, patterns,
                                                       field)) {
       return false;
@@ -190,7 +190,7 @@ std::optional<size_t> FindFieldMeetingCondition(
       case FieldLocation::kLastClassifiedPredecessor:
         return -1;
       case FieldLocation::kTriggerField:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
       case FieldLocation::kNextClassifiedSuccessor:
       case FieldLocation::kSuccessor:
         return 1;
@@ -308,8 +308,6 @@ void ApplyRationalizationEngineRules(
             .SetEnvironmentCondition(
                 EnvironmentConditionBuilder()
                     .SetCountryList({GeoIpCountryCode("MX")})
-                    .SetFeature(
-                        &features::kAutofillEnableRationalizationEngineForMX)
                     .Build())
 
             // This is the core field to which the rule applies.

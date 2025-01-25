@@ -64,6 +64,7 @@
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
+#include "third_party/blink/public/mojom/loader/same_document_navigation_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/origin_trial_feature/origin_trial_feature.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_fetch_handler_bypass_option.mojom-blink.h"
@@ -127,6 +128,7 @@
 #include "third_party/blink/renderer/core/mobile_metrics/mobile_friendliness_checker.h"
 #include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
+#include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/performance_entry_names.h"
@@ -437,7 +439,7 @@ class DocumentLoader::EncodedBodyData : public BodyData {
   }
 
   void AppendToParser(DocumentLoader* loader) override {
-    loader->parser_->AppendBytes(data_.data(), data_.size());
+    loader->parser_->AppendBytes(base::as_bytes(data_));
   }
 
   void Buffer(DocumentLoader* loader) override {
@@ -751,8 +753,16 @@ LocalFrameClient& DocumentLoader::GetLocalFrameClient() const {
 DocumentLoader::~DocumentLoader() {
   TRACE_EVENT_WITH_FLOW0("loading", "DocumentLoader::~DocumentLoader",
                          TRACE_ID_LOCAL(this), TRACE_EVENT_FLAG_FLOW_IN);
-  DCHECK(!frame_);
   DCHECK_EQ(state_, kSentDidFinishLoad);
+
+  // Before being collected by the GC, it is expected the DocumentLoader to be
+  // detached from the frame, and it should have stopped loading.
+  //
+  // Note that the WebNavigationBodyLoader implementation is not a GCed class
+  // and it could call `this` back. It is important it gets removed before
+  // collecting `this`.
+  DCHECK(!frame_);
+  DCHECK(!body_loader_);
 }
 
 void DocumentLoader::Trace(Visitor* visitor) const {
@@ -1032,7 +1042,7 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
   GetLocalFrameClient().DidFinishSameDocumentNavigation(
       commit_type, is_synchronously_committed, same_document_navigation_type,
       is_client_redirect_, is_browser_initiated);
-  probe::DidNavigateWithinDocument(frame_);
+  probe::DidNavigateWithinDocument(frame_, same_document_navigation_type);
 
   // If intercept() was called during this same-document navigation's
   // NavigateEvent, the navigation will finish asynchronously, so
@@ -1257,9 +1267,8 @@ void DocumentLoader::BodyDataReceivedImpl(BodyData& data) {
     }
     GetFrameLoader().Progress().IncrementProgress(main_resource_identifier_,
                                                   encoded_data.size());
-    probe::DidReceiveData(
-        probe::ToCoreProbeSink(GetFrame()), main_resource_identifier_, this,
-        encoded_data.ptr_or_null_if_no_data(), encoded_data.size());
+    probe::DidReceiveData(probe::ToCoreProbeSink(GetFrame()),
+                          main_resource_identifier_, this, encoded_data);
   }
 
   TRACE_EVENT_WITH_FLOW1("loading", "DocumentLoader::HandleData",
@@ -1570,6 +1579,7 @@ mojom::CommitResult DocumentLoader::CommitSameDocumentNavigation(
     Element* source_element,
     mojom::blink::TriggeringEventInfo triggering_event_info,
     bool is_browser_initiated,
+    bool has_ua_visual_transition,
     std::optional<scheduler::TaskAttributionId>
         soft_navigation_heuristics_task_id) {
   DCHECK(!IsReloadLoadType(frame_load_type));
@@ -1637,6 +1647,7 @@ mojom::CommitResult DocumentLoader::CommitSameDocumentNavigation(
     params->source_element = source_element;
     params->destination_item = history_item;
     params->is_browser_initiated = is_browser_initiated;
+    params->has_ua_visual_transition = has_ua_visual_transition;
     params->is_synchronously_committed_same_document =
         is_synchronously_committed;
     params->soft_navigation_heuristics_task_id =
@@ -1669,13 +1680,13 @@ mojom::CommitResult DocumentLoader::CommitSameDocumentNavigation(
                 client_redirect_policy, has_transient_user_activation,
                 WTF::RetainedRef(initiator_origin), is_browser_initiated,
                 is_synchronously_committed, triggering_event_info,
-                soft_navigation_heuristics_task_id));
+                soft_navigation_heuristics_task_id, has_ua_visual_transition));
   } else {
     CommitSameDocumentNavigationInternal(
         url, frame_load_type, history_item, same_document_navigation_type,
         client_redirect_policy, has_transient_user_activation, initiator_origin,
         is_browser_initiated, is_synchronously_committed, triggering_event_info,
-        soft_navigation_heuristics_task_id);
+        soft_navigation_heuristics_task_id, has_ua_visual_transition);
   }
   return mojom::CommitResult::Ok;
 }
@@ -1692,7 +1703,8 @@ void DocumentLoader::CommitSameDocumentNavigationInternal(
     bool is_synchronously_committed,
     mojom::blink::TriggeringEventInfo triggering_event_info,
     std::optional<scheduler::TaskAttributionId>
-        soft_navigation_heuristics_task_id) {
+        soft_navigation_heuristics_task_id,
+    bool has_ua_visual_transition) {
   // If this function was scheduled to run asynchronously, this DocumentLoader
   // might have been detached before the task ran.
   if (!frame_)
@@ -1766,8 +1778,12 @@ void DocumentLoader::CommitSameDocumentNavigationInternal(
     frame_->Owner()->DispatchLoad();
   }
 
+  auto scroll_behavior = has_ua_visual_transition
+                             ? mojom::blink::ScrollBehavior::kInstant
+                             : mojom::blink::ScrollBehavior::kAuto;
   GetFrameLoader().ProcessScrollForSameDocumentNavigation(
-      url, frame_load_type, view_state, scroll_restoration_type);
+      url, frame_load_type, view_state, scroll_restoration_type,
+      scroll_behavior);
 }
 
 void DocumentLoader::ProcessDataBuffer(BodyData* data) {
@@ -1822,6 +1838,8 @@ void DocumentLoader::SetDefersLoading(LoaderFreezeMode mode) {
 void DocumentLoader::DetachFromFrame(bool flush_microtask_queue) {
   DCHECK(frame_);
   StopLoading();
+  DCHECK(!body_loader_);
+
   // `frame_` may become null because this method can get re-entered. If it
   // is null we've already run the code below so just return early.
   if (!frame_)
@@ -2136,6 +2154,9 @@ void DocumentLoader::WillCommitNavigation() {
 }
 
 void DocumentLoader::DidCommitNavigation() {
+  TRACE_EVENT0("loading", "DocumentLoader::DidCommitNavigation");
+  base::ScopedUmaHistogramTimer histogram_timer(
+      "Navigation.DocumentLoader.DidCommitNavigation");
   if (commit_reason_ != CommitReason::kRegular)
     return;
 
@@ -2455,9 +2476,12 @@ WindowAgent* GetWindowAgentForOrigin(
 //
 // javascript: URLs use the calling page as their Url() value, so we need to
 // include them explicitly.
+//
+// Discarded pages retain their Url() value so must be included explicitly.
 bool ShouldInheritExplicitOriginKeying(const KURL& url, CommitReason reason) {
   return Document::ShouldInheritSecurityOriginFromOwner(url) ||
-         reason == CommitReason::kJavascriptUrl;
+         reason == CommitReason::kJavascriptUrl ||
+         reason == CommitReason::kDiscard;
 }
 
 bool DocumentLoader::IsSameOriginInitiator() const {
@@ -2471,11 +2495,10 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
   TRACE_EVENT_WITH_FLOW0("loading", "DocumentLoader::InitializeWindow",
                          TRACE_ID_LOCAL(this),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
-  // Javascript URLs and XSLT committed document must not pass a new
-  // policy_container_, since they must keep the previous document one.
-  DCHECK((commit_reason_ != CommitReason::kJavascriptUrl &&
-          commit_reason_ != CommitReason::kXSLT) ||
-         !policy_container_);
+  // Javascript URLs, XSLT committed document and discarded documents must not
+  // pass a new policy_container_, since they must keep the previous document
+  // one.
+  DCHECK((!IsJavaScriptURLOrXSLTCommitOrDiscard()) || !policy_container_);
 
   bool did_have_policy_container = (policy_container_ != nullptr);
 
@@ -2520,10 +2543,10 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
     // TODO(dcheng): Actually enforce strict sandbox flags for provisional
     // frame. For some reason, doing so breaks some random devtools tests.
     security_origin = SecurityOrigin::CreateUniqueOpaque();
-  } else if (commit_reason_ == CommitReason::kJavascriptUrl ||
-             commit_reason_ == CommitReason::kXSLT) {
-    // For javascript: URL and XSLT commits, which don't go through the browser
-    // process and reuses the same DocumentLoader, reuse the previous origin.
+  } else if (IsJavaScriptURLOrXSLTCommitOrDiscard()) {
+    // For javascript: URL, XSLT commits and discarded documents which don't go
+    // through the browser process and reuses the same DocumentLoader, reuse the
+    // previous origin.
     // TODO(dcheng): Is it a problem that the previous origin is copied with
     // isolated copy? This probably has observable side effects (e.g. executing
     // a javascript: URL in an about:blank frame that inherited an origin will
@@ -2596,7 +2619,7 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
         case net::StorageAccessApiStatus::kAccessViaAPI:
           return true;
       }
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     }();
   } else {
     if (frame_->GetSettings()->GetShouldReuseGlobalForUnownedMainFrame() &&
@@ -2638,7 +2661,7 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
                                 case net::StorageAccessApiStatus::kAccessViaAPI:
                                   return true;
                               }
-                              NOTREACHED_NORETURN();
+                              NOTREACHED();
                             }());
   base::UmaHistogramBoolean("API.StorageAccess.DocumentInheritedStorageAccess",
                             inherited_has_storage_access);
@@ -2696,6 +2719,8 @@ void DocumentLoader::CommitNavigation() {
   TRACE_EVENT_WITH_FLOW0("loading", "DocumentLoader::CommitNavigation",
                          TRACE_ID_LOCAL(this),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
+  base::ScopedUmaHistogramTimer histogram_timer(
+      "Navigation.DocumentLoader.CommitNavigation");
   base::ElapsedTimer timer;
   DCHECK_LT(state_, kCommitted);
   DCHECK(frame_->GetPage());
@@ -2752,11 +2777,10 @@ void DocumentLoader::CommitNavigation() {
 
   // The document constructed by XSLTProcessor and ScriptController should
   // inherit Permissions Policy and Document Policy from the previous Document.
-  // Note: In XSLT commit and JavaScript commit, |response_| no longer holds
-  // header fields. Going through regular initialization will cause empty policy
-  // even if there is header on xml document.
-  if (commit_reason_ == CommitReason::kXSLT ||
-      commit_reason_ == CommitReason::kJavascriptUrl) {
+  // Note: In XSLT commit, JavaScript commit and discard commit, |response_| no
+  // longer holds header fields. Going through regular initialization will cause
+  // empty policy even if there is header on xml document.
+  if (IsJavaScriptURLOrXSLTCommitOrDiscard()) {
     DCHECK(response_.HttpHeaderField(http_names::kFeaturePolicy).empty());
     DCHECK(response_.HttpHeaderField(http_names::kPermissionsPolicy).empty());
     DCHECK(response_.HttpHeaderField(http_names::kDocumentPolicy).empty());
@@ -2800,6 +2824,7 @@ void DocumentLoader::CommitNavigation() {
           .WithTypeFrom(MimeType())
           .WithSrcdocDocument(loading_srcdoc_)
           .WithJavascriptURL(commit_reason_ == CommitReason::kJavascriptUrl)
+          .ForDiscard(commit_reason_ == CommitReason::kDiscard)
           .WithFallbackBaseURL(fallback_base_url_)
           .WithUkmSourceId(ukm_source_id_)
           .WithBaseAuctionNonce(base_auction_nonce_));
@@ -2833,7 +2858,9 @@ void DocumentLoader::CommitNavigation() {
   // that it was activated before navigation. Update the frame state based on
   // the new value.
   OldDocumentInfoForCommit* old_document_info_for_commit =
-      ScopedOldDocumentInfoForCommitCapturer::CurrentInfo();
+      (commit_reason_ == CommitReason::kRegular)
+          ? ScopedOldDocumentInfoForCommitCapturer::CurrentInfo()
+          : nullptr;
   bool had_sticky_activation_before_navigation =
       old_document_info_for_commit
           ? old_document_info_for_commit
@@ -2843,6 +2870,12 @@ void DocumentLoader::CommitNavigation() {
     frame_->SetHadStickyUserActivationBeforeNavigation(had_sticky_activation_);
     frame_->GetLocalFrameHostRemote()
         .HadStickyUserActivationBeforeNavigationChanged(had_sticky_activation_);
+  }
+  bool was_focused_frame = old_document_info_for_commit
+                               ? old_document_info_for_commit->was_focused_frame
+                               : false;
+  if (was_focused_frame) {
+    frame_->GetPage()->GetFocusController().SetFocusedFrame(frame_);
   }
 
   bool should_clear_window_name =
@@ -2882,10 +2915,13 @@ void DocumentLoader::CommitNavigation() {
   // resulting `document`. The `visited_link_salt_` allows the `document` to
   // hash and identify which links should be styled as :visited. Without the
   // salt, the hashtable is unreadable to the Document.
-  if (visited_link_salt_.has_value() &&
-      base::FeatureList::IsEnabled(
-          blink::features::kPartitionVisitedLinkDatabase)) {
-    document->GetVisitedLinkState().UpdateSalt(visited_link_salt_.value());
+  if (visited_link_salt_.has_value()) {
+    if (base::FeatureList::IsEnabled(
+            blink::features::kPartitionVisitedLinkDatabase) ||
+        base::FeatureList::IsEnabled(
+            blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks)) {
+      document->GetVisitedLinkState().UpdateSalt(visited_link_salt_.value());
+    }
   }
 
   // The navigation API is not initialized on the initial about:blank document
@@ -3002,7 +3038,7 @@ void DocumentLoader::CommitNavigation() {
     FrameNavigationDisabler navigation_disabler(*frame_);
     if (commit_reason_ == CommitReason::kInitialization) {
       // There's no observers yet so nothing to notify.
-    } else if (IsJavaScriptURLOrXSLTCommit()) {
+    } else if (IsJavaScriptURLOrXSLTCommitOrDiscard()) {
       GetLocalFrameClient().DidCommitDocumentReplacementNavigation(this);
     } else {
       GetLocalFrameClient().DispatchDidCommitLoad(
@@ -3112,7 +3148,7 @@ void DocumentLoader::CreateParserPostCommit() {
   }
 
   ParserSynchronizationPolicy parsing_policy = kAllowDeferredParsing;
-  if (IsJavaScriptURLOrXSLTCommit() ||
+  if (IsJavaScriptURLOrXSLTCommitOrDiscard() ||
       Document::ForceSynchronousParsingForTesting()) {
     parsing_policy = kForceSynchronousParsing;
   }
@@ -3659,8 +3695,8 @@ WebDocumentLoader::ExtraData* DocumentLoader::GetExtraData() const {
   return extra_data_.get();
 }
 
-std::unique_ptr<WebDocumentLoader::ExtraData> DocumentLoader::TakeExtraData() {
-  return std::move(extra_data_);
+std::unique_ptr<WebDocumentLoader::ExtraData> DocumentLoader::CloneExtraData() {
+  return extra_data_ ? extra_data_->Clone() : nullptr;
 }
 
 void DocumentLoader::SetExtraData(std::unique_ptr<ExtraData> extra_data) {

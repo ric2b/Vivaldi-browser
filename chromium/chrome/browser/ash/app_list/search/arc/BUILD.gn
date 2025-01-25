@@ -25,6 +25,8 @@ static_library("arc") {
     "recommend_apps_fetcher_impl.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash/components/arc/mojom",
     "//ash/components/arc/session",
@@ -69,7 +71,6 @@ source_set("unit_tests") {
     ":arc",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/ash",
     "//chrome/browser/ash/app_list:test_support",
     "//chrome/browser/ash/app_list/arc:test_support",
     "//chrome/browser/ash/app_list/search",

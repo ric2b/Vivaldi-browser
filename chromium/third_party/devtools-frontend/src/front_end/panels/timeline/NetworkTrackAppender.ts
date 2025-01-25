@@ -11,17 +11,14 @@ import {
   buildGroupStyle,
   buildTrackHeader,
   getEventLevel,
-  getFormattedTime,
   type LastTimestampByLevel,
 } from './AppenderUtils.js';
 import {
-  type HighlightedEntryInfo,
   type TrackAppender,
   type TrackAppenderName,
   VisualLoggingTrackName,
 } from './CompatibilityTracksAppender.js';
-import {Utils} from './components/components.js';
-import {colorForNetworkCategory, colorForNetworkRequest, NetworkCategory} from './components/Utils.js';
+import * as Components from './components/components.js';
 import {InstantEventVisibleDurationMs} from './TimelineFlameChartDataProvider.js';
 
 const UIStrings = {
@@ -29,19 +26,6 @@ const UIStrings = {
    *@description Text in Timeline Flame Chart Data Provider of the Performance panel
    */
   network: 'Network',
-  /**
-   *@description Text in Timeline Flame Chart Data Provider of the Performance panel
-   */
-  wsConnectionOpened: 'WebSocket opened',
-  /**
-   *@description Text in Timeline Flame Chart Data Provider of the Performance panel
-   *@example {ws://example.com} PH1
-   */
-  wsConnectionOpenedWithUrl: 'WebSocket opened: {PH1}',
-  /**
-   *@description Text in Timeline Flame Chart Data Provider of the Performance panel
-   */
-  wsConnectionClosed: 'WebSocket closed',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/NetworkTrackAppender.ts', UIStrings);
@@ -117,9 +101,9 @@ export class NetworkTrackAppender implements TrackAppender {
       useDecoratorsForOverview: true,
     });
     const legends: PerfUI.FlameChart.Legend[] = [];
-    for (const category in NetworkCategory) {
+    for (const category of Object.values(Components.Utils.NetworkCategory)) {
       legends.push({
-        color: Utils.colorForNetworkCategory(category as NetworkCategory),
+        color: Components.Utils.colorForNetworkCategory(category),
         category,
       });
     }
@@ -151,6 +135,7 @@ export class NetworkTrackAppender implements TrackAppender {
           TraceEngine.Helpers.Network.isSyntheticNetworkRequestEventRenderBlocking(event)) {
         addDecorationToEvent(this.#flameChartData, i, {
           type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE,
+          customStartTime: event.args.data.syntheticData.sendStartTime,
           customEndTime: event.args.data.syntheticData.finishTime,
         });
       }
@@ -253,44 +238,11 @@ export class NetworkTrackAppender implements TrackAppender {
       return '';
     }
     if (TraceEngine.Types.TraceEvents.isWebSocketTraceEvent(event)) {
-      return colorForNetworkCategory(NetworkCategory.JS);
+      return Components.Utils.colorForNetworkCategory(Components.Utils.NetworkCategory.JS);
     }
     if (!TraceEngine.Types.TraceEvents.isSyntheticNetworkRequestEvent(event)) {
       throw new Error(`Unexpected Network Request: The event's type is '${event.name}'`);
     }
-    return colorForNetworkRequest(event);
-  }
-
-  /**
-   * Gets the title an event added by this appender should be rendered with.
-   */
-  titleForEvent(event: TraceEngine.Types.TraceEvents.TraceEventData): string {
-    return event.name;
-  }
-
-  /**
-   * Returns the info shown when an event added by this appender
-   * is hovered in the timeline.
-   */
-  highlightedEntryInfo(event: TraceEngine.Types.TraceEvents.TraceEventData): HighlightedEntryInfo {
-    const title = this.titleForEvent(event);
-    return {title, formattedTime: getFormattedTime(event.dur)};
-  }
-
-  /**
-   * Returns the title an event is shown with in the timeline.
-   */
-  titleForWebSocketEvent(event: TraceEngine.Types.TraceEvents.TraceEventData): string {
-    if (TraceEngine.Types.TraceEvents.isTraceEventWebSocketCreate(event)) {
-      if (event.args.data.url) {
-        return i18nString(UIStrings.wsConnectionOpenedWithUrl, {PH1: event.args.data.url});
-      }
-
-      return i18nString(UIStrings.wsConnectionOpened);
-    }
-    if (TraceEngine.Types.TraceEvents.isTraceEventWebSocketDestroy(event)) {
-      return i18nString(UIStrings.wsConnectionClosed);
-    }
-    return event.name;
+    return Components.Utils.colorForNetworkRequest(event);
   }
 }

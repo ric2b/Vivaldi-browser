@@ -11,6 +11,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/supports_user_data.h"
 #include "base/task/single_thread_task_runner.h"
 #include "content/browser/browser_interface_broker_impl.h"
 #include "content/browser/buckets/bucket_context.h"
@@ -57,7 +58,8 @@ struct ServiceWorkerVersionBaseInfo;
 // execution context instance.
 //
 // Lives on the UI thread.
-class CONTENT_EXPORT ServiceWorkerHost : public BucketContext {
+class CONTENT_EXPORT ServiceWorkerHost : public BucketContext,
+                                         public base::SupportsUserData {
  public:
   ServiceWorkerHost(mojo::PendingAssociatedReceiver<
                         blink::mojom::ServiceWorkerContainerHost> host_receiver,
@@ -138,8 +140,7 @@ class CONTENT_EXPORT ServiceWorkerHost : public BucketContext {
       const std::vector<std::string>& directory_path_components,
       blink::mojom::FileSystemAccessManager::GetSandboxedFileSystemCallback
           callback) override;
-  GlobalRenderFrameHostId GetAssociatedRenderFrameHostId() const override;
-  base::UnguessableToken GetDevToolsToken() const override;
+  storage::BucketClientInfo GetBucketClientInfo() const override;
 
   void BindAIManager(mojo::PendingReceiver<blink::mojom::AIManager> receiver);
 

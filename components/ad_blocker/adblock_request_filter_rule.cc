@@ -27,45 +27,53 @@ RequestFilterRule::RequestFilterRule(RequestFilterRule&& request_filter_rule) =
 RequestFilterRule& RequestFilterRule::operator=(
     RequestFilterRule&& request_filter_rule) = default;
 
-bool RequestFilterRule::operator==(const RequestFilterRule& other) const {
-  return decision == other.decision && modify_block == other.modify_block &&
-         modifier == other.modifier && modifier_value == other.modifier_value &&
-         activation_types == other.activation_types &&
-         is_case_sensitive == other.is_case_sensitive &&
-         resource_types == other.resource_types && party == other.party &&
-         anchor_type == other.anchor_type &&
-         pattern_type == other.pattern_type && pattern == other.pattern &&
-         ngram_search_string == other.ngram_search_string &&
-         host == other.host && excluded_domains == other.excluded_domains &&
-         included_domains == other.included_domains;
-}
+bool RequestFilterRule::operator==(const RequestFilterRule& other) const =
+    default;
 
 std::ostream& operator<<(std::ostream& os, const RequestFilterRule& rule) {
-  return os << std::endl
-            << std::setw(20) << "Decision:" << rule.decision << std::endl
-            << std::setw(20) << "Modify block:" << rule.modify_block
-            << std::endl
-            << std::setw(20) << "Modifier:" << rule.modifier << std::endl
-            << std::setw(20)
-            << "Modifier value:" << rule.modifier_value.value_or("<NULL>")
-            << std::endl
-            << std::setw(20) << PatternTypeToString(rule.pattern_type)
-            << rule.pattern << std::endl
-            << std::setw(20) << "NGram search string:"
-            << rule.ngram_search_string.value_or("<NULL>") << std::endl
-            << std::setw(20) << "Anchored:" << rule.anchor_type << std::endl
-            << std::setw(20) << "Party:" << rule.party << std::endl
-            << std::setw(20) << "Resources:" << rule.resource_types << std::endl
-            << std::setw(20) << "Activations:" << rule.activation_types
-            << std::endl
-            << std::setw(20) << "Case sensitive:" << rule.is_case_sensitive
-            << std::endl
-            << std::setw(20) << "Host:" << rule.host.value_or("<NULL>")
-            << std::endl
-            << std::setw(20) << "Included domains:"
-            << base::JoinString(rule.included_domains, "|") << std::endl
-            << std::setw(20) << "Excluded domains:"
-            << base::JoinString(rule.excluded_domains, "|") << std::endl;
+  auto print_strings = [&os](std::set<std::string> strings) {
+    if (strings.empty()) {
+      os << ":<NULL>" << std::endl;
+      return;
+    }
+
+    std::string result;
+    for (const auto& string : strings) {
+      os << ':' << string << std::endl << std::string(20, ' ');
+    }
+    os.seekp(-20, std::ios_base::cur);
+  };
+
+  os << std::endl
+     << std::setw(20) << "Decision:" << rule.decision << std::endl
+     << std::setw(20) << "Modify block:" << rule.modify_block << std::endl
+     << std::setw(20) << "Modifier:" << rule.modifier << std::endl
+     << std::setw(19) << "Modifier value";
+
+  print_strings(rule.modifier_values);
+
+  os << std::setw(20) << PatternTypeToString(rule.pattern_type) << rule.pattern
+     << std::endl
+     << std::setw(20)
+     << "NGram search string:" << rule.ngram_search_string.value_or("<NULL>")
+     << std::endl
+     << std::setw(20) << "Anchored:" << rule.anchor_type << std::endl
+     << std::setw(20) << "Party:" << rule.party << std::endl
+     << std::setw(20) << "Resources:" << rule.resource_types << std::endl
+     << std::setw(20) << "Explicit resources:" << rule.explicit_types
+     << std::endl
+     << std::setw(20) << "Activations:" << rule.activation_types << std::endl
+     << std::setw(20) << "Case sensitive:" << rule.is_case_sensitive
+     << std::endl
+     << std::setw(20) << "Host:" << rule.host.value_or("<NULL>") << std::endl
+     << std::setw(19) << "Included domains";
+  print_strings(rule.included_domains);
+  os << std::setw(19) << "Excluded domains";
+  print_strings(rule.excluded_domains);
+
+  os << std::setw(20) << "Ad domains and id query params:" << std::endl;
+  print_strings(rule.ad_domains_and_query_triggers);
+  return os;
 }
 
 }  // namespace adblock_filter

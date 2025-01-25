@@ -7,6 +7,8 @@ package org.chromium.components.embedder_support.delegate;
 import android.graphics.Bitmap;
 import android.view.KeyEvent;
 
+import androidx.annotation.Nullable;
+
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
@@ -214,6 +216,28 @@ public class WebContentsDelegateAndroid {
     }
 
     /**
+     * Used to fetch the color info to compose the fallback UX for the navigation transitions when
+     * no valid screenshots are available.
+     *
+     * @return The rounded rectangle's color.
+     */
+    @CalledByNative
+    public int getBackForwardTransitionFallbackUXFaviconBackgroundColor() {
+        return 0;
+    }
+
+    /**
+     * Used to fetch the color info to compose the fallback UX for the navigation transitions when
+     * no valid screenshots are available.
+     *
+     * @return The fallback UX's background color.
+     */
+    @CalledByNative
+    public int getBackForwardTransitionFallbackUXPageBackgroundColor() {
+        return 0;
+    }
+
+    /**
      * Capture current visible native view as a bitmap.
      *
      * @param callback Executed asynchronously with the captured screenshot if this returns true.
@@ -223,6 +247,18 @@ public class WebContentsDelegateAndroid {
      */
     public boolean maybeCopyContentAreaAsBitmap(Callback<Bitmap> callback) {
         return false;
+    }
+
+    /**
+     * Synchronous version of {@link #maybeCopyContentAreaAsBitmap(long)}
+     *
+     * @return Null if there is no native view corresponding to the currently committed navigation
+     *     entry or capture fails; otherwise, a bitmap object.
+     */
+    @Nullable
+    @CalledByNative
+    public Bitmap maybeCopyContentAreaAsBitmapSync() {
+        return null;
     }
 
     /**

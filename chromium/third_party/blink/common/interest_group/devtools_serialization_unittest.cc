@@ -11,6 +11,7 @@
 #include "third_party/blink/common/interest_group/auction_config_test_util.h"
 #include "third_party/blink/public/common/interest_group/auction_config.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
+#include "url/origin.h"
 
 namespace blink {
 namespace {
@@ -75,7 +76,8 @@ TEST(SerializeAuctionConfigTest, SerializeComponents) {
 }
 )";
 
-  EXPECT_THAT(SerializeAuctionConfigForDevtools(config), base::test::IsJson(kExpected));
+  EXPECT_THAT(SerializeAuctionConfigForDevtools(config),
+              base::test::IsJson(kExpected));
 }
 
 TEST(SerializeAuctionConfigTest, FullConfig) {
@@ -117,6 +119,7 @@ TEST(SerializeAuctionConfigTest, FullConfig) {
    "expectsAdditionalBids": true,
    "expectsDirectFromSellerSignalsHeaderAdSlot": false,
    "maxTrustedScoringSignalsURLLength": 2560,
+   "trustedScoringSignalsCoordinator": "https://example.test",
    "deprecatedRenderURLReplacements" : {
       "pending": false,
       "value": [ {
@@ -198,7 +201,8 @@ TEST(SerializeAuctionConfigTest, FullConfig) {
 }
 )";
 
-  EXPECT_THAT(SerializeAuctionConfigForDevtools(config), base::test::IsJson(kExpected));
+  EXPECT_THAT(SerializeAuctionConfigForDevtools(config),
+              base::test::IsJson(kExpected));
 }
 
 TEST(SerializeAuctionConfigTest, PendingPromise) {
@@ -258,11 +262,14 @@ TEST(SerializeInterestGroupTest, Basic) {
   ig.trusted_bidding_signals_slot_size_mode =
       InterestGroup::TrustedBiddingSignalsSlotSizeMode::kAllSlotsRequestedSizes;
   ig.max_trusted_bidding_signals_url_length = 100;
+  ig.trusted_bidding_signals_coordinator =
+      url::Origin::Create(GURL("https://example.test"));
   ig.user_bidding_signals = "hello";
   ig.ads = {
       {blink::InterestGroup::Ad(
            GURL("https://example.com/train"), "metadata", "sizegroup", "bid",
-           "bsid", "ad_render_id",
+           "bsid", std::vector<std::string>{"selectable_id1", "selectable_id2"},
+           "ad_render_id",
            {{url::Origin::Create(GURL("https://reporting.example.org"))}}),
        blink::InterestGroup::Ad(GURL("https://example.com/plane"), "meta2")}};
   ig.ad_components = {{
@@ -299,11 +306,13 @@ TEST(SerializeInterestGroupTest, Basic) {
     "trustedBiddingSignalsKeys": [ "l", "m" ],
     "trustedBiddingSignalsSlotSizeMode": "all-slots-requested-sizes",
     "maxTrustedBiddingSignalsURLLength": 100,
+    "trustedBiddingSignalsCoordinator": "https://example.test",
     "userBiddingSignals": "hello",
     "ads": [ {
       "adRenderId": "ad_render_id",
       "allowedReportingOrigins": [ "https://reporting.example.org" ],
       "buyerAndSellerReportingId": "bsid",
+      "selectableBuyerAndSellerReportingIds": [ "selectable_id1", "selectable_id2" ],
       "buyerReportingId": "bid",
       "metadata": "metadata",
       "renderURL": "https://example.com/train"

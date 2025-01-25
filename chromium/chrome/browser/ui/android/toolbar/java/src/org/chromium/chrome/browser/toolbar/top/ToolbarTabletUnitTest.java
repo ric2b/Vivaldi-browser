@@ -5,6 +5,7 @@ package org.chromium.chrome.browser.toolbar.top;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.atLeastOnce;
@@ -20,6 +21,8 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.Looper;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnLongClickListener;
@@ -43,19 +46,20 @@ import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.shadows.ShadowToast;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinatorTablet;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
+import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.R;
+import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarAllowCaptureReason;
@@ -74,10 +78,14 @@ import java.util.List;
 public final class ToolbarTabletUnitTest {
     @Mock private LocationBarCoordinator mLocationBar;
     @Mock private LocationBarCoordinatorTablet mLocationBarTablet;
+    @Mock private ToggleTabStackButtonCoordinator mTabSwitcherButtonCoordinator;
     @Mock private StatusCoordinator mStatusCoordinator;
     @Mock private MenuButtonCoordinator mMenuButtonCoordinator;
     @Mock private TabStripTransitionCoordinator mTabStripTransitionCoordinator;
     @Mock private ToolbarColorObserver mToolbarColorObserver;
+    @Mock private ToolbarDataProvider mToolbarDataProvider;
+    @Mock private NewTabPageDelegate mNewTabPageDelegate;
+    @Mock private ToolbarTabController mToolbarTabController;
     private Activity mActivity;
     private ToolbarTablet mToolbarTablet;
     private LinearLayout mToolbarTabletLayout;
@@ -86,7 +94,7 @@ public final class ToolbarTabletUnitTest {
     private ImageButton mBackButton;
     private ImageButton mForwardButton;
     private ImageButton mMenuButton;
-    private ImageButton mTabSwitcherButton;
+    private ToggleTabStackButton mTabSwitcherButton;
     private ImageButton mBookmarkButton;
     private ImageButton mSaveOfflineButton;
     private View mLocationBarButton;
@@ -105,6 +113,7 @@ public final class ToolbarTabletUnitTest {
         LocationBarLayout locationBarLayout = mToolbarTablet.findViewById(R.id.location_bar);
         locationBarLayout.setStatusCoordinatorForTesting(mStatusCoordinator);
         mToolbarTablet.setMenuButtonCoordinatorForTesting(mMenuButtonCoordinator);
+        mToolbarTablet.setTabSwitcherButtonCoordinatorForTesting(mTabSwitcherButtonCoordinator);
         mToolbarTablet.setTabStripTransitionCoordinator(mTabStripTransitionCoordinator);
         mToolbarTablet.setToolbarColorObserver(mToolbarColorObserver);
         mToolbarTabletLayout =
@@ -115,6 +124,7 @@ public final class ToolbarTabletUnitTest {
         mReloadingButton = mToolbarTablet.findViewById(R.id.refresh_button);
         mMenuButton = mToolbarTablet.findViewById(R.id.menu_button);
         mTabSwitcherButton = mToolbarTablet.findViewById(R.id.tab_switcher_button);
+        when(mTabSwitcherButtonCoordinator.getContainerView()).thenReturn(mTabSwitcherButton);
         mLocationBarButton = mToolbarTablet.findViewById(R.id.location_bar_status_icon);
         mBookmarkButton = mToolbarTablet.findViewById(R.id.bookmark_button);
         mSaveOfflineButton = mToolbarTablet.findViewById(R.id.save_offline_button);
@@ -147,9 +157,93 @@ public final class ToolbarTabletUnitTest {
     }
 
     @Test
-    @EnableFeatures({
-        ChromeFeatureList.TABLET_TOOLBAR_REORDERING
-    })
+    public void testReloadButton() {
+        mToolbarTablet.onFinishInflate();
+        mToolbarTablet.initialize(
+                mToolbarDataProvider,
+                mToolbarTabController,
+                mMenuButtonCoordinator,
+                mTabSwitcherButtonCoordinator,
+                null,
+                () -> false,
+                null,
+                null,
+                null);
+        mToolbarTablet.onNativeLibraryReady();
+
+        mToolbarTablet.onClick(mReloadingButton);
+
+        verify(mToolbarTabController).stopOrReloadCurrentTab(false);
+    }
+
+    @Test
+    public void testReloadButton_shiftDown() {
+        mToolbarTablet.onFinishInflate();
+        mToolbarTablet.initialize(
+                mToolbarDataProvider,
+                mToolbarTabController,
+                mMenuButtonCoordinator,
+                mTabSwitcherButtonCoordinator,
+                null,
+                () -> false,
+                null,
+                null,
+                null);
+        mToolbarTablet.onNativeLibraryReady();
+
+        MotionEvent shiftClick =
+                MotionEvent.obtain(
+                        0, 0, MotionEvent.ACTION_BUTTON_PRESS, 0, 0, KeyEvent.META_SHIFT_ON);
+        mToolbarTablet.getReloadButtonTouchListenerForTest().onTouch(mReloadingButton, shiftClick);
+        mToolbarTablet.onClick(mReloadingButton);
+
+        verify(mToolbarTabController).stopOrReloadCurrentTab(true);
+    }
+
+    @EnableFeatures(ChromeFeatureList.TAB_STRIP_INCOGNITO_MIGRATION)
+    @Test
+    public void testButtonPositionIncognito() {
+        mToolbarTablet.onFinishInflate();
+        mToolbarTablet.initialize(
+                mToolbarDataProvider,
+                null,
+                mMenuButtonCoordinator,
+                mTabSwitcherButtonCoordinator,
+                null,
+                () -> false,
+                null,
+                null,
+                null);
+        when(mToolbarDataProvider.getNewTabPageDelegate()).thenReturn(mNewTabPageDelegate);
+        when(mToolbarDataProvider.isIncognitoBranded()).thenReturn(true);
+        mToolbarTablet.onTabOrModelChanged();
+
+        assertEquals(
+                "Home button position is not as expected",
+                mHomeButton,
+                mToolbarTabletLayout.getChildAt(0));
+        assertEquals(
+                "Back button position is not as expected",
+                mBackButton,
+                mToolbarTabletLayout.getChildAt(1));
+        assertEquals(
+                "Forward button position is not as expected",
+                mForwardButton,
+                mToolbarTabletLayout.getChildAt(2));
+        assertEquals(
+                "Reloading button position is not as expected",
+                mReloadingButton,
+                mToolbarTabletLayout.getChildAt(3));
+        View incognitoIndicator = mToolbarTabletLayout.findViewById(R.id.incognito_indicator);
+        assertNotNull("Incognito indicator is not inflated", incognitoIndicator);
+        assertEquals(
+                "Incognito indicator visibility is not as expected.",
+                View.VISIBLE,
+                incognitoIndicator.getVisibility());
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.TABLET_TOOLBAR_REORDERING})
     public void testButtonPosition_TSR() {
         mToolbarTablet.onFinishInflate();
         assertEquals(
@@ -215,6 +309,40 @@ public final class ToolbarTabletUnitTest {
                     View.VISIBLE,
                     btn.getVisibility());
         }
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.TAB_STRIP_INCOGNITO_MIGRATION)
+    public void onMeasureIncognito_flipIncognitoVisibility() {
+        mToolbarTablet.onFinishInflate();
+        mToolbarTablet.initialize(
+                mToolbarDataProvider,
+                null,
+                mMenuButtonCoordinator,
+                mTabSwitcherButtonCoordinator,
+                null,
+                () -> false,
+                null,
+                null,
+                null);
+        when(mToolbarDataProvider.getNewTabPageDelegate()).thenReturn(mNewTabPageDelegate);
+        when(mToolbarDataProvider.isIncognitoBranded()).thenReturn(true);
+        mToolbarTablet.onTabOrModelChanged();
+        View incognitoIndicator = mToolbarTablet.findViewById(R.id.incognito_indicator);
+        assertNotNull(incognitoIndicator);
+        // Measure with wide width - indicator visible
+        mToolbarTablet.measure(700, 300);
+        assertEquals(
+                "Incognito indicator visibility is not as expected.",
+                View.VISIBLE,
+                incognitoIndicator.getVisibility());
+
+        // Measure with smaller width - indicator invisible
+        mToolbarTablet.measure(300, 300);
+        assertEquals(
+                "Incognito indicator visibility is not as expected.",
+                View.GONE,
+                incognitoIndicator.getVisibility());
     }
 
     @Test
@@ -578,19 +706,6 @@ public final class ToolbarTabletUnitTest {
             Assert.assertEquals(
                     ToolbarSnapshotDifference.BOOKMARK_BUTTON, result.snapshotDifference);
         }
-    }
-
-    @Test
-    @Features.EnableFeatures(ChromeFeatureList.TABLET_TAB_SWITCHER_LONG_PRESS_MENU)
-    public void longPressTabSwitcherMenu() {
-        CallbackHelper callback = new CallbackHelper();
-        mToolbarTablet.setOnTabSwitcherLongClickHandler(
-                (v) -> {
-                    callback.notifyCalled();
-                    return true;
-                });
-        mTabSwitcherButton.performLongClick();
-        Assert.assertEquals("Long press callback not triggered.", 1, callback.getCallCount());
     }
 
     @Test

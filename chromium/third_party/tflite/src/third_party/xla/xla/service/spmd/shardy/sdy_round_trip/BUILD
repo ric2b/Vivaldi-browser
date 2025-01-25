@@ -11,7 +11,7 @@ package_group(
     packages = [
         "//learning/deepmind/partir/compiler/shardonnay/...",
         "//third_party/openxla/shardy/tools/...",
-        "//xla/service/spmd/shardy/...",
+        "//xla/...",
     ],
 )
 
@@ -58,6 +58,8 @@ cc_library(
         "//xla/mlir_hlo:mhlo_passes",
         "//xla/service/spmd/shardy:constants",
         "//xla/service/spmd/shardy:utils",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AsmParser",
         "@llvm-project//mlir:FuncDialect",
@@ -79,6 +81,7 @@ cc_library(
         ":export_shardings",
         ":import_shardings",
         "//xla/service:hlo_proto_cc",
+        "//xla/service/spmd/shardy/mhlo_round_trip:export_shardings",
         "//xla/service/spmd/shardy/round_trip_common:pipeline_passes",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",

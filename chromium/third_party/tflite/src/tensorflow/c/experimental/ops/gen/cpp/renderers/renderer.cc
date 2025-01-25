@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/c/experimental/ops/gen/cpp/renderers/renderer.h"
 
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
 #include "tensorflow/c/experimental/ops/gen/cpp/renderers/renderer_context.h"
@@ -47,7 +48,7 @@ Renderer& Renderer::CodeLines(const string& text) {
 }
 
 Renderer& Renderer::Statement(const string& text) {
-  if (str_util::EndsWith(text, ";")) {
+  if (absl::EndsWith(text, ";")) {
     LOG(WARNING) << "Superfluous terminating ';' in '" << text << "'";
     context_.code.AddLineWithIndent(text);
   } else {

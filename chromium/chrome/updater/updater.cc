@@ -24,6 +24,7 @@
 #include "build/build_config.h"
 #include "chrome/updater/app/app.h"
 #include "chrome/updater/app/app_install.h"
+#include "chrome/updater/app/app_net_worker.h"
 #include "chrome/updater/app/app_recover.h"
 #include "chrome/updater/app/app_server.h"
 #include "chrome/updater/app/app_uninstall.h"
@@ -35,6 +36,7 @@
 #include "chrome/updater/constants.h"
 #include "chrome/updater/crash_client.h"
 #include "chrome/updater/crash_reporter.h"
+#include "chrome/updater/ipc/ipc_support.h"
 #include "chrome/updater/update_usage_stats_task.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/updater_version.h"
@@ -43,10 +45,6 @@
 #include "components/crash/core/common/crash_keys.h"
 #include "third_party/crashpad/crashpad/client/crash_report_database.h"
 #include "third_party/crashpad/crashpad/client/settings.h"
-
-#if BUILDFLAG(IS_POSIX)
-#include "chrome/updater/ipc/ipc_support.h"
-#endif
 
 #if BUILDFLAG(IS_WIN)
 #include "base/debug/alias.h"
@@ -95,8 +93,7 @@ void InitializeCrashReporting(UpdaterScope updater_scope) {
     return;
   }
   if (AreRawUsageStatsEnabled(updater_scope)) {
-    CrashClient::GetInstance()->database()->GetSettings()->SetUploadsEnabled(
-        true);
+    CrashClient::GetInstance()->SetUploadsEnabled(true);
   }
   VLOG(1) << "Crash reporting initialized.";
 }
@@ -160,12 +157,10 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
   // and reports the crash.
   CHECK(!command_line->HasSwitch(kCrashMeSwitch)) << "--crash-me was used.";
 
-#if BUILDFLAG(IS_POSIX)
   // As long as this object is alive, all Mojo API surface relevant to IPC
   // connections is usable, and message pipes which span a process boundary will
   // continue to function.
   ScopedIPCSupportWrapper ipc_support;
-#endif
 
   // Only tasks and timers are supported on the main sequence.
   base::SingleThreadTaskExecutor main_task_executor;
@@ -215,6 +210,12 @@ int HandleUpdaterCommands(UpdaterScope updater_scope,
     return MakeAppWakeAll()->Run();
   }
 
+#if BUILDFLAG(IS_MAC)
+  if (command_line->HasSwitch(kNetWorkerSwitch)) {
+    return MakeAppNetWorker()->Run();
+  }
+#endif  // BUILDFLAG(IS_MAC)
+
   VLOG(1) << "Unknown command line switch.";
   return kErrorUnknownCommandLine;
 }
@@ -239,6 +240,7 @@ const char* GetUpdaterCommand(const base::CommandLine* command_line) {
       kWakeAllSwitch,
       kHealthCheckSwitch,
       kHandoffSwitch,
+      kNetWorkerSwitch,
   };
   const auto it = base::ranges::find_if(commands, [command_line](auto cmd) {
     return command_line->HasSwitch(cmd);

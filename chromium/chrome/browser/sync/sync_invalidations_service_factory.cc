@@ -12,14 +12,27 @@
 #include "components/gcm_driver/instance_id/instance_id_profile_service.h"
 #include "components/sync/invalidations/sync_invalidations_service_impl.h"
 
+#include "app/vivaldi_apptools.h"
+#include "sync/invalidations/vivaldi_sync_invalidations_service.h"
+#include "sync/invalidations/vivaldi_sync_invalidations_service_factory.h"
+
 syncer::SyncInvalidationsService*
 SyncInvalidationsServiceFactory::GetForProfile(Profile* profile) {
+#if defined(VIVALDI_BUILD)
+  if (vivaldi::IsVivaldiRunning())
+    return vivaldi::VivaldiSyncInvalidationsServiceFactory::GetInstance()
+              ->GetForProfile(profile);
+#endif
   return static_cast<syncer::SyncInvalidationsService*>(
       GetInstance()->GetServiceForBrowserContext(profile, /*create=*/true));
 }
 
 SyncInvalidationsServiceFactory*
 SyncInvalidationsServiceFactory::GetInstance() {
+#if defined(VIVALDI_BUILD)
+  if (vivaldi::IsVivaldiRunning())
+    return vivaldi::VivaldiSyncInvalidationsServiceFactory::GetInstance();
+#endif
   static base::NoDestructor<SyncInvalidationsServiceFactory> instance;
   return instance.get();
 }

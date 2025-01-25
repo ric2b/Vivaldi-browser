@@ -63,8 +63,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
     private final boolean mShowStar;
     private final boolean mShowDownload;
     private final boolean mIsOpenedByChrome;
-    private final boolean mIsIncognito;
-    private final boolean mIsAuthView;
+    private final boolean mIsIncognitoBranded;
+    private final boolean mIsOffTheRecord;
     private final boolean mIsStartIconMenu;
 
     private final List<String> mMenuEntries;
@@ -93,8 +93,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             boolean showShare,
             boolean showStar,
             boolean showDownload,
-            boolean isIncognito,
-            boolean isAuthView,
+            boolean isIncognitoBranded,
+            boolean isOffTheRecord,
             boolean isStartIconMenu,
             Supplier<ReadAloudController> readAloudControllerSupplier,
             boolean hasClientPackage) {
@@ -118,15 +118,15 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
             mShowShare = false;
         else
-        mShowShare = showShare && !isAuthView;
+        mShowShare = showShare && mUiType != CustomTabsUiType.AUTH_TAB;
         mShowStar = showStar;
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
             mShowDownload = false;
         else
         mShowDownload = showDownload;
-        mIsIncognito = isIncognito;
-        mIsAuthView = isAuthView;
+        mIsIncognitoBranded = isIncognitoBranded;
+        mIsOffTheRecord = isOffTheRecord;
         mIsStartIconMenu = isStartIconMenu;
         mHasClientPackage = hasClientPackage;
         // Vivaldi
@@ -169,22 +169,19 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             loadingStateChanged(currentTab.isLoading());
 
             MenuItem shareItem = menu.findItem(R.id.share_row_menu_id);
-            // TODO(crbug.com/337363657): Show Share for pdf native pages once supported.
-            boolean isPdfPage = currentTab.isNativePage() && currentTab.getNativePage().isPdf();
-            boolean showShareExceptForPdf = mShowShare && !isPdfPage;
-            shareItem.setVisible(showShareExceptForPdf);
-            shareItem.setEnabled(showShareExceptForPdf);
-            if (showShareExceptForPdf) {
+            shareItem.setVisible(mShowShare);
+            shareItem.setEnabled(mShowShare);
+            if (mShowShare) {
                 updateDirectShareMenuItem(menu.findItem(R.id.direct_share_menu_id));
             }
 
-            boolean openInChromeItemVisible = !mIsAuthView;
-            boolean bookmarkItemVisible = mShowStar && !mIsAuthView;
-            boolean downloadItemVisible = mShowDownload && !mIsAuthView;
-            boolean addToHomeScreenVisible = !mIsAuthView;
+            boolean openInChromeItemVisible = true;
+            boolean bookmarkItemVisible = mShowStar;
+            boolean downloadItemVisible = mShowDownload;
+            boolean addToHomeScreenVisible = true;
             boolean requestDesktopSiteVisible = true;
             boolean tryAddingReadAloud = ReadAloudFeatures.isEnabledForOverflowMenuInCCT();
-            boolean historyItemVisible = !mIsAuthView;
+            boolean historyItemVisible = true;
             if (!HistoryManager.isAppSpecificHistoryEnabled() || !mHasClientPackage) {
                 historyItemVisible = false;
             }
@@ -227,6 +224,13 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 addToHomeScreenVisible = false;
                 requestDesktopSiteVisible = true;
                 tryAddingReadAloud = false;
+            } else if (mUiType == CustomTabsUiType.AUTH_TAB) {
+                openInChromeItemVisible = false;
+                bookmarkItemVisible = false;
+                downloadItemVisible = false;
+                addToHomeScreenVisible = false;
+                tryAddingReadAloud = false;
+                historyItemVisible = false;
             }
 
             if (!FirstRunStatus.getFirstRunFlowComplete()) {
@@ -237,7 +241,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 addToHomeScreenVisible = false;
             }
 
-            if (mIsIncognito) {
+            if (mIsIncognitoBranded) {
                 addToHomeScreenVisible = false;
                 downloadItemVisible = false;
                 openInChromeItemVisible = false;
@@ -298,7 +302,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             MenuItem openInChromeItem = menu.findItem(R.id.open_in_browser_id);
             if (openInChromeItemVisible) {
                 String title =
-                        mIsIncognito
+                        mIsOffTheRecord
                                 ? ContextUtils.getApplicationContext()
                                         .getString(R.string.menu_open_in_incognito_chrome)
                                 : DefaultBrowserInfo.getTitleOpenInDefaultBrowser(

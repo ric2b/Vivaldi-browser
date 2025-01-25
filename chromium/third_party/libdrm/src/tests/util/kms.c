@@ -126,6 +126,7 @@ static const char * const modules[] = {
 	"simpledrm",
 	"imx-lcdif",
 	"vkms",
+	"tidss",
 };
 
 int util_open(const char *device, const char *module)

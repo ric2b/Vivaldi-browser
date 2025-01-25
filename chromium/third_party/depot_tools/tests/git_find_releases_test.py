@@ -14,9 +14,12 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import gclient_utils
 import git_find_releases
 
 
+@unittest.skipIf(gclient_utils.IsEnvCog(),
+                'not supported in non-git environment')
 class TestGitFindReleases(unittest.TestCase):
     @mock.patch('sys.stdout', StringIO())
     @mock.patch('git_common.run', return_value='')

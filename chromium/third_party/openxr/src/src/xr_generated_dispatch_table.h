@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023, The Khronos Group Inc.
+// Copyright (c) 2017-2024, The Khronos Group Inc.
 // Copyright (c) 2017-2019, Valve Corporation
 // Copyright (c) 2017-2019, LunarG, Inc.
 
@@ -8,7 +8,7 @@
 //     See utility_source_generator.py for modifications
 // ************************************************************
 
-// Copyright (c) 2017-2023, The Khronos Group Inc.
+// Copyright (c) 2017-2024, The Khronos Group Inc.
 // Copyright (c) 2017-2019 Valve Corporation
 // Copyright (c) 2017-2019 LunarG, Inc.
 //
@@ -346,6 +346,27 @@ struct XrGeneratedDispatchTable {
     PFN_xrCreateSpaceFromCoordinateFrameUIDML CreateSpaceFromCoordinateFrameUIDML;
 #endif // defined(XR_USE_PLATFORM_ML)
 
+    // ---- XR_ML_marker_understanding extension commands
+    PFN_xrCreateMarkerDetectorML CreateMarkerDetectorML;
+    PFN_xrDestroyMarkerDetectorML DestroyMarkerDetectorML;
+    PFN_xrSnapshotMarkerDetectorML SnapshotMarkerDetectorML;
+    PFN_xrGetMarkerDetectorStateML GetMarkerDetectorStateML;
+    PFN_xrGetMarkersML GetMarkersML;
+    PFN_xrGetMarkerReprojectionErrorML GetMarkerReprojectionErrorML;
+    PFN_xrGetMarkerLengthML GetMarkerLengthML;
+    PFN_xrGetMarkerNumberML GetMarkerNumberML;
+    PFN_xrGetMarkerStringML GetMarkerStringML;
+    PFN_xrCreateMarkerSpaceML CreateMarkerSpaceML;
+
+    // ---- XR_ML_localization_map extension commands
+    PFN_xrEnableLocalizationEventsML EnableLocalizationEventsML;
+    PFN_xrQueryLocalizationMapsML QueryLocalizationMapsML;
+    PFN_xrRequestMapLocalizationML RequestMapLocalizationML;
+    PFN_xrImportLocalizationMapML ImportLocalizationMapML;
+    PFN_xrCreateExportedLocalizationMapML CreateExportedLocalizationMapML;
+    PFN_xrDestroyExportedLocalizationMapML DestroyExportedLocalizationMapML;
+    PFN_xrGetExportedLocalizationMapDataML GetExportedLocalizationMapDataML;
+
     // ---- XR_MSFT_spatial_anchor_persistence extension commands
     PFN_xrCreateSpatialAnchorStoreConnectionMSFT CreateSpatialAnchorStoreConnectionMSFT;
     PFN_xrDestroySpatialAnchorStoreConnectionMSFT DestroySpatialAnchorStoreConnectionMSFT;
@@ -446,10 +467,21 @@ struct XrGeneratedDispatchTable {
     PFN_xrGetSpaceUserIdFB GetSpaceUserIdFB;
     PFN_xrDestroySpaceUserFB DestroySpaceUserFB;
 
+    // ---- XR_META_recommended_layer_resolution extension commands
+    PFN_xrGetRecommendedLayerResolutionMETA GetRecommendedLayerResolutionMETA;
+
     // ---- XR_META_passthrough_color_lut extension commands
     PFN_xrCreatePassthroughColorLutMETA CreatePassthroughColorLutMETA;
     PFN_xrDestroyPassthroughColorLutMETA DestroyPassthroughColorLutMETA;
     PFN_xrUpdatePassthroughColorLutMETA UpdatePassthroughColorLutMETA;
+
+    // ---- XR_META_spatial_entity_mesh extension commands
+    PFN_xrGetSpaceTriangleMeshMETA GetSpaceTriangleMeshMETA;
+
+    // ---- XR_FB_face_tracking2 extension commands
+    PFN_xrCreateFaceTracker2FB CreateFaceTracker2FB;
+    PFN_xrDestroyFaceTracker2FB DestroyFaceTracker2FB;
+    PFN_xrGetFaceExpressionWeights2FB GetFaceExpressionWeights2FB;
 
     // ---- XR_QCOM_tracking_optimization_settings extension commands
     PFN_xrSetTrackingOptimizationSettingsHintQCOM SetTrackingOptimizationSettingsHintQCOM;
@@ -460,6 +492,10 @@ struct XrGeneratedDispatchTable {
 
     // ---- XR_HTC_foveation extension commands
     PFN_xrApplyFoveationHTC ApplyFoveationHTC;
+
+    // ---- XR_HTC_anchor extension commands
+    PFN_xrCreateSpatialAnchorHTC CreateSpatialAnchorHTC;
+    PFN_xrGetSpatialAnchorNameHTC GetSpatialAnchorNameHTC;
 
     // ---- XR_MNDX_force_feedback_curl extension commands
     PFN_xrApplyForceFeedbackCurlMNDX ApplyForceFeedbackCurlMNDX;

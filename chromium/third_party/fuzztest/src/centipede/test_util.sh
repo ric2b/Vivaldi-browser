@@ -64,17 +64,15 @@ function centipede::get_objdump_path() {
 # an executable file.
 function centipede::maybe_set_var_to_executable_path() {
   local var_name="$1"
-  # NOTE: `local -n` creates a reference to the var named "$1".
-  local -n var_ref="$1"
   local path="$2"
-  if [[ -n "${var_ref+x}" ]]; then
-    echo "Not overriding ${var_name} -- already set to '${var_ref}'" >&2
+  if [[ -n "${!var_name:-}" ]]; then
+    echo "Not overriding ${var_name} -- already set to '${!var_name}'" >&2
   else
     echo "Setting ${var_name} to '${path}'" >&2
-    var_ref="${path}"
+    eval "$(printf "${var_name}=%q" "${path}")"
   fi
-  if ! [[ -x "${var_ref}" ]]; then
-    die "Path '${var_ref}' doesn't exist or is not executable"
+  if ! [[ -x "${!var_name}" ]]; then
+    die "Path '${!var_name}' doesn't exist or is not executable"
   fi
 }
 
@@ -83,17 +81,15 @@ function centipede::maybe_set_var_to_executable_path() {
 # TODO(ussuri): Reduce code duplication with the above.
 function centipede::maybe_set_var_to_built_executable_path() {
   local var_name="$1"
-  # NOTE: `local -n` creates a reference to the var named "$1".
-  local -n var_ref="$1"
   local bazel_build_cmd="$2"
-  if [[ -n "${var_ref+x}" ]]; then
-    echo "Not overriding ${var_name} -- already set to '${var_ref}'" >&2
+  if [[ -n "${!var_name:-}" ]]; then
+    echo "Not overriding ${var_name} -- already set to '${!var_name}'" >&2
   else
     echo "Setting ${var_name} to output of '${bazel_build_cmd}'" >&2
-    var_ref="$(set -e; ${bazel_build_cmd})"
+    eval "$(printf "${var_name}=%q" "$(set -e; ${bazel_build_cmd})")"
   fi
-  if ! [[ -x "${var_ref}" ]]; then
-    die "Path '${var_ref}' doesn't exist or is not executable"
+  if ! [[ -x "${!var_name}" ]]; then
+    die "Path '${!var_name}' doesn't exist or is not executable"
   fi
 }
 
@@ -108,7 +104,7 @@ function _assert_regex_in_file_impl() {
   local -r file="$2"
   local -r expected_found="$3"
   # Make the shell option change below local.
-  local -
+  local -r saved_opts="$(set +o)"
   set -o pipefail
   if ! fileop ls "${file}" > /dev/null; then
     die "Expected file ${file} doesn't exist"
@@ -131,6 +127,7 @@ function _assert_regex_in_file_impl() {
       die "^^^ File ${file} contains unexpected regex /${regex}/"
     fi
   fi
+  eval "${saved_opts}"
 }
 
 # Makes sure that string "$1" exists in file "$2". Works for local and CNS.
@@ -153,4 +150,18 @@ function centipede::assert_fuzzing_success() {
     centipede::assert_regex_in_file "centipede.*init-done:" "${log}"
     centipede::assert_regex_in_file "centipede.*end-fuzz:" "${log}"
   done
+}
+
+# Returns a random free port on the local machine.
+function centipede::get_random_free_port() {
+  # Create an array with all ports in the range [1024..65535] (ports [0..1023]
+  # are reserved) and append all ports in the same range that are currently in
+  # use. This results in the used ports appearing twice in the array.
+  declare -ra ports=(
+    {1024..65535}
+    $(netstat -tan | perl -ne '/.+?:+(\d{1,5}) .+/; if ($1 >= 1024) { print $1; }')
+  )
+  # Sort, dedupe and shuffle the array: this leaves randomly ordered free ports.
+  # `shuf -n 1` returns the first element and stops.
+  echo "${ports[@]}" | tr ' ' '\n' | sort | uniq -u | shuf -n 1
 }

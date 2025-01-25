@@ -52,14 +52,17 @@ partition_alloc::PartitionRoot* lightweight_quarantine_partition_root;
 // A raw pointer to the LightweightQuarantineBranch as the fast path to the
 // object. This bypasses the access check and indirect access due to the
 // following std::optional and base::NoDestructor.
-LightweightQuarantineBranch* lightweight_quarantine_branch;
+LightweightQuarantineBranch* lightweight_quarantine_branch_for_small_objects;
+LightweightQuarantineBranch* lightweight_quarantine_branch_for_large_objects;
 
 // The memory storage for the quarantine root and branch to make them alive for
 // the process lifetime. std::optional reserves the memory space without
 // constructing the objects and allows to construct them lazily.
 std::optional<LightweightQuarantineRoot> lightweight_quarantine_root_storage;
 std::optional<base::NoDestructor<LightweightQuarantineBranch>>
-    lightweight_quarantine_branch_storage;
+    lightweight_quarantine_branch_storage_for_small_objects;
+std::optional<base::NoDestructor<LightweightQuarantineBranch>>
+    lightweight_quarantine_branch_storage_for_large_objects;
 
 // Sets up all we need and returns true, or returns false.
 //
@@ -69,7 +72,7 @@ std::optional<base::NoDestructor<LightweightQuarantineBranch>>
 bool TryInitSlow();
 
 inline bool TryInit() {
-  if (LIKELY(is_quarantine_initialized.load(std::memory_order_acquire))) {
+  if (is_quarantine_initialized.load(std::memory_order_acquire)) [[likely]] {
     return true;
   }
 
@@ -103,17 +106,28 @@ bool TryInitSlow() {
   static bool init_once = [&]() -> bool {
     partition_alloc::PartitionRoot* partition_root =
         allocator_shim::internal::PartitionAllocMalloc::Allocator();
-
-    LightweightQuarantineBranchConfig quarantine_config = {
-        .lock_required = true,
-        .branch_capacity_in_bytes = init_options.quarantine_capacity_in_bytes,
-    };
     lightweight_quarantine_partition_root = partition_root;
     lightweight_quarantine_root_storage.emplace(*partition_root);
-    lightweight_quarantine_branch_storage.emplace(
-        lightweight_quarantine_root_storage->CreateBranch(quarantine_config));
-    lightweight_quarantine_branch =
-        lightweight_quarantine_branch_storage.value().get();
+
+    lightweight_quarantine_branch_storage_for_small_objects.emplace(
+        lightweight_quarantine_root_storage->CreateBranch(
+            LightweightQuarantineBranchConfig{
+                .lock_required = true,
+                .branch_capacity_in_bytes =
+                    init_options.quarantine_capacity_for_small_objects_in_bytes,
+            }));
+    lightweight_quarantine_branch_for_small_objects =
+        lightweight_quarantine_branch_storage_for_small_objects.value().get();
+
+    lightweight_quarantine_branch_storage_for_large_objects.emplace(
+        lightweight_quarantine_root_storage->CreateBranch(
+            LightweightQuarantineBranchConfig{
+                .lock_required = true,
+                .branch_capacity_in_bytes =
+                    init_options.quarantine_capacity_for_large_objects_in_bytes,
+            }));
+    lightweight_quarantine_branch_for_large_objects =
+        lightweight_quarantine_branch_storage_for_large_objects.value().get();
 
     is_quarantine_initialized.store(true, std::memory_order_release);
 
@@ -130,11 +144,11 @@ bool TryInitSlow() {
 // CAUTION: No deallocation is allowed in this function because it causes
 // a reentrancy issue.
 inline bool Quarantine(void* object) {
-  if (UNLIKELY(!TryInit())) {
+  if (!TryInit()) [[unlikely]] {
     return false;
   }
 
-  if (UNLIKELY(!object)) {
+  if (!object) [[unlikely]] {
     return false;
   }
 
@@ -142,8 +156,8 @@ inline bool Quarantine(void* object) {
   // but it can be cold in cache. So, prefetches it to avoid stall.
   PA_PREFETCH_FOR_WRITE(object);
 
-  if (UNLIKELY(!partition_alloc::IsManagedByPartitionAlloc(
-          reinterpret_cast<uintptr_t>(object)))) {
+  if (!partition_alloc::IsManagedByPartitionAlloc(
+          reinterpret_cast<uintptr_t>(object))) [[unlikely]] {
     return false;
   }
 
@@ -152,11 +166,14 @@ inline bool Quarantine(void* object) {
   // See also:
   // https://source.chromium.org/chromium/chromium/src/+/main:base/allocator/partition_allocator/src/partition_alloc/partition_root.h;l=1424-1434;drc=6b284da9be36f6edfdc0ddde4a031270c41096d8
   // Although in this case `slot_span` will be touched by `GetSlotUsableSize`.
-  partition_alloc::internal::SlotSpanMetadata* slot_span =
-      partition_alloc::internal::SlotSpanMetadata::FromObject(object);
+  partition_alloc::internal::SlotSpanMetadata<
+      partition_alloc::internal::MetadataKind::kReadOnly>* slot_span =
+      partition_alloc::internal::SlotSpanMetadata<
+          partition_alloc::internal::MetadataKind::kReadOnly>::
+          FromObject(object);
   partition_alloc::PartitionRoot* root =
       partition_alloc::PartitionRoot::FromSlotSpanMetadata(slot_span);
-  if (UNLIKELY(root != lightweight_quarantine_partition_root)) {
+  if (root != lightweight_quarantine_partition_root) [[unlikely]] {
     // The LightweightQuarantineRoot is configured for
     // lightweight_quarantine_partition_root. We cannot quarantine an object
     // in other partition roots.
@@ -167,32 +184,34 @@ inline bool Quarantine(void* object) {
   ExtremeLightweightDetectorUtil::Zap(object, usable_size);
 
   uintptr_t slot_start = root->ObjectToSlotStart(object);
-  lightweight_quarantine_branch->Quarantine(object, slot_span, slot_start,
-                                            usable_size);
+  if (usable_size <= init_options.object_size_threshold_in_bytes) [[likely]] {
+    lightweight_quarantine_branch_for_small_objects->Quarantine(
+        object, slot_span, slot_start, usable_size);
+  } else {
+    lightweight_quarantine_branch_for_large_objects->Quarantine(
+        object, slot_span, slot_start, usable_size);
+  }
 
   return true;
 }
 
-void FreeFn(const AllocatorDispatch* self, void* address, void* context) {
-  if (UNLIKELY(sampling_state.Sample())) {
-    if (LIKELY(Quarantine(address))) {
+void FreeFn(void* address, void* context) {
+  if (sampling_state.Sample()) [[unlikely]] {
+    if (Quarantine(address)) [[likely]] {
       return;
     }
   }
-  MUSTTAIL return self->next->free_function(self->next, address, context);
+  MUSTTAIL return allocator_dispatch.next->free_function(address, context);
 }
 
-void FreeDefiniteSizeFn(const AllocatorDispatch* self,
-                        void* address,
-                        size_t size,
-                        void* context) {
-  if (UNLIKELY(sampling_state.Sample())) {
-    if (LIKELY(Quarantine(address))) {
+void FreeDefiniteSizeFn(void* address, size_t size, void* context) {
+  if (sampling_state.Sample()) [[unlikely]] {
+    if (Quarantine(address)) [[likely]] {
       return;
     }
   }
-  MUSTTAIL return self->next->free_definite_size_function(self->next, address,
-                                                          size, context);
+  MUSTTAIL return allocator_dispatch.next->free_definite_size_function(
+      address, size, context);
 }
 
 AllocatorDispatch allocator_dispatch = {
@@ -227,16 +246,26 @@ AllocatorDispatch allocator_dispatch = {
     nullptr   // next
 };
 
-[[maybe_unused]] base::trace_event::MallocDumpProvider::ExtremeLUDStats
+[[maybe_unused]] base::trace_event::MallocDumpProvider::ExtremeLUDStatsSet
 GetStats() {
-  if (!lightweight_quarantine_branch) {  // Not yet initialized.
-    return {};
+  if (!lightweight_quarantine_branch_for_small_objects ||
+      !lightweight_quarantine_branch_for_large_objects) {
+    return {};  // Not yet initialized.
   }
 
-  base::trace_event::MallocDumpProvider::ExtremeLUDStats stats{
-      .capacity_in_bytes = lightweight_quarantine_branch->GetCapacityInBytes()};
-  lightweight_quarantine_branch->GetRoot().AccumulateStats(stats.lq_stats);
-  return stats;
+  base::trace_event::MallocDumpProvider::ExtremeLUDStatsSet elud_stats_set;
+
+  elud_stats_set.for_small_objects.capacity_in_bytes =
+      lightweight_quarantine_branch_for_small_objects->GetCapacityInBytes();
+  lightweight_quarantine_branch_for_small_objects->GetRoot().AccumulateStats(
+      elud_stats_set.for_small_objects.lq_stats);
+
+  elud_stats_set.for_large_objects.capacity_in_bytes =
+      lightweight_quarantine_branch_for_large_objects->GetCapacityInBytes();
+  lightweight_quarantine_branch_for_large_objects->GetRoot().AccumulateStats(
+      elud_stats_set.for_large_objects.lq_stats);
+
+  return elud_stats_set;
 }
 
 }  // namespace
@@ -258,10 +287,17 @@ void InstallExtremeLightweightDetectorHooks(
 }
 
 partition_alloc::internal::LightweightQuarantineBranch&
-GetEludQuarantineBranchForTesting() {
+GetEludQuarantineBranchForSmallObjectsForTesting() {
   CHECK(TryInit());
 
-  return *lightweight_quarantine_branch;
+  return *lightweight_quarantine_branch_for_small_objects;
+}
+
+partition_alloc::internal::LightweightQuarantineBranch&
+GetEludQuarantineBranchForLargeObjectsForTesting() {
+  CHECK(TryInit());
+
+  return *lightweight_quarantine_branch_for_large_objects;
 }
 
 }  // namespace gwp_asan::internal

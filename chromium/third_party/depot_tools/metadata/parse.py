@@ -53,7 +53,7 @@ def parse_content(content: str) -> List[dm.DependencyMetadata]:
     current_field_name = None
     current_field_value = ""
 
-    for line in content.splitlines(keepends=True):
+    for line_number, line in enumerate(content.splitlines(keepends=True), 1):
         # Whether the current line should be part of a structured value.
         if current_field_spec:
             expect_structured_field_value = current_field_spec.is_structured()
@@ -89,15 +89,35 @@ def parse_content(content: str) -> List[dm.DependencyMetadata]:
                 FIELD_DELIMITER, 1)
             current_field_spec = known_fields.get_field(current_field_name)
 
+            current_metadata.record_line(line_number)
+            if current_field_spec:
+                current_metadata.record_field_line_number(
+                    current_field_spec, line_number)
+
         elif current_field_name:
+            if line.strip():
+                current_metadata.record_line(line_number)
+            if current_field_spec:
+                current_metadata.record_field_line_number(
+                    current_field_spec, line_number)
             # The field is on multiple lines, so add this line to the
             # field value.
             current_field_value += line
+
+        else:
+            # Text that aren't part of any field (e.g. free form text).
+            # Record the line number if the line is non-empty.
+            if line.strip():
+                current_metadata.record_line(line_number)
 
         # Check if current field value indicates end of the field.
         if current_field_spec and current_field_spec.should_terminate_field(
                 current_field_value):
             assert current_field_name
+            current_metadata.record_line(line_number)
+            if current_field_spec:
+                current_metadata.record_field_line_number(
+                    current_field_spec, line_number)
             current_metadata.add_entry(current_field_name, current_field_value)
             current_field_spec = None
             current_field_name = None

@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <cassert>
-#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <numeric>
@@ -25,23 +24,26 @@ limitations under the License.
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
 
 #include "absl/base/optimization.h"
+#include "absl/numeric/int128.h"
 #include "absl/types/span.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/IR/AffineExpr.h"  // from @llvm-project
-#include "mlir/IR/AffineMap.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
+#include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/AffineMap.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/Support/LLVM.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
@@ -293,15 +295,6 @@ AffineExpr AffineExprSimplifier::SimplifySumDiv(AffineExpr dividend,
     return expr;
   });
 
-  std::optional<int64_t> inner_divisor = std::nullopt;
-  int num_inner_divisors = 0;
-  VisitSummands(new_dividend, [&](AffineExpr summand) {
-    if (auto divisor = GetConstantRhs(summand, AffineExprKind::FloorDiv)) {
-      inner_divisor = divisor;
-      ++num_inner_divisors;
-    }
-  });
-
   // Split `new_dividend` into `multiplied * multiplier_gcd + not_multiplied`.
   auto [multiplied, multiplier_gcd, not_multiplied] =
       SplitSumByGcd(new_dividend);
@@ -338,6 +331,14 @@ AffineExpr AffineExprSimplifier::SimplifySumDiv(AffineExpr dividend,
   // If a0 is 16 and a1 is 2, the result is `(5 + 0) / 6 = 0`, whereas the
   // rewritten form `(a0 + a1) / 18` evaluates to 1. This can only happen when
   // there is more than one division.
+  std::optional<int64_t> inner_divisor = std::nullopt;
+  int num_inner_divisors = 0;
+  VisitSummands(new_dividend, [&](AffineExpr summand) {
+    if (auto divisor = GetConstantRhs(summand, AffineExprKind::FloorDiv)) {
+      inner_divisor = divisor;
+      ++num_inner_divisors;
+    }
+  });
   if (num_inner_divisors == 1) {
     new_dividend = MapSummands(new_dividend, [&](AffineExpr summand) {
       if (auto inner_divisor =
@@ -720,26 +721,36 @@ bool AffineExprSimplifier::SimplifyConstraintRange(AffineExpr* expr,
 // [range_vars(second)|rt_vars(second)|range_vars(first)|rt_vars(first)]
 // to
 // [range_vars(second)|range_vars(first)|rt_vars(second)|rt_vars(first)].
+// If an empty vector is returned, no replacement is needed.
 SmallVector<AffineExpr, 4> GetComposedSymbolsPermutationToCorrectOrder(
     const IndexingMap& first, const IndexingMap& second) {
+  // No permutation is needed if the second map has no RTVars.
+  if (second.GetRTVarsCount() == 0) {
+    return {};
+  }
   SmallVector<AffineExpr, 4> symbol_replacements;
   MLIRContext* mlir_context = first.GetMLIRContext();
   for (int id = 0; id < second.GetRangeVarsCount(); ++id) {
     symbol_replacements.push_back(getAffineSymbolExpr(id, mlir_context));
   }
+  int64_t first_range_vars_count = first.GetRangeVarsCount();
+  int64_t second_range_vars_count = second.GetRangeVarsCount();
+  int64_t first_rt_vars_count = first.GetRTVarsCount();
+  int64_t second_rt_vars_count = second.GetRTVarsCount();
   int64_t rt_vars_second_start =
-      first.GetRangeVarsCount() + second.GetRangeVarsCount();
-  for (int64_t id = 0; id < second.GetRTVarsCount(); ++id) {
+      first_range_vars_count + second_range_vars_count;
+  for (int64_t id = 0; id < second_rt_vars_count; ++id) {
     symbol_replacements.push_back(
         getAffineSymbolExpr(rt_vars_second_start++, mlir_context));
   }
-  int64_t range_vars_first_start = second.GetRangeVarsCount();
-  for (int64_t id = 0; id < first.GetRangeVarsCount(); ++id) {
+  int64_t range_vars_first_start = second_range_vars_count;
+  for (int64_t id = 0; id < first_range_vars_count; ++id) {
     symbol_replacements.push_back(
         getAffineSymbolExpr(range_vars_first_start++, mlir_context));
   }
-  int64_t rt_vars_first_start = rt_vars_second_start + second.GetRTVarsCount();
-  for (int64_t id = 0; id < first.GetRTVarsCount(); ++id) {
+  int64_t rt_vars_first_start =
+      first_range_vars_count + second_range_vars_count + second_rt_vars_count;
+  for (int64_t id = 0; id < first_rt_vars_count; ++id) {
     symbol_replacements.push_back(
         getAffineSymbolExpr(rt_vars_first_start++, mlir_context));
   }
@@ -771,6 +782,50 @@ SmallVector<AffineExpr, 4> MapSymbolsToComposedSymbolsList(
 
 }  // namespace
 
+static constexpr std::string_view kVarKindDefault = "default";
+static constexpr std::string_view kVarKindThreadX = "thread_x";
+static constexpr std::string_view kVarKindThreadY = "thread_y";
+static constexpr std::string_view kVarKindThreadZ = "thread_z";
+static constexpr std::string_view kVarKindBlockX = "block_x";
+static constexpr std::string_view kVarKindBlockY = "block_y";
+static constexpr std::string_view kVarKindBlockZ = "block_z";
+
+std::string_view ToString(VariableKind type) {
+  switch (type) {
+    case VariableKind::kDefault:
+      return kVarKindDefault;
+    case VariableKind::kThreadX:
+      return kVarKindThreadX;
+    case VariableKind::kThreadY:
+      return kVarKindThreadY;
+    case VariableKind::kThreadZ:
+      return kVarKindThreadZ;
+    case VariableKind::kBlockX:
+      return kVarKindBlockX;
+    case VariableKind::kBlockY:
+      return kVarKindBlockY;
+    case VariableKind::kBlockZ:
+      return kVarKindBlockZ;
+  }
+  llvm_unreachable("Unknown VariableType");
+}
+
+VariableKind ToVariableType(std::string_view type_name) {
+  if (type_name == kVarKindDefault) return VariableKind::kDefault;
+  if (type_name == kVarKindThreadX) return VariableKind::kThreadX;
+  if (type_name == kVarKindThreadY) return VariableKind::kThreadY;
+  if (type_name == kVarKindThreadZ) return VariableKind::kThreadZ;
+  if (type_name == kVarKindBlockX) return VariableKind::kBlockX;
+  if (type_name == kVarKindBlockY) return VariableKind::kBlockY;
+  if (type_name == kVarKindBlockZ) return VariableKind::kBlockZ;
+  llvm_unreachable("Unknown VariableType name");
+}
+
+std::ostream& operator<<(std::ostream& out, VariableKind var_type) {
+  out << ToString(var_type);
+  return out;
+}
+
 // Returns the output-to-input indexing map of the first output of `instr`
 IndexingMap GetIndexingMapForInstruction(const HloInstruction* instr,
                                          int64_t operand_idx,
@@ -783,8 +838,7 @@ std::string Interval::ToString() const {
 }
 
 void Interval::Print(std::ostream& out) const {
-  // The interval is printed as a semi-open one because it is easier to read.
-  out << '[' << lower << ", " << upper + 1 << ")";
+  out << '[' << lower << ", " << upper << "]";
 }
 
 int64_t Interval::GetLoopTripCount() const {
@@ -945,7 +999,8 @@ std::vector<RangeVar> RangeVarsFromTensorSizes(
 IndexingMap::IndexingMap(
     AffineMap affine_map, std::vector<DimVar> dimensions,
     std::vector<RangeVar> range_vars, std::vector<RTVar> rt_vars,
-    absl::Span<std::pair<AffineExpr, Interval> const> constraints)
+    absl::Span<std::pair<AffineExpr, Interval> const> constraints,
+    bool is_simplified)
     : affine_map_(affine_map),
       dim_vars_(std::move(dimensions)),
       range_vars_(std::move(range_vars)),
@@ -957,6 +1012,7 @@ IndexingMap::IndexingMap(
   for (const auto& [expr, range] : constraints) {
     AddConstraint(expr, range);
   }
+  is_simplified_ = is_simplified;
 }
 
 IndexingMap::IndexingMap(
@@ -976,10 +1032,13 @@ IndexingMap::IndexingMap(
 
 IndexingMap IndexingMap::FromTensorSizes(
     AffineMap affine_map, absl::Span<const int64_t> dim_upper_bounds,
-    absl::Span<const int64_t> symbol_upper_bounds) {
-  return IndexingMap{affine_map, DimVarsFromTensorSizes(dim_upper_bounds),
+    absl::Span<const int64_t> symbol_upper_bounds, bool is_simplified) {
+  return IndexingMap{affine_map,
+                     DimVarsFromTensorSizes(dim_upper_bounds),
                      RangeVarsFromTensorSizes(symbol_upper_bounds),
-                     /*rt_vars=*/{}};
+                     /*rt_vars=*/{},
+                     /*constraints=*/{},
+                     is_simplified};
 }
 
 RangeEvaluator IndexingMap::GetRangeEvaluator() const {
@@ -991,6 +1050,7 @@ const Interval& IndexingMap::GetDimensionBound(int64_t dim_id) const {
 }
 
 Interval& IndexingMap::GetMutableDimensionBound(int64_t dim_id) {
+  is_simplified_ = false;
   return dim_vars_[dim_id].bounds;
 }
 
@@ -1013,6 +1073,7 @@ const Interval& IndexingMap::GetSymbolBound(int64_t symbol_id) const {
 }
 
 Interval& IndexingMap::GetMutableSymbolBound(int64_t symbol_id) {
+  is_simplified_ = false;
   // Because affine map symbols are packed like [range_vars, rt_vars],
   // we have to pick the correct bounds.
   int64_t range_var_count = GetRangeVarsCount();
@@ -1068,6 +1129,7 @@ void IndexingMap::AddConstraint(mlir::AffineExpr expr, Interval range) {
       ResetToKnownEmpty();
     }
   }
+  is_simplified_ = false;
 }
 
 void IndexingMap::EraseConstraint(mlir::AffineExpr expr) {
@@ -1103,6 +1165,20 @@ SmallVector<int64_t, 4> IndexingMap::Evaluate(
       dim_const_exprs, symbol_const_exprs, dim_const_exprs.size(),
       symbol_const_exprs.size());
   return eval.getConstantResults();
+}
+
+bool IndexingMap::IsSymbolConstrained(int64_t symbol_id) const {
+  for (const auto& [expr, _] : constraints_) {
+    bool result = false;
+    expr.walk([&](mlir::AffineExpr leaf) {
+      auto sym = mlir::dyn_cast<mlir::AffineSymbolExpr>(leaf);
+      if (sym && sym.getPosition() == symbol_id) {
+        result = true;
+      }
+    });
+    if (result) return true;
+  }
+  return false;
 }
 
 RangeEvaluator::RangeEvaluator(const IndexingMap& indexing_map,
@@ -1235,6 +1311,7 @@ void IndexingMap::Print(std::ostream& out,
   for (const auto& expr_range_string : expr_range_strings) {
     out << expr_range_string << '\n';
   }
+  out << "is_simplified: " << (is_simplified_ ? "true" : "false") << "\n";
 }
 
 MLIRContext* IndexingMap::GetMLIRContext() const {
@@ -1273,7 +1350,7 @@ IndexingMap operator*(const IndexingMap& lhs, const IndexingMap& rhs) {
 // simplification, because the ranges of constraints were already optimized once
 // when IndexingMap was constructed.
 bool IndexingMap::Simplify() {
-  if (IsUndefined() || IsKnownEmpty()) return false;
+  if (IsSimplified() || IsUndefined() || IsKnownEmpty()) return false;
 
   bool rtvars_were_eliminated = ReplaceConstantRTVars();
 
@@ -1304,6 +1381,7 @@ bool IndexingMap::Simplify() {
   if (affine_map_was_simplified) {
     affine_map_ = simplified_affine_map;
   }
+  is_simplified_ = true;
   return affine_map_was_simplified || constraints_were_simplified ||
          rtvars_were_eliminated;
 }
@@ -1606,6 +1684,7 @@ void IndexingMap::ResetToKnownEmpty() {
   }
   constraints_.clear();
   is_known_empty_ = true;
+  is_simplified_ = true;
 }
 
 bool IndexingMap::VerifyVariableIntervals() {
@@ -1748,6 +1827,11 @@ IndexingMap ComposeIndexingMaps(const IndexingMap& first,
   // that range_vars go before rt_vars in the composed affine map symbols list.
   SmallVector<AffineExpr, 4> symbol_replacements =
       GetComposedSymbolsPermutationToCorrectOrder(first, second);
+  if (!symbol_replacements.empty()) {
+    composed_map = composed_map.replaceDimsAndSymbols(
+        /*dimReplacements=*/{}, symbol_replacements, composed_map.getNumDims(),
+        composed_map.getNumSymbols());
+  }
   IndexingMap composed_indexing_map(composed_map, first.GetDimVars(),
                                     std::move(combined_range_vars),
                                     std::move(combined_rt_vars));
@@ -1987,7 +2071,6 @@ bool IndexingMap::ReplaceConstantRTVars() {
   if (rt_vars_.empty()) return false;
 
   bool did_simplify = false;
-  std::vector<size_t> to_delete;
 
   for (auto index = 0; index < rt_vars_.size(); ++index) {
     auto& rt_var = rt_vars_[index];
@@ -2002,8 +2085,9 @@ bool IndexingMap::ReplaceConstantRTVars() {
 
     if (result.remapped_symbol != rt_var_symbol) {
       did_simplify = true;
-      affine_map_ =
-          affine_map_.replace({{rt_var_symbol, result.remapped_symbol}});
+      affine_map_ = affine_map_.replace(
+          {{rt_var_symbol, result.remapped_symbol}}, affine_map_.getNumDims(),
+          affine_map_.getNumSymbols());
 
       llvm::DenseMap<AffineExpr, AffineExpr> replacements;
 
@@ -2029,16 +2113,9 @@ bool IndexingMap::ReplaceConstantRTVars() {
         did_simplify = true;
       }
     } else {
-      // Otherwise we schedule the rt_var for removal.
-      to_delete.emplace_back(index);
       did_simplify = true;
     }
   }
-
-  for (auto index : llvm::reverse(to_delete)) {
-    rt_vars_.erase(rt_vars_.begin() + index);
-  }
-
   return did_simplify;
 }
 

@@ -114,14 +114,25 @@ void LineInfo::SetLineStyle(const InlineNode& node,
 }
 
 ETextAlign LineInfo::GetTextAlign(bool is_last_line) const {
-  // See LayoutRubyBase::TextAlignmentForLine().
   if (is_ruby_base_)
     return ETextAlign::kJustify;
 
-  // See LayoutRubyText::TextAlignmentForLine().
-  if (is_ruby_text_ && LineStyle().GetTextAlign() ==
-                           ComputedStyleInitialValues::InitialTextAlign())
-    return ETextAlign::kJustify;
+  if (is_ruby_text_) {
+    ETextAlign text_align = LineStyle().GetTextAlign();
+    if (!RuntimeEnabledFeatures::RubyLineBreakableEnabled()) {
+      if (text_align == ComputedStyleInitialValues::InitialTextAlign()) {
+        return ETextAlign::kJustify;
+      }
+    } else {
+      ERubyAlign ruby_align = LineStyle().RubyAlign();
+      if ((ruby_align == ERubyAlign::kSpaceAround &&
+           (text_align == ComputedStyleInitialValues::InitialTextAlign() ||
+            text_align == ETextAlign::kJustify)) ||
+          ruby_align == ERubyAlign::kSpaceBetween) {
+        return ETextAlign::kJustify;
+      }
+    }
+  }
 
   return LineStyle().GetTextAlign(is_last_line);
 }
@@ -588,7 +599,7 @@ void LineInfo::RemoveParallelFlowBreakToken(unsigned item_index) {
                           return a->StartItemIndex() < b->StartItemIndex();
                         }));
 #endif  //  EXPENSIVE_DCHECKS_ARE_ON()
-  for (auto* iter = parallel_flow_break_tokens_.begin();
+  for (auto iter = parallel_flow_break_tokens_.begin();
        iter != parallel_flow_break_tokens_.end(); ++iter) {
     const InlineBreakToken* break_token = *iter;
     DCHECK(break_token->IsInParallelBlockFlow());

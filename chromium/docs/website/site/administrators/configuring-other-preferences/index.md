@@ -231,7 +231,10 @@ are:
             the current user.
 *   system_level: install chrome to system-wide location.
 *   verbose_logging: emit extra details to the installer's log file to
-            diagnose install or update failures.
+            diagnose install or update failures. The
+            `chrome_installer.log` is typically generated in
+            `\Windows\SystemTemp` for `system` installs, and in `%TMP%`
+            for `user` installs.
 *   first_run_tabs: these are the tabs & URLs shown on the first launch
             (and only on first launch) of the browser.
 *   sync_promo.show_on_first_run_allowed: prevents the sign-in page from

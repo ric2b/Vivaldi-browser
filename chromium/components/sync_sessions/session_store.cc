@@ -26,7 +26,6 @@
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
-#include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync_device_info/local_device_info_util.h"
 #include "components/sync_sessions/session_sync_prefs.h"
@@ -38,8 +37,8 @@ namespace sync_sessions {
 namespace {
 
 using sync_pb::SessionSpecifics;
+using syncer::DataTypeStore;
 using syncer::MetadataChangeList;
-using syncer::ModelTypeStore;
 
 std::string TabNodeIdToClientTag(const std::string& session_tag,
                                  int tab_node_id) {
@@ -111,13 +110,13 @@ void ForwardError(syncer::OnceModelErrorHandler error_handler,
 std::optional<syncer::ModelError> ParseInitialDataOnBackendSequence(
     std::map<std::string, sync_pb::SessionSpecifics>* initial_data,
     std::string* session_name,
-    std::unique_ptr<ModelTypeStore::RecordList> record_list) {
+    std::unique_ptr<DataTypeStore::RecordList> record_list) {
   TRACE_EVENT0("sync", "sync_sessions::ParseInitialDataOnBackendSequence");
   DCHECK(initial_data);
   DCHECK(initial_data->empty());
   DCHECK(record_list);
 
-  for (ModelTypeStore::Record& record : *record_list) {
+  for (DataTypeStore::Record& record : *record_list) {
     const std::string& storage_key = record.id;
     SessionSpecifics specifics;
     if (storage_key.empty() ||
@@ -139,7 +138,7 @@ struct SessionStore::Builder {
   base::WeakPtr<SyncSessionsClient> sessions_client;
   OpenCallback callback;
   SessionInfo local_session_info;
-  std::unique_ptr<syncer::ModelTypeStore> underlying_store;
+  std::unique_ptr<syncer::DataTypeStore> underlying_store;
   std::unique_ptr<syncer::MetadataBatch> metadata_batch;
   std::map<std::string, sync_pb::SessionSpecifics> initial_data;
 };
@@ -167,7 +166,7 @@ void SessionStore::Open(const std::string& cache_guid,
 }
 
 SessionStore::WriteBatch::WriteBatch(
-    std::unique_ptr<ModelTypeStore::WriteBatch> batch,
+    std::unique_ptr<DataTypeStore::WriteBatch> batch,
     CommitCallback commit_cb,
     syncer::OnceModelErrorHandler error_handler,
     SyncedSessionTracker* session_tracker)
@@ -262,6 +261,10 @@ bool SessionStore::AreValidSpecifics(const SessionSpecifics& specifics) {
   if (specifics.session_tag().empty()) {
     return false;
   }
+  if (specifics.has_vivaldi_specific()) {
+    DCHECK(specifics.tab_node_id() == TabNodePool::kVivaldiTabNodeID);
+    return true;
+  }
   if (specifics.has_tab()) {
     return specifics.tab_node_id() >= 0 && specifics.tab().tab_id() > 0;
   }
@@ -290,6 +293,13 @@ std::string SessionStore::GetClientTag(const SessionSpecifics& specifics) {
   if (specifics.has_header()) {
     return specifics.session_tag();
   }
+
+  if (specifics.has_vivaldi_specific()) {
+    DCHECK(specifics.tab_node_id() == TabNodePool::kVivaldiTabNodeID);
+    return base::StringPrintf("%s vivaldi", specifics.session_tag().c_str());
+  }
+
+  DCHECK(specifics.tab_node_id() != TabNodePool::kVivaldiTabNodeID);
 
   DCHECK(specifics.has_tab());
   return TabNodeIdToClientTag(specifics.session_tag(), specifics.tab_node_id());
@@ -332,7 +342,7 @@ std::string SessionStore::GetTabClientTagForTest(const std::string& session_tag,
 void SessionStore::OnStoreCreated(
     std::unique_ptr<Builder> builder,
     const std::optional<syncer::ModelError>& error,
-    std::unique_ptr<ModelTypeStore> underlying_store) {
+    std::unique_ptr<DataTypeStore> underlying_store) {
   DCHECK(builder);
 
   if (error) {
@@ -421,7 +431,7 @@ void SessionStore::OnReadAllData(
 
 SessionStore::SessionStore(
     const SessionInfo& local_session_info,
-    std::unique_ptr<syncer::ModelTypeStore> underlying_store,
+    std::unique_ptr<syncer::DataTypeStore> underlying_store,
     std::map<std::string, sync_pb::SessionSpecifics> initial_data,
     const syncer::EntityMetadataMap& initial_metadata,
     SyncSessionsClient* sessions_client)
@@ -462,13 +472,17 @@ SessionStore::SessionStore(
 
     if (specifics.session_tag() != local_session_info_.session_tag) {
       UpdateTrackerWithSpecifics(specifics, mtime, &session_tracker_);
+    } else if (specifics.has_vivaldi_specific()) {
+      // This is for vivaldi.
+      DCHECK(specifics.tab_node_id() == TabNodePool::kVivaldiTabNodeID);
+      UpdateTrackerWithSpecifics(specifics, mtime, &session_tracker_);
     } else if (specifics.has_header()) {
       // This is previously stored local header information. Restoring the local
       // is actually needed on Android only where we might not have a complete
       // view of local window/tabs.
 
       // Two local headers cannot coexist because they would use the very same
-      // storage key in ModelTypeStore/LevelDB.
+      // storage key in DataTypeStore/LevelDB.
       DCHECK(!found_local_header);
       found_local_header = true;
 
@@ -552,7 +566,7 @@ std::unique_ptr<SessionStore::WriteBatch> SessionStore::CreateWriteBatch(
   // requirement).
   return std::make_unique<WriteBatch>(
       store_->CreateWriteBatch(),
-      base::BindOnce(&ModelTypeStore::CommitWriteBatch,
+      base::BindOnce(&DataTypeStore::CommitWriteBatch,
                      base::Unretained(store_.get())),
       std::move(error_handler), &session_tracker_);
 }

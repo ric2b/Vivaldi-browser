@@ -169,13 +169,60 @@ const struct {
             TriggerRegistrationError::kFiltersListLookbackWindowValueInvalid),
     },
     {
-        "lookback_window_not_positive",
+        "lookback_window_string",
+        base::test::ParseJson(R"json({"_lookback_window": "1"})json"),
+        base::unexpected(SourceRegistrationError::kFilterDataKeyReserved),
+        base::unexpected(
+            TriggerRegistrationError::kFiltersLookbackWindowValueInvalid),
+        base::unexpected(
+            TriggerRegistrationError::kFiltersListLookbackWindowValueInvalid),
+    },
+    {
+        "lookback_window_zero",
         base::test::ParseJson(R"json({"_lookback_window": 0})json"),
         base::unexpected(SourceRegistrationError::kFilterDataKeyReserved),
         base::unexpected(
             TriggerRegistrationError::kFiltersLookbackWindowValueInvalid),
         base::unexpected(
             TriggerRegistrationError::kFiltersListLookbackWindowValueInvalid),
+    },
+    {
+        "lookback_window_negative",
+        base::test::ParseJson(R"json({"_lookback_window": -1})json"),
+        base::unexpected(SourceRegistrationError::kFilterDataKeyReserved),
+        base::unexpected(
+            TriggerRegistrationError::kFiltersLookbackWindowValueInvalid),
+        base::unexpected(
+            TriggerRegistrationError::kFiltersListLookbackWindowValueInvalid),
+    },
+    {
+        "lookback_window_not_integer",
+        base::test::ParseJson(R"json({"_lookback_window": 1.5})json"),
+        base::unexpected(SourceRegistrationError::kFilterDataKeyReserved),
+        base::unexpected(
+            TriggerRegistrationError::kFiltersLookbackWindowValueInvalid),
+        base::unexpected(
+            TriggerRegistrationError::kFiltersListLookbackWindowValueInvalid),
+    },
+    {
+        "lookback_window_integer_trailing_zero",
+        base::test::ParseJson(R"json({"_lookback_window": 1.0})json"),
+        base::unexpected(SourceRegistrationError::kFilterDataKeyReserved),
+        FiltersDisjunction(
+            {*FilterConfig::Create({}, /*lookback_window=*/base::Seconds(1))}),
+        FiltersDisjunction(
+            {*FilterConfig::Create({}, /*lookback_window=*/base::Seconds(1))}),
+    },
+    {
+        "lookback_window_gt_int_max",
+        base::test::ParseJson(R"json({"_lookback_window": 2147483648})json"),
+        base::unexpected(SourceRegistrationError::kFilterDataKeyReserved),
+        FiltersDisjunction({*FilterConfig::Create(
+            {},
+            /*lookback_window=*/base::Seconds(2147483648))}),
+        FiltersDisjunction({*FilterConfig::Create(
+            {},
+            /*lookback_window=*/base::Seconds(2147483648))}),
     },
     {
         "wrong_type",

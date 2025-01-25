@@ -27,12 +27,15 @@
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/commerce/core/test_utils.h"
 #include "components/feature_engagement/test/mock_tracker.h"
+#include "components/optimization_guide/core/model_quality/feature_type_map.h"
 #include "components/optimization_guide/core/model_quality/test_model_quality_logs_uploader_service.h"
+#include "components/optimization_guide/core/optimization_guide_prefs.h"
+#include "components/optimization_guide/proto/features/product_specifications.pb.h"
 #include "components/power_bookmarks/core/power_bookmark_utils.h"
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
 #include "components/power_bookmarks/core/proto/shopping_specifics.pb.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/sync/test/mock_model_type_change_processor.h"
+#include "components/sync/test/mock_data_type_local_change_processor.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -42,6 +45,10 @@
 
 namespace commerce {
 namespace {
+
+const std::string kTestUrl1 = "http://www.example.com/1";
+const std::string kTestUrl2 = "http://www.example.com/2";
+const std::string kTestHistoryResultTitle = "Product title";
 
 class MockPage : public shopping_service::mojom::Page {
  public:
@@ -108,6 +115,17 @@ class MockDelegate : public ShoppingServiceHandler::Delegate {
               ShowFeedbackForProductSpecifications,
               (const std::string& log_id),
               (override));
+  MOCK_METHOD(void,
+              ShowProductSpecificationsDisclosureDialog,
+              (const std::vector<GURL>& urls,
+               const std::string& name,
+               const std::string& set_id),
+              (override));
+  MOCK_METHOD(void,
+              ShowProductSpecificationsSetForUuid,
+              (const base::Uuid& uuid, bool in_new_tab),
+              (override));
+  MOCK_METHOD(void, ShowSyncSetupFlow, (), (override));
 
   void SetCurrentTabUrl(const GURL& url) {
     ON_CALL(*this, GetCurrentTabUrl)
@@ -161,9 +179,7 @@ MATCHER_P(MojoBookmarkInfoWithClusterId, expected_id, "") {
 
 class ShoppingServiceHandlerTest : public testing::Test {
  public:
-  ShoppingServiceHandlerTest() : logs_uploader_(&local_state_) {
-    features_.InitAndEnableFeature(kShoppingList);
-  }
+  ShoppingServiceHandlerTest() : logs_uploader_(&local_state_) {}
 
  protected:
   void SetUp() override {
@@ -178,7 +194,9 @@ class ShoppingServiceHandlerTest : public testing::Test {
     shopping_service_ = std::make_unique<MockShoppingService>();
     shopping_service_->SetAccountChecker(account_checker_.get());
     pref_service_ = std::make_unique<TestingPrefServiceSimple>();
-    RegisterPrefs(pref_service_->registry());
+    account_checker_->SetPrefs(pref_service_.get());
+    RegisterCommercePrefs(pref_service_->registry());
+    SetTabCompareEnterprisePolicyPref(pref_service_.get(), 0);
     SetShoppingListEnterprisePolicyPref(pref_service_.get(), true);
 
     ON_CALL(*shopping_service_, GetProductSpecificationsService)
@@ -510,6 +528,24 @@ TEST_F(ShoppingServiceHandlerTest, TestGetProductInfoForUrl) {
   run_loop.Run();
 }
 
+TEST_F(ShoppingServiceHandlerTest, TestGetPageTitleFromHistory) {
+  shopping_service_->SetIsPriceInsightsEligible(true);
+
+  history::QueryURLResult result;
+  result.success = true;
+  result.row = history::URLRow();
+  result.row.set_title(base::UTF8ToUTF16(kTestHistoryResultTitle));
+  shopping_service_->SetQueryHistoryForUrlCallbackValue(result);
+
+  base::RunLoop run_loop;
+  handler_->GetPageTitleFromHistory(
+      GURL("http://example.com/"), base::BindOnce([](const std::string& title) {
+                                     ASSERT_EQ(kTestHistoryResultTitle, title);
+                                   }).Then(run_loop.QuitClosure()));
+
+  run_loop.Run();
+}
+
 TEST_F(ShoppingServiceHandlerTest,
        TestGetProductInfoForCurrentUrl_FeatureIneligible) {
   base::RunLoop run_loop;
@@ -575,6 +611,79 @@ TEST_F(ShoppingServiceHandlerTest, TestGetPriceInsightsInfoForCurrentUrl) {
         run_loop->Quit();
       },
       &run_loop));
+
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceHandlerTest, TestGetPriceInsightsInfoForUrl) {
+  base::RunLoop run_loop;
+
+  std::optional<commerce::PriceInsightsInfo> info;
+  info.emplace();
+  info->product_cluster_id = 123u;
+  info->currency_code = "usd";
+  info->typical_low_price_micros = 1230000;
+  info->typical_high_price_micros = 2340000;
+  info->catalog_attributes = "Unlocked, 4GB";
+  info->jackpot_url = GURL("http://example.com/jackpot");
+  info->price_bucket = PriceBucket::kHighPrice;
+  info->has_multiple_catalogs = true;
+  info->catalog_history_prices.emplace_back("2021-01-01", 3330000);
+  info->catalog_history_prices.emplace_back("2021-01-02", 4440000);
+
+  shopping_service_->SetIsPriceInsightsEligible(true);
+  shopping_service_->SetResponseForGetPriceInsightsInfoForUrl(info);
+
+  handler_->GetPriceInsightsInfoForUrl(
+      GURL("http://example.com/"),
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const GURL& url,
+             shopping_service::mojom::PriceInsightsInfoPtr info) {
+            ASSERT_EQ(123u, info->cluster_id);
+            ASSERT_EQ("$1.23", info->typical_low_price);
+            ASSERT_EQ("$2.34", info->typical_high_price);
+            ASSERT_EQ("Unlocked, 4GB", info->catalog_attributes);
+            ASSERT_EQ("http://example.com/jackpot", info->jackpot.spec());
+            ASSERT_EQ(
+                shopping_service::mojom::PriceInsightsInfo::PriceBucket::kHigh,
+                info->bucket);
+            ASSERT_EQ(true, info->has_multiple_catalogs);
+            ASSERT_EQ(2, (int)info->history.size());
+            ASSERT_EQ("2021-01-01", info->history[0]->date);
+            ASSERT_EQ(3.33f, info->history[0]->price);
+            ASSERT_EQ("$3.33", info->history[0]->formatted_price);
+            ASSERT_EQ("2021-01-02", info->history[1]->date);
+            ASSERT_EQ(4.44f, info->history[1]->price);
+            ASSERT_EQ("$4.44", info->history[1]->formatted_price);
+            ASSERT_EQ("en-us", info->locale);
+            ASSERT_EQ("usd", info->currency_code);
+            run_loop->Quit();
+          },
+          &run_loop));
+
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceHandlerTest,
+       TestGetPriceInsightsInfoForUrlWhenNotPriceInsightsEligible) {
+  base::RunLoop run_loop;
+
+  std::optional<commerce::PriceInsightsInfo> info;
+  info.emplace();
+  info->product_cluster_id = 123u;
+
+  shopping_service_->SetIsPriceInsightsEligible(false);
+  shopping_service_->SetResponseForGetPriceInsightsInfoForUrl(info);
+
+  handler_->GetPriceInsightsInfoForUrl(
+      GURL("http://example.com/"),
+      base::BindOnce(
+          [](base::RunLoop* run_loop, const GURL& url,
+             shopping_service::mojom::PriceInsightsInfoPtr info) {
+            ASSERT_NE(123u, info->cluster_id);
+            run_loop->Quit();
+          },
+          &run_loop));
 
   run_loop.Run();
 }
@@ -656,6 +765,10 @@ TEST_F(ShoppingServiceHandlerTest, TestShowFeedbackForPriceInsights) {
 
 TEST_F(ShoppingServiceHandlerTest,
        SetProductSpecificationsUserFeedback_NonNegative) {
+  features_.InitWithFeaturesAndParameters(
+      {{kProductSpecifications,
+        {{kProductSpecificationsEnableQualityLoggingParam, "true"}}}},
+      {});
   EXPECT_CALL(*delegate_, ShowFeedbackForProductSpecifications).Times(0);
 
   handler_->GetProductSpecificationsForUrls({GURL("http://example.com")},
@@ -665,12 +778,33 @@ TEST_F(ShoppingServiceHandlerTest,
   CHECK(handler_->current_log_quality_entry_for_testing());
   handler_->SetProductSpecificationsUserFeedback(
       shopping_service::mojom::UserFeedback::kThumbsUp);
+
+  optimization_guide::proto::LogAiDataRequest* request =
+      handler_->current_log_quality_entry_for_testing()->log_ai_data_request();
+  ASSERT_EQ(
+      optimization_guide::proto::UserFeedback::USER_FEEDBACK_THUMBS_UP,
+      optimization_guide::ProductSpecificationsFeatureTypeMap::GetLoggingData(
+          *request)
+          ->quality()
+          .user_feedback());
+
   handler_->SetProductSpecificationsUserFeedback(
       shopping_service::mojom::UserFeedback::kUnspecified);
+
+  ASSERT_EQ(
+      optimization_guide::proto::UserFeedback::USER_FEEDBACK_UNSPECIFIED,
+      optimization_guide::ProductSpecificationsFeatureTypeMap::GetLoggingData(
+          *request)
+          ->quality()
+          .user_feedback());
 }
 
 TEST_F(ShoppingServiceHandlerTest,
        SetProductSpecificationsUserFeedback_Negative) {
+  features_.InitWithFeaturesAndParameters(
+      {{kProductSpecifications,
+        {{kProductSpecificationsEnableQualityLoggingParam, "true"}}}},
+      {});
   EXPECT_CALL(*delegate_, ShowFeedbackForProductSpecifications).Times(1);
 
   handler_->GetProductSpecificationsForUrls({GURL("http://example.com")},
@@ -680,6 +814,15 @@ TEST_F(ShoppingServiceHandlerTest,
   CHECK(handler_->current_log_quality_entry_for_testing());
   handler_->SetProductSpecificationsUserFeedback(
       shopping_service::mojom::UserFeedback::kThumbsDown);
+
+  optimization_guide::proto::LogAiDataRequest* request =
+      handler_->current_log_quality_entry_for_testing()->log_ai_data_request();
+  ASSERT_EQ(
+      optimization_guide::proto::UserFeedback::USER_FEEDBACK_THUMBS_DOWN,
+      optimization_guide::ProductSpecificationsFeatureTypeMap::GetLoggingData(
+          *request)
+          ->quality()
+          .user_feedback());
 }
 
 TEST_F(ShoppingServiceHandlerTest, TestIsShoppingListEligible) {
@@ -804,9 +947,9 @@ TEST_F(ShoppingServiceHandlerTest, TestShowBookmarkEditorForCurrentUrl) {
 
 TEST_F(ShoppingServiceHandlerTest, TestShowProductSpecificationsSetForUuid) {
   const base::Uuid uuid = base::Uuid::GenerateRandomV4();
-  const GURL url = commerce::GetProductSpecsTabUrlForID(uuid);
-  EXPECT_CALL(*delegate_, OpenUrlInNewTab(url)).Times(1);
-  handler_->ShowProductSpecificationsSetForUuid(uuid);
+  EXPECT_CALL(*delegate_, ShowProductSpecificationsSetForUuid(uuid, true))
+      .Times(1);
+  handler_->ShowProductSpecificationsSetForUuid(uuid, true);
 }
 
 TEST_F(ShoppingServiceHandlerTest, TestGetProductSpecifications) {
@@ -834,22 +977,12 @@ TEST_F(ShoppingServiceHandlerTest, TestGetProductSpecifications) {
   shopping_service_->SetResponseForGetProductSpecificationsForUrls(
       std::move(specs));
 
-  ASSERT_EQ(nullptr, handler_->current_log_quality_entry_for_testing());
   base::RunLoop run_loop;
   handler_->GetProductSpecificationsForUrls(
       {GURL("http://example.com")},
       base::BindOnce(
           [](base::RunLoop* run_loop, ShoppingServiceHandler* handler,
              shopping_service::mojom::ProductSpecificationsPtr specs_ptr) {
-            // Check log quality entry is created and has correct execution_id.
-            CHECK(handler->current_log_quality_entry_for_testing());
-            std::string log_id =
-                handler->current_log_quality_entry_for_testing()
-                    ->log_ai_data_request()
-                    ->model_execution_info()
-                    .execution_id();
-            ASSERT_EQ(0u, log_id.find(kProductSpecificationsLoggingPrefix));
-
             ASSERT_EQ("color", specs_ptr->product_dimension_map[1]);
 
             ASSERT_EQ(12345u, specs_ptr->products[0]->product_cluster_id);
@@ -871,7 +1004,98 @@ TEST_F(ShoppingServiceHandlerTest, TestGetProductSpecifications) {
 }
 
 TEST_F(ShoppingServiceHandlerTest,
+       TestGetProductSpecifications_RecordLogEntry) {
+  features_.InitWithFeaturesAndParameters(
+      {{kProductSpecifications,
+        {{kProductSpecificationsEnableQualityLoggingParam, "true"}}}},
+      {});
+  ProductSpecifications specs;
+  specs.product_dimension_map[1] = "color";
+  ProductSpecifications::Product product;
+  product.product_cluster_id = 12345L;
+  product.title = "title";
+
+  ProductSpecifications::Value value;
+  ProductSpecifications::Description desc;
+  ProductSpecifications::Description::Option option;
+  ProductSpecifications::DescriptionText desc_text;
+  desc_text.text = "red";
+  option.descriptions.push_back(desc_text);
+  desc.options.push_back(option);
+  value.descriptions.push_back(desc);
+  product.product_dimension_values[1] = value;
+
+  ProductSpecifications::DescriptionText product_desc;
+  product_desc.text = "summary";
+  product.summary.push_back(std::move(product_desc));
+  specs.products.push_back(std::move(product));
+
+  shopping_service_->SetResponseForGetProductSpecificationsForUrls(
+      std::move(specs));
+
+  ASSERT_EQ(nullptr, handler_->current_log_quality_entry_for_testing());
+  base::RunLoop run_loop;
+  handler_->GetProductSpecificationsForUrls(
+      {GURL(kTestUrl1), GURL(kTestUrl2)},
+      base::BindOnce(
+          [](base::RunLoop* run_loop, ShoppingServiceHandler* handler,
+             shopping_service::mojom::ProductSpecificationsPtr specs_ptr) {
+            // Check log quality entry is created and has correct execution_id.
+            CHECK(handler->current_log_quality_entry_for_testing());
+            std::string log_id =
+                handler->current_log_quality_entry_for_testing()
+                    ->log_ai_data_request()
+                    ->model_execution_info()
+                    .execution_id();
+            ASSERT_EQ(0u, log_id.find(kProductSpecificationsLoggingPrefix));
+
+            // Check response is recorded in the log entry.
+            optimization_guide::proto::LogAiDataRequest* request =
+                handler->current_log_quality_entry_for_testing()
+                    ->log_ai_data_request();
+            CHECK(request);
+            auto quality_proto =
+                optimization_guide::ProductSpecificationsFeatureTypeMap::
+                    GetLoggingData(*request)
+                        ->quality();
+            ASSERT_EQ(2, quality_proto.product_identifiers_size());
+
+            auto product_specification_data_proto =
+                quality_proto.product_specification_data();
+            ASSERT_EQ(1, product_specification_data_proto
+                             .product_specification_sections_size());
+            ASSERT_EQ("1", product_specification_data_proto
+                               .product_specification_sections()[0]
+                               .key());
+            ASSERT_EQ("color", product_specification_data_proto
+                                   .product_specification_sections()[0]
+                                   .title());
+
+            ASSERT_EQ(
+                1,
+                product_specification_data_proto.product_specifications_size());
+            auto first_product =
+                product_specification_data_proto.product_specifications()[0];
+            ASSERT_EQ(12345u, first_product.identifiers().gpc_id());
+            ASSERT_EQ("red", first_product.product_specification_values()[0]
+                                 .specification_descriptions()[0]
+                                 .options()[0]
+                                 .description()[0]
+                                 .text());
+            ASSERT_EQ("summary", first_product.summary_description()[0].text());
+
+            run_loop->Quit();
+          },
+          &run_loop, handler_.get()));
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceHandlerTest,
        TestLogEntryReplacesForGetProductSpecifications) {
+  features_.InitWithFeaturesAndParameters(
+      {{kProductSpecifications,
+        {{kProductSpecificationsEnableQualityLoggingParam, "true"}}}},
+      {});
   ASSERT_EQ(nullptr, handler_->current_log_quality_entry_for_testing());
 
   handler_->GetProductSpecificationsForUrls({GURL("http://example.com")},
@@ -892,6 +1116,24 @@ TEST_F(ShoppingServiceHandlerTest,
   ASSERT_NE(
       log_id_one,
       entry_two->log_ai_data_request()->model_execution_info().execution_id());
+}
+
+TEST_F(ShoppingServiceHandlerTest, TestSetDisclosureVersion) {
+  handler_->SetProductSpecificationAcceptedDisclosureVersion(
+      shopping_service::mojom::ProductSpecificationsDisclosureVersion::kV1);
+  EXPECT_EQ(
+      static_cast<int>(
+          shopping_service::mojom::ProductSpecificationsDisclosureVersion::kV1),
+      pref_service_->GetInteger(
+          kProductSpecificationsAcceptedDisclosureVersion));
+}
+
+TEST_F(ShoppingServiceHandlerTest, TestSetDisclosureVersion_DefaultValue) {
+  EXPECT_EQ(
+      static_cast<int>(shopping_service::mojom::
+                           ProductSpecificationsDisclosureVersion::kUnknown),
+      pref_service_->GetInteger(
+          kProductSpecificationsAcceptedDisclosureVersion));
 }
 
 TEST_F(ShoppingServiceHandlerTest, TestBookmarkNodeMoved) {
@@ -1017,6 +1259,11 @@ TEST_F(ShoppingServiceHandlerTest, TestSetNameForProductSpecificationsSet) {
   run_loop.Run();
 }
 
+TEST_F(ShoppingServiceHandlerTest, TestShowSyncSetupFlow) {
+  EXPECT_CALL(*delegate_, ShowSyncSetupFlow).Times(1);
+  handler_->ShowSyncSetupFlow();
+}
+
 TEST_F(ShoppingServiceHandlerTest, TestSetUrlsForProductSpecificationsSet) {
   const base::Uuid& uuid = base::Uuid::GenerateRandomV4();
   ProductSpecificationsSet updated_set = ProductSpecificationsSet(
@@ -1040,6 +1287,140 @@ TEST_F(ShoppingServiceHandlerTest, TestSetUrlsForProductSpecificationsSet) {
             ASSERT_EQ("https://example.com/", set_ptr->urls[0]);
           },
           &uuid)
+          .Then(run_loop.QuitClosure()));
+
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceHandlerTest,
+       TestMaybeShowProductSpecificationDisclosure_NotShow) {
+  EXPECT_CALL(*delegate_, ShowProductSpecificationsDisclosureDialog).Times(0);
+
+  pref_service_->SetInteger(
+      kProductSpecificationsAcceptedDisclosureVersion,
+      static_cast<int>(shopping_service::mojom::
+                           ProductSpecificationsDisclosureVersion::kV1));
+
+  base::RunLoop run_loop;
+  handler_->MaybeShowProductSpecificationDisclosure(
+      {}, "", "", base::BindOnce([](bool show) {
+                    ASSERT_FALSE(show);
+                  }).Then(run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceHandlerTest,
+       TestMaybeShowProductSpecificationDisclosure_Show) {
+  std::vector<GURL> urls{GURL(kTestUrl1)};
+  std::string name = "test_name";
+  std::string set_id = "test_id";
+  EXPECT_CALL(*delegate_,
+              ShowProductSpecificationsDisclosureDialog(urls, name, set_id))
+      .Times(1);
+
+  pref_service_->SetInteger(
+      kProductSpecificationsAcceptedDisclosureVersion,
+      static_cast<int>(shopping_service::mojom::
+                           ProductSpecificationsDisclosureVersion::kUnknown));
+
+  base::RunLoop run_loop;
+  handler_->MaybeShowProductSpecificationDisclosure(
+      urls, name, set_id, base::BindOnce([](bool show) {
+                            ASSERT_TRUE(show);
+                          }).Then(run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceHandlerTest, TestDeclineProductSpecificationDisclosure) {
+  ASSERT_EQ(0,
+            pref_service_->GetInteger(
+                commerce::kProductSpecificationsEntryPointShowIntervalInDays));
+  base::Time last_dismiss_time = pref_service_->GetTime(
+      commerce::kProductSpecificationsEntryPointLastDismissedTime);
+
+  handler_->DeclineProductSpecificationDisclosure();
+
+  ASSERT_EQ(1,
+            pref_service_->GetInteger(
+                commerce::kProductSpecificationsEntryPointShowIntervalInDays));
+  ASSERT_GT(pref_service_->GetTime(
+                commerce::kProductSpecificationsEntryPointLastDismissedTime),
+            last_dismiss_time);
+
+  last_dismiss_time = pref_service_->GetTime(
+      commerce::kProductSpecificationsEntryPointLastDismissedTime);
+  handler_->DeclineProductSpecificationDisclosure();
+
+  ASSERT_EQ(2,
+            pref_service_->GetInteger(
+                commerce::kProductSpecificationsEntryPointShowIntervalInDays));
+  ASSERT_GT(pref_service_->GetTime(
+                commerce::kProductSpecificationsEntryPointLastDismissedTime),
+            last_dismiss_time);
+}
+
+TEST_F(ShoppingServiceHandlerTest,
+       TestGetProductSpecificationsFeatureState_Allowed) {
+  features_.InitWithFeaturesAndParameters(
+      {{kProductSpecifications,
+        {{kProductSpecificationsEnableQualityLoggingParam, "true"}}}},
+      {});
+  ON_CALL(*account_checker_, IsSyncTypeEnabled)
+      .WillByDefault(testing::Return(true));
+  account_checker_->SetSignedIn(true);
+  account_checker_->SetAnonymizedUrlDataCollectionEnabled(true);
+  SetTabCompareEnterprisePolicyPref(pref_service_.get(), 0);
+
+  // Set up management mode by having nonzero sets.
+  const std::string uuid = base::Uuid::GenerateRandomV4().AsLowercaseString();
+  std::vector<ProductSpecificationsSet> sets;
+  sets.push_back(ProductSpecificationsSet(
+      uuid, 0, 0, {GURL("https://example.com/")}, "set1"));
+  ON_CALL(*product_spec_service_, GetAllProductSpecifications())
+      .WillByDefault(testing::Return(std::move(sets)));
+
+  base::RunLoop run_loop;
+  handler_->GetProductSpecificationsFeatureState(
+      base::BindOnce(
+          [](shopping_service::mojom::ProductSpecificationsFeatureStatePtr
+                 state) {
+            ASSERT_TRUE(state->can_load_full_page_ui);
+            ASSERT_TRUE(state->is_syncing_tab_compare);
+            ASSERT_TRUE(state->can_manage_sets);
+            ASSERT_TRUE(state->can_fetch_data);
+            ASSERT_TRUE(state->is_allowed_for_enterprise);
+            ASSERT_TRUE(state->is_quality_logging_allowed);
+          })
+          .Then(run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
+TEST_F(ShoppingServiceHandlerTest,
+       TestGetProductSpecificationsFeatureState_NotAllowed) {
+  features_.InitWithFeaturesAndParameters({}, {{kProductSpecifications}});
+  ON_CALL(*account_checker_, IsSyncTypeEnabled)
+      .WillByDefault(testing::Return(false));
+  account_checker_->SetSignedIn(true);
+  account_checker_->SetAnonymizedUrlDataCollectionEnabled(true);
+  SetTabCompareEnterprisePolicyPref(pref_service_.get(), 2);
+
+  // Zero sets. Management mode is false.
+  std::vector<ProductSpecificationsSet> sets;
+  ON_CALL(*product_spec_service_, GetAllProductSpecifications())
+      .WillByDefault(testing::Return(std::move(sets)));
+
+  base::RunLoop run_loop;
+  handler_->GetProductSpecificationsFeatureState(
+      base::BindOnce(
+          [](shopping_service::mojom::ProductSpecificationsFeatureStatePtr
+                 state) {
+            ASSERT_FALSE(state->can_load_full_page_ui);
+            ASSERT_FALSE(state->is_syncing_tab_compare);
+            ASSERT_FALSE(state->can_manage_sets);
+            ASSERT_FALSE(state->can_fetch_data);
+            ASSERT_FALSE(state->is_allowed_for_enterprise);
+            ASSERT_FALSE(state->is_quality_logging_allowed);
+          })
           .Then(run_loop.QuitClosure()));
 
   run_loop.Run();
@@ -1093,6 +1474,56 @@ TEST_F(ShoppingServiceHandlerFeatureDisableTest,
 
   handler_->GetAllPriceTrackedBookmarkProductInfo(base::BindOnce(
       &GetEvaluationProductInfos, base::DoNothing(), std::move(empty_list)));
+}
+
+class ShoppingServiceHandlerLoggingDisableTest
+    : public ShoppingServiceHandlerTest {
+ public:
+  ShoppingServiceHandlerLoggingDisableTest() {
+    features_.InitWithFeaturesAndParameters(
+        {{kShoppingList, {}},
+         {kProductSpecifications,
+          {{kProductSpecificationsEnableQualityLoggingParam, "false"}}}},
+        {});
+  }
+
+ protected:
+  base::test::ScopedFeatureList features_;
+};
+
+TEST_F(ShoppingServiceHandlerLoggingDisableTest,
+       TestGetProductSpecifications_NoLoggingEntry) {
+  ProductSpecifications specs;
+  shopping_service_->SetResponseForGetProductSpecificationsForUrls(
+      std::move(specs));
+
+  base::RunLoop run_loop;
+  handler_->GetProductSpecificationsForUrls(
+      {GURL(kTestUrl1)},
+      base::BindOnce(
+          [](ShoppingServiceHandler* handler,
+             shopping_service::mojom::ProductSpecificationsPtr specs_ptr) {
+            ASSERT_EQ(nullptr,
+                      handler->current_log_quality_entry_for_testing());
+          },
+          handler_.get())
+          .Then(run_loop.QuitClosure()));
+  run_loop.Run();
+
+  handler_->ShowBookmarkEditorForCurrentUrl();
+}
+
+TEST_F(ShoppingServiceHandlerLoggingDisableTest,
+       SetProductSpecificationsUserFeedback_NoFeedback) {
+  EXPECT_CALL(*delegate_, ShowFeedbackForProductSpecifications).Times(1);
+
+  handler_->GetProductSpecificationsForUrls({GURL(kTestUrl1)},
+                                            base::DoNothing());
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_EQ(nullptr, handler_->current_log_quality_entry_for_testing());
+  handler_->SetProductSpecificationsUserFeedback(
+      shopping_service::mojom::UserFeedback::kThumbsDown);
 }
 
 }  // namespace

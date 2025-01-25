@@ -6,6 +6,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -171,7 +172,7 @@ export class KeybindsSettingsTab extends UI.Widget.VBox implements UI.ListContro
       item: UI.ActionRegistration.Action,
       editedShortcuts: Map<UI.KeyboardShortcut.KeyboardShortcut, UI.KeyboardShortcut.Descriptor[]|null>): void {
     for (const [originalShortcut, newDescriptors] of editedShortcuts) {
-      if (originalShortcut.type !== UI.KeyboardShortcut.Type.UnsetShortcut) {
+      if (originalShortcut.type !== UI.KeyboardShortcut.Type.UNSET_SHORTCUT) {
         UI.ShortcutRegistry.ShortcutRegistry.instance().removeShortcut(originalShortcut);
         if (!newDescriptors) {
           Host.userMetrics.actionTaken(Host.UserMetrics.Action.ShortcutRemoved);
@@ -180,8 +181,8 @@ export class KeybindsSettingsTab extends UI.Widget.VBox implements UI.ListContro
       if (newDescriptors) {
         UI.ShortcutRegistry.ShortcutRegistry.instance().registerUserShortcut(
             originalShortcut.changeKeys(newDescriptors as UI.KeyboardShortcut.Descriptor[])
-                .changeType(UI.KeyboardShortcut.Type.UserShortcut));
-        if (originalShortcut.type === UI.KeyboardShortcut.Type.UnsetShortcut) {
+                .changeType(UI.KeyboardShortcut.Type.USER_SHORTCUT));
+        if (originalShortcut.type === UI.KeyboardShortcut.Type.UNSET_SHORTCUT) {
           Host.userMetrics.actionTaken(Host.UserMetrics.Action.UserShortcutAdded);
         } else {
           Host.userMetrics.actionTaken(Host.UserMetrics.Action.ShortcutModified);
@@ -315,7 +316,7 @@ export class ShortcutListItem {
   private readonly shortcutInputs: Map<UI.KeyboardShortcut.KeyboardShortcut, Element>;
   private readonly shortcuts: UI.KeyboardShortcut.KeyboardShortcut[];
   private elementToFocus: HTMLElement|null;
-  private confirmButton: HTMLButtonElement|null;
+  private confirmButton: Buttons.Button.Button|null;
   private addShortcutLinkContainer: Element|null;
   private errorMessageElement: Element|null;
   private secondKeyTimeout: number|null;
@@ -373,15 +374,12 @@ export class ShortcutListItem {
   }
 
   private setupEditor(): void {
-    this.addShortcutLinkContainer = this.element.createChild('div', 'keybinds-shortcut devtools-link');
-    const addShortcutLink = this.addShortcutLinkContainer.createChild('span', 'devtools-link') as HTMLDivElement;
-    addShortcutLink.setAttribute('jslog', `${VisualLogging.action('add-shortcut').track({click: true})}`);
-    addShortcutLink.textContent = i18nString(UIStrings.addAShortcut);
-    addShortcutLink.tabIndex = 0;
-    UI.ARIAUtils.markAsLink(addShortcutLink);
-    self.onInvokeElement(addShortcutLink, this.addShortcut.bind(this));
+    this.addShortcutLinkContainer = this.element.createChild('div', 'keybinds-shortcut');
+    const addShortcutButton = UI.UIUtils.createTextButton(
+        i18nString(UIStrings.addAShortcut), this.addShortcut.bind(this), {jslogContext: 'add-shortcut'});
+    this.addShortcutLinkContainer.appendChild(addShortcutButton);
     if (!this.elementToFocus) {
-      this.elementToFocus = addShortcutLink;
+      this.elementToFocus = addShortcutButton;
     }
 
     this.errorMessageElement = this.element.createChild('div', 'keybinds-info keybinds-error hidden');
@@ -409,7 +407,7 @@ export class ShortcutListItem {
 
   private addShortcut(): void {
     const shortcut =
-        new UI.KeyboardShortcut.KeyboardShortcut([], this.item.id(), UI.KeyboardShortcut.Type.UnsetShortcut);
+        new UI.KeyboardShortcut.KeyboardShortcut([], this.item.id(), UI.KeyboardShortcut.Type.UNSET_SHORTCUT);
     this.shortcuts.push(shortcut);
     this.update();
     const shortcutInput = this.shortcutInputs.get(shortcut) as HTMLElement;
@@ -423,7 +421,7 @@ export class ShortcutListItem {
       return;
     }
     let icon: IconButton.Icon.Icon;
-    if (shortcut.type !== UI.KeyboardShortcut.Type.UnsetShortcut && !shortcut.isDefault()) {
+    if (shortcut.type !== UI.KeyboardShortcut.Type.UNSET_SHORTCUT && !shortcut.isDefault()) {
       icon = IconButton.Icon.create('keyboard-pen', 'keybinds-modified');
       UI.ARIAUtils.setLabel(icon, i18nString(UIStrings.shortcutModified));
       this.element.appendChild(icon);
@@ -481,11 +479,9 @@ export class ShortcutListItem {
 
   private createIconButton(
       label: string, iconName: string, className: string, jslogContext: string,
-      listener: () => void): HTMLButtonElement {
-    const button = document.createElement('button') as HTMLButtonElement;
-    button.setAttribute('jslog', `${VisualLogging.action().track({click: true}).context(jslogContext)}`);
-    button.setAttribute('title', label);
-    button.appendChild(IconButton.Icon.create(iconName));
+      listener: () => void): Buttons.Button.Button {
+    const button = new Buttons.Button.Button();
+    button.data = {variant: Buttons.Button.Variant.ICON, iconName, jslogContext, title: label};
     button.addEventListener('click', listener);
     UI.ARIAUtils.setLabel(button, label);
     if (className) {
@@ -553,10 +549,10 @@ export class ShortcutListItem {
   private resetShortcutsToDefaults(): void {
     this.editedShortcuts.clear();
     for (const shortcut of this.shortcuts) {
-      if (shortcut.type === UI.KeyboardShortcut.Type.UnsetShortcut) {
+      if (shortcut.type === UI.KeyboardShortcut.Type.UNSET_SHORTCUT) {
         const index = this.shortcuts.indexOf(shortcut);
         this.shortcuts.splice(index, 1);
-      } else if (shortcut.type === UI.KeyboardShortcut.Type.UserShortcut) {
+      } else if (shortcut.type === UI.KeyboardShortcut.Type.USER_SHORTCUT) {
         this.editedShortcuts.set(shortcut, null);
       }
     }

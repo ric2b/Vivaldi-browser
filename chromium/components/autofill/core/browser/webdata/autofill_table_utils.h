@@ -99,6 +99,12 @@ bool DropColumn(sql::Database* db,
                 std::string_view table_name,
                 std::string_view column_name);
 
+// Drops the column named `column_name` from `table_name` if it exists and
+// returns true if the column does not exist or if it was dropped successfully.
+bool DropColumnIfExists(sql::Database* db,
+                        std::string_view table_name,
+                        std::string_view column_name);
+
 // Drops `table_name`, if the table exists. Returns true if the statement
 // finishes successfully, independently of whether a table was actually dropped.
 bool DropTableIfExists(sql::Database* db, std::string_view table_name);
@@ -156,16 +162,6 @@ bool SelectByGuid(sql::Database* db,
                   std::string_view table_name,
                   std::initializer_list<std::string_view> columns,
                   std::string_view guid);
-
-// Wrapper around `SelectBuilder()` that restricts it to the half-open interval
-// [low, high[ of `column_between`.
-void SelectBetween(sql::Database* db,
-                   sql::Statement& statement,
-                   std::string_view table_name,
-                   std::initializer_list<std::string_view> columns,
-                   std::string_view column_between,
-                   int64_t low,
-                   int64_t high);
 
 }  // namespace autofill
 

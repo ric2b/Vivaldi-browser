@@ -3,9 +3,9 @@
 #import "ios/panel/sidebar_panel_presentation_controller.h"
 
 #import "base/apple/foundation_util.h"
-#import "ios/chrome/browser/ui/tabs/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
+#import "ios/chrome/browser/tabs/ui_bundled/tab_strip_constants.h"
 #import "ios/panel/panel_constants.h"
 #import "ios/panel/slide_in_animator.h"
 #import "ios/panel/slide_out_animator.h"

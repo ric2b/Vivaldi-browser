@@ -18,7 +18,7 @@
 #include "config/av1_rtcd.h"
 #include "config/aom_scale_rtcd.h"
 
-static INLINE uint8x8_t scale_filter_8(const uint8x8_t *const s,
+static inline uint8x8_t scale_filter_8(const uint8x8_t *const s,
                                        const int16x8_t filter) {
   const int16x4_t filter_lo = vget_low_s16(filter);
   const int16x4_t filter_hi = vget_high_s16(filter);
@@ -44,7 +44,7 @@ static INLINE uint8x8_t scale_filter_8(const uint8x8_t *const s,
   return vqrshrun_n_s16(sum, FILTER_BITS);
 }
 
-static INLINE void scale_plane_2_to_1_phase_0(const uint8_t *src,
+static inline void scale_plane_2_to_1_phase_0(const uint8_t *src,
                                               const int src_stride,
                                               uint8_t *dst,
                                               const int dst_stride, const int w,
@@ -68,7 +68,7 @@ static INLINE void scale_plane_2_to_1_phase_0(const uint8_t *src,
   } while (--y);
 }
 
-static INLINE void scale_plane_4_to_1_phase_0(const uint8_t *src,
+static inline void scale_plane_4_to_1_phase_0(const uint8_t *src,
                                               const int src_stride,
                                               uint8_t *dst,
                                               const int dst_stride, const int w,
@@ -92,7 +92,7 @@ static INLINE void scale_plane_4_to_1_phase_0(const uint8_t *src,
   } while (--y);
 }
 
-static INLINE void scale_plane_bilinear_kernel(
+static inline void scale_plane_bilinear_kernel(
     const uint8x16_t in0, const uint8x16_t in1, const uint8x16_t in2,
     const uint8x16_t in3, const uint8x8_t coef0, const uint8x8_t coef1,
     uint8_t *const dst) {
@@ -118,7 +118,7 @@ static INLINE void scale_plane_bilinear_kernel(
   vst1q_u8(dst, d);
 }
 
-static INLINE void scale_plane_2_to_1_bilinear(
+static inline void scale_plane_2_to_1_bilinear(
     const uint8_t *const src, const int src_stride, uint8_t *dst,
     const int dst_stride, const int w, const int h, const int16_t c0,
     const int16_t c1) {
@@ -153,7 +153,7 @@ static INLINE void scale_plane_2_to_1_bilinear(
   } while (--y);
 }
 
-static INLINE void scale_plane_4_to_1_bilinear(
+static inline void scale_plane_4_to_1_bilinear(
     const uint8_t *const src, const int src_stride, uint8_t *dst,
     const int dst_stride, const int w, const int h, const int16_t c0,
     const int16_t c1) {
@@ -415,7 +415,7 @@ static void scale_plane_4_to_1_general(const uint8_t *src, const int src_stride,
   } while (x);
 }
 
-static INLINE uint8x8_t scale_filter_bilinear(const uint8x8_t *const s,
+static inline uint8x8_t scale_filter_bilinear(const uint8x8_t *const s,
                                               const uint8x8_t *const coef) {
   const uint16x8_t h0 = vmull_u8(s[0], coef[0]);
   const uint16x8_t h1 = vmlal_u8(h0, s[1], coef[1]);
@@ -727,7 +727,7 @@ static void scale_plane_4_to_3_general(const uint8_t *src, const int src_stride,
 }
 
 // There's SIMD optimizations for 1/4, 1/2 and 3/4 downscaling in NEON.
-static INLINE bool has_normative_scaler_neon(const int src_width,
+static inline bool has_normative_scaler_neon(const int src_width,
                                              const int src_height,
                                              const int dst_width,
                                              const int dst_height) {

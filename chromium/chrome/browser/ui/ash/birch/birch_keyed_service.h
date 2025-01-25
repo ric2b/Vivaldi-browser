@@ -12,6 +12,7 @@
 #include "base/scoped_observation.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "ui/base/models/image_model.h"
 
 class Profile;
 
@@ -64,13 +65,12 @@ class BirchKeyedService : public KeyedService,
   base::FilePath GetRemovedItemsFilePath() override;
   void RemoveFileItemFromLauncher(const base::FilePath& path) override;
 
-  void GetFaviconImageForIconURL(
-      const GURL& icon_url,
+  void GetFaviconImage(
+      const GURL& page_url,
+      const bool is_page_url,
       base::OnceCallback<void(const ui::ImageModel&)> callback) override;
 
-  void GetFaviconImageForPageURL(
-      const GURL& page_url,
-      base::OnceCallback<void(const ui::ImageModel&)> callback) override;
+  ui::ImageModel GetChromeBackupIcon() override;
 
   void set_calendar_provider_for_test(BirchDataProvider* provider) {
     calendar_provider_for_test_ = provider;

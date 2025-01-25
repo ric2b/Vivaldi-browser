@@ -11,7 +11,7 @@
 #include "components/plus_addresses/settings/plus_address_setting_service.h"
 
 namespace syncer {
-class ModelTypeControllerDelegate;
+class DataTypeControllerDelegate;
 }
 
 namespace plus_addresses {
@@ -31,12 +31,12 @@ class PlusAddressSettingServiceImpl : public PlusAddressSettingService {
   bool GetIsPlusAddressesEnabled() const override;
   bool GetHasAcceptedNotice() const override;
   void SetHasAcceptedNotice() override;
-  std::unique_ptr<syncer::ModelTypeControllerDelegate>
+  std::unique_ptr<syncer::DataTypeControllerDelegate>
   GetSyncControllerDelegate() override;
 
  private:
   // Internal helpers to get the setting value for a given setting name by
-  // type. If no setting of the given name exists, the default value is
+  // type. If no setting of the given name exists, the `default_value` is
   // returned.
   // If a setting of the given name exists, but the type doesn't match...
   // - a DCHECK() will fail. This is intended to catch coding errors during
@@ -45,7 +45,7 @@ class PlusAddressSettingServiceImpl : public PlusAddressSettingService {
   //   to avoid that external factors lead to a crashing state, since settings
   //   are received via the network.
   // No string or int64_t getters exists, since no such settings are synced yet.
-  bool GetBoolean(std::string_view name) const;
+  bool GetBoolean(std::string_view name, bool default_value) const;
 
   const std::unique_ptr<PlusAddressSettingSyncBridge> sync_bridge_;
 };

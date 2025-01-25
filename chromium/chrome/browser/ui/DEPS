@@ -24,6 +24,7 @@ include_rules = [
   "+components/soda",
   "+components/supervised_user/core/common",
   "+components/tab_groups",
+  "+components/tpcd/enterprise_reporting",
   "+components/translate/content/android",
   "+components/user_education/common",
   "+components/user_education/test",
@@ -58,6 +59,9 @@ specific_include_rules = {
   ],
   "sad_tab_helper.cc": [
     "+content/common/content_navigation_policy.h",
+  ],
+  "settings_window_manager_chromeos\.cc": [
+    "+ash/wm/window_properties.h",
   ],
   "hid_chooser_controller_unittest\.cc": [
     "+services/device/hid",

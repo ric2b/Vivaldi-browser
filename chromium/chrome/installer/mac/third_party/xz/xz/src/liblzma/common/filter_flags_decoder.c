@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       filter_flags_decoder.c
 /// \brief      Decodes a Filter Flags field
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -15,7 +14,7 @@
 
 extern LZMA_API(lzma_ret)
 lzma_filter_flags_decode(
-		lzma_filter *filter, lzma_allocator *allocator,
+		lzma_filter *filter, const lzma_allocator *allocator,
 		const uint8_t *in, size_t *in_pos, size_t in_size)
 {
 	// Set the pointer to NULL so the caller can always safely free it.

@@ -12,6 +12,7 @@
 <translation id="1454726940098520109">Não mostrar confirmação novamente</translation>
 <translation id="1462666970065907900">Quer mesmo fechar esta janela?</translation>
 <translation id="1480046233931937785">Créditos</translation>
+<translation id="1521774566618522728">Ativado hoje</translation>
 <translation id="1526344461589023948">Ocorreu um erro ao tentar gravar uma atualização transferida. Confirme que o computador tem espaço suficiente em disco e tente novamente mais tarde.</translation>
 <translation id="1635542496948266458">Trocar perfis</translation>
 <translation id="1657174850639146440">Monstro 9</translation>
@@ -28,7 +29,7 @@
 <translation id="1973351931613083086">reprodução automática</translation>
 <translation id="1985669426322966465">Atualização de software</translation>
 <translation id="2079036669923635404">Clique aqui para atualizar o Vivaldi para a versão <ph name="VERSION" />.</translation>
-<translation id="2141974047387702305">Ocorreu um erro ao transferir ficheiros de atualização. Verifique a sua ligação à internet e tente novamente mais tarde.</translation>
+<translation id="2141974047387702305">Ocorreu um erro ao transferir ficheiros de atualização. Verifique a sua ligação à Internet e tente novamente mais tarde.</translation>
 <translation id="2226825946708954262">⚠ Continuar com perda de dados</translation>
 <translation id="2339641773402824483">A procurar atualizações...</translation>
 <translation id="2441056087170876076">Monstro 2</translation>
@@ -97,6 +98,7 @@
 <translation id="4430019312045809116">Volume</translation>
 <translation id="443008484043213881">Ferramentas</translation>
 <translation id="4456211719108566931">Monstro 6</translation>
+<translation id="4459169140545916303">Ativado há <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dias</translation>
 <translation id="4512900838580567989">Abrir ligação num novo separador em segundo plano</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Abrir imagem num novo separador em segundo plano</translation>
@@ -148,6 +150,7 @@
 <translation id="7099506190679014195">Atualização segura da keystore</translation>
 <translation id="7111492742514999492">Paisagem 9</translation>
 <translation id="7208252576848052204">Infelizmente, as suas definições Arc não estão disponíveis enquanto esse navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Arc. Depois, clique em Continuar.</translation>
+<translation id="7321500017121629018">Ativado ontem</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Falhou a execução do instalador de atualizações. Confirme que o computador tem memória ou espaço em disco suficiente e tente novamente mais tarde.</translation>
 <translation id="7658239707568436148">Cancelar</translation>

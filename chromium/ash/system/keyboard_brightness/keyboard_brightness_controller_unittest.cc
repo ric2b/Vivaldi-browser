@@ -6,13 +6,16 @@
 
 #include "ash/constants/ash_pref_names.h"
 #include "ash/login/login_screen_controller.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
+#include "ash/system/power/power_status.h"
 #include "ash/test/ash_test_base.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "components/user_manager/known_user.h"
 
@@ -23,6 +26,26 @@ namespace {
 constexpr char kUserEmail[] = "user@example.com";
 constexpr char kUserEmailSecondary[] = "user2@example.com";
 constexpr double kInitialKeyboardBrightness = 40.0;
+
+power_manager::PowerSupplyProperties BuildFakePowerSupplyProperties(
+    power_manager::PowerSupplyProperties::ExternalPower charger_state) {
+  power_manager::PowerSupplyProperties fake_power;
+  fake_power.set_external_power(charger_state);
+  fake_power.set_battery_percent(50);
+  return fake_power;
+}
+
+void SetBatteryPower() {
+  DCHECK(PowerStatus::IsInitialized());
+  PowerStatus::Get()->SetProtoForTesting(BuildFakePowerSupplyProperties(
+      power_manager::PowerSupplyProperties::DISCONNECTED));
+}
+
+void SetChargerPower() {
+  DCHECK(PowerStatus::IsInitialized());
+  PowerStatus::Get()->SetProtoForTesting(
+      BuildFakePowerSupplyProperties(power_manager::PowerSupplyProperties::AC));
+}
 
 }  // namespace
 
@@ -46,7 +69,9 @@ class FakeKeyboardBrightnessControlDelegate
       KeyboardBrightnessChangeSource source) override {
     keyboard_brightness_ = percent;
   }
-  void HandleSetKeyboardAmbientLightSensorEnabled(bool enabled) override {}
+  void HandleSetKeyboardAmbientLightSensorEnabled(
+      bool enabled,
+      KeyboardAmbientLightSensorEnabledChangeSource source) override {}
 
   void HandleGetKeyboardAmbientLightSensorEnabled(
       base::OnceCallback<void(std::optional<bool>)> callback) override {}
@@ -74,7 +99,8 @@ class FakeKeyboardBrightnessControlDelegate
 
 class KeyboardBrightnessControllerTest : public AshTestBase {
  public:
-  KeyboardBrightnessControllerTest() = default;
+  KeyboardBrightnessControllerTest()
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -168,7 +194,9 @@ class KeyboardBrightnessControllerTest : public AshTestBase {
       bool enabled,
       power_manager::AmbientLightSensorChange_Cause cause) {
     keyboard_brightness_control_delegate()
-        ->HandleSetKeyboardAmbientLightSensorEnabled(enabled);
+        ->HandleSetKeyboardAmbientLightSensorEnabled(
+            enabled,
+            KeyboardAmbientLightSensorEnabledChangeSource::kSettingsApp);
     power_manager::AmbientLightSensorChange sensor_change;
     sensor_change.set_sensor_enabled(enabled);
     sensor_change.set_cause(cause);
@@ -214,6 +242,10 @@ class KeyboardBrightnessControllerTest : public AshTestBase {
             }));
   }
 
+  void AdvanceClock(base::TimeDelta time) {
+    task_environment()->AdvanceClock(time);
+  }
+
  protected:
   base::RunLoop run_loop_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
@@ -240,7 +272,8 @@ TEST_F(KeyboardBrightnessControllerTest, SetKeyboardAmbientLightSensorEnabled) {
   EXPECT_TRUE(power_manager_client()->keyboard_ambient_light_sensor_enabled());
   // Disable the ambient light sensor.
   keyboard_brightness_control_delegate()
-      ->HandleSetKeyboardAmbientLightSensorEnabled(false);
+      ->HandleSetKeyboardAmbientLightSensorEnabled(
+          false, KeyboardAmbientLightSensorEnabledChangeSource::kSettingsApp);
 
   // Verify that the ambient light sensor is now disabled.
   EXPECT_FALSE(power_manager_client()->keyboard_ambient_light_sensor_enabled());
@@ -253,7 +286,8 @@ TEST_F(KeyboardBrightnessControllerTest, SetKeyboardAmbientLightSensorEnabled) {
 
   // Re-enabled the ambient light sensor
   keyboard_brightness_control_delegate()
-      ->HandleSetKeyboardAmbientLightSensorEnabled(true);
+      ->HandleSetKeyboardAmbientLightSensorEnabled(
+          true, KeyboardAmbientLightSensorEnabledChangeSource::kSettingsApp);
 
   // Verify that the ambient light sensor is enabled.
   EXPECT_TRUE(power_manager_client()->keyboard_ambient_light_sensor_enabled());
@@ -267,7 +301,9 @@ TEST_F(KeyboardBrightnessControllerTest, SetKeyboardAmbientLightSensorEnabled) {
 
 TEST_F(KeyboardBrightnessControllerTest, SaveKeyboardALSPrefToKnownUser) {
   // Set initial ALS status.
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
 
   // Clear user sessions and reset to the primary login screen.
   ClearLogin();
@@ -453,7 +489,9 @@ TEST_F(KeyboardBrightnessControllerTest,
       features::kEnableKeyboardBacklightControlInSettings);
 
   // Set initial ALS status and brightness level.
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_keyboard_brightness_percent(
       kInitialKeyboardBrightness);
 
@@ -498,10 +536,11 @@ TEST_F(KeyboardBrightnessControllerTest,
   ExpectKeyboardBrightnessPercent(first_brightness_change_percent);
 
   // Simulate a reboot, which resets the value of the keyboard ambient light
-  // sensor and
-  // the keyboard brightness.
+  // sensor and the keyboard brightness.
   ClearLogin();
-  power_manager_client()->SetAmbientLightSensorEnabled(true);
+  power_manager::SetAmbientLightSensorEnabledRequest request2;
+  request2.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request2);
   power_manager_client()->set_screen_brightness_percent(
       kInitialKeyboardBrightness);
 
@@ -530,7 +569,9 @@ TEST_F(KeyboardBrightnessControllerTest,
       features::kEnableKeyboardBacklightControlInSettings);
 
   // Set initial ALS status.
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_keyboard_brightness_percent(
       kInitialKeyboardBrightness);
 
@@ -575,7 +616,8 @@ TEST_F(KeyboardBrightnessControllerTest,
   // Simulate a reboot, which resets the value of the ambient light sensor.
   // the keyboard brightness.
   ClearLogin();
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_keyboard_brightness_percent(
       kInitialKeyboardBrightness);
 
@@ -600,7 +642,9 @@ TEST_F(KeyboardBrightnessControllerTest,
 
 TEST_F(KeyboardBrightnessControllerTest, KeyboardALSDisabledReasonPref) {
   // Set initial ALS status and brightness level.
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_keyboard_brightness_percent(
       kInitialKeyboardBrightness);
 
@@ -655,7 +699,9 @@ TEST_F(KeyboardBrightnessControllerTest, KeyboardAmbientLightEnabledUserPref) {
       session_manager::SessionState::ACTIVE);
 
   // Set the ambient light sensor to be enabled initially.
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   run_loop_.RunUntilIdle();
 
   // User pref is default to true.
@@ -663,7 +709,25 @@ TEST_F(KeyboardBrightnessControllerTest, KeyboardAmbientLightEnabledUserPref) {
       Shell::Get()->session_controller()->GetActivePrefService()->GetBoolean(
           prefs::kKeyboardAmbientLightSensorLastEnabled));
 
-  // Disable the sensor via user settings and verify the preference updates.
+  // Disable the sensor via brightness change (not from settings app), pref
+  // should remain true.
+  SetKeyboardAmbientLightSensorEnabled(
+      false, power_manager::AmbientLightSensorChange_Cause::
+                 AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST);
+  EXPECT_TRUE(
+      Shell::Get()->session_controller()->GetActivePrefService()->GetBoolean(
+          prefs::kKeyboardAmbientLightSensorLastEnabled));
+
+  // Re-enable the sensor from settings app, pref should be true.
+  SetKeyboardAmbientLightSensorEnabled(
+      true, power_manager::AmbientLightSensorChange_Cause::
+                AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP);
+  EXPECT_TRUE(
+      Shell::Get()->session_controller()->GetActivePrefService()->GetBoolean(
+          prefs::kKeyboardAmbientLightSensorLastEnabled));
+
+  // Disable the sensor again, this time, the request is from settings app, the
+  // pref should be updated to false.
   SetKeyboardAmbientLightSensorEnabled(
       false, power_manager::AmbientLightSensorChange_Cause::
                  AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP);
@@ -686,9 +750,12 @@ TEST_F(KeyboardBrightnessControllerTest,
       features::kEnableKeyboardBacklightControlInSettings);
 
   // Set initial ALS and keyboard brightness.
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_keyboard_brightness_percent(
       kInitialKeyboardBrightness);
+  run_loop_.RunUntilIdle();
 
   // Clear user sessions and reset to the primary login screen.
   ClearLogin();
@@ -719,7 +786,8 @@ TEST_F(KeyboardBrightnessControllerTest,
   // Simulate a reboot, which resets the value of the ambient light sensor and
   // the keyboard brightness.
   ClearLogin();
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_keyboard_brightness_percent(
       kInitialKeyboardBrightness);
 
@@ -754,9 +822,12 @@ TEST_F(KeyboardBrightnessControllerTest,
       features::kEnableKeyboardBacklightControlInSettings);
 
   // Set initial ALS and keyboard brightness.
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_keyboard_brightness_percent(
       kInitialKeyboardBrightness);
+  run_loop_.RunUntilIdle();
 
   // Clear user sessions and reset to the primary login screen.
   ClearLogin();
@@ -787,7 +858,8 @@ TEST_F(KeyboardBrightnessControllerTest,
   // Simulate a reboot, which resets the value of the ambient light sensor and
   // the keyboard brightness.
   ClearLogin();
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_keyboard_brightness_percent(
       kInitialKeyboardBrightness);
 
@@ -840,15 +912,299 @@ TEST_F(KeyboardBrightnessControllerTest, SetKeyboardBrightness_Cause) {
 }
 
 TEST_F(KeyboardBrightnessControllerTest,
-       RecordStartupKeyboardAmbientLightSensorStatus) {
+       ReenableKeyboardAmbientLightSensor_Reboot_DisabledFromSettingsApp) {
   scoped_feature_list_.InitAndEnableFeature(
       features::kEnableKeyboardBacklightControlInSettings);
-  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(true);
+
+  // Set initial ALS and keyboard brightness.
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
+  power_manager_client()->set_keyboard_brightness_percent(
+      kInitialKeyboardBrightness);
+  run_loop_.RunUntilIdle();
+
+  // Log in
+  ClearLogin();
+  AccountId account_id = AccountId::FromUserEmail(kUserEmail);
+  user_manager::KnownUser known_user(local_state());
+  SimulateUserLogin(kUserEmail);
+
+  // Set ALS to false, and set the disabled reason to be
+  // USER_REQUEST_SETTINGS_APP.
+  SetKeyboardAmbientLightSensorEnabled(
+      false,
+      power_manager::AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP);
+  known_user.SetPath(
+      account_id, prefs::kKeyboardAmbientLightSensorDisabledReason,
+      std::make_optional<base::Value>(
+          power_manager::
+              AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP));
+
+  // ALS is disabled.
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+  EXPECT_EQ(false, GetKeyboardAmbientLightSensorEnabledPrefValue(known_user,
+                                                                 account_id));
+
+  // "disabled reason" pref stored in KnownUser should be
+  // USER_REQUEST_SETTINGS_APP.
+  EXPECT_TRUE(HasKeyboardAmbientLightSensorDisabledReasonPrefValue(known_user,
+                                                                   account_id));
+  EXPECT_EQ(
+      power_manager::AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP,
+      GetKeyboardAmbientLightSensorDisabledReasonPrefValue(known_user,
+                                                           account_id));
+
+  // Simulate reboot, and log in again.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  known_user.SetPath(account_id, prefs::kKeyboardBrightnessPercent,
+                     std::make_optional<base::Value>(30.0));
+  login_data_dispatcher()->NotifyFocusPod(account_id);
+
+  // Expect ambient light sensor remain disabled, and brightness should be
+  // restored.
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+  ExpectKeyboardBrightnessPercent(30.0);
+
+  // Simulate reboot, and log in the third time.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  login_data_dispatcher()->NotifyFocusPod(account_id);
+
+  // ALS and brightness should remain the same as last reboot.
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+  ExpectKeyboardBrightnessPercent(30.0);
+}
+
+TEST_F(KeyboardBrightnessControllerTest,
+       ReenableKeyboardAmbientLightSensor_Reboot_DisabledFromBrightnessKey) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kEnableKeyboardBacklightControlInSettings);
+
+  // Set initial ALS and keyboard brightness.
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
+  power_manager_client()->set_keyboard_brightness_percent(
+      kInitialKeyboardBrightness);
+  run_loop_.RunUntilIdle();
+
+  // Log in
+  ClearLogin();
+  AccountId account_id = AccountId::FromUserEmail(kUserEmail);
+  user_manager::KnownUser known_user(local_state());
+  SimulateUserLogin(kUserEmail);
+
+  // Set ALS to false by brightness key, and set the disabled reason to be
+  // BRIGHTNESS_USER_REQUEST.
+  SetKeyboardAmbientLightSensorEnabled(
+      false,
+      power_manager::AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST);
+  known_user.SetPath(
+      account_id, prefs::kKeyboardAmbientLightSensorDisabledReason,
+      std::make_optional<base::Value>(
+          power_manager::
+              AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST));
+
+  // ALS is disabled.
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+  EXPECT_EQ(false, GetKeyboardAmbientLightSensorEnabledPrefValue(known_user,
+                                                                 account_id));
+
+  // "disabled reason" pref stored in KnownUser should be
+  // USER_REQUEST_SETTINGS_APP.
+  EXPECT_TRUE(HasKeyboardAmbientLightSensorDisabledReasonPrefValue(known_user,
+                                                                   account_id));
+  EXPECT_EQ(
+      power_manager::AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST,
+      GetKeyboardAmbientLightSensorDisabledReasonPrefValue(known_user,
+                                                           account_id));
+
+  // Simulate reboot, and log in again.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  known_user.SetPath(account_id, prefs::kKeyboardBrightnessPercent,
+                     std::make_optional<base::Value>(30.0));
+  login_data_dispatcher()->NotifyFocusPod(account_id);
+
+  // Expect ambient light sensor is re-enabled.
+  ExpectKeyboardAmbientLightSensorEnabled(true);
+
+  // Simulate reboot, and log in the third time.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  login_data_dispatcher()->NotifyFocusPod(account_id);
+
+  // ALS and should remain the same as last reboot.
+  ExpectKeyboardAmbientLightSensorEnabled(true);
+}
+
+TEST_F(KeyboardBrightnessControllerTest,
+       BrightnessSettingsUnchanged_DeviceLocked) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kEnableKeyboardBacklightControlInSettings);
+
+  // Set initial ALS and keyboard brightness.
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
+  power_manager_client()->set_keyboard_brightness_percent(
+      kInitialKeyboardBrightness);
+  run_loop_.RunUntilIdle();
+
+  // Log in
+  ClearLogin();
+  AccountId account_id = AccountId::FromUserEmail(kUserEmail);
+  user_manager::KnownUser known_user(local_state());
+  SimulateUserLogin(kUserEmail);
+
+  // Disable ALS using the brightness key.
+  SetKeyboardAmbientLightSensorEnabled(
+      false,
+      power_manager::AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST);
+
+  // Current status: Als is turned off, and current brightness is
+  // kInitialBrightness.
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+  ExpectKeyboardBrightnessPercent(kInitialKeyboardBrightness);
+
+  // Simulate device lock and re-login.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  login_data_dispatcher()->NotifyFocusPod(account_id);
+
+  // Als should not be re-enabled, although it was not previously disabled from
+  // settings app. The brightness percent should still be
+  // kInitialKeyboardBrightness.
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+  ExpectKeyboardBrightnessPercent(kInitialKeyboardBrightness);
+}
+
+TEST_F(KeyboardBrightnessControllerTest, RestoreBrightnessSettings_NoSensor) {
+  // Test case: Disable ALS via brightness key and restore brightness settings.
+  // When the device has no sensor. ALS should not be re-enabled after login.
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kEnableKeyboardBacklightControlInSettings);
+
+  // Set initial ALS and keyboard brightness.
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
+  power_manager_client()->set_keyboard_brightness_percent(
+      kInitialKeyboardBrightness);
+  run_loop_.RunUntilIdle();
+
+  // Log in
+  ClearLogin();
+  AccountId account_id = AccountId::FromUserEmail(kUserEmail);
+  user_manager::KnownUser known_user(local_state());
+  SimulateUserLogin(kUserEmail);
+
+  // Disable ALS
+  SetKeyboardAmbientLightSensorEnabled(
+      false,
+      power_manager::AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST);
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+
+  // Set the device to have no ambient light sensor.
+  power_manager_client()->set_has_ambient_light_sensor(false);
+  power_manager_client()->set_has_keyboard_backlight(true);
+
+  // Reinitialize controller to apply updates.
+  auto controller = std::make_unique<KeyboardBrightnessController>(
+      local_state(), Shell::Get()->session_controller());
+  run_loop_.RunUntilIdle();
+
+  // Before reboot, set saved prefs: ALS disabled
+  // reason (BRIGHTNESS_USER_REQUEST) and brightness percent (30.0).
+  known_user.SetPath(
+      account_id, prefs::kKeyboardAmbientLightSensorDisabledReason,
+      std::make_optional<base::Value>(
+          power_manager::
+              AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST));
+  known_user.SetPath(account_id, prefs::kKeyboardBrightnessPercent,
+                     std::make_optional<base::Value>(30.0));
+
+  // Simulate reboot, and log in again.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  login_data_dispatcher()->NotifyFocusPod(account_id);
+
+  // Verify ALS is not re-enabled, brightness percent is restored to 30.0.
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+  ExpectKeyboardBrightnessPercent(30.0);
+}
+
+TEST_F(KeyboardBrightnessControllerTest, RestoreBrightnessSettings_HasSensor) {
+  // Test case: Disable ALS via brightness key and restore brightness settings.
+  // when the device has a sensor. ALS should be re-enabled after login.
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kEnableKeyboardBacklightControlInSettings);
+
+  // Set initial ALS and keyboard brightness.
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
+  power_manager_client()->set_keyboard_brightness_percent(
+      kInitialKeyboardBrightness);
+  run_loop_.RunUntilIdle();
+
+  // Log in
+  ClearLogin();
+  AccountId account_id = AccountId::FromUserEmail(kUserEmail);
+  user_manager::KnownUser known_user(local_state());
+  SimulateUserLogin(kUserEmail);
+
+  // Set ALS to false.
+  SetKeyboardAmbientLightSensorEnabled(
+      false,
+      power_manager::AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST);
+  ExpectKeyboardAmbientLightSensorEnabled(false);
+
+  // Set the device to have an ambient light sensor.
+  power_manager_client()->set_has_ambient_light_sensor(true);
+  power_manager_client()->set_has_keyboard_backlight(true);
+
+  // Reinitialize controller to apply updates.
+  auto controller = std::make_unique<KeyboardBrightnessController>(
+      local_state(), Shell::Get()->session_controller());
+  run_loop_.RunUntilIdle();
+
+  // Before reboot, set saved prefs: ALS disabled
+  // reason(BRIGHTNESS_USER_REQUEST) and brightness percent (30.0).
+  known_user.SetPath(
+      account_id, prefs::kKeyboardAmbientLightSensorDisabledReason,
+      std::make_optional<base::Value>(
+          power_manager::
+              AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST));
+  known_user.SetPath(account_id, prefs::kKeyboardBrightnessPercent,
+                     std::make_optional<base::Value>(30.0));
+
+  // Simulate reboot and login again.
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  LoginScreenFocusAccount(account_id);
+
+  // Verify ambient light sensor is re-enabled, because als was disabled by
+  // brightness key, and the brightness percent should be
+  // kInitialKeyboardBrightness instead of 30.0.
+  ExpectKeyboardAmbientLightSensorEnabled(true);
+  ExpectKeyboardBrightnessPercent(kInitialKeyboardBrightness);
+}
+
+TEST_F(KeyboardBrightnessControllerTest,
+       RecordStartupKeyboardAmbientLightSensorStatus) {
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.Startup.AmbientLightSensorEnabled", 0);
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kEnableKeyboardBacklightControlInSettings);
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(true);
+  power_manager_client()->SetKeyboardAmbientLightSensorEnabled(request);
   power_manager_client()->set_has_ambient_light_sensor(true);
   base::RunLoop().RunUntilIdle();
 
-  histogram_tester_->ExpectTotalCount(
-      "ChromeOS.Keyboard.Startup.AmbientLightSensorEnabled", 0);
   // Log in.
   ClearLogin();
   AccountId account_id = AccountId::FromUserEmail(kUserEmail);
@@ -861,6 +1217,283 @@ TEST_F(KeyboardBrightnessControllerTest,
   LoginScreenFocusAccount(account_id);
   histogram_tester_->ExpectTotalCount(
       "ChromeOS.Keyboard.Startup.AmbientLightSensorEnabled", 1);
+}
+
+TEST_F(KeyboardBrightnessControllerTest,
+       HistogramTest_DecreaseBrightnessOnLoginScreen) {
+  // Metric count should start at 0.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "DecreaseBrightness.BatteryPower",
+      0);
+
+  // Start on the login screen
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+
+  // "Unplug" the device from charger
+  SetBatteryPower();
+
+  // Wait for a period of time, then send a brightness event
+  int seconds_to_wait = 11;
+  AdvanceClock(base::Seconds(seconds_to_wait));
+  keyboard_brightness_control_delegate()->HandleKeyboardBrightnessDown();
+
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "DecreaseBrightness.BatteryPower",
+      1);
+  histogram_tester_->ExpectTimeBucketCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "DecreaseBrightness.BatteryPower",
+      base::Seconds(seconds_to_wait), 1);
+
+  // Login
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+
+  // Wait for a period of time, then send another brightness event
+  AdvanceClock(base::Seconds(5));
+  keyboard_brightness_control_delegate()->HandleKeyboardBrightnessDown();
+
+  // The number of events should not have changed, since we already recorded a
+  // metric on the login screen.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "DecreaseBrightness.BatteryPower",
+      1);
+}
+
+TEST_F(KeyboardBrightnessControllerTest, HistogramTest_LoginSecondary) {
+  // Metric count should start at 0.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "DecreaseBrightness.BatteryPower",
+      0);
+
+  // Start on the "secondary" login screen (i.e. another user is already
+  // logged-in, and another user is now logging in).
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_SECONDARY);
+
+  // "Unplug" the device from charger
+  SetBatteryPower();
+
+  // Wait for a period of time, then send a brightness event
+  int seconds_to_wait = 22;
+  AdvanceClock(base::Seconds(seconds_to_wait));
+  keyboard_brightness_control_delegate()->HandleKeyboardBrightnessDown();
+
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "DecreaseBrightness.BatteryPower",
+      1);
+  histogram_tester_->ExpectTimeBucketCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "DecreaseBrightness.BatteryPower",
+      base::Seconds(seconds_to_wait), 1);
+
+  // Login
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+
+  // Wait for a period of time, then send another brightness event
+  AdvanceClock(base::Seconds(5));
+  keyboard_brightness_control_delegate()->HandleKeyboardBrightnessDown();
+
+  // The number of events should not have changed, since we already recorded a
+  // metric on the login screen.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "DecreaseBrightness.BatteryPower",
+      1);
+}
+
+TEST_F(KeyboardBrightnessControllerTest, HistogramTest_PowerSourceCharger) {
+  // Metric count should start at 0.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "IncreaseBrightness.ChargerPower",
+      0);
+
+  // Start on the login screen
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+
+  // "Plug in" the charger
+  SetChargerPower();
+
+  // Wait for a period of time, then send a brightness event
+  int seconds_to_wait = 8;
+  AdvanceClock(base::Seconds(seconds_to_wait));
+  keyboard_brightness_control_delegate()->HandleKeyboardBrightnessUp();
+
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "IncreaseBrightness.ChargerPower",
+      1);
+  histogram_tester_->ExpectTimeBucketCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLoginScreen."
+      "IncreaseBrightness.ChargerPower",
+      base::Seconds(seconds_to_wait), 1);
+}
+
+TEST_F(KeyboardBrightnessControllerTest,
+       HistogramTest_BrightnessChangeAfterLogin) {
+  // Metric count should start at 0.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "SetBrightness.ChargerPower",
+      0);
+
+  // Start on the login screen
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+
+  // "Plug in" the charger
+  SetChargerPower();
+
+  // Wait for a period of time, but don't change brightness.
+  AdvanceClock(base::Seconds(9));
+
+  // Login
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+
+  // Wait for a period of time, then send another brightness event
+  int seconds_to_wait = 5;
+  AdvanceClock(base::Seconds(seconds_to_wait));
+  keyboard_brightness_control_delegate()->HandleSetKeyboardBrightness(
+      50, true, KeyboardBrightnessChangeSource::kSettingsApp);
+
+  // Expect a record with the number of seconds since login, not since the
+  // beginning of the login screen.
+  histogram_tester_->ExpectTimeBucketCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "SetBrightness.ChargerPower",
+      base::Seconds(seconds_to_wait), 1);
+}
+
+TEST_F(KeyboardBrightnessControllerTest,
+       HistogramTest_BrightnessChangeAfterLogin_LongDuration) {
+  // Metric count should start at 0.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "IncreaseBrightness.BatteryPower",
+      0);
+
+  // Start on the login screen
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+
+  // "Unplug" the charger
+  SetBatteryPower();
+
+  // Wait for a period of time, but don't change brightness.
+  AdvanceClock(base::Seconds(20));
+
+  // Login
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+
+  // Wait for a period of time, then send another brightness event
+  int minutes_to_wait = 35;
+  AdvanceClock(base::Minutes(minutes_to_wait));
+  keyboard_brightness_control_delegate()->HandleKeyboardBrightnessUp();
+
+  // Expect a record with the number of minutes since login, not since the
+  // beginning of the login screen.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "IncreaseBrightness.BatteryPower",
+      1);
+  histogram_tester_->ExpectTimeBucketCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "IncreaseBrightness.BatteryPower",
+      base::Minutes(minutes_to_wait), 1);
+}
+
+TEST_F(KeyboardBrightnessControllerTest,
+       HistogramTest_BrightnessChangeAfterLogin_DurationGreaterThanOneHour) {
+  // Start on the login screen
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+
+  // "Unplug" the charger
+  SetBatteryPower();
+
+  // Wait for a period of time, but don't change brightness.
+  AdvanceClock(base::Seconds(1));
+
+  // Login
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+
+  // Wait for > 1 hour, then send a brightness event.
+  AdvanceClock(base::Hours(1) + base::Minutes(5));
+  keyboard_brightness_control_delegate()->HandleKeyboardBrightnessUp();
+
+  // Since the brightness event occurred >1 hour after login, don't record it.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "IncreaseBrightness.BatteryPower",
+      0);
+}
+
+TEST_F(KeyboardBrightnessControllerTest,
+       HistogramTest_SetBrightnessAfterSystemRestoration) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kEnableKeyboardBacklightControlInSettings);
+
+  // Start on the login screen
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::LOGIN_PRIMARY);
+  SetBatteryPower();
+
+  // Metrics count should start at 0, both OnLogin and AfterLogin.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLogin."
+      "SetBrightness.BatteryPower",
+      0);
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "SetBrightness.BatteryPower",
+      0);
+
+  // Log in
+  ClearLogin();
+  AccountId account_id = AccountId::FromUserEmail(kUserEmail);
+  user_manager::KnownUser known_user(local_state());
+  SimulateUserLogin(kUserEmail);
+
+  // Set keyboard brightness.
+  known_user.SetPath(account_id, prefs::kKeyboardBrightnessPercent,
+                     std::make_optional<base::Value>(30.0));
+
+  // Simulate reboot, brightness should be restored.
+  login_data_dispatcher()->NotifyFocusPod(account_id);
+
+  // Verify that system restoring brightness is not recorded.
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.OnLogin."
+      "SetBrightness.BatteryPower",
+      0);
+  histogram_tester_->ExpectTotalCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "SetBrightness.BatteryPower",
+      0);
+
+  // Wait and then simulate a user-initiated brightness change.
+  int seconds_to_wait = 5;
+  AdvanceClock(base::Seconds(seconds_to_wait));
+  keyboard_brightness_control_delegate()->HandleSetKeyboardBrightness(
+      50, true, KeyboardBrightnessChangeSource::kSettingsApp);
+
+  // Verify that the user-initiated brightness change is recorded.
+  histogram_tester_->ExpectTimeBucketCount(
+      "ChromeOS.Keyboard.TimeUntilFirstBrightnessChange.AfterLogin."
+      "SetBrightness.BatteryPower",
+      base::Seconds(seconds_to_wait), 1);
 }
 
 }  // namespace ash

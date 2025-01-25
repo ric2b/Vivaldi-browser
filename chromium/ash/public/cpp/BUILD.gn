@@ -107,6 +107,9 @@ component("cpp") {
     "assistant/controller/assistant_ui_controller.h",
     "audio_config_service.cc",
     "audio_config_service.h",
+    "auth/active_session_auth_controller.cc",
+    "auth/active_session_auth_controller.h",
+    "auth/active_session_fingerprint_client.h",
     "back_gesture_contextual_nudge_controller.h",
     "back_gesture_contextual_nudge_delegate.h",
     "bluetooth_config_service.cc",
@@ -122,6 +125,9 @@ component("cpp") {
     "clipboard_image_model_factory.h",
     "connectivity_services.cc",
     "connectivity_services.h",
+    "coral_delegate.h",
+    "coral_util.cc",
+    "coral_util.h",
     "debug_delegate.h",
     "default_user_image.cc",
     "default_user_image.h",
@@ -199,6 +205,10 @@ component("cpp") {
     "lobster/lobster_client.h",
     "lobster/lobster_client_factory.h",
     "lobster/lobster_enums.h",
+    "lobster/lobster_feedback_preview.cc",
+    "lobster/lobster_feedback_preview.h",
+    "lobster/lobster_image_candidate.h",
+    "lobster/lobster_result.h",
     "lobster/lobster_session.h",
     "lobster/lobster_system_state.cc",
     "lobster/lobster_system_state.h",
@@ -220,6 +230,8 @@ component("cpp") {
     "login_screen_test_api.h",
     "login_types.cc",
     "login_types.h",
+    "management_disclosure_client.cc",
+    "management_disclosure_client.h",
     "media_client.h",
     "media_controller.cc",
     "media_controller.h",
@@ -269,6 +281,8 @@ component("cpp") {
     "picker/picker_client.h",
     "picker/picker_search_result.cc",
     "picker/picker_search_result.h",
+    "picker/picker_web_paste_target.cc",
+    "picker/picker_web_paste_target.h",
     "power_utils.cc",
     "power_utils.h",
     "presentation_time_recorder.cc",
@@ -361,7 +375,6 @@ component("cpp") {
     "system/toast_manager.h",
     "system_notification_builder.cc",
     "system_notification_builder.h",
-    "system_sounds_delegate.h",
     "system_tray_client.h",
     "tab_cluster/clusterer.cc",
     "tab_cluster/clusterer.h",
@@ -431,12 +444,14 @@ component("cpp") {
     "//chromeos/ash/components/audio",
     "//chromeos/ash/components/audio:in_process_audio_config",
     "//chromeos/ash/components/auth_panel/public",
+    "//chromeos/ash/components/cryptohome",
     "//chromeos/ash/components/osauth/public",
     "//chromeos/ash/services/assistant/public/cpp",
     "//chromeos/ash/services/bluetooth_config:in_process_bluetooth_config",
     "//chromeos/ash/services/cellular_setup:in_process_esim_manager",
     "//chromeos/ash/services/connectivity/public/cpp",
     "//chromeos/ash/services/hotspot_config:in_process_hotspot_config",
+    "//chromeos/ash/services/nearby/public/mojom",
     "//chromeos/ash/services/network_config:in_process_instance",
     "//chromeos/dbus/power:power_manager_proto",
     "//chromeos/strings:strings_grit",
@@ -504,7 +519,10 @@ component("cpp") {
   ]
 
   if (is_chrome_branded) {
-    deps += [ "//chromeos/ash/resources/internal/strings" ]
+    deps += [
+      "//chromeos/ash/resources/internal/icons:vector_icons",
+      "//chromeos/ash/resources/internal/strings",
+    ]
   }
 
   output_name = "ash_public_cpp"
@@ -624,12 +642,15 @@ source_set("test_support") {
     "test/test_shelf_item_delegate.h",
     "test/test_system_tray_client.cc",
     "test/test_system_tray_client.h",
+    "test/test_tab_strip_delegate.cc",
+    "test/test_tab_strip_delegate.h",
   ]
 
   deps = [
     ":cpp",
     "//base",
     "//base/test:test_support",
+    "//chromeos/ash/services/nearby/public/mojom",
     "//components/access_code_cast/common:metrics",
     "//mojo/public/cpp/bindings",
     "//services/data_decoder/public/cpp:service_provider",

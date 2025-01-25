@@ -5,6 +5,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/ui/settings/tabs/vivaldi_ntp_type.h"
+
 namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
@@ -23,6 +25,16 @@ class PrefService;
 /// Returns the setting for tab stack
 + (BOOL)getUseTabStackWithPrefService:
     (PrefService*)prefService;
+
+/// Returns Homepage Url
++ (NSString*)getHomepageUrlWithPrefService: (PrefService*)prefService;
+
+/// Get new tab settings
++ (VivaldiNTPType)getNewTabSettingWithPrefService:(PrefService*)prefService;
+
+/// Returns Newtab Url
++ (NSString*)getNewTabUrlWithPrefService: (PrefService*)prefService;
+
 /// Returns whether inactive tabs available. Depends on a
 /// chrome flag. Due to dependencies in other place we also
 /// show/hide the inactive tabs section on tabs settings based
@@ -41,6 +53,15 @@ class PrefService;
 /// Sets the setting for tab stack
 + (void)setUseTabStack:(BOOL)enabled
         inPrefServices:(PrefService*)prefService;
+
+/// Sets Homepage Url
++ (void)setHomepageUrlWithPrefService:(NSString*)url
+        inPrefServices:(PrefService*)prefService;
+
+/// Save the new tab settings
++ (void)setNewTabSettingWithPrefService:(PrefService*)prefService
+                             andSetting:(VivaldiNTPType)setting
+                                withURL:(NSString *)url;
 
 @end
 

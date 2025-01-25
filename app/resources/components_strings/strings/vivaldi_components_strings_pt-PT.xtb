@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> fechou a ligação inesperadamente.</translation>
 <translation id="1161325031994447685">Ligar novamente à rede Wi-Fi</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
+<translation id="132390688737681464">Guardar e preencher endereços</translation>
 <translation id="1375198122581997741">Sobre a versão</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> não enviou quaisquer dados.</translation>
 <translation id="1559528461873125649">Esse ficheiro ou diretório não existe</translation>
 <translation id="1640244768702815859">Experimente <ph name="BEGIN_LINK" />aceder à página inicial do website<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo não suportado</translation>
+<translation id="1662550410081243962">Guardar e preencher métodos de pagamento</translation>
 <translation id="1710259589646384581">SO</translation>
 <translation id="1728677426644403582">Está a ver o código fonte de uma página Web</translation>
 <translation id="1734878702283171397">Experimente contactar o administrador do sistema.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Este website não consegue fornecer uma ligação segura</translation>
 <translation id="2187317261103489799">Detetar (pré-definição)</translation>
 <translation id="2224337661447660594">Sem Internet</translation>
+<translation id="2283340219607151381">Guardar e preencher endereços</translation>
 <translation id="2292556288342944218">O acesso à Internet está bloqueado</translation>
 <translation id="2317259163369394535">O domínio <ph name="DOMAIN" /> requer um nome de utilizador e uma palavra-passe.</translation>
 <translation id="2337852623177822836">Definição controlada pelo administrador</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">A ligação é cifrada e autenticada com <ph name="CIPHER" /> e utiliza <ph name="KX" /> como mecanismo de troca de chaves.</translation>
 <translation id="2909946352844186028">Foi detetada uma alteração de rede.</translation>
 <translation id="2948083400971632585">Pode desativar quaisquer proxies configurados para uma conexão na página de definições.</translation>
+<translation id="2954624054936281172">Tabela dos métodos de pagamento guardados</translation>
 <translation id="2991571918955627853">Não pode visitar <ph name="SITE" /> neste momento, porque o website utiliza HSTS. Os erros de rede e os ataques são geralmente temporários, pelo que esta página deverá funcionar mais tarde.</translation>
 <translation id="3005723025932146533">Mostrar cópia guardada</translation>
 <translation id="301521992641321250">Bloqueada automaticamente</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Detetar sempre conteúdo importante neste website</translation>
 <translation id="3308738399950580893">anúncios</translation>
 <translation id="3384522979010096022">A sua organização não lhe permite ver este website</translation>
+<translation id="3387261909427947069">Métodos de pagamento</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> está inacessível de momento.</translation>
 <translation id="3427092606871434483">Permitir (pré-definição)</translation>
 <translation id="3447661539832366887">O proprietário deste equipamento desativou o jogo do dinossauro.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">A cadeia de certificados inclui um certificado assinado através de SHA-1.</translation>
 <translation id="5452270690849572955">Não é possível encontrar esta página de <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Inválido</translation>
+<translation id="5490432419156082418">Endereços e mais</translation>
 <translation id="5492298309214877701">Este website na intranet da empresa, da entidade ou da escola tem o mesmo URL que um website externo.
     <ph name="LINE_BREAK" />
     Experimente contactar o administrador do sistema.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Permitida por uma extensão</translation>
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Guardar e preencher métodos de pagamento</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> não respeita os padrões de segurança.</translation>
 <translation id="7219179957768738017">A ligação utiliza <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostrar notificações</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">Se não tiver a certeza do que isto significa, contacte o administrador de rede.</translation>
 <translation id="8332188693563227489">O acesso a <ph name="HOST_NAME" /> foi recusado</translation>
 <translation id="8422228580902424274">Atacantes no website que está a tentar visitar podem tentar enganar o utilizador para instalar software ou revelar informações como a sua palavra-passe, número de telefone ou número do cartão de crédito.</translation>
+<translation id="8473863474539038330">Endereços e mais</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> demorou demasiado tempo a responder.</translation>
 <translation id="8503813439785031346">Nome de utilizador</translation>
 <translation id="8703575177326907206">A sua ligação a <ph name="DOMAIN" /> não está cifrada.</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">Favoritos</translation>
 <translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir para as definições do website</translation>
+<translation id="8975012916872825179">Inclui informações como números de telefone, endereços de correio eletrónico e moradas</translation>
 <translation id="9001074447101275817">O proxy <ph name="DOMAIN" /> necessita de um nome de utilizador e de uma palavra-passe.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9025348182339809926">(Inválido)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utiliza um protocolo não suportado.</translation>
 <translation id="936602727769022409">Pode perder o acesso à sua Conta Google. O Vivaldi recomenda que altere a sua palavra-passe agora. Ser-lhe-á pedido para iniciar sessão.</translation>
 <translation id="969892804517981540">Compilação oficial</translation>
+<translation id="984275831282074731">Métodos de pagamento</translation>
 <translation id="988159990683914416">Versão de desenvolvimento</translation>
 </translationbundle>

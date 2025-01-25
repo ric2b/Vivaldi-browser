@@ -3,8 +3,9 @@
 #ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_PARSE_UTILS_H_
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_PARSE_UTILS_H_
 
+#include <string_view>
+
 #include "base/containers/fixed_flat_map.h"
-#include "base/strings/string_piece.h"
 #include "components/ad_blocker/adblock_request_filter_rule.h"
 
 namespace adblock_filter {

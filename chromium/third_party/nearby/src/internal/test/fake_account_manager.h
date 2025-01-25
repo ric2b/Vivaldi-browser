@@ -17,6 +17,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
@@ -39,12 +40,18 @@ class FakeAccountManager : public AccountManager {
       absl::AnyInvocable<void(Account)> login_success_callback,
       absl::AnyInvocable<void(absl::Status)> login_failure_callback) override;
 
+  void Login(
+      absl::string_view client_id, absl::string_view client_secret,
+      absl::AnyInvocable<void(Account)> login_success_callback,
+      absl::AnyInvocable<void(absl::Status)> login_failure_callback) override;
+
   void Logout(absl::AnyInvocable<void(absl::Status)> logout_callback) override;
 
   bool GetAccessToken(
       absl::string_view account_id,
       absl::AnyInvocable<void(absl::string_view)> success_callback,
       absl::AnyInvocable<void(absl::Status)> failure_callback) override;
+  std::pair<std::string, std::string> GetOAuthClientCredential() override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
 
@@ -55,12 +62,16 @@ class FakeAccountManager : public AccountManager {
     is_logout_success_ = is_logout_success;
   }
 
+  void NotifyCredentialError() {
+    NotifyLogout(account_->id, /*credential_error=*/true);
+  }
+
  private:
   // Updates current username to preference.
   void UpdateCurrentUser(absl::string_view current_user);
   void ClearCurrentUser();
   void NotifyLogin(absl::string_view account_id);
-  void NotifyLogout(absl::string_view account_id);
+  void NotifyLogout(absl::string_view account_id, bool credential_error);
 
   // Login will fail when account_ is empty.
   std::optional<Account> account_;

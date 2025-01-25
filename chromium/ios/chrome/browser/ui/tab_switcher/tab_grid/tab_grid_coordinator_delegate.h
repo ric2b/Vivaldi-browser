@@ -25,9 +25,6 @@ class Browser;
 // Informs the delegate that the tab switcher is done and should be dismissed.
 - (void)tabGridDismissTransitionDidEnd:(TabGridCoordinator*)tabGrid;
 
-// Asks the delegate for the page that should currently be active.
-- (TabGridPage)activePageForTabGrid:(TabGridCoordinator*)tabGrid;
-
 // Vivaldi
 - (void)didSelectLoginFromEmptyStateView;
 - (void)didSelectRegisterFromEmptyStateView;

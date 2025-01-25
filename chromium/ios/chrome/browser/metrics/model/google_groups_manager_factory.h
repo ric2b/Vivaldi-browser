@@ -5,19 +5,19 @@
 #ifndef IOS_CHROME_BROWSER_METRICS_MODEL_GOOGLE_GROUPS_MANAGER_FACTORY_H_
 #define IOS_CHROME_BROWSER_METRICS_MODEL_GOOGLE_GROUPS_MANAGER_FACTORY_H_
 
-#include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "base/no_destructor.h"
+#import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
 class GoogleGroupsManager;
 
 class GoogleGroupsManagerFactory
     : public BrowserStateKeyedServiceFactory {
  public:
-  // Creates the service if it doesn't exist already for `browser_state`.
-  static GoogleGroupsManager* GetForBrowserState(
-      ChromeBrowserState* browser_state);
+  // TODO(crbug.com/358301380): remove this method.
+  static GoogleGroupsManager* GetForBrowserState(ProfileIOS* profile);
 
+  static GoogleGroupsManager* GetForProfile(ProfileIOS* profile);
   static GoogleGroupsManagerFactory* GetInstance();
 
   GoogleGroupsManagerFactory(const GoogleGroupsManagerFactory&) =

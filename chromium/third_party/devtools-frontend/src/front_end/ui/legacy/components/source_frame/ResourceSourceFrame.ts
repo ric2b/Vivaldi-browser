@@ -58,8 +58,8 @@ export class ResourceSourceFrame extends SourceFrameImpl {
     const isStreamingProvider = TextUtils.ContentProvider.isStreamingContentProvider(resource);
     /* eslint-disable @typescript-eslint/explicit-function-return-type */
     const lazyContent = isStreamingProvider ?
-        () => resource.requestStreamingContent().then(TextUtils.StreamingContentData.asDeferredContent.bind(null)) :
-        () => resource.requestContent();
+        () => resource.requestStreamingContent().then(TextUtils.StreamingContentData.asContentDataOrError) :
+        () => resource.requestContentData();
     super(lazyContent, options);
     /* eslint-enable @typescript-eslint/explicit-function-return-type */
     this.#givenContentType = givenContentType;
@@ -67,8 +67,8 @@ export class ResourceSourceFrame extends SourceFrameImpl {
     if (isStreamingProvider) {
       void resource.requestStreamingContent().then(streamingContent => {
         if (!TextUtils.StreamingContentData.isError(streamingContent)) {
-          streamingContent.addEventListener(TextUtils.StreamingContentData.Events.ChunkAdded, () => {
-            void this.setDeferredContent(Promise.resolve(streamingContent.content().asDeferedContent()));
+          streamingContent.addEventListener(TextUtils.StreamingContentData.Events.CHUNK_ADDED, () => {
+            void this.setContentDataOrError(Promise.resolve(streamingContent.content()));
           });
         }
       });

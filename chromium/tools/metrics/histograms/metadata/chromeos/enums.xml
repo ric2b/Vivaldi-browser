@@ -216,6 +216,7 @@ chromium-metrics-reviews@google.com.
   <int value="9025" label="DevToggleAppList"/>
   <int value="9026" label="DevToggleUnifiedDesktop"/>
   <int value="9027" label="DebugToggleFocusModeState"/>
+  <int value="9028" label="DebugStartSunfishSession"/>
 </enum>
 
 <enum name="ArcIntentHandlerDestinationPlatform">
@@ -784,6 +785,11 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="UnknownClassification"/>
 </enum>
 
+<enum name="CompanionAppState">
+  <int value="0" label="Available"/>
+  <int value="1" label="Installed"/>
+</enum>
+
 <enum name="CrashSeverityProductType">
   <int value="0" label="Unspecified"/>
   <int value="1" label="UI"/>
@@ -900,6 +906,38 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="Left Click"/>
   <int value="10" label="Right Click"/>
   <int value="11" label="Middle Click"/>
+</enum>
+
+<enum name="DlcClientDlcBeginInstallResult">
+  <int value="0" label="Install successfully initiated"/>
+  <int value="1" label="Failed because D-Bus not connected"/>
+  <int value="2" label="Failed because DLC Service was busy too many times"/>
+  <int value="3" label="Will retry because DLC Service was busy"/>
+  <int value="4"
+      label="Failed because DLC Service returned an error code (see separate
+             DLC error code histogram)"/>
+  <int value="5" label="Failed because of an unknown DLC Service failure"/>
+</enum>
+
+<enum name="DlcClientDlcErrorCode">
+<!-- One entry for each kError{...} error code in
+  third_party/cros_system_api/dbus/dlcservice/dbus-constants.h -->
+
+  <int value="0" label="Unrecognized DLC error code"/>
+  <int value="1" label="NONE (No error)"/>
+  <int value="2" label="INTERNAL"/>
+  <int value="3" label="BUSY"/>
+  <int value="4" label="NEED_REBOOT"/>
+  <int value="5" label="INVALID_DLC"/>
+  <int value="6" label="ALLOCATION"/>
+  <int value="7" label="NO_IMAGE_FOUND"/>
+</enum>
+
+<enum name="DlcClientDlcFinalInstallResult">
+  <int value="0" label="Successful install"/>
+  <int value="1"
+      label="Failed because DLC Service returned an error code (see separate
+             DLC error code histogram)"/>
 </enum>
 
 <enum name="DpSuccessMetric">
@@ -1208,10 +1246,11 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <enum name="KeyPermissionsManagerMigrationStatus">
-  <int value="0" label="kStarted"/>
-  <int value="1" label="kSucceeded"/>
-  <int value="2" label="kFailed"/>
-  <int value="3" label="kNecessary"/>
+  <int value="0" label="Started"/>
+  <int value="1" label="Succeeded"/>
+  <int value="2" label="Failed"/>
+  <int value="3" label="Necessary"/>
+  <int value="4" label="FailedToUpdatePermissions"/>
 </enum>
 
 <enum name="KeyUsageCategory">
@@ -1375,12 +1414,25 @@ chromeos/ash/components/language/language_packs/language_pack_manager.h -->
   <int value="3" label="QA"/>
 </enum>
 
+<enum name="MahiFeature">
+  <int value="0" label="Summary"/>
+  <int value="1" label="QA"/>
+</enum>
+
 <enum name="MahiMenuButton">
   <int value="0" label="Summary Button"/>
   <int value="1" label="Outline"/>
   <int value="2" label="Submit Question Button"/>
   <int value="3" label="Condensed Menu Button"/>
   <int value="4" label="Settings Button"/>
+</enum>
+
+<enum name="MahiProviderCreationStatus">
+  <int value="0" label="Ok"/>
+  <int value="1" label="Manta Service Disabled"/>
+  <int value="2" label="Profile Unavailable"/>
+  <int value="3" label="Manta Service Is Null"/>
+  <int value="4" label="Manta Service Failed To Create"/>
 </enum>
 
 <enum name="MahiResponseStatus">
@@ -1911,6 +1963,12 @@ https://chromium.googlesource.com/chromiumos/platform2/+/main/secagentd/proto/se
   <int value="7" label="Google Play error">
     Installing the WebAPK through Google Play failed with an error.
   </int>
+</enum>
+
+<enum name="WelcomeExperienceNotificationEventType">
+  <int value="0" label="Shown"/>
+  <int value="1" label="Clicked"/>
+  <int value="2" label="SettingChanged"/>
 </enum>
 
 <enum name="WrongConfigurationMetric">

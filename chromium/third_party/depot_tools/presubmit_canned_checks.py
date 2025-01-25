@@ -1970,14 +1970,14 @@ def CheckForCommitObjects(input_api, output_api):
         ]
 
     # Get DEPS file.
-    deps_file = input_api.os_path.join(input_api.PresubmitLocalPath(), 'DEPS')
-    if not input_api.os_path.isfile(deps_file):
-        # No DEPS file, carry on!
+    try:
+        deps_content = input_api.subprocess.check_output(
+            ['git', 'show', 'HEAD:DEPS'], cwd=input_api.PresubmitLocalPath())
+        deps = _ParseDeps(deps_content)
+    except Exception:
+        # No DEPS file, so skip this check.
         return []
 
-    with open(deps_file) as f:
-        deps_content = f.read()
-    deps = _ParseDeps(deps_content)
     # set default
     if 'deps' not in deps:
         deps['deps'] = {}

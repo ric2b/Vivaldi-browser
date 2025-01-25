@@ -1011,21 +1011,21 @@ class IsProcessBackgroundedObserver : public RenderProcessHostInternalObserver {
     host_observation_.Observe(host);
   }
 
-  void RenderProcessBackgroundedChanged(RenderProcessHostImpl* host) override {
-    backgrounded_ = host->IsProcessBackgrounded();
+  void RenderProcessPriorityChanged(RenderProcessHostImpl* host) override {
+    priority_ = host->GetPriority();
   }
 
   // Returns the latest recorded value if there was one and resets the recorded
   // value to |nullopt|.
-  std::optional<bool> TakeValue() {
-    auto value = backgrounded_;
-    backgrounded_ = std::nullopt;
+  std::optional<base::Process::Priority> TakeValue() {
+    auto value = priority_;
+    priority_ = std::nullopt;
     return value;
   }
 
  private:
-  // Stores the last observed value of IsProcessBackgrounded for a host.
-  std::optional<bool> backgrounded_;
+  // Stores the last observed value of GetPriority() for a host.
+  std::optional<base::Process::Priority> priority_;
   base::ScopedObservation<RenderProcessHostImpl,
                           RenderProcessHostInternalObserver>
       host_observation_{this};
@@ -1045,36 +1045,36 @@ IN_PROC_BROWSER_TEST_P(RenderProcessHostTest, PriorityOverride) {
 
   // It starts off as normal priority with no override.
   EXPECT_FALSE(process->HasPriorityOverride());
-  EXPECT_FALSE(process->IsProcessBackgrounded());
+  EXPECT_EQ(process->GetPriority(), base::Process::Priority::kUserBlocking);
   EXPECT_FALSE(observer.TakeValue().has_value());
 
-  process->SetPriorityOverride(false /* foreground */);
+  process->SetPriorityOverride(base::Process::Priority::kBestEffort);
   EXPECT_TRUE(process->HasPriorityOverride());
-  EXPECT_TRUE(process->IsProcessBackgrounded());
-  EXPECT_EQ(observer.TakeValue().value(), process->IsProcessBackgrounded());
+  EXPECT_EQ(process->GetPriority(), base::Process::Priority::kBestEffort);
+  EXPECT_EQ(observer.TakeValue().value(), process->GetPriority());
 
-  process->SetPriorityOverride(true /* foreground */);
+  process->SetPriorityOverride(base::Process::Priority::kUserBlocking);
   EXPECT_TRUE(process->HasPriorityOverride());
-  EXPECT_FALSE(process->IsProcessBackgrounded());
-  EXPECT_EQ(observer.TakeValue().value(), process->IsProcessBackgrounded());
+  EXPECT_EQ(process->GetPriority(), base::Process::Priority::kUserBlocking);
+  EXPECT_EQ(observer.TakeValue().value(), process->GetPriority());
 
-  process->SetPriorityOverride(false /* foreground */);
+  process->SetPriorityOverride(base::Process::Priority::kBestEffort);
   EXPECT_TRUE(process->HasPriorityOverride());
-  EXPECT_TRUE(process->IsProcessBackgrounded());
-  EXPECT_EQ(observer.TakeValue().value(), process->IsProcessBackgrounded());
+  EXPECT_EQ(process->GetPriority(), base::Process::Priority::kBestEffort);
+  EXPECT_EQ(observer.TakeValue().value(), process->GetPriority());
 
   // Add a pending view, and expect the process to *stay* backgrounded.
   process->AddPendingView();
   EXPECT_TRUE(process->HasPriorityOverride());
-  EXPECT_TRUE(process->IsProcessBackgrounded());
-  EXPECT_EQ(observer.TakeValue().value(), process->IsProcessBackgrounded());
+  EXPECT_EQ(process->GetPriority(), base::Process::Priority::kBestEffort);
+  EXPECT_EQ(observer.TakeValue().value(), process->GetPriority());
 
   // Clear the override. The pending view should cause the process to go back to
   // being foregrounded.
   process->ClearPriorityOverride();
   EXPECT_FALSE(process->HasPriorityOverride());
-  EXPECT_FALSE(process->IsProcessBackgrounded());
-  EXPECT_EQ(observer.TakeValue().value(), process->IsProcessBackgrounded());
+  EXPECT_EQ(process->GetPriority(), base::Process::Priority::kUserBlocking);
+  EXPECT_EQ(observer.TakeValue().value(), process->GetPriority());
 
   // Clear the pending view so the test doesn't explode.
   process->RemovePendingView();
@@ -1084,7 +1084,8 @@ IN_PROC_BROWSER_TEST_P(RenderProcessHostTest, PriorityOverride) {
 struct BoostRenderProcessForLoadingBrowserTestParam {
   bool enable_boost_render_process_for_loading;
   std::string target_urls;
-  int expect_render_process_backgrounded_;
+  bool renderer_initiated_navigation;
+  bool expect_render_process_backgrounded;
 };
 
 // This test verifies `kBoostRenderProcessForLoading` feature can keep the
@@ -1100,7 +1101,8 @@ class BoostRenderProcessForLoadingBrowserTest
       feature_list_.InitWithFeaturesAndParameters(
           {{blink::features::kBoostRenderProcessForLoading,
             {{blink::features::kBoostRenderProcessForLoadingTargetUrls.name,
-              GetParam().target_urls}}}},
+              GetParam().target_urls},
+             {"prioritize_renderer_initiated", "false"}}}},
           {});
     } else {
       feature_list_.InitAndDisableFeature(
@@ -1118,14 +1120,19 @@ class BoostRenderProcessForLoadingBrowserTest
  private:
   // content::WebContentsObserver:
   void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override {
+    if (!check_if_render_process_backgrounded_on_dom_content_loaded_) {
+      return;
+    }
     RenderProcessHost* render_process_host = render_frame_host->GetProcess();
     // Emulate render_process_host is not visible to users.
     SetVisibleClients(render_process_host, 0);
-    EXPECT_EQ(render_process_host->IsProcessBackgrounded(),
-              GetParam().expect_render_process_backgrounded_);
+    EXPECT_EQ(render_process_host->GetPriority() ==
+                  base::Process::Priority::kBestEffort,
+              GetParam().expect_render_process_backgrounded);
   }
 
  protected:
+  bool check_if_render_process_backgrounded_on_dom_content_loaded_ = false;
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -1134,29 +1141,40 @@ const BoostRenderProcessForLoadingBrowserTestParam
         {
             .enable_boost_render_process_for_loading = false,
             .target_urls = "[]",
-            .expect_render_process_backgrounded_ = true,
+            .renderer_initiated_navigation = false,
+            .expect_render_process_backgrounded = true,
         },
         {
             .enable_boost_render_process_for_loading = true,
             .target_urls = "[]",
-            .expect_render_process_backgrounded_ = false,
+            .renderer_initiated_navigation = false,
+            .expect_render_process_backgrounded = false,
+        },
+        {
+            .enable_boost_render_process_for_loading = true,
+            .target_urls = "[]",
+            .renderer_initiated_navigation = true,
+            .expect_render_process_backgrounded = true,
         },
         {
             .enable_boost_render_process_for_loading = true,
             .target_urls = "[\"http://a.com/simple_page.html\", "
                            "\"http://b.com/simple_page.html\"]",
-            .expect_render_process_backgrounded_ = false,
+            .renderer_initiated_navigation = false,
+            .expect_render_process_backgrounded = false,
         },
         {
             .enable_boost_render_process_for_loading = true,
             .target_urls = "[\"http://b.com/simple_page.html\", "
                            "\"http://c.com/simple_page.html\"]",
-            .expect_render_process_backgrounded_ = true,
+            .renderer_initiated_navigation = false,
+            .expect_render_process_backgrounded = true,
         },
         {
             .enable_boost_render_process_for_loading = true,
             .target_urls = "[\"http://a.co.jp/simple_page.html\"]",
-            .expect_render_process_backgrounded_ = false,
+            .renderer_initiated_navigation = false,
+            .expect_render_process_backgrounded = false,
         },
 };
 
@@ -1168,17 +1186,27 @@ INSTANTIATE_TEST_SUITE_P(
 IN_PROC_BROWSER_TEST_P(BoostRenderProcessForLoadingBrowserTest,
                        VerifyRenderProcessBackgrounded) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  GURL test_url = embedded_test_server()->GetURL("a.com", "/simple_page.html");
-  RenderProcessHost* render_process_host =
-      web_contents().GetPrimaryMainFrame()->GetProcess();
+  GURL empty_url(embedded_test_server()->GetURL("a.com", "/empty.html"));
+  GURL test_url(embedded_test_server()->GetURL("a.com", "/simple_page.html"));
 
-  // `BoostRenderProcessForLoadingBrowserTest::DOMContentLoaded()` is called
-  // during `NavigateToURL()`.
-  EXPECT_TRUE(NavigateToURL(shell(), test_url));
+  EXPECT_TRUE(NavigateToURL(shell(), empty_url));
+
+  // `BoostRenderProcessForLoadingBrowserTest::DOMContentLoaded()` will be
+  // called during `NavigateToURL()` to check the renderer process priority.
+  check_if_render_process_backgrounded_on_dom_content_loaded_ = true;
+  if (GetParam().renderer_initiated_navigation) {
+    EXPECT_TRUE(ExecJs(shell(), JsReplace("location = $1", test_url)));
+    EXPECT_TRUE(WaitForLoadStop(&web_contents()));
+  } else {
+    EXPECT_TRUE(NavigateToURL(shell(), test_url));
+  }
 
   // Emulate render_process_host is not visible to users.
+  RenderProcessHost* render_process_host =
+      web_contents().GetPrimaryMainFrame()->GetProcess();
   SetVisibleClients(render_process_host, 0);
-  EXPECT_TRUE(render_process_host->IsProcessBackgrounded());
+  EXPECT_EQ(render_process_host->GetPriority(),
+            base::Process::Priority::kBestEffort);
 }
 
 // This test verifies properties of RenderProcessHostImpl *before* Init method

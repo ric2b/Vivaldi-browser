@@ -190,18 +190,9 @@ def main():
       '--bucket',
       default=DEFAULT_GCS_BUCKET,
       help='Google Cloud Storage bucket where the target archive is uploaded')
-  parser.add_argument('--build-mac-arm', action='store_true',
-                      help='Build arm binaries. Only valid on macOS.')
   parser.add_argument('--revision',
                       help='LLVM revision to use. Default: based on update.py')
   args = parser.parse_args()
-
-  if args.build_mac_arm and sys.platform != 'darwin':
-    print('--build-mac-arm only valid on macOS')
-    return 1
-  if args.build_mac_arm and platform.machine() == 'arm64':
-    print('--build-mac-arm only valid on intel to cross-build arm')
-    return 1
 
   if args.revision:
     # Use upload_revision.py to set the revision first.
@@ -226,7 +217,7 @@ def main():
     # 'Mac_arm64' here when there's no flag and 'Mac' when --build-mac-intel is
     # passed. Also update the build script to explicitly pass a default triple
     # then.
-    if args.build_mac_arm or platform.machine() == 'arm64':
+    if platform.machine() == 'arm64':
       gcs_platform = 'Mac_arm64'
     else:
       gcs_platform = 'Mac'
@@ -248,8 +239,6 @@ def main():
         os.path.join(THIS_DIR, 'build.py'), '--bootstrap', '--disable-asserts',
         '--run-tests', '--pgo'
     ]
-    if args.build_mac_arm:
-      build_cmd.append('--build-mac-arm')
     if sys.platform != 'darwin':
       build_cmd.append('--thinlto')
     if sys.platform.startswith('linux'):
@@ -456,22 +445,6 @@ def main():
         # pylint: disable=line-too-long
         'bin/llvm-symbolizer.exe',
 
-        # AddressSanitizer C runtime (pure C won't link with *_cxx).
-        'lib/clang/$V/lib/windows/clang_rt.asan-x86_64.lib',
-
-        # AddressSanitizer C++ runtime.
-        'lib/clang/$V/lib/windows/clang_rt.asan_cxx-x86_64.lib',
-
-        # Thunk for AddressSanitizer needed for static build of a shared lib.
-        'lib/clang/$V/lib/windows/clang_rt.asan_dll_thunk-x86_64.lib',
-
-        # AddressSanitizer runtime for component build.
-        'lib/clang/$V/lib/windows/clang_rt.asan_dynamic-x86_64.dll',
-        'lib/clang/$V/lib/windows/clang_rt.asan_dynamic-x86_64.lib',
-
-        # Thunk for AddressSanitizer for component build of a shared lib.
-        'lib/clang/$V/lib/windows/clang_rt.asan_dynamic_runtime_thunk-x86_64.lib',
-
         # Builtins for C/C++.
         'lib/clang/$V/lib/windows/clang_rt.builtins-i386.lib',
         'lib/clang/$V/lib/windows/clang_rt.builtins-x86_64.lib',
@@ -490,6 +463,51 @@ def main():
 
         # pylint: enable=line-too-long
     ])
+    # The list of asan libraries we need changes with
+    # https://github.com/llvm/llvm-project/pull/107899.
+    # TODO(https://crbug.com/365980757): move back above after clang roll
+    if os.path.exists(
+        os.path.join(
+            LLVM_RELEASE_DIR,
+            'lib/clang/{}/lib/windows/clang_rt.asan-x86_64.lib'.format(
+                RELEASE_VERSION))):
+      # AddressSanitizer C runtime (pure C won't link with *_cxx).
+      runtime_packages.add('lib/clang/$V/lib/windows/clang_rt.asan-x86_64.lib')
+
+      # AddressSanitizer C++ runtime.
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_cxx-x86_64.lib')
+
+      # Thunk for AddressSanitizer needed for static build of a shared lib.
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_dll_thunk-x86_64.lib')
+
+      # AddressSanitizer runtime for component build.
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_dynamic-x86_64.dll')
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_dynamic-x86_64.lib')
+
+      # Thunk for AddressSanitizer for component build of a shared lib.
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_dynamic_runtime_thunk-x86_64.lib'
+      )
+    else:
+      # AddressSanitizer runtime.
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_dynamic-x86_64.dll')
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_dynamic-x86_64.lib')
+
+      # Thunk for AddressSanitizer for component builds.
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_dynamic_runtime_thunk-x86_64.lib'
+      )
+
+      # Thunk for AddressSanitizer for static builds.
+      runtime_packages.add(
+          'lib/clang/$V/lib/windows/clang_rt.asan_static_runtime_thunk-x86_64.lib'
+      )
     want.update(runtime_packages)
 
   # reclient is a tool for executing programs remotely. When uploading the

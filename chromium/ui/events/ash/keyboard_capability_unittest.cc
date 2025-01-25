@@ -171,7 +171,7 @@ class FakeDeviceManager {
   FakeDeviceManager() = default;
   FakeDeviceManager(const FakeDeviceManager&) = delete;
   FakeDeviceManager& operator=(const FakeDeviceManager&) = delete;
-  ~FakeDeviceManager() = default;
+  ~FakeDeviceManager() { RemoveAllDevices(); }
 
   // Add a fake keyboard to DeviceDataManagerTestApi and provide layout info to
   // fake udev.
@@ -824,7 +824,7 @@ class KeyboardCapabilityDogfoodTest : public KeyboardCapabilityTestBase {
 // With the dogfood flag enabled AND no Google account logged in, the feature
 // should act as though its disabled.
 TEST_F(KeyboardCapabilityDogfoodTest,
-       TestGetModifierKeysForSplitModifierKeyboardDogfood) {
+       DISABLED_TestGetModifierKeysForSplitModifierKeyboardDogfood) {
   AccountId non_google_account_id =
       AccountId::FromUserEmail("testaccount@gmail.com");
   AccountId google_account_id =

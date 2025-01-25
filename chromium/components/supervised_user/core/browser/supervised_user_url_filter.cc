@@ -20,8 +20,10 @@
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/task/thread_pool.h"
+#include "components/safe_search_api/url_checker.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/supervised_user/core/browser/kids_chrome_management_url_checker_client.h"
+#include "components/supervised_user/core/browser/supervised_user_capabilities.h"
 #include "components/supervised_user/core/browser/supervised_user_preferences.h"
 #include "components/supervised_user/core/browser/supervised_user_utils.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
@@ -235,13 +237,10 @@ std::optional<FilteringSubdomainConflictType> AddConflict(
 
 SupervisedUserURLFilter::SupervisedUserURLFilter(
     PrefService& user_prefs,
-    std::unique_ptr<safe_search_api::URLCheckerClient> url_checker_client,
-    ValidateURLSupportCallback check_webstore_url_callback)
+    std::unique_ptr<Delegate> delegate)
     : default_behavior_(FilteringBehavior::kAllow),
       user_prefs_(user_prefs),
-      async_url_checker_(std::make_unique<safe_search_api::URLChecker>(
-          std::move(url_checker_client))),
-      check_webstore_url_callback_(std::move(check_webstore_url_callback)) {}
+      delegate_(std::move(delegate)) {}
 
 SupervisedUserURLFilter::~SupervisedUserURLFilter() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -365,17 +364,11 @@ SupervisedUserURLFilter::GetHistogramValueForTopLevelFilteringBehavior(
       switch (reason) {
         case FilteringBehaviorReason::ASYNC_CHECKER:
           return SupervisedUserFilterTopLevelResult::kBlockSafeSites;
-        case FilteringBehaviorReason::ALLOWLIST:
-          NOTREACHED_IN_MIGRATION();
-          break;
         case FilteringBehaviorReason::MANUAL:
           return SupervisedUserFilterTopLevelResult::kBlockManual;
         case FilteringBehaviorReason::DEFAULT:
           return SupervisedUserFilterTopLevelResult::kBlockNotInAllowlist;
-        case FilteringBehaviorReason::NOT_SIGNED_IN:
-          NOTREACHED_IN_MIGRATION();
       }
-      [[fallthrough]];
     case FilteringBehavior::kInvalid:
       NOTREACHED_IN_MIGRATION();
   }
@@ -390,10 +383,6 @@ int SupervisedUserURLFilter::GetHistogramValueForFilteringBehavior(
     bool is_filtering_behavior_known) {
   switch (behavior) {
     case FilteringBehavior::kAllow:
-      if (reason == FilteringBehaviorReason::ALLOWLIST) {
-        return SupervisedUserSafetyFilterResult::
-            FILTERING_BEHAVIOR_ALLOW_ALLOWLIST;
-      }
       return is_filtering_behavior_known
                  ? SupervisedUserSafetyFilterResult::FILTERING_BEHAVIOR_ALLOW
                  : SupervisedUserSafetyFilterResult::
@@ -403,20 +392,13 @@ int SupervisedUserURLFilter::GetHistogramValueForFilteringBehavior(
         case FilteringBehaviorReason::ASYNC_CHECKER:
           return SupervisedUserSafetyFilterResult::
               FILTERING_BEHAVIOR_BLOCK_SAFESITES;
-        case FilteringBehaviorReason::ALLOWLIST:
-          NOTREACHED_IN_MIGRATION();
-          break;
         case FilteringBehaviorReason::MANUAL:
           return SupervisedUserSafetyFilterResult::
               FILTERING_BEHAVIOR_BLOCK_MANUAL;
         case FilteringBehaviorReason::DEFAULT:
           return SupervisedUserSafetyFilterResult::
               FILTERING_BEHAVIOR_BLOCK_DEFAULT;
-        case FilteringBehaviorReason::NOT_SIGNED_IN:
-          // Should never happen, only used for requests from Webview
-          NOTREACHED_IN_MIGRATION();
       }
-      [[fallthrough]];
     case FilteringBehavior::kInvalid:
       NOTREACHED_IN_MIGRATION();
   }
@@ -453,12 +435,12 @@ SupervisedUserURLFilter::GetFilteringBehaviorForURL(const GURL& url) {
 
 bool SupervisedUserURLFilter::IsExemptedFromGuardianApproval(
     const GURL& effective_url) {
-  DCHECK(!check_webstore_url_callback_.is_null());
+  DCHECK(delegate_);
   return IsNonStandardUrlScheme(effective_url) ||
          IsAlwaysAllowedHost(effective_url) ||
          IsAlwaysAllowedUrlPrefix(effective_url) ||
          IsPlayStoreTermsOfServiceUrl(effective_url) ||
-         check_webstore_url_callback_.Run(effective_url);
+         delegate_->SupportsWebstoreURL(effective_url);
 }
 
 bool SupervisedUserURLFilter::GetManualFilteringBehaviorForURL(
@@ -586,10 +568,12 @@ bool SupervisedUserURLFilter::GetFilteringBehaviorForURLWithAsyncChecks(
       reason != supervised_user::FilteringBehaviorReason::DEFAULT) {
     std::move(callback).Run(behavior, reason, false);
     for (Observer& observer : observers_) {
-      observer.OnURLChecked(url, behavior, reason, false);
+      observer.OnURLChecked(
+          url, behavior,
+          FilteringBehaviorDetails{.reason = reason});
     }
     return true;
-  }
+    }
 
   if (!skip_manual_parent_filter) {
     // Any non-default reason trumps the async checker.
@@ -598,7 +582,9 @@ bool SupervisedUserURLFilter::GetFilteringBehaviorForURLWithAsyncChecks(
         behavior == FilteringBehavior::kBlock) {
       std::move(callback).Run(behavior, reason, false);
       for (Observer& observer : observers_) {
-        observer.OnURLChecked(url, behavior, reason, false);
+        observer.OnURLChecked(
+            url, behavior,
+            FilteringBehaviorDetails{.reason = reason});
       }
       return true;
     }
@@ -620,7 +606,9 @@ bool SupervisedUserURLFilter::GetFilteringBehaviorForSubFrameURLWithAsyncChecks(
   if (reason != supervised_user::FilteringBehaviorReason::DEFAULT) {
     std::move(callback).Run(behavior, reason, false);
     for (Observer& observer : observers_) {
-      observer.OnURLChecked(url, behavior, reason, false);
+      observer.OnURLChecked(
+          url, behavior,
+          FilteringBehaviorDetails{.reason = reason});
     }
     return true;
   }
@@ -632,7 +620,9 @@ bool SupervisedUserURLFilter::GetFilteringBehaviorForSubFrameURLWithAsyncChecks(
     // It is not in the same domain and is blocked.
     std::move(callback).Run(behavior, reason, false);
     for (Observer& observer : observers_) {
-      observer.OnURLChecked(url, behavior, reason, false);
+      observer.OnURLChecked(
+          url, behavior,
+          FilteringBehaviorDetails{.reason = reason});
     }
     return true;
   }
@@ -682,6 +672,7 @@ void SupervisedUserURLFilter::Clear() {
   url_map_.clear();
   allowed_host_list_.clear();
   blocked_host_list_.clear();
+  async_url_checker_.reset();
   is_filter_initialized_ = false;
 }
 
@@ -777,13 +768,16 @@ bool SupervisedUserURLFilter::RunAsyncChecker(
     return true;
   }
 
+  // The primary account must be supervised to run async URL classification.
+  CHECK(supervised_user::IsSubjectToParentalControls(user_prefs_.get()));
+  CHECK(async_url_checker_);
   return async_url_checker_->CheckURL(
       url_matcher::util::Normalize(url),
       base::BindOnce(&SupervisedUserURLFilter::CheckCallback,
                      base::Unretained(this), std::move(callback)));
 }
 
-void SupervisedUserURLFilter::SetURLCheckerClientForTesting(
+void SupervisedUserURLFilter::SetURLCheckerClient(
     std::unique_ptr<safe_search_api::URLCheckerClient> url_checker_client) {
   async_url_checker_.reset(
       new safe_search_api::URLChecker(std::move(url_checker_client)));
@@ -797,16 +791,19 @@ void SupervisedUserURLFilter::CheckCallback(
     FilteringBehaviorCallback callback,
     const GURL& url,
     safe_search_api::Classification classification,
-    bool uncertain) const {
+    safe_search_api::ClassificationDetails details) const {
   FilteringBehavior behavior =
       GetBehaviorFromSafeSearchClassification(classification);
   std::move(callback).Run(
       behavior, supervised_user::FilteringBehaviorReason::ASYNC_CHECKER,
-      uncertain);
+      details.reason ==
+          safe_search_api::ClassificationDetails::Reason::kFailedUseDefault);
   for (Observer& observer : observers_) {
     observer.OnURLChecked(
-        url, behavior, supervised_user::FilteringBehaviorReason::ASYNC_CHECKER,
-        uncertain);
+        url, behavior,
+        supervised_user::FilteringBehaviorDetails{
+            .reason = supervised_user::FilteringBehaviorReason::ASYNC_CHECKER,
+            .classification_details = details});
   }
 }
 

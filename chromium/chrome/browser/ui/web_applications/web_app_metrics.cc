@@ -17,6 +17,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/clamped_math.h"
+#include "base/observer_list.h"
 #include "base/one_shot_event.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/ranges/algorithm.h"
@@ -35,6 +36,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_metrics_factory.h"
 #include "chrome/browser/web_applications/daily_metrics_helper.h"
+#include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -107,7 +109,7 @@ WebAppMetrics::WebAppMetrics(Profile* profile)
       icon_health_checks_(profile),
       browser_tab_strip_tracker_(this, nullptr) {
   browser_tab_strip_tracker_.Init();
-  base::PowerMonitor::AddPowerSuspendObserver(this);
+  base::PowerMonitor::GetInstance()->AddPowerSuspendObserver(this);
   BrowserList::AddObserver(this);
   // This isn't around on ChromeOS or tests.
   if (metrics::DesktopSessionDurationTracker::IsInitialized()) {
@@ -131,7 +133,7 @@ WebAppMetrics::WebAppMetrics(Profile* profile)
 
 WebAppMetrics::~WebAppMetrics() {
   BrowserList::RemoveObserver(this);
-  base::PowerMonitor::RemovePowerSuspendObserver(this);
+  base::PowerMonitor::GetInstance()->RemovePowerSuspendObserver(this);
   if (metrics::DesktopSessionDurationTracker::IsInitialized()) {
     metrics::DesktopSessionDurationTracker::Get()->RemoveObserver(this);
   }
@@ -141,7 +143,9 @@ void WebAppMetrics::OnEngagementEvent(
     WebContents* web_contents,
     const GURL& url,
     double score,
-    site_engagement::EngagementType engagement_type) {
+    double old_score,
+    site_engagement::EngagementType engagement_type,
+    const std::optional<webapps::AppId>& app_id) {
   if (!web_contents)
     return;
 
@@ -166,11 +170,10 @@ void WebAppMetrics::OnEngagementEvent(
                               engagement_type);
   }
 
-  // A presence of WebAppTabHelper with valid app_id indicates an installed
-  // web app.
-  const webapps::AppId* app_id = WebAppTabHelper::GetAppId(web_contents);
-  if (!app_id)
+  if (!app_id) {
     return;
+  }
+  CHECK(!app_id->empty());
 
   // No HostedAppBrowserController if app is running as a tab in common browser.
   const bool in_window = !!browser->app_controller();
@@ -178,6 +181,8 @@ void WebAppMetrics::OnEngagementEvent(
       WebAppProvider::GetForLocalAppsUnchecked(profile_)->registrar_unsafe();
   const bool user_installed = registrar.WasInstalledByUser(*app_id);
   const bool is_diy_app = registrar.IsDiyApp(*app_id);
+  const bool is_default_installed =
+      registrar.IsInstalledByDefaultManagement(*app_id);
 
   // Record all web apps:
   RecordTabOrWindowHistogram("WebApp.Engagement", in_window, engagement_type);
@@ -192,7 +197,8 @@ void WebAppMetrics::OnEngagementEvent(
       RecordTabOrWindowHistogram("WebApp.Engagement.UserInstalled.Crafted",
                                  in_window, engagement_type);
     }
-  } else {
+  }
+  if (is_default_installed) {
     // Record this app into more specific bucket if was installed by default:
     RecordTabOrWindowHistogram("WebApp.Engagement.DefaultInstalled", in_window,
                                engagement_type);
@@ -246,13 +252,6 @@ void WebAppMetrics::OnTabStripModelChanged(
   // Newly-selected foreground contents should not be going away.
   if (foreground_web_contents_ &&
       foreground_web_contents_->IsBeingDestroyed()) {
-    base::debug::DumpWithoutCrashing();
-    foreground_web_contents_ = nullptr;
-  }
-
-  // Contents being replaced should never be the new selection.
-  if (change.type() == TabStripModelChange::kReplaced &&
-      change.GetReplace()->old_contents == foreground_web_contents_) {
     base::debug::DumpWithoutCrashing();
     foreground_web_contents_ = nullptr;
   }
@@ -400,8 +399,11 @@ void WebAppMetrics::CountUserInstalledApps() {
 
 void WebAppMetrics::UpdateUkmData(WebContents* web_contents,
                                   TabSwitching mode) {
-  if (!web_contents)
+  // TODO(crbug.com/362130525): The discarded check can be removed once
+  // TabStripModelChange::kReplaced has been removed.
+  if (!web_contents || web_contents->WasDiscarded()) {
     return;
+  }
   auto* app_banner_manager =
       webapps::AppBannerManager::FromWebContents(web_contents);
   // May be null in unit tests.
@@ -418,30 +420,34 @@ void WebAppMetrics::UpdateUkmData(WebContents* web_contents,
   std::optional<webapps::WebAppBannerData> banner_data =
       app_banner_manager->GetCurrentWebAppBannerData();
 
-  const webapps::AppId* app_id = WebAppTabHelper::GetAppId(web_contents);
-  if (app_id && provider->registrar_unsafe().IsLocallyInstalled(*app_id)) {
+  WebAppTabHelper* tab_helper = WebAppTabHelper::FromWebContents(web_contents);
+  std::optional<webapps::AppId> maybe_app_id = tab_helper->app_id();
+  if (maybe_app_id &&
+      provider->registrar_unsafe().IsInstallState(
+          *maybe_app_id, {proto::INSTALLED_WITHOUT_OS_INTEGRATION,
+                          proto::INSTALLED_WITH_OS_INTEGRATION})) {
+    webapps::AppId app_id = maybe_app_id.value();
     // App is installed
-    features.start_url = provider->registrar_unsafe().GetAppStartUrl(*app_id);
+    features.start_url = provider->registrar_unsafe().GetAppStartUrl(app_id);
     features.installed = true;
     auto install_source =
-        provider->registrar_unsafe().GetLatestAppInstallSource(*app_id);
+        provider->registrar_unsafe().GetLatestAppInstallSource(app_id);
     if (install_source)
       features.install_source = static_cast<int>(*install_source);
     DisplayMode display_mode =
-        provider->registrar_unsafe().GetAppEffectiveDisplayMode(*app_id);
+        provider->registrar_unsafe().GetAppEffectiveDisplayMode(app_id);
     features.effective_display_mode = static_cast<int>(display_mode);
-    features.captures_links =
-        IsPreferredAppForSupportedLinks(*app_id, profile_);
-    features.promotable = !provider->registrar_unsafe().IsDiyApp(*app_id);
+    features.captures_links = IsPreferredAppForSupportedLinks(app_id, profile_);
+    features.promotable = !provider->registrar_unsafe().IsDiyApp(app_id);
     bool preinstalled_app =
-        provider->registrar_unsafe().IsInstalledByDefaultManagement(*app_id);
+        provider->registrar_unsafe().IsInstalledByDefaultManagement(app_id);
     // Record usage duration and session counts only for installed web apps that
     // are currently open in a window, and all preinstalled apps.
-    if (provider->ui_manager().IsInAppWindow(web_contents) ||
-        preinstalled_app || mode == TabSwitching::kForegroundClosing) {
+    if (tab_helper->is_in_app_window() || preinstalled_app ||
+        mode == TabSwitching::kForegroundClosing) {
       base::Time now = base::Time::Now();
-      if (app_last_interacted_time_.contains(*app_id)) {
-        base::TimeDelta delta = now - GetOrSetLastInteractedTimeForApp(*app_id);
+      if (app_last_interacted_time_.contains(app_id)) {
+        base::TimeDelta delta = now - GetOrSetLastInteractedTimeForApp(app_id);
         if (delta < max_valid_session_delta_) {
           switch (mode) {
             case TabSwitching::kFrom:
@@ -455,12 +461,11 @@ void WebAppMetrics::UpdateUkmData(WebContents* web_contents,
           }
         }
       }
-      app_last_interacted_time_[*app_id] = now;
+      app_last_interacted_time_[app_id] = now;
 
-      // Note: real web app launch counts 2 sessions immediately, as app window
-      // is actually activated twice in the launch process.
-      if (mode == TabSwitching::kTo)
+      if (mode == TabSwitching::kTo) {
         features.num_sessions = 1;
+      }
     }
   } else if (banner_data &&
              installable ==

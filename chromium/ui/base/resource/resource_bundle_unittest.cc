@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/base/resource/resource_bundle.h"
 
 #include <stddef.h>
@@ -241,9 +246,9 @@ TEST_F(ResourceBundleTest, DelegateLoadDataResourceBytes) {
   ResourceBundle* resource_bundle = CreateResourceBundle(&delegate_);
 
   // Create the data resource for testing purposes.
-  unsigned char data[] = "My test data";
+  const unsigned char data[] = "My test data";
   scoped_refptr<base::RefCountedStaticMemory> static_memory(
-      new base::RefCountedStaticMemory(data, sizeof(data)));
+      new base::RefCountedStaticMemory(data));
 
   int resource_id = 5;
   ResourceScaleFactor scale_factor = ui::kScaleFactorNone;

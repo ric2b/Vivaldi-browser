@@ -28,10 +28,11 @@
 #ifndef SRC_DAWN_NODE_BINDING_GPUDEVICE_H_
 #define SRC_DAWN_NODE_BINDING_GPUDEVICE_H_
 
+#include <webgpu/webgpu_cpp.h>
+
 #include <memory>
 #include <string>
 
-#include "dawn/webgpu_cpp.h"
 #include "src/dawn/node/binding/AsyncRunner.h"
 #include "src/dawn/node/interop/NodeAPI.h"
 #include "src/dawn/node/interop/WebGPU.h"
@@ -134,8 +135,6 @@ class GPUDevice final : public interop::GPUDevice {
     bool dispatchEvent(Napi::Env, interop::Interface<interop::Event> event) override;
 
   private:
-    void QueueTick();
-
     Napi::Env env_;
     wgpu::Device device_;
     std::shared_ptr<AsyncRunner> async_;

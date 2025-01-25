@@ -23,6 +23,9 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_chunk_subset.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
 #include "third_party/blink/renderer/platform/graphics/paint/transform_paint_property_node.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -35,7 +38,6 @@ namespace blink {
 
 class ContentLayerClientImpl;
 class JSONObject;
-class SynthesizedClip;
 
 using CompositorScrollCallbacks = cc::ScrollCallbacks;
 
@@ -63,7 +65,7 @@ class LayerListBuilder {
 // a kDstIn blend effect. This is why two stable cc effect IDs are provided.
 // Even if the mask layer is not present, it's important for the isolation
 // effect node to be stable, to minimize render surface damage.
-class SynthesizedClip : private cc::ContentLayerClient {
+class SynthesizedClip : public cc::ContentLayerClient {
  public:
   SynthesizedClip() : layer_(nullptr) {
     mask_isolation_id_ =
@@ -112,7 +114,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   PaintArtifactCompositor& operator=(const PaintArtifactCompositor&) = delete;
   ~PaintArtifactCompositor() override;
 
-  void Trace(Visitor* visitor) const { visitor->Trace(pending_layers_); }
+  void Trace(Visitor*) const;
 
   struct ViewportProperties {
     STACK_ALLOCATED();
@@ -132,11 +134,12 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // noncomposited nodes, and is used for Scroll Unification to generate scroll
   // nodes for noncomposited scrollers to complete the compositor's scroll
   // property tree.
-  void Update(
-      const PaintArtifact& artifact,
-      const ViewportProperties& viewport_properties,
-      const Vector<const TransformPaintPropertyNode*>& scroll_translation_nodes,
-      Vector<std::unique_ptr<cc::ViewTransitionRequest>> requests);
+  using StackScrollTranslationVector =
+      HeapVector<Member<const TransformPaintPropertyNode>, 32>;
+  void Update(const PaintArtifact& artifact,
+              const ViewportProperties& viewport_properties,
+              const StackScrollTranslationVector& scroll_translation_nodes,
+              Vector<std::unique_ptr<cc::ViewTransitionRequest>> requests);
 
   // Fast-path update where the painting of existing composited layers changed,
   // but property trees and compositing decisions remain the same. See:
@@ -242,46 +245,21 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
     return should_always_update_on_scroll_;
   }
 
+  // This is public for WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS.
+  struct SynthesizedClipEntry {
+    DISALLOW_NEW();
+
+    Member<const ClipPaintPropertyNode> key;
+    std::unique_ptr<SynthesizedClip> synthesized_clip;
+    bool in_use;
+
+    void Trace(Visitor* visitor) const { visitor->Trace(key); }
+  };
+
  private:
   void UpdateCompositorViewportProperties(const ViewportProperties&,
                                           PropertyTreeManager&,
                                           cc::LayerTreeHost*);
-
-  // Collects the PaintChunks into groups which will end up in the same
-  // cc layer. This is the entry point of the layerization algorithm.
-  void CollectPendingLayers(const PaintArtifact&);
-
-  // This is the internal recursion of CollectPendingLayers. This function
-  // loops over the list of paint chunks, scoped by an isolated group
-  // (i.e. effect node). Inside of the loop, chunks are tested for overlap
-  // and merge compatibility. Subgroups are handled by recursion, and will
-  // be tested for "decompositing" upon return.
-  // Merge compatibility means consecutive chunks may be layerized into the
-  // same backing (i.e. merged) if their property states don't cross
-  // direct-compositing boundary.
-  // Non-consecutive chunks that are nevertheless compatible may still be
-  // merged, if reordering of the chunks won't affect the ultimate result.
-  // This is determined by overlap testing such that chunks can be safely
-  // reordered if their effective bounds in screen space can't overlap.
-  // The recursion only tests merge & overlap for chunks scoped by the same
-  // group. This is where "decompositing" came in. Upon returning from a
-  // recursion, the layerization of the subgroup may be tested for merge &
-  // overlap with other chunks in the parent group, if grouping requirement
-  // can be satisfied (and the effect node has no direct reason).
-  // |directly_composited_transforms| is used internally to optimize the first
-  // time a paint property tree node is encountered that has direct compositing
-  // reasons. This case will always start a new layer and can skip merge tests.
-  // New values are added when transform nodes are first encountered.
-  void LayerizeGroup(const PaintArtifact&,
-                     const EffectPaintPropertyNode&,
-                     PaintChunks::const_iterator& chunk_cursor,
-                     HashSet<const TransformPaintPropertyNode*>&
-                         directly_composited_transforms,
-                     bool force_draws_content);
-  bool DecompositeEffect(const EffectPaintPropertyNode& parent_effect,
-                         wtf_size_t first_layer_in_parent_group_index,
-                         const EffectPaintPropertyNode& effect,
-                         wtf_size_t layer_index);
 
   const TransformPaintPropertyNode& ScrollTranslationStateForLayer(
       const PendingLayer&);
@@ -335,15 +313,13 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   LCDTextPreference lcd_text_preference_ = LCDTextPreference::kIgnored;
 
   scoped_refptr<cc::Layer> root_layer_;
-  struct SynthesizedClipEntry {
-    const ClipPaintPropertyNode* key = nullptr;
-    std::unique_ptr<SynthesizedClip> synthesized_clip;
-    bool in_use;
-  };
-  Vector<SynthesizedClipEntry> synthesized_clip_cache_;
+
+  HeapVector<SynthesizedClipEntry> synthesized_clip_cache_;
 
   class OldPendingLayerMatcher;
   PendingLayers pending_layers_;
+
+  class Layerizer;
 
   struct ScrollTranslationInfo {
     gfx::Rect scrolling_contents_cull_rect;
@@ -354,13 +330,15 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // been encountered during layerization. This includes every kind of scroll
   // translation, include those for composited scrolling and non-composited
   // scrolling (including raster-inducing and main-thread repainted).
-  HashMap<const TransformPaintPropertyNode*, ScrollTranslationInfo>
+  HeapHashMap<Member<const TransformPaintPropertyNode>, ScrollTranslationInfo>
       painted_scroll_translations_;
 
-  friend class StubChromeClientForCAP;
   friend class PaintArtifactCompositorTest;
 };
 
 }  // namespace blink
+
+WTF_ALLOW_INIT_WITH_MEM_FUNCTIONS(
+    blink::PaintArtifactCompositor::SynthesizedClipEntry)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_COMPOSITING_PAINT_ARTIFACT_COMPOSITOR_H_

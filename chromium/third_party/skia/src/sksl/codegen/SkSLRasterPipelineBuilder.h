@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 class SkArenaAlloc;
 class SkRasterPipeline;
@@ -176,7 +177,7 @@ private:
         SkSpan<float> stack;
         SkSpan<float> immutable;
     };
-    SlotData allocateSlotData(SkArenaAlloc* alloc) const;
+    std::optional<SlotData> allocateSlotData(SkArenaAlloc* alloc) const;
 
     struct Stage {
         ProgramOp op;
@@ -186,7 +187,6 @@ private:
                     SkArenaAlloc* alloc,
                     SkSpan<const float> uniforms,
                     const SlotData& slots) const;
-    void optimize();
     StackDepths tempStackMaxDepths() const;
 
     // These methods are used to split up multi-slot copies into multiple ops as needed.
@@ -296,7 +296,7 @@ private:
 
 class Builder {
 public:
-    /** Finalizes and optimizes the program. */
+    /** Finalizes and returns a completed program. */
     std::unique_ptr<Program> finish(int numValueSlots,
                                     int numUniformSlots,
                                     int numImmutableSlots,

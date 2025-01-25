@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -29,6 +30,7 @@
 #include "base/profiler/frame.h"
 #include "base/profiler/metadata_recorder.h"
 #include "base/profiler/module_cache.h"
+#include "base/profiler/process_type.h"
 #include "base/rand_util.h"
 #include "base/sampling_heap_profiler/sampling_heap_profiler.h"
 #include "base/sequence_checker.h"
@@ -42,7 +44,6 @@
 #include "components/heap_profiling/in_process/heap_profiler_parameters.h"
 #include "components/heap_profiling/in_process/switches.h"
 #include "components/metrics/call_stacks/call_stack_profile_builder.h"
-#include "components/metrics/call_stacks/call_stack_profile_params.h"
 #include "components/services/heap_profiling/public/cpp/merge_samples.h"
 #include "components/version_info/channel.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
@@ -51,7 +52,7 @@ namespace heap_profiling {
 
 namespace {
 
-using ProcessType = metrics::CallStackProfileParams::Process;
+using ProcessType = base::ProfilerProcessType;
 
 // The heap profiler for this process. HeapProfilerController will set this on
 // creation, and reset it to nullptr on destruction, so that it's always unset
@@ -123,11 +124,15 @@ double GetChannelProbability(version_info::Channel channel,
     case version_info::Channel::CANARY:
       return params.nonstable_probability;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
-bool DecideIfCollectionIsEnabled(version_info::Channel channel,
-                                 ProcessType process_type) {
+// Returns true iff heap profiles should be collected for this process, along
+// with a name for a synthetic field trial group based on the decision or
+// nullopt if no group applies.
+std::pair<bool, std::optional<std::string>> DecideIfCollectionIsEnabled(
+    version_info::Channel channel,
+    ProcessType process_type) {
   // Check the feature before the process type so that users are assigned to
   // groups in the browser process.
   if (base::FeatureList::IsEnabled(kHeapProfilerCentralControl) &&
@@ -136,26 +141,26 @@ bool DecideIfCollectionIsEnabled(version_info::Channel channel,
     // AppendCommandLineSwitchForChildProcess() to pass on the decision.
     const bool is_enabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
         switches::kSubprocessHeapProfiling);
-
-    // If this check fails, some code path that launches a child process hasn't
-    // set the appropriate switch.
-    // TODO(https://crbug.com/40840943): Remove kNoSubprocessHeapProfiling after
-    // validating that this check never fails.
-    CHECK(is_enabled || base::CommandLine::ForCurrentProcess()->HasSwitch(
-                            switches::kNoSubprocessHeapProfiling));
-    return is_enabled;
+    return {is_enabled, std::nullopt};
   }
 
   // Randomly determine whether profiling is enabled.
   HeapProfilerParameters params =
       GetHeapProfilerParametersForProcess(process_type);
   if (!params.is_supported) {
-    return false;
+    return {false, std::nullopt};
   }
-  if (base::RandDouble() >= GetChannelProbability(channel, params)) {
-    return false;
+
+  const double seed = base::RandDouble();
+  const double probability = GetChannelProbability(channel, params);
+  if (seed < probability) {
+    return {true, "Enabled"};
   }
-  return true;
+  if (seed < 2 * probability && 2 * probability <= 1.0) {
+    // Only register a Control group if it can be the same size as Enabled.
+    return {false, "Control"};
+  }
+  return {false, "Default"};
 }
 
 }  // namespace
@@ -205,7 +210,6 @@ HeapProfilerController* HeapProfilerController::GetInstance() {
 HeapProfilerController::HeapProfilerController(version_info::Channel channel,
                                                ProcessType process_type)
     : process_type_(process_type),
-      profiling_enabled_(DecideIfCollectionIsEnabled(channel, process_type)),
       stopped_(base::MakeRefCounted<StoppedFlag>()),
       snapshot_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::TaskPriority::BEST_EFFORT})) {
@@ -213,6 +217,9 @@ HeapProfilerController::HeapProfilerController(version_info::Channel channel,
   // process.
   CHECK(!g_instance);
   g_instance = this;
+
+  std::tie(profiling_enabled_, synthetic_field_trial_group_) =
+      DecideIfCollectionIsEnabled(channel, process_type);
 
   // Before starting the profiler, record the ReentryGuard's TLS slot to a crash
   // key to debug reentry into the profiler.
@@ -289,6 +296,18 @@ bool HeapProfilerController::StartIfEnabled() {
   return true;
 }
 
+bool HeapProfilerController::GetSyntheticFieldTrial(
+    std::string& trial_name,
+    std::string& group_name) const {
+  CHECK_EQ(process_type_, ProcessType::kBrowser);
+  if (!synthetic_field_trial_group_.has_value()) {
+    return false;
+  }
+  trial_name = "SyntheticHeapProfilingConfiguration";
+  group_name = synthetic_field_trial_group_.value();
+  return true;
+}
+
 void HeapProfilerController::SuppressRandomnessForTesting() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   suppress_randomness_for_testing_ = true;
@@ -306,7 +325,7 @@ void HeapProfilerController::SetFirstSnapshotCallbackForTesting(
 
 void HeapProfilerController::AppendCommandLineSwitchForChildProcess(
     base::CommandLine* command_line,
-    metrics::CallStackProfileParams::Process child_process_type,
+    base::ProfilerProcessType child_process_type,
     int child_process_id) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_EQ(process_type_, ProcessType::kBrowser);
@@ -348,7 +367,7 @@ void HeapProfilerController::TakeSnapshotInChildProcess(
 // static
 void HeapProfilerController::AppendCommandLineSwitchForTesting(
     base::CommandLine* command_line,
-    metrics::CallStackProfileParams::Process child_process_type,
+    base::ProfilerProcessType child_process_type,
     int child_process_id,
     BrowserProcessSnapshotController* snapshot_controller) {
   AppendCommandLineSwitchInternal(command_line, child_process_type,
@@ -358,7 +377,7 @@ void HeapProfilerController::AppendCommandLineSwitchForTesting(
 // static
 void HeapProfilerController::AppendCommandLineSwitchInternal(
     base::CommandLine* command_line,
-    metrics::CallStackProfileParams::Process child_process_type,
+    base::ProfilerProcessType child_process_type,
     int child_process_id,
     BrowserProcessSnapshotController* snapshot_controller) {
   CHECK_NE(child_process_type, ProcessType::kBrowser);
@@ -368,13 +387,7 @@ void HeapProfilerController::AppendCommandLineSwitchInternal(
     command_line->AppendSwitch(switches::kSubprocessHeapProfiling);
     snapshot_controller->BindRemoteForChildProcess(child_process_id,
                                                    child_process_type);
-    return;
   }
-  // Record that HeapProfilerController had a chance to update the child's
-  // command line.
-  // TODO(https://crbug.com/40840943): Remove this after verifying that the
-  // CHECK in DecideIfCollectionIsEnabled() never fails.
-  command_line->AppendSwitch(switches::kNoSubprocessHeapProfiling);
 }
 
 // static
@@ -450,9 +463,9 @@ void HeapProfilerController::RetrieveAndSendSnapshot(
                                  samples.size());
 
   base::ModuleCache module_cache;
-  metrics::CallStackProfileParams params(
-      process_type, metrics::CallStackProfileParams::Thread::kUnknown,
-      metrics::CallStackProfileParams::Trigger::kPeriodicHeapCollection,
+  base::CallStackProfileParams params(
+      process_type, base::ProfilerThreadType::kUnknown,
+      base::CallStackProfileParams::Trigger::kPeriodicHeapCollection,
       time_since_profiler_creation);
   metrics::CallStackProfileBuilder profile_builder(params);
 

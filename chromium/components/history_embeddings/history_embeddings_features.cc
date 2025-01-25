@@ -75,6 +75,10 @@ const base::FeatureParam<bool> kUseMlAnswerer(&kHistoryEmbeddings,
                                               "UseMlAnswerer",
                                               false);
 
+const base::FeatureParam<double> kMlAnswererMinScore(&kHistoryEmbeddings,
+                                                     "MlAnswererMinScore",
+                                                     0.5);
+
 const base::FeatureParam<bool> kUseMlEmbedder(&kHistoryEmbeddings,
                                               "UseMlEmbedder",
                                               true);
@@ -131,13 +135,31 @@ const base::FeatureParam<base::TimeDelta> kEmbeddingsServiceTimeout(
     "EmbeddingsServiceTimeout",
     base::Seconds(60));
 
-const base::FeatureParam<std::string> kFilterTerms(&kHistoryEmbeddings,
-                                                   "FilterTerms",
-                                                   "");
-
 const base::FeatureParam<std::string> kFilterHashes(&kHistoryEmbeddings,
                                                     "FilterHashes",
                                                     "");
+
+const base::FeatureParam<bool> kEnableSidePanel(&kHistoryEmbeddings,
+                                                "EnableSidePanel",
+                                                false);
+
+const base::FeatureParam<double> kWordMatchMinEmbeddingScore(
+    &kHistoryEmbeddings,
+    "WordMatchMinEmbeddingScore",
+    1.0);
+
+const base::FeatureParam<int> kWordMatchMinTermLength(&kHistoryEmbeddings,
+                                                      "WordMatchMinTermLength",
+                                                      3);
+
+const base::FeatureParam<double> kWordMatchScoreBoostFactor(
+    &kHistoryEmbeddings,
+    "WordMatchScoreBoostFactor",
+    0.2);
+
+const base::FeatureParam<int> kWordMatchLimit(&kHistoryEmbeddings,
+                                              "WordMatchLimit",
+                                              5);
 
 bool IsHistoryEmbeddingsEnabled() {
 #if BUILDFLAG(IS_CHROMEOS)

@@ -37,6 +37,9 @@ class TabGroupSyncServiceAndroid : public base::SupportsUserData::Data,
                          TriggerSource source) override;
   void OnTabGroupRemoved(const base::Uuid& sync_id,
                          TriggerSource source) override;
+  void OnTabGroupLocalIdChanged(
+      const base::Uuid& sync_id,
+      const std::optional<LocalTabGroupID>& local_id) override;
 
   // Mutation methods (Java -> native).
   // Mutator methods that result in group metadata mutation.
@@ -58,6 +61,11 @@ class TabGroupSyncServiceAndroid : public base::SupportsUserData::Data,
                         const JavaParamRef<jobject>& j_group_id,
                         const JavaParamRef<jstring>& j_title,
                         jint j_color);
+
+  void MakeTabGroupShared(JNIEnv* env,
+                          const JavaParamRef<jobject>& j_caller,
+                          const JavaParamRef<jobject>& j_group_id,
+                          const JavaParamRef<jstring>& j_collaboration_id);
 
   // Mutator methods that result in tab metadata mutation.
   void AddTab(JNIEnv* env,

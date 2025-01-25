@@ -138,16 +138,11 @@ class BackgroundAnimation : public AppListFolderView::Animation,
                               : folder_view_->folder_item_icon_bounds();
     to_rect -= animating_view_->bounds().OffsetFromOrigin();
     const views::Widget* app_list_widget = folder_view_->GetWidget();
-    const bool is_jelly_enabled = chromeos::features::IsJellyEnabled();
     const SkColor background_color =
         app_list_widget->GetColorProvider()->GetColor(
-            is_jelly_enabled ? static_cast<ui::ColorId>(
-                                   cros_tokens::kCrosSysSystemBaseElevated)
-                             : kColorAshShieldAndBase80);
+            cros_tokens::kCrosSysSystemBaseElevated);
     const SkColor bubble_color = app_list_widget->GetColorProvider()->GetColor(
-        is_jelly_enabled
-            ? static_cast<ui::ColorId>(cros_tokens::kCrosSysSystemOnBase)
-            : kColorAshControlBackgroundColorInactive);
+        cros_tokens::kCrosSysSystemOnBase);
     const SkColor from_color = show_ ? bubble_color : background_color;
     const SkColor to_color = show_ ? background_color : bubble_color;
 
@@ -662,8 +657,6 @@ AppListFolderView::AppListFolderView(AppListFolderController* folder_controller,
   DCHECK(view_delegate_);
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
-  const bool is_jelly_enabled = chromeos::features::IsJellyrollEnabled();
-
   // The background's corner radius cannot be changed in the same layer of the
   // contents container using layer animation, so use another layer to perform
   // such changes.
@@ -679,12 +672,9 @@ AppListFolderView::AppListFolderView(AppListFolderController* folder_controller,
   background_view_->layer()->SetIsFastRoundedCorner(true);
   background_view_->SetBorder(std::make_unique<views::HighlightBorder>(
       kFolderBackgroundRadius,
-      is_jelly_enabled ? views::HighlightBorder::Type::kHighlightBorderOnShadow
-                       : views::HighlightBorder::Type::kHighlightBorder1));
+      views::HighlightBorder::Type::kHighlightBorderOnShadow));
   background_view_->SetBackground(views::CreateThemedSolidBackground(
-      is_jelly_enabled
-          ? static_cast<ui::ColorId>(cros_tokens::kCrosSysSystemBaseElevated)
-          : kColorAshShieldAndBase80));
+      cros_tokens::kCrosSysSystemBaseElevated));
   background_view_->SetVisible(false);
 
   animating_background_ = AddChildView(std::make_unique<views::View>());
@@ -710,6 +700,8 @@ AppListFolderView::AppListFolderView(AppListFolderController* folder_controller,
                                      views::LayerRegion::kBelow);
 
   AppListModelProvider::Get()->AddObserver(this);
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kGenericContainer);
   UpdateExpandedCollapsedAccessibleState();
 }
 
@@ -1158,40 +1150,11 @@ void AppListFolderView::ReparentItem(
     AppsGridView::Pointer pointer,
     AppListItemView* original_drag_view,
     const gfx::Point& drag_point_in_folder_grid) {
-  if (!app_list_features::IsDragAndDropRefactorEnabled()) {
-    // Convert the drag point relative to the root level AppsGridView.
-    gfx::Point to_root_level_grid = drag_point_in_folder_grid;
-    ConvertPointToTarget(items_grid_view_, root_apps_grid_view_,
-                         &to_root_level_grid);
-    root_apps_grid_view_->InitiateDragFromReparentItemInRootLevelGridView(
-        pointer, original_drag_view, to_root_level_grid,
-        base::BindOnce(&AppListFolderView::CancelReparentDragFromRootGrid,
-                       weak_ptr_factory_.GetWeakPtr()));
-  }
-
   // Ensures the icon updates to reflect that the icon has been removed during
   // the drag
   folder_item_view_->UpdateDraggedItem(original_drag_view->item());
   folder_item_->NotifyOfDraggedItem(original_drag_view->item());
   folder_controller_->ReparentFolderItemTransit(folder_item_);
-}
-
-void AppListFolderView::DispatchDragEventForReparent(
-    AppsGridView::Pointer pointer,
-    const gfx::Point& drag_point_in_folder_grid) {
-  DCHECK(!app_list_features::IsDragAndDropRefactorEnabled());
-
-  gfx::Point drag_point_in_root_grid = drag_point_in_folder_grid;
-  // Temporarily reset the transform of the contents container so that the point
-  // can be correctly converted to the root grid's coordinates.
-  gfx::Transform original_transform = contents_container_->GetTransform();
-  contents_container_->SetTransform(gfx::Transform());
-  ConvertPointToTarget(items_grid_view_, root_apps_grid_view_,
-                       &drag_point_in_root_grid);
-  contents_container_->SetTransform(original_transform);
-
-  root_apps_grid_view_->UpdateDragFromReparentItem(pointer,
-                                                   drag_point_in_root_grid);
 }
 
 void AppListFolderView::DispatchEndDragEventForReparent(
@@ -1204,23 +1167,12 @@ void AppListFolderView::DispatchEndDragEventForReparent(
   }
   folder_controller_->ReparentDragEnded();
 
-  // Cache `folder_item_view_`, as it will get reset in `HideViewImmediately()`.
-  AppListItemView* const folder_item_view = folder_item_view_;
-
   // The view was not hidden in order to keeping receiving mouse events. Hide it
   // now as the reparenting ended.
   HideViewImmediately();
-
-  if (!app_list_features::IsDragAndDropRefactorEnabled()) {
-    root_apps_grid_view_->EndDragFromReparentItemInRootLevel(
-        folder_item_view, events_forwarded_to_drag_drop_host, cancel_drag,
-        std::move(drag_icon_proxy));
-  }
 }
 
 void AppListFolderView::Close() {
-  DCHECK(app_list_features::IsDragAndDropRefactorEnabled());
-
   CloseFolderPage();
 }
 
@@ -1281,10 +1233,6 @@ void AppListFolderView::HandleKeyboardReparent(AppListItemView* reparented_view,
                                                folder_item_view_, key_code);
   folder_controller_->ReparentDragEnded();
   HideViewImmediately();
-}
-
-void AppListFolderView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kGenericContainer;
 }
 
 void AppListFolderView::OnGestureEvent(ui::GestureEvent* event) {

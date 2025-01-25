@@ -59,12 +59,15 @@ import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvid
 import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider.AppHeaderObserver;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.Collections;
 import java.util.function.DoubleConsumer;
 
 // Vivaldi
+import org.chromium.build.BuildConfig;
+
 import org.vivaldi.browser.hub.VivaldiHubPaneHostView;
 
 /**
@@ -86,6 +89,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
     private final @NonNull PaneManager mPaneManager;
     private final @NonNull HubLayoutScrimController mScrimController;
     private final @NonNull DoubleConsumer mOnToolbarAlphaChange;
+    private final @NonNull HubShowPaneHelper mHubShowPaneHelper;
     private final @Nullable DesktopWindowStateProvider mDesktopWindowStateProvider;
 
     /**
@@ -143,6 +147,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
         mHubController.setHubLayoutController(this);
         mPaneManager = mHubManager.getPaneManager();
         mPaneManager.getFocusedPaneSupplier().addObserver(mOnPaneFocused);
+        mHubShowPaneHelper = mHubManager.getHubShowPaneHelper();
         mScrimController = dependencyHolder.getScrimController();
         mOnToolbarAlphaChange = dependencyHolder.getOnToolbarAlphaChange();
         mTabModelSelector = tabModelSelectorSupplier.get();
@@ -257,15 +262,8 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
                 bitmapPromise.fulfill(null);
             }
 
-            // TODO(crbug.com/41489743): This is a stop gap solution that will work until we have
-            // more
-            // panes. While we only have tab switcher panes, selecting the pane based on the
-            // currently selected tab model is correct. However, if we have more panes we likely
-            // want to be able to "select" a pane to focus as part of the HubLayout show transition.
             mPaneManager.focusPane(
-                    mTabModelSelector.isIncognitoSelected()
-                            ? PaneId.INCOGNITO_TAB_SWITCHER
-                            : PaneId.TAB_SWITCHER);
+                    mHubShowPaneHelper.consumeNextPaneId(mTabModelSelector.isIncognitoSelected()));
 
             mHubController.onHubLayoutShow();
 
@@ -513,18 +511,27 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
         View paneHost = mHubController.getPaneHostView();
         assert paneHost.isLaidOut();
         Rect finalRect = new Rect();
+
+        // Note(david@vivaldi.com): Get the correct rect for the animation.
+        if (BuildConfig.IS_VIVALDI)
+            finalRect = VivaldiHubPaneHostView.getTabSwitcherAnimationRect(containerView);
+        else
         paneHost.getGlobalVisibleRect(finalRect);
-        // Ignore left offset and just ensure the width is correct. See crbug/1502437.
-        int leftOffset = finalRect.left;
-        finalRect.offset(-leftOffset, -containerViewRect.top);
+        // Ignore edge offset and just ensure the width is correct. See crbug/1502437.
+        finalRect.offset(-finalRect.left, -containerViewRect.top);
 
         // TODO(crbug.com/40285429): Supply this from HubController so it can look like the
-        // animation
-        // originated from wherever on the Hub was clicked. This defaults to the top left of the
-        // pane host view.
-        int x = finalRect.left;
+        // animation originated from wherever on the Hub was clicked. This defaults to the top
+        // left/right of the pane host view.
+        boolean isRtl = LocalizationUtils.isLayoutRtl();
+        Rect initialRect = null;
+        int x = isRtl ? finalRect.right : finalRect.left;
         int y = finalRect.top;
-        Rect initialRect = new Rect(x, y, x + 1, y + 1);
+        if (isRtl) {
+            initialRect = new Rect(x - 1, y, x, y + 1);
+        } else {
+            initialRect = new Rect(x, y, x + 1, y + 1);
+        }
 
         animationDataSupplier.set(
                 new ShrinkExpandAnimationData(

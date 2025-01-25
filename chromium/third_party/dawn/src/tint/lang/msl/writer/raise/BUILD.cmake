@@ -47,10 +47,16 @@ tint_add_target(tint_lang_msl_writer_raise lib
   lang/msl/writer/raise/builtin_polyfill.h
   lang/msl/writer/raise/module_scope_vars.cc
   lang/msl/writer/raise/module_scope_vars.h
+  lang/msl/writer/raise/packed_vec3.cc
+  lang/msl/writer/raise/packed_vec3.h
   lang/msl/writer/raise/raise.cc
   lang/msl/writer/raise/raise.h
   lang/msl/writer/raise/shader_io.cc
   lang/msl/writer/raise/shader_io.h
+  lang/msl/writer/raise/simd_ballot.cc
+  lang/msl/writer/raise/simd_ballot.h
+  lang/msl/writer/raise/unary_polyfill.cc
+  lang/msl/writer/raise/unary_polyfill.h
 )
 
 tint_target_add_dependencies(tint_lang_msl_writer_raise lib
@@ -82,6 +88,10 @@ tint_target_add_dependencies(tint_lang_msl_writer_raise lib
   tint_utils_traits
 )
 
+tint_target_add_external_dependencies(tint_lang_msl_writer_raise lib
+  "src_utils"
+)
+
 if(TINT_BUILD_MSL_WRITER)
   tint_target_add_dependencies(tint_lang_msl_writer_raise lib
     tint_lang_msl_writer_common
@@ -99,7 +109,10 @@ tint_add_target(tint_lang_msl_writer_raise_test test
   lang/msl/writer/raise/binary_polyfill_test.cc
   lang/msl/writer/raise/builtin_polyfill_test.cc
   lang/msl/writer/raise/module_scope_vars_test.cc
+  lang/msl/writer/raise/packed_vec3_test.cc
   lang/msl/writer/raise/shader_io_test.cc
+  lang/msl/writer/raise/simd_ballot_test.cc
+  lang/msl/writer/raise/unary_polyfill_test.cc
 )
 
 tint_target_add_dependencies(tint_lang_msl_writer_raise_test test
@@ -127,6 +140,7 @@ tint_target_add_dependencies(tint_lang_msl_writer_raise_test test
 
 tint_target_add_external_dependencies(tint_lang_msl_writer_raise_test test
   "gtest"
+  "src_utils"
 )
 
 if(TINT_BUILD_MSL_WRITER)

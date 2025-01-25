@@ -4,6 +4,9 @@
 
 #pragma mark - ICONS
 
+const char kVivaldiAppStoreUrl[] =
+    "https://apps.apple.com/app/vivaldi-powerful-web-browser/id1633234600";
+
 NSString* vOverflowShare = @"vivaldi_overflow_menu_share";
 NSString* vOverflowRecentTabs = @"vivaldi_overflow_menu_recent_tabs";
 NSString* vOverflowPasswords = @"vivaldi_overflow_menu_passwords";
@@ -15,6 +18,10 @@ NSString* vOverflowNewTab = @"vivaldi_overflow_new_tab";
 NSString* vOverflowNewPrivateTab = @"vivaldi_overflow_new_private_tab";
 NSString* vOverflowNewWindow = @"vivaldi_overflow_new_window"; // iPad only.
 
+NSString* vOverflowAddTo = @"vivaldi_overflow_add_to";
+NSString* vOverflowEdit = @"vivaldi_overflow_edit";
+NSString* vOverflowAddStartPage = @"vivaldi_overflow_add_startpage";
+NSString* vOverflowEditStartPage = @"vivaldi_overflow_edit_startpage";
 NSString* vOverflowAddBookmark = @"vivaldi_overflow_add_bookmark";
 NSString* vOverflowEditBookmark = @"vivaldi_overflow_edit_bookmark";
 NSString* vOverflowAddReadingList = @"vivaldi_overflow_add_reading_list";

@@ -14,7 +14,7 @@ title: Sync
 
 [Model API](/developers/design-documents/sync/model-api)
 
-[ClientTagBasedModelTypeProcessor](/developers/design-documents/sync/client-tag-based-model-type-processor)
+[ClientTagBasedDataTypeProcessor](/developers/design-documents/sync/client-tag-based-data-type-processor)
 
 [Protection against data override by legacy clients](/developers/design-documents/sync/old-sync-clients-data-override-protection)
 

@@ -338,6 +338,14 @@ struct wl_listener *
 wl_client_get_destroy_listener(struct wl_client *client,
 			       wl_notify_func_t notify);
 
+void
+wl_client_add_destroy_late_listener(struct wl_client *client,
+				    struct wl_listener *listener);
+
+struct wl_listener *
+wl_client_get_destroy_late_listener(struct wl_client *client,
+				    wl_notify_func_t notify);
+
 struct wl_resource *
 wl_client_get_object(struct wl_client *client, uint32_t id);
 
@@ -360,6 +368,16 @@ void
 wl_client_for_each_resource(struct wl_client *client,
                             wl_client_for_each_resource_iterator_func_t iterator,
                             void *user_data);
+
+typedef void (*wl_user_data_destroy_func_t)(void *data);
+
+void
+wl_client_set_user_data(struct wl_client *client,
+			void *data,
+			wl_user_data_destroy_func_t dtor);
+
+void *
+wl_client_get_user_data(struct wl_client *client);
 
 void
 wl_client_set_max_buffer_size(struct wl_client *client, size_t max_buffer_size);

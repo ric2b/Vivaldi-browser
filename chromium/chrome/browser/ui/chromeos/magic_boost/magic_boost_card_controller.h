@@ -13,6 +13,7 @@
 #include "base/no_destructor.h"
 #include "chrome/browser/ui/chromeos/magic_boost/magic_boost_constants.h"
 #include "chrome/browser/ui/chromeos/read_write_cards/read_write_card_controller.h"
+#include "chromeos/components/mahi/public/cpp/mahi_media_app_events_proxy.h"
 #include "chromeos/crosapi/mojom/magic_boost.mojom.h"
 #include "ui/views/widget/unique_widget_ptr.h"
 
@@ -43,7 +44,9 @@ using TransitionAction = crosapi::mojom::MagicBoostController::TransitionAction;
 
 // The controller that manages the lifetime of opt-in cards.
 // Some functions in this controller are virtual for testing.
-class MagicBoostCardController : public ReadWriteCardController {
+class MagicBoostCardController
+    : public ReadWriteCardController,
+      public chromeos::MahiMediaAppEventsProxy::Observer {
  public:
   MagicBoostCardController();
   MagicBoostCardController(const MagicBoostCardController&) = delete;
@@ -58,12 +61,17 @@ class MagicBoostCardController : public ReadWriteCardController {
   void OnAnchorBoundsChanged(const gfx::Rect& anchor_bounds) override;
   void OnDismiss(bool is_other_command_executed) override;
 
+  // chromeos::MahiMediaAppEventsProxy::Observer:
+  void OnPdfContextMenuShown(const gfx::Rect& anchor) override;
+  void OnPdfContextMenuHide() override;
+
   // Shows/closes Magic Boost opt-in widget.
   virtual void ShowOptInUi(const gfx::Rect& anchor_view_bounds);
   virtual void CloseOptInUi();
 
   // Shows/closes Magic Boost disclaimer widget.
   void ShowDisclaimerUi(int64_t display_id);
+  void CloseDisclaimerUi();
 
   // The setter and getter of the features that trigger the magic boost opt in
   // card.

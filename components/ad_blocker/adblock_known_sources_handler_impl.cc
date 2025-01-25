@@ -36,6 +36,7 @@ const PermanentSource kPermanentKnownTrackingSources[] = {
 
 const PermanentSource kPermanentKnownAdBlockSources[] = {
     {kEasyList, {}},
+    // Flip allow_attribution_tracker_rules once we are ready to release.
     {kPartnersList, {}},
     {kAdblockPlusAntiCv, {.allow_abp_snippets = true}},
     {kAdblockPlusAntiAdblock, {.allow_abp_snippets = true}}};

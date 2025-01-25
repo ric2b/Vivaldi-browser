@@ -256,7 +256,7 @@ gfx::ResizeEdge GetWindowResizeEdge(UINT param) {
     case WMSZ_BOTTOMRIGHT:
       return gfx::ResizeEdge::kBottomRight;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -406,7 +406,6 @@ HWNDMessageHandler::HWNDMessageHandler(HWNDMessageHandlerDelegate* delegate,
       delegate_(delegate),
       fullscreen_handler_(new FullscreenHandler),
       waiting_for_close_now_(false),
-      use_system_default_icon_(false),
       restored_enabled_(false),
       current_cursor_(base::MakeRefCounted<ui::WinCursor>()),
       dpi_(0),
@@ -451,9 +450,10 @@ void HWNDMessageHandler::Init(HWND parent, const gfx::Rect& bounds) {
   InitExtras();
 }
 
-void HWNDMessageHandler::InitModalType(ui::ModalType modal_type) {
-  if (modal_type == ui::MODAL_TYPE_NONE)
+void HWNDMessageHandler::InitModalType(ui::mojom::ModalType modal_type) {
+  if (modal_type == ui::mojom::ModalType::kNone) {
     return;
+  }
   // We implement modality by crawling up the hierarchy of windows starting
   // at the owner, disabling all of them so that they don't receive input
   // messages.
@@ -932,11 +932,6 @@ void HWNDMessageHandler::SetWindowIcons(const gfx::ImageSkia& window_icon,
   }
 }
 
-void HWNDMessageHandler::set_use_system_default_icon(
-    bool use_system_default_icon) {
-  use_system_default_icon_ = use_system_default_icon;
-}
-
 void HWNDMessageHandler::SetFullscreen(bool fullscreen,
                                        int64_t target_display_id) {
   // Erase any prior reference to this window in the fullscreen window map.
@@ -1049,15 +1044,11 @@ bool HWNDMessageHandler::using_wm_input() const {
 // HWNDMessageHandler, gfx::WindowImpl overrides:
 
 HICON HWNDMessageHandler::GetDefaultWindowIcon() const {
-  return use_system_default_icon_
-             ? nullptr
-             : ViewsDelegate::GetInstance()->GetDefaultWindowIcon();
+  return ViewsDelegate::GetInstance()->GetDefaultWindowIcon();
 }
 
 HICON HWNDMessageHandler::GetSmallWindowIcon() const {
-  return use_system_default_icon_
-             ? nullptr
-             : ViewsDelegate::GetInstance()->GetSmallWindowIcon();
+  return ViewsDelegate::GetInstance()->GetSmallWindowIcon();
 }
 
 LRESULT HWNDMessageHandler::OnWndProc(UINT message,
@@ -3632,7 +3623,11 @@ void HWNDMessageHandler::SetBoundsInternal(const gfx::Rect& bounds_in_pixels,
   // changed.
   if (old_size == bounds_in_pixels.size() && force_size_changed &&
       !background_fullscreen_hack_) {
+    auto ref = msg_handler_weak_factory_.GetWeakPtr();
     delegate_->HandleClientSizeChanged(GetClientAreaBounds().size());
+    if (!ref) {
+      return;
+    }
     ResetWindowRegion(false, true);
   }
 }

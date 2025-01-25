@@ -518,7 +518,7 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const UnaryPowReturnType<ScalarExponent> p
     const ScalarExponent& exponent) const {
   return UnaryPowReturnType<ScalarExponent>(derived(), internal::scalar_unary_pow_op<Scalar, ScalarExponent>(exponent));
 #else
-/** \returns an expression of the coefficients of \c *this rasied to the constant power \a exponent
+/** \returns an expression of the coefficients of \c *this raised to the constant power \a exponent
  *
  * \tparam T is the scalar type of \a exponent. It must be compatible with the scalar type of the given expression.
  *

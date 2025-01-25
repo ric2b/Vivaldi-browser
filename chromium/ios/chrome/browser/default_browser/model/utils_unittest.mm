@@ -11,9 +11,9 @@
 #import "components/prefs/testing_pref_service.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
 #import "ios/chrome/browser/default_browser/model/utils_test_support.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/test/testing_application_context.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -142,44 +142,6 @@ TEST_F(DefaultBrowserUtilsTest, LogInterestingActivityEach) {
   EXPECT_TRUE(IsLikelyInterestedDefaultBrowserUser(DefaultPromoTypeAllTabs));
 }
 
-// Tests cooldown between fullscreen promos with cooldown refactor disabled and
-// no recent non-modal promo interaction.
-TEST_F(DefaultBrowserUtilsTest, FullscreenPromoCoolDownRefactorDisabled) {
-  feature_list_.InitWithFeatures(
-      {/*enabled=*/},
-      {/*disabled=*/kNonModalDefaultBrowserPromoCooldownRefactor});
-
-  EXPECT_FALSE(UserInFullscreenPromoCooldown());
-
-  LogUserInteractionWithFullscreenPromo();
-  EXPECT_TRUE(UserInFullscreenPromoCooldown());
-
-  ClearDefaultBrowserPromoData();
-  LogUserInteractionWithTailoredFullscreenPromo();
-  EXPECT_TRUE(UserInFullscreenPromoCooldown());
-}
-
-// Tests cooldown between fullscreen promos with cooldown refactor disabled and
-// a more recent non-modal promo interaction.
-TEST_F(DefaultBrowserUtilsTest,
-       FullscreenPromoCoolDownRefactorDisabledRecentNonModalInteraction) {
-  feature_list_.InitWithFeatures(
-      {/*enabled=*/},
-      {/*disabled=*/kNonModalDefaultBrowserPromoCooldownRefactor});
-
-  EXPECT_FALSE(UserInFullscreenPromoCooldown());
-
-  LogUserInteractionWithNonModalPromo(UserInteractionWithNonModalPromoCount(),
-                                      DisplayedFullscreenPromoCount());
-  EXPECT_TRUE(UserInFullscreenPromoCooldown());
-
-  ClearDefaultBrowserPromoData();
-  LogUserInteractionWithTailoredFullscreenPromo();
-  LogUserInteractionWithNonModalPromo(UserInteractionWithNonModalPromoCount(),
-                                      DisplayedFullscreenPromoCount());
-  EXPECT_TRUE(UserInFullscreenPromoCooldown());
-}
-
 // Tests cooldown between non-modal promos with a prior non-modal promo
 // interaction.
 TEST_F(DefaultBrowserUtilsTest, NonModalPromoCoolDownWithPriorInteraction) {
@@ -206,10 +168,6 @@ TEST_F(DefaultBrowserUtilsTest, NonModalPromoCoolDownWithoutPriorInteraction) {
 // enabled.
 TEST_F(DefaultBrowserUtilsTest,
        LogNonModalUserInteractionCooldownRefactorEnabled) {
-  feature_list_.InitWithFeatures(
-      {/*enabled=*/kNonModalDefaultBrowserPromoCooldownRefactor},
-      {/*disabled=*/});
-
   EXPECT_FALSE(UserInNonModalPromoCooldown());
 
   LogUserInteractionWithNonModalPromo(UserInteractionWithNonModalPromoCount(),
@@ -223,29 +181,6 @@ TEST_F(DefaultBrowserUtilsTest,
   EXPECT_EQ(UserInteractionWithNonModalPromoCount(), 2);
   EXPECT_TRUE(UserInNonModalPromoCooldown());
   EXPECT_FALSE(UserInFullscreenPromoCooldown());
-}
-
-// Tests logging user interactions with a non-modal promo with cooldown refactor
-// disabled.
-TEST_F(DefaultBrowserUtilsTest,
-       LogNonModalUserInteractionCooldownRefactorDisabled) {
-  feature_list_.InitWithFeatures(
-      {/*enabled=*/},
-      {/*disabled=*/kNonModalDefaultBrowserPromoCooldownRefactor});
-
-  EXPECT_FALSE(UserInNonModalPromoCooldown());
-
-  LogUserInteractionWithNonModalPromo(UserInteractionWithNonModalPromoCount(),
-                                      DisplayedFullscreenPromoCount());
-  EXPECT_EQ(UserInteractionWithNonModalPromoCount(), 1);
-  EXPECT_TRUE(UserInNonModalPromoCooldown());
-  EXPECT_TRUE(UserInFullscreenPromoCooldown());
-
-  LogUserInteractionWithNonModalPromo(UserInteractionWithNonModalPromoCount(),
-                                      DisplayedFullscreenPromoCount());
-  EXPECT_EQ(UserInteractionWithNonModalPromoCount(), 2);
-  EXPECT_TRUE(UserInNonModalPromoCooldown());
-  EXPECT_TRUE(UserInFullscreenPromoCooldown());
 }
 
 // Tests logging user interactions with a non-modal promo multiple times with

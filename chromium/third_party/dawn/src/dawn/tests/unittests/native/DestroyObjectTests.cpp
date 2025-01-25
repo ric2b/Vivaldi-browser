@@ -26,6 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <gtest/gtest.h>
+#include <webgpu/webgpu_cpp.h>
 
 #include <utility>
 #include <vector>
@@ -37,7 +38,6 @@
 #include "dawn/tests/MockCallback.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/WGPUHelpers.h"
-#include "dawn/webgpu_cpp.h"
 #include "mocks/BindGroupLayoutMock.h"
 #include "mocks/BindGroupMock.h"
 #include "mocks/BufferMock.h"
@@ -103,7 +103,7 @@ class DestroyObjectTests : public DawnMockTest {
   public:
     DestroyObjectTests() : DawnMockTest() {
         // Skipping validation on descriptors as coverage for validation is already present.
-        mDeviceMock->ForceSetToggleForTesting(Toggle::SkipValidation, true);
+        mDeviceToggles.ForceSet(Toggle::SkipValidation, true);
     }
 };
 
@@ -631,7 +631,7 @@ TEST_F(DestroyObjectTests, ShaderModuleNativeExplicit) {
 }
 
 TEST_F(DestroyObjectTests, ShaderModuleImplicit) {
-    ShaderModuleWGSLDescriptor wgslDesc = {};
+    ShaderSourceWGSL wgslDesc = {};
     wgslDesc.code = kVertexShader.data();
     ShaderModuleDescriptor desc = {};
     desc.nextInChain = &wgslDesc;
@@ -829,7 +829,7 @@ TEST_F(DestroyObjectTests, DestroyObjectsApiExplicit) {
     Ref<ShaderModuleMock> csModuleMock;
     wgpu::ShaderModule csModule;
     {
-        ShaderModuleWGSLDescriptor wgslDesc = {};
+        ShaderSourceWGSL wgslDesc = {};
         wgslDesc.code = kComputeShader.data();
         ShaderModuleDescriptor desc = {};
         desc.nextInChain = &wgslDesc;
@@ -843,7 +843,7 @@ TEST_F(DestroyObjectTests, DestroyObjectsApiExplicit) {
     Ref<ShaderModuleMock> vsModuleMock;
     wgpu::ShaderModule vsModule;
     {
-        ShaderModuleWGSLDescriptor wgslDesc = {};
+        ShaderSourceWGSL wgslDesc = {};
         wgslDesc.code = kVertexShader.data();
         ShaderModuleDescriptor desc = {};
         desc.nextInChain = &wgslDesc;

@@ -760,7 +760,7 @@
     Available devices
   </message>
   <message name="IDS_BLUETOOTH_PAIRING_PAIRING_NO_AVAILABLE_DEVICES" desc="Bluetooth pairing dialog: Title for the list of Bluetooth devices when no devices are available for pairing.">
-    No devices found nearby
+    Looking for nearby discoverable devices...
   </message>
   <message name="IDS_BLUETOOTH_PAIRING_PAIRING_BLUETOOTH_DISABLED" desc="Bluetooth pairing dialog: Title for the list of Bluetooth devices when Bluetooth is disabled so no devices are found for pairing.">
     Bluetooth is turned off. To see available devices, turn Bluetooth on.
@@ -1431,7 +1431,7 @@
     Please wait...
   </message>
   <!-- Strings for perks discovery screen-->
-  <message name="IDS_LOGIN_PERKS_SCREEN_LOADING" translateable="false" desc="Message shown while the perks are being fetched for the server.">
+  <message name="IDS_LOGIN_PERKS_SCREEN_LOADING" desc="Message shown while the perks are being fetched for the server.">
     Please wait...
   </message>
   <!-- Strings for app downloading screen -->
@@ -2563,9 +2563,6 @@
   </message>
   <message name="IDS_LOCK_SCREEN_WRONG_USER_SUBTITLE2" desc="User that was not logged in tries to unlock the device">
     Please make sure you are verifying <ph name="ACCOUNT">$1<ex>test@example.com</ex></ph> to unlock the session.
-  </message>
-  <message name="IDS_LOCK_SCREEN_REAUTH_SUBTITLE" desc="Subtitle for lock screen user re-auth dialog">
-    Sign in to <ph name="ACCOUNT">$1<ex>test@example.com</ex></ph> again to verify this account
   </message>
   <message name="IDS_LOCK_MANUAL_PASSWORD_SUBTITLE" desc="Subtitle for the manual password setting dialog.">
     Enter your password again to verify your account.
@@ -4677,14 +4674,6 @@
     Go to files
   </message>
 
-  <!-- Lacros data migration triggering UI. -->
-  <message name="IDS_LACROS_DATA_MIGRATION_RELAUNCH" desc="Message shown as a menu to relaunch Chrome in order to trigger data migration.">
-    Relaunch to update
-  </message>
-  <message name="IDS_LACROS_DATA_MIGRATION_OUT_OF_DISK_ERROR_TEXT" desc="Message shown when a user clicks 'Relaunch to update' button, but failed to restart due to out of disk space.">
-    There isn't enough space on this device to complete this update. Free up <ph name="NECESSARY_SPACE">$1<ex>10 MB</ex></ph> on your device and try again.
-  </message>
-
   <!-- Lacros data backward migration screen. -->
   <message name="IDS_LACROS_DATA_BACKWARD_MIGRATION_SCREEN_ERROR_SUBTITLE" desc="Shown if Lacros data backward migration fails.">
     If you click “Cancel”, it may affect your browser data and you may need to perform a factory reset.
@@ -5333,6 +5322,9 @@
   </message>
   <message name="IDS_CROSTINI_IMPORT_NOTIFICATION_MESSAGE_FAILED_SPACE" desc="Message displayed in the notification when import (restore) of the Linux container fails due to insufficient space.">
     Cannot restore due to lack of storage space. Free up <ph name="SPACE_REQUIRED">$1<ex>10Gb</ex></ph> from the device and try again.
+  </message>
+  <message name="IDS_CROSTINI_IMPORT_NOTIFICATION_MESSAGE_FAILED_SPACE_UNKNOWN_AMOUNT" desc="Message displayed in the notification when import (restore) of the Linux container fails due to insufficient space.">
+    Cannot restore due to lack of storage space.
   </message>
   <message name="IDS_CROSTINI_RECOVERY_TITLE" desc="Title displayed in the dialog when a Linux will be restarted after a Chrome crash.">
     Restart Linux?
@@ -6919,6 +6911,32 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
     Switch themes at sunrise and sunset
   </message>
 
+  <!-- Split Modifier Screen -->
+  <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_TITLE" desc="Title of the split modifier info screen.">
+    Get things done quickly with the new keyboard
+  </message>
+  <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_SUBTITLE" desc="Subtitle of the split modifier info screen.">
+    Start something new or get help in the flow.
+  </message>
+  <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_FIRST_DESCRIPTION_TITLE" desc="Title of the first description section.">
+    Quick Insert
+  </message>
+  <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_FIRST_DESCRIPTION_TEXT" desc="Text inside the first description section.">
+    Insert links, emojis, and more. You can also get help writing with Google AI.
+  </message>
+  <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_FIRST_DESCRIPTION_ACCESSIBILITY" desc="Additional information for the accessibility tools for the first description section.">
+    Quick insert key is located beneath the tab key
+  </message>
+  <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_SECOND_DESCRIPTION_TITLE" desc="Title of the second description section.">
+    Launcher
+  </message>
+  <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_SECOND_DESCRIPTION_TEXT" desc="Text inside the second description section.">
+    Find what you’re looking for by searching Google, files, apps, and more
+  </message>
+  <message name="IDS_OOBE_SPLIT_MODIFIER_INFO_SECOND_DESCRIPTION_ACCESSIBILITY" desc="Additional information for the accessibility tools for the second description section.">
+    Launcher key is located left of left alt key
+  </message>
+
   <!-- Touchpad Scroll -->
   <message name="IDS_OOBE_TOUCHPAD_SCROLL_TITLE" desc="Title of the touchpad scroll direction screen.">
     Change touchpad scrolling direction
@@ -7451,16 +7469,6 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
     Opening windows from your previous device
   </message>
 
-  <!-- Shortcut Removal Dialog -->
-  <message name="IDS_PROMP_SHORTCUT_REMOVAL_TITLE"
-    desc="Title text for remove a shortcut in its host app. Example: 'Remove Fortnite - GeForce Now shortcut?'">
-    Remove "<ph name="SHORTCUT_NAME">$1<ex>Fortnite</ex></ph> - <ph name="APP_NAME">$2<ex>GeForce Now</ex></ph>" shortcut?
-  </message>
-  <message name="IDS_PROMP_REMOVE_SHORTCUT_BUTTON"
-    desc="Text for the remove button on the shortcut removal prompt">
-    Remove
-  </message>
-
   <!-- Shortcut Accessibility Label-->
   <message name="IDS_APP_SHORTCUT_ACCESSIBILITY_LABEL"
     desc="The accessibility label of an app shortcut. Example: 'Funny Cat Video, Google Chrome'">
@@ -7476,17 +7484,6 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
   </message>
   <message name="IDS_REMOTE_ACTIVITY_NOTIFICATION_BUTTON_LABEL" desc="Button label for describing that the device is available for use and user can click on the button to remove the full screen notification.">
     Continue to use the device
-  </message>
-
-  <!-- Standalone Window Migration UX -->
-  <message name="IDS_STANDALONE_WINDOW_MIGRATION_UX_BUBBLE_HEADING" desc="Text to notify users of apps previously opening in browser by default now opening in a standalone window">
-    <ph name="APP">$1<ex>Google Docs</ex></ph> now opens as an app
-  </message>
-  <message name="IDS_STANDALONE_WINDOW_MIGRATION_UX_BUBBLE_TEXT" desc="Further explanation to notify users of apps previously opening in browser by default now opening in a standalone window">
-    All apps on ChromeOS now open in their own app windows instead of in Chrome.
-  </message>
-  <message name="IDS_STANDALONE_WINDOW_MIGRATION_UX_GOT_IT" desc="Used for Got it text on button for users to click to acknowledge the standalone window nudge">
-    Got it
   </message>
 
   <!-- App install dialog -->

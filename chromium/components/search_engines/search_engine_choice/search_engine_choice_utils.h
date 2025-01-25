@@ -22,19 +22,34 @@ struct TemplateURLData;
 
 namespace search_engines {
 
-extern const char kSearchEngineChoiceScreenProfileInitConditionsHistogram[];
-extern const char kSearchEngineChoiceScreenNavigationConditionsHistogram[];
-extern const char kSearchEngineChoiceScreenEventsHistogram[];
-extern const char kSearchEngineChoiceScreenDefaultSearchEngineTypeHistogram[];
-extern const char kSearchEngineChoiceScreenSelectedEngineIndexHistogram[];
-extern const char kSearchEngineChoiceScreenShowedEngineAtHistogramPattern[];
-extern const char
-    kSearchEngineChoiceScreenShowedEngineAtCountryMismatchHistogram[];
-extern const char kSearchEngineChoiceWipeReasonHistogram[];
-extern const char kSearchEngineChoiceRepromptHistogram[];
-extern const char kSearchEngineChoiceRepromptWildcardHistogram[];
-extern const char kSearchEngineChoiceRepromptSpecificCountryHistogram[];
-extern const char kSearchEngineChoiceUnexpectedIdHistogram[];
+inline constexpr char
+    kSearchEngineChoiceScreenProfileInitConditionsHistogram[] =
+        "Search.ChoiceScreenProfileInitConditions";
+inline constexpr char kSearchEngineChoiceScreenNavigationConditionsHistogram[] =
+    "Search.ChoiceScreenNavigationConditions";
+inline constexpr char kSearchEngineChoiceScreenEventsHistogram[] =
+    "Search.ChoiceScreenEvents";
+inline constexpr char
+    kSearchEngineChoiceScreenDefaultSearchEngineTypeHistogram[] =
+        "Search.ChoiceScreenDefaultSearchEngineType";
+inline constexpr char kSearchEngineChoiceScreenSelectedEngineIndexHistogram[] =
+    "Search.ChoiceScreenSelectedEngineIndex";
+inline constexpr char
+    kSearchEngineChoiceScreenShowedEngineAtHistogramPattern[] =
+        "Search.ChoiceScreenShowedEngineAt.Index%d";
+inline constexpr char
+    kSearchEngineChoiceScreenShowedEngineAtCountryMismatchHistogram[] =
+        "Search.ChoiceScreenShowedEngineAt.CountryMismatch";
+inline constexpr char kSearchEngineChoiceWipeReasonHistogram[] =
+    "Search.ChoiceWipeReason";
+inline constexpr char kSearchEngineChoiceRepromptHistogram[] =
+    "Search.ChoiceReprompt";
+inline constexpr char kSearchEngineChoiceRepromptWildcardHistogram[] =
+    "Search.ChoiceReprompt.Wildcard";
+inline constexpr char kSearchEngineChoiceRepromptSpecificCountryHistogram[] =
+    "Search.ChoiceReprompt.SpecificCountry";
+inline constexpr char kSearchEngineChoiceUnexpectedIdHistogram[] =
+    "Search.ChoiceDebug.UnexpectedSearchEngineId";
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -116,15 +131,6 @@ enum class SearchEngineChoiceScreenEvents {
   kMaxValue = kProfileCreationMoreButtonClicked,
 };
 // LINT.ThenChange(/tools/metrics/histograms/enums.xml:SearchEngineChoiceScreenEvents)
-
-enum class ChoicePromo {
-  // Any path of getting the choice screen.
-  kAny = 0,
-  // Showing the screen to existing users in a dialog.
-  kDialog = 1,
-  // Showing to new users in the First Run Experience.
-  kFre = 2,
-};
 
 // The cause for wiping the search engine choice preferences. Only used for
 // metrics.
@@ -245,10 +251,6 @@ std::optional<SearchEngineCountryOverride> GetSearchEngineCountryOverride();
 // Returns whether the search engine list is overridden in the command line to
 // return the default list or the list of all eea engines.
 bool HasSearchEngineCountryListOverride();
-
-// Whether the choice screen flag is generally enabled for the specific flow.
-// TODO(b/318824817): To be removed post-launch.
-bool IsChoiceScreenFlagEnabled(ChoicePromo promo);
 
 // Returns whether the provided `country_id` is eligible for the EEA default
 // search engine choice prompt.

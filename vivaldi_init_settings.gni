@@ -137,7 +137,7 @@ declare_overrides() {
     # this widgets available for users.
     ios_enable_shortcuts_widget = false
 
-    ios_application_icons_target = "//vivaldi/ios/app/resources/appicons:vivaldi_appicons"
+    ios_application_icons_target = "//vivaldi/ios/app/resources:vivaldi_appicons"
     ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"
 
     # Just making sure it stays off

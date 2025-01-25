@@ -45,6 +45,8 @@ static_library("extensions") {
     "url_constants.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash",
     "//ash/constants",
@@ -59,14 +61,13 @@ static_library("extensions") {
     "//chrome/browser/ash/app_list/search",
     "//chrome/browser/ash/crosapi:browser_util",
     "//chrome/browser/ash/extensions/language_packs",
-    "//chrome/browser/ash/extensions/speech",
-    "//chrome/browser/ash/extensions/users_private",
     "//chrome/browser/ash/file_manager",
     "//chrome/browser/ash/guest_os",
     "//chrome/browser/ash/input_method",
     "//chrome/browser/ash/login/demo_mode",
     "//chrome/browser/ash/policy/core",
     "//chrome/browser/ash/profiles",
+    "//chrome/browser/extensions/api/input_ime",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/resources/chromeos:app_icon_resources",
     "//chrome/browser/ui/ash/keyboard",
@@ -91,7 +92,6 @@ static_library("extensions") {
   allow_circular_includes_from = [
     "//chrome/browser/ash/app_list",
     "//chrome/browser/ash/app_list/search",
-    "//chrome/browser/ash/extensions/users_private",
     "//chrome/browser/ash/login/demo_mode",
     "//chrome/browser/ash/policy/core",
   ]
@@ -129,10 +129,12 @@ source_set("unit_tests") {
 
   deps = [
     ":extensions",
-    ":test_support",
     "//ash/components/arc:arc_test_support",
     "//base",
-    "//chrome/browser/ash:test_support",
+    "//chrome/browser/ash/app_list/arc:test_support",
+    "//chrome/browser/ash/login/demo_mode:test_support",
+    "//chrome/browser/ash/login/users:test_support",
+    "//chrome/browser/ash/settings:test_support",
     "//chrome/browser/extensions:test_support",
     "//chrome/common",
     "//chrome/test:test_support",
@@ -166,7 +168,6 @@ source_set("browser_tests") {
     "//ash",
     "//ash/constants",
     "//base",
-    "//chrome/browser/ash/accessibility",
     "//chrome/browser/ash/accessibility:test_support",
     "//chrome/browser/extensions",
     "//chrome/browser/profiles:profile",

@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "cast/streaming/constants.h"
+#include "cast/streaming/public/constants.h"
 #include "platform/base/interface_info.h"
 
 namespace openscreen::cast {

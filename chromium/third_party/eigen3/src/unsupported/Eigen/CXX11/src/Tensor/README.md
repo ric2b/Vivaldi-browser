@@ -898,7 +898,7 @@ containing the real part of the complex values of the original tensor.
 
 ### (Operation) imag()
 
-Returns a tensor with the same dimensions as the orginal tensor
+Returns a tensor with the same dimensions as the original tensor
 containing the imaginary part of the complex values of the original
 tensor.
 
@@ -910,7 +910,7 @@ exponent.
 
 The type of the exponent, Scalar, is always the same as the type of the
 tensor coefficients.  For example, only integer exponents can be used in
-conjuntion with tensors of integer values.
+conjunction with tensors of integer values.
 
 You can use cast() to lift this restriction.  For example this computes
 cubic roots of an int Tensor:

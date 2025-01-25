@@ -156,6 +156,10 @@ TEST_P(BufferHostMappedPointerTests, InitialDataAndCopySrc) {
 // Create a host-mapped buffer with CopyDst usage. Test that changes on the GPU
 // are visible to the host.
 TEST_P(BufferHostMappedPointerTests, CopyDst) {
+    // TODO(crbug.com/358296955): Re-enable when this no longer causes
+    // subsequent tests to flakily crash.
+    DAWN_SUPPRESS_TEST_IF(IsMacOS() && IsAMD() && IsMetal());
+
     // Set up expected data.
     uint32_t bufferSize = mRequiredAlignment;
     std::vector<uint32_t> expected(bufferSize / sizeof(uint32_t));

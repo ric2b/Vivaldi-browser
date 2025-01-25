@@ -2205,6 +2205,7 @@ static int cik_surface_sanity(struct radeon_surface_manager *surf_man,
         break;
     case RADEON_SURF_MODE_LINEAR_ALIGNED:
     default:
+        *stencil_tile_mode = SI_TILE_MODE_COLOR_LINEAR_ALIGNED;
         *tile_mode = SI_TILE_MODE_COLOR_LINEAR_ALIGNED;
     }
 

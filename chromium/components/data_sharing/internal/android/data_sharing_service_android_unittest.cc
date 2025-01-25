@@ -13,8 +13,7 @@
 #include "components/data_sharing/public/data_sharing_service.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
-#include "components/sync/protocol/model_type_state.pb.h"
-#include "components/sync/test/model_type_store_test_util.h"
+#include "components/sync/test/data_type_store_test_util.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -81,7 +80,7 @@ sync_pb::CollaborationGroupSpecifics MakeCollaborationGroupSpecifics(
     const GroupId& id) {
   sync_pb::CollaborationGroupSpecifics result;
   result.set_collaboration_id(id.value());
-  result.set_last_updated_timestamp_millis_since_unix_epoch(
+  result.set_changed_at_timestamp_millis_since_unix_epoch(
       base::Time::Now().InMillisecondsSinceUnixEpoch());
   return result;
 }
@@ -132,7 +131,7 @@ class DataSharingServiceAndroidTest : public testing::Test {
     data_sharing_service_ = std::make_unique<DataSharingServiceImpl>(
         std::move(test_url_loader_factory),
         identity_test_env_.identity_manager(),
-        syncer::ModelTypeStoreTestUtil::FactoryForInMemoryStoreForTest(),
+        syncer::DataTypeStoreTestUtil::FactoryForInMemoryStoreForTest(),
         version_info::Channel::UNKNOWN, std::move(sdk_delegate),
         /*ui_delegate=*/nullptr);
     data_sharing_service_android_ = std::make_unique<DataSharingServiceAndroid>(

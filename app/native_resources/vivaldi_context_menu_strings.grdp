@@ -133,6 +133,17 @@
     <message name="IDS_VIV_INSPECT_PORTAL_DOCUMENT" desc="Open developertools inspecting the document holding portals">
         Inspect portal-document
     </message>
-
+    <message name="IDS_VIV_DEVICE_ACTIVE_TODAY" desc="Remote device we can sent links to has been active today">
+        Active today
+    </message>
+    <message name="IDS_VIV_DEVICE_ACTIVE_YESTERDAY" desc="Remote device we can sent links to was active yesterday">
+        Active yesterday
+    </message>
+    <message name="IDS_VIV_DEVICE_ACTIVE_DAYS_AGO" desc="Remote device we can sent links to was active a given number of days ago">
+        Active <ph name="DEVICE_LAST_ACTIVATED_TIME">$1<ex>- 3 days ago</ex></ph> days ago
+    </message>
+    <message name="IDS_VIV_GET_VIVALDI_FOR_MOBILE" desc="Menu entry linking to a page for mobile versions">
+        Get Vivaldi for Mobile
+    </message>
 
 </grit-part>

@@ -2,21 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/strings/utf_string_conversions.h"
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "base/test/scoped_feature_list.h"
+#include "base/uuid.h"
 #include "chrome/browser/sync/test/integration/saved_tab_groups_helper.h"
+#include "chrome/browser/sync/test/integration/shared_tab_group_data_helper.h"
 #include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "components/data_sharing/public/features.h"
 #include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/saved_tab_group_test_utils.h"
 #include "components/saved_tab_groups/tab_group_sync_service.h"
-#include "components/sync/base/model_type.h"
+#include "components/saved_tab_groups/types.h"
+#include "components/sync/base/data_type.h"
+#include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 #include "components/sync/protocol/shared_tab_group_data_specifics.pb.h"
 #include "components/sync/service/sync_service_impl.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "url/gurl.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
@@ -30,15 +39,6 @@ namespace {
 
 using testing::SizeIs;
 using testing::UnorderedElementsAre;
-
-MATCHER_P3(HasSharedGroupMetadata, title, color, collaboration_id, "") {
-  return base::UTF16ToUTF8(arg.title()) == title && arg.color() == color &&
-         arg.collaboration_id() == collaboration_id;
-}
-
-MATCHER_P2(HasTabMetadata, title, url, "") {
-  return base::UTF16ToUTF8(arg.title()) == title && arg.url() == GURL(url);
-}
 
 sync_pb::SharedTabGroupDataSpecifics MakeSharedTabGroupSpecifics(
     const base::Uuid& guid,
@@ -94,21 +94,40 @@ class SingleClientSharedTabGroupDataSyncTest : public SyncTest {
 
 // TabGroupSyncService is used on Android only.
 #if BUILDFLAG(IS_ANDROID)
-  tab_groups::TabGroupSyncService* GetTabGroupSyncService() const {
-    return tab_groups::TabGroupSyncServiceFactory::GetForProfile(GetProfile(0));
+  TabGroupSyncService* GetTabGroupSyncService() const {
+    return TabGroupSyncServiceFactory::GetForProfile(GetProfile(0));
   }
 #else
-  tab_groups::SavedTabGroupModel* GetSavedTabGroupModel() const {
-    return tab_groups::SavedTabGroupServiceFactory::GetForProfile(GetProfile(0))
-        ->model();
+  SavedTabGroupModel* GetSavedTabGroupModel() const {
+    return SavedTabGroupServiceFactory::GetForProfile(GetProfile(0))->model();
   }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-  std::vector<tab_groups::SavedTabGroup> GetAllGroups() const {
+  // Returns both saved and shared tab groups.
+  std::vector<SavedTabGroup> GetAllTabGroups() const {
 #if BUILDFLAG(IS_ANDROID)
     return GetTabGroupSyncService()->GetAllGroups();
 #else
     return GetSavedTabGroupModel()->saved_tab_groups();
+#endif  // BUILDFLAG(IS_ANDROID)
+  }
+
+  void AddTabGroup(SavedTabGroup group) {
+#if BUILDFLAG(IS_ANDROID)
+    GetTabGroupSyncService()->AddGroup(std::move(group));
+#else
+    GetSavedTabGroupModel()->Add(std::move(group));
+#endif  // BUILDFLAG(IS_ANDROID)
+  }
+
+  void MakeTabGroupShared(const LocalTabGroupID& local_group_id,
+                          std::string_view collaboration_id) {
+#if BUILDFLAG(IS_ANDROID)
+    GetTabGroupSyncService()->MakeTabGroupShared(local_group_id,
+                                                 collaboration_id);
+#else
+    GetSavedTabGroupModel()->MakeTabGroupShared(local_group_id,
+                                                std::string(collaboration_id));
 #endif  // BUILDFLAG(IS_ANDROID)
   }
 
@@ -143,13 +162,54 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
 
   ASSERT_TRUE(SetupSync());
 
-  ASSERT_THAT(GetAllGroups(), UnorderedElementsAre(HasSharedGroupMetadata(
-                                  "title", tab_groups::TabGroupColorId::kCyan,
-                                  collaboration_id)));
+  ASSERT_THAT(GetAllTabGroups(),
+              UnorderedElementsAre(HasSharedGroupMetadata(
+                  "title", TabGroupColorId::kCyan, collaboration_id)));
   EXPECT_THAT(
-      GetAllGroups().front().saved_tabs(),
+      GetAllTabGroups().front().saved_tabs(),
       UnorderedElementsAre(HasTabMetadata("tab 1", "http://google.com/1"),
                            HasTabMetadata("tab 2", "http://google.com/2")));
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
+                       ShouldTransitionSavedToSharedTabGroup) {
+  ASSERT_TRUE(SetupSync());
+
+  SavedTabGroup group(u"title", TabGroupColorId::kBlue,
+                      /*urls=*/{}, /*position=*/std::nullopt);
+  group.SetLocalGroupId(test::GenerateRandomTabGroupID());
+  SavedTabGroupTab tab(GURL("https://google.com/1"), u"title 1",
+                       group.saved_guid(), /*position=*/std::nullopt);
+  group.AddTabLocally(tab);
+  AddTabGroup(group);
+
+  ASSERT_TRUE(
+      ServerSavedTabGroupMatchChecker(
+          UnorderedElementsAre(
+              HasSpecificsSavedTabGroup(
+                  "title", sync_pb::SavedTabGroup::SAVED_TAB_GROUP_COLOR_BLUE),
+              HasSpecificsSavedTab("title 1", "https://google.com/1")))
+          .Wait());
+
+  // Add the user to the collaboration before making any changes (to prevent
+  // filtration of local entities on GetUpdates before Commit).
+  GetFakeServer()->AddCollaboration("collaboration");
+
+  // Transition the saved tab group to shared tab group.
+  MakeTabGroupShared(group.local_group_id().value(), "collaboration");
+
+  // Only the tab group header is removed for saved tab groups.
+  EXPECT_TRUE(
+      ServerSavedTabGroupMatchChecker(UnorderedElementsAre(HasSpecificsSavedTab(
+                                          "title 1", "https://google.com/1")))
+          .Wait());
+
+  EXPECT_TRUE(ServerSharedTabGroupMatchChecker(
+                  UnorderedElementsAre(
+                      HasSpecificsSharedTabGroup("title",
+                                                 sync_pb::SharedTabGroup::BLUE),
+                      HasSpecificsSharedTab("title 1", "https://google.com/1")))
+                  .Wait());
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -173,7 +233,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
       collaboration_id);
 
   ASSERT_TRUE(SetupSync());
-  ASSERT_THAT(GetAllGroups(), SizeIs(1));
+  ASSERT_THAT(GetAllTabGroups(), SizeIs(1));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
@@ -181,9 +241,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
   ASSERT_TRUE(SetupClients());
   ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
 
-  ASSERT_THAT(GetAllGroups(), SizeIs(1));
+  ASSERT_THAT(GetAllTabGroups(), SizeIs(1));
   EXPECT_THAT(
-      GetAllGroups().front().saved_tabs(),
+      GetAllTabGroups().front().saved_tabs(),
       UnorderedElementsAre(HasTabMetadata("tab 1", "http://google.com/1"),
                            HasTabMetadata("tab 2", "http://google.com/2")));
 }

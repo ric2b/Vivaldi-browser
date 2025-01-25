@@ -224,9 +224,9 @@ export class LayerDetailsView extends Common.ObjectWrapper.eventMixin<EventTypes
       return;
     }
     const snapshotSelection =
-        this.selection.type() === Type.Snapshot ? this.selection : this.layerSnapshotMap.get(this.selection.layer());
+        this.selection.type() === Type.SNAPSHOT ? this.selection : this.layerSnapshotMap.get(this.selection.layer());
     if (snapshotSelection) {
-      this.dispatchEventToListeners(Events.PaintProfilerRequested, snapshotSelection);
+      this.dispatchEventToListeners(Events.PAINT_PROFILER_REQUESTED, snapshotSelection);
     }
   }
 
@@ -321,7 +321,7 @@ export class LayerDetailsView extends Common.ObjectWrapper.eventMixin<EventTypes
     this.scrollRectsCell.removeChildren();
     layer.scrollRects().forEach(this.createScrollRectElement.bind(this));
     this.populateStickyPositionConstraintCell(layer.stickyPositionConstraint());
-    const snapshot = this.selection && this.selection.type() === Type.Snapshot ?
+    const snapshot = this.selection && this.selection.type() === Type.SNAPSHOT ?
         (this.selection as SnapshotSelection).snapshot() :
         null;
 
@@ -371,20 +371,20 @@ export class LayerDetailsView extends Common.ObjectWrapper.eventMixin<EventTypes
 }
 
 export const enum Events {
-  PaintProfilerRequested = 'PaintProfilerRequested',
+  PAINT_PROFILER_REQUESTED = 'PaintProfilerRequested',
 }
 
 export type EventTypes = {
-  [Events.PaintProfilerRequested]: Selection,
+  [Events.PAINT_PROFILER_REQUESTED]: Selection,
 };
 
 export const slowScrollRectNames = new Map([
-  [SDK.LayerTreeBase.Layer.ScrollRectType.NonFastScrollable, i18nLazyString(UIStrings.nonFastScrollable)],
-  [SDK.LayerTreeBase.Layer.ScrollRectType.TouchEventHandler, i18nLazyString(UIStrings.touchEventHandler)],
-  [SDK.LayerTreeBase.Layer.ScrollRectType.WheelEventHandler, i18nLazyString(UIStrings.wheelEventHandler)],
-  [SDK.LayerTreeBase.Layer.ScrollRectType.RepaintsOnScroll, i18nLazyString(UIStrings.repaintsOnScroll)],
+  [SDK.LayerTreeBase.Layer.ScrollRectType.NON_FAST_SCROLLABLE, i18nLazyString(UIStrings.nonFastScrollable)],
+  [SDK.LayerTreeBase.Layer.ScrollRectType.TOUCH_EVENT_HANDLER, i18nLazyString(UIStrings.touchEventHandler)],
+  [SDK.LayerTreeBase.Layer.ScrollRectType.WHEEL_EVENT_HANDLER, i18nLazyString(UIStrings.wheelEventHandler)],
+  [SDK.LayerTreeBase.Layer.ScrollRectType.REPAINTS_ON_SCROLL, i18nLazyString(UIStrings.repaintsOnScroll)],
   [
-    SDK.LayerTreeBase.Layer.ScrollRectType.MainThreadScrollingReason,
+    SDK.LayerTreeBase.Layer.ScrollRectType.MAIN_THREAD_SCROLL_REASON,
     i18nLazyString(UIStrings.mainThreadScrollingReason),
   ],
 ]);

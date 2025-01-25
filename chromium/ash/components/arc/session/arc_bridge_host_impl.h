@@ -82,8 +82,6 @@ class ArcBridgeHostImpl
   void OnChromeFeatureFlagsInstanceReady(
       mojo::PendingRemote<mojom::ChromeFeatureFlagsInstance>
           chrome_feature_flags_remote) override;
-  void OnClipboardInstanceReady(
-      mojo::PendingRemote<mojom::ClipboardInstance> clipboard_remote) override;
   void OnCompatibilityModeInstanceReady(
       mojo::PendingRemote<mojom::CompatibilityModeInstance>
           compatibility_mode_remote) override;
@@ -159,8 +157,6 @@ class ArcBridgeHostImpl
       override;
   void OnProcessInstanceReady(
       mojo::PendingRemote<mojom::ProcessInstance> process_remote) override;
-  void OnPropertyInstanceReady(
-      mojo::PendingRemote<mojom::PropertyInstance> property_remote) override;
   void OnScreenCaptureInstanceReady(
       mojo::PendingRemote<mojom::ScreenCaptureInstance> screen_capture_remote)
       override;

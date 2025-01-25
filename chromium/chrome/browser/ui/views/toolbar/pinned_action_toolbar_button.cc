@@ -8,11 +8,14 @@
 #include <type_traits>
 
 #include "base/metrics/user_metrics.h"
+#include "base/strings/strcat.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/customize_chrome/side_panel_controller.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_action_callback.h"
 #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
@@ -86,17 +89,11 @@ PinnedActionToolbarButton::PinnedActionToolbarButton(
   // TODO(shibalik): Revisit since all pinned actions should not be toggle
   // buttons.
   GetViewAccessibility().SetRole(ax::mojom::Role::kToggleButton);
+  GetViewAccessibility().SetCheckedState(ax::mojom::CheckedState::kFalse);
 }
 
 PinnedActionToolbarButton::~PinnedActionToolbarButton() {
   action_count_changed_subscription_ = {};
-}
-
-void PinnedActionToolbarButton::GetAccessibleNodeData(
-    ui::AXNodeData* node_data) {
-  ToolbarButton::GetAccessibleNodeData(node_data);
-  node_data->SetCheckedState(IsActive() ? ax::mojom::CheckedState::kTrue
-                                        : ax::mojom::CheckedState::kFalse);
 }
 
 bool PinnedActionToolbarButton::IsActive() {
@@ -116,18 +113,12 @@ void PinnedActionToolbarButton::SetIconVisibility(bool is_visible) {
 
 void PinnedActionToolbarButton::AddHighlight() {
   anchor_higlight_ = AddAnchorHighlight();
-  if (pinned_) {
-    NotifyAccessibilityEvent(ax::mojom::Event::kCheckedStateChanged,
-                             /*send_native_event=*/true);
-  }
+  GetViewAccessibility().SetCheckedState(ax::mojom::CheckedState::kTrue);
 }
 
 void PinnedActionToolbarButton::ResetHighlight() {
   anchor_higlight_.reset();
-  if (pinned_) {
-    NotifyAccessibilityEvent(ax::mojom::Event::kCheckedStateChanged,
-                             /*send_native_event=*/true);
-  }
+  GetViewAccessibility().SetCheckedState(ax::mojom::CheckedState::kFalse);
 }
 
 void PinnedActionToolbarButton::SetPinned(bool pinned) {
@@ -203,8 +194,15 @@ bool PinnedActionToolbarButton::OnMousePressed(const ui::MouseEvent& event) {
 void PinnedActionToolbarButton::OnMouseReleased(const ui::MouseEvent& event) {
   if (!skip_execution_) {
     ToolbarButton::OnMouseReleased(event);
+  } else {
+    OnClickCanceled(event);
   }
   skip_execution_ = false;
+}
+
+void PinnedActionToolbarButton::GetAccessibleNodeData(
+    ui::AXNodeData* node_data) {
+  Button::GetAccessibleNodeData(node_data);
 }
 
 void PinnedActionToolbarButton::UpdateIcon() {
@@ -229,6 +227,10 @@ void PinnedActionToolbarButton::UpdateIcon() {
                           GetForegroundColor(ButtonState::STATE_PRESSED),
                           GetForegroundColor(ButtonState::STATE_DISABLED));
   }
+}
+
+bool PinnedActionToolbarButton::ShouldShowEphemerallyInToolbar() {
+  return should_show_in_toolbar_ || has_anchor_;
 }
 
 void PinnedActionToolbarButton::SetActionEngaged(bool action_engaged) {
@@ -263,10 +265,12 @@ std::unique_ptr<ui::SimpleMenuModel>
 PinnedActionToolbarButton::CreateMenuModel() {
   std::unique_ptr<ui::SimpleMenuModel> model =
       std::make_unique<ui::SimpleMenuModel>(this);
-  // String ID does not mean anything here as it is dynamic. It will get
-  // recomputed  from `GetLabelForCommandId()`.
-  model->AddItemWithStringId(IDC_UPDATE_SIDE_PANEL_PIN_STATE,
-                             IDS_SIDE_PANEL_TOOLBAR_BUTTON_CXMENU_UNPIN);
+  // String ID and icon do not mean anything here as it is dynamic. It will get
+  // recomputed  from `GetLabelForCommandId()` and `GetIconForCommandId`.
+  model->AddItemWithStringIdAndIcon(
+      IDC_UPDATE_SIDE_PANEL_PIN_STATE,
+      IDS_SIDE_PANEL_TOOLBAR_BUTTON_CXMENU_UNPIN,
+      ui::ImageModel::FromVectorIcon(kKeepOffIcon, ui::kColorIcon, 16));
   if (features::IsToolbarPinningEnabled()) {
     model->AddSeparator(ui::NORMAL_SEPARATOR);
     model->AddItemWithStringIdAndIcon(
@@ -288,6 +292,7 @@ void PinnedActionToolbarButton::OnAnchorCountChanged(size_t anchor_count) {
         static_cast<std::underlying_type_t<PinnedToolbarActionFlexPriority>>(
             PinnedToolbarActionFlexPriority::kHigh));
     InvalidateLayout();
+    has_anchor_ = true;
   } else {
     SetProperty(
         kToolbarButtonFlexPriorityKey,
@@ -299,6 +304,8 @@ void PinnedActionToolbarButton::OnAnchorCountChanged(size_t anchor_count) {
                   std::underlying_type_t<PinnedToolbarActionFlexPriority>>(
                   PinnedToolbarActionFlexPriority::kLow));
     InvalidateLayout();
+    has_anchor_ = false;
+    container_->MaybeRemovePoppedOutButtonFor(GetActionId());
   }
 }
 
@@ -318,6 +325,15 @@ std::u16string PinnedActionToolbarButton::GetLabelForCommandId(
   return std::u16string();
 }
 
+ui::ImageModel PinnedActionToolbarButton::GetIconForCommandId(
+    int command_id) const {
+  if (command_id == IDC_UPDATE_SIDE_PANEL_PIN_STATE) {
+    return ui::ImageModel::FromVectorIcon(pinned_ ? kKeepOffIcon : kKeepIcon,
+                                          ui::kColorIcon, 16);
+  }
+  return ui::ImageModel();
+}
+
 void PinnedActionToolbarButton::ExecuteCommand(int command_id,
                                                int event_flags) {
   if (command_id == IDC_UPDATE_SIDE_PANEL_PIN_STATE) {
@@ -330,6 +346,13 @@ void PinnedActionToolbarButton::ExecuteCommand(int command_id,
 bool PinnedActionToolbarButton::IsCommandIdEnabled(int command_id) const {
   if (command_id == IDC_UPDATE_SIDE_PANEL_PIN_STATE) {
     return browser_->profile()->IsRegularProfile() && is_pinnable_;
+  }
+  if (command_id == IDC_SHOW_CUSTOMIZE_CHROME_TOOLBAR) {
+    tabs::TabModel* tab = browser_->tab_strip_model()->GetActiveTab();
+    customize_chrome::SidePanelController* side_panel_controller =
+        tab->tab_features()->customize_chrome_side_panel_controller();
+    return side_panel_controller &&
+           side_panel_controller->IsCustomizeChromeEntryAvailable();
   }
   return true;
 }
@@ -386,6 +409,13 @@ void PinnedActionToolbarButtonActionViewInterface::InvokeActionImpl(
     actions::ActionItem* action_item) {
   base::RecordAction(
       base::UserMetricsAction("Actions.PinnedToolbarButtonActivation"));
+  std::optional<actions::ActionId> action_id = action_item->GetActionId();
+  CHECK(action_id.has_value());
+  const std::optional<std::string> metrics_name =
+      actions::ActionIdMap::ActionIdToString(action_id.value());
+  CHECK(metrics_name.has_value());
+  base::RecordComputedAction(base::StrCat(
+      {"Actions.PinnedToolbarButtonActivation.", metrics_name.value()}));
 
   base::AutoReset<bool> needs_delayed_destruction =
       action_view_->SetNeedsDelayedDestruction(true);

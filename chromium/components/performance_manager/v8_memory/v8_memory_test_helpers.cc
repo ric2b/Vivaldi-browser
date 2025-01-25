@@ -277,7 +277,8 @@ FrameNodeImpl* WebMemoryTestHarness::AddFrameNodeImpl(
             ? url::Origin::Resolve(gurl, parent->GetOrigin().value())
             : url::Origin::Create(gurl);
     frame->OnNavigationCommitted(gurl, origin,
-                                 /*same document=*/false);
+                                 /*same_document=*/false,
+                                 /*is_served_from_back_forward_cache=*/false);
   }
   if (memory_usage || canvas_memory_usage) {
     auto* data =
@@ -375,7 +376,7 @@ WorkerNodeImpl* WebMemoryTestHarness::AddWorkerNodeImpl(
       case WorkerNode::WorkerType::kService:
         return blink::ServiceWorkerToken();
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }();
   auto worker_node = CreateNode<WorkerNodeImpl>(
       worker_type, process_.get(), /*browser_context_id=*/std::string(),

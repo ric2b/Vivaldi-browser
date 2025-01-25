@@ -73,6 +73,7 @@ tests_sources = [
   "$_tests/EncodedInfoTest.cpp",
   "$_tests/ExifTest.cpp",
   "$_tests/ExtendedSkColorTypeTests.cpp",
+  "$_tests/F16DrawTest.cpp",
   "$_tests/F16StagesTest.cpp",
   "$_tests/FakeStreams.h",
   "$_tests/FillPathTest.cpp",
@@ -353,6 +354,7 @@ graphite_tests_sources = [
   "$_tests/graphite/CacheKeyTest.cpp",
   "$_tests/graphite/ComputeTest.cpp",
   "$_tests/graphite/DeviceTest.cpp",
+  "$_tests/graphite/DrawAtlasTest.cpp",
   "$_tests/graphite/DrawPassTest.cpp",
   "$_tests/graphite/GraphitePromiseImageTest.cpp",
   "$_tests/graphite/GraphiteResourceCacheTest.cpp",
@@ -383,8 +385,9 @@ graphite_tests_sources = [
 ]
 
 precompile_tests_sources = [
-  "$_tests/graphite/CombinationBuilderTest.cpp",
-  "$_tests/graphite/PaintParamsKeyTest.cpp",
+  "$_tests/graphite/precompile/ChromePrecompileTest.cpp",
+  "$_tests/graphite/precompile/CombinationBuilderTest.cpp",
+  "$_tests/graphite/precompile/PaintParamsKeyTest.cpp",
 ]
 
 graphite_dawn_tests_sources = [ "$_tests/graphite/DawnBackendTextureTest.cpp" ]

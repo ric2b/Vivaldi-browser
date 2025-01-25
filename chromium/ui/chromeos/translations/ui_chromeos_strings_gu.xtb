@@ -377,7 +377,6 @@
 <translation id="3999574733850440202">તાજેતરમાં ખોલવામાં આવેલી Microsoft ફાઇલો OneDrive પર ખસેડવામાં આવી છે</translation>
 <translation id="4002066346123236978">શીર્ષક</translation>
 <translation id="4017788180641807848">અંગ્રેજી (યુએસ), વર્કમેન કીબોર્ડ સાથે</translation>
-<translation id="4019998208269143058">ફાઇલોના ઝડપી ઍક્સેસ પર પિન કરો</translation>
 <translation id="4040753847560036377">ખોટો PUK</translation>
 <translation id="4057991113334098539">સક્રિય કરી રહ્યું છે</translation>
 <translation id="4092890906744441904">આઇરિશ</translation>
@@ -696,7 +695,6 @@
 <translation id="6320212353742551423"><ph name="ARCHIVE_TYPE" /> આર્કાઇવ</translation>
 <translation id="6321303798550928047">હાથ હલાવતું ચિહ્ન</translation>
 <translation id="6327785803543103246">વેબ પ્રૉક્સીની ઑટોમૅટિક ખોજ</translation>
-<translation id="6337014272874260727">ફાઇલોના ઝડપી ઍક્સેસમાંથી અનપિન કરો</translation>
 <translation id="6339145975392024142">US આંતરરાષ્ટ્રીય (PC)</translation>
 <translation id="6356685157277930264">ફાઇલોનો પ્રતિસાદ આપતી વિન્ડો</translation>
 <translation id="6358884629796491903">ડ્રેગન</translation>
@@ -824,7 +822,7 @@
 <translation id="7295662345261934369">બીજા સાથે શેર કરો</translation>
 <translation id="7297443947353982503">વપરાશકર્તાનામ/પાસવર્ડ ખોટો છે અથવા EAP-auth નિષ્ફળ થયું</translation>
 <translation id="7309413087278791451">જર્મન (બેલ્જિયમ)</translation>
-<translation id="7339898014177206373">નવી વિંડો</translation>
+<translation id="7339898014177206373">નવી વિન્ડો</translation>
 <translation id="7343393116438664539">વિયેતનામીઝ ટેલેક્સ</translation>
 <translation id="7347346221088620549">એન્ક્રિપ્ટેડ ફાઇલ</translation>
 <translation id="7357762654218998920">આ પ્રકારની ફાઇલને સપોર્ટ આપવામાં આવતો નથી. ChromeOS પર ફાઇલો ખોલવા વિશે <ph name="BEGIN_LINK_HELP" />વધુ જાણો<ph name="END_LINK_HELP" />.</translation>

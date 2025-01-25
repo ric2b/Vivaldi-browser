@@ -58,8 +58,6 @@ class ProgressiveDecoder final :
  public:
   enum FXCodec_Format {
     FXCodec_Invalid = 0,
-    FXCodec_1bppGray = 0x101,
-    FXCodec_1bppRgb = 0x001,
     FXCodec_8bppGray = 0x108,
     FXCodec_8bppRgb = 0x008,
     FXCodec_Rgb = 0x018,
@@ -76,18 +74,13 @@ class ProgressiveDecoder final :
                                CFX_DIBAttribute* pAttribute,
                                bool bSkipImageTypeCheck);
 
-  FXCODEC_IMAGE_TYPE GetType() const { return m_imageType; }
   int32_t GetWidth() const { return m_SrcWidth; }
   int32_t GetHeight() const { return m_SrcHeight; }
-  int32_t GetBitsPerPixel() const { return m_SrcComponents * m_SrcBPC; }
-  void SetClipBox(FX_RECT* clip);
+
+  FXDIB_Format GetBitmapFormat() const;
 
   std::pair<FXCODEC_STATUS, size_t> GetFrames();
-  FXCODEC_STATUS StartDecode(const RetainPtr<CFX_DIBitmap>& pDIBitmap,
-                             int start_x,
-                             int start_y,
-                             int size_x,
-                             int size_y);
+  FXCODEC_STATUS StartDecode(RetainPtr<CFX_DIBitmap> bitmap);
 
   FXCODEC_STATUS ContinueDecode();
 
@@ -99,7 +92,7 @@ class ProgressiveDecoder final :
                      int pass,
                      int* color_type,
                      double* gamma) override;
-  bool PngAskScanlineBuf(int line, uint8_t** pSrcBuf) override;
+  uint8_t* PngAskScanlineBuf(int line) override;
   void PngFillScanlineBufCompleted(int pass, int line) override;
 #endif  // PDF_ENABLE_XFA_PNG
 
@@ -123,40 +116,15 @@ class ProgressiveDecoder final :
 
  private:
   using WeightTable = CStretchEngine::WeightTable;
-  using PixelWeight = CStretchEngine::PixelWeight;
 
-  class HorzTable {
-   public:
-    HorzTable();
-    ~HorzTable();
-
-    void CalculateWeights(int dest_len, int src_len);
-    PixelWeight* GetPixelWeight(int pixel) {
-      return reinterpret_cast<PixelWeight*>(pdfium::make_span(m_pWeightTables)
-                                                .subspan(pixel * m_ItemSize)
-                                                .data());
-    }
-
-   private:
-    int m_ItemSize = 0;
-    DataVector<uint8_t> m_pWeightTables;
-  };
-
-  class VertTable {
-   public:
-    VertTable();
-    ~VertTable();
-
-    void CalculateWeights(int dest_len, int src_len);
-    PixelWeight* GetPixelWeight(int pixel) {
-      return reinterpret_cast<PixelWeight*>(pdfium::make_span(m_pWeightTables)
-                                                .subspan(pixel * m_ItemSize)
-                                                .data());
-    }
-
-   private:
-    int m_ItemSize = 0;
-    DataVector<uint8_t> m_pWeightTables;
+  enum class TransformMethod : uint8_t {
+    kInvalid,
+    k8BppGrayToRgbMaybeAlpha,
+    k8BppRgbToRgbNoAlpha,
+    k8BppRgbToArgb,
+    kRgbMaybeAlphaToRgbMaybeAlpha,
+    kCmykToRgbMaybeAlpha,
+    kArgbToArgb,
   };
 
 #ifdef PDF_ENABLE_XFA_BMP
@@ -172,16 +140,9 @@ class ProgressiveDecoder final :
   bool GifDetectImageTypeInBuffer();
   FXCODEC_STATUS GifStartDecode();
   FXCODEC_STATUS GifContinueDecode();
-  void GifDoubleLineResampleVert(const RetainPtr<CFX_DIBitmap>& pDeviceBitmap,
-                                 double scale_y,
-                                 int dest_row);
 #endif  // PDF_ENABLE_XFA_GIF
 
 #ifdef PDF_ENABLE_XFA_PNG
-  void PngOneOneMapResampleHorz(const RetainPtr<CFX_DIBitmap>& pDeviceBitmap,
-                                int32_t dest_line,
-                                pdfium::span<uint8_t> src_span,
-                                FXCodec_Format src_format);
   bool PngDetectImageTypeInBuffer(CFX_DIBAttribute* pAttribute);
   FXCODEC_STATUS PngStartDecode();
   FXCODEC_STATUS PngContinueDecode();
@@ -194,8 +155,10 @@ class ProgressiveDecoder final :
 
   bool JpegReadMoreData(FXCODEC_STATUS* err_status);
   bool JpegDetectImageTypeInBuffer(CFX_DIBAttribute* pAttribute);
-  FXCODEC_STATUS JpegStartDecode(FXDIB_Format format);
+  FXCODEC_STATUS JpegStartDecode();
   FXCODEC_STATUS JpegContinueDecode();
+
+  int32_t GetBitsPerPixel() const { return m_SrcComponents * m_SrcBPC; }
 
   bool DetectImageType(FXCODEC_IMAGE_TYPE imageType,
                        CFX_DIBAttribute* pAttribute);
@@ -203,8 +166,7 @@ class ProgressiveDecoder final :
                     ProgressiveDecoderIface::Context* pContext,
                     FXCODEC_STATUS* err_status);
 
-  int GetDownScale();
-  void GetTransMethod(FXDIB_Format dest_format, FXCodec_Format src_format);
+  void SetTransMethod();
 
   void ResampleScanline(const RetainPtr<CFX_DIBitmap>& pDeviceBitmap,
                         int32_t dest_line,
@@ -214,12 +176,6 @@ class ProgressiveDecoder final :
                 int32_t src_line,
                 uint8_t* src_scan,
                 FXCodec_Format src_format);
-  void ResampleVert(const RetainPtr<CFX_DIBitmap>& pDeviceBitmap,
-                    double scale_y,
-                    int dest_row);
-  void ResampleVertBT(const RetainPtr<CFX_DIBitmap>& pDeviceBitmap,
-                      double scale_y,
-                      int dest_row);
 
   FXCODEC_STATUS m_status = FXCODEC_STATUS::kDecodeFinished;
   FXCODEC_IMAGE_TYPE m_imageType = FXCODEC_IMAGE_UNKNOWN;
@@ -244,18 +200,11 @@ class ProgressiveDecoder final :
   uint32_t m_offSet = 0;
   int m_ScanlineSize = 0;
   WeightTable m_WeightHorz;
-  VertTable m_WeightVert;
-  HorzTable m_WeightHorzOO;
   int m_SrcWidth = 0;
   int m_SrcHeight = 0;
   int m_SrcComponents = 0;
   int m_SrcBPC = 0;
-  FX_RECT m_clipBox;
-  int m_startX = 0;
-  int m_startY = 0;
-  int m_sizeX = 0;
-  int m_sizeY = 0;
-  int m_TransMethod = -1;
+  TransformMethod m_TransMethod;
   int m_SrcRow = 0;
   FXCodec_Format m_SrcFormat = FXCodec_Invalid;
   int m_SrcPassNumber = 0;

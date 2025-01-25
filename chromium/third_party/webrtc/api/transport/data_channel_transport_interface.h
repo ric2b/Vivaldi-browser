@@ -12,7 +12,10 @@
 #ifndef API_TRANSPORT_DATA_CHANNEL_TRANSPORT_INTERFACE_H_
 #define API_TRANSPORT_DATA_CHANNEL_TRANSPORT_INTERFACE_H_
 
-#include "absl/types/optional.h"
+#include <cstddef>
+#include <optional>
+
+#include "api/priority.h"
 #include "api/rtc_error.h"
 #include "rtc_base/copy_on_write_buffer.h"
 
@@ -46,14 +49,14 @@ struct SendDataParams {
   // Setting this value to zero disables retransmission.
   // Valid values are in the range [0-UINT16_MAX].
   // `max_rtx_count` and `max_rtx_ms` may not be set simultaneously.
-  absl::optional<int> max_rtx_count;
+  std::optional<int> max_rtx_count;
 
   // If set, the maximum number of milliseconds for which the transport
   // may retransmit this message before it is dropped.
   // Setting this value to zero disables retransmission.
   // Valid values are in the range [0-UINT16_MAX].
   // `max_rtx_count` and `max_rtx_ms` may not be set simultaneously.
-  absl::optional<int> max_rtx_ms;
+  std::optional<int> max_rtx_ms;
 };
 
 // Sink for callbacks related to a data channel.
@@ -99,7 +102,7 @@ class DataChannelTransportInterface {
 
   // Opens a data `channel_id` for sending.  May return an error if the
   // specified `channel_id` is unusable.  Must be called before `SendData`.
-  virtual RTCError OpenChannel(int channel_id) = 0;
+  virtual RTCError OpenChannel(int channel_id, PriorityValue priority) = 0;
 
   // Sends a data buffer to the remote endpoint using the given send parameters.
   // `buffer` may not be larger than 256 KiB. Returns an error if the send

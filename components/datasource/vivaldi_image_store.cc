@@ -468,9 +468,9 @@ void VivaldiImageStore::SaveMappingsOnFileThread() {
   base::FilePath tmp_path =
       user_data_dir_.AppendASCII(kDatasourceFilemappingTmpFilename);
 
-  int length = static_cast<int>(json.length());
-  if (length != base::WriteFile(tmp_path, json.data(), length)) {
-    LOG(ERROR) << "Failed to write to " << tmp_path.value() << " " << length
+  if (!base::WriteFile(tmp_path, json)) {
+    LOG(ERROR) << "Failed to write to " << tmp_path.value() << " "
+               << json.length()
                << " bytes";
     return;
   }
@@ -562,8 +562,8 @@ void VivaldiImageStore::SanitizeUrlsOnUIThreadWithLoadedBookmarks(
         continue;
       }
       need_satitize = true;
-      auto bytes = base::MakeRefCounted<base::RefCountedBytes>(
-          reinterpret_cast<const uint8_t*>(data.c_str()), data.size());
+      auto bytes = base::MakeRefCounted<base::RefCountedBytes>(base::span(
+          reinterpret_cast<const uint8_t*>(data.c_str()), data.size()));
 
       StoreImageData(*format, bytes,
                      base::BindOnce(

@@ -31,7 +31,7 @@
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTextBlob.h"
 #include "include/encode/SkPngEncoder.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
@@ -63,6 +63,8 @@
 #include "tools/SkMetaData.h"
 #include "tools/flags/CommandLineFlags.h"
 #include "tools/flags/CommonFlags.h"
+#include "tools/flags/CommonFlagsGanesh.h"
+#include "tools/flags/CommonFlagsGraphite.h"
 #include "tools/skui/InputState.h"
 #include "tools/skui/Key.h"
 #include "tools/skui/ModifierKey.h"
@@ -250,11 +252,6 @@ static DEFINE_string2(match, m, nullptr,
 
 static DEFINE_string(pathstrategy, "default",
                      "Path renderer strategy to use. Allowed values are " PATHSTRATEGY_STR ".");
-#if defined(SK_DAWN)
-static DEFINE_bool(disable_tint_symbol_renaming,
-                   false,
-                   "Disable Tint WGSL symbol renaming when using Dawn");
-#endif
 #endif
 
 #if defined(SK_BUILD_FOR_ANDROID)
@@ -355,32 +352,17 @@ static skgpu::graphite::PathRendererStrategy get_path_renderer_strategy_type(con
 const char* get_backend_string(sk_app::Window::BackendType type) {
     switch (type) {
         case sk_app::Window::kNativeGL_BackendType: return "OpenGL";
-#if SK_ANGLE && (defined(SK_BUILD_FOR_WIN) || defined(SK_BUILD_FOR_MAC))
         case sk_app::Window::kANGLE_BackendType: return "ANGLE";
-#endif
-#ifdef SK_DAWN
-#if defined(SK_GRAPHITE)
         case sk_app::Window::kGraphiteDawn_BackendType: return "Dawn (Graphite)";
-#endif
-#endif
-#ifdef SK_VULKAN
         case sk_app::Window::kVulkan_BackendType: return "Vulkan";
-#if defined(SK_GRAPHITE)
         case sk_app::Window::kGraphiteVulkan_BackendType: return "Vulkan (Graphite)";
-#endif
-#endif
-#ifdef SK_METAL
         case sk_app::Window::kMetal_BackendType: return "Metal";
-#if defined(SK_GRAPHITE)
         case sk_app::Window::kGraphiteMetal_BackendType: return "Metal (Graphite)";
-#endif
-#endif
-#ifdef SK_DIRECT3D
         case sk_app::Window::kDirect3D_BackendType: return "Direct3D";
-#endif
         case sk_app::Window::kRaster_BackendType: return "Raster";
+        default:
+            SK_ABORT("unsupported backend type");
     }
-    SkASSERT(false);
     return nullptr;
 }
 
@@ -495,6 +477,38 @@ static const char kSoftkeyHint[] = "Please select a softkey";
 static const char kON[] = "ON";
 static const char kRefreshStateName[] = "Refresh";
 
+static const Window::BackendType kSupportedBackends[] = {
+#ifdef SK_GL
+        sk_app::Window::kNativeGL_BackendType,
+#endif
+#if SK_ANGLE && (defined(SK_BUILD_FOR_WIN) || defined(SK_BUILD_FOR_MAC))
+        sk_app::Window::kANGLE_BackendType,
+#endif
+#ifdef SK_DAWN
+#if defined(SK_GRAPHITE)
+        sk_app::Window::kGraphiteDawn_BackendType,
+#endif
+#endif
+#ifdef SK_VULKAN
+        sk_app::Window::kVulkan_BackendType,
+#if defined(SK_GRAPHITE)
+        sk_app::Window::kGraphiteVulkan_BackendType,
+#endif
+#endif
+#ifdef SK_METAL
+        sk_app::Window::kMetal_BackendType,
+#if defined(SK_GRAPHITE)
+        sk_app::Window::kGraphiteMetal_BackendType,
+#endif
+#endif
+#ifdef SK_DIRECT3D
+        sk_app::Window::kDirect3D_BackendType,
+#endif
+        sk_app::Window::kRaster_BackendType,
+};
+
+constexpr size_t kSupportedBackendTypeCount = std::size(kSupportedBackends);
+
 Viewer::Viewer(int argc, char** argv, void* platformData)
     : fCurrentSlide(-1)
     , fRefresh(false)
@@ -552,7 +566,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     static SkTaskGroup::Enabler kTaskGroupEnabler(FLAGS_threads);
 
     fBackendType = get_backend_type(FLAGS_backend[0]);
-    fWindow = Window::CreateNativeWindow(platformData);
+    fWindow = Windows::CreateNativeWindow(platformData);
 
     DisplayParams displayParams;
     displayParams.fMSAASampleCount = FLAGS_msaa;
@@ -570,11 +584,9 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     }
     displayParams.fCreateProtectedNativeBackend = FLAGS_createProtected;
 #if defined(SK_GRAPHITE)
-    displayParams.fGraphiteContextOptions.fPriv.fPathRendererStrategy =
+    CommonFlags::SetTestOptions(&displayParams.fGraphiteTestOptions.fTestOptions);
+    displayParams.fGraphiteTestOptions.fPriv.fPathRendererStrategy =
             get_path_renderer_strategy_type(FLAGS_pathstrategy[0]);
-#if defined(SK_DAWN)
-    displayParams.fDisableTintSymbolRenaming = FLAGS_disable_tint_symbol_renaming;
-#endif
 #endif
     fWindow->setRequestedDisplayParams(displayParams);
     fDisplay = fWindow->getRequestedDisplayParams();
@@ -698,18 +710,17 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
         this->changeZoomLevel(-1.f / 32.f);
         fWindow->inval();
     });
+
     fCommands.addCommand('d', "Modes", "Change rendering backend", [this]() {
-        sk_app::Window::BackendType newBackend = (sk_app::Window::BackendType)(
-                (fBackendType + 1) % sk_app::Window::kBackendTypeCount);
-        // Switching to and from Vulkan is problematic on Linux so disabled for now
-#if defined(SK_BUILD_FOR_UNIX) && defined(SK_VULKAN)
-        if (newBackend == sk_app::Window::kVulkan_BackendType) {
-            newBackend = (sk_app::Window::BackendType)((newBackend + 1) %
-                                                       sk_app::Window::kBackendTypeCount);
-        } else if (fBackendType == sk_app::Window::kVulkan_BackendType) {
-            newBackend = sk_app::Window::kVulkan_BackendType;
+        int currIdx = -1;
+        for (size_t i = 0; i < kSupportedBackendTypeCount; i++) {
+            if (kSupportedBackends[i] == fBackendType) {
+                currIdx = int(i);
+                break;
+            }
         }
-#endif
+        SkASSERT(currIdx >= 0);
+        auto newBackend = kSupportedBackends[(currIdx + 1) % kSupportedBackendTypeCount];
         this->setBackend(newBackend);
     });
     fCommands.addCommand('K', "IO", "Save slide to SKP", [this]() {
@@ -1288,7 +1299,7 @@ void Viewer::updateTitle() {
 #if defined(SK_GRAPHITE)
         skgpu::graphite::PathRendererStrategy strategy =
                 fWindow->getRequestedDisplayParams()
-                        .fGraphiteContextOptions.fPriv.fPathRendererStrategy;
+                        .fGraphiteTestOptions.fPriv.fPathRendererStrategy;
         if (skgpu::graphite::PathRendererStrategy::kDefault != strategy) {
             title.appendf(" [Path renderer strategy: %s]",
                           get_path_renderer_strategy_string(strategy));
@@ -1467,7 +1478,7 @@ void Viewer::setBackend(sk_app::Window::BackendType backendType) {
     // on Windows, so we just delete the window and recreate it.
     DisplayParams params = fWindow->getRequestedDisplayParams();
     delete fWindow;
-    fWindow = Window::CreateNativeWindow(nullptr);
+    fWindow = Windows::CreateNativeWindow(nullptr);
 
     // re-register callbacks
     fCommands.attach(fWindow);
@@ -1900,6 +1911,9 @@ void Viewer::onResize(int width, int height) {
         }
         fSlides[fCurrentSlide]->resize(width / scaleFactor, height / scaleFactor);
     }
+
+    fImGuiLayer.setScaleFactor(fWindow->scaleFactor());
+    fStatsLayer.setDisplayScale((fZoomUI ? 2.0f : 1.0f) * fWindow->scaleFactor());
 }
 
 SkPoint Viewer::mapEvent(float x, float y) {
@@ -2251,7 +2265,7 @@ void Viewer::drawImGui() {
 #if defined(SK_GRAPHITE)
                         using skgpu::graphite::PathRendererStrategy;
                         skgpu::graphite::ContextOptionsPriv* opts =
-                                &params.fGraphiteContextOptions.fPriv;
+                                &params.fGraphiteTestOptions.fPriv;
                         auto prevPrs = opts->fPathRendererStrategy;
                         auto prsButton = [&](skgpu::graphite::PathRendererStrategy s) {
                             if (ImGui::RadioButton(get_path_renderer_strategy_string(s),
@@ -2717,11 +2731,7 @@ void Viewer::drawImGui() {
                 bool sksl = params.fGrContextOptions.fShaderCacheStrategy ==
                             GrContextOptions::ShaderCacheStrategy::kSkSL;
 
-#if defined(SK_VULKAN)
                 const bool isVulkan = fBackendType == sk_app::Window::kVulkan_BackendType;
-#else
-                const bool isVulkan = false;
-#endif
 
                 // To re-load shaders from the currently active programs, we flush all
                 // caches on one frame, then set a flag to poll the cache on the next frame.
@@ -2756,17 +2766,11 @@ void Viewer::drawImGui() {
                             // Retrieve the shaders from the pipeline.
                             const skgpu::graphite::GraphicsPipeline::PipelineInfo& pipelineInfo =
                                     pipeline->getPipelineInfo();
-                            const skgpu::graphite::ShaderCodeDictionary* dict =
-                                    gctx->priv().shaderCodeDictionary();
-                            skgpu::graphite::PaintParamsKey paintKey =
-                                    dict->lookup(pipelineInfo.fPaintID);
 
                             CachedShader& entry(fCachedShaders.push_back());
                             entry.fKey = nullptr;
-                            entry.fKeyString = SkStringPrintf("#%-3d RenderStep: %u, Paint: ",
-                                                              index++,
-                                                              pipelineInfo.fRenderStepID);
-                            entry.fKeyString.append(paintKey.toString(dict, /*includeData=*/true));
+                            entry.fKeyString = SkStringPrintf("#%-3d %s",
+                                                              index++, pipelineInfo.fLabel.c_str());
 
                             if (sksl) {
                                 entry.fShader[kVertex_GrShaderType] =
@@ -3013,15 +3017,14 @@ void Viewer::drawImGui() {
             SkImageInfo info = SkImageInfo::MakeN32Premul(1, 1);
             bool didGraphiteRead = false;
             if (is_graphite_backend_type(fBackendType)) {
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
                 SkBitmap bitmap;
                 bitmap.allocPixels(info);
                 SkPixmap pixels;
                 SkAssertResult(bitmap.peekPixels(&pixels));
-                didGraphiteRead = fLastImage->readPixelsGraphite(fWindow->graphiteRecorder(),
-                                                                 pixels,
-                                                                 xInt,
-                                                                 yInt);
+                didGraphiteRead = as_IB(fLastImage)
+                                          ->readPixelsGraphite(
+                                                  fWindow->graphiteRecorder(), pixels, xInt, yInt);
                 pixel = *pixels.addr32();
                 ImGui::SameLine();
                 ImGui::Text("(X, Y): %d, %d RGBA: %X %X %X %X",
@@ -3215,8 +3218,8 @@ void Viewer::updateUIState() {
     // Backend state
     WriteStateObject(writer, kBackendStateName, get_backend_string(fBackendType),
         [](SkJSONWriter& writer) {
-            for (int i = 0; i < sk_app::Window::kBackendTypeCount; ++i) {
-                auto backendType = static_cast<sk_app::Window::BackendType>(i);
+            for (size_t i = 0; i < kSupportedBackendTypeCount; ++i) {
+                auto backendType = kSupportedBackends[i];
                 writer.appendCString(get_backend_string(backendType));
             }
         });
@@ -3300,8 +3303,8 @@ void Viewer::onUIStateChanged(const SkString& stateName, const SkString& stateVa
 
         SkDebugf("Slide not found: %s", stateValue.c_str());
     } else if (stateName.equals(kBackendStateName)) {
-        for (int i = 0; i < sk_app::Window::kBackendTypeCount; i++) {
-            auto backendType = static_cast<sk_app::Window::BackendType>(i);
+        for (size_t i = 0; i < kSupportedBackendTypeCount; i++) {
+            auto backendType = kSupportedBackends[i];
             if (stateValue.equals(get_backend_string(backendType))) {
                 if (fBackendType != i) {
                     fBackendType = backendType;

@@ -11,10 +11,11 @@
 #import "base/ios/block_types.h"
 #import "base/time/time.h"
 #import "components/content_settings/core/common/content_settings.h"
-#import "components/sync/base/model_type.h"
+#import "components/sync/base/data_type.h"
 #import "third_party/metrics_proto/user_demographics.pb.h"
 
 @class ElementSelector;
+enum class TipsNotificationType;
 
 @interface JavaScriptExecutionResult : NSObject
 @property(readonly, nonatomic) BOOL success;
@@ -393,7 +394,7 @@
 + (void)flushFakeSyncServerToDisk;
 
 // Gets the number of entities of the given `type`.
-+ (int)numberOfSyncEntitiesWithType:(syncer::ModelType)type;
++ (int)numberOfSyncEntitiesWithType:(syncer::DataType)type;
 
 // Forces every request to fail in a way that simulates a network failure.
 + (void)disconnectFakeSyncServerNetwork;
@@ -422,6 +423,10 @@
 // Adds typed URL into HistoryService.
 + (void)addHistoryServiceTypedURL:(NSString*)URL;
 
+// Adds typed URL into HistoryService at timestamp `visitTimestamp`.
++ (void)addHistoryServiceTypedURL:(NSString*)URL
+                   visitTimestamp:(base::Time)visitTimestamp;
+
 // Deletes typed URL from HistoryService.
 + (void)deleteHistoryServiceTypedURL:(NSString*)URL;
 
@@ -431,7 +436,7 @@
 + (BOOL)isURL:(NSString*)spec presentOnClient:(BOOL)expectPresent;
 
 // Triggers a sync cycle for a `type`.
-+ (void)triggerSyncCycleForType:(syncer::ModelType)type;
++ (void)triggerSyncCycleForType:(syncer::DataType)type;
 
 // Injects user demographics into the fake sync server. `rawBirthYear` is the
 // true birth year, pre-noise, and the gender corresponds to the proto enum
@@ -480,6 +485,9 @@
 // Adds a bookmark with a sync passphrase. The sync server will need the sync
 // passphrase to start.
 + (void)addBookmarkWithSyncPassphrase:(NSString*)syncPassphrase;
+
+// Add a sync passphrase requirement to start the sync server.
++ (void)addSyncPassphrase:(NSString*)syncPassphrase;
 
 // Returns whether UserSelectableType::kHistory is among the selected types.
 + (BOOL)isSyncHistoryDataTypeSelected;
@@ -723,6 +731,10 @@
 
 // Whether the first run sentinel exists.
 + (bool)hasFirstRunSentinel;
+
+#pragma mark - Notification Utilities
+
++ (void)requestTipsNotification:(TipsNotificationType)type;
 
 @end
 

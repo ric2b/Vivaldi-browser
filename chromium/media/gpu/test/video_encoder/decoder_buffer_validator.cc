@@ -1,6 +1,11 @@
 // Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
 #include "media/gpu/test/video_encoder/decoder_buffer_validator.h"
 
 #include <set>
@@ -107,9 +112,15 @@ H264Validator::~H264Validator() = default;
 bool H264Validator::Validate(const DecoderBuffer* buffer,
                              const BitstreamBufferMetadata& metadata) {
   if (metadata.dropped_frame()) {
-    LOG(ERROR)
-        << "VideoEncodeAccelerator doesn't support drop frame support in H264";
-    return false;
+    if (metadata.key_frame) {
+      LOG(ERROR) << "Don't drop key frame";
+      return false;
+    }
+    if (metadata.h264.has_value()) {
+      LOG(ERROR) << "BitstreamBufferMetadata has H264Metadata on dropped frame";
+      return false;
+    }
+    return true;
   }
 
   if (!metadata.end_of_picture()) {

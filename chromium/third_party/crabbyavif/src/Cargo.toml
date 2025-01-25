@@ -21,7 +21,7 @@ seq-macro = "0.3.5"
 tempfile = "3.8.1"
 exitcode = "1.1.2"
 rand = "0.8.5"
-image = "0.25.1"
+image = "0.25.2"
 
 [build-dependencies]
 bindgen = "0.69.1"
@@ -38,3 +38,6 @@ android_mediacodec = ["dep:ndk-sys"]
 [package.metadata.capi.header]
 name = "avif"
 subdirectory = "avif"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(google3)', 'cfg(android_soong)'] }

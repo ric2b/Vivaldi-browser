@@ -19,6 +19,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.components.tab_groups.TabGroupColorId;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,8 +43,10 @@ public class RecentlyClosedBridge implements RecentlyClosedTabManager {
             int id,
             long groupTimestamp,
             @JniType("std::u16string") String groupTitle,
+            @TabGroupColorId int groupColor,
             @JniType("std::vector") List<RecentlyClosedTab> tabs) {
-        RecentlyClosedGroup group = new RecentlyClosedGroup(id, groupTimestamp, groupTitle);
+        RecentlyClosedGroup group =
+                new RecentlyClosedGroup(id, groupTimestamp, groupTitle, groupColor);
         group.getTabs().addAll(tabs);
         entries.add(group);
     }
@@ -93,9 +96,6 @@ public class RecentlyClosedBridge implements RecentlyClosedTabManager {
         // TODO(b/336589861): Use savedTabGroupId to reassociate this tab group with a sync entity.
 
         if (tabIds.length == 1) {
-            if (!ChromeFeatureList.sAndroidTabGroupStableIds.isEnabled()) {
-                return;
-            }
             groupFilter.createSingleTabGroup(tabIds[0], false);
         } else {
             for (int id : tabIds) {

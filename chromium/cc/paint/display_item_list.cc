@@ -261,6 +261,12 @@ void DisplayItemList::AddToValue(base::trace_event::TracedValue* state,
                                  bool include_items) const {
   state->BeginDictionary("params");
 
+  // DisplayItemList doesn't know the current scroll offsets, so use zero.
+  ScrollOffsetMap zero_scroll_offsets;
+  for (auto [element_id, _] : raster_inducing_scrolls()) {
+    zero_scroll_offsets[element_id] = gfx::PointF();
+  }
+
   // For tracing code, just use the entire positive quadrant if the |rtree_|
   // has invalid bounds.
   gfx::Rect bounds = rtree_.bounds().value_or(kMaxBounds);
@@ -268,6 +274,7 @@ void DisplayItemList::AddToValue(base::trace_event::TracedValue* state,
     state->BeginArray("items");
 
     PlaybackParams params(nullptr, SkM44());
+    params.raster_inducing_scroll_offsets = &zero_scroll_offsets;
     std::map<size_t, gfx::Rect> visual_rects = rtree_.GetAllBoundsForTracing();
     for (const PaintOp& op : paint_op_buffer_) {
       state->BeginDictionary();
@@ -302,7 +309,7 @@ void DisplayItemList::AddToValue(base::trace_event::TracedValue* state,
     SkCanvas* canvas = recorder.beginRecording(gfx::RectToSkRect(bounds));
     canvas->translate(-bounds.x(), -bounds.y());
     canvas->clipRect(gfx::RectToSkRect(bounds));
-    Raster(canvas);
+    Raster(canvas, /*image_provider=*/nullptr, &zero_scroll_offsets);
     sk_sp<SkPicture> picture = recorder.finishRecordingAsPicture();
 
     std::string b64_picture;
@@ -457,6 +464,7 @@ void DisplayItemList::PushDrawScrollingContentsOp(
     // This will cause over-invalidation when the nested scroller scrolls, but
     // avoids the complexity and cost of mapping the visual rect of nested
     // scroller to the layer space, especially when the parent scroller scrolls.
+    // TODO(crbug.com/359279553): Evaluate if the optimization is worth it.
     raster_inducing_scrolls_[nested_scroll_element_id] =
         RasterInducingScrollInfo{visual_rect, info.has_discardable_images};
   }

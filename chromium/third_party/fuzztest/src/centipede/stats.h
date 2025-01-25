@@ -30,7 +30,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/types/span.h"
 #include "./centipede/environment.h"
-#include "./centipede/remote_file.h"
+#include "./common/remote_file.h"
 
 namespace centipede {
 
@@ -472,6 +472,8 @@ class StatsLogger : public StatsReporter {
   using StatsReporter::StatsReporter;
   ~StatsLogger() override = default;
 
+  StatsLogger(StatsLogger &&) = default;
+
  private:
   bool ShouldReportThisField(const Stats::FieldInfo &field) override;
   void PreAnnounceFields(
@@ -506,6 +508,8 @@ class StatsCsvFileAppender : public StatsReporter {
  public:
   using StatsReporter::StatsReporter;
   ~StatsCsvFileAppender() override;
+
+  StatsCsvFileAppender(StatsCsvFileAppender &&) = default;
 
  private:
   struct BufferedRemoteFile {

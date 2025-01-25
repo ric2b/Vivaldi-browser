@@ -33,6 +33,8 @@
 #include "extensions/common/extension_features.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
+#include "ui/content/vivaldi_tab_check.h"
+
 namespace {
 
 HidChooserContext* GetChooserContext(content::BrowserContext* browser_context) {
@@ -189,6 +191,10 @@ std::unique_ptr<content::HidChooser> ChromeHidDelegate::RunChooser(
   GetContextObserver(browser_context);
   DCHECK(base::Contains(observations_, browser_context));
 
+  // Vivaldi can show permission prompts inside webviews showing tab-content.
+  // Added for VB-106343.
+  if (!VivaldiTabCheck::IsVivaldiTab(
+          content::WebContents::FromRenderFrameHost(render_frame_host))) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // If it's a webview, request permission to show chooser from the embedder.
   if (auto* web_view =
@@ -219,6 +225,7 @@ std::unique_ptr<content::HidChooser> ChromeHidDelegate::RunChooser(
     return chooser;
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+  } // IsVivaldiTab
 
   return std::make_unique<HidChooser>(chrome::ShowDeviceChooserDialog(
       render_frame_host,

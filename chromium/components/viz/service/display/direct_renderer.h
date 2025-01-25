@@ -97,7 +97,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   gfx::Rect GetTargetDamageBoundingRect() const;
 
   // Public interface implemented by subclasses.
-  struct SwapFrameData {
+  struct VIZ_SERVICE_EXPORT SwapFrameData {
     SwapFrameData();
     ~SwapFrameData();
 
@@ -314,7 +314,8 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // a render pass (e.g. applying a filter directly to the tile quad)
   // return that quad, otherwise return null.
   virtual const DrawQuad* CanPassBeDrawnDirectly(
-      const AggregatedRenderPass* pass);
+      const AggregatedRenderPass* pass,
+      const RenderPassRequirements& requirements);
   virtual void EnsureScissorTestDisabled() = 0;
   virtual void DidChangeVisibility() = 0;
   virtual void CopyDrawnRenderPass(

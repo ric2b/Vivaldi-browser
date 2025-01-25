@@ -6,8 +6,10 @@
 
 #include <string>
 
+#include "ash/auth/active_session_auth_controller_impl.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/in_session_auth_dialog_controller.h"
+#include "ash/shell.h"
 #include "base/check_op.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
@@ -58,9 +60,8 @@ void OSSettingsLockScreenBrowserTestBase::SetUpOnMainThread() {
 
 mojom::LockScreenSettingsAsyncWaiter
 OSSettingsLockScreenBrowserTestBase::OpenLockScreenSettings() {
-  if (ash::features::IsUseAuthPanelInSettingsEnabled()) {
-    base::test::TestFuture<AuthHubConnector*, AuthSurfaceRegistry::AuthSurface>
-        future;
+  if (ash::features::IsUseAuthPanelInSessionEnabled()) {
+    base::test::TestFuture<AuthSurfaceRegistry::AuthSurface> future;
     auto subscription =
         ash::AuthParts::Get()->GetAuthSurfaceRegistry()->RegisterShownCallback(
             future.GetCallback());
@@ -70,9 +71,8 @@ OSSettingsLockScreenBrowserTestBase::OpenLockScreenSettings() {
     lock_screen_settings_remote_ =
         mojo::Remote(os_settings_driver.GoToLockScreenSettings());
 
-    auto [connector, surface] = future.Get();
-
-    connector_ = connector;
+    auto surface = future.Get();
+    CHECK_EQ(surface, AuthSurfaceRegistry::AuthSurface::kInSession);
 
     base::RunLoop().RunUntilIdle();
   } else {
@@ -85,24 +85,21 @@ OSSettingsLockScreenBrowserTestBase::OpenLockScreenSettings() {
       lock_screen_settings_remote_.get());
 }
 
-void OSSettingsLockScreenBrowserTestBase::
-    AuthenticateViaCryptohomePasswordEngine(bool keep_alive_connector) {
-  AuthEngineApi::AuthenticateWithPassword(
-      connector_, AshAuthFactor::kGaiaPassword, kPassword);
-  if (!keep_alive_connector) {
-    // In certain cases, we do not want to invalidate `connector`,
-    // for example, to test scenarios such as entering the wrong password
-    // initially, followed by the correct one.
-    connector_ = nullptr;
-  }
+void OSSettingsLockScreenBrowserTestBase::AuthenticateUsingPassword() {
+  auto* controller = static_cast<ActiveSessionAuthControllerImpl*>(
+      Shell::Get()->active_session_auth_controller());
+
+  ActiveSessionAuthControllerImpl::TestApi(controller)
+      .SubmitPassword(kPassword);
+
   base::RunLoop().RunUntilIdle();
 }
 
 mojom::LockScreenSettingsAsyncWaiter
 OSSettingsLockScreenBrowserTestBase::OpenLockScreenSettingsAndAuthenticate() {
-  if (ash::features::IsUseAuthPanelInSettingsEnabled()) {
+  if (ash::features::IsUseAuthPanelInSessionEnabled()) {
     OpenLockScreenSettings();
-    AuthenticateViaCryptohomePasswordEngine(false);
+    AuthenticateUsingPassword();
   } else {
     OpenLockScreenSettings().Authenticate(kPassword);
   }
@@ -121,22 +118,20 @@ mojom::LockScreenSettingsAsyncWaiter OSSettingsLockScreenBrowserTestBase::
         const std::string& setting_id) {
   std::string relative_url = "/osPrivacy/lockScreen?settingId=";
   relative_url += setting_id;
-  if (ash::features::IsUseAuthPanelInSettingsEnabled()) {
-    base::test::TestFuture<AuthHubConnector*, AuthSurfaceRegistry::AuthSurface>
-        future;
+  if (ash::features::IsUseAuthPanelInSessionEnabled()) {
+    base::test::TestFuture<AuthSurfaceRegistry::AuthSurface> future;
     auto subscription =
         ash::AuthParts::Get()->GetAuthSurfaceRegistry()->RegisterShownCallback(
             future.GetCallback());
 
     auto os_settings_driver = OpenOSSettings(relative_url);
 
-    auto [connector, surface] = future.Get();
-
-    connector_ = connector;
+    auto surface = future.Get();
+    CHECK_EQ(surface, AuthSurfaceRegistry::AuthSurface::kInSession);
 
     base::RunLoop().RunUntilIdle();
 
-    AuthenticateViaCryptohomePasswordEngine(false);
+    AuthenticateUsingPassword();
 
     lock_screen_settings_remote_ =
         mojo::Remote(os_settings_driver.AssertOnLockScreenSettings());

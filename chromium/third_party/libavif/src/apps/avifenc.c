@@ -207,8 +207,8 @@ static void syntaxLong(void)
     printf("    -j,--jobs J                       : Number of jobs (worker threads). Use \"all\" to potentially use as many cores as possible (default: all)\n");
     printf("    --no-overwrite                    : Never overwrite existing output file\n");
     printf("    -o,--output FILENAME              : Instead of using the last filename given as output, use this filename\n");
-#if defined(AVIF_ENABLE_EXPERIMENTAL_METAV1)
-    printf("    --metav1                          : Use reduced header if possible\n");
+#if defined(AVIF_ENABLE_EXPERIMENTAL_MINI)
+    printf("    --mini                            : Use reduced header if possible (experimental, backward-incompatible)\n");
 #endif
     printf("    -l,--lossless                     : Set all defaults to encode losslessly, and emit warnings when settings/input don't allow for it\n");
     printf("    -d,--depth D                      : Output depth [8,10,12]. (JPEG/PNG only; For y4m or stdin, depth is retained)\n");
@@ -582,7 +582,7 @@ static avifBool avifInputReadImage(avifInput * input,
         if (feof(stdin)) {
             return AVIF_FALSE;
         }
-        if (!y4mRead(NULL, AVIF_DEFAULT_IMAGE_SIZE_LIMIT, dstImage, dstSourceTiming, &input->frameIter)) {
+        if (!y4mRead(NULL, UINT32_MAX, dstImage, dstSourceTiming, &input->frameIter)) {
             fprintf(stderr, "ERROR: Cannot read y4m through standard input");
             return AVIF_FALSE;
         }
@@ -611,7 +611,7 @@ static avifBool avifInputReadImage(avifInput * input,
                                                             ignoreXMP,
                                                             allowChangingCicp,
                                                             ignoreGainMap,
-                                                            AVIF_DEFAULT_IMAGE_SIZE_LIMIT,
+                                                            UINT32_MAX,
                                                             dstImage,
                                                             dstDepth,
                                                             dstSourceTiming,
@@ -1477,10 +1477,10 @@ int main(int argc, char * argv[])
         } else if (!strcmp(arg, "-o") || !strcmp(arg, "--output")) {
             NEXTARG();
             outputFilename = arg;
-#if defined(AVIF_ENABLE_EXPERIMENTAL_METAV1)
-        } else if (!strcmp(arg, "--metav1")) {
+#if defined(AVIF_ENABLE_EXPERIMENTAL_MINI)
+        } else if (!strcmp(arg, "--mini")) {
             settings.headerFormat = AVIF_HEADER_REDUCED;
-#endif // AVIF_ENABLE_EXPERIMENTAL_METAV1
+#endif // AVIF_ENABLE_EXPERIMENTAL_MINI
         } else if (!strcmp(arg, "-d") || !strcmp(arg, "--depth")) {
             NEXTARG();
             input.requestedDepth = atoi(arg);

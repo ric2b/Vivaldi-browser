@@ -426,7 +426,7 @@ WebInputEventResult KeyboardEventManager::KeyEvent(
       break;
     }
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
   return event_handling_util::ToWebInputEventResult(dispatch_result);
 }
@@ -675,21 +675,6 @@ void KeyboardEventManager::DefaultEscapeEventHandler(KeyboardEvent* event) {
   }
 
   frame_->DomWindow()->closewatcher_stack()->EscapeKeyHandler(event);
-
-  HTMLDialogElement* dialog = frame_->GetDocument()->ActiveModalDialog();
-  if (dialog && !RuntimeEnabledFeatures::CloseWatcherEnabled()) {
-    auto* cancel_event = Event::CreateCancelable(event_type_names::kCancel);
-    dialog->DispatchEvent(*cancel_event);
-    if (!cancel_event->defaultPrevented()) {
-      dialog->close();
-    }
-  }
-
-  if (!RuntimeEnabledFeatures::CloseWatcherEnabled()) {
-    auto* target_node = event->GetEventPath()[0].Target()->ToNode();
-    DCHECK(target_node);
-    HTMLElement::HandlePopoverLightDismiss(*event, *target_node);
-  }
 }
 
 void KeyboardEventManager::DefaultEnterEventHandler(KeyboardEvent* event) {

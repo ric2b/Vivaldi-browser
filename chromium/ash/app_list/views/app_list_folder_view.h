@@ -110,7 +110,6 @@ class ASH_EXPORT AppListFolderView : public views::View,
   void AddedToWidget() override;
   void Layout(PassKey) override;
   void ChildPreferredSizeChanged(View* child) override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
 
   // AppListModelProvider::Observer:
@@ -182,9 +181,6 @@ class ASH_EXPORT AppListFolderView : public views::View,
   void ReparentItem(AppsGridView::Pointer pointer,
                     AppListItemView* original_drag_view,
                     const gfx::Point& drag_point_in_folder_grid) override;
-  void DispatchDragEventForReparent(
-      AppsGridView::Pointer pointer,
-      const gfx::Point& drag_point_in_folder_grid) override;
   void DispatchEndDragEventForReparent(
       bool events_forwarded_to_drag_drop_host,
       bool cancel_drag,

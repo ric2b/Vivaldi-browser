@@ -19,6 +19,8 @@ BASE_DECLARE_FEATURE(kWebXrOrientationSensorDevice);
 
 #if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(VR_FEATURES) BASE_DECLARE_FEATURE(kWebXrSharedBuffers);
+COMPONENT_EXPORT(VR_FEATURES)
+BASE_DECLARE_FEATURE(kUseTargetTexture2DForSharedBuffers);
 #endif
 
 #if BUILDFLAG(ENABLE_OPENXR)
@@ -45,7 +47,11 @@ COMPONENT_EXPORT(VR_FEATURES) bool IsOpenXrEnabled();
 // and should be checked instead of a direct query on the kOpenXR feature being
 // enabled.
 COMPONENT_EXPORT(VR_FEATURES) bool IsOpenXrArEnabled();
+
 #endif  // ENABLE_OPENXR
+COMPONENT_EXPORT(VR_FEATURES) bool HasImmersiveFeature();
+
+COMPONENT_EXPORT(VR_FEATURES) bool IsHandTrackingEnabled();
 
 }  // namespace device::features
 

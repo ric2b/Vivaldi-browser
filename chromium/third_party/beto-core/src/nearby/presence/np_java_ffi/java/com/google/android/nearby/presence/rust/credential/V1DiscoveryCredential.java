@@ -19,6 +19,7 @@ package com.google.android.nearby.presence.rust.credential;
 import static com.google.android.nearby.presence.rust.credential.Utils.copyBytes;
 
 /** A V1 discovery credential in a format that is ready to be passed to native code. */
+@SuppressWarnings("UnusedVariable")
 public final class V1DiscoveryCredential {
   private final byte[] keySeed;
   private final byte[] expectedMicShortSaltIdentityTokenHmac;

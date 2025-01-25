@@ -4,10 +4,10 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
-#import "ios/sync/vivaldi_sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/ui/modal_page/modal_page_commands.h"
 #import "ios/ui/modal_page/modal_page_coordinator.h"
 #import "ios/ui/settings/sync/vivaldi_sync_activate_account_view_controller.h"
@@ -24,27 +24,27 @@
 #import "vivaldi_account/vivaldi_account_manager.h"
 
 @interface VivaldiSyncCoordinator () <
-  VivaldiSyncActivateAccountViewControllerDelegate,
-  VivaldiSyncCreateAccountUserViewControllerDelegate,
-  VivaldiSyncCreateAccountPasswordViewControllerDelegate,
-  VivaldiSyncCreateEncryptionPasswordViewControllerDelegate,
-  VivaldiSyncEncryptionPasswordViewControllerDelegate,
-  VivaldiSyncLoginViewControllerDelegate,
-  VivaldiSyncSettingsViewControllerDelegate,
-  VivaldiSyncSettingsCommandHandler> {
+    VivaldiSyncActivateAccountViewControllerDelegate,
+    VivaldiSyncCreateAccountUserViewControllerDelegate,
+    VivaldiSyncCreateAccountPasswordViewControllerDelegate,
+    VivaldiSyncCreateEncryptionPasswordViewControllerDelegate,
+    VivaldiSyncEncryptionPasswordViewControllerDelegate,
+    VivaldiSyncLoginViewControllerDelegate,
+    VivaldiSyncSettingsViewControllerDelegate,
+    VivaldiSyncSettingsCommandHandler> {
 }
 
 @property(nonatomic, strong) ModalPageCoordinator* modalPageCoordinator;
-@property(nonatomic, strong) VivaldiSyncActivateAccountViewController*
-        syncActivateAccountViewController;
+@property(nonatomic, strong)
+    VivaldiSyncActivateAccountViewController* syncActivateAccountViewController;
 @property(nonatomic, strong) VivaldiSyncCreateAccountUserViewController*
-        syncCreateAccountUserViewController;
+    syncCreateAccountUserViewController;
 @property(nonatomic, strong) VivaldiSyncCreateAccountPasswordViewController*
-        syncCreateAccountPasswordViewController;
+    syncCreateAccountPasswordViewController;
 @property(nonatomic, strong) VivaldiSyncEncryptionPasswordViewController*
-        syncEncryptionPasswordViewController;
+    syncEncryptionPasswordViewController;
 @property(nonatomic, strong) VivaldiSyncCreateEncryptionPasswordViewController*
-        syncCreateEncryptionPasswordViewController;
+    syncCreateEncryptionPasswordViewController;
 @property(nonatomic, strong)
     VivaldiSyncLoginViewController* syncLoginViewController;
 @property(nonatomic, strong)
@@ -64,8 +64,8 @@
                     (UINavigationController*)navigationController
                                          browser:(Browser*)browser
                                showCreateAccount:(BOOL)showCreateAccount {
-  self = [super initWithBaseViewController:navigationController
-                                   browser:browser];
+  self =
+      [super initWithBaseViewController:navigationController browser:browser];
   if (self) {
     _baseNavigationController = navigationController;
     _showCreateAccount = showCreateAccount;
@@ -86,18 +86,18 @@
 }
 
 - (void)start {
-  vivaldi::VivaldiSyncServiceImpl* sync_service =
-        vivaldi::VivaldiSyncServiceFactory::GetForBrowserStateVivaldi(
-            self.browser->GetBrowserState());
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState());
   vivaldi::VivaldiAccountManager* account_manager =
       vivaldi::VivaldiAccountManagerFactory::GetForBrowserState(
-            self.browser->GetBrowserState());
-  PrefService* pref_service = ChromeBrowserState::FromBrowserState(
-            self.browser->GetBrowserState())->GetPrefs();
-  self.mediator = [[VivaldiSyncMediator alloc]
-                    initWithAccountManager:account_manager
-                    syncService:sync_service
-                    prefService:pref_service];
+          self.browser->GetBrowserState());
+  PrefService* pref_service =
+      ChromeBrowserState::FromBrowserState(self.browser->GetBrowserState())
+          ->GetPrefs();
+  self.mediator =
+      [[VivaldiSyncMediator alloc] initWithAccountManager:account_manager
+                                              syncService:sync_service
+                                              prefService:pref_service];
   self.mediator.commandHandler = self;
 
   [self.mediator startMediating];
@@ -134,28 +134,27 @@
 
 - (void)showActivateAccountView {
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncActivateAccountViewController class]]) {
+          isKindOfClass:[VivaldiSyncActivateAccountViewController class]]) {
     return;
   }
 
   if (!self.syncActivateAccountViewController) {
-    self.syncActivateAccountViewController =[
-        [VivaldiSyncActivateAccountViewController alloc]
-            initWithStyle:ChromeTableViewStyle()
-    ];
+    self.syncActivateAccountViewController =
+        [[VivaldiSyncActivateAccountViewController alloc]
+            initWithStyle:ChromeTableViewStyle()];
   }
   self.syncActivateAccountViewController.delegate = self;
   self.mediator.settingsConsumer = nil;
 
-
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController
+                            class]]) {
     [self.baseNavigationController
         pushViewController:self.syncActivateAccountViewController
                   animated:YES];
   } else {
-    NSMutableArray* controllers = [self removeSyncViewsFromArray:
-      self.baseNavigationController.viewControllers];
+    NSMutableArray* controllers = [self
+        removeSyncViewsFromArray:self.baseNavigationController.viewControllers];
     [controllers addObject:self.syncActivateAccountViewController];
     [self.baseNavigationController setViewControllers:controllers animated:YES];
   }
@@ -163,35 +162,34 @@
 
 - (void)showSyncCreateAccountUserView {
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
     return;
   }
 
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController
+                            class]]) {
     [self.baseNavigationController popViewControllerAnimated:YES];
     return;
   }
 
   if (!self.syncCreateAccountUserViewController) {
-    self.syncCreateAccountUserViewController =[
-        [VivaldiSyncCreateAccountUserViewController alloc]
-            initWithStyle:ChromeTableViewStyle()
-    ];
+    self.syncCreateAccountUserViewController =
+        [[VivaldiSyncCreateAccountUserViewController alloc]
+            initWithStyle:ChromeTableViewStyle()];
   }
   self.syncCreateAccountUserViewController.shouldHideDoneButton = YES;
   self.syncCreateAccountUserViewController.delegate = self;
   self.mediator.settingsConsumer = nil;
 
-
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+          isKindOfClass:[VivaldiSyncLoginViewController class]]) {
     [self.baseNavigationController
         pushViewController:self.syncCreateAccountUserViewController
                   animated:YES];
   } else {
-    NSMutableArray* controllers = [self removeSyncViewsFromArray:
-      self.baseNavigationController.viewControllers];
+    NSMutableArray* controllers = [self
+        removeSyncViewsFromArray:self.baseNavigationController.viewControllers];
     [controllers addObject:self.syncCreateAccountUserViewController];
     [self.baseNavigationController setViewControllers:controllers animated:YES];
   }
@@ -199,35 +197,35 @@
 
 - (void)showSyncCreateAccountPasswordView {
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController
+                            class]]) {
     return;
   }
 
   if (!self.syncCreateAccountPasswordViewController) {
     [self.browser->GetCommandDispatcher()
-      startDispatchingToTarget:self
-                   forProtocol:@protocol(ModalPageCommands)];
-      id<ModalPageCommands> modalPageHandler = HandlerForProtocol(
-          self.browser->GetCommandDispatcher(), ModalPageCommands);
+        startDispatchingToTarget:self
+                     forProtocol:@protocol(ModalPageCommands)];
+    id<ModalPageCommands> modalPageHandler = HandlerForProtocol(
+        self.browser->GetCommandDispatcher(), ModalPageCommands);
 
-    self.syncCreateAccountPasswordViewController =[
-        [VivaldiSyncCreateAccountPasswordViewController alloc]
+    self.syncCreateAccountPasswordViewController =
+        [[VivaldiSyncCreateAccountPasswordViewController alloc]
             initWithModalPageHandler:modalPageHandler
-                               style:ChromeTableViewStyle()
-    ];
+                               style:ChromeTableViewStyle()];
   }
   self.syncCreateAccountPasswordViewController.shouldHideDoneButton = YES;
   self.syncCreateAccountPasswordViewController.delegate = self;
   self.mediator.settingsConsumer = nil;
 
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
     [self.baseNavigationController
         pushViewController:self.syncCreateAccountPasswordViewController
                   animated:YES];
   } else {
-    NSMutableArray* controllers = [self removeSyncViewsFromArray:
-      self.baseNavigationController.viewControllers];
+    NSMutableArray* controllers = [self
+        removeSyncViewsFromArray:self.baseNavigationController.viewControllers];
     [controllers addObject:self.syncCreateAccountPasswordViewController];
     [self.baseNavigationController setViewControllers:controllers animated:YES];
   }
@@ -235,17 +233,16 @@
 
 - (void)showSyncEncryptionPasswordView {
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
     return;
   }
-  NSMutableArray* controllers = [self removeSyncViewsFromArray:
-      self.baseNavigationController.viewControllers];
+  NSMutableArray* controllers = [self
+      removeSyncViewsFromArray:self.baseNavigationController.viewControllers];
 
   if (!self.syncEncryptionPasswordViewController) {
-    self.syncEncryptionPasswordViewController =[
-        [VivaldiSyncEncryptionPasswordViewController alloc]
-            initWithStyle:ChromeTableViewStyle()
-    ];
+    self.syncEncryptionPasswordViewController =
+        [[VivaldiSyncEncryptionPasswordViewController alloc]
+            initWithStyle:ChromeTableViewStyle()];
   }
 
   self.syncEncryptionPasswordViewController.shouldHideDoneButton = YES;
@@ -257,17 +254,17 @@
 
 - (void)showSyncCreateEncryptionPasswordView {
   if ([self.baseNavigationController.viewControllers.lastObject
-     isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController
+                            class]]) {
     return;
   }
-  NSMutableArray* controllers = [self removeSyncViewsFromArray:
-      self.baseNavigationController.viewControllers];
+  NSMutableArray* controllers = [self
+      removeSyncViewsFromArray:self.baseNavigationController.viewControllers];
 
   if (!self.syncCreateEncryptionPasswordViewController) {
-    self.syncCreateEncryptionPasswordViewController = [
-        [VivaldiSyncCreateEncryptionPasswordViewController alloc]
-            initWithStyle:ChromeTableViewStyle()
-    ];
+    self.syncCreateEncryptionPasswordViewController =
+        [[VivaldiSyncCreateEncryptionPasswordViewController alloc]
+            initWithStyle:ChromeTableViewStyle()];
   }
   self.syncCreateEncryptionPasswordViewController.shouldHideDoneButton = YES;
   self.syncCreateEncryptionPasswordViewController.delegate = self;
@@ -278,14 +275,14 @@
 
 - (void)showSyncSettingsView {
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
+          isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
     return;
   }
-  NSMutableArray* controllers = [self removeSyncViewsFromArray:
-      self.baseNavigationController.viewControllers];
+  NSMutableArray* controllers = [self
+      removeSyncViewsFromArray:self.baseNavigationController.viewControllers];
 
   if (!self.syncSettingsViewController) {
-    self.syncSettingsViewController =[[VivaldiSyncSettingsViewController alloc]
+    self.syncSettingsViewController = [[VivaldiSyncSettingsViewController alloc]
         initWithStyle:ChromeTableViewStyle()];
   }
   self.syncSettingsViewController.delegate = self;
@@ -344,11 +341,13 @@
     (VivaldiSyncActivateAccountViewController*)controller {
   DCHECK_EQ(self.syncActivateAccountViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController
+                            class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController
+                            class]]) {
     return;
   }
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
@@ -376,23 +375,24 @@
     (VivaldiSyncLoginViewController*)controller {
   DCHECK_EQ(self.syncLoginViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController
+                            class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
+          isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncActivateAccountViewController class]]) {
+          isKindOfClass:[VivaldiSyncActivateAccountViewController class]]) {
     return;
   }
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
@@ -427,11 +427,11 @@
     (VivaldiSyncSettingsViewController*)controller {
   DCHECK_EQ(self.syncSettingsViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+          isKindOfClass:[VivaldiSyncLoginViewController class]]) {
     return;
   }
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
@@ -443,18 +443,19 @@
     (VivaldiSyncCreateEncryptionPasswordViewController*)controller {
   DCHECK_EQ(self.syncCreateEncryptionPasswordViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
+          isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+          isKindOfClass:[VivaldiSyncLoginViewController class]]) {
     return;
   }
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
 }
 
 - (void)saveEncryptionKeyButtonPressed:(NSString*)encryptionPassword
-           completionHandler:(void (^)(BOOL success))completionHandler {
+                     completionHandler:
+                         (void (^)(BOOL success))completionHandler {
   if (!encryptionPassword) {
     return;
   }
@@ -469,13 +470,13 @@
 
 - (void)vivaldiSyncEncryptionPasswordViewControllerWasRemoved:
     (VivaldiSyncEncryptionPasswordViewController*)controller {
-  DCHECK_EQ(self.syncEncryptionPasswordViewController, controller);
+  // DCHECK_EQ(self.syncEncryptionPasswordViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
+          isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+          isKindOfClass:[VivaldiSyncLoginViewController class]]) {
     return;
   }
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
@@ -516,19 +517,20 @@
     (VivaldiSyncCreateAccountUserViewController*)controller {
   DCHECK_EQ(self.syncCreateAccountUserViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController
+                            class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
+          isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+          isKindOfClass:[VivaldiSyncLoginViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncActivateAccountViewController class]]) {
+          isKindOfClass:[VivaldiSyncActivateAccountViewController class]]) {
     return;
   }
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
@@ -537,13 +539,11 @@
 - (void)nextButtonPressed:(NSString*)username
                       age:(int)age
      recoveryEmailAddress:(NSString*)recoveryEmailAddress {
-  [self.mediator storeUsername:username
-                           age:age
-                         email:recoveryEmailAddress];
+  [self.mediator storeUsername:username age:age email:recoveryEmailAddress];
   [self showSyncCreateAccountPasswordView];
 }
 
-- (void)logInLinkPressed{
+- (void)logInLinkPressed {
   [self showSyncLoginView];
 }
 
@@ -553,23 +553,24 @@
     (VivaldiSyncCreateAccountPasswordViewController*)controller {
   DCHECK_EQ(self.syncCreateAccountPasswordViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController
+                            class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
+          isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+          isKindOfClass:[VivaldiSyncLoginViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
+          isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncActivateAccountViewController class]]) {
+          isKindOfClass:[VivaldiSyncActivateAccountViewController class]]) {
     return;
   }
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
@@ -587,8 +588,8 @@
 
 - (void)showModalPage:(NSURL*)url title:(NSString*)title {
   self.modalPageCoordinator = [[ModalPageCoordinator alloc]
-      initWithBaseViewController:
-          self.baseNavigationController.viewControllers.lastObject
+      initWithBaseViewController:self.baseNavigationController.viewControllers
+                                     .lastObject
                          browser:self.browser
                          pageURL:url
                            title:title];
@@ -605,14 +606,13 @@
 - (void)addSyncLoginViewControllerToNavigationStack {
   if (!self.syncLoginViewController) {
     [self.browser->GetCommandDispatcher()
-      startDispatchingToTarget:self
-                   forProtocol:@protocol(ModalPageCommands)];
+        startDispatchingToTarget:self
+                     forProtocol:@protocol(ModalPageCommands)];
     id<ModalPageCommands> modalPageHandler = HandlerForProtocol(
         self.browser->GetCommandDispatcher(), ModalPageCommands);
-    self.syncLoginViewController =
-        [[VivaldiSyncLoginViewController alloc]
-          initWithModalPageHandler:modalPageHandler
-                             style:ChromeTableViewStyle()];
+    self.syncLoginViewController = [[VivaldiSyncLoginViewController alloc]
+        initWithModalPageHandler:modalPageHandler
+                           style:ChromeTableViewStyle()];
     if (self.showCancelButton) {
       [self.syncLoginViewController setupLeftCancelButton];
     }
@@ -620,9 +620,8 @@
     self.syncLoginViewController.delegate = self;
   }
   self.mediator.settingsConsumer = nil;
-  NSMutableArray* controllers =
-      [self removeSyncViewsFromArray:
-          self.baseNavigationController.viewControllers];
+  NSMutableArray* controllers = [self
+      removeSyncViewsFromArray:self.baseNavigationController.viewControllers];
   [controllers addObject:self.syncLoginViewController];
   [self.baseNavigationController setViewControllers:controllers animated:YES];
 }
@@ -630,14 +629,18 @@
 - (NSMutableArray*)removeSyncViewsFromArray:(NSArray*)controllers {
   NSMutableArray* new_controllers = [[NSMutableArray alloc] init];
   for (SettingsRootTableViewController* c in controllers) {
-    if (c && !(
-      [c isKindOfClass:[VivaldiSyncSettingsViewController class]] ||
-      [c isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]] ||
-      [c isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]] ||
-      [c isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController class]] ||
-      [c isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]] ||
-      [c isKindOfClass:[VivaldiSyncActivateAccountViewController class]] ||
-      [c isKindOfClass:[VivaldiSyncLoginViewController class]])) {
+    if (c &&
+        !([c isKindOfClass:[VivaldiSyncSettingsViewController class]] ||
+          [c isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController
+                               class]] ||
+          [c isKindOfClass:[VivaldiSyncEncryptionPasswordViewController
+                               class]] ||
+          [c isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController
+                               class]] ||
+          [c isKindOfClass:[VivaldiSyncCreateAccountUserViewController
+                               class]] ||
+          [c isKindOfClass:[VivaldiSyncActivateAccountViewController class]] ||
+          [c isKindOfClass:[VivaldiSyncLoginViewController class]])) {
       [new_controllers addObject:c];
     }
   }

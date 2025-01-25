@@ -26,7 +26,7 @@ class PrefService;
 
 @property(nonatomic, weak) id<QuickDeleteConsumer> consumer;
 
-// Local dispatcher for presentation commands of quick delete.
+// Local dispatcher for presentation commands of Quick Delete.
 @property(nonatomic, weak) id<QuickDeletePresentationCommands>
     presentationHandler;
 
@@ -36,6 +36,7 @@ class PrefService;
                        identityManager:(signin::IdentityManager*)identityManager
                    browsingDataRemover:(BrowsingDataRemover*)browsingDataRemover
                    discoverFeedService:(DiscoverFeedService*)discoverFeedService
+        canPerformTabsClosureAnimation:(BOOL)canPerformTabsClosureAnimation
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button_style.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_progress_bar.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -102,6 +103,8 @@ UIView* SecondaryToolbarLocationBarContainerView(
 @property(nonatomic, strong, readwrite) ToolbarButton* panelButton;
 // Search button on the new tab page.
 @property(nonatomic, strong, readwrite) ToolbarButton* searchButton;
+// Home button on page.
+@property(nonatomic, strong, readwrite) ToolbarButton* homeButton;
 // End Vivaldi
 
 @end
@@ -140,6 +143,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
 @synthesize canShowBack = _canShowBack;
 @synthesize canShowForward = _canShowForward;
 @synthesize canShowAdTrackerBlocker = _canShowAdTrackerBlocker;
+@synthesize homePageEnabled = _homePageEnabled;
 // End Vivaldi
 
 #pragma mark - Public
@@ -151,6 +155,27 @@ UIView* SecondaryToolbarLocationBarContainerView(
     [self setUp];
   }
   return self;
+}
+
+- (void)makeTranslucent {
+  // Note:(prio@vivaldi.com) - We set background color outside of this view
+  // based on accent color. Skip this upstream override.
+  if (!IsVivaldiRunning()) {
+  _visualEffectView.hidden = NO;
+  _contentView.backgroundColor = nil;
+  } // End Vivaldi
+}
+
+- (void)makeOpaque {
+
+  // Note:(prio@vivaldi.com) - We set background color outside of this view
+  // based on accent color. Skip this upstream override.
+  if (!IsVivaldiRunning()) {
+  _visualEffectView.hidden = YES;
+  _contentView.backgroundColor =
+      self.buttonFactory.toolbarConfiguration.backgroundColor;
+  } // End Vivaldi
+
 }
 
 #pragma mark - UIView
@@ -221,6 +246,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
   // Vivaldi
   self.panelButton = [self.buttonFactory panelButton];
   self.searchButton = [self.buttonFactory vivaldiSearchButton];
+  self.homeButton = [self.buttonFactory vivaldiHomeButton];
   // End Vivaldi
 
   // Move the tools menu button such as it looks visually balanced with the
@@ -231,6 +257,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
     self.allButtons = @[
       self.panelButton,
       self.backButton,
+      self.homeButton,
       self.openNewTabButton,
       self.forwardButton,
       self.tabGridButton
@@ -448,6 +475,10 @@ UIView* SecondaryToolbarLocationBarContainerView(
   AddSameConstraints(self.locationBarView, self.locationBarContainer);
 }
 
+- (void)setTabGridButtonStyle:(ToolbarTabGridButtonStyle)tabGridButtonStyle {
+  self.tabGridButton.tabGridButtonStyle = tabGridButtonStyle;
+}
+
 #pragma mark - Private
 
 /// Updates `buttonStackView.topAnchor` constraints when adding/removing the
@@ -457,7 +488,7 @@ UIView* SecondaryToolbarLocationBarContainerView(
   _locationBarBottomConstraint.active = NO;
   _buttonStackViewNoOmniboxConstraint.active = NO;
 
-  // Set the correct constrant for `buttonStackView.topAnchor`.
+  // Set the correct constraint for `buttonStackView.topAnchor`.
   if (self.locationBarView) {
     _locationBarBottomConstraint.active = YES;
   } else {
@@ -465,51 +496,29 @@ UIView* SecondaryToolbarLocationBarContainerView(
   }
 }
 
-- (void)makeTranslucent {
-
-  // Note:(prio@vivaldi.com) - We set background color outside of this view
-  // based on accent color. Skip this upstream override.
-  if (!IsVivaldiRunning()) {
-  _visualEffectView.hidden = NO;
-  _contentView.backgroundColor = nil;
-  } // End Vivaldi
-
-}
-
-- (void)makeOpaque {
-
-  // Note:(prio@vivaldi.com) - We set background color outside of this view
-  // based on accent color. Skip this upstream override.
-  if (!IsVivaldiRunning()) {
-  _visualEffectView.hidden = YES;
-  _contentView.backgroundColor =
-      self.buttonFactory.toolbarConfiguration.backgroundColor;
-  } // End Vivaldi
-
-}
-
 #pragma mark: - Vivaldi
 - (void)reloadButtonsWithNewTabPage:(BOOL)isNewTabPage
                   desktopTabEnabled:(BOOL)desktopTabEnabled {
-  // Determine the new set of buttons
-  NSArray *newButtons;
-  if (desktopTabEnabled || isNewTabPage) {
-    newButtons = @[
-      self.panelButton,
-      self.backButton,
-      self.searchButton,
-      self.forwardButton,
-      self.tabGridButton
-    ];
+  NSMutableArray *buttons = [NSMutableArray arrayWithObjects:
+                             self.panelButton,
+                             self.backButton,
+                             nil];
+  // Determine the homebutton/search/newtab button based on conditions
+  UIButton *middleButton = nil;
+  if (isNewTabPage) {
+    middleButton = self.searchButton;
+  } else if (desktopTabEnabled) {
+    middleButton = _homePageEnabled ? self.homeButton : self.searchButton;
+  } else if (_bottomOmniboxEnabled) {
+    middleButton = self.openNewTabButton;
   } else {
-    newButtons = @[
-      self.panelButton,
-      self.backButton,
-      self.openNewTabButton,
-      self.forwardButton,
-      self.tabGridButton
-    ];
+    middleButton = _homePageEnabled ? self.homeButton : self.openNewTabButton;
   }
+
+  [buttons addObject:middleButton];
+
+  // Add the remaining common buttons
+  [buttons addObjectsFromArray:@[self.forwardButton, self.tabGridButton]];
 
   // Remove old buttons from the stack view
   for (UIView *button in self.allButtons) {
@@ -518,12 +527,13 @@ UIView* SecondaryToolbarLocationBarContainerView(
   }
 
   // Add new buttons to the stack view
-  for (UIView *button in newButtons) {
+  for (UIView *button in buttons) {
     [self.buttonStackView addArrangedSubview:button];
   }
 
   // Update the allButtons property
-  self.allButtons = newButtons;
+  self.allButtons = buttons;
 }
+// End Vivaldi
 
 @end

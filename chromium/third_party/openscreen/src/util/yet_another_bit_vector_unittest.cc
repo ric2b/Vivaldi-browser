@@ -6,7 +6,6 @@
 
 #include <algorithm>
 
-#include "absl/algorithm/container.h"
 #include "gtest/gtest.h"
 #include "platform/base/span.h"
 
@@ -28,8 +27,10 @@ const int kTestSizes[] = {0,  1,  2,  3,  5,  7,  11, 13, 17,  19,
 // Returns a subspan of |kTestSizes| that contains all values in the range
 // [first,last].
 Span<const int> GetTestSizesInRange(int first, int last) {
-  const auto begin = absl::c_lower_bound(kTestSizes, first);
-  const auto end = absl::c_upper_bound(kTestSizes, last);
+  const auto begin =
+      std::lower_bound(std::cbegin(kTestSizes), std::cend(kTestSizes), first);
+  const auto end =
+      std::upper_bound(std::cbegin(kTestSizes), std::cend(kTestSizes), last);
   return Span<const int>(&*begin, std::distance(begin, end));
 }
 

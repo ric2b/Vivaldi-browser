@@ -1,56 +1,32 @@
 # Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-group("resources") {
-  deps = [
-    ":vivaldi_no_tabs_ipad",
-    ":vivaldi_no_tabs_iphone",
-    ":vivaldi_tabs_bottom_ipad",
-    ":vivaldi_tabs_bottom_iphone",
-    ":vivaldi_tabs_top_ipad",
-    ":vivaldi_tabs_top_iphone",
-  ]
-}
-
-imageset("vivaldi_no_tabs_ipad") {
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
   sources = [
-    "vivaldi_no_tabs_ipad.imageset/Contents.json",
-    "vivaldi_no_tabs_ipad.imageset/vivaldi_no_tabs_ipad.pdf"
-  ]
-}
+    # vivaldi_no_tabs_ipad
+    "Assets.xcassets/vivaldi_no_tabs_ipad.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_no_tabs_ipad.imageset/vivaldi_no_tabs_ipad.pdf",
 
-imageset("vivaldi_no_tabs_iphone") {
-  sources = [
-    "vivaldi_no_tabs_iphone.imageset/Contents.json",
-    "vivaldi_no_tabs_iphone.imageset/vivaldi_no_tabs_iphone.pdf"
-  ]
-}
+    # vivaldi_no_tabs_iphone
+    "Assets.xcassets/vivaldi_no_tabs_iphone.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_no_tabs_iphone.imageset/vivaldi_no_tabs_iphone.pdf",
 
-imageset("vivaldi_tabs_bottom_ipad") {
-  sources = [
-    "vivaldi_tabs_bottom_ipad.imageset/Contents.json",
-    "vivaldi_tabs_bottom_ipad.imageset/vivaldi_tabs_bottom_ipad.pdf"
-  ]
-}
+    # vivaldi_tabs_bottom_ipad
+    "Assets.xcassets/vivaldi_tabs_bottom_ipad.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_tabs_bottom_ipad.imageset/vivaldi_tabs_bottom_ipad.pdf",
 
-imageset("vivaldi_tabs_bottom_iphone") {
-  sources = [
-    "vivaldi_tabs_bottom_iphone.imageset/Contents.json",
-    "vivaldi_tabs_bottom_iphone.imageset/vivaldi_tabs_bottom_iphone.pdf"
-  ]
-}
+    # vivaldi_tabs_bottom_iphone
+    "Assets.xcassets/vivaldi_tabs_bottom_iphone.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_tabs_bottom_iphone.imageset/vivaldi_tabs_bottom_iphone.pdf",
 
-imageset("vivaldi_tabs_top_ipad") {
-  sources = [
-    "vivaldi_tabs_top_ipad.imageset/Contents.json",
-    "vivaldi_tabs_top_ipad.imageset/vivaldi_tabs_top_ipad.pdf"
-  ]
-}
+    # vivaldi_tabs_top_ipad
+    "Assets.xcassets/vivaldi_tabs_top_ipad.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_tabs_top_ipad.imageset/vivaldi_tabs_top_ipad.pdf",
 
-imageset("vivaldi_tabs_top_iphone") {
-  sources = [
-    "vivaldi_tabs_top_iphone.imageset/Contents.json",
-    "vivaldi_tabs_top_iphone.imageset/vivaldi_tabs_top_iphone.pdf"
+    # vivaldi_tabs_top_iphone
+    "Assets.xcassets/vivaldi_tabs_top_iphone.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_tabs_top_iphone.imageset/vivaldi_tabs_top_iphone.pdf",
   ]
 }

@@ -4,9 +4,9 @@
 #define COMPONENTS_CONTENT_INJECTION_CONTENT_INJECTION_TYPES_H_
 
 #include <string>
+#include <string_view>
 #include <vector>
 
-#include "base/strings/string_piece.h"
 #include "components/content_injection/mojom/content_injection.mojom.h"
 #include "url/gurl.h"
 

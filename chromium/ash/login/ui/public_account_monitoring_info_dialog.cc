@@ -9,6 +9,8 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -67,8 +69,8 @@ END_METADATA
 PublicAccountMonitoringInfoDialog::PublicAccountMonitoringInfoDialog(
     base::WeakPtr<LoginExpandedPublicAccountView> controller)
     : controller_(controller) {
-  SetModalType(ui::MODAL_TYPE_SYSTEM);
-  SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetModalType(ui::mojom::ModalType::kSystem);
+  SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   auto layout = std::make_unique<views::FlexLayout>();
   layout->SetOrientation(views::LayoutOrientation::kVertical);
   SetLayoutManager(std::move(layout));

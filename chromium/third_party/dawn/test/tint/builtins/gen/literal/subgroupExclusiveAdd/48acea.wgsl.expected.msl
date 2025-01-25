@@ -1,0 +1,18 @@
+#include <metal_stdlib>
+
+using namespace metal;
+uint2 subgroupExclusiveAdd_48acea() {
+  uint2 res = simd_prefix_exclusive_sum(uint2(1u));
+  return res;
+}
+
+fragment void fragment_main(device uint2* tint_symbol [[buffer(0)]]) {
+  *(tint_symbol) = subgroupExclusiveAdd_48acea();
+  return;
+}
+
+kernel void compute_main(device uint2* tint_symbol_1 [[buffer(0)]]) {
+  *(tint_symbol_1) = subgroupExclusiveAdd_48acea();
+  return;
+}
+

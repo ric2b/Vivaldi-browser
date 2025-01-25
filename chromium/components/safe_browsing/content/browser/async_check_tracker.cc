@@ -6,6 +6,7 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/metrics/histogram_functions.h"
+#include "build/build_config.h"
 #include "components/safe_browsing/content/browser/base_ui_manager.h"
 #include "components/safe_browsing/content/browser/unsafe_resource_util.h"
 #include "components/safe_browsing/core/common/features.h"
@@ -23,8 +24,8 @@ constexpr int kNavigationTimestampsSizeThreshold = 10000;
 
 // Navigation timestamps that are older than this interval are considered
 // expired and may be cleaned up. This interval must be much larger than the
-// life time of UrlCheckerOnSB so that IsMainPageLoadPending returns the correct
-// result when the check completes.
+// life time of UrlCheckerHolder so that IsMainPageLoadPending returns the
+// correct result when the check completes.
 constexpr base::TimeDelta kNavigationTimestampExpiration = base::Seconds(180);
 
 }  // namespace
@@ -34,10 +35,12 @@ WEB_CONTENTS_USER_DATA_KEY_IMPL(AsyncCheckTracker);
 // static
 AsyncCheckTracker* AsyncCheckTracker::GetOrCreateForWebContents(
     content::WebContents* web_contents,
-    scoped_refptr<BaseUIManager> ui_manager) {
+    scoped_refptr<BaseUIManager> ui_manager,
+    bool should_sync_checker_check_allowlist) {
   CHECK(web_contents);
   // CreateForWebContents does nothing if the delegate instance already exists.
-  AsyncCheckTracker::CreateForWebContents(web_contents, std::move(ui_manager));
+  AsyncCheckTracker::CreateForWebContents(web_contents, std::move(ui_manager),
+                                          should_sync_checker_check_allowlist);
   return AsyncCheckTracker::FromWebContents(web_contents);
 }
 
@@ -73,13 +76,26 @@ AsyncCheckTracker::GetBlockedPageCommittedTimestamp(
   return std::nullopt;
 }
 
+// static
+bool AsyncCheckTracker::IsPlatformEligibleForSyncCheckerCheckAllowlist() {
+#if BUILDFLAG(IS_ANDROID)
+  // Allowlist check is much faster than blocklist check on Android, so we are
+  // enabling this on Android only.
+  return base::FeatureList::IsEnabled(kSafeBrowsingSyncCheckerCheckAllowlist);
+#else
+  return false;
+#endif
+}
+
 AsyncCheckTracker::AsyncCheckTracker(content::WebContents* web_contents,
-                                     scoped_refptr<BaseUIManager> ui_manager)
+                                     scoped_refptr<BaseUIManager> ui_manager,
+                                     bool should_sync_checker_check_allowlist)
     : content::WebContentsUserData<AsyncCheckTracker>(*web_contents),
       content::WebContentsObserver(web_contents),
       ui_manager_(std::move(ui_manager)),
-      navigation_timestamps_size_threshold_(
-          kNavigationTimestampsSizeThreshold) {}
+      navigation_timestamps_size_threshold_(kNavigationTimestampsSizeThreshold),
+      should_sync_checker_check_allowlist_(
+          should_sync_checker_check_allowlist) {}
 
 AsyncCheckTracker::~AsyncCheckTracker() {
   DeletePendingCheckers(/*excluded_navigation_id=*/std::nullopt);
@@ -89,7 +105,7 @@ AsyncCheckTracker::~AsyncCheckTracker() {
 }
 
 void AsyncCheckTracker::TransferUrlChecker(
-    std::unique_ptr<UrlCheckerOnSB> checker) {
+    std::unique_ptr<UrlCheckerHolder> checker) {
   std::optional<int64_t> navigation_id = checker->navigation_id();
   CHECK(navigation_id.has_value());
   int64_t id = navigation_id.value();
@@ -107,7 +123,7 @@ void AsyncCheckTracker::TransferUrlChecker(
 
 void AsyncCheckTracker::PendingCheckerCompleted(
     int64_t navigation_id,
-    UrlCheckerOnSB::OnCompleteCheckResult result) {
+    UrlCheckerHolder::OnCompleteCheckResult result) {
   DVLOG(1) << __func__ << " : navigation id: " << navigation_id
            << " proceed: " << result.proceed
            << " has_post_commit_interstitial_skipped: "

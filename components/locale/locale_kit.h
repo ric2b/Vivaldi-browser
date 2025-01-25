@@ -4,8 +4,9 @@
 #ifndef COMPONENTS_LOCALE_LOCALE_KIT_H_
 #define COMPONENTS_LOCALE_LOCALE_KIT_H_
 
+#include <string_view>
+
 #include "base/containers/span.h"
-#include "base/strings/string_piece.h"
 
 namespace locale_kit {
 

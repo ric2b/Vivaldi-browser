@@ -34,6 +34,7 @@
 #                       Do not modify this file directly
 ################################################################################
 
+import("../../../../../../scripts/dawn_overrides_with_defaults.gni")
 import("../../../../../../scripts/tint_overrides_with_defaults.gni")
 
 import("${tint_src_dir}/tint.gni")
@@ -50,10 +51,13 @@ if (tint_build_msl_writer) {
       "packed_vec3.h",
       "pixel_local.cc",
       "pixel_local.h",
+      "quad_swap.cc",
+      "quad_swap.h",
       "subgroup_ballot.cc",
       "subgroup_ballot.h",
     ]
     deps = [
+      "${dawn_root}/src/utils:utils",
       "${tint_src_dir}/api/common",
       "${tint_src_dir}/lang/core",
       "${tint_src_dir}/lang/core/constant",
@@ -90,9 +94,11 @@ if (tint_build_unittests) {
         "module_scope_var_to_entry_point_param_test.cc",
         "packed_vec3_test.cc",
         "pixel_local_test.cc",
+        "quad_swap_test.cc",
         "subgroup_ballot_test.cc",
       ]
       deps = [
+        "${dawn_root}/src/utils:utils",
         "${tint_src_dir}:gmock_and_gtest",
         "${tint_src_dir}/api/common",
         "${tint_src_dir}/lang/core",

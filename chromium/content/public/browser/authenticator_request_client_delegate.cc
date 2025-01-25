@@ -101,9 +101,23 @@ WebAuthenticationRequestProxy* WebAuthenticationDelegate::MaybeGetRequestProxy(
 }
 
 void WebAuthenticationDelegate::DeletePasskey(
-    BrowserContext* browser_context,
+    content::WebContents* web_contents,
     const std::vector<uint8_t>& passkey_credential_id,
     const std::string& relying_party_id) {}
+
+void WebAuthenticationDelegate::DeleteUnacceptedPasskeys(
+    content::WebContents* web_contents,
+    const std::string& relying_party_id,
+    const std::vector<uint8_t>& user_id,
+    const std::vector<std::vector<uint8_t>>& all_accepted_credentials_ids) {}
+
+void WebAuthenticationDelegate::UpdateUserPasskeys(
+    content::WebContents* web_contents,
+    const url::Origin& origin,
+    const std::string& relying_party_id,
+    std::vector<uint8_t>& user_id,
+    const std::string& name,
+    const std::string& display_name) {}
 
 void WebAuthenticationDelegate::BrowserProvidedPasskeysAvailable(
     BrowserContext* browser_context,
@@ -155,14 +169,6 @@ void AuthenticatorRequestClientDelegate::RegisterActionCallbacks(
     base::RepeatingCallback<
         void(device::FidoRequestHandlerBase::BlePermissionCallback)>
         request_ble_permission_callback) {}
-
-void AuthenticatorRequestClientDelegate::ShouldReturnAttestation(
-    const std::string& relying_party_id,
-    const device::FidoAuthenticator* authenticator,
-    bool is_enterprise_attestation,
-    base::OnceCallback<void(bool)> callback) {
-  std::move(callback).Run(!is_enterprise_attestation);
-}
 
 void AuthenticatorRequestClientDelegate::ConfigureDiscoveries(
     const url::Origin& origin,

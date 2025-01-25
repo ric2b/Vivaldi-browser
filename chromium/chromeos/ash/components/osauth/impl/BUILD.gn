@@ -14,6 +14,7 @@ component("impl") {
 
   deps = [
     "//ash/constants",
+    "//ash/strings",
     "//base",
     "//chromeos/ash/components/cryptohome",
     "//chromeos/ash/components/cryptohome:public",
@@ -23,6 +24,7 @@ component("impl") {
     "//chromeos/ash/components/login/auth/public:authpublic",
     "//components/prefs:prefs",
     "//components/user_manager",
+    "//ui/base",
   ]
   sources = [
     "auth_engine_api_impl.cc",
@@ -59,10 +61,20 @@ component("impl") {
     "engines/cryptohome_smart_card_engine.h",
     "engines/prefs_pin_engine.cc",
     "engines/prefs_pin_engine.h",
+    "legacy_auth_surface_registry.cc",
+    "legacy_auth_surface_registry.h",
     "login_screen_auth_policy_connector.cc",
     "login_screen_auth_policy_connector.h",
     "prefs.cc",
     "prefs.h",
+    "request/password_manager_auth_request.cc",
+    "request/password_manager_auth_request.h",
+    "request/settings_auth_request.cc",
+    "request/settings_auth_request.h",
+    "request/token_based_auth_request.cc",
+    "request/token_based_auth_request.h",
+    "request/webauthn_auth_request.cc",
+    "request/webauthn_auth_request.h",
   ]
 }
 

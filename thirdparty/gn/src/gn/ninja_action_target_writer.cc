@@ -40,7 +40,9 @@ void NinjaActionTargetWriter::Run() {
 
   for (const Target* dep : target_deps.linked_deps()) {
     if (dep->IsDataOnly()) {
-      order_only_deps.push_back(dep->dependency_output_file());
+      if (dep->has_dependency_output()) {
+        order_only_deps.push_back(dep->dependency_output());
+      }
     } else {
       additional_hard_deps.push_back(dep);
     }
@@ -60,16 +62,19 @@ void NinjaActionTargetWriter::Run() {
   //    and on an incremental build, if the now-implicit dependencies are
   //    'dirty', this action will be considered 'dirty' as well.
   //
-  for (const Target* data_dep : target_deps.data_deps())
-    order_only_deps.push_back(data_dep->dependency_output_file());
+  for (const Target* data_dep : target_deps.data_deps()) {
+    if (data_dep->has_dependency_output()) {
+      order_only_deps.push_back(data_dep->dependency_output());
+    }
+  }
 
   // For ACTIONs, the input deps appear only once in the generated ninja
-  // file, so WriteInputDepsStampAndGetDep() won't create a stamp file
+  // file, so WriteInputDepsStampOrPhonyAndGetDep() won't create a phony rule
   // and the action will just depend on all the input deps directly.
-  size_t num_stamp_uses =
+  size_t num_output_uses =
       target_->output_type() == Target::ACTION ? 1u : target_->sources().size();
-  std::vector<OutputFile> input_deps =
-      WriteInputDepsStampAndGetDep(additional_hard_deps, num_stamp_uses);
+  std::vector<OutputFile> input_deps = WriteInputDepsStampOrPhonyAndGetDep(
+      additional_hard_deps, num_output_uses);
   out_ << std::endl;
 
   // Collects all output files for writing below.
@@ -119,13 +124,12 @@ void NinjaActionTargetWriter::Run() {
   }
   out_ << std::endl;
 
-  // Write the stamp, which doesn't need to depend on the data deps because they
+  // Write the phony, which doesn't need to depend on the data deps because they
   // have been added as order-only deps of the action output itself.
   //
   // TODO(thakis): If the action has just a single output, make things depend
-  // on that output directly without writing a stamp file.
   std::vector<OutputFile> stamp_file_order_only_deps;
-  WriteStampForTarget(output_files, stamp_file_order_only_deps);
+  WriteStampOrPhonyForTarget(output_files, stamp_file_order_only_deps);
 }
 
 std::string NinjaActionTargetWriter::WriteRuleDefinition() {

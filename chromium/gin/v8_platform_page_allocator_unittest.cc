@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "gin/v8_platform_page_allocator.h"
 
 #include "base/cpu.h"
@@ -13,8 +18,8 @@
 #if defined(ARCH_CPU_ARM64) && (OS_LINUX || OS_ANDROID)
 // BTI is only available for AArch64, relevant platform are Android and Linux
 
-#include "base/allocator/partition_allocator/src/partition_alloc/arm_bti_test_functions.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator_constants.h"
+#include "partition_alloc/arm_bti_test_functions.h"
+#include "partition_alloc/page_allocator_constants.h"
 #if BUILDFLAG(IS_POSIX)
 #include <signal.h>
 #include "testing/gtest/include/gtest/gtest-death-test.h"

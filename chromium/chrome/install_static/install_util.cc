@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/install_static/install_util.h"
 
 #include <windows.h>
@@ -403,16 +408,11 @@ int GetAppIconResourceIndex() {
 }
 
 int GetHTMLIconResourceIndex() {
-  // TODO(crbug.com/40384442): Return HTML specific resource index
-  // once we've added support for it. This will be used for all doc types
-  // Chrome registers itself as a default handler for, except for .pdf.
-  return InstallDetails::Get().mode().app_icon_resource_index;
+  return InstallDetails::Get().mode().html_doc_icon_resource_index;
 }
 
 int GetPDFIconResourceIndex() {
-  // TODO(crbug.com/40384442): Return PDF specific resource index
-  // once we've added support for it.
-  return InstallDetails::Get().mode().app_icon_resource_index;
+  return InstallDetails::Get().mode().pdf_doc_icon_resource_index;
 }
 
 const wchar_t* GetSandboxSidPrefix() {

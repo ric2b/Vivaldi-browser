@@ -53,6 +53,11 @@ const char kVivaldiCrashReportingConsentGranted[] =
 const char kVivaldiPreferredColorScheme[] =
     "vivaldi.PreferredColorScheme";
 #if BUILDFLAG(IS_IOS)
+// Dict preference which tracks the current elements and order of the overflow
+// menu's vivaldi actions.
+const char kOverflowMenuVivaldiActionsOrder[] =
+    "overflow_menu.vivaldi_actions_order";
+
 // Caches the folder id of user's position in the note hierarchy navigator.
 const char kVivaldiNoteCachedFolderId[] = "vivaldi.note.cached_folder_id";
 
@@ -97,6 +102,12 @@ const char kVivaldiOpenNTPOnClosingLastTabEnabled[] =
 // Focus omnibox on new tab page
 const char kVivaldiFocusOmniboxOnNTPEnabled[] =
     "vivaldi.tabs.focus_omnibox_on_ntp";
+const char kVivaldiNewTabURL[] = "vivaldi.tabs.newtab.url";
+const char kVivaldiNewTabSetting[] = "vivaldi.tabs.newtab.setting";
+
+// General Settings
+const char kVivaldiHomepageURL[] = "vivaldi.general.homepage.url";
+const char kVivaldiHomepageEnabled[] = "vivaldi.general.homepage.enabled";
 
 // Apearance
 const char kVivaldiAppearanceMode[] = "vivaldi.appearance.selected.mode";

@@ -87,7 +87,7 @@ struct State {
                 }
                 auto* ptr = var->Result(0)->Type()->As<core::type::Pointer>();
                 if (ptr->StoreType()->Is<core::type::ExternalTexture>()) {
-                    if (auto res = ReplaceVar(var); TINT_UNLIKELY(res != Success)) {
+                    if (auto res = ReplaceVar(var); DAWN_UNLIKELY(res != Success)) {
                         return res.Failure();
                     }
                     to_remove.Push(var);
@@ -123,7 +123,7 @@ struct State {
         auto name = ir.NameOf(old_var);
         auto bp = old_var->BindingPoint();
         auto itr = multiplanar_map.find(bp.value());
-        if (TINT_UNLIKELY(itr == multiplanar_map.end())) {
+        if (DAWN_UNLIKELY(itr == multiplanar_map.end())) {
             std::stringstream err;
             err << "ExternalTextureOptions missing binding entry for " << bp.value();
             return Failure{err.str()};
@@ -210,7 +210,7 @@ struct State {
     /// @param plane_1 the second plane of the replacement texture
     /// @param params the parameters of the replacement texture
     void ReplaceUses(Value* old_value, Value* plane_0, Value* plane_1, Value* params) {
-        old_value->ForEachUse([&](Usage use) {
+        old_value->ForEachUseUnsorted([&](Usage use) {
             tint::Switch(
                 use.instruction,
                 [&](Load* load) {
@@ -239,7 +239,7 @@ struct State {
                     } else if (call->Func() == core::BuiltinFn::kTextureLoad) {
                         // Convert the coordinates to unsigned integers if necessary.
                         auto* coords = call->Args()[1];
-                        if (coords->Type()->is_signed_integer_vector()) {
+                        if (coords->Type()->IsSignedIntegerVector()) {
                             auto* convert = b.Convert(ty.vec2<u32>(), coords);
                             convert->InsertBefore(call);
                             coords = convert->Result(0);

@@ -862,20 +862,20 @@ TEST_F(ComputedStyleTest, ApplyLightDarkColor) {
 
   StyleCascade cascade1(state);
   cascade1.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(document);
-  cascade1.MutableMatchResult().AddMatchedProperties(color_declaration,
-                                                     CascadeOrigin::kAuthor);
-  cascade1.MutableMatchResult().AddMatchedProperties(dark_declaration,
-                                                     CascadeOrigin::kAuthor);
+  cascade1.MutableMatchResult().AddMatchedProperties(
+      color_declaration, {.origin = CascadeOrigin::kAuthor});
+  cascade1.MutableMatchResult().AddMatchedProperties(
+      dark_declaration, {.origin = CascadeOrigin::kAuthor});
   cascade1.Apply();
   const ComputedStyle* style = state.StyleBuilder().CloneStyle();
   EXPECT_EQ(Color::kWhite, style->VisitedDependentColor(GetCSSPropertyColor()));
 
   StyleCascade cascade2(state);
   cascade2.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(document);
-  cascade2.MutableMatchResult().AddMatchedProperties(color_declaration,
-                                                     CascadeOrigin::kAuthor);
-  cascade2.MutableMatchResult().AddMatchedProperties(light_declaration,
-                                                     CascadeOrigin::kAuthor);
+  cascade2.MutableMatchResult().AddMatchedProperties(
+      color_declaration, {.origin = CascadeOrigin::kAuthor});
+  cascade2.MutableMatchResult().AddMatchedProperties(
+      light_declaration, {.origin = CascadeOrigin::kAuthor});
   cascade2.Apply();
   style = state.StyleBuilder().CloneStyle();
   EXPECT_EQ(Color::kBlack, style->VisitedDependentColor(GetCSSPropertyColor()));
@@ -904,10 +904,10 @@ TEST_F(ComputedStyleTest, ApplyLightDarkBackgroundImage) {
 
   StyleCascade cascade1(state);
   cascade1.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(document);
-  cascade1.MutableMatchResult().AddMatchedProperties(bgimage_declaration,
-                                                     CascadeOrigin::kAuthor);
-  cascade1.MutableMatchResult().AddMatchedProperties(dark_declaration,
-                                                     CascadeOrigin::kAuthor);
+  cascade1.MutableMatchResult().AddMatchedProperties(
+      bgimage_declaration, {.origin = CascadeOrigin::kAuthor});
+  cascade1.MutableMatchResult().AddMatchedProperties(
+      dark_declaration, {.origin = CascadeOrigin::kAuthor});
   cascade1.Apply();
   EXPECT_TRUE(state.TakeStyle()->HasBackgroundImage());
 
@@ -915,10 +915,10 @@ TEST_F(ComputedStyleTest, ApplyLightDarkBackgroundImage) {
 
   StyleCascade cascade2(state);
   cascade2.MutableMatchResult().BeginAddingAuthorRulesForTreeScope(document);
-  cascade2.MutableMatchResult().AddMatchedProperties(bgimage_declaration,
-                                                     CascadeOrigin::kAuthor);
-  cascade2.MutableMatchResult().AddMatchedProperties(light_declaration,
-                                                     CascadeOrigin::kAuthor);
+  cascade2.MutableMatchResult().AddMatchedProperties(
+      bgimage_declaration, {.origin = CascadeOrigin::kAuthor});
+  cascade2.MutableMatchResult().AddMatchedProperties(
+      light_declaration, {.origin = CascadeOrigin::kAuthor});
   cascade2.Apply();
   EXPECT_FALSE(state.TakeStyle()->HasBackgroundImage());
 }
@@ -2152,6 +2152,59 @@ TEST_F(ComputedStyleTest, ZoomInheritance) {
   )HTML");
   document.View()->UpdateAllLifecyclePhasesForTest();
   ASSERT_TRUE(true) << "Test passes if it doesn't hit a DCHECK.";
+}
+
+TEST_F(ComputedStyleTest, ColorSchemeFlagsIsNormal) {
+  Document& document = GetDocument();
+  ColorSchemeHelper color_scheme_helper(document);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
+
+  document.body()->setInnerHTML(R"HTML(
+    <div id="normal" style="color-scheme: normal"></div>
+    <div id="light" style="color-scheme: light"></div>
+    <div id="dark" style="color-scheme: dark"></div>
+  )HTML");
+  document.View()->UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(GetDocument()
+                  .getElementById(AtomicString("normal"))
+                  ->ComputedStyleRef()
+                  .ColorSchemeFlagsIsNormal());
+  EXPECT_FALSE(GetDocument()
+                   .getElementById(AtomicString("light"))
+                   ->ComputedStyleRef()
+                   .ColorSchemeFlagsIsNormal());
+  EXPECT_FALSE(GetDocument()
+                   .getElementById(AtomicString("dark"))
+                   ->ComputedStyleRef()
+                   .ColorSchemeFlagsIsNormal());
+}
+
+TEST_F(ComputedStyleTest, ColorSchemeFlagsIsNormal_WithMeta) {
+  Document& document = GetDocument();
+  ColorSchemeHelper color_scheme_helper(document);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
+
+  document.body()->setInnerHTML(R"HTML(
+    <meta name="color-scheme" content="light">
+    <div id="normal" style="color-scheme: normal"></div>
+    <div id="light" style="color-scheme: light"></div>
+    <div id="dark" style="color-scheme: dark"></div>
+  )HTML");
+  document.View()->UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(GetDocument()
+                   .getElementById(AtomicString("normal"))
+                   ->ComputedStyleRef()
+                   .ColorSchemeFlagsIsNormal());
+  EXPECT_FALSE(GetDocument()
+                   .getElementById(AtomicString("light"))
+                   ->ComputedStyleRef()
+                   .ColorSchemeFlagsIsNormal());
+  EXPECT_FALSE(GetDocument()
+                   .getElementById(AtomicString("dark"))
+                   ->ComputedStyleRef()
+                   .ColorSchemeFlagsIsNormal());
 }
 
 }  // namespace blink

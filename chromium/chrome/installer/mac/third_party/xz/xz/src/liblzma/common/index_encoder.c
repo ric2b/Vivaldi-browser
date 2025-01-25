@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       index_encoder.c
 /// \brief      Encodes the Index field
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -15,7 +14,7 @@
 #include "check.h"
 
 
-struct lzma_coder_s {
+typedef struct {
 	enum {
 		SEQ_INDICATOR,
 		SEQ_COUNT,
@@ -37,12 +36,12 @@ struct lzma_coder_s {
 
 	/// CRC32 of the List of Records field
 	uint32_t crc32;
-};
+} lzma_index_coder;
 
 
 static lzma_ret
-index_encode(lzma_coder *coder,
-		lzma_allocator *allocator lzma_attribute((__unused__)),
+index_encode(void *coder_ptr,
+		const lzma_allocator *allocator lzma_attribute((__unused__)),
 		const uint8_t *restrict in lzma_attribute((__unused__)),
 		size_t *restrict in_pos lzma_attribute((__unused__)),
 		size_t in_size lzma_attribute((__unused__)),
@@ -50,6 +49,8 @@ index_encode(lzma_coder *coder,
 		size_t out_size,
 		lzma_action action lzma_attribute((__unused__)))
 {
+	lzma_index_coder *coder = coder_ptr;
+
 	// Position where to start calculating CRC32. The idea is that we
 	// need to call lzma_crc32() only once per call to index_encode().
 	const size_t out_start = *out_pos;
@@ -63,7 +64,7 @@ index_encode(lzma_coder *coder,
 	while (*out_pos < out_size)
 	switch (coder->sequence) {
 	case SEQ_INDICATOR:
-		out[*out_pos] = 0x00;
+		out[*out_pos] = INDEX_INDICATOR;
 		++*out_pos;
 		coder->sequence = SEQ_COUNT;
 		break;
@@ -151,15 +152,22 @@ index_encode(lzma_coder *coder,
 
 out:
 	// Update the CRC32.
-	coder->crc32 = lzma_crc32(out + out_start,
-			*out_pos - out_start, coder->crc32);
+	//
+	// Avoid null pointer + 0 (undefined behavior) in "out + out_start".
+	// In such a case we had no input and thus out_used == 0.
+	{
+		const size_t out_used = *out_pos - out_start;
+		if (out_used > 0)
+			coder->crc32 = lzma_crc32(out + out_start,
+					out_used, coder->crc32);
+	}
 
 	return ret;
 }
 
 
 static void
-index_encoder_end(lzma_coder *coder, lzma_allocator *allocator)
+index_encoder_end(void *coder, const lzma_allocator *allocator)
 {
 	lzma_free(coder, allocator);
 	return;
@@ -167,7 +175,7 @@ index_encoder_end(lzma_coder *coder, lzma_allocator *allocator)
 
 
 static void
-index_encoder_reset(lzma_coder *coder, const lzma_index *i)
+index_encoder_reset(lzma_index_coder *coder, const lzma_index *i)
 {
 	lzma_index_iter_init(&coder->iter, i);
 
@@ -181,7 +189,7 @@ index_encoder_reset(lzma_coder *coder, const lzma_index *i)
 
 
 extern lzma_ret
-lzma_index_encoder_init(lzma_next_coder *next, lzma_allocator *allocator,
+lzma_index_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_index *i)
 {
 	lzma_next_coder_init(&lzma_index_encoder_init, next, allocator);
@@ -190,7 +198,7 @@ lzma_index_encoder_init(lzma_next_coder *next, lzma_allocator *allocator,
 		return LZMA_PROG_ERROR;
 
 	if (next->coder == NULL) {
-		next->coder = lzma_alloc(sizeof(lzma_coder), allocator);
+		next->coder = lzma_alloc(sizeof(lzma_index_coder), allocator);
 		if (next->coder == NULL)
 			return LZMA_MEM_ERROR;
 
@@ -230,7 +238,7 @@ lzma_index_buffer_encode(const lzma_index *i,
 
 	// The Index encoder needs just one small data structure so we can
 	// allocate it on stack.
-	lzma_coder coder;
+	lzma_index_coder coder;
 	index_encoder_reset(&coder, i);
 
 	// Do the actual encoding. This should never fail, but store

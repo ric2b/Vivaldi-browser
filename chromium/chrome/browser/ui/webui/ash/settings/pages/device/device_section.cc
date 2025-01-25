@@ -36,6 +36,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "media/base/media_switches.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/display/display_features.h"
 #include "ui/display/display_switches.h"
@@ -724,8 +725,17 @@ bool IsTouchCalibrationAvailable() {
          display::HasExternalTouchscreenDevice();
 }
 
+bool IsTouchscreenRemappingExperienceAvailable() {
+  return features::IsTouchscreenMappingExperienceEnabled() &&
+         display::HasExternalTouchscreenDevice();
+}
+
 bool IsListAllDisplayModesEnabled() {
   return display::features::IsListAllDisplayModesEnabled();
+}
+
+bool IsExcludeDisplayInMirrorModeEnabled() {
+  return display::features::IsExcludeDisplayInMirrorModeEnabled();
 }
 
 bool IsShowForceRespectUiGainsToggleEnabled() {
@@ -852,6 +862,9 @@ void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
       {"openAppLabel", IDS_SETTINGS_PER_DEVICE_OPEN_APP_LABEL},
       {"installAppLabel", IDS_SETTINGS_PER_DEVICE_INSTALL_APP_LABEL},
       {"installAppButton", IDS_SETTINGS_PER_DEVICE_INSTALL_APP_BUTTON},
+      {"deviceNameLabel", IDS_SETTINGS_PER_DEVICE_NAME},
+      {"deviceBatteryLabel",
+       IDS_SETTINGS_PER_DEVICE_BATTERY_PERCENTAGE_A11Y_LABEL},
   };
   html_source->AddLocalizedStrings(keyboard_strings);
 
@@ -1012,10 +1025,6 @@ void AddDeviceAudioStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_AUDIO_INPUT_NOISE_CANCELLATION_TITLE},
       {"audioInputStyleTransferTitle",
        IDS_SETTINGS_AUDIO_INPUT_STYLE_TRANSFER_TITLE},
-      {"audioInputStyleTransferBadge",
-       IDS_SETTINGS_AUDIO_INPUT_STYLE_TRANSFER_BADGE},
-      {"audioInputStyleTransferDescription",
-       IDS_SETTINGS_AUDIO_INPUT_STYLE_TRANSFER_DESCRIPTION},
       {"audioInputTitle", IDS_SETTINGS_AUDIO_INPUT_TITLE},
       {"audioMutedByPolicyTooltip", IDS_SETTINGS_AUDIO_MUTED_BY_POLICY_TOOLTIP},
       {"audioMutedExternallyTooltip",
@@ -1041,6 +1050,11 @@ void AddDeviceAudioStrings(content::WebUIDataSource* html_source) {
   };
 
   html_source->AddLocalizedStrings(kAudioStrings);
+  html_source->AddString(
+      "audioInputStyleTransferDescription",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_AUDIO_INPUT_STYLE_TRANSFER_DESCRIPTION,
+          DeviceSection::GetHelpUrlWithBoard(chrome::kVcLearnMoreURL)));
 }
 
 // Mirrors enum of the same name in enums.xml.
@@ -1877,6 +1891,10 @@ void DeviceSection::AddDeviceDisplayStrings(
        IDS_SETTINGS_DISPLAY_AUTO_BRIGHTNESS_TOGGLE_LABEL},
       {"displayAutoBrightnessToggleSubtitle",
        IDS_SETTINGS_DISPLAY_AUTO_BRIGHTNESS_TOGGLE_SUBTITLE},
+      {"displayExcludeInMirrorModeLabel",
+       IDS_SETTINGS_DISPLAY_EXCLUDE_IN_MIRROR_LABEL},
+      {"displayExcludeInMirrorModeSublabel",
+       IDS_SETTINGS_DISPLAY_EXCLUDE_IN_MIRROR_SUBLABEL},
       {"displayMirror", IDS_SETTINGS_DISPLAY_MIRROR},
       {"displayMirrorDisplayName", IDS_SETTINGS_DISPLAY_MIRROR_DISPLAY_NAME},
       {"displayNightLightLabel", IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_LABEL},
@@ -1894,6 +1912,8 @@ void DeviceSection::AddDeviceDisplayStrings(
        IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_SCHEDULE_SUNSET_TO_SUNRISE},
       {"displayNightLightGeolocationWarningText",
        IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_GEOLOCATION_WARNING_TEXT},
+      {"displayNightLightGeolocationManagedWarningText",
+       IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_GEOLOCATION_MANAGED_WARNING_TEXT},
       {"displayNightLightTemperatureLabel",
        IDS_SETTINGS_DISPLAY_NIGHT_LIGHT_TEMPERATURE_LABEL},
       {"displayNightLightTempSliderMaxLabel",
@@ -1964,6 +1984,8 @@ void DeviceSection::AddDeviceDisplayStrings(
        IDS_SETTINGS_DISPLAY_TOUCH_CALIBRATION_TEXT},
       {"displayTouchCalibrationTitle",
        IDS_SETTINGS_DISPLAY_TOUCH_CALIBRATION_TITLE},
+      {"displayTouchMappingText", IDS_SETTINGS_DISPLAY_TOUCH_MAPPING_TEXT},
+      {"displayTouchMappingTitle", IDS_SETTINGS_DISPLAY_TOUCH_MAPPING_TITLE},
       {"displayUnifiedDesktop", IDS_SETTINGS_DISPLAY_UNIFIED_DESKTOP},
       {"displayUnifiedDesktopOff", IDS_SETTINGS_DISPLAY_UNIFIED_DESKTOP_OFF},
       {"displayUnifiedDesktopOn", IDS_SETTINGS_DISPLAY_UNIFIED_DESKTOP_ON},
@@ -2009,6 +2031,9 @@ void DeviceSection::AddDeviceDisplayStrings(
   html_source->AddBoolean("enableTouchCalibrationSetting",
                           IsTouchCalibrationAvailable());
 
+  html_source->AddBoolean("enableTouchscreenMappingExperience",
+                          IsTouchscreenRemappingExperienceAvailable());
+
   html_source->AddString("invalidDisplayId",
                          base::NumberToString(display::kInvalidDisplayId));
 
@@ -2025,6 +2050,9 @@ void DeviceSection::AddDeviceDisplayStrings(
 
   html_source->AddBoolean("enableDisplayBrightnessControlInSettings",
                           features::IsBrightnessControlInSettingsEnabled());
+
+  html_source->AddBoolean("excludeDisplayInMirrorModeEnabled",
+                          IsExcludeDisplayInMirrorModeEnabled());
 }
 
 }  // namespace ash::settings

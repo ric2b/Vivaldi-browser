@@ -3,15 +3,16 @@
 // found in the LICENSE file.
 
 import * as TraceEngine from '../../models/trace/trace.js';
+import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 import {getMainThread} from '../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../testing/TraceLoader.js';
 
 import * as Timeline from './timeline.js';
 
 function findFirstEntry(
-    allEntries: readonly TraceEngine.Types.TraceEvents.SyntheticTraceEntry[],
-    predicate: (entry: TraceEngine.Types.TraceEvents.SyntheticTraceEntry) =>
-        boolean): TraceEngine.Types.TraceEvents.SyntheticTraceEntry {
+    allEntries: readonly TraceEngine.Types.TraceEvents.TraceEventData[],
+    predicate: (entry: TraceEngine.Types.TraceEvents.TraceEventData) =>
+        boolean): TraceEngine.Types.TraceEvents.TraceEventData {
   const entry = allEntries.find(entry => predicate(entry));
   if (!entry) {
     throw new Error('Could not find expected entry.');
@@ -19,7 +20,7 @@ function findFirstEntry(
   return entry;
 }
 
-describe('EventsSerializer', () => {
+describeWithEnvironment('EventsSerializer', () => {
   it('correctly implements a bidirectional key <-> event mapping', async function() {
     const {traceData} = await TraceLoader.traceEngine(this, 'basic-stack.json.gz');
     const eventsSerializer = new Timeline.EventsSerializer.EventsSerializer();
@@ -52,5 +53,20 @@ describe('EventsSerializer', () => {
     assert.strictEqual(resolvedRawEntry, rawEntry);
     assert.strictEqual(resolvedSyntheticEntry, syntheticEvent);
     assert.strictEqual(resolvedProfileCall, profileCall);
+  });
+
+  it('correctly maps to and from legacy timeline frames', async function() {
+    const {traceData} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+    const eventsSerializer = new Timeline.EventsSerializer.EventsSerializer();
+
+    const frame = traceData.Frames.frames.at(0);
+    assert.isOk(frame);
+
+    const frameKey = eventsSerializer.keyForEvent(frame);
+    assert.isOk(frameKey);
+    assert.strictEqual(frameKey, 'l-0');
+
+    const resolvedFrame = eventsSerializer.eventForKey(frameKey, traceData);
+    assert.strictEqual(resolvedFrame, frame);
   });
 });

@@ -37,8 +37,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -51,7 +49,6 @@ import org.chromium.chrome.browser.feed.FeedFeatures;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedBridge;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedBridgeJni;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSnackbarController;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -85,7 +82,6 @@ import org.chromium.components.webapps.AppBannerManager;
 import org.chromium.components.webapps.AppBannerManagerJni;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.accessibility.UiAccessibilityFeatures;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.url.JUnitTestGURLs;
 
@@ -94,8 +90,6 @@ import java.util.List;
 
 /** Unit tests for {@link TabbedAppMenuPropertiesDelegate}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@EnableFeatures({UiAccessibilityFeatures.START_SURFACE_ACCESSIBILITY_CHECK})
-@DisableFeatures({ChromeFeatureList.PWA_UNIVERSAL_INSTALL_UI})
 public class TabbedAppMenuPropertiesDelegateUnitTest {
     // Constants defining flags that determines multi-window menu items visibility.
     private static final boolean TAB_M = true; // multiple tabs
@@ -256,7 +250,7 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
             R.id.translate_id,
             R.id.share_row_menu_id,
             R.id.find_in_page_id,
-            R.id.add_to_homescreen_id,
+            R.id.universal_install,
             R.id.request_desktop_site_row_menu_id,
             R.id.auto_dark_web_contents_row_menu_id,
             R.id.divider_line_id,
@@ -365,14 +359,10 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
     }
 
     @Test
-    @EnableFeatures({ChromeFeatureList.PWA_UNIVERSAL_INSTALL_UI})
     public void testPageMenuItems_universalInstall() {
         setUpMocksForPageMenu();
         Menu menu = createMenuForMultiWindow();
         assertTrue(isMenuVisible(menu, R.id.universal_install));
-
-        assertFalse(isMenuVisible(menu, R.id.add_to_homescreen_id));
-        assertFalse(isMenuVisible(menu, R.id.install_webapp_id));
         assertFalse(isMenuVisible(menu, R.id.open_webapk_id));
     }
 
@@ -497,11 +487,6 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
         doReturn(true)
                 .when(mTabbedAppMenuPropertiesDelegate)
                 .shouldShowTranslateMenuItem(any(Tab.class));
-        doReturn(
-                        new AppBannerManager.InstallStringPair(
-                                R.string.menu_add_to_homescreen, R.string.add))
-                .when(mTabbedAppMenuPropertiesDelegate)
-                .getAddToHomeScreenTitle(mTab);
         when(mManagedBrowserUtilsJniMock.isBrowserManaged(any())).thenReturn(true);
     }
 

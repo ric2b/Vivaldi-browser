@@ -33,7 +33,7 @@ namespace Eigen {
  */
 template <typename Scalar>
 class KahanSum {
-  // Straighforward Kahan summation for accurate accumulation of a sum of numbers
+  // Straightforward Kahan summation for accurate accumulation of a sum of numbers
   Scalar _sum{};
   Scalar _correction{};
 

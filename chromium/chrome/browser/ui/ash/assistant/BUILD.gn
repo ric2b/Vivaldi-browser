@@ -24,6 +24,8 @@ static_library("assistant") {
     "search_and_assistant_enabled_checker.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash/components/arc:arc_base_utils",
     "//ash/components/arc/mojom",
@@ -35,11 +37,11 @@ static_library("assistant") {
     "//chrome/browser/ash/arc",
     "//chrome/browser/ash/arc/session",
     "//chrome/browser/ash/assistant",
-    "//chrome/browser/ash/crosapi",
     "//chrome/browser/ash/crosapi:browser_util",
     "//chrome/browser/ash/profiles",
     "//chrome/browser/profiles",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/webui/ash/assistant_optin",
     "//chrome/common",
     "//chromeos/ash/components/assistant:buildflags",
     "//chromeos/ash/components/network",
@@ -75,6 +77,7 @@ source_set("unit_tests") {
     "//ash/components/arc:arc_test_support",
     "//ash/public/cpp",
     "//base",
+    "//chrome/browser/ash/app_list/arc",
     "//chrome/browser/ash/arc/session",
     "//chrome/browser/ash/arc/test:arc_test_support",
     "//chrome/browser/ash/login/users:test_support",
@@ -150,6 +153,7 @@ if (enable_assistant_integration_tests) {
       "//chromeos/ash/components/audio",
       "//chromeos/ash/services/assistant:lib",
       "//chromeos/ash/services/assistant/public/cpp",
+      "//chromeos/dbus/power:power_manager_proto",
       "//components/language/core/browser",
       "//content/test:test_support",
       "//ui/events:test_support",

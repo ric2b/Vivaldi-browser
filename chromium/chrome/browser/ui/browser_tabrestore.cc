@@ -58,7 +58,8 @@ std::unique_ptr<WebContents> CreateRestoredTab(
     const std::vector<SerializedNavigationEntry>& navigations,
     int selected_navigation,
     const std::string& extension_app_id,
-    base::TimeTicks last_active_time,
+    base::TimeTicks last_active_time_ticks,
+    base::Time last_active_time,
     content::SessionStorageNamespace* session_storage_namespace,
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
@@ -81,6 +82,7 @@ std::unique_ptr<WebContents> CreateRestoredTab(
   create_params.initially_hidden = initially_hidden;
   create_params.desired_renderer_state =
       WebContents::CreateParams::kNoRendererProcess;
+  create_params.last_active_time_ticks = last_active_time_ticks;
   create_params.last_active_time = last_active_time;
 
   create_params.always_create_guest = browser->is_vivaldi();
@@ -294,7 +296,8 @@ WebContents* AddRestoredTab(
     std::optional<tab_groups::TabGroupId> group,
     bool select,
     bool pin,
-    base::TimeTicks last_active_time,
+    base::TimeTicks last_active_time_ticks,
+    base::Time last_active_time,
     content::SessionStorageNamespace* session_storage_namespace,
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::map<std::string, std::string>& extra_data,
@@ -306,14 +309,9 @@ WebContents* AddRestoredTab(
   const bool initially_hidden = !select || browser->window()->IsMinimized();
   std::unique_ptr<WebContents> web_contents = CreateRestoredTab(
       browser, navigations, selected_navigation, extension_app_id,
-      last_active_time, session_storage_namespace, user_agent_override,
-      extra_data, initially_hidden, from_session_restore,
+      last_active_time_ticks, last_active_time, session_storage_namespace,
+      user_agent_override, extra_data, initially_hidden, from_session_restore,
       viv_page_action_overrides, viv_ext_data);
-
-  // Always allow lazyload/discard the webcontents. We must load it after it has
-  // been attached in a webview .
-  web_contents->SetUserData(&vivaldi::LazyLoadService::kLazyLoadIsSafe,
-                            std::make_unique<base::SupportsUserData::Data>());
 
   return AddRestoredTabImpl(std::move(web_contents), browser, tab_index, group,
                             select, pin, from_session_restore,
@@ -333,8 +331,8 @@ WebContents* ReplaceRestoredTab(
     const std::string& viv_ext_data) {
   std::unique_ptr<WebContents> web_contents = CreateRestoredTab(
       browser, navigations, selected_navigation, extension_app_id,
-      base::TimeTicks(), session_storage_namespace, user_agent_override,
-      extra_data, false, from_session_restore,
+      base::TimeTicks(), base::Time(), session_storage_namespace,
+      user_agent_override, extra_data, false, from_session_restore,
       viv_page_action_overrides, viv_ext_data);
   WebContents* raw_web_contents = web_contents.get();
 

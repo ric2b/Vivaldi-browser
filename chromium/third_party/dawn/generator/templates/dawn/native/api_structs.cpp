@@ -32,7 +32,10 @@
 {% set namespace = metadata.namespace %}
 #include "{{native_dir}}/{{namespace}}_structs_autogen.h"
 
+#include <cstring>
 #include <tuple>
+
+#include "dawn/common/Assert.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 // error: 'offsetof' within non-standard-layout type '{{namespace}}::XXX' is conditionally-supported
@@ -104,7 +107,7 @@ namespace {{native_namespace}} {
                 return copy;
             }
         {% endif %}
-        bool {{CppType}}::operator==(const {{as_cppType(type.name)}}& rhs) const {
+        bool {{CppType}}::operator==(const {{CppType}}& rhs) const {
             return {% if type.extensible or type.chained -%}
                 (nextInChain == rhs.nextInChain) &&
             {%- endif %} std::tie(
@@ -165,5 +168,25 @@ namespace {{native_namespace}} {
         }
 
     {% endfor %}
+
+    StringView::operator std::string_view() const {
+        const bool isNull = this->data == nullptr;
+        const bool useStrlen = this->length == SIZE_MAX;
+        DAWN_ASSERT(!(isNull && useStrlen));
+        return std::string_view(this->data, isNull      ? 0
+                                            : useStrlen ? std::strlen(this->data)
+                                                        : this->length);
+    }
+
+    NullableStringView::operator std::optional<std::string_view>() const {
+        const bool isNull = this->data == nullptr;
+        const bool useStrlen = this->length == SIZE_MAX;
+        if (isNull && useStrlen) {
+            return std::nullopt;
+        }
+        return std::string_view(this->data, isNull      ? 0
+                                            : useStrlen ? std::strlen(this->data)
+                                                        : this->length);
+    }
 
 } // namespace {{native_namespace}}

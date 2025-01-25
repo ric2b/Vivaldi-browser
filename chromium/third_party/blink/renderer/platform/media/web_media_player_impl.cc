@@ -48,6 +48,7 @@
 #include "media/base/media_switches.h"
 #include "media/base/media_url_demuxer.h"
 #include "media/base/memory_dump_provider_proxy.h"
+#include "media/base/remoting_constants.h"
 #include "media/base/renderer.h"
 #include "media/base/routing_token_callback.h"
 #include "media/base/supported_types.h"
@@ -61,7 +62,6 @@
 #include "media/learning/common/media_learning_tasks.h"
 #include "media/learning/mojo/public/cpp/mojo_learning_task_controller.h"
 #include "media/media_buildflags.h"
-#include "media/remoting/remoting_constants.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/data_url.h"
@@ -129,7 +129,7 @@ constexpr const char* GetHistogramName(SplitHistogramName type) {
     case SplitHistogramName::kTimeToFirstFrame:
       return "Media.TimeToFirstFrame";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 namespace learning = ::media::learning;
@@ -910,7 +910,7 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
       main_task_runner_,
       url_index_->GetByUrl(
           url, static_cast<UrlData::CorsMode>(cors_mode),
-          is_cache_disabled ? UrlIndex::kCacheDisabled : UrlIndex::kNormal),
+          is_cache_disabled ? UrlData::kCacheDisabled : UrlData::kNormal),
       media_log_.get(), buffered_data_source_host_.get(),
       base::BindRepeating(&WebMediaPlayerImpl::NotifyDownloading, weak_this_));
 
@@ -1187,11 +1187,20 @@ void WebMediaPlayerImpl::SetPreservesPitch(bool preserves_pitch) {
   pipeline_controller_->SetPreservesPitch(preserves_pitch);
 }
 
-void WebMediaPlayerImpl::SetWasPlayedWithUserActivation(
-    bool was_played_with_user_activation) {
+void WebMediaPlayerImpl::SetWasPlayedWithUserActivationAndHighMediaEngagement(
+    bool was_played_with_user_activation_and_high_media_engagement) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
-  pipeline_controller_->SetWasPlayedWithUserActivation(
-      was_played_with_user_activation);
+  pipeline_controller_->SetWasPlayedWithUserActivationAndHighMediaEngagement(
+      was_played_with_user_activation_and_high_media_engagement);
+}
+
+void WebMediaPlayerImpl::SetShouldPauseWhenFrameIsHidden(
+    bool should_pause_when_frame_is_hidden) {
+  should_pause_when_frame_is_hidden_ = should_pause_when_frame_is_hidden;
+}
+
+bool WebMediaPlayerImpl::GetShouldPauseWhenFrameIsHidden() {
+  return should_pause_when_frame_is_hidden_;
 }
 
 void WebMediaPlayerImpl::OnRequestPictureInPicture() {
@@ -1240,33 +1249,38 @@ bool WebMediaPlayerImpl::HasAudio() const {
   return pipeline_metadata_.has_audio;
 }
 
-void WebMediaPlayerImpl::EnabledAudioTracksChanged(
-    const WebVector<WebMediaPlayer::TrackId>& enabledTrackIds) {
+void WebMediaPlayerImpl::OnEnabledAudioTracksChanged(
+    std::vector<media::MediaTrack::Id> enabled) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
+  media_log_->AddEvent<MediaLogEvent::kAudioTrackChange>(enabled);
+  pipeline_controller_->OnEnabledAudioTracksChanged(enabled);
+}
 
-  std::ostringstream logstr;
-  std::vector<MediaTrack::Id> enabledMediaTrackIds;
-  for (const auto& blinkTrackId : enabledTrackIds) {
-    const auto track_id = MediaTrack::Id(blinkTrackId.Utf8().data());
-    logstr << track_id << " ";
-    enabledMediaTrackIds.push_back(track_id);
+void WebMediaPlayerImpl::OnSelectedVideoTrackChanged(
+    std::optional<media::MediaTrack::Id> selected) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  media_log_->AddEvent<MediaLogEvent::kVideoTrackChange>(selected);
+  pipeline_controller_->OnSelectedVideoTrackChanged(selected);
+}
+
+void WebMediaPlayerImpl::EnabledAudioTracksChanged(
+    const WebVector<WebMediaPlayer::TrackId>& enabled_track_ids) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  std::vector<MediaTrack::Id> enabled_tracks;
+  for (const auto& blinkTrackId : enabled_track_ids) {
+    enabled_tracks.push_back(MediaTrack::Id(blinkTrackId.Utf8().data()));
   }
-  MEDIA_LOG(INFO, media_log_.get())
-      << "Enabled audio tracks: [" << logstr.str() << "]";
-  pipeline_controller_->OnEnabledAudioTracksChanged(enabledMediaTrackIds);
+  OnEnabledAudioTracksChanged(std::move(enabled_tracks));
 }
 
 void WebMediaPlayerImpl::SelectedVideoTrackChanged(
-    WebMediaPlayer::TrackId* selectedTrackId) {
+    std::optional<WebMediaPlayer::TrackId> selected_track_id) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
-
-  std::optional<MediaTrack::Id> selected_video_track_id;
-  if (selectedTrackId && !video_track_disabled_)
-    selected_video_track_id = MediaTrack::Id(selectedTrackId->Utf8().data());
-  MEDIA_LOG(INFO, media_log_.get())
-      << "Selected video track: ["
-      << selected_video_track_id.value_or(MediaTrack::Id()) << "]";
-  pipeline_controller_->OnSelectedVideoTrackChanged(selected_video_track_id);
+  std::optional<MediaTrack::Id> selected_track;
+  if (selected_track_id.has_value()) {
+    selected_track = MediaTrack::Id(selected_track_id->Utf8().data());
+  }
+  OnSelectedVideoTrackChanged(selected_track);
 }
 
 gfx::Size WebMediaPlayerImpl::NaturalSize() const {
@@ -1612,36 +1626,24 @@ void WebMediaPlayerImpl::OnEncryptedMediaInitData(
 }
 
 #if BUILDFLAG(ENABLE_FFMPEG)
-void WebMediaPlayerImpl::AddAudioTrack(const std::string& id,
-                                       const std::string& label,
-                                       const std::string& language,
-                                       bool is_first_track) {
-  client_->AddAudioTrack(WebString::FromUTF8(id),
-                         WebMediaPlayerClient::kAudioTrackKindMain,
-                         WebString::FromUTF8(label),
-                         WebString::FromUTF8(language), is_first_track);
+
+void WebMediaPlayerImpl::AddMediaTrack(const media::MediaTrack& track) {
+  client_->AddMediaTrack(track);
 }
 
-void WebMediaPlayerImpl::AddVideoTrack(const std::string& id,
-                                       const std::string& label,
-                                       const std::string& language,
-                                       bool is_first_track) {
-  client_->AddVideoTrack(WebString::FromUTF8(id),
-                         WebMediaPlayerClient::kVideoTrackKindMain,
-                         WebString::FromUTF8(label),
-                         WebString::FromUTF8(language), is_first_track);
-}
 #endif  // BUILDFLAG(ENABLE_FFMPEG)
 
 #if BUILDFLAG(ENABLE_HLS_DEMUXER)
 
 void WebMediaPlayerImpl::GetUrlData(
     const GURL& gurl,
+    bool ignore_cache,
     base::OnceCallback<void(scoped_refptr<UrlData>)> cb) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   auto url_data = url_index_->GetByUrl(
       gurl, static_cast<UrlData::CorsMode>(cors_mode_),
-      is_cache_disabled_ ? UrlIndex::kCacheDisabled : UrlIndex::kNormal);
+      (is_cache_disabled_ || ignore_cache) ? UrlData::kCacheDisabled
+                                           : UrlData::kNormal);
   std::move(cb).Run(std::move(url_data));
 }
 
@@ -2609,6 +2611,52 @@ void WebMediaPlayerImpl::OnIdleTimeout() {
   UpdatePlayState();
 }
 
+void WebMediaPlayerImpl::OnFrameShown() {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  background_pause_timer_.Stop();
+
+  // Foreground videos don't require user gesture to continue playback.
+  video_locked_when_paused_when_hidden_ = false;
+
+  was_suspended_for_frame_closed_ = false;
+
+  if (watch_time_reporter_) {
+    watch_time_reporter_->OnShown();
+  }
+
+  if (video_decode_stats_reporter_) {
+    video_decode_stats_reporter_->OnShown();
+  }
+
+  UpdateBackgroundVideoOptimizationState();
+
+  UpdatePlayState();
+}
+
+void WebMediaPlayerImpl::OnFrameHidden() {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+
+  // Backgrounding a video requires a user gesture to resume playback.
+  if (IsFrameHidden()) {
+    video_locked_when_paused_when_hidden_ = true;
+  }
+
+  if (watch_time_reporter_) {
+    watch_time_reporter_->OnHidden();
+  }
+
+  if (video_decode_stats_reporter_) {
+    video_decode_stats_reporter_->OnHidden();
+  }
+
+  UpdateBackgroundVideoOptimizationState();
+  UpdatePlayState();
+
+  // Schedule suspended playing media to be paused if the user doesn't come back
+  // to it within some timeout period to avoid any autoplay surprises.
+  ScheduleIdlePauseTimer();
+}
+
 void WebMediaPlayerImpl::SetVolumeMultiplier(double multiplier) {
   volume_multiplier_ = multiplier;
   SetVolume(volume_);
@@ -3494,6 +3542,12 @@ bool WebMediaPlayerImpl::IsPageHidden() const {
   return delegate_->IsPageHidden() && !was_suspended_for_frame_closed_;
 }
 
+bool WebMediaPlayerImpl::IsFrameHidden() const {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+
+  return delegate_->IsFrameHidden() && !was_suspended_for_frame_closed_;
+}
+
 bool WebMediaPlayerImpl::IsStreaming() const {
   return demuxer_manager_->IsStreaming();
 }
@@ -3585,6 +3639,10 @@ base::WeakPtr<WebMediaPlayer> WebMediaPlayerImpl::AsWeakPtr() {
 bool WebMediaPlayerImpl::ShouldPausePlaybackWhenHidden() const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
+  if (should_pause_when_frame_is_hidden_ && IsFrameHidden()) {
+    return true;
+  }
+
   const bool preserve_audio =
       should_pause_background_muted_audio_
           ? HasUnmutedAudio() || audio_source_provider_->IsAudioBeingCaptured()
@@ -3662,7 +3720,8 @@ bool WebMediaPlayerImpl::ShouldDisableVideoWhenHidden() const {
 }
 
 void WebMediaPlayerImpl::UpdateBackgroundVideoOptimizationState() {
-  if (IsPageHidden()) {
+  if (IsPageHidden() ||
+      (IsFrameHidden() && should_pause_when_frame_is_hidden_)) {
     if (ShouldPausePlaybackWhenHidden()) {
       update_background_status_cb_.Cancel();
       is_background_status_change_cancelled_ = true;
@@ -3690,7 +3749,7 @@ void WebMediaPlayerImpl::UpdateBackgroundVideoOptimizationState() {
 }
 
 void WebMediaPlayerImpl::PauseVideoIfNeeded() {
-  DCHECK(IsPageHidden());
+  DCHECK(IsPageHidden() || IsFrameHidden());
 
   // Don't pause video while the pipeline is stopped, resuming or seeking.
   // Also if the video is paused already.
@@ -3698,11 +3757,16 @@ void WebMediaPlayerImpl::PauseVideoIfNeeded() {
       seeking_ || paused_)
     return;
 
+  auto pause_reason =
+      WebMediaPlayerClient::PauseReason::kBackgroundVideoOptimization;
+  if (IsFrameHidden() && should_pause_when_frame_is_hidden_) {
+    pause_reason = WebMediaPlayerClient::PauseReason::kFrameHidden;
+  }
+
   // client_->PausePlayback() will get `paused_when_hidden_` set to
   // false and UpdatePlayState() called, so set the flag to true after and then
   // return.
-  client_->PausePlayback(
-      WebMediaPlayerClient::PauseReason::kBackgroundVideoOptimization);
+  client_->PausePlayback(pause_reason);
   paused_when_hidden_ = true;
 }
 
@@ -3716,14 +3780,13 @@ void WebMediaPlayerImpl::EnableVideoTrackIfNeeded() {
   if (video_track_disabled_) {
     video_track_disabled_ = false;
     if (client_->HasSelectedVideoTrack()) {
-      WebMediaPlayer::TrackId trackId = client_->GetSelectedVideoTrackId();
-      SelectedVideoTrackChanged(&trackId);
+      SelectedVideoTrackChanged(client_->GetSelectedVideoTrackId());
     }
   }
 }
 
 void WebMediaPlayerImpl::DisableVideoTrackIfNeeded() {
-  DCHECK(IsPageHidden());
+  DCHECK(IsPageHidden() || IsFrameHidden());
 
   // Don't change video track while the pipeline is resuming or seeking.
   if (is_pipeline_resuming_ || seeking_)
@@ -3731,7 +3794,7 @@ void WebMediaPlayerImpl::DisableVideoTrackIfNeeded() {
 
   if (!video_track_disabled_ && ShouldDisableVideoWhenHidden()) {
     video_track_disabled_ = true;
-    SelectedVideoTrackChanged(nullptr);
+    SelectedVideoTrackChanged(std::nullopt);
   }
 }
 

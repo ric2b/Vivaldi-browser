@@ -55,6 +55,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"upload_system_symbols/arch"
+	"upload_system_symbols/archive"
 )
 
 var (
@@ -179,7 +182,7 @@ func getSystemRoots(tempDir string) []string {
 		if hasIPSW || hasRoot {
 			log.Fatalf("--installer, --ipsw, and --system-root are mutually exclusive")
 		}
-		if rs, err := extractSystems(Installer, *installer, tempDir); err != nil {
+		if rs, err := extractSystems(archive.Installer, *installer, tempDir); err != nil {
 			log.Fatalf("Couldn't extract installer at %s: %v", *installer, err)
 		} else {
 			return rs
@@ -188,7 +191,7 @@ func getSystemRoots(tempDir string) []string {
 		if hasRoot {
 			log.Fatalf("--installer, --ipsw, and --system-root are mutually exclusive")
 		}
-		if rs, err := extractSystems(IPSW, *ipsw, tempDir); err != nil {
+		if rs, err := extractSystems(archive.IPSW, *ipsw, tempDir); err != nil {
 			log.Fatalf("Couldn't extract IPSW at %s: %v", *ipsw, err)
 		} else {
 			return rs
@@ -506,11 +509,13 @@ func (fq *findQueue) worker() {
 }
 
 func (fq *findQueue) dumpMachOFile(fp string, image *macho.File) {
-	if image.Type != MachODylib && image.Type != MachOBundle && image.Type != MachODylinker {
+	if image.Type != arch.MachODylib &&
+		image.Type != arch.MachOBundle &&
+		image.Type != arch.MachODylinker {
 		return
 	}
 
-	arch := getArchStringFromHeader(image.FileHeader)
+	arch := arch.GetArchStringFromHeader(image.FileHeader)
 	if arch == "" {
 		// Don't know about this architecture type.
 		return
@@ -521,14 +526,14 @@ func (fq *findQueue) dumpMachOFile(fp string, image *macho.File) {
 	}
 }
 
-// extractSystems extracts any dyld shared caches from `archive`, then extracts the caches
+// extractSystems extracts any dyld shared caches from `archivePath`, then extracts the caches
 // into macOS system libraries, returning the locations on disk of any systems extracted.
-func extractSystems(format ArchiveFormat, archive string, extractPath string) ([]string, error) {
+func extractSystems(format archive.ArchiveFormat, archivePath string, extractPath string) ([]string, error) {
 	cachesPath := path.Join(extractPath, "caches")
 	if err := os.MkdirAll(cachesPath, 0755); err != nil {
 		return nil, err
 	}
-	if err := ExtractCaches(format, archive, cachesPath, true); err != nil {
+	if err := archive.ExtractCaches(format, archivePath, cachesPath, true); err != nil {
 		return nil, err
 	}
 	files, err := os.ReadDir(cachesPath)

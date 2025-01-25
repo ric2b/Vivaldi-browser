@@ -11,14 +11,16 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/scoped_observation_traits.h"
+#include "base/uuid.h"
 #include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/saved_tab_groups/saved_tab_group_model_observer.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
+#include "components/saved_tab_groups/sync_bridge_tab_group_model_wrapper.h"
 
 class PrefService;
 
 namespace syncer {
-class ModelTypeControllerDelegate;
+class DataTypeControllerDelegate;
 }  // namespace syncer
 
 namespace tab_groups {
@@ -47,9 +49,9 @@ class TabGroupSyncBridgeMediator : public SavedTabGroupModelObserver {
   ~TabGroupSyncBridgeMediator() override;
 
   // Delegates for sync initialization.
-  base::WeakPtr<syncer::ModelTypeControllerDelegate>
+  base::WeakPtr<syncer::DataTypeControllerDelegate>
   GetSavedTabGroupControllerDelegate();
-  base::WeakPtr<syncer::ModelTypeControllerDelegate>
+  base::WeakPtr<syncer::DataTypeControllerDelegate>
   GetSharedTabGroupControllerDelegate();
 
   // SavedTabGroupSyncBridge specific getters.
@@ -62,7 +64,10 @@ class TabGroupSyncBridgeMediator : public SavedTabGroupModelObserver {
   void SavedTabGroupUpdatedLocally(
       const base::Uuid& group_guid,
       const std::optional<base::Uuid>& tab_guid) override;
-  void SavedTabGroupTabsReorderedLocally(const base::Uuid& group_guid) override;
+  void SavedTabGroupSharedStateUpdatedLocally(
+      const base::Uuid& group_guid) override;
+  void SavedTabGroupTabMovedLocally(const base::Uuid& group_guid,
+                                    const base::Uuid& tab_guid) override;
   void SavedTabGroupReorderedLocally() override;
   void SavedTabGroupLocalIdChanged(const base::Uuid& group_guid) override;
   void SavedTabGroupLastUserInteractionTimeUpdated(
@@ -76,8 +81,6 @@ class TabGroupSyncBridgeMediator : public SavedTabGroupModelObserver {
                                    std::vector<SavedTabGroupTab> tabs);
   void OnSharedGroupsWithTabsLoaded(std::vector<SavedTabGroup> groups,
                                     std::vector<SavedTabGroupTab> tabs);
-  void AddGroupsWithTabsImpl(std::vector<SavedTabGroup> groups,
-                             std::vector<SavedTabGroupTab> tabs);
 
   raw_ptr<SavedTabGroupModel> model_;
 
@@ -85,13 +88,18 @@ class TabGroupSyncBridgeMediator : public SavedTabGroupModelObserver {
   base::ScopedObservation<SavedTabGroupModel, SavedTabGroupModelObserver>
       observation_{this};
 
+  SyncBridgeTabGroupModelWrapper saved_bridge_model_wrapper_;
   std::unique_ptr<SavedTabGroupSyncBridge> saved_bridge_;
+
+  SyncBridgeTabGroupModelWrapper shared_bridge_model_wrapper_;
   std::unique_ptr<SharedTabGroupDataSyncBridge> shared_bridge_;
 
   // Temporary storage of groups and tabs loaded from the disk for both saved
   // and shared tab groups. Empty once the model is initialized.
-  std::vector<SavedTabGroup> loaded_groups_;
-  std::vector<SavedTabGroupTab> loaded_tabs_;
+  std::vector<SavedTabGroup> loaded_saved_groups_;
+  std::vector<SavedTabGroupTab> loaded_saved_tabs_;
+  std::vector<SavedTabGroup> loaded_shared_groups_;
+  std::vector<SavedTabGroupTab> loaded_shared_tabs_;
   bool saved_tab_groups_loaded_ = false;
   bool shared_tab_groups_loaded_ = false;
 };

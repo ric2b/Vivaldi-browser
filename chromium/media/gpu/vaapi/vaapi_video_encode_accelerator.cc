@@ -314,9 +314,13 @@ void VaapiVideoEncodeAccelerator::InitializeTask(const Config& config) {
     VaapiWrapper::CodecMode mode;
     switch (output_codec_) {
       case VideoCodec::kH264:
-        mode = config.bitrate.mode() == Bitrate::Mode::kConstant
-                   ? VaapiWrapper::kEncodeConstantBitrate
-                   : VaapiWrapper::kEncodeVariableBitrate;
+        if (H264VaapiVideoEncoderDelegate::UseSoftwareRateController(config)) {
+          mode = VaapiWrapper::kEncodeConstantQuantizationParameter;
+        } else {
+          mode = config.bitrate.mode() == Bitrate::Mode::kConstant
+                     ? VaapiWrapper::kEncodeConstantBitrate
+                     : VaapiWrapper::kEncodeVariableBitrate;
+        }
         break;
       case VideoCodec::kVP8:
       case VideoCodec::kVP9:
@@ -1066,8 +1070,9 @@ void VaapiVideoEncodeAccelerator::RequestEncodingParametersChange(
     const std::optional<gfx::Size>& size) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(child_sequence_checker_);
 
-  VideoBitrateAllocation allocation;
+  VideoBitrateAllocation allocation(bitrate.mode());
   allocation.SetBitrate(0, 0, bitrate.target_bps());
+  allocation.SetPeakBps(bitrate.peak_bps());
   encoder_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(

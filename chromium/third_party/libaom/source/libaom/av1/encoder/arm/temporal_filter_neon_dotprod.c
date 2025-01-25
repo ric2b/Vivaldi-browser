@@ -41,7 +41,7 @@ DECLARE_ALIGNED(16, static const uint8_t, kSlidingWindowMask[]) = {
 
 // clang-format on
 
-static INLINE void get_abs_diff(const uint8_t *frame1, const uint32_t stride1,
+static inline void get_abs_diff(const uint8_t *frame1, const uint32_t stride1,
                                 const uint8_t *frame2, const uint32_t stride2,
                                 const uint32_t block_width,
                                 const uint32_t block_height,

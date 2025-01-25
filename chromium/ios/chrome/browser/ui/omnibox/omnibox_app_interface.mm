@@ -19,7 +19,7 @@
 #import "ios/chrome/browser/autocomplete/model/shortcuts_backend_factory.h"
 #import "ios/chrome/browser/history/model/top_sites_factory.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/omnibox/test_fake_suggestions_service.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -89,7 +89,7 @@ const base::FilePath& GetTestDataDir() {
 
 + (void)setUpFakeSuggestionsService:(NSString*)filename {
   RemoteSuggestionsService* remoteSuggestionsService =
-      RemoteSuggestionsServiceFactory::GetForBrowserState(
+      RemoteSuggestionsServiceFactory::GetForProfile(
           chrome_test_util::GetOriginalBrowserState(), YES);
 
   TemplateURLService* templateURLService =
@@ -104,7 +104,7 @@ const base::FilePath& GetTestDataDir() {
 
 + (void)tearDownFakeSuggestionsService {
   RemoteSuggestionsService* remoteSuggestionsService =
-      RemoteSuggestionsServiceFactory::GetForBrowserState(
+      RemoteSuggestionsServiceFactory::GetForProfile(
           chrome_test_util::GetOriginalBrowserState(), YES);
 
   network::mojom::URLLoaderFactory* urlLoaderFactory =
@@ -116,7 +116,7 @@ const base::FilePath& GetTestDataDir() {
 
 + (BOOL)shortcutsBackendInitialized {
   scoped_refptr<ShortcutsBackend> shortcuts_backend =
-      ios::ShortcutsBackendFactory::GetInstance()->GetForBrowserStateIfExists(
+      ios::ShortcutsBackendFactory::GetInstance()->GetForProfileIfExists(
           chrome_test_util::GetOriginalBrowserState());
   if (shortcuts_backend) {
     return shortcuts_backend->initialized();
@@ -126,7 +126,7 @@ const base::FilePath& GetTestDataDir() {
 
 + (NSInteger)numberOfShortcutsInDatabase {
   scoped_refptr<ShortcutsBackend> shortcuts_backend =
-      ios::ShortcutsBackendFactory::GetInstance()->GetForBrowserStateIfExists(
+      ios::ShortcutsBackendFactory::GetInstance()->GetForProfileIfExists(
           chrome_test_util::GetOriginalBrowserState());
   if (shortcuts_backend && shortcuts_backend->initialized()) {
     return static_cast<NSInteger>(shortcuts_backend->shortcuts_map().size());

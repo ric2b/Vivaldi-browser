@@ -3,15 +3,13 @@
 // found in the LICENSE file.
 
 import {waitFor} from '../../../../shared/helper.js';
-import {describe, itScreenshot} from '../../../../shared/mocha-extensions.js';
 import {assertElementScreenshotUnchanged} from '../../../../shared/screenshots.js';
-import {loadComponentDocExample, preloadForCodeCoverage} from '../../../helpers/shared.js';
+import {loadComponentDocExample} from '../../../helpers/shared.js';
 
 describe('Network track', function() {
   if (this.timeout() !== 0) {
     this.timeout(20_000);
   }
-  preloadForCodeCoverage('performance_panel/track_example.html');
 
   const urlForTest = 'performance_panel/track_example.html?track=Network&fileName=cls-cluster-max-timeout';
 

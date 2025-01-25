@@ -6,6 +6,9 @@
 #define IOS_CHROME_BROWSER_AUTOFILL_UI_BUNDLED_MANUAL_FILL_ADDRESS_COORDINATOR_H_
 
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/fallback_coordinator.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/plus_address_coordinator_delegate.h"
+
+@class ManualFillPlusAddressMediator;
 
 namespace autofill {
 class AutofillProfile;
@@ -13,12 +16,13 @@ class AutofillProfile;
 
 // Delegate for the coordinator actions.
 // TODO(crbug.com/40577448): revise delegate method names.
-@protocol AddressCoordinatorDelegate<FallbackCoordinatorDelegate>
+@protocol AddressCoordinatorDelegate <FallbackCoordinatorDelegate,
+                                      PlusAddressCoordinatorDelegate>
 
 // Opens the details of the given address in edit mode. `offerMigrateToAccount`
 // indicates whether or not the option to migrate the address to the account
 // should be available in the details page.
-- (void)openAddressDetailsInEditMode:(const autofill::AutofillProfile*)address
+- (void)openAddressDetailsInEditMode:(autofill::AutofillProfile)address
                offerMigrateToAccount:(BOOL)offerMigrateToAccount;
 
 // Opens the address settings.
@@ -33,6 +37,8 @@ class AutofillProfile;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
+             manualFillPlusAddressMediator:
+                 (ManualFillPlusAddressMediator*)manualFillPlusAddressMediator
                           injectionHandler:
                               (ManualFillInjectionHandler*)injectionHandler
                     showAutofillFormButton:(BOOL)showAutofillFormButton

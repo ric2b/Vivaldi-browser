@@ -15,7 +15,9 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
+#include "components/subresource_filter/content/shared/browser/page_load_statistics.h"
 #include "components/subresource_filter/core/browser/verified_ruleset_dealer.h"
+#include "components/subresource_filter/core/common/activation_decision.h"
 #include "components/subresource_filter/core/mojom/subresource_filter.mojom.h"
 #include "content/public/browser/document_user_data.h"
 #include "content/public/browser/navigation_handle_user_data.h"
@@ -30,7 +32,6 @@ class RenderFrameHost;
 }  // namespace content
 
 namespace subresource_filter {
-enum class ActivationDecision;
 
 class AsyncDocumentSubresourceFilter;
 class ActivationStateComputingNavigationThrottle;
@@ -124,6 +125,8 @@ class ThrottleManager : public base::SupportsUserData::Data {
     return ruleset_handle_.get();
   }
 
+  void NotifyDisallowLoadPolicy(content::NavigationHandle* navigation_handle);
+
  protected:
   FRIEND_TEST_ALL_PREFIXES(
       ThrottleManagerEnabledTest,
@@ -154,10 +157,13 @@ class ThrottleManager : public base::SupportsUserData::Data {
   // Similar to above, called from the WebContentsHelper.
   void OnPageActivationComputed(
       content::NavigationHandle* navigation_handle,
-      const subresource_filter::mojom::ActivationState& activation_state);
+      const subresource_filter::mojom::ActivationState& activation_state,
+      const subresource_filter::ActivationDecision& activation_decision);
 
  private:
   friend FingerprintingProtectionWebContentsHelper;
+
+  void LogActivationDecisionUkm(content::NavigationHandle* navigation_handle);
 
   // Keeps track of a filter that is associated with a document that already
   // has its activation computed.
@@ -266,6 +272,8 @@ class ThrottleManager : public base::SupportsUserData::Data {
   // RenderFrameHosts (i.e. activated_frame_hosts_ is empty).
   std::unique_ptr<subresource_filter::VerifiedRuleset::Handle> ruleset_handle_;
 
+  std::unique_ptr<subresource_filter::PageLoadStatistics> statistics_;
+
   // TODO(https://crbug.com/40280666): Add statistics once they are available in
   // a shared SubresourceFilter directory.
 
@@ -283,6 +291,11 @@ class ThrottleManager : public base::SupportsUserData::Data {
   //
   // TODO(https://crbug.com/40280666): Triage dangling pointers.
   raw_ptr<content::Page, DanglingUntriaged> page_ = nullptr;
+
+  // One ThrottleManger per page means one page activation decision per throttle
+  // manager.
+  subresource_filter::ActivationDecision page_activation_decision_ =
+      subresource_filter::ActivationDecision::UNKNOWN;
 
   // The helper class is attached to the WebContents so it is guaranteed to
   // outlive this class which is owned by either a Page or NavigationHandle in

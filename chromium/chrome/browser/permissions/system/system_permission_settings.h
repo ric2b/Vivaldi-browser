@@ -7,67 +7,76 @@
 
 #include <memory>
 
-#include "base/supports_user_data.h"
-#include "chrome/browser/profiles/profile.h"
+#include "base/functional/callback_forward.h"
+#include "base/observer_list_types.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "content/public/browser/web_contents.h"
 
-// A class that abstracts the access to the system-level permission settings.
-//
-// There is a certain overlap with
-// https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/permissions/system_permission_delegate.h
-// this is intentional as explained in
-// https://chromium-review.googlesource.com/c/chromium/src/+/5424111/comment/5e007f7b_c2b9ff9f
-class SystemPermissionSettings : public base::SupportsUserData::Data {
+namespace content {
+class WebContents;
+}
+
+namespace system_permission_settings {
+
+class PlatformHandle;
+
+using SystemPermissionResponseCallback = base::OnceCallback<void()>;
+using content_settings::mojom::ContentSettingsType;
+using SystemPermissionChangedCallback =
+    base::RepeatingCallback<void(ContentSettingsType /*type*/,
+                                 bool /*is_blocked*/)>;
+
+class ScopedObservation {
+ protected:
+  ScopedObservation() = default;
+
  public:
-  using SystemPermissionResponseCallback = base::OnceCallback<void()>;
-
-  // base::SupportsUserData::Data:
-  std::unique_ptr<base::SupportsUserData::Data> Clone() override;
-
-  // Creates a new instance of SystemPermissionSettings that is OS-specific and
-  // saves it within the profile. Should be only used when initializing the
-  // Profile.
-  static void Create(Profile*);
-
-  // Gets a cached instance of SystemPermissionSettings from Profile.
-  static SystemPermissionSettings* GetInstance();
-
-  // Returns `true` if Chrome can request system-level permission. Returns
-  // `false` otherwise.
-  virtual bool CanPrompt(ContentSettingsType type) const = 0;
-
-  // Check whether the system blocks the access to the specified content type /
-  // permission.
-  bool IsDenied(ContentSettingsType type) const;
-  // Check whether the system allows the access to the specified content type /
-  // permission.
-  bool IsAllowed(ContentSettingsType type) const;
-
-  // Opens the OS page where the user can change the permission settings.
-  // Implementation is OS specific.
-  virtual void OpenSystemSettings(content::WebContents* web_contents,
-                                  ContentSettingsType type) const = 0;
-
-  // Initiates a system permission request and invokes the provided callback
-  // once the user's decision is made.
-  virtual void Request(ContentSettingsType type,
-                       SystemPermissionResponseCallback callback) = 0;
-
- private:
-  virtual bool IsDeniedImpl(ContentSettingsType type) const = 0;
-  virtual bool IsAllowedImpl(ContentSettingsType type) const = 0;
-  static std::unique_ptr<SystemPermissionSettings> CreateImpl();
+  ScopedObservation(ScopedObservation const&) = delete;
+  ScopedObservation& operator=(ScopedObservation const&) = delete;
+  virtual ~ScopedObservation() = default;
 };
 
-class ScopedSystemPermissionSettingsForTesting {
+// For testing purposes only. Sets a fake / mock instance of
+// `PlatformHandle` to be used instead of the real implementation.
+// This allows tests to control the behavior of system permission checks and
+// requests.
+void SetInstanceForTesting(PlatformHandle* instance_for_testing);
+
+// Returns `true` if Chrome can request system-level permission. Returns
+// `false` otherwise.
+bool CanPrompt(ContentSettingsType type);
+
+// Check whether the system blocks the access to the specified content type /
+// permission.
+bool IsDenied(ContentSettingsType type);
+
+// Check whether the system allows the access to the specified content type /
+// permission.
+// On some platforms, both IsDenied and IsAllowed may return false for the
+// same permission.
+bool IsAllowed(ContentSettingsType type);
+
+// Opens the OS page where the user can change the permission settings.
+// Implementation is OS specific.
+void OpenSystemSettings(content::WebContents* web_contents,
+                        ContentSettingsType type);
+
+// Initiates a system permission request and invokes the provided callback
+// once the user's decision is made.
+void Request(ContentSettingsType type,
+             SystemPermissionResponseCallback callback);
+
+std::unique_ptr<ScopedObservation> Observe(
+    SystemPermissionChangedCallback observer);
+
+class ScopedSettingsForTesting {
  public:
-  ScopedSystemPermissionSettingsForTesting(ContentSettingsType type,
-                                           bool blocked);
-  ~ScopedSystemPermissionSettingsForTesting();
+  ScopedSettingsForTesting(ContentSettingsType type, bool blocked);
+  ~ScopedSettingsForTesting();
 
  private:
   ContentSettingsType type_;
 };
+
+}  // namespace system_permission_settings
 
 #endif  // CHROME_BROWSER_PERMISSIONS_SYSTEM_SYSTEM_PERMISSION_SETTINGS_H_

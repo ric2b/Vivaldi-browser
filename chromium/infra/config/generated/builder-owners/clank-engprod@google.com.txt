@@ -6,12 +6,14 @@ ci/Android x86 Builder (dbg)
 ci/Cast Android (dbg)
 ci/android-12-x64-rel
 ci/android-13-x64-rel
+ci/android-14-arm64-rel
 ci/android-official
 ci/android-oreo-x86-rel
 ci/android-pie-arm64-dbg
 ci/android-pie-arm64-rel
 try/android-12-x64-rel
 try/android-13-x64-rel
+try/android-14-arm64-rel
 try/android-official
 try/android-x64-rel
 try/android-x64-rel-compilator

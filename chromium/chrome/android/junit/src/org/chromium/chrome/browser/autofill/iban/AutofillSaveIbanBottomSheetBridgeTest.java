@@ -32,9 +32,12 @@ import org.chromium.chrome.browser.layouts.ManagedLayoutManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
 import org.chromium.components.autofill.payments.AutofillSaveIbanUiInfo;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFactory;
 import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetController;
 import org.chromium.ui.base.WindowAndroid;
+
+import java.util.Collections;
 
 /** Unit tests for {@link AutofillSaveIbanBottomSheetBridge}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -46,8 +49,12 @@ public final class AutofillSaveIbanBottomSheetBridgeTest {
             new AutofillSaveIbanUiInfo.Builder()
                     .withAcceptText("Save")
                     .withCancelText("No thanks")
-                    .withIbanLabel("FR** **** **** **** **** ***0 189")
+                    .withDescriptionText("")
+                    .withIbanLabel("FR **0189")
                     .withTitleText("Save IBAN?")
+                    .withLegalMessageLines(Collections.EMPTY_LIST)
+                    .withLogoIcon(0)
+                    .withTitleText("")
                     .build();
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -97,7 +104,10 @@ public final class AutofillSaveIbanBottomSheetBridgeTest {
         mAutofillSaveIbanBottomSheetBridge.destroy();
 
         verify(mBottomSheetController)
-                .hideContent(any(AutofillSaveIbanBottomSheetContent.class), eq(true));
+                .hideContent(
+                        any(AutofillSaveIbanBottomSheetContent.class),
+                        /* animate= */ eq(true),
+                        eq(StateChangeReason.NONE));
     }
 
     @Test

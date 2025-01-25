@@ -21,6 +21,8 @@
 #include "xfa/fgas/font/cfgas_gefont.h"
 #include "xfa/fgas/font/cfgas_gemodule.h"
 
+namespace pdfium {
+
 class CFDETextOutTest : public testing::Test {
  public:
   CFDETextOutTest() = default;
@@ -31,9 +33,9 @@ class CFDETextOutTest : public testing::Test {
     CFX_GlyphCache::InitializeGlobals();
 #endif
     CFX_Size bitmap_size = GetBitmapSize();
-    bitmap_ = pdfium::MakeRetain<CFX_DIBitmap>();
+    bitmap_ = MakeRetain<CFX_DIBitmap>();
     ASSERT_TRUE(bitmap_->Create(bitmap_size.width, bitmap_size.height,
-                                FXDIB_Format::kArgb));
+                                FXDIB_Format::kBgra));
 
     device_ = std::make_unique<CFX_DefaultRenderDevice>();
     device_->Attach(bitmap_);
@@ -97,7 +99,7 @@ TEST_F(CFDETextOutTest, DrawLogicTextBasic) {
   const char* checksum = []() {
 #if BUILDFLAG(IS_WIN)
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-      return "cdd8f00144e421bf18f22d09896838b0";
+      return "bc1f736237b08d13db06c09f6becc9f7";
     }
 #endif
     return "b26f1c171fcdbf185823364185adacf0";
@@ -134,7 +136,7 @@ class CFDETextOutLargeBitmapTest : public CFDETextOutTest {
 
   const char* GetLargeTextBlobChecksum() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-      return "cd357c6afbf17bb2ac48817df5d9eaad";
+      return "6181929583fd7651169306852397806f";
     }
     return "268b71a8660b51e31c6bf30fc7ff1e08";
   }
@@ -184,3 +186,5 @@ TEST_F(CFDETextOutLargeBitmapTest, DrawLogicTextBug1342078) {
   EXPECT_EQ(GetLargeTextBlobChecksum(), GetBitmapChecksum());
 }
 #endif  // !BUILDFLAG(IS_WIN)
+
+}  // namespace pdfium

@@ -35,11 +35,27 @@ if (current_cpu == "x86" || current_cpu == "x64") {
 
     inputs = [
       "simd/nasm/jdct.inc",
+      "simd/nasm/jsimdcfg.inc",
       "simd/nasm/jsimdext.inc",
+      "simd/nasm/jcolsamp.inc",
     ]
 
     if (current_cpu == "x86") {
       include_dirs += [ "simd/i386/" ]
+      inputs += [
+        "simd/i386/jccolext-avx2.asm",
+        "simd/i386/jccolext-mmx.asm",
+        "simd/i386/jccolext-sse2.asm",
+        "simd/i386/jcgryext-avx2.asm",
+        "simd/i386/jcgryext-mmx.asm",
+        "simd/i386/jcgryext-sse2.asm",
+        "simd/i386/jdcolext-avx2.asm",
+        "simd/i386/jdcolext-mmx.asm",
+        "simd/i386/jdcolext-sse2.asm",
+        "simd/i386/jdmrgext-avx2.asm",
+        "simd/i386/jdmrgext-mmx.asm",
+        "simd/i386/jdmrgext-sse2.asm",
+      ]
       sources = [
         "simd/i386/jccolor-avx2.asm",
         "simd/i386/jccolor-mmx.asm",
@@ -92,6 +108,16 @@ if (current_cpu == "x86" || current_cpu == "x64") {
       ]
     } else if (current_cpu == "x64") {
       include_dirs += [ "simd/x86_64/" ]
+      inputs += [
+        "simd/x86_64/jccolext-avx2.asm",
+        "simd/x86_64/jccolext-sse2.asm",
+        "simd/x86_64/jcgryext-avx2.asm",
+        "simd/x86_64/jcgryext-sse2.asm",
+        "simd/x86_64/jdcolext-avx2.asm",
+        "simd/x86_64/jdcolext-sse2.asm",
+        "simd/x86_64/jdmrgext-avx2.asm",
+        "simd/x86_64/jdmrgext-sse2.asm",
+      ]
       sources = [
         "simd/x86_64/jccolor-avx2.asm",
         "simd/x86_64/jccolor-sse2.asm",

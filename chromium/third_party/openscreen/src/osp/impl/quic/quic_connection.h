@@ -7,6 +7,7 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "osp/impl/quic/quic_stream.h"
 #include "platform/base/udp_packet.h"
@@ -38,6 +39,11 @@ class QuicConnection {
     // This is used to get a QuicStream::Delegate for an incoming stream, which
     // will be returned via OnIncomingStream immediately after this call.
     virtual QuicStream::Delegate& GetStreamDelegate(uint64_t instance_id) = 0;
+
+    // This is used to propagate client certificate to QuicServer.
+    virtual void OnClientCertificates(
+        std::string_view instance_name,
+        const std::vector<std::string>& certs) = 0;
 
    protected:
     virtual ~Delegate() = default;

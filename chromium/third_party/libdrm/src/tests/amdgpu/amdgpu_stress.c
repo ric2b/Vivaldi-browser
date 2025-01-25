@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 #include "drm.h"
 #include "xf86drmMode.h"
@@ -175,7 +176,7 @@ int alloc_bo(uint32_t domain, uint64_t size)
 
 	resources[num_buffers] = bo;
 	virtual[num_buffers] = addr;
-	fprintf(stdout, "Allocated BO number %u at 0x%lx, domain 0x%x, size %lu\n",
+	fprintf(stdout, "Allocated BO number %u at 0x%" PRIx64 ", domain 0x%x, size %" PRIu64 "\n",
 		num_buffers++, addr, domain, size);
 	return 0;
 }
@@ -273,7 +274,7 @@ int submit_ib(uint32_t from, uint32_t to, uint64_t size, uint32_t count)
 	delta = stop.tv_nsec + stop.tv_sec * 1000000000UL;
 	delta -= start.tv_nsec + start.tv_sec * 1000000000UL;
 
-	fprintf(stdout, "Submitted %u IBs to copy from %u(%lx) to %u(%lx) %lu bytes took %lu usec\n",
+	fprintf(stdout, "Submitted %u IBs to copy from %u(%" PRIx64 ") to %u(%" PRIx64 ") %" PRIu64 " bytes took %" PRIu64 " usec\n",
 		count, from, virtual[from], to, virtual[to], copied, delta / 1000);
 	return 0;
 }
@@ -293,7 +294,7 @@ uint64_t parse_size(void)
 	char ext[2];
 
 	ext[0] = 0;
-	if (sscanf(optarg, "%li%1[kmgKMG]", &size, ext) < 1) {
+	if (sscanf(optarg, "%" PRIi64 "%1[kmgKMG]", &size, ext) < 1) {
 		fprintf(stderr, "Can't parse size arg: %s\n", optarg);
 		exit(EXIT_FAILURE);
 	}
@@ -375,7 +376,7 @@ int main(int argc, char **argv)
 			next_arg(argc, argv, "Missing buffer size");
 			size = parse_size();
 			if (size < getpagesize()) {
-				fprintf(stderr, "Buffer size to small %lu\n", size);
+				fprintf(stderr, "Buffer size to small %" PRIu64 "\n", size);
 				exit(EXIT_FAILURE);
 			}
 			r = alloc_bo(domain, size);

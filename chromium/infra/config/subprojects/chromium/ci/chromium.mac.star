@@ -211,6 +211,7 @@ ci.builder(
             "arm64",
         ],
     ),
+    builderless = True,
     os = os.MAC_DEFAULT,
     cpu = cpu.ARM64,
     console_view_entry = consoles.console_view_entry(
@@ -381,6 +382,35 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
+    name = "mac-skia-alt-arm64-rel-tests",
+    description_html = "Runs web tests with Skia Graphite on Mac ARM machines",
+    triggered_by = ["ci/mac-arm64-rel"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+    ),
+    gardener_rotations = args.ignore_default(None),
+    tree_closing = False,
+    console_view_entry = consoles.console_view_entry(
+        category = "release|arm64",
+        short_name = "skia-alt",
+    ),
+    contact_team_email = "chrome-skia-graphite@google.com",
+)
+
+ci.thin_tester(
     name = "mac14-arm64-rel-tests",
     branch_selector = branches.selector.MAC_BRANCHES,
     description_html = "Runs MacOS 14 tests on ARM machines",
@@ -406,34 +436,6 @@ ci.thin_tester(
         category = "release|arm64",
         short_name = "14",
     ),
-    contact_team_email = "bling-engprod@google.com",
-)
-
-ci.thin_tester(
-    name = "Mac10.15 Tests",
-    branch_selector = branches.selector.MAC_BRANCHES,
-    triggered_by = ["ci/Mac Builder"],
-    builder_spec = builder_config.builder_spec(
-        execution_mode = builder_config.execution_mode.TEST,
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "chromium",
-            apply_configs = [
-                "mb",
-            ],
-            build_config = builder_config.build_config.RELEASE,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.MAC,
-        ),
-        build_gs_bucket = "chromium-mac-archive",
-    ),
-    console_view_entry = consoles.console_view_entry(
-        category = "mac",
-        short_name = "15",
-    ),
-    cq_mirrors_console_view = "mirrors",
     contact_team_email = "bling-engprod@google.com",
 )
 
@@ -578,6 +580,11 @@ ios_builder(
     # We don't have necessary capacity to run this configuration in CQ, but it
     # is part of the main waterfall
     name = "ios-catalyst",
+    description_html = (
+        "Builds the open-source version of Chrome for iOS as a Catalyst app " +
+        "(i.e. an iOS app for running in a wrapper on macOS). Build-only " +
+        "(does not run tests)."
+    ),
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "ios",
@@ -618,6 +625,10 @@ ios_builder(
 
 ios_builder(
     name = "ios-device",
+    description_html = (
+        "Builds the open-source version of Chrome for iOS as a binary for " +
+        "running on a real device. Build-only (does not run tests)."
+    ),
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "ios",
@@ -663,6 +674,11 @@ ios_builder(
 ios_builder(
     name = "ios-simulator",
     branch_selector = branches.selector.IOS_BRANCHES,
+    description_html = (
+        "Builds the open-source version of Chrome for iOS as a simulator " +
+        "binary and runs tests. This is what's included on most CQ runs " +
+        "(even for CLs that don't explicitly touch an iOS file)."
+    ),
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "ios",
@@ -710,6 +726,15 @@ ios_builder(
 ios_builder(
     name = "ios-simulator-full-configs",
     branch_selector = branches.selector.IOS_BRANCHES,
+    description_html = (
+        "Builds the open-source version of Chrome for iOS as a simulator " +
+        "binary, and runs tests on a large variety of configurations. These " +
+        "configurations are less common (e.g. weird screen sizes, older OS " +
+        "versions) and failures are less frequent, so these configs only " +
+        "run in the CQ for CLs that actually touch an ios-related file. " +
+        "Other CLs may introduce failures, but we handle them reactively as " +
+        "they appear on the console."
+    ),
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "ios",
@@ -756,6 +781,11 @@ ios_builder(
 
 ios_builder(
     name = "ios-simulator-noncq",
+    description_html = (
+        "Builds the open-source version of Chrome for iOS as a simulator " +
+        "binary. Runs tests that are not included on CQ runs, but that we " +
+        "still want tested regularly."
+    ),
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "ios",
@@ -777,7 +807,7 @@ ios_builder(
             "debug_static_builder",
             "remoteexec",
             "ios_simulator",
-            "x64",
+            "arm64",
             "xctest",
         ],
     ),

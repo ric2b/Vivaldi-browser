@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/history/core/browser/expire_history_backend.h"
 
 #include <stddef.h>
@@ -1183,7 +1188,7 @@ TEST_F(ExpireHistoryTest, ClearOldOnDemandFaviconsDoesDeleteUnstarred) {
   // The blob does not encode any real bitmap, obviously.
   const unsigned char kBlob[] = "0";
   scoped_refptr<base::RefCountedBytes> favicon(
-      new base::RefCountedBytes(kBlob, sizeof(kBlob)));
+      new base::RefCountedBytes(kBlob));
 
   // Icon: old and not bookmarked case.
   GURL url("http://google.com/favicon.ico");
@@ -1209,7 +1214,7 @@ TEST_F(ExpireHistoryTest, ClearOldOnDemandFaviconsDoesNotDeleteStarred) {
   // The blob does not encode any real bitmap, obviously.
   const unsigned char kBlob[] = "0";
   scoped_refptr<base::RefCountedBytes> favicon(
-      new base::RefCountedBytes(kBlob, sizeof(kBlob)));
+      new base::RefCountedBytes(kBlob));
 
   // Icon: old but bookmarked case.
   GURL url("http://google.com/favicon.ico");
@@ -1249,7 +1254,7 @@ TEST_F(ExpireHistoryTest, ClearOldOnDemandFaviconsDoesDeleteAfterLongDelay) {
   // The blob does not encode any real bitmap, obviously.
   const unsigned char kBlob[] = "0";
   scoped_refptr<base::RefCountedBytes> favicon(
-      new base::RefCountedBytes(kBlob, sizeof(kBlob)));
+      new base::RefCountedBytes(kBlob));
 
   // Icon: old and not bookmarked case.
   GURL url("http://google.com/favicon.ico");
@@ -1280,7 +1285,7 @@ TEST_F(ExpireHistoryTest,
   // The blob does not encode any real bitmap, obviously.
   const unsigned char kBlob[] = "0";
   scoped_refptr<base::RefCountedBytes> favicon(
-      new base::RefCountedBytes(kBlob, sizeof(kBlob)));
+      new base::RefCountedBytes(kBlob));
 
   // Icon: old but bookmarked case.
   GURL url("http://google.com/favicon.ico");

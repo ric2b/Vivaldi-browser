@@ -18,6 +18,12 @@ const char kExtraSearchQueryParams[] = "extra-search-query-params";
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 const char kSearchEngineChoiceCountry[] = "search-engine-choice-country";
 
+// Override the --no-first-run dialog suppression for the search dialog
+// for testing
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+const char kIgnoreNoFirstRunForSearchEngineChoiceScreen[] =
+    "ignore-no-first-run-for-search-engine-choice-screen";
+
 // Disable the search engine choice screen for testing / autmation.
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 const char kDisableSearchEngineChoiceScreen[] =
@@ -28,6 +34,12 @@ const char kDisableSearchEngineChoiceScreen[] =
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 const char kForceSearchEngineChoiceScreen[] =
     "force-search-engine-choice-screen";
+
+// Enables the new guest mode experience for the search engine choice dialog.
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_FEATURE(kSearchEngineChoiceGuestExperience,
+             "SearchEngineChoiceGuestExperience",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables the search engine choice screen. Feature parameters below can
 // affect the actual triggering logic.
@@ -46,21 +58,6 @@ BASE_FEATURE(kSearchEngineChoiceAttribution,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
-BASE_FEATURE(kSearchEnginesSortingCleanup,
-             "kSearchEnginesSortingCleanup",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kPersistentSearchEngineChoiceImport,
-             "PersistentSearchEngineChoiceImport",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
-COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
-const base::FeatureParam<bool> kSearchEngineChoiceTriggerWithForceEeaCountry{
-    &kSearchEngineChoiceTrigger, /*name=*/"with_force_eea_country", false};
-
 // Use an explicit "NO_REPROMPT" value as default to avoid reprompting users
 // who saw the choice screen in M121.
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
@@ -68,12 +65,6 @@ const base::FeatureParam<std::string> kSearchEngineChoiceTriggerRepromptParams{
     &kSearchEngineChoiceTrigger,
     /*name=*/"reprompt",
     /*default_value=*/kSearchEngineChoiceNoRepromptString};
-
-COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
-const base::FeatureParam<bool> kSearchEngineChoiceTriggerSkipFor3p{
-    &kSearchEngineChoiceTrigger,
-    /*name=*/"skip_for_3p",
-    /*default_value=*/true};
 
 #if BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
@@ -84,13 +75,8 @@ extern const base::FeatureParam<int> kSearchEngineChoiceMaximumSkipCount{
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kSearchEngineChoice,
-             "SearchEngineChoice",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kSearchEnginePromoDialogRewrite,
-             "SearchEnginePromoDialogRewrite",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_FEATURE(kClayBlocking, "ClayBlocking", base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
@@ -102,5 +88,10 @@ COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 BASE_FEATURE(kRemoveSearchboxStatsParamFromPrefetchRequests,
              "RemoveSearchboxStatsParamFromPrefetchRequests",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+BASE_FEATURE(kTemplateUrlReconciliation,
+             "TemplateUrlReconciliation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace switches

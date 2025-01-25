@@ -320,6 +320,16 @@ drm_public int drmModeRmFB(int fd, uint32_t bufferId)
 	return DRM_IOCTL(fd, DRM_IOCTL_MODE_RMFB, &bufferId);
 }
 
+drm_public int drmModeCloseFB(int fd, uint32_t buffer_id)
+{
+	struct drm_mode_closefb closefb;
+
+	memclear(closefb);
+	closefb.fb_id = buffer_id;
+
+	return DRM_IOCTL(fd, DRM_IOCTL_MODE_CLOSEFB, &closefb);
+}
+
 drm_public drmModeFBPtr drmModeGetFB(int fd, uint32_t buf)
 {
 	struct drm_mode_fb_cmd info;
@@ -1004,8 +1014,8 @@ drm_public int drmModeCrtcGetGamma(int fd, uint32_t crtc_id, uint32_t size,
 }
 
 drm_public int drmModeCrtcSetGamma(int fd, uint32_t crtc_id, uint32_t size,
-								   uint16_t *red, uint16_t *green,
-								   uint16_t *blue)
+								   const uint16_t *red, const uint16_t *green,
+								   const uint16_t *blue)
 {
 	struct drm_mode_crtc_lut l;
 

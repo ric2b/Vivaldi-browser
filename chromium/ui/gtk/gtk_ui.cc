@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/gtk/gtk_ui.h"
 
 #include <cairo.h>
@@ -999,11 +1004,16 @@ display::DisplayConfig GtkUi::GetDisplayConfig() const {
           static_cast<GdkMonitor*>(g_list_model_get_item(list, i)));
     }
   } else {
-    primary = gdk_display_get_primary_monitor(display);
     const int n_monitors = gdk_display_get_n_monitors(display);
     monitors.reserve(n_monitors);
     for (int i = 0; i < n_monitors; i++) {
       monitors.push_back(gdk_display_get_monitor(display, i));
+    }
+    // In GDK3 Wayland this is always NULL; Fallback to the first monitor then.
+    // https://gitlab.gnome.org/GNOME/gtk/-/issues/1028
+    primary = gdk_display_get_primary_monitor(display);
+    if (!primary && !monitors.empty()) {
+      primary = monitors.front();
     }
   }
   if (!primary) {
@@ -1011,6 +1021,7 @@ display::DisplayConfig GtkUi::GetDisplayConfig() const {
   }
   config.primary_scale =
       std::max(1, gdk_monitor_get_scale_factor(primary)) * font_scale;
+  config.font_scale = font_scale;
   config.display_geometries.reserve(monitors.size());
   for (GdkMonitor* monitor : monitors) {
     GdkRectangle geometry;

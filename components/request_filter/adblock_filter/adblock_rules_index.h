@@ -36,6 +36,11 @@ class RulesIndex : public content::RenderProcessHostObserver {
 
   using RulesBufferMap = std::map<uint32_t, const RuleBufferHolder&>;
   using ScriptletInjection = std::pair<std::string, std::vector<std::string>>;
+  using AdAttributionMatches = base::RepeatingCallback<bool(
+      std::string_view tracker_url_spec,
+      std::string_view allowed_domain_and_query_param)>;
+
+  enum ModifierCategory { kBlockedRequest, kAllowedRequest, kHeadersReceived };
 
   struct ActivationResult {
     enum { MATCH, PARENT, ALWAYS_PASS } type = MATCH;
@@ -94,16 +99,11 @@ class RulesIndex : public content::RenderProcessHostObserver {
       const url::Origin& document_origin,
       flat::ResourceType resource_type,
       bool is_third_party,
-      bool disable_generic_rules);
+      bool disable_generic_rules,
+      AdAttributionMatches ad_attribution_matches);
 
-  FoundModifiersByType FindMatchingRequestModifierRules(
-      const GURL& url,
-      const url::Origin& document_origin,
-      flat::ResourceType resource_type,
-      bool is_third_party,
-      bool disable_generic_rules);
-
-  FoundModifiersByType FindMatchingHeadersReceivedRules(
+  FoundModifiersByType FindMatchingModifierRules(
+      ModifierCategory category,
       const GURL& url,
       const url::Origin& document_origin,
       flat::ResourceType resource_type,

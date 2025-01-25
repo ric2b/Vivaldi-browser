@@ -17,7 +17,6 @@
 package com.google.android.nearby.presence.rust;
 
 import androidx.annotation.Nullable;
-import java.lang.ref.Cleaner;
 import java.util.Arrays;
 
 /**
@@ -68,7 +67,7 @@ public final class V0Payload extends OwnedHandle {
   }
 
   /** Create a V0Payload handle from the raw handle id. */
-  /* package-visible */ V0Payload(long handleId, Cleaner cleaner) {
+  private V0Payload(long handleId, CooperativeCleaner cleaner) {
     super(handleId, cleaner, V0Payload::deallocate);
   }
 

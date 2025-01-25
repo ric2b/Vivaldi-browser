@@ -11,6 +11,7 @@
 
 #include "third_party/blink/renderer/core/layout/block_node.h"
 #include "third_party/blink/renderer/core/layout/constraint_space_builder.h"
+#include "third_party/blink/renderer/core/layout/length_utils.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_caption.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_cell.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_column.h"
@@ -106,7 +107,7 @@ TableTypes::Column TableTypes::CreateColumn(
   bool is_constrained = inline_size.has_value();
   if (percentage_inline_size && *percentage_inline_size == 0.0f)
     percentage_inline_size.reset();
-  bool is_collapsed = style.Visibility() == EVisibility::kCollapse;
+  bool is_collapsed = style.UsedVisibility() == EVisibility::kCollapse;
   if (is_table_fixed) {
     is_mergeable = false;
   } else {
@@ -161,8 +162,8 @@ TableTypes::CellInlineConstraint TableTypes::CreateCellInlineConstraint(
       const auto space = builder.ToConstraintSpace();
 
       cached_min_max_sizes =
-          node.ComputeMinMaxSizes(table_writing_mode,
-                                  MinMaxSizesType::kIntrinsic, space)
+          node.ComputeMinMaxSizes(table_writing_mode, SizeType::kIntrinsic,
+                                  space)
               .sizes;
     }
 

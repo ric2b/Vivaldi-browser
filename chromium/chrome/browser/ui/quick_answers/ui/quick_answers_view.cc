@@ -24,13 +24,17 @@
 #include "chrome/browser/ui/quick_answers/ui/quick_answers_util.h"
 #include "chrome/browser/ui/quick_answers/ui/result_view.h"
 #include "chrome/browser/ui/quick_answers/ui/retry_view.h"
+#include "chrome/browser/ui/quick_answers/ui/typography.h"
 #include "chrome/browser/ui/views/editor_menu/utils/focus_search.h"
 #include "chrome/browser/ui/views/editor_menu/utils/pre_target_handler.h"
+#include "chromeos/components/magic_boost/public/cpp/views/experiment_badge.h"
+#include "chromeos/components/quick_answers/public/cpp/constants.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_metrics.h"
 #include "chromeos/components/quick_answers/utils/quick_answers_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/aura/window.h"
@@ -43,9 +47,11 @@
 #include "ui/color/color_provider.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/font.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/text_constants.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -66,6 +72,7 @@
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/metadata/view_factory_internal.h"
 #include "ui/views/painter.h"
@@ -90,12 +97,11 @@ using views::Button;
 using views::Label;
 using views::View;
 
-constexpr auto kMainViewInsets = gfx::Insets::VH(4, 0);
-constexpr auto kContentViewInsets = gfx::Insets::TLBR(8, 0, 8, 16);
+constexpr auto kMainViewInsets = gfx::Insets::TLBR(12, 8, 12, 16);
+constexpr auto kContentViewInsets = gfx::Insets::TLBR(0, 8, 0, 0);
 
 // Google icon.
 constexpr int kIconSizeDip = 16;
-constexpr auto kIconInsets = gfx::Insets::TLBR(10, 10, 0, 10);
 
 // Spacing between lines in the main view.
 constexpr int kLineSpacingDip = 4;
@@ -108,40 +114,74 @@ constexpr int kDogfoodButtonSizeDip = 20;
 constexpr int kSettingsButtonSizeDip = 14;
 constexpr int kSettingsButtonBorderDip = 3;
 
-constexpr int kMaximumHeight =
-    kMainViewInsets.height() + kContentViewInsets.height() +
-    kDefaultLineHeightDip + kLineSpacingDip +
-    quick_answers::ResultView::kMaxLines * kDefaultLineHeightDip;
+const gfx::Insets GetMainViewInsets(Design design) {
+  switch (design) {
+    case Design::kCurrent:
+      return kMainViewInsets;
+    case Design::kRefresh:
+    case Design::kMagicBoost:
+      return gfx::Insets::TLBR(12, 16, 16, 16);
+  }
 
-const gfx::VectorIcon& GetVectorIcon(QuickAnswersView::Intent intent) {
-  switch (intent) {
-    case QuickAnswersView::Intent::kDefinition:
-      return omnibox::kAnswerDictionaryIcon;
-    case QuickAnswersView::Intent::kTranslation:
+  CHECK(false) << "Invalid design enum value provided";
+}
+
+const gfx::Insets GetIconInsets(Design design) {
+  switch (design) {
+    case Design::kCurrent:
+      return gfx::Insets(views::LayoutProvider::Get()->GetInsetsMetric(
+          views::InsetsMetric::INSETS_ICON_BUTTON));
+    case Design::kRefresh:
+    case Design::kMagicBoost:
+      return gfx::Insets::TLBR(2, 0, 0, 0);
+  }
+
+  CHECK(false) << "Invalid design enum value provided";
+}
+
+const gfx::Insets GetButtonsViewInsets(Design design) {
+  switch (design) {
+    case Design::kCurrent:
+      return gfx::Insets(kButtonsViewMarginDip);
+    case Design::kRefresh:
+    case Design::kMagicBoost:
+      // Buttons view is rendered as a layer on top of main view. For `kRefresh`
+      // and `kMagicBoost`, they share the same insets.
+      return GetMainViewInsets(design);
+  }
+
+  CHECK(false) << "Invalid design enum value provided";
+}
+
+const gfx::VectorIcon& GetVectorIcon(std::optional<Intent> intent) {
+  if (!intent) {
+    return omnibox::kAnswerDefaultIcon;
+  }
+
+  switch (intent.value()) {
+    case Intent::kDefinition:
+      return chromeos::kDictionaryIcon;
+    case Intent::kTranslation:
       return omnibox::kAnswerTranslationIcon;
-    case QuickAnswersView::Intent::kUnitConversion:
+    case Intent::kUnitConversion:
       return omnibox::kAnswerCalculatorIcon;
-    case QuickAnswersView::Intent::kUndefined:
-      CHECK(false) << "Invalid intent value specified";
-      return omnibox::kAnswerDefaultIcon;
   }
 
   CHECK(false) << "Invalid intent enum value specified";
 }
 
-ui::ImageModel GetIcon(QuickAnswersView::Design design,
-                       QuickAnswersView::Intent intent) {
+ui::ImageModel GetIcon(Design design, std::optional<Intent> intent) {
   switch (design) {
-    case QuickAnswersView::Design::kCurrent:
+    case Design::kCurrent:
       return ui::ImageModel::FromVectorIcon(
           vector_icons::kGoogleColorIcon, gfx::kPlaceholderColor, kIconSizeDip);
-    case QuickAnswersView::Design::kRefresh:
+    case Design::kRefresh:
       return ui::ImageModel::FromVectorIcon(
           GetVectorIcon(intent), ui::kColorSysOnSurface, kIconSizeDip);
-    case QuickAnswersView::Design::kMagicBoost:
-      // TODO(b/335701090): update this with Magic Boost spec icon.
-      return ui::ImageModel::FromVectorIcon(
-          vector_icons::kGoogleColorIcon, gfx::kPlaceholderColor, kIconSizeDip);
+    case Design::kMagicBoost:
+      return ui::ImageModel::FromVectorIcon(chromeos::kInfoSparkIcon,
+                                            ui::ColorIds::kColorSysOnSurface,
+                                            kIconSizeDip);
   }
 
   CHECK(false) << "Invalid design enum value specified";
@@ -165,11 +205,11 @@ void SetResultTo(ResultView* result_view, DefinitionResult* definition_result) {
 
 void SetResultTo(ResultView* result_view,
                  TranslationResult* translation_result,
-                 QuickAnswersView::Design design) {
+                 Design design) {
   result_view->SetFirstLineText(
       base::UTF8ToUTF16(translation_result->text_to_translate));
 
-  if (design != QuickAnswersView::Design::kCurrent) {
+  if (design != Design::kCurrent) {
     std::u16string display_name_locale =
         l10n_util::GetDisplayNameForLocaleWithoutCountry(
             translation_result->source_locale,
@@ -197,6 +237,95 @@ void SetNoResult(ResultView* result_view, std::string_view title) {
       l10n_util::GetStringUTF16(IDS_QUICK_ANSWERS_VIEW_NO_RESULT_V2));
 }
 
+std::u16string GetIntentName(std::optional<Intent> intent) {
+  if (!intent) {
+    // The original intent name is kept if the backend finds out that it cannot
+    // find an intent in a query. It means that `std::nullopt` case is shown
+    // only for Linux-ChromeOS.
+    return std::u16string();
+  }
+
+  switch (intent.value()) {
+    case Intent::kDefinition:
+      return l10n_util::GetStringUTF16(
+          IDS_QUICK_ANSWERS_RESULT_HEADER_INTENT_DEFINITION);
+    case Intent::kTranslation:
+      return l10n_util::GetStringUTF16(
+          IDS_QUICK_ANSWERS_RESULT_HEADER_INTENT_TRANSLATION);
+    case Intent::kUnitConversion:
+      return l10n_util::GetStringUTF16(
+          IDS_QUICK_ANSWERS_RESULT_HEADER_INTENT_UNIT_CONVERSION);
+  }
+
+  CHECK(false) << "Invalid intent enum value specified";
+}
+
+// TODO(b/340629098): A temporary solution until buttons view is merged into
+// headers. See another comment for buttons view in
+// `QuickAnswersView::QuickAnswersView` about details.
+int GetButtonsViewOcclusion(Design design) {
+  gfx::Insets insets_icon_button =
+      views::LayoutProvider::Get()->GetInsetsMetric(
+          views::InsetsMetric::INSETS_ICON_BUTTON);
+  return insets_icon_button.left() + kIconSizeDip + insets_icon_button.right() +
+         GetButtonsViewInsets(design).right();
+}
+
+views::Builder<views::Label> GetRefreshUiHeader() {
+  int line_height = GetCrosAnnotation1LineHeight();
+  int vertical_padding = std::max(0, (20 - line_height) / 2);
+
+  return views::Builder<views::Label>()
+      .SetFontList(GetCrosAnnotation1FontList().DeriveWithWeight(
+          gfx::Font::Weight::MEDIUM))
+      .SetLineHeight(line_height)
+      .SetProperty(
+          views::kMarginsKey,
+          gfx::Insets::TLBR(
+              vertical_padding, 0,
+              vertical_padding +
+                  views::LayoutProvider::Get()->GetDistanceMetric(
+                      views::DistanceMetric::DISTANCE_RELATED_CONTROL_VERTICAL),
+              GetButtonsViewOcclusion(Design::kRefresh)))
+      .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
+      .SetProperty(
+          views::kFlexBehaviorKey,
+          views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                                   views::MaximumFlexSizeRule::kPreferred));
+}
+
+views::Builder<views::BoxLayoutView> GetMagicBoostHeader() {
+  int line_height = GetCrosAnnotation1LineHeight();
+  int vertical_padding = std::max(0, (20 - line_height) / 2);
+
+  return views::Builder<views::BoxLayoutView>()
+      .SetProperty(
+          views::kMarginsKey,
+          gfx::Insets::TLBR(
+              0, 0,
+              views::LayoutProvider::Get()->GetDistanceMetric(
+                  views::DistanceMetric::DISTANCE_RELATED_CONTROL_VERTICAL),
+              GetButtonsViewOcclusion(Design::kMagicBoost)))
+      .SetOrientation(views::LayoutOrientation::kHorizontal)
+      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
+      .SetProperty(
+          views::kFlexBehaviorKey,
+          views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                                   views::MaximumFlexSizeRule::kPreferred))
+      .SetBetweenChildSpacing(views::LayoutProvider::Get()->GetDistanceMetric(
+          views::DistanceMetric::DISTANCE_RELATED_BUTTON_HORIZONTAL))
+      .AddChild(
+          views::Builder<views::Label>()
+              .SetText(l10n_util::GetStringUTF16(IDS_ASH_MAHI_MENU_TITLE))
+              .SetLineHeight(line_height)
+              .SetProperty(views::kMarginsKey,
+                           gfx::Insets::VH(vertical_padding, 0))
+              .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
+              .SetFontList(GetCrosAnnotation1FontList().DeriveWithWeight(
+                  gfx::Font::Weight::MEDIUM)))
+      .AddChild(views::Builder<chromeos::ExperimentBadge>());
+}
+
 }  // namespace
 
 // QuickAnswersView -----------------------------------------------------------
@@ -208,14 +337,11 @@ QuickAnswersView::QuickAnswersView(
       controller_(std::move(controller)),
       title_(params.title),
       design_(params.design),
-      intent_(params.intent),
       is_internal_(params.is_internal),
       focus_search_(std::make_unique<chromeos::editor_menu::FocusSearch>(
           this,
           base::BindRepeating(&QuickAnswersView::GetFocusableViews,
                               base::Unretained(this)))) {
-  CHECK_NE(intent_, QuickAnswersView::Intent::kUndefined);
-
   SetBackground(
       views::CreateThemedSolidBackground(ui::kColorPrimaryBackground));
   SetUseDefaultFillLayout(true);
@@ -223,81 +349,83 @@ QuickAnswersView::QuickAnswersView(
   std::unique_ptr<views::FlexLayout> main_view_layout =
       std::make_unique<views::FlexLayout>();
   main_view_layout->SetOrientation(views::LayoutOrientation::kHorizontal)
-      .SetInteriorMargin(kMainViewInsets)
+      .SetInteriorMargin(GetMainViewInsets(design_))
       .SetCrossAxisAlignment(views::LayoutAlignment::kStart);
 
-  QuickAnswersStageButton* quick_answers_stage_button;
-  LoadingView* loading_view;
-  RetryView* retry_view;
-  ResultView* result_view;
   AddChildView(
       views::Builder<QuickAnswersStageButton>()
-          .CopyAddressTo(&quick_answers_stage_button)
+          .CopyAddressTo(&quick_answers_stage_button_)
           .SetCallback(base::BindRepeating(
               &QuickAnswersView::SendQuickAnswersQuery, base::Unretained(this)))
           .SetAccessibleName(
               l10n_util::GetStringUTF16(IDS_QUICK_ANSWERS_VIEW_A11Y_NAME_TEXT))
           .SetLayoutManager(std::move(main_view_layout))
-          .AddChild(views::Builder<views::ImageView>()
-                        .SetProperty(views::kMarginsKey, kIconInsets)
-                        .SetImage(GetIcon(design_, intent_)))
+          .AddChild(views::Builder<views::ImageView>().CopyAddressTo(&icon_))
           .AddChild(
-              views::Builder<LoadingView>()
-                  .CopyAddressTo(&loading_view)
-                  .SetFirstLineText(base::UTF8ToUTF16(title_))
-                  .SetInteriorMargin(kContentViewInsets)
-                  .SetProperty(views::kFlexBehaviorKey,
-                               views::FlexSpecification(
-                                   views::MinimumFlexSizeRule::kScaleToZero,
-                                   views::MaximumFlexSizeRule::kPreferred)))
-          .AddChild(
-              views::Builder<RetryView>()
-                  .CopyAddressTo(&retry_view)
-                  .SetVisible(false)
-                  .SetFirstLineText(base::UTF8ToUTF16(title_))
-                  .SetInteriorMargin(kContentViewInsets)
-                  .SetRetryButtonCallback(base::BindRepeating(
-                      &QuickAnswersUiController::OnRetryLabelPressed,
-                      controller_))
-                  .SetProperty(views::kFlexBehaviorKey,
-                               views::FlexSpecification(
-                                   views::MinimumFlexSizeRule::kScaleToZero,
-                                   views::MaximumFlexSizeRule::kPreferred)))
-          .AddChild(
-              views::Builder<ResultView>()
-                  .CopyAddressTo(&result_view)
-                  .SetVisible(false)
+              views::Builder<views::FlexLayoutView>()
                   .SetInteriorMargin(kContentViewInsets)
                   .SetProperty(views::kFlexBehaviorKey,
                                views::FlexSpecification(
                                    views::MinimumFlexSizeRule::kScaleToZero,
                                    views::MaximumFlexSizeRule::kPreferred,
                                    /*adjust_height_for_width=*/true))
-                  .SetGenerateTtsCallback(base::BindRepeating(
-                      &QuickAnswersView::GenerateTts, base::Unretained(this))))
+                  .SetOrientation(views::LayoutOrientation::kVertical)
+                  .AddChild(GetRefreshUiHeader()
+                                .SetVisible(design_ == Design::kRefresh)
+                                .CopyAddressTo(&refreshed_ui_header_))
+                  .AddChild(GetMagicBoostHeader().SetVisible(
+                      design_ == Design::kMagicBoost))
+                  .AddChild(
+                      views::Builder<LoadingView>()
+                          .CopyAddressTo(&loading_view_)
+                          .SetFirstLineText(base::UTF8ToUTF16(title_))
+                          .SetDesign(design_)
+                          .SetProperty(
+                              views::kFlexBehaviorKey,
+                              views::FlexSpecification(
+                                  views::MinimumFlexSizeRule::kPreferred,
+                                  views::MaximumFlexSizeRule::kPreferred)))
+                  .AddChild(
+                      views::Builder<RetryView>()
+                          .CopyAddressTo(&retry_view_)
+                          .SetVisible(false)
+                          .SetFirstLineText(base::UTF8ToUTF16(title_))
+                          .SetRetryButtonCallback(base::BindRepeating(
+                              &QuickAnswersUiController::OnRetryLabelPressed,
+                              controller_))
+                          .SetDesign(design_)
+                          .SetProperty(
+                              views::kFlexBehaviorKey,
+                              views::FlexSpecification(
+                                  views::MinimumFlexSizeRule::kPreferred,
+                                  views::MaximumFlexSizeRule::kPreferred)))
+                  .AddChild(views::Builder<ResultView>()
+                                .CopyAddressTo(&result_view_)
+                                .SetVisible(false)
+                                .SetProperty(
+                                    views::kFlexBehaviorKey,
+                                    views::FlexSpecification(
+                                        views::MinimumFlexSizeRule::kPreferred,
+                                        views::MaximumFlexSizeRule::kPreferred,
+                                        /*adjust_height_for_width=*/true))
+                                .SetDesign(design_)
+                                .SetGenerateTtsCallback(base::BindRepeating(
+                                    &QuickAnswersView::GenerateTts,
+                                    base::Unretained(this)))))
           .Build());
 
-  CHECK(quick_answers_stage_button);
-  quick_answers_stage_button_ = quick_answers_stage_button;
-  CHECK(loading_view);
-  loading_view_ = loading_view;
-  CHECK(retry_view);
-  retry_view_ = retry_view;
-  CHECK(result_view);
-  result_view_ = result_view;
-
-  views::ImageButton* settings_button;
-  views::ImageButton* dogfood_button;
+  // TODO(b/340629098): For `kRefresh` and `kMagicBoost`, buttons are in the
+  // same row of a header. Move buttons to the row.
   AddChildView(
       views::Builder<views::BoxLayoutView>()
           .SetOrientation(views::LayoutOrientation::kHorizontal)
           .SetMainAxisAlignment(views::LayoutAlignment::kEnd)
           .SetCrossAxisAlignment(views::LayoutAlignment::kStart)
-          .SetInsideBorderInsets(gfx::Insets(kButtonsViewMarginDip))
+          .SetInsideBorderInsets(GetButtonsViewInsets(design_))
           .SetBetweenChildSpacing(kButtonsSpacingDip)
           .AddChild(
               views::Builder<views::ImageButton>()
-                  .CopyAddressTo(&dogfood_button)
+                  .CopyAddressTo(&dogfood_button_)
                   .SetVisible(is_internal_)
                   .SetCallback(base::BindRepeating(
                       &QuickAnswersUiController::OnReportQueryButtonPressed,
@@ -306,12 +434,14 @@ QuickAnswersView::QuickAnswersView(
                       IDS_QUICK_ANSWERS_DOGFOOD_FEEDBACK_BUTTON_TOOLTIP_TEXT))
                   .SetImageModel(
                       views::Button::STATE_NORMAL,
-                      ui::ImageModel::FromVectorIcon(vector_icons::kDogfoodIcon,
-                                                     ui::kColorIconSecondary,
-                                                     kDogfoodButtonSizeDip)))
+                      ui::ImageModel::FromVectorIcon(
+                          vector_icons::kDogfoodIcon,
+                          design_ == Design::kCurrent ? ui::kColorIconSecondary
+                                                      : ui::kColorSysSecondary,
+                          kDogfoodButtonSizeDip)))
           .AddChild(
               views::Builder<views::ImageButton>()
-                  .CopyAddressTo(&settings_button)
+                  .CopyAddressTo(&settings_button_)
                   .SetCallback(base::BindRepeating(
                       &QuickAnswersUiController::OnSettingsButtonPressed,
                       controller_))
@@ -321,18 +451,20 @@ QuickAnswersView::QuickAnswersView(
                       views::Button::ButtonState::STATE_NORMAL,
                       ui::ImageModel::FromVectorIcon(
                           vector_icons::kSettingsOutlineIcon,
-                          ui::kColorIconSecondary, kSettingsButtonSizeDip))
+                          design_ == Design::kCurrent ? ui::kColorIconSecondary
+                                                      : ui::kColorSysSecondary,
+                          kSettingsButtonSizeDip))
                   .SetProperty(views::kMarginsKey,
                                gfx::Insets(kSettingsButtonBorderDip)))
           .Build());
 
-  CHECK(dogfood_button);
-  dogfood_button_ = dogfood_button;
-  CHECK(settings_button);
-  settings_button_ = settings_button;
-
   SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   set_suppress_default_focus_handling();
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
+  UpdateAccessibleName();
+  UpdateIcon();
+  UpdateUiText();
 }
 
 QuickAnswersView::~QuickAnswersView() = default;
@@ -367,26 +499,45 @@ views::FocusTraversable* QuickAnswersView::GetPaneFocusTraversable() {
   return focus_search_.get();
 }
 
-void QuickAnswersView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kDialog;
-
-  // The view itself is not focused for retry-mode, so should not be announced
-  // by the screen reader.
-  if (retry_view_->GetVisible()) {
-    node_data->SetNameExplicitlyEmpty();
+void QuickAnswersView::UpdateUiText() {
+  if (design_ != Design::kRefresh) {
     return;
   }
 
-  node_data->SetName(
+  refreshed_ui_header_->SetText(GetIntentName(intent_));
+}
+
+void QuickAnswersView::UpdateAccessibleName() {
+  // The view itself is not focused for retry-mode, so should not be announced
+  // by the screen reader.
+  if (retry_view_->GetVisible()) {
+    GetViewAccessibility().SetName(
+        std::u16string(), ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
+    return;
+  }
+
+  GetViewAccessibility().SetName(
       l10n_util::GetStringUTF8(IDS_QUICK_ANSWERS_VIEW_A11Y_NAME_TEXT));
 }
 
+void QuickAnswersView::UpdateIcon() {
+  icon_->SetProperty(views::kMarginsKey, GetIconInsets(design_));
+  icon_->SetImage(GetIcon(design_, intent_));
+}
+
 gfx::Size QuickAnswersView::GetMaximumSize() const {
+  // TODO(b/340629098): update this. Different line heights are used for
+  // `kRefresh` and `kMagicBoost`.
+  int maximum_height =
+      GetMainViewInsets(design_).height() + kContentViewInsets.height() +
+      kDefaultLineHeightDip + kLineSpacingDip +
+      quick_answers::ResultView::kMaxLines * kDefaultLineHeightDip;
+
   // The maximum height will be used in calculating the position of the widget
   // in `ReadWriteCardsUiController`. We need to reserve space at
   // the top since the view might expand for two-line answers.
   // Note that the width will not be used in the calculation.
-  return gfx::Size(0, kMaximumHeight);
+  return gfx::Size(0, maximum_height);
 }
 
 void QuickAnswersView::UpdateBoundsForQuickAnswers() {
@@ -404,6 +555,7 @@ void QuickAnswersView::SwitchTo(views::View* view) {
 
   loading_view_->SetVisible(view == loading_view_);
   retry_view_->SetVisible(view == retry_view_);
+  UpdateAccessibleName();
   result_view_->SetVisible(view == result_view_);
 }
 
@@ -440,6 +592,17 @@ bool QuickAnswersView::HasFocusInside() {
   return Contains(focus_manager->GetFocusedView());
 }
 
+void QuickAnswersView::SetIntent(Intent intent) {
+  intent_ = intent;
+
+  UpdateUiText();
+  UpdateIcon();
+}
+
+std::optional<Intent> QuickAnswersView::GetIntent() const {
+  return intent_;
+}
+
 void QuickAnswersView::SetResult(const StructuredResult& structured_result) {
   // Check if the view (or any of its children) had focus before resetting the
   // view, so it can be restored for the updated view.
@@ -449,16 +612,21 @@ void QuickAnswersView::SetResult(const StructuredResult& structured_result) {
 
   switch (structured_result.GetResultType()) {
     case ResultType::kDefinitionResult:
+      SetIntent(Intent::kDefinition);
       SetResultTo(result_view_, structured_result.definition_result.get());
       break;
     case ResultType::kTranslationResult:
+      SetIntent(Intent::kTranslation);
       SetResultTo(result_view_, structured_result.translation_result.get(),
                   design_);
       break;
     case ResultType::kUnitConversionResult:
+      SetIntent(Intent::kUnitConversion);
       SetResultTo(result_view_, structured_result.unit_conversion_result.get());
       break;
     case ResultType::kNoResult:
+      // Do not set intent back to unknown (i.e., `kNoResult`). See the comment
+      // of `SetIntent` in the header file.
       SetNoResult(result_view_, title_);
       break;
   }
@@ -534,6 +702,7 @@ std::vector<views::View*> QuickAnswersView::GetFocusableViews() {
 }
 
 BEGIN_METADATA(QuickAnswersView)
+ADD_READONLY_PROPERTY_METADATA(std::optional<Intent>, Intent)
 END_METADATA
 
 }  // namespace quick_answers

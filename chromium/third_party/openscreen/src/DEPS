@@ -46,8 +46,8 @@ vars = {
   'checkout_instrumented_libraries': 'checkout_linux and checkout_configuration == "default"',
 
   # GN CIPD package version.
-  'gn_version': 'git_revision:5e19d2fb166fbd4f6f32147fbb2f497091a54ad8',
-  'clang_format_revision': 'e435ad79c17b1888b34df88d6a30a094936e3836',
+  'gn_version': 'git_revision:225e90c5025bf74f41dbee60d9cde4512c846fe7',
+  'clang_format_revision': '3c0acd2d4e73dd911309d9e970ba09d58bf23a62',
 
   # 'magic' text to tell depot_tools that git submodules should be accepted
   # but parity with DEPS file is expected.
@@ -70,10 +70,10 @@ deps = {
   },
 
   # and here:
-  # https://chromium.googlesource.com/chromium/src/buildtools/+/refs/heads/main
+  # https://chromium.googlesource.com/chromium/src/build/+/refs/heads/main
   'build': {
     'url': Var('chromium_git') + '/chromium/src/build' +
-      '@' + '007a74bf79d5c749f6c217f743999ffdcea4cbec',
+      '@' + 'b54b4378fdd36dd8636d982451216bcb4ab298cd',
     'condition': 'not build_with_chromium',
   },
 
@@ -119,7 +119,7 @@ deps = {
       # https://chrome-infra-packages.appspot.com/p/infra/3pp/tools/ninja
       {
         'package': 'infra/3pp/tools/ninja/${{platform}}',
-        'version': 'version:2@1.8.2.chromium.3',
+        'version': 'version:2@1.12.1.chromium.4',
       }
     ],
     'dep_type': 'cipd',
@@ -287,17 +287,11 @@ include_rules = [
   '-third_party/abseil',
 
   # Abseil allowed headers.
-  '+absl/algorithm/container.h',
   '+absl/base/thread_annotations.h',
   '+absl/hash/hash.h',
   '+absl/hash/hash_testing.h',
-  '+absl/strings/numbers.h',
-  '+absl/strings/str_cat.h',
   '+absl/strings/str_join.h',
-  '+absl/strings/str_replace.h',
   '+absl/strings/str_split.h',
-  '+absl/strings/substitute.h',
-  '+absl/synchronization/mutex.h',
   '+absl/types/variant.h',
 
   # Similar to abseil, don't include boringssl using root path.  Instead,

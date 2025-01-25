@@ -2,14 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/ash/mako/mako_ui.h"
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/lobster/lobster_controller.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/hash/sha1.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/ash/input_method/editor_helpers.h"
 #include "chrome/browser/ash/input_method/editor_mediator_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -28,14 +35,15 @@
 namespace ash {
 namespace {
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-constexpr int kEnUSResourceIds[] = {IDR_MAKO_ORCA_HTML, IDR_MAKO_PRIVACY_HTML,
-                                    IDR_MAKO_ORCA_JS,
-                                    IDR_MAKO_ORCA_TRANSLATION_EN_JS};
-#else
-constexpr int kEnUSResourceIds[] = {IDR_MAKO_ORCA_HTML, IDR_MAKO_PRIVACY_HTML,
-                                    IDR_MAKO_ORCA_JS, IDR_MAKO_ORCA_EN};
-#endif
+constexpr int kEnUSResourceIds[] = {
+    IDR_MAKO_ORCA_HTML, IDR_MAKO_PRIVACY_HTML, IDR_MAKO_LOBSTER_HTML,
+    IDR_MAKO_ORCA_JS,   IDR_MAKO_LOBSTER_JS,   IDR_MAKO_ORCA_TRANSLATION_EN_JS};
+
+constexpr int kLobsterResourceIds[] = {
+    IDR_MAKO_LOBSTER_HTML,
+    IDR_MAKO_LOBSTER_JS,
+};
+
 } // namespace
 
 MakoUntrustedUIConfig::MakoUntrustedUIConfig()
@@ -67,16 +75,29 @@ MakoUntrustedUI::MakoUntrustedUI(content::WebUI* web_ui)
   base::span<const webui::ResourcePath> orca_resources =
       base::make_span(kOrcaResources, kOrcaResourcesSize);
 
+  const bool is_lobster_enabled = LobsterController::IsEnabled();
+  const bool should_use_l10n_strings = input_method::ShouldUseL10nStrings();
+
+  auto should_use_resource =
+      [&](const webui::ResourcePath& resource_path) -> bool {
+    // when lobster is disabled, lobster resources are not allowed.
+    if (!is_lobster_enabled &&
+        base::Contains(kLobsterResourceIds, resource_path.id)) {
+      return false;
+    }
+    // when l10n is disabled, only EN-US resources are allowed.
+    if (!should_use_l10n_strings &&
+        !base::Contains(kEnUSResourceIds, resource_path.id)) {
+      return false;
+    }
+    return true;
+  };
+
   // TODO: b:333625296 - Add tests for this conditional behavior
-  if (input_method::ShouldUseL10nStrings()) {
-    webui::SetupWebUIDataSource(source, orca_resources, IDR_MAKO_ORCA_HTML);
-  } else {
+  {
     std::vector<webui::ResourcePath> orca_en_us_resources;
     std::copy_if(orca_resources.begin(), orca_resources.end(),
-                 std::back_inserter(orca_en_us_resources),
-                 [](const webui::ResourcePath& resource_path) {
-                   return base::Contains(kEnUSResourceIds, resource_path.id);
-                 });
+                 std::back_inserter(orca_en_us_resources), should_use_resource);
     webui::SetupWebUIDataSource(source, base::make_span(orca_en_us_resources),
                                 IDR_MAKO_ORCA_HTML);
   }

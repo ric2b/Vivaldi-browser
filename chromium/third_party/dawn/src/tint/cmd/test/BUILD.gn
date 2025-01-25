@@ -34,6 +34,7 @@
 #                       Do not modify this file directly
 ################################################################################
 
+import("../../../../scripts/dawn_overrides_with_defaults.gni")
 import("../../../../scripts/tint_overrides_with_defaults.gni")
 
 import("${tint_src_dir}/tint.gni")
@@ -100,8 +101,12 @@ if (tint_build_unittests) {
       deps += [
         "${tint_src_dir}/lang/glsl/writer/ast_printer:unittests",
         "${tint_src_dir}/lang/glsl/writer/common:unittests",
-        "${tint_src_dir}/lang/glsl/writer/printer:unittests",
+        "${tint_src_dir}/lang/glsl/writer/raise:unittests",
       ]
+    }
+
+    if (tint_build_glsl_writer && tint_build_glsl_validator) {
+      deps += [ "${tint_src_dir}/lang/glsl/writer:unittests" ]
     }
 
     if (tint_build_glsl_writer && tint_build_wgsl_reader &&
@@ -163,15 +168,9 @@ if (tint_build_unittests) {
     if (tint_build_spv_writer) {
       deps += [
         "${tint_src_dir}/lang/spirv/writer:unittests",
-        "${tint_src_dir}/lang/spirv/writer/ast_printer:unittests",
         "${tint_src_dir}/lang/spirv/writer/common:unittests",
         "${tint_src_dir}/lang/spirv/writer/raise:unittests",
       ]
-    }
-
-    if (tint_build_spv_writer && tint_build_wgsl_reader &&
-        tint_build_wgsl_writer) {
-      deps += [ "${tint_src_dir}/lang/spirv/writer/ast_raise:unittests" ]
     }
 
     if (tint_build_tintd && tint_build_wgsl_reader) {

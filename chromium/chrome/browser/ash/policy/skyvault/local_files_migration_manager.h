@@ -16,9 +16,10 @@
 #include "chrome/browser/ash/policy/skyvault/migration_coordinator.h"
 #include "chrome/browser/ash/policy/skyvault/migration_notification_manager.h"
 #include "chrome/browser/ash/policy/skyvault/policy_utils.h"
+#include "chrome/browser/chromeos/extensions/login_screen/login/cleanup/files_cleanup_handler.h"
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
+#include "chromeos/ash/components/dbus/cryptohome/UserDataAuth.pb.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/prefs/pref_change_registrar.h"
 
 namespace base {
 template <typename T>
@@ -43,13 +44,6 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
     virtual void OnMigrationSucceeded() = 0;
   };
 
-  // Returns an instance of LocalFilesMigrationManager with injected
-  // dependencies. Should only be used in tests.
-  static LocalFilesMigrationManager CreateLocalFilesMigrationManagerForTesting(
-      content::BrowserContext* context,
-      std::unique_ptr<MigrationNotificationManager> notification_manager,
-      std::unique_ptr<MigrationCoordinator> coordinator);
-
   explicit LocalFilesMigrationManager(content::BrowserContext* context);
   LocalFilesMigrationManager(const LocalFilesMigrationManager&) = delete;
   LocalFilesMigrationManager& operator=(const LocalFilesMigrationManager&) =
@@ -65,13 +59,15 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // Removes an observer.
   void RemoveObserver(Observer* observer);
 
- private:
-  // Test constructor.
-  LocalFilesMigrationManager(
-      content::BrowserContext* context,
-      std::unique_ptr<MigrationNotificationManager> notification_manager,
+  // Injects a mock MigrationNotificationManager for tests.
+  void SetNotificationManagerForTesting(
+      MigrationNotificationManager* notification_manager);
+
+  // Injects a mock MigrationCoordinator for tests.
+  void SetCoordinatorForTesting(
       std::unique_ptr<MigrationCoordinator> coordinator);
 
+ private:
   // policy::local_user_files::Observer overrides:
   void OnLocalUserFilesPolicyChanged() override;
 
@@ -102,6 +98,18 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // Handles the completion of the migration process (success or failure).
   void OnMigrationDone(std::map<base::FilePath, MigrationUploadError> errors);
 
+  // Handles the completion of the local files cleanup process.
+  void OnCleanupDone(
+      std::unique_ptr<chromeos::FilesCleanupHandler> cleanup_handler,
+      const std::optional<std::string>& error_message);
+
+  // Sends a D-Bus call to enable or disable write access to MyFiles.
+  void SetLocalUserFilesWriteEnabled(bool enabled);
+
+  // Handles the response of the SetUserDataStorageWriteEnabled D-Bus call.
+  void OnFilesWriteRestricted(
+      std::optional<user_data_auth::SetUserDataStorageWriteEnabledReply> reply);
+
   // Stops the migration if currently ongoing.
   void MaybeStopMigration();
 
@@ -111,6 +119,9 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // Indicates if migration is currently running.
   bool in_progress_ = false;
 
+  // Indicates if local files cleanup is currently running.
+  bool cleanup_in_progress_ = false;
+
   // Whether local user files are allowed by policy.
   bool local_user_files_allowed_ = true;
 
@@ -118,19 +129,20 @@ class LocalFilesMigrationManager : public LocalUserFilesPolicyObserver,
   // happens.
   CloudProvider cloud_provider_ = CloudProvider::kNotSpecified;
 
+  // The time at which the migration will start automatically.
+  base::Time migration_start_time_;
+
   // Context for which this instance is created.
   raw_ptr<content::BrowserContext> context_;
 
   // Shows and manages migration notifications and dialogs.
-  std::unique_ptr<MigrationNotificationManager> notification_manager_;
+  raw_ptr<MigrationNotificationManager> notification_manager_;
 
   // Manages the upload of local files to the cloud.
   std::unique_ptr<MigrationCoordinator> coordinator_;
 
   // Timer for delaying the start of migration and showing dialogs.
   std::unique_ptr<base::WallClockTimer> scheduling_timer_;
-
-  PrefChangeRegistrar pref_change_registrar_;
 
   base::WeakPtrFactory<LocalFilesMigrationManager> weak_factory_{this};
 };
@@ -148,9 +160,11 @@ class LocalFilesMigrationManagerFactory : public ProfileKeyedServiceFactory {
   static LocalFilesMigrationManagerFactory* GetInstance();
 
   // Gets the LocalFilesMigrationManager instance associated with the given
-  // BrowserContext.
+  // BrowserContext. If `create` is true, an instance is created if it doesn't
+  // exist.
   static LocalFilesMigrationManager* GetForBrowserContext(
-      content::BrowserContext* context);
+      content::BrowserContext* context,
+      bool create = true);
 
  private:
   friend base::NoDestructor<LocalFilesMigrationManagerFactory>;

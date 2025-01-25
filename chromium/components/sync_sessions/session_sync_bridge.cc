@@ -54,7 +54,7 @@ class LocalSessionWriteBatch : public LocalSessionEventHandlerImpl::WriteBatch {
  public:
   LocalSessionWriteBatch(const SessionStore::SessionInfo& session_info,
                          std::unique_ptr<SessionStore::WriteBatch> batch,
-                         syncer::ModelTypeChangeProcessor* processor)
+                         syncer::DataTypeLocalChangeProcessor* processor)
       : session_info_(session_info),
         batch_(std::move(batch)),
         processor_(processor) {
@@ -92,7 +92,7 @@ class LocalSessionWriteBatch : public LocalSessionEventHandlerImpl::WriteBatch {
  private:
   const SessionStore::SessionInfo session_info_;
   std::unique_ptr<SessionStore::WriteBatch> batch_;
-  const raw_ptr<syncer::ModelTypeChangeProcessor> processor_;
+  const raw_ptr<syncer::DataTypeLocalChangeProcessor> processor_;
 };
 
 }  // namespace
@@ -100,8 +100,8 @@ class LocalSessionWriteBatch : public LocalSessionEventHandlerImpl::WriteBatch {
 SessionSyncBridge::SessionSyncBridge(
     const base::RepeatingClosure& notify_foreign_session_updated_cb,
     SyncSessionsClient* sessions_client,
-    std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor)
-    : ModelTypeSyncBridge(std::move(change_processor)),
+    std::unique_ptr<syncer::DataTypeLocalChangeProcessor> change_processor)
+    : DataTypeSyncBridge(std::move(change_processor)),
       notify_foreign_session_updated_cb_(notify_foreign_session_updated_cb),
       sessions_client_(sessions_client),
       local_session_event_router_(
@@ -143,13 +143,15 @@ std::optional<syncer::ModelError> SessionSyncBridge::MergeFullSyncData(
   DCHECK(!syncing_);
   DCHECK(change_processor()->IsTrackingMetadata());
 
-  StartLocalSessionEventHandler();
+  store_->mutable_tracker()->SetLocalSessionStartTime(base::Time::Now());
+
+  StartLocalSessionEventHandler(/*is_new_session=*/true);
 
   return ApplyIncrementalSyncChanges(std::move(metadata_change_list),
                                      std::move(entity_data));
 }
 
-void SessionSyncBridge::StartLocalSessionEventHandler() {
+void SessionSyncBridge::StartLocalSessionEventHandler(bool is_new_session) {
   // We should be ready to propagate local state to sync.
   DCHECK(change_processor()->IsTrackingMetadata());
   DCHECK(!syncing_);
@@ -161,7 +163,8 @@ void SessionSyncBridge::StartLocalSessionEventHandler() {
   // store.
   syncing_->local_session_event_handler =
       std::make_unique<LocalSessionEventHandlerImpl>(
-          /*delegate=*/this, sessions_client_, store_->mutable_tracker());
+          /*delegate=*/this, sessions_client_, store_->mutable_tracker(),
+          is_new_session);
 
   syncing_->open_tabs_ui_delegate = std::make_unique<OpenTabsUIDelegateImpl>(
       sessions_client_, store_->tracker(),
@@ -179,6 +182,8 @@ void SessionSyncBridge::StartLocalSessionEventHandler() {
   // SessionSyncService API, so interested parties (subscribed to changes)
   // should be notified that the value changed. https://crbug.com/1422634.
   notify_foreign_session_updated_cb_.Run();
+
+  sessions_client_->NotifyVivaldiObserver();
 }
 
 std::optional<syncer::ModelError>
@@ -364,7 +369,7 @@ void SessionSyncBridge::OnSyncStarting(
     // If initial sync was already done, MergeFullSyncData() will never be
     // called so we need to start syncing local changes.
     if (change_processor()->IsTrackingMetadata()) {
-      StartLocalSessionEventHandler();
+      StartLocalSessionEventHandler(/*is_new_session=*/false);
     }
     return;
   }
@@ -396,7 +401,7 @@ void SessionSyncBridge::OnStoreInitialized(
   // If initial sync was already done, MergeFullSyncData() will never be called
   // so we need to start syncing local changes.
   if (change_processor()->IsTrackingMetadata()) {
-    StartLocalSessionEventHandler();
+    StartLocalSessionEventHandler(/*is_new_session=*/false);
   }
 }
 

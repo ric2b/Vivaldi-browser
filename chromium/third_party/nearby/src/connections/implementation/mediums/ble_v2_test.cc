@@ -14,14 +14,24 @@
 
 #include "connections/implementation/mediums/ble_v2.h"
 
+#include <cstdint>
 #include <string>
+#include <utility>
 
 #include "gtest/gtest.h"
+#include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "connections/implementation/flags/nearby_connections_feature_flags.h"
 #include "connections/implementation/mediums/ble_v2/discovered_peripheral_callback.h"
 #include "connections/implementation/mediums/bluetooth_radio.h"
+#include "connections/power_level.h"
 #include "internal/flags/nearby_flags.h"
+#include "internal/platform/ble_v2.h"
+#include "internal/platform/byte_array.h"
+#include "internal/platform/cancellation_flag.h"
 #include "internal/platform/count_down_latch.h"
+#include "internal/platform/feature_flags.h"
+#include "internal/platform/logging.h"
 #include "internal/platform/medium_environment.h"
 
 namespace nearby {
@@ -99,9 +109,10 @@ TEST_P(BleV2Test, CanConnect) {
                   const ByteArray& advertisement_bytes,
                   bool fast_advertisement) {
                 discovered_peripheral = peripheral;
-                NEARBY_LOG(INFO,
-                           "Discovered peripheral=%p, fast advertisement=%d",
-                           &peripheral, fast_advertisement);
+                NEARBY_LOGS(INFO)
+                    << "Discovered peripheral="
+                    << peripheral.GetAddress().value_or("")
+                    << ", fast advertisement=" << fast_advertisement;
                 discovered_latch.CountDown();
               },
       });
@@ -157,9 +168,10 @@ TEST_P(BleV2Test, CanCancelConnect) {
                   const ByteArray& advertisement_bytes,
                   bool fast_advertisement) {
                 discovered_peripheral = peripheral;
-                NEARBY_LOG(INFO,
-                           "Discovered peripheral=%p, fast advertisement=%d",
-                           &peripheral, fast_advertisement);
+                NEARBY_LOGS(INFO)
+                    << "Discovered peripheral="
+                    << peripheral.GetAddress().value_or("")
+                    << ", fast advertisement=" << fast_advertisement;
                 discovered_latch.CountDown();
               },
       });

@@ -153,6 +153,8 @@ enum class MagnifierCommand {
 // dwelling. These values are written to prefs and correspond to
 // AutoclickActionType in enums.xml, so should not be changed. New values
 // should be added at the end.
+//
+// LINT.IfChange(AutoclickEventType)
 enum class AutoclickEventType {
   // Perform a left click.
   kLeftClick = 0,
@@ -176,6 +178,7 @@ enum class AutoclickEventType {
 
   kMaxValue = kScroll
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/accessibility/enums.xml:AutoclickActionType)
 
 // Display location of the on-screen floating menus used by accessibility
 // features(e.g. the Automatic Clicks) . These values are written to prefs so
@@ -246,6 +249,12 @@ enum class DictationNotificationType {
   kOnlyPumpkinDownloaded,
 };
 
+// The types of notifications that can be shown by FaceGaze.
+enum class FaceGazeNotificationType {
+  kDlcFailed,
+  kDlcSucceeded,
+};
+
 // The types of accessibility-related toasts. This enum should be kept in sync
 // with chrome.accessibilityPrivate.ToastType.
 enum class AccessibilityToastType {
@@ -259,6 +268,23 @@ enum class MouseKeysDominantHand {
   kRightHandDominant = 0,
   kLeftHandDominant = 1,
   kMaxValue = kLeftHandDominant,
+};
+
+// The four directions for scrolling.
+enum class AccessibilityScrollDirection {
+  kUp,
+  kDown,
+  kLeft,
+  kRight,
+};
+
+// The different modes in which the internal trackpad can be disabled.
+// These values are written to prefs so should not be changed.
+enum class DisableTrackpadMode {
+  kNever = 0,
+  kAlways = 1,
+  kOnExternalMouseConnected = 2,
+  kMaxValue = kOnExternalMouseConnected,
 };
 
 }  // namespace ash

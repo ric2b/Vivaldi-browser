@@ -122,8 +122,8 @@
 
 #if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
 // Enable remoting receiver
+#include "media/base/remoting_constants.h"             // nogncheck
 #include "media/remoting/receiver_controller.h"        // nogncheck
-#include "media/remoting/remoting_constants.h"         // nogncheck
 #include "media/remoting/remoting_renderer_factory.h"  // nogncheck
 #endif  // BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
 
@@ -189,7 +189,7 @@ void PostContextProviderToCallback(
                                         media::kMediaSharedBitmapToSharedImage);
             if (is_gpu_composition_disabled && use_shared_image) {
               shared_image_interface =
-                  rti->GetVideoFrameCompositorSharedImageInterface();
+                  rti->GetRenderThreadSharedImageInterface();
               if (!shared_image_interface) {
                 // Delay for 150 ms and retry.
                 base::OnceClosure task =

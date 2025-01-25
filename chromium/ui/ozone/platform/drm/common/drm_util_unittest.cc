@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/ozone/platform/drm/common/drm_util.h"
 
 #include <xf86drm.h>
@@ -1216,4 +1221,42 @@ TEST(GetTotalTileDisplaySizeTest, Tile) {
   EXPECT_EQ(GetTotalTileDisplaySize(tile_property), gfx::Size(400, 1200));
 }
 
+TEST(IsTileModeTest, TileMode) {
+  TileProperty property = {.group_id = 1,
+                           .scale_to_fit_display = true,
+                           .tile_size = gfx::Size(1000, 2000),
+                           .tile_layout = gfx::Size(2, 3),
+                           .location = gfx::Point(1, 1)};
+  EXPECT_TRUE(IsTileMode(gfx::Size(1000, 2000), property));
+}
+
+TEST(IsTileModeTest, TileCompositedModeIsNotTile) {
+  TileProperty property = {.group_id = 1,
+                           .scale_to_fit_display = true,
+                           .tile_size = gfx::Size(1000, 2000),
+                           .tile_layout = gfx::Size(2, 3),
+                           .location = gfx::Point(1, 1)};
+  EXPECT_FALSE(IsTileMode(gfx::Size(1000 * 2, 2000 * 3), property));
+}
+
+TEST(IsTileModeTest, NotTileMode) {
+  TileProperty property = {.group_id = 1,
+                           .scale_to_fit_display = true,
+                           .tile_size = gfx::Size(1000, 2000),
+                           .tile_layout = gfx::Size(2, 3),
+                           .location = gfx::Point(1, 1)};
+  EXPECT_FALSE(IsTileMode(gfx::Size(1920, 1080), property));
+}
+
+TEST(TileCrtcOffset, Origin) {
+  TileProperty property = {.tile_size = gfx::Size(1000, 2000),
+                           .location = gfx::Point(0, 0)};
+  EXPECT_EQ(GetTileCrtcOffset(property), gfx::Point(0, 0));
+}
+
+TEST(TileCrtcOffset, NotOrigin) {
+  TileProperty property = {.tile_size = gfx::Size(1000, 2000),
+                           .location = gfx::Point(1, 2)};
+  EXPECT_EQ(GetTileCrtcOffset(property), gfx::Point(1000, 4000));
+}
 }  // namespace ui

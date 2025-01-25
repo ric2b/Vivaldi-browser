@@ -79,4 +79,9 @@ void MigrateLastUsedBookmarkFolderUponLocalIdsReassigned(
     const std::multimap<int64_t, int64_t>&
         local_or_syncable_reassigned_ids_per_old_id);
 
+// Vivaldi
+bool NodeInTrash(const bookmarks::BookmarkNode* node,
+                 const bookmarks::BookmarkNode* trashNode);
+// End Vivaldi
+
 #endif  // IOS_CHROME_BROWSER_BOOKMARKS_MODEL_BOOKMARKS_UTILS_H_

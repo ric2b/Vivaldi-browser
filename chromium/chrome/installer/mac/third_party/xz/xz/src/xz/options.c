@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       options.c
 /// \brief      Parser for filter-specific options
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -31,8 +30,8 @@ typedef struct {
 } option_map;
 
 
-/// Parses option=value pairs that are separated with colons, semicolons,
-/// or commas: opt=val:opt=val;opt=val,opt=val
+/// Parses option=value pairs that are separated with commas:
+/// opt=val,opt=val,opt=val
 ///
 /// Each option is a string, that is converted to an integer using the
 /// index where the option string is in the array.
@@ -49,17 +48,17 @@ typedef struct {
 /// is called, which should update the given value to filter-specific
 /// options structure.
 ///
+/// This returns only if no errors occur.
+///
 /// \param      str     String containing the options from the command line
 /// \param      opts    Filter-specific option map
 /// \param      set     Filter-specific function to update filter_options
 /// \param      filter_options  Pointer to filter-specific options structure
 ///
-/// \return     Returns only if no errors occur.
-///
 static void
 parse_options(const char *str, const option_map *opts,
 		void (*set)(void *filter_options,
-			uint32_t key, uint64_t value, const char *valuestr),
+			unsigned key, uint64_t value, const char *valuestr),
 		void *filter_options)
 {
 	if (str == NULL || str[0] == '\0')
@@ -83,11 +82,11 @@ parse_options(const char *str, const option_map *opts,
 			*value++ = '\0';
 
 		if (value == NULL || value[0] == '\0')
-			message_fatal(_("%s: Options must be `name=value' "
+			message_fatal(_("%s: Options must be 'name=value' "
 					"pairs separated with commas"), str);
 
 		// Look for the option name from the option map.
-		size_t i = 0;
+		unsigned i = 0;
 		while (true) {
 			if (opts[i].name == NULL)
 				message_fatal(_("%s: Invalid option name"),
@@ -103,7 +102,7 @@ parse_options(const char *str, const option_map *opts,
 		if (opts[i].map != NULL) {
 			// value is a string which we should map
 			// to an integer.
-			size_t j;
+			unsigned j;
 			for (j = 0; opts[i].map[j].name != NULL; ++j) {
 				if (strcmp(opts[i].map[j].name, value) == 0)
 					break;
@@ -149,7 +148,7 @@ enum {
 
 
 static void
-set_delta(void *options, uint32_t key, uint64_t value,
+set_delta(void *options, unsigned key, uint64_t value,
 		const char *valuestr lzma_attribute((__unused__)))
 {
 	lzma_options_delta *opt = options;
@@ -193,7 +192,7 @@ enum {
 
 
 static void
-set_bcj(void *options, uint32_t key, uint64_t value,
+set_bcj(void *options, unsigned key, uint64_t value,
 		const char *valuestr lzma_attribute((__unused__)))
 {
 	lzma_options_bcj *opt = options;
@@ -241,7 +240,8 @@ enum {
 };
 
 
-static void lzma_attribute((__noreturn__))
+tuklib_attr_noreturn
+static void
 error_lzma_preset(const char *valuestr)
 {
 	message_fatal(_("Unsupported LZMA1/LZMA2 preset: %s"), valuestr);
@@ -249,7 +249,7 @@ error_lzma_preset(const char *valuestr)
 
 
 static void
-set_lzma(void *options, uint32_t key, uint64_t value, const char *valuestr)
+set_lzma(void *options, unsigned key, uint64_t value, const char *valuestr)
 {
 	lzma_options_lzma *opt = options;
 
@@ -258,7 +258,7 @@ set_lzma(void *options, uint32_t key, uint64_t value, const char *valuestr)
 		if (valuestr[0] < '0' || valuestr[0] > '9')
 			error_lzma_preset(valuestr);
 
-		uint32_t preset = valuestr[0] - '0';
+		uint32_t preset = (uint32_t)(valuestr[0] - '0');
 
 		// Currently only "e" is supported as a modifier,
 		// so keep this simple for now.
@@ -353,11 +353,6 @@ options_lzma(const char *str)
 
 	if (options->lc + options->lp > LZMA_LCLP_MAX)
 		message_fatal(_("The sum of lc and lp must not exceed 4"));
-
-	const uint32_t nice_len_min = options->mf & 0x0F;
-	if (options->nice_len < nice_len_min)
-		message_fatal(_("The selected match finder requires at "
-				"least nice=%" PRIu32), nice_len_min);
 
 	return options;
 }

@@ -2,6 +2,11 @@
 
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 
+#pragma mark - NOTIFICATION
+NSString* vNTPShowOmniboxPopupOnFocus = @"vNTPShowOmniboxPopupOnFocus";
+NSString* vNTPShowOmniboxPopupOnFocusBoolKey =
+    @"vNTPShowOmniboxPopupOnFocusBoolKey";
+
 #pragma mark - SIZE AND PADDINGS
 // Vivaldi location bar leading padding
 const CGFloat vLocationBarLeadingPadding = 16.0;

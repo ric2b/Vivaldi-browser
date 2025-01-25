@@ -205,6 +205,7 @@ class LocationBarMediator
     private boolean mNativeInitialized;
     private boolean mUrlFocusedFromFakebox;
     private boolean mUrlFocusedWithoutAnimations;
+    private boolean mUrlFocusedWithPastedText;
     private boolean mIsUrlFocusChangeInProgress;
     private final boolean mIsTablet;
     private boolean mShouldShowLensButtonWhenUnfocused;
@@ -221,7 +222,6 @@ class LocationBarMediator
     private @BrandedColorScheme int mBrandedColorScheme = BrandedColorScheme.APP_DEFAULT;
     private ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
             new ObservableSupplierImpl<>();
-    private boolean mShouldClearOmniboxOnFocus; // Vivaldi: Do not clear omnibox on focus.
     private ObservableSupplier<TabModelSelector> mTabModelSelectorSupplier;
     private SearchEngineUtils mSearchEngineUtils;
 
@@ -322,10 +322,12 @@ class LocationBarMediator
 
         if (hasFocus) {
             if (mNativeInitialized) RecordUserAction.record("FocusLocation");
-            // Don't clear Omnibox if the user just pasted text to NTP Omnibox.
-            if (mShouldClearOmniboxOnFocus) {
+            boolean shouldRetainOmniboxOnFocus = OmniboxFeatures.shouldRetainOmniboxOnFocus();
+            if (!mUrlFocusedWithPastedText && !shouldRetainOmniboxOnFocus) {
                 setUrlBarText(
                         UrlBarData.EMPTY, UrlBar.ScrollType.NO_SCROLL, SelectionState.SELECT_END);
+            } else if (shouldRetainOmniboxOnFocus) {
+                mUrlCoordinator.setSelectAllOnFocus(true);
             }
         } else {
             mUrlFocusedFromFakebox = false;
@@ -520,8 +522,11 @@ class LocationBarMediator
     /* package */ void onUrlTextChanged() {
         // Vivaldi - intercept and check if entered text is a valid search engine shortcut
         // and set search engine temporarily.
+        // Note(simonb@vivaldi.com) Vivaldi VAB-9878 added a boolean to stop intercept
+        // from clearing the text and setting DSE for pasted text.
         if (SearchEngineIconHandler.get().interceptForSearchEngineShortcut(
-                mUrlCoordinator.getTextWithoutAutocomplete())) {
+                mUrlCoordinator.getTextWithoutAutocomplete(),
+                mUrlCoordinator.wasLastEditPaste())) {
             // Clear all autocomplete text.
             mUrlCoordinator.setUrlBarData(UrlBarData.EMPTY, UrlBar.ScrollType.NO_SCROLL,
                     UrlBarCoordinator.SelectionState.SELECT_ALL);
@@ -708,6 +713,9 @@ class LocationBarMediator
         RecordUserAction.record("MobileOmniboxDeleteUrl");
         setUrlBarTextEmpty();
         updateButtonVisibility();
+        if (BuildConfig.IS_VIVALDI) { // Vivaldi VAB-9880
+            SearchEngineIconHandler.get().restoreDSE();
+        } // End Vivaldi
     }
 
     /* package */ void micButtonClicked(View view) {
@@ -792,8 +800,10 @@ class LocationBarMediator
                     MeasureSpec.makeMeasureSpec(
                             mLocationBarLayout.getMeasuredWidth(), MeasureSpec.EXACTLY));
         }
-        // Reset to the default value.
-        mShouldClearOmniboxOnFocus = false; // Vivaldi: Should never clear omnibox on focus.
+        // Reset to the default values.
+        mUrlCoordinator.setSelectAllOnFocus(false);
+        mUrlFocusedWithPastedText = false;
+
         // Vivaldi
         if (shouldShowKeyboard)
             mUrlCoordinator.selectAll();
@@ -1400,7 +1410,7 @@ class LocationBarMediator
                 mUrlFocusedFromFakebox = true;
             }
 
-            mShouldClearOmniboxOnFocus = pastedText == null;
+            mUrlFocusedWithPastedText = pastedText != null;
 
             if (urlHasFocus && mUrlFocusedWithoutAnimations) {
                 handleUrlFocusAnimation(true);

@@ -279,12 +279,12 @@ void *worker_thread(void *arg) {
 }
 
 TEST(LdtFfiTests, MultiThreadedTests) {
-  int i, num_threads = 100;
+  constexpr int num_threads = 100;
   pthread_t tid[num_threads];
   memset(tid, 0, num_threads * sizeof(pthread_t));
 
   // Create the threads
-  for (i = 0; i < num_threads; i++)
+  for (int i = 0; i < num_threads; i++)
     ASSERT_EQ(pthread_create(&tid[i], nullptr, worker_thread, (void *)&tid[i]),
               0);
 
@@ -295,6 +295,8 @@ TEST(LdtFfiTests, MultiThreadedTests) {
   pthread_cond_broadcast(&cond);
 
   // Wait for them all to finish and check the status
-  for (i = 0; i < num_threads; i++) ASSERT_EQ(pthread_join(tid[i], nullptr), 0);
+  for (int i = 0; i < num_threads; i++) {
+    ASSERT_EQ(pthread_join(tid[i], nullptr), 0);
+  }
 }
 #endif

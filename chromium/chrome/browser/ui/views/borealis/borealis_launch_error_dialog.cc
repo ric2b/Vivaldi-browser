@@ -14,7 +14,7 @@
 #include "chrome/browser/ash/borealis/borealis_metrics.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
 #include "chrome/browser/ash/borealis/borealis_util.h"
-#include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/feedback/show_feedback_page.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/views/borealis/borealis_disallowed_dialog.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -23,6 +23,8 @@
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/layout/box_layout.h"
@@ -64,9 +66,10 @@ class BorealisLaunchErrorDialog : public DialogDelegate {
             IDS_BOREALIS_INSTALLER_ERROR_BUTTON_RETRY);
     }
 
-    SetButtons(ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL);
-    SetButtonLabel(ui::DIALOG_BUTTON_OK, ok_string);
-    SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+    SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |
+               static_cast<int>(ui::mojom::DialogButton::kCancel));
+    SetButtonLabel(ui::mojom::DialogButton::kOk, ok_string);
+    SetButtonLabel(ui::mojom::DialogButton::kCancel,
                    l10n_util::GetStringUTF16(IDS_APP_CANCEL));
 
     SetCancelCallback(base::BindOnce(&BorealisLaunchErrorDialog::OnCancelled,
@@ -76,7 +79,7 @@ class BorealisLaunchErrorDialog : public DialogDelegate {
                                      base::Unretained(this), profile));
 
     InitializeView();
-    SetModalType(ui::MODAL_TYPE_NONE);
+    SetModalType(ui::mojom::ModalType::kNone);
     SetOwnedByWidget(true);
     SetShowCloseButton(false);
     set_fixed_width(ChromeLayoutProvider::Get()->GetDistanceMetric(

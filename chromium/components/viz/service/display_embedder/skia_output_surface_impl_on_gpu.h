@@ -40,8 +40,8 @@
 #include "media/gpu/buildflags.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/skia/include/core/SkSurface.h"
-#include "third_party/skia/include/gpu/GrBackendSemaphore.h"
-#include "third_party/skia/include/gpu/GrTypes.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 #include "third_party/skia/include/private/chromium/GrDeferredDisplayList.h"
 #include "ui/gfx/gpu_fence_handle.h"
 
@@ -63,7 +63,6 @@ class Presenter;
 }  // namespace gl
 
 namespace gpu {
-class DawnContextProvider;
 class DisplayCompositorMemoryAndTaskControllerOnGpu;
 class SharedImageRepresentationFactory;
 class SharedImageFactory;
@@ -166,11 +165,7 @@ class SkiaOutputSurfaceImplOnGpu
       std::vector<gpu::SyncToken> sync_tokens,
       base::OnceClosure on_finished,
       base::OnceCallback<void(gfx::GpuFenceHandle)> return_release_fence_cb);
-  void ScheduleOutputSurfaceAsOverlay(
-      const OverlayProcessorInterface::OutputSurfaceOverlayPlane&
-          output_surface_plane);
   void SwapBuffers(OutputSurfaceFrame frame);
-  void EnsureMinNumberOfBuffers(int n);
 
   void SetDependenciesResolvedTimings(base::TimeTicks task_ready);
   void SetDrawTimings(base::TimeTicks task_ready);
@@ -228,8 +223,6 @@ class SkiaOutputSurfaceImplOnGpu
 
   void SetCapabilitiesForTesting(
       const OutputSurface::Capabilities& capabilities);
-
-  bool IsDisplayedAsOverlay();
 
   // gpu::SharedContextState::ContextLostObserver implementation:
   void OnContextLost() override;
@@ -306,6 +299,9 @@ class SkiaOutputSurfaceImplOnGpu
   void CleanupImageProcessor();
 #endif
 
+  void ReadbackForTesting(
+      CopyOutputRequest::CopyOutputRequestCallback result_callback);
+
  private:
   struct MailboxAccessData {
     MailboxAccessData();
@@ -361,17 +357,6 @@ class SkiaOutputSurfaceImplOnGpu
 
   bool is_using_gl() const {
     return gpu_preferences_.gr_context_type == gpu::GrContextType::kGL;
-  }
-
-  bool is_using_graphite_dawn() const {
-    return !!dawn_context_provider_ && gpu_preferences_.gr_context_type ==
-                                           gpu::GrContextType::kGraphiteDawn;
-  }
-
-  bool is_using_graphite_metal() const {
-    return !!context_state_->metal_context_provider() &&
-           gpu_preferences_.gr_context_type ==
-               gpu::GrContextType::kGraphiteMetal;
   }
 
   // Helper for `CopyOutput()` method, handles the RGBA format.
@@ -507,7 +492,6 @@ class SkiaOutputSurfaceImplOnGpu
   std::unique_ptr<gpu::SharedImageRepresentationFactory>
       shared_image_representation_factory_;
   const raw_ptr<VulkanContextProvider> vulkan_context_provider_;
-  const raw_ptr<gpu::DawnContextProvider> dawn_context_provider_;
   const RendererSettings renderer_settings_;
 
   // Should only be run on the client thread with PostTaskToClientThread().
@@ -589,8 +573,6 @@ class SkiaOutputSurfaceImplOnGpu
       std::unique_ptr<gpu::SkiaImageRepresentation::ScopedWriteAccess>>
       overlay_pass_accesses_;
 
-  std::optional<OverlayProcessorInterface::OutputSurfaceOverlayPlane>
-      output_surface_plane_;
   // Overlays are saved when ScheduleOverlays() is called, then passed to
   // |output_device_| in PostSubmit().
   SkiaOutputSurface::OverlayList overlays_;

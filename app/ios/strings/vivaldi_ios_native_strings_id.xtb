@@ -23,6 +23,7 @@
 <translation id="1325473901257014816">Dengan Vivaldi, pertahankan semua tab Anda di satu peramban lalu sinkronkan pada semua perangkat.</translation>
 <translation id="132683371494960526">Ketuk dua kali untuk mengubah folder induk.</translation>
 <translation id="1341156196125040601">Pilih letak Bidang Alamat.</translation>
+<translation id="1344236299365524156">Cinta Vivaldi?</translation>
 <translation id="1354002567845495520">Sinkronkan Catatan Vivaldi (lampiran tidak disinkronkan)</translation>
 <translation id="1365181765792690850">Mengaktifkan pengaturan ini mungkin merusak beberapa situs web dan/atau gambar. Mulai ulang untuk melihat perubahan.</translation>
 <translation id="1379470994139227452">Atur Vivaldi sebagai standar</translation>
@@ -30,6 +31,7 @@
 <translation id="1383876407941801731">Telusur</translation>
 <translation id="1397515084080510783">Tidak Ada Tab yang Disinkronkan</translation>
 <translation id="1410197035576869800">Ikon Aplikasi</translation>
+<translation id="1430308140197327248">Tampilkan Alamat Lengkap</translation>
 <translation id="1430638949087011281">Tanpa Blokir</translation>
 <translation id="1446108955355168157">Untuk mengenkripsi dan melindungi data sinkronisasi Anda (sandi, penanda, catatan, dan lainnya), silakan buat sandi enkripsi. Sandi ini tidak akan dikirim kepada kami.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> item</translation>
@@ -46,6 +48,7 @@
 <translation id="1751280147639351837">Pemblokir Iklan dan Pelacak</translation>
 <translation id="1752547299766512813">Simpan Sandi</translation>
 <translation id="1754797958074421486">Syarat Penggunaan</translation>
+<translation id="1763111582687651119">Aktifkan Panggilan Mesin Telusur</translation>
 <translation id="1771413903824396513">Berdasar Nama Panggilan</translation>
 <translation id="1804522390855853698">Cina (<ph name="ORIGIN" />)</translation>
 <translation id="1807246157184219062">Terang</translation>
@@ -53,7 +56,6 @@
 <translation id="1813686536470127172">Folder lain</translation>
 <translation id="1828800626900562968">Ketuk ikon plus di bawah ini untuk membuka tab baru.</translation>
 <translation id="1861262398884155592">Folder ini kosong</translation>
-<translation id="1887193815546011584">Panggilan Cepat Baru</translation>
 <translation id="1929299157575856072">TINGKAT PEMBLOKIRAN BAWAAN</translation>
 <translation id="2030706494969937066">Gagal mengambil kredensial Anda. Silakan masuk lagi.</translation>
 <translation id="2034405583989639424">Edit Panggilan Cepat</translation>
@@ -66,6 +68,7 @@
 <translation id="2272338747456392228">Akun telah dikunci</translation>
 <translation id="2273327106802955778">Menu lebih banyak</translation>
 <translation id="2324160330092901720">Kode verifikasi telah dikirimkan ke <ph name="EMAIL_ID" /></translation>
+<translation id="2330644510603114741">Perilaku Tab</translation>
 <translation id="2336309953058658733">Kosongkan sampah</translation>
 <translation id="2359808026110333948">Lanjutkan</translation>
 <translation id="2386793615875593361">1 dipilih</translation>
@@ -92,6 +95,7 @@ diblokir</translation>
 <translation id="2678542925523700624">Estonia (<ph name="ORIGIN" />)</translation>
 <translation id="2709516037105925701">Isi otomatis</translation>
 <translation id="271033894570825754">Baru</translation>
+<translation id="2725892265692641195">Baru <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Sandi enkripsi</translation>
 <translation id="276436995507680929">Sinkronkan Daftar Baca</translation>
 <translation id="2765217105034171413">Kecil</translation>
@@ -103,18 +107,21 @@ diblokir</translation>
 <translation id="2874111661876416905">Telusuri dengan Vivaldi</translation>
 <translation id="2884735088411646852">Pengurutan</translation>
 <translation id="2898963176829412617">Folder Baru…</translation>
+<translation id="2918704853620385162">Buka Tab Baru di Tab yang Terakhir Ditutup</translation>
 <translation id="2924890236896835588">Nama Grup</translation>
 <translation id="2961573414320947355">Ingin membuka semua tautan di Vivaldi? Pastikan kami diatur sebagai Standar.</translation>
 <translation id="3006429105107822794">Anda tidak perlu mengingat sandi ini. Ini akan disimpan di Pengelola Sandi Vivaldi.</translation>
 <translation id="3018244467214569202">Yunani (<ph name="ORIGIN" />)</translation>
 <translation id="3029426144711327484">Tampilan Panggilan Cepat</translation>
 <translation id="3039671569659952257">Hapus folder</translation>
+<translation id="3065031457538473619">Prioritaskan penanda di saran lengkap otomatis</translation>
 <translation id="3073196329485613487">Masuk ke akun Anda</translation>
 <translation id="307859903981308731">Dengan melanjutkan, Anda setuju dengan</translation>
 <translation id="3086746722712840547">catatan</translation>
 <translation id="3087734570205094154">Bawah</translation>
 <translation id="3091563570137981919">Blokir Pelacak dan Iklan</translation>
 <translation id="3134385238404760368">Tidak ada tab terkini</translation>
+<translation id="3142562627629111859">Grup Baru</translation>
 <translation id="3157931365184549694">Pulihkan</translation>
 <translation id="3159285901314605198">Gambar Latar Belakang</translation>
 <translation id="3177673846235066154">Server menolak kredensial Anda.</translation>
@@ -135,7 +142,6 @@ diblokir</translation>
 <translation id="3513566764071045027">Keluar</translation>
 <translation id="3527085408025491307">Folder</translation>
 <translation id="3530991200302302959">Bulgaria (<ph name="ORIGIN" />)</translation>
-<translation id="3536029647154100190">Tambah Grup</translation>
 <translation id="3601414719864711130">Berdasar Tanggal</translation>
 <translation id="3602290021589620013">Pratinjau</translation>
 <translation id="3607176258839749451">Pendaftaran gagal karena galat. Silakan coba lagi nanti.</translation>
@@ -227,8 +233,10 @@ diblokir</translation>
 <translation id="4852383705713307704">Iklan diblokir</translation>
 <translation id="4903325570808402486">Pengaturan Sinkronisasi Vivaldi (belum semua pengaturan dapat disinkronkan)</translation>
 <translation id="4929196061847506605">Powerful. Personal. Pribadi.</translation>
+<translation id="4935075658237181291">Donasi!</translation>
 <translation id="4936710149174207991">Tidak Disinkronkan</translation>
 <translation id="4943266325467647391">Pemblokir Pelacak dan Iklan bawaan Vivaldi melindungi Anda dari malware dan iklan.</translation>
+<translation id="4950266778127803750">Tampilkan Tombol X untuk Tab Latar Belakang</translation>
 <translation id="495421405224926623">Saya sudah membaca dan menyetujui Syarat Penggunaan dan Kebijakan Privasi</translation>
 <translation id="497942794017668482">Memblokir Pelacak dan Iklan</translation>
 <translation id="4993477362660748586">Sinkronisasi</translation>
@@ -247,11 +255,11 @@ diblokir</translation>
 <translation id="5245732982828228444">Anda akan menemukan catatan Anda di sini</translation>
 <translation id="5249199221558969362">Silakan masukkan angka usia yang realistis.</translation>
 <translation id="5271549068863921519">Simpan sandi</translation>
-<translation id="5273620430932404871">Aktifkan Pencocokan Panggilan Penanda</translation>
 <translation id="5290452628447338707">Tidak ada catatan</translation>
 <translation id="5317780077021120954">Simpan</translation>
 <translation id="5349678548463426691">Berdasar Deskripsi</translation>
 <translation id="5350737901534958404">Izinkan iklan dari mitra kami (mendukung Vivaldi)</translation>
+<translation id="5350868038818774118">Pencocokan Penanda</translation>
 <translation id="5351912500249789547">Vivaldi.net menolak kredensial Anda: Kode galat <ph name="ERROR_CODE" /></translation>
 <translation id="5378841821586202982">Folder sampah</translation>
 <translation id="5398772614898833570">Iklan diblokir</translation>
@@ -261,6 +269,7 @@ diblokir</translation>
 <translation id="5494016731375030300">Tab yang Baru Saja Ditutup</translation>
 <translation id="5564687523685713029">Hanya tampilkan Grup</translation>
 <translation id="5600792731098584229">Ukuran Panggilan Cepat</translation>
+<translation id="5607445917275004427">Tampilkan Alamat Lengkap di Bilah Alamat alih-alih Domain saja.</translation>
 <translation id="5639137028584114536">Organisasi Anda mewajibkan untuk menjelajah secara pribadi. Tab tidak disimpan di mode Pribadi.
         <ph name="BEGIN_LINK" />Pelajari lebih lanjut<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Daftar</translation>
@@ -274,6 +283,7 @@ diblokir</translation>
 <translation id="5859825823508296659">Edit Domain</translation>
 <translation id="5867841422488265304">Telusuri atau ketik alamat web</translation>
 <translation id="5869217094746242845">Pelajari lebih lanjut tentang Privasi dan Keamanan</translation>
+<translation id="587130020764788326">Pencocokan Panggilan</translation>
 <translation id="5871497086027727873">1 item dipindahkan</translation>
 <translation id="5898502570200301364">Anda dapat menggunakan sandi yang disimpan di Pengelola Sandi Vivaldi di aplikasi lain di iPhone Anda.</translation>
 <translation id="5900160494089383343">Nama pengguna ini tidak tersedia.</translation>
@@ -294,7 +304,6 @@ diblokir</translation>
 <translation id="6517411226162529295">Kunci enkripsi cadangan</translation>
 <translation id="6527303717912515753">Bagikan</translation>
 <translation id="6535988230515403205">Polandia (<ph name="ORIGIN" />)</translation>
-<translation id="6566198107563125484">Aktifkan Pencocokan Penanda</translation>
 <translation id="659351303388691480">Hapus Data Penelusuran...</translation>
 <translation id="6602272356389933803">Tampilan &amp; Tema</translation>
 <translation id="6614744450826097546">Detail Iklan</translation>
@@ -322,6 +331,7 @@ diblokir</translation>
 <translation id="6951948201878750661">Ketuk untuk memilih warna ini</translation>
 <translation id="6967884871145366229">Pengaturan Pengelolaan Privasi</translation>
 <translation id="6973630695168034713">Folder</translation>
+<translation id="6976865195058364361">Prioritaskan panggilan penanda di saran lengkap otomatis</translation>
 <translation id="7006864796794806241">Pulihkan Sandi</translation>
 <translation id="7029809446516969842">Sandi</translation>
 <translation id="7041964446309059643">Manual</translation>
@@ -346,6 +356,7 @@ diblokir</translation>
 <translation id="7454640759045234067">Pelacak diblokir</translation>
 <translation id="7461899062138731833">SUMBER</translation>
 <translation id="7490291412537629707">Buka di Tab Latar Belakang Baru</translation>
+<translation id="749277285729135008">Fokus Bilah Alamat di Tab Baru</translation>
 <translation id="750493650310597496">0 terpilih</translation>
 <translation id="7525067979554623046">Buat Baru</translation>
 <translation id="753732157349120914">Pengalih Tab</translation>

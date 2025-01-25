@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "remoting/protocol/stun_tcp_packet_processor.h"
 
 #include "base/containers/span.h"
@@ -27,7 +32,7 @@ int GetExpectedStunPacketSize(const uint8_t* data_ptr,
                               size_t* pad_bytes) {
   // TODO(crbug.com/40284755): GetExpectedStunPacketSize() should receive a
   // span.
-  auto data = UNSAFE_BUFFERS(base::span(data_ptr, len));
+  auto data = UNSAFE_TODO(base::span(data_ptr, len));
   DCHECK_LE(kTurnChannelDataHeaderSize, data.size());
 
   // Get packet type (STUN or TURN).

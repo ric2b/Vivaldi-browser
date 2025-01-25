@@ -11,7 +11,6 @@
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/style/blurred_background_shield.h"
-#include "ash/style/radio_button.h"
 #include "ash/style/radio_button_group.h"
 #include "ash/style/style_util.h"
 #include "ash/style/typography.h"
@@ -68,7 +67,6 @@ constexpr gfx::RoundedCornersF kComboboxRoundedCorners =
     gfx::RoundedCornersF(12, 12, 12, 4);
 constexpr gfx::RoundedCornersF kMenuRoundedCorners =
     gfx::RoundedCornersF(4, 12, 12, 12);
-constexpr gfx::Insets kComboboxBorderInsets = gfx::Insets::TLBR(4, 10, 4, 4);
 constexpr gfx::Insets kMenuBorderInsets = gfx::Insets::TLBR(16, 0, 12, 0);
 constexpr gfx::Insets kMenuItemInnerPadding = gfx::Insets::VH(8, 16);
 constexpr int kArrowIconSize = 20;
@@ -97,20 +95,34 @@ class ComboboxMenuOption : public RadioButton {
     // pressed option will get selected for the combobox. For this reason, for
     // accessibility, treat the menu option as a list box option instead of
     // radio button.
-    GetViewAccessibility().SetProperties(ax::mojom::Role::kListBoxOption);
-  }
-
-  // RadioButton:
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    RadioButton::GetAccessibleNodeData(node_data);
+    GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
     // Clear the checked state set by the base class. The check is used as an
     // indicator of the current combobox menu selection, and gets updated as the
     // keyboard selection changes. Announcing that each item that gets keyboard
     // selection is checked does not add value to the user and may cause
     // confusion. Additionally, if checked state is set, the action verb will
     // indicate that activating the item toggles it, which would be misleading.
-    node_data->SetCheckedState(ax::mojom::CheckedState::kNone);
-    node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kClick);
+    GetViewAccessibility().SetCheckedState(ax::mojom::CheckedState::kNone);
+    UpdateAccessibleDefaultAction();
+  }
+
+ private:
+  // views::Button:
+  void OnEnabledChanged() override {
+    RadioButton::OnEnabledChanged();
+    UpdateAccessibleDefaultAction();
+  }
+
+  // OptionButtonBase:
+  void OnSelectedChanged() override {
+    RadioButton::OnSelectedChanged();
+    // Override the default action verb updated in OptionButtonBase.
+    UpdateAccessibleDefaultAction();
+  }
+
+  void UpdateAccessibleDefaultAction() {
+    GetViewAccessibility().SetDefaultActionVerb(
+        ax::mojom::DefaultActionVerb::kClick);
   }
 };
 
@@ -129,7 +141,7 @@ class ComboboxMenuOptionGroup : public RadioButtonGroup {
                          RadioButton::IconType::kCheck,
                          kMenuItemInnerPadding,
                          kCheckmarkLabelSpacing) {
-    GetViewAccessibility().SetProperties(ax::mojom::Role::kListBox);
+    GetViewAccessibility().SetRole(ax::mojom::Role::kListBox);
     GetViewAccessibility().SetName(
         "", ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
   }
@@ -383,8 +395,9 @@ Combobox::Combobox(ui::ComboboxModel* model)
   // `ax::mojom::Role::kComboBox` is for UI elements with a dropdown and
   // an editable text field, which `views::Combobox` does not have. Use
   // `ax::mojom::Role::kPopUpButton` to match an HTML <select> element.
-  GetViewAccessibility().SetProperties(ax::mojom::Role::kPopUpButton);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kPopUpButton);
   UpdateExpandedCollapsedAccessibleState();
+  UpdateAccessibleDefaultAction();
 }
 
 Combobox::~Combobox() = default;
@@ -411,7 +424,7 @@ void Combobox::SetSelectedIndex(std::optional<size_t> index) {
   // Update selected item on menu if the menu is opening.
   if (menu_view_) {
     menu_view_->SelectItem(selected_index_.value());
-    NotifyAccessibilityEvent(ax::mojom::Event::kActiveDescendantChanged, true);
+    UpdateAccessibleAccessibleActiveDescendantId();
   }
 }
 
@@ -448,9 +461,8 @@ views::View* Combobox::MenuView() const {
 }
 
 void Combobox::SetCallback(PressedCallback callback) {
-  NOTREACHED_IN_MIGRATION()
-      << "Clients shouldn't modify this. Maybe you want to use "
-         "SetSelectionChangedCallback?";
+  NOTREACHED() << "Clients shouldn't modify this. Maybe you want to use "
+                  "SetSelectionChangedCallback?";
 }
 
 void Combobox::OnBoundsChanged(const gfx::Rect& previous_bounds) {
@@ -466,21 +478,6 @@ void Combobox::OnBlur() {
   }
 
   views::Button::OnBlur();
-}
-
-void Combobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  views::Button::GetAccessibleNodeData(node_data);
-
-  node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kOpen);
-  node_data->SetValue(title_->GetText());
-
-  const OptionButtonBase* selected_button =
-      menu_view_ ? menu_view_->GetSelectedItemView() : nullptr;
-  if (selected_button) {
-    node_data->AddIntAttribute(
-        ax::mojom::IntAttribute::kActivedescendantId,
-        selected_button->GetViewAccessibility().GetUniqueId());
-  }
 }
 
 void Combobox::AddedToWidget() {
@@ -604,6 +601,7 @@ void Combobox::ShowDropDownMenu() {
   menu_->Show();
   menu_view_->ScrollToSelectedView();
   UpdateExpandedCollapsedAccessibleState();
+  UpdateAccessibleAccessibleActiveDescendantId();
 
   SetBackground(views::CreateThemedRoundedRectBackground(
       kComboboxActiveColorId, kComboboxRoundedCorners));
@@ -618,6 +616,7 @@ void Combobox::CloseDropDownMenu() {
   menu_view_ = nullptr;
   menu_.reset();
   UpdateExpandedCollapsedAccessibleState();
+  UpdateAccessibleAccessibleActiveDescendantId();
 
   closed_time_ = base::TimeTicks::Now();
   SetBackground(nullptr);
@@ -654,7 +653,7 @@ void Combobox::OnPerformAction() {
     GetViewAccessibility().ClearSetSize();
   }
 
-  NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
+  GetViewAccessibility().SetValue(title_->GetText());
 
   if (selected_index_.has_value() && callback_) {
     callback_.Run();
@@ -674,7 +673,7 @@ void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
 
   if (menu_view_) {
     menu_view_->UpdateMenuContent();
-    NotifyAccessibilityEvent(ax::mojom::Event::kActiveDescendantChanged, true);
+    UpdateAccessibleAccessibleActiveDescendantId();
   }
 }
 
@@ -804,12 +803,32 @@ bool Combobox::OnKeyPressed(const ui::KeyEvent& e) {
   return true;
 }
 
+void Combobox::OnEnabledChanged() {
+  views::Button::OnEnabledChanged();
+  UpdateAccessibleDefaultAction();
+}
+
 void Combobox::UpdateExpandedCollapsedAccessibleState() const {
   if (IsMenuRunning()) {
     GetViewAccessibility().SetIsExpanded();
   } else {
     GetViewAccessibility().SetIsCollapsed();
   }
+}
+
+void Combobox::UpdateAccessibleAccessibleActiveDescendantId() {
+  OptionButtonBase* selected_button =
+      menu_view_ ? menu_view_->GetSelectedItemView() : nullptr;
+  if (selected_button) {
+    GetViewAccessibility().SetActiveDescendant(*selected_button);
+  } else {
+    GetViewAccessibility().ClearActiveDescendant();
+  }
+}
+
+void Combobox::UpdateAccessibleDefaultAction() {
+  GetViewAccessibility().SetDefaultActionVerb(
+      ax::mojom::DefaultActionVerb::kOpen);
 }
 
 BEGIN_METADATA(Combobox)

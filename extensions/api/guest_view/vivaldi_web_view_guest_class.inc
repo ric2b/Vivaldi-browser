@@ -28,6 +28,7 @@
   // Vivaldi customs below
   bool IsVivaldiMail();
   bool IsVivaldiWebPanel();
+  bool IsVivaldiWebPageWidget();
 
   void SetIsFullscreen(bool is_fullscreen);
 

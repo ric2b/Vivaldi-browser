@@ -11,6 +11,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "components/data_sharing/public/data_sharing_service.h"
 #include "components/data_sharing/public/group_data.h"
+#include "components/data_sharing/public/service_status.h"
 
 using base::android::ScopedJavaLocalRef;
 
@@ -24,10 +25,25 @@ class DataSharingConversionBridge {
       JNIEnv* env,
       const GroupMember& member);
 
+  // Creates an object of org.chromium.components.data_sharing.GroupToken.
+  static ScopedJavaLocalRef<jobject> CreateJavaGroupToken(
+      JNIEnv* env,
+      const GroupToken& token);
+
   // Creates an object of org.chromium.components.data_sharing.GroupData.
   static ScopedJavaLocalRef<jobject> CreateJavaGroupData(
       JNIEnv* env,
       const GroupData& result);
+
+  // Creates an object of org.chromium.components.data_sharing.ServiceStatus.
+  static ScopedJavaLocalRef<jobject> CreateJavaServiceStatus(
+      JNIEnv* env,
+      const ServiceStatus& status);
+
+  // Creates an object of org.chromium.components.data_sharing.SharedEntity.
+  static ScopedJavaLocalRef<jobject> CreateJavaSharedEntity(
+      JNIEnv* env,
+      const SharedEntity& entity);
 
   // Creates an object of
   // org.chromium.components.data_sharing.DataSharingService.
@@ -48,6 +64,19 @@ class DataSharingConversionBridge {
   // support primitive type int.
   static ScopedJavaLocalRef<jobject> CreatePeopleGroupActionOutcome(JNIEnv* env,
                                                                     int value);
+
+  // Creates an object of
+  // org.chromium.components.data_sharing.DataSharingService.ParseURLResult.
+  static ScopedJavaLocalRef<jobject> CreateParseURLResult(
+      JNIEnv* env,
+      const DataSharingService::ParseURLResult& data);
+
+  // Creates an object of
+  // org.chromium.components.data_sharing.DataSharingService.
+  //   SharedDataPreviewOrFailureOutcome.
+  static ScopedJavaLocalRef<jobject> CreateSharedDataPreviewOrFailureOutcome(
+      JNIEnv* env,
+      const DataSharingService::SharedDataPreviewOrFailureOutcome& data);
 };
 
 }  // namespace data_sharing

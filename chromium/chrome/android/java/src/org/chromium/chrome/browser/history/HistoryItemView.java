@@ -33,7 +33,7 @@ import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import android.graphics.Bitmap;
-
+import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.favicon.IconType;
 
@@ -58,7 +58,11 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     public HistoryItemView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
+        if (!ChromeApplicationImpl.isVivaldi())
         mMinIconSize = getResources().getDimensionPixelSize(R.dimen.default_favicon_min_size);
+        else {
+            mMinIconSize = BookmarkUtils.getFaviconFetchSize(context.getResources());
+        } // End Vivaldi
         mDisplayedIconSize = getResources().getDimensionPixelSize(R.dimen.default_favicon_size);
         mIconGenerator = FaviconUtils.createCircularIconGenerator(context);
         mEndPadding = getResources().getDimensionPixelSize(R.dimen.default_list_row_padding);
@@ -202,6 +206,20 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
     private void requestIcon() {
         HistoryItem item = getItem();
         if (item.wasBlockedVisit()) return;
+        if (ChromeApplicationImpl.isVivaldi()) {
+            int desiredSize = getResources().getDimensionPixelSize(
+                    R.dimen.improved_bookmark_start_image_size_compact);
+            item.getLargeIconForUrl(
+                    desiredSize,
+                    mMinIconSize,
+                    (icon, fallbackColor, isFallbackColorDefault, iconType) -> {
+                        // Prevent stale icons from making it through to the UI.
+                        if (item != getItem()) return;
+                         largeIconAvailableVivaldi(icon, fallbackColor, isFallbackColorDefault,
+                                    iconType);
+                    });
+            return;
+        } // End Vivaldi
         item.getLargeIconForUrl(
                 mMinIconSize,
                 (icon, fallbackColor, isFallbackColorDefault, iconType) -> {

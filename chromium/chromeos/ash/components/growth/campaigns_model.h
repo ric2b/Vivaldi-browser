@@ -54,7 +54,8 @@ enum class BuiltInImage {
   kSparkRebuy = 2,
   kSpark1PApp = 3,
   kSparkV2 = 4,
-  kMaxValue = kSparkV2
+  kG1Notification = 5,
+  kMaxValue = kG1Notification
 };
 
 // Supported window anchor element.
@@ -74,7 +75,8 @@ enum class TriggerType {
   kAppOpened = 0,
   kCampaignsLoaded = 1,
   kEvent = 2,
-  kMaxValue = kEvent
+  kDelayedOneShotTimer = 3,
+  kMaxValue = kDelayedOneShotTimer
 };
 
 class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH) Trigger {

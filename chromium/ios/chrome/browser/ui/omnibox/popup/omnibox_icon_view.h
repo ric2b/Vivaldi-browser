@@ -26,6 +26,10 @@
 
 - (void)setOmniboxIcon:(id<OmniboxIcon>)omniboxIcon;
 
+// Vivaldi
+- (void)setOmniboxIconFromLocal:(UIImage*)omniboxIcon;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_POPUP_OMNIBOX_ICON_VIEW_H_

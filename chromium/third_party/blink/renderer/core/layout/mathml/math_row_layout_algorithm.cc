@@ -93,7 +93,8 @@ void MathRowLayoutAlgorithm::LayoutRowItems(ChildrenVector* children,
       should_layout_remaining_items_with_zero_block_stretch_size = false;
     }
 
-    if (UNLIKELY(should_layout_remaining_items_with_zero_block_stretch_size)) {
+    if (should_layout_remaining_items_with_zero_block_stretch_size)
+        [[unlikely]] {
       // "If LNotToStretch is empty, perform layout with stretch size constraint
       // 0 on all the items of LToStretch."
       for (LayoutInputNode child = Node().FirstChild(); child;
@@ -218,7 +219,7 @@ const LayoutResult* MathRowLayoutAlgorithm::Layout() {
   auto intrinsic_block_size =
       max_row_size.block_size + BorderScrollbarPadding().BlockSum();
   auto block_size = ComputeBlockSizeForFragment(
-      GetConstraintSpace(), Style(), BorderPadding(), intrinsic_block_size,
+      GetConstraintSpace(), Node(), BorderPadding(), intrinsic_block_size,
       border_box_size.inline_size);
   container_builder_.SetIntrinsicBlockSize(intrinsic_block_size);
   container_builder_.SetFragmentsTotalBlockSize(block_size);

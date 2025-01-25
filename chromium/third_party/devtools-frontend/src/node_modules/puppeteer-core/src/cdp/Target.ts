@@ -39,7 +39,7 @@ export class CdpTarget extends Target {
   #sessionFactory:
     | ((isAutoAttachEmulated: boolean) => Promise<CDPSession>)
     | undefined;
-
+  #childTargets = new Set<CdpTarget>();
   _initializedDeferred = Deferred.create<InitializationStatus>();
   _isClosedDeferred = Deferred.create<void>();
   _targetId: string;
@@ -74,10 +74,10 @@ export class CdpTarget extends Target {
     const session = this._session();
     if (!session) {
       return await this.createCDPSession().then(client => {
-        return CdpPage._create(client, this, false, null);
+        return CdpPage._create(client, this, null);
       });
     }
-    return await CdpPage._create(session, this, false, null);
+    return await CdpPage._create(session, this, null);
   }
 
   _subtype(): string | undefined {
@@ -86,6 +86,18 @@ export class CdpTarget extends Target {
 
   _session(): CDPSession | undefined {
     return this.#session;
+  }
+
+  _addChildTarget(target: CdpTarget): void {
+    this.#childTargets.add(target);
+  }
+
+  _removeChildTarget(target: CdpTarget): void {
+    this.#childTargets.delete(target);
+  }
+
+  _childTargets(): ReadonlySet<CdpTarget> {
+    return this.#childTargets;
   }
 
   protected _sessionFactory(): (
@@ -196,7 +208,6 @@ export class CdpTarget extends Target {
 export class PageTarget extends CdpTarget {
   #defaultViewport?: Viewport;
   protected pagePromise?: Promise<Page>;
-  #ignoreHTTPSErrors: boolean;
 
   constructor(
     targetInfo: Protocol.Target.TargetInfo,
@@ -204,11 +215,9 @@ export class PageTarget extends CdpTarget {
     browserContext: BrowserContext,
     targetManager: TargetManager,
     sessionFactory: (isAutoAttachEmulated: boolean) => Promise<CDPSession>,
-    ignoreHTTPSErrors: boolean,
     defaultViewport: Viewport | null
   ) {
     super(targetInfo, session, browserContext, targetManager, sessionFactory);
-    this.#ignoreHTTPSErrors = ignoreHTTPSErrors;
     this.#defaultViewport = defaultViewport ?? undefined;
   }
 
@@ -246,12 +255,7 @@ export class PageTarget extends CdpTarget {
           ? Promise.resolve(session)
           : this._sessionFactory()(/* isAutoAttachEmulated=*/ false)
       ).then(client => {
-        return CdpPage._create(
-          client,
-          this,
-          this.#ignoreHTTPSErrors,
-          this.#defaultViewport ?? null
-        );
+        return CdpPage._create(client, this, this.#defaultViewport ?? null);
       });
     }
     return (await this.pagePromise) ?? null;

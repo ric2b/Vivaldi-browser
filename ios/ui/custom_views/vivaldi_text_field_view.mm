@@ -55,7 +55,8 @@ const CGSize deleteButtonSize = CGSizeMake(20, 20);
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithPlaceholder:(NSString*)placeholder {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     self.backgroundColor = UIColor.clearColor;
     self.isURLMode = NO;
     self.validateScheme = NO;

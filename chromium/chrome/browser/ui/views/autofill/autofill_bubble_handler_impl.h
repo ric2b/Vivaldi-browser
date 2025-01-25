@@ -60,6 +60,9 @@ class AutofillBubbleHandlerImpl : public AutofillBubbleHandler {
       content::WebContents* contents,
       OfferNotificationBubbleController* controller,
       bool is_user_gesture) override;
+  AutofillBubbleBase* ShowSaveAutofillPredictionImprovementsBubble(
+      content::WebContents* web_contents,
+      SaveAutofillPredictionImprovementsController* controller) override;
   AutofillBubbleBase* ShowSaveAddressProfileBubble(
       content::WebContents* web_contents,
       std::unique_ptr<SaveAddressBubbleController> controller,
@@ -91,6 +94,9 @@ class AutofillBubbleHandlerImpl : public AutofillBubbleHandler {
   AutofillBubbleBase* ShowSaveCardConfirmationBubble(
       content::WebContents* web_contents,
       SaveCardBubbleController* controller) override;
+  AutofillBubbleBase* ShowSaveIbanConfirmationBubble(
+      content::WebContents* web_contents,
+      IbanBubbleController* controller) override;
 
  private:
   // Show the save card and virtual card enrollment confirmation bubble.

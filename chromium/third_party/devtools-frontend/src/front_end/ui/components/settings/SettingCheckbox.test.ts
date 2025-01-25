@@ -76,6 +76,13 @@ describe('SettingCheckbox', () => {
     assert.isTrue(setting.get());
   });
 
+  it('renders override text if provided', () => {
+    const setting = createFakeSetting<boolean>('setting', false);
+    const {component} = renderSettingCheckbox({setting, textOverride: 'Text override'});
+
+    assert.strictEqual(component.shadowRoot!.querySelector('label')!.innerText, 'Text override');
+  });
+
   it('ignores clicks when disabled', () => {
     const setting = createFakeSetting<boolean>('setting', false);
     setting.setDisabled(true);
@@ -120,7 +127,8 @@ describe('SettingCheckbox', () => {
 
     const {component} = renderSettingCheckbox({setting});
 
-    assert.strictEqual((component.shadowRoot!.querySelector('.disabled-reason') as HTMLElement).title, 'reason');
+    assert.strictEqual(
+        (component.shadowRoot!.querySelector('.disabled-reason') as HTMLElement).getAttribute('title'), 'reason');
   });
 
   it('is disabled for a disabled deprecated settings', () => {

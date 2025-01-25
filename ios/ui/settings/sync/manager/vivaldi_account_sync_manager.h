@@ -12,10 +12,14 @@
 #import "vivaldi_account/vivaldi_account_manager.h"
 
 class Browser;
+class ChromeBrowserState;
 @protocol VivaldiAccountSyncManagerConsumer;
 
 using syncer::UserSelectableType;
 using syncer::UserSelectableTypeSet;
+
+typedef void (^ServerRequestCompletionHandler)
+    (NSData* data, NSURLResponse* response, NSError* error);
 
 // VivaldiAccountSyncManager handles the communication between UI
 // and the Sync backend.
@@ -25,9 +29,10 @@ using syncer::UserSelectableTypeSet;
     id<VivaldiAccountSyncManagerConsumer> consumer;
 
 - (instancetype)initWithBrowser:(Browser*)browser;
+- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState;
 - (instancetype)initWithAccountManager:
       (vivaldi::VivaldiAccountManager*)vivaldiAccountManager
-      syncService:(vivaldi::VivaldiSyncServiceImpl*)syncService;
+      syncService:(syncer::SyncService*)syncService;
 - (instancetype)init NS_UNAVAILABLE;
 
 - (void)start;
@@ -35,6 +40,8 @@ using syncer::UserSelectableTypeSet;
 
 #pragma mark - GETTERS
 - (BOOL)hasSyncConsent;
+- (NSString*)accountUsername;
+- (UIImage*)accountUserAvatar;
 - (BOOL)isSyncBookmarksEnabled;
 - (BOOL)isSyncSettingsEnabled;
 - (BOOL)isSyncPasswordsEnabled;

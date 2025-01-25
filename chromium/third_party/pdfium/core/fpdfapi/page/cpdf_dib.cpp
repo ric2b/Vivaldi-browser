@@ -39,6 +39,7 @@
 #include "core/fxcrt/data_vector.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/span_util.h"
 #include "core/fxcrt/stl_util.h"
 #include "core/fxcrt/zip.h"
 #include "core/fxge/calculate_pitch.h"
@@ -51,23 +52,23 @@ bool IsValidDimension(int value) {
   return value > 0 && value <= kMaxImageDimension;
 }
 
-unsigned int GetBits8(const uint8_t* pData, uint64_t bitpos, size_t nbits) {
+unsigned int GetBits8(pdfium::span<const uint8_t> pData,
+                      uint64_t bitpos,
+                      size_t nbits) {
   DCHECK(nbits == 1 || nbits == 2 || nbits == 4 || nbits == 8 || nbits == 16);
   DCHECK_EQ((bitpos & (nbits - 1)), 0u);
-  UNSAFE_TODO({
-    unsigned int byte = pData[bitpos / 8];
-    if (nbits == 8) {
-      return byte;
-    }
-    if (nbits == 16) {
-      return byte * 256 + pData[bitpos / 8 + 1];
-    }
-    return (byte >> (8 - nbits - (bitpos % 8))) & ((1 << nbits) - 1);
-  });
+  unsigned int byte = pData[bitpos / 8];
+  if (nbits == 8) {
+    return byte;
+  }
+  if (nbits == 16) {
+    return byte * 256 + pData[bitpos / 8 + 1];
+  }
+  return (byte >> (8 - nbits - (bitpos % 8))) & ((1 << nbits) - 1);
 }
 
-bool GetBitValue(const uint8_t* pSrc, uint32_t pos) {
-  return UNSAFE_TODO(pSrc[pos / 8] & (1 << (7 - pos % 8)));
+bool GetBitValue(pdfium::span<const uint8_t> pSrc, uint32_t pos) {
+  return pSrc[pos / 8] & (1 << (7 - pos % 8));
 }
 
 // Just to sanity check and filter out obvious bad values.
@@ -268,7 +269,7 @@ bool CPDF_DIB::ContinueInternal() {
     } else if (bpp <= 8) {
       SetFormat(FXDIB_Format::k8bppRgb);
     } else {
-      SetFormat(FXDIB_Format::kRgb);
+      SetFormat(FXDIB_Format::kBgr);
     }
   }
 
@@ -279,7 +280,9 @@ bool CPDF_DIB::ContinueInternal() {
   m_LineBuf = DataVector<uint8_t>(pitch.value());
   LoadPalette();
   if (m_bColorKey) {
-    SetFormat(FXDIB_Format::kArgb);
+    // TODO(crbug.com/355676038): Consider adding support for
+    // `FXDIB_Format::kBgraPremul`
+    SetFormat(FXDIB_Format::kBgra);
     pitch = fxge::CalculatePitch32(GetBPP(), GetWidth());
     if (!pitch.has_value())
       return false;
@@ -723,15 +726,15 @@ RetainPtr<CFX_DIBitmap> CPDF_DIB::LoadJpxBitmap(
   if (action == JpxDecodeAction::kUseGray) {
     format = FXDIB_Format::k8bppRgb;
   } else if (action == JpxDecodeAction::kUseRgb && image_info.channels == 3) {
-    format = FXDIB_Format::kRgb;
+    format = FXDIB_Format::kBgr;
   } else if (action == JpxDecodeAction::kUseRgb && image_info.channels == 4) {
-    format = FXDIB_Format::kRgb32;
+    format = FXDIB_Format::kBgrx;
   } else if (action == JpxDecodeAction::kConvertArgbToRgb) {
     CHECK_GE(image_info.channels, 4);
-    format = FXDIB_Format::kRgb32;
+    format = FXDIB_Format::kBgrx;
   } else {
     image_info.width = (image_info.width * image_info.channels + 2) / 3;
-    format = FXDIB_Format::kRgb;
+    format = FXDIB_Format::kBgr;
   }
 
   auto result_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
@@ -748,7 +751,7 @@ RetainPtr<CFX_DIBitmap> CPDF_DIB::LoadJpxBitmap(
     DCHECK_EQ(3u, m_nComponents);
     auto rgb_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
     if (!rgb_bitmap->Create(image_info.width, image_info.height,
-                            FXDIB_Format::kRgb)) {
+                            FXDIB_Format::kBgr)) {
       return nullptr;
     }
     if (m_pDict->GetIntegerFor("SMaskInData") == 1) {
@@ -1055,7 +1058,7 @@ void CPDF_DIB::TranslateScanline24bpp(
         color_values[color] = m_CompData[color].m_DecodeMin +
                               m_CompData[color].m_DecodeStep * data;
       } else {
-        unsigned int data = GetBits8(src_scan.data(), src_bit_pos, m_bpc);
+        unsigned int data = GetBits8(src_scan, src_bit_pos, m_bpc);
         color_values[color] = m_CompData[color].m_DecodeMin +
                               m_CompData[color].m_DecodeStep * data;
         src_bit_pos += m_bpc;
@@ -1127,23 +1130,23 @@ bool CPDF_DIB::TranslateScanline24bppDefaultDecode(
       const unsigned int max_data = (1 << m_bpc) - 1;
       uint64_t src_bit_pos = 0;
       size_t dest_byte_pos = 0;
-      UNSAFE_TODO({
-        for (int column = 0; column < GetWidth(); column++) {
-          unsigned int R = GetBits8(src_scan.data(), src_bit_pos, m_bpc);
-          src_bit_pos += m_bpc;
-          unsigned int G = GetBits8(src_scan.data(), src_bit_pos, m_bpc);
-          src_bit_pos += m_bpc;
-          unsigned int B = GetBits8(src_scan.data(), src_bit_pos, m_bpc);
-          src_bit_pos += m_bpc;
-          R = std::min(R, max_data);
-          G = std::min(G, max_data);
-          B = std::min(B, max_data);
+      for (int column = 0; column < GetWidth(); column++) {
+        unsigned int R = GetBits8(src_scan, src_bit_pos, m_bpc);
+        src_bit_pos += m_bpc;
+        unsigned int G = GetBits8(src_scan, src_bit_pos, m_bpc);
+        src_bit_pos += m_bpc;
+        unsigned int B = GetBits8(src_scan, src_bit_pos, m_bpc);
+        src_bit_pos += m_bpc;
+        R = std::min(R, max_data);
+        G = std::min(G, max_data);
+        B = std::min(B, max_data);
+        UNSAFE_TODO({
           dest_pos[dest_byte_pos] = B * 255 / max_data;
           dest_pos[dest_byte_pos + 1] = G * 255 / max_data;
           dest_pos[dest_byte_pos + 2] = R * 255 / max_data;
           dest_byte_pos += 3;
-        }
-      });
+        });
+      }
       break;
   }
   return true;
@@ -1201,13 +1204,12 @@ pdfium::span<const uint8_t> CPDF_DIB::GetScanline(int line) const {
     }
     uint32_t reset_argb = Get1BitResetValue();
     uint32_t set_argb = Get1BitSetValue();
-    uint32_t* dest_scan = reinterpret_cast<uint32_t*>(m_MaskBuf.data());
-    UNSAFE_TODO({
-      for (int col = 0; col < GetWidth(); col++, dest_scan++) {
-        *dest_scan = GetBitValue(pSrcLine.data(), col) ? set_argb : reset_argb;
-      }
-    });
-    return pdfium::make_span(m_MaskBuf).first(GetWidth() * sizeof(uint32_t));
+    auto mask32_span =
+        fxcrt::reinterpret_span<uint32_t>(pdfium::make_span(m_MaskBuf));
+    for (int col = 0; col < GetWidth(); col++) {
+      mask32_span[col] = GetBitValue(pSrcLine, col) ? set_argb : reset_argb;
+    }
+    return fxcrt::reinterpret_span<uint8_t>(mask32_span.first(GetWidth()));
   }
   if (m_bpc * m_nComponents <= 8) {
     pdfium::span<uint8_t> result = m_LineBuf;
@@ -1219,7 +1221,7 @@ pdfium::span<const uint8_t> CPDF_DIB::GetScanline(int line) const {
       for (int col = 0; col < GetWidth(); col++) {
         unsigned int color_index = 0;
         for (uint32_t color = 0; color < m_nComponents; color++) {
-          unsigned int data = GetBits8(pSrcLine.data(), src_bit_pos, m_bpc);
+          unsigned int data = GetBits8(pSrcLine, src_bit_pos, m_bpc);
           color_index |= data << (color * m_bpc);
           src_bit_pos += m_bpc;
         }

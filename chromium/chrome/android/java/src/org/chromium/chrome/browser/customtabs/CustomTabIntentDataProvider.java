@@ -26,8 +26,6 @@ import static androidx.browser.customtabs.CustomTabsIntent.EXTRA_INITIAL_ACTIVIT
 import static androidx.browser.customtabs.CustomTabsIntent.EXTRA_INITIAL_ACTIVITY_WIDTH_PX;
 import static androidx.browser.customtabs.CustomTabsIntent.EXTRA_TOOLBAR_CORNER_RADIUS_DP;
 
-import static org.chromium.chrome.browser.content.WebContentsFactory.DEFAULT_NETWORK_HANDLE;
-
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.PendingIntent;
@@ -72,6 +70,7 @@ import org.chromium.base.cached_flags.StringCachedFieldTrialParameter;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.version_info.VersionInfo;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
@@ -87,6 +86,7 @@ import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.device.mojom.ScreenOrientationLockType;
+import org.chromium.net.NetId;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -95,6 +95,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+
+// Vivaldi
+import org.vivaldi.browser.common.VivaldiIntentHandler;
 
 /**
  * A model class that parses the incoming intent for Custom Tabs specific customization data.
@@ -111,27 +114,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     public @interface LaunchSourceType {
         int OTHER = -1;
         int MEDIA_LAUNCHER_ACTIVITY = 3;
-    }
-
-    // These values are persisted to logs. Entries should not be renumbered and numeric values
-    // should never be reused.
-    @IntDef({
-        ShareOptionLocation.TOOLBAR,
-        ShareOptionLocation.MENU,
-        ShareOptionLocation.TOOLBAR_FULL_MENU_FALLBACK,
-        ShareOptionLocation.NO_SPACE,
-        ShareOptionLocation.SHARE_DISABLED,
-        ShareOptionLocation.NUM_ENTRIES
-    })
-    private @interface ShareOptionLocation {
-        int TOOLBAR = 0;
-        int MENU = 1;
-        int TOOLBAR_FULL_MENU_FALLBACK = 2;
-        int NO_SPACE = 3;
-        int SHARE_DISABLED = 4;
-
-        // Must be the last one.
-        int NUM_ENTRIES = 5;
     }
 
     @IntDef({
@@ -199,6 +181,21 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     static final String EXTRA_AUTO_TRANSLATE_LANGUAGE =
             "androidx.browser.customtabs.extra.AUTO_TRANSLATE_LANGUAGE";
 
+    public static final String EXTRA_OPEN_IN_BROWSER_STATE =
+            "androidx.browser.customtabs.extra.OPEN_IN_BROWSER_STATE";
+
+    @IntDef({
+        CustomTabsButtonState.BUTTON_STATE_OFF,
+        CustomTabsButtonState.BUTTON_STATE_ON,
+        CustomTabsButtonState.BUTTON_STATE_DEFAULT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CustomTabsButtonState {
+        int BUTTON_STATE_OFF = CustomTabsIntent.SHARE_STATE_OFF;
+        int BUTTON_STATE_ON = CustomTabsIntent.SHARE_STATE_ON;
+        int BUTTON_STATE_DEFAULT = CustomTabsIntent.SHARE_STATE_DEFAULT;
+    }
+
     /**
      * Parameter that, if true, indicates that the {@link EXTRA_AUTO_TRANSLATE_LANGUAGE} should be
      * automatically allowed from any first party package name.
@@ -219,9 +216,15 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
                     "com.google.android.googlequicksearchbox");
 
     /** Pipe ("|") separated list of package names allowed to use the interactive Omnibox. */
+    // TODO(b/40239922): remove when no longer relevant.
+    private static final String DEFAULT_OMNIBOX_ALLOWED_PACKAGE_NAMES =
+            BuildConfig.ENABLE_DEBUG_LOGS ? "org.chromium.customtabsclient" : null;
+
     public static final StringCachedFieldTrialParameter OMNIBOX_ALLOWED_PACKAGE_NAMES =
             ChromeFeatureList.newStringCachedFieldTrialParameter(
-                    ChromeFeatureList.SEARCH_IN_CCT, "omnibox_allowed_package_names", null);
+                    ChromeFeatureList.SEARCH_IN_CCT,
+                    "omnibox_allowed_package_names",
+                    DEFAULT_OMNIBOX_ALLOWED_PACKAGE_NAMES);
 
     private static final String EXTRA_TWA_DISCLOSURE_UI =
             "androidx.browser.trusted.extra.DISCLOSURE_VERSION";
@@ -383,6 +386,12 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
      * {@link Network} to be bound when launching a custom tab or tabs that have been pre-created.
      */
     @Nullable private final Network mNetwork;
+
+    /**
+     * Vivaldi OEM
+     * If true, open CCT in immersive fullscreen mode.
+     */
+    private final boolean mIsCinemaMode;
 
     /** Add extras to customize menu items for opening Reader Mode UI custom tab from Chrome. */
     public static void addReaderModeUIExtras(Intent intent) {
@@ -582,6 +591,8 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
         List<Bundle> menuItems =
                 IntentUtils.getParcelableArrayListExtra(intent, CustomTabsIntent.EXTRA_MENU_ITEMS);
+
+        addOpenInBrowserOption(intent, context);
         updateExtraMenuItems(menuItems);
         // Disable CCT share options for automotive. See b/300292495.
         if (ShareUtils.enableShareForAutomotive(true)) {
@@ -595,7 +606,10 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
                                 TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY,
                                 false);
 
-        mActivityType = isTwa ? ActivityType.TRUSTED_WEB_ACTIVITY : ActivityType.CUSTOM_TAB;
+        mActivityType =
+                isTwa
+                        ? ActivityType.TRUSTED_WEB_ACTIVITY
+                        : isAuthTab() ? ActivityType.AUTH_TAB : ActivityType.CUSTOM_TAB;
         mTrustedWebActivityAdditionalOrigins =
                 IntentUtils.safeGetStringArrayListExtra(
                         intent, TrustedWebActivityIntentBuilder.EXTRA_ADDITIONAL_TRUSTED_ORIGINS);
@@ -680,6 +694,11 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         String packageName = getClientPackageNameFromSessionOrCallingActivity(mIntent, mSession);
         RecordHistogram.recordBooleanHistogram(
                 "CustomTabs.HasNonSpoofablePackageName", !TextUtils.isEmpty(packageName));
+
+        // Vivaldi
+        //!! TODO(jarle@vivaldi): check if calling package name is valid
+        mIsCinemaMode = IntentUtils.safeGetBooleanExtra(intent,
+                VivaldiIntentHandler.EXTRA_CUSTOMTAB_CINEMA_MODE, false);
     }
 
     /** Returns the toolbar corner radius in px. */
@@ -885,40 +904,38 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
      * <p>Shows share options according to the following rules:
      *
      * <ul>
-     *   <li>If {@link CustomTabsIntent#SHARE_STATE_ON} or
-     *   {@link CustomTabsIntent#SHARE_STATE_DEFAULT}, add to the top toolbar if empty, otherwise
-     *   add to the overflow menu if it is not customized.
+     *   <li>If {@link CustomTabsIntent#SHARE_STATE_ON} or {@link
+     *       CustomTabsIntent#SHARE_STATE_DEFAULT}, add to the top toolbar if empty, otherwise add
+     *       to the overflow menu if it is not customized.
      *   <li>If {@link CustomTabsIntent#SHARE_STATE_OFF}, add to the overflow menu depending on
-     *   {@link CustomTabsIntent#EXTRA_DEFAULT_SHARE_MENU_ITEM}.
+     *       {@link CustomTabsIntent#EXTRA_DEFAULT_SHARE_MENU_ITEM}.
      * </ul>
      */
     private void addShareOption(Intent intent, Context context) {
+        boolean usingInteractiveOmnibox =
+                CustomTabsConnection.getInstance().shouldEnableOmniboxForIntent(this);
         int shareState =
                 IntentUtils.safeGetIntExtra(
                         intent,
                         CustomTabsIntent.EXTRA_SHARE_STATE,
-                        CustomTabsIntent.SHARE_STATE_DEFAULT);
+                        usingInteractiveOmnibox
+                                ? CustomTabsIntent.SHARE_STATE_OFF
+                                : CustomTabsIntent.SHARE_STATE_DEFAULT);
         if (shareState == CustomTabsIntent.SHARE_STATE_DEFAULT) {
             if (mToolbarButtons.isEmpty()) {
                 mToolbarButtons.add(
                         CustomButtonParamsImpl.createShareButton(
                                 context, getColorProvider().getToolbarColor()));
-                logShareOptionLocation(ShareOptionLocation.TOOLBAR);
             } else if (mMenuEntries.isEmpty()) {
                 mShowShareItemInMenu = true;
-                logShareOptionLocation(ShareOptionLocation.TOOLBAR_FULL_MENU_FALLBACK);
-            } else {
-                logShareOptionLocation(ShareOptionLocation.NO_SPACE);
             }
         } else if (shareState == CustomTabsIntent.SHARE_STATE_ON) {
             if (mToolbarButtons.isEmpty()) {
                 mToolbarButtons.add(
                         CustomButtonParamsImpl.createShareButton(
                                 context, getColorProvider().getToolbarColor()));
-                logShareOptionLocation(ShareOptionLocation.TOOLBAR);
             } else {
                 mShowShareItemInMenu = true;
-                logShareOptionLocation(ShareOptionLocation.MENU);
             }
         } else {
             mShowShareItemInMenu =
@@ -926,19 +943,32 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
                             intent,
                             CustomTabsIntent.EXTRA_DEFAULT_SHARE_MENU_ITEM,
                             mIsOpenedByChrome && mUiType == CustomTabsUiType.DEFAULT);
-            if (mShowShareItemInMenu) {
-                logShareOptionLocation(ShareOptionLocation.MENU);
-            } else {
-                logShareOptionLocation(ShareOptionLocation.SHARE_DISABLED);
-            }
         }
     }
 
-    private static void logShareOptionLocation(@ShareOptionLocation int shareOptionLocation) {
-        RecordHistogram.recordEnumeratedHistogram(
-                "CustomTabs.ShareOptionLocation",
-                shareOptionLocation,
-                ShareOptionLocation.NUM_ENTRIES);
+    private void addOpenInBrowserOption(Intent intent, Context context) {
+        boolean usingInteractiveOmnibox =
+                CustomTabsConnection.getInstance().shouldEnableOmniboxForIntent(this);
+        int openInBrowserState =
+                IntentUtils.safeGetIntExtra(
+                        intent,
+                        EXTRA_OPEN_IN_BROWSER_STATE,
+                        usingInteractiveOmnibox
+                                ? CustomTabsButtonState.BUTTON_STATE_DEFAULT
+                                : CustomTabsButtonState.BUTTON_STATE_OFF);
+
+        if (openInBrowserState == CustomTabsButtonState.BUTTON_STATE_DEFAULT
+                && isInteractiveOmniboxAllowed()) {
+            openInBrowserState = CustomTabsButtonState.BUTTON_STATE_ON;
+        }
+
+        if (openInBrowserState == CustomTabsButtonState.BUTTON_STATE_ON) {
+            if (mToolbarButtons.isEmpty()) {
+                mToolbarButtons.add(
+                        CustomButtonParamsImpl.createOpenInBrowserButton(
+                                context, getColorProvider().getToolbarColor()));
+            }
+        }
     }
 
     private String resolveUrlToLoad(Intent intent) {
@@ -1022,7 +1052,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
         // Ordering: Log all the features ordered by CustomTabsFeature enum, when they apply.
         if (mAnimationBundle != null) {
-            featureUsage.log(CustomTabsFeature.EXTRA_ACTION_BUTTON_BUNDLE);
+            featureUsage.log(CustomTabsFeature.EXTRA_EXIT_ANIMATION_BUNDLE);
         }
         if (IntentUtils.safeHasExtra(intent, CustomTabsIntent.EXTRA_TINT_ACTION_BUTTON)) {
             featureUsage.log(CustomTabsFeature.EXTRA_TINT_ACTION_BUTTON);
@@ -1144,9 +1174,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         }
         if (IntentUtils.safeHasExtra(intent, EXTRA_ACTIVITY_SIDE_SHEET_POSITION)) {
             featureUsage.log(CustomTabsFeature.EXTRA_ACTIVITY_SIDE_SHEET_POSITION);
-        }
-        if (CustomTabsConnection.getInstance().shouldEnablePageInsightsForIntent(this)) {
-            featureUsage.log(CustomTabsFeature.EXTRA_ENABLE_PAGE_INSIGHTS_HUB);
         }
         if (CustomTabsConnection.getInstance().shouldEnableGoogleBottomBarForIntent(this)) {
             featureUsage.log(CustomTabsFeature.EXTRA_ENABLE_GOOGLE_BOTTOM_BAR);
@@ -1586,15 +1613,25 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     }
 
     @Override
-    public long getNetworkHandle() {
-        return mNetwork != null ? mNetwork.getNetworkHandle() : DEFAULT_NETWORK_HANDLE;
+    public long getTargetNetwork() {
+        return mNetwork != null ? mNetwork.getNetworkHandle() : NetId.INVALID;
     }
 
     @Override
-    public boolean isAuthView() {
+    public boolean isAuthTab() {
         // TODO(crbug.com/345627627): Remove this and set this to return true in a new
         //     intent data provider.
-        boolean isAuthView = false;
-        return ChromeFeatureList.sCctAuthView.isEnabled() && isAuthView;
+        boolean isAuthTab = false;
+        return ChromeFeatureList.sCctAuthTab.isEnabled() && isAuthTab;
+    }
+
+    /**
+     * Vivaldi OEM
+     * Returns true if CCT can open in immersive fullscreen (cinema) mode.
+     */
+    @Override
+    public boolean isCinemaMode() {
+        assert BuildConfig.IS_OEM_AUTOMOTIVE_BUILD;
+        return mIsCinemaMode;
     }
 }

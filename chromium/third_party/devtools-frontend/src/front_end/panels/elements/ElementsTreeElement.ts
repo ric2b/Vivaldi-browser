@@ -207,6 +207,10 @@ const UIStrings = {
    *@description Text of a tooltip to redirect to another element in the Elements panel
    */
   showPopoverTarget: 'Show popover target',
+  /**
+   *@description Text of the tooltip for scroll adorner.
+   */
+  elementHasScrollableOverflow: 'This element has a scrollable overflow',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/elements/ElementsTreeElement.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -232,7 +236,7 @@ type ClosingTagContext = {
 
 export type TagTypeContext = OpeningTagContext|ClosingTagContext;
 
-function isOpeningTag(context: TagTypeContext): context is OpeningTagContext {
+export function isOpeningTag(context: TagTypeContext): context is OpeningTagContext {
   return context.tagType === TagType.OPENING;
 }
 
@@ -310,6 +314,8 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
         const adorner = this.adorn(config);
         UI.Tooltip.Tooltip.install(adorner, i18nString(UIStrings.thisFrameWasIdentifiedAsAnAd));
       }
+
+      void this.updateScrollAdorner();
     }
     this.expandAllButtonElement = null;
   }
@@ -1777,7 +1783,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     if (result) {
       result += text.substring(lastIndexAfterEntity);
     }
-    return {text: result || text, entityRanges: entityRanges};
+    return {text: result || text, entityRanges};
   }
 
   private nodeTitleInfo(updateRecord: UpdateRecord|null): DocumentFragment {
@@ -2036,7 +2042,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
         if (style.parentRule && style.parentRule.isUserAgent()) {
           continue;
         }
-        if (cascade.propertyState(property) !== SDK.CSSMatchedStyles.PropertyState.Active) {
+        if (cascade.propertyState(property) !== SDK.CSSMatchedStyles.PropertyState.ACTIVE) {
           continue;
         }
         lines.push(`${indent}${property.name}: ${property.value};`);
@@ -2228,7 +2234,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     const containerType = styles.get('container-type');
     const contain = styles.get('contain');
     const isContainer =
-        SDK.CSSContainerQuery.getQueryAxis(`${containerType} ${contain}`) !== SDK.CSSContainerQuery.QueryAxis.None;
+        SDK.CSSContainerQuery.getQueryAxis(`${containerType} ${contain}`) !== SDK.CSSContainerQuery.QueryAxis.NONE;
 
     if (isGrid) {
       this.pushGridAdorner(this.tagTypeContext, isSubgrid);
@@ -2276,7 +2282,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     });
 
     node.domModel().overlayModel().addEventListener(
-        SDK.OverlayModel.Events.PersistentGridOverlayStateChanged, event => {
+        SDK.OverlayModel.Events.PERSISTENT_GRID_OVERLAY_STATE_CHANGED, event => {
           const {nodeId: eventNodeId, enabled} = event.data;
           if (eventNodeId !== nodeId) {
             return;
@@ -2318,7 +2324,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     });
 
     node.domModel().overlayModel().addEventListener(
-        SDK.OverlayModel.Events.PersistentScrollSnapOverlayStateChanged, event => {
+        SDK.OverlayModel.Events.PERSISTENT_SCROLL_SNAP_OVERLAY_STATE_CHANGED, event => {
           const {nodeId: eventNodeId, enabled} = event.data;
           if (eventNodeId !== nodeId) {
             return;
@@ -2361,7 +2367,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     });
 
     node.domModel().overlayModel().addEventListener(
-        SDK.OverlayModel.Events.PersistentFlexContainerOverlayStateChanged, event => {
+        SDK.OverlayModel.Events.PERSISTENT_FLEX_CONTAINER_OVERLAY_STATE_CHANGED, event => {
           const {nodeId: eventNodeId, enabled} = event.data;
           if (eventNodeId !== nodeId) {
             return;
@@ -2405,7 +2411,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     });
 
     node.domModel().overlayModel().addEventListener(
-        SDK.OverlayModel.Events.PersistentContainerQueryOverlayStateChanged, event => {
+        SDK.OverlayModel.Events.PERSISTENT_CONTAINER_QUERY_OVERLAY_STATE_CHANGED, event => {
           const {nodeId: eventNodeId, enabled} = event.data;
           if (eventNodeId !== nodeId) {
             return;
@@ -2442,6 +2448,29 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     });
 
     context.styleAdorners.push(adorner);
+  }
+
+  updateScrollAdorner(): void {
+    if (!isOpeningTag(this.tagTypeContext)) {
+      return;
+    }
+    const scrollAdorner = this.tagTypeContext.adorners.find(x => x.name === 'scroll');
+    // Check if the node is scrollable, or if it's the <html> element and the document is scrollable because the top-level document (#document) doesn't have a corresponding tree element.
+    const needsAScrollAdorner = (this.node().nodeName() === 'HTML' && this.node().ownerDocument?.isScrollable()) ||
+        (this.node().nodeName() !== '#document' && this.node().isScrollable());
+    if (needsAScrollAdorner && !scrollAdorner) {
+      this.pushScrollAdorner();
+    } else if (!needsAScrollAdorner && scrollAdorner) {
+      this.removeAdorner(scrollAdorner, this.tagTypeContext);
+    }
+  }
+
+  pushScrollAdorner(): void {
+    const config = ElementsComponents.AdornerManager.getRegisteredAdorner(
+        ElementsComponents.AdornerManager.RegisteredAdorners.SCROLL);
+    const adorner = this.adorn(config);
+    UI.Tooltip.Tooltip.install(adorner, i18nString(UIStrings.elementHasScrollableOverflow));
+    adorner.classList.add('scroll');
   }
 }
 

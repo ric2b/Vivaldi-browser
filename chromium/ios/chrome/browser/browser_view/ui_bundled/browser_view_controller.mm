@@ -20,18 +20,20 @@
 #import "ios/chrome/browser/browser_view/ui_bundled/browser_view_visibility_consumer.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/key_commands_provider.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/safe_area_provider.h"
-#import "ios/chrome/browser/bubble/ui_bundled/bubble_presenter.h"
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
 #import "ios/chrome/browser/default_promo/ui_bundled/default_promo_non_modal_presentation_delegate.h"
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/find_in_page/model/util.h"
+#import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_view.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
 #import "ios/chrome/browser/metrics/model/tab_usage_recorder_browser_agent.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -51,32 +53,29 @@
 #import "ios/chrome/browser/side_swipe/ui_bundled/swipe_view.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
+#import "ios/chrome/browser/tabs/ui_bundled/background_tab_animation_view.h"
+#import "ios/chrome/browser/tabs/ui_bundled/foreground_tab_animation_view.h"
+#import "ios/chrome/browser/tabs/ui_bundled/requirements/tab_strip_presentation.h"
+#import "ios/chrome/browser/tabs/ui_bundled/switch_to_tab_animation_view.h"
+#import "ios/chrome/browser/tabs/ui_bundled/tab_strip_constants.h"
+#import "ios/chrome/browser/tabs/ui_bundled/tab_strip_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/re_signin_infobar_delegate.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_view.h"
 #import "ios/chrome/browser/ui/main_content/main_content_ui.h"
 #import "ios/chrome/browser/ui/main_content/main_content_ui_broadcasting_util.h"
 #import "ios/chrome/browser/ui/main_content/main_content_ui_state.h"
 #import "ios/chrome/browser/ui/main_content/web_scroll_view_main_content_ui_forwarder.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/coordinator/tab_strip_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/ui/tab_strip_utils.h"
-#import "ios/chrome/browser/ui/tabs/background_tab_animation_view.h"
-#import "ios/chrome/browser/ui/tabs/foreground_tab_animation_view.h"
-#import "ios/chrome/browser/ui/tabs/requirements/tab_strip_presentation.h"
-#import "ios/chrome/browser/ui/tabs/switch_to_tab_animation_view.h"
-#import "ios/chrome/browser/ui/tabs/tab_strip_constants.h"
-#import "ios/chrome/browser/ui/tabs/tab_strip_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/accessory/toolbar_accessory_presenter.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/fullscreen/toolbar_ui.h"
 #import "ios/chrome/browser/ui/toolbar/fullscreen/toolbar_ui_broadcasting_util.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator.h"
@@ -111,22 +110,22 @@
 #import "components/prefs/pref_service.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/url_formatter/url_fixer.h"
+#import "ios/chrome/browser/location_bar/ui_bundled/location_bar_steady_view_consumer.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/tabs/ui_bundled/requirements/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
-#import "ios/chrome/browser/ui/location_bar/location_bar_steady_view_consumer.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
-#import "ios/chrome/browser/ui/tabs/requirements/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/toolbar/secondary_toolbar_view.h"
 #import "ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h"
+#import "ios/in_app_rating/vivaldi_in_app_rating_manager_swift.h"
 #import "ios/panel/panel_interaction_controller.h"
 #import "ios/ui/common/vivaldi_url_constants.h"
-#import "ios/ui/helpers/vivaldi_default_rating_manager.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
@@ -466,7 +465,6 @@ const double kDelayForRatingPrompt = 10.0;
     _sideSwipeMediator = dependencies.sideSwipeMediator;
     [_sideSwipeMediator setSwipeDelegate:self];
     _bookmarksCoordinator = dependencies.bookmarksCoordinator;
-    self.bubblePresenter = dependencies.bubblePresenter;
     self.toolbarAccessoryPresenter = dependencies.toolbarAccessoryPresenter;
     self.ntpCoordinator = dependencies.ntpCoordinator;
     self.popupMenuCoordinator = dependencies.popupMenuCoordinator;
@@ -1230,7 +1228,6 @@ const double kDelayForRatingPrompt = 10.0;
   if (ShouldShowVivaldiWhatsNewPage()) {
     [self openWhatsNewTab];
   }
-  [_defaultRatingManager recordActiveDay];
   [self showReviewPrompt];
   // End Vivaldi
 
@@ -1325,14 +1322,13 @@ const double kDelayForRatingPrompt = 10.0;
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
 
-#if defined(__IPHONE_17_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_17_0
-  if (base::ios::IsRunningOnIOS17OrLater() &&
-      base::FeatureList::IsEnabled(kEnableTraitCollectionWorkAround)) {
-    [self updateTraitsIfNeeded];
+  if (@available(iOS 17.0, *)) {
+    if (base::FeatureList::IsEnabled(kEnableTraitCollectionWorkAround)) {
+      [self updateTraitsIfNeeded];
+    }
   }
-#endif
 
-  // After `-shutdown` is called, browserState is invalid and will cause a
+  // After `-shutdown` is called, profile is invalid and will cause a
   // crash.
   if (_isShutdown) {
     return;
@@ -1501,11 +1497,6 @@ const double kDelayForRatingPrompt = 10.0;
         // End Vivaldi
 
       }];
-
-  if (self.currentWebState) {
-    id<CRWWebViewProxy> webViewProxy = self.currentWebState->GetWebViewProxy();
-    [webViewProxy surfaceSizeChanged];
-  }
 
   crash_keys::SetCurrentOrientation(GetInterfaceOrientation(),
                                     [[UIDevice currentDevice] orientation]);
@@ -1705,6 +1696,8 @@ const double kDelayForRatingPrompt = 10.0;
       _fakeStatusBarView.overrideUserInterfaceStyle =
           _isOffTheRecord ? UIUserInterfaceStyleDark
                           : UIUserInterfaceStyleUnspecified;
+      const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
+      _fakeStatusBarView.hidden = !canShowTabStrip;
     } else {
       _fakeStatusBarView.backgroundColor = UIColor.blackColor;
     }
@@ -1720,7 +1713,7 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 // Builds the UI parts of tab strip and the toolbar. Does not matter whether
-// or not browser state and browser are valid.
+// or not profile and browser are valid.
 - (void)buildToolbarAndTabStrip {
   DCHECK([self isViewLoaded]);
 
@@ -2045,7 +2038,7 @@ const double kDelayForRatingPrompt = 10.0;
       self.browserContainerViewController.contentView = nil;
       self.browserContainerViewController.contentViewController =
           viewController;
-      [NTPCoordinator constrainFeedHeaderManagementButtonNamedGuide];
+      [NTPCoordinator constrainNamedGuideForFeedIPH];
     } else {
       self.browserContainerViewController.contentView = view;
     }
@@ -2301,6 +2294,17 @@ const double kDelayForRatingPrompt = 10.0;
 - (UIViewController*)popupParentViewControllerForPresenter:
     (OmniboxPopupPresenter*)presenter {
   return self;
+}
+
+- (UIColor*)popupBackgroundColorForPresenter:(OmniboxPopupPresenter*)presenter {
+  ToolbarConfiguration* configuration = [[ToolbarConfiguration alloc]
+      initWithStyle:_isOffTheRecord ? ToolbarStyle::kIncognito
+                                    : ToolbarStyle::kNormal];
+  return configuration.backgroundColor;
+}
+
+- (GuideName*)omniboxGuideNameForPresenter:(OmniboxPopupPresenter*)presenter {
+  return kTopOmniboxGuide;
 }
 
 - (void)popupDidOpenForPresenter:(OmniboxPopupPresenter*)presenter {
@@ -3068,6 +3072,14 @@ const double kDelayForRatingPrompt = 10.0;
   self.secondaryToolbarHeightConstraint.priority = UILayoutPriorityDefaultHigh;
 
   // Vivaldi
+  // (VIB-887) When toolbar is at the bottom and tab bar is enabled set the
+  // accent color as the background color for steady view which is visible
+  // above the keyboard when keyboard is active. Reset the color when keyboard
+  // is closed.
+  if ([self canShowTabStrip] && [self isBottomOmniboxEnabled]) {
+    [self.vivaldiStickyToolbarView updateBackgroundColor:[self accentColor]];
+  }
+
   self.bottomOmniboxSteadyViewTopAnchor.constant =
       vBottomToolbarSteadyViewTopPaddingFullScreen;
   // End Vivaldi
@@ -3082,6 +3094,10 @@ const double kDelayForRatingPrompt = 10.0;
   // Vivaldi: Reset toolbar state after keyboard is closed.
   self.bottomOmniboxSteadyViewTopAnchor.constant =
     vBottomToolbarSteadyViewTopPadding;
+  // (VIB-887) - Reset the color
+  if ([self canShowTabStrip] && [self isBottomOmniboxEnabled]) {
+    [self.vivaldiStickyToolbarView updateBackgroundColor:UIColor.clearColor];
+  }
   [self.view layoutIfNeeded];
   // End Vivaldi
 

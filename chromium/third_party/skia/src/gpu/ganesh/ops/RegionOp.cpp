@@ -4,20 +4,50 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-
 #include "src/gpu/ganesh/ops/RegionOp.h"
 
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkRegion.h"
+#include "include/core/SkString.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/private/SkColorData.h"
+#include "include/private/base/SkDebug.h"
+#include "include/private/base/SkTArray.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkSafeMath.h"
-#include "src/core/SkMatrixPriv.h"
 #include "src/gpu/BufferWriter.h"
-#include "src/gpu/ganesh/GrCaps.h"
+#include "src/gpu/ganesh/GrAppliedClip.h"
 #include "src/gpu/ganesh/GrDefaultGeoProcFactory.h"
+#include "src/gpu/ganesh/GrGeometryProcessor.h"
 #include "src/gpu/ganesh/GrOpFlushState.h"
+#include "src/gpu/ganesh/GrPaint.h"
+#include "src/gpu/ganesh/GrProcessorAnalysis.h"
+#include "src/gpu/ganesh/GrProcessorSet.h"
 #include "src/gpu/ganesh/GrProgramInfo.h"
-#include "src/gpu/ganesh/GrResourceProvider.h"
 #include "src/gpu/ganesh/ops/GrMeshDrawOp.h"
 #include "src/gpu/ganesh/ops/GrSimpleMeshDrawOpHelperWithStencil.h"
+
+#if defined(GPU_TEST_UTILS)
+#include "src/base/SkRandom.h"
+#include "src/gpu/ganesh/GrDrawOpTest.h"
+#include "src/gpu/ganesh/GrTestUtils.h"
+#endif
+
+#include <utility>
+
+class GrCaps;
+class GrDstProxyView;
+class GrMeshDrawTarget;
+class GrSurfaceProxyView;
+class SkArenaAlloc;
+enum class GrXferBarrierFlags;
+struct GrSimpleMesh;
+
+namespace skgpu::ganesh {
+class SurfaceDrawContext;
+}
 
 using namespace skia_private;
 
@@ -122,12 +152,8 @@ private:
         for (int i = 0; i < numRegions; i++) {
             numRects = safeMath.addInt(numRects, fRegions[i].fRegion.computeRegionComplexity());
         }
-        if (!safeMath) {
-            // This is a nonsensical draw, so we can just drop it.
-            return;
-        }
 
-        if (!numRects) {
+        if (!numRects || !safeMath) {
             return;
         }
 
@@ -177,7 +203,7 @@ private:
         return CombineResult::kMerged;
     }
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     SkString onDumpInfo() const override {
         SkString str = SkStringPrintf("# combined: %d\n", fRegions.size());
         for (int i = 0; i < fRegions.size(); ++i) {
@@ -223,11 +249,7 @@ GrOp::Owner Make(GrRecordingContext* context,
 
 }  // namespace skgpu::ganesh::RegionOp
 
-#if defined(GR_TEST_UTILS)
-
-#include "src/base/SkRandom.h"
-#include "src/gpu/ganesh/GrDrawOpTest.h"
-#include "src/gpu/ganesh/GrTestUtils.h"
+#if defined(GPU_TEST_UTILS)
 
 GR_DRAW_OP_TEST_DEFINE(RegionOp) {
     SkRegion region;
@@ -262,4 +284,4 @@ GR_DRAW_OP_TEST_DEFINE(RegionOp) {
                                                        GrGetRandomStencil(random, context));
 }
 
-#endif // defined(GR_TEST_UTILS)
+#endif // defined(GPU_TEST_UTILS)

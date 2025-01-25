@@ -19,6 +19,8 @@
 
 #include "app/vivaldi_apptools.h"
 
+using enum safe_browsing::ExtendedReportingLevel;
+
 namespace {
 
 // Update the correct UMA metric based on which pref was changed and which UI
@@ -112,18 +114,32 @@ bool IsEnhancedProtectionEnabled(const PrefService& prefs) {
 }
 
 ExtendedReportingLevel GetExtendedReportingLevel(const PrefService& prefs) {
+  if (base::FeatureList::IsEnabled(kExtendedReportingRemovePrefDependency)) {
+    // If it is enabled and the currently the deprecation flag is on,
+    // it means this is an ESB user.
+    return IsEnhancedProtectionEnabled(prefs) ? SBER_LEVEL_ENHANCED_PROTECTION
+                                              : SBER_LEVEL_OFF;
+  }
   return IsExtendedReportingEnabled(prefs) ? SBER_LEVEL_SCOUT : SBER_LEVEL_OFF;
 }
 
 bool IsExtendedReportingOptInAllowed(const PrefService& prefs) {
   if (vivaldi::IsVivaldiRunning())
     return false;
+
+  if (base::FeatureList::IsEnabled(kExtendedReportingRemovePrefDependency)) {
+    return false;
+  }
   return prefs.GetBoolean(prefs::kSafeBrowsingExtendedReportingOptInAllowed);
 }
 
 bool IsExtendedReportingEnabled(const PrefService& prefs) {
   if (vivaldi::IsVivaldiRunning())
     return false;
+
+  if (base::FeatureList::IsEnabled(kExtendedReportingRemovePrefDependency)) {
+    return IsEnhancedProtectionEnabled(prefs);
+  }
   return (IsSafeBrowsingEnabled(prefs) &&
           prefs.GetBoolean(prefs::kSafeBrowsingScoutReportingEnabled)) ||
          IsEnhancedProtectionEnabled(prefs);
@@ -136,6 +152,9 @@ bool IsExtendedReportingEnabledBypassDeprecationFlag(const PrefService& prefs) {
 }
 
 bool IsExtendedReportingPolicyManaged(const PrefService& prefs) {
+  if (base::FeatureList::IsEnabled(kExtendedReportingRemovePrefDependency)) {
+    return false;
+  }
   return prefs.IsManagedPreference(prefs::kSafeBrowsingScoutReportingEnabled);
 }
 
@@ -167,10 +186,15 @@ bool IsSafeBrowsingProceedAnywayDisabled(const PrefService& prefs) {
   return prefs.GetBoolean(prefs::kSafeBrowsingProceedAnywayDisabled);
 }
 
+// TODO(crbug.com/349632699): Remove the metric, SafeBrowsing.Pref.Extended, and
+// its related code.
 void RecordExtendedReportingMetrics(const PrefService& prefs) {
   // This metric tracks the extended browsing opt-in based on whichever setting
   // the user is currently seeing. It tells us whether extended reporting is
   // happening for this user.
+  if (base::FeatureList::IsEnabled(kExtendedReportingRemovePrefDependency)) {
+    return;
+  }
   UMA_HISTOGRAM_BOOLEAN("SafeBrowsing.Pref.Extended",
                         IsExtendedReportingEnabled(prefs));
 }
@@ -206,11 +230,6 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
                                 PASSWORD_PROTECTION_OFF);
   registry->RegisterInt64Pref(prefs::kAdvancedProtectionLastRefreshInUs, 0);
   registry->RegisterBooleanPref(prefs::kAdvancedProtectionAllowed, true);
-  registry->RegisterIntegerPref(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode,
-      REAL_TIME_CHECK_DISABLED);
-  registry->RegisterIntegerPref(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope, 0);
   registry->RegisterInt64Pref(prefs::kSafeBrowsingMetricsLastLogTime, 0);
   registry->RegisterDictionaryPref(prefs::kSafeBrowsingEventTimestamps);
   registry->RegisterTimePref(
@@ -245,8 +264,6 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
                                 true);
   registry->RegisterBooleanPref(prefs::kSafeBrowsingSurveysEnabled, true);
   registry->RegisterBooleanPref(prefs::kSafeBrowsingDeepScanningEnabled, true);
-  registry->RegisterBooleanPref(
-      prefs::kSafeBrowsingEsbOptInWithFriendlierSettings, false);
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingAutomaticDeepScanningIPHSeen, false);
   registry->RegisterBooleanPref(prefs::kSafeBrowsingAutomaticDeepScanPerformed,
@@ -286,6 +303,9 @@ void SetExtendedReportingPrefAndMetric(
     PrefService* prefs,
     bool value,
     ExtendedReportingOptInLocation location) {
+  // TODO(crbug.com/336547987): Re-enable this DCHECK after the stage 2 is
+  // rolloed out. During stage 1, we still allow users to opt-in and opt-out.
+  // DCHECK(!base::FeatureList::IsEnabled(kExtendedReportingRemovePrefDependency));
   prefs->SetBoolean(prefs::kSafeBrowsingScoutReportingEnabled, value);
   RecordExtendedReportingPrefChanged(*prefs, location);
 }

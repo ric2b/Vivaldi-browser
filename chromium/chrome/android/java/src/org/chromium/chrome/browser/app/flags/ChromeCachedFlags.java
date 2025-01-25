@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.customtabs.features.minimizedcustomtab.Minimi
 import org.chromium.chrome.browser.firstrun.FirstRunUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubFieldTrial;
+import org.chromium.chrome.browser.latency_injection.StartupLatencyInjector;
 import org.chromium.chrome.browser.logo.LogoUtils;
 import org.chromium.chrome.browser.magic_stack.HomeModulesMetricsUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
@@ -37,6 +38,7 @@ import org.chromium.chrome.browser.optimization_guide.OptimizationGuidePushNotif
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
+import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
 import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabDataService;
 import org.chromium.chrome.browser.tab_resumption.TabResumptionModuleUtils;
 import org.chromium.chrome.browser.tabbed_mode.TabbedSystemUiCoordinator;
@@ -125,14 +127,20 @@ public class ChromeCachedFlags {
                         ReturnToChromeUtil.HOME_SURFACE_RETURN_TIME_SECONDS,
                         LogoUtils.LOGO_POLISH_LARGE_SIZE,
                         LogoUtils.LOGO_POLISH_MEDIUM_SIZE,
+                        SuggestionsNavigationDelegate.MOST_VISITED_TILES_RESELECT_LAX_PATH,
+                        SuggestionsNavigationDelegate.MOST_VISITED_TILES_RESELECT_LAX_QUERY,
+                        SuggestionsNavigationDelegate.MOST_VISITED_TILES_RESELECT_LAX_REF,
+                        SuggestionsNavigationDelegate.MOST_VISITED_TILES_RESELECT_LAX_SCHEME_HOST,
+                        StartupLatencyInjector.CLANK_STARTUP_LATENCY_PARAM_MS,
                         TabManagementFieldTrial.DELAY_TEMP_STRIP_TIMEOUT_MS,
                         HomeModulesMetricsUtils.HOME_MODULES_SHOW_ALL_MODULES,
                         HomeModulesMetricsUtils.TAB_RESUMPTION_COMBINE_TABS,
+                        TabGroupModelFilter.SHOW_TAB_GROUP_CREATION_DIALOG_SETTING,
                         TabGroupModelFilter.SKIP_TAB_GROUP_CREATION_DIALOG,
                         TabResumptionModuleUtils.TAB_RESUMPTION_DISABLE_BLEND,
                         TabResumptionModuleUtils.TAB_RESUMPTION_FETCH_HISTORY_BACKEND,
-                        TabResumptionModuleUtils.TAB_RESUMPTION_FETCH_LOCAL_TABS_BACKEND,
                         TabResumptionModuleUtils.TAB_RESUMPTION_MAX_TILES_NUMBER,
+                        TabResumptionModuleUtils.TAB_RESUMPTION_SHOW_DEFAULT_REASON,
                         TabResumptionModuleUtils.TAB_RESUMPTION_SHOW_SEE_MORE,
                         TabResumptionModuleUtils.TAB_RESUMPTION_USE_DEFAULT_APP_FILTER,
                         TabResumptionModuleUtils.TAB_RESUMPTION_USE_SALIENT_IMAGE,

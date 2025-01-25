@@ -27,6 +27,8 @@ NSString* const vVivaldiRecoverUsernameUrl =
     @"https://login.vivaldi.net/profile/id/recoverAccount";
 NSString* const vVivaldiRecoverPasswordUrl =
     @"https://login.vivaldi.net/profile/id/userInfoView";
+NSString* const vVivaldiDirectMatchLearnMoreUrl =
+    @"https://help.vivaldi.com/desktop/navigation/what-is-direct-match";
 
 const char vVivaldiBugReportURL[] =
     "https://help.vivaldi.com/ios/ios-troubleshoot/report-a-bug-in-vivaldi-on-ios/";
@@ -34,3 +36,5 @@ const char vVivaldiBugReportURL[] =
 // Help
 const char vVivaldiHelpCopyLinkToHightlightUrl[] =
     "https://help.vivaldi.com/ios/ios-browse/copy-link-to-highlight-on-ios/";
+const char vVivaldiHelpPreloadWebpagUrl[] =
+    "https://help.vivaldi.com/ios/ios-privacy/privacy-and-security-settings-in-vivaldi-on-ios/";

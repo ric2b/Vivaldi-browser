@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/capture/video/fake_video_capture_device.h"
 
 #include <stddef.h>
@@ -360,7 +365,7 @@ std::unique_ptr<FrameDeliverer> FrameDelivererFactory::CreateFrameDeliverer(
       return std::make_unique<GpuMemoryBufferFrameDeliverer>(
           std::move(frame_painter), gmb_support_.get());
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 PacmanFramePainter::PacmanFramePainter(Format pixel_format,
@@ -703,6 +708,10 @@ void FakePhotoDevice::GetPhotoState(
                                           ? mojom::BackgroundBlurMode::BLUR
                                           : mojom::BackgroundBlurMode::OFF;
 
+  photo_state->supported_background_segmentation_mask_states = {false, true};
+  photo_state->current_background_segmentation_mask_state =
+      fake_device_state_->background_segmentation_mask;
+
   photo_state->supported_eye_gaze_correction_modes = {
       mojom::EyeGazeCorrectionMode::OFF, mojom::EyeGazeCorrectionMode::ON};
   photo_state->current_eye_gaze_correction_mode =
@@ -764,6 +773,11 @@ void FakePhotoDevice::SetPhotoOptions(
         device_state_write_access->background_blur = true;
         break;
     }
+  }
+
+  if (settings->background_segmentation_mask_state.has_value()) {
+    device_state_write_access->background_segmentation_mask =
+        settings->background_segmentation_mask_state.value();
   }
 
   if (settings->eye_gaze_correction_mode.has_value()) {

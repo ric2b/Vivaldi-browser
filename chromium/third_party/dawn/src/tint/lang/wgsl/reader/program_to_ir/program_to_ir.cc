@@ -423,7 +423,7 @@ class Impl {
     void EmitIncrementDecrement(const ast::IncrementDecrementStatement* stmt) {
         auto lhs = EmitExpression(stmt->lhs);
 
-        auto* one = program_.TypeOf(stmt->lhs)->UnwrapRef()->is_signed_integer_scalar()
+        auto* one = program_.TypeOf(stmt->lhs)->UnwrapRef()->IsSignedIntegerScalar()
                         ? builder_.Constant(1_i)
                         : builder_.Constant(1_u);
 
@@ -977,9 +977,8 @@ class Impl {
                         inst = impl.builder_.Bitcast(ty, args[0]);
                     } else {
                         auto* res = impl.builder_.InstructionResult(ty);
-                        inst =
-                            impl.builder_.ir.allocators.instructions.Create<wgsl::ir::BuiltinCall>(
-                                res, b->Fn(), std::move(args));
+                        inst = impl.builder_.ir.CreateInstruction<wgsl::ir::BuiltinCall>(
+                            res, b->Fn(), std::move(args));
                     }
                 } else if (sem->Target()->As<sem::ValueConstructor>()) {
                     inst = impl.builder_.Construct(ty, std::move(args));
@@ -1003,7 +1002,7 @@ class Impl {
 
             void EmitIdentifier(const ast::IdentifierExpression* i) {
                 auto* v = impl.scopes_.Get(i->identifier->symbol);
-                if (TINT_UNLIKELY(!v)) {
+                if (DAWN_UNLIKELY(!v)) {
                     impl.AddError(i->source)
                         << "unable to find identifier " << i->identifier->symbol.Name();
                     return;

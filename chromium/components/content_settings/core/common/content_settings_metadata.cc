@@ -16,9 +16,19 @@ namespace content_settings {
 
 RuleMetaData::RuleMetaData() = default;
 
+RuleMetaData::RuleMetaData(const RuleMetaData& other) = default;
+
+RuleMetaData::RuleMetaData(RuleMetaData&& other) = default;
+
+RuleMetaData& RuleMetaData::operator=(const RuleMetaData& other) = default;
+
+RuleMetaData& RuleMetaData::operator=(RuleMetaData&& other) = default;
+
 void RuleMetaData::SetFromConstraints(
     const ContentSettingConstraints& constraints) {
   session_model_ = constraints.session_model();
+  decided_by_related_website_sets_ =
+      constraints.decided_by_related_website_sets();
   SetExpirationAndLifetime(constraints.expiration(), constraints.lifetime());
 }
 
@@ -30,7 +40,7 @@ void RuleMetaData::SetExpirationAndLifetime(base::Time expiration,
   lifetime_ = lifetime;
 }
 
-bool RuleMetaData::IsExpired(base::Clock* clock) const {
+bool RuleMetaData::IsExpired(const base::Clock* clock) const {
   return !expiration().is_null() && expiration() <= clock->Now();
 }
 

@@ -6,10 +6,17 @@ import("//build/config/features.gni")
 
 source_set("browser") {
   sources = [
-    "passkey_model_type_controller.cc",
-    "passkey_model_type_controller.h",
+    "passkey_data_type_controller.cc",
+    "passkey_data_type_controller.h",
   ]
   deps = [ "//components/sync" ]
+
+  if (!is_android && !is_ios) {
+    sources += [
+      "passkey_change_quota_tracker.cc",
+      "passkey_change_quota_tracker.h",
+    ]
+  }
 
   if (!is_ios) {
     sources += [ "internal_authenticator.h" ]
@@ -58,13 +65,17 @@ source_set("unit_tests") {
   deps = []
 
   if (!is_ios && !is_android) {
-    sources += [ "passkey_model_utils_unittest.cc" ]
+    sources += [
+      "passkey_change_quota_tracker_unittest.cc",
+      "passkey_model_utils_unittest.cc",
+    ]
     deps += [
       ":browser",
       ":passkey_model",
       "//base/test:test_support",
       "//components/sync/protocol",
       "//crypto",
+      "//url",
     ]
   }
 }

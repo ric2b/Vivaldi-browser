@@ -20,7 +20,7 @@
 #include "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_sync_service_factory.h"
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
 #include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/public/thread/web_thread.h"
 
@@ -55,16 +55,22 @@ std::unique_ptr<KeyedService> BuildBookmarkModel(web::BrowserState* context) {
 
 // static
 bookmarks::BookmarkModel* BookmarkModelFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
-  return static_cast<bookmarks::BookmarkModel*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+    ProfileIOS* profile) {
+  return GetForProfile(profile);
 }
 
 // static
-bookmarks::BookmarkModel* BookmarkModelFactory::GetForBrowserStateIfExists(
-    ChromeBrowserState* browser_state) {
+bookmarks::BookmarkModel* BookmarkModelFactory::GetForProfile(
+    ProfileIOS* profile) {
   return static_cast<bookmarks::BookmarkModel*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, false));
+      GetInstance()->GetServiceForBrowserState(profile, true));
+}
+
+// static
+bookmarks::BookmarkModel* BookmarkModelFactory::GetForProfileIfExists(
+    ProfileIOS* profile) {
+  return static_cast<bookmarks::BookmarkModel*>(
+      GetInstance()->GetServiceForBrowserState(profile, false));
 }
 
 // static

@@ -34,9 +34,6 @@ namespace gl {
 
 class SwapChainPresenter;
 
-inline constexpr int kNumVideoProcessorTypes = 2;
-enum class VideoProcessorType : int { kSDR = 0, kHDR = 1 };
-
 // Cache video processor and its size.
 struct VideoProcessorWrapper {
   VideoProcessorWrapper();
@@ -323,7 +320,8 @@ class GL_EXPORT DCLayerTree {
           const gfx::Transform& quad_to_root_transform,
           const gfx::RRectF& rounded_corner_bounds,
           float opacity,
-          const std::optional<gfx::Rect>& clip_rect_in_root);
+          const std::optional<gfx::Rect>& clip_rect_in_root,
+          bool allow_antialiasing);
 
       IDCompositionVisual2* container_visual() const {
         return clip_visual_.Get();
@@ -425,6 +423,9 @@ class GL_EXPORT DCLayerTree {
       // pixels.
       gfx::Size image_size_;
 
+      // If false, force |transform_visual_| to use the hard border mode.
+      bool allow_antialiasing_ = true;
+
       // The order relative to the root surface. Positive values means the
       // visual appears in front of the root surface (i.e. overlay) and negative
       // values means the visual appears below the root surface (i.e. underlay).
@@ -520,7 +521,8 @@ class GL_EXPORT DCLayerTree {
   // Store the largest video processor for SDR and HDR content
   // to avoid problems in (http://crbug.com/1121061) and
   // (http://crbug.com/1472975).
-  VideoProcessorWrapper video_processor_wrapper_[kNumVideoProcessorTypes];
+  VideoProcessorWrapper video_processor_wrapper_sdr_;
+  VideoProcessorWrapper video_processor_wrapper_hdr_;
 
   // Current video processor input and output colorspace.
   gfx::ColorSpace video_input_color_space_;

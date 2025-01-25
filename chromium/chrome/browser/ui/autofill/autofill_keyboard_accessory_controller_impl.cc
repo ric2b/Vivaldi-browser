@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/keyboard_accessory/android/manual_filling_controller.h"
+#include "chrome/browser/password_manager/android/access_loss/password_access_loss_warning_bridge_impl.h"
 #include "chrome/browser/password_manager/android/local_passwords_migration_warning_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/autofill/autofill_keyboard_accessory_view.h"
@@ -34,6 +35,7 @@
 #include "components/autofill/core/browser/ui/suggestion_hiding_reason.h"
 #include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/strings/grit/components_strings.h"
@@ -282,10 +284,30 @@ void AutofillKeyboardAccessoryControllerImpl::AcceptSuggestion(int index) {
   }
 
   delegate_->DidAcceptSuggestion(
-      suggestion, AutofillSuggestionDelegate::SuggestionPosition{.row = index});
+      suggestion, AutofillSuggestionDelegate::SuggestionMetadata{.row = index});
 
-  if (suggestion.type == SuggestionType::kPasswordEntry &&
-      base::FeatureList::IsEnabled(
+  if (suggestion.type != SuggestionType::kPasswordEntry) {
+    // Returning early because the code below triggers the UI which is shown
+    // after accepting passwords.
+    return;
+  }
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::
+              kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning)) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+    if (!access_loss_warning_bridge_) {
+      access_loss_warning_bridge_ =
+          std::make_unique<PasswordAccessLossWarningBridgeImpl>();
+    }
+    if (profile && access_loss_warning_bridge_->ShouldShowAccessLossNoticeSheet(
+                       profile->GetPrefs(), /*called_at_startup=*/false)) {
+      access_loss_warning_bridge_->MaybeShowAccessLossNoticeSheet(
+          profile->GetPrefs(), web_contents_->GetTopLevelNativeWindow(),
+          profile, /*called_at_startup=*/false);
+    }
+  }
+  if (base::FeatureList::IsEnabled(
           password_manager::features::
               kUnifiedPasswordManagerLocalPasswordsMigrationWarning)) {
     show_pwd_migration_warning_callback_.Run(
@@ -362,6 +384,7 @@ void AutofillKeyboardAccessoryControllerImpl::OnDeletionDialogClosed(
     case FillingProduct::kPassword:
     case FillingProduct::kCompose:
     case FillingProduct::kPlusAddresses:
+    case FillingProduct::kPredictionImprovements:
       break;
   }
 
@@ -402,9 +425,11 @@ AutofillKeyboardAccessoryControllerImpl::GetPopupScreenLocation() const {
 }
 
 void AutofillKeyboardAccessoryControllerImpl::Show(
+    UiSessionId ui_session_id,
     std::vector<Suggestion> suggestions,
     AutofillSuggestionTriggerSource trigger_source,
     AutoselectFirstSuggestion autoselect_first_suggestion) {
+  ui_session_id_ = ui_session_id;
   suggestions_filling_product_ =
       !suggestions.empty() && IsStandaloneSuggestionType(suggestions[0].type)
           ? GetFillingProductFromSuggestionType(suggestions[0].type)
@@ -472,12 +497,13 @@ void AutofillKeyboardAccessoryControllerImpl::Show(
 
   barrier_for_accepting_ = NextIdleBarrier::CreateNextIdleBarrierWithDelay(
       kIgnoreEarlyClicksOnSuggestionsDuration);
-  delegate_->OnSuggestionsShown();
+  // TODO(crbug.com/364165357): Use actually shown suggestions.
+  delegate_->OnSuggestionsShown(suggestions_);
 }
 
-void AutofillKeyboardAccessoryControllerImpl::DisableThresholdForTesting(
-    bool disable_threshold) {
-  disable_threshold_for_testing_ = disable_threshold;
+std::optional<AutofillSuggestionController::UiSessionId>
+AutofillKeyboardAccessoryControllerImpl::GetUiSessionId() const {
+  return view_ ? std::make_optional(ui_session_id_) : std::nullopt;
 }
 
 void AutofillKeyboardAccessoryControllerImpl::SetKeepPopupOpenForTesting(
@@ -594,13 +620,6 @@ void AutofillKeyboardAccessoryControllerImpl::
   for (const Suggestion& suggestion : suggestions_) {
     labels_.push_back(CreateLabel(suggestion));
   }
-}
-
-void AutofillKeyboardAccessoryControllerImpl::SetViewForTesting(
-    std::unique_ptr<AutofillKeyboardAccessoryView> view) {
-  view_ = std::move(view);
-  barrier_for_accepting_ = NextIdleBarrier::CreateNextIdleBarrierWithDelay(
-      kIgnoreEarlyClicksOnSuggestionsDuration);
 }
 
 }  // namespace autofill

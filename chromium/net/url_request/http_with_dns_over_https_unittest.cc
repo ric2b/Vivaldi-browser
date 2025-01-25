@@ -257,6 +257,9 @@ class TestHttpDelegate : public HttpStreamRequest::Delegate {
 
   void OnQuicBroken() override {}
 
+  void OnSwitchesToHttpStreamPool(
+      HttpStreamPoolSwitchingInfo switching_info) override {}
+
  private:
   raw_ptr<base::RunLoop> loop_;
 };

@@ -7,8 +7,8 @@
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/enterprise/data_controls/core/features.h"
-#include "components/enterprise/data_controls/core/prefs.h"
+#include "components/enterprise/data_controls/core/browser/features.h"
+#include "components/enterprise/data_controls/core/browser/prefs.h"
 #include "components/prefs/pref_service.h"
 #include "url/origin.h"
 
@@ -120,8 +120,7 @@ Level ChromeDlpRulesManager::IsRestrictedDestination(
 
   const MatchedRuleInfo rule_info = GetMaxJoinRestrictionLevelAndRuleId(
       restriction, intersection_rules, restrictions_map_);
-  if (rule_info.url_condition.has_value() && out_source_pattern &&
-      out_destination_pattern) {
+  if (rule_info.url_condition.has_value() && out_source_pattern) {
     UrlConditionId src_condition_id = rule_info.url_condition.value().first;
     UrlConditionId dst_condition_id = rule_info.url_condition.value().second;
     if (out_source_pattern) {
@@ -302,7 +301,7 @@ void ChromeDlpRulesManager::OnDataLeakPreventionRulesUpdate() {
   // Not supported on non-CrOS platforms, see
   // `DlpRulesManagerImpl::OnDataLeakPreventionRulesUpdate()` for the CrOS
   // implementation.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace data_controls

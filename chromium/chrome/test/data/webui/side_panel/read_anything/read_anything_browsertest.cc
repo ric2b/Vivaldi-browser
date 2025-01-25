@@ -20,6 +20,10 @@ class ReadAnythingMochaBrowserTest : public WebUIMochaBrowserTest {
   ReadAnythingMochaBrowserTest() {
     set_test_loader_host(chrome::kChromeUIUntrustedReadAnythingSidePanelHost);
     set_test_loader_scheme(content::kChromeUIUntrustedScheme);
+    scoped_feature_list_.InitWithFeatures(
+        {features::kReadAnythingReadAloud,
+         features::kReadAloudLanguagePackDownloading},
+        {});
   }
 
   void RunSidePanelTest(const std::string& file, const std::string& trigger) {
@@ -34,6 +38,9 @@ class ReadAnythingMochaBrowserTest : public WebUIMochaBrowserTest {
     ASSERT_TRUE(RunTestOnWebContents(web_contents, file, trigger, true));
     side_panel_ui->Close();
   }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 using ReadAnythingMochaTest = ReadAnythingMochaBrowserTest;
@@ -96,6 +103,10 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, LineSpacing) {
                    "mocha.run()");
 }
 
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Toolbar) {
+  RunSidePanelTest("side_panel/read_anything/toolbar_test.js", "mocha.run()");
+}
+
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, UpdateContent) {
   RunSidePanelTest("side_panel/read_anything/update_content_test.js",
                    "mocha.run()");
@@ -105,6 +116,11 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, AppReceivesToolbarChanges) {
   RunSidePanelTest(
       "side_panel/read_anything/app_receives_toolbar_changes_test.js",
       "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, AppStyleUpdater) {
+  RunSidePanelTest("side_panel/read_anything/app_style_updater_test.js",
+                   "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, LanguageMenu) {
@@ -119,11 +135,6 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, LinksToggle) {
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, PlayPause) {
   RunSidePanelTest("side_panel/read_anything/play_pause_test.js",
-                   "mocha.run()");
-}
-
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, HighlightToggle) {
-  RunSidePanelTest("side_panel/read_anything/highlight_toggle_test.js",
                    "mocha.run()");
 }
 
@@ -255,7 +266,7 @@ class ReadAnythingReadAloudWordHighlightingMochaTest
     scoped_feature_list_.InitWithFeatures(
         {features::kReadAnythingReadAloud,
          features::kReadAnythingReadAloudAutomaticWordHighlighting},
-        {});
+        {features::kReadAnythingReadAloudPhraseHighlighting});
   }
 
  private:
@@ -290,4 +301,37 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudWordHighlightingDisabledMochaTest,
   RunSidePanelTest(
       "side_panel/read_anything/word_highlighting_disabled_test.js",
       "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudWordHighlightingDisabledMochaTest,
+                       HighlightToggle) {
+  RunSidePanelTest("side_panel/read_anything/highlight_toggle_test.js",
+                   "mocha.run()");
+}
+
+class ReadAnythingReadAloudPhraseHighlightingMochaTest
+    : public ReadAnythingMochaBrowserTest {
+ protected:
+  ReadAnythingReadAloudPhraseHighlightingMochaTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {features::kReadAnythingReadAloud,
+         features::kReadAnythingReadAloudAutomaticWordHighlighting,
+         features::kReadAnythingReadAloudPhraseHighlighting},
+        {});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudPhraseHighlightingMochaTest,
+                       HighlightMenu) {
+  RunSidePanelTest("side_panel/read_anything/highlight_menu_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudPhraseHighlightingMochaTest,
+                       PhraseHighlighting) {
+  RunSidePanelTest("side_panel/read_anything/phrase_highlighting_test.js",
+                   "mocha.run()");
 }

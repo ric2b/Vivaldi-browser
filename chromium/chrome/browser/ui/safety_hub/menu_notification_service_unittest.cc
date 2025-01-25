@@ -16,6 +16,8 @@
 #include "chrome/browser/extensions/cws_info_service_factory.h"
 #include "chrome/browser/password_manager/password_manager_test_util.h"
 #include "chrome/browser/permissions/notifications_engagement_service_factory.h"
+#include "chrome/browser/ui/hats/hats_service_factory.h"
+#include "chrome/browser/ui/hats/mock_hats_service.h"
 #include "chrome/browser/ui/safety_hub/menu_notification.h"
 #include "chrome/browser/ui/safety_hub/menu_notification_service_factory.h"
 #include "chrome/browser/ui/safety_hub/notification_permission_review_service_factory.h"
@@ -24,6 +26,7 @@
 #include "chrome/browser/ui/safety_hub/safety_hub_test_util.h"
 #include "chrome/browser/ui/safety_hub/unused_site_permissions_service_factory.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -42,6 +45,8 @@
 #include "components/password_manager/core/browser/password_store/test_password_store.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
+using ::testing::_;
+
 class SafetyHubMenuNotificationServiceTest
     : public ChromeRenderViewHostTestHarness {
  public:
@@ -52,17 +57,35 @@ class SafetyHubMenuNotificationServiceTest
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     feature_list_.InitWithFeatures(
-        {features::kSafetyHub,
-         safe_browsing::kSafetyHubAbusiveNotificationRevocation},
+        {
+            features::kSafetyHub,
+            safe_browsing::kSafetyHubAbusiveNotificationRevocation,
+#if BUILDFLAG(IS_ANDROID)
+            features::kSafetyHubFollowup,
+#else
+            features::kSafetyHubHaTSOneOffSurvey,
+#endif
+        },
         {});
     prefs()->SetBoolean(
         safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled, true);
+#if !BUILDFLAG(IS_ANDROID)
+    // mock_hats_service_ should return true for CanShowAnySurvey on each test
+    // running for desktop, since hats service is called in
+    // SafetyHubMenuNotificationService ctor.
+    mock_hats_service_ = static_cast<MockHatsService*>(
+        HatsServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+            profile(), base::BindRepeating(&BuildMockHatsService)));
+    EXPECT_CALL(*mock_hats_service(), CanShowAnySurvey(_))
+        .WillRepeatedly(testing::Return(true));
+#endif
   }
 
   void TearDown() override {
     // Wait till all ongoing tasks to be finalized to let password manager
     // enough time to complete password checks.
     RunUntilIdle();
+    mock_hats_service_ = nullptr;
     ChromeRenderViewHostTestHarness::TearDown();
   }
 
@@ -131,6 +154,7 @@ class SafetyHubMenuNotificationServiceTest
   HostContentSettingsMap* hcsm() {
     return HostContentSettingsMapFactory::GetForProfile(profile());
   }
+  MockHatsService* mock_hats_service() { return mock_hats_service_; }
   // Using |AdvanceClockBy| when the timers are not required to execute.
   void AdvanceClockBy(base::TimeDelta delta) {
     task_environment()->AdvanceClock(delta);
@@ -144,6 +168,7 @@ class SafetyHubMenuNotificationServiceTest
 
  private:
   base::test::ScopedFeatureList feature_list_;
+  raw_ptr<MockHatsService> mock_hats_service_;
 };
 
 TEST_F(SafetyHubMenuNotificationServiceTest, GetNotificationToShowNoResult) {
@@ -343,6 +368,99 @@ TEST_F(SafetyHubMenuNotificationServiceTest, SafeBrowsingTriggerLogic) {
   EXPECT_TRUE(notification.has_value());
 }
 
+#if BUILDFLAG(IS_ANDROID)
+TEST_F(SafetyHubMenuNotificationServiceTest, PasswordOverride) {
+  std::optional<MenuNotificationEntry> notification;
+  // Show Safe Browsing notification.
+  prefs()->SetBoolean(prefs::kSafeBrowsingEnabled, false);
+  notification = menu_notification_service()->GetNotificationToShow();
+  AdvanceClockBy(base::Days(1));
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_TRUE(notification.has_value());
+  EXPECT_EQ(
+      menu_notification_service()->GetLastShownNotificationModule().value(),
+      safety_hub::SafetyHubModuleType::SAFE_BROWSING);
+
+  // A leaked password warning should override the Safe Browsing notification.
+  prefs()->SetInteger(prefs::kBreachedCredentialsCount, 1);
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_TRUE(notification.has_value());
+  ExpectPluralString(
+      IDS_SETTINGS_SAFETY_HUB_COMPROMISED_PASSWORDS_MENU_NOTIFICATION, 1,
+      notification.value().label);
+  EXPECT_TRUE(menu_notification_service()
+                  ->GetLastShownNotificationModule()
+                  .has_value());
+  EXPECT_EQ(
+      menu_notification_service()->GetLastShownNotificationModule().value(),
+      safety_hub::SafetyHubModuleType::PASSWORDS);
+
+  // Fixing the leaked password will clear notification. Because the safe
+  // browsing notification was dismissed, it will not be shown either.
+  prefs()->SetInteger(prefs::kBreachedCredentialsCount, 0);
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_FALSE(notification.has_value());
+
+  // The last shown menu notification remains the same even when it has been
+  // dismissed.
+  EXPECT_TRUE(menu_notification_service()
+                  ->GetLastShownNotificationModule()
+                  .has_value());
+  EXPECT_EQ(
+      menu_notification_service()->GetLastShownNotificationModule().value(),
+      safety_hub::SafetyHubModuleType::PASSWORDS);
+}
+
+TEST_F(SafetyHubMenuNotificationServiceTest, PasswordTrigger) {
+  // If the leaked password count is not yet fetched or the user is signed out,
+  // no notification should be displayed.
+  std::optional<MenuNotificationEntry> notification;
+  prefs()->SetInteger(prefs::kBreachedCredentialsCount, -1);
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_FALSE(notification.has_value());
+
+  // A leaked password warning should create a password notification.
+  prefs()->SetInteger(prefs::kBreachedCredentialsCount, 2);
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_TRUE(notification.has_value());
+  ExpectPluralString(
+      IDS_SETTINGS_SAFETY_HUB_COMPROMISED_PASSWORDS_MENU_NOTIFICATION, 2,
+      notification.value().label);
+
+  // The notification should no longer appear after it has been dismissed.
+  menu_notification_service()->DismissActiveNotificationOfModule(
+      safety_hub::SafetyHubModuleType::PASSWORDS);
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_FALSE(notification.has_value());
+  EXPECT_TRUE(menu_notification_service()
+                  ->GetLastShownNotificationModule()
+                  .has_value());
+
+  // A leaked password count of lower value should NOT create a new password
+  // notification.
+  prefs()->SetInteger(prefs::kBreachedCredentialsCount, 1);
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_FALSE(notification.has_value());
+  EXPECT_TRUE(menu_notification_service()
+                  ->GetLastShownNotificationModule()
+                  .has_value());
+
+  // A leaked password count of higher value should create a new password
+  // notification.
+  prefs()->SetInteger(prefs::kBreachedCredentialsCount, 3);
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_TRUE(notification.has_value());
+  ExpectPluralString(
+      IDS_SETTINGS_SAFETY_HUB_COMPROMISED_PASSWORDS_MENU_NOTIFICATION, 3,
+      notification.value().label);
+
+  // Fixing the leaked passwords should clear notification.
+  prefs()->SetInteger(prefs::kBreachedCredentialsCount, 0);
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_FALSE(notification.has_value());
+}
+#endif
+
 TEST_F(SafetyHubMenuNotificationServiceTest, DismissNotifications) {
   // Generate a mock notification for unused site permissions.
   CreateMockUnusedSitePermissionsEntry("https://example1.com:443");
@@ -380,7 +498,9 @@ class
  public:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-    feature_list_.InitWithFeatures({features::kSafetyHub}, {});
+    feature_list_.InitWithFeatures(
+        {features::kSafetyHub},
+        {safe_browsing::kSafetyHubAbusiveNotificationRevocation});
     prefs()->SetBoolean(
         safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled, true);
   }
@@ -506,20 +626,12 @@ TEST_F(SafetyHubMenuNotificationServiceDesktopOnlyTest,
 TEST_F(SafetyHubMenuNotificationServiceDesktopOnlyTest, PasswordOverride) {
   const std::string origin = "https://www.example.com";
   std::optional<MenuNotificationEntry> notification;
-  // Disabling Safe Browsing should only trigger a menu notification after one
-  // day.
+  // Show Safe Browsing notification.
   prefs()->SetBoolean(prefs::kSafeBrowsingEnabled, false);
   notification = menu_notification_service()->GetNotificationToShow();
-  EXPECT_FALSE(notification.has_value());
-  EXPECT_FALSE(menu_notification_service()
-                   ->GetLastShownNotificationModule()
-                   .has_value());
   AdvanceClockBy(base::Days(1));
   notification = menu_notification_service()->GetNotificationToShow();
   EXPECT_TRUE(notification.has_value());
-  EXPECT_TRUE(menu_notification_service()
-                  ->GetLastShownNotificationModule()
-                  .has_value());
   EXPECT_EQ(
       menu_notification_service()->GetLastShownNotificationModule().value(),
       safety_hub::SafetyHubModuleType::SAFE_BROWSING);
@@ -636,4 +748,27 @@ TEST_F(SafetyHubMenuNotificationServiceDesktopOnlyTest, PasswordMigration) {
   SetMockCredentialEntry(kOrigin, true);
   EXPECT_TRUE(menu_notification_service()->GetNotificationToShow().has_value());
 }
-#endif  // BUILDFLAG(IS_ANDROID)
+
+TEST_F(SafetyHubMenuNotificationServiceDesktopOnlyTest, HaTSControlTriggerNew) {
+  EXPECT_CALL(*mock_hats_service(),
+              LaunchSurvey(kHatsSurveyTriggerSafetyHubOneOffExperimentControl,
+                           _, _, _, _))
+      .Times(1);
+  // Creating service without any notification should trigger survey for control
+  // group for A/B experiment.
+  std::optional<MenuNotificationEntry> notification =
+      menu_notification_service()->GetNotificationToShow();
+
+  // After a notification is shown, control group should not be triggered for
+  // A/B experiment.
+  EXPECT_CALL(*mock_hats_service(),
+              LaunchSurvey(kHatsSurveyTriggerSafetyHubOneOffExperimentControl,
+                           _, _, _, _))
+      .Times(0);
+  CreateMockUnusedSitePermissionsEntry("https://example1.com:443");
+  // The notification to show should be the unused site permissions one with
+  // one revoked permission. The relevant command should be to open Safety Hub.
+  notification = menu_notification_service()->GetNotificationToShow();
+  EXPECT_TRUE(notification.has_value());
+}
+#endif  // !BUILDFLAG(IS_ANDROID)

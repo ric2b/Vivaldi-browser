@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/base64.h"
@@ -15,7 +16,6 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
-#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -256,10 +256,7 @@ std::unique_ptr<CaptureData> SaveBitmapOnWorkerThread(
     }
     path = ConstructCaptureFilename(std::move(path), data->save_file_pattern,
                                     data->url, data->title, ext);
-    int nwritten =
-        base::WriteFile(path, reinterpret_cast<const char*>(&image_bytes[0]),
-                        static_cast<int>(image_bytes.size()));
-    if (nwritten < 0 || static_cast<size_t>(nwritten) != image_bytes.size()) {
+    if(!base::WriteFile(path, image_bytes)) {
       LOG(ERROR) << "Failed to write to " << path;
       break;
     }

@@ -25,10 +25,13 @@ class ASH_EXPORT PickerContentsView : public views::View {
   PickerContentsView& operator=(const PickerContentsView&) = delete;
   ~PickerContentsView() override;
 
-  // Adds a new page.
+  // Adds a new page. If this is the first page, then it is also set as the
+  // active page.
   template <typename T>
   T* AddPage(std::unique_ptr<T> view) {
-    view->SetVisible(false);
+    if (!page_container_->children().empty()) {
+      view->SetVisible(false);
+    }
     return page_container_->AddChildView(std::move(view));
   }
 

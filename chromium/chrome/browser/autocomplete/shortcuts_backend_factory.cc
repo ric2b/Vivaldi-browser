@@ -14,6 +14,7 @@
 #include "components/omnibox/browser/shortcuts_constants.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/buildflags/buildflags.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/autocomplete/shortcuts_extensions_manager.h"
@@ -110,5 +111,13 @@ scoped_refptr<ShortcutsBackend> ShortcutsBackendFactory::CreateShortcutsBackend(
   profile->SetUserData(kShortcutsExtensionsManagerKey,
                        std::move(extensions_manager));
 #endif
-  return backend->Init() ? backend : nullptr;
+
+#if !BUILDFLAG(IS_ANDROID)
+  int number_of_days_to_keep_visits =
+      profile->GetPrefs()->GetInteger(vivaldiprefs::kHistoryDaysToKeepVisits);
+#else
+  int number_of_days_to_keep_visits = 90;
+#endif
+
+  return backend->Init(number_of_days_to_keep_visits) ? backend : nullptr;
 }

@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>  // NOLINT
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -30,15 +31,16 @@
 #include "absl/flags/reflection.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/substitute.h"
 #include "./centipede/config_init.h"
 #include "./centipede/config_util.h"
-#include "./centipede/logging.h"
-#include "./centipede/remote_file.h"
 #include "./centipede/util.h"
+#include "./common/logging.h"
+#include "./common/remote_file.h"
 
 // TODO(ussuri): Move these flags next to main() ASAP. They are here
 //  only temporarily to simplify the APIs and implementation in V1.
@@ -89,13 +91,30 @@ ABSL_DECLARE_FLAG(std::vector<std::string>, flagfile);
 namespace centipede::config {
 
 AugmentedArgvWithCleanup::AugmentedArgvWithCleanup(
-    const std::vector<std::string>& orig_argv, const Replacements& replacements,
+    const std::vector<std::string>& orig_argv,
+    const Replacements& flag_replacements, const Replacements& replacements,
     BackingResourcesCleanup&& cleanup)
     : was_augmented_{false}, cleanup_{cleanup} {
   argv_.reserve(orig_argv.size());
   for (const auto& old_arg : orig_argv) {
-    const std::string& new_arg =
-        argv_.emplace_back(absl::StrReplaceAll(old_arg, replacements));
+    const auto flag_replaced_arg = [&]() -> std::optional<std::string> {
+      if (old_arg.empty() || old_arg[0] != '-') return std::nullopt;
+      std::string_view contents = old_arg;
+      std::string_view dashes =
+          (contents.size() > 1 && contents[1] == '-') ? "--" : "-";
+      contents = contents.substr(dashes.size());
+      for (const auto& flag_replacement : flag_replacements) {
+        if (absl::StartsWith(contents, flag_replacement.first) &&
+            (contents.size() == flag_replacement.first.size() ||
+             contents[flag_replacement.first.size()] == '=')) {
+          return absl::StrCat(dashes, flag_replacement.second,
+                              contents.substr(flag_replacement.first.size()));
+        }
+      }
+      return std::nullopt;
+    }();
+    const std::string& new_arg = argv_.emplace_back(
+        absl::StrReplaceAll(flag_replaced_arg.value_or(old_arg), replacements));
     if (new_arg != old_arg) {
       VLOG(1) << "Augmented argv arg:\n" << VV(old_arg) << "\n" << VV(new_arg);
       was_augmented_ = true;
@@ -133,34 +152,33 @@ AugmentedArgvWithCleanup LocalizeConfigFilesInArgv(
   }
 
   // Always need these (--config=<path> can be passed with a local <path>).
-  AugmentedArgvWithCleanup::Replacements replacements = {
-      // "-". not "--" to support the shortened "-flag" form as well.
-      // TODO(ussuri): Fix for  usage without =, i.e. `--config <file>`.
-      {absl::StrCat("-", FLAGS_config.Name(), "="),
-       absl::StrCat("-", FLAGS_flagfile.Name(), "=")},
+  const AugmentedArgvWithCleanup::Replacements flag_replacements = {
+      {std::string{FLAGS_config.Name()}, std::string{FLAGS_flagfile.Name()}},
   };
+  AugmentedArgvWithCleanup::Replacements replacements;
   AugmentedArgvWithCleanup::BackingResourcesCleanup cleanup;
 
   // Copy the remote config file to a temporary local mirror.
   if (!path.empty() && !std::filesystem::exists(path)) {  // assume remote
     // Read the remote file.
     std::string contents;
-    RemoteFileGetContents(path, contents);
+    CHECK_OK(RemoteFileGetContents(path.c_str(), contents));
 
     // Save a temporary local copy.
     const std::filesystem::path tmp_dir = TemporaryLocalDirPath();
     const std::filesystem::path local_path = tmp_dir / path.filename();
     LOG(INFO) << "Localizing remote config: " << VV(path) << VV(local_path);
     // NOTE: Ignore "Remote" in the API names here: the paths are always local.
-    RemoteMkdir(tmp_dir.c_str());
-    RemoteFileSetContents(local_path, contents);
+    CHECK_OK(RemoteMkdir(tmp_dir.c_str()));
+    CHECK_OK(RemoteFileSetContents(local_path.c_str(), contents));
 
     // Augment the argv to point at the local copy and ensure it is cleaned up.
     replacements.emplace_back(path.c_str(), local_path.c_str());
     cleanup = [local_path]() { std::filesystem::remove(local_path); };
   }
 
-  return AugmentedArgvWithCleanup{argv, replacements, std::move(cleanup)};
+  return AugmentedArgvWithCleanup{argv, flag_replacements, replacements,
+                                  std::move(cleanup)};
 }
 
 std::filesystem::path MaybeSaveConfigToFile(
@@ -226,7 +244,7 @@ $2 "$${flags[@]}"
     } else {
       file_contents = flags_str;
     }
-    RemoteFileSetContents(path, file_contents);
+    CHECK_OK(RemoteFileSetContents(path.c_str(), file_contents));
   }
 
   return path;

@@ -49,7 +49,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/anchor_element_metrics_sender.h"
-#include "third_party/blink/renderer/core/html/anchor_element_observer_for_service_worker.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -156,9 +155,10 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tag_name,
 
 HTMLAnchorElement::~HTMLAnchorElement() = default;
 
-bool HTMLAnchorElement::SupportsFocus(UpdateBehavior update_behavior) const {
+FocusableState HTMLAnchorElement::SupportsFocus(
+    UpdateBehavior update_behavior) const {
   if (IsLink() && !IsEditable(*this)) {
-    return true;
+    return FocusableState::kFocusable;
   }
   return HTMLElement::SupportsFocus(update_behavior);
 }
@@ -166,17 +166,19 @@ bool HTMLAnchorElement::SupportsFocus(UpdateBehavior update_behavior) const {
 bool HTMLAnchorElement::ShouldHaveFocusAppearance() const {
   // TODO(crbug.com/1444450): Can't this be done with focus-visible now?
   return (GetDocument().LastFocusType() != mojom::blink::FocusType::kMouse) ||
-         HTMLElement::SupportsFocus(UpdateBehavior::kNoneForIsFocused);
+         HTMLElement::SupportsFocus(UpdateBehavior::kNoneForFocusManagement) !=
+             FocusableState::kNotFocusable;
 }
 
-bool HTMLAnchorElement::IsFocusable(UpdateBehavior update_behavior) const {
+FocusableState HTMLAnchorElement::IsFocusableState(
+    UpdateBehavior update_behavior) const {
   if (!IsFocusableStyle(update_behavior)) {
-    return false;
+    return FocusableState::kNotFocusable;
   }
   if (IsLink()) {
     return SupportsFocus(update_behavior);
   }
-  return HTMLElement::IsFocusable(update_behavior);
+  return HTMLElement::IsFocusableState(update_behavior);
 }
 
 bool HTMLAnchorElement::IsKeyboardFocusable(
@@ -185,8 +187,12 @@ bool HTMLAnchorElement::IsKeyboardFocusable(
     return false;
   }
 
-  // Anchor is focusable if the base element supports focus and is focusable.
-  if (Element::SupportsFocus(update_behavior) && IsFocusable(update_behavior)) {
+  // Anchor is focusable if the base element is focusable. Note that
+  // because HTMLAnchorElement overrides IsFocusable, we need to check
+  // both SupportsFocus and IsFocusable.
+  if (Element::SupportsFocus(update_behavior) !=
+          FocusableState::kNotFocusable &&
+      IsFocusable(update_behavior)) {
     return HTMLElement::IsKeyboardFocusable(update_behavior);
   }
 
@@ -239,25 +245,6 @@ static void AppendServerMapMousePosition(StringBuilder& url, Event* event) {
 void HTMLAnchorElement::DefaultEventHandler(Event& event) {
   if (IsLink()) {
     EmitDidAnchorElementReceiveMouseEvent(*this, event);
-
-    if (isConnected() && base::FeatureList::IsEnabled(
-                             features::kSpeculativeServiceWorkerWarmUp)) {
-      Document& top_document = GetDocument().TopDocument();
-      if (auto* observer =
-              AnchorElementObserverForServiceWorker::From(top_document)) {
-        if (features::kSpeculativeServiceWorkerWarmUpOnPointerover.Get() &&
-            (event.type() == event_type_names::kMouseover ||
-             event.type() == event_type_names::kPointerover)) {
-          observer->MaybeSendNavigationTargetLinks({this});
-        } else if (features::kSpeculativeServiceWorkerWarmUpOnPointerdown
-                       .Get() &&
-                   (event.type() == event_type_names::kMousedown ||
-                    event.type() == event_type_names::kPointerdown ||
-                    event.type() == event_type_names::kTouchstart)) {
-          observer->MaybeSendNavigationTargetLinks({this});
-        }
-      }
-    }
 
     if (IsFocused() && IsEnterKeyKeydownEvent(event) && IsLiveLink()) {
       event.SetDefaultHandled();
@@ -536,7 +523,7 @@ void HTMLAnchorElement::NavigateToHyperlink(ResourceRequest request,
   request.SetRequestContext(mojom::blink::RequestContextType::HYPERLINK);
   FrameLoadRequest frame_request(window, request);
   frame_request.SetNavigationPolicy(navigation_policy);
-  frame_request.SetClientRedirectReason(ClientNavigationReason::kAnchorClick);
+  frame_request.SetClientNavigationReason(ClientNavigationReason::kAnchorClick);
   frame_request.SetSourceElement(this);
   const AtomicString& target =
       frame_request.CleanNavigationTarget(GetEffectiveTarget());
@@ -620,7 +607,8 @@ Element* HTMLAnchorElement::interestTargetElement() {
     return nullptr;
   }
 
-  return GetElementAttribute(html_names::kInteresttargetAttr);
+  return GetElementAttributeResolvingReferenceTarget(
+      html_names::kInteresttargetAttr);
 }
 
 AtomicString HTMLAnchorElement::interestAction() const {
@@ -792,27 +780,6 @@ Node::InsertionNotificationRequest HTMLAnchorElement::InsertedInto(
   }
 
   if (isConnected() && IsLink()) {
-    static const bool speculative_service_worker_warm_up_enabled =
-        base::FeatureList::IsEnabled(features::kSpeculativeServiceWorkerWarmUp);
-    if (speculative_service_worker_warm_up_enabled) {
-      static const bool warm_up_on_visible =
-          features::kSpeculativeServiceWorkerWarmUpOnVisible.Get();
-      static const bool warm_up_on_inserted_into_dom =
-          features::kSpeculativeServiceWorkerWarmUpOnInsertedIntoDom.Get();
-      if (warm_up_on_visible || warm_up_on_inserted_into_dom) {
-        Document& top_document = GetDocument().TopDocument();
-        if (auto* observer =
-                AnchorElementObserverForServiceWorker::From(top_document)) {
-          if (warm_up_on_visible) {
-            observer->ObserveAnchorElementVisibility(*this);
-          }
-          if (warm_up_on_inserted_into_dom) {
-            observer->MaybeSendNavigationTargetLinks({this});
-          }
-        }
-      }
-    }
-
     if (auto* document_rules =
             DocumentSpeculationRules::FromIfExists(GetDocument())) {
       document_rules->LinkInserted(this);

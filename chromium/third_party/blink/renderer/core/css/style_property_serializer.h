@@ -71,6 +71,7 @@ class CORE_EXPORT StylePropertySerializer {
   String GetShorthandValueForGridArea(const StylePropertyShorthand&) const;
   String GetShorthandValueForGridLine(const StylePropertyShorthand&) const;
   String GetShorthandValueForGridTemplate(const StylePropertyShorthand&) const;
+  String GetShorthandValueForMasonryTrack() const;
   String ContainerValue() const;
   String TimelineValue(const StylePropertyShorthand&) const;
   String ScrollTimelineValue() const;
@@ -82,8 +83,10 @@ class CORE_EXPORT StylePropertySerializer {
   bool AppendFontLonghandValueIfNotNormal(const CSSProperty&,
                                           WTF::StringBuilder& result) const;
   String OffsetValue() const;
+  String TextBoxValue() const;
   String TextDecorationValue() const;
   String TextSpacingValue() const;
+  String TextWrapValue() const;
   String ContainIntrinsicSizeValue() const;
   String WhiteSpaceValue() const;
   String ScrollStartValue() const;

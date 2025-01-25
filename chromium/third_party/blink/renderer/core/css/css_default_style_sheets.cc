@@ -129,6 +129,10 @@ CSSDefaultStyleSheets::CSSDefaultStyleSheets()
 }
 
 void CSSDefaultStyleSheets::PrepareForLeakDetection() {
+  Reset();
+}
+
+void CSSDefaultStyleSheets::Reset() {
   // Clear the optional style sheets.
   svg_style_sheet_.Clear();
   mathml_style_sheet_.Clear();
@@ -229,7 +233,6 @@ RuleSet* CSSDefaultStyleSheets::DefaultViewSourceStyle() {
 }
 
 RuleSet* CSSDefaultStyleSheets::DefaultJSONDocumentStyle() {
-  CHECK(RuntimeEnabledFeatures::PrettyPrintJSONDocumentEnabled());
   if (!default_json_document_style_) {
     StyleSheetContents* stylesheet = ParseUASheet(
         UncompressResourceAsASCIIString(IDR_UASTYLE_JSON_DOCUMENT_CSS));
@@ -396,7 +399,9 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForElement(
     changed_default_style = true;
   }
 
-  DCHECK(!default_html_style_->Features().HasIdsInSelectors());
+  DCHECK(!default_html_style_->Features()
+              .GetRuleInvalidationData()
+              .HasIdsInSelectors());
   return changed_default_style;
 }
 
@@ -521,8 +526,7 @@ void CSSDefaultStyleSheets::CollectFeaturesTo(const Document& document,
   if (document.IsViewSource() && DefaultViewSourceStyle()) {
     features.Merge(DefaultViewSourceStyle()->Features());
   }
-  if (RuntimeEnabledFeatures::PrettyPrintJSONDocumentEnabled() &&
-      document.IsJSONDocument() && DefaultJSONDocumentStyle()) {
+  if (document.IsJSONDocument() && DefaultJSONDocumentStyle()) {
     features.Merge(DefaultJSONDocumentStyle()->Features());
   }
 }
@@ -553,6 +557,11 @@ void CSSDefaultStyleSheets::Trace(Visitor* visitor) const {
   visitor->Trace(marker_style_sheet_);
   visitor->Trace(default_json_document_style_);
   visitor->Trace(default_forced_colors_media_controls_style_);
+}
+
+CSSDefaultStyleSheets::TestingScope::TestingScope() = default;
+CSSDefaultStyleSheets::TestingScope::~TestingScope() {
+  Instance().Reset();
 }
 
 }  // namespace blink

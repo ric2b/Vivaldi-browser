@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/ozone/platform/wayland/host/wayland_clipboard.h"
 
 #include <linux/input.h>
@@ -29,7 +34,6 @@
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/geometry/point.h"
-#include "ui/ozone/platform/wayland/host/wayland_connection_test_api.h"
 #include "ui/ozone/platform/wayland/host/wayland_keyboard.h"
 #include "ui/ozone/platform/wayland/host/wayland_pointer.h"
 #include "ui/ozone/platform/wayland/host/wayland_seat.h"
@@ -128,7 +132,7 @@ class WaylandClipboardTestBase : public WaylandTest {
   // wl::TestSelection{Source,Offer} use ThreadPool task runners to read/write
   // selection data, so the pool must be explicitly flushed as well.
   void WaitForClipboardTasks() {
-    WaylandConnectionTestApi(connection_.get()).SyncDisplay();
+    WaylandTestBase::SyncDisplay();
     base::ThreadPoolInstance::Get()->FlushForTesting();
     base::RunLoop().RunUntilIdle();
   }
@@ -218,7 +222,7 @@ class WaylandClipboardTest : public WaylandClipboardTestBase {
     // calls, otherwise tests, such as ReadFromClipboard, would crash.
     ASSERT_EQ(WhichBufferToUse() == ClipboardBuffer::kSelection,
               !!clipboard_->GetClipboard(ClipboardBuffer::kSelection));
-    WaylandConnectionTestApi(connection_.get()).SyncDisplay();
+    WaylandTestBase::SyncDisplay();
 
     offered_data_.clear();
   }
@@ -233,9 +237,9 @@ class WaylandClipboardTest : public WaylandClipboardTestBase {
 
   // Fill the clipboard backing store with sample data.
   void OfferData(ClipboardBuffer buffer,
-                 const char* data,
+                 std::string_view data,
                  const std::string& mime_type) {
-    std::vector<uint8_t> data_vector(data, data + std::strlen(data));
+    std::vector<uint8_t> data_vector(data.begin(), data.end());
     offered_data_[mime_type] = base::RefCountedBytes::TakeVector(&data_vector);
 
     base::MockCallback<PlatformClipboard::OfferDataClosure> offer_callback;
@@ -308,7 +312,7 @@ TEST_P(WaylandClipboardTest, DISABLED_WriteToClipboard) {
 
     // 1. Offer sample text as selection data.
     OfferData(WhichBufferToUse(), kSampleClipboardText, {kMimeTypeTextUtf8});
-    WaylandConnectionTestApi(connection_.get()).SyncDisplay();
+    WaylandTestBase::SyncDisplay();
 
     // 2. Emulate an external client requesting to read the offered data and
     // make sure the appropriate string gets delivered.

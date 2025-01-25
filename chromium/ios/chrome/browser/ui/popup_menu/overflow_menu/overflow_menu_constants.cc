@@ -15,10 +15,17 @@ namespace overflow_menu {
 // LINT.IfChange(stringToDestination)
 Destination DestinationForStringName(std::string destination) {
 
-  // Vivaldi
+#if defined(VIVALDI_BUILD)
   if (destination == "overflow_menu::Destination::vShare") {
     return overflow_menu::Destination::vShare;
-  } // End Vivaldi
+  } else if (destination == "overflow_menu::Destination::vZoomText") {
+    return overflow_menu::Destination::vZoomText;
+  } else if (destination == "overflow_menu::Destination::vFindInPage") {
+    return overflow_menu::Destination::vFindInPage;
+  } else if (destination == "overflow_menu::Destination::vDesktopSite") {
+    return overflow_menu::Destination::vDesktopSite;
+  }
+#endif // End Vivaldi
 
   if (destination == "overflow_menu::Destination::Bookmarks") {
     return overflow_menu::Destination::Bookmarks;
@@ -79,10 +86,16 @@ std::string StringNameForDestination(Destination destination) {
     case overflow_menu::Destination::SpotlightDebugger:
       return "overflow_menu::Destination::SpotlightDebugger";
 
-    // Vivaldi
+#if defined(VIVALDI_BUILD)
     case overflow_menu::Destination::vShare:
       return "overflow_menu::Destination::vShare";
-    // End Vivaldi
+    case overflow_menu::Destination::vZoomText:
+      return "overflow_menu::Destination::vZoomText";
+    case overflow_menu::Destination::vFindInPage:
+      return "overflow_menu::Destination::vFindInPage";
+    case overflow_menu::Destination::vDesktopSite:
+      return "overflow_menu::Destination::vDesktopSite";
+#endif // End Vivaldi
 
   }
 }
@@ -124,8 +137,30 @@ ActionType ActionTypeForStringName(std::string action) {
     return overflow_menu::ActionType::ShareChrome;
   } else if (action == "EditActions") {
     return overflow_menu::ActionType::EditActions;
+  } else if (action == "LensOverlay") {
+    return overflow_menu::ActionType::LensOverlay;
+
+#if defined(VIVALDI_BUILD)
+  } else if (action == "Bookmarks") {
+    return overflow_menu::ActionType::vBookmarks;
+  } else if (action == "Notes") {
+    return overflow_menu::ActionType::vNotes;
+  } else if (action == "History") {
+    return overflow_menu::ActionType::vHistory;
+  } else if (action == "Reading List") {
+    return overflow_menu::ActionType::vReadingList;
+  } else if (action == "Downloads") {
+    return overflow_menu::ActionType::vDownloads;
+  } else if (action == "vAddPageTo") {
+    return overflow_menu::ActionType::vAddPageTo;
+  } else if (action == "vEditPage") {
+    return overflow_menu::ActionType::vEditPage;
+  } else if (action == "vStartPage") {
+    return overflow_menu::ActionType::vStartPage;
+#endif // End Vivaldi
+
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 }
 // LINT.ThenChange(:actionTypeToString)
@@ -165,12 +200,16 @@ std::string StringNameForActionType(ActionType action) {
       return "ShareChrome";
     case overflow_menu::ActionType::EditActions:
       return "EditActions";
+    case overflow_menu::ActionType::LensOverlay:
+      return "LensOverlay";
 
     // Vivaldi
-    // Note: (prio@vivaldi.com) - These are not utilized for us yet. But, we
-    // needed to add these cases because of the modification on the enum class.
-    case overflow_menu::ActionType::vSiteInfo:
-      return "Site Info";
+    case overflow_menu::ActionType::vAddPageTo:
+      return "vAddPageTo";
+    case overflow_menu::ActionType::vEditPage:
+      return "vEditPage";
+    case overflow_menu::ActionType::vStartPage:
+      return "vStartPage";
     case overflow_menu::ActionType::vBookmarks:
       return "Bookmarks";
     case overflow_menu::ActionType::vNotes:
@@ -227,10 +266,14 @@ void RecordUmaActionForDestination(Destination destination) {
       // No need to log metrics for a debug-only feature.
       break;
 
-    // Vivaldi
+#if defined(VIVALDI_BUILD)
     case overflow_menu::Destination::vShare:
+    case overflow_menu::Destination::vZoomText:
+    case overflow_menu::Destination::vFindInPage:
+    case overflow_menu::Destination::vDesktopSite:
       break;
-    // End Vivaldi
+#endif // End Vivaldi
+
   }
 }
 }  // namespace overflow_menu

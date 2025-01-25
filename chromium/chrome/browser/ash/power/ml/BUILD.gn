@@ -29,6 +29,8 @@ static_library("ml") {
     "user_activity_ukm_logger_impl.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     ":screen_brightness_event_proto",
     ":user_activity_event_proto",
@@ -37,10 +39,10 @@ static_library("ml") {
     "//ash/constants",
     "//base",
     "//chrome/browser/ash/accessibility",
-    "//chrome/browser/ash/crosapi",
     "//chrome/browser/ash/power",
     "//chrome/browser/ash/power/ml/smart_dim",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui:browser_list",
     "//chrome/common:constants",
     "//chromeos/ash/components/dbus",
     "//chromeos/ash/components/install_attributes",
@@ -78,14 +80,17 @@ source_set("unit_tests") {
 
   deps = [
     ":ml",
+    ":screen_brightness_event_proto",
+    ":user_activity_event_proto",
     ":user_activity_ukm_logger_helpers",
     "//base/test:test_support",
-    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/accessibility",
+    "//chrome/browser/ash/login/users:test_support",
+    "//chrome/browser/ash/power/ml/smart_dim",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui",
     "//chrome/test:test_support",
-    "//chromeos/dbus/power",
+    "//chromeos/dbus/power:power_manager_proto",
     "//chromeos/services/machine_learning/public/cpp",
     "//chromeos/services/machine_learning/public/cpp:stub",
     "//components/site_engagement/content",

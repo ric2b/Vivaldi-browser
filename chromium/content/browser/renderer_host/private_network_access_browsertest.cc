@@ -553,6 +553,10 @@ class PrivateNetworkAccessBrowserTestBase : public ContentBrowserTest {
     return secure_public_server_.Get().GetURL(kPublicHost, path);
   }
 
+  GURL NullIPURL(const std::string& path) {
+    return insecure_public_server_.Get().GetURL("0.0.0.0", path);
+  }
+
  private:
   base::test::ScopedFeatureList feature_list_;
 
@@ -577,6 +581,37 @@ class PrivateNetworkAccessBrowserTest
                 features::kPrivateNetworkAccessSendPreflights,
             },
             {}) {}
+};
+
+// This definition is required as raw initializer lists aren't allowed in the
+// ternary ? operator.
+using FeatureVec = std::vector<base::test::FeatureRef>;
+
+// This is the same as PrivateNetworkAccessBrowserTest, but runs each test
+// twice, once with kOriginKeyedProcessesByDefault explicitly enabled, and once
+// with it explicitly disabled. The tests implemented using this class involve
+// sandboxed data: frames whose SiteInfo creation may vary depending on whether
+// the feature is enabled or not.
+class PrivateNetworkAccessSandboxedDataBrowserTest
+    : public PrivateNetworkAccessBrowserTestBase,
+      public testing::WithParamInterface<bool> {
+ public:
+  PrivateNetworkAccessSandboxedDataBrowserTest()
+      : PrivateNetworkAccessBrowserTestBase(
+            GetParam() ? FeatureVec({
+                             blink::features::kPlzDedicatedWorker,
+                             features::kBlockInsecurePrivateNetworkRequests,
+                             features::kPrivateNetworkAccessSendPreflights,
+                             features::kOriginKeyedProcessesByDefault,
+                         })
+                       : FeatureVec({
+                             blink::features::kPlzDedicatedWorker,
+                             features::kBlockInsecurePrivateNetworkRequests,
+                             features::kPrivateNetworkAccessSendPreflights,
+                         }),
+            GetParam()
+                ? FeatureVec({})
+                : FeatureVec({features::kOriginKeyedProcessesByDefault})) {}
 };
 
 class PrivateNetworkAccessBrowserTestWithBlockInsteadOfWarnOption
@@ -891,6 +926,54 @@ IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessBrowserTest,
       root_frame_host()->BuildClientSecurityState();
   ASSERT_FALSE(security_state.is_null());
   EXPECT_TRUE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
+            security_state->ip_address_space);
+}
+
+// Tests that a top-level navigation to 0.0.0.0 is in the kLocal address space.
+IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessBrowserTest,
+                       ClientSecurityStateForNullIP) {
+  if constexpr (BUILDFLAG(IS_WIN)) {
+    GTEST_SKIP() << "0.0.0.0 behavior varies across platforms and is "
+                    "unreachable on Windows.";
+  }
+
+  EXPECT_TRUE(NavigateToURL(shell(), NullIPURL(kDefaultPath)));
+
+  const network::mojom::ClientSecurityStatePtr security_state =
+      root_frame_host()->BuildClientSecurityState();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_FALSE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kLocal,
+            security_state->ip_address_space);
+}
+
+class PrivateNetworkAccessBrowserTestNullIPKillswitch
+    : public PrivateNetworkAccessBrowserTestBase {
+ public:
+  PrivateNetworkAccessBrowserTestNullIPKillswitch()
+      : PrivateNetworkAccessBrowserTestBase(
+            {
+                network::features::kTreatNullIPAsPublicAddressSpace,
+            },
+            {}) {}
+};
+
+// Tests that a top-level navigation to 0.0.0.0 is in the kPublic address space
+// when a killswitch is enabled to specifically treat it as public.
+IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessBrowserTestNullIPKillswitch,
+                       ClientSecurityStateForNullIPKillswitch) {
+  if constexpr (BUILDFLAG(IS_WIN)) {
+    GTEST_SKIP() << "0.0.0.0 behavior varies across platforms and is "
+                    "unreachable on Windows.";
+  }
+
+  EXPECT_TRUE(NavigateToURL(shell(), NullIPURL(kDefaultPath)));
+
+  const network::mojom::ClientSecurityStatePtr security_state =
+      root_frame_host()->BuildClientSecurityState();
+  ASSERT_FALSE(security_state.is_null());
+  EXPECT_FALSE(security_state->is_web_secure_context);
   EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
             security_state->ip_address_space);
 }
@@ -1675,8 +1758,8 @@ IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessBrowserTest,
             security_state->ip_address_space);
 }
 
-IN_PROC_BROWSER_TEST_F(
-    PrivateNetworkAccessBrowserTest,
+IN_PROC_BROWSER_TEST_P(
+    PrivateNetworkAccessSandboxedDataBrowserTest,
     SandboxedIframeInheritsAddressSpaceForDataURLFromPublic) {
   EXPECT_TRUE(NavigateToURL(shell(), SecurePublicURL(kDefaultPath)));
 
@@ -1692,7 +1775,7 @@ IN_PROC_BROWSER_TEST_F(
             security_state->ip_address_space);
 }
 
-IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessBrowserTest,
+IN_PROC_BROWSER_TEST_P(PrivateNetworkAccessSandboxedDataBrowserTest,
                        SandboxedIframeInheritsAddressSpaceForDataURLFromLocal) {
   EXPECT_TRUE(NavigateToURL(shell(), SecureLocalURL(kDefaultPath)));
 
@@ -2180,8 +2263,8 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(security_state->is_web_secure_context);
 }
 
-IN_PROC_BROWSER_TEST_F(
-    PrivateNetworkAccessBrowserTest,
+IN_PROC_BROWSER_TEST_P(
+    PrivateNetworkAccessSandboxedDataBrowserTest,
     SandboxedIframeInheritsSecureContextForDataURLFromInsecure) {
   EXPECT_TRUE(NavigateToURL(shell(), InsecureLocalURL(kDefaultPath)));
 
@@ -2413,6 +2496,15 @@ INSTANTIATE_TEST_SUITE_P(
     ,
     PrivateNetworkAccessBrowserTestWithBlockInsteadOfWarnOption,
     testing::Values(false, true));
+
+INSTANTIATE_TEST_SUITE_P(,
+                         PrivateNetworkAccessSandboxedDataBrowserTest,
+                         testing::Bool(),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return info.param
+                                      ? "OriginKeyedProcessesByDefault_disabled"
+                                      : "OriginKeyedProcessesByDefault_enabled";
+                         });
 
 // This test verifies that by default, the private network request policy used
 // by RenderFrameHostImpl for requests is set to block requests from non-secure

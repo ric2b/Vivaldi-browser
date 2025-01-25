@@ -29,8 +29,14 @@ namespace {
 
 void handle_client_destroyed(struct wl_listener* listener, void* data) {
   TestServerListener* destroy_listener =
-      wl_container_of(listener, /*sample=*/destroy_listener,
-                      /*member=*/listener);
+      // SAFETY: wl_container_of is used to calculate the address of the
+      // containing TestServerListener struct, which uses unsafe pointer
+      // arithmetic. This is valid because `listener` is guaranteed to be
+      // contained inside a TestServerListener, which is true because of
+      // how handle_client_destroyed is registered, down in
+      // TestWaylandServerThread::Start
+      UNSAFE_BUFFERS(wl_container_of(listener, /*sample=*/destroy_listener,
+                                     /*member=*/listener));
   DCHECK(destroy_listener);
   destroy_listener->test_server->OnClientDestroyed(
       static_cast<struct wl_client*>(data));
@@ -137,7 +143,7 @@ bool TestWaylandServerThread::Start() {
 
   if (!zcr_stylus_.Initialize(display_.get()))
     return false;
-  if (config_.text_input_wrapper_type == ui::ZWPTextInputWrapperType::kV3) {
+  if (config_.text_input_wrapper_type == ZWPTextInputWrapperType::kV3) {
     if (!zwp_text_input_manager_v3_.Initialize(display_.get())) {
       return false;
     }
@@ -163,6 +169,9 @@ bool TestWaylandServerThread::Start() {
     return false;
   }
   if (!xdg_activation_v1_.Initialize(display_.get())) {
+    return false;
+  }
+  if (!xdg_toplevel_icon_manager_v1_.Initialize(display_.get())) {
     return false;
   }
 
@@ -308,9 +317,9 @@ bool TestWaylandServerThread::SetupExplicitSynchronizationProtocol(
 std::unique_ptr<base::MessagePump> TestWaylandServerThread::CreateMessagePump(
     base::OnceClosure closure) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  auto pump = std::make_unique<base::MessagePumpLibevent>();
+  auto pump = std::make_unique<base::MessagePumpEpoll>();
   pump->WatchFileDescriptor(wl_event_loop_get_fd(event_loop_), true,
-                            base::MessagePumpLibevent::WATCH_READ, &controller_,
+                            base::MessagePumpEpoll::WATCH_READ, &controller_,
                             this);
   std::move(closure).Run();
   return std::move(pump);

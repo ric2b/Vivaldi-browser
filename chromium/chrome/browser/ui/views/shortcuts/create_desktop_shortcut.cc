@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/shortcuts/create_desktop_shortcut.h"
 
+#include <optional>
 #include <string>
 
 #include "base/check_is_test.h"
@@ -27,9 +28,13 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/dialog_model.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/bubble/bubble_dialog_model_host.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/interaction/element_tracker_views.h"
+#include "ui/views/view_class_properties.h"
 #include "url/gurl.h"
 
 namespace shortcuts {
@@ -40,7 +45,7 @@ namespace {
 // desktop of the OS. This API works only if kShortcutsNotApps is enabled.
 // Triggered from the three-dot menu on Chrome, Save & Share > Create Shortcut.
 // Callers of the API should pass a |CreateShortcutDialogCallback| so that the
-// user action on the dialog and the title in the dialog's text field can be
+// user action on the dialog or the title in the dialog's text field can be
 // obtained.
 void ShowCreateDesktopShortcutDialog(
     content::WebContents* web_contents,
@@ -49,8 +54,7 @@ void ShowCreateDesktopShortcutDialog(
     CreateShortcutDialogCallback dialog_action_and_text_callback) {
   Browser* browser = chrome::FindBrowserWithTab(web_contents);
   if (!browser) {
-    std::move(dialog_action_and_text_callback)
-        .Run(/*is_accepted=*/false, title);
+    std::move(dialog_action_and_text_callback).Run(std::nullopt);
     return;
   }
 
@@ -58,8 +62,7 @@ void ShowCreateDesktopShortcutDialog(
   const web_modal::WebContentsModalDialogManager* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
   if (!manager || manager->IsDialogActive()) {
-    std::move(dialog_action_and_text_callback)
-        .Run(/*is_accepted=*/false, title);
+    std::move(dialog_action_and_text_callback).Run(std::nullopt);
     return;
   }
 
@@ -75,44 +78,49 @@ void ShowCreateDesktopShortcutDialog(
       web_contents, std::move(dialog_action_and_text_callback));
   auto delegate_weak_ptr = delegate->AsWeakPtr();
 
+  auto dialog_model_builder = ui::DialogModel::Builder(std::move(delegate));
+  dialog_model_builder.SetInternalName("CreateDesktopShortcutDialog")
+      .SetTitle(
+          l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUT_NOT_APPS_DIALOG_TITLE))
+      .SetSubtitle(l10n_util::GetStringUTF16(
+          IDS_CREATE_SHORTCUT_NOT_APPS_DIALOG_SUBTITLE))
+      .AddOkButton(base::BindOnce(&CreateDesktopShortcutDelegate::OnAccept,
+                                  delegate_weak_ptr),
+                   ui::DialogModel::Button::Params()
+                       .SetLabel(l10n_util::GetStringUTF16(
+                           IDS_CREATE_SHORTCUTS_BUTTON_LABEL))
+                       .SetId(CreateDesktopShortcutDelegate::
+                                  kCreateShortcutDialogOkButtonId))
+      // Dialog cancellations and closes are handled properly by the dialog
+      // destroying callback.
+      .AddCancelButton(base::DoNothing())
+      .SetDialogDestroyingCallback(base::BindOnce(
+          &CreateDesktopShortcutDelegate::OnClose, delegate_weak_ptr))
+      .OverrideDefaultButton(ui::mojom::DialogButton::kNone);
+
+  auto site_view = std::make_unique<SiteIconTextAndOriginView>(
+      icon, title,
+      l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUT_NOT_APPS_AX_BUBBLE_LABEL),
+      web_contents->GetLastCommittedURL(), web_contents,
+      base::BindRepeating(&CreateDesktopShortcutDelegate::OnTitleUpdated,
+                          delegate_weak_ptr));
+  views::Textfield* title_field = site_view->title_field();
+
   auto dialog_model =
-      ui::DialogModel::Builder(std::move(delegate))
-          .SetInternalName("CreateDesktopShortcutDialog")
-          .SetTitle(l10n_util::GetStringUTF16(
-              IDS_CREATE_SHORTCUT_NOT_APPS_DIALOG_TITLE))
-          .SetSubtitle(l10n_util::GetStringUTF16(
-              IDS_CREATE_SHORTCUT_NOT_APPS_DIALOG_SUBTITLE))
-          .AddOkButton(base::BindOnce(&CreateDesktopShortcutDelegate::OnAccept,
-                                      delegate_weak_ptr),
-                       ui::DialogModel::Button::Params()
-                           .SetLabel(l10n_util::GetStringUTF16(
-                               IDS_CREATE_SHORTCUTS_BUTTON_LABEL))
-                           .SetId(CreateDesktopShortcutDelegate::
-                                      kCreateShortcutDialogOkButtonId))
-          // Dialog cancellations and closes are handled properly by the dialog
-          // destroying callback.
-          .AddCancelButton(base::DoNothing())
-          .SetDialogDestroyingCallback(base::BindOnce(
-              &CreateDesktopShortcutDelegate::OnClose, delegate_weak_ptr))
-          .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_CANCEL)
+      dialog_model_builder
+          .AddCustomField(
+              std::make_unique<views::BubbleDialogModelHost::CustomView>(
+                  std::move(site_view),
+                  views::BubbleDialogModelHost::FieldType::kControl,
+                  title_field),
+              shortcuts::CreateDesktopShortcutDelegate::
+                  kCreateShortcutDialogTitleFieldId)
+          .SetInitiallyFocusedField(shortcuts::CreateDesktopShortcutDelegate::
+                                        kCreateShortcutDialogTitleFieldId)
           .Build();
 
-  dialog_model->AddCustomField(
-      std::make_unique<views::BubbleDialogModelHost::CustomView>(
-          std::make_unique<SiteIconTextAndOriginView>(
-              icon, title,
-              l10n_util::GetStringUTF16(
-                  IDS_CREATE_SHORTCUT_NOT_APPS_AX_BUBBLE_LABEL),
-              web_contents->GetLastCommittedURL(), web_contents,
-              base::BindRepeating(
-                  &CreateDesktopShortcutDelegate::OnTitleUpdated,
-                  delegate_weak_ptr)),
-          views::BubbleDialogModelHost::FieldType::kControl),
-      shortcuts::CreateDesktopShortcutDelegate::
-          kCreateShortcutDialogTitleFieldId);
-
   auto dialog = views::BubbleDialogModelHost::CreateModal(
-      std::move(dialog_model), ui::MODAL_TYPE_CHILD);
+      std::move(dialog_model), ui::mojom::ModalType::kChild);
 
   base::RecordAction(
       base::UserMetricsAction("CreateDesktopShortcutDialogShown"));

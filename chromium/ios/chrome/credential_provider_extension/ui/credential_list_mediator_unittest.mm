@@ -27,6 +27,7 @@ NSData* StringToData(std::string str) {
 ArchivableCredential* TestPasskeyCredential() {
   return [[ArchivableCredential alloc]
        initWithFavicon:@"favicon1"
+                  gaia:nil
       recordIdentifier:@"recordIdentifier1"
                 syncId:StringToData("syncId1")
               username:@"username1"
@@ -36,12 +37,14 @@ ArchivableCredential* TestPasskeyCredential() {
                   rpId:@"rpId1"
             privateKey:StringToData("privateKey1")
              encrypted:StringToData("encrypted1")
-          creationTime:kJan1st2024];
+          creationTime:kJan1st2024
+          lastUsedTime:kJan1st2024];
 }
 
 ArchivableCredential* TestPasskeyCredential2() {
   return [[ArchivableCredential alloc]
        initWithFavicon:@"favicon2"
+                  gaia:nil
       recordIdentifier:@"recordIdentifier2"
                 syncId:StringToData("syncId2")
               username:@"username2"
@@ -51,11 +54,13 @@ ArchivableCredential* TestPasskeyCredential2() {
                   rpId:@"rpId2"
             privateKey:StringToData("privateKey2")
              encrypted:StringToData("encrypted2")
-          creationTime:kJan1st2024 + 1];
+          creationTime:kJan1st2024 + 1
+          lastUsedTime:kJan1st2024 + 1];
 }
 
 ArchivableCredential* TestPasswordCredential() {
   return [[ArchivableCredential alloc] initWithFavicon:nil
+                                                  gaia:nil
                                               password:@"qwerty123"
                                                   rank:1
                                       recordIdentifier:@"recordIdentifier"
@@ -68,6 +73,7 @@ ArchivableCredential* TestPasswordCredential() {
 ArchivableCredential* TestPasswordCredential2() {
   return
       [[ArchivableCredential alloc] initWithFavicon:nil
+                                               gaia:nil
                                            password:@"qwerty1234"
                                                rank:2
                                    recordIdentifier:@"recordIdentifier2"

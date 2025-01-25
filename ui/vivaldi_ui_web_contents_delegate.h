@@ -93,7 +93,8 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
                          bool* proceed_to_fire_unload) override;
   blink::mojom::DisplayMode GetDisplayMode(
       const content::WebContents* source) override;
-  void AddNewContents(content::WebContents* source,
+  content::WebContents* AddNewContents(
+      content::WebContents* source,
                       std::unique_ptr<content::WebContents> new_contents,
                       const GURL& target_url,
                       WindowOpenDisposition disposition,

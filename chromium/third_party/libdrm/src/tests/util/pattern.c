@@ -23,6 +23,7 @@
  * IN THE SOFTWARE.
  */
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,6 +61,33 @@ struct color_yuv {
 	{ .y = MAKE_YUV_601_Y(r, g, b), \
 	  .u = MAKE_YUV_601_U(r, g, b), \
 	  .v = MAKE_YUV_601_V(r, g, b) }
+
+static inline uint16_t swap16(uint16_t x)
+{
+	return ((x & 0x00ffU) << 8) | ((x & 0xff00U) >> 8);
+}
+
+static inline uint32_t swap32(uint32_t x)
+{
+	return ((x & 0x000000ffU) << 24) |
+	       ((x & 0x0000ff00U) <<  8) |
+	       ((x & 0x00ff0000U) >>  8) |
+	       ((x & 0xff000000U) >> 24);
+}
+
+#ifdef HAVE_BIG_ENDIAN
+#define cpu_to_be16(x)			(x)
+#define cpu_to_le16(x)			swap16(x)
+#define cpu_to_le32(x)			swap32(x)
+#define fb_foreign_endian(format)	(!((format) & DRM_FORMAT_BIG_ENDIAN))
+#else
+#define cpu_to_be16(x)			swap16(x)
+#define cpu_to_le16(x)			(x)
+#define cpu_to_le32(x)			(x)
+#define fb_foreign_endian(format)	((format) & DRM_FORMAT_BIG_ENDIAN)
+#endif
+
+#define cpu_to_fb16(x)	(fb_be ? cpu_to_be16(x) : cpu_to_le16(x))
 
 /* This function takes 8-bit color values */
 static inline uint32_t shiftcolor8(const struct util_color_component *comp,
@@ -162,7 +190,7 @@ static void fill_smpte_yuv_planar(const struct util_yuv_info *yuv,
 				  unsigned int height, unsigned int stride)
 {
 	const struct color_yuv colors_top[] = {
-		MAKE_YUV_601(191, 192, 192),	/* grey */
+		MAKE_YUV_601(192, 192, 192),	/* grey */
 		MAKE_YUV_601(192, 192, 0),	/* yellow */
 		MAKE_YUV_601(0, 192, 192),	/* cyan */
 		MAKE_YUV_601(0, 192, 0),	/* green */
@@ -260,12 +288,154 @@ static void fill_smpte_yuv_planar(const struct util_yuv_info *yuv,
 	}
 }
 
+static void write_pixels_10bpp(unsigned char *mem,
+			       unsigned short a,
+			       unsigned short b,
+			       unsigned short c,
+			       unsigned short d)
+{
+	  mem[0] = (a & 0xff);
+	  mem[1] = ((a >> 8) & 0x3) | ((b & 0x3f) << 2);
+	  mem[2] = ((b >> 6) & 0xf) | ((c & 0xf) << 4);
+	  mem[3] = ((c >> 4) & 0x3f) | ((d & 0x3) << 6);
+	  mem[4] = ((d >> 2) & 0xff);
+}
+
+static void fill_smpte_yuv_planar_10bpp(const struct util_yuv_info *yuv,
+					unsigned char *y_mem,
+					unsigned char *uv_mem,
+					unsigned int width,
+					unsigned int height,
+					unsigned int stride)
+{
+	const struct color_yuv colors_top[] = {
+		MAKE_YUV_601(192, 192, 192),	/* grey */
+		MAKE_YUV_601(192, 192, 0),	/* yellow */
+		MAKE_YUV_601(0, 192, 192),	/* cyan */
+		MAKE_YUV_601(0, 192, 0),	/* green */
+		MAKE_YUV_601(192, 0, 192),	/* magenta */
+		MAKE_YUV_601(192, 0, 0),	/* red */
+		MAKE_YUV_601(0, 0, 192),	/* blue */
+	};
+	const struct color_yuv colors_middle[] = {
+		MAKE_YUV_601(0, 0, 192),	/* blue */
+		MAKE_YUV_601(19, 19, 19),	/* black */
+		MAKE_YUV_601(192, 0, 192),	/* magenta */
+		MAKE_YUV_601(19, 19, 19),	/* black */
+		MAKE_YUV_601(0, 192, 192),	/* cyan */
+		MAKE_YUV_601(19, 19, 19),	/* black */
+		MAKE_YUV_601(192, 192, 192),	/* grey */
+	};
+	const struct color_yuv colors_bottom[] = {
+		MAKE_YUV_601(0, 33, 76),	/* in-phase */
+		MAKE_YUV_601(255, 255, 255),	/* super white */
+		MAKE_YUV_601(50, 0, 106),	/* quadrature */
+		MAKE_YUV_601(19, 19, 19),	/* black */
+		MAKE_YUV_601(9, 9, 9),		/* 3.5% */
+		MAKE_YUV_601(19, 19, 19),	/* 7.5% */
+		MAKE_YUV_601(29, 29, 29),	/* 11.5% */
+		MAKE_YUV_601(19, 19, 19),	/* black */
+	};
+	unsigned int cs = yuv->chroma_stride;
+	unsigned int xsub = yuv->xsub;
+	unsigned int ysub = yuv->ysub;
+	unsigned int xstep = cs * xsub;
+	unsigned int x;
+	unsigned int y;
+
+	/* Luma */
+	for (y = 0; y < height * 6 / 9; ++y) {
+		for (x = 0; x < width; x += 4)
+			write_pixels_10bpp(&y_mem[(x * 5) / 4],
+				colors_top[(x+0) * 7 / width].y << 2,
+				colors_top[(x+1) * 7 / width].y << 2,
+				colors_top[(x+2) * 7 / width].y << 2,
+				colors_top[(x+3) * 7 / width].y << 2);
+		y_mem += stride;
+	}
+
+	for (; y < height * 7 / 9; ++y) {
+		for (x = 0; x < width; x += 4)
+			write_pixels_10bpp(&y_mem[(x * 5) / 4],
+				colors_middle[(x+0) * 7 / width].y << 2,
+				colors_middle[(x+1) * 7 / width].y << 2,
+				colors_middle[(x+2) * 7 / width].y << 2,
+				colors_middle[(x+3) * 7 / width].y << 2);
+		y_mem += stride;
+	}
+
+	for (; y < height; ++y) {
+		for (x = 0; x < width * 5 / 7; x += 4)
+			write_pixels_10bpp(&y_mem[(x * 5) / 4],
+				colors_bottom[(x+0) * 4 / (width * 5 / 7)].y << 2,
+				colors_bottom[(x+1) * 4 / (width * 5 / 7)].y << 2,
+				colors_bottom[(x+2) * 4 / (width * 5 / 7)].y << 2,
+				colors_bottom[(x+3) * 4 / (width * 5 / 7)].y << 2);
+		for (; x < width * 6 / 7; x += 4)
+			write_pixels_10bpp(&y_mem[(x * 5) / 4],
+				colors_bottom[((x+0) - width * 5 / 7) * 3 / (width / 7) + 4].y << 2,
+				colors_bottom[((x+1) - width * 5 / 7) * 3 / (width / 7) + 4].y << 2,
+				colors_bottom[((x+2) - width * 5 / 7) * 3 / (width / 7) + 4].y << 2,
+				colors_bottom[((x+3) - width * 5 / 7) * 3 / (width / 7) + 4].y << 2);
+		for (; x < width; x += 4)
+			write_pixels_10bpp(&y_mem[(x * 5) / 4],
+				colors_bottom[7].y << 2,
+				colors_bottom[7].y << 2,
+				colors_bottom[7].y << 2,
+				colors_bottom[7].y << 2);
+		y_mem += stride;
+	}
+
+	/* Chroma */
+	for (y = 0; y < height * 6 / 9; y += ysub) {
+		for (x = 0; x < width; x += xstep)
+			write_pixels_10bpp(&uv_mem[(x * 5) / xstep],
+				colors_top[(x+0) * 7 / width].u << 2,
+				colors_top[(x+0) * 7 / width].v << 2,
+				colors_top[(x+xsub) * 7 / width].u << 2,
+				colors_top[(x+xsub) * 7 / width].v << 2);
+		uv_mem += stride * cs / xsub;
+	}
+
+	for (; y < height * 7 / 9; y += ysub) {
+		for (x = 0; x < width; x += xstep)
+			write_pixels_10bpp(&uv_mem[(x * 5) / xstep],
+				colors_middle[(x+0) * 7 / width].u << 2,
+				colors_middle[(x+0) * 7 / width].v << 2,
+				colors_middle[(x+xsub) * 7 / width].u << 2,
+				colors_middle[(x+xsub) * 7 / width].v << 2);
+		uv_mem += stride * cs / xsub;
+	}
+
+	for (; y < height; y += ysub) {
+		for (x = 0; x < width * 5 / 7; x += xstep)
+			write_pixels_10bpp(&uv_mem[(x * 5) / xstep],
+				colors_bottom[(x+0) * 4 / (width * 5 / 7)].u << 2,
+				colors_bottom[(x+0) * 4 / (width * 5 / 7)].v << 2,
+				colors_bottom[(x+xsub) * 4 / (width * 5 / 7)].u << 2,
+				colors_bottom[(x+xsub) * 4 / (width * 5 / 7)].v << 2);
+		for (; x < width * 6 / 7; x += xstep)
+			write_pixels_10bpp(&uv_mem[(x * 5) / xstep],
+				colors_bottom[((x+0) - width * 5 / 7) * 3 / (width / 7) + 4].u << 2,
+				colors_bottom[((x+0) - width * 5 / 7) * 3 / (width / 7) + 4].v << 2,
+				colors_bottom[((x+xsub) - width * 5 / 7) * 3 / (width / 7) + 4].u << 2,
+				colors_bottom[((x+xsub) - width * 5 / 7) * 3 / (width / 7) + 4].v << 2);
+		for (; x < width; x += xstep)
+			write_pixels_10bpp(&uv_mem[(x * 5) / xstep],
+				colors_bottom[7].u << 2,
+				colors_bottom[7].v << 2,
+				colors_bottom[7].u << 2,
+				colors_bottom[7].v << 2);
+		uv_mem += stride * cs / xsub;
+	}
+}
+
 static void fill_smpte_yuv_packed(const struct util_yuv_info *yuv, void *mem,
 				  unsigned int width, unsigned int height,
 				  unsigned int stride)
 {
 	const struct color_yuv colors_top[] = {
-		MAKE_YUV_601(191, 192, 192),	/* grey */
+		MAKE_YUV_601(192, 192, 192),	/* grey */
 		MAKE_YUV_601(192, 192, 0),	/* yellow */
 		MAKE_YUV_601(0, 192, 192),	/* cyan */
 		MAKE_YUV_601(0, 192, 0),	/* green */
@@ -361,7 +531,7 @@ static void fill_smpte_yuv_packed(const struct util_yuv_info *yuv, void *mem,
 
 static void fill_smpte_rgb16(const struct util_rgb_info *rgb, void *mem,
 			     unsigned int width, unsigned int height,
-			     unsigned int stride)
+			     unsigned int stride, bool fb_be)
 {
 	const uint16_t colors_top[] = {
 		MAKE_RGBA(rgb, 192, 192, 192, 255),	/* grey */
@@ -396,26 +566,26 @@ static void fill_smpte_rgb16(const struct util_rgb_info *rgb, void *mem,
 
 	for (y = 0; y < height * 6 / 9; ++y) {
 		for (x = 0; x < width; ++x)
-			((uint16_t *)mem)[x] = colors_top[x * 7 / width];
+			((uint16_t *)mem)[x] = cpu_to_fb16(colors_top[x * 7 / width]);
 		mem += stride;
 	}
 
 	for (; y < height * 7 / 9; ++y) {
 		for (x = 0; x < width; ++x)
-			((uint16_t *)mem)[x] = colors_middle[x * 7 / width];
+			((uint16_t *)mem)[x] = cpu_to_fb16(colors_middle[x * 7 / width]);
 		mem += stride;
 	}
 
 	for (; y < height; ++y) {
 		for (x = 0; x < width * 5 / 7; ++x)
 			((uint16_t *)mem)[x] =
-				colors_bottom[x * 4 / (width * 5 / 7)];
+				cpu_to_fb16(colors_bottom[x * 4 / (width * 5 / 7)]);
 		for (; x < width * 6 / 7; ++x)
 			((uint16_t *)mem)[x] =
-				colors_bottom[(x - width * 5 / 7) * 3
-					      / (width / 7) + 4];
+				cpu_to_fb16(colors_bottom[(x - width * 5 / 7) * 3
+							  / (width / 7) + 4]);
 		for (; x < width; ++x)
-			((uint16_t *)mem)[x] = colors_bottom[7];
+			((uint16_t *)mem)[x] = cpu_to_fb16(colors_bottom[7]);
 		mem += stride;
 	}
 }
@@ -520,26 +690,26 @@ static void fill_smpte_rgb32(const struct util_rgb_info *rgb, void *mem,
 
 	for (y = 0; y < height * 6 / 9; ++y) {
 		for (x = 0; x < width; ++x)
-			((uint32_t *)mem)[x] = colors_top[x * 7 / width];
+			((uint32_t *)mem)[x] = cpu_to_le32(colors_top[x * 7 / width]);
 		mem += stride;
 	}
 
 	for (; y < height * 7 / 9; ++y) {
 		for (x = 0; x < width; ++x)
-			((uint32_t *)mem)[x] = colors_middle[x * 7 / width];
+			((uint32_t *)mem)[x] = cpu_to_le32(colors_middle[x * 7 / width]);
 		mem += stride;
 	}
 
 	for (; y < height; ++y) {
 		for (x = 0; x < width * 5 / 7; ++x)
 			((uint32_t *)mem)[x] =
-				colors_bottom[x * 4 / (width * 5 / 7)];
+				cpu_to_le32(colors_bottom[x * 4 / (width * 5 / 7)]);
 		for (; x < width * 6 / 7; ++x)
 			((uint32_t *)mem)[x] =
-				colors_bottom[(x - width * 5 / 7) * 3
-					      / (width / 7) + 4];
+				cpu_to_le32(colors_bottom[(x - width * 5 / 7) * 3
+							  / (width / 7) + 4]);
 		for (; x < width; ++x)
-			((uint32_t *)mem)[x] = colors_bottom[7];
+			((uint32_t *)mem)[x] = cpu_to_le32(colors_bottom[7]);
 		mem += stride;
 	}
 }
@@ -605,6 +775,370 @@ static void fill_smpte_rgb16fp(const struct util_rgb_info *rgb, void *mem,
 	}
 }
 
+enum smpte_colors {
+	SMPTE_COLOR_GREY,
+	SMPTE_COLOR_YELLOW,
+	SMPTE_COLOR_CYAN,
+	SMPTE_COLOR_GREEN,
+	SMPTE_COLOR_MAGENTA,
+	SMPTE_COLOR_RED,
+	SMPTE_COLOR_BLUE,
+	SMPTE_COLOR_BLACK,
+	SMPTE_COLOR_IN_PHASE,
+	SMPTE_COLOR_SUPER_WHITE,
+	SMPTE_COLOR_QUADRATURE,
+	SMPTE_COLOR_3PC5,
+	SMPTE_COLOR_11PC5,
+};
+
+static unsigned int smpte_top[7] = {
+	SMPTE_COLOR_GREY,
+	SMPTE_COLOR_YELLOW,
+	SMPTE_COLOR_CYAN,
+	SMPTE_COLOR_GREEN,
+	SMPTE_COLOR_MAGENTA,
+	SMPTE_COLOR_RED,
+	SMPTE_COLOR_BLUE,
+};
+
+static unsigned int smpte_middle[7] = {
+	SMPTE_COLOR_BLUE,
+	SMPTE_COLOR_BLACK,
+	SMPTE_COLOR_MAGENTA,
+	SMPTE_COLOR_BLACK,
+	SMPTE_COLOR_CYAN,
+	SMPTE_COLOR_BLACK,
+	SMPTE_COLOR_GREY,
+};
+
+static unsigned int smpte_bottom[8] = {
+	SMPTE_COLOR_IN_PHASE,
+	SMPTE_COLOR_SUPER_WHITE,
+	SMPTE_COLOR_QUADRATURE,
+	SMPTE_COLOR_BLACK,
+	SMPTE_COLOR_3PC5,
+	SMPTE_COLOR_BLACK,
+	SMPTE_COLOR_11PC5,
+	SMPTE_COLOR_BLACK,
+};
+
+#define EXPAND_COLOR(r, g, b)	{ (r) * 0x101, (g) * 0x101, (b) * 0x101 }
+
+static const struct drm_color_lut bw_color_lut[] = {
+	EXPAND_COLOR(  0,   0,   0),	/* black */
+	EXPAND_COLOR(255, 255, 255),	/* white */
+};
+
+static const struct drm_color_lut pentile_color_lut[] = {
+	/* PenTile RG-GB */
+	EXPAND_COLOR(  0,   0,   0),	/* black */
+	EXPAND_COLOR(255,   0,   0),	/* red */
+	EXPAND_COLOR(  0, 207,   0),	/* green */
+	EXPAND_COLOR(  0,   0, 255),	/* blue */
+};
+
+static const struct drm_color_lut smpte_color_lut[] = {
+	[SMPTE_COLOR_GREY] =        EXPAND_COLOR(192, 192, 192),
+	[SMPTE_COLOR_YELLOW] =      EXPAND_COLOR(192, 192,   0),
+	[SMPTE_COLOR_CYAN] =        EXPAND_COLOR(  0, 192, 192),
+	[SMPTE_COLOR_GREEN] =       EXPAND_COLOR(  0, 192,   0),
+	[SMPTE_COLOR_MAGENTA] =     EXPAND_COLOR(192,   0, 192),
+	[SMPTE_COLOR_RED] =         EXPAND_COLOR(192,   0,   0),
+	[SMPTE_COLOR_BLUE] =        EXPAND_COLOR(  0,   0, 192),
+	[SMPTE_COLOR_BLACK] =       EXPAND_COLOR( 19,  19,  19),
+	[SMPTE_COLOR_IN_PHASE] =    EXPAND_COLOR(  0,  33,  76),
+	[SMPTE_COLOR_SUPER_WHITE] = EXPAND_COLOR(255, 255, 255),
+	[SMPTE_COLOR_QUADRATURE] =  EXPAND_COLOR( 50,   0, 106),
+	[SMPTE_COLOR_3PC5] =        EXPAND_COLOR(  9,   9,   9),
+	[SMPTE_COLOR_11PC5] =       EXPAND_COLOR( 29,  29,  29),
+};
+
+#undef EXPAND_COLOR
+
+/*
+ * Floyd-Steinberg dithering
+ */
+
+struct fsd {
+	unsigned int width;
+	unsigned int x;
+	unsigned int i;
+	int red;
+	int green;
+	int blue;
+	int error[];
+};
+
+static struct fsd *fsd_alloc(unsigned int width)
+{
+	unsigned int n = 3 * (width + 1);
+	struct fsd *fsd = malloc(sizeof(*fsd) + n * sizeof(fsd->error[0]));
+
+	fsd->width = width;
+	fsd->x = 0;
+	fsd->i = 0;
+	memset(fsd->error, 0, n * sizeof(fsd->error[0]));
+
+	return fsd;
+}
+
+static inline int clamp(int val, int min, int max)
+{
+	if (val < min)
+		return min;
+	if (val > max)
+		return max;
+	return val;
+}
+
+static void fsd_dither(struct fsd *fsd, struct drm_color_lut *color)
+{
+	unsigned int i = fsd->i;
+
+	fsd->red = (int)color->red + (fsd->error[3 * i] + 8) / 16;
+	fsd->green = (int)color->green + (fsd->error[3 * i + 1] + 8) / 16;
+	fsd->blue = (int)color->blue + (fsd->error[3 * i + 2] + 8) / 16;
+
+	color->red = clamp(fsd->red, 0, 65535);
+	color->green = clamp(fsd->green, 0, 65535);
+	color->blue = clamp(fsd->blue, 0, 65535);
+}
+
+static void fsd_update(struct fsd *fsd, const struct drm_color_lut *actual)
+{
+	int error_red = fsd->red - (int)actual->red;
+	int error_green = fsd->green - (int)actual->green;
+	int error_blue = fsd->blue - (int)actual->blue;
+	unsigned int width = fsd->width;
+	unsigned int i = fsd->i, j;
+	unsigned int n = width + 1;
+
+	/* Distribute errors over neighboring pixels */
+	if (fsd->x == width - 1) {
+		/* Last pixel on this scanline */
+		/* South East: initialize to zero */
+		fsd->error[3 * i] = 0;
+		fsd->error[3 * i + 1] = 0;
+		fsd->error[3 * i + 2] = 0;
+	} else {
+		/* East: accumulate error */
+		j = (i + 1) % n;
+		fsd->error[3 * j] += 7 * error_red;
+		fsd->error[3 * j + 1] += 7 * error_green;
+		fsd->error[3 * j + 2] += 7 * error_blue;
+
+		/* South East: initial error */
+		fsd->error[3 * i] = error_red;
+		fsd->error[3 * i + 1] = error_green;
+		fsd->error[3 * i + 2] = error_blue;
+	}
+	/* South West: accumulate error */
+	j = (i + width - 1) % n;
+	fsd->error[3 * j] += 3 * error_red;
+	fsd->error[3 * j + 1] += 3 * error_green;
+	fsd->error[3 * j + 2] += 3 * error_blue;
+
+	/* South: accumulate error */
+	j = (i + width) % n;
+	fsd->error[3 * j] += 5 * error_red;
+	fsd->error[3 * j + 1] += 5 * error_green;
+	fsd->error[3 * j + 2] += 5 * error_blue;
+
+	fsd->x = (fsd->x + 1) % width;
+	fsd->i = (fsd->i + 1) % n;
+}
+
+static void write_pixel_1(uint8_t *mem, unsigned int x, unsigned int pixel)
+{
+	unsigned int shift = 7 - (x & 7);
+	unsigned int mask = 1U << shift;
+
+	mem[x / 8] = (mem[x / 8] & ~mask) | ((pixel << shift) & mask);
+}
+
+static void write_color_1(struct fsd *fsd, uint8_t *mem, unsigned int x,
+			  unsigned int index)
+{
+	struct drm_color_lut color = smpte_color_lut[index];
+	unsigned int pixel;
+
+	fsd_dither(fsd, &color);
+
+	/* ITU BT.601: Y = 0.299 R + 0.587 G + 0.114 B */
+	if (3 * color.red + 6 * color.green + color.blue >= 10 * 32768) {
+		pixel = 1;
+		color.red = color.green = color.blue = 65535;
+	} else {
+		pixel = 0;
+		color.red = color.green = color.blue = 0;
+	}
+
+	fsd_update(fsd, &color);
+
+	write_pixel_1(mem, x, pixel);
+}
+
+static void fill_smpte_c1(void *mem, unsigned int width, unsigned int height,
+			  unsigned int stride)
+{
+	struct fsd *fsd = fsd_alloc(width);
+	unsigned int x;
+	unsigned int y;
+
+	for (y = 0; y < height * 6 / 9; ++y) {
+		for (x = 0; x < width; ++x)
+			write_color_1(fsd, mem, x, smpte_top[x * 7 / width]);
+		mem += stride;
+	}
+
+	for (; y < height * 7 / 9; ++y) {
+		for (x = 0; x < width; ++x)
+			write_color_1(fsd, mem, x, smpte_middle[x * 7 / width]);
+		mem += stride;
+	}
+
+	for (; y < height; ++y) {
+		for (x = 0; x < width * 5 / 7; ++x)
+			write_color_1(fsd, mem, x,
+				      smpte_bottom[x * 4 / (width * 5 / 7)]);
+		for (; x < width * 6 / 7; ++x)
+			write_color_1(fsd, mem, x,
+				      smpte_bottom[(x - width * 5 / 7) * 3 /
+						   (width / 7) + 4]);
+		for (; x < width; ++x)
+			write_color_1(fsd, mem, x, smpte_bottom[7]);
+		mem += stride;
+	}
+
+	free(fsd);
+}
+
+static void write_pixel_2(uint8_t *mem, unsigned int x, unsigned int pixel)
+{
+	unsigned int shift = 6 - 2 * (x & 3);
+	unsigned int mask = 3U << shift;
+
+	mem[x / 4] = (mem[x / 4] & ~mask) | ((pixel << shift) & mask);
+}
+
+static void write_color_2(struct fsd *fsd, uint8_t *mem, unsigned int stride,
+			  unsigned int x, unsigned int index)
+{
+	struct drm_color_lut color = smpte_color_lut[index];
+	unsigned int r, g, b;
+
+	fsd_dither(fsd, &color);
+
+	if (color.red >= 32768) {
+		r = 1;
+		color.red = 65535;
+	} else {
+		r = 0;
+		color.red = 0;
+	}
+	if (color.green >= 32768) {
+		g = 2;
+		color.green = 65535;
+	} else {
+		g = 0;
+		color.green = 0;
+	}
+	if (color.blue >= 32768) {
+		b = 3;
+		color.blue = 65535;
+	} else {
+		b = 0;
+		color.blue = 0;
+	}
+
+	fsd_update(fsd, &color);
+
+	/* Use PenTile RG-GB */
+	write_pixel_2(mem, 2 * x, r);
+	write_pixel_2(mem, 2 * x + 1, g);
+	write_pixel_2(mem + stride, 2 * x, g);
+	write_pixel_2(mem + stride, 2 * x + 1, b);
+}
+
+static void fill_smpte_c2(void *mem, unsigned int width, unsigned int height,
+			  unsigned int stride)
+{
+	struct fsd *fsd = fsd_alloc(width);
+	unsigned int x;
+	unsigned int y;
+
+	/* Half resolution for PenTile RG-GB */
+	width /= 2;
+	height /= 2;
+
+	for (y = 0; y < height * 6 / 9; ++y) {
+		for (x = 0; x < width; ++x)
+			write_color_2(fsd, mem, stride, x, smpte_top[x * 7 / width]);
+		mem += 2 * stride;
+	}
+
+	for (; y < height * 7 / 9; ++y) {
+		for (x = 0; x < width; ++x)
+			write_color_2(fsd, mem, stride, x, smpte_middle[x * 7 / width]);
+		mem += 2 * stride;
+	}
+
+	for (; y < height; ++y) {
+		for (x = 0; x < width * 5 / 7; ++x)
+			write_color_2(fsd, mem, stride, x,
+				      smpte_bottom[x * 4 / (width * 5 / 7)]);
+		for (; x < width * 6 / 7; ++x)
+			write_color_2(fsd, mem, stride, x,
+				      smpte_bottom[(x - width * 5 / 7) * 3 /
+						   (width / 7) + 4]);
+		for (; x < width; ++x)
+			write_color_2(fsd, mem, stride, x, smpte_bottom[7]);
+		mem += 2 * stride;
+	}
+
+	free(fsd);
+}
+
+static void write_pixel_4(uint8_t *mem, unsigned int x, unsigned int pixel)
+{
+	if (x & 1)
+		mem[x / 2] = (mem[x / 2] & 0xf0) | (pixel & 0x0f);
+	else
+		mem[x / 2] = (mem[x / 2] & 0x0f) | (pixel << 4);
+}
+
+static void fill_smpte_c4(void *mem, unsigned int width, unsigned int height,
+			  unsigned int stride)
+{
+	unsigned int x;
+	unsigned int y;
+
+	for (y = 0; y < height * 6 / 9; ++y) {
+		for (x = 0; x < width; ++x)
+			write_pixel_4(mem, x, smpte_top[x * 7 / width]);
+		mem += stride;
+	}
+
+	for (; y < height * 7 / 9; ++y) {
+		for (x = 0; x < width; ++x)
+			write_pixel_4(mem, x, smpte_middle[x * 7 / width]);
+		mem += stride;
+	}
+
+	for (; y < height; ++y) {
+		for (x = 0; x < width * 5 / 7; ++x)
+			write_pixel_4(mem, x,
+				      smpte_bottom[x * 4 / (width * 5 / 7)]);
+		for (; x < width * 6 / 7; ++x)
+			write_pixel_4(mem, x,
+				      smpte_bottom[(x - width * 5 / 7) * 3 /
+						   (width / 7) + 4]);
+		for (; x < width; ++x)
+			write_pixel_4(mem, x, smpte_bottom[7]);
+		mem += stride;
+	}
+}
+
 static void fill_smpte_c8(void *mem, unsigned int width, unsigned int height,
 			  unsigned int stride)
 {
@@ -613,69 +1147,45 @@ static void fill_smpte_c8(void *mem, unsigned int width, unsigned int height,
 
 	for (y = 0; y < height * 6 / 9; ++y) {
 		for (x = 0; x < width; ++x)
-			((uint8_t *)mem)[x] = x * 7 / width;
+			((uint8_t *)mem)[x] = smpte_top[x * 7 / width];
 		mem += stride;
 	}
 
 	for (; y < height * 7 / 9; ++y) {
 		for (x = 0; x < width; ++x)
-			((uint8_t *)mem)[x] = 7 + (x * 7 / width);
+			((uint8_t *)mem)[x] = smpte_middle[x * 7 / width];
 		mem += stride;
 	}
 
 	for (; y < height; ++y) {
 		for (x = 0; x < width * 5 / 7; ++x)
 			((uint8_t *)mem)[x] =
-				14 + (x * 4 / (width * 5 / 7));
+				smpte_bottom[x * 4 / (width * 5 / 7)];
 		for (; x < width * 6 / 7; ++x)
 			((uint8_t *)mem)[x] =
-				14 + ((x - width * 5 / 7) * 3
-					      / (width / 7) + 4);
+				smpte_bottom[(x - width * 5 / 7) * 3
+					     / (width / 7) + 4];
 		for (; x < width; ++x)
-			((uint8_t *)mem)[x] = 14 + 7;
+			((uint8_t *)mem)[x] = smpte_bottom[7];
 		mem += stride;
 	}
 }
 
-void util_smpte_c8_gamma(unsigned size, struct drm_color_lut *lut)
+void util_smpte_fill_lut(unsigned int ncolors, struct drm_color_lut *lut)
 {
-	if (size < 7 + 7 + 8) {
-		printf("Error: gamma too small: %d < %d\n", size, 7 + 7 + 8);
+	if (ncolors < ARRAY_SIZE(bw_color_lut)) {
+		printf("Error: lut too small: %u < %zu\n", ncolors,
+		       ARRAY_SIZE(bw_color_lut));
 		return;
 	}
-	memset(lut, 0, size * sizeof(struct drm_color_lut));
+	memset(lut, 0, ncolors * sizeof(struct drm_color_lut));
 
-#define FILL_COLOR(idx, r, g, b) \
-	lut[idx].red = (r) << 8; \
-	lut[idx].green = (g) << 8; \
-	lut[idx].blue = (b) << 8
-
-	FILL_COLOR( 0, 192, 192, 192);	/* grey */
-	FILL_COLOR( 1, 192, 192, 0  );	/* yellow */
-	FILL_COLOR( 2, 0,   192, 192);	/* cyan */
-	FILL_COLOR( 3, 0,   192, 0  );	/* green */
-	FILL_COLOR( 4, 192, 0,   192);	/* magenta */
-	FILL_COLOR( 5, 192, 0,   0  );	/* red */
-	FILL_COLOR( 6, 0,   0,   192);	/* blue */
-
-	FILL_COLOR( 7, 0,   0,   192);	/* blue */
-	FILL_COLOR( 8, 19,  19,  19 );	/* black */
-	FILL_COLOR( 9, 192, 0,   192);	/* magenta */
-	FILL_COLOR(10, 19,  19,  19 );	/* black */
-	FILL_COLOR(11, 0,   192, 192);	/* cyan */
-	FILL_COLOR(12, 19,  19,  19 );	/* black */
-	FILL_COLOR(13, 192, 192, 192);	/* grey */
-
-	FILL_COLOR(14, 0,   33,  76);	/* in-phase */
-	FILL_COLOR(15, 255, 255, 255);	/* super white */
-	FILL_COLOR(16, 50,  0,   106);	/* quadrature */
-	FILL_COLOR(17, 19,  19,  19);	/* black */
-	FILL_COLOR(18, 9,   9,   9);	/* 3.5% */
-	FILL_COLOR(19, 19,  19,  19);	/* 7.5% */
-	FILL_COLOR(20, 29,  29,  29);	/* 11.5% */
-	FILL_COLOR(21, 19,  19,  19);	/* black */
-
-#undef FILL_COLOR
+	if (ncolors < ARRAY_SIZE(pentile_color_lut))
+		memcpy(lut, bw_color_lut, sizeof(bw_color_lut));
+	else if (ncolors < ARRAY_SIZE(smpte_color_lut))
+		memcpy(lut, pentile_color_lut, sizeof(pentile_color_lut));
+	else
+		memcpy(lut, smpte_color_lut, sizeof(smpte_color_lut));
 }
 
 static void fill_smpte(const struct util_format_info *info, void *planes[3],
@@ -685,6 +1195,12 @@ static void fill_smpte(const struct util_format_info *info, void *planes[3],
 	unsigned char *u, *v;
 
 	switch (info->format) {
+	case DRM_FORMAT_C1:
+		return fill_smpte_c1(planes[0], width, height, stride);
+	case DRM_FORMAT_C2:
+		return fill_smpte_c2(planes[0], width, height, stride);
+	case DRM_FORMAT_C4:
+		return fill_smpte_c4(planes[0], width, height, stride);
 	case DRM_FORMAT_C8:
 		return fill_smpte_c8(planes[0], width, height, stride);
 	case DRM_FORMAT_UYVY:
@@ -698,10 +1214,19 @@ static void fill_smpte(const struct util_format_info *info, void *planes[3],
 	case DRM_FORMAT_NV21:
 	case DRM_FORMAT_NV16:
 	case DRM_FORMAT_NV61:
+	case DRM_FORMAT_NV24:
+	case DRM_FORMAT_NV42:
 		u = info->yuv.order & YUV_YCbCr ? planes[1] : planes[1] + 1;
 		v = info->yuv.order & YUV_YCrCb ? planes[1] : planes[1] + 1;
 		return fill_smpte_yuv_planar(&info->yuv, planes[0], u, v,
 					     width, height, stride);
+
+	case DRM_FORMAT_NV15:
+	case DRM_FORMAT_NV20:
+	case DRM_FORMAT_NV30:
+		return fill_smpte_yuv_planar_10bpp(&info->yuv, planes[0],
+						   planes[1], width, height,
+						   stride);
 
 	case DRM_FORMAT_YUV420:
 		return fill_smpte_yuv_planar(&info->yuv, planes[0], planes[1],
@@ -720,9 +1245,11 @@ static void fill_smpte(const struct util_format_info *info, void *planes[3],
 	case DRM_FORMAT_BGRA4444:
 	case DRM_FORMAT_BGRX4444:
 	case DRM_FORMAT_RGB565:
+	case DRM_FORMAT_RGB565 | DRM_FORMAT_BIG_ENDIAN:
 	case DRM_FORMAT_BGR565:
 	case DRM_FORMAT_ARGB1555:
 	case DRM_FORMAT_XRGB1555:
+	case DRM_FORMAT_XRGB1555 | DRM_FORMAT_BIG_ENDIAN:
 	case DRM_FORMAT_ABGR1555:
 	case DRM_FORMAT_XBGR1555:
 	case DRM_FORMAT_RGBA5551:
@@ -730,7 +1257,8 @@ static void fill_smpte(const struct util_format_info *info, void *planes[3],
 	case DRM_FORMAT_BGRA5551:
 	case DRM_FORMAT_BGRX5551:
 		return fill_smpte_rgb16(&info->rgb, planes[0],
-					width, height, stride);
+					width, height, stride,
+					info->format & DRM_FORMAT_BIG_ENDIAN);
 
 	case DRM_FORMAT_BGR888:
 	case DRM_FORMAT_RGB888:
@@ -764,10 +1292,31 @@ static void fill_smpte(const struct util_format_info *info, void *planes[3],
 	}
 }
 
-/* swap these for big endian.. */
-#define RED   2
-#define GREEN 1
-#define BLUE  0
+#if HAVE_CAIRO
+static void byteswap_buffer16(void *mem, unsigned int width, unsigned int height,
+			      unsigned int stride)
+{
+	unsigned int x, y;
+
+	for (y = 0; y < height; ++y) {
+		for (x = 0; x < width; ++x)
+			((uint16_t *)mem)[x] = swap16(((uint16_t *)mem)[x]);
+		mem += stride;
+	}
+}
+
+static void byteswap_buffer32(void *mem, unsigned int width, unsigned int height,
+			      unsigned int stride)
+{
+	unsigned int x, y;
+
+	for (y = 0; y < height; ++y) {
+		for (x = 0; x < width; ++x)
+			((uint32_t *)mem)[x] = swap32(((uint32_t *)mem)[x]);
+		mem += stride;
+	}
+}
+#endif
 
 static void make_pwetty(void *data, unsigned int width, unsigned int height,
 			unsigned int stride, uint32_t format)
@@ -776,6 +1325,8 @@ static void make_pwetty(void *data, unsigned int width, unsigned int height,
 	cairo_surface_t *surface;
 	cairo_t *cr;
 	cairo_format_t cairo_format;
+	bool swap16 = false;
+	bool swap32 = false;
 
 	/* we can ignore the order of R,G,B channels */
 	switch (format) {
@@ -786,8 +1337,10 @@ static void make_pwetty(void *data, unsigned int width, unsigned int height,
 		cairo_format = CAIRO_FORMAT_ARGB32;
 		break;
 	case DRM_FORMAT_RGB565:
+	case DRM_FORMAT_RGB565 | DRM_FORMAT_BIG_ENDIAN:
 	case DRM_FORMAT_BGR565:
 		cairo_format = CAIRO_FORMAT_RGB16_565;
+		swap16 = fb_foreign_endian(format);
 		break;
 #if CAIRO_VERSION_MAJOR > 1 || (CAIRO_VERSION_MAJOR == 1 && CAIRO_VERSION_MINOR >= 12)
 	case DRM_FORMAT_ARGB2101010:
@@ -795,11 +1348,18 @@ static void make_pwetty(void *data, unsigned int width, unsigned int height,
 	case DRM_FORMAT_ABGR2101010:
 	case DRM_FORMAT_XBGR2101010:
 		cairo_format = CAIRO_FORMAT_RGB30;
+		swap32 = fb_foreign_endian(format);
 		break;
 #endif
 	default:
 		return;
 	}
+
+	/* Cairo uses native byte order, so we may have to byteswap before... */
+	if (swap16)
+		byteswap_buffer16(data, width, height, stride);
+	if (swap32)
+		byteswap_buffer32(data, width, height, stride);
 
 	surface = cairo_image_surface_create_for_data(data,
 						      cairo_format,
@@ -836,7 +1396,25 @@ static void make_pwetty(void *data, unsigned int width, unsigned int height,
 		}
 
 	cairo_destroy(cr);
+
+	/* ... and after */
+	if (swap16)
+		byteswap_buffer16(data, width, height, stride);
+	if (swap32)
+		byteswap_buffer32(data, width, height, stride);
 #endif
+}
+
+static struct color_yuv make_tiles_yuv_color(unsigned int x, unsigned int y,
+					     unsigned int width)
+{
+	div_t d = div(x+y, width);
+	uint32_t rgb32 = 0x00130502 * (d.quot >> 6)
+		       + 0x000a1120 * (d.rem >> 6);
+	struct color_yuv color =
+		MAKE_YUV_601((rgb32 >> 16) & 0xff, (rgb32 >> 8) & 0xff,
+			     rgb32 & 0xff);
+	return color;
 }
 
 static void fill_tiles_yuv_planar(const struct util_format_info *info,
@@ -853,12 +1431,8 @@ static void fill_tiles_yuv_planar(const struct util_format_info *info,
 
 	for (y = 0; y < height; ++y) {
 		for (x = 0; x < width; ++x) {
-			div_t d = div(x+y, width);
-			uint32_t rgb32 = 0x00130502 * (d.quot >> 6)
-				       + 0x000a1120 * (d.rem >> 6);
 			struct color_yuv color =
-				MAKE_YUV_601((rgb32 >> 16) & 0xff,
-					     (rgb32 >> 8) & 0xff, rgb32 & 0xff);
+				make_tiles_yuv_color(x, y, width);
 
 			y_mem[x] = color.y;
 			u_mem[x/xsub*cs] = color.u;
@@ -870,6 +1444,45 @@ static void fill_tiles_yuv_planar(const struct util_format_info *info,
 			u_mem += stride * cs / xsub;
 			v_mem += stride * cs / xsub;
 		}
+	}
+}
+
+static void fill_tiles_yuv_planar_10bpp(const struct util_format_info *info,
+					unsigned char *y_mem,
+					unsigned char *uv_mem,
+					unsigned int width,
+					unsigned int height,
+					unsigned int stride)
+{
+	const struct util_yuv_info *yuv = &info->yuv;
+	unsigned int cs = yuv->chroma_stride;
+	unsigned int xsub = yuv->xsub;
+	unsigned int ysub = yuv->ysub;
+	unsigned int xstep = cs * xsub;
+	unsigned int x;
+	unsigned int y;
+
+	for (y = 0; y < height; ++y) {
+		for (x = 0; x < width; x += 4) {
+			struct color_yuv a = make_tiles_yuv_color(x+0, y, width);
+			struct color_yuv b = make_tiles_yuv_color(x+1, y, width);
+			struct color_yuv c = make_tiles_yuv_color(x+2, y, width);
+			struct color_yuv d = make_tiles_yuv_color(x+3, y, width);
+
+			write_pixels_10bpp(&y_mem[(x * 5) / 4],
+				a.y << 2, b.y << 2, c.y << 2, d.y << 2);
+		}
+		y_mem += stride;
+	}
+	for (y = 0; y < height; y += ysub) {
+		for (x = 0; x < width; x += xstep) {
+			struct color_yuv a = make_tiles_yuv_color(x+0, y, width);
+			struct color_yuv b = make_tiles_yuv_color(x+xsub, y, width);
+
+			write_pixels_10bpp(&uv_mem[(x * 5) / xstep],
+				a.u << 2, a.v << 2, b.u << 2, b.v << 2);
+		}
+		uv_mem += stride * cs / xsub;
 	}
 }
 
@@ -887,12 +1500,8 @@ static void fill_tiles_yuv_packed(const struct util_format_info *info,
 
 	for (y = 0; y < height; ++y) {
 		for (x = 0; x < width; x += 2) {
-			div_t d = div(x+y, width);
-			uint32_t rgb32 = 0x00130502 * (d.quot >> 6)
-				       + 0x000a1120 * (d.rem >> 6);
 			struct color_yuv color =
-				MAKE_YUV_601((rgb32 >> 16) & 0xff,
-					     (rgb32 >> 8) & 0xff, rgb32 & 0xff);
+				make_tiles_yuv_color(x, y, width);
 
 			y_mem[2*x] = color.y;
 			c_mem[2*x+u] = color.u;
@@ -907,7 +1516,7 @@ static void fill_tiles_yuv_packed(const struct util_format_info *info,
 
 static void fill_tiles_rgb16(const struct util_format_info *info, void *mem,
 			     unsigned int width, unsigned int height,
-			     unsigned int stride)
+			     unsigned int stride, bool fb_be)
 {
 	const struct util_rgb_info *rgb = &info->rgb;
 	void *mem_base = mem;
@@ -923,7 +1532,7 @@ static void fill_tiles_rgb16(const struct util_format_info *info, void *mem,
 					  (rgb32 >> 8) & 0xff, rgb32 & 0xff,
 					  255);
 
-			((uint16_t *)mem)[x] = color;
+			((uint16_t *)mem)[x] = cpu_to_fb16(color);
 		}
 		mem += stride;
 	}
@@ -972,7 +1581,7 @@ static void fill_tiles_rgb32(const struct util_format_info *info, void *mem,
 					  (rgb32 >> 8) & 0xff, rgb32 & 0xff,
 					  alpha);
 
-			((uint32_t *)mem)[x] = color;
+			((uint32_t *)mem)[x] = cpu_to_le32(color);
 		}
 		mem += stride;
 	}
@@ -1023,10 +1632,18 @@ static void fill_tiles(const struct util_format_info *info, void *planes[3],
 	case DRM_FORMAT_NV21:
 	case DRM_FORMAT_NV16:
 	case DRM_FORMAT_NV61:
+	case DRM_FORMAT_NV24:
+	case DRM_FORMAT_NV42:
 		u = info->yuv.order & YUV_YCbCr ? planes[1] : planes[1] + 1;
 		v = info->yuv.order & YUV_YCrCb ? planes[1] : planes[1] + 1;
 		return fill_tiles_yuv_planar(info, planes[0], u, v,
 					     width, height, stride);
+
+	case DRM_FORMAT_NV15:
+	case DRM_FORMAT_NV20:
+	case DRM_FORMAT_NV30:
+		return fill_tiles_yuv_planar_10bpp(info, planes[0], planes[1],
+						   width, height, stride);
 
 	case DRM_FORMAT_YUV420:
 		return fill_tiles_yuv_planar(info, planes[0], planes[1],
@@ -1045,9 +1662,11 @@ static void fill_tiles(const struct util_format_info *info, void *planes[3],
 	case DRM_FORMAT_BGRA4444:
 	case DRM_FORMAT_BGRX4444:
 	case DRM_FORMAT_RGB565:
+	case DRM_FORMAT_RGB565 | DRM_FORMAT_BIG_ENDIAN:
 	case DRM_FORMAT_BGR565:
 	case DRM_FORMAT_ARGB1555:
 	case DRM_FORMAT_XRGB1555:
+	case DRM_FORMAT_XRGB1555 | DRM_FORMAT_BIG_ENDIAN:
 	case DRM_FORMAT_ABGR1555:
 	case DRM_FORMAT_XBGR1555:
 	case DRM_FORMAT_RGBA5551:
@@ -1055,7 +1674,8 @@ static void fill_tiles(const struct util_format_info *info, void *planes[3],
 	case DRM_FORMAT_BGRA5551:
 	case DRM_FORMAT_BGRX5551:
 		return fill_tiles_rgb16(info, planes[0],
-					width, height, stride);
+					width, height, stride,
+					info->format & DRM_FORMAT_BIG_ENDIAN);
 
 	case DRM_FORMAT_BGR888:
 	case DRM_FORMAT_RGB888:
@@ -1119,7 +1739,7 @@ static void fill_gradient_rgb32(const struct util_rgb_info *rgb,
 
 		for (j = 0; j < width / 2; j++) {
 			uint32_t value = MAKE_RGBA10(rgb, j & 0x3ff, j & 0x3ff, j & 0x3ff, 0);
-			row[2*j] = row[2*j+1] = value;
+			row[2*j] = row[2*j+1] = cpu_to_le32(value);
 		}
 		mem += stride;
 	}
@@ -1129,7 +1749,7 @@ static void fill_gradient_rgb32(const struct util_rgb_info *rgb,
 
 		for (j = 0; j < width / 2; j++) {
 			uint32_t value = MAKE_RGBA10(rgb, j & 0x3fc, j & 0x3fc, j & 0x3fc, 0);
-			row[2*j] = row[2*j+1] = value;
+			row[2*j] = row[2*j+1] = cpu_to_le32(value);
 		}
 		mem += stride;
 	}

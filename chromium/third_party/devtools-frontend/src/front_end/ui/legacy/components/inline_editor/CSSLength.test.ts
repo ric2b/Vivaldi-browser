@@ -6,82 +6,70 @@ import {renderElementIntoDOM} from '../../../../testing/DOMHelpers.js';
 
 import * as InlineEditor from './inline_editor.js';
 
-const initialData = {
-  lengthText: '42px',
-  overloaded: false,
-};
-
 describe('CSSLength', () => {
-  it('can render CSSLength component correctly', () => {
-    const component = new InlineEditor.CSSLength.CSSLength();
-    renderElementIntoDOM(component);
-    component.data = initialData;
+  const {CSSLength} = InlineEditor.CSSLength;
 
-    assert.isNotNull(component.shadowRoot);
-    const valueElement = component.shadowRoot.querySelector('.value');
-    if (!valueElement) {
-      assert.fail('CSSLength component is not rendered correctly');
-      return;
-    }
-    assert.strictEqual(valueElement.textContent, '42', 'CSSLength value content is not rendered correctly');
+  it('can render CSSLength component correctly', () => {
+    const component = new CSSLength();
+    renderElementIntoDOM(component);
+    component.data = {lengthText: '42rem'};
+
+    assert.strictEqual(component.shadowRoot!.textContent?.trim(), '42rem');
+    const valueElement = component.shadowRoot!.querySelector('.value');
+    assert.strictEqual(valueElement!.textContent, '42');
   });
 
-  it('can +/- length values when the value is dragged', async () => {
-    const component = new InlineEditor.CSSLength.CSSLength();
+  it('correctly preserves lengths in decimal notation', () => {
+    const component = new CSSLength();
     renderElementIntoDOM(component);
-    component.data = initialData;
+    component.data = {lengthText: '.0000001px'};
 
-    assert.isNotNull(component.shadowRoot);
+    assert.strictEqual(component.shadowRoot!.textContent?.trim(), '.0000001px');
+    const valueElement = component.shadowRoot!.querySelector('.value');
+    assert.strictEqual(valueElement!.textContent, '.0000001');
+  });
 
-    let lengthText = initialData.lengthText;
-    component.addEventListener('valuechanged', (event: Event) => {
-      const {data} = event as InlineEditor.InlineEditorUtils.ValueChangedEvent;
-      lengthText = data.value;
-    });
+  it('correctly preserves lengths in exponential notation', () => {
+    const component = new CSSLength();
+    renderElementIntoDOM(component);
+    component.data = {lengthText: '1e-7vw'};
 
-    const lengthValueElement = component.shadowRoot.querySelector('.value');
-    if (!lengthValueElement) {
-      assert.fail('length value element was not rendered');
-      return;
-    }
+    assert.strictEqual(component.shadowRoot!.textContent?.trim(), '1e-7vw');
+    const valueElement = component.shadowRoot!.querySelector('.value');
+    assert.strictEqual(valueElement!.textContent, '1e-7');
+  });
 
-    let mousePositionX = 1;
-    lengthValueElement.dispatchEvent(new MouseEvent('mousedown', {clientX: mousePositionX}));
+  it('correctly increments and decrements lengths via dragging', async () => {
+    const component = new CSSLength();
+    renderElementIntoDOM(component);
+    component.data = {lengthText: '42px'};
+
+    const valueElement = component.shadowRoot!.querySelector('.value');
+    valueElement!.dispatchEvent(new MouseEvent('mousedown', {clientX: 1}));
     // Wait enough to let CSSLength think it is not a click.
     await new Promise<void>(res => setTimeout(() => res(), 400));
 
-    const mousemoveRight = new MouseEvent('mousemove', {
-      clientX: ++mousePositionX,
-    });
-    document.dispatchEvent(mousemoveRight);
-    assert.strictEqual(lengthText, '43px', 'length value should increase by 1 when the mouse is dragged to right');
+    document.dispatchEvent(new MouseEvent('mousemove', {movementX: 1}));
+    assert.strictEqual(valueElement!.textContent, '43');
 
-    const mousemoveLeftShift = new MouseEvent('mousemove', {
-      clientX: --mousePositionX,
-      shiftKey: true,
-    });
-    document.dispatchEvent(mousemoveLeftShift);
-    assert.strictEqual(
-        lengthText, '33px', 'length value should decrease by 10 when the mouse is dragged to left with shift key');
+    document.dispatchEvent(new MouseEvent('mousemove', {movementX: -1, shiftKey: true}));
+    assert.strictEqual(valueElement!.textContent, '33');
 
-    const mousemoveRightAlt = new MouseEvent('mousemove', {
-      clientX: ++mousePositionX,
-      altKey: true,
-    });
-    document.dispatchEvent(mousemoveRightAlt);
-    assert.strictEqual(
-        lengthText, '33.1px', 'length value should decrease by 10 when the mouse is dragged to left with shift key');
+    document.dispatchEvent(new MouseEvent('mousemove', {movementX: 1, altKey: true}));
+    assert.strictEqual(valueElement!.textContent, '33.1');
   });
 
-  describe('#CSSLengthUtils', () => {
-    it('parses CSS properties with length correctly', () => {
-      assert.deepEqual(
-          InlineEditor.CSSLengthUtils.parseText('42px'),
-          {value: 42, unit: InlineEditor.CSSLengthUtils.LengthUnit.PIXEL});
-      assert.deepEqual(
-          InlineEditor.CSSLengthUtils.parseText('-5vw'), {value: -5, unit: InlineEditor.CSSLengthUtils.LengthUnit.VW});
-      assert.deepEqual(InlineEditor.CSSLengthUtils.parseText('42'), null);
-      assert.deepEqual(InlineEditor.CSSLengthUtils.parseText(''), null);
-    });
+  it('correctly increments by 0.1 with Alt key held', async () => {
+    const component = new CSSLength();
+    renderElementIntoDOM(component);
+    component.data = {lengthText: '100px'};
+
+    const valueElement = component.shadowRoot!.querySelector('.value');
+    valueElement!.dispatchEvent(new MouseEvent('mousedown', {clientX: 1}));
+    // Wait enough to let CSSLength think it is not a click.
+    await new Promise<void>(res => setTimeout(() => res(), 400));
+
+    document.dispatchEvent(new MouseEvent('mousemove', {movementX: 1, altKey: true}));
+    assert.strictEqual(valueElement!.textContent, '100.1');
   });
 });

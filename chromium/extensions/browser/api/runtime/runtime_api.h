@@ -200,7 +200,7 @@ class RuntimeEventRouter {
                                      const ExtensionId& extension_id);
 
   // Dispatches the onInstalled event to the given extension.
-  static void DispatchOnInstalledEvent(content::BrowserContext* context,
+  static void DispatchOnInstalledEvent(void* context_id,
                                        const ExtensionId& extension_id,
                                        const base::Version& old_version,
                                        bool chrome_updated);
@@ -339,6 +339,12 @@ class RuntimeGetContextsFunction : public ExtensionFunction {
   // Returns a collection of all frame-based extension contexts for the
   // extension.
   std::vector<api::runtime::ExtensionContext> GetFrameContexts();
+
+  // Helper methods to return tab id, frame id and window id for a given
+  // context.
+  int GetTabId(content::WebContents& web_contents);
+  int GetFrameId(content::RenderFrameHost& host);
+  int GetWindowId(content::WebContents& web_contents);
 };
 
 }  // namespace extensions

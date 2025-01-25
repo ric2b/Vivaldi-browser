@@ -19,6 +19,7 @@ package com.google.android.nearby.presence.rust;
 import androidx.annotation.Nullable;
 import com.google.android.nearby.presence.rust.credential.CredentialBook;
 import java.util.Iterator;
+import org.checkerframework.checker.nullness.qual.EnsuresNonNull;
 
 /**
  * A deserialized V0 advertisement. This class is backed by native data behind the {@link V0Payload}
@@ -32,9 +33,9 @@ public final class DeserializedV0Advertisement<M extends CredentialBook.MatchedM
   }
 
   private final int numDataElements;
-  private final @Nullable V0Payload payload;
-  private final @IdentityKind int identity;
-  private final CredentialBook<M> credentialBook;
+  @Nullable private final V0Payload payload;
+  @IdentityKind private final int identity;
+  @Nullable private final CredentialBook<M> credentialBook;
 
   /** Create an illegible instance with the given error identity. */
   /* package */ DeserializedV0Advertisement(@IdentityKind int illegibleIdentity) {
@@ -79,8 +80,9 @@ public final class DeserializedV0Advertisement<M extends CredentialBook.MatchedM
   }
 
   /** Throws {@code IllegalStateException} if this advertisement is not legible. */
+  @EnsuresNonNull({"payload", "credentialBook"})
   private void ensureLegible(String action) {
-    if (!isLegible()) {
+    if (!isLegible() || payload == null || credentialBook == null) {
       throw new IllegalStateException(
           String.format("Cannot %s for non-legible advertisement", action));
     }
@@ -122,7 +124,11 @@ public final class DeserializedV0Advertisement<M extends CredentialBook.MatchedM
 
   /** Gets all the data elements for iteration. */
   public Iterable<V0DataElement> getDataElements() {
-    return () -> new DataElementIterator(payload, numDataElements);
+    ensureLegible("get data elements");
+    return () -> {
+      ensureLegible("get data element iterator");
+      return new DataElementIterator(payload, numDataElements);
+    };
   }
 
   /** Visits all the data elements with the given visitor. */
@@ -179,6 +185,7 @@ public final class DeserializedV0Advertisement<M extends CredentialBook.MatchedM
    */
   @Nullable
   public byte[] getDecryptedMetadata() {
+    ensureLegible("get decrypted metadata");
     return payload.getDecryptedMetadata();
   }
 
@@ -196,7 +203,7 @@ public final class DeserializedV0Advertisement<M extends CredentialBook.MatchedM
 
     @Override
     public boolean hasNext() {
-      return position < (numDataElements - 1);
+      return position < numDataElements;
     }
 
     @Override

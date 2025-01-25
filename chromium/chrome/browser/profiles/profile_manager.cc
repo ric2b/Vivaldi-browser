@@ -89,6 +89,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/search_engines/default_search_manager.h"
+#include "components/signin/core/browser/active_primary_accounts_metrics_recorder.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -108,11 +109,14 @@
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+#include "extensions/browser/extension_system.h"
+#endif
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_service.h"
 #include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest.h"
 #endif
@@ -727,7 +731,12 @@ Profile* ProfileManager::GetProfile(const base::FilePath& profile_dir) {
   Profile* profile = GetProfileByPath(profile_dir);
   if (profile)
     return profile;
-  return CreateAndInitializeProfile(profile_dir);
+  return CreateAndInitializeProfile(
+      profile_dir,
+      // Because the callback is called synchronously, it's safe to use
+      // Unretained here.
+      base::BindOnce(&ProfileManager::CreateProfileHelper,
+                     base::Unretained(this)));
 }
 
 size_t ProfileManager::GetNumberOfProfiles() {
@@ -1222,20 +1231,7 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
     profile->GetPrefs()->SetString(prefs::kProfileName, profile_name);
   }
 
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  bool force_supervised_user_id =
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-      !ash::IsSigninBrowserContext(profile) &&
-      !ash::IsLockScreenAppBrowserContext(profile) &&
-#endif
-      command_line->HasSwitch(switches::kSupervisedUserId);
-
-  if (force_supervised_user_id) {
-    supervised_user_id =
-        command_line->GetSwitchValueASCII(switches::kSupervisedUserId);
-  }
-  if (force_supervised_user_id ||
-      !profile->GetPrefs()->HasPrefPath(prefs::kSupervisedUserId)) {
+  if (!profile->GetPrefs()->HasPrefPath(prefs::kSupervisedUserId)) {
     profile->GetPrefs()->SetString(prefs::kSupervisedUserId,
                                    supervised_user_id);
   }
@@ -1260,12 +1256,12 @@ std::unique_ptr<Profile> ProfileManager::CreateProfileHelper(
     const base::FilePath& path) {
   TRACE_EVENT0("browser", "ProfileManager::CreateProfileHelper");
 
-  return Profile::CreateProfile(path, this, Profile::CREATE_MODE_SYNCHRONOUS);
+  return Profile::CreateProfile(path, this, Profile::CreateMode::kSynchronous);
 }
 
 std::unique_ptr<Profile> ProfileManager::CreateProfileAsyncHelper(
     const base::FilePath& path) {
-  return Profile::CreateProfile(path, this, Profile::CREATE_MODE_ASYNCHRONOUS);
+  return Profile::CreateProfile(path, this, Profile::CreateMode::kAsynchronous);
 }
 
 bool ProfileManager::HasKeepAliveForTesting(const Profile* profile,
@@ -1498,7 +1494,7 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
 
   TRACE_EVENT0("browser", "ProfileManager::DoFinalInitForServices");
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   bool extensions_enabled = !go_off_the_record;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if ((!base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -1512,6 +1508,7 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   extensions::ExtensionSystem::Get(profile)->InitForRegularProfile(
       extensions_enabled);
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Set the block extensions bit on the ExtensionService. There likely are no
   // blockable extensions to block.
   ProfileAttributesEntry* entry =
@@ -1522,6 +1519,7 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
         ->extension_service()
         ->BlockAllExtensions();
   }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Ensure that the `ContactCenterInsightsExtensionManager` is instantiated
@@ -1536,7 +1534,8 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   }
 #endif
 
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+
   // Initialization needs to happen after extension system initialization (for
   // extension::ManagementPolicy) and InitProfileUserPrefs (for setting the
   // initializing the supervised flag if necessary).
@@ -1595,10 +1594,16 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
 }
 
 void ProfileManager::DoFinalInitLogging(Profile* profile) {
-  if (!do_final_services_init_)
-    return;
-
   TRACE_EVENT0("browser", "ProfileManager::DoFinalInitLogging");
+  base::UmaHistogramCounts100("Profile.NumberOfProfilesAtProfileCreation",
+                              GetNumberOfProfiles());
+
+  // Skip the rest of this function in tests as the extension service might be
+  // uninitialized.
+  if (!do_final_services_init_) {
+    return;
+  }
+
   // Count number of extensions in this profile.
   int enabled_app_count = -1;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1722,29 +1727,6 @@ Profile* ProfileManager::GetActiveUserOrOffTheRecordProfile() {
 }
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
 
-bool ProfileManager::AddProfile(std::unique_ptr<Profile> profile) {
-  TRACE_EVENT0("browser", "ProfileManager::AddProfile");
-
-  DCHECK(profile);
-
-  // Make sure that we're not loading a profile with the same ID as a profile
-  // that's already loaded.
-  if (GetProfileByPathInternal(profile->GetPath())) {
-    NOTREACHED_IN_MIGRATION()
-        << "Attempted to add profile with the same path ("
-        << profile->GetPath().value() << ") as an already-loaded profile.";
-    return false;
-  }
-
-  ProfileInfo* profile_info = RegisterOwnedProfile(std::move(profile));
-  profile_info->MarkProfileAsCreated(profile_info->GetRawProfile());
-
-  InitProfileUserPrefs(profile_info->GetCreatedProfile());
-  DoFinalInit(profile_info,
-              ShouldGoOffTheRecord(profile_info->GetCreatedProfile()));
-  return true;
-}
-
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 void ProfileManager::UnloadProfile(const base::FilePath& profile_dir) {
   TRACE_EVENT0("browser", "ProfileManager::UnloadProfile");
@@ -1781,7 +1763,9 @@ void ProfileManager::UnloadProfile(const base::FilePath& profile_dir) {
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 
 Profile* ProfileManager::CreateAndInitializeProfile(
-    const base::FilePath& profile_dir) {
+    const base::FilePath& profile_dir,
+    base::OnceCallback<std::unique_ptr<Profile>(const base::FilePath&)>
+        factory) {
   TRACE_EVENT0("browser", "ProfileManager::CreateAndInitializeProfile");
 
   if (!CanCreateProfileAtPath(profile_dir)) {
@@ -1817,9 +1801,10 @@ Profile* ProfileManager::CreateAndInitializeProfile(
     return profile_being_loaded.get();
   }
 
-  std::unique_ptr<Profile> profile = CreateProfileHelper(profile_dir);
-  if (!profile)
+  std::unique_ptr<Profile> profile = std::move(factory).Run(profile_dir);
+  if (!profile) {
     return nullptr;
+  }
 
   // Place the unique_ptr inside ProfileInfo, which was added by
   // OnProfileCreationStarted().
@@ -1847,7 +1832,7 @@ void ProfileManager::OnProfileCreationFinished(Profile* profile,
   CHECK(iter != profiles_info_.end(), base::NotFatalUntil::M130);
   ProfileInfo* info = iter->second.get();
 
-  if (create_mode == Profile::CREATE_MODE_SYNCHRONOUS) {
+  if (create_mode == Profile::CreateMode::kSynchronous) {
     // Already initialized in OnProfileCreationStarted().
     // TODO(nicolaso): Figure out why this would break browser tests:
     //     DCHECK_EQ(profile, profiles_info_->GetCreatedProfile());
@@ -1901,7 +1886,7 @@ void ProfileManager::OnProfileCreationStarted(Profile* profile,
     observer.OnProfileCreationStarted(profile);
   }
 
-  if (create_mode == Profile::CREATE_MODE_ASYNCHRONOUS) {
+  if (create_mode == Profile::CreateMode::kAsynchronous) {
     // Profile will be registered later, in CreateProfileAsync().
     return;
   }
@@ -2122,6 +2107,55 @@ void ProfileManager::SaveActiveProfiles() {
   }
 }
 
+void ProfileManager::SetProfileAsLastUsed(Profile* last_active) {
+#if !BUILDFLAG(IS_ANDROID)
+  // The profile may incorrectly become "active" during its destruction, caused
+  // by the UI teardown. See https://crbug.com/1073451
+  if (IsProfileDirectoryMarkedForDeletion(last_active->GetPath())) {
+    return;
+  }
+#endif
+
+  // If there is a primary account, mark it as used "just now".
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(last_active);
+  signin::ActivePrimaryAccountsMetricsRecorder*
+      active_primary_accounts_metrics_recorder =
+          g_browser_process->active_primary_accounts_metrics_recorder();
+  // IdentityManager is null for incognito profiles.
+  if (active_primary_accounts_metrics_recorder && identity_manager &&
+      identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+    CoreAccountInfo account_info =
+        identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
+    active_primary_accounts_metrics_recorder->MarkAccountAsActiveNow(
+        account_info.gaia);
+  }
+
+  // Don't remember ephemeral profiles as last because they are not going to
+  // persist after restart.
+  if (IsRegisteredAsEphemeral(&GetProfileAttributesStorage(),
+                              last_active->GetPath())) {
+    return;
+  }
+
+  // Only keep track of profiles that we are managing; tests may create others.
+  // Also never consider the SystemProfile as "active".
+  if (profiles_info_.find(last_active->GetPath()) != profiles_info_.end() &&
+      !last_active->IsSystemProfile()) {
+    base::FilePath profile_path_base = last_active->GetBaseName();
+    if (profile_path_base != GetLastUsedProfileBaseName()) {
+      profiles::SetLastUsedProfile(profile_path_base);
+    }
+
+    ProfileAttributesEntry* entry =
+        GetProfileAttributesStorage().GetProfileAttributesWithPath(
+            last_active->GetPath());
+    if (entry) {
+      entry->SetActiveTimeToNow();
+    }
+  }
+}
+
 #if !BUILDFLAG(IS_ANDROID)
 void ProfileManager::OnBrowserOpened(Browser* browser) {
   DCHECK(browser);
@@ -2193,31 +2227,6 @@ void ProfileManager::OnBrowserClosed(Browser* browser) {
   }
 }
 
-void ProfileManager::UpdateLastUser(Profile* last_active) {
-  // The profile may incorrectly become "active" during its destruction, caused
-  // by the UI teardown. See https://crbug.com/1073451
-  if (IsProfileDirectoryMarkedForDeletion(last_active->GetPath()))
-    return;
-
-  PrefService* local_state = g_browser_process->local_state();
-  DCHECK(local_state);
-  // Only keep track of profiles that we are managing; tests may create others.
-  // Also never consider the SystemProfile as "active".
-  if (profiles_info_.find(last_active->GetPath()) != profiles_info_.end() &&
-      !last_active->IsSystemProfile()) {
-    base::FilePath profile_path_base = last_active->GetBaseName();
-    if (profile_path_base != GetLastUsedProfileBaseName())
-      profiles::SetLastUsedProfile(profile_path_base);
-
-    ProfileAttributesEntry* entry =
-        GetProfileAttributesStorage().GetProfileAttributesWithPath(
-            last_active->GetPath());
-    if (entry) {
-      entry->SetActiveTimeToNow();
-    }
-  }
-}
-
 ProfileManager::BrowserListObserver::BrowserListObserver(
     ProfileManager* manager)
     : profile_manager_(manager) {
@@ -2242,18 +2251,11 @@ void ProfileManager::BrowserListObserver::OnBrowserSetLastActive(
   // shutting down), this event will be fired after each browser is
   // closed. This does not represent a user intention to change the active
   // browser so is not handled here.
-  if (profile_manager_->closing_all_browsers_)
+  if (profile_manager_->closing_all_browsers_) {
     return;
+  }
 
-  Profile* last_active = browser->profile();
-
-  // Don't remember ephemeral profiles as last because they are not going to
-  // persist after restart.
-  if (IsRegisteredAsEphemeral(&profile_manager_->GetProfileAttributesStorage(),
-                              last_active->GetPath()))
-    return;
-
-  profile_manager_->UpdateLastUser(last_active);
+  profile_manager_->SetProfileAsLastUsed(browser->profile());
 }
 
 void ProfileManager::OnClosingAllBrowsersChanged(bool closing) {

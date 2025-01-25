@@ -148,6 +148,7 @@ component("capture_lib") {
   public_deps = [
     ":capture_base",
     ":capture_device_specific",
+    ":capture_gpu_channel",
     ":capture_switches",
   ]
 
@@ -162,7 +163,7 @@ component("capture_lib") {
     "//media/mojo/mojom",
     "//services/service_manager/public/cpp",
     "//services/video_capture/public/mojom",
-    "//services/video_effects:buildflags",
+    "//services/video_effects/buildflags",
     "//third_party/libyuv",
     "//ui/display",
     "//ui/gfx",
@@ -272,18 +273,6 @@ component("capture_lib") {
     ]
   }
 
-  # Establish GPU Channel
-  if (is_linux || is_win || is_chromeos_ash || is_mac) {
-    sources += [
-      "video/video_capture_gpu_channel_host.cc",
-      "video/video_capture_gpu_channel_host.h",
-    ]
-    deps += [
-      "//gpu/command_buffer/client",
-      "//gpu/ipc/client",
-    ]
-  }
-
   if (is_chromeos_ash) {
     sources += [
       "video/chromeos/camera_3a_controller.cc",
@@ -310,6 +299,8 @@ component("capture_lib") {
       "video/chromeos/camera_hal_dispatcher_impl.h",
       "video/chromeos/camera_metadata_utils.cc",
       "video/chromeos/camera_metadata_utils.h",
+      "video/chromeos/camera_sw_privacy_switch_state_observer.cc",
+      "video/chromeos/camera_sw_privacy_switch_state_observer.h",
       "video/chromeos/camera_trace_utils.cc",
       "video/chromeos/camera_trace_utils.h",
       "video/chromeos/capture_metadata_dispatcher.h",
@@ -361,6 +352,7 @@ component("capture_lib") {
       "//components/chromeos_camera:mojo_mjpeg_decode_accelerator",
       "//components/chromeos_camera/common",
       "//components/device_event_log",
+      "//gpu/ipc/client:ipc_client_sources",
       "//gpu/ipc/common:common",
       "//media/capture/video/chromeos/mojom:cros_camera",
       "//media/capture/video/chromeos/mojom:document_scanner",
@@ -390,6 +382,25 @@ component("capture_lib") {
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3:fuchsia.camera3_hlcpp",
       "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
       "//third_party/libyuv",
+    ]
+  }
+}
+
+source_set("capture_gpu_channel") {
+  defines = [ "CAPTURE_IMPLEMENTATION" ]
+  sources = []
+  deps = []
+
+  # Establish GPU Channel
+  if (is_linux || is_win || is_chromeos_ash || is_mac) {
+    sources += [
+      "video/video_capture_gpu_channel_host.cc",
+      "video/video_capture_gpu_channel_host.h",
+    ]
+    deps += [
+      ":capture_base",
+      "//gpu/command_buffer/client",
+      "//gpu/ipc/client",
     ]
   }
 }

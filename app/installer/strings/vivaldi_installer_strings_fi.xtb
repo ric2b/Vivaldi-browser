@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Asenna erilleen</translation>
 <translation id="1682285232070778125">Aseta Vivaldi oletusselaimeksi</translation>
 <translation id="1974060860693918893">Lisäasetukset</translation>
+<translation id="2053560788696003312">Vivaldi vaatii Windows-version 10 tai uudemman.</translation>
 <translation id="2134216661302048561">Vivaldin asentaja ei ole vielä lopettanut Vivaldi-selaimen asennusta. Haluatko varmasti sulkea sen nyt?</translation>
 <translation id="2286454467119466181">Perusasetukset</translation>
 <translation id="237789874664518125">Tekijänoikeus <ph name="YEAR" /> Vivaldi Technologies AS. Kaikki oikeudet pidätetään. &lt;a&gt;Tietosuojakäytäntö&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Hyväksy ja päivitä</translation>
 <translation id="5302048478445481009">Kieli</translation>
 <translation id="694714344624446243">Vivaldin asennus</translation>
+<translation id="7467493612551448880">Asentamaasi Vivaldin versiota ei ole optimoitu käyttämääsi Windowsin versioon.
+
+Lataa Windows ARM -versio sivulta vivaldi.com/downloads.</translation>
 <translation id="7658239707568436148">Peruuta</translation>
 <translation id="8773751185824654197">Huomaa: Jos käynnissä oleva Vivaldi-selain päivitetään, se suljetaan ja käynnistetään uudelleen</translation>
 <translation id="933060950687965486">Asennustapa</translation>

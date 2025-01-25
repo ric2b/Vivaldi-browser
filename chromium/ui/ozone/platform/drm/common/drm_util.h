@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef UI_OZONE_PLATFORM_DRM_COMMON_DRM_UTIL_H_
 #define UI_OZONE_PLATFORM_DRM_COMMON_DRM_UTIL_H_
 
@@ -44,6 +49,9 @@ const size_t kMaxDrmCount =
 // It is safe to assume there will be no more than 256 connectors per DRM.
 const size_t kMaxDrmConnectors =
     display::features::IsEdidBasedDisplayIdsEnabled() ? 256u : 16u;
+
+// Using a moderate size e.g. 256 for the cursor is enough in most cases.
+const int kMaxCursorBufferSize = 256;
 
 // DRM property names.
 const char kContentProtectionKey[] = "Content Protection Key";
@@ -116,7 +124,15 @@ std::vector<uint32_t> GetPossibleCrtcIdsFromBitmask(
 bool SameMode(const drmModeModeInfo& lhs, const drmModeModeInfo& rhs);
 
 std::unique_ptr<display::DisplayMode> CreateDisplayMode(
-    const drmModeModeInfo& mode);
+    const drmModeModeInfo& mode,
+    const std::optional<uint16_t>& vsync_rate_min_from_edid);
+
+// Returns a virtual mode based on |base_mode| with its vtotal altered to
+// achieve the specified |virtual_refresh_rate|, or nullptr if it could not be
+// created.
+std::unique_ptr<drmModeModeInfo> CreateVirtualMode(
+    const drmModeModeInfo& base_mode,
+    float virtual_refresh_rate);
 
 // Extracts the display modes list from |info| as well as the current and native
 // display modes given the |active_pixel_size| which is retrieved from the first
@@ -153,6 +169,13 @@ float ModeRefreshRate(const drmModeModeInfo& mode);
 
 bool ModeIsInterlaced(const drmModeModeInfo& mode);
 
+// Computes the precise minimum vsync rate using the mode's timing details.
+// The value obtained from the EDID has a loss of precision due to being an
+// integer. The precise rate must correspond to an integer valued vtotal.
+const std::optional<float> ModeVSyncRateMin(
+    const drmModeModeInfo& mode,
+    const std::optional<uint16_t>& vsync_rate_min_from_edid);
+
 bool IsVrrCapable(const DrmWrapper& drm, drmModeConnector* connector);
 
 bool IsVrrEnabled(const DrmWrapper& drm, drmModeCrtc* crtc);
@@ -165,6 +188,13 @@ const char* GetNameForColorspace(const gfx::ColorSpace color_space);
 uint64_t GetEnumValueForName(const DrmWrapper& drm,
                              int property_id,
                              const char* str);
+
+// Checks if |mode_size| corresponds to a tile mode size according to
+// |tile_property|. Note that this method does not return true for
+// tile-composited mode.
+bool IsTileMode(const gfx::Size mode_size, const TileProperty& tile_property);
+
+const gfx::Point GetTileCrtcOffset(const TileProperty& tiled_property);
 
 std::vector<uint64_t> ParsePathBlob(const drmModePropertyBlobRes& path_blob);
 
@@ -282,6 +312,21 @@ void ConsolidateTiledDisplayInfo(
 
 // Get the total tile-composited size of a tiled display.
 gfx::Size GetTotalTileDisplaySize(const TileProperty& tile_property);
+
+// A custom comparator of gfx::Size used to sort cursor sizes.
+struct CursorSizeComparator {
+  bool operator()(const gfx::Size& a, const gfx::Size& b) const {
+    if (a.GetArea() == b.GetArea()) {
+      if (a.width() == b.width()) {
+        return a.height() < b.height();
+      } else {
+        return a.width() < b.width();
+      }
+    } else {
+      return a.GetArea() < b.GetArea();
+    }
+  }
+};
 }  // namespace ui
 
 #endif  // UI_OZONE_PLATFORM_DRM_COMMON_DRM_UTIL_H_

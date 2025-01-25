@@ -26,10 +26,9 @@ class PasswordFormMetricsRecorder;
 struct PasswordForm;
 namespace metrics_util {
 enum class CredentialSourceType;
+enum class MoveToAccountStoreTrigger;
 }  // namespace metrics_util
 }  // namespace password_manager
-
-struct AccountInfo;
 
 // An interface for ManagePasswordsBubbleModel implemented by
 // ManagePasswordsUIController. Allows to retrieve the current state of the tab
@@ -73,6 +72,14 @@ class PasswordsModelDelegate {
   virtual const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
   GetCurrentForms() const = 0;
 
+  // Returns credential for the manage passwords bubble in the single credential
+  // mode. Providing a form by this method allows to use the bubble to display
+  // arbitrary password form details, not only those from the list of website
+  // related credentials. When this method returns `nullopt`, a list of stored
+  // credentials for the current origin are displayed in the bubble.
+  virtual const std::optional<password_manager::PasswordForm>&
+  GetManagePasswordsSingleCredentialDetailsModeCredential() const = 0;
+
   // For PENDING_PASSWORD_STATE state returns the current statistics for
   // the pending username.
   virtual const password_manager::InteractionsStats*
@@ -92,10 +99,6 @@ class PasswordsModelDelegate {
   // Returns true if GPM pin was created during the most recent passkey creation
   // flow, applicable for PASSKEY_SAVED_CONFIRMATION_STATE only.
   virtual bool GpmPinCreatedDuringRecentPasskeyCreation() const = 0;
-
-  // Returns username of a passkey that has just been saved, applicable for
-  // PASSKEY_SAVED_CONFIRMATION_STATE only.
-  virtual std::u16string GetRecentlySavedPasskeyUsername() const = 0;
 
   // Called from the model when the bubble is displayed.
   virtual void OnBubbleShown() = 0;
@@ -136,6 +139,11 @@ class PasswordsModelDelegate {
   // used or selected credential to their account store.
   virtual void MovePasswordToAccountStore() = 0;
 
+  // Moves pending password to the account storage.
+  virtual void MovePendingPasswordToAccountStoreUsingHelper(
+      const password_manager::PasswordForm&,
+      password_manager::metrics_util::MoveToAccountStoreTrigger) = 0;
+
   // Called from the dialog controller when a user rejects moving the recently
   // used credential to their account store.
   virtual void BlockMovingPasswordToAccountStore() = 0;
@@ -167,11 +175,6 @@ class PasswordsModelDelegate {
   // Open a new tab, pointing to the password check in the settings page.
   virtual void NavigateToPasswordCheckup(
       password_manager::PasswordCheckReferrer referrer) = 0;
-  // Called by the view when the "Sign in to Chrome" button or the "Sync to"
-  // button in the promo bubble are clicked.
-  virtual void SignIn(
-      const AccountInfo& account,
-      const password_manager::PasswordForm& password_to_move) = 0;
 
   // Called from the dialog controller when the dialog is hidden.
   virtual void OnDialogHidden() = 0;

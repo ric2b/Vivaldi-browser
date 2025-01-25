@@ -30,7 +30,9 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/buildflags.h"
 #include "components/autofill/core/browser/form_parsing/form_field_parser.h"
+#include "components/autofill/core/browser/form_parsing/regex_patterns.h"
 #include "components/autofill/core/browser/form_structure_test_api.h"
+#include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/randomized_encoder.h"
 #include "components/autofill/core/common/autocomplete_parsing_util.h"
@@ -50,7 +52,6 @@
 #include "url/gurl.h"
 
 namespace autofill {
-
 namespace {
 
 using ::autofill::FormControlType;
@@ -64,16 +65,6 @@ using ::testing::Pointee;
 using ::testing::ResultOf;
 using ::testing::Truly;
 using ::testing::UnorderedElementsAre;
-
-constexpr DenseSet<PatternSource> kAllPatternSources {
-#if !BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-  PatternSource::kLegacy
-#else
-    PatternSource::kDefault, PatternSource::kExperimental
-#endif
-};
-
-}  // namespace
 
 class FormStructureTestImpl : public test::FormStructureTest {
  public:
@@ -105,47 +96,6 @@ class FormStructureTestImpl : public test::FormStructureTest {
   base::test::ScopedFeatureList scoped_feature_list_;
   test::AutofillUnitTestEnvironment autofill_test_environment_;
 };
-
-class FormStructureTest_ForPatternSource
-    : public FormStructureTestImpl,
-      public testing::WithParamInterface<PatternSource> {
- public:
-  FormStructureTest_ForPatternSource() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {base::test::FeatureRefAndParams(
-            features::kAutofillParsingPatternProvider,
-            {{"prediction_source", pattern_source_as_string()}})},
-        {});
-  }
-
-  PatternSource pattern_source() const { return GetParam(); }
-
-  std::string pattern_source_as_string() const {
-    switch (pattern_source()) {
-      case PatternSource::kLegacy:
-        return "legacy";
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-      case PatternSource::kDefault:
-        return "default";
-      case PatternSource::kExperimental:
-        return "experimental";
-#endif
-    }
-  }
-
-  DenseSet<PatternSource> other_pattern_sources() const {
-    DenseSet<PatternSource> patterns = kAllPatternSources;
-    patterns.erase(pattern_source());
-    return patterns;
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(FormStructureTest,
-                         FormStructureTest_ForPatternSource,
-                         ::testing::ValuesIn(kAllPatternSources));
 
 TEST_F(FormStructureTestImpl, FieldCount) {
   CheckFormStructureTestData(
@@ -602,10 +552,6 @@ TEST_F(FormStructureTestImpl, DetermineHeuristicTypes_AutocompleteFalse) {
 }
 
 TEST_F(FormStructureTestImpl, HeuristicsContactInfo) {
-  FieldType expected_phone_number =
-      base::FeatureList::IsEnabled(features::kAutofillDefaultToCityAndNumber)
-          ? PHONE_HOME_CITY_AND_NUMBER
-          : PHONE_HOME_WHOLE_NUMBER;
   CheckFormStructureTestData(
       {{{.description_for_logging = "HeuristicsContactInfo",
          .fields = {{.role = FieldType::NAME_FIRST},
@@ -625,7 +571,7 @@ TEST_F(FormStructureTestImpl, HeuristicsContactInfo) {
             .autofill_count = 8,
         },
         {.expected_heuristic_type = {
-             NAME_FIRST, NAME_LAST, EMAIL_ADDRESS, expected_phone_number,
+             NAME_FIRST, NAME_LAST, EMAIL_ADDRESS, PHONE_HOME_CITY_AND_NUMBER,
              PHONE_HOME_EXTENSION, ADDRESS_HOME_LINE1, ADDRESS_HOME_CITY,
              ADDRESS_HOME_ZIP, UNKNOWN_TYPE}}}});
 }
@@ -665,10 +611,6 @@ TEST_F(FormStructureTestImpl, HeuristicsAutocompleteAttribute) {
 // All fields share a common prefix which could confuse the heuristics. Test
 // that the common prefix is stripped out before running heuristics.
 TEST_F(FormStructureTestImpl, StripCommonNamePrefix) {
-  FieldType expected_phone_number =
-      base::FeatureList::IsEnabled(features::kAutofillDefaultToCityAndNumber)
-          ? PHONE_HOME_CITY_AND_NUMBER
-          : PHONE_HOME_WHOLE_NUMBER;
   CheckFormStructureTestData(
       {{{.description_for_logging = "StripCommonNamePrefix",
          .fields =
@@ -688,7 +630,8 @@ TEST_F(FormStructureTestImpl, StripCommonNamePrefix) {
          .field_count = 5,
          .autofill_count = 4},
         {.expected_heuristic_type = {NAME_FIRST, NAME_LAST, EMAIL_ADDRESS,
-                                     expected_phone_number, UNKNOWN_TYPE}}}});
+                                     PHONE_HOME_CITY_AND_NUMBER,
+                                     UNKNOWN_TYPE}}}});
 }
 
 // All fields share a common prefix which is small enough that it is not
@@ -1130,11 +1073,8 @@ TEST_F(FormStructureTestImpl, HeuristicsSample8) {
   // Country.
   EXPECT_EQ(ADDRESS_HOME_COUNTRY, form_structure->field(7)->heuristic_type());
   // Phone.
-  FieldType expected_phone_number =
-      base::FeatureList::IsEnabled(features::kAutofillDefaultToCityAndNumber)
-          ? PHONE_HOME_CITY_AND_NUMBER
-          : PHONE_HOME_WHOLE_NUMBER;
-  EXPECT_EQ(expected_phone_number, form_structure->field(8)->heuristic_type());
+  EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER,
+            form_structure->field(8)->heuristic_type());
   // Submit.
   EXPECT_EQ(UNKNOWN_TYPE, form_structure->field(9)->heuristic_type());
 }
@@ -1273,11 +1213,8 @@ TEST_F(FormStructureTestImpl, HeuristicsLabelsOnly) {
   // Email.
   EXPECT_EQ(EMAIL_ADDRESS, form_structure->field(2)->heuristic_type());
   // Phone.
-  FieldType expected_phone_number =
-      base::FeatureList::IsEnabled(features::kAutofillDefaultToCityAndNumber)
-          ? PHONE_HOME_CITY_AND_NUMBER
-          : PHONE_HOME_WHOLE_NUMBER;
-  EXPECT_EQ(expected_phone_number, form_structure->field(3)->heuristic_type());
+  EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER,
+            form_structure->field(3)->heuristic_type());
   // Address.
   EXPECT_EQ(ADDRESS_HOME_LINE1, form_structure->field(4)->heuristic_type());
   // Address Line 2.
@@ -1720,11 +1657,8 @@ TEST_F(FormStructureTestImpl, HeuristicsWithBilling) {
   EXPECT_EQ(ADDRESS_HOME_STATE, form_structure->field(6)->heuristic_type());
   EXPECT_EQ(ADDRESS_HOME_COUNTRY, form_structure->field(7)->heuristic_type());
   EXPECT_EQ(ADDRESS_HOME_ZIP, form_structure->field(8)->heuristic_type());
-  FieldType expected_phone_number =
-      base::FeatureList::IsEnabled(features::kAutofillDefaultToCityAndNumber)
-          ? PHONE_HOME_CITY_AND_NUMBER
-          : PHONE_HOME_WHOLE_NUMBER;
-  EXPECT_EQ(expected_phone_number, form_structure->field(9)->heuristic_type());
+  EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER,
+            form_structure->field(9)->heuristic_type());
   EXPECT_EQ(EMAIL_ADDRESS, form_structure->field(10)->heuristic_type());
 }
 
@@ -2357,39 +2291,6 @@ TEST_F(FormStructureTestImpl, FindFieldsEligibleForManualFilling) {
             FormStructure::FindFieldsEligibleForManualFilling(forms));
 }
 
-// Tests that AssignBestFieldTypes() sets (only) the PatternSource.
-TEST_P(FormStructureTest_ForPatternSource, ParseFieldTypesWithPatterns) {
-  FormData form = test::CreateTestAddressFormData();
-  FormStructure form_structure(form);
-  ParsingContext context(GeoIpCountryCode(""), LanguageCode(""),
-                         pattern_source());
-  test_api(form_structure)
-      .AssignBestFieldTypes(
-          test_api(form_structure).ParseFieldTypesWithPatterns(context),
-          pattern_source());
-  ASSERT_THAT(form_structure.fields(), Not(IsEmpty()));
-
-  auto get_heuristic_type = [&](const AutofillField& field) {
-    return field.heuristic_type(
-        PatternSourceToHeuristicSource(pattern_source()));
-  };
-  EXPECT_THAT(
-      form_structure.fields(),
-      Each(Pointee(ResultOf(get_heuristic_type,
-                            AllOf(Not(NO_SERVER_DATA), Not(UNKNOWN_TYPE))))));
-
-  for (PatternSource other_pattern_source : other_pattern_sources()) {
-    auto get_other_pattern_heuristic_type = [&](const AutofillField& field) {
-      return field.heuristic_type(
-          PatternSourceToHeuristicSource(other_pattern_source));
-    };
-    EXPECT_THAT(form_structure.fields(),
-                Each(Pointee(ResultOf(get_other_pattern_heuristic_type,
-                                      NO_SERVER_DATA))))
-        << "PatternSource = " << static_cast<int>(other_pattern_source);
-  }
-}
-
 TEST_F(FormStructureTestImpl, DetermineRanks) {
   FormData form;
   form.set_url(GURL("http://foo.com"));
@@ -2528,4 +2429,66 @@ TEST_F(FormStructureTestImpl,
   }
 }
 
+// When the single field email heuristics feature is enabled, email fields are
+// not parsed if these are outside of form tags.
+TEST_F(FormStructureTestImpl,
+       SingleFieldEmailHeuristicsNotSupportedOutsideFormTag) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {features::kAutofillEnableEmailHeuristicOnlyAddressForms},
+      {features::kAutofillEnableEmailHeuristicOutsideForms});
+
+  FormData form = test::GetFormData({.fields = {{.role = EMAIL_ADDRESS}}});
+  // Set the form to simulate a field outside a <form> tag.
+  form.set_renderer_id(FormRendererId());
+
+  // The form has too few fields; it should not run heuristics, falling back to
+  // the single field parsing.
+  EXPECT_FALSE(FormShouldRunHeuristics(form));
+  EXPECT_TRUE(FormShouldRunHeuristicsForSingleFieldForms(form));
+  {
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr,
+                                           nullptr);
+    ASSERT_EQ(1U, form_structure.field_count());
+    ASSERT_EQ(0U, form_structure.autofill_count());
+    EXPECT_EQ(UNKNOWN_TYPE, form_structure.field(0)->heuristic_type());
+    EXPECT_FALSE(form_structure.IsAutofillable());
+  }
+}
+
+// When the single field email heuristics feature is enabled, a single field
+// email form should be parsed accordingly. Support for email fields outside of
+// form tags is also supported when `kAutofillEnableEmailHeuristicOutsideForms`
+// is enabled.
+TEST_F(FormStructureTestImpl,
+       SingleFieldEmailHeuristicsSupportedOutsideFormTag) {
+  base::test::ScopedFeatureList enabled;
+  enabled.InitWithFeatures(
+      {features::kAutofillEnableEmailHeuristicOnlyAddressForms,
+       features::kAutofillEnableEmailHeuristicOutsideForms},
+      {});
+
+  FormData form = test::GetFormData({.fields = {{.role = EMAIL_ADDRESS}}});
+  // Set the form to simulate a field outside a <form> tag.
+  form.set_renderer_id(FormRendererId());
+
+  // The form has too few fields; it should not run heuristics, falling back to
+  // the single field parsing.
+  EXPECT_FALSE(FormShouldRunHeuristics(form));
+  EXPECT_TRUE(FormShouldRunHeuristicsForSingleFieldForms(form));
+  {
+    FormStructure form_structure(form);
+    form_structure.DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr,
+                                           nullptr);
+    ASSERT_EQ(1U, form_structure.field_count());
+    // However, because the email field is in a form and matches the heuristics,
+    // it should be autofillable when the feature is enabled.
+    ASSERT_EQ(1U, form_structure.autofill_count());
+    EXPECT_EQ(EMAIL_ADDRESS, form_structure.field(0)->heuristic_type());
+    EXPECT_TRUE(form_structure.IsAutofillable());
+  }
+}
+
+}  // namespace
 }  // namespace autofill

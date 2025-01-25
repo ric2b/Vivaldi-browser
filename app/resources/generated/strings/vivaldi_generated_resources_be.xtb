@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Памылка</translation>
 <translation id="1175364870820465910">&amp;Друкаванне...</translation>
 <translation id="1181037720776840403">Выдаліць</translation>
+<translation id="1184037892196730210">Не ўдалося запусціць трансляцыю экрана</translation>
 <translation id="1187722533808055681">Пераход у актыўны рэжым</translation>
 <translation id="122082903575839559">Алгарытм подпісу сертыфікатаў</translation>
 <translation id="1221825588892235038">Толькі абраныя</translation>
@@ -37,6 +38,7 @@
 <translation id="1601560923496285236">Ужыць</translation>
 <translation id="1603914832182249871">(прыватны)</translation>
 <translation id="1627276047960621195">Дэскрыптары файла</translation>
+<translation id="1654713139320245449">Прылады для трансляцыі не знойдзеныя. Вам патрэбная дапамога?</translation>
 <translation id="166278006618318542">Алгарытм публічнага ключа суб'екта</translation>
 <translation id="1682548588986054654">Новае акно ў рэжыме інкогніта</translation>
 <translation id="1708338024780164500">(не актыўна)</translation>
@@ -98,7 +100,6 @@
 <translation id="265390580714150011">Значэнне поля</translation>
 <translation id="2662876636500006917">Сеціўная крама Chrome</translation>
 <translation id="2678063897982469759">Уключыць зноў</translation>
-<translation id="2678100101831051676">Не ўдалося запусціць трансляцыю.</translation>
 <translation id="2719936478972253983">Заблакаваныя файлы cookie</translation>
 <translation id="2721037002783622288">&amp;Знайсці выяву ў <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Не пазней</translation>
@@ -148,7 +149,6 @@
 <translation id="3378572629723696641">Гэтае пашырэнне можа быць пашкоджана.</translation>
 <translation id="3387614642886316601">Палепшаная праверка правапісу</translation>
 <translation id="3390013585654699824">Звесткі пра праграму</translation>
-<translation id="3393582007140394275">Немагчыма трансляваць экран.</translation>
 <translation id="345693547134384690">Адкрыць &amp;выяву ў новай укладцы</translation>
 <translation id="3493881266323043047">Тэрмін дзеяння</translation>
 <translation id="3511307672085573050">Скапіяваць адрас &amp;спасылкі</translation>
@@ -346,6 +346,7 @@
 <translation id="6812841287760418429">Захаваць змены</translation>
 <translation id="6824564591481349393">Скапіяваць &amp;адрас электроннай пошты</translation>
 <translation id="6840155290835956714">Пытацца перад адпраўленнем</translation>
+<translation id="6878862640969460273">Альбомная</translation>
 <translation id="6886871292305414135">Адкрыць спасылку ў новай &amp;укладцы</translation>
 <translation id="6892812721183419409">Адкрыць спасылку як <ph name="USER" /></translation>
 <translation id="6900284862687837908">Праграма ў фоне: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -366,6 +367,7 @@
 <translation id="7287143125007575591">Доступ забаронены.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />х<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Правяраць правапіс падчас набору тэксту</translation>
+<translation id="7359680654975233185">Не ўдалося запусціць трансляцыю ўкладкі</translation>
 <translation id="7385854874724088939">Падчас друку адбылася памылка.   Калі ласка, праверце прынтар і паўтарыце спробу.</translation>
 <translation id="7412226954991670867">Памяць GPU</translation>
 <translation id="7421925624202799674">&amp;Праглядзець код старонкі</translation>
@@ -379,6 +381,7 @@
 <translation id="7661259717474717992">Дазволіць сайтам захоўваць і чытаць даныя cookie</translation>
 <translation id="7663719505383602579">Атрымальнік: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Усталявана адміністратарам</translation>
+<translation id="7685038817958445325">Не ўдалося запусціць трансляцыю</translation>
 <translation id="7685049629764448582">Памяць JavaScript</translation>
 <translation id="7701869757853594372">Апрацоўнікі USER</translation>
 <translation id="7704305437604973648">Задача</translation>
@@ -409,7 +412,6 @@
 Захоўвайце файл ключа ў надзейным месцы. Ён спатрэбіцца для стварэння новых версій пашырэння.</translation>
 <translation id="8004582292198964060">Браўзер</translation>
 <translation id="8018313076035239964">Кіруйце данымі, якія адпраўляюцца сайтам, і змесцівам, якое паказваецца на сайтах</translation>
-<translation id="8032244173881942855">Немагчыма выканаць трансляцыю ўкладкі.</translation>
 <translation id="8071432093239591881">Надрукаваць як выяву</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />КБ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Выконваецца спампоўванне}one{Выконваецца спампоўванне}few{Выконваюцца спампоўванні}many{Выконваюцца спампоўванні}other{Выконваюцца спампоўванні}}</translation>
@@ -464,7 +466,6 @@
 <translation id="9218430445555521422">Зрабіць прадвызначаным браўзерам</translation>
 <translation id="93766956588638423">Аднавіць пашырэнне</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Альбомная</translation>
 <translation id="994289308992179865">&amp;Паўтарэнне</translation>
 <translation id="998747458861718449">Інспектаваць</translation>
 </translationbundle>

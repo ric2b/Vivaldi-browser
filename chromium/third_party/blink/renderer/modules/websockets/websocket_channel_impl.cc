@@ -375,8 +375,8 @@ bool WebSocketChannelImpl::Connect(const KURL& url, const String& protocol) {
   if (handshake_throttle_) {
     scoped_refptr<const SecurityOrigin> isolated_security_origin;
     const DOMWrapperWorld* world = execution_context_->GetCurrentWorld();
-    // TODO(crbug.com/702990): Current world can be null because of PPAPI. Null
-    // check can be cleaned up once PPAPI support is removed.
+    // TODO(crbug.com/40511450): Current world can be null because of PPAPI.
+    // Null check can be cleaned up once PPAPI support is removed.
     if (world && world->IsIsolatedWorld()) {
       isolated_security_origin = world->IsolatedWorldSecurityOrigin(
           execution_context_->GetAgentClusterID());
@@ -406,8 +406,7 @@ WebSocketChannel::SendResult WebSocketChannelImpl::Send(
     base::OnceClosure completion_callback) {
   DVLOG(1) << this << " Send(" << message << ") (std::string argument)";
   probe::DidSendWebSocketMessage(execution_context_, identifier_,
-                                 WebSocketOpCode::kOpCodeText, true,
-                                 message.c_str(), message.length());
+                                 WebSocketOpCode::kOpCodeText, true, message);
   DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT(
     "WebSocketSend", InspectorWebSocketTransferEvent::Data,
     execution_context_.Get(), identifier_, message.length());
@@ -448,7 +447,8 @@ void WebSocketChannelImpl::Send(
   // Since Binary data are not displayed in Inspector, this does not
   // affect actual behavior.
   probe::DidSendWebSocketMessage(execution_context_, identifier_,
-                                 WebSocketOpCode::kOpCodeBinary, true, "", 0);
+                                 WebSocketOpCode::kOpCodeBinary, true,
+                                 base::span_from_cstring(""));
   DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT(
     "WebSocketSend", InspectorWebSocketTransferEvent::Data,
     execution_context_.Get(), identifier_, blob_data_handle->size());
@@ -466,7 +466,7 @@ WebSocketChannel::SendResult WebSocketChannelImpl::Send(
            << "(DOMArrayBuffer argument)";
   probe::DidSendWebSocketMessage(
       execution_context_, identifier_, WebSocketOpCode::kOpCodeBinary, true,
-      static_cast<const char*>(buffer.Data()) + byte_offset, byte_length);
+      base::as_chars(buffer.ByteSpan().subspan(byte_offset, byte_length)));
   DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT(
     "WebSocketSend", InspectorWebSocketTransferEvent::Data,
     execution_context_.Get(), identifier_, byte_length);
@@ -1175,9 +1175,8 @@ MojoResult WebSocketChannelImpl::ProduceData(
     const size_t size_to_write = std::min(buffer.size(), data->size());
     DCHECK_GT(size_to_write, 0u);
 
-    base::as_writable_chars(buffer)
-        .first(size_to_write)
-        .copy_from(data->first(size_to_write));
+    base::as_writable_chars(buffer).copy_prefix_from(
+        data->first(size_to_write));
     *data = data->subspan(size_to_write);
 
     const MojoResult end_result = writable_->EndWriteData(size_to_write);
@@ -1223,8 +1222,7 @@ String WebSocketChannelImpl::GetTextMessage(
   if (chunks.size() > 1) {
     flatten.reserve(size);
     for (const auto& chunk : chunks) {
-      flatten.Append(chunk.data(),
-                     base::checked_cast<wtf_size_t>(chunk.size()));
+      flatten.AppendSpan(chunk);
     }
     span = base::span(flatten);
   } else if (chunks.size() == 1) {

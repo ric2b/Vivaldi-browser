@@ -62,7 +62,8 @@ class MockCloudPolicyClient : public CloudPolicyClient {
               (const RegistrationParameters&,
                const std::string&,
                const std::string&,
-               const std::string&),
+               const std::string&,
+               const base::TimeDelta&),
               (override));
   MOCK_METHOD(void, FetchPolicy, (PolicyFetchReason), (override));
   MOCK_METHOD(void,
@@ -101,6 +102,7 @@ class MockCloudPolicyClient : public CloudPolicyClient {
               UploadPolicyValidationReport,
               (CloudPolicyValidatorBase::Status,
                const std::vector<ValueValidationIssue>&,
+               const ValidationAction,
                const std::string&,
                const std::string&),
               (override));

@@ -41,6 +41,20 @@ struct dot_nocheck<T, U, true> {
   }
 };
 
+template <typename Derived, typename Scalar = typename traits<Derived>::Scalar>
+struct squared_norm_impl {
+  using Real = typename NumTraits<Scalar>::Real;
+  static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Real run(const Derived& a) {
+    Scalar result = a.unaryExpr(squared_norm_functor<Scalar>()).sum();
+    return numext::real(result) + numext::imag(result);
+  }
+};
+
+template <typename Derived>
+struct squared_norm_impl<Derived, bool> {
+  static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE bool run(const Derived& a) { return a.any(); }
+};
+
 }  // end namespace internal
 
 /** \fn MatrixBase::dot
@@ -85,7 +99,7 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
 template <typename Derived>
 EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE typename NumTraits<typename internal::traits<Derived>::Scalar>::Real
 MatrixBase<Derived>::squaredNorm() const {
-  return numext::real((*this).cwiseAbs2().sum());
+  return internal::squared_norm_impl<Derived>::run(derived());
 }
 
 /** \returns, for vectors, the \em l2 norm of \c *this, and for matrices the Frobenius norm.

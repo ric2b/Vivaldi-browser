@@ -5,7 +5,7 @@
 import {assert} from 'chai';
 
 import {click, getBrowserAndPages, step, waitForFunction} from '../../shared/helper.js';
-import {describe, it} from '../../shared/mocha-extensions.js';
+
 import {reloadDevTools} from '../helpers/cross-tool-helper.js';
 import {getDataGridRows} from '../helpers/datagrid-helpers.js';
 import {
@@ -49,7 +49,7 @@ describe('The Performance panel', function() {
   it('Includes a selector stats table in recalculate style events', async () => {
     await cssSelectorStatsRecording('empty');
 
-    await step('Open select stats for a recorded "Recalculate Styles" event', async () => {
+    await step('Open select stats for a recorded "Recalculate styles" event', async () => {
       await selectRecalculateStylesEvent();
       await navigateToSelectorStatsTab();
     });

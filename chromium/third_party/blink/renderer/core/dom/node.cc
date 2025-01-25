@@ -28,6 +28,7 @@
 
 #include <algorithm>
 
+#include "base/memory/raw_ptr.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_get_root_node_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_node_string_trustedscript.h"
@@ -58,6 +59,7 @@
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
 #include "third_party/blink/renderer/core/dom/events/event_listener.h"
 #include "third_party/blink/renderer/core/dom/events/event_path.h"
+#include "third_party/blink/renderer/core/dom/events/mutation_event_suppression_scope.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_node_data.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
@@ -146,6 +148,7 @@
 #include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
@@ -401,6 +404,12 @@ Node* Node::PseudoAwarePreviousSibling() const {
         return previous;
       }
       [[fallthrough]];
+    case kPseudoIdScrollNextButton:
+      if (Node* next =
+              parent->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter)) {
+        return next;
+      }
+      [[fallthrough]];
     case kPseudoIdScrollMarkerGroupAfter:
       if (Node* next = parent->GetPseudoElement(kPseudoIdAfter)) {
         return next;
@@ -431,6 +440,11 @@ Node* Node::PseudoAwarePreviousSibling() const {
       }
       [[fallthrough]];
     case kPseudoIdScrollMarkerGroupBefore:
+      if (Node* next = parent->GetPseudoElement(kPseudoIdScrollPrevButton)) {
+        return next;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollPrevButton:
       return nullptr;
     // The pseudos of the view transition subtree have a known structure and
     // cannot create other pseudos so these are handled separately of the above
@@ -472,6 +486,12 @@ Node* Node::PseudoAwareNextSibling() const {
 
   // See comments in PseudoAwarePreviousSibling.
   switch (GetPseudoId()) {
+    case kPseudoIdScrollPrevButton:
+      if (Node* next =
+              parent->GetPseudoElement(kPseudoIdScrollMarkerGroupBefore)) {
+        return next;
+      }
+      [[fallthrough]];
     case kPseudoIdScrollMarkerGroupBefore:
       if (Node* next = parent->GetPseudoElement(kPseudoIdMarker)) {
         return next;
@@ -501,6 +521,11 @@ Node* Node::PseudoAwareNextSibling() const {
       }
       [[fallthrough]];
     case kPseudoIdScrollMarkerGroupAfter:
+      if (Node* next = parent->GetPseudoElement(kPseudoIdScrollNextButton)) {
+        return next;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollNextButton:
       if (Node* next = parent->GetPseudoElement(kPseudoIdViewTransition)) {
         return next;
       }
@@ -564,6 +589,10 @@ Node* Node::PseudoAwareFirstChild() const {
       return current_element->GetPseudoElement(kPseudoIdViewTransitionNew,
                                                name);
     }
+    if (Node* first =
+            current_element->GetPseudoElement(kPseudoIdScrollPrevButton)) {
+      return first;
+    }
     if (Node* first = current_element->GetPseudoElement(
             kPseudoIdScrollMarkerGroupBefore)) {
       return first;
@@ -583,6 +612,10 @@ Node* Node::PseudoAwareFirstChild() const {
     }
     if (Node* first = current_element->GetPseudoElement(
             kPseudoIdScrollMarkerGroupAfter)) {
+      return first;
+    }
+    if (Node* first =
+            current_element->GetPseudoElement(kPseudoIdScrollNextButton)) {
       return first;
     }
     return current_element->GetPseudoElement(kPseudoIdViewTransition);
@@ -624,6 +657,10 @@ Node* Node::PseudoAwareLastChild() const {
             current_element->GetPseudoElement(kPseudoIdViewTransition)) {
       return last;
     }
+    if (Node* last =
+            current_element->GetPseudoElement(kPseudoIdScrollNextButton)) {
+      return last;
+    }
     if (Node* last = current_element->GetPseudoElement(
             kPseudoIdScrollMarkerGroupAfter)) {
       return last;
@@ -640,7 +677,11 @@ Node* Node::PseudoAwareLastChild() const {
     if (Node* last = current_element->GetPseudoElement(kPseudoIdMarker)) {
       return last;
     }
-    return current_element->GetPseudoElement(kPseudoIdScrollMarkerGroupBefore);
+    if (Node* last = current_element->GetPseudoElement(
+            kPseudoIdScrollMarkerGroupBefore)) {
+      return last;
+    }
+    return current_element->GetPseudoElement(kPseudoIdScrollPrevButton);
   }
 
   return lastChild();
@@ -692,7 +733,8 @@ Node* Node::moveBefore(Node* new_child,
   // to run during atomic moves.
   const bool perform_state_preserving_atomic_move =
       isConnected() && new_child->isConnected() && GetDocument().IsActive() &&
-      (GetTreeScope() == new_child->GetTreeScope());
+      (GetTreeScope() == new_child->GetTreeScope()) &&
+      new_child->IsElementNode();
 
   if (perform_state_preserving_atomic_move) {
     // When `moveBefore()` is called, AND we're actually performing a
@@ -708,6 +750,9 @@ Node* Node::moveBefore(Node* new_child,
     // use case in the future.
     UseCounter::Count(&GetDocument(), WebFeature::kCrossShadowAtomicMove);
   }
+
+  // Mutation events are disabled during the `moveBefore()` API.
+  MutationEventSuppressionScope scope(GetDocument());
 
   Node* return_node = insertBefore(new_child, ref_child, exception_state);
 
@@ -890,6 +935,48 @@ VectorOf<Node> ConvertNodeUnionsIntoNodes(
   return nodes;
 }
 
+// When instantiating an AutoAtomicMoveScope (and the AtomicMoveAutoEnabled flag
+// is on), the node insertion operations that occur in the scope act like a
+// "state preserving atomic move". This means that some of the usual effects of
+// removal+insertion, such as iframe reloading and losing focus, are skipped.
+// See https://github.com/whatwg/dom/issues/1255
+struct AutoAtomicMoveScope {
+  bool CheckNode(const Node* node, const TreeScope* tree_scope) {
+    return node->isConnected() && node->GetDocument().IsActive() &&
+           (!tree_scope || node->GetTreeScope() == *tree_scope);
+  }
+  AutoAtomicMoveScope(
+      Node* base_node,
+      const HeapVector<Member<V8UnionNodeOrStringOrTrustedScript>>&
+          node_unions) {
+    if (!RuntimeEnabledFeatures::AtomicMoveAutoEnabled()) {
+      return;
+    }
+
+    CHECK(base_node);
+    if (!CheckNode(base_node, /*tree_scope=*/nullptr)) {
+      return;
+    }
+    for (const auto& node_or_string : node_unions) {
+      if (node_or_string->IsNode() &&
+          !CheckNode(node_or_string->GetAsNode(), &base_node->GetTreeScope())) {
+        return;
+      }
+    }
+    document = base_node->ownerDocument();
+    CHECK(!document->StatePreservingAtomicMoveInProgress());
+    document->SetStatePreservingAtomicMoveInProgress(true);
+  }
+
+  ~AutoAtomicMoveScope() {
+    if (document) {
+      document->SetStatePreservingAtomicMoveInProgress(false);
+    }
+  }
+
+  Persistent<Document> document;
+};
+
 }  // namespace
 
 // static
@@ -918,6 +1005,7 @@ void Node::prepend(
     return;
   }
 
+  AutoAtomicMoveScope atomic_move_auto_scope(this, nodes);
   if (Node* node = ConvertNodeUnionsIntoNode(this, nodes, GetDocument(),
                                              exception_state)) {
     this_node->InsertBefore(node, this_node->firstChild(), exception_state);
@@ -935,6 +1023,7 @@ void Node::append(
     return;
   }
 
+  AutoAtomicMoveScope atomic_move_auto_scope(this, nodes);
   if (Node* node = ConvertNodeUnionsIntoNode(this, nodes, GetDocument(),
                                              exception_state)) {
     this_node->AppendChild(node, exception_state);
@@ -947,6 +1036,8 @@ void Node::before(
   ContainerNode* parent = parentNode();
   if (!parent)
     return;
+
+  AutoAtomicMoveScope atomic_move_auto_scope(parent, nodes);
   Node* viable_previous_sibling = FindViablePreviousSibling(*this, nodes);
   if (Node* node = ConvertNodeUnionsIntoNode(parent, nodes, GetDocument(),
                                              exception_state)) {
@@ -964,6 +1055,7 @@ void Node::after(
   ContainerNode* parent = parentNode();
   if (!parent)
     return;
+  AutoAtomicMoveScope atomic_move_auto_scope(parent, nodes);
   Node* viable_next_sibling = FindViableNextSibling(*this, nodes);
   if (Node* node = ConvertNodeUnionsIntoNode(parent, nodes, GetDocument(),
                                              exception_state)) {
@@ -2286,10 +2378,6 @@ Node::InsertionNotificationRequest Node::InsertedInto(
     cache->NodeIsConnected(this);
   }
 
-  if (GetDocument().StatePreservingAtomicMoveInProgress() &&
-      (IsElementNode() || IsTextNode())) {
-    FlatTreeParentChanged();
-  }
   return kInsertionDone;
 }
 

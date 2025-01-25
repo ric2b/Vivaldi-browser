@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <stddef.h>
 
 #include <set>
@@ -64,6 +69,7 @@
 #include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/startup/startup_types.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
@@ -91,6 +97,8 @@
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/memory_pressure/fake_memory_pressure_monitor.h"
 #include "components/saved_tab_groups/features.h"
+#include "components/saved_tab_groups/saved_tab_group.h"
+#include "components/saved_tab_groups/tab_group_sync_service.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/content/content_test_helper.h"
 #include "components/sessions/core/serialized_navigation_entry_test_helper.h"
@@ -1407,16 +1415,16 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWebUI) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), webui_url));
   content::WebContents* old_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_TRUE(content::BINDINGS_POLICY_MOJO_WEB_UI &
-              old_tab->GetPrimaryMainFrame()->GetEnabledBindings());
+  EXPECT_TRUE(old_tab->GetPrimaryMainFrame()->GetEnabledBindings().Has(
+      content::BindingsPolicyValue::kMojoWebUi));
 
   Browser* new_browser = QuitBrowserAndRestore(browser());
   ASSERT_EQ(1u, active_browser_list_->size());
   content::WebContents* new_tab =
       new_browser->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(webui_url, new_tab->GetURL());
-  EXPECT_TRUE(content::BINDINGS_POLICY_MOJO_WEB_UI &
-              new_tab->GetPrimaryMainFrame()->GetEnabledBindings());
+  EXPECT_TRUE(new_tab->GetPrimaryMainFrame()->GetEnabledBindings().Has(
+      content::BindingsPolicyValue::kMojoWebUi));
 }
 
 // http://crbug.com/803510 : Flaky on dbg and ASan bots.
@@ -1430,16 +1438,16 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreWebUISettings) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), webui_url));
   content::WebContents* old_tab =
       browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_TRUE(old_tab->GetPrimaryMainFrame()->GetEnabledBindings() &
-              content::BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(old_tab->GetPrimaryMainFrame()->GetEnabledBindings().Has(
+      content::BindingsPolicyValue::kWebUi));
 
   Browser* new_browser = QuitBrowserAndRestore(browser());
   ASSERT_EQ(1u, active_browser_list_->size());
   content::WebContents* new_tab =
       new_browser->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(webui_url, new_tab->GetURL());
-  EXPECT_TRUE(new_tab->GetPrimaryMainFrame()->GetEnabledBindings() &
-              content::BINDINGS_POLICY_WEB_UI);
+  EXPECT_TRUE(new_tab->GetPrimaryMainFrame()->GetEnabledBindings().Has(
+      content::BindingsPolicyValue::kWebUi));
 }
 
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoresForwardAndBackwardNavs) {
@@ -2400,8 +2408,8 @@ IN_PROC_BROWSER_TEST_F(SmartSessionRestoreTest, MAYBE_PRE_CorrectLoadingOrder) {
     GURL expected_url = GURL(kUrls[activation_order[kExpectedNumTabs - i - 1]]);
     ASSERT_EQ(expected_url, web_contents[i]->GetLastCommittedURL());
     if (i > 0) {
-      ASSERT_GT(web_contents[i - 1]->GetLastActiveTime(),
-                web_contents[i]->GetLastActiveTime());
+      ASSERT_GT(web_contents[i - 1]->GetLastActiveTimeTicks(),
+                web_contents[i]->GetLastActiveTimeTicks());
     }
   }
 
@@ -2449,8 +2457,8 @@ IN_PROC_BROWSER_TEST_F(SmartSessionRestoreTest, MAYBE_CorrectLoadingOrder) {
     GURL expected_url = GURL(kUrls[activation_order[kExpectedNumTabs - i]]);
     ASSERT_EQ(expected_url, web_contents[i]->GetLastCommittedURL());
     if (i > 0) {
-      ASSERT_GT(web_contents[i - 1]->GetLastActiveTime(),
-                web_contents[i]->GetLastActiveTime());
+      ASSERT_GT(web_contents[i - 1]->GetLastActiveTimeTicks(),
+                web_contents[i]->GetLastActiveTimeTicks());
     }
   }
 }
@@ -2992,6 +3000,14 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWithTabRemovedFromGroup) {
+  if (tab_groups::IsTabGroupSyncServiceDesktopMigrationEnabled()) {
+    // Cannot simulate sync removal of tab using TabGroupSyncService API. This
+    // causes this test to fail when the migration flag is enabled.
+    // TODO(crbug.com/365152362): Skip for now and reassess if this test is
+    // still necessary.
+    GTEST_SKIP();
+  }
+
   // Add two more tabs.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(url::kAboutBlankURL),
@@ -3017,9 +3033,9 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWithTabRemovedFromGroup) {
 
   auto* saved_tab_group =
       saved_tab_group_keyed_service->model()->Get(tab_group_id);
+  ASSERT_TRUE(saved_tab_group);
   auto saved_tab_group_id = saved_tab_group->saved_guid();
 
-  ASSERT_TRUE(saved_tab_group);
   // This ensures SessionService knows about the savedtabgroup. It shouldn't be
   // necessary.
   browser()
@@ -4496,10 +4512,21 @@ IN_PROC_BROWSER_TEST_P(SessionRestoreStaleSessionCookieDeletionTest,
             !ShouldDeleteStaleSessionCookiesOnStartup());
 }
 
-class SavedTabGroupSessionRestoreTest : public SessionRestoreTest {
+class SavedTabGroupSessionRestoreTest
+    : public SessionRestoreTest,
+      public ::testing::WithParamInterface<bool> {
  public:
   SavedTabGroupSessionRestoreTest() {
-    feature_list_.InitAndEnableFeature(tab_groups::kTabGroupsSaveV2);
+    if (GetParam()) {
+      feature_list_.InitWithFeatures(
+          {tab_groups::kTabGroupsSaveV2,
+           tab_groups::kTabGroupSyncServiceDesktopMigration},
+          {});
+    } else {
+      feature_list_.InitWithFeatures(
+          {tab_groups::kTabGroupsSaveV2},
+          {tab_groups::kTabGroupSyncServiceDesktopMigration});
+    }
   }
   SavedTabGroupSessionRestoreTest(const SavedTabGroupSessionRestoreTest&) =
       delete;
@@ -4513,7 +4540,7 @@ class SavedTabGroupSessionRestoreTest : public SessionRestoreTest {
 // This test simulates migrating from V1 of SavedTabGroups to V2. A user may
 // have unsaved groups at the time they update the browser. We must ensure all
 // groups are saved by default correctly. See crbug.com/344016224.
-IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
+IN_PROC_BROWSER_TEST_P(SavedTabGroupSessionRestoreTest,
                        UnsavedGroupDefaultSavedAfterBrowserRestart) {
   // Add a second tab.
   ui_test_utils::NavigateToURLWithDisposition(
@@ -4529,11 +4556,13 @@ IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
       {0}, tab_groups::TabGroupId::GenerateNew());
 
   // Expect no groups have been saved at this point.
-  tab_groups::SavedTabGroupKeyedService* service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
+  tab_groups::TabGroupSyncService* service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(
           browser()->profile());
-  ASSERT_NE(service, nullptr);
-  EXPECT_TRUE(service->model()->IsEmpty());
+  ASSERT_TRUE(service);
+
+  service->SetIsInitializedForTesting(true);
+  EXPECT_EQ(0u, service->GetAllGroups().size());
 
   // Close the browser and restore the last session
   Browser* restored = QuitBrowserAndRestore(browser());
@@ -4542,13 +4571,13 @@ IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
   ASSERT_EQ(2, tabs);
 
   // Expect the unsaved group has been saved at this point.
-  EXPECT_EQ(1, service->model()->Count());
+  EXPECT_EQ(1u, service->GetAllGroups().size());
 }
 
 // This test simulates creating a default group (using the default group color
 // and no title). Ensure on restart there was no duplicated groups and that the
 // restored group is connected to the saved group.
-IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
+IN_PROC_BROWSER_TEST_P(SavedTabGroupSessionRestoreTest,
                        NoDuplicatesOfDefaultSavedGroupAfterBrowserRestart) {
   // Add a second tab.
   ui_test_utils::NavigateToURLWithDisposition(
@@ -4556,15 +4585,20 @@ IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
+  // Expect no groups have been saved at this point.
+  tab_groups::TabGroupSyncService* service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+          browser()->profile());
+  ASSERT_TRUE(service);
+
+  service->SetIsInitializedForTesting(true);
+  EXPECT_EQ(0u, service->GetAllGroups().size());
+
   // Add the tab to a new group.
   browser()->tab_strip_model()->AddToNewGroup({0});
 
   // Expect the newly created to be saved at this point.
-  tab_groups::SavedTabGroupKeyedService* service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
-          browser()->profile());
-  ASSERT_NE(service, nullptr);
-  EXPECT_EQ(1, service->model()->Count());
+  EXPECT_EQ(1u, service->GetAllGroups().size());
 
   // Close the browser and restore the last session
   Browser* restored = QuitBrowserAndRestore(browser());
@@ -4572,13 +4606,13 @@ IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
   const int tabs = tab_strip_model->count();
   ASSERT_EQ(2, tabs);
 
-  // Expect the restored browser to still has 1 saved group i.e. no duplicates.
-  EXPECT_EQ(1, service->model()->Count());
+  // Expect the restored browser to still have 1 saved group i.e. no duplicates.
+  EXPECT_EQ(1u, service->GetAllGroups().size());
 }
 
 // This test simulates creating multiple groups with different visual data
 // and ensuring on restart they are restored with the same information.
-IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
+IN_PROC_BROWSER_TEST_P(SavedTabGroupSessionRestoreTest,
                        MultipleSavedGroupsAfterBrowserRestart) {
   // Add a second tab.
   ui_test_utils::NavigateToURLWithDisposition(
@@ -4592,20 +4626,22 @@ IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
-  tab_groups::SavedTabGroupKeyedService* service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
+  // Expect no groups have been saved at this point.
+  tab_groups::TabGroupSyncService* service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(
           browser()->profile());
-  ASSERT_NE(service, nullptr);
+  ASSERT_TRUE(service);
+  service->SetIsInitializedForTesting(true);
 
   // Add the tab to a new groups.
   auto group1 = browser()->tab_strip_model()->AddToNewGroup({0});
-  base::Uuid group1_saved_guid = service->model()->Get(group1)->saved_guid();
+  base::Uuid group1_saved_guid = service->GetGroup(group1)->saved_guid();
 
   auto group2 = browser()->tab_strip_model()->AddToNewGroup({1});
-  base::Uuid group2_saved_guid = service->model()->Get(group2)->saved_guid();
+  base::Uuid group2_saved_guid = service->GetGroup(group2)->saved_guid();
 
   // Expect the newly created to be saved at this point.
-  EXPECT_EQ(2, service->model()->Count());
+  EXPECT_EQ(2u, service->GetAllGroups().size());
 
   // Update the visual data of the new groups.
   browser()
@@ -4631,10 +4667,11 @@ IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
   ASSERT_EQ(3, tabs);
 
   // Expect the restored browser to still has 2 saved group.
-  EXPECT_EQ(2, service->model()->Count());
+  EXPECT_EQ(2u, service->GetAllGroups().size());
 
-  auto* saved_group1 = service->model()->Get(group1_saved_guid);
-  ASSERT_NE(saved_group1, nullptr);
+  std::optional<tab_groups::SavedTabGroup> saved_group1 =
+      service->GetGroup(group1_saved_guid);
+  ASSERT_TRUE(saved_group1);
   ASSERT_TRUE(saved_group1->local_group_id().has_value());
   auto* local_group1 = tab_strip_model->group_model()->GetTabGroup(
       saved_group1->local_group_id().value());
@@ -4642,8 +4679,9 @@ IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
   EXPECT_EQ(tab_groups::TabGroupColorId::kGrey,
             local_group1->visual_data()->color());
 
-  auto* saved_group2 = service->model()->Get(group2_saved_guid);
-  ASSERT_NE(saved_group2, nullptr);
+  std::optional<tab_groups::SavedTabGroup> saved_group2 =
+      service->GetGroup(group2_saved_guid);
+  ASSERT_TRUE(saved_group2);
   ASSERT_TRUE(saved_group2->local_group_id().has_value());
   auto* local_group2 = tab_strip_model->group_model()->GetTabGroup(
       saved_group2->local_group_id().value());
@@ -4651,3 +4689,7 @@ IN_PROC_BROWSER_TEST_F(SavedTabGroupSessionRestoreTest,
   EXPECT_EQ(tab_groups::TabGroupColorId::kBlue,
             local_group2->visual_data()->color());
 }
+
+INSTANTIATE_TEST_SUITE_P(SessionRestore,
+                         SavedTabGroupSessionRestoreTest,
+                         testing::Bool());

@@ -20,6 +20,10 @@ BASE_FEATURE(kSyncAndroidLimitNTPPromoImpressions,
 BASE_FEATURE(kEnableBatchUploadFromSettings,
              "EnableBatchUploadFromSettings",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kUnoPhase2FollowUp,
+             "UnoPhase2FollowUp",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kSyncAutofillWalletUsageData,
@@ -28,10 +32,6 @@ BASE_FEATURE(kSyncAutofillWalletUsageData,
 
 BASE_FEATURE(kSyncAutofillWalletCredentialData,
              "SyncAutofillWalletCredentialData",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kSyncPlusAddress,
-             "SyncPlusAddress",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSyncPlusAddressSetting,
@@ -98,7 +98,7 @@ BASE_FEATURE(kSyncEnableContactInfoDataTypeForDasherUsers,
 
 BASE_FEATURE(kSyncEnableContactInfoDataTypeForChildUsers,
              "SyncEnableContactInfoDataTypeForChildUsers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnablePreferencesAccountStorage,
              "EnablePreferencesAccountStorage",
@@ -187,10 +187,6 @@ BASE_FEATURE(kSyncPasswordCleanUpAccidentalBatchDeletions,
              "SyncPasswordCleanUpAccidentalBatchDeletions",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSyncSessionOnVisibilityChanged,
-             "SyncSessionOnVisibilityChanged",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kSyncIncreaseNudgeDelayForSingleClient,
              "SyncIncreaseNudgeDelayForSingleClient",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -199,23 +195,22 @@ BASE_FEATURE(kTrustedVaultAutoUpgradeSyntheticFieldTrial,
              "TrustedVaultAutoUpgradeSyntheticFieldTrial",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kMoveThemePrefsToSpecifics,
+             "MoveThemePrefsToSpecifics",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kWebApkBackupAndRestoreBackend,
              "WebApkBackupAndRestoreBackend",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-BASE_FEATURE(kSyncAccountKeyedTransportPrefs,
-             "SyncAccountKeyedTransportPrefs",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kSyncEnableModelTypeLocalDataBatchUploaders,
              "SyncEnableModelTypeLocalDataBatchUploaders",
-#if BUILDFLAG(IS_IOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_IOS)
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSyncEnableExtensionsInTransportMode,
+             "kSyncEnableExtensionsInTransportMode",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace syncer

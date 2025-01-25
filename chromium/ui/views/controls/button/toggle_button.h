@@ -58,10 +58,6 @@ class VIEWS_EXPORT ToggleButton : public Button {
   void SetAcceptsEvents(bool accepts_events);
   bool GetAcceptsEvents() const;
 
-  // Gets the horizontal margin between the rounded edge of the thumb and the
-  // edge of the view.
-  int GetVisualHorizontalMargin() const;
-
   // views::View:
   void AddLayerToRegion(ui::Layer* layer, LayerRegion region) override;
   void RemoveLayerFromRegions(ui::Layer* layer) override;
@@ -104,7 +100,6 @@ class VIEWS_EXPORT ToggleButton : public Button {
   // views::View:
   bool CanAcceptEvent(const ui::Event& event) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // Button:
   void PaintButtonContents(gfx::Canvas* canvas) override;

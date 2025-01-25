@@ -36,6 +36,11 @@ update_target("//components/sync_sessions:sync_sessions") {
     "//vivaldi/sync/glue/vivaldi_synced_tab_delegate.cc",
     "//vivaldi/sync/vivaldi_session_sync_prefs.cc",
   ]
+  if (!is_ios) {
+    sources += [
+      "//vivaldi/sync/vivaldi_sync_sessions_router_tab_helper.cc",
+    ]
+  }
 }
 
 

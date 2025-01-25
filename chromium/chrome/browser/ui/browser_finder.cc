@@ -29,9 +29,6 @@
 #include "components/account_id/account_id.h"
 #endif
 
-#include "app/vivaldi_apptools.h"
-#include "browser/vivaldi_browser_finder.h"
-
 using content::WebContents;
 
 namespace {
@@ -302,13 +299,7 @@ Browser* FindBrowserWithTab(const WebContents* web_contents) {
   auto& all_tabs = AllTabContentses();
   auto it = base::ranges::find(all_tabs, web_contents);
 
-  Browser* browser = (it == all_tabs.end()) ? nullptr : it.browser();
-  // Addition for Vivaldi is to find browser from embedded contents like popups
-  // and webpanels.
-  if (!browser && vivaldi::IsVivaldiRunning()) {
-    browser = vivaldi::FindBrowserWithNonTabContent(web_contents);
-  }
-  return browser;
+  return (it == all_tabs.end()) ? nullptr : it.browser();
 }
 
 Browser* FindBrowserWithGroup(tab_groups::TabGroupId group, Profile* profile) {

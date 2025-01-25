@@ -117,6 +117,7 @@ include_rules = [
   "+components/sync_user_events",
   "+components/tab_groups",
   "+components/translate",
+  "+components/language_detection/core/browser",
   "+components/ui_metrics",
   "+components/ukm",
   "+components/undo",
@@ -168,6 +169,7 @@ include_rules = [
 
   # Features should add explicit dependencies.
   "-ios/chrome/browser",
+  "+ios/chrome/browser/profile/model",
 
   # Shared dependencies.
   "+ios/chrome/browser/shared/coordinator",
@@ -180,7 +182,7 @@ include_rules = [
   "-ios/chrome/browser/ui",
   "-ios/common/ui",
   "+ios/chrome/browser/ui/commands",
-  "+ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h",
+  "+ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h",
 
   # For tests.
   "+ios/chrome/test",

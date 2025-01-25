@@ -321,7 +321,7 @@ struct ScanTextResult {
     if (is_newline_then_whitespace_string &&
         text.size() < WTF::NewlineThenWhitespaceStringsTable::kTableSize) {
       DCHECK(WTF::NewlineThenWhitespaceStringsTable::IsNewlineThenWhitespaces(
-          String(text.data(), static_cast<unsigned>(text.size()))));
+          String(text)));
       return WTF::NewlineThenWhitespaceStringsTable::GetStringForLength(
           text.size());
     }
@@ -335,7 +335,7 @@ struct ScanTextResult {
 
 template <>
 String ScanTextResult<LChar>::TextToString() const {
-  return String(text.data(), static_cast<unsigned>(text.size()));
+  return String(text);
 }
 
 template <>
@@ -764,7 +764,7 @@ class HTMLFastPathParser {
         return {Span{}, ScanEscapedText()};
     };
 
-    NOTREACHED_NORETURN();
+    NOTREACHED();
     return {};
   }
 #endif  // VECTORIZE_SCANNING
@@ -801,7 +801,7 @@ class HTMLFastPathParser {
       if (*pos_ == '&' || *pos_ == '\r') {
         pos_ = start;
         return {Span{}, ScanEscapedText()};
-      } else if (UNLIKELY(*pos_ == '\0')) {
+      } else if (*pos_ == '\0') [[unlikely]] {
         return Fail(HtmlFastPathResult::kFailedContainsNull,
                     ScanTextResult<Char>{Span{}, nullptr});
       }
@@ -829,7 +829,7 @@ class HTMLFastPathParser {
         }
         uchar_buffer_.AddChar('\n');
         ++pos_;
-      } else if (UNLIKELY(*pos_ == '\0')) {
+      } else if (*pos_ == '\0') [[unlikely]] {
         return Fail(HtmlFastPathResult::kFailedContainsNull, nullptr);
       } else {
         uchar_buffer_.AddChar(*pos_);
@@ -878,7 +878,7 @@ class HTMLFastPathParser {
     while (pos_ != end_ && ((*pos_ >= 'a' && *pos_ <= 'z') || *pos_ == '-')) {
       ++pos_;
     }
-    if (UNLIKELY(pos_ == end_)) {
+    if (pos_ == end_) [[unlikely]] {
       return Fail(HtmlFastPathResult::kFailedEndOfInputReached, Span());
     }
     if (!IsValidAttributeNameChar(*pos_)) {
@@ -998,14 +998,14 @@ class HTMLFastPathParser {
         // The c is mostly like to be a~z or A~Z, the ASCII code value of a~z
         // and A~Z is greater than kSingleQuote, so we just need to compare
         // kSingleQuote here.
-        if (LIKELY(c > '\'')) {
+        if (c > '\'') [[likely]] {
           ++pos_;
         } else if (c == '&' || c == '\r') {
           pos_ = start - 1;
           return {Span{}, ScanEscapedAttrValue()};
         } else if (c == '\'' || c == '\"') {
           break;
-        } else if (UNLIKELY(c == '\0')) {
+        } else if (c == '\0') [[unlikely]] {
           // \0 is generally mapped to \uFFFD (but there are exceptions).
           // Fallback to normal path as this generally does not happen often.
           return Fail(HtmlFastPathResult::kFailedParsingQuotedAttributeValue,
@@ -1091,8 +1091,10 @@ class HTMLFastPathParser {
       // A rather arbitrary constant to prevent unbounded lookahead in the case
       // of ill-formed input.
       constexpr int kMaxLength = 20;
-      if (pos_ == end_ || pos_ - start > kMaxLength ||
-          UNLIKELY(*pos_ == '\0')) {
+      if (pos_ == end_ || pos_ - start > kMaxLength) {
+        return Fail(HtmlFastPathResult::kFailedParsingCharacterReference);
+      }
+      if (*pos_ == '\0') [[unlikely]] {
         return Fail(HtmlFastPathResult::kFailedParsingCharacterReference);
       }
       // Note: the fast path will only parse `;`-terminated character
@@ -1265,14 +1267,20 @@ class HTMLFastPathParser {
           name_span.data(), static_cast<unsigned>(name_span.size())));
     }
 
+    // The string pointer in |value| is null for attributes with no values, but
+    // the null atom is used to represent absence of attributes; attributes with
+    // no values have the value set to an empty atom instead.
     AtomicString value;
     if (value_span.second.empty()) {
-      value = HTMLAtomicStringCache::MakeAttributeValue(value_span.first);
+      value = AtomicString(value_span.first.data(),
+                           static_cast<unsigned>(value_span.first.size()));
     } else {
-      value = HTMLAtomicStringCache::MakeAttributeValue(value_span.second);
+      value = AtomicString(value_span.second.data(),
+                           static_cast<unsigned>(value_span.second.size()));
     }
-    DCHECK(!value.IsNull()) << "Attribute value should never be null";
-
+    if (value.IsNull()) {
+      value = g_empty_atom;
+    }
     return Attribute(std::move(name), std::move(value));
   }
 

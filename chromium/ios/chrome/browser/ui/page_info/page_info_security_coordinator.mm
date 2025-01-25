@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/page_info/page_info_security_coordinator.h"
 
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/page_info_commands.h"
@@ -14,6 +14,10 @@
 #import "ios/chrome/browser/ui/page_info/page_info_site_security_description.h"
 #import "ios/chrome/browser/ui/page_info/page_info_site_security_mediator.h"
 #import "ios/web/public/web_state.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 @implementation PageInfoSecurityCoordinator {
   PageInfoSecurityViewController* _viewController;
@@ -28,8 +32,8 @@
                          siteSecurityDescription:
                              (PageInfoSiteSecurityDescription*)
                                  siteSecurityDescription {
-  if (self = [super initWithBaseViewController:navigationController
-                                       browser:browser]) {
+  if ((self = [super initWithBaseViewController:navigationController
+                                        browser:browser])) {
     _baseNavigationController = navigationController;
     _siteSecurityDescription = siteSecurityDescription;
   }
@@ -42,8 +46,13 @@
   _viewController = [[PageInfoSecurityViewController alloc]
       initWithSiteSecurityDescription:_siteSecurityDescription];
 
+  if (vivaldi::IsVivaldiRunning() && self.openedViaSiteTrackerPrefModal) {
+    _viewController.pageInfoCommandsHandler = self.pageInfoCommandsHandler;
+  } else {
   _viewController.pageInfoCommandsHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), PageInfoCommands);
+  } // End Vivaldi
+
   _viewController.pageInfoPresentationHandler =
       self.pageInfoPresentationHandler;
 

@@ -95,7 +95,6 @@
 <translation id="265390580714150011">Feldwert</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Wieder aktivieren</translation>
-<translation id="2678100101831051676">Streamen nicht möglich.</translation>
 <translation id="2719936478972253983">Die folgenden Cookies wurden blockiert</translation>
 <translation id="2721037002783622288">Mit <ph name="SEARCH_ENGINE" /> nach Bild &amp;suchen</translation>
 <translation id="2738771556149464852">Nicht nach</translation>
@@ -143,7 +142,6 @@
 <translation id="3378572629723696641">Diese Erweiterung ist möglicherweise beschädigt.</translation>
 <translation id="3387614642886316601">Vorschläge von Google</translation>
 <translation id="3390013585654699824">App–Details</translation>
-<translation id="3393582007140394275">Bildschirm kann nicht gestreamt werden.</translation>
 <translation id="345693547134384690">Bil&amp;d in neuem Tab öffnen</translation>
 <translation id="3493881266323043047">Gültigkeit</translation>
 <translation id="3511307672085573050">Adr&amp;esse des Links kopieren</translation>
@@ -324,6 +322,7 @@
 <translation id="6812841287760418429">Änderungen beibehalten</translation>
 <translation id="6824564591481349393">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="6840155290835956714">Vor dem Senden nachfragen</translation>
+<translation id="6878862640969460273">Querformat</translation>
 <translation id="6886871292305414135">Link in neuem &amp;Tab öffnen</translation>
 <translation id="6892812721183419409">Link als <ph name="USER" /> öffnen</translation>
 <translation id="6900284862687837908">Hintergrund-App: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -381,7 +380,6 @@ Schlüsseldatei: <ph name="KEY_FILE" />
 Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Datei, um neue Versionen Ihrer Erweiterung zu erstellen.</translation>
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8018313076035239964">Festlegen, welche Informationen von Websites genutzt und welche Inhalte von Websites anzeigen werden dürfen</translation>
-<translation id="8032244173881942855">Tab kann nicht gestreamt werden.</translation>
 <translation id="8071432093239591881">Als Bild drucken</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
@@ -432,6 +430,5 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="9218430445555521422">Als Standard festlegen</translation>
 <translation id="93766956588638423">Erweiterung reparieren</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Querformat</translation>
 <translation id="998747458861718449">Untersuchen</translation>
 </translationbundle>

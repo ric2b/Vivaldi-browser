@@ -9,6 +9,7 @@
 #include "base/sequence_checker.h"
 #include "services/webnn/coreml/graph_builder_coreml.h"
 #include "services/webnn/coreml/graph_impl_coreml.h"
+#include "services/webnn/coreml/tensor_impl_coreml.h"
 #include "services/webnn/public/cpp/context_properties.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/webnn_context_impl.h"
@@ -18,16 +19,12 @@ namespace webnn::coreml {
 
 ContextImplCoreml::ContextImplCoreml(
     mojo::PendingReceiver<mojom::WebNNContext> receiver,
-    mojo::PendingRemote<mojom::WebNNContextClient> client_remote,
     WebNNContextProviderImpl* context_provider,
-    mojom::CreateContextOptionsPtr options,
-    base::UnguessableToken context_handle)
+    mojom::CreateContextOptionsPtr options)
     : WebNNContextImpl(std::move(receiver),
-                       std::move(client_remote),
                        context_provider,
                        GraphBuilderCoreml::GetContextProperties(),
-                       std::move(options),
-                       std::move(context_handle)) {}
+                       std::move(options)) {}
 
 ContextImplCoreml::~ContextImplCoreml() = default;
 
@@ -45,14 +42,12 @@ void ContextImplCoreml::CreateGraphImpl(
       options().Clone(), properties(), std::move(callback));
 }
 
-std::unique_ptr<WebNNBufferImpl> ContextImplCoreml::CreateBufferImpl(
-    mojo::PendingAssociatedReceiver<mojom::WebNNBuffer> receiver,
-    mojom::BufferInfoPtr buffer_info,
-    const base::UnguessableToken& buffer_handle) {
-  // TODO(crbug.com/40278771): Implement MLBuffer for CoreML. Involve
-  // an IPC security reviewer.
-  NOTIMPLEMENTED();
-  return {};
+void ContextImplCoreml::CreateTensorImpl(
+    mojo::PendingAssociatedReceiver<mojom::WebNNTensor> receiver,
+    mojom::TensorInfoPtr tensor_info,
+    CreateTensorImplCallback callback) {
+  std::move(callback).Run(TensorImplCoreml::Create(std::move(receiver), this,
+                                                   std::move(tensor_info)));
 }
 
 }  // namespace webnn::coreml

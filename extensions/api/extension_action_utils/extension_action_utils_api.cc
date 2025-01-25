@@ -16,9 +16,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "browser/vivaldi_browser_finder.h"
-#include "chrome/browser/extensions/api/commands/command_service.h"
-#include "chrome/browser/extensions/api/context_menus/context_menus_api_helpers.h"
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
+#include "chrome/browser/extensions/commands/command_service.h"
+#include "chrome/browser/extensions/context_menu_helpers.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -34,7 +34,6 @@
 #include "chrome/common/extensions/api/context_menus.h"
 #include "chrome/common/extensions/api/side_panel/side_panel_info.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/prefs/pref_change_registrar.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
@@ -65,7 +64,6 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/vivaldi_skia_utils.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "extensions/common/manifest_handlers/permissions_parser.h"
 namespace extensions {
 
@@ -307,10 +305,13 @@ void ExtensionActionUtil::SendIconLoaded(
     FillBitmapForTabId(&info, action, ExtensionAction::kDefaultTabId);
     info.tab_id = ExtensionAction::kDefaultTabId;
     info.id = extension_id;
+    // Also include name as it is a mandatory property, otherwise be "" will
+    // be used as an update to name.
+    info.name = extension->name();
 
     ::vivaldi::BroadcastEvent(
-        vivaldi::extension_action_utils::OnIconLoaded::kEventName,
-        vivaldi::extension_action_utils::OnIconLoaded::Create(info),
+        vivaldi::extension_action_utils::OnUpdated::kEventName,
+        vivaldi::extension_action_utils::OnUpdated::Create(info),
         browser_context);
   }
 }
@@ -319,80 +320,6 @@ ExtensionActionUtil::ExtensionActionUtil(Profile* profile) : profile_(profile) {
   ExtensionRegistry::Get(profile_)->AddObserver(this);
   ExtensionActionAPI::Get(profile)->AddObserver(this);
   CommandService::Get(profile_)->AddObserver(this);
-
-  prefs_registrar_ = std::make_unique<PrefChangeRegistrar>();
-  prefs_registrar_->Init(profile->GetPrefs());
-
-  // Trigger an initial state.
-  ExtensionVisibilityChanged();
-}
-
-void ExtensionActionUtil::ExtensionVisibilityChanged() {
-  const base::Value::List& hidden_extensions = profile_->GetPrefs()->GetList(
-      vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
-
-  std::vector<std::string> changed_extensions;
-  if (!user_hidden_extensions_.empty()) {
-    // Calculate the changed entries and fire update events based on this.
-    // The number of extensions are usually low, so for simplicity we could
-    // update all extensions here.
-    for (const auto& hidden_extension_value : hidden_extensions) {
-      if (const std::string* hidden_extension =
-              hidden_extension_value.GetIfString()) {
-        if (!Contains(user_hidden_extensions_,
-                      base::Value(*hidden_extension))) {
-          changed_extensions.push_back(*hidden_extension);
-        }
-      }
-    }
-
-    for (const auto& was_hidden_extension_value : user_hidden_extensions_) {
-      if (const std::string* washidden_extension =
-              was_hidden_extension_value.GetIfString()) {
-        if (Contains(user_hidden_extensions_,
-                      base::Value(*washidden_extension))) {
-          changed_extensions.push_back(*washidden_extension);
-        }
-      }
-    }
-  }
-  else {
-    // No extensions has been hidden, add all the hidden ones so the get an
-    // update event.
-    for (const auto& hidden_extension_value : hidden_extensions) {
-      if (const std::string* hidden_extension =
-              hidden_extension_value.GetIfString()) {
-        changed_extensions.push_back(*hidden_extension);
-      }
-    }
-  }
-
-  user_hidden_extensions_ = hidden_extensions.Clone();
-
-  for (auto extension_id : changed_extensions) {
-
-    const Extension* extension =
-        ExtensionRegistry::Get(profile_)
-            ->GetExtensionById(extension_id,
-                               extensions::ExtensionRegistry::EVERYTHING);
-    if (!extension) {
-      return;
-    }
-    ExtensionActionManager* manager =
-        ExtensionActionManager::Get(profile_);
-    ExtensionAction* action = manager->GetExtensionAction(*extension);
-
-    if (action) {
-      vivaldi::extension_action_utils::ExtensionInfo info;
-      info.keyboard_shortcut =
-          GetShortcutTextForExtensionAction(action, profile_);
-      FillInfoFromManifest(&info, extension);
-      FillInfoForTabId(&info, action, ExtensionAction::kDefaultTabId);
-      ::vivaldi::BroadcastEvent(
-          vivaldi::extension_action_utils::OnUpdated::kEventName,
-          vivaldi::extension_action_utils::OnUpdated::Create(info), profile_);
-    }
-  }
 }
 
 ExtensionActionUtil::~ExtensionActionUtil() {}
@@ -468,14 +395,6 @@ void ExtensionActionUtil::FillInfoForTabId(
   info->allow_in_incognito =
       util::IsIncognitoEnabled(action->extension_id(), profile_);
 
-  bool is_user_hidden = Contains(user_hidden_extensions_,
-                                 base::Value(action->extension_id()));
-
-  // Only fill this for the default tab_id to make it global, for all tabs.
-  if (tab_id == ExtensionAction::kDefaultTabId) {
-    info->action_is_hidden = is_user_hidden;
-  }
-
   FillBitmapForTabId(info, action, tab_id);
 }
 
@@ -489,37 +408,54 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
     ExtensionAction* extension_action,
     content::WebContents* web_contents,
     content::BrowserContext* browser_context) {
-  // TODO(igor@vivaldi.com): web_contents is null when
-  // extension_action->action_type() is ActionInfo::TYPE_BROWSER or
-  // ActionInfo::TYPE_SYSTEM_INDICATOR when tab_id should be
-  // ExtensionAction::kDefaultTabId, see ExtensionActionFunction::Run in
-  // Chromium. Yet we always use tabId for the last active window. Is it
-  // right? See VB-52519.
-
-  vivaldi::extension_action_utils::ExtensionInfo info;
-
-  info.keyboard_shortcut =
-      GetShortcutTextForExtensionAction(extension_action, browser_context);
-
-  // TODO(igor@vivaldi.com): Shall we use the passed browser_context here,
-  // not stored profile_? See VB-52519.
-
-  const Extension* extension =
-      extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
-          extension_action->extension_id(),
-          extensions::ExtensionRegistry::ENABLED);
-  if (extension) {
-    FillInfoFromManifest(&info, extension);
+  int tab_id;
+  bool is_cleared;
+  if (web_contents == nullptr) {
+    tab_id = ExtensionAction::kDefaultTabId;
+    is_cleared = false;
+  } else {
+    tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
+    // see ExtensionAction::ClearAllValuesForTab()
+    is_cleared = !extension_action->HasPopupUrl(tab_id) &&
+        !extension_action->HasTitle(tab_id) &&
+        !extension_action->HasIcon(tab_id) &&
+        !extension_action->HasBadgeText(tab_id) &&
+        !extension_action->HasDNRActionCount(tab_id) &&
+        !extension_action->HasBadgeTextColor(tab_id) &&
+        !extension_action->HasBadgeBackgroundColor(tab_id) &&
+        !extension_action->HasIsVisible(tab_id);
   }
 
-  int tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
+  if (is_cleared) {
+    ::vivaldi::BroadcastEvent(
+        vivaldi::extension_action_utils::OnClearAllValuesForTab::kEventName,
+        vivaldi::extension_action_utils::OnClearAllValuesForTab::Create(
+            extension_action->extension_id(), tab_id),
+        browser_context);
+  } else {
+    vivaldi::extension_action_utils::ExtensionInfo info;
 
-  FillInfoForTabId(&info, extension_action, tab_id);
+    info.keyboard_shortcut =
+        GetShortcutTextForExtensionAction(extension_action, browser_context);
 
-  ::vivaldi::BroadcastEvent(
-      vivaldi::extension_action_utils::OnUpdated::kEventName,
-      vivaldi::extension_action_utils::OnUpdated::Create(info),
-      browser_context);
+    // TODO(igor@vivaldi.com): Shall we use the passed browser_context here,
+    // not stored profile_? See VB-52519.
+    const Extension* extension =
+        extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
+            extension_action->extension_id(),
+            extensions::ExtensionRegistry::ENABLED);
+    if (extension) {
+      FillInfoFromManifest(&info, extension);
+    }
+
+
+    FillInfoForTabId(&info, extension_action, tab_id);
+
+    ::vivaldi::BroadcastEvent(
+        vivaldi::extension_action_utils::OnUpdated::kEventName,
+        vivaldi::extension_action_utils::OnUpdated::Create(info),
+        browser_context);
+  }
 }
 
 void ExtensionActionUtil::OnExtensionUninstalled(
@@ -670,31 +606,6 @@ void ExtensionActionUtil::OnExtensionCommandRemoved(
       profile_);
 }
 
-void ExtensionActionUtil::NotifyTabSelectionChange(
-    content::WebContents* selected_contents) {
-  Browser* browser = chrome::FindBrowserWithTab(selected_contents);
-  if (!browser)
-    return;
-  last_active_tab_window_ = browser->session_id();
-
-  // loop through the extensions and update the actions based on the tabid
-  const extensions::ExtensionSet& extensions =
-      extensions::ExtensionRegistry::Get(profile_)->enabled_extensions();
-
-  extensions::ExtensionActionManager* action_manager =
-      extensions::ExtensionActionManager::Get(profile_);
-
-  for (ExtensionSet::const_iterator it = extensions.begin();
-       it != extensions.end(); ++it) {
-    const Extension* extension = it->get();
-
-    ExtensionAction* action = action_manager->GetExtensionAction(*extension);
-    if (action) {
-      OnExtensionActionUpdated(action, selected_contents, profile_);
-    }
-  }
-}
-
 void ExtensionActionUtil::AddGlobalError(
     std::unique_ptr<VivaldiExtensionDisabledGlobalError> error) {
   errors_.push_back(std::move(error));
@@ -809,49 +720,6 @@ ExtensionActionUtilsExecuteExtensionActionFunction::Run() {
   }
 
   return RespondNow(ArgumentList(Results::Create(popup_url_str)));
-}
-
-ExtensionFunction::ResponseAction
-ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
-  using vivaldi::extension_action_utils::ToggleBrowserActionVisibility::Params;
-
-  std::optional<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  const Extension* extension =
-      extensions::ExtensionRegistry::Get(browser_context())
-          ->GetExtensionById(params->extension_id,
-                             extensions::ExtensionRegistry::ENABLED);
-  if (!extension) {
-    return RespondNow(Error(NoSuchExtension(params->extension_id)));
-  }
-
-  extensions::ExtensionActionManager* action_manager =
-      extensions::ExtensionActionManager::Get(browser_context());
-  ExtensionAction* action = action_manager->GetExtensionAction(*extension);
-  if (!action) {
-    return RespondNow(Error(NoExtensionAction(params->extension_id)));
-  }
-
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  auto& hidden_extensions = profile->GetPrefs()->GetList(
-      vivaldiprefs::kAddressBarExtensionsHiddenExtensions);
-
-  auto updated_hidden_extensions(hidden_extensions.Clone());
-
-  if (Contains(updated_hidden_extensions,
-               base::Value(params->extension_id))) {
-    updated_hidden_extensions.EraseValue(base::Value(params->extension_id));
-  } else {
-    updated_hidden_extensions.Append(params->extension_id);
-  }
-  profile->GetPrefs()->SetList(vivaldiprefs::kAddressBarExtensionsHiddenExtensions,
-                           std::move(updated_hidden_extensions));
-
-  ExtensionActionUtilFactory::GetForBrowserContext(browser_context())
-      ->ExtensionVisibilityChanged();
-
-  return RespondNow(NoArguments());
 }
 
 namespace {
@@ -1050,7 +918,7 @@ void RecursivelyFillMenu(
       vivaldi::extension_action_utils::MenuItem menuitem;
 
       menuitem.name = item->title();
-      menuitem.id = context_menus_api_helpers::GetIDString(item->id());
+      menuitem.id = context_menu_helpers::GetIDString(item->id());
       menuitem.visible = item->visible();
       menuitem.enabled = item->enabled();
       menuitem.checked = item->checked();

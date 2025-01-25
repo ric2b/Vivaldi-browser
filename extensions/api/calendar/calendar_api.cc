@@ -1162,11 +1162,10 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
                           // asynchronously.
 }
 
-void CalendarUpdateFunction::UpdateCalendarComplete(bool results) {
-  if (!results) {
-    Respond(
-        ErrorWithArguments(vivaldi::calendar::Update::Results::Create(false),
-                           "Error updating calendar"));
+void CalendarUpdateFunction::UpdateCalendarComplete(calendar::StatusCB cb) {
+  if (!cb.success) {
+    Respond(ErrorWithArguments(
+        vivaldi::calendar::Update::Results::Create(false), cb.message));
   } else {
     Respond(ArgumentList(vivaldi::calendar::Update::Results::Create(true)));
   }

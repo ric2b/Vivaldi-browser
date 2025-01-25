@@ -25,7 +25,7 @@
 #import "ios/chrome/browser/policy_url_blocking/model/policy_url_blocking_service.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_test_utils.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/web/common/features.h"
@@ -163,7 +163,7 @@ class AppLauncherTabHelperTest : public PlatformTest {
         ReadingListModelFactory::GetInstance(),
         base::BindRepeating(&BuildReadingListModelWithFakeStorage,
                             std::vector<scoped_refptr<ReadingListEntry>>()));
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
     abuse_detector_ = [[FakeAppLauncherAbuseDetector alloc] init];
     AppLauncherTabHelper::CreateForWebState(&web_state_, abuse_detector_,
                                             /*incognito*/ incognito_);
@@ -994,7 +994,7 @@ class BlockedUrlPolicyAppLauncherTabHelperTest
         policy_map);
 
     policy_blocklist_service_ = static_cast<PolicyBlocklistService*>(
-        PolicyBlocklistServiceFactory::GetForBrowserState(
+        PolicyBlocklistServiceFactory::GetForProfile(
             enterprise_policy_helper_->GetBrowserState()));
   }
 

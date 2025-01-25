@@ -151,9 +151,8 @@ extern const char kBlueDotPromoOverflowMenuShown[];
 // row.
 extern const char kBlueDotPromoSettingsShown[];
 
-// The user has dismissed the blue dot default browser promo on the overflow
-// carousel.
-extern const char kBlueDotPromoOverflowMenuDismissed[];
+// The user has opened the overflow menu while the blue dot was showing.
+extern const char kBlueDotPromoOverflowMenuOpened[];
 
 // The user has dismissed the blue dot default browser promo on the settings
 // row.
@@ -162,6 +161,10 @@ extern const char kBlueDotPromoSettingsDismissed[];
 // The user has customized the overflow menu while default browser blue dot was
 // showing.
 extern const char kBlueDotOverflowMenuCustomized[];
+
+// The user has dismissed the blue dot default browser promo on the overflow
+// carousel.
+extern const char kBlueDotPromoOverflowMenuDismissed[];
 
 // The user snoozed the Credential Provider Extension Promo.
 extern const char kCredentialProviderExtensionPromoSnoozed[];
@@ -186,9 +189,6 @@ extern const char kShareToolbarItemUsed[];
 
 // The user has triggered the Lens button in the Omnibox keyboard.
 extern const char kLensButtonKeyboardUsed[];
-
-// The omnibox position choice promo has been shown.
-extern const char kOmniboxPositionPromoShown[];
 
 // The user has triggered Parcel Tracking.
 extern const char kParcelTrackingTriggered[];
@@ -295,6 +295,17 @@ extern const char kIOSContextualPanelSampleModelEntrypointUsed[];
 // The user has tapped the contextual panel entrypoint when it was branded with
 // price insights infoblock.
 extern const char kIOSContextualPanelPriceInsightsEntrypointUsed[];
+
+// The user has explicitly dismissed the Price Insights branded Contextual Panel
+// entrypoint in-product help.
+extern const char
+    kIOSContextualPanelPriceInsightsEntrypointExplicitlyDismissed[];
+
+// The user has tapped the Home customization menu's entrypoint.
+extern const char kHomeCustomizationMenuUsed[];
+
+// The user has tapped on the lens overlay entrypoint.
+extern const char kLensOverlayEntrypointUsed[];
 
 #endif  // BUILDFLAG(IS_IOS)
 

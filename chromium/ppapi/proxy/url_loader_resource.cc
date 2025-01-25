@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ppapi/proxy/url_loader_resource.h"
 
 #include <algorithm>
@@ -240,8 +245,7 @@ void URLLoaderResource::OnPluginMsgSendData(
   const char* data;
   size_t data_length;
   if (!iter.ReadData(&data, &data_length)) {
-    NOTREACHED_IN_MIGRATION() << "Expecting data";
-    return;
+    NOTREACHED() << "Expecting data";
   }
 
   mode_ = MODE_STREAMING_DATA;

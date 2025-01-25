@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/signin/public/identity_manager/account_capabilities.h"
+
 #include <map>
 #include <string>
 #include <vector>
 
-#include "base/notreached.h"
-#include "components/signin/public/identity_manager/account_capabilities.h"
-
+#include "base/containers/heap_array.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "components/signin/internal/identity_manager/account_capabilities_constants.h"
 #include "components/signin/public/identity_manager/tribool.h"
 
@@ -137,6 +138,16 @@ signin::Tribool AccountCapabilities::is_subject_to_parental_controls() const {
   return GetCapabilityByName(kIsSubjectToParentalControlsCapabilityName);
 }
 
+signin::Tribool AccountCapabilities::can_use_speaker_label_in_recorder_app()
+    const {
+  return GetCapabilityByName(kCanUseSpeakerLabelInRecorderApp);
+}
+
+signin::Tribool AccountCapabilities::can_use_generative_ai_in_recorder_app()
+    const {
+  return GetCapabilityByName(kCanUseGenerativeAiInRecorderApp);
+}
+
 bool AccountCapabilities::UpdateWith(const AccountCapabilities& other) {
   bool modified = false;
 
@@ -155,8 +166,9 @@ bool AccountCapabilities::UpdateWith(const AccountCapabilities& other) {
 
 bool AccountCapabilities::operator==(const AccountCapabilities& other) const {
   for (const std::string& name : GetSupportedAccountCapabilityNames()) {
-    if (GetCapabilityByName(name) != other.GetCapabilityByName(name))
+    if (GetCapabilityByName(name) != other.GetCapabilityByName(name)) {
       return false;
+    }
   }
   return true;
 }
@@ -182,19 +194,19 @@ AccountCapabilities AccountCapabilities::ConvertFromJavaAccountCapabilities(
 
 base::android::ScopedJavaLocalRef<jobject>
 AccountCapabilities::ConvertToJavaAccountCapabilities(JNIEnv* env) const {
-  int capabilities_size = capabilities_map_.size();
+  const size_t num_caps = capabilities_map_.size();
   std::vector<std::string> capability_names;
-  auto capability_values = std::make_unique<bool[]>(capabilities_size);
-  int value_iterator = 0;
-  for (const auto& kv : capabilities_map_) {
-    capability_names.push_back(kv.first);
-    capability_values[value_iterator] = kv.second;
+  capability_names.reserve(num_caps);
+  auto capability_values = base::HeapArray<bool>::WithSize(num_caps);
+  size_t value_iterator = 0u;
+  for (const auto& [name, value] : capabilities_map_) {
+    capability_names.push_back(name);
+    capability_values[value_iterator] = value;
     value_iterator++;
   }
   return signin::Java_AccountCapabilities_Constructor(
       env, base::android::ToJavaArrayOfStrings(env, capability_names),
-      base::android::ToJavaBooleanArray(env, capability_values.get(),
-                                        capabilities_size));
+      base::android::ToJavaBooleanArray(env, capability_values));
 }
 #endif
 

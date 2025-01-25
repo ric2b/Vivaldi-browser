@@ -10,7 +10,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 
 namespace file_sync {
 
@@ -55,13 +55,13 @@ base::Value::List SerializeReferenceSet(const std::set<T>& reference_set) {
 
 template <typename T>
 base::Value::Dict SerializeReferences(
-    const std::map<syncer::ModelType, std::set<T>>& references) {
+    const std::map<syncer::DataType, std::set<T>>& references) {
   base::Value::Dict references_dict;
 
   for (const auto& reference_set : references) {
     references_dict.Set(
         base::NumberToString(
-            syncer::GetSpecificsFieldNumberFromModelType(reference_set.first)),
+            syncer::GetSpecificsFieldNumberFromDataType(reference_set.first)),
         SerializeReferenceSet(reference_set.second));
   }
 
@@ -108,15 +108,15 @@ std::set<T> LoadReferencesList(const base::Value::List& references_list) {
 }
 
 template <typename T>
-std::map<syncer::ModelType, std::set<T>> LoadReferences(
+std::map<syncer::DataType, std::set<T>> LoadReferences(
     const base::Value::Dict& references_dict) {
-  std::map<syncer::ModelType, std::set<T>> references;
+  std::map<syncer::DataType, std::set<T>> references;
   for (const auto references_for_type : references_dict) {
     int model_type_field_number;
     if (!base::StringToInt(references_for_type.first, &model_type_field_number))
       continue;
-    syncer::ModelType model_type =
-        syncer::GetModelTypeFromSpecificsFieldNumber(model_type_field_number);
+    syncer::DataType model_type =
+        syncer::GetDataTypeFromSpecificsFieldNumber(model_type_field_number);
     if (model_type == syncer::UNSPECIFIED)
       continue;
 

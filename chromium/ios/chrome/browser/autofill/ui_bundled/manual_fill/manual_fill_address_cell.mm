@@ -4,14 +4,15 @@
 
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_address_cell.h"
 
+#import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_cell_utils.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_content_injector.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -36,6 +37,9 @@
 @end
 
 @implementation ManualFillAddressItem {
+  // The 0-based index at which the address is in the list of addresses to show.
+  NSInteger _cellIndex;
+
   // If `YES`, autofill button is shown for the item.
   BOOL _showAutofillFormButton;
 }
@@ -43,6 +47,7 @@
 - (instancetype)initWithAddress:(ManualFillAddress*)address
                 contentInjector:(id<ManualFillContentInjector>)contentInjector
                     menuActions:(NSArray<UIAction*>*)menuActions
+                      cellIndex:(NSInteger)cellIndex
     cellIndexAccessibilityLabel:(NSString*)cellIndexAccessibilityLabel
          showAutofillFormButton:(BOOL)showAutofillFormButton {
   self = [super initWithType:kItemTypeEnumZero];
@@ -50,6 +55,7 @@
     _contentInjector = contentInjector;
     _address = address;
     _menuActions = menuActions;
+    _cellIndex = cellIndex;
     _cellIndexAccessibilityLabel = cellIndexAccessibilityLabel;
     _showAutofillFormButton = showAutofillFormButton;
     self.cellClass = [ManualFillAddressCell class];
@@ -63,10 +69,10 @@
   [cell setUpWithAddress:self.address
                   contentInjector:self.contentInjector
                       menuActions:self.menuActions
+                        cellIndex:_cellIndex
       cellIndexAccessibilityLabel:self.cellIndexAccessibilityLabel
            showAutofillFormButton:_showAutofillFormButton];
 }
-
 @end
 
 @interface ManualFillAddressCell ()
@@ -142,16 +148,28 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
 }  // namespace
 
 @implementation ManualFillAddressCell {
+  // The 0-based index at which the address is in the list of addresses to show.
+  NSInteger _cellIndex;
+
   // If `YES`, autofill button is shown for the cell.
   BOOL _showAutofillFormButton;
+
+  // If `YES`, the first row of chip buttons was laid out horizontally. This is
+  // useful to know whether or not the overflow menu needs to be considered when
+  // laying out a group of chip buttons horizontally as this menu is presented
+  // on the trailing side of the first row.
+  BOOL _firstChipRowHasBeenLaidOut;
+
+  // Current width of the cell's layout guide. Used to know whenever it changes
+  // and when the views need to be re-arranged.
+  CGFloat _layoutGuideWidth;
 }
 
 #pragma mark - Public
 
 - (void)prepareForReuse {
   [super prepareForReuse];
-  [NSLayoutConstraint deactivateConstraints:self.dynamicConstraints];
-  [self.dynamicConstraints removeAllObjects];
+  [self resetDynamicContraints];
 
   self.addressLabel.text = @"";
   [self.firstNameButton setTitle:@"" forState:UIControlStateNormal];
@@ -174,8 +192,10 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
 - (void)setUpWithAddress:(ManualFillAddress*)address
                 contentInjector:(id<ManualFillContentInjector>)contentInjector
                     menuActions:(NSArray<UIAction*>*)menuActions
+                      cellIndex:(NSInteger)cellIndex
     cellIndexAccessibilityLabel:(NSString*)cellIndexAccessibilityLabel
          showAutofillFormButton:(BOOL)showAutofillFormButton {
+  _cellIndex = cellIndex;
   _showAutofillFormButton = showAutofillFormButton;
   if (self.contentView.subviews.count == 0) {
     [self createViewHierarchy];
@@ -191,11 +211,28 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
   }
 
   if (IsKeyboardAccessoryUpgradeEnabled()) {
-    self.accessibilityLabel = cellIndexAccessibilityLabel;
+    GiveAccessibilityContextToCellAndButton(self, self.overflowMenuButton,
+                                            self.autofillFormButton,
+                                            cellIndexAccessibilityLabel);
   }
 
   [self populateViewsWithAddress:address];
   [self arrangeViewsWithAddress:address];
+}
+
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  CGFloat width = self.layoutGuide.layoutFrame.size.width;
+  if (self.contentView.subviews.count == 0 || width == _layoutGuideWidth) {
+    return;
+  }
+
+  // Re-arrange the views when the width of the layout guide's frame changed to
+  // make sure that the usage of the horizontal space is optimized.
+  _layoutGuideWidth = width;
+  [self resetDynamicContraints];
+  [self.contentView invalidateIntrinsicContentSize];
+  [self arrangeViewsWithAddress:self.address];
 }
 
 #pragma mark - Private
@@ -297,15 +334,13 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
       kChipsHorizontalMargin,
       AppendConstraintsHorizontalEqualOrSmallerThanGuide);
 
-  if (ShouldCreateAutofillFormButton(_showAutofillFormButton)) {
-    self.autofillFormButton = CreateAutofillFormButton();
-    [self.contentView addSubview:self.autofillFormButton];
-    [self.autofillFormButton addTarget:self
-                                action:@selector(onAutofillFormButtonTapped)
-                      forControlEvents:UIControlEventTouchUpInside];
-    AppendHorizontalConstraintsForViews(
-        staticConstraints, @[ self.autofillFormButton ], self.layoutGuide);
-  }
+  self.autofillFormButton = CreateAutofillFormButton();
+  [self.contentView addSubview:self.autofillFormButton];
+  [self.autofillFormButton addTarget:self
+                              action:@selector(onAutofillFormButtonTapped)
+                    forControlEvents:UIControlEventTouchUpInside];
+  AppendHorizontalConstraintsForViews(
+      staticConstraints, @[ self.autofillFormButton ], self.layoutGuide);
 
   // Without this set, Voice Over will read the content vertically instead of
   // horizontally.
@@ -495,6 +530,8 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
 
   self.dynamicConstraints = [[NSMutableArray alloc] init];
 
+  _firstChipRowHasBeenLaidOut = NO;
+
   // First, middle and last names are presented on the same line when possible.
   NSMutableArray<UIView*>* nameLineViews = [[NSMutableArray alloc] init];
 
@@ -517,11 +554,8 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
     [nameLineViews addObject:self.lastNameButton];
   }
 
-  UIView* trailingView =
-      IsKeyboardAccessoryUpgradeEnabled() ? self.overflowMenuButton : nil;
-  LayViewsHorizontallyWhenPossible(nameLineViews, self.layoutGuide,
-                                   self.dynamicConstraints,
-                                   nameGroupVerticalLeadChips, trailingView);
+  [self layViewsHorizontally:nameLineViews
+           verticalLeadViews:nameGroupVerticalLeadChips];
 
   // Holds the chip buttons related to the company name that are vertical leads.
   NSMutableArray<UIView*>* companyGroupVerticalLeadChips =
@@ -588,16 +622,13 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
   }
 
   if (IsKeyboardAccessoryUpgradeEnabled()) {
-    LayViewsHorizontallyWhenPossible(cityStateZipCountryLineViews,
-                                     self.layoutGuide, self.dynamicConstraints,
-                                     addressGroupVerticalLeadChips);
+    [self layViewsHorizontally:cityStateZipCountryLineViews
+             verticalLeadViews:addressGroupVerticalLeadChips];
   } else {
-    LayViewsHorizontallyWhenPossible(zipCityLineViews, self.layoutGuide,
-                                     self.dynamicConstraints,
-                                     addressGroupVerticalLeadChips);
-    LayViewsHorizontallyWhenPossible(stateCountryLineViews, self.layoutGuide,
-                                     self.dynamicConstraints,
-                                     addressGroupVerticalLeadChips);
+    [self layViewsHorizontally:zipCityLineViews
+             verticalLeadViews:addressGroupVerticalLeadChips];
+    [self layViewsHorizontally:stateCountryLineViews
+             verticalLeadViews:addressGroupVerticalLeadChips];
   }
 
   // Holds the chip buttons related to the contact info that are vertical leads.
@@ -621,16 +652,46 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
       ],
       verticalLeadViews);
 
-  if (ShouldCreateAutofillFormButton(_showAutofillFormButton)) {
+  if (_showAutofillFormButton) {
+    CHECK(IsKeyboardAccessoryUpgradeEnabled());
     AddViewToVerticalLeadViews(self.autofillFormButton,
                                ManualFillCellView::ElementType::kOther,
                                verticalLeadViews);
+    self.autofillFormButton.hidden = NO;
+  } else {
+    self.autofillFormButton.hidden = YES;
   }
 
   // Set and activate constraints.
   AppendVerticalConstraintsSpacingForViews(self.dynamicConstraints,
                                            verticalLeadViews, self.layoutGuide);
   [NSLayoutConstraint activateConstraints:self.dynamicConstraints];
+}
+
+// Lays the given `views` horizontally and evaluates whether the overflow menu
+// should be considered or not as part of the row.
+- (void)layViewsHorizontally:(NSArray<UIView*>*)views
+           verticalLeadViews:(NSMutableArray<UIView*>*)verticalLeadViews {
+  if (views.count <= 0) {
+    return;
+  }
+
+  UIView* trailingView;
+  if (!_firstChipRowHasBeenLaidOut) {
+    trailingView =
+        IsKeyboardAccessoryUpgradeEnabled() ? self.overflowMenuButton : nil;
+    _firstChipRowHasBeenLaidOut = YES;
+  }
+
+  LayViewsHorizontallyWhenPossible(views, self.layoutGuide,
+                                   self.dynamicConstraints, verticalLeadViews,
+                                   trailingView);
+}
+
+// Deactivates and removes the dynamic constraints.
+- (void)resetDynamicContraints {
+  [NSLayoutConstraint deactivateConstraints:self.dynamicConstraints];
+  [self.dynamicConstraints removeAllObjects];
 }
 
 - (void)userDidTapAddressInfo:(UIButton*)sender {
@@ -671,6 +732,12 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
 // Called when the "Autofill Form" button is tapped. Fills the current form with
 // the address' data.
 - (void)onAutofillFormButtonTapped {
+  base::UmaHistogramSparse(
+      "Autofill.UserAcceptedSuggestionAtIndex.Address.ManualFallback",
+      _cellIndex);
+  base::RecordAction(
+      base::UserMetricsAction("ManualFallback_Profiles_SuggestionAccepted"));
+
   FormSuggestion* suggestion = [FormSuggestion
              suggestionWithValue:nil
                       minorValue:nil
@@ -683,7 +750,8 @@ constexpr CGFloat kOverflowMenuButtonTopSpacing = 14;
           base::SysUTF16ToNSString(l10n_util::GetStringUTF16(
               IDS_AUTOFILL_A11Y_ANNOUNCE_FILLED_FORM))];
 
-  [self.contentInjector autofillFormWithSuggestion:suggestion];
+  [self.contentInjector autofillFormWithSuggestion:suggestion
+                                           atIndex:_cellIndex];
 }
 
 // Sets the title and accessbility label of the given `chipButton` using the

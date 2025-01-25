@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/mojo/mojom/video_frame_mojom_traits.h"
 
 #include "base/functional/callback_helpers.h"
@@ -214,9 +219,8 @@ TEST_F(VideoFrameStructTraitsTest, InvalidOffsets) {
 
 TEST_F(VideoFrameStructTraitsTest, MailboxVideoFrame) {
   gpu::Mailbox mailbox = gpu::Mailbox::Generate();
-  gpu::MailboxHolder mailbox_holder[VideoFrame::kMaxPlanes];
-  mailbox_holder[0] = gpu::MailboxHolder(mailbox, gpu::SyncToken(), 0);
-  scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
+  gpu::MailboxHolder mailbox_holder(mailbox, gpu::SyncToken(), 0);
+  scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTexture(
       PIXEL_FORMAT_ARGB, mailbox_holder, VideoFrame::ReleaseMailboxCB(),
       gfx::Size(100, 100), gfx::Rect(10, 10, 80, 80), gfx::Size(200, 100),
       base::Seconds(100));
@@ -250,7 +254,7 @@ TEST_F(VideoFrameStructTraitsTest, SharedImageVideoFrame) {
   EXPECT_EQ(frame->natural_size(), gfx::Size(200, 100));
   EXPECT_EQ(frame->timestamp(), base::Seconds(100));
   ASSERT_TRUE(frame->HasTextures());
-  ASSERT_EQ(frame->shared_image(0)->mailbox(), shared_image->mailbox());
+  ASSERT_EQ(frame->shared_image()->mailbox(), shared_image->mailbox());
 }
 
 // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) because

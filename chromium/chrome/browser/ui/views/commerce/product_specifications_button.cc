@@ -4,7 +4,8 @@
 
 #include "chrome/browser/ui/views/commerce/product_specifications_button.h"
 
-#include "base/strings/utf_string_conversions.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -50,8 +51,7 @@ ProductSpecificationsButton::ProductSpecificationsButton(
           tab_strip_controller,
           base::BindRepeating(&ProductSpecificationsButton::OnClicked,
                               base::Unretained(this)),
-          l10n_util::GetStringUTF16(
-              IDS_PRODUCT_SPECIFICATIONS_ENTRY_POINT_DEFAULT),
+          l10n_util::GetStringUTF16(IDS_COMPARE_ENTRY_POINT_DEFAULT),
           Edge::kNone),
       locked_expansion_view_(locked_expansion_view),
       tab_strip_model_(tab_strip_model),
@@ -70,8 +70,7 @@ ProductSpecificationsButton::ProductSpecificationsButton(
   SetProperty(views::kElementIdentifierKey,
               kProductSpecificationsButtonElementId);
 
-  SetTooltipText(l10n_util::GetStringUTF16(
-      IDS_PRODUCT_SPECIFICATIONS_ENTRY_POINT_DEFAULT));
+  SetTooltipText(l10n_util::GetStringUTF16(IDS_COMPARE_ENTRY_POINT_DEFAULT));
   // TODO(b/325661685): Set accessibility name of the button.
   SetLabelStyle(views::style::STYLE_BODY_3_EMPHASIS);
   label()->SetElideBehavior(gfx::ElideBehavior::NO_ELIDE);
@@ -109,6 +108,9 @@ ProductSpecificationsButton::ProductSpecificationsButton(
   SetLayoutManager(std::make_unique<views::FlexLayout>());
 
   UpdateColors();
+
+  // Button is not visible by default to avoid grabbing focus.
+  SetVisible(false);
 }
 
 ProductSpecificationsButton::~ProductSpecificationsButton() = default;
@@ -138,9 +140,14 @@ void ProductSpecificationsButton::AnimationEnded(
   // If the button went from shown -> hidden, unblock the tab strip from
   // showing other modal UIs. Compare to 0.5 to distinguish between show/hide
   // while avoiding potentially inexact float comparison to 0.0.
+  // When hiding animation finishes, set the button to not visible to avoid
+  // grabbing focus.
   if (animation == &expansion_animation_ &&
-      animation->GetCurrentValue() < 0.5 && scoped_tab_strip_modal_ui_) {
-    scoped_tab_strip_modal_ui_.reset();
+      animation->GetCurrentValue() < 0.5) {
+    SetVisible(false);
+    if (scoped_tab_strip_modal_ui_) {
+      scoped_tab_strip_modal_ui_.reset();
+    }
   }
 }
 
@@ -154,6 +161,7 @@ void ProductSpecificationsButton::Show() {
   if (expansion_animation_.IsShowing()) {
     return;
   }
+
   if (locked_expansion_view_->IsMouseHovered()) {
     SetLockedExpansionMode(LockedExpansionMode::kWillShow);
   }
@@ -172,9 +180,9 @@ void ProductSpecificationsButton::Hide() {
 }
 
 void ProductSpecificationsButton::ShowEntryPointWithTitle(
-    const std::string title) {
-  SetText(l10n_util::GetStringFUTF16(IDS_PRODUCT_SPECIFICATIONS_ENTRY_POINT,
-                                     base::UTF8ToUTF16(title)));
+    const std::u16string& title) {
+  SetText(title);
+  SetTooltipText(title);
   Show();
 }
 
@@ -206,10 +214,6 @@ void ProductSpecificationsButton::ExecuteShow() {
   if (!tab_strip_model_->CanShowModalUI()) {
     return;
   }
-  // Check if the entry point is still eligible for showing.
-  if (!entry_point_controller_->ShouldExecuteEntryPointShow()) {
-    return;
-  }
 
   scoped_tab_strip_modal_ui_ = tab_strip_model_->ShowModalUI();
 
@@ -221,10 +225,13 @@ void ProductSpecificationsButton::ExecuteShow() {
       FROM_HERE, delay, this,
       &ProductSpecificationsButton::ShowOpacityAnimation);
 
+  SetVisible(true);
   expansion_animation_.Show();
 
   hide_button_timer_.Start(FROM_HERE, kShowDuration, this,
                            &ProductSpecificationsButton::OnTimeout);
+  base::RecordAction(
+      base::UserMetricsAction("Commerce.Compare.ProactiveChipShown"));
 }
 
 void ProductSpecificationsButton::ExecuteHide() {
@@ -246,6 +253,8 @@ void ProductSpecificationsButton::OnClicked() {
     entry_point_controller_->OnEntryPointExecuted();
   }
   ExecuteHide();
+  base::RecordAction(
+      base::UserMetricsAction("Commerce.Compare.ProactiveChipClicked"));
 }
 
 void ProductSpecificationsButton::OnDismissed() {
@@ -253,18 +262,22 @@ void ProductSpecificationsButton::OnDismissed() {
   if (entry_point_controller_) {
     entry_point_controller_->OnEntryPointDismissed();
   }
+  base::RecordAction(
+      base::UserMetricsAction("Commerce.Compare.ProactiveChipDismissed"));
 }
 
 void ProductSpecificationsButton::OnTimeout() {
   Hide();
+  base::RecordAction(
+      base::UserMetricsAction("Commerce.Compare.ProactiveChipIgnored"));
 }
 
 void ProductSpecificationsButton::SetCloseButton(
     views::LabelButton::PressedCallback pressed_callback) {
   auto close_button =
       std::make_unique<views::LabelButton>(std::move(pressed_callback));
-  close_button->SetTooltipText(l10n_util::GetStringUTF16(
-      IDS_TOOLTIP_PRODUCT_SPECIFICATIONS_ENTRY_POINT_CLOSE));
+  close_button->SetTooltipText(
+      l10n_util::GetStringUTF16(IDS_TOOLTIP_COMPARE_ENTRY_POINT_CLOSE));
 
   const ui::ImageModel icon_image_model = ui::ImageModel::FromVectorIcon(
       vector_icons::kCloseChromeRefreshIcon,
@@ -307,7 +320,10 @@ void ProductSpecificationsButton::SetLockedExpansionMode(
     LockedExpansionMode mode) {
   if (mode == LockedExpansionMode::kNone) {
     if (locked_expansion_mode_ == LockedExpansionMode::kWillShow) {
-      ExecuteShow();
+      // Check if the entry point is still eligible for showing.
+      if (entry_point_controller_->ShouldExecuteEntryPointShow()) {
+        ExecuteShow();
+      }
     } else if (locked_expansion_mode_ == LockedExpansionMode::kWillHide) {
       ExecuteHide();
     }

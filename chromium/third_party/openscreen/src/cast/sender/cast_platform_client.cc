@@ -9,7 +9,6 @@
 #include <string_view>
 #include <utility>
 
-#include "absl/strings/str_cat.h"
 #include "cast/common/channel/virtual_connection_router.h"
 #include "cast/common/public/cast_socket.h"
 #include "cast/common/public/receiver_info.h"

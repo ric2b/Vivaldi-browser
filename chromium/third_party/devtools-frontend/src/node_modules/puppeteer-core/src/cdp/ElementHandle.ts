@@ -4,20 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type Path from 'path';
-
 import type {Protocol} from 'devtools-protocol';
 
 import type {CDPSession} from '../api/CDPSession.js';
 import {ElementHandle, type AutofillData} from '../api/ElementHandle.js';
+import type {AwaitableIterable} from '../common/types.js';
 import {debugError} from '../common/util.js';
+import {environment} from '../environment.js';
 import {assert} from '../util/assert.js';
+import {AsyncIterableUtil} from '../util/AsyncIterableUtil.js';
 import {throwIfDisposed} from '../util/decorators.js';
 
 import type {CdpFrame} from './Frame.js';
 import type {FrameManager} from './FrameManager.js';
 import type {IsolatedWorld} from './IsolatedWorld.js';
 import {CdpJSHandle} from './JSHandle.js';
+
+const NON_ELEMENT_NODE_ROLES = new Set(['StaticText', 'InlineTextBox']);
 
 /**
  * The CdpElementHandle extends ElementHandle now to keep compatibility
@@ -105,17 +108,7 @@ export class CdpElementHandle<
     );
 
     // Locate all files and confirm that they exist.
-    let path: typeof Path;
-    try {
-      path = await import('path');
-    } catch (error) {
-      if (error instanceof TypeError) {
-        throw new Error(
-          `JSHandle#uploadFile can only be used in Node-like environments.`
-        );
-      }
-      throw error;
-    }
+    const path = environment.value.path;
     const files = filePaths.map(filePath => {
       if (path.win32.isAbsolute(filePath) || path.posix.isAbsolute(filePath)) {
         return filePath;
@@ -167,6 +160,36 @@ export class CdpElementHandle<
       fieldId,
       frameId,
       card: data.creditCard,
+    });
+  }
+
+  override async *queryAXTree(
+    name?: string | undefined,
+    role?: string | undefined
+  ): AwaitableIterable<ElementHandle<Node>> {
+    const {nodes} = await this.client.send('Accessibility.queryAXTree', {
+      objectId: this.id,
+      accessibleName: name,
+      role,
+    });
+
+    const results = nodes.filter(node => {
+      if (node.ignored) {
+        return false;
+      }
+      if (!node.role) {
+        return false;
+      }
+      if (NON_ELEMENT_NODE_ROLES.has(node.role.value)) {
+        return false;
+      }
+      return true;
+    });
+
+    return yield* AsyncIterableUtil.map(results, node => {
+      return this.realm.adoptBackendNode(node.backendDOMNodeId) as Promise<
+        ElementHandle<Node>
+      >;
     });
   }
 }

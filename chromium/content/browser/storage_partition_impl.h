@@ -6,7 +6,6 @@
 #define CONTENT_BROWSER_STORAGE_PARTITION_IMPL_H_
 
 #include <stdint.h>
-
 #include <map>
 #include <memory>
 #include <set>
@@ -30,7 +29,6 @@
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/url_loader_factory_getter.h"
 #include "content/browser/worker_host/dedicated_worker_service_impl.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/storage_partition.h"
@@ -70,10 +68,15 @@ class SharedDictionaryAccessObserver;
 }  // namespace network
 
 namespace storage {
+struct BucketClientInfo;
 class SharedStorageManager;
 }
 
 namespace content {
+
+namespace indexed_db {
+class IndexedDBControlWrapper;
+}
 
 class AggregationService;
 class AttributionManager;
@@ -98,7 +101,6 @@ class FileSystemAccessManagerImpl;
 class FontAccessManager;
 class GeneratedCodeCacheContext;
 class HostZoomLevelContext;
-class IndexedDBControlWrapper;
 class InterestGroupManagerImpl;
 class LockManager;
 class NavigationStateKeepAlive;
@@ -108,6 +110,7 @@ class PrivateAggregationManager;
 class PrivateAggregationManagerImpl;
 class PushMessagingContext;
 class QuotaContext;
+class ReconnectableURLLoaderFactoryForIOThreadWrapper;
 class SharedStorageHeaderObserver;
 class SharedStorageWorkletHostManager;
 class SharedWorkerServiceImpl;
@@ -391,11 +394,6 @@ class CONTENT_EXPORT StoragePartitionImpl
     return shared_storage_header_observer_.get();
   }
 
-  scoped_refptr<ReconnectableURLLoaderFactoryForIOThread>
-  url_loader_factory_getter() {
-    return url_loader_factory_getter_;
-  }
-
   // Can return nullptr while `this` is being destroyed.
   BrowserContext* browser_context() const;
 
@@ -411,9 +409,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   // `window.indexedDB`).
   void BindIndexedDB(
       const storage::BucketLocator& bucket_locator,
+      const storage::BucketClientInfo& client_info,
       mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
           client_state_checker_remote,
-      const base::UnguessableToken& client_token,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver);
 
   // Called by each renderer process to bind its global DomStorage interface.
@@ -496,7 +494,7 @@ class CONTENT_EXPORT StoragePartitionImpl
       std::unique_ptr<NavigationStateKeepAlive> handle);
 
   // Forward the call to `NetworkContext::RevokeNetworkForNonces` and save the
-  // nonces in StoragePartitionImpl. Clients should revoke network access for
+  // nonces in `StoragePartitionImpl`. Clients should revoke network access for
   // nonces using this function instead of calling
   // `NetworkContext::RevokeNetworkForNonces` directly. This is because this
   // function saves the nonces so that they can be restored in case of a
@@ -504,6 +502,17 @@ class CONTENT_EXPORT StoragePartitionImpl
   void RevokeNetworkForNoncesInNetworkContext(
       const std::vector<base::UnguessableToken>& nonces,
       network::mojom::NetworkContext::RevokeNetworkForNoncesCallback callback);
+
+  // Forward the call to `NetworkContext::ClearNonces` and remove the stored
+  // nonce values in `StoragePartitionImpl`. Clients should clear nonces using
+  // this function instead of calling `NetworkContext::ClearNonces` directly.
+  // This should only be called when the nonces saved by
+  // `RevokeNetworkForNoncesInNetworkContext` are no longer relevant.
+  // The nonces are cleared after a time delay, which will prevent races where
+  // network requests succeed while the fenced frame corresponding to the
+  // nonces is being destroyed.
+  void ClearNoncesInNetworkContextAfterDelay(
+      const std::vector<base::UnguessableToken>& nonces);
 
   // Get the NavigationStateKeepAlive associated with `frame_token`. See
   // `navigation_state_keep_alive_map_`.
@@ -514,6 +523,10 @@ class CONTENT_EXPORT StoragePartitionImpl
   // should be called when the keep alive is destructed.
   void RemoveKeepAliveHandleFromMap(blink::LocalFrameToken frame_token,
                                     NavigationStateKeepAlive* keep_alive);
+
+  void SetClearNoncesInNetworkContextParamsForTesting(
+      const base::TimeDelta& delay,
+      base::RepeatingClosure callback);
 
   enum class ContextType {
     kRenderFrameHostContext,
@@ -703,6 +716,9 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   void DeleteStaleSessionOnlyCookiesAfterDelayCallback();
 
+  void ClearNoncesInNetworkContextAfterDelayCallback(
+      const std::vector<base::UnguessableToken>& nonces);
+
   void VivaldiUpdateBlobUrlRegistryWithFallback(storage::BlobUrlRegistry* fallback);
 
   // Raw pointer that should always be valid. The BrowserContext owns the
@@ -722,15 +738,14 @@ class CONTENT_EXPORT StoragePartitionImpl
   bool initialized_ = false;
 
   mojo::Remote<storage::mojom::Partition> remote_partition_;
-  scoped_refptr<ReconnectableURLLoaderFactoryForIOThread>
-      url_loader_factory_getter_;
   scoped_refptr<QuotaContext> quota_context_;
   scoped_refptr<storage::QuotaManager> quota_manager_;
   scoped_refptr<storage::FileSystemContext> filesystem_context_;
   scoped_refptr<storage::DatabaseTracker> database_tracker_;
   scoped_refptr<DOMStorageContextWrapper> dom_storage_context_;
   std::unique_ptr<LockManager> lock_manager_;
-  std::unique_ptr<IndexedDBControlWrapper> indexed_db_control_wrapper_;
+  std::unique_ptr<indexed_db::IndexedDBControlWrapper>
+      indexed_db_control_wrapper_;
   std::unique_ptr<CacheStorageControlWrapper> cache_storage_control_wrapper_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
   std::unique_ptr<DedicatedWorkerServiceImpl> dedicated_worker_service_;
@@ -812,7 +827,7 @@ class CONTENT_EXPORT StoragePartitionImpl
       network_context_client_receiver_{this};
 
   // Always valid/non-null after `Initialize()`.
-  scoped_refptr<ReconnectableURLLoaderFactory>
+  std::unique_ptr<ReconnectableURLLoaderFactoryForIOThreadWrapper>
       shared_url_loader_factory_for_browser_process_;
 
   mojo::Remote<cert_verifier::mojom::CertVerifierServiceUpdater>
@@ -908,6 +923,16 @@ class CONTENT_EXPORT StoragePartitionImpl
   // has initialized, otherwise we will bypass lazy loading and block.
   // See crbug.com/40285083 for more info.
   base::TimeDelta delete_stale_session_only_cookies_delay_{base::Minutes(1)};
+
+  // We need a delay when removing fenced frame nonces from here and from the
+  // network service, to avoid races where a fenced frame could regain network
+  // access during destruction. See the comment on
+  // `ClearNoncesInNetworkContextAfterDelay` for more info.
+  base::TimeDelta clear_nonces_in_network_context_delay_{base::Minutes(1)};
+  // Because removing the nonces after a delay is async, we need a callback to
+  // execute when the task completes in order to test it.
+  base::RepeatingClosure clear_nonces_in_network_context_callback_for_testing_ =
+      base::DoNothing();
 
   base::WeakPtrFactory<StoragePartitionImpl> weak_factory_{this};
 };

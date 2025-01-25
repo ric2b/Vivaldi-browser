@@ -49,6 +49,7 @@
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
+#include "components/password_manager/core/browser/password_generation_frame_helper.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -68,11 +69,13 @@
 #include "components/ukm/test_ukm_recorder.h"
 #include "net/cert/cert_status_flags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/test/test_network_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "components/password_manager/core/browser/first_cct_page_load_passwords_ukm_recorder.h"
 #include "components/webauthn/android/cred_man_support.h"
 #include "components/webauthn/android/webauthn_cred_man_delegate.h"
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -247,6 +250,12 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
               GetMetricsRecorder,
               (),
               (override));
+#if BUILDFLAG(IS_ANDROID)
+  MOCK_METHOD(FirstCctPageLoadPasswordsUkmRecorder*,
+              GetFirstCctPageLoadUkmRecorder,
+              (),
+              (override));
+#endif  // BUILDFLAG(IS_ANDROID)
   MOCK_METHOD(bool, IsNewTabPage, (), (const, override));
   MOCK_METHOD(profile_metrics::BrowserProfileType,
               GetProfileType,
@@ -310,6 +319,14 @@ class MockPasswordManagerDriver : public StubPasswordManagerDriver {
               (override));
   MOCK_METHOD(bool, IsInPrimaryMainFrame, (), (const, override));
   MOCK_METHOD(const GURL&, GetLastCommittedURL, (), (const, override));
+  MOCK_METHOD(void,
+              GeneratedPasswordAccepted,
+              (const std::u16string& password),
+              (override));
+  MOCK_METHOD(PasswordGenerationFrameHelper*,
+              GetPasswordGenerationHelper,
+              (),
+              (override));
 };
 
 // Invokes the password store consumer with a single copy of |form|.
@@ -447,7 +464,7 @@ class PasswordManagerTestBase : public testing::Test {
         prefs::kProfileStoreDateLastUsedForFilling, base::Time());
     prefs_->registry()->RegisterTimePref(
         prefs::kAccountStoreDateLastUsedForFilling, base::Time());
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
     prefs_->registry()->RegisterBooleanPref(
         password_manager::prefs::kBiometricAuthenticationBeforeFilling, true);
 #endif
@@ -908,6 +925,9 @@ TEST_P(PasswordManagerTest, EditingGeneratedPasswordOnIOS) {
   std::u16string generated_password = form_data.fields()[1].value() + u"1";
   FieldRendererId username_element = form_data.fields()[0].renderer_id();
   FieldRendererId generation_element = form_data.fields()[1].renderer_id();
+
+  EXPECT_CALL(driver_, GetLastCommittedURL)
+      .WillRepeatedly(ReturnRef(form_data.url()));
 
   // A form is found by PasswordManager.
   manager()->OnPasswordFormsParsed(&driver_, {form_data});
@@ -2869,6 +2889,23 @@ TEST_P(PasswordManagerTest, SetGenerationElementAndTypeForForm) {
   EXPECT_TRUE(form_manager->HasGeneratedPassword());
 }
 
+// Tests that generation triggers `PasswordManager` to create
+// `PasswordFormManager` for the corresponding form.
+TEST_P(PasswordManagerTest, GenerationTriggersFormManagerCreation) {
+  FormData form(MakeSimpleFormData());
+  ASSERT_THAT(form.fields(), SizeIs(2));
+  EXPECT_TRUE(form.fields()[1].IsPasswordInputElement());
+  std::u16string generated_password;
+
+  EXPECT_CALL(driver_, GeneratedPasswordAccepted)
+      .WillOnce(SaveArg<0>(&generated_password));
+  manager()->OnGeneratedPasswordAccepted(
+      &driver_, form, form.fields()[1].renderer_id(), u"generated_password");
+
+  EXPECT_THAT(manager()->form_managers(), SizeIs(1));
+  EXPECT_EQ(generated_password, u"generated_password");
+}
+
 TEST_P(PasswordManagerTest, UpdateFormManagers) {
   // Seeing a form should result in creating PasswordFormManager and
   // PasswordFormManager and querying PasswordStore. Calling
@@ -3654,11 +3691,6 @@ TEST_P(PasswordManagerTest,
 // server predictions are not ignored and used for filling in case there are
 // multiple forms on a page, including forms that have UsernameFirstFlow votes.
 TEST_P(PasswordManagerTest, AutofillPredictionBeforeMultipleFormsParsed) {
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kIOSPasswordSignInUff);
-#endif  // BUIDFLAG(IS_IOS)
-
   PasswordFormManager::set_wait_for_server_predictions_for_filling(true);
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(Return(true));
@@ -4222,11 +4254,6 @@ TEST_P(PasswordManagerTest, StartLeakDetection) {
 
 // Check that a non-password form with SINGLE_USERNAME prediction is filled.
 TEST_P(PasswordManagerTest, FillSingleUsername) {
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kIOSPasswordSignInUff);
-#endif  // BUIDFLAG(IS_IOS)
-
   base::HistogramTester histogram_tester;
   PasswordFormManager::set_wait_for_server_predictions_for_filling(true);
   EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
@@ -4259,14 +4286,6 @@ TEST_P(PasswordManagerTest, FillSingleUsername) {
 // Check that a non-password form with SINGLE_USERNAME_FORGOT_PASSWORD
 // prediction is filled.
 TEST_P(PasswordManagerTest, FillSingleUsernameForgotPassword) {
-  std::vector<FeatureRef> enabled_features = {
-      password_manager::features::kForgotPasswordFormSupport};
-#if BUILDFLAG(IS_IOS)
-  enabled_features.push_back(features::kIOSPasswordSignInUff);
-#endif  // BUIDFLAG(IS_IOS)
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(enabled_features, /*disabled_features=*/{});
-
   base::HistogramTester histogram_tester;
   PasswordFormManager::set_wait_for_server_predictions_for_filling(true);
   EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
@@ -4298,7 +4317,7 @@ TEST_P(PasswordManagerTest, FillSingleUsernameForgotPassword) {
 }
 
 // Checks that a password form with a clear-text account creation field results
-// in marking the password field as eligible for password generation.
+// in marking the password field as eligible for manual password generation.
 TEST_P(PasswordManagerTest,
        MarkServerPredictedClearTextPasswordFieldEligibleForGeneration) {
   PasswordFormManager::set_wait_for_server_predictions_for_filling(true);
@@ -4325,15 +4344,23 @@ TEST_P(PasswordManagerTest,
   password_field.set_renderer_id(password_field_id);
   test_api(form_data).Append(password_field);
 
-  autofill::PasswordFormGenerationData form_generation_data;
-  EXPECT_CALL(driver_, FormEligibleForGenerationFound)
-      .WillOnce(SaveArg<0>(&form_generation_data));
+  // No automatic generation should be offered on the text field.
+  EXPECT_CALL(driver_, FormEligibleForGenerationFound).Times(0);
+
+  PasswordGenerationFrameHelper password_generation_frame_helper =
+      PasswordGenerationFrameHelper(&client_, &driver_);
+  EXPECT_CALL(driver_, GetPasswordGenerationHelper)
+      .WillRepeatedly(Return(&password_generation_frame_helper));
+  EXPECT_CALL(driver_, GetLastCommittedURL)
+      .WillRepeatedly(ReturnRef(form_data.url()));
   manager()->ProcessAutofillPredictions(
       &driver_, form_data,
       CreateServerPredictions(form_data,
                               {{1, FieldType::ACCOUNT_CREATION_PASSWORD}}));
   task_environment_.RunUntilIdle();
-  EXPECT_EQ(password_field_id, form_generation_data.new_password_renderer_id);
+
+  EXPECT_TRUE(password_generation_frame_helper.IsManualGenerationEnabledField(
+      password_field.renderer_id()));
 }
 
 // Checks that username is suggested in the save prompt and saved on username
@@ -5559,6 +5586,52 @@ TEST_P(PasswordManagerTest, SubmittedManagerClearingOnSuccessfulLogin) {
   EXPECT_FALSE(manager()->GetSubmittedManagerForTest());
 }
 
+// Tests that server predictions are correctly assigned even though forms have
+// the same form signature.
+TEST_P(PasswordManagerTest, ProcessingPredictionsOnSameFormSignatureForms) {
+  constexpr int kPasswordFieldIndex = 1;
+  FormData observed_form(MakeSimpleFormData());
+  FormData similar_form(MakeSimpleFormData());
+
+  // Similar form has different renderer ids.
+  ASSERT_THAT(similar_form.fields(), SizeIs(2));
+  test_api(similar_form)
+      .field(kPasswordFieldIndex)
+      .set_renderer_id(FieldRendererId(-10));
+  similar_form.set_renderer_id(FormRendererId(-20));
+
+  manager()->OnPasswordFormsParsed(&driver_, {observed_form});
+  manager()->ProcessAutofillPredictions(
+      &driver_, observed_form,
+      CreateServerPredictions(
+          observed_form, {{0, FieldType::USERNAME}, {1, FieldType::PASSWORD}}));
+  manager()->OnPasswordFormSubmitted(&driver_, observed_form);
+
+  manager()->OnPasswordFormsParsed(&driver_, {similar_form});
+  manager()->ProcessAutofillPredictions(
+      &driver_, similar_form,
+      CreateServerPredictions(similar_form, {{0, FieldType::USERNAME},
+                                             {1, FieldType::NEW_PASSWORD}}));
+  // Wait for password store response before parsing.
+  task_environment_.RunUntilIdle();
+  manager()->OnPasswordFormSubmitted(&driver_, similar_form);
+
+  EXPECT_THAT(manager()->form_managers(), SizeIs(2));
+
+  const PasswordForm* form_with_new_password_prediction =
+      manager()->GetParsedObservedForm(
+          &driver_, similar_form.fields()[kPasswordFieldIndex].renderer_id());
+  const PasswordForm* form_with_password_prediction =
+      manager()->GetParsedObservedForm(
+          &driver_, observed_form.fields()[kPasswordFieldIndex].renderer_id());
+
+  ASSERT_THAT(form_with_new_password_prediction, NotNull());
+  ASSERT_THAT(form_with_password_prediction, NotNull());
+
+  EXPECT_TRUE(form_with_new_password_prediction->HasNewPasswordElement());
+  EXPECT_FALSE(form_with_password_prediction->HasNewPasswordElement());
+}
+
 #if BUILDFLAG(IS_ANDROID)
 TEST_P(PasswordManagerTest, FormSubmissionTrackingAfterTouchToFill) {
   PasswordForm saved_match(MakeSavedForm());
@@ -5735,10 +5808,6 @@ TEST_P(PasswordManagerTest, HaveFormManagersReceivedDataDependsOnDriver) {
 
 TEST_P(PasswordManagerTest,
        FieldInfoManagerHasDataPredictionsInitiallyAvailable) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kForgotPasswordFormSupport);
-
   // Process server predictions.
   PasswordForm username_form(MakeSimpleFormWithOnlyUsernameField());
   const FieldType kFieldType = FieldType::SINGLE_USERNAME_FORGOT_PASSWORD;
@@ -5767,10 +5836,6 @@ TEST_P(PasswordManagerTest,
 }
 
 TEST_P(PasswordManagerTest, FieldInfoManagerHasDataPredictionsPropagatedLater) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kForgotPasswordFormSupport);
-
   // Simulate the user typed in a text field.
   PasswordForm username_form(MakeSimpleFormWithOnlyUsernameField());
   ON_CALL(driver_, GetLastCommittedURL())
@@ -6080,6 +6145,27 @@ TEST_P(PasswordManagerTest,
   manager_.reset();
   histogram_tester.ExpectTotalCount(
       "PasswordManager.FormSubmissionsVsSavePrompts", 0);
+}
+
+TEST_P(PasswordManagerTest, MarksHasPasswordFormForFirstCctPageLoad) {
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+  auto first_cct_page_recorder =
+      std::make_unique<FirstCctPageLoadPasswordsUkmRecorder>(ukm::SourceId(1));
+
+  ON_CALL(client_, GetFirstCctPageLoadUkmRecorder)
+      .WillByDefault(Return(first_cct_page_recorder.get()));
+
+  FormData form_data(MakeSimpleFormData());
+  std::vector<FormData> observed;
+  observed.push_back(std::move(form_data));
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  manager()->OnPasswordFormsRendered(&driver_, observed);
+  // Destroy the recorder as it records metrics on destruction.
+  first_cct_page_recorder.reset();
+  CheckMetricHasValue(
+      test_ukm_recorder,
+      ukm::builders::PasswordManager_FirstCCTPageLoad::kEntryName,
+      ukm::builders::PasswordManager_FirstCCTPageLoad::kHasPasswordFormName, 1);
 }
 #endif
 

@@ -138,10 +138,9 @@ class DisplayMtl : public DisplayImpl
     bool supportsEitherGPUFamily(uint8_t iOSFamily, uint8_t macFamily) const;
     bool supportsAppleGPUFamily(uint8_t iOSFamily) const;
     bool supportsMacGPUFamily(uint8_t macFamily) const;
-    bool supportsMetal2_1() const;
-    bool supportsMetal2_2() const;
     bool supportsDepth24Stencil8PixelFormat() const;
     bool supports32BitFloatFiltering() const;
+    bool supportsBCTextureCompression() const;
     bool isAMD() const;
     bool isAMDBronzeDriver() const;
     bool isAMDFireProDevice() const;
@@ -176,9 +175,8 @@ class DisplayMtl : public DisplayImpl
     {
         return mFormatTable.getVertexFormat(angleFormatId, tightlyPacked);
     }
-#if ANGLE_MTL_EVENT_AVAILABLE
+
     mtl::AutoObjCObj<MTLSharedEventListener> getOrCreateSharedEventListener();
-#endif
 
   protected:
     void generateExtensions(egl::DisplayExtensions *outExtensions) const override;
@@ -215,9 +213,7 @@ class DisplayMtl : public DisplayImpl
 
     // Built-in Shaders
     mtl::AutoObjCPtr<id<MTLLibrary>> mDefaultShaders;
-#if ANGLE_MTL_EVENT_AVAILABLE
     mtl::AutoObjCObj<MTLSharedEventListener> mSharedEventListener;
-#endif
 
     mutable bool mCapsInitialized;
     mutable gl::TextureCapsMap mNativeTextureCaps;

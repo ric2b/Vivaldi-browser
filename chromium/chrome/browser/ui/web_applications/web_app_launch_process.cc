@@ -31,6 +31,7 @@
 #include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "extensions/common/constants.h"
+#include "ui/base/window_open_disposition.h"
 #include "ui/display/scoped_display_for_new_windows.h"
 #include "url/gurl.h"
 
@@ -168,6 +169,12 @@ content::WebContents* WebAppLaunchProcess::Run() {
   if (!web_contents) {
     return nullptr;
   }
+  // Because the browser could be a non-app browser, ensure that app launches
+  // always set 'acting_as_app' to true, to enable the app settings menu for
+  // the browser tab.
+  auto* helper = WebAppTabHelper::FromWebContents(web_contents);
+  CHECK(helper);
+  helper->set_acting_as_app(true);
 
   MaybeEnqueueWebLaunchParams(
       launch_url, is_file_handling, web_contents,
@@ -330,8 +337,16 @@ Browser* WebAppLaunchProcess::CreateBrowserForLaunch() {
                                                  /*user_gesture=*/true));
   }
 
-  return CreateWebApplicationWindow(&*profile_, params_->app_id,
-                                    params_->disposition, params_->restore_id);
+  Browser::CreateParams browser_params = web_app::CreateParamsForApp(
+      params_->app_id,
+      /*is_popup=*/params_->disposition == WindowOpenDisposition::NEW_POPUP,
+      /*trusted_source=*/true, /*window_bounds=*/gfx::Rect(),
+      /*profile=*/&profile_.get(),
+      /*user_gesture*/ true);
+#if BUILDFLAG(IS_CHROMEOS)
+  browser_params.restore_id = params_->restore_id;
+#endif
+  return CreateWebAppWindowMaybeWithHomeTab(params_->app_id, browser_params);
 }
 
 WebAppLaunchProcess::NavigateResult WebAppLaunchProcess::MaybeNavigateBrowser(
@@ -356,9 +371,12 @@ WebAppLaunchProcess::NavigateResult WebAppLaunchProcess::MaybeNavigateBrowser(
   TabStripModel* const tab_strip = browser->tab_strip_model();
   if (tab_strip->empty() ||
       navigation_disposition != WindowOpenDisposition::CURRENT_TAB) {
-    return {.web_contents = NavigateWebApplicationWindow(
-                browser, params_->app_id, launch_url, navigation_disposition),
-            .did_navigate = true};
+    NavigateParams nav_params(browser, launch_url,
+                              ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+    nav_params.disposition = navigation_disposition;
+    return {
+        .web_contents = NavigateWebAppUsingParams(params_->app_id, nav_params),
+        .did_navigate = true};
   }
 
   content::WebContents* existing_tab = tab_strip->GetActiveWebContents();
@@ -404,7 +422,6 @@ WebAppLaunchProcess::NavigateResult WebAppLaunchProcess::MaybeNavigateBrowser(
   tab_strip->ActivateTabAt(
       tab_index, TabStripUserGestureDetails(
                      TabStripUserGestureDetails::GestureType::kOther));
-  SetWebContentsActingAsApp(web_contents, params_->app_id);
   return {.web_contents = web_contents, .did_navigate = true};
 }
 

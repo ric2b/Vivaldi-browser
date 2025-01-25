@@ -927,10 +927,11 @@ class _DiffCache(object):
 class _GitDiffCache(_DiffCache):
     """DiffCache implementation for git; gets all file diffs at once."""
 
-    def __init__(self, upstream):
+    def __init__(self, upstream, end_commit):
         """Stores the upstream revision against which all diffs are computed."""
         super(_GitDiffCache, self).__init__()
         self._upstream = upstream
+        self._end_commit = end_commit
         self._diffs_by_file = None
 
     def GetDiff(self, path, local_root):
@@ -942,7 +943,8 @@ class _GitDiffCache(_DiffCache):
             unified_diff = scm.GIT.GenerateDiff(local_root,
                                                 files=[],
                                                 full_move=True,
-                                                branch=self._upstream)
+                                                branch=self._upstream,
+                                                branch_head=self._end_commit)
             # Compute a single diff for all files and parse the output; with git
             # this is much faster than computing one diff for each file.
             self._diffs_by_file = _parse_unified_diff(unified_diff)
@@ -1076,16 +1078,18 @@ class AffectedFile(object):
         return self._diff_cache.GetOldContents(self.LocalPath(),
                                                self._local_root).splitlines()
 
-    def NewContents(self):
+    def NewContents(self, flush_cache=False):
         """Returns an iterator over the lines in the new version of file.
 
         The new version is the file in the user's workspace, i.e. the 'right hand
         side'.
 
+        If flush_cache is True, read from disk and replace any cached contents.
+
         Contents will be empty if the file is a directory or does not exist.
         Note: The carriage returns (LF or CR) are stripped off.
         """
-        if self._cached_new_contents is None:
+        if self._cached_new_contents is None or flush_cache:
             self._cached_new_contents = []
             try:
                 self._cached_new_contents = gclient_utils.FileRead(
@@ -1435,12 +1439,13 @@ class GitChange(Change):
     _AFFECTED_FILES = GitAffectedFile
     scm = 'git'
 
-    def __init__(self, *args, upstream, **kwargs):
+    def __init__(self, *args, upstream, end_commit, **kwargs):
         self._upstream = upstream
+        self._end_commit = end_commit
         super(GitChange, self).__init__(*args)
 
     def _diff_cache(self):
-        return self._AFFECTED_FILES.DIFF_CACHE(self._upstream)
+        return self._AFFECTED_FILES.DIFF_CACHE(self._upstream, self._end_commit)
 
     def UpstreamBranch(self):
         """Returns the upstream branch for the change."""
@@ -1815,6 +1820,19 @@ class PresubmitExecuter(object):
             the result of the presubmit function call.
         """
         start_time = time_time()
+
+        def _progress_loop(event):
+            while not event.is_set():
+                if event.wait(timeout=30):
+                    return
+                sys.stdout.write(f'Still running {function_name} after '
+                                 f'{int(time_time() - start_time)}s...\n')
+
+        event = threading.Event()
+        event_thread = threading.Thread(target=_progress_loop, args=(event,))
+        event_thread.daemon = True
+        event_thread.start()
+
         try:
             result = eval(function_name + '(*__args)', context)
             self._check_result_type(result)
@@ -1825,6 +1843,9 @@ class PresubmitExecuter(object):
                     'Evaluation of %s failed: %s, %s' %
                     (function_name, e_value, traceback.format_exc()))
             ]
+        finally:
+            event.set()
+            event_thread.join()
 
         elapsed_time = time_time() - start_time
         if elapsed_time > 10.0:
@@ -2002,11 +2023,18 @@ def DoPresubmitChecks(change,
         global _ASKED_FOR_FEEDBACK
         # Ask for feedback one time out of 5.
         if (results and random.randint(0, 4) == 0 and not _ASKED_FOR_FEEDBACK):
-            sys.stdout.write(
-                'Was the presubmit check useful? If not, run "git cl presubmit -v"\n'
-                'to figure out which PRESUBMIT.py was run, then run git blame\n'
-                'on the file to figure out who to ask for help.\n')
             _ASKED_FOR_FEEDBACK = True
+            if gclient_utils.IsEnvCog():
+                sys.stdout.write(
+                    'Was the presubmit check useful? If not, view the file\'s\n'
+                    'blame on Code Search to figure out who to ask for help.\n')
+            else:
+                sys.stdout.write(
+                    'Was the presubmit check useful? If not, run '
+                    '"git cl presubmit -v"\n'
+                    'to figure out which PRESUBMIT.py was run, then run '
+                    '"git blame"\n'
+                    'on the file to figure out who to ask for help.\n')
 
         return 1 if presubmits_failed else 0
 
@@ -2104,10 +2132,13 @@ def _parse_change(parser, options):
         options.name, options.description, options.root, change_files,
         options.issue, options.patchset, options.author
     ]
+
     if diff:
         return ProvidedDiffChange(*change_args, diff=diff)
     if change_scm == 'git':
-        return GitChange(*change_args, upstream=options.upstream)
+        return GitChange(*change_args,
+                         upstream=options.upstream,
+                         end_commit=options.end_commit)
     return Change(*change_args)
 
 
@@ -2302,6 +2333,10 @@ def main(argv=None):
     parser.add_argument('--upstream',
                         help='The base ref or upstream branch against '
                         'which the diff should be computed.')
+    parser.add_argument('--end_commit',
+                        default='HEAD',
+                        help='The commit to diff against upstream. '
+                         'By default this is HEAD.')
     parser.add_argument('--default_presubmit')
     parser.add_argument('--may_prompt', action='store_true', default=False)
     parser.add_argument(

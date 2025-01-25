@@ -102,10 +102,10 @@ impl<'local> IdentityDetails<JObject<'local>> {
     pub fn construct_from_parts(
         env: &mut JNIEnv<'local>,
         verification_mode: V1VerificationMode,
-        credential_id: u32,
+        credential_id: i64,
         identity_token: [u8; 16],
     ) -> jni::errors::Result<Self> {
-        let verification_mode = VerificationMode::value_for(env, verification_mode)?;
+        let verification_mode = VerificationMode::from(verification_mode).to_java(env)?;
         let credential_id = credential_id as jint;
         let identity_token = env.byte_array_from_slice(&identity_token)?;
 

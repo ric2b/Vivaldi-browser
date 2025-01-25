@@ -54,15 +54,6 @@ tests_protocol_c = custom_target(
 	output: 'tests-protocol.c'
 )
 
-benchmark(
-	'fixed-benchmark',
-	executable(
-		'fixed-benchmark',
-		'fixed-benchmark.c',
-		dependencies: [ test_runner_dep, rt_dep ]
-	)
-)
-
 executable(
 	'exec-fd-leak-checker',
 	'exec-fd-leak-checker.c',
@@ -84,15 +75,23 @@ endif
 sed_path = find_program('sed').full_path()
 
 if get_option('scanner')
+	scanner_test_env = [
+		'TEST_DATA_DIR=@0@/data'.format(meson.current_source_dir()),
+		'TEST_OUTPUT_DIR=@0@/output'.format(meson.current_build_dir()),
+		'SED=@0@'.format(sed_path),
+		'WAYLAND_SCANNER=@0@'.format(wayland_scanner.full_path()),
+	]
+
 	test(
 		'scanner-test',
 		find_program('scanner-test.sh'),
-		env: [
-			'TEST_DATA_DIR=@0@/data'.format(meson.current_source_dir()),
-			'TEST_OUTPUT_DIR=@0@/output'.format(meson.current_build_dir()),
-			'SED=@0@'.format(sed_path),
-			'WAYLAND_SCANNER=@0@'.format(wayland_scanner.full_path()),
-		],
+		env: scanner_test_env,
+	)
+
+	run_target(
+		'gen-scanner-test',
+		command: find_program('scanner-test-gen.sh'),
+		env: scanner_test_env,
 	)
 endif
 
@@ -155,6 +154,11 @@ tests = {
 		'headers-protocol-core-test.c',
 	],
 	'os-wrappers-test': [],
+	'proxy-test': [
+		wayland_client_protocol_h,
+		wayland_server_protocol_h,
+	],
+	'enum-validator-test': [],
 }
 
 foreach test_name, test_extra_sources: tests

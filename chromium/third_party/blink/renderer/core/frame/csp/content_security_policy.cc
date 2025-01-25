@@ -232,7 +232,9 @@ static WebFeature GetUseCounterType(ContentSecurityPolicyType type) {
       return WebFeature::kContentSecurityPolicyReportOnly;
   }
   NOTREACHED_IN_MIGRATION();
-  return WebFeature::kNumberOfFeatures;
+  // Use kPageVisits here which is not a valid use counter, as this is never
+  // supposed to be reached.
+  return WebFeature::kPageVisits;
 }
 
 ContentSecurityPolicy::ContentSecurityPolicy()
@@ -1465,8 +1467,6 @@ const char* ContentSecurityPolicy::GetDirectiveName(CSPDirectiveName type) {
       return "manifest-src";
     case CSPDirectiveName::MediaSrc:
       return "media-src";
-    case CSPDirectiveName::NavigateTo:
-      return "navigate-to";
     case CSPDirectiveName::ObjectSrc:
       return "object-src";
     case CSPDirectiveName::ReportTo:
@@ -1534,8 +1534,6 @@ CSPDirectiveName ContentSecurityPolicy::GetDirectiveType(const String& name) {
     return CSPDirectiveName::ManifestSrc;
   if (name == "media-src")
     return CSPDirectiveName::MediaSrc;
-  if (name == "navigate-to")
-    return CSPDirectiveName::NavigateTo;
   if (name == "object-src")
     return CSPDirectiveName::ObjectSrc;
   if (name == "report-to")

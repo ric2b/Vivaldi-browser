@@ -4,15 +4,22 @@
 
 #import "ios/chrome/browser/ui/authentication/account_menu/account_menu_coordinator.h"
 
+#import <MaterialComponents/MaterialSnackbar.h>
+
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_service_utils.h"
 #import "components/sync/service/sync_user_settings.h"
+#import "components/trusted_vault/trusted_vault_server_constants.h"
+#import "ios/chrome/browser/policy/model/management_state.h"
+#import "ios/chrome/browser/policy/ui_bundled/management_util.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_service.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -20,6 +27,7 @@
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/util/identity_snackbar/identity_snackbar_message.h"
 #import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -32,10 +40,11 @@
 #import "ios/chrome/browser/ui/authentication/account_menu/account_menu_mediator.h"
 #import "ios/chrome/browser/ui/authentication/account_menu/account_menu_mediator_delegate.h"
 #import "ios/chrome/browser/ui/authentication/account_menu/account_menu_view_controller.h"
-#import "ios/chrome/browser/ui/authentication/account_menu/account_menu_view_controller_presentation_delegate.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 #import "ios/chrome/browser/ui/authentication/signout_action_sheet/signout_action_sheet_coordinator.h"
+#import "ios/chrome/browser/ui/scoped_ui_blocker/scoped_ui_blocker.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_accounts/accounts_coordinator.h"
+#import "ios/chrome/browser/ui/settings/settings_controller_protocol.h"
 #import "ios/chrome/browser/ui/settings/settings_root_view_controlling.h"
 #import "ios/chrome/browser/ui/settings/sync/sync_encryption_passphrase_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/sync/sync_encryption_table_view_controller.h"
@@ -44,28 +53,38 @@
 
 @interface AccountMenuCoordinator () <
     AccountMenuMediatorDelegate,
-    AccountMenuViewControllerPresentationDelegate,
-    SignoutActionSheetCoordinatorDelegate,
     UIAdaptivePresentationControllerDelegate,
     UINavigationControllerDelegate>
+
+// The view controller.
+@property(nonatomic, strong) AccountMenuViewController* viewController;
+// The mediator.
+@property(nonatomic, strong) AccountMenuMediator* mediator;
+
 @end
 
 @implementation AccountMenuCoordinator {
-  AccountMenuViewController* _viewController;
   UINavigationController* _navigationController;
   AuthenticationService* _authenticationService;
+  signin::IdentityManager* _identityManager;
+  PrefService* _prefService;
   // Dismiss callback for account details view.
   SystemIdentityManager::DismissViewCallback
       _accountDetailsControllerDismissCallback;
   // The coordinators for the "Edit account list"
   AccountsCoordinator* _accountsCoordinator;
-  AccountMenuMediator* _mediator;
   // The coordinator for the action sheet to sign out.
   SignoutActionSheetCoordinator* _signoutActionSheetCoordinator;
   raw_ptr<syncer::SyncService> _syncService;
-
+  SyncEncryptionTableViewController* _syncEncryptionTableViewController;
+  SyncEncryptionPassphraseTableViewController*
+      _syncEncryptionPassphraseTableViewController;
   // ApplicationCommands handler.
   id<ApplicationCommands> _applicationHandler;
+  ChromeAccountManagerService* _accountManagerService;
+
+  // Block the UI when the identity removal or switch is in progress.
+  std::unique_ptr<ScopedUIBlocker> _UIBlocker;
 }
 
 - (void)dealloc {
@@ -79,16 +98,15 @@
   _syncService = SyncServiceFactory::GetForBrowserState(browserState);
   _authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(browserState);
-  ChromeAccountManagerService* accountManagerService =
+  _accountManagerService =
       ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
-  signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(browserState);
+  _identityManager = IdentityManagerFactory::GetForProfile(browserState);
+  _prefService = browserState->GetPrefs();
   _applicationHandler = HandlerForProtocol(self.browser->GetCommandDispatcher(),
                                            ApplicationCommands);
 
   _viewController = [[AccountMenuViewController alloc]
-      initWithStyle:ChromeTableViewStyle()];
-  _viewController.delegate = self;
+      initWithStyle:UITableViewStyleInsetGrouped];
 
   _navigationController = [[UINavigationController alloc]
       initWithRootViewController:_viewController];
@@ -101,11 +119,14 @@
       UIPopoverArrowDirectionUp;
   _navigationController.presentationController.delegate = self;
 
+  PrefService* prefs = browserState->GetPrefs();
+
   _mediator =
       [[AccountMenuMediator alloc] initWithSyncService:_syncService
-                                 accountManagerService:accountManagerService
+                                 accountManagerService:_accountManagerService
                                            authService:_authenticationService
-                                       identityManager:identityManager];
+                                       identityManager:_identityManager
+                                                 prefs:prefs];
   _mediator.delegate = self;
   _mediator.consumer = _viewController;
   _viewController.mutator = _mediator;
@@ -127,13 +148,20 @@
     std::move(_accountDetailsControllerDismissCallback).Run(/*animated=*/false);
   }
   [self stopAccountsCoordinator];
-  [_navigationController dismissViewControllerAnimated:YES completion:nil];
+  [_navigationController.presentingViewController
+      dismissViewControllerAnimated:YES
+                         completion:nil];
   _authenticationService = nil;
+  _identityManager = nil;
+  _prefService = nil;
   _navigationController.delegate = nil;
   _navigationController = nil;
   _viewController.dataSource = nil;
-  _viewController.delegate = nil;
   _viewController.mutator = nil;
+  [_syncEncryptionPassphraseTableViewController settingsWillBeDismissed];
+  _syncEncryptionPassphraseTableViewController = nil;
+  [_syncEncryptionTableViewController settingsWillBeDismissed];
+  _syncEncryptionTableViewController = nil;
   _viewController = nil;
   [_mediator disconnect];
   _mediator.consumer = nil;
@@ -141,13 +169,21 @@
   _mediator = nil;
   _applicationHandler = nil;
   _syncService = nullptr;
-  _authenticationService = nullptr;
+  _accountManagerService = nullptr;
   [self stopSignoutActionSheetCoordinator];
   [self stopAccountsCoordinator];
   [super stop];
 }
 
-#pragma mark - AccountMenuViewControllerPresentationDelegate
+#pragma mark - UIAdaptivePresentationControllerDelegate
+
+- (void)presentationControllerDidDismiss:
+    (UIPresentationController*)presentationController {
+  [self.delegate acountMenuCoordinatorShouldStop:self];
+  _navigationController = nil;
+}
+
+#pragma mark - AccountMenuMediatorDelegate
 
 - (void)viewControllerWantsToBeClosed:
     (AccountMenuViewController*)viewController {
@@ -181,11 +217,8 @@
   [_accountsCoordinator start];
 }
 
-- (void)signOutFromTargetRect:(CGRect)targetRect {
-  if (_mediator.signOutFlowInProgress ||
-      _mediator.addAccountOperationInProgress) {
-    return;
-  }
+- (void)signOutFromTargetRect:(CGRect)targetRect
+                     callback:(void (^)(BOOL))callback {
   if (!_authenticationService->HasPrimaryIdentity(
           signin::ConsentLevel::kSignin)) {
     // This could happen in very rare cases, if the account somehow got removed
@@ -199,31 +232,20 @@
                             view:_viewController.view
                       withSource:signin_metrics::ProfileSignout::
                                      kUserClickedSignoutInAccountMenu];
-  _signoutActionSheetCoordinator.delegate = self;
   __weak __typeof(self) weakSelf = self;
   _signoutActionSheetCoordinator.completion = ^(BOOL success) {
     [weakSelf stopSignoutActionSheetCoordinator];
     if (success) {
       [weakSelf.delegate acountMenuCoordinatorShouldStop:weakSelf];
     }
+    if (callback) {
+      callback(success);
+    }
   };
   [_signoutActionSheetCoordinator start];
 }
 
-- (void)didTapAddAccount {
-  if (_mediator.signOutFlowInProgress ||
-      _mediator.addAccountOperationInProgress) {
-    return;
-  }
-  _mediator.addAccountOperationInProgress = YES;
-  __weak __typeof(self) weakSelf = self;
-  ShowSigninCommandCompletionCallback callback =
-      ^(SigninCoordinatorResult result, SigninCompletionInfo* completionInfo) {
-        __typeof(self) strongSelf = weakSelf;
-        if (strongSelf) {
-          strongSelf->_mediator.addAccountOperationInProgress = NO;
-        }
-      };
+- (void)didTapAddAccount:(ShowSigninCommandCompletionCallback)callback {
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
       initWithOperation:AuthenticationOperation::kAddAccount
                identity:nil
@@ -235,119 +257,71 @@
                baseViewController:_navigationController];
 }
 
-#pragma mark - UIAdaptivePresentationControllerDelegate
-
-- (void)presentationControllerDidDismiss:
-    (UIPresentationController*)presentationController {
-  [self.delegate acountMenuCoordinatorShouldStop:self];
-  _navigationController = nil;
-}
-
-#pragma mark - SignoutActionSheetCoordinatorDelegate
-
-- (void)signoutActionSheetCoordinatorPreventUserInteraction:
-    (SignoutActionSheetCoordinator*)coordinator {
-  _mediator.signOutFlowInProgress = YES;
-}
-
-- (void)signoutActionSheetCoordinatorAllowUserInteraction:
-    (SignoutActionSheetCoordinator*)coordinator {
-  _mediator.signOutFlowInProgress = NO;
-}
-
-#pragma mark - AccountMenuMediatorDelegate
-
 - (void)mediatorWantsToBeDismissed:(AccountMenuMediator*)mediator {
   CHECK_EQ(mediator, _mediator);
   [self.delegate acountMenuCoordinatorShouldStop:self];
 }
 
-- (void)triggerSignoutWithTargetRect:(CGRect)targetRect
-                          completion:(void (^)(BOOL success))completion {
-  CHECK(!_mediator.signOutFlowInProgress &&
-        !_mediator.addAccountOperationInProgress);
+- (void)triggerAccountSwitchWithTargetRect:(CGRect)targetRect
+                               newIdentity:(id<SystemIdentity>)newIdentity
+           viewWillBeDismissedAfterSignout:(BOOL)viewWillBeDismissedAfterSignout
+                          signInCompletion:(ShowSigninCommandCompletionCallback)
+                                               signInCompletion {
   CHECK(
       _authenticationService->HasPrimaryIdentity(signin::ConsentLevel::kSignin),
       base::NotFatalUntil::M130)
       << "There must be a signed-in account to view the menu and be able to "
          "switch accounts.";
 
-  _signoutActionSheetCoordinator = [[SignoutActionSheetCoordinator alloc]
-      initWithBaseViewController:_navigationController
-                         browser:self.browser
-                            rect:targetRect
-                            view:_viewController.view
-                      withSource:signin_metrics::ProfileSignout::
-                                     kChangeAccountInAccountMenu];
-  _signoutActionSheetCoordinator.delegate = self;
-  _signoutActionSheetCoordinator.skipPostSignoutSnackbar = YES;
-
-  __weak __typeof(self) weakSelf = self;
-  _signoutActionSheetCoordinator.completion = ^(BOOL signoutSuccess) {
-    [weakSelf stopSignoutActionSheetCoordinator];
-    completion(signoutSuccess);
-  };
-  [_signoutActionSheetCoordinator start];
+  [_applicationHandler
+      switchAccountWithBaseViewController:_navigationController
+                              newIdentity:newIdentity
+                                     rect:targetRect
+                           rectAnchorView:_viewController.view
+          viewWillBeDismissedAfterSignout:viewWillBeDismissedAfterSignout
+                         signInCompletion:signInCompletion];
 }
 
-- (void)triggerSigninWithSystemIdentity:(id<SystemIdentity>)identity
-                             completion:
-                                 (void (^)(id<SystemIdentity> systemIdentity))
-                                     completion {
-  AuthenticationFlow* authenticationFlow = [[AuthenticationFlow alloc]
-               initWithBrowser:self.browser
-                      identity:identity
-                   accessPoint:signin_metrics::AccessPoint::
-                                   ACCESS_POINT_ACCOUNT_MENU
-             postSignInActions:PostSignInActionSet({PostSignInAction::kNone})
-      presentingViewController:_navigationController];
-
-  [authenticationFlow startSignInWithCompletion:^(BOOL success) {
-    completion(identity);
-  }];
+- (void)blockScene {
+  SceneState* sceneState = self.browser->GetSceneState();
+  _UIBlocker = std::make_unique<ScopedUIBlocker>(sceneState);
 }
 
-- (void)triggerAccountSwitchSnackbarWithIdentity:
-    (id<SystemIdentity>)systemIdentity {
-  NSString* accountName = systemIdentity.userGivenName
-                              ? systemIdentity.userGivenName
-                              : systemIdentity.userEmail;
-  MDCSnackbarMessage* snackbarTitle = CreateSnackbarMessage(
-      l10n_util::GetNSStringF(IDS_IOS_ACCOUNT_MENU_SWITCH_CONFIRMATION_TITLE,
-                              base::SysNSStringToUTF16(accountName)));
-  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
-  id<SnackbarCommands> snackbarCommandsHandler =
-      HandlerForProtocol(dispatcher, SnackbarCommands);
-  [snackbarCommandsHandler showSnackbarMessage:snackbarTitle bottomOffset:0];
+- (void)unblockScene {
+  _UIBlocker.reset();
 }
 
 #pragma mark - SyncErrorSettingsCommandHandler
 
 - (void)openPassphraseDialogWithModalPresentation:(BOOL)presentModally {
   if (presentModally) {
-    SyncEncryptionPassphraseTableViewController* controllerToPresent =
+    _syncEncryptionPassphraseTableViewController =
         [[SyncEncryptionPassphraseTableViewController alloc]
             initWithBrowser:self.browser];
-    controllerToPresent.presentModally = YES;
+    _syncEncryptionPassphraseTableViewController.presentModally = YES;
     UINavigationController* navigationController =
         [[UINavigationController alloc]
-            initWithRootViewController:controllerToPresent];
+            initWithRootViewController:
+                _syncEncryptionPassphraseTableViewController];
     navigationController.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self configureHandlersForRootViewController:controllerToPresent];
+    [self configureHandlersForRootViewController:
+              _syncEncryptionPassphraseTableViewController];
     [_navigationController presentViewController:navigationController
                                         animated:YES
                                       completion:nil];
     return;
   }
-  UIViewController<SettingsRootViewControlling>* controllerToPush;
   // If there was a sync error, prompt the user to enter the passphrase.
   // Otherwise, show the full encryption options.
+  UIViewController<SettingsRootViewControlling>* controllerToPush;
   if (_syncService->GetUserSettings()->IsPassphraseRequired()) {
-    controllerToPush = [[SyncEncryptionPassphraseTableViewController alloc]
-        initWithBrowser:self.browser];
+    controllerToPush = _syncEncryptionPassphraseTableViewController =
+        [[SyncEncryptionPassphraseTableViewController alloc]
+            initWithBrowser:self.browser];
   } else {
-    controllerToPush = [[SyncEncryptionTableViewController alloc]
-        initWithBrowser:self.browser];
+    controllerToPush = _syncEncryptionTableViewController =
+        [[SyncEncryptionTableViewController alloc]
+            initWithBrowser:self.browser];
   }
 
   [self configureHandlersForRootViewController:controllerToPush];
@@ -358,12 +332,15 @@
   id<ApplicationCommands> applicationCommands =
       static_cast<id<ApplicationCommands>>(
           self.browser->GetCommandDispatcher());
+  trusted_vault::SecurityDomainId securityDomainID =
+      trusted_vault::SecurityDomainId::kChromeSync;
   syncer::TrustedVaultUserActionTriggerForUMA trigger =
       syncer::TrustedVaultUserActionTriggerForUMA::kSettings;
   signin_metrics::AccessPoint accessPoint =
       signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU;
   [applicationCommands
       showTrustedVaultReauthForFetchKeysFromViewController:_navigationController
+                                          securityDomainID:securityDomainID
                                                    trigger:trigger
                                                accessPoint:accessPoint];
 }
@@ -372,6 +349,8 @@
   id<ApplicationCommands> applicationCommands =
       static_cast<id<ApplicationCommands>>(
           self.browser->GetCommandDispatcher());
+  trusted_vault::SecurityDomainId securityDomainID =
+      trusted_vault::SecurityDomainId::kChromeSync;
   syncer::TrustedVaultUserActionTriggerForUMA trigger =
       syncer::TrustedVaultUserActionTriggerForUMA::kSettings;
   signin_metrics::AccessPoint accessPoint =
@@ -379,6 +358,8 @@
   [applicationCommands
       showTrustedVaultReauthForDegradedRecoverabilityFromViewController:
           _navigationController
+                                                       securityDomainID:
+                                                           securityDomainID
                                                                 trigger:trigger
                                                             accessPoint:
                                                                 accessPoint];

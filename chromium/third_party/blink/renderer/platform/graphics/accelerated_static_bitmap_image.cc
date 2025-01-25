@@ -109,7 +109,7 @@ AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
 scoped_refptr<AcceleratedStaticBitmapImage>
 AcceleratedStaticBitmapImage::CreateFromExternalMailbox(
     const gpu::MailboxHolder& mailbox_holder,
-    uint32_t usage,
+    gpu::SharedImageUsageSet usage,
     const SkImageInfo& sk_image_info,
     bool is_origin_top_left,
     bool supports_display_compositing,
@@ -152,16 +152,12 @@ AcceleratedStaticBitmapImage::CreateFromExternalMailbox(
         if (is_lost || !context_provider) {
           return;
         }
-        auto* sii = context_provider->ContextProvider()->SharedImageInterface();
-        if (!sii) {
-          return;
-        }
-        sii->DestroySharedImage(sync_token, std::move(shared_image));
+        shared_image->UpdateDestructionSyncToken(sync_token);
       },
-      shared_gpu_context, std::move(shared_image));
+      shared_gpu_context, shared_image);
 
   return base::AdoptRef(new AcceleratedStaticBitmapImage(
-      mailbox_holder.mailbox, release_token, 0u, sk_image_info,
+      std::move(shared_image), release_token, 0u, sk_image_info,
       mailbox_holder.texture_target, is_origin_top_left,
       supports_display_compositing, is_overlay_candidate,
       ImageOrientationEnum::kDefault, shared_gpu_context,
@@ -504,6 +500,15 @@ gpu::MailboxHolder AcceleratedStaticBitmapImage::GetMailboxHolder() const {
                             texture_target_);
 }
 
+scoped_refptr<gpu::ClientSharedImage>
+AcceleratedStaticBitmapImage::GetSharedImage() const {
+  if (!IsValid()) {
+    return nullptr;
+  }
+
+  return shared_image_;
+}
+
 void AcceleratedStaticBitmapImage::Transfer() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -558,7 +563,7 @@ AcceleratedStaticBitmapImage::ConvertToColorSpace(
   return provider->Snapshot(FlushReason::kNon2DCanvas, orientation_);
 }
 
-uint32_t AcceleratedStaticBitmapImage::GetUsage() const {
+gpu::SharedImageUsageSet AcceleratedStaticBitmapImage::GetUsage() const {
   return ContextProviderWrapper()
       ->ContextProvider()
       ->SharedImageInterface()

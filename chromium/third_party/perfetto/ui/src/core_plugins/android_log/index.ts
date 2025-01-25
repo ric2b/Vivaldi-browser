@@ -13,14 +13,17 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {LogFilteringCriteria, LogPanel} from './logs_panel';
-import {Plugin, PluginContextTrace, PluginDescriptor} from '../../public';
+import {ANDROID_LOGS_TRACK_KIND} from '../../public/track_kinds';
+import {Trace} from '../../public/trace';
+import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
+import {addSqlTableTab} from '../../frontend/sql_table_tab_command';
+import {sqlTableRegistry} from '../../frontend/widgets/sql/table/sql_table_registry';
 import {NUM} from '../../trace_processor/query_result';
 import {AndroidLogTrack} from './logs_track';
 import {exists} from '../../base/utils';
-
-export const ANDROID_LOGS_TRACK_KIND = 'AndroidLogTrack';
+import {TrackNode} from '../../public/workspace';
+import {getAndroidLogsTable} from './table';
 
 const VERSION = 1;
 
@@ -40,8 +43,8 @@ interface AndroidLogPluginState {
   filter: LogFilteringCriteria;
 }
 
-class AndroidLog implements Plugin {
-  async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
+class AndroidLog implements PerfettoPlugin {
+  async onTraceLoad(ctx: Trace): Promise<void> {
     const store = ctx.mountStore<AndroidLogPluginState>((init) => {
       return exists(init) && (init as {version: unknown}).version === VERSION
         ? (init as AndroidLogPluginState)
@@ -52,13 +55,16 @@ class AndroidLog implements Plugin {
       `select count(1) as cnt from android_logs`,
     );
     const logCount = result.firstRow({cnt: NUM}).cnt;
+    const uri = 'perfetto.AndroidLog';
+    const title = 'Android logs';
     if (logCount > 0) {
-      ctx.registerStaticTrack({
-        uri: 'perfetto.AndroidLog',
-        title: 'Android logs',
+      ctx.tracks.registerTrack({
+        uri,
+        title,
         tags: {kind: ANDROID_LOGS_TRACK_KIND},
-        trackFactory: () => new AndroidLogTrack(ctx.engine),
+        track: new AndroidLogTrack(ctx.engine),
       });
+      ctx.workspace.insertChildInOrder(new TrackNode(uri, title));
     }
 
     const androidLogsTabUri = 'perfetto.AndroidLog#tab';
@@ -69,7 +75,7 @@ class AndroidLog implements Plugin {
       (x) => x as LogFilteringCriteria,
     );
 
-    ctx.registerTab({
+    ctx.tabs.registerTab({
       isEphemeral: false,
       uri: androidLogsTabUri,
       content: {
@@ -80,14 +86,25 @@ class AndroidLog implements Plugin {
     });
 
     if (logCount > 0) {
-      ctx.addDefaultTab(androidLogsTabUri);
+      ctx.tabs.addDefaultTab(androidLogsTabUri);
     }
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'perfetto.AndroidLog#ShowLogsTab',
       name: 'Show android logs tab',
       callback: () => {
         ctx.tabs.showTab(androidLogsTabUri);
+      },
+    });
+
+    sqlTableRegistry['android_logs'] = getAndroidLogsTable();
+    ctx.commands.registerCommand({
+      id: 'perfetto.ShowTable.android_logs',
+      name: 'Open table: android_logs',
+      callback: () => {
+        addSqlTableTab({
+          table: getAndroidLogsTable(),
+        });
       },
     });
   }

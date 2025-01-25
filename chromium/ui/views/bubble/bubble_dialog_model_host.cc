@@ -15,12 +15,15 @@
 #include "ui/base/models/combobox_model.h"
 #include "ui/base/models/dialog_model.h"
 #include "ui/base/models/dialog_model_field.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/bubble/bubble_dialog_utils.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -60,10 +63,10 @@ BubbleDialogModelHost::FieldType GetFieldTypeForField(
       return BubbleDialogModelHost::FieldType::kMenuItem;
     case ui::DialogModelField::kTitleItem:
       // No need to handle titles.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case ui::DialogModelField::kSection:
       // TODO(pbos): Handle nested/multiple sections.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case ui::DialogModelField::kSeparator:
       return BubbleDialogModelHost::FieldType::kMenuItem;
     case ui::DialogModelField::kCustom:
@@ -283,8 +286,11 @@ END_METADATA
 }  // namespace
 
 BubbleDialogModelHost::CustomView::CustomView(std::unique_ptr<View> view,
-                                              FieldType field_type)
-    : view_(std::move(view)), field_type_(field_type) {}
+                                              FieldType field_type,
+                                              View* focusable_view)
+    : view_(std::move(view)),
+      field_type_(field_type),
+      focusable_view_(focusable_view) {}
 
 BubbleDialogModelHost::CustomView::~CustomView() = default;
 
@@ -344,10 +350,10 @@ class BubbleDialogModelHostContentsView final : public DialogModelSectionHost {
         break;
       case ui::DialogModelField::kTitleItem:
         // No need to handle titles.
-        NOTREACHED_NORETURN();
+        NOTREACHED();
       case ui::DialogModelField::kSection:
         // TODO(pbos): Handle nested/multiple sections.
-        NOTREACHED_NORETURN();
+        NOTREACHED();
       case ui::DialogModelField::kSeparator:
         AddOrUpdateSeparator(field);
         break;
@@ -355,14 +361,7 @@ class BubbleDialogModelHostContentsView final : public DialogModelSectionHost {
         AddOrUpdateTextfield(field->AsTextfield());
         break;
       case ui::DialogModelField::kCustom:
-        std::unique_ptr<View> view =
-            static_cast<BubbleDialogModelHost::CustomView*>(
-                field->AsCustomField()->field())
-                ->TransferView();
-        DCHECK(view);
-        view->SetProperty(kElementIdentifierKey, field->id());
-        DialogModelHostField info{field, view.get(), nullptr};
-        AddDialogModelHostField(std::move(view), info);
+        AddOrUpdateCustomField(field->AsCustomField());
         break;
     }
     OnFieldChanged(field);
@@ -517,6 +516,17 @@ class BubbleDialogModelHostContentsView final : public DialogModelSectionHost {
     const gfx::FontList& font_list = textfield->GetFontList();
     AddViewForLabelAndField(model_field, model_field->label(),
                             std::move(textfield), font_list);
+  }
+
+  void AddOrUpdateCustomField(ui::DialogModelCustomField* model_field) {
+    auto* custom_view =
+        static_cast<BubbleDialogModelHost::CustomView*>(model_field->field());
+    std::unique_ptr<View> view = custom_view->TransferView();
+    View* focusable_view = custom_view->TransferFocusableView();
+    DCHECK(view);
+    view->SetProperty(kElementIdentifierKey, model_field->id());
+    DialogModelHostField info{model_field, view.get(), focusable_view};
+    AddDialogModelHostField(std::move(view), info);
   }
 
   void AddOrUpdateSeparator(ui::DialogModelField* model_field) {
@@ -684,7 +694,7 @@ class BubbleDialogModelHostContentsView final : public DialogModelSectionHost {
         return info;
       }
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
  private:
@@ -744,7 +754,7 @@ BubbleDialogModelHost::BubbleDialogModelHost(
                             std::move(model),
                             anchor_view,
                             arrow,
-                            ui::ModalType::MODAL_TYPE_NONE,
+                            ui::mojom::ModalType::kNone,
                             autosize) {}
 
 BubbleDialogModelHost::BubbleDialogModelHost(
@@ -752,7 +762,7 @@ BubbleDialogModelHost::BubbleDialogModelHost(
     std::unique_ptr<ui::DialogModel> model,
     View* anchor_view,
     BubbleBorder::Arrow arrow,
-    ui::ModalType modal_type,
+    ui::mojom::ModalType modal_type,
     bool autosize)
     : BubbleDialogDelegate(anchor_view,
                            arrow,
@@ -790,29 +800,20 @@ BubbleDialogModelHost::BubbleDialogModelHost(
   RegisterWindowClosingCallback(base::BindOnce(
       &BubbleDialogModelHost::OnWindowClosing, base::Unretained(this)));
 
-  int button_mask = ui::DIALOG_BUTTON_NONE;
+  int button_mask = static_cast<int>(ui::mojom::DialogButton::kNone);
   auto* ok_button = model_->ok_button(DialogModelHost::GetPassKey());
   if (ok_button) {
-    button_mask |= ui::DIALOG_BUTTON_OK;
-    if (!ok_button->label().empty()) {
-      SetButtonLabel(ui::DIALOG_BUTTON_OK, ok_button->label());
-    }
-    if (ok_button->style()) {
-      SetButtonStyle(ui::DIALOG_BUTTON_OK, ok_button->style());
-    }
-    SetButtonEnabled(ui::DIALOG_BUTTON_OK, ok_button->is_enabled());
+    button_mask |= static_cast<int>(ui::mojom::DialogButton::kOk);
+    ConfigureBubbleButtonForParams(*this, /*button_view=*/nullptr,
+                                   ui::mojom::DialogButton::kOk, *ok_button);
   }
 
   auto* cancel_button = model_->cancel_button(DialogModelHost::GetPassKey());
   if (cancel_button) {
-    button_mask |= ui::DIALOG_BUTTON_CANCEL;
-    if (!cancel_button->label().empty()) {
-      SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, cancel_button->label());
-    }
-    if (cancel_button->style()) {
-      SetButtonStyle(ui::DIALOG_BUTTON_CANCEL, cancel_button->style());
-    }
-    SetButtonEnabled(ui::DIALOG_BUTTON_CANCEL, cancel_button->is_enabled());
+    button_mask |= static_cast<int>(ui::mojom::DialogButton::kCancel);
+    ConfigureBubbleButtonForParams(*this, /*button_view=*/nullptr,
+                                   ui::mojom::DialogButton::kCancel,
+                                   *cancel_button);
   }
 
   // TODO(pbos): Consider refactoring ::SetExtraView() so it can be called
@@ -843,8 +844,9 @@ BubbleDialogModelHost::BubbleDialogModelHost(
   SetButtons(button_mask);
 
   if (model_->override_default_button(DialogModelHost::GetPassKey())) {
-    SetDefaultButton(
-        model_->override_default_button(DialogModelHost::GetPassKey()).value());
+    SetDefaultButton(static_cast<int>(
+        model_->override_default_button(DialogModelHost::GetPassKey())
+            .value()));
   }
 
   SetTitle(model_->title(DialogModelHost::GetPassKey()));
@@ -914,9 +916,9 @@ BubbleDialogModelHost::~BubbleDialogModelHost() {
 
 std::unique_ptr<BubbleDialogModelHost> BubbleDialogModelHost::CreateModal(
     std::unique_ptr<ui::DialogModel> model,
-    ui::ModalType modal_type,
+    ui::mojom::ModalType modal_type,
     bool autosize) {
-  DCHECK_NE(modal_type, ui::MODAL_TYPE_NONE);
+  DCHECK_NE(modal_type, ui::mojom::ModalType::kNone);
   return std::make_unique<BubbleDialogModelHost>(
       base::PassKey<BubbleDialogModelHost>(), std::move(model), nullptr,
       BubbleBorder::Arrow::NONE, modal_type, autosize);
@@ -1028,7 +1030,8 @@ BubbleDialogModelHostContentsView* BubbleDialogModelHost::InitContentsView(
     // content. Thus, the content has to be manually set by the view inside a
     // scroll view. Modal dialogs handle their own size via constrained windows,
     // so we can add a scroll view to the DialogModel directly.
-    constexpr int kMaxDialogHeight = 448;
+    const int kMaxDialogHeight = LayoutProvider::Get()->GetDistanceMetric(
+        DISTANCE_MODAL_DIALOG_SCROLLABLE_AREA_MAX_HEIGHT);
     auto scroll_view = std::make_unique<views::ScrollView>();
     scroll_view->ClipHeightTo(0, kMaxDialogHeight);
     scroll_view->SetHorizontalScrollBarMode(
@@ -1126,8 +1129,9 @@ void BubbleDialogModelHost::UpdateSpacingAndMargins() {
   const int top_margin =
       GetDialogTopMargins(layout_provider, first_field) - extra_margin;
   const int bottom_margin =
-      GetDialogBottomMargins(layout_provider, last_field,
-                             buttons() != ui::DIALOG_BUTTON_NONE) -
+      GetDialogBottomMargins(
+          layout_provider, last_field,
+          buttons() != static_cast<int>(ui::mojom::DialogButton::kNone)) -
       extra_margin;
   set_margins(gfx::Insets::TLBR(top_margin >= 0 ? top_margin : 0, 0,
                                 bottom_margin >= 0 ? bottom_margin : 0, 0));
@@ -1145,19 +1149,14 @@ void BubbleDialogModelHost::OnWindowClosing() {
 void BubbleDialogModelHost::UpdateDialogButtons() {
   if (ui::DialogModel::Button* const ok_button =
           model_->ok_button(DialogModelHost::GetPassKey())) {
-    SetButtonLabel(ui::DIALOG_BUTTON_OK, ok_button->label());
-    SetButtonEnabled(ui::DIALOG_BUTTON_OK, ok_button->is_enabled());
-    MdTextButton* const ok_button_view = GetOkButton();
-    ok_button_view->SetVisible(ok_button->is_visible());
-    ok_button_view->SetProperty(kElementIdentifierKey, ok_button->id());
+    ConfigureBubbleButtonForParams(*this, GetOkButton(),
+                                   ui::mojom::DialogButton::kOk, *ok_button);
   }
   if (ui::DialogModel::Button* const cancel_button =
           model_->cancel_button(DialogModelHost::GetPassKey())) {
-    SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, cancel_button->label());
-    SetButtonEnabled(ui::DIALOG_BUTTON_CANCEL, cancel_button->is_enabled());
-    MdTextButton* const cancel_button_view = GetCancelButton();
-    cancel_button_view->SetVisible(cancel_button->is_visible());
-    cancel_button_view->SetProperty(kElementIdentifierKey, cancel_button->id());
+    ConfigureBubbleButtonForParams(*this, GetCancelButton(),
+                                   ui::mojom::DialogButton::kCancel,
+                                   *cancel_button);
   }
   if (ui::DialogModel::Button* const extra_button =
           model_->extra_button(DialogModelHost::GetPassKey())) {
@@ -1170,7 +1169,7 @@ void BubbleDialogModelHost::UpdateDialogButtons() {
 }
 
 bool BubbleDialogModelHost::IsModalDialog() const {
-  return GetModalType() != ui::MODAL_TYPE_NONE;
+  return GetModalType() != ui::mojom::ModalType::kNone;
 }
 
 }  // namespace views

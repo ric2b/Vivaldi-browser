@@ -27,7 +27,7 @@
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
 #include "third_party/leveldatabase/src/include/leveldb/slice.h"
 
-namespace content {
+namespace content::indexed_db {
 
 // Cleanup tasks generally run in the background since they're just internal
 // bookkeeping that shouldn't block other IDB operations. It has to block
@@ -77,8 +77,9 @@ leveldb::Status LevelDBScopes::Initialize() {
   leveldb::Slice metadata_key =
       key_encoder.GlobalMetadataKey(metadata_key_prefix_);
   s = level_db_->db()->Get(read_options, metadata_key, &metadata_value);
-  if (UNLIKELY(!s.ok() && !s.IsNotFound()))
+  if (!s.ok() && !s.IsNotFound()) [[unlikely]] {
     return s;
+  }
 
   LevelDBScopesMetadata metadata;
   if (s.IsNotFound()) {
@@ -87,8 +88,9 @@ leveldb::Status LevelDBScopes::Initialize() {
     // leveldb::WriteBatch isn't necessary.
     s = level_db_->db()->Put(write_options, metadata_key,
                              metadata.SerializeAsString());
-    if (UNLIKELY(!s.ok()))
+    if (!s.ok()) [[unlikely]] {
       return s;
+    }
   } else {
     if (!metadata.ParseFromString(metadata_value)) {
       return leveldb::Status::Corruption(
@@ -119,12 +121,12 @@ leveldb::Status LevelDBScopes::Initialize() {
     // Parse the key & value.
     auto [success, scope_id] = leveldb_scopes::ParseScopeMetadataId(
         iterator->key(), metadata_key_prefix_);
-    if (UNLIKELY(!success)) {
+    if (!success) [[unlikely]] {
       return leveldb::Status::Corruption(base::StrCat(
           {"Could not read scope metadata key: ", iterator->key().ToString()}));
     }
-    if (UNLIKELY(!scope_metadata.ParseFromArray(iterator->value().data(),
-                                                iterator->value().size()))) {
+    if (!scope_metadata.ParseFromArray(iterator->value().data(),
+                                       iterator->value().size())) [[unlikely]] {
       return leveldb::Status::Corruption(base::StrCat(
           {"Could not parse scope value key: ", iterator->value().ToString()}));
     }
@@ -132,7 +134,7 @@ leveldb::Status LevelDBScopes::Initialize() {
     // The 'commit point' is not having any lock ranges in scope_metadata. If
     // lock ranges aren't present then it was committed, and the scope only
     // needs to be cleaned up.
-    if (LIKELY(scope_metadata.locks_size() == 0)) {
+    if (scope_metadata.locks_size() == 0) [[likely]] {
       startup_scopes_to_clean_.emplace_back(
           scope_id, scope_metadata.ignore_cleanup_tasks()
                         ? StartupCleanupType::kIgnoreCleanupTasks
@@ -152,29 +154,29 @@ leveldb::Status LevelDBScopes::Initialize() {
       lock_id.key = lock.key().key();
       lock_requests.emplace(lock_id,
                             PartitionedLockManager::LockType::kExclusive);
-      if (UNLIKELY(
-              lock_manager_->TestLock(
-                  {lock_id, PartitionedLockManager::LockType::kExclusive}) !=
-              PartitionedLockManager::TestLockResult::kFree)) {
+      if (lock_manager_->TestLock(
+              {lock_id, PartitionedLockManager::LockType::kExclusive}) !=
+          PartitionedLockManager::TestLockResult::kFree) [[unlikely]] {
         return leveldb::Status::Corruption("Invalid locks on disk.");
       }
     }
     PartitionedLockHolder receiver;
-    lock_manager_->AcquireLocks(std::move(lock_requests),
-                                receiver.weak_factory.GetWeakPtr(),
+    lock_manager_->AcquireLocks(std::move(lock_requests), receiver,
                                 base::DoNothing());
 
     // AcquireLocks should grant the locks synchronously because
     // 1. There should be no locks acquired before calling this method, and
     // 2. All locks that were are being loaded from disk were previously 'held'
     //    by this system. If they conflict, this is an invalid state on disk.
-    if (UNLIKELY(receiver.locks.empty()))
+    if (receiver.locks.empty()) [[unlikely]] {
       return leveldb::Status::Corruption("Invalid lock ranges on disk.");
+    }
 
     startup_scopes_to_revert_.emplace_back(scope_id, std::move(receiver.locks));
   }
-  if (LIKELY(iterator->status().ok()))
+  if (iterator->status().ok()) [[likely]] {
     recovery_finished_ = true;
+  }
   return s;
 }
 
@@ -215,7 +217,7 @@ void LevelDBScopes::StartRecoveryAndCleanupTasks() {
                           : CleanupScopeTask::CleanupMode::kIgnoreCleanupTasks,
                       max_write_batch_size_bytes)
                       .Run();
-              if (UNLIKELY(!result.ok())) {
+              if (!result.ok()) [[unlikely]] {
                 return result;
               }
             }
@@ -241,16 +243,15 @@ std::unique_ptr<LevelDBScope> LevelDBScopes::CreateScope(
 }
 
 leveldb::Status LevelDBScopes::Commit(std::unique_ptr<LevelDBScope> scope,
-                                      bool sync_on_commit) {
-  return Commit(std::move(scope), sync_on_commit, base::OnceClosure());
-}
-
-leveldb::Status LevelDBScopes::Commit(std::unique_ptr<LevelDBScope> scope,
                                       bool sync_on_commit,
-                                      base::OnceClosure on_complete) {
+                                      base::OnceClosure on_commit_complete,
+                                      base::OnceClosure on_cleanup_complete) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(recovery_finished_);
   auto [status, scopes_mode] = scope->Commit(sync_on_commit);
+  if (on_commit_complete) {
+    std::move(on_commit_complete).Run();
+  }
   if (scopes_mode == LevelDBScope::Mode::kUndoLogOnDisk) {
     auto task = std::make_unique<CleanupScopeTask>(
         level_db_, metadata_key_prefix_, scope->scope_id(),
@@ -260,7 +261,8 @@ leveldb::Status LevelDBScopes::Commit(std::unique_ptr<LevelDBScope> scope,
         FROM_HERE, kCleanupTaskTraits,
         base::BindOnce(&CleanupScopeTask::Run, std::move(task)),
         base::BindOnce(&LevelDBScopes::OnCleanupTaskResult,
-                       weak_factory_.GetWeakPtr(), std::move(on_complete)));
+                       weak_factory_.GetWeakPtr(),
+                       std::move(on_cleanup_complete)));
   }
   return status;
 }
@@ -272,7 +274,7 @@ void LevelDBScopes::Rollback(int64_t scope_id,
       RevertScopeTask(level_db_, metadata_key_prefix_, scope_id,
                       max_write_batch_size_bytes_)
           .Run();
-  if (UNLIKELY(!result.ok())) {
+  if (!result.ok()) [[unlikely]] {
     // Prospective fix for crbug.com/350196532: synchronous teardown seems to
     // cause issues.
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -294,7 +296,7 @@ void LevelDBScopes::Rollback(int64_t scope_id,
 void LevelDBScopes::OnCleanupTaskResult(base::OnceClosure on_complete,
                                         leveldb::Status result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (UNLIKELY(!result.ok())) {
+  if (!result.ok()) [[unlikely]] {
     tear_down_callback_.Run(result);
   }
   if (on_complete) {
@@ -302,4 +304,4 @@ void LevelDBScopes::OnCleanupTaskResult(base::OnceClosure on_complete,
   }
 }
 
-}  // namespace content
+}  // namespace content::indexed_db

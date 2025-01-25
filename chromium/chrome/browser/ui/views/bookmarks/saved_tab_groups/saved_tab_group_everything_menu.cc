@@ -4,19 +4,21 @@
 
 #include "chrome/browser/ui/views/bookmarks/saved_tab_groups/saved_tab_group_everything_menu.h"
 
+#include <memory>
+
 #include "base/metrics/user_metrics.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_action_context_desktop.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_group_theme.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
+#include "components/saved_tab_groups/tab_group_sync_service.h"
 #include "components/saved_tab_groups/types.h"
 #include "ui/base/models/dialog_model.h"
 #include "ui/gfx/favicon_size.h"
@@ -69,30 +71,25 @@ base::Uuid STGEverythingMenu::GetTabGroupIdFromCommandId(int command_id) {
   return sorted_tab_groups_.at(idx_in_sorted_tab_group);
 }
 
-const SavedTabGroupModel*
-STGEverythingMenu::GetSavedTabGroupModelFromBrowser() {
-  CHECK(browser_);
-  auto* profile = browser_->profile();
-  CHECK(!profile->IsOffTheRecord());
-  auto* keyed_service = SavedTabGroupServiceFactory::GetForProfile(profile);
-  return keyed_service->model();
-}
-
 std::vector<base::Uuid> STGEverythingMenu::GetSortedTabGroupsByCreationTime(
-    const SavedTabGroupModel* stg_model) {
-  CHECK(stg_model);
+    TabGroupSyncService* tab_group_service) {
+  CHECK(tab_group_service);
   std::vector<base::Uuid> sorted_tab_groups;
-  for (const SavedTabGroup& group : stg_model->saved_tab_groups()) {
+  for (const SavedTabGroup& group : tab_group_service->GetAllGroups()) {
     sorted_tab_groups.push_back(group.saved_guid());
   }
   auto compare_by_creation_time = [=](const base::Uuid& a,
                                       const base::Uuid& b) {
-    const auto* const saved_tab_group_a = stg_model->Get(a);
-    const auto* const saved_tab_group_b = stg_model->Get(b);
+    const std::optional<SavedTabGroup> saved_tab_group_a =
+        tab_group_service->GetGroup(a);
+    const std::optional<SavedTabGroup> saved_tab_group_b =
+        tab_group_service->GetGroup(b);
+
     // If either gets deleted while creating the model, ignore the order.
-    if (!saved_tab_group_a || !saved_tab_group_b) {
+    if (!saved_tab_group_a.has_value() || !saved_tab_group_b.has_value()) {
       return false;
     }
+
     return saved_tab_group_a->creation_time_windows_epoch_micros() >
            saved_tab_group_b->creation_time_windows_epoch_micros();
   };
@@ -112,15 +109,17 @@ std::unique_ptr<ui::SimpleMenuModel> STGEverythingMenu::CreateMenuModel() {
       menu_model->GetIndexOfCommandId(IDC_CREATE_NEW_TAB_GROUP).value(),
       kCreateNewTabGroup);
 
-  const auto* stg_model = GetSavedTabGroupModelFromBrowser();
-  if (!stg_model->IsEmpty()) {
+  TabGroupSyncService* tab_group_service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser_->profile());
+  if (!tab_group_service->GetAllGroups().empty()) {
     menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
   }
 
-  sorted_tab_groups_ = GetSortedTabGroupsByCreationTime(stg_model);
+  sorted_tab_groups_ = GetSortedTabGroupsByCreationTime(tab_group_service);
   const auto* const color_provider = browser_->window()->GetColorProvider();
   for (size_t i = 0; i < sorted_tab_groups_.size(); ++i) {
-    const auto* const tab_group = stg_model->Get(sorted_tab_groups_[i]);
+    const std::optional<SavedTabGroup> tab_group =
+        tab_group_service->GetGroup(sorted_tab_groups_[i]);
     // In case any tab group gets deleted while creating the model.
     if (!tab_group) {
       continue;
@@ -188,11 +187,13 @@ void STGEverythingMenu::PopulateTabGroupSubMenu(views::MenuItemView* parent) {
   submenu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
   int parent_command_id = parent->GetCommand();
   auto group_id = GetTabGroupIdFromCommandId(parent_command_id);
-  const auto* const service =
-      SavedTabGroupServiceFactory::GetForProfile(browser_->profile());
-  const auto* const saved_group = service->model()->Get(group_id);
+  TabGroupSyncService* tab_group_service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser_->profile());
+
+  const std::optional<SavedTabGroup> saved_group =
+      tab_group_service->GetGroup(group_id);
   // If the group has been deleted remotely.
-  if (!saved_group) {
+  if (!saved_group.has_value()) {
     return;
   }
   const auto& local_group_id = saved_group->local_group_id();
@@ -250,9 +251,7 @@ void STGEverythingMenu::PopulateTabGroupSubMenu(views::MenuItemView* parent) {
       latest_command_id,
       group_pinned ? IDS_TAB_GROUP_HEADER_CXMENU_UNPIN_GROUP
                    : IDS_TAB_GROUP_HEADER_CXMENU_PIN_GROUP,
-      ui::ImageModel::FromVectorIcon(group_pinned
-                                         ? kKeepPinFilledChromeRefreshIcon
-                                         : kKeepPinChromeRefreshIcon,
+      ui::ImageModel::FromVectorIcon(group_pinned ? kKeepFilledIcon : kKeepIcon,
                                      ui::kColorMenuIcon, kUIUpdateIconSize));
   submenu_model_->SetElementIdentifierAt(
       submenu_model_->GetIndexOfCommandId(latest_command_id).value(),
@@ -342,10 +341,12 @@ void STGEverythingMenu::ExecuteCommand(int command_id, int event_flags) {
       case Action::Type::OPEN_IN_BROWSER: {
         base::RecordAction(base::UserMetricsAction(
             "TabGroups_SavedTabGroups_OpenedFromEverythingMenu"));
-        auto* const keyed_service =
-            SavedTabGroupServiceFactory::GetForProfile(browser_->profile());
-        keyed_service->OpenSavedTabGroupInBrowser(
-            browser_, uuid, OpeningSource::kOpenedFromRevisitUi);
+        TabGroupSyncService* tab_group_service =
+            tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+                browser_->profile());
+        tab_group_service->OpenTabGroup(
+            uuid, std::make_unique<TabGroupActionContextDesktop>(
+                      browser_, OpeningSource::kOpenedFromRevisitUi));
         break;
       }
       case Action::Type::OPEN_OR_MOVE_TO_NEW_WINDOW:
@@ -368,10 +369,12 @@ void STGEverythingMenu::ExecuteCommand(int command_id, int event_flags) {
     base::RecordAction(base::UserMetricsAction(
         "TabGroups_SavedTabGroups_OpenedFromEverythingMenu"));
     const auto group_id = GetTabGroupIdFromCommandId(command_id);
-    auto* const keyed_service =
-        SavedTabGroupServiceFactory::GetForProfile(browser_->profile());
-    keyed_service->OpenSavedTabGroupInBrowser(
-        browser_, group_id, OpeningSource::kOpenedFromRevisitUi);
+    TabGroupSyncService* tab_group_service =
+        tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+            browser_->profile());
+    tab_group_service->OpenTabGroup(
+        group_id, std::make_unique<TabGroupActionContextDesktop>(
+                      browser_, OpeningSource::kOpenedFromRevisitUi));
   }
 }
 

@@ -24,6 +24,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
+#include "components/language_detection/content/renderer/language_detection_agent.h"
+#include "components/language_detection/core/language_detection_provider.h"
 #include "components/translate/content/renderer/isolated_world_util.h"
 #include "components/translate/core/common/translate_constants.h"
 #include "components/translate/core/common/translate_metrics.h"
@@ -78,7 +80,8 @@ constexpr char kCLDModelVersion[] = "CLD3";
 // Returns the language detection model that is shared across the RenderFrames
 // in the renderer.
 translate::LanguageDetectionModel& GetLanguageDetectionModel() {
-  static base::NoDestructor<translate::LanguageDetectionModel> instance;
+  static base::NoDestructor<translate::LanguageDetectionModel> instance(
+      &language_detection::GetLanguageDetectionModel());
   return *instance;
 }
 
@@ -101,69 +104,20 @@ namespace translate {
 TranslateAgent::TranslateAgent(content::RenderFrame* render_frame, int world_id)
     : content::RenderFrameObserver(render_frame),
       world_id_(world_id),
-      waiting_for_first_foreground_(render_frame->IsHidden()) {
+      language_detection_agent_(
+          IsTFLiteLanguageDetectionEnabled()
+              ? new language_detection::LanguageDetectionAgent(render_frame)
+              : nullptr) {
   translate_task_runner_ = this->render_frame()->GetTaskRunner(
       blink::TaskType::kInternalTranslation);
-
-  if (!translate::IsTFLiteLanguageDetectionEnabled()) {
-    return;
-  }
-
-  translate::LanguageDetectionModel& language_detection_model =
-      GetLanguageDetectionModel();
-
-  // If the language detection model is available, we do not
-  // worry about requesting the model.
-  if (language_detection_model.IsAvailable()) {
-    return;
-  }
-
-  UMA_HISTOGRAM_BOOLEAN("LanguageDetection.TFLiteModel.WasModelRequestDeferred",
-                        waiting_for_first_foreground_);
-
-  // Ensure the render frame is visible, otherwise the browser-side
-  // translate driver may not exist yet (https://crbug.com/1199397).
-  if (!waiting_for_first_foreground_) {
-    GetTranslateHandler()->GetLanguageDetectionModel(
-        base::BindOnce(&TranslateAgent::UpdateLanguageDetectionModel,
-                       weak_pointer_factory_.GetWeakPtr()));
-  }
 }
 
 TranslateAgent::~TranslateAgent() {}
 
-void TranslateAgent::WasShown() {
-  // Check if the the render frame was initially hidden and
-  // the model request was delayed until the frame was in
-  // the foreground.
-  if (!waiting_for_first_foreground_) {
-    return;
-  }
-
-  waiting_for_first_foreground_ = false;
-
-  if (!translate::IsTFLiteLanguageDetectionEnabled()) {
-    return;
-  }
-
-  translate::LanguageDetectionModel& language_detection_model =
-      GetLanguageDetectionModel();
-  if (language_detection_model.IsAvailable()) {
-    return;
-  }
-  // The model request was deferred because the frame was hidden
-  // and now the model is visible and the model is still not available.
-  // The browser-side translate driver should always be available at
-  // this point so we should make the request and race to get the
-  // model loaded for when the page content is available.
-  GetTranslateHandler()->GetLanguageDetectionModel(
-      base::BindOnce(&TranslateAgent::UpdateLanguageDetectionModel,
-                     weak_pointer_factory_.GetWeakPtr()));
-}
-
 void TranslateAgent::SeedLanguageDetectionModelForTesting(
     base::File model_file) {
-  UpdateLanguageDetectionModel(std::move(model_file));
+  language_detection_agent_->UpdateLanguageDetectionModel(
+      std::move(model_file));
 }
 
 void TranslateAgent::PrepareForUrl(const GURL& url) {
@@ -234,27 +188,34 @@ void TranslateAgent::PageCaptured(
   LanguageDetectionDetails details;
   std::string language;
   if (page_contents_length_ == 0) {
-    // If captured content is empty do not run language detection and pass "und"
-    // as the model defined language along with page-provided languages.
-    language = translate::DeterminePageLanguage(
-        content_language, html_lang, translate::kUnknownLanguageCode, false);
+    // If captured content is empty do not run language detection and
+    // only use page-provided languages.
+    language = translate::DeterminePageLanguageNoModel(
+        content_language, html_lang,
+        translate::LanguageVerificationType::kNoPageContent);
   } else if (translate::IsTFLiteLanguageDetectionEnabled()) {
     // Use TFLite and page contents to assist with language detection.
     translate::LanguageDetectionModel& language_detection_model =
         GetLanguageDetectionModel();
     bool is_available = language_detection_model.IsAvailable();
-    language = is_available
-                   ? language_detection_model.DeterminePageLanguage(
-                         content_language, html_lang, contents->as_string(),
-                         &model_detected_language, &is_model_reliable,
-                         model_reliability_score)
-                   : translate::kUnknownLanguageCode;
+    language =
+        is_available
+            ? language_detection_model.DeterminePageLanguage(
+                  content_language, html_lang, contents->as_string(),
+                  &model_detected_language, &is_model_reliable,
+                  model_reliability_score)
+            // If the model is not available do not run language
+            // detection and only use page-provided languages.
+            : translate::DeterminePageLanguageNoModel(
+                  content_language, html_lang,
+                  translate::LanguageVerificationType::kModelNotAvailable);
     UMA_HISTOGRAM_BOOLEAN(
         "LanguageDetection.TFLiteModel.WasModelAvailableForDetection",
         is_available);
     UMA_HISTOGRAM_BOOLEAN(
         "LanguageDetection.TFLiteModel.WasModelUnavailableDueToDeferredLoad",
-        !is_available && waiting_for_first_foreground_);
+        !is_available &&
+            language_detection_agent_->waiting_for_first_foreground());
     detection_model_version = language_detection_model.GetModelVersion();
     details.has_run_lang_detection = true;
   } else {
@@ -625,19 +586,16 @@ void TranslateAgent::NotifyBrowserTranslationFailed(TranslateErrors error) {
 
 const mojo::Remote<mojom::ContentTranslateDriver>&
 TranslateAgent::GetTranslateHandler() {
-  if (!translate_handler_) {
-    render_frame()->GetBrowserInterfaceBroker().GetInterface(
-        translate_handler_.BindNewPipeAndPassReceiver());
-    return translate_handler_;
+  if (translate_handler_) {
+    if (translate_handler_.is_connected()) {
+      return translate_handler_;
+    }
+    // The translate handler can become unbound or disconnected in testing
+    // so this catches that case and reconnects so `this` can connect to
+    // the driver in the browser.
+    translate_handler_.reset();
   }
 
-  // The translate handler can become unbound or disconnected in testing
-  // so this catches that case and reconnects so `this` can connect to
-  // the driver in the browser.
-  if (translate_handler_.is_bound() && translate_handler_.is_connected())
-    return translate_handler_;
-
-  translate_handler_.reset();
   render_frame()->GetBrowserInterfaceBroker().GetInterface(
       translate_handler_.BindNewPipeAndPassReceiver());
   return translate_handler_;
@@ -665,15 +623,6 @@ std::string TranslateAgent::BuildTranslationScript(
   return "cr.googleTranslate.translate(" +
          base::GetQuotedJSONString(source_lang) + "," +
          base::GetQuotedJSONString(target_lang) + ")";
-}
-
-void TranslateAgent::UpdateLanguageDetectionModel(base::File model_file) {
-  TRACE_EVENT("browser", "TranslateAgent::UpdateLanguageDetectionModel");
-  base::ScopedUmaHistogramTimer timer(
-      "LanguageDetection.TFLiteModel.UpdateLanaguageDetectionModelTime");
-  translate::LanguageDetectionModel& language_detection_model =
-      GetLanguageDetectionModel();
-  language_detection_model.UpdateWithFile(std::move(model_file));
 }
 
 }  // namespace translate

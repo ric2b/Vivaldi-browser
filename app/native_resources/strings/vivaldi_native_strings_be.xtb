@@ -12,6 +12,7 @@
 <translation id="1454726940098520109">Больш не пытацца пацвярджэння</translation>
 <translation id="1462666970065907900">Сапраўды хочаце закрыць гэтае акно?</translation>
 <translation id="1480046233931937785">Падзякі</translation>
+<translation id="1521774566618522728">Актыўна сёння</translation>
 <translation id="1526344461589023948">Падчас захавання спампаванага абнаўлення адбылася памылка. Праверце дыск на наяўнасць вольнага месца і паўтарыце спробу.</translation>
 <translation id="1635542496948266458">Пераключыць профілі</translation>
 <translation id="1657174850639146440">Пачварка 9</translation>
@@ -97,6 +98,7 @@
 <translation id="4430019312045809116">Гучнасць</translation>
 <translation id="443008484043213881">Інструменты</translation>
 <translation id="4456211719108566931">Пачварка 6</translation>
+<translation id="4459169140545916303">Актыўна <ph name="DEVICE_LAST_ACTIVATED_TIME" /> дзён таму</translation>
 <translation id="4512900838580567989">Адкрыць спасылку ў новай фонавай укладцы</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Адкрыць выяву ў новай фонавай укладцы</translation>
@@ -148,6 +150,7 @@
 <translation id="7099506190679014195">Бяспечнае абнаўленне сховішча ключоў</translation>
 <translation id="7111492742514999492">Краявід 9</translation>
 <translation id="7208252576848052204">На жаль, вашы налады Arc недаступныя, калі гэты браўзер працуе. Каб імпартаваць гэтыя налады ў Vivaldi, закрыйце ўсе вокны Arc. Затым націсніце "Працягнуць".</translation>
+<translation id="7321500017121629018">Актыўна ўчора</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Падчас запуску сродку абнаўлення адбылася памылка. Праверце, ці хапае памяці і вольнага месца на дыску і паўтарыце спробу.</translation>
 <translation id="7658239707568436148">Скасаваць</translation>

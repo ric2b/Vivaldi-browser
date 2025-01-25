@@ -29,10 +29,7 @@
 
 #include "src/tint/cmd/bench/bench.h"
 #include "src/tint/lang/spirv/writer/writer.h"
-
-#if TINT_BUILD_WGSL_READER
 #include "src/tint/lang/wgsl/reader/reader.h"
-#endif  // TINT_BUILD_WGSL_READER
 
 #if TINT_BUILD_IS_MSVC
 #if _MSC_VER > 1930 && _MSC_VER < 1939
@@ -46,22 +43,7 @@ namespace tint::spirv::writer {
 namespace {
 
 void GenerateSPIRV(benchmark::State& state, std::string input_name) {
-    auto res = bench::LoadProgram(input_name);
-    if (res != Success) {
-        state.SkipWithError(res.Failure().reason.Str());
-        return;
-    }
-    for (auto _ : state) {
-        auto gen_res = Generate(res->program, {});
-        if (gen_res != Success) {
-            state.SkipWithError(gen_res.Failure().reason.Str());
-        }
-    }
-}
-
-void GenerateSPIRV_UseIR(benchmark::State& state, std::string input_name) {
-#if TINT_BUILD_WGSL_READER
-    auto res = bench::LoadProgram(input_name);
+    auto res = bench::GetWgslProgram(input_name);
     if (res != Success) {
         state.SkipWithError(res.Failure().reason.Str());
         return;
@@ -79,13 +61,9 @@ void GenerateSPIRV_UseIR(benchmark::State& state, std::string input_name) {
             state.SkipWithError(gen_res.Failure().reason.Str());
         }
     }
-#else
-#error "WGSL Reader is required to build IR generator"
-#endif  // TINT_BUILD_WGSL_READER
 }
 
 TINT_BENCHMARK_PROGRAMS(GenerateSPIRV);
-TINT_BENCHMARK_PROGRAMS(GenerateSPIRV_UseIR);
 
 }  // namespace
 }  // namespace tint::spirv::writer

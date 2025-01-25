@@ -5,18 +5,28 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_AI_AI_METRICS_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_AI_AI_METRICS_H_
 
+#include <string>
+
 namespace blink {
 
 class AIMetrics {
  public:
   // This class contains all the supported session types.
+  // LINT.IfChange(AISessionType)
   enum class AISessionType {
-    kText = 0,
-    kMaxValue = kText,
+    kAssistant = 0,
+    kWriter = 1,
+    kRewriter = 2,
+    kSummarizer = 3,
+    kMaxValue = kSummarizer,
   };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/ai/histogram.xml:AIAPI)
 
   // This class contains all the model execution API supported.
-  //
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  // TODO(crbug.com/355967885): update the enums when adding metrics for
+  // assistant API.
   // LINT.IfChange(AIAPI)
   enum class AIAPI {
     kCanCreateSession = 0,
@@ -25,21 +35,33 @@ class AIMetrics {
     kSessionPromptStreaming = 3,
     kDefaultTextSessionOptions = 4,
     kSessionDestroy = 5,
+    kSessionClone = 6,
+    kTextModelInfo = 7,
+    kSessionSummarize = 8,
+    kSessionSummarizeStreaming = 9,
+    kWriterWrite = 10,
+    kWriterWriteStreaming = 11,
+    kRewriterRewrite = 12,
+    kRewriterRewriteStreaming = 13,
+    kSummarizerSummarize = 14,
+    kSummarizerSummarizeStreaming = 15,
+    kSummarizerCreate = 16,
+    kSummarizerDestroy = 17,
 
-    kMaxValue = kSessionDestroy,
+    kMaxValue = kSummarizerDestroy,
   };
   // LINT.ThenChange(//tools/metrics/histograms/metadata/ai/enums.xml:AIAPI)
 
-  static const char* GetAIAPIUsageMetricName(AISessionType session_type);
-  static const char* GetAIModelAvailabilityMetricName(
+  static std::string GetAIAPIUsageMetricName(AISessionType session_type);
+  static std::string GetAICapabilityAvailabilityMetricName(
       AISessionType session_type);
-  static const char* GetAISessionRequestSizeMetricName(
+  static std::string GetAISessionRequestSizeMetricName(
       AISessionType session_type);
-  static const char* GetAISessionResponseStatusMetricName(
+  static std::string GetAISessionResponseStatusMetricName(
       AISessionType session_type);
-  static const char* GetAISessionResponseSizeMetricName(
+  static std::string GetAISessionResponseSizeMetricName(
       AISessionType session_type);
-  static const char* GetAISessionResponseCallbackCountMetricName(
+  static std::string GetAISessionResponseCallbackCountMetricName(
       AISessionType session_type);
 };
 

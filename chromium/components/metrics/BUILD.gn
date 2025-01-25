@@ -246,6 +246,7 @@ if (!is_cronet_build || is_ios) {
       "//build:branding_buildflags",
       "//build:chromeos_buildflags",
       "//components/flags_ui:switches",
+      "//components/metrics/dwa",
       "//components/metrics/public/mojom:histogram_fetcher_mojo_bindings",
       "//components/network_time",
       "//components/prefs",
@@ -457,11 +458,8 @@ if (!is_cronet_build) {
     ]
   }
 
-  source_set("call_stack_profile_params") {
-    public = [
-      "call_stacks/call_stack_profile_encoding.h",
-      "call_stacks/call_stack_profile_params.h",
-    ]
+  source_set("call_stack_profile_encoding") {
+    public = [ "call_stacks/call_stack_profile_encoding.h" ]
     sources = [ "call_stacks/call_stack_profile_encoding.cc" ]
 
     deps = [
@@ -482,7 +480,7 @@ if (!is_cronet_build) {
       "call_stacks/call_stack_profile_metadata.cc",
       "call_stacks/child_call_stack_profile_collector.cc",
     ]
-    public_deps = [ ":call_stack_profile_params" ]
+    public_deps = [ ":call_stack_profile_encoding" ]
     deps = [
       "//base",
       "//components/metrics/public/mojom:call_stack_mojo_bindings",
@@ -508,7 +506,6 @@ if (!is_cronet_build) {
       "call_stacks/call_stack_profile_collector.h",
     ]
     deps = [
-      ":call_stack_profile_params",
       ":metrics",
       "//components/metrics/public/mojom:call_stack_mojo_bindings",
     ]

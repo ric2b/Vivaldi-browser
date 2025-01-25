@@ -24,8 +24,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
-#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_reuse_manager_factory.h"
@@ -97,6 +95,8 @@
 #include "url/url_util.h"
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
+#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
+#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -108,7 +108,7 @@
 #include "chrome/browser/safe_browsing/android/password_reuse_controller_android.h"
 #include "chrome/browser/safe_browsing/android/safe_browsing_referring_app_bridge_android.h"
 #include "components/password_manager/core/browser/password_check_referrer_android.h"
-#include "components/password_manager/core/browser/password_store/split_stores_and_local_upm.h"
+#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "ui/android/window_android.h"
 #else
 #include "chrome/browser/ui/browser_list.h"
@@ -119,6 +119,7 @@
 using base::RecordAction;
 using base::UserMetricsAction;
 using content::BrowserThread;
+using enum safe_browsing::ExtendedReportingLevel;
 using sync_pb::GaiaPasswordReuse;
 using sync_pb::UserEventSpecifics;
 using GaiaPasswordCaptured = UserEventSpecifics::GaiaPasswordCaptured;
@@ -733,6 +734,10 @@ void ChromePasswordProtectionService::MaybeLogPasswordReuseDetectedEvent(
     case SBER_LEVEL_SCOUT:
       status->set_safe_browsing_reporting_population(SafeBrowsingStatus::SCOUT);
       break;
+    case SBER_LEVEL_ENHANCED_PROTECTION:
+      status->set_safe_browsing_reporting_population(
+          SafeBrowsingStatus::ENHANCED_PROTECTION);
+      break;
   }
 
   WebUIInfoSingleton::GetInstance()->AddToPGEvents(*specifics);
@@ -1289,6 +1294,9 @@ void ChromePasswordProtectionService::MaybeReportPasswordReuseDetected(
     if (router) {
       router->OnPolicySpecifiedPasswordReuseDetected(
           main_frame_url, username_or_email, is_phishing_url, warning_shown);
+      base::UmaHistogramBoolean(
+          "PasswordProtection.GmailReportSent",
+          base::EndsWith(username_or_email, "@gmail.com"));
     }
   }
 }

@@ -98,11 +98,9 @@ void CheckClientDownloadRequestBase::Start() {
   DVLOG(2) << "Starting SafeBrowsing download check for: " << source_url_;
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (base::FeatureList::IsEnabled(kStrictDownloadTimeout)) {
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&CheckClientDownloadRequestBase::StartTimeout,
-                                  GetWeakPtr()));
-  }
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&CheckClientDownloadRequestBase::StartTimeout,
+                                GetWeakPtr()));
 
   if (IsAllowlistedByPolicy()) {
     FinishRequest(DownloadCheckResult::ALLOWLISTED_BY_POLICY,
@@ -348,15 +346,6 @@ void CheckClientDownloadRequestBase::OnRequestBuilt(
     return;
   }
 
-  if (!base::FeatureList::IsEnabled(kStrictDownloadTimeout)) {
-    // We wait until after the file checks finish to start the timeout, as
-    // windows can cause permissions errors if the timeout fired while we were
-    // checking the file signature and we tried to complete the download.
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&CheckClientDownloadRequestBase::StartTimeout,
-                                  GetWeakPtr()));
-  }
-
   if (!pingback_enabled_) {
     FinishRequest(DownloadCheckResult::UNKNOWN, REASON_PING_DISABLED);
     return;
@@ -527,6 +516,12 @@ void CheckClientDownloadRequestBase::OnURLLoaderComplete(
   }
   base::UmaHistogramSparse("SBClientDownload.DownloadRequestNetError",
                            -loader_->NetError());
+
+  if (!access_token_.empty()) {
+    MaybeLogCookieReset(*loader_,
+                        SafeBrowsingAuthenticatedEndpoint::kDownloadProtection);
+  }
+
   DownloadCheckResultReason reason = REASON_SERVER_PING_FAILED;
   DownloadCheckResult result = DownloadCheckResult::UNKNOWN;
   std::string token;
@@ -600,9 +595,9 @@ void CheckClientDownloadRequestBase::OnURLLoaderComplete(
     }
 
     bool upload_requested = response.upload();
-    MaybeStorePingsForDownload(result, upload_requested,
-                               client_download_request_data_,
-                               *response_body.get());
+    MaybeBeginFeedbackForDownload(result, upload_requested,
+                                  client_download_request_data_,
+                                  *response_body.get());
   }
 
   // We don't need the loader anymore.
@@ -628,10 +623,7 @@ void CheckClientDownloadRequestBase::OnURLLoaderComplete(
       metrics_suffix = ".Dmg";
       break;
     case DownloadFileType::SEVEN_ZIP:
-      if (base::FeatureList::IsEnabled(kSevenZipEvaluationEnabled))
-        metrics_suffix = ".SevenZip";
-      else
-        metrics_suffix = ".None";
+      metrics_suffix = ".SevenZip";
       break;
   }
   base::UmaHistogramTimes("SBClientDownload.DownloadRequestDuration", duration);

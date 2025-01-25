@@ -31,9 +31,8 @@ class RendererFrameContextData : public FrameContextData {
 
   ~RendererFrameContextData() override = default;
 
-  std::unique_ptr<ContextData> Clone() const override;
   std::unique_ptr<FrameContextData> CloneFrameContextData() const override;
-  bool IsIsolatedApplication() const override;
+  bool HasControlledFrameCapability() const override;
 
   std::unique_ptr<FrameContextData> GetLocalParentOrOpener() const override;
 

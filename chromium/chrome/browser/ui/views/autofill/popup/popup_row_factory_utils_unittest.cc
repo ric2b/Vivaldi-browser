@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/check_op.h"
+#include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/autofill/mock_autofill_popup_controller.h"
@@ -40,7 +41,7 @@ using ::testing::Return;
 
 namespace autofill {
 
-class PopupRowFactoryUtilsTestBase : public ChromeViewsTestBase {
+class PopupRowFactoryUtilsTest : public ChromeViewsTestBase {
  public:
   void SetUp() override {
     ChromeViewsTestBase::SetUp();
@@ -51,12 +52,22 @@ class PopupRowFactoryUtilsTestBase : public ChromeViewsTestBase {
   }
 
   void TearDown() override {
+    row_view_ = nullptr;
     generator_.reset();
     widget_.reset();
     ChromeViewsTestBase::TearDown();
   }
 
  protected:
+  void ShowSuggestion(Suggestion suggestion) {
+    // Show the button.
+    controller().set_suggestions({std::move(suggestion)});
+    row_view_ = widget().SetContentsView(
+        CreatePopupRowView(controller().GetWeakPtr(), a11y_selection_delegate(),
+                           selection_delegate(), 0));
+    widget().Show();
+  }
+
   MockAutofillPopupController& controller() { return controller_; }
   MockAccessibilitySelectionDelegate& a11y_selection_delegate() {
     return mock_a11y_selection_delegate_;
@@ -65,6 +76,7 @@ class PopupRowFactoryUtilsTestBase : public ChromeViewsTestBase {
     return mock_selection_delegate_;
   }
   ui::test::EventGenerator& generator() { return *generator_; }
+  PopupRowView& row_view() { return *row_view_; }
   views::Widget& widget() { return *widget_; }
 
  private:
@@ -73,44 +85,50 @@ class PopupRowFactoryUtilsTestBase : public ChromeViewsTestBase {
   MockAutofillPopupController controller_;
   MockAccessibilitySelectionDelegate mock_a11y_selection_delegate_;
   MockSelectionDelegate mock_selection_delegate_;
+  raw_ptr<PopupRowView> row_view_ = nullptr;
 };
 
-class AutocompleteRowWithDeleteButtonTest
-    : public PopupRowFactoryUtilsTestBase {
+// A test fixture for testing the creation of rows that contain a button.
+class PopupRowFactoryUtilsRowWithButtonTest : public PopupRowFactoryUtilsTest {
  public:
-  void TearDown() override {
-    view_ = nullptr;
-    PopupRowFactoryUtilsTestBase::TearDown();
-  }
-
-  void ShowSuggestion(Suggestion suggestion) {
-    // Show the button.
-    controller().set_suggestions({std::move(suggestion)});
-    PopupRowView* view = widget().SetContentsView(
-        CreatePopupRowView(controller().GetWeakPtr(), a11y_selection_delegate(),
-                           selection_delegate(), 0));
-    CHECK(views::IsViewClass<PopupRowWithButtonView>(view));
-    view_ = static_cast<PopupRowWithButtonView*>(view);
-    widget().Show();
-  }
 
   void ShowAutocompleteSuggestion() {
     ShowSuggestion(
         Suggestion(u"Some entry", SuggestionType::kAutocompleteEntry));
   }
 
- protected:
-  PopupRowWithButtonView& view() { return *view_; }
+  void ShowCreateNewPlusAddressInlineSuggestion() {
+    Suggestion suggestion(u"Create new plus address",
+                          SuggestionType::kCreateNewPlusAddressInline);
+    suggestion.payload = Suggestion::PlusAddressPayload();
+    ShowSuggestion(suggestion);
+  }
 
- private:
-  raw_ptr<PopupRowWithButtonView> view_ = nullptr;
+ protected:
+  PopupRowWithButtonView& row_with_button_view() {
+    CHECK(views::IsViewClass<PopupRowWithButtonView>(&row_view()));
+    return static_cast<PopupRowWithButtonView&>(row_view());
+  }
 };
 
-TEST_F(AutocompleteRowWithDeleteButtonTest,
+// Tests that if `offer_refresh` is set to `false` in the payload, then a plus
+// address error suggestion does not have a refresh button.
+TEST_F(PopupRowFactoryUtilsTest, PlusAddressErrorSuggestionWithoutRefresh) {
+  Suggestion suggestion(u"Create new plus address",
+                        SuggestionType::kPlusAddressError);
+  Suggestion::PlusAddressPayload payload;
+  payload.offer_refresh = false;
+  suggestion.payload = std::move(payload);
+  ShowSuggestion(suggestion);
+
+  EXPECT_FALSE(views::IsViewClass<PopupRowWithButtonView>(&row_view()));
+}
+
+TEST_F(PopupRowFactoryUtilsRowWithButtonTest,
        AutocompleteDeleteInvokesController) {
   ShowAutocompleteSuggestion();
-  views::ImageButton* button = view().GetButtonForTest();
-  view().SetSelectedCell(PopupRowView::CellType::kContent);
+  views::ImageButton* button = row_with_button_view().GetButtonForTest();
+  row_with_button_view().SetSelectedCell(PopupRowView::CellType::kContent);
   // In test env we have to manually set the bounds when a view becomes visible.
   button->parent()->SetBoundsRect(gfx::Rect(0, 0, 30, 30));
 
@@ -125,19 +143,19 @@ TEST_F(AutocompleteRowWithDeleteButtonTest,
   task_environment()->RunUntilIdle();
 }
 
-TEST_F(AutocompleteRowWithDeleteButtonTest,
+TEST_F(PopupRowFactoryUtilsRowWithButtonTest,
        AutocompleteDeleteButtonHasTooltip) {
   ShowAutocompleteSuggestion();
-  views::ImageButton* button = view().GetButtonForTest();
+  views::ImageButton* button = row_with_button_view().GetButtonForTest();
   EXPECT_EQ(button->GetTooltipText(),
             l10n_util::GetStringUTF16(
                 IDS_AUTOFILL_DELETE_AUTOCOMPLETE_SUGGESTION_TOOLTIP));
 }
 
-TEST_F(AutocompleteRowWithDeleteButtonTest,
+TEST_F(PopupRowFactoryUtilsRowWithButtonTest,
        AutocompleteDeleteButtonSetsAccessibility) {
   ShowAutocompleteSuggestion();
-  views::ImageButton* button = view().GetButtonForTest();
+  views::ImageButton* button = row_with_button_view().GetButtonForTest();
 
   views::IgnoreMissingWidgetForTestingScopedSetter ignore_missing_widget(
       button->GetViewAccessibility());
@@ -151,50 +169,72 @@ TEST_F(AutocompleteRowWithDeleteButtonTest,
       node_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
 }
 
-class PasswordPopupRowViewTest : public PopupRowFactoryUtilsTestBase {
+TEST_F(PopupRowFactoryUtilsRowWithButtonTest,
+       CreateNewPlusAddressInlineSuggestionRefreshInvokesController) {
+  ShowCreateNewPlusAddressInlineSuggestion();
+  views::ImageButton* button = row_with_button_view().GetButtonForTest();
+  row_with_button_view().SetSelectedCell(PopupRowView::CellType::kContent);
+  // In test env we have to manually set the bounds when a view becomes visible.
+  button->parent()->SetBoundsRect(gfx::Rect(0, 0, 30, 30));
+
+  base::RunLoop loop;
+  base::RepeatingClosure quit_closure = loop.QuitClosure();
+  EXPECT_CALL(controller(),
+              PerformButtonActionForSuggestion(0, SuggestionButtonAction()))
+      .WillOnce([&quit_closure] { std::move(quit_closure).Run(); });
+
+  generator().MoveMouseTo(button->GetBoundsInScreen().CenterPoint());
+  generator().ClickLeftButton();
+  loop.Run();
+}
+
+TEST_F(PopupRowFactoryUtilsRowWithButtonTest,
+       CreateNewPlusAddressInlineSuggestionHasTooltip) {
+  ShowCreateNewPlusAddressInlineSuggestion();
+  views::ImageButton* button = row_with_button_view().GetButtonForTest();
+  EXPECT_EQ(button->GetTooltipText(),
+            l10n_util::GetStringUTF16(
+                IDS_PLUS_ADDRESS_CREATE_INLINE_REFRESH_TOOLTIP));
+}
+
+TEST_F(PopupRowFactoryUtilsRowWithButtonTest,
+       CreateNewPlusAddressInlineSuggestionSetsAccessibility) {
+  ShowCreateNewPlusAddressInlineSuggestion();
+  views::ImageButton* button = row_with_button_view().GetButtonForTest();
+
+  views::IgnoreMissingWidgetForTestingScopedSetter ignore_missing_widget(
+      button->GetViewAccessibility());
+  ui::AXNodeData node_data;
+  button->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+
+  EXPECT_EQ(node_data.role, ax::mojom::Role::kMenuItem);
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_PLUS_ADDRESS_CREATE_INLINE_REFRESH_A11Y_NAME),
+            node_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
+}
+
+class PasswordPopupRowViewTest : public PopupRowFactoryUtilsTest {
  public:
-  void TearDown() override {
-    view_ = nullptr;
-    PopupRowFactoryUtilsTestBase::TearDown();
-  }
-
-  void ShowSuggestion(Suggestion suggestion) {
-    // Show the button.
-    controller().set_suggestions({std::move(suggestion)});
-    PopupRowView* view = widget().SetContentsView(
-        CreatePopupRowView(controller().GetWeakPtr(), a11y_selection_delegate(),
-                           selection_delegate(), 0));
-    CHECK(views::IsViewClass<PopupRowView>(view));
-    view_ = static_cast<PopupRowView*>(view);
-    widget().Show();
-  }
-
   void ShowPasswordSuggestionWithLoadingState(bool is_loading) {
     Suggestion suggestion(u"ortiler", SuggestionType::kPasswordEntry);
     suggestion.labels = {{Suggestion::Text(u"password")}};
     suggestion.is_loading = Suggestion::IsLoading(is_loading);
     ShowSuggestion(suggestion);
   }
-
- protected:
-  PopupRowView& view() { return *view_; }
-
- private:
-  raw_ptr<PopupRowView> view_ = nullptr;
 };
 
 TEST_F(PasswordPopupRowViewTest, LoadingSuggestionShowsThrobber) {
   ShowPasswordSuggestionWithLoadingState(true);
 
   EXPECT_TRUE(views::IsViewClass<views::Throbber>(
-      view().GetContentView().children().at(0)));
+      row_view().GetContentView().children().at(0)));
 }
 
 TEST_F(PasswordPopupRowViewTest, NonLoadingSuggestionDoesNotShowThrobber) {
   ShowPasswordSuggestionWithLoadingState(false);
 
   EXPECT_FALSE(views::IsViewClass<views::Throbber>(
-      view().GetContentView().children().at(0)));
+      row_view().GetContentView().children().at(0)));
 }
 
 }  // namespace autofill

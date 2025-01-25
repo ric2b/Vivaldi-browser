@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/accessibility/platform/inspect/ax_inspect_utils_win.h"
 
 #include <map>
@@ -846,7 +851,7 @@ COMPONENT_EXPORT(AX_PLATFORM)
 std::vector<Microsoft::WRL::ComPtr<IAccessible>> IAccessibleChildrenOf(
     Microsoft::WRL::ComPtr<IAccessible> parent) {
   auto children = std::vector<Microsoft::WRL::ComPtr<IAccessible>>();
-  for (const ui::MSAAChild& msaa_child : ui::MSAAChildren(parent)) {
+  for (const MSAAChild& msaa_child : MSAAChildren(parent)) {
     Microsoft::WRL::ComPtr<IAccessible> child = msaa_child.AsIAccessible();
     if (child) {
       children.emplace_back(child);

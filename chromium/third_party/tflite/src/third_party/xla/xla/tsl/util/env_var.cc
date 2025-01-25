@@ -17,16 +17,20 @@ limitations under the License.
 
 #include <stdlib.h>
 
+#include "absl/status/status.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/string_view.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/logging.h"
 #include "tsl/platform/numbers.h"
 #include "tsl/platform/str_util.h"
 #include "tsl/platform/strcat.h"
+#include "tsl/platform/types.h"
 
 namespace tsl {
 
-absl::Status ReadBoolFromEnvVar(StringPiece env_var_name, bool default_val,
-                                bool* value) {
+absl::Status ReadBoolFromEnvVar(absl::string_view env_var_name,
+                                bool default_val, bool* value) {
   *value = default_val;
   const char* tf_env_var_val = getenv(string(env_var_name).c_str());
   if (tf_env_var_val == nullptr) {
@@ -45,8 +49,8 @@ absl::Status ReadBoolFromEnvVar(StringPiece env_var_name, bool default_val,
       tf_env_var_val, ". Use the default value: ", default_val));
 }
 
-absl::Status ReadInt64FromEnvVar(StringPiece env_var_name, int64_t default_val,
-                                 int64_t* value) {
+absl::Status ReadInt64FromEnvVar(absl::string_view env_var_name,
+                                 int64_t default_val, int64_t* value) {
   *value = default_val;
   const char* tf_env_var_val = getenv(string(env_var_name).c_str());
   if (tf_env_var_val == nullptr) {
@@ -60,8 +64,8 @@ absl::Status ReadInt64FromEnvVar(StringPiece env_var_name, int64_t default_val,
       tf_env_var_val, ". Use the default value: ", default_val));
 }
 
-absl::Status ReadFloatFromEnvVar(StringPiece env_var_name, float default_val,
-                                 float* value) {
+absl::Status ReadFloatFromEnvVar(absl::string_view env_var_name,
+                                 float default_val, float* value) {
   *value = default_val;
   const char* tf_env_var_val = getenv(string(env_var_name).c_str());
   if (tf_env_var_val == nullptr) {
@@ -75,8 +79,9 @@ absl::Status ReadFloatFromEnvVar(StringPiece env_var_name, float default_val,
       tf_env_var_val, ". Use the default value: ", default_val));
 }
 
-absl::Status ReadStringFromEnvVar(StringPiece env_var_name,
-                                  StringPiece default_val, string* value) {
+absl::Status ReadStringFromEnvVar(absl::string_view env_var_name,
+                                  absl::string_view default_val,
+                                  string* value) {
   const char* tf_env_var_val = getenv(string(env_var_name).c_str());
   if (tf_env_var_val != nullptr) {
     *value = tf_env_var_val;
@@ -86,8 +91,8 @@ absl::Status ReadStringFromEnvVar(StringPiece env_var_name,
   return absl::OkStatus();
 }
 
-absl::Status ReadStringsFromEnvVar(StringPiece env_var_name,
-                                   StringPiece default_val,
+absl::Status ReadStringsFromEnvVar(absl::string_view env_var_name,
+                                   absl::string_view default_val,
                                    std::vector<string>* value) {
   string str_val;
   TF_RETURN_IF_ERROR(ReadStringFromEnvVar(env_var_name, default_val, &str_val));

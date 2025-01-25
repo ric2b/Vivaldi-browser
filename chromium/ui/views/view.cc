@@ -644,7 +644,6 @@ void View::SetVisible(bool visible) {
     // of its descendants.
     GetViewAccessibility().UpdateFocusableStateRecursive();
     GetViewAccessibility().UpdateInvisibleState();
-    AdvanceFocusIfNecessary();
 
     AdvanceFocusIfNecessary();
 
@@ -1699,7 +1698,7 @@ void View::OnMouseEvent(ui::MouseEvent* event) {
 void View::OnScrollEvent(ui::ScrollEvent* event) {}
 
 void View::OnTouchEvent(ui::TouchEvent* event) {
-  NOTREACHED_NORETURN() << "Views should not receive touch events.";
+  NOTREACHED() << "Views should not receive touch events.";
 }
 
 void View::OnGestureEvent(ui::GestureEvent* event) {}
@@ -2083,17 +2082,6 @@ ViewAccessibility& View::GetViewAccessibility() const {
     view_accessibility_ = ViewAccessibility::Create(const_cast<View*>(this));
   }
   return *view_accessibility_;
-}
-
-void View::SetAccessibilityProperties(
-    std::optional<ax::mojom::Role> role,
-    std::optional<std::u16string> name,
-    std::optional<std::u16string> description,
-    std::optional<std::u16string> role_description,
-    std::optional<ax::mojom::NameFrom> name_from,
-    std::optional<ax::mojom::DescriptionFrom> description_from) {
-  GetViewAccessibility().SetProperties(
-      role, name, description, role_description, name_from, description_from);
 }
 
 void View::SetAccessibleName(const std::u16string& name) {
@@ -2626,9 +2614,6 @@ void View::OnBlur() {}
 void View::Focus() {
   OnFocus();
 
-  // TODO(crbug.com/40285437) - Get this working on Lacros as well.
-  UpdateTooltipForFocus();
-
   // TODO(pbos): Investigate if parts of this can run unconditionally.
   if (!suppress_default_focus_handling_) {
     // Clear the native focus. This ensures that no visible native view has the
@@ -2657,6 +2642,11 @@ void View::Focus() {
   } else {
     ScrollViewToVisible();
   }
+
+  // Update tooltip after scrolling view to place tooltip according to the new
+  // position.
+  // TODO(crbug.com/40285437) - Get this working on Lacros as well.
+  UpdateTooltipForFocus();
 
   for (ViewObserver& observer : observers_) {
     observer.OnViewFocused(this);
@@ -2934,7 +2924,7 @@ void View::PaintDebugRects(const PaintInfo& parent_paint_info) {
   ui::PaintRecorder recorder(context, paint_info.paint_recording_size(),
                              paint_info.paint_recording_scale_x(),
                              paint_info.paint_recording_scale_y(),
-                             &paint_cache_);
+                             /*cache*/ nullptr);
   gfx::Canvas* canvas = recorder.canvas();
   const float scale = canvas->UndoDeviceScaleFactor();
   gfx::RectF outline_rect(ScaleToEnclosedRect(GetLocalBounds(), scale));
@@ -2998,9 +2988,23 @@ void View::AddChildViewAtImpl(View* view, size_t index) {
   // inherit the visibility of the owner View.
   view->UpdateLayerVisibility();
 
+  // TODO(https://crbug.com/325137417): We should only complete the
+  // initialization of the accessible cache when we know an accessibility API
+  // client fetches information from the browser. Add a condition for the
+  // kNativeAPIs mode after doing some testing.
+  view->GetViewAccessibility().CompleteCacheInitialization();
+
   // Make sure that the accessible focusable state of the descendants of the
-  // `view` is correct.
-  view->GetViewAccessibility().UpdateFocusableStateRecursive();
+  // `view` is correct, and make sure they are ready to send event
+  // notifications.
+  //
+  // TODO(https://crbug.com/325137417): This function and
+  // `CompleteCacheInitialization` called above both walk the views hierarchy.
+  // Their responsibilities are also similar. Investigate whether we can prevent
+  // events from being fired until accessibility is fully initialized, and if we
+  // need to update the accessible focusable state before the cache is fully
+  // initialized. If so, let's merge these two functions.
+  view->GetViewAccessibility().UpdateStatesForViewAndDescendants();
 
   if (widget) {
     // There are scenarios where we might be reparenting a view from a widget
@@ -3069,13 +3073,6 @@ void View::DoRemoveChildView(View* view,
     }
   }
 
-  // Make sure the layers belonging to the subtree rooted at |view| get
-  // removed.
-  view->OrphanLayers();
-  if (widget) {
-    widget->LayerTreeChanged();
-  }
-
   // Need to notify the layout manager because one of the callbacks below might
   // want to know the view's new preferred size, minimum size, etc.
   if (HasLayoutManager()) {
@@ -3083,6 +3080,14 @@ void View::DoRemoveChildView(View* view,
   }
 
   view->PropagateRemoveNotifications(this, new_parent, is_removed_from_widget);
+
+  // Make sure the layers belonging to the subtree rooted at |view| get
+  // removed. Only do this after all the removal notifications have gone out.
+  view->OrphanLayers();
+  if (widget) {
+    widget->LayerTreeChanged();
+  }
+
   view->parent_ = nullptr;
 
   if (delete_removed_view && !view->owned_by_client_) {

@@ -10,7 +10,7 @@
 #include "base/functional/callback.h"
 #include "base/uuid.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 
 namespace file_sync {
 // The synced file store keeps track of files that must be made available for
@@ -39,7 +39,7 @@ class SyncedFileStore : public KeyedService {
   // active and whether or not the entity is synced.
   // If the owner already had a reference, it will be replaced.
   virtual void SetLocalFileRef(base::Uuid owner_uuid,
-                               syncer::ModelType sync_type,
+                               syncer::DataType sync_type,
                                std::string checksum) = 0;
 
   // Add a file for which the |content| is known and creates a reference to it
@@ -48,7 +48,7 @@ class SyncedFileStore : public KeyedService {
   // returns the checksum that can be used to address the file in future calls.
   // If the owner already had a reference, it will be replaced.
   virtual std::string SetLocalFile(base::Uuid owner_uuid,
-                                   syncer::ModelType sync_type,
+                                   syncer::DataType sync_type,
                                    std::vector<uint8_t> content) = 0;
 
   // Stores a reference to a file with a given |checksum| for a synced entity of
@@ -58,7 +58,7 @@ class SyncedFileStore : public KeyedService {
   // sync if it isn't available locally
   // If the owner already had a reference, it will be replaced.
   virtual void SetSyncFileRef(std::string owner_sync_id,
-                              syncer::ModelType sync_type,
+                              syncer::DataType sync_type,
                               std::string checksum) = 0;
 
   // Attempts to retrieve a file form the store. The |callback| may be invoked
@@ -76,12 +76,12 @@ class SyncedFileStore : public KeyedService {
   // gone to avoid needing to re-download the file if a conflict causes the
   // entity to be resurected.
   virtual void RemoveLocalRef(base::Uuid owner_uuid,
-                              syncer::ModelType sync_type) = 0;
+                              syncer::DataType sync_type) = 0;
 
   virtual void RemoveSyncRef(std::string owner_sync_id,
-                             syncer::ModelType sync_type) = 0;
+                             syncer::DataType sync_type) = 0;
 
-  virtual void RemoveAllSyncRefsForType(syncer::ModelType sync_type) = 0;
+  virtual void RemoveAllSyncRefsForType(syncer::DataType sync_type) = 0;
 
   // Gets the sum of the sizes of all files held by the store.
   virtual size_t GetTotalStorageSize() = 0;

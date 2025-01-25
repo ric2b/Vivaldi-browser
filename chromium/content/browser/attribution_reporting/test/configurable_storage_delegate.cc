@@ -121,7 +121,8 @@ AttributionResolverDelegate::GetRandomizedResponseResult
 ConfigurableStorageDelegate::GetRandomizedResponse(
     attribution_reporting::mojom::SourceType,
     const attribution_reporting::TriggerSpecs&,
-    attribution_reporting::EventLevelEpsilon) {
+    attribution_reporting::EventLevelEpsilon,
+    const std::optional<attribution_reporting::AttributionScopesData>&) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (exceeds_channel_capacity_limit_) {
     return base::unexpected(attribution_reporting::RandomizedResponseError::
@@ -155,7 +156,7 @@ void ConfigurableStorageDelegate::set_max_reports_per_destination(
       config_.aggregate_limit.max_reports_per_destination = max;
       break;
     case AttributionReport::Type::kNullAggregatable:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

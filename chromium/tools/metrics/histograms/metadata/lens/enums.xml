@@ -48,6 +48,7 @@ chromium-metrics-reviews@google.com.
   <int value="15" label="Find in page invoked"/>
   <int value="16" label="Preselection toast exit button"/>
   <int value="17" label="Side panel entry replaced"/>
+  <int value="18" label="Search bubble close button"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/ui/lens/lens_overlay_dismissal_source.h:LensOverlayDismissalSource) -->
@@ -66,6 +67,13 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="Learn more action"/>
   <int value="8" label="Send feedback action"/>
   <int value="9" label="Tap region selection"/>
+  <int value="10" label="Translate mode button enable action"/>
+  <int value="11" label="Translate mode button disable action"/>
+  <int value="12" label="Translate source language changed"/>
+  <int value="13" label="Translate target language changed"/>
+  <int value="14" label="Translate text selection"/>
+  <int value="15" label="Copy as image action"/>
+  <int value="16" label="Save as image action"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/lens/core/mojom/lens.mojom:UserAction) -->

@@ -39,7 +39,7 @@ void QuicConnectionFactoryServer::SetServerDelegate(
 
   crypto_server_config_ = std::make_unique<quic::QuicCryptoServerConfig>(
       kSourceAddressTokenSecret, quic::QuicRandom::GetInstance(),
-      QuicServer::GetAgentCertificate().CreateProofSource(),
+      QuicServiceBase::GetAgentCertificate().CreateServerProofSource(),
       quic::KeyExchangeSource::Default());
 
   for (const auto& endpoint : endpoints) {
@@ -61,7 +61,6 @@ void QuicConnectionFactoryServer::SetServerDelegate(
     auto dispatcher = std::make_unique<QuicDispatcherImpl>(
         &config_, crypto_server_config_.get(), std::move(version_manager),
         std::make_unique<quic::QuicDefaultConnectionHelper>(),
-        std::make_unique<OpenScreenCryptoServerStreamHelper>(),
         std::make_unique<QuicAlarmFactoryImpl>(task_runner_,
                                                quic::QuicDefaultClock::Get()),
         /*expected_server_connection_id_length=*/0u, connection_id_generator_,

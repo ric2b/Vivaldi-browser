@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
 import("//build/config/chromeos/ui_mode.gni")
 
 assert(is_chromeos_ash)
@@ -34,6 +35,8 @@ static_library("birch") {
     "refresh_token_waiter.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash",
     "//ash/constants",
@@ -41,7 +44,7 @@ static_library("birch") {
     "//base",
     "//chrome/app/theme:chrome_unscaled_resources",
     "//chrome/browser/ash/app_list/search",
-    "//chrome/browser/ash/crosapi",
+    "//chrome/browser/ash/calendar",
     "//chrome/browser/ash/crosapi:browser_util",
     "//chrome/browser/ash/file_suggest",
     "//chrome/browser/ash/login/session",
@@ -50,7 +53,6 @@ static_library("birch") {
     "//chrome/browser/favicon",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/sync",
-    "//chrome/browser/ui/ash/calendar",
     "//chrome/common",
     "//components/favicon_base",
     "//components/history/core/browser",
@@ -64,6 +66,10 @@ static_library("birch") {
     "//ui/base",
     "//url",
   ]
+
+  if (is_chrome_branded) {
+    deps += [ "//chrome/browser/resources:preinstalled_web_apps_resources" ]
+  }
 
   allow_circular_includes_from = [ "//chrome/browser/ash/login/session" ]
 }
@@ -117,15 +123,35 @@ source_set("unit_tests") {
   ]
 }
 
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "birch_test_util.cc",
+    "birch_test_util.h",
+  ]
+
+  deps = [
+    "//ash",
+    "//ash:test_support",
+    "//ash/constants",
+    "//base",
+  ]
+}
+
 source_set("browser_tests") {
   testonly = true
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
-  sources = [ "birch_browsertest.cc" ]
+  sources = [
+    "birch_browsertest.cc",
+    "birch_coral_provider_browsertest.cc",
+  ]
 
   deps = [
     ":birch",
+    ":test_support",
     "//ash",
     "//ash/constants",
     "//ash/public/cpp",
@@ -133,7 +159,9 @@ source_set("browser_tests") {
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui",
     "//chrome/browser/ui/ash",
+    "//chrome/browser/ui/ash/main_extra_parts",
     "//chrome/test:test_support",
+    "//chrome/test/base/ash/util:test_support",
     "//components/prefs",
     "//content/test:test_support",
     "//testing/gtest",

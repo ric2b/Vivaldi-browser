@@ -179,14 +179,6 @@ LayoutText::LayoutText(Node* node, String str)
 
   if (node)
     GetFrameView()->IncrementVisuallyNonEmptyCharacterCount(text_.length());
-
-  // Call GetSecureTextTimers() and GetSelectionDisplayItemClientMap() to ensure
-  // map exists. They are called in pre-finalizer where allocation is not
-  // allowed.
-  // TODO(yukiy): Remove these if FormattedTextRun::Dispose() can be
-  // removed.
-  GetSecureTextTimers();
-  GetSelectionDisplayItemClientMap();
 }
 
 void LayoutText::Trace(Visitor* visitor) const {
@@ -202,17 +194,6 @@ LayoutText* LayoutText::CreateEmptyAnonymous(Document& doc,
   return text;
 }
 
-LayoutText* LayoutText::CreateAnonymousForFormattedText(
-    Document& doc,
-    const ComputedStyle* style,
-    String text) {
-  auto* layout_text =
-      MakeGarbageCollected<LayoutText>(nullptr, std::move(text));
-  layout_text->SetDocumentForAnonymous(&doc);
-  layout_text->SetStyleInternal(std::move(style));
-  return layout_text;
-}
-
 bool LayoutText::IsWordBreak() const {
   NOT_DESTROYED();
   return false;
@@ -224,7 +205,7 @@ void LayoutText::StyleWillChange(StyleDifference diff,
 
   if (const ComputedStyle* current_style = Style()) {
     // Process accessibility for style changes that affect text.
-    if (current_style->Visibility() != new_style.Visibility() ||
+    if (current_style->UsedVisibility() != new_style.UsedVisibility() ||
         current_style->IsInert() != new_style.IsInert()) {
       if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache()) {
         cache->StyleChanged(this, /*visibility_or_inertness_changed*/ true);
@@ -518,7 +499,7 @@ void LayoutText::CollectLineBoxRects(const PhysicalRectCollector& yield,
     InlineCursor cursor;
     cursor.MoveTo(*this);
     for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
-      if (UNLIKELY(option != ClippingOption::kNoClipping)) {
+      if (option != ClippingOption::kNoClipping) [[unlikely]] {
         DCHECK_EQ(option, ClippingOption::kClipToEllipsis);
         if (cursor.Current().IsHiddenForPaint())
           continue;
@@ -529,11 +510,12 @@ void LayoutText::CollectLineBoxRects(const PhysicalRectCollector& yield,
   }
 }
 
-void LayoutText::AbsoluteQuads(Vector<gfx::QuadF>& quads,
-                               MapCoordinatesFlags mode) const {
+void LayoutText::QuadsInAncestorInternal(Vector<gfx::QuadF>& quads,
+                                         const LayoutBoxModelObject* ancestor,
+                                         MapCoordinatesFlags mode) const {
   NOT_DESTROYED();
-  CollectLineBoxRects([this, &quads, mode](const PhysicalRect& r) {
-    quads.push_back(LocalRectToAbsoluteQuad(r, mode));
+  CollectLineBoxRects([this, &quads, ancestor, mode](const PhysicalRect& r) {
+    quads.push_back(LocalRectToAncestorQuad(r, ancestor, mode));
   });
 }
 
@@ -644,8 +626,9 @@ void LayoutText::AbsoluteQuadsForRange(Vector<gfx::QuadF>& quads,
           continue;
         rect = item.LocalRect();
       }
-      if (UNLIKELY(text_combine))
+      if (text_combine) [[unlikely]] {
         rect = text_combine->AdjustRectForBoundingBox(rect);
+      }
       gfx::QuadF quad;
       if (const SvgFragmentData* svg_data = item.GetSvgFragmentData()) {
         gfx::RectF float_rect(rect);
@@ -713,7 +696,7 @@ PositionWithAffinity LayoutText::PositionForPoint(
         container_fragment = &cursor.ContainerFragment();
         point_in_container_fragment =
             point_in_contents - container_fragment->OffsetFromOwnerLayoutBox();
-        if (UNLIKELY(text_combine)) {
+        if (text_combine) [[unlikely]] {
           point_in_container_fragment =
               text_combine->AdjustOffsetForHitTest(point_in_container_fragment);
         }
@@ -792,8 +775,9 @@ PhysicalOffset LayoutText::FirstLineBoxTopLeft() const {
   if (IsInLayoutNGInlineFormattingContext()) {
     // TODO(kojii): Some clients call this against dirty-tree, but NG fragments
     // are not safe to read for dirty-tree. crbug.com/963103
-    if (UNLIKELY(!IsFirstInlineFragmentSafe()))
+    if (!IsFirstInlineFragmentSafe()) [[unlikely]] {
       return PhysicalOffset();
+    }
     InlineCursor cursor;
     cursor.MoveTo(*this);
     return cursor ? cursor.Current().OffsetInContainerFragment()
@@ -1022,7 +1006,7 @@ void LayoutText::ForceSetText(String text) {
 void LayoutText::SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
     LayoutInvalidationReasonForTracing reason) {
   auto* const text_combine = DynamicTo<LayoutTextCombine>(Parent());
-  if (UNLIKELY(text_combine)) {
+  if (text_combine) [[unlikely]] {
     // Number of characters in text may change compressed font or scaling of
     // text combine. So, we should invalidate |LayoutNGTextCombine| to repaint.
     text_combine
@@ -1097,8 +1081,9 @@ PhysicalRect LayoutText::PhysicalLinesBoundingBox() const {
     result.offset = FirstLineBoxTopLeft();
   // Note: |result.offset| is relative to container fragment.
   const auto* const text_combine = DynamicTo<LayoutTextCombine>(Parent());
-  if (UNLIKELY(text_combine))
+  if (text_combine) [[unlikely]] {
     return text_combine->AdjustRectForBoundingBox(result);
+  }
   return result;
 }
 
@@ -1407,13 +1392,16 @@ void LayoutText::InvalidateDisplayItemClients(
 
 const DisplayItemClient* LayoutText::GetSelectionDisplayItemClient() const {
   NOT_DESTROYED();
-  if (UNLIKELY(!IsInLayoutNGInlineFormattingContext()))
+  if (!IsInLayoutNGInlineFormattingContext()) [[unlikely]] {
     return nullptr;
+  }
   // When |this| is in text-combine box, we should use text-combine box as
   // display client item to paint caret with affine transform.
   const auto* const text_combine = DynamicTo<LayoutTextCombine>(Parent());
-  if (UNLIKELY(text_combine) && text_combine->NeedsAffineTransformInPaint())
+  if (text_combine && text_combine->NeedsAffineTransformInPaint())
+      [[unlikely]] {
     return text_combine;
+  }
   if (!IsSelected())
     return nullptr;
   auto it = GetSelectionDisplayItemClientMap().find(this);

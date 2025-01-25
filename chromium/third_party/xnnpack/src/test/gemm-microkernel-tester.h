@@ -22,32 +22,13 @@
 #include "xnnpack/microfnptr.h"
 #include "xnnpack/pack.h"
 #include "xnnpack/requantization.h"
+#include "next_prime.h"
 
 #if XNN_PLATFORM_JIT
 #include <vector>
 
 #include "xnnpack/post-operation.h"
 #endif  // XNN_PLATFORM_JIT
-
-inline bool IsPrime(size_t n) {
-    if (n == 1 || n == 2) {
-      return true;
-    }
-    for (size_t k = 3; k * k <= n; k += 2) {
-      if (n % k == 0) {
-        return false;
-      }
-    }
-    return true;
-}
-
-inline size_t NextPrime(size_t n) {
-    n = (n + 1) | static_cast<size_t>(1);
-    while (!IsPrime(n)) {
-      n++;
-    }
-    return n;
-}
 
 class GemmMicrokernelTester {
  public:
@@ -224,15 +205,6 @@ class GemmMicrokernelTester {
 
   size_t zero_index() const {
     return this->zero_index_;
-  }
-
-  GemmMicrokernelTester& extended_weights(bool extended_weights) {
-    this->extended_weights_ = extended_weights;
-    return *this;
-  }
-
-  bool extended_weights() const {
-    return this->extended_weights_;
   }
 
   GemmMicrokernelTester& iterations(size_t iterations) {
@@ -522,7 +494,6 @@ class GemmMicrokernelTester {
   uint8_t qmax_{255};
   size_t a_offset_{0};
   size_t zero_index_{SIZE_MAX};
-  bool extended_weights_{false};
   size_t iterations_{15};
   bool known_nc_mod_nr_{true};
   bool relu_{false};
@@ -549,7 +520,7 @@ struct LoopParams {
       case LoopStepType::Linear:
         return n + step;
       case LoopStepType::NextPrime:
-        return NextPrime(n + step);
+        return xnnpack::NextPrime(n + step);
       default:
         std::cerr << "Unknown loop step type " << static_cast<int>(step_type) << std::endl;
         std::abort();

@@ -3,13 +3,10 @@
 // found in the LICENSE file.
 
 import {click, waitFor} from '../../../shared/helper.js';
-import {describe, itScreenshot} from '../../../shared/mocha-extensions.js';
 import {assertElementScreenshotUnchanged} from '../../../shared/screenshots.js';
-import {loadComponentDocExample, preloadForCodeCoverage} from '../../helpers/shared.js';
+import {loadComponentDocExample} from '../../helpers/shared.js';
 
 describe('ConsoleInsight', function() {
-  preloadForCodeCoverage('console_insight/static.html');
-
   // eslint-disable-next-line rulesdir/ban_screenshot_test_outside_perf_panel
   itScreenshot('renders the initial disclaimer', async () => {
     await loadComponentDocExample('console_insight/static.html');

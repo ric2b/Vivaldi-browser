@@ -49,7 +49,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
       // All events fit on the top level
       assert.strictEqual(entryTypeByLevel.length, 1);
       assert.deepEqual(entryTypeByLevel, [
-        Timeline.TimelineFlameChartDataProvider.EntryType.TrackAppender,
+        Timeline.TimelineFlameChartDataProvider.EntryType.TRACK_APPENDER,
       ]);
     });
 
@@ -123,46 +123,5 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
     const {flameChartData} = await renderTrackAppender(this, 'slow-interaction-button-click.json.gz');
     // None of the interactions are over 200ms, so we do not expect to see any decorations
     assert.lengthOf(flameChartData.entryDecorations, 0);
-  });
-
-  it('returns the correct title for a pointer interaction, using its category', async function() {
-    const {interactionsTrackAppender, traceParsedData} =
-        await renderTrackAppender(this, 'slow-interaction-button-click.json.gz');
-    const firstInteraction = traceParsedData.UserInteractions.interactionEvents[0];
-    const title = interactionsTrackAppender.titleForEvent(firstInteraction);
-    assert.strictEqual(title, 'Pointer');
-  });
-
-  it('returns the correct title for a keyboard interaction, using its category', async function() {
-    const {interactionsTrackAppender, traceParsedData} =
-        await renderTrackAppender(this, 'slow-interaction-keydown.json.gz');
-    const keydownInteraction = traceParsedData.UserInteractions.interactionEvents.find(e => e.type === 'keydown');
-    if (!keydownInteraction) {
-      throw new Error('Could not find keydown interaction');
-    }
-    const title = interactionsTrackAppender.titleForEvent(keydownInteraction);
-    assert.strictEqual(title, 'Keyboard');
-  });
-
-  it('returns "Other" as the title for unknown event types', async function() {
-    const {interactionsTrackAppender, traceParsedData} =
-        await renderTrackAppender(this, 'slow-interaction-button-click.json.gz');
-
-    // Copy the event so we do not modify the actual trace data, and fake its
-    // interaction type to be unexpected.
-    const firstInteraction = {...traceParsedData.UserInteractions.interactionEvents[0]};
-    firstInteraction.type = 'unknown';
-
-    const title = interactionsTrackAppender.titleForEvent(firstInteraction);
-    assert.strictEqual(title, 'Other');
-  });
-
-  it('highlightedEntryInfo returns the correct information', async function() {
-    const {interactionsTrackAppender, traceParsedData} =
-        await renderTrackAppender(this, 'slow-interaction-button-click.json.gz');
-    const firstInteraction = traceParsedData.UserInteractions.interactionEvents[0];
-    const highlightedEntryInfo = interactionsTrackAppender.highlightedEntryInfo(firstInteraction);
-    // The i18n encodes spaces using the u00A0 unicode character.
-    assert.strictEqual(highlightedEntryInfo.formattedTime, ('31.72\u00A0ms'));
   });
 });

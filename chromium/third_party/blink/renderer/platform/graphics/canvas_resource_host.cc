@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_host.h"
 
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_context_rate_limiter.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
@@ -78,7 +79,7 @@ bool CanvasResourceHost::IsComposited() const {
     return false;
   }
 
-  if (UNLIKELY(!resource_provider_)) {
+  if (!resource_provider_) [[unlikely]] {
     return false;
   }
 
@@ -159,7 +160,7 @@ cc::TextureLayer* CanvasResourceHost::GetOrCreateCcLayerIfNeeded() {
   if (!IsComposited()) {
     return nullptr;
   }
-  if (UNLIKELY(!cc_layer_)) {
+  if (!cc_layer_) [[unlikely]] {
     cc_layer_ = cc::TextureLayer::CreateForMailbox(this);
     cc_layer_->SetIsDrawable(true);
     cc_layer_->SetHitTestable(true);
@@ -276,12 +277,24 @@ bool CanvasResourceHost::IsResourceValid() {
   if (IsHibernating()) {
     return true;
   }
-  if (!cc_layer_ || (preferred_2d_raster_mode_ == RasterModeHint::kPreferCPU)) {
+
+  if (!cc_layer_) {
     return true;
   }
-  if (context_lost_) {
+
+  if (!features::IsCanvasSharedBitmapConversionEnabled() ||
+      (resource_provider_ &&
+       resource_provider_->GetType() == CanvasResourceProvider::kBitmap)) {
+    if (preferred_2d_raster_mode_ == RasterModeHint::kPreferCPU) {
+      return true;
+    }
+  }
+
+  if (context_lost_ || shared_bitmap_gpu_channel_lost_) {
     return false;
   }
+
+  // For Gpu rendering
   if (resource_provider_ && resource_provider_->IsAccelerated() &&
       resource_provider_->IsGpuContextLost()) {
     context_lost_ = true;
@@ -289,6 +302,17 @@ bool CanvasResourceHost::IsResourceValid() {
     NotifyGpuContextLost();
     return false;
   }
+
+  // For software rendering with CanvasResourceProvider::kSharedBitmap
+  if (resource_provider_ &&
+      resource_provider_->GetType() == CanvasResourceProvider::kSharedBitmap &&
+      resource_provider_->IsSharedBitmapGpuChannelLost()) {
+    shared_bitmap_gpu_channel_lost_ = true;
+    ReplaceResourceProvider(nullptr);
+    NotifyGpuContextLost();
+    return false;
+  }
+
   return !!GetOrCreateCanvasResourceProvider(preferred_2d_raster_mode_);
 }
 

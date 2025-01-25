@@ -168,11 +168,15 @@ FPDFImageObj_SetBitmap(FPDF_PAGE* pages,
                        FPDF_PAGEOBJECT image_object,
                        FPDF_BITMAP bitmap) {
   CPDF_ImageObject* pImgObj = CPDFImageObjectFromFPDFPageObject(image_object);
-  if (!pImgObj)
+  if (!pImgObj) {
     return false;
+  }
 
-  if (!bitmap)
+  RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
+  if (!holder) {
     return false;
+  }
+  CHECK(!holder->IsPremultiplied());
 
   if (pages) {
     for (int index = 0; index < count; index++) {
@@ -183,7 +187,6 @@ FPDFImageObj_SetBitmap(FPDF_PAGE* pages,
     }
   }
 
-  RetainPtr<CFX_DIBitmap> holder(CFXDIBitmapFromFPDFBitmap(bitmap));
   pImgObj->GetImage()->SetImage(holder);
   pImgObj->CalcBoundingBox();
   pImgObj->SetDirty(true);
@@ -230,17 +233,17 @@ FPDFImageObj_GetBitmap(FPDF_PAGEOBJECT image_object) {
       break;
     }
     case FXDIB_Format::k1bppRgb: {
-      // If there is a palette, then convert to `FXDIB_Format::kRgb` to avoid
+      // If there is a palette, then convert to `FXDIB_Format::kBgr` to avoid
       // creating a bitmap with a palette.
       op = pSource->HasPalette() ? ConversionOp::kConvertToRgb
                                  : ConversionOp::kConvertTo8bppRgb;
       break;
     }
     case FXDIB_Format::k8bppRgb:
-    case FXDIB_Format::kArgb:
-    case FXDIB_Format::kRgb:
-    case FXDIB_Format::kRgb32: {
-      // If there is a palette, then convert to `FXDIB_Format::kRgb` to avoid
+    case FXDIB_Format::kBgra:
+    case FXDIB_Format::kBgr:
+    case FXDIB_Format::kBgrx: {
+      // If there is a palette, then convert to `FXDIB_Format::kBgr` to avoid
       // creating a bitmap with a palette.
       op = pSource->HasPalette() ? ConversionOp::kConvertToRgb
                                  : ConversionOp::kRealize;
@@ -249,6 +252,13 @@ FPDFImageObj_GetBitmap(FPDF_PAGEOBJECT image_object) {
     case FXDIB_Format::kInvalid: {
       NOTREACHED_NORETURN();
     }
+#if defined(PDF_USE_SKIA)
+    case FXDIB_Format::kBgraPremul: {
+      // TODO(crbug.com/355676038): Consider adding support for
+      // `FXDIB_Format::kBgraPremul`
+      NOTREACHED_NORETURN();
+    }
+#endif
   }
 
   RetainPtr<CFX_DIBitmap> pBitmap;
@@ -260,13 +270,17 @@ FPDFImageObj_GetBitmap(FPDF_PAGEOBJECT image_object) {
       pBitmap = pSource->ConvertTo(FXDIB_Format::k8bppRgb);
       break;
     case ConversionOp::kConvertToRgb:
-      pBitmap = pSource->ConvertTo(FXDIB_Format::kRgb);
+      pBitmap = pSource->ConvertTo(FXDIB_Format::kBgr);
       break;
   }
-  if (pBitmap) {
-    CHECK(!pBitmap->HasPalette());
+  if (!pBitmap) {
+    return nullptr;
   }
 
+  CHECK(!pBitmap->HasPalette());
+  CHECK(!pBitmap->IsPremultiplied());
+
+  // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(pBitmap.Leak());
 }
 
@@ -293,7 +307,7 @@ FPDFImageObj_GetRenderedBitmap(FPDF_DOCUMENT document,
   auto result_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   if (!result_bitmap->Create(static_cast<int>(output_width),
                              static_cast<int>(output_height),
-                             FXDIB_Format::kArgb)) {
+                             FXDIB_Format::kBgra)) {
     return nullptr;
   }
 
@@ -316,19 +330,15 @@ FPDFImageObj_GetRenderedBitmap(FPDF_DOCUMENT document,
   render_matrix.Translate(-min_x, min_y);
 
   // Do the actual rendering.
-  bool should_continue = renderer.Start(image, render_matrix,
-                                        /*bStdCS=*/false, BlendMode::kNormal);
-  while (should_continue)
+  bool should_continue = renderer.Start(image, render_matrix, /*bStdCS=*/false);
+  while (should_continue) {
     should_continue = renderer.Continue(/*pPause=*/nullptr);
+  }
 
   if (!renderer.GetResult())
     return nullptr;
 
-#if defined(PDF_USE_SKIA)
-  if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
-    result_bitmap->UnPreMultiply();
-  }
-#endif
+  CHECK(!result_bitmap->IsPremultiplied());
 
   // Caller takes ownership.
   return FPDFBitmapFromCFXDIBitmap(result_bitmap.Leak());

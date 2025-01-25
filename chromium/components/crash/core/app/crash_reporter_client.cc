@@ -4,8 +4,10 @@
 
 #include "components/crash/core/app/crash_reporter_client.h"
 
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "components/crash/core/app/url_constants.h"
+
+#include "app/vivaldi_constants.h"
 
 // On Windows don't use FilePath and logging.h.
 // http://crbug.com/604923
@@ -22,6 +24,10 @@ namespace crash_reporter {
 namespace {
 
 CrashReporterClient* g_client = nullptr;
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OFFICIAL_BUILD)
+const char kDefaultUploadURL[] = "https://clients2.google.com/cr/report";
+#endif
 
 }  // namespace
 
@@ -190,7 +196,12 @@ void CrashReporterClient::GetSanitizationInformation(
 #endif
 
 std::string CrashReporterClient::GetUploadUrl() {
-  return kDefaultUploadUrl;
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OFFICIAL_BUILD)
+  return kDefaultUploadURL;
+#else
+  return VIVALDI_CRASH_REPORT_UPLOAD_URL;
+  //return std::string();
+#endif
 }
 
 bool CrashReporterClient::ShouldMonitorCrashHandlerExpensively() {

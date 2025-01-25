@@ -30,7 +30,6 @@
 #include <assert.h>
 
 #include <sys/mman.h>
-#include <linux/stddef.h>
 
 #include <xf86drm.h>
 

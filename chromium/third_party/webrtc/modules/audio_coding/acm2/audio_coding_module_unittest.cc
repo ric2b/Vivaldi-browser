@@ -175,9 +175,8 @@ class AudioCodingModuleTestOldApi : public ::testing::Test {
   void SetUp() {
     acm_ = AudioCodingModule::Create();
     acm2::AcmReceiver::Config config;
-    config.clock = env_.clock();
     config.decoder_factory = CreateBuiltinAudioDecoderFactory();
-    acm_receiver_ = std::make_unique<acm2::AcmReceiver>(config);
+    acm_receiver_ = std::make_unique<acm2::AcmReceiver>(env_, config);
 
     rtp_utility_->Populate(&rtp_header_);
 
@@ -250,7 +249,7 @@ class AudioCodingModuleTestOldApi : public ::testing::Test {
   RTPHeader rtp_header_;
   AudioFrame input_frame_;
 
-  absl::optional<SdpAudioFormat> audio_format_;
+  std::optional<SdpAudioFormat> audio_format_;
   int pac_size_ = -1;
 };
 
@@ -523,6 +522,17 @@ class AudioPacketizationCallbackMock : public AudioPacketizationCallback {
               (override));
 };
 
+TEST(AudioCodingModule, DoesResetEncoder) {
+  std::unique_ptr<AudioCodingModule> acm = AudioCodingModule::Create();
+  auto encoder = std::make_unique<MockAudioEncoder>();
+  MockAudioEncoder* encoder_mock = encoder.get();
+
+  acm->SetEncoder(std::move(encoder));
+
+  EXPECT_CALL(*encoder_mock, Reset()).Times(1);
+  acm->Reset();
+}
+
 class AcmAbsoluteCaptureTimestamp : public ::testing::Test {
  public:
   AcmAbsoluteCaptureTimestamp() : audio_frame_(kSampleRateHz, kNumChannels) {}
@@ -581,6 +591,40 @@ TEST_F(AcmAbsoluteCaptureTimestamp, HaveBeginningOfFrameCaptureTime) {
       transport_,
       SendData(_, _, _, _, _, first_absolute_capture_timestamp_ms + kPTimeMs))
       .Times(1);
+  for (int k = 0; k < 5; ++k) {
+    acm_->Add10MsData(
+        GetAudioWithAbsoluteCaptureTimestamp(absolute_capture_timestamp_ms));
+    absolute_capture_timestamp_ms += 10;
+  }
+}
+
+TEST_F(AcmAbsoluteCaptureTimestamp, DoesResetWhenAudioCodingModuleDo) {
+  constexpr int64_t first_absolute_capture_timestamp_ms = 123456789;
+
+  int64_t absolute_capture_timestamp_ms = first_absolute_capture_timestamp_ms;
+  EXPECT_CALL(transport_,
+              SendData(_, _, _, _, _, first_absolute_capture_timestamp_ms))
+      .Times(1);
+  EXPECT_CALL(
+      transport_,
+      SendData(_, _, _, _, _, first_absolute_capture_timestamp_ms + kPTimeMs))
+      .Times(1);
+  for (int k = 0; k < 5; ++k) {
+    acm_->Add10MsData(
+        GetAudioWithAbsoluteCaptureTimestamp(absolute_capture_timestamp_ms));
+    absolute_capture_timestamp_ms += 10;
+  }
+
+  acm_->Reset();
+  constexpr int64_t after_reset_absolute_capture_timestamp_ms = 523456789;
+  EXPECT_CALL(transport_, SendData(_, _, _, _, _,
+                                   after_reset_absolute_capture_timestamp_ms))
+      .Times(1);
+  EXPECT_CALL(transport_,
+              SendData(_, _, _, _, _,
+                       after_reset_absolute_capture_timestamp_ms + kPTimeMs))
+      .Times(1);
+  absolute_capture_timestamp_ms = after_reset_absolute_capture_timestamp_ms;
   for (int k = 0; k < 5; ++k) {
     acm_->Add10MsData(
         GetAudioWithAbsoluteCaptureTimestamp(absolute_capture_timestamp_ms));
@@ -940,7 +984,9 @@ TEST_F(AcmSenderBitExactnessNewApi, OpusFromFormat_stereo_20ms) {
       SdpAudioFormat("opus", 48000, 2, {{"stereo", "1"}}));
   ASSERT_TRUE(SetUpSender(kTestFileFakeStereo32kHz, 32000));
   ASSERT_NO_FATAL_FAILURE(SetUpTestExternalEncoder(
-      AudioEncoderOpus::MakeAudioEncoder(*config, 120), 120));
+      AudioEncoderOpus::MakeAudioEncoder(CreateEnvironment(), *config,
+                                         {.payload_type = 120}),
+      120));
   Run(audio_checksum, payload_checksum, /*expected_packets=*/50,
       /*expected_channels=*/test::AcmReceiveTestOldApi::kStereoOutput);
 }
@@ -995,7 +1041,9 @@ TEST_F(AcmSenderBitExactnessNewApi, OpusFromFormat_stereo_20ms_voip) {
   config->application = AudioEncoderOpusConfig::ApplicationMode::kVoip;
   ASSERT_TRUE(SetUpSender(kTestFileFakeStereo32kHz, 32000));
   ASSERT_NO_FATAL_FAILURE(SetUpTestExternalEncoder(
-      AudioEncoderOpus::MakeAudioEncoder(*config, 120), 120));
+      AudioEncoderOpus::MakeAudioEncoder(CreateEnvironment(), *config,
+                                         {.payload_type = 120}),
+      120));
   const std::string audio_maybe_sse =
       "cb644fc17d9666a0f5986eef24818159"
       "|4a74024473c7c729543c2790829b1e42";
@@ -1086,8 +1134,10 @@ TEST_F(AcmSetBitRateNewApi, OpusFromFormat_48khz_20ms_10kbps) {
   const auto config = AudioEncoderOpus::SdpToConfig(
       SdpAudioFormat("opus", 48000, 2, {{"maxaveragebitrate", "10000"}}));
   ASSERT_TRUE(SetUpSender());
-  RegisterExternalSendCodec(AudioEncoderOpus::MakeAudioEncoder(*config, 107),
-                            107);
+  RegisterExternalSendCodec(
+      AudioEncoderOpus::MakeAudioEncoder(CreateEnvironment(), *config,
+                                         {.payload_type = 107}),
+      107);
   RunInner(7000, 12000);
 }
 
@@ -1095,8 +1145,10 @@ TEST_F(AcmSetBitRateNewApi, OpusFromFormat_48khz_20ms_50kbps) {
   const auto config = AudioEncoderOpus::SdpToConfig(
       SdpAudioFormat("opus", 48000, 2, {{"maxaveragebitrate", "50000"}}));
   ASSERT_TRUE(SetUpSender());
-  RegisterExternalSendCodec(AudioEncoderOpus::MakeAudioEncoder(*config, 107),
-                            107);
+  RegisterExternalSendCodec(
+      AudioEncoderOpus::MakeAudioEncoder(CreateEnvironment(), *config,
+                                         {.payload_type = 107}),
+      107);
   RunInner(40000, 60000);
 }
 
@@ -1203,8 +1255,10 @@ TEST_F(AcmSetBitRateNewApi, MAYBE_OpusFromFormat_48khz_20ms_100kbps) {
   const auto config = AudioEncoderOpus::SdpToConfig(
       SdpAudioFormat("opus", 48000, 2, {{"maxaveragebitrate", "100000"}}));
   ASSERT_TRUE(SetUpSender());
-  RegisterExternalSendCodec(AudioEncoderOpus::MakeAudioEncoder(*config, 107),
-                            107);
+  RegisterExternalSendCodec(
+      AudioEncoderOpus::MakeAudioEncoder(CreateEnvironment(), *config,
+                                         {.payload_type = 107}),
+      107);
   RunInner(80000, 120000);
 }
 

@@ -44,6 +44,7 @@ pub(crate) mod intermediate;
 use crate::credential::matched::HasIdentityMatch;
 use crate::legacy::data_elements::actions::ActionsDataElement;
 use crate::legacy::data_elements::de_type::{DataElementType, DeActualLength};
+use crate::legacy::data_elements::DataElementDeserializeError::DuplicateDeTypes;
 use crate::legacy::Plaintext;
 /// exposed because the unencrypted case isn't just for intermediate: no further processing is needed
 pub use intermediate::UnencryptedAdvContents;
@@ -121,6 +122,44 @@ impl<'d, F: PacketFlavor> Iterator for DeIterator<'d, F> {
     }
 }
 
+struct DeTypeBitFieldPosition(u16);
+impl DeTypeBitFieldPosition {
+    fn as_u16(&self) -> u16 {
+        self.0
+    }
+}
+
+impl From<u16> for DeTypeBitFieldPosition {
+    fn from(value: u16) -> Self {
+        DeTypeBitFieldPosition(value)
+    }
+}
+
+impl From<DeTypeCode> for DeTypeBitFieldPosition {
+    fn from(value: DeTypeCode) -> Self {
+        match value.as_u8() {
+            0 => 0.into(),
+            1 => 0b00000000_00000001.into(),
+            2 => 0b00000000_00000010.into(),
+            3 => 0b00000000_00000100.into(),
+            4 => 0b00000000_00001000.into(),
+            5 => 0b00000000_00010000.into(),
+            6 => 0b00000000_00100000.into(),
+            7 => 0b00000000_01000000.into(),
+            8 => 0b00000000_10000000.into(),
+            9 => 0b00000001_00000000.into(),
+            10 => 0b00000010_00000000.into(),
+            11 => 0b00000100_00000000.into(),
+            12 => 0b00001000_00000000.into(),
+            13 => 0b00010000_00000000.into(),
+            14 => 0b00100000_00000000.into(),
+            15 => 0b01000000_00000000.into(),
+            16 => 0b10000000_00000000.into(),
+            _ => panic!("Invalid v0 De type code"),
+        }
+    }
+}
+
 /// The generified innards of [DeIterator] so that it's possible to also use test-only
 /// deserializers.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -128,13 +167,21 @@ pub(in crate::legacy) struct GenericDeIterator<'d, F, D> {
     /// Data to be parsed, containing a sequence of data elements in serialized
     /// form.
     data: &'d [u8],
+    /// Keeps track of de_types as we iterate to ensure that multiple des of the same type
+    /// are not present in an advertisement
+    already_encountered: u16,
     _flavor_marker: PhantomData<F>,
     _deser_marker: PhantomData<D>,
 }
 
 impl<'d, F, D> GenericDeIterator<'d, F, D> {
     fn new(data: &'d [u8]) -> Self {
-        Self { data, _flavor_marker: Default::default(), _deser_marker: Default::default() }
+        Self {
+            data,
+            already_encountered: 0u16,
+            _flavor_marker: Default::default(),
+            _deser_marker: Default::default(),
+        }
     }
 }
 
@@ -152,6 +199,14 @@ impl<'d, F: PacketFlavor, D: DataElementDeserializer> Iterator for GenericDeIter
 
         match parse_result.finish() {
             Ok((rem, de)) => {
+                if self.already_encountered
+                    & DeTypeBitFieldPosition::from(de.de_type_code()).as_u16()
+                    != 0
+                {
+                    return Some(Err(DuplicateDeTypes));
+                }
+                self.already_encountered |=
+                    DeTypeBitFieldPosition::from(de.de_type_code()).as_u16();
                 self.data = rem;
                 Some(Ok(de))
             }
@@ -173,6 +228,21 @@ pub(crate) enum DecryptError {
 pub enum DeserializedDataElement<F: PacketFlavor> {
     Actions(actions::ActionsDataElement<F>),
     TxPower(TxPowerDataElement),
+}
+
+impl<F: PacketFlavor> Deserialized for DeserializedDataElement<F> {
+    fn de_type_code(&self) -> DeTypeCode {
+        match self {
+            DeserializedDataElement::Actions(_) => {
+                DeTypeCode::try_from(ActionsDataElement::<F>::DE_TYPE_CODE.as_u8())
+                    .expect("Actions type code is valid so this will always succeed")
+            }
+            DeserializedDataElement::TxPower(_) => {
+                DeTypeCode::try_from(TxPowerDataElement::DE_TYPE_CODE.as_u8())
+                    .expect("TxPower type code is valid so this will always succeed")
+            }
+        }
+    }
 }
 
 impl<F: PacketFlavor> DeserializedDataElement<F> {
@@ -254,13 +324,19 @@ impl HasIdentityMatch for DecryptedAdvContents {
     }
 }
 
+pub(in crate::legacy) trait Deserialized:
+    fmt::Debug + PartialEq + Eq + Clone
+{
+    fn de_type_code(&self) -> DeTypeCode;
+}
+
 /// Overall strategy for deserializing adv contents (once decrypted, if applicable) into data
 /// elements
 pub(in crate::legacy) trait DataElementDeserializer: Sized {
-    /// Disambiguates the intermediate form of a DE
+    /// Disambiguate the intermediate form of a DE
     type DeTypeDisambiguator: Copy;
     /// The fully deserialized form of a DE
-    type Deserialized<F: PacketFlavor>: fmt::Debug + PartialEq + Eq + Clone;
+    type Deserialized<F: PacketFlavor>: Deserialized;
 
     /// Map the encoded len found in a DE header to the actual len that should be consumed from the
     /// advertisement payload

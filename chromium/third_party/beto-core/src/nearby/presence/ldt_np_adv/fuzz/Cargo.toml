@@ -2,6 +2,7 @@
 name = "ldt-np-adv-fuzz"
 version.workspace = true
 publish.workspace = true
+license.workspace = true
 edition.workspace = true
 
 [package.metadata]
@@ -18,6 +19,9 @@ xts_aes.workspace = true
 
 [target.'cfg(fuzzing)'.dependencies]
 libfuzzer-sys.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
 [[bin]]
 name = "ldt_np_roundtrip"

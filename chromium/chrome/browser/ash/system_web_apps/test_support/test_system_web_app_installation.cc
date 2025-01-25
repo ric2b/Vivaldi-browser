@@ -162,6 +162,9 @@ bool UnittestingSystemAppDelegate::ShouldAllowFullscreen() const {
 bool UnittestingSystemAppDelegate::ShouldHaveTabStrip() const {
   return has_tab_strip_;
 }
+bool UnittestingSystemAppDelegate::ShouldHideNewTabButton() const {
+  return hide_new_tab_button_;
+}
 bool UnittestingSystemAppDelegate::ShouldHaveReloadButtonInMinimalUi() const {
   return should_have_reload_button_in_minimal_ui_;
 }
@@ -199,9 +202,6 @@ bool UnittestingSystemAppDelegate::IsAppEnabled() const {
 bool UnittestingSystemAppDelegate::IsUrlInSystemAppScope(
     const GURL& url) const {
   return url == url_in_system_app_scope_;
-}
-bool UnittestingSystemAppDelegate::PreferManifestBackgroundColor() const {
-  return prefer_manifest_background_color_;
 }
 bool UnittestingSystemAppDelegate::UseSystemThemeColor() const {
   return use_system_theme_color_;
@@ -258,6 +258,9 @@ void UnittestingSystemAppDelegate::SetShouldAllowMaximize(bool value) {
 void UnittestingSystemAppDelegate::SetShouldHaveTabStrip(bool value) {
   has_tab_strip_ = value;
 }
+void UnittestingSystemAppDelegate::SetShouldHideNewTabButton(bool value) {
+  hide_new_tab_button_ = value;
+}
 void UnittestingSystemAppDelegate::SetShouldHaveReloadButtonInMinimalUi(
     bool value) {
   should_have_reload_button_in_minimal_ui_ = value;
@@ -283,10 +286,6 @@ void UnittestingSystemAppDelegate::SetIsAppEnabled(bool value) {
 }
 void UnittestingSystemAppDelegate::SetUrlInSystemAppScope(const GURL& url) {
   url_in_system_app_scope_ = url;
-}
-void UnittestingSystemAppDelegate::SetPreferManifestBackgroundColor(
-    bool value) {
-  prefer_manifest_background_color_ = value;
 }
 void UnittestingSystemAppDelegate::SetUseSystemThemeColor(bool value) {
   use_system_theme_color_ = value;
@@ -643,13 +642,15 @@ TestSystemWebAppInstallation::SetupAppWithAllowScriptsToCloseWindows(
 
 // static
 std::unique_ptr<TestSystemWebAppInstallation>
-TestSystemWebAppInstallation::SetUpAppWithTabStrip(bool has_tab_strip) {
+TestSystemWebAppInstallation::SetUpAppWithTabStrip(bool has_tab_strip,
+                                                   bool hide_new_tab_button) {
   std::unique_ptr<UnittestingSystemAppDelegate> delegate =
       std::make_unique<UnittestingSystemAppDelegate>(
           SystemWebAppType::MEDIA, "Test",
           GURL("chrome://test-system-app/pwa.html"),
           base::BindRepeating(&GenerateWebAppInstallInfoForTestApp));
   delegate->SetShouldHaveTabStrip(has_tab_strip);
+  delegate->SetShouldHideNewTabButton(hide_new_tab_button);
 
   return base::WrapUnique(
       new TestSystemWebAppInstallation(std::move(delegate)));

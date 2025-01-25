@@ -73,7 +73,7 @@ TlmFieldDebugAnnotation::TlmFieldDebugAnnotation(
     std::string_view name,
     perfetto::protos::pbzero::DebugAnnotation_Decoder& annotation)
     : TlmFieldBase(name) {
-  CHECK_NE(Name(), nullptr);
+  CHECK_NE(Name().data(), nullptr);
 
   if (annotation.has_bool_value()) {
     in_type_ = 4 /* TlgInUINT8 */;
@@ -182,9 +182,6 @@ class MultiEtwPayloadHandler final {
     descriptors_index_ += data_desc_count;
   }
 
-  ~MultiEtwPayloadHandler() { std::ignore = EventEnd(); }
-
- private:
   ULONG EventEnd() {
     if (!is_enabled_) {
       return 0;
@@ -195,6 +192,7 @@ class MultiEtwPayloadHandler final {
     return ret;
   }
 
+ private:
   raw_ptr<TlmProvider> provider_;
   bool is_enabled_ = false;
   char metadata_[TlmProvider::kMaxEventMetadataSize]{};
@@ -321,6 +319,7 @@ void ETWInterceptor::Delegate::OnTrackEvent(
     for (const auto& debug_field : debug_fields) {
       etw_payload_handler.WriteField(debug_field);
     }
+    etw_payload_handler.EventEnd();
   }
 }
 

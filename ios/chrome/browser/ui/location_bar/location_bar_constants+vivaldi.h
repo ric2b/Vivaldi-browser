@@ -13,6 +13,8 @@ extern const CGFloat vLocationBarSteadyViewLocationImageToLabelSpacing;
 // Trailing space between the trailing button and the trailing edge of the
 // location bar.
 extern const CGFloat vLocationBarSteadyViewShareButtonTrailingSpacing;
+// Size for site connection security status icon
+extern const CGFloat vLocationBarSiteConnectionStatusIconSize;
 
 #pragma mark - Icons
 extern NSString* vLocationBarPageInfo;

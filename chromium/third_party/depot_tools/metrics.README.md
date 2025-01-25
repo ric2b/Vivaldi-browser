@@ -70,6 +70,8 @@ The metrics we're collecting are:
   - What argument names (but not values) were passed to the program.
     (e.g. --checkout but not the branch name).
   - What was the exit code?
+- Information about the enablement status of experimental feature flags, when
+  such experiments are being run.
 
 The list of all known strings we collect can be found at
 https://source.chromium.org/chromium/infra/infra/+/HEAD:go/src/infra/appengine/depot_tools_metrics/metrics/constants.go

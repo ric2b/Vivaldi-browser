@@ -253,6 +253,15 @@ PrerenderMismatchedHeaders::PrerenderMismatchedHeaders(
 PrerenderMismatchedHeaders::~PrerenderMismatchedHeaders() = default;
 
 PrerenderMismatchedHeaders::PrerenderMismatchedHeaders(
+    const PrerenderMismatchedHeaders& other) = default;
+
+PrerenderMismatchedHeaders::PrerenderMismatchedHeaders(
+    PrerenderMismatchedHeaders&& other) = default;
+
+PrerenderMismatchedHeaders& PrerenderMismatchedHeaders::operator=(
+    const PrerenderMismatchedHeaders& other) = default;
+
+PrerenderMismatchedHeaders& PrerenderMismatchedHeaders::operator=(
     PrerenderMismatchedHeaders&& other) = default;
 
 std::string GeneratePrerenderHistogramSuffix(
@@ -270,7 +279,7 @@ std::string GeneratePrerenderHistogramSuffix(
     case PreloadingTriggerType::kEmbedder:
       return ".Embedder_" + embedder_suffix;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void RecordPrerenderTriggered(ukm::SourceId ukm_id) {

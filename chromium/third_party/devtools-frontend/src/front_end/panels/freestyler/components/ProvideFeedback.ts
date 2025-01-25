@@ -8,6 +8,7 @@ import type * as Platform from '../../../core/platform/platform.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import provideFeedbackStyles from './provideFeedback.css.js';
 
@@ -36,7 +37,7 @@ const UIStringsTemp = {
    * @description The disclaimer text that tells the user what will be shared
    * and what will be stored.
    */
-  disclaimer: 'Feedback submitted will also include your conversation.',
+  disclaimer: 'Feedback submitted will also include your conversation',
   /**
    * @description The button text for the action of submitting feedback.
    */
@@ -64,13 +65,14 @@ const REPORT_URL = 'https://support.google.com/legal/troubleshooter/1114905?hl=e
     Platform.DevToolsPath.UrlString;
 export interface ProvideFeedbackProps {
   onFeedbackSubmit: (rate: Host.AidaClient.Rating, feedback?: string) => void;
+  canShowFeedbackForm: boolean;
 }
 
 export class ProvideFeedback extends HTMLElement {
   static readonly litTagName = LitHtml.literal`devtools-provide-feedback`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   #props: ProvideFeedbackProps;
-  #showFeedbackForm = false;
+  #isShowingFeedbackForm = false;
   #currentRating?: Host.AidaClient.Rating;
 
   constructor(props: ProvideFeedbackProps) {
@@ -94,13 +96,13 @@ export class ProvideFeedback extends HTMLElement {
     }
 
     this.#currentRating = rating;
-    this.#showFeedbackForm = true;
+    this.#isShowingFeedbackForm = this.#props.canShowFeedbackForm;
     this.#props.onFeedbackSubmit(this.#currentRating);
     this.#render();
   }
 
   #handleClose = (): void => {
-    this.#showFeedbackForm = false;
+    this.#isShowingFeedbackForm = false;
     this.#render();
   };
 
@@ -111,7 +113,7 @@ export class ProvideFeedback extends HTMLElement {
       return;
     }
     this.#props.onFeedbackSubmit(this.#currentRating, input.value);
-    this.#showFeedbackForm = false;
+    this.#isShowingFeedbackForm = false;
     this.#render();
   };
 
@@ -127,7 +129,9 @@ export class ProvideFeedback extends HTMLElement {
           variant: Buttons.Button.Variant.ICON,
           size: Buttons.Button.Size.SMALL,
           iconName: 'thumb-up',
-          active: this.#currentRating === Host.AidaClient.Rating.POSITIVE,
+          toggledIconName: 'thumb-up-filled',
+          toggled: this.#currentRating === Host.AidaClient.Rating.POSITIVE,
+          toggleType: Buttons.Button.ToggleType.PRIMARY,
           title: i18nString(UIStringsTemp.thumbsUp),
           jslogContext: 'thumbs-up',
         } as Buttons.Button.ButtonData}
@@ -138,7 +142,9 @@ export class ProvideFeedback extends HTMLElement {
           variant: Buttons.Button.Variant.ICON,
           size: Buttons.Button.Size.SMALL,
           iconName: 'thumb-down',
-          active: this.#currentRating === Host.AidaClient.Rating.NEGATIVE,
+          toggledIconName: 'thumb-down-filled',
+          toggled: this.#currentRating === Host.AidaClient.Rating.NEGATIVE,
+          toggleType: Buttons.Button.ToggleType.PRIMARY,
           title: i18nString(UIStringsTemp.thumbsDown),
           jslogContext: 'thumbs-down',
         } as Buttons.Button.ButtonData}
@@ -164,7 +170,7 @@ export class ProvideFeedback extends HTMLElement {
   #renderFeedbackForm(): LitHtml.LitTemplate {
     // clang-format off
     return LitHtml.html`
-      <form class="feedback" @submit=${this.#handleSubmit}>
+      <form class="feedback-form" @submit=${this.#handleSubmit}>
         <div class="feedback-header">
           <h4 class="feedback-title">${i18nString(
               UIStringsTemp.whyThisRating,
@@ -189,6 +195,7 @@ export class ProvideFeedback extends HTMLElement {
           placeholder=${i18nString(
            UIStringsTemp.provideFeedbackPlaceholder,
           )}
+          jslog=${VisualLogging.textField('feedback').track({ keydown: 'Enter' })}
         >
         <span class="feedback-disclaimer">${
           i18nString(UIStringsTemp.disclaimer)
@@ -216,9 +223,11 @@ export class ProvideFeedback extends HTMLElement {
     // clang-format off
     LitHtml.render(
       LitHtml.html`
-        <div class="rate-buttons">
-          ${this.#renderButtons()}
-          ${this.#showFeedbackForm
+        <div class="feedback">
+          <div class="rate-buttons">
+            ${this.#renderButtons()}
+          </div>
+          ${this.#isShowingFeedbackForm
             ? this.#renderFeedbackForm()
             : LitHtml.nothing
           }

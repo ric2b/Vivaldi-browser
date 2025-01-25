@@ -8,8 +8,6 @@
 // https://github.com/evanw/esbuild/issues/587#issuecomment-901397213
 import puppeteer = require('puppeteer-core');
 
-import {type CoverageMapData} from 'istanbul-lib-coverage';
-
 import {
   clearPuppeteerState,
   getBrowserAndPages,
@@ -49,6 +47,10 @@ const windowWidth = viewportWidth + 50;
 const windowHeight = viewportHeight + 200;
 
 const headless = !TestConfig.debug;
+// CDP commands in e2e and interaction should not generally take
+// more than 20 seconds.
+const protocolTimeout = TestConfig.debug ? 0 : 20_000;
+
 const envSlowMo = process.env['STRESS'] ? 50 : undefined;
 const envThrottleRate = process.env['STRESS'] ? 3 : 1;
 const envLatePromises = process.env['LATE_PROMISES'] !== undefined ?
@@ -100,21 +102,33 @@ function launchChrome() {
     'PrivacySandboxAdsAPIsOverride',
     'AutofillEnableDevtoolsIssues',
   ];
+
+  const disabledFeatures = [
+    'DeferRendererTasksAfterInput',  // crbug.com/361078921
+    'PMProcessPriorityPolicy',       // crbug.com/361252079
+    'RenderDocument',                // crbug.com/361519377
+  ];
   const launchArgs = [
-    '--remote-allow-origins=*', '--remote-debugging-port=0', '--enable-experimental-web-platform-features',
+    '--remote-allow-origins=*',
+    '--remote-debugging-port=0',
+    '--enable-experimental-web-platform-features',
     // This fingerprint may be generated from the certificate using
     // openssl x509 -noout -pubkey -in scripts/hosted_mode/cert.pem | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64
     '--ignore-certificate-errors-spki-list=KLy6vv6synForXwI6lDIl+D3ZrMV6Y1EMTY6YpOcAos=',
     '--site-per-process',  // Default on Desktop anyway, but ensure that we always use out-of-process frames when we intend to.
-    '--host-resolver-rules=MAP *.test 127.0.0.1', '--disable-gpu',
+    '--host-resolver-rules=MAP *.test 127.0.0.1',
+    '--disable-gpu',
     '--enable-blink-features=CSSContainerQueries,HighlightInheritance',  // TODO(crbug.com/1218390) Remove globally enabled flags and conditionally enable them
     '--disable-blink-features=WebAssemblyJSPromiseIntegration',  // TODO(crbug.com/325123665) Remove once heap snapshots work again with JSPI
+    `--disable-features=${disabledFeatures.join(',')}`,
+    '--disable-field-trial-config',
   ];
   const opts: puppeteer.LaunchOptions&puppeteer.BrowserLaunchArgumentOptions&puppeteer.BrowserConnectOptions = {
     headless,
     executablePath: TestConfig.chromeBinary,
     dumpio: !headless || Boolean(process.env['LUCI_CONTEXT']),
     slowMo: envSlowMo,
+    protocolTimeout,
   };
 
   // Always set the default viewport because setting only the window size for
@@ -181,15 +195,18 @@ export async function unregisterAllServiceWorkers() {
   });
 }
 
+export async function setupPages(currentTest: string|undefined) {
+  const {frontend} = getBrowserAndPages();
+  await watchForHang(currentTest, () => throttleCPUIfRequired(frontend));
+  await watchForHang(currentTest, () => delayPromisesIfRequired(frontend));
+}
+
 export async function resetPages(currentTest: string|undefined) {
   const {frontend, target} = getBrowserAndPages();
 
   await watchForHang(currentTest, () => target.bringToFront());
   await watchForHang(currentTest, () => targetTab.reset());
-
   await watchForHang(currentTest, () => frontend.bringToFront());
-  await watchForHang(currentTest, () => throttleCPUIfRequired(frontend));
-  await watchForHang(currentTest, () => delayPromisesIfRequired(frontend));
 
   if (TestConfig.serverType === 'hosted-mode') {
     await watchForHang(currentTest, () => frontendTab.reset());
@@ -248,12 +265,6 @@ export async function postFileTeardown() {
 
   clearPuppeteerState();
   dumpCollectedErrors();
-}
-
-export function collectCoverageFromPage(): Promise<CoverageMapData|undefined> {
-  const {frontend} = getBrowserAndPages();
-
-  return frontend.evaluate('window.__coverage__') as Promise<CoverageMapData|undefined>;
 }
 
 export function getDevToolsFrontendHostname(): string {

@@ -71,13 +71,6 @@ const base::FeatureParam<std::string> kAndroidSurfaceControlModelBlocklist{
     &kAndroidSurfaceControl, "AndroidSurfaceControlModelBlocklist",
     "SM-F9*|SM-W202?|SCV44|SCG05|SCG11|SC-55B"};
 
-// Enables creation of GpuMemoryBufferImplAndroidHardwareBuffer.
-// Serves as reverse killswitch while we roll out disabling of this class.
-// TODO(crbug.com/343584529): Remove post-safe rollout.
-BASE_FEATURE(kEnableGpuMemoryBufferImplAHB,
-             "EnableGpuMemoryBufferImplAHB",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Hardware Overlays for WebView.
 BASE_FEATURE(kWebViewSurfaceControl,
              "WebViewSurfaceControl",
@@ -170,20 +163,13 @@ BASE_FEATURE(kCanvasOopRasterization,
              "CanvasOopRasterization",
 #if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_WIN) ||         \
     (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)) || BUILDFLAG(IS_ANDROID) || \
-    BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_LINUX)
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
 #endif
-
-// Enables the use of out of process rasterization for canvas even when GPU tile
-// rasterization is disabled. CanvasOopRasterization is still required to be
-// enabled to use OOP-C path with this flag.
-BASE_FEATURE(kCanvasOopWithoutGpuTileRaster,
-             "CanvasOopWithoutGpuTileRaster",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the use of MSAA in skia on Ice Lake and later intel architectures.
 BASE_FEATURE(kEnableMSAAOnNewIntelGPUs,
@@ -199,12 +185,6 @@ BASE_FEATURE(kDawnSIRepsUseClientProvidedInternalUsages,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_WIN)
-// Disable overlay promotion for clear video quads when their MPO quad would
-// move.
-BASE_FEATURE(kDisableVideoOverlayIfMoving,
-             "DisableVideoOverlayIfMoving",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kNoUndamagedOverlayPromotion,
              "NoUndamagedOverlayPromotion",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -217,12 +197,6 @@ BASE_FEATURE(kAdjustGpuProcessPriority,
              "AdjustGpuProcessPriority",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-// Fix to move cache key prefix generation from host to gpu service side in
-// order to avoid race in GpuInfo. crbug.com/1506660.
-BASE_FEATURE(kGenGpuDiskCacheKeyPrefixInGpuService,
-             "GenGpuDiskCacheKeyPrefixInGpuService",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, Grshader disk cache will be cleared on startup if any cache
 // entry prefix does not match with the current prefix. prefix is made up of
@@ -396,12 +370,6 @@ BASE_FEATURE(kSkiaGraphiteDawnUseD3D12,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-// Enable report only mode on the GPU watchdog instead of pausing the watchdog
-// thread during GPU startup.
-BASE_FEATURE(kEnableWatchdogReportOnlyModeOnGpuInit,
-             "EnableWatchdogReportOnlyModeOnGpuInit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enable persistent storage of VkPipelineCache data.
 BASE_FEATURE(kEnableVkPipelineCache,
              "EnableVkPipelineCache",
@@ -425,12 +393,6 @@ BASE_FEATURE(kIncreasedCmdBufferParseSlice,
 BASE_FEATURE(kPruneOldTransferCacheEntries,
              "PruneOldTransferCacheEntries",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Using the new SchedulerDfs GPU scheduler.
-BASE_FEATURE(kUseGpuSchedulerDfs,
-             "UseGpuSchedulerDfs",
-             base::FEATURE_ENABLED_BY_DEFAULT
-);
 
 // On platforms with delegated compositing, try to release overlays later, when
 // no new frames are swapped.
@@ -605,11 +567,6 @@ bool IsSkiaGraphiteSupportedByDevice(const base::CommandLine* command_line) {
   }
 #if BUILDFLAG(IS_MAC)
   // The following code tries to match angle::IsMetalRendererAvailable().
-  // ANGLE requires at least macOS 10.13 for Metal 2.0.
-  const int macos_version = base::mac::MacOSVersion();
-  if (macos_version < 10'13'00) {
-    return false;
-  }
   auto model_name_split = base::SysInfo::SplitHardwareModelNameDoNotUse(
       base::SysInfo::HardwareModelName());
   if (model_name_split.has_value()) {
@@ -821,9 +778,8 @@ bool IncreaseBufferCountForHighFrameRate() {
 
 #endif
 
-// When this flag and kUseGpuSchedulerDfs are both enabled, stops using
-// gpu::SyncPointOrderData for sync point validation, uses gpu::TaskGraph
-// instead.
+// When this flag is enabled, stops using gpu::SyncPointOrderData for sync point
+// validation, uses gpu::TaskGraph instead.
 // Graph-based validation doesn't require sync point releases are submitted to
 // the scheduler prior to their corresponding waits. Therefore it allows to
 // remove the synchronous flush done by VerifySyncTokens().
@@ -834,8 +790,7 @@ BASE_FEATURE(kSyncPointGraphValidation,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsSyncPointGraphValidationEnabled() {
-  return base::FeatureList::IsEnabled(kUseGpuSchedulerDfs) &&
-         base::FeatureList::IsEnabled(kSyncPointGraphValidation);
+  return base::FeatureList::IsEnabled(kSyncPointGraphValidation);
 }
 
 }  // namespace features

@@ -175,7 +175,7 @@ static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {
         !CBB_add_u8_length_prefixed(&body, &nonce_cbb) ||
         !CBB_add_bytes(&nonce_cbb, nonce, sizeof(nonce)) ||
         !CBB_add_u16_length_prefixed(&body, &ticket) ||
-        !tls13_derive_session_psk(session.get(), nonce) ||
+        !tls13_derive_session_psk(session.get(), nonce, SSL_is_dtls(ssl)) ||
         !ssl_encrypt_ticket(hs, &ticket, session.get()) ||
         !CBB_add_u16_length_prefixed(&body, &extensions)) {
       return false;
@@ -244,9 +244,15 @@ static enum ssl_hs_wait_t do_select_parameters(SSL_HANDSHAKE *hs) {
     ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_ILLEGAL_PARAMETER);
     return ssl_hs_error;
   }
-  OPENSSL_memcpy(hs->session_id, client_hello.session_id,
-                 client_hello.session_id_len);
-  hs->session_id_len = client_hello.session_id_len;
+  // DTLS 1.3 disables compatibility mode, and even if the client advertised a
+  // session ID (for resumption in DTLS 1.2), the server "MUST NOT echo the
+  // 'legacy_session_id' value from the client" (RFC 9147, section 5) as it
+  // would in a TLS 1.3 handshake.
+  if (!SSL_is_dtls(ssl)) {
+    OPENSSL_memcpy(hs->session_id, client_hello.session_id,
+                   client_hello.session_id_len);
+    hs->session_id_len = client_hello.session_id_len;
+  }
 
   Array<SSL_CREDENTIAL *> creds;
   if (!ssl_get_credential_list(hs, &creds)) {
@@ -792,11 +798,15 @@ static enum ssl_hs_wait_t do_send_server_hello(SSL_HANDSHAKE *hs) {
     }
   }
 
+  uint16_t server_hello_version = TLS1_2_VERSION;
+  if (SSL_is_dtls(ssl)) {
+    server_hello_version = DTLS1_2_VERSION;
+  }
   Array<uint8_t> server_hello;
   ScopedCBB cbb;
   CBB body, extensions, session_id;
   if (!ssl->method->init_message(ssl, cbb.get(), &body, SSL3_MT_SERVER_HELLO) ||
-      !CBB_add_u16(&body, TLS1_2_VERSION) ||
+      !CBB_add_u16(&body, server_hello_version) ||
       !CBB_add_bytes(&body, ssl->s3->server_random,
                      sizeof(ssl->s3->server_random)) ||
       !CBB_add_u8_length_prefixed(&body, &session_id) ||

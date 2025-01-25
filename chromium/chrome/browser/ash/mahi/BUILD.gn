@@ -6,6 +6,26 @@ import("//build/config/chromeos/ui_mode.gni")
 
 assert(is_chromeos_ash)
 
+static_library("mahi_availability") {
+  sources = [
+    "mahi_availability.cc",
+    "mahi_availability.h",
+  ]
+
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
+  deps = [
+    "//ash/constants",
+    "//base",
+    "//chrome/browser:browser_process",
+    "//chrome/browser/ash/login/demo_mode",
+    "//chromeos/constants",
+    "//components/manta",
+    "//components/user_manager",
+    "//components/variations/service:service",
+  ]
+}
+
 static_library("mahi") {
   sources = [
     "mahi_browser_client_wrapper.cc",
@@ -18,16 +38,21 @@ static_library("mahi") {
     "mahi_manager_impl.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
+    ":mahi_availability",
     "//ash",
     "//ash/constants",
     "//ash/webui/settings/public/constants:mojom",
     "//base",
     "//chrome/browser/ash/magic_boost",
+    "//chrome/browser/feedback",
     "//chromeos/components/magic_boost/public/cpp:cpp",
     "//chromeos/components/mahi/public/cpp",
     "//chromeos/strings:strings_grit",
     "//components/feedback",
+    "//components/history/core/browser:browser",
     "//components/manta",
     "//ui/aura",
     "//ui/base",
@@ -54,7 +79,6 @@ source_set("unit_tests") {
     "//ash/constants",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/ash",
     "//chrome/browser/ash/magic_boost:magic_boost",
     "//chrome/browser/ash/mahi/media_app:unit_tests",
     "//chromeos/components/magic_boost/public/cpp:cpp",
@@ -78,13 +102,11 @@ source_set("browser_tests") {
   sources = [ "mahi_ui_browsertest.cc" ]
 
   deps = [
-    ":mahi",
     ":test_util",
     "//ash",
     "//ash/constants",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/ash/system_web_apps/test_support:test_support_ui",
     "//chrome/browser/ui/views/mahi",
     "//chrome/test:test_support",
     "//chromeos/components/magic_boost/public/cpp",

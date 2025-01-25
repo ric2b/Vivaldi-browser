@@ -60,7 +60,7 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
 
     const proxyElement = (this.prompt.attach(this.input) as HTMLElement);
     this.prompt.setPlaceholder(i18nString(UIStrings.addNewClass));
-    this.prompt.addEventListener(UI.TextPrompt.Events.TextChanged, this.onTextChanged, this);
+    this.prompt.addEventListener(UI.TextPrompt.Events.TEXT_CHANGED, this.onTextChanged, this);
     proxyElement.addEventListener('keydown', this.onKeyDown.bind(this), false);
 
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -218,6 +218,7 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
   private toggleClass(node: SDK.DOMModel.DOMNode, className: string, enabled: boolean): void {
     const classes = this.nodeClasses(node);
     classes.set(className, enabled);
+    ButtonProvider.instance().item().setChecked([...classes.values()].includes(true));
   }
 
   private installNodeClasses(node: SDK.DOMModel.DOMNode): void {
@@ -265,12 +266,12 @@ export class ButtonProvider implements UI.Toolbar.Provider {
   private readonly button: UI.Toolbar.ToolbarToggle;
   private view: ClassesPaneWidget;
   private constructor() {
-    this.button = new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.elementClasses), '');
-    this.button.setText('.cls');
-    this.button.element.classList.add('monospace');
+    this.button = new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.elementClasses), 'class');
+    this.button.element.style.setProperty('--dot-toggle-top', '12px');
+    this.button.element.style.setProperty('--dot-toggle-left', '18px');
     this.button.element.setAttribute(
         'jslog', `${VisualLogging.toggleSubpane('elements-classes').track({click: true})}`);
-    this.button.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.clicked, this);
+    this.button.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.clicked, this);
     this.view = new ClassesPaneWidget();
   }
 
@@ -289,7 +290,7 @@ export class ButtonProvider implements UI.Toolbar.Provider {
     ElementsPanel.instance().showToolbarPane(!this.view.isShowing() ? this.view : null, this.button);
   }
 
-  item(): UI.Toolbar.ToolbarItem {
+  item(): UI.Toolbar.ToolbarToggle {
     return this.button;
   }
 }

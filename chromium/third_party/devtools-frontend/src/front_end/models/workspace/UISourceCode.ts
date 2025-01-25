@@ -198,7 +198,7 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
     }
     this.dispatchEventToListeners(Events.TitleChanged, this);
     this.project().workspace().dispatchEventToListeners(
-        WorkspaceImplEvents.UISourceCodeRenamed, {oldURL: oldURL, uiSourceCode: this});
+        WorkspaceImplEvents.UISourceCodeRenamed, {oldURL, uiSourceCode: this});
   }
 
   contentURL(): Platform.DevToolsPath.UrlString {
@@ -355,17 +355,22 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
   }
 
   workingCopyContent(): TextUtils.ContentProvider.DeferredContent {
+    return this.workingCopyContentData().asDeferedContent();
+  }
+
+  workingCopyContentData(): TextUtils.ContentData.ContentData {
     if (this.workingCopyGetter) {
       this.workingCopyInternal = this.workingCopyGetter();
       this.workingCopyGetter = null;
     }
-    if (this.isDirty()) {
-      return {content: this.workingCopyInternal as string, isEncoded: false};
+    const contentData = this.contentInternal ?
+        TextUtils.ContentData.ContentData.contentDataOrEmpty(this.contentInternal) :
+        TextUtils.ContentData.EMPTY_TEXT_CONTENT_DATA;
+    if (this.workingCopyInternal !== null) {
+      return new TextUtils.ContentData.ContentData(
+          this.workingCopyInternal, /* isBase64 */ false, contentData.mimeType);
     }
-    if (this.contentInternal) {
-      return TextUtils.ContentData.ContentData.asDeferredContent(this.contentInternal);
-    }
-    return {content: '', isEncoded: false};
+    return contentData;
   }
 
   resetWorkingCopy(): void {
@@ -467,11 +472,11 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
 
   searchInContent(query: string, caseSensitive: boolean, isRegex: boolean):
       Promise<TextUtils.ContentProvider.SearchMatch[]> {
-    const content = this.content();
-    if (!content) {
+    if (!this.contentInternal || 'error' in this.contentInternal) {
       return this.projectInternal.searchInFileContent(this, query, caseSensitive, isRegex);
     }
-    return Promise.resolve(TextUtils.TextUtils.performSearchInContent(content, query, caseSensitive, isRegex));
+    return Promise.resolve(
+        TextUtils.TextUtils.performSearchInContentData(this.contentInternal, query, caseSensitive, isRegex));
   }
 
   contentLoaded(): boolean {
@@ -540,12 +545,14 @@ export class UISourceCode extends Common.ObjectWrapper.ObjectWrapper<EventTypes>
 }
 
 export enum Events {
+  /* eslint-disable @typescript-eslint/naming-convention -- Used by web_tests. */
   WorkingCopyChanged = 'WorkingCopyChanged',
   WorkingCopyCommitted = 'WorkingCopyCommitted',
   TitleChanged = 'TitleChanged',
   MessageAdded = 'MessageAdded',
   MessageRemoved = 'MessageRemoved',
   DecorationChanged = 'DecorationChanged',
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 export interface WorkingCopyCommitedEvent {
@@ -701,9 +708,9 @@ export class Message {
 
 export namespace Message {
   export const enum Level {
-    Error = 'Error',
-    Issue = 'Issue',
-    Warning = 'Warning',
+    ERROR = 'Error',
+    ISSUE = 'Issue',
+    WARNING = 'Warning',
   }
 }
 

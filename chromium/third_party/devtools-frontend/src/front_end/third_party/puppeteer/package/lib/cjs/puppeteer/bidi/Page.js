@@ -95,6 +95,7 @@ const EventEmitter_js_1 = require("../common/EventEmitter.js");
 const util_js_1 = require("../common/util.js");
 const assert_js_1 = require("../util/assert.js");
 const decorators_js_1 = require("../util/decorators.js");
+const encoding_js_1 = require("../util/encoding.js");
 const ErrorLike_js_1 = require("../util/ErrorLike.js");
 const Frame_js_1 = require("./Frame.js");
 const Input_js_1 = require("./Input.js");
@@ -384,15 +385,15 @@ let BidiPage = (() => {
                 scale,
                 shrinkToFit: !preferCSSPageSize,
             })).pipe((0, rxjs_js_1.raceWith)((0, util_js_1.timeout)(ms))));
-            const buffer = Buffer.from(data, 'base64');
-            await this._maybeWriteBufferToFile(path, buffer);
-            return buffer;
+            const typedArray = (0, encoding_js_1.stringToTypedArray)(data, true);
+            await this._maybeWriteTypedArrayToFile(path, typedArray);
+            return typedArray;
         }
         async createPDFStream(options) {
-            const buffer = await this.pdf(options);
+            const typedArray = await this.pdf(options);
             return new ReadableStream({
                 start(controller) {
-                    controller.enqueue(buffer);
+                    controller.enqueue(typedArray);
                     controller.close();
                 },
             });
@@ -668,15 +669,19 @@ let BidiPage = (() => {
             return await this.#go(1, options);
         }
         async #go(delta, options) {
+            const controller = new AbortController();
             try {
                 const [response] = await Promise.all([
-                    this.waitForNavigation(options),
+                    this.waitForNavigation({
+                        ...options,
+                        signal: controller.signal,
+                    }),
                     this.#frame.browsingContext.traverseHistory(delta),
                 ]);
                 return response;
             }
             catch (error) {
-                // TODO: waitForNavigation should be cancelled if an error happens.
+                controller.abort();
                 if ((0, ErrorLike_js_1.isErrorLike)(error)) {
                     if (error.message.includes('no such history entry')) {
                         return null;
@@ -743,6 +748,20 @@ function testUrlMatchCookie(cookie, url) {
     return testUrlMatchCookiePath(cookie, normalizedUrl);
 }
 function bidiToPuppeteerCookie(bidiCookie) {
+    const partitionKey = bidiCookie[CDP_SPECIFIC_PREFIX + 'partitionKey'];
+    function getParitionKey() {
+        if (typeof partitionKey === 'string') {
+            return { partitionKey };
+        }
+        if (typeof partitionKey === 'object' && partitionKey !== null) {
+            return {
+                // TODO: a breaking change in Puppeteer is required to change
+                // partitionKey type and report the composite partition key.
+                partitionKey: partitionKey.topLevelSite,
+            };
+        }
+        return {};
+    }
     return {
         name: bidiCookie.name,
         // Presents binary value as base64 string.
@@ -756,7 +775,8 @@ function bidiToPuppeteerCookie(bidiCookie) {
         expires: bidiCookie.expiry ?? -1,
         session: bidiCookie.expiry === undefined || bidiCookie.expiry <= 0,
         // Extending with CDP-specific properties with `goog:` prefix.
-        ...cdpSpecificCookiePropertiesFromBidiToPuppeteer(bidiCookie, 'sameParty', 'sourceScheme', 'partitionKey', 'partitionKeyOpaque', 'priority'),
+        ...cdpSpecificCookiePropertiesFromBidiToPuppeteer(bidiCookie, 'sameParty', 'sourceScheme', 'partitionKeyOpaque', 'priority'),
+        ...getParitionKey(),
     };
 }
 const CDP_SPECIFIC_PREFIX = 'goog:';

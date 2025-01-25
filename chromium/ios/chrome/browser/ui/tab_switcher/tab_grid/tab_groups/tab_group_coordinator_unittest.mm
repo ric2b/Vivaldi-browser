@@ -8,15 +8,16 @@
 #import "base/test/task_environment.h"
 #import "components/tab_groups/tab_group_id.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/tab_groups_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_browser_agent.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_groups_commands.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_mode_holder.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -66,10 +67,13 @@ class TabGroupCoordinatorTest : public PlatformTest {
     const TabGroup* group = web_state_list->CreateGroup(
         {0}, temporaryVisualData, TabGroupId::GenerateNew());
 
+    mode_holder_ = [[TabGridModeHolder alloc] init];
+
     coordinator_ = [[TabGroupCoordinator alloc]
         initWithBaseViewController:base_view_controller_
                            browser:browser_.get()
                           tabGroup:group];
+    coordinator_.modeHolder = mode_holder_;
 
     [coordinator_ start];
   }
@@ -83,6 +87,7 @@ class TabGroupCoordinatorTest : public PlatformTest {
   std::unique_ptr<TestBrowser> browser_;
   UIViewController* base_view_controller_;
   TabGroupCoordinator* coordinator_;
+  TabGridModeHolder* mode_holder_;
 };
 
 TEST_F(TabGroupCoordinatorTest, TabGroupCoordinatorCreated) {

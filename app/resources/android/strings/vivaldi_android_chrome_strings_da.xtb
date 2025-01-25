@@ -16,7 +16,7 @@
 <translation id="2433507940547922241">Udseende</translation>
 <translation id="2501278716633472235">Gå tilbage</translation>
 <translation id="2633278372998075009">Private faner</translation>
-<translation id="272026394418727548">Vivaldi's startside</translation>
+<translation id="272026394418727548">Vivaldi's hjemmeside</translation>
 <translation id="2951071800649516099">Føj sider til din læseliste, til senere læsning</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT,plural,
 =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bogmærke}
@@ -29,7 +29,7 @@ other {<ph name="BOOKMARKS_COUNT_MANY" /> bogmærker}}</translation>
 <translation id="3571177741182643350">Ulæste artikler - Tilgængelige offline:</translation>
 <translation id="3602290021589620013">Forhåndsvisning</translation>
 <translation id="3700829948786686853">Velkommen til Vivaldi</translation>
-<translation id="3719826155360621982">Startside</translation>
+<translation id="3719826155360621982">Hjemmeside</translation>
 <translation id="385051799172605136">Tilbage</translation>
 <translation id="399014816462153200">Læste artikler:</translation>
 <translation id="4121750346708795461">Ved at bruge denne app accepterer du Vivaldi's <ph name="BEGIN_LINK1" />slutbruger-licensaftale<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" />privatlivspolitik<ph name="END_LINK2" />.</translation>
@@ -37,6 +37,7 @@ other {<ph name="BOOKMARKS_COUNT_MANY" /> bogmærker}}</translation>
 <translation id="4167670741834902166">Ny privat fane</translation>
 <translation id="4195643157523330669">Åbn på ny fane</translation>
 <translation id="4243710787042215766">Åbn i privat fane</translation>
+<translation id="4304713468139749426">Adgangskodeadministrator</translation>
 <translation id="451872707440238414">Søg i dine bogmærker</translation>
 <translation id="4526803704855831732">Private faner</translation>
 <translation id="4719086422742491124">Lær om emner på websider uden at forlade siden. Vælg et eller flere ord på siden, for at søge på dem.
@@ -69,9 +70,9 @@ Hold fingeren nede, for at tilpasse dine søgetermer. Stryg panelet hele vejen o
 <translation id="7481312909269577407">Frem</translation>
 <translation id="7968014550143838305">Føjet til læseliste</translation>
 <translation id="804786196054284061">Servicevilkår</translation>
-<translation id="8127542551745560481">Rediger startside</translation>
+<translation id="8127542551745560481">Rediger hjemmeside</translation>
 <translation id="8560602726703398413">Se din læseliste under Bogmærker</translation>
-<translation id="85991616550051997">Gå til startside</translation>
+<translation id="85991616550051997">Gå til hjemmeside</translation>
 <translation id="8820817407110198400">Bogmærker</translation>
 <translation id="9063523880881406963">Slå anmodning om standardwebside fra</translation>
 <translation id="9080642952018487277">Gå i privat tilstand</translation>

@@ -30,17 +30,7 @@ else
   exit 1
 fi
 
-# $npm third_party/node/mac/node-darwin-x64/lib/npm/lib/npm.js run "$@"
 script=$1
 shift
-if [ "$1" = "install" ]
-then
-  $node_dir/bin/node $node_dir/lib/node_modules/npm \
-    --scripts-prepend-node-path=true \
-    $script "$@"
-else
-  $node_dir/bin/node $node_dir/lib/node_modules/npm \
-    --scripts-prepend-node-path=true \
-    run-script $script $@
-fi
-
+export PATH=${node_dir}/bin:${SCRIPT_DIR}/node_modules/.bin:$PATH
+$node_dir/bin/node node_modules/npm/bin/npm-cli.js run-script $script "$@"

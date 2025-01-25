@@ -25,6 +25,7 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.base.Callback;
 import org.chromium.base.JavaExceptionReporter;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -366,6 +367,8 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
 
     @Override
     public ViewAndroidDelegate getViewAndroidDelegate() {
+        // TODO(crbug.com/343119998): Investigate why this can be null and possibly fix that.
+        if (mInternalsHolder == null) return null;
         WebContentsInternals internals = mInternalsHolder.get();
         if (internals == null) return null;
         return ((WebContentsInternalsImpl) internals).viewAndroidDelegate;
@@ -1257,6 +1260,12 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 "Native WebContents already destroyed", mNativeDestroyThrowable);
     }
 
+    @Override
+    public void captureContentAsBitmapForTesting(Callback<Bitmap> callback) {
+        WebContentsImplJni.get()
+                .captureContentAsBitmapForTesting(mNativeWebContentsAndroid, callback);
+    }
+
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
 
     /**
@@ -1269,6 +1278,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
 
     @NativeMethods
     public interface Natives {
+
         // This is static to avoid exposing a public destroy method on the native side of this
         // class.
         void destroyWebContents(long webContentsAndroidPtr);
@@ -1474,5 +1484,8 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 long nativeWebContentsAndroid,
                 BrowserControlsOffsetTagsInfo oldOffsetTagsInfo,
                 BrowserControlsOffsetTagsInfo offsetTagsInfo);
+
+        void captureContentAsBitmapForTesting(
+                long nativeWebContentsAndroid, Callback<Bitmap> callback);
     }
 }

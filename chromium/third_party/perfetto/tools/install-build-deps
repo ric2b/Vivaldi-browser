@@ -257,6 +257,15 @@ BUILD_DEPS_HOST = [
         'all',
         'all'),
 
+    # Libexpat for Instruments XML import.
+    # If updating the version, also update bazel/deps.bzl.
+    Dependency(
+        'buildtools/expat/src',
+        'https://chromium.googlesource.com/external/github.com/libexpat/libexpat.git',
+        'fa75b96546c069d17b8f80d91e0f4ef0cde3790d',  # refs/tags/upstream/R_2_6_2.
+        'all',
+        'all'),
+
     # Archive with only the demangling sources from llvm-project.
     # See tools/repackage_llvm_demangler.sh on how to update this.
     # File suffix is the git reference to the commit at which we rearchived the
@@ -426,11 +435,17 @@ UI_DEPS = [
 ]
 
 # Dependencies to build gRPC.
-GRPC_DEPS = [
+BIGTRACE_DEPS = [
     Dependency(
         'buildtools/grpc/src',
         'https://chromium.googlesource.com/external/github.com/grpc/grpc.git',
         '4795c5e69b25e8c767b498bea784da0ef8c96fd5', 'all', 'all', True),
+    Dependency(
+      'buildtools/cpp-httplib',
+      'https://github.com/yhirose/cpp-httplib.git',
+      '6c3e8482f7b4e3b307bb42afbb85fd8771da86b8',
+      'all', 'all', True
+    )
 ]
 
 # Sysroots required to cross-compile Linux targets (linux-arm{,64}).
@@ -707,8 +722,9 @@ def Main():
     deps += BUILD_DEPS_LINUX_CROSS_SYSROOTS
   if args.ui:
     deps += UI_DEPS
+  # TODO(b/360084012) Change the arg name to bigtrace
   if args.grpc:
-    deps += GRPC_DEPS
+    deps += BIGTRACE_DEPS
   deps_updated = False
   nodejs_updated = False
 

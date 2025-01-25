@@ -268,8 +268,13 @@ void PrintTargetsAsOutputs(const std::vector<const Target*>& targets,
     // Use the link output file if there is one, otherwise fall back to the
     // dependency output file (for actions, for example).
     OutputFile output_file = target->link_output_file();
+    if (output_file.value().empty() && target->has_dependency_output())
+      output_file = target->dependency_output();
+
+    // This output might be an omitted phony target, but that would mean we
+    // don't have an output file to list.
     if (output_file.value().empty())
-      output_file = target->dependency_output_file();
+      continue;
 
     SourceFile output_as_source = output_file.AsSourceFile(build_settings);
     std::string result =

@@ -4,11 +4,11 @@
 #define COMPONENTS_DATASOURCE_VIVALDI_DATA_URL_UTILS_H_
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/strings/string_piece.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {

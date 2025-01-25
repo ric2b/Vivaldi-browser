@@ -59,7 +59,8 @@ bool areApproxAbs(const Scalar* a, const Scalar* b, int size, const typename Num
   for (int i = 0; i < size; ++i) {
     if (!isApproxAbs(a[i], b[i], refvalue)) {
       print_mismatch(a, b, size);
-      std::cout << "Values differ in position " << i << ": " << a[i] << " vs " << b[i] << std::endl;
+      std::cout << std::setprecision(16) << "Values differ in position " << i << ": " << a[i] << " vs " << b[i]
+                << std::endl;
       return false;
     }
   }
@@ -72,7 +73,8 @@ bool areApprox(const Scalar* a, const Scalar* b, int size) {
     if (numext::not_equal_strict(a[i], b[i]) && !internal::isApprox(a[i], b[i]) &&
         !((numext::isnan)(a[i]) && (numext::isnan)(b[i]))) {
       print_mismatch(a, b, size);
-      std::cout << "Values differ in position " << i << ": " << a[i] << " vs " << b[i] << std::endl;
+      std::cout << std::setprecision(16) << "Values differ in position " << i << ": " << a[i] << " vs " << b[i]
+                << std::endl;
       return false;
     }
   }
@@ -84,7 +86,8 @@ bool areEqual(const Scalar* a, const Scalar* b, int size) {
   for (int i = 0; i < size; ++i) {
     if (numext::not_equal_strict(a[i], b[i]) && !((numext::isnan)(a[i]) && (numext::isnan)(b[i]))) {
       print_mismatch(a, b, size);
-      std::cout << "Values differ in position " << i << ": " << a[i] << " vs " << b[i] << std::endl;
+      std::cout << std::setprecision(16) << "Values differ in position " << i << ": " << a[i] << " vs " << b[i]
+                << std::endl;
       return false;
     }
   }
@@ -97,7 +100,8 @@ bool areApprox(const Scalar* a, const Scalar* b, int size, const typename NumTra
     if (numext::not_equal_strict(a[i], b[i]) && !internal::isApprox(a[i], b[i], precision) &&
         !((numext::isnan)(a[i]) && (numext::isnan)(b[i]))) {
       print_mismatch(a, b, size);
-      std::cout << "Values differ in position " << i << ": " << a[i] << " vs " << b[i] << std::endl;
+      std::cout << std::setprecision(16) << "Values differ in position " << i << ": " << a[i] << " vs " << b[i]
+                << std::endl;
       return false;
     }
   }

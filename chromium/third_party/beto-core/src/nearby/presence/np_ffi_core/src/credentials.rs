@@ -100,24 +100,24 @@ impl V1DiscoveryCredential {
 /// the FFI boundary.
 #[derive(Debug, Clone)]
 pub struct MatchedCredential {
-    cred_id: u32,
+    cred_id: i64,
     encrypted_metadata_bytes: Arc<[u8]>,
 }
 
 impl MatchedCredential {
     /// Constructs a new matched credential from the given match-id
-    /// (some arbitrary `u32` identifier) and encrypted metadata bytes,
+    /// (some arbitrary `i64` identifier) and encrypted metadata bytes,
     /// copied from the given slice.
-    pub fn new(cred_id: u32, encrypted_metadata_bytes: &[u8]) -> Self {
+    pub fn new(cred_id: i64, encrypted_metadata_bytes: &[u8]) -> Self {
         Self::from_arc_bytes(cred_id, encrypted_metadata_bytes.to_vec().into())
     }
     /// Constructs a new matched credential from the given match-id
     /// (some arbitrary `u32` identifier) and encrypted metadata bytes.
-    pub fn from_arc_bytes(cred_id: u32, encrypted_metadata_bytes: Arc<[u8]>) -> Self {
+    pub fn from_arc_bytes(cred_id: i64, encrypted_metadata_bytes: Arc<[u8]>) -> Self {
         Self { cred_id, encrypted_metadata_bytes }
     }
     /// Gets the pre-specified numerical identifier for this matched-credential.
-    pub(crate) fn id(&self) -> u32 {
+    pub(crate) fn id(&self) -> i64 {
         self.cred_id
     }
 }

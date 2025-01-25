@@ -17,7 +17,6 @@
 #import "ios/ad_blocker/utils.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
-#import "ios/web/web_state/ui/wk_web_view_configuration_provider_observer.h"
 
 namespace adblock_filter {
 
@@ -30,8 +29,8 @@ constexpr std::string_view kListNameGroupPrefix[2] = {kTrackerListNamePrefix,
                                                        kAdsListNamePrefix};
 
 class AdBlockerContentRuleListProviderImpl
-    : public AdBlockerContentRuleListProvider,
-      public web::WKWebViewConfigurationProviderObserver {
+    : public AdBlockerContentRuleListProvider {
+
  public:
   explicit AdBlockerContentRuleListProviderImpl(
       web::BrowserState* browser_state,
@@ -53,12 +52,10 @@ class AdBlockerContentRuleListProviderImpl
   }
 
  private:
-  // Implementing WKWebViewConfigurationProviderObserver
-  void DidCreateNewConfiguration(
-      web::WKWebViewConfigurationProvider* config_provider,
-      WKWebViewConfiguration* new_config) override;
-
   void RemoveInstalledLists();
+  void OnNewConfigurationCreated(
+      web::WKWebViewConfigurationProvider* config_provider,
+      WKWebViewConfiguration* new_config);
   void DoInstallContentRuleLists(
       int64_t rule_list_timestamp,
       std::vector<WKContentRuleList*> content_rule_lists);
@@ -76,6 +73,10 @@ class AdBlockerContentRuleListProviderImpl
   std::set<int64_t> list_application_in_progress_stamps_;
   base::RepeatingClosure on_done_applying_rules_;
 
+  // CallbackListSubscription members
+  base::CallbackListSubscription main_config_subscription_;
+  base::CallbackListSubscription incognito_config_subscription_;
+
   base::WeakPtrFactory<AdBlockerContentRuleListProviderImpl> weak_ptr_factory_{
       this};
 };
@@ -90,9 +91,18 @@ AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
               .AsWeakPtr()),
       group_(group),
       on_done_applying_rules_(std::move(on_done_applying_rules)) {
-  DidCreateNewConfiguration(config_provider_.get(),
-                            config_provider_->GetWebViewConfiguration());
-  config_provider_->AddObserver(this);
+
+  // Register callback for configuration changes in the main profile
+  if (config_provider_) {
+    main_config_subscription_ =
+        config_provider_->RegisterConfigurationCreatedCallback(
+            base::BindRepeating(
+               &AdBlockerContentRuleListProviderImpl::OnNewConfigurationCreated,
+                   weak_ptr_factory_.GetWeakPtr(), config_provider_.get()));
+    // Apply for the existing configuration
+    OnNewConfigurationCreated(
+         config_provider_.get(), config_provider_->GetWebViewConfiguration());
+  }
 
   base::WeakPtr<AdBlockerContentRuleListProviderImpl> weak_this =
       weak_ptr_factory_.GetWeakPtr();
@@ -128,12 +138,8 @@ AdBlockerContentRuleListProviderImpl::AdBlockerContentRuleListProviderImpl(
 }
 
 AdBlockerContentRuleListProviderImpl::~AdBlockerContentRuleListProviderImpl() {
-  if (config_provider_) {
-    config_provider_->RemoveObserver(this);
-  }
-  if (incognito_config_provider_) {
-    incognito_config_provider_->RemoveObserver(this);
-  }
+  // No need to manually remove observers as
+  // subscriptions are handled by CallbackListSubscription.
 }
 
 void AdBlockerContentRuleListProviderImpl::ApplyLoadedRules() {
@@ -144,20 +150,29 @@ void AdBlockerContentRuleListProviderImpl::ApplyLoadedRules() {
 void AdBlockerContentRuleListProviderImpl::SetIncognitoBrowserState(
     web::BrowserState* browser_state) {
   if (incognito_config_provider_) {
-    incognito_config_provider_->RemoveObserver(this);
+    incognito_config_subscription_ = base::CallbackListSubscription();
     incognito_config_provider_.reset();
   }
 
   if (!browser_state) {
     return;
   }
+
   incognito_config_provider_ =
       web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
           .AsWeakPtr();
-  DidCreateNewConfiguration(
-      incognito_config_provider_.get(),
-      incognito_config_provider_->GetWebViewConfiguration());
-  incognito_config_provider_->AddObserver(this);
+  if (incognito_config_provider_) {
+    incognito_config_subscription_ =
+        incognito_config_provider_->RegisterConfigurationCreatedCallback(
+            base::BindRepeating(
+               &AdBlockerContentRuleListProviderImpl::OnNewConfigurationCreated,
+                   weak_ptr_factory_.GetWeakPtr(),
+                   incognito_config_provider_.get()));
+    // Apply for the existing configuration
+    OnNewConfigurationCreated(
+        incognito_config_provider_.get(),
+        incognito_config_provider_->GetWebViewConfiguration());
+  }
 }
 
 void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
@@ -207,7 +222,7 @@ void AdBlockerContentRuleListProviderImpl::InstallContentRuleLists(
   }
 }
 
-void AdBlockerContentRuleListProviderImpl::DidCreateNewConfiguration(
+void AdBlockerContentRuleListProviderImpl::OnNewConfigurationCreated(
     web::WKWebViewConfigurationProvider* config_provider,
     WKWebViewConfiguration* new_config) {
   if (config_provider == config_provider_.get()) {

@@ -136,6 +136,10 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
       const std::optional<blink::AdCurrency>& component_expect_bid_currency,
       const url::Origin& browser_signal_interest_group_owner,
       const GURL& browser_signal_render_url,
+      const std::optional<std::string>&
+          browser_signal_selected_buyer_and_seller_reporting_id,
+      const std::optional<std::string>&
+          browser_signal_buyer_and_seller_reporting_id,
       const std::vector<GURL>& browser_signal_ad_components,
       uint32_t browser_signal_bidding_duration_msecs,
       const std::optional<blink::AdSize>& browser_signal_render_size,
@@ -158,6 +162,8 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
       const url::Origin& browser_signal_interest_group_owner,
       const std::optional<std::string>&
           browser_signal_buyer_and_seller_reporting_id,
+      const std::optional<std::string>&
+          browser_signal_selected_buyer_and_seller_reporting_id,
       const GURL& browser_signal_render_url,
       double browser_signal_bid,
       const std::optional<blink::AdCurrency>& browser_signal_bid_currency,
@@ -195,6 +201,9 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     std::optional<blink::AdCurrency> component_expect_bid_currency;
     url::Origin browser_signal_interest_group_owner;
     GURL browser_signal_render_url;
+    std::optional<std::string>
+        browser_signal_selected_buyer_and_seller_reporting_id;
+    std::optional<std::string> browser_signal_buyer_and_seller_reporting_id;
     // While these are URLs, it's more convenient to store these as strings
     // rather than GURLs, both for creating a v8 array from, and for sharing
     // ScoringSignals code with BidderWorklets.
@@ -211,6 +220,10 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     base::TimeDelta wait_code;
     base::TimeDelta wait_trusted_signals;
     base::TimeDelta wait_direct_from_seller_signals;
+
+    // Time where the SellerWorklet finished waiting for ScoreAd dependencies,
+    // used to compute start and end times for latency phase UKMs.
+    base::TimeTicks score_ad_start_time;
 
     mojo::Remote<auction_worklet::mojom::ScoreAdClient> score_ad_client;
 
@@ -259,6 +272,8 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     mojom::ComponentAuctionOtherSellerPtr browser_signals_other_seller;
     url::Origin browser_signal_interest_group_owner;
     std::optional<std::string> browser_signal_buyer_and_seller_reporting_id;
+    std::optional<std::string>
+        browser_signal_selected_buyer_and_seller_reporting_id;
     GURL browser_signal_render_url;
     double browser_signal_bid;
     std::optional<blink::AdCurrency> browser_signal_bid_currency;
@@ -365,6 +380,10 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
         const std::optional<blink::AdCurrency>& component_expect_bid_currency,
         const url::Origin& browser_signal_interest_group_owner,
         const GURL& browser_signal_render_url,
+        const std::optional<std::string>&
+            browser_signal_selected_buyer_and_seller_reporting_id,
+        const std::optional<std::string>&
+            browser_signal_buyer_and_seller_reporting_id,
         const std::vector<std::string>& browser_signal_ad_components,
         uint32_t browser_signal_bidding_duration_msecs,
         const std::optional<blink::AdSize>& browser_signal_render_size,
@@ -390,6 +409,8 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
         const url::Origin& browser_signal_interest_group_owner,
         const std::optional<std::string>&
             browser_signal_buyer_and_seller_reporting_id,
+        const std::optional<std::string>&
+            browser_signal_selected_buyer_and_seller_reporting_id,
         const GURL& browser_signal_render_url,
         double browser_signal_bid,
         const std::optional<blink::AdCurrency>& browser_signal_bid_currency,
@@ -612,6 +633,8 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
 
   // Deleted once load has completed.
   std::unique_ptr<WorkletLoader> worklet_loader_;
+  base::TimeTicks code_download_start_;
+  std::optional<base::TimeDelta> js_fetch_latency_;
 
   // Lives on `v8_runners_`. Since it's deleted there, tasks can be safely
   // posted from main thread to it with an Unretained pointer.

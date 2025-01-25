@@ -7,11 +7,13 @@
 <translation id="1158211211994409885">Хост <ph name="HOST_NAME" /> је неочекивано прекинуо везу.</translation>
 <translation id="1161325031994447685">да се поново повежете на Wi-Fi мрежу</translation>
 <translation id="1175364870820465910">&amp;Одштампај...</translation>
+<translation id="132390688737681464">Чувај и попуни адресе</translation>
 <translation id="1375198122581997741">Основни подаци</translation>
 <translation id="139305205187523129">Хост <ph name="HOST_NAME" /> није послао никакве податке.</translation>
 <translation id="1559528461873125649">Нема такве датотеке или директоријума</translation>
 <translation id="1640244768702815859">Покушајте да <ph name="BEGIN_LINK" />посетите матичну страницу сајта<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Неподржани протокол</translation>
+<translation id="1662550410081243962">Чувај и попуни начине плаћања</translation>
 <translation id="1710259589646384581">ОС</translation>
 <translation id="1728677426644403582">Прегледате извор веб странице</translation>
 <translation id="1734878702283171397">Обратите се администратору система.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Овај сајт не може да пружи безбедну везу</translation>
 <translation id="2187317261103489799">Откриј (подразумевано)</translation>
 <translation id="2224337661447660594">Нема интернета</translation>
+<translation id="2283340219607151381">Чувај и попуни адресе</translation>
 <translation id="2292556288342944218">Приступ интернету је блокиран</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> захтева корисничко име и лозинку.</translation>
 <translation id="2337852623177822836">Подешавањем управља администратор</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Веза је шифрована и њена аутентичност је потврђена помоћу <ph name="CIPHER" /> и користи <ph name="KX" /> као механизам за размену шифара.</translation>
 <translation id="2909946352844186028">Откривена је промена на мрежи.</translation>
 <translation id="2948083400971632585">Можете да онемогућите било који прокси конфигурисан за повезивање са странице подешавања.</translation>
+<translation id="2954624054936281172">Табела сачуваних начина плаћања</translation>
 <translation id="2991571918955627853">Не можете посетити сада <ph name="SITE" /> јер веб-сајт користи HSTS. Грешке и напади на мрежи су обично привремени, па ће ова страница вероватно функционисати касније.</translation>
 <translation id="3005723025932146533">Прикажи сачувану копију</translation>
 <translation id="301521992641321250">Аутоматски је блокирано</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Увек откриј важан садржај на овом сајту</translation>
 <translation id="3308738399950580893">рекламе</translation>
 <translation id="3384522979010096022">Ваша организација вам не дозвољава да прегледате овај сајт</translation>
+<translation id="3387261909427947069">Начини плаћања</translation>
 <translation id="3422472998109090673">Хост <ph name="HOST_NAME" /> тренутно није доступан.</translation>
 <translation id="3427092606871434483">Дозволи (подразумевано)</translation>
 <translation id="3447661539832366887">Власник овог уређаја је искључио ову застарелу игру.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">Ланац сертификата за овај сајт садржи сертификат потписан помоћу алгоритма SHA-1.</translation>
 <translation id="5452270690849572955">Није могуће пронаћи ову страницу на <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Неважећи</translation>
+<translation id="5490432419156082418">Адресе и остало</translation>
 <translation id="5492298309214877701">Овај сајт на интранету компаније, организације или школе има исти URL као и један спољни веб-сајт.
     <ph name="LINE_BREAK" />
     Покушајте да се обратите администратору система.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Дозвољено проширењем</translation>
 <translation id="7111012039238467737">(важећи)</translation>
 <translation id="7113310725918019676">Дозволи <ph name="BLOCKED_TYPE" /> од <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Чувај и попуни начине плаћања</translation>
 <translation id="7210863904660874423">Хост <ph name="HOST_NAME" /> не поштује безбедносне стандарде.</translation>
 <translation id="7219179957768738017">Веза користи <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">приказује обавештења</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">Обратите се администратору мреже ако нисте сигурни шта то значи.</translation>
 <translation id="8332188693563227489">Приступ хосту <ph name="HOST_NAME" /> је одбијен</translation>
 <translation id="8422228580902424274">Нападачи на сајт који покушавате да посетите могу да вас наведу да инсталирате софтвер или откријете ствари попут лозинке, телефона или броја кредитне картице.</translation>
+<translation id="8473863474539038330">Адресе и остало</translation>
 <translation id="8498891568109133222">Одговор хоста <ph name="HOST_NAME" /> је трајао предуго.</translation>
 <translation id="8503813439785031346">Корисничко име</translation>
 <translation id="8703575177326907206">Ваша веза са доменом <ph name="DOMAIN" /> није шифрована.</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">Обележивачи</translation>
 <translation id="8940028675168378100">Блокирао <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Иди на подешавања сајта</translation>
+<translation id="8975012916872825179">Укључује информације као што су бројеви телефона, адресе е-поште и адресе за испоруку</translation>
 <translation id="9001074447101275817">Прокси <ph name="DOMAIN" /> захтева корисничко име и лозинку.</translation>
 <translation id="9008201768610948239">Занемари</translation>
 <translation id="9025348182339809926">(неважећи)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419">Хост <ph name="HOST_NAME" /> користи неподржани протокол.</translation>
 <translation id="936602727769022409">Могли бисте изгубити приступ свом Google налогу. Препоручујемо да одмах промените лозинку. Од вас ће се затражити да се пријавите.</translation>
 <translation id="969892804517981540">Званична верзија</translation>
+<translation id="984275831282074731">Начини плаћања</translation>
 <translation id="988159990683914416">Верзија за програмере</translation>
 </translationbundle>

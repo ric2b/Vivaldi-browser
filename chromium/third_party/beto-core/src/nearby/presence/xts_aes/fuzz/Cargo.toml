@@ -4,6 +4,7 @@ version = "0.0.0"
 authors = ["Automatically generated"]
 publish = false
 edition = "2018"
+license = "Apache-2.0"
 
 [package.metadata]
 cargo-fuzz = true
@@ -18,6 +19,9 @@ xts_aes.workspace = true
 
 [target.'cfg(fuzzing)'.dependencies]
 libfuzzer-sys.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
 [[bin]]
 name = "xts_roundtrip"

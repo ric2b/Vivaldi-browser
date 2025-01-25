@@ -1,6 +1,6 @@
 ; SPIR-V
 ; Version: 1.3
-; Generator: Google Tint Compiler; 0
+; Generator: Google Tint Compiler; 1
 ; Bound: 23
 ; Schema: 0
                OpCapability Shader
@@ -10,37 +10,37 @@
                OpName %main "main"
                OpName %out "out"
        %void = OpTypeVoid
-          %1 = OpTypeFunction %void
+          %3 = OpTypeFunction %void
        %uint = OpTypeInt 32 0
-          %6 = OpConstantNull %uint
 %_ptr_Function_uint = OpTypePointer Function %uint
+     %uint_0 = OpConstant %uint 0
         %int = OpTypeInt 32 1
       %int_2 = OpConstant %int 2
      %uint_1 = OpConstant %uint 1
        %bool = OpTypeBool
        %true = OpConstantTrue %bool
-       %main = OpFunction %void None %1
+       %main = OpFunction %void None %3
           %4 = OpLabel
-        %out = OpVariable %_ptr_Function_uint Function %6
-               OpStore %out %6
-               OpBranch %9
-          %9 = OpLabel
-               OpLoopMerge %10 %11 None
-               OpBranch %12
-         %12 = OpLabel
-               OpSelectionMerge %13 None
-               OpSwitch %int_2 %16 1 %17
-         %17 = OpLabel
-               OpBranch %11
-         %16 = OpLabel
-               OpBranch %13
-         %13 = OpLabel
-         %18 = OpLoad %uint %out
-         %20 = OpIAdd %uint %18 %uint_1
-               OpStore %out %20
+        %out = OpVariable %_ptr_Function_uint Function
+               OpStore %out %uint_0
                OpBranch %11
          %11 = OpLabel
-               OpBranchConditional %true %10 %9
+               OpLoopMerge %12 %10 None
+               OpBranch %9
+          %9 = OpLabel
+               OpSelectionMerge %17 None
+               OpSwitch %int_2 %13 1 %16
+         %16 = OpLabel
+               OpBranch %10
+         %13 = OpLabel
+               OpBranch %17
+         %17 = OpLabel
+         %18 = OpLoad %uint %out None
+         %19 = OpIAdd %uint %18 %uint_1
+               OpStore %out %19 None
+               OpBranch %10
          %10 = OpLabel
+               OpBranchConditional %true %12 %11
+         %12 = OpLabel
                OpReturn
                OpFunctionEnd

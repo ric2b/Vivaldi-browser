@@ -208,6 +208,7 @@ class TestBluetoothDelegate : public BluetoothDelegate {
                                 const device::BluetoothUUID& service) override {
     return false;
   }
+  bool MayUseBluetooth(RenderFrameHost* rfh) override { return true; }
   bool IsAllowedToAccessAtLeastOneService(
       RenderFrameHost* frame,
       const blink::WebBluetoothDeviceId& device_id) override {
@@ -408,7 +409,7 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothServiceImplBrowserTest,
   // Loads a page in the prerender.
   auto prerender_url = embedded_test_server()->GetURL("/empty.html");
   // The prerendering doesn't affect the current scanning.
-  int host_id = prerender_helper()->AddPrerender(prerender_url);
+  FrameTreeNodeId host_id = prerender_helper()->AddPrerender(prerender_url);
   content::test::PrerenderHostObserver host_observer(*GetWebContents(),
                                                      host_id);
   RenderFrameHost* prerendered_frame_host =
@@ -503,7 +504,7 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothServiceImplBrowserTest,
 
   // Loads a page in the prerender.
   auto prerender_url = embedded_test_server()->GetURL("/empty.html");
-  int host_id = prerender_helper()->AddPrerender(prerender_url);
+  FrameTreeNodeId host_id = prerender_helper()->AddPrerender(prerender_url);
   content::test::PrerenderHostObserver host_observer(*GetWebContents(),
                                                      host_id);
   content::RenderFrameHost* prerendered_frame_host =
@@ -565,7 +566,7 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothServiceImplBrowserTest,
   // Loads a page in the prerender.
   auto prerender_url = embedded_test_server()->GetURL("/empty.html");
   // The prerendering doesn't affect the current scanning.
-  int host_id = prerender_helper()->AddPrerender(prerender_url);
+  FrameTreeNodeId host_id = prerender_helper()->AddPrerender(prerender_url);
   content::test::PrerenderHostObserver host_observer(*GetWebContents(),
                                                      host_id);
   RenderFrameHost* prerendered_frame_host =

@@ -15,7 +15,7 @@
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 10000153
+    "kCurrentDataVersion": 10000155
   },
 
   // The following engines are included in country lists and are added to the
@@ -209,6 +209,15 @@
       "search_url": "https://mx.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
       "suggest_url": "https://mx.search.yahoo.com/sugg/chrome?output=fxjson&command={searchTerms}",
       "favicon_url": "https://mx.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_nl": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://nl.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "suggest_url": "https://search.yahoo.com/sugg/chrome?output=fxjson&_sfp&command={searchTerms}",
+      "favicon_url": "https://nl.search.yahoo.com/favicon.ico",
       "type": "SEARCH_ENGINE_YAHOO",
       "id": 2
     },
@@ -490,6 +499,15 @@
       "search_url": "https://lt.wikipedia.org/wiki/Special:Search?search={searchTerms}",
       "suggest_url": "https://lt.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
       "favicon_url": "https://lt.wikipedia.org/static/favicon/wikipedia.ico",
+      "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
+      "id": 6
+    },
+    "wikipedia_nl": {
+      "name": "Wikipedia",
+      "keyword": "w",
+      "search_url": "https://nl.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://nl.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://nl.wikipedia.org/static/favicon/wikipedia.ico",
       "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
       "id": 6
     },
@@ -893,16 +911,16 @@
       "duckduckgo",
       "ecosia",
       "qwant_de",
-      "you",
       "!startpage_com",
       "wikipedia_de",
       "google"
     ],
     "de_AT": [
-      "*bing",
+      "bing",
       "yahoo_at",
       "duckduckgo",
       "ecosia",
+      "*startpage_com",
       "!startpage_com",
       "google",
       "wikipedia_de"
@@ -931,7 +949,6 @@
       "duckduckgo",
       "ecosia",
       "qwant_ca",
-      "you",
       "!startpage_com",
       "google",
       "wikipedia"
@@ -942,7 +959,6 @@
       "duckduckgo",
       "ecosia",
       "qwant_gb",
-      "you",
       "!startpage_com",
       "wikipedia",
       "google"
@@ -990,7 +1006,6 @@
       "yelp",
       "ecosia",
       "qwant_us",
-      "you",
       "!startpage_com",
       "wikipedia",
       "google"
@@ -1060,12 +1075,24 @@
       "wikipedia_es"
     ],
     "fi_FI": [
-      "*bing",
+      "bing",
       "yahoo_fi",
       "duckduckgo",
       "ecosia",
+      "*startpage_com",
       "!startpage_com",
       "wikipedia_fi",
+      "google"
+    ],
+    "fr_BE": [
+      "bing",
+      "yahoo_fr",
+      "duckduckgo",
+      "ecosia",
+      "qwant_fr",
+      "*startpage_com",
+      "!startpage_com",
+      "wikipedia_fr",
       "google"
     ],
     "fr_FR": [
@@ -1148,6 +1175,26 @@
       "ecosia",
       "!startpage_com",
       "wikipedia_no",
+      "google"
+    ],
+    "nl_BE": [
+      "bing",
+      "yahoo_nl",
+      "duckduckgo",
+      "ecosia",
+      "*startpage_com",
+      "!startpage_com",
+      "wikipedia_nl",
+      "google"
+    ],
+    "nl_NL": [
+      "bing",
+      "yahoo_nl",
+      "duckduckgo",
+      "ecosia",
+      "*startpage_com",
+      "!startpage_com",
+      "wikipedia_nl",
       "google"
     ],
     "nn_NO": [
@@ -1340,7 +1387,8 @@
     ["es", "MX"],
     ["es", "VE"],
     ["fi", "FI"],
-    ["fr", "FR"],
+    ["fr", "BE"],
+    ["fr*", "FR"],
     ["hr", "HR"],
     ["hu", "HU"],
     ["id", "ID"],
@@ -1349,6 +1397,8 @@
     ["ko", "KR"],
     ["lt", "LT"],
     ["nb", "NO"],
+    ["nl", "BE"],
+    ["nl*", "NL"],
     ["nn", "NO"],
     ["pl", "PL"],
     ["pt*", "BR"],

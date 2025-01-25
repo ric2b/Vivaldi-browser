@@ -39,15 +39,18 @@ class WebStateList;
 // Disconnects the mediator.
 - (void)disconnect;
 
-// Return the credit card associated with the backend identifier.
-- (autofill::CreditCard*)creditCardForIdentifier:(NSString*)identifier;
+// Returns the credit card associated with the backend identifier, if any.
+- (std::optional<autofill::CreditCard>)creditCardForIdentifier:
+    (NSString*)identifier;
 
 // Logs bottom sheet exit reasons, like dismissal or using a payment method.
 - (void)logExitReason:(PaymentsSuggestionBottomSheetExitReason)exitReason;
 
 // Sends the information about which credit card from the bottom sheet was
-// selected by the user, which is expected to fill the relevant fields.
-- (void)didSelectCreditCard:(CreditCardData*)creditCardData;
+// selected by the user, which is expected to fill the relevant fields. `index`
+// represents the position of the selected card in the list of card suggestions.
+- (void)didSelectCreditCard:(CreditCardData*)creditCardData
+                    atIndex:(NSInteger)index;
 
 @end
 

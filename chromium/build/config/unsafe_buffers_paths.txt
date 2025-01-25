@@ -51,104 +51,101 @@
 # See `docs/unsafe_buffers.md`.
 
 -android_webview/
--apps/
--ash/
 -base/allocator
 -base/third_party
--build/
--build_overrides/
--buildtools/
--cc/
--chrome/
-+chrome/browser/apps/guest_view/
-+chrome/browser/autofill/
-+chrome/browser/extensions/api/web_view/
-+chrome/browser/guest_view/
-+chrome/browser/history_clusters/
-+chrome/browser/history_embeddings/
-+chrome/browser/manta/
-+chrome/browser/model_execution/
-+chrome/browser/navigation_predictor/
-+chrome/browser/page_image_service/
-+chrome/browser/performance_manager/
-+chrome/browser/preloading/
-+chrome/browser/ui/autofill/
-+chrome/browser/ui/views/autofill/
-+chrome/browser/ui/webui/history_clusters/
-+chrome/browser/win/
+-chrome/browser/ash/chromebox_for_meetings/
+-chrome/browser/ash/policy/
+-chrome/browser/component_updater/
+-chrome/browser/extensions/api/messaging/
+-chrome/browser/extensions/api/printing/
+-chrome/browser/local_discovery/
+-chrome/browser/media/webrtc
+-chrome/browser/platform_experience/win/
+-chrome/browser/thumbnail/
+-chrome/browser/ui/android/hats/
+-chrome/browser/ui/webui/lens/
+-chrome/browser/ui/webui/media_router/
+-chrome/chrome_elf/third_party_dlls/
+-chrome/common/profiler/
+-chrome/credential_provider/
+-chrome/elevation_service/
+-chrome/services/cups_proxy/
+-chrome/services/ipp_parser/public/cpp/
+-chrome/services/sharing/nearby/decoder/
+-chrome/test/
+-chrome/tools/service_discovery_sniffer/
+-chrome/updater/net/
 -chromecast/
--chromeos/
+-chromeos/ash/components/memory/userspace_swap/
+-chromeos/ash/components/system/
+-chromeos/ash/services/libassistant/
+-chromeos/components/kcer/kcer_nss
 -clank/
--codelabs/
--components/
-+components/autofill/
-+components/compose/
-+components/discardable_memory/
-+components/guest_view/
-+components/history_clusters/
-+components/history_embeddings/
-+components/manta/
-+components/optimization_guide/content/
-+components/optimization_guide/core/
-+components/optimization_guide/internal/testdata/
-+components/optimization_guide/internal/testing/
-+components/optimization_guide/internal/tools/
-+components/optimization_guide/optimization_guide_internals/
-+components/optimization_guide/proto/
-+components/optimization_guide/tools/
-+components/page_image_service/
-+components/password_manager/
-+components/performance_manager/
-+components/plus_addresses/
-+components/prefs/
-+components/sync/
-+components/sync_bookmarks/
-+components/sync_device_info/
-+components/sync_preferences/
-+components/sync_sessions/
-+components/sync_user_events/
-+components/variations/
--courgette/
--crypto/
--data/
--device/
--docs/
+-components/allocation_recorder/
+-components/chromeos_camera
+-components/commerce/
+-components/crash/
+-components/cronet/
+-components/crx_file/
+-components/desks_storage/
+-components/device_event_log/
+-components/exo/
+-components/grpc_support/
+-components/gwp_asan/
+-components/media_router/
+-components/open_from_clipboard/
+-components/optimization_guide/internal/
+-components/ownership/
+-components/query_parser/
+-components/segmentation_platform/
+-components/sharing_message/
+-components/signin/
+-components/system_cpu/
+-components/url_formatter/
+-components/url_pattern_index/
+-components/webrtc_logging/
+-components/zucchini/
 -fuchsia_web/
--gin/
 -google_apis/
--google_update/
--gpu/
--headless/
--infra/
--internal/
+-gpu/ipc/service/
 -ios/
 -ios_internal/
--ipc/
 -media/
 -native_client/
--native_client_sdk/
 -net/third_party/
--ppapi/
 -printing/
--remoting/
--sandbox/
--services/accessibility
--services/data_decoder
--services/shape_detection
--services/tracing/public/cpp/perfetto/
--signing_keys/
--skia/
--sql/
--storage/
--testing/
+-remoting/host/
+-remoting/client/input/
+-testing/iossim/
 -third_party/
 +third_party/blink/
 -tools/
--ui/
-+ui/views/
+-ui/base/clipboard/
+-ui/base/ime/ash/
+-ui/display/manager/
+-ui/events/ash/
+-ui/ozone/
++ui/ozone/platform/wayland
 -url/third_party
 -v8/
+
+# Before clearing this directory, make sure to run against a bot running
+# with the build flag: use_internal_isolated_origins. There are none on the CQ
+# by default. See file components/site_isolation/preloaded_isolated_origins.cc
+-components/site_isolation/
 
 # TODO(crbug.com/41497066#comment22) The Win SDK headers don't get categorized
 # as system headers when building with DEPOT_TOOLS_WIN_TOOLCHAIN=0 ?
 -Program Files (x86)/Windows Kits/
+
+# Please be cautious before removing this opt-out, because it won't show up on
+# the Mega-CQ, nor Sheriffs' dashboards. See https://crbug.com/361760067
+# Removing this directory may fail on the bot CI bot:
+# https://luci-milo.appspot.com/ui/p/chrome/builders/official/win-arm64-clang
+-chrome/installer/
+
+# //codelabs is a directory that contains examples for developers to modify as
+# they learn about chromium development. This is indefinitely opt-out because
+# it is not part of the main build, and we don't want developers to be blocked
+# by this check.
+-codelabs/

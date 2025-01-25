@@ -3,6 +3,7 @@ name = "crypto_provider_default"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [lints]
 workspace = true

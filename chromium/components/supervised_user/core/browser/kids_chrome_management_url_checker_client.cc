@@ -20,8 +20,8 @@
 #include "components/safe_search_api/url_checker_client.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/supervised_user/core/browser/fetcher_config.h"
+#include "components/supervised_user/core/browser/kids_management_api_fetcher.h"
 #include "components/supervised_user/core/browser/proto/kidsmanagement_messages.pb.h"
-#include "components/supervised_user/core/browser/proto_fetcher.h"
 #include "components/supervised_user/core/common/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/protobuf/src/google/protobuf/message_lite.h"
@@ -50,9 +50,6 @@ void OnResponse(
     const ProtoFetcherStatus& status,
     std::unique_ptr<kidsmanagement::ClassifyUrlResponse>
         classify_url_response) {
-  DVLOG(1) << "URL classification = "
-           << classify_url_response->display_classification();
-
   if (!status.IsOk()) {
     DVLOG(1) << "ClassifyUrl request failed with status: " << status.ToString();
     std::move(client_callback)
@@ -60,20 +57,25 @@ void OnResponse(
     return;
   }
 
+  DVLOG(1) << "URL classification = "
+           << classify_url_response->display_classification();
+
   std::move(client_callback)
       .Run(url, ToSafeSearchClientClassification(classify_url_response.get()));
 }
 
-// Flips order of arguments so that the sole unbound argument will be the
-// request.
-std::unique_ptr<ProtoFetcher<kidsmanagement::ClassifyUrlResponse>> ClassifyURL(
+// Flips order of arguments so that the unbound arguments will be the
+// request and callback.
+std::unique_ptr<ClassifyUrlFetcher> ClassifyURL(
     signin::IdentityManager* identity_manager,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     const FetcherConfig& config,
     version_info::Channel channel,
-    const kidsmanagement::ClassifyUrlRequest& request) {
+    const kidsmanagement::ClassifyUrlRequest& request,
+    ClassifyUrlFetcher::Callback callback) {
   return CreateClassifyURLFetcher(*identity_manager, url_loader_factory,
-                                  request, config, channel);
+                                  request, std::move(callback), config,
+                                  channel);
 }
 
 FetcherConfig GetFetcherConfig() {

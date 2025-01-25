@@ -24,6 +24,13 @@
 
 class SafeBrowsingClient;
 
+// Used to identify the type of check a query is. For example, `kSync` is used
+// to trigger logic related to sync checks.
+enum class QueryType {
+  kSync = 0,
+  kAsync = 1,
+};
+
 // A helper object that manages the Safe Browsing URL queries for a single
 // WebState.
 class SafeBrowsingQueryManager
@@ -61,8 +68,37 @@ class SafeBrowsingQueryManager
     bool proceed = false;
     // Whether an error page should be shown for the URL.
     bool show_error_page = false;
+    // Checks if sync check was completed.
+    bool sync_check_complete = false;
+    // Checks if async check was completed.
+    bool async_check_complete = false;
     // The UnsafeResource created for the URL check, if any.
     std::optional<security_interstitials::UnsafeResource> resource;
+  };
+
+  // Struct used to store objects that need to be used in query observer calls.
+  struct QueryData {
+    explicit QueryData(SafeBrowsingQueryManager* manager,
+                       const SafeBrowsingQueryManager::Query& query,
+                       const QueryType query_type,
+                       const SafeBrowsingQueryManager::Result& result,
+                       safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
+                           performed_check);
+
+    QueryData(const QueryData&);
+    QueryData& operator=(const QueryData&);
+    ~QueryData();
+
+    // The SafeBrowsingQueryManager related to the query.
+    SafeBrowsingQueryManager* manager;
+    // The underlying query.
+    const SafeBrowsingQueryManager::Query& query;
+    // The type of query.
+    const QueryType type;
+    // The result of the query.
+    const SafeBrowsingQueryManager::Result& result;
+    // The PerformedCheck for a query.
+    safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck performed_check;
   };
 
   // Observer class for the query manager.
@@ -76,14 +112,15 @@ class SafeBrowsingQueryManager
         const Result& result,
         safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
             performed_check) {}
+
     // Notifies observers that a sync `query` check has completed with `result`
     // after performing a check of type `performed_check`.
     virtual void SafeBrowsingSyncQueryFinished(
-        SafeBrowsingQueryManager* manager,
-        const SafeBrowsingQueryManager::Query& query,
-        const SafeBrowsingQueryManager::Result& result,
-        safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
-            performed_check) {}
+        const SafeBrowsingQueryManager::QueryData& query_data) {}
+
+    virtual void SafeBrowsingAsyncQueryFinished(
+        const SafeBrowsingQueryManager::QueryData& query_data) {}
+
     // Called when `manager` is about to be destroyed.
     virtual void SafeBrowsingQueryManagerDestroyed(
         SafeBrowsingQueryManager* manager) {}
@@ -113,9 +150,7 @@ class SafeBrowsingQueryManager
                            SafeBrowsingClient* client);
 
   // Queries the Safe Browsing database using SafeBrowsingUrlCheckerImpls. This
-  // class may be constructed on the UI thread but otherwise must only be used
-  // and destroyed on the IO thread. If kSafeBrowsingOnUIThread is enabled this
-  // is used and destroyed on the UI thread.
+  // class must be constructed and used on the UI thread.
   class UrlCheckerClient final {
    public:
     UrlCheckerClient();
@@ -170,7 +205,7 @@ class SafeBrowsingQueryManager
   // `url_checker_client_`.
   void UrlCheckFinished(
       const Query query,
-      bool is_async_check,
+      const QueryType query_type,
       bool proceed,
       bool show_error_page,
       safe_browsing::SafeBrowsingUrlCheckerImpl::PerformedCheck
@@ -180,8 +215,7 @@ class SafeBrowsingQueryManager
   raw_ptr<web::WebState> web_state_ = nullptr;
   // The safe browsing client.
   raw_ptr<SafeBrowsingClient> client_ = nullptr;
-  // The checker client.  Used to communicate with the database on the IO
-  // thread. If kSafeBrowsingOnUIThread is enabled it'll be used on the UI
+  // The checker client.  Used to communicate with the database on the UI
   // thread.
   std::unique_ptr<UrlCheckerClient> url_checker_client_;
   // The results for each active query.

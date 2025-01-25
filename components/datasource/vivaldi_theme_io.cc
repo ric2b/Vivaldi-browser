@@ -194,8 +194,9 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
           }
         }
       }
-    } else if (!has_background_image) {
-      SaveJSON();
+    }
+    if (num_images_being_processed_async == 0) {
+      SaveJSONAndCreateZip();
     }
   }
 
@@ -207,7 +208,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
       VivaldiImageStore::UrlKind url_kind;
       std::string url_id;
       if (VivaldiImageStore::ParseDataUrl(*image_url, url_kind, url_id)) {
-        processed_images_counter++;
+        num_images_being_processed_async++;
         data_source_api_->GetDataForId(
             url_kind, url_id,
             base::BindOnce(&Exporter::SaveImage, this, &object, image_key,
@@ -225,8 +226,6 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
                    reader.size());
       }
     }
-
-    SaveJSON();
   }
 
   void SaveImage(base::Value* object,
@@ -239,6 +238,10 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
       return;
     }
     WriteImage(*object, image_key, name, base_name, data->data(), data->size());
+    num_images_being_processed_async--;
+    if (num_images_being_processed_async == 0) {
+      SaveJSONAndCreateZip();
+    }
   }
 
   void WriteImage(base::Value& object,
@@ -256,20 +259,16 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
     }
     base::FilePath path =
         temp_dir_.GetPath().Append(base::FilePath::FromUTF8Unsafe(file_name));
-    if (!base::WriteFile(path, reinterpret_cast<const char*>(data), size)) {
+    if (!base::WriteFile(path, base::span(data, size))) {
       error_ = std::string("Failed to write ") + file_name;
       return;
     }
     archive_files_.push_back(path.BaseName());
 
     object.GetDict().Set(image_key, std::move(file_name));
-    processed_images_counter--;
-    if (processed_images_counter == 0) {
-      SaveJSON();
-    }
   }
 
-  void SaveJSON() {
+  void SaveJSONAndCreateZip() {
     if (!error_.empty())
       return;
 
@@ -342,7 +341,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
   std::string error_;
   std::vector<base::FilePath> archive_files_;
   std::vector<uint8_t> data_blob_;
-  int processed_images_counter = 0;
+  int num_images_being_processed_async = 0;
 };
 
 // Based on chromium/extensions/browser/zipfile_installer.cc
@@ -410,7 +409,8 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
     // delete the whole directory so presence of unknown files does not lead
     // to their permanent storage.
     unzip::Unzip(unzip::LaunchUnzipper(), theme_archive_path_,
-                 temp_dir_.GetPath(),
+                 temp_dir_.GetPath(), unzip::mojom::UnzipOptions::New(),
+                 unzip::AllContents(), base::DoNothing(),
                  base::BindOnce(&Importer::ProcessUnzipped, this));
   }
 

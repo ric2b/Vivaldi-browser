@@ -24,7 +24,7 @@
 #include "av1/encoder/pickrst.h"
 #include "av1/encoder/arm/pickrst_sve.h"
 
-static INLINE uint16_t find_average_sve(const uint16_t *src, int src_stride,
+static inline uint16_t find_average_sve(const uint16_t *src, int src_stride,
                                         int width, int height) {
   uint64x2_t avg_u64 = vdupq_n_u64(0);
   uint16x8_t ones = vdupq_n_u16(1);
@@ -51,7 +51,7 @@ static INLINE uint16_t find_average_sve(const uint16_t *src, int src_stride,
   return (uint16_t)(vaddvq_u64(avg_u64) / (width * height));
 }
 
-static INLINE void compute_sub_avg(const uint16_t *buf, int buf_stride,
+static inline void compute_sub_avg(const uint16_t *buf, int buf_stride,
                                    int16_t avg, int16_t *buf_avg,
                                    int buf_avg_stride, int width, int height) {
   uint16x8_t avg_u16 = vdupq_n_u16(avg);
@@ -81,7 +81,7 @@ static INLINE void compute_sub_avg(const uint16_t *buf, int buf_stride,
   } while (--height > 0);
 }
 
-static INLINE void copy_upper_triangle(int64_t *H, int64_t *H_tmp,
+static inline void copy_upper_triangle(int64_t *H, int64_t *H_tmp,
                                        const int wiener_win2,
                                        const int divider) {
   for (int i = 0; i < wiener_win2 - 2; i = i + 2) {
@@ -113,7 +113,7 @@ static INLINE void copy_upper_triangle(int64_t *H, int64_t *H_tmp,
 }
 
 // Transpose the matrix that has just been computed and accumulate it in M.
-static INLINE void acc_transpose_M(int64_t *M, const int64_t *M_trn,
+static inline void acc_transpose_M(int64_t *M, const int64_t *M_trn,
                                    const int wiener_win, const int divider) {
   for (int i = 0; i < wiener_win; ++i) {
     for (int j = 0; j < wiener_win; ++j) {
@@ -140,7 +140,7 @@ static INLINE void acc_transpose_M(int64_t *M, const int64_t *M_trn,
 // by taking each different pair of columns, and multiplying all the elements of
 // the first one with all the elements of the second one, with a special case
 // when multiplying a column by itself.
-static INLINE void highbd_compute_stats_win7_sve(
+static inline void highbd_compute_stats_win7_sve(
     int16_t *dgd_avg, int dgd_avg_stride, int16_t *src_avg, int src_avg_stride,
     int width, int height, int64_t *M, int64_t *H, int bit_depth_divider) {
   const int wiener_win = 7;
@@ -270,7 +270,7 @@ static INLINE void highbd_compute_stats_win7_sve(
 // by taking each different pair of columns, and multiplying all the elements of
 // the first one with all the elements of the second one, with a special case
 // when multiplying a column by itself.
-static INLINE void highbd_compute_stats_win5_sve(
+static inline void highbd_compute_stats_win5_sve(
     int16_t *dgd_avg, int dgd_avg_stride, int16_t *src_avg, int src_avg_stride,
     int width, int height, int64_t *M, int64_t *H, int bit_depth_divider) {
   const int wiener_win = 5;

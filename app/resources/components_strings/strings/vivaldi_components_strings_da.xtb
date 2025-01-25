@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> lukkede forbindelsen uventet.</translation>
 <translation id="1161325031994447685">Genopretter forbindelse til Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Udskriv...</translation>
+<translation id="132390688737681464">Gem og udfyld adresser</translation>
 <translation id="1375198122581997741">Om version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> har ikke sendt nogen data.</translation>
 <translation id="1559528461873125649">Filen eller mappen findes ikke</translation>
 <translation id="1640244768702815859">Prøv at <ph name="BEGIN_LINK" />gå til websitets forside<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Ikke-understøttet protokol</translation>
+<translation id="1662550410081243962">Gem og udfyld betalingsmetoder</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">Du ser kilden for en webside</translation>
 <translation id="1734878702283171397">Prøv at kontakte systemadministratoren.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Dette website kan ikke levere en sikker forbindelse</translation>
 <translation id="2187317261103489799">Registrer (standard)</translation>
 <translation id="2224337661447660594">Der er ingen internetforbindelse</translation>
+<translation id="2283340219607151381">Gem og udfyld adresser</translation>
 <translation id="2292556288342944218">Din internetadgang er blokeret</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> kræver et brugernavn og en adgangskode.</translation>
 <translation id="2337852623177822836">Indstillingen styres af din administrator</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Forbindelsen er krypteret og godkendt ved hjælp af <ph name="CIPHER" />, og den anvender <ph name="KX" /> som primær udvekslingsmekanisme.</translation>
 <translation id="2909946352844186028">Der blev registreret en netværksændring.</translation>
 <translation id="2948083400971632585">Du kan deaktivere enhver proxy konfigureret for en forbindelse fra Indstillinger-siden.</translation>
+<translation id="2954624054936281172">Tabel over gemte betalingsmetoder</translation>
 <translation id="2991571918955627853">Du kan ikke besøge <ph name="SITE" /> lige nu, da websitet bruger HSTS. Netværksfejl og angreb er normalt midlertidige, så siden vil sandsynligvis fungere senere.</translation>
 <translation id="3005723025932146533">Vis gemt kopi</translation>
 <translation id="301521992641321250">Automatisk blokeret</translation>
@@ -57,7 +61,8 @@
 <translation id="3226128629678568754">Tryk på genindlæsningsknappen for at genindsende de data, der er nødvendige for at indlæse siden.</translation>
 <translation id="3234666976984236645">Registrer altid vigtigt indhold på dette website</translation>
 <translation id="3308738399950580893">reklamer</translation>
-<translation id="3384522979010096022">Din organisation tillader dig ikke at se dette websted</translation>
+<translation id="3384522979010096022">Din organisation tillader dig ikke at se dette website</translation>
+<translation id="3387261909427947069">Betalingsmetoder</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan ikke læses i øjeblikket.</translation>
 <translation id="3427092606871434483">Tillad (standard)</translation>
 <translation id="3447661539832366887">Ejeren af denne enhed har lukket dinosaurspillet.</translation>
@@ -67,6 +72,7 @@
 <translation id="3566021033012934673">Din forbindelse er ikke privat</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Skjul oplysninger</translation>
+<translation id="3614001939154393113">Hackere prøver muligvis at stjæle dine oplysninger fra <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (f.eks. adgangskoder, beskeder eller kreditkort). <ph name="BEGIN_LEARN_MORE_LINK" />Få flere oplysninger om denne advarsel<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Hvis programmet allerede står på listen over programmer, der har adgang til netværket, kan du prøve
     at fjerne det fra listen og tilføje det igen.</translation>
 <translation id="3658742229777143148">Version</translation>
@@ -114,6 +120,7 @@
 <translation id="5386426401304769735">Certifikatkæden for dette website indeholder et certifikat, der er signeret med SHA-1.</translation>
 <translation id="5452270690849572955">Denne side fra <ph name="HOST_NAME" /> blev ikke fundet</translation>
 <translation id="5457113250005438886">Ugyldig</translation>
+<translation id="5490432419156082418">Adresser m.m.</translation>
 <translation id="5492298309214877701">Dette website på virksomhedens, organisationens eller skolens intranet har samme webadresse som et eksternt website.
     <ph name="LINE_BREAK" />
     Prøv at kontakte din systemadministrator.</translation>
@@ -158,9 +165,11 @@
 <translation id="7108819624672055576">Tilladt med en udvidelse</translation>
 <translation id="7111012039238467737">(gyldigt)</translation>
 <translation id="7113310725918019676">Tillad <ph name="BLOCKED_TYPE" /> fra <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Gem og udfyld betalingsmetoder</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> overholder ikke sikkerhedsstandarderne.</translation>
 <translation id="7219179957768738017">Forbindelsen bruger <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Vis notifikationer</translation>
+<translation id="7227747683324411744">Hackere på det website, du forsøger at besøge, kan narre dig til at installere skadelig software, der påvirker den måde, du browser på – f.eks. ved at ændre din hjemmeside eller vise dig ekstra annoncer på de websites, du besøger.</translation>
 <translation id="7353601530677266744">Kommandolinje</translation>
 <translation id="7364115444476960850">Siden du forsøgte at få adgang tit blev blokeret af Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilsti</translation>
@@ -168,6 +177,7 @@
 <translation id="7518003948725431193">Ingen webside fundet på webadressen: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Denne webside kræver data, du tidligere har indtastet, før den kan vises korrekt. Du kan sende disse data igen, men hvis du gør dette, gentager du enhver handling, som denne side tidligere har foretaget.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan i øjeblikket ikke behandle denne anmodning.</translation>
+<translation id="7605377493722372900">Hackere på det website, du forsøger at besøge, kan installere skadelig software, der stjæler eller sletter ting som f.eks. din adgangskode, dine billeder, dine beskeder eller dit kreditkortnummer.</translation>
 <translation id="7662298039739062396">Indstillingen styres af en udvidelse</translation>
 <translation id="7663736086183791259">Certifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Certifikat</translation>
@@ -193,6 +203,8 @@
 <translation id="8288807391153049143">Vis certifikat</translation>
 <translation id="8289355894181816810">Kontakt din netværksadministrator, hvis du ikke er sikker på, hvad det betyder.</translation>
 <translation id="8332188693563227489">Adgangen til <ph name="HOST_NAME" /> blev nægtet</translation>
+<translation id="8422228580902424274">Hackere på det website, du forsøger at besøge, kan narre dig til at installere software eller afsløre ting såsom din adgangskode, dit telefonnummer eller dit kreditkortnummer.</translation>
+<translation id="8473863474539038330">Adresser m.m.</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> var for lang tid om at svare.</translation>
 <translation id="8503813439785031346">Brugernavn</translation>
 <translation id="8703575177326907206">Din forbindelse til <ph name="DOMAIN" /> er ikke krypteret.</translation>
@@ -200,6 +212,7 @@
 <translation id="8820817407110198400">Bogmærker</translation>
 <translation id="8940028675168378100">Blokeret af <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Gå til indstillingerne for websitet</translation>
+<translation id="8975012916872825179">Omfatter oplysninger såsom telefonnumre, mailadresser og leveringsadresser</translation>
 <translation id="9001074447101275817">Proxyserveren <ph name="DOMAIN" /> kræver et brugernavn og en adgangskode.</translation>
 <translation id="9008201768610948239">Ignorer</translation>
 <translation id="9025348182339809926">(ugyldigt)</translation>
@@ -212,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> anvender en ikke-understøttet protokol.</translation>
 <translation id="936602727769022409">Du kan miste adgangen til din Vivaldi-konto. Vi anbefaler, at du skifter din adgangskode nu. Du bliver bedt om at logge ind.</translation>
 <translation id="969892804517981540">Officiel version</translation>
+<translation id="984275831282074731">Betalingsmetoder</translation>
 <translation id="988159990683914416">Udviklerversion</translation>
 </translationbundle>

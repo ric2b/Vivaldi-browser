@@ -99,7 +99,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "  frameworks =\n"
         "  swiftmodules =\n"
         "  output_extension = .so\n"
-        "  output_dir = \n";
+        "  output_dir =\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -129,8 +129,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         // this will probably fail in the archive tool.)
         "build obj/foo/libstlib.a: alink || obj/foo/bar.stamp\n"
         "  arflags =\n"
-        "  output_extension = \n"
-        "  output_dir = \n";
+        "  output_extension =\n"
+        "  output_dir =\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -158,8 +158,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSet) {
         "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj "
         "|| obj/foo/bar.stamp\n"
         "  arflags =\n"
-        "  output_extension = \n"
-        "  output_dir = \n";
+        "  output_extension =\n"
+        "  output_dir =\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -219,8 +219,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, StaticLibrary) {
       "\n"
       "build obj/foo/libbar.a: alink obj/foo/libbar.input1.o\n"
       "  arflags = --asdf\n"
-      "  output_extension = \n"
-      "  output_dir = \n";
+      "  output_extension =\n"
+      "  output_dir =\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
@@ -269,8 +269,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
         "build obj/foo/libbar.a: alink obj/foo/libbar.input1.o "
         "obj/foo/libbaz.input2.o || obj/foo/libbaz.a\n"
         "  arflags = --asdf\n"
-        "  output_extension = \n"
-        "  output_dir = \n";
+        "  output_extension =\n"
+        "  output_dir =\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -301,8 +301,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, CompleteStaticLibrary) {
         "build obj/foo/libbar.a: alink obj/foo/libbar.input1.o "
         "|| obj/foo/libbaz.a\n"
         "  arflags = --asdf\n"
-        "  output_extension = \n"
-        "  output_dir = \n";
+        "  output_extension =\n"
+        "  output_dir =\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -504,7 +504,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, NoHardDepsToNoPublicHeaderTarget) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
+      "  output_extension =\n"
       "  output_dir = foo\n";
 
   std::string final_str = final_out.str();
@@ -552,7 +552,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LibsAndLibDirs) {
       "  frameworks =\n"
       "  swiftmodules =\n"
       "  output_extension = .so\n"
-      "  output_dir = \n";
+      "  output_dir =\n";
 
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -610,7 +610,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, FrameworksAndFrameworkDirs) {
       "-weak_framework Whizbang\n"
       "  swiftmodules =\n"
       "  output_extension = .so\n"
-      "  output_dir = \n";
+      "  output_dir =\n";
 
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -661,8 +661,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, EmptyOutputExtension) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n";
+      "  output_extension =\n"
+      "  output_dir =\n";
 
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -753,8 +753,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, SourceSetDataDeps) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n";
+      "  output_extension =\n"
+      "  output_dir =\n";
   EXPECT_EQ(final_expected, final_out.str());
 }
 
@@ -795,7 +795,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, SharedLibraryModuleDefinitionFile) {
       "  frameworks =\n"
       "  swiftmodules =\n"
       "  output_extension = .so\n"
-      "  output_dir = \n";
+      "  output_dir =\n";
   EXPECT_EQ(expected, out.str());
 }
 
@@ -835,7 +835,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, LoadableModule) {
       "  frameworks =\n"
       "  swiftmodules =\n"
       "  output_extension = .so\n"
-      "  output_dir = \n";
+      "  output_dir =\n";
   EXPECT_EQ(loadable_expected, out.str());
 
   // Final target.
@@ -872,8 +872,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, LoadableModule) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n";
+      "  output_extension =\n"
+      "  output_dir =\n";
   EXPECT_EQ(final_expected, final_out.str());
 }
 
@@ -1261,7 +1261,7 @@ TEST_F(NinjaCBinaryTargetWriterTest, InputFiles) {
         "  frameworks =\n"
         "  swiftmodules =\n"
         "  output_extension = .so\n"
-        "  output_dir = \n";
+        "  output_dir =\n";
 
     EXPECT_EQ(expected, out.str());
   }
@@ -1414,8 +1414,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustStaticLib) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n";
+      "  output_extension =\n"
+      "  output_dir =\n";
 
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -1599,8 +1599,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, RlibInLibrary) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n"
+      "  output_extension =\n"
+      "  output_dir =\n"
       "  rlibs = obj/pub_in_staticlib/libpub_in_staticlib.rlib "
       "obj/priv_in_staticlib/libpriv_in_staticlib.rlib\n";
 
@@ -1764,8 +1764,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, RlibsWithProcMacros) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n"
+      "  output_extension =\n"
+      "  output_dir =\n"
       "  rlibs = obj/pub_in_staticlib/libpub_in_staticlib.rlib "
       "obj/priv_in_staticlib/libpriv_in_staticlib.rlib "
       "obj/rlib/librlib.rlib "
@@ -1836,8 +1836,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, ProcMacroInRustStaticLib) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n";
+      "  output_extension =\n"
+      "  output_dir =\n";
 
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -1940,8 +1940,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustDepsOverDynamicLinking) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n"
+      "  output_extension =\n"
+      "  output_dir =\n"
       "  rlibs = obj/near/libnear.rlib\n";
 
   std::string out_str = out.str();
@@ -2038,8 +2038,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, LinkingWithRustLibraryDepsOnCdylib) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n"
+      "  output_extension =\n"
+      "  output_dir =\n"
       "  rlibs = obj/rlib/librlib.rlib\n";
 
   std::string out_str = out.str();
@@ -2136,8 +2136,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, LinkingWithRustLibraryDepsOnDylib) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n"
+      "  output_extension =\n"
+      "  output_dir =\n"
       "  rlibs = obj/rlib/librlib.rlib\n";
 
   std::string out_str = out.str();
@@ -2245,8 +2245,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, RustLibAfterSharedLib) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n"
+      "  output_extension =\n"
+      "  output_dir =\n"
       "  rlibs = obj/rlib2/libmyrlib2.rlib\n";
 
   std::string out_str = out.str();
@@ -2294,8 +2294,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
       "\n"
       "build obj/foo/libbar.a: alink obj/foo/libbar.bar.o\n"
       "  arflags =\n"
-      "  output_extension = \n"
-      "  output_dir = \n";
+      "  output_extension =\n"
+      "  output_dir =\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
@@ -2456,8 +2456,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
         "  libs =\n"
         "  frameworks =\n"
         "  swiftmodules = obj/foo/Foo.swiftmodule\n"
-        "  output_extension = \n"
-        "  output_dir = \n";
+        "  output_extension =\n"
+        "  output_dir =\n";
 
     const std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
@@ -2559,8 +2559,8 @@ build obj/blah/liba.a.o: cxx ../../blah/a.cc | obj/blah/liba.a.pcm
 
 build obj/blah/liba.a: alink obj/blah/liba.a.o
   arflags =
-  output_extension = 
-  output_dir = 
+  output_extension =
+  output_dir =
 )";
 
     std::string out_str = out.str();
@@ -2604,8 +2604,8 @@ build obj/stuff/libb.b.o: cxx ../../stuff/b.cc | obj/stuff/libb.b.pcm
 
 build obj/stuff/libb.a: alink obj/stuff/libb.b.o
   arflags =
-  output_extension = 
-  output_dir = 
+  output_extension =
+  output_dir =
 )";
 
     std::string out_str = out.str();
@@ -2645,8 +2645,8 @@ build obj/stuff/libc.c.pcm: cxx_module ../../stuff/c.modulemap | obj/blah/liba.a
 
 build obj/things/libc.a: alink || obj/blah/liba.a
   arflags =
-  output_extension = 
-  output_dir = 
+  output_extension =
+  output_dir =
 )";
 
     std::string out_str = out.str();
@@ -2692,8 +2692,8 @@ build withmodules/c: link obj/zap/c.x.o obj/zap/c.y.o obj/blah/liba.a obj/stuff/
   libs =
   frameworks =
   swiftmodules =
-  output_extension = 
-  output_dir = 
+  output_extension =
+  output_dir =
 )";
 
     std::string out_str = out.str();
@@ -2747,8 +2747,8 @@ build ./main: link obj/launchpad/main.main.o | ./Space$ Cadet.so.TOC
   libs =
   frameworks =
   swiftmodules =
-  output_extension = 
-  output_dir = 
+  output_extension =
+  output_dir =
 )"
 #if defined(OS_WIN)
                           "  solibs = \"./Space$ Cadet.so\"\n";
@@ -2799,8 +2799,8 @@ TEST_F(NinjaCBinaryTargetWriterTest, Pool) {
       "  libs =\n"
       "  frameworks =\n"
       "  swiftmodules =\n"
-      "  output_extension = \n"
-      "  output_dir = \n"
+      "  output_extension =\n"
+      "  output_dir =\n"
       "  pool = foo_pool\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;

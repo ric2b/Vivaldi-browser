@@ -11,6 +11,7 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.browser.customtabs.CustomTabsIntent;
 
 import com.google.common.base.Strings;
@@ -20,7 +21,7 @@ import org.chromium.base.lifetime.DestroyChecker;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.share.ChromeShareExtras;
 import org.chromium.chrome.browser.share.ChromeShareExtras.DetailedContentType;
@@ -55,10 +56,9 @@ class PageSummarySharingRequest {
     private static final String DEFAULT_LEARN_MORE_URL = "https://support.google.com/chrome/";
 
     @NonNull private final Context mContext;
-    @NonNull private final HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
     @NonNull private final BottomSheetController mBottomSheetController;
     @NonNull private final Tab mTab;
-    @NonNull private final ChromeOptionShareCallback mChromeOptionShareCallback;
+    @Nullable private final ChromeOptionShareCallback mChromeOptionShareCallback;
     @NonNull private final Runnable mDestroyCallback;
     @NonNull private final ObservableSupplierImpl<PageInfoContents> mPageInfoSupplier;
     private final DestroyChecker mDestroyChecker = new DestroyChecker();
@@ -68,15 +68,13 @@ class PageSummarySharingRequest {
     public PageSummarySharingRequest(
             @NonNull Context context,
             @NonNull Tab tab,
-            @NonNull ChromeOptionShareCallback chromeOptionShareCallback,
-            @NonNull HelpAndFeedbackLauncher helpAndFeedbackLauncher,
+            @Nullable ChromeOptionShareCallback chromeOptionShareCallback,
             @NonNull ObservableSupplierImpl<PageInfoContents> pageInfoSupplier,
             @NonNull Runnable destroyCallback,
             @NonNull BottomSheetController bottomSheetController) {
         mContext = context;
         mTab = tab;
         mChromeOptionShareCallback = chromeOptionShareCallback;
-        mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
         mDestroyCallback = destroyCallback;
         mPageInfoSupplier = pageInfoSupplier;
         mBottomSheetController = bottomSheetController;
@@ -185,11 +183,12 @@ class PageSummarySharingRequest {
         if (!Strings.isNullOrEmpty(feedbackTypeValue)) {
             feedbackDataMap.put(FEEDBACK_TYPE_KEY, feedbackTypeValue);
         }
-        mHelpAndFeedbackLauncher.showFeedback(
-                (Activity) mContext,
-                mTab.getUrl() == null ? null : mTab.getUrl().getSpec(),
-                FEEDBACK_REPORT_TYPE,
-                feedbackDataMap);
+        HelpAndFeedbackLauncherFactory.getForProfile(mTab.getProfile())
+                .showFeedback(
+                        (Activity) mContext,
+                        mTab.getUrl() == null ? null : mTab.getUrl().getSpec(),
+                        FEEDBACK_REPORT_TYPE,
+                        feedbackDataMap);
     }
 
     private void attachSummaryToShareSheet() {
@@ -221,8 +220,10 @@ class PageSummarySharingRequest {
                         .setText(pageInfo.resultContents)
                         .build();
 
-        mChromeOptionShareCallback.showShareSheet(
-                shareParams, chromeShareExtras, SystemClock.elapsedRealtime());
+        if (mChromeOptionShareCallback != null) {
+            mChromeOptionShareCallback.showShareSheet(
+                    shareParams, chromeShareExtras, SystemClock.elapsedRealtime());
+        }
 
         destroy();
     }

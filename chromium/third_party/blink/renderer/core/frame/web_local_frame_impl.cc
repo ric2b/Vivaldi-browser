@@ -320,6 +320,9 @@ class DummyFrameOwner final : public GarbageCollected<DummyFrameOwner>,
   mojom::blink::ColorScheme GetColorScheme() const override {
     return mojom::blink::ColorScheme::kLight;
   }
+  mojom::blink::PreferredColorScheme GetPreferredColorScheme() const override {
+    return mojom::blink::PreferredColorScheme::kLight;
+  }
   bool ShouldLazyLoadChildren() const override { return false; }
 
  private:
@@ -345,7 +348,7 @@ class ChromePrintContext : public PrintContext {
     return GetFrame()->GetDocument()->GetPageDescription(page_index);
   }
 
-  void SpoolSinglePage(cc::PaintCanvas* canvas, wtf_size_t page_number) {
+  void SpoolSinglePage(cc::PaintCanvas* canvas, wtf_size_t page_index) {
     // The page rect gets scaled and translated, so specify the entire
     // print content area here as the recording rect.
     PaintRecordBuilder builder;
@@ -353,7 +356,7 @@ class ChromePrintContext : public PrintContext {
     context.SetPrintingMetafile(canvas->GetPrintingMetafile());
     context.SetPrinting(true);
     context.BeginRecording();
-    SpoolPage(context, page_number);
+    SpoolPage(context, page_index);
     canvas->drawPicture(context.EndRecording());
   }
 
@@ -425,7 +428,7 @@ class ChromePrintContext : public PrintContext {
   }
 
  protected:
-  virtual void SpoolPage(GraphicsContext& context, wtf_size_t page_number) {
+  virtual void SpoolPage(GraphicsContext& context, wtf_size_t page_index) {
     DispatchEventsForPrintingOnAllFrames();
     if (!IsFrameValid()) {
       return;
@@ -435,12 +438,12 @@ class ChromePrintContext : public PrintContext {
     DCHECK(frame_view);
     frame_view->UpdateLifecyclePhasesForPrinting();
 
-    if (!IsFrameValid() || page_number >= PageCount()) {
+    if (!IsFrameValid() || page_index >= PageCount()) {
       // TODO(crbug.com/452672): The number of pages may change after layout for
       // pagination.
       return;
     }
-    gfx::Rect page_rect = PageRect(page_number);
+    gfx::Rect page_rect = PageRect(page_index);
 
     // Cancel out the scroll offset used in screen mode.
     gfx::Vector2d offset = frame_view->LayoutViewport()->ScrollOffsetInt();
@@ -452,7 +455,7 @@ class ChromePrintContext : public PrintContext {
 
     PaintRecordBuilder builder(context);
 
-    frame_view->PrintPage(builder.Context(), page_number, CullRect(page_rect));
+    frame_view->PrintPage(builder.Context(), page_index, CullRect(page_rect));
 
     auto property_tree_state =
         layout_view->FirstFragment().LocalBorderBoxProperties();
@@ -521,9 +524,9 @@ class ChromePluginPrintContext final : public ChromePrintContext {
   }
 
  protected:
-  void SpoolPage(GraphicsContext& context, wtf_size_t page_number) override {
+  void SpoolPage(GraphicsContext& context, wtf_size_t page_index) override {
     PaintRecordBuilder builder(context);
-    plugin_->PrintPage(page_number, builder.Context());
+    plugin_->PrintPage(page_index, builder.Context());
     context.DrawRecord(builder.EndRecording());
   }
 
@@ -694,7 +697,7 @@ WebLocalFrame* WebLocalFrame::FromFrameToken(
 
 WebLocalFrame* WebLocalFrame::FrameForCurrentContext() {
   v8::Isolate* isolate = v8::Isolate::TryGetCurrent();
-  if (UNLIKELY(!isolate)) {
+  if (!isolate) [[unlikely]] {
     return nullptr;
   }
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
@@ -881,7 +884,7 @@ gfx::Size WebLocalFrameImpl::DocumentSize() const {
 bool WebLocalFrameImpl::HasVisibleContent() const {
   auto* layout_object = GetFrame()->OwnerLayoutObject();
   if (layout_object &&
-      layout_object->StyleRef().Visibility() != EVisibility::kVisible) {
+      layout_object->StyleRef().UsedVisibility() != EVisibility::kVisible) {
     return false;
   }
 
@@ -1103,6 +1106,10 @@ void WebLocalFrameImpl::RequestExecuteScript(
       world_id, sources, user_gesture, evaluation_timing, blocking_option,
       std::move(callback), back_forward_cache_aware, want_result_option,
       promise_behavior);
+}
+
+bool WebLocalFrameImpl::IsInspectorConnected() {
+  return LocalRoot()->DevToolsAgentImpl(/*create_if_necessary=*/false);
 }
 
 v8::MaybeLocal<v8::Value> WebLocalFrameImpl::CallFunctionEvenIfScriptDisabled(
@@ -1394,8 +1401,7 @@ void WebLocalFrameImpl::RemoveSpellingMarkers() {
 void WebLocalFrameImpl::RemoveSpellingMarkersUnderWords(
     const WebVector<WebString>& words) {
   Vector<String> converted_words;
-  converted_words.Append(words.data(),
-                         base::checked_cast<wtf_size_t>(words.size()));
+  converted_words.AppendSpan(base::span(words));
   GetFrame()->RemoveSpellingMarkersUnderWords(converted_words);
 }
 
@@ -1914,12 +1920,13 @@ uint32_t WebLocalFrameImpl::PrintBegin(const WebPrintParams& print_params,
   return print_context_->PageCount();
 }
 
-void WebLocalFrameImpl::PrintPage(uint32_t page, cc::PaintCanvas* canvas) {
+void WebLocalFrameImpl::PrintPage(uint32_t page_index,
+                                  cc::PaintCanvas* canvas) {
   DCHECK(print_context_);
   DCHECK(GetFrame());
   DCHECK(GetFrame()->GetDocument());
 
-  print_context_->SpoolSinglePage(canvas, page);
+  print_context_->SpoolSinglePage(canvas, page_index);
 }
 
 void WebLocalFrameImpl::PrintEnd() {
@@ -2363,7 +2370,8 @@ LocalFrame* WebLocalFrameImpl::CreateChildFrame(
       owner_element->ScrollbarMode(), owner_element->MarginWidth(),
       owner_element->MarginHeight(), owner_element->AllowFullscreen(),
       owner_element->AllowPaymentRequest(), owner_element->IsDisplayNone(),
-      owner_element->GetColorScheme());
+      owner_element->GetColorScheme(),
+      owner_element->GetPreferredColorScheme());
 
   mojo::PendingAssociatedRemote<mojom::blink::PolicyContainerHost>
       policy_container_remote;
@@ -2757,6 +2765,7 @@ blink::mojom::CommitResult WebLocalFrameImpl::CommitSameDocumentNavigation(
     bool has_transient_user_activation,
     const WebSecurityOrigin& initiator_origin,
     bool is_browser_initiated,
+    bool has_ua_visual_transition,
     std::optional<scheduler::TaskAttributionId>
         soft_navigation_heuristics_task_id) {
   DCHECK(GetFrame());
@@ -2770,7 +2779,7 @@ blink::mojom::CommitResult WebLocalFrameImpl::CommitSameDocumentNavigation(
       has_transient_user_activation, initiator_origin.Get(),
       /*is_synchronously_committed=*/false, /*source_element=*/nullptr,
       mojom::blink::TriggeringEventInfo::kNotFromEvent, is_browser_initiated,
-      soft_navigation_heuristics_task_id);
+      has_ua_visual_transition, soft_navigation_heuristics_task_id);
 }
 
 bool WebLocalFrameImpl::IsLoading() const {
@@ -3166,19 +3175,17 @@ Node* WebLocalFrameImpl::ContextMenuImageNodeInner() const {
 
 void WebLocalFrameImpl::WaitForDebuggerWhenShown() {
   DCHECK(frame_->IsLocalRoot());
-  DevToolsAgentImpl()->WaitForDebuggerWhenShown();
+  DevToolsAgentImpl(/*create_if_necessary=*/true)->WaitForDebuggerWhenShown();
 }
 
-void WebLocalFrameImpl::SetDevToolsAgentImpl(WebDevToolsAgentImpl* agent) {
-  DCHECK(!dev_tools_agent_);
-  dev_tools_agent_ = agent;
-}
-
-WebDevToolsAgentImpl* WebLocalFrameImpl::DevToolsAgentImpl() {
-  if (!frame_->IsLocalRoot())
+WebDevToolsAgentImpl* WebLocalFrameImpl::DevToolsAgentImpl(
+    bool create_if_necessary) {
+  if (!frame_->IsLocalRoot()) {
     return nullptr;
-  if (!dev_tools_agent_)
+  }
+  if (!dev_tools_agent_ && create_if_necessary) {
     dev_tools_agent_ = WebDevToolsAgentImpl::CreateForFrame(this);
+  }
   return dev_tools_agent_.Get();
 }
 
@@ -3328,16 +3335,22 @@ void WebLocalFrameImpl::SetLCPPHint(
   lcpp->set_unused_preloads(std::move(unused_preloads));
 }
 
+bool WebLocalFrameImpl::IsFeatureEnabled(
+    const mojom::blink::PermissionsPolicyFeature& feature) const {
+  return GetFrame()->DomWindow()->IsFeatureEnabled(feature);
+}
+
 void WebLocalFrameImpl::AddHitTestOnTouchStartCallback(
     base::RepeatingCallback<void(const blink::WebHitTestResult&)> callback) {
   TouchStartEventListener* touch_start_event_listener =
       MakeGarbageCollected<TouchStartEventListener>(std::move(callback));
-  AddEventListenerOptionsResolved options;
-  options.setPassive(true);
-  options.SetPassiveSpecified(true);
-  options.setCapture(true);
+  AddEventListenerOptionsResolved* options =
+      MakeGarbageCollected<AddEventListenerOptionsResolved>();
+  options->setPassive(true);
+  options->SetPassiveSpecified(true);
+  options->setCapture(true);
   GetFrame()->DomWindow()->addEventListener(
-      event_type_names::kTouchstart, touch_start_event_listener, &options);
+      event_type_names::kTouchstart, touch_start_event_listener, options);
 }
 
 void WebLocalFrameImpl::BlockParserForTesting() {
@@ -3413,8 +3426,7 @@ void WebLocalFrameImpl::WillSendSubmitEvent(const WebFormElement& form) {
 
 bool WebLocalFrameImpl::AllowStorageAccessSyncAndNotify(
     WebContentSettingsClient::StorageType storage_type) {
-  return LocalFrame::FromFrameToken(GetLocalFrameToken())
-      ->AllowStorageAccessSyncAndNotify(storage_type);
+  return GetFrame()->AllowStorageAccessSyncAndNotify(storage_type);
 }
 
 }  // namespace blink

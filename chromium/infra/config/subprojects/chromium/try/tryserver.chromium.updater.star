@@ -82,13 +82,15 @@ updater_mac_builder(
     name = "mac-updater-try-builder-dbg",
     mirrors = [
         "ci/mac-updater-builder-dbg",
-        "ci/mac10.15-updater-tester-dbg",
+        "ci/mac11-x64-updater-tester-dbg",
     ],
     gn_args = gn_args.config(
         configs = [
             "ci/mac-updater-builder-dbg",
         ],
     ),
+    cores = None,
+    cpu = cpu.ARM64,
     main_list_view = "try",
     tryjob = try_.job(
         location_filters = [
@@ -101,7 +103,7 @@ updater_mac_builder(
     name = "mac-updater-try-builder-rel",
     mirrors = [
         "ci/mac-updater-builder-rel",
-        "ci/mac10.15-updater-tester-rel",
+        "ci/mac11-x64-updater-tester-rel",
     ],
     gn_args = gn_args.config(
         configs = [

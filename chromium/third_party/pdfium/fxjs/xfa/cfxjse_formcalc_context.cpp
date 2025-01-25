@@ -3490,9 +3490,7 @@ void CFXJSE_FormCalcContext::Format(
   GCedLocaleIface* pLocale = pThisNode->GetLocale();
   WideString wsPattern = WideString::FromUTF8(bsPattern.AsStringView());
   WideString wsValue = WideString::FromUTF8(bsValue.AsStringView());
-  bool bPatternIsString;
-  CXFA_LocaleValue::ValueType dwPatternType;
-  std::tie(bPatternIsString, dwPatternType) =
+  auto [bPatternIsString, dwPatternType] =
       PatternStringType(bsPattern.AsStringView());
   if (!bPatternIsString) {
     switch (dwPatternType) {
@@ -3667,9 +3665,7 @@ void CFXJSE_FormCalcContext::Parse(
   GCedLocaleIface* pLocale = pThisNode->GetLocale();
   WideString wsPattern = WideString::FromUTF8(bsPattern.AsStringView());
   WideString wsValue = WideString::FromUTF8(bsValue.AsStringView());
-  bool bPatternIsString;
-  CXFA_LocaleValue::ValueType dwPatternType;
-  std::tie(bPatternIsString, dwPatternType) =
+  auto [bPatternIsString, dwPatternType] =
       PatternStringType(bsPattern.AsStringView());
   if (bPatternIsString) {
     CXFA_LocaleValue localeValue(dwPatternType, wsValue, wsPattern, pLocale,
@@ -4225,12 +4221,12 @@ void CFXJSE_FormCalcContext::Get(
     return;
 
   FX_FILESIZE size = pFile->GetSize();
-  DataVector<uint8_t> dataBuf(size);
+  DataVector<uint8_t> data_buf(size);
 
   // TODO(tsepez): check return value?
-  (void)pFile->ReadBlock(dataBuf);
+  (void)pFile->ReadBlockAtOffset(data_buf, 0);
   info.GetReturnValue().Set(
-      fxv8::NewStringHelper(info.GetIsolate(), ByteStringView(dataBuf)));
+      fxv8::NewStringHelper(info.GetIsolate(), ByteStringView(data_buf)));
 }
 
 // static

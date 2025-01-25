@@ -30,7 +30,7 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
-#include "mlir/IR/Value.h"  // from @llvm-project
+#include "mlir/IR/Value.h"
 #include "xla/autotuning.pb.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -147,8 +147,7 @@ class IrEmitterUnnested : public IrEmitter {
   absl::Status EmitConvolutionReorderThunk(
       const HloCustomCallInstruction* instr);
   absl::Status EmitNormThunk(const HloCustomCallInstruction* instr);
-  absl::Status EmitFusedMHAThunk(const HloCustomCallInstruction* instr);
-  absl::Status EmitFusedMHABackwardThunk(const HloCustomCallInstruction* instr);
+  absl::Status EmitCuDnnThunk(const HloCustomCallInstruction* instr);
 #endif  // GOOGLE_CUDA
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
   absl::Status EmitCubDeviceRadixSort(const HloCustomCallInstruction* instr);

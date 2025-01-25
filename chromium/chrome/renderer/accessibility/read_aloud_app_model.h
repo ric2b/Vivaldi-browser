@@ -9,6 +9,7 @@
 #include "base/values.h"
 #include "chrome/common/accessibility/read_anything.mojom.h"
 #include "chrome/common/accessibility/read_anything_constants.h"
+#include "chrome/renderer/accessibility/phrase_segmentation/dependency_parser_model.h"
 #include "chrome/renderer/accessibility/read_aloud_traversal_utils.h"
 #include "ui/accessibility/ax_node_position.h"
 
@@ -64,6 +65,8 @@ class ReadAloudAppModel {
   // where this isn't needed.
   void InitAXPositionWithNode(ui::AXNode* ax_node);
 
+  void ResetGranularityIndex();
+
   // Returns a list of AXNodeIds representing the next nodes that should be
   // spoken and highlighted with Read Aloud.
   // This defaults to returning the first granularity until
@@ -77,6 +80,14 @@ class ReadAloudAppModel {
       bool is_pdf,
       bool is_docs,
       const std::set<ui::AXNodeID>* current_nodes);
+
+  // Asynchronously preprocess the text on the current page that will be
+  // used for Read Aloud.
+  void PreprocessTextForSpeech(bool is_pdf,
+                               bool is_docs,
+                               const std::set<ui::AXNodeID>* current_nodes);
+
+  void PreprocessPhrasesForText(DependencyParserModel& dependency_parser_model);
 
   // Increments the processed_granularity_index_, updating ReadAloud's state of
   // the current granularity to refer to the next granularity. The current
@@ -100,8 +111,6 @@ class ReadAloudAppModel {
   // segment.
   int GetCurrentTextStartIndex(const ui::AXNodeID& node_id);
 
-  int GetHighlightStartIndex(const ui::AXNodeID& node_id, int index);
-
   // Returns the Read Aloud ending text index for a node. For example,
   // if the entire text of the node should be read by Read Aloud at a particular
   // moment, this will return the length of the node's text. Returns -1 if the
@@ -110,26 +119,25 @@ class ReadAloudAppModel {
 
   void ResetReadAloudState();
 
-  // Given a text index for the current granularity, return the AXNodeID for
-  // that part of the text.
+  // Given a text index for the current granularity, return the nodes and the
+  // corresponding text ranges for that part of the text. The text ranges
+  // consist of start and end offsets within each node. If the `phrases`
+  // argument is `true`, the text ranges for the containing phrase are returned,
+  // otherwise the text ranges for the word are returned.
+  //
   // For example, if a current granularity segment has text:
   // "Hello darkness, my old friend."
   // Composed of nodes:
-  // Node: {id: 113, text: "Hello darkness, "}
-  // Node: {id: 207, text: "my old friend."}
-  // Then GetNodeIdForCurrentSegmentIndex for index=0-16 will return "113"
-  // and for index=17-29 will return "207"
-  ui::AXNodeID GetNodeIdForCurrentSegmentIndex(int index) const;
-
-  // Starting at the given index, return the length of the next word in the
-  // current granularity.
-  // e.g. if the current granularity is "I've come to talk with you again."...
-  // A start index of "0" will return "3" to correspond to "I've"
-  // And a start index of "10" will return "2" to correspond to "to."
-  // This method is only forward-looking, so if an index is in the middle of a
-  // current word, the remaining length for that word will be returned.
-  // e.g. "1" will return "2" to "'ve"
-  int GetNextWordHighlightLength(int start_index);
+  // Node: {id: 113, text: "Hello dark"}
+  // Node: {id: 207, text: "ness, my old friend."}
+  // Then GetHighlightForCurrentSegmentIndex for index=6 will return the
+  // following nodes, which correspond to the word "darkness, ":
+  //    [{"113", 6, 10}, {"207", 0, 6}]
+  // For index=17, which corresponds to the word "my ", will return:
+  //    [{"207", 6, 9}].
+  std::vector<ReadAloudTextSegment> GetHighlightForCurrentSegmentIndex(
+      int index,
+      bool phrases) const;
 
   // Updates the session count for the given metric name using
   // SingleSampleMetric. These are then logged once on destruction.
@@ -166,7 +174,8 @@ class ReadAloudAppModel {
       ui::AXNode* anchor_node,
       int start_index,
       int end_index,
-      a11y::ReadAloudCurrentGranularity& current_granularity);
+      a11y::ReadAloudCurrentGranularity& current_granularity,
+      bool is_docs);
 
   // Returns if we should end text traversal from the current position, due
   // to reaching the end of content or reaching a point, such as a paragraph,
@@ -187,6 +196,7 @@ class ReadAloudAppModel {
   // continue to the next node, or continue within the same node.
   a11y::TraversalState AddTextFromStartOfNode(
       bool is_pdf,
+      bool is_docs,
       a11y::ReadAloudCurrentGranularity& current_granularity);
 
   // Helper method for GetNextNodes.
@@ -202,6 +212,7 @@ class ReadAloudAppModel {
   // continue to the next node, or continue within the same node.
   a11y::TraversalState AddTextFromMiddleOfNode(
       bool is_pdf,
+      bool is_docs,
       a11y::ReadAloudCurrentGranularity& current_granularity);
 
   bool PositionEndsWithOpeningPunctuation(
@@ -218,6 +229,8 @@ class ReadAloudAppModel {
       bool is_docs,
       const std::set<ui::AXNodeID>* current_nodes);
 
+  ui::AXNodePosition::AXPositionInstance GetNextSentencePosition() const;
+
   // Helper for GetNextNodes.
   // Returns true if the node at the current AXPosition has no more text
   // remaining.
@@ -226,7 +239,11 @@ class ReadAloudAppModel {
   //      return true. However, if Read Aloud has only read out the first
   //      sentence, this will return false because "You need to not stare."
   //      still needs to be read.
-  bool NoValidTextRemainingInCurrentNode(bool is_pdf) const;
+  bool NoValidTextRemainingInCurrentNode(bool is_pdf, bool is_docs) const;
+
+  // Segment the given granularity into phrases with the given model.
+  void CalculatePhrases(DependencyParserModel& dependency_parser_model,
+                        a11y::ReadAloudCurrentGranularity& granularity);
 
   // Whether Read Aloud speech is currently playing or not.
   bool speech_playing_ = false;
@@ -281,6 +298,8 @@ class ReadAloudAppModel {
   // Previously processed granularities on the current page.
   std::vector<a11y::ReadAloudCurrentGranularity>
       processed_granularities_on_current_page_;
+
+  const ui::AXMovementOptions sentence_movement_options_;
 };
 
 #endif  // CHROME_RENDERER_ACCESSIBILITY_READ_ALOUD_APP_MODEL_H_

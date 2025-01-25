@@ -34,6 +34,7 @@ public final class ApplyButtonData {
             Context context = button.getContext();
             button.setVisibility(View.VISIBLE);
             button.setText(buttonData.resolveText(context));
+            button.setText(null); // Vivaldi
             button.setContentDescription(buttonData.resolveContentDescription(context));
             if (buttonData.getOnPressRunnable() != null) {
                 button.setOnClickListener((v) -> buttonData.getOnPressRunnable().run());

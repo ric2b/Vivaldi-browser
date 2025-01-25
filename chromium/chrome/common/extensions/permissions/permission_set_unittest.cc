@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <stddef.h>
 
 #include <memory>
@@ -825,6 +830,10 @@ TEST(PermissionsTest, PermissionMessages) {
 
   // The Identity API has its own server-driven permission prompts.
   skip.insert(APIPermissionID::kIdentity);
+
+  // This API is still in origin trial so we don't want to show a permission
+  // prompt.
+  skip.insert(APIPermissionID::kAIAssistantOriginTrial);
 
   // These are private.
   skip.insert(APIPermissionID::kAccessibilityPrivate);

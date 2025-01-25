@@ -44,8 +44,6 @@ class CameraHost;
 class CameraInstance;
 class ChromeFeatureFlagsInstance;
 class CastReceiverInstance;
-class ClipboardHost;
-class ClipboardInstance;
 class CompatibilityModeInstance;
 class CrashCollectorHost;
 class CrashCollectorInstance;
@@ -95,7 +93,6 @@ class PrintSpoolerInstance;
 class PrivacyItemsHost;
 class PrivacyItemsInstance;
 class ProcessInstance;
-class PropertyInstance;
 class ScreenCaptureHost;
 class ScreenCaptureInstance;
 class SharesheetHost;
@@ -206,10 +203,6 @@ class ArcBridgeService {
   ConnectionHolder<mojom::ChromeFeatureFlagsInstance>* chrome_feature_flags() {
     return &chrome_feature_flags_;
   }
-  ConnectionHolder<mojom::ClipboardInstance, mojom::ClipboardHost>*
-  clipboard() {
-    return &clipboard_;
-  }
   ConnectionHolder<mojom::CompatibilityModeInstance>* compatibility_mode() {
     return &compatibility_mode_;
   }
@@ -309,7 +302,6 @@ class ArcBridgeService {
     return &privacy_items_;
   }
   ConnectionHolder<mojom::ProcessInstance>* process() { return &process_; }
-  ConnectionHolder<mojom::PropertyInstance>* property() { return &property_; }
   ConnectionHolder<mojom::ScreenCaptureInstance, mojom::ScreenCaptureHost>*
   screen_capture() {
     return &screen_capture_;
@@ -372,7 +364,6 @@ class ArcBridgeService {
   ConnectionHolder<mojom::CameraInstance, mojom::CameraHost> camera_;
   ConnectionHolder<mojom::CastReceiverInstance> cast_receiver_;
   ConnectionHolder<mojom::ChromeFeatureFlagsInstance> chrome_feature_flags_;
-  ConnectionHolder<mojom::ClipboardInstance, mojom::ClipboardHost> clipboard_;
   ConnectionHolder<mojom::CompatibilityModeInstance> compatibility_mode_;
   ConnectionHolder<mojom::CrashCollectorInstance, mojom::CrashCollectorHost>
       crash_collector_;
@@ -417,7 +408,6 @@ class ArcBridgeService {
   ConnectionHolder<mojom::PrivacyItemsInstance, mojom::PrivacyItemsHost>
       privacy_items_;
   ConnectionHolder<mojom::ProcessInstance> process_;
-  ConnectionHolder<mojom::PropertyInstance> property_;
   ConnectionHolder<mojom::ScreenCaptureInstance, mojom::ScreenCaptureHost>
       screen_capture_;
   ConnectionHolder<mojom::SharesheetInstance, mojom::SharesheetHost>

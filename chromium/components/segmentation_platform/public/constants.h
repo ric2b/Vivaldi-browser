@@ -110,6 +110,8 @@ const char kOptimizationTargetSegmentationDummyUmaName[] = "SegmentationDummy";
 const char kComposePromotionKey[] = "compose_promotion";
 const char kComposePromotionUmaName[] = "ComposePromotion";
 
+const char kEphemeralHomeModuleBackendKey[] = "ephemeral_home_module_backend";
+
 // SEGMENTATION_CLIENT_KEYS_END
 
 // Please keep the UMA names for keys in sync with SegmentationKey variant in
@@ -156,6 +158,7 @@ const char kAdaptiveToolbarModelLabelAddToBookmarks[] = "AddToBookmarks";
 const char kAdaptiveToolbarModelLabelReadAloud[] = "ReadAloud";
 
 // Labels for contextual page actions model.
+const char kContextualPageActionModelLabelDiscounts[] = "discounts";
 const char kContextualPageActionModelLabelPriceTracking[] = "price_tracking";
 const char kContextualPageActionModelLabelReaderMode[] = "reader_mode";
 const char kContextualPageActionModelLabelPriceInsights[] = "price_insights";
@@ -212,6 +215,7 @@ const char kShortcuts[] = "Shortcuts";
 const char kSafetyCheck[] = "SafetyCheck";
 const char kTabResumption[] = "TabResumption";
 const char kParcelTracking[] = "ParcelTracking";
+const char kPriceTrackingPromo[] = "PriceTrackingPromo";
 
 // Input Context keys for freshness for IOS modules.
 const char kMostVisitedTilesFreshness[] = "most_visited_tiles_freshness";
@@ -232,6 +236,7 @@ const char kContextualPageActionModelInputPriceTracking[] = "can_track_price";
 const char kContextualPageActionModelInputReaderMode[] = "has_reader_mode";
 const char kContextualPageActionModelInputPriceInsights[] =
     "has_price_insights";
+const char kContextualPageActionModelInputDiscounts[] = "has_discounts";
 
 const char kComposePrmotionLabelShow[] = "Show";
 const char kComposePrmotionLabelDontShow[] = "DontShow";

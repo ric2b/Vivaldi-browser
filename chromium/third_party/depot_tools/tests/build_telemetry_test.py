@@ -3,7 +3,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -17,33 +19,28 @@ import build_telemetry
 
 class BuildTelemetryTest(unittest.TestCase):
 
-    def test_is_googler(self):
-        with unittest.mock.patch('subprocess.run') as run_mock:
-            run_mock.return_value.returncode = 0
-            run_mock.return_value.stdout = 'Logged in as foo@google.com.\n'
-            self.assertTrue(build_telemetry.is_googler())
+    def test_check_auth(self):
+        with unittest.mock.patch('subprocess.check_output') as run_mock:
+            auth = {'email': 'bob@google.com'}
+            run_mock.return_value = json.dumps(auth)
+            self.assertEqual(build_telemetry.check_auth(), auth)
 
-        with unittest.mock.patch('subprocess.run') as run_mock:
-            run_mock.return_value.returncode = 1
-            self.assertFalse(build_telemetry.is_googler())
+        with unittest.mock.patch('subprocess.check_output') as run_mock:
+            run_mock.side_effect = subprocess.CalledProcessError(
+                1, cmd=['check auth'], stderr='failed')
+            self.assertEqual(build_telemetry.check_auth(), {})
 
-        with unittest.mock.patch('subprocess.run') as run_mock:
-            run_mock.return_value.returncode = 0
-            run_mock.return_value.stdout = ''
-            self.assertFalse(build_telemetry.is_googler())
-
-        with unittest.mock.patch('subprocess.run') as run_mock:
-            run_mock.return_value.returncode = 0
-            run_mock.return_value.stdout = 'Logged in as foo@example.com.\n'
-            self.assertFalse(build_telemetry.is_googler())
+        with unittest.mock.patch('subprocess.check_output') as run_mock:
+            run_mock.return_value = ''
+            self.assertEqual(build_telemetry.check_auth(), {})
 
     def test_load_and_save_config(self):
         test_countdown = 2
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
-                    'build_telemetry.is_googler') as is_googler:
-                is_googler.return_value = True
+                    'build_telemetry.check_auth') as check_auth:
+                check_auth.return_value = {'email': 'bob@google.com'}
 
                 # Initial config load
                 cfg = build_telemetry.load_config(cfg_path, test_countdown)
@@ -61,9 +58,9 @@ class BuildTelemetryTest(unittest.TestCase):
                 self.assertEqual(cfg.countdown, test_countdown)
                 self.assertEqual(cfg.version, build_telemetry.VERSION)
 
-                # build_telemetry.is_googler() is an expensive call.
+                # build_telemetry.check_auth() is an expensive call.
                 # The cached result should be reused.
-                is_googler.assert_called_once()
+                check_auth.assert_called_once()
 
     def test_enabled(self):
         test_countdown = 2
@@ -72,8 +69,8 @@ class BuildTelemetryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
-                    'build_telemetry.is_googler') as is_googler:
-                is_googler.return_value = True
+                    'build_telemetry.check_auth') as check_auth:
+                check_auth.return_value = {'email': 'bob@google.com'}
 
                 # Initial config load
                 cfg = build_telemetry.load_config(cfg_path, test_countdown)
@@ -115,8 +112,8 @@ class BuildTelemetryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
-                    'build_telemetry.is_googler') as is_googler:
-                is_googler.return_value = True
+                    'build_telemetry.check_auth') as check_auth:
+                check_auth.return_value = {'email': 'bob@google.com'}
                 # After opt-out, it should not display the notice and
                 # change the countdown.
                 cfg = build_telemetry.load_config(cfg_path, test_countdown)
@@ -143,8 +140,8 @@ class BuildTelemetryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_path = os.path.join(tmpdir, "build_telemetry.cfg")
             with unittest.mock.patch(
-                    'build_telemetry.is_googler') as is_googler:
-                is_googler.return_value = False
+                    'build_telemetry.check_auth') as check_auth:
+                check_auth.return_value = {'email': 'bob@example.com'}
                 cfg = build_telemetry.load_config(cfg_path)
                 self.assertFalse(cfg.enabled())
 

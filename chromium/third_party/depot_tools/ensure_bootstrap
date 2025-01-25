@@ -34,7 +34,7 @@ fi
 
 # Sync CIPD-boostrapped packages.
 source "$base_dir/cipd_bin_setup.sh"
-cipd_bin_setup
+cipd_bin_setup &> /dev/null
 
 # Sync "gsutil.py".
 python3 "$base_dir/gsutil.py" -- version 1> /dev/null &

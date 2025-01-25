@@ -125,13 +125,13 @@ export interface SourceFrameOptions {
 }
 
 export const enum Events {
-  EditorUpdate = 'EditorUpdate',
-  EditorScroll = 'EditorScroll',
+  EDITOR_UPDATE = 'EditorUpdate',
+  EDITOR_SCROLL = 'EditorScroll',
 }
 
 export type EventTypes = {
-  [Events.EditorUpdate]: CodeMirror.ViewUpdate,
-  [Events.EditorScroll]: void,
+  [Events.EDITOR_UPDATE]: CodeMirror.ViewUpdate,
+  [Events.EDITOR_SCROLL]: void,
 };
 
 type FormatFn = (lineNo: number, state: CodeMirror.EditorState) => string;
@@ -146,7 +146,7 @@ export const LINE_NUMBER_FORMATTER = CodeMirror.Facet.define<FormatFn, FormatFn>
 
 export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes, typeof UI.View.SimpleView>(
     UI.View.SimpleView) implements UI.SearchableView.Searchable, UI.SearchableView.Replaceable, Transformer {
-  private readonly lazyContent: () => Promise<TextUtils.ContentProvider.DeferredContent>;
+  private readonly lazyContent: () => Promise<TextUtils.ContentData.ContentDataOrError>;
   private prettyInternal: boolean;
   private rawContent: string|CodeMirror.Text|null;
   private formattedMap: Formatter.ScriptFormatter.FormatterSourceMapping|null;
@@ -181,7 +181,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   private selfXssWarningDisabledSetting: Common.Settings.Setting<boolean>;
 
   constructor(
-      lazyContent: () => Promise<TextUtils.ContentProvider.DeferredContent>,
+      lazyContent: () => Promise<TextUtils.ContentData.ContentDataOrError>,
       private readonly options: SourceFrameOptions = {}) {
     super(i18nString(UIStrings.source));
 
@@ -192,8 +192,8 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     this.formattedMap = null;
     this.prettyToggle =
         new UI.Toolbar.ToolbarToggle(i18nString(UIStrings.prettyPrint), 'brackets', undefined, 'pretty-print');
-    this.prettyToggle.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, () => {
-      void this.setPretty(!this.prettyToggle.toggled());
+    this.prettyToggle.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, () => {
+      void this.setPretty(this.prettyToggle.isToggled());
     });
     this.shouldAutoPrettyPrint = false;
     this.prettyToggle.setVisible(false);
@@ -236,7 +236,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     this.contentSet = false;
 
     this.selfXssWarningDisabledSetting = Common.Settings.Settings.instance().createSetting(
-        'disable-self-xss-warning', false, Common.Settings.SettingStorageType.Synced);
+        'disable-self-xss-warning', false, Common.Settings.SettingStorageType.SYNCED);
     Common.Settings.Settings.instance()
         .moduleSetting('text-editor-indent')
         .addChangeListener(this.#textEditorIndentChanged, this);
@@ -271,7 +271,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
 
   protected editorConfiguration(doc: string|CodeMirror.Text): CodeMirror.Extension {
     return [
-      CodeMirror.EditorView.updateListener.of(update => this.dispatchEventToListeners(Events.EditorUpdate, update)),
+      CodeMirror.EditorView.updateListener.of(update => this.dispatchEventToListeners(Events.EDITOR_UPDATE, update)),
       TextEditor.Config.baseConfiguration(doc),
       TextEditor.Config.closeBrackets.instance(),
       TextEditor.Config.autocompletion.instance(),
@@ -284,7 +284,7 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
         focus: () => this.onFocus(),
         blur: () => this.onBlur(),
         paste: () => this.onPaste(),
-        scroll: () => this.dispatchEventToListeners(Events.EditorScroll),
+        scroll: () => this.dispatchEventToListeners(Events.EDITOR_SCROLL),
         contextmenu: event => this.onContextMenu(event),
       }),
       CodeMirror.lineNumbers({
@@ -307,16 +307,14 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
       this.wasmDisassemblyInternal ? markNonBreakableLines(this.wasmDisassemblyInternal) : nonBreakableLines,
       this.options.lineWrapping ? CodeMirror.EditorView.lineWrapping : [],
       this.options.lineNumbers !== false ? CodeMirror.lineNumbers() : [],
-      Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.INDENTATION_MARKERS_TEMP_DISABLE) ?
-          [] :
-          CodeMirror.indentationMarkers({
-            colors: {
-              light: 'var(--sys-color-divider)',
-              activeLight: 'var(--sys-color-divider-prominent)',
-              dark: 'var(--sys-color-divider)',
-              activeDark: 'var(--sys-color-divider-prominent)',
-            },
-          }),
+      CodeMirror.indentationMarkers({
+        colors: {
+          light: 'var(--sys-color-divider)',
+          activeLight: 'var(--sys-color-divider-prominent)',
+          dark: 'var(--sys-color-divider)',
+          activeDark: 'var(--sys-color-divider-prominent)',
+        },
+      }),
     ];
   }
 
@@ -324,7 +322,6 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   }
 
   protected onFocus(): void {
-    this.resetCurrentSearchResultIndex();
   }
 
   protected onPaste(): boolean {
@@ -537,13 +534,13 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
   private async ensureContentLoaded(): Promise<void> {
     if (!this.contentRequested) {
       this.contentRequested = true;
-      await this.setDeferredContent(this.lazyContent());
+      await this.setContentDataOrError(this.lazyContent());
 
       this.contentSet = true;
     }
   }
 
-  protected async setDeferredContent(deferredContentPromise: Promise<TextUtils.ContentProvider.DeferredContent>):
+  protected async setContentDataOrError(contentDataPromise: Promise<TextUtils.ContentData.ContentDataOrError>):
       Promise<void> {
     const progressIndicator = new UI.ProgressIndicator.ProgressIndicator();
     progressIndicator.setTitle(i18nString(UIStrings.loading));
@@ -551,22 +548,19 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
     this.progressToolbarItem.element.appendChild(progressIndicator.element);
 
     progressIndicator.setWorked(1);
-    const deferredContent = await deferredContentPromise;
+    const contentData = await contentDataPromise;
 
     let error, content;
-    if (deferredContent.content === null) {
-      error = deferredContent.error;
-      content = deferredContent.error;
-    } else if (deferredContent.isEncoded) {
-      const view = new DataView(Common.Base64.decode(deferredContent.content));
-      const decoder = new TextDecoder();
-      content = decoder.decode(view, {stream: true});
-    } else if ('wasmDisassemblyInfo' in deferredContent && deferredContent.wasmDisassemblyInfo) {
-      const {wasmDisassemblyInfo} = deferredContent;
-      content = CodeMirror.Text.of(wasmDisassemblyInfo.lines);
-      this.wasmDisassemblyInternal = wasmDisassemblyInfo;
+    let isMinified = false;
+    if (TextUtils.ContentData.ContentData.isError(contentData)) {
+      error = contentData.error;
+      content = contentData.error;
+    } else if (contentData instanceof TextUtils.WasmDisassembly.WasmDisassembly) {
+      content = CodeMirror.Text.of(contentData.lines);
+      this.wasmDisassemblyInternal = contentData;
     } else {
-      content = deferredContent.content;
+      content = contentData.text;
+      isMinified = TextUtils.TextUtils.isMinified(contentData.text);
       this.wasmDisassemblyInternal = null;
     }
 
@@ -585,12 +579,10 @@ export class SourceFrameImpl extends Common.ObjectWrapper.eventMixin<EventTypes,
       this.loadError = true;
       this.textEditor.state = this.placeholderEditorState(error);
       this.prettyToggle.setEnabled(false);
+    } else if (this.shouldAutoPrettyPrint && isMinified) {
+      await this.setPretty(true);
     } else {
-      if (this.shouldAutoPrettyPrint && TextUtils.TextUtils.isMinified(deferredContent.content || '')) {
-        await this.setPretty(true);
-      } else {
-        await this.setContent(this.rawContent || '');
-      }
+      await this.setContent(this.rawContent || '');
     }
   }
 
@@ -1051,7 +1043,7 @@ export class SelfXssWarningDialog {
   static async show(): Promise<boolean> {
     const dialog = new UI.Dialog.Dialog('self-xss-warning');
     dialog.setMaxContentSize(new UI.Geometry.Size(504, 340));
-    dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.SetExactWidthMaxHeight);
+    dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.SET_EXACT_WIDTH_MAX_HEIGHT);
     dialog.setDimmed(true);
     const shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(
         dialog.contentElement, {cssFile: selfXssDialogStyles, delegatesFocus: undefined});

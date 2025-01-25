@@ -9,6 +9,7 @@ import android.content.res.Configuration;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.BinderCallsListener;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.version_info.Channel;
 import org.chromium.base.version_info.VersionConstants;
@@ -71,10 +72,14 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
                     .setAsyncNotificationManagerFlag(
                             ChromeFeatureList.sAsyncNotificationManager.isEnabled());
 
+            if (ChromeFeatureList.sTraceBinderIpc.isEnabled()) {
+                BinderCallsListener.getInstance().installListener();
+            }
+
             // Only load the native library early for bundle builds since some tests use the
             // "--disable-native-initialization" switch, and the CommandLine is not initialized at
             // this point to check.
-            if (ProductConfig.IS_BUNDLE) {
+            if (BuildConfig.IS_BUNDLE) {
                 // Kick off library loading in a separate thread so it's ready when we need it.
                 new Thread(() -> LibraryLoader.getInstance().ensureInitialized()).start();
             }

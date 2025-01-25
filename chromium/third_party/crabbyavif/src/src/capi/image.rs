@@ -159,8 +159,8 @@ impl From<&Image> for avifImage {
             width: image.width,
             height: image.height,
             depth: image.depth as u32,
-            yuvFormat: image.yuv_format.into(),
-            yuvRange: image.yuv_range.into(),
+            yuvFormat: image.yuv_format,
+            yuvRange: image.yuv_range,
             yuvChromaSamplePosition: image.chroma_sample_position,
             alphaPremultiplied: image.alpha_premultiplied as avifBool,
             icc: (&image.icc).into(),
@@ -348,7 +348,7 @@ pub unsafe extern "C" fn crabby_avifImagePlane(image: *const avifImage, channel:
     }
     unsafe {
         match channel {
-            0 | 1 | 2 => (*image).yuvPlanes[channel as usize],
+            0..=2 => (*image).yuvPlanes[channel as usize],
             3 => (*image).alphaPlane,
             _ => std::ptr::null_mut(),
         }
@@ -365,7 +365,7 @@ pub unsafe extern "C" fn crabby_avifImagePlaneRowBytes(
     }
     unsafe {
         match channel {
-            0 | 1 | 2 => (*image).yuvRowBytes[channel as usize],
+            0..=2 => (*image).yuvRowBytes[channel as usize],
             3 => (*image).alphaRowBytes,
             _ => 0,
         }

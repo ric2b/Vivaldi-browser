@@ -41,7 +41,7 @@
 
 using leveldb_env::DBTracker;
 
-namespace content {
+namespace content::indexed_db {
 
 namespace {
 
@@ -125,8 +125,9 @@ leveldb::Status TransactionalLevelDBDatabase::Get(std::string_view key,
     *found = true;
     return s;
   }
-  if (LIKELY(s.IsNotFound()))
+  if (s.IsNotFound()) [[likely]] {
     return leveldb::Status::OK();
+  }
   return s;
 }
 
@@ -325,4 +326,4 @@ void TransactionalLevelDBDatabase::OnIteratorDestroyed(
   iterator_lru_.Erase(lru_iterator);
 }
 
-}  // namespace content
+}  // namespace content::indexed_db

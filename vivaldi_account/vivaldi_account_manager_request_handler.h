@@ -41,9 +41,9 @@ class VivaldiAccountManagerRequestHandler {
 
   void Retry();
 
-  base::Time request_start_time() { return request_start_time_; }
-  bool done() { return done_; }
-  base::Time GetNextRequestTime();
+  base::Time request_start_time() const { return request_start_time_; }
+  bool done() const { return done_; }
+  base::Time GetNextRequestTime() const;
 
  private:
   void OnURLLoadComplete(std::unique_ptr<std::string> response_body);

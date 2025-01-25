@@ -13,6 +13,8 @@
 #include <type_traits>
 #include <vector>
 
+#include "platform/base/type_util.h"
+
 namespace openscreen {
 
 template <typename T>
@@ -22,14 +24,6 @@ class Span;
 // These can be converted to use std::span once the library supports C++20.
 using ByteView = Span<const uint8_t>;
 using ByteBuffer = Span<uint8_t>;
-
-namespace internal {
-
-template <typename From, typename To>
-using EnableIfConvertible = std::enable_if_t<
-    std::is_convertible<From (*)[], To (*)[]>::value>;  // NOLINT
-
-}  // namespace internal
 
 // Contains a pointer and length to a span of contiguous data.
 //

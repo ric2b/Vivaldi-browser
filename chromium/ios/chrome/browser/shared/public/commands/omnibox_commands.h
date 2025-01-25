@@ -18,7 +18,9 @@
 - (void)cancelOmniboxEdit;
 
 // Vivaldi
-- (void)showTrackerBlockerManager;
+// Give focus to the omnibox, but doesn't show the autocomplete suggestions
+// popup view.
+- (void)focusOmniboxWithoutAutocompletePopup;
 // End Vivaldi
 
 @end

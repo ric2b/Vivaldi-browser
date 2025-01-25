@@ -382,8 +382,7 @@ std::string DomainToIfURL(std::string domain, bool subdomains) {
   return result;
 }
 
-template <typename T>
-std::vector<std::string> DomainsToIfURL(T domains) {
+std::vector<std::string> DomainsToIfURL(std::set<std::string> domains) {
   std::vector<std::string> results;
   std::transform(
       domains.cbegin(), domains.cend(), std::back_inserter(results),
@@ -399,7 +398,7 @@ struct DomainTreeNode {
   bool overriden = false;
 };
 
-void BuildDomainTree(std::vector<std::string> domains,
+void BuildDomainTree(std::set<std::string> domains,
                      bool excluded,
                      DomainTreeNode& root) {
   for (const auto& domain : domains) {
@@ -489,8 +488,8 @@ base::Value::List* GetTarget(base::Value::Dict& compiled_rules,
 // out instances where some inclusions/exclusions are subdomains of each
 // other.
 void CompileRuleWithDomains(RequestFilterRule::Decision decision,
-                            const std::vector<std::string>& included_domains,
-                            const std::vector<std::string>& excluded_domains,
+                            const std::set<std::string>& included_domains,
+                            const std::set<std::string>& excluded_domains,
                             base::Value::Dict& compiled_rules,
                             Trigger trigger,
                             Action block_action) {
@@ -586,6 +585,11 @@ void CompilePlainRequestFilter(const RequestFilterRule& rule,
     return;
   }
 
+  if (!rule.ad_domains_and_query_triggers.empty()) {
+    // No possibility to support this on iOS.
+    return;
+  }
+
   CompileRuleWithDomains(rule.decision, rule.included_domains,
                          rule.excluded_domains, compiled_request_filter_rules,
                          std::move(trigger), Action::BlockAction());
@@ -601,14 +605,15 @@ void CompileRequestFilterRule(
   if (!url_filter)
     return;
   auto resource_types = rule.resource_types;
+  auto explicit_types = rule.explicit_types;
   auto activations = rule.activation_types;
   if (!resource_types.none() ||
-      (activations.test(RequestFilterRule::kDocument) &&
+      (explicit_types.test(RequestFilterRule::kDocument) &&
        rule.decision != RequestFilterRule::kPass)) {
     Trigger trigger(*url_filter, rule.is_case_sensitive);
     trigger.set_load_type(rule.party);
 
-    if (activations.test(RequestFilterRule::kDocument) &&
+    if (explicit_types.test(RequestFilterRule::kDocument) &&
         rule.decision != RequestFilterRule::kPass) {
       resource_types.set(RequestFilterRule::kSubDocument);
     } else if (resource_types.test(RequestFilterRule::kSubDocument)) {

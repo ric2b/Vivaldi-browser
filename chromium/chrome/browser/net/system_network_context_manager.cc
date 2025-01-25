@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/net/system_network_context_manager.h"
 
 #include <algorithm>
@@ -29,6 +34,7 @@
 #include "chrome/browser/component_updater/pki_metadata_component_installer.h"
 #include "chrome/browser/net/chrome_mojo_proxy_resolver_factory.h"
 #include "chrome/browser/net/convert_explicitly_allowed_network_ports_pref.h"
+#include "chrome/browser/net/default_dns_over_https_config_source.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ssl/sct_reporting_service.h"
 #include "chrome/browser/ssl/ssl_config_service_manager.h"
@@ -629,6 +635,7 @@ SystemNetworkContextManager::~SystemNetworkContextManager() {
 // static
 void SystemNetworkContextManager::RegisterPrefs(PrefRegistrySimple* registry) {
   StubResolverConfigReader::RegisterPrefs(registry);
+  DefaultDnsOverHttpsConfigSource::RegisterPrefs(registry);
 
   // Static auth params
   registry->RegisterStringPref(prefs::kAuthSchemes,
@@ -811,6 +818,18 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
         network_annotation_monitor_->GetClient());
   }
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+  // cert_verifier_time_updater_ does not depend on the network service, but
+  // can't be initialized from the constructor since network_time_tracker()
+  // requires the SystemNetworkContextManager to be ready. It does not need to
+  // be recreated every time the network service is restarted (and should not,
+  // since it expects to outlive the NetworkTimeTracker).
+  if (base::FeatureList::IsEnabled(features::kCertVerificationNetworkTime) &&
+      !cert_verifier_time_updater_) {
+    cert_verifier_time_updater_ =
+        std::make_unique<CertVerifierServiceTimeUpdater>(
+            g_browser_process->network_time_tracker());
+  }
 }
 
 void SystemNetworkContextManager::DisableQuic() {

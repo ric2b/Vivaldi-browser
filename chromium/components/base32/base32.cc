@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <array>
 #include <limits>
 #include <string_view>
 
@@ -16,7 +17,9 @@ namespace base32 {
 
 namespace {
 
-constexpr char kEncoding[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+constexpr auto kEncoding =
+    std::to_array<const char>("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567");
+static_assert(kEncoding.size() == 33);  // 32 symbols + null terminator
 constexpr char kPaddingChar = '=';
 
 // Returns a 5 bit number between [0,31] matching the provided base 32 encoded

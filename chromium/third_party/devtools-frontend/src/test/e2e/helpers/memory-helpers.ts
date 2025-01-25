@@ -20,7 +20,7 @@ import {
   waitForNone,
 } from '../../shared/helper.js';
 
-const NEW_HEAP_SNAPSHOT_BUTTON = 'button[aria-label="Take heap snapshot"]';
+const NEW_HEAP_SNAPSHOT_BUTTON = 'devtools-button[aria-label="Take heap snapshot"]';
 const MEMORY_PANEL_CONTENT = 'div[aria-label="Memory panel"]';
 const PROFILE_TREE_SIDEBAR = 'div.profiles-tree-sidebar';
 export const MEMORY_TAB_ID = '#tab-heap-profiler';
@@ -33,12 +33,20 @@ export async function navigateToMemoryTab() {
   await waitFor(PROFILE_TREE_SIDEBAR);
 }
 
+export async function takeDetachedElementsProfile() {
+  const radioButton = await $('//label[text()="Detached elements"]', undefined, 'xpath');
+  await clickElement(radioButton);
+  await click('devtools-button[aria-label="Obtain detached elements"]');
+  await waitForNone('.heap-snapshot-sidebar-tree-item.wait');
+  await waitFor('.heap-snapshot-sidebar-tree-item.selected');
+}
+
 export async function takeAllocationProfile() {
   const radioButton = await $('//label[text()="Allocation sampling"]', undefined, 'xpath');
   await clickElement(radioButton);
-  await click('button[aria-label="Start heap profiling"]');
+  await click('devtools-button[aria-label="Start heap profiling"]');
   await new Promise(r => setTimeout(r, 200));
-  await click('button[aria-label="Stop heap profiling"]');
+  await click('devtools-button[aria-label="Stop heap profiling"]');
   await waitForNone('.heap-snapshot-sidebar-tree-item.wait');
   await waitFor('.heap-snapshot-sidebar-tree-item.selected');
 }
@@ -46,22 +54,26 @@ export async function takeAllocationProfile() {
 export async function takeAllocationTimelineProfile({recordStacks}: {recordStacks: boolean} = {
   recordStacks: false,
 }) {
-  const radioButton = await $('//label[text()="Allocation instrumentation on timeline"]', undefined, 'xpath');
+  const radioButton = await $('//label[text()="Allocations on timeline"]', undefined, 'xpath');
   await clickElement(radioButton);
   if (recordStacks) {
-    await click('[title="Record stack traces of allocations (extra performance overhead)"]');
+    await click('[title="Allocation stack traces (more overhead)"]');
   }
-  await click('button[aria-label="Start recording heap profile"]');
+  await click('devtools-button[aria-label="Start recording heap profile"]');
   await new Promise(r => setTimeout(r, 200));
-  await click('button[aria-label="Stop recording heap profile"]');
+  await click('devtools-button[aria-label="Stop recording heap profile"]');
   await waitForNone('.heap-snapshot-sidebar-tree-item.wait');
   await waitFor('.heap-snapshot-sidebar-tree-item.selected');
 }
 
-export async function takeHeapSnapshot() {
+export async function takeHeapSnapshot(name: string = 'Snapshot 1') {
   await click(NEW_HEAP_SNAPSHOT_BUTTON);
   await waitForNone('.heap-snapshot-sidebar-tree-item.wait');
-  await waitFor('.heap-snapshot-sidebar-tree-item.selected');
+  await waitForFunction(async () => {
+    const selected = await waitFor('.heap-snapshot-sidebar-tree-item.selected');
+    const title = await waitFor('span.title', selected);
+    return (await title.evaluate(e => e.textContent)) === name ? title : undefined;
+  });
 }
 
 export async function waitForHeapSnapshotData() {
@@ -297,14 +309,18 @@ export async function expandFocusedRow() {
   await waitFor('.selected.data-grid-data-grid-node.expanded');
 }
 
+function parseNumberWithSpaces(number: string): number {
+  return parseInt(number.replaceAll('\xa0', ''), 10);
+}
+
 async function getSizesFromRow(row: puppeteer.ElementHandle<Element>) {
   const numericData = await $$('.numeric-column>.profile-multiple-values>span', row);
   assert.strictEqual(numericData.length, 4);
-  function readNumber(e: Element) {
-    return parseInt((e.textContent as string).replaceAll('\xa0', ''), 10);
+  function readNumber(e: Element): string {
+    return e.textContent as string;
   }
-  const shallowSize = await numericData[0].evaluate(readNumber);
-  const retainedSize = await numericData[2].evaluate(readNumber);
+  const shallowSize = parseNumberWithSpaces(await numericData[0].evaluate(readNumber));
+  const retainedSize = parseNumberWithSpaces(await numericData[2].evaluate(readNumber));
   assert.isTrue(retainedSize >= shallowSize);
   return {shallowSize, retainedSize};
 }
@@ -336,6 +352,13 @@ export async function getCountFromCategoryRow(text: string) {
   return await countSpan.evaluate(e => parseInt((e.textContent ?? '').substring(1), 10));
 }
 
+export async function getAddedCountFromComparisonRow(text: string) {
+  const row = await getCategoryRow(text);
+  const addedCountCell = await waitFor('.addedCount-column', row);
+  const countText = await addedCountCell.evaluate(e => e.textContent ?? '');
+  return parseNumberWithSpaces(countText);
+}
+
 export async function clickOnContextMenuForRetainer(retainerName: string, menuItem: string) {
   const retainersPane = await waitFor('.retaining-paths-view');
   const element = await waitFor(`//span[text()="${retainerName}"]`, retainersPane, undefined, 'xpath');
@@ -345,7 +368,7 @@ export async function clickOnContextMenuForRetainer(retainerName: string, menuIt
 }
 
 export async function restoreIgnoredRetainers() {
-  const element = await waitFor('button[aria-label="Restore ignored retainers"]');
+  const element = await waitFor('devtools-button[aria-label="Restore ignored retainers"]');
   await clickElement(element);
 }
 
@@ -355,7 +378,6 @@ export async function setFilterDropdown(filter: string) {
 }
 
 export async function checkExposeInternals() {
-  const element =
-      await waitForElementWithTextContent('Expose internals (includes additional implementation-specific details)');
+  const element = await waitForElementWithTextContent('Internals with implementation details');
   await clickElement(element);
 }

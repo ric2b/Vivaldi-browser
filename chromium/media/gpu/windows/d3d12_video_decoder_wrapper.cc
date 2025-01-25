@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/gpu/windows/d3d12_video_decoder_wrapper.h"
 
 #include <Windows.h>
@@ -130,7 +135,7 @@ class D3D12VideoDecoderWrapperImpl : public D3D12VideoDecoderWrapper {
       case BufferType::kBitstream:
         return bitstream_buffer_.has_value();
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   bool SubmitSlice() override {
@@ -350,7 +355,7 @@ std::unique_ptr<ScopedD3DBuffer> D3D12VideoDecoderWrapperImpl::GetBuffer(
       return std::make_unique<ScopedD3D12ResourceBuffer>(
           this, compressed_bitstream_.Get(), media_log_);
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace

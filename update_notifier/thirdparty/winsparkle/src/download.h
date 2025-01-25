@@ -26,13 +26,13 @@
 #ifndef UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_DOWNLOAD_H_
 #define UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_DOWNLOAD_H_
 
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
 
-#include "base/strings/string_piece.h"
 #include "url/gurl.h"
-
-#include <string>
-#include <vector>
 
 namespace vivaldi_update_notifier {
 

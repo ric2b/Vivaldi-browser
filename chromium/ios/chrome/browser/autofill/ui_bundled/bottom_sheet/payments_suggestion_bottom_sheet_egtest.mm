@@ -35,17 +35,6 @@ const char kFormCardNumber[] = "CCNo";
 const char kFormCardExpirationMonth[] = "CCExpiresMonth";
 const char kFormCardExpirationYear[] = "CCExpiresYear";
 
-using base::test::ios::kWaitForActionTimeout;
-
-BOOL WaitForKeyboardToAppear() {
-  GREYCondition* waitForKeyboard = [GREYCondition
-      conditionWithName:@"Wait for keyboard"
-                  block:^BOOL {
-                    return [EarlGrey isKeyboardShownWithError:nil];
-                  }];
-  return [waitForKeyboard waitWithTimeout:kWaitForActionTimeout.InSecondsF()];
-}
-
 }  // namespace
 
 @interface PaymentsSuggestionBottomSheetEGTest : ChromeTestCase
@@ -142,6 +131,28 @@ NSString* ExpirationDateNSString() {
                                  autofill::test::NextYear().substr(2));
 }
 
+// Verifies that the number of accepted suggestions recorded for the given
+// `suggestion_index` is as expected.
+void CheckAutofillSuggestionAcceptedIndexMetricsCount(
+    NSInteger suggestion_index) {
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectUniqueSampleWithCount:1
+                            forBucket:suggestion_index
+                         forHistogram:
+                             @"Autofill.SuggestionAcceptedIndex.CreditCard"],
+      @"Unexpected histogram count for accepted card suggestion index.");
+
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectUniqueSampleWithCount:1
+                            forBucket:suggestion_index
+                         forHistogram:@"Autofill.UserAcceptedSuggestionAtIndex."
+                                      @"CreditCard.BottomSheet"],
+      @"Unexpected histogram count for bottom sheet accepted card suggestion "
+      @"index.");
+}
+
 #pragma mark - Helper methods
 
 // Loads simple page on localhost.
@@ -223,6 +234,42 @@ NSString* ExpirationDateNSString() {
           expectTotalCount:0
               forHistogram:@"Autofill.TouchToFill.CreditCard.SelectedIndex"],
       @"Unexpected histogram error for touch to fill credit card selected");
+
+  // Verify that the acceptance of the card suggestion at index 0 was correctly
+  // recorded.
+  CheckAutofillSuggestionAcceptedIndexMetricsCount(/*suggestion_index=*/0);
+
+  // Verify that the page is filled properly.
+  [self verifyCreditCardInfosHaveBeenFilled:autofill::test::GetCreditCard()];
+}
+
+// Tests that the expected metric is logged when accepting a suggestion from
+// the bottom sheet that is not the first one in the list.
+- (void)testAcceptedSuggestionIndexLogged {
+  // Add a credit card to the Personal Data Manager.
+  [AutofillAppInterface saveMaskedCreditCard];
+
+  [self loadPaymentsPage];
+
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+      performAction:chrome_test_util::TapWebElementWithId(kFormCardName)];
+
+  id<GREYMatcher> continueButton = ContinueButton();
+
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:continueButton];
+
+  // Make sure the user is seeing 2 cards on the bottom sheet.
+  GREYAssertEqual(2, [AutofillAppInterface localCreditCount],
+                  @"Wrong number of stored credit cards.");
+
+  // Select and use the second credit card.
+  [[EarlGrey selectElementWithMatcher:grey_text(_lastDigits)]
+      performAction:grey_tap()];
+  [[EarlGrey selectElementWithMatcher:continueButton] performAction:grey_tap()];
+
+  // Verify that the acceptance of the card suggestion at index 1 was correctly
+  // recorded.
+  CheckAutofillSuggestionAcceptedIndexMetricsCount(/*suggestion_index=*/1);
 
   // Verify that the page is filled properly.
   [self verifyCreditCardInfosHaveBeenFilled:autofill::test::GetCreditCard()];
@@ -383,7 +430,7 @@ NSString* ExpirationDateNSString() {
   [[EarlGrey selectElementWithMatcher:useKeyboardButton]
       performAction:grey_tap()];
 
-  WaitForKeyboardToAppear();
+  [ChromeEarlGrey waitForKeyboardToAppear];
 }
 
 // Verify that the Payments Bottom Sheet "Show Details" button opens the proper
@@ -427,7 +474,7 @@ NSString* ExpirationDateNSString() {
 
   // Close the context menu.
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::NavigationBarCancelButton()]
+      selectElementWithMatcher:chrome_test_util::NavigationBarDoneButton()]
       performAction:grey_tap()];
 
   // Reopen the bottom sheet.
@@ -491,7 +538,7 @@ NSString* ExpirationDateNSString() {
       performAction:chrome_test_util::TapWebElementWithId(kFormCardName)];
 
   // With no suggestions left, the keyboard should open instead.
-  WaitForKeyboardToAppear();
+  [ChromeEarlGrey waitForKeyboardToAppear];
 
   // Make sure the bottom sheet isn't there.
   [[EarlGrey selectElementWithMatcher:continueButton]
@@ -513,7 +560,7 @@ NSString* ExpirationDateNSString() {
   [[EarlGrey selectElementWithMatcher:grey_keyWindow()]
       performAction:grey_tap()];
 
-  WaitForKeyboardToAppear();
+  [ChromeEarlGrey waitForKeyboardToAppear];
 }
 
 // Tests that both the virtual card and the original card are shown

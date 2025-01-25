@@ -11,6 +11,7 @@
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
@@ -19,7 +20,6 @@
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
-#import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller+subclassing.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
@@ -29,11 +29,12 @@
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
+#import "ios/chrome/browser/ui/toolbar/tab_groups/ui/tab_group_indicator_view.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
+#import "ios/chrome/browser/location_bar/ui_bundled/location_bar_view_controller.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 
@@ -41,6 +42,7 @@ using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 @interface PrimaryToolbarViewController ()
+
 // Redefined to be a PrimaryToolbarView.
 @property(nonatomic, strong) PrimaryToolbarView* view;
 @property(nonatomic, assign) BOOL isNTP;
@@ -48,6 +50,7 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, assign) CGFloat previousFullscreenProgress;
 // Pan Gesture Recognizer for the view revealing pan gesture handler.
 @property(nonatomic, weak) UIPanGestureRecognizer* panGestureRecognizer;
+
 @end
 
 @implementation PrimaryToolbarViewController
@@ -191,25 +194,46 @@ using vivaldi::IsVivaldiRunning;
   // set to topLayoutGuide after the view creation on iOS 10.
   [self.view setUp];
 
+  // Note:(prio@vivaldi.com) - Add the guide in ToolbarCoordinator since its
+  // used for both top and bottom omnibox.
+  if (!IsVivaldiRunning()) {
   [self.layoutGuideCenter referenceView:self.view.locationBarContainer
                               underName:kTopOmniboxGuide];
+  } // End Vivaldi
+
   self.view.locationBarBottomConstraint.constant =
       [self verticalMarginForLocationBarForFullscreenProgress:1];
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  self.view.locationBarBottomConstraint.constant =
-      [self verticalMarginForLocationBarForFullscreenProgress:
-                self.previousFullscreenProgress];
-  self.view.topCornersRounded = NO;
-  [self.delegate
-      viewControllerTraitCollectionDidChange:previousTraitCollection];
+  // iOS 17 and later introduce a new way to handle trait changes. If the OS
+  // version is iOS 17 or later, we skip the old way of updating views.
+  if (@available(iOS 17, *)) {
+    return;
+  }
+  [self updateViews:self.view previousTraitCollection:previousTraitCollection];
 
   // Vivaldi
   [self refreshToolbarButtons];
   [self updateToolbarButtonsTintColor];
   // End Vivaldi
+}
+
+- (void)viewDidLoad {
+  [super viewDidLoad];
+
+  // On iOS 17 and later, we register for specific trait changes (vertical and
+  // horizontal size classes) and provide a handler method
+  // `updateViews:previousTraitCollection:` to be called when those traits
+  // change.
+  if (@available(iOS 17, *)) {
+    [self registerForTraitChanges:@[
+      UITraitVerticalSizeClass.self, UITraitHorizontalSizeClass.self
+    ]
+                       withAction:@selector(updateViews:
+                                      previousTraitCollection:)];
+  }
 }
 
 #pragma mark - UIResponder
@@ -227,6 +251,13 @@ using vivaldi::IsVivaldiRunning;
 - (void)keyCommand_close {
   base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
   [self.delegate close];
+}
+
+#pragma mark - Public
+
+- (void)setTabGroupIndicatorView:(TabGroupIndicatorView*)view {
+  CHECK(IsTabGroupIndicatorEnabled());
+  self.view.tabGroupIndicatorView = view;
 }
 
 #pragma mark - Property accessors
@@ -283,7 +314,9 @@ using vivaldi::IsVivaldiRunning;
 
   self.view.leadingStackView.alpha = alphaValue;
   self.view.trailingStackView.alpha = alphaValue;
-
+  if (IsTabGroupIndicatorEnabled()) {
+    self.view.tabGroupIndicatorView.alpha = alphaValue;
+  }
   self.view.locationBarBottomConstraint.constant =
       [self verticalMarginForLocationBarForFullscreenProgress:progress];
 }
@@ -358,6 +391,21 @@ using vivaldi::IsVivaldiRunning;
 }
 
 #pragma mark - Private
+
+// Adjusts the layout and appearance of views in response to changes in
+// available space and trait collections.
+- (void)updateViews:(UIView*)updatedView
+    previousTraitCollection:(UITraitCollection*)previousTraitCollection {
+  self.view.locationBarBottomConstraint.constant =
+      [self verticalMarginForLocationBarForFullscreenProgress:
+                self.previousFullscreenProgress];
+  self.view.topCornersRounded = NO;
+  if (IsTabGroupIndicatorEnabled()) {
+    [self.view updateTabGroupIndicatorAvailability];
+  }
+  [self.delegate
+      viewControllerTraitCollectionDidChange:previousTraitCollection];
+}
 
 - (CGFloat)clampedFontSizeMultiplier {
   return ToolbarClampedFontSizeMultiplier(

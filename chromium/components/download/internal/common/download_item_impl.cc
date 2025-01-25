@@ -159,9 +159,33 @@ std::string GetDownloadDangerNames(DownloadDangerType type) {
       return "POTENTIALLY_UNWANTED";
     case DOWNLOAD_DANGER_TYPE_ALLOWLISTED_BY_POLICY:
       return "ALLOWLISTED_BY_POLICY";
+    case DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
+      return "ASYNC_SCANNING";
+    case DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
+      return "BLOCKED_PASSWORD_PROTECTED";
+    case DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
+      return "BLOCKED_TOO_LARGE";
+    case DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
+      return "SENSITIVE_CONTENT_WARNING";
+    case DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
+      return "SENSITIVE_CONTENT_BLOCK";
+    case DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
+      return "DEEP_SCANNED_SAFE";
+    case DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
+      return "DEEP_SCANNED_OPENED_DANGEROUS";
+    case DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
+      return "PROMPT_FOR_SCANNING";
     case DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE:
       return "DANGEROUS_ACCOUNT_COMPROMISE";
-    default:
+    case DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_FAILED:
+      return "DEEP_SCANNED_FAILED";
+    case DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
+      return "PROMPT_FOR_LOCAL_PASSWORD_SCANNING";
+    case DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING:
+      return "ASYNC_LOCAL_PASSWORD_SCANNING";
+    case DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED:
+      return "BLOCKED_SCAN_FAILED";
+    case DOWNLOAD_DANGER_TYPE_MAX:
       NOTREACHED_IN_MIGRATION();
       return "UNKNOWN_DANGER_TYPE";
   }
@@ -565,26 +589,13 @@ void DownloadItemImpl::ValidateInsecureDownload() {
   MaybeCompleteDownload();
 }
 
-void DownloadItemImpl::StealDangerousDownload(bool delete_file_afterward,
-                                              AcquireFileCallback callback) {
+void DownloadItemImpl::CopyDownload(AcquireFileCallback callback) {
   DVLOG(20) << __func__ << "() download = " << DebugString(true);
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(IsDangerous());
   DCHECK(AllDataSaved());
 
-  if (delete_file_afterward) {
-    if (download_file_) {
-      GetDownloadTaskRunner()->PostTaskAndReplyWithResult(
-          FROM_HERE,
-          base::BindOnce(&DownloadFileDetach, std::move(download_file_)),
-          std::move(callback));
-    } else {
-      std::move(callback).Run(GetFullPath());
-    }
-    destination_info_.current_path.clear();
-    Remove();
-    // Download item has now been deleted.
-  } else if (download_file_) {
+  if (download_file_) {
     GetDownloadTaskRunner()->PostTaskAndReplyWithResult(
         FROM_HERE,
         base::BindOnce(&MakeCopyOfDownloadFile, download_file_.get()),
@@ -1658,7 +1669,7 @@ void DownloadItemImpl::Start(
       RecordParallelizableDownloadCount(NEW_DOWNLOAD_COUNT,
                                         IsParallelDownloadEnabled());
     }
-    RecordDownloadMimeType(mime_type_);
+    RecordDownloadMimeType(mime_type_, transient_);
     DownloadContent file_type = DownloadContentFromMimeType(mime_type_, false);
     DownloadConnectionSecurity state = CheckDownloadConnectionSecurity(
         new_create_info.url(), new_create_info.url_chain);
@@ -1668,7 +1679,7 @@ void DownloadItemImpl::Start(
     if (!delegate_->IsOffTheRecord()) {
       RecordDownloadCountWithSource(NEW_DOWNLOAD_COUNT_NORMAL_PROFILE,
                                     download_source_);
-      RecordDownloadMimeTypeForNormalProfile(mime_type_);
+      RecordDownloadMimeTypeForNormalProfile(mime_type_, transient_);
     }
   }
 
@@ -1768,6 +1779,7 @@ void DownloadItemImpl::OnDownloadTargetDetermined(
   if (state_ == TARGET_PENDING_INTERNAL &&
       target_info.interrupt_reason != DOWNLOAD_INTERRUPT_REASON_NONE) {
     deferred_interrupt_reason_ = target_info.interrupt_reason;
+    insecure_download_status_ = target_info.insecure_download_status;
     TransitionTo(INTERRUPTED_TARGET_PENDING_INTERNAL);
     OnTargetResolved();
     return;
@@ -1955,13 +1967,14 @@ void DownloadItemImpl::OnDownloadCompleting() {
 
   GetDownloadTaskRunner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&DownloadFile::RenameAndAnnotate,
-                     base::Unretained(download_file_.get()),
-                     GetTargetFilePath(),
-                     delegate_->GetApplicationClientIdForFileScanning(),
-                     delegate_->IsOffTheRecord() ? GURL() : GetURL(),
-                     delegate_->IsOffTheRecord() ? GURL() : GetReferrerUrl(),
-                     std::move(quarantine), std::move(rename_callback)));
+      base::BindOnce(
+          &DownloadFile::RenameAndAnnotate,
+          base::Unretained(download_file_.get()), GetTargetFilePath(),
+          delegate_->GetApplicationClientIdForFileScanning(),
+          delegate_->IsOffTheRecord() ? GURL() : GetURL(),
+          delegate_->IsOffTheRecord() ? GURL() : GetReferrerUrl(),
+          delegate_->IsOffTheRecord() ? std::nullopt : GetRequestInitiator(),
+          std::move(quarantine), std::move(rename_callback)));
 }
 
 void DownloadItemImpl::OnRenameAndAnnotateDone(

@@ -7,6 +7,7 @@ package org.chromium.components.data_sharing;
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.UserDataHost;
+import org.chromium.url.GURL;
 
 /** Data sharing service impl for testing. */
 public class TestDataSharingService implements DataSharingService {
@@ -60,6 +61,11 @@ public class TestDataSharingService implements DataSharingService {
     }
 
     @Override
+    public void addMember(String groupId, String accessToken, Callback<Integer> callback) {
+        Callback.runNullSafe(callback, PeopleGroupActionOutcome.PERSISTENT_FAILURE);
+    }
+
+    @Override
     public void removeMember(String groupId, String memberEmail, Callback<Integer> callback) {
         Callback.runNullSafe(callback, PeopleGroupActionOutcome.PERSISTENT_FAILURE);
     }
@@ -76,6 +82,46 @@ public class TestDataSharingService implements DataSharingService {
 
     @Override
     public UserDataHost getUserDataHost() {
+        return null;
+    }
+
+    @Override
+    public GURL getDataSharingURL(GroupData groupData) {
+        return null;
+    }
+
+    @Override
+    public ParseURLResult parseDataSharingURL(GURL url) {
+        return new ParseURLResult(
+                new GroupToken(/* groupId= */ null, /* accessToken= */ null),
+                ParseURLStatus.UNKNOWN);
+    }
+
+    @Override
+    public void ensureGroupVisibility(
+            String groupId, Callback<GroupDataOrFailureOutcome> callback) {
+        Callback.runNullSafe(
+                callback,
+                new DataSharingService.GroupDataOrFailureOutcome(
+                        null, PeopleGroupActionFailure.PERSISTENT_FAILURE));
+    }
+
+    @Override
+    public void getSharedEntitiesPreview(
+            GroupToken groupToken, Callback<SharedDataPreviewOrFailureOutcome> callback) {
+        Callback.runNullSafe(
+                callback,
+                new DataSharingService.SharedDataPreviewOrFailureOutcome(
+                        null, PeopleGroupActionFailure.PERSISTENT_FAILURE));
+    }
+
+    @Override
+    public DataSharingUIDelegate getUIDelegate() {
+        return null;
+    }
+
+    @Override
+    public ServiceStatus getServiceStatus() {
         return null;
     }
 }

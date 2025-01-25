@@ -61,7 +61,10 @@ luci.project(
             roles = [
                 acl.SCHEDULER_OWNER,
             ],
-            groups = "project-dawn-admins",
+            groups = [
+                "project-dawn-admins",
+                "project-dawn-schedulers",
+            ],
         ),
         acl.entry(
             roles = [
@@ -231,12 +234,7 @@ def get_dimension(os, builder_name = None):
     if os.category == os_category.LINUX:
         return "Ubuntu-22.04"
     elif os.category == os_category.MAC:
-        if "cmake" in builder_name:
-            # CMake build runs Tint e2e tests, which must run on 11+ where the metal
-            # compiler (xcrun) supports texel fetch (chromium_experimental_framebuffer_fetch)
-            return "Mac-11|Mac-12|Mac-13"
-        else:
-            return "Mac-10.15|Mac-11"
+        return "Mac-11|Mac-12|Mac-13|Mac-14"
     elif os.category == os_category.WINDOWS:
         return "Windows-10"
 
@@ -647,7 +645,7 @@ def dawn_cmake_standalone_builder(name, clang, debug, cpu, asan, ubsan, experime
             builder = "dawn:try/" + name,
         )
 
-def _add_branch_verifiers(builder_name, os, min_milestone = None, includable_only = False):
+def _add_branch_verifiers(builder_name, os, min_milestone = None, includable_only = False, disable_reuse = False):
     for milestone, details in ACTIVE_MILESTONES.items():
         if os not in details.platforms:
             continue
@@ -657,6 +655,7 @@ def _add_branch_verifiers(builder_name, os, min_milestone = None, includable_onl
             cq_group = "Dawn-CQ-" + milestone,
             builder = "{}:try/{}".format(details.chromium_project, builder_name),
             includable_only = includable_only,
+            disable_reuse = disable_reuse,
         )
 
 # We use the DEPS version for branches because ToT builders do not make sense on
@@ -931,6 +930,21 @@ luci.cq_tryjob_verifier(
     builder = "chromium:try/dawn-try-win-x64-nvidia-exp",
     includable_only = True,
 )
+
+luci.cq_tryjob_verifier(
+    cq_group = "Dawn-CQ",
+    builder = "chromium:try/linux-dawn-nvidia-1660-exp-rel",
+    includable_only = True,
+)
+
+# This is separate from the "presubmit" builder since we need branch-specific
+# branch builders unlike stock presubmit.
+luci.cq_tryjob_verifier(
+    cq_group = "Dawn-CQ",
+    builder = "chromium:try/dawn-chromium-presubmit",
+    disable_reuse = True,
+)
+_add_branch_verifiers("dawn-chromium-presubmit", "linux", min_milestone = 130, disable_reuse = True)
 
 # Views
 

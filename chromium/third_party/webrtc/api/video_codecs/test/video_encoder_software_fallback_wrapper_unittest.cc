@@ -14,20 +14,24 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "absl/types/optional.h"
 #include "api/environment/environment.h"
 #include "api/environment/environment_factory.h"
 #include "api/fec_controller_override.h"
 #include "api/scoped_refptr.h"
 #include "api/test/mock_video_encoder.h"
+#include "api/units/timestamp.h"
 #include "api/video/encoded_image.h"
 #include "api/video/i420_buffer.h"
-#include "api/video/video_bitrate_allocation.h"
+#include "api/video/video_bitrate_allocator.h"
+#include "api/video/video_codec_type.h"
 #include "api/video/video_frame.h"
 #include "api/video/video_frame_buffer.h"
+#include "api/video/video_frame_type.h"
 #include "api/video/video_rotation.h"
 #include "api/video_codecs/video_codec.h"
 #include "api/video_codecs/video_encoder.h"
@@ -160,7 +164,7 @@ class VideoEncoderSoftwareFallbackWrapperTestBase : public ::testing::Test {
     bool supports_native_handle_ = false;
     bool is_qp_trusted_ = false;
     std::string implementation_name_ = "fake-encoder";
-    absl::optional<VideoFrame> last_video_frame_;
+    std::optional<VideoFrame> last_video_frame_;
   };
 
   void InitEncode();

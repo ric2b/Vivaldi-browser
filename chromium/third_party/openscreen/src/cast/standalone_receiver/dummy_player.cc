@@ -6,7 +6,7 @@
 
 #include <chrono>
 
-#include "cast/streaming/encoded_frame.h"
+#include "cast/streaming/public/encoded_frame.h"
 #include "platform/base/span.h"
 #include "platform/base/trivial_clock_traits.h"
 #include "util/chrono_helpers.h"

@@ -37,9 +37,10 @@ Links: [https://example.com](https://example.com)
 Images: ![https://example.com](https://example.com)
 `,
               metadata: {},
+              completed: true,
             };
           },
       registerClientEvent: () => Promise.resolve({}),
     },
-    Host.AidaClient.AidaAvailability.AVAILABLE);
+    Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
 document.getElementById('container')?.appendChild(component);

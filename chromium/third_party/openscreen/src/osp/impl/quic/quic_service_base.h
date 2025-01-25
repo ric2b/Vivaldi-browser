@@ -10,9 +10,13 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "osp/impl/quic/certificates/quic_agent_certificate.h"
+#include "osp/impl/quic/quic_connection_factory_base.h"
 #include "osp/impl/quic/quic_stream_manager.h"
+#include "osp/public/connect_request.h"
 #include "osp/public/instance_request_ids.h"
 #include "osp/public/message_demuxer.h"
 #include "osp/public/protocol_connection_endpoint.h"
@@ -31,12 +35,15 @@ namespace openscreen::osp {
 class QuicServiceBase : public QuicConnection::Delegate,
                         public QuicStreamManager::Delegate {
  public:
+  static QuicAgentCertificate& GetAgentCertificate();
+
   QuicServiceBase(const ServiceConfig& config,
-                  MessageDemuxer& demuxer,
+                  std::unique_ptr<QuicConnectionFactoryBase> connection_factory,
                   ProtocolConnectionServiceObserver& observer,
                   InstanceRequestIds::Role role,
                   ClockNowFunctionPtr now_function,
-                  TaskRunner& task_runner);
+                  TaskRunner& task_runner,
+                  size_t buffer_limit);
   QuicServiceBase(const QuicServiceBase&) = delete;
   QuicServiceBase& operator=(const QuicServiceBase&) = delete;
   QuicServiceBase(QuicServiceBase&&) noexcept = delete;
@@ -44,8 +51,12 @@ class QuicServiceBase : public QuicConnection::Delegate,
   virtual ~QuicServiceBase();
 
   // QuicConnection::Delegate overrides.
+  uint64_t OnCryptoHandshakeComplete(std::string_view instance_name) override;
   void OnIncomingStream(uint64_t instance_id, QuicStream* stream) override;
+  void OnConnectionClosed(uint64_t instance_id) override;
   QuicStream::Delegate& GetStreamDelegate(uint64_t instance_id) override;
+  void OnClientCertificates(std::string_view instance_name,
+                            const std::vector<std::string>& certs) override;
 
   // QuicStreamManager::Delegate overrides.
   void OnConnectionDestroyed(QuicProtocolConnection& connection) override;
@@ -68,7 +79,20 @@ class QuicServiceBase : public QuicConnection::Delegate,
     std::unique_ptr<QuicStreamManager> stream_manager;
   };
 
-  virtual void CloseAllConnections() = 0;
+  struct PendingConnectionData {
+    explicit PendingConnectionData(ServiceConnectionData&& data);
+    PendingConnectionData(const PendingConnectionData&) = delete;
+    PendingConnectionData& operator=(const PendingConnectionData&) = delete;
+    PendingConnectionData(PendingConnectionData&&) noexcept;
+    PendingConnectionData& operator=(PendingConnectionData&&) noexcept;
+    ~PendingConnectionData();
+
+    ServiceConnectionData data;
+
+    // Pairs of request IDs and the associated ConnectRequestCallback.
+    // This is only used by QuicClient and is empty for QuicServer.
+    std::vector<std::pair<uint64_t, ConnectRequestCallback*>> callbacks;
+  };
 
   bool StartImpl();
   bool StopImpl();
@@ -77,14 +101,11 @@ class QuicServiceBase : public QuicConnection::Delegate,
   std::unique_ptr<ProtocolConnection> CreateProtocolConnectionImpl(
       uint64_t instance_id);
 
-  // Delete dead QUIC connections and schedule the next call to this function.
-  void Cleanup();
-
   ProtocolConnectionEndpoint::State state_ =
       ProtocolConnectionEndpoint::State::kStopped;
   InstanceRequestIds instance_request_ids_;
-  MessageDemuxer& demuxer_;
-  ProtocolConnectionServiceObserver& observer_;
+  MessageDemuxer demuxer_;
+  std::unique_ptr<QuicConnectionFactoryBase> connection_factory_;
 
   // IPEndpoints used by this service to build connection.
   //
@@ -103,6 +124,17 @@ class QuicServiceBase : public QuicConnection::Delegate,
   // TODO(crbug.com/347268871): Replace instance_name as an agent identifier.
   std::map<std::string, uint64_t, std::less<>> instance_map_;
 
+  // Maps an instance name to data about connections that haven't successfully
+  // completed the QUIC handshake.
+  std::map<std::string, PendingConnectionData, std::less<>>
+      pending_connections_;
+
+ private:
+  void CloseAllConnections();
+
+  // Delete dead QUIC connections and schedule the next call to this function.
+  void Cleanup();
+
   // Value that will be used for the next new instance.
   uint64_t next_instance_id_ = 1u;
 
@@ -115,6 +147,7 @@ class QuicServiceBase : public QuicConnection::Delegate,
   // referencing them.
   std::vector<uint64_t> delete_connections_;
 
+  ProtocolConnectionServiceObserver& observer_;
   Alarm cleanup_alarm_;
 };
 

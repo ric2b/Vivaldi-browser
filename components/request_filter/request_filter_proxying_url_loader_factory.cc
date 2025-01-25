@@ -10,13 +10,13 @@
 #include <utility>
 
 #include "base/no_destructor.h"
+#include "base/not_fatal_until.h"
 #include "base/strings/stringprintf.h"
 #include "base/types/optional_util.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "base/not_fatal_until.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
@@ -73,10 +73,11 @@ void ForwardOnBeforeSendHeadersCallback(
     const std::optional<::net::HttpRequestHeaders>& initial_headers,
     int32_t error_code,
     const std::optional<::net::HttpRequestHeaders>& headers) {
-  if (headers)
+  if (headers) {
     std::move(callback).Run(error_code, headers);
-  else
+  } else {
     std::move(callback).Run(error_code, initial_headers);
+  }
 }
 
 void ForwardOnHeaderReceivedCallback(
@@ -268,8 +269,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     // continue or cancel the request.
     //
     // We pause the receiver here to prevent further client message processing.
-    if (proxied_client_receiver_.is_bound())
+    if (proxied_client_receiver_.is_bound()) {
       proxied_client_receiver_.Pause();
+    }
 
     // Pause the header client, since we want to wait until OnBeforeRequest has
     // finished before processing any future events.
@@ -289,11 +291,13 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::FollowRedirect(
     const net::HttpRequestHeaders& modified_headers,
     const net::HttpRequestHeaders& modified_cors_exempt_headers,
     const std::optional<GURL>& new_url) {
-  if (new_url)
+  if (new_url) {
     request_.url = new_url.value();
+  }
 
-  for (const std::string& header : removed_headers)
+  for (const std::string& header : removed_headers) {
     request_.headers.RemoveHeader(header);
+  }
   request_.headers.MergeFrom(modified_headers);
 
   // Call this before checking |current_request_uses_header_client_| as it
@@ -325,20 +329,23 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::FollowRedirect(
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::SetPriority(
     net::RequestPriority priority,
     int32_t intra_priority_value) {
-  if (target_loader_.is_bound())
+  if (target_loader_.is_bound()) {
     target_loader_->SetPriority(priority, intra_priority_value);
+  }
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     PauseReadingBodyFromNet() {
-  if (target_loader_.is_bound())
+  if (target_loader_.is_bound()) {
     target_loader_->PauseReadingBodyFromNet();
+  }
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     ResumeReadingBodyFromNet() {
-  if (target_loader_.is_bound())
+  if (target_loader_.is_bound()) {
     target_loader_->ResumeReadingBodyFromNet();
+  }
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -397,8 +404,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     // If this redirect is from an HSTS upgrade, OnHeadersReceived will not be
     // called before OnReceiveRedirect, so make sure the saved headers exist
     // before setting them.
-    if (saved_headers)
+    if (saved_headers) {
       current_response_->headers = saved_headers;
+    }
     ContinueToBeforeRedirect(redirect_info, net::OK);
   } else {
     current_response_ = std::move(head);
@@ -450,8 +458,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnLoaderCreated(
   header_client_receiver_.reset();
 
   header_client_receiver_.Bind(std::move(receiver));
-  if (is_header_client_receiver_paused_)
+  if (is_header_client_receiver_paused_) {
     header_client_receiver_.Pause();
+  }
 
   forwarding_header_client_.reset();
   forwarding_header_client_.Bind(std::move(forwarding_header_client));
@@ -504,8 +513,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       // Deletes |this| unless we have a forwarding client dealing with the
       // callback. In that case, the forwarding client may delete itself,
       // resulting in us landing in OnRequestError.
-      if (!forwarding_header_client_)
+      if (!forwarding_header_client_) {
         factory_->RemoveRequest(network_service_request_id_, request_id_);
+      }
     }
     return;
   }
@@ -582,8 +592,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     return;
   }
 
-  if (proxied_client_receiver_.is_bound())
+  if (proxied_client_receiver_.is_bound()) {
     proxied_client_receiver_.Resume();
+  }
 
   if (request_.url.SchemeIsHTTPOrHTTPS() ||
       request_.url.SchemeIs(url::kUuidInPackageScheme)) {
@@ -615,8 +626,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       // continue or cancel the request.
       //
       // We pause the binding here to prevent further client message processing.
-      if (proxied_client_receiver_.is_bound())
+      if (proxied_client_receiver_.is_bound()) {
         proxied_client_receiver_.Pause();
+      }
       return;
     }
     DCHECK_EQ(net::OK, result);
@@ -650,8 +662,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     return;
   }
 
-  if (proxied_client_receiver_.is_bound())
+  if (proxied_client_receiver_.is_bound()) {
     proxied_client_receiver_.Resume();
+  }
 
   if (header_client_receiver_.is_bound()) {
     header_client_receiver_.Resume();
@@ -671,8 +684,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     uint32_t options = options_;
     // Even if this request does not use the header client, future redirects
     // might, so we need to set the option on the loader.
-    if (has_any_extra_headers_listeners_)
+    if (has_any_extra_headers_listeners_) {
       options |= network::mojom::kURLLoadOptionUseHeaderClient;
+    }
     factory_->target_factory_->CreateLoaderAndStart(
         target_loader_.BindNewPipeAndPassReceiver(
             navigation_response_task_runner_),
@@ -717,10 +731,11 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
         removed_request_headers_.begin(), removed_request_headers_.end());
 
     for (auto& set_header : set_request_headers_) {
-      std::string header_value;
-      if (request_.headers.GetHeader(set_header, &header_value)) {
+      std::optional<std::string> header_value =
+          request_.headers.GetHeader(set_header);
+      if (header_value) {
         pending_follow_redirect_params_->modified_headers.SetHeader(
-            set_header, header_value);
+            set_header, *header_value);
       } else {
         NOTREACHED_IN_MIGRATION();
       }
@@ -737,8 +752,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     pending_follow_redirect_params_.reset();
   }
 
-  if (proxied_client_receiver_.is_bound())
+  if (proxied_client_receiver_.is_bound()) {
     proxied_client_receiver_.Resume();
+  }
 
   if (request_.url.SchemeIsHTTPOrHTTPS() ||
       request_.url.SchemeIs(url::kUuidInPackageScheme)) {
@@ -749,8 +765,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
                                               &info_.value(), request_.headers);
   }
 
-  if (!current_request_uses_header_client_)
+  if (!current_request_uses_header_client_) {
     ContinueToStartRequestWithOk();
+  }
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -815,8 +832,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     // which will start authentication process.
     if (current_response_->headers &&
         current_response_->headers->response_code() ==
-            net::HTTP_PROXY_AUTHENTICATION_REQUIRED)
+            net::HTTP_PROXY_AUTHENTICATION_REQUIRED) {
       return;
+    }
     // We notify the completion here, and delete |this|.
     factory_->request_handler_->OnResponseStarted(factory_->browser_context_,
                                                   &info_.value(), net::OK);
@@ -826,13 +844,15 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     // Deletes |this| unless we have a forwarding client dealing with the
     // callback. In that case, the forwarding client may delete itself,
     // resulting in us landing in OnRequestError.
-    if (!forwarding_header_client_)
+    if (!forwarding_header_client_) {
       factory_->RemoveRequest(network_service_request_id_, request_id_);
+    }
     return;
   }
 
-  if (proxied_client_receiver_.is_bound())
+  if (proxied_client_receiver_.is_bound()) {
     proxied_client_receiver_.Resume();
+  }
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -950,8 +970,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   info_->AddResponse(*current_response_);
 
-  if (proxied_client_receiver_.is_bound())
+  if (proxied_client_receiver_.is_bound()) {
     proxied_client_receiver_.Resume();
+  }
 
   factory_->request_handler_->OnBeforeRedirect(
       factory_->browser_context_, &info_.value(), redirect_info.new_url);
@@ -969,8 +990,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   // The request method can be changed to "GET". In this case we need to
   // reset the request body manually.
-  if (request_.method == net::HttpRequestHeaders::kGetMethod)
+  if (request_.method == net::HttpRequestHeaders::kGetMethod) {
     request_.request_body = nullptr;
+  }
 }
 
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
@@ -1026,8 +1048,9 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnRequestError(
     const network::URLLoaderCompletionStatus& status,
     State state) {
-  if (target_client_)
+  if (target_client_) {
     target_client_->OnComplete(status);
+  }
   factory_->request_handler_->OnErrorOccurred(
       factory_->browser_context_, &info_.value(), true /* started */,
       status.error_code);
@@ -1096,8 +1119,7 @@ bool RequestFilterProxyingURLLoaderFactory::InProgressRequest::IsRedirectSafe(
     }
     return extensions::WebAccessibleResourcesInfo::
         IsResourceWebAccessibleRedirect(extension, target_url,
-                                        original_initiator_,
-                                        upstream_url);
+                                        original_initiator_, upstream_url);
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   return content::IsSafeRedirectTarget(upstream_url, target_url);
@@ -1163,9 +1185,10 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
       &RequestFilterProxyingURLLoaderFactory::OnProxyBindingError,
       base::Unretained(this)));
 
-  if (header_client_receiver)
+  if (header_client_receiver) {
     url_loader_header_client_receiver_.Bind(std::move(header_client_receiver),
                                             navigation_response_task_runner_);
+  }
 }
 
 void RequestFilterProxyingURLLoaderFactory::StartProxying(
@@ -1242,9 +1265,10 @@ void RequestFilterProxyingURLLoaderFactory::OnLoaderCreated(
     mojo::PendingReceiver<network::mojom::TrustedHeaderClient> receiver) {
   auto it = network_request_id_to_filtered_request_id_.find(request_id);
   if (it == network_request_id_to_filtered_request_id_.end()) {
-    if (forwarding_url_loader_header_client_)
+    if (forwarding_url_loader_header_client_) {
       forwarding_url_loader_header_client_->OnLoaderCreated(
           request_id, std::move(receiver));
+    }
     return;
   }
 
@@ -1280,9 +1304,10 @@ void RequestFilterProxyingURLLoaderFactory::OnLoaderForCorsPreflightCreated(
 
   mojo::PendingRemote<network::mojom::TrustedHeaderClient>
       forwarding_header_client;
-  if (forwarding_url_loader_header_client_)
+  if (forwarding_url_loader_header_client_) {
     forwarding_url_loader_header_client_->OnLoaderForCorsPreflightCreated(
         request, forwarding_header_client.InitWithNewPipeAndPassReceiver());
+  }
 
   result.first->second->OnLoaderCreated(std::move(receiver),
                                         std::move(forwarding_header_client));

@@ -16,11 +16,8 @@
 #include <string>
 #include <vector>
 
-#include "base/strings/cstring_view.h"
 #include "base/time/time.h"
 #include "base/win/windows_types.h"
-#include "build/branding_buildflags.h"
-#include "build/build_config.h"
 #include "chrome/installer/util/lzma_util.h"
 #include "chrome/installer/util/util_constants.h"
 
@@ -47,28 +44,6 @@ enum UnPackConsumer {
   SETUP_EXE_PATCH,
   UNCOMPRESSED_CHROME_ARCHIVE,
 };
-
-// Applies a patch file to source file using Courgette. Returns 0 in case of
-// success. In case of errors, it returns kCourgetteErrorOffset + a Courgette
-// status code, as defined in courgette/courgette.h
-int CourgettePatchFiles(const base::FilePath& src,
-                        const base::FilePath& patch,
-                        const base::FilePath& dest);
-
-// Applies a patch file to source file using bsdiff. This function uses
-// Courgette's flavor of bsdiff. Returns 0 in case of success, or
-// kBsdiffErrorOffset + a bsdiff status code in case of errors.
-// See courgette/third_party/bsdiff/bsdiff.h for details.
-int BsdiffPatchFiles(const base::FilePath& src,
-                     const base::FilePath& patch,
-                     const base::FilePath& dest);
-
-// Applies a patch file to source file using Zucchini. Returns 0 in case of
-// success. In case of errors, it returns kZucchiniErrorOffset + a Zucchini
-// status code, as defined in components/zucchini/zucchini.h
-int ZucchiniPatchFiles(const base::FilePath& src,
-                       const base::FilePath& patch,
-                       const base::FilePath& dest);
 
 // Find the version of Chrome from an install source directory.
 // Chrome_path should contain at least one version folder.
@@ -178,13 +153,6 @@ void AddUpdateDowngradeVersionItem(HKEY root,
                                    const base::Version& current_version,
                                    const base::Version& new_version,
                                    WorkItemList* list);
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-// Store the current Windows version in the Windows registry, and return the
-// previously stored last version.
-std::wstring UpdateLastWindowsVersion(base::wcstring_view os_version);
-
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 }  // namespace installer
 

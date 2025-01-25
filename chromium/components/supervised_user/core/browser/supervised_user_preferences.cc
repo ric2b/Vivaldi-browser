@@ -16,13 +16,6 @@
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "components/prefs/android/pref_service_android.h"
-
-// Must come after other includes, because FromJniType() uses PrefService.
-#include "components/supervised_user/android/supervised_user_preferences_jni_headers/SupervisedUserPreferences_jni.h"
-#endif
-
 namespace supervised_user {
 
 namespace {
@@ -57,7 +50,7 @@ struct Family {
           regular_members_.push_back(member);
           break;
         default:
-          NOTREACHED_NORETURN();
+          NOTREACHED();
       }
     }
   }
@@ -190,36 +183,4 @@ bool IsSubjectToParentalControls(const PrefService& pref_service) {
   return pref_service.GetString(prefs::kSupervisedUserId) == kChildAccountSUID;
 }
 
-bool AreExtensionsPermissionsEnabled(const PrefService& pref_service) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#if BUILDFLAG(IS_CHROMEOS)
-  return supervised_user::IsSubjectToParentalControls(pref_service);
-#else
-  return supervised_user::IsSubjectToParentalControls(pref_service) &&
-         base::FeatureList::IsEnabled(
-             kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-#endif  // BUILDFLAG(IS_CHROMEOS)
-#else
-  return false;
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-}
-
-bool SupervisedUserCanSkipExtensionParentApprovals(
-    const PrefService& pref_service) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  return IsSubjectToParentalControls(pref_service) &&
-         IsSupervisedUserSkipParentApprovalToInstallExtensionsEnabled() &&
-         pref_service.GetBoolean(prefs::kSkipParentApprovalToInstallExtensions);
-#else
-  return false;
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-}
 }  // namespace supervised_user
-
-#if BUILDFLAG(IS_ANDROID)
-static jboolean JNI_SupervisedUserPreferences_IsSubjectToParentalControls(
-    JNIEnv* env,
-    PrefService* prefs) {
-  return prefs && supervised_user::IsSubjectToParentalControls(*prefs);
-}
-#endif

@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "Iec753a7e4fc984fe032cf0519d201d92af2b2c70",
+  "upstream_commit_id": "I75f718ecb34bb5c53df8c729f44d46590594cce3",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -47,6 +47,19 @@ hooks = [
     'name': 'Ensure bootstrap',
     'pattern': '.',
     'action': ["bash", 'chromium/third_party/depot_tools/ensure_bootstrap'],
+  },
+  {
+    # Ensure we remove any file from disk that is no longer needed (e.g. after
+    # hooks to native GCS deps migration).
+    'name': 'remove_stale_files',
+    'pattern': '.',
+    'action': [
+        'python3',
+        'chromium/tools/remove_stale_files.py',
+        'chromium/third_party/test_fonts/test_fonts.tar.gz', # Remove after 20240901
+        'chromium/third_party/node/node_modules.tar.gz', # TODO: Remove after 20241201, see https://crbug.com/351092787
+        'chromium/third_party/tfhub_models', # TODO: Remove after 20241211
+    ],
   },
   {
     # Ensure that we don't accidentally reference any .pyc files whose
@@ -395,6 +408,9 @@ hooks = [
                 'download',
                 '--depot-tools',
                 'chromium/third_party/depot_tools',
+                '--check-v8-revision',
+                "--force",
+                '--quiet',
     ],
   },
   #{ # Vivaldi don't do libc++ roll and reverts; disabling

@@ -16,7 +16,6 @@ is_android = os.access(os.path.join(sourcedir, ".enable_android"), os.F_OK)
 is_ios = os.access(os.path.join(sourcedir, ".enable_ios"), os.F_OK)
 use_gn_ide_all = os.access(os.path.join(sourcedir, ".enable_gn_all_ide"), os.F_OK)
 use_gn_unique_name = os.access(os.path.join(sourcedir, ".enable_gn_unique_name"), os.F_OK)
-use_gn_goma = os.access(os.path.join(sourcedir, ".enable_gn_goma"), os.F_OK)
 use_gn_reclient = os.access(os.path.join(sourcedir, ".enable_gn_reclient"), os.F_OK)
 
 # Check python version
@@ -50,7 +49,6 @@ parser.add_argument("--ide-all", action="store_true");
 parser.add_argument("--ide-unique-name", action="store_true");
 parser.add_argument("--official", action="store_true");
 parser.add_argument("--static", action="store_true");
-parser.add_argument("--goma", action="store_true");
 parser.add_argument("--no-hermetic", action="store_true");
 parser.add_argument("--args-gn")
 parser.add_argument("--filter-project")
@@ -215,33 +213,8 @@ if args.static or is_ios: # IOS requires static linking
 if args.no_hermetic:
   gn_defines += " use_hermetic_toolchain=false"
 
-assert not (use_gn_reclient and use_gn_goma), "only enable either Reclient or Goma"
-
-if  args.goma or use_gn_goma:
-  _paths = os.environ["PATH"].split(os.pathsep)
-  goma_path = "bin/goma/goma-"
-  goma_cc = "gomacc"
-  if is_windows:
-    goma_cc = goma_cc+".exe"
-    goma_path = goma_path+"win"
-  elif is_mac_arm64:
-    goma_path = goma_path+"mac-arm64"
-  elif is_mac:
-    goma_path = goma_path+"mac"
-  else:
-    goma_path = goma_path+"linux"
-
-  goma_cand = None
-  for _p in _paths:
-    goma_cand = os.path.join(_p, goma_path, goma_cc)
-    if os.access(goma_cand, os.F_OK):
-      break
-    goma_cand = None
-  if goma_cand:
-    gn_defines += ' use_goma=true goma_dir="{}"'.format(os.path.join(_p, goma_path))
-  else:
-    print("NOTE! Goma was not found and has not been enabled!")
-elif use_gn_reclient:
+if use_gn_reclient:
+  # Temporary disabling of reclient on Windows, because problems with Linux clang 20 cross-compile
   gn_defines += ' vivaldi_enable_reclient=true'
 
 if args.refresh or not args.args:

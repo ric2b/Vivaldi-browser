@@ -23,7 +23,6 @@ import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionPr
 import org.chromium.chrome.browser.omnibox.suggestions.groupseparator.GroupSeparatorProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.mostvisited.MostVisitedTilesProcessor;
-import org.chromium.chrome.browser.omnibox.suggestions.querytiles.QueryTilesProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionProcessor;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
@@ -41,6 +40,8 @@ import java.util.Optional;
 // Vivaldi
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import java.util.Collections;
+import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 
 /** Builds DropdownItemViewInfo list from AutocompleteResult for the Suggestions list. */
 class DropdownItemViewInfoListBuilder {
@@ -97,7 +98,6 @@ class DropdownItemViewInfoListBuilder {
                         context, host, textProvider, mImageSupplier, mBookmarkState));
         registerSuggestionProcessor(new TailSuggestionProcessor(context, host));
         registerSuggestionProcessor(new MostVisitedTilesProcessor(context, host, mImageSupplier));
-        registerSuggestionProcessor(new QueryTilesProcessor(context, host, mImageSupplier));
         registerSuggestionProcessor(
                 new BasicSuggestionProcessor(
                         context, host, textProvider, mImageSupplier, mBookmarkState));
@@ -235,6 +235,15 @@ class DropdownItemViewInfoListBuilder {
                     DropdownCommonProperties.BG_BOTTOM_CORNER_ROUNDED,
                     indexInList == numGroupMatches - 1);
             model.set(DropdownCommonProperties.SHOW_DIVIDER, indexInList < numGroupMatches - 1);
+            if (BuildConfig.IS_VIVALDI) { // Vivaldi VAB-10000
+                Tab activeTab = mActivityTabSupplier.get();
+                if (activeTab != null) {
+                    model.set(SuggestionCommonProperties.COLOR_SCHEME,
+                            activeTab.isIncognitoBranded()
+                                    ? BrandedColorScheme.INCOGNITO
+                                    : BrandedColorScheme.LIGHT_BRANDED_THEME);
+                }
+            }
 
             processor.populateModel(match, model, indexOnList);
             result.add(new DropdownItemViewInfo(processor, model, groupDetails));

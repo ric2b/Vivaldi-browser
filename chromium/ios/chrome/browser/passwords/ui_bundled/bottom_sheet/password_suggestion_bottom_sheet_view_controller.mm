@@ -5,17 +5,18 @@
 #import "ios/chrome/browser/passwords/ui_bundled/bottom_sheet/password_suggestion_bottom_sheet_view_controller.h"
 
 #import "base/apple/foundation_util.h"
+#import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/ios/shared_password_controller.h"
 #import "components/url_formatter/elide_url.h"
-#import "ios/chrome/browser/shared/ui/bottom_sheet/table_view_bottom_sheet_view_controller+subclassing.h"
-#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/passwords/ui_bundled/bottom_sheet/password_suggestion_bottom_sheet_delegate.h"
 #import "ios/chrome/browser/passwords/ui_bundled/bottom_sheet/password_suggestion_bottom_sheet_handler.h"
-#import "ios/chrome/browser/ui/settings/password/branded_navigation_item_title_view.h"
+#import "ios/chrome/browser/shared/ui/bottom_sheet/table_view_bottom_sheet_view_controller+subclassing.h"
+#import "ios/chrome/browser/shared/ui/elements/branded_navigation_item_title_view.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/settings/password/create_password_manager_title_view.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -228,8 +229,13 @@ CGFloat const kSpacingAfterTitle = 4;
 #pragma mark - ConfirmationAlertActionHandler
 
 - (void)confirmationAlertPrimaryAction {
+  base::RecordAction(
+      base::UserMetricsAction("BottomSheet_Password_SuggestionAccepted"));
   NSInteger index = [self selectedRow];
-  [self.handler primaryButtonTapped:_suggestions[index]];
+  base::UmaHistogramSparse(
+      "Autofill.UserAcceptedSuggestionAtIndex.Password.BottomSheet", index);
+  [self.handler primaryButtonTappedForSuggestion:_suggestions[index]
+                                         atIndex:index];
 
   if ([self rowCount] > 1) {
     base::UmaHistogramCounts100("PasswordManager.TouchToFill.CredentialIndex",
@@ -248,6 +254,9 @@ CGFloat const kSpacingAfterTitle = 4;
     subtitle.attributedText =
         PutBoldPartInString(_subtitle, UIFontTextStyleBody);
     subtitle.textAlignment = NSTextAlignmentCenter;
+    // Setting `attributedText` overrides `textColor` set in the parent class,
+    // which does not render visibly in dark mode.
+    subtitle.textColor = [UIColor colorNamed:kTextSecondaryColor];
   }
 }
 

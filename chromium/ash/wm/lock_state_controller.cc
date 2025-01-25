@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ash/wm/lock_state_controller.h"
 
 #include <algorithm>
@@ -192,9 +197,16 @@ bool ShouldTakeInformedRestoreScreenshot() {
         ScreenshotOnShutdownStatus::kFailedInOverview);
     return false;
   }
-  if (shell->session_controller()->IsScreenLocked()) {
+  auto* session_controller = shell->session_controller();
+  if (session_controller->IsScreenLocked()) {
     RecordScreenshotOnShutdownStatus(
         ScreenshotOnShutdownStatus::kFailedInLockScreen);
+    return false;
+  }
+  if (session_controller->IsUserGuest() ||
+      session_controller->IsUserPublicAccount()) {
+    RecordScreenshotOnShutdownStatus(
+        ScreenshotOnShutdownStatus::kFailedInGuestOrPublicUserSession);
     return false;
   }
   if (shell->app_list_controller()->IsHomeScreenVisible()) {
@@ -873,6 +885,7 @@ void LockStateController::SessionStateChangeWithInformedRestore(
     DeleteInformedRestoreImage(informed_restore_image_callback_for_test_,
                                file_path);
     StartSessionStateChange(requested_session_state);
+    return;
   }
 
   // Check if there are any content currently on the screen that are restricted

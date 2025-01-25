@@ -5,7 +5,10 @@
 #include "components/plus_addresses/plus_address_parsing_utils.h"
 
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
@@ -31,7 +34,7 @@ namespace {
 std::optional<PlusProfile> ParsePlusProfileFromV1Dict(base::Value::Dict dict) {
   std::string profile_id;
   std::string facet_str;
-  std::string plus_address;
+  PlusAddress plus_address;
   std::optional<bool> is_confirmed;
   for (std::pair<const std::string&, base::Value&> entry : dict) {
     auto [key, val] = entry;
@@ -51,7 +54,7 @@ std::optional<PlusProfile> ParsePlusProfileFromV1Dict(base::Value::Dict dict) {
           continue;
         }
         if (base::MatchPattern(email_key, "*Address")) {
-          plus_address = std::move(email_val.GetString());
+          plus_address = PlusAddress(std::move(email_val.GetString()));
         }
         if (base::MatchPattern(email_key, "*Mode")) {
           is_confirmed =
@@ -60,13 +63,9 @@ std::optional<PlusProfile> ParsePlusProfileFromV1Dict(base::Value::Dict dict) {
       }
     }
   }
-  if (profile_id.empty() || facet_str.empty() || plus_address.empty() ||
+  if (profile_id.empty() || facet_str.empty() || plus_address->empty() ||
       !is_confirmed.has_value()) {
     return std::nullopt;
-  }
-  if (!IsSyncingPlusAddresses()) {
-    return PlusProfile(std::move(profile_id), std::move(facet_str),
-                       std::move(plus_address), *is_confirmed);
   }
   affiliations::FacetURI facet =
       affiliations::FacetURI::FromPotentiallyInvalidSpec(facet_str);
@@ -77,30 +76,46 @@ std::optional<PlusProfile> ParsePlusProfileFromV1Dict(base::Value::Dict dict) {
                      std::move(plus_address), *is_confirmed);
 }
 
-// Creates a list of PlusProfiles by parsing each dict-value in `list` that
-// fits this schema (in TS notation):
-// {
-//   "facet": string,
-//   "plusEmail": {
-//     "plusAddress": string
-//     "plusMode": string,
-//   }
-// }[]
-// The returned list only contains PlusProfiles which could be parsed.
-std::vector<PlusProfile> ParsePlusProfilesFromV1ProfileList(
-    base::Value::List list) {
-  std::vector<PlusProfile> profiles;
-  profiles.reserve(list.size());
-  for (base::Value& entry : list) {
-    if (!entry.is_dict()) {
-      continue;
-    }
-    if (std::optional<PlusProfile> maybe_profile =
-            ParsePlusProfileFromV1Dict(std::move(entry.GetDict()))) {
-      profiles.push_back(std::move(*maybe_profile));
-    }
+// Attempts to parse a string of format "[0-9]+s" into a `base::TimeDelta`.
+std::optional<base::TimeDelta> ParseLifetime(std::string* str) {
+  if (!str) {
+    return std::nullopt;
   }
-  return profiles;
+  if (str->empty() || !str->ends_with('s')) {
+    return std::nullopt;
+  }
+
+  int64_t seconds;
+  if (!base::StringToInt64(std::string_view(*str).substr(0, str->size() - 1),
+                           &seconds)) {
+    return std::nullopt;
+  }
+  return base::Seconds(seconds);
+}
+
+// Attempts to parse a `base::Value::Dict` into to a `PreallocatedPlusAddress`.
+std::optional<PreallocatedPlusAddress> ParsePreallocatedPlusAddress(
+    base::Value::Dict dict) {
+  static constexpr std::string_view kAddressKey = "emailAddress";
+  static constexpr std::string_view kLifetimeKey = "reservationLifetime";
+
+  PlusAddress address;
+  if (std::string* address_str = dict.FindString(kAddressKey)) {
+    address = PlusAddress(std::move(*address_str));
+  } else {
+    return std::nullopt;
+  }
+
+  base::TimeDelta lifetime;
+  if (std::optional<base::TimeDelta> time =
+          ParseLifetime(dict.FindString(kLifetimeKey))) {
+    lifetime = *time;
+  } else {
+    return std::nullopt;
+  }
+
+  return std::make_optional<PreallocatedPlusAddress>(std::move(address),
+                                                     lifetime);
 }
 
 }  // namespace
@@ -122,28 +137,29 @@ std::optional<PlusProfile> ParsePlusProfileFromV1Create(
   return std::nullopt;
 }
 
-std::optional<PlusAddressMap> ParsePlusAddressMapFromV1List(
+std::optional<std::vector<PreallocatedPlusAddress>>
+ParsePreallocatedPlusAddresses(
     data_decoder::DataDecoder::ValueOrError response) {
+  static constexpr std::string_view kAddressesKey = "emailAddresses";
   if (!response.has_value() || !response->is_dict()) {
     return std::nullopt;
   }
-  // Use iterators to avoid looking up by JSON keys.
-  for (std::pair<const std::string&, base::Value&> first_level_entry :
-       response->GetDict()) {
-    auto [first_key, first_val] = first_level_entry;
-    if (base::MatchPattern(first_key, "*Profiles") && first_val.is_list()) {
-      PlusAddressMap site_to_plus_address;
-      // Parse the list of profiles and add the result to the mapping.
-      for (PlusProfile& profile :
-           ParsePlusProfilesFromV1ProfileList(std::move(first_val.GetList()))) {
-        site_to_plus_address[std::move(absl::get<std::string>(profile.facet))] =
-            std::move(profile.plus_address);
-      }
-      return site_to_plus_address;
+  base::Value::List* addresses = response->GetDict().FindList(kAddressesKey);
+  if (!addresses) {
+    return std::nullopt;
+  }
+  std::vector<PreallocatedPlusAddress> result;
+  result.reserve(addresses->size());
+  for (base::Value& entry : *addresses) {
+    if (!entry.is_dict()) {
+      continue;
+    }
+    if (std::optional<PreallocatedPlusAddress> address =
+            ParsePreallocatedPlusAddress(std::move(entry.GetDict()))) {
+      result.push_back(*std::move(address));
     }
   }
-  // Return nullopt if the `*Profiles` key is not present.
-  return std::nullopt;
+  return std::move(result);
 }
 
 }  // namespace plus_addresses

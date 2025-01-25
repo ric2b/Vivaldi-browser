@@ -27,3 +27,6 @@ jobs:
 
     - name: Run clippy
       run: cargo clippy --no-default-features -- -Dwarnings
+
+    - name: Run clippy with C API
+      run: cargo clippy --no-default-features --features=capi -- -Dwarnings

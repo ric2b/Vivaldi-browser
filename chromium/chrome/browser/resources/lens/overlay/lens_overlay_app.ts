@@ -5,17 +5,19 @@
 import './cursor_tooltip.js';
 import './initial_gradient.js';
 import './selection_overlay.js';
+import './translate_button.js';
+import '/lens/shared/searchbox_shared_style.css.js';
 import '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import '//resources/cr_elements/icons.html.js';
+import '//resources/cr_components/searchbox/searchbox.js';
 
 import type {CrIconButtonElement} from '//resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import type {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
+import {I18nMixin} from '//resources/cr_elements/i18n_mixin.js';
 import {assert} from '//resources/js/assert.js';
 import {skColorToHexColor} from '//resources/js/color_utils.js';
 import {EventTracker} from '//resources/js/event_tracker.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
-import type {BigBuffer} from '//resources/mojo/mojo/public/mojom/base/big_buffer.mojom-webui.js';
-import type {BigString} from '//resources/mojo/mojo/public/mojom/base/big_string.mojom-webui.js';
 import type {SkColor} from '//resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -37,16 +39,18 @@ export interface LensOverlayAppElement {
   $: {
     backgroundScrim: HTMLElement,
     closeButton: CrIconButtonElement,
-    copyToast: CrToastElement,
     cursorTooltip: CursorTooltipElement,
     initialGradient: InitialGradientElement,
     moreOptionsButton: CrIconButtonElement,
     moreOptionsMenu: HTMLElement,
     selectionOverlay: SelectionOverlayElement,
+    toast: CrToastElement,
   };
 }
 
-export class LensOverlayAppElement extends PolymerElement {
+const LensOverlayAppElementBase = I18nMixin(PolymerElement);
+
+export class LensOverlayAppElement extends LensOverlayAppElementBase {
   static get is() {
     return 'lens-overlay-app';
   }
@@ -57,13 +61,19 @@ export class LensOverlayAppElement extends PolymerElement {
 
   static get properties() {
     return {
-      screenshotDataUri: String,
-      isImageRendered: Boolean,
+      isImageRendered: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
       initialFlashAnimationHasEnded: {
         type: Boolean,
         reflectToAttribute: true,
       },
       closeButtonHidden: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
+      searchBoxHidden: {
         type: Boolean,
         reflectToAttribute: true,
       },
@@ -75,33 +85,69 @@ export class LensOverlayAppElement extends PolymerElement {
         type: Boolean,
         reflectToAttribute: true,
       },
+      isTranslateButtonVisible: {
+        type: Boolean,
+        value: loadTimeData.getBoolean('enableOverlayTranslateButton'),
+        readOnly: true,
+      },
+      shouldFadeOutButtons: {
+        type: Boolean,
+        computed: 'computeShouldFadeOutButtons(isTranslateModeActive, ' +
+            'isPointerDown)',
+        reflectToAttribute: true,
+      },
+      isLensOverlayContextualSearchboxEnabled: {
+        type: Boolean,
+        value: loadTimeData.getBoolean('enableOverlayContextualSearchbox'),
+        reflectToAttribute: true,
+        readOnly: true,
+      },
       theme: {
         type: Object,
         value: getFallbackTheme,
       },
+      darkMode: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('darkMode'),
+        reflectToAttribute: true,
+      },
+      toastMessage: String,
     };
   }
 
-  // The data URI of the screenshot passed from C++.
-  private screenshotDataUri: string = '';
   // Whether the image has finished rendering.
   private isImageRendered: boolean = false;
   // Whether the initial flash animation has ended on the selection overlay.
   private initialFlashAnimationHasEnded: boolean = false;
   // Whether the close button should be hidden.
   private closeButtonHidden: boolean = false;
+  // Whether the search box should be hidden.
+  private searchBoxHidden: boolean = false;
   // Whether the overlay is being shut down.
   private isClosing: boolean = false;
   // Whether more options menu should be shown.
   private moreOptionsMenuVisible: boolean = false;
+  // Whether the translate mode on the lens overlay has been activated. Updated
+  // in response to events dispatched from the translate button.
+  private isTranslateModeActive: boolean = false;
+  // Whether the user is pressing down on the selection overlay. Updated in
+  // response to events dispatched from the selection overlay.
+  private isPointerDown: boolean = false;
+  // Whether the button containers should be faded out.
+  private shouldFadeOutButtons: boolean = false;
   // The overlay theme.
   private theme: OverlayTheme;
+  private toastMessage: string = '';
 
   private eventTracker_: EventTracker = new EventTracker();
 
   private browserProxy: BrowserProxy = BrowserProxyImpl.getInstance();
   private listenerIds: number[];
   private invocationTime: number = loadTimeData.getValue('invocationTime');
+
+  // The ID returned by requestAnimationFrame for the updateCursorPosition
+  // function.
+  private updateCursorPositionRequestId?: number;
 
   constructor() {
     super();
@@ -117,8 +163,6 @@ export class LensOverlayAppElement extends PolymerElement {
 
     const callbackRouter = this.browserProxy.callbackRouter;
     this.listenerIds = [
-      callbackRouter.screenshotDataUriReceived.addListener(
-          this.screenshotDataUriReceived.bind(this)),
       callbackRouter.themeReceived.addListener(this.themeReceived.bind(this)),
       callbackRouter.notifyResultsPanelOpened.addListener(
           this.onNotifyResultsPanelOpened.bind(this)),
@@ -130,6 +174,16 @@ export class LensOverlayAppElement extends PolymerElement {
         document, 'set-cursor-tooltip', (e: CustomEvent<CursorTooltipData>) => {
           this.$.cursorTooltip.setTooltip(e.detail.tooltipType);
         });
+    this.eventTracker_.add(
+        document, 'translate-mode-state-changed', (e: CustomEvent) => {
+          this.isTranslateModeActive = e.detail.translateModeEnabled;
+        });
+    this.eventTracker_.add(document, 'text-copied', () => {
+      this.showToast(this.i18n('copyToastMessage'));
+    });
+    this.eventTracker_.add(document, 'copied-as-image', () => {
+      this.showToast(this.i18n('copyAsImageToastMessage'));
+    });
   }
 
   override disconnectedCallback() {
@@ -233,38 +287,16 @@ export class LensOverlayAppElement extends PolymerElement {
     this.theme = theme;
   }
 
-  private screenshotDataUriReceived(dataUri: BigString) {
-    const data: BigBuffer = dataUri.data;
-
-    // TODO(b/334185985): This occurs when the browser failed to allocate the
-    // memory for the string. Handle case when screenshot data URI encoding
-    // fails.
-    if (data.invalidBuffer) {
-      return;
-    }
-
-    if (Array.isArray(data.bytes)) {
-      this.screenshotDataUri =
-          new TextDecoder().decode(new Uint8Array(data.bytes));
-      return;
-    }
-
-    // If the buffer is not invalid or an array, it must be shared memory.
-    assert(data.sharedMemory);
-    const sharedMemory = data.sharedMemory;
-    const {buffer, result} =
-        sharedMemory.bufferHandle.mapBuffer(0, sharedMemory.size);
-    assert(result === Mojo.RESULT_OK);
-    this.screenshotDataUri = new TextDecoder().decode(buffer);
-  }
-
   private handleSelectionOverlayClicked() {
     this.$.cursorTooltip.setPauseTooltipChanges(true);
+    this.isPointerDown = true;
+    this.searchBoxHidden = true;
   }
 
   private handlePointerReleased() {
     this.$.initialGradient.triggerHideScrimAnimation();
     this.$.cursorTooltip.setPauseTooltipChanges(false);
+    this.isPointerDown = false;
   }
 
   private onScreenshotRendered() {
@@ -276,34 +308,48 @@ export class LensOverlayAppElement extends PolymerElement {
     this.$.initialGradient.setScrimVisible();
   }
 
-  private async showTextCopiedToast() {
-    if (this.$.copyToast.open) {
+  private computeShouldFadeOutButtons(): boolean {
+    return !this.isTranslateModeActive && this.isPointerDown;
+  }
+
+  private async showToast(message: string) {
+    if (this.$.toast.open) {
       // If toast already open, wait after hiding so that animation is
       // smoother.
-      await this.$.copyToast.hide();
+      await this.$.toast.hide();
       setTimeout(() => {
-        this.$.copyToast.show();
+        this.toastMessage = message;
+        this.$.toast.show();
       }, 100);
     } else {
-      this.$.copyToast.show();
+      this.toastMessage = message;
+      this.$.toast.show();
     }
   }
 
   private onHideToastClick() {
-    this.$.copyToast.hide();
+    this.$.toast.hide();
   }
 
-  private getSelectionOverlayClass(screenshotDataUri: string): string {
-    if (!screenshotDataUri || !screenshotDataUri.length) {
-      return 'hidden';
-    } else {
-      return '';
-    }
-  }
+
 
   private updateCursorPosition(event: PointerEvent) {
-    this.$.cursorTooltip.style.transform =
-        `translate3d(${event.clientX}px, ${event.clientY}px, 0)`;
+    // Cancel the previous animation frame to prevent the code from running more
+    // than once a frame.
+    if (this.updateCursorPositionRequestId) {
+      cancelAnimationFrame(this.updateCursorPositionRequestId);
+    }
+
+    // Exit early if the tooltip is not visible.
+    if (!this.$.cursorTooltip.isTooltipVisible()) {
+      return;
+    }
+
+    this.updateCursorPositionRequestId = requestAnimationFrame(() => {
+      this.$.cursorTooltip.style.transform =
+          `translate3d(${event.clientX}px, ${event.clientY}px, 0)`;
+      this.updateCursorPositionRequestId = undefined;
+    });
   }
 
   private skColorToHex_(skColor: SkColor): string {

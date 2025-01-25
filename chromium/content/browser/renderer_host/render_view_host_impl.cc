@@ -51,6 +51,7 @@
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/page_delegate.h"
+#include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
@@ -602,6 +603,20 @@ bool RenderViewHostImpl::CreateRenderView(
   params->blink_page_broadcast =
       page_broadcast_.BindNewEndpointAndPassReceiver();
 
+  // We must send access information relative to the popin opener in order for
+  // the renderer to properly conduct checks.
+  // See https://explainers-by-googlers.github.io/partitioned-popins/
+  if (!frame_tree_->GetMainFrame()->IsNestedWithinFencedFrame() &&
+      frame_tree_->GetMainFrame()->delegate()->IsPartitionedPopin()) {
+    RenderFrameHostImpl* partitioned_popin_opener =
+        frame_tree_->GetMainFrame()->delegate()->PartitionedPopinOpener();
+    params->partitioned_popin_params =
+        blink::mojom::PartitionedPopinParams::New(
+            partitioned_popin_opener->ComputeTopFrameOrigin(
+                partitioned_popin_opener->GetLastCommittedOrigin()),
+            partitioned_popin_opener->ComputeSiteForCookies());
+  }
+
   // The renderer process's `blink::WebView` is owned by this lifecycle of
   // the `page_broadcast_` channel.
   GetAgentSchedulingGroup().CreateView(std::move(params));
@@ -618,6 +633,7 @@ bool RenderViewHostImpl::CreateRenderView(
 
 void RenderViewHostImpl::SetMainFrameRoutingId(int routing_id) {
   main_frame_routing_id_ = routing_id;
+  render_widget_host_->ClearVisualProperties();
   GetWidget()->UpdatePriority();
   // TODO(crbug.com/40387047): If a local main frame is no longer attached to
   // this `blink::WebView` then the RenderWidgetHostImpl owned by this class

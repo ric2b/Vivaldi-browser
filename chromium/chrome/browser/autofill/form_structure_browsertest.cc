@@ -136,8 +136,8 @@ std::string FormStructuresToString(
       }
       string_form += base::JoinString(
           {field->Type().ToStringView(), base::UTF16ToUTF8(field->name()),
-           base::UTF16ToUTF8(field->label()), base::UTF16ToUTF8(field->value()),
-           section},
+           base::UTF16ToUTF8(field->label()),
+           base::UTF16ToUTF8(field->value(ValueSemantics::kCurrent)), section},
           " | ");
       string_form.push_back('\n');
     }
@@ -146,8 +146,6 @@ std::string FormStructuresToString(
   sort(string_forms.begin(), string_forms.end());
   return base::JoinString(string_forms, "\n");
 }
-
-}  // namespace
 
 // A data-driven test for verifying Autofill heuristics. Each input is an HTML
 // file that contains one or more forms. The corresponding output file lists the
@@ -208,8 +206,6 @@ FormStructureBrowserTest::FormStructureBrowserTest()
   feature_list_.InitWithFeatures(
       // Enabled
       {
-          // TODO(crbug.com/40160818) Remove once launched.
-          features::kAutofillEnableDependentLocalityParsing,
           features::kAutofillPageLanguageDetection,
           // TODO(crbug.com/40741721): Remove once shared labels are launched.
           features::kAutofillEnableSupportForParsingWithSharedLabels,
@@ -220,12 +216,6 @@ FormStructureBrowserTest::FormStructureBrowserTest()
           features::kAutofillInferCountryCallingCode,
           // TODO(crbug.com/40266396): Remove once launched.
           features::kAutofillEnableExpirationDateImprovements,
-          // TODO(crbug.com/40279279): Clean up when launched.
-          features::kAutofillDefaultToCityAndNumber,
-          // TODO(crbug.com/40204601): Clean up when launched.
-          blink::features::kAutofillIncludeFormElementsInShadowDom,
-          blink::features::
-              kAutofillIncludeShadowDomInUnassociatedListedElements,
       },
       // Disabled
       {// TODO(crbug.com/40220393): Remove once launched.
@@ -250,6 +240,11 @@ void FormStructureBrowserTest::SetUpCommandLine(
   command_line->AppendSwitchASCII(switches::kLoggingLevel, "2");
   command_line->AppendSwitchASCII(
       variations::switches::kVariationsOverrideCountry, "us");
+  // SelectParserRelaxation affects the results from the test data because the
+  // test data has unclosed <select> tags. Since SelectParserRelaxation is not
+  // enabled by default, we are disabling it for this test.
+  command_line->AppendSwitchASCII("disable-blink-features",
+                                  "SelectParserRelaxation");
 }
 
 void FormStructureBrowserTest::SetUpOnMainThread() {
@@ -295,16 +290,18 @@ std::unique_ptr<HttpResponse> FormStructureBrowserTest::HandleRequest(
 }
 
 // TODO(https://crbug.com/41493195): Re-enable this test
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 #define MAYBE_DataDrivenHeuristics DISABLED_DataDrivenHeuristics
 #else
 #define MAYBE_DataDrivenHeuristics DataDrivenHeuristics
 #endif
 IN_PROC_BROWSER_TEST_P(FormStructureBrowserTest, MAYBE_DataDrivenHeuristics) {
-  if (GetActiveHeuristicSource() != HeuristicSource::kLegacy) {
+#if !BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
+  if (GetActiveHeuristicSource() != HeuristicSource::kLegacyRegexes) {
     GTEST_SKIP() << "DataDrivenHeuristics tests are only supported with legacy "
                     "parsing patterns";
   }
+#endif
   // Prints the path of the test to be executed.
   LOG(INFO) << GetParam().MaybeAsASCII();
   bool is_expected_to_pass =
@@ -316,4 +313,5 @@ INSTANTIATE_TEST_SUITE_P(AllForms,
                          FormStructureBrowserTest,
                          testing::ValuesIn(GetTestFiles()));
 
+}  // namespace
 }  // namespace autofill

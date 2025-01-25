@@ -126,7 +126,7 @@ const AtomicString& InputType::TypeToString(Type type) {
     case Type::kWeek:
       return input_type_names::kWeek;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // Listed once to avoid any discrepancy between InputType::Create and
@@ -563,7 +563,7 @@ String InputType::BadInputText() const {
 }
 
 String InputType::ValueNotEqualText(const Decimal& value) const {
-  NOTREACHED_IN_MIGRATION();
+  DUMP_WILL_BE_NOTREACHED();
   return String();
 }
 
@@ -903,8 +903,9 @@ void InputType::WarnIfValueIsInvalidAndElementIsVisible(
     const String& value) const {
   // Don't warn if the value is set in Modernizr.
   const ComputedStyle* style = GetElement().GetComputedStyle();
-  if (style && style->Visibility() != EVisibility::kHidden)
+  if (style && style->UsedVisibility() != EVisibility::kHidden) {
     WarnIfValueIsInvalid(value);
+  }
 }
 
 void InputType::WarnIfValueIsInvalid(const String&) const {}
@@ -1126,10 +1127,8 @@ void InputType::ApplyStep(const Decimal& current,
   // greater than valueBeforeStepping, or the method invoked was the stepUp()
   // method and value is less than valueBeforeStepping, then return.
   DCHECK(!current_was_invalid || current == 0);
-  if (!(RuntimeEnabledFeatures::InputStepCurrentValueValidationEnabled() &&
-        current_was_invalid) &&
-      ((count < 0 && current < new_value) ||
-       (count > 0 && current > new_value))) {
+  if (!current_was_invalid && ((count < 0 && current < new_value) ||
+                               (count > 0 && current > new_value))) {
     return;
   }
 
@@ -1279,8 +1278,9 @@ void InputType::StepUpFromLayoutObject(int n) {
 
 void InputType::CountUsageIfVisible(WebFeature feature) const {
   if (const ComputedStyle* style = GetElement().GetComputedStyle()) {
-    if (style->Visibility() != EVisibility::kHidden)
+    if (style->UsedVisibility() != EVisibility::kHidden) {
       UseCounter::Count(GetElement().GetDocument(), feature);
+    }
   }
 }
 

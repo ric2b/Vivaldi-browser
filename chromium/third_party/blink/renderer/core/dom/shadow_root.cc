@@ -34,6 +34,8 @@
 #include "third_party/blink/renderer/core/css/style_sheet_list.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
+#include "third_party/blink/renderer/core/dom/id_target_observer.h"
+#include "third_party/blink/renderer/core/dom/id_target_observer_registry.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/dom/text.h"
@@ -43,14 +45,34 @@
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 
 namespace blink {
 
+class ReferenceTargetIdObserver : public IdTargetObserver {
+ public:
+  ReferenceTargetIdObserver(const AtomicString& id, ShadowRoot* root)
+      : IdTargetObserver(root->EnsureIdTargetObserverRegistry(), id),
+        root_(root) {}
+
+  using IdTargetObserver::Id;
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(root_);
+    IdTargetObserver::Trace(visitor);
+  }
+
+  void IdTargetChanged() override { root_->ReferenceTargetChanged(); }
+
+ private:
+  Member<ShadowRoot> root_;
+};
+
 struct SameSizeAsShadowRoot : public DocumentFragment,
                               public TreeScope,
                               public ElementRareDataField {
-  Member<void*> member[2];
+  Member<void*> member[3];
   unsigned flags[1];
 };
 
@@ -60,13 +82,7 @@ ShadowRoot::ShadowRoot(Document& document,
                        ShadowRootMode mode,
                        SlotAssignmentMode assignment_mode)
     : DocumentFragment(nullptr, kCreateShadowRoot),
-      TreeScope(
-          *this,
-          document,
-          static_cast<V8ObservableArrayCSSStyleSheet::SetAlgorithmCallback>(
-              &ShadowRoot::OnAdoptedStyleSheetSet),
-          static_cast<V8ObservableArrayCSSStyleSheet::DeleteAlgorithmCallback>(
-              &ShadowRoot::OnAdoptedStyleSheetDelete)),
+      TreeScope(*this, document),
       child_shadow_root_count_(0),
       mode_(static_cast<unsigned>(mode)),
       registered_with_parent_shadow_root_(false),
@@ -109,27 +125,6 @@ Node* ShadowRoot::Clone(Document&,
 
 String ShadowRoot::innerHTML() const {
   return CreateMarkup(this, kChildrenOnly);
-}
-
-// This forwards to the TreeScope implementation.
-void ShadowRoot::OnAdoptedStyleSheetSet(
-    ScriptState* script_state,
-    V8ObservableArrayCSSStyleSheet& observable_array,
-    uint32_t index,
-    Member<CSSStyleSheet>& sheet,
-    ExceptionState& exception_state) {
-  TreeScope::OnAdoptedStyleSheetSet(script_state, observable_array, index,
-                                    sheet, exception_state);
-}
-
-// This forwards to the TreeScope implementation.
-void ShadowRoot::OnAdoptedStyleSheetDelete(
-    ScriptState* script_state,
-    V8ObservableArrayCSSStyleSheet& observable_array,
-    uint32_t index,
-    ExceptionState& exception_state) {
-  TreeScope::OnAdoptedStyleSheetDelete(script_state, observable_array, index,
-                                       exception_state);
 }
 
 void ShadowRoot::setInnerHTML(const String& html,
@@ -247,12 +242,10 @@ void ShadowRoot::ChildrenChanged(const ChildrenChange& change) {
 
   // In the case of input types like button where the child element is not
   // in a container, we need to explicit adjust directionality.
-  if (RuntimeEnabledFeatures::DirnameMoreInputTypesEnabled()) {
-    if (TextControlElement* text_element =
-            HTMLElement::ElementIfAutoDirectionalityFormAssociatedOrNull(
-                &host())) {
-      text_element->AdjustDirectionalityIfNeededAfterChildrenChanged(change);
-    }
+  if (TextControlElement* text_element =
+          HTMLElement::ElementIfAutoDirectionalityFormAssociatedOrNull(
+              &host())) {
+    text_element->AdjustDirectionalityIfNeededAfterChildrenChanged(change);
   }
 }
 
@@ -266,9 +259,55 @@ void ShadowRoot::SetRegistry(CustomElementRegistry* registry) {
   }
 }
 
+void ShadowRoot::setReferenceTarget(const AtomicString& reference_target) {
+  if (!RuntimeEnabledFeatures::ShadowRootReferenceTargetEnabled()) {
+    return;
+  }
+
+  if (referenceTarget() == reference_target) {
+    return;
+  }
+
+  const Element* previous_reference_target_element = referenceTargetElement();
+
+  if (reference_target_id_observer_) {
+    reference_target_id_observer_->Unregister();
+  }
+
+  reference_target_id_observer_ =
+      reference_target ? MakeGarbageCollected<ReferenceTargetIdObserver>(
+                             reference_target, this)
+                       : nullptr;
+
+  if (previous_reference_target_element != referenceTargetElement()) {
+    ReferenceTargetChanged();
+  }
+}
+
+const AtomicString& ShadowRoot::referenceTarget() const {
+  return reference_target_id_observer_ ? reference_target_id_observer_->Id()
+                                       : g_null_atom;
+}
+
+Element* ShadowRoot::referenceTargetElement() const {
+  return getElementById(referenceTarget());
+}
+
+void ShadowRoot::ReferenceTargetChanged() {
+  // When this ShadowRoot's reference target changes, notify anything observing
+  // the host element's ID, since they may have been referring to the reference
+  // target instead.
+  if (const auto& id = host().GetIdAttribute()) {
+    if (auto* registry = host().GetTreeScope().GetIdTargetObserverRegistry()) {
+      registry->NotifyObservers(id);
+    }
+  }
+}
+
 void ShadowRoot::Trace(Visitor* visitor) const {
   visitor->Trace(slot_assignment_);
   visitor->Trace(registry_);
+  visitor->Trace(reference_target_id_observer_);
   ElementRareDataField::Trace(visitor);
   TreeScope::Trace(visitor);
   DocumentFragment::Trace(visitor);

@@ -15,8 +15,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
 #include "components/notes/note_node.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/base/hash_util.h"
-#include "components/sync/base/model_type.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
@@ -281,7 +281,7 @@ GroupedUpdates GroupValidUpdates(UpdateResponseDataList updates) {
     }
     // Special-case the root folder to avoid reporting an error.
     if (update_entity.server_defined_unique_tag ==
-        syncer::ModelTypeToProtocolRootTag(syncer::NOTES)) {
+        syncer::DataTypeToProtocolRootTag(syncer::NOTES)) {
       continue;
     }
     // Non-root permanent folders don't need further validation.

@@ -8,6 +8,7 @@
 #include <map>
 
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "components/sync/service/local_data_description.h"
 #include "components/sync/service/sync_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -26,10 +27,6 @@ class SyncClientMock : public SyncClient {
   MOCK_METHOD(PrefService*, GetPrefService, (), (override));
   MOCK_METHOD(signin::IdentityManager*, GetIdentityManager, (), (override));
   MOCK_METHOD(base::FilePath, GetLocalSyncBackendFolder, (), (override));
-  MOCK_METHOD(ModelTypeController::TypeVector,
-              CreateModelTypeControllers,
-              (SyncService * sync_service),
-              (override));
   MOCK_METHOD(syncer::SyncInvalidationsService*,
               GetSyncInvalidationsService,
               (),
@@ -42,10 +39,7 @@ class SyncClientMock : public SyncClient {
               GetExtensionsActivity,
               (),
               (override));
-  MOCK_METHOD(SyncApiComponentFactory*,
-              GetSyncApiComponentFactory,
-              (),
-              (override));
+  MOCK_METHOD(SyncEngineFactory*, GetSyncEngineFactory, (), (override));
   MOCK_METHOD(bool, IsCustomPassphraseAllowed, (), (override));
   MOCK_METHOD(bool, IsPasswordSyncAllowed, (), (override));
   MOCK_METHOD(void,
@@ -55,14 +49,11 @@ class SyncClientMock : public SyncClient {
   MOCK_METHOD(
       void,
       GetLocalDataDescriptions,
-      (ModelTypeSet types,
-       base::OnceCallback<void(std::map<ModelType, LocalDataDescription>)>
+      (DataTypeSet types,
+       base::OnceCallback<void(std::map<DataType, LocalDataDescription>)>
            callback),
       (override));
-  MOCK_METHOD(void,
-              TriggerLocalDataMigration,
-              (ModelTypeSet types),
-              (override));
+  MOCK_METHOD(void, TriggerLocalDataMigration, (DataTypeSet types), (override));
   MOCK_METHOD(void,
               RegisterTrustedVaultAutoUpgradeSyntheticFieldTrial,
               (const TrustedVaultAutoUpgradeSyntheticFieldTrialGroup&),

@@ -15,7 +15,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/chrome_enterprise_url_lookup_service.h"
 #include "chrome/browser/safe_browsing/chrome_enterprise_url_lookup_service_factory.h"
-#include "components/enterprise/data_controls/core/features.h"
+#include "components/enterprise/data_controls/core/browser/features.h"
 #include "components/safe_browsing/core/browser/realtime/policy_engine.h"
 #include "components/safe_browsing/core/browser/realtime/url_lookup_service_base.h"
 #include "components/sessions/content/session_tab_helper.h"
@@ -44,18 +44,20 @@ DataProtectionPageUserData* GetUserData(content::WebContents* web_contents) {
       GetPageFromWebContents(web_contents));
 }
 
-bool ShouldReportWatermark(DataProtectionPageUserData* user_data) {
+// Returns whether a URL filtering event should be reported for safe verdicts.
+// For warn/block+watermark verdicts, a security event is reported as part
+// of the interstitial page appearing, so we only need to report in this class
+// for SAFE verdicts where no interstitial was shown, only if a rule was
+// triggered.
+bool ShouldReportSafeUrlFilteringEvents(DataProtectionPageUserData* user_data) {
   DCHECK(user_data);
-
-  // For warn/block+watermark verdicts, a security event is reported as part
-  // of the interstitial page appearing, so we only need to report in this class
-  // for SAFE verdicts where no interstitial was shown.
-  // Nothing should be reported if there is no watermark at all.
-  return !user_data->settings().watermark_text.empty() &&
-         user_data->rt_lookup_response() &&
+  return user_data->rt_lookup_response() &&
          !user_data->rt_lookup_response()->threat_info().empty() &&
          user_data->rt_lookup_response()->threat_info(0).verdict_type() ==
-             safe_browsing::RTLookupResponse::ThreatInfo::SAFE;
+             safe_browsing::RTLookupResponse::ThreatInfo::SAFE &&
+         user_data->rt_lookup_response()
+             ->threat_info(0)
+             .has_matched_url_navigation_rule();
 }
 
 void RunPendingNavigationCallback(
@@ -66,7 +68,7 @@ void RunPendingNavigationCallback(
   auto* user_data = GetUserData(web_contents);
   DCHECK(user_data);
 
-  if (ShouldReportWatermark(user_data)) {
+  if (ShouldReportSafeUrlFilteringEvents(user_data)) {
     MaybeTriggerUrlFilteringInterstitialEvent(
         web_contents, web_contents->GetLastCommittedURL(),
         /*threat_type=*/"", *user_data->rt_lookup_response());
@@ -127,7 +129,8 @@ bool IsEnterpriseLookupEnabled(Profile* profile) {
       connectors_service &&
       connectors_service->GetDMTokenForRealTimeUrlCheck().has_value();
   return safe_browsing::RealTimePolicyEngine::CanPerformEnterpriseFullURLLookup(
-      profile->GetPrefs(), has_valid_dm_token, profile->IsOffTheRecord());
+      profile->GetPrefs(), has_valid_dm_token, profile->IsOffTheRecord(),
+      profile->IsGuestSession());
 }
 
 bool IsEnterpriseLookupEnabled(content::BrowserContext* context) {
@@ -158,10 +161,6 @@ bool IsScreenshotProtectionEnabled() {
       data_controls::kEnableScreenshotProtection);
 }
 
-bool IsDataProtectionEnabled(Profile* profile) {
-  return IsEnterpriseLookupEnabled(profile) || IsScreenshotProtectionEnabled();
-}
-
 std::string GetIdentifier(content::BrowserContext* browser_context) {
   return enterprise_connectors::ConnectorsServiceFactory::GetForBrowserContext(
              browser_context)
@@ -184,21 +183,27 @@ bool IsScreenshotAllowedByDataControls(content::BrowserContext* context,
 
 }  // namespace
 
+bool IsDataProtectionEnabled(Profile* profile) {
+  return IsEnterpriseLookupEnabled(profile) || IsScreenshotProtectionEnabled();
+}
+
 // static
 void DataProtectionNavigationObserver::CreateForNavigationIfNeeded(
     Profile* profile,
     content::NavigationHandle* navigation_handle,
     Callback callback) {
   if (navigation_handle->IsSameDocument() ||
-      !navigation_handle->IsInPrimaryMainFrame() ||
-      !IsDataProtectionEnabled(profile)) {
+      !navigation_handle->IsInPrimaryMainFrame()) {
     return;
   }
 
-  // If this is a skipped URL, force the view to clear any data protections if
-  // present.  This is needed to handle for example navigating from a
-  // watermarked page to the NTP.
-  if (SkipUrl(navigation_handle->GetURL())) {
+  // The Data protection settings need to be cleared if:
+  // 1. This is a skipped URL. This is needed to handle for example navigating
+  // from a watermarked page to the NTP.
+  // 2. Data protection is disabled. This is needed to prevent stale data
+  // protection settings if the enabled state is changed mid session.
+  if (SkipUrl(navigation_handle->GetURL()) ||
+      !IsDataProtectionEnabled(profile)) {
     std::move(callback).Run(UrlSettings::None());
     return;
   }
@@ -226,6 +231,7 @@ void DataProtectionNavigationObserver::GetDataProtectionSettings(
   }
 
   if (!IsDataProtectionEnabled(profile)) {
+    std::move(callback).Run(UrlSettings::None());
     return;
   }
 

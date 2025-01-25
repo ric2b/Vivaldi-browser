@@ -150,7 +150,7 @@ void TemplateURLService::ResetTemplateURL(
   Update(url, TemplateURL(data));
 
   for (int i = 0; i < kDefaultSearchTypeCount; i++) {
-    if (url == default_search_provider_[i] && prefs_)
+    if (url == default_search_provider_[i])
       prefs_->SetString(vivaldi::VivaldiGetDefaultProviderGuidPrefForType(
                             DefaultSearchType(i)),
           data.sync_guid);

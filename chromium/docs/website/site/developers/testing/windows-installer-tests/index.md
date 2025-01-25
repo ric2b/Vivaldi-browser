@@ -28,7 +28,8 @@ installer. The test does variations along the following theme:
 ## Diagnosing Failures
 
 The task output should show detailed installer and Chrome logs in case of
-failure.
+failure. The `chrome_installer.log` is typically generated in
+`\Windows\SystemTemp` for `system` installs, and in `%TMP%` for `user` installs.
 
 ## Running the Tests Locally
 

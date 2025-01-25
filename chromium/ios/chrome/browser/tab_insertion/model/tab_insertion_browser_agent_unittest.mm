@@ -9,7 +9,7 @@
 #import "ios/chrome/browser/sessions/model/session_restoration_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/url_loading/model/new_tab_animation_tab_helper.h"
@@ -72,6 +72,19 @@ TEST_F(TabInsertionBrowserAgentTest, InsertUrlSingle) {
       agent_->InsertWebState(LoadParams(GURL(kURL1)), TabInsertion::Params());
   ASSERT_EQ(1, browser_->GetWebStateList()->count());
   EXPECT_EQ(web_state, browser_->GetWebStateList()->GetWebStateAt(0));
+  EXPECT_TRUE(web_state->IsRealized());
+}
+
+// Checks that inserting a tab in the background when the WebStateList is empty
+// is activating it.
+TEST_F(TabInsertionBrowserAgentTest, InsertUrlSingleBackground) {
+  TabInsertion::Params insertion_params;
+  insertion_params.in_background = true;
+  web::WebState* web_state =
+      agent_->InsertWebState(LoadParams(GURL(kURL1)), insertion_params);
+  ASSERT_EQ(1, browser_->GetWebStateList()->count());
+  EXPECT_EQ(web_state, browser_->GetWebStateList()->GetWebStateAt(0));
+  EXPECT_EQ(web_state, browser_->GetWebStateList()->GetActiveWebState());
   EXPECT_TRUE(web_state->IsRealized());
 }
 

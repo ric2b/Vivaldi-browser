@@ -123,7 +123,47 @@ void DawnD3DImageRepresentation::EndAccess() {
 // representation does so. This representation meets both of the above
 // constraints.
 bool DawnD3DImageRepresentation::SupportsMultipleConcurrentReadAccess() {
-  return true;
+  D3DImageBacking* d3d_image_backing = static_cast<D3DImageBacking*>(backing());
+  // KeyedMutex does not support concurrent read access.
+  return !d3d_image_backing->has_keyed_mutex();
+}
+
+DawnD3DBufferRepresentation::DawnD3DBufferRepresentation(
+    SharedImageManager* manager,
+    SharedImageBacking* backing,
+    MemoryTypeTracker* tracker,
+    const wgpu::Device& device,
+    wgpu::BackendType backend_type)
+    : DawnBufferRepresentation(manager, backing, tracker),
+      device_(device),
+      backend_type_(backend_type) {
+  DCHECK(device_);
+}
+
+DawnD3DBufferRepresentation::~DawnD3DBufferRepresentation() {
+  EndAccess();
+}
+
+wgpu::Buffer DawnD3DBufferRepresentation::BeginAccess(wgpu::BufferUsage usage) {
+  D3DImageBacking* d3d_image_backing = static_cast<D3DImageBacking*>(backing());
+  buffer_ =
+      d3d_image_backing->BeginAccessDawnBuffer(device_, backend_type_, usage);
+  return buffer_;
+}
+
+void DawnD3DBufferRepresentation::EndAccess() {
+  if (!buffer_) {
+    return;
+  }
+
+  // Do this before further operations since those could end up destroying the
+  // Dawn device and we want the fence to be duplicated before then.
+  D3DImageBacking* d3d_image_backing = static_cast<D3DImageBacking*>(backing());
+  d3d_image_backing->EndAccessDawnBuffer(device_, buffer_);
+
+  // All further operations on the buffer are errors (they would be racy
+  // with other backings).
+  buffer_ = nullptr;
 }
 
 OverlayD3DImageRepresentation::OverlayD3DImageRepresentation(
@@ -153,20 +193,19 @@ OverlayD3DImageRepresentation::GetDCLayerOverlayImage() {
   return static_cast<D3DImageBacking*>(backing())->GetDCLayerOverlayImage();
 }
 
-D3D11VideoDecodeImageRepresentation::D3D11VideoDecodeImageRepresentation(
+D3D11VideoImageRepresentation::D3D11VideoImageRepresentation(
     SharedImageManager* manager,
     SharedImageBacking* backing,
     MemoryTypeTracker* tracker,
     Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
     Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture)
-    : VideoDecodeImageRepresentation(manager, backing, tracker),
+    : VideoImageRepresentation(manager, backing, tracker),
       d3d11_device_(std::move(d3d11_device)),
       d3d11_texture_(std::move(d3d11_texture)) {}
 
-D3D11VideoDecodeImageRepresentation::~D3D11VideoDecodeImageRepresentation() =
-    default;
+D3D11VideoImageRepresentation::~D3D11VideoImageRepresentation() = default;
 
-bool D3D11VideoDecodeImageRepresentation::BeginWriteAccess() {
+bool D3D11VideoImageRepresentation::BeginWriteAccess() {
   D3DImageBacking* d3d_image_backing = static_cast<D3DImageBacking*>(backing());
   if (!d3d_image_backing->BeginAccessD3D11(d3d11_device_,
                                            /*write_access=*/true)) {
@@ -175,13 +214,27 @@ bool D3D11VideoDecodeImageRepresentation::BeginWriteAccess() {
   return true;
 }
 
-void D3D11VideoDecodeImageRepresentation::EndWriteAccess() {
+void D3D11VideoImageRepresentation::EndWriteAccess() {
+  D3DImageBacking* d3d_image_backing = static_cast<D3DImageBacking*>(backing());
+  d3d_image_backing->EndAccessD3D11(d3d11_device_);
+}
+
+bool D3D11VideoImageRepresentation::BeginReadAccess() {
+  D3DImageBacking* d3d_image_backing = static_cast<D3DImageBacking*>(backing());
+  if (!d3d_image_backing->BeginAccessD3D11(d3d11_device_,
+                                           /*write_access=*/false)) {
+    return false;
+  }
+  return true;
+}
+
+void D3D11VideoImageRepresentation::EndReadAccess() {
   D3DImageBacking* d3d_image_backing = static_cast<D3DImageBacking*>(backing());
   d3d_image_backing->EndAccessD3D11(d3d11_device_);
 }
 
 Microsoft::WRL::ComPtr<ID3D11Texture2D>
-D3D11VideoDecodeImageRepresentation::GetD3D11Texture() const {
+D3D11VideoImageRepresentation::GetD3D11Texture() const {
   return d3d11_texture_;
 }
 

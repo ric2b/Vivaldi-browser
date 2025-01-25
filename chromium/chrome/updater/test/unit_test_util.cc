@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/base_paths.h"
 #include "base/check.h"
@@ -26,12 +27,19 @@
 #include "base/path_service.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
+#include "base/process/process.h"
 #include "base/process/process_iterator.h"
+#include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/task_runner.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
+#include "base/test/bind.h"
+#include "base/test/multiprocess_test.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
@@ -170,20 +178,23 @@ void SetupFakeUpdater(UpdaterScope scope,
 
 const char kChromeAppId[] = "{8A69D345-D564-463C-AFF1-A69D9E530F96}";
 
-bool IsProcessRunning(const base::FilePath::StringType& executable_name) {
-  return base::GetProcessCount(executable_name, nullptr) != 0;
+bool IsProcessRunning(const base::FilePath::StringType& executable_name,
+                      const base::ProcessFilter* filter) {
+  return base::GetProcessCount(executable_name, filter) != 0;
 }
 
 bool WaitForProcessesToExit(const base::FilePath::StringType& executable_name,
-                            base::TimeDelta wait) {
-  return base::WaitForProcessesToExit(executable_name, wait, nullptr);
+                            base::TimeDelta wait,
+                            const base::ProcessFilter* filter) {
+  return base::WaitForProcessesToExit(executable_name, wait, filter);
 }
 
 bool KillProcesses(const base::FilePath::StringType& executable_name,
-                   int exit_code) {
+                   int exit_code,
+                   const base::ProcessFilter* filter) {
   bool result = true;
   for (const base::ProcessEntry& entry :
-       base::NamedProcessIterator(executable_name, nullptr).Snapshot()) {
+       base::NamedProcessIterator(executable_name, filter).Snapshot()) {
     base::Process process = base::Process::Open(entry.pid());
     if (!process.IsValid()) {
       PLOG(ERROR) << "Process invalid for PID: " << executable_name << ": "
@@ -208,9 +219,10 @@ bool KillProcesses(const base::FilePath::StringType& executable_name,
 }
 
 scoped_refptr<PolicyService> CreateTestPolicyService() {
-  PolicyService::PolicyManagerVector managers;
-  managers.push_back(GetDefaultValuesPolicyManager());
-  return base::MakeRefCounted<PolicyService>(std::move(managers));
+  std::vector<scoped_refptr<PolicyManagerInterface>> managers{
+      GetDefaultValuesPolicyManager()};
+  return base::MakeRefCounted<PolicyService>(std::move(managers),
+                                             /*usage_stats_enabled=*/true);
 }
 
 std::string GetTestName() {
@@ -413,15 +425,18 @@ EventHolder CreateWaitableEventForTest() {
 #endif  // BUILDFLAG(IS_WIN)
 
 const base::ProcessIterator::ProcessEntries FindProcesses(
-    const base::FilePath::StringType& executable_name) {
-  return base::NamedProcessIterator(executable_name, nullptr).Snapshot();
+    const base::FilePath::StringType& executable_name,
+    const base::ProcessFilter* filter) {
+  return base::NamedProcessIterator(executable_name, filter).Snapshot();
 }
 
-std::string PrintProcesses(const base::FilePath::StringType& executable_name) {
+std::string PrintProcesses(const base::FilePath::StringType& executable_name,
+                           const base::ProcessFilter* filter) {
   const std::string demarcation(72, '=');
   std::stringstream message;
   message << "Found processes:" << std::endl << demarcation << std::endl;
-  for (const base::ProcessEntry& entry : FindProcesses(executable_name)) {
+  for (const base::ProcessEntry& entry :
+       FindProcesses(executable_name, filter)) {
     message << entry.exe_file() << ", pid=" << entry.pid()
             << ", creation time=" << [](base::ProcessId pid) {
                  const base::Process process = base::Process::Open(pid);
@@ -565,6 +580,23 @@ void ExpectTagArgsEqual(const updater::tagging::TagArgs& actual,
   }
 
   EXPECT_EQ(actual.runtime_mode, expected.runtime_mode);
+}
+
+int WaitForProcess(base::Process& process) {
+  int exit_code = -1;
+  bool process_exited = false;
+  base::RunLoop wait_for_process_exit_loop;
+  base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()})
+      ->PostTaskAndReply(
+          FROM_HERE, base::BindLambdaForTesting([&] {
+            base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
+            process_exited = base::WaitForMultiprocessTestChildExit(
+                process, TestTimeouts::action_timeout(), &exit_code);
+          }),
+          wait_for_process_exit_loop.QuitClosure());
+  wait_for_process_exit_loop.Run();
+  EXPECT_TRUE(process_exited);
+  return exit_code;
 }
 
 }  // namespace updater::test

@@ -14,6 +14,9 @@ import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Sets up the component that handles the toolbar of the Hub. */
 public class HubToolbarCoordinator {
     private final HubToolbarMediator mMediator;
@@ -36,6 +39,12 @@ public class HubToolbarCoordinator {
         mMediator = new HubToolbarMediator(model, paneManager, tracker);
 
         MenuButton menuButton = hubToolbarView.findViewById(R.id.menu_button_wrapper);
+        // Note(david@vivaldi.com): The menu button is part of the top toolbar view.
+        if (BuildConfig.IS_VIVALDI) {
+            View topToolbarView =
+                    ((View) hubToolbarView.getParent()).findViewById(R.id.hub_top_toolbar);
+            menuButton = topToolbarView.findViewById(R.id.menu_button_wrapper);
+        }
         menuButtonCoordinator.setMenuButton(menuButton);
     }
 

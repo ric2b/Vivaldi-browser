@@ -2,11 +2,9 @@
 members = [
     "build_scripts",
     "cmd_runner",
-    "derive_fuzztest",
-    "derive_fuzztest/fuzz",
-    "derive_fuzztest_macro",
     "handle_map",
     "lock_adapter",
+    "oauth",
     "pourover",
     "pourover_macro",
 ]
@@ -32,8 +30,6 @@ unwrap_used = "deny"
 [workspace.dependencies]
 # local crates
 cmd_runner = { path = "cmd_runner" }
-derive_fuzztest = { path = "derive_fuzztest" }
-derive_fuzztest_macro = { path = "derive_fuzztest_macro" }
 lock_adapter = { path = "lock_adapter" }
 handle_map = { path = "handle_map" }
 pourover = { path = "pourover" }
@@ -42,7 +38,7 @@ pourover_macro = { path = "pourover_macro" }
 # from crates.io
 anyhow = "1.0.75"
 arbitrary = "1.3.2"
-clap = { version = "4.4.11", features = ["derive"] }
+clap = { version = "4.5.13", features = ["derive"] }
 criterion = { version = "0.5.1", features = ["html_reports"] }
 jni = "0.21.1"
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
@@ -51,18 +47,22 @@ nom = { version = "7.1.3", default-features = false }
 pretty_assertions = "1.4.0"
 prettyplease = "0.2.16"
 proc-macro2 = "1.0"
-proptest = "1.4.0"
-proptest-arbitrary-interop = { git = "https://github.com/brson/proptest-arbitrary-interop.git", branch = "incorrect-format" }
 quickcheck = "1.0.3"
 quote = "1.0"
 spin = { version = "0.9.8", features = ["once", "lock_api", "rwlock"] }
 syn = { version = "2.0", features = ["full"] }
 xshell = "0.2.6"
+hex = "0.4.3"
+log = "0.4.22"
+rand = "0.8.5"
+reqwest = "0.12.5"
+tokio = { version = "1.39.1", features = ["full"] }
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 publish = false
+license = "Apache-2.0"
 
 [profile.test]
 # speed up test execution

@@ -24,6 +24,7 @@
 #include "components/safe_browsing/buildflags.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
@@ -174,7 +175,7 @@ int ContentPasswordManagerDriver::GetId() const {
 
 int ContentPasswordManagerDriver::GetFrameId() const {
   // Use the associated FrameTreeNode ID as the Frame ID.
-  return render_frame_host_->GetFrameTreeNodeId();
+  return render_frame_host_->GetFrameTreeNodeId().value();
 }
 
 void ContentPasswordManagerDriver::SetPasswordFillData(
@@ -243,6 +244,16 @@ void ContentPasswordManagerDriver::FillSuggestion(
   GetPasswordAutofillAgent()->FillPasswordSuggestion(username, password);
 }
 
+void ContentPasswordManagerDriver::FillSuggestionById(
+    autofill::FieldRendererId username_element_id,
+    autofill::FieldRendererId password_element_id,
+    const std::u16string& username,
+    const std::u16string& password) {
+  LogFilledFieldType();
+  GetPasswordAutofillAgent()->FillPasswordSuggestionById(
+      username_element_id, password_element_id, username, password);
+}
+
 void ContentPasswordManagerDriver::FillIntoFocusedField(
     bool is_password,
     const std::u16string& credential) {
@@ -276,6 +287,15 @@ void ContentPasswordManagerDriver::PreviewSuggestion(
     const std::u16string& username,
     const std::u16string& password) {
   GetAutofillAgent()->PreviewPasswordSuggestion(username, password);
+}
+
+void ContentPasswordManagerDriver::PreviewSuggestionById(
+    autofill::FieldRendererId username_element_id,
+    autofill::FieldRendererId password_element_id,
+    const std::u16string& username,
+    const std::u16string& password) {
+  GetPasswordAutofillAgent()->PreviewPasswordSuggestionById(
+      username_element_id, password_element_id, username, password);
 }
 
 void ContentPasswordManagerDriver::PreviewGenerationSuggestion(
@@ -343,6 +363,24 @@ void ContentPasswordManagerDriver::GeneratePassword(
     autofill::mojom::PasswordGenerationAgent::TriggeredGeneratePasswordCallback
         callback) {
   GetPasswordGenerationAgent()->TriggeredGeneratePassword(std::move(callback));
+}
+
+bool ContentPasswordManagerDriver::IsPasswordFieldForPasswordManager(
+    autofill::FieldRendererId field_renderer_id,
+    const content::ContextMenuParams& params) {
+  if (params.form_control_type ==
+          blink::mojom::FormControlType::kInputPassword ||
+      params.is_password_type_by_heuristics) {
+    return true;
+  }
+
+  password_manager::PasswordGenerationFrameHelper*
+      password_generation_frame_helper = GetPasswordGenerationHelper();
+  if (!password_generation_frame_helper) {
+    return false;
+  }
+  return password_generation_frame_helper->IsManualGenerationEnabledField(
+      field_renderer_id);
 }
 
 void ContentPasswordManagerDriver::PasswordFormsParsed(
@@ -609,7 +647,7 @@ void ContentPasswordManagerDriver::LogFirstFillingResult(
 
 void ContentPasswordManagerDriver::LogFilledFieldType() {
   bool field_classified_as_target_filling_password =
-      GetPasswordManager()->GetPasswordFormCache()->HasPasswordForm(
+      GetPasswordManager()->GetPasswordFormCache()->GetPasswordForm(
           this, last_triggering_field_id_);
   base::UmaHistogramBoolean("Autofill.FilledFieldType.Password",
                             field_classified_as_target_filling_password);

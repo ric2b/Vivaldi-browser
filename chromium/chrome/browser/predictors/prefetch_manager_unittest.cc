@@ -126,12 +126,10 @@ class PrefetchManagerTest : public testing::TestWithParam<bool> {
   }
 
   void CheckHeaders(network::ResourceRequest& request) {
-    std::string purpose;
-    EXPECT_TRUE(request.headers.GetHeader("Purpose", &purpose));
-    EXPECT_EQ(purpose, "prefetch");
-    std::string sec_purpose;
-    EXPECT_TRUE(request.headers.GetHeader("Sec-Purpose", &sec_purpose));
-    EXPECT_EQ(sec_purpose, "prefetch");
+    EXPECT_THAT(request.headers.GetHeader("Purpose"),
+                testing::Optional(std::string("prefetch")));
+    EXPECT_THAT(request.headers.GetHeader("Sec-Purpose"),
+                testing::Optional(std::string("prefetch")));
   }
 
   base::test::ScopedFeatureList features_;
@@ -619,7 +617,7 @@ class ThrottlingContentBrowserClient : public content::ContentBrowserClient {
       content::BrowserContext* browser_context,
       const base::RepeatingCallback<content::WebContents*()>& wc_getter,
       content::NavigationUIData* navigation_ui_data,
-      int frame_tree_node_id,
+      content::FrameTreeNodeId frame_tree_node_id,
       std::optional<int64_t> navigation_id) override {
     std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles;
     throttles.emplace_back(std::make_unique<HeaderInjectingThrottle>());

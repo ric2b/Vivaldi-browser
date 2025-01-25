@@ -156,6 +156,18 @@ enum SVCInterLayerPredMode {
   kOnKeyPic
 };
 
+// This defines a mojo transport format for media::VideoAspectRatio.
+// See media/base/video_aspect_ratio.h for description.
+struct VideoAspectRatio {
+  enum Type {
+    kDisplay,
+    kPixel,
+  };
+
+  Type type;
+  double value;
+};
+
 // This defines a mojo transport format for media::VideoColorSpace.
 // See media/base/video_color_space.h for description.
 struct VideoColorSpace {
@@ -208,6 +220,7 @@ struct VideoDecoderConfig {
   gfx.mojom.Size coded_size;
   gfx.mojom.Rect visible_rect;
   gfx.mojom.Size natural_size;
+  VideoAspectRatio aspect_ratio;
   array<uint8> extra_data;
   EncryptionScheme encryption_scheme;
   VideoColorSpace color_space_info;
@@ -260,6 +273,10 @@ struct DecoderBufferSideData {
   array<uint32> spatial_layers;
   array<uint8> alpha_data;
   uint64 secure_handle;
+
+  // These fields indicate the amount of data to discard after decoding.
+  mojo_base.mojom.TimeDelta front_discard;
+  mojo_base.mojom.TimeDelta back_discard;
 };
 
 // This defines a mojo transport format for media::DecoderBuffer.
@@ -281,10 +298,6 @@ struct DecoderBuffer {
 
   // DecryptConfig for a encrypted buffer. NULL if the buffer is not encrypted.
   DecryptConfig? decrypt_config;
-
-  // These fields indicate the amount of data to discard after decoding.
-  mojo_base.mojom.TimeDelta front_discard;
-  mojo_base.mojom.TimeDelta back_discard;
 
   DecoderBufferSideData? side_data;
 };
@@ -459,17 +472,15 @@ struct GpuMemoryBufferSharedImageVideoFrameData {
   uint32 texture_target;
 };
 
-// This defines video frame data stored in texture mailboxes.
+// This defines video frame data stored in texture mailbox.
 struct MailboxVideoFrameData {
-  // Size must be kept in sync with media::VideoFrame::kMaxPlanes.
-  array<gpu.mojom.MailboxHolder, 4> mailbox_holder;
+  gpu.mojom.MailboxHolder mailbox_holder;
   gpu.mojom.VulkanYCbCrInfo? ycbcr_data;
 };
 
 // This defines video frame data stored in texture shared images.
 struct SharedImageVideoFrameData {
-  // Size should be no greater than media::VideoFrame::kMaxPlanes.
-  array<gpu.mojom.ExportedSharedImage> shared_images;
+  gpu.mojom.ExportedSharedImage shared_image;
   gpu.mojom.SyncToken sync_token;
   uint32 texture_target;
   // |ycbcr_data| is present on Android (and sometimes Fuchsia) when the

@@ -52,6 +52,7 @@ bool should_dither(const PaintParams& p, SkColorType dstCT) {
 
 PaintParams::PaintParams(const SkPaint& paint,
                          sk_sp<SkBlender> primitiveBlender,
+                         const CircularRRectClip& analyticClip,
                          sk_sp<SkShader> clipShader,
                          DstReadRequirement dstReadReq,
                          bool skipColorXform)
@@ -60,6 +61,7 @@ PaintParams::PaintParams(const SkPaint& paint,
         , fShader(paint.refShader())
         , fColorFilter(paint.refColorFilter())
         , fPrimitiveBlender(std::move(primitiveBlender))
+        , fAnalyticClip(analyticClip)
         , fClipShader(std::move(clipShader))
         , fDstReadReq(dstReadReq)
         , fSkipColorXform(skipColorXform)
@@ -98,7 +100,7 @@ void Blend(const KeyContext& keyContext,
            AddToKeyFn addBlendToKey,
            AddToKeyFn addSrcToKey,
            AddToKeyFn addDstToKey) {
-    BlendShaderBlock::BeginBlock(keyContext, keyBuilder, gatherer);
+    BlendComposeBlock::BeginBlock(keyContext, keyBuilder, gatherer);
 
         addSrcToKey();
 
@@ -106,7 +108,7 @@ void Blend(const KeyContext& keyContext,
 
         addBlendToKey();
 
-    keyBuilder->endBlock();  // BlendShaderBlock
+    keyBuilder->endBlock();  // BlendComposeBlock
 }
 
 void Compose(const KeyContext& keyContext,
@@ -123,25 +125,32 @@ void Compose(const KeyContext& keyContext,
     keyBuilder->endBlock();  // ComposeBlock
 }
 
-void AddKnownModeBlend(const KeyContext& keyContext,
+void AddFixedBlendMode(const KeyContext& keyContext,
                        PaintParamsKeyBuilder* builder,
                        PipelineDataGatherer* gatherer,
                        SkBlendMode bm) {
-    SkASSERT(bm <= SkBlendMode::kLastCoeffMode);
-    BuiltInCodeSnippetID id = static_cast<BuiltInCodeSnippetID>(kFixedFunctionBlendModeIDOffset +
+    SkASSERT(bm <= SkBlendMode::kLastMode);
+    BuiltInCodeSnippetID id = static_cast<BuiltInCodeSnippetID>(kFixedBlendIDOffset +
                                                                 static_cast<int>(bm));
     builder->addBlock(id);
 }
 
-void AddModeBlend(const KeyContext& keyContext,
+void AddBlendMode(const KeyContext& keyContext,
                   PaintParamsKeyBuilder* builder,
                   PipelineDataGatherer* gatherer,
                   SkBlendMode bm) {
+    // For non-fixed blends, coefficient blend modes are combined into the same shader snippet.
+    // The same goes for the HSLC advanced blends. The remaining advanced blends are fairly unique
+    // in their implementations. To avoid having to compile all of their SkSL, they are treated as
+    // fixed blend modes.
     SkSpan<const float> coeffs = skgpu::GetPorterDuffBlendConstants(bm);
     if (!coeffs.empty()) {
-        CoeffBlenderBlock::AddBlock(keyContext, builder, gatherer, coeffs);
+        PorterDuffBlenderBlock::AddBlock(keyContext, builder, gatherer, coeffs);
+    } else if (bm >= SkBlendMode::kHue) {
+        ReducedBlendModeInfo blendInfo = GetReducedBlendModeInfo(bm);
+        HSLCBlenderBlock::AddBlock(keyContext, builder, gatherer, blendInfo.fUniformData);
     } else {
-        BlendModeBlenderBlock::AddBlock(keyContext, builder, gatherer, bm);
+        AddFixedBlendMode(keyContext, builder, gatherer, bm);
     }
 }
 
@@ -235,7 +244,7 @@ void PaintParams::handlePaintAlpha(const KeyContext& keyContext,
     if (fColor.fA != 1.0f) {
         Blend(keyContext, keyBuilder, gatherer,
               /* addBlendToKey= */ [&] () -> void {
-                  AddKnownModeBlend(keyContext, keyBuilder, gatherer, SkBlendMode::kSrcIn);
+                  AddFixedBlendMode(keyContext, keyBuilder, gatherer, SkBlendMode::kSrcIn);
               },
               /* addSrcToKey= */ [&]() -> void {
                   this->handlePrimitiveColor(keyContext, keyBuilder, gatherer);
@@ -294,7 +303,7 @@ void PaintParams::handleDstRead(const KeyContext& keyContext,
                   if (fFinalBlender) {
                       AddToKey(keyContext, builder, gatherer, fFinalBlender.get());
                   } else {
-                      AddKnownModeBlend(keyContext, builder, gatherer, SkBlendMode::kSrcOver);
+                      AddFixedBlendMode(keyContext, builder, gatherer, SkBlendMode::kSrcOver);
                   }
               },
               /* addSrcToKey= */ [&]() -> void {
@@ -308,6 +317,43 @@ void PaintParams::handleDstRead(const KeyContext& keyContext,
     }
 }
 
+void PaintParams::handleClipping(const KeyContext& keyContext,
+                                 PaintParamsKeyBuilder* builder,
+                                 PipelineDataGatherer* gatherer) const {
+    ClipBlock::BeginBlock(keyContext, builder, gatherer);
+
+    if (!fAnalyticClip.isEmpty()) {
+        float radius = fAnalyticClip.fRadius + 0.5f;
+        // N.B.: Because the clip data is normally used with depth-based clipping,
+        // the shape is inverted from its usual state. We re-invert here to
+        // match what the shader snippet expects.
+        SkPoint radiusPair = {(fAnalyticClip.fInverted) ? radius : -radius, 1.0f/radius};
+        CircularRRectClipBlock::CircularRRectClipData data(
+                fAnalyticClip.fBounds.makeOutset(0.5f).asSkRect(),
+                radiusPair,
+                fAnalyticClip.edgeSelectRect());
+        if (fClipShader) {
+            Blend(keyContext, builder, gatherer,
+                  /* addBlendToKey= */ [&]() -> void {
+                      AddFixedBlendMode(keyContext, builder, gatherer, SkBlendMode::kModulate);
+                  },
+                  /* addSrcToKey= */ [&]() -> void {
+                      CircularRRectClipBlock::AddBlock(keyContext, builder, gatherer, data);
+                  },
+                  /* addDstToKey= */ [&]() -> void {
+                      AddToKey(keyContext, builder, gatherer, fClipShader.get());
+                  });
+        } else {
+            CircularRRectClipBlock::AddBlock(keyContext, builder, gatherer, data);
+        }
+    } else {
+        SkASSERT(fClipShader);
+        AddToKey(keyContext, builder, gatherer, fClipShader.get());
+    }
+
+    builder->endBlock();
+}
+
 void PaintParams::toKey(const KeyContext& keyContext,
                         PaintParamsKeyBuilder* builder,
                         PipelineDataGatherer* gatherer) const {
@@ -319,20 +365,13 @@ void PaintParams::toKey(const KeyContext& keyContext,
         finalBlendMode = SkBlendMode::kSrc;
     }
 
-    if (fClipShader) {
-        ClipShaderBlock::BeginBlock(keyContext, builder, gatherer);
-
-            AddToKey(keyContext, builder, gatherer, fClipShader.get());
-
-        builder->endBlock();
+    if (!fAnalyticClip.isEmpty() || fClipShader) {
+        this->handleClipping(keyContext, builder, gatherer);
     }
 
     // Set the hardware blend mode.
     SkASSERT(finalBlendMode);
-    BuiltInCodeSnippetID fixedFuncBlendModeID = static_cast<BuiltInCodeSnippetID>(
-            kFixedFunctionBlendModeIDOffset + static_cast<int>(*finalBlendMode));
-
-    builder->addBlock(fixedFuncBlendModeID);
+    AddFixedBlendMode(keyContext, builder, gatherer, *finalBlendMode);
 }
 
 // TODO(b/330864257): Can be deleted once keys are determined by the Device draw.

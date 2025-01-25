@@ -38,6 +38,8 @@ constexpr char kProfileImportTypeHistogram[] =
     "Autofill.ProfileImport.ProfileImportType";
 constexpr char kSilentUpdatesProfileImportTypeHistogram[] =
     "Autofill.ProfileImport.SilentUpdatesProfileImportType";
+constexpr char kNewProfileStorageHistogram[] =
+    "Autofill.ProfileImport.StorageNewAddressIsSavedTo";
 constexpr char kNewProfileEditsHistogram[] =
     "Autofill.ProfileImport.NewProfileEditedType";
 constexpr char kProfileUpdateEditsHistogram[] =
@@ -55,11 +57,12 @@ constexpr char kProfileMigrationDecisionHistogram[] =
 constexpr char kProfileUpdateNumberOfAffectedTypesHistogram[] =
     "Autofill.ProfileImport.UpdateProfileNumberOfAffectedFields";
 
-// Test that two AutofillProfiles have the same `source() and `Compare()` equal.
-MATCHER(CompareWithSource, "") {
+// Test that two AutofillProfiles have the same `record_type() and `Compare()`
+// equal.
+MATCHER(CompareWithRecordType, "") {
   const AutofillProfile& a = std::get<0>(arg);
   const AutofillProfile& b = std::get<1>(arg);
-  return a.source() == b.source() && a.Compare(b) == 0;
+  return a.record_type() == b.record_type() && a.Compare(b) == 0;
 }
 
 // This derived version of the AddressProfileSaveManager stores the last import
@@ -332,7 +335,7 @@ void AddressProfileSaveManagerTest::VerifyFinalProfiles(
   } else {
     EXPECT_THAT(
         test_scenario.expected_final_profiles,
-        testing::UnorderedPointwise(CompareWithSource(), final_profiles));
+        testing::UnorderedPointwise(CompareWithRecordType(), final_profiles));
   }
 }
 
@@ -344,6 +347,16 @@ void AddressProfileSaveManagerTest::VerifyUMAMetricsCollection(
           ? kSilentUpdatesProfileImportTypeHistogram
           : kProfileImportTypeHistogram,
       test_scenario.expected_import_type, 1);
+
+  // Only record the profile's storage for new profiles.
+  const bool accepted_and_is_new_profile =
+      (test_scenario.user_decision ==
+           AutofillClient::AddressPromptUserDecision::kAccepted ||
+       test_scenario.user_decision ==
+           AutofillClient::AddressPromptUserDecision::kEditAccepted) &&
+      IsNewProfile(test_scenario);
+  histogram_tester.ExpectTotalCount(kNewProfileStorageHistogram,
+                                    accepted_and_is_new_profile ? 1 : 0);
 
   // When the user is prompted, three histograms are recorded:
   // - The user `decision`.

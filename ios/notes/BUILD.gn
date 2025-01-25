@@ -1,7 +1,5 @@
 # Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
-import("//build/config/ios/asset_catalog.gni")
-
 source_set("notes") {
   sources = [
     "notes_factory.h",

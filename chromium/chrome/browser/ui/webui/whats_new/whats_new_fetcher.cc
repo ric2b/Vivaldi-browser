@@ -14,7 +14,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/global_desktop_features.h"
+#include "chrome/browser/global_features.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -37,22 +37,27 @@
 
 namespace whats_new {
 const char kChromeWhatsNewURL[] = "https://www.google.com/chrome/whats-new/";
+const char kChromeWhatsNewStagingURL[] =
+    "https://chrome-staging.corp.google.com/chrome/whats-new/";
 const char kChromeWhatsNewV2URL[] =
     "https://www.google.com/chrome/v2/whats-new/";
+const char kChromeWhatsNewV2StagingURL[] =
+    "https://chrome-staging.corp.google.com/chrome/v2/whats-new/";
 
 const int64_t kMaxDownloadBytes = 1024 * 1024;
 
-GURL GetV2ServerURL() {
-  return net::AppendQueryParameter(GURL(kChromeWhatsNewV2URL), "version",
+GURL GetV2ServerURL(bool is_staging) {
+  const GURL base_url = is_staging ? GURL(kChromeWhatsNewV2StagingURL)
+                                   : GURL(kChromeWhatsNewV2URL);
+  return net::AppendQueryParameter(base_url, "version",
                                    base::NumberToString(CHROME_VERSION_MAJOR));
 }
 
-GURL GetV2ServerURLForRender() {
-  auto* registry =
-      g_browser_process->GetDesktopFeatures()->whats_new_registry();
+GURL GetV2ServerURLForRender(bool is_staging) {
+  auto* registry = g_browser_process->GetFeatures()->whats_new_registry();
   CHECK(registry);
 
-  GURL url = GetV2ServerURL();
+  GURL url = GetV2ServerURL(is_staging);
   auto active_features = registry->GetActiveFeatureNames();
   if (active_features.size() > 0) {
     url = net::AppendQueryParameter(
@@ -68,14 +73,14 @@ GURL GetV2ServerURLForRender() {
   return net::AppendQueryParameter(url, "internal", "true");
 }
 
-GURL GetServerURL(bool may_redirect) {
+GURL GetServerURL(bool may_redirect, bool is_staging) {
+  const GURL base_url =
+      is_staging ? GURL(kChromeWhatsNewStagingURL) : GURL(kChromeWhatsNewURL);
   const GURL url =
       may_redirect
           ? net::AppendQueryParameter(
-                GURL(kChromeWhatsNewURL), "version",
-                base::NumberToString(CHROME_VERSION_MAJOR))
-          : GURL(kChromeWhatsNewURL)
-                .Resolve(base::StringPrintf("m%d", CHROME_VERSION_MAJOR));
+                base_url, "version", base::NumberToString(CHROME_VERSION_MAJOR))
+          : base_url.Resolve(base::StringPrintf("m%d", CHROME_VERSION_MAJOR));
   return net::AppendQueryParameter(url, "internal", "true");
 }
 

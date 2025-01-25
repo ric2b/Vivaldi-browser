@@ -4,11 +4,11 @@
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_STYLESHEET_BUILDER_H_
 
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
-#include "base/strings/string_piece.h"
 #include "components/ad_blocker/adblock_types.h"
 #include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
 

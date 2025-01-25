@@ -123,6 +123,10 @@ source_set("types") {
   if (!is_ios) {
     sources += [ "ui_base_types.h" ]
   }
+
+  # Need to be removed once all clients of `MenuSourceType` have been migrated.
+  public_deps = [ "//ui/base/mojom:ui_base_types" ]
+
   deps = [ "//build:chromeos_buildflags" ]
 }
 
@@ -319,8 +323,8 @@ component("base") {
       "cocoa/command_dispatcher.mm",
       "cocoa/constrained_window/constrained_window_animation.h",
       "cocoa/constrained_window/constrained_window_animation.mm",
-      "cocoa/cursor_accessibility_scale_factor_observer.h",
-      "cocoa/cursor_accessibility_scale_factor_observer.mm",
+      "cocoa/cursor_accessibility_scale_factor.h",
+      "cocoa/cursor_accessibility_scale_factor.mm",
       "cocoa/cursor_utils.h",
       "cocoa/cursor_utils.mm",
       "cocoa/defaults_utils.h",
@@ -502,6 +506,7 @@ component("base") {
     "//base",
     "//skia",
     "//third_party/abseil-cpp:absl",
+    "//ui/base/mojom:ui_base_types",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -537,6 +542,7 @@ component("base") {
   if (use_blink) {
     public_deps += [
       "//ui/base/clipboard:file_info",
+      "//ui/base/mojom:ui_base_types",
       "//ui/events:dom_keycode_converter",
       "//ui/events:events_base",
       "//ui/events/platform",
@@ -864,6 +870,11 @@ static_library("test_support") {
     ":base",
     "//ui/base/idle",
   ]
+
+  if (!is_ios) {
+    public_deps += [ "//ui/base/mojom:ui_base_types" ]
+  }
+
   deps = [
     "//base",
     "//base/test:test_config",
@@ -1292,7 +1303,7 @@ test("ui_base_unittests") {
       "$root_out_dir/ui_test.pak",  # TODO(brettw): remove this line.
     ]
     data_deps += [
-      "//third_party/mesa_headers",
+      "//third_party/angle:includes",
       "//ui/resources:ui_test_pak",  # TODO(brettw): this does nothing.
     ]
   }

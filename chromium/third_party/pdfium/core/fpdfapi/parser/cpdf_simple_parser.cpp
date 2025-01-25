@@ -6,7 +6,12 @@
 
 #include "core/fpdfapi/parser/cpdf_simple_parser.h"
 
+#include <stdint.h>
+
+#include <optional>
+
 #include "core/fpdfapi/parser/fpdf_parser_utility.h"
+#include "core/fxcrt/check_op.h"
 
 CPDF_SimpleParser::CPDF_SimpleParser(pdfium::span<const uint8_t> input)
     : data_(input) {}
@@ -14,117 +19,134 @@ CPDF_SimpleParser::CPDF_SimpleParser(pdfium::span<const uint8_t> input)
 CPDF_SimpleParser::~CPDF_SimpleParser() = default;
 
 ByteStringView CPDF_SimpleParser::GetWord() {
-  uint8_t ch;
+  std::optional<uint8_t> start_char = SkipSpacesAndComments();
+  if (!start_char.has_value()) {
+    return ByteStringView();
+  }
 
-  // Skip whitespace and comment lines.
+  CHECK_GT(cur_position_, 0);
+  uint32_t start_position = cur_position_ - 1;
+  CHECK_LT(start_position, data_.size());
+
+  if (!PDFCharIsDelimiter(start_char.value())) {
+    return HandleNonDelimiter();
+  }
+
+  switch (start_char.value()) {
+    case '/':
+      return HandleName();
+    case '<':
+      return HandleBeginAngleBracket();
+    case '>':
+      return HandleEndAngleBracket();
+    case '(':
+      return HandleParentheses();
+    default:
+      return GetDataToCurrentPosition(start_position);
+  }
+}
+
+ByteStringView CPDF_SimpleParser::GetDataToCurrentPosition(
+    uint32_t start_position) const {
+  return ByteStringView(
+      data_.subspan(start_position, cur_position_ - start_position));
+}
+
+std::optional<uint8_t> CPDF_SimpleParser::SkipSpacesAndComments() {
   while (true) {
-    if (data_.size() <= cur_pos_)
-      return ByteStringView();
-
-    ch = data_[cur_pos_++];
-    while (PDFCharIsWhitespace(ch)) {
-      if (data_.size() <= cur_pos_)
-        return ByteStringView();
-      ch = data_[cur_pos_++];
+    if (cur_position_ >= data_.size()) {
+      return std::nullopt;
     }
 
-    if (ch != '%')
-      break;
+    // Skip whitespaces.
+    uint8_t cur_char = data_[cur_position_++];
+    while (PDFCharIsWhitespace(cur_char)) {
+      if (cur_position_ >= data_.size()) {
+        return std::nullopt;
+      }
+      cur_char = data_[cur_position_++];
+    }
 
+    if (cur_char != '%') {
+      return cur_char;
+    }
+
+    // Skip comments.
     while (true) {
-      if (data_.size() <= cur_pos_)
-        return ByteStringView();
+      if (cur_position_ >= data_.size()) {
+        return std::nullopt;
+      }
 
-      ch = data_[cur_pos_++];
-      if (PDFCharIsLineEnding(ch))
+      cur_char = data_[cur_position_++];
+      if (PDFCharIsLineEnding(cur_char)) {
         break;
+      }
     }
   }
+}
 
-  uint8_t dwSize = 0;
-  uint32_t start_pos = cur_pos_ - 1;
-  if (PDFCharIsDelimiter(ch)) {
-    // Find names
-    if (ch == '/') {
-      while (true) {
-        if (data_.size() <= cur_pos_)
-          break;
-
-        ch = data_[cur_pos_++];
-        if (!PDFCharIsOther(ch) && !PDFCharIsNumeric(ch)) {
-          cur_pos_--;
-          dwSize = cur_pos_ - start_pos;
-          break;
-        }
-      }
-      return ByteStringView(data_.subspan(start_pos, dwSize));
+ByteStringView CPDF_SimpleParser::HandleName() {
+  uint32_t start_position = cur_position_ - 1;
+  while (cur_position_ < data_.size()) {
+    uint8_t cur_char = data_[cur_position_];
+    // Stop parsing after encountering a whitespace or delimiter.
+    if (PDFCharIsWhitespace(cur_char) || PDFCharIsDelimiter(cur_char)) {
+      return GetDataToCurrentPosition(start_position);
     }
+    ++cur_position_;
+  }
+  return ByteStringView();
+}
 
-    dwSize = 1;
-    if (ch == '<') {
-      if (data_.size() <= cur_pos_) {
-        return ByteStringView(data_.subspan(start_pos, dwSize));
-      }
-      ch = data_[cur_pos_++];
-      if (ch == '<') {
-        dwSize = 2;
-      } else {
-        while (cur_pos_ < data_.size() && data_[cur_pos_] != '>')
-          cur_pos_++;
-
-        if (cur_pos_ < data_.size())
-          cur_pos_++;
-
-        dwSize = cur_pos_ - start_pos;
-      }
-    } else if (ch == '>') {
-      if (data_.size() <= cur_pos_) {
-        return ByteStringView(data_.subspan(start_pos, dwSize));
-      }
-      ch = data_[cur_pos_++];
-      if (ch == '>')
-        dwSize = 2;
-      else
-        cur_pos_--;
-    } else if (ch == '(') {
-      int level = 1;
-      while (cur_pos_ < data_.size()) {
-        if (data_[cur_pos_] == ')') {
-          level--;
-          if (level == 0)
-            break;
-        }
-
-        if (data_[cur_pos_] == '\\') {
-          if (data_.size() <= cur_pos_)
-            break;
-
-          cur_pos_++;
-        } else if (data_[cur_pos_] == '(') {
-          level++;
-        }
-        if (data_.size() <= cur_pos_)
-          break;
-
-        cur_pos_++;
-      }
-      if (cur_pos_ < data_.size())
-        cur_pos_++;
-
-      dwSize = cur_pos_ - start_pos;
-    }
-    return ByteStringView(data_.subspan(start_pos, dwSize));
+ByteStringView CPDF_SimpleParser::HandleBeginAngleBracket() {
+  uint32_t start_position = cur_position_ - 1;
+  if (cur_position_ >= data_.size()) {
+    return GetDataToCurrentPosition(start_position);
   }
 
-  dwSize = 1;
-  while (cur_pos_ < data_.size()) {
-    ch = data_[cur_pos_++];
+  uint8_t cur_char = data_[cur_position_++];
+  // Stop parsing if encountering "<<".
+  if (cur_char == '<') {
+    return GetDataToCurrentPosition(start_position);
+  }
 
-    if (PDFCharIsDelimiter(ch) || PDFCharIsWhitespace(ch)) {
-      cur_pos_--;
+  // Continue parsing until end of `data_` or closing bracket.
+  while (cur_position_ < data_.size() && cur_char != '>') {
+    cur_char = data_[cur_position_++];
+  }
+  return GetDataToCurrentPosition(start_position);
+}
+
+ByteStringView CPDF_SimpleParser::HandleEndAngleBracket() {
+  uint32_t start_position = cur_position_ - 1;
+  if (cur_position_ < data_.size() && data_[cur_position_] == '>') {
+    ++cur_position_;
+  }
+  return GetDataToCurrentPosition(start_position);
+}
+
+ByteStringView CPDF_SimpleParser::HandleParentheses() {
+  uint32_t start_position = cur_position_ - 1;
+  int level = 1;
+  while (cur_position_ < data_.size() && level > 0) {
+    uint8_t cur_char = data_[cur_position_++];
+    if (cur_char == '(') {
+      ++level;
+    } else if (cur_char == ')') {
+      --level;
+    }
+  }
+  return GetDataToCurrentPosition(start_position);
+}
+
+ByteStringView CPDF_SimpleParser::HandleNonDelimiter() {
+  uint32_t start_position = cur_position_ - 1;
+  while (cur_position_ < data_.size()) {
+    uint8_t cur_char = data_[cur_position_];
+    if (PDFCharIsDelimiter(cur_char) || PDFCharIsWhitespace(cur_char)) {
       break;
     }
-    dwSize++;
+    ++cur_position_;
   }
-  return ByteStringView(data_.subspan(start_pos, dwSize));
+  return GetDataToCurrentPosition(start_position);
 }

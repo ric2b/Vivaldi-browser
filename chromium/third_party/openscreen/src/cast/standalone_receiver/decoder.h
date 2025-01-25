@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "cast/standalone_receiver/avcodec_glue.h"
-#include "cast/streaming/frame_id.h"
+#include "cast/streaming/public/frame_id.h"
 #include "platform/base/span.h"
 
 namespace openscreen::cast {

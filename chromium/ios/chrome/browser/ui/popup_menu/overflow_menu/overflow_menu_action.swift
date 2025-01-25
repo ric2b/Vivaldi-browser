@@ -26,4 +26,8 @@ import Combine
   /// The uniquely-identifying `overflow_menu::ActionType` of the action,
   /// stored as an int because Swift does not yet support C++ enum variables.
   public var actionType = 0
+
+  // Vivaldi
+  @Published public var submenuActions: [OverflowMenuAction] = []
+  // End Vivaldi
 }

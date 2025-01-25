@@ -76,10 +76,12 @@ export function securityStateCompare(a: Protocol.Security.SecurityState, b: Prot
   return SECURITY_STATE_ORDER.indexOf(a) - SECURITY_STATE_ORDER.indexOf(b);
 }
 
-SDK.SDKModel.SDKModel.register(SecurityModel, {capabilities: SDK.Target.Capability.Security, autostart: false});
+SDK.SDKModel.SDKModel.register(SecurityModel, {capabilities: SDK.Target.Capability.SECURITY, autostart: false});
 
 export enum Events {
+  /* eslint-disable @typescript-eslint/naming-convention -- Used by web_tests. */
   VisibleSecurityStateChanged = 'VisibleSecurityStateChanged',
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 export type EventTypes = {

@@ -9,8 +9,8 @@ import {BrowserServiceImpl, CrRouter, HistoryEmbeddingsBrowserProxyImpl, History
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {isMac} from 'chrome://resources/js/platform.js';
-import {pressAndReleaseKeyOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {pressAndReleaseKeyOn} from 'chrome://webui-test/keyboard_mock_interactions.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
@@ -23,12 +23,22 @@ suite('HistoryAppTest', function() {
   let embeddingsHandler: TestMock<HistoryEmbeddingsPageHandlerRemote>&
       HistoryEmbeddingsPageHandlerRemote;
 
+  // Force cr-history-embeddings to be in the DOM for testing.
+  async function forceHistoryEmbeddingsElement() {
+    loadTimeData.overrideValues({historyEmbeddingsSearchMinimumWordCount: 0});
+    element.dispatchEvent(new CustomEvent(
+        'change-query',
+        {bubbles: true, composed: true, detail: {search: 'some fake input'}}));
+    return flushTasks();
+  }
+
   setup(() => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     loadTimeData.overrideValues({
       historyEmbeddingsSearchMinimumWordCount: 2,
       enableHistoryEmbeddings: true,
+      maybeShowEmbeddingsIph: false,
     });
 
     browserService = new TestBrowserService();
@@ -288,12 +298,7 @@ suite('HistoryAppTest', function() {
   });
 
   test('CountsCharacters', async () => {
-    // Force cr-history-embeddings to be in the DOM for testing.
-    loadTimeData.overrideValues({historyEmbeddingsSearchMinimumWordCount: 0});
-    element.dispatchEvent(new CustomEvent(
-        'change-query',
-        {bubbles: true, composed: true, detail: {search: 'some fake input'}}));
-    await flushTasks();
+    await forceHistoryEmbeddingsElement();
 
     function dispatchNativeInput(
         inputEvent: Partial<InputEvent>, inputValue: string) {
@@ -337,6 +342,15 @@ suite('HistoryAppTest', function() {
   });
 
   test('RegistersAndMaybeShowsPromo', async () => {
+    assertEquals(
+        0, embeddingsHandler.getCallCount('maybeShowFeaturePromo'),
+        'promo is disabled in setup');
+
+    // Recreate the app with the promo enabled.
+    loadTimeData.overrideValues({maybeShowEmbeddingsIph: true});
+    element = document.createElement('history-app');
+    document.body.appendChild(element);
+    await flushTasks();
     assertDeepEquals(
         element.getSortedAnchorStatusesForTesting(),
         [
@@ -344,15 +358,18 @@ suite('HistoryAppTest', function() {
         ],
     );
     await embeddingsHandler.whenCalled('maybeShowFeaturePromo');
+    assertEquals(
+        1, embeddingsHandler.getCallCount('maybeShowFeaturePromo'),
+        'promo is disabled in setup');
   });
 
   test('ProductSpecsIncrementsToolbar', async () => {
     // Reset the app with product spec lists feature enabled.
     document.body.removeChild(element);
-    loadTimeData.overrideValues({productSpecificationsListsEnabled: true});
+    loadTimeData.overrideValues({compareHistoryEnabled: true});
     element = document.createElement('history-app');
     document.body.appendChild(element);
-    element.$.router.selectedPage = 'productSpecificationsLists';
+    element.$.router.selectedPage = 'comparisonTables';
     await flushTasks();
     assertEquals(0, element.$.toolbar.count);
 
@@ -379,10 +396,10 @@ suite('HistoryAppTest', function() {
   test('ProductSpecsSelectUnselectAll', async () => {
     // Reset the app with product spec lists feature enabled.
     document.body.removeChild(element);
-    loadTimeData.overrideValues({productSpecificationsListsEnabled: true});
+    loadTimeData.overrideValues({compareHistoryEnabled: true});
     element = document.createElement('history-app');
     document.body.appendChild(element);
-    element.$.router.selectedPage = 'productSpecificationsLists';
+    element.$.router.selectedPage = 'comparisonTables';
     await flushTasks();
     assertEquals(0, element.$.toolbar.count);
 
@@ -406,4 +423,24 @@ suite('HistoryAppTest', function() {
     assertEquals(2, element.$.toolbar.count);
   });
 
+  test('PassesDisclaimerLinkClicksToEmbeddings', async () => {
+    await forceHistoryEmbeddingsElement();
+    const historyEmbeddingsElement =
+        element.shadowRoot!.querySelector('cr-history-embeddings');
+    assertTrue(!!historyEmbeddingsElement);
+    assertFalse(historyEmbeddingsElement.forceSuppressLogging);
+    element.$.historyEmbeddingsDisclaimerLink.click();
+    assertTrue(historyEmbeddingsElement.forceSuppressLogging);
+  });
+
+  test('PassesDisclaimerLinkAuxClicksToEmbeddings', async () => {
+    await forceHistoryEmbeddingsElement();
+    const historyEmbeddingsElement =
+        element.shadowRoot!.querySelector('cr-history-embeddings');
+    assertTrue(!!historyEmbeddingsElement);
+    assertFalse(historyEmbeddingsElement.forceSuppressLogging);
+    element.$.historyEmbeddingsDisclaimerLink.dispatchEvent(
+        new MouseEvent('auxclick'));
+    assertTrue(historyEmbeddingsElement.forceSuppressLogging);
+  });
 });

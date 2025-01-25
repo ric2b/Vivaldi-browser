@@ -25,6 +25,7 @@
 #include "chrome/browser/safe_browsing/test_safe_browsing_blocking_page_quiet.h"
 #include "chrome/browser/ssl/chrome_security_blocking_page_factory.h"
 #include "chrome/browser/ssl/https_only_mode_controller_client.h"
+#include "chrome/browser/ssl/https_upgrades_util.h"
 #include "chrome/browser/ssl/insecure_form/insecure_form_controller_client.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/url_constants.h"
@@ -276,7 +277,8 @@ CreateHttpsOnlyModePage(content::WebContents* web_contents) {
       web_contents, request_url,
       std::make_unique<HttpsOnlyModeControllerClient>(web_contents,
                                                       request_url),
-      security_interstitials::https_only_mode::HttpInterstitialState{});
+      security_interstitials::https_only_mode::HttpInterstitialState{},
+      /*use_new_interstitial=*/IsNewHttpsFirstModeInterstitialEnabled());
 }
 
 std::unique_ptr<security_interstitials::SecurityInterstitialPage>
@@ -378,16 +380,38 @@ std::unique_ptr<EnterpriseWarnPage> CreateEnterpriseWarnPage(
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 std::unique_ptr<SupervisedUserVerificationPage>
-CreateSupervisedUserVerificationPage(content::WebContents* web_contents) {
+CreateSupervisedUserVerificationPage(content::WebContents* web_contents,
+                                     bool is_main_frame) {
   const GURL kRequestUrl("https://supervised-user-verification.example.net");
   return std::make_unique<SupervisedUserVerificationPage>(
       web_contents, "first.last@gmail.com", kRequestUrl,
+      SupervisedUserVerificationPage::VerificationPurpose::REAUTH_REQUIRED_SITE,
+      /*child_account_service*/ nullptr, ukm::kInvalidSourceId,
       std::make_unique<SupervisedUserVerificationControllerClient>(
           web_contents,
           Profile::FromBrowserContext(web_contents->GetBrowserContext())
               ->GetPrefs(),
           g_browser_process->GetApplicationLocale(),
-          GURL(chrome::kChromeUINewTabURL), kRequestUrl));
+          GURL(chrome::kChromeUINewTabURL), kRequestUrl),
+      is_main_frame);
+}
+
+std::unique_ptr<SupervisedUserVerificationPage>
+CreateSupervisedUserVerificationPageForBlockedSite(
+    content::WebContents* web_contents,
+    bool is_main_frame) {
+  const GURL kRequestUrl("https://supervised-user-verification.example.net");
+  return std::make_unique<SupervisedUserVerificationPage>(
+      web_contents, "first.last@gmail.com", kRequestUrl,
+      SupervisedUserVerificationPage::VerificationPurpose::DEFAULT_BLOCKED_SITE,
+      /*child_account_service*/ nullptr, ukm::kInvalidSourceId,
+      std::make_unique<SupervisedUserVerificationControllerClient>(
+          web_contents,
+          Profile::FromBrowserContext(web_contents->GetBrowserContext())
+              ->GetPrefs(),
+          g_browser_process->GetApplicationLocale(),
+          GURL(chrome::kChromeUINewTabURL), kRequestUrl),
+      is_main_frame);
 }
 #endif
 
@@ -572,7 +596,18 @@ void InterstitialHTMLSource::StartDataRequest(
     interstitial_delegate = CreateHttpsOnlyModePage(web_contents);
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   } else if (path_without_query == "/supervised-user-verify") {
-    interstitial_delegate = CreateSupervisedUserVerificationPage(web_contents);
+    interstitial_delegate = CreateSupervisedUserVerificationPage(
+        web_contents, /*is_main_frame=*/true);
+  } else if (path_without_query == "/supervised-user-verify-blocked-site") {
+    interstitial_delegate = CreateSupervisedUserVerificationPageForBlockedSite(
+        web_contents, /*is_main_frame=*/true);
+  } else if (path_without_query == "/supervised-user-verify-subframe") {
+    interstitial_delegate = CreateSupervisedUserVerificationPage(
+        web_contents, /*is_main_frame=*/false);
+  } else if (path_without_query ==
+             "/supervised-user-verify-blocked-site-subframe") {
+    interstitial_delegate = CreateSupervisedUserVerificationPageForBlockedSite(
+        web_contents, /*is_main_frame=*/false);
 #endif
   }
 
@@ -629,8 +664,6 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
       reason = supervised_user::FilteringBehaviorReason::ASYNC_CHECKER;
     } else if (reason_string == "manual") {
       reason = supervised_user::FilteringBehaviorReason::MANUAL;
-    } else if (reason_string == "not_signed_in") {
-      reason = supervised_user::FilteringBehaviorReason::NOT_SIGNED_IN;
     }
   }
 

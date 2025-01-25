@@ -27,13 +27,13 @@
 #include "absl/time/time.h"
 #include "internal/platform/clock.h"
 #include "internal/platform/task_runner.h"
+#include "sharing/analytics/analytics_recorder.h"
 #include "sharing/certificates/nearby_share_certificate_manager.h"
 #include "sharing/constants.h"
 #include "sharing/incoming_frames_reader.h"
 #include "sharing/internal/public/logging.h"
 #include "sharing/nearby_connection.h"
 #include "sharing/nearby_connections_manager.h"
-#include "sharing/nearby_sharing_decoder.h"
 #include "sharing/paired_key_verification_runner.h"
 #include "sharing/proto/wire_format.pb.h"
 #include "sharing/share_target.h"
@@ -67,9 +67,12 @@ std::string TokenToFourDigitString(const std::vector<uint8_t>& bytes) {
 
 }  // namespace
 
-ShareSession::ShareSession(TaskRunner& service_thread, std::string endpoint_id,
+ShareSession::ShareSession(TaskRunner& service_thread,
+                           analytics::AnalyticsRecorder& analytics_recorder,
+                           std::string endpoint_id,
                            const ShareTarget& share_target)
     : service_thread_(service_thread),
+      analytics_recorder_(analytics_recorder),
       endpoint_id_(std::move(endpoint_id)),
       self_share_(share_target.for_self_share),
       share_target_(share_target) {}
@@ -93,6 +96,14 @@ void ShareSession::UpdateTransferMetadata(
   InvokeTransferUpdateCallback(transfer_metadata);
 }
 
+std::weak_ptr<NearbyConnectionsManager::PayloadStatusListener>
+ShareSession::payload_tracker() const {
+  if (!payload_tracker_) {
+    return std::weak_ptr<NearbyConnectionsManager::PayloadStatusListener>();
+  }
+  return payload_tracker_->GetWeakPtr();
+}
+
 void ShareSession::set_disconnect_status(
     TransferMetadata::Status disconnect_status) {
   disconnect_status_ = disconnect_status;
@@ -103,17 +114,44 @@ void ShareSession::set_disconnect_status(
   }
 }
 
-bool ShareSession::OnConnected(const NearbySharingDecoder& decoder,
-                               absl::Time connect_start_time,
+bool ShareSession::OnConnected(absl::Time connect_start_time,
+                               NearbyConnectionsManager* connections_manager,
                                NearbyConnection* connection) {
+  NL_DCHECK(connections_manager) << "Connections manager must not be null";
+  connections_manager_ = connections_manager;
   if (!OnNewConnection(connection)) {
     return false;
   }
   connection_start_time_ = connect_start_time;
   connection_ = connection;
-  frames_reader_ = std::make_shared<IncomingFramesReader>(service_thread_,
-                                                          decoder, connection_);
+  frames_reader_ =
+      std::make_shared<IncomingFramesReader>(service_thread_, connection_);
   return true;
+}
+
+void ShareSession::Disconnect() {
+  if (connection_ == nullptr) {
+    return;
+  }
+  // Do not clear connection_ here.  It will be cleared in OnDisconnect().
+  connection_->Close();
+}
+
+void ShareSession::Abort(TransferMetadata::Status status) {
+  NL_DCHECK(TransferMetadata::IsFinalStatus(status))
+      << "Abort should only be called with a final status";
+
+  // First invoke the appropriate transfer callback with the final
+  // |status|.
+  UpdateTransferMetadata(TransferMetadataBuilder().set_status(status).build());
+
+  // Close connection if necessary.
+  if (connection_ == nullptr) {
+    return;
+  }
+  // Final status already sent above.  No need to send it again.
+  set_disconnect_status(TransferMetadata::Status::kUnknown);
+  connection_->Close();
 }
 
 void ShareSession::RunPairedKeyVerification(
@@ -146,10 +184,12 @@ void ShareSession::SetAttachmentPayloadId(int64_t attachment_id,
   attachment_payload_map_[attachment_id] = payload_id;
 }
 
-void ShareSession::CancelPayloads(
-    NearbyConnectionsManager& connections_manager) {
+void ShareSession::CancelPayloads() {
+  if (connections_manager_ == nullptr) {
+    return;
+  }
   for (const auto& [attachment_id, payload_id] : attachment_payload_map_) {
-    connections_manager.Cancel(payload_id);
+    connections_manager_->Cancel(payload_id);
   }
 }
 
@@ -202,10 +242,10 @@ bool ShareSession::HandleKeyVerificationResult(
     case PairedKeyVerificationRunner::PairedKeyVerificationResult::kSuccess:
       NL_VLOG(1) << __func__ << ": Paired key handshake succeeded for target - "
                  << share_target().id;
-      // Clear out token if it is self-share since verification is successful.
-      if (self_share_) {
-        token_.resize(0);
-      }
+      // If verification succeeds, this either means that the target is a
+      // self-share or a mutual contact. In either case, we should clear the
+      // token.
+      token_.resize(0);
       break;
 
     case PairedKeyVerificationRunner::PairedKeyVerificationResult::kUnable:

@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/contextual_panel/entrypoint/coordinator/contextual_panel_entrypoint_mediator.h"
 
+#import "base/check_op.h"
 #import "base/memory/weak_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/stringprintf.h"
@@ -18,6 +19,9 @@
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_tab_helper.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_tab_helper_observer_bridge.h"
 #import "ios/chrome/browser/contextual_panel/utils/contextual_panel_metrics.h"
+#import "ios/chrome/browser/infobars/model/infobar_badge_tab_helper.h"
+#import "ios/chrome/browser/infobars/model/infobar_badge_tab_helper_observer.h"
+#import "ios/chrome/browser/infobars/model/infobar_badge_tab_helper_observer_bridge.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/public/commands/contextual_panel_entrypoint_iph_commands.h"
 #import "ios/chrome/browser/shared/public/commands/contextual_sheet_commands.h"
@@ -26,10 +30,14 @@
 
 @interface ContextualPanelEntrypointMediator () <
     ContextualPanelTabHelperObserving,
+    InfobarBadgeTabHelperObserving,
     WebStateListObserving>
 @end
 
 @implementation ContextualPanelEntrypointMediator {
+  // Whether there currently are any Infobar badges being shown.
+  BOOL _infobarBadgesCurrentlyShown;
+
   // The command handler for contextual sheet commands.
   __weak id<ContextualSheetCommands> _contextualSheetHandler;
 
@@ -59,6 +67,13 @@
   // Bridge for the ContextualPanelTabHelper observation.
   std::unique_ptr<ContextualPanelTabHelperObserverBridge>
       _contextualPanelObserverBridge;
+
+  // Bridge for the InfobarBadgeTabHelper observation.
+  std::unique_ptr<InfobarBadgeTabHelperObserverBridge>
+      _infobarBadgeObserverBridge;
+  std::unique_ptr<base::ScopedObservation<InfobarBadgeTabHelper,
+                                          InfobarBadgeTabHelperObserverBridge>>
+      _infobarBadgeObservation;
 
   // Forwarder to always be observing the active ContextualPanelTabHelper.
   std::unique_ptr<ActiveContextualPanelTabHelperObservationForwarder>
@@ -91,11 +106,27 @@
     _activeContextualPanelObservationForwarder =
         std::make_unique<ActiveContextualPanelTabHelperObservationForwarder>(
             webStateList, _contextualPanelObserverBridge.get());
+
+    // Setup InfobarBadgeTabHelper observation.
+    _infobarBadgeObserverBridge =
+        std::make_unique<InfobarBadgeTabHelperObserverBridge>(self);
+    _infobarBadgeObservation = std::make_unique<base::ScopedObservation<
+        InfobarBadgeTabHelper, InfobarBadgeTabHelperObserverBridge>>(
+        _infobarBadgeObserverBridge.get());
+
+    if (_webStateList->GetActiveWebState()) {
+      _infobarBadgeObservation->Observe(
+          InfobarBadgeTabHelper::GetOrCreateForWebState(
+              _webStateList->GetActiveWebState()));
+    }
   }
   return self;
 }
 
 - (void)disconnect {
+  _infobarBadgeObservation->Reset();
+  _infobarBadgeObservation.reset();
+  _infobarBadgeObserverBridge.reset();
   _activeContextualPanelObservationForwarder.reset();
   _contextualPanelObserverBridge.reset();
   _webStateListObservation.reset();
@@ -111,11 +142,7 @@
 
 - (void)entrypointTapped {
   // Cancel any pending transition timers since user interacted with entrypoint.
-  _transitionToEntrypointLoudMomentTimer = nullptr;
-  _transitionToDefaultEntrypointTimer = nullptr;
-
-  [self dismissEntrypointIPHAnimated:YES];
-  [self.delegate enableFullscreen];
+  [self resetTimersAndUIStateAnimated:YES];
 
   ContextualPanelTabHelper* contextualPanelTabHelper =
       ContextualPanelTabHelper::FromWebState(
@@ -177,8 +204,11 @@
     return;
   }
 
-  // Update old active web state's visible time.
+  // De-register observer bridge for the old WebState's InfobarBadgeTabHelper.
+  _infobarBadgeObservation->Reset();
+
   if (status.old_active_web_state) {
+    // Update old active web state's visible time.
     ContextualPanelTabHelper* contextualPanelTabHelper =
         ContextualPanelTabHelper::FromWebState(status.old_active_web_state);
     std::optional<ContextualPanelTabHelper::EntrypointMetricsData>&
@@ -190,26 +220,68 @@
     }
   }
 
+  [self resetTimersAndUIStateAnimated:NO];
+
   // Return early if no new webstates are active.
   if (!status.new_active_web_state) {
     return;
   }
+
+  // Register observer bridge for the new WebState's InfobarBadgeTabHelper.
+  _infobarBadgeObservation->Observe(
+      InfobarBadgeTabHelper::GetOrCreateForWebState(
+          status.new_active_web_state));
+
   ContextualPanelTabHelper* contextualPanelTabHelper =
       ContextualPanelTabHelper::FromWebState(status.new_active_web_state);
   [self activeTabHasNewData:contextualPanelTabHelper->GetFirstCachedConfig()];
 }
 
+#pragma mark - InfobarBadgeTabHelperObserving
+
+- (void)infobarBadgesUpdated:(InfobarBadgeTabHelper*)tabHelper {
+  // Return early if the notification doesn't come from the currently active
+  // webstate's tab helper.
+  raw_ptr<web::WebState> active_web_state = _webStateList->GetActiveWebState();
+  if (!active_web_state || active_web_state->IsBeingDestroyed()) {
+    return;
+  }
+  if (tabHelper !=
+      InfobarBadgeTabHelper::GetOrCreateForWebState(active_web_state)) {
+    return;
+  }
+
+  size_t badgesCount = tabHelper->GetInfobarBadgesCount();
+
+  BOOL infobarBadgesCurrentlyShown = badgesCount > 0;
+  if (_infobarBadgesCurrentlyShown == infobarBadgesCurrentlyShown) {
+    return;
+  }
+  _infobarBadgesCurrentlyShown = infobarBadgesCurrentlyShown;
+
+  if (_infobarBadgesCurrentlyShown) {
+    [self dismissEntrypointIPHAnimated:YES];
+  }
+
+  [self.consumer setInfobarBadgesCurrentlyShown:_infobarBadgesCurrentlyShown];
+}
+
 #pragma mark - private
+
+// Cancels pending timers, dismisses any showing IPH and removes any active
+// fullscreen disabler.
+- (void)resetTimersAndUIStateAnimated:(BOOL)animated {
+  _transitionToEntrypointLoudMomentTimer = nullptr;
+  _transitionToDefaultEntrypointTimer = nullptr;
+  [self dismissEntrypointIPHAnimated:animated];
+  [self.delegate enableFullscreen];
+}
 
 // Updates the entrypoint state whenever the active tab changes or new data is
 // provided.
 - (void)activeTabHasNewData:
     (base::WeakPtr<ContextualPanelItemConfiguration>)config {
-  _transitionToEntrypointLoudMomentTimer = nullptr;
-  _transitionToDefaultEntrypointTimer = nullptr;
-
-  [self dismissEntrypointIPHAnimated:NO];
-  [self.delegate enableFullscreen];
+  [self resetTimersAndUIStateAnimated:NO];
 
   if (!config) {
     [self.consumer hideEntrypoint];
@@ -315,12 +387,8 @@
   base::WeakPtr<ContextualPanelItemConfiguration> config =
       contextualPanelTabHelper->GetFirstCachedConfig();
 
-  if (!config || ![self canShowEntrypointIPHWithConfig:config]) {
-    return;
-  }
-
   // Show the large entrypoint instead if the IPH can't be shown.
-  if (!_engagementTracker->WouldTriggerHelpUI(*config->iph_feature)) {
+  if (!config || ![self canShowEntrypointIPHWithConfig:config]) {
     [self setupAndTransitionToLargeEntrypoint];
     return;
   }
@@ -336,6 +404,8 @@
     [self setupAndTransitionToLargeEntrypoint];
     return;
   }
+
+  [self.consumer setEntrypointColored:YES];
 
   std::optional<ContextualPanelTabHelper::EntrypointMetricsData>& metricsData =
       [self metricsData];
@@ -393,6 +463,7 @@
 
 - (void)dismissEntrypointIPHAnimated:(BOOL)animated {
   [_entrypointHelpHandler dismissContextualPanelEntrypointIPHAnimated:animated];
+  [self.consumer setEntrypointColored:NO];
 }
 
 - (BOOL)canShowLargeEntrypointWithConfig:
@@ -404,7 +475,8 @@
 - (BOOL)canShowEntrypointIPHWithConfig:
     (base::WeakPtr<ContextualPanelItemConfiguration>)config {
   return [self canShowLoudEntrypointMoment] && config &&
-         config->CanShowEntrypointIPH();
+         config->CanShowEntrypointIPH() &&
+         _engagementTracker->WouldTriggerHelpUI(*config->iph_feature);
 }
 
 - (BOOL)canShowLoudEntrypointMoment {
@@ -412,7 +484,8 @@
       ContextualPanelTabHelper::FromWebState(
           _webStateList->GetActiveWebState());
 
-  return !contextualPanelTabHelper->IsContextualPanelCurrentlyOpened() &&
+  return !_infobarBadgesCurrentlyShown &&
+         !contextualPanelTabHelper->IsContextualPanelCurrentlyOpened() &&
          !contextualPanelTabHelper->WasLoudMomentEntrypointShown() &&
          [self.delegate canShowLargeContextualPanelEntrypoint:self];
 }

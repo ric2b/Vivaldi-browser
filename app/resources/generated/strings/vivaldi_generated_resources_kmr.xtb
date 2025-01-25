@@ -87,7 +87,6 @@
 <translation id="2653275834716714682">Guhertina nivîsê</translation>
 <translation id="2662876636500006917">Marketa Tevnê ya Chromeê</translation>
 <translation id="2678063897982469759">Ji nû ve çalak bike</translation>
-<translation id="2678100101831051676">Nayê weşandin.</translation>
 <translation id="2721037002783622288"><ph name="SEARCH_ENGINE" /> &amp;li nav wêneyan bigere</translation>
 <translation id="2785873697295365461">Danasînerên pelê</translation>
 <translation id="2850541429955027218">Rûkarê tevlî bike</translation>
@@ -130,7 +129,6 @@
 <translation id="3378572629723696641">Dibe ku ev pêvek hatibe xerakirin.</translation>
 <translation id="3387614642886316601">Kontrolkirina rastnivîsê ya baştirkirî bi kar bîne</translation>
 <translation id="3390013585654699824">Hûrgiliyên sepanê</translation>
-<translation id="3393582007140394275">Wêşana dîmenderê nayê pêkanîn.</translation>
 <translation id="345693547134384690">Wêneyê di rûgerekê nû de veke</translation>
 <translation id="3511307672085573050">Navnîşana girêdanê jê bigire</translation>
 <translation id="354068948465830244">Ev dikare daneyên malperê bixwîne û biguherîne</translation>
@@ -288,6 +286,7 @@
 <translation id="6812841287760418429">Guhertinan biparêze</translation>
 <translation id="6824564591481349393">Navnîşana e-nameyê jê bigire</translation>
 <translation id="6840155290835956714">Berî şandinê bipirse</translation>
+<translation id="6878862640969460273">Dîmen</translation>
 <translation id="6886871292305414135">Girêdanê di rûgerekê nû de veke</translation>
 <translation id="6892812721183419409">Girêdanê veke wekî <ph name="USER" /></translation>
 <translation id="6900284862687837908">Sepana paşrûyê: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -344,7 +343,6 @@ Pelê kilîd: <ph name="KEY_FILE" />
 Pelê xwe yê kilîdê li cihekî ewle biparêze. Ji bo afirandina gohertoyekê nû yên pêvekên xwe, dê pêdiviya te pê hebe.</translation>
 <translation id="8004582292198964060">Gerok</translation>
 <translation id="8018313076035239964">Kontrol bike ka malper çi zanyariyan dikarin bi kar bînin û ew dikarin kîjan naverokê nîşanî te bidin</translation>
-<translation id="8032244173881942855">Rûger nayê weşandin.</translation>
 <translation id="8071432093239591881">Wekî wêne çap bike</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural
@@ -393,6 +391,5 @@ Pelê xwe yê kilîdê li cihekî ewle biparêze. Ji bo afirandina gohertoyekê 
 <translation id="9218430445555521422">Wekî berdest saz bike</translation>
 <translation id="93766956588638423">Pêvekê çê bike</translation>
 <translation id="961012016278832836">Piştgiriya Microsoft Edge</translation>
-<translation id="98515147261107953">Dîmen</translation>
 <translation id="998747458861718449">L&amp;ê vekole</translation>
 </translationbundle>

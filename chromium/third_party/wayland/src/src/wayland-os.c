@@ -42,6 +42,12 @@
 
 #include "wayland-os.h"
 
+/* used by tests */
+int (*wl_fcntl)(int fildes, int cmd, ...) = fcntl;
+int (*wl_socket)(int domain, int type, int protocol) = socket;
+ssize_t (*wl_recvmsg)(int socket, struct msghdr *message, int flags) = recvmsg;
+int (*wl_epoll_create1)(int flags) = epoll_create1;
+
 static int
 set_cloexec_or_close(int fd)
 {
@@ -50,11 +56,11 @@ set_cloexec_or_close(int fd)
 	if (fd == -1)
 		return -1;
 
-	flags = fcntl(fd, F_GETFD);
+	flags = wl_fcntl(fd, F_GETFD);
 	if (flags == -1)
 		goto err;
 
-	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1)
+	if (wl_fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1)
 		goto err;
 
 	return fd;
@@ -69,13 +75,13 @@ wl_os_socket_cloexec(int domain, int type, int protocol)
 {
 	int fd;
 
-	fd = socket(domain, type | SOCK_CLOEXEC, protocol);
+	fd = wl_socket(domain, type | SOCK_CLOEXEC, protocol);
 	if (fd >= 0)
 		return fd;
 	if (errno != EINVAL)
 		return -1;
 
-	fd = socket(domain, type, protocol);
+	fd = wl_socket(domain, type, protocol);
 	return set_cloexec_or_close(fd);
 }
 
@@ -105,7 +111,11 @@ int
 wl_os_socket_peercred(int sockfd, uid_t *uid, gid_t *gid, pid_t *pid)
 {
 	socklen_t len;
+#if defined(__OpenBSD__)
+	struct sockpeercred ucred;
+#else
 	struct ucred ucred;
+#endif
 
 	len = sizeof(ucred);
 	if (getsockopt(sockfd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) < 0)
@@ -124,13 +134,13 @@ wl_os_dupfd_cloexec(int fd, int minfd)
 {
 	int newfd;
 
-	newfd = fcntl(fd, F_DUPFD_CLOEXEC, minfd);
+	newfd = wl_fcntl(fd, F_DUPFD_CLOEXEC, minfd);
 	if (newfd >= 0)
 		return newfd;
 	if (errno != EINVAL)
 		return -1;
 
-	newfd = fcntl(fd, F_DUPFD, minfd);
+	newfd = wl_fcntl(fd, F_DUPFD, minfd);
 	return set_cloexec_or_close(newfd);
 }
 
@@ -143,7 +153,7 @@ recvmsg_cloexec_fallback(int sockfd, struct msghdr *msg, int flags)
 	int *fd;
 	int *end;
 
-	len = recvmsg(sockfd, msg, flags);
+	len = wl_recvmsg(sockfd, msg, flags);
 	if (len == -1)
 		return -1;
 
@@ -179,7 +189,7 @@ wl_os_recvmsg_cloexec(int sockfd, struct msghdr *msg, int flags)
 #else
 	ssize_t len;
 
-	len = recvmsg(sockfd, msg, flags | MSG_CMSG_CLOEXEC);
+	len = wl_recvmsg(sockfd, msg, flags | MSG_CMSG_CLOEXEC);
 	if (len >= 0)
 		return len;
 	if (errno != EINVAL)
@@ -194,7 +204,7 @@ wl_os_epoll_create_cloexec(void)
 	int fd;
 
 #ifdef EPOLL_CLOEXEC
-	fd = epoll_create1(EPOLL_CLOEXEC);
+	fd = wl_epoll_create1(EPOLL_CLOEXEC);
 	if (fd >= 0)
 		return fd;
 	if (errno != EINVAL)

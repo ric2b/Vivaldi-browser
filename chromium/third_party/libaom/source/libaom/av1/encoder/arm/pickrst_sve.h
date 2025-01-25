@@ -19,7 +19,7 @@
 
 // Swap each half of the dgd vectors so that we can accumulate the result of
 // the dot-products directly in the destination matrix.
-static INLINE int16x8x2_t transpose_dgd(int16x8_t dgd0, int16x8_t dgd1) {
+static inline int16x8x2_t transpose_dgd(int16x8_t dgd0, int16x8_t dgd1) {
   int16x8_t dgd_trn0 = vreinterpretq_s16_s64(
       vzip1q_s64(vreinterpretq_s64_s16(dgd0), vreinterpretq_s64_s16(dgd1)));
   int16x8_t dgd_trn1 = vreinterpretq_s16_s64(
@@ -28,7 +28,7 @@ static INLINE int16x8x2_t transpose_dgd(int16x8_t dgd0, int16x8_t dgd1) {
   return (struct int16x8x2_t){ dgd_trn0, dgd_trn1 };
 }
 
-static INLINE void compute_M_one_row_win5(int16x8_t src, int16x8_t dgd[5],
+static inline void compute_M_one_row_win5(int16x8_t src, int16x8_t dgd[5],
                                           int64_t *M, int row) {
   const int wiener_win = 5;
 
@@ -50,7 +50,7 @@ static INLINE void compute_M_one_row_win5(int16x8_t src, int16x8_t dgd[5],
   M[row * wiener_win + 4] += vaddvq_s64(m4);
 }
 
-static INLINE void compute_M_one_row_win7(int16x8_t src, int16x8_t dgd[7],
+static inline void compute_M_one_row_win7(int16x8_t src, int16x8_t dgd[7],
                                           int64_t *M, int row) {
   const int wiener_win = 7;
 
@@ -79,7 +79,7 @@ static INLINE void compute_M_one_row_win7(int16x8_t src, int16x8_t dgd[7],
   M[row * wiener_win + 6] += vaddvq_s64(m6);
 }
 
-static INLINE void compute_H_one_col(int16x8_t *dgd, int col, int64_t *H,
+static inline void compute_H_one_col(int16x8_t *dgd, int col, int64_t *H,
                                      const int wiener_win,
                                      const int wiener_win2) {
   for (int row0 = 0; row0 < wiener_win; row0++) {
@@ -93,7 +93,7 @@ static INLINE void compute_H_one_col(int16x8_t *dgd, int col, int64_t *H,
   }
 }
 
-static INLINE void compute_H_two_rows_win5(int16x8_t *dgd0, int16x8_t *dgd1,
+static inline void compute_H_two_rows_win5(int16x8_t *dgd0, int16x8_t *dgd1,
                                            int row0, int row1, int64_t *H) {
   for (int col0 = 0; col0 < 5; col0++) {
     int auto_cov_idx = (row0 * 5 + col0) * 25 + (row1 * 5);
@@ -117,7 +117,7 @@ static INLINE void compute_H_two_rows_win5(int16x8_t *dgd0, int16x8_t *dgd1,
   }
 }
 
-static INLINE void compute_H_two_rows_win7(int16x8_t *dgd0, int16x8_t *dgd1,
+static inline void compute_H_two_rows_win7(int16x8_t *dgd0, int16x8_t *dgd1,
                                            int row0, int row1, int64_t *H) {
   for (int col0 = 0; col0 < 7; col0++) {
     int auto_cov_idx = (row0 * 7 + col0) * 49 + (row1 * 7);

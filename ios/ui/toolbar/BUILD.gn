@@ -11,7 +11,7 @@ source_set("vivaldi_toolbar") {
   deps = [
     "//base",
     "//ui/base",
-    "resources:resources",
+    "resources:vivaldi_toolbar_assets",
   ]
 
  frameworks = [ "UIKit.framework", "Foundation.framework" ]

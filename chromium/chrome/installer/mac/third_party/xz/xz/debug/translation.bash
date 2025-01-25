@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: 0BSD
 
 ###############################################################################
 #
@@ -19,9 +20,6 @@
 ###############################################################################
 #
 # Author: Lasse Collin
-#
-# This file has been put into the public domain.
-# You can do whatever you want with this file.
 #
 ###############################################################################
 
@@ -80,7 +78,6 @@ for CMD in \
 	"xz --lzma2=foobarbaz=abcd" \
 	"xz --lzma2=mf=abcd" \
 	"xz --lzma2=preset=foobarbaz" \
-	"xz --lzma2=mf=bt4,nice=2" \
 	"xz --lzma2=nice=50000" \
 	"xz --help" \
 	"xz --long-help" \

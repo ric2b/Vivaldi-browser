@@ -20,7 +20,7 @@ limitations under the License.
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "absl/status/status.h"
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
+#include "mlir/IR/MLIRContext.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
@@ -64,7 +64,7 @@ ENTRY entry_computation {
       TestGpuDeviceInfo::RTXA6000DeviceInfo();
 
   auto* root = module->entry_computation()->root_instruction();
-  HloFusionAnalysis analysis = AnalyzeFusion(*root, device_info);
+  HloFusionAnalysis analysis = HloFusionAnalysis::Create(*root, device_info);
 
   std::unique_ptr<FusionInterface> emitter =
       GetFusionEmitter(PreBufferAssignmentFusionInfo{analysis});
@@ -100,7 +100,7 @@ ENTRY entry_computation {
       TestGpuDeviceInfo::RTXA6000DeviceInfo();
 
   auto* root = module->entry_computation()->root_instruction();
-  HloFusionAnalysis analysis = AnalyzeFusion(*root, device_info);
+  HloFusionAnalysis analysis = HloFusionAnalysis::Create(*root, device_info);
 
   std::unique_ptr<FusionInterface> emitter =
       GetFusionEmitter(PreBufferAssignmentFusionInfo{analysis});

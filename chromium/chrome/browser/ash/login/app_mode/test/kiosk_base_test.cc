@@ -10,6 +10,7 @@
 #include "apps/test/app_window_waiter.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "ash/webui/settings/public/constants/routes.mojom-forward.h"
+#include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/functional/callback_forward.h"
 #include "base/json/json_reader.h"
@@ -17,6 +18,7 @@
 #include "base/test/test_future.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "chrome/browser/ash/app_mode/consumer_kiosk_test_helper.h"
 #include "chrome/browser/ash/app_mode/fake_cws.h"
 #include "chrome/browser/ash/app_mode/kiosk_app.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
@@ -31,11 +33,11 @@
 #include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/login/test/oobe_window_visibility_waiter.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/profiles/profile_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -153,10 +155,11 @@ void KioskBaseTest::ReloadKioskApps() {
   SetupTestAppUpdateCheck();
 
   // Remove then add to ensure UI update.
-  KioskChromeAppManager::Get()->RemoveApp(test_app_id(),
-                                          owner_settings_service_.get());
-  KioskChromeAppManager::Get()->AddApp(test_app_id(),
-                                       owner_settings_service_.get());
+  RemoveConsumerKioskChromeAppForTesting(
+      CHECK_DEREF(KioskChromeAppManager::Get()),
+      CHECK_DEREF(owner_settings_service_.get()), test_app_id());
+  AddConsumerKioskChromeAppForTesting(
+      CHECK_DEREF(owner_settings_service_.get()), test_app_id());
 }
 
 void KioskBaseTest::SetupTestAppUpdateCheck() {
@@ -170,10 +173,11 @@ void KioskBaseTest::SetupTestAppUpdateCheck() {
 void KioskBaseTest::ReloadAutolaunchKioskApps() {
   SetupTestAppUpdateCheck();
 
-  KioskChromeAppManager::Get()->AddApp(test_app_id(),
-                                       owner_settings_service_.get());
-  KioskChromeAppManager::Get()->SetAutoLaunchApp(test_app_id(),
-                                                 owner_settings_service_.get());
+  AddConsumerKioskChromeAppForTesting(
+      CHECK_DEREF(owner_settings_service_.get()), test_app_id());
+  SetConsumerKioskAutoLaunchChromeAppForTesting(
+      CHECK_DEREF(KioskChromeAppManager::Get()),
+      CHECK_DEREF(owner_settings_service_.get()), test_app_id());
 }
 
 void KioskBaseTest::PrepareAppLaunch() {
@@ -301,7 +305,7 @@ KioskApp KioskBaseTest::test_kiosk_app() const {
       return app;
     }
   }
-  NOTREACHED_NORETURN() << "App not in KioskController: " << test_app_id();
+  NOTREACHED() << "App not in KioskController: " << test_app_id();
 }
 
 }  // namespace ash

@@ -34,7 +34,7 @@
 #include "chrome/browser/printing/printing_init.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/renderer_preferences_util.h"
-#include "chrome/browser/sharing/sharing_dialog_data.h"
+#include "chrome/browser/send_tab_to_self/receiving_ui_handler_registry.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/autofill/add_new_address_bubble_controller.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
@@ -68,7 +68,9 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/printing/browser/print_composite_client.h"
+#include "components/send_tab_to_self/send_tab_to_self_entry.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "components/sharing_message/sharing_dialog_data.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
@@ -79,7 +81,6 @@
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/site_instance.h"
 #include "extensions/browser/extension_function_dispatcher.h"
@@ -149,6 +150,40 @@
 
 #include "browser/win/vivaldi_utils.h"
 #endif
+
+// Used by Chrome's send tab to self functionality to pass data as events to JS.
+VivaldiUIRelay::VivaldiUIRelay(Profile* profile)
+  :profile_(profile) {}
+
+void VivaldiUIRelay::DisplayNewEntries(
+  const std::vector<const send_tab_to_self::SendTabToSelfEntry*>& new_entries) {
+  std::vector<extensions::vivaldi::tabs_private::SendTabToSelfEntry> list;
+  for (auto entry : new_entries) {
+    extensions::vivaldi::tabs_private::SendTabToSelfEntry item;
+    item.guid = entry->GetGUID();
+    item.url = entry->GetURL().spec();
+    item.title = entry->GetTitle();
+    item.device_name = entry->GetDeviceName();
+    item.shared_time = entry->GetSharedTime().InMillisecondsFSinceUnixEpoch();
+    list.push_back(std::move(item));
+  }
+  ::vivaldi::BroadcastEvent(
+      extensions::vivaldi::tabs_private::OnSendTabToSelfAdded::kEventName,
+      extensions::vivaldi::tabs_private::OnSendTabToSelfAdded::Create(list),
+      profile_);
+}
+
+void VivaldiUIRelay::DismissEntries(const std::vector<std::string>& guids) {
+  ::vivaldi::BroadcastEvent(
+      extensions::vivaldi::tabs_private::OnSendTabToSelfDismissed::kEventName,
+      extensions::vivaldi::tabs_private::OnSendTabToSelfDismissed::Create(guids),
+      profile_);
+}
+
+const Profile* VivaldiUIRelay::profile() const {
+  return profile_;
+}
+
 
 namespace {
 
@@ -279,6 +314,15 @@ class VivaldiBrowserWindow::InterfaceHelper final
         web_contents, controller, is_user_gesture);
   }
 
+  autofill::AutofillBubbleBase* ShowSaveAutofillPredictionImprovementsBubble(
+      content::WebContents* web_contents,
+      autofill::SaveAutofillPredictionImprovementsController* controller)
+      override {
+    return GetAutofillBubbleHandler()
+        ->ShowSaveAutofillPredictionImprovementsBubble(web_contents,
+                                                       controller);
+  }
+
   autofill::AutofillBubbleBase* ShowSaveAddressProfileBubble(
       content::WebContents* web_contents,
       std::unique_ptr<autofill::SaveAddressBubbleController> controller,
@@ -339,6 +383,13 @@ class VivaldiBrowserWindow::InterfaceHelper final
       content::WebContents* web_contents,
       autofill::SaveCardBubbleController* controller) override {
     return GetAutofillBubbleHandler()->ShowSaveCardConfirmationBubble(
+        web_contents, controller);
+  }
+
+  autofill::AutofillBubbleBase* ShowSaveIbanConfirmationBubble(
+    content::WebContents* web_contents,
+    autofill::IbanBubbleController* controller) override {
+    return GetAutofillBubbleHandler()->ShowSaveIbanConfirmationBubble(
         web_contents, controller);
   }
 
@@ -850,6 +901,12 @@ void VivaldiBrowserWindow::CreateWebContents(
   autofill_bubble_handler_ =
       std::make_unique<autofill::AutofillBubbleHandlerImpl>(
           browser_.get(), toolbar_button_provider_.get());
+
+  // This will create a new instance of a VivaldiUIRelay maintained and owned by
+  // the registry. The profile is key, there is only one relay per profile and
+  // it is removed when profile dies.
+  (void)send_tab_to_self::ReceivingUiHandlerRegistry::GetInstance()
+      ->GetVivaldiUIRelayForProfile(browser_->profile());
 }
 
 void VivaldiBrowserWindow::InitWidget(
@@ -870,7 +927,6 @@ void VivaldiBrowserWindow::InitWidget(
   // VivaldiDesktopWindowTreeHostWin should be overwritten as well.
   init_params.remove_standard_frame = !with_native_frame_;
 
-  init_params.use_system_default_icon = false;
   if (create_params.alpha_enabled) {
     init_params.opacity =
         views::Widget::InitParams::WindowOpacity::kTranslucent;
@@ -978,11 +1034,6 @@ void VivaldiBrowserWindow::ContentsLoadCompletedInMainFrame() {
       script,
       base::BindOnce(&VivaldiBrowserWindow::InjectVivaldiWindowIdComplete,
                      base::Unretained(this)));
-
-  direct_match::DirectMatchService* dm =
-      direct_match::DirectMatchServiceFactory::GetForBrowserContext(
-          GetProfile());
-  dm->Load(GetProfile());
 }
 
 void VivaldiBrowserWindow::InjectVivaldiWindowIdComplete(base::Value result) {
@@ -1628,6 +1679,15 @@ void VivaldiBrowserWindow::UpdateToolbar(content::WebContents* contents) {
   UpdatePageActionIcon(PageActionIconType::kManagePasswords);
 }
 
+bool VivaldiBrowserWindow::UpdateToolbarSecurityState() {
+  // We may end up here during destruction.
+  /* if (toolbar_.get()) {
+    return toolbar_->UpdateSecurityState();
+  }*/
+
+  return false;
+}
+
 void VivaldiBrowserWindow::HandleMouseChange(bool motion) {
   if (last_motion_ != motion || motion == false) {
     extensions::VivaldiUIEvents::SendMouseChangeEvent(browser_->profile(),
@@ -1719,7 +1779,8 @@ void VivaldiBrowserWindow::VivaldiShowWebsiteSettingsAt(
           nullptr, anchor_rect, GetNativeWindow(), web_contents, url,
           base::DoNothing(),
           base::BindOnce(&VivaldiBrowserWindow::OnWebsiteSettingsStatClosed,
-                         weak_ptr_factory_.GetWeakPtr()));
+                         weak_ptr_factory_.GetWeakPtr()),
+          false);
   bubble->SetAnchorRect(gfx::Rect(pos, gfx::Size()));
   bubble->GetWidget()->Show();
   ReportWebsiteSettingsState(true);
@@ -2378,6 +2439,10 @@ ui::WindowShowState VivaldiBrowserWindow::GetWindowShowState() const {
 
 views::WebView* VivaldiBrowserWindow::GetContentsWebView() {
   // TODO: return correct value
+  return nullptr;
+}
+
+BrowserView* VivaldiBrowserWindow::AsBrowserView() {
   return nullptr;
 }
 

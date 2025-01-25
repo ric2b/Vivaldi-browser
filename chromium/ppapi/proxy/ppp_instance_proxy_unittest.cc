@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -73,8 +78,7 @@ PP_Bool HandleDocumentLoad(PP_Instance instance, PP_Resource url_loader) {
   // This one requires use of the PPB_URLLoader proxy and PPB_Core, plus a
   // resource tracker for the url_loader resource.
   // TODO(dmichael): Mock those out and test this function.
-  NOTREACHED_IN_MIGRATION();
-  return PP_FALSE;
+  NOTREACHED();
 }
 
 // Clear all the 'received' values for our mock.  Call this before you expect

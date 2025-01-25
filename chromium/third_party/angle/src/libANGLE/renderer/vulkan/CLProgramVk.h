@@ -44,7 +44,8 @@ class CLProgramVk : public CLProgramImpl
         angle::HashMap<std::string, std::string> kernelAttributes;
         angle::HashMap<std::string, std::array<uint32_t, 3>> kernelCompileWorkgroupSize;
         angle::HashMap<uint32_t, VkPushConstantRange> pushConstants;
-        std::array<uint32_t, 3> specConstantWorkgroupSizeIDs{0, 0, 0};
+        angle::PackedEnumMap<SpecConstantType, uint32_t> specConstantIDs;
+        angle::PackedEnumBitSet<SpecConstantType, uint32_t> specConstantsUsed;
         CLKernelArgsMap kernelArgsMap;
     };
 
@@ -238,6 +239,9 @@ class CLProgramVk : public CLProgramImpl
 
     angle::Result allocateDescriptorSet(const vk::DescriptorSetLayout &descriptorSetLayout,
                                         VkDescriptorSet *descriptorSetOut);
+
+    // Sets the status for given associated device programs
+    void setBuildStatus(const cl::DevicePtrs &devices, cl_build_status status);
 
   private:
     CLContextVk *mContext;

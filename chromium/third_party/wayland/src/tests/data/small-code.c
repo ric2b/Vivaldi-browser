@@ -25,6 +25,7 @@
  * SOFTWARE.
  */
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include "wayland-util.h"
@@ -51,11 +52,12 @@ static const struct wl_message intf_A_requests[] = {
 
 static const struct wl_message intf_A_events[] = {
 	{ "hey", "", small_test_types + 0 },
+	{ "yo", "2", small_test_types + 0 },
 };
 
 WL_EXPORT const struct wl_interface intf_A_interface = {
 	"intf_A", 3,
 	3, intf_A_requests,
-	1, intf_A_events,
+	2, intf_A_events,
 };
 

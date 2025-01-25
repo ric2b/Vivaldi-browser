@@ -17,6 +17,7 @@ def RunSteps(api):
   api.gclient.set_config('depot_tools')
   api.bot_update.ensure_checkout()
   api.bot_update.ensure_checkout(no_fetch_tags=True, enforce_fetch=True)
+  api.bot_update.ensure_checkout(step_tags={'tag': 'value'})
 
 
 def GenTests(api):

@@ -5,13 +5,17 @@
 #include <optional>
 #include <string>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/check.h"
+#include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/test/gtest_util.h"
+#include "base/test/run_until.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/ash/app_mode/consumer_kiosk_test_helper.h"
 #include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_test_helper.h"
 #include "chrome/browser/ash/login/app_mode/test/kiosk_apps_mixin.h"
@@ -29,8 +33,8 @@
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/oobe_screens_utils.h"
 #include "chrome/browser/ash/login/test/scoped_policy_update.h"
+#include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/test/test_condition_waiter.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/ownership/fake_owner_settings_service.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
@@ -43,14 +47,17 @@
 #include "chrome/browser/ash/policy/test_support/policy_test_server_constants.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/browser/ui/webui/ash/login/device_disabled_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/online_login_utils.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/fake_gaia_mixin.h"
 #include "chromeos/ash/components/attestation/mock_attestation_flow.h"
 #include "chromeos/ash/components/attestation/stub_attestation_features.h"
+#include "chromeos/ash/components/dbus/attestation/attestation_client.h"
 #include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
@@ -138,6 +145,16 @@ class EnrollmentEmbeddedPolicyServerBase : public OobeBaseTest {
         WizardController::default_controller()->screen_manager());
     EXPECT_NE(enrollment_screen, nullptr);
     return enrollment_screen;
+  }
+
+  login::OnlineSigninArtifacts GetFakeSinginArtifactsForEnterpriseUser1() {
+    login::OnlineSigninArtifacts signin_artifacts;
+    signin_artifacts.email = FakeGaiaMixin::kEnterpriseUser1;
+    signin_artifacts.gaia_id = FakeGaiaMixin::kEnterpriseUser1GaiaId;
+    signin_artifacts.password = FakeGaiaMixin::kFakeUserPassword;
+    signin_artifacts.using_saml = false;
+
+    return signin_artifacts;
   }
 
   AutoEnrollmentCheckScreen* auto_enrollment_screen() {
@@ -1063,7 +1080,7 @@ IN_PROC_BROWSER_TEST_F(EnrollmentRecoveryTest, Success) {
             enrollment_ui_.WaitForScreenExit());
 
   enrollment_screen()->OnLoginDone(
-      FakeGaiaMixin::kEnterpriseUser1,
+      GetFakeSinginArtifactsForEnterpriseUser1(),
       static_cast<int>(policy::LicenseType::kEnterprise),
       FakeGaiaMixin::kFakeAuthCode);
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
@@ -1079,8 +1096,15 @@ IN_PROC_BROWSER_TEST_F(EnrollmentRecoveryTest, DifferentDomain) {
 
   ASSERT_TRUE(StartupUtils::IsDeviceRegistered());
   ASSERT_TRUE(InstallAttributes::Get()->IsEnterpriseManaged());
+
+  login::OnlineSigninArtifacts signin_artifacts;
+  signin_artifacts.email = FakeGaiaMixin::kFakeUserEmail;
+  signin_artifacts.gaia_id = FakeGaiaMixin::kFakeUserGaiaId;
+  signin_artifacts.password = FakeGaiaMixin::kFakeUserPassword;
+  signin_artifacts.using_saml = false;
+
   enrollment_screen()->OnLoginDone(
-      FakeGaiaMixin::kFakeUserEmail,
+      std::move(signin_artifacts),
       static_cast<int>(policy::LicenseType::kEnterprise),
       FakeGaiaMixin::kFakeAuthCode);
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepError);
@@ -1125,7 +1149,7 @@ IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, MAYBE_EnrollmentForced) {
   // Domain is actually different from what the server sent down. But Chrome
   // does not enforce that domain if device is not locked.
   enrollment_screen()->OnLoginDone(
-      FakeGaiaMixin::kEnterpriseUser1,
+      GetFakeSinginArtifactsForEnterpriseUser1(),
       static_cast<int>(policy::LicenseType::kEnterprise),
       FakeGaiaMixin::kFakeAuthCode);
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
@@ -1171,7 +1195,7 @@ IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest,
   // Domain is actually different from what the server sent down. But Chrome
   // does not enforce that domain if device is not locked.
   enrollment_screen()->OnLoginDone(
-      FakeGaiaMixin::kEnterpriseUser1,
+      GetFakeSinginArtifactsForEnterpriseUser1(),
       static_cast<int>(policy::LicenseType::kEnterprise),
       FakeGaiaMixin::kFakeAuthCode);
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
@@ -1366,10 +1390,11 @@ class KioskEnrollmentTest : public EnrollmentEmbeddedPolicyServerBase {
   }
 
   void SetupAutoLaunchApp(FakeOwnerSettingsService* service) {
-    KioskChromeAppManager::Get()->AddApp(KioskAppsMixin::kTestChromeAppId,
-                                         service);
-    KioskChromeAppManager::Get()->SetAutoLaunchApp(
-        KioskAppsMixin::kTestChromeAppId, service);
+    AddConsumerKioskChromeAppForTesting(CHECK_DEREF(service),
+                                        KioskAppsMixin::kTestChromeAppId);
+    SetConsumerKioskAutoLaunchChromeAppForTesting(
+        CHECK_DEREF(KioskChromeAppManager::Get()), CHECK_DEREF(service),
+        KioskAppsMixin::kTestChromeAppId);
   }
 
  private:
@@ -1393,6 +1418,88 @@ IN_PROC_BROWSER_TEST_F(KioskEnrollmentTest,
 
   // Wait for app to be launched.
   KioskSessionInitializedWaiter().Wait();
+}
+
+// Making sure the Kiosk flow still works when configured together with the
+// feature that allows to skip the gaia screen by reusing the credentials used
+// during the enrollment.
+class KioskEnrollmentTestWithAddUserFlowEnabled : public KioskEnrollmentTest {
+ public:
+  KioskEnrollmentTestWithAddUserFlowEnabled() {
+    feature_list_.InitAndEnableFeature(features::kOobeAddUserDuringEnrollment);
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    KioskEnrollmentTestWithAddUserFlowEnabled,
+    ManualEnrollmentAutolaunchKioskAppWithAddUserAfterEnrollment) {
+  TriggerEnrollmentAndSignInSuccessfully();
+
+  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
+  EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
+  EXPECT_TRUE(InstallAttributes::Get()->IsCloudManaged());
+
+  ScopedDeviceSettings settings;
+
+  SetupAutoLaunchApp(settings.owner_settings_service());
+  enrollment_screen()->OnConfirmationClosed();
+
+  // TODO(b/362725459) Once the cleanup is implemented, we should expect
+  // here the user_context to not be saved.
+  UserContext* user_context =
+      LoginDisplayHost::default_host()->GetWizardContext()->user_context.get();
+  EXPECT_TRUE(user_context);
+  EXPECT_EQ(user_context->GetAccountId().GetUserEmail(),
+            FakeGaiaMixin::kFakeUserEmail);
+  EXPECT_EQ(user_context->GetGaiaID(), FakeGaiaMixin::kFakeUserGaiaId);
+  EXPECT_TRUE(user_context->GetPassword());
+  EXPECT_EQ(user_context->GetPassword().value(),
+            PasswordInput(FakeGaiaMixin::kFakeUserPassword));
+  EXPECT_EQ(user_context->GetRefreshToken(), FakeGaiaMixin::kFakeRefreshToken);
+
+  // Wait for app to be launched.
+  KioskSessionInitializedWaiter().Wait();
+}
+
+// Test suite for a feature that allows to skip the Gaia screen by reusing the
+// credentials saved during enrollment. It depends on the
+// EnrollmentEmbeddedPolicyServerBase for a successful enrollment and the fake
+// gaia server setup.
+class EnrollmentAddUserTest : public EnrollmentEmbeddedPolicyServerBase {
+ public:
+  EnrollmentAddUserTest() {
+    feature_list_.InitAndEnableFeature(features::kOobeAddUserDuringEnrollment);
+  }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+
+  void WaitForLDHSwitch() {
+    // After the enrollment, the current LoginDisplayHost is destroyed, and a
+    // new one is created in its place. During this switch the session state is
+    // changed to LOGIN_PRIMARY, hence we use RunUntil to wait for the state to
+    // change, signaling that the LDH switch is done.
+    EXPECT_TRUE(base::test::RunUntil([]() {
+      return session_manager::SessionManager::Get()->session_state() ==
+             session_manager::SessionState::LOGIN_PRIMARY;
+    }));
+  }
+};
+
+// Testing the flow that allows to store the signin artifacts and the refresh
+// token during the enrollment in order to skip the second signin screen.
+IN_PROC_BROWSER_TEST_F(EnrollmentAddUserTest, AddUserFlow) {
+  TriggerEnrollmentAndSignInSuccessfully();
+  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
+  enrollment_ui_.LeaveSuccessScreen();
+
+  // Wait for the creation of the new LDH before attaching an event observer.
+  WaitForLDHSwitch();
+  // Actually wait for the session to start.
+  test::WaitForPrimaryUserSessionStart();
 }
 
 }  // namespace

@@ -104,10 +104,10 @@ struct TTPanelSize {
   static EIGEN_CONSTEXPR StorageIndex TileSizeDimM = LocalThreadSizeM * WorkLoadPerThreadM;
   // TileSizeDimN: determines the tile size for the n dimension
   static EIGEN_CONSTEXPR StorageIndex TileSizeDimN = LocalThreadSizeN * WorkLoadPerThreadN;
-  // LoadPerThreadLhs: determines workload per thread for loading Lhs Tensor. This must be divisable by packetsize
+  // LoadPerThreadLhs: determines workload per thread for loading Lhs Tensor. This must be divisible by packetsize
   static EIGEN_CONSTEXPR StorageIndex LoadPerThreadLhs =
       ((TileSizeDimK * WorkLoadPerThreadM * WorkLoadPerThreadN) / (TileSizeDimN));
-  // LoadPerThreadRhs: determines workload per thread for loading Rhs Tensor. This must be divisable by packetsize
+  // LoadPerThreadRhs: determines workload per thread for loading Rhs Tensor. This must be divisible by packetsize
   static EIGEN_CONSTEXPR StorageIndex LoadPerThreadRhs =
       ((TileSizeDimK * WorkLoadPerThreadM * WorkLoadPerThreadN) / (TileSizeDimM));
   // BC : determines if supporting bank conflict is required
@@ -674,7 +674,7 @@ class TensorContractionKernel {
     for (StorageIndex wLPTN = 0; wLPTN < Properties::WorkLoadPerThreadN / PrivateNStride; wLPTN++) {
       // output leading dimension
       StorageIndex outputLD = 0;
-      // When local memory is used the PrivateNstride is always 1 because the coalesed access on N is loaded into Local
+      // When local memory is used the PrivateNstride is always 1 because the coalesced access on N is loaded into Local
       // memory and extracting from local to global is the same as no transposed version. However, when local memory is
       // not used and RHS is transposed we packetize the load for RHS.
       EIGEN_UNROLL_LOOP
@@ -898,7 +898,7 @@ class TensorContractionKernel {
     EIGEN_CONSTEXPR StorageIndex LSD = InputBlockProperties::is_rhs ? LSDR : LSDL;
     static_assert(((LocalOffset % (TileSizeDimNC / InputBlockProperties::nc_stride) == 0) &&
                    (LocalOffset % (Properties::TileSizeDimK / InputBlockProperties::c_stride) == 0)),
-                  " LocalOffset must be divisable by stride");
+                  " LocalOffset must be divisible by stride");
     const StorageIndex &NC = InputBlockProperties::is_rhs ? triple_dim.N : triple_dim.M;
     StorageIndex localThreadNC = local_index.first;
     StorageIndex localThreadC = local_index.second;

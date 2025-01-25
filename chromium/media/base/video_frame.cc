@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/base/video_frame.h"
 
 #include <GLES2/gl2.h>
@@ -182,7 +187,7 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
           break;
       }
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // Checks if |source_format| can be wrapped into a |target_format| frame.
@@ -441,16 +446,16 @@ VideoFrame::CreateFrameForGpuMemoryBufferOrMappableSIInternal(
     return nullptr;
   }
   frame->gpu_memory_buffer_ = std::move(gpu_memory_buffer);
-  frame->mailbox_holders_and_gmb_release_cb_ =
+  frame->mailbox_holder_and_gmb_release_cb_ =
       std::move(mailbox_holder_and_gmb_release_cb);
   frame->is_mappable_si_enabled_ = enable_mappable_si;
   return frame;
 }
 
 // static
-scoped_refptr<VideoFrame> VideoFrame::WrapNativeTextures(
+scoped_refptr<VideoFrame> VideoFrame::WrapNativeTexture(
     VideoPixelFormat format,
-    const gpu::MailboxHolder (&mailbox_holders)[kMaxPlanes],
+    const gpu::MailboxHolder& mailbox_holder,
     ReleaseMailboxCB mailbox_holder_release_cb,
     const gfx::Size& coded_size,
     const gfx::Rect& visible_rect,
@@ -462,51 +467,12 @@ scoped_refptr<VideoFrame> VideoFrame::WrapNativeTextures(
     return nullptr;
   }
 
-  for (size_t i = 0; i < kMaxPlanes; ++i) {
-    frame->mailbox_holders_[i] = mailbox_holders[i];
-  }
-  frame->mailbox_holders_and_gmb_release_cb_ =
+  frame->mailbox_holder_ = mailbox_holder;
+  frame->mailbox_holder_and_gmb_release_cb_ =
       WrapReleaseMailboxCB(std::move(mailbox_holder_release_cb));
 
   // Wrapping native textures should... have textures. https://crbug.com/864145.
   DCHECK(frame->HasTextures());
-  DCHECK_GT(frame->NumTextures(), 0u);
-
-  return frame;
-}
-
-// static
-scoped_refptr<VideoFrame> VideoFrame::WrapSharedImages(
-    VideoPixelFormat format,
-    scoped_refptr<gpu::ClientSharedImage> shared_images[kMaxPlanes],
-    gpu::SyncToken sync_token,
-    uint32_t texture_target,
-    ReleaseMailboxCB mailbox_holder_release_cb,
-    const gfx::Size& coded_size,
-    const gfx::Rect& visible_rect,
-    const gfx::Size& natural_size,
-    base::TimeDelta timestamp) {
-  scoped_refptr<VideoFrame> frame = CreateFrameForNativeTexturesInternal(
-      format, coded_size, visible_rect, natural_size, timestamp);
-  if (!frame) {
-    return nullptr;
-  }
-
-  for (size_t i = 0; i < kMaxPlanes; ++i) {
-    if (shared_images[i]) {
-      frame->mailbox_holders_[i] = gpu::MailboxHolder(
-          shared_images[i]->mailbox(), sync_token,
-          base::FeatureList::IsEnabled(kVideoFrameUseClientSITextureTarget)
-              ? shared_images[i]->GetTextureTarget()
-              : texture_target);
-      frame->shared_images_[i] = shared_images[i]->MakeUnowned();
-    }
-  }
-  frame->mailbox_holders_and_gmb_release_cb_ =
-      WrapReleaseMailboxCB(std::move(mailbox_holder_release_cb));
-
-  DCHECK(frame->HasTextures());
-  DCHECK_GT(frame->NumTextures(), 0u);
 
   return frame;
 }
@@ -529,18 +495,17 @@ scoped_refptr<VideoFrame> VideoFrame::WrapSharedImage(
   }
 
   if (shared_image) {
-    frame->mailbox_holders_[0] = gpu::MailboxHolder(
+    frame->mailbox_holder_ = gpu::MailboxHolder(
         shared_image->mailbox(), sync_token,
         base::FeatureList::IsEnabled(kVideoFrameUseClientSITextureTarget)
             ? shared_image->GetTextureTarget()
             : texture_target);
-    frame->shared_images_[0] = shared_image->MakeUnowned();
+    frame->shared_image_ = shared_image->MakeUnowned();
   }
-  frame->mailbox_holders_and_gmb_release_cb_ =
+  frame->mailbox_holder_and_gmb_release_cb_ =
       WrapReleaseMailboxCB(std::move(mailbox_holder_release_cb));
 
   DCHECK(frame->HasTextures());
-  DCHECK_GT(frame->NumTextures(), 0u);
 
   return frame;
 }
@@ -563,7 +528,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapMappableSharedImage(
   if (!frame) {
     return nullptr;
   }
-  frame->mailbox_holders_[0] = gpu::MailboxHolder(
+  frame->mailbox_holder_ = gpu::MailboxHolder(
       shared_image->mailbox(), sync_token,
       base::FeatureList::IsEnabled(kVideoFrameUseClientSITextureTarget)
           ? shared_image->GetTextureTarget()
@@ -584,7 +549,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapMappableSharedImage(
   // VideoFrame MappableSI client. This works well since it is also eventual
   // goal of ClientSharedImage for rest of the chrome. crbug.com/40286368 for
   // more details on the work.
-  frame->shared_images_[0] = std::move(shared_image);
+  frame->shared_image_ = std::move(shared_image);
   return frame;
 }
 
@@ -807,12 +772,12 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalGpuMemoryBuffer(
   }
 
   if (shared_image) {
-    frame->mailbox_holders_[0] = gpu::MailboxHolder(
+    frame->mailbox_holder_ = gpu::MailboxHolder(
         shared_image->mailbox(), sync_token,
         base::FeatureList::IsEnabled(kVideoFrameUseClientSITextureTarget)
             ? shared_image->GetTextureTarget()
             : texture_target);
-    frame->shared_images_[0] = shared_image->MakeUnowned();
+    frame->shared_image_ = shared_image->MakeUnowned();
   }
   return frame;
 }
@@ -841,16 +806,14 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDmabufs(
     return nullptr;
   }
 
-  gpu::MailboxHolder mailbox_holders[kMaxPlanes];
   scoped_refptr<VideoFrame> frame =
       new VideoFrame(layout, storage, visible_rect, natural_size, timestamp);
   if (!frame) {
     DLOG(ERROR) << __func__ << " Couldn't create VideoFrame instance.";
     return nullptr;
   }
-  memcpy(&frame->mailbox_holders_, mailbox_holders,
-         sizeof(frame->mailbox_holders_));
-  frame->mailbox_holders_and_gmb_release_cb_ =
+  frame->mailbox_holder_ = gpu::MailboxHolder();
+  frame->mailbox_holder_and_gmb_release_cb_ =
       ReleaseMailboxAndGpuMemoryBufferCB();
   frame->dmabuf_fds_ = std::move(dmabuf_fds);
   DCHECK(frame->HasDmaBufs());
@@ -1230,7 +1193,7 @@ int VideoFrame::BytesPerElement(VideoPixelFormat format, size_t plane) {
     case PIXEL_FORMAT_UNKNOWN:
       break;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // static
@@ -1313,7 +1276,7 @@ bool VideoFrame::IsMappable() const {
 
 bool VideoFrame::HasTextures() const {
   return wrapped_frame_ ? wrapped_frame_->HasTextures()
-                        : !mailbox_holders_[0].mailbox.IsZero();
+                        : !mailbox_holder_.mailbox.IsZero();
 }
 
 size_t VideoFrame::NumTextures() const {
@@ -1323,18 +1286,16 @@ size_t VideoFrame::NumTextures() const {
   if (!HasTextures())
     return 0;
 
-  size_t i = 0;
-  for (; i < NumPlanes(format()); ++i) {
-    const auto& mailbox = mailbox_holders_[i].mailbox;
-    if (mailbox.IsZero())
-      return i;
+  if (mailbox_holder_.mailbox.IsZero()) {
+    return 0;
   }
-  return i;
+
+  return 1;
 }
 
-bool VideoFrame::HasSharedImages() const {
-  return wrapped_frame_ ? wrapped_frame_->HasSharedImages()
-                        : shared_images_[0] != nullptr;
+bool VideoFrame::HasSharedImage() const {
+  return wrapped_frame_ ? wrapped_frame_->HasSharedImage()
+                        : shared_image_ != nullptr;
 }
 
 bool VideoFrame::HasMappableGpuBuffer() const {
@@ -1344,6 +1305,9 @@ bool VideoFrame::HasMappableGpuBuffer() const {
 bool VideoFrame::HasNativeGpuMemoryBuffer() const {
   if (wrapped_frame_) {
     return wrapped_frame_->HasNativeGpuMemoryBuffer();
+  } else if (is_mappable_si_enabled_) {
+    CHECK(shared_image_);
+    return !shared_image_->IsSharedMemoryForVideoFrame();
   } else if (gpu_memory_buffer_) {
     return gpu_memory_buffer_->GetType() != gfx::SHARED_MEMORY_BUFFER;
   }
@@ -1364,7 +1328,7 @@ std::unique_ptr<VideoFrame::ScopedMapping> VideoFrame::MapGMBOrSharedImage()
     // When MappableSI is enabled, there can only be 1 shared image
     // even for multiplanar formats.
     CHECK_EQ(NumTextures(), 1U);
-    if (auto mapping = shared_images_[0]->Map()) {
+    if (auto mapping = shared_image_->Map()) {
       return base::WrapUnique(
           new VideoFrame::ScopedMapping(nullptr, std::move(mapping)));
     }
@@ -1384,7 +1348,7 @@ gfx::GpuMemoryBufferHandle VideoFrame::GetGpuMemoryBufferHandle() const {
     // When MappableSI is enabled, there can only be 1 shared image
     // even for multiplanar formats.
     CHECK_EQ(NumTextures(), 1U);
-    return shared_images_[0]->CloneGpuMemoryBufferHandle();
+    return shared_image_->CloneGpuMemoryBufferHandle();
   }
   if (gpu_memory_buffer_) {
     return gpu_memory_buffer_->CloneHandle();
@@ -1441,18 +1405,18 @@ gfx::ColorSpace VideoFrame::CompatRGBColorSpace() const {
 }
 
 bool VideoFrame::RequiresExternalSampler() const {
-  const bool is_multiplanar_pixel_format = format() == PIXEL_FORMAT_NV12 ||
-                                           format() == PIXEL_FORMAT_YV12 ||
-                                           format() == PIXEL_FORMAT_P010LE;
+  const bool is_multiplanar_pixel_format =
+      format() == PIXEL_FORMAT_NV12 || format() == PIXEL_FORMAT_NV12A ||
+      format() == PIXEL_FORMAT_YV12 || format() == PIXEL_FORMAT_P010LE;
 
   // With SharedImageFormats NumTextures() is always 1. Use
   // SharedImageFormatType to check for NumTextures for legacy formats and
   // kSharedImageFormatExternalSampler for SharedImageFormats. Note that
   // kSharedImageFormatExternalSampler is set only for multiplanar formats.
   const bool requires_external_sampler =
-      shared_image_format_type() ==
-          SharedImageFormatType::kSharedImageFormatExternalSampler ||
-      (is_multiplanar_pixel_format &&
+      is_multiplanar_pixel_format &&
+      ((shared_image_format_type() ==
+        SharedImageFormatType::kSharedImageFormatExternalSampler) ||
        (NumTextures() == 1 &&
         shared_image_format_type() == SharedImageFormatType::kLegacy));
 
@@ -1480,7 +1444,7 @@ template <typename T>
 T VideoFrame::GetVisibleDataInternal(T data, size_t plane) const {
   DCHECK(IsValidPlane(format(), plane));
   DCHECK(IsMappable());
-  if (UNLIKELY(!data)) {
+  if (!data) [[unlikely]] {
     return nullptr;
   }
 
@@ -1511,21 +1475,18 @@ uint8_t* VideoFrame::GetWritableVisibleData(size_t plane) {
   return GetVisibleDataInternal(writable_data(plane), plane);
 }
 
+// TODO(crbug.com/332564976): Update method to not take in param.
 const gpu::MailboxHolder& VideoFrame::mailbox_holder(
     size_t texture_index) const {
   DCHECK(HasTextures());
-  DCHECK(IsValidPlane(format(), texture_index));
   return wrapped_frame_ ? wrapped_frame_->mailbox_holder(texture_index)
-                        : mailbox_holders_[texture_index];
+                        : mailbox_holder_;
 }
 
-scoped_refptr<gpu::ClientSharedImage> VideoFrame::shared_image(
-    size_t texture_index) const {
+scoped_refptr<gpu::ClientSharedImage> VideoFrame::shared_image() const {
   DCHECK(HasTextures());
-  DCHECK(IsValidPlane(format(), texture_index));
-  DCHECK(HasSharedImages());
-  return wrapped_frame_ ? wrapped_frame_->shared_image(texture_index)
-                        : shared_images_[texture_index];
+  DCHECK(HasSharedImage());
+  return wrapped_frame_ ? wrapped_frame_->shared_image() : shared_image_;
 }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -1558,12 +1519,12 @@ CVPixelBufferRef VideoFrame::CvPixelBuffer() const {
 
 void VideoFrame::SetReleaseMailboxCB(ReleaseMailboxCB release_mailbox_cb) {
   DCHECK(release_mailbox_cb);
-  DCHECK(!mailbox_holders_and_gmb_release_cb_);
+  DCHECK(!mailbox_holder_and_gmb_release_cb_);
   // We don't relay SetReleaseMailboxCB to |wrapped_frame_| because the method
   // is not thread safe.  This method should only be called by the owner of
   // |wrapped_frame_| directly.
   DCHECK(!wrapped_frame_);
-  mailbox_holders_and_gmb_release_cb_ =
+  mailbox_holder_and_gmb_release_cb_ =
       WrapReleaseMailboxCB(std::move(release_mailbox_cb));
 }
 
@@ -1571,14 +1532,14 @@ void VideoFrame::SetReleaseMailboxAndGpuMemoryBufferCB(
     ReleaseMailboxAndGpuMemoryBufferCB release_mailbox_cb) {
   // See remarks in SetReleaseMailboxCB.
   DCHECK(release_mailbox_cb);
-  DCHECK(!mailbox_holders_and_gmb_release_cb_);
+  DCHECK(!mailbox_holder_and_gmb_release_cb_);
   DCHECK(!wrapped_frame_);
-  mailbox_holders_and_gmb_release_cb_ = std::move(release_mailbox_cb);
+  mailbox_holder_and_gmb_release_cb_ = std::move(release_mailbox_cb);
 }
 
 bool VideoFrame::HasReleaseMailboxCB() const {
   return wrapped_frame_ ? wrapped_frame_->HasReleaseMailboxCB()
-                        : !!mailbox_holders_and_gmb_release_cb_;
+                        : !!mailbox_holder_and_gmb_release_cb_;
 }
 
 void VideoFrame::AddDestructionObserver(base::OnceClosure callback) {
@@ -1594,7 +1555,7 @@ gpu::SyncToken VideoFrame::UpdateReleaseSyncToken(SyncTokenClient* client) {
   }
   base::AutoLock locker(release_sync_token_lock_);
   // Must wait on the previous sync point before inserting a new sync point so
-  // that |mailbox_holders_and_gmb_release_cb_| guarantees the previous sync
+  // that |mailbox_holder_and_gmb_release_cb_| guarantees the previous sync
   // point occurred when it waits on |release_sync_token_|.
   if (release_sync_token_.HasData())
     client->WaitSyncToken(release_sync_token_);
@@ -1602,6 +1563,7 @@ gpu::SyncToken VideoFrame::UpdateReleaseSyncToken(SyncTokenClient* client) {
   return release_sync_token_;
 }
 
+// TODO(crbug.com/332564976): Update method to not take in plane param.
 gpu::SyncToken VideoFrame::UpdateMailboxHolderSyncToken(
     size_t plane,
     SyncTokenClient* client) {
@@ -1611,7 +1573,7 @@ gpu::SyncToken VideoFrame::UpdateMailboxHolderSyncToken(
   DCHECK_LT(plane, kMaxPlanes);
 
   // No lock is required due to the HasOneRef() check.
-  auto& token = mailbox_holders_[plane].sync_token;
+  auto& token = mailbox_holder_.sync_token;
   if (token.HasData())
     client->WaitSyncToken(token);
   client->GenerateSyncToken(&token);
@@ -1652,12 +1614,12 @@ VideoFrame::VideoFrame(const VideoFrameLayout& layout,
   DCHECK(visible_rect_ == visible_rect)
       << "visible_rect " << visible_rect.ToString() << " exceeds coded_size "
       << coded_size().ToString();
-  memset(&mailbox_holders_, 0, sizeof(mailbox_holders_));
+  memset(&mailbox_holder_, 0, sizeof(mailbox_holder_));
   memset(&data_, 0, sizeof(data_));
 }
 
 VideoFrame::~VideoFrame() {
-  if (mailbox_holders_and_gmb_release_cb_) {
+  if (mailbox_holder_and_gmb_release_cb_) {
     gpu::SyncToken release_sync_token;
     {
       // To ensure that changes to |release_sync_token_| are visible on this
@@ -1665,7 +1627,7 @@ VideoFrame::~VideoFrame() {
       base::AutoLock locker(release_sync_token_lock_);
       release_sync_token = release_sync_token_;
     }
-    std::move(mailbox_holders_and_gmb_release_cb_)
+    std::move(mailbox_holder_and_gmb_release_cb_)
         .Run(release_sync_token, std::move(gpu_memory_buffer_));
   }
 

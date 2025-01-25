@@ -13,6 +13,7 @@
 #include "base/test/task_environment.h"
 #include "base/version.h"
 #include "chrome/browser/web_applications/isolated_web_apps/iwa_identity_validator.h"
+#include "chrome/browser/web_applications/isolated_web_apps/key_distribution/iwa_key_distribution_info_provider.h"
 #include "chrome/browser/web_applications/isolated_web_apps/key_distribution/proto/key_distribution.pb.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/key_distribution/test_utils.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_signature_verifier.h"
@@ -61,6 +62,11 @@ IwaKeyDistribution CreateValidData() {
 }  // namespace
 
 class IwaIwaKeyDistributionInfoProviderTest : public testing::Test {
+ public:
+  void TearDown() override {
+    IwaKeyDistributionInfoProvider::DestroyInstanceForTesting();
+  }
+
  private:
   base::test::TaskEnvironment task_environment_;
 };
@@ -104,22 +110,6 @@ class SignedWebBundleSignatureVerifierWithKeyDistributionTest
     IwaIdentityValidator::CreateSingleton();
   }
 
-  std::pair<std::vector<uint8_t>, cbor::Value> CreateSignedWebBundle(
-      const std::vector<web_package::WebBundleSigner::KeyPair>& key_pairs,
-      const web_package::WebBundleSigner::IntegrityBlockAttributes&
-          ib_attributes) {
-    web_package::WebBundleBuilder builder;
-    auto web_bundle = builder.CreateBundle();
-    auto integrity_block =
-        web_package::WebBundleSigner::CreateIntegrityBlockForBundle(
-            web_bundle, key_pairs, ib_attributes);
-    auto integrity_block_cbor = *cbor::Writer::Write(integrity_block);
-    std::vector<uint8_t> signed_web_bundle;
-    base::Extend(signed_web_bundle, integrity_block_cbor);
-    base::Extend(signed_web_bundle, web_bundle);
-    return {std::move(signed_web_bundle), std::move(integrity_block)};
-  }
-
   base::FilePath WriteSignedWebBundleToDisk(
       base::span<const uint8_t> signed_web_bundle) {
     base::FilePath signed_web_bundle_path;
@@ -138,15 +128,15 @@ TEST_F(SignedWebBundleSignatureVerifierWithKeyDistributionTest,
        VerifySignaturesWithKeyDistribution) {
   using Error = web_package::SignedWebBundleSignatureVerifier::Error;
 
-  auto key_pairs = std::vector<web_package::WebBundleSigner::KeyPair>{
-      web_package::WebBundleSigner::EcdsaP256KeyPair::CreateRandom(),
-      web_package::WebBundleSigner::Ed25519KeyPair::CreateRandom()};
+  auto key_pairs = web_package::test::KeyPairs{
+      web_package::test::EcdsaP256KeyPair::CreateRandom(),
+      web_package::test::Ed25519KeyPair::CreateRandom()};
 
-  web_package::WebBundleSigner::IntegrityBlockAttributes ib_attributes(
+  web_package::test::WebBundleSigner::IntegrityBlockAttributes ib_attributes(
       {.web_bundle_id = kWebBundleId});
 
-  auto [signed_web_bundle, integrity_block] =
-      CreateSignedWebBundle(key_pairs, ib_attributes);
+  auto signed_web_bundle = web_package::test::WebBundleSigner::SignBundle(
+      web_package::WebBundleBuilder().CreateBundle(), key_pairs, ib_attributes);
   base::FilePath signed_web_bundle_path =
       WriteSignedWebBundleToDisk(signed_web_bundle);
   auto file = base::File(signed_web_bundle_path,
@@ -154,8 +144,8 @@ TEST_F(SignedWebBundleSignatureVerifierWithKeyDistributionTest,
   EXPECT_TRUE(file.IsValid());
 
   auto parsed_integrity_block =
-      web_package::test::ParseIntegrityBlockFromValue(integrity_block);
-  EXPECT_EQ(parsed_integrity_block.attributes().web_bundle_id(),
+      web_package::test::ParseIntegrityBlock(signed_web_bundle);
+  EXPECT_EQ(parsed_integrity_block.web_bundle_id().id(),
             ib_attributes.web_bundle_id);
 
   web_package::SignedWebBundleSignatureVerifier signature_verifier;
@@ -180,8 +170,7 @@ TEST_F(SignedWebBundleSignatureVerifierWithKeyDistributionTest,
                                                   parsed_integrity_block),
               HasValue());
 
-  auto random_key =
-      web_package::WebBundleSigner::Ed25519KeyPair::CreateRandom();
+  auto random_key = web_package::test::Ed25519KeyPair::CreateRandom();
   EXPECT_THAT(
       test::UpdateKeyDistributionInfo(base::Version("1.0.1"), kWebBundleId,
                                       random_key.public_key.bytes()),

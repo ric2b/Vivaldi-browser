@@ -15,6 +15,7 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_visibility_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button_style.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -25,7 +26,6 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/settings/vivaldi_settings_constants.h"
 #import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
@@ -105,22 +105,26 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarTabGridButton*)tabGridButton {
-  auto loadImageBlock = ^UIImage* {
+  auto styledImageBlock = ^UIImage*(ToolbarTabGridButtonStyle style) {
 
     if (IsVivaldiRunning())
       return [UIImage imageNamed:vToolbarTabSwitcherButtonIcon];
     // End Vivaldi
 
-    return CustomSymbolWithPointSize(kSquareNumberSymbol,
-                                     kSymbolToolbarPointSize);
+    switch (style) {
+      case ToolbarTabGridButtonStyle::kNormal:
+        return CustomSymbolWithPointSize(kSquareNumberSymbol,
+                                         kSymbolToolbarPointSize);
+      case ToolbarTabGridButtonStyle::kTabGroup:
+        return DefaultSymbolWithPointSize(kSquareFilledOnSquareSymbol,
+                                          kSymbolToolbarPointSize);
+    }
   };
 
   ToolbarTabGridButton* tabGridButton =
-      [[ToolbarTabGridButton alloc] initWithImageLoader:loadImageBlock];
+      [[ToolbarTabGridButton alloc] initWithStyledImageLoader:styledImageBlock];
 
   [self configureButton:tabGridButton width:kAdaptiveToolbarButtonWidth];
-  SetA11yLabelAndUiAutomationName(tabGridButton, IDS_IOS_TOOLBAR_SHOW_TABS,
-                                  kToolbarStackButtonIdentifier);
   [tabGridButton addTarget:self.actionHandler
                     action:@selector(tabGridTouchDown)
           forControlEvents:UIControlEventTouchDown];
@@ -136,9 +140,18 @@ const CGFloat kSymbolToolbarPointSize = 24;
   auto loadImageBlock = ^UIImage* {
     return DefaultSymbolWithPointSize(kMenuSymbol, kSymbolToolbarPointSize);
   };
+  UIColor* locationBarBackgroundColor =
+      [self.toolbarConfiguration locationBarBackgroundColorWithVisibility:1];
 
+  auto loadIPHHighlightedImageBlock = ^UIImage* {
+    return SymbolWithPalette(
+        CustomSymbolWithPointSize(kEllipsisSquareFillSymbol,
+                                  kSymbolToolbarPointSize),
+        @[ [UIColor colorNamed:kGrey600Color], locationBarBackgroundColor ]);
+  };
   ToolbarButton* toolsMenuButton =
-      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock];
+      [[ToolbarButton alloc] initWithImageLoader:loadImageBlock
+                       IPHHighlightedImageLoader:loadIPHHighlightedImageBlock];
 
   if (IsVivaldiRunning()) {
     auto iconImageBlock = ^UIImage* {
@@ -346,22 +359,22 @@ const CGFloat kSymbolToolbarPointSize = 24;
   return searchButton;
 }
 
-- (ToolbarButton*)shieldButton {
+  // Vivaldi Homepage Buttton
+- (ToolbarButton*)vivaldiHomeButton {
   auto iconImageBlock = ^UIImage* {
-    UIImage* shieldImage = [UIImage imageNamed:vATBShieldNone];
-    return [shieldImage imageFlippedForRightToLeftLayoutDirection];
+    UIImage* homeImage = [UIImage imageNamed:vToolbarHomeButtonIcon];
+    return [homeImage imageFlippedForRightToLeftLayoutDirection];
   };
 
-  ToolbarButton* shieldButton =
-      [[ToolbarButton alloc] initWithImageLoader:iconImageBlock];
-  [self configureButton:shieldButton width:kAdaptiveToolbarButtonWidth];
-  shieldButton.accessibilityLabel = GetNSString(IDS_ACCNAME_ATB);
-  [shieldButton addTarget:self.actionHandler
-                   action:@selector(showTrackerBlockerManager)
-         forControlEvents:UIControlEventTouchUpInside];
-  shieldButton.visibilityMask =
-    self.visibilityConfiguration.toolsMenuButtonVisibility;
-  return shieldButton;
+  ToolbarButton* homeButton =
+    [[ToolbarButton alloc] initWithImageLoader:iconImageBlock];
+  [self configureButton:homeButton width:kAdaptiveToolbarButtonWidth];
+  [homeButton addTarget:self.actionHandler
+                 action:@selector(vivaldiHomeAction)
+       forControlEvents:UIControlEventTouchUpInside];
+  homeButton.visibilityMask =
+      self.visibilityConfiguration.toolsMenuButtonVisibility;
+  return homeButton;
 }
 
 // Visible only in iPhone portrait + Tab bar enabled + bottom omnibox enabled
@@ -382,19 +395,10 @@ const CGFloat kSymbolToolbarPointSize = 24;
   return moreButton;
 }
 
-- (UIMenu*)overflowMenuWithTrackerBlocker:(BOOL)trackerBlockerEnabled
-                           atbSettingType:(ATBSettingType)type
-                 navigationForwardEnabled:(BOOL)navigationForwardEnabled
-                navigationBackwordEnabled:(BOOL)navigationBackwordEnabled {
+- (UIMenu*)overflowMenuWithNavForwardEnabled:(BOOL)navigationForwardEnabled
+                          navBackwordEnabled:(BOOL)navigationBackwordEnabled {
 
   NSMutableArray* overflowActions = [NSMutableArray array];
-
-  // Set correct icon for tracker blocker based on settings before
-  // creating the menu.
-  if (trackerBlockerEnabled) {
-    [overflowActions
-        addObject:[self adAndTrackBlockerActionWithSettingType:type]];
-  }
 
   // Add common actions
   [overflowActions addObject:self.tabSwitcherAction];
@@ -415,36 +419,6 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 #pragma mark - Private
-- (UIAction*)adAndTrackBlockerActionWithSettingType:(ATBSettingType)type {
-  NSString* shieldIcon = vATBShieldNone;
-  switch (type) {
-    case ATBSettingNoBlocking:
-      shieldIcon = vATBShieldNone;
-      break;
-    case ATBSettingBlockTrackers:
-      shieldIcon = vATBShieldTrackers;
-      break;
-    case ATBSettingBlockTrackersAndAds:
-      shieldIcon = vATBShieldTrackesAndAds;
-      break;
-    default:
-      break;
-  }
-  NSString* atbTitle =
-      GetNSString(IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER);
-  UIImage* buttonIcon =
-      [self toolbarButtonWithImage:shieldIcon];
-  UIAction* atbAction =
-      [UIAction actionWithTitle:atbTitle
-                          image:buttonIcon
-                     identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                  action) {
-        [self.actionHandler showTrackerBlockerManager];
-      }];
-  atbAction.accessibilityLabel = atbTitle;
-  return atbAction;
-}
 
 - (UIAction*)panelAction {
   NSString* buttonTitle = GetNSString(IDS_IOS_TOOLBAR_VIVALDI_PANEL);

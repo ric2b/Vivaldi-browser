@@ -33,13 +33,13 @@ class PlusAddressCache {
   // Searches the cache for an element with an equivalent facet and returns a
   // profile if found, otherwise it returns `std::nullopt`.
   std::optional<PlusProfile> FindByFacet(
-      const PlusProfile::facet_t& facet) const;
+      const affiliations::FacetURI& facet) const;
 
   // Clears the cache.
   void Clear();
 
   // Checks whether the passed-in string is a known plus address.
-  bool IsPlusAddress(const std::string& potential_plus_address) const;
+  bool IsPlusAddress(const std::string& plus_address) const;
 
   // Returns all the cached plus profiles.
   base::span<const PlusProfile> GetPlusProfiles() const;
@@ -53,6 +53,9 @@ class PlusAddressCache {
  private:
   // The user's existing set of `PlusProfile`s, ordered by facet. Since only a
   // single address per facet is supported, this can be used as the comparator.
+  // The facets related to stored profiles are always valid web or Android
+  // `FacetURI`s. This is guaranteed by the PlusAddress server. Notably, this
+  // excludes facets related to http domains.
   base::flat_set<PlusProfile, PlusProfileFacetComparator> plus_profiles_;
 
   // Used to drive the `IsPlusAddress` function, and derived from the values of

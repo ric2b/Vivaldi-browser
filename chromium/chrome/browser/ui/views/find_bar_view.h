@@ -100,6 +100,10 @@ class FindBarView : public views::BoxLayoutView,
   void OnAfterPaste() override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(LegacyFindInPageTest, AccessibleName);
+  const views::ViewAccessibility&
+  GetFindBarMatchCountLabelViewAccessibilityForTesting();
+
   // Starts finding |search_text|.  If the text is empty, stops finding.
   void Find(const std::u16string& search_text);
 
@@ -118,6 +122,12 @@ class FindBarView : public views::BoxLayoutView,
   // Hides the Lens Overlay entrypoint if search_text is not empty, else, shows
   // the button.
   void UpdateLensButtonVisibility(const std::u16string& search_text);
+
+  // Returns the IDS to use for the Lens message.
+  int GetLensOverlayFindBarMessageIds();
+
+  // Returns the IDS to use for the Lens button label.
+  int GetLensOverlayFindBarButtonLabelIds();
 
   // The OS-specific view for the find bar that acts as an intermediary
   // between us and the WebContentsView.

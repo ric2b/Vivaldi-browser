@@ -53,6 +53,14 @@ WTF::Vector<std::pair<String, FeatureVal>> MakeFeatureStatusVector(
       FeatureVal(
           RuntimeEnabledFeatures::FledgePermitCrossOriginTrustedSignalsEnabled(
               execution_context)));
+  feature_status.emplace_back(
+      String("realTimeReporting"),
+      FeatureVal(RuntimeEnabledFeatures::FledgeRealTimeReportingEnabled(
+          execution_context)));
+  feature_status.emplace_back(
+      String("selectableReportingIds"),
+      FeatureVal(RuntimeEnabledFeatures::FledgeAuctionDealSupportEnabled(
+          execution_context)));
   return feature_status;
 }
 

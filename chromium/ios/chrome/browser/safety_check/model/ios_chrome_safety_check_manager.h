@@ -13,6 +13,7 @@
 #import "base/task/sequenced_task_runner.h"
 #import "components/keyed_service/core/keyed_service.h"
 #import "components/prefs/pref_change_registrar.h"
+#import "ios/chrome/browser/omaha/model/omaha_service.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/model/password_checkup_utils.h"
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_constants.h"
@@ -26,9 +27,12 @@ struct UpgradeRecommendedDetails;
 class IOSChromeSafetyCheckManagerObserver : public base::CheckedObserver {
  public:
   // Called whenever the Safety Check determines a change in the Password check
-  // state (i.e. when user has reused passwords, weak passwords, no compromised
-  // password, etc.)
-  virtual void PasswordCheckStateChanged(PasswordSafetyCheckState state) {}
+  // state (i.e. when the user has reused passwords, weak passwords, no
+  // compromised password, etc.). Also provides the latest count of insecure
+  // credentials.
+  virtual void PasswordCheckStateChanged(
+      PasswordSafetyCheckState state,
+      password_manager::InsecurePasswordCounts insecure_password_counts) {}
   // Called whenever the Safety Check determines a change in the Safe Browsing
   // check state (i.e. when Safe Browsing is enabled, disabled, the check
   // is currently running, etc.)
@@ -51,23 +55,31 @@ class IOSChromeSafetyCheckManagerObserver : public base::CheckedObserver {
 
 // This class handles the bulk of the safety check feature, namely:
 //
-// 1. Observing changes in the password check status and compromised credentials
-// list.
-// 2. Determining if the user has Enhanced Safe Browsing enabled.
-// 3. Determining if the browser is up-to-date.
-// 4. Determining if the Safety Check is currently running.
-// 5. Determining if the previous Safety Check run found any issues.
+// 1. Monitors:
+//    - Password check status and compromised credentials list
+//    - Enhanced Safe Browsing enablement
+//    - App update status
+//    - Safety Check execution status (running/complete)
+//    - Results of previous Safety Check runs
 //
-// This class notifies its observers (`IOSChromeSafetyCheckManagerObserver`)
-// when state from the above list change.
+// 2. Automatic Safety Check Runs:
+//    - Triggers Safety Check automatically if the last run is older than
+//      'kSafetyCheckAutorunDelay' (e.g., 30 days), regardless of whether the
+//      previous run was manual or automatic.
+//
+// 3. Observer Notifications:
+//    - Notifies `IOSChromeSafetyCheckManagerObserver` of any state changes
+//      (e.g., compromised password detected, Safety Check completed).
 class IOSChromeSafetyCheckManager
     : public KeyedService,
-      public IOSChromePasswordCheckManager::Observer {
+      public IOSChromePasswordCheckManager::Observer,
+      public OmahaServiceObserver {
  public:
   explicit IOSChromeSafetyCheckManager(
       PrefService* pref_service,
       PrefService* local_pref_service,
-      const scoped_refptr<base::SequencedTaskRunner> task_runner);
+      scoped_refptr<IOSChromePasswordCheckManager> password_check_manager,
+      scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   IOSChromeSafetyCheckManager(const IOSChromeSafetyCheckManager&) = delete;
   IOSChromeSafetyCheckManager& operator=(const IOSChromeSafetyCheckManager&) =
@@ -92,11 +104,16 @@ class IOSChromeSafetyCheckManager
   // NOTE: If the Safety Check is not currently running, does nothing.
   void StopSafetyCheck();
 
-  // IOSChromePasswordCheckManager::Observer implementation.
+  // `IOSChromePasswordCheckManager::Observer` implementation.
   void PasswordCheckStatusChanged(PasswordCheckState state) override;
   void InsecureCredentialsChanged() override;
   void ManagerWillShutdown(
       IOSChromePasswordCheckManager* password_check_manager) override;
+
+  // `OmahaServiceObserver` implementation.
+  void UpgradeRecommendedDetailsChanged(
+      UpgradeRecommendedDetails details) override;
+  void ServiceWillShutdown(OmahaService* omaha_service) override;
 
   // Adds/removes an observer to be notified of PasswordSafetyCheckState,
   // SafeBrowsingSafetyCheckState, UpdateChromeSafetyCheckState, and
@@ -130,9 +147,18 @@ class IOSChromeSafetyCheckManager
   // Returns the time of the last Safety Check run, if ever.
   base::Time GetLastSafetyCheckRunTime() const;
 
+  // Ingests the Omaha response, `details`, to determine if the app is up to
+  // date.
+  //
+  // If the app is up-to-date, calls `SetUpdateChromeCheckState()` to reflect
+  // the new, updated state.
+  //
+  // If the app is outdated, sets `upgrade_url_` and `next_version_` to maintain
+  // the upgrade details.
+  void HandleOmahaResponse(UpgradeRecommendedDetails details);
+
   // For unit-testing only.
   void StartOmahaCheckForTesting();
-  void HandleOmahaResponseForTesting(UpgradeRecommendedDetails details);
   RunningSafetyCheckState GetRunningCheckStateForTesting() const;
   void SetPasswordCheckStateForTesting(PasswordSafetyCheckState state);
   void SetInsecurePasswordCountsForTesting(
@@ -205,16 +231,6 @@ class IOSChromeSafetyCheckManager
   // NOTE: The response from the Omaha service is handled by
   // `HandleOmahaResponse()`.
   void StartOmahaCheck();
-
-  // Ingests the Omaha response, `details`, to determine if the app is up to
-  // date.
-  //
-  // If the app is up-to-date, calls `SetUpdateChromeCheckState()` to reflect
-  // the new, updated state.
-  //
-  // If the app is outdated, sets `upgrade_url_` and `next_version_` to maintain
-  // the upgrade details.
-  void HandleOmahaResponse(UpgradeRecommendedDetails details);
 
   // Checks if the Update Chrome check is still running after
   // `kOmahaNetworkWaitTime` has elapsed. If so, considers this an Omaha
@@ -340,6 +356,9 @@ class IOSChromeSafetyCheckManager
   // about the latest Safety Check run (e.g. the results of each check, the
   // timestamp of the run, etc.)
   raw_ptr<PrefService> local_pref_service_;
+
+  // Refcounted pointer to the IOSChromeSafetyCheckManager to use.
+  scoped_refptr<IOSChromePasswordCheckManager> password_check_manager_;
 
   // Registrar for pref changes notifications.
   PrefChangeRegistrar pref_change_registrar_;

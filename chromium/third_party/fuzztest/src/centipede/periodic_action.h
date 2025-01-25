@@ -33,13 +33,10 @@
 #ifndef FUZZTEST_CENTIPEDE_PERIODIC_ACTION_H_
 #define FUZZTEST_CENTIPEDE_PERIODIC_ACTION_H_
 
+#include <cstdint>
 #include <memory>
-#include <thread>  // NOLINT
 
-#include "absl/base/thread_annotations.h"
 #include "absl/functional/any_invocable.h"
-#include "absl/synchronization/mutex.h"
-#include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 
 namespace centipede {
@@ -47,23 +44,47 @@ namespace centipede {
 class PeriodicAction {
  public:
   struct Options {
-    // A delay before the first invocation of the callback. Allowed to be
-    // `absl::IniniteDuration()`: in that case, the periodic invocations are
-    // initiated only by a first explicit `Nudge()` call.
-    absl::Duration delay = absl::ZeroDuration();
-    // The interval between the end of one invocation of the callback and the
-    // start of another. Note that a nudge triggers an out-of-schedule
-    // invocation and resets the timer (see `Nudge()`).
-    absl::Duration interval = absl::InfiniteDuration();
+    // The interval to sleep for before a given iteration. Iteration numbers are
+    // 0-based.
+    //
+    // Thus, the interval before `iteration == 0` is the delay before the first
+    // invocation of the action, the interval before `iteration == 1` is the
+    // interval between the first and the second invocation, etc.
+    //
+    // This is a functor and not a fixed value to enable dynamic intervals (the
+    // caller can use static functor state for that). Note that
+    // `PeriodicAction::Nudge()` calls trigger out-of-schedule invocations and
+    // count as iterations (therefore incrementing the internal iteration
+    // counter and resetting the timer).
+    //
+    // If `sleep_before_each()` ever returns an `absl::InfiniteDuration()`, then
+    // periodic action execution will be paused and resumed only by the next
+    // `Nudge()` call.
+    absl::AnyInvocable<absl::Duration(uint64_t iter_num)> sleep_before_each;
   };
+
+  // Convenience factory methods for common options.
+  static Options ConstDelayConstInterval(  //
+      absl::Duration delay, absl::Duration interval) {
+    return {
+        [delay, interval](uint64_t i) { return i == 0 ? delay : interval; },
+    };
+  }
+  static Options ZeroDelayZeroInterval() {
+    return ConstDelayConstInterval(absl::ZeroDuration(), absl::ZeroDuration());
+  }
+  static Options ZeroDelayConstInterval(absl::Duration interval) {
+    return ConstDelayConstInterval(absl::ZeroDuration(), interval);
+  }
+  static Options ConstDelayZeroInterval(absl::Duration delay) {
+    return ConstDelayConstInterval(delay, absl::ZeroDuration());
+  }
 
   PeriodicAction(absl::AnyInvocable<void()> action, Options options);
 
-  // Non-copyable and non-movable.
-  PeriodicAction(const PeriodicAction&) = delete;
-  PeriodicAction& operator=(const PeriodicAction&) = delete;
-  PeriodicAction(PeriodicAction&&) = delete;
-  PeriodicAction& operator=(PeriodicAction&&) = delete;
+  // Movable, but not copyable.
+  PeriodicAction(PeriodicAction&&);
+  PeriodicAction& operator=(PeriodicAction&&);
 
   // Stops the periodic action via RAII. May block: waits for any currently
   // active invocation of the action to finish first before returning.
@@ -84,23 +105,10 @@ class PeriodicAction {
   void Nudge();
 
  private:
-  // The actual run-loop. Runs on the `thread_` and invokes `action_`
-  // periodically, as controlled by `options_`, `stop_` and `nudge_`.
-  void RunLoop();
-
-  // Sleeps for up to `duration` amount of time, unless a `nudge_` comes, in
-  // which case wakes up and returns immediately.
-  void SleepUnlessWokenByNudge(absl::Duration duration);
-
-  absl::AnyInvocable<void()> action_;
-  const Options options_;
-
-  // WARNING!!! The order below is important.
-
-  absl::Notification stop_;
-  absl::Mutex nudge_mu_;
-  bool nudge_ ABSL_GUARDED_BY(nudge_mu_) = false;
-  std::thread thread_;
+  // Use the "pointer to implementation" idiom to make the class movable and
+  // move-constructible.
+  class Impl;
+  std::unique_ptr<Impl> pimpl_;
 };
 
 }  // namespace centipede

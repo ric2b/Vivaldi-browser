@@ -44,8 +44,8 @@ TranslateIconView::TranslateIconView(
                          kActionShowTranslate),
       browser_(browser) {
   SetID(VIEW_ID_TRANSLATE_BUTTON);
-  GetViewAccessibility().SetProperties(
-      /*role*/ std::nullopt, l10n_util::GetStringUTF16(IDS_TOOLTIP_TRANSLATE));
+  GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_TOOLTIP_TRANSLATE));
 }
 
 TranslateIconView::~TranslateIconView() = default;
@@ -99,6 +99,7 @@ void TranslateIconView::UpdateImpl() {
           ->GetLanguageState();
   bool enabled = language_state.translate_enabled();
 
+  bool show_page_action = true;
   if (features::IsToolbarPinningEnabled()) {
     CHECK(browser_);
     BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser_);
@@ -108,14 +109,14 @@ void TranslateIconView::UpdateImpl() {
     if (pinned_toolbar_actions_container &&
         pinned_toolbar_actions_container->IsActionPinnedOrPoppedOut(
             action_id().value())) {
-      enabled = false;
+      show_page_action = false;
     }
   }
   ChromeTranslateClient::FromWebContents(GetWebContents())
       ->GetTranslateManager()
       ->GetActiveTranslateMetricsLogger()
-      ->LogOmniboxIconChange(enabled);
-  SetVisible(enabled);
+      ->LogOmniboxIconChange(show_page_action && enabled);
+  SetVisible(show_page_action && enabled);
 
   if (!enabled &&
       TranslateBubbleController::FromWebContents(GetWebContents())) {
@@ -127,7 +128,7 @@ void TranslateIconView::OnExecuting(
     PageActionIconView::ExecuteSource execute_source) {}
 
 const gfx::VectorIcon& TranslateIconView::GetVectorIcon() const {
-  return vector_icons::kTranslateChromeRefreshIcon;
+  return vector_icons::kTranslateIcon;
 }
 
 BEGIN_METADATA(TranslateIconView)

@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
@@ -249,6 +248,7 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
       file_manager::util::GetCrostiniMountDirectory(profile_);
   base::FilePath system_fonts(file_manager::util::kSystemFontsPath);
   base::FilePath archive_mount(file_manager::util::kArchiveMountPath);
+  base::FilePath fusebox_path(file_manager::util::kFuseBoxMediaPath);
   if (AppendRelativePath(my_files, path, &relative_path)) {
     allowed_path = true;
     request.set_storage_location(
@@ -336,6 +336,11 @@ void GuestOsSharePath::CallSeneschalSharePath(const std::string& vm_name,
     allowed_path = true;
     request.set_storage_location(
         vm_tools::seneschal::SharePathRequest::ARCHIVE);
+  } else if (fusebox_path.AppendRelativePath(path, &relative_path)) {
+    // Allow Fusebox files and subdirs under /media/fuse/fusebox.
+    allowed_path = true;
+    request.set_storage_location(
+        vm_tools::seneschal::SharePathRequest::FUSEBOX);
   } else if (smb_service &&
              (smb_share = smb_service->GetSmbFsShareForPath(path)) &&
              AppendRelativePath(
@@ -406,6 +411,11 @@ void GuestOsSharePath::CallSeneschalUnsharePath(const std::string& vm_name,
         blink::StorageKey(), storage::kFileSystemTypeExternal, virtual_path);
     result = file_manager::util::ConvertFileSystemURLToPathInsideVM(
         profile_, url, dummy_vm_mount, /*map_crostini_home=*/false, &inside);
+  } else {
+    // Fusebox Monikers do not belong to any external mounts, so their paths are
+    // directly translated to the ones inside VMs.
+    result = file_manager::util::ConvertFuseboxMonikerPathToPathInsideVM(
+        path, dummy_vm_mount, &inside);
   }
   base::FilePath unshare_path;
   if (!result || !dummy_vm_mount.AppendRelativePath(inside, &unshare_path)) {

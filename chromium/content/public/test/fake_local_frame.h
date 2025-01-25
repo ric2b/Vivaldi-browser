@@ -17,6 +17,7 @@
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
 #include "third_party/blink/public/mojom/navigation/navigation_api_history_entry_arrays.mojom.h"
 
@@ -84,6 +85,8 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
   void ReportContentSecurityPolicyViolation(
       network::mojom::CSPViolationPtr violation) override;
   void DidUpdateFramePolicy(const blink::FramePolicy& frame_policy) override;
+  void OnFrameVisibilityChanged(
+      blink::mojom::FrameVisibility visibility) override;
   void PostMessageEvent(
       const std::optional<blink::RemoteFrameToken>& source_frame_token,
       const std::u16string& source_origin,
@@ -101,8 +104,9 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
       JavaScriptExecuteRequestCallback callback) override;
   void JavaScriptExecuteRequestForTests(
       const std::u16string& javascript,
-      bool wants_result,
       bool has_user_gesture,
+      bool resolve_promises,
+      bool honor_js_content_settings,
       int32_t world_id,
       JavaScriptExecuteRequestForTestsCallback callback) override;
   void JavaScriptExecuteRequestInIsolatedWorld(

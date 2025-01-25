@@ -637,8 +637,8 @@ void ThreadController::RunLevelTracker::TimeKeeper::MaybeEmitIncomingWakeupFlow(
     return;
   }
 
-  perfetto::Flow::ProcessScoped(reinterpret_cast<uint64_t>(&(outer_.get())))(
-      ctx);
+  perfetto::TerminatingFlow::ProcessScoped(
+      reinterpret_cast<uint64_t>(&(outer_.get())))(ctx);
 #endif
 }
 
@@ -719,8 +719,7 @@ const char* ThreadController::RunLevelTracker::TimeKeeper::PhaseToEventName(
     case kWorkItemSuspendedOnNested:
       // kWorkItemSuspendedOnNested should be transformed into kNativeWork or
       // kApplicationTask before this point.
-      NOTREACHED_IN_MIGRATION();
-      return "";
+      NOTREACHED();
   }
 }
 

@@ -29,6 +29,17 @@ inline constexpr char kExecutableName[] = "updater.exe";
 inline constexpr char kExecutableName[] = "updater";
 #endif
 
+// The name of the enterprise companion program image.
+#if BUILDFLAG(IS_WIN)
+inline constexpr char kCompanionAppExecutableName[] =
+    "enterprise_companion.exe";
+#else
+inline constexpr char kCompanionAppExecutableName[] = "enterprise_companion";
+#endif
+
+// Uninstall switch for the enterprise companion app.
+inline constexpr char kUninstallCompanionAppSwitch[] = "uninstall";
+
 // A suffix appended to the updater executable name before any file extension.
 extern const char kExecutableSuffix[];
 
@@ -93,6 +104,9 @@ inline constexpr char kCrashHandlerSwitch[] = "crash-handler";
 // Updates the updater.
 inline constexpr char kUpdateSwitch[] = "update";
 
+// Run as a network worker.
+inline constexpr char kNetWorkerSwitch[] = "net-worker";
+
 // Installs the updater. Takes an optional argument for the meta installer tag.
 // The tag is a string of arguments, separated by a delimiter (in this case, the
 // delimiter is `&`). The tag is typically embedded in the program image of the
@@ -145,10 +159,6 @@ inline constexpr char kSessionIdSwitch[] =
 
 // The app ID of the program triggering recovery.
 inline constexpr char kAppGuidSwitch[] = "appguid";
-
-// Disables throttling for the crash reported until the following bug is fixed:
-// https://bugs.chromium.org/p/crashpad/issues/detail?id=23
-inline constexpr char kNoRateLimitSwitch[] = "no-rate-limit";
 
 // Causes crashpad handler to start a second instance to monitor the first
 // instance for exceptions.
@@ -326,10 +336,6 @@ inline constexpr int kErrorApplicationInstallerFailed =
 // arguments.
 inline constexpr int kErrorMissingInstallParams = kCustomInstallErrorBase + 1;
 
-// The file specified by the manifest |run| attribute could not be found
-// inside the CRX.
-inline constexpr int kErrorMissingRunableFile = kCustomInstallErrorBase + 2;
-
 // The file extension for the installer is not supported. For instance, on
 // Windows, only `.exe` and `.msi` extensions are supported.
 inline constexpr int kErrorInvalidFileExtension = kCustomInstallErrorBase + 4;
@@ -506,6 +512,26 @@ inline constexpr int kErrorPathOwnershipMismatch = kUpdaterErrorBase + 74;
 // A setup process could not acquire the lock needed to run.
 inline constexpr int kErrorFailedToLockSetupMutex = kUpdaterErrorBase + 75;
 
+// Cannot establish a Mojo connection.
+inline constexpr int kErrorMojoConnectionFailure = kUpdaterErrorBase + 76;
+
+// Mojo server rejected the request.
+inline constexpr int kErrorMojoRequestRejected = kUpdaterErrorBase + 77;
+
+// Cannot find the console user, for example when the user is not logged on.
+inline constexpr int kErrorNoConsoleUser = kUpdaterErrorBase + 78;
+
+// Failed to fetch enterprise policies.
+inline constexpr int kErrorPolicyFetchFailed = kUpdaterErrorBase + 79;
+
+// Failed to uninstall the enterprise companion app.
+inline constexpr int kErrorFailedToUninstallCompanionApp =
+    kUpdaterErrorBase + 80;
+
+// Failed to uninstall the other versions of updater.
+inline constexpr int kErrorFailedToUninstallOtherVersion =
+    kUpdaterErrorBase + 81;
+
 // Policy Management constants.
 // The maximum value allowed for policy AutoUpdateCheckPeriodMinutes.
 inline constexpr int kMaxAutoUpdateCheckPeriodMinutes = 43200;
@@ -556,6 +582,9 @@ inline constexpr int kUninstallPingReasonNeverHadApps = 3;
 
 // The file downloaded to a temporary location could not be moved.
 inline constexpr int kErrorFailedToMoveDownloadedFile = 5;
+
+// Error occurred during file writing.
+inline constexpr int kErrorFailedToWriteFile = 6;
 
 inline constexpr base::TimeDelta kInitialDelay = base::Minutes(1);
 inline constexpr base::TimeDelta kServerKeepAliveTime = base::Seconds(10);

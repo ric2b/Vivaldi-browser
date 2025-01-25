@@ -14,14 +14,14 @@
 #include "third_party/blink/renderer/modules/ml/ml_trace.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_remote.h"
 
 namespace blink {
 
-class MLBuffer;
+class MLTensor;
 class MLComputeResult;
 class MLContext;
 class MLGraphBuilder;
@@ -53,7 +53,7 @@ struct ArrayBufferViewInfo {
 typedef HeapVector<std::pair<String, NotShared<DOMArrayBufferView>>>
     MLNamedArrayBufferViews;
 
-typedef HeapVector<std::pair<String, Member<MLBuffer>>> MLNamedBuffers;
+typedef HeapVector<std::pair<String, Member<MLTensor>>> MLNamedTensors;
 
 // Represents a handle to a compiled, platform-specific computational graph.
 class MODULES_EXPORT MLGraph : public ScriptWrappable {
@@ -84,6 +84,9 @@ class MODULES_EXPORT MLGraph : public ScriptWrappable {
 
   void Trace(Visitor* visitor) const override;
 
+  // ml_graph.idl
+  void destroy();
+
   const NamedOperandDescriptors& GetInputConstraints() const;
   const NamedOperandDescriptors& GetOutputConstraints() const;
 
@@ -102,12 +105,12 @@ class MODULES_EXPORT MLGraph : public ScriptWrappable {
 
   // Execute the compiled platform graph asynchronously.
   //
-  // This method validates the input and output MLNamedBuffers against the
+  // This method validates the input and output MLNamedTensors against the
   // graph's input and output resources info and then executes the compiled
   // platform graph.
   void Dispatch(ScopedMLTrace scoped_trace,
-                const MLNamedBuffers& inputs,
-                const MLNamedBuffers& outputs,
+                const MLNamedTensors& inputs,
+                const MLNamedTensors& outputs,
                 ExceptionState& exception_state);
 
   const MLContext* Context() const;

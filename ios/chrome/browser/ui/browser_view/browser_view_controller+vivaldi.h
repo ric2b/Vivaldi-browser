@@ -4,7 +4,7 @@
 #define IOS_CHROME_BROWSER_UI_BROWSER_VIEW_BROWSER_VIEW_CONTROLLER_VIVALDI_
 
 #import "ios/chrome/browser/browser_view/ui_bundled/browser_view_controller.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 
 @interface BrowserViewController(Vivaldi)
 

@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Zelfstandige installatie</translation>
 <translation id="1682285232070778125">Vivaldi instellen als standaardbrowser</translation>
 <translation id="1974060860693918893">Geavanceerd</translation>
+<translation id="2053560788696003312">Vivaldi vereist Windows 10 of hoger.</translation>
 <translation id="2134216661302048561">Het installatieprogramma is nog bezig de Vivaldi-browser te installeren. Weet je zeker dat je wilt afsluiten?</translation>
 <translation id="2286454467119466181">Eenvoudig</translation>
 <translation id="237789874664518125">Auteursrecht <ph name="YEAR" /> Vivaldi Technologies AS. Alle rechten voorbehouden. &lt;a&gt;Privacybeleid&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Accepteren en bijwerken</translation>
 <translation id="5302048478445481009">Taal</translation>
 <translation id="694714344624446243">Installatieprogramma Vivaldi</translation>
+<translation id="7467493612551448880">De versie van Vivaldi die je installeert, is niet geoptimaliseerd voor de versie van Windows die je gebruikt.
+
+Ga naar vivaldi.com/download om de Windows on Arm-versie te downloaden.</translation>
 <translation id="7658239707568436148">Annuleren</translation>
 <translation id="8773751185824654197">Let op: als je een draaiende Vivaldi-browser bijwerkt, wordt deze afgesloten en herstart</translation>
 <translation id="933060950687965486">Installatiesoort</translation>

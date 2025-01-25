@@ -86,7 +86,7 @@ export class ResourceScriptMapping implements DebuggerSourceMapping {
       runtimeModel.addEventListener(
           SDK.RuntimeModel.Events.ExecutionContextDestroyed, this.executionContextDestroyed, this),
       runtimeModel.target().targetManager().addEventListener(
-          SDK.TargetManager.Events.InspectedURLChanged, this.inspectedURLChanged, this),
+          SDK.TargetManager.Events.INSPECTED_URL_CHANGED, this.inspectedURLChanged, this),
     ];
   }
 
@@ -381,12 +381,12 @@ export class ResourceScriptFile extends Common.ObjectWrapper.ObjectWrapper<Resou
       // TODO(crbug.com/1334484): Instead of to the console, report these errors in an "info bar" at the bottom
       //                          of the text editor, similar to e.g. source mapping errors.
       Common.Console.Console.instance().addMessage(
-          i18nString(UIStrings.liveEditFailed, {PH1: getErrorText(status)}), Common.Console.MessageLevel.Warning);
+          i18nString(UIStrings.liveEditFailed, {PH1: getErrorText(status)}), Common.Console.MessageLevel.WARNING);
       return;
     }
     const messageText = i18nString(UIStrings.liveEditCompileFailed, {PH1: exceptionDetails.text});
     this.uiSourceCode.addLineMessage(
-        Workspace.UISourceCode.Message.Level.Error, messageText, exceptionDetails.lineNumber,
+        Workspace.UISourceCode.Message.Level.ERROR, messageText, exceptionDetails.lineNumber,
         exceptionDetails.columnNumber);
 
     function getErrorText(status: Protocol.Debugger.SetScriptSourceResponseStatus): string {
@@ -422,7 +422,7 @@ export class ResourceScriptFile extends Common.ObjectWrapper.ObjectWrapper<Resou
       await this.#resourceScriptMapping.debuggerWorkspaceBinding.updateLocations(this.script);
       this.#isDivergingFromVMInternal = undefined;
       this.#hasDivergedFromVMInternal = true;
-      this.dispatchEventToListeners(ResourceScriptFile.Events.DidDivergeFromVM);
+      this.dispatchEventToListeners(ResourceScriptFile.Events.DID_DIVERGE_FROM_VM);
     }
   }
 
@@ -432,7 +432,7 @@ export class ResourceScriptFile extends Common.ObjectWrapper.ObjectWrapper<Resou
       this.#isMergingToVMInternal = true;
       await this.#resourceScriptMapping.debuggerWorkspaceBinding.updateLocations(this.script);
       this.#isMergingToVMInternal = undefined;
-      this.dispatchEventToListeners(ResourceScriptFile.Events.DidMergeToVM);
+      this.dispatchEventToListeners(ResourceScriptFile.Events.DID_MERGE_TO_VM);
     }
   }
 
@@ -500,12 +500,12 @@ export class ResourceScriptFile extends Common.ObjectWrapper.ObjectWrapper<Resou
 
 export namespace ResourceScriptFile {
   export const enum Events {
-    DidMergeToVM = 'DidMergeToVM',
-    DidDivergeFromVM = 'DidDivergeFromVM',
+    DID_MERGE_TO_VM = 'DidMergeToVM',
+    DID_DIVERGE_FROM_VM = 'DidDivergeFromVM',
   }
 
   export type EventTypes = {
-    [Events.DidMergeToVM]: void,
-    [Events.DidDivergeFromVM]: void,
+    [Events.DID_MERGE_TO_VM]: void,
+    [Events.DID_DIVERGE_FROM_VM]: void,
   };
 }

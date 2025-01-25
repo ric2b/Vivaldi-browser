@@ -232,8 +232,6 @@ list(APPEND AOM_AV1_ENCODER_SOURCES
             "${AOM_ROOT}/av1/encoder/svc_layercontext.h"
             "${AOM_ROOT}/av1/encoder/temporal_filter.c"
             "${AOM_ROOT}/av1/encoder/temporal_filter.h"
-            "${AOM_ROOT}/av1/encoder/thirdpass.c"
-            "${AOM_ROOT}/av1/encoder/thirdpass.h"
             "${AOM_ROOT}/av1/encoder/tokenize.c"
             "${AOM_ROOT}/av1/encoder/tokenize.h"
             "${AOM_ROOT}/av1/encoder/tpl_model.c"
@@ -322,11 +320,13 @@ list(APPEND AOM_AV1_ENCODER_INTRIN_SSE2
             "${AOM_ROOT}/av1/encoder/x86/temporal_filter_sse2.c"
             "${AOM_ROOT}/av1/encoder/x86/wedge_utils_sse2.c")
 
-list(APPEND AOM_AV1_ENCODER_INTRIN_SSE3 "${AOM_ROOT}/av1/encoder/x86/ml_sse3.c"
-            "${AOM_ROOT}/av1/encoder/x86/ml_sse3.h")
-
-list(APPEND AOM_AV1_ENCODER_INTRIN_SSSE3
-            "${AOM_ROOT}/av1/encoder/x86/reconinter_enc_ssse3.c")
+# The functions defined in these files are removed from rtcd when
+# CONFIG_EXCLUDE_SIMD_MISMATCH=1.
+if(NOT CONFIG_EXCLUDE_SIMD_MISMATCH)
+  list(APPEND AOM_AV1_ENCODER_INTRIN_SSE3
+              "${AOM_ROOT}/av1/encoder/x86/ml_sse3.c"
+              "${AOM_ROOT}/av1/encoder/x86/ml_sse3.h")
+endif()
 
 list(APPEND AOM_AV1_ENCODER_ASM_SSSE3_X86_64
             "${AOM_ROOT}/av1/encoder/x86/av1_quantize_ssse3_x86_64.asm")
@@ -350,20 +350,24 @@ list(APPEND AOM_AV1_ENCODER_INTRIN_AVX2
             "${AOM_ROOT}/av1/encoder/x86/rdopt_avx2.c"
             "${AOM_ROOT}/av1/encoder/x86/av1_k_means_avx2.c"
             "${AOM_ROOT}/av1/encoder/x86/temporal_filter_avx2.c"
-            "${AOM_ROOT}/av1/encoder/x86/pickrst_avx2.c"
-            "${AOM_ROOT}/av1/encoder/x86/cnn_avx2.c"
-            "${AOM_ROOT}/av1/encoder/x86/ml_avx2.c")
+            "${AOM_ROOT}/av1/encoder/x86/pickrst_avx2.c")
+
+# The functions defined in these files are removed from rtcd when
+# CONFIG_EXCLUDE_SIMD_MISMATCH=1.
+if(NOT CONFIG_EXCLUDE_SIMD_MISMATCH)
+  list(APPEND AOM_AV1_ENCODER_INTRIN_AVX2
+              "${AOM_ROOT}/av1/encoder/x86/cnn_avx2.c"
+              "${AOM_ROOT}/av1/encoder/x86/ml_avx2.c")
+endif()
 
 list(APPEND AOM_AV1_ENCODER_INTRIN_NEON
             "${AOM_ROOT}/av1/encoder/arm/av1_error_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/av1_fwd_txfm2d_neon.c"
-            "${AOM_ROOT}/av1/encoder/arm/av1_highbd_quantize_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/av1_k_means_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/cnn_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/encodetxb_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/highbd_fwd_txfm_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/hybrid_fwd_txfm_neon.c"
-            "${AOM_ROOT}/av1/encoder/arm/ml_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/pickrst_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/pickrst_neon.h"
             "${AOM_ROOT}/av1/encoder/arm/quantize_neon.c"
@@ -371,6 +375,13 @@ list(APPEND AOM_AV1_ENCODER_INTRIN_NEON
             "${AOM_ROOT}/av1/encoder/arm/reconinter_enc_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/temporal_filter_neon.c"
             "${AOM_ROOT}/av1/encoder/arm/wedge_utils_neon.c")
+
+# The functions defined in this file are removed from rtcd when
+# CONFIG_EXCLUDE_SIMD_MISMATCH=1.
+if(NOT CONFIG_EXCLUDE_SIMD_MISMATCH)
+  list(APPEND AOM_AV1_ENCODER_INTRIN_NEON
+              "${AOM_ROOT}/av1/encoder/arm/ml_neon.c")
+endif()
 
 list(APPEND AOM_AV1_ENCODER_INTRIN_NEON_DOTPROD
             "${AOM_ROOT}/av1/encoder/arm/temporal_filter_neon_dotprod.c")
@@ -426,6 +437,11 @@ list(APPEND AOM_AV1_ENCODER_INTRIN_SSE4_2
             "${AOM_ROOT}/av1/encoder/x86/hash_sse42.c")
 
 list(APPEND AOM_AV1_COMMON_INTRIN_VSX "${AOM_ROOT}/av1/common/ppc/cfl_ppc.c")
+
+if(CONFIG_THREE_PASS)
+  list(APPEND AOM_AV1_ENCODER_SOURCES "${AOM_ROOT}/av1/encoder/thirdpass.c"
+              "${AOM_ROOT}/av1/encoder/thirdpass.h")
+endif()
 
 if(CONFIG_TUNE_VMAF)
   list(APPEND AOM_AV1_ENCODER_SOURCES "${AOM_ROOT}/av1/encoder/tune_vmaf.c"
@@ -487,12 +503,8 @@ if(CONFIG_AV1_HIGHBITDEPTH)
               "${AOM_ROOT}/av1/common/arm/highbd_convolve_scale_neon.c"
               "${AOM_ROOT}/av1/common/arm/highbd_reconinter_neon.c"
               "${AOM_ROOT}/av1/common/arm/highbd_reconintra_neon.c"
+              "${AOM_ROOT}/av1/common/arm/highbd_warp_plane_neon.c"
               "${AOM_ROOT}/av1/common/arm/highbd_wiener_convolve_neon.c")
-  # TODO(aomedia:349455146): enable this for armv7 after SIGBUS is fixed.
-  if(AOM_ARCH_AARCH64)
-    list(APPEND AOM_AV1_COMMON_INTRIN_NEON
-                "${AOM_ROOT}/av1/common/arm/highbd_warp_plane_neon.c")
-  endif()
 
   list(APPEND AOM_AV1_COMMON_INTRIN_SVE2
               "${AOM_ROOT}/av1/common/arm/highbd_compound_convolve_sve2.c"
@@ -511,6 +523,7 @@ if(CONFIG_AV1_HIGHBITDEPTH)
               "${AOM_ROOT}/av1/encoder/x86/highbd_temporal_filter_avx2.c")
 
   list(APPEND AOM_AV1_ENCODER_INTRIN_NEON
+              "${AOM_ROOT}/av1/encoder/arm/av1_highbd_quantize_neon.c"
               "${AOM_ROOT}/av1/encoder/arm/highbd_pickrst_neon.c"
               "${AOM_ROOT}/av1/encoder/arm/highbd_rdopt_neon.c"
               "${AOM_ROOT}/av1/encoder/arm/highbd_temporal_filter_neon.c")
@@ -549,7 +562,10 @@ if(CONFIG_REALTIME_ONLY)
 
   list(REMOVE_ITEM AOM_AV1_ENCODER_INTRIN_NEON
                    "${AOM_ROOT}/av1/encoder/arm/cnn_neon.c"
+                   "${AOM_ROOT}/av1/encoder/arm/highbd_pickrst_neon.c"
                    "${AOM_ROOT}/av1/encoder/arm/highbd_temporal_filter_neon.c"
+                   "${AOM_ROOT}/av1/encoder/arm/pickrst_neon.c"
+                   "${AOM_ROOT}/av1/encoder/arm/pickrst_neon.h"
                    "${AOM_ROOT}/av1/encoder/arm/temporal_filter_neon.c")
 
   list(REMOVE_ITEM AOM_AV1_ENCODER_INTRIN_NEON_DOTPROD
@@ -649,12 +665,6 @@ function(setup_av1_targets)
       if(AOM_AV1_DECODER_INTRIN_SSSE3)
         add_intrinsics_object_library("-mssse3" "ssse3" "aom_av1_decoder"
                                       "AOM_AV1_DECODER_INTRIN_SSSE3")
-      endif()
-    endif()
-    if(CONFIG_AV1_ENCODER)
-      if(AOM_AV1_ENCODER_INTRIN_SSSE3)
-        add_intrinsics_object_library("-mssse3" "ssse3" "aom_av1_encoder"
-                                      "AOM_AV1_ENCODER_INTRIN_SSSE3")
       endif()
     endif()
   endif()

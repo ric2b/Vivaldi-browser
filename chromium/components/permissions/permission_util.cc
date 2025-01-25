@@ -28,6 +28,8 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+#include "app/vivaldi_apptools.h"
+
 using blink::PermissionType;
 
 namespace permissions {
@@ -167,6 +169,9 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     case ContentSettingsType::AR:
       *out = PermissionType::AR;
       break;
+    case ContentSettingsType::HAND_TRACKING:
+      *out = PermissionType::HAND_TRACKING;
+      break;
     case ContentSettingsType::SMART_CARD_DATA:
       *out = PermissionType::SMART_CARD;
       break;
@@ -208,6 +213,9 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
       break;
     case ContentSettingsType::AUTOMATIC_FULLSCREEN:
       *out = PermissionType::AUTOMATIC_FULLSCREEN;
+      break;
+    case ContentSettingsType::WEB_APP_INSTALLATION:
+      *out = PermissionType::WEB_APP_INSTALLATION;
       break;
     default:
       return false;
@@ -256,9 +264,9 @@ GURL PermissionUtil::GetLastCommittedOriginAsURL(
     content::RenderFrameHost* render_frame_host) {
   DCHECK(render_frame_host);
 
-#if BUILDFLAG(IS_ANDROID)
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
+#if BUILDFLAG(IS_ANDROID)
   // If `allow_universal_access_from_file_urls` flag is enabled, a file:/// can
   // change its url via history.pushState/replaceState to any other url,
   // including about:blank. To avoid user confusion we should always use a
@@ -273,6 +281,11 @@ GURL PermissionUtil::GetLastCommittedOriginAsURL(
   }
 #endif
 
+  if (render_frame_host->GetLastCommittedOrigin().GetURL().is_empty()) {
+    if (!web_contents->GetVisibleURL().is_empty()) {
+      return web_contents->GetVisibleURL();
+    }
+  }
   return render_frame_host->GetLastCommittedOrigin().GetURL();
 }
 
@@ -324,6 +337,8 @@ ContentSettingsType PermissionUtil::PermissionTypeToContentSettingTypeSafe(
       return ContentSettingsType::WAKE_LOCK_SYSTEM;
     case PermissionType::NFC:
       return ContentSettingsType::NFC;
+    case PermissionType::HAND_TRACKING:
+      return ContentSettingsType::HAND_TRACKING;
     case PermissionType::VR:
       return ContentSettingsType::VR;
     case PermissionType::AR:
@@ -354,6 +369,8 @@ ContentSettingsType PermissionUtil::PermissionTypeToContentSettingTypeSafe(
       return ContentSettingsType::POINTER_LOCK;
     case PermissionType::AUTOMATIC_FULLSCREEN:
       return ContentSettingsType::AUTOMATIC_FULLSCREEN;
+    case PermissionType::WEB_APP_INSTALLATION:
+      return ContentSettingsType::WEB_APP_INSTALLATION;
     case PermissionType::NUM:
       break;
   }
@@ -413,6 +430,10 @@ blink::mojom::PermissionStatus PermissionUtil::ContentSettingToPermissionStatus(
       break;
   }
 
+  LOG(ERROR) << "PermissionUtil::ContentSettingToPermissionStatus: Invalid "
+                "permission value "
+             << setting;
+  if (!vivaldi::IsVivaldiRunning())
   NOTREACHED_IN_MIGRATION();
   return blink::mojom::PermissionStatus::DENIED;
 }

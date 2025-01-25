@@ -6,6 +6,7 @@ import("//build/buildflag_header.gni")
 import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//chrome/test/fuzzing/in_process_fuzzer.gni")
+import("//testing/libfuzzer/research/domatolpm/domatolpm.gni")
 
 # This target exists to reference other test executables to bring these files
 # into the build.
@@ -98,9 +99,32 @@ if (!is_android) {
     }
   }
 
+  # We cannot disable instrumenting protobuf generated files on MSAN builds,
+  # which makes the build time explode and fail the CQ.
+  if (!is_msan) {
+    domatolpm_fuzzer("domato_html_fuzzer_grammar") {
+      template_file = "//third_party/domato/src/template.html"
+      grammars = [
+        "jsfuzzer://chrome/test/fuzzing/domato_html_in_process_fuzzer_grammar/js.txt",
+        "cssfuzzer://third_party/domato/src/rules/css.txt",
+        "htmlfuzzer://chrome/test/fuzzing/domato_html_in_process_fuzzer_grammar/html.txt",
+      ]
+    }
+    in_process_fuzzer("domato_html_in_process_fuzzer") {
+      sources = [ "domato_html_in_process_fuzzer.cc" ]
+
+      deps = [
+        ":domato_html_fuzzer_grammar",
+        "//testing/libfuzzer/research/domatolpm:domatolpm_context",
+        "//third_party/libprotobuf-mutator",
+      ]
+    }
+  }
+
   if (is_linux) {
     in_process_proto_fuzzer("atspi_in_process_fuzzer") {
       sources = [ "atspi_in_process_fuzzer.cc" ]
+      libfuzzer_options = [ "max_len=4096" ]
       proto_source = "atspi_in_process_fuzzer.proto"
       deps = [ "//sql" ]
     }

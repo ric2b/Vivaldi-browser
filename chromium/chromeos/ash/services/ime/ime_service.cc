@@ -175,7 +175,7 @@ bool ImeService::IsFeatureEnabled(const char* feature_name) {
       &features::kAutocorrectUseReplaceSurroundingText,
       &features::kInputMethodKoreanRightAltKeyDownFix,
       &features::kImeKoreanModeSwitchDebug,
-  };
+      &features::kImeSwitchCheckConnectionStatus};
 
   // Use consistent feature flag names as in CrOS base::Feature::name and always
   // wire 1:1 to CrOS feature flags without extra logic.
@@ -252,6 +252,10 @@ void ImeService::SimpleDownloadFinishedV2(SimpleDownloadCallbackV2 callback,
 
 const MojoSystemThunks* ImeService::GetMojoSystemThunks() {
   return MojoEmbedderGetSystemThunks32();
+}
+
+const MojoSystemThunks2* ImeService::GetMojoSystemThunks2() {
+  return MojoEmbedderGetSystemThunks2();
 }
 
 void ImeService::Unused1() {

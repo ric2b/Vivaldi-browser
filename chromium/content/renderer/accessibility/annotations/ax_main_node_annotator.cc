@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 
 namespace content {
@@ -21,12 +22,14 @@ const char kHistogramsName[] =
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+// LINT.IfChange(MainNodeAnnotationResult)
 enum class MainNodeAnnotationResult {
   kSuccess = 0,
   kInvalid = 1,
   kDuplicate = 2,
   kMaxValue = kDuplicate,
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/accessibility/enums.xml:MainNodeAnnotationResult)
 
 }  // namespace
 
@@ -39,22 +42,15 @@ AXMainNodeAnnotator::AXMainNodeAnnotator(
 AXMainNodeAnnotator::~AXMainNodeAnnotator() = default;
 
 void AXMainNodeAnnotator::EnableAnnotations() {
-  if (annotator_remote_.is_bound() || !render_accessibility_->render_frame()) {
-    return;
-  }
-  mojo::PendingRemote<screen_ai::mojom::Screen2xMainContentExtractor> annotator;
-  render_accessibility_->render_frame()
-      ->GetBrowserInterfaceBroker()
-      .GetInterface(annotator.InitWithNewPipeAndPassReceiver());
-  annotator_remote_.Bind(std::move(annotator));
+  annotator_enabled_ = true;
 }
 
 void AXMainNodeAnnotator::CancelAnnotations() {
-  if (!annotator_remote_.is_bound() ||
-      render_accessibility_->GetAccessibilityMode().has_mode(
+  if (render_accessibility_->GetAccessibilityMode().has_mode(
           GetAXModeToEnableAnnotations())) {
     return;
   }
+  annotator_enabled_ = false;
   annotator_remote_.reset();
 }
 
@@ -67,7 +63,7 @@ bool AXMainNodeAnnotator::HasAXActionToEnableAnnotations() {
 }
 
 ax::mojom::Action AXMainNodeAnnotator::GetAXActionToEnableAnnotations() {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void AXMainNodeAnnotator::Annotate(const WebDocument& document,
@@ -107,8 +103,22 @@ void AXMainNodeAnnotator::Annotate(const WebDocument& document,
 
   // TODO(crbug.com/327248295): Promote the feature if the user has not enabled
   // it and is on a page without a main node annotation.
-  if (!annotator_remote_.is_bound()) {
+  if (!annotator_enabled_) {
     return;
+  }
+
+  if (!annotator_remote_.is_bound() || !annotator_remote_.is_connected()) {
+    if (!render_accessibility_->render_frame()) {
+      return;
+    }
+
+    mojo::PendingRemote<screen_ai::mojom::Screen2xMainContentExtractor>
+        annotator;
+    render_accessibility_->render_frame()
+        ->GetBrowserInterfaceBroker()
+        .GetInterface(annotator.InitWithNewPipeAndPassReceiver());
+    annotator_remote_.Bind(std::move(annotator));
+    annotator_remote_.reset_on_disconnect();
   }
 
   // Identify the main node using Screen2x.
@@ -161,6 +171,7 @@ void AXMainNodeAnnotator::BindAnnotatorForTesting(
     mojo::PendingRemote<screen_ai::mojom::Screen2xMainContentExtractor>
         annotator) {
   annotator_remote_.Bind(std::move(annotator));
+  annotator_enabled_ = true;
 }
 
 }  // namespace content

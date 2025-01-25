@@ -174,7 +174,7 @@ class DragHandler {
     this.glassPaneInUse = true;
     if (!DragHandler.glassPaneUsageCount++) {
       DragHandler.glassPane = new GlassPane();
-      DragHandler.glassPane.setPointerEventsBehavior(PointerEventsBehavior.BlockedByGlassPane);
+      DragHandler.glassPane.setPointerEventsBehavior(PointerEventsBehavior.BLOCKED_BY_GLASS_PANE);
       if (DragHandler.documentForMouseOut) {
         DragHandler.glassPane.show(DragHandler.documentForMouseOut);
       }
@@ -380,19 +380,23 @@ export const StyleValueDelimiters = ' \xA0\t\n"\':;,/()';
 
 export function getValueModificationDirection(event: Event): string|null {
   let direction: 'Up'|'Down'|null = null;
-  if (event.type === 'wheel') {
+  if (event instanceof WheelEvent) {
     // When shift is pressed while spinning mousewheel, delta comes as wheelDeltaX.
-    const wheelEvent = (event as WheelEvent);
-    if (wheelEvent.deltaY < 0 || wheelEvent.deltaX < 0) {
+    if (event.deltaY < 0 || event.deltaX < 0) {
       direction = 'Up';
-    } else if (wheelEvent.deltaY > 0 || wheelEvent.deltaX > 0) {
+    } else if (event.deltaY > 0 || event.deltaX > 0) {
       direction = 'Down';
     }
-  } else {
-    const keyEvent = (event as KeyboardEvent);
-    if (keyEvent.key === 'ArrowUp' || keyEvent.key === 'PageUp') {
+  } else if (event instanceof MouseEvent) {
+    if (event.movementX < 0) {
+      direction = 'Down';
+    } else if (event.movementX > 0) {
       direction = 'Up';
-    } else if (keyEvent.key === 'ArrowDown' || keyEvent.key === 'PageDown') {
+    }
+  } else if (event instanceof KeyboardEvent) {
+    if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+      direction = 'Up';
+    } else if (event.key === 'ArrowDown' || event.key === 'PageDown') {
       direction = 'Down';
     }
   }
@@ -468,13 +472,13 @@ export function modifiedFloatNumber(number: number, event: Event, modifierMultip
   // When shift is pressed, increase by 10.
   // When alt is pressed, increase by 0.1.
   // Otherwise increase by 1.
-  let delta = 1;
+  let delta = mouseEvent.type === 'mousemove' ? Math.abs(mouseEvent.movementX) : 1;
   if (KeyboardShortcut.eventHasCtrlEquivalentKey(mouseEvent)) {
-    delta = 100;
+    delta *= 100;
   } else if (mouseEvent.shiftKey) {
-    delta = 10;
+    delta *= 10;
   } else if (mouseEvent.altKey) {
-    delta = 0.1;
+    delta *= 0.1;
   }
 
   if (direction === 'Down') {
@@ -524,11 +528,15 @@ export function createReplacementString(
 }
 
 export function isElementValueModification(event: Event): boolean {
-  const arrowKeyOrWheelEvent =
-      ((event as KeyboardEvent).key === 'ArrowUp' || (event as KeyboardEvent).key === 'ArrowDown' ||
-       event.type === 'wheel');
-  const pageKeyPressed = ((event as KeyboardEvent).key === 'PageUp' || (event as KeyboardEvent).key === 'PageDown');
-  return arrowKeyOrWheelEvent || pageKeyPressed;
+  if (event instanceof MouseEvent) {
+    const {type} = event;
+    return type === 'mousemove' || type === 'wheel';
+  }
+  if (event instanceof KeyboardEvent) {
+    const {key} = event;
+    return key === 'ArrowUp' || key === 'ArrowDown' || key === 'PageUp' || key === 'PageDown';
+  }
+  return false;
 }
 
 export function handleElementValueModifications(
@@ -621,9 +629,12 @@ export function asyncStackTraceLabel(
   return i18nString(UIStrings.asyncCall);
 }
 
-export function installComponentRootStyles(element: Element): void {
-  injectCoreStyles(element);
+export function addPlatformClass(element: HTMLElement): void {
   element.classList.add('platform-' + Host.Platform.platform());
+}
+
+export function installComponentRootStyles(element: HTMLElement): void {
+  injectCoreStyles(element);
 
   // Detect overlay scrollbar enable by checking for nonzero scrollbar width.
   if (!Host.Platform.isMac() && measuredScrollbarWidth(element.ownerDocument) === 0) {
@@ -1568,7 +1579,7 @@ export const MaxLengthForDisplayedURLs = 150;
 export class MessageDialog {
   static async show(message: string, where?: Element|Document, jslogContext?: string): Promise<void> {
     const dialog = new Dialog(jslogContext);
-    dialog.setSizeBehavior(SizeBehavior.MeasureContent);
+    dialog.setSizeBehavior(SizeBehavior.MEASURE_CONTENT);
     dialog.setDimmed(true);
     const shadowRoot = createShadowRootWithCoreStyles(
         dialog.contentElement, {cssFile: confirmDialogStyles, delegatesFocus: undefined});
@@ -1592,7 +1603,7 @@ export class MessageDialog {
 export class ConfirmDialog {
   static async show(message: string, where?: Element|Document, options?: ConfirmDialogOptions): Promise<boolean> {
     const dialog = new Dialog(options?.jslogContext);
-    dialog.setSizeBehavior(SizeBehavior.MeasureContent);
+    dialog.setSizeBehavior(SizeBehavior.MEASURE_CONTENT);
     dialog.setDimmed(true);
     ARIAUtils.setLabel(dialog.contentElement, message);
     const shadowRoot = createShadowRootWithCoreStyles(
@@ -1828,6 +1839,10 @@ export function injectCoreStyles(root: Element|ShadowRoot): void {
 
   ThemeSupport.ThemeSupport.instance().injectHighlightStyleSheets(root);
   ThemeSupport.ThemeSupport.instance().injectCustomStyleSheets(root);
+}
+
+export function injectTextButtonStyles(root: Element|ShadowRoot): void {
+  ThemeSupport.ThemeSupport.instance().appendStyle(root, textButtonStyles);
 }
 
 export function createShadowRootWithCoreStyles(

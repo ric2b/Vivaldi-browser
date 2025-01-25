@@ -11,12 +11,14 @@
 #ifndef API_TEST_VIDEO_QUALITY_ANALYZER_INTERFACE_H_
 #define API_TEST_VIDEO_QUALITY_ANALYZER_INTERFACE_H_
 
-#include <memory>
+#include <cstdint>
+#include <optional>
 #include <string>
 
 #include "absl/strings/string_view.h"
-#include "absl/types/optional.h"
 #include "api/array_view.h"
+#include "api/scoped_refptr.h"
+#include "api/stats/rtc_stats_report.h"
 #include "api/test/stats_observer_interface.h"
 #include "api/video/encoded_image.h"
 #include "api/video/video_frame.h"
@@ -71,7 +73,9 @@ class VideoQualityAnalyzerInterface
     std::string decoder_name = "unknown";
     // Decode time provided by decoder itself. If decoder doesn’t produce such
     // information can be omitted.
-    absl::optional<int32_t> decode_time_ms = absl::nullopt;
+    std::optional<int32_t> decode_time_ms = std::nullopt;
+    // Decoder quantizer value.
+    std::optional<uint8_t> qp = std::nullopt;
   };
 
   ~VideoQualityAnalyzerInterface() override = default;

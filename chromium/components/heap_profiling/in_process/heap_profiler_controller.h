@@ -7,16 +7,17 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 #include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/profiler/process_type.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/types/pass_key.h"
-#include "components/metrics/call_stacks/call_stack_profile_params.h"
 #include "components/version_info/channel.h"
 
 namespace base {
@@ -40,9 +41,9 @@ class HeapProfilerController {
   // the samples until StartIfEnabled() is called. `channel` is used to
   // determine the probability that this client will be opted in to profiling.
   // `process_type` is the current process, which can be retrieved with
-  // GetProfileParamsProcess in chrome/common/profiler/process_type.h.
+  // GetProfilerProcessType in base/profiler/process_type.h.
   HeapProfilerController(version_info::Channel channel,
-                         metrics::CallStackProfileParams::Process process_type);
+                         base::ProfilerProcessType process_type);
 
   HeapProfilerController(const HeapProfilerController&) = delete;
   HeapProfilerController& operator=(const HeapProfilerController&) = delete;
@@ -59,6 +60,13 @@ class HeapProfilerController {
   // false otherwise.
   bool StartIfEnabled();
 
+  // Get the synthetic field trial configuration. If a synthetic field trial
+  // should be registered, returns true and writes the field trial details to
+  // `trial_name` and `group_name`. Otherwise, returns false and does not modify
+  // `trial_name` and `group_name`. Must only be called in the browser process.
+  bool GetSyntheticFieldTrial(std::string& trial_name,
+                              std::string& group_name) const;
+
   // Uses the exact parameter values for the sampling interval and time between
   // samples, instead of a distribution around those values. This must be called
   // before Start.
@@ -73,7 +81,7 @@ class HeapProfilerController {
   // `child_process_type` to `command_line`.
   void AppendCommandLineSwitchForChildProcess(
       base::CommandLine* command_line,
-      metrics::CallStackProfileParams::Process child_process_type,
+      base::ProfilerProcessType child_process_type,
       int child_process_id) const;
 
   // Returns the BrowserProcessSnapshotController or nullptr if none exists (if
@@ -94,12 +102,12 @@ class HeapProfilerController {
   // profiling is disabled in the browser process.
   static void AppendCommandLineSwitchForTesting(
       base::CommandLine* command_line,
-      metrics::CallStackProfileParams::Process child_process_type,
+      base::ProfilerProcessType child_process_type,
       int child_process_id,
       BrowserProcessSnapshotController* snapshot_controller);
 
  private:
-  using ProcessType = metrics::CallStackProfileParams::Process;
+  using ProcessType = base::ProfilerProcessType;
   using StoppedFlag = base::RefCountedData<base::AtomicFlag>;
 
   // Parameters to control the snapshot sampling and reporting. This is
@@ -186,7 +194,10 @@ class HeapProfilerController {
       size_t process_index);
 
   const ProcessType process_type_;
-  const bool profiling_enabled_;
+  bool profiling_enabled_;
+
+  // Group name for the synthetic field trial, or nullopt for none.
+  std::optional<std::string> synthetic_field_trial_group_;
 
   // Stores the time the HeapProfilerController was created, which will be close
   // to the process creation time. This is used instead of

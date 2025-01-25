@@ -25,7 +25,6 @@
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/PipelineData.h"
-#include "src/gpu/graphite/PipelineDataCache.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/ResourceProvider.h"
@@ -38,7 +37,6 @@
 #include "src/base/SkTBlockList.h"
 
 #include <algorithm>
-#include <unordered_map>
 
 using namespace skia_private;
 
@@ -94,22 +92,28 @@ private:
     TArray<V> fIndexToData;
 };
 
+
+// NOTE: Both CpuOrGpuData and TextureBinding's use as a key type in DenseBiMap relies on the fact
+// that the underlying data has been de-duplicated by a PipelineDataCache earlier, so that the
+// bit identity of the data blocks (e.g. address+size) is equivalent to the content equality of the
+// uniform data or texture lists.
+
 // Tracks uniform data on the CPU and then its transition to storage in a GPU buffer (ubo or ssbo).
 struct CpuOrGpuData {
     union {
-        const UniformDataBlock* fCpuData;
-        BindUniformBufferInfo fGpuData;
+        UniformDataBlock fCpuData;
+        BindBufferInfo fGpuData;
     };
 
     // Can only start from CPU data
-    CpuOrGpuData(const UniformDataBlock* cpuData) : fCpuData(cpuData) {}
+    CpuOrGpuData(UniformDataBlock cpuData) : fCpuData(cpuData) {}
 };
 
 // Tracks the combination of textures from the paint and from the RenderStep to describe the full
 // binding that needs to be in the command list.
 struct TextureBinding {
-    const TextureDataBlock* fPaintTextures;
-    const TextureDataBlock* fStepTextures;
+    TextureDataBlock fPaintTextures;
+    TextureDataBlock fStepTextures;
 
     bool operator==(const TextureBinding& other) const {
         return fPaintTextures == other.fPaintTextures &&
@@ -118,12 +122,12 @@ struct TextureBinding {
     bool operator!=(const TextureBinding& other) const { return !(*this == other); }
 
     int numTextures() const {
-        return (fPaintTextures ? fPaintTextures->numTextures() : 0) +
-               (fStepTextures ? fStepTextures->numTextures() : 0);
+        return (fPaintTextures ? fPaintTextures.numTextures() : 0) +
+               (fStepTextures ? fStepTextures.numTextures() : 0);
     }
 };
 
-using UniformCache = DenseBiMap<const UniformDataBlock*, CpuOrGpuData>;
+using UniformCache = DenseBiMap<UniformDataBlock, CpuOrGpuData>;
 using TextureBindingCache = DenseBiMap<TextureBinding>;
 using GraphicsPipelineCache = DenseBiMap<GraphicsPipelineDesc>;
 
@@ -132,8 +136,8 @@ using GraphicsPipelineCache = DenseBiMap<GraphicsPipelineDesc>;
 // Bind commands to a CommandList when necessary.
 class TextureBindingTracker {
 public:
-    TextureBindingCache::Index trackTextures(const TextureDataBlock* paintTextures,
-                                             const TextureDataBlock* stepTextures) {
+    TextureBindingCache::Index trackTextures(TextureDataBlock paintTextures,
+                                             TextureDataBlock stepTextures) {
         if (!paintTextures && !stepTextures) {
             return TextureBindingCache::kInvalidIndex;
         }
@@ -157,15 +161,15 @@ public:
                 commandList->bindDeferredTexturesAndSamplers(binding.numTextures());
 
         if (binding.fPaintTextures) {
-            for (int i = 0; i < binding.fPaintTextures->numTextures(); ++i) {
-                auto [tex, sampler] = binding.fPaintTextures->texture(i);
+            for (int i = 0; i < binding.fPaintTextures.numTextures(); ++i) {
+                auto [tex, sampler] = binding.fPaintTextures.texture(i);
                 *texIndices++     = fProxyCache.insert(tex.get());
                 *samplerIndices++ = fSamplerCache.insert(sampler);
             }
         }
         if (binding.fStepTextures) {
-            for (int i = 0; i < binding.fStepTextures->numTextures(); ++i) {
-                auto [tex, sampler] = binding.fStepTextures->texture(i);
+            for (int i = 0; i < binding.fStepTextures.numTextures(); ++i) {
+                auto [tex, sampler] = binding.fStepTextures.texture(i);
                 *texIndices++     = fProxyCache.insert(tex.get());
                 *samplerIndices++ = fSamplerCache.insert(sampler);
             }
@@ -200,7 +204,7 @@ public:
     // Maps a given {pipeline index, uniform data cache index} pair to a buffer index within the
     // pipeline's accumulated array of uniforms.
     UniformCache::Index trackUniforms(GraphicsPipelineCache::Index pipelineIndex,
-                                      const UniformDataBlock* cpuData) {
+                                      UniformDataBlock cpuData) {
         if (!cpuData) {
             return UniformCache::kInvalidIndex;
         }
@@ -223,14 +227,14 @@ public:
             }
             // All data blocks for the same pipeline have the same size, so peek the first
             // to determine the total buffer size
-            size_t udbSize = cache.lookup(0).fCpuData->size();
+            size_t udbSize = cache.lookup(0).fCpuData.size();
             size_t udbDataSize = udbSize;
             if (!fUseStorageBuffers) {
                 udbSize = bufferMgr->alignUniformBlockSize(udbSize);
             }
             auto [writer, bufferInfo] =
-                    fUseStorageBuffers ? bufferMgr->getSsboWriter(udbSize * cache.size())
-                                       : bufferMgr->getUniformWriter(udbSize * cache.size());
+                    fUseStorageBuffers ? bufferMgr->getSsboWriter(cache.size(), udbSize)
+                                       : bufferMgr->getUniformWriter(cache.size(), udbSize);
             if (!writer) {
                 return false; // Early out if buffer mapping failed
             }
@@ -244,14 +248,15 @@ public:
                 // For uniform buffer we will bind one block at a time.
                 bindingSize = static_cast<uint32_t>(udbSize);
             }
+            SkASSERT(bindingSize <= bufferInfo.fSize);
 
             for (CpuOrGpuData& dataBlock : cache.data()) {
-                SkASSERT(dataBlock.fCpuData->size() == udbDataSize);
-                writer.write(dataBlock.fCpuData->data(), udbDataSize);
+                SkASSERT(dataBlock.fCpuData.size() == udbDataSize);
+                writer.write(dataBlock.fCpuData.data(), udbDataSize);
                 // Swap from tracking the CPU data to the location of the GPU data
                 dataBlock.fGpuData.fBuffer = bufferInfo.fBuffer;
                 dataBlock.fGpuData.fOffset = bufferInfo.fOffset;
-                dataBlock.fGpuData.fBindingSize = bindingSize;
+                dataBlock.fGpuData.fSize = bindingSize;
 
                 if (!fUseStorageBuffers) {
                     bufferInfo.fOffset += bindingSize;
@@ -291,7 +296,7 @@ public:
         SkASSERT(fLastPipeline < GraphicsPipelineCache::kInvalidIndex &&
                  fLastIndex < UniformCache::kInvalidIndex);
         SkASSERT(!fUseStorageBuffers || fLastIndex == 0);
-        const BindUniformBufferInfo& binding =
+        const BindBufferInfo& binding =
                 fPerPipelineCaches[fLastPipeline].lookup(fLastIndex).fGpuData;
         commandList->bindUniformBuffer(binding, slot);
     }
@@ -315,17 +320,14 @@ public:
             return true;
         }
 
-        auto [writer, bufferInfo] = bufferMgr->getSsboWriter(gradData.size_bytes());
+        auto [writer, bufferInfo] = bufferMgr->getSsboWriter(gradData.size(), sizeof(float));
 
         if (!writer) {
             return false;
         }
 
         writer.write(gradData.data(), gradData.size_bytes());
-
-        fBufferInfo.fBuffer = bufferInfo.fBuffer;
-        fBufferInfo.fOffset = bufferInfo.fOffset;
-        fBufferInfo.fBindingSize = gradData.size_bytes();
+        fBufferInfo = bufferInfo;
         fHasData = true;
 
         return true;
@@ -338,7 +340,7 @@ public:
     }
 
 private:
-    BindUniformBufferInfo fBufferInfo;
+    BindBufferInfo fBufferInfo;
     bool fHasData = false;
 };
 
@@ -532,8 +534,8 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         // bound independently of those used by the rest of the RenderStep, then we can upload now
         // and remember the location for re-use on any RenderStep that does shading.
         UniquePaintParamsID shaderID;
-        const UniformDataBlock* shadingUniforms = nullptr;
-        const TextureDataBlock* paintTextures = nullptr;
+        UniformDataBlock shadingUniforms;
+        TextureDataBlock paintTextures;
 
         if (draw.fPaintParams.has_value()) {
             sk_sp<TextureProxy> curDst =
@@ -569,9 +571,9 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
             UniformCache::Index geomUniformIndex = geometryUniformTracker.trackUniforms(
                     pipelineIndex, geometryUniforms);
             UniformCache::Index shadingUniformIndex = shadingUniformTracker.trackUniforms(
-                    pipelineIndex, performsShading ? shadingUniforms : nullptr);
+                    pipelineIndex, performsShading ? shadingUniforms : UniformDataBlock());
             TextureBindingCache::Index textureIndex = textureBindingTracker.trackTextures(
-                    performsShading ? paintTextures : nullptr, stepTextures);
+                    performsShading ? paintTextures : TextureDataBlock(), stepTextures);
 
             keys.push_back({&draw, stepIndex, pipelineIndex,
                             geomUniformIndex, shadingUniformIndex, textureIndex});

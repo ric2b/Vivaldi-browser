@@ -9,7 +9,7 @@
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/sessions/model/session_restoration_service.h"
 #import "ios/chrome/browser/sessions/model/session_restoration_service_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
@@ -107,7 +107,11 @@ web::WebState* TabInsertionBrowserAgent::InsertWebState(
                                            ui::PAGE_TRANSITION_LINK)) {
     params = WebStateList::InsertionParams::AtIndex(web_state_list->count());
   }
-  params.Activate(!tab_insertion_params.in_background)
+
+  bool should_activate =
+      !tab_insertion_params.in_background || web_state_list->empty();
+
+  params.Activate(should_activate)
       .InheritOpener(tab_insertion_params.inherit_opener)
       .WithOpener(WebStateOpener(tab_insertion_params.parent));
   if (tab_insertion_params.insert_in_group && tab_insertion_params.tab_group) {

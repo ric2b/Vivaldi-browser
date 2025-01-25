@@ -34,29 +34,29 @@ void NinjaCopyTargetWriter::Run() {
     return;
   }
 
-  const Tool* stamp_tool =
-      target_->toolchain()->GetTool(GeneralTool::kGeneralToolStamp);
-  if (!stamp_tool) {
-    g_scheduler->FailWithError(Err(
-        nullptr, "Copy tool not defined",
-        "The toolchain " +
-            target_->toolchain()->label().GetUserVisibleName(false) +
-            "\n used by target " + target_->label().GetUserVisibleName(false) +
-            "\n doesn't define a \"stamp\" tool."));
-    return;
+  SubstitutionBits required_bits = copy_tool->substitution_bits();
+  if (!settings_->build_settings()->no_stamp_files()) {
+    const Tool* stamp_tool =
+        target_->toolchain()->GetTool(GeneralTool::kGeneralToolStamp);
+    if (!stamp_tool) {
+      g_scheduler->FailWithError(
+          Err(nullptr, "Stamp tool not defined",
+              "The toolchain " +
+                  target_->toolchain()->label().GetUserVisibleName(false) +
+                  "\n used by target " +
+                  target_->label().GetUserVisibleName(false) +
+                  "\n doesn't define a \"stamp\" tool."));
+    }
+    required_bits.MergeFrom(stamp_tool->substitution_bits());
   }
 
-  // Figure out the substitutions used by the copy and stamp tools.
-  SubstitutionBits required_bits = copy_tool->substitution_bits();
-  required_bits.MergeFrom(stamp_tool->substitution_bits());
-
-  // General target-related substitutions needed by both tools.
+  // General target-related substitutions needed by the copy/stamp tool.
   WriteSharedVars(required_bits);
 
   std::vector<OutputFile> output_files;
   WriteCopyRules(&output_files);
   out_ << std::endl;
-  WriteStampForTarget(output_files, std::vector<OutputFile>());
+  WriteStampOrPhonyForTarget(output_files, std::vector<OutputFile>());
 }
 
 void NinjaCopyTargetWriter::WriteCopyRules(
@@ -71,13 +71,15 @@ void NinjaCopyTargetWriter::WriteCopyRules(
   std::string tool_name =
       GetNinjaRulePrefixForToolchain(settings_) + GeneralTool::kGeneralToolCopy;
 
-  size_t num_stamp_uses = target_->sources().size();
-  std::vector<OutputFile> input_deps = WriteInputDepsStampAndGetDep(
-      std::vector<const Target*>(), num_stamp_uses);
+  size_t num_output_uses = target_->sources().size();
+  std::vector<OutputFile> input_deps = WriteInputDepsStampOrPhonyAndGetDep(
+      std::vector<const Target*>(), num_output_uses);
 
   std::vector<OutputFile> data_outs;
-  for (const Target* data_dep : resolved().GetDataDeps(target_))
-    data_outs.push_back(data_dep->dependency_output_file());
+  for (const Target* data_dep : resolved().GetDataDeps(target_)) {
+    if (data_dep->has_dependency_output())
+      data_outs.push_back(data_dep->dependency_output());
+  }
 
   // Note that we don't write implicit deps for copy steps. "copy" only
   // depends on the output files themselves, rather than having includes

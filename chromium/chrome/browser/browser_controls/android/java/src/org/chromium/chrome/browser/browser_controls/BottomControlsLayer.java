@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.browser_controls;
 
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerScrollBehavior;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerType;
+import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerVisibility;
 
 /** Interface represented in the bottom controls stack. */
 public interface BottomControlsLayer {
@@ -22,7 +23,8 @@ public interface BottomControlsLayer {
 
     /**
      * Return the current height of the layer. Can change after the layer is created; call {@link
-     * BottomControlsStacker#requestLayerUpdate} to trigger an update.
+     * BottomControlsStacker#requestLayerUpdate} to trigger an update. When animating a layer
+     * transition with SHOWING/HIDING, the height should remain the same throughout the animation.
      */
     int getHeight();
 
@@ -30,7 +32,8 @@ public interface BottomControlsLayer {
      * Whether the layer is visible in the UI. Can change after the layer is created; call {@link
      * BottomControlsStacker#requestLayerUpdate} to trigger an update.
      */
-    boolean isVisible();
+    @LayerVisibility
+    int getLayerVisibility();
 
     /**
      * Interface method to receive browser controls update. The goal is each layer will know exactly

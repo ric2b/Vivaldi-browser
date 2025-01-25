@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/parsers/ivf_parser.h"
 
 #include <cstring>
@@ -33,7 +38,7 @@ bool IvfParser::Initialize(const uint8_t* stream,
   auto input =
       // TODO(crbug.com/40284755): Initialize() should receive a span, not a
       // pointer. IvfParser should hold a span, not a pointer.
-      UNSAFE_BUFFERS(base::span(ptr_.get(), end_.get()));
+      UNSAFE_TODO(base::span(ptr_.get(), end_.get()));
   auto [in_header, in_rem] = input.split_at<sizeof(IvfFileHeader)>();
 
   // The stream is little-endian encoded, so we can just copy it into place.
@@ -70,7 +75,7 @@ bool IvfParser::ParseNextFrame(IvfFrameHeader* frame_header,
 
   auto input =
       // TODO(crbug.com/40284755): IvfParser should hold a span, not a pointer.
-      UNSAFE_BUFFERS(base::span(ptr_.get(), end_.get()));
+      UNSAFE_TODO(base::span(ptr_.get(), end_.get()));
   auto [in_header, in_rem] = input.split_at<sizeof(IvfFrameHeader)>();
 
   // The stream is little-endian encoded, so we can just copy it into place.

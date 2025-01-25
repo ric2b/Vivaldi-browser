@@ -76,10 +76,6 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   static LayoutText* CreateEmptyAnonymous(Document&, const ComputedStyle*);
 
-  static LayoutText* CreateAnonymousForFormattedText(Document&,
-                                                     const ComputedStyle*,
-                                                     String);
-
   const char* GetName() const override {
     NOT_DESTROYED();
     return "LayoutText";
@@ -144,8 +140,9 @@ class CORE_EXPORT LayoutText : public LayoutObject {
     return nullptr;
   }
 
-  void AbsoluteQuads(Vector<gfx::QuadF>&,
-                     MapCoordinatesFlags mode = 0) const final;
+  void QuadsInAncestorInternal(Vector<gfx::QuadF>&,
+                               const LayoutBoxModelObject* ancestor,
+                               MapCoordinatesFlags) const final;
   void AbsoluteQuadsForRange(Vector<gfx::QuadF>&,
                              unsigned start_offset = 0,
                              unsigned end_offset = INT_MAX) const;
@@ -479,8 +476,9 @@ inline wtf_size_t LayoutText::FirstInlineFragmentItemIndex() const {
 }
 
 inline void LayoutText::DetachAbstractInlineTextBoxesIfNeeded() {
-  if (UNLIKELY(has_abstract_inline_text_box_))
+  if (has_abstract_inline_text_box_) [[unlikely]] {
     DetachAbstractInlineTextBoxes();
+  }
 }
 
 template <>

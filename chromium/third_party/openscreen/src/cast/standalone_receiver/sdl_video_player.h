@@ -8,7 +8,7 @@
 #include <string>
 
 #include "cast/standalone_receiver/sdl_player_base.h"
-#include "cast/streaming/constants.h"
+#include "cast/streaming/public/constants.h"
 
 namespace openscreen::cast {
 

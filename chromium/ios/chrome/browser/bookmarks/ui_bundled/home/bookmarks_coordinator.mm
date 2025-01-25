@@ -38,7 +38,7 @@
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -61,6 +61,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "ios/panel/panel_interaction_controller.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_coordinator.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_entry_point.h"
@@ -303,16 +304,16 @@ enum class PresentedState {
   DCHECK(node) << [self description];
   DCHECK_EQ(node->type(), BookmarkNode::URL);
   [self dismissSnackbar];
+  self.currentPresentedState = PresentedState::BOOKMARK_EDITOR;
 
   if (IsVivaldiRunning()) {
     [self presentBookmarkEditorWithEditingNode:node
-                                    parentNode:node->parent()
-                                     isEditing:YES
-                                      isFolder:NO];
+                        parentNode:node->parent()
+                         isEditing:YES
+                        entryPoint:VivaldiBookmarksEditorEntryPointBookmark];
     return;
   } // End Vivaldi
 
-  self.currentPresentedState = PresentedState::BOOKMARK_EDITOR;
   UIViewController* baseViewController =
       top_view_controller::TopPresentedViewControllerFrom(
           self.baseViewController);
@@ -332,16 +333,16 @@ enum class PresentedState {
   DCHECK(node) << [self description];
   DCHECK_EQ(node->type(), BookmarkNode::FOLDER) << [self description];
   [self dismissSnackbar];
+  self.currentPresentedState = PresentedState::FOLDER_EDITOR;
 
   if (IsVivaldiRunning()) {
     [self presentBookmarkEditorWithEditingNode:node
-                                    parentNode:node->parent()
-                                     isEditing:YES
-                                      isFolder:YES];
+                            parentNode:node->parent()
+                             isEditing:YES
+                            entryPoint:VivaldiBookmarksEditorEntryPointFolder];
     return;
   } // End Vivaldi
 
-  self.currentPresentedState = PresentedState::FOLDER_EDITOR;
   // `self.baseViewController` is part of a navigation view controller.
   // Therefore, the bookmark folder view needs to be presented by
   // `self.baseViewController.navigationController`.
@@ -666,10 +667,14 @@ enum class PresentedState {
       _bookmarkModel->GetMostRecentlyAddedUserNodeForURL(URL);
   if (existingBookmark) {
     if (IsVivaldiRunning()) {
-      [self presentBookmarkEditorWithEditingNode:existingBookmark
-                                      parentNode:existingBookmark->parent()
-                                       isEditing:YES
-                                        isFolder:NO];
+      if (_bookmarkModel->IsBookmarked(URL)) {
+        [self presentBookmarkEditorWithEditingNode:existingBookmark
+                          parentNode:existingBookmark->parent()
+                           isEditing:YES
+                          entryPoint:VivaldiBookmarksEditorEntryPointBookmark];
+      } else {
+        [self createBookmarkURL:URL title:title];
+      }
     } else {
     [self presentBookmarkEditorForURL:URL];
    } // End Vivaldi
@@ -938,10 +943,13 @@ enum class PresentedState {
 #pragma mark - PUBLIC
 - (void)presentBookmarkCreator:(const bookmarks::BookmarkNode*)parentNode
                       isFolder:(BOOL)isFolder {
+  VivaldiBookmarksEditorEntryPoint entryPoint = isFolder ?
+      VivaldiBookmarksEditorEntryPointFolder :
+        VivaldiBookmarksEditorEntryPointBookmark;
   [self presentBookmarkEditorWithEditingNode:nil
                                   parentNode:parentNode
                                    isEditing:NO
-                                    isFolder:isFolder];
+                                  entryPoint:entryPoint];
 }
 
 #pragma mark - PRIVATE
@@ -969,10 +977,8 @@ enum class PresentedState {
 - (void)presentBookmarkEditorWithEditingNode:(const BookmarkNode*)editingNode
                                   parentNode:(const BookmarkNode*)parentNode
                                    isEditing:(BOOL)isEditing
-                                    isFolder:(BOOL)isFolder {
-  VivaldiBookmarksEditorEntryPoint entryPoint = isFolder ?
-      VivaldiBookmarksEditorEntryPointFolder :
-        VivaldiBookmarksEditorEntryPointBookmark;
+                                  entryPoint:
+                                  (VivaldiBookmarksEditorEntryPoint)entryPoint {
 
   VivaldiSpeedDialItem* editingItem =
       [[VivaldiSpeedDialItem alloc] initWithBookmark:editingNode];
@@ -1095,6 +1101,80 @@ enum class PresentedState {
       [self openURLInNewTab:url inIncognito:inIncognito inBackground:YES];
     }
   }  // end for
+}
+
+- (void)createOrEditSpeedDialWithURLWithTitle:(URLWithTitle*)URLWithTitle {
+  DCHECK(URLWithTitle) << [self description];
+  NSString* title = URLWithTitle.title;
+  GURL URL = URLWithTitle.URL;
+  if (!_bookmarkModel->loaded()) {
+    return;
+  }
+
+  BOOL isExistingSpeedDial =
+      vivaldi_bookmark_kit::IsURLAddedToStartPage(_bookmarkModel.get(), URL);
+  const BookmarkNode* existingBookmark =
+      _bookmarkModel->GetMostRecentlyAddedUserNodeForURL(URL);
+
+  if (isExistingSpeedDial && existingBookmark) {
+    [self presentBookmarkEditorWithEditingNode:existingBookmark
+                        parentNode:existingBookmark->parent()
+                         isEditing:YES
+                        entryPoint:VivaldiBookmarksEditorEntryPointSpeedDial];
+  } else {
+    if (!_bookmarkModel->loaded()) {
+      return;
+    }
+
+    __weak BookmarksCoordinator* weakSelf = self;
+    // Copy of `URL` to be captured in block.
+    GURL bookmarkedURL(URL);
+    void (^editAction)() = ^{
+      [weakSelf presentSpeedDialEditorForURL:bookmarkedURL];
+    };
+
+    [self.snackbarCommandsHandler
+        showSnackbarMessage:[self.mediator addSpeedDialWithTitle:title
+                                                             URL:bookmarkedURL
+                                                      editAction:editAction]];
+    default_browser::NotifyBookmarkAddOrEdit(
+        feature_engagement::TrackerFactory::GetForBrowserState(
+            _currentBrowserState.get()));
+  }
+}
+
+- (void)presentSpeedDialEditorForURL:(const GURL&)URL {
+  if (!_bookmarkModel->loaded()) {
+    return;
+  }
+
+  const BookmarkNode* bookmark =
+      _bookmarkModel->GetMostRecentlyAddedUserNodeForURL(URL);
+  if (!bookmark) {
+    return;
+  }
+
+  DCHECK(!self.bookmarkNavigationController) << [self description];
+  DCHECK(bookmark) << [self description];
+  DCHECK_EQ(bookmark->type(), BookmarkNode::URL);
+  [self dismissSnackbar];
+
+  [self presentBookmarkEditorWithEditingNode:bookmark
+                      parentNode:bookmark->parent()
+                       isEditing:YES
+                      entryPoint:VivaldiBookmarksEditorEntryPointSpeedDial];
+
+  default_browser::NotifyBookmarkAddOrEdit(
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          _currentBrowserState.get()));
+}
+
+#pragma mark - BookmarksCommands (Vivaldi)
+- (void)createOrEditSpeedDialWithURL:(web::WebState*)webState {
+  GURL URL = webState->GetLastCommittedURL();
+  NSString* title = tab_util::GetTabTitle(webState);
+  [self createOrEditSpeedDialWithURLWithTitle:
+      [[URLWithTitle alloc] initWithURL:URL title:title]];
 }
 
 #endif // End Vivaldi

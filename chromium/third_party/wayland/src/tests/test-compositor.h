@@ -40,9 +40,11 @@ struct client_info {
 	int pipe;
 	pid_t pid;
 	int exit_code;
+	int kill_code;
 
 	struct wl_list link;
 	void *data; /* for arbitrary use */
+	int log_fd;
 };
 
 struct display {
@@ -90,6 +92,7 @@ void noop_request(struct client *);
  */
 struct display *display_create(void);
 void display_destroy(struct display *d);
+void display_destroy_expect_signal(struct display *d, int signum);
 void display_run(struct display *d);
 
 /* This function posts the display_resumed event to all waiting clients,
@@ -106,6 +109,9 @@ void display_post_resume_events(struct display *d);
  * it then reruns the display. */
 void display_resume(struct display *d);
 
+/* The file descriptor containing the client log. This is only valid in the
+ * test client processes. */
+extern int client_log_fd;
 
 struct client_info *client_create_with_name(struct display *d,
 					    void (*client_main)(void *data),

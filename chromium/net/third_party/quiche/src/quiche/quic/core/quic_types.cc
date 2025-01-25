@@ -265,6 +265,7 @@ std::string MessageStatusToString(MessageStatus message_status) {
     RETURN_STRING_LITERAL(MESSAGE_STATUS_UNSUPPORTED);
     RETURN_STRING_LITERAL(MESSAGE_STATUS_BLOCKED);
     RETURN_STRING_LITERAL(MESSAGE_STATUS_TOO_LARGE);
+    RETURN_STRING_LITERAL(MESSAGE_STATUS_SETTINGS_NOT_RECEIVED);
     RETURN_STRING_LITERAL(MESSAGE_STATUS_INTERNAL_ERROR);
     default:
       return absl::StrCat("Unknown(", static_cast<int>(message_status), ")");
@@ -418,6 +419,12 @@ std::string KeyUpdateReasonString(KeyUpdateReason reason) {
 std::ostream& operator<<(std::ostream& os, const KeyUpdateReason reason) {
   os << KeyUpdateReasonString(reason);
   return os;
+}
+
+std::string ParsedClientHello::ToString() const {
+  std::ostringstream oss;
+  oss << *this;
+  return oss.str();
 }
 
 bool operator==(const ParsedClientHello& a, const ParsedClientHello& b) {

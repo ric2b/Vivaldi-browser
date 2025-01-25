@@ -337,11 +337,12 @@ var mapperTab = (function () {
 
 	Object.defineProperty(ErrorResponse, "__esModule", { value: true });
 	ErrorResponse.UnderspecifiedStoragePartitionException = ErrorResponse.UnableToSetFileInputException = ErrorResponse.UnableToSetCookieException = ErrorResponse.NoSuchStoragePartitionException = ErrorResponse.UnsupportedOperationException = ErrorResponse.UnableToCloseBrowserException = ErrorResponse.UnableToCaptureScreenException = ErrorResponse.UnknownErrorException = ErrorResponse.UnknownCommandException = ErrorResponse.SessionNotCreatedException = ErrorResponse.NoSuchUserContextException = ErrorResponse.NoSuchScriptException = ErrorResponse.NoSuchRequestException = ErrorResponse.NoSuchNodeException = ErrorResponse.NoSuchInterceptException = ErrorResponse.NoSuchHistoryEntryException = ErrorResponse.NoSuchHandleException = ErrorResponse.NoSuchFrameException = ErrorResponse.NoSuchElementException = ErrorResponse.NoSuchAlertException = ErrorResponse.MoveTargetOutOfBoundsException = ErrorResponse.InvalidSessionIdException = ErrorResponse.InvalidSelectorException = ErrorResponse.InvalidArgumentException = ErrorResponse.Exception = void 0;
-	class Exception {
+	class Exception extends Error {
 	    error;
 	    message;
 	    stacktrace;
 	    constructor(error, message, stacktrace) {
+	        super();
 	        this.error = error;
 	        this.message = message;
 	        this.stacktrace = stacktrace;
@@ -756,7 +757,7 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(BrowserProcessor$1, "__esModule", { value: true });
 	BrowserProcessor$1.BrowserProcessor = void 0;
-	const protocol_js_1$n = protocol;
+	const protocol_js_1$o = protocol;
 	class BrowserProcessor {
 	    #browserCdpClient;
 	    constructor(browserCdpClient) {
@@ -784,7 +785,7 @@ var mapperTab = (function () {
 	    async removeUserContext(params) {
 	        const userContext = params.userContext;
 	        if (userContext === 'default') {
-	            throw new protocol_js_1$n.InvalidArgumentException('`default` user context cannot be removed');
+	            throw new protocol_js_1$o.InvalidArgumentException('`default` user context cannot be removed');
 	        }
 	        try {
 	            await this.#browserCdpClient.sendCommand('Target.disposeBrowserContext', {
@@ -794,7 +795,7 @@ var mapperTab = (function () {
 	        catch (err) {
 	            // https://source.chromium.org/chromium/chromium/src/+/main:content/browser/devtools/protocol/target_handler.cc;l=1424;drc=c686e8f4fd379312469fe018f5c390e9c8f20d0d
 	            if (err.message.startsWith('Failed to find context with id')) {
-	                throw new protocol_js_1$n.NoSuchUserContextException(err.message);
+	                throw new protocol_js_1$o.NoSuchUserContextException(err.message);
 	            }
 	            throw err;
 	        }
@@ -838,7 +839,7 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(CdpProcessor$1, "__esModule", { value: true });
 	CdpProcessor$1.CdpProcessor = void 0;
-	const protocol_js_1$m = protocol;
+	const protocol_js_1$n = protocol;
 	class CdpProcessor {
 	    #browsingContextStorage;
 	    #realmStorage;
@@ -862,7 +863,7 @@ var mapperTab = (function () {
 	        const context = params.realm;
 	        const realm = this.#realmStorage.getRealm({ realmId: context });
 	        if (realm === undefined) {
-	            throw new protocol_js_1$m.UnknownErrorException(`Could not find realm ${params.realm}`);
+	            throw new protocol_js_1$n.UnknownErrorException(`Could not find realm ${params.realm}`);
 	        }
 	        return { executionContextId: realm.executionContextId };
 	    }
@@ -883,7 +884,7 @@ var mapperTab = (function () {
 
 	Object.defineProperty(BrowsingContextProcessor$1, "__esModule", { value: true });
 	BrowsingContextProcessor$1.BrowsingContextProcessor = void 0;
-	const protocol_js_1$l = protocol;
+	const protocol_js_1$m = protocol;
 	class BrowsingContextProcessor {
 	    #browserCdpClient;
 	    #browsingContextStorage;
@@ -892,7 +893,7 @@ var mapperTab = (function () {
 	        this.#browserCdpClient = browserCdpClient;
 	        this.#browsingContextStorage = browsingContextStorage;
 	        this.#eventManager = eventManager;
-	        this.#eventManager.addSubscribeHook(protocol_js_1$l.ChromiumBidi.BrowsingContext.EventNames.ContextCreated, this.#onContextCreatedSubscribeHook.bind(this));
+	        this.#eventManager.addSubscribeHook(protocol_js_1$m.ChromiumBidi.BrowsingContext.EventNames.ContextCreated, this.#onContextCreatedSubscribeHook.bind(this));
 	    }
 	    getTree(params) {
 	        const resultContexts = params.root === undefined
@@ -908,7 +909,7 @@ var mapperTab = (function () {
 	        if (params.referenceContext !== undefined) {
 	            referenceContext = this.#browsingContextStorage.getContext(params.referenceContext);
 	            if (!referenceContext.isTopLevelContext()) {
-	                throw new protocol_js_1$l.InvalidArgumentException(`referenceContext should be a top-level context`);
+	                throw new protocol_js_1$m.InvalidArgumentException(`referenceContext should be a top-level context`);
 	            }
 	            userContext = referenceContext.userContext;
 	        }
@@ -947,7 +948,7 @@ var mapperTab = (function () {
 	            err.message.startsWith('Failed to find browser context with id') ||
 	                // See https://source.chromium.org/chromium/chromium/src/+/main:headless/lib/browser/protocol/target_handler.cc;l=49;drc=e80392ac11e48a691f4309964cab83a3a59e01c8
 	                err.message === 'browserContextId') {
-	                throw new protocol_js_1$l.NoSuchUserContextException(`The context ${userContext} was not found`);
+	                throw new protocol_js_1$m.NoSuchUserContextException(`The context ${userContext} was not found`);
 	            }
 	            throw err;
 	        }
@@ -972,7 +973,7 @@ var mapperTab = (function () {
 	    async activate(params) {
 	        const context = this.#browsingContextStorage.getContext(params.context);
 	        if (!context.isTopLevelContext()) {
-	            throw new protocol_js_1$l.InvalidArgumentException('Activation is only supported on the top-level context');
+	            throw new protocol_js_1$m.InvalidArgumentException('Activation is only supported on the top-level context');
 	        }
 	        await context.activate();
 	        return {};
@@ -988,7 +989,7 @@ var mapperTab = (function () {
 	    async setViewport(params) {
 	        const context = this.#browsingContextStorage.getContext(params.context);
 	        if (!context.isTopLevelContext()) {
-	            throw new protocol_js_1$l.InvalidArgumentException('Emulating viewport is only supported on the top-level context');
+	            throw new protocol_js_1$m.InvalidArgumentException('Emulating viewport is only supported on the top-level context');
 	        }
 	        await context.setViewport(params.viewport, params.devicePixelRatio);
 	        return {};
@@ -996,7 +997,7 @@ var mapperTab = (function () {
 	    async traverseHistory(params) {
 	        const context = this.#browsingContextStorage.getContext(params.context);
 	        if (!context) {
-	            throw new protocol_js_1$l.InvalidArgumentException(`No browsing context with id ${params.context}`);
+	            throw new protocol_js_1$m.InvalidArgumentException(`No browsing context with id ${params.context}`);
 	        }
 	        await context.traverseHistory(params.delta);
 	        return {};
@@ -1010,7 +1011,7 @@ var mapperTab = (function () {
 	            // Heuristically determine the error
 	            // https://source.chromium.org/chromium/chromium/src/+/main:content/browser/devtools/protocol/page_handler.cc;l=1085?q=%22No%20dialog%20is%20showing%22&ss=chromium
 	            if (error.message?.includes('No dialog is showing')) {
-	                throw new protocol_js_1$l.NoSuchAlertException('No dialog is showing');
+	                throw new protocol_js_1$m.NoSuchAlertException('No dialog is showing');
 	            }
 	            throw error;
 	        }
@@ -1019,7 +1020,7 @@ var mapperTab = (function () {
 	    async close(params) {
 	        const context = this.#browsingContextStorage.getContext(params.context);
 	        if (!context.isTopLevelContext()) {
-	            throw new protocol_js_1$l.InvalidArgumentException(`Non top-level browsing context ${context.id} cannot be closed.`);
+	            throw new protocol_js_1$m.InvalidArgumentException(`Non top-level browsing context ${context.id} cannot be closed.`);
 	        }
 	        try {
 	            const detachedFromTargetPromise = new Promise((resolve) => {
@@ -1067,7 +1068,7 @@ var mapperTab = (function () {
 	        contextsToReport.forEach((context) => {
 	            this.#eventManager.registerEvent({
 	                type: 'event',
-	                method: protocol_js_1$l.ChromiumBidi.BrowsingContext.EventNames.ContextCreated,
+	                method: protocol_js_1$m.ChromiumBidi.BrowsingContext.EventNames.ContextCreated,
 	                params: context.serializeToBidiValue(),
 	            }, context.id);
 	        });
@@ -2088,7 +2089,7 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(ActionDispatcher$1, "__esModule", { value: true });
 	ActionDispatcher$1.ActionDispatcher = void 0;
-	const protocol_js_1$k = protocol;
+	const protocol_js_1$l = protocol;
 	const assert_js_1$6 = assert$1;
 	const GraphemeTools_1 = GraphemeTools;
 	const InputSource_js_1$1 = InputSource;
@@ -2106,7 +2107,7 @@ var mapperTab = (function () {
 	    const sandbox = await context.getOrCreateSandbox(undefined);
 	    const result = await sandbox.callFunction(CALCULATE_IN_VIEW_CENTER_PT_DECL, false, { type: 'undefined' }, [element]);
 	    if (result.type === 'exception') {
-	        throw new protocol_js_1$k.NoSuchElementException(`Origin element ${element.sharedId} was not found`);
+	        throw new protocol_js_1$l.NoSuchElementException(`Origin element ${element.sharedId} was not found`);
 	    }
 	    (0, assert_js_1$6.assert)(result.result.type === 'array');
 	    (0, assert_js_1$6.assert)(result.result.value?.[0]?.type === 'number');
@@ -2317,7 +2318,7 @@ var mapperTab = (function () {
 	        const { radiusX, radiusY } = getRadii(width ?? 1, height ?? 1);
 	        const { targetX, targetY } = await this.#getCoordinateFromOrigin(origin, offsetX, offsetY, startX, startY);
 	        if (targetX < 0 || targetY < 0) {
-	            throw new protocol_js_1$k.MoveTargetOutOfBoundsException(`Cannot move beyond viewport (x: ${targetX}, y: ${targetY})`);
+	            throw new protocol_js_1$l.MoveTargetOutOfBoundsException(`Cannot move beyond viewport (x: ${targetX}, y: ${targetY})`);
 	        }
 	        let last;
 	        do {
@@ -2357,6 +2358,12 @@ var mapperTab = (function () {
 	                        break;
 	                    case "pen" /* Input.PointerType.Pen */:
 	                        if (source.pressed.size !== 0) {
+	                            // Empty `source.pressed.size` means the pen is not detected by digitizer.
+	                            // Dispatch a mouse event for the pen only if either:
+	                            // 1. the pen is hovering over the digitizer (0);
+	                            // 2. the pen is in contact with the digitizer (1);
+	                            // 3. the pen has at least one button pressed (2, 4, etc).
+	                            // https://www.w3.org/TR/pointerevents/#the-buttons-property
 	                            // TODO: Implement width and height when available.
 	                            await this.#context.cdpTarget.cdpClient.sendCommand('Input.dispatchMouseEvent', {
 	                                type: 'mouseMoved',
@@ -2371,7 +2378,7 @@ var mapperTab = (function () {
 	                                tiltX,
 	                                tiltY,
 	                                twist,
-	                                force: pressure,
+	                                force: pressure ?? 0.5,
 	                            });
 	                        }
 	                        break;
@@ -2432,11 +2439,11 @@ var mapperTab = (function () {
 	    async #dispatchScrollAction(_source, keyState, action) {
 	        const { deltaX: targetDeltaX, deltaY: targetDeltaY, x: offsetX, y: offsetY, origin = 'viewport', duration = this.#tickDuration, } = action;
 	        if (origin === 'pointer') {
-	            throw new protocol_js_1$k.InvalidArgumentException('"pointer" origin is invalid for scrolling.');
+	            throw new protocol_js_1$l.InvalidArgumentException('"pointer" origin is invalid for scrolling.');
 	        }
 	        const { targetX, targetY } = await this.#getCoordinateFromOrigin(origin, offsetX, offsetY, 0, 0);
 	        if (targetX < 0 || targetY < 0) {
-	            throw new protocol_js_1$k.MoveTargetOutOfBoundsException(`Cannot move beyond viewport (x: ${targetX}, y: ${targetY})`);
+	            throw new protocol_js_1$l.MoveTargetOutOfBoundsException(`Cannot move beyond viewport (x: ${targetX}, y: ${targetY})`);
 	        }
 	        let currentDeltaX = 0;
 	        let currentDeltaY = 0;
@@ -2476,7 +2483,7 @@ var mapperTab = (function () {
 	        if (!(0, GraphemeTools_1.isSingleGrapheme)(rawKey)) {
 	            // https://w3c.github.io/webdriver/#dfn-process-a-key-action
 	            // WebDriver spec allows a grapheme to be used.
-	            throw new protocol_js_1$k.InvalidArgumentException(`Invalid key value: ${rawKey}`);
+	            throw new protocol_js_1$l.InvalidArgumentException(`Invalid key value: ${rawKey}`);
 	        }
 	        const isGrapheme = (0, GraphemeTools_1.isSingleComplexGrapheme)(rawKey);
 	        const key = (0, keyUtils_js_1.getNormalizedKey)(rawKey);
@@ -2559,7 +2566,7 @@ var mapperTab = (function () {
 	        if (!(0, GraphemeTools_1.isSingleGrapheme)(rawKey)) {
 	            // https://w3c.github.io/webdriver/#dfn-process-a-key-action
 	            // WebDriver spec allows a grapheme to be used.
-	            throw new protocol_js_1$k.InvalidArgumentException(`Invalid key value: ${rawKey}`);
+	            throw new protocol_js_1$l.InvalidArgumentException(`Invalid key value: ${rawKey}`);
 	        }
 	        const isGrapheme = (0, GraphemeTools_1.isSingleComplexGrapheme)(rawKey);
 	        const key = (0, keyUtils_js_1.getNormalizedKey)(rawKey);
@@ -2707,6 +2714,7 @@ var mapperTab = (function () {
 	    return;
 	};
 	function getCdpButton(button) {
+	    // https://www.w3.org/TR/pointerevents/#the-button-property
 	    switch (button) {
 	        case 0:
 	            return 'left';
@@ -2724,7 +2732,7 @@ var mapperTab = (function () {
 	}
 	function getTilt(action) {
 	    // https://w3c.github.io/pointerevents/#converting-between-tiltx-tilty-and-altitudeangle-azimuthangle
-	    const altitudeAngle = action.altitudeAngle ?? 0;
+	    const altitudeAngle = action.altitudeAngle ?? Math.PI / 2;
 	    const azimuthAngle = action.azimuthAngle ?? 0;
 	    let tiltXRadians = 0;
 	    let tiltYRadians = 0;
@@ -2872,7 +2880,7 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(InputState$1, "__esModule", { value: true });
 	InputState$1.InputState = void 0;
-	const protocol_js_1$j = protocol;
+	const protocol_js_1$k = protocol;
 	const Mutex_js_1 = Mutex$1;
 	const InputSource_js_1 = InputSource;
 	class InputState {
@@ -2907,20 +2915,20 @@ var mapperTab = (function () {
 	                    source = new InputSource_js_1.WheelSource();
 	                    break;
 	                default:
-	                    throw new protocol_js_1$j.InvalidArgumentException(`Expected "${"none" /* SourceType.None */}", "${"key" /* SourceType.Key */}", "${"pointer" /* SourceType.Pointer */}", or "${"wheel" /* SourceType.Wheel */}". Found unknown source type ${type}.`);
+	                    throw new protocol_js_1$k.InvalidArgumentException(`Expected "${"none" /* SourceType.None */}", "${"key" /* SourceType.Key */}", "${"pointer" /* SourceType.Pointer */}", or "${"wheel" /* SourceType.Wheel */}". Found unknown source type ${type}.`);
 	            }
 	            this.#sources.set(id, source);
 	            return source;
 	        }
 	        if (source.type !== type) {
-	            throw new protocol_js_1$j.InvalidArgumentException(`Input source type of ${id} is ${source.type}, but received ${type}.`);
+	            throw new protocol_js_1$k.InvalidArgumentException(`Input source type of ${id} is ${source.type}, but received ${type}.`);
 	        }
 	        return source;
 	    }
 	    get(id) {
 	        const source = this.#sources.get(id);
 	        if (!source) {
-	            throw new protocol_js_1$j.UnknownErrorException(`Internal error.`);
+	            throw new protocol_js_1$k.UnknownErrorException(`Internal error.`);
 	        }
 	        return source;
 	    }
@@ -2997,17 +3005,15 @@ var mapperTab = (function () {
 	 * See the License for the specific language governing permissions and
 	 * limitations under the License.
 	 */
-	const protocol_js_1$i = protocol;
+	const protocol_js_1$j = protocol;
 	const assert_js_1$4 = assert$1;
 	const ActionDispatcher_js_1 = ActionDispatcher$1;
 	const InputStateManager_js_1 = InputStateManager$1;
 	class InputProcessor {
 	    #browsingContextStorage;
-	    #realmStorage;
 	    #inputStateManager = new InputStateManager_js_1.InputStateManager();
-	    constructor(browsingContextStorage, realmStorage) {
+	    constructor(browsingContextStorage) {
 	        this.#browsingContextStorage = browsingContextStorage;
-	        this.#realmStorage = realmStorage;
 	    }
 	    async performActions(params) {
 	        const context = this.#browsingContextStorage.getContext(params.context);
@@ -3051,25 +3057,25 @@ var mapperTab = (function () {
 	            }), false, params.element, [{ type: 'number', value: params.files.length }]);
 	        }
 	        catch {
-	            throw new protocol_js_1$i.NoSuchNodeException(`Could not find element ${params.element.sharedId}`);
+	            throw new protocol_js_1$j.NoSuchNodeException(`Could not find element ${params.element.sharedId}`);
 	        }
 	        (0, assert_js_1$4.assert)(result.type === 'success');
 	        if (result.result.type === 'number') {
 	            switch (result.result.value) {
 	                case 0 /* ErrorCode.Node */: {
-	                    throw new protocol_js_1$i.NoSuchElementException(`Could not find element ${params.element.sharedId}`);
+	                    throw new protocol_js_1$j.NoSuchElementException(`Could not find element ${params.element.sharedId}`);
 	                }
 	                case 1 /* ErrorCode.Element */: {
-	                    throw new protocol_js_1$i.UnableToSetFileInputException(`Element ${params.element.sharedId} is not a input`);
+	                    throw new protocol_js_1$j.UnableToSetFileInputException(`Element ${params.element.sharedId} is not a input`);
 	                }
 	                case 2 /* ErrorCode.Type */: {
-	                    throw new protocol_js_1$i.UnableToSetFileInputException(`Input element ${params.element.sharedId} is not a file type`);
+	                    throw new protocol_js_1$j.UnableToSetFileInputException(`Input element ${params.element.sharedId} is not a file type`);
 	                }
 	                case 3 /* ErrorCode.Disabled */: {
-	                    throw new protocol_js_1$i.UnableToSetFileInputException(`Input element ${params.element.sharedId} is disabled`);
+	                    throw new protocol_js_1$j.UnableToSetFileInputException(`Input element ${params.element.sharedId} is disabled`);
 	                }
 	                case 4 /* ErrorCode.Multiple */: {
-	                    throw new protocol_js_1$i.UnableToSetFileInputException(`Cannot set multiple files on a non-multiple input element`);
+	                    throw new protocol_js_1$j.UnableToSetFileInputException(`Cannot set multiple files on a non-multiple input element`);
 	                }
 	            }
 	        }
@@ -3149,7 +3155,7 @@ var mapperTab = (function () {
 	                    action.parameters.pointerType ??= "mouse" /* Input.PointerType.Mouse */;
 	                    const source = inputState.getOrCreate(action.id, "pointer" /* SourceType.Pointer */, action.parameters.pointerType);
 	                    if (source.subtype !== action.parameters.pointerType) {
-	                        throw new protocol_js_1$i.InvalidArgumentException(`Expected input source ${action.id} to be ${source.subtype}; got ${action.parameters.pointerType}.`);
+	                        throw new protocol_js_1$j.InvalidArgumentException(`Expected input source ${action.id} to be ${source.subtype}; got ${action.parameters.pointerType}.`);
 	                    }
 	                    break;
 	                }
@@ -3174,6 +3180,33 @@ var mapperTab = (function () {
 
 	var NetworkProcessor$1 = {};
 
+	var UrlPatternBrowser = {};
+
+	/**
+	 * Copyright 2024 Google LLC.
+	 * Copyright (c) Microsoft Corporation.
+	 *
+	 * Licensed under the Apache License, Version 2.0 (the "License");
+	 * you may not use this file except in compliance with the License.
+	 * You may obtain a copy of the License at
+	 *
+	 *     http://www.apache.org/licenses/LICENSE-2.0
+	 *
+	 * Unless required by applicable law or agreed to in writing, software
+	 * distributed under the License is distributed on an "AS IS" BASIS,
+	 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	 * See the License for the specific language governing permissions and
+	 * limitations under the License.
+	 */
+	Object.defineProperty(UrlPatternBrowser, "__esModule", { value: true });
+	UrlPatternBrowser.URLPattern = void 0;
+	const URLPattern = globalThis
+	    .URLPattern;
+	UrlPatternBrowser.URLPattern = URLPattern;
+	if (!URLPattern) {
+	    throw new Error('Unable to find URLPattern');
+	}
+
 	/**
 	 * Copyright 2023 Google LLC.
 	 * Copyright (c) Microsoft Corporation.
@@ -3192,7 +3225,8 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(NetworkProcessor$1, "__esModule", { value: true });
 	NetworkProcessor$1.NetworkProcessor = void 0;
-	const protocol_js_1$h = protocol;
+	const protocol_js_1$i = protocol;
+	const UrlPattern_js_1$1 = UrlPatternBrowser;
 	/** Dispatches Network domain commands. */
 	class NetworkProcessor {
 	    #browsingContextStorage;
@@ -3223,7 +3257,7 @@ var mapperTab = (function () {
 	        }
 	        if (params.method !== undefined) {
 	            if (!NetworkProcessor.isMethodValid(params.method)) {
-	                throw new protocol_js_1$h.InvalidArgumentException(`Method '${params.method}' is invalid.`);
+	                throw new protocol_js_1$i.InvalidArgumentException(`Method '${params.method}' is invalid.`);
 	            }
 	        }
 	        if (params.headers) {
@@ -3267,10 +3301,10 @@ var mapperTab = (function () {
 	    async failRequest({ request: networkId, }) {
 	        const request = this.#getRequestOrFail(networkId);
 	        if (request.interceptPhase === "authRequired" /* Network.InterceptPhase.AuthRequired */) {
-	            throw new protocol_js_1$h.InvalidArgumentException(`Request '${networkId}' in 'authRequired' phase cannot be failed`);
+	            throw new protocol_js_1$i.InvalidArgumentException(`Request '${networkId}' in 'authRequired' phase cannot be failed`);
 	        }
 	        if (!request.interceptPhase) {
-	            throw new protocol_js_1$h.NoSuchRequestException(`No blocked request found for network id '${networkId}'`);
+	            throw new protocol_js_1$i.NoSuchRequestException(`No blocked request found for network id '${networkId}'`);
 	        }
 	        await request.failRequest('Failed');
 	        return {};
@@ -3302,17 +3336,17 @@ var mapperTab = (function () {
 	    #getRequestOrFail(id) {
 	        const request = this.#networkStorage.getRequestById(id);
 	        if (!request) {
-	            throw new protocol_js_1$h.NoSuchRequestException(`Network request with ID '${id}' doesn't exist`);
+	            throw new protocol_js_1$i.NoSuchRequestException(`Network request with ID '${id}' doesn't exist`);
 	        }
 	        return request;
 	    }
 	    #getBlockedRequestOrFail(id, phases) {
 	        const request = this.#getRequestOrFail(id);
 	        if (!request.interceptPhase) {
-	            throw new protocol_js_1$h.NoSuchRequestException(`No blocked request found for network id '${id}'`);
+	            throw new protocol_js_1$i.NoSuchRequestException(`No blocked request found for network id '${id}'`);
 	        }
 	        if (request.interceptPhase && !phases.includes(request.interceptPhase)) {
-	            throw new protocol_js_1$h.InvalidArgumentException(`Blocked request for network id '${id}' is in '${request.interceptPhase}' phase`);
+	            throw new protocol_js_1$i.InvalidArgumentException(`Blocked request for network id '${id}' is in '${request.interceptPhase}' phase`);
 	        }
 	        return request;
 	    }
@@ -3331,7 +3365,7 @@ var mapperTab = (function () {
 	            if (headerValue !== headerValue.trim() ||
 	                headerValue.includes('\n') ||
 	                headerValue.includes('\0')) {
-	                throw new protocol_js_1$h.InvalidArgumentException(`Header value '${headerValue}' is not acceptable value`);
+	                throw new protocol_js_1$i.InvalidArgumentException(`Header value '${headerValue}' is not acceptable value`);
 	            }
 	        }
 	    }
@@ -3348,7 +3382,7 @@ var mapperTab = (function () {
 	            return new URL(url);
 	        }
 	        catch (error) {
-	            throw new protocol_js_1$h.InvalidArgumentException(`Invalid URL '${url}': ${error}`);
+	            throw new protocol_js_1$i.InvalidArgumentException(`Invalid URL '${url}': ${error}`);
 	        }
 	    }
 	    static parseUrlPatterns(urlPatterns) {
@@ -3370,7 +3404,7 @@ var mapperTab = (function () {
 	                    if (urlPattern.protocol) {
 	                        urlPattern.protocol = unescapeURLPattern(urlPattern.protocol);
 	                        if (!urlPattern.protocol.match(/^[a-zA-Z+-.]+$/)) {
-	                            throw new protocol_js_1$h.InvalidArgumentException('Forbidden characters');
+	                            throw new protocol_js_1$i.InvalidArgumentException('Forbidden characters');
 	                        }
 	                    }
 	                    if (urlPattern.hostname) {
@@ -3386,7 +3420,7 @@ var mapperTab = (function () {
 	                        }
 	                        if (urlPattern.pathname.includes('#') ||
 	                            urlPattern.pathname.includes('?')) {
-	                            throw new protocol_js_1$h.InvalidArgumentException('Forbidden characters');
+	                            throw new protocol_js_1$i.InvalidArgumentException('Forbidden characters');
 	                        }
 	                    }
 	                    else if (urlPattern.pathname === '') {
@@ -3398,31 +3432,31 @@ var mapperTab = (function () {
 	                            urlPattern.search = `?${urlPattern.search}`;
 	                        }
 	                        if (urlPattern.search.includes('#')) {
-	                            throw new protocol_js_1$h.InvalidArgumentException('Forbidden characters');
+	                            throw new protocol_js_1$i.InvalidArgumentException('Forbidden characters');
 	                        }
 	                    }
 	                    if (urlPattern.protocol === '') {
-	                        throw new protocol_js_1$h.InvalidArgumentException(`URL pattern must specify a protocol`);
+	                        throw new protocol_js_1$i.InvalidArgumentException(`URL pattern must specify a protocol`);
 	                    }
 	                    if (urlPattern.hostname === '') {
-	                        throw new protocol_js_1$h.InvalidArgumentException(`URL pattern must specify a hostname`);
+	                        throw new protocol_js_1$i.InvalidArgumentException(`URL pattern must specify a hostname`);
 	                    }
 	                    if ((urlPattern.hostname?.length ?? 0) > 0) {
 	                        if (urlPattern.protocol?.match(/^file/i)) {
-	                            throw new protocol_js_1$h.InvalidArgumentException(`URL pattern protocol cannot be 'file'`);
+	                            throw new protocol_js_1$i.InvalidArgumentException(`URL pattern protocol cannot be 'file'`);
 	                        }
 	                        if (urlPattern.hostname?.includes(':')) {
-	                            throw new protocol_js_1$h.InvalidArgumentException(`URL pattern hostname must not contain a colon`);
+	                            throw new protocol_js_1$i.InvalidArgumentException(`URL pattern hostname must not contain a colon`);
 	                        }
 	                    }
 	                    if (urlPattern.port === '') {
-	                        throw new protocol_js_1$h.InvalidArgumentException(`URL pattern must specify a port`);
+	                        throw new protocol_js_1$i.InvalidArgumentException(`URL pattern must specify a port`);
 	                    }
 	                    try {
-	                        new URLPattern(urlPattern);
+	                        new UrlPattern_js_1$1.URLPattern(urlPattern);
 	                    }
 	                    catch (error) {
-	                        throw new protocol_js_1$h.InvalidArgumentException(`${error}`);
+	                        throw new protocol_js_1$i.InvalidArgumentException(`${error}`);
 	                    }
 	                    return urlPattern;
 	            }
@@ -3431,7 +3465,7 @@ var mapperTab = (function () {
 	    static wrapInterceptionError(error) {
 	        // https://source.chromium.org/chromium/chromium/src/+/main:content/browser/devtools/protocol/fetch_handler.cc;l=169
 	        if (error?.message.includes('Invalid header')) {
-	            return new protocol_js_1$h.InvalidArgumentException('Invalid header');
+	            return new protocol_js_1$i.InvalidArgumentException('Invalid header');
 	        }
 	        return error;
 	    }
@@ -3447,7 +3481,7 @@ var mapperTab = (function () {
 	    for (const c of pattern) {
 	        if (!isEscaped) {
 	            if (forbidden.has(c)) {
-	                throw new protocol_js_1$h.InvalidArgumentException('Forbidden characters');
+	                throw new protocol_js_1$i.InvalidArgumentException('Forbidden characters');
 	            }
 	            if (c === '\\') {
 	                isEscaped = true;
@@ -3480,7 +3514,7 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(PermissionsProcessor$1, "__esModule", { value: true });
 	PermissionsProcessor$1.PermissionsProcessor = void 0;
-	const protocol_js_1$g = protocol;
+	const protocol_js_1$h = protocol;
 	class PermissionsProcessor {
 	    #browserCdpClient;
 	    constructor(browserCdpClient) {
@@ -3508,7 +3542,7 @@ var mapperTab = (function () {
 	                // existing origins).
 	                return {};
 	            }
-	            throw new protocol_js_1$g.InvalidArgumentException(err.message);
+	            throw new protocol_js_1$h.InvalidArgumentException(err.message);
 	        }
 	        return {};
 	    }
@@ -3539,6 +3573,9 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(uuid, "__esModule", { value: true });
 	uuid.uuidv4 = uuidv4;
+	function bytesToHex(bytes) {
+	    return bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '');
+	}
 	/**
 	 * Generates a random v4 UUID, as specified in RFC4122.
 	 *
@@ -3558,21 +3595,20 @@ var mapperTab = (function () {
 	    }
 	    const randomValues = new Uint8Array(16);
 	    if ('crypto' in globalThis && 'getRandomValues' in globalThis.crypto) {
-	        // Node with
+	        // Node (>=18) with
 	        // https://nodejs.org/dist/latest-v20.x/docs/api/globals.html#crypto_1 or
 	        // browser.
 	        globalThis.crypto.getRandomValues(randomValues);
 	    }
 	    else {
-	        // Node without
+	        // Node (<=16) without
 	        // https://nodejs.org/dist/latest-v20.x/docs/api/globals.html#crypto_1.
-	        // eslint-disable-next-line @typescript-eslint/no-var-requires
+	        // eslint-disable-next-line @typescript-eslint/no-var-requires,@typescript-eslint/no-require-imports
 	        require('crypto').webcrypto.getRandomValues(randomValues);
 	    }
 	    // Set version (4) and variant (RFC4122) bits.
 	    randomValues[6] = (randomValues[6] & 0x0f) | 0x40;
 	    randomValues[8] = (randomValues[8] & 0x3f) | 0x80;
-	    const bytesToHex = (bytes) => bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '');
 	    return [
 	        bytesToHex(randomValues.subarray(0, 4)),
 	        bytesToHex(randomValues.subarray(4, 6)),
@@ -3603,7 +3639,7 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(ChannelProxy$1, "__esModule", { value: true });
 	ChannelProxy$1.ChannelProxy = void 0;
-	const protocol_js_1$f = protocol;
+	const protocol_js_1$g = protocol;
 	const log_js_1$d = log$1;
 	const uuid_js_1$3 = uuid;
 	/**
@@ -3724,12 +3760,14 @@ var mapperTab = (function () {
 	                    },
 	                });
 	                if (message.exceptionDetails) {
-	                    throw message.exceptionDetails;
+	                    throw new Error('Runtime.callFunctionOn in ChannelProxy', {
+	                        cause: message.exceptionDetails,
+	                    });
 	                }
 	                for (const browsingContext of realm.associatedBrowsingContexts) {
 	                    eventManager.registerEvent({
 	                        type: 'event',
-	                        method: protocol_js_1$f.ChromiumBidi.Script.EventNames.Message,
+	                        method: protocol_js_1$g.ChromiumBidi.Script.EventNames.Message,
 	                        params: {
 	                            channel: this.#properties.channel,
 	                            data: realm.cdpToBidiValue(message, this.#properties.ownership ?? "none" /* Script.ResultOwnership.None */),
@@ -3959,18 +3997,45 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(ScriptProcessor$1, "__esModule", { value: true });
 	ScriptProcessor$1.ScriptProcessor = void 0;
-	const protocol_js_1$e = protocol;
+	const protocol_js_1$f = protocol;
 	const PreloadScript_js_1 = PreloadScript$1;
 	class ScriptProcessor {
+	    #eventManager;
 	    #browsingContextStorage;
 	    #realmStorage;
 	    #preloadScriptStorage;
 	    #logger;
-	    constructor(browsingContextStorage, realmStorage, preloadScriptStorage, logger) {
+	    constructor(eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, logger) {
 	        this.#browsingContextStorage = browsingContextStorage;
 	        this.#realmStorage = realmStorage;
 	        this.#preloadScriptStorage = preloadScriptStorage;
 	        this.#logger = logger;
+	        this.#eventManager = eventManager;
+	        this.#eventManager.addSubscribeHook(protocol_js_1$f.ChromiumBidi.Script.EventNames.RealmCreated, this.#onRealmCreatedSubscribeHook.bind(this));
+	    }
+	    #onRealmCreatedSubscribeHook(contextId) {
+	        const context = this.#browsingContextStorage.getContext(contextId);
+	        const contextsToReport = [
+	            context,
+	            ...this.#browsingContextStorage.getContext(contextId).allChildren,
+	        ];
+	        const realms = new Set();
+	        for (const reportContext of contextsToReport) {
+	            const realmsForContext = this.#realmStorage.findRealms({
+	                browsingContextId: reportContext.id,
+	            });
+	            for (const realm of realmsForContext) {
+	                realms.add(realm);
+	            }
+	        }
+	        for (const realm of realms) {
+	            this.#eventManager.registerEvent({
+	                type: 'event',
+	                method: protocol_js_1$f.ChromiumBidi.Script.EventNames.RealmCreated,
+	                params: realm.realmInfo,
+	            }, context.id);
+	        }
+	        return Promise.resolve();
 	    }
 	    async addPreloadScript(params) {
 	        const contexts = this.#browsingContextStorage.verifyTopLevelContextsList(params.contexts);
@@ -3990,7 +4055,7 @@ var mapperTab = (function () {
 	        const { script: id } = params;
 	        const scripts = this.#preloadScriptStorage.find({ id });
 	        if (scripts.length === 0) {
-	            throw new protocol_js_1$e.NoSuchScriptException(`No preload script with id '${id}'`);
+	            throw new protocol_js_1$f.NoSuchScriptException(`No preload script with id '${id}'`);
 	        }
 	        await Promise.all(scripts.map((script) => script.remove()));
 	        this.#preloadScriptStorage.remove({ id });
@@ -4054,26 +4119,79 @@ var mapperTab = (function () {
 	 */
 	Object.defineProperty(SessionProcessor$1, "__esModule", { value: true });
 	SessionProcessor$1.SessionProcessor = void 0;
+	const protocol_js_1$e = protocol;
 	class SessionProcessor {
 	    #eventManager;
 	    #browserCdpClient;
-	    constructor(eventManager, browserCdpClient) {
+	    #initConnection;
+	    #created = false;
+	    constructor(eventManager, browserCdpClient, initConnection) {
 	        this.#eventManager = eventManager;
 	        this.#browserCdpClient = browserCdpClient;
+	        this.#initConnection = initConnection;
 	    }
 	    status() {
 	        return { ready: false, message: 'already connected' };
 	    }
-	    async new(_params) {
-	        // Since mapper exists, there is a session already.
-	        // Still the mapper can handle capabilities for us.
-	        // Currently, only Puppeteer calls here but, eventually, every client
-	        // should delegrate capability processing here.
+	    #mergeCapabilities(capabilitiesRequest) {
+	        // Roughly following https://www.w3.org/TR/webdriver2/#dfn-capabilities-processing.
+	        // Validations should already be done by the parser.
+	        const mergedCapabilities = [];
+	        for (const first of capabilitiesRequest.firstMatch ?? [{}]) {
+	            const result = {
+	                ...capabilitiesRequest.alwaysMatch,
+	            };
+	            for (const key of Object.keys(first)) {
+	                if (result[key] !== undefined) {
+	                    throw new protocol_js_1$e.InvalidArgumentException(`Capability ${key} in firstMatch is already defined in alwaysMatch`);
+	                }
+	                result[key] = first[key];
+	            }
+	            mergedCapabilities.push(result);
+	        }
+	        const match = mergedCapabilities.find((c) => c.browserName === 'chrome') ??
+	            mergedCapabilities[0] ??
+	            {};
+	        match.unhandledPromptBehavior = this.#getUnhandledPromptBehavior(match.unhandledPromptBehavior);
+	        return match;
+	    }
+	    #getUnhandledPromptBehavior(capabilityValue) {
+	        if (capabilityValue === undefined) {
+	            return undefined;
+	        }
+	        if (typeof capabilityValue === 'object') {
+	            // Do not validate capabilities. Incorrect ones will be ignored by Mapper.
+	            return capabilityValue;
+	        }
+	        if (typeof capabilityValue !== 'string') {
+	            throw new protocol_js_1$e.InvalidArgumentException(`Unexpected 'unhandledPromptBehavior' type: ${typeof capabilityValue}`);
+	        }
+	        switch (capabilityValue) {
+	            case 'accept':
+	            case 'accept and notify':
+	                return { default: "accept" /* Session.UserPromptHandlerType.Accept */ };
+	            case 'dismiss':
+	            case 'dismiss and notify':
+	                return { default: "dismiss" /* Session.UserPromptHandlerType.Dismiss */ };
+	            case 'ignore':
+	                return { default: "ignore" /* Session.UserPromptHandlerType.Ignore */ };
+	            default:
+	                throw new protocol_js_1$e.InvalidArgumentException(`Unexpected 'unhandledPromptBehavior' value: ${capabilityValue}`);
+	        }
+	    }
+	    async new(params) {
+	        if (this.#created) {
+	            throw new Error('Session has been already created.');
+	        }
+	        this.#created = true;
+	        const matchedCapabitlites = this.#mergeCapabilities(params.capabilities);
+	        await this.#initConnection(matchedCapabitlites);
 	        const version = await this.#browserCdpClient.sendCommand('Browser.getVersion');
 	        return {
 	            sessionId: 'unknown',
 	            capabilities: {
-	                acceptInsecureCerts: false,
+	                ...matchedCapabitlites,
+	                acceptInsecureCerts: matchedCapabitlites.acceptInsecureCerts ?? false,
 	                browserName: version.product,
 	                browserVersion: version.revision,
 	                platformName: '',
@@ -4134,45 +4252,6 @@ var mapperTab = (function () {
 	    return Buffer.from(base64Str, 'base64').toString('ascii');
 	}
 
-	var UrlPattern = {};
-
-	var M=Object.defineProperty;var Pe=Object.getOwnPropertyDescriptor;var Re=Object.getOwnPropertyNames;var Ee=Object.prototype.hasOwnProperty;var Oe=(e,t)=>{for(var r in t)M(e,r,{get:t[r],enumerable:!0});},ke=(e,t,r,n)=>{if(t&&typeof t=="object"||typeof t=="function")for(let a of Re(t))!Ee.call(e,a)&&a!==r&&M(e,a,{get:()=>t[a],enumerable:!(n=Pe(t,a))||n.enumerable});return e};var Te=e=>ke(M({},"__esModule",{value:!0}),e);var Ne={};Oe(Ne,{URLPattern:()=>Y});var urlpattern=Te(Ne);var R=class{type=3;name="";prefix="";value="";suffix="";modifier=3;constructor(t,r,n,a,c,l){this.type=t,this.name=r,this.prefix=n,this.value=a,this.suffix=c,this.modifier=l;}hasCustomName(){return this.name!==""&&typeof this.name!="number"}},Ae=/[$_\p{ID_Start}]/u,ye=/[$_\u200C\u200D\p{ID_Continue}]/u,v=".*";function we(e,t){return (/^[\x00-\x7F]*$/).test(e)}function D(e,t=!1){let r=[],n=0;for(;n<e.length;){let a=e[n],c=function(l){if(!t)throw new TypeError(l);r.push({type:"INVALID_CHAR",index:n,value:e[n++]});};if(a==="*"){r.push({type:"ASTERISK",index:n,value:e[n++]});continue}if(a==="+"||a==="?"){r.push({type:"OTHER_MODIFIER",index:n,value:e[n++]});continue}if(a==="\\"){r.push({type:"ESCAPED_CHAR",index:n++,value:e[n++]});continue}if(a==="{"){r.push({type:"OPEN",index:n,value:e[n++]});continue}if(a==="}"){r.push({type:"CLOSE",index:n,value:e[n++]});continue}if(a===":"){let l="",s=n+1;for(;s<e.length;){let i=e.substr(s,1);if(s===n+1&&Ae.test(i)||s!==n+1&&ye.test(i)){l+=e[s++];continue}break}if(!l){c(`Missing parameter name at ${n}`);continue}r.push({type:"NAME",index:n,value:l}),n=s;continue}if(a==="("){let l=1,s="",i=n+1,o=!1;if(e[i]==="?"){c(`Pattern cannot start with "?" at ${i}`);continue}for(;i<e.length;){if(!we(e[i])){c(`Invalid character '${e[i]}' at ${i}.`),o=!0;break}if(e[i]==="\\"){s+=e[i++]+e[i++];continue}if(e[i]===")"){if(l--,l===0){i++;break}}else if(e[i]==="("&&(l++,e[i+1]!=="?")){c(`Capturing groups are not allowed at ${i}`),o=!0;break}s+=e[i++];}if(o)continue;if(l){c(`Unbalanced pattern at ${n}`);continue}if(!s){c(`Missing pattern at ${n}`);continue}r.push({type:"REGEX",index:n,value:s}),n=i;continue}r.push({type:"CHAR",index:n,value:e[n++]});}return r.push({type:"END",index:n,value:""}),r}function F(e,t={}){let r=D(e);t.delimiter??="/#?",t.prefixes??="./";let n=`[^${S(t.delimiter)}]+?`,a=[],c=0,l=0,i=new Set,o=h=>{if(l<r.length&&r[l].type===h)return r[l++].value},f=()=>o("OTHER_MODIFIER")??o("ASTERISK"),d=h=>{let u=o(h);if(u!==void 0)return u;let{type:p,index:A}=r[l];throw new TypeError(`Unexpected ${p} at ${A}, expected ${h}`)},T=()=>{let h="",u;for(;u=o("CHAR")??o("ESCAPED_CHAR");)h+=u;return h},xe=h=>h,L=t.encodePart||xe,I="",U=h=>{I+=h;},$=()=>{I.length&&(a.push(new R(3,"","",L(I),"",3)),I="");},X=(h,u,p,A,Z)=>{let g=3;switch(Z){case"?":g=1;break;case"*":g=0;break;case"+":g=2;break}if(!u&&!p&&g===3){U(h);return}if($(),!u&&!p){if(!h)return;a.push(new R(3,"","",L(h),"",g));return}let m;p?p==="*"?m=v:m=p:m=n;let O=2;m===n?(O=1,m=""):m===v&&(O=0,m="");let P;if(u?P=u:p&&(P=c++),i.has(P))throw new TypeError(`Duplicate name '${P}'.`);i.add(P),a.push(new R(O,P,L(h),m,L(A),g));};for(;l<r.length;){let h=o("CHAR"),u=o("NAME"),p=o("REGEX");if(!u&&!p&&(p=o("ASTERISK")),u||p){let g=h??"";t.prefixes.indexOf(g)===-1&&(U(g),g=""),$();let m=f();X(g,u,p,"",m);continue}let A=h??o("ESCAPED_CHAR");if(A){U(A);continue}if(o("OPEN")){let g=T(),m=o("NAME"),O=o("REGEX");!m&&!O&&(O=o("ASTERISK"));let P=T();d("CLOSE");let be=f();X(g,m,O,P,be);continue}$(),d("END");}return a}function S(e){return e.replace(/([.+*?^${}()[\]|/\\])/g,"\\$1")}function B(e){return e&&e.ignoreCase?"ui":"u"}function q(e,t,r){return W(F(e,r),t,r)}function k(e){switch(e){case 0:return "*";case 1:return "?";case 2:return "+";case 3:return ""}}function W(e,t,r={}){r.delimiter??="/#?",r.prefixes??="./",r.sensitive??=!1,r.strict??=!1,r.end??=!0,r.start??=!0,r.endsWith="";let n=r.start?"^":"";for(let s of e){if(s.type===3){s.modifier===3?n+=S(s.value):n+=`(?:${S(s.value)})${k(s.modifier)}`;continue}t&&t.push(s.name);let i=`[^${S(r.delimiter)}]+?`,o=s.value;if(s.type===1?o=i:s.type===0&&(o=v),!s.prefix.length&&!s.suffix.length){s.modifier===3||s.modifier===1?n+=`(${o})${k(s.modifier)}`:n+=`((?:${o})${k(s.modifier)})`;continue}if(s.modifier===3||s.modifier===1){n+=`(?:${S(s.prefix)}(${o})${S(s.suffix)})`,n+=k(s.modifier);continue}n+=`(?:${S(s.prefix)}`,n+=`((?:${o})(?:`,n+=S(s.suffix),n+=S(s.prefix),n+=`(?:${o}))*)${S(s.suffix)})`,s.modifier===0&&(n+="?");}let a=`[${S(r.endsWith)}]|$`,c=`[${S(r.delimiter)}]`;if(r.end)return r.strict||(n+=`${c}?`),r.endsWith.length?n+=`(?=${a})`:n+="$",new RegExp(n,B(r));r.strict||(n+=`(?:${c}(?=${a}))?`);let l=!1;if(e.length){let s=e[e.length-1];s.type===3&&s.modifier===3&&(l=r.delimiter.indexOf(s)>-1);}return l||(n+=`(?=${c}|${a})`),new RegExp(n,B(r))}var x={delimiter:"",prefixes:"",sensitive:!0,strict:!0},J={delimiter:".",prefixes:"",sensitive:!0,strict:!0},Q={delimiter:"/",prefixes:"/",sensitive:!0,strict:!0};function ee(e,t){return e.length?e[0]==="/"?!0:!t||e.length<2?!1:(e[0]=="\\"||e[0]=="{")&&e[1]=="/":!1}function te(e,t){return e.startsWith(t)?e.substring(t.length,e.length):e}function Ce(e,t){return e.endsWith(t)?e.substr(0,e.length-t.length):e}function _(e){return !e||e.length<2?!1:e[0]==="["||(e[0]==="\\"||e[0]==="{")&&e[1]==="["}var re=["ftp","file","http","https","ws","wss"];function N(e){if(!e)return !0;for(let t of re)if(e.test(t))return !0;return !1}function ne(e,t){if(e=te(e,"#"),t||e==="")return e;let r=new URL("https://example.com");return r.hash=e,r.hash?r.hash.substring(1,r.hash.length):""}function se(e,t){if(e=te(e,"?"),t||e==="")return e;let r=new URL("https://example.com");return r.search=e,r.search?r.search.substring(1,r.search.length):""}function ie(e,t){return t||e===""?e:_(e)?K(e):j(e)}function ae(e,t){if(t||e==="")return e;let r=new URL("https://example.com");return r.password=e,r.password}function oe(e,t){if(t||e==="")return e;let r=new URL("https://example.com");return r.username=e,r.username}function ce(e,t,r){if(r||e==="")return e;if(t&&!re.includes(t))return new URL(`${t}:${e}`).pathname;let n=e[0]=="/";return e=new URL(n?e:"/-"+e,"https://example.com").pathname,n||(e=e.substring(2,e.length)),e}function le(e,t,r){return z(t)===e&&(e=""),r||e===""?e:G(e)}function fe(e,t){return e=Ce(e,":"),t||e===""?e:y(e)}function z(e){switch(e){case"ws":case"http":return "80";case"wws":case"https":return "443";case"ftp":return "21";default:return ""}}function y(e){if(e==="")return e;if(/^[-+.A-Za-z0-9]*$/.test(e))return e.toLowerCase();throw new TypeError(`Invalid protocol '${e}'.`)}function he(e){if(e==="")return e;let t=new URL("https://example.com");return t.username=e,t.username}function ue(e){if(e==="")return e;let t=new URL("https://example.com");return t.password=e,t.password}function j(e){if(e==="")return e;if(/[\t\n\r #%/:<>?@[\]^\\|]/g.test(e))throw new TypeError(`Invalid hostname '${e}'`);let t=new URL("https://example.com");return t.hostname=e,t.hostname}function K(e){if(e==="")return e;if(/[^0-9a-fA-F[\]:]/g.test(e))throw new TypeError(`Invalid IPv6 hostname '${e}'`);return e.toLowerCase()}function G(e){if(e===""||/^[0-9]*$/.test(e)&&parseInt(e)<=65535)return e;throw new TypeError(`Invalid port '${e}'.`)}function de(e){if(e==="")return e;let t=new URL("https://example.com");return t.pathname=e[0]!=="/"?"/-"+e:e,e[0]!=="/"?t.pathname.substring(2,t.pathname.length):t.pathname}function pe(e){return e===""?e:new URL(`data:${e}`).pathname}function ge(e){if(e==="")return e;let t=new URL("https://example.com");return t.search=e,t.search.substring(1,t.search.length)}function me(e){if(e==="")return e;let t=new URL("https://example.com");return t.hash=e,t.hash.substring(1,t.hash.length)}var H=class{#i;#n=[];#t={};#e=0;#s=1;#l=0;#o=0;#d=0;#p=0;#g=!1;constructor(t){this.#i=t;}get result(){return this.#t}parse(){for(this.#n=D(this.#i,!0);this.#e<this.#n.length;this.#e+=this.#s){if(this.#s=1,this.#n[this.#e].type==="END"){if(this.#o===0){this.#b(),this.#f()?this.#r(9,1):this.#h()?this.#r(8,1):this.#r(7,0);continue}else if(this.#o===2){this.#u(5);continue}this.#r(10,0);break}if(this.#d>0)if(this.#A())this.#d-=1;else continue;if(this.#T()){this.#d+=1;continue}switch(this.#o){case 0:this.#P()&&this.#u(1);break;case 1:if(this.#P()){this.#C();let t=7,r=1;this.#E()?(t=2,r=3):this.#g&&(t=2),this.#r(t,r);}break;case 2:this.#S()?this.#u(3):(this.#x()||this.#h()||this.#f())&&this.#u(5);break;case 3:this.#O()?this.#r(4,1):this.#S()&&this.#r(5,1);break;case 4:this.#S()&&this.#r(5,1);break;case 5:this.#y()?this.#p+=1:this.#w()&&(this.#p-=1),this.#k()&&!this.#p?this.#r(6,1):this.#x()?this.#r(7,0):this.#h()?this.#r(8,1):this.#f()&&this.#r(9,1);break;case 6:this.#x()?this.#r(7,0):this.#h()?this.#r(8,1):this.#f()&&this.#r(9,1);break;case 7:this.#h()?this.#r(8,1):this.#f()&&this.#r(9,1);break;case 8:this.#f()&&this.#r(9,1);break;}}this.#t.hostname!==void 0&&this.#t.port===void 0&&(this.#t.port="");}#r(t,r){switch(this.#o){case 0:break;case 1:this.#t.protocol=this.#c();break;case 2:break;case 3:this.#t.username=this.#c();break;case 4:this.#t.password=this.#c();break;case 5:this.#t.hostname=this.#c();break;case 6:this.#t.port=this.#c();break;case 7:this.#t.pathname=this.#c();break;case 8:this.#t.search=this.#c();break;case 9:this.#t.hash=this.#c();break;}this.#o!==0&&t!==10&&([1,2,3,4].includes(this.#o)&&[6,7,8,9].includes(t)&&(this.#t.hostname??=""),[1,2,3,4,5,6].includes(this.#o)&&[8,9].includes(t)&&(this.#t.pathname??=this.#g?"/":""),[1,2,3,4,5,6,7].includes(this.#o)&&t===9&&(this.#t.search??="")),this.#R(t,r);}#R(t,r){this.#o=t,this.#l=this.#e+r,this.#e+=r,this.#s=0;}#b(){this.#e=this.#l,this.#s=0;}#u(t){this.#b(),this.#o=t;}#m(t){return t<0&&(t=this.#n.length-t),t<this.#n.length?this.#n[t]:this.#n[this.#n.length-1]}#a(t,r){let n=this.#m(t);return n.value===r&&(n.type==="CHAR"||n.type==="ESCAPED_CHAR"||n.type==="INVALID_CHAR")}#P(){return this.#a(this.#e,":")}#E(){return this.#a(this.#e+1,"/")&&this.#a(this.#e+2,"/")}#S(){return this.#a(this.#e,"@")}#O(){return this.#a(this.#e,":")}#k(){return this.#a(this.#e,":")}#x(){return this.#a(this.#e,"/")}#h(){if(this.#a(this.#e,"?"))return !0;if(this.#n[this.#e].value!=="?")return !1;let t=this.#m(this.#e-1);return t.type!=="NAME"&&t.type!=="REGEX"&&t.type!=="CLOSE"&&t.type!=="ASTERISK"}#f(){return this.#a(this.#e,"#")}#T(){return this.#n[this.#e].type=="OPEN"}#A(){return this.#n[this.#e].type=="CLOSE"}#y(){return this.#a(this.#e,"[")}#w(){return this.#a(this.#e,"]")}#c(){let t=this.#n[this.#e],r=this.#m(this.#l).index;return this.#i.substring(r,t.index)}#C(){let t={};Object.assign(t,x),t.encodePart=y;let r=q(this.#c(),void 0,t);this.#g=N(r);}};var V=["protocol","username","password","hostname","port","pathname","search","hash"],E="*";function Se(e,t){if(typeof e!="string")throw new TypeError("parameter 1 is not of type 'string'.");let r=new URL(e,t);return {protocol:r.protocol.substring(0,r.protocol.length-1),username:r.username,password:r.password,hostname:r.hostname,port:r.port,pathname:r.pathname,search:r.search!==""?r.search.substring(1,r.search.length):void 0,hash:r.hash!==""?r.hash.substring(1,r.hash.length):void 0}}function b(e,t){return t?C(e):e}function w(e,t,r){let n;if(typeof t.baseURL=="string")try{n=new URL(t.baseURL),t.protocol===void 0&&(e.protocol=b(n.protocol.substring(0,n.protocol.length-1),r)),!r&&t.protocol===void 0&&t.hostname===void 0&&t.port===void 0&&t.username===void 0&&(e.username=b(n.username,r)),!r&&t.protocol===void 0&&t.hostname===void 0&&t.port===void 0&&t.username===void 0&&t.password===void 0&&(e.password=b(n.password,r)),t.protocol===void 0&&t.hostname===void 0&&(e.hostname=b(n.hostname,r)),t.protocol===void 0&&t.hostname===void 0&&t.port===void 0&&(e.port=b(n.port,r)),t.protocol===void 0&&t.hostname===void 0&&t.port===void 0&&t.pathname===void 0&&(e.pathname=b(n.pathname,r)),t.protocol===void 0&&t.hostname===void 0&&t.port===void 0&&t.pathname===void 0&&t.search===void 0&&(e.search=b(n.search.substring(1,n.search.length),r)),t.protocol===void 0&&t.hostname===void 0&&t.port===void 0&&t.pathname===void 0&&t.search===void 0&&t.hash===void 0&&(e.hash=b(n.hash.substring(1,n.hash.length),r));}catch{throw new TypeError(`invalid baseURL '${t.baseURL}'.`)}if(typeof t.protocol=="string"&&(e.protocol=fe(t.protocol,r)),typeof t.username=="string"&&(e.username=oe(t.username,r)),typeof t.password=="string"&&(e.password=ae(t.password,r)),typeof t.hostname=="string"&&(e.hostname=ie(t.hostname,r)),typeof t.port=="string"&&(e.port=le(t.port,e.protocol,r)),typeof t.pathname=="string"){if(e.pathname=t.pathname,n&&!ee(e.pathname,r)){let a=n.pathname.lastIndexOf("/");a>=0&&(e.pathname=b(n.pathname.substring(0,a+1),r)+e.pathname);}e.pathname=ce(e.pathname,e.protocol,r);}return typeof t.search=="string"&&(e.search=se(t.search,r)),typeof t.hash=="string"&&(e.hash=ne(t.hash,r)),e}function C(e){return e.replace(/([+*?:{}()\\])/g,"\\$1")}function Le(e){return e.replace(/([.+*?^${}()[\]|/\\])/g,"\\$1")}function Ie(e,t){t.delimiter??="/#?",t.prefixes??="./",t.sensitive??=!1,t.strict??=!1,t.end??=!0,t.start??=!0,t.endsWith="";let r=".*",n=`[^${Le(t.delimiter)}]+?`,a=/[$_\u200C\u200D\p{ID_Continue}]/u,c="";for(let l=0;l<e.length;++l){let s=e[l];if(s.type===3){if(s.modifier===3){c+=C(s.value);continue}c+=`{${C(s.value)}}${k(s.modifier)}`;continue}let i=s.hasCustomName(),o=!!s.suffix.length||!!s.prefix.length&&(s.prefix.length!==1||!t.prefixes.includes(s.prefix)),f=l>0?e[l-1]:null,d=l<e.length-1?e[l+1]:null;if(!o&&i&&s.type===1&&s.modifier===3&&d&&!d.prefix.length&&!d.suffix.length)if(d.type===3){let T=d.value.length>0?d.value[0]:"";o=a.test(T);}else o=!d.hasCustomName();if(!o&&!s.prefix.length&&f&&f.type===3){let T=f.value[f.value.length-1];o=t.prefixes.includes(T);}o&&(c+="{"),c+=C(s.prefix),i&&(c+=`:${s.name}`),s.type===2?c+=`(${s.value})`:s.type===1?i||(c+=`(${n})`):s.type===0&&(!i&&(!f||f.type===3||f.modifier!==3||o||s.prefix!=="")?c+="*":c+=`(${r})`),s.type===1&&i&&s.suffix.length&&a.test(s.suffix[0])&&(c+="\\"),c+=C(s.suffix),o&&(c+="}"),s.modifier!==3&&(c+=k(s.modifier));}return c}var Y=class{#i;#n={};#t={};#e={};#s={};#l=!1;constructor(t={},r,n){try{let a;if(typeof r=="string"?a=r:n=r,typeof t=="string"){let i=new H(t);if(i.parse(),t=i.result,a===void 0&&typeof t.protocol!="string")throw new TypeError("A base URL must be provided for a relative constructor string.");t.baseURL=a;}else {if(!t||typeof t!="object")throw new TypeError("parameter 1 is not of type 'string' and cannot convert to dictionary.");if(a)throw new TypeError("parameter 1 is not of type 'string'.")}typeof n>"u"&&(n={ignoreCase:!1});let c={ignoreCase:n.ignoreCase===!0},l={pathname:E,protocol:E,username:E,password:E,hostname:E,port:E,search:E,hash:E};this.#i=w(l,t,!0),z(this.#i.protocol)===this.#i.port&&(this.#i.port="");let s;for(s of V){if(!(s in this.#i))continue;let i={},o=this.#i[s];switch(this.#t[s]=[],s){case"protocol":Object.assign(i,x),i.encodePart=y;break;case"username":Object.assign(i,x),i.encodePart=he;break;case"password":Object.assign(i,x),i.encodePart=ue;break;case"hostname":Object.assign(i,J),_(o)?i.encodePart=K:i.encodePart=j;break;case"port":Object.assign(i,x),i.encodePart=G;break;case"pathname":N(this.#n.protocol)?(Object.assign(i,Q,c),i.encodePart=de):(Object.assign(i,x,c),i.encodePart=pe);break;case"search":Object.assign(i,x,c),i.encodePart=ge;break;case"hash":Object.assign(i,x,c),i.encodePart=me;break}try{this.#s[s]=F(o,i),this.#n[s]=W(this.#s[s],this.#t[s],i),this.#e[s]=Ie(this.#s[s],i),this.#l=this.#l||this.#s[s].some(f=>f.type===2);}catch{throw new TypeError(`invalid ${s} pattern '${this.#i[s]}'.`)}}}catch(a){throw new TypeError(`Failed to construct 'URLPattern': ${a.message}`)}}test(t={},r){let n={pathname:"",protocol:"",username:"",password:"",hostname:"",port:"",search:"",hash:""};if(typeof t!="string"&&r)throw new TypeError("parameter 1 is not of type 'string'.");if(typeof t>"u")return !1;try{typeof t=="object"?n=w(n,t,!1):n=w(n,Se(t,r),!1);}catch{return !1}let a;for(a of V)if(!this.#n[a].exec(n[a]))return !1;return !0}exec(t={},r){let n={pathname:"",protocol:"",username:"",password:"",hostname:"",port:"",search:"",hash:""};if(typeof t!="string"&&r)throw new TypeError("parameter 1 is not of type 'string'.");if(typeof t>"u")return;try{typeof t=="object"?n=w(n,t,!1):n=w(n,Se(t,r),!1);}catch{return null}let a={};r?a.inputs=[t,r]:a.inputs=[t];let c;for(c of V){let l=this.#n[c].exec(n[c]);if(!l)return null;let s={};for(let[i,o]of this.#t[c].entries())if(typeof o=="string"||typeof o=="number"){let f=l[i+1];s[o]=f;}a[c]={input:n[c]??"",groups:s};}return a}static compareComponent(t,r,n){let a=(i,o)=>{for(let f of ["type","modifier","prefix","value","suffix"]){if(i[f]<o[f])return -1;if(i[f]===o[f])continue;return 1}return 0},c=new R(3,"","","","",3),l=new R(0,"","","","",3),s=(i,o)=>{let f=0;for(;f<Math.min(i.length,o.length);++f){let d=a(i[f],o[f]);if(d)return d}return i.length===o.length?0:a(i[f]??c,o[f]??c)};return !r.#e[t]&&!n.#e[t]?0:r.#e[t]&&!n.#e[t]?s(r.#s[t],[l]):!r.#e[t]&&n.#e[t]?s([l],n.#s[t]):s(r.#s[t],n.#s[t])}get protocol(){return this.#e.protocol}get username(){return this.#e.username}get password(){return this.#e.password}get hostname(){return this.#e.hostname}get port(){return this.#e.port}get pathname(){return this.#e.pathname}get search(){return this.#e.search}get hash(){return this.#e.hash}get hasRegExpGroups(){return this.#l}};
-
-	const { URLPattern: URLPattern$2 } = urlpattern;
-
-	var urlpatternPolyfill = { URLPattern: URLPattern$2 };
-
-	if (!globalThis.URLPattern) {
-	  globalThis.URLPattern = URLPattern$2;
-	}
-
-	Object.defineProperty(UrlPattern, "__esModule", { value: true });
-	UrlPattern.URLPattern = void 0;
-	/**
-	 * Copyright 2023 Google LLC.
-	 * Copyright (c) Microsoft Corporation.
-	 *
-	 * Licensed under the Apache License, Version 2.0 (the "License");
-	 * you may not use this file except in compliance with the License.
-	 * You may obtain a copy of the License at
-	 *
-	 *     http://www.apache.org/licenses/LICENSE-2.0
-	 *
-	 * Unless required by applicable law or agreed to in writing, software
-	 * distributed under the License is distributed on an "AS IS" BASIS,
-	 * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-	 * See the License for the specific language governing permissions and
-	 * limitations under the License.
-	 */
-	const urlpattern_polyfill_1 = urlpatternPolyfill;
-	// XXX: Switch to native URLPattern when available.
-	// https://github.com/nodejs/node/issues/40844
-	let URLPattern$1 = urlpattern_polyfill_1.URLPattern;
-	UrlPattern.URLPattern = URLPattern$1;
-	if ('URLPattern' in globalThis) {
-	    UrlPattern.URLPattern = URLPattern$1 = globalThis.URLPattern;
-	}
-
 	/*
 	 * Copyright 2023 Google LLC.
 	 * Copyright (c) Microsoft Corporation.
@@ -4206,9 +4285,10 @@ var mapperTab = (function () {
 	NetworkUtils.isSpecialScheme = isSpecialScheme;
 	NetworkUtils.matchUrlPattern = matchUrlPattern;
 	NetworkUtils.bidiBodySizeFromCdpPostDataEntries = bidiBodySizeFromCdpPostDataEntries;
+	NetworkUtils.getTiming = getTiming;
 	const ErrorResponse_js_1 = ErrorResponse;
 	const Base64_js_1 = Base64;
-	const UrlPattern_js_1 = UrlPattern;
+	const UrlPattern_js_1 = UrlPatternBrowser;
 	function computeHeadersSize(headers) {
 	    const requestHeaders = headers.reduce((acc, header) => {
 	        return `${acc}${header.name}: ${header.value.value}\r\n`;
@@ -4457,6 +4537,15 @@ var mapperTab = (function () {
 	        size += atob(entry.bytes ?? '').length;
 	    }
 	    return size;
+	}
+	function getTiming(timing) {
+	    if (!timing) {
+	        return 0;
+	    }
+	    if (timing < 0) {
+	        return 0;
+	    }
+	    return timing;
 	}
 
 	Object.defineProperty(StorageProcessor$1, "__esModule", { value: true });
@@ -4752,7 +4841,7 @@ var mapperTab = (function () {
 	    // keep-sorted end
 	    #parser;
 	    #logger;
-	    constructor(cdpConnection, browserCdpClient, eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, networkStorage, parser = new BidiNoOpParser_js_1.BidiNoOpParser(), logger) {
+	    constructor(cdpConnection, browserCdpClient, eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, networkStorage, parser = new BidiNoOpParser_js_1.BidiNoOpParser(), initConnection, logger) {
 	        super();
 	        this.#parser = parser;
 	        this.#logger = logger;
@@ -4760,11 +4849,11 @@ var mapperTab = (function () {
 	        this.#browserProcessor = new BrowserProcessor_js_1.BrowserProcessor(browserCdpClient);
 	        this.#browsingContextProcessor = new BrowsingContextProcessor_js_1.BrowsingContextProcessor(browserCdpClient, browsingContextStorage, eventManager);
 	        this.#cdpProcessor = new CdpProcessor_js_1.CdpProcessor(browsingContextStorage, realmStorage, cdpConnection, browserCdpClient);
-	        this.#inputProcessor = new InputProcessor_js_1.InputProcessor(browsingContextStorage, realmStorage);
+	        this.#inputProcessor = new InputProcessor_js_1.InputProcessor(browsingContextStorage);
 	        this.#networkProcessor = new NetworkProcessor_js_1.NetworkProcessor(browsingContextStorage, networkStorage);
 	        this.#permissionsProcessor = new PermissionsProcessor_js_1.PermissionsProcessor(browserCdpClient);
-	        this.#scriptProcessor = new ScriptProcessor_js_1.ScriptProcessor(browsingContextStorage, realmStorage, preloadScriptStorage, logger);
-	        this.#sessionProcessor = new SessionProcessor_js_1.SessionProcessor(eventManager, browserCdpClient);
+	        this.#scriptProcessor = new ScriptProcessor_js_1.ScriptProcessor(eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, logger);
+	        this.#sessionProcessor = new SessionProcessor_js_1.SessionProcessor(eventManager, browserCdpClient, initConnection);
 	        this.#storageProcessor = new StorageProcessor_js_1.StorageProcessor(browserCdpClient, browsingContextStorage, logger);
 	        // keep-sorted end
 	    }
@@ -5195,6 +5284,7 @@ var mapperTab = (function () {
 	     * target's `globalThis`.
 	     */
 	    async serializeCdpObject(cdpRemoteObject, resultOwnership) {
+	        // TODO: if the object is a primitive, return it directly without CDP roundtrip.
 	        const argument = Realm.#cdpRemoteObjectToCallArgument(cdpRemoteObject);
 	        const cdpValue = await this.cdpClient.sendCommand('Runtime.callFunctionOn', {
 	            functionDeclaration: String((remoteObject) => remoteObject),
@@ -5786,10 +5876,21 @@ var mapperTab = (function () {
 	    #previousViewport = { width: 0, height: 0 };
 	    // The URL of the navigation that is currently in progress. A workaround of the CDP
 	    // lacking URL for the pending navigation events, e.g. `Page.frameStartedLoading`.
-	    // Set on `Page.navigate`, `Page.reload` commands and on deprecated CDP event
-	    // `Page.frameScheduledNavigation`.
+	    // Set on `Page.navigate`, `Page.reload` commands, on `Page.frameRequestedNavigation` or
+	    // on a deprecated `Page.frameScheduledNavigation` event. The latest is required as the
+	    // `Page.frameRequestedNavigation` event is not emitted for same-document navigations.
 	    #pendingNavigationUrl;
-	    #virtualNavigationId = (0, uuid_1.uuidv4)();
+	    // Navigation ID is required, as CDP `loaderId` cannot be mapped 1:1 to all the
+	    // navigations (e.g. same document navigations). Updated after each navigation,
+	    // including same-document ones.
+	    #navigationId = (0, uuid_1.uuidv4)();
+	    // When a new navigation is started via `BrowsingContext.navigate` with `wait` set to
+	    // `None`, the command result should have `navigation` value, but mapper does not have
+	    // it yet. This value will be set to `navigationId` after next .
+	    #pendingNavigationId;
+	    // Set if there is a pending navigation initiated by `BrowsingContext.navigate` command.
+	    // The promise is resolved when the navigation is finished or rejected when canceled.
+	    #pendingCommandNavigation;
 	    #originalOpener;
 	    // Set when the user prompt is opened. Required to provide the type in closing event.
 	    #lastUserPromptType;
@@ -5847,30 +5948,28 @@ var mapperTab = (function () {
 	    get navigableId() {
 	        return this.#loaderId;
 	    }
-	    /**
-	     * Virtual navigation ID. Required, as CDP `loaderId` cannot be mapped 1:1 to all the
-	     * navigations (e.g. same document navigations). Updated after each navigation,
-	     * including same-document ones.
-	     */
-	    get virtualNavigationId() {
-	        return this.#virtualNavigationId;
+	    get navigationId() {
+	        return this.#navigationId;
 	    }
-	    dispose() {
+	    dispose(emitContextDestroyed) {
+	        this.#pendingCommandNavigation?.reject(new protocol_js_1$9.UnknownErrorException('navigation canceled by context disposal'));
 	        this.#deleteAllChildren();
 	        this.#realmStorage.deleteRealms({
 	            browsingContextId: this.id,
 	        });
-	        // Remove context from the parent.
+	        // Delete context from the parent.
 	        if (!this.isTopLevelContext()) {
 	            this.parent.#children.delete(this.id);
 	        }
 	        // Fail all ongoing navigations.
 	        this.#failLifecycleIfNotFinished();
-	        this.#eventManager.registerEvent({
-	            type: 'event',
-	            method: protocol_js_1$9.ChromiumBidi.BrowsingContext.EventNames.ContextDestroyed,
-	            params: this.serializeToBidiValue(),
-	        }, this.id);
+	        if (emitContextDestroyed) {
+	            this.#eventManager.registerEvent({
+	                type: 'event',
+	                method: protocol_js_1$9.ChromiumBidi.BrowsingContext.EventNames.ContextDestroyed,
+	                params: this.serializeToBidiValue(),
+	            }, this.id);
+	        }
 	        this.#browsingContextStorage.deleteContextById(this.id);
 	    }
 	    /** Returns the ID of this context. */
@@ -5930,8 +6029,8 @@ var mapperTab = (function () {
 	    addChild(childId) {
 	        this.#children.add(childId);
 	    }
-	    #deleteAllChildren() {
-	        this.directChildren.map((child) => child.dispose());
+	    #deleteAllChildren(emitContextDestroyed = false) {
+	        this.directChildren.map((child) => child.dispose(emitContextDestroyed));
 	    }
 	    get cdpTarget() {
 	        return this.#cdpTarget;
@@ -6004,7 +6103,7 @@ var mapperTab = (function () {
 	            this.#pendingNavigationUrl = undefined;
 	            // At the point the page is initialized, all the nested iframes from the
 	            // previous page are detached and realms are destroyed.
-	            // Remove children from context.
+	            // Delete children from context.
 	            this.#deleteAllChildren();
 	        });
 	        this.#cdpTarget.cdpClient.on('Page.navigatedWithinDocument', (params) => {
@@ -6020,7 +6119,7 @@ var mapperTab = (function () {
 	                method: protocol_js_1$9.ChromiumBidi.BrowsingContext.EventNames.FragmentNavigated,
 	                params: {
 	                    context: this.id,
-	                    navigation: this.#virtualNavigationId,
+	                    navigation: this.#navigationId,
 	                    timestamp,
 	                    url: this.#url,
 	                },
@@ -6030,14 +6129,16 @@ var mapperTab = (function () {
 	            if (this.id !== params.frameId) {
 	                return;
 	            }
-	            // Generate a new virtual navigation id.
-	            this.#virtualNavigationId = (0, uuid_1.uuidv4)();
+	            // Use `pendingNavigationId` if navigation initiated by BiDi
+	            // `BrowsingContext.navigate` or generate a new navigation id.
+	            this.#navigationId = this.#pendingNavigationId ?? (0, uuid_1.uuidv4)();
+	            this.#pendingNavigationId = undefined;
 	            this.#eventManager.registerEvent({
 	                type: 'event',
 	                method: protocol_js_1$9.ChromiumBidi.BrowsingContext.EventNames.NavigationStarted,
 	                params: {
 	                    context: this.id,
-	                    navigation: this.#virtualNavigationId,
+	                    navigation: this.#navigationId,
 	                    timestamp: BrowsingContextImpl.getTimestamp(),
 	                    // The URL of the navigation that is currently in progress. Although the URL
 	                    // is not yet known in case of user-initiated navigations, it is possible to
@@ -6052,6 +6153,14 @@ var mapperTab = (function () {
 	            if (this.id !== params.frameId) {
 	                return;
 	            }
+	            this.#pendingNavigationUrl = params.url;
+	        });
+	        this.#cdpTarget.cdpClient.on('Page.frameRequestedNavigation', (params) => {
+	            if (this.id !== params.frameId) {
+	                return;
+	            }
+	            // If there is a pending navigation, reject it.
+	            this.#pendingCommandNavigation?.reject(new protocol_js_1$9.UnknownErrorException(`navigation canceled, as new navigation is requested by ${params.reason}`));
 	            this.#pendingNavigationUrl = params.url;
 	        });
 	        this.#cdpTarget.cdpClient.on('Page.lifecycleEvent', (params) => {
@@ -6084,7 +6193,7 @@ var mapperTab = (function () {
 	                        method: protocol_js_1$9.ChromiumBidi.BrowsingContext.EventNames.DomContentLoaded,
 	                        params: {
 	                            context: this.id,
-	                            navigation: this.#virtualNavigationId,
+	                            navigation: this.#navigationId,
 	                            timestamp,
 	                            url: this.#url,
 	                        },
@@ -6097,7 +6206,7 @@ var mapperTab = (function () {
 	                        method: protocol_js_1$9.ChromiumBidi.BrowsingContext.EventNames.Load,
 	                        params: {
 	                            context: this.id,
-	                            navigation: this.#virtualNavigationId,
+	                            navigation: this.#navigationId,
 	                            timestamp,
 	                            url: this.#url,
 	                        },
@@ -6250,8 +6359,8 @@ var mapperTab = (function () {
 	        }
 	    }
 	    #documentChanged(loaderId) {
-	        // Same document navigation.
 	        if (loaderId === undefined || this.#loaderId === loaderId) {
+	            // Same document navigation. Document didn't change.
 	            if (this.#navigation.withinDocument.isFinished) {
 	                this.#navigation.withinDocument = new Deferred_js_1$2.Deferred();
 	            }
@@ -6260,8 +6369,11 @@ var mapperTab = (function () {
 	            }
 	            return;
 	        }
+	        // Document changed.
 	        this.#resetLifecycleIfFinished();
 	        this.#loaderId = loaderId;
+	        // Delete all child iframes and notify about top level destruction.
+	        this.#deleteAllChildren(true);
 	    }
 	    #resetLifecycleIfFinished() {
 	        if (this.#lifecycle.DOMContentLoaded.isFinished) {
@@ -6292,61 +6404,83 @@ var mapperTab = (function () {
 	        catch {
 	            throw new protocol_js_1$9.InvalidArgumentException(`Invalid URL: ${url}`);
 	        }
+	        this.#pendingCommandNavigation?.reject(new protocol_js_1$9.UnknownErrorException('navigation canceled by concurrent navigation'));
 	        await this.targetUnblockedOrThrow();
 	        // Set the pending navigation URL to provide it in `browsingContext.navigationStarted`
 	        // event.
 	        // TODO: detect navigation start not from CDP. Check if
 	        //  `Page.frameRequestedNavigation` can be used for this purpose.
 	        this.#pendingNavigationUrl = url;
-	        // TODO: handle loading errors.
-	        const cdpNavigateResult = await this.#cdpTarget.cdpClient.sendCommand('Page.navigate', {
-	            url,
-	            frameId: this.id,
-	        });
-	        if (cdpNavigateResult.errorText) {
-	            // If navigation failed, no pending navigation is left.
-	            this.#pendingNavigationUrl = undefined;
-	            this.#eventManager.registerEvent({
-	                type: 'event',
-	                method: protocol_js_1$9.ChromiumBidi.BrowsingContext.EventNames.NavigationFailed,
-	                params: {
-	                    context: this.id,
-	                    navigation: this.#virtualNavigationId,
-	                    timestamp: BrowsingContextImpl.getTimestamp(),
-	                    url,
-	                },
-	            }, this.id);
-	            throw new protocol_js_1$9.UnknownErrorException(cdpNavigateResult.errorText);
+	        const navigationId = (0, uuid_1.uuidv4)();
+	        this.#pendingNavigationId = navigationId;
+	        this.#pendingCommandNavigation = new Deferred_js_1$2.Deferred();
+	        // Navigate and wait for the result. If the navigation fails, the error event is
+	        // emitted and the promise is rejected.
+	        const cdpNavigatePromise = (async () => {
+	            const cdpNavigateResult = await this.#cdpTarget.cdpClient.sendCommand('Page.navigate', {
+	                url,
+	                frameId: this.id,
+	            });
+	            if (cdpNavigateResult.errorText) {
+	                // If navigation failed, no pending navigation is left.
+	                this.#pendingNavigationUrl = undefined;
+	                this.#eventManager.registerEvent({
+	                    type: 'event',
+	                    method: protocol_js_1$9.ChromiumBidi.BrowsingContext.EventNames.NavigationFailed,
+	                    params: {
+	                        context: this.id,
+	                        navigation: navigationId,
+	                        timestamp: BrowsingContextImpl.getTimestamp(),
+	                        url,
+	                    },
+	                }, this.id);
+	                throw new protocol_js_1$9.UnknownErrorException(cdpNavigateResult.errorText);
+	            }
+	            this.#documentChanged(cdpNavigateResult.loaderId);
+	            return cdpNavigateResult;
+	        })();
+	        if (wait === "none" /* BrowsingContext.ReadinessState.None */) {
+	            // Do not wait for the result of the navigation promise.
+	            this.#pendingCommandNavigation.resolve();
+	            this.#pendingCommandNavigation = undefined;
+	            return {
+	                navigation: navigationId,
+	                url,
+	            };
 	        }
-	        this.#documentChanged(cdpNavigateResult.loaderId);
-	        switch (wait) {
-	            case "none" /* BrowsingContext.ReadinessState.None */:
-	                break;
-	            case "interactive" /* BrowsingContext.ReadinessState.Interactive */:
-	                // No `loaderId` means same-document navigation.
-	                if (cdpNavigateResult.loaderId === undefined) {
-	                    await this.#navigation.withinDocument;
-	                }
-	                else {
-	                    await this.#lifecycle.DOMContentLoaded;
-	                }
-	                break;
-	            case "complete" /* BrowsingContext.ReadinessState.Complete */:
-	                // No `loaderId` means same-document navigation.
-	                if (cdpNavigateResult.loaderId === undefined) {
-	                    await this.#navigation.withinDocument;
-	                }
-	                else {
-	                    await this.#lifecycle.load;
-	                }
-	                break;
-	        }
+	        const cdpNavigateResult = await cdpNavigatePromise;
+	        // Wait for either the navigation is finished or canceled by another navigation.
+	        await Promise.race([
+	            // No `loaderId` means same-document navigation.
+	            this.#waitNavigation(wait, cdpNavigateResult.loaderId === undefined),
+	            // Throw an error if the navigation is canceled.
+	            this.#pendingCommandNavigation,
+	        ]);
+	        this.#pendingCommandNavigation.resolve();
+	        this.#pendingCommandNavigation = undefined;
 	        return {
-	            navigation: this.#virtualNavigationId,
+	            navigation: navigationId,
 	            // Url can change due to redirect get the latest one.
-	            url: wait === "none" /* BrowsingContext.ReadinessState.None */ ? url : this.#url,
+	            url: this.#url,
 	        };
 	    }
+	    async #waitNavigation(wait, withinDocument) {
+	        if (withinDocument) {
+	            await this.#navigation.withinDocument;
+	            return;
+	        }
+	        switch (wait) {
+	            case "none" /* BrowsingContext.ReadinessState.None */:
+	                return;
+	            case "interactive" /* BrowsingContext.ReadinessState.Interactive */:
+	                await this.#lifecycle.DOMContentLoaded;
+	                return;
+	            case "complete" /* BrowsingContext.ReadinessState.Complete */:
+	                await this.#lifecycle.load;
+	                return;
+	        }
+	    }
+	    // TODO: support concurrent navigations analogous to `navigate`.
 	    async reload(ignoreCache, wait) {
 	        await this.targetUnblockedOrThrow();
 	        this.#resetLifecycleIfFinished();
@@ -6364,7 +6498,7 @@ var mapperTab = (function () {
 	                break;
 	        }
 	        return {
-	            navigation: this.#virtualNavigationId,
+	            navigation: this.#navigationId,
 	            url: this.url,
 	        };
 	    }
@@ -6637,7 +6771,7 @@ var mapperTab = (function () {
 	                            }
 	                            return [...element.querySelectorAll(cssSelector)];
 	                        };
-	                        startNodes = startNodes.length > 0 ? startNodes : [document.body];
+	                        startNodes = startNodes.length > 0 ? startNodes : [document];
 	                        const returnedNodes = startNodes
 	                            .map((startNode) => 
 	                        // TODO: stop search early if `maxNodeCount` is reached.
@@ -6670,7 +6804,7 @@ var mapperTab = (function () {
 	                            }
 	                            return returnedNodes;
 	                        };
-	                        startNodes = startNodes.length > 0 ? startNodes : [document.body];
+	                        startNodes = startNodes.length > 0 ? startNodes : [document];
 	                        const returnedNodes = startNodes
 	                            .map((startNode) => 
 	                        // TODO: stop search early if `maxNodeCount` is reached.
@@ -6848,7 +6982,10 @@ var mapperTab = (function () {
 	                                collect(childNodes, selector);
 	                            }
 	                        }
-	                        startNodes = startNodes.length > 0 ? startNodes : [document.body];
+	                        startNodes =
+	                            startNodes.length > 0
+	                                ? startNodes
+	                                : Array.from(document.documentElement.children).filter((c) => c instanceof HTMLElement);
 	                        collect(startNodes, {
 	                            role,
 	                            name,
@@ -7307,6 +7444,43 @@ var mapperTab = (function () {
 	        logManager.#initializeEntryAddedEventListener();
 	        return logManager;
 	    }
+	    /**
+	     * Heuristic serialization of CDP remote object. If possible, return the BiDi value
+	     * without deep serialization.
+	     */
+	    async #heuristicSerializeArg(arg, realm) {
+	        switch (arg.type) {
+	            // TODO: Implement regexp, array, object, map and set heuristics base on
+	            //  preview.
+	            case 'undefined':
+	                return { type: 'undefined' };
+	            case 'boolean':
+	                return { type: 'boolean', value: arg.value };
+	            case 'string':
+	                return { type: 'string', value: arg.value };
+	            case 'number':
+	                // The value can be either a number or a string like `Infinity` or `-0`.
+	                return { type: 'number', value: arg.unserializableValue ?? arg.value };
+	            case 'bigint':
+	                if (arg.unserializableValue !== undefined &&
+	                    arg.unserializableValue[arg.unserializableValue.length - 1] === 'n') {
+	                    return {
+	                        type: arg.type,
+	                        value: arg.unserializableValue.slice(0, -1),
+	                    };
+	                }
+	                // Unexpected bigint value, fall back to CDP deep serialization.
+	                break;
+	            case 'object':
+	                if (arg.subtype === 'null') {
+	                    return { type: 'null' };
+	                }
+	                // Fall back to CDP deep serialization.
+	                break;
+	        }
+	        // Fall back to CDP deep serialization.
+	        return await realm.serializeCdpObject(arg, "none" /* Script.ResultOwnership.None */);
+	    }
 	    #initializeEntryAddedEventListener() {
 	        this.#cdpTarget.cdpClient.on('Runtime.consoleAPICalled', (params) => {
 	            // Try to find realm by `cdpSessionId` and `executionContextId`,
@@ -7320,12 +7494,7 @@ var mapperTab = (function () {
 	                this.#logger?.(log_js_1$8.LogType.cdp, params);
 	                return;
 	            }
-	            const argsPromise = realm === undefined
-	                ? Promise.resolve(params.args)
-	                : // Properly serialize arguments if possible.
-	                    Promise.all(params.args.map((arg) => {
-	                        return realm.serializeCdpObject(arg, "none" /* Script.ResultOwnership.None */);
-	                    }));
+	            const argsPromise = Promise.all(params.args.map((arg) => this.#heuristicSerializeArg(arg, realm)));
 	            for (const browsingContext of realm.associatedBrowsingContexts) {
 	                this.#eventManager.registerPromiseEvent(argsPromise.then((args) => ({
 	                    kind: 'success',
@@ -7582,6 +7751,7 @@ var mapperTab = (function () {
 	            ]);
 	        }
 	        catch (err) {
+	            this.#logger?.(log_js_1$7.LogType.debugError, err);
 	            this.#networkDomainEnabled = !enabled;
 	        }
 	    }
@@ -7647,6 +7817,7 @@ var mapperTab = (function () {
 	class CdpTargetManager {
 	    #browserCdpClient;
 	    #cdpConnection;
+	    #targetKeysToBeIgnoredByAutoAttach = new Set();
 	    #selfTargetId;
 	    #eventManager;
 	    #browsingContextStorage;
@@ -7659,6 +7830,7 @@ var mapperTab = (function () {
 	    constructor(cdpConnection, browserCdpClient, selfTargetId, eventManager, browsingContextStorage, realmStorage, networkStorage, preloadScriptStorage, defaultUserContextId, unhandledPromptBehavior, logger) {
 	        this.#cdpConnection = cdpConnection;
 	        this.#browserCdpClient = browserCdpClient;
+	        this.#targetKeysToBeIgnoredByAutoAttach.add(selfTargetId);
 	        this.#selfTargetId = selfTargetId;
 	        this.#eventManager = eventManager;
 	        this.#browsingContextStorage = browsingContextStorage;
@@ -7685,6 +7857,7 @@ var mapperTab = (function () {
 	        });
 	        cdpClient.on('Page.frameAttached', this.#handleFrameAttachedEvent.bind(this));
 	        cdpClient.on('Page.frameDetached', this.#handleFrameDetachedEvent.bind(this));
+	        cdpClient.on('Page.frameSubtreeWillBeDetached', this.#handleFrameSubtreeWillBeDetached.bind(this));
 	    }
 	    #handleFrameAttachedEvent(params) {
 	        const parentBrowsingContext = this.#browsingContextStorage.findContext(params.parentFrameId);
@@ -7700,20 +7873,49 @@ var mapperTab = (function () {
 	        if (params.reason === 'swap') {
 	            return;
 	        }
-	        this.#browsingContextStorage.findContext(params.frameId)?.dispose();
+	        this.#browsingContextStorage.findContext(params.frameId)?.dispose(true);
+	    }
+	    #handleFrameSubtreeWillBeDetached(params) {
+	        this.#browsingContextStorage.findContext(params.frameId)?.dispose(true);
 	    }
 	    #handleAttachedToTargetEvent(params, parentSessionCdpClient) {
 	        const { sessionId, targetInfo } = params;
 	        const targetCdpClient = this.#cdpConnection.getCdpClient(sessionId);
+	        const detach = async () => {
+	            // Detaches and resumes the target suppressing errors.
+	            await targetCdpClient
+	                .sendCommand('Runtime.runIfWaitingForDebugger')
+	                .then(() => parentSessionCdpClient.sendCommand('Target.detachFromTarget', params))
+	                .catch((error) => this.#logger?.(log_js_1$6.LogType.debugError, error));
+	        };
+	        if (this.#selfTargetId !== targetInfo.targetId) {
+	            // Service workers are special case because they attach to the
+	            // browser target and the page target (so twice per worker) during
+	            // the regular auto-attach and might hang if the CDP session on
+	            // the browser level is not detached. The logic to detach the
+	            // right session is handled in the switch below.
+	            const targetKey = targetInfo.type === 'service_worker'
+	                ? `${parentSessionCdpClient.sessionId}_${targetInfo.targetId}`
+	                : targetInfo.targetId;
+	            // Mapper generally only needs one session per target. If we
+	            // receive additional auto-attached sessions, that is very likely
+	            // coming from custom CDP sessions.
+	            if (this.#targetKeysToBeIgnoredByAutoAttach.has(targetKey)) {
+	                // Return to leave the session untouched.
+	                return;
+	            }
+	            this.#targetKeysToBeIgnoredByAutoAttach.add(targetKey);
+	        }
 	        switch (targetInfo.type) {
 	            case 'page':
 	            case 'iframe': {
-	                if (targetInfo.targetId === this.#selfTargetId) {
-	                    break;
+	                if (this.#selfTargetId === targetInfo.targetId) {
+	                    void detach();
+	                    return;
 	                }
 	                const cdpTarget = this.#createCdpTarget(targetCdpClient, targetInfo);
 	                const maybeContext = this.#browsingContextStorage.findContext(targetInfo.targetId);
-	                if (maybeContext) {
+	                if (maybeContext && targetInfo.type === 'iframe') {
 	                    // OOPiF.
 	                    maybeContext.updateCdpTarget(cdpTarget);
 	                }
@@ -7743,7 +7945,8 @@ var mapperTab = (function () {
 	                });
 	                // If there is no browsing context, this worker is already terminated.
 	                if (!realm) {
-	                    break;
+	                    void detach();
+	                    return;
 	                }
 	                const cdpTarget = this.#createCdpTarget(targetCdpClient, targetInfo);
 	                this.#handleWorkerTarget(cdpToBidiTargetTypes[targetInfo.type], cdpTarget, realm);
@@ -7761,10 +7964,7 @@ var mapperTab = (function () {
 	        }
 	        // DevTools or some other not supported by BiDi target. Just release
 	        // debugger and ignore them.
-	        targetCdpClient
-	            .sendCommand('Runtime.runIfWaitingForDebugger')
-	            .then(() => parentSessionCdpClient.sendCommand('Target.detachFromTarget', params))
-	            .catch((error) => this.#logger?.(log_js_1$6.LogType.debugError, error));
+	        void detach();
 	    }
 	    #createCdpTarget(targetCdpClient, targetInfo) {
 	        this.#setEventListeners(targetCdpClient);
@@ -7788,7 +7988,7 @@ var mapperTab = (function () {
 	        }
 	        const context = this.#browsingContextStorage.findContextBySession(sessionId);
 	        if (context) {
-	            context.dispose();
+	            context.dispose(true);
 	            return;
 	        }
 	        const worker = this.#workers.get(sessionId);
@@ -8047,7 +8247,7 @@ var mapperTab = (function () {
 	            return null;
 	        }
 	        // Get virtual navigation ID from the browsing context.
-	        return this.#networkStorage.getVirtualNavigationId(this.#context ?? undefined);
+	        return this.#networkStorage.getNavigationId(this.#context ?? undefined);
 	    }
 	    get #cookies() {
 	        let cookies = [];
@@ -8118,22 +8318,25 @@ var mapperTab = (function () {
 	        }
 	        return authChallenges;
 	    }
-	    // TODO: implement.
 	    get #timings() {
 	        return {
-	            timeOrigin: 0,
-	            requestTime: 0,
+	            // TODO: Verify this is correct
+	            timeOrigin: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.requestTime),
+	            requestTime: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.requestTime),
 	            redirectStart: 0,
 	            redirectEnd: 0,
-	            fetchStart: 0,
-	            dnsStart: 0,
-	            dnsEnd: 0,
-	            connectStart: 0,
-	            connectEnd: 0,
-	            tlsStart: 0,
-	            requestStart: 0,
-	            responseStart: 0,
-	            responseEnd: 0,
+	            // TODO: Verify this is correct
+	            // https://source.chromium.org/chromium/chromium/src/+/main:net/base/load_timing_info.h;l=145
+	            fetchStart: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.requestTime),
+	            dnsStart: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.dnsStart),
+	            dnsEnd: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.dnsEnd),
+	            connectStart: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.connectStart),
+	            connectEnd: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.connectEnd),
+	            tlsStart: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.sslStart),
+	            requestStart: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.sendStart),
+	            // https://source.chromium.org/chromium/chromium/src/+/main:net/base/load_timing_info.h;l=196
+	            responseStart: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.receiveHeadersStart),
+	            responseEnd: (0, NetworkUtils_js_1$1.getTiming)(this.#response.info?.timing?.receiveHeadersEnd),
 	        };
 	    }
 	    #phaseChanged() {
@@ -8474,7 +8677,7 @@ var mapperTab = (function () {
 	            redirectCount: this.#redirectCount,
 	            request: this.#getRequestData(),
 	            // Timestamp should be in milliseconds, while CDP provides it in seconds.
-	            timestamp: Math.round((this.#request.info?.wallTime ?? 0) * 1000),
+	            timestamp: Math.round((0, NetworkUtils_js_1$1.getTiming)(this.#request.info?.wallTime) * 1000),
 	            // Contains isBlocked and intercepts
 	            ...interceptProps,
 	        };
@@ -8825,12 +9028,11 @@ var mapperTab = (function () {
 	    /**
 	     * Gets the virtual navigation ID for the given navigable ID.
 	     */
-	    getVirtualNavigationId(contextId) {
+	    getNavigationId(contextId) {
 	        if (contextId === undefined) {
 	            return null;
 	        }
-	        return (this.#browsingContextStorage.findContext(contextId)
-	            ?.virtualNavigationId ?? null);
+	        return (this.#browsingContextStorage.findContext(contextId)?.navigationId ?? null);
 	    }
 	}
 	NetworkStorage$1.NetworkStorage = NetworkStorage;
@@ -9293,7 +9495,7 @@ var mapperTab = (function () {
 	                    ? Math.min(priority, cdpPriority)
 	                    : // At this point we know that we have subscribed
 	                        // to only one of the two
-	                        priority ?? cdpPriority;
+	                        (priority ?? cdpPriority);
 	            }
 	            return priority;
 	        })
@@ -9708,7 +9910,7 @@ var mapperTab = (function () {
 	        }
 	        await this.#transport.sendMessage(message);
 	    };
-	    constructor(bidiTransport, cdpConnection, browserCdpClient, selfTargetId, defaultUserContextId, options, parser, logger) {
+	    constructor(bidiTransport, cdpConnection, browserCdpClient, selfTargetId, defaultUserContextId, parser, logger) {
 	        super();
 	        this.#logger = logger;
 	        this.#messageQueue = new ProcessingQueue_js_1.ProcessingQueue(this.#processOutgoingMessage, this.#logger);
@@ -9716,8 +9918,24 @@ var mapperTab = (function () {
 	        this.#transport.setOnMessage(this.#handleIncomingMessage);
 	        this.#eventManager = new EventManager_js_1.EventManager(this.#browsingContextStorage);
 	        const networkStorage = new NetworkStorage_js_1.NetworkStorage(this.#eventManager, this.#browsingContextStorage, browserCdpClient, logger);
-	        new CdpTargetManager_js_1.CdpTargetManager(cdpConnection, browserCdpClient, selfTargetId, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, networkStorage, this.#preloadScriptStorage, defaultUserContextId, options?.unhandledPromptBehavior, logger);
-	        this.#commandProcessor = new CommandProcessor_js_1.CommandProcessor(cdpConnection, browserCdpClient, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, this.#preloadScriptStorage, networkStorage, parser, this.#logger);
+	        this.#commandProcessor = new CommandProcessor_js_1.CommandProcessor(cdpConnection, browserCdpClient, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, this.#preloadScriptStorage, networkStorage, parser, async (options) => {
+	            // This is required to ignore certificate errors when service worker is fetched.
+	            await browserCdpClient.sendCommand('Security.setIgnoreCertificateErrors', {
+	                ignore: options.acceptInsecureCerts ?? false,
+	            });
+	            new CdpTargetManager_js_1.CdpTargetManager(cdpConnection, browserCdpClient, selfTargetId, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, networkStorage, this.#preloadScriptStorage, defaultUserContextId, options?.unhandledPromptBehavior, logger);
+	            // Needed to get events about new targets.
+	            await browserCdpClient.sendCommand('Target.setDiscoverTargets', {
+	                discover: true,
+	            });
+	            // Needed to automatically attach to new targets.
+	            await browserCdpClient.sendCommand('Target.setAutoAttach', {
+	                autoAttach: true,
+	                waitForDebuggerOnStart: true,
+	                flatten: true,
+	            });
+	            await this.#topLevelContextsLoaded();
+	        }, this.#logger);
 	        this.#eventManager.on("event" /* EventManagerEvents.Event */, ({ message, event }) => {
 	            this.emitOutgoingMessage(message, event);
 	        });
@@ -9728,7 +9946,7 @@ var mapperTab = (function () {
 	    /**
 	     * Creates and starts BiDi Mapper instance.
 	     */
-	    static async createAndStart(bidiTransport, cdpConnection, browserCdpClient, selfTargetId, options, parser, logger) {
+	    static async createAndStart(bidiTransport, cdpConnection, browserCdpClient, selfTargetId, parser, logger) {
 	        // The default context is not exposed in Target.getBrowserContexts but can
 	        // be observed via Target.getTargets. To determine the default browser
 	        // context, we check which one is mentioned in Target.getTargets and not in
@@ -9736,10 +9954,6 @@ var mapperTab = (function () {
 	        const [{ browserContextIds }, { targetInfos }] = await Promise.all([
 	            browserCdpClient.sendCommand('Target.getBrowserContexts'),
 	            browserCdpClient.sendCommand('Target.getTargets'),
-	            // This is required to ignore certificate errors when service worker is fetched.
-	            browserCdpClient.sendCommand('Security.setIgnoreCertificateErrors', {
-	                ignore: options?.acceptInsecureCerts ?? false,
-	            }),
 	        ]);
 	        let defaultUserContextId = 'default';
 	        for (const info of targetInfos) {
@@ -9749,18 +9963,7 @@ var mapperTab = (function () {
 	                break;
 	            }
 	        }
-	        const server = new BidiServer(bidiTransport, cdpConnection, browserCdpClient, selfTargetId, defaultUserContextId, options, parser, logger);
-	        // Needed to get events about new targets.
-	        await browserCdpClient.sendCommand('Target.setDiscoverTargets', {
-	            discover: true,
-	        });
-	        // Needed to automatically attach to new targets.
-	        await browserCdpClient.sendCommand('Target.setAutoAttach', {
-	            autoAttach: true,
-	            waitForDebuggerOnStart: true,
-	            flatten: true,
-	        });
-	        await server.#topLevelContextsLoaded();
+	        const server = new BidiServer(bidiTransport, cdpConnection, browserCdpClient, selfTargetId, defaultUserContextId, parser, logger);
 	        return server;
 	    }
 	    /**
@@ -17237,23 +17440,23 @@ var mapperTab = (function () {
 	 * @param {string} selfTargetId
 	 * @param options Mapper options. E.g. `acceptInsecureCerts`.
 	 */
-	async function runMapperInstance(selfTargetId, options) {
+	async function runMapperInstance(selfTargetId) {
 	    // eslint-disable-next-line no-console
 	    console.log('Launching Mapper instance with selfTargetId:', selfTargetId);
 	    const bidiServer = await BidiMapper_js_1.BidiServer.createAndStart(mapperTabToServerTransport, cdpConnection, 
 	    /**
 	     * Create a Browser CDP Session per Mapper instance.
 	     */
-	    await cdpConnection.createBrowserSession(), selfTargetId, options, new BidiParser_js_1.BidiParser(), mapperTabPage_js_1.log);
+	    await cdpConnection.createBrowserSession(), selfTargetId, new BidiParser_js_1.BidiParser(), mapperTabPage_js_1.log);
 	    (0, mapperTabPage_js_1.log)(log_js_1.LogType.debugInfo, 'Mapper instance has been launched');
 	    return bidiServer;
 	}
 	/**
 	 * Set `window.runMapper` to a function which launches the BiDi mapper instance.
 	 * @param selfTargetId Needed to filter out info related to BiDi target.
-	 * @param options Mapper options. E.g. `acceptInsecureCerts`. */
-	window.runMapperInstance = async (selfTargetId, options) => {
-	    await runMapperInstance(selfTargetId, options);
+	 */
+	window.runMapperInstance = async (selfTargetId) => {
+	    await runMapperInstance(selfTargetId);
 	};
 
 	return bidiTab;

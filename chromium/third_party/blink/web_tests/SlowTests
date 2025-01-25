@@ -1,4 +1,4 @@
-# tags: [ Android Fuchsia Linux Mac Mac10.15 Mac11 Mac11-arm64 Mac12 Mac12-arm64 Mac13 Mac13-arm64 Mac14 Mac14-arm64 Win Win10.20h2 Win11 Win11-arm64 ]
+# tags: [ Android Fuchsia Linux Mac Mac11 Mac11-arm64 Mac12 Mac12-arm64 Mac13 Mac13-arm64 Mac14 Mac14-arm64 Win Win10.20h2 Win11 Win11-arm64 ]
 # tags: [ Release Debug ]
 # results: [ Slow ]
 
@@ -153,7 +153,6 @@ crbug.com/1229701 [ Mac12 ] http/tests/inspector-protocol/network/disable-cache-
 crbug.com/1229701 [ Release Win ] http/tests/inspector-protocol/network/disable-cache-media-resource.js [ Slow ]
 crbug.com/1300409 http/tests/inspector-protocol/network/websocket/offline-no-send.js [ Slow ]
 crbug.com/1280873 http/tests/inspector-protocol/network/xhr-cors-preflight-redirect-failure.js [ Slow ]
-crbug.com/1280697 http/tests/inspector-protocol/network/block_cross_site_document_load.js [ Slow ]
 crbug.com/1280585 http/tests/inspector-protocol/network/xhr-post-replay-cors.js [ Slow ]
 crbug.com/1280537 http/tests/inspector-protocol/network/blocked-cookie-same-site-lax-browser-navigate.js [ Slow ]
 crbug.com/1280537 [ Linux ] http/tests/inspector-protocol/network/blocked-cookie-same-site-lax-js-navigate.js [ Slow ]
@@ -998,9 +997,9 @@ crbug.com/1044715 [ Win ] external/wpt/pointerevents/pointerevent_touch-action-i
 crbug.com/1044715 [ Linux ] external/wpt/pointerevents/pointerevent_touch-action-inherit_parent-none_touch.html [ Slow ]
 crbug.com/1044715 [ Win ] external/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-x_touch.html [ Slow ]
 crbug.com/1044715 [ Linux ] external/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-x_touch.html [ Slow ]
-crbug.com/1479003 [ Mac ] external/wpt/pointerevents/coalesced_events_attributes_under_load.https.html?mouse [ Slow ]
-crbug.com/1479003 [ Debug Mac13-arm64 ] external/wpt/pointerevents/coalesced_events_attributes_under_load.https.html?pen [ Slow ]
-crbug.com/1479003 [ Mac Release ] external/wpt/pointerevents/coalesced_events_attributes_under_load.https.html?pen [ Slow ]
+crbug.com/339686361 external/wpt/pointerevents/coalesced_events_attributes_under_load.https.optional.html?mouse [ Slow ]
+crbug.com/339686361 external/wpt/pointerevents/coalesced_events_attributes_under_load.https.optional.html?pen [ Slow ]
+crbug.com/339686361 external/wpt/pointerevents/coalesced_events_attributes_under_load.https.optional.html?touch [ Slow ]
 crbug.com/1043396 [ Linux ] http/tests/devtools/network/network-eventsource.js [ Slow ]
 crbug.com/1043396 [ Mac11 Release ] http/tests/devtools/network/network-eventsource.js [ Slow ]
 crbug.com/1043396 [ Mac12 ] http/tests/devtools/network/network-eventsource.js [ Slow ]
@@ -1456,9 +1455,8 @@ crbug.com/327390559 [ Win11-arm64 ] virtual/keepalive-in-browser-migration/exter
 crbug.com/328860404 virtual/disable-intersection-optimization/external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox-top-navigation-escalate-privileges.tentative.sub.window.html [ Slow ]
 crbug.com/328849073 virtual/no-auto-wpt-origin-isolation/external/wpt/html/semantics/embedded-content/the-iframe-element/sandbox-top-navigation-escalate-privileges.tentative.sub.window.html [ Slow ]
 
-crbug.com/350628679 external/wpt/css/css-sizing/min-content-negative-margin-crash.html [ Slow ]
-crbug.com/350628679 external/wpt/css/css-tables/crashtests/textarea-intrinsic-size-crash.html [ Slow ]
-crbug.com/350628679 [ Mac ] external/wpt/acid/acid2/reftest.html [ Slow ]
+crbug.com/350628679 [ Mac ] external/wpt/css/css-sizing/min-content-negative-margin-crash.html [ Slow ]
+crbug.com/350628679 [ Mac ] external/wpt/css/css-tables/crashtests/textarea-intrinsic-size-crash.html [ Slow ]
 
 crbug.com/328501805 external/wpt/html/semantics/interactive-elements/the-summary-element/interactive-content.html [ Slow ]
 
@@ -1470,13 +1468,12 @@ crbug.com/341380030 [ Mac ] external/wpt/css/css-pseudo/text-selection.html [ Sl
 
 crbug.com/352489143 virtual/third-party-storage-partitioning/external/wpt/IndexedDB/interleaved-cursors-large.html [ Slow ]
 
-crbug.com/349647498 [ Mac10.15 ] virtual/threaded/external/wpt/css/css-backgrounds/border-image-image-type-005.htm [ Slow ]
-
 crbug.com/349639998 virtual/attribution-reporting-aggregatable-debug/external/wpt/attribution-reporting/aggregatable-debug/simple-source-aggregatable-debug-report.sub.https.html [ Slow ]
 crbug.com/349639998 virtual/attribution-reporting-aggregatable-debug/external/wpt/attribution-reporting/aggregatable-debug/simple-trigger-aggregatable-debug-report.sub.https.html [ Slow ]
-
-crbug.com/352643600 [ Mac10.15 ] external/wpt/dom/events/scrolling/scrollend-event-fired-to-window.html [ Slow ]
 
 crbug.com/351944362 external/wpt/fetch/metadata/generated/element-iframe.https.sub.html [ Slow ]
 
 crbug.com/354579691 fast/events/touch/gesture/long-press-drag-drop-touch-editing-combined-in-iframe.html [ Slow ]
+
+# Slow because it is transfering a lot of data to catch non-spec compliant behavior with large buffers
+crbug.com/356963272 external/wpt/webrtc/RTCDataChannel-send-close.html [ Slow ]

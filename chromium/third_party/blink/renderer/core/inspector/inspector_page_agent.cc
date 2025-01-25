@@ -46,6 +46,7 @@
 #include "third_party/blink/public/common/origin_trials/trial_token.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_evidence.mojom-blink.h"
+#include "third_party/blink/public/mojom/loader/same_document_navigation_type.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/local_window_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
@@ -122,16 +123,17 @@ String ClientNavigationReasonToProtocol(ClientNavigationReason reason) {
       return ReasonEnum::HttpHeaderRefresh;
     case ClientNavigationReason::kFrameNavigation:
       return ReasonEnum::ScriptInitiated;
+    case ClientNavigationReason::kInitialFrameNavigation:
+      return ReasonEnum::InitialFrameNavigation;
     case ClientNavigationReason::kMetaTagRefresh:
       return ReasonEnum::MetaTagRefresh;
     case ClientNavigationReason::kPageBlock:
       return ReasonEnum::PageBlockInterstitial;
     case ClientNavigationReason::kReload:
       return ReasonEnum::Reload;
-    default:
-      NOTREACHED_IN_MIGRATION();
+    case ClientNavigationReason::kNone:
+      return ReasonEnum::Other;
   }
-  return ReasonEnum::Reload;
 }
 
 String NavigationPolicyToProtocol(NavigationPolicy policy) {
@@ -152,7 +154,7 @@ String NavigationPolicyToProtocol(NavigationPolicy policy) {
     case kNavigationPolicyPictureInPicture:
       return DispositionEnum::NewWindow;
     case kNavigationPolicyLinkPreview:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
   return DispositionEnum::CurrentTab;
 }
@@ -223,20 +225,6 @@ std::unique_ptr<protocol::Array<String>> GetEnabledWindowFeatures(
 }
 
 }  // namespace
-
-struct InspectorPageAgent::IsolatedWorldRequest {
-  IsolatedWorldRequest() = delete;
-  IsolatedWorldRequest(String world_name,
-                       bool grant_universal_access,
-                       std::unique_ptr<CreateIsolatedWorldCallback> callback)
-      : world_name(world_name),
-        grant_universal_access(grant_universal_access),
-        callback(std::move(callback)) {}
-
-  const String world_name;
-  const bool grant_universal_access;
-  std::unique_ptr<CreateIsolatedWorldCallback> callback;
-};
 
 static bool PrepareResourceBuffer(const Resource* cached_resource,
                                   bool* has_zero_size) {
@@ -323,7 +311,7 @@ static void MaybeEncodeTextContent(const String& text_content,
 
   const SegmentedBuffer::DeprecatedFlatData flat_buffer(buffer.get());
   return MaybeEncodeTextContent(
-      text_content, flat_buffer.Data(),
+      text_content, flat_buffer.data(),
       base::checked_cast<wtf_size_t>(flat_buffer.size()), result,
       base64_encoded);
 }
@@ -352,14 +340,14 @@ bool InspectorPageAgent::SegmentedBufferContent(
 
   const SegmentedBuffer::DeprecatedFlatData flat_buffer(buffer);
   if (decoder) {
-    text_content = decoder->Decode(flat_buffer.Data(), flat_buffer.size());
+    text_content = decoder->Decode(flat_buffer);
     text_content = text_content + decoder->Flush();
   } else if (encoding.IsValid()) {
     text_content = encoding.Decode(
-        flat_buffer.Data(), base::checked_cast<wtf_size_t>(flat_buffer.size()));
+        flat_buffer.data(), base::checked_cast<wtf_size_t>(flat_buffer.size()));
   }
 
-  MaybeEncodeTextContent(text_content, flat_buffer.Data(),
+  MaybeEncodeTextContent(text_content, flat_buffer.data(),
                          base::checked_cast<wtf_size_t>(flat_buffer.size()),
                          result, base64_encoded);
   return true;
@@ -381,8 +369,7 @@ bool InspectorPageAgent::CachedResourceContent(const Resource* cached_resource,
       return false;
 
     const SegmentedBuffer::DeprecatedFlatData flat_buffer(buffer.get());
-    *result = Base64Encode(base::as_bytes(
-        base::make_span(flat_buffer.Data(), flat_buffer.size())));
+    *result = Base64Encode(base::as_byte_span(flat_buffer));
     *base64_encoded = true;
     return true;
   }
@@ -607,7 +594,7 @@ protocol::Response InspectorPageAgent::addScriptToEvaluateOnNewDocument(
     Maybe<bool> runImmediately,
     String* identifier) {
   Vector<WTF::String> keys = scripts_to_evaluate_on_load_.Keys();
-  auto* result = std::max_element(
+  auto result = std::max_element(
       keys.begin(), keys.end(), [](const WTF::String& a, const WTF::String& b) {
         return Decimal::FromString(a) < Decimal::FromString(b);
       });
@@ -991,11 +978,32 @@ protocol::Response InspectorPageAgent::setDocumentContent(
   return protocol::Response::Success();
 }
 
-void InspectorPageAgent::DidNavigateWithinDocument(LocalFrame* frame) {
+namespace {
+const char* NavigationTypeToProtocolString(
+    mojom::blink::SameDocumentNavigationType navigation_type) {
+  switch (navigation_type) {
+    case mojom::blink::SameDocumentNavigationType::kFragment:
+      return protocol::Page::NavigatedWithinDocument::NavigationTypeEnum::
+          Fragment;
+    case mojom::blink::SameDocumentNavigationType::kHistoryApi:
+      return protocol::Page::NavigatedWithinDocument::NavigationTypeEnum::
+          HistoryApi;
+    case mojom::blink::SameDocumentNavigationType::kNavigationApiIntercept:
+    case mojom::blink::SameDocumentNavigationType::
+        kPrerenderNoVarySearchActivation:
+      return protocol::Page::NavigatedWithinDocument::NavigationTypeEnum::Other;
+  }
+}
+}  // namespace
+
+void InspectorPageAgent::DidNavigateWithinDocument(
+    LocalFrame* frame,
+    mojom::blink::SameDocumentNavigationType navigation_type) {
   Document* document = frame->GetDocument();
   if (document) {
     return GetFrontend()->navigatedWithinDocument(
-        IdentifiersFactory::FrameId(frame), document->Url());
+        IdentifiersFactory::FrameId(frame), document->Url(),
+        NavigationTypeToProtocolString(navigation_type));
   }
 }
 
@@ -1050,7 +1058,7 @@ void InspectorPageAgent::DidCreateMainWorldContext(LocalFrame* frame) {
     return;
   }
   ScriptState* script_state = ToScriptStateForMainWorld(frame);
-  if (!script_state) {
+  if (!script_state || !v8_session_) {
     return;
   }
 
@@ -1075,7 +1083,7 @@ void InspectorPageAgent::EvaluateScriptOnNewDocument(
                       *DOMWrapperWorld::EnsureIsolatedWorld(
                           ToIsolate(window->GetFrame()), world->GetWorldId()));
   }
-  if (!script_state) {
+  if (!script_state || !v8_session_) {
     return;
   }
 
@@ -1156,6 +1164,11 @@ void InspectorPageAgent::FrameDetachedFromParent(LocalFrame* frame,
 
   GetFrontend()->frameDetached(IdentifiersFactory::FrameId(frame),
                                FrameDetachTypeToProtocol(type));
+}
+
+void InspectorPageAgent::FrameSubtreeWillBeDetached(Frame* frame) {
+  GetFrontend()->frameSubtreeWillBeDetached(IdentifiersFactory::FrameId(frame));
+  GetFrontend()->flush();
 }
 
 bool InspectorPageAgent::ScreencastEnabled() {
@@ -1985,6 +1998,11 @@ void InspectorPageAgent::Trace(Visitor* visitor) const {
   visitor->Trace(inspector_resource_content_loader_);
   visitor->Trace(isolated_worlds_);
   InspectorBaseAgent::Trace(visitor);
+}
+
+void InspectorPageAgent::Dispose() {
+  InspectorBaseAgent::Dispose();
+  v8_session_ = nullptr;
 }
 
 protocol::Response InspectorPageAgent::getOriginTrials(

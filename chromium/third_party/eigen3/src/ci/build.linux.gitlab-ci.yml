@@ -117,7 +117,7 @@ build:linux:cross:x86-64:clang-12:avx512dq:
 .build:linux:cuda:
   extends: .build:linux:cross:x86-64
   variables:
-    # Addtional flags passed to the cuda compiler.
+    # Additional flags passed to the cuda compiler.
     EIGEN_CI_CUDA_CXX_FLAGS: ""
     # Compute architectures present in the GitLab CI runners.
     EIGEN_CI_CUDA_COMPUTE_ARCH: "50;75"

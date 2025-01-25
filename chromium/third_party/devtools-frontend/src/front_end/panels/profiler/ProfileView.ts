@@ -197,9 +197,9 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
       deleteCallback: undefined,
       refreshCallback: undefined,
     });
-    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SortingChanged, this.sortProfile, this);
-    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SelectedNode, this.nodeSelected.bind(this, true));
-    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.DeselectedNode, this.nodeSelected.bind(this, false));
+    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SORTING_CHANGED, this.sortProfile, this);
+    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SELECTED_NODE, this.nodeSelected.bind(this, true));
+    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.DESELECTED_NODE, this.nodeSelected.bind(this, false));
     this.dataGrid.setRowContextMenuCallback(this.populateContextMenu.bind(this));
 
     this.viewSelectComboBox = new UI.Toolbar.ToolbarComboBox(
@@ -208,17 +208,17 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
     this.focusButton = new UI.Toolbar.ToolbarButton(
         i18nString(UIStrings.focusSelectedFunction), 'eye', undefined, 'profile-view.focus-selected-function');
     this.focusButton.setEnabled(false);
-    this.focusButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.focusClicked, this);
+    this.focusButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.focusClicked, this);
 
     this.excludeButton = new UI.Toolbar.ToolbarButton(
         i18nString(UIStrings.excludeSelectedFunction), 'cross', undefined, 'profile-view.exclude-selected-function');
     this.excludeButton.setEnabled(false);
-    this.excludeButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.excludeClicked, this);
+    this.excludeButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.excludeClicked, this);
 
     this.resetButton = new UI.Toolbar.ToolbarButton(
         i18nString(UIStrings.restoreAllFunctions), 'refresh', undefined, 'profile-view.restore-all-functions');
     this.resetButton.setEnabled(false);
-    this.resetButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, this.resetClicked, this);
+    this.resetButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, this.resetClicked, this);
 
     this.linkifierInternal = new Components.Linkifier.Linkifier(maxLinkLength);
   }
@@ -251,13 +251,13 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
   initialize(nodeFormatter: Formatter): void {
     this.nodeFormatter = nodeFormatter;
 
-    this.viewType = Common.Settings.Settings.instance().createSetting('profile-view', ViewTypes.Heavy);
-    const viewTypes = [ViewTypes.Flame, ViewTypes.Heavy, ViewTypes.Tree];
+    this.viewType = Common.Settings.Settings.instance().createSetting('profile-view', ViewTypes.HEAVY);
+    const viewTypes = [ViewTypes.FLAME, ViewTypes.HEAVY, ViewTypes.TREE];
 
     const optionNames = new Map([
-      [ViewTypes.Flame, i18nString(UIStrings.chart)],
-      [ViewTypes.Heavy, i18nString(UIStrings.heavyBottomUp)],
-      [ViewTypes.Tree, i18nString(UIStrings.treeTopDown)],
+      [ViewTypes.FLAME, i18nString(UIStrings.chart)],
+      [ViewTypes.HEAVY, i18nString(UIStrings.heavyBottomUp)],
+      [ViewTypes.TREE, i18nString(UIStrings.treeTopDown)],
     ]);
 
     const options = new Map(
@@ -406,7 +406,7 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
     }
     this.dataProvider = this.createFlameChartDataProvider();
     this.flameChart = new ProfileFlameChart(this.searchableViewInternal, this.dataProvider);
-    this.flameChart.addEventListener(PerfUI.FlameChart.Events.EntryInvoked, event => {
+    this.flameChart.addEventListener(PerfUI.FlameChart.Events.ENTRY_INVOKED, event => {
       void this.onEntryInvoked(event);
     });
   }
@@ -444,18 +444,18 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
     }
     this.viewType.set((this.viewSelectComboBox.selectedOption() as HTMLOptionElement).value as ViewTypes);
     switch (this.viewType.get()) {
-      case ViewTypes.Flame:
+      case ViewTypes.FLAME:
         this.ensureFlameChartCreated();
         this.visibleView = this.flameChart;
         this.searchableElement = this.flameChart;
         break;
-      case ViewTypes.Tree:
+      case ViewTypes.TREE:
         this.profileDataGridTree = this.getTopDownProfileDataGridTree();
         this.sortProfile();
         this.visibleView = this.dataGrid.asWidget();
         this.searchableElement = this.profileDataGridTree;
         break;
-      case ViewTypes.Heavy:
+      case ViewTypes.HEAVY:
         this.profileDataGridTree = this.getBottomUpProfileDataGridTree();
         this.sortProfile();
         this.visibleView = this.dataGrid.asWidget();
@@ -463,7 +463,7 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
         break;
     }
 
-    const isFlame = this.viewType.get() === ViewTypes.Flame;
+    const isFlame = this.viewType.get() === ViewTypes.FLAME;
     this.focusButton.setVisible(!isFlame);
     this.excludeButton.setVisible(!isFlame);
     this.resetButton.setVisible(!isFlame);
@@ -540,9 +540,9 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
 export const maxLinkLength = 30;
 
 export const enum ViewTypes {
-  Flame = 'Flame',
-  Tree = 'Tree',
-  Heavy = 'Heavy',
+  FLAME = 'Flame',
+  TREE = 'Tree',
+  HEAVY = 'Heavy',
 }
 
 export class WritableProfileHeader extends ProfileHeader implements Common.StringOutputStream.OutputStream {

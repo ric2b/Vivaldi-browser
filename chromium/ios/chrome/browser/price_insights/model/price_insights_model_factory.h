@@ -5,19 +5,20 @@
 #ifndef IOS_CHROME_BROWSER_PRICE_INSIGHTS_MODEL_PRICE_INSIGHTS_MODEL_FACTORY_H_
 #define IOS_CHROME_BROWSER_PRICE_INSIGHTS_MODEL_PRICE_INSIGHTS_MODEL_FACTORY_H_
 
-#include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "base/no_destructor.h"
+#import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
 class PriceInsightsModel;
 
 // Singleton that owns all PriceInsightsModels and associates them with
-// BrowserStates.
+// profile.
 class PriceInsightsModelFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static PriceInsightsModel* GetForBrowserState(
-      ChromeBrowserState* browser_state);
+  // TODO(crbug.com/358301380): remove this method.
+  static PriceInsightsModel* GetForBrowserState(ProfileIOS* profile);
 
+  static PriceInsightsModel* GetForProfile(ProfileIOS* profile);
   static PriceInsightsModelFactory* GetInstance();
 
   PriceInsightsModelFactory(const PriceInsightsModelFactory&) = delete;

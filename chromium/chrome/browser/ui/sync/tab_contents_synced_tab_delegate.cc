@@ -27,6 +27,10 @@ using content::NavigationEntry;
 
 namespace {
 
+// The minimum time between two sync updates of `last_active_time` when the tab
+// hasn't changed.
+constexpr base::TimeDelta kSyncActiveTimeThreshold = base::Minutes(10);
+
 // Helper to access the correct NavigationEntry, accounting for pending entries.
 NavigationEntry* GetPossiblyPendingEntryAtIndex(
     content::WebContents* web_contents,
@@ -53,20 +57,16 @@ void TabContentsSyncedTabDelegate::ResetCachedLastActiveTime() {
 }
 
 base::Time TabContentsSyncedTabDelegate::GetLastActiveTime() {
-  // Use the TimeDelta common ground between the two units to make the
-  // conversion.
-  const base::TimeDelta delta_since_epoch =
-      web_contents_->GetLastActiveTime() - base::TimeTicks::UnixEpoch();
-  const base::Time converted_time = base::Time::UnixEpoch() + delta_since_epoch;
-  if (base::FeatureList::IsEnabled(syncer::kSyncSessionOnVisibilityChanged)) {
-    if (cached_last_active_time_.has_value() &&
-        converted_time - cached_last_active_time_.value() <
-            syncer::kSyncSessionOnVisibilityChangedTimeThreshold.Get()) {
-      return cached_last_active_time_.value();
-    }
-    cached_last_active_time_ = converted_time;
+  const base::Time last_active_time = web_contents_->GetLastActiveTime();
+  const base::TimeTicks last_active_time_ticks =
+      web_contents_->GetLastActiveTimeTicks();
+  if (cached_last_active_time_.has_value() &&
+      last_active_time_ticks - cached_last_active_time_.value().first <
+          kSyncActiveTimeThreshold) {
+    return cached_last_active_time_.value().second;
   }
-  return converted_time;
+  cached_last_active_time_ = {last_active_time_ticks, last_active_time};
+  return last_active_time;
 }
 
 bool TabContentsSyncedTabDelegate::IsBeingDestroyed() const {

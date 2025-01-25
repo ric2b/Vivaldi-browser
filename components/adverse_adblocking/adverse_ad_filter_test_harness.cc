@@ -108,7 +108,7 @@ void AdverseAdFilterTestHarness::SetUp() {
   infobars::ContentInfoBarManager::CreateForWebContents(web_contents());
   content_settings::PageSpecificContentSettings::CreateForWebContents(
       web_contents(),
-      std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
+      std::make_unique<PageSpecificContentSettingsDelegate>(
           web_contents()));
 
   VivaldiSubresourceFilterAdblockingThrottleManager::

@@ -1,6 +1,10 @@
 #include <metal_stdlib>
 using namespace metal;
 
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
+
 struct tint_module_vars_struct {
   const constant int* u;
 };
@@ -12,11 +16,11 @@ int f() {
 void g() {
   int j = 0;
   {
-    while(true) {
+    TINT_ISOLATE_UB(tint_volatile_true) while(true) {
       if ((j >= 1)) {
         break;
       }
-      j = (j + 1);
+      j = as_type<int>((as_type<uint>(j) + as_type<uint>(1)));
       int k = f();
       {
       }

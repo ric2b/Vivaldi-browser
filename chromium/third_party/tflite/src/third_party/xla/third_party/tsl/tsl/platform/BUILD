@@ -68,6 +68,7 @@ cc_library(
         ":status",
         ":stringpiece",
         ":types",
+        "@com_google_absl//absl/status",
     ],
 )
 
@@ -150,6 +151,28 @@ cc_library(
         "threadpool.h",
     ],
     deps = tf_windows_aware_platform_deps("env") + if_static([":env_impl"]),
+)
+
+cc_library(
+    name = "threadpool_async_executor",
+    hdrs = ["threadpool_async_executor.h"],
+    deps = [
+        ":env",
+        "@local_xla//xla/tsl/concurrency:async_value",
+    ],
+)
+
+tsl_cc_test(
+    name = "threadpool_async_executor_test",
+    srcs = ["threadpool_async_executor_test.cc"],
+    deps = [
+        ":env",
+        ":env_impl",
+        ":test",
+        ":test_main",
+        ":threadpool_async_executor",
+        "@com_google_absl//absl/synchronization",
+    ],
 )
 
 cc_library(
@@ -847,6 +870,7 @@ cc_library(
     deps = [
         ":logging",
         ":path",
+        ":platform",
         ":test",
     ],
 )
@@ -1464,7 +1488,7 @@ tsl_cc_test(
         ":subprocess",
         ":test",
         ":test_main",
-        "//tsl/lib/core:status_test_util",
+        "@local_xla//xla/tsl/lib/core:status_test_util",
     ],
 )
 
@@ -1767,7 +1791,7 @@ tsl_cc_test(
         ":str_util",
         ":test",
         ":test_main",
-        "//tsl/lib/core:status_test_util",
+        "@local_xla//xla/tsl/lib/core:status_test_util",
     ],
 )
 
@@ -1783,7 +1807,7 @@ tsl_cc_test(
         ":str_util",
         ":test",
         ":test_main",
-        "//tsl/lib/core:status_test_util",
         "@com_google_absl//absl/time",
+        "@local_xla//xla/tsl/lib/core:status_test_util",
     ],
 )

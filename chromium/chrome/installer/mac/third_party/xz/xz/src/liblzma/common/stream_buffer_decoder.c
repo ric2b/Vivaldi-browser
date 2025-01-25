@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       stream_buffer_decoder.c
 /// \brief      Single-call .xz Stream decoder
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -15,7 +14,7 @@
 
 extern LZMA_API(lzma_ret)
 lzma_stream_buffer_decode(uint64_t *memlimit, uint32_t flags,
-		lzma_allocator *allocator,
+		const lzma_allocator *allocator,
 		const uint8_t *in, size_t *in_pos, size_t in_size,
 		uint8_t *out, size_t *out_pos, size_t out_size)
 {

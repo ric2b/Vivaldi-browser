@@ -66,6 +66,7 @@
 #include "src/tint/lang/core/ir/swizzle.h"
 #include "src/tint/lang/core/ir/terminate_invocation.h"
 #include "src/tint/lang/core/ir/unreachable.h"
+#include "src/tint/lang/core/ir/unused.h"
 #include "src/tint/lang/core/ir/user_call.h"
 #include "src/tint/lang/core/ir/value.h"  // IWYU pragma: export
 #include "src/tint/lang/core/ir/var.h"
@@ -74,11 +75,13 @@
 #include "src/tint/lang/core/type/f16.h"    // IWYU pragma: export
 #include "src/tint/lang/core/type/f32.h"    // IWYU pragma: export
 #include "src/tint/lang/core/type/i32.h"    // IWYU pragma: export
+#include "src/tint/lang/core/type/i8.h"     // IWYU pragma: export
 #include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/memory_view.h"
 #include "src/tint/lang/core/type/pointer.h"  // IWYU pragma: export
 #include "src/tint/lang/core/type/type.h"     // IWYU pragma: export
 #include "src/tint/lang/core/type/u32.h"      // IWYU pragma: export
+#include "src/tint/lang/core/type/u8.h"       // IWYU pragma: export
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"  // IWYU pragma: export
 #include "src/tint/utils/ice/ice.h"
@@ -133,21 +136,17 @@ class Builder {
             /// @param i the instruction to insert
             void operator()(ir::Instruction* i) { block->Append(i); }
         };
-        /// Insertion point method that inserts the instruction to the front of #block
-        struct PrependToBlock {
-            /// The block to insert new instructions to the front of
-            ir::Block* block = nullptr;
-            /// The insertion point function
-            /// @param i the instruction to insert
-            void operator()(ir::Instruction* i) { block->Prepend(i); }
-        };
-        /// Insertion point method that inserts the instruction after #after
+        /// Insertion point method that inserts the instruction after #after and updates the
+        /// insertion point to be after the inserted instruction.
         struct InsertAfter {
             /// The instruction to insert new instructions after
             ir::Instruction* after = nullptr;
             /// The insertion point function
             /// @param i the instruction to insert
-            void operator()(ir::Instruction* i) { i->InsertAfter(after); }
+            void operator()(ir::Instruction* i) {
+                i->InsertAfter(after);
+                after = i;
+            }
         };
         /// Insertion point method that inserts the instruction before #before
         struct InsertBefore {
@@ -162,7 +161,6 @@ class Builder {
     /// A variant of different instruction insertion methods
     using InsertionPoint = std::variant<InsertionPoints::NoInsertion,
                                         InsertionPoints::AppendToBlock,
-                                        InsertionPoints::PrependToBlock,
                                         InsertionPoints::InsertAfter,
                                         InsertionPoints::InsertBefore>;
 
@@ -191,15 +189,6 @@ class Builder {
     template <typename FUNCTION>
     void Append(ir::Block* b, FUNCTION&& cb) {
         TINT_SCOPED_ASSIGNMENT(insertion_point_, InsertionPoints::AppendToBlock{b});
-        cb();
-    }
-
-    /// Calls @p cb with the builder prepending to block @p b
-    /// @param b the block to set as the block to prepend to
-    /// @param cb the function to call with the builder prepending to block @p b
-    template <typename FUNCTION>
-    void Prepend(ir::Block* b, FUNCTION&& cb) {
-        TINT_SCOPED_ASSIGNMENT(insertion_point_, InsertionPoints::PrependToBlock{b});
         cb();
     }
 
@@ -294,7 +283,7 @@ class Builder {
     template <typename T>
     ir::If* If(T&& condition) {
         auto* cond_val = Value(std::forward<T>(condition));
-        return Append(ir.allocators.instructions.Create<ir::If>(cond_val, Block(), Block()));
+        return Append(ir.CreateInstruction<ir::If>(cond_val, Block(), Block()));
     }
 
     /// Creates a loop instruction
@@ -307,7 +296,7 @@ class Builder {
     template <typename T>
     ir::Switch* Switch(T&& condition) {
         auto* cond_val = Value(std::forward<T>(condition));
-        return Append(ir.allocators.instructions.Create<ir::Switch>(cond_val));
+        return Append(ir.CreateInstruction<ir::Switch>(cond_val));
     }
 
     /// Creates a default case for the switch @p s
@@ -331,8 +320,7 @@ class Builder {
     /// @param val the constant value
     /// @returns the new constant
     ir::Constant* Constant(const core::constant::Value* val) {
-        return ir.constants.GetOrAdd(
-            val, [&] { return ir.allocators.values.Create<ir::Constant>(val); });
+        return ir.constants.GetOrAdd(val, [&] { return ir.CreateValue<ir::Constant>(val); });
     }
 
     /// Creates a ir::Constant for an i32 Scalar
@@ -340,10 +328,20 @@ class Builder {
     /// @returns the new constant
     ir::Constant* Constant(core::i32 v) { return Constant(ConstantValue(v)); }
 
+    /// Creates a ir::Constant for an i8 Scalar
+    /// @param v the value
+    /// @returns the new constant
+    ir::Constant* Constant(core::i8 v) { return Constant(ConstantValue(v)); }
+
     /// Creates a ir::Constant for a u32 Scalar
     /// @param v the value
     /// @returns the new constant
     ir::Constant* Constant(core::u32 v) { return Constant(ConstantValue(v)); }
+
+    /// Creates a ir::Constant for a u8 Scalar
+    /// @param v the value
+    /// @returns the new constant
+    ir::Constant* Constant(core::u8 v) { return Constant(ConstantValue(v)); }
 
     /// Creates a ir::Constant for a f32 Scalar
     /// @param v the value
@@ -377,10 +375,20 @@ class Builder {
     /// @returns the new constant
     const core::constant::Value* ConstantValue(core::i32 v) { return ir.constant_values.Get(v); }
 
+    /// Creates a core::constant::Value for an i8 Scalar
+    /// @param v the value
+    /// @returns the new constant
+    const core::constant::Value* ConstantValue(core::i8 v) { return ir.constant_values.Get(v); }
+
     /// Creates a core::constant::Value for a u32 Scalar
     /// @param v the value
     /// @returns the new constant
     const core::constant::Value* ConstantValue(core::u32 v) { return ir.constant_values.Get(v); }
+
+    /// Creates a core::constant::Value for a u8 Scalar
+    /// @param v the value
+    /// @returns the new constant
+    const core::constant::Value* ConstantValue(core::u8 v) { return ir.constant_values.Get(v); }
 
     /// Creates a core::constant::Value for a f32 Scalar
     /// @param v the value
@@ -533,8 +541,23 @@ class Builder {
         CheckForNonDeterministicEvaluation<LHS, RHS>();
         auto* lhs_val = Value(std::forward<LHS>(lhs));
         auto* rhs_val = Value(std::forward<RHS>(rhs));
-        return Append(ir.allocators.instructions.Create<ir::CoreBinary>(InstructionResult(type), op,
-                                                                        lhs_val, rhs_val));
+        return Append(
+            ir.CreateInstruction<ir::CoreBinary>(InstructionResult(type), op, lhs_val, rhs_val));
+    }
+
+    /// Creates an op for `lhs kind rhs`
+    /// @param op the binary operator
+    /// @param type the result type of the binary expression
+    /// @param lhs the left-hand-side of the operation
+    /// @param rhs the right-hand-side of the operation
+    /// @returns the operation
+    template <typename KLASS, typename LHS, typename RHS>
+    tint::traits::EnableIf<tint::traits::IsTypeOrDerived<KLASS, ir::Binary>, KLASS*>
+    Binary(BinaryOp op, const core::type::Type* type, LHS&& lhs, RHS&& rhs) {
+        CheckForNonDeterministicEvaluation<LHS, RHS>();
+        auto* lhs_val = Value(std::forward<LHS>(lhs));
+        auto* rhs_val = Value(std::forward<RHS>(rhs));
+        return Append(ir.CreateInstruction<KLASS>(InstructionResult(type), op, lhs_val, rhs_val));
     }
 
     /// Creates an And operation
@@ -883,8 +906,7 @@ class Builder {
     template <typename VAL>
     ir::CoreUnary* Unary(UnaryOp op, const core::type::Type* type, VAL&& val) {
         auto* value = Value(std::forward<VAL>(val));
-        return Append(
-            ir.allocators.instructions.Create<ir::CoreUnary>(InstructionResult(type), op, value));
+        return Append(ir.CreateInstruction<ir::CoreUnary>(InstructionResult(type), op, value));
     }
 
     /// Creates an op for `op val`
@@ -962,8 +984,7 @@ class Builder {
     template <typename VAL>
     ir::Bitcast* Bitcast(const core::type::Type* type, VAL&& val) {
         auto* value = Value(std::forward<VAL>(val));
-        return Append(
-            ir.allocators.instructions.Create<ir::Bitcast>(InstructionResult(type), value));
+        return Append(ir.CreateInstruction<ir::Bitcast>(InstructionResult(type), value));
     }
 
     /// Creates a bitcast instruction
@@ -990,8 +1011,8 @@ class Builder {
     ir::UserCall* CallWithResult(ir::InstructionResult* result,
                                  ir::Function* func,
                                  ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<ir::UserCall>(
-            result, func, Values(std::forward<ARGS>(args)...)));
+        return Append(
+            ir.CreateInstruction<ir::UserCall>(result, func, Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates a user function call instruction
@@ -1033,7 +1054,7 @@ class Builder {
     ir::CoreBuiltinCall* CallWithResult(core::ir::InstructionResult* result,
                                         core::BuiltinFn func,
                                         ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<ir::CoreBuiltinCall>(
+        return Append(ir.CreateInstruction<ir::CoreBuiltinCall>(
             result, func, Values(std::forward<ARGS>(args)...)));
     }
 
@@ -1066,8 +1087,8 @@ class Builder {
     template <typename KLASS, typename FUNC, typename... ARGS>
     tint::traits::EnableIf<tint::traits::IsTypeOrDerived<KLASS, ir::BuiltinCall>, KLASS*>
     CallWithResult(ir::InstructionResult* result, FUNC func, ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<KLASS>(
-            result, func, Values(std::forward<ARGS>(args)...)));
+        return Append(
+            ir.CreateInstruction<KLASS>(result, func, Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates a builtin call instruction
@@ -1091,8 +1112,8 @@ class Builder {
     template <typename KLASS, typename FUNC, typename OBJ, typename... ARGS>
     tint::traits::EnableIf<tint::traits::IsTypeOrDerived<KLASS, ir::MemberBuiltinCall>, KLASS*>
     MemberCallWithResult(ir::InstructionResult* result, FUNC func, OBJ&& obj, ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<KLASS>(
-            result, func, Value(std::forward<OBJ>(obj)), Values(std::forward<ARGS>(args)...)));
+        return Append(ir.CreateInstruction<KLASS>(result, func, Value(std::forward<OBJ>(obj)),
+                                                  Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates a member builtin call instruction.
@@ -1115,8 +1136,7 @@ class Builder {
     /// @returns the instruction
     template <typename VAL>
     ir::Convert* ConvertWithResult(ir::InstructionResult* result, VAL&& val) {
-        return Append(
-            ir.allocators.instructions.Create<ir::Convert>(result, Value(std::forward<VAL>(val))));
+        return Append(ir.CreateInstruction<ir::Convert>(result, Value(std::forward<VAL>(val))));
     }
 
     /// Creates a value conversion instruction to the template type T
@@ -1143,8 +1163,8 @@ class Builder {
     /// @returns the instruction
     template <typename... ARGS>
     ir::Construct* ConstructWithResult(ir::InstructionResult* result, ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<ir::Construct>(
-            result, Values(std::forward<ARGS>(args)...)));
+        return Append(
+            ir.CreateInstruction<ir::Construct>(result, Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates a value constructor instruction to the template type T
@@ -1172,7 +1192,7 @@ class Builder {
     template <typename VAL>
     ir::Load* LoadWithResult(ir::InstructionResult* result, VAL&& from) {
         auto* value = Value(std::forward<VAL>(from));
-        return Append(ir.allocators.instructions.Create<ir::Load>(result, value));
+        return Append(ir.CreateInstruction<ir::Load>(result, value));
     }
 
     /// Creates a load instruction
@@ -1193,7 +1213,7 @@ class Builder {
         CheckForNonDeterministicEvaluation<TO, FROM>();
         auto* to_val = Value(std::forward<TO>(to));
         auto* from_val = Value(std::forward<FROM>(from));
-        return Append(ir.allocators.instructions.Create<ir::Store>(to_val, from_val));
+        return Append(ir.CreateInstruction<ir::Store>(to_val, from_val));
     }
 
     /// Creates a store vector element instruction
@@ -1207,8 +1227,7 @@ class Builder {
         auto* to_val = Value(std::forward<TO>(to));
         auto* index_val = Value(std::forward<INDEX>(index));
         auto* value_val = Value(std::forward<VALUE>(value));
-        return Append(ir.allocators.instructions.Create<ir::StoreVectorElement>(to_val, index_val,
-                                                                                value_val));
+        return Append(ir.CreateInstruction<ir::StoreVectorElement>(to_val, index_val, value_val));
     }
 
     /// Creates a load vector element instruction with an existing instruction result
@@ -1223,8 +1242,7 @@ class Builder {
         CheckForNonDeterministicEvaluation<FROM, INDEX>();
         auto* from_val = Value(std::forward<FROM>(from));
         auto* index_val = Value(std::forward<INDEX>(index));
-        return Append(
-            ir.allocators.instructions.Create<ir::LoadVectorElement>(result, from_val, index_val));
+        return Append(ir.CreateInstruction<ir::LoadVectorElement>(result, from_val, index_val));
     }
 
     /// Creates a load vector element instruction
@@ -1265,7 +1283,7 @@ class Builder {
             !traits::IsTypeOrDerived<std::remove_pointer_t<std::decay_t<VALUE>>, core::type::Type>>>
     ir::Var* Var(std::string_view name, VALUE&& init) {
         auto* val = Value(std::forward<VALUE>(init));
-        if (TINT_UNLIKELY(!val)) {
+        if (DAWN_UNLIKELY(!val)) {
             TINT_ASSERT(val);
             return nullptr;
         }
@@ -1320,12 +1338,11 @@ class Builder {
     template <typename VALUE>
     ir::Let* Let(std::string_view name, VALUE&& value) {
         auto* val = Value(std::forward<VALUE>(value));
-        if (TINT_UNLIKELY(!val)) {
+        if (DAWN_UNLIKELY(!val)) {
             TINT_ASSERT(val);
             return nullptr;
         }
-        auto* let =
-            Append(ir.allocators.instructions.Create<ir::Let>(InstructionResult(val->Type()), val));
+        auto* let = Append(ir.CreateInstruction<ir::Let>(InstructionResult(val->Type()), val));
         ir.SetName(let->Result(0), name);
         return let;
     }
@@ -1334,7 +1351,7 @@ class Builder {
     /// @param type the let type
     /// @returns the instruction
     ir::Let* Let(const type::Type* type) {
-        auto* let = ir.allocators.instructions.Create<ir::Let>(InstructionResult(type), nullptr);
+        auto* let = ir.CreateInstruction<ir::Let>(InstructionResult(type), nullptr);
         Append(let);
         return let;
     }
@@ -1343,7 +1360,7 @@ class Builder {
     /// @param func the function being returned
     /// @returns the instruction
     ir::Return* Return(ir::Function* func) {
-        return Append(ir.allocators.instructions.Create<ir::Return>(func));
+        return Append(ir.CreateInstruction<ir::Return>(func));
     }
 
     /// Creates a return instruction
@@ -1354,11 +1371,11 @@ class Builder {
     ir::Return* Return(ir::Function* func, ARG&& value) {
         if constexpr (std::is_same_v<std::decay_t<ARG>, ir::Value*>) {
             if (value == nullptr) {
-                return Append(ir.allocators.instructions.Create<ir::Return>(func));
+                return Append(ir.CreateInstruction<ir::Return>(func));
             }
         }
         auto* val = Value(std::forward<ARG>(value));
-        return Append(ir.allocators.instructions.Create<ir::Return>(func, val));
+        return Append(ir.CreateInstruction<ir::Return>(func, val));
     }
 
     /// Creates a loop next iteration instruction
@@ -1367,8 +1384,8 @@ class Builder {
     /// @returns the instruction
     template <typename... ARGS>
     ir::NextIteration* NextIteration(ir::Loop* loop, ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<ir::NextIteration>(
-            loop, Values(std::forward<ARGS>(args)...)));
+        return Append(
+            ir.CreateInstruction<ir::NextIteration>(loop, Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates a loop break-if instruction
@@ -1379,7 +1396,7 @@ class Builder {
     ir::BreakIf* BreakIf(ir::Loop* loop, CONDITION&& condition) {
         CheckForNonDeterministicEvaluation<CONDITION>();
         auto* cond_val = Value(std::forward<CONDITION>(condition));
-        return Append(ir.allocators.instructions.Create<ir::BreakIf>(cond_val, loop));
+        return Append(ir.CreateInstruction<ir::BreakIf>(cond_val, loop));
     }
 
     /// Creates a loop break-if instruction
@@ -1397,7 +1414,7 @@ class Builder {
                          EXIT_VALUES&& exit_values) {
         CheckForNonDeterministicEvaluation<CONDITION, NEXT_ITER_VALUES, EXIT_VALUES>();
         auto* cond_val = Value(std::forward<CONDITION>(condition));
-        return Append(ir.allocators.instructions.Create<ir::BreakIf>(
+        return Append(ir.CreateInstruction<ir::BreakIf>(
             cond_val, loop, Values(std::forward<NEXT_ITER_VALUES>(next_iter_values)),
             Values(std::forward<EXIT_VALUES>(exit_values))));
     }
@@ -1408,8 +1425,8 @@ class Builder {
     /// @returns the instruction
     template <typename... ARGS>
     ir::Continue* Continue(ir::Loop* loop, ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<ir::Continue>(
-            loop, Values(std::forward<ARGS>(args)...)));
+        return Append(
+            ir.CreateInstruction<ir::Continue>(loop, Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates an exit switch instruction
@@ -1418,8 +1435,8 @@ class Builder {
     /// @returns the instruction
     template <typename... ARGS>
     ir::ExitSwitch* ExitSwitch(ir::Switch* sw, ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<ir::ExitSwitch>(
-            sw, Values(std::forward<ARGS>(args)...)));
+        return Append(
+            ir.CreateInstruction<ir::ExitSwitch>(sw, Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates an exit loop instruction
@@ -1428,8 +1445,8 @@ class Builder {
     /// @returns the instruction
     template <typename... ARGS>
     ir::ExitLoop* ExitLoop(ir::Loop* loop, ARGS&&... args) {
-        return Append(ir.allocators.instructions.Create<ir::ExitLoop>(
-            loop, Values(std::forward<ARGS>(args)...)));
+        return Append(
+            ir.CreateInstruction<ir::ExitLoop>(loop, Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates an exit if instruction
@@ -1438,8 +1455,7 @@ class Builder {
     /// @returns the instruction
     template <typename... ARGS>
     ir::ExitIf* ExitIf(ir::If* i, ARGS&&... args) {
-        return Append(
-            ir.allocators.instructions.Create<ir::ExitIf>(i, Values(std::forward<ARGS>(args)...)));
+        return Append(ir.CreateInstruction<ir::ExitIf>(i, Values(std::forward<ARGS>(args)...)));
     }
 
     /// Creates an exit instruction for the given control instruction
@@ -1524,8 +1540,8 @@ class Builder {
     ir::Access* AccessWithResult(ir::InstructionResult* result, OBJ&& object, ARGS&&... indices) {
         CheckForNonDeterministicEvaluation<OBJ, ARGS...>();
         auto* obj_val = Value(std::forward<OBJ>(object));
-        return Append(ir.allocators.instructions.Create<ir::Access>(
-            result, obj_val, Values(std::forward<ARGS>(indices)...)));
+        return Append(ir.CreateInstruction<ir::Access>(result, obj_val,
+                                                       Values(std::forward<ARGS>(indices)...)));
     }
 
     /// Creates a new `Access`
@@ -1558,8 +1574,8 @@ class Builder {
     template <typename OBJ>
     ir::Swizzle* Swizzle(const core::type::Type* type, OBJ&& object, VectorRef<uint32_t> indices) {
         auto* obj_val = Value(std::forward<OBJ>(object));
-        return Append(ir.allocators.instructions.Create<ir::Swizzle>(InstructionResult(type),
-                                                                     obj_val, std::move(indices)));
+        return Append(ir.CreateInstruction<ir::Swizzle>(InstructionResult(type), obj_val,
+                                                        std::move(indices)));
     }
 
     /// Creates a new `Swizzle`
@@ -1583,8 +1599,8 @@ class Builder {
                          OBJ&& object,
                          std::initializer_list<uint32_t> indices) {
         auto* obj_val = Value(std::forward<OBJ>(object));
-        return Append(ir.allocators.instructions.Create<ir::Swizzle>(
-            InstructionResult(type), obj_val, Vector<uint32_t, 4>(indices)));
+        return Append(ir.CreateInstruction<ir::Swizzle>(InstructionResult(type), obj_val,
+                                                        Vector<uint32_t, 4>(indices)));
     }
 
     /// Name names the value or instruction with @p name
@@ -1605,11 +1621,15 @@ class Builder {
     /// @returns the instruction
     ir::Unreachable* Unreachable();
 
+    /// Creates an unused instruction
+    /// @returns the instruction
+    ir::Unused* Unused();
+
     /// Creates a new runtime value
     /// @param type the return type
     /// @returns the value
     ir::InstructionResult* InstructionResult(const core::type::Type* type) {
-        return ir.allocators.values.Create<ir::InstructionResult>(type);
+        return ir.CreateValue<ir::InstructionResult>(type);
     }
 
     /// Creates a new runtime value

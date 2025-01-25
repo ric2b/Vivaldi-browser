@@ -43,7 +43,6 @@
 #include "menus/context_menu_service_factory.h"
 #include "menus/main_menu_service_factory.h"
 #include "sessions/index_service_factory.h"
-#include "sync/invalidation/vivaldi_invalidation_service_factory.h"
 #include "sync/note_sync_service_factory.h"
 #include "translate_history/th_service_factory.h"
 #include "ui/lazy_load_service_factory.h"
@@ -106,6 +105,7 @@
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 #include "components/crashreport/crashreport_observer.h"
 #include "components/theme/native_web_theme_observer.h"
+#include "permissions/vivaldi_permission_handler_impl.h"
 #endif
 
 namespace vivaldi {
@@ -143,6 +143,7 @@ void VivaldiBrowserMainExtraParts::
   menus::ContextMenuServiceFactory::GetInstance();
   sessions::IndexServiceFactory::GetInstance();
   vivaldi_runtime_feature::Init();
+  vivaldi::permissions::VivaldiPermissionHandlerImpl::GetInstance();
 #endif
   page_actions::ServiceFactory::GetInstance();
   adblock_filter::RuleServiceFactory::GetInstance();

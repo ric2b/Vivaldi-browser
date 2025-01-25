@@ -47,7 +47,7 @@ constexpr char XrBrowserTestBase::kTestFileDir[];
 constexpr char XrBrowserTestBase::kSwitchIgnoreRuntimeRequirements[];
 const std::vector<std::string> XrBrowserTestBase::kRequiredTestSwitches{
     "enable-gpu", "enable-pixel-output-in-tests",
-    "run-through-xr-wrapper-script"};
+    "run-through-xr-wrapper-script", "enable-unsafe-swiftshader"};
 const std::vector<std::pair<std::string, std::string>>
     XrBrowserTestBase::kRequiredTestSwitchesWithValues{
         std::pair<std::string, std::string>("test-launcher-jobs", "1")};
@@ -220,7 +220,7 @@ void XrBrowserTestBase::OpenNewTab(const std::string& url) {
 
 void XrBrowserTestBase::OpenNewTab(const std::string& url, bool incognito) {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 #else
   if (incognito) {
     OpenURLOffTheRecord(browser()->profile(), GURL(url));

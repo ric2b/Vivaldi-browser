@@ -226,9 +226,9 @@ class RichAnswerText implements AnswerText {
                 int styleResource =
                         wantPositiveColor
                                 ? org.chromium.chrome.browser.omnibox.R.style
-                                        .TextAppearance_OmniboxAnswerDescriptionPositiveSmall
+                                        .TextAppearance_OmniboxAnswerDescriptionPositive
                                 : org.chromium.chrome.browser.omnibox.R.style
-                                        .TextAppearance_OmniboxAnswerDescriptionNegativeSmall;
+                                        .TextAppearance_OmniboxAnswerDescriptionNegative;
                 yield new DownloadableFontTextAppearanceSpan(context, styleResource);
             }
             default -> new DownloadableFontTextAppearanceSpan(context, largeRes);

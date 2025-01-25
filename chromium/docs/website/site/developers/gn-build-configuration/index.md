@@ -172,7 +172,6 @@ Use these args for official builds:
 ```
 is_official_build = true
 is_chrome_branded = true
-is_debug = false
 ```
 
 For 32-bit official builds, append this arg to the above set:

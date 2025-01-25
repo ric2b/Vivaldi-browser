@@ -85,8 +85,7 @@ export class BidiHTTPResponse extends HTTPResponse {
 
   override headers(): Record<string, string> {
     const headers: Record<string, string> = {};
-    // TODO: Remove once the Firefox implementation is compliant with https://w3c.github.io/webdriver-bidi/#get-the-response-data.
-    for (const header of this.#data.headers || []) {
+    for (const header of this.#data.headers) {
       // TODO: How to handle Binary Headers
       // https://w3c.github.io/webdriver-bidi/#type-network-Header
       if (header.value.type === 'string') {
@@ -105,7 +104,30 @@ export class BidiHTTPResponse extends HTTPResponse {
   }
 
   override timing(): Protocol.Network.ResourceTiming | null {
-    throw new UnsupportedOperation();
+    const bidiTiming = this.#request.timing();
+    return {
+      requestTime: bidiTiming.requestTime,
+      proxyStart: -1,
+      proxyEnd: -1,
+      dnsStart: bidiTiming.dnsStart,
+      dnsEnd: bidiTiming.dnsEnd,
+      connectStart: bidiTiming.connectStart,
+      connectEnd: bidiTiming.connectEnd,
+      sslStart: bidiTiming.tlsStart,
+      sslEnd: -1,
+      workerStart: -1,
+      workerReady: -1,
+      workerFetchStart: -1,
+      workerRespondWithSettled: -1,
+      workerRouterEvaluationStart: -1,
+      workerCacheLookupStart: -1,
+      sendStart: bidiTiming.requestStart,
+      sendEnd: -1,
+      pushStart: -1,
+      pushEnd: -1,
+      receiveHeadersStart: bidiTiming.responseStart,
+      receiveHeadersEnd: bidiTiming.responseEnd,
+    };
   }
 
   override frame(): Frame | null {
@@ -123,7 +145,7 @@ export class BidiHTTPResponse extends HTTPResponse {
     return this.#securityDetails ?? null;
   }
 
-  override buffer(): never {
+  override content(): never {
     throw new UnsupportedOperation();
   }
 }

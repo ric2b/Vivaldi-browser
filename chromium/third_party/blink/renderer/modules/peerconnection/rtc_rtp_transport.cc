@@ -11,7 +11,6 @@
 
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/web_rtc_cross_thread_copier.h"
-#include "third_party/blink/renderer/modules/peerconnection/intercepting_network_controller.h"
 #include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/renderer/platform/peerconnection/webrtc_util.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
@@ -19,127 +18,113 @@
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 
+namespace WTF {
+template <>
+struct CrossThreadCopier<Vector<scoped_refptr<blink::FeedbackProvider>>>
+    : public CrossThreadCopierPassThrough<
+          Vector<scoped_refptr<blink::FeedbackProvider>>> {
+  STATIC_ONLY(CrossThreadCopier);
+};
+}  // namespace WTF
+
 namespace blink {
 
-namespace {
+// This method runs in the worker context, once PostCustomEvent appears.
+Event* CreateEvent(
+    CrossThreadWeakHandle<RTCRtpTransport> rtp_transport,
+    scoped_refptr<base::SequencedTaskRunner> rtp_transport_task_runner,
+    ScriptState* script_state,
+    CustomEventMessage data) {
+  auto* processor = MakeGarbageCollected<RTCRtpTransportProcessor>(
+      ExecutionContext::From(script_state));
+  auto* event = MakeGarbageCollected<RTCRtpTransportProcessorEvent>(processor);
 
-class FeedbackReceiverImpl : public FeedbackReceiver {
- public:
-  FeedbackReceiverImpl(RTCRtpTransport* rtc_rtp_transport,
-                       scoped_refptr<base::SequencedTaskRunner> task_runner)
-      : rtc_rtp_transport_(rtc_rtp_transport),
-        task_runner_(std::move(task_runner)) {}
+  // Reply to the RTCRtpTransport object on the main thread with a handle to
+  // the created Processor.
+  PostCrossThreadTask(
+      *rtp_transport_task_runner, FROM_HERE,
+      CrossThreadBindOnce(
+          &RTCRtpTransport::SetProcessorHandle,
+          MakeUnwrappingCrossThreadWeakHandle(rtp_transport),
+          MakeCrossThreadWeakHandle(processor),
+          WrapRefCounted(ExecutionContext::From(script_state)
+                             ->GetTaskRunner(TaskType::kInternalMediaRealTime)
+                             .get())));
+  return event;
+}
 
-  void OnFeedback(webrtc::TransportPacketsFeedback feedback) override {
-    // Called on a WebRTC thread.
-    CHECK(!task_runner_->RunsTasksInCurrentSequence());
+RTCRtpTransport::RTCRtpTransport(ExecutionContext* context)
+    : ExecutionContextClient(context) {}
+
+RTCRtpTransport::~RTCRtpTransport() = default;
+
+void RTCRtpTransport::createProcessor(ScriptState* script_state,
+                                      DedicatedWorker* worker,
+                                      ExceptionState& exception_state) {
+  createProcessor(script_state, worker, ScriptValue(), exception_state);
+}
+
+void RTCRtpTransport::createProcessor(ScriptState* script_state,
+                                      DedicatedWorker* worker,
+                                      const ScriptValue& options,
+                                      ExceptionState& exception_state) {
+  HeapVector<ScriptValue> transfer;
+  createProcessor(script_state, worker, options, transfer, exception_state);
+}
+
+void RTCRtpTransport::createProcessor(ScriptState* script_state,
+                                      DedicatedWorker* worker,
+                                      const ScriptValue& options,
+                                      HeapVector<ScriptValue>& transfer,
+                                      ExceptionState& exception_state) {
+  worker->PostCustomEvent(
+      TaskType::kInternalMediaRealTime, script_state,
+      CrossThreadBindRepeating(
+          &CreateEvent, MakeCrossThreadWeakHandle(this),
+          ExecutionContext::From(script_state)
+              ->GetTaskRunner(TaskType::kInternalMediaRealTime)),
+      CrossThreadFunction<Event*(ScriptState*)>(), options, transfer,
+      exception_state);
+}
+
+void RTCRtpTransport::RegisterFeedbackProvider(
+    scoped_refptr<FeedbackProvider> feedback_provider) {
+  if (processor_) {
+    CHECK(processor_task_runner_);
+    feedback_provider->SetProcessor(*processor_, processor_task_runner_);
+  }
+
+  feedback_providers_.push_back(std::move(feedback_provider));
+
+  if (processor_) {
     PostCrossThreadTask(
-        *task_runner_, FROM_HERE,
-        CrossThreadBindOnce(
-            &FeedbackReceiverImpl::OnFeedbackOnDestinationTaskRunner,
-            WrapRefCounted(this), feedback));
+        *processor_task_runner_, FROM_HERE,
+        CrossThreadBindOnce(&RTCRtpTransportProcessor ::SetFeedbackProviders,
+                            MakeUnwrappingCrossThreadWeakHandle(*processor_),
+                            feedback_providers_));
   }
-
-  void OnFeedbackOnDestinationTaskRunner(
-      webrtc::TransportPacketsFeedback feedback) {
-    CHECK(task_runner_->RunsTasksInCurrentSequence());
-    if (rtc_rtp_transport_) {
-      rtc_rtp_transport_->OnFeedback(feedback);
-    }
-  }
-
-  void OnSentPacket(webrtc::SentPacket sp) override {
-    // Called on a WebRTC thread.
-    CHECK(!task_runner_->RunsTasksInCurrentSequence());
-    PostCrossThreadTask(
-        *task_runner_, FROM_HERE,
-        CrossThreadBindOnce(
-            &FeedbackReceiverImpl::OnSentPacketOnDestinationTaskRunner,
-            WrapRefCounted(this), sp));
-  }
-
-  void OnSentPacketOnDestinationTaskRunner(webrtc::SentPacket sp) {
-    CHECK(task_runner_->RunsTasksInCurrentSequence());
-    if (rtc_rtp_transport_) {
-      rtc_rtp_transport_->OnSentPacket(sp);
-    }
-  }
-
- private:
-  WeakPersistent<RTCRtpTransport> rtc_rtp_transport_;
-  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
-};
-
-}  // namespace
-
-void RTCRtpTransport::Register(webrtc::NetworkControllerInterface* controller) {
-  InterceptingNetworkController* intercepting_controller =
-      static_cast<InterceptingNetworkController*>(controller);
-  intercepting_controller->SetFeedbackReceiver(
-      base::MakeRefCounted<FeedbackReceiverImpl>(
-          this, To<LocalDOMWindow>(GetExecutionContext())
-                    ->GetTaskRunner(TaskType::kInternalMedia)));
 }
 
-webrtc::NetworkControlUpdate RTCRtpTransport::OnFeedback(
-    webrtc::TransportPacketsFeedback feedback) {
-  HeapVector<Member<RTCRtpAck>> acks;
-  for (const webrtc::PacketResult& result : feedback.packet_feedbacks) {
-    RTCRtpAck* ack = RTCRtpAck::Create();
-    // TODO: crbug.com/345101934 - Handle unset (infinite) result.receive_time.
-    ack->setRemoteReceiveTimestamp(
-        result.receive_time.IsFinite() ? result.receive_time.ms() : 0);
-    ack->setAckId(result.sent_packet.sequence_number);
-    acks.push_back(ack);
+void RTCRtpTransport::SetProcessorHandle(
+    CrossThreadWeakHandle<RTCRtpTransportProcessor> processor,
+    scoped_refptr<base::SequencedTaskRunner> processor_task_runner) {
+  processor_.emplace(std::move(processor));
+  processor_task_runner_ = processor_task_runner;
+
+  for (auto& feedback_provider : feedback_providers_) {
+    feedback_provider->SetProcessor(*processor_, processor_task_runner_);
   }
-  // TODO: crbug.com/345101934 - Actually fill in a received time & ECN.
-  // TODO: crbug.com/345101934 - Handle unset feedback_time.
-  // TODO: crbug.com/345101934 - Have a max size for acks_messages_ to prevent
-  // unbound growth if JS never calls readReceivedAcks(), and implement stats to
-  // tell JS that things were dropped as suggested on
-  // https://github.com/w3c/webrtc-rtptransport/pull/42#issuecomment-2142665283.
-  acks_messages_.push_back(MakeGarbageCollected<RTCRtpAcks>(
-      acks, feedback.feedback_time.IsFinite() ? feedback.feedback_time.ms() : 0,
-      /*received_time=*/0, /*explicit_congestion_notification=*/"unset"));
 
-  return webrtc::NetworkControlUpdate();
-}
-
-HeapVector<Member<RTCRtpAcks>> RTCRtpTransport::readReceivedAcks(
-    uint32_t maxCount) {
-  HeapVector<Member<RTCRtpAcks>> acks_messages;
-  if (acks_messages_.size() <= maxCount) {
-    std::swap(acks_messages, acks_messages_);
-  } else {
-    auto begin = acks_messages_.begin();
-    acks_messages.AppendRange(begin, begin + maxCount);
-    acks_messages_.erase(begin, begin + maxCount);
-  }
-  return acks_messages;
-}
-
-void RTCRtpTransport::OnSentPacket(webrtc::SentPacket sp) {
-  sents_.push_back(MakeGarbageCollected<RTCRtpSent>(
-      sp.send_time.ms<double>(), sp.sequence_number, sp.size.bytes()));
-}
-
-HeapVector<Member<RTCRtpSent>> RTCRtpTransport::readSentRtp(uint32_t maxCount) {
-  HeapVector<Member<RTCRtpSent>> sents;
-  if (sents_.size() <= maxCount) {
-    std::swap(sents, sents_);
-  } else {
-    auto begin = sents_.begin();
-    sents.AppendRange(begin, begin + maxCount);
-    sents_.erase(begin, begin + maxCount);
-  }
-  return sents;
+  PostCrossThreadTask(
+      *processor_task_runner_, FROM_HERE,
+      CrossThreadBindOnce(&RTCRtpTransportProcessor ::SetFeedbackProviders,
+                          MakeUnwrappingCrossThreadWeakHandle(*processor_),
+                          feedback_providers_));
 }
 
 void RTCRtpTransport::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
   ExecutionContextClient::Trace(visitor);
-  visitor->Trace(acks_messages_);
-  visitor->Trace(sents_);
 }
 
 }  // namespace blink

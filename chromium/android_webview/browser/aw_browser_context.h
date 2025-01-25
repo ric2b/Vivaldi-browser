@@ -29,14 +29,11 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/zoom_level_delegate.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom-forward.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom-shared.h"
 
 class GURL;
 class PrefService;
-
-namespace autofill {
-class AutocompleteHistoryManager;
-}
 
 namespace content {
 class ClientHintsControllerDelegate;
@@ -151,6 +148,9 @@ class AwBrowserContext : public content::BrowserContext,
   blink::mojom::PermissionStatus GetGeolocationPermission(
       const GURL& origin) const override;
 
+  mojo::PendingRemote<network::mojom::URLLoaderFactory>
+  CreateURLLoaderFactory();
+
   PrefService* GetPrefService() const { return user_pref_service_.get(); }
 
   void SetExtendedReportingAllowed(bool allowed);
@@ -195,8 +195,6 @@ class AwBrowserContext : public content::BrowserContext,
 
   scoped_refptr<AwQuotaManagerBridge> quota_manager_bridge_;
   std::unique_ptr<AwFormDatabaseService> form_database_service_;
-  std::unique_ptr<autofill::AutocompleteHistoryManager>
-      autocomplete_history_manager_;
 
   std::unique_ptr<visitedlink::VisitedLinkWriter> visitedlink_writer_;
 

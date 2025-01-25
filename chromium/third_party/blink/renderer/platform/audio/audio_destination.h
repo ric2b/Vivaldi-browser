@@ -177,7 +177,8 @@ class PLATFORM_EXPORT AudioDestination final
   // into it.
   void PullFromCallback(AudioBus* destination_bus, base::TimeDelta delay);
 
-  void SendLogMessage(const String& message) const;
+  // https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/media/capture/README.md#logs
+  void SendLogMessage(const char* const func, const String& message) const;
 
   // Accessed by the main thread.
   std::unique_ptr<WebAudioDevice> web_audio_device_;

@@ -1590,7 +1590,7 @@ EIGEN_ALWAYS_INLINE void bscalec(PacketBlock<Packet, N>& aReal, PacketBlock<Pack
   pger_common<Packet, false, N>(&cImag, bImag, aReal.packet);
 }
 
-// Load a PacketBlock, the N parameters make tunning gemm easier so we can add more accumulators as needed.
+// Load a PacketBlock, the N parameters make tuning gemm easier so we can add more accumulators as needed.
 //
 // full = operate (load) on the entire PacketBlock or only half
 template <typename DataMapper, typename Packet, const Index accCols, int StorageOrder, bool Complex, int N, bool full>

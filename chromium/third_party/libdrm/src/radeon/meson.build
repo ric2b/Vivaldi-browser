@@ -65,6 +65,6 @@ test(
   args : [
     '--lib', libdrm_radeon,
     '--symbols-file', files('radeon-symbols.txt'),
-    '--nm', prog_nm.path(),
+    '--nm', prog_nm.full_path(),
   ],
 )

@@ -27,6 +27,7 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/lens/lens_availability.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button_style.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_consumer.h"
 #import "ios/chrome/browser/url_loading/model/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
@@ -51,9 +52,9 @@
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
@@ -91,6 +92,8 @@ using vivaldi::IsVivaldiRunning;
   PrefBackedBoolean* _tabBarEnabled;
   // Pref tracking if force dark pages is enabled.
   PrefBackedBoolean* _forceDarkWebPagesEnabled;
+  // Pref tracking for homepage
+  PrefBackedBoolean* _homepageEnabled;
 }
 // End Vivaldi
 
@@ -175,6 +178,11 @@ using vivaldi::IsVivaldiRunning;
     [_forceDarkWebPagesEnabled setObserver:nil];
     _forceDarkWebPagesEnabled = nil;
   }
+  if (_homepageEnabled) {
+    [_homepageEnabled stop];
+    [_homepageEnabled setObserver:nil];
+    _homepageEnabled = nil;
+  }
   _prefChangeRegistrar.RemoveAll();
   _prefObserverBridge.reset();
   // End Vivaldi
@@ -238,33 +246,35 @@ using vivaldi::IsVivaldiRunning;
                        change:(const WebStateListChange&)change
                        status:(const WebStateListStatus&)status {
   DCHECK_EQ(_webStateList, webStateList);
+
+  if (status.active_web_state_change()) {
+    self.webState = status.new_active_web_state;
+  }
+
+  if (webStateList->IsBatchInProgress()) {
+    return;
+  }
+
+  [self.consumer setTabGridButtonStyle:[self tabGridButtonStyleToDisplay]];
+
+  const int tabCount = [self tabCountToDisplay];
   switch (change.type()) {
     case WebStateListChange::Type::kStatusOnly:
-      // The activation is handled after this switch statement.
+      [self.consumer setTabCount:tabCount addedInBackground:NO];
       break;
-    case WebStateListChange::Type::kDetach: {
-      if (webStateList->IsBatchInProgress()) {
-        break;
-      }
-
-      [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
+    case WebStateListChange::Type::kDetach:
+      [self.consumer setTabCount:tabCount addedInBackground:NO];
       break;
-    }
     case WebStateListChange::Type::kMove:
-      // Do nothing when a WebState is moved.
+      [self.consumer setTabCount:tabCount addedInBackground:NO];
       break;
     case WebStateListChange::Type::kReplace:
       // Do nothing when a WebState is replaced.
       break;
-    case WebStateListChange::Type::kInsert: {
-      if (webStateList->IsBatchInProgress()) {
-        break;
-      }
-
-      [self.consumer setTabCount:_webStateList->count()
+    case WebStateListChange::Type::kInsert:
+      [self.consumer setTabCount:tabCount
                addedInBackground:!status.active_web_state_change()];
       break;
-    }
     case WebStateListChange::Type::kGroupCreate:
       // Do nothing when a group is created.
       break;
@@ -278,15 +288,12 @@ using vivaldi::IsVivaldiRunning;
       // Do nothing when a group is deleted.
       break;
   }
-
-  if (status.active_web_state_change()) {
-    self.webState = status.new_active_web_state;
-  }
 }
 
 - (void)webStateListBatchOperationEnded:(WebStateList*)webStateList {
   DCHECK_EQ(_webStateList, webStateList);
-  [self.consumer setTabCount:_webStateList->count() addedInBackground:NO];
+  [self.consumer setTabGridButtonStyle:[self tabGridButtonStyleToDisplay]];
+  [self.consumer setTabCount:[self tabCountToDisplay] addedInBackground:NO];
 }
 
 #pragma mark - AdaptiveToolbarMenusProvider
@@ -425,6 +432,7 @@ using vivaldi::IsVivaldiRunning;
   [self.consumer
       setIsDynamicAccentColorEnabled:[self isDynamicAccentColorEnabled]];
   [self.consumer setCustomAccentColor:[self customAccentColor]];
+  [self.consumer setIsHomepageEnabled:[self isHomepageEnabled]];
   // End Vivaldi
 
 }
@@ -644,6 +652,34 @@ using vivaldi::IsVivaldiRunning;
   return isGoogleDefaultSearchProvider;
 }
 
+// Returns the tab count to display in the Tab Grid button.
+- (int)tabCountToDisplay {
+  if (IsTabGroupIndicatorEnabled()) {
+    const int active_index = _webStateList->active_index();
+    if (active_index != WebStateList::kInvalidIndex) {
+      const TabGroup* activeTabGroup =
+          _webStateList->GetGroupOfWebStateAt(active_index);
+      if (activeTabGroup) {
+        return activeTabGroup->range().count();
+      }
+    }
+  }
+  return _webStateList->count();
+}
+
+// Returns the style to display in the Tab Grid button.
+- (ToolbarTabGridButtonStyle)tabGridButtonStyleToDisplay {
+  if (IsTabGroupIndicatorEnabled()) {
+    const int active_index = _webStateList->active_index();
+    if (active_index != WebStateList::kInvalidIndex) {
+      if (_webStateList->GetGroupOfWebStateAt(active_index)) {
+        return ToolbarTabGridButtonStyle::kTabGroup;
+      }
+    }
+  }
+  return ToolbarTabGridButtonStyle::kNormal;
+}
+
 #pragma mark - VIVALDI
 - (void)setUpVivaldiObservers {
   ChromeBrowserState* browserState =
@@ -656,6 +692,7 @@ using vivaldi::IsVivaldiRunning;
     [self startObservingAccentColorChange:prefService];
     [self startObservingWebsiteAppearanceChange:prefService];
     [self startObservingBrowserThemeChange:prefService];
+    [self startObservingBrowserForHomepageButtonState:prefService];
   }
 }
 
@@ -710,6 +747,14 @@ using vivaldi::IsVivaldiRunning;
   _prefObserverBridge->ObserveChangesForPreference(
       vivaldiprefs::kVivaldiAppearanceMode, &_prefChangeRegistrar);
   [self onPreferenceChanged:vivaldiprefs::kVivaldiAppearanceMode];
+}
+
+- (void)startObservingBrowserForHomepageButtonState:(PrefService*)prefService {
+  _homepageEnabled =
+    [[PrefBackedBoolean alloc]
+      initWithPrefService:prefService
+                 prefName:vivaldiprefs::kVivaldiHomepageEnabled];
+  [_homepageEnabled setObserver:self];
 }
 
 #pragma mark - Helpers
@@ -789,10 +834,22 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
+- (BOOL)isHomepageEnabled {
+  if (!_homepageEnabled) {
+    return NO;
+  }
+  return [_homepageEnabled value];
+}
+
 #pragma mark - Boolean Observer
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
   if (observableBoolean == _tabBarEnabled) {
     [self.consumer setIsTabBarEnabled:[observableBoolean value]];
+  } else if (observableBoolean == _homepageEnabled) {
+    [self.consumer setIsHomepageEnabled:[observableBoolean value]];
+    BOOL isNTP = IsVisibleURLNewTabPage(self.webState);
+    [self.consumer reloadButtonsWithNewTabPage:isNTP
+                             desktopTabEnabled:[_tabBarEnabled value]];
   } else if (observableBoolean == _bottomOmniboxEnabled) {
     [self.consumer setIsBottomOmniboxEnabled:[observableBoolean value]];
   } else if (observableBoolean == _dynamicAccentColorEnabled) {
@@ -821,5 +878,6 @@ using vivaldi::IsVivaldiRunning;
     [self forceReloadWebpageIfNeeded];
   }
 }
+// End Vivaldi
 
 @end

@@ -20,12 +20,12 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/dips/dips_bounce_detector.h"
 #include "chrome/browser/dips/dips_service.h"
-#include "chrome/browser/dips/dips_service_factory.h"
 #include "chrome/browser/dips/dips_storage.h"
 #include "chrome/browser/dips/dips_test_utils.h"
 #include "chrome/browser/dips/dips_utils.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/test/base/chrome_test_utils.h"
+#include "chrome/test/base/platform_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -138,8 +138,8 @@ class DIPSTabHelperBrowserTest : public PlatformBrowserTest,
 
   void EndRedirectChain() {
     WebContents* web_contents = GetActiveWebContents();
-    DIPSService* dips_service = DIPSServiceFactory::GetForBrowserContext(
-        web_contents->GetBrowserContext());
+    DIPSServiceImpl* dips_service =
+        DIPSServiceImpl::Get(web_contents->GetBrowserContext());
     GURL expected_url = web_contents->GetLastCommittedURL();
 
     RedirectChainObserver chain_observer(dips_service, expected_url);
@@ -480,9 +480,8 @@ IN_PROC_BROWSER_TEST_P(DIPSTabHelperBrowserTest,
                        DetectRedirectHandlingFlakiness) {
   WebContents* web_contents = GetActiveWebContents();
 
-  auto* dips_storage = DIPSServiceFactory::GetForBrowserContext(
-                           web_contents->GetBrowserContext())
-                           ->storage();
+  auto* dips_storage =
+      DIPSServiceImpl::Get(web_contents->GetBrowserContext())->storage();
 
   for (int i = 0; i < 10; i++) {
     const base::Time bounce_time = base::Time::FromSecondsSinceUnixEpoch(i + 1);
@@ -529,8 +528,8 @@ IN_PROC_BROWSER_TEST_P(DIPSTabHelperBrowserTest,
                        UserClearedSitesAreNotReportedToUKM) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   content::WebContents* web_contents = GetActiveWebContents();
-  DIPSService* dips_service = DIPSServiceFactory::GetForBrowserContext(
-      web_contents->GetBrowserContext());
+  DIPSServiceImpl* dips_service =
+      DIPSServiceImpl::Get(web_contents->GetBrowserContext());
   // A time more than an hour ago.
   base::Time old_bounce_time = base::Time::Now() - base::Hours(2);
   // A time within the past hour.
@@ -613,8 +612,8 @@ IN_PROC_BROWSER_TEST_P(DIPSTabHelperBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(DIPSTabHelperBrowserTest, SitesInOpenTabsAreExempt) {
   content::WebContents* web_contents = GetActiveWebContents();
-  DIPSService* dips_service = DIPSServiceFactory::GetForBrowserContext(
-      web_contents->GetBrowserContext());
+  DIPSServiceImpl* dips_service =
+      DIPSServiceImpl::Get(web_contents->GetBrowserContext());
 
   // A time within the past hour.
   base::Time bounce_time = base::Time::Now() - base::Minutes(10);
@@ -685,8 +684,8 @@ IN_PROC_BROWSER_TEST_P(DIPSTabHelperBrowserTest, SitesInOpenTabsAreExempt) {
 IN_PROC_BROWSER_TEST_P(DIPSTabHelperBrowserTest,
                        SitesInDestroyedTabsAreNotExempt) {
   content::WebContents* web_contents = GetActiveWebContents();
-  DIPSService* dips_service = DIPSServiceFactory::GetForBrowserContext(
-      web_contents->GetBrowserContext());
+  DIPSServiceImpl* dips_service =
+      DIPSServiceImpl::Get(web_contents->GetBrowserContext());
 
   // A time within the past hour.
   base::Time bounce_time = base::Time::Now() - base::Minutes(10);
@@ -736,8 +735,8 @@ IN_PROC_BROWSER_TEST_P(DIPSTabHelperBrowserTest,
 IN_PROC_BROWSER_TEST_P(DIPSTabHelperBrowserTest,
                        SitesInOpenTabsForDifferentProfilesAreNotExempt) {
   content::WebContents* web_contents = GetActiveWebContents();
-  DIPSService* dips_service = DIPSServiceFactory::GetForBrowserContext(
-      web_contents->GetBrowserContext());
+  DIPSServiceImpl* dips_service =
+      DIPSServiceImpl::Get(web_contents->GetBrowserContext());
 
   // A time within the past hour.
   base::Time bounce_time = base::Time::Now() - base::Minutes(10);

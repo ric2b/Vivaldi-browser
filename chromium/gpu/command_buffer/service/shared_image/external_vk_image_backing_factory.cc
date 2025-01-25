@@ -81,10 +81,6 @@ base::flat_map<VkFormat, VkImageUsageFlags> CreateImageUsageCache(
     add_to_cache_if_supported(format);
   }
 
-  for (auto format : viz::LegacyMultiPlaneFormat::kAll) {
-    add_to_cache_if_supported(format);
-  }
-
   return image_usage_cache;
 }
 
@@ -104,7 +100,7 @@ bool IsFormatSupported(viz::SharedImageFormat format,
   // planes in Fuchsia and enable this check for Fuchsia.
 #if !BUILDFLAG(IS_FUCHSIA)
   if (HasGLES2ReadOrWriteUsage(usage)) {
-    if (format.IsLegacyMultiplanar() || format.PrefersExternalSampler()) {
+    if (format.PrefersExternalSampler()) {
       return false;
     }
   }
@@ -301,14 +297,6 @@ bool ExternalVkImageBackingFactory::IsSupported(
                   "cross-thread usage.";
     return false;
   }
-
-#if BUILDFLAG(IS_ANDROID)
-  // Scanout on Android requires explicit fence synchronization which is only
-  // supported by the interop factory.
-  if (usage.Has(SHARED_IMAGE_USAGE_SCANOUT)) {
-    return false;
-  }
-#endif
 
   return true;
 }

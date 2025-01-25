@@ -15,10 +15,10 @@
 #include "./fuzztest/internal/io.h"
 
 #include <cerrno>
-#include <cstdio>
 #include <cstring>
-#include <filesystem>
+#include <filesystem>  // NOLINT
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -27,25 +27,22 @@
 #include <utility>
 #include <vector>
 
+#include "absl/functional/function_ref.h"
 #include "absl/hash/hash.h"
+#include "absl/status/status.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "absl/types/span.h"
+#include "./common/blob_file.h"
+#include "./common/defs.h"
+#include "./common/remote_file.h"
 #include "./fuzztest/internal/logging.h"
-
-#if defined(__APPLE__)
-#if (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) &&       \
-     __MAC_OS_X_VERSION_MIN_REQUIRED < __MAC_10_15) || \
-    (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) &&      \
-     __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_13_0)
-// std::filesystem requires macOS 10.15+ or iOS 13+.
-// Just stub out these functions.
-#define FUZZTEST_STUB_FILESYSTEM
-#endif
-#endif
 
 namespace fuzztest::internal {
 
-#if defined(FUZZTEST_STUB_FILESYSTEM)
+#if defined(FUZZTEST_STUB_STD_FILESYSTEM)
 
 // TODO(lszekeres): Return absl::Status instead of bool for these.
 
@@ -102,8 +99,8 @@ std::optional<std::string> ReadFile(absl::string_view path) {
     // Using stderr instead of GetStderr() to avoid initialization-order-fiasco
     // when reading files at static init time with
     // `.WithSeeds(fuzztest::ReadFilesFromDirectory(...))`.
-    absl::FPrintF(stderr, "[!] %s:%d: Error reading %s: (%d) %s\n",
-                  __FILE__, __LINE__, path, errno, strerror(errno));
+    absl::FPrintF(stderr, "[!] %s:%d: Error reading %s: (%d) %s\n", __FILE__,
+                  __LINE__, path, errno, strerror(errno));
     return std::nullopt;
   }
   std::stringstream buffer;
@@ -142,14 +139,15 @@ std::vector<std::string> ListDirectoryRecursively(absl::string_view path) {
 
   const std::filesystem::path fs_path{
       std::string_view{path.data(), path.size()}};
-  for (const auto& entry :
-       std::filesystem::recursive_directory_iterator(fs_path)) {
+  for (const auto& entry : std::filesystem::recursive_directory_iterator(
+           fs_path,
+           std::filesystem::directory_options::follow_directory_symlink)) {
     output_paths.push_back(entry.path().string());
   }
   return output_paths;
 }
 
-#endif  // FUZZTEST_STUB_FILESYSTEM
+#endif  // FUZZTEST_STUB_STD_FILESYSTEM
 
 std::string WriteDataToDir(absl::string_view data, absl::string_view outdir) {
   std::string filename(outdir);
@@ -203,6 +201,97 @@ std::vector<std::tuple<std::string>> ReadFilesFromDirectory(
   }
 
   return out;
+}
+
+// TODO(b/348702296): Consider merging with `centipede::ReadShard()`.
+void ForEachSerializedInput(absl::Span<const std::string> file_paths,
+                            absl::FunctionRef<absl::Status(
+                                absl::string_view file_path,
+                                std::optional<int> blob_idx, std::string input)>
+                                consume,
+                            absl::Duration timeout) {
+  int total_loaded_inputs = 0;
+  int total_invalid_inputs = 0;
+  const absl::Time start_time = absl::Now();
+  for (const std::string& file_path : file_paths) {
+    FUZZTEST_INTERNAL_CHECK_PRECONDITION(centipede::RemotePathExists(file_path),
+                                         "File path ", file_path,
+                                         " does not exist.");
+    FUZZTEST_INTERNAL_CHECK_PRECONDITION(
+        !centipede::RemotePathIsDirectory(file_path), "File path ", file_path,
+        " is a directory.");
+    int loaded_inputs_from_file = 0;
+    int invalid_inputs_from_file = 0;
+    // The reader cannot be reused for multiple files because of the way it
+    // handles its internal state. So we instantiate a new reader for each file.
+    std::unique_ptr<centipede::BlobFileReader> reader =
+        centipede::DefaultBlobFileReaderFactory();
+    if (reader->Open(file_path).ok()) {
+      centipede::ByteSpan blob;
+      for (int blob_idx = 0; reader->Read(blob).ok(); ++blob_idx) {
+        if (absl::Now() - start_time > timeout) {
+          absl::FPrintF(GetStderr(),
+                        "[!] Timeout reached while processing input at index "
+                        "%d in file %s.\n",
+                        blob_idx, file_path);
+          break;
+        }
+        absl::Status result = consume(
+            file_path, blob_idx, std::string(centipede::AsStringView(blob)));
+        if (result.ok()) {
+          ++loaded_inputs_from_file;
+        } else {
+          ++invalid_inputs_from_file;
+          absl::FPrintF(GetStderr(),
+                        "[!] Invalid input at index %d in file %s: %s\n",
+                        blob_idx, file_path, result.message());
+        }
+      }
+    }
+    if (absl::Now() - start_time > timeout) {
+      absl::FPrintF(GetStderr(),
+                    "[!] Timeout reached while processing input %s.\n",
+                    file_path);
+      break;
+    }
+    if (loaded_inputs_from_file + invalid_inputs_from_file > 0) {
+      // The file was a blob file and we read some inputs from it.
+      absl::FPrintF(
+          GetStderr(),
+          "[*] Loaded %d inputs and ignored %d invalid inputs from %s.\n",
+          loaded_inputs_from_file, invalid_inputs_from_file, file_path);
+      total_loaded_inputs += loaded_inputs_from_file;
+      total_invalid_inputs += invalid_inputs_from_file;
+      continue;
+    }
+    // The file was not a blob file (or, unlikely, it was an empty blob file);
+    // read its contents directly.
+    // TODO(b/349115475): Currently, we cannot distinguish between an empty blob
+    // file and a file that is not a blob file. Once we can, we should not fall
+    // back to reading the file directly if it is an empty blob file.
+    std::string contents;
+    const absl::Status get_contents_status =
+        centipede::RemoteFileGetContents(file_path, contents);
+    FUZZTEST_INTERNAL_CHECK_PRECONDITION(
+        get_contents_status.ok(), "RemoteFileGetContents failed on ", file_path,
+        ", status: ", get_contents_status.message());
+    absl::Status result = consume(file_path, std::nullopt, std::move(contents));
+    if (result.ok()) {
+      ++total_loaded_inputs;
+    } else {
+      ++total_invalid_inputs;
+      absl::FPrintF(GetStderr(), "[!] Invalid input file %s: %s\n", file_path,
+                    result.message());
+    }
+  }
+
+  // Print stats if we attempted to load something.
+  if (total_loaded_inputs != 0 || total_invalid_inputs != 0) {
+    absl::FPrintF(
+        GetStderr(),
+        "[*] In total, loaded %d inputs and ignored %d invalid inputs.\n",
+        total_loaded_inputs, total_invalid_inputs);
+  }
 }
 
 }  // namespace fuzztest::internal

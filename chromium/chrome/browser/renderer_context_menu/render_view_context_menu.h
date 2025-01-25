@@ -329,11 +329,12 @@ class RenderViewContextMenu
       bool notify_if_restricted) const;
 
   // Helper function for checking policies.
-  bool IsSaveAsItemAllowedByPolicy() const;
+  bool IsSaveAsItemAllowedByPolicy(const GURL& item_url) const;
 
   // Helper function for checking fenced frame tree untrusted network access
-  // status.
-  bool IsSaveAsItemAllowedByUntrustedNetworkStatus() const;
+  // status. For context menu commands that make network requests, this check
+  // should be applied.
+  bool IsAllowedByUntrustedNetworkStatus() const;
 
   // Command enabled query functions.
   bool IsReloadEnabled() const;
@@ -379,7 +380,7 @@ class RenderViewContextMenu
   void ExecControls();
   void ExecSaveVideoFrameAs();
   void ExecCopyVideoFrame();
-  void ExecSearchForVideoFrame(int event_flags);
+  void ExecSearchForVideoFrame(int event_flags, bool is_lens_query);
   void ExecLiveCaption();
   void ExecRotateCW();
   void ExecRotateCCW();
@@ -399,6 +400,7 @@ class RenderViewContextMenu
 
   void MediaPlayerAction(const blink::mojom::MediaPlayerAction& action);
   void SearchForVideoFrame(int event_flags,
+                           bool is_lens_query,
                            const SkBitmap& bitmap,
                            const gfx::Rect& region_bounds);
   void PluginActionAt(const gfx::Point& location,

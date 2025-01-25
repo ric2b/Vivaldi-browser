@@ -91,10 +91,9 @@ class MediaLabelButton : public views::Button {
                    ui::ColorId text_color_id,
                    ui::ColorId focus_ring_color_id)
       : views::Button(PressedCallback()) {
-    GetViewAccessibility().SetProperties(
-        ax::mojom::Role::kLabelText,
-        l10n_util::GetStringUTF16(
-            IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_LABEL));
+    GetViewAccessibility().SetRole(ax::mojom::Role::kLabelText);
+    GetViewAccessibility().SetName(l10n_util::GetStringUTF16(
+        IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_LABEL));
     SetLayoutManager(std::make_unique<views::FillLayout>());
     SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
     views::FocusRing::Get(this)->SetColorId(focus_ring_color_id);
@@ -386,6 +385,10 @@ MediaItemUIDetailedView::MediaItemUIDetailedView(
   if (item_) {
     item_->SetView(this);
   }
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kListItem);
+  GetViewAccessibility().SetName(l10n_util::GetStringUTF8(
+      IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACCESSIBLE_NAME));
 }
 
 MediaItemUIDetailedView::~MediaItemUIDetailedView() {
@@ -531,13 +534,6 @@ void MediaItemUIDetailedView::AddedToWidget() {
   if (device_selector_view_) {
     UpdateCastingState();
   }
-}
-
-void MediaItemUIDetailedView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  View::GetAccessibleNodeData(node_data);
-  node_data->role = ax::mojom::Role::kListItem;
-  node_data->SetNameChecked(l10n_util::GetStringUTF8(
-      IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACCESSIBLE_NAME));
 }
 
 bool MediaItemUIDetailedView::OnKeyPressed(const ui::KeyEvent& event) {

@@ -7,10 +7,11 @@
 #include <memory>
 #include <utility>
 
-#include "ash/picker/views/picker_item_view.h"
+#include "ash/picker/views/picker_list_item_view.h"
 #include "ash/picker/views/picker_section_view.h"
 #include "ash/picker/views/picker_style.h"
 #include "base/functional/bind.h"
+#include "base/i18n/rtl.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
@@ -31,7 +32,8 @@ constexpr int kSubmenuHorizontalOverlap = 4;
 
 std::unique_ptr<views::BubbleBorder> CreateBorder() {
   auto border = std::make_unique<views::BubbleBorder>(
-      views::BubbleBorder::LEFT_TOP,
+      base::i18n::IsRTL() ? views::BubbleBorder::Arrow::RIGHT_TOP
+                          : views::BubbleBorder::Arrow::LEFT_TOP,
       views::BubbleBorder::CHROMEOS_SYSTEM_UI_SHADOW);
   border->SetCornerRadius(kPickerContainerBorderRadius);
   border->SetColor(SK_ColorTRANSPARENT);
@@ -42,7 +44,7 @@ std::unique_ptr<views::BubbleBorder> CreateBorder() {
 
 PickerSubmenuView::PickerSubmenuView(
     const gfx::Rect& anchor_rect,
-    std::vector<std::unique_ptr<PickerItemView>> items) {
+    std::vector<std::unique_ptr<PickerListItemView>> items) {
   SetShowCloseButton(false);
   set_desired_bounds_delegate(
       base::BindRepeating(&PickerSubmenuView::GetDesiredBounds,
@@ -60,8 +62,8 @@ PickerSubmenuView::PickerSubmenuView(
       kSubmenuWidth, /*asset_fetcher=*/nullptr,
       /*submenu_controller=*/nullptr));
 
-  for (std::unique_ptr<PickerItemView>& item : items) {
-    section_view_->AddItem(std::move(item));
+  for (std::unique_ptr<PickerListItemView>& item : items) {
+    section_view_->AddListItem(std::move(item));
   }
 }
 

@@ -22,6 +22,7 @@ const char kReboot[] = "reboot";
 const char kClearAttachAPN[] = "clear_attach_apn";
 const char kFwVersion[] = "fw_version";
 const char kGetHeartbeatConfig[] = "get_heartbeat_config";
+const char kGetRecoveryFileList[] = "get_recovery_file_list";
 
 // Keys used for the kFlashFirmware/kFwVersion/kGetFirmwareInfo switches
 const char kFwMain[] = "main";
@@ -35,6 +36,9 @@ const char kFwCarrierUuid[] = "carrier_uuid";
 const char kHeartbeatMaxFailures[] = "max_failures";
 const char kHeartbeatInterval[] = "interval";
 const char kHeartbeatModemIdleInterval[] = "modem_idle_interval";
+
+// Keys used for the kGetRecoveryFileList switch
+const char kRecoveryMetadataDir[] = "recovery_metadata_dir";
 
 }  // namespace modemfwd
 

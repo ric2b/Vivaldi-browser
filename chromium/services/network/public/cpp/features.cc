@@ -400,7 +400,7 @@ BASE_FEATURE(kCompressionDictionaryTransportBackend,
 // `shared_dictionary_writer_enabled` flag in resource requests.
 BASE_FEATURE(kCompressionDictionaryTransport,
              "CompressionDictionaryTransport",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When this feature is enabled, preloaded dictionaries will not be used for
 // network requests if the binary has not yet been preloaded.
@@ -413,12 +413,6 @@ BASE_FEATURE(kVisibilityAwareResourceScheduler,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSharedZstd, "SharedZstd", base::FEATURE_ENABLED_BY_DEFAULT);
-
-// This feature will permits de-duplicating cookie access details that are sent
-// to observers via OnCookiesAccessed.
-BASE_FEATURE(kCookieAccessDetailsNotificationDeDuping,
-             "CookieAccessDetailsNotificationDeDuping",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // This feature will reduce TransferSizeUpdated IPC from the network service.
 // When enabled, the network service will send the IPC only when DevTools is
@@ -473,5 +467,26 @@ BASE_FEATURE(kNetworkContextPrefetch,
 const base::FeatureParam<int> kNetworkContextPrefetchMaxLoaders{
     &kNetworkContextPrefetch,
     /*name=*/"max_loaders", /*default_value=*/10};
+
+// This feature enables treating 0.0.0.0/8 as the public address space instead
+// of private or local. This is a killswitch for a tightening of a loophole in
+// Private Network Access. See https://crbug.com/40058874.
+BASE_FEATURE(kTreatNullIPAsPublicAddressSpace,
+             "TreatNullIPAsPublicAddressSpace",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, the CORS URL loader will clone the DevTools connection for a
+// resource request only if the request includes a DevTools request id.
+BASE_FEATURE(kCloneDevToolsConnectionOnlyIfRequested,
+             "CloneDevToolsConnectionOnlyIfRequested",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kStorageAccessHeaders,
+             "StorageAccessHeaders",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kStorageAccessHeadersTrial,
+             "StorageAccessHeadersTrial",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace network::features

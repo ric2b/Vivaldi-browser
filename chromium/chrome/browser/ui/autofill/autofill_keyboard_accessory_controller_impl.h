@@ -26,6 +26,7 @@ class WebContents;
 }  // namespace content
 
 class Profile;
+class PasswordAccessLossWarningBridge;
 
 namespace autofill {
 
@@ -78,10 +79,11 @@ class AutofillKeyboardAccessoryControllerImpl
   FillingProduct GetMainFillingProduct() const override;
   std::optional<AutofillClient::PopupScreenLocation> GetPopupScreenLocation()
       const override;
-  void Show(std::vector<Suggestion> suggestions,
+  void Show(UiSessionId ui_session_id,
+            std::vector<Suggestion> suggestions,
             AutofillSuggestionTriggerSource trigger_source,
             AutoselectFirstSuggestion autoselect_first_suggestion) override;
-  void DisableThresholdForTesting(bool disable_threshold) override;
+  std::optional<UiSessionId> GetUiSessionId() const override;
   void SetKeepPopupOpenForTesting(bool keep_popup_open_for_testing) override;
   void UpdateDataListValues(base::span<const SelectOption> options) override;
   void PinView() override;
@@ -92,15 +94,13 @@ class AutofillKeyboardAccessoryControllerImpl
   bool GetRemovalConfirmationText(int index,
                                   std::u16string* title,
                                   std::u16string* body) override;
-  void SetViewForTesting(
-      std::unique_ptr<AutofillKeyboardAccessoryView> view) override;
 
   base::WeakPtr<AutofillKeyboardAccessoryControllerImpl> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
   }
-  AutofillKeyboardAccessoryView* view() { return view_.get(); }
 
  private:
+  friend class AutofillKeyboardAccessoryControllerImplTestApi;
   friend class AutofillSuggestionController;
 
   // Returns true if the popup has entries that are not "Manage ...".
@@ -117,6 +117,9 @@ class AutofillKeyboardAccessoryControllerImpl
 
   // Hides the view and asynchronously deletes itself.
   void HideViewAndDie();
+
+  // Uniquely identifies the UI the controller is showing.
+  UiSessionId ui_session_id_;
 
   base::WeakPtr<AutofillSuggestionDelegate> delegate_;
   base::WeakPtr<content::WebContents> web_contents_;
@@ -169,6 +172,10 @@ class AutofillKeyboardAccessoryControllerImpl
   // The first `IsStandaloneSuggestionType()` is used to define what the
   // `FillingProduct` is.
   FillingProduct suggestions_filling_product_ = FillingProduct::kNone;
+
+  // Bridge used to show the data loss warning (expected to be shown after
+  // filling user's credentials).
+  std::unique_ptr<PasswordAccessLossWarningBridge> access_loss_warning_bridge_;
 
   base::WeakPtrFactory<AutofillKeyboardAccessoryControllerImpl>
       self_deletion_weak_ptr_factory_{this};

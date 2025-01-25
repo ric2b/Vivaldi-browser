@@ -146,6 +146,8 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::SharedBufferMemoryD3D12Resource);
     EnableFeature(Feature::ShaderModuleCompilationOptions);
     EnableFeature(Feature::StaticSamplers);
+    EnableFeature(Feature::MultiDrawIndirect);
+    EnableFeature(Feature::ClipDistances);
 
     if (AreTimestampQueriesSupported()) {
         EnableFeature(Feature::TimestampQuery);
@@ -352,7 +354,7 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     // Max number of "constants" where each constant is a 16-byte float4
     limits->v1.maxUniformBufferBindingSize = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16;
 
-    if (gpu_info::IsQualcomm(GetVendorId())) {
+    if (gpu_info::IsQualcomm_ACPI(GetVendorId())) {
         // limit of number of texels in a buffer == (1 << 27)
         // D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP
         // This limit doesn't apply to a raw buffer, but only applies to
@@ -557,12 +559,16 @@ void PhysicalDevice::SetupBackendAdapterToggles(dawn::platform::Platform* platfo
     uint32_t deviceId = GetDeviceId();
     uint32_t vendorId = GetVendorId();
 
-    // On Intel Gen12 GPU, using shader model 6.6 will cause unexpected result when
-    // adding/subtracting I32/U32 vector/scalar with vector/scalar in constant initialized array.
-    // See https://crbug.com/tint/2189 and https://crbug.com/dawn/2470 for more information.
+    // On Intel Gen12 D3D driver < 32.0.101.5762, using shader model 6.6 will cause unexpected
+    // result when adding/subtracting I32/U32 vector/scalar with vector/scalar in constant
+    // initialized array. See https://crbug.com/tint/2189 and https://crbug.com/dawn/2470 for more
+    // information.
     if (gpu_info::IsIntelGen12HP(vendorId, deviceId) ||
         gpu_info::IsIntelGen12LP(vendorId, deviceId)) {
-        adapterToggles->Default(Toggle::D3D12DontUseShaderModel66OrHigher, true);
+        if (gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
+                                                  {32, 0, 101, 5762}) == -1) {
+            adapterToggles->Default(Toggle::D3D12DontUseShaderModel66OrHigher, true);
+        }
     }
 
     // Workaround for textureDimensions() produces incorrect results with shader model 6.6 on Intel
@@ -784,6 +790,7 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
 
     if (gpu_info::IsNvidia(vendorId)) {
         deviceToggles->Default(Toggle::D3D12ForceStencilComponentReplicateSwizzle, true);
+        deviceToggles->Default(Toggle::D3D12ExpandShaderResourceStateTransitionsToCopySource, true);
     }
 }
 
@@ -807,8 +814,8 @@ MaybeError PhysicalDevice::ResetInternalDeviceForTestingImpl() {
     return {};
 }
 
-void PhysicalDevice::PopulateBackendProperties(UnpackedPtr<AdapterProperties>& properties) const {
-    if (auto* memoryHeapProperties = properties.Get<AdapterPropertiesMemoryHeaps>()) {
+void PhysicalDevice::PopulateBackendProperties(UnpackedPtr<AdapterInfo>& info) const {
+    if (auto* memoryHeapProperties = info.Get<AdapterPropertiesMemoryHeaps>()) {
         // https://microsoft.github.io/DirectX-Specs/d3d/D3D12GPUUploadHeaps.html describes
         // the properties of D3D12 Default/Upload/Readback heaps.
         if (mDeviceInfo.isUMA) {
@@ -842,7 +849,7 @@ void PhysicalDevice::PopulateBackendProperties(UnpackedPtr<AdapterProperties>& p
                 wgpu::HeapProperty::HostUncached | wgpu::HeapProperty::HostCached;
         }
     }
-    if (auto* d3dProperties = properties.Get<AdapterPropertiesD3D>()) {
+    if (auto* d3dProperties = info.Get<AdapterPropertiesD3D>()) {
         // Report highest supported shader model version, instead of actual applied version.
         d3dProperties->shaderModel = GetDeviceInfo().highestSupportedShaderModel;
     }

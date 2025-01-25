@@ -42,6 +42,10 @@ extern const char kVivaldiCrashReportingConsentGranted[];
 
 extern const char kVivaldiPreferredColorScheme[];
 #if BUILDFLAG(IS_IOS)
+// Dict preference which tracks the current elements and order of the overflow
+// menu's vivaldi actions.
+extern const char kOverflowMenuVivaldiActionsOrder[];
+
 // Notes
 extern const char kVivaldiNoteFolderDefault[];
 extern const char kVivaldiNoteCachedTopMostRow[];
@@ -74,6 +78,16 @@ extern const char kVivaldiShowXButtonBackgroundTabsEnabled[];
 extern const char kVivaldiOpenNTPOnClosingLastTabEnabled[];
 // Focus omnibox on new tab page
 extern const char kVivaldiFocusOmniboxOnNTPEnabled[];
+// New Tab URL
+extern const char kVivaldiNewTabURL[];
+// New Tab Setting
+extern const char kVivaldiNewTabSetting[];
+
+// General Settings
+// Homepage url
+extern const char kVivaldiHomepageURL[];
+// Show Homepage Button
+extern const char kVivaldiHomepageEnabled[];
 
 // Apearance
 // Selected browser theme i.e. Light, Dark, System

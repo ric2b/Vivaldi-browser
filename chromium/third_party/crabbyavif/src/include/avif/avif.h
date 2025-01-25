@@ -115,6 +115,7 @@ enum avifRGBFormat {
     AVIF_RGB_FORMAT_BGRA,
     AVIF_RGB_FORMAT_ABGR,
     AVIF_RGB_FORMAT_RGB565,
+    AVIF_RGB_FORMAT_RGBA1010102,
 };
 
 enum avifMatrixCoefficients : uint16_t {
@@ -133,8 +134,8 @@ enum avifMatrixCoefficients : uint16_t {
     AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL = 12,
     AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_CL = 13,
     AVIF_MATRIX_COEFFICIENTS_ICTCP = 14,
-    AVIF_MATRIX_COEFFICIENTS_YCGCO_RE = 15,
-    AVIF_MATRIX_COEFFICIENTS_YCGCO_RO = 16,
+    AVIF_MATRIX_COEFFICIENTS_YCGCO_RE = 16,
+    AVIF_MATRIX_COEFFICIENTS_YCGCO_RO = 17,
 };
 
 enum avifPixelFormat {
@@ -143,6 +144,7 @@ enum avifPixelFormat {
     AVIF_PIXEL_FORMAT_YUV422 = 2,
     AVIF_PIXEL_FORMAT_YUV420 = 3,
     AVIF_PIXEL_FORMAT_YUV400 = 4,
+    AVIF_PIXEL_FORMAT_ANDROID_P010 = 5,
     AVIF_PIXEL_FORMAT_COUNT,
 };
 
@@ -593,6 +595,11 @@ void crabby_avifIODestroy(avifIO *io);
 void crabby_avifRGBImageSetDefaults(avifRGBImage *rgb, const avifImage *image);
 
 avifResult crabby_avifImageYUVToRGB(const avifImage *image, avifRGBImage *rgb);
+
+avifResult crabby_avifImageScale(avifImage *image,
+                                 uint32_t dstWidth,
+                                 uint32_t dstHeight,
+                                 avifDiagnostics *_diag);
 
 const char *crabby_avifResultToString(avifResult _res);
 

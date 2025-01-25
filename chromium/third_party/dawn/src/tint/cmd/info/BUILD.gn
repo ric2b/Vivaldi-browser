@@ -34,6 +34,7 @@
 #                       Do not modify this file directly
 ################################################################################
 
+import("../../../../scripts/dawn_overrides_with_defaults.gni")
 import("../../../../scripts/tint_overrides_with_defaults.gni")
 
 import("${tint_src_dir}/tint.gni")
@@ -42,6 +43,7 @@ tint_executable("info") {
   output_name = "tint_info"
   sources = [ "main.cc" ]
   deps = [
+    "${dawn_root}/src/utils:utils",
     "${tint_src_dir}/api/common",
     "${tint_src_dir}/cmd/common",
     "${tint_src_dir}/lang/core",
@@ -54,7 +56,6 @@ tint_executable("info") {
     "${tint_src_dir}/lang/wgsl/inspector",
     "${tint_src_dir}/lang/wgsl/program",
     "${tint_src_dir}/lang/wgsl/sem",
-    "${tint_src_dir}/utils/command",
     "${tint_src_dir}/utils/containers",
     "${tint_src_dir}/utils/diagnostic",
     "${tint_src_dir}/utils/ice",
@@ -72,12 +73,5 @@ tint_executable("info") {
 
   if (tint_build_spv_reader) {
     deps += [ "${tint_src_dir}/lang/spirv/reader/common" ]
-  }
-
-  if (tint_build_spv_reader || tint_build_spv_writer) {
-    deps += [
-      "${tint_spirv_tools_dir}:spvtools_headers",
-      "${tint_spirv_tools_dir}:spvtools_val",
-    ]
   }
 }

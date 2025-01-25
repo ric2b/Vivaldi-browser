@@ -106,11 +106,11 @@ export class UISourceCodeFrame extends
     this.initializeUISourceCode();
   }
 
-  private async workingCopy(): Promise<TextUtils.ContentProvider.DeferredContent> {
+  private async workingCopy(): Promise<TextUtils.ContentData.ContentDataOrError> {
     if (this.uiSourceCodeInternal.isDirty()) {
-      return {content: this.uiSourceCodeInternal.workingCopy(), isEncoded: false};
+      return this.uiSourceCodeInternal.workingCopyContentData();
     }
-    return this.uiSourceCodeInternal.requestContent();
+    return this.uiSourceCodeInternal.requestContentData();
   }
 
   protected override editorConfiguration(doc: string): CodeMirror.Extension {
@@ -172,7 +172,7 @@ export class UISourceCodeFrame extends
       this.unloadUISourceCode();
       this.uiSourceCodeInternal = uiSourceCode;
       if (uiSourceCode.workingCopy() !== this.textEditor.state.doc.toString()) {
-        await this.setDeferredContent(Promise.resolve(uiSourceCode.workingCopyContent()));
+        await this.setContentDataOrError(Promise.resolve(uiSourceCode.workingCopyContentData()));
       } else {
         this.reloadPlugins();
       }
@@ -317,12 +317,12 @@ export class UISourceCodeFrame extends
     if (this.muteSourceCodeEvents) {
       return;
     }
-    this.maybeSetContent(this.uiSourceCodeInternal.workingCopyContent());
+    this.maybeSetContent(this.uiSourceCodeInternal.workingCopyContentData());
   }
 
   private onWorkingCopyCommitted(): void {
     if (!this.muteSourceCodeEvents) {
-      this.maybeSetContent(this.uiSourceCode().workingCopyContent());
+      this.maybeSetContent(this.uiSourceCode().workingCopyContentData());
     }
     this.contentCommitted();
     this.updateStyle();
@@ -352,7 +352,7 @@ export class UISourceCodeFrame extends
       }
     }
 
-    this.dispatchEventToListeners(Events.ToolbarItemsChanged);
+    this.dispatchEventToListeners(Events.TOOLBAR_ITEMS_CHANGED);
   }
 
   private disposePlugins(): void {
@@ -384,9 +384,9 @@ export class UISourceCodeFrame extends
     this.setEditable(this.canEditSourceInternal());
   }
 
-  private maybeSetContent(content: TextUtils.ContentProvider.DeferredContent): void {
-    if (this.textEditor.state.doc.toString() !== content.content) {
-      void this.setDeferredContent(Promise.resolve(content));
+  private maybeSetContent(content: TextUtils.ContentData.ContentData): void {
+    if (this.textEditor.state.doc.toString() !== content.text) {
+      void this.setContentDataOrError(Promise.resolve(content));
     }
   }
 
@@ -484,7 +484,7 @@ export class UISourceCodeFrame extends
       return null;
     }
     const issues = anchorElement.classList.contains('cm-messageIcon-issue');
-    const messages = row.filter(msg => (msg.level() === Workspace.UISourceCode.Message.Level.Issue) === issues);
+    const messages = row.filter(msg => (msg.level() === Workspace.UISourceCode.Message.Level.ISSUE) === issues);
     if (!messages.length) {
       return null;
     }
@@ -522,19 +522,21 @@ export class UISourceCodeFrame extends
     const mimeType = Common.ResourceType.ResourceType.mimeFromURL(this.uiSourceCodeInternal.url());
     const mediaType = Common.ResourceType.ResourceType.mediaTypeForMetrics(
         mimeType ?? '', this.uiSourceCodeInternal.contentType().isFromSourceMap(),
-        TextUtils.TextUtils.isMinified(this.uiSourceCodeInternal.content()));
+        TextUtils.TextUtils.isMinified(this.uiSourceCodeInternal.content()),
+        this.uiSourceCodeInternal.url().startsWith('snippet://'),
+        this.uiSourceCodeInternal.url().startsWith('debugger://'));
     Host.userMetrics.sourcesPanelFileOpened(mediaType);
   }
 }
 
 function getIconDataForLevel(level: Workspace.UISourceCode.Message.Level): IconButton.Icon.IconData {
-  if (level === Workspace.UISourceCode.Message.Level.Error) {
+  if (level === Workspace.UISourceCode.Message.Level.ERROR) {
     return {color: 'var(--icon-error)', width: '16px', height: '14px', iconName: 'cross-circle-filled'};
   }
-  if (level === Workspace.UISourceCode.Message.Level.Warning) {
+  if (level === Workspace.UISourceCode.Message.Level.WARNING) {
     return {color: 'var(--icon-warning)', width: '18px', height: '14px', iconName: 'warning-filled'};
   }
-  if (level === Workspace.UISourceCode.Message.Level.Issue) {
+  if (level === Workspace.UISourceCode.Message.Level.ISSUE) {
     return {color: 'var(--icon-warning)', width: '17px', height: '14px', iconName: 'issue-exclamation-filled'};
   }
   return {color: 'var(--icon-error)', width: '16px', height: '14px', iconName: 'cross-circle-filled'};
@@ -542,20 +544,20 @@ function getIconDataForLevel(level: Workspace.UISourceCode.Message.Level): IconB
 
 function getBubbleTypePerLevel(level: Workspace.UISourceCode.Message.Level): string {
   switch (level) {
-    case Workspace.UISourceCode.Message.Level.Error:
+    case Workspace.UISourceCode.Message.Level.ERROR:
       return 'error';
-    case Workspace.UISourceCode.Message.Level.Warning:
+    case Workspace.UISourceCode.Message.Level.WARNING:
       return 'warning';
-    case Workspace.UISourceCode.Message.Level.Issue:
+    case Workspace.UISourceCode.Message.Level.ISSUE:
       return 'warning';
   }
 }
 
 function messageLevelComparator(a: RowMessage, b: RowMessage): number {
   const messageLevelPriority = {
-    [Workspace.UISourceCode.Message.Level.Issue]: 2,
-    [Workspace.UISourceCode.Message.Level.Warning]: 3,
-    [Workspace.UISourceCode.Message.Level.Error]: 4,
+    [Workspace.UISourceCode.Message.Level.ISSUE]: 2,
+    [Workspace.UISourceCode.Message.Level.WARNING]: 3,
+    [Workspace.UISourceCode.Message.Level.ERROR]: 4,
   };
   return messageLevelPriority[a.level()] - messageLevelPriority[b.level()];
 }
@@ -572,11 +574,11 @@ function getIconDataForMessage(message: RowMessage): IconButton.Icon.IconData {
 }
 
 export const enum Events {
-  ToolbarItemsChanged = 'ToolbarItemsChanged',
+  TOOLBAR_ITEMS_CHANGED = 'ToolbarItemsChanged',
 }
 
 export type EventTypes = {
-  [Events.ToolbarItemsChanged]: void,
+  [Events.TOOLBAR_ITEMS_CHANGED]: void,
 };
 
 const pluginCompartment = new CodeMirror.Compartment();
@@ -694,17 +696,17 @@ class MessageWidget extends CodeMirror.WidgetType {
   toDOM(): HTMLElement {
     const wrap = document.createElement('span');
     wrap.classList.add('cm-messageIcon');
-    const nonIssues = this.messages.filter(msg => msg.level() !== Workspace.UISourceCode.Message.Level.Issue);
+    const nonIssues = this.messages.filter(msg => msg.level() !== Workspace.UISourceCode.Message.Level.ISSUE);
     if (nonIssues.length) {
       const maxIssue = nonIssues.sort(messageLevelComparator)[nonIssues.length - 1];
       const errorIcon = wrap.appendChild(new IconButton.Icon.Icon());
       errorIcon.data = getIconDataForLevel(maxIssue.level());
       errorIcon.classList.add('cm-messageIcon-error');
     }
-    const issue = this.messages.find(m => m.level() === Workspace.UISourceCode.Message.Level.Issue);
+    const issue = this.messages.find(m => m.level() === Workspace.UISourceCode.Message.Level.ISSUE);
     if (issue) {
       const issueIcon = wrap.appendChild(new IconButton.Icon.Icon());
-      issueIcon.data = getIconDataForLevel(Workspace.UISourceCode.Message.Level.Issue);
+      issueIcon.data = getIconDataForLevel(Workspace.UISourceCode.Message.Level.ISSUE);
       issueIcon.classList.add('cm-messageIcon-issue');
       issueIcon.addEventListener('click', () => (issue.clickHandler() || Math.min)());
     }

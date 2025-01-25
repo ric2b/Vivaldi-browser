@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chromeos/ash/components/growth/campaigns_model.h"
 
 #include <memory>
@@ -17,6 +22,7 @@
 #include "build/branding_buildflags.h"
 #include "build/buildflag.h"
 #include "chromeos/ash/components/growth/action_performer.h"
+#include "chromeos/ash/components/growth/campaigns_logger.h"
 #include "chromeos/ash/components/growth/growth_metrics.h"
 #include "chromeos/ash/grit/ash_resources.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
@@ -204,6 +210,8 @@ std::optional<int> GetBuiltInImageResourceId(
       return IDR_GROWTH_FRAMEWORK_SPARK_1P_APP_PNG;
     case BuiltInImage::kSparkV2:
       return IDR_GROWTH_FRAMEWORK_SPARK_V2_PNG;
+    case BuiltInImage::kG1Notification:
+      return IDR_GROWTH_FRAMEWORK_G1_NOTIFICATION_PNG;
   }
 }
 
@@ -654,8 +662,8 @@ const std::vector<std::string> RuntimeTargeting::GetActiveUrlRegexes() const {
   for (const auto& active_url_regex_value : *active_url_regexes_value) {
     if (!active_url_regex_value.is_string()) {
       // TODO(b/329124927): Record error.
-      LOG(ERROR) << "Invalid active url regex: "
-                 << active_url_regex_value.DebugString();
+      CAMPAIGNS_LOG(ERROR) << "Invalid active url regex: "
+                           << active_url_regex_value.DebugString();
       continue;
     }
 
@@ -707,7 +715,7 @@ Action::~Action() = default;
 std::optional<growth::ActionType> Action::GetActionType() const {
   auto action_type_value = action_dict_->FindInt(kActionTypePath);
   if (!action_type_value) {
-    LOG(ERROR) << "Missing action type.";
+    CAMPAIGNS_LOG(ERROR) << "Missing action type.";
     RecordCampaignsManagerError(CampaignsManagerError::kMissingActionType);
     return std::nullopt;
   }
@@ -715,7 +723,7 @@ std::optional<growth::ActionType> Action::GetActionType() const {
   auto action_type = action_type_value.value();
   if (action_type < 0 ||
       action_type > static_cast<int>(growth::ActionType::kMaxValue)) {
-    LOG(ERROR) << "Unrecognized action type.";
+    CAMPAIGNS_LOG(ERROR) << "Unrecognized action type.";
     // TODO: b/330931877 - Record an error.
     return std::nullopt;
   }
@@ -742,7 +750,7 @@ const std::optional<WindowAnchorType> Anchor::GetActiveAppWindowAnchorType()
       anchor_dict_->FindInt(kActiveAppWindowAnchorType);
   if (!anchor_type_value) {
     // Invalid anchor type.
-    LOG(ERROR) << "Invalid anchor type";
+    CAMPAIGNS_LOG(ERROR) << "Invalid anchor type";
     RecordCampaignsManagerError(CampaignsManagerError::kInvalidAnchorType);
     return std::nullopt;
   }
@@ -789,7 +797,7 @@ const gfx::Image* Image::GetBuiltInImage() const {
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   // TODO: b/340895798 - record error metric.
-  LOG(ERROR) << "Unrecognized built in image.";
+  CAMPAIGNS_LOG(ERROR) << "Unrecognized built in image.";
 
   return nullptr;
 }
@@ -812,7 +820,7 @@ const gfx::VectorIcon* VectorIcon::GetBuiltInVectorIcon() const {
   const auto icon = GetBuiltInVectorIconType(vector_icon_dict_);
   if (!icon || icon.value() != BuiltInVectorIcon::kRedeem) {
     // TODO: b/340895798 - record error metric.
-    LOG(ERROR) << "Unrecognized built in vector icon.";
+    CAMPAIGNS_LOG(ERROR) << "Unrecognized built in vector icon.";
 
     return nullptr;
   }
@@ -856,7 +864,7 @@ const std::optional<ui::ImageModel> ImageModel::GetBuiltInImageModel() const {
   RecordCampaignsManagerError(CampaignsManagerError::kUnrecognizedBuiltInIcon);
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-  LOG(ERROR) << "Unrecognized built in image model.";
+  CAMPAIGNS_LOG(ERROR) << "Unrecognized built in image model.";
   return std::nullopt;
 }
 

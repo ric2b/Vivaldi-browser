@@ -4,15 +4,19 @@
 
 // Utilities that are used in multiple tests.
 
-import type {Bookmark, DocumentDimensions, LayoutOptions, PdfViewerElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import type {Bookmark, DocumentDimensions, LayoutOptions, PdfViewerElement, ViewerToolbarElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import {Viewport} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 // <if expr="enable_pdf_ink2">
-import type {PluginController, ViewerToolbarElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import {BeforeUnloadProxyImpl} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import type {BeforeUnloadProxy, PluginController} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import {PluginControllerEventType} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 // </if>
 import {assert} from 'chrome://resources/js/assert.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {eventToPromise} from 'chrome://webui-test/test_util.js';
+import {CrLitElement, html} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+// <if expr="enable_pdf_ink2">
+import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
+// </if>
+import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 export class MockElement {
   dir: string = '';
@@ -197,26 +201,24 @@ export function createMockPdfPluginForTest(): MockPdfPluginElement {
       MockPdfPluginElement;
 }
 
-class TestBookmarksElement extends PolymerElement {
+class TestBookmarksElement extends CrLitElement {
   static get is() {
     return 'test-bookmarks';
   }
 
-  static get template() {
-    return html`
-      <template is="dom-repeat" items="[[bookmarks]]">
-        <viewer-bookmark bookmark="[[item]]" depth="0"></viewer-bookmark>
-      </template>
-    `;
+  override render() {
+    return this.bookmarks.map(
+        item => html`<viewer-bookmark .bookmark="${item}" depth="0">
+             </viewer-bookmark>`);
   }
 
-  static get properties() {
+  static override get properties() {
     return {
-      bookmarks: Array,
+      bookmarks: {type: Array},
     };
   }
 
-  bookmarks: Bookmark[];
+  bookmarks: Bookmark[] = [];
 }
 
 declare global {
@@ -306,15 +308,49 @@ export function createWheelEvent(
 }
 
 /**
- * Check that the show-annotations button matches the `enabled` state.
- * @param button The show-annotations button.
- * @param enabled Whether annotations should be displayed or not.
+ * Helper to always get a non-null child element of `parent`. The element must
+ * exist.
+ * @param parent The parent to get the child element from.
+ * @param query  The query to get the child element.
+ * @returns A non-null element that matches `query`.
  */
-export function assertShowAnnotationsButton(
-    button: HTMLElement, enabled: boolean) {
+export function getRequiredElement<K extends keyof HTMLElementTagNameMap>(
+    parent: HTMLElement, query: K): HTMLElementTagNameMap[K];
+export function getRequiredElement<E extends HTMLElement = HTMLElement>(
+    parent: HTMLElement, query: string): E;
+export function getRequiredElement(parent: HTMLElement, query: string) {
+  const element = parent.shadowRoot!.querySelector(query);
+  assert(element);
+  return element;
+}
+
+/**
+ * Open the toolbar menu. Does nothing if the menu is already open.
+ * @param toolbar The toolbar containing the menu to open.
+ */
+export async function openToolbarMenu(toolbar: ViewerToolbarElement) {
+  const menu = toolbar.$.menu;
+  if (menu.open) {
+    return;
+  }
+
+  getRequiredElement(toolbar, '#more').click();
+  await microtasksFinished();
+  assert(menu.open);
+}
+
+/**
+ * Check that the checkbox menu `button` in `toolbar` matches the `checked`
+ * state.
+ */
+export function assertCheckboxMenuButton(
+    toolbar: ViewerToolbarElement, button: HTMLElement, checked: boolean) {
+  chrome.test.assertTrue(toolbar.$.menu.open);
+
+  // Check that the check mark visibility matches `checked`.
+  chrome.test.assertEq(String(checked), button.getAttribute('aria-checked'));
   chrome.test.assertEq(
-      enabled ? 'true' : 'false', button.getAttribute('aria-checked'));
-  chrome.test.assertEq(enabled, !button.querySelector('iron-icon')!.hidden);
+      checked, isVisible(button.querySelector('.check-container cr-icon')));
 }
 
 export async function ensureFullscreen(): Promise<void> {
@@ -355,15 +391,20 @@ export function finishInkStroke(controller: PluginController) {
       PluginControllerEventType.PLUGIN_MESSAGE, {detail: message}));
 }
 
-/**
- * Helper to always get a non-null annotation bar. The annotation bar must
- * exist.
- * @returns The annotation bar.
- */
-export function getAnnotationsBar(viewerToolbar: ViewerToolbarElement) {
-  const annotationsBar =
-      viewerToolbar.shadowRoot!.querySelector('viewer-annotations-bar');
-  assert(annotationsBar);
-  return annotationsBar;
+export class TestBeforeUnloadProxy extends TestBrowserProxy implements
+    BeforeUnloadProxy {
+  constructor() {
+    super(['preventDefault']);
+  }
+
+  preventDefault() {
+    this.methodCalled('preventDefault');
+  }
+}
+
+export function getNewTestBeforeUnloadProxy(): TestBeforeUnloadProxy {
+  const testProxy = new TestBeforeUnloadProxy();
+  BeforeUnloadProxyImpl.setInstance(testProxy);
+  return testProxy;
 }
 // </if>

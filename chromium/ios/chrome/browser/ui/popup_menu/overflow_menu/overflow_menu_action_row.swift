@@ -128,14 +128,29 @@ struct OverflowMenuActionRow: View {
         if rowIcon == nil {
           Spacer()
         }
+
+        if let rowIcon = rowIcon, VivaldiGlobalHelpers.isVivaldiRunning() {
+          rowIcon
+            .padding(.trailing)
+        } // End Vivaldi
+
         centerTextView
         if action.displayNewLabelIcon {
           newLabelIconView
         }
         Spacer()
+
+        if VivaldiGlobalHelpers.isVivaldiRunning() {
+          if action.submenuActions.count > 0 {
+            Image(systemName: "chevron.forward")
+              .foregroundColor(.textTertiary)
+          }
+        } else {
         if let rowIcon = rowIcon {
           rowIcon
         }
+        } // End Vivaldi
+
       }
       .padding([.trailing], Self.rowEndPadding)
     }
@@ -157,6 +172,20 @@ struct OverflowMenuActionRow: View {
     if isEditing {
       rowContent
     } else {
+      if VivaldiGlobalHelpers.isVivaldiRunning() &&
+          action.submenuActions.count > 0 {
+        VivaldiOverflowActionSubMenuView(
+          label:
+            rowContent
+            .contentShape(
+              Rectangle()
+            ),
+          actions: action.submenuActions
+        )
+        .if(action.useButtonStyling) { view in
+          view.buttonStyle(.borderless)
+        }
+      } else {
       Button(
         action: {
           metricsHandler?.popupMenuTookAction()
@@ -171,6 +200,8 @@ struct OverflowMenuActionRow: View {
       .if(action.useButtonStyling) { view in
         view.buttonStyle(.borderless)
       }
+      } // End Vivaldi
+
     }
   }
 

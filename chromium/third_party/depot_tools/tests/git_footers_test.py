@@ -249,6 +249,8 @@ My commit message is my best friend. It is my life.
                 'message\n\nKey: value\nSome: footer\nKey: value', 'Key'),
             'message\n\nSome: footer')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
     @mock.patch('sys.stdout', StringIO())
     @mock.patch(
         'sys.stdin',
@@ -257,6 +259,8 @@ My commit message is my best friend. It is my life.
         self.assertEqual(git_footers.main([]), 0)
         self.assertEqual(sys.stdout.getvalue(), 'Still: footer\nFoo: baz\n')
 
+    @unittest.skipIf(gclient_utils.IsEnvCog(),
+                     'not supported in non-git environment')
     @mock.patch('sys.stdin',
                 StringIO('line\r\nany spaces\r\n\r\n\r\nFoo: 1\nBar: 2\nFoo: 3')
                 )

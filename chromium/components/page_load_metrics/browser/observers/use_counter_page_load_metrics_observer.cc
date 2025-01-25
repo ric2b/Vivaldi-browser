@@ -298,8 +298,7 @@ void UseCounterMetricsRecorder::RecordWebDXFeatures(
   std::set<int32_t> webdx_features;
 
   for (int32_t feature = 1;
-       feature < static_cast<int32_t>(WebDXFeature::kNumberOfFeatures);
-       feature++) {
+       feature <= static_cast<int32_t>(WebDXFeature::kMaxValue); feature++) {
     if (uma_webdx_features_.IsRecordedOrDeferred(
             static_cast<WebDXFeature>(feature))) {
       webdx_features.insert(feature);
@@ -308,14 +307,14 @@ void UseCounterMetricsRecorder::RecordWebDXFeatures(
 
   ukm::UkmRecorder::Get()->RecordWebDXFeatures(
       ukm_source_id, webdx_features,
-      static_cast<size_t>(WebDXFeature::kNumberOfFeatures) - 1);
+      static_cast<size_t>(WebDXFeature::kMaxValue));
 }
 
 const base::flat_map<blink::mojom::WebFeature, blink::mojom::WebDXFeature>&
 UseCounterMetricsRecorder::GetWebFeatureToWebDXFeatureMap() {
   static const base::NoDestructor<
       const base::flat_map<WebFeature, WebDXFeature>>
-      kMap({
+      kMap{{
           {WebFeature::kViewTransition, WebDXFeature::kViewTransitions},
           {WebFeature::kValidPopoverAttribute, WebDXFeature::kPopover},
           {WebFeature::kCSSSubgridLayout, WebDXFeature::kSubgrid},
@@ -346,6 +345,10 @@ UseCounterMetricsRecorder::GetWebFeatureToWebDXFeatureMap() {
           {WebFeature::kCreateCSSModuleScript, WebDXFeature::kCssModules},
           {WebFeature::kStreamingDeclarativeShadowDOM,
            WebDXFeature::kDeclarativeShadowDom},
+          {WebFeature::kHTMLDetailsElementNameAttribute,
+           WebDXFeature::kDetailsName},
+          {WebFeature::kElementCheckVisibility,
+           WebDXFeature::kElementCheckVisibility},
           {WebFeature::kDialogElement, WebDXFeature::kDialog},
           {WebFeature::kV8DocumentPictureInPicture_RequestWindow_Method,
            WebDXFeature::kDocumentPictureInPicture},
@@ -396,11 +399,11 @@ UseCounterMetricsRecorder::GetWebFeatureToWebDXFeatureMap() {
           {WebFeature::kCSSSelectorUserValid, WebDXFeature::kUserPseudos},
           {WebFeature::kCSSSelectorUserInvalid, WebDXFeature::kUserPseudos},
           {WebFeature::kWebCodecs, WebDXFeature::kWebcodecs},
-          {WebFeature::kHidGetDevices, WebDXFeature::kWebhid},
+          {WebFeature::kHidDeviceOpen, WebDXFeature::kWebhid},
           {WebFeature::kV8LockManager_Request_Method, WebDXFeature::kWebLocks},
           {WebFeature::kWebPImage, WebDXFeature::kWebp},
           {WebFeature::kWebTransport, WebDXFeature::kWebtransport},
-          {WebFeature::kUsbGetDevices, WebDXFeature::kWebusb},
+          {WebFeature::kUsbDeviceOpen, WebDXFeature::kWebusb},
           {WebFeature::kVTTCue, WebDXFeature::kWebvtt},
           {WebFeature::kCSSSelectorPseudoWhere, WebDXFeature::kWhere},
           {WebFeature::kDataListElement, WebDXFeature::kDatalist},
@@ -410,7 +413,40 @@ UseCounterMetricsRecorder::GetWebFeatureToWebDXFeatureMap() {
           {WebFeature::kAbortSignalAny, WebDXFeature::kAbortsignalAny},
           {WebFeature::kNavigationAPI, WebDXFeature::kNavigation},
           {WebFeature::kMathMLMathElement, WebDXFeature::kMathml},
-      });
+          {WebFeature::kCanvasRenderingContext2DConicGradient,
+           WebDXFeature::kCanvasCreateconicgradient},
+          {WebFeature::kCanvasRenderingContext2DReset,
+           WebDXFeature::kCanvasReset},
+          {WebFeature::kCanvasRenderingContext2DRoundRect,
+           WebDXFeature::kCanvasRoundrect},
+          {WebFeature::kCSSColorMixFunction, WebDXFeature::kColorMix},
+          {WebFeature::kImageSet, WebDXFeature::kImageSet},
+          {WebFeature::kStructuredCloneMethod, WebDXFeature::kStructuredClone},
+          {WebFeature::kSlotAssignNode, WebDXFeature::kSlotAssign},
+          {WebFeature::kDeviceMotionSecureOrigin,
+           WebDXFeature::kDeviceOrientationEvents},
+          {WebFeature::kDeviceOrientationAbsoluteSecureOrigin,
+           WebDXFeature::kDeviceOrientationEvents},
+          {WebFeature::kDeviceOrientationSecureOrigin,
+           WebDXFeature::kDeviceOrientationEvents},
+          {WebFeature::kGamepadButtons, WebDXFeature::kDRAFT_Gamepad},
+          {WebFeature::kWakeLockAcquireScreenLock,
+           WebDXFeature::kScreenWakeLock},
+          {WebFeature::kWakeLockAcquireSystemLock,
+           WebDXFeature::kScreenWakeLock},
+          {WebFeature::kWebBluetoothRemoteServerConnect,
+           WebDXFeature::kWebBluetooth},
+          {WebFeature::kWebNfcNdefReaderScan, WebDXFeature::kWebNfc},
+          {WebFeature::kSerialPortOpen, WebDXFeature::kDRAFT_Serial},
+          {WebFeature::kModuleDedicatedWorker, WebDXFeature::kJsModulesWorkers},
+          {WebFeature::kModuleSharedWorker,
+           WebDXFeature::kJsModulesSharedWorkers},
+          {WebFeature::kCssDisplayPropertyMultipleValues,
+           WebDXFeature::kTwoValueDisplay},
+          {WebFeature::kTwoValuedOverflow, WebDXFeature::kOverflowShorthand},
+          {WebFeature::kKeyboardApiGetLayoutMap,
+           WebDXFeature::kKeyboardMap},
+      }};
 
   return *kMap;
 }
@@ -419,8 +455,9 @@ const base::flat_map<blink::mojom::CSSSampleId, blink::mojom::WebDXFeature>&
 UseCounterMetricsRecorder::GetCSSProperties2WebDXFeatureMap() {
   static const base::NoDestructor<
       const base::flat_map<CSSSampleId, WebDXFeature>>
-      kMap({
+      kMap{{
           {CSSSampleId::kAccentColor, WebDXFeature::kAccentColor},
+          {CSSSampleId::kAnchorName, WebDXFeature::kAnchorPositioning},
           {CSSSampleId::kAnimationComposition,
            WebDXFeature::kAnimationComposition},
           {CSSSampleId::kAppearance, WebDXFeature::kAppearance},
@@ -430,6 +467,7 @@ UseCounterMetricsRecorder::GetCSSProperties2WebDXFeatureMap() {
           {CSSSampleId::kColorScheme, WebDXFeature::kColorScheme},
           {CSSSampleId::kContainIntrinsicSize,
            WebDXFeature::kContainIntrinsicSize},
+          {CSSSampleId::kFieldSizing, WebDXFeature::kFieldSizing},
           {CSSSampleId::kFontOpticalSizing, WebDXFeature::kFontOpticalSizing},
           {CSSSampleId::kFontPalette, WebDXFeature::kFontPalette},
           {CSSSampleId::kFontSynthesisSmallCaps,
@@ -452,7 +490,16 @@ UseCounterMetricsRecorder::GetCSSProperties2WebDXFeatureMap() {
           {CSSSampleId::kRotate, WebDXFeature::kIndividualTransforms},
           {CSSSampleId::kScale, WebDXFeature::kIndividualTransforms},
           {CSSSampleId::kWillChange, WebDXFeature::kWillChange},
-      });
+          {CSSSampleId::kMaskImage, WebDXFeature::kMasks},
+          {CSSSampleId::kMaskClip, WebDXFeature::kMasks},
+          {CSSSampleId::kMaskSize, WebDXFeature::kMasks},
+          {CSSSampleId::kMaskOrigin, WebDXFeature::kMasks},
+          {CSSSampleId::kMaskRepeat, WebDXFeature::kMasks},
+          {CSSSampleId::kMaskComposite, WebDXFeature::kMasks},
+          {CSSSampleId::kMaskPosition, WebDXFeature::kMasks},
+          {CSSSampleId::kMaskMode, WebDXFeature::kMasks},
+          {CSSSampleId::kMask, WebDXFeature::kMasks},
+      }};
 
   return *kMap;
 }
@@ -461,12 +508,12 @@ const base::flat_map<blink::mojom::CSSSampleId, blink::mojom::WebDXFeature>&
 UseCounterMetricsRecorder::GetAnimatedCSSProperties2WebDXFeatureMap() {
   static const base::NoDestructor<
       const base::flat_map<CSSSampleId, WebDXFeature>>
-      kMap({
+      kMap{{
           // TODO(jstenback): This animated kFontPalette is being investigated.
           // Uncomment this once that's resolved, or replace this with something
           // else that matches the resolution of the investigation
           // {CSSSampleId::kFontPalette, WebDXFeature::kFontPaletteAnimation}
-      });
+      }};
 
   return *kMap;
 }

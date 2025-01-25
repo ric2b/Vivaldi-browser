@@ -15,11 +15,13 @@
 #include "services/webnn/public/cpp/operand_descriptor.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace webnn {
 
-class WebNNBufferImpl;
 class WebNNContextImpl;
+class WebNNGraphBuilderImpl;
+class WebNNTensorImpl;
 
 class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
     : public mojom::WebNNGraph {
@@ -30,7 +32,7 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
                             input_names_to_descriptors,
                         base::flat_map<std::string, OperandDescriptor>
                             output_names_to_descriptors,
-                        base::PassKey<WebNNGraphImpl> pass_key);
+                        base::PassKey<WebNNGraphBuilderImpl> pass_key);
     ~ComputeResourceInfo();
 
     ComputeResourceInfo(const ComputeResourceInfo&);
@@ -52,17 +54,6 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
   WebNNGraphImpl& operator=(const WebNNGraphImpl&) = delete;
   ~WebNNGraphImpl() override;
 
-  // Return `ComputeResourceInfo` which describe graph constraints if it is
-  // valid; otherwise null.
-  [[nodiscard]] static std::optional<ComputeResourceInfo> ValidateGraph(
-      const ContextProperties& context_properties,
-      const mojom::GraphInfo& graph_info);
-
-  // Same as above, but just return true/false.
-  [[nodiscard]] static bool IsValidForTesting(
-      const ContextProperties& context_properties,
-      const mojom::GraphInfo& graph_info);
-
   const ComputeResourceInfo& compute_resource_info() const {
     return compute_resource_info_;
   }
@@ -82,8 +73,8 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
                mojom::WebNNGraph::ComputeCallback callback) override;
 
   void Dispatch(
-      const base::flat_map<std::string, base::UnguessableToken>& named_inputs,
-      const base::flat_map<std::string, base::UnguessableToken>& named_outputs)
+      const base::flat_map<std::string, blink::WebNNTensorToken>& named_inputs,
+      const base::flat_map<std::string, blink::WebNNTensorToken>& named_outputs)
       override;
 
   // An WebNNGraph backend should implement this method to execute the compiled
@@ -95,8 +86,8 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
   // Execute the compiled platform graph. The `named_inputs` and `named_outputs`
   // were validated in base class.
   virtual void DispatchImpl(
-      const base::flat_map<std::string_view, WebNNBufferImpl*>& named_inputs,
-      const base::flat_map<std::string_view, WebNNBufferImpl*>&
+      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs,
+      const base::flat_map<std::string_view, WebNNTensorImpl*>&
           named_outputs) = 0;
 };
 

@@ -18,6 +18,26 @@ package sync_pb;
 
 import "components/sync/protocol/sync_enums.proto";
 
+message VivaldiWebPanel {
+  optional string initial_url = 1;
+  optional string title = 2;
+  optional string initial_favicon_url = 3;
+  optional string panel_id = 4;
+}
+
+message VivaldiWorkspace {
+  optional uint64 id = 1;
+  optional string name = 2;
+  optional int32 icon_id = 3;
+  optional string emoji = 4;
+  optional string icon = 5;
+}
+
+message VivaldiSpecific {
+  repeated VivaldiWebPanel vivaldi_panels = 1;
+  repeated VivaldiWorkspace vivaldi_workspaces = 2;
+}
+
 message SessionSpecifics {
   // Unique id for the client. M89 and higher use sync's cache GUID (client ID)
   // to populate this tag for *new* sessions.
@@ -27,10 +47,16 @@ message SessionSpecifics {
 
   // The local tab id used by sync. Unique across all nodes for that client.
   optional int32 tab_node_id = 4 [default = -1];
+
+  optional VivaldiSpecific vivaldi_specific = 51;
 }
 
 // Properties of session sync objects.
 message SessionHeader {
+  // The timestamp when this session was started, i.e. when the user signed in
+  // or turned on the sessions data type. Introduced in M130, and not populated
+  // for sessions created/started before that milestone.
+  optional int64 session_start_time_unix_epoch_millis = 6;
   // Each session is composed of windows.
   repeated SessionWindow window = 2;
   // A non-unique but human-readable name to describe this client.
@@ -44,7 +70,7 @@ message SessionHeader {
   optional SyncEnums.DeviceType device_type = 4 [deprecated = true];
 
   // Vivaldi ext data
-  optional string vivaldi_specific = 50;
+  optional string vivaldi_specific = 50 [deprecated = true];
 }
 
 message SessionWindow {

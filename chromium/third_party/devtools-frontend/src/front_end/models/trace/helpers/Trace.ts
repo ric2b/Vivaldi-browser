@@ -25,12 +25,22 @@ type MatchingPairableAsyncEvents = {
  * one based this function can yield unexpected results when used
  * indiscriminately.
  */
-function stackTraceForEvent(event: Types.TraceEvents.TraceEventData): Types.TraceEvents.TraceEventCallFrame[]|null {
+export function stackTraceForEvent(event: Types.TraceEvents.TraceEventData): Types.TraceEvents.TraceEventCallFrame[]|
+    null {
   if (event.args?.data?.stackTrace) {
     return event.args.data.stackTrace;
   }
+  if (event.args?.stackTrace) {
+    return event.args.stackTrace;
+  }
   if (Types.TraceEvents.isTraceEventUpdateLayoutTree(event)) {
     return event.args.beginData?.stackTrace || null;
+  }
+  if (Types.Extensions.isSyntheticExtensionEntry(event)) {
+    return stackTraceForEvent(event.rawSourceEvent);
+  }
+  if (Types.TraceEvents.isSyntheticUserTiming(event)) {
+    return stackTraceForEvent(event.rawSourceEvent);
   }
   return null;
 }
@@ -209,26 +219,9 @@ export function makeProfileCall(
     tid,
     ts,
     dur: Types.Timing.MicroSeconds(0),
-    selfTime: Types.Timing.MicroSeconds(0),
     callFrame: node.callFrame,
     sampleIndex,
     profileId,
-  };
-}
-
-export function makeSyntheticTraceEntry(
-    name: string, ts: Types.Timing.MicroSeconds, pid: Types.TraceEvents.ProcessID,
-    tid: Types.TraceEvents.ThreadID): Types.TraceEvents.SyntheticTraceEntry {
-  return {
-    cat: '',
-    name,
-    args: {},
-    ph: Types.TraceEvents.Phase.COMPLETE,
-    pid,
-    tid,
-    ts,
-    dur: Types.Timing.MicroSeconds(0),
-    selfTime: Types.Timing.MicroSeconds(0),
   };
 }
 
@@ -377,10 +370,10 @@ export function getZeroIndexedLineAndColumnForEvent(event: Types.TraceEvents.Tra
   switch (event.name) {
     // All these events have line/column numbers which are 1 indexed; so we
     // subtract to make them 0 indexed.
-    case Types.TraceEvents.KnownEventName.FunctionCall:
-    case Types.TraceEvents.KnownEventName.EvaluateScript:
-    case Types.TraceEvents.KnownEventName.Compile:
-    case Types.TraceEvents.KnownEventName.CacheScript: {
+    case Types.TraceEvents.KnownEventName.FUNCTION_CALL:
+    case Types.TraceEvents.KnownEventName.EVALUATE_SCRIPT:
+    case Types.TraceEvents.KnownEventName.COMPILE:
+    case Types.TraceEvents.KnownEventName.CACHE_SCRIPT: {
       return {
         lineNumber: typeof lineNumber === 'number' ? lineNumber - 1 : undefined,
         columnNumber: typeof columnNumber === 'number' ? columnNumber - 1 : undefined,
@@ -405,17 +398,32 @@ export function getZeroIndexedStackTraceForEvent(event: Types.TraceEvents.TraceE
     return null;
   }
   return stack.map(callFrame => {
-    const normalizedCallFrame = {...callFrame};
     switch (event.name) {
-      case Types.TraceEvents.KnownEventName.ScheduleStyleRecalculation:
-      case Types.TraceEvents.KnownEventName.InvalidateLayout:
-      case Types.TraceEvents.KnownEventName.UpdateLayoutTree: {
-        normalizedCallFrame.lineNumber = callFrame.lineNumber && callFrame.lineNumber - 1;
-        normalizedCallFrame.columnNumber = callFrame.columnNumber && callFrame.columnNumber - 1;
+      case Types.TraceEvents.KnownEventName.SCHEDULE_STYLE_RECALCULATION:
+      case Types.TraceEvents.KnownEventName.INVALIDATE_LAYOUT:
+      case Types.TraceEvents.KnownEventName.UPDATE_LAYOUT_TREE: {
+        return makeZeroBasedCallFrame(callFrame);
+      }
+      default: {
+        if (Types.TraceEvents.isTraceEventUserTiming(event) || Types.Extensions.isSyntheticExtensionEntry(event)) {
+          return makeZeroBasedCallFrame(callFrame);
+        }
       }
     }
-    return normalizedCallFrame;
+    return callFrame;
   });
+}
+
+/**
+ * Given a 1-based call frame creates a 0-based one.
+ */
+export function makeZeroBasedCallFrame(callFrame: Types.TraceEvents.TraceEventCallFrame):
+    Types.TraceEvents.TraceEventCallFrame {
+  const normalizedCallFrame = {...callFrame};
+
+  normalizedCallFrame.lineNumber = callFrame.lineNumber && callFrame.lineNumber - 1;
+  normalizedCallFrame.columnNumber = callFrame.columnNumber && callFrame.columnNumber - 1;
+  return normalizedCallFrame;
 }
 
 /**
@@ -479,7 +487,7 @@ export function isTopLevelEvent(event: Types.TraceEvents.TraceEventData): boolea
     // TODO(crbug.com/341234884): do we need this?
     return true;
   }
-  return event.cat.includes(DevToolsTimelineEventCategory) && event.name === Types.TraceEvents.KnownEventName.RunTask;
+  return event.cat.includes(DevToolsTimelineEventCategory) && event.name === Types.TraceEvents.KnownEventName.RUN_TASK;
 }
 
 function topLevelEventIndexEndingAfter(
@@ -553,7 +561,7 @@ export function forEachEvent(
     events: Types.TraceEvents.TraceEventData[],
     config: ForEachEventConfig,
     ): void {
-  const globalStartTime = config.startTime || Types.Timing.MicroSeconds(0);
+  const globalStartTime = config.startTime ?? Types.Timing.MicroSeconds(0);
   const globalEndTime = config.endTime || Types.Timing.MicroSeconds(Infinity);
   const ignoreAsyncEvents = config.ignoreAsyncEvents === false ? false : true;
 

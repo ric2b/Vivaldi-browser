@@ -25,7 +25,7 @@ use std::ops::Range;
 // The denominator is always unsigned.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Fraction(pub i32, pub u32);
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct UFraction(pub u32, pub u32);
 // 'clap' fractions do not follow this pattern: both numerators and denominators
 // are used as i32, but they are signalled as u32 according to the specification

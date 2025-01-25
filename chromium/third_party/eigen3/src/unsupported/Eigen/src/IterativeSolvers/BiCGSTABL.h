@@ -70,7 +70,7 @@ bool bicgstabl(const MatrixType &mat, const Rhs &rhs, Dest &x, const Preconditio
   rHat.col(0) = rhs - mat * x0;  // r_0
 
   x.setZero();  // This will contain the updates to the solution.
-  // rShadow is arbritary, but must never be orthogonal to any residual.
+  // rShadow is arbitrary, but must never be orthogonal to any residual.
   VectorType rShadow = VectorType::Random(N);
 
   VectorType x_prime = x;
@@ -313,7 +313,7 @@ class BiCGSTABL : public IterativeSolverBase<BiCGSTABL<MatrixType_, Precondition
 
   /** \internal */
   /** Loops over the number of columns of b and does the following:
-    1. sets the tolerence and maxIterations
+    1. sets the tolerance and maxIterations
     2. Calls the function that has the core solver routine
   */
   template <typename Rhs, typename Dest>

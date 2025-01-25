@@ -25,7 +25,6 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "content/public/browser/notification_observer.h"
 
 #include "calendar/calendar_backend.h"
 #include "calendar/calendar_database_params.h"
@@ -149,7 +148,7 @@ class CalendarService : public KeyedService {
   base::CancelableTaskTracker::TaskId UpdateCalendar(
       CalendarID calendar_id,
       Calendar calendar,
-      base::OnceCallback<void(bool)> callback,
+      base::OnceCallback<void(StatusCB)> callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteCalendar(

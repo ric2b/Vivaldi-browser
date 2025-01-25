@@ -6,7 +6,9 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_MOCK_AUTOFILL_PLUS_ADDRESS_DELEGATE_H_
 
 #include "components/autofill/core/browser/autofill_plus_address_delegate.h"
+#include "components/autofill/core/browser/password_form_classification.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
+#include "components/autofill/core/common/form_field_data.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace autofill {
@@ -21,8 +23,8 @@ class MockAutofillPlusAddressDelegate : public AutofillPlusAddressDelegate {
               GetSuggestions,
               (const url::Origin&,
                bool,
-               AutofillClient::PasswordFormType,
-               std::u16string_view,
+               const PasswordFormClassification&,
+               const FormFieldData&,
                AutofillSuggestionTriggerSource,
                GetSuggestionsCallback),
               (override));
@@ -44,8 +46,34 @@ class MockAutofillPlusAddressDelegate : public AutofillPlusAddressDelegate {
                FormGlobalId,
                FieldGlobalId,
                SuggestionContext,
-               AutofillClient::PasswordFormType,
+               PasswordFormClassification::Type,
                SuggestionType),
+              (override));
+  MOCK_METHOD(void,
+              OnClickedRefreshInlineSuggestion,
+              (const url::Origin&,
+               base::span<const Suggestion>,
+               size_t,
+               base::OnceCallback<void(std::vector<Suggestion>,
+                                       AutofillSuggestionTriggerSource)>),
+              (override));
+  MOCK_METHOD(void,
+              OnShowedInlineSuggestion,
+              (const url::Origin&,
+               base::span<const Suggestion>,
+               UpdateSuggestionsCallback),
+              (override));
+  MOCK_METHOD(void,
+              OnAcceptedInlineSuggestion,
+              (const url::Origin&,
+               base::span<const Suggestion>,
+               size_t,
+               UpdateSuggestionsCallback,
+               HideSuggestionsCallback,
+               PlusAddressCallback,
+               ShowAffiliationErrorDialogCallback,
+               ShowErrorDialogCallback,
+               base::OnceClosure),
               (override));
 };
 

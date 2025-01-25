@@ -2,6 +2,7 @@ __pycache__
 /.firebase
 /.gclient_entries
 /.gclient_previous_sync_commits
+/.gcs_entries
 *.pyc
 *.swo
 *.swp
@@ -11,8 +12,4 @@ __pycache__
 /infra/.recipe_deps
 /node_modules
 /node_modules.tar.gz
-/third_party/node/linux/node-linux-x64
-/third_party/node/linux/node-linux-x64.tar.gz
-/third_party/node/mac/node-darwin-x64
-/third_party/node/mac/node-darwin-x64.tar.gz
-/third_party/node/win/node.exe
+/third_party/node/

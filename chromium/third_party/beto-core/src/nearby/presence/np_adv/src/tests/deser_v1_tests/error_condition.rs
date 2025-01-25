@@ -17,34 +17,6 @@ use crate::deserialization_arena;
 use rand::SeedableRng;
 
 #[test]
-fn v1_multiple_plaintext_sections() {
-    let mut rng = StdRng::from_entropy();
-    let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-    add_plaintext_section(&mut rng, &mut adv_builder).unwrap();
-
-    // append an extra plaintext section
-    let adv = [
-        adv_builder.into_advertisement().as_slice(),
-        &[
-            0x00, // format unencrypted
-            0x03, // section len
-        ],
-        &[0xDD; 3], // 3 bytes of de contents
-    ]
-    .concat();
-
-    let arena = deserialization_arena!();
-    let cred_book = build_empty_cred_book();
-    let v1_error = deser_v1_error::<_, CryptoProviderImpl>(arena, &adv, &cred_book);
-    assert_eq!(
-        v1_error,
-        AdvDeserializationError::ParseError {
-            details_hazmat: AdvDeserializationErrorDetailsHazmat::AdvertisementDeserializeError
-        }
-    );
-}
-
-#[test]
 fn v1_plaintext_empty_contents() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
     let sb = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
@@ -197,7 +169,8 @@ fn v1_encrypted_matching_identity_but_mic_mismatch() {
                 // mangle the last 2 bytes of the suffix to invalidate the advertisement.
                 // the identity should still correctly match
                 let adv_len = adv.len();
-                adv[adv_len - 2..].copy_from_slice(&[0xFF; 2]);
+                adv[adv_len - 2] = adv[adv_len - 2].wrapping_add(1);
+                adv[adv_len - 1] = adv[adv_len - 1].wrapping_sub(1);
             },
         )
     }
@@ -248,7 +221,6 @@ fn v1_deserialize_error_test_tampered_adv(
     let mut adv = builder.into_advertisement().as_slice().to_vec();
 
     mangle_adv(&mut adv);
-
     let cred_book = identities.build_cred_book::<CryptoProviderImpl>();
     let arena = deserialization_arena!();
     let v1_contents = deser_v1::<_, CryptoProviderImpl>(arena, adv.as_slice(), &cred_book);

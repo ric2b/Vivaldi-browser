@@ -28,9 +28,9 @@
 #ifndef SRC_DAWN_NODE_BINDING_GPUSUPPORTEDLIMITS_H_
 #define SRC_DAWN_NODE_BINDING_GPUSUPPORTEDLIMITS_H_
 
-#include "dawn/native/DawnNative.h"
-#include "dawn/webgpu_cpp.h"
+#include <webgpu/webgpu_cpp.h>
 
+#include "dawn/native/DawnNative.h"
 #include "src/dawn/node/interop/NodeAPI.h"
 #include "src/dawn/node/interop/WebGPU.h"
 
@@ -39,7 +39,7 @@ namespace wgpu::binding {
 // GPUSupportedLimits is an implementation of interop::GPUSupportedLimits.
 class GPUSupportedLimits final : public interop::GPUSupportedLimits {
   public:
-    explicit GPUSupportedLimits(wgpu::SupportedLimits);
+    explicit GPUSupportedLimits(wgpu::SupportedLimits limits);
 
     // interop::GPUSupportedLimits interface compliance
     uint32_t getMaxTextureDimension1D(Napi::Env) override;
@@ -74,11 +74,12 @@ class GPUSupportedLimits final : public interop::GPUSupportedLimits {
     uint32_t getMaxComputeWorkgroupSizeY(Napi::Env) override;
     uint32_t getMaxComputeWorkgroupSizeZ(Napi::Env) override;
     uint32_t getMaxComputeWorkgroupsPerDimension(Napi::Env) override;
-    // TODO(349125474): Expose subgroups limits (subgroupMinSize and subgroupMinSize) in Node
-    // binding.
+    std::variant<uint32_t, interop::UndefinedType> getMinSubgroupSize(Napi::Env) override;
+    std::variant<uint32_t, interop::UndefinedType> getMaxSubgroupSize(Napi::Env) override;
 
   private:
     wgpu::SupportedLimits limits_;
+    std::optional<wgpu::DawnExperimentalSubgroupLimits> subgroup_limits_;
 };
 
 }  // namespace wgpu::binding

@@ -189,7 +189,8 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupViewViews* popup_view,
       std::make_unique<views::FlexLayout>());
   suggestion_and_buttons->SetProperty(
       views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
 
   suggestion_view_ = suggestion_and_buttons->AddChildView(
@@ -281,6 +282,9 @@ OmniboxResultView::OmniboxResultView(OmniboxPopupViewViews* popup_view,
                                views::MaximumFlexSizeRule::kPreferred));
 
   mouse_enter_exit_handler_.ObserveMouseEnterExitOn(this);
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
+  GetViewAccessibility().SetPosInSet(model_index_ + 1);
 }
 
 OmniboxResultView::~OmniboxResultView() {}
@@ -437,10 +441,8 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
       selected ? kColorOmniboxResultsTextSelected : kColorOmniboxText;
   bool prefers_contrast =
       GetNativeTheme() && GetNativeTheme()->UserHasContrastPreference();
-  if (omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled
-          ? match_.answer_template.has_value()
-          : match_.answer ||
-                match_.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
+  if (match_.answer_type != omnibox::ANSWER_TYPE_UNSPECIFIED ||
+      match_.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
     suggestion_view_->content()->ApplyTextColor(default_id);
     suggestion_view_->description()->ApplyTextColor(dimmed_id);
   } else if (match_.type == AutocompleteMatchType::NULL_RESULT_MESSAGE) {
@@ -477,6 +479,7 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
 void OmniboxResultView::OnSelectionStateChanged() {
   UpdateFeedbackButtonsVisibility();
   UpdateRemoveSuggestionVisibility();
+  UpdateAccessibilitySelectedState();
   if (GetMatchSelected()) {
     // Immediately before notifying screen readers that the selected item has
     // changed, we want to update the name of the newly-selected item so that
@@ -634,8 +637,6 @@ void OmniboxResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // ax::mojom::IntAttribute::kPosInSet/SET_SIZE and providing it via text as
   // well would result in duplicate announcements.
 
-  node_data->role = ax::mojom::Role::kListBoxOption;
-
   const auto* autocomplete_controller =
       popup_view_->controller()->autocomplete_controller();
 
@@ -667,13 +668,6 @@ void OmniboxResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     }
     node_data->SetName(label);
   }
-
-  node_data->AddIntAttribute(ax::mojom::IntAttribute::kPosInSet,
-                             model_index_ + 1);
-  node_data->AddIntAttribute(ax::mojom::IntAttribute::kSetSize,
-                             autocomplete_controller->result().size());
-
-  node_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, is_selected);
 }
 
 void OmniboxResultView::OnThemeChanged() {
@@ -690,13 +684,18 @@ void OmniboxResultView::EmitTextChangedAccessiblityEvent() {
   // these items is updated as the value of omnibox changes. The displayed text
   // for a given item is exposed to screen readers as the item's name/label.
   ui::AXNodeData node_data;
-  GetAccessibleNodeData(&node_data);
+  GetViewAccessibility().GetAccessibleNodeData(&node_data);
   std::u16string current_name =
       node_data.GetString16Attribute(ax::mojom::StringAttribute::kName);
   if (accessible_name_ != current_name) {
     NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
     accessible_name_ = current_name;
   }
+}
+
+void OmniboxResultView::UpdateAccessibilityProperties() {
+  GetViewAccessibility().SetSetSize(
+      popup_view_->controller()->autocomplete_controller()->result().size());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -764,6 +763,10 @@ void OmniboxResultView::UpdateRemoveSuggestionVisibility() {
   if (old_visibility != new_visibility) {
     InvalidateLayout();
   }
+}
+
+void OmniboxResultView::UpdateAccessibilitySelectedState() {
+  GetViewAccessibility().SetIsSelected(GetMatchSelected());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

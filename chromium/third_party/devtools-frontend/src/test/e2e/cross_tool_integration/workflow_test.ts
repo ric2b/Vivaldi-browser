@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {click, closeAllCloseableTabs, goToResource, timeout, waitFor} from '../../shared/helper.js';
-import {describe, it} from '../../shared/mocha-extensions.js';
+
 import {navigateToConsoleTab, waitForConsoleInfoMessageAndClickOnLink} from '../helpers/console-helpers.js';
 import {
   clickOnContextMenuItemFromTab,
@@ -17,7 +17,7 @@ import {clickOnFirstLinkInStylesPanel, navigateToElementsTab} from '../helpers/e
 import {LAYERS_TAB_SELECTOR} from '../helpers/layers-helpers.js';
 import {MEMORY_TAB_ID, navigateToMemoryTab} from '../helpers/memory-helpers.js';
 import {
-  navigateToPerformanceSidebarTab,
+  navigateToBottomUpTab,
   navigateToPerformanceTab,
   startRecording,
   stopRecording,
@@ -75,7 +75,7 @@ describe('A user can navigate across', function() {
 
     await stopRecording();
 
-    await navigateToPerformanceSidebarTab('Bottom-Up');
+    await navigateToBottomUpTab();
 
     await click('.devtools-link[title*="default.html"]');
     await waitFor('.panel[aria-label="sources"]');

@@ -47,7 +47,7 @@ describeWithEnvironment('LayoutShiftsTrackAppender', function() {
     // Only one row of layout shifts.
     assert.strictEqual(entryTypeByLevel.length, 1);
     assert.deepEqual(entryTypeByLevel, [
-      Timeline.TimelineFlameChartDataProvider.EntryType.TrackAppender,
+      Timeline.TimelineFlameChartDataProvider.EntryType.TRACK_APPENDER,
     ]);
   });
 
@@ -60,7 +60,7 @@ describeWithEnvironment('LayoutShiftsTrackAppender', function() {
   it('creates a flamechart group', async function() {
     const {flameChartData} = await renderTrackAppender(this, 'cls-single-frame.json.gz');
     assert.strictEqual(flameChartData.groups.length, 1);
-    assert.strictEqual(flameChartData.groups[0].name, 'Layout Shifts');
+    assert.strictEqual(flameChartData.groups[0].name, 'Layout shifts');
   });
 
   it('adds all layout shifts with the correct start times', async function() {

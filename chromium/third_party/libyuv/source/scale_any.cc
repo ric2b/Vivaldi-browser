@@ -255,6 +255,20 @@ SDANY(ScaleRowDown34_Any_NEON,
       4 / 3,
       1,
       23)
+#ifdef __aarch64__
+SDANY(ScaleRowDown34_0_Box_Any_NEON,
+      ScaleRowDown34_0_Box_NEON,
+      ScaleRowDown34_0_Box_C,
+      4 / 3,
+      1,
+      47)
+SDANY(ScaleRowDown34_1_Box_Any_NEON,
+      ScaleRowDown34_1_Box_NEON,
+      ScaleRowDown34_1_Box_C,
+      4 / 3,
+      1,
+      47)
+#else
 SDANY(ScaleRowDown34_0_Box_Any_NEON,
       ScaleRowDown34_0_Box_NEON,
       ScaleRowDown34_0_Box_C,
@@ -267,6 +281,7 @@ SDANY(ScaleRowDown34_1_Box_Any_NEON,
       4 / 3,
       1,
       23)
+#endif
 #endif
 #ifdef HAS_SCALEROWDOWN34_MSA
 SDANY(ScaleRowDown34_Any_MSA,
@@ -749,11 +764,19 @@ SUH2LANY(ScaleRowUp2_Linear_16_Any_AVX2,
 #endif
 
 #ifdef HAS_SCALEROWUP2_LINEAR_NEON
+#ifdef __aarch64__
+SUH2LANY(ScaleRowUp2_Linear_Any_NEON,
+         ScaleRowUp2_Linear_NEON,
+         ScaleRowUp2_Linear_C,
+         31,
+         uint8_t)
+#else
 SUH2LANY(ScaleRowUp2_Linear_Any_NEON,
          ScaleRowUp2_Linear_NEON,
          ScaleRowUp2_Linear_C,
          15,
          uint8_t)
+#endif
 #endif
 
 #ifdef HAS_SCALEROWUP2_LINEAR_12_NEON

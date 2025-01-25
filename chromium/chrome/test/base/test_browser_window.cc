@@ -9,10 +9,10 @@
 #include "base/feature_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/sharing/sharing_dialog_data.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
+#include "components/sharing_message/sharing_dialog_data.h"
 #include "components/user_education/common/feature_promo_controller.h"
 #include "components/user_education/common/feature_promo_handle.h"
 #include "components/user_education/common/new_badge_controller.h"
@@ -43,10 +43,6 @@ std::unique_ptr<Browser> CreateBrowserWithTestWindowForParams(
 }
 
 // TestBrowserWindow::TestLocationBar -----------------------------------------
-
-const OmniboxView* TestBrowserWindow::TestLocationBar::GetOmniboxView() const {
-  return nullptr;
-}
 
 OmniboxView* TestBrowserWindow::TestLocationBar::GetOmniboxView() {
   return nullptr;
@@ -181,6 +177,10 @@ bool TestBrowserWindow::IsForceFullscreen() const {
   return false;
 }
 
+bool TestBrowserWindow::UpdateToolbarSecurityState() {
+  return false;
+}
+
 bool TestBrowserWindow::IsVisible() const {
   return true;
 }
@@ -241,6 +241,10 @@ bool TestBrowserWindow::IsBorderlessModeEnabled() const {
 }
 
 views::WebView* TestBrowserWindow::GetContentsWebView() {
+  return nullptr;
+}
+
+BrowserView* TestBrowserWindow::AsBrowserView() {
   return nullptr;
 }
 

@@ -41,8 +41,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.compat.ApiHelperForN;
-import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -73,6 +71,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabManagementFieldTrial;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.widget.TouchEventObserver;
 import org.chromium.components.browser_ui.widget.TouchEventProvider;
@@ -84,8 +83,10 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ApplicationViewportInsetSupplier;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.EventForwarder;
 import org.chromium.ui.base.EventOffsetHandler;
+import org.chromium.ui.base.SPenSupport;
 import org.chromium.ui.base.UiAndroidFeatureList;
 import org.chromium.ui.base.UiAndroidFeatureMap;
 import org.chromium.ui.base.ViewUtils;
@@ -264,7 +265,7 @@ public class CompositorViewHolder extends FrameLayout
                         @Override
                         public void setCurrentTouchEventOffsets(float top) {
                             EventForwarder forwarder = getEventForwarder();
-                            if (forwarder != null) forwarder.setCurrentTouchEventOffsets(0, top);
+                            if (forwarder != null) forwarder.setCurrentTouchOffsetY(top);
                         }
 
                         @Override
@@ -347,12 +348,13 @@ public class CompositorViewHolder extends FrameLayout
     public PointerIcon onResolvePointerIcon(MotionEvent event, int pointerIndex) {
         View activeView = getContentView();
         if (activeView == null || !ViewCompat.isAttachedToWindow(activeView)) return null;
-        return ApiHelperForN.onResolvePointerIcon(activeView, event, pointerIndex);
+        return activeView.onResolvePointerIcon(event, pointerIndex);
     }
 
     /**
      * Creates a {@link CompositorView}.
-     * @param c     The Context to create this {@link CompositorView} in.
+     *
+     * @param c The Context to create this {@link CompositorView} in.
      * @param attrs The AttributeSet used to create this {@link CompositorView}.
      */
     public CompositorViewHolder(Context c, AttributeSet attrs) {
@@ -415,7 +417,7 @@ public class CompositorViewHolder extends FrameLayout
                 TabManagementFieldTrial.DELAY_TEMP_STRIP_TIMEOUT_MS.getValue();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ApiHelperForO.setDefaultFocusHighlightEnabled(this, false);
+            setDefaultFocusHighlightEnabled(false);
         }
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
@@ -720,7 +722,10 @@ public class CompositorViewHolder extends FrameLayout
 
         if (mLayoutManager == null) return false;
 
-        mEventOffsetHandler.onInterceptTouchEvent(e);
+        int actionMasked = SPenSupport.convertSPenEventAction(e.getActionMasked());
+        if (actionMasked == MotionEvent.ACTION_DOWN) {
+            mEventOffsetHandler.onInterceptTouchDownEvent(e);
+        }
         return mLayoutManager.onInterceptMotionEvent(e, mIsKeyboardShowing, EventType.TOUCH);
     }
 
@@ -1068,7 +1073,8 @@ public class CompositorViewHolder extends FrameLayout
         // When scrolling browser controls in viz, don't produce new browser frames unless it's
         // forced with |needs_animate|
         boolean scrollingWithBciv =
-                ChromeFeatureList.sBrowserControlsInViz.isEnabled()
+                ToolbarFeatures.isBrowserControlsInVizEnabled(
+                                DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext()))
                         && (mInGesture || mContentViewScrolling);
         if (needsAnimate && !scrollingWithBciv) {
             requestRender();

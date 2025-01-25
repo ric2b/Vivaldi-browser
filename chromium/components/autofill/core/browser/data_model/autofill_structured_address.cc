@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/data_model/autofill_i18n_api.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_regex_provider.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
@@ -61,11 +62,9 @@ FloorNode::FloorNode(SubcomponentsList children)
 FloorNode::~FloorNode() = default;
 
 ApartmentNode::ApartmentNode(SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForApartmentNumbers,
-          ADDRESS_HOME_APT_NUM,
-          std::move(children),
-          MergeMode::kDefault) {}
+    : AddressComponent(ADDRESS_HOME_APT_NUM,
+                       std::move(children),
+                       MergeMode::kDefault) {}
 
 ApartmentNode::~ApartmentNode() = default;
 
@@ -94,6 +93,13 @@ StreetAddressNode::GetParseRegularExpressionsByRelevance() const {
   DCHECK(pattern_provider);
   const std::string country_code =
       base::UTF16ToUTF8(GetRootNode().GetValueForType(ADDRESS_HOME_COUNTRY));
+  // Countries with custom hierarchies are not guaranteed to support street
+  // names, house numbers, floors and apartment numbers. Therefore, we don't
+  // apply the hardcoded fallback regular expressions.
+  if (i18n_model_definition::IsCustomHierarchyAvailableForCountry(
+          AddressCountryCode(country_code))) {
+    return {};
+  }
   return {pattern_provider->GetRegEx(RegEx::kParseHouseNumberStreetName,
                                      country_code),
           pattern_provider->GetRegEx(RegEx::kParseStreetNameHouseNumber,
@@ -314,76 +320,60 @@ SortingCodeNode::SortingCodeNode(SubcomponentsList children)
 SortingCodeNode::~SortingCodeNode() = default;
 
 LandmarkNode::LandmarkNode(SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForLandmark,
-          ADDRESS_HOME_LANDMARK,
-          std::move(children),
-          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+    : AddressComponent(ADDRESS_HOME_LANDMARK,
+                       std::move(children),
+                       MergeMode::kReplaceEmpty | kReplaceSubset) {}
 
 LandmarkNode::~LandmarkNode() = default;
 
 BetweenStreetsNode::BetweenStreetsNode(SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForBetweenStreets,
-          ADDRESS_HOME_BETWEEN_STREETS,
-          std::move(children),
-          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+    : AddressComponent(ADDRESS_HOME_BETWEEN_STREETS,
+                       std::move(children),
+                       MergeMode::kReplaceEmpty | kReplaceSubset) {}
 
 BetweenStreetsNode::~BetweenStreetsNode() = default;
 
 BetweenStreets1Node::BetweenStreets1Node(SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForBetweenStreets,
-          ADDRESS_HOME_BETWEEN_STREETS_1,
-          std::move(children),
-          MergeMode::kDefault) {}
+    : AddressComponent(ADDRESS_HOME_BETWEEN_STREETS_1,
+                       std::move(children),
+                       MergeMode::kDefault) {}
 
 BetweenStreets1Node::~BetweenStreets1Node() = default;
 
 BetweenStreets2Node::BetweenStreets2Node(SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForBetweenStreets,
-          ADDRESS_HOME_BETWEEN_STREETS_2,
-          std::move(children),
-          MergeMode::kDefault) {}
+    : AddressComponent(ADDRESS_HOME_BETWEEN_STREETS_2,
+                       std::move(children),
+                       MergeMode::kDefault) {}
 
 BetweenStreets2Node::~BetweenStreets2Node() = default;
 
 AdminLevel2Node::AdminLevel2Node(SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForAdminLevel2,
-          ADDRESS_HOME_ADMIN_LEVEL2,
-          std::move(children),
-          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+    : AddressComponent(ADDRESS_HOME_ADMIN_LEVEL2,
+                       std::move(children),
+                       MergeMode::kReplaceEmpty | kReplaceSubset) {}
 
 AdminLevel2Node::~AdminLevel2Node() = default;
 
 AddressOverflowNode::AddressOverflowNode(SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForAddressOverflow,
-          ADDRESS_HOME_OVERFLOW,
-          std::move(children),
-          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+    : AddressComponent(ADDRESS_HOME_OVERFLOW,
+                       std::move(children),
+                       MergeMode::kReplaceEmpty | kReplaceSubset) {}
 
 AddressOverflowNode::~AddressOverflowNode() = default;
 
 AddressOverflowAndLandmarkNode::AddressOverflowAndLandmarkNode(
     SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForAddressOverflowAndLandmark,
-          ADDRESS_HOME_OVERFLOW_AND_LANDMARK,
-          std::move(children),
-          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+    : AddressComponent(ADDRESS_HOME_OVERFLOW_AND_LANDMARK,
+                       std::move(children),
+                       MergeMode::kReplaceEmpty | kReplaceSubset) {}
 
 AddressOverflowAndLandmarkNode::~AddressOverflowAndLandmarkNode() = default;
 
 BetweenStreetsOrLandmarkNode::BetweenStreetsOrLandmarkNode(
     SubcomponentsList children)
-    : FeatureGuardedAddressComponent(
-          &features::kAutofillEnableSupportForBetweenStreetsOrLandmark,
-          ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK,
-          std::move(children),
-          MergeMode::kReplaceEmpty | kReplaceSubset) {}
+    : AddressComponent(ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK,
+                       std::move(children),
+                       MergeMode::kReplaceEmpty | kReplaceSubset) {}
 
 BetweenStreetsOrLandmarkNode::~BetweenStreetsOrLandmarkNode() = default;
 

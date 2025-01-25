@@ -29,6 +29,7 @@
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/common/dense_set.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/is_required.h"
 #include "components/autofill/core/common/language_code.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
@@ -57,6 +58,8 @@ class LogManager;
 class AutofillManager
     : public translate::TranslateDriver::LanguageDetectionObserver {
  public:
+  using LifecycleState = AutofillDriver::LifecycleState;
+
   // Observer of AutofillManager events.
   //
   // For the On{Before,After}Foo() events, the following invariant holds:
@@ -65,24 +68,35 @@ class AutofillManager
   // OnBeforeFoo() may be called without a corresponding OnAfterFoo() call are:
   // - if the number of cached forms exceeds `kAutofillManagerMaxFormCacheSize`;
   // - if this AutofillManager has been destroyed or reset in the meantime.
-  // - if the request in AutofillCrowdsourcingManager was not successful (i.e.
-  // no 2XX
-  //   response code or a null response body).
+  //
+  // When observing an AutofillManager, make sure to remove the observation
+  // before the AutofillManager is destroyed. Pending destruction is signaled
+  // by a call to `OnAutofillManagerStateChanged` with current `LifecycleState`
+  // `kPendingDeletion`.
+  // If you want to observe all AutofillManagers of a `WebContents`, consider
+  // using `autofill::ScopedAutofillManagersObservation`, which abstracts away
+  // all the boilerplate for adding and removing observers of AutofillManagers
+  // of a `WebContents`.
   //
   // TODO(crbug.com/40280003): Consider moving events that are specific to BAM
   // to a new BAM::Observer class.
   class Observer : public base::CheckedObserver {
    public:
-    virtual void OnAutofillManagerDestroyed(AutofillManager& manager) {}
-    virtual void OnAutofillManagerReset(AutofillManager& manager) {}
+    virtual void OnAutofillManagerStateChanged(AutofillManager& manager,
+                                               LifecycleState previous,
+                                               LifecycleState current) {}
 
     virtual void OnBeforeLanguageDetermined(AutofillManager& manager) {}
     virtual void OnAfterLanguageDetermined(AutofillManager& manager) {}
 
-    virtual void OnBeforeFormsSeen(AutofillManager& manager,
-                                   base::span<const FormGlobalId> forms) {}
-    virtual void OnAfterFormsSeen(AutofillManager& manager,
-                                  base::span<const FormGlobalId> forms) {}
+    virtual void OnBeforeFormsSeen(
+        AutofillManager& manager,
+        base::span<const FormGlobalId> updated_forms,
+        base::span<const FormGlobalId> removed_forms) {}
+    virtual void OnAfterFormsSeen(
+        AutofillManager& manager,
+        base::span<const FormGlobalId> updated_forms,
+        base::span<const FormGlobalId> removed_forms) {}
 
     virtual void OnBeforeCaretMovedInFormField(AutofillManager& manager,
                                                const FormGlobalId& form,
@@ -129,8 +143,7 @@ class AutofillManager
 
     virtual void OnBeforeFocusOnFormField(AutofillManager& manager,
                                           FormGlobalId form,
-                                          FieldGlobalId field,
-                                          const FormData& form_data) {}
+                                          FieldGlobalId field) {}
     virtual void OnAfterFocusOnFormField(AutofillManager& manager,
                                          FormGlobalId form,
                                          FieldGlobalId field) {}
@@ -201,6 +214,12 @@ class AutofillManager
 
   ~AutofillManager() override;
 
+  // Notifies `Observer`s and calls Reset() if applicable.
+  void OnAutofillDriverLifecycleStateChanged(
+      LifecycleState old_state,
+      LifecycleState new_state,
+      base::PassKey<AutofillDriverFactory> pass_key);
+
   AutofillClient& client() { return driver_->GetAutofillClient(); }
   const AutofillClient& client() const { return driver_->GetAutofillClient(); }
 
@@ -219,13 +238,14 @@ class AutofillManager
                                     const FieldGlobalId& field_id,
                                     const base::TimeTicks timestamp);
   void OnDidEndTextFieldEditing();
-  void OnTextFieldDidScroll(const FormData& form,
-                            const FieldGlobalId& field_id);
-  void OnSelectControlDidChange(const FormData& form,
-                                const FieldGlobalId& field_id);
+  virtual void OnTextFieldDidScroll(const FormData& form,
+                                    const FieldGlobalId& field_id);
+  virtual void OnSelectControlDidChange(const FormData& form,
+                                        const FieldGlobalId& field_id);
   void OnSelectOrSelectListFieldOptionsDidChange(const FormData& form);
-  void OnFocusOnFormField(const FormData& form, const FieldGlobalId& field_id);
-  void OnFocusOnNonFormField(bool had_interacted_form);
+  virtual void OnFocusOnFormField(const FormData& form,
+                                  const FieldGlobalId& field_id);
+  void OnFocusOnNonFormField();
   virtual void OnAskForValuesToFill(
       const FormData& form,
       const FieldGlobalId& field_id,
@@ -249,9 +269,6 @@ class AutofillManager
   // Other events.
 
   virtual void ReportAutofillWebOTPMetrics(bool used_web_otp) = 0;
-
-  // Resets cache.
-  virtual void Reset();
 
   // translate::TranslateDriver::LanguageDetectionObserver:
   void OnTranslateDriverDestroyed(
@@ -316,6 +333,10 @@ class AutofillManager
  protected:
   explicit AutofillManager(AutofillDriver* driver);
 
+  // Clears the managed forms and other objects held by the AutofillManager.
+  // Does not touch the LifecycleState, which is controlled by the caller.
+  virtual void Reset();
+
   LogManager* log_manager() { return log_manager_; }
 
   // Retrieves the page language from |client_|
@@ -341,7 +362,7 @@ class AutofillManager
       const FormData& form) = 0;
   virtual void OnFocusOnFormFieldImpl(const FormData& form,
                                       const FieldGlobalId& field_id) = 0;
-  virtual void OnFocusOnNonFormFieldImpl(bool had_interacted_form) = 0;
+  virtual void OnFocusOnNonFormFieldImpl() = 0;
   virtual void OnAskForValuesToFillImpl(
       const FormData& form,
       const FieldGlobalId& field_id,
@@ -426,8 +447,7 @@ class AutofillManager
 
   // Invoked by `AutofillCrowdsourcingManager`.
   void OnLoadedServerPredictions(
-      std::string response,
-      const std::vector<FormSignature>& queried_form_signatures);
+      std::optional<AutofillCrowdsourcingManager::QueryResponse> response);
 
   // Invoked when forms from OnFormsSeen() have been parsed to
   // |form_structures|.

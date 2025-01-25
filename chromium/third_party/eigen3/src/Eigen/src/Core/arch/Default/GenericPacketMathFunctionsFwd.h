@@ -21,7 +21,7 @@ namespace internal {
 // This is needed to workaround a circular dependency.
 
 /***************************************************************************
- * Some generic implementations to be used by implementors
+ * Some generic implementations to be used by implementers
  ***************************************************************************/
 
 /** Default implementation of pfrexp.
@@ -66,6 +66,10 @@ Packet generic_plog1p(const Packet& x);
 template <typename Packet>
 Packet generic_expm1(const Packet& x);
 
+/** \internal \returns atan(x) */
+template <typename Packet>
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet generic_patan(const Packet& x);
+
 /** \internal \returns exp(x) for single precision float */
 template <typename Packet>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet pexp_float(const Packet _x);
@@ -98,21 +102,21 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet pasin_float(const Pac
 template <typename Packet>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet pacos_float(const Packet& x);
 
-/** \internal \returns atan(x) for single precision float */
-template <typename Packet>
-EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patan_float(const Packet& x);
-
-/** \internal \returns atan(x) for double precision float */
-template <typename Packet>
-EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patan_double(const Packet& x);
-
 /** \internal \returns tanh(x) for single precision float */
 template <typename Packet>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet ptanh_float(const Packet& x);
 
+/** \internal \returns tanh(x) for double precision float */
+template <typename Packet>
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet ptanh_double(const Packet& x);
+
 /** \internal \returns atanh(x) for single precision float */
 template <typename Packet>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patanh_float(const Packet& x);
+
+/** \internal \returns atanh(x) for double precision float */
+template <typename Packet>
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patanh_double(const Packet& x);
 
 /** \internal \returns sqrt(x) for complex types */
 template <typename Packet>
@@ -163,7 +167,6 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Packet generic_round(const Packet& a);
   EIGEN_FLOAT_PACKET_FUNCTION(cos, PACKET)                                                     \
   EIGEN_FLOAT_PACKET_FUNCTION(asin, PACKET)                                                    \
   EIGEN_FLOAT_PACKET_FUNCTION(acos, PACKET)                                                    \
-  EIGEN_FLOAT_PACKET_FUNCTION(atan, PACKET)                                                    \
   EIGEN_FLOAT_PACKET_FUNCTION(tanh, PACKET)                                                    \
   EIGEN_FLOAT_PACKET_FUNCTION(atanh, PACKET)                                                   \
   EIGEN_FLOAT_PACKET_FUNCTION(log, PACKET)                                                     \
@@ -171,20 +174,29 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Packet generic_round(const Packet& a);
   EIGEN_FLOAT_PACKET_FUNCTION(exp, PACKET)                                                     \
   template <>                                                                                  \
   EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET pexpm1<PACKET>(const PACKET& _x) { \
-    return internal::generic_expm1(_x);                                                        \
+    return generic_expm1(_x);                                                                  \
   }                                                                                            \
   template <>                                                                                  \
   EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET plog1p<PACKET>(const PACKET& _x) { \
-    return internal::generic_plog1p(_x);                                                       \
+    return generic_plog1p(_x);                                                                 \
+  }                                                                                            \
+  template <>                                                                                  \
+  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET patan<PACKET>(const PACKET& _x) {  \
+    return generic_patan(_x);                                                                  \
   }
 
-#define EIGEN_INSTANTIATE_GENERIC_MATH_FUNCS_DOUBLE(PACKET) \
-  EIGEN_DOUBLE_PACKET_FUNCTION(atan, PACKET)                \
-  EIGEN_DOUBLE_PACKET_FUNCTION(log, PACKET)                 \
-  EIGEN_DOUBLE_PACKET_FUNCTION(sin, PACKET)                 \
-  EIGEN_DOUBLE_PACKET_FUNCTION(cos, PACKET)                 \
-  EIGEN_DOUBLE_PACKET_FUNCTION(log2, PACKET)                \
-  EIGEN_DOUBLE_PACKET_FUNCTION(exp, PACKET)
+#define EIGEN_INSTANTIATE_GENERIC_MATH_FUNCS_DOUBLE(PACKET)                                   \
+  EIGEN_DOUBLE_PACKET_FUNCTION(atanh, PACKET)                                                 \
+  EIGEN_DOUBLE_PACKET_FUNCTION(log, PACKET)                                                   \
+  EIGEN_DOUBLE_PACKET_FUNCTION(sin, PACKET)                                                   \
+  EIGEN_DOUBLE_PACKET_FUNCTION(cos, PACKET)                                                   \
+  EIGEN_DOUBLE_PACKET_FUNCTION(log2, PACKET)                                                  \
+  EIGEN_DOUBLE_PACKET_FUNCTION(exp, PACKET)                                                   \
+  EIGEN_DOUBLE_PACKET_FUNCTION(tanh, PACKET)                                                  \
+  template <>                                                                                 \
+  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET patan<PACKET>(const PACKET& _x) { \
+    return generic_patan(_x);                                                                 \
+  }
 
 }  // end namespace internal
 }  // end namespace Eigen

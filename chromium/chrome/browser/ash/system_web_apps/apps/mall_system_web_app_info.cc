@@ -8,6 +8,7 @@
 #include "ash/webui/mall/url_constants.h"
 #include "ash/webui/system_apps/public/system_web_app_type.h"
 #include "base/feature_list.h"
+#include "chrome/browser/apps/user_type_filter.h"
 #include "chrome/browser/ash/system_web_apps/apps/system_web_app_install_utils.h"
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
@@ -51,6 +52,9 @@ MallSystemAppDelegate::GetWebAppInfo() const {
 }
 
 bool MallSystemAppDelegate::IsAppEnabled() const {
+  if (apps::DetermineUserType(profile()) != apps::kUserTypeUnmanaged) {
+    return false;
+  }
   return chromeos::features::IsCrosMallSwaEnabled();
 }
 
@@ -64,4 +68,8 @@ std::vector<std::string> MallSystemAppDelegate::GetAppIdsToUninstallAndReplace()
   // Mall app. Fixing this requires teaching ExternallyManagedAppManager how
   // to ignore apps, the buggy behaviour is considered an acceptable tradeoff.
   return {web_app::kMallAppId};
+}
+
+bool MallSystemAppDelegate::ShouldCaptureNavigations() const {
+  return true;
 }

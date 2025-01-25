@@ -98,10 +98,12 @@ static bool check_parameters(const Context& context,
                                                    permittedFlags);
         param->layout().checkPermittedLayout(context, param->modifiersPosition(),
                                              permittedLayoutFlags);
-        // Only the (builtin) declarations of 'sample' are allowed to have shader/colorFilter or FP
-        // parameters. You can pass other opaque types to functions safely; this restriction is
+
+        // Public Runtime Effects aren't allowed to pass shader/colorFilter/blender types to
+        // function calls. You can pass other opaque types to functions safely; this restriction is
         // specific to "child" objects.
-        if (type.isEffectChild() && !context.fConfig->isBuiltinCode()) {
+        if (!ProgramConfig::AllowsPrivateIdentifiers(context.fConfig->fKind) &&
+            type.isEffectChild()) {
             context.fErrors->error(param->fPosition, "parameters of type '" + type.displayName() +
                                                      "' not allowed");
             return false;
@@ -396,9 +398,14 @@ static bool find_existing_declaration(const Context& context,
                     return false;
                 }
             }
-            if (other->definition() || other->isIntrinsic() ||
-                modifierFlags != other->modifierFlags()) {
-                errors.error(pos, "duplicate definition of '" + invalidDeclDescription() + "'");
+            if (other->isIntrinsic()) {
+                errors.error(pos, "duplicate definition of intrinsic function '" +
+                                  std::string(name) + "'");
+                return false;
+            }
+            if (modifierFlags != other->modifierFlags()) {
+                errors.error(pos, "functions '" + invalidDeclDescription() + "' and '" +
+                                  other->description() + "' differ only in modifiers");
                 return false;
             }
             *outExistingDecl = other;
@@ -425,7 +432,7 @@ FunctionDeclaration::FunctionDeclaration(const Context& context,
         , fReturnType(returnType)
         , fModifierFlags(modifierFlags)
         , fIntrinsicKind(intrinsicKind)
-        , fBuiltin(context.fConfig->isBuiltinCode())
+        , fModuleType(context.fConfig->fModuleType)
         , fIsMain(name == "main") {
     int builtinColorIndex = 0;
     for (const Variable* param : fParameters) {

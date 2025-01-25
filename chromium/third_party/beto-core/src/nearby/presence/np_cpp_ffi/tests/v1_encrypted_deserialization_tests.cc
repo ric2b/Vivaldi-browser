@@ -59,7 +59,7 @@ TEST_F(NpCppTest, V1PrivateIdentitySimpleCase) {
 
   auto identity_details = section->GetIdentityDetails();
   ASSERT_TRUE(identity_details.ok());
-  ASSERT_EQ(identity_details->cred_id, 123U);
+  ASSERT_EQ(identity_details->cred_id, 123);
   ASSERT_EQ(identity_details->verification_mode,
             nearby_protocol::V1VerificationMode::Signature);
 

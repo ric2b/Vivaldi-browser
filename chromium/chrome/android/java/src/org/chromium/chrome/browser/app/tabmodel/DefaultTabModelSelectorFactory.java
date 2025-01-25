@@ -36,7 +36,7 @@ public class DefaultTabModelSelectorFactory implements TabModelSelectorFactory {
                 tabModelFilterFactory,
                 nextTabPolicySupplier,
                 asyncTabParamsManager,
-                false, // Vivaldi
+                true,
                 ActivityType.TABBED,
                 false);
     }

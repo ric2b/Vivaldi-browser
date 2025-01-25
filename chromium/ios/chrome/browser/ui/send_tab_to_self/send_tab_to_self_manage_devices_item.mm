@@ -16,6 +16,11 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+// End Vivaldi
+
 namespace {
 
 const CGFloat kAvatarSize = 24;
@@ -135,6 +140,13 @@ const CGFloat kAvatarSize = 24;
       base::apple::ObjCCastStrict<SendTabtoSelfManageDevicesCell>(cell);
 
   if (self.showManageDevicesLink) {
+
+    if (vivaldi::IsVivaldiRunning()) {
+      NSString* text =
+          l10n_util::GetNSStringF(IDS_IOS_SEND_TAB_TO_SELF_MANAGE_DEVICES_LINK,
+                                  base::SysNSStringToUTF16(self.accountEmail));
+      accountCell.linkAndEmailTextView.text = text;
+    } else {
     NSString* text =
         l10n_util::GetNSStringF(IDS_SEND_TAB_TO_SELF_MANAGE_DEVICES_LINK,
                                 base::SysNSStringToUTF16(self.accountEmail));
@@ -150,6 +162,8 @@ const CGFloat kAvatarSize = 24;
         AttributedStringFromStringWithLink(text, textAttributes,
                                            linkAttributes);
     accountCell.linkAndEmailTextView.delegate = self;
+    } // End Vivaldi
+
   } else {
     accountCell.linkAndEmailTextView.text = self.accountEmail;
   }

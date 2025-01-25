@@ -23,7 +23,7 @@
 #include "components/reading_list/core/reading_list_model_impl.h"
 #include "components/sync/base/features.h"
 #include "components/sync/service/local_data_description.h"
-#include "components/sync/test/mock_model_type_change_processor.h"
+#include "components/sync/test/mock_data_type_local_change_processor.h"
 #include "components/sync_bookmarks/bookmark_model_view.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -47,7 +47,7 @@ password_manager::PasswordForm CreateTestPassword(
 }
 
 syncer::LocalDataDescription CreateLocalDataDescription(
-    syncer::ModelType type,
+    syncer::DataType type,
     int item_count,
     const std::vector<std::string>& domains,
     int domain_count) {
@@ -133,7 +133,7 @@ class LocalDataQueryHelperTest : public testing::Test {
 
   raw_ptr<bookmarks::BookmarkNode> managed_node_;
 
-  testing::NiceMock<syncer::MockModelTypeChangeProcessor> processor_;
+  testing::NiceMock<syncer::MockDataTypeLocalChangeProcessor> processor_;
   std::unique_ptr<reading_list::DualReadingListModel> dual_reading_list_model_;
   raw_ptr<ReadingListModel> local_reading_list_model_;
   raw_ptr<ReadingListModel> account_reading_list_model_;
@@ -143,19 +143,19 @@ class LocalDataQueryHelperTest : public testing::Test {
 
 TEST_F(LocalDataQueryHelperTest, ShouldHandleZeroTypes) {
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
   EXPECT_CALL(callback, Run(::testing::IsEmpty()));
 
-  local_data_query_helper_->Run(syncer::ModelTypeSet(), callback.Get());
+  local_data_query_helper_->Run(syncer::DataTypeSet(), callback.Get());
 }
 
 TEST_F(LocalDataQueryHelperTest, ShouldHandleUnusableTypes) {
   base::HistogramTester histogram_tester;
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
   EXPECT_CALL(callback, Run(::testing::IsEmpty()));
@@ -167,7 +167,7 @@ TEST_F(LocalDataQueryHelperTest, ShouldHandleUnusableTypes) {
       /*account_password_store=*/nullptr,
       /*bookmark_model=*/nullptr,
       /*dual_reading_list_model=*/nullptr);
-  helper.Run(syncer::ModelTypeSet(
+  helper.Run(syncer::DataTypeSet(
                  {syncer::PASSWORDS, syncer::BOOKMARKS, syncer::READING_LIST}),
              callback.Get());
 
@@ -183,17 +183,17 @@ TEST_F(LocalDataQueryHelperTest, ShouldReturnLocalPasswordsViaCallback) {
   RunAllPendingTasks();
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected = {
       {syncer::PASSWORDS,
        CreateLocalDataDescription(syncer::PASSWORDS, 2,
                                   {"amazon.de", "facebook.com"}, 2)}};
 
   EXPECT_CALL(callback, Run(expected));
 
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}),
                                 callback.Get());
   RunAllPendingTasks();
 }
@@ -210,10 +210,10 @@ TEST_F(LocalDataQueryHelperTest, ShouldReturnCountOfDistinctDomains) {
   RunAllPendingTasks();
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected = {
       {syncer::PASSWORDS, CreateLocalDataDescription(
                               syncer::PASSWORDS,
                               // Total passwords = 3.
@@ -223,7 +223,7 @@ TEST_F(LocalDataQueryHelperTest, ShouldReturnCountOfDistinctDomains) {
 
   EXPECT_CALL(callback, Run(expected));
 
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}),
                                 callback.Get());
   RunAllPendingTasks();
 }
@@ -237,26 +237,26 @@ TEST_F(LocalDataQueryHelperTest, ShouldHandleMultipleRequests) {
   RunAllPendingTasks();
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback1;
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback2;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected = {
       {syncer::PASSWORDS,
        CreateLocalDataDescription(syncer::PASSWORDS, 2,
                                   {"amazon.de", "facebook.com"}, 2)}};
 
   // Request #1.
   EXPECT_CALL(callback1, Run(expected));
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}),
                                 callback1.Get());
 
   // Request #2.
   EXPECT_CALL(callback2, Run(expected));
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}),
                                 callback2.Get());
 
   RunAllPendingTasks();
@@ -292,17 +292,17 @@ TEST_F(LocalDataQueryHelperTest, ShouldReturnLocalBookmarksViaCallback) {
   ASSERT_EQ(1u, folder2->children().size());
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected = {
       {syncer::BOOKMARKS,
        CreateLocalDataDescription(syncer::BOOKMARKS, 3,
                                   {"amazon.de", "facebook.com"}, 2)}};
 
   EXPECT_CALL(callback, Run(expected));
 
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::BOOKMARKS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::BOOKMARKS}),
                                 callback.Get());
 
   RunAllPendingTasks();
@@ -327,16 +327,16 @@ TEST_F(LocalDataQueryHelperTest, ShouldIgnoreManagedBookmarks) {
   ASSERT_EQ(1u, managed_node_->children().size());
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected = {
       {syncer::BOOKMARKS,
        CreateLocalDataDescription(syncer::BOOKMARKS, 1, {"amazon.de"}, 1)}};
 
   EXPECT_CALL(callback, Run(expected));
 
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::BOOKMARKS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::BOOKMARKS}),
                                 callback.Get());
 
   RunAllPendingTasks();
@@ -353,10 +353,10 @@ TEST_F(LocalDataQueryHelperTest,
   RunAllPendingTasks();
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected = {
       {syncer::PASSWORDS,
        CreateLocalDataDescription(syncer::PASSWORDS, 1, {"amazon.de"}, 1)},
       {syncer::BOOKMARKS,
@@ -366,7 +366,7 @@ TEST_F(LocalDataQueryHelperTest,
   EXPECT_CALL(callback, Run(expected));
 
   local_data_query_helper_->Run(
-      syncer::ModelTypeSet({syncer::PASSWORDS, syncer::BOOKMARKS}),
+      syncer::DataTypeSet({syncer::PASSWORDS, syncer::BOOKMARKS}),
       callback.Get());
   RunAllPendingTasks();
 }
@@ -383,9 +383,9 @@ TEST_F(LocalDataQueryHelperTest,
 
   // Request #1.
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback1;
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected1 = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected1 = {
       {syncer::PASSWORDS,
        CreateLocalDataDescription(syncer::PASSWORDS, 1, {"amazon.de"}, 1)},
   };
@@ -393,17 +393,17 @@ TEST_F(LocalDataQueryHelperTest,
 
   // Request #2.
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback2;
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected2 = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected2 = {
       {syncer::BOOKMARKS,
        CreateLocalDataDescription(syncer::BOOKMARKS, 1, {"facebook.com"}, 1)},
   };
   EXPECT_CALL(callback2, Run(expected2));
 
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}),
                                 callback1.Get());
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::BOOKMARKS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::BOOKMARKS}),
                                 callback2.Get());
 
   RunAllPendingTasks();
@@ -427,17 +427,17 @@ TEST_F(LocalDataQueryHelperTest, ShouldReturnLocalReadingListViaCallback) {
   ASSERT_TRUE(local_reading_list_model_->loaded());
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected = {
       {syncer::READING_LIST,
        CreateLocalDataDescription(syncer::READING_LIST, 3,
                                   {"amazon.de", "facebook.com"}, 2)}};
 
   EXPECT_CALL(callback, Run(expected));
 
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::READING_LIST}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::READING_LIST}),
                                 callback.Get());
   RunAllPendingTasks();
 }
@@ -450,17 +450,17 @@ TEST_F(LocalDataQueryHelperTest, ShouldWorkForUrlsWithNoTLD) {
   RunAllPendingTasks();
 
   base::MockOnceCallback<void(
-      std::map<syncer::ModelType, syncer::LocalDataDescription>)>
+      std::map<syncer::DataType, syncer::LocalDataDescription>)>
       callback;
 
-  std::map<syncer::ModelType, syncer::LocalDataDescription> expected = {
+  std::map<syncer::DataType, syncer::LocalDataDescription> expected = {
       {syncer::PASSWORDS,
        CreateLocalDataDescription(syncer::PASSWORDS, 2,
                                   {"chrome://flags", "test"}, 2)}};
 
   EXPECT_CALL(callback, Run(expected));
 
-  local_data_query_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}),
+  local_data_query_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}),
                                 callback.Get());
   RunAllPendingTasks();
 }
@@ -538,7 +538,7 @@ class LocalDataMigrationHelperTest : public testing::Test {
 
   raw_ptr<bookmarks::BookmarkNode> managed_node_;
 
-  testing::NiceMock<syncer::MockModelTypeChangeProcessor> processor_;
+  testing::NiceMock<syncer::MockDataTypeLocalChangeProcessor> processor_;
   std::unique_ptr<reading_list::DualReadingListModel> dual_reading_list_model_;
   raw_ptr<ReadingListModel> local_reading_list_model_;
   raw_ptr<ReadingListModel> account_reading_list_model_;
@@ -549,19 +549,18 @@ class LocalDataMigrationHelperTest : public testing::Test {
 TEST_F(LocalDataMigrationHelperTest, ShouldLogRequestsToHistogram) {
   {
     base::HistogramTester histogram_tester;
-    local_data_migration_helper_->Run(syncer::ModelTypeSet());
+    local_data_migration_helper_->Run(syncer::DataTypeSet());
 
     // Nothing logged to histogram.
     histogram_tester.ExpectTotalCount("Sync.BatchUpload.Requests2", 0);
   }
   {
     base::HistogramTester histogram_tester;
-    local_data_migration_helper_->Run(
-        syncer::ModelTypeSet({syncer::PASSWORDS}));
+    local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
 
     histogram_tester.ExpectUniqueSample(
-        "Sync.BatchUpload.Requests2",
-        syncer::ModelTypeForHistograms::kPasswords, 1);
+        "Sync.BatchUpload.Requests2", syncer::DataTypeForHistograms::kPasswords,
+        1);
   }
   {
     base::HistogramTester histogram_tester;
@@ -570,19 +569,19 @@ TEST_F(LocalDataMigrationHelperTest, ShouldLogRequestsToHistogram) {
     ON_CALL(processor_, IsTrackingMetadata)
         .WillByDefault(::testing::Return(true));
 
-    local_data_migration_helper_->Run(syncer::ModelTypeSet(
+    local_data_migration_helper_->Run(syncer::DataTypeSet(
         {syncer::PASSWORDS, syncer::BOOKMARKS, syncer::READING_LIST}));
 
     histogram_tester.ExpectTotalCount("Sync.BatchUpload.Requests2", 3);
     histogram_tester.ExpectBucketCount(
-        "Sync.BatchUpload.Requests2",
-        syncer::ModelTypeForHistograms::kPasswords, 1);
+        "Sync.BatchUpload.Requests2", syncer::DataTypeForHistograms::kPasswords,
+        1);
+    histogram_tester.ExpectBucketCount(
+        "Sync.BatchUpload.Requests2", syncer::DataTypeForHistograms::kBookmarks,
+        1);
     histogram_tester.ExpectBucketCount(
         "Sync.BatchUpload.Requests2",
-        syncer::ModelTypeForHistograms::kBookmarks, 1);
-    histogram_tester.ExpectBucketCount(
-        "Sync.BatchUpload.Requests2",
-        syncer::ModelTypeForHistograms::kReadingList, 1);
+        syncer::DataTypeForHistograms::kReadingList, 1);
   }
 }
 
@@ -590,17 +589,17 @@ TEST_F(LocalDataMigrationHelperTest,
        ShouldNotLogUnsupportedDataTypesRequestToHistogram) {
   base::HistogramTester histogram_tester;
   local_data_migration_helper_->Run(
-      syncer::ModelTypeSet({syncer::PASSWORDS, syncer::DEVICE_INFO}));
+      syncer::DataTypeSet({syncer::PASSWORDS, syncer::DEVICE_INFO}));
 
   // Only the request for PASSWORDS is logged.
-  histogram_tester.ExpectUniqueSample(
-      "Sync.BatchUpload.Requests2", syncer::ModelTypeForHistograms::kPasswords,
-      1);
+  histogram_tester.ExpectUniqueSample("Sync.BatchUpload.Requests2",
+                                      syncer::DataTypeForHistograms::kPasswords,
+                                      1);
 }
 
 TEST_F(LocalDataMigrationHelperTest, ShouldHandleZeroTypes) {
   // Just checks that there's no crash.
-  local_data_migration_helper_->Run(syncer::ModelTypeSet());
+  local_data_migration_helper_->Run(syncer::DataTypeSet());
 }
 
 TEST_F(LocalDataMigrationHelperTest, ShouldHandleUnusableTypes) {
@@ -613,7 +612,7 @@ TEST_F(LocalDataMigrationHelperTest, ShouldHandleUnusableTypes) {
       /*account_password_store=*/nullptr,
       /*bookmark_model=*/nullptr,
       /*dual_reading_list_model=*/nullptr);
-  helper.Run(syncer::ModelTypeSet(
+  helper.Run(syncer::DataTypeSet(
       {syncer::PASSWORDS, syncer::BOOKMARKS, syncer::READING_LIST}));
 
   EXPECT_TRUE(task_environment_.MainThreadIsIdle());
@@ -635,14 +634,14 @@ TEST_F(LocalDataMigrationHelperTest, ShouldMovePasswordsToAccountStore) {
 
   base::HistogramTester histogram_tester;
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{syncer::PASSWORDS});
+            syncer::DataTypeSet{syncer::PASSWORDS});
 
   RunAllPendingTasks();
 
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{});
+            syncer::DataTypeSet{});
 
   EXPECT_EQ(2, histogram_tester.GetTotalSum("Sync.PasswordsBatchUpload.Count"));
 
@@ -681,7 +680,7 @@ TEST_F(LocalDataMigrationHelperTest, ShouldNotUploadSamePassword) {
 
   base::HistogramTester histogram_tester;
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
 
   RunAllPendingTasks();
 
@@ -726,7 +725,7 @@ TEST_F(LocalDataMigrationHelperTest,
 
   base::HistogramTester histogram_tester;
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
 
   RunAllPendingTasks();
 
@@ -773,7 +772,7 @@ TEST_F(LocalDataMigrationHelperTest,
 
   base::HistogramTester histogram_tester;
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
 
   RunAllPendingTasks();
 
@@ -818,7 +817,7 @@ TEST_F(LocalDataMigrationHelperTest,
             password_manager::TestPasswordStore::PasswordMap(
                 {{account_form.signon_realm, {account_form}}}));
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
 
   RunAllPendingTasks();
 
@@ -862,7 +861,7 @@ TEST_F(LocalDataMigrationHelperTest,
             password_manager::TestPasswordStore::PasswordMap(
                 {{account_form.signon_realm, {account_form}}}));
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
 
   RunAllPendingTasks();
 
@@ -904,7 +903,7 @@ TEST_F(LocalDataMigrationHelperTest,
             password_manager::TestPasswordStore::PasswordMap(
                 {{account_form.signon_realm, {account_form}}}));
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
 
   RunAllPendingTasks();
 
@@ -947,7 +946,7 @@ TEST_F(LocalDataMigrationHelperTest,
             password_manager::TestPasswordStore::PasswordMap(
                 {{account_form.signon_realm, {account_form}}}));
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
 
   RunAllPendingTasks();
 
@@ -975,9 +974,9 @@ TEST_F(LocalDataMigrationHelperTest, ShouldMoveBookmarksToAccountStore) {
                           /*index=*/0, base::UTF8ToUTF16(std::string("url2")),
                           GURL("https://www.google.com"));
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::BOOKMARKS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::BOOKMARKS}));
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{});
+            syncer::DataTypeSet{});
 
   // -------- The expected merge outcome --------
   // account_bookmark_bar
@@ -1003,7 +1002,7 @@ TEST_F(LocalDataMigrationHelperTest, ShouldClearBookmarksFromLocalStore) {
                           /*index=*/0, base::UTF8ToUTF16(std::string("url1")),
                           GURL("https://www.google.com"));
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::BOOKMARKS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::BOOKMARKS}));
 
   // No actual move happens since the data already exists in the account store.
   // -------- The expected merge outcome --------
@@ -1030,7 +1029,7 @@ TEST_F(LocalDataMigrationHelperTest,
   // -------- The account bookmarks don't exist --------
   ASSERT_EQ(nullptr, bookmark_model_->account_bookmark_bar_node());
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::BOOKMARKS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::BOOKMARKS}));
 
   // -------- The expected merge outcome --------
   // bookmark_bar
@@ -1059,7 +1058,7 @@ TEST_F(LocalDataMigrationHelperTest, ShouldIgnoreManagedBookmarks) {
   EXPECT_EQ(0u,
             bookmark_model_->account_bookmark_bar_node()->children().size());
 
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::BOOKMARKS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::BOOKMARKS}));
 
   // -------- The expected merge outcome --------
   // managed_bookmarks
@@ -1089,18 +1088,18 @@ TEST_F(LocalDataMigrationHelperTest,
             bookmark_model_->account_bookmark_bar_node()->children().size());
 
   // Request #1.
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{syncer::PASSWORDS});
+            syncer::DataTypeSet{syncer::PASSWORDS});
 
   // Request #2.
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::BOOKMARKS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::BOOKMARKS}));
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{syncer::PASSWORDS});
+            syncer::DataTypeSet{syncer::PASSWORDS});
 
   RunAllPendingTasks();
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{});
+            syncer::DataTypeSet{});
 
   // The local data has been moved to the account store/model.
   form.in_store = password_manager::PasswordForm::Store::kAccountStore;
@@ -1133,19 +1132,19 @@ TEST_F(LocalDataMigrationHelperTest, ShouldHandleMultipleRequestsForPasswords) {
   RunAllPendingTasks();
 
   // Request #1.
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{syncer::PASSWORDS});
+            syncer::DataTypeSet{syncer::PASSWORDS});
 
   // Request #2.
-  local_data_migration_helper_->Run(syncer::ModelTypeSet({syncer::PASSWORDS}));
+  local_data_migration_helper_->Run(syncer::DataTypeSet({syncer::PASSWORDS}));
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{syncer::PASSWORDS});
+            syncer::DataTypeSet{syncer::PASSWORDS});
 
   RunAllPendingTasks();
 
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{});
+            syncer::DataTypeSet{});
 
   // Passwords have been moved to the account store.
   local_form1.in_store = password_manager::PasswordForm::Store::kAccountStore;
@@ -1176,9 +1175,9 @@ TEST_F(LocalDataMigrationHelperTest, ShouldMoveReadingListToAccountStore) {
       /*estimated_read_time=*/base::TimeDelta());
 
   local_data_migration_helper_->Run(
-      syncer::ModelTypeSet({syncer::READING_LIST}));
+      syncer::DataTypeSet({syncer::READING_LIST}));
   EXPECT_EQ(local_data_migration_helper_->GetTypesWithOngoingMigrations(),
-            syncer::ModelTypeSet{});
+            syncer::DataTypeSet{});
 
   RunAllPendingTasks();
 
@@ -1208,7 +1207,7 @@ TEST_F(LocalDataMigrationHelperTest, ShouldClearReadingListFromLocalStore) {
           kExistsInBothModels);
 
   local_data_migration_helper_->Run(
-      syncer::ModelTypeSet({syncer::READING_LIST}));
+      syncer::DataTypeSet({syncer::READING_LIST}));
 
   RunAllPendingTasks();
 

@@ -31,37 +31,37 @@ $VerifiedPlatform linux-armv6l linux-mips64 linux-mips64le linux-mipsle
 $VerifiedPlatform windows-arm64
 
 # vpython.
-infra/tools/luci/vpython3/${platform} git_revision:f7fecd758a887260d403361b70d6b9e83e0c84b0
+infra/tools/luci/vpython3/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI editor
-infra/tools/luci/led/${platform} git_revision:811f963c20b777889aa015f74352126ab3dfe06b
+infra/tools/luci/led/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI config generator
-infra/tools/luci/lucicfg/${platform} git_revision:6aa843f036e8b3121740c89219d41989213a0e03
+infra/tools/luci/lucicfg/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # Mac toolchain installer
-infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:05fe195bf77656743f3daa99d463a794260b429b
+infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI rpc command line tool
-infra/tools/prpc/${platform} git_revision:bd3a982ae62b4820b71414b2340e86019a1fbd26
+infra/tools/prpc/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI authentication command line tool
-infra/tools/luci-auth/${platform} git_revision:02ffe6e2b222aa1f56776b8e5385f49687451bb2
+infra/tools/luci-auth/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI Git credential helper
-infra/tools/luci/git-credential-luci/${platform} git_revision:d41024b9e474be209a7975b2d57b175a84095d12
+infra/tools/luci/git-credential-luci/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI Buildbucket CLI
-infra/tools/bb/${platform} git_revision:b1ef34e3c86269b1261ccbc039ff2cfe3baaa961
+infra/tools/bb/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI ResultDB CLI
-infra/tools/rdb/${platform} git_revision:6dc7eeb1a5db99a04b6ee701fa3b369813528c20
+infra/tools/rdb/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # dirmd, a tool to work with DIR_METADATA files
-infra/tools/dirmd/${platform} git_revision:9558e2c2dc002209753b8e61b83c4a2c81361fbc
+infra/tools/dirmd/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # Pinpoint CLI
-infra/chromeperf/pinpoint/${platform} git_revision:bd3a982ae62b4820b71414b2340e86019a1fbd26
+infra/chromeperf/pinpoint/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 @Subdir reclient
 # reclient, currently this is only for ChromeOS build.

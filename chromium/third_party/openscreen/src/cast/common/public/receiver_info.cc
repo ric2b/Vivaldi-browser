@@ -4,16 +4,16 @@
 
 #include "cast/common/public/receiver_info.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cinttypes>
 #include <string>
 #include <vector>
 
-#include "absl/strings/numbers.h"
-#include "absl/strings/str_replace.h"
 #include "discovery/mdns/public/mdns_constants.h"
 #include "util/osp_logging.h"
 #include "util/span_util.h"
+#include "util/string_parse.h"
 
 namespace openscreen::cast {
 namespace {
@@ -37,30 +37,30 @@ std::string CalculateInstanceId(const ReceiverInfo& info) {
   // First set the receiver model, truncated to 20 bytes at most. Replace any
   // whitespace characters (" ") with hyphens ("-") in the receiver model before
   // truncation.
-  std::string instance_name =
-      absl::StrReplaceAll(info.model_name, {{" ", "-"}});
-  instance_name = std::string(instance_name, 0, kMaxReceiverModelSize);
+  std::string instance_name = info.model_name.substr(0, kMaxReceiverModelSize);
+  std::replace(instance_name.begin(), instance_name.end(), ' ', '-');
 
   // Append the receiver ID to the instance name separated by a single
   // '-' character if not empty. Strip all hyphens from the receiver ID prior
   // to appending it.
-  std::string receiver_id = absl::StrReplaceAll(info.unique_id, {{"-", ""}});
+  std::string receiver_id(info.unique_id);
+  receiver_id.erase(std::remove(receiver_id.begin(), receiver_id.end(), '-'),
+                    receiver_id.end());
 
   if (!instance_name.empty()) {
     instance_name.push_back('-');
   }
   instance_name.append(receiver_id);
 
-  return std::string(instance_name, 0, discovery::kMaxLabelLength);
+  return instance_name.substr(0, discovery::kMaxLabelLength);
 }
 
 }  // namespace
 
 const std::string& ReceiverInfo::GetInstanceId() const {
-  if (instance_id_ == std::string("")) {
+  if (instance_id_.empty()) {
     instance_id_ = CalculateInstanceId(*this);
   }
-
   return instance_id_;
 }
 
@@ -145,7 +145,7 @@ ErrorOr<ReceiverInfo> DnsSdInstanceEndpointToReceiverInfo(
   constexpr int kMinVersion = 2;   // According to spec.
   constexpr int kMaxVersion = 99;  // Implied by spec (field is max of 2 bytes).
   int version;
-  if (!absl::SimpleAtoi(version_value.value(), &version) ||
+  if (!string_parse::ParseAsciiNumber(version_value.value(), version) ||
       version < kMinVersion || version > kMaxVersion) {
     return {Error::Code::kParameterInvalid,
             "Invalid Cast protocol version in record."};
@@ -158,7 +158,8 @@ ErrorOr<ReceiverInfo> DnsSdInstanceEndpointToReceiverInfo(
     return {Error::Code::kParameterInvalid,
             "Missing receiver capabilities in record."};
   }
-  if (!absl::SimpleAtoi(capabilities_value.value(), &record.capabilities)) {
+  if (!string_parse::ParseAsciiNumber(capabilities_value.value(),
+                                      record.capabilities)) {
     return {Error::Code::kParameterInvalid,
             "Invalid receiver capabilities field in record."};
   }

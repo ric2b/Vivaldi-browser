@@ -47,7 +47,7 @@ AuthenticatorSupportedOptions WinWebAuthnApiOptions(int api_version) {
   options.supports_cred_protect = api_version >= WEBAUTHN_API_VERSION_2;
   options.enterprise_attestation = api_version >= WEBAUTHN_API_VERSION_3;
   if (api_version >= WEBAUTHN_API_VERSION_3) {
-    options.large_blob_type = LargeBlobSupportType::kKey;
+    options.large_blob_type = LargeBlobSupportType::kBespoke;
   }
   options.supports_min_pin_length_extension =
       api_version >= WEBAUTHN_API_VERSION_3;
@@ -90,7 +90,6 @@ void FilterFoundCredentials(
 
 // static
 void WinWebAuthnApiAuthenticator::IsUserVerifyingPlatformAuthenticatorAvailable(
-    bool is_off_the_record,
     WinWebAuthnApi* api,
     base::OnceCallback<void(bool is_available)> callback) {
   base::ThreadPool::PostTaskAndReplyWithResult(
@@ -98,19 +97,16 @@ void WinWebAuthnApiAuthenticator::IsUserVerifyingPlatformAuthenticatorAvailable(
       {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(
-          [](bool is_off_the_record, WinWebAuthnApi* api) {
+          [](WinWebAuthnApi* api) {
             BOOL result;
             if (!api || !api->IsAvailable()) {
-              return false;
-            }
-            if (is_off_the_record && api->Version() < WEBAUTHN_API_VERSION_4) {
               return false;
             }
             return api->IsUserVerifyingPlatformAuthenticatorAvailable(
                        &result) == S_OK &&
                    result == TRUE;
           },
-          is_off_the_record, api),
+          api),
       std::move(callback));
 }
 
@@ -344,7 +340,7 @@ base::WeakPtr<FidoAuthenticator> WinWebAuthnApiAuthenticator::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-bool WinWebAuthnApiAuthenticator::ShowsPrivacyNotice() const {
+bool WinWebAuthnApiAuthenticator::ShowsResidentCredentialNotice() const {
   return win_api_->Version() >= WEBAUTHN_API_VERSION_2;
 }
 

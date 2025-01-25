@@ -151,32 +151,32 @@ struct cursor {
  * the returned buffer.
  */
 WL_EXPORT struct wl_buffer *
-wl_cursor_image_get_buffer(struct wl_cursor_image *_img)
+wl_cursor_image_get_buffer(struct wl_cursor_image *image)
 {
-	struct cursor_image *image = (struct cursor_image *) _img;
-	struct wl_cursor_theme *theme = image->theme;
+	struct cursor_image *img = (struct cursor_image *) image;
+	struct wl_cursor_theme *theme = img->theme;
 
-	if (!image->buffer) {
-		image->buffer =
+	if (!img->buffer) {
+		img->buffer =
 			wl_shm_pool_create_buffer(theme->pool->pool,
-						  image->offset,
-						  _img->width, _img->height,
-						  _img->width * 4,
+						  img->offset,
+						  image->width, image->height,
+						  image->width * 4,
 						  WL_SHM_FORMAT_ARGB8888);
 	};
 
-	return image->buffer;
+	return img->buffer;
 }
 
 static void
-wl_cursor_image_destroy(struct wl_cursor_image *_img)
+wl_cursor_image_destroy(struct wl_cursor_image *image)
 {
-	struct cursor_image *image = (struct cursor_image *) _img;
+	struct cursor_image *img = (struct cursor_image *) image;
 
-	if (image->buffer)
-		wl_buffer_destroy(image->buffer);
+	if (img->buffer)
+		wl_buffer_destroy(img->buffer);
 
-	free(image);
+	free(img);
 }
 
 static void
@@ -461,21 +461,21 @@ wl_cursor_theme_get_cursor(struct wl_cursor_theme *theme,
  * given time in the cursor animation.
  */
 WL_EXPORT int
-wl_cursor_frame_and_duration(struct wl_cursor *_cursor, uint32_t time,
+wl_cursor_frame_and_duration(struct wl_cursor *cursor, uint32_t time,
 			     uint32_t *duration)
 {
-	struct cursor *cursor = (struct cursor *) _cursor;
+	struct cursor *cur = (struct cursor *) cursor;
 	uint32_t t;
 	int i;
 
-	if (cursor->cursor.image_count == 1 || cursor->total_delay == 0) {
+	if (cur->cursor.image_count == 1 || cur->total_delay == 0) {
 		if (duration)
 			*duration = 0;
 		return 0;
 	}
 
 	i = 0;
-	t = time % cursor->total_delay;
+	t = time % cur->total_delay;
 
 	/* If there is a 0 delay in the image set then this
 	 * loop breaks on it and we display that cursor until
@@ -484,8 +484,8 @@ wl_cursor_frame_and_duration(struct wl_cursor *_cursor, uint32_t time,
 	 * seen one in a cursor file, we haven't bothered to
 	 * "fix" this.
 	 */
-	while (t - cursor->cursor.images[i]->delay < t)
-		t -= cursor->cursor.images[i++]->delay;
+	while (t - cur->cursor.images[i]->delay < t)
+		t -= cur->cursor.images[i++]->delay;
 
 	if (!duration)
 		return i;
@@ -493,10 +493,10 @@ wl_cursor_frame_and_duration(struct wl_cursor *_cursor, uint32_t time,
 	/* Make sure we don't accidentally tell the caller this is
 	 * a static cursor image.
 	 */
-	if (t >= cursor->cursor.images[i]->delay)
+	if (t >= cur->cursor.images[i]->delay)
 		*duration = 1;
 	else
-		*duration = cursor->cursor.images[i]->delay - t;
+		*duration = cur->cursor.images[i]->delay - t;
 
 	return i;
 }
@@ -510,7 +510,7 @@ wl_cursor_frame_and_duration(struct wl_cursor *_cursor, uint32_t time,
  * given time in the cursor animation.
  */
 WL_EXPORT int
-wl_cursor_frame(struct wl_cursor *_cursor, uint32_t time)
+wl_cursor_frame(struct wl_cursor *cursor, uint32_t time)
 {
-	return wl_cursor_frame_and_duration(_cursor, time, NULL);
+	return wl_cursor_frame_and_duration(cursor, time, NULL);
 }

@@ -320,7 +320,10 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionAddressSpace {
   // reserved for the regular and brp shadow. However the result |true| doesn't
   // mean the given |ptr| is valid. Because we don't use the entire address
   // space for the shadow. We only use 2 SystemPageSize() / kSuperPageSize(%)
-  // of the space. See PoolShadowOffset().
+  // of the space.
+  //
+  // TODO(crbug.com/40238514) This is an unused function. Start using it in
+  // tests and/or in production code.
   PA_ALWAYS_INLINE static bool IsInPoolShadow(const void* ptr) {
     uintptr_t ptr_as_uintptr = reinterpret_cast<uintptr_t>(ptr);
     return (pool_shadow_address_ <= ptr_as_uintptr &&
@@ -472,7 +475,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionAddressSpace {
   // These are write-once fields, frequently accessed thereafter. Make sure they
   // don't share a cacheline with other, potentially writeable data, through
   // alignment and padding.
-  static PoolSetup setup_ PA_CONSTINIT;
+  PA_CONSTINIT static PoolSetup setup_;
 
 #if PA_CONFIG(ENABLE_SHADOW_METADATA)
   static std::ptrdiff_t regular_pool_shadow_offset_;
@@ -513,14 +516,20 @@ PA_ALWAYS_INLINE bool IsManagedByPartitionAlloc(uintptr_t address) {
 #if !PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   PA_DCHECK(!internal::PartitionAddressSpace::IsInBRPPool(address));
 #endif
-  return internal::PartitionAddressSpace::IsInRegularPool(address)
+
+  return
+#if PA_BUILDFLAG(GLUE_CORE_POOLS)
+      internal::PartitionAddressSpace::IsInCorePools(address)
+#else
 #if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
-         || internal::PartitionAddressSpace::IsInBRPPool(address)
+      internal::PartitionAddressSpace::IsInBRPPool(address) ||
 #endif
+      internal::PartitionAddressSpace::IsInRegularPool(address)
+#endif  // PA_BUILDFLAG(GLUE_CORE_POOLS)
 #if PA_BUILDFLAG(ENABLE_THREAD_ISOLATION)
-         || internal::PartitionAddressSpace::IsInThreadIsolatedPool(address)
+      || internal::PartitionAddressSpace::IsInThreadIsolatedPool(address)
 #endif
-         || internal::PartitionAddressSpace::IsInConfigurablePool(address);
+      || internal::PartitionAddressSpace::IsInConfigurablePool(address);
 }
 
 // Returns false for nullptr.

@@ -7,6 +7,7 @@
 #                               |_| XML parser
 #
 # Copyright (c) 2021-2024 Sebastian Pipping <sebastian@pipping.org>
+# Copyright (c) 2024      Dag-Erling Smørgrav <des@des.dev>
 # Licensed under the MIT license:
 #
 # Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -31,13 +32,7 @@
 PS4='# '
 set -e -u -o pipefail -x
 
-if [[ "$(uname -s)" =~ ^Darwin ]]; then
-    export PATH="/usr/local/opt/findutils/libexec/gnubin${PATH:+:}${PATH}"
-fi
-
 cppcheck --version
-
-find --version | head -n1
 
 for xml_context_bytes in 0 1024; do
     for xml_ge in 0 1; do
@@ -45,6 +40,7 @@ for xml_context_bytes in 0 1024; do
             --quiet
             --error-exitcode=1
             --force
+            --check-level=exhaustive
             --suppress=objectIndex
             --suppress=unknownMacro
             -DXML_CONTEXT_BYTES=${xml_context_bytes}
@@ -63,6 +59,6 @@ for xml_context_bytes in 0 1024; do
             -exec cppcheck "${cppcheck_args[@]}" {} +
         )
 
-        time find "${find_args[@]}"
+        time find . "${find_args[@]}"
     done
 done

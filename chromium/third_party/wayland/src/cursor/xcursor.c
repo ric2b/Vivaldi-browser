@@ -585,6 +585,7 @@ xcursor_build_fullname(const char *dir, const char *subdir, const char *file)
 {
 	char *full;
 	size_t full_size;
+	int ret;
 
 	if (!dir || !subdir || !file)
 		return NULL;
@@ -593,7 +594,11 @@ xcursor_build_fullname(const char *dir, const char *subdir, const char *file)
 	full = malloc(full_size);
 	if (!full)
 		return NULL;
-	snprintf(full, full_size, "%s/%s/%s", dir, subdir, file);
+	ret = snprintf(full, full_size, "%s/%s/%s", dir, subdir, file);
+	if (ret < 0) {
+		free(full);
+		return NULL;
+	}
 	return full;
 }
 
@@ -721,6 +726,78 @@ load_all_cursors_from_dir(const char *path, int size,
 	closedir(dir);
 }
 
+struct xcursor_nodelist {
+	size_t nodelen;
+	const char *node;
+	struct xcursor_nodelist *next;
+};
+
+static bool
+nodelist_contains(struct xcursor_nodelist *nodelist, const char *s, size_t ss)
+{
+	struct xcursor_nodelist *vi;
+
+	for (vi = nodelist; vi && vi->node; vi = vi->next) {
+		if (vi->nodelen == ss && !strncmp(s, vi->node, vi->nodelen))
+			return true;
+	}
+	return false;
+}
+
+static void
+xcursor_load_theme_protected(const char *theme, int size,
+		   void (*load_callback)(struct xcursor_images *, void *),
+		   void *user_data,
+		   struct xcursor_nodelist *visited_nodes)
+{
+	char *full, *dir;
+	char *inherits = NULL;
+	const char *path, *i;
+	char *xcursor_path;
+	size_t si;
+	struct xcursor_nodelist current_node;
+
+	if (!theme)
+		theme = "default";
+
+	current_node.next = visited_nodes;
+	current_node.node = theme;
+	current_node.nodelen = strlen(theme);
+	visited_nodes = &current_node;
+
+	xcursor_path = xcursor_library_path();
+	for (path = xcursor_path;
+	     path;
+	     path = xcursor_next_path(path)) {
+		dir = xcursor_build_theme_dir(path, theme);
+		if (!dir)
+			continue;
+
+		full = xcursor_build_fullname(dir, "cursors", "");
+		load_all_cursors_from_dir(full, size, load_callback,
+					  user_data);
+		free(full);
+
+		if (!inherits) {
+			full = xcursor_build_fullname(dir, "", "index.theme");
+			inherits = xcursor_theme_inherits(full);
+			free(full);
+		}
+
+		free(dir);
+	}
+
+	for (i = inherits; i; i = xcursor_next_path(i)) {
+		si = strlen(i);
+		if (nodelist_contains(visited_nodes, i, si))
+			continue;
+		xcursor_load_theme_protected(i, size, load_callback, user_data, visited_nodes);
+	}
+
+	free(inherits);
+	free(xcursor_path);
+}
+
 /** Load all the cursor of a theme
  *
  * This function loads all the cursor images of a given theme and its
@@ -745,39 +822,9 @@ xcursor_load_theme(const char *theme, int size,
 		   void (*load_callback)(struct xcursor_images *, void *),
 		   void *user_data)
 {
-	char *full, *dir;
-	char *inherits = NULL;
-	const char *path, *i;
-	char *xcursor_path;
-
-	if (!theme)
-		theme = "default";
-
-	xcursor_path = xcursor_library_path();
-	for (path = xcursor_path;
-	     path;
-	     path = xcursor_next_path(path)) {
-		dir = xcursor_build_theme_dir(path, theme);
-		if (!dir)
-			continue;
-
-		full = xcursor_build_fullname(dir, "cursors", "");
-		load_all_cursors_from_dir(full, size, load_callback,
-					  user_data);
-		free(full);
-
-		if (!inherits) {
-			full = xcursor_build_fullname(dir, "", "index.theme");
-			inherits = xcursor_theme_inherits(full);
-			free(full);
-		}
-
-		free(dir);
-	}
-
-	for (i = inherits; i; i = xcursor_next_path(i))
-		xcursor_load_theme(i, size, load_callback, user_data);
-
-	free(inherits);
-	free(xcursor_path);
+	xcursor_load_theme_protected(theme,
+				     size,
+				     load_callback,
+				     user_data,
+				     NULL);
 }

@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/feedback/android/process_id_feedback_source.h"
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
 
-#include "content/public/browser/browser_thread.h"
+#include "chrome/browser/feedback/android/process_id_feedback_source.h"
 
 #include "base/android/jni_array.h"
 #include "base/functional/bind.h"
+#include "base/types/fixed_array.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
@@ -82,11 +86,11 @@ ScopedJavaLocalRef<jlongArray> ProcessIdFeedbackSource::GetProcessIdsForType(
   }
   size_t size = process_ids_[process_type].size();
 
-  jlong pids[size];
+  base::FixedArray<jlong> pids(size);
   for (size_t i = 0; i < size; i++)
     pids[i] = process_ids_[process_type][i];
 
-  return base::android::ToJavaLongArray(env, pids, size);
+  return base::android::ToJavaLongArray(env, pids);
 }
 
 }  // namespace android

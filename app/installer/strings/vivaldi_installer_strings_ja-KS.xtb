@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">スタンドアローンインストール</translation>
 <translation id="1682285232070778125">デフォルトのブラウザーはVivaldiにしいや</translation>
 <translation id="1974060860693918893">高度な設定</translation>
+<translation id="2053560788696003312">Vivaldi使うんやったらWindows 10以上がいるで。</translation>
 <translation id="2134216661302048561">Vivaldiのインストールまだ終わってへんで？ほんまに今やめんの？</translation>
 <translation id="2286454467119466181">かんちこちんな方</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. All rights reserved. &lt;a&gt;プライバシーポリシー&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">承認してアップデート</translation>
 <translation id="5302048478445481009">言語</translation>
 <translation id="694714344624446243">Vivaldiインストーラー</translation>
+<translation id="7467493612551448880">インストールしてる Vivaldiのバージョンは、現在実行してるWindowsのバージョンに最適化されてへんわ。
+
+Arm版Windowsのバージョンは、vivaldi.com/downloadでダウンロードできるで。</translation>
 <translation id="7658239707568436148">キャンセル</translation>
 <translation id="8773751185824654197">注：Vivaldiブラウザー使ってる時に更新したら、そのインスタンスは終了して再起動するで</translation>
 <translation id="933060950687965486">インストール単位</translation>

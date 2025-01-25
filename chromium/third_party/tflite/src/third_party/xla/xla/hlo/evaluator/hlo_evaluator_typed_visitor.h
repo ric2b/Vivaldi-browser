@@ -1278,14 +1278,28 @@ class HloEvaluatorTypedVisitor : public ConstDfsHloVisitorWithDefault {
                             /*operand_shape=*/pad->operand(0)->shape(),
                             /*padding_value_shape=*/pad->operand(1)->shape(),
                             /*padding_config=*/pad->padding_config()));
+    // Try to convert the element type if the inferred type is not compatible.
+    bool convert_element_type =
+        pad->shape().element_type() != inferred_return_shape.element_type();
+    if (convert_element_type) {
+      inferred_return_shape.set_element_type(pad->shape().element_type());
+    }
     CHECK(ShapeUtil::Compatible(pad->shape(), inferred_return_shape))
         << "return shape is set to: " << ShapeUtil::HumanString(pad->shape())
         << " but is inferred to be: "
         << ShapeUtil::HumanString(inferred_return_shape);
+    ReturnT scalar;
+    if (convert_element_type) {
+      TF_ASSIGN_OR_RETURN(auto literal,
+                          parent_->GetEvaluatedLiteralFor(pad->operand(1))
+                              .Convert(inferred_return_shape.element_type()));
+      scalar = literal.Get<ReturnT>({});
+    } else {
+      scalar =
+          parent_->GetEvaluatedLiteralFor(pad->operand(1)).Get<ReturnT>({});
+    }
 
     // Create new HLO of padded shape with padding value.
-    ReturnT scalar =
-        parent_->GetEvaluatedLiteralFor(pad->operand(1)).Get<ReturnT>({});
     Literal result(pad->shape());
     TF_RETURN_IF_ERROR(result.PopulateParallel<ReturnT>(
         [&scalar](absl::Span<const int64_t> multi_index, int) {
@@ -1710,11 +1724,13 @@ class HloEvaluatorTypedVisitor : public ConstDfsHloVisitorWithDefault {
 // instantiating it.  We explicitly instantiate this class in the various
 // hlo_evaluator_typed_visitor*.cc files.
 extern template class HloEvaluatorTypedVisitor<bool>;
+extern template class HloEvaluatorTypedVisitor<u2, uint64_t>;
 extern template class HloEvaluatorTypedVisitor<u4, uint64_t>;
 extern template class HloEvaluatorTypedVisitor<uint8_t, uint64_t>;
 extern template class HloEvaluatorTypedVisitor<uint16_t, uint64_t>;
 extern template class HloEvaluatorTypedVisitor<uint32_t, uint64_t>;
 extern template class HloEvaluatorTypedVisitor<uint64_t>;
+extern template class HloEvaluatorTypedVisitor<s2, int64_t>;
 extern template class HloEvaluatorTypedVisitor<s4, int64_t>;
 extern template class HloEvaluatorTypedVisitor<int8_t, int64_t>;
 extern template class HloEvaluatorTypedVisitor<int16_t, int64_t>;

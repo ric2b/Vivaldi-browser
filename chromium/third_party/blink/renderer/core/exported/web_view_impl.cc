@@ -58,6 +58,7 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/draggable_region.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/prerender_page_param.mojom.h"
+#include "third_party/blink/public/mojom/partitioned_popins/partitioned_popin_params.mojom.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -401,7 +402,7 @@ ui::mojom::blink::WindowOpenDisposition NavigationPolicyToDisposition(
     case kNavigationPolicyPictureInPicture:
       return ui::mojom::blink::WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
     case kNavigationPolicyLinkPreview:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
   NOTREACHED_IN_MIGRATION() << "Unexpected NavigationPolicy";
   return ui::mojom::blink::WindowOpenDisposition::IGNORE_ACTION;
@@ -477,6 +478,17 @@ void ForEachFrameWidgetControlledByView(
   }
 }
 
+void MaybePreloadSystemFonts(Page* page) {
+  static bool is_first_run = true;
+  if (!is_first_run) {
+    return;
+  }
+  is_first_run = false;
+
+  page->GetAgentGroupScheduler().DefaultTaskRunner()->PostTask(
+      FROM_HERE, WTF::BindOnce([]() { FontCache::MaybePreloadSystemFonts(); }));
+}
+
 }  // namespace
 
 // WebView ----------------------------------------------------------------
@@ -496,7 +508,8 @@ WebView* WebView::Create(
     const SessionStorageNamespaceId& session_storage_namespace_id,
     std::optional<SkColor> page_base_background_color,
     const BrowsingContextGroupInfo& browsing_context_group_info,
-    const ColorProviderColorMaps* color_provider_colors) {
+    const ColorProviderColorMaps* color_provider_colors,
+    blink::mojom::PartitionedPopinParamsPtr partitioned_popin_params) {
   return WebViewImpl::Create(
       client,
       is_hidden ? mojom::blink::PageVisibilityState::kHidden
@@ -505,7 +518,7 @@ WebView* WebView::Create(
       widgets_never_composited, To<WebViewImpl>(opener), std::move(page_handle),
       agent_group_scheduler, session_storage_namespace_id,
       std::move(page_base_background_color), browsing_context_group_info,
-      color_provider_colors);
+      color_provider_colors, std::move(partitioned_popin_params));
 }
 
 WebViewImpl* WebViewImpl::Create(
@@ -522,13 +535,15 @@ WebViewImpl* WebViewImpl::Create(
     const SessionStorageNamespaceId& session_storage_namespace_id,
     std::optional<SkColor> page_base_background_color,
     const BrowsingContextGroupInfo& browsing_context_group_info,
-    const ColorProviderColorMaps* color_provider_colors) {
+    const ColorProviderColorMaps* color_provider_colors,
+    blink::mojom::PartitionedPopinParamsPtr partitioned_popin_params) {
   return new WebViewImpl(
       client, visibility, std::move(prerender_param), fenced_frame_mode,
       compositing_enabled, widgets_never_composited, opener,
       std::move(page_handle), agent_group_scheduler,
       session_storage_namespace_id, std::move(page_base_background_color),
-      browsing_context_group_info, color_provider_colors);
+      browsing_context_group_info, color_provider_colors,
+      std::move(partitioned_popin_params));
 }
 
 size_t WebView::GetWebViewCount() {
@@ -592,7 +607,8 @@ WebViewImpl::WebViewImpl(
     const SessionStorageNamespaceId& session_storage_namespace_id,
     std::optional<SkColor> page_base_background_color,
     const BrowsingContextGroupInfo& browsing_context_group_info,
-    const ColorProviderColorMaps* color_provider_colors)
+    const ColorProviderColorMaps* color_provider_colors,
+    blink::mojom::PartitionedPopinParamsPtr partitioned_popin_params)
     : widgets_never_composited_(widgets_never_composited),
       web_view_client_(client),
       chrome_client_(MakeGarbageCollected<ChromeClientImpl>(this)),
@@ -623,7 +639,8 @@ WebViewImpl::WebViewImpl(
   page_ = Page::CreateOrdinary(
       *chrome_client_, opener ? opener->GetPage() : nullptr,
       agent_group_scheduler.GetAgentGroupScheduler(),
-      browsing_context_group_info, color_provider_colors);
+      browsing_context_group_info, color_provider_colors,
+      std::move(partitioned_popin_params));
   CoreInitializer::GetInstance().ProvideModulesToPage(
       *page_, session_storage_namespace_id_);
 
@@ -664,11 +681,6 @@ WebViewImpl::WebViewImpl(
 
 WebViewImpl::~WebViewImpl() {
   DCHECK(!page_);
-}
-
-WebDevToolsAgentImpl* WebViewImpl::MainFrameDevToolsAgentImpl() {
-  WebLocalFrameImpl* main_frame = MainFrameImpl();
-  return main_frame ? main_frame->DevToolsAgentImpl() : nullptr;
 }
 
 void WebViewImpl::SetTabKeyCyclesThroughElements(bool value) {
@@ -1340,6 +1352,7 @@ void WebViewImpl::ResizeViewWhileAnchored(
   if (!scoped_defer_main_frame_update_) {
     // Page scale constraints may need to be updated; running layout now will
     // do that.
+    if (MainFrameWidget()) // Vivaldi null check related to VB-101374
     MainFrameWidget()->UpdateLifecycle(WebLifecycleUpdate::kLayout,
                                        DocumentUpdateReason::kSizeChange);
   }
@@ -1789,8 +1802,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
       prefs.require_transient_activation_for_get_display_media);
   settings->SetRequireTransientActivationForShowFileOrDirectoryPicker(
       prefs.require_transient_activation_for_show_file_or_directory_picker);
-  settings->SetRequireTransientActivationForHtmlFullscreen(
-      prefs.require_transient_activation_for_html_fullscreen);
   settings->SetViewportEnabled(prefs.viewport_enabled);
   settings->SetViewportMetaEnabled(prefs.viewport_meta_enabled);
   settings->SetViewportStyle(prefs.viewport_style);
@@ -2309,31 +2320,11 @@ double WebViewImpl::ClampZoomLevel(double zoom_level) const {
                   std::min(maximum_zoom_level_, zoom_level));
 }
 
-double WebViewImpl::ZoomLevelToZoomFactor(double zoom_level,
-                                          bool for_main_frame) const {
-  double zoom_factor = blink::ZoomLevelToZoomFactor(zoom_level);
-  if (for_main_frame && zoom_factor_override_) {
-    zoom_factor = zoom_factor_override_;
+double WebViewImpl::ZoomLevelToZoomFactor(double zoom_level) const {
+  if (zoom_factor_override_) {
+    return zoom_factor_override_;
   }
-  if (zoom_factor_for_device_scale_factor_) {
-    if (compositor_device_scale_factor_override_) {
-      zoom_factor *= compositor_device_scale_factor_override_;
-    } else {
-      zoom_factor *= zoom_factor_for_device_scale_factor_;
-    }
-  }
-  return zoom_factor;
-}
-
-double WebViewImpl::ZoomFactorToZoomLevel(double zoom_factor) const {
-  if (zoom_factor_for_device_scale_factor_) {
-    if (compositor_device_scale_factor_override_) {
-      zoom_factor /= compositor_device_scale_factor_override_;
-    } else {
-      zoom_factor /= zoom_factor_for_device_scale_factor_;
-    }
-  }
-  return blink::ZoomFactorToZoomLevel(zoom_factor);
+  return blink::ZoomLevelToZoomFactor(zoom_level);
 }
 
 void WebViewImpl::UpdateWidgetZoomFactors() {
@@ -2343,14 +2334,12 @@ void WebViewImpl::UpdateWidgetZoomFactors() {
 }
 
 void WebViewImpl::UpdateInspectorDeviceScaleFactorOverride() {
-  if (zoom_factor_for_device_scale_factor_) {
-    if (compositor_device_scale_factor_override_) {
-      page_->SetInspectorDeviceScaleFactorOverride(
-          zoom_factor_for_device_scale_factor_ /
-          compositor_device_scale_factor_override_);
-    } else {
-      page_->SetInspectorDeviceScaleFactorOverride(1.0f);
-    }
+  if (compositor_device_scale_factor_override_) {
+    page_->SetInspectorDeviceScaleFactorOverride(
+        zoom_factor_for_device_scale_factor_ /
+        compositor_device_scale_factor_override_);
+  } else {
+    page_->SetInspectorDeviceScaleFactorOverride(1.0f);
   }
 }
 
@@ -2948,6 +2937,10 @@ void WebViewImpl::UpdatePageDefinedViewportConstraints(
   }
 
   UpdateMainFrameLayoutSize();
+
+  if (RuntimeEnabledFeatures::ViewportChangesUpdateTextAutosizingEnabled()) {
+    TextAutosizer::UpdatePageInfoInAllFrames(GetPage()->MainFrame());
+  }
 }
 
 void WebViewImpl::UpdateMainFrameLayoutSize() {
@@ -3079,12 +3072,17 @@ void WebViewImpl::Show(const LocalFrameToken& opener_frame_token,
   window_features->has_width = web_window_features.width_set;
   window_features->has_height = web_window_features.height_set;
   window_features->is_popup = web_window_features.is_popup;
+  window_features->is_partitioned_popin =
+      web_window_features.is_partitioned_popin;
   local_main_frame_host_remote_->ShowCreatedWindow(
       opener_frame_token, NavigationPolicyToDisposition(policy),
       std::move(window_features), opened_by_user_gesture,
       WTF::BindOnce(&WebViewImpl::DidShowCreatedWindow, WTF::Unretained(this)));
 
-  MainFrameDevToolsAgentImpl()->DidShowNewWindow();
+  if (auto* dev_tools_agent =
+          MainFrameImpl()->DevToolsAgentImpl(/*create_if_necessary=*/false)) {
+    dev_tools_agent->DidShowNewWindow();
+  }
 }
 
 void WebViewImpl::DidShowCreatedWindow() {
@@ -3254,10 +3252,8 @@ void WebViewImpl::SetCompositorDeviceScaleFactorOverride(
     float device_scale_factor) {
   if (compositor_device_scale_factor_override_ != device_scale_factor) {
     compositor_device_scale_factor_override_ = device_scale_factor;
-    if (zoom_factor_for_device_scale_factor_) {
-      UpdateWidgetZoomFactors();
-      UpdateInspectorDeviceScaleFactorOverride();
-    }
+    UpdateWidgetZoomFactors();
+    UpdateInspectorDeviceScaleFactorOverride();
   }
 }
 
@@ -3555,6 +3551,8 @@ void WebViewImpl::UpdateRendererPreferences(
         renderer_preferences_.prefixed_fullscreen_video_api_availability
             .value());
   }
+
+  MaybePreloadSystemFonts(GetPage());
 
   // Vivaldi specific.
   UpdateVivaldiRendererPreferences();
@@ -4078,6 +4076,10 @@ bool WebViewImpl::SupportsDraggableRegions() {
 }
 
 void WebViewImpl::DraggableRegionsChanged() {
+  if (!MainFrameImpl()) {
+    return;
+  }
+
   WebVector<WebDraggableRegion> web_regions =
       MainFrameImpl()->GetDocument().DraggableRegions();
 

@@ -24,7 +24,7 @@ limitations under the License.
 namespace tensorflow {
 namespace ifrt_serving {
 
-const tsl::thread::ThreadPool& IfrtModelContext::GetThreadPool() const {
+tsl::thread::ThreadPool& IfrtModelContext::GetThreadPool() const {
   return thread_pool_;
 }
 
@@ -33,6 +33,7 @@ absl::Status IfrtModelContext::Freeze() {
   for (auto& program_handle : handles_) {
     TF_RETURN_IF_ERROR(program_handle.Freeze());
   }
+  frozen_ = true;
   return absl::OkStatus();
 }
 

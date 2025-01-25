@@ -1703,7 +1703,7 @@ int main(int argc, const char **argv) {
     aom_codec_control(&codec, AV1E_SET_RTC_EXTERNAL_RC, 1);
   }
 
-  aom_codec_control(&codec, AV1E_SET_MAX_CONSEC_FRAME_DROP_CBR, INT_MAX);
+  aom_codec_control(&codec, AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR, INT_MAX);
 
   aom_codec_control(&codec, AV1E_SET_SVC_FRAME_DROP_MODE,
                     AOM_FULL_SUPERFRAME_DROP);

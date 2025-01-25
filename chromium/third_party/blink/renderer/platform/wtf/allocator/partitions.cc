@@ -32,12 +32,6 @@
 
 #include "base/allocator/partition_alloc_features.h"
 #include "base/allocator/partition_alloc_support.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/buildflags.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_alloc_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/partition_root.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
@@ -46,6 +40,12 @@
 #include "base/thread_annotations.h"
 #include "build/build_config.h"
 #include "components/crash/core/common/crash_key.h"
+#include "partition_alloc/buildflags.h"
+#include "partition_alloc/oom.h"
+#include "partition_alloc/page_allocator.h"
+#include "partition_alloc/partition_alloc.h"
+#include "partition_alloc/partition_alloc_constants.h"
+#include "partition_alloc/partition_root.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 
 namespace WTF {
@@ -377,7 +377,7 @@ size_t Partitions::BufferPotentialCapacity(size_t n) {
 // static
 void* Partitions::FastMalloc(size_t n, const char* type_name) {
   auto* fast_malloc_partition = FastMallocPartition();
-  if (UNLIKELY(fast_malloc_partition)) {
+  if (fast_malloc_partition) [[unlikely]] {
     return fast_malloc_partition->Alloc(n, type_name);
   } else {
     return malloc(n);
@@ -387,7 +387,7 @@ void* Partitions::FastMalloc(size_t n, const char* type_name) {
 // static
 void* Partitions::FastZeroedMalloc(size_t n, const char* type_name) {
   auto* fast_malloc_partition = FastMallocPartition();
-  if (UNLIKELY(fast_malloc_partition)) {
+  if (fast_malloc_partition) [[unlikely]] {
     return fast_malloc_partition
         ->AllocInline<partition_alloc::AllocFlags::kZeroFill>(n, type_name);
   } else {
@@ -398,7 +398,7 @@ void* Partitions::FastZeroedMalloc(size_t n, const char* type_name) {
 // static
 void Partitions::FastFree(void* p) {
   auto* fast_malloc_partition = FastMallocPartition();
-  if (UNLIKELY(fast_malloc_partition)) {
+  if (fast_malloc_partition) [[unlikely]] {
     fast_malloc_partition->Free(p);
   } else {
     free(p);

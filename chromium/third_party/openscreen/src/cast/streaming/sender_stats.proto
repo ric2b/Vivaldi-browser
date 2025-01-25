@@ -32,7 +32,12 @@ message SimpleHistogram {
 }
 
 message SenderStatistic {
-  enum Type {
+  enum MediaType {
+    MEDIA_TYPE_UNSPECIFIED = 0; // Google internal use only
+    AUDIO = 1;
+    VIDEO = 2;
+  }
+  enum StatisticType {
     TYPE_UNSPECIFIED = 0;
 
     // Frame enqueuing rate.
@@ -95,11 +100,17 @@ message SenderStatistic {
     LAST_EVENT_TIME_MS = 18;
   }
   optional double value = 1;
-  optional Type type = 2;
+  optional StatisticType statistic_type = 2;
+  optional MediaType media_type = 3;
 }
 
 message SenderHistogram {
-  enum Type {
+  enum MediaType {
+    MEDIA_TYPE_UNSPECIFIED = 0; // Google internal use only.
+    AUDIO = 1;
+    VIDEO = 2;
+  }
+  enum StatisticType {
     TYPE_UNSPECIFIED = 0;
 
     // Histogram representing the capture latency (in milliseconds).
@@ -124,7 +135,8 @@ message SenderHistogram {
     FRAME_LATENESS_MS = 7;
   }
   optional SimpleHistogram histogram = 1;
-  optional Type type = 2;
+  optional StatisticType statistic_type = 2;
+  optional MediaType media_type = 3;
 }
 
 message SenderStats {

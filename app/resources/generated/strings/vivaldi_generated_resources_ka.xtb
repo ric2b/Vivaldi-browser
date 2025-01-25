@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">შეცდომა</translation>
 <translation id="1175364870820465910">&amp;ბეჭდვა…</translation>
 <translation id="1181037720776840403">წაშლა</translation>
+<translation id="1184037892196730210">ეკრანის ტრანსლაცია შეუძლებელია</translation>
 <translation id="1187722533808055681">უქმეს გაღვიძებები</translation>
 <translation id="122082903575839559">სერტიფიკატის ხელმოწერის ალგორითმი</translation>
 <translation id="1221825588892235038">მხოლოდ მონიშნული</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">ველის მნიშვნელობა</translation>
 <translation id="2662876636500006917">Chrome-ის Web Store</translation>
 <translation id="2678063897982469759">თავიდან ჩართვა</translation>
-<translation id="2678100101831051676">ტრანსლირება ვერ ხერხდება.</translation>
 <translation id="2719936478972253983">დაიბლოკა შემდეგი ქუქი-ჩანაწერები</translation>
 <translation id="2721037002783622288">&amp;გამოსახულების <ph name="SEARCH_ENGINE" /> ძებნა</translation>
 <translation id="2738771556149464852">არა შემდეგ</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">ეს გაფართოება, შეიძლება, დაზიანებულია.</translation>
 <translation id="3387614642886316601">გაფართოებული მართლწერის შემოწმება</translation>
 <translation id="3390013585654699824">აპის შესახებ</translation>
-<translation id="3393582007140394275">ეკრანის გადაცემა შეუძლებელია.</translation>
 <translation id="345693547134384690">&amp;გამოსახულების ახალ ჩანართში გახსნა</translation>
 <translation id="3493881266323043047">სისწორე</translation>
 <translation id="3511307672085573050">ბმულის &amp;მისამართის კოპირება</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">ცვლილებების დატოვება</translation>
 <translation id="6824564591481349393">ელფოსტის მისამართის &amp;კოპირება</translation>
 <translation id="6840155290835956714">კითხვა გაგზავნამდე</translation>
+<translation id="6878862640969460273">ლანდშაფტი</translation>
 <translation id="6886871292305414135">ბმულის ახალ ფანჯარაში &amp;გახსნა</translation>
 <translation id="6892812721183419409">ბმულის გახსნა, როგორც <ph name="USER" /></translation>
 <translation id="6900284862687837908">ფონური აპი: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">წვდომა აკრძალულია.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">მართლწერის რეალურ დროში შემოწმება</translation>
+<translation id="7359680654975233185">ჩანართის ტრანსლაცია შეუძლებელია</translation>
 <translation id="7385854874724088939">ბეჭდვისას პრინტერს რაღაც მოუვიდა.  შეამოწმეთ თქვენი პრინტერი და თავიდან სცადეთ.</translation>
 <translation id="7412226954991670867">GPU მეხსიერება</translation>
 <translation id="7421925624202799674">გვერდის კოდის &amp;ნახვა</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">საიტებისთვის ქუქიების მონაცემების შენახვისა და წაკითხვის ნების დართვა</translation>
 <translation id="7663719505383602579">მიმღები: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">დაყენებულია თქვენი ადმინისტრატორის მიერ</translation>
+<translation id="7685038817958445325">ტრანსლაცია შეუძლებელია</translation>
 <translation id="7685049629764448582">JavaScript-ის მეხსიერება</translation>
 <translation id="7701869757853594372">მომხმარებლის დამმუშავებლები</translation>
 <translation id="7704305437604973648">დავალება</translation>
@@ -410,7 +412,6 @@
 გასაღების ფაილი უსაფრთხო ადგილას შეინახეთ. ის თქვენი გაფართოების ახალი ვერსიების შესაქმნელად დაგჭირდებათ.</translation>
 <translation id="8004582292198964060">ბრაუზერი</translation>
 <translation id="8018313076035239964">აკონტროლეთ, რა ინფორმაცია შეუძლათ ვებგვერდებს, გამოიყენონ და რა შემცველობა შეუძლიათ, გაჩვენოთ</translation>
-<translation id="8032244173881942855">ჩანართის გადაცემა შეუძლებელია.</translation>
 <translation id="8071432093239591881">გამოსახულების სახით დაბეჭდვა</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />კ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +467,6 @@
 <translation id="9218430445555521422">ნაგულისხმებად დაყენება</translation>
 <translation id="93766956588638423">გაფართოების შეკეთება</translation>
 <translation id="961012016278832836">Microsoft Edge მოძველებული</translation>
-<translation id="98515147261107953">ლანდშაფტი</translation>
 <translation id="994289308992179865">&amp;მარყუჟი</translation>
 <translation id="998747458861718449">&amp;ინსპექტირება</translation>
 </translationbundle>

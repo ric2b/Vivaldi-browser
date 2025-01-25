@@ -26,13 +26,13 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <gtest/gtest.h>
+#include <webgpu/webgpu_cpp.h>
 
 #include <string_view>
 #include <utility>
 
 #include "dawn/native/ChainUtils.h"
 #include "dawn/tests/MockCallback.h"
-#include "dawn/webgpu_cpp.h"
 #include "mocks/BufferMock.h"
 #include "mocks/ComputePipelineMock.h"
 #include "mocks/DawnMockTest.h"
@@ -76,15 +76,16 @@ static constexpr std::string_view kVertexShader = R"(
 
 class AllowedErrorTests : public DawnMockTest {
   public:
-    AllowedErrorTests() : DawnMockTest() {
+    ~AllowedErrorTests() override { DropDevice(); }
+
+  protected:
+    void SetUp() override {
+        DawnMockTest::SetUp();
         device.SetDeviceLostCallback(mDeviceLostCb.Callback(), mDeviceLostCb.MakeUserdata(this));
         device.SetUncapturedErrorCallback(mDeviceErrorCb.Callback(),
                                           mDeviceErrorCb.MakeUserdata(this));
     }
 
-    ~AllowedErrorTests() override { DropDevice(); }
-
-  protected:
     // Device mock callbacks used throughout the tests.
     StrictMock<MockCallback<wgpu::DeviceLostCallback>> mDeviceLostCb;
     StrictMock<MockCallback<wgpu::ErrorCallback>> mDeviceErrorCb;

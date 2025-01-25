@@ -21,10 +21,6 @@ namespace enterprise_connectors {
 class ContentAnalysisResponse;
 }  // namespace enterprise_connectors
 
-namespace signin {
-class IdentityManager;
-}  // namespace signin
-
 namespace safe_browsing {
 
 // Access points used to record UMA metrics and specify which code location is
@@ -150,12 +146,6 @@ std::string BinaryUploadServiceResultToString(
     const BinaryUploadService::Result& result,
     bool success);
 
-// Returns the email address of the unconsented account signed in to the profile
-// or an empty string if no account is signed in.  If either |profile| or
-// |identity_manager| is null then the empty string is returned.
-std::string GetProfileEmail(Profile* profile);
-std::string GetProfileEmail(signin::IdentityManager* identity_manager);
-
 // Helper enum and function to manipulate crash keys relevant to scanning.
 // If a key would be set to 0, it is unset.
 enum class ScanningCrashKey {
@@ -170,15 +160,6 @@ enum class ScanningCrashKey {
 };
 void IncrementCrashKey(ScanningCrashKey key, int delta = 1);
 void DecrementCrashKey(ScanningCrashKey key, int delta = 1);
-
-// Helper enum to get the corresponding regional url in service provider config
-// for data region setting policy.
-// LINT.IfChange(DlpRegionEndpoints)
-enum class DataRegion { NO_PREFERENCE = 0, UNITED_STATES = 1, EUROPE = 2 };
-// LINT.ThenChange(/chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h:DlpRegionEndpoints)
-GURL GetRegionalizedEndpoint(base::span<const char* const> region_urls,
-                             DataRegion data_region);
-DataRegion ChromeDataRegionSettingToEnum(int chrome_data_region_setting);
 
 // Returns true for consumer scans and not on enterprise scans.
 bool IsConsumerScanRequest(

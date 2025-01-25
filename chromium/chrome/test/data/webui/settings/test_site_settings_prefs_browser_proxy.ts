@@ -70,8 +70,10 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
       'clearPartitionedOriginDataAndCookies',
       'recordAction',
       'getRecentSitePermissions',
-      'getFpsMembershipLabel',
+      'getRwsMembershipLabel',
       'getNumCookiesString',
+      'getSystemDeniedPermissions',
+      'openSystemPermissionSettings',
       'getExtensionName',
       'getFileSystemGrants',
       'revokeFileSystemGrant',
@@ -96,7 +98,7 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
       ContentSettingsTypes.IDLE_DETECTION,
       ContentSettingsTypes.IMAGES,
       ContentSettingsTypes.JAVASCRIPT,
-      ContentSettingsTypes.JAVASCRIPT_JIT,
+      ContentSettingsTypes.JAVASCRIPT_OPTIMIZER,
       ContentSettingsTypes.LOCAL_FONTS,
       ContentSettingsTypes.MIC,
       ContentSettingsTypes.MIDI_DEVICES,
@@ -123,11 +125,6 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
 
     if (loadTimeData.getBoolean('capturedSurfaceControlEnabled')) {
       this.categoryList_.push(ContentSettingsTypes.CAPTURED_SURFACE_CONTROL);
-    }
-
-    if (loadTimeData.getBoolean('enableKeyboardAndPointerLockPrompt')) {
-      this.categoryList_.push(ContentSettingsTypes.KEYBOARD_LOCK);
-      this.categoryList_.push(ContentSettingsTypes.POINTER_LOCK);
     }
 
     this.prefs_ = createSiteSettingsPrefs([], [], []);
@@ -620,12 +617,12 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
     this.methodCalled('setProtocolHandlerDefault', value);
   }
 
-  getFpsMembershipLabel(fpsNumMembers: number, fpsOwner: string) {
-    this.methodCalled('getFpsMembershipLabel', fpsNumMembers, fpsOwner);
+  getRwsMembershipLabel(rwsNumMembers: number, rwsOwner: string) {
+    this.methodCalled('getRwsMembershipLabel', rwsNumMembers, rwsOwner);
     return Promise.resolve([
-      `${fpsNumMembers}`,
-      (fpsNumMembers === 1 ? 'site' : 'sites'),
-      `in ${fpsOwner}'s group`,
+      `${rwsNumMembers}`,
+      (rwsNumMembers === 1 ? 'site' : 'sites'),
+      `in ${rwsOwner}'s group`,
     ].join(' '));
   }
 
@@ -633,6 +630,15 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
     this.methodCalled('getNumCookiesString', numCookies);
     return Promise.resolve(
         `${numCookies} ` + (numCookies === 1 ? 'cookie' : 'cookies'));
+  }
+
+  getSystemDeniedPermissions() {
+    this.methodCalled('getSystemDeniedPermissions');
+    return Promise.resolve([]);
+  }
+
+  openSystemPermissionSettings(contentType: string): void {
+    this.methodCalled('openSystemPermissionSettings', contentType);
   }
 
   getExtensionName(id: string) {

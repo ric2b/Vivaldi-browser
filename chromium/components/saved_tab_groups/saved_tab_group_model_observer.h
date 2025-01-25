@@ -43,10 +43,15 @@ class SavedTabGroupModelObserver {
       const base::Uuid& group_guid,
       const std::optional<base::Uuid>& tab_guid) {}
 
+  // Called whenever the tab group has changed its shared state (e.g. after
+  // transitioning from saved to shared tab group).
+  virtual void SavedTabGroupSharedStateUpdatedLocally(
+      const base::Uuid& group_guid) {}
+
   // Called when the order of tabs in an open saved tab group are changed in the
   // tabstrip.
-  virtual void SavedTabGroupTabsReorderedLocally(const base::Uuid& group_guid) {
-  }
+  virtual void SavedTabGroupTabMovedLocally(const base::Uuid& group_guid,
+                                            const base::Uuid& tab_guid) {}
 
   // Called when the order of saved tab groups in the bookmark bar are changed.
   virtual void SavedTabGroupReorderedLocally() {}
@@ -54,7 +59,7 @@ class SavedTabGroupModelObserver {
   // Happens when a group is reordered from sync.
   virtual void SavedTabGroupReorderedFromSync() {}
 
-  // Called when sync / ModelTypeStore updates data.
+  // Called when sync / DataTypeStore updates data.
   virtual void SavedTabGroupAddedFromSync(const base::Uuid& guid) {}
 
   // TODO(crbug.com/40870833): Decide if we want to also remove the tabgroup

@@ -39,41 +39,41 @@ using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
+namespace syncer {
+
 namespace {
 
-syncer::ModelType IntToModelTypeChecked(int type) {
-  CHECK_GE(type, static_cast<int>(syncer::ModelType::FIRST_REAL_MODEL_TYPE));
-  CHECK_LE(type, static_cast<int>(syncer::ModelType::LAST_REAL_MODEL_TYPE));
-  return static_cast<syncer::ModelType>(type);
+DataType IntToDataTypeChecked(int type) {
+  CHECK_GE(type, static_cast<int>(DataType::FIRST_REAL_DATA_TYPE));
+  CHECK_LE(type, static_cast<int>(DataType::LAST_REAL_DATA_TYPE));
+  return static_cast<DataType>(type);
 }
 
-ScopedJavaLocalRef<jintArray> ModelTypeSetToJavaIntArray(
-    JNIEnv* env,
-    syncer::ModelTypeSet types) {
+ScopedJavaLocalRef<jintArray> DataTypeSetToJavaIntArray(JNIEnv* env,
+                                                        DataTypeSet types) {
   std::vector<int> type_vector;
-  for (syncer::ModelType type : types) {
+  for (DataType type : types) {
     type_vector.push_back(type);
   }
   return base::android::ToJavaIntArray(env, type_vector);
 }
 
-syncer::ModelTypeSet JavaIntArrayToModelTypeSet(
-    JNIEnv* env,
-    const JavaParamRef<jintArray>& types) {
+DataTypeSet JavaIntArrayToDataTypeSet(JNIEnv* env,
+                                      const JavaParamRef<jintArray>& types) {
   std::vector<int> types_vector;
   base::android::JavaIntArrayToIntVector(env, types, &types_vector);
-  syncer::ModelTypeSet model_type_set;
+  DataTypeSet data_type_set;
   for (int type : types_vector) {
-    model_type_set.Put(IntToModelTypeChecked(type));
+    data_type_set.Put(IntToDataTypeChecked(type));
   }
-  return model_type_set;
+  return data_type_set;
 }
 
 ScopedJavaLocalRef<jintArray> UserSelectableTypeSetToJavaIntArray(
     JNIEnv* env,
-    syncer::UserSelectableTypeSet types) {
+    UserSelectableTypeSet types) {
   std::vector<int> type_vector;
-  for (syncer::UserSelectableType type : types) {
+  for (UserSelectableType type : types) {
     type_vector.push_back(static_cast<int>(type));
   }
   return base::android::ToJavaIntArray(env, type_vector);
@@ -85,20 +85,19 @@ ScopedJavaLocalRef<jintArray> UserSelectableTypeSetToJavaIntArray(
 void NativeGetTypesWithUnsyncedDataCallback(
     JNIEnv* env,
     const base::android::ScopedJavaGlobalRef<jobject>& callback,
-    syncer::ModelTypeSet types) {
+    DataTypeSet types) {
   Java_SyncServiceImpl_onGetTypesWithUnsyncedDataResult(
-      env, callback, ModelTypeSetToJavaIntArray(env, types));
+      env, callback, DataTypeSetToJavaIntArray(env, types));
 }
 
 void NativeGetLocalDataDescriptionsCallback(
     JNIEnv* env,
     const base::android::ScopedJavaGlobalRef<jobject>& callback,
-    std::map<syncer::ModelType, syncer::LocalDataDescription>
-        localDataDescription) {
-  std::vector<int> model_types;
-  std::vector<syncer::LocalDataDescription> local_data_descriptions;
-  for (const auto& [model_type, description] : localDataDescription) {
-    model_types.push_back(model_type);
+    std::map<DataType, LocalDataDescription> localDataDescription) {
+  std::vector<int> data_types;
+  std::vector<LocalDataDescription> local_data_descriptions;
+  for (const auto& [data_type, description] : localDataDescription) {
+    data_types.push_back(data_type);
     local_data_descriptions.push_back(description);
   }
   base::android::ScopedJavaLocalRef<jclass> localdatadescription_clazz =
@@ -116,7 +115,7 @@ void NativeGetLocalDataDescriptionsCallback(
   }
 
   Java_SyncServiceImpl_onGetLocalDataDescriptionsResult(
-      env, callback, base::android::ToJavaIntArray(env, model_types), array);
+      env, callback, base::android::ToJavaIntArray(env, data_types), array);
 }
 
 // Native callback for the JNI GetAllNodes method. When
@@ -136,16 +135,16 @@ void NativeGetAllNodesCallback(
       env, callback, ConvertUTF8ToJavaString(env, json_string));
 }
 
-syncer::UserSelectableType IntToUserSelectableTypeChecked(int type) {
-  CHECK_GE(type, static_cast<int>(syncer::UserSelectableType::kFirstType));
-  CHECK_LE(type, static_cast<int>(syncer::UserSelectableType::kLastType));
-  return static_cast<syncer::UserSelectableType>(type);
+UserSelectableType IntToUserSelectableTypeChecked(int type) {
+  CHECK_GE(type, static_cast<int>(UserSelectableType::kFirstType));
+  CHECK_LE(type, static_cast<int>(UserSelectableType::kLastType));
+  return static_cast<UserSelectableType>(type);
 }
 
 }  // namespace
 
 // static
-syncer::SyncService* SyncServiceAndroidBridge::FromJavaObject(
+SyncService* SyncServiceAndroidBridge::FromJavaObject(
     const base::android::JavaRef<jobject>& j_sync_service) {
   if (!j_sync_service) {
     return nullptr;
@@ -157,13 +156,12 @@ syncer::SyncService* SyncServiceAndroidBridge::FromJavaObject(
 }
 
 SyncServiceAndroidBridge::SyncServiceAndroidBridge(
-    syncer::SyncService* native_sync_service)
+    SyncService* native_sync_service)
     : native_sync_service_(native_sync_service) {
   DCHECK(native_sync_service_);
 
   java_ref_.Reset(Java_SyncServiceImpl_Constructor(
-      base::android::AttachCurrentThread(),
-      reinterpret_cast<intptr_t>(this)));
+      base::android::AttachCurrentThread(), reinterpret_cast<intptr_t>(this)));
 
   native_sync_service_->AddObserver(this);
 }
@@ -174,13 +172,13 @@ ScopedJavaLocalRef<jobject> SyncServiceAndroidBridge::GetJavaObject() {
   return ScopedJavaLocalRef<jobject>(java_ref_);
 }
 
-void SyncServiceAndroidBridge::OnStateChanged(syncer::SyncService* sync) {
+void SyncServiceAndroidBridge::OnStateChanged(SyncService* sync) {
   // Notify the java world that our sync state has changed.
   JNIEnv* env = AttachCurrentThread();
   Java_SyncServiceImpl_syncStateChanged(env, java_ref_);
 }
 
-void SyncServiceAndroidBridge::OnSyncShutdown(syncer::SyncService* sync) {
+void SyncServiceAndroidBridge::OnSyncShutdown(SyncService* sync) {
   native_sync_service_->RemoveObserver(this);
   Java_SyncServiceImpl_destroy(AttachCurrentThread(), java_ref_);
   // Not worth resetting `native_sync_service_`, it owns this object and will
@@ -202,16 +200,11 @@ jboolean SyncServiceAndroidBridge::IsSyncFeatureActive(JNIEnv* env) {
 jboolean SyncServiceAndroidBridge::IsSyncDisabledByEnterprisePolicy(
     JNIEnv* env) {
   return native_sync_service_->HasDisableReason(
-      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+      SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
 }
 
 jboolean SyncServiceAndroidBridge::IsEngineInitialized(JNIEnv* env) {
   return native_sync_service_->IsEngineInitialized();
-}
-
-jboolean SyncServiceAndroidBridge::IsTransportStateActive(JNIEnv* env) {
-  return native_sync_service_->GetTransportState() ==
-         syncer::SyncService::TransportState::ACTIVE;
 }
 
 void SyncServiceAndroidBridge::SetSetupInProgress(JNIEnv* env,
@@ -235,18 +228,18 @@ jboolean SyncServiceAndroidBridge::IsInitialSyncFeatureSetupComplete(
 void SyncServiceAndroidBridge::SetInitialSyncFeatureSetupComplete(JNIEnv* env,
                                                                   jint source) {
   native_sync_service_->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
-      static_cast<syncer::SyncFirstSetupCompleteSource>(source));
+      static_cast<SyncFirstSetupCompleteSource>(source));
 }
 
 ScopedJavaLocalRef<jintArray> SyncServiceAndroidBridge::GetActiveDataTypes(
     JNIEnv* env) {
-  return ModelTypeSetToJavaIntArray(env,
-                                    native_sync_service_->GetActiveDataTypes());
+  return DataTypeSetToJavaIntArray(env,
+                                   native_sync_service_->GetActiveDataTypes());
 }
 
 ScopedJavaLocalRef<jintArray> SyncServiceAndroidBridge::GetSelectedTypes(
     JNIEnv* env) {
-  syncer::UserSelectableTypeSet user_selectable_types;
+  UserSelectableTypeSet user_selectable_types;
   user_selectable_types =
       native_sync_service_->GetUserSettings()->GetSelectedTypes();
   return UserSelectableTypeSetToJavaIntArray(env, user_selectable_types);
@@ -258,7 +251,7 @@ void SyncServiceAndroidBridge::GetTypesWithUnsyncedData(
   base::android::ScopedJavaGlobalRef<jobject> java_callback;
   java_callback.Reset(env, callback);
   native_sync_service_->GetTypesWithUnsyncedData(
-      syncer::TypesRequiringUnsyncedDataCheckOnSignout(),
+      TypesRequiringUnsyncedDataCheckOnSignout(),
       base::BindOnce(&NativeGetTypesWithUnsyncedDataCallback, env,
                      java_callback));
 }
@@ -271,7 +264,7 @@ void SyncServiceAndroidBridge::GetLocalDataDescriptions(
   java_callback.Reset(env, callback);
 
   native_sync_service_->GetLocalDataDescriptions(
-      JavaIntArrayToModelTypeSet(env, types),
+      JavaIntArrayToDataTypeSet(env, types),
       base::BindOnce(&NativeGetLocalDataDescriptionsCallback, env,
                      java_callback));
 }
@@ -280,7 +273,7 @@ void SyncServiceAndroidBridge::TriggerLocalDataMigration(
     JNIEnv* env,
     const JavaParamRef<jintArray>& types) {
   native_sync_service_->TriggerLocalDataMigration(
-      JavaIntArrayToModelTypeSet(env, types));
+      JavaIntArrayToDataTypeSet(env, types));
 }
 
 jboolean SyncServiceAndroidBridge::IsTypeManagedByPolicy(JNIEnv* env,
@@ -303,7 +296,7 @@ void SyncServiceAndroidBridge::SetSelectedTypes(
   base::android::JavaIntArrayToIntVector(env, user_selectable_type_array,
                                          &types_vector);
 
-  syncer::UserSelectableTypeSet user_selectable_types;
+  UserSelectableTypeSet user_selectable_types;
   for (int type : types_vector) {
     user_selectable_types.Put(IntToUserSelectableTypeChecked(type));
   }
@@ -358,9 +351,13 @@ jint SyncServiceAndroidBridge::GetPassphraseType(JNIEnv* env) {
   // TODO(crbug.com/40923935): Mapping nullopt -> kImplicitPassphrase preserves
   // the historic behavior, but ideally we should propagate the nullopt state to
   // Java.
-  return static_cast<unsigned>(
+  return static_cast<jint>(
       native_sync_service_->GetUserSettings()->GetPassphraseType().value_or(
-          syncer::PassphraseType::kImplicitPassphrase));
+          PassphraseType::kImplicitPassphrase));
+}
+
+jint SyncServiceAndroidBridge::GetTransportState(JNIEnv* env) {
+  return static_cast<jint>(native_sync_service_->GetTransportState());
 }
 
 void SyncServiceAndroidBridge::SetEncryptionPassphrase(
@@ -438,7 +435,7 @@ jboolean SyncServiceAndroidBridge::ShouldOfferTrustedVaultOptIn(JNIEnv* env) {
 }
 
 void SyncServiceAndroidBridge::TriggerRefresh(JNIEnv* env) {
-  native_sync_service_->TriggerRefresh(syncer::ModelTypeSet::All());
+  native_sync_service_->TriggerRefresh(DataTypeSet::All());
 }
 
 jlong SyncServiceAndroidBridge::GetLastSyncedTimeForDebugging(JNIEnv* env) {
@@ -460,3 +457,5 @@ void SyncServiceAndroidBridge::KeepAccountSettingsPrefsOnlyForUsers(
   native_sync_service_->GetUserSettings()->KeepAccountSettingsPrefsOnlyForUsers(
       gaia_id_hashes);
 }
+
+}  // namespace syncer

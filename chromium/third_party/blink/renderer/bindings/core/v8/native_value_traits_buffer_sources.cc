@@ -33,7 +33,7 @@ bool DoesExceedSizeLimitSlow(v8::Isolate* isolate,
 inline bool DoesExceedSizeLimit(v8::Isolate* isolate,
                                 size_t byte_length,
                                 ExceptionState& exception_state) {
-  if (LIKELY(byte_length <= ::partition_alloc::MaxDirectMapped())) {
+  if (byte_length <= ::partition_alloc::MaxDirectMapped()) [[likely]] {
     return false;
   }
 
@@ -75,7 +75,7 @@ auto NativeValueImpl(v8::Isolate* isolate,
   }
 
   auto blink_value = ToBlinkValue(isolate, value);
-  if (LIKELY(RecipeTrait::IsNonNull(blink_value))) {
+  if (RecipeTrait::IsNonNull(blink_value)) [[likely]] {
     if constexpr (allow_resizable == ResizableAllowance::kDisallowResizable) {
       if (RecipeTrait::IsResizable(blink_value)) {
         exception_state.ThrowTypeError(
@@ -96,7 +96,7 @@ auto NativeValueImpl(v8::Isolate* isolate,
   }
 
   if constexpr (nullablity == Nullablity::kIsNullable) {
-    if (LIKELY(value->IsNullOrUndefined())) {
+    if (value->IsNullOrUndefined()) [[likely]] {
       return RecipeTrait::NullValue();
     }
   }
@@ -139,7 +139,7 @@ auto ArgumentValueImpl(v8::Isolate* isolate,
   }
 
   auto blink_value = ToBlinkValue(isolate, value);
-  if (LIKELY(RecipeTrait::IsNonNull(blink_value))) {
+  if (RecipeTrait::IsNonNull(blink_value)) [[likely]] {
     if constexpr (allow_resizable == ResizableAllowance::kDisallowResizable) {
       if (RecipeTrait::IsResizable(blink_value)) {
         exception_state.ThrowTypeError(
@@ -160,7 +160,7 @@ auto ArgumentValueImpl(v8::Isolate* isolate,
   }
 
   if constexpr (nullablity == Nullablity::kIsNullable) {
-    if (LIKELY(value->IsNullOrUndefined())) {
+    if (value->IsNullOrUndefined()) [[likely]] {
       return RecipeTrait::NullValue();
     }
   }
@@ -220,6 +220,7 @@ DEFINE_ABV_TRAIT(Uint16Array)
 DEFINE_ABV_TRAIT(Uint32Array)
 DEFINE_ABV_TRAIT(BigInt64Array)
 DEFINE_ABV_TRAIT(BigUint64Array)
+DEFINE_ABV_TRAIT(Float16Array)
 DEFINE_ABV_TRAIT(Float32Array)
 DEFINE_ABV_TRAIT(Float64Array)
 #undef DEFINE_ABV_TRAIT
@@ -279,8 +280,9 @@ struct RecipeTrait<MaybeShared<T>, void> : public RecipeTrait<T> {
 
 DOMArrayBuffer* ToDOMArrayBuffer(v8::Isolate* isolate,
                                  v8::Local<v8::Value> value) {
-  if (UNLIKELY(!value->IsArrayBuffer()))
+  if (!value->IsArrayBuffer()) [[unlikely]] {
     return nullptr;
+  }
 
   v8::Local<v8::ArrayBuffer> v8_array_buffer = value.As<v8::ArrayBuffer>();
   if (auto* array_buffer =
@@ -300,8 +302,9 @@ DOMArrayBuffer* ToDOMArrayBuffer(v8::Isolate* isolate,
 
 DOMSharedArrayBuffer* ToDOMSharedArrayBuffer(v8::Isolate* isolate,
                                              v8::Local<v8::Value> value) {
-  if (UNLIKELY(!value->IsSharedArrayBuffer()))
+  if (!value->IsSharedArrayBuffer()) [[unlikely]] {
     return nullptr;
+  }
 
   v8::Local<v8::SharedArrayBuffer> v8_shared_array_buffer =
       value.As<v8::SharedArrayBuffer>();
@@ -337,8 +340,9 @@ template <typename DOMViewType, bool allow_shared>
 DOMViewType* ToDOMViewType(v8::Isolate* isolate, v8::Local<v8::Value> value) {
   using Trait = ABVTrait<DOMViewType>;
 
-  if (UNLIKELY(!Trait::IsV8ViewType(value)))
+  if (!Trait::IsV8ViewType(value)) [[unlikely]] {
     return nullptr;
+  }
 
   v8::Local<typename Trait::V8ViewType> v8_view =
       value.As<typename Trait::V8ViewType>();
@@ -354,10 +358,11 @@ DOMViewType* ToDOMViewType(v8::Isolate* isolate, v8::Local<v8::Value> value) {
     else  // must be IsSharedArrayBuffer()
       blink_buffer = ToDOMSharedArrayBuffer(isolate, v8_buffer);
   } else {
-    if (LIKELY(v8_buffer->IsArrayBuffer()))
+    if (v8_buffer->IsArrayBuffer()) [[likely]] {
       blink_buffer = ToDOMArrayBuffer(isolate, v8_buffer);
-    else  // must be IsSharedArrayBuffer()
+    } else {  // must be IsSharedArrayBuffer()
       return nullptr;
+    }
   }
 
   DOMViewType* blink_view = Trait::CreateDOMViewType(blink_buffer, v8_view);
@@ -370,8 +375,9 @@ DOMViewType* ToDOMViewType(v8::Isolate* isolate, v8::Local<v8::Value> value) {
 template <bool allow_shared>
 DOMArrayBufferView* ToDOMArrayBufferView(v8::Isolate* isolate,
                                          v8::Local<v8::Value> value) {
-  if (UNLIKELY(!value->IsArrayBufferView()))
+  if (!value->IsArrayBufferView()) [[unlikely]] {
     return nullptr;
+  }
 
   v8::Local<v8::ArrayBufferView> v8_view = value.As<v8::ArrayBufferView>();
   if (auto* blink_view =
@@ -379,30 +385,45 @@ DOMArrayBufferView* ToDOMArrayBufferView(v8::Isolate* isolate,
     return blink_view;
   }
 
-  if (v8_view->IsInt8Array())
+  if (v8_view->IsInt8Array()) {
     return ToDOMViewType<DOMInt8Array, allow_shared>(isolate, value);
-  if (v8_view->IsInt16Array())
+  }
+  if (v8_view->IsInt16Array()) {
     return ToDOMViewType<DOMInt16Array, allow_shared>(isolate, value);
-  if (v8_view->IsInt32Array())
+  }
+  if (v8_view->IsInt32Array()) {
     return ToDOMViewType<DOMInt32Array, allow_shared>(isolate, value);
-  if (v8_view->IsUint8Array())
+  }
+  if (v8_view->IsUint8Array()) {
     return ToDOMViewType<DOMUint8Array, allow_shared>(isolate, value);
-  if (v8_view->IsUint8ClampedArray())
+  }
+  if (v8_view->IsUint8ClampedArray()) {
     return ToDOMViewType<DOMUint8ClampedArray, allow_shared>(isolate, value);
-  if (v8_view->IsUint16Array())
+  }
+  if (v8_view->IsUint16Array()) {
     return ToDOMViewType<DOMUint16Array, allow_shared>(isolate, value);
-  if (v8_view->IsUint32Array())
+  }
+  if (v8_view->IsUint32Array()) {
     return ToDOMViewType<DOMUint32Array, allow_shared>(isolate, value);
-  if (v8_view->IsBigInt64Array())
+  }
+  if (v8_view->IsBigInt64Array()) {
     return ToDOMViewType<DOMBigInt64Array, allow_shared>(isolate, value);
-  if (v8_view->IsBigUint64Array())
+  }
+  if (v8_view->IsBigUint64Array()) {
     return ToDOMViewType<DOMBigUint64Array, allow_shared>(isolate, value);
-  if (v8_view->IsFloat32Array())
+  }
+  if (v8_view->IsFloat16Array()) {
+    return ToDOMViewType<DOMFloat16Array, allow_shared>(isolate, value);
+  }
+  if (v8_view->IsFloat32Array()) {
     return ToDOMViewType<DOMFloat32Array, allow_shared>(isolate, value);
-  if (v8_view->IsFloat64Array())
+  }
+  if (v8_view->IsFloat64Array()) {
     return ToDOMViewType<DOMFloat64Array, allow_shared>(isolate, value);
-  if (v8_view->IsDataView())
+  }
+  if (v8_view->IsDataView()) {
     return ToDOMViewType<DOMDataView, allow_shared>(isolate, value);
+  }
 
   NOTREACHED_IN_MIGRATION();
   return nullptr;

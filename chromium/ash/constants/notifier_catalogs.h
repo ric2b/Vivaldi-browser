@@ -200,7 +200,9 @@ enum class NotificationCatalogName {
   kAudioSelection = 181,
   kExtendedUpdatesAvailable = 182,
   kOnDeviceAppControls = 183,
-  kMaxValue = kOnDeviceAppControls
+  kFaceGazeAssetsDownloaded = 184,
+  kFaceGazeAssetsFailed = 185,
+  kMaxValue = kFaceGazeAssetsFailed
 };
 
 // A living catalog that registers system nudges.
@@ -238,7 +240,7 @@ enum class NudgeCatalogName {
   kCaptureModeEducationQuickSettingsNudge = 24,
   kGameDashboardControlsNudge = 25,
   // [Deprecated] kWebsiteTelemetryReportingNudge = 26,
-  kStandaloneWindowMigrationUx = 27,
+  // [Deprecated] kStandaloneWindowMigrationUx = 27,
   kFocusModeEndingMomentNudge = 28,
   kInformedRestoreEducationNudge = 29,
   kGrowthCampaignNudge = 30,
@@ -247,7 +249,9 @@ enum class NudgeCatalogName {
   kCapsLockShortcutPressed = 33,
   kMahi = 34,
   kBirchPrivacy = 35,
-  kMaxValue = kBirchPrivacy
+  kVideoConferenceTraySidetoneNotSupported = 36,
+  kVideoConferenceTraySidetoneEnabled = 37,
+  kMaxValue = kVideoConferenceTraySidetoneEnabled
 };
 
 // A living catalog that registers toasts.

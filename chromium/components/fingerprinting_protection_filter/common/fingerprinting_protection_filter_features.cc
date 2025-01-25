@@ -17,6 +17,36 @@ BASE_FEATURE(kEnableFingerprintingProtectionFilter,
              "EnableFingerprintingProtectionFilter",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kEnableFingerprintingProtectionFilterInIncognito,
+             "EnableFingerprintingProtectionFilterInIncognito",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsFingerprintingProtectionFeatureEnabled() {
+  return base::FeatureList::IsEnabled(kEnableFingerprintingProtectionFilter) ||
+         base::FeatureList::IsEnabled(
+             kEnableFingerprintingProtectionFilterInIncognito);
+}
+
+bool IsFingerprintingProtectionEnabledInIncognito(bool is_incognito) {
+  if (!is_incognito) {
+    return false;
+  }
+  return base::FeatureList::IsEnabled(
+      kEnableFingerprintingProtectionFilterInIncognito);
+}
+
+bool IsFingerprintingProtectionEnabledInNonIncognito(bool is_incognito) {
+  if (is_incognito) {
+    return false;
+  }
+  return base::FeatureList::IsEnabled(kEnableFingerprintingProtectionFilter);
+}
+
+bool IsFingerprintingProtectionEnabledForIncognitoState(bool is_incognito) {
+  return IsFingerprintingProtectionEnabledInIncognito(is_incognito) ||
+         IsFingerprintingProtectionEnabledInNonIncognito(is_incognito);
+}
+
 constexpr base::FeatureParam<subresource_filter::mojom::ActivationLevel>::Option
     kActivationLevelOptions[] = {
         {subresource_filter::mojom::ActivationLevel::kDisabled, "disabled"},
@@ -31,4 +61,7 @@ const base::FeatureParam<subresource_filter::mojom::ActivationLevel>
 const base::FeatureParam<bool> kEnableOn3pcBlocked{
     &kEnableFingerprintingProtectionFilter, "enable_on_3pc_blocked", false};
 
+BASE_FEATURE(kUseCnameAliasesForFingerprintingProtectionFilter,
+             "UseCnameAliasesForFingerprintingProtectionFilter",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace fingerprinting_protection_filter::features

@@ -19,15 +19,45 @@ reviewer.
 
 <histograms>
 
+<variants name="BooleanResult">
+  <variant name="Failure" summary="failure"/>
+  <variant name="Success" summary="success"/>
+</variants>
+
 <!-- Note: Update the histogram summaries when adding a new variant.-->
 
 <variants name="FacilitatedPaymentsTypes">
-  <variant name=".Pix"
+  <variant name="Pix"
       summary="Facilitate a Pix based payment using Google Pay."/>
 </variants>
 
+<histogram
+    name="FacilitatedPayments.Pix.PaymentCodeValidation.{PaymentCodeValidationResult}.Latency"
+    units="ms" expires_after="2025-07-01">
+  <owner>siashah@google.com</owner>
+  <owner>vishwasuppoor@google.com</owner>
+  <owner>rouslan@google.com</owner>
+  <owner>payments-autofill-team@google.com</owner>
+  <summary>
+    Latency for the Pix payment code validation with
+    {PaymentCodeValidationResult} as result. The validation is done in a
+    sandboxed utility process to safely process strings from the renderer
+    without compromising the browser process. The string would have already been
+    verified to contain the Pix identifier prefix (0014br.gov.bcb.pix).
+    [Frequency] As the Pix payflow is only allowed to be triggered once per page
+    load, this metric similarly can only be logged at most once per page load.
+    [Trigger] The user copies a Pix payment code to their clipboard, either
+    manually for via a merchant's copy button.
+  </summary>
+  <token key="PaymentCodeValidationResult">
+    <variant name="InvalidCode" summary="invalid code"/>
+    <variant name="ValidatorFailed" summary="failed validator"/>
+    <variant name="ValidCode" summary="valid code"/>
+  </token>
+</histogram>
+
 <histogram name="FacilitatedPayments.SettingsPage.Shown" enum="BooleanShown"
-    expires_after="2024-09-01">
+    expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -42,7 +72,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.SettingsPage.{FacilitatedPaymentsType}.ToggleUpdated"
-    enum="Boolean" expires_after="2024-09-01">
+    enum="Boolean" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -58,7 +88,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.FopSelector.Shown"
-    enum="BooleanShown" expires_after="2024-09-01">
+    enum="BooleanShown" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -77,7 +107,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.GetClientToken.Latency"
-    units="ms" expires_after="2024-09-01">
+    units="ms" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -94,7 +124,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.GetClientToken.Result"
-    enum="Boolean" expires_after="2024-09-01">
+    enum="Boolean" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -111,7 +141,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.InitiatePayment.Latency"
-    units="ms" expires_after="2024-09-01">
+    units="ms" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -126,7 +156,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.InitiatePayment.Result"
-    enum="Boolean" expires_after="2024-09-01">
+    enum="Boolean" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -142,7 +172,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.InitiatePurchaseAction.Latency"
-    units="ms" expires_after="2024-09-01">
+    units="ms" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -159,7 +189,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.InitiatePurchaseAction.Result"
-    enum="Boolean" expires_after="2024-09-01">
+    enum="Boolean" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -176,7 +206,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.IsApiAvailable.Latency"
-    units="ms" expires_after="2024-09-01">
+    units="ms" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -193,7 +223,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.IsApiAvailable.Result"
-    enum="Boolean" expires_after="2024-09-01">
+    enum="Boolean" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -209,9 +239,27 @@ reviewer.
 </histogram>
 
 <histogram
+    name="FacilitatedPayments.{FacilitatedPaymentsType}.LoadRiskData.{Result}.Latency"
+    units="ms" expires_after="2025-07-01">
+  <owner>siashah@google.com</owner>
+  <owner>vishwasuppoor@google.com</owner>
+  <owner>rouslan@google.com</owner>
+  <owner>payments-autofill-team@google.com</owner>
+  <summary>
+    Latency for the call to fetch risk data which was a {Result}. The risk data
+    gives device's risk fingerprint which is used to decide whether or not to
+    process the transaction. [Frequency] Logged at most once per page load.
+    [Trigger] The browser gets signal that a {FacilitatedPaymentsType} code
+    exists on the page.
+  </summary>
+  <token key="FacilitatedPaymentsType" variants="FacilitatedPaymentsTypes"/>
+  <token key="Result" variants="BooleanResult"/>
+</histogram>
+
+<histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.PaymentNotOfferedReason"
     enum="FacilitatedPayments.PaymentNotOfferedReason"
-    expires_after="2024-09-01">
+    expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -228,7 +276,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.Transaction.Result"
-    enum="FacilitatedPayments.TransactionResult" expires_after="2024-09-01">
+    enum="FacilitatedPayments.TransactionResult" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -244,7 +292,7 @@ reviewer.
 
 <histogram
     name="FacilitatedPayments.{FacilitatedPaymentsType}.Transaction.{TransactionResult}.Latency"
-    enum="FacilitatedPayments.TransactionResult" expires_after="2024-09-01">
+    units="ms" expires_after="2025-07-01">
   <owner>siashah@google.com</owner>
   <owner>vishwasuppoor@google.com</owner>
   <owner>rouslan@google.com</owner>
@@ -258,9 +306,9 @@ reviewer.
   </summary>
   <token key="FacilitatedPaymentsType" variants="FacilitatedPaymentsTypes"/>
   <token key="TransactionResult">
-    <variant name=".Abandoned" summary="Abandoned transaction"/>
-    <variant name=".Failed" summary="Failed transaction"/>
-    <variant name=".Success" summary="Successful transaction"/>
+    <variant name="Abandoned" summary="Abandoned transaction"/>
+    <variant name="Failed" summary="Failed transaction"/>
+    <variant name="Success" summary="Successful transaction"/>
   </token>
 </histogram>
 

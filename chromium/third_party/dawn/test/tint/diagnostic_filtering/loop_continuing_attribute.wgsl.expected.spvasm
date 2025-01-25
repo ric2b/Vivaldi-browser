@@ -12,46 +12,46 @@
 
 ; SPIR-V
 ; Version: 1.3
-; Generator: Google Tint Compiler; 0
+; Generator: Google Tint Compiler; 1
 ; Bound: 23
 ; Schema: 0
                OpCapability Shader
                OpMemoryModel Logical GLSL450
-               OpEntryPoint Fragment %main "main" %x_1
+               OpEntryPoint Fragment %main "main" %main_loc0_Input
                OpExecutionMode %main OriginUpperLeft
-               OpName %x_1 "x_1"
+               OpName %main_loc0_Input "main_loc0_Input"
                OpName %main_inner "main_inner"
                OpName %x "x"
                OpName %main "main"
-               OpDecorate %x_1 Location 0
+               OpDecorate %main_loc0_Input Location 0
       %float = OpTypeFloat 32
 %_ptr_Input_float = OpTypePointer Input %float
-        %x_1 = OpVariable %_ptr_Input_float Input
+%main_loc0_Input = OpVariable %_ptr_Input_float Input
        %void = OpTypeVoid
-          %4 = OpTypeFunction %void %float
+          %7 = OpTypeFunction %void %float
     %float_1 = OpConstant %float 1
-         %15 = OpConstantNull %float
+    %float_0 = OpConstant %float 0
        %bool = OpTypeBool
-         %18 = OpTypeFunction %void
- %main_inner = OpFunction %void None %4
+         %19 = OpTypeFunction %void
+ %main_inner = OpFunction %void None %7
           %x = OpFunctionParameter %float
           %8 = OpLabel
-               OpBranch %9
-          %9 = OpLabel
-               OpLoopMerge %10 %11 None
-               OpBranch %12
-         %12 = OpLabel
                OpBranch %11
          %11 = OpLabel
-         %13 = OpDPdx %float %float_1
-         %16 = OpFOrdGreaterThan %bool %x %15
-               OpBranchConditional %16 %10 %9
+               OpLoopMerge %12 %10 None
+               OpBranch %9
+          %9 = OpLabel
+               OpBranch %10
          %10 = OpLabel
+         %13 = OpDPdx %float %float_1
+         %15 = OpFOrdGreaterThan %bool %x %float_0
+               OpBranchConditional %15 %12 %11
+         %12 = OpLabel
                OpReturn
                OpFunctionEnd
-       %main = OpFunction %void None %18
+       %main = OpFunction %void None %19
          %20 = OpLabel
-         %22 = OpLoad %float %x_1
-         %21 = OpFunctionCall %void %main_inner %22
+         %21 = OpLoad %float %main_loc0_Input None
+         %22 = OpFunctionCall %void %main_inner %21
                OpReturn
                OpFunctionEnd

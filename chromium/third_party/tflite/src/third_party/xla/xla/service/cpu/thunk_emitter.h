@@ -16,24 +16,27 @@ limitations under the License.
 #ifndef XLA_SERVICE_CPU_THUNK_EMITTER_H_
 #define XLA_SERVICE_CPU_THUNK_EMITTER_H_
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
+#include "xla/backends/cpu/runtime/resource_use.h"
+#include "xla/backends/cpu/runtime/thunk.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/buffer_assignment.h"
 #include "xla/service/cpu/ir_emitter2.h"
-#include "xla/service/cpu/runtime/resource_use.h"
-#include "xla/service/cpu/runtime/thunk.h"
 #include "xla/service/cpu/target_machine_features.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/shape_util.h"
+#include "xla/xla_data.pb.h"
 
 namespace xla::cpu {
 
@@ -87,6 +90,12 @@ class ThunkEmitter {
   absl::StatusOr<ThunkSequence> EmitSetDimensionSizeThunk(
       const HloInstruction* instruction);
 
+  absl::StatusOr<ThunkSequence> EmitBatchNormGradThunk(
+      const HloInstruction* instruction);
+
+  absl::StatusOr<ThunkSequence> EmitBatchNormTrainingThunk(
+      const HloInstruction* instruction);
+
   absl::StatusOr<ThunkSequence> EmitConvolutionThunk(
       const HloInstruction* instruction);
 
@@ -94,6 +103,9 @@ class ThunkEmitter {
       const HloInstruction* instruction);
 
   absl::StatusOr<ThunkSequence> EmitElementalKernelThunk(
+      const HloInstruction* instruction);
+
+  absl::StatusOr<ThunkSequence> EmitPadKernelThunk(
       const HloInstruction* instruction);
 
   absl::StatusOr<ThunkSequence> EmitFftThunk(const HloInstruction* instruction);
@@ -110,6 +122,9 @@ class ThunkEmitter {
       const HloInstruction* instruction);
 
   absl::StatusOr<ThunkSequence> EmitRngGetAndUpdateStateThunk(
+      const HloInstruction* instruction);
+
+  absl::StatusOr<ThunkSequence> EmitStochasticConvertThunk(
       const HloInstruction* instruction);
 
   absl::StatusOr<ThunkSequence> EmitInfeedThunk(
@@ -150,6 +165,9 @@ class ThunkEmitter {
   absl::StatusOr<ThunkSequence> EmitCustomCallThunk(
       const HloInstruction* instruction);
 
+  absl::StatusOr<ThunkSequence> EmitSliceToDynamicThunk(
+      const HloInstruction* instruction);
+
   absl::StatusOr<ThunkSequence> EmitSelectAndScatterThunk(
       const HloInstruction* instruction);
 
@@ -160,6 +178,9 @@ class ThunkEmitter {
       const HloInstruction* instruction);
 
   absl::StatusOr<ThunkSequence> EmitDynamicUpdateSliceThunk(
+      const HloInstruction* instruction);
+
+  absl::StatusOr<ThunkSequence> EmitSortThunk(
       const HloInstruction* instruction);
 
   // Returns the list of buffer allocation slices assigned to the given
@@ -176,6 +197,13 @@ class ThunkEmitter {
       const HloInstruction& instruction,
       absl::Span<const HloInstruction* const> operands,
       absl::Span<const PrimitiveType> supported_types);
+
+  // Convenience function that creates a thunk sequence containing given kernel.
+  static absl::StatusOr<ThunkSequence> MakeKernelThunkSequence(
+      const HloInstruction* instruction,
+      const ThunkEmitter::HostKernelAllocationSlices& buffers,
+      const IrEmitter2::KernelInfo& kernel,
+      std::optional<uint64_t> min_alignment = std::nullopt);
 
   IrEmitter2& ir_emitter_;
   const BufferAssignment& buffer_assignment_;

@@ -48,10 +48,10 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using ::testing::HasSubstr;
-
 namespace autofill::payments {
 namespace {
+
+using ::testing::HasSubstr;
 
 using PaymentsRpcResult = PaymentsAutofillClient::PaymentsRpcResult;
 
@@ -126,8 +126,6 @@ struct CardUnmaskOptions {
   // If true, use only legacy instrument id.
   bool use_only_legacy_id = false;
 };
-
-}  // namespace
 
 class PaymentsNetworkInterfaceTest : public PaymentsNetworkInterfaceTestBase,
                                      public testing::Test {
@@ -316,24 +314,15 @@ class PaymentsNetworkInterfaceTest : public PaymentsNetworkInterfaceTestBase,
   }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  void StartMigrating(bool has_cardholder_name,
-                      bool set_nickname_for_first_card = false) {
+  void StartMigrating() {
     PaymentsNetworkInterface::MigrationRequestDetails request_details;
     request_details.context_token = u"context token";
     request_details.risk_data = "some risk data";
     request_details.app_locale = "language-LOCALE";
 
     migratable_credit_cards_.clear();
-    CreditCard card1 = test::GetCreditCard();
-    if (set_nickname_for_first_card)
-      card1.SetNickname(u"grocery");
-    CreditCard card2 = test::GetCreditCard2();
-    if (!has_cardholder_name) {
-      card1.SetRawInfo(CREDIT_CARD_NAME_FULL, u"");
-      card2.SetRawInfo(CREDIT_CARD_NAME_FULL, u"");
-    }
-    migratable_credit_cards_.emplace_back(card1);
-    migratable_credit_cards_.emplace_back(card2);
+    migratable_credit_cards_.emplace_back(test::GetCreditCard());
+    migratable_credit_cards_.emplace_back(test::GetCreditCard2());
     payments_network_interface_->MigrateCards(
         request_details, migratable_credit_cards_,
         base::BindOnce(&PaymentsNetworkInterfaceTest::OnDidMigrateLocalCards,
@@ -945,6 +934,42 @@ TEST_F(PaymentsNetworkInterfaceTest, GetDetailsSuccess) {
   EXPECT_NE(nullptr, legal_message_.get());
 }
 
+TEST_F(PaymentsNetworkInterfaceTest, GetDetailsSuccessRequestLatencyMetric) {
+  base::HistogramTester histogram_tester;
+
+  StartGettingUploadDetails();
+  IssueOAuthToken();
+  ReturnResponse(
+      payments_network_interface_.get(), net::HTTP_OK,
+      "{ \"context_token\": \"some_token\", \"legal_message\": {} }");
+
+  histogram_tester.ExpectTotalCount(
+      "Autofill.PaymentsNetworkInterface.RequestLatency.GetCardUploadDetails",
+      1);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.PaymentsNetworkInterface.RequestLatency.GetCardUploadDetails."
+      "Success",
+      1);
+}
+
+TEST_F(PaymentsNetworkInterfaceTest, GetDetailsFailureRequestLatencyMetric) {
+  base::HistogramTester histogram_tester;
+
+  StartGettingUploadDetails();
+  IssueOAuthToken();
+  ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
+                 "{ \"error\": { \"code\": \"INTERNAL\" }, \"context_token\": "
+                 "\"some_token\", \"legal_message\": {} }");
+
+  histogram_tester.ExpectTotalCount(
+      "Autofill.PaymentsNetworkInterface.RequestLatency.GetCardUploadDetails",
+      1);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.PaymentsNetworkInterface.RequestLatency.GetCardUploadDetails."
+      "Failure",
+      1);
+}
+
 TEST_F(PaymentsNetworkInterfaceTest, GetUploadDetailsVariationsTest) {
   // Register a trial and variation id, so that there is data in variations
   // headers.
@@ -1026,11 +1051,10 @@ TEST_F(PaymentsNetworkInterfaceTest, GetUploadAccountFromSyncTest) {
       AutofillClock::Now() + base::Days(10));
 
   // Verify the auth header.
-  std::string auth_header_value;
-  EXPECT_TRUE(intercepted_headers_.GetHeader(
-      net::HttpRequestHeaders::kAuthorization, &auth_header_value))
+  EXPECT_THAT(
+      intercepted_headers_.GetHeader(net::HttpRequestHeaders::kAuthorization),
+      testing::Optional(std::string("Bearer secondary_account_token")))
       << intercepted_headers_.ToString();
-  EXPECT_EQ("Bearer secondary_account_token", auth_header_value);
 }
 
 TEST_F(PaymentsNetworkInterfaceTest, UploadCardVariationsTest) {
@@ -1194,7 +1218,7 @@ TEST_F(PaymentsNetworkInterfaceTest, UploadFailureDueToClientSideTimeout) {
   IssueOAuthToken();
   ReturnResponse(payments_network_interface_.get(), net::ERR_TIMED_OUT, "");
 
-  EXPECT_EQ(PaymentsRpcResult::kTryAgainFailure, result_);
+  EXPECT_EQ(PaymentsRpcResult::kClientSideTimeout, result_);
   histogram_tester.ExpectUniqueSample(
       "Autofill.PaymentsNetworkInterface.UploadCardRequest.ClientSideTimedOut",
       /*sample=*/true, /*expected_bucket_count=*/1);
@@ -1356,6 +1380,64 @@ TEST_F(PaymentsNetworkInterfaceTest, UnmaskPermanentFailureWhenVcnMissingCvv) {
   EXPECT_EQ(PaymentsRpcResult::kPermanentFailure, result_);
 }
 
+TEST_F(PaymentsNetworkInterfaceTest, UnmaskSuccessMeasureTimeoutHistogram) {
+  base::HistogramTester histogram_tester;
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kAutofillUnmaskCardRequestTimeout);
+
+  StartUnmasking(CardUnmaskOptions());
+  IssueOAuthToken();
+  ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
+                 "{ \"pan\": \"1234\" }");
+
+  EXPECT_EQ(PaymentsRpcResult::kSuccess, result_);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.PaymentsNetworkInterface.UnmaskCardRequest.ClientSideTimedOut",
+      /*sample=*/false, /*expected_bucket_count=*/1);
+}
+
+TEST_F(PaymentsNetworkInterfaceTest, UnmaskFailureDueToClientSideTimeout) {
+  base::HistogramTester histogram_tester;
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kAutofillUnmaskCardRequestTimeout);
+
+  // Fake a client-side timeout on the card unmask.
+  StartUnmasking(CardUnmaskOptions());
+  IssueOAuthToken();
+  ReturnResponse(payments_network_interface_.get(), net::ERR_TIMED_OUT, "");
+
+  EXPECT_EQ(PaymentsRpcResult::kClientSideTimeout, result_);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.PaymentsNetworkInterface.UnmaskCardRequest.ClientSideTimedOut",
+      /*sample=*/true, /*expected_bucket_count=*/1);
+}
+
+TEST_F(PaymentsNetworkInterfaceTest,
+       UnmaskClientTimeoutNotRecordedForOtherFailure) {
+  base::HistogramTester histogram_tester;
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kAutofillUnmaskCardRequestTimeout);
+
+  // Fake a network issue on the unmask; this shouldn't result in any record
+  // being made for the client timeout histogram. In particular,
+  // HTTP_REQUEST_TIMEOUT is treated differently than the client side timeout.
+  StartUnmasking(CardUnmaskOptions());
+  IssueOAuthToken();
+  ReturnResponse(payments_network_interface_.get(), net::HTTP_REQUEST_TIMEOUT,
+                 "");
+
+  EXPECT_EQ(PaymentsRpcResult::kNetworkError, result_);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.PaymentsNetworkInterface.UnmaskCardRequest.ClientSideTimedOut",
+      /*expected_count=*/0);
+}
+
 // Tests for the local card migration flow. Desktop only.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 TEST_F(PaymentsNetworkInterfaceTest, GetDetailsFollowedByMigrationSuccess) {
@@ -1368,7 +1450,7 @@ TEST_F(PaymentsNetworkInterfaceTest, GetDetailsFollowedByMigrationSuccess) {
 
   result_ = PaymentsRpcResult::kNone;
 
-  StartMigrating(/*has_cardholder_name=*/true);
+  StartMigrating();
   ReturnResponse(
       payments_network_interface_.get(), net::HTTP_OK,
       "{\"save_result\":[],\"value_prop_display_text\":\"display text\"}");
@@ -1382,88 +1464,15 @@ TEST_F(PaymentsNetworkInterfaceTest, MigrateCardsVariationsTest) {
   // Register a trial and variation id, so that there is data in variations
   // headers.
   CreateFieldTrialWithId("AutofillTest", "Group", 369);
-  StartMigrating(/*has_cardholder_name=*/true);
+  StartMigrating();
   IssueOAuthToken();
 
   // Note that experiment information is stored in X-Client-Data.
   EXPECT_TRUE(HasVariationsHeader());
 }
 
-TEST_F(PaymentsNetworkInterfaceTest, MigrationRequestIncludesUniqueId) {
-  StartMigrating(/*has_cardholder_name=*/true);
-  IssueOAuthToken();
-
-  // Verify that the unique id was included in the request.
-  EXPECT_TRUE(GetUploadData().find("unique_id") != std::string::npos);
-  EXPECT_TRUE(
-      GetUploadData().find(migratable_credit_cards_[0].credit_card().guid()) !=
-      std::string::npos);
-  EXPECT_TRUE(
-      GetUploadData().find(migratable_credit_cards_[1].credit_card().guid()) !=
-      std::string::npos);
-}
-
-TEST_F(PaymentsNetworkInterfaceTest, MigrationRequestIncludesEncryptedPan) {
-  StartMigrating(/*has_cardholder_name=*/true);
-  IssueOAuthToken();
-
-  // Verify that the encrypted_pan and s7e_1_pan parameters were included
-  // in the request.
-  EXPECT_TRUE(GetUploadData().find("encrypted_pan") != std::string::npos);
-  EXPECT_TRUE(GetUploadData().find("__param:s7e_1_pan0") != std::string::npos);
-  EXPECT_TRUE(GetUploadData().find("&s7e_1_pan0=4111111111111111") !=
-              std::string::npos);
-  EXPECT_TRUE(GetUploadData().find("__param:s7e_1_pan1") != std::string::npos);
-  EXPECT_TRUE(GetUploadData().find("&s7e_1_pan1=378282246310005") !=
-              std::string::npos);
-}
-
-TEST_F(PaymentsNetworkInterfaceTest, MigrationRequestIncludesCardholderNameWhenItExists) {
-  StartMigrating(/*has_cardholder_name=*/true);
-  IssueOAuthToken();
-
-  EXPECT_TRUE(!GetUploadData().empty());
-  // Verify that the cardholder name is sent if it exists.
-  EXPECT_TRUE(GetUploadData().find("cardholder_name") != std::string::npos);
-}
-
-TEST_F(PaymentsNetworkInterfaceTest,
-       MigrationRequestExcludesCardholderNameWhenItDoesNotExist) {
-  StartMigrating(/*has_cardholder_name=*/false);
-  IssueOAuthToken();
-
-  EXPECT_TRUE(!GetUploadData().empty());
-  // Verify that the cardholder name is not sent if it doesn't exist.
-  EXPECT_TRUE(GetUploadData().find("cardholder_name") == std::string::npos);
-}
-
-TEST_F(PaymentsNetworkInterfaceTest, MigrationRequestIncludesChromeUserContext) {
-  StartMigrating(/*has_cardholder_name=*/true);
-  IssueOAuthToken();
-
-  // ChromeUserContext was set.
-  EXPECT_TRUE(GetUploadData().find("chrome_user_context") != std::string::npos);
-  EXPECT_TRUE(GetUploadData().find("full_sync_enabled") != std::string::npos);
-}
-
-TEST_F(PaymentsNetworkInterfaceTest, MigrationRequestIncludesCardNickname) {
-  StartMigrating(/*has_cardholder_name=*/true,
-                 /*set_nickname_for_first_card=*/true);
-  IssueOAuthToken();
-
-  // Nickname was set for the first card.
-  std::size_t pos = GetUploadData().find("nickname");
-  EXPECT_TRUE(pos != std::string::npos);
-  EXPECT_TRUE(GetUploadData().find(base::UTF16ToUTF8(
-                  migratable_credit_cards_[0].credit_card().nickname())) !=
-              std::string::npos);
-
-  // Nickname was not set for the second card.
-  EXPECT_FALSE(GetUploadData().find("nickname", pos + 1) != std::string::npos);
-}
-
 TEST_F(PaymentsNetworkInterfaceTest, MigrationSuccessWithSaveResult) {
-  StartMigrating(/*has_cardholder_name=*/true);
+  StartMigrating();
   IssueOAuthToken();
   ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
                  "{\"save_result\":[{\"unique_id\":\"0\",\"status\":"
@@ -1481,7 +1490,7 @@ TEST_F(PaymentsNetworkInterfaceTest, MigrationSuccessWithSaveResult) {
 }
 
 TEST_F(PaymentsNetworkInterfaceTest, MigrationMissingSaveResult) {
-  StartMigrating(/*has_cardholder_name=*/true);
+  StartMigrating();
   IssueOAuthToken();
   ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
                  "{\"value_prop_display_text\":\"display text\"}");
@@ -1490,7 +1499,7 @@ TEST_F(PaymentsNetworkInterfaceTest, MigrationMissingSaveResult) {
 }
 
 TEST_F(PaymentsNetworkInterfaceTest, MigrationSuccessWithDisplayText) {
-  StartMigrating(/*has_cardholder_name=*/true);
+  StartMigrating();
   IssueOAuthToken();
   ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
                  "{\"save_result\":[{\"unique_id\":\"0\",\"status\":"
@@ -1620,6 +1629,10 @@ class UpdateVirtualCardEnrollmentTest
         ReturnResponse(payments_network_interface_.get(),
                        net::HTTP_REQUEST_TIMEOUT, "");
         break;
+      case PaymentsRpcResult::kClientSideTimeout:
+        ReturnResponse(payments_network_interface_.get(), net::ERR_TIMED_OUT,
+                       "");
+        break;
       case PaymentsRpcResult::kNone:
         NOTREACHED_IN_MIGRATION();
         break;
@@ -1667,7 +1680,8 @@ INSTANTIATE_TEST_SUITE_P(
                         PaymentsRpcResult::kTryAgainFailure,
                         PaymentsRpcResult::kVcnRetrievalPermanentFailure,
                         PaymentsRpcResult::kPermanentFailure,
-                        PaymentsRpcResult::kNetworkError)));
+                        PaymentsRpcResult::kNetworkError,
+                        PaymentsRpcResult::kClientSideTimeout)));
 
 // Parameterized test that tests all combinations of
 // VirtualCardEnrollmentSource and VirtualCardEnrollmentRequestType against all
@@ -1701,7 +1715,8 @@ INSTANTIATE_TEST_SUITE_P(
                         PaymentsRpcResult::kTryAgainFailure,
                         PaymentsRpcResult::kVcnRetrievalPermanentFailure,
                         PaymentsRpcResult::kPermanentFailure,
-                        PaymentsRpcResult::kNetworkError)));
+                        PaymentsRpcResult::kNetworkError,
+                        PaymentsRpcResult::kClientSideTimeout)));
 
 // Parameterized test that tests all combinations of
 // VirtualCardEnrollmentSource and server PaymentsRpcResult. This test
@@ -1758,6 +1773,9 @@ TEST_P(GetVirtualCardEnrollmentDetailsTest,
       ReturnResponse(payments_network_interface_.get(),
                      net::HTTP_REQUEST_TIMEOUT, "");
       break;
+    case PaymentsRpcResult::kClientSideTimeout:
+      ReturnResponse(payments_network_interface_.get(), net::ERR_TIMED_OUT, "");
+      break;
     case PaymentsRpcResult::kNone:
       NOTREACHED_IN_MIGRATION();
       break;
@@ -1765,4 +1783,5 @@ TEST_P(GetVirtualCardEnrollmentDetailsTest,
   EXPECT_EQ(result, result_);
 }
 
+}  // namespace
 }  // namespace autofill::payments

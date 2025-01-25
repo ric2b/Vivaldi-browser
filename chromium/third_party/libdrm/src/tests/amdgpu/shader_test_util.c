@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <assert.h>
 
 #include "CUnit/Basic.h"
 #include "amdgpu_test.h"
@@ -303,6 +304,9 @@ static void amdgpu_dispatch_init(struct shader_test_priv *test_priv)
 	case AMDGPU_TEST_GFX_V11:
 		amdgpu_dispatch_init_gfx11(test_priv);
 		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
+		break;
 	}
 }
 
@@ -337,6 +341,9 @@ static void amdgpu_dispatch_write_cumask(struct shader_test_priv *test_priv)
 		ptr[i++] = 0x30000219;
 		ptr[i++] = 0xffffffff;
 		ptr[i++] = 0xffffffff;
+		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
 		break;
 	}
 
@@ -540,6 +547,9 @@ static void amdgpu_dispatch_write2hw(struct shader_test_priv *test_priv)
 		break;
 	case AMDGPU_TEST_GFX_V11:
 		amdgpu_dispatch_write2hw_gfx11(test_priv);
+		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
 		break;
 	}
 }
@@ -1168,6 +1178,9 @@ static void amdgpu_draw_setup_and_write_drawblt_surf_info(struct shader_test_pri
 	case AMDGPU_TEST_GFX_V11:
 		amdgpu_draw_setup_and_write_drawblt_surf_info_gfx11(test_priv);
 		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
+		break;
 	}
 }
 
@@ -1297,6 +1310,9 @@ static void amdgpu_draw_setup_and_write_drawblt_state(struct shader_test_priv *t
 		break;
 	case AMDGPU_TEST_GFX_V11:
 		amdgpu_draw_setup_and_write_drawblt_state_gfx11(test_priv);
+		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
 		break;
 	}
 }
@@ -1546,6 +1562,9 @@ static void amdgpu_draw_vs_RectPosTexFast_write2hw(struct shader_test_priv *test
 	case AMDGPU_TEST_GFX_V11:
 		amdgpu_draw_vs_RectPosTexFast_write2hw_gfx11(test_priv);
 		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
+		break;
 	}
 }
 
@@ -1679,6 +1698,9 @@ static void amdgpu_draw_ps_write2hw(struct shader_test_priv *test_priv)
 	case AMDGPU_TEST_GFX_V11:
 		amdgpu_draw_ps_write2hw_gfx11(test_priv);
 		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
+		break;
 	}
 }
 
@@ -1717,6 +1739,9 @@ static void amdgpu_draw_draw(struct shader_test_priv *test_priv)
 		ptr[i++] = PACKET3(PACKET3_SET_UCONFIG_REG, 1);
 		ptr[i++] = 0x242;
 		ptr[i++] = 0x11;
+		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
 		break;
 	}
 
@@ -2009,6 +2034,9 @@ static void amdgpu_memcpy_draw_test(struct shader_test_info *test_info)
 		i += 2;
 		ptr_cmd[i++] = 0x400;
 		i++;
+		break;
+	case AMDGPU_TEST_GFX_MAX:
+		assert(1 && "Not Support gfx, never go here");
 		break;
 	}
 

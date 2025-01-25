@@ -13,6 +13,7 @@
 #include "ash/wm/overview/overview_delegate.h"
 #include "ash/wm/overview/overview_metrics.h"
 #include "ash/wm/overview/overview_observer.h"
+#include "ash/wm/overview/overview_session_metrics_recorder.h"
 #include "ash/wm/overview/overview_types.h"
 #include "ash/wm/overview/overview_window_occlusion_calculator.h"
 #include "ash/wm/raster_scale/raster_scale_controller.h"
@@ -167,7 +168,6 @@ class ASH_EXPORT OverviewController : public OverviewDelegate,
   }
 
  private:
-
   // Toggle overview mode. Depending on |type| the enter/exit animation will
   // look different.
   void ToggleOverview(
@@ -253,6 +253,8 @@ class ASH_EXPORT OverviewController : public OverviewDelegate,
   // overview mode as finished its enter animation. Otherwise, we must mark
   // all windows as visible immediately.
   bool windows_have_snapshot_ = false;
+
+  std::optional<OverviewSessionMetricsRecorder> session_metrics_recorder_;
 
   OverviewWindowOcclusionCalculator overview_window_occlusion_calculator_;
 

@@ -41,6 +41,7 @@ export const unidentifiedKeyCodeToKey: {[keyCode: number]: string} = {
 // The keys in this map are pulled from the file:
 // ui/events/keycodes/dom/dom_code_data.inc
 export const keyToIconNameMap: {[key: string]: string|undefined} = {
+  'Accessibility': 'accessibility',
   'ArrowDown': 'arrow-down',
   'ArrowLeft': 'arrow-left',
   'ArrowRight': 'arrow-right',
@@ -106,6 +107,7 @@ export const createEmptyAccelInfoFromAccel =
       return {
         layoutProperties:
             {standardAccelerator: {accelerator: accel, keyDisplay: ''}},
+        acceleratorLocked: false,
         locked: false,
         state: AcceleratorState.kEnabled,
         type: AcceleratorType.kUser,

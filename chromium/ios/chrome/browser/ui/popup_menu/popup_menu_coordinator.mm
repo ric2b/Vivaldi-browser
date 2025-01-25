@@ -14,12 +14,12 @@
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
-#import "ios/chrome/browser/bubble/ui_bundled/bubble_presenter.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/follow/model/follow_action_state.h"
 #import "ios/chrome/browser/follow/model/follow_browser_agent.h"
 #import "ios/chrome/browser/iph_for_new_chrome_user/model/tab_based_iph_browser_agent.h"
+#import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
 #import "ios/chrome/browser/promos_manager/model/promos_manager_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
@@ -30,7 +30,7 @@
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -39,7 +39,9 @@
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/find_in_page_commands.h"
+#import "ios/chrome/browser/shared/public/commands/help_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
+#import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/overflow_menu_customization_commands.h"
 #import "ios/chrome/browser/shared/public/commands/page_info_commands.h"
@@ -50,6 +52,7 @@
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
+#import "ios/chrome/browser/shared/public/commands/whats_new_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -145,7 +148,6 @@ using base::UserMetricsAction;
 @synthesize mediator = _mediator;
 @synthesize presenter = _presenter;
 @synthesize UIUpdater = _UIUpdater;
-@synthesize bubblePresenter = _bubblePresenter;
 @synthesize viewController = _viewController;
 @synthesize baseViewController = _baseViewController;
 
@@ -233,16 +235,15 @@ using base::UserMetricsAction;
 
   self.viewController = tableViewController;
 
-  BOOL triggerNewIncognitoTabTip =
-      self.bubblePresenter.incognitoTabTipBubblePresenter.triggerFollowUpAction;
-  self.bubblePresenter.incognitoTabTipBubblePresenter.triggerFollowUpAction =
-      NO;
-
   OverlayPresenter* overlayPresenter = OverlayPresenter::FromBrowser(
       self.browser, OverlayModality::kWebContentArea);
   self.contentBlockerMediator = [[BrowserContainerMediator alloc]
                 initWithWebStateList:self.browser->GetWebStateList()
       webContentAreaOverlayPresenter:overlayPresenter];
+
+  feature_engagement::Tracker* tracker =
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
 
   // Create the overflow menu mediator first so the popup mediator isn't created
   // if not needed.
@@ -251,13 +252,16 @@ using base::UserMetricsAction;
   self.toolsMenuWasScrolledHorizontally = NO;
   self.toolsMenuUserTookAction = NO;
   if (IsNewOverflowMenuEnabled()) {
+    Browser* browser = self.browser;
+    ProfileIOS* profile = browser->GetProfile();
+
     OverflowMenuMediator* mediator = [[OverflowMenuMediator alloc] init];
 
     CGFloat screenWidth = self.baseViewController.view.frame.size.width;
     UIContentSizeCategory contentSizeCategory =
         self.baseViewController.traitCollection.preferredContentSizeCategory;
 
-    BOOL isIncognito = self.browser->GetBrowserState()->IsOffTheRecord();
+    BOOL isIncognito = profile->IsOffTheRecord();
     mediator.isIncognito = isIncognito;
     _overflowMenuOrderer =
         [[OverflowMenuOrderer alloc] initWithIsIncognito:isIncognito];
@@ -271,7 +275,7 @@ using base::UserMetricsAction;
 
     mediator.menuOrderer = _overflowMenuOrderer;
 
-    CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
+    CommandDispatcher* dispatcher = browser->GetCommandDispatcher();
 
     mediator.activityServiceHandler =
         HandlerForProtocol(dispatcher, ActivityServiceCommands);
@@ -280,10 +284,15 @@ using base::UserMetricsAction;
     mediator.settingsHandler = HandlerForProtocol(dispatcher, SettingsCommands);
     mediator.bookmarksHandler =
         HandlerForProtocol(dispatcher, BookmarksCommands);
+    if (IsLensOverlayAvailable()) {
+      mediator.lensOverlayHandler =
+          HandlerForProtocol(dispatcher, LensOverlayCommands);
+    }
     mediator.browserCoordinatorHandler =
         HandlerForProtocol(dispatcher, BrowserCoordinatorCommands);
     mediator.findInPageHandler =
         HandlerForProtocol(dispatcher, FindInPageCommands);
+    mediator.helpHandler = HandlerForProtocol(dispatcher, HelpCommands);
     mediator.overflowMenuCustomizationHandler =
         HandlerForProtocol(dispatcher, OverflowMenuCustomizationCommands);
     mediator.pageInfoHandler = HandlerForProtocol(dispatcher, PageInfoCommands);
@@ -294,41 +303,38 @@ using base::UserMetricsAction;
     mediator.textZoomHandler = HandlerForProtocol(dispatcher, TextZoomCommands);
     mediator.quickDeleteHandler =
         HandlerForProtocol(dispatcher, QuickDeleteCommands);
+    mediator.whatsNewHandler = HandlerForProtocol(dispatcher, WhatsNewCommands);
 
-    mediator.webStateList = self.browser->GetWebStateList();
-    mediator.navigationAgent =
-        WebNavigationBrowserAgent::FromBrowser(self.browser);
+    mediator.webStateList = browser->GetWebStateList();
+    mediator.navigationAgent = WebNavigationBrowserAgent::FromBrowser(browser);
     mediator.baseViewController = self.baseViewController;
-    mediator.bookmarkModel = ios::BookmarkModelFactory::GetForBrowserState(
-        self.browser->GetBrowserState());
+    mediator.bookmarkModel =
+        ios::BookmarkModelFactory::GetForBrowserState(profile);
     mediator.readingListModel =
-        ReadingListModelFactory::GetInstance()->GetForBrowserState(
-            self.browser->GetBrowserState());
-    mediator.browserStatePrefs = self.browser->GetBrowserState()->GetPrefs();
-    mediator.engagementTracker =
-        feature_engagement::TrackerFactory::GetForBrowserState(
-            self.browser->GetBrowserState());
+        ReadingListModelFactory::GetInstance()->GetForBrowserState(profile);
+    mediator.browserStatePrefs = profile->GetPrefs();
+    mediator.engagementTracker = tracker;
     mediator.webContentAreaOverlayPresenter = overlayPresenter;
     mediator.browserPolicyConnector =
         GetApplicationContext()->GetBrowserPolicyConnector();
-    mediator.syncService =
-        SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState());
-    mediator.promosManager = PromosManagerFactory::GetForBrowserState(
-        self.browser->GetBrowserState());
+    mediator.syncService = SyncServiceFactory::GetForBrowserState(profile);
+    mediator.templateURLService =
+        ios::TemplateURLServiceFactory::GetForBrowserState(profile);
+    mediator.promosManager = PromosManagerFactory::GetForBrowserState(profile);
     mediator.readingListBrowserAgent =
-        ReadingListBrowserAgent::FromBrowser(self.browser);
+        ReadingListBrowserAgent::FromBrowser(browser);
     if (IsWebChannelsEnabled()) {
-      mediator.followBrowserAgent =
-          FollowBrowserAgent::FromBrowser(self.browser);
+      mediator.followBrowserAgent = FollowBrowserAgent::FromBrowser(browser);
     }
     // Set the AuthenticationService with the one from the original
     // ChromeBrowserState as the incognito one doesn't have that service.
     mediator.authenticationService =
         AuthenticationServiceFactory::GetForBrowserState(
-            self.browser->GetBrowserState()->GetOriginalChromeBrowserState());
+            profile->GetOriginalChromeBrowserState());
     mediator.tabBasedIPHBrowserAgent =
-        TabBasedIPHBrowserAgent::FromBrowser(self.browser);
-
+        TabBasedIPHBrowserAgent::FromBrowser(browser);
+    mediator.hasSettingsBlueDot =
+        [self.popupMenuHelpCoordinator hasBlueDotForOverflowMenu];
     self.contentBlockerMediator.consumer = mediator;
 
     NSInteger highlightDestination =
@@ -364,14 +370,7 @@ using base::UserMetricsAction;
                                                metricsHandler:self
                                     customizationEventHandler:self];
 
-    if (IsVivaldiRunning()) {
-      menu = [VivaldiOverflowMenuViewProvider
-              makeViewControllerWithModel:_overflowMenuModel
-                          uiConfiguration:uiConfiguration];
-    } // End Vivaldi
-
-    LayoutGuideCenter* layoutGuideCenter =
-        LayoutGuideCenterForBrowser(self.browser);
+    LayoutGuideCenter* layoutGuideCenter = LayoutGuideCenterForBrowser(browser);
     UILayoutGuide* layoutGuide =
         [layoutGuideCenter makeLayoutGuideNamed:kToolsMenuGuide];
 
@@ -415,6 +414,15 @@ using base::UserMetricsAction;
                      [weakSelf.popupMenuHelpCoordinator
                          showIPHAfterOpenOfOverflowMenu:menu];
                    }];
+
+    // Log to FET overflow menu opened if opened with blue dot.
+    if (IsBlueDotOnToolsMenuButtoneEnabled() &&
+        [self.popupMenuHelpCoordinator hasBlueDotForOverflowMenu] && tracker) {
+      tracker->NotifyEvent(
+          feature_engagement::events::kBlueDotPromoOverflowMenuOpened);
+      [self updateToolsMenuBlueDotVisibility];
+    }
+
     return;
   }
 
@@ -423,12 +431,9 @@ using base::UserMetricsAction;
                                     ->IsOffTheRecord()
                readingListModel:ReadingListModelFactory::GetForBrowserState(
                                     self.browser->GetBrowserState())
-      triggerNewIncognitoTabTip:triggerNewIncognitoTabTip
          browserPolicyConnector:GetApplicationContext()
                                     ->GetBrowserPolicyConnector()];
-  self.mediator.engagementTracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+  self.mediator.engagementTracker = tracker;
   self.mediator.webStateList = self.browser->GetWebStateList();
   self.mediator.readingListBrowserAgent =
       ReadingListBrowserAgent::FromBrowser(self.browser);
@@ -467,6 +472,8 @@ using base::UserMetricsAction;
       self.browser->GetCommandDispatcher(), PopupMenuCommands);
   self.actionHandler.qrScannerCommandsHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), QRScannerCommands);
+  self.actionHandler.helpHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), HelpCommands);
   self.actionHandler.delegate = self.mediator;
   self.actionHandler.navigationAgent =
       WebNavigationBrowserAgent::FromBrowser(self.browser);
@@ -590,16 +597,39 @@ using base::UserMetricsAction;
   }
 }
 
+- (void)updateToolsMenuBlueDotVisibility {
+  [self.popupMenuHelpCoordinator updateBlueDotVisibility];
+}
+
+- (void)notifyIPHBubblePresenting {
+  [self.popupMenuHelpCoordinator notifyIPHBubblePresenting];
+}
+
+- (BOOL)hasBlueDotForOverflowMenu {
+  return [self.popupMenuHelpCoordinator hasBlueDotForOverflowMenu];
+}
+
 #pragma mark - OverflowMenuCustomizationCommands
 
 - (void)showMenuCustomization {
   _event.Put(OverflowMenuVisitedEventFields::kUserStartedCustomization);
   [self logFeatureEngagementCustomizationStarted];
+
+  if (IsVivaldiRunning()) {
+    [_overflowMenuModel
+        startCustomizationWithActions:_overflowMenuOrderer
+                                          .actionCustomizationModel
+                       vivaldiActions:_overflowMenuOrderer
+                                          .vivaldiActionCustomizationModel
+                         destinations:_overflowMenuOrderer
+                                          .destinationCustomizationModel];
+  } else {
   [_overflowMenuModel
       startCustomizationWithActions:_overflowMenuOrderer
                                         .actionCustomizationModel
                        destinations:_overflowMenuOrderer
                                         .destinationCustomizationModel];
+  } // End Vivaldi
 
   [self setupSheetForMenu:self.baseViewController.presentedViewController
       isCustomizationScreen:YES
@@ -639,12 +669,20 @@ using base::UserMetricsAction;
   [_overflowMenuOrderer commitActionsUpdate];
   [_overflowMenuOrderer commitDestinationsUpdate];
 
+  if (IsVivaldiRunning()) {
+    [_overflowMenuOrderer commitVivaldiActionsUpdate];
+  } // End Vivaldi
+
   [self hideMenuCustomization];
 }
 
 - (void)cancelWasTapped {
   [_overflowMenuOrderer cancelActionsUpdate];
   [_overflowMenuOrderer cancelDestinationsUpdate];
+
+  if (IsVivaldiRunning()) {
+    [_overflowMenuOrderer cancelVivaldiActionsUpdate];
+  } // End Vivaldi
 
   _event.Put(OverflowMenuVisitedEventFields::kUserCancelledCustomization);
 

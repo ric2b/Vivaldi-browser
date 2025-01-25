@@ -203,6 +203,13 @@ using bookmarks::BookmarkNode;
              [self.dataSource.accountDataSource mobileFolderNode] != nullptr)
                 ? [self.dataSource.accountDataSource mobileFolderNode]
                 : [self.dataSource.localOrSyncableDataSource mobileFolderNode];
+
+        // Note(prio@vivaldi.com): Bookmarks bar node is our default folder as
+        // we hide the mobile bookmarks folder from UI if there's no children.
+        if (IsVivaldiRunning()) {
+          parentNode = [_dataSource profileBookmarkModel]->bookmark_bar_node();
+        } // End Vivaldi
+
       }
       [self.delegate showBookmarksFolderEditorWithParentFolderNode:parentNode];
       return;
@@ -323,6 +330,15 @@ using bookmarks::BookmarkNode;
           ? _accountFolderNodes
           : _localOrSyncableFolderNodes;
   for (const BookmarkNode* folderNode : folders) {
+
+    // Note(prio@vivaldi.com): Hide the mobile bookmarks folder from UI
+    // if there's no children.
+    if (IsVivaldiRunning() &&
+        folderNode == [_dataSource profileBookmarkModel]->mobile_node() &&
+        [_dataSource profileBookmarkModel]->mobile_node()->children().empty()) {
+      continue;
+    } // End Vivaldi
+
     TableViewBookmarksFolderItem* folderItem =
         [[TableViewBookmarksFolderItem alloc]
             initWithType:ItemTypeBookmarkFolder

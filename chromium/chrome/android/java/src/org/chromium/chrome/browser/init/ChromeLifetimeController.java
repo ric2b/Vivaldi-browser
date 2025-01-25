@@ -16,8 +16,8 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.ApplicationLifetime;
 import org.chromium.chrome.browser.BrowserRestartActivity;
+import org.chromium.chrome.browser.lifetime.ApplicationLifetime;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -25,11 +25,12 @@ import org.chromium.build.BuildConfig;
 /**
  * Answers requests to kill and (potentially) restart Chrome's main browser process.
  *
- * This class fires an Intent to start the {@link BrowserRestartActivity}, which will ultimately
+ * <p>This class fires an Intent to start the {@link BrowserRestartActivity}, which will ultimately
  * kill the main browser process from its own process.
  *
- * https://crbug.com/515919 details why another Activity is used instead of using the AlarmManager.
- * https://crbug.com/545453 details why the BrowserRestartActivity handles the process killing.
+ * <p>https://crbug.com/515919 details why another Activity is used instead of using the
+ * AlarmManager. https://crbug.com/545453 details why the BrowserRestartActivity handles the process
+ * killing.
  */
 class ChromeLifetimeController
         implements ApplicationLifetime.Observer, ApplicationStatus.ActivityStateListener {

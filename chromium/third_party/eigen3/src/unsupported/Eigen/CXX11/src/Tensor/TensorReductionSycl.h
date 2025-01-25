@@ -433,7 +433,7 @@ struct PartialReducerLauncher {
     EIGEN_CONSTEXPR Index localRange = PannelParameters::LocalThreadSizeP * PannelParameters::LocalThreadSizeR;
     // In this step, we force the code not to be more than 2-step reduction:
     // Our empirical research shows that if each thread reduces at least 64
-    // elemnts individually, we get better performance. However, this can change
+    // elements individually, we get better performance. However, this can change
     // on different platforms. In this step we force the code not to be
     // morthan step reduction: Our empirical research shows that for inner_most
     // dim reducer, it is better to have 8 group in a reduce dimension for sizes
@@ -495,7 +495,7 @@ struct FullReducer<Self, Op, Eigen::SyclDevice, Vectorizable> {
     typename Self::Index inputSize = self.impl().dimensions().TotalSize();
     // In this step we force the code not to be more than 2-step reduction:
     // Our empirical research shows that if each thread reduces at least 512
-    // elemnts individually, we get better performance.
+    // elements individually, we get better performance.
     const Index reductionPerThread = 2048;
     // const Index num_work_group =
     Index reductionGroup = dev.getPowerOfTwo(

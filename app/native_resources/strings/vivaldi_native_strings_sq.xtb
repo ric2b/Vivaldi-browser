@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Peizazhi 12</translation>
 <translation id="1158503667684816647">Nuk e kërkoj më konfirmimin</translation>
 <translation id="1222195720020481779">Nis instalimin...</translation>
+<translation id="1224683873953469764">Instaloni Vivaldin për celular</translation>
 <translation id="1270785070369717623">Fatkeqësisht, parametrat e Opera GX nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni gjithë dritaret e Opera GX. Pastaj klikoni Vazhdoj.</translation>
 <translation id="1276145862619442150">Tastet e shpejta</translation>
 <translation id="1281950884873973195">Kafsha 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Nuk e kërkoj më konfirmimin</translation>
 <translation id="1462666970065907900">Vërtet do e mbyllni dritaren?</translation>
 <translation id="1480046233931937785">Mirënjohje</translation>
+<translation id="1521774566618522728">Aktiv nga sot</translation>
 <translation id="1526344461589023948">Problem me regjistrimin e përditësimit të shkarkuar. Lutemi të kontrolloni hapësirën e nevojshme në kompjuter dhe provojeni më vonë.</translation>
 <translation id="1635542496948266458">Ndërroj profilet</translation>
 <translation id="1657174850639146440">Monstra 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Volumi</translation>
 <translation id="443008484043213881">Instrumentet</translation>
 <translation id="4456211719108566931">Monstra 6</translation>
+<translation id="4459169140545916303">Aktiv prej <ph name="DEVICE_LAST_ACTIVATED_TIME" /> ditësh</translation>
 <translation id="4512900838580567989">Hap lidhjen në skedën e re në sfond</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Hap imazhin në skedën e re në sfond</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Përmirësimi i vendruajtjes së sigurt</translation>
 <translation id="7111492742514999492">Peizazhi 9</translation>
 <translation id="7208252576848052204">Fatkeqësisht, parametrat e Arc nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni gjithë dritaret e Arc. Pastaj klikoni Vazhdoj.</translation>
+<translation id="7321500017121629018">Aktiv nga dje</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">E pamundur të hapej instaluesi. Lutemi të kontrolloni memorien apo hapësirën e nevojshme në kompjuter dhe provojeni më vonë.</translation>
 <translation id="7658239707568436148">Anuloj</translation>

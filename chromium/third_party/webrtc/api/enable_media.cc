@@ -18,7 +18,6 @@
 #include "api/scoped_refptr.h"
 #include "call/call.h"
 #include "call/call_config.h"
-#include "call/create_call.h"
 #include "media/base/media_engine.h"
 #include "media/engine/webrtc_video_engine.h"
 #include "media/engine/webrtc_voice_engine.h"
@@ -39,8 +38,8 @@ class MediaFactoryImpl : public MediaFactory {
   MediaFactoryImpl& operator=(const MediaFactoryImpl&) = delete;
   ~MediaFactoryImpl() override = default;
 
-  std::unique_ptr<Call> CreateCall(const CallConfig& config) override {
-    return webrtc::CreateCall(config);
+  std::unique_ptr<Call> CreateCall(CallConfig config) override {
+    return webrtc::Call::Create(std::move(config));
   }
 
   std::unique_ptr<MediaEngineInterface> CreateMediaEngine(

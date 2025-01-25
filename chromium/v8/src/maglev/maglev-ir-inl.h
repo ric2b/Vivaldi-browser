@@ -30,11 +30,12 @@ enum class DeoptFrameVisitMode {
 
 template <DeoptFrameVisitMode mode, typename T>
 using const_if_default =
-    std::conditional<mode == DeoptFrameVisitMode::kDefault, const T, T>::type;
+    std::conditional_t<mode == DeoptFrameVisitMode::kDefault, const T, T>;
 
 template <DeoptFrameVisitMode mode>
-using ValueNodeT = std::conditional<mode == DeoptFrameVisitMode::kDefault,
-                                    ValueNode*, ValueNode*&>::type;
+using ValueNodeT =
+    std::conditional_t<mode == DeoptFrameVisitMode::kDefault, ValueNode*,
+                       ValueNode*&>;
 
 template <DeoptFrameVisitMode mode, typename Function>
 void DeepForEachInputSingleFrameImpl(
@@ -106,16 +107,17 @@ void DeepForVirtualObject(VirtualObject* vobject,
         UNREACHABLE();
       case Opcode::kInlinedAllocation: {
         InlinedAllocation* alloc = value->Cast<InlinedAllocation>();
+        VirtualObject* vobject = virtual_objects.FindAllocatedWith(alloc);
+        CHECK_NOT_NULL(vobject);
         // Check if it has escaped.
         if (alloc->HasBeenAnalysed() && alloc->HasBeenElided()) {
-          VirtualObject* vobject = virtual_objects.FindAllocatedWith(alloc);
-          CHECK_NOT_NULL(vobject);
           input_location++;  // Reserved for the inlined allocation.
           DeepForVirtualObject<mode>(vobject, input_location, virtual_objects,
                                      f);
         } else {
           f(alloc, input_location);
-          input_location += alloc->object()->InputLocationSizeNeeded() + 1;
+          input_location +=
+              vobject->InputLocationSizeNeeded(virtual_objects) + 1;
         }
         break;
       }
@@ -151,7 +153,7 @@ void DeepForEachInputAndVirtualObject(
                                           virtual_objects, f);
       } else {
         f(alloc, input_location);
-        input_location += vobject->InputLocationSizeNeeded() + 1;
+        input_location += vobject->InputLocationSizeNeeded(virtual_objects) + 1;
       }
     } else {
       f(node, input_location);

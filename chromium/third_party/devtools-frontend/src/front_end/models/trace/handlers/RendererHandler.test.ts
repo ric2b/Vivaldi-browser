@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Timeline from '../../../panels/timeline/timeline.js';
+import * as Components from '../../../panels/timeline/components/components.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {
   getAllNodes,
@@ -122,13 +122,11 @@ describeWithEnvironment('RendererHandler', function() {
     const thread = [...frame.threads.values()].find(thread => thread.name === 'CrRendererMain');
     if (!thread) {
       assert(false, 'Main thread was not found');
-      return;
     }
 
     const tree = thread.tree;
     if (!tree) {
       assert(false, 'Main thread has no tree of events');
-      return;
     }
     assert.deepEqual([...tree.roots].map(root => root.id), [
       0,    1,    2,    3,    4,    5,    16,   18,   29,   38,   49,   58,   77,   183,  184,  185,  186,  188,  189,
@@ -165,13 +163,11 @@ describeWithEnvironment('RendererHandler', function() {
     const thread = [...frame.threads.values()].find(thread => thread.name === 'CrRendererMain');
     if (!thread) {
       assert(false, 'Main thread was not found');
-      return;
     }
 
     const tree = thread.tree;
     if (!tree) {
       assert(false, 'Main thread has no tree of events');
-      return;
     }
     assert.deepEqual(
         [...tree.roots].map(root => root.id), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20]);
@@ -184,25 +180,22 @@ describeWithEnvironment('RendererHandler', function() {
     const thread = [...frame.threads.values()].find(thread => thread.name === 'CrRendererMain');
     if (!thread) {
       assert(false, 'Main thread was not found');
-      return;
     }
 
     const tree = thread.tree;
     if (!tree) {
       assert(false, 'Main thread has no tree of events');
-      return;
     }
 
     const isRoot = (node: TraceModel.Helpers.TreeHelpers.TraceEntryNode) => node.depth === 0;
-    const isInstant = (event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) =>
+    const isInstant = (event: TraceModel.Types.TraceEvents.TraceEventData) =>
         TraceModel.Types.TraceEvents.isTraceEventInstant(event);
-    const isLong = (event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) =>
+    const isLong = (event: TraceModel.Types.TraceEvents.TraceEventData) =>
         TraceModel.Types.TraceEvents.isTraceEventComplete(event) && event.dur > 1000;
     const isIncluded =
-        (node: TraceModel.Helpers.TreeHelpers.TraceEntryNode,
-         event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) =>
+        (node: TraceModel.Helpers.TreeHelpers.TraceEntryNode, event: TraceModel.Types.TraceEvents.TraceEventData) =>
             (!isRoot(node) || isInstant(event) || isLong(event)) &&
-        Boolean(Timeline.EventUICategory.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
+        Boolean(Components.EntryStyles.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
     assert.strictEqual(prettyPrint(tree, isIncluded), `
 ............
 -RunTask [2.21ms]
@@ -394,18 +387,15 @@ describeWithEnvironment('RendererHandler', function() {
     const thread = [...frame.threads.values()].find(thread => thread.name === 'CrRendererMain');
     if (!thread) {
       assert(false, 'Main thread was not found');
-      return;
     }
 
     const tree = thread.tree;
     if (!tree) {
       assert(false, 'Main thread has no tree of events');
-      return;
     }
     const isIncluded =
-        (_node: TraceModel.Helpers.TreeHelpers.TraceEntryNode,
-         event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) =>
-            Boolean(Timeline.EventUICategory.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
+        (_node: TraceModel.Helpers.TreeHelpers.TraceEntryNode, event: TraceModel.Types.TraceEvents.TraceEventData) =>
+            Boolean(Components.EntryStyles.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
     assert.strictEqual(prettyPrint(tree, isIncluded), `
 -RunTask [0.13ms]
 -RunTask [0.005ms]
@@ -437,59 +427,57 @@ describeWithEnvironment('RendererHandler', function() {
     const thread = [...frame.threads.values()].find(thread => thread.name === 'CrRendererMain');
     if (!thread) {
       assert(false, 'Main thread was not found');
-      return;
     }
 
     const tree = thread.tree;
     if (!tree) {
       assert(false, 'Main thread has no tree of events');
-      return;
     }
 
     const event0 = getRootAt(thread, 1).entry;
     assert.deepEqual(event0 as unknown, {
-      'args': {},
-      'cat': 'disabled-by-default-devtools.timeline',
-      'dur': 132,
-      'name': 'RunTask',
-      'ph': 'X',
-      'pid': 2154214,
-      'tdur': 131,
-      'tid': 1,
-      'ts': 643492822363,
-      'tts': 291450,
-      'selfTime': 132,
+      args: {},
+      cat: 'disabled-by-default-devtools.timeline',
+      dur: 132,
+      name: 'RunTask',
+      ph: 'X',
+      pid: 2154214,
+      tdur: 131,
+      tid: 1,
+      ts: 643492822363,
+      tts: 291450,
     });
+    assert.strictEqual(renderers.entryToNode.get(event0)?.selfTime, 132);
 
     const event1 = getRootAt(thread, 2).entry;
     assert.deepEqual(event1 as unknown, {
-      'args': {},
-      'cat': 'disabled-by-default-devtools.timeline',
-      'dur': 4,
-      'name': 'RunTask',
-      'ph': 'X',
-      'pid': 2154214,
-      'tdur': 4,
-      'tid': 1,
-      'ts': 643492822500,
-      'tts': 291586,
-      'selfTime': 4,
+      args: {},
+      cat: 'disabled-by-default-devtools.timeline',
+      dur: 4,
+      name: 'RunTask',
+      ph: 'X',
+      pid: 2154214,
+      tdur: 4,
+      tid: 1,
+      ts: 643492822500,
+      tts: 291586,
     });
+    assert.strictEqual(renderers.entryToNode.get(event1)?.selfTime, 4);
 
     const eventLast = getRootAt(thread, tree.roots.size - 1).entry;
     assert.deepEqual(eventLast as unknown, {
-      'args': {},
-      'cat': 'disabled-by-default-devtools.timeline',
-      'dur': 67,
-      'name': 'RunTask',
-      'ph': 'X',
-      'pid': 2154214,
-      'tdur': 67,
-      'tid': 1,
-      'ts': 643499551460,
-      'tts': 949032,
-      'selfTime': 35,
+      args: {},
+      cat: 'disabled-by-default-devtools.timeline',
+      dur: 67,
+      name: 'RunTask',
+      ph: 'X',
+      pid: 2154214,
+      tdur: 67,
+      tid: 1,
+      ts: 643499551460,
+      tts: 949032,
     });
+    assert.strictEqual(renderers.entryToNode.get(eventLast)?.selfTime, 35);
   });
 
   it('has some correct known roots for the sub frame\'s main thread in a real world profile', async () => {
@@ -499,60 +487,58 @@ describeWithEnvironment('RendererHandler', function() {
     const thread = [...frame.threads.values()].find(thread => thread.name === 'CrRendererMain');
     if (!thread) {
       assert(false, 'Main thread was not found');
-      return;
     }
 
     const tree = thread.tree;
     if (!tree) {
       assert(false, 'Main thread has no tree of events');
-      return;
     }
 
     const event0 = getRootAt(thread, 0).entry;
     assert.deepEqual(event0 as unknown, {
-      'args': {},
-      'cat': 'disabled-by-default-devtools.timeline',
-      'dur': 130,
-      'name': 'RunTask',
-      'ph': 'X',
-      'pid': 2236065,
-      'tdur': 129,
-      'tid': 1,
-      'ts': 643492822099,
-      'tts': 62157,
-      'selfTime': 130,
+      args: {},
+      cat: 'disabled-by-default-devtools.timeline',
+      dur: 130,
+      name: 'RunTask',
+      ph: 'X',
+      pid: 2236065,
+      tdur: 129,
+      tid: 1,
+      ts: 643492822099,
+      tts: 62157,
     });
+    assert.strictEqual(renderers.entryToNode.get(event0)?.selfTime, 130);
 
     const event1 = getRootAt(thread, 1).entry;
     assert.deepEqual(event1 as unknown, {
-      'args': {},
-      'cat': 'disabled-by-default-devtools.timeline',
-      'dur': 5,
-      'name': 'RunTask',
-      'ph': 'X',
-      'pid': 2236065,
-      'tdur': 5,
-      'tid': 1,
-      'ts': 643492822234,
-      'tts': 62291,
-      'selfTime': 5,
+      args: {},
+      cat: 'disabled-by-default-devtools.timeline',
+      dur: 5,
+      name: 'RunTask',
+      ph: 'X',
+      pid: 2236065,
+      tdur: 5,
+      tid: 1,
+      ts: 643492822234,
+      tts: 62291,
     });
+    assert.strictEqual(renderers.entryToNode.get(event1)?.selfTime, 5);
 
     const event2 = getRootAt(thread, 2).entry;
 
     assert.deepEqual(event2 as unknown, {
-      'args': {},
-      'cat': 'disabled-by-default-devtools.timeline',
-      'dur': 9,
-      'name': 'RunTask',
-      'ph': 'X',
-      'pid': 2236065,
-      'tdur': 9,
-      'tid': 1,
-      'ts': 643492822242,
-      'tts': 62299,
-      'selfTime': 9,
+      args: {},
+      cat: 'disabled-by-default-devtools.timeline',
+      dur: 9,
+      name: 'RunTask',
+      ph: 'X',
+      pid: 2236065,
+      tdur: 9,
+      tid: 1,
+      ts: 643492822242,
+      tts: 62299,
     });
+    assert.strictEqual(renderers.entryToNode.get(event2)?.selfTime, 9);
   });
 
   it('can correctly sort a simple list of complete events', async () => {
@@ -571,15 +557,15 @@ describeWithEnvironment('RendererHandler', function() {
     TraceModel.Helpers.Trace.sortTraceEventsInPlace(data);
 
     assert.deepEqual(data.map(e => ({name: e.name, ts: e.ts, dur: e.dur})) as unknown, [
-      {'name': 'a0', 'ts': 0, 'dur': 1},
-      {'name': 'a1', 'ts': 0, 'dur': 0.5},
-      {'name': 'a2', 'ts': 0.5, 'dur': 0.5},
-      {'name': 'a3', 'ts': 0.5, 'dur': 0.25},
-      {'name': 'a4', 'ts': 0.99, 'dur': 0.01},
-      {'name': 'b0', 'ts': 1, 'dur': 1},
-      {'name': 'b1', 'ts': 1, 'dur': 0.01},
-      {'name': 'c0', 'ts': 1.5, 'dur': 0.5},
-      {'name': 'd0', 'ts': 2, 'dur': 1},
+      {name: 'a0', ts: 0, dur: 1},
+      {name: 'a1', ts: 0, dur: 0.5},
+      {name: 'a2', ts: 0.5, dur: 0.5},
+      {name: 'a3', ts: 0.5, dur: 0.25},
+      {name: 'a4', ts: 0.99, dur: 0.01},
+      {name: 'b0', ts: 1, dur: 1},
+      {name: 'b1', ts: 1, dur: 0.01},
+      {name: 'c0', ts: 1.5, dur: 0.5},
+      {name: 'd0', ts: 2, dur: 1},
     ]);
   });
 
@@ -608,24 +594,24 @@ describeWithEnvironment('RendererHandler', function() {
     TraceModel.Helpers.Trace.sortTraceEventsInPlace(data);
 
     assert.deepEqual(data.map(e => ({name: e.name, ts: e.ts, dur: e.dur})) as unknown, [
-      {'name': 'a0', 'ts': 0, 'dur': 1},
-      {'name': 'a1', 'ts': 0, 'dur': 0.5},
-      {'name': 'i0', 'ts': 0, 'dur': undefined},
-      {'name': 'i1', 'ts': 0.01, 'dur': undefined},
-      {'name': 'a2', 'ts': 0.5, 'dur': 0.5},
-      {'name': 'a3', 'ts': 0.5, 'dur': 0.25},
-      {'name': 'i2', 'ts': 0.5, 'dur': undefined},
-      {'name': 'a4', 'ts': 0.99, 'dur': 0.01},
-      {'name': 'i3', 'ts': 0.99, 'dur': undefined},
-      {'name': 'b0', 'ts': 1, 'dur': 1},
-      {'name': 'b1', 'ts': 1, 'dur': 0.01},
-      {'name': 'i4', 'ts': 1, 'dur': undefined},
-      {'name': 'c0', 'ts': 1.5, 'dur': 0.5},
-      {'name': 'i5', 'ts': 1.75, 'dur': undefined},
-      {'name': 'i6', 'ts': 1.99, 'dur': undefined},
-      {'name': 'd0', 'ts': 2, 'dur': 1},
-      {'name': 'i7', 'ts': 2, 'dur': undefined},
-      {'name': 'i8', 'ts': 2.01, 'dur': undefined},
+      {name: 'a0', ts: 0, dur: 1},
+      {name: 'a1', ts: 0, dur: 0.5},
+      {name: 'i0', ts: 0, dur: undefined},
+      {name: 'i1', ts: 0.01, dur: undefined},
+      {name: 'a2', ts: 0.5, dur: 0.5},
+      {name: 'a3', ts: 0.5, dur: 0.25},
+      {name: 'i2', ts: 0.5, dur: undefined},
+      {name: 'a4', ts: 0.99, dur: 0.01},
+      {name: 'i3', ts: 0.99, dur: undefined},
+      {name: 'b0', ts: 1, dur: 1},
+      {name: 'b1', ts: 1, dur: 0.01},
+      {name: 'i4', ts: 1, dur: undefined},
+      {name: 'c0', ts: 1.5, dur: 0.5},
+      {name: 'i5', ts: 1.75, dur: undefined},
+      {name: 'i6', ts: 1.99, dur: undefined},
+      {name: 'd0', ts: 2, dur: 1},
+      {name: 'i7', ts: 2, dur: undefined},
+      {name: 'i8', ts: 2.01, dur: undefined},
     ]);
   });
 
@@ -690,7 +676,6 @@ describeWithEnvironment('RendererHandler', function() {
 
     if (!firstThread.tree || !secondThread.tree) {
       assert(false, 'Trees not found');
-      return;
     }
 
     assert.strictEqual(firstThread.tree.maxDepth, 3, 'Got the correct tree max depth for the first thread');
@@ -698,14 +683,14 @@ describeWithEnvironment('RendererHandler', function() {
 
     const firstRoots = getEventsIn(firstThread.tree.roots.values());
     assert.deepEqual(firstRoots.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-      {'name': 'A', 'ts': 0, 'dur': 10},
-      {'name': 'E', 'ts': 11, 'dur': 3},
+      {name: 'A', ts: 0, dur: 10},
+      {name: 'E', ts: 11, dur: 3},
     ]);
 
     const secondRoots = getEventsIn(secondThread.tree.roots.values());
     assert.deepEqual(secondRoots.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-      {'name': 'F', 'ts': 0, 'dur': 3},
-      {'name': 'G', 'ts': 3, 'dur': 10},
+      {name: 'F', ts: 0, dur: 3},
+      {name: 'G', ts: 3, dur: 10},
     ]);
   });
 
@@ -954,9 +939,9 @@ describeWithEnvironment('RendererHandler', function() {
         throw new Error('Tree not found');
       }
       const onlyLongTasksPredicate =
-          (_node: TraceModel.Helpers.TreeHelpers.TraceEntryNode,
-           event: TraceModel.Types.TraceEvents.SyntheticTraceEntry) => Boolean(event.dur && event.dur > 1000) &&
-          Boolean(Timeline.EventUICategory.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
+          (_node: TraceModel.Helpers.TreeHelpers.TraceEntryNode, event: TraceModel.Types.TraceEvents.TraceEventData) =>
+              Boolean(event.dur && event.dur > 1000) &&
+          Boolean(Components.EntryStyles.getEventStyle(event.name as TraceModel.Types.TraceEvents.KnownEventName));
       assert.strictEqual(prettyPrint(thread.tree, onlyLongTasksPredicate), `
 .............
 -RunTask [17.269ms]

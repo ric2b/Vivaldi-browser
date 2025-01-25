@@ -104,6 +104,6 @@ test(
   args : [
     '--lib', libdrm_intel,
     '--symbols-file', files('intel-symbols.txt'),
-    '--nm', prog_nm.path(),
+    '--nm', prog_nm.full_path(),
   ],
 )

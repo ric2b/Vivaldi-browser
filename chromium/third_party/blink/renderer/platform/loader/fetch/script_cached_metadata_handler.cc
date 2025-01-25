@@ -106,12 +106,9 @@ size_t ScriptCachedMetadataHandler::GetCodeCacheSize() const {
 void ScriptCachedMetadataHandler::CommitToPersistentStorage(
     CodeCacheHost* code_cache_host) {
   if (cached_metadata_) {
-    base::span<const uint8_t> serialized_data =
-        cached_metadata_->SerializedData();
-    sender_->Send(code_cache_host, serialized_data.data(),
-                  serialized_data.size());
+    sender_->Send(code_cache_host, cached_metadata_->SerializedData());
   } else {
-    sender_->Send(code_cache_host, nullptr, 0);
+    sender_->Send(code_cache_host, base::span<const uint8_t>());
   }
 }
 
@@ -203,9 +200,7 @@ ScriptCachedMetadataHandlerWithHashing::GetCachedMetadata(
 
 void ScriptCachedMetadataHandlerWithHashing::CommitToPersistentStorage(
     CodeCacheHost* code_cache_host) {
-  Vector<uint8_t> serialized_data = GetSerializedCachedMetadata();
-  Sender()->Send(code_cache_host, serialized_data.data(),
-                 serialized_data.size());
+  Sender()->Send(code_cache_host, GetSerializedCachedMetadata());
 }
 
 Vector<uint8_t>
@@ -223,11 +218,9 @@ ScriptCachedMetadataHandlerWithHashing::GetSerializedCachedMetadata() const {
                            sizeof(padding));
     CHECK_EQ(serialized_data.size(),
              offsetof(CachedMetadataHeaderWithHash, hash));
-    serialized_data.Append(hash_, kSha256Bytes);
+    serialized_data.AppendSpan(base::span(hash_));
     CHECK_EQ(serialized_data.size(), sizeof(CachedMetadataHeaderWithHash));
-    base::span<const uint8_t> data = cached_metadata_->SerializedData();
-    serialized_data.Append(data.data(),
-                           base::checked_cast<wtf_size_t>(data.size()));
+    serialized_data.AppendSpan(cached_metadata_->SerializedData());
   }
   return serialized_data;
 }

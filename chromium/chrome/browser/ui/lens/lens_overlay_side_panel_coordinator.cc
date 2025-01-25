@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/lens/lens_overlay_side_panel_coordinator.h"
 
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
@@ -11,7 +12,7 @@
 #include "chrome/browser/ui/lens/lens_overlay_invocation_source.h"
 #include "chrome/browser/ui/lens/lens_overlay_side_panel_web_view.h"
 #include "chrome/browser/ui/lens/lens_overlay_url_builder.h"
-#include "chrome/browser/ui/lens/lens_untrusted_ui.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_content_proxy.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
@@ -33,6 +34,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/models/simple_menu_model.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view_class_properties.h"
@@ -86,8 +88,9 @@ LensOverlaySidePanelCoordinator::~LensOverlaySidePanelCoordinator() {
     side_panel_web_view_ = nullptr;
   }
 
-  auto* registry = SidePanelRegistry::Get(
-      lens_overlay_controller_->GetTabInterface()->GetContents());
+  auto* registry = lens_overlay_controller_->GetTabInterface()
+                       ->GetTabFeatures()
+                       ->side_panel_registry();
   CHECK(registry);
 
   // Remove the side panel entry observer if it is present.
@@ -129,7 +132,7 @@ void LensOverlaySidePanelCoordinator::WebViewClosing() {
   // This is called from the destructor of the WebView. Synchronously clear all
   // state associated with the WebView.
   if (side_panel_web_view_) {
-    lens_overlay_controller_->ResetSearchboxHandler();
+    lens_overlay_controller_->ResetSidePanelSearchboxHandler();
     lens_overlay_controller_->RemoveGlueForWebView(side_panel_web_view_);
     side_panel_web_view_ = nullptr;
   }
@@ -263,8 +266,9 @@ void LensOverlaySidePanelCoordinator::OpenURLInBrowser(
 }
 
 void LensOverlaySidePanelCoordinator::RegisterEntry() {
-  auto* registry = SidePanelRegistry::Get(
-      lens_overlay_controller_->GetTabInterface()->GetContents());
+  auto* registry = lens_overlay_controller_->GetTabInterface()
+                       ->GetTabFeatures()
+                       ->side_panel_registry();
   CHECK(registry);
 
   // If the entry is already registered, don't register it again.
@@ -278,7 +282,8 @@ void LensOverlaySidePanelCoordinator::RegisterEntry() {
             base::Unretained(this)),
         base::BindRepeating(
             &LensOverlaySidePanelCoordinator::GetOpenInNewTabUrl,
-            base::Unretained(this)));
+            base::Unretained(this)),
+        GetMoreInfoCallback());
     entry->SetProperty(kShouldShowTitleInSidePanelHeaderKey, false);
     registry->Register(std::move(entry));
 
@@ -323,6 +328,64 @@ LensOverlaySidePanelCoordinator::CreateLensOverlayResultsView() {
 
 GURL LensOverlaySidePanelCoordinator::GetOpenInNewTabUrl() {
   return GURL();
+}
+
+base::RepeatingCallback<std::unique_ptr<ui::MenuModel>()>
+LensOverlaySidePanelCoordinator::GetMoreInfoCallback() {
+  if (lens::features::IsLensOverlaySearchBubbleEnabled()) {
+    return base::BindRepeating(
+        &LensOverlaySidePanelCoordinator::GetMoreInfoMenuModel,
+        base::Unretained(this));
+  }
+  return base::NullCallbackAs<std::unique_ptr<ui::MenuModel>()>();
+}
+
+std::unique_ptr<ui::MenuModel>
+LensOverlaySidePanelCoordinator::GetMoreInfoMenuModel() {
+  auto menu_model = std::make_unique<ui::SimpleMenuModel>(this);
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  menu_model->AddItemWithIcon(
+      COMMAND_MY_ACTIVITY,
+      l10n_util::GetStringUTF16(IDS_LENS_OVERLAY_MY_ACTIVITY),
+      ui::ImageModel::FromVectorIcon(vector_icons::kGoogleGLogoMonochromeIcon,
+                                     ui::kColorMenuIcon,
+                                     ui::SimpleMenuModel::kDefaultIconSize));
+#else
+  menu_model->AddItem(COMMAND_MY_ACTIVITY,
+                      l10n_util::GetStringUTF16(IDS_LENS_OVERLAY_MY_ACTIVITY));
+#endif
+  menu_model->AddItemWithIcon(
+      COMMAND_LEARN_MORE,
+      l10n_util::GetStringUTF16(IDS_LENS_OVERLAY_LEARN_MORE),
+      ui::ImageModel::FromVectorIcon(vector_icons::kInfoOutlineIcon,
+                                     ui::kColorMenuIcon,
+                                     ui::SimpleMenuModel::kDefaultIconSize));
+  menu_model->AddItemWithIcon(
+      COMMAND_SEND_FEEDBACK, l10n_util::GetStringUTF16(IDS_LENS_SEND_FEEDBACK),
+      ui::ImageModel::FromVectorIcon(kSubmitFeedbackIcon, ui::kColorMenuIcon,
+                                     ui::SimpleMenuModel::kDefaultIconSize));
+  return menu_model;
+}
+
+void LensOverlaySidePanelCoordinator::ExecuteCommand(int command_id,
+                                                     int event_flags) {
+  switch (command_id) {
+    case COMMAND_MY_ACTIVITY: {
+      lens_overlay_controller_->ActivityRequestedByEvent(event_flags);
+      break;
+    }
+    case COMMAND_LEARN_MORE: {
+      lens_overlay_controller_->InfoRequestedByEvent(event_flags);
+      break;
+    }
+    case COMMAND_SEND_FEEDBACK: {
+      lens_overlay_controller_->FeedbackRequestedByEvent(event_flags);
+      break;
+    }
+    default: {
+      NOTREACHED() << "Unknown option";
+    }
+  }
 }
 
 }  // namespace lens

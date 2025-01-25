@@ -28,9 +28,10 @@
 #ifndef SRC_DAWN_WIRE_CLIENT_SURFACE_H_
 #define SRC_DAWN_WIRE_CLIENT_SURFACE_H_
 
+#include <webgpu/webgpu.h>
+
 #include <vector>
 
-#include "dawn/webgpu.h"
 #include "dawn/wire/client/ObjectBase.h"
 
 namespace dawn::wire::client {
@@ -52,7 +53,7 @@ class Surface final : public ObjectBase {
     void GetCurrentTexture(WGPUSurfaceTexture* surfaceTexture);
 
   private:
-    WGPUTextureUsageFlags mSupportedUsages;
+    WGPUTextureUsage mSupportedUsages;
     std::vector<WGPUTextureFormat> mSupportedFormats;
     std::vector<WGPUPresentMode> mSupportedPresentModes;
     std::vector<WGPUCompositeAlphaMode> mSupportedAlphaModes;

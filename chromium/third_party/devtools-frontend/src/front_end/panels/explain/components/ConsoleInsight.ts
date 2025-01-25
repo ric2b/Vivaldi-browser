@@ -6,12 +6,14 @@ import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
+import * as Root from '../../../core/root/root.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Marked from '../../../third_party/marked/marked.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as MarkdownView from '../../../ui/components/markdown_view/markdown_view.js';
+import * as Spinners from '../../../ui/components/spinners/spinners.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
@@ -59,12 +61,12 @@ const UIStrings = {
    * @description The title of the button that allows submitting positive
    * feedback about the console insight.
    */
-  thumbsUp: 'Thumbs up',
+  goodResponse: 'Good response',
   /**
    * @description The title of the button that allows submitting negative
    * feedback about the console insight.
    */
-  thumbsDown: 'Thumbs down',
+  badResponse: 'Bad response',
   /**
    * @description The title of the button that opens a page to report a legal
    * issue with the console insight.
@@ -149,6 +151,16 @@ const UIStrings = {
    */
   reloadRecommendation:
       'Reload the page to capture related network request data for this message in order to create a better insight.',
+  /**
+   * @description Shown to the user when they need to enable the console insights feature in settings in order to use it.
+   * @example {Console insights in Settings} PH1
+   */
+  turnOnInSettings:
+      'Turn on {PH1} to receive AI assistance for understanding and addressing console warnings and errors.',
+  /**
+   * @description Text for a link to Chrome DevTools Settings.
+   */
+  settingsLink: 'Console insights in Settings',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/explain/components/ConsoleInsight.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -213,6 +225,7 @@ type StateData = {
   validMarkdown: boolean,
   sources: Source[],
   isPageReloadRecommended: boolean,
+  completed: boolean,
 }&Host.AidaClient.AidaResponse|{
   type: State.ERROR,
   error: string,
@@ -233,7 +246,7 @@ type StateData = {
 
 export class ConsoleInsight extends HTMLElement {
   static async create(promptBuilder: PublicPromptBuilder, aidaClient: PublicAidaClient): Promise<ConsoleInsight> {
-    const aidaAvailability = await Host.AidaClient.AidaClient.getAidaClientAvailability();
+    const aidaAvailability = await Host.AidaClient.AidaClient.checkAccessPreconditions();
     return new ConsoleInsight(promptBuilder, aidaClient, aidaAvailability);
   }
 
@@ -250,31 +263,55 @@ export class ConsoleInsight extends HTMLElement {
   // Rating sub-form state.
   #selectedRating?: boolean;
 
+  #consoleInsightsEnabledSetting: Common.Settings.Setting<boolean>|undefined;
+
   constructor(
       promptBuilder: PublicPromptBuilder, aidaClient: PublicAidaClient,
-      aidaAvailability: Host.AidaClient.AidaAvailability) {
+      aidaAvailability: Host.AidaClient.AidaAccessPreconditions) {
     super();
     this.#promptBuilder = promptBuilder;
     this.#aidaClient = aidaClient;
+    this.#consoleInsightsEnabledSetting = this.#getConsoleInsightsEnabledSetting();
+
     switch (aidaAvailability) {
-      case Host.AidaClient.AidaAvailability.AVAILABLE:
-        this.#state = {
-          type: State.LOADING,
-          consentReminderConfirmed: false,
-          consentOnboardingFinished: this.#getOnboardingCompletedSetting().get(),
-        };
+      case Host.AidaClient.AidaAccessPreconditions.AVAILABLE:
+        if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+          if (this.#consoleInsightsEnabledSetting?.disabled()) {
+            this.#state = {
+              type: State.CONSENT_ONBOARDING,
+              page: ConsentOnboardingPage.PAGE1,
+            };
+            break;
+          }
+          // Allows skipping the consent reminder if the user enabled the feature via settings in the current session
+          const skipReminder =
+              Common.Settings.Settings.instance()
+                  .createSetting('console-insights-skip-reminder', false, Common.Settings.SettingStorageType.SESSION)
+                  .get();
+          this.#state = {
+            type: State.LOADING,
+            consentReminderConfirmed: this.#getOnboardingCompletedSetting().get() || skipReminder,
+            consentOnboardingFinished: this.#consoleInsightsEnabledSetting?.getIfNotDisabled() === true,
+          };
+        } else {
+          this.#state = {
+            type: State.LOADING,
+            consentReminderConfirmed: false,
+            consentOnboardingFinished: this.#getOnboardingCompletedSetting().get(),
+          };
+        }
         break;
-      case Host.AidaClient.AidaAvailability.NO_ACCOUNT_EMAIL:
+      case Host.AidaClient.AidaAccessPreconditions.NO_ACCOUNT_EMAIL:
         this.#state = {
           type: State.NOT_LOGGED_IN,
         };
         break;
-      case Host.AidaClient.AidaAvailability.NO_ACTIVE_SYNC:
+      case Host.AidaClient.AidaAccessPreconditions.NO_ACTIVE_SYNC:
         this.#state = {
           type: State.SYNC_IS_OFF,
         };
         break;
-      case Host.AidaClient.AidaAvailability.NO_INTERNET:
+      case Host.AidaClient.AidaAccessPreconditions.NO_INTERNET:
         this.#state = {
           type: State.OFFLINE,
         };
@@ -297,13 +334,30 @@ export class ConsoleInsight extends HTMLElement {
       e.stopPropagation();
     });
     this.focus();
-    // Measure the height of the element after an animation. `--actual-height` can
-    // be used as the `from` value for the subsequent animation.
-    this.addEventListener('animationend', () => {
-      this.style.setProperty('--actual-height', `${this.offsetHeight}px`);
-    });
   }
 
+  // The 'console-insights-enabled'-setting controls different things, depending on the 'gen-ai-settings-panel' experiment.
+  // experiment off:
+  //   setting off -> no entrypoints for console insights shown
+  //   setting on -> entrypoints are shown
+  // experiment on:
+  //   setting off -> entrypoints are shown, and point to the AI setting panel where the setting can be turned on
+  //   setting on -> entrypoints are shown, and lead to directly generating a console insight
+  #getConsoleInsightsEnabledSetting(): Common.Settings.Setting<boolean>|undefined {
+    try {
+      return Common.Settings.moduleSetting('console-insights-enabled') as Common.Settings.Setting<boolean>;
+    } catch {
+      return;
+    }
+  }
+
+  // The 'console-insights-onboarding-finished'-setting controls different things, depending on the 'gen-ai-settings-panel' experiment.
+  // experiment off:
+  //   setting off -> 2-page onboarding disclaimer is shown before generating a console insight
+  //   setting on -> no onboarding disclaimer
+  // experiment on:
+  //   setting off -> single page consent reminder is shown, unless the 'console-insights-enabled'-setting has been enabled in the current DevTools session
+  //   setting on -> no consent reminder shown
   #getOnboardingCompletedSetting(): Common.Settings.Setting<boolean> {
     return Common.Settings.Settings.instance().createLocalSetting('console-insights-onboarding-finished', false);
   }
@@ -311,15 +365,49 @@ export class ConsoleInsight extends HTMLElement {
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [styles, Input.checkboxStyles];
     this.classList.add('opening');
+    this.#consoleInsightsEnabledSetting?.addChangeListener(this.#onConsoleInsightsSettingChanged, this);
+    if (this.#state.type === State.LOADING && this.#state.consentOnboardingFinished &&
+        this.#state.consentReminderConfirmed) {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.GeneratingInsightWithoutDisclaimer);
+    }
     void this.#generateInsightIfNeeded();
+  }
+
+  disconnectedCallback(): void {
+    this.#consoleInsightsEnabledSetting?.removeChangeListener(this.#onConsoleInsightsSettingChanged, this);
+  }
+
+  #onConsoleInsightsSettingChanged(): void {
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+      if (this.#consoleInsightsEnabledSetting?.getIfNotDisabled() === true) {
+        this.#getOnboardingCompletedSetting().set(true);
+      }
+      if (this.#state.type === State.CONSENT_ONBOARDING &&
+          this.#consoleInsightsEnabledSetting?.getIfNotDisabled() === true) {
+        this.#transitionTo({
+          type: State.LOADING,
+          consentReminderConfirmed: true,
+          consentOnboardingFinished: true,
+        });
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsOptInTeaserConfirmedInSettings);
+        void this.#generateInsightIfNeeded();
+      }
+      if (this.#state.type === State.CONSENT_REMINDER &&
+          this.#consoleInsightsEnabledSetting?.getIfNotDisabled() === false) {
+        this.#transitionTo({
+          type: State.LOADING,
+          consentReminderConfirmed: false,
+          consentOnboardingFinished: false,
+        });
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsReminderTeaserAbortedInSettings);
+        void this.#generateInsightIfNeeded();
+      }
+    }
   }
 
   #transitionTo(newState: StateData): void {
     const previousState = this.#state;
     this.#state = newState;
-    if (newState.type !== previousState.type && previousState.type === State.LOADING) {
-      this.classList.add('loaded');
-    }
     this.#render();
     if (newState.type !== previousState.type) {
       this.#focusHeader();
@@ -335,7 +423,11 @@ export class ConsoleInsight extends HTMLElement {
         type: State.CONSENT_ONBOARDING,
         page: ConsentOnboardingPage.PAGE1,
       });
-      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsOnboardingShown);
+      if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsOptInTeaserShown);
+      } else {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsOnboardingShown);
+      }
       return;
     }
     if (!this.#state.consentReminderConfirmed) {
@@ -345,14 +437,23 @@ export class ConsoleInsight extends HTMLElement {
         sources,
         isPageReloadRecommended,
       });
-      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightConsentReminderShown);
+      if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsReminderTeaserShown);
+      } else {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightConsentReminderShown);
+      }
       return;
     }
+    await this.#generateInsight();
   }
 
   #onClose(): void {
     if (this.#state.type === State.CONSENT_REMINDER) {
-      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightConsentReminderCanceled);
+      if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsReminderTeaserCanceled);
+      } else {
+        Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightConsentReminderCanceled);
+      }
     } else if (this.#state.type === State.CONSENT_ONBOARDING) {
       if (this.#state.page === ConsentOnboardingPage.PAGE1) {
         Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsOnboardingCanceledOnPage1);
@@ -360,7 +461,9 @@ export class ConsoleInsight extends HTMLElement {
         Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsOnboardingCanceledOnPage2);
       }
     }
-    this.dispatchEvent(new CloseEvent());
+    this.shadowRoot?.addEventListener('animationend', () => {
+      this.dispatchEvent(new CloseEvent());
+    }, {once: true});
     this.classList.add('closing');
   }
 
@@ -383,8 +486,11 @@ export class ConsoleInsight extends HTMLElement {
     } else {
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightRatedNegative);
     }
+    const disallowLogging =
+        Common.Settings.Settings.instance().getHostConfig().aidaAvailability?.disallowLogging ?? true;
     void this.#aidaClient.registerClientEvent({
       corresponding_aida_rpc_global_id: this.#state.metadata.rpcGlobalId,
+      disable_user_content_logging: disallowLogging,
       do_conversation_client_event: {
         user_feedback: {
           sentiment: this.#selectedRating ? Host.AidaClient.Rating.POSITIVE : Host.AidaClient.Rating.NEGATIVE,
@@ -403,14 +509,23 @@ export class ConsoleInsight extends HTMLElement {
   }
 
   async #onConsentReminderConfirmed(): Promise<void> {
+    this.#getOnboardingCompletedSetting().set(true);
     this.#transitionTo({
       type: State.LOADING,
       consentReminderConfirmed: true,
-      consentOnboardingFinished: this.#getOnboardingCompletedSetting().get(),
+      consentOnboardingFinished: true,
     });
-    Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightConsentReminderConfirmed);
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsReminderTeaserConfirmed);
+    } else {
+      Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightConsentReminderConfirmed);
+    }
+    await this.#generateInsight();
+  }
+
+  async #generateInsight(): Promise<void> {
     try {
-      for await (const {sources, isPageReloadRecommended, explanation, metadata} of this.#getInsight()) {
+      for await (const {sources, isPageReloadRecommended, explanation, metadata, completed} of this.#getInsight()) {
         const tokens = this.#validateMarkdown(explanation);
         const valid = tokens !== false;
         this.#transitionTo({
@@ -421,6 +536,7 @@ export class ConsoleInsight extends HTMLElement {
           sources,
           metadata,
           isPageReloadRecommended,
+          completed,
         });
       }
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightGenerated);
@@ -492,12 +608,9 @@ export class ConsoleInsight extends HTMLElement {
   }
 
   #onDisableFeature(): void {
-    try {
-      Common.Settings.moduleSetting('console-insights-enabled').set(false);
-    } finally {
-      this.#onClose();
-      UI.InspectorView.InspectorView.instance().displayReloadRequiredWarning('Reload for the change to apply.');
-    }
+    this.#consoleInsightsEnabledSetting?.set(false);
+    this.#onClose();
+    UI.InspectorView.InspectorView.instance().displayReloadRequiredWarning('Reload for the change to apply.');
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsOnboardingFeatureDisabled);
   }
 
@@ -510,7 +623,9 @@ export class ConsoleInsight extends HTMLElement {
   }
 
   #focusHeader(): void {
-    (this.#shadow.querySelector('header h2') as HTMLElement | undefined)?.focus();
+    this.addEventListener('animationend', () => {
+      (this.#shadow.querySelector('header h2') as HTMLElement | undefined)?.focus();
+    }, {once: true});
   }
 
   #termsChecked(): boolean {
@@ -660,12 +775,12 @@ export class ConsoleInsight extends HTMLElement {
   #renderMain(): LitHtml.TemplateResult {
     const jslog = `${VisualLogging.section(this.#state.type).track({resize: true})}`;
     const disallowLogging =
-        Common.Settings.Settings.instance().getHostConfig()?.devToolsConsoleInsights.disallowLogging === true;
+        Common.Settings.Settings.instance().getHostConfig().aidaAvailability?.disallowLogging ?? true;
     // clang-format off
     switch (this.#state.type) {
       case State.LOADING:
         return html`<main jslog=${jslog}>
-            <div role="presentation" class="loader" style="clip-path: url('#clipPath');">
+            <div role="presentation" aria-label="Loading" class="loader" style="clip-path: url('#clipPath');">
               <svg width="100%" height="64">
                 <clipPath id="clipPath">
                   <rect x="0" y="0" width="100%" height="16" rx="8"></rect>
@@ -698,6 +813,60 @@ export class ConsoleInsight extends HTMLElement {
           <div class="error">${i18nString(UIStrings.errorBody)}</div>
         </main>`;
       case State.CONSENT_REMINDER:
+        if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+          return html`
+          <main class="reminder-container" jslog=${jslog}>
+            <h3>Things to consider</h3>
+            <div class="reminder-items">
+              <div>
+                <${IconButton.Icon.Icon.litTagName} .data=${{
+                  iconName: 'google',
+                  width: 'var(--sys-size-8)',
+                  height: 'var(--sys-size-8)',
+                } as IconButton.Icon.IconData}>
+                </${IconButton.Icon.Icon.litTagName}>
+              </div>
+              <div>The console message, associated stack trace, related source code, and the associated network headers are sent to Google to generate explanations. This data may be seen by human reviewers to improve this feature. Avoid sharing sensitive or personal information.</div>
+              <div>
+                <${IconButton.Icon.Icon.litTagName} .data=${{
+                  iconName: 'policy',
+                  width: 'var(--sys-size-8)',
+                  height: 'var(--sys-size-8)',
+                } as IconButton.Icon.IconData}>
+                </${IconButton.Icon.Icon.litTagName}>
+              </div>
+              <div>Use of this feature is subject to the
+                <x-link
+                  href=${TERMS_OF_SERVICE_URL}
+                  class="link"
+                  jslog=${VisualLogging.link('terms-of-service.console-insights').track({click: true})}
+                >Google Terms of Service</x-link>
+                and
+                <x-link
+                  href=${PRIVACY_POLICY_URL}
+                  class="link"
+                  jslog=${VisualLogging.link('privacy-policy.console-insights').track({click: true})}
+                >Google Privacy Policy</x-link>
+              </div>
+              <div>
+                <${IconButton.Icon.Icon.litTagName} .data=${{
+                  iconName: 'warning',
+                  width: 'var(--sys-size-8)',
+                  height: 'var(--sys-size-8)',
+                } as IconButton.Icon.IconData}>
+                </${IconButton.Icon.Icon.litTagName}>
+              </div>
+              <div>
+                <x-link
+                  href="https://support.google.com/legal/answer/13505487"
+                  class="link"
+                  jslog=${VisualLogging.link('code-snippets-explainer.console-insights').track({click: true})}
+                >Use generated code snippets with caution</x-link>
+              </div>
+            </div>
+          </main>
+        `;
+        }
         return html`
           <main jslog=${jslog}>
             <p>The following data will be sent to Google to understand the context for the console message.
@@ -707,7 +876,33 @@ export class ConsoleInsight extends HTMLElement {
             </${ConsoleInsightSourcesList.litTagName}>
           </main>
         `;
-      case State.CONSENT_ONBOARDING:
+      case State.CONSENT_ONBOARDING: {
+        if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+          const settingsLink = document.createElement('button');
+          settingsLink.textContent = i18nString(UIStrings.settingsLink);
+          settingsLink.classList.add('link');
+          UI.ARIAUtils.markAsLink(settingsLink);
+          settingsLink.addEventListener('click', () => {
+            Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsOptInTeaserSettingsLinkClicked);
+            void UI.ViewManager.ViewManager.instance().showView('chrome-ai');
+          });
+          settingsLink.setAttribute('jslog', `${VisualLogging.action('open-ai-settings').track({click: true})}`);
+
+          return html`<main class="opt-in-teaser" jslog=${jslog}>
+            <div class="badge">
+              <${IconButton.Icon.Icon.litTagName} .data=${{
+                iconName: 'lightbulb-spark',
+                width: 'var(--sys-size-8)',
+                height: 'var(--sys-size-8)',
+              } as IconButton.Icon.IconData}>
+              </${IconButton.Icon.Icon.litTagName}>
+            </div>
+            <div>
+              ${i18n.i18n.getFormatLocalizedString(str_, UIStrings.turnOnInSettings, {PH1: settingsLink})}
+              ${this.#renderLearnMoreAboutInsights()}
+            </div>
+          </main>`;
+        }
         switch (this.#state.page) {
           case ConsentOnboardingPage.PAGE1:
             return html`<main jslog=${jslog}>
@@ -737,6 +932,7 @@ export class ConsoleInsight extends HTMLElement {
             </p>
             </main>`;
         }
+      }
       case State.NOT_LOGGED_IN:
         return html`
           <main jslog=${jslog}>
@@ -756,15 +952,31 @@ export class ConsoleInsight extends HTMLElement {
     // clang-format on
   }
 
+  #renderDisclaimer(): LitHtml.LitTemplate {
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+      // clang-format off
+      return LitHtml.html`<span>
+        Chrome AI may generate inaccurate info that does not represent Google's views. Data sent to Google may be seen by human reviewers to improve this feature.
+        <button class="link" role="link" @click=${() => UI.ViewManager.ViewManager.instance().showView('chrome-ai')}
+          jslog=${VisualLogging.action('open-ai-settings').track({click: true})}
+        >Open settings</button>
+        or
+        <x-link href=${LEARNMORE_URL} class="link" jslog=${VisualLogging.link('learn-more').track({click: true})}>learn more</x-link>
+      </span>`;
+    }
+    return LitHtml.html`<span>
+      This feature may display inaccurate or offensive information that doesn't represent Google's views.
+      <x-link href=${LEARNMORE_URL} class="link" jslog=${
+        VisualLogging.link('learn-more').track({click: true})}>${i18nString(UIStrings.learnMore)}</x-link>
+    </span>`;
+    // clang-format on
+  }
+
   #renderFooter(): LitHtml.LitTemplate {
     const showThumbsUpDownButtons =
-        Common.Settings.Settings.instance().getHostConfig()?.devToolsConsoleInsights.disallowLogging !== true;
+        !(Common.Settings.Settings.instance().getHostConfig().aidaAvailability?.disallowLogging ?? true);
+    const disclaimer = this.#renderDisclaimer();
     // clang-format off
-    const disclaimer = LitHtml.html`<span>
-              This feature may display inaccurate or offensive information that doesn't represent Google's views.
-              <x-link href=${LEARNMORE_URL} class="link" jslog=${
-        VisualLogging.link('learn-more').track({click: true})}>${i18nString(UIStrings.learnMore)}</x-link>
-            </span>`;
     switch (this.#state.type) {
       case State.LOADING:
         return LitHtml.nothing;
@@ -794,6 +1006,41 @@ export class ConsoleInsight extends HTMLElement {
         </div>
       </footer>`;
       case State.CONSENT_REMINDER:
+        if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+          return html`<footer jslog=${VisualLogging.section('footer')}>
+            <div class="filler"></div>
+            <div class="buttons">
+              <${Buttons.Button.Button.litTagName}
+                @click=${() => {
+                  Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightsReminderTeaserSettingsLinkClicked);
+                  void UI.ViewManager.ViewManager.instance().showView('chrome-ai');
+                }}
+                .data=${
+                  {
+                    variant: Buttons.Button.Variant.TONAL,
+                    jslogContext: 'settings',
+                    title: 'Settings',
+                  } as Buttons.Button.ButtonData
+                }
+              >
+                Settings
+              </${Buttons.Button.Button.litTagName}>
+              <${Buttons.Button.Button.litTagName}
+                class='continue-button'
+                @click=${this.#onConsentReminderConfirmed}
+                .data=${
+                  {
+                    variant: Buttons.Button.Variant.PRIMARY,
+                    jslogContext: 'continue',
+                    title: 'continue',
+                  } as Buttons.Button.ButtonData
+                }
+               >
+                Continue
+              </${Buttons.Button.Button.litTagName}>
+            </div>
+          </footer>`;
+        }
         return html`<footer jslog=${VisualLogging.section('footer')}>
           <div class="disclaimer">
             ${disclaimer}
@@ -805,6 +1052,9 @@ export class ConsoleInsight extends HTMLElement {
           </div>
         </footer>`;
       case State.CONSENT_ONBOARDING:
+        if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+          return LitHtml.nothing;
+        }
         switch (this.#state.page) {
           case ConsentOnboardingPage.PAGE1:
             return html`<footer jslog=${VisualLogging.section('footer')}>
@@ -847,7 +1097,7 @@ export class ConsoleInsight extends HTMLElement {
                   size: Buttons.Button.Size.SMALL,
                   iconName: 'thumb-up',
                   active: this.#selectedRating !== undefined && this.#selectedRating,
-                  title: i18nString(UIStrings.thumbsUp),
+                  title: i18nString(UIStrings.goodResponse),
                   jslogContext: 'thumbs-up',
                 } as Buttons.Button.ButtonData
               }
@@ -861,7 +1111,7 @@ export class ConsoleInsight extends HTMLElement {
                   size: Buttons.Button.Size.SMALL,
                   iconName: 'thumb-down',
                   active: this.#selectedRating !== undefined && !this.#selectedRating,
-                  title: i18nString(UIStrings.thumbsDown),
+                  title: i18nString(UIStrings.badResponse),
                   jslogContext: 'thumbs-down',
                 } as Buttons.Button.ButtonData
               }
@@ -902,6 +1152,9 @@ export class ConsoleInsight extends HTMLElement {
       case State.ERROR:
         return i18nString(UIStrings.error);
       case State.CONSENT_REMINDER:
+        if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+          return 'Understand console messages with Chrome AI';
+        }
         return i18nString(UIStrings.inputData);
       case State.CONSENT_ONBOARDING:
         switch (this.#state.page) {
@@ -913,33 +1166,69 @@ export class ConsoleInsight extends HTMLElement {
     }
   }
 
+  #renderSpinner(): LitHtml.LitTemplate {
+    // clang-format off
+    if (this.#state.type === State.INSIGHT && !this.#state.completed) {
+      return html`<${Spinners.Spinner.Spinner.litTagName}></${Spinners.Spinner.Spinner.litTagName}>`;
+    }
+    return LitHtml.nothing;
+    // clang-format on
+  }
+
+  #renderHeader(): LitHtml.LitTemplate {
+    if (this.#state.type === State.CONSENT_ONBOARDING &&
+        Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL)) {
+      return LitHtml.nothing;
+    }
+    const hasIcon = Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL) &&
+        this.#state.type === State.CONSENT_REMINDER;
+    // clang-format off
+    return html`
+      <header>
+        ${hasIcon ? html`
+          <div class="header-icon-container">
+            <${IconButton.Icon.Icon.litTagName} .data=${{
+              iconName: 'lightbulb-spark',
+              width: '18px',
+              height: '18px',
+            } as IconButton.Icon.IconData}>
+            </${IconButton.Icon.Icon.litTagName}>
+          </div>`
+        : LitHtml.nothing}
+        <div class="filler">
+          <h2 tabindex="-1">
+            ${this.#getHeader()}
+          </h2>
+          ${this.#renderSpinner()}
+        </div>
+        <div class="close-button">
+          <${Buttons.Button.Button.litTagName}
+            .data=${
+              {
+                variant: Buttons.Button.Variant.ICON,
+                size: Buttons.Button.Size.SMALL,
+                iconName: 'cross',
+                title: i18nString(UIStrings.closeInsight),
+              } as Buttons.Button.ButtonData
+            }
+            jslog=${VisualLogging.close().track({click: true})}
+            @click=${this.#onClose}
+          ></${Buttons.Button.Button.litTagName}>
+        </div>
+      </header>
+    `;
+    // clang-format on
+  }
+
   #render(): void {
     // clang-format off
     render(html`
       <div class="wrapper" jslog=${VisualLogging.pane('console-insights').track({resize: true})}>
-        <header>
-          <div class="filler">
-            <h2 tabindex="-1">
-              ${this.#getHeader()}
-            </h2>
-          </div>
-          <div>
-            <${Buttons.Button.Button.litTagName}
-              .data=${
-                {
-                  variant: Buttons.Button.Variant.ICON,
-                  size: Buttons.Button.Size.SMALL,
-                  iconName: 'cross',
-                  title: i18nString(UIStrings.closeInsight),
-                } as Buttons.Button.ButtonData
-              }
-              jslog=${VisualLogging.close().track({click: true})}
-              @click=${this.#onClose}
-            ></${Buttons.Button.Button.litTagName}>
-          </div>
-        </header>
-        ${this.#renderMain()}
-        ${this.#renderFooter()}
+        <div class="animation-wrapper">
+          ${this.#renderHeader()}
+          ${this.#renderMain()}
+          ${this.#renderFooter()}
+        </div>
       </div>
     `, this.#shadow, {
       host: this,

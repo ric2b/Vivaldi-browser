@@ -107,6 +107,9 @@
   "core/common/Revealer.ts | stylesSidebar": {
     "message": "sidofältet Format"
   },
+  "core/common/Revealer.ts | timelinePanel": {
+    "message": "Prestandapanel"
+  },
   "core/common/SettingRegistration.ts | adorner": {
     "message": "Dekoration"
   },
@@ -254,6 +257,9 @@
   "core/sdk/DebuggerModel.ts | closure": {
     "message": "Stängning"
   },
+  "core/sdk/DebuggerModel.ts | exception": {
+    "message": "Undantag"
+  },
   "core/sdk/DebuggerModel.ts | expression": {
     "message": "Uttryck"
   },
@@ -265,6 +271,9 @@
   },
   "core/sdk/DebuggerModel.ts | module": {
     "message": "Modul"
+  },
+  "core/sdk/DebuggerModel.ts | returnValue": {
+    "message": "Returnera värde"
   },
   "core/sdk/DebuggerModel.ts | script": {
     "message": "Skript"
@@ -341,17 +350,20 @@
   "core/sdk/NetworkRequest.ts | exemptionReasonEnterprisePolicy": {
     "message": "Denna cookie tillåts enligt Chrome Enterprise-policyn. Läs mer: goo.gle/ce-3pc"
   },
+  "core/sdk/NetworkRequest.ts | exemptionReasonScheme": {
+    "message": "Denna cookie tillåts enligt webbadresschemat på toppnivå"
+  },
   "core/sdk/NetworkRequest.ts | exemptionReasonStorageAccessAPI": {
     "message": "Denna cookie tillåts av Storage Access API. Läs mer: goo.gle/saa"
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDDeprecationTrial": {
-    "message": "Denna cookie tillåts på grund av temporär återanvändning av utfasad funktion från tredje part"
+    "message": "Denna cookie tillåts på grund av temporär återanvändning av utfasade tredjepartscookies. Läs mer på goo.gle/ps-dt."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDHeuristics": {
     "message": "Denna cookie tillåts på grund av heuristik för utfasning av tredjepartscookies. Läs mer: goo.gle/hbe"
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDMetadata": {
-    "message": "Denna cookie tillåts på grund av en respitperiod för temporär återanvändning av utfasade tredjepartscookies. Läs mer på goo.gle/ps-dt."
+    "message": "Denna cookie tillåts på grund av en respitperiod för temporär återanvändning av utfasade tredjepartscookies. Läs mer: goo.gle/dt-grace."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTopLevelStorageAccessAPI": {
     "message": "Denna cookie tillåts av Storage Access API på högsta nivå. Läs mer: goo.gle/saa-top"
@@ -744,7 +756,7 @@
     "message": "Öppna verktyg för programmerare avsedda för Node.js"
   },
   "entrypoints/inspector_main/InspectorMain.ts | tab": {
-    "message": "Tabb"
+    "message": "Flik"
   },
   "entrypoints/inspector_main/OutermostTargetSelector.ts | targetNotSelected": {
     "message": "Sida: Inte vald"
@@ -959,6 +971,9 @@
   "entrypoints/main/main-meta.ts | browserLanguage": {
     "message": "Gränssnittsspråk för webbläsaren"
   },
+  "entrypoints/main/main-meta.ts | browserPreference": {
+    "message": "Webbläsarinställning"
+  },
   "entrypoints/main/main-meta.ts | cancelSearch": {
     "message": "Avbryt sökning"
   },
@@ -1046,17 +1061,14 @@
   "entrypoints/main/main-meta.ts | searchOnEnterCommand": {
     "message": "Inaktivera funktionen Sök medan du skriver (tryck på Retur för att söka)"
   },
+  "entrypoints/main/main-meta.ts | switchToBrowserPreferredColor": {
+    "message": "Byt till färgschemat som prioriteras av webbläsaren"
+  },
   "entrypoints/main/main-meta.ts | switchToDarkTheme": {
     "message": "Byt till mörkt tema"
   },
   "entrypoints/main/main-meta.ts | switchToLightTheme": {
     "message": "Byt till ljust tema"
-  },
-  "entrypoints/main/main-meta.ts | switchToSystemPreferredColor": {
-    "message": "Byt till färgschemat som prioriteras av systemet"
-  },
-  "entrypoints/main/main-meta.ts | systemPreference": {
-    "message": "Systeminställning"
   },
   "entrypoints/main/main-meta.ts | theme": {
     "message": "Tema:"
@@ -1133,11 +1145,11 @@
   "generated/Deprecation.ts | CSSCustomStateDeprecatedSyntax": {
     "message": ":--customstatename har fasats ut. Använd syntaxen :state(customstatename) i stället."
   },
+  "generated/Deprecation.ts | CSSInsetAreaProperty": {
+    "message": "Egenskapen inset-area har fasats ut. Använd egenskapen position-area i stället."
+  },
   "generated/Deprecation.ts | CSSSelectorInternalMediaControlsOverlayCastButton": {
     "message": "Attributet disableRemotePlayback ska användas för att inaktivera standardintegreringen av Cast i stället för väljaren -internal-media-controls-overlay-cast-button."
-  },
-  "generated/Deprecation.ts | CSSValueAppearanceNonStandard": {
-    "message": "CSS-utseendevärdena inner-spin-button, media-slider, media-sliderthumb, media-volume-slider, media-volume-sliderthumb, push-button, searchfield-cancel-button, slider-horizontal, sliderthumb-horizontal, sliderthumb-vertical och square-button är inte standardiserade och kommer att tas bort."
   },
   "generated/Deprecation.ts | CSSValueAppearanceSliderVertical": {
     "message": "CSS-utseendevärdet slider-vertical är inte standardiserat och kommer att tas bort."
@@ -1171,6 +1183,9 @@
   },
   "generated/Deprecation.ts | DataUrlInSvgUse": {
     "message": "Stöd för data: webbadresser i SVGUseElement har fasats ut och tas bort i framtiden."
+  },
+  "generated/Deprecation.ts | DelegatedInkExpectedImprovement": {
+    "message": "DelegatedInkTrailPresenter.expectedImprovement har fasats ut på grund av problem med signaturinsamling."
   },
   "generated/Deprecation.ts | DocumentDomainSettingWithoutOriginAgentClusterHeader": {
     "message": "Funktionen för att lätta på principen gällande samma ursprung genom att ange document.domain är utfasad och inaktiveras som standard. Om du vill fortsätta använda den här funktionen ska du välja bort ursprungsbundna agentkluster genom att skicka ett Origin-Agent-Cluster: ?0-huvud tillsammans med HTTP-svaret för dokumentet och ramarna. Läs mer på https://developer.chrome.com/blog/immutable-document-domain/."
@@ -1486,9 +1501,6 @@
   },
   "models/issues_manager/GenericIssue.ts | corbExplainerPageTitle": {
     "message": "Förklaring av CORB"
-  },
-  "models/issues_manager/GenericIssue.ts | crossOriginPortalPostMessage": {
-    "message": "Portaler – Kommunikationskanaler med samma ursprung"
   },
   "models/issues_manager/GenericIssue.ts | howDoesAutofillWorkPageTitle": {
     "message": "Hur fungerar autofyll?"
@@ -3261,7 +3273,7 @@
     "message": "Sidor med åtkomstbehörighet till en mediestream kan för närvarande inte placeras i vilocacheminnet."
   },
   "panels/application/components/BackForwardCacheStrings.ts | haveInnerContents": {
-    "message": "Sidor som använder en portal kan för närvarande inte placeras i vilocacheminnet."
+    "message": "Sidor med vissa typer av inbäddat innehåll (t.ex. PDF-filer) kan för närvarande inte placeras i vilocacheminnet."
   },
   "panels/application/components/BackForwardCacheStrings.ts | idleManager": {
     "message": "Sidor som använder IdleManager kan för närvarande inte placeras i vilocacheminnet."
@@ -3343,9 +3355,6 @@
   },
   "panels/application/components/BackForwardCacheStrings.ts | pictureInPicture": {
     "message": "Sidor som använder bild-i-bild kan för närvarande inte placeras i vilocacheminnet."
-  },
-  "panels/application/components/BackForwardCacheStrings.ts | portal": {
-    "message": "Sidor som använder en portal kan för närvarande inte placeras i vilocacheminnet."
   },
   "panels/application/components/BackForwardCacheStrings.ts | printing": {
     "message": "Sidor där användargränssnittet för utskrift visas kan för närvarande inte placeras i vilocacheminnet."
@@ -4526,6 +4535,9 @@
   "panels/autofill/AutofillView.ts | sendFeedback": {
     "message": "Skicka feedback"
   },
+  "panels/autofill/AutofillView.ts | showTestAddressesInAutofillMenu": {
+    "message": "Visa testadresser i autofyllningsmenyn"
+  },
   "panels/autofill/AutofillView.ts | toStartDebugging": {
     "message": "Om du vill börja felsöka autofyll använder du Chromes autofyllmeny för att fylla i ett adressformulär."
   },
@@ -5585,6 +5597,9 @@
   "panels/elements/ElementStatePaneWidget.ts | emulatesAFocusedPage": {
     "message": "Låt sidan vara i fokus. Används ofta för att felsöka element som försvinner."
   },
+  "panels/elements/ElementStatePaneWidget.ts | forceElementSpecificStates": {
+    "message": "Framtvinga specifik elementstatus"
+  },
   "panels/elements/ElementStatePaneWidget.ts | forceElementState": {
     "message": "Tvinga fram elementstatus"
   },
@@ -5937,10 +5952,10 @@
     "message": "Kopiera CSS-ändringar"
   },
   "panels/elements/StylesSidebarPane.ts | incrementdecrementWithMousewheelHundred": {
-    "message": "Ökning/minskning med mushjulet eller uppåt-/nedåttangenterna. {PH1}: ±100, Skift: ±10, Alt: ±0,1"
+    "message": "Ökning/minskning med mushjulet eller uppåt-/nedåttangenterna. {PH1}: ±100, Skift: ±10, {PH2}: ±0,1"
   },
   "panels/elements/StylesSidebarPane.ts | incrementdecrementWithMousewheelOne": {
-    "message": "Ökning/minskning med mushjulet eller uppåt-/nedåttangenterna. {PH1}: R ±1, Skift: G ±1, Alt: B ±1"
+    "message": "Ökning/minskning med mushjulet eller uppåt-/nedåttangenterna. {PH1}: R ±1, Skift: G ±1, {PH2}: B ±1"
   },
   "panels/elements/StylesSidebarPane.ts | inheritedFromSPseudoOf": {
     "message": "Ärvt från ::{PH1} pseudoelement för "
@@ -6417,7 +6432,7 @@
     "message": "Uppdatera inställningarna"
   },
   "panels/explain/explain-meta.ts | ageRestricted": {
-    "message": "Den här funktionen är endast tillgänglig för användare som är 18 år eller äldre."
+    "message": "Den här funktionen är endast tillgänglig för användare som är 18 år eller äldre"
   },
   "panels/explain/explain-meta.ts | enableConsoleInsights": {
     "message": "Förstå konsolmeddelanden med AI"
@@ -6432,43 +6447,13 @@
     "message": "Förstå den här varningen"
   },
   "panels/explain/explain-meta.ts | geoRestricted": {
-    "message": "Funktionen är inte tillgänglig i din region."
+    "message": "Funktionen är inte tillgänglig i din region"
   },
   "panels/explain/explain-meta.ts | policyRestricted": {
     "message": "Din organisation har inaktiverat den här funktionen. Kontakta administratörerna om du vill veta mer."
   },
-  "panels/explain/explain-meta.ts | rolloutRestricted": {
-    "message": "Den här funktionen lanseras för närvarande. Mer information kommer snart."
-  },
   "panels/explain/explain-meta.ts | wrongLocale": {
-    "message": "Om du vill använda den här funktionen uppdaterar du språkinställningen till engelska i inställningarna för Verktyg för programmerare."
-  },
-  "panels/freestyler/FreestylerPanel.ts | clearMessages": {
-    "message": "Rensa meddelanden"
-  },
-  "panels/freestyler/FreestylerPanel.ts | sendFeedback": {
-    "message": "Skicka feedback"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | emptyStateText": {
-    "message": "Hur kan jag hjälpa dig?"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | inputDisclaimer": {
-    "message": "Freestyler kan visa felaktig information och det blir kanske inte alltid korrekt"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | inputPlaceholder": {
-    "message": "Fråga Freestyler eller skriv för att se kommandon"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | selectAnElement": {
-    "message": "Välj ett element"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | sendButtonTitle": {
-    "message": "Skicka"
-  },
-  "panels/freestyler/freestyler-meta.ts | freestyler": {
-    "message": "Freestyler"
-  },
-  "panels/freestyler/freestyler-meta.ts | showFreestyler": {
-    "message": "Visa Freestyler"
+    "message": "Om du vill använda den här funktionen uppdaterar du språkinställningen till engelska i inställningarna för Verktyg för programmerare"
   },
   "panels/issues/AffectedBlockedByResponseView.ts | blockedResource": {
     "message": "Spärrad resurs"
@@ -6860,14 +6845,14 @@
   "panels/js_timeline/js_timeline-meta.ts | record": {
     "message": "Spela in"
   },
+  "panels/js_timeline/js_timeline-meta.ts | recordAndReload": {
+    "message": "Registrera och läs in igen"
+  },
   "panels/js_timeline/js_timeline-meta.ts | showPerformance": {
     "message": "Visa prestanda"
   },
   "panels/js_timeline/js_timeline-meta.ts | showRecentTimelineSessions": {
     "message": "Visa senaste tidslinjesessioner"
-  },
-  "panels/js_timeline/js_timeline-meta.ts | startProfilingAndReloadPage": {
-    "message": "Starta profilering och läs in sidan igen"
   },
   "panels/js_timeline/js_timeline-meta.ts | stop": {
     "message": "Stoppa"
@@ -6956,9 +6941,6 @@
   "panels/layer_viewer/Layers3DView.ts | dLayersView": {
     "message": "Vy för 3D-lager"
   },
-  "panels/layer_viewer/Layers3DView.ts | deprecationWarning": {
-    "message": "Panelen Lager kanske snart fasas ut. Dela med dig av dina tankar och funderingar innan vi bestämmer oss."
-  },
   "panels/layer_viewer/Layers3DView.ts | layerInformationIsNotYet": {
     "message": "Det finns ännu ingen tillgänglig information om lager."
   },
@@ -6967,9 +6949,6 @@
   },
   "panels/layer_viewer/Layers3DView.ts | resetView": {
     "message": "Återställ vy"
-  },
-  "panels/layer_viewer/Layers3DView.ts | sendFeedback": {
-    "message": "Skicka feedback"
   },
   "panels/layer_viewer/Layers3DView.ts | showPaintProfiler": {
     "message": "Visa uppritningsprofilerare"
@@ -8136,25 +8115,49 @@
     "message": "Kopiera"
   },
   "panels/network/NetworkLogView.ts | copyAllAsCurl": {
-    "message": "Kopiera alla som cURL"
+    "message": "Kopiera allt som cURL"
   },
   "panels/network/NetworkLogView.ts | copyAllAsCurlBash": {
-    "message": "Kopiera alla som cURL (bash)"
+    "message": "Kopiera allt som cURL (bash)"
   },
   "panels/network/NetworkLogView.ts | copyAllAsCurlCmd": {
-    "message": "Kopiera alla som cURL (cmd)"
+    "message": "Kopiera allt som cURL (cmd)"
   },
   "panels/network/NetworkLogView.ts | copyAllAsFetch": {
-    "message": "Kopiera alla som fetch"
+    "message": "Kopiera allt som fetch"
   },
   "panels/network/NetworkLogView.ts | copyAllAsHar": {
     "message": "Kopiera alla som HAR"
   },
   "panels/network/NetworkLogView.ts | copyAllAsNodejsFetch": {
-    "message": "Kopiera alla som fetch (Node.js)"
+    "message": "Kopiera allt som fetch (Node.js)"
   },
   "panels/network/NetworkLogView.ts | copyAllAsPowershell": {
-    "message": "Kopiera alla som PowerShell"
+    "message": "Kopiera allt som PowerShell"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsCurl": {
+    "message": "Kopiera alla som anges som cURL"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsCurlBash": {
+    "message": "Kopiera alla som anges som cURL (bash)"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsCurlCmd": {
+    "message": "Kopiera alla som anges som cURL (cmd)"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsFetch": {
+    "message": "Kopiera alla som anges som fetch"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsHar": {
+    "message": "Kopiera alla som anges som HAR"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsNodejsFetch": {
+    "message": "Kopiera alla som anges som fetch (Node.js)"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsPowershell": {
+    "message": "Kopiera alla som anges som PowerShell"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedURLs": {
+    "message": "Kopiera alla webbadresser i listan"
   },
   "panels/network/NetworkLogView.ts | copyAllURLs": {
     "message": "Kopiera alla webbadresser"
@@ -9201,7 +9204,7 @@
     "message": "{PH1} byte"
   },
   "panels/profiler/HeapProfileView.ts | samplingProfiles": {
-    "message": "SAMPLINGPROFILER"
+    "message": "Samplingsprofiler"
   },
   "panels/profiler/HeapProfileView.ts | selectedSizeS": {
     "message": "Vald storlek: {PH1}"
@@ -9396,13 +9399,10 @@
     "message": "Tilldelningsstack"
   },
   "panels/profiler/HeapSnapshotView.ts | allocationTimelines": {
-    "message": "TIDSLINJER FÖR ALLOKERING"
+    "message": "Tidslinjer för tilldelning"
   },
   "panels/profiler/HeapSnapshotView.ts | baseSnapshot": {
     "message": "Grundläggande översiktsbild"
-  },
-  "panels/profiler/HeapSnapshotView.ts | captureNumericValue": {
-    "message": "Ta med numeriska värden i skärmbilden"
   },
   "panels/profiler/HeapSnapshotView.ts | code": {
     "message": "Kod"
@@ -9438,7 +9438,7 @@
     "message": "Profiler för minnesögonblicksbilder visar minnesfördelningen mellan JavaScript-objekt på din sida och relaterade DOM-noder."
   },
   "panels/profiler/HeapSnapshotView.ts | heapSnapshots": {
-    "message": "MINNESÖGONBLICKSBILDER"
+    "message": "Minnesögonblicksbild"
   },
   "panels/profiler/HeapSnapshotView.ts | jsArrays": {
     "message": "JavaScript-matriser"
@@ -9601,6 +9601,9 @@
   },
   "panels/profiler/ModuleUIStrings.ts | calculatingNodeFlags": {
     "message": "Beräknar nodflaggor …"
+  },
+  "panels/profiler/ModuleUIStrings.ts | calculatingObjectNames": {
+    "message": "Beräknar objektnamn …"
   },
   "panels/profiler/ModuleUIStrings.ts | calculatingRetainedSizes": {
     "message": "Beräknar bibehållna storlekar …"
@@ -10877,6 +10880,78 @@
   "panels/sensors/sensors-meta.ts | userIdleScreenUnlocked": {
     "message": "Användaren är inaktiv, skärmen upplåst"
   },
+  "panels/settings/AISettingsTab.ts | adminSettings": {
+    "message": "Vilka funktioner som är tillgängliga för hanterade användare kan variera beroende på administratörens inställningar"
+  },
+  "panels/settings/AISettingsTab.ts | boostYourProductivity": {
+    "message": "Öka produktiviteten med Chrome AI"
+  },
+  "panels/settings/AISettingsTab.ts | chromeAi": {
+    "message": "AI i Chrome"
+  },
+  "panels/settings/AISettingsTab.ts | collapse": {
+    "message": "komprimera"
+  },
+  "panels/settings/AISettingsTab.ts | consoleInsightsSendsData": {
+    "message": "Konsolmeddelandet, tillhörande stackspårning, relaterad källkod och tillhörande nätverksrubriker skickas till Google för att generera förklaringar. Denna data kan ses av mänskliga granskare för att förbättra den här funktionen."
+  },
+  "panels/settings/AISettingsTab.ts | expand": {
+    "message": "utöka"
+  },
+  "panels/settings/AISettingsTab.ts | experimentalFeatures": {
+    "message": "Funktionerna är experimentella och kan komma att ändras"
+  },
+  "panels/settings/AISettingsTab.ts | explainConsole": {
+    "message": "Få förklaringar av varningar och fel i konsolen"
+  },
+  "panels/settings/AISettingsTab.ts | explainStyling": {
+    "message": "Få förklaringar och ytterligare kontext för format"
+  },
+  "panels/settings/AISettingsTab.ts | freestylerSendsData": {
+    "message": "Allt DOM- eller CSS-innehåll på den granskade sidan kan skickas till Google för att generera förklaringar. Denna data kan ses av mänskliga granskare för att förbättra den här funktionen."
+  },
+  "panels/settings/AISettingsTab.ts | generatedSnippets": {
+    "message": "Använd genererade kodavsnitt med försiktighet"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandConsole": {
+    "message": "Gör det enklare att förstå och åtgärda varningar och fel i konsolen"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandStyling": {
+    "message": "Hjälper dig att förstå och åtgärda formatproblem"
+  },
+  "panels/settings/AISettingsTab.ts | learnMore": {
+    "message": "Läs mer"
+  },
+  "panels/settings/AISettingsTab.ts | oneOrMoreSettingsHaveChanged": {
+    "message": "En eller flera inställningar har ändrats. Läs in igen för att verkställa dem."
+  },
+  "panels/settings/AISettingsTab.ts | privacyNotice": {
+    "message": "Integritetsmeddelande"
+  },
+  "panels/settings/AISettingsTab.ts | receiveStylingSuggestions": {
+    "message": "Få förslag och kodexempel för att åtgärda formatproblem"
+  },
+  "panels/settings/AISettingsTab.ts | receiveSuggestions": {
+    "message": "Få förslag och kodexempel för att åtgärda dessa problem"
+  },
+  "panels/settings/AISettingsTab.ts | retainData": {
+    "message": "Data om användning lagras på ett sätt som gör att Google inte kan avgöra vem den kommer från och kan därför inte längre raderas på begäran. Den lagras i upp till 18 månader"
+  },
+  "panels/settings/AISettingsTab.ts | sendsDataToGoogle": {
+    "message": "När du använder dessa funktioner skickas data som är relevant för den aktuella funktionen till Google. Du hittar mer funktionsspecifik information nedan."
+  },
+  "panels/settings/AISettingsTab.ts | termsOfService": {
+    "message": "Googles användarvillkor"
+  },
+  "panels/settings/AISettingsTab.ts | termsOfServicePrivacyNotice": {
+    "message": "Användning av den här funktionen omfattas av {PH1} och {PH2}"
+  },
+  "panels/settings/AISettingsTab.ts | thingsToConsider": {
+    "message": "Tänk på detta"
+  },
+  "panels/settings/AISettingsTab.ts | whenOn": {
+    "message": "När funktionen är aktiverad"
+  },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | addFilenamePattern": {
     "message": "Lägg till filnamnsmönster"
   },
@@ -11162,6 +11237,9 @@
   "panels/settings/emulation/emulation-meta.ts | showDevices": {
     "message": "Visa enheter"
   },
+  "panels/settings/settings-meta.ts | chromeAI": {
+    "message": "AI i Chrome"
+  },
   "panels/settings/settings-meta.ts | documentation": {
     "message": "Dokumentation"
   },
@@ -11179,6 +11257,9 @@
   },
   "panels/settings/settings-meta.ts | shortcuts": {
     "message": "Genvägar"
+  },
+  "panels/settings/settings-meta.ts | showChromeAI": {
+    "message": "Visa AI i Chrome"
   },
   "panels/settings/settings-meta.ts | showExperiments": {
     "message": "Visa experiment"
@@ -11630,9 +11711,6 @@
   "panels/sources/ScopeChainSidebarPane.ts | closureS": {
     "message": "Stängning ({PH1})"
   },
-  "panels/sources/ScopeChainSidebarPane.ts | exception": {
-    "message": "Undantag"
-  },
   "panels/sources/ScopeChainSidebarPane.ts | loading": {
     "message": "Läser in …"
   },
@@ -11641,9 +11719,6 @@
   },
   "panels/sources/ScopeChainSidebarPane.ts | notPaused": {
     "message": "Inte pausat"
-  },
-  "panels/sources/ScopeChainSidebarPane.ts | returnValue": {
-    "message": "Returnera värde"
   },
   "panels/sources/SnippetsPlugin.ts | ctrlenter": {
     "message": "Ctrl+Retur"
@@ -12224,6 +12299,9 @@
   "panels/timeline/CountersGraph.ts | listeners": {
     "message": "Lyssnare"
   },
+  "panels/timeline/CountersGraph.ts | noEventsFound": {
+    "message": "Ingen minnesanvändningsdata hittades för de valda händelserna."
+  },
   "panels/timeline/CountersGraph.ts | nodes": {
     "message": "Noder"
   },
@@ -12581,6 +12659,12 @@
   "panels/timeline/EventsTimelineTreeView.ts | startTime": {
     "message": "Starttid"
   },
+  "panels/timeline/ExtensionTrackAppender.ts | customTrackDescription": {
+    "message": "Det här är ett anpassat spår som har lagts till av en tredje part."
+  },
+  "panels/timeline/ExtensionTrackAppender.ts | customTrackName": {
+    "message": "{PH1} – Anpassat spår"
+  },
   "panels/timeline/GPUTrackAppender.ts | gpu": {
     "message": "Grafikprocessor"
   },
@@ -12598,6 +12682,21 @@
   },
   "panels/timeline/NetworkTrackAppender.ts | network": {
     "message": "Nätverk"
+  },
+  "panels/timeline/NetworkTrackAppender.ts | wsConnectionClosed": {
+    "message": "WebSocket har stängts"
+  },
+  "panels/timeline/NetworkTrackAppender.ts | wsConnectionOpened": {
+    "message": "WebSocket har öppnats"
+  },
+  "panels/timeline/NetworkTrackAppender.ts | wsConnectionOpenedWithUrl": {
+    "message": "WebSocket har öppnats: {PH1}"
+  },
+  "panels/timeline/ServerTimingsTrackAppender.ts | serverSideTrack": {
+    "message": "Servertider – {PH1}"
+  },
+  "panels/timeline/ServerTimingsTrackAppender.ts | serverTimingTrack": {
+    "message": "Kanalen innehåller tider som hämtas från svarshuvuden för servertidsnätverket. De respektive starttiderna är endast uppskattade och kanske inte korrekta."
   },
   "panels/timeline/ThreadAppender.ts | anonymous": {
     "message": "(anonym)"
@@ -12725,6 +12824,12 @@
   "panels/timeline/TimelineHistoryManager.ts | currentSessionSS": {
     "message": "Aktuell session: {PH1} {PH2}"
   },
+  "panels/timeline/TimelineHistoryManager.ts | landingPageTitleLocalAndFieldMetrics": {
+    "message": "Lokala mätvärden och fältmätvärden"
+  },
+  "panels/timeline/TimelineHistoryManager.ts | landingPageTitleLocalMetrics": {
+    "message": "Lokala mätvärden"
+  },
   "panels/timeline/TimelineHistoryManager.ts | moments": {
     "message": "ögonblick"
   },
@@ -12827,11 +12932,20 @@
   "panels/timeline/TimelinePanel.ts | enableSelectorStats": {
     "message": "Aktivera statistik för CSS-väljare (långsamt)"
   },
+  "panels/timeline/TimelinePanel.ts | exportEnhancedTraces": {
+    "message": "Förbättrad resultatspårning"
+  },
+  "panels/timeline/TimelinePanel.ts | exportNormalTraces": {
+    "message": "Grundläggande resultatspårning"
+  },
   "panels/timeline/TimelinePanel.ts | failedToSaveTimelineSS": {
     "message": "Det gick inte att spara tidslinjen: {PH1} ({PH2})"
   },
   "panels/timeline/TimelinePanel.ts | fixMe": {
     "message": "Åtgärda"
+  },
+  "panels/timeline/TimelinePanel.ts | hideSidebar": {
+    "message": "Dölj enskilda sidofält"
   },
   "panels/timeline/TimelinePanel.ts | initializingProfiler": {
     "message": "Initierar profilerare …"
@@ -12851,6 +12965,9 @@
   "panels/timeline/TimelinePanel.ts | networkConditions": {
     "message": "Nätverksförhållanden"
   },
+  "panels/timeline/TimelinePanel.ts | performanceExtension": {
+    "message": "Data från tillägg"
+  },
   "panels/timeline/TimelinePanel.ts | processingProfile": {
     "message": "Profilen bearbetas …"
   },
@@ -12869,8 +12986,20 @@
   "panels/timeline/TimelinePanel.ts | screenshots": {
     "message": "Skärmbilder"
   },
+  "panels/timeline/TimelinePanel.ts | showDataAddedByExtensions": {
+    "message": "Visa data som lagts till av tillägg på panelen Prestanda"
+  },
   "panels/timeline/TimelinePanel.ts | showMemoryTimeline": {
     "message": "Visa minnestidslinje"
+  },
+  "panels/timeline/TimelinePanel.ts | showSidebar": {
+    "message": "Visa sidopanel"
+  },
+  "panels/timeline/TimelinePanel.ts | sidebarHidden": {
+    "message": "Sidofältet med resultat har dolts"
+  },
+  "panels/timeline/TimelinePanel.ts | sidebarShown": {
+    "message": "Prestandasidofältet visas"
   },
   "panels/timeline/TimelinePanel.ts | ssec": {
     "message": "{PH1} sek"
@@ -13013,21 +13142,6 @@
   "panels/timeline/TimelineTreeView.ts | vRuntime": {
     "message": "[V8 körning]"
   },
-  "panels/timeline/TimelineUIUtils.ts | FromCache": {
-    "message": " (från cacheminnet)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | FromMemoryCache": {
-    "message": " (från minnescache)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | FromPush": {
-    "message": " (från överföring)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | FromServiceWorker": {
-    "message": " (från service worker)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | SSSResourceLoading": {
-    "message": " ({PH1} {PH2} och {PH3} inläsning av resurser)"
-  },
   "panels/timeline/TimelineUIUtils.ts | UnknownNode": {
     "message": "[ okänd nod ]"
   },
@@ -13076,9 +13190,6 @@
   "panels/timeline/TimelineUIUtils.ts | currentClusterScore": {
     "message": "Resultat för nuvarande kluster"
   },
-  "panels/timeline/TimelineUIUtils.ts | decodedBody": {
-    "message": "Avkodad brödtext"
-  },
   "panels/timeline/TimelineUIUtils.ts | details": {
     "message": "Information"
   },
@@ -13096,9 +13207,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | emptyPlaceholder": {
     "message": "{PH1}"
-  },
-  "panels/timeline/TimelineUIUtils.ts | encodedData": {
-    "message": "Kodad data"
   },
   "panels/timeline/TimelineUIUtils.ts | entryIsHidden": {
     "message": "(posten är dold)"
@@ -13130,9 +13238,6 @@
   "panels/timeline/TimelineUIUtils.ts | imageUrl": {
     "message": "Bildadress"
   },
-  "panels/timeline/TimelineUIUtils.ts | initialPriority": {
-    "message": "Första prioritet"
-  },
   "panels/timeline/TimelineUIUtils.ts | initiatedBy": {
     "message": "Initierades av"
   },
@@ -13152,7 +13257,7 @@
     "message": "{PH1} vid {PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | invalidations": {
-    "message": "Ogiltighetsförklaringar"
+    "message": "Ogiltighetsförklaringar ({PH1} totalt)"
   },
   "panels/timeline/TimelineUIUtils.ts | invokedByTimeout": {
     "message": "Anropades av tidsgräns"
@@ -13169,17 +13274,11 @@
   "panels/timeline/TimelineUIUtils.ts | learnMore": {
     "message": "Läs mer"
   },
-  "panels/timeline/TimelineUIUtils.ts | loadFromCache": {
-    "message": "läs in från cacheminne"
-  },
   "panels/timeline/TimelineUIUtils.ts | location": {
     "message": "Plats"
   },
   "panels/timeline/TimelineUIUtils.ts | message": {
     "message": "Meddelande"
-  },
-  "panels/timeline/TimelineUIUtils.ts | mimeType": {
-    "message": "MIME-typ"
   },
   "panels/timeline/TimelineUIUtils.ts | module": {
     "message": "Modul"
@@ -13189,12 +13288,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | movedTo": {
     "message": "Har flyttats till"
-  },
-  "panels/timeline/TimelineUIUtils.ts | networkRequest": {
-    "message": "Nätverksbegäran"
-  },
-  "panels/timeline/TimelineUIUtils.ts | networkTransfer": {
-    "message": "nätverksöverföring"
   },
   "panels/timeline/TimelineUIUtils.ts | no": {
     "message": "Nej"
@@ -13223,9 +13316,6 @@
   "panels/timeline/TimelineUIUtils.ts | preview": {
     "message": "Förhandsgranskning"
   },
-  "panels/timeline/TimelineUIUtils.ts | priority": {
-    "message": "Prioritet"
-  },
   "panels/timeline/TimelineUIUtils.ts | processingDuration": {
     "message": "Behandlingstid"
   },
@@ -13243,9 +13333,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | repeats": {
     "message": "Upprepas"
-  },
-  "panels/timeline/TimelineUIUtils.ts | requestMethod": {
-    "message": "Metod för begäran"
   },
   "panels/timeline/TimelineUIUtils.ts | sAtS": {
     "message": "{PH1} kl. {PH2}"
@@ -13400,6 +13487,18 @@
   "panels/timeline/UIDevtoolsUtils.ts | system": {
     "message": "System"
   },
+  "panels/timeline/components/CPUThrottlingSelector.ts | cpu": {
+    "message": "CPU: {PH1}"
+  },
+  "panels/timeline/components/CPUThrottlingSelector.ts | cpuThrottling": {
+    "message": "CPU-begränsning: {PH1}"
+  },
+  "panels/timeline/components/CPUThrottlingSelector.ts | dSlowdown": {
+    "message": "{PH1} × lägre hastighet"
+  },
+  "panels/timeline/components/CPUThrottlingSelector.ts | noThrottling": {
+    "message": "Inga begränsningar"
+  },
   "panels/timeline/components/DetailsView.ts | forcedReflow": {
     "message": "Framtvingad flödesomformning"
   },
@@ -13430,6 +13529,75 @@
   "panels/timeline/components/DetailsView.ts | websocketProtocol": {
     "message": "WebSocket-protokoll"
   },
+  "panels/timeline/components/FieldSettingsDialog.ts | add": {
+    "message": "Lägg till"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | advanced": {
+    "message": "Avancerat"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | alreadyMapped": {
+    "message": "{PH1} har redan mappats till en produktionskälla."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | cancel": {
+    "message": "Avbryt"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | configure": {
+    "message": "Konfigurera"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | configureFieldData": {
+    "message": "Konfigurera hämtning av fältdata"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | delete": {
+    "message": "Radera"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | developmentOrigin": {
+    "message": "Utvecklingskälla"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | developmentOriginValue": {
+    "message": "Utveckling: {PH1}"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | doesNotHaveSufficientData": {
+    "message": "Chrome UX Report innehåller inte tillräckligt med verklig hastighetsdata för den här sidan."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | fetchAggregated": {
+    "message": "Hämta sammanställd fältdata från {PH1} så att du kan göra innehållsbaserade lokala mätningar utifrån verkliga användares upplevelse på webbplatsen."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | invalidOrigin": {
+    "message": "{PH1} är inte ett giltigt ursprung eller en giltig webbadress."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | mapDevelopmentOrigins": {
+    "message": "Ange en utvecklingskälla så du automatiskt får relevant fältdata för produktionskällan."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | new": {
+    "message": "Ny"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | ok": {
+    "message": "OK"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | onlyFetchFieldData": {
+    "message": "Visa alltid fältdata för webbadressen nedan"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | optOut": {
+    "message": "Välj bort"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | privacyDisclosure": {
+    "message": "Integritetsinformation"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | productionOrigin": {
+    "message": "Produktionskälla"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | productionOriginValue": {
+    "message": "Produktionskälla: {PH1}"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | setUp": {
+    "message": "Konfigurera"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | url": {
+    "message": "Webbadress"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | whenPerformanceIsShown": {
+    "message": "När Verktyg för programmerare är öppna skickas webbadresserna du besöker till Google för att söka efter fältdata. Dessa begäranden är inte kopplade till ditt Google-konto."
+  },
   "panels/timeline/components/InteractionBreakdown.ts | inputDelay": {
     "message": "Inmatningsfördröjning"
   },
@@ -13438,6 +13606,288 @@
   },
   "panels/timeline/components/InteractionBreakdown.ts | processingDuration": {
     "message": "Behandlingstid"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | allDevices": {
+    "message": "Alla enheter"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | auto": {
+    "message": "Automatiskt ({PH1})"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | collectionPeriod": {
+    "message": "Insamlingsperiod:"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | dateRange": {
+    "message": "{PH1}–{PH2}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | desktop": {
+    "message": "Dator"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | device": {
+    "message": "Enhet: {PH1}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | fieldData": {
+    "message": "Fältdata"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | fieldDataLink": {
+    "message": "fältdata"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | interactions": {
+    "message": "Interaktioner"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | lcpElement": {
+    "message": "LCP-element"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | loadingOption": {
+    "message": "{PH1} – Läser in …"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | localAndFieldMetrics": {
+    "message": "Lokala mätvärden och fältmätvärden"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | localMetrics": {
+    "message": "Lokala mätvärden"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | localMetricsLink": {
+    "message": "lokala mätvärden"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | mobile": {
+    "message": "Mobil"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | mostUsersDesktop": {
+    "message": "Majoriteten av användarna använder datorer. Testa att emulera en skärmstorlek som används av verkliga användare."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | mostUsersMobile": {
+    "message": "Majoriteten av användarna använder en mobil enhet. Testa att emulera en mobil enhet som används av verkliga användare."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | needsDataOption": {
+    "message": "{PH1} – Ingen data"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | nextSteps": {
+    "message": "Nästa steg"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | originOption": {
+    "message": "Ursprung"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | originOptionWithKey": {
+    "message": "Källa: {PH1}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | recordingSettings": {
+    "message": "Inspelningsinställningar"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | seeHowYourLocalMetricsCompare": {
+    "message": "Se hur väl dina lokala mätvärden och data från verkliga användare i {PH1} stämmer överens."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | showFieldDataForDevice": {
+    "message": "Visa fältdata för enhetstyp: {PH1}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | showFieldDataForPage": {
+    "message": "Visa fältdata för {PH1}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | tablet": {
+    "message": "Surfplatta"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | theFieldMetricsAre": {
+    "message": "{PH1} mäts av verkliga användare som använder många olika nätverksanslutningar och enheter."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | theLocalMetricsAre": {
+    "message": "{PH1} samlas in från den aktuella sidan via din nätverksanslutning och enhet."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | tryDisablingThrottling": {
+    "message": "Testa att inaktivera nätverksbegränsning för att likna den nätverkslatens som uppmätts av verkliga användare."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | tryUsingThrottling": {
+    "message": "Testa att använda nätverksbegränsningen {PH1} för att likna den nätverkslatens som uppmätts av verkliga användare."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | urlOption": {
+    "message": "Webbadress"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | urlOptionWithKey": {
+    "message": "Webbadress: {PH1}"
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodBetterCompare": {
+    "message": "Din lokala {PH1} på {PH2} är bra. Den är betydligt bättre än användarnas upplevelse."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodGoodDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} är bra. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Dessutom är fältdatan för 75:e percentilen {PH1} på {PH3} bra."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodNeedsImprovementDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} är bra. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Fältdatan för 75:e percentilen {PH1} på {PH3} behöver dock förbättras."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodPoorDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} är bra. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Fältdatan för den 75:e percentilen {PH1} på {PH3} är dock dålig."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodSimilarCompare": {
+    "message": "Din lokala {PH1} på {PH2} är bra. Den liknar användarnas upplevelse."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodSummarized": {
+    "message": "Din lokala {PH1} på {PH2} är bra."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodWorseCompare": {
+    "message": "Din lokala {PH1} på {PH2} är bra. Den är betydligt sämre än användarnas upplevelse."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementBetterCompare": {
+    "message": "Din lokala {PH1} på {PH2} behöver förbättras. Den är betydligt bättre än användarnas upplevelse."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementGoodDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} behöver förbättras. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Fältdatan för den 75:e percentilen {PH1} på {PH3} är dock bra."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementNeedsImprovementDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} behöver förbättras. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Dessutom behöver fältdatan för 75:e percentilen {PH1} på {PH3} förbättras."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementPoorDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} behöver förbättras. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Fältdatan för den 75:e percentilen {PH1} på {PH3} är dock dålig."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementSimilarCompare": {
+    "message": "Din lokala {PH1} på {PH2} behöver förbättras. Den liknar användarnas upplevelse."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementSummarized": {
+    "message": "Din lokala {PH1} på {PH2} behöver förbättras."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementWorseCompare": {
+    "message": "Din lokala {PH1} på {PH2} behöver förbättras. Den är betydligt sämre än användarnas upplevelse."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorBetterCompare": {
+    "message": "Din lokala {PH1} på {PH2} är dålig. Den är betydligt bättre än användarnas upplevelse."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorGoodDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} är dålig. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Fältdatan för den 75:e percentilen {PH1} på {PH3} är dock bra."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorNeedsImprovementDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} är dålig. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Fältdatan för 75:e percentilen {PH1} på {PH3} behöver dock förbättras."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorPoorDetailedCompare": {
+    "message": "Din lokala {PH1} på {PH2} är dålig. Den har samma betyg som {PH4} av användarnas verkliga {PH1}-upplevelser. Dessutom är fältdatan för 75:e percentilen {PH1} på {PH3} dålig."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorSimilarCompare": {
+    "message": "Din lokala {PH1} på {PH2} är bra. Den liknar användarnas upplevelse."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorSummarized": {
+    "message": "Din lokala {PH1} på {PH2} är dålig."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorWorseCompare": {
+    "message": "Din lokala {PH1} på {PH2} är dålig. Den är betydligt sämre än användarnas upplevelse."
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | FromCache": {
+    "message": " (från cacheminnet)"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | FromMemoryCache": {
+    "message": " (från minnescache)"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | FromPush": {
+    "message": " (från överföring)"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | FromServiceWorker": {
+    "message": " (från service worker)"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | contentDownloading": {
+    "message": "Innehållet laddas ned"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | decodedBody": {
+    "message": "Avkodad brödtext"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | duration": {
+    "message": "Längd"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | encodedData": {
+    "message": "Kodad data"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | fromCache": {
+    "message": "Från cacheminnet"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | initialPriority": {
+    "message": "Första prioritet"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | initiatedBy": {
+    "message": "Initierades av"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | mimeType": {
+    "message": "MIME-typ"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | networkRequest": {
+    "message": "Nätverksbegäran"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | no": {
+    "message": "Nej"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | preview": {
+    "message": "Förhandsgranskning"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | priority": {
+    "message": "Prioritet"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | queuingAndConnecting": {
+    "message": "Köplacera och ansluta"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | requestMethod": {
+    "message": "Metod för begäran"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | requestSentAndWaiting": {
+    "message": "Begäran har skickats och väntar"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | waitingOnMainThread": {
+    "message": "Väntar på huvudtråd"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | yes": {
+    "message": "Ja"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | contentDownloading": {
+    "message": "Innehållet laddas ned"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | priority": {
+    "message": "Prioritet"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | queuingAndConnecting": {
+    "message": "Köplacera och ansluta"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | renderBlocking": {
+    "message": "Renderingsblockering"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | requestSentAndWaiting": {
+    "message": "Begäran har skickats och väntar"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | waitingOnMainThread": {
+    "message": "Väntar på huvudtråd"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | add": {
+    "message": "Lägg till …"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | custom": {
+    "message": "Anpassat"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | disabled": {
+    "message": "Inaktiverat"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | network": {
+    "message": "Nätverk: {PH1}"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | networkThrottling": {
+    "message": "Nätverksbegränsning: {PH1}"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | presets": {
+    "message": "Förinställningar"
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | fetchPriorityApplied": {
+    "message": "fetchpriority=high har tillämpats"
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | lazyLoadNotApplied": {
+    "message": "uppskjuten inläsning tillämpas inte"
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | lcpLoadDelay": {
+    "message": "LCP-bilden läses in {PH1} efter den tidigaste startpunkten."
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | requestDiscoverable": {
+    "message": "Begäran kan hittas i det ursprungliga dokumentet"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | elementRenderDelay": {
+    "message": "Fördröjning av elementrendering"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDelay": {
+    "message": "Fördröjning av resursinläsning"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDuration": {
+    "message": "Inläsningstid för resurs"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | timeToFirstByte": {
+    "message": "Time to First Byte"
   },
   "panels/timeline/timeline-meta.ts | hideChromeFrameInLayersView": {
     "message": "Dölj chrome-ram i vyn Lager"
@@ -13463,6 +13913,9 @@
   "panels/timeline/timeline-meta.ts | record": {
     "message": "Spela in"
   },
+  "panels/timeline/timeline-meta.ts | recordAndReload": {
+    "message": "Registrera och läs in igen"
+  },
   "panels/timeline/timeline-meta.ts | saveProfile": {
     "message": "Spara profil …"
   },
@@ -13471,9 +13924,6 @@
   },
   "panels/timeline/timeline-meta.ts | showRecentTimelineSessions": {
     "message": "Visa senaste tidslinjesessioner"
-  },
-  "panels/timeline/timeline-meta.ts | startProfilingAndReloadPage": {
-    "message": "Starta profilering och läs in sidan igen"
   },
   "panels/timeline/timeline-meta.ts | stop": {
     "message": "Stoppa"
@@ -14453,9 +14903,6 @@
   "ui/legacy/components/perf_ui/FilmStripView.ts | screenshotForSSelectToView": {
     "message": "Skärmbild för {PH1} – välj för att visa föregående förfrågningar."
   },
-  "ui/legacy/components/perf_ui/FlameChart.ts | addScriptToIgnoreList": {
-    "message": "Lägg till skript på ignoreringslistan"
-  },
   "ui/legacy/components/perf_ui/FlameChart.ts | enterTrackConfigurationMode": {
     "message": "Konfigurera spår …"
   },
@@ -14465,23 +14912,11 @@
   "ui/legacy/components/perf_ui/FlameChart.ts | flameChart": {
     "message": "Flame chart"
   },
-  "ui/legacy/components/perf_ui/FlameChart.ts | hideChildren": {
-    "message": "Dölj underordnade poster"
+  "ui/legacy/components/perf_ui/FlameChart.ts | labelEntry": {
+    "message": "Etikettpost"
   },
-  "ui/legacy/components/perf_ui/FlameChart.ts | hideFunction": {
-    "message": "Dölj funktion"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | hideRepeatingChildren": {
-    "message": "Dölj återkommande underordnade poster"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | removeScriptFromIgnoreList": {
-    "message": "Ta bort skript från ignoreringslistan"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | resetChildren": {
-    "message": "Återställ underordnade"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | resetTrace": {
-    "message": "Återställ spårning"
+  "ui/legacy/components/perf_ui/FlameChart.ts | linkEntries": {
+    "message": "Länkposter"
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | sCollapsed": {
     "message": "{PH1} komprimerat"

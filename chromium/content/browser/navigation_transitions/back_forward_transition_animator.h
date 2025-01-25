@@ -22,6 +22,7 @@ namespace cc::slim {
 class Layer;
 class SolidColorLayer;
 class SurfaceLayer;
+class UIResourceLayer;
 }
 
 namespace content {
@@ -38,80 +39,9 @@ class RenderFrameHostImpl;
 // updates the UI in response. It is 1:1 with a single gesture, i.e. each time
 // the user touches the screen to start a gesture a new instance is created.
 class CONTENT_EXPORT BackForwardTransitionAnimator
-    : public gfx::FloatAnimationCurve::Target {
+    : public gfx::FloatAnimationCurve::Target,
+      public gfx::TransformAnimationCurve::Target {
  public:
-  // To create the `BackForwardTransitionAnimator`. Tests can override this
-  // factory to supply a customized version of `BackForwardTransitionAnimator`.
-  class Factory {
-   public:
-    Factory() = default;
-    Factory(const Factory&) = delete;
-    Factory& operator=(const Factory&) = delete;
-    virtual ~Factory() = default;
-
-    virtual std::unique_ptr<BackForwardTransitionAnimator> Create(
-        WebContentsViewAndroid* web_contents_view_android,
-        NavigationControllerImpl* controller,
-        const ui::BackGestureEvent& gesture,
-        BackForwardTransitionAnimationManager::NavigationDirection
-            nav_direction,
-        ui::BackGestureEventSwipeEdge initiating_edge,
-        NavigationEntryImpl* destination_entry,
-        BackForwardTransitionAnimationManagerAndroid* animation_manager);
-  };
-
-  BackForwardTransitionAnimator(const BackForwardTransitionAnimator&) = delete;
-  BackForwardTransitionAnimator& operator=(
-      const BackForwardTransitionAnimator&) = delete;
-  ~BackForwardTransitionAnimator() override;
-
-  // Mirrors the APIs on `BackForwardTransitionAnimationManager`.
-  // Some of them are virtual for testing purposes.
-  void OnGestureProgressed(const ui::BackGestureEvent& gesture);
-  void OnGestureCancelled();
-  void OnGestureInvoked();
-  void OnNavigationCancelledBeforeStart(NavigationHandle* navigation_handle);
-  void OnContentForNavigationEntryShown();
-  BackForwardTransitionAnimationManager::AnimationStage
-  GetCurrentAnimationStage();
-  virtual void OnAnimate(base::TimeTicks frame_begin_time);
-  void OnRenderWidgetHostDestroyed(RenderWidgetHost* widget_host);
-  virtual void OnRenderFrameMetadataChangedAfterActivation(
-      base::TimeTicks activation_time);
-  virtual void DidStartNavigation(NavigationHandle* navigation_handle);
-  virtual void ReadyToCommitNavigation(NavigationHandle* navigation_handle);
-  virtual void DidFinishNavigation(NavigationHandle* navigation_handle);
-  void OnDidNavigatePrimaryMainFramePreCommit(
-      NavigationRequest* navigation_request,
-      RenderFrameHostImpl* old_host,
-      RenderFrameHostImpl* new_host);
-
-  // Notifies when the transition needs to be aborted.
-  void AbortAnimation();
-
-  [[nodiscard]] bool IsTerminalState();
-
- protected:
-  BackForwardTransitionAnimator(
-      WebContentsViewAndroid* web_contents_view_android,
-      NavigationControllerImpl* controller,
-      const ui::BackGestureEvent& gesture,
-      BackForwardTransitionAnimationManager::NavigationDirection nav_direction,
-      ui::BackGestureEventSwipeEdge initiating_edge,
-      NavigationEntryImpl* destination_entry,
-      BackForwardTransitionAnimationManagerAndroid* animation_manager);
-
-  // `gfx::FloatAnimationCurve::Target`:
-  void OnFloatAnimated(const float& value,
-                       int target_property_id,
-                       gfx::KeyframeModel* keyframe_model) override;
-
-  // Called when each animation finishes. Advances `this` into the next state.
-  // Being virtual for testing.
-  virtual void OnCancelAnimationDisplayed();
-  virtual void OnInvokeAnimationDisplayed();
-  virtual void OnCrossFadeAnimationDisplayed();
-
   // Identifies the different stages of the animation that this manager is in.
   enum class State {
     // Set immediately when `OnGestureStarted` is called. Indicates that the
@@ -198,10 +128,151 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
     // transition.
     kAnimationAborted,
   };
-  State state() const { return state_; }
+  static std::string ToString(State state);
+
+  // Indicates the animation abort reason for UMA metrics.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused. Upon adding a new value, add it
+  // to `enums.xml` as well.
+  enum class AnimationAbortReason {
+    // The subscribed `RenderWidgetHost` was destroyed.
+    kRenderWidgetHostDestroyed = 0,
+
+    kMainCommitOnSubframeTransition = 1,
+    kNewCommitInPrimaryMainFrame = 2,
+    kCrossOriginRedirect = 3,
+    kNewCommitWhileDisplayingInvokeAnimation = 4,
+    kNewCommitWhileDisplayingCanceledAnimation = 5,
+    kNewCommitWhileWaitingForNewRendererToDraw = 6,
+    kNewCommitWhileWaitingForContentForNavigationEntryShown = 7,
+    kNewCommitWhileDisplayingCrossFadeAnimation = 8,
+    kNewCommitWhileWaitingForBeforeUnloadResponse = 9,
+    kMultipleNavigationRequestsCreated = 10,
+
+    // The navigation entry was deleted when the navigation was ready to commit.
+    kNavigationEntryDeletedBeforeCommit = 11,
+
+    // The new frame is not activated in time.
+    kPostNavigationFirstFrameTimeout = 12,
+
+    // The user started a new gesture while the first one is still on-going.
+    kChainedBack = 13,
+
+    // Set when the native view is detached from the native window. Clank can
+    // sometimes detach the view without detaching the compositor first. See
+    // https://crbug.com/344761329.
+    kDetachedFromWindow = 14,
+
+    // Set when the native window becomes invisible.
+    kRootWindowVisibilityChanged = 15,
+
+    kCompositorDetached = 16,
+
+    kMaxValue = kCompositorDetached
+  };
+
+  // To create the `BackForwardTransitionAnimator`. Tests can override this
+  // factory to supply a customized version of `BackForwardTransitionAnimator`.
+  class Factory {
+   public:
+    Factory() = default;
+    Factory(const Factory&) = delete;
+    Factory& operator=(const Factory&) = delete;
+    virtual ~Factory() = default;
+
+    virtual std::unique_ptr<BackForwardTransitionAnimator> Create(
+        WebContentsViewAndroid* web_contents_view_android,
+        NavigationControllerImpl* controller,
+        const ui::BackGestureEvent& gesture,
+        BackForwardTransitionAnimationManager::NavigationDirection
+            nav_direction,
+        ui::BackGestureEventSwipeEdge initiating_edge,
+        NavigationEntryImpl* destination_entry,
+        SkBitmap embedder_content,
+        BackForwardTransitionAnimationManagerAndroid* animation_manager);
+  };
+
+  BackForwardTransitionAnimator(const BackForwardTransitionAnimator&) = delete;
+  BackForwardTransitionAnimator& operator=(
+      const BackForwardTransitionAnimator&) = delete;
+  ~BackForwardTransitionAnimator() override;
+
+  // Mirrors the APIs on `BackForwardTransitionAnimationManager`.
+  // Some of them are virtual for testing purposes.
+  void OnGestureProgressed(const ui::BackGestureEvent& gesture);
+  void OnGestureCancelled();
+  void OnGestureInvoked();
+  void OnContentForNavigationEntryShown();
+  BackForwardTransitionAnimationManager::AnimationStage
+  GetCurrentAnimationStage();
+  virtual void OnAnimate(base::TimeTicks frame_begin_time);
+  void OnRenderWidgetHostDestroyed(RenderWidgetHost* widget_host);
+  virtual void OnRenderFrameMetadataChangedAfterActivation(
+      base::TimeTicks activation_time);
+  virtual void DidStartNavigation(NavigationHandle* navigation_handle);
+  virtual void ReadyToCommitNavigation(NavigationHandle* navigation_handle);
+  virtual void DidFinishNavigation(NavigationHandle* navigation_handle);
+  void OnDidNavigatePrimaryMainFramePreCommit(
+      NavigationRequest* navigation_request,
+      RenderFrameHostImpl* old_host,
+      RenderFrameHostImpl* new_host);
+  void OnNavigationCancelledBeforeStart(NavigationHandle* navigation_handle);
+  void MaybeRecordIgnoredInput(const blink::WebInputEvent& event);
+
+  // Notifies when the transition needs to be aborted.
+  void AbortAnimation(AnimationAbortReason abort_reason);
+
+  [[nodiscard]] bool IsTerminalState();
+
+  cc::slim::Layer* screenshot_layer_for_testing() const {
+    return screenshot_layer_.get();
+  }
+  cc::slim::SolidColorLayer* scrim_layer_for_testing() const {
+    return screenshot_scrim_.get();
+  }
+  cc::slim::SurfaceLayer* clone_layer_for_testing() const {
+    return old_surface_clone_.get();
+  }
+  cc::slim::SolidColorLayer* rrect_layer_for_testing() const {
+    return rounded_rectangle_.get();
+  }
+  ProgressBar* progress_bar_for_testing() const { return progress_bar_.get(); }
+  cc::slim::UIResourceLayer* embedder_live_content_clone_for_testing() const {
+    return embedder_live_content_clone_.get();
+  }
+
+  base::OneShotTimer* dismiss_screenshot_timer_for_testing() {
+    return &dismiss_screenshot_timer_;
+  }
+
+ protected:
+  BackForwardTransitionAnimator(
+      WebContentsViewAndroid* web_contents_view_android,
+      NavigationControllerImpl* controller,
+      const ui::BackGestureEvent& gesture,
+      BackForwardTransitionAnimationManager::NavigationDirection nav_direction,
+      ui::BackGestureEventSwipeEdge initiating_edge,
+      NavigationEntryImpl* destination_entry,
+      SkBitmap embedder_content,
+      BackForwardTransitionAnimationManagerAndroid* animation_manager);
+
+  // `gfx::FloatAnimationCurve::Target`:
+  void OnFloatAnimated(const float& value,
+                       int target_property_id,
+                       gfx::KeyframeModel* keyframe_model) override;
+
+  // `gfx::TransformAnimationCurve::Target`:
+  void OnTransformAnimated(const gfx::TransformOperations& transform,
+                           int target_property_id,
+                           gfx::KeyframeModel* keyframe_model) override;
+
+  // Called when each animation finishes. Advances `this` into the next state.
+  // Being virtual for testing.
+  virtual void OnCancelAnimationDisplayed();
+  virtual void OnInvokeAnimationDisplayed();
+  virtual void OnCrossFadeAnimationDisplayed();
 
   static bool CanAdvanceTo(State from, State to);
-  static std::string ToString(State state);
 
   enum class NavigationState {
     // Navigation has not begun.
@@ -238,7 +309,22 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
     return initiating_edge_;
   }
 
+  State state_;
+
+  // The destination `FrameNavigationEntry::item_sequence_number()` of the
+  // gesture back navigation in the primary main frame. Set when the browser
+  // tells the renderer to commit the navigation.
+  int64_t primary_main_frame_navigation_entry_item_sequence_number_ =
+      cc::RenderFrameMetadata::kInvalidItemSequenceNumber;
+
  private:
+  // Indicates what animation state caused input event suppression.
+  enum class IgnoringInputReason {
+    kAnimationInvokedOccurred = 0,
+    kAnimationCanceledOccurred = 1,
+    kNoOccurrence = 2
+  };
+
   // Initializes `effect_` for the scrim and cross-fade animation.
   void InitializeEffectForGestureProgressAnimation();
   void InitializeEffectForCrossfadeAnimation();
@@ -250,7 +336,7 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   void ProcessState();
 
   // Initializes the `ui_resource_layer_` and sets up the layer tree.
-  void SetupForScreenshotPreview();
+  void SetupForScreenshotPreview(SkBitmap embedder_content);
 
   // Sets the progress bar shown during the invoke phase of the animation.
   void SetupProgressBar();
@@ -260,12 +346,13 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   // successfully created and false otherwise. The caller should play the invoke
   // or cancel animation based on the return value.
   [[nodiscard]] bool StartNavigationAndTrackRequest();
+  void TrackRequest(base::WeakPtr<NavigationRequest> created_request);
 
   struct ComputedAnimationValues {
     // The offset that will be applied to the live, outgoing page.
-    float live_page_offset = 0.f;
+    float live_page_offset_px = 0.f;
     // The offset that will be applied to the incoming screenshot layer.
-    float screenshot_offset = 0.f;
+    float screenshot_offset_px = 0.f;
     // The current progress of the animation, running from 0 to 1.
     float progress = 0.f;
   };
@@ -287,7 +374,9 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   [[nodiscard]] bool SetLayerTransformationAndTickEffect(
       const PhysicsModel::Result& result);
 
-  void CloneOldSurfaceLayer(RenderWidgetHostViewBase* old_main_frame_view);
+  void MaybeCloneOldSurfaceLayer(RenderWidgetHostViewBase* old_main_frame_view);
+
+  void SetUpEmbedderContentLayerIfNeeded(SkBitmap embedder_content);
 
   // Called when the navigation is ready to be committed in the renderer.
   void SubscribeToNewRenderWidgetHost(NavigationRequest* navigation_request);
@@ -295,6 +384,25 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   void UnregisterNewFrameActivationObserver();
 
   int GetViewportWidthPx() const;
+  int GetViewportHeightPx() const;
+
+  void StartInputSuppression(IgnoringInputReason ignoring_input_reason);
+
+  void InsertLayersInOrder();
+
+  // Dispatched when `dismiss_screenshot_timer_` fires, to remove the stale
+  // screenshot after the screenshot is fully centered because the new Document
+  // hasn't produced a frame yet.
+  void OnPostNavigationFirstFrameTimeout();
+
+  void ResetLiveOverlayLayer();
+
+  // Calculate the start and end position of the rrect for the fallback UX, in
+  // physical pixels.
+  gfx::PointF CalculateRRectStartPx() const;
+  gfx::PointF CalculateRRectEndPx() const;
+
+  int DipToPx(int dip) const;
 
   const BackForwardTransitionAnimationManager::NavigationDirection
       nav_direction_;
@@ -311,10 +419,22 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   const raw_ptr<BackForwardTransitionAnimationManagerAndroid>
       animation_manager_;
 
-  // Tracks the `NavigationRequest` created by the gesture back navigation of a
-  // primary main frame.
-  std::optional<int64_t>
-      primary_main_frame_navigation_request_id_of_gesture_nav_;
+  // Track the ID of the `NavigationRequest` created by the gesture back
+  // navigation in the primary main frame or in the subframe:
+  // - If a request is created in the primary main frame, we won't track any of
+  // the subframe requests (i.e., a fragment navigation in the primary main
+  // frame and cross-doc navigations in the subframes).
+  // - Else, we track the subframe request.
+  // - For any navigation with more than one subframe requests, the transition
+  // is aborted.
+  struct TrackedRequest {
+    int64_t navigation_id;
+    bool is_primary_main_frame;
+  };
+  std::optional<TrackedRequest> tracked_request_;
+
+  // Set when a navigation is being started.
+  bool is_starting_navigation_ = false;
 
   // The unique id assigned to `screenshot_`.
   cc::UIResourceId ui_resource_id_ =
@@ -334,6 +454,10 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   //   tell the renderer to commit the navigation.
   scoped_refptr<cc::slim::SurfaceLayer> old_surface_clone_;
 
+  // A copy of the embedder content to show the content from the embedder side.
+  // Only one of old_surface_clone_ or embedder_live_content_clone_ will be set.
+  scoped_refptr<cc::slim::UIResourceLayer> embedder_live_content_clone_;
+
   // The pre-captured screenshot used for previewing. The ownership of the
   // screenshot is transferred from the cache to this manager when the gesture
   // starts. If the user decides not to start the history navigation, or the
@@ -345,27 +469,30 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   // it's being displayed in the UI.
   std::unique_ptr<NavigationEntryScreenshot> screenshot_;
 
-  // Other information about the screenshot, and about the page we are
-  // navigating towards.
-  //
   // If `screenshot_` is supplied by the embedder.
   const bool is_copied_from_embedder_;
-  // The background color of the destination page. Used to compose a fallback
-  // screenshot when no screenshot is available in the destination entry.
-  const SkColor4f main_frame_background_color_;
-  // The current transition is using a fallback screenshot of page's background
-  // color.
-  const bool use_fallback_screenshot_;
+
+  // The scale factor is constant per gesture.
+  const float device_scale_factor_;
+
+  // Color and positional information to compose a fallback screenshot.
+  struct FallbackUX {
+    BackForwardTransitionAnimationManager::FallbackUXConfig color_config;
+    // The start and stop positions of the rounded rectangle, with respect to
+    // its parent (the screenshot layer).
+    gfx::PointF start_px;
+    gfx::PointF end_px;
+  };
+  std::optional<FallbackUX> fallback_ux_;
+  // The rounded rectangle specified by `fallback_ux_`. It embeds the favicon,
+  // and is child of the screenshot layer. Need the reference here because the
+  // animation timeline of the rounded rectangle and the favicon is different
+  // from the screenshot.
+  scoped_refptr<cc::slim::SolidColorLayer> rounded_rectangle_;
 
   // Tracks various state of the navigation request associated with this
   // gesture. Only set if the navigation request is successfully created.
   NavigationState navigation_state_ = NavigationState::kNotStarted;
-
-  // The destination `FrameNavigationEntry::item_sequence_number()` of the
-  // gesture back navigation in the primary main frame. Set when the browser
-  // tells the renderer to commit the navigation.
-  int64_t primary_main_frame_navigation_entry_item_sequence_number_ =
-      cc::RenderFrameMetadata::kInvalidItemSequenceNumber;
 
   // If viz has already activated a frame for the new page before the invoke
   // animation finishes, we set this bit so we can start the crossfade animation
@@ -388,11 +515,13 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   // to null when the tracked `RenderWidgetHost` is destroyed.
   raw_ptr<RenderWidgetHostImpl> new_render_widget_host_;
 
-  // Responsible for the non-transformational animations (scrim and
-  // cross-fade).
+  // Responsible for the non-transformational animations (e.g., scrim and
+  // cross-fade), and the position of the rounded rectangle (when fallback UX is
+  // used).
   gfx::KeyframeEffect effect_;
 
-  // Responsible for the transformational animations.
+  // Responsible for the transformational animations of the live page and the
+  // screenshot.
   PhysicsModel physics_model_;
 
   // Set by the latest `OnGestureProgressed()`.
@@ -401,7 +530,28 @@ class CONTENT_EXPORT BackForwardTransitionAnimator
   // The indeterminate progress bar shown during the invoke animation.
   std::unique_ptr<ProgressBar> progress_bar_;
 
-  State state_;
+  // A transition suppresses sending input events to the renderer during the
+  // animation.
+  std::optional<WebContentsImpl::ScopedIgnoreInputEvents> ignore_input_scope_;
+
+  // A timer to dismiss the potentially stale screenshot, after screenshot is
+  // fully centered (at the end of the invoke animation).
+  base::OneShotTimer dismiss_screenshot_timer_;
+
+  // Counter for different combinations of reason and position of ignored
+  // inputs.
+  struct IgnoredReasonCategoryAndCount {
+    int animation_invoked_on_source = 0;
+    int animation_invoked_on_destination = 0;
+    int animation_canceled_on_source = 0;
+    int animation_canceled_on_destination = 0;
+  };
+  IgnoredReasonCategoryAndCount ignored_inputs_count_;
+
+  IgnoringInputReason ignoring_input_reason_ =
+      IgnoringInputReason::kNoOccurrence;
+
+  base::WeakPtrFactory<BackForwardTransitionAnimator> weak_ptr_factory_{this};
 };
 
 }  // namespace content

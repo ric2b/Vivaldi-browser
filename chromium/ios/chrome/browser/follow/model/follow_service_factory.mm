@@ -10,15 +10,19 @@
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
 #import "ios/chrome/browser/follow/model/follow_configuration.h"
 #import "ios/chrome/browser/follow/model/follow_service.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/public/provider/chrome/browser/follow/follow_api.h"
 
 // static
-FollowService* FollowServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+FollowService* FollowServiceFactory::GetForBrowserState(ProfileIOS* profile) {
+  return GetForProfile(profile);
+}
+
+// static
+FollowService* FollowServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<FollowService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static

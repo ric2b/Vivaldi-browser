@@ -117,7 +117,8 @@ include_rules = [
     "+ui/base/pointer/pointer_device.h",
     "+ui/base/resource/resource_scale_factor.h",
     "+ui/base/ui_base_features.h",
-    "+ui/base/ui_base_types.h",
+    "+ui/base/mojom/window_show_state.mojom-blink.h",
+    "+ui/base/mojom/window_show_state.mojom-blink-forward.h",
     "+ui/color",
     "+ui/display/screen_info.h",
     "+ui/display/screen_infos.h",
@@ -131,6 +132,7 @@ include_rules = [
     "+ui/gfx/presentation_feedback.h",
     "+ui/gfx/range/range.h",
     "+ui/gfx/selection_bound.h",
+    "+ui/strings/grit/ax_strings.h",
     "-web",
     # We do not want any new dependencies into core/exported until we resolve
     # controller layer.

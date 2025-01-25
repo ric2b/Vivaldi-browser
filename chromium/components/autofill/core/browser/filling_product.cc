@@ -11,6 +11,7 @@
 
 namespace autofill {
 
+// LINT.IfChange
 std::string FillingProductToString(FillingProduct filling_product) {
   switch (filling_product) {
     case FillingProduct::kNone:
@@ -32,10 +33,16 @@ std::string FillingProductToString(FillingProduct filling_product) {
     case FillingProduct::kPlusAddresses:
       return "PlusAddresses";
     case FillingProduct::kStandaloneCvc:
-      return "VirtualCard.StandaloneCvc";
+      return "StandaloneCvc";
+    case FillingProduct::kPredictionImprovements:
+      return "PredictionImprovements";
   };
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
+// LINT.ThenChange(
+//   /tools/metrics/histograms/metadata/autofill/histograms.xml:Autofill.FillingProduct,
+//   /tools/metrics/histograms/metadata/autofill/histograms.xml:Autofill.FillingProduct.Condensed
+// )
 
 FillingProduct GetFillingProductFromSuggestionType(SuggestionType type) {
   switch (type) {
@@ -49,6 +56,7 @@ FillingProduct GetFillingProductFromSuggestionType(SuggestionType type) {
     case SuggestionType::kEditAddressProfile:
     case SuggestionType::kDeleteAddressProfile:
     case SuggestionType::kDevtoolsTestAddresses:
+    case SuggestionType::kDevtoolsTestAddressByCountry:
     case SuggestionType::kDevtoolsTestAddressEntry:
     case SuggestionType::kManageAddress:
       return FillingProduct::kAddress;
@@ -88,9 +96,13 @@ FillingProduct GetFillingProductFromSuggestionType(SuggestionType type) {
     case SuggestionType::kComposeSavedStateNotification:
       return FillingProduct::kCompose;
     case SuggestionType::kCreateNewPlusAddress:
+    case SuggestionType::kCreateNewPlusAddressInline:
     case SuggestionType::kFillExistingPlusAddress:
     case SuggestionType::kManagePlusAddress:
+    case SuggestionType::kPlusAddressError:
       return FillingProduct::kPlusAddresses;
+    case SuggestionType::kPredictionImprovementsFeedback:
+      return FillingProduct::kPredictionImprovements;
     case SuggestionType::kSeePromoCodeDetails:
     case SuggestionType::kTitle:
     case SuggestionType::kSeparator:
@@ -99,8 +111,13 @@ FillingProduct GetFillingProductFromSuggestionType(SuggestionType type) {
     case SuggestionType::kMixedFormMessage:
     case SuggestionType::kInsecureContextPaymentDisabledMessage:
       return FillingProduct::kNone;
+    case SuggestionType::kRetrievePredictionImprovements:
+    case SuggestionType::kPredictionImprovementsLoadingState:
+    case SuggestionType::kFillPredictionImprovements:
+    case SuggestionType::kPredictionImprovementsDetails:
+      return FillingProduct::kPredictionImprovements;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 FillingProduct GetFillingProductFromFieldTypeGroup(
@@ -125,8 +142,10 @@ FillingProduct GetFillingProductFromFieldTypeGroup(
       return FillingProduct::kPassword;
     case FieldTypeGroup::kIban:
       return FillingProduct::kIban;
+    case autofill::FieldTypeGroup::kPredictionImprovements:
+      return FillingProduct::kPredictionImprovements;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 FillingProduct GetPreferredSuggestionFillingProduct(

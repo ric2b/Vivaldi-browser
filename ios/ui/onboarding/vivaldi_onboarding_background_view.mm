@@ -28,7 +28,8 @@ CGFloat const kOverlayLightOpacity = 0.6;
 
 #pragma mark - Initializer
 - (instancetype)init {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     [self setUpUI];
   }
   return self;

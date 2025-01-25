@@ -152,21 +152,23 @@ void DownloadItemWarningData::AddWarningActionEvent(DownloadItem* download,
 }
 
 // static
-bool DownloadItemWarningData::IsEncryptedArchive(
+bool DownloadItemWarningData::IsTopLevelEncryptedArchive(
     const download::DownloadItem* download) {
-  return GetWithDefault(download,
-                        &DownloadItemWarningData::is_encrypted_archive_, false);
+  return GetWithDefault(
+      download, &DownloadItemWarningData::is_top_level_encrypted_archive_,
+      false);
 }
 
 // static
-void DownloadItemWarningData::SetIsEncryptedArchive(
+void DownloadItemWarningData::SetIsTopLevelEncryptedArchive(
     download::DownloadItem* download,
-    bool is_encrypted_archive) {
+    bool is_top_level_encrypted_archive) {
   if (!download) {
     return;
   }
 
-  GetOrCreate(download)->is_encrypted_archive_ = is_encrypted_archive;
+  GetOrCreate(download)->is_top_level_encrypted_archive_ =
+      is_top_level_encrypted_archive;
 }
 
 // static
@@ -258,6 +260,9 @@ DownloadItemWarningData::ConstructCsbrrDownloadWarningAction(
     case DownloadItemWarningData::WarningAction::SHOWN:
       NOTREACHED_IN_MIGRATION();
       break;
+    case DownloadItemWarningData::WarningAction::ACCEPT_DEEP_SCAN:
+      action.set_action(ClientSafeBrowsingReportRequest::DownloadWarningAction::
+                            ACCEPT_DEEP_SCAN);
   }
   action.set_is_terminal_action(event.is_terminal_action);
   action.set_interval_msec(event.action_latency_msec);
@@ -408,6 +413,9 @@ std::string DownloadItemWarningData::WarningActionEvent::ToString() const {
       break;
     case WarningAction::OPEN_LEARN_MORE_LINK:
       action_string = "OPEN_LEARN_MORE_LINK";
+      break;
+    case WarningAction::ACCEPT_DEEP_SCAN:
+      action_string = "ACCEPT_DEEP_SCAN";
       break;
   }
   return base::JoinString({surface_string, action_string,

@@ -5,6 +5,8 @@
 
 #import <Foundation/Foundation.h>
 
+#import "ios/ui/settings/tabs/vivaldi_ntp_type.h"
+
 // A protocol implemented by consumers to handle address bar and tab style
 // preference state change.
 @protocol VivaldiTabsSettingsConsumer
@@ -23,10 +25,12 @@
 - (void)setPreferenceShowXButtonInBackgroundTab:(BOOL)showXButton;
 // Updates the state with the inactive tabs threshold preference value.
 - (void)setPreferenceForInactiveTabsTimeThreshold:(int)threshold;
-// Updates the state with the show inactive tabs preference value.
+// Updates the new tab setting state
+- (void)setPreferenceForVivaldiNTPType:(VivaldiNTPType)setting
+                               withURL:(NSString*)url;
 @optional
+// Updates the state with the show inactive tabs preference value.
 - (void)setPreferenceForShowInactiveTabs:(BOOL)showInactiveTabs;
-
 @end
 
 #endif  // IOS_UI_SETTINGS_TABS_VIVALDI_TAB_SETTINGS_CONSUMER_H_

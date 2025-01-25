@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
@@ -63,12 +64,14 @@ ExtensionSidePanelCoordinator::ExtensionSidePanelCoordinator(
     Browser* browser,
     content::WebContents* web_contents,
     const Extension* extension,
-    SidePanelRegistry* registry)
+    SidePanelRegistry* registry,
+    bool for_tab)
     : profile_(profile),
       browser_(browser),
       web_contents_(web_contents),
       extension_(extension),
-      registry_(registry) {
+      registry_(registry),
+      for_tab_(for_tab) {
   DCHECK(base::FeatureList::IsEnabled(
       extensions_features::kExtensionSidePanelIntegration));
 
@@ -101,9 +104,7 @@ ExtensionSidePanelCoordinator::ExtensionSidePanelCoordinator(
   }
 }
 
-ExtensionSidePanelCoordinator::~ExtensionSidePanelCoordinator() {
-  DeregisterEntry();
-}
+ExtensionSidePanelCoordinator::~ExtensionSidePanelCoordinator() = default;
 
 content::WebContents*
 ExtensionSidePanelCoordinator::GetHostWebContentsForTesting() const {
@@ -312,6 +313,7 @@ std::unique_ptr<views::View> ExtensionSidePanelCoordinator::CreateView() {
   auto extension_view = std::make_unique<ExtensionViewViews>(host_.get());
   extension_view->SetVisible(true);
 
+  scoped_view_observation_.Reset();
   scoped_view_observation_.Observe(extension_view.get());
   return extension_view;
 }
@@ -322,14 +324,14 @@ void ExtensionSidePanelCoordinator::HandleCloseExtensionSidePanel(
   Browser* browser = GetBrowser();
   DCHECK(browser);
 
-  auto* coordinator = SidePanelUtil::GetSidePanelCoordinatorForBrowser(browser);
+  auto* coordinator = browser->GetFeatures().side_panel_coordinator();
 
   // If the SidePanelEntry for this extension is showing when window.close() is
   // called, close the side panel. Otherwise, clear the entry's cached view.
   SidePanelEntry* entry = GetEntry();
   DCHECK(entry);
 
-  if (coordinator->IsSidePanelEntryShowing(entry)) {
+  if (coordinator->IsSidePanelEntryShowing(entry->key(), for_tab_)) {
     coordinator->Close();
   } else {
     entry->ClearCachedView();

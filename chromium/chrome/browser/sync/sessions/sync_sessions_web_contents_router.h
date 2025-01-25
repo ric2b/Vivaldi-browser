@@ -20,6 +20,8 @@
 #include "components/sync/model/syncable_service.h"
 #include "components/sync_sessions/local_session_event_router.h"
 
+#include "components/sync_sessions/vivaldi_specific.h"
+
 namespace content {
 class WebContents;
 }  // namespace content
@@ -61,13 +63,11 @@ class SyncSessionsWebContentsRouter : public LocalSessionEventRouter,
   // KeyedService implementation.
   void Shutdown() override;
 
-  void UpdateVivExtData(const std::string &data);
+  void UpdateVivExtData(const VivaldiSpecific &data);
 
  private:
   syncer::SyncableService::StartSyncFlare flare_;
   raw_ptr<LocalSessionEventHandler> handler_ = nullptr;
-
-  std::optional<std::string> future_viv_ext_data_;
 
 #if !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<BrowserListRouterHelper> browser_list_helper_;

@@ -4,6 +4,10 @@
 
 #include "components/subresource_filter/core/browser/copying_file_stream.h"
 
+#include "base/compiler_specific.h"
+#include "base/containers/span.h"
+#include "base/numerics/safe_conversions.h"
+
 namespace subresource_filter {
 
 // CopyingFileInputStream ------------------------------------------------------
@@ -14,7 +18,11 @@ CopyingFileInputStream::CopyingFileInputStream(base::File file)
     : file_(std::move(file)) {}
 
 int CopyingFileInputStream::Read(void* buffer, int size) {
-  return file_.ReadAtCurrentPosNoBestEffort(static_cast<char*>(buffer), size);
+  std::optional<size_t> result =
+      file_.ReadAtCurrentPosNoBestEffort(UNSAFE_TODO(base::span(
+          static_cast<uint8_t*>(buffer), base::checked_cast<size_t>(size))));
+
+  return result.has_value() ? base::checked_cast<int>(result.value()) : -1;
 }
 
 // CopyingFileOutputStream -----------------------------------------------------
@@ -24,8 +32,8 @@ CopyingFileOutputStream::CopyingFileOutputStream(base::File file)
     : file_(std::move(file)) {}
 
 bool CopyingFileOutputStream::Write(const void* buffer, int size) {
-  return file_.WriteAtCurrentPos(static_cast<const char*>(buffer), size) ==
-         size;
+  return UNSAFE_TODO(
+      file_.WriteAtCurrentPos(static_cast<const char*>(buffer), size) == size);
 }
 
 }  // namespace subresource_filter

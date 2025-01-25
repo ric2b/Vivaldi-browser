@@ -51,11 +51,13 @@ export class BackgroundServiceModel extends SDK.SDKModel.SDKModel<EventTypes> im
   }
 }
 
-SDK.SDKModel.SDKModel.register(BackgroundServiceModel, {capabilities: SDK.Target.Capability.Browser, autostart: false});
+SDK.SDKModel.SDKModel.register(BackgroundServiceModel, {capabilities: SDK.Target.Capability.BROWSER, autostart: false});
 
 export enum Events {
+  /* eslint-disable @typescript-eslint/naming-convention -- Used by web_tests. */
   RecordingStateChanged = 'RecordingStateChanged',
   BackgroundServiceEventReceived = 'BackgroundServiceEventReceived',
+  /* eslint-enable @typescript-eslint/naming-convention */
 }
 
 export type EventTypes = {

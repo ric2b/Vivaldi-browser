@@ -3,7 +3,10 @@
 #import "ios/ui/settings/addressbar/vivaldi_addressbar_settings_coordinator.h"
 
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/model/url_loading_params.h"
+#import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/settings/addressbar/vivaldi_addressbar_settings_mediator.h"
 #import "ios/ui/settings/addressbar/vivaldi_addressbar_settings_swift.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -64,6 +67,8 @@
 
   [self.baseNavigationController pushViewController:self.viewController
                                            animated:YES];
+
+  [self observeTapEvents];
 }
 
 - (void)stop {
@@ -74,12 +79,28 @@
   self.viewProvider = nil;
 }
 
-#pragma mark - Private
+#pragma mark - Private Actions
+- (void)observeTapEvents {
+  __weak __typeof(self) weakSelf = self;
+  [self.viewProvider observeDMLearnMoreLinkTap:^{
+    [weakSelf showDirectMatchLearnMorePage];
+  }];
+}
 
 - (void)handleDoneButtonTap {
   [self stop];
   [self.baseNavigationController dismissViewControllerAnimated:YES
                                                     completion:nil];
+}
+
+#pragma mark - Private
+
+- (void)showDirectMatchLearnMorePage {
+  GURL learnMoreURL([vVivaldiDirectMatchLearnMoreUrl UTF8String]);
+  UrlLoadParams params = UrlLoadParams::InNewTab(learnMoreURL);
+  params.in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
+  [self handleDoneButtonTap];
 }
 
 @end

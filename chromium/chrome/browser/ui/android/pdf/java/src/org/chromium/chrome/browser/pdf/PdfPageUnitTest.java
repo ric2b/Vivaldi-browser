@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.pdf;
 
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.verify;
 
 import android.app.Activity;
 import android.graphics.Rect;
@@ -21,22 +20,21 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.supplier.DestroyableObservableSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.ui.base.TestActivity;
 
-import java.net.URL;
-
 @RunWith(BaseRobolectricTestRunner.class)
+@EnableFeatures(ContentFeatureList.ANDROID_OPEN_PDF_INLINE)
 public class PdfPageUnitTest {
     @Rule
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
@@ -51,6 +49,7 @@ public class PdfPageUnitTest {
     private String mPdfPageUrl;
 
     private static final String DEFAULT_TAB_TITLE = "Loading PDF…";
+    private static final int TAB_ID = 123;
     private static final String CONTENT_URL = "content://media/external/downloads/1000000022";
     private static final String FILE_URL = "file:///media/external/downloads/sample.pdf";
     private static final String PDF_LINK = "https://www.foo.com/testfiles/pdf/sample.pdf";
@@ -71,7 +70,7 @@ public class PdfPageUnitTest {
         doReturn(mMarginSupplier).when(mMockNativePageHost).createDefaultMarginSupplier();
         mPdfInfo = new PdfInfo();
         ChromeFileProvider.setGeneratedUriForTesting(Uri.parse(CONTENT_URL));
-        PdfUtils.skipLoadPdfForTesting(true);
+        PdfCoordinator.skipLoadPdfForTesting(true);
         mPdfPageUrl = PdfUtils.encodePdfPageUrl(PDF_LINK);
     }
 
@@ -79,7 +78,7 @@ public class PdfPageUnitTest {
     public void tearDown() throws Exception {
         mCloseableMocks.close();
         ChromeFileProvider.setGeneratedUriForTesting(null);
-        PdfUtils.skipLoadPdfForTesting(false);
+        PdfCoordinator.skipLoadPdfForTesting(false);
     }
 
     @Test
@@ -92,7 +91,8 @@ public class PdfPageUnitTest {
                         mActivity,
                         encodedUrl,
                         mPdfInfo,
-                        DEFAULT_TAB_TITLE);
+                        DEFAULT_TAB_TITLE,
+                        TAB_ID);
         Assert.assertNotNull(pdfPage);
         Assert.assertEquals(
                 "Pdf page host should match.", UrlConstants.PDF_HOST, pdfPage.getHost());
@@ -121,7 +121,8 @@ public class PdfPageUnitTest {
                         mActivity,
                         encodedUrl,
                         mPdfInfo,
-                        DEFAULT_TAB_TITLE);
+                        DEFAULT_TAB_TITLE,
+                        TAB_ID);
         Assert.assertNotNull(pdfPage);
         Assert.assertEquals("Pdf page title should match.", FILE_NAME, pdfPage.getTitle());
         Assert.assertEquals(
@@ -150,14 +151,15 @@ public class PdfPageUnitTest {
                         mActivity,
                         mPdfPageUrl,
                         mPdfInfo,
-                        DEFAULT_TAB_TITLE);
+                        DEFAULT_TAB_TITLE,
+                        TAB_ID);
         Assert.assertNotNull(pdfPage);
         Assert.assertFalse(
                 "Pdf should not be loaded when the download is not completed.",
                 pdfPage.mPdfCoordinator.getIsPdfLoadedForTesting());
 
         // Simulate download complete
-        pdfPage.onDownloadComplete(FILE_NAME, FILE_PATH);
+        pdfPage.onDownloadComplete(FILE_NAME, FILE_PATH, true);
         Assert.assertEquals("Pdf page title should match.", FILE_NAME, pdfPage.getTitle());
         Assert.assertEquals(
                 "Pdf page host should match.", UrlConstants.PDF_HOST, pdfPage.getHost());
@@ -174,19 +176,7 @@ public class PdfPageUnitTest {
                 "Pdf should be loaded when the view is attached to window.",
                 pdfPage.mPdfCoordinator.getIsPdfLoadedForTesting());
 
-        // Simulate open embedded hyperlink in PDF
-        pdfPage.mPdfCoordinator
-                .getPdfEventsListenerForTesting()
-                .onHyperlinkClicked(new URL(EXAMPLE_URL));
-        ArgumentCaptor<LoadUrlParams> params = ArgumentCaptor.forClass(LoadUrlParams.class);
-        verify(mMockNativePageHost).openNewTab(params.capture());
-        Assert.assertEquals(
-                "The URL to be loaded should match.", EXAMPLE_URL, params.getValue().getUrl());
-
         contentView.removeView(view);
         pdfPage.destroy();
-        Assert.assertNull(
-                "PdfEventsListener should be reset to null.",
-                pdfPage.mPdfCoordinator.getPdfEventsListenerForTesting());
     }
 }

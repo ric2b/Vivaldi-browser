@@ -16,7 +16,7 @@
 #include "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #include "ios/chrome/browser/ntp_tiles/model/ios_most_visited_sites_factory.h"
 #include "ios/chrome/browser/ntp_tiles/model/ios_popular_sites_factory.h"
-#include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #include "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #include "ios/web/public/thread/web_thread.h"
 #include "ios/web/public/webui/web_ui_ios.h"
@@ -64,17 +64,17 @@ void IOSNTPTilesInternalsMessageHandlerBridge::RegisterMessages() {
 }
 
 bool IOSNTPTilesInternalsMessageHandlerBridge::SupportsNTPTiles() {
-  return !ChromeBrowserState::FromWebUIIOS(web_ui())->IsOffTheRecord();
+  return !ProfileIOS::FromWebUIIOS(web_ui())->IsOffTheRecord();
 }
 
 std::unique_ptr<ntp_tiles::MostVisitedSites>
 IOSNTPTilesInternalsMessageHandlerBridge::MakeMostVisitedSites() {
   return IOSMostVisitedSitesFactory::NewForBrowserState(
-      ChromeBrowserState::FromWebUIIOS(web_ui()));
+      ProfileIOS::FromWebUIIOS(web_ui()));
 }
 
 PrefService* IOSNTPTilesInternalsMessageHandlerBridge::GetPrefs() {
-  return ChromeBrowserState::FromWebUIIOS(web_ui())->GetPrefs();
+  return ProfileIOS::FromWebUIIOS(web_ui())->GetPrefs();
 }
 
 void IOSNTPTilesInternalsMessageHandlerBridge::RegisterMessageCallback(
@@ -105,13 +105,12 @@ web::WebUIIOSDataSource* CreateNTPTilesInternalsHTMLSource() {
 NTPTilesInternalsUI::NTPTilesInternalsUI(web::WebUIIOS* web_ui,
                                          const std::string& host)
     : web::WebUIIOSController(web_ui, host) {
-  ChromeBrowserState* browser_state = ChromeBrowserState::FromWebUIIOS(web_ui);
-  web::WebUIIOSDataSource::Add(browser_state,
-                               CreateNTPTilesInternalsHTMLSource());
+  ProfileIOS* profile = ProfileIOS::FromWebUIIOS(web_ui);
+  web::WebUIIOSDataSource::Add(profile, CreateNTPTilesInternalsHTMLSource());
   web_ui->AddMessageHandler(
       std::make_unique<IOSNTPTilesInternalsMessageHandlerBridge>(
           ios::FaviconServiceFactory::GetForBrowserState(
-              browser_state, ServiceAccessType::EXPLICIT_ACCESS)));
+              profile, ServiceAccessType::EXPLICIT_ACCESS)));
 }
 
 NTPTilesInternalsUI::~NTPTilesInternalsUI() {}

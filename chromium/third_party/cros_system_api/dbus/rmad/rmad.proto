@@ -7,6 +7,7 @@
 syntax = "proto3";
 
 package rmad;
+
 option optimize_for = LITE_RUNTIME;
 
 // Defined error codes.
@@ -390,6 +391,7 @@ message UpdateRoFirmwareState {
   bool optional = 1;  // If optional is set true by rmad then skip is allowed.
   UpdateFirmware update = 2;
   UpdateChoice choice = 3;
+  bool skip_update_ro_firmware_from_rootfs = 4;
 }
 
 // Pause RMA for restock.

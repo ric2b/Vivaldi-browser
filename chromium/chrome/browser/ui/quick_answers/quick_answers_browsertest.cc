@@ -32,6 +32,7 @@
 #include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test.h"
@@ -43,6 +44,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/widget/any_widget_observer.h"
 #include "ui/views/widget/widget.h"
@@ -659,7 +661,7 @@ IN_PROC_BROWSER_TEST_P(RichAnswersBrowserTest,
   RichAnswersView* rich_answers_view = static_cast<RichAnswersView*>(
       rich_answers_view_widget->GetContentsView());
   expected_image_model = ui::ImageModel::FromVectorIcon(
-      omnibox::kAnswerDictionaryIcon, ui::kColorSysBaseContainerElevated,
+      chromeos::kDictionaryIcon, ui::kColorSysBaseContainerElevated,
       /*icon_size=*/kRichAnswersResultTypeIconSizeDip);
   EXPECT_TRUE(rich_answers_view->GetIconImageModelForTesting() ==
               expected_image_model);
@@ -725,6 +727,21 @@ IN_PROC_BROWSER_TEST_P(RichAnswersBrowserTest,
               expected_image_model);
 
   // TODO(b/326370198): Add checks for other card contents.
+}
+
+IN_PROC_BROWSER_TEST_P(RichAnswersBrowserTest, AccessibleProperties) {
+  views::Widget* quick_answers_view_widget = ShowQuickAnswersWidget();
+  controller()->GetQuickAnswersDelegate()->OnQuickAnswerReceived(
+      CreateQuickAnswerUnitConversionResponse());
+  RichAnswersView* rich_answers_view = static_cast<RichAnswersView*>(
+      ShowRichAnswersWidget(quick_answers_view_widget)->GetContentsView());
+  ui::AXNodeData data;
+
+  ASSERT_TRUE(rich_answers_view);
+  rich_answers_view->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.role, ax::mojom::Role::kDialog);
+  EXPECT_EQ(data.GetStringAttribute(ax::mojom::StringAttribute::kName),
+            l10n_util::GetStringUTF8(IDS_RICH_ANSWERS_VIEW_A11Y_NAME_TEXT));
 }
 
 INSTANTIATE_TEST_SUITE_P(

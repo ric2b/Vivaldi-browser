@@ -101,8 +101,8 @@ mojom::blink::NotificationDataPtr CreateNotificationData(
         VibrationController::SanitizeVibrationPattern(options->vibrate());
   }
   notification_data->vibration_pattern = Vector<int32_t>();
-  notification_data->vibration_pattern->Append(vibration_pattern.data(),
-                                               vibration_pattern.size());
+  notification_data->vibration_pattern->AppendSpan(
+      base::span(vibration_pattern));
 
   notification_data->timestamp =
       options->hasTimestamp()
@@ -130,10 +130,7 @@ mojom::blink::NotificationDataPtr CreateNotificationData(
     }
 
     notification_data->data = Vector<uint8_t>();
-    notification_data->data->Append(
-        serialized_script_value->Data(),
-        base::checked_cast<wtf_size_t>(
-            serialized_script_value->DataLengthInBytes()));
+    notification_data->data->AppendSpan(serialized_script_value->GetWireData());
   }
 
   Vector<mojom::blink::NotificationActionPtr> actions;

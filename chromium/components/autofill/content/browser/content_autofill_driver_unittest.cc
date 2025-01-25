@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
@@ -42,12 +43,14 @@
 #include "components/autofill/core/common/form_data_test_api.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
+#include "components/autofill/core/common/test_matchers.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/mock_navigation_handle.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/prerender_test_util.h"
@@ -64,6 +67,10 @@
 
 namespace autofill {
 
+namespace {
+
+using ::autofill::test::LazyRef;
+using ::autofill::test::SaveArgPtr;
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::DoAll;
@@ -77,12 +84,9 @@ using ::testing::IsNull;
 using ::testing::Optional;
 using ::testing::Pointwise;
 using ::testing::Property;
-using ::testing::Return;
 using ::testing::SaveArg;
 using ::testing::SizeIs;
 using ::testing::WithArg;
-
-namespace {
 
 const char kAppLocale[] = "en-US";
 
@@ -304,8 +308,6 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
   bool suggestions_available_;
 };
 
-}  // namespace
-
 class MockBrowserAutofillManager : public BrowserAutofillManager {
  public:
   explicit MockBrowserAutofillManager(AutofillDriver* driver)
@@ -314,6 +316,13 @@ class MockBrowserAutofillManager : public BrowserAutofillManager {
 
   MOCK_METHOD(void, Reset, (), (override));
   MOCK_METHOD(bool, ShouldParseForms, (), (override));
+  MOCK_METHOD(void,
+              OnAskForValuesToFill,
+              (const FormData&,
+               const FieldGlobalId&,
+               const gfx::Rect&,
+               AutofillSuggestionTriggerSource),
+              (override));
   MOCK_METHOD(void,
               OnFormsSeen,
               (const std::vector<FormData>& updated_forms,
@@ -342,39 +351,33 @@ class ContentAutofillDriverWithFakeAutofillAgent
   FakeAutofillAgent agent_;
 };
 
+// RAII type that intercepts mojom::ReportBadMessage() calls.
+class BadMessageHelper {
+ public:
+  BadMessageHelper() { mojo::SetDefaultProcessErrorHandler(callback_.Get()); }
+  ~BadMessageHelper() {
+    mojo::SetDefaultProcessErrorHandler(base::NullCallback());
+  }
+
+  // This callback is invoked when a bad message arrives.
+  base::MockRepeatingCallback<void(const std::string&)>& callback() {
+    return callback_;
+  }
+
+ private:
+  base::MockRepeatingCallback<void(const std::string&)> callback_;
+  // mojo::ReportBadMessage() needs a MessageDispatchContext.
+  mojo::Message dummy_message_{0, 0, 0, 0, nullptr};
+  mojo::internal::MessageDispatchContext context_{&dummy_message_};
+};
+
 class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
  public:
-  enum class NavigationType {
-    kNormal,
-    kSameDocument,
-    kServedFromBackForwardCache,
-    kPrerenderedPageActivation,
-  };
-
   void SetUp() override {
     content::RenderViewHostTestHarness::SetUp();
     // This needed to keep the WebContentsObserverConsistencyChecker checks
     // happy for when AppendChild is called.
-    NavigateAndCommit(GURL("https://foo.com/"));
-  }
-
-  void Navigate(NavigationType type) {
-    content::MockNavigationHandle navigation_handle(GURL(), main_rfh());
-    navigation_handle.set_has_committed(true);
-    switch (type) {
-      case NavigationType::kNormal:
-        break;
-      case NavigationType::kSameDocument:
-        navigation_handle.set_is_same_document(true);
-        break;
-      case NavigationType::kServedFromBackForwardCache:
-        navigation_handle.set_is_served_from_bfcache(true);
-        break;
-      case NavigationType::kPrerenderedPageActivation:
-        navigation_handle.set_is_prerendered_page_activation(true);
-        break;
-    }
-    factory().DidFinishNavigation(&navigation_handle);
+    NavigateAndCommit(GURL("https://a.test/"));
   }
 
  protected:
@@ -383,7 +386,7 @@ class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
   }
 
   ContentAutofillDriverFactory& factory() {
-    return *client()->GetAutofillDriverFactory();
+    return client()->GetAutofillDriverFactory();
   }
 
   AutofillDriverRouter& router() { return factory().router(); }
@@ -398,6 +401,10 @@ class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
 
   MockBrowserAutofillManager& manager(content::RenderFrameHost* rfh = nullptr) {
     return *autofill_manager_injector_[rfh ? rfh : main_frame()];
+  }
+
+  MockBrowserAutofillManager& manager(ContentAutofillDriver* driver) {
+    return *autofill_manager_injector_[driver->render_frame_host()];
   }
 
   LocalFrameToken frame_token(content::RenderFrameHost* rfh = nullptr) {
@@ -508,7 +515,7 @@ class ContentAutofillDriverWithMultiFrameCreditCardForm
  private:
   content::RenderFrameHost* CreateChild(std::string_view name) {
     return content::NavigationSimulator::NavigateAndCommitFromDocument(
-        GURL(base::StrCat({"https://foo.com/", name})),
+        GURL(base::StrCat({"https://a.test/", name})),
         content::RenderFrameHostTester::For(main_rfh())
             ->AppendChild(std::string(name)));
   }
@@ -529,39 +536,19 @@ class ContentAutofillDriverWithMultiFrameCreditCardForm
   std::array<raw_ptr<content::RenderFrameHost>, 4> rfhs_;
 };
 
-TEST_F(ContentAutofillDriverTest, NavigatedMainFrameDifferentDocument) {
-  EXPECT_CALL(manager(), Reset());
-  Navigate(NavigationType::kNormal);
-}
-
-TEST_F(ContentAutofillDriverTest, NavigatedMainFrameSameDocument) {
-  EXPECT_CALL(manager(), Reset()).Times(0);
-  Navigate(NavigationType::kSameDocument);
-}
-
-TEST_F(ContentAutofillDriverTest, NavigatedMainFrameFromBackForwardCache) {
-  EXPECT_CALL(manager(), Reset()).Times(0);
-  Navigate(NavigationType::kServedFromBackForwardCache);
-}
-
-TEST_F(ContentAutofillDriverTest, NavigatedMainFramePrerenderedPageActivation) {
-  EXPECT_CALL(manager(), Reset()).Times(0);
-  Navigate(NavigationType::kPrerenderedPageActivation);
-}
-
 TEST_F(ContentAutofillDriverTest, Lift_Form) {
-  NavigateAndCommit(GURL("https://username:password@hostname/path?query#hash"));
+  NavigateAndCommit(GURL("https://username:password@a.test/path?query#hash"));
   FormData form;
   test_api(form).Append(FormFieldData());
   test_api(driver()).LiftForTest(form);
 
   EXPECT_EQ(form.host_frame(), frame_token());
-  EXPECT_EQ(form.url(), GURL("https://hostname/path"));
+  EXPECT_EQ(form.url(), GURL("https://a.test/path"));
   EXPECT_EQ(form.full_url(), GURL());
   EXPECT_EQ(form.main_frame_origin(),
             web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
   EXPECT_EQ(form.main_frame_origin(),
-            url::Origin::CreateFromNormalizedTuple("https", "hostname", 443));
+            url::Origin::CreateFromNormalizedTuple("https", "a.test", 443));
   ASSERT_EQ(form.fields().size(), 1u);
   EXPECT_EQ(form.fields().front().host_frame(), frame_token());
 }
@@ -581,7 +568,7 @@ TEST_F(ContentAutofillDriverTest, Lift_Form_AboutScheme) {
 // non-"about:" ancestor in FormData::url.
 TEST_F(ContentAutofillDriverTest,
        Lift_Form_AboutSchemeInheritsFromGrandParent) {
-  NavigateAndCommit(GURL("https://username:password@hostname/path?query#hash"));
+  NavigateAndCommit(GURL("https://username:password@a.test/path?query#hash"));
   content::RenderFrameHost* child_rfh =
       content::NavigationSimulator::NavigateAndCommitFromDocument(
           GURL("about:blank"), content::RenderFrameHostTester::For(main_rfh())
@@ -602,7 +589,7 @@ TEST_F(ContentAutofillDriverTest,
   FormData form;
   test_api(*grandchild_driver).LiftForTest(form);
 
-  EXPECT_EQ(form.url(), GURL("https://hostname"));
+  EXPECT_EQ(form.url(), GURL("https://a.test"));
 }
 
 // Tests that the FormData::version of forms passed to AutofillManager
@@ -710,7 +697,7 @@ TEST_F(ContentAutofillDriverTestWithAddressForm,
     field.set_origin(triggered_origin);
     field.set_value(u"dummy_value");
   }
-  ASSERT_TRUE(base::ranges::all_of(
+  ASSERT_TRUE(std::ranges::all_of(
       address_form().fields(),
       [](const FormFieldData& field) { return !field.value().empty(); }));
   base::RunLoop run_loop;
@@ -884,7 +871,7 @@ TEST_F(ContentAutofillDriverWithMultiFrameCreditCardForm, ExtractForm_Found) {
   task_environment()->RunUntilIdle();
 }
 
-TEST_F(ContentAutofillDriverTest, GetFourDigitCombinationsFromDOM_NoMatches) {
+TEST_F(ContentAutofillDriverTest, GetFourDigitCombinationsFromDom_NoMatches) {
   base::RunLoop run_loop;
   auto cb =
       [](base::OnceCallback<void(const std::vector<std::string>&)> callback) {
@@ -895,7 +882,7 @@ TEST_F(ContentAutofillDriverTest, GetFourDigitCombinationsFromDOM_NoMatches) {
       .WillOnce(WithArg<0>(Invoke(cb)));
 
   std::vector<std::string> matches = {"dummy data"};
-  driver().browser_events().GetFourDigitCombinationsFromDOM(
+  driver().browser_events().GetFourDigitCombinationsFromDom(
       base::BindLambdaForTesting([&](const std::vector<std::string>& result) {
         matches = result;
         run_loop.Quit();
@@ -905,7 +892,7 @@ TEST_F(ContentAutofillDriverTest, GetFourDigitCombinationsFromDOM_NoMatches) {
 }
 
 TEST_F(ContentAutofillDriverTest,
-       GetFourDigitCombinationsFromDOM_SuccessfulMatches) {
+       GetFourDigitCombinationsFromDom_SuccessfulMatches) {
   base::RunLoop run_loop;
   auto cb =
       [](base::OnceCallback<void(const std::vector<std::string>&)> callback) {
@@ -915,7 +902,7 @@ TEST_F(ContentAutofillDriverTest,
   EXPECT_CALL(agent(), GetPotentialLastFourCombinationsForStandaloneCvc)
       .WillOnce(WithArg<0>(Invoke(cb)));
   std::vector<std::string> matches;
-  driver().browser_events().GetFourDigitCombinationsFromDOM(
+  driver().browser_events().GetFourDigitCombinationsFromDom(
       base::BindLambdaForTesting([&](const std::vector<std::string>& result) {
         matches = result;
         run_loop.Quit();
@@ -924,25 +911,18 @@ TEST_F(ContentAutofillDriverTest,
   EXPECT_THAT(matches, ElementsAre("1234"));
 }
 
-// RAII type that intercepts mojom::ReportBadMessage() calls.
-class BadMessageHelper {
- public:
-  BadMessageHelper() { mojo::SetDefaultProcessErrorHandler(callback_.Get()); }
-  ~BadMessageHelper() {
-    mojo::SetDefaultProcessErrorHandler(base::NullCallback());
-  }
-
-  // This callback is invoked when a bad message arrives.
-  base::MockRepeatingCallback<void(const std::string&)>& callback() {
-    return callback_;
-  }
-
- private:
-  base::MockRepeatingCallback<void(const std::string&)> callback_;
-  // mojo::ReportBadMessage() needs a MessageDispatchContext.
-  mojo::Message dummy_message_{0, 0, 0, 0, nullptr};
-  mojo::internal::MessageDispatchContext context_{&dummy_message_};
-};
+// Tests that calls from the renderer with trigger source
+// kPlusAddressUpdatedInBrowserProcess are classified as bad messages.
+TEST_F(ContentAutofillDriverTest, AskForValuesToFillChecksTriggerSource) {
+  BadMessageHelper bad_message_helper;
+  EXPECT_CALL(manager(), OnAskForValuesToFill).Times(0);
+  EXPECT_CALL(bad_message_helper.callback(),
+              Run("PlusAddressUpdatedInBrowserProcess is not a permitted "
+                  "trigger source in the renderer"));
+  driver().renderer_events().AskForValuesToFill(
+      FormData(), FieldRendererId(), gfx::Rect(),
+      AutofillSuggestionTriggerSource::kPlusAddressUpdatedInBrowserProcess);
+}
 
 class ContentAutofillDriverTest_PrerenderBadMessage
     : public ContentAutofillDriverTest {
@@ -964,7 +944,7 @@ TEST_F(ContentAutofillDriverTest_PrerenderBadMessage,
   ASSERT_EQ(rfh->GetLifecycleState(),
             content::RenderFrameHost::LifecycleState::kPrerendering);
   BadMessageHelper bad_message_helper;
-  EXPECT_CALL(manager(rfh), Reset()).Times(0);
+  EXPECT_CALL(manager(rfh), Reset).Times(0);
   EXPECT_CALL(bad_message_helper.callback(), Run);
   EXPECT_CALL(manager(rfh), OnFormsSeen).Times(0);
   driver(rfh).renderer_events().FormsSeen(/*updated_forms=*/{},
@@ -974,7 +954,7 @@ TEST_F(ContentAutofillDriverTest_PrerenderBadMessage,
 // Tests that a renderer event with a FieldRendererId that doesn't belong to the
 // associated FormData causes a bad message.
 TEST_F(ContentAutofillDriverTest, BadMessageIfFieldWithoutForm) {
-  EXPECT_CALL(manager(), Reset()).Times(0);
+  EXPECT_CALL(manager(), Reset).Times(0);
   BadMessageHelper bad_message_helper;
   EXPECT_CALL(bad_message_helper.callback(), Run);
   EXPECT_CALL(manager(), OnFormsSeen).Times(0);
@@ -983,5 +963,7 @@ TEST_F(ContentAutofillDriverTest, BadMessageIfFieldWithoutForm) {
   driver().renderer_events().AskForValuesToFill(
       form, field, gfx::Rect(), AutofillSuggestionTriggerSource::kUnspecified);
 }
+
+}  // namespace
 
 }  // namespace autofill

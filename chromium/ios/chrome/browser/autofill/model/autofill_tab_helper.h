@@ -5,15 +5,16 @@
 #ifndef IOS_CHROME_BROWSER_AUTOFILL_MODEL_AUTOFILL_TAB_HELPER_H_
 #define IOS_CHROME_BROWSER_AUTOFILL_MODEL_AUTOFILL_TAB_HELPER_H_
 
-#include <memory>
+#import <memory>
 
 #import "base/memory/raw_ptr.h"
-#include "ios/web/public/web_state_observer.h"
+#import "components/autofill/ios/form_util/child_frame_registrar.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
+#import "ios/web/public/web_state_observer.h"
 #import "ios/web/public/web_state_user_data.h"
 
 @class AutofillAgent;
 @protocol AutofillCommands;
-class ChromeBrowserState;
 @protocol FormSuggestionProvider;
 @class UIViewController;
 
@@ -23,7 +24,8 @@ class ChromeAutofillClientIOS;
 
 // Class binding an instance of AutofillAgent to a WebState.
 class AutofillTabHelper : public web::WebStateObserver,
-                          public web::WebStateUserData<AutofillTabHelper> {
+                          public web::WebStateUserData<AutofillTabHelper>,
+                          public autofill::ChildFrameRegistrarObserver {
  public:
   AutofillTabHelper(const AutofillTabHelper&) = delete;
   AutofillTabHelper& operator=(const AutofillTabHelper&) = delete;
@@ -45,19 +47,25 @@ class AutofillTabHelper : public web::WebStateObserver,
  private:
   friend class web::WebStateUserData<AutofillTabHelper>;
 
-  AutofillTabHelper(web::WebState* web_state);
+  explicit AutofillTabHelper(web::WebState* web_state);
 
   // web::WebStateObserver implementation.
   void WebStateDestroyed(web::WebState* web_state) override;
 
+  // autofill::ChildFrameRegistrarObserver implementation.
+  void OnDidDoubleRegistration(autofill::LocalFrameToken local) override;
+
   // The BrowserState associated with this WebState.
-  raw_ptr<ChromeBrowserState> browser_state_;
+  raw_ptr<ProfileIOS> profile_;
 
   // The Objective-C AutofillAgent instance.
   __strong AutofillAgent* autofill_agent_;
 
   // The iOS AutofillClient instance.
   std::unique_ptr<autofill::ChromeAutofillClientIOS> autofill_client_;
+
+  // The WebState holding this instance of the helper.
+  raw_ptr<web::WebState> web_state_;
 
   WEB_STATE_USER_DATA_KEY_DECL();
 };

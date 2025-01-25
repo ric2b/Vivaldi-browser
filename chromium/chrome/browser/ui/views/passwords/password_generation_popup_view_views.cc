@@ -12,13 +12,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/passwords/password_generation_popup_controller.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
-#include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/passwords/views_utils.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -40,13 +38,10 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
-
-using password_manager::features::PasswordGenerationVariation;
 
 // The max width prevents the popup from growing too much when the password
 // field is too long.
@@ -64,83 +59,6 @@ void AddSpacerWithSize(int spacer_width, bool resize, views::View* view) {
       ->SetFlexForView(view->AddChildView(std::move(spacer)),
                        /*flex=*/resize ? 1 : 0,
                        /*use_min_size=*/true);
-}
-
-// Returns the message id of the help text which may differ depending on
-// specific variation of `kPasswordGenerationExperiment` feature enabled.
-int GetHelpTextMessageId() {
-  if (!base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordGenerationExperiment)) {
-    return IDS_PASSWORD_GENERATION_PROMPT_GOOGLE_PASSWORD_MANAGER;
-  }
-
-  switch (
-      password_manager::features::kPasswordGenerationExperimentVariationParam
-          .Get()) {
-    case PasswordGenerationVariation::kTrustedAdvice:
-      return IDS_PASSWORD_GENERATION_HELP_TEXT_TRUSTED_ADVICE;
-    case PasswordGenerationVariation::kSafetyFirst:
-      return IDS_PASSWORD_GENERATION_HELP_TEXT_SAFETY_FIRST;
-    case PasswordGenerationVariation::kTrySomethingNew:
-      return IDS_PASSWORD_GENERATION_HELP_TEXT_TRY_SOMETHING_NEW;
-    case PasswordGenerationVariation::kConvenience:
-      return IDS_PASSWORD_GENERATION_HELP_TEXT_CONVENIENCE;
-    case PasswordGenerationVariation::kCrossDevice:
-      return IDS_PASSWORD_GENERATION_HELP_TEXT;
-    default:
-      return IDS_PASSWORD_GENERATION_PROMPT_GOOGLE_PASSWORD_MANAGER;
-  }
-}
-
-std::unique_ptr<views::FlexLayoutView> CreateLabelWithCheckIcon(
-    const std::u16string& label_text) {
-  auto label_with_icon = std::make_unique<views::FlexLayoutView>();
-
-  auto icon = std::make_unique<NonAccessibleImageView>();
-  icon->SetImage(ui::ImageModel::FromVectorIcon(
-      views::kMenuCheckIcon, ui::kColorIconSecondary, kIconSize));
-  label_with_icon->AddChildView(std::move(icon));
-
-  auto spacer = std::make_unique<views::View>();
-  spacer->SetPreferredSize(gfx::Size(
-      autofill::PopupBaseView::ArrowHorizontalMargin(), /*height=*/1));
-  label_with_icon->AddChildView(std::move(spacer));
-
-  label_with_icon->AddChildView(
-      std::make_unique<views::Label>(label_text, CONTEXT_DIALOG_BODY_TEXT_SMALL,
-                                     views::style::STYLE_SECONDARY));
-
-  return label_with_icon;
-}
-
-// Creates help text listing benefits of password generation in bullet points.
-std::unique_ptr<views::View> CreateCrossDeviceFooter(
-    const std::u16string& primary_account_email) {
-  auto cross_device_footer = std::make_unique<views::View>();
-
-  auto* layout =
-      cross_device_footer->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical));
-  layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kStart);
-
-  cross_device_footer->AddChildView(std::make_unique<views::Label>(
-      l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_BENEFITS),
-      CONTEXT_DIALOG_BODY_TEXT_SMALL, views::style::STYLE_SECONDARY));
-  cross_device_footer->AddChildView(CreateLabelWithCheckIcon(
-      l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_CROSS_DEVICE)));
-  cross_device_footer->AddChildView(CreateLabelWithCheckIcon(
-      l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_SECURITY)));
-  cross_device_footer->AddChildView(CreateLabelWithCheckIcon(
-      l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_PROACTIVE_CHECK)));
-
-  cross_device_footer->AddChildView(CreateGooglePasswordManagerLabel(
-      GetHelpTextMessageId(),
-      /*link_message_id=*/
-      IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SYNCED_TO_ACCOUNT,
-      primary_account_email));
-
-  return cross_device_footer;
 }
 
 // Creates row with Password Manager key icon and title for the
@@ -184,7 +102,7 @@ class NudgePasswordButtons : public views::View {
     const std::u16string help_text = base::JoinString(
         {l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_NUDGE_TITLE),
          l10n_util::GetStringFUTF16(
-             GetHelpTextMessageId(),
+             IDS_PASSWORD_GENERATION_PROMPT_GOOGLE_PASSWORD_MANAGER,
              l10n_util::GetStringUTF16(
                  IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SYNCED_TO_ACCOUNT),
              controller_->GetPrimaryAccountEmail())},
@@ -204,8 +122,7 @@ class NudgePasswordButtons : public views::View {
     AddSpacerWithSize(autofill::PopupBaseView::ArrowHorizontalMargin(),
                       /*resize=*/false, this);
 
-    const std::u16string accept_button_label =
-        l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_SUGGESTION_GPM);
+    const std::u16string accept_button_label = controller_->SuggestedText();
     auto accept_button = std::make_unique<views::MdTextButton>(
         base::BindRepeating(&NudgePasswordButtons::AcceptButtonPressed,
                             base::Unretained(this)),
@@ -238,6 +155,10 @@ class NudgePasswordButtons : public views::View {
   void UpdateFocus(bool accept_button_focused) {
     accept_button_has_focus_ = accept_button_focused;
     cancel_button_has_focus_ = !accept_button_focused;
+    accept_button_->GetViewAccessibility().SetIsSelected(
+        accept_button_has_focus_);
+    cancel_button_->GetViewAccessibility().SetIsSelected(
+        cancel_button_has_focus_);
     views::FocusRing::Get(accept_button_)->SchedulePaint();
     views::FocusRing::Get(cancel_button_)->SchedulePaint();
   }
@@ -283,7 +204,8 @@ std::unique_ptr<views::View> CreateNudgePasswordView(
   nudge_password_view->AddChildView(CreatePasswordLabelWithIcon());
 
   nudge_password_view->AddChildView(CreateGooglePasswordManagerLabel(
-      GetHelpTextMessageId(),
+      /*text_message_id=*/
+      IDS_PASSWORD_GENERATION_PROMPT_GOOGLE_PASSWORD_MANAGER,
       /*link_message_id=*/
       IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SYNCED_TO_ACCOUNT,
       controller->GetPrimaryAccountEmail()));
@@ -300,40 +222,11 @@ class PasswordGenerationPopupViewViews::GeneratedPasswordBox
   METADATA_HEADER(GeneratedPasswordBox, views::View)
 
  public:
-  GeneratedPasswordBox() = default;
-  ~GeneratedPasswordBox() override = default;
-
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    if (!controller_) {
-      return;
-    }
-
-    node_data->role = ax::mojom::Role::kListBoxOption;
-    node_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
-                                controller_->password_selected());
-    node_data->SetNameChecked(base::JoinString(
-        {controller_->SuggestedText(), controller_->password()}, u" "));
-    const std::u16string help_text = l10n_util::GetStringFUTF16(
-        GetHelpTextMessageId(),
-        l10n_util::GetStringUTF16(
-            IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SYNCED_TO_ACCOUNT),
-        controller_->GetPrimaryAccountEmail());
-
-    if (password_manager::features::kPasswordGenerationExperimentVariationParam
-            .Get() == PasswordGenerationVariation::kCrossDevice) {
-      const std::u16string description = base::JoinString(
-          {l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_BENEFITS),
-           l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_CROSS_DEVICE),
-           l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_SECURITY),
-           l10n_util::GetStringUTF16(IDS_PASSWORD_GENERATION_PROACTIVE_CHECK),
-           help_text},
-          u" ");
-      node_data->SetDescription(description);
-      return;
-    }
-
-    node_data->SetDescription(help_text);
+  GeneratedPasswordBox() {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kListBoxOption);
+    UpdateAccessibleNameAndDescription();
   }
+  ~GeneratedPasswordBox() override = default;
 
   // Fills the view with strings provided by |controller|.
   void Init(base::WeakPtr<PasswordGenerationPopupController> controller);
@@ -350,9 +243,28 @@ class PasswordGenerationPopupViewViews::GeneratedPasswordBox
     suggestion_label_->SetBackgroundColorId(color);
   }
 
-  void reset_controller() { controller_ = nullptr; }
+  void reset_controller() {
+    controller_ = nullptr;
+    UpdateAccessibleNameAndDescription();
+  }
 
  private:
+  void UpdateAccessibleNameAndDescription() {
+    if (!controller_) {
+      GetViewAccessibility().RemoveName();
+      GetViewAccessibility().RemoveDescription();
+      return;
+    }
+
+    GetViewAccessibility().SetName(base::JoinString(
+        {controller_->SuggestedText(), controller_->password()}, u" "));
+    GetViewAccessibility().SetDescription(l10n_util::GetStringFUTF16(
+        IDS_PASSWORD_GENERATION_PROMPT_GOOGLE_PASSWORD_MANAGER,
+        l10n_util::GetStringUTF16(
+            IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SYNCED_TO_ACCOUNT),
+        controller_->GetPrimaryAccountEmail()));
+  }
+
   // Implements the View interface.
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
@@ -401,6 +313,7 @@ void PasswordGenerationPopupViewViews::GeneratedPasswordBox::Init(
       controller_->password(), views::style::CONTEXT_DIALOG_BODY_TEXT,
       STYLE_SECONDARY_MONOSPACED));
   layout->SetFlexForView(password_label_, 1);
+  UpdateAccessibleNameAndDescription();
 }
 
 void PasswordGenerationPopupViewViews::GeneratedPasswordBox::OnMouseEntered(
@@ -458,6 +371,11 @@ PasswordGenerationPopupViewViews::PasswordGenerationPopupViewViews(
     views::Widget* parent_widget)
     : PopupBaseView(controller, parent_widget), controller_(controller) {
   CreateLayoutAndChildren();
+
+  // TODO(crbug.com/40885943): kListBox is used for the same reason as in
+  // `autofill::PopupViewViews`. See crrev.com/c/2545285 for details.
+  // Consider using a more appropriate role (e.g. kMenuListPopup or similar).
+  GetViewAccessibility().SetRole(ax::mojom::Role::kListBox);
   UpdateExpandedCollapsedAccessibleState();
 }
 
@@ -504,13 +422,18 @@ bool PasswordGenerationPopupViewViews::UpdateBoundsAndRedrawPopup() {
 }
 
 void PasswordGenerationPopupViewViews::PasswordSelectionUpdated() {
-  if (!GetWidget() || !password_view_) {
+  if (!password_view_) {
     return;
   }
 
-  CHECK(password_view_);
   if (controller_->password_selected()) {
     NotifyAXSelection(*this->password_view_);
+  }
+  password_view_->GetViewAccessibility().SetIsSelected(
+      controller_->password_selected());
+
+  if (!GetWidget()) {
+    return;
   }
 
   password_view_->UpdateBackground(controller_->password_selected()
@@ -572,36 +495,15 @@ void PasswordGenerationPopupViewViews::CreateLayoutAndChildren() {
                    .SetColorId(ui::kColorMenuSeparator)
                    .Build());
 
-  if (password_manager::features::kPasswordGenerationExperimentVariationParam
-          .Get() == PasswordGenerationVariation::kCrossDevice) {
-    auto* cross_device_footer = AddChildView(
-        CreateCrossDeviceFooter(controller_->GetPrimaryAccountEmail()));
-    cross_device_footer->SetBorder(views::CreateEmptyBorder(
-        gfx::Insets::VH(kVerticalPadding, kHorizontalMargin)));
-    return;
-  }
-
   views::Label* help_label = AddChildView(CreateGooglePasswordManagerLabel(
-      GetHelpTextMessageId(),
+      /*text_message_id=*/
+      IDS_PASSWORD_GENERATION_PROMPT_GOOGLE_PASSWORD_MANAGER,
       /*link_message_id=*/
       IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SYNCED_TO_ACCOUNT,
       controller_->GetPrimaryAccountEmail()));
 
   help_label->SetBorder(views::CreateEmptyBorder(
       gfx::Insets::VH(kVerticalPadding, kHorizontalMargin)));
-}
-
-void PasswordGenerationPopupViewViews::GetAccessibleNodeData(
-    ui::AXNodeData* node_data) {
-  // TODO(crbug.com/40885943): kListBox is used for the same reason as in
-  // `autofill::PopupViewViews`. See crrev.com/c/2545285 for details.
-  // Consider using a more appropriate role (e.g. kMenuListPopup or similar).
-  node_data->role = ax::mojom::Role::kListBox;
-
-  if (!controller_) {
-    node_data->AddState(ax::mojom::State::kInvisible);
-    return;
-  }
 }
 
 void PasswordGenerationPopupViewViews::UpdateExpandedCollapsedAccessibleState()
@@ -611,6 +513,7 @@ void PasswordGenerationPopupViewViews::UpdateExpandedCollapsedAccessibleState()
   } else {
     GetViewAccessibility().SetIsCollapsed();
   }
+  GetViewAccessibility().SetIsInvisible(!controller_);
 }
 
 gfx::Size PasswordGenerationPopupViewViews::CalculatePreferredSize(
@@ -642,6 +545,11 @@ PasswordGenerationPopupView* PasswordGenerationPopupView::Create(
           controller->container_view());
 
   return new PasswordGenerationPopupViewViews(controller, observing_widget);
+}
+
+const views::ViewAccessibility&
+PasswordGenerationPopupViewViews::GetPasswordViewViewAccessibilityForTest() {
+  return password_view_->GetViewAccessibility();
 }
 
 BEGIN_METADATA(PasswordGenerationPopupViewViews)

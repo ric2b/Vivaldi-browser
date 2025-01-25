@@ -85,7 +85,9 @@ sk_sp<SharedContext> VulkanSharedContext::Make(const VulkanBackendContext& conte
         skgpu::ThreadSafe threadSafe = options.fClientWillExternallySynchronizeAllThreads
                                                ? skgpu::ThreadSafe::kNo
                                                : skgpu::ThreadSafe::kYes;
-        memoryAllocator = skgpu::VulkanMemoryAllocators::Make(context, threadSafe);
+        memoryAllocator = skgpu::VulkanMemoryAllocators::Make(context,
+                                                              threadSafe,
+                                                              options.fVulkanVMALargeHeapBlockSize);
     }
 #endif
     if (!memoryAllocator) {
@@ -106,7 +108,8 @@ VulkanSharedContext::VulkanSharedContext(const VulkanBackendContext& backendCont
         : skgpu::graphite::SharedContext(std::move(caps), BackendApi::kVulkan)
         , fInterface(std::move(interface))
         , fMemoryAllocator(std::move(memoryAllocator))
-        , fDevice(std::move(backendContext.fDevice))
+        , fPhysDevice(backendContext.fPhysicalDevice)
+        , fDevice(backendContext.fDevice)
         , fQueueIndex(backendContext.fGraphicsQueueIndex)
         , fDeviceLostContext(backendContext.fDeviceLostContext)
         , fDeviceLostProc(backendContext.fDeviceLostProc) {}

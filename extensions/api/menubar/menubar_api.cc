@@ -89,6 +89,8 @@ int getIdByAction(const menubar::MenuItem& item) {
     tag_map[item.action] = {IDC_VIV_CLOSE_TAB, item.with_no_window, enabled};
   else if (item.action == "COMMAND_WINDOW_MINIMIZE")
     tag_map[item.action] = {IDC_VIV_MAC_MINIMIZE, item.with_no_window, enabled};
+  else if (item.action == "COMMAND_SHOW_HELP")
+    tag_map[item.action] = {IDC_VIV_SHOW_HELP, item.with_no_window, enabled};
   // Some menus
   else if (item.action == "MENU_APPLE_APP")
     tag_map[item.action] = {IDC_CHROME_MENU, item.with_no_window, enabled};
@@ -183,6 +185,23 @@ bool MenubarAPI::GetIsEnabled(int id, bool hasWindow, bool* enabled) {
     }
   }
   return false;
+}
+
+// static
+// This collection should match commandSettingsAcceptlist in CommandStore
+// TODO: Remove hardcoding here. Let menu spec pass info instead.
+bool MenubarAPI::GetIsSupportedInSettings(int id) {
+  switch (id) {
+    case IDC_VIV_CLOSE_TAB: // COMMAND_CLOSE_TAB
+    case IDC_VIV_CLOSE_WINDOW: // COMMAND_CLOSE_WINDOW
+    case IDC_VIV_EXIT: // COMMAND_QUIT_MAC_MAYBE_WARN
+    case IDC_VIV_NEW_WINDOW: // COMMAND_NEW_WINDOW
+    case IDC_VIV_NEW_PRIVATE_WINDOW: // COMMAND_NEW_PRIVATE_WINDOW
+    case IDC_VIV_SHOW_HELP: // COMMAND_SHOW_HELP
+      return true;
+    default:
+      return false;
+  }
 }
 
 // We have a problem in the Help Menu. The std inlined search function there

@@ -16,11 +16,12 @@
 #import "ios/chrome/browser/default_promo/ui_bundled/generic/default_browser_generic_promo_view_controller.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/chrome/test/scoped_key_window.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
+#import "third_party/ocmock/OCMock/OCMock.h"
 
 namespace {
 
@@ -75,7 +76,7 @@ class DefaultBrowserGenericPromoCoordinatorTest : public PlatformTest {
         feature_engagement::TrackerFactory::GetInstance(),
         base::BindRepeating(&BuildFeatureEngagementMockTracker));
 
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
     browser_ = std::make_unique<TestBrowser>(browser_state_.get());
     view_controller_ = [[UIViewController alloc] init];
     [scoped_key_window_.Get() setRootViewController:view_controller_];
@@ -95,7 +96,7 @@ class DefaultBrowserGenericPromoCoordinatorTest : public PlatformTest {
   }
 
   base::test::TaskEnvironment task_environment_;
-  IOSChromeScopedTestingLocalState local_state_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<TestBrowser> browser_;
    DefaultBrowserGenericPromoCoordinator* coordinator_;
@@ -187,6 +188,11 @@ TEST_F(DefaultBrowserGenericPromoCoordinatorTest,
   base::HistogramTester histogram_tester;
 
   [coordinator_ start];
+
+  // Mock the mediator which otherwise will open the iOS settings on primary
+  // action. This can be a problem for next tests.
+  id mock_mediator = OCMClassMock([DefaultBrowserGenericPromoMediator class]);
+  coordinator_.mediator = mock_mediator;
 
   // Check that histograms for appear action are recorded, but for other actions
   // there are not.

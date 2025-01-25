@@ -32,6 +32,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/types/expected_macros.h"
+#include "base/win/elevation_util.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_localalloc.h"
 #include "base/win/windows_version.h"
@@ -46,6 +47,7 @@
 #include "chrome/updater/win/installer/installer_constants.h"
 #include "chrome/updater/win/installer/pe_resource.h"
 #include "chrome/updater/win/ui/l10n_util.h"
+#include "chrome/updater/win/win_constants.h"
 
 namespace updater {
 
@@ -163,20 +165,16 @@ BOOL CALLBACK OnResourceFound(HMODULE module,
 
 std::optional<base::FilePath> FindOfflineDir(
     const base::FilePath& unpack_path) {
-  const base::FilePath base_offline_dir =
-      unpack_path.Append(L"bin").Append(L"Offline");
-  if (!base::PathExists(base_offline_dir)) {
-    return std::nullopt;
-  }
-  base::FileEnumerator file_enumerator(base_offline_dir, false,
-                                       base::FileEnumerator::DIRECTORIES);
+  base::FileEnumerator file_enumerator(
+      unpack_path.Append(L"bin").Append(L"Offline"), false,
+      base::FileEnumerator::DIRECTORIES);
   for (base::FilePath path = file_enumerator.Next(); !path.empty();
        path = file_enumerator.Next()) {
     if (IsGuid(path.BaseName().value())) {
       return path;
     }
   }
-  return std::nullopt;
+  return {};
 }
 
 // Finds and writes to disk resources of type 'B7' (7zip archive). Returns false
@@ -304,7 +302,7 @@ ProcessExitResult HandleRunElevated(const base::CommandLine& command_line) {
                      return ProcessExitResult(FAILED_TO_ELEVATE_METAINSTALLER,
                                               error);
                    });
-  return ProcessExitResult(result);
+  return ProcessExitResult(UPDATER_EXIT_CODE, result);
 }
 
 ProcessExitResult HandleRunDeElevated(const base::CommandLine& command_line) {
@@ -320,16 +318,18 @@ ProcessExitResult HandleRunDeElevated(const base::CommandLine& command_line) {
       base::win::ScopedCOMInitializer::kMTA);
   CHECK(com_initializer.Succeeded());
 
-  // Deelevate the metainstaller.
-  HRESULT hr =
-      RunDeElevated(command_line.GetProgram().value(), [&command_line] {
-        base::CommandLine de_elevate_command_line = command_line;
-        de_elevate_command_line.AppendSwitch(kCmdLineExpectDeElevated);
-        return de_elevate_command_line.GetArgumentsString();
-      }());
-  return SUCCEEDED(hr)
-             ? ProcessExitResult(SUCCESS_EXIT_CODE)
-             : ProcessExitResult(FAILED_TO_DE_ELEVATE_METAINSTALLER, hr);
+  // De-elevate the metainstaller.
+  const base::Process process = base::win::RunDeElevated([&] {
+    base::CommandLine de_elevate_command_line = command_line;
+    de_elevate_command_line.AppendSwitch(kCmdLineExpectDeElevated);
+    return de_elevate_command_line;
+  }());
+
+  int result = 0;
+  return process.IsValid() && process.WaitForExit(&result)
+             ? ProcessExitResult(UPDATER_EXIT_CODE, result)
+             : ProcessExitResult(FAILED_TO_DE_ELEVATE_METAINSTALLER,
+                                 HRESULTFromLastError());
 }
 
 ProcessExitResult InstallerMain(HMODULE module) {
@@ -363,9 +363,7 @@ ProcessExitResult InstallerMain(HMODULE module) {
 
   if (!::IsUserAnAdmin() && IsSystemInstall(scope)) {
     ProcessExitResult run_elevated_result = HandleRunElevated(command_line);
-    if ((run_elevated_result.exit_code !=
-             RUN_SETUP_FAILED_COULD_NOT_CREATE_PROCESS &&
-         run_elevated_result.exit_code != UNEXPECTED_ELEVATION_LOOP_SILENT) ||
+    if (run_elevated_result.exit_code == UPDATER_EXIT_CODE ||
         !IsPrefersForCommandLine(command_line)) {
       return run_elevated_result;
     }

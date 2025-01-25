@@ -55,6 +55,18 @@ describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
     assert.strictEqual(dataProvider.preferredHeight(), 17 * 7);
   });
 
+  it('can return the group for a given entryIndex', async function() {
+    const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
+    const {traceData} = await TraceLoader.traceEngine(this, 'load-simple.json.gz');
+    dataProvider.setModel(traceData);
+    dataProvider.timelineData();
+
+    assert.strictEqual(
+        dataProvider.groupForEvent(0)?.name,
+        'Network',
+    );
+  });
+
   it('filters navigations to only return those that happen on the main frame', async function() {
     const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
     const {traceData} = await TraceLoader.traceEngine(this, 'multiple-navigations-with-iframes.json.gz');
@@ -162,6 +174,19 @@ describeWithEnvironment('TimelineFlameChartNetworkDataProvider', function() {
       start: 10,
       end: (183752670.454 - 183752441.977) + 10,
     });
+  });
+
+  it('can search for entries within a given time-range', async function() {
+    const dataProvider = new Timeline.TimelineFlameChartNetworkDataProvider.TimelineFlameChartNetworkDataProvider();
+    const {traceData} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+    dataProvider.setModel(traceData);
+    const boundsMs = TraceEngine.Helpers.Timing.traceWindowMilliSeconds(traceData.Meta.traceBounds);
+    dataProvider.setWindowTimes(boundsMs.min, boundsMs.max);
+
+    const filter = new Timeline.TimelineFilters.TimelineRegExp(/app\.js/i);
+    const results = dataProvider.search(traceData.Meta.traceBounds, filter);
+    assert.lengthOf(results, 1);
+    assert.deepEqual(results[0], {index: 8, startTimeMilli: 122411056.533, provider: 'network'});
   });
 });
 

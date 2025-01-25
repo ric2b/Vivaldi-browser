@@ -124,6 +124,17 @@ const char* ProtoEnumToString(
 }
 
 const char* ProtoEnumToString(
+    sync_pb::ContactInfoSpecifics::AddressType address_type) {
+  ASSERT_ENUM_BOUNDS(sync_pb::ContactInfoSpecifics, AddressType, REGULAR, WORK);
+  switch (address_type) {
+    ENUM_CASE(sync_pb::ContactInfoSpecifics, REGULAR);
+    ENUM_CASE(sync_pb::ContactInfoSpecifics, HOME);
+    ENUM_CASE(sync_pb::ContactInfoSpecifics, WORK);
+  }
+  NOTREACHED();
+}
+
+const char* ProtoEnumToString(
     sync_pb::ContactInfoSpecifics::VerificationStatus verification_status) {
   ASSERT_ENUM_BOUNDS(sync_pb::ContactInfoSpecifics, VerificationStatus,
                      VERIFICATION_STATUS_UNSPECIFIED, SERVER_PARSED);
@@ -173,11 +184,12 @@ const char* ProtoEnumToString(sync_pb::NigoriSpecifics::PassphraseType type) {
 const char* ProtoEnumToString(
     sync_pb::PaymentInstrument::SupportedRail supported_rail) {
   ASSERT_ENUM_BOUNDS(sync_pb::PaymentInstrument, SupportedRail,
-                     SUPPORTED_RAIL_UNKNOWN, IBAN);
+                     SUPPORTED_RAIL_UNKNOWN, PAYMENT_HYPERLINK);
   switch (supported_rail) {
     ENUM_CASE(sync_pb::PaymentInstrument, SUPPORTED_RAIL_UNKNOWN);
     ENUM_CASE(sync_pb::PaymentInstrument, PIX);
     ENUM_CASE(sync_pb::PaymentInstrument, IBAN);
+    ENUM_CASE(sync_pb::PaymentInstrument, PAYMENT_HYPERLINK);
   }
   NOTREACHED_IN_MIGRATION();
   return "";
@@ -282,12 +294,13 @@ const char* ProtoEnumToString(sync_pb::SharedTabGroup::Color color) {
 
 const char* ProtoEnumToString(sync_pb::SyncEnums::BrowserType browser_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, BrowserType, BROWSER_TYPE_UNKNOWN,
-                     TYPE_CUSTOM_TAB);
+                     TYPE_AUTH_TAB);
   switch (browser_type) {
     ENUM_CASE(sync_pb::SyncEnums, BROWSER_TYPE_UNKNOWN);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_TABBED);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_POPUP);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_CUSTOM_TAB);
+    ENUM_CASE(sync_pb::SyncEnums, TYPE_AUTH_TAB);
   }
   NOTREACHED_IN_MIGRATION();
   return "";
@@ -341,12 +354,15 @@ const char* ProtoEnumToString(sync_pb::SyncEnums::OsType os_type) {
 const char* ProtoEnumToString(
     sync_pb::SyncEnums::DeviceFormFactor device_form_factor) {
   ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, DeviceFormFactor,
-                     DEVICE_FORM_FACTOR_UNSPECIFIED, DEVICE_FORM_FACTOR_TABLET);
+                     DEVICE_FORM_FACTOR_UNSPECIFIED, DEVICE_FORM_FACTOR_TV);
   switch (device_form_factor) {
     ENUM_CASE(sync_pb::SyncEnums, DEVICE_FORM_FACTOR_UNSPECIFIED);
     ENUM_CASE(sync_pb::SyncEnums, DEVICE_FORM_FACTOR_DESKTOP);
     ENUM_CASE(sync_pb::SyncEnums, DEVICE_FORM_FACTOR_PHONE);
     ENUM_CASE(sync_pb::SyncEnums, DEVICE_FORM_FACTOR_TABLET);
+    ENUM_CASE(sync_pb::SyncEnums, DEVICE_FORM_FACTOR_AUTOMOTIVE);
+    ENUM_CASE(sync_pb::SyncEnums, DEVICE_FORM_FACTOR_WEARABLE);
+    ENUM_CASE(sync_pb::SyncEnums, DEVICE_FORM_FACTOR_TV);
   }
   NOTREACHED_IN_MIGRATION();
   return "";
@@ -500,7 +516,8 @@ const char* ProtoEnumToString(
         ReportingPopulation safe_browsing_reporting_population) {
   ASSERT_ENUM_BOUNDS(
       sync_pb::GaiaPasswordReuse::PasswordReuseDetected::SafeBrowsingStatus,
-      ReportingPopulation, REPORTING_POPULATION_UNSPECIFIED, SCOUT);
+      ReportingPopulation, REPORTING_POPULATION_UNSPECIFIED,
+      ENHANCED_PROTECTION);
   switch (safe_browsing_reporting_population) {
     ENUM_CASE(
         sync_pb::GaiaPasswordReuse::PasswordReuseDetected::SafeBrowsingStatus,
@@ -514,6 +531,9 @@ const char* ProtoEnumToString(
     ENUM_CASE(
         sync_pb::GaiaPasswordReuse::PasswordReuseDetected::SafeBrowsingStatus,
         SCOUT);
+    ENUM_CASE(
+        sync_pb::GaiaPasswordReuse::PasswordReuseDetected::SafeBrowsingStatus,
+        ENHANCED_PROTECTION);
   }
   NOTREACHED_IN_MIGRATION();
   return "";
@@ -722,7 +742,7 @@ const char* ProtoEnumToString(sync_pb::WebApkIconInfo::Purpose purpose) {
     ENUM_CASE(sync_pb::WebApkIconInfo, MASKABLE);
     ENUM_CASE(sync_pb::WebApkIconInfo, MONOCHROME);
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 const char* ProtoEnumToString(sync_pb::WebAppIconInfo::Purpose purpose) {
@@ -941,14 +961,14 @@ const char* ProtoEnumToString(
   return "";
 }
 
-const char* ProtoEnumToString(sync_pb::ModelTypeState::InitialSyncState state) {
-  ASSERT_ENUM_BOUNDS(sync_pb::ModelTypeState, InitialSyncState,
+const char* ProtoEnumToString(sync_pb::DataTypeState::InitialSyncState state) {
+  ASSERT_ENUM_BOUNDS(sync_pb::DataTypeState, InitialSyncState,
                      INITIAL_SYNC_STATE_UNSPECIFIED, INITIAL_SYNC_UNNECESSARY);
   switch (state) {
-    ENUM_CASE(sync_pb::ModelTypeState, INITIAL_SYNC_STATE_UNSPECIFIED);
-    ENUM_CASE(sync_pb::ModelTypeState, INITIAL_SYNC_PARTIALLY_DONE);
-    ENUM_CASE(sync_pb::ModelTypeState, INITIAL_SYNC_DONE);
-    ENUM_CASE(sync_pb::ModelTypeState, INITIAL_SYNC_UNNECESSARY);
+    ENUM_CASE(sync_pb::DataTypeState, INITIAL_SYNC_STATE_UNSPECIFIED);
+    ENUM_CASE(sync_pb::DataTypeState, INITIAL_SYNC_PARTIALLY_DONE);
+    ENUM_CASE(sync_pb::DataTypeState, INITIAL_SYNC_DONE);
+    ENUM_CASE(sync_pb::DataTypeState, INITIAL_SYNC_UNNECESSARY);
   }
   NOTREACHED_IN_MIGRATION();
   return "";
@@ -1025,6 +1045,37 @@ const char* ProtoEnumToString(
   }
   NOTREACHED_IN_MIGRATION();
   return "";
+}
+
+const char* ProtoEnumToString(
+    sync_pb::ThemeSpecifics::UserColorTheme::BrowserColorVariant
+        browser_color_variant) {
+  ASSERT_ENUM_BOUNDS(sync_pb::ThemeSpecifics::UserColorTheme,
+                     BrowserColorVariant, BROWSER_COLOR_VARIANT_UNSPECIFIED,
+                     EXPRESSIVE);
+  switch (browser_color_variant) {
+    ENUM_CASE(sync_pb::ThemeSpecifics::UserColorTheme,
+              BROWSER_COLOR_VARIANT_UNSPECIFIED);
+    ENUM_CASE(sync_pb::ThemeSpecifics::UserColorTheme, SYSTEM);
+    ENUM_CASE(sync_pb::ThemeSpecifics::UserColorTheme, TONAL_SPOT);
+    ENUM_CASE(sync_pb::ThemeSpecifics::UserColorTheme, NEUTRAL);
+    ENUM_CASE(sync_pb::ThemeSpecifics::UserColorTheme, VIBRANT);
+    ENUM_CASE(sync_pb::ThemeSpecifics::UserColorTheme, EXPRESSIVE);
+  }
+  NOTREACHED_IN_MIGRATION();
+  return "";
+}
+
+const char* ProtoEnumToString(
+    sync_pb::ThemeSpecifics::BrowserColorScheme browser_color_scheme) {
+  ASSERT_ENUM_BOUNDS(sync_pb::ThemeSpecifics, BrowserColorScheme,
+                     BROWSER_COLOR_SCHEME_UNSPECIFIED, DARK);
+  switch (browser_color_scheme) {
+    ENUM_CASE(sync_pb::ThemeSpecifics, BROWSER_COLOR_SCHEME_UNSPECIFIED);
+    ENUM_CASE(sync_pb::ThemeSpecifics, SYSTEM);
+    ENUM_CASE(sync_pb::ThemeSpecifics, LIGHT);
+    ENUM_CASE(sync_pb::ThemeSpecifics, DARK);
+  }
 }
 
 #undef ASSERT_ENUM_BOUNDS

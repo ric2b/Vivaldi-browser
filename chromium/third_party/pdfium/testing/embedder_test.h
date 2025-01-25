@@ -92,6 +92,10 @@ class EmbedderTest : public ::testing::Test,
   class ScopedEmbedderTestPage {
    public:
     ScopedEmbedderTestPage(EmbedderTest* test, int page_index);
+    ScopedEmbedderTestPage(const ScopedEmbedderTestPage&) = delete;
+    ScopedEmbedderTestPage& operator=(const ScopedEmbedderTestPage&) = delete;
+    ScopedEmbedderTestPage(ScopedEmbedderTestPage&&) noexcept;
+    ScopedEmbedderTestPage& operator=(ScopedEmbedderTestPage&&) noexcept;
     ~ScopedEmbedderTestPage();
 
     FPDF_PAGE get() { return page_; }
@@ -99,8 +103,8 @@ class EmbedderTest : public ::testing::Test,
     explicit operator bool() const { return !!page_; }
 
    private:
-    UnownedPtr<EmbedderTest> const test_;
-    const FPDF_PAGE page_;
+    UnownedPtr<EmbedderTest> test_;
+    FPDF_PAGE page_;
   };
 
   EmbedderTest();

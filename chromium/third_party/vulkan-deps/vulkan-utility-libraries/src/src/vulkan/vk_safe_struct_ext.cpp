@@ -2688,6 +2688,75 @@ void safe_VkSampleLocationsInfoEXT::initialize(const safe_VkSampleLocationsInfoE
     }
 }
 
+safe_VkAttachmentSampleLocationsEXT::safe_VkAttachmentSampleLocationsEXT(const VkAttachmentSampleLocationsEXT* in_struct,
+                                                                         [[maybe_unused]] PNextCopyState* copy_state)
+    : attachmentIndex(in_struct->attachmentIndex), sampleLocationsInfo(&in_struct->sampleLocationsInfo) {}
+
+safe_VkAttachmentSampleLocationsEXT::safe_VkAttachmentSampleLocationsEXT() : attachmentIndex() {}
+
+safe_VkAttachmentSampleLocationsEXT::safe_VkAttachmentSampleLocationsEXT(const safe_VkAttachmentSampleLocationsEXT& copy_src) {
+    attachmentIndex = copy_src.attachmentIndex;
+    sampleLocationsInfo.initialize(&copy_src.sampleLocationsInfo);
+}
+
+safe_VkAttachmentSampleLocationsEXT& safe_VkAttachmentSampleLocationsEXT::operator=(
+    const safe_VkAttachmentSampleLocationsEXT& copy_src) {
+    if (&copy_src == this) return *this;
+
+    attachmentIndex = copy_src.attachmentIndex;
+    sampleLocationsInfo.initialize(&copy_src.sampleLocationsInfo);
+
+    return *this;
+}
+
+safe_VkAttachmentSampleLocationsEXT::~safe_VkAttachmentSampleLocationsEXT() {}
+
+void safe_VkAttachmentSampleLocationsEXT::initialize(const VkAttachmentSampleLocationsEXT* in_struct,
+                                                     [[maybe_unused]] PNextCopyState* copy_state) {
+    attachmentIndex = in_struct->attachmentIndex;
+    sampleLocationsInfo.initialize(&in_struct->sampleLocationsInfo);
+}
+
+void safe_VkAttachmentSampleLocationsEXT::initialize(const safe_VkAttachmentSampleLocationsEXT* copy_src,
+                                                     [[maybe_unused]] PNextCopyState* copy_state) {
+    attachmentIndex = copy_src->attachmentIndex;
+    sampleLocationsInfo.initialize(&copy_src->sampleLocationsInfo);
+}
+
+safe_VkSubpassSampleLocationsEXT::safe_VkSubpassSampleLocationsEXT(const VkSubpassSampleLocationsEXT* in_struct,
+                                                                   [[maybe_unused]] PNextCopyState* copy_state)
+    : subpassIndex(in_struct->subpassIndex), sampleLocationsInfo(&in_struct->sampleLocationsInfo) {}
+
+safe_VkSubpassSampleLocationsEXT::safe_VkSubpassSampleLocationsEXT() : subpassIndex() {}
+
+safe_VkSubpassSampleLocationsEXT::safe_VkSubpassSampleLocationsEXT(const safe_VkSubpassSampleLocationsEXT& copy_src) {
+    subpassIndex = copy_src.subpassIndex;
+    sampleLocationsInfo.initialize(&copy_src.sampleLocationsInfo);
+}
+
+safe_VkSubpassSampleLocationsEXT& safe_VkSubpassSampleLocationsEXT::operator=(const safe_VkSubpassSampleLocationsEXT& copy_src) {
+    if (&copy_src == this) return *this;
+
+    subpassIndex = copy_src.subpassIndex;
+    sampleLocationsInfo.initialize(&copy_src.sampleLocationsInfo);
+
+    return *this;
+}
+
+safe_VkSubpassSampleLocationsEXT::~safe_VkSubpassSampleLocationsEXT() {}
+
+void safe_VkSubpassSampleLocationsEXT::initialize(const VkSubpassSampleLocationsEXT* in_struct,
+                                                  [[maybe_unused]] PNextCopyState* copy_state) {
+    subpassIndex = in_struct->subpassIndex;
+    sampleLocationsInfo.initialize(&in_struct->sampleLocationsInfo);
+}
+
+void safe_VkSubpassSampleLocationsEXT::initialize(const safe_VkSubpassSampleLocationsEXT* copy_src,
+                                                  [[maybe_unused]] PNextCopyState* copy_state) {
+    subpassIndex = copy_src->subpassIndex;
+    sampleLocationsInfo.initialize(&copy_src->sampleLocationsInfo);
+}
+
 safe_VkRenderPassSampleLocationsBeginInfoEXT::safe_VkRenderPassSampleLocationsBeginInfoEXT(
     const VkRenderPassSampleLocationsBeginInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
     : sType(in_struct->sType),
@@ -2698,16 +2767,17 @@ safe_VkRenderPassSampleLocationsBeginInfoEXT::safe_VkRenderPassSampleLocationsBe
     if (copy_pnext) {
         pNext = SafePnextCopy(in_struct->pNext, copy_state);
     }
-    if (in_struct->pAttachmentInitialSampleLocations) {
-        pAttachmentInitialSampleLocations = new VkAttachmentSampleLocationsEXT[in_struct->attachmentInitialSampleLocationsCount];
-        memcpy((void*)pAttachmentInitialSampleLocations, (void*)in_struct->pAttachmentInitialSampleLocations,
-               sizeof(VkAttachmentSampleLocationsEXT) * in_struct->attachmentInitialSampleLocationsCount);
+    if (attachmentInitialSampleLocationsCount && in_struct->pAttachmentInitialSampleLocations) {
+        pAttachmentInitialSampleLocations = new safe_VkAttachmentSampleLocationsEXT[attachmentInitialSampleLocationsCount];
+        for (uint32_t i = 0; i < attachmentInitialSampleLocationsCount; ++i) {
+            pAttachmentInitialSampleLocations[i].initialize(&in_struct->pAttachmentInitialSampleLocations[i]);
+        }
     }
-
-    if (in_struct->pPostSubpassSampleLocations) {
-        pPostSubpassSampleLocations = new VkSubpassSampleLocationsEXT[in_struct->postSubpassSampleLocationsCount];
-        memcpy((void*)pPostSubpassSampleLocations, (void*)in_struct->pPostSubpassSampleLocations,
-               sizeof(VkSubpassSampleLocationsEXT) * in_struct->postSubpassSampleLocationsCount);
+    if (postSubpassSampleLocationsCount && in_struct->pPostSubpassSampleLocations) {
+        pPostSubpassSampleLocations = new safe_VkSubpassSampleLocationsEXT[postSubpassSampleLocationsCount];
+        for (uint32_t i = 0; i < postSubpassSampleLocationsCount; ++i) {
+            pPostSubpassSampleLocations[i].initialize(&in_struct->pPostSubpassSampleLocations[i]);
+        }
     }
 }
 
@@ -2727,17 +2797,17 @@ safe_VkRenderPassSampleLocationsBeginInfoEXT::safe_VkRenderPassSampleLocationsBe
     postSubpassSampleLocationsCount = copy_src.postSubpassSampleLocationsCount;
     pPostSubpassSampleLocations = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
-
-    if (copy_src.pAttachmentInitialSampleLocations) {
-        pAttachmentInitialSampleLocations = new VkAttachmentSampleLocationsEXT[copy_src.attachmentInitialSampleLocationsCount];
-        memcpy((void*)pAttachmentInitialSampleLocations, (void*)copy_src.pAttachmentInitialSampleLocations,
-               sizeof(VkAttachmentSampleLocationsEXT) * copy_src.attachmentInitialSampleLocationsCount);
+    if (attachmentInitialSampleLocationsCount && copy_src.pAttachmentInitialSampleLocations) {
+        pAttachmentInitialSampleLocations = new safe_VkAttachmentSampleLocationsEXT[attachmentInitialSampleLocationsCount];
+        for (uint32_t i = 0; i < attachmentInitialSampleLocationsCount; ++i) {
+            pAttachmentInitialSampleLocations[i].initialize(&copy_src.pAttachmentInitialSampleLocations[i]);
+        }
     }
-
-    if (copy_src.pPostSubpassSampleLocations) {
-        pPostSubpassSampleLocations = new VkSubpassSampleLocationsEXT[copy_src.postSubpassSampleLocationsCount];
-        memcpy((void*)pPostSubpassSampleLocations, (void*)copy_src.pPostSubpassSampleLocations,
-               sizeof(VkSubpassSampleLocationsEXT) * copy_src.postSubpassSampleLocationsCount);
+    if (postSubpassSampleLocationsCount && copy_src.pPostSubpassSampleLocations) {
+        pPostSubpassSampleLocations = new safe_VkSubpassSampleLocationsEXT[postSubpassSampleLocationsCount];
+        for (uint32_t i = 0; i < postSubpassSampleLocationsCount; ++i) {
+            pPostSubpassSampleLocations[i].initialize(&copy_src.pPostSubpassSampleLocations[i]);
+        }
     }
 }
 
@@ -2755,17 +2825,17 @@ safe_VkRenderPassSampleLocationsBeginInfoEXT& safe_VkRenderPassSampleLocationsBe
     postSubpassSampleLocationsCount = copy_src.postSubpassSampleLocationsCount;
     pPostSubpassSampleLocations = nullptr;
     pNext = SafePnextCopy(copy_src.pNext);
-
-    if (copy_src.pAttachmentInitialSampleLocations) {
-        pAttachmentInitialSampleLocations = new VkAttachmentSampleLocationsEXT[copy_src.attachmentInitialSampleLocationsCount];
-        memcpy((void*)pAttachmentInitialSampleLocations, (void*)copy_src.pAttachmentInitialSampleLocations,
-               sizeof(VkAttachmentSampleLocationsEXT) * copy_src.attachmentInitialSampleLocationsCount);
+    if (attachmentInitialSampleLocationsCount && copy_src.pAttachmentInitialSampleLocations) {
+        pAttachmentInitialSampleLocations = new safe_VkAttachmentSampleLocationsEXT[attachmentInitialSampleLocationsCount];
+        for (uint32_t i = 0; i < attachmentInitialSampleLocationsCount; ++i) {
+            pAttachmentInitialSampleLocations[i].initialize(&copy_src.pAttachmentInitialSampleLocations[i]);
+        }
     }
-
-    if (copy_src.pPostSubpassSampleLocations) {
-        pPostSubpassSampleLocations = new VkSubpassSampleLocationsEXT[copy_src.postSubpassSampleLocationsCount];
-        memcpy((void*)pPostSubpassSampleLocations, (void*)copy_src.pPostSubpassSampleLocations,
-               sizeof(VkSubpassSampleLocationsEXT) * copy_src.postSubpassSampleLocationsCount);
+    if (postSubpassSampleLocationsCount && copy_src.pPostSubpassSampleLocations) {
+        pPostSubpassSampleLocations = new safe_VkSubpassSampleLocationsEXT[postSubpassSampleLocationsCount];
+        for (uint32_t i = 0; i < postSubpassSampleLocationsCount; ++i) {
+            pPostSubpassSampleLocations[i].initialize(&copy_src.pPostSubpassSampleLocations[i]);
+        }
     }
 
     return *this;
@@ -2788,17 +2858,17 @@ void safe_VkRenderPassSampleLocationsBeginInfoEXT::initialize(const VkRenderPass
     postSubpassSampleLocationsCount = in_struct->postSubpassSampleLocationsCount;
     pPostSubpassSampleLocations = nullptr;
     pNext = SafePnextCopy(in_struct->pNext, copy_state);
-
-    if (in_struct->pAttachmentInitialSampleLocations) {
-        pAttachmentInitialSampleLocations = new VkAttachmentSampleLocationsEXT[in_struct->attachmentInitialSampleLocationsCount];
-        memcpy((void*)pAttachmentInitialSampleLocations, (void*)in_struct->pAttachmentInitialSampleLocations,
-               sizeof(VkAttachmentSampleLocationsEXT) * in_struct->attachmentInitialSampleLocationsCount);
+    if (attachmentInitialSampleLocationsCount && in_struct->pAttachmentInitialSampleLocations) {
+        pAttachmentInitialSampleLocations = new safe_VkAttachmentSampleLocationsEXT[attachmentInitialSampleLocationsCount];
+        for (uint32_t i = 0; i < attachmentInitialSampleLocationsCount; ++i) {
+            pAttachmentInitialSampleLocations[i].initialize(&in_struct->pAttachmentInitialSampleLocations[i]);
+        }
     }
-
-    if (in_struct->pPostSubpassSampleLocations) {
-        pPostSubpassSampleLocations = new VkSubpassSampleLocationsEXT[in_struct->postSubpassSampleLocationsCount];
-        memcpy((void*)pPostSubpassSampleLocations, (void*)in_struct->pPostSubpassSampleLocations,
-               sizeof(VkSubpassSampleLocationsEXT) * in_struct->postSubpassSampleLocationsCount);
+    if (postSubpassSampleLocationsCount && in_struct->pPostSubpassSampleLocations) {
+        pPostSubpassSampleLocations = new safe_VkSubpassSampleLocationsEXT[postSubpassSampleLocationsCount];
+        for (uint32_t i = 0; i < postSubpassSampleLocationsCount; ++i) {
+            pPostSubpassSampleLocations[i].initialize(&in_struct->pPostSubpassSampleLocations[i]);
+        }
     }
 }
 
@@ -2810,17 +2880,17 @@ void safe_VkRenderPassSampleLocationsBeginInfoEXT::initialize(const safe_VkRende
     postSubpassSampleLocationsCount = copy_src->postSubpassSampleLocationsCount;
     pPostSubpassSampleLocations = nullptr;
     pNext = SafePnextCopy(copy_src->pNext);
-
-    if (copy_src->pAttachmentInitialSampleLocations) {
-        pAttachmentInitialSampleLocations = new VkAttachmentSampleLocationsEXT[copy_src->attachmentInitialSampleLocationsCount];
-        memcpy((void*)pAttachmentInitialSampleLocations, (void*)copy_src->pAttachmentInitialSampleLocations,
-               sizeof(VkAttachmentSampleLocationsEXT) * copy_src->attachmentInitialSampleLocationsCount);
+    if (attachmentInitialSampleLocationsCount && copy_src->pAttachmentInitialSampleLocations) {
+        pAttachmentInitialSampleLocations = new safe_VkAttachmentSampleLocationsEXT[attachmentInitialSampleLocationsCount];
+        for (uint32_t i = 0; i < attachmentInitialSampleLocationsCount; ++i) {
+            pAttachmentInitialSampleLocations[i].initialize(&copy_src->pAttachmentInitialSampleLocations[i]);
+        }
     }
-
-    if (copy_src->pPostSubpassSampleLocations) {
-        pPostSubpassSampleLocations = new VkSubpassSampleLocationsEXT[copy_src->postSubpassSampleLocationsCount];
-        memcpy((void*)pPostSubpassSampleLocations, (void*)copy_src->pPostSubpassSampleLocations,
-               sizeof(VkSubpassSampleLocationsEXT) * copy_src->postSubpassSampleLocationsCount);
+    if (postSubpassSampleLocationsCount && copy_src->pPostSubpassSampleLocations) {
+        pPostSubpassSampleLocations = new safe_VkSubpassSampleLocationsEXT[postSubpassSampleLocationsCount];
+        for (uint32_t i = 0; i < postSubpassSampleLocationsCount; ++i) {
+            pPostSubpassSampleLocations[i].initialize(&copy_src->pPostSubpassSampleLocations[i]);
+        }
     }
 }
 

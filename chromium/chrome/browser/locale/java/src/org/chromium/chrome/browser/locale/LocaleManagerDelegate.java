@@ -16,23 +16,20 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryLoader;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.search_engines.DefaultSearchEngineDialogCoordinator;
 import org.chromium.chrome.browser.search_engines.DefaultSearchEngineDialogHelper;
-import org.chromium.chrome.browser.search_engines.DefaultSearchEnginePromoDialog;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoState;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.search_engines.SogouPromoDialog;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
-import org.chromium.chrome.browser.search_engines.choice_screen.ChoiceDialogCoordinator;
 import org.chromium.chrome.browser.search_engines.settings.SearchEngineSettings;
+import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.ui.base.PageTransition;
@@ -58,7 +55,6 @@ public class LocaleManagerDelegate {
     // SnackbarManager is owned by ChromeActivity and is not null as long as the activity is alive.
     private WeakReference<SnackbarManager> mSnackbarManager = new WeakReference<>(null);
     private LocaleTemplateUrlLoader mLocaleTemplateUrlLoader;
-    @Nullable private SettingsLauncher mSettingsLauncher;
     private DefaultSearchEngineDialogHelper.Delegate mSearchEngineHelperDelegate;
 
     private SnackbarController mSnackbarController =
@@ -68,9 +64,9 @@ public class LocaleManagerDelegate {
 
                 @Override
                 public void onAction(Object actionData) {
-                    assert mSettingsLauncher != null;
                     Context context = ContextUtils.getApplicationContext();
-                    mSettingsLauncher.launchSettingsActivity(context, SearchEngineSettings.class);
+                    SettingsLauncherFactory.createSettingsLauncher()
+                            .launchSettingsActivity(context, SearchEngineSettings.class);
                 }
             };
 
@@ -194,8 +190,7 @@ public class LocaleManagerDelegate {
                     } else {
                         @SearchEnginePromoType int promoType = getSearchEnginePromoShowType();
                         if (promoType == SearchEnginePromoType.SHOW_EXISTING
-                                || promoType == SearchEnginePromoType.SHOW_NEW
-                                || promoType == SearchEnginePromoType.SHOW_WAFFLE) {
+                                || promoType == SearchEnginePromoType.SHOW_NEW) {
                             onUserLeavePromoDialogWithNoConfirmedChoice(promoType);
                         }
                     }
@@ -219,40 +214,17 @@ public class LocaleManagerDelegate {
                                 new SogouPromoDialog(
                                                 activity,
                                                 this::onSelectSearchEngine,
-                                                finalizeInternalCallback,
-                                                mSettingsLauncher)
+                                                finalizeInternalCallback)
                                         .show();
                 break;
             case SearchEnginePromoType.SHOW_EXISTING:
             case SearchEnginePromoType.SHOW_NEW:
-                if (ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.SEARCH_ENGINE_PROMO_DIALOG_REWRITE)) {
-                    dialogPresenter =
-                            () ->
-                                    new DefaultSearchEngineDialogCoordinator(
-                                                    activity,
-                                                    mSearchEngineHelperDelegate,
-                                                    shouldShow,
-                                                    finalizeInternalCallback)
-                                            .show();
-                } else {
-                    dialogPresenter =
-                            () ->
-                                    new DefaultSearchEnginePromoDialog(
-                                                    activity,
-                                                    mSearchEngineHelperDelegate,
-                                                    shouldShow,
-                                                    finalizeInternalCallback)
-                                            .show();
-                }
-                break;
-            case SearchEnginePromoType.SHOW_WAFFLE:
-                assert ChromeFeatureList.isEnabled(ChromeFeatureList.SEARCH_ENGINE_CHOICE);
                 dialogPresenter =
                         () ->
-                                new ChoiceDialogCoordinator(
+                                new DefaultSearchEngineDialogCoordinator(
                                                 activity,
                                                 mSearchEngineHelperDelegate,
+                                                shouldShow,
                                                 finalizeInternalCallback)
                                         .show();
                 break;
@@ -299,11 +271,6 @@ public class LocaleManagerDelegate {
     /** @see LocaleManager#setSnackbarManager */
     public void setSnackbarManager(SnackbarManager manager) {
         mSnackbarManager = new WeakReference<SnackbarManager>(manager);
-    }
-
-    /** @see LocaleManager#setSettingsLauncher */
-    public void setSettingsLauncher(SettingsLauncher settingsLauncher) {
-        mSettingsLauncher = settingsLauncher;
     }
 
     private void showSnackbar(CharSequence title) {

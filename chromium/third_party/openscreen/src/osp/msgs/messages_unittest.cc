@@ -7,6 +7,7 @@
 
 using openscreen::msgs::CborEncodeBuffer;
 using openscreen::msgs::HttpHeader;
+using openscreen::msgs::PresentationConnectionCloseEvent;
 using openscreen::msgs::PresentationConnectionMessage;
 using openscreen::msgs::PresentationStartRequest;
 using openscreen::msgs::PresentationUrlAvailabilityRequest;
@@ -206,6 +207,47 @@ TEST(PresentationMessagesTest, CborEncodeBufferTooLarge) {
   PresentationUrlAvailabilityRequest request{7, urls};
   CborEncodeBuffer buffer{10, 30};
   ASSERT_FALSE(EncodePresentationUrlAvailabilityRequest(request, &buffer));
+}
+
+TEST(PresentationMessagesTest, EncodePresentationConnectionCloseEvent) {
+  uint8_t buffer[256];
+  PresentationConnectionCloseEvent event = {
+      .connection_id = 1,
+      .reason =
+          msgs::PresentationConnectionCloseEvent_reason::kCloseMethodCalled,
+      .connection_count = 1,
+      .has_error_message = false};
+  ssize_t bytes_out =
+      EncodePresentationConnectionCloseEvent(event, buffer, sizeof(buffer));
+  ASSERT_LE(bytes_out, static_cast<ssize_t>(sizeof(buffer)));
+  ASSERT_GT(bytes_out, 0);
+
+  PresentationConnectionCloseEvent decoded_event;
+  ssize_t bytes_read =
+      DecodePresentationConnectionCloseEvent(buffer, bytes_out, decoded_event);
+  ASSERT_EQ(bytes_read, bytes_out);
+  EXPECT_EQ(1u, decoded_event.connection_id);
+  EXPECT_EQ(1u, decoded_event.connection_count);
+
+  PresentationConnectionCloseEvent event_with_message = {
+      .connection_id = 2,
+      .reason =
+          msgs::PresentationConnectionCloseEvent_reason::kCloseMethodCalled,
+      .connection_count = 2,
+      .has_error_message = true,
+      .error_message = "test message"};
+  bytes_out = EncodePresentationConnectionCloseEvent(event_with_message, buffer,
+                                                     sizeof(buffer));
+  ASSERT_LE(bytes_out, static_cast<ssize_t>(sizeof(buffer)));
+  ASSERT_GT(bytes_out, 0);
+
+  PresentationConnectionCloseEvent decoded_event_with_message;
+  bytes_read = DecodePresentationConnectionCloseEvent(
+      buffer, bytes_out, decoded_event_with_message);
+  ASSERT_EQ(bytes_read, bytes_out);
+  EXPECT_EQ(2u, decoded_event_with_message.connection_id);
+  EXPECT_EQ(2u, decoded_event_with_message.connection_count);
+  EXPECT_EQ("test message", decoded_event_with_message.error_message);
 }
 
 }  // namespace openscreen::osp

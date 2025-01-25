@@ -13,8 +13,8 @@
 #include "base/numerics/checked_math.h"
 #include "base/strings/strcat.h"
 #include "base/trace_event/trace_event.h"
-#include "services/webnn/dml/buffer_impl_dml.h"
 #include "services/webnn/dml/error.h"
+#include "services/webnn/dml/tensor_impl_dml.h"
 #include "services/webnn/public/cpp/webnn_errors.h"
 
 namespace webnn::dml {
@@ -95,7 +95,7 @@ uint64_t CalculateDMLBufferTensorSize(
       element_size = 8;
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 
   // Calculate the total size of the tensor in bytes. It should be rounded up to
@@ -119,14 +119,14 @@ std::vector<uint32_t> CalculateStrides(base::span<const uint32_t> dimensions) {
   return strides;
 }
 
-Microsoft::WRL::ComPtr<ID3D12Device> GetD3D12Device(IDMLDevice* dml_device) {
+Microsoft::WRL::ComPtr<ID3D12Device> GetD3D12Device(IDMLDevice1* dml_device) {
   CHECK(dml_device);
   Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device;
   CHECK_EQ(dml_device->GetParentDevice(IID_PPV_ARGS(&d3d12_device)), S_OK);
   return d3d12_device;
 }
 
-DML_FEATURE_LEVEL GetMaxSupportedDMLFeatureLevel(IDMLDevice* dml_device) {
+DML_FEATURE_LEVEL GetMaxSupportedDMLFeatureLevel(IDMLDevice1* dml_device) {
   CHECK(dml_device);
 
   // WebNN targets DML_FEATURE_LEVEL_4_0 for GPU and DML_FEATURE_LEVEL_6_4 for
@@ -211,23 +211,23 @@ void ReadbackBufferWithBarrier(
   command_recorder->ResourceBarrier(barriers);
 }
 
-void UploadBufferWithBarrier(CommandRecorder* command_recorder,
-                             BufferImplDml* dst_buffer,
+void UploadTensorWithBarrier(CommandRecorder* command_recorder,
+                             TensorImplDml* dst_tensor,
                              Microsoft::WRL::ComPtr<ID3D12Resource> src_buffer,
                              size_t buffer_size) {
-  UploadBufferWithBarrier(command_recorder, dst_buffer->buffer(),
+  UploadBufferWithBarrier(command_recorder, dst_tensor->buffer(),
                           std::move(src_buffer), buffer_size);
-  command_recorder->OnBufferAccessed(dst_buffer);
+  command_recorder->OnTensorAccessed(dst_tensor);
 }
 
-void ReadbackBufferWithBarrier(
+void ReadbackTensorWithBarrier(
     CommandRecorder* command_recorder,
     Microsoft::WRL::ComPtr<ID3D12Resource> dst_buffer,
-    BufferImplDml* src_buffer,
+    TensorImplDml* src_tensor,
     size_t buffer_size) {
-  ReadbackBufferWithBarrier(command_recorder, dst_buffer, src_buffer->buffer(),
+  ReadbackBufferWithBarrier(command_recorder, dst_buffer, src_tensor->buffer(),
                             buffer_size);
-  command_recorder->OnBufferAccessed(src_buffer);
+  command_recorder->OnTensorAccessed(src_tensor);
 }
 
 mojom::ErrorPtr CreateError(mojom::Error::Code error_code,
@@ -236,7 +236,7 @@ mojom::ErrorPtr CreateError(mojom::Error::Code error_code,
   LOG(ERROR) << "[WebNN] CreateError: " << error_message;
   if (!label.empty()) {
     return mojom::Error::New(
-        error_code, base::StrCat({kBackendName, GetLabelErrorSuffix(label),
+        error_code, base::StrCat({kBackendName, GetErrorLabelPrefix(label),
                                   error_message}));
   }
   return mojom::Error::New(error_code, kBackendName + error_message);

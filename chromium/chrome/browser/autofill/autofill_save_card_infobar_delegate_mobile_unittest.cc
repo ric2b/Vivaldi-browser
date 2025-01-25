@@ -28,6 +28,7 @@
 
 using testing::_;
 
+namespace autofill {
 namespace {
 
 class TestDeviceLockBridge : public DeviceLockBridge {
@@ -39,9 +40,10 @@ class TestDeviceLockBridge : public DeviceLockBridge {
   bool ShouldShowDeviceLockUi() override { return false; }
 };
 
-}  // namespace
 
-namespace autofill {
+using CardSaveType = payments::PaymentsAutofillClient::CardSaveType;
+using SaveCreditCardOptions =
+    payments::PaymentsAutofillClient::SaveCreditCardOptions;
 
 class AutofillSaveCardInfoBarDelegateMobileTest
     : public ChromeRenderViewHostTestHarness {
@@ -80,13 +82,13 @@ class AutofillSaveCardInfoBarDelegateMobileTest
       CreditCard credit_card = CreditCard());
   std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile>
   CreateDelegateWithOptions(bool is_uploading,
-                            AutofillClient::SaveCreditCardOptions options,
+                            SaveCreditCardOptions options,
                             CreditCard credit_card = CreditCard());
   std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile>
   CreateDelegateWithLegalMessageAndOptions(
       bool is_uploading,
       std::string legal_message_string,
-      AutofillClient::SaveCreditCardOptions options,
+      SaveCreditCardOptions options,
       CreditCard credit_card = CreditCard());
   void CheckInfobarAcceptReturnValue(ConfirmInfoBarDelegate* infobar_delegate);
 
@@ -94,14 +96,15 @@ class AutofillSaveCardInfoBarDelegateMobileTest
 
  private:
   void LocalSaveCardPromptCallback(
-      AutofillClient::SaveCardOfferUserDecision user_decision) {
+      payments::PaymentsAutofillClient::SaveCardOfferUserDecision
+          user_decision) {
     personal_data_->test_payments_data_manager().SaveImportedCreditCard(
         credit_card_to_save_);
   }
 
   void UploadSaveCardPromptCallback(
-      AutofillClient::SaveCardOfferUserDecision user_decision,
-      const AutofillClient::UserProvidedCardDetails&
+      payments::PaymentsAutofillClient::SaveCardOfferUserDecision user_decision,
+      const payments::PaymentsAutofillClient::UserProvidedCardDetails&
           user_provided_card_details) {
     personal_data_->test_payments_data_manager().SaveImportedCreditCard(
         credit_card_to_save_);
@@ -153,14 +156,14 @@ AutofillSaveCardInfoBarDelegateMobileTest::CreateDelegate(
   auto save_card_delegate = std::make_unique<AutofillSaveCardDelegateAndroid>(
       (payments::PaymentsAutofillClient::LocalSaveCardPromptCallback)
           base::DoNothing(),
-      AutofillClient::SaveCreditCardOptions(), web_contents());
+      SaveCreditCardOptions(), web_contents());
   save_card_delegate->SetDeviceLockBridgeForTesting(
       std::make_unique<TestDeviceLockBridge>());
 #else
   auto save_card_delegate = std::make_unique<AutofillSaveCardDelegate>(
       (payments::PaymentsAutofillClient::LocalSaveCardPromptCallback)
           base::DoNothing(),
-      AutofillClient::SaveCreditCardOptions());
+      SaveCreditCardOptions());
 #endif
   return std::make_unique<AutofillSaveCardInfoBarDelegateMobile>(
       std::move(ui_info), std::move(save_card_delegate));
@@ -169,7 +172,7 @@ AutofillSaveCardInfoBarDelegateMobileTest::CreateDelegate(
 std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile>
 AutofillSaveCardInfoBarDelegateMobileTest::CreateDelegateWithOptions(
     bool is_uploading,
-    AutofillClient::SaveCreditCardOptions options,
+    SaveCreditCardOptions options,
     CreditCard credit_card) {
   return CreateDelegateWithLegalMessageAndOptions(
       is_uploading, /* legal_message_string= */ "", options, credit_card);
@@ -181,17 +184,15 @@ AutofillSaveCardInfoBarDelegateMobileTest::CreateDelegateWithLegalMessage(
     std::string legal_message_string,
     CreditCard credit_card) {
   return CreateDelegateWithLegalMessageAndOptions(
-      is_uploading, legal_message_string,
-      AutofillClient::SaveCreditCardOptions(), credit_card);
+      is_uploading, legal_message_string, SaveCreditCardOptions(), credit_card);
 }
 
 std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile>
 AutofillSaveCardInfoBarDelegateMobileTest::
-    CreateDelegateWithLegalMessageAndOptions(
-        bool is_uploading,
-        std::string legal_message_string,
-        AutofillClient::SaveCreditCardOptions options,
-        CreditCard credit_card) {
+    CreateDelegateWithLegalMessageAndOptions(bool is_uploading,
+                                             std::string legal_message_string,
+                                             SaveCreditCardOptions options,
+                                             CreditCard credit_card) {
   LegalMessageLines legal_message_lines;
   if (!legal_message_string.empty()) {
     std::optional<base::Value> value =
@@ -359,7 +360,7 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Server_Main) {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(
         CreateDelegateWithLegalMessageAndOptions(
             /* is_uploading= */ true, /* legal_message_string= */ "",
-            AutofillClient::SaveCreditCardOptions()
+            SaveCreditCardOptions()
                 .with_should_request_expiration_date_from_user(true)));
 
     base::HistogramTester histogram_tester;
@@ -387,8 +388,7 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Server_Main) {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(
         CreateDelegateWithLegalMessageAndOptions(
             /* is_uploading= */ true, /* legal_message_string= */ "",
-            AutofillClient::SaveCreditCardOptions()
-                .with_should_request_name_from_user(true)));
+            SaveCreditCardOptions().with_should_request_name_from_user(true)));
 
     base::HistogramTester histogram_tester;
     CheckInfobarAcceptReturnValue(infobar.get());
@@ -428,7 +428,7 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Server_Main) {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(
         CreateDelegateWithLegalMessageAndOptions(
             /* is_uploading= */ true, /* legal_message_string= */ "",
-            AutofillClient::SaveCreditCardOptions()
+            SaveCreditCardOptions()
                 .with_should_request_expiration_date_from_user(true)));
 
     base::HistogramTester histogram_tester;
@@ -451,8 +451,7 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Server_Main) {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(
         CreateDelegateWithLegalMessageAndOptions(
             /* is_uploading= */ true, /* legal_message_string= */ "",
-            AutofillClient::SaveCreditCardOptions()
-                .with_should_request_name_from_user(true)));
+            SaveCreditCardOptions().with_should_request_name_from_user(true)));
 
     base::HistogramTester histogram_tester;
     infobar->InfoBarDismissed();
@@ -488,7 +487,7 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Server_Main) {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(
         CreateDelegateWithLegalMessageAndOptions(
             /* is_uploading= */ true, /* legal_message_string= */ "",
-            AutofillClient::SaveCreditCardOptions()
+            SaveCreditCardOptions()
                 .with_should_request_expiration_date_from_user(true)));
 
     base::HistogramTester histogram_tester;
@@ -511,8 +510,7 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Server_Main) {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(
         CreateDelegateWithLegalMessageAndOptions(
             /* is_uploading= */ true, /* legal_message_string= */ "",
-            AutofillClient::SaveCreditCardOptions()
-                .with_should_request_name_from_user(true)));
+            SaveCreditCardOptions().with_should_request_name_from_user(true)));
 
     base::HistogramTester histogram_tester;
     infobar.reset();
@@ -539,9 +537,8 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Cvc_Local_Main) {
   {
     base::HistogramTester histogram_tester;
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegateWithOptions(
-        /* is_uploading= */ false,
-        AutofillClient::SaveCreditCardOptions().with_card_save_type(
-            AutofillClient::CardSaveType::kCvcSaveOnly)));
+        /* is_uploading= */ false, SaveCreditCardOptions().with_card_save_type(
+                                       CardSaveType::kCvcSaveOnly)));
 
     histogram_tester.ExpectUniqueSample("Autofill.CvcInfoBar.Local",
                                         AutofillMetrics::INFOBAR_SHOWN, 1);
@@ -551,9 +548,8 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Cvc_Local_Main) {
   {
     personal_data_->test_payments_data_manager().ClearCreditCards();
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegateWithOptions(
-        /* is_uploading= */ false,
-        AutofillClient::SaveCreditCardOptions().with_card_save_type(
-            AutofillClient::CardSaveType::kCvcSaveOnly)));
+        /* is_uploading= */ false, SaveCreditCardOptions().with_card_save_type(
+                                       CardSaveType::kCvcSaveOnly)));
 
     base::HistogramTester histogram_tester;
 
@@ -567,9 +563,8 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Cvc_Local_Main) {
   // Dismiss the infobar.
   {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegateWithOptions(
-        /* is_uploading= */ false,
-        AutofillClient::SaveCreditCardOptions().with_card_save_type(
-            AutofillClient::CardSaveType::kCvcSaveOnly)));
+        /* is_uploading= */ false, SaveCreditCardOptions().with_card_save_type(
+                                       CardSaveType::kCvcSaveOnly)));
 
     base::HistogramTester histogram_tester;
     infobar->InfoBarDismissed();
@@ -580,9 +575,8 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Cvc_Local_Main) {
   // Ignore the infobar.
   {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegateWithOptions(
-        /* is_uploading= */ false,
-        AutofillClient::SaveCreditCardOptions().with_card_save_type(
-            AutofillClient::CardSaveType::kCvcSaveOnly)));
+        /* is_uploading= */ false, SaveCreditCardOptions().with_card_save_type(
+                                       CardSaveType::kCvcSaveOnly)));
 
     base::HistogramTester histogram_tester;
     infobar.reset();
@@ -600,9 +594,8 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Cvc_Server_Main) {
   {
     base::HistogramTester histogram_tester;
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegateWithOptions(
-        /* is_uploading= */ true,
-        AutofillClient::SaveCreditCardOptions().with_card_save_type(
-            AutofillClient::CardSaveType::kCvcSaveOnly)));
+        /* is_uploading= */ true, SaveCreditCardOptions().with_card_save_type(
+                                      CardSaveType::kCvcSaveOnly)));
 
     histogram_tester.ExpectUniqueSample("Autofill.CvcInfoBar.Upload",
                                         AutofillMetrics::INFOBAR_SHOWN, 1);
@@ -612,9 +605,8 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Cvc_Server_Main) {
   {
     personal_data_->test_payments_data_manager().ClearCreditCards();
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegateWithOptions(
-        /* is_uploading= */ true,
-        AutofillClient::SaveCreditCardOptions().with_card_save_type(
-            AutofillClient::CardSaveType::kCvcSaveOnly)));
+        /* is_uploading= */ true, SaveCreditCardOptions().with_card_save_type(
+                                      CardSaveType::kCvcSaveOnly)));
 
     base::HistogramTester histogram_tester;
     CheckInfobarAcceptReturnValue(infobar.get());
@@ -627,9 +619,8 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Cvc_Server_Main) {
   // Dismiss the infobar.
   {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegateWithOptions(
-        /* is_uploading= */ true,
-        AutofillClient::SaveCreditCardOptions().with_card_save_type(
-            AutofillClient::CardSaveType::kCvcSaveOnly)));
+        /* is_uploading= */ true, SaveCreditCardOptions().with_card_save_type(
+                                      CardSaveType::kCvcSaveOnly)));
 
     base::HistogramTester histogram_tester;
     infobar->InfoBarDismissed();
@@ -640,9 +631,8 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest, Metrics_Cvc_Server_Main) {
   // Ignore the infobar.
   {
     std::unique_ptr<ConfirmInfoBarDelegate> infobar(CreateDelegateWithOptions(
-        /* is_uploading= */ true,
-        AutofillClient::SaveCreditCardOptions().with_card_save_type(
-            AutofillClient::CardSaveType::kCvcSaveOnly)));
+        /* is_uploading= */ true, SaveCreditCardOptions().with_card_save_type(
+                                      CardSaveType::kCvcSaveOnly)));
 
     base::HistogramTester histogram_tester;
     infobar.reset();
@@ -728,4 +718,5 @@ TEST_F(AutofillSaveCardInfoBarDelegateMobileTest,
       u"Mock Cancel Text");
 }
 
+}  // namespace
 }  // namespace autofill

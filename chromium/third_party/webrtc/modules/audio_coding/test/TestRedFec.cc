@@ -46,6 +46,7 @@ TestRedFec::TestRedFec()
                                                  AudioDecoderOpus>()),
       _acmA(AudioCodingModule::Create()),
       _acm_receiver(std::make_unique<acm2::AcmReceiver>(
+          env_,
           acm2::AcmReceiver::Config(decoder_factory_))),
       _channelA2B(NULL),
       _testCntr(0) {}
@@ -102,7 +103,7 @@ void TestRedFec::Perform() {
   _outFileB.Close();
 #endif
 
-  RegisterSendCodec(_acmA, {"opus", 48000, 2}, absl::nullopt, false);
+  RegisterSendCodec(_acmA, {"opus", 48000, 2}, std::nullopt, false);
 
   // _channelA2B imposes 25% packet loss rate.
   EXPECT_EQ(0, _acmA->SetPacketLossRate(25));
@@ -115,11 +116,11 @@ void TestRedFec::Perform() {
   Run();
 
   // Switch to L16 with RED.
-  RegisterSendCodec(_acmA, {"L16", 8000, 1}, absl::nullopt, true);
+  RegisterSendCodec(_acmA, {"L16", 8000, 1}, std::nullopt, true);
   Run();
 
   // Switch to Opus again.
-  RegisterSendCodec(_acmA, {"opus", 48000, 2}, absl::nullopt, false);
+  RegisterSendCodec(_acmA, {"opus", 48000, 2}, std::nullopt, false);
   _acmA->ModifyEncoder([&](std::unique_ptr<AudioEncoder>* enc) {
     EXPECT_EQ(true, (*enc)->SetFec(false));
   });
@@ -134,7 +135,7 @@ void TestRedFec::Perform() {
 void TestRedFec::RegisterSendCodec(
     const std::unique_ptr<AudioCodingModule>& acm,
     const SdpAudioFormat& codec_format,
-    absl::optional<Vad::Aggressiveness> vad_mode,
+    std::optional<Vad::Aggressiveness> vad_mode,
     bool use_red) {
   constexpr int payload_type = 17, cn_payload_type = 27, red_payload_type = 37;
 

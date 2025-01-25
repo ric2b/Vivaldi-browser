@@ -47,6 +47,36 @@ if (DAWN_FETCH_DEPENDENCIES)
     )
 endif ()
 
+################################################################################
+# Start of Emscripten enabled third party directories
+#   To minimize the number of third party targets to make when building with
+#   Emscripten to the minimal set, only subdirectories added within the Start
+#   and End of the Emscripten block are enabled .
+################################################################################
+
+if (NOT TARGET absl::strings)
+    # Recommended setting for compability with future abseil releases.
+    set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "" FORCE)
+    message(STATUS "Dawn: using Abseil at ${DAWN_ABSEIL_DIR}")
+    if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") OR
+        ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
+        add_compile_options(
+            -Wno-array-parameter
+            -Wno-deprecated-builtins
+            -Wno-unknown-warning-option
+        )
+    endif()
+
+    add_subdirectory(${DAWN_ABSEIL_DIR} "${CMAKE_CURRENT_BINARY_DIR}/abseil")
+endif()
+
+################################################################################
+# End of Emscripten enabled third party directories
+################################################################################
+if (${DAWN_ENABLE_EMSCRIPTEN})
+    return()
+endif()
+
 if (NOT TARGET SPIRV-Headers)
     set(SPIRV_HEADERS_SKIP_EXAMPLES ON CACHE BOOL "" FORCE)
     set(SPIRV_HEADERS_SKIP_INSTALL ON CACHE BOOL "" FORCE)
@@ -94,22 +124,6 @@ if (NOT TARGET glfw AND DAWN_USE_GLFW)
     add_subdirectory(${DAWN_GLFW_DIR} "${CMAKE_CURRENT_BINARY_DIR}/glfw")
 endif()
 
-if (NOT TARGET absl::strings)
-    # Recommended setting for compability with future abseil releases.
-    set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "" FORCE)
-    message(STATUS "Dawn: using Abseil at ${DAWN_ABSEIL_DIR}")
-    if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") OR
-        ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
-        add_compile_options(
-            -Wno-array-parameter
-            -Wno-deprecated-builtins
-            -Wno-unknown-warning-option
-        )
-    endif()
-
-    add_subdirectory(${DAWN_ABSEIL_DIR} "${CMAKE_CURRENT_BINARY_DIR}/abseil")
-endif()
-
 if (DAWN_BUILD_PROTOBUF AND NOT TARGET libprotobuf-mutator)
     message(STATUS "Dawn: using LPM at ${DAWN_LPM_DIR}")
     include("libprotobuf-mutator/BUILD.cmake")
@@ -151,6 +165,22 @@ if (TINT_BUILD_TESTS AND NOT TARGET gmock)
     set(gtest_force_shared_crt ON CACHE BOOL "Controls whether a shared run-time library should be used even when Google Test is built as static library" FORCE)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/googletest EXCLUDE_FROM_ALL)
 endif()
+
+# Populates 'targets' with list of all targets under 'dir'
+# Use 'get_all_targets_recursive' instead of this macro
+macro(do_get_all_targets_recursive targets dir)
+    get_property(subdirectories DIRECTORY ${dir} PROPERTY SUBDIRECTORIES)
+    foreach(subdir ${subdirectories})
+        do_get_all_targets_recursive(${targets} ${subdir})
+    endforeach()
+    get_property(current_targets DIRECTORY ${dir} PROPERTY BUILDSYSTEM_TARGETS)
+    list(APPEND ${targets} ${current_targets})
+endmacro()
+function(get_all_targets_recursive targets dir)
+    set(targets_out)
+    do_get_all_targets_recursive(targets_out ${dir})
+    set(${targets} ${targets_out} PARENT_SCOPE)
+endfunction()
 
 function(AddSubdirectoryDXC)
     # We use a CMake function so that all these (non-cache) variables are scoped
@@ -209,12 +239,6 @@ function(AddSubdirectoryDXC)
     # not visible from our build dir. We don't need this validation, so just disable it.
     set(CLANG_FORMAT_EXE "" CACHE STRING "" FORCE)
 
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT DAWN_DXC_DISABLE_ASSERTS_DEBUG)
-        set(LLVM_ENABLE_ASSERTIONS ON CACHE BOOL "" FORCE)
-    else()
-        set(LLVM_ENABLE_ASSERTIONS OFF CACHE BOOL "" FORCE)
-    endif()
-
     # Override RPATH so that it points to current dir (exe path). This allows both executable and
     # shared library to be in the same location, which we set below. Note that DXC places places
     # executables in a bin directory, and shared libraries in a lib directory.
@@ -232,6 +256,29 @@ function(AddSubdirectoryDXC)
     )
     set_target_properties(dxc PROPERTIES EXCLUDE_FROM_ALL FALSE)
     set_target_properties(dxcompiler PROPERTIES EXCLUDE_FROM_ALL FALSE)
+
+    if ((NOT IS_DEBUG_BUILD) AND DAWN_DXC_ENABLE_ASSERTS_IN_NDEBUG)
+        # NOTE: Don't set LLVM_ENABLE_ASSERTIONS because it modifies CMAKE_CXX_FLAGS_* by removing NDEBUG
+        # from it; but this is a global CMake flag that affects all targets, including the non-DXC ones.
+        # Instead, we add '-UNDEBUG', which will come after the default '-DNDEBUG' that comes from
+        # CMAKE_CXX_FLAGS_*, and rely on the fact that compilers will undefine NDEBUG if it comes last
+        # on the compile command line. This was tested on Clang, GCC, and MSVC.
+        # Also note that MSVC will warn about both being defined, which is why DXC/LLVM
+        # removes NDEBUG from CMAKE_CXX_FLAGS_*, but we can live with the warnings.
+        # TODO(crbug.com/358169277): Once we move the 'dxc' directory one level deeper,
+        # use add_definitions instead of getting all targets and setting properties on them.
+        get_all_targets_recursive(ALL_TARGETS ${CMAKE_CURRENT_SOURCE_DIR}/dxc)
+        foreach(t IN LISTS ALL_TARGETS)
+            set_property(TARGET ${t} APPEND PROPERTY COMPILE_OPTIONS "-UNDEBUG")
+            if (NOT MSVC)
+                set_property(TARGET ${t} APPEND PROPERTY COMPILE_DEFINITIONS "_DEBUG")
+            endif()
+            # Reduce binary size by dropping assertion strings
+            set_property(TARGET ${t} APPEND PROPERTY COMPILE_DEFINITIONS "LLVM_ASSERTIONS_NO_STRINGS")
+            # Always trap on asserts for consistent crash logging
+            set_property(TARGET ${t} APPEND PROPERTY COMPILE_DEFINITIONS "LLVM_ASSERTIONS_TRAP")
+        endforeach()
+    endif()
 
     # Override output dir for both targets so that they end up in the same place
     # as the rest of our binaries. Otherwise, DXC wants its outputs in bin and lib dirs.

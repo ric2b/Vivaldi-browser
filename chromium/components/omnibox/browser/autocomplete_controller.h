@@ -42,6 +42,7 @@
 
 // Vivaldi
 #include "components/omnibox/bookmark_nickname_provider.h"
+#include "components/omnibox/direct_match_provider.h"
 
 class ClipboardProvider;
 class DocumentProvider;
@@ -354,6 +355,10 @@ class AutocompleteController : public AutocompleteProviderListener,
                            OpenActionSelectionLogsOmniboxEvent);
   FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelPopupTest,
                            OpenThumbsDownSelectionShowsFeedback);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest,
+                           AccessibleActivedescendantId);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest,
+                           AccessibleSelectionOnResultSelection);
 
   // A minimal representation of the previous `AutocompleteResult`. Used by
   // `UpdateResult()`'s helper methods.
@@ -601,6 +606,7 @@ class AutocompleteController : public AutocompleteProviderListener,
 
   // Vivaldi
   raw_ptr<BookmarkNicknameProvider> bookmark_nickname_provider_;
+  raw_ptr<DirectMatchProvider> direct_match_provider_;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_CONTROLLER_H_

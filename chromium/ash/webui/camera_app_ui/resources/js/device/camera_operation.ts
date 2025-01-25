@@ -10,7 +10,6 @@ import {
 import {AsyncJobQueue} from '../async_job_queue.js';
 import * as error from '../error.js';
 import * as expert from '../expert.js';
-import * as loadTimeData from '../models/load_time_data.js';
 import {DeviceOperator} from '../mojo/device_operator.js';
 import * as state from '../state.js';
 import {
@@ -76,6 +75,8 @@ class Reconfigurer {
   readonly capturePreferrer = new CaptureCandidatePreferrer();
 
   private readonly failedDevices = new Set<string>();
+
+  private failedBySWPrivacySwitch = false;
 
   constructor(
       private readonly preview: Preview,
@@ -238,16 +239,27 @@ class Reconfigurer {
   }
 
   /**
-   * Reset the failed devices list so the next reconfiguration
-   * will try to open those devices.
+   * Clears the list of devices that previously failed to open and allows retry
+   * to open devices even when the sw privacy switch is on.
+   *
    */
-  resetFailedDevices(): void {
+
+  resetConfigurationFailure(): void {
+    this.failedBySWPrivacySwitch = false;
     this.failedDevices.clear();
   }
 
   async startConfigure(cameraInfo: CameraInfo): Promise<void> {
     if (this.shouldSuspend) {
       throw new CameraSuspendError();
+    }
+    // CCA should attempt to open device at least once, even if the SW privacy
+    // switch is on, to ensure the user receives a notification about the SW
+    // privacy setting.
+    if (this.failedBySWPrivacySwitch && util.isSWPrivacySwitchOn()) {
+      // If a previous configuration failed due to the SW privacy switch being
+      // on, and the switch is still on, skip this configuration attempt.
+      throw new NoCameraError();
     }
 
     const deviceOperator = DeviceOperator.getInstance();
@@ -338,6 +350,10 @@ class Reconfigurer {
           if (e.name === 'NotReadableError') {
             // TODO(b/187879603): Remove this hacked once we understand more
             // about such error.
+            if (util.isSWPrivacySwitchOn()) {
+              this.failedBySWPrivacySwitch = true;
+              break;
+            }
             let facing: Facing|null = null;
             let errorMessage: string = e.message;
             const deviceOperator = DeviceOperator.getInstance();
@@ -428,7 +444,14 @@ export class OperationScheduler {
 
   private readonly togglePausedEventQueue = new AsyncJobQueue('drop');
 
-  private readonly deviceMonitor = new DeviceMonitor();
+  private readonly deviceMonitor = new DeviceMonitor((devices) => {
+    const info = new CameraInfo(devices);
+    if (this.ongoingOperationType !== null) {
+      this.pendingUpdateInfo = info;
+      return;
+    }
+    this.doUpdate(info);
+  });
 
   constructor(
       private readonly listener: EventListener,
@@ -444,22 +467,12 @@ export class OperationScheduler {
         defaultFacing,
     );
     this.capturer = new Capturer(this.modes);
-    this.deviceMonitor.addDeviceChangeListener((devices) => {
-      const info = new CameraInfo(devices);
-      if (this.ongoingOperationType !== null) {
-        this.pendingUpdateInfo = info;
-        return;
-      }
-      this.doUpdate(info);
-    });
   }
 
   async initialize(cameraViewUI: CameraViewUI): Promise<void> {
     this.modes.initialize(cameraViewUI);
     await this.deviceMonitor.deviceUpdate();
-    if (!loadTimeData.isCCADisallowed()) {
-      await this.firstInfoUpdate.wait();
-    }
+    await this.firstInfoUpdate.wait();
   }
 
   private doUpdate(cameraInfo: CameraInfo) {

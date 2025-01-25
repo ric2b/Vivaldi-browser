@@ -25,7 +25,6 @@
 #include "absl/synchronization/mutex.h"
 #include "internal/platform/task_runner.h"
 #include "sharing/internal/public/logging.h"
-#include "sharing/nearby_connection.h"
 
 namespace nearby {
 namespace sharing {
@@ -33,7 +32,8 @@ FakeNearbyConnection::FakeNearbyConnection(TaskRunner* task_runner)
     : task_runner_(task_runner) {}
 FakeNearbyConnection::~FakeNearbyConnection() = default;
 
-void FakeNearbyConnection::Read(ReadCallback callback) {
+void FakeNearbyConnection::Read(
+    std::function<void(std::optional<std::vector<uint8_t>> bytes)> callback) {
   NL_DCHECK(!closed_);
   {
     absl::MutexLock lock(&read_mutex_);
@@ -86,6 +86,16 @@ void FakeNearbyConnection::SetDisconnectionListener(
 
 void FakeNearbyConnection::AppendReadableData(std::vector<uint8_t> bytes) {
   NL_DCHECK(!closed_);
+  if (task_runner_) {
+    task_runner_->PostTask([this, bytes = std::move(bytes)]() {
+      {
+        absl::MutexLock lock(&read_mutex_);
+        read_data_.push(std::move(bytes));
+      }
+      MaybeRunCallback();
+    });
+    return;
+  }
   {
     absl::MutexLock lock(&read_mutex_);
     read_data_.push(std::move(bytes));
@@ -107,7 +117,7 @@ bool FakeNearbyConnection::IsClosed() { return closed_; }
 void FakeNearbyConnection::MaybeRunCallback() {
   NL_DCHECK(!closed_);
   std::vector<uint8_t> item;
-  ReadCallback callback;
+  std::function<void(std::optional<std::vector<uint8_t>> bytes)> callback;
   {
     absl::MutexLock lock(&read_mutex_);
     if (!callback_ || read_data_.empty()) return;

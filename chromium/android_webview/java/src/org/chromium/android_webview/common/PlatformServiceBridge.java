@@ -19,8 +19,6 @@ import org.chromium.base.ThreadUtils;
  * this class and use this base class to fetch their specialized version.
  */
 public abstract class PlatformServiceBridge {
-    private static final String TAG = "PlatformServiceBrid-";
-
     private static PlatformServiceBridge sInstance;
     private static final Object sInstanceLock = new Object();
 
@@ -143,10 +141,11 @@ public abstract class PlatformServiceBridge {
      * @param callback Callback to call with the result containing either a non-null
      *     MediaIntegrityProvider implementation or an appropriate exception.
      */
-    public void getMediaIntegrityProvider(
+    public void getMediaIntegrityProvider2(
             long cloudProjectNumber,
             @MediaIntegrityApiStatus int apiStatus,
-            ValueOrErrorCallback<MediaIntegrityProvider, Integer> callback) {
-        callback.onError(MediaIntegrityErrorCode.NON_RECOVERABLE_ERROR);
+            ValueOrErrorCallback<MediaIntegrityProvider, MediaIntegrityErrorWrapper> callback) {
+        callback.onError(
+                new MediaIntegrityErrorWrapper(MediaIntegrityErrorCode.NON_RECOVERABLE_ERROR));
     }
 }

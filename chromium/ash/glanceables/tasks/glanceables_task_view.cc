@@ -224,24 +224,15 @@ class GlanceablesTaskView::CheckButton : public views::ImageButton {
 
     GetViewAccessibility().SetName(l10n_util::GetStringUTF16(
         IDS_GLANCEABLES_TASKS_TASK_ITEM_MARK_COMPLETED_ACCESSIBLE_NAME));
-  }
-
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    views::ImageButton::GetAccessibleNodeData(node_data);
-
-    const ax::mojom::CheckedState checked_state =
-        checked_ ? ax::mojom::CheckedState::kTrue
-                 : ax::mojom::CheckedState::kFalse;
-    node_data->SetCheckedState(checked_state);
-    node_data->SetDefaultActionVerb(checked_
-                                        ? ax::mojom::DefaultActionVerb::kUncheck
-                                        : ax::mojom::DefaultActionVerb::kCheck);
+    SetAndUpdateAccessibleDefaultActionVerb();
+    UpdateAccessibleCheckedState();
   }
 
   void SetChecked(bool checked) {
     checked_ = checked;
     UpdateImage();
-    NotifyAccessibilityEvent(ax::mojom::Event::kCheckedStateChanged, true);
+    UpdateAccessibleCheckedState();
+    SetAndUpdateAccessibleDefaultActionVerb();
   }
 
   bool checked() const { return checked_; }
@@ -253,6 +244,18 @@ class GlanceablesTaskView::CheckButton : public views::ImageButton {
                       checked_ ? kGlanceablesHollowCheckCircleIcon
                                : kGlanceablesHollowCircleIcon,
                       cros_tokens::kFocusRingColor));
+  }
+
+  void SetAndUpdateAccessibleDefaultActionVerb() {
+    SetDefaultActionVerb(checked_ ? ax::mojom::DefaultActionVerb::kUncheck
+                                  : ax::mojom::DefaultActionVerb::kCheck);
+    UpdateAccessibleDefaultActionVerb();
+  }
+
+  void UpdateAccessibleCheckedState() {
+    GetViewAccessibility().SetCheckedState(
+        checked_ ? ax::mojom::CheckedState::kTrue
+                 : ax::mojom::CheckedState::kFalse);
   }
 
   bool checked_ = false;
@@ -467,6 +470,10 @@ const views::ImageButton* GlanceablesTaskView::GetCheckButtonForTest() const {
   return check_button_;
 }
 
+void GlanceablesTaskView::SetCheckedForTest(bool checked) {
+  check_button_->SetChecked(checked);
+}
+
 bool GlanceablesTaskView::GetCompletedForTest() const {
   return check_button_->checked();
 }
@@ -482,7 +489,7 @@ void GlanceablesTaskView::UpdateTaskTitleViewForState(
 
   switch (state) {
     case TaskTitleViewState::kNotInitialized:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case TaskTitleViewState::kView:
       task_title_button_ =
           tasks_title_view_->AddChildView(std::make_unique<TaskTitleButton>(
@@ -585,7 +592,7 @@ void GlanceablesTaskView::AddExtraContentForEditState() {
 void GlanceablesTaskView::UpdateContentsMargins(TaskTitleViewState state) {
   switch (state) {
     case TaskTitleViewState::kNotInitialized:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case TaskTitleViewState::kView:
       contents_view_->SetProperty(views::kMarginsKey, kContentsMargin);
       task_title_button_->SetProperty(views::kMarginsKey,
@@ -657,14 +664,14 @@ void GlanceablesTaskView::CheckButtonPressed() {
   if (!glanceables_util::IsNetworkConnected()) {
     show_error_message_callback_.Run(
         GlanceablesTasksErrorType::kCantMarkCompleteNoNetwork,
-        GlanceablesErrorMessageView::ButtonActionType::kDismiss);
+        ErrorMessageToast::ButtonActionType::kDismiss);
     return;
   }
 
   if (task_id_.empty()) {
     show_error_message_callback_.Run(
         GlanceablesTasksErrorType::kCantMarkComplete,
-        GlanceablesErrorMessageView::ButtonActionType::kReload);
+        ErrorMessageToast::ButtonActionType::kReload);
     return;
   }
 
@@ -682,7 +689,7 @@ void GlanceablesTaskView::TaskTitleButtonPressed() {
   if (!glanceables_util::IsNetworkConnected()) {
     show_error_message_callback_.Run(
         GlanceablesTasksErrorType::kCantUpdateTitleNoNetwork,
-        GlanceablesErrorMessageView::ButtonActionType::kDismiss);
+        ErrorMessageToast::ButtonActionType::kDismiss);
     return;
   }
   RecordUserModifyingTask();
@@ -735,7 +742,8 @@ void GlanceablesTaskView::OnFinishedEditing(const std::u16string& title) {
   }
 }
 
-void GlanceablesTaskView::OnSaved(const api::Task* task) {
+void GlanceablesTaskView::OnSaved(google_apis::ApiErrorCode http_error,
+                                  const api::Task* task) {
   saving_task_changes_ = false;
   if (task_title_button_) {
     task_title_button_->SetEnabled(true);

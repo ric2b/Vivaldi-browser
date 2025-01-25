@@ -54,6 +54,7 @@ using ::chromeos::network_config::mojom::DeviceStateProperties;
 using ::chromeos::network_config::mojom::DeviceStateType;
 using ::chromeos::network_config::mojom::FilterType;
 using ::chromeos::network_config::mojom::GlobalPolicy;
+using ::chromeos::network_config::mojom::InhibitReason;
 using ::chromeos::network_config::mojom::ManagedPropertiesPtr;
 using ::chromeos::network_config::mojom::NetworkFilter;
 using ::chromeos::network_config::mojom::NetworkStateProperties;
@@ -100,6 +101,16 @@ bool IsCellularDeviceInhibited() {
   }
   return cellular_device->inhibit_reason !=
          chromeos::network_config::mojom::InhibitReason::kNotInhibited;
+}
+
+bool IsCellularDeviceFlashing() {
+  const DeviceStateProperties* cellular_device =
+      Shell::Get()->system_tray_model()->network_state_model()->GetDevice(
+          NetworkType::kCellular);
+  if (!cellular_device) {
+    return false;
+  }
+  return cellular_device->is_flashing;
 }
 
 bool IsESimSupported() {
@@ -181,6 +192,10 @@ void NetworkListViewControllerImpl::ActiveNetworkStateChanged() {
 
 void NetworkListViewControllerImpl::NetworkListChanged() {
   GetNetworkStateList();
+}
+
+void NetworkListViewControllerImpl::DeviceStateListChanged() {
+  UpdateMobileSection();
 }
 
 void NetworkListViewControllerImpl::GlobalPolicyChanged() {
@@ -277,7 +292,7 @@ void NetworkListViewControllerImpl::OnGetNetworkStateList(
         &previous_network_views);
 
     // Add mobile status message to NetworkDetailedNetworkView's
-    // `mobile_network_list_view_` if it exist.
+    // `mobile_network_list_view_` if it exists.
     if (mobile_status_message_) {
       network_detailed_network_view()
           ->GetNetworkList(GetMobileSectionNetworkType())
@@ -505,8 +520,9 @@ void NetworkListViewControllerImpl::MaybeShowConnectionWarningManagedIcon(
 }
 
 bool NetworkListViewControllerImpl::ShouldAddESimEntry() const {
-  const bool is_add_esim_enabled =
-      is_mobile_network_enabled_ && !IsCellularDeviceInhibited();
+  const bool is_add_esim_enabled = is_mobile_network_enabled_ &&
+                                   !IsCellularDeviceInhibited() &&
+                                   !IsCellularDeviceFlashing();
 
   bool is_add_esim_visible = IsESimSupported();
   const GlobalPolicy* global_policy = model()->global_policy();
@@ -804,7 +820,37 @@ void NetworkListViewControllerImpl::UpdateMobileToggleAndSetStatusMessage() {
                                           /*animate_toggle=*/true);
       network_detailed_network_view()->UpdateMobileStatus(true);
 
+      if (has_cellular_networks_ || has_tether_networks_) {
+        RemoveAndResetViewIfExists(&mobile_status_message_);
+        return;
+      }
+      const InhibitReason inhibit_reason = GetCellularInhibitReason();
+      if (inhibit_reason == InhibitReason::kInstallingProfile ||
+          inhibit_reason == InhibitReason::kRefreshingProfileList ||
+          inhibit_reason == InhibitReason::kRequestingAvailableProfiles) {
+        CreateInfoLabelIfMissingAndUpdate(
+            GetCellularInhibitReasonMessageId(inhibit_reason),
+            &mobile_status_message_);
+        return;
+      }
       RemoveAndResetViewIfExists(&mobile_status_message_);
+      return;
+    }
+
+    if (IsCellularDeviceFlashing()) {
+      // When a device is flashing, it cannot process any new operations. Thus,
+      // keep the toggle on to show users that the device is active, but set it
+      // to be disabled to make it clear that users cannot update it until
+      // operation completes.
+      CreateInfoLabelIfMissingAndUpdate(IDS_ASH_STATUS_TRAY_UPDATING,
+                                        &mobile_status_message_);
+
+      mobile_header_view_->SetToggleVisibility(/*visible=*/true);
+      mobile_header_view_->SetToggleState(/*enabled=*/false,
+                                          /*is_on=*/true,
+                                          /*animate_toggle=*/true);
+      network_detailed_network_view()->UpdateMobileStatus(true);
+
       return;
     }
 
@@ -932,7 +978,7 @@ void NetworkListViewControllerImpl::CreateInfoLabelIfMissingAndUpdate(
                           ->GetNetworkList(NetworkType::kTether)
                           ->AddChildView(std::move(info));
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 }
 

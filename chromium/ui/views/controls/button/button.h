@@ -250,7 +250,6 @@ class VIEWS_EXPORT Button : public View, public AnimationDelegateViews {
   // Instead of overriding this, subclasses that want custom painting should use
   // PaintButtonContents.
   void OnPaint(gfx::Canvas* canvas) final;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
@@ -339,14 +338,21 @@ class VIEWS_EXPORT Button : public View, public AnimationDelegateViews {
 
   base::WeakPtr<Button> GetWeakPtr();
 
+  virtual void OnEnabledChanged();
+
+  // Sets the |default_action_verb_| for accessibility. Subclasses may
+  // call this method to set their specific default action verb.
+  void SetDefaultActionVerb(ax::mojom::DefaultActionVerb verb);
+  // Called whenever the state impacting default action verb changes.
+  void UpdateAccessibleDefaultActionVerb();
+
  private:
   friend class test::ButtonTestApi;
   friend class ScopedAnchorHighlight;
   FRIEND_TEST_ALL_PREFIXES(BlueButtonTest, Border);
 
-  void OnEnabledChanged();
-
   void ReleaseAnchorHighlight();
+  void UpdateAccessibleCheckedState();
 
   // The text shown in a tooltip.
   std::u16string tooltip_text_;
@@ -404,6 +410,9 @@ class VIEWS_EXPORT Button : public View, public AnimationDelegateViews {
                                                     base::Unretained(this)))};
 
   size_t anchor_count_ = 0;
+
+  ax::mojom::DefaultActionVerb default_action_verb_ =
+      ax::mojom::DefaultActionVerb::kPress;
 
   base::WeakPtrFactory<Button> weak_ptr_factory_{this};
 };

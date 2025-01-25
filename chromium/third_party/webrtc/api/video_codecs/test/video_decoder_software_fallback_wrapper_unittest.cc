@@ -12,14 +12,17 @@
 
 #include <stdint.h>
 
-#include "absl/types/optional.h"
+#include <memory>
+#include <optional>
+#include <string>
+
 #include "api/environment/environment.h"
 #include "api/environment/environment_factory.h"
 #include "api/video/encoded_image.h"
 #include "api/video/video_frame.h"
+#include "api/video/video_frame_type.h"
 #include "api/video_codecs/video_decoder.h"
 #include "modules/video_coding/codecs/vp8/include/vp8.h"
-#include "modules/video_coding/include/video_codec_interface.h"
 #include "modules/video_coding/include/video_error_codes.h"
 #include "rtc_base/checks.h"
 #include "test/explicit_key_value_config.h"
@@ -187,8 +190,8 @@ TEST_F(VideoDecoderSoftwareFallbackWrapperTest,
       return -1;
     }
     void Decoded(webrtc::VideoFrame& decodedImage,
-                 absl::optional<int32_t> decode_time_ms,
-                 absl::optional<uint8_t> qp) override {
+                 std::optional<int32_t> decode_time_ms,
+                 std::optional<uint8_t> qp) override {
       RTC_DCHECK_NOTREACHED();
     }
   } callback;

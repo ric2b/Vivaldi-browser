@@ -6,6 +6,8 @@
 
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
+#include "third_party/blink/renderer/core/html/html_hr_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
@@ -68,10 +70,12 @@ void MergeAnonymousFlexItems(LayoutObject* remove_child) {
 bool LayoutFlexibleBox::IsChildAllowed(LayoutObject* object,
                                        const ComputedStyle& style) const {
   const auto* select = DynamicTo<HTMLSelectElement>(GetNode());
-  if (UNLIKELY(select && select->UsesMenuList())) {
-    if (select->IsAppearanceBaseSelect()) {
+  if (select && select->UsesMenuList()) [[unlikely]] {
+    if (select->IsAppearanceBaseButton()) {
       CHECK(RuntimeEnabledFeatures::StylableSelectEnabled());
-      if (IsA<HTMLOptionElement>(object->GetNode())) {
+      if (IsA<HTMLOptionElement>(object->GetNode()) ||
+          IsA<HTMLOptGroupElement>(object->GetNode()) ||
+          IsA<HTMLHRElement>(object->GetNode())) {
         // TODO(crbug.com/1511354): Remove this when <option>s are slotted into
         // the UA <datalist>, which will be hidden by default as a popover.
         return false;
@@ -79,7 +83,19 @@ bool LayoutFlexibleBox::IsChildAllowed(LayoutObject* object,
       // For appearance:base-select <select>, we want to render all children.
       // However, the InnerElement is only used for rendering in
       // appearance:auto, so don't include that one.
-      return object->GetNode() != &select->InnerElementForAppearanceAuto();
+      Node* child = object->GetNode();
+      if (child == &select->InnerElementForAppearanceAuto()) {
+        return false;
+      }
+      if (auto* popover = select->PopoverForAppearanceBase()) {
+        if (child == popover && !popover->popoverOpen()) {
+          // This is needed in order to keep the popover hidden after the UA
+          // sheet is forcing it to be display:block in order to get a computed
+          // style.
+          return false;
+        }
+      }
+      return true;
     } else {
       // For a size=1 appearance:auto <select>, we only render the active option
       // label through the InnerElement. We do not allow adding layout objects

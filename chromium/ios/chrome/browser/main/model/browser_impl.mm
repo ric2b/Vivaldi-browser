@@ -9,7 +9,7 @@
 #import "ios/chrome/browser/main/model/browser_agent_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser_observer.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -46,7 +46,13 @@ Browser::Type BrowserImpl::type() const {
   return type_;
 }
 
+// TODO(crbug.com/358301380): After all usage has changed to GetProfile(),
+// remove this method.
 ChromeBrowserState* BrowserImpl::GetBrowserState() {
+  return GetProfile();
+}
+
+ChromeBrowserState* BrowserImpl::GetProfile() {
   return browser_state_;
 }
 

@@ -95,22 +95,26 @@ static int amdgpu_get_auth(int fd, int *auth)
 
 static void amdgpu_device_free_internal(amdgpu_device_handle dev)
 {
-	amdgpu_device_handle *node = &dev_list;
-
-	pthread_mutex_lock(&dev_mutex);
-	while (*node != dev && (*node)->next)
-		node = &(*node)->next;
-	*node = (*node)->next;
-	pthread_mutex_unlock(&dev_mutex);
+	/* Remove dev from dev_list, if it was added there. */
+	if (dev == dev_list) {
+		dev_list = dev->next;
+	} else {
+		for (amdgpu_device_handle node = dev_list; node; node = node->next) {
+			if (node->next == dev) {
+				node->next = dev->next;
+				break;
+			}
+		}
+	}
 
 	close(dev->fd);
 	if ((dev->flink_fd >= 0) && (dev->fd != dev->flink_fd))
 		close(dev->flink_fd);
 
-	amdgpu_vamgr_deinit(&dev->vamgr_32);
-	amdgpu_vamgr_deinit(&dev->vamgr);
-	amdgpu_vamgr_deinit(&dev->vamgr_high_32);
-	amdgpu_vamgr_deinit(&dev->vamgr_high);
+	amdgpu_vamgr_deinit(&dev->va_mgr.vamgr_32);
+	amdgpu_vamgr_deinit(&dev->va_mgr.vamgr_low);
+	amdgpu_vamgr_deinit(&dev->va_mgr.vamgr_high_32);
+	amdgpu_vamgr_deinit(&dev->va_mgr.vamgr_high);
 	handle_table_fini(&dev->bo_handles);
 	handle_table_fini(&dev->bo_flink_names);
 	pthread_mutex_destroy(&dev->bo_table_mutex);
@@ -140,22 +144,23 @@ static void amdgpu_device_reference(struct amdgpu_device **dst,
 	*dst = src;
 }
 
-drm_public int amdgpu_device_initialize(int fd,
-					uint32_t *major_version,
-					uint32_t *minor_version,
-					amdgpu_device_handle *device_handle)
+static int _amdgpu_device_initialize(int fd,
+				     uint32_t *major_version,
+				     uint32_t *minor_version,
+				     amdgpu_device_handle *device_handle,
+				     bool deduplicate_device)
 {
-	struct amdgpu_device *dev;
+	struct amdgpu_device *dev = NULL;
 	drmVersionPtr version;
 	int r;
 	int flag_auth = 0;
 	int flag_authexist=0;
 	uint32_t accel_working = 0;
-	uint64_t start, max;
 
 	*device_handle = NULL;
 
 	pthread_mutex_lock(&dev_mutex);
+
 	r = amdgpu_get_auth(fd, &flag_auth);
 	if (r) {
 		fprintf(stderr, "%s: amdgpu_get_auth (1) failed (%i)\n",
@@ -164,9 +169,10 @@ drm_public int amdgpu_device_initialize(int fd,
 		return r;
 	}
 
-	for (dev = dev_list; dev; dev = dev->next)
-		if (fd_compare(dev->fd, fd) == 0)
-			break;
+	if (deduplicate_device)
+		for (dev = dev_list; dev; dev = dev->next)
+			if (fd_compare(dev->fd, fd) == 0)
+				break;
 
 	if (dev) {
 		r = amdgpu_get_auth(dev->fd, &flag_authexist);
@@ -238,35 +244,22 @@ drm_public int amdgpu_device_initialize(int fd,
 		goto cleanup;
 	}
 
-	start = dev->dev_info.virtual_address_offset;
-	max = MIN2(dev->dev_info.virtual_address_max, 0x100000000ULL);
-	amdgpu_vamgr_init(&dev->vamgr_32, start, max,
-			  dev->dev_info.virtual_address_alignment);
-
-	start = max;
-	max = MAX2(dev->dev_info.virtual_address_max, 0x100000000ULL);
-	amdgpu_vamgr_init(&dev->vamgr, start, max,
-			  dev->dev_info.virtual_address_alignment);
-
-	start = dev->dev_info.high_va_offset;
-	max = MIN2(dev->dev_info.high_va_max, (start & ~0xffffffffULL) +
-		   0x100000000ULL);
-	amdgpu_vamgr_init(&dev->vamgr_high_32, start, max,
-			  dev->dev_info.virtual_address_alignment);
-
-	start = max;
-	max = MAX2(dev->dev_info.high_va_max, (start & ~0xffffffffULL) +
-		   0x100000000ULL);
-	amdgpu_vamgr_init(&dev->vamgr_high, start, max,
-			  dev->dev_info.virtual_address_alignment);
+	amdgpu_va_manager_init(&dev->va_mgr,
+			       dev->dev_info.virtual_address_offset,
+			       dev->dev_info.virtual_address_max,
+			       dev->dev_info.high_va_offset,
+			       dev->dev_info.high_va_max,
+			       dev->dev_info.virtual_address_alignment);
 
 	amdgpu_parse_asic_ids(dev);
 
 	*major_version = dev->major_version;
 	*minor_version = dev->minor_version;
 	*device_handle = dev;
-	dev->next = dev_list;
-	dev_list = dev;
+	if (deduplicate_device) {
+		dev->next = dev_list;
+		dev_list = dev;
+	}
 	pthread_mutex_unlock(&dev_mutex);
 
 	return 0;
@@ -279,9 +272,27 @@ cleanup:
 	return r;
 }
 
+drm_public int amdgpu_device_initialize(int fd,
+					uint32_t *major_version,
+					uint32_t *minor_version,
+					amdgpu_device_handle *device_handle)
+{
+	return _amdgpu_device_initialize(fd, major_version, minor_version, device_handle, true);
+}
+
+drm_public int amdgpu_device_initialize2(int fd, bool deduplicate_device,
+					 uint32_t *major_version,
+					 uint32_t *minor_version,
+					 amdgpu_device_handle *device_handle)
+{
+	return _amdgpu_device_initialize(fd, major_version, minor_version, device_handle, deduplicate_device);
+}
+
 drm_public int amdgpu_device_deinitialize(amdgpu_device_handle dev)
 {
+	pthread_mutex_lock(&dev_mutex);
 	amdgpu_device_reference(&dev, NULL);
+	pthread_mutex_unlock(&dev_mutex);
 	return 0;
 }
 
@@ -306,10 +317,10 @@ drm_public int amdgpu_query_sw_info(amdgpu_device_handle dev,
 
 	switch (info) {
 	case amdgpu_sw_info_address32_hi:
-		if (dev->vamgr_high_32.va_max)
-			*val32 = (dev->vamgr_high_32.va_max - 1) >> 32;
+		if (dev->va_mgr.vamgr_high_32.va_max)
+			*val32 = (dev->va_mgr.vamgr_high_32.va_max - 1) >> 32;
 		else
-			*val32 = (dev->vamgr_32.va_max - 1) >> 32;
+			*val32 = (dev->va_mgr.vamgr_32.va_max - 1) >> 32;
 		return 0;
 	}
 	return -EINVAL;

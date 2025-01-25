@@ -17,9 +17,9 @@ import type {PrivacySandboxDialogNoticeStepElement} from 'chrome://privacy-sandb
 import type {PrivacySandboxNoticeDialogAppElement} from 'chrome://privacy-sandbox-dialog/privacy_sandbox_notice_dialog_app.js';
 import type {PrivacySandboxNoticeRestrictedDialogAppElement} from 'chrome://privacy-sandbox-dialog/privacy_sandbox_notice_restricted_dialog_app.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {pressAndReleaseKeyOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush, html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {pressAndReleaseKeyOn} from 'chrome://webui-test/keyboard_mock_interactions.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {isChildVisible} from 'chrome://webui-test/test_util.js';
@@ -185,7 +185,7 @@ suite('Consent', function() {
 
   test('escPressed', async function() {
     browserProxy.reset();
-    pressAndReleaseKeyOn(page, 0, '', 'Escape');
+    pressAndReleaseKeyOn(page, 0, [], 'Escape');
     // No user action is triggered by pressing Esc.
     assertEquals(browserProxy.getCallCount('promptActionOccurred'), 0);
   });
@@ -242,7 +242,7 @@ suite('Notice', function() {
   });
 
   test('escPressed', async function() {
-    pressAndReleaseKeyOn(page, 0, '', 'Escape');
+    pressAndReleaseKeyOn(page, 0, [], 'Escape');
     const [action] = await browserProxy.whenCalled('promptActionOccurred');
     assertEquals(action, PrivacySandboxPromptAction.NOTICE_DISMISS);
   });
@@ -465,6 +465,49 @@ suite('Combined', function() {
     await verifyActionOccured(
         browserProxy, PrivacySandboxPromptAction.CONSENT_MORE_INFO_CLOSED);
     assertFalse(collapseElement!.opened);
+  });
+
+  test('privacyPolicy', async function() {
+    await verifyActionOccured(
+        browserProxy, PrivacySandboxPromptAction.CONSENT_SHOWN);
+    const consentStep = getActiveStep()!;
+    assertEquals(getActiveStep()!.id, PrivacySandboxCombinedDialogStep.CONSENT);
+
+    // The collapse section is opened.
+    const learnMore: HTMLElement = consentStep!.shadowRoot!.querySelector(
+        'privacy-sandbox-dialog-learn-more')!;
+    const collapseElement = learnMore!.shadowRoot!.querySelector('cr-collapse');
+    testClickButton('cr-expand-button', learnMore);
+    await verifyActionOccured(
+        browserProxy, PrivacySandboxPromptAction.CONSENT_MORE_INFO_OPENED);
+    assertTrue(collapseElement!.opened);
+
+    // TODO(crbug.com/358087159): Add metrics testing for privacy policy page
+    // loading. After clicking the privacy policy link, the privacy policy page
+    // should be opened.
+    const privacyPolicyDiv =
+        learnMore!.querySelector<HTMLElement>('#privacyPolicyDiv');
+    const privacyPolicyLink =
+        privacyPolicyDiv!.querySelector<HTMLElement>('#privacyPolicyLink');
+    assertTrue(
+        !!privacyPolicyLink,
+        `the link isn\'t found, selector: ${privacyPolicyDiv}`);
+    privacyPolicyLink.click();
+    assertEquals(
+        isChildVisible(consentStep, '.iframe'), true,
+        `privacy policy page should be visible when the link is clicked`);
+    assertEquals(
+        isChildVisible(consentStep, '#consentNotice'), false,
+        `if the privacy policy page is visible,
+        the consent notice should not be visible.`);
+
+
+    // After clicking the back button, the content area should display the
+    // consent screen again.
+    testClickButton('#backButton', consentStep);
+    assertEquals(
+        isChildVisible(consentStep, '#confirmButton'), true,
+        `buttons should be shown on the consent notice again`);
   });
 });
 

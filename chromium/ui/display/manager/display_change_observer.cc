@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ui/display/manager/display_change_observer.h"
 
 #include <algorithm>
@@ -98,14 +103,6 @@ std::optional<gfx::RoundedCornersF> ParsePanelRadiiFromCommandLine() {
   }
 
   return ParseDisplayPanelRadii(&display_switch_value.value());
-}
-
-std::optional<float> GetVSyncRateMin(const DisplaySnapshot* snapshot,
-                                     const DisplayMode* mode_info) {
-  if (snapshot->vsync_rate_min().has_value()) {
-    return mode_info->GetVSyncRateMin(snapshot->vsync_rate_min().value());
-  }
-  return std::nullopt;
 }
 
 }  // namespace
@@ -278,6 +275,8 @@ float DisplayChangeObserver::FindDeviceScaleFactor(
   // Keep the Chell's scale factor 2.252 until we make decision.
   constexpr gfx::Size k2DisplaySizeHackChell(3200, 1800);
   constexpr gfx::Size k18DisplaySizeHackCoachZ(2160, 1440);
+  // Only change the OLED display scale factor for Xol device.
+  constexpr gfx::Size k12DisplaySizeHackXol(1920, 1080);
 
   if (size_in_pixels == k225DisplaySizeHackNocturne) {
     return kDsf_2_252;
@@ -288,6 +287,12 @@ float DisplayChangeObserver::FindDeviceScaleFactor(
   if (size_in_pixels == k18DisplaySizeHackCoachZ) {
     return kDsf_1_8;
   }
+
+  if (display::features::IsOledScaleFactorEnabled() &&
+      size_in_pixels == k12DisplaySizeHackXol) {
+    return 1.2f;
+  }
+
   for (size_t i = 0; i < std::size(kThresholdTableForInternal); ++i) {
     if (dpi >= kThresholdTableForInternal[i].dpi) {
       return kThresholdTableForInternal[i].device_scale_factor;
@@ -353,7 +358,7 @@ ManagedDisplayInfo DisplayChangeObserver::CreateManagedDisplayInfo(
 
   new_info.set_refresh_rate(mode_info->refresh_rate());
   new_info.set_is_interlaced(mode_info->is_interlaced());
-  new_info.set_vsync_rate_min(GetVSyncRateMin(snapshot, mode_info));
+  new_info.set_vsync_rate_min(mode_info->vsync_rate_min());
   new_info.set_variable_refresh_rate_state(
       snapshot->variable_refresh_rate_state());
   new_info.set_connection_type(snapshot->type());

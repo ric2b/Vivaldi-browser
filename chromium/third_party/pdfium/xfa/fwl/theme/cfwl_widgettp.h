@@ -17,8 +17,11 @@
 #include "v8/include/cppgc/garbage-collected.h"
 #include "xfa/fwl/theme/cfwl_utils.h"
 
-class CFDE_TextOut;
 class CFGAS_GEGraphics;
+
+namespace pdfium {
+
+class CFDE_TextOut;
 class CFWL_ThemeBackground;
 class CFWL_ThemeText;
 class IFWL_ThemeProvider;
@@ -77,5 +80,10 @@ class CFWL_WidgetTP : public cppgc::GarbageCollected<CFWL_WidgetTP> {
   std::unique_ptr<CFDE_TextOut> m_pTextOut;
   std::unique_ptr<CColorData> m_pColorData;
 };
+
+}  // namespace pdfium
+
+// TODO(crbug.com/42271761): Remove.
+using pdfium::CFWL_WidgetTP;
 
 #endif  // XFA_FWL_THEME_CFWL_WIDGETTP_H_

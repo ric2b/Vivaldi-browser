@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -114,7 +113,8 @@ LocalSessionEventHandlerImpl::Delegate::~Delegate() = default;
 LocalSessionEventHandlerImpl::LocalSessionEventHandlerImpl(
     Delegate* delegate,
     SyncSessionsClient* sessions_client,
-    SyncedSessionTracker* session_tracker)
+    SyncedSessionTracker* session_tracker,
+    bool is_new_session)
     : delegate_(delegate),
       sessions_client_(sessions_client),
       session_tracker_(session_tracker) {
@@ -124,6 +124,10 @@ LocalSessionEventHandlerImpl::LocalSessionEventHandlerImpl(
 
   current_session_tag_ = session_tracker_->GetLocalSessionTag();
   DCHECK(!current_session_tag_.empty());
+
+  if (is_new_session) {
+    session_tracker_->SetLocalSessionStartTime(base::Time::Now());
+  }
 
   if (!IsSessionRestoreInProgress(sessions_client)) {
     OnSessionRestoreComplete();
@@ -193,14 +197,6 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
              << " windows from previous session.";
   }
 
-  // Added to debug reported slowness in https://crbug.com/41483250.
-  const size_t num_tracked_sessions = session_tracker_->num_synced_sessions();
-  const size_t num_window_delegates = window_delegates.size();
-  int total_processed_tab_count = 0;
-  base::debug::Alias(&num_tracked_sessions);
-  base::debug::Alias(&num_window_delegates);
-  base::debug::Alias(&total_processed_tab_count);
-
   for (auto& [window_id, window_delegate] : window_delegates) {
     // Make sure the window is viewable and is not about to be closed. The
     // viewable window check is necessary because, for example, when a browser
@@ -217,11 +213,6 @@ void LocalSessionEventHandlerImpl::AssociateWindows(ReloadTabsOption option,
     }
 
     const int tab_count_in_window = window_delegate->GetTabCount();
-    total_processed_tab_count += tab_count_in_window;
-
-    // Added to debug reported slowness in https://crbug.com/41483250.
-    base::debug::Alias(&tab_count_in_window);
-
     DCHECK_EQ(window_id, window_delegate->GetSessionId());
     DVLOG(1) << "Associating window " << window_id.id() << " with "
              << tab_count_in_window << " tabs.";
@@ -433,11 +424,9 @@ sync_pb::SessionTab LocalSessionEventHandlerImpl::GetTabSpecificsFromDelegate(
   specifics.set_pinned(
       window_delegate ? window_delegate->IsTabPinned(&tab_delegate) : false);
   specifics.set_extension_app_id(tab_delegate.GetExtensionAppId());
-  if (base::FeatureList::IsEnabled(syncer::kSyncSessionOnVisibilityChanged)) {
-    specifics.set_last_active_time_unix_epoch_millis(
-        (tab_delegate.GetLastActiveTime() - base::Time::UnixEpoch())
-            .InMilliseconds());
-  }
+  specifics.set_last_active_time_unix_epoch_millis(
+      (tab_delegate.GetLastActiveTime() - base::Time::UnixEpoch())
+          .InMilliseconds());
 
   specifics.set_viv_ext_data(tab_delegate.GetVivExtData());
 

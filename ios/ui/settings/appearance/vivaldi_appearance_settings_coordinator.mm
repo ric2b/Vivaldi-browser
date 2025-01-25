@@ -2,8 +2,8 @@
 
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_coordinator.h"
 
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_mediator.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_swift.h"
@@ -16,8 +16,6 @@
 }
 // View provider class for the appearance settings.
 @property(nonatomic, strong) VivaldiAppearanceSettingsViewProvider* viewProvider;
-//// View controller for the appearance setting.
-//@property(nonatomic, strong) UIViewController* viewController;
 // Mediator class for the appearance settings
 @property(nonatomic, strong) VivaldiAppearanceSettingsMediator* mediator;
 

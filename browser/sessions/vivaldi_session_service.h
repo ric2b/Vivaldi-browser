@@ -42,6 +42,7 @@ struct SessionOptions {
   std::vector<int32_t> tabs_to_include_;
 };
 
+// TODO: Rename this from Service to helper.
 // We cannot inherit from SessionService, and changing that class to be
 // suitable is risky and requires significant changes.
 class VivaldiSessionService {

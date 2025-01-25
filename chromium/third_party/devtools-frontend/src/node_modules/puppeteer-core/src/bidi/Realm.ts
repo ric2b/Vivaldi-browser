@@ -53,6 +53,7 @@ export abstract class BidiRealm extends Realm {
   protected initialize(): void {
     this.realm.on('destroyed', ({reason}) => {
       this.taskManager.terminateAll(new Error(reason));
+      this.dispose();
     });
     this.realm.on('updated', () => {
       this.internalPuppeteerUtil = undefined;
@@ -156,13 +157,19 @@ export abstract class BidiRealm extends Realm {
         functionDeclaration,
         /* awaitPromise= */ true,
         {
-          arguments: args.length
+          // LazyArgs are used only internally and should not affect the order
+          // evaluate calls for the public APIs.
+          arguments: args.some(arg => {
+            return arg instanceof LazyArg;
+          })
             ? await Promise.all(
                 args.map(arg => {
-                  return this.serialize(arg);
+                  return this.serializeAsync(arg);
                 })
               )
-            : [],
+            : args.map(arg => {
+                return this.serialize(arg);
+              }),
           resultOwnership,
           userActivation: true,
           serializationOptions,
@@ -193,11 +200,14 @@ export abstract class BidiRealm extends Realm {
     return BidiJSHandle.from(result, this);
   }
 
-  async serialize(arg: unknown): Promise<Bidi.Script.LocalValue> {
+  async serializeAsync(arg: unknown): Promise<Bidi.Script.LocalValue> {
     if (arg instanceof LazyArg) {
       arg = await arg.get(this);
     }
+    return this.serialize(arg);
+  }
 
+  serialize(arg: unknown): Bidi.Script.LocalValue {
     if (arg instanceof BidiJSHandle || arg instanceof BidiElementHandle) {
       if (arg.realm !== this) {
         if (
@@ -224,6 +234,10 @@ export abstract class BidiRealm extends Realm {
   }
 
   async destroyHandles(handles: Array<BidiJSHandle<unknown>>): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
     const handleIds = handles
       .map(({id}) => {
         return id;

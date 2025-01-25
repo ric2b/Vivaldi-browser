@@ -25,7 +25,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton;
-import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton.CompositorOnClickHandler;
+import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton.ButtonType;
 import org.chromium.chrome.browser.compositor.layouts.components.TintedCompositorButton;
 import org.chromium.chrome.browser.compositor.overlays.strip.TabLoadTracker.TabLoadTrackerCallback;
 import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
@@ -56,25 +56,10 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 public class StripLayoutTab extends StripLayoutView {
     /** An observer interface for StripLayoutTab. */
     public interface Observer {
-        /** @param visible Whether the StripLayoutTab is visible. */
-        void onVisibilityChanged(boolean visible);
-    }
-
-    /** Delegate for additional tab functionality. */
-    public interface StripLayoutTabDelegate {
         /**
-         * Handles tab click actions.
-         * @param tab The tab clicked.
+         * @param newVisibility Whether the StripLayoutTab is visible.
          */
-        void handleTabClick(StripLayoutTab tab);
-
-        /**
-         * Handles close button click actions.
-         *
-         * @param tab The tab whose close button was clicked.
-         * @param time The time the close button was clicked.
-         */
-        void handleCloseButtonClick(StripLayoutTab tab, long time);
+        void onVisibilityChanged(boolean newVisibility);
     }
 
     /** A property for animations to use for changing the Y offset of the tab. */
@@ -101,7 +86,7 @@ public class StripLayoutTab extends StripLayoutView {
 
                 @Override
                 public Float get(StripLayoutTab object) {
-                    return object.getHeight();
+                    return object.getWidth();
                 }
             };
 
@@ -173,10 +158,10 @@ public class StripLayoutTab extends StripLayoutView {
     private static final float CLOSE_BUTTON_HOVER_BACKGROUND_DEFAULT_OPACITY = 0.08f;
     @VisibleForTesting static final float DIVIDER_FOLIO_LIGHT_OPACITY = 0.2f;
 
-    private int mId;
+    // Tab's ID this view refers to.
+    private int mTabId;
 
     private final Context mContext;
-    private final StripLayoutTabDelegate mDelegate;
     private final TabLoadTracker mLoadTracker;
     private final LayoutUpdateHost mUpdateHost;
     private TintedCompositorButton mCloseButton;
@@ -189,12 +174,8 @@ public class StripLayoutTab extends StripLayoutView {
     private boolean mFolioAttached = true;
     private boolean mStartDividerVisible;
     private boolean mEndDividerVisible;
-    private final boolean mIncognito;
     private float mBottomMargin;
     private float mContainerOpacity;
-    private float mLeftInset;
-    private float mRightInset;
-    private String mAccessibilityDescription = "";
 
     // For avoiding unnecessary accessibility description updates.
     private Optional<String> mCachedA11yDescriptionTitle = Optional.empty();
@@ -203,13 +184,6 @@ public class StripLayoutTab extends StripLayoutView {
     // Ideal intermediate parameters
     private float mTabOffsetY;
     private float mTrailingMargin;
-
-    // Actual draw parameters
-    private float mDrawX;
-    private float mDrawY;
-    private float mWidth;
-    private float mHeight;
-    private final RectF mTouchTarget = new RectF();
 
     // Startup parameters
     private boolean mIsPlaceholder;
@@ -220,7 +194,6 @@ public class StripLayoutTab extends StripLayoutView {
     private CompositorAnimator mButtonOpacityAnimation;
 
     private float mLoadingSpinnerRotationDegrees;
-    private float mBrightness = 1.f;
 
     // Preallocated
     private final RectF mClosePlacement = new RectF();
@@ -249,21 +222,24 @@ public class StripLayoutTab extends StripLayoutView {
     public StripLayoutTab(
             Context context,
             int id,
-            StripLayoutTabDelegate delegate,
+            StripLayoutViewOnClickHandler clickHandler,
             TabLoadTrackerCallback loadTrackerCallback,
             LayoutUpdateHost updateHost,
             boolean incognito) {
-        mId = id;
+        super(incognito, clickHandler);
+        mTabId = id;
         mContext = context;
-        mDelegate = delegate;
         mLoadTracker = new TabLoadTracker(id, loadTrackerCallback);
         mUpdateHost = updateHost;
-        mIncognito = incognito;
-        CompositorOnClickHandler closeClickAction =
-                time -> mDelegate.handleCloseButtonClick(StripLayoutTab.this, time);
         mCloseButton =
                 new TintedCompositorButton(
-                        context, 0, 0, closeClickAction, R.drawable.btn_tab_close_normal);
+                        context,
+                        ButtonType.TAB_CLOSE,
+                        this,
+                        /* width= */ 0,
+                        /* height= */ 0,
+                        clickHandler,
+                        R.drawable.btn_tab_close_normal);
         mCloseButton.setTintResources(
                 R.color.default_icon_color_tint_list,
                 R.color.default_icon_color_tint_list,
@@ -304,22 +280,17 @@ public class StripLayoutTab extends StripLayoutView {
                 apsBackgroundIncognitoHoveredTint,
                 apsBackgroundIncognitoPressedTint);
 
-        mCloseButton.setIncognito(mIncognito);
+        mCloseButton.setIncognito(incognito);
         mCloseButton.setBounds(getCloseRect());
         mCloseButton.setClickSlop(0.f);
-        if (LocalizationUtils.isLayoutRtl()) {
-            mLeftInset = getCloseButtonOffsetX();
-            mRightInset = FOLIO_FOOT_LENGTH_DP;
-        } else {
-            mLeftInset = FOLIO_FOOT_LENGTH_DP;
-            mRightInset = getCloseButtonOffsetX();
-        }
 
         // Vivaldi
         mAlpha = 1.f;
     }
 
-    /** @param observer The observer to add. */
+    /**
+     * @param observer The observer to add.
+     */
     @VisibleForTesting
     public void addObserver(Observer observer) {
         mObservers.addObserver(observer);
@@ -347,7 +318,7 @@ public class StripLayoutTab extends StripLayoutView {
             String description,
             @Nullable String title,
             @StringRes int newA11yTabstripIdentifierResId) {
-        mAccessibilityDescription = description;
+        super.setAccessibilityDescription(description);
         String closeButtonDescription =
                 ContextUtils.getApplicationContext()
                         .getString(R.string.accessibility_tabstrip_btn_close_tab, title);
@@ -357,12 +328,6 @@ public class StripLayoutTab extends StripLayoutView {
         // updates.
         mCachedA11yDescriptionTitle = Optional.ofNullable(title);
         mCachedA11yTabstripIdentifierResId = newA11yTabstripIdentifierResId;
-    }
-
-    /** {@link org.chromium.chrome.browser.layouts.components.VirtualView} Implementation */
-    @Override
-    public String getAccessibilityDescription() {
-        return mAccessibilityDescription;
     }
 
     /**
@@ -391,25 +356,16 @@ public class StripLayoutTab extends StripLayoutView {
     }
 
     @Override
-    public void getTouchTarget(RectF target) {
-        target.set(mTouchTarget);
-    }
-
-    @Override
     public boolean checkClickedOrHovered(float x, float y) {
         // Since both the close button as well as the tab inhabit the same coordinates, the tab
         // should not consider itself hit if the close button is also hit, since it is on top.
         if (checkCloseHitTest(x, y)) return false;
-        return mTouchTarget.contains(x, y);
-    }
-
-    @Override
-    public void handleClick(long time) {
-        mDelegate.handleTabClick(this);
+        return super.checkClickedOrHovered(x, y);
     }
 
     /**
      * Marks if we are currently reordering this tab.
+     *
      * @param isReordering Whether the tab is reordering.
      */
     public void setIsReordering(boolean isReordering) {
@@ -453,15 +409,15 @@ public class StripLayoutTab extends StripLayoutView {
     }
 
     /** Sets the id of the {@link Tab} this {@link StripLayoutTab} represents. */
-    public void setId(int id) {
-        mId = id;
+    public void setTabId(int id) {
+        mTabId = id;
     }
 
     /**
      * @return The id of the {@link Tab} this {@link StripLayoutTab} represents.
      */
-    public int getId() {
-        return mId;
+    public int getTabId() {
+        return mTabId;
     }
 
     /**
@@ -471,10 +427,10 @@ public class StripLayoutTab extends StripLayoutView {
         // Note(david@vivaldi.com): Get appropriate resources and set the opacity.
         if (mTabModelSelector != null) {
             int selectedTabId = mTabModelSelector.getCurrentTabId();
-            boolean isTabSelected = mId == selectedTabId;
+            boolean isTabSelected = mTabId == selectedTabId;
             boolean inNightMode = ColorUtils.inNightMode(mContext);
             float backgroundTabAlpha = inNightMode ? (mIsStackStrip ? 0.25f : 0.35f) : 0.1f;
-            mAlpha = mId == selectedTabId ? 1.f : backgroundTabAlpha;
+            mAlpha = mTabId == selectedTabId ? 1.f : backgroundTabAlpha;
             // Set close button opacity for background tabs. Only show it when setting is turned on.
             boolean showCloseButton = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                     VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
@@ -482,7 +438,7 @@ public class StripLayoutTab extends StripLayoutView {
             if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled() && !mIsStackStrip) {
                 int tabCount = mTabModelSelector.getTabModelFilterProvider()
                                        .getCurrentTabModelFilter()
-                                       .getRelatedTabList(mId)
+                                       .getRelatedTabList(mTabId)
                                        .size();
                 if (tabCount > 1) {
                     if (!isTabSelected) {
@@ -542,10 +498,11 @@ public class StripLayoutTab extends StripLayoutView {
     public @ColorInt int getTint(boolean foreground, boolean hovered) {
         // TODO(crbug.com/40888366): Avoid calculating every time. Instead, store the tab's
         //  color and only re-determine when the color could have changed (i.e. on selection).
-        if (foreground || mIncognito || ColorUtils.inNightMode(mContext)) { // Vivaldi
-        return TabUiThemeUtil.getTabStripContainerColor(
-                mContext, mIncognito, foreground, mIsReordering, mIsPlaceholder, hovered);
-        }
+        if (foreground || mTabModelSelector.isIncognitoBrandedModelSelected()
+                || ColorUtils.inNightMode(mContext)) { // Vivaldi
+            return TabUiThemeUtil.getTabStripContainerColor(
+                    mContext, isIncognito(), foreground, mIsReordering, mIsPlaceholder, hovered);
+        } // Vivaldi
 
         // Note(david@vivaldi.com): When we have a background tab we calculate the contrast here and
         // take the color with the highest ratio.
@@ -553,12 +510,13 @@ public class StripLayoutTab extends StripLayoutView {
         if (currentTab != null) {
             int color = currentTab.getThemeColor();
             double ratio1 =
-                    android.support.v4.graphics.ColorUtils.calculateContrast(color, Color.WHITE);
+                    androidx.core.graphics.ColorUtils.calculateContrast(color, Color.WHITE);
             double ratio2 =
-                    android.support.v4.graphics.ColorUtils.calculateContrast(color, Color.BLACK);
+                    androidx.core.graphics.ColorUtils.calculateContrast(color, Color.BLACK);
             if (ratio1 >= ratio2) return Color.WHITE;
         }
         return Color.BLACK;
+        // End Vivaldi
     }
 
     /**
@@ -566,11 +524,12 @@ public class StripLayoutTab extends StripLayoutView {
      */
     public @ColorInt int getDividerTint() {
         if (ChromeApplicationImpl.isVivaldi()) return Color.TRANSPARENT;
-        if (mIncognito) {
+
+        if (isIncognito()) {
             return mContext.getColor(R.color.divider_line_bg_color_light);
         }
 
-        if (!ColorUtils.inNightMode(mContext) && !mIncognito) {
+        if (!ColorUtils.inNightMode(mContext) && !isIncognito()) {
             // This color will not be used at full opacity. We can't set this using the alpha
             // component of the {@code @ColorInt}, since it is ignored when loading resources
             // with a specified tint in the CC layer (instead retaining the alpha of the original
@@ -613,15 +572,20 @@ public class StripLayoutTab extends StripLayoutView {
     }
 
     @Override
-    public void setVisible(boolean visible) {
-        if (isVisible() == visible) return;
-        super.setVisible(visible);
-        if (!visible) {
-            mUpdateHost.releaseResourcesForTab(mId);
+    public void onVisibilityChanged(boolean newVisibility) {
+        if (!newVisibility) {
+            // TODO(crbug.com/358205243): Re-build the bitmaps if the tab becomes visible here.
+            mUpdateHost.releaseResourcesForTab(mTabId);
         }
+
         for (Observer observer : mObservers) {
             observer.onVisibilityChanged(isVisible());
         }
+    }
+
+    @Override
+    public void setIncognito(boolean incognito) {
+        assert false : "Incognito state of a tab cannot change";
     }
 
     /**
@@ -696,20 +660,6 @@ public class StripLayoutTab extends StripLayoutView {
     }
 
     /**
-     * @param brightness The fraction (from 0.f to 1.f) of how bright the tab should be.
-     */
-    public void setBrightness(float brightness) {
-        mBrightness = brightness;
-    }
-
-    /**
-     * @return The fraction (from 0.f to 1.f) of how bright the tab should be.
-     */
-    public float getBrightness() {
-        return mBrightness;
-    }
-
-    /**
      * @param opacity The fraction (from 0.f to 1.f) of how opaque the tab container should be.
      */
     public void setContainerOpacity(float opacity) {
@@ -770,52 +720,30 @@ public class StripLayoutTab extends StripLayoutView {
     /** {@link StripLayoutView} Implementation */
     @Override
     public void setDrawX(float x) {
-        mCloseButton.setDrawX(mCloseButton.getDrawX() + (x - mDrawX));
-        mDrawX = x;
-        mTouchTarget.left = mDrawX + mLeftInset;
-        mTouchTarget.right = mDrawX + mWidth - mRightInset;
-    }
-
-    @Override
-    public float getDrawX() {
-        return mDrawX;
+        mCloseButton.setDrawX(mCloseButton.getDrawX() + (x - getDrawX()));
+        super.setDrawX(x);
+        float[] insetsX = getTouchTargetInsetsX();
+        super.setTouchTargetInsets(insetsX[0], null, insetsX[1], null);
     }
 
     @Override
     public void setDrawY(float y) {
-        mCloseButton.setDrawY(mCloseButton.getDrawY() + (y - mDrawY));
-        mDrawY = y;
-        mTouchTarget.top = mDrawY;
-        mTouchTarget.bottom = mDrawY + mHeight;
-    }
-
-    @Override
-    public float getDrawY() {
-        return mDrawY;
+        mCloseButton.setDrawY(mCloseButton.getDrawY() + (y - getDrawY()));
+        super.setDrawY(y);
     }
 
     @Override
     public void setWidth(float width) {
-        mWidth = width;
+        super.setWidth(width);
         resetCloseRect();
-        mTouchTarget.right = mDrawX + mWidth - mRightInset;
-    }
-
-    @Override
-    public float getWidth() {
-        return mWidth;
+        float[] insetsX = getTouchTargetInsetsX();
+        super.setTouchTargetInsets(null, null, insetsX[1], null);
     }
 
     @Override
     public void setHeight(float height) {
-        mHeight = height;
+        super.setHeight(height);
         resetCloseRect();
-        mTouchTarget.bottom = mDrawY + mHeight;
-    }
-
-    @Override
-    public float getHeight() {
-        return mHeight;
     }
 
     /**
@@ -855,19 +783,20 @@ public class StripLayoutTab extends StripLayoutView {
 
     /**
      * This represents how much this tab's width should be counted when positioning tabs in the
-     * stack.  As tabs close or open, their width weight is increased.  They visually take up
-     * the same amount of space but the other tabs will smoothly move out of the way to make room.
+     * stack. As tabs close or open, their width weight is increased. They visually take up the same
+     * amount of space but the other tabs will smoothly move out of the way to make room.
+     *
      * @return The weight from 0 to 1 that the width of this tab should have on the stack.
      */
     public float getWidthWeight() {
-        return MathUtils.clamp(1.f - mDrawY / mHeight, 0.f, 1.f);
+        return MathUtils.clamp(1.f - getDrawY() / getHeight(), 0.f, 1.f);
     }
 
     /**
      * @param x The x position of the position to test.
      * @param y The y position of the position to test.
-     * @return Whether or not {@code x} and {@code y} is over the close button for this tab and
-     *         if the button can be clicked.
+     * @return Whether or not {@code x} and {@code y} is over the close button for this tab and if
+     *     the button can be clicked.
      */
     public boolean checkCloseHitTest(float x, float y) {
         // Note(david@vivaldi.com): This will make sure that the resources are loaded correctly.
@@ -935,22 +864,19 @@ public class StripLayoutTab extends StripLayoutView {
      * @return The left-side of the tab's touch target.
      */
     public float getTouchTargetLeft() {
-        return mTouchTarget.left;
+        return getTouchTargetBounds().left;
     }
 
     /**
      * @return The right-side of the tab's touch target.
      */
     public float getTouchTargetRight() {
-        return mTouchTarget.right;
+        return getTouchTargetBounds().right;
     }
 
     private void resetCloseRect() {
         RectF closeRect = getCloseRect();
-        mCloseButton.setWidth(closeRect.width());
-        mCloseButton.setHeight(closeRect.height());
-        mCloseButton.setDrawX(closeRect.left);
-        mCloseButton.setDrawY(closeRect.top);
+        mCloseButton.setBounds(closeRect);
     }
 
     private RectF getCloseRect() {
@@ -1040,6 +966,19 @@ public class StripLayoutTab extends StripLayoutView {
         }
     }
 
+    private float[] getTouchTargetInsetsX() {
+        float leftInset;
+        float rightInset;
+        if (LocalizationUtils.isLayoutRtl()) {
+            leftInset = getCloseButtonOffsetX();
+            rightInset = FOLIO_FOOT_LENGTH_DP;
+        } else {
+            leftInset = FOLIO_FOOT_LENGTH_DP;
+            rightInset = getCloseButtonOffsetX();
+        }
+        return new float[] {leftInset, rightInset};
+    }
+
     /** Vivaldi **/
     public void setIsStackStrip(boolean isStackStrip) {
         mIsStackStrip = isStackStrip;
@@ -1062,7 +1001,7 @@ public class StripLayoutTab extends StripLayoutView {
     public boolean isCloseButtonVisible() {
         if (mTabModelSelector != null) {
             int selectedTabId = mTabModelSelector.getCurrentTabId();
-            boolean isTabSelected = mId == selectedTabId;
+            boolean isTabSelected = mTabId == selectedTabId;
             if (isTabSelected) return true;
             return VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                     VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
@@ -1083,4 +1022,5 @@ public class StripLayoutTab extends StripLayoutView {
     public void setRenderHost(LayoutRenderHost renderHost) {
         mRenderHost = renderHost;
     }
+    // End Vivaldi
 }

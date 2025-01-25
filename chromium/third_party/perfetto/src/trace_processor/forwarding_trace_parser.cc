@@ -57,6 +57,7 @@ std::optional<TraceSorter::SortingMode> GetMinimumSortingMode(
       return std::nullopt;
 
     case kPerfDataTraceType:
+    case kInstrumentsXmlTraceType:
       return TraceSorter::SortingMode::kDefault;
 
     case kUnknownTraceType:
@@ -149,8 +150,8 @@ base::Status ForwardingTraceParser::Parse(TraceBlobView blob) {
   return reader_->Parse(std::move(blob));
 }
 
-void ForwardingTraceParser::NotifyEndOfFile() {
-  reader_->NotifyEndOfFile();
+base::Status ForwardingTraceParser::NotifyEndOfFile() {
+  return reader_ ? reader_->NotifyEndOfFile() : base::OkStatus();
 }
 
 }  // namespace trace_processor

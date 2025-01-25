@@ -12,9 +12,9 @@
 #include <vector>
 
 #include "osp/msgs/osp_messages.h"
+#include "osp/public/connect_request.h"
 #include "osp/public/message_demuxer.h"
 #include "osp/public/presentation/presentation_controller.h"
-#include "osp/public/protocol_connection_client.h"
 #include "osp/public/service_info.h"
 #include "platform/api/time.h"
 #include "platform/base/error.h"
@@ -73,9 +73,8 @@ class UrlAvailabilityRequester {
   // during the following watch period.  Before a watch will expire, it needs to
   // send a new request to restart the watch, as long as there are active
   // observers for a given URL.
-  class ReceiverRequester final
-      : public ProtocolConnectionClient::ConnectionRequestCallback,
-        public MessageDemuxer::MessageCallback {
+  class ReceiverRequester final : public ConnectRequestCallback,
+                                  public MessageDemuxer::MessageCallback {
    public:
     ReceiverRequester(UrlAvailabilityRequester& listener,
                       const std::string& instance_name);
@@ -95,11 +94,9 @@ class UrlAvailabilityRequester {
     void RemoveUnobservedWatches(const std::set<std::string>& unobserved_urls);
     void RemoveReceiver();
 
-    // ProtocolConnectionClient::ConnectionRequestCallback overrides.
-    void OnConnectionOpened(
-        uint64_t request_id,
-        std::unique_ptr<ProtocolConnection> connection) override;
-    void OnConnectionFailed(uint64_t request_id) override;
+    // ProtocolConnectionClient::ConnectRequestCallback overrides.
+    void OnConnectSucceed(uint64_t request_id, uint64_t instance_id) override;
+    void OnConnectFailed(uint64_t request_id) override;
 
     // MessageDemuxer::MessageCallback overrides.
     ErrorOr<size_t> OnStreamMessage(uint64_t instance_id,
@@ -130,7 +127,7 @@ class UrlAvailabilityRequester {
     const std::string instance_name_;
     uint64_t instance_id_{0};
 
-    ProtocolConnectionClient::ConnectRequest connect_request_;
+    ConnectRequest connect_request_;
     // TODO(btolsch): Observe connection and restart all the things on close.
     std::unique_ptr<ProtocolConnection> connection_;
 

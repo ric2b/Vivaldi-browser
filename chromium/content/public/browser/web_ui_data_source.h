@@ -40,6 +40,13 @@ class WebUIDataSource {
 
   // Creates a WebUIDataSource and adds it to the BrowserContext, which owns it.
   // Callers just get a raw pointer, which they don't own.
+  // `source_name` is the key for URL lookups, allowing the source to serve
+  // content for URLs that match the patterns:
+  //  - chrome://source_name/*
+  //  - chrome-untrusted://<host>/*
+  //    (source_name is of the form "chrome-untrusted://<host>")
+  //  - scheme://*
+  //    (source_name is of the form "scheme://")
   CONTENT_EXPORT static WebUIDataSource* CreateAndAdd(
       BrowserContext* browser_context,
       const std::string& source_name);
@@ -49,11 +56,10 @@ class WebUIDataSource {
                                     const base::Value::Dict& update);
 
   // Adds a string keyed to its name to our dictionary.
-  virtual void AddString(std::string_view name,
-                         const std::u16string& value) = 0;
+  virtual void AddString(std::string_view name, std::u16string_view value) = 0;
 
   // Adds a string keyed to its name to our dictionary.
-  virtual void AddString(std::string_view name, const std::string& value) = 0;
+  virtual void AddString(std::string_view name, std::string_view value) = 0;
 
   // Adds a localized string with resource |ids| keyed to its name to our
   // dictionary.

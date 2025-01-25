@@ -6,7 +6,7 @@ page_name: remote-debugging
 title: Remote debugging in ChromiumOS
 ---
 
-### See the [CrOS developer guide](/chromium-os/developer-library/guides/development/developer-guide/) for instructions on using a script that automates most of the below steps.
+### See the [CrOS developer guide](/chromium-os/developer-library/guides/development/developer-guide/#remote-debugging) for instructions on using a script that automates most of the below steps.
 
 ### Device Setup
 

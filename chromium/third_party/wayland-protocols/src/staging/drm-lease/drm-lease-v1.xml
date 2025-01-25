@@ -245,7 +245,7 @@
       <description summary="submit the lease request">
         Submits the lease request and creates a new wp_drm_lease_v1 object.
         After calling submit the compositor will immediately destroy this
-        object, issuing any more requests will cause a wl_diplay error.
+        object, issuing any more requests will cause a wl_display error.
         The compositor doesn't make any guarantees about the events of the
         lease object, clients cannot expect an immediate response.
         Not requesting any connectors before submitting the lease request

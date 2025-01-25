@@ -7,6 +7,7 @@
 #import <UserNotifications/UserNotifications.h>
 
 #import "base/apple/foundation_util.h"
+#import "base/feature_list.h"
 #import "base/ios/ios_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
@@ -16,6 +17,7 @@
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_prepopulate_data.h"
 #import "components/search_engines/template_url_service.h"
+#import "components/send_tab_to_self/features.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/memory_warning_helper.h"
@@ -31,6 +33,7 @@
 #import "ios/chrome/browser/content_notification/model/content_notification_util.h"
 #import "ios/chrome/browser/crash_report/model/crash_keys_helper.h"
 #import "ios/chrome/browser/download/model/background_service/background_download_service_factory.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/menu_builder.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_delegate.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
@@ -40,10 +43,9 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
-#import "ios/chrome/browser/ui/keyboard/menu_builder.h"
 #import "ios/web/common/uikit_ui_util.h"
 #import "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/public/thread/web_thread.h"
@@ -81,7 +83,7 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 @implementation MainApplicationDelegate
 
 - (instancetype)init {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _memoryHelper = [[MemoryWarningHelper alloc] init];
     _mainController = [[MainController alloc] init];
     _metricsMediator = [[MetricsMediator alloc] init];
@@ -246,7 +248,7 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
                             true);
   web::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(^{
-        if ([self isContentNotificationAvailable]) {
+        if ([self provisionalNotificationTypesEnabled]) {
           // TODO(crbug.com/341906612) Remove use of
           // browserProviderInterfaceDoNotUse.
           Browser* browser =
@@ -374,10 +376,10 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   // Register if it's a cold start or when bringing Chrome to foreground with
   // Content Push Notifications available.
   if (_startupInformation.isColdStart ||
-      [self isContentNotificationAvailable]) {
+      [self provisionalNotificationTypesEnabled]) {
     [PushNotificationUtil
-        registerDeviceWithAPNSWithContentNotificationsAvailable:
-            [self isContentNotificationAvailable]];
+        registerDeviceWithAPNSWithProvisionalNotificationsAvailable:
+            [self provisionalNotificationTypesEnabled]];
   }
 
   [_appState applicationWillEnterForeground:UIApplication.sharedApplication
@@ -454,9 +456,9 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   }
 }
 
-// `YES` if Content notification is enabled or registered. Called before
-// register device With APNS.
-- (BOOL)isContentNotificationAvailable {
+// `YES` if Content or Send Tab notifications are enabled or registered. Called
+// before register device With APNS.
+- (BOOL)provisionalNotificationTypesEnabled {
   // TODO(crbug.com/341903881) Do not use
   // mainController.browserProviderInterfaceDoNotUse.
   Browser* browser = _mainController.browserProviderInterfaceDoNotUse
@@ -471,7 +473,9 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   ChromeBrowserState* browserState = browser->GetBrowserState();
 
   return IsContentNotificationEnabled(browserState) ||
-         IsContentNotificationRegistered(browserState);
+         IsContentNotificationRegistered(browserState) ||
+         base::FeatureList::IsEnabled(
+             send_tab_to_self::kSendTabToSelfIOSPushNotifications);
 }
 
 @end

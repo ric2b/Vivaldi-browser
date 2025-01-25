@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/base/video_frame.h"
 
 #include <stddef.h>
@@ -912,7 +917,7 @@ TEST(VideoFrameMetadata, ClearTextureMetadata) {
   VideoFrameMetadata copy_md;
   copy_md.MergeMetadataFrom(reference_md);
 
-  copy_md.ClearTextureFrameMedatada();
+  copy_md.ClearTextureFrameMetadata();
   EXPECT_FALSE(copy_md.is_webgpu_compatible);
   EXPECT_TRUE(copy_md.texture_origin_is_top_left);
   EXPECT_FALSE(copy_md.read_lock_fences_enabled);

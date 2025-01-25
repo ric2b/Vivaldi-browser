@@ -495,6 +495,8 @@ if (DAWN_ENABLE_METAL)
         "metal/ComputePipelineMTL.h"
         "metal/DeviceMTL.h"
         "metal/Forward.h"
+        "metal/MultiDrawEncoder.h"
+        "metal/MultiDrawEncoder.mm"
         "metal/PhysicalDeviceMTL.h"
         "metal/PipelineLayoutMTL.h"
         "metal/QuerySetMTL.h"
@@ -851,10 +853,12 @@ endif()
 
 if ((DAWN_ENABLE_OPENGL OR DAWN_ENABLE_VULKAN) AND DAWN_ENABLE_SPIRV_VALIDATION)
     target_compile_definitions(dawn_native PRIVATE "DAWN_ENABLE_SPIRV_VALIDATION")
+    target_compile_definitions(dawn_native_objects PRIVATE "DAWN_ENABLE_SPIRV_VALIDATION")
 endif()
 
 if (DAWN_ENABLE_SWIFTSHADER)
     target_compile_definitions(dawn_native PRIVATE "DAWN_ENABLE_SWIFTSHADER")
+    target_compile_definitions(dawn_native_objects PRIVATE "DAWN_ENABLE_SWIFTSHADER")
 endif()
 
 if (DAWN_BUILD_MONOLITHIC_LIBRARY)

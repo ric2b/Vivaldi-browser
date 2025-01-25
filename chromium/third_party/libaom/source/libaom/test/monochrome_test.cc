@@ -11,7 +11,7 @@
 
 #include <climits>
 #include <vector>
-#include "third_party/googletest/src/googletest/include/gtest/gtest.h"
+#include "gtest/gtest.h"
 #include "test/codec_factory.h"
 #include "test/encode_test_driver.h"
 #include "test/i420_video_source.h"
@@ -31,7 +31,7 @@ const double kPsnrThreshold[3] = { 29.0, 41.5, 41.5 };
 // kPsnrFluctuation represents the maximum allowed psnr fluctuation w.r.t first
 // frame. The indices correspond to one/two-pass, allintra and realtime
 // encoding modes.
-const double kPsnrFluctuation[3] = { 2.5, 0.3, 16.0 };
+const double kPsnrFluctuation[3] = { 2.5, 0.3, 17.0 };
 
 class MonochromeTest
     : public ::libaom_test::CodecTestWith3Params<libaom_test::TestMode, int,
@@ -183,6 +183,9 @@ TEST_P(MonochromeRealtimeTest, TestMonochromeEncoding) {
   cfg_.monochrome = 1;
   // Run at low bitrate.
   cfg_.rc_target_bitrate = 40;
+  cfg_.rc_buf_sz = 6000;
+  cfg_.rc_buf_initial_sz = 4000;
+  cfg_.rc_buf_optimal_sz = 5000;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
 
   // Check that the chroma planes are equal across all frames

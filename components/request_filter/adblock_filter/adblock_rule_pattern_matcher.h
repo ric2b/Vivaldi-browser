@@ -8,9 +8,9 @@
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_RULE_PATTERN_MATCHER_H_
 
 #include <string>
+#include <string_view>
 
 #include "base/memory/raw_ref.h"
-#include "base/strings/string_piece.h"
 #include "url/third_party/mozilla/url_parse.h"
 
 class GURL;

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/media/media_engagement_preloaded_list.h"
 
 #include <cstdint>
@@ -88,8 +93,7 @@ bool MediaEngagementPreloadedList::CheckOriginIsPresent(
   std::string location(origin.host());
 
   // Add :<port> if we use a non-default port.
-  if (origin.port() != url::DefaultPortForScheme(origin.scheme().data(),
-                                                 origin.scheme().length())) {
+  if (origin.port() != url::DefaultPortForScheme(origin.scheme())) {
     location.push_back(':');
     std::string port(base::NumberToString(origin.port()));
     location.append(std::move(port));

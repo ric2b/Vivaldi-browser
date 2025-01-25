@@ -31,6 +31,7 @@ NSString* const kToolsMenuHelpId = @"kToolsMenuHelpId";
 NSString* const kToolsMenuRequestMobileId = @"kToolsMenuRequestMobileId";
 NSString* const kToolsMenuReadLater = @"kToolsMenuReadLater";
 NSString* const kToolsMenuAddToBookmarks = @"kToolsMenuAddToBookmarks";
+NSString* const kToolsMenuOpenLensOverlay = @"kToolsMenuOpenLensOverlay";
 NSString* const kToolsMenuEditBookmark = @"kToolsMenuEditBookmark";
 NSString* const kToolsMenuSiteInformation = @"kToolsMenuSiteInformation";
 NSString* const kToolsMenuIncognitoSearch = @"kToolsMenuIncognitoSearch";
@@ -48,4 +49,12 @@ NSString* const kToolsMenuEditActionsId = @"kToolsMenuEditActionsId";
 // Vivaldi
 NSString* const kToolsMenuAboutVivaldiId = @"kToolsMenuAboutVivaldiId";
 NSString* const kToolsMenuShareId = @"kToolsMenuShareId";
+NSString* const vToolsMenuTextZoomId = @"vToolsMenuTextZoomId";
+NSString* const vToolsMenuFindInPageId = @"vToolsMenuFindInPageId";
+NSString* const vToolsMenuMobileSiteId = @"vToolsMenuMobileSiteId";
+NSString* const vToolsMenuDesktopSiteId = @"vToolsMenuDesktopSiteId";
+NSString* const vToolsMenuAddPageToId = @"vToolsMenuAddPageToId";
+NSString* const vToolsMenuEditPageId = @"vToolsMenuEditPageId";
+NSString* const vToolsMenuAddStartPageId = @"vToolsMenuAddStartPageId";
+NSString* const vToolsMenuEditStartPageId = @"vToolsMenuEditStartPageId";
 // End Vivaldi

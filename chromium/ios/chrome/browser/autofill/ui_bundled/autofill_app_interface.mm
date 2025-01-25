@@ -14,6 +14,7 @@
 #import "components/autofill/core/browser/autofill_client.h"
 #import "components/autofill/core/browser/autofill_test_utils.h"
 #import "components/autofill/core/browser/browser_autofill_manager_test_api.h"
+#import "components/autofill/core/browser/data_model/autofill_profile_test_api.h"
 #import "components/autofill/core/browser/form_data_importer.h"
 #import "components/autofill/core/browser/payments/credit_card_save_manager.h"
 #import "components/autofill/core/browser/payments/payments_autofill_client.h"
@@ -35,7 +36,7 @@
 #import "ios/chrome/browser/autofill/ui_bundled/scoped_autofill_payment_reauth_module_override.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/mock_reauthentication_module.h"
@@ -60,7 +61,7 @@ GetPasswordProfileStore() {
   // context. Therefore IMPLICIT_ACCESS is used to let the test fail if in
   // Incognito context.
   return IOSChromeProfilePasswordStoreFactory::GetForBrowserState(
-      chrome_test_util::GetOriginalBrowserState(),
+      chrome_test_util::GetOriginalProfile(),
       ServiceAccessType::IMPLICIT_ACCESS);
 }
 
@@ -175,7 +176,8 @@ void AddAutofillProfile(autofill::PersonalDataManager* personalDataManager,
       personalDataManager->address_data_manager().GetProfiles().size();
 
   if (isAccountProfile) {
-    profile.set_source_for_testing(autofill::AutofillProfile::Source::kAccount);
+    test_api(profile).set_record_type(
+        autofill::AutofillProfile::RecordType::kAccount);
   }
   personalDataManager->address_data_manager().AddProfile(profile);
 
@@ -392,10 +394,9 @@ static std::unique_ptr<ScopedAutofillPaymentReauthModuleOverride>
 }
 
 + (void)clearProfilesStore {
-  ChromeBrowserState* browserState =
-      chrome_test_util::GetOriginalBrowserState();
+  ProfileIOS* profileIOS = chrome_test_util::GetOriginalProfile();
   autofill::PersonalDataManager* personalDataManager =
-      autofill::PersonalDataManagerFactory::GetForBrowserState(browserState);
+      autofill::PersonalDataManagerFactory::GetForProfile(profileIOS);
   for (const autofill::AutofillProfile* profile :
        personalDataManager->address_data_manager().GetProfiles()) {
     personalDataManager->RemoveByGUID(profile->guid());
@@ -408,7 +409,7 @@ static std::unique_ptr<ScopedAutofillPaymentReauthModuleOverride>
   CHECK(base::test::ios::WaitUntilConditionOrTimeout(
       base::test::ios::kWaitForActionTimeout, conditionBlock));
 
-  autofill::prefs::SetAutofillProfileEnabled(browserState->GetPrefs(), YES);
+  autofill::prefs::SetAutofillProfileEnabled(profileIOS->GetPrefs(), YES);
 }
 
 + (void)saveExampleProfile {
@@ -436,10 +437,8 @@ static std::unique_ptr<ScopedAutofillPaymentReauthModuleOverride>
     personalDataManager->RemoveByGUID(creditCard->guid());
   }
 
-  ChromeBrowserState* browserState =
-      chrome_test_util::GetOriginalBrowserState();
-  autofill::prefs::SetAutofillPaymentMethodsEnabled(browserState->GetPrefs(),
-                                                    YES);
+  ProfileIOS* profile = chrome_test_util::GetOriginalProfile();
+  autofill::prefs::SetAutofillPaymentMethodsEnabled(profile->GetPrefs(), YES);
 }
 
 // Clears all server data including server cards.
@@ -627,12 +626,11 @@ static std::unique_ptr<ScopedAutofillPaymentReauthModuleOverride>
 
 #pragma mark - Private
 
-// The PersonalDataManager instance for the current browser state.
+// The PersonalDataManager instance for the current profile.
 + (autofill::PersonalDataManager*)personalDataManager {
-  ChromeBrowserState* browserState =
-      chrome_test_util::GetOriginalBrowserState();
+  ProfileIOS* profile = chrome_test_util::GetOriginalProfile();
   autofill::PersonalDataManager* personalDataManager =
-      autofill::PersonalDataManagerFactory::GetForBrowserState(browserState);
+      autofill::PersonalDataManagerFactory::GetForProfile(profile);
   personalDataManager->payments_data_manager().SetSyncingForTest(true);
   return personalDataManager;
 }

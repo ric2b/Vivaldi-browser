@@ -98,7 +98,6 @@
 <translation id="265390580714150011">Sahə dəyəri</translation>
 <translation id="2662876636500006917">Chrome əlavələr mağazası</translation>
 <translation id="2678063897982469759">Yenidən açmaq</translation>
-<translation id="2678100101831051676">Yayım əlçatan deyil.</translation>
 <translation id="2719936478972253983">Aşağıdakı kukilər əngəllənib</translation>
 <translation id="2721037002783622288">&amp;Şəkili <ph name="SEARCH_ENGINE" />-da axtarmaq</translation>
 <translation id="2738771556149464852">Bitmə vaxtı</translation>
@@ -148,7 +147,6 @@
 <translation id="3378572629723696641">Ola bilsin ki, bu qoşma zədələnib.</translation>
 <translation id="3387614642886316601">Təkmilləşdirilmiş orfoqrafiya yoxlaması</translation>
 <translation id="3390013585654699824">Tətbiq detalları</translation>
-<translation id="3393582007140394275">Ekran yayımı baş tutmadı.</translation>
 <translation id="345693547134384690">Şəkili yeni vərəqdə açın</translation>
 <translation id="3493881266323043047">Etibarlılıq</translation>
 <translation id="3511307672085573050">K&amp;eçid ünvanını kopyalayın</translation>
@@ -346,6 +344,7 @@
 <translation id="6812841287760418429">Dəyişiklikləri saxlamaq</translation>
 <translation id="6824564591481349393">&amp;E-poçt ünvanını kopyalayın</translation>
 <translation id="6840155290835956714">Göndərmədən öncə soruşmaq</translation>
+<translation id="6878862640969460273">Albom</translation>
 <translation id="6886871292305414135">Keçidi yeni &amp;vərəqdə açın</translation>
 <translation id="6892812721183419409">Keçidi, <ph name="USER" /> kimi açın</translation>
 <translation id="6900284862687837908">Arxa fon tətbiqi: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -409,7 +408,6 @@ Açar faylı: <ph name="KEY_FILE" />
 Açar faylını təhlükəsiz yerdə saxlayın. Bu yeni versiya qoşma yaratmaq üçün lazım olacaq.</translation>
 <translation id="8004582292198964060">Veb-bələdçi</translation>
 <translation id="8018313076035239964">Veb saytların hansı məlumatları istiadə edə biləcəyini və sizə hansı məzmunu göstərə biləcəklərini idarə edin</translation>
-<translation id="8032244173881942855">Vərəqin yayımı mümkün deyil.</translation>
 <translation id="8071432093239591881">Şəkil kimi çap edin</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -465,7 +463,6 @@ Açar faylını təhlükəsiz yerdə saxlayın. Bu yeni versiya qoşma yaratmaq 
 <translation id="9218430445555521422">Standart veb-bələdçi kimi təyin etmək</translation>
 <translation id="93766956588638423">Qoşmanı bərpa etmək</translation>
 <translation id="961012016278832836">Microsoft Edge Təminatı</translation>
-<translation id="98515147261107953">Albom</translation>
 <translation id="994289308992179865">&amp;Təkrar</translation>
 <translation id="998747458861718449">Təftiş etmək</translation>
 </translationbundle>

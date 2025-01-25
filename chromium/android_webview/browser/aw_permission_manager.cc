@@ -14,12 +14,14 @@
 #include "android_webview/browser/aw_contents.h"
 #include "android_webview/browser/aw_context_permissions_delegate.h"
 #include "android_webview/browser/aw_settings.h"
+#include "android_webview/common/aw_features.h"
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/sequence_checker.h"
 #include "base/task/thread_pool.h"
 #include "components/permissions/permission_manager.h"
 #include "components/permissions/permission_util.h"
@@ -62,26 +64,24 @@ class LastRequestResultCache {
     }
 
     if (!requesting_origin.is_valid()) {
-      NOTREACHED_IN_MIGRATION() << requesting_origin.possibly_invalid_spec();
-      return;
+      NOTREACHED() << requesting_origin.possibly_invalid_spec();
     }
     if (!embedding_origin.is_valid()) {
-      NOTREACHED_IN_MIGRATION() << embedding_origin.possibly_invalid_spec();
-      return;
+      NOTREACHED() << embedding_origin.possibly_invalid_spec();
     }
 
-    if (permission != PermissionType::PROTECTED_MEDIA_IDENTIFIER) {
+    switch (permission) {
+      case PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+      case PermissionType::STORAGE_ACCESS_GRANT:
+      case PermissionType::TOP_LEVEL_STORAGE_ACCESS:
+        break;
       // Other permissions are not cached.
-      return;
+      default:
+        return;
     }
 
     std::string key = GetCacheKey(requesting_origin, embedding_origin);
-    if (key.empty()) {
-      NOTREACHED_IN_MIGRATION();
-      // Never store an empty key because it could inadvertently be used for
-      // another combination.
-      return;
-    }
+    CHECK(!key.empty());
     pmi_result_cache_[key] = status;
   }
 
@@ -98,10 +98,15 @@ class LastRequestResultCache {
     DCHECK(embedding_origin.is_valid())
         << embedding_origin.possibly_invalid_spec();
 
-    if (permission != PermissionType::PROTECTED_MEDIA_IDENTIFIER) {
-      NOTREACHED_IN_MIGRATION()
-          << "Results are only cached for PROTECTED_MEDIA_IDENTIFIER";
-      return PermissionStatus::ASK;
+    switch (permission) {
+      case PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+      case PermissionType::STORAGE_ACCESS_GRANT:
+      case PermissionType::TOP_LEVEL_STORAGE_ACCESS:
+        break;
+      // Other permissions are not cached.
+      default:
+        NOTREACHED()
+            << "Results are only cached for PROTECTED_MEDIA_IDENTIFIER AND SAA";
     }
 
     std::string key = GetCacheKey(requesting_origin, embedding_origin);
@@ -179,8 +184,7 @@ class AwPermissionManager::PendingRequest {
   void SetPermissionStatus(PermissionType type, PermissionStatus status) {
     auto result = permission_index_map_.find(type);
     if (result == permission_index_map_.end()) {
-      NOTREACHED_IN_MIGRATION();
-      return;
+      NOTREACHED();
     }
     DCHECK(!IsCompleted());
     results[result->second] = status;
@@ -201,8 +205,7 @@ class AwPermissionManager::PendingRequest {
   PermissionStatus GetPermissionStatus(PermissionType type) {
     auto result = permission_index_map_.find(type);
     if (result == permission_index_map_.end()) {
-      NOTREACHED_IN_MIGRATION();
-      return PermissionStatus::DENIED;
+      NOTREACHED();
     }
     return results[result->second];
   }
@@ -237,36 +240,29 @@ class AwPermissionManager::PendingRequest {
   bool cancelled_;
 };
 
+// Regarding the saa_cache_ size: 99% of WebView site visits fall
+// into this count (based on Android.WebView.SitesVisitedWeekly) in a week so we
+// will cache those for revisits but not going above it to avoid using up too
+// much memory for any heavy case. This will cache in memory so every app reload
+// will require a new request. This will also be duplicated across profiles
+// which may be a useful property in the future so we aren't going to design
+// around that.
 AwPermissionManager::AwPermissionManager(
     const AwContextPermissionsDelegate& context_delegate)
     : context_delegate_(context_delegate),
-      result_cache_(new LastRequestResultCache) {}
+      result_cache_(new LastRequestResultCache),
+      saa_cache_(10) {}
 
 AwPermissionManager::~AwPermissionManager() {
   CancelPermissionRequests();
-}
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused
-enum class StorageAccessAppDefinedType {
-  kAppDefined = 0,
-  kExternal = 1,
-  kMaxValue = kExternal,
-};
-
-void LogStorageAccessRequest(std::string etld_plus1) {
-  bool is_defined = IsAppDefined(std::move(etld_plus1));
-
-  base::UmaHistogramEnumeration("Android.WebView.StorageAccessRelation",
-                                is_defined
-                                    ? StorageAccessAppDefinedType::kAppDefined
-                                    : StorageAccessAppDefinedType::kExternal);
 }
 
 void AwPermissionManager::RequestPermissions(
     content::RenderFrameHost* render_frame_host,
     const content::PermissionRequestDescription& request_description,
     base::OnceCallback<void(const std::vector<PermissionStatus>&)> callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   auto const& permissions = request_description.permissions;
   if (permissions.empty()) {
     std::move(callback).Run(std::vector<PermissionStatus>());
@@ -366,6 +362,7 @@ void AwPermissionManager::RequestPermissions(
       case PermissionType::NFC:
       case PermissionType::VR:
       case PermissionType::AR:
+      case PermissionType::HAND_TRACKING:
       case PermissionType::CAMERA_PAN_TILT_ZOOM:
       case PermissionType::WINDOW_MANAGEMENT:
       case PermissionType::LOCAL_FONTS:
@@ -377,32 +374,35 @@ void AwPermissionManager::RequestPermissions(
       case PermissionType::KEYBOARD_LOCK:
       case PermissionType::POINTER_LOCK:
       case PermissionType::AUTOMATIC_FULLSCREEN:
+      case PermissionType::WEB_APP_INSTALLATION:
         NOTIMPLEMENTED() << "RequestPermissions is not implemented for "
                          << static_cast<int>(permissions[i]);
         pending_request_raw->SetPermissionStatus(permissions[i],
                                                  PermissionStatus::DENIED);
         break;
-      // The only reason we separate these request types out is to measure the
-      // calls for these requests. We are interested in the top level origin
-      // source for storage access requests.
       case PermissionType::STORAGE_ACCESS_GRANT:
       case PermissionType::TOP_LEVEL_STORAGE_ACCESS: {
-        NOTIMPLEMENTED() << "RequestPermissions is not implemented for "
-                         << static_cast<int>(permissions[i]);
-        pending_request_raw->SetPermissionStatus(permissions[i],
-                                                 PermissionStatus::DENIED);
-
         const url::Origin& outer_origin =
             render_frame_host->GetOutermostMainFrame()
                 ->GetLastCommittedOrigin();
-        std::string etld_plus1 =
-            net::registry_controlled_domains::GetDomainAndRegistry(
-                outer_origin,
-                net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 
-        base::ThreadPool::PostTask(
-            FROM_HERE,
-            base::BindOnce(&LogStorageAccessRequest, std::move(etld_plus1)));
+        auto cached_value = saa_cache_->Get(outer_origin.Serialize());
+        if (cached_value != saa_cache_->end()) {
+          auto is_granted = cached_value->second ? PermissionStatus::GRANTED
+                                                 : PermissionStatus::DENIED;
+          pending_request_raw->SetPermissionStatus(permissions[i], is_granted);
+          break;
+        }
+
+        auto on_saa_response =
+            base::BindOnce(&CacheAutoSAA, weak_ptr_factory_.GetWeakPtr(),
+                           outer_origin)
+                .Then(base::BindOnce(&OnRequestResponse,
+                                     weak_ptr_factory_.GetWeakPtr(), request_id,
+                                     permissions[i]));
+
+        delegate->RequestStorageAccess(outer_origin,
+                                       std::move(on_saa_response));
         break;
       }
       case PermissionType::MIDI:
@@ -420,11 +420,7 @@ void AwPermissionManager::RequestPermissions(
                                                  PermissionStatus::DENIED);
         break;
       case PermissionType::NUM:
-        NOTREACHED_IN_MIGRATION()
-            << "PermissionType::NUM was not expected here.";
-        pending_request_raw->SetPermissionStatus(permissions[i],
-                                                 PermissionStatus::DENIED);
-        break;
+        NOTREACHED() << "PermissionType::NUM was not expected here.";
     }
   }
 
@@ -447,6 +443,27 @@ void AwPermissionManager::RequestPermissions(
 }
 
 // static
+bool AwPermissionManager::CacheAutoSAA(
+    const base::WeakPtr<AwPermissionManager>& manager,
+    const url::Origin& origin,
+    bool allowed) {
+  // All delegate functions should be cancelled when the manager runs
+  // destructor. Therefore |manager| should be always valid here.
+  CHECK(manager);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(manager->sequence_checker_);
+
+  DVLOG(1) << "Caching auto granted SAA result " << allowed << " for origin "
+           << origin;
+
+  manager->saa_cache_->Put({
+      origin.Serialize(),
+      allowed,
+  });
+
+  return allowed;
+}
+
+// static
 void AwPermissionManager::OnRequestResponse(
     const base::WeakPtr<AwPermissionManager>& manager,
     int request_id,
@@ -454,7 +471,7 @@ void AwPermissionManager::OnRequestResponse(
     bool allowed) {
   // All delegate functions should be cancelled when the manager runs
   // destructor. Therefore |manager| should be always valid here.
-  DCHECK(manager);
+  CHECK(manager);
 
   PermissionStatus status =
       allowed ? PermissionStatus::GRANTED : PermissionStatus::DENIED;
@@ -523,10 +540,20 @@ PermissionStatus AwPermissionManager::GetPermissionStatusInternal(
     const GURL& embedding_origin,
     content::WebContents* web_contents) {
   switch (permission) {
-    case blink::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
-      // Method is called outside the Permissions API only for this permission.
+    // Setting results is called outside the Permissions API only for these
+    // permissions.
+    case blink::PermissionType::STORAGE_ACCESS_GRANT:
+    case blink::PermissionType::TOP_LEVEL_STORAGE_ACCESS: {
+      if (!base::FeatureList::IsEnabled(features::kWebViewAutoSAA)) {
+        return PermissionStatus::DENIED;
+      }
       return result_cache_->GetResult(permission, requesting_origin,
                                       embedding_origin);
+    }
+    case blink::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
+      return result_cache_->GetResult(permission, requesting_origin,
+                                      embedding_origin);
+
     case blink::PermissionType::GEOLOCATION:
       return GetGeolocationPermission(requesting_origin, web_contents);
 
@@ -554,6 +581,7 @@ PermissionStatus AwPermissionManager::GetPermissionStatusInternal(
     case blink::PermissionType::CLIPBOARD_READ_WRITE:
     case blink::PermissionType::DISPLAY_CAPTURE:
     case blink::PermissionType::DURABLE_STORAGE:
+    case blink::PermissionType::HAND_TRACKING:
     case blink::PermissionType::IDLE_DETECTION:
     case blink::PermissionType::KEYBOARD_LOCK:
     case blink::PermissionType::LOCAL_FONTS:
@@ -565,11 +593,10 @@ PermissionStatus AwPermissionManager::GetPermissionStatusInternal(
     case blink::PermissionType::POINTER_LOCK:
     case blink::PermissionType::SMART_CARD:
     case blink::PermissionType::SPEAKER_SELECTION:
-    case blink::PermissionType::STORAGE_ACCESS_GRANT:
-    case blink::PermissionType::TOP_LEVEL_STORAGE_ACCESS:
     case blink::PermissionType::VR:
     case blink::PermissionType::WAKE_LOCK_SCREEN:
     case blink::PermissionType::WAKE_LOCK_SYSTEM:
+    case blink::PermissionType::WEB_APP_INSTALLATION:
     case blink::PermissionType::WEB_PRINTING:
     case blink::PermissionType::WINDOW_MANAGEMENT:
       return PermissionStatus::DENIED;
@@ -644,20 +671,6 @@ PermissionStatus AwPermissionManager::GetPermissionStatusForEmbeddedRequester(
       content::WebContents::FromRenderFrameHost(render_frame_host));
 }
 
-AwPermissionManager::SubscriptionId
-AwPermissionManager::SubscribeToPermissionStatusChange(
-    PermissionType permission,
-    content::RenderProcessHost* render_process_host,
-    content::RenderFrameHost* render_frame_host,
-    const GURL& requesting_origin,
-    bool should_include_device_status,
-    base::RepeatingCallback<void(PermissionStatus)> callback) {
-  return SubscriptionId();
-}
-
-void AwPermissionManager::UnsubscribeFromPermissionStatusChange(
-    SubscriptionId subscription_id) {}
-
 void AwPermissionManager::CancelPermissionRequest(int request_id) {
   PendingRequest* pending_request = pending_requests_.Lookup(request_id);
   if (!pending_request || pending_request->IsCancelled())
@@ -720,6 +733,7 @@ void AwPermissionManager::CancelPermissionRequest(int request_id) {
       case PermissionType::IDLE_DETECTION:
       case PermissionType::PERIODIC_BACKGROUND_SYNC:
       case PermissionType::NFC:
+      case PermissionType::HAND_TRACKING:
       case PermissionType::VR:
       case PermissionType::AR:
       case PermissionType::STORAGE_ACCESS_GRANT:
@@ -735,6 +749,7 @@ void AwPermissionManager::CancelPermissionRequest(int request_id) {
       case PermissionType::KEYBOARD_LOCK:
       case PermissionType::POINTER_LOCK:
       case PermissionType::AUTOMATIC_FULLSCREEN:
+      case PermissionType::WEB_APP_INSTALLATION:
         NOTIMPLEMENTED() << "CancelPermission not implemented for "
                          << static_cast<int>(permission);
         break;
@@ -745,9 +760,7 @@ void AwPermissionManager::CancelPermissionRequest(int request_id) {
         // There is nothing to cancel so this is simply ignored.
         break;
       case PermissionType::NUM:
-        NOTREACHED_IN_MIGRATION()
-            << "PermissionType::NUM was not expected here.";
-        break;
+        NOTREACHED() << "PermissionType::NUM was not expected here.";
     }
     pending_request->SetPermissionStatus(permission, PermissionStatus::DENIED);
   }

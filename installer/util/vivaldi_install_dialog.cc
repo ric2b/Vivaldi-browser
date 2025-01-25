@@ -21,6 +21,7 @@
 #include "base/win/atl.h"
 #include "base/win/embedded_i18n/language_selector.h"
 #include "base/win/registry.h"
+#include "base/win/windows_version.h"
 #include "chrome/installer/setup/setup_constants.h"
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/html_dialog.h"
@@ -146,10 +147,21 @@ VivaldiInstallDialog::~VivaldiInstallDialog() {
 }
 
 VivaldiInstallDialog::DlgResult VivaldiInstallDialog::ShowModal() {
+
+   if (base::win::OSInfo::IsRunningEmulatedOnArm64()) {
+    MessageBox(
+        nullptr,
+        GetLocalizedString(IDS_INSTALL_RUNNING_EMULATED_ON_ARM64_BASE).c_str(),
+        GetLocalizedString(IDS_INSTALL_INSTALLER_NAME_BASE).c_str(),
+        MB_ICONINFORMATION | MB_SETFOREGROUND);
+    // Fallthrough, let the user install.
+  }
+
   if (!InstallUtil::IsOSSupported()) {
-    // TODO(jarle@vivaldi.com): Localize
-    MessageBox(nullptr, L"Vivaldi requires Windows 10 or higher.", nullptr,
-               MB_ICONINFORMATION | MB_SETFOREGROUND);
+    MessageBox(nullptr,
+        GetLocalizedString(IDS_INSTALL_OUTDATED_WINDOWS_VERSION_BASE).c_str(),
+               GetLocalizedString(IDS_INSTALL_INSTALLER_NAME_BASE).c_str(),
+        MB_ICONERROR | MB_SETFOREGROUND);
     return INSTALL_DLG_ERROR;
   }
 

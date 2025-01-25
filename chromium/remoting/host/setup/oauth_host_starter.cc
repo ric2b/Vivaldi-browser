@@ -5,6 +5,7 @@
 #include "remoting/host/setup/oauth_host_starter.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -20,6 +21,8 @@
 #include "remoting/base/directory_service_client.h"
 #include "remoting/base/passthrough_oauth_token_getter.h"
 #include "remoting/base/protobuf_http_status.h"
+#include "remoting/host/host_config.h"
+#include "remoting/host/pin_hash.h"
 #include "remoting/host/setup/host_starter.h"
 #include "remoting/host/setup/host_starter_base.h"
 #include "remoting/proto/remoting/v1/directory_messages.pb.h"
@@ -41,9 +44,10 @@ class OAuthHostStarter : public HostStarterBase {
   ~OAuthHostStarter() override;
 
   // HostStarterBase implementation.
-  void RegisterNewHost(const std::string& access_token,
-                       const std::string& public_key) override;
+  void RegisterNewHost(const std::string& public_key,
+                       std::optional<std::string> access_token) override;
   void RemoveOldHostFromDirectory(base::OnceClosure on_host_removed) override;
+  void ApplyConfigValues(base::Value::Dict& config) override;
 
   // DirectoryServiceClient callbacks.
   void OnDeleteHostResponse(
@@ -70,13 +74,15 @@ OAuthHostStarter::OAuthHostStarter(
 
 OAuthHostStarter::~OAuthHostStarter() = default;
 
-void OAuthHostStarter::RegisterNewHost(const std::string& access_token,
-                                       const std::string& public_key) {
+void OAuthHostStarter::RegisterNewHost(
+    const std::string& public_key,
+    std::optional<std::string> access_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!access_token.empty());
+  DCHECK(access_token.has_value());
+  DCHECK(!access_token->empty());
   DCHECK(!public_key.empty());
 
-  token_getter_.set_access_token(access_token);
+  token_getter_.set_access_token(*access_token);
 
   directory_service_client_.RegisterHost(
       params().id, params().name, public_key,
@@ -98,6 +104,14 @@ void OAuthHostStarter::RemoveOldHostFromDirectory(
   } else {
     std::move(on_host_removed_).Run();
   }
+}
+
+void OAuthHostStarter::ApplyConfigValues(base::Value::Dict& config) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  config.Set(kHostTypeHintPath, kMe2MeHostTypeHint);
+  config.Set(kHostSecretHashConfigPath,
+             MakeHostPinHash(params().id, params().pin));
 }
 
 void OAuthHostStarter::OnRegisterHostResponse(

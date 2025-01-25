@@ -115,7 +115,7 @@ describe('SettingRegistration', () => {
       settingType: Common.Settings.SettingType.BOOLEAN,
       defaultValue: false,
       condition: config => {
-        return config?.devToolsConsoleInsights.enabled === true;
+        return config?.devToolsConsoleInsights?.enabled === true;
       },
     });
     assert.throws(() => Common.Settings.Settings.instance().moduleSetting(configSettingName));
@@ -128,9 +128,8 @@ describe('SettingRegistration', () => {
       localStorage: dummyStorage,
       config: {
         devToolsConsoleInsights: {
-          aidaModelId: 'mockModel',
-          aidaTemperature: 0.2,
-          optIn: false,
+          modelId: 'mockModel',
+          temperature: 0.2,
           enabled: true,
         },
       } as Root.Runtime.HostConfig,

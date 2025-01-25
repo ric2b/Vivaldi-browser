@@ -425,16 +425,12 @@ void RUsageProfiler::StartTimelapse(  //
     std::string title) {
   absl::WriterMutexLock lock{&mutex_};
   CHECK(!timelapse_recorder_) << "StopTimelapse() wasn't called";
-  const PeriodicAction::Options periodic_options{
-      .delay = absl::ZeroDuration(),
-      .interval = interval,
-  };
   timelapse_recorder_ = std::make_unique<PeriodicAction>(
       [this, loc = std::move(loc), title = std::move(title), also_log]() {
         const auto& s = TakeSnapshot(loc, title);
         if (also_log) s.Log();
       },
-      periodic_options);
+      PeriodicAction::ZeroDelayConstInterval(interval));
 }
 
 void RUsageProfiler::StopTimelapse() {

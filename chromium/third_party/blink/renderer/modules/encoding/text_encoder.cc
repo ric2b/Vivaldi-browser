@@ -38,10 +38,15 @@
 
 namespace blink {
 
+// Controls if TextEncode will throw an exception when failed to allocate
+// buffer.
+BASE_FEATURE(kThrowExceptionWhenTextEncodeOOM,
+             "ThrowExceptionWhenTextEncodeOOM",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 TextEncoder* TextEncoder::Create(ExecutionContext* context,
                                  ExceptionState& exception_state) {
-  WTF::TextEncoding encoding("UTF-8");
-  return MakeGarbageCollected<TextEncoder>(encoding);
+  return MakeGarbageCollected<TextEncoder>(UTF8Encoding());
 }
 
 TextEncoder::TextEncoder(const WTF::TextEncoding& encoding)
@@ -58,7 +63,8 @@ String TextEncoder::encoding() const {
   return name;
 }
 
-NotShared<DOMUint8Array> TextEncoder::encode(const String& input) {
+NotShared<DOMUint8Array> TextEncoder::encode(const String& input,
+                                             ExceptionState& exception_state) {
   std::string result;
   // Note that the UnencodableHandling here is never used since the
   // only possible encoding is UTF-8, which will use
@@ -72,13 +78,17 @@ NotShared<DOMUint8Array> TextEncoder::encode(const String& input) {
     result = codec_->Encode(input.Characters16(), input.length(),
                             WTF::kNoUnencodables);
   }
-
-  const char* buffer = result.c_str();
-  const unsigned char* unsigned_buffer =
-      reinterpret_cast<const unsigned char*>(buffer);
-
-  return NotShared<DOMUint8Array>(DOMUint8Array::Create(
-      unsigned_buffer, static_cast<unsigned>(result.length())));
+  if (base::FeatureList::IsEnabled(kThrowExceptionWhenTextEncodeOOM)) {
+    NotShared<DOMUint8Array> result_array(
+        DOMUint8Array::CreateOrNull(base::as_byte_span(result)));
+    if (result_array.IsNull()) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kUnknownError,
+                                        "Failed to allocate buffer.");
+    }
+    return result_array;
+  }
+  return NotShared<DOMUint8Array>(
+      DOMUint8Array::Create(base::as_byte_span(result)));
 }
 
 TextEncoderEncodeIntoResult* TextEncoder::encodeInto(

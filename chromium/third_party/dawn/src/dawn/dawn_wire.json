@@ -207,18 +207,20 @@
     "special items": {
         "client_side_structures": [
             "FutureWaitInfo",
-            "SurfaceDescriptorFromMetalLayer",
-            "SurfaceDescriptorFromWindowsHWND",
-            "SurfaceDescriptorFromXlibWindow",
             "SurfaceDescriptorFromWindowsCoreWindow",
             "SurfaceDescriptorFromWindowsSwapChainPanel",
-            "SurfaceDescriptorFromAndroidNativeWindow"
+            "SurfaceSourceMetalLayer",
+            "SurfaceSourceWindowsHWND",
+            "SurfaceSourceXlibWindow",
+            "SurfaceSourceWaylandSurface",
+            "SurfaceSourceAndroidNativeWindow",
+            "SurfaceSourceXCBWindow"
         ],
         "client_side_commands": [
             "AdapterCreateDevice",
             "AdapterGetFormatCapabilities",
             "AdapterGetInfo",
-            "AdapterGetProperties",
+            "AdapterGetInstance",
             "AdapterGetLimits",
             "AdapterHasFeature",
             "AdapterEnumerateFeatures",
@@ -240,6 +242,7 @@
             "DeviceCreateRenderPipelineAsync",
             "DeviceCreateRenderPipelineAsyncF",
             "DeviceCreateRenderPipelineAsync2",
+            "DeviceGetAdapter",
             "DeviceGetLimits",
             "DeviceHasFeature",
             "DeviceEnumerateFeatures",
@@ -283,7 +286,6 @@
             "BufferUnmap",
             "DeviceCreateErrorBuffer",
             "DeviceDestroy",
-            "DeviceGetAdapter",
             "DeviceGetQueue",
             "DeviceGetSupportedSurfaceUsage",
             "DeviceInjectError",

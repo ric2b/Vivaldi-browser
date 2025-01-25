@@ -10,15 +10,14 @@
 #include <optional>
 #include <vector>
 
-#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "components/saved_tab_groups/proto/saved_tab_group_data.pb.h"
 #include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/saved_tab_groups/saved_tab_group_model.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
-#include "components/sync/model/model_type_change_processor.h"
-#include "components/sync/model/model_type_store.h"
-#include "components/sync/model/model_type_sync_bridge.h"
+#include "components/sync/model/data_type_local_change_processor.h"
+#include "components/sync/model/data_type_store.h"
+#include "components/sync/model/data_type_sync_bridge.h"
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 
 class PrefService;
@@ -30,31 +29,28 @@ class ModelError;
 }  // namespace syncer
 
 namespace tab_groups {
-class SavedTabGroupModel;
+class SyncBridgeTabGroupModelWrapper;
 
 // The SavedTabGroupSyncBridge is responsible for synchronizing and resolving
 // conflicts between the data stored in the sync server and what is currently
 // stored in the SavedTabGroupModel. Once synchronized, this data is stored in
-// the ModelTypeStore for local persistence across sessions.
-class SavedTabGroupSyncBridge : public syncer::ModelTypeSyncBridge {
+// the DataTypeStore for local persistence across sessions.
+class SavedTabGroupSyncBridge : public syncer::DataTypeSyncBridge {
  public:
-  using SavedTabGroupLoadCallback =
-      base::OnceCallback<void(std::vector<SavedTabGroup>,
-                              std::vector<SavedTabGroupTab>)>;
-
-  explicit SavedTabGroupSyncBridge(
-      SavedTabGroupModel* model,
-      syncer::OnceModelTypeStoreFactory create_store_callback,
-      std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor,
-      PrefService* pref_service,
-      SavedTabGroupLoadCallback on_load_callback);
+  // `model_wrapper` and `pref_service` must not be null and must outlive the
+  // current object.
+  SavedTabGroupSyncBridge(
+      SyncBridgeTabGroupModelWrapper* model_wrapper,
+      syncer::OnceDataTypeStoreFactory create_store_callback,
+      std::unique_ptr<syncer::DataTypeLocalChangeProcessor> change_processor,
+      PrefService* pref_service);
 
   SavedTabGroupSyncBridge(const SavedTabGroupSyncBridge&) = delete;
   SavedTabGroupSyncBridge& operator=(const SavedTabGroupSyncBridge&) = delete;
 
   ~SavedTabGroupSyncBridge() override;
 
-  // syncer::ModelTypeSyncBridge:
+  // syncer::DataTypeSyncBridge:
   void OnSyncStarting(
       const syncer::DataTypeActivationRequest& request) override;
   std::unique_ptr<syncer::MetadataChangeList> CreateMetadataChangeList()
@@ -119,39 +115,38 @@ class SavedTabGroupSyncBridge : public syncer::ModelTypeSyncBridge {
       const SavedTabGroupTab& tab);
 
  private:
-  // Updates and/or adds the specifics into the ModelTypeStore.
+  // Updates and/or adds the specifics into the DataTypeStore.
   void UpsertEntitySpecific(const proto::SavedTabGroupData& data,
-                            syncer::ModelTypeStore::WriteBatch* write_batch);
+                            syncer::DataTypeStore::WriteBatch* write_batch);
 
-  // Removes the specifics pointed to by `guid` from the ModelTypeStore.
+  // Removes the specifics pointed to by `guid` from the DataTypeStore.
   void RemoveEntitySpecific(const base::Uuid& guid,
-                            syncer::ModelTypeStore::WriteBatch* write_batch);
+                            syncer::DataTypeStore::WriteBatch* write_batch);
 
   // Adds `specifics` into local storage (SavedTabGroupModel, and
-  // ModelTypeStore) and resolves any conflicts if `specifics` already exists
+  // DataTypeStore) and resolves any conflicts if `specifics` already exists
   // locally. `notify_sync` is true when MergeFullSyncData is called and there
   // is a conflict between the received and local data. Accordingly, after the
   // conflict has been resolved, we will want to update sync with this merged
   // data. `notify_sync` is false in cases that would cause a cycle such as when
   // ApplyIncrementalSyncChanges is called. Additionally, the list of changes
   // may not be complete and tabs may have been sent before their groups have
-  // arrived. In this case, the tabs are saved in the ModelTypeStore but not in
+  // arrived. In this case, the tabs are saved in the DataTypeStore but not in
   // the model (and instead cached in this class).
   void AddDataToLocalStorage(const sync_pb::SavedTabGroupSpecifics& specifics,
                              syncer::MetadataChangeList* metadata_change_list,
-                             syncer::ModelTypeStore::WriteBatch* write_batch,
+                             syncer::DataTypeStore::WriteBatch* write_batch,
                              bool notify_sync);
 
   // Removes all data assigned to `guid` from local storage (SavedTabGroupModel,
-  // and ModelTypeStore). If this guid represents a group, all tabs will be
+  // and DataTypeStore). If this guid represents a group, all tabs will be
   // removed in addition to the group.
   void DeleteDataFromLocalStorage(
       const base::Uuid& guid,
-      syncer::ModelTypeStore::WriteBatch* write_batch);
+      syncer::DataTypeStore::WriteBatch* write_batch);
 
   // Attempts to add the tabs found in `tabs_missing_groups_` to local storage.
-  void ResolveTabsMissingGroups(
-      syncer::ModelTypeStore::WriteBatch* write_batch);
+  void ResolveTabsMissingGroups(syncer::DataTypeStore::WriteBatch* write_batch);
 
   // Adds the entry into `batch`.
   void AddEntryToBatch(syncer::MutableDataBatch* batch,
@@ -162,17 +157,15 @@ class SavedTabGroupSyncBridge : public syncer::ModelTypeSyncBridge {
   void SendToSync(sync_pb::SavedTabGroupSpecifics specifics,
                   syncer::MetadataChangeList* metadata_change_list);
 
-  // Loads the data already stored in the ModelTypeStore.
-  void OnStoreCreated(SavedTabGroupLoadCallback on_load_callback,
-                      const std::optional<syncer::ModelError>& error,
-                      std::unique_ptr<syncer::ModelTypeStore> store);
+  // Loads the data already stored in the DataTypeStore.
+  void OnStoreCreated(const std::optional<syncer::ModelError>& error,
+                      std::unique_ptr<syncer::DataTypeStore> store);
 
   // Loads all sync_pb::SavedTabGroupSpecifics stored in `entries` passing the
   // specifics into OnReadAllMetadata.
   void OnDatabaseLoad(
-      SavedTabGroupLoadCallback on_load_callback,
       const std::optional<syncer::ModelError>& error,
-      std::unique_ptr<syncer::ModelTypeStore::RecordList> entries);
+      std::unique_ptr<syncer::DataTypeStore::RecordList> entries);
 
   // React to store failures if a save was not successful.
   void OnDatabaseSave(const std::optional<syncer::ModelError>& error);
@@ -180,33 +173,30 @@ class SavedTabGroupSyncBridge : public syncer::ModelTypeSyncBridge {
   // Calls ModelReadyToSync if there are no errors to report and loads the
   // stored entries into `model_`.
   void OnReadAllMetadata(
-      SavedTabGroupLoadCallback on_load_callback,
-      std::unique_ptr<syncer::ModelTypeStore::RecordList> entries,
+      std::unique_ptr<syncer::DataTypeStore::RecordList> entries,
       const std::optional<syncer::ModelError>& error,
       std::unique_ptr<syncer::MetadataBatch> metadata_batch);
 
   // Called to migrate the SavedTabGroupSpecfics to SavedTabGroupData.
   void MigrateSpecificsToSavedTabGroupData(
-      SavedTabGroupLoadCallback on_load_callback,
-      std::unique_ptr<syncer::ModelTypeStore::RecordList> entries);
+      std::unique_ptr<syncer::DataTypeStore::RecordList> entries);
   void OnSpecificsToDataMigrationComplete(
-      SavedTabGroupLoadCallback on_load_callback,
       const std::optional<syncer::ModelError>& error);
 
   // Called to update the cache guid of groups and tabs with latest cache guid
   // and subsequently writes the updated data to storage.
   void UpdateLocalCacheGuidForGroups(
-      syncer::ModelTypeStore::WriteBatch* write_batch);
+      syncer::DataTypeStore::WriteBatch* write_batch);
 
   // Helper method to determine if a tab group was created from a remote device
   // based on the group's cache guid.
   bool IsRemoteGroup(const SavedTabGroup& group);
 
-  // The ModelTypeStore used for local storage.
-  std::unique_ptr<syncer::ModelTypeStore> store_;
+  // The DataTypeStore used for local storage.
+  std::unique_ptr<syncer::DataTypeStore> store_;
 
-  // The Model we used to represent the current state of SavedTabGroups.
-  raw_ptr<SavedTabGroupModel> model_;
+  // Tab groups model wrapper used to access and modify SavedTabGroupModel.
+  raw_ptr<SyncBridgeTabGroupModelWrapper> model_wrapper_;
 
   // The pref service for storing migration status.
   raw_ptr<PrefService> pref_service_;

@@ -84,6 +84,7 @@ cc_library(
     "//src/tint/utils/symbol",
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
+    "//src/utils",
   ],
   copts = COPTS,
   visibility = ["//visibility:public"],
@@ -108,7 +109,7 @@ cc_library(
     "builtins_validation_test.cc",
     "call_test.cc",
     "call_validation_test.cc",
-    "compatibility_mode_test.cc",
+    "clip_distances_extension_test.cc",
     "compound_assignment_validation_test.cc",
     "compound_statement_test.cc",
     "const_assert_test.cc",
@@ -192,6 +193,7 @@ cc_library(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@gtest",
+    "//src/utils",
   ] + select({
     ":tint_build_wgsl_reader": [
       "//src/tint/lang/wgsl/reader",

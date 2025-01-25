@@ -105,7 +105,8 @@ class DevtoolsConnectorItem : public content::WebContentsDelegate {
 
   // content::WebContentsDelegate:
   void ActivateContents(content::WebContents* contents) override;
-  void AddNewContents(content::WebContents* source,
+  content::WebContents* AddNewContents(
+      content::WebContents* source,
                       std::unique_ptr<content::WebContents> new_contents,
                       const GURL& target_url,
                       WindowOpenDisposition disposition,

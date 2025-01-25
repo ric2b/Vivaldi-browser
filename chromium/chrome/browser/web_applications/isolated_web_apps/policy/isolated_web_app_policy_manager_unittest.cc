@@ -39,7 +39,6 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_discovery_task.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
-#include "chrome/browser/web_applications/isolated_web_apps/iwa_identity_validator.h"
 #include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_external_install_options.h"
 #include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_policy_constants.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/iwa_test_server_configurator.h"
@@ -222,7 +221,7 @@ void HandleInstallBasedOnId(
     }
 
     std::move(callback).Run(InstallIsolatedWebAppCommandSuccess(
-        expected_version,
+        url_info, expected_version,
         IwaStorageOwnedBundle{"random_folder", /*dev_mode=*/false}));
     return;
   }
@@ -478,7 +477,7 @@ class IsolatedWebAppPolicyManagerTestBase : public WebAppTest {
     web_app::TestSignedWebBundle swbn_app2 =
         web_app::TestSignedWebBundleBuilder::BuildDefault(
             TestSignedWebBundleBuilder::BuildOptions().AddKeyPair(
-                web_package::WebBundleSigner::Ed25519KeyPair::CreateRandom()));
+                web_package::test::Ed25519KeyPair::CreateRandom()));
 
     lazy_app1_id_ = swbn_app1.id;
     lazy_app2_id_ = swbn_app2.id;
@@ -499,7 +498,6 @@ class IsolatedWebAppPolicyManagerTestBase : public WebAppTest {
 
   void SetUp() override {
     WebAppTest::SetUp();
-    IwaIdentityValidator::CreateSingleton();
     SetCommandScheduler();
     test::AwaitStartWebAppProviderAndSubsystems(profile());
     SetUpServedIwas();
@@ -1501,5 +1499,91 @@ TEST_F(CleanupOrphanedBundlesTest, CleanUpNotCalledOnAllTasksSuccess) {
   EXPECT_TRUE(last_installed_app_id == url_info_1.app_id() ||
               last_installed_app_id == url_info_2.app_id());
 }
+
+class IsolatedWebAppInstallEmergencyMechanismTest
+    : public IsolatedWebAppPolicyManagerTestBase,
+      public testing::WithParamInterface<int> {
+ public:
+  IsolatedWebAppInstallEmergencyMechanismTest()
+      : IsolatedWebAppPolicyManagerTestBase(
+            /*is_mgs_session_install_enabled=*/false,
+            /*is_user_session=*/true,
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+
+ protected:
+  int GetSimulatedPendingInstallCount() { return GetParam(); }
+
+  webapps::AppId app_id_;
+
+ private:
+  // `IsolatedWebAppPolicyManagerTestBase`:
+  void SetCommandScheduler() override {
+    // For these tests we are fine with the regular command scheduler.
+    const auto url_info_1 = IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(
+        web_app::TestSignedWebBundleBuilder::BuildDefault().id);
+    app_id_ = url_info_1.app_id();
+
+    PolicyGenerator policy_generator;
+    policy_generator.AddForceInstalledIwa(url_info_1.web_bundle_id(),
+                                          GURL(kUpdateManifestUrlApp1));
+    profile()->GetPrefs()->Set(prefs::kIsolatedWebAppInstallForceList,
+                               policy_generator.Generate());
+
+    // Set the number of previous crashes on profile creation to simulate a
+    // previously crashing device.
+    profile()->GetPrefs()->SetInteger(
+        prefs::kIsolatedWebAppPendingInitializationCount,
+        GetSimulatedPendingInstallCount());
+  }
+};
+
+TEST_P(IsolatedWebAppInstallEmergencyMechanismTest,
+       EmergencyMechanismOnStartup) {
+  // If the emergency mechanism is triggered, the install count is increaded by
+  // one. If not, the startup is successful and the pending install count is
+  // reset to 0.
+  if (GetSimulatedPendingInstallCount() > 2) {
+    EXPECT_EQ(GetSimulatedPendingInstallCount() + 1,
+              profile()->GetPrefs()->GetInteger(
+                  prefs::kIsolatedWebAppPendingInitializationCount));
+  } else {
+    EXPECT_EQ(0, profile()->GetPrefs()->GetInteger(
+                     prefs::kIsolatedWebAppPendingInitializationCount));
+  }
+
+  // Process all the pending immediate tasks (not the delayed emergency task).
+  task_environment()->FastForwardBy(base::Seconds(1));
+
+  // If we already tried twice, we delay the execution to allow for updates.
+  if (GetSimulatedPendingInstallCount() > 2) {
+    EXPECT_EQ(GetSimulatedPendingInstallCount() + 1,
+              profile()->GetPrefs()->GetInteger(
+                  prefs::kIsolatedWebAppPendingInitializationCount));
+    EXPECT_EQ(0u, provider().registrar_unsafe().GetAppIds().size());
+
+    // Forward until one second before the retry. The pending installation count
+    // is still not reset.
+    task_environment()->FastForwardBy(base::Hours(4) + base::Minutes(59) +
+                                      base::Seconds(58));
+    EXPECT_EQ(GetSimulatedPendingInstallCount() + 1,
+              profile()->GetPrefs()->GetInteger(
+                  prefs::kIsolatedWebAppPendingInitializationCount));
+    EXPECT_EQ(0u, provider().registrar_unsafe().GetAppIds().size());
+
+    // Forward by another second, which triggers the retry.
+    task_environment()->FastForwardBy(base::Seconds(1));
+  }
+
+  provider().command_manager().AwaitAllCommandsCompleteForTesting();
+  EXPECT_EQ(1u, provider().registrar_unsafe().GetAppIds().size());
+  EXPECT_EQ(0, profile()->GetPrefs()->GetInteger(
+                   prefs::kIsolatedWebAppPendingInitializationCount));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    /***/,
+    IsolatedWebAppInstallEmergencyMechanismTest,
+    // Simulates the number of failed attempts before the current session start.
+    testing::ValuesIn({0, 1, 2, 3}));
 
 }  // namespace web_app

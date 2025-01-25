@@ -42,20 +42,22 @@ class CORE_EXPORT ScrollbarLayerDelegate : public cc::Scrollbar {
   gfx::Rect ForwardButtonRect() const override;
 
   float Opacity() const override;
-  bool NeedsRepaintPart(cc::ScrollbarPart part) const override;
+  bool ThumbNeedsRepaint() const override;
+  void ClearThumbNeedsRepaint() override;
+  bool TrackAndButtonsNeedRepaint() const override;
   bool NeedsUpdateDisplay() const override;
   void ClearNeedsUpdateDisplay() override;
   bool HasTickmarks() const override;
-  void PaintPart(cc::PaintCanvas* canvas,
-                 cc::ScrollbarPart part,
-                 const gfx::Rect& rect) override;
-  void ClearThumbNeedsRepaint() override;
+  void PaintThumb(cc::PaintCanvas& canvas, const gfx::Rect& rect) override;
+  void PaintTrackAndButtons(cc::PaintCanvas& canvas,
+                            const gfx::Rect& rect) override;
   SkColor4f ThumbColor() const override;
 
   bool UsesNinePatchThumbResource() const override;
   gfx::Size NinePatchThumbCanvasSize() const override;
   gfx::Rect NinePatchThumbAperture() const override;
   bool UsesSolidColorThumb() const override;
+  gfx::Insets SolidColorThumbInsets() const override;
   bool UsesNinePatchTrackAndButtonsResource() const override;
   gfx::Size NinePatchTrackAndButtonsCanvasSize() const override;
   gfx::Rect NinePatchTrackAndButtonsAperture() const override;

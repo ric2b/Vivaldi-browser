@@ -32,10 +32,6 @@ void aom_write_primitive_symmetric(aom_writer *w, int16_t v,
   }
 }
 
-int aom_count_primitive_symmetric(int16_t v, unsigned int abs_bits) {
-  return (v == 0 ? 1 : abs_bits + 2);
-}
-
 // Encodes a value v in [0, n-1] quasi-uniformly
 void aom_write_primitive_quniform(aom_writer *w, uint16_t n, uint16_t v) {
   if (n <= 1) return;
@@ -49,7 +45,7 @@ void aom_write_primitive_quniform(aom_writer *w, uint16_t n, uint16_t v) {
   }
 }
 
-int aom_count_primitive_quniform(uint16_t n, uint16_t v) {
+static int count_primitive_quniform(uint16_t n, uint16_t v) {
   if (n <= 1) return 0;
   const int l = get_msb(n) + 1;
   const int m = (1 << l) - n;
@@ -81,7 +77,7 @@ void aom_write_primitive_subexpfin(aom_writer *w, uint16_t n, uint16_t k,
   }
 }
 
-int aom_count_primitive_subexpfin(uint16_t n, uint16_t k, uint16_t v) {
+static int count_primitive_subexpfin(uint16_t n, uint16_t k, uint16_t v) {
   int count = 0;
   int i = 0;
   int mk = 0;
@@ -89,7 +85,7 @@ int aom_count_primitive_subexpfin(uint16_t n, uint16_t k, uint16_t v) {
     int b = (i ? k + i - 1 : k);
     int a = (1 << b);
     if (n <= mk + 3 * a) {
-      count += aom_count_primitive_quniform(n - mk, v - mk);
+      count += count_primitive_quniform(n - mk, v - mk);
       break;
     } else {
       int t = (v >= mk + a);
@@ -125,7 +121,7 @@ void aom_write_signed_primitive_refsubexpfin(aom_writer *w, uint16_t n,
 
 int aom_count_primitive_refsubexpfin(uint16_t n, uint16_t k, uint16_t ref,
                                      uint16_t v) {
-  return aom_count_primitive_subexpfin(n, k, recenter_finite_nonneg(n, ref, v));
+  return count_primitive_subexpfin(n, k, recenter_finite_nonneg(n, ref, v));
 }
 
 int aom_count_signed_primitive_refsubexpfin(uint16_t n, uint16_t k, int16_t ref,

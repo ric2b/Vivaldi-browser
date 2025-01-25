@@ -26,7 +26,6 @@ int GetFieldTypeGroupPredictionQualityMetric(
     AutofillMetrics::FieldTypeQualityMetric metric);
 
 namespace autofill_metrics {
-
 namespace {
 
 using ::autofill::test::AddFieldPredictionToForm;
@@ -51,6 +50,8 @@ std::string SerializeAndEncode(const AutofillQueryResponse& response) {
 }
 
 }  // namespace
+// The anonymous namespace needs to end here because of `friend`ships between
+// the tests and the production code.
 
 class QualityMetricsTest : public AutofillMetricsBaseTest,
                            public testing::Test {
@@ -731,7 +732,7 @@ TEST_F(QualityMetricsTest, NoSubmission) {
   base::HistogramTester histogram_tester;
 
   // Triggers the metrics.
-  autofill_manager().Reset();
+  test_api(autofill_manager()).Reset();
 
   auto Buck = [](FieldType field_type,
                  AutofillMetrics::FieldTypeQualityMetric metric, size_t n) {
@@ -1029,5 +1030,4 @@ TEST_F(QualityMetricsTest, EmailPredictionCorrectnessRecallMetric) {
 }
 
 }  // namespace autofill_metrics
-
 }  // namespace autofill

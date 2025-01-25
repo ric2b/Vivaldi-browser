@@ -31,6 +31,7 @@
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/ozone/evdev/keyboard_mouse_combo_device_metrics.h"
 #include "ui/events/types/event_type.h"
 
@@ -123,13 +124,19 @@ bool RestrictionBlocksRemapping(
         return false;
       }
       return remapping.button->get_vkey() != ui::VKEY_TAB;
+    case mojom::CustomizationRestriction::kAllowFKeyRewrites:
+      if (remapping.button->is_customizable_button()) {
+        return false;
+      }
+      return !(remapping.button->get_vkey() >= ui::VKEY_F1 &&
+               remapping.button->get_vkey() <= ui::VKEY_F15);
   }
 }
 
-// "0111_185a" is from the list of supported device keys listed here:
+// "0111:185a" is from the list of supported device keys listed here:
 // google3/chrome/chromeos/apps_foundation/almanac/fondue/boq/
 // peripherals_service/manual_config/companion_apps.h
-constexpr char kWelcomeExperienceTestDeviceKey[] = "0111_185a";
+constexpr char kWelcomeExperienceTestDeviceKey[] = "0111:185a";
 
 }  // namespace
 
@@ -372,6 +379,12 @@ mojom::ButtonRemappingPtr ConvertDictToButtonRemapping(
   } else if (key_code &&
              customization_restriction !=
                  mojom::CustomizationRestriction::kDisableKeyEventRewrites) {
+    // Do not allow the keycode to be an unknown key. This indicates an internal
+    // error in the implementation and should not be allowed.
+    if (*key_code == ui::VKEY_UNKNOWN) {
+      return nullptr;
+    }
+
     button = mojom::Button::NewVkey(static_cast<::ui::KeyboardCode>(*key_code));
   } else {
     return nullptr;

@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">风景 12</translation>
 <translation id="1158503667684816647">不再显示确认对话框</translation>
 <translation id="1222195720020481779">正在加载安装程序...</translation>
+<translation id="1224683873953469764">获取移动版 Vivaldi</translation>
 <translation id="1270785070369717623">很遗憾，当该浏览器运行时，您的 Opera GX 设置不可用。要将这些设置导入 Vivaldi，请保存您的工作并关闭所有 Opera GX 窗口，然后单击继续。</translation>
 <translation id="1276145862619442150">快速拨号</translation>
 <translation id="1281950884873973195">动物 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">不再显示确认信息</translation>
 <translation id="1462666970065907900">确认要关闭此窗口？</translation>
 <translation id="1480046233931937785">第三方开源软件</translation>
+<translation id="1521774566618522728">今天激活</translation>
 <translation id="1526344461589023948">保存下载的更新文件时出错。请检查是否有足够的存储空间然后重试。</translation>
 <translation id="1635542496948266458">切换配置文件</translation>
 <translation id="1657174850639146440">怪兽 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">音量</translation>
 <translation id="443008484043213881">工具</translation>
 <translation id="4456211719108566931">怪兽 6</translation>
+<translation id="4459169140545916303"><ph name="DEVICE_LAST_ACTIVATED_TIME" /> 天前激活</translation>
 <translation id="4512900838580567989">在后台标签页中打开链接</translation>
 <translation id="4545097004879999966">Opera邮件</translation>
 <translation id="4548358047305717967">在后台标签页中打开图片</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">安全密钥库升级</translation>
 <translation id="7111492742514999492">风景 9</translation>
 <translation id="7208252576848052204">很遗憾，当该浏览器运行时，您的 Arc 设置不可用。要将这些设置导入 Vivaldi，请保存您的工作并关闭所有 Arc 窗口。然后单击继续。</translation>
+<translation id="7321500017121629018">昨天激活</translation>
 <translation id="7337881442233988129">Chromium 浏览器</translation>
 <translation id="7581266044164103589">启动更新安装器失败。请检查是否有足够的内存或存储空间然后重试。</translation>
 <translation id="7658239707568436148">取消</translation>

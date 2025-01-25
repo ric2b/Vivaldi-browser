@@ -25,7 +25,6 @@ import dalvik.system.PathClassLoader;
 
 import org.jni_zero.CalledByNative;
 
-import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.build.BuildConfig;
 
@@ -35,27 +34,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 
-/**
- * Utils for working with android app bundles.
- *
- * Important notes about bundle status as interpreted by this class:
- *
- * <ul>
- *   <li>If {@link BuildConfig#BUNDLES_SUPPORTED} is false, then we are definitely not in a bundle,
- *   and ProGuard is able to strip out the bundle support library.</li>
- *   <li>If {@link BuildConfig#BUNDLES_SUPPORTED} is true, then we MIGHT be in a bundle.
- *   {@link BundleUtils#sIsBundle} is the source of truth.</li>
- * </ul>
- *
- * We need two fields to store one bit of information here to ensure that ProGuard can optimize out
- * the bundle support library (since {@link BuildConfig#BUNDLES_SUPPORTED} is final) and so that
- * we can dynamically set whether or not we're in a bundle for targets that use static shared
- * library APKs.
- */
+/** Utils for working with android app bundles. */
 public class BundleUtils {
     private static final String TAG = "BundleUtils";
     private static final String LOADED_SPLITS_KEY = "split_compat_loaded_splits";
-    private static Boolean sIsBundle;
     private static final Object sSplitLock = new Object();
 
     // This cache is needed to support the workaround for b/172602571, see
@@ -71,42 +53,15 @@ public class BundleUtils {
     private static ArrayList<String> sSplitsToRestore;
 
     public static void resetForTesting() {
-        sIsBundle = null;
         sCachedClassLoaders.clear();
         sInflationClassLoaders.clear();
         sSplitCompatClassLoaderInstance = null;
         sSplitsToRestore = null;
     }
 
-    /**
-     * {@link BundleUtils#isBundle()}  is not called directly by native because
-     * {@link CalledByNative} prevents inlining, causing the bundle support lib to not be
-     * removed non-bundle builds.
-     *
-     * @return true if the current build is a bundle.
-     */
     @CalledByNative
-    public static boolean isBundleForNative() {
-        return isBundle();
-    }
-
-    /**
-     * @return true if the current build is a bundle.
-     */
-    public static boolean isBundle() {
-        if (!BuildConfig.BUNDLES_SUPPORTED) {
-            return false;
-        }
-        assert sIsBundle != null;
-        return sIsBundle;
-    }
-
-    public static void setIsBundle(boolean isBundle) {
-        sIsBundle = isBundle;
-    }
-
-    public static boolean isolatedSplitsEnabled() {
-        return BuildConfig.ISOLATED_SPLITS_ENABLED;
+    private static boolean isBundleForNative() {
+        return BuildConfig.IS_BUNDLE;
     }
 
     @RequiresApi(api = Build.VERSION_CODES.O)
@@ -125,7 +80,7 @@ public class BundleUtils {
      * below O, where isolated splits are not supported.
      */
     public static boolean isIsolatedSplitInstalled(String splitName) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        if (!BuildConfig.IS_BUNDLE || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return false;
         }
         return getSplitApkPath(splitName) != null;
@@ -146,7 +101,7 @@ public class BundleUtils {
     public static Context createIsolatedSplitContext(Context base, String splitName) {
         // Isolated splits are only supported in O+, so just return the base context on other
         // versions, since this will have access to all splits.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        if (!BuildConfig.IS_BUNDLE || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return base;
         }
 
@@ -157,11 +112,13 @@ public class BundleUtils {
             // preloading on a background thread.
             // TODO(crbug.com/40745927): Consider moving preloading logic into //base so we can lock
             // here.
-            if (isApplicationContext(base)) {
-                context = ApiHelperForO.createContextForSplit(base, splitName);
-            } else {
-                synchronized (getSplitContextLock()) {
-                    context = ApiHelperForO.createContextForSplit(base, splitName);
+            try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+                if (isApplicationContext(base)) {
+                    context = base.createContextForSplit(splitName);
+                } else {
+                    synchronized (getSplitContextLock()) {
+                        context = base.createContextForSplit(splitName);
+                    }
                 }
             }
             ClassLoader parent = context.getClassLoader().getParent();
@@ -173,8 +130,7 @@ public class BundleUtils {
             // SplitCompatAppComponentFactory, but modules which depend on the chrome module need
             // special handling here to make sure they have the correct parent.
             boolean shouldReplaceClassLoader =
-                    isolatedSplitsEnabled()
-                            && !parent.equals(BundleUtils.class.getClassLoader())
+                    !parent.equals(BundleUtils.class.getClassLoader())
                             && appContext != null
                             && !parent.equals(appContext.getClassLoader());
             synchronized (sCachedClassLoaders) {
@@ -321,10 +277,12 @@ public class BundleUtils {
     }
 
     /**
-     * Returns the ClassLoader for the given split, loading the split if it has not yet been
-     * loaded.
+     * Returns the ClassLoader for the given split, loading the split if it has not yet been loaded.
      */
     public static ClassLoader getOrCreateSplitClassLoader(String splitName) {
+        if (!BuildConfig.IS_BUNDLE) {
+            return BundleUtils.class.getClassLoader();
+        }
         ClassLoader ret;
         synchronized (sCachedClassLoaders) {
             ret = sCachedClassLoaders.get(splitName);

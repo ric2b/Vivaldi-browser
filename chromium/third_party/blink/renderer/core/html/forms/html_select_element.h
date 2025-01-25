@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element_with_state.h"
 #include "third_party/blink/renderer/core/html/forms/option_list.h"
 #include "third_party/blink/renderer/core/html/forms/type_ahead.h"
+#include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
@@ -57,6 +58,21 @@ class CORE_EXPORT HTMLSelectElement final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  class SelectAutofillPreviewElement : public HTMLDivElement {
+   public:
+    SelectAutofillPreviewElement(Document& document, HTMLSelectElement* select);
+
+    const ComputedStyle* CustomStyleForLayoutObject(
+        const StyleRecalcContext& style_recalc_context) override;
+    Node::InsertionNotificationRequest InsertedInto(ContainerNode&) override;
+    void RemovedFrom(ContainerNode&) override;
+
+    void Trace(Visitor*) const override;
+
+   private:
+    Member<HTMLSelectElement> select_;
+  };
+
   explicit HTMLSelectElement(Document&);
   ~HTMLSelectElement() override;
 
@@ -216,22 +232,48 @@ class CORE_EXPORT HTMLSelectElement final
   // value of the appearance property is not checked.
   HTMLButtonElement* SlottedButton() const;
 
-  // DisplayedDatalist returns whatever <datalist> is included in the flat tree
-  // based on the result of slot assignment. If a child <datalist> is present,
-  // then the return value will be the same as FirstChildDatalist. Otherwise,
-  // the fallback <datalist> in the UA shadowroot will be returned.
-  // This <datalist> is the one which will get rendered as a popover.
-  HTMLDataListElement* DisplayedDatalist() const;
+  // This method returns the UA popover element which is used for
+  // appearance:base-select. If this select is rendering in a mode which doesn't
+  // use the UA popover, such as appearance:auto/none or size=2/multiple, then
+  // this will return null.
+  HTMLElement* PopoverForAppearanceBase() const;
 
-  // This method returns true if the computed style is appearance:base-select and
-  // the SelectType supports alternate rendering based on appearance:base-select.
-  bool IsAppearanceBaseSelect() const;
+  // Returns true if the provided element is some select element's
+  // PopoverForAppearanceBase.
+  static bool IsPopoverForAppearanceBase(const Element*);
+
+  // DisplayedButton returns whatever <button> is included in the flat tree
+  // based on the result of slot assignment. If a child <button> is present,
+  // then the return value will be that <button>. Otherwise, the fallback
+  // <button> in the UA shadowroot will be returned. This <button> is the one
+  // which will get rendered as a popover.
+  HTMLButtonElement* DisplayedButton() const;
+
+  // <select> supports appearance:base-select on both the main element and
+  // ::picker(select). When the main element has appearance:base-select,
+  // IsAppearanceBaseButton will return true and the in-page button part of the
+  // <select> will have base appearance and support rendering of the
+  // author-provided <button>. When both the element and its ::picker(select)
+  // has appearance:base-select, IsAppearanceBasePicker will return true and the
+  // popup will be a popover element. The SelectType must also support base
+  // appearance, which is currently only MenuListSelectType.
+  bool IsAppearanceBaseButton() const;
+  bool IsAppearanceBasePicker() const;
 
   void SelectedOptionElementInserted(HTMLSelectedOptionElement* selectedoption);
   void SelectedOptionElementRemoved(HTMLSelectedOptionElement* selectedoption);
 
+  // This will only return an element if IsAppearanceBaseButton(). The element
+  // is a popover inside the UA shadowroot which is used to show the user a
+  // preview of what is going to be autofilled.
+  SelectAutofillPreviewElement* GetAutofillPreviewElement() const;
+
+  // Getter and setter for the selectedoptionelement attribute
+  HTMLSelectedOptionElement* selectedOptionElement() const;
+  void setSelectedOptionElement(HTMLSelectedOptionElement*);
+
   void DefaultEventHandler(Event&) override;
-  bool SupportsFocus(UpdateBehavior update_behavior) const override;
+  FocusableState SupportsFocus(UpdateBehavior update_behavior) const override;
 
  private:
   mojom::blink::FormControlType FormControlType() const override;
@@ -324,6 +366,10 @@ class CORE_EXPORT HTMLSelectElement final
   // size).
   void ChangeRendering();
   void UpdateUserAgentShadowTree(ShadowRoot& root);
+
+  // Returns descendant_selectedoptions_ and the <selectedoption> targeted by
+  // the selectedoptionelement attribute.
+  HeapHashSet<Member<HTMLSelectedOptionElement>> TargetSelectedOptions() const;
 
   // list_items_ contains HTMLOptionElement, HTMLOptGroupElement, and
   // HTMLHRElement objects.

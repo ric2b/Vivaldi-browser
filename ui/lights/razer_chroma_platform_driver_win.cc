@@ -84,7 +84,9 @@ RazerChromaPlatformDriverWin::~RazerChromaPlatformDriverWin() {}
 bool RazerChromaPlatformDriverWin::Initialize() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (module_ == nullptr) {
-    module_ = ::LoadLibrary(CHROMASDKDLL);
+    // Note the Razer system dll is by default located in the system32
+    // directory. Only try to use the one there. VB-109515.
+    module_ = ::LoadLibraryEx(CHROMASDKDLL, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (module_ != NULL) {
       INIT Init = (INIT)::GetProcAddress(module_, "Init");
       if (Init != NULL) {

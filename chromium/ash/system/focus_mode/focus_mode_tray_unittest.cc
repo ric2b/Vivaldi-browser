@@ -4,7 +4,10 @@
 
 #include "ash/system/focus_mode/focus_mode_tray.h"
 
+#include <optional>
+
 #include "ash/accessibility/accessibility_controller.h"
+#include "ash/api/tasks/fake_tasks_client.h"
 #include "ash/constants/ash_features.h"
 #include "ash/glanceables/common/glanceables_util.h"
 #include "ash/root_window_controller.h"
@@ -60,6 +63,7 @@ class FocusModeTrayTest : public AshTestBase {
 
     auto& tasks_client =
         CreateFakeTasksClient(AccountId::FromUserEmail("user0@tray"));
+    tasks_client.set_http_error(google_apis::ApiErrorCode::HTTP_SUCCESS);
     AddFakeTaskList(tasks_client, "default");
     AddFakeTask(tasks_client, "default", "task1", "Task 1");
 
@@ -109,6 +113,10 @@ class FocusModeTrayTest : public AshTestBase {
         ->time_remaining_label_;
   }
 
+  std::optional<TaskId> GetSelectedTask() {
+    return focus_mode_tray_->selected_task_;
+  }
+
   bool IsCountdownViewVisible() const {
     return focus_mode_tray_->countdown_view_for_testing()->GetVisible();
   }
@@ -125,6 +133,10 @@ class FocusModeTrayTest : public AshTestBase {
             Shell::GetPrimaryRootWindow());
     event_generator->MoveMouseTo(work_area.CenterPoint());
     event_generator->ClickLeftButton();
+  }
+
+  void HandleCompleteTaskButton() {
+    focus_mode_tray_->HandleCompleteTaskButton();
   }
 
  protected:
@@ -155,6 +167,51 @@ TEST_F(FocusModeTrayTest, ActiveVisibility) {
   // End the session, the tray should disappear.
   controller->ToggleFocusMode();
   EXPECT_FALSE(controller->in_focus_session());
+  EXPECT_FALSE(focus_mode_tray_->GetVisible());
+}
+
+// Tests that the focus mode tray is hidden in the lock screen.
+TEST_F(FocusModeTrayTest, HiddenInLockScreen) {
+  FocusModeController* controller = FocusModeController::Get();
+  EXPECT_FALSE(controller->in_focus_session());
+  EXPECT_FALSE(focus_mode_tray_->GetVisible());
+
+  // Start the focus session, the tray should appear on the shelf.
+  controller->ToggleFocusMode();
+  EXPECT_TRUE(controller->in_focus_session());
+  EXPECT_TRUE(focus_mode_tray_->GetVisible());
+
+  // Lock the screen, the tray should be hidden.
+  GetSessionControllerClient()->LockScreen();
+  EXPECT_FALSE(focus_mode_tray_->GetVisible());
+
+  // Unlock the screen, the tray should be back on the shelf.
+  GetSessionControllerClient()->UnlockScreen();
+  EXPECT_TRUE(focus_mode_tray_->GetVisible());
+}
+
+// Tests that the focus mode tray is hidden and doesn't animate in the lock
+// screen.
+TEST_F(FocusModeTrayTest, LockScreenNoAnimationAndStaysHidden) {
+  FocusModeController* controller = FocusModeController::Get();
+  EXPECT_FALSE(controller->in_focus_session());
+  EXPECT_FALSE(focus_mode_tray_->GetVisible());
+
+  // Start the focus session, the tray should appear on the shelf.
+  controller->ToggleFocusMode();
+  EXPECT_TRUE(controller->in_focus_session());
+  EXPECT_TRUE(focus_mode_tray_->GetVisible());
+
+  // Lock the screen, the tray should be hidden.
+  GetSessionControllerClient()->LockScreen();
+  EXPECT_FALSE(focus_mode_tray_->GetVisible());
+
+  // End the session, the tray animation shouldn't trigger.
+  controller->ToggleFocusMode();
+  EXPECT_FALSE(focus_mode_tray_->GetVisible());
+
+  // Unlock the screen, the tray should still be hidden.
+  GetSessionControllerClient()->UnlockScreen();
   EXPECT_FALSE(focus_mode_tray_->GetVisible());
 }
 
@@ -232,6 +289,130 @@ TEST_F(FocusModeTrayTest, MarkTaskAsCompleted) {
                   ui::LayerAnimationElement::AnimatableProperty::BOUNDS));
   // Layer top edge animates down.
   EXPECT_GT(bubble_view_layer->bounds().y(), bubble_view->y());
+  // `task_item_view` will be removed at the start of the animation.
+  EXPECT_FALSE(GetTaskItemView());
+}
+
+// Tests that when the user double clicks the radio button to mark a selected
+// task as completed, there is no crash from `AnimateBubbleResize()` getting run
+// multiple times in succession.
+// Regression test for b/363291923.
+TEST_F(FocusModeTrayTest, MarkTaskAsCompletedDoubleClick) {
+  // Enable animations.
+  ui::ScopedAnimationDurationScaleMode duration(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  FocusModeTask task;
+  task.task_id = {.list_id = "default", .id = "task1"};
+  task.title = "make a travel plan";
+  task.updated = base::Time::Now();
+
+  FocusModeController* controller = FocusModeController::Get();
+  controller->SetSelectedTask(task);
+
+  //  Start focus mode and click the tray to activate the button.
+  controller->ToggleFocusMode();
+  LeftClickOn(focus_mode_tray_);
+  EXPECT_TRUE(focus_mode_tray_->is_active());
+
+  // A `TaskItemView` will be created because we have a selected task.
+  EXPECT_TRUE(GetSelectedTask());
+  EXPECT_TRUE(GetTaskItemView());
+
+  const auto* const radio_button = focus_mode_tray_->GetRadioButtonForTesting();
+  EXPECT_TRUE(radio_button);
+
+  // Double click the radio button to mark the selected task as completed.
+  // Theoretically only the first one should do anything, since the second click
+  // should return early since `selected_task_` has been reset.
+  LeftClickOn(radio_button);
+  EXPECT_FALSE(GetSelectedTask());
+  LeftClickOn(radio_button);
+
+  AdvanceClock(kStartAnimationDelay);
+
+  // `task_item_view` will be removed at the start of the animation.
+  EXPECT_FALSE(GetTaskItemView());
+}
+
+// Tests that there is no crash if the user clicks the radio button to mark a
+// selected task as completed immediately before the model is attempting to
+// update the tray.
+// Regression test for b/363291923.
+TEST_F(FocusModeTrayTest, MarkTaskAsCompletedBeforeModelUpdate) {
+  // Enable animations.
+  ui::ScopedAnimationDurationScaleMode duration(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  FocusModeTask task;
+  task.task_id = {.list_id = "default", .id = "task1"};
+  task.title = "make a travel plan";
+  task.updated = base::Time::Now();
+
+  FocusModeController* controller = FocusModeController::Get();
+  controller->SetSelectedTask(task);
+
+  //  Start focus mode and click the tray to activate the button.
+  controller->ToggleFocusMode();
+  LeftClickOn(focus_mode_tray_);
+  EXPECT_TRUE(focus_mode_tray_->is_active());
+
+  // A `TaskItemView` will be created because we have a selected task.
+  EXPECT_TRUE(GetSelectedTask());
+  EXPECT_TRUE(GetTaskItemView());
+
+  const auto* const radio_button = focus_mode_tray_->GetRadioButtonForTesting();
+  EXPECT_TRUE(radio_button);
+
+  // Simulate the case where the button is triggered immediately before the
+  // model has updated the task as completed.
+  HandleCompleteTaskButton();
+  focus_mode_tray_->OnTaskCompleted(task);
+  focus_mode_tray_->OnSelectedTaskChanged(std::nullopt);
+
+  AdvanceClock(kStartAnimationDelay);
+
+  // `task_item_view` will be removed at the start of the animation.
+  EXPECT_FALSE(GetTaskItemView());
+}
+
+// Tests that there is no crash if the user clicks the radio button to mark a
+// selected task as completed immediately after the model has updated the tray.
+// Regression test for b/363291923.
+TEST_F(FocusModeTrayTest, MarkTaskAsCompletedAfterModelUpdate) {
+  // Enable animations.
+  ui::ScopedAnimationDurationScaleMode duration(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  FocusModeTask task;
+  task.task_id = {.list_id = "default", .id = "task1"};
+  task.title = "make a travel plan";
+  task.updated = base::Time::Now();
+
+  FocusModeController* controller = FocusModeController::Get();
+  controller->SetSelectedTask(task);
+
+  //  Start focus mode and click the tray to activate the button.
+  controller->ToggleFocusMode();
+  LeftClickOn(focus_mode_tray_);
+  EXPECT_TRUE(focus_mode_tray_->is_active());
+
+  // A `TaskItemView` will be created because we have a selected task.
+  EXPECT_TRUE(GetSelectedTask());
+  EXPECT_TRUE(GetTaskItemView());
+
+  const auto* const radio_button = focus_mode_tray_->GetRadioButtonForTesting();
+  EXPECT_TRUE(radio_button);
+
+  // Simulate the case where the button is triggered immediately after the
+  // model has updated the task as completed and the UI hasn't had a chance to
+  // update yet.
+  focus_mode_tray_->OnTaskCompleted(task);
+  focus_mode_tray_->OnSelectedTaskChanged(std::nullopt);
+  HandleCompleteTaskButton();
+
+  AdvanceClock(kStartAnimationDelay);
+
   // `task_item_view` will be removed at the start of the animation.
   EXPECT_FALSE(GetTaskItemView());
 }
@@ -336,21 +517,22 @@ TEST_F(FocusModeTrayTest, BubbleTabbingAndAccessibility) {
       focus_manager->GetFocusedView()->GetViewAccessibility().GetCachedName());
 
   PressAndReleaseKey(ui::VKEY_TAB, ui::EF_NONE);
-  EXPECT_EQ(
-      l10n_util::GetStringFUTF16(
-          IDS_ASH_STATUS_TRAY_FOCUS_MODE_TRAY_RADIO_BUTTON,
-          base::UTF8ToUTF16(task_name)),
-      focus_manager->GetFocusedView()->GetViewAccessibility().GetCachedName());
+  views::ViewAccessibility& focused_view_a11y =
+      focus_manager->GetFocusedView()->GetViewAccessibility();
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_FOCUS_MODE_TASK_VIEW_RADIO_BUTTON),
+            focused_view_a11y.GetCachedName());
+  EXPECT_EQ(base::UTF8ToUTF16(task_name),
+            focused_view_a11y.GetCachedDescription());
 }
 
 // Tests basic ending moment functionality. If the time expires for the ending
-// moment, the tray icon will disappear.
+// moment, the tray icon will persist until user interacts with it.
 TEST_F(FocusModeTrayTest, EndingMoment) {
   FocusModeController* controller = FocusModeController::Get();
   EXPECT_FALSE(controller->in_focus_session());
   EXPECT_FALSE(focus_mode_tray_->GetVisible());
 
-  // Case 1: the ending moment automatically terminates.
   // Start a focus session.
   controller->ToggleFocusMode();
   EXPECT_TRUE(controller->in_focus_session());
@@ -360,11 +542,19 @@ TEST_F(FocusModeTrayTest, EndingMoment) {
   // still visible, even though the focus session has ended.
   AdvanceClock(controller->GetSessionDuration());
   EXPECT_FALSE(controller->in_focus_session());
+  EXPECT_TRUE(controller->in_ending_moment());
   EXPECT_TRUE(focus_mode_tray_->GetVisible());
 
-  // Verify that if there is no action for the `kEndingMomentDuration`, the
-  // ending moment terminates and the tray icon is hidden.
-  AdvanceClock(focus_mode_util::kEndingMomentDuration);
+  // Verify that the tray icon persists until the user interacts and dismisses
+  // it.
+  AdvanceClock(base::Minutes(10));
+  EXPECT_TRUE(focus_mode_tray_->GetVisible());
+
+  FocusModeTray* focus_mode_tray =
+      StatusAreaWidgetTestHelper::GetStatusAreaWidget()->focus_mode_tray();
+  LeftClickOn(focus_mode_tray);
+  LeftClickOn(focus_mode_tray);
+  // controller->ResetFocusSession();
   EXPECT_FALSE(focus_mode_tray_->GetVisible());
 }
 
@@ -382,6 +572,9 @@ TEST_F(FocusModeTrayTest, EndingMomentPersists) {
   // Focus session ends.
   AdvanceClock(controller->GetSessionDuration());
   EXPECT_FALSE(controller->in_focus_session());
+  EXPECT_TRUE(controller->in_ending_moment());
+  EXPECT_TRUE(focus_mode_tray_->GetVisible());
+  AdvanceClock(base::Minutes(2));
   EXPECT_TRUE(controller->in_ending_moment());
   EXPECT_TRUE(focus_mode_tray_->GetVisible());
 

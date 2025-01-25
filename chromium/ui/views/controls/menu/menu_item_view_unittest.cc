@@ -69,7 +69,6 @@ class SquareView : public views::View {
     int width = available_size.width().value_or(1);
     return gfx::Size(width, width);
   }
-  int GetHeightForWidth(int width) const override { return width; }
 };
 
 BEGIN_METADATA(SquareView)
@@ -243,6 +242,31 @@ TEST_F(MenuItemViewUnitTest, AccessibleKeyShortcutsTest) {
   }
 }
 
+TEST_F(MenuItemViewUnitTest, AccessibleProperties) {
+  views::TestMenuItemView root_menu;
+  views::MenuItemView* item1 = root_menu.AppendMenuItemImpl(
+      0, u"checkbox", ui::ImageModel(), MenuItemView::Type::kCheckbox);
+  views::MenuItemView* item2 = root_menu.AppendMenuItemImpl(
+      1, u"radio", ui::ImageModel(), MenuItemView::Type::kRadio);
+  views::MenuItemView* item3 = root_menu.AppendMenuItemImpl(
+      2, u"title", ui::ImageModel(), MenuItemView::Type::kTitle);
+  views::MenuItemView* item4 = root_menu.AppendMenuItemImpl(
+      3, u"highlighted", ui::ImageModel(), MenuItemView::Type::kHighlighted);
+  ui::AXNodeData data1, data2, data3, data4;
+
+  item1->GetViewAccessibility().GetAccessibleNodeData(&data1);
+  EXPECT_EQ(data1.role, ax::mojom::Role::kMenuItemCheckBox);
+
+  item2->GetViewAccessibility().GetAccessibleNodeData(&data2);
+  EXPECT_EQ(data2.role, ax::mojom::Role::kMenuItemRadio);
+
+  item3->GetViewAccessibility().GetAccessibleNodeData(&data3);
+  EXPECT_EQ(data3.role, ax::mojom::Role::kMenuItem);
+
+  item4->GetViewAccessibility().GetAccessibleNodeData(&data4);
+  EXPECT_EQ(data4.role, ax::mojom::Role::kMenuItem);
+}
+
 class TouchableMenuItemViewTest : public ViewsTestBase {
  public:
   TouchableMenuItemViewTest() = default;
@@ -250,7 +274,7 @@ class TouchableMenuItemViewTest : public ViewsTestBase {
 
   void SetUp() override {
     ViewsTestBase::SetUp();
-    widget_ = CreateTestWidget(Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
+    widget_ = CreateTestWidget(Widget::InitParams::CLIENT_OWNS_WIDGET);
     widget_->Show();
 
     menu_delegate_ = std::make_unique<test::TestMenuDelegate>();
@@ -389,9 +413,8 @@ class MenuItemViewPaintUnitTest : public ViewsTestBase {
     menu_item_view_ = menu_item_view_owning.get();
 
     widget_ = std::make_unique<Widget>();
-    Widget::InitParams params =
-        CreateParams(Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
-                     Widget::InitParams::TYPE_POPUP);
+    Widget::InitParams params = CreateParams(
+        Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
     widget_->Init(std::move(params));
     widget_->Show();
 
@@ -403,6 +426,20 @@ class MenuItemViewPaintUnitTest : public ViewsTestBase {
     menu_item_view_ = nullptr;
     widget_->CloseNow();
     ViewsTestBase::TearDown();
+  }
+
+  test::TestMenuDelegate* GetDelegate() { return menu_delegate_.get(); }
+
+  ax::mojom::CheckedState GetCheckedStatus(int command,
+                                           views::MenuItemView::Type type) {
+    if (type == views::MenuItemView::Type::kRadio ||
+        type == views::MenuItemView::Type::kCheckbox) {
+      bool is_checked = GetDelegate() && GetDelegate()->IsItemChecked(command);
+      return is_checked ? ax::mojom::CheckedState::kTrue
+                        : ax::mojom::CheckedState::kFalse;
+    } else {
+      return ax::mojom::CheckedState::kNone;
+    }
   }
 
  protected:
@@ -641,6 +678,48 @@ TEST_F(MenuItemViewPaintUnitTest, SelectionBasedStateUpdatedDuringDragAndDrop) {
   EXPECT_FALSE(submenu_child2->last_paint_as_selected_for_testing());
 }
 
+TEST_F(MenuItemViewPaintUnitTest, AccessibleCheckedStateChange) {
+  int command = 1000;
+  auto type = views::MenuItemView::Type::kNormal;
+  ui::AXNodeData data;
+
+  auto AddItem = [this](auto command_, auto type_) {
+    menu_item_view()->AddMenuItemAt(
+        0, command_, u"No custom colors", std::u16string(), std::u16string(),
+        ui::ImageModel(), ui::ImageModel(), type_, ui::NORMAL_SEPARATOR,
+        std::nullopt, std::nullopt, std::nullopt);
+  };
+
+  type = views::MenuItemView::Type::kRadio;
+  AddItem(command, type);
+  menu_item_view()
+      ->GetMenuItemByID(command)
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetCheckedState(), GetCheckedStatus(command, type));
+  EXPECT_EQ(data.GetCheckedState(), ax::mojom::CheckedState::kFalse);
+
+  data = ui::AXNodeData();
+  type = views::MenuItemView::Type::kCheckbox;
+  AddItem(command, type);
+  menu_item_view()
+      ->GetMenuItemByID(command)
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetCheckedState(), GetCheckedStatus(command, type));
+  EXPECT_EQ(data.GetCheckedState(), ax::mojom::CheckedState::kFalse);
+
+  data = ui::AXNodeData();
+  type = views::MenuItemView::Type::kNormal;
+  AddItem(command, type);
+  menu_item_view()
+      ->GetMenuItemByID(command)
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetCheckedState(), GetCheckedStatus(command, type));
+  EXPECT_EQ(data.GetCheckedState(), ax::mojom::CheckedState::kNone);
+}
+
 // Sets up a custom MenuDelegate that expects functions aren't called. See
 // DontAskForFontsWhenAddingSubmenu.
 class MenuItemViewAccessTest : public MenuItemViewPaintUnitTest {
@@ -693,6 +772,40 @@ TEST_F(MenuItemViewA11yTest, HandlesExpandCollapseActions) {
   collapse_action_data.action = ax::mojom::Action::kCollapse;
   submenu_item_view->HandleAccessibleAction(collapse_action_data);
   EXPECT_FALSE(submenu_item_view->SubmenuIsShowing());
+}
+
+TEST_F(MenuItemViewA11yTest, AccessibleSelectedTest) {
+  MenuItemView* item = menu_item_view();
+  ui::AXNodeData data;
+  item->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasBoolAttribute(ax::mojom::BoolAttribute::kSelected));
+
+  item->SetSelected(true);
+  data = ui::AXNodeData();
+  item->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
+
+  item->SetSelected(false);
+  data = ui::AXNodeData();
+  item->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
+
+  item->SetSelected(true);
+  item->SetEnabled(false);
+  data = ui::AXNodeData();
+  item->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
+
+  item->SetEnabled(true);
+  item->SetVisible(false);
+  data = ui::AXNodeData();
+  item->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
+
+  item->SetVisible(true);
+  data = ui::AXNodeData();
+  item->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
 }
 
 }  // namespace views

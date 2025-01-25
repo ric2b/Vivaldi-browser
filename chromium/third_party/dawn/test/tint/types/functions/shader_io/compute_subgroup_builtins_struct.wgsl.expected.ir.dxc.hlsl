@@ -1,9 +1,18 @@
-SKIP: FAILED
+struct ComputeInputs {
+  uint subgroup_invocation_id;
+  uint subgroup_size;
+};
 
-<dawn>/src/tint/lang/hlsl/writer/printer/printer.cc:285 internal compiler error: Switch() matched no cases. Type: tint::core::ir::Access
-********************************************************************
-*  The tint shader compiler has encountered an unexpected error.   *
-*                                                                  *
-*  Please help us fix this issue by submitting a bug report at     *
-*  crbug.com/tint with the source program that triggered the bug.  *
-********************************************************************
+
+RWByteAddressBuffer output : register(u0);
+void main_inner(ComputeInputs inputs) {
+  output.Store((0u + (uint(inputs.subgroup_invocation_id) * 4u)), inputs.subgroup_size);
+}
+
+[numthreads(1, 1, 1)]
+void main() {
+  uint v = WaveGetLaneIndex();
+  ComputeInputs v_1 = {v, WaveGetLaneCount()};
+  main_inner(v_1);
+}
+

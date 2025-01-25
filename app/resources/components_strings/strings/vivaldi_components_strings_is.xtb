@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> missti óvænt samband.</translation>
 <translation id="1161325031994447685">Endurtengjast þráðlausu neti</translation>
 <translation id="1175364870820465910">&amp;Prenta...</translation>
+<translation id="132390688737681464">Vista og fylla út heimilisföng</translation>
 <translation id="1375198122581997741">Um útgáfu</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> sendi engin gögn.</translation>
 <translation id="1559528461873125649">Ekkert slíkt skjal né staðsetning</translation>
 <translation id="1640244768702815859">Reyndu <ph name="BEGIN_LINK" /> að heimsækja forsíðuna <ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Enginn stuðningur við samskiptaaðferð</translation>
+<translation id="1662550410081243962">Vista og fylla út greiðsluaðferðir</translation>
 <translation id="1710259589646384581">Stýrikerfi</translation>
 <translation id="1728677426644403582">Þú ert að skoða frumgögn síðu</translation>
 <translation id="1734878702283171397">Reyndu að hafa samband við kerfisstjóra.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Þessi síða getur ekki veitt örugga tengingu</translation>
 <translation id="2187317261103489799">Greina (sjálfvalið)</translation>
 <translation id="2224337661447660594">Engin nettenging</translation>
+<translation id="2283340219607151381">Vista og fylla út heimilisföng</translation>
 <translation id="2292556288342944218">Lokað er á netaðgang þinn</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />hér þarf notandanafn og lykilorð.</translation>
 <translation id="2337852623177822836">Stillingu stýrt af kerfisstjóra</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Tengingin er dulrituð og auðkennd með <ph name="CIPHER" /> og notar <ph name="KX" /> sem aðferð til að flytja lykil á milli.</translation>
 <translation id="2909946352844186028">Netstillingar hafa breyst.</translation>
 <translation id="2948083400971632585">Þú getur aftengt öll vefsel sem sett hafa verið upp til tengingar á stillingarsíðunni.</translation>
+<translation id="2954624054936281172">Tafla með vistuðum greiðsluaðferðum</translation>
 <translation id="2991571918955627853">Þú getur ekki heimsótt <ph name="SITE" /> núna þar sem að vefsíðan notar HSTS. Tengi vandamál og netárásir eru yfirleitt tímabundnar þannnig að síðan mun líklega virka aftur síðar.</translation>
 <translation id="3005723025932146533">Sýna vistað afrit</translation>
 <translation id="301521992641321250">Sjálfkrafa hamlað</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Skynja ætíð mikilvægt efni á þessari síðu</translation>
 <translation id="3308738399950580893">Auglýsingar</translation>
 <translation id="3384522979010096022">Fyrirtækið þitt leyfir þér ekki að skoða þetta vefsvæði</translation>
+<translation id="3387261909427947069">Greiðsluaðferðir</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> svarar ekki, í augnablikinu.</translation>
 <translation id="3427092606871434483">Leyfa (sjálfgefið)</translation>
 <translation id="3447661539832366887">Eigandi þessa tækis hefur slökkt á leiknum.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">Vottorðskeðjan fyrir þessa síðu inniheldur vottorð undirritað með SHA-1.</translation>
 <translation id="5452270690849572955">Þessi <ph name="HOST_NAME" /> síða var ekki fundin</translation>
 <translation id="5457113250005438886">Ógilt</translation>
+<translation id="5490432419156082418">Heimilisföng og fleira</translation>
 <translation id="5492298309214877701">Þessi síða á innra neti fyrirtækis, stofnunar eða skóla er með sama veffang og almenn vefsíða
 <ph name="LINE_BREAK" />
 Hafðu samband við kerfisstjóra.</translation>
@@ -159,6 +165,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="7108819624672055576">Leyfi fengið gegnum viðbót</translation>
 <translation id="7111012039238467737">(Gilt)</translation>
 <translation id="7113310725918019676">Leyfa <ph name="BLOCKED_TYPE" />frá <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Vista og fylla út greiðsluaðferðir</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> fylgir ekki öryggisstöðlum.</translation>
 <translation id="7219179957768738017">Tengingin notar <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Sýna tilkynningar</translation>
@@ -197,6 +204,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="8289355894181816810">Hafðu samband við kerfistjóra ef þú ert ekki viss um hvað þetta þýðir.</translation>
 <translation id="8332188693563227489">Þú hefur ekki aðgang að <ph name="HOST_NAME" /></translation>
 <translation id="8422228580902424274">Tölvuþrjótar á vefsvæðinu sem þú ert að reyna að opna gætu reynt að plata þig til að setja upp hugbúnað eða afhjúpað atriði á borð við aðgangsorðið þitt, símanúmerið eða kreditkortanúmerið.</translation>
+<translation id="8473863474539038330">Heimilisföng og fleira</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> svar tók of langan tíma.</translation>
 <translation id="8503813439785031346">Notendanafn</translation>
 <translation id="8703575177326907206">Tenging þín við <ph name="DOMAIN" /> er ekki dulrituð.</translation>
@@ -204,6 +212,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="8820817407110198400">Bókamerki</translation>
 <translation id="8940028675168378100">Lokað á af <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Opna stillingar fyrir vefsvæði</translation>
+<translation id="8975012916872825179">Inniheldur upplýsingar á borð við símanúmer, netföng og heimilisföng</translation>
 <translation id="9001074447101275817">Velselið <ph name="DOMAIN" /> þarfnast notendanafns og lykilorðs.</translation>
 <translation id="9008201768610948239">Hunsa</translation>
 <translation id="9025348182339809926">(Ógilt)</translation>
@@ -216,5 +225,6 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> notar óstudda samskiptareglu.</translation>
 <translation id="936602727769022409">Þú gætir misst aðgang að Google reikningnum þínum. Chrome mælir með því að breyta lykilorðinu þínu núna. Þú munt vera beðin/n um að skrá þig inn.</translation>
 <translation id="969892804517981540">Opinber útgáfa</translation>
+<translation id="984275831282074731">Greiðsluaðferðir</translation>
 <translation id="988159990683914416">Prófunarútgáfa</translation>
 </translationbundle>

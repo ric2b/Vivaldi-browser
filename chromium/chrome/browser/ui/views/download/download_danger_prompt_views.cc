@@ -33,11 +33,19 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "url/gurl.h"
+
+#include "app/vivaldi_apptools.h"
+#include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/views/download/bubble/download_bubble_password_prompt_view.h"
+#include "ui/views/layout/box_layout.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 
 using safe_browsing::ClientSafeBrowsingReportRequest;
 
@@ -69,8 +77,18 @@ class DownloadDangerPromptViews : public DownloadDangerPrompt,
   // download::DownloadItem::Observer:
   void OnDownloadUpdated(download::DownloadItem* download) override;
 
+  // Cancel is marked DEPRECATED, but will use them as a shortcut.
+  // Would need to write a new class otherwise.
+  virtual bool Cancel() override;
+
  private:
   std::u16string GetMessageBody() const;
+
+  void UpdatePasswordPrompt();
+
+  // Vivaldi addition to support password input for decrypt.
+  raw_ptr<DownloadBubblePasswordPromptView> password_prompt_ = nullptr;
+
   void RunDone(Action action);
 
   raw_ptr<download::DownloadItem> download_;
@@ -87,10 +105,11 @@ DownloadDangerPromptViews::DownloadDangerPromptViews(
       done_(std::move(done)) {
   // Note that this prompt is asking whether to cancel a dangerous download, so
   // the accept path is titled "Cancel".
-  SetButtonLabel(ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_CANCEL));
-  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+  SetButtonLabel(ui::mojom::DialogButton::kOk,
+                 l10n_util::GetStringUTF16(IDS_CANCEL));
+  SetButtonLabel(ui::mojom::DialogButton::kCancel,
                  l10n_util::GetStringUTF16(IDS_CONFIRM_DOWNLOAD));
-  SetModalType(ui::MODAL_TYPE_CHILD);
+  SetModalType(ui::mojom::ModalType::kChild);
 
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
@@ -111,14 +130,34 @@ DownloadDangerPromptViews::DownloadDangerPromptViews(
 
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::DialogContentType::kText, views::DialogContentType::kText));
+  if (!vivaldi::IsVivaldiRunning()) {
   SetUseDefaultFillLayout(true);
-
+  } else {
+    SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kVertical));
+  }
   auto message_body_label = std::make_unique<views::Label>(GetMessageBody());
   message_body_label->SetMultiLine(true);
   message_body_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   message_body_label->SetAllowCharacterBreak(true);
 
   AddChildView(std::move(message_body_label));
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // Add the password box.
+    password_prompt_ = AddChildView(
+        std::make_unique<DownloadBubblePasswordPromptView>());
+
+    bool show_password_input =
+        download_->GetDangerType() ==
+        download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING;
+
+    password_prompt_->SetVisible(show_password_input);
+    if (show_password_input) {
+      SetButtonLabel(ui::mojom::DialogButton::kCancel,
+                     l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_SCAN));
+    }
+  }
 }
 
 DownloadDangerPromptViews::~DownloadDangerPromptViews() {
@@ -143,7 +182,7 @@ void DownloadDangerPromptViews::InvokeActionForTesting(Action action) {
       break;
 
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -155,6 +194,11 @@ std::u16string DownloadDangerPromptViews::GetWindowTitle() const {
 // download::DownloadItem::Observer:
 void DownloadDangerPromptViews::OnDownloadUpdated(
     download::DownloadItem* download) {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    UpdatePasswordPrompt();
+  }
+
   // If the download is nolonger dangerous (accepted externally) or the download
   // is in a terminal state, then the download danger prompt is no longer
   // necessary.
@@ -164,9 +208,84 @@ void DownloadDangerPromptViews::OnDownloadUpdated(
   }
 }
 
+bool DownloadDangerPromptViews::Cancel() {
+  if (download_ &&
+      download_->GetDangerType() ==
+          download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING) {
+    safe_browsing::DownloadProtectionService::CheckDownloadWithLocalDecryption(
+        download_, base::UTF16ToUTF8(password_prompt_->GetText()));
+    return true;  // Do not run the done callback yet.
+  }
+
+  return DialogDelegate::Cancel();
+}
+
+// This must be in sync with the danger-type in |DownloadUIModel::GetWarningText|.
 std::u16string DownloadDangerPromptViews::GetMessageBody() const {
   std::u16string filename =
       download_->GetFileNameToReportUser().LossyDisplayName();
+  if (vivaldi::IsVivaldiRunning()) {
+    switch (download_->GetDangerType()) {
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
+        return l10n_util::GetStringFUTF16(IDS_PROMPT_DANGEROUS_DOWNLOAD,
+                                          filename);
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE:
+      case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+        return l10n_util::GetStringFUTF16(IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT,
+                                          filename);
+      case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT:
+        return l10n_util::GetStringFUTF16(
+            safe_browsing::AdvancedProtectionStatusManagerFactory::
+                    GetForProfile(profile_)
+                        ->IsUnderAdvancedProtection()
+                ? IDS_PROMPT_UNCOMMON_DOWNLOAD_CONTENT_IN_ADVANCED_PROTECTION
+                : IDS_PROMPT_UNCOMMON_DOWNLOAD_CONTENT,
+            filename);
+      case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
+        return l10n_util::GetStringFUTF16(IDS_PROMPT_DOWNLOAD_CHANGES_SETTINGS,
+                                          filename);
+      case download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
+        return l10n_util::GetStringFUTF16(IDS_PROMPT_DOWNLOAD_BLOCKED_TOO_LARGE,
+                                          filename);
+
+      case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
+        return l10n_util::GetStringFUTF16(
+            IDS_PROMPT_DOWNLOAD_BLOCKED_PASSWORD_PROTECTED, filename);
+
+      case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
+        return l10n_util::GetStringUTF16(
+            IDS_PROMPT_DOWNLOAD_SENSITIVE_CONTENT_WARNING);
+
+      case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
+        return l10n_util::GetStringUTF16(
+            IDS_PROMPT_DOWNLOAD_SENSITIVE_CONTENT_BLOCKED);
+
+      case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
+        return l10n_util::GetStringFUTF16(IDS_PROMPT_DEEP_SCANNING, filename);
+      case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING:
+        return l10n_util::GetStringFUTF16(
+            IDS_DOWNLOAD_LOCAL_DECRYPTION_PROMPT_ALERT, filename);
+
+      case download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED:
+        return l10n_util::GetStringUTF16(
+            IDS_PROMPT_DOWNLOAD_BLOCKED_SCAN_FAILED);
+
+      case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
+      case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_FAILED:
+      case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
+      case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
+      case download::DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING:
+      case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
+      case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
+      case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
+      case download::DOWNLOAD_DANGER_TYPE_ALLOWLISTED_BY_POLICY:
+      case download::DOWNLOAD_DANGER_TYPE_MAX:
+        break;
+    }
+    return std::u16string();
+  } else {
   switch (download_->GetDangerType()) {
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
       return l10n_util::GetStringFUTF16(IDS_PROMPT_DANGEROUS_DOWNLOAD,
@@ -189,9 +308,11 @@ std::u16string DownloadDangerPromptViews::GetMessageBody() const {
       return l10n_util::GetStringFUTF16(IDS_PROMPT_DOWNLOAD_CHANGES_SETTINGS,
                                         filename);
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
+  }
   }
 }
+
 
 void DownloadDangerPromptViews::RunDone(Action action) {
   // Invoking the callback can cause the download item state to change or cause
@@ -241,6 +362,14 @@ void DownloadDangerPromptViews::RunDone(Action action) {
     std::move(done).Run(action);
 }
 
+void DownloadDangerPromptViews::UpdatePasswordPrompt() {
+  password_prompt_->SetState(
+      DownloadItemWarningData::HasIncorrectPassword(download_)
+          ? DownloadBubblePasswordPromptView::State::kInvalid
+          : DownloadBubblePasswordPromptView::State::kValid);
+
+}
+
 BEGIN_METADATA(DownloadDangerPromptViews)
 ADD_READONLY_PROPERTY_METADATA(std::u16string, MessageBody)
 END_METADATA
@@ -256,7 +385,8 @@ DownloadDangerPrompt* DownloadDangerPrompt::Create(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   DownloadDangerPromptViews* download_danger_prompt =
       new DownloadDangerPromptViews(item, profile, std::move(done));
-  constrained_window::ShowWebModalDialogViews(download_danger_prompt,
+  constrained_window::ShowWebModalDialogViews(
+      download_danger_prompt,
                                               web_contents);
   return download_danger_prompt;
 }

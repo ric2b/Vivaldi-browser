@@ -53,10 +53,13 @@ export const checkIfTabExistsInDrawer = async (tabId: string) => {
   return Boolean(tab);
 };
 
-export async function reloadDevTools(
-    options?: DevToolsFrontendReloadOptions&
-    {expectClosedPanels?: string[], enableExperiments?: string[], disableExperiments?: string[]}) {
-  const {frontend} = getBrowserAndPages();
+export async function reloadDevTools(options?: DevToolsFrontendReloadOptions&{
+  expectClosedPanels?: string[],
+  enableExperiments?: string[],
+  disableExperiments?: string[],
+  removeBackendState?: boolean,
+}) {
+  const {frontend, target} = getBrowserAndPages();
   const enableExperiments = options?.enableExperiments || [];
   const disableExperiments = options?.disableExperiments || [];
   if (enableExperiments.length || disableExperiments.length) {
@@ -70,11 +73,16 @@ export async function reloadDevTools(
       }
     })()`);
   }
+  if (options?.removeBackendState) {
+    // Navigate to a different site to make sure that back-end state will be removed.
+    await target.goto('about:blank');
+  }
   await baseReloadDevTools(options);
   const selectedPanel = options?.selectedPanel?.name || options?.queryParams?.panel || 'elements';
   await waitFor(`.panel.${selectedPanel}`);
   const expectClosedPanels = options?.expectClosedPanels;
   const newFilterBar = enableExperiments.includes('network-panel-filter-bar-redesign');
+  const timelineLegacyLandingPage = disableExperiments.includes('timeline-observations');
   const dockable = options?.canDock;
   const panelImpression = selectedPanel === 'elements' ? veImpressionForElementsPanel({dockable}) :
       selectedPanel === 'animations'                   ? veImpressionForAnimationsPanel() :
@@ -82,7 +90,7 @@ export async function reloadDevTools(
       selectedPanel === 'layers'                       ? veImpressionForLayersPanel() :
       selectedPanel === 'network'                      ? veImpressionForNetworkPanel({newFilterBar}) :
       selectedPanel === 'console'                      ? veImpressionForConsolePanel() :
-      selectedPanel === 'timeline'                     ? veImpressionForPerformancePanel() :
+      selectedPanel === 'timeline'                     ? veImpressionForPerformancePanel({timelineLegacyLandingPage}) :
       selectedPanel === 'sources'                      ? veImpressionForSourcesPanel() :
       selectedPanel === 'animations'                   ? veImpressionForSourcesPanel() :
       selectedPanel === 'changes'                      ? veImpressionForChangesPanel() :

@@ -1,6 +1,6 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/swift_source_set.gni")
+import("//build/config/apple/swift_source_set.gni")
 
 source_set("vivaldi_onboarding") {
   sources = [
@@ -11,7 +11,7 @@ source_set("vivaldi_onboarding") {
   ]
 
   deps = [
-    "resources",
+    "resources:assets",
     ":vivaldi_onboarding_swift",
     "//base",
     "//ui/base",
@@ -46,15 +46,17 @@ swift_source_set("vivaldi_onboarding_swift") {
 
   deps = [
     "//base",
+    "//ios/chrome/app/strings",
     "//ui/base",
     "//url",
-    "//ios/chrome/app/strings",
-    "//vivaldi/ios/ui/helpers:helpers",
     "//vivaldi/ios/ui/ad_tracker_blocker:vivaldi_ad_tracker_blocker",
-    "//vivaldi/ios/ui/settings/sync:vivaldi_sync_settings",
-    "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
     "//vivaldi/ios/ui/common:vivaldi_common",
     "//vivaldi/ios/ui/helpers:helpers_swift",
+    "//vivaldi/ios/ui/helpers:helpers",
+    "//vivaldi/ios/ui/settings/sync:vivaldi_sync_settings",
+    "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
+    "//vivaldi/ios/ui/site_tracker_prefs:site_tracker_prefs_view_swift",
+    "//vivaldi/ios/ui/site_tracker_prefs",
   ]
 
   frameworks = [

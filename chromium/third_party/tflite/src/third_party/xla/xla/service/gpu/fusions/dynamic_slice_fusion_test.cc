@@ -16,7 +16,9 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "xla/client/lib/constants.h"
@@ -24,9 +26,11 @@ limitations under the License.
 #include "xla/error_spec.h"
 #include "xla/ffi/ffi.h"
 #include "xla/ffi/ffi_api.h"
+#include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/custom_call_target_registry.h"
-#include "xla/service/gpu/dynamic_slice_fusion_rewriter.h"
+#include "xla/service/gpu/backend_configs.pb.h"
+#include "xla/service/gpu/transforms/dynamic_slice_fusion_rewriter.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/service/hlo_module_config.h"
 #include "xla/shape.h"
@@ -34,6 +38,7 @@ limitations under the License.
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/gpu/gpu_types.h"
 #include "xla/stream_executor/stream.h"
+#include "xla/tests/filecheck.h"
 #include "xla/tests/hlo_test_base.h"
 #include "xla/xla.pb.h"
 #include "xla/xla_data.pb.h"
@@ -79,6 +84,36 @@ class DynamicSliceFusionTest : public HloTestBase {
     HloModuleConfig config;
     config.set_debug_options(debug_options);
     return config;
+  }
+
+  HloModuleConfig GetModuleConfigWithDeterministicOps() {
+    DebugOptions debug_options = GetDebugOptionsForTest();
+    debug_options.set_xla_gpu_exclude_nondeterministic_ops(true);
+    HloModuleConfig config;
+    config.set_debug_options(debug_options);
+    return config;
+  }
+
+  std::vector<HloComputation*> GetDynamicSliceFusions(const HloModule& module) {
+    std::vector<HloComputation*> computations;
+    for (auto computation : module.computations()) {
+      if (!computation->IsFusionComputation()) {
+        continue;
+      }
+      auto backend_config = computation->FusionInstruction()
+                                ->backend_config<xla::gpu::GpuBackendConfig>();
+      if (backend_config.ok()) {
+        const FusionBackendConfig& fusion_backend_config =
+            backend_config.value().fusion_backend_config();
+        const std::string name =
+            fusion_backend_config.custom_fusion_config().name();
+        if (name == "dynamic_address_computation" ||
+            name == "address_computation") {
+          computations.push_back(computation);
+        }
+      }
+    }
+    return computations;
   }
 };
 
@@ -153,7 +188,7 @@ TEST_F(DynamicSliceFusionTest, CublasGemmSimple) {
     %p0 = bf16[2,8,8]{2,1,0} parameter(0), sharding={replicated}
     %p1 = bf16[2,8,8]{2,1,0} parameter(1), sharding={replicated}
     ROOT %fusion.2 = bf16[8,8]{1,0} fusion(%p0, %p1), kind=kCustom, calls=%fused_computation,
-        backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
+        backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"address_computation"}}}
   })";
 
   EXPECT_TRUE(RunAndCompareTwoModules(hlo_ref, hlo_opt, error_spec,
@@ -237,8 +272,10 @@ TEST_F(DynamicSliceFusionTest, CublasGemmWithWorkspace) {
         backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
   })";
 
-  EXPECT_TRUE(RunAndCompareTwoModules(hlo_ref, hlo_opt, error_spec,
-                                      /*run_hlo_passes=*/false));
+  EXPECT_TRUE(RunAndCompareTwoModules(
+      hlo_ref, hlo_opt, GetModuleConfigWithDeterministicOps(),
+      GetModuleConfigWithDeterministicOps(), error_spec,
+      /*run_hlo_passes=*/false));
 }
 
 TEST_F(DynamicSliceFusionTest, ContiguousSlice) {
@@ -457,7 +494,7 @@ TEST_F(DynamicSliceFusionTest, OperandIsSlicedGetTupleElement) {
   const char* hlo_opt = R"(
   HloModule jit_slice
 
-  %address-computation {
+  %dynamic-slice-fusion {
     %p0.3 = f32[200,100]{1,0} parameter(0)
     %p1.3 = f32[100,100]{1,0} parameter(1)
     %slice.56 = f32[100,100]{1,0} slice(%p0.3), slice={[0:100], [0:100]}
@@ -514,9 +551,9 @@ TEST_F(DynamicSliceFusionTest, OperandIsSlicedGetTupleElement) {
         }
       }
     %get-tuple-element.97 = f32[200,100]{1,0} get-tuple-element(%custom-call.16), index=0
-    ROOT %address_computation.6 = (f32[100,100]{1,0}, s8[80000]{0}) fusion(%get-tuple-element.97, %get-tuple-element.240),
+    ROOT %dynamic-slice-fusion.6 = (f32[100,100]{1,0}, s8[80000]{0}) fusion(%get-tuple-element.97, %get-tuple-element.240),
       kind=kCustom,
-      calls=%address-computation,
+      calls=%dynamic-slice-fusion,
       backend_config={
         "fusion_backend_config":{
           "kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}
@@ -566,7 +603,7 @@ TEST_F(DynamicSliceFusionTest, ReversedOperandOrder) {
   const char* hlo_opt = R"(
   HloModule jit_slice
 
-  %address-computation {
+  %dynamic-slice-fusion {
     %p0.1 = f16[2,8,8]{2,1,0} parameter(0)
     %slice.1 = f16[1,8,8]{2,1,0} slice(%p0.1), slice={[1:2], [0:8], [0:8]}
     %bitcast.1 = f16[8,8]{1,0} bitcast(%slice.1)
@@ -599,9 +636,9 @@ TEST_F(DynamicSliceFusionTest, ReversedOperandOrder) {
   ENTRY %main {
     %p0 = f16[2,8,8]{2,1,0} parameter(0)
     %p1 = f16[2,8,8]{2,1,0} parameter(1)
-    ROOT %address_computation.6 = f16[8,8]{1,0} fusion(%p1, %p0),
+    ROOT %dynamic-slice-fusion.6 = f16[8,8]{1,0} fusion(%p1, %p0),
       kind=kCustom,
-      calls=%address-computation,
+      calls=%dynamic-slice-fusion,
       backend_config={
         "fusion_backend_config":{
           "kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}
@@ -673,7 +710,7 @@ TEST_F(DynamicSliceFusionTest, SingleOperandComputation) {
   const char* hlo_opt = R"(
   HloModule jit_slice
 
-  %address-computation {
+  %dynamic-slice-fusion {
     %p0.3 = f32[200,100]{1,0} parameter(0)
     %slice.56 = f32[100,100]{1,0} slice(%p0.3), slice={[0:100], [0:100]}
     %cublas-gemm.23 = (f32[100,100]{1,0}, s8[80000]{0}) custom-call(%slice.56, %slice.56),
@@ -729,9 +766,9 @@ TEST_F(DynamicSliceFusionTest, SingleOperandComputation) {
         }
       }
     %get-tuple-element.97 = f32[200,100]{1,0} get-tuple-element(%custom-call.16), index=0
-    ROOT %address_computation.6 = (f32[100,100]{1,0}, s8[80000]{0}) fusion(%get-tuple-element.97),
+    ROOT %dynamic-slice-fusion.6 = (f32[100,100]{1,0}, s8[80000]{0}) fusion(%get-tuple-element.97),
       kind=kCustom,
-      calls=%address-computation,
+      calls=%dynamic-slice-fusion,
       backend_config={
         "fusion_backend_config":{
           "kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}
@@ -781,7 +818,7 @@ TEST_F(DynamicSliceFusionTest, SlicedOperandAliasingOutput) {
   const char* hlo_opt = R"(
   HloModule jit_slice
 
-  %address-computation {
+  %dynamic-slice-fusion {
     %p0.1 = f32[100,100]{1,0} parameter(0)
     %p2 = f32[200,100]{1,0} parameter(2)
     %slice.0 = f32[100,100]{1,0} slice(f32[200,100]{1,0} %p2), slice={[20:120], [0:100]}
@@ -818,9 +855,9 @@ TEST_F(DynamicSliceFusionTest, SlicedOperandAliasingOutput) {
     %get-tuple-element.288 = f32[100,100]{1,0} get-tuple-element(%p0), index=1
     %concatenate.12 = f32[200,100]{1,0} concatenate(%get-tuple-element.287, %get-tuple-element.288), dimensions={0}
     %slice.34 = f32[100,100]{1,0} slice(%concatenate.12), slice={[99:199], [0:100]}
-    ROOT %address_computation.6 = (f32[100,100]{1,0}, s8[120000]{0}) fusion(%get-tuple-element.287, %slice.34, %concatenate.12),
+    ROOT %dynamic-slice-fusion.6 = (f32[100,100]{1,0}, s8[120000]{0}) fusion(%get-tuple-element.287, %slice.34, %concatenate.12),
       kind=kCustom,
-      calls=%address-computation,
+      calls=%dynamic-slice-fusion,
       output_to_operand_aliasing={{0}: (1, {})},
       backend_config={
         "fusion_backend_config":{
@@ -867,7 +904,7 @@ TEST_F(DynamicSliceFusionTest, CustomCallSimple) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/false);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
@@ -1010,12 +1047,12 @@ TEST_F(DynamicSliceFusionTest, CustomCallWithTuple) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/true);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
 
-  debug_options.set_xla_gpu_enable_address_computation_fusion(true);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(true);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_opt, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
@@ -1059,12 +1096,12 @@ TEST_F(DynamicSliceFusionTest, NilTuple) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/false);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
 
-  debug_options.set_xla_gpu_enable_address_computation_fusion(true);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(true);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_opt, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
@@ -1103,12 +1140,12 @@ TEST_F(DynamicSliceFusionTest, CustomCallLegacyAPI) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/false);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
 
-  debug_options.set_xla_gpu_enable_address_computation_fusion(true);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(true);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_opt, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
@@ -1141,12 +1178,12 @@ TEST_F(DynamicSliceFusionTest, NilTupleLegacyAPI) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/false);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
 
-  debug_options.set_xla_gpu_enable_address_computation_fusion(true);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(true);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_opt, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
@@ -1327,8 +1364,10 @@ TEST_F(DynamicSliceFusionTest, CublasGemmDynamicWithWorkspace) {
         backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
   })";
 
-  EXPECT_TRUE(RunAndCompareTwoModules(hlo_ref, hlo_opt, error_spec,
-                                      /*run_hlo_passes=*/false));
+  EXPECT_TRUE(RunAndCompareTwoModules(
+      hlo_ref, hlo_opt, GetModuleConfigWithDeterministicOps(),
+      GetModuleConfigWithDeterministicOps(), error_spec,
+      /*run_hlo_passes=*/false));
 }
 
 TEST_F(DynamicSliceFusionTest, DynamicContiguousSlice) {
@@ -1573,7 +1612,7 @@ TEST_F(DynamicSliceFusionTest, DynamicOperandIsSlicedGetTupleElement) {
   const char* hlo_opt = R"(
   HloModule jit_slice
 
-  %address-computation {
+  %dynamic-slice-fusion {
     %p0.3 = f32[200,100]{1,0} parameter(0)
     %p1.3 = f32[100,100]{1,0} parameter(1)
     %c0_s32 = s32[] parameter(2)
@@ -1632,9 +1671,9 @@ TEST_F(DynamicSliceFusionTest, DynamicOperandIsSlicedGetTupleElement) {
         }
       }
     %get-tuple-element.97 = f32[200,100]{1,0} get-tuple-element(%custom-call.16), index=0
-    ROOT %address_computation.6 = (f32[100,100]{1,0}, s8[80000]{0}) fusion(%get-tuple-element.97, %get-tuple-element.240, %c0_s32),
+    ROOT %dynamic-slice-fusion.6 = (f32[100,100]{1,0}, s8[80000]{0}) fusion(%get-tuple-element.97, %get-tuple-element.240, %c0_s32),
       kind=kCustom,
-      calls=%address-computation,
+      calls=%dynamic-slice-fusion,
       backend_config={
         "fusion_backend_config":{
           "kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}
@@ -1686,7 +1725,7 @@ TEST_F(DynamicSliceFusionTest, DynamicReversedOperandOrder) {
   const char* hlo_opt = R"(
   HloModule jit_slice
 
-  %address-computation {
+  %dynamic-slice-fusion {
     %p0.1 = f16[2,8,8]{2,1,0} parameter(0)
     %p1.1 = f16[2,8,8]{2,1,0} parameter(1)
     %c0_s32 = s32[] parameter(2)
@@ -1723,9 +1762,9 @@ TEST_F(DynamicSliceFusionTest, DynamicReversedOperandOrder) {
     %p1 = f16[2,8,8]{2,1,0} parameter(1)
     %c0_s32 = s32[] constant(0)
     %c1_s32 = s32[] constant(1)
-    ROOT %address_computation.6 = f16[8,8]{1,0} fusion(%p1, %p0, %c0_s32, %c1_s32),
+    ROOT %dynamic-slice-fusion.6 = f16[8,8]{1,0} fusion(%p1, %p0, %c0_s32, %c1_s32),
       kind=kCustom,
-      calls=%address-computation,
+      calls=%dynamic-slice-fusion,
       backend_config={
         "fusion_backend_config":{
           "kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}
@@ -1798,7 +1837,7 @@ TEST_F(DynamicSliceFusionTest, DynamicSingleOperandComputation) {
   const char* hlo_opt = R"(
   HloModule jit_slice
 
-  %address-computation {
+  %dynamic-slice-fusion {
     %p0.3 = f32[200,100]{1,0} parameter(0)
     %c0_s32 = s32[] parameter(1)
     %slice.56 = f32[100,100]{1,0} dynamic-slice(%p0.3, %c0_s32, %c0_s32), dynamic_slice_sizes={100,100}
@@ -1856,9 +1895,9 @@ TEST_F(DynamicSliceFusionTest, DynamicSingleOperandComputation) {
         }
       }
     %get-tuple-element.97 = f32[200,100]{1,0} get-tuple-element(%custom-call.16), index=0
-    ROOT %address_computation.6 = (f32[100,100]{1,0}, s8[80000]{0}) fusion(%get-tuple-element.97, %c0_s32),
+    ROOT %dynamic-slice-fusion.6 = (f32[100,100]{1,0}, s8[80000]{0}) fusion(%get-tuple-element.97, %c0_s32),
       kind=kCustom,
-      calls=%address-computation,
+      calls=%dynamic-slice-fusion,
       backend_config={
         "fusion_backend_config":{
           "kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}
@@ -1911,7 +1950,7 @@ TEST_F(DynamicSliceFusionTest, DynamicSlicedOperandAliasingOutput) {
   const char* hlo_opt = R"(
   HloModule jit_slice
 
-  %address-computation {
+  %dynamic-slice-fusion {
     %p0.1 = f32[100,100]{1,0} parameter(0)
     %p1 = f32[100,100]{1,0} parameter(1)
     %p2 = f32[200,100]{1,0} parameter(2)
@@ -1953,9 +1992,9 @@ TEST_F(DynamicSliceFusionTest, DynamicSlicedOperandAliasingOutput) {
     %get-tuple-element.288 = f32[100,100]{1,0} get-tuple-element(%p0), index=1
     %concatenate.12 = f32[200,100]{1,0} concatenate(%get-tuple-element.287, %get-tuple-element.288), dimensions={0}
     %slice.34 = f32[100,100]{1,0} dynamic-slice(%concatenate.12, %c99_s32, %c0_s32), dynamic_slice_sizes={100,100}
-    ROOT %address_computation.6 = (f32[100,100]{1,0}, s8[120000]{0}) fusion(%get-tuple-element.287, %slice.34, %concatenate.12, %c0_s32, %c20_s32),
+    ROOT %dynamic-slice-fusion.6 = (f32[100,100]{1,0}, s8[120000]{0}) fusion(%get-tuple-element.287, %slice.34, %concatenate.12, %c0_s32, %c20_s32),
       kind=kCustom,
-      calls=%address-computation,
+      calls=%dynamic-slice-fusion,
       output_to_operand_aliasing={{0}: (1, {})},
       backend_config={
         "fusion_backend_config":{
@@ -2156,8 +2195,10 @@ TEST_F(DynamicSliceFusionTest, CublasGemmDUSWithWorkspace) {
         backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
   })";
 
-  EXPECT_TRUE(RunAndCompareTwoModules(hlo_ref, hlo_opt, error_spec,
-                                      /*run_hlo_passes=*/false));
+  EXPECT_TRUE(RunAndCompareTwoModules(
+      hlo_ref, hlo_opt, GetModuleConfigWithDeterministicOps(),
+      GetModuleConfigWithDeterministicOps(), error_spec,
+      /*run_hlo_passes=*/false));
 }
 
 TEST_F(DynamicSliceFusionTest, CublasGemmDUSWorkspaceIgnored) {
@@ -2241,8 +2282,10 @@ TEST_F(DynamicSliceFusionTest, CublasGemmDUSWorkspaceIgnored) {
         backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
   })";
 
-  EXPECT_TRUE(RunAndCompareTwoModules(hlo_ref, hlo_opt, error_spec,
-                                      /*run_hlo_passes=*/false));
+  EXPECT_TRUE(RunAndCompareTwoModules(
+      hlo_ref, hlo_opt, GetModuleConfigWithDeterministicOps(),
+      GetModuleConfigWithDeterministicOps(), error_spec,
+      /*run_hlo_passes=*/false));
 }
 
 TEST_F(DynamicSliceFusionTest, CublasGemmDUSOffsetS32NotConstant) {
@@ -2435,8 +2478,10 @@ TEST_F(DynamicSliceFusionTest, CublasGemmDUSOffsetOOB) {
         backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
   })";
 
-  EXPECT_TRUE(RunAndCompareTwoModules(hlo_ref, hlo_opt, error_spec,
-                                      /*run_hlo_passes=*/false));
+  EXPECT_TRUE(RunAndCompareTwoModules(
+      hlo_ref, hlo_opt, GetModuleConfigWithDeterministicOps(),
+      GetModuleConfigWithDeterministicOps(), error_spec,
+      /*run_hlo_passes=*/false));
 }
 
 TEST_F(DynamicSliceFusionTest, DynamicCustomCallSimple) {
@@ -2445,9 +2490,7 @@ TEST_F(DynamicSliceFusionTest, DynamicCustomCallSimple) {
       &b, "__xla_test$$memcpy",
       /*operands=*/
       {DynamicSlice(Parameter(&b, 0, ShapeUtil::MakeShape(S32, {4, 128}), "p0"),
-                    {Parameter(&b, 1, ShapeUtil::MakeShape(S32, {}), "start0"),
-                     Parameter(&b, 2, ShapeUtil::MakeShape(S32, {}), "start1")},
-                    {2, 128})},
+                    {ConstantR0(&b, 2), ConstantR0(&b, 0)}, {2, 128})},
       ShapeUtil::MakeShape(F32, {2, 128}), /*opaque=*/"",
       /*has_side_effect=*/false,
       /*output_operand_aliasing=*/{}, /*literal=*/nullptr,
@@ -2460,11 +2503,10 @@ TEST_F(DynamicSliceFusionTest, DynamicCustomCallSimple) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/false);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
-
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_opt, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
   DynamicSliceFusionRewriter pass(PLATFORM);
@@ -2502,11 +2544,7 @@ TEST_F(DynamicSliceFusionTest, DynamicCustomCallWithTuple) {
                     DynamicSlice(
                         Parameter(&b, 0, ShapeUtil::MakeShape(S32, {4, 128}),
                                   "p0"),
-                        {Parameter(&b, 1, ShapeUtil::MakeShape(S32, {}),
-                                   "start0"),
-                         Parameter(&b, 2, ShapeUtil::MakeShape(S32, {}),
-                                   "start1")},
-                        {3, 128}),
+                        {ConstantR0(&b, 20), ConstantR0(&b, 0)}, {3, 128}),
                 }),
       },
       ShapeUtil::MakeTupleShape({
@@ -2532,12 +2570,12 @@ TEST_F(DynamicSliceFusionTest, DynamicCustomCallWithTuple) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/true);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
 
-  debug_options.set_xla_gpu_enable_address_computation_fusion(true);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(true);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_opt, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
@@ -2545,6 +2583,15 @@ TEST_F(DynamicSliceFusionTest, DynamicCustomCallWithTuple) {
   DynamicSliceFusionRewriter pass(PLATFORM);
   TF_ASSERT_OK_AND_ASSIGN(auto changed, this->RunHloPass(&pass, hlo_opt.get()));
   EXPECT_TRUE(changed);
+  EXPECT_TRUE(*RunFileCheck(hlo_opt->ToString(), R"(
+    // CHECK: %dynamic-slice-fusion{{.+}} {
+    // CHECK:   {{.+}} = {{.+}} slice
+    // CHECK:   {{.+}} = {{.+}} dynamic-slice
+    // CHECK:   {{.+}} = {{.+}} custom-call
+    // CHECK: ENTRY {{.+}} {
+    // CHECK-NOT: {{.+}} = {{.+}} slice
+    // CHECK-NOT: {{.+}} = {{.+}} dynamic-slice
+  )"));
 
   EXPECT_TRUE(RunAndCompareTwoModules(std::move(hlo_ref), std::move(hlo_opt),
                                       error_spec, /*run_hlo_passes=*/false));
@@ -2639,12 +2686,12 @@ TEST_F(DynamicSliceFusionTest, CustomCallDUS) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/false);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
 
-  debug_options.set_xla_gpu_enable_address_computation_fusion(true);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(true);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_opt, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
@@ -2735,12 +2782,12 @@ TEST_F(DynamicSliceFusionTest, CustomCallDUSTuple) {
       xla::ProgramShape(computation.proto().host_program_shape()),
       /*ignore_layouts=*/false);
   DebugOptions debug_options = GetDebugOptionsForTest();
-  debug_options.set_xla_gpu_enable_address_computation_fusion(false);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(false);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_ref, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
 
-  debug_options.set_xla_gpu_enable_address_computation_fusion(true);
+  debug_options.set_xla_gpu_enable_dynamic_slice_fusion(true);
   hlo_config.set_debug_options(debug_options);
   TF_ASSERT_OK_AND_ASSIGN(auto hlo_opt, xla::HloModule::CreateFromProto(
                                             computation.proto(), hlo_config));
@@ -2752,6 +2799,612 @@ TEST_F(DynamicSliceFusionTest, CustomCallDUSTuple) {
   EXPECT_TRUE(RunAndCompareTwoModules(std::move(hlo_ref), std::move(hlo_opt),
                                       error_spec,
                                       /*run_hlo_passes=*/false));
+}
+
+TEST_F(DynamicSliceFusionTest, ReduceScatterDUSConstant) {
+  // DUS offset is a constant
+  const char* hlo_ref = R"(
+  HloModule test, replica_count=2
+
+  add.clone {
+    x.1 = f16[] parameter(0)
+    y.1 = f16[] parameter(1)
+    ROOT add.462 = f16[] add(x.1, y.1)
+  }
+
+  ENTRY %main.9 {
+    param_0 = f16[128,128]{1,0} parameter(0)
+    param_1 = f16[128,128]{1,0} parameter(1)
+    constant_20 = u32[] constant(20)
+    constant_0 = u32[] constant(0)
+    reduce-scatter = f16[64,128]{1,0} reduce-scatter(param_0), channel_id=64, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add.clone
+    ROOT dynamic-update-slice = f16[128,128]{1,0} dynamic-update-slice(param_1, reduce-scatter, constant_20, constant_0)
+  })";
+
+  const char* hlo_opt = R"(
+  HloModule test, replica_count=2
+
+  %add {
+    %param_0 = f16[] parameter(0)
+    %param_1 = f16[] parameter(1)
+    ROOT %add.1 = f16[] add(%param_0, %param_1)
+  }
+
+  %dynamic-slice-fusion {
+    %p1 = f16[128,128]{1,0} parameter(1)
+    %p0 = f16[128,128]{1,0} parameter(0)
+    %reduce-scatter.1 = f16[64,128]{1,0} reduce-scatter(%p0), channel_id=64, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=%add
+    %p2 = u32[] parameter(2)
+    %p3 = u32[] parameter(3)
+    ROOT %loop_dynamic_update_slice_fusion.1 = f16[128,128]{1,0} dynamic-update-slice(%p1, %reduce-scatter.1, %p2, %p3)
+  }
+
+  ENTRY %main.9 {
+    %param_0.1 = f16[128,128]{1,0} parameter(0)
+    %param_1.1 = f16[128,128]{1,0} parameter(1)
+    %constant_20 = u32[] constant(20)
+    %constant_0 = u32[] constant(0)
+    ROOT %dynamic-slice-fusion = f16[128,128]{1,0} fusion(%param_0.1, %param_1.1, %constant_20, %constant_0), kind=kCustom, calls=%dynamic-slice-fusion, backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}},"force_earliest_schedule":false}
+  })";
+
+  ErrorSpec error_spec{/*aabs=*/1e-3, /*arel=*/1e-3};
+  EXPECT_TRUE(RunAndCompareTwoModulesReplicated(hlo_ref, hlo_opt, true, true,
+                                                error_spec));
+}
+
+TEST_F(DynamicSliceFusionTest, ReduceScatterDUSParameterOffset) {
+  // DUS offset is a parameter. This enforces a d2h copy.
+  const char* hlo_ref = R"(
+  HloModule test, replica_count=2
+
+  add.clone {
+    x.1 = f16[] parameter(0)
+    y.1 = f16[] parameter(1)
+    ROOT add.462 = f16[] add(x.1, y.1)
+  }
+
+  ENTRY %main.9 {
+    param_0 = f16[128,128]{1,0} parameter(0)
+    param_1 = f16[128,128]{1,0} parameter(1)
+    param_2 = u32[] parameter(2)
+    constant_0 = u32[] constant(0)
+    reduce-scatter = f16[64,128]{1,0} reduce-scatter(param_0), channel_id=64, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add.clone
+    ROOT dynamic-update-slice = f16[128,128]{1,0} dynamic-update-slice(param_1, reduce-scatter, param_2, constant_0)
+  })";
+
+  const char* hlo_opt = R"(
+  HloModule test, replica_count=2
+
+  %add {
+    %param_0 = f16[] parameter(0)
+    %param_1 = f16[] parameter(1)
+    ROOT %add.1 = f16[] add(f16[] %param_0, f16[] %param_1)
+  }
+
+  %dynamic-slice-fusion {
+    %p1 = f16[128,128]{1,0} parameter(1)
+    %p0 = f16[128,128]{1,0} parameter(0)
+    %reduce-scatter.1 = f16[64,128]{1,0} reduce-scatter(%p0), channel_id=64, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=%add
+    %p2 = u32[] parameter(2)
+    %p3 = u32[] parameter(3)
+    ROOT %loop_dynamic_update_slice_fusion.1 = f16[128,128]{1,0} dynamic-update-slice(%p1, %reduce-scatter.1, %p2, %p3)
+  }
+
+  ENTRY %main.9 {
+    %param_0 = f16[128,128]{1,0} parameter(0)
+    %param_1 = f16[128,128]{1,0} parameter(1)
+    %param_2 = u32[] parameter(2)
+    %constant_0 = u32[] constant(0)
+    ROOT %dynamic-slice-fusion = f16[128,128]{1,0} fusion(%param_0, %param_1, %param_2, %constant_0), kind=kCustom, calls=%dynamic-slice-fusion, backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}},"force_earliest_schedule":false}
+  })";
+
+  ErrorSpec error_spec{/*aabs=*/1e-3, /*arel=*/1e-3};
+  EXPECT_TRUE(RunAndCompareTwoModulesReplicated(hlo_ref, hlo_opt, true, true,
+                                                error_spec));
+}
+
+TEST_F(DynamicSliceFusionTest, ReduceScatterDUSLoopIterationOffset) {
+  const char* hlo_ref = R"(
+  HloModule jit_scan, replica_count=2
+
+  %add {
+    %param_0 = f32[] parameter(0)
+    %param_1 = f32[] parameter(1)
+    ROOT %add.1 = f32[] add(%param_0, %param_1)
+  }
+
+  %region_0.14 {
+    %arg_tuple.15 = (s32[], f32[128,128]{1,0}, f32[128,128,128]{2,1,0}, f32[128,128,128]{2,1,0}, f32[128,128]{1,0}) parameter(0)
+    %get-tuple-element.16 = s32[] get-tuple-element(%arg_tuple.15), index=0
+    %constant.21 = s32[] constant(1)
+    %add.37 = s32[] add(%get-tuple-element.16, %constant.21)
+    %get-tuple-element.20 = f32[128,128]{1,0} get-tuple-element(%arg_tuple.15), index=4
+    %get-tuple-element.18 = f32[128,128,128]{2,1,0} get-tuple-element(%arg_tuple.15), index=2
+    %reduce-scatter.1 = f32[64,128]{1,0} reduce-scatter(%get-tuple-element.20), channel_id=64, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=%add
+    %reshape.32 = f32[1,64,128]{2,1,0} reshape(%reduce-scatter.1)
+    %constant.23 = s32[] constant(0)
+    %compare.33 = pred[] compare(%get-tuple-element.16, %constant.23), direction=LT
+    %constant.22 = s32[] constant(128)
+    %add.34 = s32[] add(%get-tuple-element.16, %constant.22)
+    %select.35 = s32[] select(%compare.33, %add.34, %get-tuple-element.16)
+    %dynamic-update-slice.36 = f32[128,128,128]{2,1,0} dynamic-update-slice(%get-tuple-element.18, %reshape.32, %select.35, %constant.23, %constant.23)
+    %get-tuple-element.19 = f32[128,128,128]{2,1,0} get-tuple-element(%arg_tuple.15), index=3
+    ROOT %tuple.38 = tuple(%add.37, %get-tuple-element.20, %dynamic-update-slice.36, %get-tuple-element.19, %get-tuple-element.20)
+  }
+
+  %region_1.39 {
+    %arg_tuple.40 = (s32[], f32[128,128]{1,0}, f32[128,128,128]{2,1,0}, f32[128,128,128]{2,1,0}, f32[128,128]{1,0}) parameter(0)
+    %get-tuple-element.41 = s32[] get-tuple-element(%arg_tuple.40), index=0
+    %constant.46 = s32[] constant(128)
+    ROOT %compare.47 = pred[] compare(%get-tuple-element.41, %constant.46), direction=LT
+  }
+
+  ENTRY %main.55 {
+    %constant.4 = s32[] constant(0)
+    %Arg_1.2 = f32[128,128]{1,0} parameter(1)
+    %constant.5 = f32[] constant(0)
+    %broadcast.6 = f32[128,128,128]{2,1,0} broadcast(%constant.5), dimensions={}
+    %Arg_2.3 = f32[128,128,128]{2,1,0} parameter(2)
+    %Arg_0.1 = f32[128,128]{1,0} parameter(0)
+    %tuple.7 = tuple(%constant.4, %Arg_1.2, %broadcast.6, %Arg_2.3, %Arg_0.1)
+    %while.48 = while(%tuple.7), condition=%region_1.39, body=%region_0.14
+    %get-tuple-element.50 = f32[128,128]{1,0} get-tuple-element(%while.48), index=1
+    %get-tuple-element.51 = f32[128,128,128]{2,1,0} get-tuple-element(%while.48), index=2
+    ROOT %tuple.54 = tuple(%get-tuple-element.50, %get-tuple-element.51)
+  })";
+  DebugOptions debugoptions = GetDebugOptionsForTest();
+
+  HloModuleConfig ref_config;
+  debugoptions.set_xla_gpu_enable_dynamic_slice_fusion(false);
+  debugoptions.set_xla_gpu_enable_pipelined_reduce_scatter(false);
+  ref_config.set_debug_options(debugoptions);
+  TF_ASSERT_OK_AND_ASSIGN(auto ref_module,
+                          ParseAndReturnVerifiedModule(hlo_ref, ref_config));
+  TF_ASSERT_OK_AND_ASSIGN(auto ref_module_opt,
+                          GetOptimizedModule(std::move(ref_module)));
+
+  HloModuleConfig opt_config;
+  debugoptions.set_xla_gpu_enable_dynamic_slice_fusion(true);
+  opt_config.set_debug_options(debugoptions);
+  debugoptions.set_xla_gpu_enable_pipelined_reduce_scatter(false);
+  TF_ASSERT_OK_AND_ASSIGN(auto module_with_adddress_computation_flag,
+                          ParseAndReturnVerifiedModule(hlo_ref, opt_config));
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto module_with_adddress_computation,
+      GetOptimizedModule(std::move(module_with_adddress_computation_flag)));
+
+  std::vector<HloComputation*> address_computations_opt =
+      GetDynamicSliceFusions(*module_with_adddress_computation);
+  std::vector<HloComputation*> address_computations_ref =
+      GetDynamicSliceFusions(*ref_module_opt);
+  EXPECT_EQ(address_computations_ref.size(), 0);
+  ASSERT_EQ(address_computations_opt.size(), 1);
+
+  // Check that reduce scatter happens in the fusion in optimized module and not
+  // outside the fusion.
+  EXPECT_TRUE(*RunFileCheck(address_computations_opt[0]->ToString(), R"(
+    // CHECK: {{.+}} = {{.*}}reduce-scatter({{.+}})
+    // CHECK: {{.+}} = {{.*}}dynamic-update-slice({{.+}})
+  )"));
+  EXPECT_TRUE(*RunFileCheck(
+      address_computations_opt[0]->FusionInstruction()->parent()->ToString(),
+      "// CHECK-NOT: {{.+}} = {{.*}}reduce-scatter"));
+
+  ErrorSpec error{/*aabs=*/1e-3, /*arel=*/1e-3};
+  EXPECT_TRUE(RunAndCompareTwoModulesReplicated(
+      std::move(ref_module_opt), std::move(module_with_adddress_computation),
+      false, true, error));
+}
+
+TEST_F(DynamicSliceFusionTest, OffsetArrayTestS32) {
+  // When the offset is s32, then this checks that the offset values can be out
+  // of bounds on both directions but they should be clamped during execution.
+  const char* hlo = R"(
+    HloModule test_module, replica_count=2
+
+    add {
+      a = s32[] parameter(0)
+      b = s32[] parameter(1)
+      ROOT add = s32[] add(a, b)
+    }
+
+    dynamic-slice-fusion {
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      loop_iter = s32[] parameter(2)
+      offset_values = s32[4] constant({-4,4,12,20})
+      offset_as_array = s32[1] dynamic-slice(offset_values, loop_iter), dynamic_slice_sizes={1}
+      offset = s32[] reshape(offset_as_array)
+      rs = s32[4,4] reduce-scatter(src), channel_id=0, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add
+      zero = s32[] parameter(3)
+      ROOT dus = s32[16,4] dynamic-update-slice(dest, rs, offset, zero)
+    }
+
+    Body {
+      param = (s32[], s32[16, 4], s32[8, 4], s32[]) parameter(0)
+      i = s32[] get-tuple-element(param), index=0
+      dest = s32[16,4] get-tuple-element(param), index=1
+      src = s32[8,4] get-tuple-element(param), index=2
+      loop_iter = s32[] get-tuple-element(param), index=3
+      zero = s32[] constant(0)
+      fusion = s32[16,4] fusion(dest, src, loop_iter, zero), kind=kCustom, calls=dynamic-slice-fusion, backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
+      one = s32[] constant(1)
+      i_plus_one = s32[] add(i, one)
+      loop_iter_plus_one = s32[] add(loop_iter, one)
+      ROOT tuple = tuple(i_plus_one, fusion, src, loop_iter)
+    }
+
+    Cond {
+      param = (s32[], s32[16,4], s32[8,4], s32[]) parameter(0)
+      loop_iter = s32[] get-tuple-element(param), index=0
+      four = s32[] constant(4)
+      ROOT compare = pred[] compare(loop_iter, four), direction=LT
+    }
+
+    ENTRY main {
+      zero = s32[] constant(0)
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      tuple = tuple(zero, dest, src, zero)
+      ROOT while = (s32[], s32[16,4], s32[8,4], s32[]) while(tuple), body=Body, condition=Cond
+    }
+  )";
+
+  const char* normal = R"(
+    HloModule test_module, replica_count=2
+
+    add {
+      a = s32[] parameter(0)
+      b = s32[] parameter(1)
+      ROOT add = s32[] add(a, b)
+    }
+
+    Body {
+      param = (s32[], s32[16, 4], s32[8, 4], s32[]) parameter(0)
+      i = s32[] get-tuple-element(param), index=0
+      dest = s32[16,4] get-tuple-element(param), index=1
+      src = s32[8,4] get-tuple-element(param), index=2
+      loop_iter = s32[] get-tuple-element(param), index=3
+      eight = s32[] constant(8)
+      four = s32[] constant(4)
+      mul = s32[] multiply(eight, i)
+      offset = s32[] subtract(mul, four)
+      zero = s32[] constant(0)
+      rs = s32[4,4] reduce-scatter(src), channel_id=0, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add
+      fusion = s32[16,4] dynamic-update-slice(dest, rs, offset, zero)
+      one = s32[] constant(1)
+      i_plus_one = s32[] add(i, one)
+      loop_iter_plus_one = s32[] add(loop_iter, one)
+      ROOT tuple = tuple(i_plus_one, fusion, src, loop_iter)
+    }
+
+    Cond {
+      param = (s32[], s32[16,4], s32[8,4], s32[]) parameter(0)
+      loop_iter = s32[] get-tuple-element(param), index=0
+      four = s32[] constant(4)
+      ROOT compare = pred[] compare(loop_iter, four), direction=LT
+    }
+
+    ENTRY main {
+      zero = s32[] constant(0)
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      tuple = tuple(zero, dest, src, zero)
+      ROOT while = (s32[], s32[16,4], s32[8,4], s32[]) while(tuple), body=Body, condition=Cond
+    }
+  )";
+  ErrorSpec error_spec{/*aabs=*/1e-3, /*arel=*/1e-3};
+  EXPECT_TRUE(
+      RunAndCompareTwoModulesReplicated(hlo, normal, true, true, error_spec));
+}
+
+TEST_F(DynamicSliceFusionTest, OffsetArrayTestS64) {
+  // This test makes sure that the offsets are not parsed as `int32_t` all the
+  // time. If the offset is INT64_MAX, and it is parsed as int32_t, it will be
+  // clamped to the zero (parsed as -1) instead of being clamped to the upper
+  // bound. The offsets in the example here should be clamped to {0,4,8,12} but
+  // if they are parsed as int32_t, then they will be clamped to {12, 4, 8, 0}.
+  const char* hlo = R"(
+    HloModule test_module, replica_count=2
+
+    add {
+      a = s32[] parameter(0)
+      b = s32[] parameter(1)
+      ROOT add = s32[] add(a, b)
+    }
+
+    dynamic-slice-fusion {
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      loop_iter = s32[] parameter(2)
+      offset_values = s64[4] constant({-2147483649,4,8,9223372036854775807})
+      offset_as_array = s64[1] dynamic-slice(offset_values, loop_iter), dynamic_slice_sizes={1}
+      offset = s64[] reshape(offset_as_array)
+      rs = s32[4,4] reduce-scatter(src), channel_id=0, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add
+      zero = s64[] parameter(3)
+      ROOT dus = s32[16,4] dynamic-update-slice(dest, rs, offset, zero)
+    }
+
+    Body {
+      param = (s32[], s32[16, 4], s32[8, 4], s32[]) parameter(0)
+      i = s32[] get-tuple-element(param), index=0
+      dest = s32[16,4] get-tuple-element(param), index=1
+      src = s32[8,4] get-tuple-element(param), index=2
+      loop_iter = s32[] get-tuple-element(param), index=3
+      zero = s64[] constant(0)
+      fusion = s32[16,4] fusion(dest, src, loop_iter, zero), kind=kCustom, calls=dynamic-slice-fusion, backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
+      one = s32[] constant(1)
+      i_plus_one = s32[] add(i, one)
+      loop_iter_plus_one = s32[] add(loop_iter, one)
+      ROOT tuple = tuple(i_plus_one, fusion, src, loop_iter)
+    }
+
+    Cond {
+      param = (s32[], s32[16,4], s32[8,4], s32[]) parameter(0)
+      loop_iter = s32[] get-tuple-element(param), index=0
+      four = s32[] constant(4)
+      ROOT compare = pred[] compare(loop_iter, four), direction=LT
+    }
+
+    ENTRY main {
+      zero = s32[] constant(0)
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      tuple = tuple(zero, dest, src, zero)
+      ROOT while = (s32[], s32[16,4], s32[8,4], s32[]) while(tuple), body=Body, condition=Cond
+    }
+  )";
+
+  const char* normal = R"(
+    HloModule test_module, replica_count=2
+
+    add {
+      a = s32[] parameter(0)
+      b = s32[] parameter(1)
+      ROOT add = s32[] add(a, b)
+    }
+
+    Body {
+      param = (s32[], s32[16, 4], s32[8, 4], s32[]) parameter(0)
+      i = s32[] get-tuple-element(param), index=0
+      dest = s32[16,4] get-tuple-element(param), index=1
+      src = s32[8,4] get-tuple-element(param), index=2
+      loop_iter = s32[] get-tuple-element(param), index=3
+      offset_values = s64[4] constant({-2147483649,4,8,9223372036854775807})
+      offset_as_array = s64[1] dynamic-slice(offset_values, i), dynamic_slice_sizes={1}
+      offset = s64[] reshape(offset_as_array)
+      zero = s64[] constant(0)
+      rs = s32[4,4] reduce-scatter(src), channel_id=0, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add
+      fusion = s32[16,4] dynamic-update-slice(dest, rs, offset, zero)
+      one = s32[] constant(1)
+      i_plus_one = s32[] add(i, one)
+      loop_iter_plus_one = s32[] add(loop_iter, one)
+      ROOT tuple = tuple(i_plus_one, fusion, src, loop_iter)
+    }
+
+    Cond {
+      param = (s32[], s32[16,4], s32[8,4], s32[]) parameter(0)
+      loop_iter = s32[] get-tuple-element(param), index=0
+      four = s32[] constant(4)
+      ROOT compare = pred[] compare(loop_iter, four), direction=LT
+    }
+
+    ENTRY main {
+      zero = s32[] constant(0)
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      tuple = tuple(zero, dest, src, zero)
+      ROOT while = (s32[], s32[16,4], s32[8,4], s32[]) while(tuple), body=Body, condition=Cond
+    }
+  )";
+  ErrorSpec error_spec{/*aabs=*/1e-3, /*arel=*/1e-3};
+  EXPECT_TRUE(
+      RunAndCompareTwoModulesReplicated(hlo, normal, true, true, error_spec));
+}
+
+// Same as above for uint32_t
+TEST_F(DynamicSliceFusionTest, OffsetArrayTestU32) {
+  const char* hlo = R"(
+    HloModule test_module, replica_count=2
+
+    add {
+      a = s32[] parameter(0)
+      b = s32[] parameter(1)
+      ROOT add = s32[] add(a, b)
+    }
+
+    dynamic-slice-fusion {
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      loop_iter = s32[] parameter(2)
+      offset_values = u32[4] constant({0,4,8,4294967295})
+      offset_as_array = u32[1] dynamic-slice(offset_values, loop_iter), dynamic_slice_sizes={1}
+      offset = u32[] reshape(offset_as_array)
+      rs = s32[4,4] reduce-scatter(src), channel_id=0, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add
+      zero = u32[] parameter(3)
+      ROOT dus = s32[16,4] dynamic-update-slice(dest, rs, offset, zero)
+    }
+
+    Body {
+      param = (s32[], s32[16, 4], s32[8, 4], s32[]) parameter(0)
+      i = s32[] get-tuple-element(param), index=0
+      dest = s32[16,4] get-tuple-element(param), index=1
+      src = s32[8,4] get-tuple-element(param), index=2
+      loop_iter = s32[] get-tuple-element(param), index=3
+      zero = u32[] constant(0)
+      fusion = s32[16,4] fusion(dest, src, loop_iter, zero), kind=kCustom, calls=dynamic-slice-fusion, backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
+      one = s32[] constant(1)
+      i_plus_one = s32[] add(i, one)
+      loop_iter_plus_one = s32[] add(loop_iter, one)
+      ROOT tuple = tuple(i_plus_one, fusion, src, loop_iter)
+    }
+
+    Cond {
+      param = (s32[], s32[16,4], s32[8,4], s32[]) parameter(0)
+      loop_iter = s32[] get-tuple-element(param), index=0
+      four = s32[] constant(4)
+      ROOT compare = pred[] compare(loop_iter, four), direction=LT
+    }
+
+    ENTRY main {
+      zero = s32[] constant(0)
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      tuple = tuple(zero, dest, src, zero)
+      ROOT while = (s32[], s32[16,4], s32[8,4], s32[]) while(tuple), body=Body, condition=Cond
+    }
+  )";
+
+  const char* normal = R"(
+    HloModule test_module, replica_count=2
+
+    add {
+      a = s32[] parameter(0)
+      b = s32[] parameter(1)
+      ROOT add = s32[] add(a, b)
+    }
+
+    Body {
+      param = (s32[], s32[16, 4], s32[8, 4], s32[]) parameter(0)
+      i = s32[] get-tuple-element(param), index=0
+      dest = s32[16,4] get-tuple-element(param), index=1
+      src = s32[8,4] get-tuple-element(param), index=2
+      loop_iter = s32[] get-tuple-element(param), index=3
+      offset_values = u32[4] constant({0,4,8,4294967295})
+      offset_as_array = u32[1] dynamic-slice(offset_values, i), dynamic_slice_sizes={1}
+      offset = u32[] reshape(offset_as_array)
+      zero = u32[] constant(0)
+      rs = s32[4,4] reduce-scatter(src), channel_id=0, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add
+      fusion = s32[16,4] dynamic-update-slice(dest, rs, offset, zero)
+      one = s32[] constant(1)
+      i_plus_one = s32[] add(i, one)
+      loop_iter_plus_one = s32[] add(loop_iter, one)
+      ROOT tuple = tuple(i_plus_one, fusion, src, loop_iter)
+    }
+
+    Cond {
+      param = (s32[], s32[16,4], s32[8,4], s32[]) parameter(0)
+      loop_iter = s32[] get-tuple-element(param), index=0
+      four = s32[] constant(4)
+      ROOT compare = pred[] compare(loop_iter, four), direction=LT
+    }
+
+    ENTRY main {
+      zero = s32[] constant(0)
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      tuple = tuple(zero, dest, src, zero)
+      ROOT while = (s32[], s32[16,4], s32[8,4], s32[]) while(tuple), body=Body, condition=Cond
+    }
+  )";
+
+  ErrorSpec error_spec{/*aabs=*/1e-3, /*arel=*/1e-3};
+  EXPECT_TRUE(
+      RunAndCompareTwoModulesReplicated(hlo, normal, true, true, error_spec));
+}
+
+// Same as above for uint64_t. It is expected to produce an error if the offset
+// is outside the range of int64_t.
+TEST_F(DynamicSliceFusionTest, OffsetArrayTestU64) {
+  const char* hlo = R"(
+    HloModule test_module, replica_count=2
+
+    add {
+      a = s32[] parameter(0)
+      b = s32[] parameter(1)
+      ROOT add = s32[] add(a, b)
+    }
+
+    dynamic-slice-fusion {
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      loop_iter = s32[] parameter(2)
+      offset_values = u64[4] constant({0,4,8,18446744073709551615})
+      offset_as_array = u64[1] dynamic-slice(offset_values, loop_iter), dynamic_slice_sizes={1}
+      offset = u64[] reshape(offset_as_array)
+      rs = s32[4,4] reduce-scatter(src), channel_id=0, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add
+      zero = u64[] parameter(3)
+      ROOT dus = s32[16,4] dynamic-update-slice(dest, rs, offset, zero)
+    }
+
+    Body {
+      param = (s32[], s32[16, 4], s32[8, 4], s32[]) parameter(0)
+      i = s32[] get-tuple-element(param), index=0
+      dest = s32[16,4] get-tuple-element(param), index=1
+      src = s32[8,4] get-tuple-element(param), index=2
+      loop_iter = s32[] get-tuple-element(param), index=3
+      zero = u64[] constant(0)
+      fusion = s32[16,4] fusion(dest, src, loop_iter, zero), kind=kCustom, calls=dynamic-slice-fusion, backend_config={"fusion_backend_config":{"kind":"__custom_fusion","custom_fusion_config":{"name":"dynamic_address_computation"}}}
+      one = s32[] constant(1)
+      i_plus_one = s32[] add(i, one)
+      loop_iter_plus_one = s32[] add(loop_iter, one)
+      ROOT tuple = tuple(i_plus_one, fusion, src, loop_iter)
+    }
+
+    Cond {
+      param = (s32[], s32[16,4], s32[8,4], s32[]) parameter(0)
+      loop_iter = s32[] get-tuple-element(param), index=0
+      four = s32[] constant(4)
+      ROOT compare = pred[] compare(loop_iter, four), direction=LT
+    }
+
+    ENTRY main {
+      zero = s32[] constant(0)
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      tuple = tuple(zero, dest, src, zero)
+      ROOT while = (s32[], s32[16,4], s32[8,4], s32[]) while(tuple), body=Body, condition=Cond
+    }
+  )";
+
+  const char* normal = R"(
+    HloModule test_module, replica_count=2
+
+    add {
+      a = s32[] parameter(0)
+      b = s32[] parameter(1)
+      ROOT add = s32[] add(a, b)
+    }
+
+    Body {
+      param = (s32[], s32[16, 4], s32[8, 4], s32[]) parameter(0)
+      i = s32[] get-tuple-element(param), index=0
+      dest = s32[16,4] get-tuple-element(param), index=1
+      src = s32[8,4] get-tuple-element(param), index=2
+      loop_iter = s32[] get-tuple-element(param), index=3
+      offset_values = u64[4] constant({0,4,8,18446744073709551615})
+      offset_as_array = u64[1] dynamic-slice(offset_values, i), dynamic_slice_sizes={1}
+      offset = u64[] reshape(offset_as_array)
+      zero = u64[] constant(0)
+      rs = s32[4,4] reduce-scatter(src), channel_id=0, replica_groups={{0,1}}, use_global_device_ids=true, dimensions={0}, to_apply=add
+      fusion = s32[16,4] dynamic-update-slice(dest, rs, offset, zero)
+      one = s32[] constant(1)
+      i_plus_one = s32[] add(i, one)
+      loop_iter_plus_one = s32[] add(loop_iter, one)
+      ROOT tuple = tuple(i_plus_one, fusion, src, loop_iter)
+    }
+
+    Cond {
+      param = (s32[], s32[16,4], s32[8,4], s32[]) parameter(0)
+      loop_iter = s32[] get-tuple-element(param), index=0
+      four = s32[] constant(4)
+      ROOT compare = pred[] compare(loop_iter, four), direction=LT
+    }
+
+    ENTRY main {
+      zero = s32[] constant(0)
+      dest = s32[16,4] parameter(0)
+      src = s32[8,4] parameter(1)
+      tuple = tuple(zero, dest, src, zero)
+      ROOT while = (s32[], s32[16,4], s32[8,4], s32[]) while(tuple), body=Body, condition=Cond
+    }
+  )";
+
+  ErrorSpec error_spec{/*aabs=*/1e-3, /*arel=*/1e-3};
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  EXPECT_DEATH(auto status = RunAndCompareTwoModulesReplicated(
+                   hlo, normal, true, true, error_spec),
+               ".*");
 }
 
 }  // namespace

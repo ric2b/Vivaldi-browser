@@ -27,7 +27,7 @@
 #include "av1/encoder/reconinter_enc.h"
 #include "av1/encoder/var_based_part.h"
 
-static INLINE int early_term_inter_search_with_sse(int early_term_idx,
+static inline int early_term_inter_search_with_sse(int early_term_idx,
                                                    BLOCK_SIZE bsize,
                                                    int64_t this_sse,
                                                    int64_t best_sse,
@@ -57,7 +57,7 @@ static INLINE int early_term_inter_search_with_sse(int early_term_idx,
   return 0;
 }
 
-static INLINE void init_best_pickmode(BEST_PICKMODE *bp) {
+static inline void init_best_pickmode(BEST_PICKMODE *bp) {
   bp->best_sse = INT64_MAX;
   bp->best_mode = NEARESTMV;
   bp->best_ref_frame = LAST_FRAME;
@@ -75,7 +75,7 @@ static INLINE void init_best_pickmode(BEST_PICKMODE *bp) {
 }
 
 // Copy best inter mode parameters to best_pickmode
-static INLINE void update_search_state_nonrd(
+static inline void update_search_state_nonrd(
     InterModeSearchStateNonrd *search_state, MB_MODE_INFO *const mi,
     TxfmSearchInfo *txfm_info, RD_STATS *nonskip_rdc, PICK_MODE_CONTEXT *ctx,
     PREDICTION_MODE this_best_mode, const int64_t sse_y) {
@@ -99,7 +99,7 @@ static INLINE void update_search_state_nonrd(
   }
 }
 
-static INLINE int subpel_select(AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bsize,
+static inline int subpel_select(AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bsize,
                                 int_mv *mv, MV ref_mv, FULLPEL_MV start_mv,
                                 bool fullpel_performed_well) {
   const int frame_lowmotion = cpi->rc.avg_frame_low_motion;
@@ -402,7 +402,7 @@ static void estimate_single_ref_frame_costs(const AV1_COMMON *cm,
   }
 }
 
-static INLINE void set_force_skip_flag(const AV1_COMP *const cpi,
+static inline void set_force_skip_flag(const AV1_COMP *const cpi,
                                        MACROBLOCK *const x, unsigned int sse,
                                        int *force_skip) {
   if (x->txfm_search_params.tx_mode_search_type == TX_MODE_SELECT &&
@@ -570,7 +570,7 @@ static int ac_thr_factor(int speed, int width, int height, int norm_sum) {
 }
 
 // Sets early_term flag based on chroma planes prediction
-static INLINE void set_early_term_based_on_uv_plane(
+static inline void set_early_term_based_on_uv_plane(
     AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bsize, MACROBLOCKD *xd, int mi_row,
     int mi_col, int *early_term, int num_blk, const unsigned int *sse_tx,
     const unsigned int *var_tx, int sum, unsigned int var, unsigned int sse) {
@@ -656,7 +656,7 @@ static INLINE void set_early_term_based_on_uv_plane(
   }
 }
 
-static INLINE void calc_rate_dist_block_param(AV1_COMP *cpi, MACROBLOCK *x,
+static inline void calc_rate_dist_block_param(AV1_COMP *cpi, MACROBLOCK *x,
                                               RD_STATS *rd_stats,
                                               int calculate_rd, int *early_term,
                                               BLOCK_SIZE bsize,
@@ -899,7 +899,7 @@ static void model_rd_for_sb_y(const AV1_COMP *const cpi, BLOCK_SIZE bsize,
   rd_stats->dist = dist;
 }
 
-static INLINE int get_drl_cost(PREDICTION_MODE this_mode, int ref_mv_idx,
+static inline int get_drl_cost(PREDICTION_MODE this_mode, int ref_mv_idx,
                                const MB_MODE_INFO_EXT *mbmi_ext,
                                const int (*const drl_mode_cost0)[2],
                                int8_t ref_frame_type) {
@@ -1017,7 +1017,7 @@ static void newmv_diff_bias(MACROBLOCKD *xd, PREDICTION_MODE this_mode,
   }
 }
 
-static INLINE void update_thresh_freq_fact(AV1_COMP *cpi, MACROBLOCK *x,
+static inline void update_thresh_freq_fact(AV1_COMP *cpi, MACROBLOCK *x,
                                            BLOCK_SIZE bsize,
                                            MV_REFERENCE_FRAME ref_frame,
                                            THR_MODES best_mode_idx,
@@ -1265,9 +1265,9 @@ static void search_filter_ref(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *this_rdc,
 }
 #if !CONFIG_REALTIME_ONLY
 
-static AOM_INLINE int is_warped_mode_allowed(const AV1_COMP *cpi,
-                                             MACROBLOCK *const x,
-                                             const MB_MODE_INFO *mbmi) {
+static inline int is_warped_mode_allowed(const AV1_COMP *cpi,
+                                         MACROBLOCK *const x,
+                                         const MB_MODE_INFO *mbmi) {
   const FeatureFlags *const features = &cpi->common.features;
   const MACROBLOCKD *xd = &x->e_mbd;
 
@@ -1470,9 +1470,8 @@ static void search_motion_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *this_rdc,
 
 #if COLLECT_NONRD_PICK_MODE_STAT
 
-static AOM_INLINE void print_stage_time(const char *stage_name,
-                                        int64_t stage_time,
-                                        int64_t total_time) {
+static inline void print_stage_time(const char *stage_name, int64_t stage_time,
+                                    int64_t total_time) {
   printf("    %s: %ld (%f%%)\n", stage_name, stage_time,
          100 * stage_time / (float)total_time);
 }
@@ -1714,7 +1713,7 @@ void av1_nonrd_pick_intra_mode(AV1_COMP *cpi, MACROBLOCK *x, RD_STATS *rd_cost,
 #endif  // CONFIG_INTERNAL_STATS
 }
 
-static AOM_INLINE int is_same_gf_and_last_scale(AV1_COMMON *cm) {
+static inline int is_same_gf_and_last_scale(AV1_COMMON *cm) {
   struct scale_factors *const sf_last = get_ref_scale_factors(cm, LAST_FRAME);
   struct scale_factors *const sf_golden =
       get_ref_scale_factors(cm, GOLDEN_FRAME);
@@ -1722,12 +1721,12 @@ static AOM_INLINE int is_same_gf_and_last_scale(AV1_COMMON *cm) {
           (sf_last->y_scale_fp == sf_golden->y_scale_fp));
 }
 
-static AOM_INLINE void get_ref_frame_use_mask(AV1_COMP *cpi, MACROBLOCK *x,
-                                              MB_MODE_INFO *mi, int mi_row,
-                                              int mi_col, BLOCK_SIZE bsize,
-                                              int gf_temporal_ref,
-                                              int use_ref_frame[],
-                                              int *force_skip_low_temp_var) {
+static inline void get_ref_frame_use_mask(AV1_COMP *cpi, MACROBLOCK *x,
+                                          MB_MODE_INFO *mi, int mi_row,
+                                          int mi_col, BLOCK_SIZE bsize,
+                                          int gf_temporal_ref,
+                                          int use_ref_frame[],
+                                          int *force_skip_low_temp_var) {
   AV1_COMMON *const cm = &cpi->common;
   const struct segmentation *const seg = &cm->seg;
   const int is_small_sb = (cm->seq_params->sb_size == BLOCK_64X64);
@@ -1846,9 +1845,11 @@ static AOM_INLINE void get_ref_frame_use_mask(AV1_COMP *cpi, MACROBLOCK *x,
   assert(use_last_ref_frame || use_golden_ref_frame || use_alt_ref_frame);
 }
 
-static AOM_INLINE int is_filter_search_enabled_blk(
-    AV1_COMP *cpi, MACROBLOCK *x, int mi_row, int mi_col, BLOCK_SIZE bsize,
-    int segment_id, int cb_pred_filter_search, InterpFilter *filt_select) {
+static inline int is_filter_search_enabled_blk(AV1_COMP *cpi, MACROBLOCK *x,
+                                               int mi_row, int mi_col,
+                                               BLOCK_SIZE bsize, int segment_id,
+                                               int cb_pred_filter_search,
+                                               InterpFilter *filt_select) {
   const AV1_COMMON *const cm = &cpi->common;
   // filt search disabled
   if (!cpi->sf.rt_sf.use_nonrd_filter_search) return 0;
@@ -1886,11 +1887,13 @@ static AOM_INLINE int is_filter_search_enabled_blk(
   return enable_interp_search;
 }
 
-static AOM_INLINE int skip_mode_by_threshold(
-    PREDICTION_MODE mode, MV_REFERENCE_FRAME ref_frame, int_mv mv,
-    int frames_since_golden, const int *const rd_threshes,
-    const int *const rd_thresh_freq_fact, int64_t best_cost, int best_skip,
-    int extra_shift) {
+static inline int skip_mode_by_threshold(PREDICTION_MODE mode,
+                                         MV_REFERENCE_FRAME ref_frame,
+                                         int_mv mv, int frames_since_golden,
+                                         const int *const rd_threshes,
+                                         const int *const rd_thresh_freq_fact,
+                                         int64_t best_cost, int best_skip,
+                                         int extra_shift) {
   int skip_this_mode = 0;
   const THR_MODES mode_index = mode_idx[ref_frame][INTER_OFFSET(mode)];
   int64_t mode_rd_thresh =
@@ -1912,7 +1915,7 @@ static AOM_INLINE int skip_mode_by_threshold(
   return skip_this_mode;
 }
 
-static AOM_INLINE int skip_mode_by_low_temp(
+static inline int skip_mode_by_low_temp(
     PREDICTION_MODE mode, MV_REFERENCE_FRAME ref_frame, BLOCK_SIZE bsize,
     CONTENT_STATE_SB content_state_sb, int_mv mv, int force_skip_low_temp_var) {
   // Skip non-zeromv mode search for non-LAST frame if force_skip_low_temp_var
@@ -1929,7 +1932,7 @@ static AOM_INLINE int skip_mode_by_low_temp(
   return 0;
 }
 
-static AOM_INLINE int skip_mode_by_bsize_and_ref_frame(
+static inline int skip_mode_by_bsize_and_ref_frame(
     PREDICTION_MODE mode, MV_REFERENCE_FRAME ref_frame, BLOCK_SIZE bsize,
     int extra_prune, unsigned int sse_zeromv_norm, int more_prune,
     int skip_nearmv) {
@@ -2147,7 +2150,7 @@ static AOM_FORCE_INLINE void fill_single_inter_mode_costs(
   }
 }
 
-static AOM_INLINE bool is_globalmv_better(
+static inline bool is_globalmv_better(
     PREDICTION_MODE this_mode, MV_REFERENCE_FRAME ref_frame, int rate_mv,
     const ModeCosts *mode_costs,
     const int (*single_inter_mode_costs)[REF_FRAMES],
@@ -2166,7 +2169,7 @@ static AOM_INLINE bool is_globalmv_better(
 
 // Set up the mv/ref_frames etc based on the comp_index. Returns 1 if it
 // succeeds, 0 if it fails.
-static AOM_INLINE int setup_compound_params_from_comp_idx(
+static inline int setup_compound_params_from_comp_idx(
     const AV1_COMP *cpi, MACROBLOCK *x, struct buf_2d yv12_mb[8][MAX_MB_PLANE],
     PREDICTION_MODE *this_mode, MV_REFERENCE_FRAME *ref_frame,
     MV_REFERENCE_FRAME *ref_frame2, int_mv frame_mv[MB_MODE_COUNT][REF_FRAMES],
@@ -2223,7 +2226,7 @@ static AOM_INLINE int setup_compound_params_from_comp_idx(
   return 1;
 }
 
-static AOM_INLINE bool previous_mode_performed_poorly(
+static inline bool previous_mode_performed_poorly(
     PREDICTION_MODE mode, MV_REFERENCE_FRAME ref_frame,
     const unsigned int (*vars)[REF_FRAMES],
     const int64_t (*uv_dist)[REF_FRAMES]) {
@@ -2244,7 +2247,7 @@ static AOM_INLINE bool previous_mode_performed_poorly(
   return var_bad;
 }
 
-static AOM_INLINE bool prune_compoundmode_with_singlemode_var(
+static inline bool prune_compoundmode_with_singlemode_var(
     PREDICTION_MODE compound_mode, MV_REFERENCE_FRAME ref_frame,
     MV_REFERENCE_FRAME ref_frame2, const int_mv (*frame_mv)[REF_FRAMES],
     const uint8_t (*mode_checked)[REF_FRAMES],
@@ -3114,12 +3117,11 @@ static AOM_FORCE_INLINE void handle_screen_content_mode_nonrd(
   }
 }
 
-static AOM_INLINE bool enable_palette(AV1_COMP *cpi, bool is_mode_intra,
-                                      BLOCK_SIZE bsize,
-                                      unsigned int source_variance,
-                                      int force_zeromv_skip,
-                                      int skip_idtx_palette,
-                                      int force_palette_test) {
+static inline bool enable_palette(AV1_COMP *cpi, bool is_mode_intra,
+                                  BLOCK_SIZE bsize,
+                                  unsigned int source_variance,
+                                  int force_zeromv_skip, int skip_idtx_palette,
+                                  int force_palette_test) {
   if (!cpi->oxcf.tool_cfg.enable_palette) return false;
   if (!av1_allow_palette(cpi->common.features.allow_screen_content_tools,
                          bsize)) {

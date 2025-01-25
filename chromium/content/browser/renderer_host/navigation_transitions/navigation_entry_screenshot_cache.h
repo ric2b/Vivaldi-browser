@@ -18,8 +18,6 @@ class NavigationEntry;
 class NavigationEntryScreenshot;
 class NavigationEntryScreenshotManager;
 
-bool AreBackForwardTransitionsEnabled();
-
 // This interface limits the access of the `NavigationEntryScreenshotManager` to
 // the `NavigationEntryScreenshotCache`: we do not want the manager to
 // accidentally perform any "Set" or "Take" operations on the cache. This is
@@ -37,9 +35,14 @@ class NavigationEntryScreenshotCacheEvictor {
 
   // Deletes all the tracked screenshots in this cache, and notifies the global
   // manager to stop tracking this cache.
-  virtual void PurgeForMemoryPressure() = 0;
+  enum class PurgeReason { kMemoryPressure, kInvisible };
+  virtual void Purge(PurgeReason reason) = 0;
 
   virtual bool IsEmpty() const = 0;
+
+  // Returns the time when this cache's tab was last visible or null if it is
+  // currently visible.
+  virtual std::optional<base::TimeTicks> GetLastVisibleTime() const = 0;
 };
 
 // `NavigationEntryScreenshotCache` tracks `NavigationEntryScreenshot`s per
@@ -48,6 +51,9 @@ class NavigationEntryScreenshotCacheEvictor {
 class CONTENT_EXPORT NavigationEntryScreenshotCache
     : public NavigationEntryScreenshotCacheEvictor {
  public:
+  using CompressedCallback = base::OnceCallback<void(int nav_entry_index)>;
+  static void SetCompressedCallbackForTesting(CompressedCallback callback);
+
   explicit NavigationEntryScreenshotCache(
       base::SafeRef<NavigationEntryScreenshotManager> manager,
       NavigationControllerImpl* nav_controller);
@@ -76,10 +82,17 @@ class CONTENT_EXPORT NavigationEntryScreenshotCache
 
   // Called by the `NavigationScreenshot` when the hosting navigation entry is
   // deleted.
-  void OnNavigationEntryGone(int navigation_entry_id, size_t size);
+  void OnNavigationEntryGone(int navigation_entry_id);
+
+  // Called by `NavigationScreenshot` when the cached screenshot has been
+  // compressed.
+  void OnScreenshotCompressed(int navigation_entry_id, size_t new_size);
 
   // Called when a navigation request has finished.
   void OnNavigationFinished(const NavigationRequest& navigation_request);
+
+  // Called when the visibility of the cache changes.
+  void SetVisible(bool visible);
 
   // `NavigationEntryScreenshotCacheEvictor`:
   //
@@ -91,8 +104,9 @@ class CONTENT_EXPORT NavigationEntryScreenshotCache
   // `NavigationControllerImpl::GetEntryWithUniqueID`, which performs a linear
   // scan on all the navigation entries.
   void EvictScreenshotsUntilUnderBudgetOrEmpty() override;
-  void PurgeForMemoryPressure() override;
+  void Purge(PurgeReason reason) override;
   bool IsEmpty() const override;
+  std::optional<base::TimeTicks> GetLastVisibleTime() const override;
 
   // Allows the browsertests to be notified when a screenshot is cached.
   using NewScreenshotCachedCallbackForTesting = base::OnceCallback<void(int)>;
@@ -106,11 +120,11 @@ class CONTENT_EXPORT NavigationEntryScreenshotCache
 
   // Helper function to differentiate between purge because of memory pressure
   // and purge called by the destructor.
-  void PurgeInternal(bool for_memory_pressure);
+  void PurgeInternal(std::optional<PurgeReason> reason);
 
   // Tracks the unique IDs of the navigation entries, for which we have captured
-  // screenshots.
-  base::flat_set<int> cached_screenshots_;
+  // screenshots, and the screenshot size in bytes.
+  base::flat_map<int, size_t> cached_screenshots_;
 
   // Tracks the set of screenshots for ongoing navigations. These screenshots
   // are either added to `cached_screenshots_` or discarded when the navigation
@@ -137,6 +151,9 @@ class CONTENT_EXPORT NavigationEntryScreenshotCache
   // We need the controller for cache eviction to query all the
   // `NavigationEntry`. See the impl for `EvictScreenshotsUntilInBudgetOrEmpty`.
   const raw_ptr<NavigationControllerImpl> nav_controller_;
+
+  // The last time this cache was visible or null if its currently visible.
+  std::optional<base::TimeTicks> last_visible_timestamp_;
 
   NewScreenshotCachedCallbackForTesting new_screenshot_cached_callback_;
 };

@@ -5,17 +5,18 @@
 import './icons.html.js';
 import 'chrome://resources/cr_elements/cr_icon/cr_icon.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
-import '../tab_resumption/page_favicon.js';
+import './page_favicon.js';
 import '../icons.html.js';
 
 import type {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import type {DomRepeatEvent} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import type {Tab} from '../../../history_types.mojom-webui.js';
-import {DeviceType} from '../../../history_types.mojom-webui.js';
 import {I18nMixin, loadTimeData} from '../../../i18n_setup.js';
+import {recordOccurence as recordOccurrence} from '../../../metrics_utils.js';
 import {ScoredURLUserAction} from '../../../most_relevant_tab_resumption.mojom-webui.js';
+import type {URLVisit} from '../../../url_visit_types.mojom-webui.js';
+import {FormFactor, VisitSource} from '../../../url_visit_types.mojom-webui.js';
 import type {InfoDialogElement} from '../../info_dialog.js';
 import {ModuleDescriptor} from '../../module_descriptor.js';
 import type {MenuItem, ModuleHeaderElement} from '../module_header.js';
@@ -23,13 +24,13 @@ import type {MenuItem, ModuleHeaderElement} from '../module_header.js';
 import {getTemplate} from './module.html.js';
 import {MostRelevantTabResumptionProxyImpl} from './most_relevant_tab_resumption_proxy.js';
 
-export const MAX_TABS = 5;
+export const MAX_URL_VISITS = 5;
 
 export interface MostRelevantTabResumptionModuleElement {
   $: {
     infoDialogRender: CrLazyRenderElement<InfoDialogElement>,
     moduleHeaderElementV2: ModuleHeaderElement,
-    tabs: HTMLElement,
+    urlVisits: HTMLElement,
   };
 }
 
@@ -52,7 +53,7 @@ export class MostRelevantTabResumptionModuleElement extends I18nMixin
       },
 
       /** The cluster displayed by this element. */
-      tabs: {
+      urlVisits: {
         type: Object,
       },
 
@@ -70,8 +71,8 @@ export class MostRelevantTabResumptionModuleElement extends I18nMixin
 
 format:
   string;
-tabs:
-  Tab[];
+urlVisits:
+  URLVisit[];
 private shouldShowDeviceIcon_:
   boolean;
 
@@ -119,7 +120,7 @@ private shouldShowDeviceIcon_:
 
   private onDismissAllButtonClick_() {
     MostRelevantTabResumptionProxyImpl.getInstance().handler.dismissModule(
-        this.tabs);
+        this.urlVisits);
     this.dispatchEvent(new CustomEvent('dismiss-module-instance', {
       bubbles: true,
       composed: true,
@@ -128,18 +129,26 @@ private shouldShowDeviceIcon_:
             'dismissModuleToastMessage',
             loadTimeData.getString('modulesTabResumptionSentence')),
         restoreCallback: () => MostRelevantTabResumptionProxyImpl.getInstance()
-                                   .handler.restoreModule(this.tabs),
+                                   .handler.restoreModule(this.urlVisits),
       },
     }));
   }
 
-  private onDismissButtonClick_(e: DomRepeatEvent<Tab>) {
-    e.preventDefault();
-    const tab = (e.target! as HTMLElement).parentElement!;
+  private onSeeMoreButtonClick_() {
+    this.dispatchEvent(new Event('usage', {bubbles: true, composed: true}));
+    recordOccurrence('NewTabPage.TabResumption.SeeMoreClick');
+  }
+
+  private onDismissButtonClick_(e: DomRepeatEvent<URLVisit>) {
+    e.preventDefault();   // Stop navigation
+    e.stopPropagation();  // Stop firing of click handler
+    const urlVisit = (e.target! as HTMLElement).parentElement!;
     const index = e.model.index;
-    tab!.remove();
-    MostRelevantTabResumptionProxyImpl.getInstance().handler.dismissTab(
-        this.tabs[index]);
+    chrome.metricsPrivate.recordSmallCount(
+        'NewTabPage.TabResumption.VisitDismissIndex', index);
+    urlVisit!.remove();
+    MostRelevantTabResumptionProxyImpl.getInstance().handler.dismissURLVisit(
+        this.urlVisits[index]);
     this.dispatchEvent(new CustomEvent('dismiss-module-element', {
       bubbles: true,
       composed: true,
@@ -148,9 +157,12 @@ private shouldShowDeviceIcon_:
             'dismissModuleToastMessage',
             loadTimeData.getString('modulesTabResumptionSentence')),
         restoreCallback: () => {
-          this.$.tabs.insertBefore(tab, this.$.tabs.childNodes[index]);
-          MostRelevantTabResumptionProxyImpl.getInstance().handler.restoreTab(
-              this.tabs[index]);
+          chrome.metricsPrivate.recordSmallCount(
+              'NewTabPage.TabResumption.VisitRestoreIndex', index);
+          this.$.urlVisits.insertBefore(
+              urlVisit, this.$.urlVisits.childNodes[index]);
+          MostRelevantTabResumptionProxyImpl.getInstance()
+              .handler.restoreURLVisit(this.urlVisits[index]);
         },
       },
     }));
@@ -164,10 +176,13 @@ private shouldShowDeviceIcon_:
     this.$.moduleHeaderElementV2.showAt(e);
   }
 
-  private onTabClick_(e: DomRepeatEvent<Tab>) {
+  private onUrlVisitClick_(e: DomRepeatEvent<URLVisit>) {
     this.dispatchEvent(new Event('usage', {bubbles: true, composed: true}));
     chrome.metricsPrivate.recordSmallCount(
         'NewTabPage.TabResumption.ClickIndex', e.model.index);
+    chrome.metricsPrivate.recordEnumerationValue(
+        'NewTabPage.TabResumption.Visit.ClickSource',
+        this.urlVisits[e.model.index].source, VisitSource.MAX_VALUE);
 
     // Calculate the number of milliseconds in the difference. Max is 4 days.
     chrome.metricsPrivate.recordValue(
@@ -180,46 +195,53 @@ private shouldShowDeviceIcon_:
         },
         Number(e.model.item.relativeTime.microseconds / 1000n));
 
-    const tab = this.tabs[e.model.index];
+    const urlVisit = this.urlVisits[e.model.index];
     MostRelevantTabResumptionProxyImpl.getInstance().handler.recordAction(
-        ScoredURLUserAction.kActivated, tab.urlKey, tab.trainingRequestId);
+        ScoredURLUserAction.kActivated, urlVisit.urlKey,
+        urlVisit.trainingRequestId);
   }
 
-  private computeDomain_(tab: Tab): string {
-    let domain = (new URL(tab.url.url)).hostname;
+  private computeDomain_(urlVisit: URLVisit): string {
+    let domain = (new URL(urlVisit.url.url)).hostname;
     domain = domain.replace('www.', '');
     return domain;
   }
 
-  private computeIcon_(tab: Tab): string {
-    switch (tab.deviceType) {
-      case DeviceType.kDesktop:
+  private computeIcon_(urlVisit: URLVisit): string {
+    switch (urlVisit.formFactor) {
+      case FormFactor.kDesktop:
         return 'tab_resumption:computer';
-      case DeviceType.kPhone:
+      case FormFactor.kPhone:
         return 'tab_resumption:phone';
-      case DeviceType.kTablet:
+      case FormFactor.kTablet:
         return 'tab_resumption:tablet';
+      case FormFactor.kAutomotive:
+        return 'tab_resumption:automotive';
+      case FormFactor.kWearable:
+        return 'tab_resumption:wearable';
+      case FormFactor.kTv:
+        return 'tab_resumption:tv';
       default:
         return 'tab_resumption:globe';
     }
   }
 
-  private computeDeviceName_(tab: Tab): string|null {
+  private computeDeviceName_(urlVisit: URLVisit): string|null {
     return loadTimeData.getBoolean('modulesRedesignedEnabled') ?
-        tab.sessionName :
-        this.i18n('modulesTabResumptionDevicePrefix') + ` ${tab.sessionName}`;
+        urlVisit.sessionName :
+        this.i18n('modulesTabResumptionDevicePrefix') +
+            ` ${urlVisit.sessionName}`;
   }
 
   private computeFaviconSize_(): number {
     return 24;
   }
-
-  private computeShouldShowDeviceName_(tab: Tab): boolean {
-    return !this.shouldShowDeviceIcon_ && !!this.computeDeviceName_(tab);
+  private computeShouldShowDeviceName_(urlVisit: URLVisit): boolean {
+    return !this.shouldShowDeviceIcon_ && !!this.computeDeviceName_(urlVisit);
   }
 
-  private getVisibleTabs_(): Tab[] {
-    return this.tabs.slice(0, MAX_TABS);
+  private getVisibleUrlVisits_(): URLVisit[] {
+    return this.urlVisits.slice(0, MAX_URL_VISITS);
   }
 }
 
@@ -229,18 +251,18 @@ customElements.define(
 
 async function createElement():
     Promise<MostRelevantTabResumptionModuleElement|null> {
-  const {tabs} =
-      await MostRelevantTabResumptionProxyImpl.getInstance().handler.getTabs();
-  if (!tabs || tabs.length === 0) {
+  const {urlVisits} = await MostRelevantTabResumptionProxyImpl.getInstance()
+                          .handler.getURLVisits();
+  if (!urlVisits || urlVisits.length === 0) {
     return null;
   }
 
   const element = new MostRelevantTabResumptionModuleElement();
-  element.tabs = tabs;
+  element.urlVisits = urlVisits;
 
-  tabs.slice(0, MAX_TABS).forEach((tab) => {
+  urlVisits.slice(0, MAX_URL_VISITS).forEach((urlVisit) => {
     MostRelevantTabResumptionProxyImpl.getInstance().handler.recordAction(
-        ScoredURLUserAction.kSeen, tab.urlKey, tab.trainingRequestId);
+        ScoredURLUserAction.kSeen, urlVisit.urlKey, urlVisit.trainingRequestId);
   });
 
   return element;

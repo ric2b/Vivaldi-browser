@@ -33,13 +33,15 @@
 
 #include "base/memory/values_equivalent.h"
 #include "cc/input/scroll_snap_data.h"
-#include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/dom/scroll_marker_group_pseudo_element.h"
+#include "third_party/blink/renderer/core/dom/scroll_marker_pseudo_element.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
@@ -78,6 +80,7 @@
 #include "third_party/blink/renderer/core/layout/forms/layout_text_control.h"
 #include "third_party/blink/renderer/core/layout/fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
+#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
@@ -262,11 +265,10 @@ LayoutUnit FileUploadControlIntrinsicInlineSize(const HTMLInputElement& input,
       WritingMode mode = button_style.GetWritingMode();
       ConstraintSpaceBuilder builder(mode, button_style.GetWritingDirection(),
                                      /* is_new_fc */ true);
-      LayoutUnit max =
-          BlockNode(button_box)
-              .ComputeMinMaxSizes(mode, MinMaxSizesType::kIntrinsic,
-                                  builder.ToConstraintSpace())
-              .sizes.max_size;
+      LayoutUnit max = BlockNode(button_box)
+                           .ComputeMinMaxSizes(mode, SizeType::kIntrinsic,
+                                               builder.ToConstraintSpace())
+                           .sizes.max_size;
       default_label_width +=
           max + (kAfterButtonSpacing * box.StyleRef().EffectiveZoom());
     }
@@ -1103,14 +1105,16 @@ PhysicalBoxStrut LayoutBox::MarginBoxOutsets() const {
   return PhysicalBoxStrut();
 }
 
-void LayoutBox::AbsoluteQuads(Vector<gfx::QuadF>& quads,
-                              MapCoordinatesFlags mode) const {
+void LayoutBox::QuadsInAncestorInternal(Vector<gfx::QuadF>& quads,
+                                        const LayoutBoxModelObject* ancestor,
+                                        MapCoordinatesFlags mode) const {
   NOT_DESTROYED();
   if (LayoutFlowThread* flow_thread = FlowThreadContainingBlock()) {
-    flow_thread->AbsoluteQuadsForDescendant(*this, quads, mode);
+    flow_thread->QuadsInAncestorForDescendant(*this, quads, ancestor, mode);
     return;
   }
-  quads.push_back(LocalRectToAbsoluteQuad(PhysicalBorderBoxRect(), mode));
+  quads.push_back(
+      LocalRectToAncestorQuad(PhysicalBorderBoxRect(), ancestor, mode));
 }
 
 gfx::RectF LayoutBox::LocalBoundingBoxRectForAccessibility() const {
@@ -1210,13 +1214,13 @@ LayoutUnit LayoutBox::DefaultIntrinsicContentInlineSize() const {
 
   const bool apply_fixed_size = StyleRef().ApplyControlFixedSize(&element);
   const auto* select = DynamicTo<HTMLSelectElement>(element);
-  if (UNLIKELY(select && select->UsesMenuList() &&
-               !select->IsAppearanceBaseSelect())) {
+  if (select && select->UsesMenuList() && !select->IsAppearanceBaseButton())
+      [[unlikely]] {
     return apply_fixed_size ? MenuListIntrinsicInlineSize(*select, *this)
                             : kIndefiniteSize;
   }
   const auto* input = DynamicTo<HTMLInputElement>(element);
-  if (UNLIKELY(input)) {
+  if (input) [[unlikely]] {
     if (input->IsTextField() && apply_fixed_size) {
       return TextFieldIntrinsicInlineSize(*input, *this);
     }
@@ -1239,7 +1243,7 @@ LayoutUnit LayoutBox::DefaultIntrinsicContentInlineSize() const {
     return kIndefiniteSize;
   }
   const auto* textarea = DynamicTo<HTMLTextAreaElement>(element);
-  if (UNLIKELY(textarea) && apply_fixed_size) {
+  if (textarea && apply_fixed_size) [[unlikely]] {
     return TextAreaIntrinsicInlineSize(*textarea, *this);
   }
   if (IsSliderContainer(element))
@@ -1264,7 +1268,7 @@ LayoutUnit LayoutBox::DefaultIntrinsicContentBlockSize() const {
     return kIndefiniteSize;
   }
   if (const auto* select = DynamicTo<HTMLSelectElement>(GetNode())) {
-    if (!select->IsAppearanceBaseSelect()) {
+    if (!select->IsAppearanceBaseButton()) {
       if (select->UsesMenuList()) {
         return MenuListIntrinsicBlockSize(*select, *this);
       }
@@ -1516,7 +1520,7 @@ void LayoutBox::Autoscroll(const PhysicalOffset& position_in_root_frame) {
   PhysicalOffset absolute_position =
       frame_view->ConvertFromRootFrame(position_in_root_frame);
   mojom::blink::ScrollIntoViewParamsPtr params =
-      ScrollAlignment::CreateScrollIntoViewParams(
+      scroll_into_view_util::CreateScrollIntoViewParams(
           ScrollAlignment::ToEdgeIfNeeded(), ScrollAlignment::ToEdgeIfNeeded(),
           mojom::blink::ScrollType::kUser);
   scroll_into_view_util::ScrollRectToVisible(
@@ -1940,7 +1944,7 @@ bool LayoutBox::NodeAtPoint(HitTestResult& result,
   if (IsInSelfHitTestingPhase(phase) &&
       VisibleToHitTestRequest(result.GetHitTestRequest())) {
     PhysicalRect bounds_rect;
-    if (UNLIKELY(result.GetHitTestRequest().IsHitTestVisualOverflow())) {
+    if (result.GetHitTestRequest().IsHitTestVisualOverflow()) [[unlikely]] {
       bounds_rect = VisualOverflowRectIncludingFilters();
     } else {
       bounds_rect = PhysicalBorderBoxRect();
@@ -1995,7 +1999,7 @@ bool LayoutBox::HitTestClippedOutByBorder(
 
 void LayoutBox::Paint(const PaintInfo& paint_info) const {
   NOT_DESTROYED();
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 PhysicalRect LayoutBox::BackgroundPaintedExtent() const {
@@ -2034,9 +2038,10 @@ static bool IsCandidateForOpaquenessTest(const LayoutBox& child_box) {
   if (child_box.HasLayer())
     return false;
   const ComputedStyle& child_style = child_box.StyleRef();
-  if (child_style.Visibility() != EVisibility::kVisible ||
-      child_style.ShapeOutside())
+  if (child_style.UsedVisibility() != EVisibility::kVisible ||
+      child_style.ShapeOutside()) {
     return false;
+  }
   if (child_box.Size().IsZero())
     return false;
   // A replaced element with border-radius always clips the content.
@@ -2185,7 +2190,7 @@ ResourcePriority LayoutBox::ComputeResourcePriority() const {
   object_bounds.Move(LocalToAbsolutePoint(PhysicalOffset(), kIgnoreTransforms));
 
   // The object bounds might be empty right now, so intersects will fail since
-  // it doesn't deal with empty rects. Use LayoutRect::contains in that case.
+  // it doesn't deal with empty rects. Use PhysicalRect::Contains in that case.
   bool is_visible;
   if (!object_bounds.IsEmpty())
     is_visible = view_bounds.Intersects(object_bounds);
@@ -2345,7 +2350,7 @@ PhysicalRect LayoutBox::OverflowClipRect(
                       kExcludeScrollbarGutter);
   }
 
-  if (UNLIKELY(IsA<HTMLInputElement>(GetNode()))) {
+  if (IsA<HTMLInputElement>(GetNode())) [[unlikely]] {
     // We only apply a clip to <input> buttons, and not regular <button>s.
     if (IsTextField() || IsInputButton()) {
       DCHECK(HasControlClip());
@@ -2353,7 +2358,7 @@ PhysicalRect LayoutBox::OverflowClipRect(
       control_clip.Move(location);
       clip_rect.Intersect(control_clip);
     }
-  } else if (UNLIKELY(IsMenuList())) {
+  } else if (IsMenuList()) [[unlikely]] {
     DCHECK(HasControlClip());
     PhysicalRect control_clip = PhysicalContentBoxRect();
     control_clip.Move(location);
@@ -2367,7 +2372,10 @@ PhysicalRect LayoutBox::OverflowClipRect(
 
 bool LayoutBox::HasControlClip() const {
   NOT_DESTROYED();
-  return UNLIKELY(IsTextField() || IsMenuList() || IsInputButton());
+  if (IsTextField() || IsMenuList() || IsInputButton()) [[unlikely]] {
+    return true;
+  }
+  return false;
 }
 
 void LayoutBox::ExcludeScrollbars(
@@ -2910,7 +2918,7 @@ bool LayoutBox::MapToVisualRectInAncestorSpaceInternal(
 
   if (IsStickyPositioned()) {
     container_offset += StickyPositionOffset();
-  } else if (UNLIKELY(NeedsAnchorPositionScrollAdjustment())) {
+  } else if (NeedsAnchorPositionScrollAdjustment()) [[unlikely]] {
     container_offset += AnchorPositionScrollTranslationOffset();
   }
 
@@ -2985,7 +2993,7 @@ bool LayoutBox::SkipContainingBlockForPercentHeightCalculation(
   }
 
   const Node* node = containing_block->GetNode();
-  if (UNLIKELY(node->IsInUserAgentShadowRoot())) {
+  if (node->IsInUserAgentShadowRoot()) [[unlikely]] {
     const Element* host = node->OwnerShadowHost();
     if (const auto* input = DynamicTo<HTMLInputElement>(host)) {
       // In web_tests/fast/forms/range/range-thumb-height-percentage.html, a
@@ -3112,6 +3120,73 @@ PhysicalRect LayoutBox::LocalCaretRect(
   }
 
   return rect;
+}
+
+// Implements scroll tracking for scroll marker controls as per
+// https://drafts.csswg.org/css-overflow-5/#scroll-container-scroll.
+void LayoutBox::UpdateScrollMarkerControlsAfterScroll() const {
+  NOT_DESTROYED();
+  CHECK(IsScrollContainerWithScrollMarkerGroup());
+  LayoutObject* scroll_marker_group_object = GetScrollMarkerGroup();
+  if (!scroll_marker_group_object) {
+    return;
+  }
+  auto* scroll_marker_group =
+      To<ScrollMarkerGroupPseudoElement>(scroll_marker_group_object->GetNode());
+  ScrollMarkerPseudoElement* selected = nullptr;
+  PhysicalOffset scroll_offset = ScrolledContentOffset();
+  for (ScrollMarkerPseudoElement* scroll_marker :
+       scroll_marker_group->ScrollMarkers()) {
+    if (!selected) {
+      selected = scroll_marker;
+    }
+    const LayoutBox* target_box =
+        scroll_marker->OriginatingElement()->GetLayoutBox();
+    if (!target_box) {
+      continue;
+    }
+    PhysicalBoxStrut scroll_margin =
+        target_box->Style() ? target_box->Style()->ScrollMarginStrut()
+                            : PhysicalBoxStrut();
+    // Ignore sticky position offsets for the purposes of scrolling elements
+    // into view. See https://www.w3.org/TR/css-position-3/#stickypos-scroll for
+    // details
+    const MapCoordinatesFlags flag =
+        (RuntimeEnabledFeatures::CSSPositionStickyStaticScrollPositionEnabled())
+            ? kIgnoreStickyOffset
+            : 0;
+    PhysicalRect rect_to_scroll = AbsoluteToLocalRect(
+        target_box->AbsoluteBoundingBoxRectForScrollIntoView(), flag);
+    rect_to_scroll.Expand(scroll_margin);
+    ScrollOffset target_scroll_offset =
+        scroll_into_view_util::GetScrollOffsetToExpose(
+            *GetScrollableArea(), rect_to_scroll, scroll_margin,
+            scroll_into_view_util::PhysicalAlignmentFromSnapAlignStyle(
+                *target_box, kHorizontalScroll),
+            scroll_into_view_util::PhysicalAlignmentFromSnapAlignStyle(
+                *target_box, kVerticalScroll));
+    PhysicalOffset target_offset(LayoutUnit(target_scroll_offset.x()),
+                                 LayoutUnit(target_scroll_offset.y()));
+    // TODO(332396355, 355460994): It's a bug for now, since scroll area doesn't
+    // account for its border when If left/top of scroll offset is zero, don't
+    // check that dimension for now, since target can have some border/margin
+    // and will always be more than zero.
+    // Note: use of abs here is determined by the fact that for direction: rtl
+    // the scroll offset starts at zero and goes to the negative side, all the
+    // target offsets go to the negative side as well. We can't end up in
+    // situation of scroll offset to be on the wrong side of zero, so it's safe
+    // to do so.
+    if ((target_offset.left.Abs() <= scroll_offset.left.Abs() ||
+         !scroll_offset.left) &&
+        (target_offset.top.Abs() <= scroll_offset.top.Abs() ||
+         !scroll_offset.top)) {
+      selected = scroll_marker;
+    }
+  }
+  if (!selected) {
+    return;
+  }
+  scroll_marker_group->SetSelected(*selected);
 }
 
 PositionWithAffinity LayoutBox::PositionForPointInFragments(
@@ -3555,7 +3630,7 @@ void LayoutBox::CopyVisualOverflowFromFragments() {
 void LayoutBox::CopyVisualOverflowFromFragmentsWithoutInvalidations() {
   NOT_DESTROYED();
   DCHECK(CanUseFragmentsForVisualOverflow());
-  if (UNLIKELY(!PhysicalFragmentCount())) {
+  if (!PhysicalFragmentCount()) [[unlikely]] {
     DCHECK(IsLayoutTableCol());
     ClearVisualOverflow();
     return;

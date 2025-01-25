@@ -20,13 +20,18 @@ namespace {
 
 const char kDescriberName[] = "FrameNodeImpl";
 
-std::string IntersectsViewportToString(
-    std::optional<bool> intersects_viewport) {
-  if (!intersects_viewport.has_value()) {
+std::string ViewportIntersectionStateToString(
+    std::optional<ViewportIntersectionState> viewport_intersection_state) {
+  if (!viewport_intersection_state.has_value()) {
     return "Nullopt";
   }
 
-  return intersects_viewport.value() ? "true" : "false";
+  switch (*viewport_intersection_state) {
+    case ViewportIntersectionState::kNotIntersecting:
+      return "Not intersecting";
+    case ViewportIntersectionState::kIntersecting:
+      return "Intersecting";
+  }
 }
 
 std::string FrameNodeVisibilityToString(FrameNode::Visibility visibility) {
@@ -71,7 +76,8 @@ base::Value::Dict FrameNodeImplDescriber::DescribeFrameNodeData(
           impl->document_.has_nonempty_beforeunload);
   doc.Set("network_almost_idle", impl->document_.network_almost_idle.value());
   doc.Set("had_form_interaction", impl->document_.had_form_interaction.value());
-  ret.Set("had_user_edits", impl->document_.had_user_edits.value());
+  doc.Set("had_user_edits", impl->document_.had_user_edits.value());
+  doc.Set("uses_webrtc", impl->document_.uses_web_rtc.value());
   ret.Set("document", std::move(doc));
 
   // Frame node properties.
@@ -84,13 +90,14 @@ base::Value::Dict FrameNodeImplDescriber::DescribeFrameNodeData(
   ret.Set("is_holding_weblock", impl->is_holding_weblock_.value());
   ret.Set("is_holding_indexeddb_lock",
           impl->is_holding_indexeddb_lock_.value());
-  ret.Set("is_current", impl->is_current_.value());
+  ret.Set("is_current", impl->IsCurrent());
   ret.Set("priority", PriorityAndReasonToValue(impl->GetPriorityAndReason()));
   ret.Set("is_audible", impl->is_audible_.value());
   ret.Set("is_capturing_media_stream",
           impl->is_capturing_media_stream_.value());
-  ret.Set("viewport_intersection",
-          IntersectsViewportToString(impl->intersects_viewport_.value()));
+  ret.Set("viewport_intersection_state",
+          ViewportIntersectionStateToString(
+              impl->viewport_intersection_state_.value()));
   ret.Set("visibility", FrameNodeVisibilityToString(impl->visibility_.value()));
   ret.Set("resource_context", impl->GetResourceContext().ToString());
 

@@ -7,7 +7,10 @@
 #import <UIKit/UIKit.h>
 
 #import "base/check.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/metrics/user_metrics.h"
 #import "components/browsing_data/core/browsing_data_utils.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/ui/bottom_sheet/table_view_bottom_sheet_view_controller+subclassing.h"
@@ -16,6 +19,7 @@
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/settings/cells/clear_browsing_data_constants.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/quick_delete_mutator.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/quick_delete_presentation_commands.h"
@@ -23,10 +27,17 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
 namespace {
+
+using browsing_data::DeleteBrowsingDataDialogAction;
+
+// Delay to observe when dismissing the UI after showing the confirmation
+// indicator that the deletion has concluded.
+constexpr base::TimeDelta kDismissDelay = base::Seconds(1);
 
 // Trash icon view size.
 constexpr CGFloat kTrashIconContainerViewSize = 64;
@@ -39,6 +50,8 @@ constexpr CGFloat kTrashIconSize = 32;
 
 // Top padding for the trash icon view.
 constexpr CGFloat kTrashIconContainerViewTopPadding = 33;
+
+constexpr CGFloat kTrashIconContainerViewAlphaComponent = 0.11;
 
 // Vertical padding for the title.
 constexpr CGFloat kTitleVerticalPadding = 22;
@@ -71,14 +84,31 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
     TableViewLinkHeaderFooterItemDelegate> {
   UITableViewDiffableDataSource<NSNumber*, NSNumber*>* _dataSource;
   UITableView* _tableView;
+
+  NSLayoutConstraint* _tableViewHeightConstraint;
+
   browsing_data::TimePeriod _timeRange;
   NSString* _browsingDataSummary;
   BOOL _shouldShowFooter;
-  NSLayoutConstraint* _tableViewHeightConstraint;
+
+  BOOL _historySelected;
+  BOOL _tabsSelected;
+  BOOL _siteDataSelected;
+  BOOL _cacheSelected;
+  BOOL _passwordsSelected;
+  BOOL _autofillSelected;
 }
 @end
 
 @implementation QuickDeleteViewController
+
+- (void)focusOnBrowsingDataRow {
+  UIView* browsingDataRow = [_tableView
+      cellForRowAtIndexPath:[_dataSource indexPathForItemIdentifier:
+                                             @(ItemIdentifierBrowsingData)]];
+  UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification,
+                                  browsingDataRow);
+}
 
 #pragma mark - UIViewController
 
@@ -88,6 +118,9 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
 }
 
 - (void)viewDidLoad {
+  base::RecordAction(
+      base::UserMetricsAction("ClearBrowsingData_DialogCreated"));
+
   _tableView = [self createTableView];
   _dataSource = [self createAndFillDataSource];
   _tableView.dataSource = _dataSource;
@@ -117,13 +150,11 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
 
   [self displayGradientView:NO];
 
-  // Configure the color of the primary button to red, as the default colour is
-  // blue.
-  UIButtonConfiguration* buttonConfiguration =
-      self.primaryActionButton.configuration;
-  buttonConfiguration.background.backgroundColor =
-      [UIColor colorNamed:kRedColor];
-  self.primaryActionButton.configuration = buttonConfiguration;
+  // Configure the color of the primary button to red in several states, as the
+  // default colour is blue.
+  [self updatePrimaryActionButtonEnabledStatus];
+  self.confirmationCheckmarkColor = [UIColor colorNamed:kRed600Color];
+  self.confirmationButtonColor = [UIColor colorNamed:kRed100Color];
 
   // Assign the table view's anchors now that it is in the same hierarchy as the
   // top view and that the content has been loaded.
@@ -158,12 +189,17 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
 #pragma mark - ConfirmationAlertActionHandler
 
 - (void)confirmationAlertPrimaryAction {
+  base::UmaHistogramEnumeration(
+      browsing_data::kDeleteBrowsingDataDialogHistogram,
+      DeleteBrowsingDataDialogAction::kDeletionSelected);
   [_mutator triggerDeletion];
 }
 
 - (void)confirmationAlertSecondaryAction {
-  CHECK(self.presentationHandler);
-  [self.presentationHandler dismissQuickDelete];
+  base::UmaHistogramEnumeration(
+      browsing_data::kDeleteBrowsingDataDialogHistogram,
+      DeleteBrowsingDataDialogAction::kCancelSelected);
+  [self dismissQuickDelete];
 }
 
 #pragma mark - UITableViewDelegate
@@ -174,6 +210,9 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
   ItemIdentifier itemType = static_cast<ItemIdentifier>(
       [_dataSource itemIdentifierForIndexPath:indexPath].integerValue);
   CHECK(itemType == ItemIdentifierBrowsingData) << itemType;
+  base::UmaHistogramEnumeration(
+      browsing_data::kDeleteBrowsingDataDialogHistogram,
+      DeleteBrowsingDataDialogAction::kBrowsingDataSelected);
   [self.presentationHandler showBrowsingDataPage];
 }
 
@@ -197,9 +236,9 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
         [[CrURL alloc]
             initWithGURL:GURL(kClearBrowsingDataDSEMyActivityUrlInFooterURL)]
       ];
-      [footer
-            setText:l10n_util::GetNSString(IDS_IOS_DELETE_BROWSING_DATA_FOOTER)
-          withColor:[UIColor colorNamed:kTextSecondaryColor]];
+      [footer setText:l10n_util::GetNSString(
+                          IDS_IOS_DELETE_BROWSING_DATA_BOTTOM_SHEET_FOOTER)
+            withColor:[UIColor colorNamed:kTextSecondaryColor]];
       return footer;
     }
     case SectionIdentifierTimeRange:
@@ -207,7 +246,7 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
       return nil;
     }
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 - (CGFloat)tableView:(UITableView*)tableView
@@ -282,16 +321,153 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
                   }];
 }
 
-- (void)updateAutofillWithResult:
-    (const browsing_data::BrowsingDataCounter::Result&)result {
-  // TODO(crbug.com/341107834): Refactor summary using this result.
+- (void)setHistorySummary:(NSString*)historySummary {
+  // No-op: This ViewController doesn't show the individual summaries for each
+  // browsing data type.
+}
+
+- (void)setTabsSummary:(NSString*)tabsSummary {
+  // No-op: This ViewController doesn't show the individual summaries for each
+  // browsing data type.
+}
+
+- (void)setCacheSummary:(NSString*)cacheSummary {
+  // No-op: This ViewController doesn't show the individual summaries for each
+  // browsing data type.
+}
+
+- (void)setPasswordsSummary:(NSString*)passwordsSummary {
+  // No-op: This ViewController doesn't show the individual summaries for each
+  // browsing data type.
+}
+
+- (void)setAutofillSummary:(NSString*)autofillSummary {
+  // No-op: This ViewController doesn't show the individual summaries for each
+  // browsing data type.
+}
+
+- (void)setHistorySelection:(BOOL)selected {
+  _historySelected = selected;
+  [self updatePrimaryActionButtonEnabledStatus];
+}
+
+- (void)setTabsSelection:(BOOL)selected {
+  _tabsSelected = selected;
+  [self updatePrimaryActionButtonEnabledStatus];
+}
+
+- (void)setSiteDataSelection:(BOOL)selected {
+  _siteDataSelected = selected;
+  [self updatePrimaryActionButtonEnabledStatus];
+}
+
+- (void)setCacheSelection:(BOOL)selected {
+  _cacheSelected = selected;
+  [self updatePrimaryActionButtonEnabledStatus];
+}
+
+- (void)setPasswordsSelection:(BOOL)selected {
+  _passwordsSelected = selected;
+  [self updatePrimaryActionButtonEnabledStatus];
 }
 
 - (void)setAutofillSelection:(BOOL)selected {
-  // TODO(crbug.com/341107834): Refactor summary using this type selection.
+  _autofillSelected = selected;
+  [self updatePrimaryActionButtonEnabledStatus];
+}
+
+- (void)deletionInProgress {
+  self.primaryActionButton.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_DELETE_BROWSING_DATA_IN_PROGRESS_NOTICE);
+  self.isLoading = YES;
+  self.isConfirmed = NO;
+
+  self.view.window.userInteractionEnabled = NO;
+  // Disable accessibility elements on entire window to avoid Voiceover focusing
+  // on new elements during the deletion or the animation.
+  self.view.window.accessibilityElementsHidden = YES;
+  [self.presentationHandler blockOtherWindows];
+}
+
+- (void)deletionFinished {
+  [self.presentationHandler releaseOtherWindows];
+  // Allow the user to dismiss the bottom sheet, but still not interact with
+  // contents of the bottom sheet.
+  self.view.userInteractionEnabled = NO;
+  self.view.window.userInteractionEnabled = YES;
+  self.view.window.accessibilityElementsHidden = NO;
+
+  self.isLoading = NO;
+  self.isConfirmed = YES;
+  TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
+
+  // If Voiceover is enabled, inform users that their browsing data has been
+  // deleted. We should let the voiceover announcement finish before dismissing
+  // the UI programatically. We'll trigger the dismissal after the announcement
+  // is finished when UIAccessibilityAnnouncementDidFinishNotification is
+  // received. Users are still able to dismiss the UI manually before the
+  // announcement is finished by swipping down the bottom sheet.
+  if (UIAccessibilityIsVoiceOverRunning()) {
+    [[NSNotificationCenter defaultCenter]
+        addObserver:self
+           selector:@selector
+           (handleUIAccessibilityAnnouncementDidFinishNotification:)
+               name:UIAccessibilityAnnouncementDidFinishNotification
+             object:nil];
+    UIAccessibilityPostNotification(
+        UIAccessibilityAnnouncementNotification,
+        l10n_util::GetNSString(
+            IDS_IOS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_TITLE));
+  } else {
+    // If voice over is not running, we'll add an artificial delay for dimissing
+    // the UI, so the user is able to see the confirmation state.
+    __weak __typeof(self) weakSelf = self;
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW, kDismissDelay.InNanoseconds()),
+        dispatch_get_main_queue(), ^{
+          [weakSelf dismissQuickDelete];
+        });
+  }
 }
 
 #pragma mark - Private
+
+// Updates the enabled status of the primary button. The primary button should
+// only be enabled if at least one browsing data type is selected for deletion.
+- (void)updatePrimaryActionButtonEnabledStatus {
+  self.primaryActionButton.enabled = _historySelected || _tabsSelected ||
+                                     _siteDataSelected || _cacheSelected ||
+                                     _passwordsSelected || _autofillSelected;
+
+  UIButtonConfiguration* buttonConfiguration =
+      self.primaryActionButton.configuration;
+  buttonConfiguration.background.backgroundColor =
+      self.primaryActionButton.enabled ? [UIColor colorNamed:kRedColor]
+                                       : [UIColor colorNamed:kRed100Color];
+  self.primaryActionButton.configuration = buttonConfiguration;
+}
+
+// Action handler that executes when a voiceover announcement ends.
+- (void)handleUIAccessibilityAnnouncementDidFinishNotification:
+    (NSNotification*)notification {
+  NSString* announcement = [[notification userInfo]
+      valueForKey:UIAccessibilityAnnouncementKeyStringValue];
+  if ([announcement
+          isEqualToString:
+              l10n_util::GetNSString(
+                  IDS_IOS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_TITLE)]) {
+    [[NSNotificationCenter defaultCenter]
+        removeObserver:self
+                  name:UIAccessibilityAnnouncementDidFinishNotification
+                object:nil];
+    [self dismissQuickDelete];
+  }
+}
+
+// Triggers the dismission of the Quick Delete UI.
+- (void)dismissQuickDelete {
+  [self.presentationHandler dismissQuickDelete];
+}
 
 // Updates the bottom sheet height by also updating the table view height. The
 // table view might have a different height after the browsing data summary is
@@ -406,7 +582,7 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
       return browsingDataCell;
     }
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // Returns a UIMenu with all supported time ranges for deletion.
@@ -474,7 +650,7 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
       // This value should not be reached since it's not a part of the menu.
       break;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // Returns a view of a trash icon with a red background with vertical padding.
@@ -483,7 +659,8 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
   UIView* iconContainerView = [[UIView alloc] init];
   iconContainerView.translatesAutoresizingMaskIntoConstraints = NO;
   iconContainerView.layer.cornerRadius = kTrashIconContainerViewCornerRadius;
-  iconContainerView.backgroundColor = [UIColor colorNamed:kRed50Color];
+  iconContainerView.backgroundColor = [[UIColor colorNamed:kRed600Color]
+      colorWithAlphaComponent:kTrashIconContainerViewAlphaComponent];
 
   // Trash icon that inside the container with the red background.
   UIImageView* icon =
@@ -511,6 +688,24 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
       NSDirectionalEdgeInsetsMake(kTrashIconContainerViewTopPadding, 0, 0, 0));
 
   return outerView;
+}
+
+#pragma mark - UIResponder
+
+// To always be able to register key commands via -keyCommands, the VC must be
+// able to become first responder.
+- (BOOL)canBecomeFirstResponder {
+  return YES;
+}
+
+- (NSArray*)keyCommands {
+  return @[ UIKeyCommand.cr_close ];
+}
+
+#pragma mark - KeyCommandActions
+
+- (void)keyCommand_close {
+  [self dismissQuickDelete];
 }
 
 @end

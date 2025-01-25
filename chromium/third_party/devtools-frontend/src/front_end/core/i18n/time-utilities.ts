@@ -53,6 +53,13 @@ export function formatMicroSecondsTime(
   return millisToString(Platform.Timing.microSecondsToMilliSeconds(time), true);
 }
 
+export function formatMicroSecondsAsMillisFixed(time: Platform.Timing.MicroSeconds, fractionDigits = 0): string {
+  const milliseconds = Platform.Timing.microSecondsToMilliSeconds(
+      time,
+  );
+  return i18nString(UIStrings.fms, {PH1: milliseconds.toFixed(fractionDigits)});
+}
+
 export function formatMicroSecondsAsSeconds(time: Platform.Timing.MicroSeconds): string {
   const milliseconds = Platform.Timing.microSecondsToMilliSeconds(
       time,
@@ -64,10 +71,6 @@ export function formatMicroSecondsAsSeconds(time: Platform.Timing.MicroSeconds):
 export const millisToString = function(ms: number, higherResolution?: boolean): string {
   if (!isFinite(ms)) {
     return '-';
-  }
-
-  if (ms === 0) {
-    return '0';
   }
 
   if (higherResolution && ms < 0.1) {

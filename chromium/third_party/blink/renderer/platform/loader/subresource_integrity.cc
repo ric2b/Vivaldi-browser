@@ -204,8 +204,7 @@ bool SubresourceIntegrity::CheckSubresourceIntegrityDigest(
   Vector<char> hash_vector;
   Base64Decode(metadata.Digest(), hash_vector);
   DigestValue converted_hash_vector;
-  converted_hash_vector.Append(reinterpret_cast<uint8_t*>(hash_vector.data()),
-                               hash_vector.size());
+  converted_hash_vector.AppendSpan(base::as_byte_span(hash_vector));
   return DigestsEqual(digest, converted_hash_vector);
 }
 
@@ -301,7 +300,7 @@ void SubresourceIntegrity::ParseIntegrityAttribute(
   Vector<UChar> characters;
   attribute.StripWhiteSpace().AppendTo(characters);
   const UChar* position = characters.data();
-  const UChar* end = characters.end();
+  const UChar* end = characters.data() + characters.size();
   const UChar* current_integrity_end;
 
   // The integrity attribute takes the form:

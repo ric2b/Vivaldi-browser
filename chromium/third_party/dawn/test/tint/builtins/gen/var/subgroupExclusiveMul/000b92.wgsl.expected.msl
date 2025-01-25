@@ -1,0 +1,19 @@
+#include <metal_stdlib>
+
+using namespace metal;
+uint4 subgroupExclusiveMul_000b92() {
+  uint4 arg_0 = uint4(1u);
+  uint4 res = simd_prefix_exclusive_product(arg_0);
+  return res;
+}
+
+fragment void fragment_main(device uint4* tint_symbol [[buffer(0)]]) {
+  *(tint_symbol) = subgroupExclusiveMul_000b92();
+  return;
+}
+
+kernel void compute_main(device uint4* tint_symbol_1 [[buffer(0)]]) {
+  *(tint_symbol_1) = subgroupExclusiveMul_000b92();
+  return;
+}
+

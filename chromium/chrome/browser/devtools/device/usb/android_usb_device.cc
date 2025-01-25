@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/devtools/device/usb/android_usb_device.h"
 
 #include <set>
@@ -277,10 +282,12 @@ void AndroidUsbDevice::Queue(std::unique_ptr<AdbMessage> message) {
   header.push_back(body_length);
   header.push_back(Checksum(message->body));
   header.push_back(message->command ^ 0xffffffff);
+  DCHECK_EQ(kHeaderSize, base::as_byte_span(header).size());
+
   // TODO(donna.wu@intel.com): eliminate the buffer copy here, needs to change
   // type BulkMessage.
-  auto header_buffer = base::MakeRefCounted<base::RefCountedBytes>(
-      reinterpret_cast<uint8_t*>(header.data()), kHeaderSize);
+  auto header_buffer =
+      base::MakeRefCounted<base::RefCountedBytes>(base::as_byte_span(header));
   outgoing_queue_.push(header_buffer);
 
   // Queue body.

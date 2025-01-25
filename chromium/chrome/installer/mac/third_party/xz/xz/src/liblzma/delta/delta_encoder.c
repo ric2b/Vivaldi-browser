@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       delta_encoder.c
 /// \brief      Delta filter encoder
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -18,7 +17,7 @@
 /// is the first filter in the chain (and thus the last filter in the
 /// encoder's filter stack).
 static void
-copy_and_encode(lzma_coder *coder,
+copy_and_encode(lzma_delta_coder *coder,
 		const uint8_t *restrict in, uint8_t *restrict out, size_t size)
 {
 	const size_t distance = coder->distance;
@@ -35,7 +34,7 @@ copy_and_encode(lzma_coder *coder,
 /// Encodes the data in place. This is used when we are the last filter
 /// in the chain (and thus non-last filter in the encoder's filter stack).
 static void
-encode_in_place(lzma_coder *coder, uint8_t *buffer, size_t size)
+encode_in_place(lzma_delta_coder *coder, uint8_t *buffer, size_t size)
 {
 	const size_t distance = coder->distance;
 
@@ -49,11 +48,13 @@ encode_in_place(lzma_coder *coder, uint8_t *buffer, size_t size)
 
 
 static lzma_ret
-delta_encode(lzma_coder *coder, lzma_allocator *allocator,
+delta_encode(void *coder_ptr, const lzma_allocator *allocator,
 		const uint8_t *restrict in, size_t *restrict in_pos,
 		size_t in_size, uint8_t *restrict out,
 		size_t *restrict out_pos, size_t out_size, lzma_action action)
 {
+	lzma_delta_coder *coder = coder_ptr;
+
 	lzma_ret ret;
 
 	if (coder->next.code == NULL) {
@@ -61,7 +62,12 @@ delta_encode(lzma_coder *coder, lzma_allocator *allocator,
 		const size_t out_avail = out_size - *out_pos;
 		const size_t size = my_min(in_avail, out_avail);
 
-		copy_and_encode(coder, in + *in_pos, out + *out_pos, size);
+		// in and out might be NULL. In such cases size == 0.
+		// Null pointer + 0 is undefined behavior so skip
+		// the call in that case as it would do nothing anyway.
+		if (size > 0)
+			copy_and_encode(coder, in + *in_pos, out + *out_pos,
+					size);
 
 		*in_pos += size;
 		*out_pos += size;
@@ -76,7 +82,10 @@ delta_encode(lzma_coder *coder, lzma_allocator *allocator,
 				in, in_pos, in_size, out, out_pos, out_size,
 				action);
 
-		encode_in_place(coder, out + out_start, *out_pos - out_start);
+		// Like above, avoid null pointer + 0.
+		const size_t size = *out_pos - out_start;
+		if (size > 0)
+			encode_in_place(coder, out + out_start, size);
 	}
 
 	return ret;
@@ -84,10 +93,12 @@ delta_encode(lzma_coder *coder, lzma_allocator *allocator,
 
 
 static lzma_ret
-delta_encoder_update(lzma_coder *coder, lzma_allocator *allocator,
+delta_encoder_update(void *coder_ptr, const lzma_allocator *allocator,
 		const lzma_filter *filters_null lzma_attribute((__unused__)),
 		const lzma_filter *reversed_filters)
 {
+	lzma_delta_coder *coder = coder_ptr;
+
 	// Delta doesn't and will never support changing the options in
 	// the middle of encoding. If the app tries to change them, we
 	// simply ignore them.
@@ -97,7 +108,7 @@ delta_encoder_update(lzma_coder *coder, lzma_allocator *allocator,
 
 
 extern lzma_ret
-lzma_delta_encoder_init(lzma_next_coder *next, lzma_allocator *allocator,
+lzma_delta_encoder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter_info *filters)
 {
 	next->code = &delta_encode;

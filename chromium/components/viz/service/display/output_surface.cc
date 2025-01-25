@@ -71,14 +71,15 @@ base::ScopedClosureRunner OutputSurface::GetCacheBackBufferCb() {
 }
 #endif
 
-gpu::Mailbox OutputSurface::GetOverlayMailbox() const {
-  return gpu::Mailbox();
-}
-
 void OutputSurface::InitDelegatedInkPointRendererReceiver(
     mojo::PendingReceiver<gfx::mojom::DelegatedInkPointRenderer>
         pending_receiver) {
   NOTREACHED_IN_MIGRATION();
+}
+
+void OutputSurface::ReadbackForTesting(
+    CopyOutputRequest::CopyOutputRequestCallback result_callback) {
+  NOTIMPLEMENTED();
 }
 
 }  // namespace viz

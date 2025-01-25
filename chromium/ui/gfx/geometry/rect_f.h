@@ -8,11 +8,13 @@
 #include <iosfwd>
 #include <string>
 
+#include "base/containers/span.h"
 #include "build/build_config.h"
 #include "ui/gfx/geometry/insets_f.h"
 #include "ui/gfx/geometry/outsets_f.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
@@ -271,12 +273,21 @@ inline RectF operator+(const Vector2dF& lhs, const RectF& rhs) {
 
 GEOMETRY_EXPORT RectF IntersectRects(const RectF& a, const RectF& b);
 GEOMETRY_EXPORT RectF UnionRects(const RectF& a, const RectF& b);
+GEOMETRY_EXPORT RectF UnionRects(base::span<const RectF> rects);
 GEOMETRY_EXPORT RectF UnionRectsEvenIfEmpty(const RectF& a, const RectF& b);
 GEOMETRY_EXPORT RectF SubtractRects(const RectF& a, const RectF& b);
 
 inline RectF ScaleRect(const RectF& r, float x_scale, float y_scale) {
   return RectF(r.x() * x_scale, r.y() * y_scale,
        r.width() * x_scale, r.height() * y_scale);
+}
+
+inline RectF ScaleRect(const RectF& r, const SizeF& size) {
+  return ScaleRect(r, size.width(), size.height());
+}
+
+inline RectF ScaleRect(const RectF& r, const Size& size) {
+  return ScaleRect(r, SizeF(size));
 }
 
 inline RectF ScaleRect(const RectF& r, float scale) {

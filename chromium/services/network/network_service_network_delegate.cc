@@ -204,6 +204,20 @@ NetworkServiceNetworkDelegate::OnGetStorageAccessStatus(
                               request.cookie_setting_overrides());
 }
 
+bool NetworkServiceNetworkDelegate::OnIsStorageAccessHeaderEnabled(
+    const url::Origin* top_frame_origin,
+    const GURL& url) const {
+  return base::FeatureList::IsEnabled(
+             network::features::kStorageAccessHeaders) ||
+         (base::FeatureList::IsEnabled(
+              network::features::kStorageAccessHeadersTrial) &&
+          top_frame_origin &&
+          network_context_->cookie_manager()
+              ->cookie_settings()
+              .IsStorageAccessHeaderOriginTrialEnabled(
+                  url, top_frame_origin->GetURL()));
+}
+
 bool NetworkServiceNetworkDelegate::OnAnnotateAndMoveUserBlockedCookies(
     const net::URLRequest& request,
     const net::FirstPartySetMetadata& first_party_set_metadata,

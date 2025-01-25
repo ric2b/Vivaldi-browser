@@ -72,6 +72,12 @@
       permissions_policy_name: "accelerometer",
     },
     {
+      name: "AllScreensCapture",
+      permissions_policy_name: "all-screens-capture",
+      depends_on: ["GetAllScreensMedia"],
+      visibility: "IsolatedContext",
+    },
+    {
       name: "AmbientLightSensor",
       permissions_policy_name: "ambient-light-sensor",
       depends_on: ["SensorExtraClasses"],
@@ -223,6 +229,12 @@
       depends_on: ["ComputePressure"],
     },
     {
+      name: "ControlledFrame",
+      permissions_policy_name: "controlled-frame",
+      depends_on: ["ControlledFrame"],
+      visibility: "IsolatedContext",
+    },
+    {
       name: "CrossOriginIsolated",
       permissions_policy_name: "cross-origin-isolated",
     },
@@ -326,6 +338,12 @@
       permissions_policy_name: "magnetometer",
     },
     {
+      name: "MediaPlaybackWhileNotVisible",
+      permissions_policy_name: "media-playback-while-not-visible",
+      feature_default: "EnableForAll",
+      depends_on: ["MediaPlaybackWhileNotVisiblePermissionPolicy"],
+    },
+    {
       name: "Microphone",
       permissions_policy_name: "microphone",
     },
@@ -337,6 +355,12 @@
       name: "OTPCredentials",
       permissions_policy_name: "otp-credentials",
       depends_on: ["WebOTPAssertionFeaturePolicy"],
+    },
+    {
+      name: "PartitionedPopins",
+      permissions_policy_name: "popins",
+      feature_default: "EnableForSelf",
+      depends_on: ["PartitionedPopins"],
     },
     {
       name: "Payment",
@@ -458,6 +482,11 @@
       permissions_policy_name: "vertical-scroll",
       feature_default: "EnableForAll",
       depends_on: ["ExperimentalPolicies"],
+    },
+    {
+      name: "WebAppInstallation",
+      permissions_policy_name: "web-app-installation",
+      depends_on: ["WebAppInstallation"],
     },
     {
       name: "WebPrinting",

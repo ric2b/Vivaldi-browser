@@ -19,16 +19,14 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTextureCompressionType.h"
-#include "third_party/skia/include/gpu/GrBackendSurface.h"
-#include "third_party/skia/include/gpu/GrContextThreadSafeProxy.h"
-#include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/ganesh/GrContextThreadSafeProxy.h"
+#include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
 #include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
-#include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
-#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLTypes.h"
 #include "third_party/skia/include/gpu/graphite/Context.h"
 #include "third_party/skia/include/gpu/graphite/GraphiteTypes.h"
 #include "third_party/skia/include/gpu/graphite/Recorder.h"
-#include "third_party/skia/include/gpu/vk/VulkanTypes.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
@@ -43,6 +41,8 @@
 #include "gpu/vulkan/vulkan_fence_helper.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_image.h"
+#include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
+#include "third_party/skia/include/gpu/vk/VulkanTypes.h"
 #endif
 
 namespace gpu {
@@ -126,11 +126,16 @@ GrContextOptions GetDefaultGrContextOptions() {
 
 skgpu::graphite::ContextOptions GetDefaultGraphiteContextOptions(
     const GpuDriverBugWorkarounds& workarounds) {
-  skgpu::graphite::ContextOptions options;
+  // Use the default resource cache limits used for Ganesh which is 96 MB for
+  // the resource cache and 8 MB for the glyph cache. These same values also get
+  // used for the GPU main and Viz compositor recorders later and the resource
+  // caches are not shared so don't use the large default value of 256 MB.
   size_t max_resource_cache_bytes;
   size_t glyph_cache_max_texture_bytes;
   DetermineGrCacheLimitsFromAvailableMemory(&max_resource_cache_bytes,
                                             &glyph_cache_max_texture_bytes);
+  skgpu::graphite::ContextOptions options;
+  options.fGpuBudgetInBytes = max_resource_cache_bytes;
   options.fGlyphCacheTextureMaximumBytes = glyph_cache_max_texture_bytes;
 
   // msaa_is_slow_2 excludes new Intel >= Gen 11 GPUs. We're unconditionally
@@ -148,6 +153,12 @@ skgpu::graphite::ContextOptions GetDefaultGraphiteContextOptions(
   // are played out of sequence this option should no longer be used.
   options.fDisableCachedGlyphUploads = true;
 
+  // Always emit labels in Skia. For Dawn, we have a toggle that controls
+  // whether labels are emitted to the underlying backend, which is currently
+  // only enabled on Windows or DCHECK builds on other platforms. For Metal,
+  // the labels are only emitted under the SK_ENABLE_MTL_DEBUG_INFO define.
+  options.fSetBackendLabels = true;
+
   return options;
 }
 
@@ -156,6 +167,7 @@ void DumpBackgroundGraphiteMemoryStatistics(
     const skgpu::graphite::Recorder* recorder,
     base::trace_event::ProcessMemoryDump* pmd) {
   using base::trace_event::MemoryAllocatorDump;
+  static constexpr char kNamePurgeableSize[] = "purgeable_size";
 
   std::string context_dump_name =
       base::StringPrintf("skia/gpu_resources/graphite_context_0x%" PRIXPTR,
@@ -165,6 +177,8 @@ void DumpBackgroundGraphiteMemoryStatistics(
   context_dump->AddScalar(MemoryAllocatorDump::kNameSize,
                           MemoryAllocatorDump::kUnitsBytes,
                           context->currentBudgetedBytes());
+  context_dump->AddScalar(kNamePurgeableSize, MemoryAllocatorDump::kUnitsBytes,
+                          context->currentPurgeableBytes());
 
   std::string recorder_dump_name = base::StringPrintf(
       "skia/gpu_resources/gpu_main_graphite_recorder_0x%" PRIXPTR,
@@ -174,6 +188,8 @@ void DumpBackgroundGraphiteMemoryStatistics(
   recorder_dump->AddScalar(MemoryAllocatorDump::kNameSize,
                            MemoryAllocatorDump::kUnitsBytes,
                            recorder->currentBudgetedBytes());
+  recorder_dump->AddScalar(kNamePurgeableSize, MemoryAllocatorDump::kUnitsBytes,
+                           recorder->currentPurgeableBytes());
 
   // The ImageProvider's bytes are not included in the recorder's budgeted
   // bytes as they are owned by Chrome, so dump them separately.
@@ -470,10 +486,9 @@ CreateVulkanYcbcrConversionInfo(
   gr_ycbcr_info.fFormatFeatures = format_features;
 
   if (!gr_ycbcr_info.fExternalFormat &&
-      (si_format == viz::LegacyMultiPlaneFormat::kYV12 ||
-       (si_format.is_multi_plane() &&
-        si_format.plane_config() ==
-            viz::SharedImageFormat::PlaneConfig::kY_V_U))) {
+      (si_format.is_multi_plane() &&
+       si_format.plane_config() ==
+           viz::SharedImageFormat::PlaneConfig::kY_V_U)) {
     switch (vk_format) {
       case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
       case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:

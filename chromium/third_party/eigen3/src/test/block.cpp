@@ -153,7 +153,7 @@ void block(const MatrixType& m) {
   VERIFY_IS_EQUAL(numext::real(ones.col(c1).dot(ones.col(c2))), RealScalar(rows));
   VERIFY_IS_EQUAL(numext::real(ones.row(r1).dot(ones.row(r2))), RealScalar(cols));
 
-  // check that linear acccessors works on blocks
+  // check that linear accessors works on blocks
   m1 = m1_copy;
 
   // now test some block-inside-of-block.

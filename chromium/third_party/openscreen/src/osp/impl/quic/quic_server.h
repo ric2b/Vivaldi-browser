@@ -12,7 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "osp/impl/quic/certificates/quic_agent_certificate.h"
 #include "osp/impl/quic/quic_connection_factory_server.h"
 #include "osp/impl/quic/quic_service_base.h"
 #include "osp/public/protocol_connection_server.h"
@@ -32,14 +31,12 @@ class QuicServer final : public ProtocolConnectionServer,
                          public QuicConnectionFactoryServer::ServerDelegate,
                          public QuicServiceBase {
  public:
-  static QuicAgentCertificate& GetAgentCertificate();
-
   QuicServer(const ServiceConfig& config,
-             MessageDemuxer& demuxer,
              std::unique_ptr<QuicConnectionFactoryServer> connection_factory,
              ProtocolConnectionServiceObserver& observer,
              ClockNowFunctionPtr now_function,
-             TaskRunner& task_runner);
+             TaskRunner& task_runner,
+             size_t buffer_limit);
   QuicServer(const QuicServer&) = delete;
   QuicServer& operator=(const QuicServer&) = delete;
   QuicServer(QuicServer&&) noexcept = delete;
@@ -57,31 +54,32 @@ class QuicServer final : public ProtocolConnectionServer,
   std::unique_ptr<ProtocolConnection> CreateProtocolConnection(
       uint64_t instance_id) override;
   std::string GetAgentFingerprint() override;
+  std::string GetAuthToken() override;
 
   // QuicServiceBase overrides.
-  uint64_t OnCryptoHandshakeComplete(std::string_view instance_name) override;
-  void OnConnectionClosed(uint64_t instance_id) override;
+  void OnClientCertificates(std::string_view instance_name,
+                            const std::vector<std::string>& certs) override;
 
   const std::string& instance_name() const { return instance_name_; }
 
  private:
-  // QuicServiceBase overrides.
-  void CloseAllConnections() override;
-
   // QuicConnectionFactoryServer::ServerDelegate overrides.
   QuicConnection::Delegate& GetConnectionDelegate() override { return *this; }
   void OnIncomingConnection(
       std::unique_ptr<QuicConnection> connection) override;
 
+  std::string GenerateToken(int length);
+
   // This is used for server name indication check.
   const std::string instance_name_;
 
-  std::unique_ptr<QuicConnectionFactoryServer> connection_factory_;
+  // An alphanumeric and unguessable token for authentication.
+  // See https://w3c.github.io/openscreenprotocol/#authentication.
+  std::string auth_token_;
 
-  // Maps an instance name to data about connections that haven't successfully
-  // completed the QUIC handshake.
-  std::map<std::string, ServiceConnectionData, std::less<>>
-      pending_connections_;
+  // Maps an instance name to the fingerprint of the instance's active agent
+  // certificate.
+  std::map<std::string, std::string, std::less<>> fingerprint_map_;
 };
 
 }  // namespace openscreen::osp

@@ -36,6 +36,7 @@ class TabNodePool {
   ~TabNodePool();
 
   static const int kInvalidTabNodeID;
+  static const int kVivaldiTabNodeID;
 
   // Returns the tab node associated with |tab_id| or kInvalidTabNodeID if
   // no association existed.

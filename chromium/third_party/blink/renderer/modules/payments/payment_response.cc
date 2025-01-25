@@ -39,9 +39,7 @@ v8::Local<v8::Value> BuildDetails(
 
     auto* result = MakeGarbageCollected<PublicKeyCredential>(
         get_assertion_authentication_response->info->id,
-        DOMArrayBuffer::Create(static_cast<const void*>(info->raw_id.data()),
-                               info->raw_id.size()),
-        authenticator_response,
+        DOMArrayBuffer::Create(info->raw_id), authenticator_response,
         get_assertion_authentication_response->authenticator_attachment,
         ConvertTo<AuthenticationExtensionsClientOutputs*>(
             get_assertion_authentication_response->extensions));
@@ -52,9 +50,9 @@ v8::Local<v8::Value> BuildDetails(
     return V8ObjectBuilder(script_state).V8Value();
   }
 
-  ExceptionState exception_state(
-      script_state->GetIsolate(),
-      ExceptionContextType::kConstructorOperationInvoke, "PaymentResponse");
+  ExceptionState exception_state(script_state->GetIsolate(),
+                                 v8::ExceptionContext::kConstructor,
+                                 "PaymentResponse");
   v8::Local<v8::Value> parsed_value =
       FromJSONString(script_state->GetIsolate(), script_state->GetContext(),
                      json, exception_state);

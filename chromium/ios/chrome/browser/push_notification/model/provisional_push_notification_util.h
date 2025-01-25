@@ -10,6 +10,10 @@
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 
+namespace syncer {
+class DeviceInfoSyncService;
+}  // namespace syncer
+
 // This util holds class methods to update the status of provisional push
 // notifications.
 @interface ProvisionalPushNotificationUtil : NSObject
@@ -20,9 +24,13 @@
 // user.
 + (void)enrollUserToProvisionalNotificationsForClientIds:
             (std::vector<PushNotificationClientId>)clientIds
+                             clientEnabledForProvisional:
+                                 (BOOL)clientEnabledForProvisional
                                          withAuthService:
-                                             (AuthenticationService*)
-                                                 authService;
+                                             (AuthenticationService*)authService
+                                   deviceInfoSyncService:
+                                       (syncer::DeviceInfoSyncService*)
+                                           deviceInfoSyncService;
 
 @end
 

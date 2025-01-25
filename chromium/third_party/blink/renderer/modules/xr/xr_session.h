@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_light_probe_init.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
+#include "third_party/blink/renderer/modules/xr/average_timer.h"
 #include "third_party/blink/renderer/modules/xr/xr_frame_request_callback_collection.h"
 #include "third_party/blink/renderer/modules/xr/xr_input_source.h"
 #include "third_party/blink/renderer/modules/xr/xr_input_source_array.h"
@@ -127,7 +128,8 @@ class XRSession final : public EventTarget,
             device::mojom::blink::XRInteractionMode interaction_mode,
             device::mojom::blink::XRSessionDeviceConfigPtr device_config,
             bool sensorless_session,
-            XRSessionFeatureSet enabled_feature_set);
+            XRSessionFeatureSet enabled_feature_set,
+            uint64_t trace_id);
   ~XRSession() override = default;
 
   XRSystem* xr() const { return xr_.Get(); }
@@ -259,6 +261,12 @@ class XRSession final : public EventTarget,
   // value that provides a good balance between quality and performance.
   gfx::SizeF RecommendedFramebufferSize() const;
 
+  // Describes the recommended dimensions of layers represented by an array
+  // texture. Should be a value that provides a good balance between quality
+  // and performance.
+  gfx::SizeF RecommendedArrayTextureSize() const;
+  size_t array_texture_layers() const { return views_.size(); }
+
   // Reports the size of the output canvas, if one is available. If not
   // reports (0, 0);
   gfx::Size OutputCanvasSize() const;
@@ -382,11 +390,15 @@ class XRSession final : public EventTarget,
     return camera_image_size_;
   }
 
+  uint64_t GetTraceId() const { return trace_id_; }
+  base::TimeDelta TakeAnimationFrameTimerAverage();
+
  private:
   class XRSessionResizeObserverDelegate;
 
   using XRVisibilityState = device::mojom::blink::XRVisibilityState;
 
+  void UpdateInlineView();
   void UpdateCanvasDimensions(Element*);
   void ApplyPendingRenderState();
 
@@ -615,6 +627,10 @@ class XRSession final : public EventTarget,
   int16_t last_frame_id_ = -1;
 
   bool emulated_position_ = false;
+
+  uint64_t trace_id_;
+
+  AverageTimer page_animation_frame_timer_;
 };
 
 }  // namespace blink

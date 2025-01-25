@@ -107,6 +107,9 @@
   "core/common/Revealer.ts | stylesSidebar": {
     "message": "스타일 사이드바"
   },
+  "core/common/Revealer.ts | timelinePanel": {
+    "message": "성능 패널"
+  },
   "core/common/SettingRegistration.ts | adorner": {
     "message": "어도너"
   },
@@ -254,6 +257,9 @@
   "core/sdk/DebuggerModel.ts | closure": {
     "message": "클로저"
   },
+  "core/sdk/DebuggerModel.ts | exception": {
+    "message": "예외"
+  },
   "core/sdk/DebuggerModel.ts | expression": {
     "message": "표현식"
   },
@@ -265,6 +271,9 @@
   },
   "core/sdk/DebuggerModel.ts | module": {
     "message": "모듈"
+  },
+  "core/sdk/DebuggerModel.ts | returnValue": {
+    "message": "반환 값"
   },
   "core/sdk/DebuggerModel.ts | script": {
     "message": "스크립트"
@@ -341,17 +350,20 @@
   "core/sdk/NetworkRequest.ts | exemptionReasonEnterprisePolicy": {
     "message": "이 쿠키는 Chrome Enterprise 정책에 의해 허용됩니다. 자세히 알아보기: goo.gle/ce-3pc"
   },
+  "core/sdk/NetworkRequest.ts | exemptionReasonScheme": {
+    "message": "이 쿠키는 최상위 URL 스킴에 의해 허용됩니다."
+  },
   "core/sdk/NetworkRequest.ts | exemptionReasonStorageAccessAPI": {
     "message": "이 쿠키는 Storage Access API에 의해 허용됩니다. 자세히 알아보기: goo.gle/saa"
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDDeprecationTrial": {
-    "message": "이 쿠키는 서드 파티 쿠키의 단계적 지원 중단 기능 트라이얼에 의해 허용됩니다."
+    "message": "이 쿠키는 서드 파티 쿠키의 단계적 지원 중단 기능 트라이얼에 의해 허용됩니다. 자세히 알아보기: goo.gle/ps-dt"
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDHeuristics": {
     "message": "이 쿠키는 서드 파티 쿠키의 단계적 지원 중단 휴리스틱에 의해 허용됩니다. 자세히 알아보기: goo.gle/hbe"
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDMetadata": {
-    "message": "이 쿠키는 서드 파티 쿠키의 지원 중단 기능 트라이얼 유예 기간에 의해 허용됩니다. 자세히 알아보기: goo.gle/ps-dt"
+    "message": "이 쿠키는 서드 파티 쿠키의 지원 중단 기능 트라이얼 유예 기간에 의해 허용됩니다. 자세히 알아보기: goo.gle/dt-grace"
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTopLevelStorageAccessAPI": {
     "message": "이 쿠키는 최상위 Storage Access API에 의해 허용됩니다. 자세히 알아보기: goo.gle/saa-top"
@@ -744,7 +756,7 @@
     "message": "Node.js 전용 DevTools를 열어 주세요."
   },
   "entrypoints/inspector_main/InspectorMain.ts | tab": {
-    "message": "Tab"
+    "message": "탭"
   },
   "entrypoints/inspector_main/OutermostTargetSelector.ts | targetNotSelected": {
     "message": "페이지: 선택되지 않음"
@@ -959,6 +971,9 @@
   "entrypoints/main/main-meta.ts | browserLanguage": {
     "message": "브라우저 UI 언어"
   },
+  "entrypoints/main/main-meta.ts | browserPreference": {
+    "message": "브라우저 환경설정"
+  },
   "entrypoints/main/main-meta.ts | cancelSearch": {
     "message": "검색 취소"
   },
@@ -1046,17 +1061,14 @@
   "entrypoints/main/main-meta.ts | searchOnEnterCommand": {
     "message": "실시간 검색 사용 중지(Enter 키를 눌러야 검색)"
   },
+  "entrypoints/main/main-meta.ts | switchToBrowserPreferredColor": {
+    "message": "브라우저의 기본 색상 테마로 전환"
+  },
   "entrypoints/main/main-meta.ts | switchToDarkTheme": {
     "message": "어두운 테마로 전환"
   },
   "entrypoints/main/main-meta.ts | switchToLightTheme": {
     "message": "밝은 테마로 전환"
-  },
-  "entrypoints/main/main-meta.ts | switchToSystemPreferredColor": {
-    "message": "시스템의 기본 색 테마로 전환"
-  },
-  "entrypoints/main/main-meta.ts | systemPreference": {
-    "message": "시스템 환경설정"
   },
   "entrypoints/main/main-meta.ts | theme": {
     "message": "테마:"
@@ -1133,11 +1145,11 @@
   "generated/Deprecation.ts | CSSCustomStateDeprecatedSyntax": {
     "message": ":--customstatename은 지원 중단되었습니다. 대신 :state(customstatename) 문법을 사용하세요."
   },
+  "generated/Deprecation.ts | CSSInsetAreaProperty": {
+    "message": "inset-area 속성은 지원 중단됩니다. 대신 position-area 속성을 사용하세요."
+  },
   "generated/Deprecation.ts | CSSSelectorInternalMediaControlsOverlayCastButton": {
     "message": "기본 Cast 통합을 사용 중지하려면 -internal-media-controls-overlay-cast-button 선택기 대신 disableRemotePlayback 속성을 사용해야 합니다."
-  },
-  "generated/Deprecation.ts | CSSValueAppearanceNonStandard": {
-    "message": "CSS 노출 값 inner-spin-button, media-slider, media-sliderthumb, media-volume-slider, media-volume-sliderthumb, push-button, searchfield-cancel-button, slider-horizontal, sliderthumb-horizontal, sliderthumb-vertical, square-button은 표준화되지 않았으며 삭제될 예정입니다."
   },
   "generated/Deprecation.ts | CSSValueAppearanceSliderVertical": {
     "message": "CSS 모양 값(slider-vertical)이 표준화되지 않았으며 삭제될 예정입니다."
@@ -1171,6 +1183,9 @@
   },
   "generated/Deprecation.ts | DataUrlInSvgUse": {
     "message": "데이터 지원: SVGUseElement의 URL은 지원 중단되며 향후 삭제될 예정입니다."
+  },
+  "generated/Deprecation.ts | DelegatedInkExpectedImprovement": {
+    "message": "잠재적인 디지털 지문 수집 관련 문제로 인해 DelegatedInkTrailPresenter.expectedImprovement 지원이 중단됩니다."
   },
   "generated/Deprecation.ts | DocumentDomainSettingWithoutOriginAgentClusterHeader": {
     "message": "document.domain 설정을 통한 동일 출처 정책의 해제는 지원 중단되었으며 기본적으로 사용 중지될 예정입니다. 이 기능을 계속 사용하려면 문서 및 프레임의 HTTP 응답과 함께 Origin-Agent-Cluster: ?0 헤더를 전송하여 오리진 키 에이전트 클러스터를 선택 해제하세요. 자세한 내용은 다음 페이지를 참고하세요. https://developer.chrome.com/blog/immutable-document-domain/"
@@ -1486,9 +1501,6 @@
   },
   "models/issues_manager/GenericIssue.ts | corbExplainerPageTitle": {
     "message": "CORB 설명"
-  },
-  "models/issues_manager/GenericIssue.ts | crossOriginPortalPostMessage": {
-    "message": "포털 - 동일 출처 커뮤니케이션 채널"
   },
   "models/issues_manager/GenericIssue.ts | howDoesAutofillWorkPageTitle": {
     "message": "자동 완성은 어떤 방식으로 작동하나요?"
@@ -3261,7 +3273,7 @@
     "message": "미디어 스트림 액세스 권한을 부여한 페이지에서는 현재 뒤로-앞으로 캐시를 사용할 수 없습니다."
   },
   "panels/application/components/BackForwardCacheStrings.ts | haveInnerContents": {
-    "message": "포털을 사용하는 페이지에서는 현재 뒤로-앞으로 캐시를 사용할 수 없습니다."
+    "message": "특정 유형의 삽입 콘텐츠(예: PDF)가 있는 페이지에서는 현재 뒤로-앞으로 캐시를 사용할 수 없습니다."
   },
   "panels/application/components/BackForwardCacheStrings.ts | idleManager": {
     "message": "IdleManager를 사용하는 페이지에서는 현재 뒤로-앞으로 캐시를 사용할 수 없습니다."
@@ -3343,9 +3355,6 @@
   },
   "panels/application/components/BackForwardCacheStrings.ts | pictureInPicture": {
     "message": "PIP 모드를 사용하는 페이지에서는 현재 뒤로-앞으로 캐시를 사용할 수 없습니다."
-  },
-  "panels/application/components/BackForwardCacheStrings.ts | portal": {
-    "message": "포털을 사용하는 페이지에서는 현재 뒤로-앞으로 캐시를 사용할 수 없습니다."
   },
   "panels/application/components/BackForwardCacheStrings.ts | printing": {
     "message": "인쇄 UI를 표시하는 페이지에서는 현재 뒤로-앞으로 캐시를 사용할 수 없습니다."
@@ -4526,6 +4535,9 @@
   "panels/autofill/AutofillView.ts | sendFeedback": {
     "message": "의견 보내기"
   },
+  "panels/autofill/AutofillView.ts | showTestAddressesInAutofillMenu": {
+    "message": "자동 완성 메뉴에 테스트 주소 표시"
+  },
   "panels/autofill/AutofillView.ts | toStartDebugging": {
     "message": "자동 완성 디버깅을 시작하려면 Chrome의 자동 완성 메뉴를 사용하여 주소 양식을 작성하세요."
   },
@@ -5585,6 +5597,9 @@
   "panels/elements/ElementStatePaneWidget.ts | emulatesAFocusedPage": {
     "message": "페이지에 포커스를 유지합니다. 사라지는 요소를 디버깅하는 데 흔히 사용됩니다."
   },
+  "panels/elements/ElementStatePaneWidget.ts | forceElementSpecificStates": {
+    "message": "특정 요소 상태 강제 적용"
+  },
   "panels/elements/ElementStatePaneWidget.ts | forceElementState": {
     "message": "요소 상태 강제 적용"
   },
@@ -5937,10 +5952,10 @@
     "message": "CSS 변경사항 복사"
   },
   "panels/elements/StylesSidebarPane.ts | incrementdecrementWithMousewheelHundred": {
-    "message": "마우스 휠 또는 위/아래 키로 늘리거나 줄입니다. {PH1}: ±100, Shift: ±10, Alt: ±0.1"
+    "message": "마우스 휠 또는 위/아래 키로 늘리거나 줄입니다. {PH1}: ±100, Shift: ±10, {PH2}: ±0.1"
   },
   "panels/elements/StylesSidebarPane.ts | incrementdecrementWithMousewheelOne": {
-    "message": "마우스 휠 또는 위/아래 키로 늘리거나 줄입니다. {PH1}: R ±1, Shift: G ±1, Alt: B ±1"
+    "message": "마우스 휠 또는 위/아래 키로 늘리거나 줄입니다. {PH1}: R ±1, Shift: G ±1, {PH2}: B ±1"
   },
   "panels/elements/StylesSidebarPane.ts | inheritedFromSPseudoOf": {
     "message": "의사 ::{PH1}에서 상속됨 "
@@ -6417,7 +6432,7 @@
     "message": "설정 업데이트"
   },
   "panels/explain/explain-meta.ts | ageRestricted": {
-    "message": "이 기능은 18세 이상의 사용자만 사용할 수 있습니다."
+    "message": "이 기능은 18세 이상의 사용자만 사용할 수 있습니다"
   },
   "panels/explain/explain-meta.ts | enableConsoleInsights": {
     "message": "AI로 콘솔 메시지 이해하기"
@@ -6432,43 +6447,13 @@
     "message": "이 경고 이해하기"
   },
   "panels/explain/explain-meta.ts | geoRestricted": {
-    "message": "이 기능은 해당 지역에서 사용할 수 없습니다."
+    "message": "이 기능은 사용자의 지역에서 사용할 수 없습니다"
   },
   "panels/explain/explain-meta.ts | policyRestricted": {
     "message": "조직에서 이 기능을 사용 중지했습니다. 자세한 내용은 관리자에게 문의하세요."
   },
-  "panels/explain/explain-meta.ts | rolloutRestricted": {
-    "message": "이 기능은 현재 출시 중입니다. 지속적인 관심 부탁드립니다."
-  },
   "panels/explain/explain-meta.ts | wrongLocale": {
-    "message": "이 기능을 사용하려면 DevTools 설정에서 언어 환경설정을 영어로 업데이트하세요."
-  },
-  "panels/freestyler/FreestylerPanel.ts | clearMessages": {
-    "message": "메시지 지우기"
-  },
-  "panels/freestyler/FreestylerPanel.ts | sendFeedback": {
-    "message": "의견 보내기"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | emptyStateText": {
-    "message": "무엇을 도와드릴까요?"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | inputDisclaimer": {
-    "message": "Freestyler는 부정확한 정보를 표시할 수 있으며 정확하지 않을 수도 있습니다."
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | inputPlaceholder": {
-    "message": "Freestyler에게 물어보거나 / 기호를 입력하여 명령어를 실행하세요."
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | selectAnElement": {
-    "message": "요소 선택"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | sendButtonTitle": {
-    "message": "보내기"
-  },
-  "panels/freestyler/freestyler-meta.ts | freestyler": {
-    "message": "Freestyler"
-  },
-  "panels/freestyler/freestyler-meta.ts | showFreestyler": {
-    "message": "Freestyler 표시"
+    "message": "이 기능을 사용하려면 DevTools 설정에서 언어 환경설정을 영어로 업데이트하세요"
   },
   "panels/issues/AffectedBlockedByResponseView.ts | blockedResource": {
     "message": "차단된 리소스"
@@ -6860,14 +6845,14 @@
   "panels/js_timeline/js_timeline-meta.ts | record": {
     "message": "기록"
   },
+  "panels/js_timeline/js_timeline-meta.ts | recordAndReload": {
+    "message": "기록 및 새로고침"
+  },
   "panels/js_timeline/js_timeline-meta.ts | showPerformance": {
     "message": "성능 표시"
   },
   "panels/js_timeline/js_timeline-meta.ts | showRecentTimelineSessions": {
     "message": "최근 타임라인 세션 표시"
-  },
-  "panels/js_timeline/js_timeline-meta.ts | startProfilingAndReloadPage": {
-    "message": "프로파일링 시작 및 페이지 새로고침"
   },
   "panels/js_timeline/js_timeline-meta.ts | stop": {
     "message": "중지"
@@ -6956,9 +6941,6 @@
   "panels/layer_viewer/Layers3DView.ts | dLayersView": {
     "message": "3D 레이어 보기"
   },
-  "panels/layer_viewer/Layers3DView.ts | deprecationWarning": {
-    "message": "레이어 패널이 곧 지원 중단될 수 있습니다. 결정이 내려지기 전에 여러분의 의견과 우려사항을 알려주세요."
-  },
   "panels/layer_viewer/Layers3DView.ts | layerInformationIsNotYet": {
     "message": "아직 레이어 정보를 사용할 수 없습니다."
   },
@@ -6967,9 +6949,6 @@
   },
   "panels/layer_viewer/Layers3DView.ts | resetView": {
     "message": "보기 재설정"
-  },
-  "panels/layer_viewer/Layers3DView.ts | sendFeedback": {
-    "message": "의견 보내기"
   },
   "panels/layer_viewer/Layers3DView.ts | showPaintProfiler": {
     "message": "페인트 프로파일러 표시"
@@ -8156,6 +8135,30 @@
   "panels/network/NetworkLogView.ts | copyAllAsPowershell": {
     "message": "모두 PowerShell로 복사"
   },
+  "panels/network/NetworkLogView.ts | copyAllListedAsCurl": {
+    "message": "나열된 모든 항목을 cURL 형식으로 복사"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsCurlBash": {
+    "message": "나열된 모든 항목을 cURL(bash) 형식으로 복사"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsCurlCmd": {
+    "message": "나열된 모든 항목을 cURL(cmd) 형식으로 복사"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsFetch": {
+    "message": "나열된 모든 항목을 fetch 형식으로 복사"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsHar": {
+    "message": "나열된 모든 항목을 HAR 형식으로 복사"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsNodejsFetch": {
+    "message": "나열된 모든 항목을 fetch(Node.js) 형식으로 복사"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsPowershell": {
+    "message": "나열된 모든 항목을 PowerShell 형식으로 복사"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedURLs": {
+    "message": "나열된 모든 URL 복사"
+  },
   "panels/network/NetworkLogView.ts | copyAllURLs": {
     "message": "모든 URL 복사"
   },
@@ -9201,7 +9204,7 @@
     "message": "{PH1}바이트"
   },
   "panels/profiler/HeapProfileView.ts | samplingProfiles": {
-    "message": "프로필 샘플링"
+    "message": "샘플링 프로필"
   },
   "panels/profiler/HeapProfileView.ts | selectedSizeS": {
     "message": "선택된 크기: {PH1}"
@@ -9401,9 +9404,6 @@
   "panels/profiler/HeapSnapshotView.ts | baseSnapshot": {
     "message": "베이스 스냅샷"
   },
-  "panels/profiler/HeapSnapshotView.ts | captureNumericValue": {
-    "message": "캡처에 숫자 값 포함"
-  },
   "panels/profiler/HeapSnapshotView.ts | code": {
     "message": "코드"
   },
@@ -9601,6 +9601,9 @@
   },
   "panels/profiler/ModuleUIStrings.ts | calculatingNodeFlags": {
     "message": "노드 플래그 계산 중…"
+  },
+  "panels/profiler/ModuleUIStrings.ts | calculatingObjectNames": {
+    "message": "객체 이름 계산 중…"
   },
   "panels/profiler/ModuleUIStrings.ts | calculatingRetainedSizes": {
     "message": "보관된 크기 계산 중…"
@@ -10877,6 +10880,78 @@
   "panels/sensors/sensors-meta.ts | userIdleScreenUnlocked": {
     "message": "사용자 유휴 상태, 화면 잠금 해제됨"
   },
+  "panels/settings/AISettingsTab.ts | adminSettings": {
+    "message": "관리 사용자에게 제공되는 기능은 관리자의 설정에 따라 다를 수 있습니다."
+  },
+  "panels/settings/AISettingsTab.ts | boostYourProductivity": {
+    "message": "Chrome AI를 통한 생산성 향상"
+  },
+  "panels/settings/AISettingsTab.ts | chromeAi": {
+    "message": "Chrome AI"
+  },
+  "panels/settings/AISettingsTab.ts | collapse": {
+    "message": "접기"
+  },
+  "panels/settings/AISettingsTab.ts | consoleInsightsSendsData": {
+    "message": "설명을 생성할 수 있도록 콘솔 메시지, 관련 스택 트레이스, 관련 소스 코드, 관련 네트워크 헤더가 Google로 전송됩니다. 이 기능의 개선을 위해 인적 검토자가 데이터를 확인할 수도 있습니다."
+  },
+  "panels/settings/AISettingsTab.ts | expand": {
+    "message": "펼치기"
+  },
+  "panels/settings/AISettingsTab.ts | experimentalFeatures": {
+    "message": "이 기능은 실험용이며 변경될 수 있습니다"
+  },
+  "panels/settings/AISettingsTab.ts | explainConsole": {
+    "message": "콘솔 경고 및 오류에 관한 설명을 확인합니다"
+  },
+  "panels/settings/AISettingsTab.ts | explainStyling": {
+    "message": "스타일 지정 동작에 관한 설명 및 추가 컨텍스트를 확인해 보세요."
+  },
+  "panels/settings/AISettingsTab.ts | freestylerSendsData": {
+    "message": "설명을 생성할 수 있도록 검사된 페이지의 DOM 또는 CSS 콘텐츠가 Google로 전송될 수 있습니다. 이 기능의 개선을 위해 인적 검토자가 데이터를 확인할 수도 있습니다."
+  },
+  "panels/settings/AISettingsTab.ts | generatedSnippets": {
+    "message": "생성된 코드 스니펫 사용 시 주의"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandConsole": {
+    "message": "콘솔 경고 및 오류를 이해하고 수정하는 데 도움이 됩니다"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandStyling": {
+    "message": "스타일 지정 문제를 파악하고 해결하는 데 도움이 됩니다"
+  },
+  "panels/settings/AISettingsTab.ts | learnMore": {
+    "message": "자세히 알아보기"
+  },
+  "panels/settings/AISettingsTab.ts | oneOrMoreSettingsHaveChanged": {
+    "message": "하나 이상의 설정이 변경되었으며 변경사항을 적용하려면 새로고침해야 합니다."
+  },
+  "panels/settings/AISettingsTab.ts | privacyNotice": {
+    "message": "개인정보처리방침"
+  },
+  "panels/settings/AISettingsTab.ts | receiveStylingSuggestions": {
+    "message": "스타일 지정 문제를 해결하기 위한 추천 및 코드 샘플을 받습니다."
+  },
+  "panels/settings/AISettingsTab.ts | receiveSuggestions": {
+    "message": "이러한 문제를 해결하기 위한 제안 및 코드 샘플을 받습니다"
+  },
+  "panels/settings/AISettingsTab.ts | retainData": {
+    "message": "사용 데이터는 누가 제공했는지 Google에서 알 수 없어 더 이상 삭제 요청을 처리할 수 없는 방식으로 저장되고, 최대 18개월 동안 보관됩니다."
+  },
+  "panels/settings/AISettingsTab.ts | sendsDataToGoogle": {
+    "message": "이 기능을 사용하면 해당 기능과 관련된 데이터가 Google로 전송됩니다. 아래에서 기능별 세부정보를 확인하세요."
+  },
+  "panels/settings/AISettingsTab.ts | termsOfService": {
+    "message": "Google 서비스 약관"
+  },
+  "panels/settings/AISettingsTab.ts | termsOfServicePrivacyNotice": {
+    "message": "이 기능을 사용하면 {PH1} 및 {PH2}가 적용됩니다."
+  },
+  "panels/settings/AISettingsTab.ts | thingsToConsider": {
+    "message": "고려사항"
+  },
+  "panels/settings/AISettingsTab.ts | whenOn": {
+    "message": "켜졌을 때"
+  },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | addFilenamePattern": {
     "message": "파일 이름 패턴 추가"
   },
@@ -11162,6 +11237,9 @@
   "panels/settings/emulation/emulation-meta.ts | showDevices": {
     "message": "기기 표시"
   },
+  "panels/settings/settings-meta.ts | chromeAI": {
+    "message": "Chrome AI"
+  },
   "panels/settings/settings-meta.ts | documentation": {
     "message": "문서"
   },
@@ -11179,6 +11257,9 @@
   },
   "panels/settings/settings-meta.ts | shortcuts": {
     "message": "단축키"
+  },
+  "panels/settings/settings-meta.ts | showChromeAI": {
+    "message": "Chrome AI 표시"
   },
   "panels/settings/settings-meta.ts | showExperiments": {
     "message": "실험 표시"
@@ -11439,7 +11520,7 @@
     "message": "연결된 파일은 파일 트리에 추가해야 합니다. 결정된 소스 파일을 일반 자바스크립트 파일로 디버그할 수 있습니다."
   },
   "panels/sources/DebuggerPlugin.ts | configure": {
-    "message": "구성"
+    "message": "설정"
   },
   "panels/sources/DebuggerPlugin.ts | debugFileNotFound": {
     "message": "\"{PH1}\" 디버그 파일을 로드할 수 없습니다."
@@ -11630,9 +11711,6 @@
   "panels/sources/ScopeChainSidebarPane.ts | closureS": {
     "message": "닫기({PH1})"
   },
-  "panels/sources/ScopeChainSidebarPane.ts | exception": {
-    "message": "예외"
-  },
   "panels/sources/ScopeChainSidebarPane.ts | loading": {
     "message": "로드 중..."
   },
@@ -11641,9 +11719,6 @@
   },
   "panels/sources/ScopeChainSidebarPane.ts | notPaused": {
     "message": "일시중지되지 않음"
-  },
-  "panels/sources/ScopeChainSidebarPane.ts | returnValue": {
-    "message": "반환 값"
   },
   "panels/sources/SnippetsPlugin.ts | ctrlenter": {
     "message": "Ctrl+Enter"
@@ -12224,6 +12299,9 @@
   "panels/timeline/CountersGraph.ts | listeners": {
     "message": "리스너"
   },
+  "panels/timeline/CountersGraph.ts | noEventsFound": {
+    "message": "선택한 이벤트 내에서 메모리 사용량 데이터를 찾을 수 없습니다."
+  },
   "panels/timeline/CountersGraph.ts | nodes": {
     "message": "노드"
   },
@@ -12581,6 +12659,12 @@
   "panels/timeline/EventsTimelineTreeView.ts | startTime": {
     "message": "시작 시간"
   },
+  "panels/timeline/ExtensionTrackAppender.ts | customTrackDescription": {
+    "message": "서드 파티에서 추가한 맞춤 트랙입니다."
+  },
+  "panels/timeline/ExtensionTrackAppender.ts | customTrackName": {
+    "message": "{PH1} - 맞춤 트랙"
+  },
   "panels/timeline/GPUTrackAppender.ts | gpu": {
     "message": "GPU"
   },
@@ -12598,6 +12682,21 @@
   },
   "panels/timeline/NetworkTrackAppender.ts | network": {
     "message": "네트워크"
+  },
+  "panels/timeline/NetworkTrackAppender.ts | wsConnectionClosed": {
+    "message": "WebSocket 닫힘"
+  },
+  "panels/timeline/NetworkTrackAppender.ts | wsConnectionOpened": {
+    "message": "WebSocket 열림"
+  },
+  "panels/timeline/NetworkTrackAppender.ts | wsConnectionOpenedWithUrl": {
+    "message": "WebSocket 열림: {PH1}"
+  },
+  "panels/timeline/ServerTimingsTrackAppender.ts | serverSideTrack": {
+    "message": "서버 타이밍 — {PH1}"
+  },
+  "panels/timeline/ServerTimingsTrackAppender.ts | serverTimingTrack": {
+    "message": "이 트랙에는 서버 타이밍 네트워크 응답 헤더에서 가져온 타이밍이 포함되어 있습니다. 각 시작 시간은 추정치이며 정확하지 않을 수 있습니다."
   },
   "panels/timeline/ThreadAppender.ts | anonymous": {
     "message": "(익명)"
@@ -12725,6 +12824,12 @@
   "panels/timeline/TimelineHistoryManager.ts | currentSessionSS": {
     "message": "현재 세션: {PH1}. {PH2}"
   },
+  "panels/timeline/TimelineHistoryManager.ts | landingPageTitleLocalAndFieldMetrics": {
+    "message": "로컬 및 필드 측정항목"
+  },
+  "panels/timeline/TimelineHistoryManager.ts | landingPageTitleLocalMetrics": {
+    "message": "로컬 측정항목"
+  },
   "panels/timeline/TimelineHistoryManager.ts | moments": {
     "message": "활동"
   },
@@ -12827,11 +12932,20 @@
   "panels/timeline/TimelinePanel.ts | enableSelectorStats": {
     "message": "CSS 선택자 통계 사용 설정(느림)"
   },
+  "panels/timeline/TimelinePanel.ts | exportEnhancedTraces": {
+    "message": "향상된 성능 트레이스"
+  },
+  "panels/timeline/TimelinePanel.ts | exportNormalTraces": {
+    "message": "기본 성능 트레이스"
+  },
   "panels/timeline/TimelinePanel.ts | failedToSaveTimelineSS": {
     "message": "타임라인을 저장할 수 없음: {PH1}({PH2})"
   },
   "panels/timeline/TimelinePanel.ts | fixMe": {
     "message": "문제 해결"
+  },
+  "panels/timeline/TimelinePanel.ts | hideSidebar": {
+    "message": "단독 사이드바 숨기기"
   },
   "panels/timeline/TimelinePanel.ts | initializingProfiler": {
     "message": "프로파일러 초기화 중…"
@@ -12851,6 +12965,9 @@
   "panels/timeline/TimelinePanel.ts | networkConditions": {
     "message": "네트워크 조건"
   },
+  "panels/timeline/TimelinePanel.ts | performanceExtension": {
+    "message": "확장 프로그램 데이터"
+  },
   "panels/timeline/TimelinePanel.ts | processingProfile": {
     "message": "프로필 처리 중…"
   },
@@ -12869,8 +12986,20 @@
   "panels/timeline/TimelinePanel.ts | screenshots": {
     "message": "스크린샷"
   },
+  "panels/timeline/TimelinePanel.ts | showDataAddedByExtensions": {
+    "message": "성능 패널의 확장 프로그램에서 추가한 데이터를 표시합니다"
+  },
   "panels/timeline/TimelinePanel.ts | showMemoryTimeline": {
     "message": "메모리 타임라인 표시"
+  },
+  "panels/timeline/TimelinePanel.ts | showSidebar": {
+    "message": "사이드바 표시"
+  },
+  "panels/timeline/TimelinePanel.ts | sidebarHidden": {
+    "message": "성능 사이드바 숨김"
+  },
+  "panels/timeline/TimelinePanel.ts | sidebarShown": {
+    "message": "성능 사이드바 표시됨"
   },
   "panels/timeline/TimelinePanel.ts | ssec": {
     "message": "{PH1}초"
@@ -13013,21 +13142,6 @@
   "panels/timeline/TimelineTreeView.ts | vRuntime": {
     "message": "[V8 런타임]"
   },
-  "panels/timeline/TimelineUIUtils.ts | FromCache": {
-    "message": " (캐시에서)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | FromMemoryCache": {
-    "message": " (메모리 캐시에서)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | FromPush": {
-    "message": " (푸시에서)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | FromServiceWorker": {
-    "message": " (service worker에서)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | SSSResourceLoading": {
-    "message": " ({PH1} {PH2} + {PH3} 리소스 로드)"
-  },
   "panels/timeline/TimelineUIUtils.ts | UnknownNode": {
     "message": "[ 알 수 없는 노드 ]"
   },
@@ -13076,9 +13190,6 @@
   "panels/timeline/TimelineUIUtils.ts | currentClusterScore": {
     "message": "현재 클러스터 점수"
   },
-  "panels/timeline/TimelineUIUtils.ts | decodedBody": {
-    "message": "디코딩된 본문"
-  },
   "panels/timeline/TimelineUIUtils.ts | details": {
     "message": "세부정보"
   },
@@ -13096,9 +13207,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | emptyPlaceholder": {
     "message": "{PH1}"
-  },
-  "panels/timeline/TimelineUIUtils.ts | encodedData": {
-    "message": "인코딩된 데이터"
   },
   "panels/timeline/TimelineUIUtils.ts | entryIsHidden": {
     "message": "(항목이 숨겨짐)"
@@ -13130,9 +13238,6 @@
   "panels/timeline/TimelineUIUtils.ts | imageUrl": {
     "message": "이미지 URL"
   },
-  "panels/timeline/TimelineUIUtils.ts | initialPriority": {
-    "message": "초기 우선순위"
-  },
   "panels/timeline/TimelineUIUtils.ts | initiatedBy": {
     "message": "개시자:"
   },
@@ -13152,7 +13257,7 @@
     "message": "{PH1} {PH2}"
   },
   "panels/timeline/TimelineUIUtils.ts | invalidations": {
-    "message": "무효화"
+    "message": "무효화(총 {PH1}개)"
   },
   "panels/timeline/TimelineUIUtils.ts | invokedByTimeout": {
     "message": "시간 초과로 호출됨"
@@ -13169,17 +13274,11 @@
   "panels/timeline/TimelineUIUtils.ts | learnMore": {
     "message": "자세히 알아보기"
   },
-  "panels/timeline/TimelineUIUtils.ts | loadFromCache": {
-    "message": "캐시에서 로드"
-  },
   "panels/timeline/TimelineUIUtils.ts | location": {
     "message": "위치"
   },
   "panels/timeline/TimelineUIUtils.ts | message": {
     "message": "메시지"
-  },
-  "panels/timeline/TimelineUIUtils.ts | mimeType": {
-    "message": "MIME 유형"
   },
   "panels/timeline/TimelineUIUtils.ts | module": {
     "message": "모듈"
@@ -13189,12 +13288,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | movedTo": {
     "message": "다음 위치로 이동:"
-  },
-  "panels/timeline/TimelineUIUtils.ts | networkRequest": {
-    "message": "네트워크 요청"
-  },
-  "panels/timeline/TimelineUIUtils.ts | networkTransfer": {
-    "message": "네트워크 전송"
   },
   "panels/timeline/TimelineUIUtils.ts | no": {
     "message": "없음"
@@ -13223,9 +13316,6 @@
   "panels/timeline/TimelineUIUtils.ts | preview": {
     "message": "미리보기"
   },
-  "panels/timeline/TimelineUIUtils.ts | priority": {
-    "message": "우선순위"
-  },
   "panels/timeline/TimelineUIUtils.ts | processingDuration": {
     "message": "처리 기간"
   },
@@ -13243,9 +13333,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | repeats": {
     "message": "반복"
-  },
-  "panels/timeline/TimelineUIUtils.ts | requestMethod": {
-    "message": "요청 메서드"
   },
   "panels/timeline/TimelineUIUtils.ts | sAtS": {
     "message": "{PH1} {PH2}"
@@ -13400,6 +13487,18 @@
   "panels/timeline/UIDevtoolsUtils.ts | system": {
     "message": "시스템"
   },
+  "panels/timeline/components/CPUThrottlingSelector.ts | cpu": {
+    "message": "CPU: {PH1}"
+  },
+  "panels/timeline/components/CPUThrottlingSelector.ts | cpuThrottling": {
+    "message": "CPU 제한: {PH1}"
+  },
+  "panels/timeline/components/CPUThrottlingSelector.ts | dSlowdown": {
+    "message": "{PH1}× 감속"
+  },
+  "panels/timeline/components/CPUThrottlingSelector.ts | noThrottling": {
+    "message": "제한 없음"
+  },
   "panels/timeline/components/DetailsView.ts | forcedReflow": {
     "message": "강제 실행된 리플로우"
   },
@@ -13430,6 +13529,75 @@
   "panels/timeline/components/DetailsView.ts | websocketProtocol": {
     "message": "WebSocket 프로토콜"
   },
+  "panels/timeline/components/FieldSettingsDialog.ts | add": {
+    "message": "추가"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | advanced": {
+    "message": "고급"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | alreadyMapped": {
+    "message": "\"{PH1}\"은 이미 프로덕션 출처에 매핑되어 있습니다."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | cancel": {
+    "message": "취소"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | configure": {
+    "message": "설정"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | configureFieldData": {
+    "message": "필드 데이터 가져오기 구성"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | delete": {
+    "message": "삭제"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | developmentOrigin": {
+    "message": "개발 출처"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | developmentOriginValue": {
+    "message": "개발 출처: {PH1}"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | doesNotHaveSufficientData": {
+    "message": "Chrome UX 보고서에 이 페이지의 실제 속도 데이터가 충분하지 않습니다."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | fetchAggregated": {
+    "message": "{PH1}에서 집계된 필드 데이터를 가져와 실제 사용자가 사이트에서 경험하는 내용을 바탕으로 지역 측정항목을 문맥에 맞게 분석할 수 있습니다."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | invalidOrigin": {
+    "message": "\"{PH1}\"은 유효한 출처 또는 URL이 아닙니다."
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | mapDevelopmentOrigins": {
+    "message": "개발 출처를 설정하여 프로덕션 출처의 관련 필드 데이터를 자동으로 가져옵니다"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | new": {
+    "message": "신규"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | ok": {
+    "message": "확인"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | onlyFetchFieldData": {
+    "message": "아래 URL의 필드 데이터 항상 표시"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | optOut": {
+    "message": "선택 해제"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | privacyDisclosure": {
+    "message": "개인 정보 보호 공개"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | productionOrigin": {
+    "message": "프로덕션 출처"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | productionOriginValue": {
+    "message": "프로덕션 출처: {PH1}"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | setUp": {
+    "message": "설정"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | url": {
+    "message": "URL"
+  },
+  "panels/timeline/components/FieldSettingsDialog.ts | whenPerformanceIsShown": {
+    "message": "DevTools가 열려 있으면 방문하는 URL이 Google로 전송되어 필드 데이터를 쿼리합니다. 이러한 요청은 Google 계정에 연결되지 않습니다."
+  },
   "panels/timeline/components/InteractionBreakdown.ts | inputDelay": {
     "message": "입력 지연"
   },
@@ -13438,6 +13606,288 @@
   },
   "panels/timeline/components/InteractionBreakdown.ts | processingDuration": {
     "message": "처리 기간"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | allDevices": {
+    "message": "모든 기기"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | auto": {
+    "message": "자동({PH1})"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | collectionPeriod": {
+    "message": "수집 기간:"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | dateRange": {
+    "message": "{PH1}~{PH2}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | desktop": {
+    "message": "데스크톱"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | device": {
+    "message": "기기: {PH1}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | fieldData": {
+    "message": "필드 데이터"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | fieldDataLink": {
+    "message": "필드 데이터"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | interactions": {
+    "message": "상호작용"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | lcpElement": {
+    "message": "LCP 요소"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | loadingOption": {
+    "message": "{PH1} - 로드 중…"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | localAndFieldMetrics": {
+    "message": "로컬 및 필드 측정항목"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | localMetrics": {
+    "message": "로컬 측정항목"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | localMetricsLink": {
+    "message": "로컬 측정항목"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | mobile": {
+    "message": "모바일"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | mostUsersDesktop": {
+    "message": "대부분의 사용자가 데스크톱을 사용합니다. 실제 사용자와 일치하는 데스크톱 창 크기를 에뮬레이션해 보세요."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | mostUsersMobile": {
+    "message": "대부분의 사용자가 모바일을 사용합니다. 실제 사용자와 일치하는 휴대기기를 에뮬레이션해 보세요."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | needsDataOption": {
+    "message": "{PH1} - 데이터 없음"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | nextSteps": {
+    "message": "다음 단계"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | originOption": {
+    "message": "출처"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | originOptionWithKey": {
+    "message": "출처: {PH1}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | recordingSettings": {
+    "message": "녹화 설정"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | seeHowYourLocalMetricsCompare": {
+    "message": "{PH1}에서 로컬 측정항목과 실제 사용자 데이터를 비교해 보세요."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | showFieldDataForDevice": {
+    "message": "기기 유형 관련 필드 데이터 표시: {PH1}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | showFieldDataForPage": {
+    "message": "{PH1}의 필드 데이터 표시"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | tablet": {
+    "message": "태블릿"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | theFieldMetricsAre": {
+    "message": "{PH1}는 다양한 네트워크 연결 및 기기를 사용하는 실제 사용자에 의해 측정됩니다."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | theLocalMetricsAre": {
+    "message": "{PH1}는 네트워크 연결 및 기기를 사용하여 현재 페이지에서 캡처됩니다."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | tryDisablingThrottling": {
+    "message": "네트워크 제한을 사용 중지하여 실제 사용자가 측정한 네트워크 지연 시간을 근사치로 계산하세요."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | tryUsingThrottling": {
+    "message": "{PH1} 네트워크 제한을 사용하여 실제 사용자가 측정한 네트워크 지연 시간을 근사치로 계산하세요."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | urlOption": {
+    "message": "URL"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | urlOptionWithKey": {
+    "message": "URL: {PH1}"
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodBetterCompare": {
+    "message": "로컬 {PH1} {PH2}가 양호하며 사용자 환경보다 훨씬 낫습니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodGoodDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}가 양호하며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 또한 필드 데이터 75번째 백분위수 {PH1} {PH3}도 양호합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodNeedsImprovementDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}가 양호하며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 하지만 필드 데이터 75번째 백분위수 {PH1} {PH3}에 개선이 필요합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodPoorDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}가 양호하며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 하지만 필드 데이터 75번째 백분위수 {PH1} {PH3}는 좋지 않습니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodSimilarCompare": {
+    "message": "로컬 {PH1} {PH2}가 양호하며 사용자 환경과 유사합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodSummarized": {
+    "message": "로컬 {PH1} {PH2}가 양호합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | goodWorseCompare": {
+    "message": "로컬 {PH1} {PH2}가 양호하며 사용자 환경보다는 훨씬 나쁩니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementBetterCompare": {
+    "message": "로컬 {PH1} {PH2}에 개선이 필요하며 사용자 환경보다 훨씬 낫습니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementGoodDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}에 개선이 필요하며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 하지만 필드 데이터 75번째 백분위수 {PH1} {PH3}는 양호합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementNeedsImprovementDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}에 개선이 필요하며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 또한 필드 데이터 75번째 백분위수 {PH1} {PH3}에 개선이 필요합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementPoorDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}에 개선이 필요하며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 하지만 필드 데이터 75번째 백분위수 {PH1} {PH3}는 좋지 않습니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementSimilarCompare": {
+    "message": "로컬 {PH1} {PH2}에 개선이 필요하며 사용자 환경과 유사합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementSummarized": {
+    "message": "로컬 {PH1} {PH2}에 개선이 필요합니다"
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | needsImprovementWorseCompare": {
+    "message": "로컬 {PH1} {PH2}에 개선이 필요하며 사용자 환경보다 훨씬 좋지 않습니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorBetterCompare": {
+    "message": "로컬 {PH1} {PH2}가 좋지 않으며 사용자 환경보다 훨씬 낫습니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorGoodDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}가 좋지 않으며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 하지만 필드 데이터 75번째 백분위수 {PH1} {PH3}는 양호합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorNeedsImprovementDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}가 좋지 않으며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 하지만 필드 데이터 75번째 백분위수 {PH1} {PH3}에 개선이 필요합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorPoorDetailedCompare": {
+    "message": "로컬 {PH1} {PH2}가 좋지 않으며 {PH1} 경험이 있는 실제 사용자 중 {PH4}도 동일하게 평가합니다. 또한 필드 데이터 75번째 백분위수 {PH1} {PH3}도 좋지 않습니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorSimilarCompare": {
+    "message": "로컬 {PH1} {PH2}가 좋지 않으며 사용자 환경과 유사합니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorSummarized": {
+    "message": "로컬 {PH1} {PH2}가 좋지 않습니다."
+  },
+  "panels/timeline/components/MetricCompareStrings.ts | poorWorseCompare": {
+    "message": "로컬 {PH1} {PH2}가 좋지 않으며 사용자 환경보다 훨씬 나쁩니다."
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | FromCache": {
+    "message": " (캐시에서)"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | FromMemoryCache": {
+    "message": " (메모리 캐시에서)"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | FromPush": {
+    "message": " (푸시에서)"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | FromServiceWorker": {
+    "message": " (service worker에서)"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | contentDownloading": {
+    "message": "콘텐츠 다운로드 중"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | decodedBody": {
+    "message": "디코딩된 본문"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | duration": {
+    "message": "기간"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | encodedData": {
+    "message": "인코딩된 데이터"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | fromCache": {
+    "message": "캐시에서"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | initialPriority": {
+    "message": "초기 우선순위"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | initiatedBy": {
+    "message": "개시자:"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | mimeType": {
+    "message": "MIME 유형"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | networkRequest": {
+    "message": "네트워크 요청"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | no": {
+    "message": "없음"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | preview": {
+    "message": "미리보기"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | priority": {
+    "message": "우선순위"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | queuingAndConnecting": {
+    "message": "대기 및 연걸"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | requestMethod": {
+    "message": "요청 메서드"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | requestSentAndWaiting": {
+    "message": "요청 전송 완료 및 대기 중"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | waitingOnMainThread": {
+    "message": "기본 스레드에서 대기 중"
+  },
+  "panels/timeline/components/NetworkRequestDetails.ts | yes": {
+    "message": "예"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | contentDownloading": {
+    "message": "콘텐츠 다운로드 중"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | priority": {
+    "message": "우선순위"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | queuingAndConnecting": {
+    "message": "대기 및 연걸"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | renderBlocking": {
+    "message": "렌더링 차단"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | requestSentAndWaiting": {
+    "message": "요청 전송 완료 및 대기 중"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | waitingOnMainThread": {
+    "message": "기본 스레드에서 대기 중"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | add": {
+    "message": "추가…"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | custom": {
+    "message": "맞춤"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | disabled": {
+    "message": "사용 안함"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | network": {
+    "message": "네트워크: {PH1}"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | networkThrottling": {
+    "message": "네트워크 제한: {PH1}"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | presets": {
+    "message": "사전 설정"
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | fetchPriorityApplied": {
+    "message": "fetchpriority=high 적용됨"
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | lazyLoadNotApplied": {
+    "message": "지연 로드가 적용되지 않음"
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | lcpLoadDelay": {
+    "message": "LCP 이미지가 가장 이른 시작 시간 {PH1} 후에 로드되었습니다."
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | requestDiscoverable": {
+    "message": "초기 문서에서 요청을 검색할 수 있습니다"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | elementRenderDelay": {
+    "message": "요소 렌더링 지연"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDelay": {
+    "message": "리소스 로드 지연"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDuration": {
+    "message": "리소스 로드 시간"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | timeToFirstByte": {
+    "message": "첫 바이트까지의 시간"
   },
   "panels/timeline/timeline-meta.ts | hideChromeFrameInLayersView": {
     "message": "레이어 보기에서 chrome 프레임 숨기기"
@@ -13463,6 +13913,9 @@
   "panels/timeline/timeline-meta.ts | record": {
     "message": "기록"
   },
+  "panels/timeline/timeline-meta.ts | recordAndReload": {
+    "message": "기록 및 새로고침"
+  },
   "panels/timeline/timeline-meta.ts | saveProfile": {
     "message": "프로필 저장…"
   },
@@ -13471,9 +13924,6 @@
   },
   "panels/timeline/timeline-meta.ts | showRecentTimelineSessions": {
     "message": "최근 타임라인 세션 표시"
-  },
-  "panels/timeline/timeline-meta.ts | startProfilingAndReloadPage": {
-    "message": "프로파일링 시작 및 페이지 새로고침"
   },
   "panels/timeline/timeline-meta.ts | stop": {
     "message": "중지"
@@ -14453,9 +14903,6 @@
   "ui/legacy/components/perf_ui/FilmStripView.ts | screenshotForSSelectToView": {
     "message": "{PH1} 스크린샷 - 이전 요청을 확인하려면 선택하세요."
   },
-  "ui/legacy/components/perf_ui/FlameChart.ts | addScriptToIgnoreList": {
-    "message": "무시 목록에 스크립트 추가"
-  },
   "ui/legacy/components/perf_ui/FlameChart.ts | enterTrackConfigurationMode": {
     "message": "트랙 구성…"
   },
@@ -14465,23 +14912,11 @@
   "ui/legacy/components/perf_ui/FlameChart.ts | flameChart": {
     "message": "Flame Chart"
   },
-  "ui/legacy/components/perf_ui/FlameChart.ts | hideChildren": {
-    "message": "하위 요소 숨기기"
+  "ui/legacy/components/perf_ui/FlameChart.ts | labelEntry": {
+    "message": "라벨 항목"
   },
-  "ui/legacy/components/perf_ui/FlameChart.ts | hideFunction": {
-    "message": "함수 숨기기"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | hideRepeatingChildren": {
-    "message": "반복되는 하위 항목 숨기기"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | removeScriptFromIgnoreList": {
-    "message": "무시 목록에서 스크립트 삭제"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | resetChildren": {
-    "message": "자녀 재설정"
-  },
-  "ui/legacy/components/perf_ui/FlameChart.ts | resetTrace": {
-    "message": "trace 재설정"
+  "ui/legacy/components/perf_ui/FlameChart.ts | linkEntries": {
+    "message": "항목 연결"
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | sCollapsed": {
     "message": "{PH1} 접음"

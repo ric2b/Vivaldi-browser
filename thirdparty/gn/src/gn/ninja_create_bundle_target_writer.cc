@@ -7,6 +7,7 @@
 #include <iterator>
 
 #include "base/strings/string_util.h"
+#include "gn/builtin_tool.h"
 #include "gn/filesystem_utils.h"
 #include "gn/general_tool.h"
 #include "gn/ninja_utils.h"
@@ -79,7 +80,7 @@ void NinjaCreateBundleTargetWriter::Run() {
   // Stamp users are CopyBundleData, CompileAssetsCatalog, PostProcessing and
   // StampForTarget.
   size_t num_stamp_uses = 4;
-  std::vector<OutputFile> order_only_deps = WriteInputDepsStampAndGetDep(
+  std::vector<OutputFile> order_only_deps = WriteInputDepsStampOrPhonyAndGetDep(
       std::vector<const Target*>(), num_stamp_uses);
 
   std::string post_processing_rule_name = WritePostProcessingRuleDefinition();
@@ -90,9 +91,17 @@ void NinjaCreateBundleTargetWriter::Run() {
   WritePostProcessingStep(post_processing_rule_name, order_only_deps,
                           &output_files);
 
-  for (const Target* data_dep : resolved().GetDataDeps(target_))
-    order_only_deps.push_back(data_dep->dependency_output_file());
-  WriteStampForTarget(output_files, order_only_deps);
+  for (const Target* data_dep : resolved().GetDataDeps(target_)) {
+    if (data_dep->has_dependency_output())
+      order_only_deps.push_back(data_dep->dependency_output());
+  }
+
+  // If the target does not have a phony target to write, then we have nothing
+  // left to do.
+  if (!target_->has_dependency_output())
+    return;
+
+  WriteStampOrPhonyForTarget(output_files, order_only_deps);
 
   // Write a phony target for the outer bundle directory. This allows other
   // targets to treat the entire bundle as a single unit, even though it is
@@ -102,8 +111,8 @@ void NinjaCreateBundleTargetWriter::Run() {
   WriteOutput(
       OutputFile(settings_->build_settings(),
                  target_->bundle_data().GetBundleRootDirOutput(settings_)));
-
-  out_ << ": phony " << target_->dependency_output_file().value();
+  out_ << ": " << BuiltinTool::kBuiltinToolPhony << " ";
+  out_ << target_->dependency_output().value();
   out_ << std::endl;
 }
 
@@ -219,7 +228,7 @@ void NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogStep(
     return;
   }
 
-  OutputFile input_dep = WriteCompileAssetsCatalogInputDepsStamp(
+  OutputFile input_dep = WriteCompileAssetsCatalogInputDepsStampOrPhony(
       target_->bundle_data().assets_catalog_deps());
   DCHECK(!input_dep.value().empty());
 
@@ -279,28 +288,45 @@ void NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogStep(
 }
 
 OutputFile
-NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogInputDepsStamp(
+NinjaCreateBundleTargetWriter::WriteCompileAssetsCatalogInputDepsStampOrPhony(
     const std::vector<const Target*>& dependencies) {
   DCHECK(!dependencies.empty());
-  if (dependencies.size() == 1)
-    return dependencies[0]->dependency_output_file();
+  if (dependencies.size() == 1) {
+    return dependencies[0]->has_dependency_output()
+               ? dependencies[0]->dependency_output()
+               : OutputFile{};
+  }
 
-  OutputFile xcassets_input_stamp_file =
-      GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
-  xcassets_input_stamp_file.value().append(target_->label().name());
-  xcassets_input_stamp_file.value().append(".xcassets.inputdeps.stamp");
+  OutputFile xcassets_input_stamp_or_phony;
+  std::string tool;
+  if (settings_->build_settings()->no_stamp_files()) {
+    xcassets_input_stamp_or_phony =
+        GetBuildDirForTargetAsOutputFile(target_, BuildDirType::PHONY);
+
+    xcassets_input_stamp_or_phony.value().append(target_->label().name());
+    xcassets_input_stamp_or_phony.value().append(".xcassets.inputdeps");
+    tool = BuiltinTool::kBuiltinToolPhony;
+  } else {
+    xcassets_input_stamp_or_phony =
+        GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
+    xcassets_input_stamp_or_phony.value().append(target_->label().name());
+    xcassets_input_stamp_or_phony.value().append(".xcassets.inputdeps.stamp");
+    tool = GetNinjaRulePrefixForToolchain(settings_) +
+           GeneralTool::kGeneralToolStamp;
+  }
 
   out_ << "build ";
-  WriteOutput(xcassets_input_stamp_file);
-  out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
-       << GeneralTool::kGeneralToolStamp;
+  WriteOutput(xcassets_input_stamp_or_phony);
+  out_ << ": " << tool;
 
   for (const Target* target : dependencies) {
-    out_ << " ";
-    path_output_.WriteFile(out_, target->dependency_output_file());
+    if (target->has_dependency_output()) {
+      out_ << " ";
+      path_output_.WriteFile(out_, target->dependency_output());
+    }
   }
   out_ << std::endl;
-  return xcassets_input_stamp_file;
+  return xcassets_input_stamp_or_phony;
 }
 
 void NinjaCreateBundleTargetWriter::WritePostProcessingStep(
@@ -311,7 +337,7 @@ void NinjaCreateBundleTargetWriter::WritePostProcessingStep(
     return;
 
   OutputFile post_processing_input_stamp_file =
-      WritePostProcessingInputDepsStamp(order_only_deps, output_files);
+      WritePostProcessingInputDepsStampOrPhony(order_only_deps, output_files);
   DCHECK(!post_processing_input_stamp_file.value().empty());
 
   out_ << "build";
@@ -332,7 +358,8 @@ void NinjaCreateBundleTargetWriter::WritePostProcessingStep(
   out_ << std::endl;
 }
 
-OutputFile NinjaCreateBundleTargetWriter::WritePostProcessingInputDepsStamp(
+OutputFile
+NinjaCreateBundleTargetWriter::WritePostProcessingInputDepsStampOrPhony(
     const std::vector<OutputFile>& order_only_deps,
     std::vector<OutputFile>* output_files) {
   std::vector<SourceFile> post_processing_input_files;
@@ -352,16 +379,29 @@ OutputFile NinjaCreateBundleTargetWriter::WritePostProcessingInputDepsStamp(
     return OutputFile(settings_->build_settings(),
                       post_processing_input_files[0]);
 
-  OutputFile post_processing_input_stamp_file =
-      GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
-  post_processing_input_stamp_file.value().append(target_->label().name());
-  post_processing_input_stamp_file.value().append(
-      ".postprocessing.inputdeps.stamp");
+  OutputFile stamp_or_phony;
+  std::string tool;
+  if (settings_->build_settings()->no_stamp_files()) {
+    // Make a phony target. We don't need to worry about an empty phony target,
+    // as those would have been peeled off already.
+    stamp_or_phony =
+        GetBuildDirForTargetAsOutputFile(target_, BuildDirType::PHONY);
+    stamp_or_phony.value().append(target_->label().name());
+    stamp_or_phony.value().append(".postprocessing.inputdeps");
+    tool = BuiltinTool::kBuiltinToolPhony;
+  } else {
+    // Make a stamp target.
+    stamp_or_phony =
+        GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
+    stamp_or_phony.value().append(target_->label().name());
+    stamp_or_phony.value().append(".postprocessing.inputdeps.stamp");
+    tool = GetNinjaRulePrefixForToolchain(settings_) +
+           GeneralTool::kGeneralToolStamp;
+  }
 
   out_ << "build ";
-  WriteOutput(post_processing_input_stamp_file);
-  out_ << ": " << GetNinjaRulePrefixForToolchain(settings_)
-       << GeneralTool::kGeneralToolStamp;
+  WriteOutput(stamp_or_phony);
+  out_ << ": " << tool;
 
   for (const SourceFile& source : post_processing_input_files) {
     out_ << " ";
@@ -372,5 +412,5 @@ OutputFile NinjaCreateBundleTargetWriter::WritePostProcessingInputDepsStamp(
     path_output_.WriteFiles(out_, order_only_deps);
   }
   out_ << std::endl;
-  return post_processing_input_stamp_file;
+  return stamp_or_phony;
 }

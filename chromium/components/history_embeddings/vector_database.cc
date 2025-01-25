@@ -7,6 +7,7 @@
 #include <queue>
 
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/history_embeddings/history_embeddings_features.h"
@@ -18,6 +19,56 @@ constexpr float kUnitLength = 1.0f;
 
 // Close enough to be considered near zero.
 constexpr float kEpsilon = 0.01f;
+
+namespace {
+
+// Increases occurrence counts for each element of `query_terms` as they are
+// found in `passage`, ranging from zero up to `max_count` inclusive. The
+// `term_counts` vector is modified while counting, corresponding 1:1 with the
+// terms, so its size must exactly match that of `query_terms`. Each term is
+// already-folded ASCII, and `passage` is pure ASCII, so it can be folded
+// efficiently during search.  Note: This can be simplified to gain performance
+// boost if we do text cleaning and folding of passages in advance.
+void CountTermsInPassage(std::vector<size_t>& term_counts,
+                         const std::vector<std::string>& query_terms,
+                         const std::string_view passage,
+                         const size_t max_count) {
+  DCHECK_EQ(term_counts.size(), query_terms.size());
+  DCHECK(base::IsStringASCII(passage));
+  DCHECK(std::ranges::all_of(
+      query_terms, [](std::string_view term) { return !term.empty(); }));
+  DCHECK(std::ranges::all_of(query_terms, [](std::string_view term) {
+    return base::IsStringASCII(term);
+  }));
+  DCHECK(std::ranges::all_of(query_terms, [](std::string_view term) {
+    return base::ToLowerASCII(term) == term;
+  }));
+
+  base::StringViewTokenizer tokenizer(passage, ",;. ");
+  while (tokenizer.GetNext()) {
+    const std::string_view token = tokenizer.token();
+    for (size_t term_index = 0; term_index < query_terms.size(); term_index++) {
+      if (term_counts[term_index] >= max_count) {
+        continue;
+      }
+      const std::string_view query_term = query_terms[term_index];
+      if (query_term.size() != token.size()) {
+        continue;
+      }
+      size_t char_index;
+      for (char_index = 0; char_index < token.size(); char_index++) {
+        if (query_term[char_index] != base::ToLowerASCII(token[char_index])) {
+          break;
+        }
+      }
+      if (char_index == token.size()) {
+        term_counts[term_index]++;
+      }
+    }
+  }
+}
+
+}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -77,24 +128,17 @@ void Embedding::Normalize() {
   }
 }
 
-float Embedding::ScoreWith(SearchInfo& search_info,
-                           const std::string& other_passage,
-                           const Embedding& other_embedding) const {
+float Embedding::ScoreWith(const Embedding& other_embedding) const {
   // This check is redundant since the database layers ensure embeddings
   // always have a fixed consistent size, but code can change with time,
   // and being sure directly before use may eventually catch a bug.
   CHECK_EQ(data_.size(), other_embedding.data_.size());
 
-  float score = 0.0f;
-  // Skip non-ASCII strings to avoid scoring problems with the model.
-  if (base::IsStringASCII(other_passage)) {
-    for (size_t i = 0; i < data_.size(); i++) {
-      score += data_[i] * other_embedding.data_[i];
-    }
-  } else {
-    search_info.skipped_nonascii_passage_count++;
+  float embedding_score = 0.0f;
+  for (size_t i = 0; i < data_.size(); i++) {
+    embedding_score += data_[i] * other_embedding.data_[i];
   }
-  return score;
+  return embedding_score;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -116,21 +160,48 @@ UrlEmbeddings& UrlEmbeddings::operator=(const UrlEmbeddings&) = default;
 bool UrlEmbeddings::operator==(const UrlEmbeddings&) const = default;
 
 float UrlEmbeddings::BestScoreWith(SearchInfo& search_info,
-                                   const Embedding& query,
+                                   const SearchParams& search_params,
+                                   const Embedding& query_embedding,
                                    const proto::PassagesValue& passages,
-                                   size_t search_minimum_word_count) const {
-  float best = std::numeric_limits<float>::min();
+                                   size_t min_passage_word_count) const {
+  std::vector<size_t> term_counts(search_params.query_terms.size(), 0);
+  float best = 0.0f;
   for (size_t i = 0; i < embeddings.size(); i++) {
     const Embedding& embedding = embeddings[i];
-    float score =
-        embedding.GetPassageWordCount() < search_minimum_word_count
-            ? 0.0f
-            : query.ScoreWith(search_info, passages.passages(i), embedding);
-    if (score > best) {
-      best = score;
+    const std::string& passage = passages.passages(i);
+
+    // Skip non-ASCII strings to avoid scoring problems with the model.
+    if (!base::IsStringASCII(passage)) {
+      search_info.skipped_nonascii_passage_count++;
+      continue;
     }
+
+    float score = embedding.GetPassageWordCount() < min_passage_word_count
+                      ? 0.0f
+                      : query_embedding.ScoreWith(embedding);
+
+    if (score >= search_params.word_match_minimum_embedding_score) {
+      // Since the ASCII check above processed the whole passage string, it is
+      // likely ready in CPU cache. Scan text again to count terms in passage.
+      base::ElapsedTimer timer;
+      CountTermsInPassage(term_counts, search_params.query_terms, passage,
+                          search_params.word_match_limit);
+      search_info.passage_scanning_time += timer.Elapsed();
+    }
+
+    best = std::max(best, score);
   }
-  return best;
+
+  // Calculate total boost from term counts across all passages.
+  float word_match_boost = 0.0f;
+  for (size_t term_count : term_counts) {
+    float term_boost = search_params.word_match_score_boost_factor *
+                       term_count / search_params.word_match_limit;
+    // Boost factor is applied per term such that longer queries boost more.
+    word_match_boost += term_boost;
+  }
+
+  return best + word_match_boost;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -148,6 +219,12 @@ ScoredUrl::ScoredUrl(ScoredUrl&&) = default;
 ScoredUrl& ScoredUrl::operator=(ScoredUrl&&) = default;
 ScoredUrl::ScoredUrl(const ScoredUrl&) = default;
 ScoredUrl& ScoredUrl::operator=(const ScoredUrl&) = default;
+
+////////////////////////////////////////////////////////////////////////////////
+
+SearchParams::SearchParams() = default;
+SearchParams::SearchParams(SearchParams&&) = default;
+SearchParams::~SearchParams() = default;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -174,7 +251,8 @@ bool UrlPassagesEmbeddings::operator==(const UrlPassagesEmbeddings&) const =
 SearchInfo VectorDatabase::FindNearest(
     std::optional<base::Time> time_range_start,
     size_t count,
-    const Embedding& query,
+    const SearchParams& search_params,
+    const Embedding& query_embedding,
     base::RepeatingCallback<bool()> is_search_halted) {
   if (count == 0) {
     return {};
@@ -187,15 +265,15 @@ SearchInfo VectorDatabase::FindNearest(
   }
 
   // Dimensions are always equal.
-  CHECK_EQ(query.Dimensions(), GetEmbeddingDimensions());
+  CHECK_EQ(query_embedding.Dimensions(), GetEmbeddingDimensions());
 
   // Magnitudes are also assumed equal; they are provided normalized by design.
-  CHECK_LT(std::abs(query.Magnitude() - kUnitLength), kEpsilon);
+  CHECK_LT(std::abs(query_embedding.Magnitude() - kUnitLength), kEpsilon);
 
   // Embeddings must have source passages with at least this many words in order
   // to be considered during the search. Insufficient word count embeddings
-  // will score zero against the query.
-  size_t search_minimum_word_count = kSearchPassageMinimumWordCount.Get();
+  // will score zero against the query_embedding.
+  size_t min_passage_word_count = kSearchPassageMinimumWordCount.Get();
 
   struct Compare {
     bool operator()(const ScoredUrl& a, const ScoredUrl& b) {
@@ -207,7 +285,6 @@ SearchInfo VectorDatabase::FindNearest(
   SearchInfo search_info;
   search_info.completed = true;
   base::ElapsedTimer total_timer;
-  base::TimeDelta scoring_elapsed;
   while (const UrlPassagesEmbeddings* url_data = iterator->Next()) {
     const UrlEmbeddings& item = url_data->url_embeddings;
     if (is_search_halted.Run()) {
@@ -218,27 +295,34 @@ SearchInfo VectorDatabase::FindNearest(
     search_info.searched_embedding_count += item.embeddings.size();
 
     base::ElapsedTimer scoring_timer;
-    const float score =
-        item.BestScoreWith(search_info, query, url_data->url_passages.passages,
-                           search_minimum_word_count);
+    const float score = item.BestScoreWith(
+        search_info, search_params, query_embedding,
+        url_data->url_passages.passages, min_passage_word_count);
     q.emplace(item.url_id, item.visit_id, item.visit_time, score);
     while (q.size() > count) {
       q.pop();
     }
 
-    scoring_elapsed += scoring_timer.Elapsed();
+    search_info.scoring_time += scoring_timer.Elapsed();
   }
+  search_info.total_search_time = total_timer.Elapsed();
 
-  base::TimeDelta total_elapsed = total_timer.Elapsed();
-  if (total_elapsed.is_zero()) {
-    // Note, base::Nanoseconds(1) is still treated as zero by the time code,
-    // so at least milliseconds are required here.
-    scoring_elapsed = base::Milliseconds(0);
-    total_elapsed = base::Milliseconds(1);
+  // TODO(b/363083815): Log histograms and rework caller time histogram.
+  if (search_info.total_search_time.is_zero()) {
+    VLOG(1) << "Inner search total (μs): "
+            << search_info.total_search_time.InMicroseconds();
+  } else {
+    VLOG(1) << "Inner search total (μs): "
+            << search_info.total_search_time.InMicroseconds()
+            << " ; scoring (μs): " << search_info.scoring_time.InMicroseconds()
+            << " ; scoring %: "
+            << search_info.scoring_time * 100 / search_info.total_search_time
+            << " ; passage scanning (μs): "
+            << search_info.passage_scanning_time.InMicroseconds()
+            << " ; passage scanning %: "
+            << search_info.passage_scanning_time * 100 /
+                   search_info.total_search_time;
   }
-  VLOG(1) << "Inner search total (ns): " << total_elapsed.InNanoseconds()
-          << " ; scoring (ns): " << scoring_elapsed.InNanoseconds()
-          << " ; scoring %: " << scoring_elapsed * 100 / total_elapsed;
 
   // Empty queue into vector and return result sorted with descending scores.
   while (!q.empty()) {

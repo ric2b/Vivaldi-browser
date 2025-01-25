@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">적용</translation>
 <translation id="1603914832182249871">(사생활 보호 모드)</translation>
 <translation id="1627276047960621195">파일 설명자</translation>
+<translation id="1654713139320245449">전송 대상을 찾을 수 없습니다. 도움이 필요하신가요?</translation>
 <translation id="166278006618318542">대상 공개 키 알고리즘</translation>
 <translation id="1682548588986054654">새 시크릿 창</translation>
 <translation id="1708338024780164500">(비활성)</translation>
@@ -98,7 +99,6 @@
 <translation id="265390580714150011">필드 값</translation>
 <translation id="2662876636500006917">Chrome 웹 스토어</translation>
 <translation id="2678063897982469759">다시 사용</translation>
-<translation id="2678100101831051676">전송할 수 없습니다.</translation>
 <translation id="2719936478972253983">다음 쿠키가 차단됨</translation>
 <translation id="2721037002783622288"><ph name="SEARCH_ENGINE" />에서 이미지 검색(&amp;S)</translation>
 <translation id="2738771556149464852">만료 기간:</translation>
@@ -148,7 +148,6 @@
 <translation id="3378572629723696641">확장 프로그램이 손상되었을 수도 있습니다.</translation>
 <translation id="3387614642886316601">향상된 맞춤법 검사 기능 사용</translation>
 <translation id="3390013585654699824">앱 세부정보</translation>
-<translation id="3393582007140394275">화면을 전송할 수 없습니다.</translation>
 <translation id="345693547134384690">새 탭에서 이미지 열기(&amp;I)</translation>
 <translation id="3493881266323043047">유효성</translation>
 <translation id="3511307672085573050">링크 주소 복사(&amp;E)</translation>
@@ -164,7 +163,7 @@
 <translation id="3727187387656390258">팝업 검사</translation>
 <translation id="3760460896538743390">백그라운드 페이지 검사(&amp;B)</translation>
 <translation id="3786224729726357296"><ph name="SITE" />의 사이트 데이터 및 권한 삭제</translation>
-<translation id="3797900183766075808"><ph name="SEARCH_ENGINE" />에서 '<ph name="SEARCH_TERMS" />' 검색 (&amp;S)</translation>
+<translation id="3797900183766075808"><ph name="SEARCH_ENGINE" />에서 “<ph name="SEARCH_TERMS" />” 검색 (&amp;S)</translation>
 <translation id="3798449238516105146">버전</translation>
 <translation id="3810973564298564668">관리</translation>
 <translation id="3838085852053358637">확장 프로그램을 로드하지 못함</translation>
@@ -346,6 +345,7 @@
 <translation id="6812841287760418429">변경사항 유지</translation>
 <translation id="6824564591481349393">이메일 주소 복사(&amp;E)</translation>
 <translation id="6840155290835956714">보내기 전에 확인</translation>
+<translation id="6878862640969460273">가로 방향</translation>
 <translation id="6886871292305414135">새 탭에서 링크 열기(&amp;T)</translation>
 <translation id="6892812721183419409"><ph name="USER" />(으)로 링크 열기</translation>
 <translation id="6900284862687837908">백그라운드 앱: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -409,7 +409,6 @@
 키 파일은 확장 프로그램의 새 버전을 만드는 데 필요하므로 안전한 장소에 보관하시기 바랍니다.</translation>
 <translation id="8004582292198964060">브라우저</translation>
 <translation id="8018313076035239964">웹사이트에서 사용할 수 있는 정보와 나에게 표시할 수 있는 콘텐츠를 컨트롤합니다</translation>
-<translation id="8032244173881942855">탭을 전송할 수 없습니다.</translation>
 <translation id="8071432093239591881">이미지로 인쇄</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
@@ -465,7 +464,6 @@
 <translation id="9218430445555521422">기본 브라우저로 설정</translation>
 <translation id="93766956588638423">확장 프로그램 복구</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">가로 방향</translation>
 <translation id="994289308992179865">반복 재생 (&amp;L)</translation>
 <translation id="998747458861718449">검사(&amp;N)</translation>
 </translationbundle>

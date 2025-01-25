@@ -18,6 +18,7 @@
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
+#include "browser/menus/vivaldi_menubar_controller.h"
 
 namespace extensions {
 
@@ -104,7 +105,7 @@ void MenubarMenuAPI::SendAction(content::BrowserContext* browser_context,
                                 int event_state) {
   vivaldi::menubar_menu::Action action;
   // Convert to api id before sending to JS.
-  action.id = command - IDC_VIV_MENU_FIRST - 1;
+  action.id = command - IDC_VIV_MENU_FIRST;
   action.state = FlagToEventState(event_state);
   ::vivaldi::BroadcastEvent(vivaldi::menubar_menu::OnAction::kEventName,
                             vivaldi::menubar_menu::OnAction::Create(action),
@@ -197,414 +198,53 @@ void MenubarMenuAPI::SendError(content::BrowserContext* browser_context,
                             browser_context);
 }
 
+MenubarMenuShowFunction::MenubarMenuShowFunction() {}
+
+MenubarMenuShowFunction::~MenubarMenuShowFunction() = default;
+
+ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
 #if BUILDFLAG(IS_MAC)
-// Not used on Mac but we still need a stub
-MenubarMenuShowFunction::MenubarMenuShowFunction() = default;
-MenubarMenuShowFunction::~MenubarMenuShowFunction() = default;
-ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
   return RespondNow(Error("Not implemented on Mac"));
-}
 #else
-MenubarMenuShowFunction::MenubarMenuShowFunction() : menuParams_(this) {}
-
-MenubarMenuShowFunction::~MenubarMenuShowFunction() = default;
-
-ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
   using vivaldi::menubar_menu::Show::Params;
-  namespace Results = vivaldi::menubar_menu::Show::Results;
 
-  params_ = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params_);
-
-  // Set up needed information for the menu bar to request menus on demand.
-  menuParams_.siblings.reserve(params_->properties.siblings.size());
-  for (const vivaldi::menubar_menu::Menu& m : params_->properties.siblings) {
-    menuParams_.siblings.emplace_back();
-    ::vivaldi::MenubarMenuEntry* entry = &menuParams_.siblings.back();
-    entry->id = m.id;
-    entry->rect = gfx::Rect(m.rect.x, m.rect.y, m.rect.width, m.rect.height);
-  }
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
-      VivaldiBrowserWindow::FromId(params_->properties.window_id);
+    VivaldiBrowserWindow::FromId(params->properties.window_id);
   if (!window) {
     return RespondNow(Error("No such window"));
   }
-  ::vivaldi::ConvertMenubarButtonRectToScreen(window->web_contents(),
-                                              menuParams_);
 
-  // We have not yet created any menu content. This will be done on a per menu
-  // basis when and if the menu is needed.
-  std::string error = Open(window->web_contents(), params_->properties.id);
-  if (!error.empty()) {
-    return RespondNow(Error(error));
-  }
-
-  AddRef();
-  return RespondLater();
-}
-
-std::string MenubarMenuShowFunction::Open(content::WebContents* web_contents,
-                                          int id) {
-  // Range check
-  bool match = false;
-  for (const ::vivaldi::MenubarMenuEntry& entry : menuParams_.siblings) {
-    if (entry.id == id) {
-      match = true;
+  // Validate requested menu.
+  bool valid_id = false;
+  for (const vivaldi::menubar_menu::Menu& m : params->properties.siblings) {
+    if (m.id == params->properties.id) {
+      valid_id = true;
       break;
     }
   }
-  if (!match) {
-    return "Menu id out of range";
+  if (!valid_id) {
+    return RespondNow(Error("Id out of range"));
   }
 
-  menu_.reset(
-      ::vivaldi::CreateVivaldiMenubarMenu(web_contents, menuParams_, id));
-  if (!menu_->CanShow()) {
-    return "Can not show menu";
+  // Controller owns itself.
+  ::vivaldi::MenubarController* controller =
+    ::vivaldi::MenubarController::Create(window, std::move(params));
+  if (!controller->browser()) {
+    return RespondNow(Error("Can not show menu"));
   }
-
-  menu_->Show();
-
-  return "";
+  controller->Show();
+  return RespondNow(ArgumentList(
+      vivaldi::menubar_menu::Show::Results::Create()));
+#endif  // IS_MAC
 }
 
-std::string MenubarMenuShowFunction::PopulateModel(
-    std::optional<vivaldi::menubar_menu::Show::Params>& params,
-    int menu_id,
-    bool dark_text_color,
-    const std::vector<Element>& list,
-    ui::SimpleMenuModel* menu_model) {
-  bool prev_is_bookmarks = false;
-  namespace menubar_menu = extensions::vivaldi::menubar_menu;
-  for (const Element& child : list) {
-    if (child.item) {
-      prev_is_bookmarks = false;
-      const Item& item = *child.item;
-      int id = item.id + IDC_VIV_MENU_FIRST + 1;
-      const std::u16string label = base::UTF8ToUTF16(item.name);
-      switch (item.type) {
-        case menubar_menu::ItemType::kCommand:
-          menu_model->AddItem(id, label);
-          if (item.enabled && !*item.enabled) {
-            id_to_disabled_map_[id] = true;
-          }
-          break;
-        case menubar_menu::ItemType::kCheckbox:
-          menu_model->AddCheckItem(id, label);
-          id_to_checked_map_[id] = item.checked && *item.checked;
-          if (item.enabled && !*item.enabled) {
-            id_to_disabled_map_[id] = true;
-          }
-          break;
-        case menubar_menu::ItemType::kRadio:
-          if (!item.radiogroup.has_value()) {
-            return "Radio button added without group";
-          }
-          menu_model->AddRadioItem(id, label, item.radiogroup.value());
-          id_to_checked_map_[id] = item.checked.value_or(false);
-          if (item.enabled && !*item.enabled) {
-            id_to_disabled_map_[id] = true;
-          }
-          break;
-        case menubar_menu::ItemType::kFolder: {
-          // We create the SimpleMenuModel sub menu but do not populate it. That
-          // will be done in PopulateSubmodel() by the calling menu code when
-          // and if this sub menu will be shown to the user.
-          if (item.selected.value_or(false)) {
-            if (selected_menu_id_ != -1) {
-              return "Only one menu item can be selected";
-            }
-            selected_menu_id_ = id;
-          }
-          ui::SimpleMenuModel* child_menu_model =
-              new ui::SimpleMenuModel(nullptr);
-          models_.push_back(base::WrapUnique(child_menu_model));
-          menu_model->AddSubMenu(id, label, child_menu_model);
-          if (child.children.has_value())
-            id_to_elementvector_map_[id] = &child.children.value();
-          break;
-        }
-        case menubar_menu::ItemType::kNone:
-          return "Item type missing";
-      }
-      if (item.shortcut) {
-        id_to_accelerator_map_[id] =
-            ::vivaldi::ParseShortcut(*item.shortcut, true);
-      }
-      if (item.url && !item.url->empty()) {
-        id_to_url_map_[id] = *item.url;
-      }
-      if (item.persistent && *item.persistent == true) {
-        id_to_persistent_map_[id] = true;
-      }
-      if (item.icons) {
-        if (item.icons->size() != 2) {
-          return "Wrong number of icons";
-        } else {
-          const std::string* icon = &item.icons->at(dark_text_color ? 0 : 1);
-          if (icon->length() > 0) {
-            std::string png_data;
-            if (base::Base64Decode(*icon, &png_data)) {
-              gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
-                  reinterpret_cast<const unsigned char*>(png_data.c_str()),
-                  png_data.length());
-              menu_model->SetIcon(menu_model->GetIndexOfCommandId(id).value(),
-                                  ui::ImageModel::FromImage(img));
-            }
-          }
-        }
-      }
-    } else if (child.separator) {
-      // All container types except bookmarks are expanded in JS. For bookmarks
-      // expansion happens in C++ code just before a menu is shown. This causes
-      // a problem for separators since the menu model prevents adding multiple
-      // separators after another which we may do since the container content
-      // is expanded later. We let the container expansion code add a separator
-      // if needed (Note: we reset this tweak at the end of this function if
-      // the bookmark container turns out to be the last element in the menu).
-      if (prev_is_bookmarks) {
-        bookmark_menu_container_->siblings[0].tweak_separator = true;
-      } else {
-        menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
-      }
-    } else if (child.container) {
-      if (child.container->type ==
-          vivaldi::menubar_menu::ContainerType::kBookmarks) {
-        if (bookmark_menu_container_) {
-          return "Only one bookmark container supported";
-        }
-        prev_is_bookmarks = true;
-        bookmark_menu_id_ = menu_id;
-        bookmark_menu_container_.reset(
-            new ::vivaldi::BookmarkMenuContainer(this));
-        switch (child.container->edge) {
-          case vivaldi::menubar_menu::Edge::kAbove:
-            bookmark_menu_container_->edge =
-                ::vivaldi::BookmarkMenuContainer::Above;
-            break;
-          case vivaldi::menubar_menu::Edge::kBelow:
-            bookmark_menu_container_->edge =
-                ::vivaldi::BookmarkMenuContainer::Below;
-            break;
-          default:
-            bookmark_menu_container_->edge =
-                ::vivaldi::BookmarkMenuContainer::Off;
-            break;
-        };
-        bookmark_menu_container_->siblings.reserve(1);
-        bookmark_menu_container_->siblings.emplace_back();
-        ::vivaldi::BookmarkMenuContainerEntry* sibling =
-            &bookmark_menu_container_->siblings.back();
-        if (!base::StringToInt64(child.container->id, &sibling->id) ||
-            sibling->id <= 0) {
-          return "Illegal bookmark id";
-        }
-        sibling->offset = child.container->offset;
-        sibling->menu_index = menu_model->GetItemCount();
-        sibling->tweak_separator = false;
-        sibling->folder_group = child.container->group_folders;
-        bookmark_menu_container_->support.initIcons(params->properties.icons);
-        switch (child.container->sort_field) {
-          case vivaldi::menubar_menu::SortField::kNone:
-            bookmark_menu_container_->sort_field =
-                ::vivaldi::BookmarkSorter::FIELD_NONE;
-            break;
-          case vivaldi::menubar_menu::SortField::kTitle:
-            bookmark_menu_container_->sort_field =
-                ::vivaldi::BookmarkSorter::FIELD_TITLE;
-            break;
-          case vivaldi::menubar_menu::SortField::kUrl:
-            bookmark_menu_container_->sort_field =
-                ::vivaldi::BookmarkSorter::FIELD_URL;
-            break;
-          case vivaldi::menubar_menu::SortField::kNickname:
-            bookmark_menu_container_->sort_field =
-                ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
-            break;
-          case vivaldi::menubar_menu::SortField::kDescription:
-            bookmark_menu_container_->sort_field =
-                ::vivaldi::BookmarkSorter::FIELD_NICKNAME;
-            break;
-          case vivaldi::menubar_menu::SortField::kDateAdded:
-            bookmark_menu_container_->sort_field =
-                ::vivaldi::BookmarkSorter::FIELD_DATEADDED;
-            break;
-        };
-        switch (child.container->sort_order) {
-          case vivaldi::menubar_menu::SortOrder::kNone:
-            bookmark_menu_container_->sort_order =
-                ::vivaldi::BookmarkSorter::ORDER_NONE;
-            break;
-          case vivaldi::menubar_menu::SortOrder::kAscending:
-            bookmark_menu_container_->sort_order =
-                ::vivaldi::BookmarkSorter::ORDER_ASCENDING;
-            break;
-          case vivaldi::menubar_menu::SortOrder::kDescending:
-            bookmark_menu_container_->sort_order =
-                ::vivaldi::BookmarkSorter::ORDER_DESCENDING;
-            break;
-        };
-      } else {
-        return "Unknown container element";
-      }
-    } else {
-      return "Unknown menu element";
-    }
-  }
-  if (prev_is_bookmarks) {
-    bookmark_menu_container_->siblings[0].tweak_separator = false;
-  } else {
-    SanitizeModel(menu_model);
-  }
-
-  return "";
+ExtensionFunction::ResponseAction MenubarMenuGetMaxIdFunction::Run() {
+  return RespondNow(ArgumentList(
+      vivaldi::menubar_menu::GetMaxId::Results::Create(
+          ::vivaldi::MenubarController::GetMaximumId())));
 }
-
-// Called by menu code to populate the top level of a menu model
-void MenubarMenuShowFunction::PopulateModel(int menu_id,
-                                            bool dark_text_color,
-                                            ui::MenuModel** menu_model) {
-  using vivaldi::menubar_menu::Show::Params;
-
-  ui::SimpleMenuModel* simple_menu_model = new ui::SimpleMenuModel(nullptr);
-  models_.push_back(base::WrapUnique(simple_menu_model));  // We own the model.
-  *menu_model = simple_menu_model;
-
-  std::vector<vivaldi::menubar_menu::Menu>& list = params_->properties.siblings;
-  for (const vivaldi::menubar_menu::Menu& sibling : list) {
-    if (sibling.id == menu_id) {
-      std::string error =
-          PopulateModel(params_, sibling.id, dark_text_color,
-                        sibling.children, simple_menu_model);
-      if (!error.empty()) {
-        MenubarMenuAPI::SendError(browser_context(), error);
-      }
-      break;
-    }
-  }
-}
-
-// Called by menu code to populate a sub menu model of an existing menu model
-void MenubarMenuShowFunction::PopulateSubmodel(int menu_id,
-                                               bool dark_text_color,
-                                               ui::MenuModel* menu_model) {
-  using vivaldi::menubar_menu::Show::Params;
-
-  // Avoids a static_cast and takes no time
-  ui::SimpleMenuModel* simple_menu_model = nullptr;
-  for (std::unique_ptr<ui::SimpleMenuModel>& model : models_) {
-    if (model.get() == menu_model) {
-      simple_menu_model = model.get();
-      break;
-    }
-  }
-  DCHECK(simple_menu_model);
-
-  std::string error =
-      PopulateModel(params_, menu_id, dark_text_color,
-                    *id_to_elementvector_map_[menu_id], simple_menu_model);
-  if (!error.empty()) {
-    MenubarMenuAPI::SendError(browser_context(), error);
-  }
-}
-
-// Chrome menu code will replace multiple separators with one, remove those
-// at the start of a menu but not remove the last separator if it happens to be
-// the last item in the menu. We want removal because automatic hiding of menu
-// elements depending on state can easily make a separator the last item.
-void MenubarMenuShowFunction::SanitizeModel(ui::SimpleMenuModel* menu_model) {
-  for (int i = menu_model->GetItemCount() - 1; i >= 0; i--) {
-    if (menu_model->GetTypeAt(i) == ui::MenuModel::TYPE_SEPARATOR) {
-      menu_model->RemoveItemAt(i);
-    } else {
-      break;
-    }
-  }
-}
-
-void MenubarMenuShowFunction::OnMenuOpened(int menu_id) {
-  MenubarMenuAPI::SendOpen(browser_context(), menu_id);
-}
-
-void MenubarMenuShowFunction::OnMenuClosed() {
-  namespace Results = vivaldi::menubar_menu::Show::Results;
-  MenubarMenuAPI::SendClose(browser_context());
-  Respond(ArgumentList(vivaldi::menubar_menu::Show::Results::Create()));
-  Release();
-}
-
-void MenubarMenuShowFunction::OnAction(int command, int event_state) {
-  MenubarMenuAPI::SendAction(browser_context(), command, event_state);
-}
-
-void MenubarMenuShowFunction::OnHover(const std::string& url) {
-  MenubarMenuAPI::SendHover(browser_context(), params_->properties.window_id,
-      url);
-}
-
-void MenubarMenuShowFunction::OnOpenBookmark(int64_t bookmark_id,
-                                             int event_state) {
-  MenubarMenuAPI::SendOpenBookmark(browser_context(),
-      params_->properties.window_id, bookmark_id, event_state);
-}
-
-void MenubarMenuShowFunction::OnBookmarkAction(int64_t bookmark_id,
-                                               int command) {
-  MenubarMenuAPI::SendBookmarkAction(browser_context(),
-      params_->properties.window_id, bookmark_id, command);
-}
-
-bool MenubarMenuShowFunction::IsBookmarkMenu(int menu_id) {
-  return bookmark_menu_id_ == menu_id;
-}
-
-int MenubarMenuShowFunction::GetSelectedMenuId() {
-  return selected_menu_id_;
-}
-
-bool MenubarMenuShowFunction::IsItemChecked(int id) {
-  std::map<int, bool>::iterator it = id_to_checked_map_.find(id);
-  return it != id_to_checked_map_.end() ? it->second : false;
-}
-
-bool MenubarMenuShowFunction::IsItemEnabled(int id) {
-  // Note, we record the disabled entries as we normally have few disabled.
-  std::map<int, bool>::iterator it = id_to_disabled_map_.find(id);
-  return it != id_to_disabled_map_.end() ? !it->second : true;
-}
-
-bool MenubarMenuShowFunction::IsItemPersistent(int id) {
-  std::map<int, bool>::iterator it = id_to_persistent_map_.find(id);
-  return it != id_to_persistent_map_.end() ? it->second : false;
-}
-
-bool MenubarMenuShowFunction::GetAccelerator(int id,
-                                             ui::Accelerator* accelerator) {
-  std::map<int, ui::Accelerator>::iterator it = id_to_accelerator_map_.find(id);
-  if (it == id_to_accelerator_map_.end()) {
-    return false;
-  } else {
-    *accelerator = it->second;
-    return true;
-  }
-}
-
-bool MenubarMenuShowFunction::GetUrl(int id, std::string* url) {
-  std::map<int, std::string>::iterator it = id_to_url_map_.find(id);
-  if (it == id_to_url_map_.end()) {
-    return false;
-  } else {
-    *url = it->second;
-    return true;
-  }
-}
-
-::vivaldi::BookmarkMenuContainer*
-MenubarMenuShowFunction::GetBookmarkMenuContainer() {
-  return bookmark_menu_container_.get();
-}
-
-#endif
 
 }  // namespace extensions

@@ -41,7 +41,7 @@ static const uint32_t ps_const_shader_gfx10[] = {
     0xF8001C0F, 0x00000100, 0xBF810000
 };
 
-static const uint32_t ps_const_shader_patchinfo_code_size_gfx10 = 6;
+#define ps_const_shader_patchinfo_code_size_gfx10 6
 
 static const uint32_t ps_const_shader_patchinfo_code_gfx10[][10][6] = {
     {{ 0xBF800000, 0xBF800000, 0xBF800000, 0xBF800000, 0xF8001890, 0x00000000 },
@@ -61,7 +61,7 @@ static const uint32_t ps_const_shader_patchinfo_offset_gfx10[] = {
     0x00000004
 };
 
-static const uint32_t ps_const_num_sh_registers_gfx10 = 2;
+#define ps_const_num_sh_registers_gfx10 2
 
 static const struct reg_info ps_const_sh_registers_gfx10[] = {
 	{0x2C0A, 0x000C0000},//{ mmSPI_SHADER_PGM_RSRC1_PS, 0x000C0000 },
@@ -79,7 +79,7 @@ static const struct reg_info ps_const_context_registers_gfx10[] =
     {0xA1C5, 0x00000004}, //{ mmSPI_SHADER_COL_FORMAT,   0x00000004 /* SI_EXPORT_FMT_FP16_ABGR */ }
 };
 
-static const uint32_t ps_const_num_context_registers_gfx10 = 7;
+#define ps_const_num_context_registers_gfx10 7
 
 static const uint32_t ps_tex_shader_gfx10[] = {
     0xBEFC030C, 0xBE8E047E, 0xBEFE0A7E, 0xC8080000,
@@ -93,7 +93,7 @@ static const uint32_t ps_tex_shader_patchinfo_offset_gfx10[] = {
     0x0000000C
 };
 
-static const uint32_t ps_tex_shader_patchinfo_code_size_gfx10 = 6;
+#define ps_tex_shader_patchinfo_code_size_gfx10 6
 
 static const uint32_t ps_tex_shader_patchinfo_code_gfx10[][10][6] = {
     {{ 0xBF800000, 0xBF800000, 0xBF800000, 0xBF800000, 0xF8001890, 0x00000000 },
@@ -115,7 +115,7 @@ static const struct reg_info ps_tex_sh_registers_gfx10[] =
      {0x2C0B, 0x00000018 }, //{ mmSPI_SHADER_PGM_RSRC2_PS, 0x00000018 }
 };
 
-static const uint32_t ps_tex_num_sh_registers_gfx10 = 2;
+#define ps_tex_num_sh_registers_gfx10 2
 
 // Holds Context Register Information
 static const struct reg_info ps_tex_context_registers_gfx10[] =
@@ -129,7 +129,7 @@ static const struct reg_info ps_tex_context_registers_gfx10[] =
     {0xA1C5, 0x00000004}, //{ mmSPI_SHADER_COL_FORMAT,   0x00000004 /* SI_EXPORT_FMT_FP16_ABGR */ }
 };
 
-static const uint32_t ps_tex_num_context_registers_gfx10 = 7;
+#define ps_tex_num_context_registers_gfx10 7
 
 static const uint32_t vs_RectPosTexFast_shader_gfx10[] = {
     0x7E000B00, 0x060000F3, 0x7E020202, 0x7E040206,
@@ -148,7 +148,7 @@ static const struct reg_info vs_RectPosTexFast_sh_registers_gfx10[] =
     {0x2C4B, 0x00000018 }, //{ mmSPI_SHADER_PGM_RSRC2_VS, 0x00000018 }
 };
 
-static const uint32_t vs_RectPosTexFast_num_sh_registers_gfx10 = 2;
+#define vs_RectPosTexFast_num_sh_registers_gfx10 2
 
 // Holds Context Register Information
 static const struct reg_info vs_RectPosTexFast_context_registers_gfx10[] =
@@ -157,7 +157,7 @@ static const struct reg_info vs_RectPosTexFast_context_registers_gfx10[] =
     {0xA1C3, 0x00000000}, //{ mmSPI_SHADER_POS_FORMAT, 0x00000000 /* Always 0 for now */}
 };
 
-static const uint32_t vs_RectPosTexFast_num_context_registers_gfx10 = 2;
+#define vs_RectPosTexFast_num_context_registers_gfx10 2
 
 static const uint32_t preamblecache_gfx10[] = {
 	0xc0026900, 0x81, 0x80000000, 0x40004000, 0xc0026900, 0x8c, 0xaa99aaaa, 0x0,
@@ -196,7 +196,7 @@ static const uint32_t cached_cmd_gfx10[] = {
 	0xc0026900, 0x2b0, 0x0, 0x0, 0xc0016900, 0x2f8, 0x0
 };
 
-static const uint32_t sh_reg_base_gfx10 = 0x2C00;
-static const uint32_t context_reg_base_gfx10 = 0xA000;
+#define sh_reg_base_gfx10 0x2C00
+#define context_reg_base_gfx10 0xA000
 
 #endif

@@ -19,7 +19,6 @@ import {
   waitFor,
   waitForFunction,
 } from '../../shared/helper.js';
-import {describe, it} from '../../shared/mocha-extensions.js';
 import {CONSOLE_MESSAGES_SELECTOR, navigateToConsoleTab} from '../helpers/console-helpers.js';
 import {reloadDevTools} from '../helpers/cross-tool-helper.js';
 import {navigateToCssOverviewTab, startCaptureCSSOverview} from '../helpers/css-overview-helpers.js';
@@ -400,20 +399,6 @@ describe('User metrics for CSS overview', () => {
       {
         actionName: 'DevTools.ActionTaken',
         actionCode: 41,  // CaptureCssOverviewClicked
-      },
-    ]);
-  });
-});
-
-describe('User Metrics for sidebar panes', () => {
-  it('dispatches sidebar panes events for switching to \'Workspace\' tab in the \'Sources\' panel', async () => {
-    await click('#tab-sources');
-    await navigateToSidePane('Workspace');
-
-    await assertHistogramEventsInclude([
-      {
-        actionName: 'DevTools.Sources.SidebarTabShown',
-        actionCode: 2,  // navigator-files
       },
     ]);
   });

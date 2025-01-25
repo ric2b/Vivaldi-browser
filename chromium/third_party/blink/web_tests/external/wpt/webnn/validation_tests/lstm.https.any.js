@@ -1,5 +1,8 @@
 // META: title=validation tests for WebNN API lstm operation
 // META: global=window,dedicatedworker
+// META: variant=?cpu
+// META: variant=?gpu
+// META: variant=?npu
 // META: script=../resources/utils_validation.js
 
 'use strict';
@@ -264,6 +267,7 @@ const tests = [
 
 tests.forEach(
     test => promise_test(async t => {
+      const builder = new MLGraphBuilder(context);
       const input = builder.input(
           'input',
           {dataType: test.input.dataType, dimensions: test.input.dimensions});
@@ -317,13 +321,13 @@ tests.forEach(
           options.layout = test.options.layout;
         }
         if (test.options.activations) {
-          options.activations = [];
-          test.options.activations.forEach(
-              activation => options.activations.push(builder[activation]()));
+          options.activations = test.options.activations;
         }
       }
 
-      if (test.outputs) {
+      if (test.outputs &&
+          context.opSupportLimits().lstm.input.dataTypes.includes(
+              test.input.dataType)) {
         const outputs = builder.lstm(
             input, weight, recurrentWeight, test.steps, test.hiddenSize,
             options);
@@ -333,11 +337,14 @@ tests.forEach(
           assert_array_equals(outputs[i].shape(), test.outputs[i].dimensions);
         }
       } else {
-        assert_throws_js(
-            TypeError,
+        const label = 'lstm_xxx';
+        options.label = label;
+        const regrexp = new RegExp('\\[' + label + '\\]');
+        assert_throws_with_label(
             () => builder.lstm(
                 input, weight, recurrentWeight, test.steps, test.hiddenSize,
-                options));
+                options),
+            regrexp);
       }
     }, test.name));
 
@@ -454,18 +461,3 @@ multi_builder_test(async (t, builder, otherBuilder) => {
       () => builder.lstm(
           input, weight, recurrentWeight, steps, hiddenSize, options));
 }, '[lstm] throw if initialCellState option is from another builder');
-
-multi_builder_test(async (t, builder, otherBuilder) => {
-  const activation = builder.relu();
-  const activationFromOtherBuilder = otherBuilder.relu();
-  const options = {activations: [activation, activationFromOtherBuilder]};
-
-  const input = builder.input('input', kExampleInputDescriptor);
-  const weight = builder.input('weight', kExampleWeightDescriptor);
-  const recurrentWeight =
-      builder.input('recurrentWeight', kExampleRecurrentWeightDescriptor);
-  assert_throws_js(
-      TypeError,
-      () => builder.lstm(
-          input, weight, recurrentWeight, steps, hiddenSize, options));
-}, '[lstm] throw if any activation option is from another builder');

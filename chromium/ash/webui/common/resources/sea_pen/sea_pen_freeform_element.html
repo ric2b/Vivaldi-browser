@@ -1,7 +1,17 @@
 <style include="common cros-button-style wallpaper">
-  #heading {
+  #heading,
+  #samplePromptHeading {
     display: flex;
-    margin: 0 calc(var(--personalization-app-grid-item-spacing) / 2);
+    margin-inline-end: calc(var(--personalization-app-grid-item-spacing) / 2);
+    margin-inline-start: calc(var(--personalization-app-grid-item-spacing) / 2);
+  }
+
+  #heading {
+    margin-bottom: 18px;
+  }
+
+  #heading:has(#tabContainer) {
+    margin-bottom: 0px;
   }
 
   #tabContainer cr-button {
@@ -36,25 +46,43 @@
   }
 
   #tabContainer,
-  #samplesTitle {
+  #promptingGuide {
     flex-grow: 1;
   }
 
-  #samplesTitle,
   #seaPenImagesHeading {
-    margin-top: 18px;
+    margin-top: 10px;
     padding-inline-end: 0;
   }
 
   #shuffle {
     --text-color: var(--cros-sys-primary);
+    background-color: transparent;
+  }
+
+  #samplePromptHeading {
     background-color: unset;
     font: var(--cros-button-2-font);
-    margin-top: 18px;
+  }
+
+  #promptingGuide{
+    --text-color: var(--cros-sys-secondary);
+    padding: 6px;
+    text-decoration: none;
+  }
+
+  #promptingGuide a {
+    --text-color: var(--cros-sys-primary);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  #promptingGuide a:hover {
+    text-decoration: underline;
   }
 </style>
 <div id="heading">
-  <template is="dom-if" if="[[isTabContainerEnabled_(seaPenQuery_)]]" restamp>
+  <template is="dom-if" if="[[isTabContainerEnabled_(seaPenQuery_, thumbnailResponseStatusCode_)]]" restamp>
     <div id="tabContainer">
       <cr-button id="resultsTab"
           aria-pressed="[[isResultsTabSelected_(freeformTab_)]]"
@@ -68,33 +96,29 @@
       </cr-button>
     </div>
   </template>
-  <template is="dom-if" if="[[!isTabContainerEnabled_(seaPenQuery_)]]" restamp>
-    <h2 id="samplesTitle" class="wallpaper-collections-heading">
-      [[i18n('seaPenFreeformSamplePromptsLabel')]]
-    </h2>
-  </template>
-  <div id="endElement">
-    <template is="dom-if" if="[[isSamplePromptsTabSelected_(freeformTab_)]]">
-      <cr-button
-          id="shuffle"
-          on-click="onShuffleClicked_">
-        <iron-icon icon="personalization-shared:refresh" slot="prefix-icon">
-        </iron-icon>
-        <p>[[i18n('seaPenFreeformShuffle')]]</p>
-      </cr-button>
-    </template>
-  </div>
   <template is="dom-if" if="[[!isSamplePromptsTabSelected_(freeformTab_)]]">
     <h2 id="seaPenImagesHeading" class="wallpaper-collections-heading">
       [[i18n('seaPenFreeformPoweredByGoogle')]]
     </h2>
   </template>
 </div>
+<div id="samplePromptHeading">
+  <template is="dom-if" if="[[isSamplePromptsTabSelected_(freeformTab_)]]">
+    <div id="promptingGuide"
+        inner-h-t-m-l="[[i18nAdvanced('seaPenFreeformPromptingGuide')]]">
+    </div>
+    <cr-button
+        id="shuffle"
+        on-click="onShuffleClicked_">
+      <iron-icon icon="personalization-shared:refresh" slot="prefix-icon">
+      </iron-icon>
+      <p>[[i18n('seaPenFreeformShuffle')]]</p>
+    </cr-button>
+  </template>
+</div>
 <template is="dom-if" if="[[isSamplePromptsTabSelected_(freeformTab_)]]" restamp>
   <sea-pen-samples samples="[[samples]]"></sea-pen-samples>
-  <sea-pen-recent-wallpapers
-      on-sea-pen-recent-image-delete="onRecentFreeformImageDelete_">
-  </sea-pen-recent-wallpapers>
+  <sea-pen-recent-wallpapers></sea-pen-recent-wallpapers>
 </template>
 <template is="dom-if" if="[[isResultsTabSelected_(freeformTab_)]]" restamp>
   <sea-pen-images template-id="Query"></sea-pen-images>

@@ -32,6 +32,8 @@ source_set("quick_answers") {
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//chrome/browser:browser_process",
     "//chrome/browser/profiles:profile",
@@ -41,12 +43,16 @@ source_set("quick_answers") {
     "//chrome/browser/ui/quick_answers/ui:quick_answers_stage_button",
     "//chrome/browser/ui/quick_answers/ui:result_view",
     "//chrome/browser/ui/quick_answers/ui:retry_view",
+    "//chrome/browser/ui/quick_answers/ui:typography",
     "//chrome/browser/ui/views/editor_menu:utils",
+    "//chromeos/components/magic_boost/public/cpp/views",
     "//chromeos/components/quick_answers",
+    "//chromeos/components/quick_answers/public/cpp:constants",
     "//chromeos/components/quick_answers/public/cpp:cpp",
     "//chromeos/components/quick_answers/public/cpp:prefs",
     "//chromeos/constants:constants",
     "//chromeos/strings:strings_grit",
+    "//chromeos/ui/vector_icons",
     "//components/account_id",
     "//components/omnibox/browser:vector_icons",
     "//components/prefs",

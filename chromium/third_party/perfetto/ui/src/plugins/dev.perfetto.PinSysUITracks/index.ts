@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {NUM, Plugin, PluginContextTrace, PluginDescriptor} from '../../public';
+import {NUM} from '../../trace_processor/query_result';
+import {Trace} from '../../public/trace';
+import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
 
 // List of tracks to pin
 const TRACKS_TO_PIN: string[] = [
@@ -27,8 +29,8 @@ const TRACKS_TO_PIN: string[] = [
 const SYSTEM_UI_PROCESS: string = 'com.android.systemui';
 
 // Plugin that pins the tracks relevant to System UI
-class PinSysUITracks implements Plugin {
-  async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
+class PinSysUITracks implements PerfettoPlugin {
+  async onTraceLoad(ctx: Trace): Promise<void> {
     // Find the upid for the sysui process
     const result = await ctx.engine.query(`
       INCLUDE PERFETTO MODULE android.process_metadata;
@@ -45,25 +47,28 @@ class PinSysUITracks implements Plugin {
       upid: NUM,
     }).upid;
 
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.PinSysUITracks#PinSysUITracks',
       name: 'Pin: System UI Related Tracks',
       callback: () => {
-        ctx.timeline.pinTracksByPredicate((track) => {
-          if (!track.uri.startsWith(`/process_${sysuiUpid}`)) return false;
+        ctx.workspace.flatTracks.forEach((track) => {
+          // Ensure we only grab tracks that are in the SysUI process group
+          if (!track.uri.startsWith(`/process_${sysuiUpid}`)) return;
           if (
             !TRACKS_TO_PIN.some((trackName) =>
-              track.title.startsWith(trackName),
+              track.displayName.startsWith(trackName),
             )
           ) {
-            return false;
+            return;
           }
-          return true;
+          track.pin();
         });
 
         // expand the sysui process tracks group
-        ctx.timeline.expandGroupsByPredicate((groupRef) => {
-          return groupRef.displayName?.startsWith(SYSTEM_UI_PROCESS) ?? false;
+        ctx.workspace.flatGroups.forEach((group) => {
+          if (group.displayName.startsWith(SYSTEM_UI_PROCESS)) {
+            group.expand();
+          }
         });
       },
     });

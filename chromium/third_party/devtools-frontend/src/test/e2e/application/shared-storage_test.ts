@@ -15,10 +15,6 @@ import {
   waitFor,
 } from '../../shared/helper.js';
 import {
-  describe,
-  it,
-} from '../../shared/mocha-extensions.js';
-import {
   getStorageItemsData,
   getTrimmedTextContent,
   navigateToApplicationTab,
@@ -31,6 +27,7 @@ import {
   getInnerTextOfDataGridCells,
 } from '../helpers/datagrid-helpers.js';
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 let DOMAIN: string;
 
 describe('The Application Tab', () => {

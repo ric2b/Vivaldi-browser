@@ -5,7 +5,9 @@ License: MIT
 License File: src/LICENSE
 Security Critical: yes
 Shipped: yes
+Version: 0.6.0
+Revision: d393c16f3eb30d0c47e6f9d92db62272f0ec4dc7
 
 Description:
-This directory contains the source code of TinyCGBOR, which is a binary object
+This directory contains the source code of TinyCBOR, which is a binary object
 representation library.

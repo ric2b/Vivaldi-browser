@@ -23,6 +23,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_internals/log_message.h"
 #include "components/autofill/core/common/autofill_internals/logging_scope.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/unique_ids.h"
 
 namespace autofill::autofill_metrics {
@@ -51,10 +52,17 @@ bool DetermineHeuristicOnlyEmailFormStatus(const FormStructure& form) {
     return false;
   }
   // When the feature is enabled, the forms for which this classification is
-  // applicable must be inside a form tag, must not run heuristics normally
-  // (i.e., their field count is below `kMinRequiredFieldsForHeuristics`), but
-  // must be eligible for single field form heuristics.
-  if (!form.is_form_element() || form.ShouldRunHeuristics() ||
+  // applicable must be inside a form tag (unless
+  // `kAutofillEnableEmailHeuristicOutsideForms` is enabled), must not run
+  // heuristics normally (i.e., their field count is below
+  // `kMinRequiredFieldsForHeuristics`), but must be eligible for single field
+  // form heuristics. Note that `kAutofillEnableEmailHeuristicOutsideForms`
+  // rolls out support for fields outside of form tags.
+  const bool form_tag_requirement_passed =
+      form.is_form_element() ||
+      base::FeatureList::IsEnabled(
+          features::kAutofillEnableEmailHeuristicOutsideForms);
+  if (!form_tag_requirement_passed || form.ShouldRunHeuristics() ||
       !form.ShouldRunHeuristicsForSingleFieldForms()) {
     return false;
   }
@@ -87,9 +95,7 @@ FormEventLoggerBase::~FormEventLoggerBase() {
 }
 
 void FormEventLoggerBase::OnDidInteractWithAutofillableForm(
-    const FormStructure& form,
-    AutofillMetrics::PaymentsSigninState signin_state_for_metrics) {
-  signin_state_for_metrics_ = signin_state_for_metrics;
+    const FormStructure& form) {
   if (!has_logged_interacted_) {
     has_logged_interacted_ = true;
     LogUkmInteractedWithForm(form.form_signature());
@@ -97,10 +103,7 @@ void FormEventLoggerBase::OnDidInteractWithAutofillableForm(
   }
 }
 
-void FormEventLoggerBase::OnDidPollSuggestions(
-    const FormFieldData& field,
-    AutofillMetrics::PaymentsSigninState signin_state_for_metrics) {
-  signin_state_for_metrics_ = signin_state_for_metrics;
+void FormEventLoggerBase::OnDidPollSuggestions(const FormFieldData& field) {
   // Record only one poll user action for consecutive polls of the same field.
   // This is to avoid recording too many poll actions (for example when a user
   // types in a field, triggering multiple queries) to make the analysis more
@@ -131,9 +134,7 @@ void FormEventLoggerBase::OnDidShowSuggestions(
     const FormStructure& form,
     const AutofillField& field,
     base::TimeTicks form_parsed_timestamp,
-    AutofillMetrics::PaymentsSigninState signin_state_for_metrics,
     bool off_the_record) {
-  signin_state_for_metrics_ = signin_state_for_metrics;
   form_interactions_ukm_logger_->LogSuggestionsShown(
       form, field, form_parsed_timestamp, off_the_record);
 
@@ -175,10 +176,7 @@ void FormEventLoggerBase::RecordFillingOperation(
   }
 }
 
-void FormEventLoggerBase::OnDidRefill(
-    AutofillMetrics::PaymentsSigninState signin_state_for_metrics,
-    const FormStructure& form) {
-  signin_state_for_metrics_ = signin_state_for_metrics;
+void FormEventLoggerBase::OnDidRefill(const FormStructure& form) {
   Log(FORM_EVENT_DID_DYNAMIC_REFILL, form);
 }
 
@@ -201,10 +199,7 @@ void FormEventLoggerBase::SetTimeFromInteractionToSubmission(
   time_from_interaction_to_submission_ = time_from_interaction_to_submission;
 }
 
-void FormEventLoggerBase::OnWillSubmitForm(
-    AutofillMetrics::PaymentsSigninState signin_state_for_metrics,
-    const FormStructure& form) {
-  signin_state_for_metrics_ = signin_state_for_metrics;
+void FormEventLoggerBase::OnWillSubmitForm(const FormStructure& form) {
   // Not logging this kind of form if we haven't logged a user interaction.
   if (!has_logged_interacted_)
     return;
@@ -229,10 +224,7 @@ void FormEventLoggerBase::OnWillSubmitForm(
   base::RecordAction(base::UserMetricsAction("Autofill_OnWillSubmitForm"));
 }
 
-void FormEventLoggerBase::OnFormSubmitted(
-    AutofillMetrics::PaymentsSigninState signin_state_for_metrics,
-    const FormStructure& form) {
-  signin_state_for_metrics_ = signin_state_for_metrics;
+void FormEventLoggerBase::OnFormSubmitted(const FormStructure& form) {
   // Not logging this kind of form if we haven't logged a user interaction.
   if (!has_logged_interacted_)
     return;
@@ -311,7 +303,11 @@ void FormEventLoggerBase::
 void FormEventLoggerBase::Log(FormEvent event, const FormStructure& form) {
   DCHECK_LT(event, NUM_FORM_EVENTS);
   form_events_set_[form.global_id()].insert(event);
-  for (FormTypeNameForLogging form_type : GetFormTypesForLogging(form)) {
+  for (FormTypeNameForLogging form_type :
+       base::FeatureList::IsEnabled(
+           features::kAutofillEnableLogFormEventsToAllParsedFormTypes)
+           ? parsed_form_types_
+           : GetFormTypesForLogging(form)) {
     std::string name(
         base::StrCat({"Autofill.FormEvents.",
                       FormTypeNameForLoggingToStringView(form_type)}));
@@ -338,8 +334,6 @@ void FormEventLoggerBase::Log(FormEvent event, const FormStructure& form) {
 void FormEventLoggerBase::LogWillSubmitForm(const FormStructure& form) {
   if (!has_logged_form_filling_suggestion_filled_) {
     Log(FORM_EVENT_NO_SUGGESTION_WILL_SUBMIT_ONCE, form);
-  } else if (logged_suggestion_filled_was_server_data_) {
-    Log(FORM_EVENT_SERVER_SUGGESTION_WILL_SUBMIT_ONCE, form);
   } else {
     Log(FORM_EVENT_LOCAL_SUGGESTION_WILL_SUBMIT_ONCE, form);
   }
@@ -348,8 +342,6 @@ void FormEventLoggerBase::LogWillSubmitForm(const FormStructure& form) {
 void FormEventLoggerBase::LogFormSubmitted(const FormStructure& form) {
   if (!has_logged_form_filling_suggestion_filled_) {
     Log(FORM_EVENT_NO_SUGGESTION_SUBMITTED_ONCE, form);
-  } else if (logged_suggestion_filled_was_server_data_) {
-    Log(FORM_EVENT_SERVER_SUGGESTION_SUBMITTED_ONCE, form);
   } else {
     Log(FORM_EVENT_LOCAL_SUGGESTION_SUBMITTED_ONCE, form);
   }

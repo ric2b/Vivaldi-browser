@@ -529,7 +529,7 @@ class ScriptOnDestroyPlugin : public GarbageCollected<ScriptOnDestroyPlugin>,
     return {};
   }
   void DidReceiveResponse(const WebURLResponse&) override {}
-  void DidReceiveData(const char* data, size_t data_length) override {}
+  void DidReceiveData(base::span<const char> data) override {}
   void DidFinishLoading() override {}
   void DidFailLoading(const WebURLError&) override {}
 
@@ -1178,6 +1178,38 @@ TEST_F(ElementTest, GetPseudoElement) {
     EXPECT_EQ(e.has_after, !!element->GetPseudoElement(kPseudoIdAfter));
     EXPECT_EQ(e.has_marker, !!element->GetPseudoElement(kPseudoIdMarker));
   }
+}
+
+TEST_F(ElementTest, ColumnScrollMarkers) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style id="test-style">
+    #test::column::scroll-marker { content: "*"; opacity: 0.5; }
+    </style>
+    <div id="test"></div>
+    )HTML");
+  // GetPseudoElement() relies on style recalc.
+  GetDocument().UpdateStyleAndLayoutTree();
+
+  Element* element = GetElementById("test");
+
+  ScrollMarkerPseudoElement* first_scroll_marker =
+      element->CreateColumnScrollMarker();
+  ASSERT_TRUE(first_scroll_marker);
+  ScrollMarkerPseudoElement* second_scroll_marker =
+      element->CreateColumnScrollMarker();
+  ASSERT_TRUE(second_scroll_marker);
+  ScrollMarkerPseudoElement* third_scroll_marker =
+      element->CreateColumnScrollMarker();
+  ASSERT_TRUE(third_scroll_marker);
+
+  ASSERT_TRUE(element->GetColumnScrollMarkers());
+  ASSERT_EQ(element->GetColumnScrollMarkers()->size(), 3u);
+
+  Element* style = GetElementById("test-style");
+  style->setInnerHTML("");
+  GetDocument().UpdateStyleAndLayoutTree();
+
+  ASSERT_EQ(element->GetColumnScrollMarkers()->size(), 0u);
 }
 
 }  // namespace blink

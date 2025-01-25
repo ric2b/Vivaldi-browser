@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '//components/autofill/ios/form_util/resources/create_fill_namespace.js';
 import '//components/autofill/ios/form_util/resources/fill_util.js';
 
 import {registerChildFrame} from '//components/autofill/ios/form_util/resources/child_frame_registration_lib.js';
@@ -67,10 +66,6 @@ function extractFieldsFromControlElements(
     const controlElement = controlElements[i];
     if (!gCrWeb.fill.isAutofillableElement(controlElement)) {
       continue;
-    }
-    try {
-      gCrWeb.fill.setUniqueIDIfNeeded(controlElements[i]);
-    } catch (e) {
     }
 
     // Create a new AutofillFormFieldData, fill it out and map it to the
@@ -414,7 +409,6 @@ gCrWeb.fill.webFormElementToFormData = function(
   form.name_attribute = formElement.getAttribute('name') || '';
   form.id_attribute = formElement.getAttribute('id') || '';
 
-  gCrWeb.fill.setUniqueIDIfNeeded(formElement);
   form.renderer_id = gCrWeb.fill.getUniqueID(formElement);
 
   form.frame_id = frame.__gCrWeb.message.getFrameId();
@@ -467,7 +461,6 @@ gCrWeb.fill.webFormControlElementToFormField = function(
   field.name_attribute = element.getAttribute('name') || '';
   field.id_attribute = element.getAttribute('id') || '';
 
-  gCrWeb.fill.setUniqueIDIfNeeded(element);
   field.renderer_id = gCrWeb.fill.getUniqueID(element);
 
   field.form_control_type = element.type;

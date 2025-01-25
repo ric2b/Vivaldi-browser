@@ -13,7 +13,7 @@
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
-#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/gpu/ganesh/vk/GrVkDirectContext.h"
 #include "include/gpu/vk/VulkanBackendContext.h"
@@ -85,8 +85,8 @@ int main(int argc, char** argv) {
     }
     ACQUIRE_INST_VK_PROC(DestroyDevice);
 
-    backendContext.fMemoryAllocator =
-            skgpu::VulkanMemoryAllocators::Make(backendContext, skgpu::ThreadSafe::kNo);
+    backendContext.fMemoryAllocator = skgpu::VulkanMemoryAllocators::Make(
+            backendContext, skgpu::ThreadSafe::kNo, std::nullopt);
 
     // Create a GrDirectContext with our VulkanBackendContext
     sk_sp<GrDirectContext> context = GrDirectContexts::MakeVulkan(backendContext);

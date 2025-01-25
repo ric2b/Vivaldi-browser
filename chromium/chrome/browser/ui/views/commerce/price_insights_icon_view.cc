@@ -11,6 +11,8 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/commerce/commerce_ui_tab_helper.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
+#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "components/commerce/core/commerce_feature_list.h"
@@ -38,8 +40,7 @@ PriceInsightsIconView::PriceInsightsIconView(
       profile_(profile) {
   SetUpForInOutAnimation();
   SetProperty(views::kElementIdentifierKey, kPriceInsightsChipElementId);
-  GetViewAccessibility().SetProperties(
-      /*role*/ std::nullopt,
+  GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_SHOPPING_INSIGHTS_ICON_TOOLTIP_TEXT));
 
   if (base::FeatureList::IsEnabled(commerce::kShoppingIconColorVariant)) {
@@ -79,8 +80,9 @@ void PriceInsightsIconView::MaybeShowPageActionLabel() {
   if (!base::FeatureList::IsEnabled(commerce::kCommerceAllowChipExpansion)) {
     return;
   }
-  auto* tab_helper =
-      commerce::CommerceUiTabHelper::FromWebContents(GetWebContents());
+  auto* tab_helper = tabs::TabInterface::GetFromContents(GetWebContents())
+                         ->GetTabFeatures()
+                         ->commerce_ui_tab_helper();
 
   if (!tab_helper || !tab_helper->ShouldExpandPageActionIcon(
                          PageActionIconType::kPriceInsights)) {
@@ -93,31 +95,28 @@ void PriceInsightsIconView::MaybeShowPageActionLabel() {
   AnimateIn(std::nullopt);
 }
 
-PriceInsightsIconView::PriceInsightsIconLabelType
-PriceInsightsIconView::GetLabelTypeForPage() {
+PriceInsightsIconLabelType PriceInsightsIconView::GetLabelTypeForPage() {
   auto* web_contents = GetWebContents();
 
   if (!web_contents) {
-    return PriceInsightsIconView::PriceInsightsIconLabelType::kNone;
+    return PriceInsightsIconLabelType::kNone;
   }
-  auto* tab_helper =
-      commerce::CommerceUiTabHelper::FromWebContents(web_contents);
+  auto* tab_helper = tabs::TabInterface::GetFromContents(web_contents)
+                         ->GetTabFeatures()
+                         ->commerce_ui_tab_helper();
   CHECK(tab_helper);
 
   return tab_helper->GetPriceInsightsIconLabelTypeForPage();
 }
 
 void PriceInsightsIconView::UpdatePriceInsightsIconLabel() {
-  PriceInsightsIconView::PriceInsightsIconLabelType label_type =
-      GetLabelTypeForPage();
-  if (label_type ==
-      PriceInsightsIconView::PriceInsightsIconLabelType::kPriceIsLow) {
+  PriceInsightsIconLabelType label_type = GetLabelTypeForPage();
+  if (label_type == PriceInsightsIconLabelType::kPriceIsLow) {
     SetLabel(
         l10n_util::GetStringUTF16(
             IDS_SHOPPING_INSIGHTS_ICON_EXPANDED_TEXT_LOW_PRICE),
         l10n_util::GetStringUTF16(IDS_SHOPPING_INSIGHTS_ICON_TOOLTIP_TEXT));
-  } else if (label_type ==
-             PriceInsightsIconView::PriceInsightsIconLabelType::kPriceIsHigh) {
+  } else if (label_type == PriceInsightsIconLabelType::kPriceIsHigh) {
     SetLabel(
         l10n_util::GetStringUTF16(
             IDS_SHOPPING_INSIGHTS_ICON_EXPANDED_TEXT_HIGH_PRICE),
@@ -159,8 +158,9 @@ void PriceInsightsIconView::OnExecuting(
   if (!web_contents) {
     return;
   }
-  auto* tab_helper =
-      commerce::CommerceUiTabHelper::FromWebContents(web_contents);
+  auto* tab_helper = tabs::TabInterface::GetFromContents(web_contents)
+                         ->GetTabFeatures()
+                         ->commerce_ui_tab_helper();
   CHECK(tab_helper);
 
   tab_helper->OnPriceInsightsIconClicked();
@@ -175,8 +175,9 @@ bool PriceInsightsIconView::ShouldShow() const {
   if (!web_contents) {
     return false;
   }
-  auto* tab_helper =
-      commerce::CommerceUiTabHelper::FromWebContents(web_contents);
+  auto* tab_helper = tabs::TabInterface::GetFromContents(web_contents)
+                         ->GetTabFeatures()
+                         ->commerce_ui_tab_helper();
 
   return tab_helper && tab_helper->ShouldShowPriceInsightsIconView();
 }

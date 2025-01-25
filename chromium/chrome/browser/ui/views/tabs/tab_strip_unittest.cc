@@ -250,17 +250,38 @@ TEST_P(TabStripTest, AccessibilityEvents) {
 
   controller_->AddTab(0, TabActive::kInactive);
   controller_->AddTab(1, TabActive::kActive);
+  Tab* tab = tab_strip_->tab_at(1);
   EXPECT_EQ(0, ax_counter.GetCount(ax::mojom::Event::kSelectionAdd));
   EXPECT_EQ(1, ax_counter.GetCount(ax::mojom::Event::kSelection));
+  ui::AXNodeData node_data;
+  tab->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_TRUE(node_data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
   EXPECT_EQ(0, ax_counter.GetCount(ax::mojom::Event::kSelectionRemove));
 
+  tab = tab_strip_->tab_at(0);
   controller_->RemoveTab(1);
+  node_data = ui::AXNodeData();
+  tab->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_TRUE(node_data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
+  EXPECT_EQ(0, ax_counter.GetCount(ax::mojom::Event::kSelectionAdd));
+  EXPECT_EQ(2, ax_counter.GetCount(ax::mojom::Event::kSelection));
+  EXPECT_EQ(0, ax_counter.GetCount(ax::mojom::Event::kSelectionRemove));
+
+  // Before the Widget actcivation changes to true, it must be deactivated
+  // first.
+  widget_->OnNativeWidgetActivationChanged(false);
+  node_data = ui::AXNodeData();
+  tab->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_FALSE(node_data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
   EXPECT_EQ(0, ax_counter.GetCount(ax::mojom::Event::kSelectionAdd));
   EXPECT_EQ(2, ax_counter.GetCount(ax::mojom::Event::kSelection));
   EXPECT_EQ(0, ax_counter.GetCount(ax::mojom::Event::kSelectionRemove));
 
   // When activating widget, refire selection event on tab.
   widget_->OnNativeWidgetActivationChanged(true);
+  node_data = ui::AXNodeData();
+  tab->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_TRUE(node_data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected));
   EXPECT_EQ(0, ax_counter.GetCount(ax::mojom::Event::kSelectionAdd));
   EXPECT_EQ(3, ax_counter.GetCount(ax::mojom::Event::kSelection));
   EXPECT_EQ(0, ax_counter.GetCount(ax::mojom::Event::kSelectionRemove));
@@ -398,6 +419,42 @@ TEST_P(TabStripTest, TabCloseButtonVisibility) {
   EXPECT_TRUE(tab3->showing_close_button_);
   EXPECT_FALSE(tab4->showing_close_button_);
 }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+TEST_P(TabStripTest, CloseButtonHiddenWhenLockedForOnTask) {
+  controller_->SetLockedForOnTask(true);
+
+  controller_->AddTab(0, TabActive::kInactive);
+  controller_->AddTab(1, TabActive::kActive);
+  controller_->AddTab(2, TabActive::kInactive);
+  ASSERT_EQ(3, tab_strip_->GetTabCount());
+
+  Tab* const tab0 = tab_strip_->tab_at(0);
+  ASSERT_FALSE(tab0->IsActive());
+  EXPECT_FALSE(tab0->showing_close_button_);
+
+  Tab* const tab1 = tab_strip_->tab_at(1);
+  ASSERT_TRUE(tab1->IsActive());
+  EXPECT_FALSE(tab1->showing_close_button_);
+
+  Tab* tab2 = tab_strip_->tab_at(2);
+  ASSERT_FALSE(tab2->IsActive());
+  EXPECT_FALSE(tab2->showing_close_button_);
+
+  // Switch tabs and confirm close button remains hidden for all opened tabs.
+  tab_strip_->SelectTab(tab2, dummy_event_);
+  ASSERT_TRUE(tab2->IsActive());
+  EXPECT_FALSE(tab0->showing_close_button_);
+  EXPECT_FALSE(tab1->showing_close_button_);
+  EXPECT_FALSE(tab2->showing_close_button_);
+
+  // Closing a tab should not alter tab close button visibility either.
+  tab_strip_->CloseTab(tab2, CLOSE_TAB_FROM_MOUSE);
+  tab2 = nullptr;
+  EXPECT_FALSE(tab0->showing_close_button_);
+  EXPECT_FALSE(tab1->showing_close_button_);
+}
+#endif
 
 // The cached widths are private, but if they give incorrect results it can
 // cause subtle errors in other tests. Therefore it's prudent to test them.

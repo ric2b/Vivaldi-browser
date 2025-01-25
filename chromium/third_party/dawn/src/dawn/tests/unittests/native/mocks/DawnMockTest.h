@@ -26,9 +26,9 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <gtest/gtest.h>
+#include <webgpu/webgpu_cpp.h>
 
 #include "dawn/tests/unittests/native/mocks/DeviceMock.h"
-#include "dawn/webgpu_cpp.h"
 #include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native {
@@ -41,8 +41,11 @@ class DawnMockTest : public ::testing::Test {
     void ProcessEvents();
 
   protected:
+    void SetUp() override;
     void DropDevice();
 
+    DeviceDescriptor mDeviceDescriptor;
+    TogglesState mDeviceToggles;
     raw_ptr<::testing::NiceMock<DeviceMock>> mDeviceMock;
     wgpu::Device device;
 };

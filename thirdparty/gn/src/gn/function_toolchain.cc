@@ -445,6 +445,20 @@ Tool variables
         would be
           "-Wl,-add_ast_path,obj/foo/Foo.swiftmodule"
 
+    rust_swiftmodule_switch [string, optional, link tools only]
+        Valid for: Linker tools except "alink"
+
+        Like swiftmodule_switch, but for targets built/linked with the Rust
+        compiler. The string will be prependend to the path to the
+        .swiftmodule files that are embedded in the linker output.
+
+        If you specified:
+          rust_swiftmodule_swift = "-Clink-arg=-Wl,-add_ast_path,"
+        then the "{{swiftmodules}}" expansion for
+          [ "obj/foo/Foo.swiftmodule" ]
+        would be
+          "-Clink-arg=-Wl,-add_ast_path,obj/foo/Foo.swiftmodule"
+
     outputs  [list of strings with substitutions]
         Valid for: Linker and compiler tools (required)
 
@@ -495,13 +509,13 @@ Tool variables
 
     link_output  [string with substitutions]
     depend_output  [string with substitutions]
-        Valid for: "solink" only (optional)
+        Valid for: "solink", "rust_dylib" or "rust_cdylib" only (optional)
 
-        These two files specify which of the outputs from the solink tool
-        should be used for linking and dependency tracking. These should match
-        entries in the "outputs". If unspecified, the first item in the
-        "outputs" array will be used for all. See "Separate linking and
-        dependencies for shared libraries" below for more.
+        These two files specify which of the outputs from the tool should
+        be used for linking and dependency tracking. These should match entries
+        in the "outputs". If unspecified, the first item in the "outputs" array
+        will be used for all. See "Separate linking and dependencies for shared
+        libraries" below for more.
 
         On Windows, where the tools produce a .dll shared library and a .lib
         import library, you will want the first two to be the import library
@@ -549,7 +563,7 @@ Tool variables
         skip writing output if the output file has not changed.
 
         Normally, Ninja will assume that when a tool runs the output be new and
-        downstream dependents must be rebuild. When this is set to trye, Ninja
+        downstream dependents must be rebuild. When this is set to true, Ninja
         can skip rebuilding downstream dependents for input changes that don't
         actually affect the output.
 
@@ -746,8 +760,8 @@ Tool variables
     {{solibs}}
         Extra libraries from shared library dependencies not specified in the
         {{inputs}}. This is the list of link_output files from shared libraries
-        (if the solink tool specifies a "link_output" variable separate from
-        the "depend_output").
+        (if the solink, rust_dylib and rust_cdylib tools specify a "link_output"
+        variable separate from the "depend_output").
 
         These should generally be treated the same as libs by your tool.
 

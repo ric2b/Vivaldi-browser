@@ -43,7 +43,10 @@ content::BrowserContext* DirectMatchServiceFactory::GetBrowserContextToUse(
 
 KeyedService* DirectMatchServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  return new DirectMatchService();
+  Profile* profile = Profile::FromBrowserContext(context);
+  auto dm_service = new DirectMatchService();
+  dm_service->Load(profile);
+  return dm_service;
 }
 
 bool DirectMatchServiceFactory::ServiceIsNULLWhileTesting() const {

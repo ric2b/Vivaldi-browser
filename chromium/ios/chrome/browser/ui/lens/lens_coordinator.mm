@@ -17,13 +17,14 @@
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
+#import "ios/chrome/browser/shared/public/commands/new_tab_page_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_lens_input_selection_command.h"
 #import "ios/chrome/browser/shared/public/commands/search_image_with_lens_command.h"
@@ -56,6 +57,14 @@
 // End Vivaldi
 
 using lens::CameraOpenEntryPoint;
+
+namespace {
+
+// Lens results web page loading progress threshold to transition from LVF to
+// results page.
+static const double kLensWebPageTransitionLoadingProgressThreshold = 0.5;
+
+}  // namespace
 
 @interface LensCoordinator () <ChromeLensControllerDelegate,
                                LensCommands,
@@ -95,6 +104,13 @@ using lens::CameraOpenEntryPoint;
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserverBridge;
   std::unique_ptr<base::ScopedObservation<WebStateList, WebStateListObserver>>
       _webStateListObservation;
+
+  // Indicates whether the view was dismissed without a Lens search.
+  BOOL _dismissed;
+
+  // If set to YES, an IPH bubble will be presented on the NTP that points to
+  // the Lens icon in the NTP fakebox, if Lens is dismissed by the user.
+  BOOL _presentNTPLensIconBubbleOnDismiss;
 }
 @synthesize baseViewController = _baseViewController;
 
@@ -147,6 +163,8 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   _webStateListObservation->Observe(browser->GetWebStateList());
   [self updateLensAvailabilityForWidgets];
   [self updateQRCodeOrLensAppShortcutItem];
+  _dismissed = NO;
+  _presentNTPLensIconBubbleOnDismiss = NO;
 }
 
 - (void)stop {
@@ -210,6 +228,10 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   configuration.singleSignOnService =
       GetApplicationContext()->GetSingleSignOnService();
   configuration.entrypoint = entrypoint;
+
+  _dismissed = NO;
+  _presentNTPLensIconBubbleOnDismiss =
+      command.presentNTPLensIconBubbleOnDismiss;
 
   // Mark IPHs as completed.
   if (entrypoint == LensEntrypoint::Keyboard) {
@@ -291,11 +313,14 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
       // Do not record the camera open histogram for other entry points.
       break;
   }
+  GetApplicationContext()->GetLocalState()->SetTime(prefs::kLensLastOpened,
+                                                    base::Time::Now());
 }
 
 #pragma mark - ChromeLensControllerDelegate
 
 - (void)lensControllerDidTapDismissButton {
+  _dismissed = YES;
   self.lensWebPageLoadTriggeredFromInputSelection = NO;
   web::WebState* loadingWebState = self.loadingWebState;
   // If there is a webstate loading Lens results underneath the Lens UI,
@@ -380,8 +405,7 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
 
 - (void)webState:(web::WebState*)webState
     didChangeLoadingProgress:(double)progress {
-  if (base::FeatureList::IsEnabled(kLensWebPageEarlyTransitionEnabled) &&
-      progress >= LensWebPageEarlyTransitionLoadingProgressThreshold()) {
+  if (progress >= kLensWebPageTransitionLoadingProgressThreshold) {
     [self transitionToLensWebPageWithWebState:webState];
   }
 }
@@ -448,7 +472,14 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
 
 - (void)dismissViewController {
   if (self.baseViewController.presentedViewController == self.viewController) {
-    [self.baseViewController dismissViewControllerAnimated:YES completion:nil];
+    ProceduralBlock completion = nil;
+    if (_presentNTPLensIconBubbleOnDismiss && _dismissed) {
+      completion = ^{
+        [self presentNTPLensIconBubble];
+      };
+    }
+    [self.baseViewController dismissViewControllerAnimated:YES
+                                                completion:completion];
   }
 
   self.viewController = nil;
@@ -543,4 +574,9 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   [[UIApplication sharedApplication] setShortcutItems:@[ item ]];
 }
 
+// Presents an IPH bubble that points to the Lens Icon in the NTP's Fakebox.
+- (void)presentNTPLensIconBubble {
+  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
+  [HandlerForProtocol(dispatcher, NewTabPageCommands) presentLensIconBubble];
+}
 @end

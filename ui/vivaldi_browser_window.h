@@ -11,6 +11,7 @@
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "chrome/browser/send_tab_to_self/receiving_ui_handler.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
@@ -50,6 +51,21 @@ class VivaldiRootDocumentHandler;
 namespace vivaldi {
 class InfoBarContainerWebProxy;
 }
+
+
+class VivaldiUIRelay: public send_tab_to_self::ReceivingUiHandler {
+ public:
+  VivaldiUIRelay(Profile* profile);
+  virtual ~VivaldiUIRelay() {}
+
+  // ReceivingUiHandler
+  void DisplayNewEntries(const std::vector<const send_tab_to_self::SendTabToSelfEntry*>& new_entries) override;
+  void DismissEntries(const std::vector<std::string>& guids) override;
+  const Profile* profile() const override;
+
+ private:
+  Profile* profile_;
+};
 
 class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
  public:
@@ -338,6 +354,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void SetFocusToLocationBar(bool select_all) override {}
   void UpdateReloadStopState(bool is_loading, bool force) override {}
   void UpdateToolbar(content::WebContents* contents) override;
+  bool UpdateToolbarSecurityState() override;
   bool IsToolbarShowing() const override;
   void MaybeShowProfileSwitchIPH() override {}
   void FocusToolbar() override {}
@@ -400,7 +417,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
                                     content::WebContents* web_contents,
                                     const GURL& url,
                                     gfx::Point pos) override;
-  void CutCopyPaste(int command_id) override {}
   bool IsOnCurrentWorkspace() const override;
   void SetTopControlsShownRatio(content::WebContents* web_contents,
                                 float ratio) override {}
@@ -440,6 +456,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
                                    SharingDialogData data) override;
   void ShowHatsDialog(
       const std::string& site_id,
+      const std::optional<std::string>& histogram_name,
+      const std::optional<uint64_t> hats_survey_ukm_id,
       base::OnceClosure success_callback,
       base::OnceClosure failure_callback,
       const SurveyBitsData& product_specific_bits_data,
@@ -483,6 +501,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool GetCanResize() override;
   ui::WindowShowState GetWindowShowState() const override;
   views::WebView* GetContentsWebView() override;
+  BrowserView* AsBrowserView() override;
+
 
   // BrowserWindow overrides end
 

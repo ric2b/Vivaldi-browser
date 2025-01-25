@@ -125,8 +125,7 @@
     <request name="set_serial">
       <description summary="associates a Xwayland window to a wl_surface">
         Associates an Xwayland window to a wl_surface.
-        The association state is double-buffered and will be applied at
-        the time wl_surface.commit of the corresponding wl_surface is called.
+        The association state is double-buffered, see wl_surface.commit.
 
         The `serial_lo` and `serial_hi` parameters specify a non-zero
         monotonic serial number which is entirely unique and provided by the

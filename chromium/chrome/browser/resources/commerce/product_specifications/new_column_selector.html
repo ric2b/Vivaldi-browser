@@ -3,6 +3,7 @@
     --iron-icon-width: 20px;
     --new-column-selector-border-radius: 10px;
     --new-column-selector-size: 42px;
+    position: relative;
     text-align: start;
   }
 
@@ -26,6 +27,10 @@
     position: absolute;
   }
 
+  #productSelectionMenu {
+    --product-selector-width: 280px;
+  }
+
   #button:active > #hoverLayer,
   #button:focus-within > #hoverLayer,
   #button:hover > #hoverLayer,
@@ -37,12 +42,16 @@
 <div id="button"
     on-click="showMenu_"
     on-keydown="onButtonKeyDown_"
-    tabindex="0">
+    tabindex="0"
+    title="$i18n{addNewColumn}"
+    aria-label="$i18n{addNewColumn}">
   <cr-icon icon="cr:add"></cr-icon>
   <div id="hoverLayer"></div>
 </div>
 
 <product-selection-menu id="productSelectionMenu"
     excluded-urls="[[excludedUrls]]"
+    is-table-full="[[isTableFull]]"
+    for-new-column="true"
     on-close-menu="onCloseMenu_">
 </product-selection-menu>

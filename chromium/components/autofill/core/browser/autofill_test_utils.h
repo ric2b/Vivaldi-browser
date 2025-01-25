@@ -118,10 +118,10 @@ AutofillProfile GetIncompleteProfile1();
 // Returns an incomplete profile of dummy info, different to the above.
 AutofillProfile GetIncompleteProfile2();
 
-// Sets the `profile`s source and initial creator to match `category`.
+// Sets the `profile`s record type and initial creator to match `category`.
 void SetProfileCategory(
     AutofillProfile& profile,
-    autofill_metrics::AutofillProfileSourceCategory category);
+    autofill_metrics::AutofillProfileRecordTypeCategory category);
 
 // Returns the stripped (without characters representing whitespace) value of
 // the given `value`.
@@ -298,15 +298,6 @@ CreditCard CreateCreditCardWithInfo(const char* name_on_card,
                                     const std::string& billing_address_id,
                                     const std::u16string& cvc = u"");
 
-// TODO(isherman): We should do this automatically for all tests, not manually
-// on a per-test basis: http://crbug.com/57221
-// Disables or mocks out code that would otherwise reach out to system services.
-// Revert this configuration with |ReenableSystemServices|.
-void DisableSystemServices(PrefService* prefs);
-
-// Undoes the mocking set up by |DisableSystemServices|
-void ReenableSystemServices();
-
 // Sets |cards| for |table|. |cards| may contain full, unmasked server cards,
 // whereas PaymentsAutofillTable::SetServerCreditCards can only contain masked
 // cards.
@@ -388,6 +379,10 @@ Suggestion CreateAutofillSuggestion(
     SuggestionType type,
     const std::u16string& main_text_value = std::u16string(),
     const Suggestion::Payload& payload = Suggestion::Payload());
+
+Suggestion CreateAutofillSuggestion(const std::u16string& main_text_value,
+                                    const std::u16string& minor_text_value,
+                                    bool apply_deactivated_style);
 
 // Returns a bank account enabled for Pix with fake data.
 BankAccount CreatePixBankAccount(int64_t instrument_id);

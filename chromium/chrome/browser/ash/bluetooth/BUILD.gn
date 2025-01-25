@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/chromeos/crosier_tests.gni")
 import("//build/config/chromeos/ui_mode.gni")
 
 assert(is_chromeos_ash)
@@ -26,6 +27,7 @@ static_library("bluetooth") {
   public_deps = [
     "//ash",
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/ash/hats",
     "//chrome/browser/profiles",
     "//chrome/browser/ui/webui/bluetooth_internals:mojo_bindings",
@@ -65,7 +67,6 @@ source_set("browser_tests") {
     "//ash/public/cpp",
     "//base/test:test_support",
     "//chrome/browser/ash/hats",
-    "//chrome/browser/ash/notifications",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui",
     "//chrome/common",
@@ -78,15 +79,12 @@ source_set("browser_tests") {
 }
 
 if (is_chromeos_device) {
-  source_set("integration_tests") {
-    testonly = true
-
-    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-
+  crosier_tests("integration_tests") {
     sources = [ "bluetooth_integration_test.cc" ]
 
+    sources_metadata = [ "bluetooth_integration_test.yaml" ]
+
     deps = [
-      ":bluetooth",
       "//ash",
       "//base",
       "//base/test:test_support",

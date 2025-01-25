@@ -4,24 +4,31 @@
 
 #include "chrome/browser/ui/webui/certificate_manager/client_cert_sources.h"
 
+#include <map>
+
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/webui/certificate_manager/certificate_manager_utils.h"
 #include "chrome/common/net/x509_certificate_model.h"
+#include "content/public/browser/browser_thread.h"
 #include "crypto/crypto_buildflags.h"
 #include "crypto/sha2.h"
 #include "net/base/hash_value.h"
+#include "net/base/net_errors.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/client_cert_identity.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 #include "ui/shell_dialogs/selected_file_info.h"
+#include "ui/webui/resources/cr_components/certificate_manager/certificate_manager_v2.mojom-shared.h"
+#include "ui/webui/resources/cr_components/certificate_manager/certificate_manager_v2.mojom.h"
 
 #if BUILDFLAG(USE_NSS_CERTS)
 #include "chrome/browser/ui/crypto_module_delegate_nss.h"
@@ -49,25 +56,55 @@
 #include "chrome/browser/certificate_provider/certificate_provider_service_factory.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/components/kcer/kcer.h"
+#include "ash/components/kcer/kcer_histograms.h"
+#include "ash/constants/ash_features.h"
+#include "chrome/browser/ash/kcer/kcer_factory_ash.h"
+#include "chrome/browser/ash/net/client_cert_store_ash.h"
+#include "chrome/browser/ash/net/client_cert_store_kcer.h"
+#include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/net/nss_service.h"
+#include "chrome/browser/net/nss_service_factory.h"
+#include "chromeos/constants/chromeos_features.h"
+#include "components/user_manager/user.h"
+#include "net/cert/nss_cert_database.h"
+#endif
+
 namespace {
 
-// A certificate loader that wraps a ClientCertStore. Read-only.
-// Lifetimes note: The callback will not be called if the ClientCertStoreLoader
-// (and thus, the ClientCertStore) is destroyed first.
+class ClientCertStoreFactory {
+ public:
+  virtual ~ClientCertStoreFactory() = default;
+  virtual std::unique_ptr<net::ClientCertStore> CreateClientCertStore() = 0;
+};
+
+// A certificate loader that wraps a ClientCertStoreFactory. Read-only.
 class ClientCertStoreLoader {
  public:
-  explicit ClientCertStoreLoader(std::unique_ptr<net::ClientCertStore> store)
-      : store_(std::move(store)) {}
+  explicit ClientCertStoreLoader(
+      std::unique_ptr<ClientCertStoreFactory> factory)
+      : factory_(std::move(factory)) {}
 
+  // Lifetimes note: The callback will not be called if the
+  // ClientCertStoreLoader (and thus, the ClientCertStore handle held by
+  // `active_requests_`) is destroyed first.
   void GetCerts(base::OnceCallback<void(net::CertificateList)> callback) {
-    store_->GetClientCerts(
+    std::unique_ptr<net::ClientCertStore> store =
+        factory_->CreateClientCertStore();
+    net::ClientCertStore* store_ptr = store.get();
+    active_requests_[store_ptr] = std::move(store);
+    // Unretained is safe as the callback is not run if `active_requests_` is
+    // destroyed.
+    store_ptr->GetClientCerts(
         base::MakeRefCounted<net::SSLCertRequestInfo>(),
         base::BindOnce(&ClientCertStoreLoader::HandleClientCertsResult,
-                       std::move(callback)));
+                       base::Unretained(this), store_ptr, std::move(callback)));
   }
 
  private:
-  static void HandleClientCertsResult(
+  void HandleClientCertsResult(
+      net::ClientCertStore* store,
       base::OnceCallback<void(net::CertificateList)> callback,
       net::ClientCertIdentityList identities) {
     net::CertificateList certs;
@@ -75,24 +112,80 @@ class ClientCertStoreLoader {
     for (const auto& identity : identities) {
       certs.push_back(identity->certificate());
     }
+    active_requests_.erase(store);
     std::move(callback).Run(std::move(certs));
   }
 
-  std::unique_ptr<net::ClientCertStore> store_;
+  std::unique_ptr<ClientCertStoreFactory> factory_;
+  std::map<net::ClientCertStore*, std::unique_ptr<net::ClientCertStore>>
+      active_requests_;
 };
 
-std::unique_ptr<ClientCertStoreLoader> CreatePlatformClientCertLoader() {
-#if BUILDFLAG(USE_NSS_CERTS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+class ClientCertStoreFactoryAsh : public ClientCertStoreFactory {
+ public:
+  explicit ClientCertStoreFactoryAsh(Profile* profile) : profile_(profile) {}
+
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore() override {
+    if (ash::features::ShouldUseKcerClientCertStore()) {
+      return std::make_unique<ash::ClientCertStoreKcer>(
+          nullptr,  // no additional provider
+          kcer::KcerFactoryAsh::GetKcer(profile_));
+    } else {
+      const user_manager::User* user =
+          ash::ProfileHelper::Get()->GetUserByProfile(profile_);
+      // Use the device-wide system key slot only if the user is affiliated on
+      // the device.
+      const bool use_system_key_slot = user->IsAffiliated();
+      return std::make_unique<ash::ClientCertStoreAsh>(
+          nullptr,  // no additional provider
+          use_system_key_slot, user->username_hash(),
+          ash::ClientCertStoreAsh::PasswordDelegateFactory());
+    }
+  }
+
+ private:
+  raw_ptr<Profile> profile_;
+};
+#elif BUILDFLAG(USE_NSS_CERTS)
+class ClientCertStoreFactoryNSS : public ClientCertStoreFactory {
+ public:
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore() override {
+    return std::make_unique<net::ClientCertStoreNSS>(
+        base::BindRepeating(&CreateCryptoModuleBlockingPasswordDelegate,
+                            kCryptoModulePasswordClientAuth));
+  }
+};
+#elif BUILDFLAG(IS_WIN)
+class ClientCertStoreFactoryWin : public ClientCertStoreFactory {
+ public:
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore() override {
+    return std::make_unique<net::ClientCertStoreWin>();
+  }
+};
+#elif BUILDFLAG(IS_MAC)
+class ClientCertStoreFactoryMac : public ClientCertStoreFactory {
+ public:
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore() override {
+    return std::make_unique<net::ClientCertStoreMac>();
+  }
+};
+#endif
+
+std::unique_ptr<ClientCertStoreLoader> CreatePlatformClientCertLoader(
+    Profile* profile) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return std::make_unique<ClientCertStoreLoader>(
-      std::make_unique<net::ClientCertStoreNSS>(
-          base::BindRepeating(&CreateCryptoModuleBlockingPasswordDelegate,
-                              kCryptoModulePasswordClientAuth)));
+      std::make_unique<ClientCertStoreFactoryAsh>(profile));
+#elif BUILDFLAG(USE_NSS_CERTS)
+  return std::make_unique<ClientCertStoreLoader>(
+      std::make_unique<ClientCertStoreFactoryNSS>());
 #elif BUILDFLAG(IS_WIN)
   return std::make_unique<ClientCertStoreLoader>(
-      std::make_unique<net::ClientCertStoreWin>());
+      std::make_unique<ClientCertStoreFactoryWin>());
 #elif BUILDFLAG(IS_MAC)
   return std::make_unique<ClientCertStoreLoader>(
-      std::make_unique<net::ClientCertStoreMac>());
+      std::make_unique<ClientCertStoreFactoryMac>());
 #else
   return nullptr;
 #endif
@@ -114,6 +207,22 @@ class NullClientCertStore : public net::ClientCertStore {
   }
 };
 
+class ClientCertStoreFactoryProvisioned : public ClientCertStoreFactory {
+ public:
+  explicit ClientCertStoreFactoryProvisioned(
+      client_certificates::CertificateProvisioningService* provisioning_service)
+      : provisioning_service_(provisioning_service) {}
+
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore() override {
+    return client_certificates::ClientCertificatesService::Create(
+        provisioning_service_, std::make_unique<NullClientCertStore>());
+  }
+
+ private:
+  raw_ptr<client_certificates::CertificateProvisioningService>
+      provisioning_service_;
+};
+
 std::unique_ptr<ClientCertStoreLoader> CreateProvisionedClientCertLoader(
     Profile* profile) {
   if (!profile || !client_certificates::features::
@@ -128,8 +237,8 @@ std::unique_ptr<ClientCertStoreLoader> CreateProvisionedClientCertLoader(
   }
 
   return std::make_unique<ClientCertStoreLoader>(
-      client_certificates::ClientCertificatesService::Create(
-          provisioning_service, std::make_unique<NullClientCertStore>()));
+      std::make_unique<ClientCertStoreFactoryProvisioned>(
+          provisioning_service));
 }
 #endif
 
@@ -178,20 +287,13 @@ class ClientCertSource : public CertificateManagerPageHandler::CertSource {
   void GetCertificateInfos(
       CertificateManagerPageHandler::GetCertificatesCallback callback)
       override {
-    if (!loader_) {
-      std::move(callback).Run({});
-      return;
-    }
     if (certs_) {
-      PopulateCertInfosFromCertificateList(std::move(callback), *certs_);
+      ReplyToGetCertificatesCallback(std::move(callback));
       return;
     }
-    // Unretained is safe here as if `this` is destroyed, the ClientCertStore
-    // will be destroyed, and the ClientCertStore contract is that the callback
-    // will not be called after the ClientCertStore object is destroyed.
-    loader_->GetCerts(base::BindOnce(&ClientCertSource::SaveCertsAndRespond,
-                                     base::Unretained(this),
-                                     std::move(callback)));
+    RefreshCachedCertificateList(
+        base::BindOnce(&ClientCertSource::ReplyToGetCertificatesCallback,
+                       base::Unretained(this), std::move(callback)));
   }
 
   void ViewCertificate(
@@ -204,12 +306,31 @@ class ClientCertSource : public CertificateManagerPageHandler::CertSource {
                                        std::move(web_contents));
   }
 
+ protected:
+  // Refresh list of cached certificates and run `callback` when done.
+  void RefreshCachedCertificateList(base::OnceClosure callback) {
+    if (!loader_) {
+      std::move(callback).Run();
+      return;
+    }
+    // Unretained is safe here as if `this` is destroyed, the ClientCertStore
+    // will be destroyed, and the ClientCertStore contract is that the callback
+    // will not be called after the ClientCertStore object is destroyed.
+    loader_->GetCerts(base::BindOnce(&ClientCertSource::SaveCertsAndRespond,
+                                     base::Unretained(this),
+                                     std::move(callback)));
+  }
+
  private:
-  void SaveCertsAndRespond(
-      CertificateManagerPageHandler::GetCertificatesCallback callback,
-      net::CertificateList certs) {
-    certs_ = std::move(certs);
+  void ReplyToGetCertificatesCallback(
+      CertificateManagerPageHandler::GetCertificatesCallback callback) const {
     PopulateCertInfosFromCertificateList(std::move(callback), *certs_);
+  }
+
+  void SaveCertsAndRespond(base::OnceClosure callback,
+                           net::CertificateList certs) {
+    certs_ = std::move(certs);
+    std::move(callback).Run();
   }
 
   std::unique_ptr<ClientCertStoreLoader> loader_;
@@ -222,8 +343,14 @@ class ClientCertSource : public CertificateManagerPageHandler::CertSource {
 class CrosClientCertSource : public ClientCertSource,
                              public ui::SelectFileDialog::Listener {
  public:
-  explicit CrosClientCertSource(std::unique_ptr<ClientCertStoreLoader> loader)
-      : ClientCertSource(std::move(loader)) {}
+  explicit CrosClientCertSource(
+      std::unique_ptr<ClientCertStoreLoader> loader,
+      mojo::Remote<certificate_manager_v2::mojom::CertificateManagerPage>*
+          remote_client,
+      Profile* profile)
+      : ClientCertSource(std::move(loader)),
+        remote_client_(remote_client),
+        profile_(profile) {}
 
   ~CrosClientCertSource() override {
     if (select_file_dialog_) {
@@ -235,6 +362,22 @@ class CrosClientCertSource : public ClientCertSource,
       base::WeakPtr<content::WebContents> web_contents,
       CertificateManagerPageHandler::ImportCertificateCallback callback)
       override {
+    BeginImportCertificate(/*hardware_backed=*/false, std::move(web_contents),
+                           std::move(callback));
+  }
+
+  void ImportAndBindCertificate(
+      base::WeakPtr<content::WebContents> web_contents,
+      CertificateManagerPageHandler::ImportCertificateCallback callback)
+      override {
+    BeginImportCertificate(/*hardware_backed=*/true, std::move(web_contents),
+                           std::move(callback));
+  }
+
+  void BeginImportCertificate(
+      bool hardware_backed,
+      base::WeakPtr<content::WebContents> web_contents,
+      CertificateManagerPageHandler::ImportCertificateCallback callback) {
     // Containing web contents went away (e.g. user navigated away) or dialog
     // is already open. Don't try to open the dialog.
     if (!web_contents || select_file_dialog_) {
@@ -242,6 +385,7 @@ class CrosClientCertSource : public ClientCertSource,
       return;
     }
 
+    import_hardware_backed_ = hardware_backed;
     import_callback_ = std::move(callback);
 
     select_file_dialog_ = ui::SelectFileDialog::Create(
@@ -266,8 +410,8 @@ class CrosClientCertSource : public ClientCertSource,
 
     // Use CONTINUE_ON_SHUTDOWN since this is only for reading a file, if it
     // doesn't complete before shutdown the file still exists, and even if the
-    // browser blocked on completing this task, the import isn't actually
-    // done yet, so just blocking shutdown on the file read wouldn't accomplish
+    // browser blocked on completing this task, the import isn't actually done
+    // yet, so just blocking shutdown on the file read wouldn't accomplish
     // anything. CONTINUE_ON_SHUTDOWN should be safe as base::ReadFileToBytes
     // doesn't access any global state.
     base::ThreadPool::PostTaskAndReplyWithResult(
@@ -285,6 +429,7 @@ class CrosClientCertSource : public ClientCertSource,
     std::move(import_callback_).Run(nullptr);
   }
 
+ private:
   void FileRead(std::optional<std::vector<uint8_t>> file_bytes) {
     if (!file_bytes) {
       // TODO(crbug.com/40928765): localize
@@ -294,15 +439,166 @@ class CrosClientCertSource : public ClientCertSource,
       return;
     }
 
-    // TODO(crbug.com/40928765): actually do the import
-    std::move(import_callback_)
-        .Run(certificate_manager_v2::mojom::ImportResult::NewError(
-            "not implemented"));
+    (*remote_client_)
+        ->AskForImportPassword(base::BindOnce(
+            &CrosClientCertSource::GotImportPassword,
+            weak_ptr_factory_.GetWeakPtr(), std::move(*file_bytes)));
   }
 
- private:
+  void GotImportPassword(std::vector<uint8_t> file_bytes,
+                         const std::optional<std::string>& password) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    if (!password) {
+      std::move(import_callback_).Run(nullptr);
+      return;
+    }
+
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &CrosClientCertSource::GetCertDBOnIOThread,
+            NssServiceFactory::GetForContext(profile_)
+                ->CreateNSSCertDatabaseGetterForIOThread(),
+            base::BindOnce(
+                &CrosClientCertSource::GotNSSCertDatabaseOnIOThread,
+                import_hardware_backed_, std::move(file_bytes), *password,
+                base::BindOnce(&CrosClientCertSource::FinishedNSSImport,
+                               weak_ptr_factory_.GetWeakPtr()))));
+  }
+
+  static void GetCertDBOnIOThread(
+      NssCertDatabaseGetter database_getter,
+      base::OnceCallback<void(net::NSSCertDatabase*)> callback) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+    auto split_callback = base::SplitOnceCallback(std::move(callback));
+
+    net::NSSCertDatabase* cert_db =
+        std::move(database_getter).Run(std::move(split_callback.first));
+    // If the NSS database was already available, |cert_db| is non-null and
+    // |did_get_cert_db_callback| has not been called. Call it explicitly.
+    if (cert_db) {
+      std::move(split_callback.second).Run(cert_db);
+    }
+  }
+
+  static void GotNSSCertDatabaseOnIOThread(
+      bool use_hardware_backed,
+      std::vector<uint8_t> file_bytes,
+      std::string password,
+      base::OnceCallback<void(std::vector<uint8_t> file_bytes,
+                              std::string password,
+                              int nss_import_result)> finished_import_callback,
+      net::NSSCertDatabase* cert_db) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+    crypto::ScopedPK11Slot slot;
+    if (use_hardware_backed) {
+      slot = cert_db->GetPrivateSlot();
+    } else {
+      slot = cert_db->GetPublicSlot();
+    }
+    bool is_extractable = !use_hardware_backed;
+    // TODO(crbug.com/40928765): Should do the NSS import on worker thread, not
+    // IO thread. (Would need to add an ImportFromPKCS12Async method on
+    // NSSCertDatabase.)
+    int nss_import_result = cert_db->ImportFromPKCS12(
+        slot.get(), std::string(base::as_string_view(file_bytes)),
+        base::UTF8ToUTF16(password), is_extractable, nullptr);
+
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(std::move(finished_import_callback),
+                                  std::move(file_bytes), std::move(password),
+                                  nss_import_result));
+  }
+
+  void FinishedNSSImport(std::vector<uint8_t> file_bytes,
+                         std::string password,
+                         int nss_import_result) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    if (nss_import_result == net::OK) {
+      kcer::RecordPkcs12MigrationUmaEvent(
+          kcer::Pkcs12MigrationUmaEvent::kPkcs12ImportNssSuccess);
+      // `import_hardware_backed_` == false indicates that the cert came from
+      // the "Import" button. By default it's imported into the software NSS
+      // database (aka public slot). With the experiment enabled it should also
+      // be imported into Chaps. `import_hardware_backed_` == true means that
+      // the cert came from the "Import and Bind" button and it's import into
+      // Chaps by default.
+      if (!import_hardware_backed_ &&
+          chromeos::features::IsPkcs12ToChapsDualWriteEnabled()) {
+        // Record the dual-write event. Even if the import fails, it's
+        // theoretically possible that some related objects are still created
+        // and would need to be deleted in case of a rollback.
+        base::WeakPtr<kcer::Kcer> kcer =
+            kcer::KcerFactoryAsh::GetKcer(profile_);
+        if (kcer) {
+          kcer::KcerFactoryAsh::RecordPkcs12CertDualWritten();
+          return kcer->ImportPkcs12Cert(
+              kcer::Token::kUser, kcer::Pkcs12Blob(std::move(file_bytes)),
+              std::move(password),
+              /*hardware_backed=*/import_hardware_backed_,
+              /*mark_as_migrated=*/true,
+              base::BindOnce(&CrosClientCertSource::FinishedKcerImport,
+                             weak_ptr_factory_.GetWeakPtr(),
+                             nss_import_result));
+        }
+      }
+    } else {
+      kcer::RecordPkcs12MigrationUmaEvent(
+          kcer::Pkcs12MigrationUmaEvent::kPkcs12ImportNssFailed);
+    }
+
+    ReplyToImportCallback(nss_import_result);
+  }
+
+  void FinishedKcerImport(
+      int nss_import_result,
+      base::expected<void, kcer::Error> kcer_import_result) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    if (kcer_import_result.has_value()) {
+      kcer::RecordPkcs12MigrationUmaEvent(
+          kcer::Pkcs12MigrationUmaEvent::kPkcs12ImportKcerSuccess);
+    } else {
+      kcer::RecordPkcs12MigrationUmaEvent(
+          kcer::Pkcs12MigrationUmaEvent::kPkcs12ImportKcerFailed);
+      kcer::RecordKcerError(kcer_import_result.error());
+    }
+
+    // Just return the nss_import_result. Kcer will attempt to import only if
+    // NSS succeeds and even if Kcer fails, the cert should be usable.
+    ReplyToImportCallback(nss_import_result);
+  }
+
+  void ReplyToImportCallback(int nss_import_result) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    if (nss_import_result == net::OK) {
+      // Refresh the certificate list to include the newly imported cert, and
+      // call the import complete callback once the list has been updated.
+      RefreshCachedCertificateList(base::BindOnce(
+          std::move(import_callback_),
+          certificate_manager_v2::mojom::ImportResult::NewSuccess(
+              certificate_manager_v2::mojom::SuccessResult::kSuccess)));
+    } else {
+      // TODO(crbug.com/40928765): Localize and provide better error messages.
+      // TODO(crbug.com/40928765): If the error was bad password, could prompt
+      // the user to try again rather than just failing and requiring the user
+      // to reselect the file to try again.
+      std::move(import_callback_)
+          .Run(certificate_manager_v2::mojom::ImportResult::NewError(
+              "import failed"));
+    }
+  }
+
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+  bool import_hardware_backed_;
   CertificateManagerPageHandler::ImportCertificateCallback import_callback_;
+  raw_ptr<mojo::Remote<certificate_manager_v2::mojom::CertificateManagerPage>>
+      remote_client_;
+  raw_ptr<Profile> profile_;
   base::WeakPtrFactory<CrosClientCertSource> weak_ptr_factory_{this};
 };
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -364,12 +660,16 @@ class ExtensionsClientCertSource
 }  // namespace
 
 std::unique_ptr<CertificateManagerPageHandler::CertSource>
-CreatePlatformClientCertSource() {
+CreatePlatformClientCertSource(
+    mojo::Remote<certificate_manager_v2::mojom::CertificateManagerPage>*
+        remote_client,
+    Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return std::make_unique<CrosClientCertSource>(
-      CreatePlatformClientCertLoader());
+      CreatePlatformClientCertLoader(profile), remote_client, profile);
 #else
-  return std::make_unique<ClientCertSource>(CreatePlatformClientCertLoader());
+  return std::make_unique<ClientCertSource>(
+      CreatePlatformClientCertLoader(profile));
 #endif
 }
 

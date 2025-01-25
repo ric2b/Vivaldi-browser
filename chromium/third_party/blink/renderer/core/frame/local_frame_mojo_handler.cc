@@ -545,7 +545,7 @@ void LocalFrameMojoHandler::SetFrameOwnerProperties(
   GetDocument()->WillChangeFrameOwnerProperties(
       properties->margin_width, properties->margin_height,
       properties->scrollbar_mode, properties->is_display_none,
-      properties->color_scheme);
+      properties->color_scheme, properties->preferred_color_scheme);
 
   frame_->ApplyFrameOwnerProperties(std::move(properties));
 }
@@ -785,6 +785,15 @@ void LocalFrameMojoHandler::DidUpdateFramePolicy(
   To<RemoteFrameOwner>(frame_->Owner())->SetFramePolicy(frame_policy);
 }
 
+void LocalFrameMojoHandler::OnFrameVisibilityChanged(
+    mojom::blink::FrameVisibility visibility) {
+  if (frame_->Client() && frame_->Client()->GetWebFrame() &&
+      frame_->Client()->GetWebFrame()->Client()) {
+    frame_->Client()->GetWebFrame()->Client()->OnFrameVisibilityChanged(
+        visibility);
+  }
+}
+
 void LocalFrameMojoHandler::OnPostureChanged(
     mojom::blink::DevicePostureType posture) {
   if (!RuntimeEnabledFeatures::DevicePostureEnabled(
@@ -868,6 +877,7 @@ void LocalFrameMojoHandler::JavaScriptExecuteRequestForTests(
     const String& javascript,
     bool has_user_gesture,
     bool resolve_promises,
+    bool honor_js_content_settings,
     int32_t world_id,
     JavaScriptExecuteRequestForTestsCallback callback) {
   TRACE_EVENT_INSTANT0("test_tracing", "JavaScriptExecuteRequestForTests",
@@ -892,8 +902,12 @@ void LocalFrameMojoHandler::JavaScriptExecuteRequestForTests(
       javascript, ScriptSourceLocationType::kUnknown,
       SanitizeScriptErrors::kDoNotSanitize);
 
+  const auto policy =
+      honor_js_content_settings
+          ? ExecuteScriptPolicy::kDoNotExecuteScriptWhenScriptsDisabled
+          : ExecuteScriptPolicy::kExecuteScriptWhenScriptsDisabled;
   ScriptEvaluationResult result =
-      script->RunScriptOnScriptStateAndReturnValue(script_state);
+      script->RunScriptOnScriptStateAndReturnValue(script_state, policy);
 
   auto* handler = MakeGarbageCollected<JavaScriptExecuteRequestForTestsHandler>(
       std::move(callback));
@@ -982,7 +996,7 @@ void LocalFrameMojoHandler::GetFirstRectForRange(const gfx::Range& range) {
     // Pepper-free PDF will reach here.
     rect = plugin_container->Plugin()->GetPluginCaretBounds();
   } else {
-    // TODO(crbug.com/702990): Remove `pepper_has_caret` once pepper is removed.
+    // TODO(crbug.com/40511450): Remove `pepper_has_caret` once PPAPI is gone.
     bool pepper_has_caret = client->GetCaretBoundsFromFocusedPlugin(rect);
     if (!pepper_has_caret) {
       // When request range is invalid we will try to obtain it from current
@@ -1319,6 +1333,10 @@ void LocalFrameMojoHandler::UpdateBrowserControlsState(
       constraints, current, animate, offset_tags_info);
 }
 
+void LocalFrameMojoHandler::Discard() {
+  frame_->Discard();
+}
+
 void LocalFrameMojoHandler::SetV8CompileHints(
     base::ReadOnlySharedMemoryRegion data) {
   CHECK(base::FeatureList::IsEnabled(blink::features::kConsumeCompileHints));
@@ -1449,7 +1467,7 @@ void LocalFrameMojoHandler::UpdatePrerenderURL(
       mojom::blink::SameDocumentNavigationType::
           kPrerenderNoVarySearchActivation,
       /*data=*/nullptr, WebFrameLoadType::kReplaceCurrentItem,
-      FirePopstate::kYes,
+      FirePopstate::kNo,
       /*is_browser_initiated=*/true);
   std::move(callback).Run();
 }

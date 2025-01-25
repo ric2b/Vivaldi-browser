@@ -82,6 +82,8 @@ standardization.
    one open-source server implementation to be eligible for inclusion.
 7. "Open-source" is defined as distributed with an Open Source Initiative
    approved license.
+8. All protocols are eligible for inclusion only if formally reviewed in-depth
+   by at least one member's point-of-contact different from the author.
 
 ### 2.3. Introducing new protocols
 

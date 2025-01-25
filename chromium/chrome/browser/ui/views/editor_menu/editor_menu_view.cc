@@ -87,18 +87,23 @@ EditorMenuView::EditorMenuView(EditorMenuMode editor_menu_mode,
       delegate_(delegate) {
   CHECK(delegate_);
   InitLayout(preset_text_queries);
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
+  GetViewAccessibility().SetName(editor_menu_mode_ == EditorMenuMode::kWrite
+                                     ? GetEditorMenuWriteCardTitle()
+                                     : GetEditorMenuRewriteCardTitle());
 }
 
 EditorMenuView::~EditorMenuView() = default;
 
 // static
-views::UniqueWidgetPtr EditorMenuView::CreateWidget(
+std::unique_ptr<views::Widget> EditorMenuView::CreateWidget(
     EditorMenuMode editor_menu_mode,
     const PresetTextQueries& preset_text_queries,
     const gfx::Rect& anchor_view_bounds,
     EditorMenuViewDelegate* delegate) {
   views::Widget::InitParams params(
-      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_POPUP);
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.activatable = views::Widget::InitParams::Activatable::kYes;
@@ -107,8 +112,7 @@ views::UniqueWidgetPtr EditorMenuView::CreateWidget(
   params.z_order = ui::ZOrderLevel::kFloatingUIElement;
   params.name = kWidgetName;
 
-  views::UniqueWidgetPtr widget =
-      std::make_unique<views::Widget>(std::move(params));
+  auto widget = std::make_unique<views::Widget>(std::move(params));
   EditorMenuView* editor_menu_view =
       widget->SetContentsView(std::make_unique<EditorMenuView>(
           editor_menu_mode, preset_text_queries, anchor_view_bounds, delegate));
@@ -127,14 +131,13 @@ void EditorMenuView::RequestFocus() {
   settings_button_->RequestFocus();
 }
 
-void EditorMenuView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kDialog;
-  node_data->SetName(editor_menu_mode_ == EditorMenuMode::kWrite
-                         ? GetEditorMenuWriteCardTitle()
-                         : GetEditorMenuRewriteCardTitle());
-}
+gfx::Size EditorMenuView::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
+  if (!available_size.width().is_bounded()) {
+    return PreTargetHandlerView::CalculatePreferredSize(available_size);
+  }
 
-int EditorMenuView::GetHeightForWidth(int width) const {
+  int width = available_size.width().value();
   // When the width of editor menu view is updated, we will adjust the number of
   // rows chips (see: UpdateChipsContainer). Thus, here we need to pre-compute
   // the expected number of rows here and so we can estimate the height rather
@@ -168,8 +171,9 @@ int EditorMenuView::GetHeightForWidth(int width) const {
   const int textfield_height_with_padding =
       textfield_->height() + kTextfieldContainerInsets.height();
 
-  return title_height_with_padding + chips_height_with_padding +
-         textfield_height_with_padding;
+  return gfx::Size(width, title_height_with_padding +
+                              chips_height_with_padding +
+                              textfield_height_with_padding);
 }
 
 bool EditorMenuView::AcceleratorPressed(const ui::Accelerator& accelerator) {

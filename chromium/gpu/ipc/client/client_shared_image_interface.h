@@ -38,7 +38,7 @@ class GPU_EXPORT ClientSharedImageInterface : public SharedImageInterface {
 #if BUILDFLAG(IS_FUCHSIA)
   void RegisterSysmemBufferCollection(zx::eventpair service_handle,
                                       zx::channel sysmem_token,
-                                      gfx::BufferFormat format,
+                                      const viz::SharedImageFormat& format,
                                       gfx::BufferUsage usage,
                                       bool register_with_image_pipe) override;
 #endif  // BUILDFLAG(IS_FUCHSIA)
@@ -73,9 +73,9 @@ class GPU_EXPORT ClientSharedImageInterface : public SharedImageInterface {
   // get the shared memory mapping.
   SharedImageInterface::SharedImageMapping CreateSharedImage(
       const SharedImageInfo& si_info) override;
-#if BUILDFLAG(IS_WIN)
   void CopyToGpuMemoryBuffer(const SyncToken& sync_token,
                              const Mailbox& mailbox) override;
+#if BUILDFLAG(IS_WIN)
   void CopyToGpuMemoryBufferAsync(
       const SyncToken& sync_token,
       const Mailbox& mailbox,

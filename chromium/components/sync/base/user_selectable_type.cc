@@ -9,7 +9,7 @@
 
 #include "base/notreached.h"
 #include "build/chromeos_buildflags.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 
 namespace syncer {
 
@@ -17,8 +17,8 @@ namespace {
 
 struct UserSelectableTypeInfo {
   const char* const type_name;
-  const ModelType canonical_model_type;
-  const ModelTypeSet model_type_group;
+  const DataType canonical_data_type;
+  const DataTypeSet data_type_group;
 };
 
 constexpr char kBookmarksTypeName[] = "bookmarks";
@@ -41,8 +41,8 @@ constexpr char kProductComparisonTypeName[] = "productComparison";
 constexpr char kCookiesTypeName[] = "cookies";
 
 UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
-  static_assert(53 + 1 /* notes */ == syncer::GetNumModelTypes(),
-                "Almost always when adding a new ModelType, you must tie it to "
+  static_assert(53 + 1 /* notes */ == syncer::GetNumDataTypes(),
+                "Almost always when adding a new DataType, you must tie it to "
                 "a UserSelectableType below (new or existing) so the user can "
                 "disable syncing of that data. Today you must also update the "
                 "UI code yourself; crbug.com/1067282 and related bugs will "
@@ -86,17 +86,27 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       return {kReadingListTypeName, READING_LIST, {READING_LIST}};
     case UserSelectableType::kTabs:
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-      return {kTabsTypeName, SESSIONS, {SESSIONS, SAVED_TAB_GROUP}};
+      return {kTabsTypeName,
+              SESSIONS,
+              {SESSIONS, SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA,
+               COLLABORATION_GROUP}};
 #else
       return {kTabsTypeName, SESSIONS, {SESSIONS}};
 #endif
     case UserSelectableType::kSavedTabGroups:
-      // Note: Saved tab groups is presented as a separate type only on desktop.
+      // Note: Tab groups is presented as a separate type only on desktop.
       // On mobile platforms, it is bundled together with open tabs.
-      return {kSavedTabGroupsTypeName, SAVED_TAB_GROUP, {SAVED_TAB_GROUP}};
+      // TODO(crbug.com/361625227): In post-UNO world, it will be bundled
+      // together with open tabs same as mobile.
+      return {kSavedTabGroupsTypeName,
+              SAVED_TAB_GROUP,
+              {SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA, COLLABORATION_GROUP}};
     case UserSelectableType::kSharedTabGroupData:
-      // Note: COLLABORATION_GROUP might be re-used for other features. If this
-      // happens, it should probably be in AlwaysPreferredUserTypes().
+      // Note: COLLABORATION_GROUP might be re-used for other
+      // features. If this happens, it should probably be in
+      // AlwaysPreferredUserTypes().
+      // TODO(crbug.com/361625648): Remove kSharedTabGroupData as it's not
+      // needed any more.
       return {kSharedTabGroupDataTypeName,
               SHARED_TAB_GROUP_DATA,
               {SHARED_TAB_GROUP_DATA, COLLABORATION_GROUP}};
@@ -211,12 +221,12 @@ std::string UserSelectableTypeSetToString(UserSelectableTypeSet types) {
   return result;
 }
 
-ModelTypeSet UserSelectableTypeToAllModelTypes(UserSelectableType type) {
-  return GetUserSelectableTypeInfo(type).model_type_group;
+DataTypeSet UserSelectableTypeToAllDataTypes(UserSelectableType type) {
+  return GetUserSelectableTypeInfo(type).data_type_group;
 }
 
-ModelType UserSelectableTypeToCanonicalModelType(UserSelectableType type) {
-  return GetUserSelectableTypeInfo(type).canonical_model_type;
+DataType UserSelectableTypeToCanonicalDataType(UserSelectableType type) {
+  return GetUserSelectableTypeInfo(type).canonical_data_type;
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -265,12 +275,12 @@ std::optional<UserSelectableOsType> GetUserSelectableOsTypeFromString(
   return std::nullopt;
 }
 
-ModelTypeSet UserSelectableOsTypeToAllModelTypes(UserSelectableOsType type) {
-  return GetUserSelectableOsTypeInfo(type).model_type_group;
+DataTypeSet UserSelectableOsTypeToAllDataTypes(UserSelectableOsType type) {
+  return GetUserSelectableOsTypeInfo(type).data_type_group;
 }
 
-ModelType UserSelectableOsTypeToCanonicalModelType(UserSelectableOsType type) {
-  return GetUserSelectableOsTypeInfo(type).canonical_model_type;
+DataType UserSelectableOsTypeToCanonicalDataType(UserSelectableOsType type) {
+  return GetUserSelectableOsTypeInfo(type).canonical_data_type;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 

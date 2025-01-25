@@ -37,6 +37,12 @@ enum MenuScenarioHistogram {
   kMenuScenarioHistogramAutofillManualFallbackPasswordEntry = 24,
   kMenuScenarioHistogramAutofillManualFallbackPaymentEntry = 25,
   kMenuScenarioHistogramAutofillManualFallbackAddressEntry = 26,
+  kMenuScenarioHistogramTabGroupsPanelEntry = 27,
+  kMenuScenarioHistogramSortDriveItemsEntry = 28,
+  kMenuScenarioHistogramSelectDriveIdentityEntry = 29,
+  kMenuScenarioHistogramTabGroupIndicatorEntry = 30,
+  kMenuScenarioHistogramAutofillManualFallbackPlusAddressEntry = 31,
+  kMenuScenarioHistogramTabGroupIndicatorNTPEntry = 32,
 
   kMenuScenarioHistogramNoteEntry, // Vivaldi
   kMenuScenarioHistogramNoteFolder, // Vivaldi

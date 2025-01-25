@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/audio/android/aaudio_stream_wrapper.h"
 
 #include "base/logging.h"
@@ -259,7 +264,8 @@ bool AAudioStreamWrapper::Open() {
   AAudioStreamBuilder_setErrorCallback(builder, OnStreamErrorCallback,
                                        destruction_helper_.get());
 
-  result = AAudioStreamBuilder_openStream(builder, &aaudio_stream_);
+  result = AAudioStreamBuilder_openStream(builder,
+                                          &aaudio_stream_.AsEphemeralRawAddr());
 
   AAudioStreamBuilder_delete(builder);
 

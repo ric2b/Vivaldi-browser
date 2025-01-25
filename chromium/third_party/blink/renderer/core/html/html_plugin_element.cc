@@ -116,7 +116,7 @@ void PluginParameters::MapDataParamToSrc() {
     return;
   }
 
-  auto* data = base::ranges::find_if(
+  auto data = base::ranges::find_if(
       names_, [](auto name) { return EqualIgnoringASCIICase(name, "data"); });
 
   if (data != names_.end()) {
@@ -625,7 +625,8 @@ void HTMLPlugInElement::DisconnectContentFrame() {
 }
 
 bool HTMLPlugInElement::IsFocusableStyle(UpdateBehavior update_behavior) const {
-  if (HTMLFrameOwnerElement::SupportsFocus(update_behavior) &&
+  if (HTMLFrameOwnerElement::SupportsFocus(update_behavior) !=
+          FocusableState::kNotFocusable &&
       HTMLFrameOwnerElement::IsFocusableStyle(update_behavior)) {
     return true;
   }

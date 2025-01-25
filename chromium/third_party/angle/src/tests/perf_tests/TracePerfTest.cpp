@@ -20,6 +20,10 @@
 #include "util/png_utils.h"
 #include "util/test_utils.h"
 
+#if defined(ANGLE_PLATFORM_ANDROID)
+#    include "util/android/AndroidWindow.h"
+#endif
+
 #include <rapidjson/document.h>
 #include <rapidjson/istreamwrapper.h>
 
@@ -1177,7 +1181,7 @@ TracePerfTest::TracePerfTest(std::unique_ptr<const TracePerfParams> params)
 
     if (traceNameIs("hill_climb_racing") || traceNameIs("dead_trigger_2") ||
         traceNameIs("disney_mirrorverse") || traceNameIs("cut_the_rope") ||
-        traceNameIs("geometry_dash"))
+        traceNameIs("geometry_dash") || traceNameIs("critical_ops"))
     {
         if (IsAndroid() && (IsPixel4() || IsPixel4XL()) && !mParams->isANGLE())
         {
@@ -1547,6 +1551,11 @@ TracePerfTest::TracePerfTest(std::unique_ptr<const TracePerfParams> params)
             skipTest("http://anglebug.com/42266193 Renders incorrectly on Nvidia Windows");
         }
 
+        if (isNVIDIALinuxANGLE)
+        {
+            skipTest("https://anglebug.com/362728695 Renders incorrectly on Linux/NVIDIA");
+        }
+
         addExtensionPrerequisite("GL_EXT_texture_buffer");
         addExtensionPrerequisite("GL_EXT_texture_cube_map_array");
     }
@@ -1795,13 +1804,44 @@ TracePerfTest::TracePerfTest(std::unique_ptr<const TracePerfParams> params)
         }
     }
 
+    if (traceNameIs("grand_mountain_adventure"))
+    {
+        addIntegerPrerequisite(GL_MAX_TEXTURE_SIZE, 11016);
+    }
+
+    if (traceNameIs("passmark_simple"))
+    {
+        if (isIntelLinuxNative)
+        {
+            skipTest("https://anglebug.com/42267118 fails on newer OS/driver");
+        }
+        addExtensionPrerequisite("GL_OES_framebuffer_object");
+    }
+
+    if (traceNameIs("passmark_complex"))
+    {
+        if (isIntelLinuxNative)
+        {
+            skipTest("b/362801312 eglCreateContext fails on Mesa 23.2.1");
+        }
+    }
+
+    if (traceNameIs("critical_ops"))
+    {
+        if (isNVIDIALinuxANGLE || isNVIDIAWinANGLE)
+        {
+            skipTest("https://anglebug.com/365524876 Renders incorrectly on Nvidia");
+        }
+    }
+
     if (IsGalaxyS22())
     {
         if (traceNameIs("cod_mobile") || traceNameIs("dota_underlords") ||
             traceNameIs("marvel_snap") || traceNameIs("nier_reincarnation") ||
             traceNameIs("pokemon_unite") || traceNameIs("slingshot_test1") ||
             traceNameIs("slingshot_test2") || traceNameIs("supertuxkart") ||
-            traceNameIs("the_witcher_monster_slayer") || traceNameIs("warcraft_rumble"))
+            traceNameIs("the_witcher_monster_slayer") || traceNameIs("warcraft_rumble") ||
+            traceNameIs("critical_ops"))
         {
             skipTest("https://issuetracker.google.com/267953710 Trace needs triage on Galaxy S22");
         }
@@ -1873,9 +1913,14 @@ void TracePerfTest::initializeBenchmark()
         return;
     }
 
+    std::string baseDir = "";
+#if defined(ANGLE_TRACE_EXTERNAL_BINARIES)
+    baseDir += AndroidWindow::GetApplicationDirectory() + "/angle_traces/";
+#endif
+
     if (gTraceInterpreter)
     {
-        mTraceReplay.reset(new TraceLibrary("angle_trace_interpreter", traceInfo));
+        mTraceReplay.reset(new TraceLibrary("angle_trace_interpreter", traceInfo, baseDir));
         if (strcmp(gTraceInterpreter, "gz") == 0)
         {
             std::string traceGzPath = FindTraceGzPath(traceInfo.name);
@@ -1892,7 +1937,7 @@ void TracePerfTest::initializeBenchmark()
         std::stringstream traceNameStr;
         traceNameStr << "angle_restricted_traces_" << traceInfo.name;
         std::string traceName = traceNameStr.str();
-        mTraceReplay.reset(new TraceLibrary(traceNameStr.str(), traceInfo));
+        mTraceReplay.reset(new TraceLibrary(traceNameStr.str(), traceInfo, baseDir));
     }
 
     LoadTraceEGL(TraceLoadProc);
@@ -2644,6 +2689,8 @@ void TracePerfTest::saveScreenshot(const std::string &screenshotName)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    glFinish();
+
     glReadPixels(0, 0, mTestParams.windowWidth, mTestParams.windowHeight, GL_RGBA, GL_UNSIGNED_BYTE,
                  pixelData.data());
 
@@ -2689,7 +2736,7 @@ void RegisterTraceTests()
     char rootTracePath[kMaxPath] = {};
     if (!FindRootTraceTestDataPath(rootTracePath, kMaxPath))
     {
-        ERR() << "Unable to find trace folder.";
+        ERR() << "Unable to find trace folder " << rootTracePath;
         return;
     }
 

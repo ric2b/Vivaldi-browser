@@ -97,10 +97,9 @@ NET_EXPORT BASE_DECLARE_FEATURE(kUseDnsHttpsSvcbAlpn);
 // transactions complete.
 NET_EXPORT BASE_DECLARE_FEATURE(kUseHostResolverCache);
 
-// Enables the DNS ServiceEndpointRequest API, which provides intermediate
-// service endpoints in the middle of a DNS transaction so that clients of this
-// API can attempt connections as soon as candidate endpoints are available.
-NET_EXPORT BASE_DECLARE_FEATURE(kUseServiceEndpointRequest);
+// Enables the Happy Eyeballs v3, where we use intermediate DNS resolution
+// results to make connection attempts as soon as possible.
+NET_EXPORT BASE_DECLARE_FEATURE(kHappyEyeballsV3);
 
 // If the `kUseAlternativePortForGloballyReachableCheck` flag is enabled, the
 // globally reachable check will use the port number specified by
@@ -159,6 +158,35 @@ NET_EXPORT BASE_DECLARE_FEATURE(kSplitCacheByIncludeCredentials);
 // available.
 NET_EXPORT BASE_DECLARE_FEATURE(kSplitCacheByNetworkIsolationKey);
 
+// The following flags are used as part of an experiment to modify the HTTP
+// cache key scheme to better protect against leaks via navigations.
+// These flags are mutually exclusive, and for each flag the HTTP cache will be
+// cleared when the flag first transitions from being disabled to being enabled.
+//
+// This flag incorporates a boolean into the cache key that is true for
+// renderer-initiated main frame navigations when the request initiator site is
+// cross-site to the URL being navigated to.
+NET_EXPORT BASE_DECLARE_FEATURE(
+    kSplitCacheByCrossSiteMainFrameNavigationBoolean);
+// This flag incorporates the request initiator site into the cache key for
+// renderer-initiated main frame navigations when the request initiator site is
+// cross-site to the URL being navigated to. If the request initiator site is
+// opaque, then no caching is performed of the navigated-to document.
+NET_EXPORT BASE_DECLARE_FEATURE(kSplitCacheByMainFrameNavigationInitiator);
+// This flag incorporates the request initiator site into the cache key for all
+// renderer-initiated navigations (including subframe navigations) when the
+// request initiator site is cross-site to the URL being navigated to. If the
+// request initiator is opaque, then no caching is performed of the navigated-to
+// document. When this scheme is used, the `is-subframe-document-resource`
+// boolean is not incorporated into the cache key, since incorporating the
+// initiator site for subframe navigations should be sufficient for mitigating
+// the attacks that the `is-subframe-document-resource` mitigates.
+NET_EXPORT BASE_DECLARE_FEATURE(kSplitCacheByNavigationInitiator);
+// This flag doesn't result in changes to the HTTP cache scheme but provides an
+// experiment control group that mitigates the differences inherent in changing
+// cache key schemes.
+NET_EXPORT BASE_DECLARE_FEATURE(kHttpCacheKeyingExperimentControlGroup2024);
+
 // Splits the generated code cache by the request's NetworkIsolationKey if one
 // is available. Note that this feature is also gated behind
 // `net::HttpCache::IsSplitCacheEnabled()`.
@@ -175,8 +203,14 @@ NET_EXPORT BASE_DECLARE_FEATURE(kPartitionConnectionsByNetworkIsolationKey);
 // servers.
 NET_EXPORT BASE_DECLARE_FEATURE(kTLS13KeyUpdate);
 
-// Enables Kyber-based post-quantum key-agreements in TLS 1.3 connections.
+// Enables post-quantum key-agreements in TLS 1.3 connections. kUseMLKEM
+// controls whether ML-KEM or Kyber is used.
 NET_EXPORT BASE_DECLARE_FEATURE(kPostQuantumKyber);
+
+// Causes TLS 1.3 connections to use the ML-KEM standard instead of the Kyber
+// draft standard for post-quantum key-agreement. Post-quantum key-agreement
+// must be enabled (e.g. via kPostQuantumKyber) for this to have an effect.
+NET_EXPORT BASE_DECLARE_FEATURE(kUseMLKEM);
 
 // Changes the timeout after which unused sockets idle sockets are cleaned up.
 NET_EXPORT BASE_DECLARE_FEATURE(kNetUnusedIdleSocketTimeout);
@@ -301,8 +335,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kAlpsClientHintParsing);
 // Whether to kill the session on Error::kAcceptChMalformed.
 NET_EXPORT BASE_DECLARE_FEATURE(kShouldKillSessionOnAcceptChMalformed);
 
-NET_EXPORT BASE_DECLARE_FEATURE(kCaseInsensitiveCookiePrefix);
-
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableWebsocketsOverHttp3);
 
 #if BUILDFLAG(IS_WIN)
@@ -375,6 +407,11 @@ NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
 NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kIpPrivacyProxyListMinFetchInterval;
 
+// Fetches of the IP Protection proxy list will have a random time in the range
+// of plus or minus this delta added to their interval.
+NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kIpPrivacyProxyListFetchIntervalFuzz;
+
 // Overrides the ProxyA hostname normally set by the proxylist fetch.
 NET_EXPORT extern const base::FeatureParam<std::string>
     kIpPrivacyProxyAHostnameOverride;
@@ -438,6 +475,11 @@ NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyFallbackToDirect;
 // value, 0, is not sent.
 NET_EXPORT extern const base::FeatureParam<int> kIpPrivacyDebugExperimentArm;
 
+// Caches tokens by geo allowing for tokens to be preserved on network/geo
+// changes. The default value of this feature is false which maintains existing
+// behavior by default.
+NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyCacheTokensByGeo;
+
 // Whether QuicParams::migrate_sessions_on_network_change_v2 defaults to true or
 // false. This is needed as a workaround to set this value to true on Android
 // but not on WebView (until crbug.com/1430082 has been fixed).
@@ -467,11 +509,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kTimeLimitedInsecureCookies);
 
 // Enables enabling third-party cookie blocking from the command line.
 NET_EXPORT BASE_DECLARE_FEATURE(kForceThirdPartyCookieBlocking);
-
-// Enables an exception for third-party cookie blocking when the request is
-// same-site with the top-level document, opted into CORS, but embedded in a
-// cross-site context.
-NET_EXPORT BASE_DECLARE_FEATURE(kThirdPartyCookieTopLevelSiteCorsException);
 
 // Enables Early Hints on HTTP/1.1.
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableEarlyHintsOnHttp11);
@@ -532,9 +569,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kStoreConnectionSubtype);
 // partitioned, allowing greater connection re-use.
 NET_EXPORT BASE_DECLARE_FEATURE(kPartitionProxyChains);
 
-// Enables the Storage Access Headers semantics.
-NET_EXPORT BASE_DECLARE_FEATURE(kStorageAccessHeaders);
-
 // Enables more checks when creating a SpdySession for proxy. These checks are
 // already applied to non-proxy SpdySession creations.
 // TODO(crbug.com/343519247): Remove this once we are sure that these checks are
@@ -561,6 +595,18 @@ NET_EXPORT BASE_DECLARE_FEATURE(kReportingApiEnableEnterpriseCookieIssues);
 
 // Optimize parsing data: URLs.
 NET_EXPORT BASE_DECLARE_FEATURE(kOptimizeParsingDataUrls);
+
+// Enables support for codepoints defined in draft-ietf-tls-tls13-pkcs1, which
+// enable RSA keys to be used with client certificates even if they do not
+// support RSA-PSS.
+NET_EXPORT BASE_DECLARE_FEATURE(kLegacyPKCS1ForTLS13);
+
+// Keep whitespace for non-base64 encoded data: URLs.
+NET_EXPORT BASE_DECLARE_FEATURE(kKeepWhitespaceForDataUrls);
+
+// If enabled, unrecognized keys in a No-Vary-Search header will be ignored.
+// Otherwise, unrecognized keys are treated as if the header was invalid.
+NET_EXPORT BASE_DECLARE_FEATURE(kNoVarySearchIgnoreUnrecognizedKeys);
 
 }  // namespace net::features
 

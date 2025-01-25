@@ -551,7 +551,7 @@ drm_public int amdgpu_find_bo_by_cpu_mapping(amdgpu_device_handle dev,
 		if (!bo || !bo->cpu_ptr || size > bo->alloc_size)
 			continue;
 		if (cpu >= bo->cpu_ptr &&
-		    cpu < (void*)((uintptr_t)bo->cpu_ptr + bo->alloc_size))
+		    cpu < (void*)((uintptr_t)bo->cpu_ptr + (size_t)bo->alloc_size))
 			break;
 	}
 

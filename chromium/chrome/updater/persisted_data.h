@@ -32,6 +32,7 @@ class Version;
 
 namespace update_client {
 class ActivityDataService;
+struct CategorizedError;
 }  // namespace update_client
 
 namespace updater {
@@ -67,7 +68,7 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData>,
                                const base::FilePath& ecp);
 
   // These functions access the brand code for the specified id.
-  std::string GetBrandCode(const std::string& id) const;
+  std::string GetBrandCode(const std::string& id);
   void SetBrandCode(const std::string& id, const std::string& bc);
 
   // These functions access the brand path for the specified id.
@@ -171,6 +172,8 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData>,
                          callback) const override;
   base::Time GetThrottleUpdatesUntil() const override;
   void SetThrottleUpdatesUntil(const base::Time& time) override;
+  void SetLastUpdateCheckError(
+      const update_client::CategorizedError& error) override;
 
  private:
   friend class base::RefCountedThreadSafe<PersistedData>;

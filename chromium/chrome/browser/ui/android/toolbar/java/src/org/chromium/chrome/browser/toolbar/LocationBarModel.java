@@ -30,6 +30,8 @@ import org.chromium.chrome.browser.omnibox.SearchEngineUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.paint_preview.TabbedPaintPreview;
+import org.chromium.chrome.browser.pdf.PdfUtils;
+import org.chromium.chrome.browser.pdf.PdfUtils.PdfPageType;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
@@ -50,8 +52,11 @@ import org.chromium.url.GURL;
 
 import java.util.Objects;
 
-import android.graphics.Color;
+// Vivaldi
 import org.chromium.build.BuildConfig;
+
+import org.vivaldi.browser.adblock.AdblockManager;
+import org.vivaldi.browser.adblock.AdblockManager.BlockerModeSetting;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 
 /** Provides a way of accessing toolbar data and state. */
@@ -159,6 +164,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     private long mNativeLocationBarModelAndroid;
     private ObserverList<LocationBarDataProvider.Observer> mLocationBarDataObservers =
             new ObserverList<>();
+    private ObserverList<ToolbarDataProvider.Observer> mToolbarDataObservers = new ObserverList<>();
     protected GURL mVisibleGurl = GURL.emptyGURL();
     protected String mFormattedFullUrl;
     protected String mUrlForDisplay;
@@ -290,6 +296,16 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     }
 
     @Override
+    public void addToolbarDataProviderObserver(ToolbarDataProvider.Observer observer) {
+        mToolbarDataObservers.addObserver(observer);
+    }
+
+    @Override
+    public void removeToolbarDataProviderObserver(ToolbarDataProvider.Observer observer) {
+        mToolbarDataObservers.removeObserver(observer);
+    }
+
+    @Override
     // TODO(crbug.com/40218072): migrate to GURL.
     @Deprecated
     public String getCurrentUrl() {
@@ -344,7 +360,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     }
 
     void notifyNtpStartedLoading() {
-        for (Observer observer : mLocationBarDataObservers) {
+        for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
             observer.onNtpStartedLoading();
         }
     }
@@ -513,6 +529,10 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
             observer.onIncognitoStateChanged();
         }
+
+        for (ToolbarDataProvider.Observer observer : mToolbarDataObservers) {
+            observer.onIncognitoStateChanged();
+        }
     }
 
     @Override
@@ -566,21 +586,24 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         return hasTab() && TabbedPaintPreview.get(mTab).isShowing();
     }
 
+    private int getPdfPageType() {
+        if (!hasTab()) {
+            return 0;
+        }
+        return PdfUtils.getPdfPageType(mTab.getNativePage());
+    }
+
     @Override
     public int getSecurityLevel() {
         return getSecurityLevel(getTab(), isOfflinePage());
     }
 
     @Override
-    public int getPageClassification(boolean isFocusedFromFakebox, boolean isPrefetch) {
+    public int getPageClassification(boolean isPrefetch) {
         if (mNativeLocationBarModelAndroid == 0) return PageClassification.INVALID_SPEC_VALUE;
 
         return LocationBarModelJni.get()
-                .getPageClassification(
-                        mNativeLocationBarModelAndroid,
-                        LocationBarModel.this,
-                        isFocusedFromFakebox,
-                        isPrefetch);
+                .getPageClassification(mNativeLocationBarModelAndroid, isPrefetch);
     }
 
     @Override
@@ -597,7 +620,8 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                 getSecurityLevel(getTab(), isOfflinePage),
                 !isTablet,
                 isOfflinePage,
-                isPaintPreview());
+                isPaintPreview(),
+                getPdfPageType());
     }
 
     @Override
@@ -637,7 +661,8 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
             int securityLevel,
             boolean isSmallDevice,
             boolean isOfflinePage,
-            boolean isPaintPreview) {
+            boolean isPaintPreview,
+            int pdfPageType) {
         // Paint Preview appears on top of WebContents and shows a visual representation of the page
         // that has been previously stored locally.
         if (isPaintPreview) return R.drawable.omnibox_info;
@@ -646,6 +671,16 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         // on a slow connection. In this case, the previews UI takes precedence.
         if (isOfflinePage) {
             return R.drawable.ic_offline_pin_24dp;
+        }
+
+        // Pdf page is a native page used to render downloaded pdf files.
+        // Show warning icon for pdf from insecure source (e.g. mixed content download).
+        if (pdfPageType == PdfPageType.TRANSIENT_INSECURE) {
+            return R.drawable.omnibox_not_secure_warning;
+        }
+        // Show info icon for other pdf pages.
+        if (pdfPageType == PdfPageType.TRANSIENT_SECURE || pdfPageType == PdfPageType.LOCAL) {
+            return R.drawable.omnibox_info;
         }
 
         // Return early if native initialization hasn't been done yet.
@@ -665,7 +700,8 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                 securityLevel,
                 isSmallDevice,
                 skipIconForNeutralState,
-                mOmniboxUpdatedConnectionSecurityIndicatorsEnabled);
+                mOmniboxUpdatedConnectionSecurityIndicatorsEnabled, // Vivaldi
+                getTrackerBlockerIcon()); // Vivaldi
     }
 
     @Override
@@ -824,16 +860,40 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         GURL getUrlOfVisibleNavigationEntry(
                 long nativeLocationBarModelAndroid, LocationBarModel caller);
 
-        int getPageClassification(
-                long nativeLocationBarModelAndroid,
-                LocationBarModel caller,
-                boolean isFocusedFromFakebox,
-                boolean isPrefetch);
+        int getPageClassification(long nativeLocationBarModelAndroid, boolean isPrefetch);
     }
 
     public void onPageLoadStopped() {
         for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
             observer.onPageLoadStopped();
+        }
+    }
+
+    // Vivaldi - Returns the appropriate Shield icon to replace the page info icon in the url bar
+    public int getTrackerBlockerIcon() {
+        if (!AdblockManager.getInstance().isLoaded())
+            return R.drawable.tracker_shield_url_no_blocking;
+
+        boolean isBlockingTrackers = !AdblockManager.getInstance().isExemptOfFiltering(
+                AdblockManager.GroupRule.TRACKING_RULES, mFormattedFullUrl);
+        boolean isBlockingAds = !AdblockManager.getInstance().isExemptOfFiltering(
+                AdblockManager.GroupRule.ADBLOCKING_RULES, mFormattedFullUrl);
+
+        int blockerMode = BlockerModeSetting.NO_BLOCKING;
+        if (isBlockingTrackers) {
+            if (isBlockingAds)
+                blockerMode = BlockerModeSetting.BLOCK_TRACKERS_AND_ADS;
+            else
+                blockerMode = BlockerModeSetting.BLOCK_TRACKERS;
+        }
+
+        switch (blockerMode) {
+            case BlockerModeSetting.BLOCK_TRACKERS:
+                return R.drawable.shield_block_trackers_24dp;
+            case BlockerModeSetting.BLOCK_TRACKERS_AND_ADS:
+                return R.drawable.shield_block_ads_24dp;
+            default:
+                return R.drawable.shield_no_blocking_24dp;
         }
     }
 }

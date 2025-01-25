@@ -7,7 +7,7 @@ import ios_chrome_browser_ui_tab_switcher_tab_strip_ui_swift_constants
 
 /// Layout used for the TabStrip.
 class TabStripLayout: UICollectionViewFlowLayout {
-  /// Wether the size of the items in the flow layout needs to be updated.
+  /// Whether the size of the items in the flow layout needs to be updated.
   public var needsSizeUpdate: Bool = true
 
   /// Static decoration views that border the collection view.
@@ -17,7 +17,7 @@ class TabStripLayout: UICollectionViewFlowLayout {
   /// The tab strip new tab button.
   public var newTabButton: UIView?
 
-  /// Wether the selected cell is animated, used only on iOS 16.
+  /// Whether the selected cell is animated, used only on iOS 16.
   /// On iOS 16, the scroll animation after opening a new tab is delayed, the
   /// selected cell should remain in an animated state until the end of the
   /// (scroll) animation.

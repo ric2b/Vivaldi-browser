@@ -27,6 +27,7 @@
 
 #include "src/tint/lang/wgsl/inspector/inspector.h"
 
+#include <algorithm>
 #include <unordered_set>
 #include <utility>
 
@@ -95,7 +96,7 @@ void AppendResourceBindings(std::vector<ResourceBinding>* dest,
 std::tuple<ComponentType, CompositionType> CalculateComponentAndComposition(
     const core::type::Type* type) {
     // entry point in/out variables must of numeric scalar or vector types.
-    TINT_ASSERT(type->is_numeric_scalar_or_vector());
+    TINT_ASSERT(type->IsNumericScalarOrVector());
 
     ComponentType componentType = Switch(
         type->DeepestElement(),  //
@@ -207,6 +208,7 @@ EntryPoint Inspector::GetEntryPoint(const tint::ast::Function* func) {
             core::BuiltinValue::kSampleMask, sem->ReturnType(), func->return_type_attributes);
         entry_point.frag_depth_used = ContainsBuiltin(
             core::BuiltinValue::kFragDepth, sem->ReturnType(), func->return_type_attributes);
+        entry_point.clip_distances_size = GetClipDistancesBuiltinSize(sem->ReturnType());
     }
 
     for (auto* var : sem->TransitivelyReferencedGlobals()) {
@@ -221,17 +223,17 @@ EntryPoint Inspector::GetEntryPoint(const tint::ast::Function* func) {
             override.id = override_id.value();
             auto* type = var->Type();
             TINT_ASSERT(type->Is<core::type::Scalar>());
-            if (type->is_bool_scalar_or_vector()) {
+            if (type->IsBoolScalarOrVector()) {
                 override.type = Override::Type::kBool;
-            } else if (type->is_float_scalar()) {
+            } else if (type->IsFloatScalar()) {
                 if (type->Is<core::type::F16>()) {
                     override.type = Override::Type::kFloat16;
                 } else {
                     override.type = Override::Type::kFloat32;
                 }
-            } else if (type->is_signed_integer_scalar()) {
+            } else if (type->IsSignedIntegerScalar()) {
                 override.type = Override::Type::kInt32;
-            } else if (type->is_unsigned_integer_scalar()) {
+            } else if (type->IsUnsignedIntegerScalar()) {
                 override.type = Override::Type::kUint32;
             } else {
                 TINT_UNREACHABLE();
@@ -243,6 +245,23 @@ EntryPoint Inspector::GetEntryPoint(const tint::ast::Function* func) {
 
             entry_point.overrides.push_back(override);
         }
+    }
+
+    {
+        auto filter = [](const tint::sem::Call* call,
+                         tint::wgsl::BuiltinFn builtin_fn) -> std::optional<TextureUsageType> {
+            if (builtin_fn == wgsl::BuiltinFn::kTextureLoad) {
+                if (call->Arguments()[0]
+                        ->Type()
+                        ->IsAnyOf<core::type::DepthTexture,
+                                  core::type::DepthMultisampledTexture>()) {
+                    return TextureUsageType::kTextureLoad;
+                }
+            }
+            return {};
+        };
+        entry_point.has_texture_load_with_depth_texture =
+            !GetTextureUsagesForEntryPoint(*func, filter).empty();
     }
 
     return entry_point;
@@ -479,7 +498,7 @@ std::vector<ResourceBinding> Inspector::GetTextureResourceBindings(
         entry.variable_name = var->Declaration()->name->symbol.Name();
 
         auto* tex = var->Type()->UnwrapRef()->As<core::type::Texture>();
-        entry.dim = TypeTextureDimensionToResourceBindingTextureDimension(tex->dim());
+        entry.dim = TypeTextureDimensionToResourceBindingTextureDimension(tex->Dim());
 
         result.push_back(entry);
     }
@@ -532,13 +551,13 @@ std::vector<ResourceBinding> Inspector::GetInputAttachmentResourceBindings(
         entry.input_attachmnt_index = sem_var->Attributes().input_attachment_index.value();
 
         auto* input_attachment_type = var->Type()->UnwrapRef()->As<core::type::InputAttachment>();
-        auto* base_type = input_attachment_type->type();
+        auto* base_type = input_attachment_type->Type();
         entry.sampled_kind = BaseTypeToSampledKind(base_type);
 
         entry.variable_name = var->Declaration()->name->symbol.Name();
 
         entry.dim =
-            TypeTextureDimensionToResourceBindingTextureDimension(input_attachment_type->dim());
+            TypeTextureDimensionToResourceBindingTextureDimension(input_attachment_type->Dim());
 
         result.push_back(entry);
     }
@@ -690,6 +709,25 @@ bool Inspector::ContainsBuiltin(core::BuiltinValue builtin,
     return builtin_declaration->builtin == builtin;
 }
 
+std::optional<uint32_t> Inspector::GetClipDistancesBuiltinSize(const core::type::Type* type) const {
+    auto* unwrapped_type = type->UnwrapRef();
+
+    if (auto* struct_ty = unwrapped_type->As<sem::Struct>()) {
+        for (auto* member : struct_ty->Members()) {
+            if (ContainsBuiltin(core::BuiltinValue::kClipDistances, member->Type(),
+                                member->Declaration()->attributes)) {
+                auto* array_type = member->Type()->As<core::type::Array>();
+                if (DAWN_UNLIKELY(array_type == nullptr)) {
+                    TINT_ICE() << "clip_distances is not an array";
+                }
+                return array_type->ConstantCount();
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::vector<ResourceBinding> Inspector::GetStorageBufferResourceBindingsImpl(
     const std::string& entry_point,
     bool read_only) {
@@ -755,13 +793,13 @@ std::vector<ResourceBinding> Inspector::GetSampledTextureResourceBindingsImpl(
         entry.variable_name = var->Declaration()->name->symbol.Name();
 
         auto* texture_type = var->Type()->UnwrapRef()->As<core::type::Texture>();
-        entry.dim = TypeTextureDimensionToResourceBindingTextureDimension(texture_type->dim());
+        entry.dim = TypeTextureDimensionToResourceBindingTextureDimension(texture_type->Dim());
 
         const core::type::Type* base_type = nullptr;
         if (multisampled_only) {
-            base_type = texture_type->As<core::type::MultisampledTexture>()->type();
+            base_type = texture_type->As<core::type::MultisampledTexture>()->Type();
         } else {
-            base_type = texture_type->As<core::type::SampledTexture>()->type();
+            base_type = texture_type->As<core::type::SampledTexture>()->Type();
         }
         entry.sampled_kind = BaseTypeToSampledKind(base_type);
 
@@ -788,7 +826,7 @@ std::vector<ResourceBinding> Inspector::GetStorageTextureResourceBindingsImpl(
         auto* texture_type = var->Type()->UnwrapRef()->As<core::type::StorageTexture>();
 
         ResourceBinding entry;
-        switch (texture_type->access()) {
+        switch (texture_type->Access()) {
             case core::Access::kWrite:
                 entry.resource_type = ResourceBinding::ResourceType::kWriteOnlyStorageTexture;
                 break;
@@ -805,12 +843,12 @@ std::vector<ResourceBinding> Inspector::GetStorageTextureResourceBindingsImpl(
         entry.binding = binding_info.binding;
         entry.variable_name = var->Declaration()->name->symbol.Name();
 
-        entry.dim = TypeTextureDimensionToResourceBindingTextureDimension(texture_type->dim());
+        entry.dim = TypeTextureDimensionToResourceBindingTextureDimension(texture_type->Dim());
 
-        auto* base_type = texture_type->type();
+        auto* base_type = texture_type->Type();
         entry.sampled_kind = BaseTypeToSampledKind(base_type);
         entry.image_format =
-            TypeTexelFormatToResourceBindingTexelFormat(texture_type->texel_format());
+            TypeTexelFormatToResourceBindingTexelFormat(texture_type->TexelFormat());
 
         result.push_back(entry);
     }
@@ -1008,7 +1046,7 @@ std::vector<PixelLocalMemberType> Inspector::ComputePixelLocalMemberTypes(
 
 template <size_t N, typename F>
 void Inspector::GetOriginatingResources(std::array<const ast::Expression*, N> exprs, F&& callback) {
-    if (TINT_UNLIKELY(!program_.IsValid())) {
+    if (DAWN_UNLIKELY(!program_.IsValid())) {
         TINT_ICE() << "attempting to get originating resources in invalid program";
         return;
     }
@@ -1061,31 +1099,86 @@ void Inspector::GetOriginatingResources(std::array<const ast::Expression*, N> ex
 }
 
 std::vector<Inspector::LevelSampleInfo> Inspector::GetTextureQueries(const std::string& ep_name) {
-    std::vector<LevelSampleInfo> res;
-
-    std::unordered_set<BindingPoint> seen = {};
-
-    Hashmap<const sem::Function*, Hashmap<const ast::Parameter*, TextureQueryType, 4>, 8>
-        fn_to_data;
-
-    auto record_function_param = [&fn_to_data](const sem::Function* func,
-                                               const ast::Parameter* param, TextureQueryType type) {
-        fn_to_data.GetOrAddZero(func).Add(param, type);
-    };
-
-    auto save_if_needed = [&res, &seen](const sem::GlobalVariable* global, TextureQueryType type) {
-        auto binding = global->Attributes().binding_point.value();
-        if (seen.insert(binding).second) {
-            res.emplace_back(LevelSampleInfo{type, binding.group, binding.binding});
-        }
-    };
-
-    auto& sem = program_.Sem();
-
     const auto* ep = FindEntryPointByName(ep_name);
     if (!ep) {
         return {};
     }
+
+    auto filter = [&](const tint::sem::Call* call,
+                      tint::wgsl::BuiltinFn builtin_fn) -> std::optional<TextureUsageType> {
+        switch (builtin_fn) {
+            case wgsl::BuiltinFn::kTextureNumLevels: {
+                return TextureUsageType::kTextureNumLevels;
+            }
+            case wgsl::BuiltinFn::kTextureDimensions: {
+                if (call->Declaration()->args.Length() <= 1) {
+                    // When textureDimension only takes a texture as the input,
+                    // it doesn't require calls to textureNumLevels to clamp mip levels.
+                    return {};
+                }
+                return TextureUsageType::kTextureNumLevels;
+            }
+            case wgsl::BuiltinFn::kTextureLoad: {
+                if (call->Arguments()[0]
+                        ->Type()
+                        ->IsAnyOf<core::type::MultisampledTexture,
+                                  core::type::DepthMultisampledTexture>()) {
+                    // When textureLoad takes a multisampled texture as the input,
+                    // it doesn't require to query the mip level.
+                    return {};
+                }
+                return TextureUsageType::kTextureNumLevels;
+            }
+            case wgsl::BuiltinFn::kTextureNumSamples: {
+                return TextureUsageType::kTextureNumSamples;
+            }
+            default:
+                return {};
+        }
+    };
+
+    auto usages = GetTextureUsagesForEntryPoint(*ep, filter);
+
+    auto t = [](const TextureUsageInfo& info) -> LevelSampleInfo {
+        return {
+            info.type == TextureUsageType::kTextureNumSamples ? TextureQueryType::kTextureNumSamples
+                                                              : TextureQueryType::kTextureNumLevels,
+            info.group,
+            info.binding,
+        };
+    };
+
+    std::vector<LevelSampleInfo> res;
+    std::transform(usages.begin(), usages.end(), std::back_inserter(res), t);
+    return res;
+}
+
+std::vector<Inspector::TextureUsageInfo> Inspector::GetTextureUsagesForEntryPoint(
+    const tint::ast::Function& ep,
+    std::function<std::optional<TextureUsageType>(const tint::sem::Call* call,
+                                                  tint::wgsl::BuiltinFn builtin_fn)> filter) {
+    TINT_ASSERT(ep.IsEntryPoint());
+
+    std::vector<TextureUsageInfo> res;
+
+    std::unordered_set<BindingPoint> seen = {};
+
+    Hashmap<const sem::Function*, Hashmap<const ast::Parameter*, TextureUsageType, 4>, 8>
+        fn_to_data;
+
+    auto record_function_param = [&fn_to_data](const sem::Function* func,
+                                               const ast::Parameter* param, TextureUsageType type) {
+        fn_to_data.GetOrAddZero(func).Add(param, type);
+    };
+
+    auto save_if_needed = [&res, &seen](const sem::GlobalVariable* global, TextureUsageType type) {
+        auto binding = global->Attributes().binding_point.value();
+        if (seen.insert(binding).second) {
+            res.emplace_back(TextureUsageInfo{type, binding.group, binding.binding});
+        }
+    };
+
+    auto& sem = program_.Sem();
 
     // This works in dependency order such that we'll see the texture call first and can record
     // any function parameter information and then as we walk up the function chain we can look
@@ -1098,15 +1191,31 @@ std::vector<Inspector::LevelSampleInfo> Inspector::GetTextureQueries(const std::
 
         // This is an entrypoint, make sure it's the requested entry point
         if (fn->Declaration()->IsEntryPoint()) {
-            if (fn->Declaration() != ep) {
+            if (fn->Declaration() != &ep) {
                 continue;
             }
         } else {
             // Not an entry point, make sure it was called from the requested entry point
-            if (!fn->HasAncestorEntryPoint(ep->name->symbol)) {
+            if (!fn->HasAncestorEntryPoint(ep.name->symbol)) {
                 continue;
             }
         }
+
+        auto queryTextureBuiltin = [&](TextureUsageType type, const sem::Call* builtin_call,
+                                       const sem::Variable* texture_sem = nullptr) {
+            TINT_ASSERT(builtin_call);
+            if (!texture_sem) {
+                auto* texture_expr = builtin_call->Declaration()->args[0];
+                texture_sem = sem.GetVal(texture_expr)->RootIdentifier();
+            }
+            tint::Switch(
+                texture_sem,  //
+                [&](const sem::GlobalVariable* global) { save_if_needed(global, type); },
+                [&](const sem::Parameter* param) {
+                    record_function_param(fn, param->Declaration(), type);
+                },
+                TINT_ICE_ON_NO_MATCH);
+        };
 
         for (auto* call : fn->DirectCalls()) {
             // Builtin function call, record the texture information. If the used texture maps
@@ -1115,61 +1224,9 @@ std::vector<Inspector::LevelSampleInfo> Inspector::GetTextureQueries(const std::
             tint::Switch(
                 call->Target(),
                 [&](const sem::BuiltinFn* builtin) {
-                    auto queryTextureBuiltin = [&](TextureQueryType type,
-                                                   const sem::Call* builtin_call,
-                                                   const sem::Variable* texture_sem = nullptr) {
-                        TINT_ASSERT(builtin_call);
-                        if (!texture_sem) {
-                            auto* texture_expr = builtin_call->Declaration()->args[0];
-                            texture_sem = sem.GetVal(texture_expr)->RootIdentifier();
-                        }
-                        tint::Switch(
-                            texture_sem,  //
-                            [&](const sem::GlobalVariable* global) {
-                                save_if_needed(global, type);
-                            },
-                            [&](const sem::Parameter* param) {
-                                record_function_param(fn, param->Declaration(), type);
-                            },
-                            TINT_ICE_ON_NO_MATCH);
-                    };
-
-                    switch (builtin->Fn()) {
-                        case wgsl::BuiltinFn::kTextureNumLevels: {
-                            queryTextureBuiltin(TextureQueryType::kTextureNumLevels, call);
-                            break;
-                        }
-                        case wgsl::BuiltinFn::kTextureDimensions: {
-                            if (call->Declaration()->args.Length() <= 1) {
-                                // When textureDimension only takes a texture as the input,
-                                // it doesn't require calls to textureNumLevels to clamp mip levels.
-                                return;
-                            }
-                            queryTextureBuiltin(TextureQueryType::kTextureNumLevels, call);
-                            break;
-                        }
-                        case wgsl::BuiltinFn::kTextureLoad: {
-                            auto* texture_expr = call->Declaration()->args[0];
-                            auto* texture_sem = sem.GetVal(texture_expr)->RootIdentifier();
-                            TINT_ASSERT(texture_sem);
-                            if (texture_sem->Type()
-                                    ->UnwrapRef()
-                                    ->IsAnyOf<core::type::MultisampledTexture,
-                                              core::type::DepthMultisampledTexture>()) {
-                                // When textureLoad takes a multisampled texture as the input,
-                                // it doesn't require to query the mip level.
-                                return;
-                            }
-                            queryTextureBuiltin(TextureQueryType::kTextureNumLevels, call,
-                                                texture_sem);
-                            break;
-                        }
-                        case wgsl::BuiltinFn::kTextureNumSamples: {
-                            queryTextureBuiltin(TextureQueryType::kTextureNumSamples, call);
-                            break;
-                        }
-                        default:
-                            return;
+                    auto type = filter(call, builtin->Fn());
+                    if (type) {
+                        queryTextureBuiltin(*type, call);
                     }
                 },
                 [&](const sem::Function* func) {

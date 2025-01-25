@@ -15,6 +15,7 @@
 // reused.
 // LINT.IfChange
 enum class ContentSuggestionsModuleType {
+  kInvalid = -1,
   kMostVisited = 0,
   kShortcuts = 1,
   kSetUpListSync = 2,
@@ -30,7 +31,8 @@ enum class ContentSuggestionsModuleType {
   // Removed: kParcelTrackingSeeMore = 12,
   kSetUpListNotifications = 13,
   kPlaceholder = 14,
-  kMaxValue = kPlaceholder,
+  kPriceTrackingPromo = 15,
+  kMaxValue = kPriceTrackingPromo,
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/ios/enums.xml)
 

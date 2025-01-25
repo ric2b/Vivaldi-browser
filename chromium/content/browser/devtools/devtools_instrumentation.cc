@@ -15,6 +15,7 @@
 #include "content/browser/devtools/browser_devtools_agent_host.h"
 #include "content/browser/devtools/dedicated_worker_devtools_agent_host.h"
 #include "content/browser/devtools/devtools_issue_storage.h"
+#include "content/browser/devtools/devtools_preload_storage.h"
 #include "content/browser/devtools/protocol/audits.h"
 #include "content/browser/devtools/protocol/audits_handler.h"
 #include "content/browser/devtools/protocol/browser_handler.h"
@@ -94,7 +95,7 @@ void DispatchToAgents(FrameTreeNode* frame_tree_node,
 }
 
 template <typename Handler, typename... MethodArgs, typename... Args>
-void DispatchToAgents(int frame_tree_node_id,
+void DispatchToAgents(FrameTreeNodeId frame_tree_node_id,
                       void (Handler::*method)(MethodArgs...),
                       Args&&... args) {
   FrameTreeNode* ftn = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
@@ -200,7 +201,7 @@ BuildAttributionReportingIssueViolationType(
     case blink::mojom::AttributionReportingIssueType::
         kNavigationRegistrationWithoutTransientUserActivation:
       // This issue is not reported from the browser.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case blink::mojom::AttributionReportingIssueType::kInvalidInfoHeader:
       return AttributionReportingIssueTypeEnum::InvalidInfoHeader;
     case blink::mojom::AttributionReportingIssueType::kNoRegisterSourceHeader:
@@ -212,6 +213,10 @@ BuildAttributionReportingIssueViolationType(
     case blink::mojom::AttributionReportingIssueType::
         kNoRegisterOsTriggerHeader:
       return AttributionReportingIssueTypeEnum::NoRegisterOsTriggerHeader;
+    case blink::mojom::AttributionReportingIssueType::
+        kNavigationRegistrationUniqueScopeAlreadySet:
+      return AttributionReportingIssueTypeEnum::
+          NavigationRegistrationUniqueScopeAlreadySet;
   }
 }
 
@@ -386,7 +391,7 @@ FederatedAuthRequestResultToProtocol(
       return FederatedAuthRequestIssueReasonEnum::TypeNotMatching;
     }
     case FederatedAuthRequestResult::kSuccess: {
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     }
   }
 }
@@ -456,7 +461,7 @@ FederatedAuthUserInfoRequestResultToProtocol(
     }
     case FederatedAuthUserInfoRequestResult::kSuccess:
     case FederatedAuthUserInfoRequestResult::kUnhandledRequest: {
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     }
   }
 }
@@ -735,6 +740,12 @@ void DidUpdatePrefetchStatus(
     return;
   }
 
+  // We update DevToolsPreloadStorage, even if there are no active DevTools
+  // sessions, to persist the latest status update.
+  DevToolsPreloadStorage::GetOrCreateForCurrentDocument(
+      ftn->current_frame_host())
+      ->UpdatePrefetchStatus(prefetch_url, status, prefetch_status, request_id);
+
   std::string initiating_frame_id =
       ftn->current_frame_host()->devtools_frame_token().ToString();
   DispatchToAgents(ftn, &protocol::PreloadHandler::DidUpdatePrefetchStatus,
@@ -743,7 +754,7 @@ void DidUpdatePrefetchStatus(
 }
 
 void DidUpdatePrerenderStatus(
-    int initiator_frame_tree_node_id,
+    FrameTreeNodeId initiator_frame_tree_node_id,
     const base::UnguessableToken& initiator_devtools_navigation_token,
     const GURL& prerender_url,
     std::optional<blink::mojom::SpeculationTargetHint> target_hint,
@@ -757,10 +768,26 @@ void DidUpdatePrerenderStatus(
     return;
   }
 
+  // We update DevToolsPreloadStorage, even if there are no active DevTools
+  // sessions, to persist the latest status update.
+  DevToolsPreloadStorage::GetOrCreateForCurrentDocument(
+      ftn->current_frame_host())
+      ->UpdatePrerenderStatus(prerender_url, target_hint, status,
+                              prerender_status, disallowed_mojo_interface,
+                              mismatched_headers);
+
   DispatchToAgents(ftn, &protocol::PreloadHandler::DidUpdatePrerenderStatus,
                    initiator_devtools_navigation_token, prerender_url,
                    target_hint, status, prerender_status,
                    disallowed_mojo_interface, mismatched_headers);
+}
+
+void DidUpdateSpeculationCandidates(
+    RenderFrameHost& rfh,
+    const std::vector<blink::mojom::SpeculationCandidatePtr>& candidates) {
+  if (auto* storage = DevToolsPreloadStorage::GetForCurrentDocument(&rfh)) {
+    storage->SpeculationCandidatesUpdated(candidates);
+  }
 }
 
 namespace {
@@ -1164,6 +1191,41 @@ DevToolsAgentHostImpl* GetDevToolsAgentHostForNetworkOverrides(
   return RenderFrameDevToolsAgentHost::GetFor(frame_tree_node);
 }
 
+void ApplyNetworkRequestOverrides(
+    DevToolsAgentHostImpl* agent_host,
+    net::HttpRequestHeaders* headers,
+    bool* disable_cache,
+    bool* network_instrumentation_enabled,
+    bool* skip_service_worker,
+    std::optional<std::vector<net::SourceStream::SourceType>>*
+        devtools_accepted_stream_types,
+    bool* devtools_user_agent_overridden,
+    bool* devtools_accept_language_overridden) {
+  for (auto* network : protocol::NetworkHandler::ForAgentHost(agent_host)) {
+    if (!network->enabled()) {
+      continue;
+    }
+    if (network_instrumentation_enabled) {
+      *network_instrumentation_enabled = true;
+    }
+    network->ApplyOverrides(headers, skip_service_worker, disable_cache,
+                            devtools_accepted_stream_types);
+  }
+
+  for (auto* emulation : protocol::EmulationHandler::ForAgentHost(agent_host)) {
+    bool ua_overridden = false;
+    bool accept_language_overridden = false;
+    emulation->ApplyOverrides(headers, &ua_overridden,
+                              &accept_language_overridden);
+    if (devtools_user_agent_overridden) {
+      *devtools_user_agent_overridden |= ua_overridden;
+    }
+    if (devtools_accept_language_overridden) {
+      *devtools_accept_language_overridden |= accept_language_overridden;
+    }
+  }
+}
+
 }  // namespace
 
 void ApplyAuctionNetworkRequestOverrides(
@@ -1176,24 +1238,10 @@ void ApplyAuctionNetworkRequestOverrides(
   if (!agent_host) {
     return;
   }
-
-  for (auto* network : protocol::NetworkHandler::ForAgentHost(agent_host)) {
-    if (!network->enabled()) {
-      continue;
-    }
-    *network_instrumentation_enabled = true;
-    network->ApplyOverrides(&request->headers, &request->skip_service_worker,
-                            &disable_cache,
-                            &request->devtools_accepted_stream_types);
-  }
-
-  for (auto* emulation : protocol::EmulationHandler::ForAgentHost(agent_host)) {
-    bool ua_overridden = false;
-    bool accept_language_overridden = false;
-    emulation->ApplyOverrides(&request->headers, &ua_overridden,
-                              &accept_language_overridden);
-  }
-
+  ApplyNetworkRequestOverrides(
+      agent_host, &request->headers, &disable_cache,
+      network_instrumentation_enabled, &request->skip_service_worker,
+      &request->devtools_accepted_stream_types, nullptr, nullptr);
   if (disable_cache) {
     request->load_flags = net::LOAD_BYPASS_CACHE;
   }
@@ -1217,24 +1265,10 @@ void ApplyNetworkRequestOverrides(
   }
   net::HttpRequestHeaders headers;
   headers.AddHeadersFromString(begin_params->headers);
-  for (auto* network : protocol::NetworkHandler::ForAgentHost(agent_host)) {
-    if (!network->enabled()) {
-      continue;
-    }
-    *report_raw_headers = true;
-    network->ApplyOverrides(&headers, &begin_params->skip_service_worker,
-                            &disable_cache, devtools_accepted_stream_types);
-  }
-
-  for (auto* emulation : protocol::EmulationHandler::ForAgentHost(agent_host)) {
-    bool ua_overridden = false;
-    bool accept_language_overridden = false;
-    emulation->ApplyOverrides(&headers, &ua_overridden,
-                              &accept_language_overridden);
-    *devtools_user_agent_overridden |= ua_overridden;
-    *devtools_accept_language_overridden |= accept_language_overridden;
-  }
-
+  ApplyNetworkRequestOverrides(
+      agent_host, &headers, &disable_cache, report_raw_headers,
+      &begin_params->skip_service_worker, devtools_accepted_stream_types,
+      devtools_user_agent_overridden, devtools_accept_language_overridden);
   if (disable_cache) {
     begin_params->load_flags &=
         ~(net::LOAD_VALIDATE_CACHE | net::LOAD_SKIP_CACHE_VALIDATION |
@@ -1414,11 +1448,13 @@ WillCreateURLLoaderFactoryParams::ForSharedWorker(SharedWorkerHost* host) {
 WillCreateURLLoaderFactoryParams
 WillCreateURLLoaderFactoryParams::ForWorkerMainScript(
     DevToolsAgentHostImpl* agent_host,
-    const base::UnguessableToken& worker_token) {
-  RenderProcessHost* rph = agent_host->GetProcessHost();
-  CHECK(rph);
-  return WillCreateURLLoaderFactoryParams(
-      agent_host, worker_token, rph->GetID(), rph->GetStoragePartition());
+    const base::UnguessableToken& worker_token,
+    RenderFrameHostImpl& ancestor_render_frame_host) {
+  // Use the ancestor frame's interceptor to align with the interception
+  // behavior in the renderer that reuses the same url loader factory from
+  // the ancestor frame for the worker.
+  return WillCreateURLLoaderFactoryParams::ForFrame(
+      &ancestor_render_frame_host);
 }
 
 void OnPrefetchRequestWillBeSent(
@@ -1468,7 +1504,7 @@ void OnPrefetchBodyDataReceived(FrameTreeNode* frame_tree_node,
 }
 
 void OnAuctionWorkletNetworkRequestWillBeSent(
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     const network::ResourceRequest& request,
     base::TimeTicks timestamp) {
   if (request.devtools_request_id->empty()) {
@@ -1484,7 +1520,7 @@ void OnAuctionWorkletNetworkRequestWillBeSent(
   }
   // if we cannot get the loader_id from the parent, use an empty string.
   std::string loader_id = "";
-  if (frame_tree_node_id != FrameTreeNode::kFrameTreeNodeInvalidId) {
+  if (frame_tree_node_id) {
     FrameTreeNode* ftn = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
 
     if (ftn == nullptr) {
@@ -1508,7 +1544,7 @@ void OnAuctionWorkletNetworkRequestWillBeSent(
 }
 
 void OnAuctionWorkletNetworkResponseReceived(
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     const std::string& request_id,
     const std::string& loader_id,
     const GURL& request_url,
@@ -1523,7 +1559,7 @@ void OnAuctionWorkletNetworkResponseReceived(
 }
 
 void OnAuctionWorkletNetworkRequestComplete(
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     const std::string& request_id,
     const network::URLLoaderCompletionStatus& status) {
   DispatchToAgents(frame_tree_node_id,
@@ -1532,7 +1568,7 @@ void OnAuctionWorkletNetworkRequestComplete(
                    status);
 }
 
-bool NeedInterestGroupAuctionEvents(int frame_tree_node_id) {
+bool NeedInterestGroupAuctionEvents(FrameTreeNodeId frame_tree_node_id) {
   FrameTreeNode* ftn = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
   if (!ftn) {
     return false;
@@ -1550,7 +1586,7 @@ bool NeedInterestGroupAuctionEvents(int frame_tree_node_id) {
 }
 
 void OnInterestGroupAuctionEventOccurred(
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     base::Time event_time,
     InterestGroupAuctionEventType type,
     const std::string& unique_auction_id,
@@ -1563,7 +1599,7 @@ void OnInterestGroupAuctionEventOccurred(
 }
 
 void OnInterestGroupAuctionNetworkRequestCreated(
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     content::InterestGroupAuctionFetchType type,
     const std::string& request_id,
     const std::vector<std::string>& devtools_auction_ids) {
@@ -2181,6 +2217,21 @@ void OnWorkerMainScriptRequestWillBeSent(
     return;
   }
   MaybeAssignResourceRequestId(owner_host, worker_token.ToString(), request);
+
+  // Note: we apply overrides from the owner frame to match the behavior in the
+  // renderer.
+  bool disable_cache = false;
+  ApplyNetworkRequestOverrides(owner_host, &request.headers, &disable_cache,
+                               nullptr, &request.skip_service_worker,
+                               &request.devtools_accepted_stream_types, nullptr,
+                               nullptr);
+  if (disable_cache) {
+    request.load_flags &=
+        ~(net::LOAD_VALIDATE_CACHE | net::LOAD_SKIP_CACHE_VALIDATION |
+          net::LOAD_ONLY_FROM_CACHE | net::LOAD_DISABLE_CACHE);
+    request.load_flags |= net::LOAD_BYPASS_CACHE;
+  }
+
   DispatchToAgents(
       ftn, &protocol::NetworkHandler::RequestSent, worker_token.ToString(),
       /*loader_id=*/"", request.headers, *request_info,
@@ -2345,10 +2396,11 @@ void DidCloseFedCmDialog(RenderFrameHost& render_frame_host) {
   DispatchToAgents(ftn, &protocol::FedCmHandler::DidCloseDialog);
 }
 
-void OnFencedFrameReportRequestSent(int initiator_frame_tree_node_id,
-                                    const std::string& devtools_request_id,
-                                    network::ResourceRequest& request,
-                                    const std::string& event_data) {
+void OnFencedFrameReportRequestSent(
+    FrameTreeNodeId initiator_frame_tree_node_id,
+    const std::string& devtools_request_id,
+    network::ResourceRequest& request,
+    const std::string& event_data) {
   DispatchToAgents(initiator_frame_tree_node_id,
                    &protocol::NetworkHandler::FencedFrameReportRequestSent,
                    /*request_id=*/devtools_request_id, request, event_data,
@@ -2356,7 +2408,7 @@ void OnFencedFrameReportRequestSent(int initiator_frame_tree_node_id,
 }
 
 void OnFencedFrameReportResponseReceived(
-    int initiator_frame_tree_node_id,
+    FrameTreeNodeId initiator_frame_tree_node_id,
     const std::string& devtools_request_id,
     const GURL& final_url,
     scoped_refptr<net::HttpResponseHeaders> headers) {

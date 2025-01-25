@@ -7,6 +7,8 @@
 #include <memory>
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_string.h"
+#include "base/android/scoped_java_ref.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/task_environment.h"
 #include "components/saved_tab_groups/android/tab_group_sync_conversions_bridge.h"
@@ -41,6 +43,11 @@ const int kPosition = 3;
 
 MATCHER_P(UuidEq, uuid, "") {
   return arg.saved_guid() == uuid;
+}
+
+MATCHER_P3(TabBuilderEq, title, url, position, "") {
+  return arg.title() == title && arg.url() == url &&
+         static_cast<int>(arg.position()) == position;
 }
 
 }  // namespace
@@ -157,6 +164,14 @@ TEST_F(TabGroupSyncServiceAndroidTest, OnTabGroupRemoved) {
   Java_TabGroupSyncServiceAndroidUnitTest_testOnTabGroupRemoved(env, j_test_);
 }
 
+TEST_F(TabGroupSyncServiceAndroidTest, OnTabGroupLocalIdChanged) {
+  auto* env = AttachCurrentThread();
+  base::Uuid group_id = base::Uuid::GenerateRandomV4();
+  bridge_->OnTabGroupLocalIdChanged(group_id, test_tab_group_id_);
+  Java_TabGroupSyncServiceAndroidUnitTest_testOnTabGroupLocalIdChanged(env,
+                                                                       j_test_);
+}
+
 TEST_F(TabGroupSyncServiceAndroidTest, CreateGroup) {
   auto* env = AttachCurrentThread();
   SavedTabGroup captured_group = test::CreateTestSavedTabGroup();
@@ -196,6 +211,18 @@ TEST_F(TabGroupSyncServiceAndroidTest, UpdateVisualData) {
   Java_TabGroupSyncServiceAndroidUnitTest_testUpdateVisualData(env, j_test_);
 }
 
+TEST_F(TabGroupSyncServiceAndroidTest, MakeTabGroupShared) {
+  JNIEnv* env = AttachCurrentThread();
+  const std::string collaboration_id = "collaboration";
+
+  EXPECT_CALL(tab_group_sync_service_,
+              MakeTabGroupShared(Eq(test_tab_group_id_), Eq(collaboration_id)));
+  ScopedJavaLocalRef<jstring> j_collaboration_id =
+      base::android::ConvertUTF8ToJavaString(env, collaboration_id);
+  Java_TabGroupSyncServiceAndroidUnitTest_testMakeTabGroupShared(
+      env, j_test_, j_collaboration_id);
+}
+
 TEST_F(TabGroupSyncServiceAndroidTest, AddTab) {
   auto* env = AttachCurrentThread();
 
@@ -215,11 +242,11 @@ TEST_F(TabGroupSyncServiceAndroidTest, UpdateTab) {
 
   GURL url(kTestUrl);
   EXPECT_CALL(tab_group_sync_service_,
-              UpdateTab(Eq(test_tab_group_id_), Eq(kTabId1), Eq(kTestTabTitle),
-                        Eq(url), Eq(kPosition)));
+              UpdateTab(Eq(test_tab_group_id_), Eq(kTabId1),
+                        TabBuilderEq(kTestTabTitle, url, kPosition)));
   EXPECT_CALL(tab_group_sync_service_,
-              UpdateTab(Eq(test_tab_group_id_), Eq(kTabId2), Eq(kTestTabTitle),
-                        Eq(url), Eq(std::nullopt)));
+              UpdateTab(Eq(test_tab_group_id_), Eq(kTabId2),
+                        TabBuilderEq(kTestTabTitle, url, 0)));
   Java_TabGroupSyncServiceAndroidUnitTest_testUpdateTab(env, j_test_);
 }
 

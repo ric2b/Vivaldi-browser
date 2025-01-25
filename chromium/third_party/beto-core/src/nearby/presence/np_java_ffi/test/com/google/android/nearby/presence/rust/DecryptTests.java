@@ -16,12 +16,22 @@
 
 package com.google.android.nearby.presence.rust;
 
-import static com.google.android.nearby.presence.rust.TestData.*;
+import static com.google.android.nearby.presence.rust.TestData.ALICE_METADATA;
+import static com.google.android.nearby.presence.rust.TestData.V0_CRED;
+import static com.google.android.nearby.presence.rust.TestData.V0_ENCRYPTED_ALICE_METADATA;
+import static com.google.android.nearby.presence.rust.TestData.V0_PRIVATE;
+import static com.google.android.nearby.presence.rust.TestData.V1_ALICE_METADATA;
+import static com.google.android.nearby.presence.rust.TestData.V1_CRED;
+import static com.google.android.nearby.presence.rust.TestData.V1_ENCRYPTED_ALICE_METADATA;
+import static com.google.android.nearby.presence.rust.TestData.V1_PRIVATE;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.android.nearby.presence.rust.credential.CredentialBook;
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class DecryptTests {
 
   public static final class TestMetadata implements CredentialBook.MatchedMetadata {
@@ -55,11 +65,11 @@ public class DecryptTests {
   }
 
   @Test
-  void deserializeAdvertisement_v0_canParsePrivate() {
-    try (DeserializeResult result = parsePrivateAdv(V0_PRIVATE)) {
+  public void deserializeAdvertisement_v0_canParsePrivate() {
+    try (DeserializeResult<TestMetadata> result = parsePrivateAdv(V0_PRIVATE)) {
       assertThat(result.getKind()).isEqualTo(DeserializeResult.Kind.V0_ADVERTISEMENT);
 
-      DeserializedV0Advertisement adv = result.getAsV0();
+      DeserializedV0Advertisement<TestMetadata> adv = result.getAsV0();
 
       assertThat(adv).isNotNull();
       assertThat(adv.isLegible()).isTrue();
@@ -70,20 +80,20 @@ public class DecryptTests {
   }
 
   @Test
-  void deserializeAdvertisement_v1_canParsePrivate() {
-    try (DeserializeResult result = parsePrivateAdv(V1_PRIVATE)) {
+  public void deserializeAdvertisement_v1_canParsePrivate() {
+    try (DeserializeResult<TestMetadata> result = parsePrivateAdv(V1_PRIVATE)) {
       assertThat(result.getKind()).isEqualTo(DeserializeResult.Kind.V1_ADVERTISEMENT);
 
-      DeserializedV1Advertisement adv = result.getAsV1();
+      DeserializedV1Advertisement<TestMetadata> adv = result.getAsV1();
 
       assertThat(adv).isNotNull();
       assertThat(adv.getNumLegibleSections()).isEqualTo(1);
       assertThat(adv.getNumUndecryptableSections()).isEqualTo(0);
 
-      DeserializedV1Section section = adv.getSection(0);
+      DeserializedV1Section<TestMetadata> section = adv.getSection(0);
       assertThat(section.getIdentityKind()).isEqualTo(IdentityKind.DECRYPTED);
       assertThat(section.getMatchedMetadata()).isSameInstanceAs(V1_METADATA);
-      assertThat(section.getDecryptedMetadata()).isEqualTo(ALICE_METADATA);
+      assertThat(section.getDecryptedMetadata()).isEqualTo(V1_ALICE_METADATA);
     }
   }
 }

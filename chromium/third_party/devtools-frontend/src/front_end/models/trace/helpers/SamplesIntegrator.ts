@@ -169,8 +169,8 @@ export class SamplesIntegrator {
   #onTraceEventStart(event: Types.TraceEvents.TraceEventData): void {
     // Top level events cannot be nested into JS frames so we reset
     // the stack when we find one.
-    if (event.name === Types.TraceEvents.KnownEventName.RunMicrotasks ||
-        event.name === Types.TraceEvents.KnownEventName.RunTask) {
+    if (event.name === Types.TraceEvents.KnownEventName.RUN_MICROTASKS ||
+        event.name === Types.TraceEvents.KnownEventName.RUN_TASK) {
       this.#lockedJsStackDepth = [];
       this.#truncateJSStack(0, event.ts);
       this.#fakeJSInvocation = false;
@@ -220,7 +220,7 @@ export class SamplesIntegrator {
     // Because the event has ended, any frames that happened after
     // this event are terminated. Frames that are ancestors to this
     // event are extended to cover its ending.
-    const endTime = Types.Timing.MicroSeconds(event.ts + (event.dur || 0));
+    const endTime = Types.Timing.MicroSeconds(event.ts + (event.dur ?? 0));
     this.#truncateJSStack(this.#lockedJsStackDepth.pop() || 0, endTime);
   }
 
@@ -398,7 +398,7 @@ export class SamplesIntegrator {
   #makeJSSampleEvent(call: Types.TraceEvents.SyntheticProfileCall, timestamp: Types.Timing.MicroSeconds):
       Types.TraceEvents.SyntheticJSSample {
     const JSSampleEvent: Types.TraceEvents.SyntheticJSSample = {
-      name: Types.TraceEvents.KnownEventName.JSSample,
+      name: Types.TraceEvents.KnownEventName.JS_SAMPLE,
       cat: 'devtools.timeline',
       args: {
         data: {stackTrace: this.#makeProfileCallsForStack(call).map(e => e.callFrame)},

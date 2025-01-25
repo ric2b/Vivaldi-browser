@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -22,6 +23,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/display/display_features.h"
+#include "ui/display/types/display_configuration_params.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
@@ -60,27 +62,89 @@ enum class TestOnlyModesetOutcome {
   kMaxValue = kFailure,
 };
 
+using CrtcConnectorPairTileLocations = std::vector<
+    std::pair<CrtcConnectorPair, std::optional<gfx::Point> /*tile_location*/>>;
+
+CrtcConnectorPairTileLocations CreateCrtcConnectorPairTileLocationsForDisplay(
+    const DrmDisplay& display) {
+  CrtcConnectorPairTileLocations crtc_connector_pairs;
+  for (const DrmDisplay::CrtcConnectorPair& crtc_connector_pair :
+       display.crtc_connector_pairs()) {
+    crtc_connector_pairs.push_back(
+        {{.crtc_id = crtc_connector_pair.crtc_id,
+          .connector_id = crtc_connector_pair.connector->connector_id},
+         crtc_connector_pair.tile_location});
+  }
+  return crtc_connector_pairs;
+}
+
 class DisplayComparator {
  public:
-  explicit DisplayComparator(const DrmDisplay* display)
-      : drm_(display->drm()),
-        crtc_(display->crtc()),
-        connector_(display->connector()) {}
+  explicit DisplayComparator(const DrmDisplay* display) : drm_(display->drm()) {
+    crtc_connector_pair_tile_locations_ =
+        CreateCrtcConnectorPairTileLocationsForDisplay(*display);
+  }
 
   DisplayComparator(const scoped_refptr<DrmDevice>& drm,
-                    uint32_t crtc,
-                    uint32_t connector)
-      : drm_(drm), crtc_(crtc), connector_(connector) {}
+                    const HardwareDisplayControllerInfo& display_info)
+      : drm_(drm) {
+    CrtcConnectorPair primary_crtc_connector{
+        .crtc_id = display_info.crtc()->crtc_id,
+        .connector_id = display_info.connector()->connector_id};
+    std::optional<gfx::Point> primary_tile_location;
+    const std::optional<TileProperty>& primary_tile_property =
+        display_info.tile_property();
+    if (primary_tile_property.has_value()) {
+      tile_group_id_ = std::optional<int>(primary_tile_property->group_id);
+      primary_tile_location = primary_tile_property->location;
+    }
+    crtc_connector_pair_tile_locations_.push_back(
+        {primary_crtc_connector, primary_tile_location});
+
+    for (const std::unique_ptr<HardwareDisplayControllerInfo>& nonprimary_tile :
+         display_info.nonprimary_tile_infos()) {
+      CrtcConnectorPair crtc_connector_pair{
+          .crtc_id = nonprimary_tile->crtc()->crtc_id,
+          .connector_id = nonprimary_tile->connector()->connector_id};
+      crtc_connector_pair_tile_locations_.push_back(
+          {crtc_connector_pair, nonprimary_tile->tile_property()->location});
+    }
+  }
 
   bool operator()(const std::unique_ptr<DrmDisplay>& other) const {
-    return drm_ == other->drm() && connector_ == other->connector() &&
-           crtc_ == other->crtc();
+    if (drm_ != other->drm()) {
+      return false;
+    }
+
+    const std::optional<TileProperty>& other_tile_property =
+        other->GetTileProperty();
+    std::optional<int> other_tile_group_id =
+        other_tile_property.has_value() ? other_tile_property->group_id
+                                        : std::optional<int>(std::nullopt);
+    if (tile_group_id_ != other_tile_group_id) {
+      return false;
+    }
+
+    // Check that |crtc_connector_pair_tile_locations_| is unordered equal to
+    // CrtcConnectorPairs in |other| DrmDisplay.
+    CrtcConnectorPairTileLocations other_crtc_connector_tile_locations =
+        CreateCrtcConnectorPairTileLocationsForDisplay(*other);
+    return std::is_permutation(
+        crtc_connector_pair_tile_locations_.begin(),
+        crtc_connector_pair_tile_locations_.end(),
+        other_crtc_connector_tile_locations.begin(),
+        [](const std::pair<CrtcConnectorPair, std::optional<gfx::Point>>& lhs,
+           const std::pair<CrtcConnectorPair, std::optional<gfx::Point>>& rhs) {
+          return (lhs.first.crtc_id == rhs.first.crtc_id) &&
+                 (lhs.first.connector_id == rhs.first.connector_id) &&
+                 (lhs.second == rhs.second);
+        });
   }
 
  private:
   scoped_refptr<DrmDevice> drm_;
-  uint32_t crtc_;
-  uint32_t connector_;
+  CrtcConnectorPairTileLocations crtc_connector_pair_tile_locations_;
+  std::optional<int> tile_group_id_;
 };
 
 bool MatchMode(const display::DisplayMode& display_mode,
@@ -102,6 +166,48 @@ std::vector<const drmModeModeInfo*> FindMatchingModes(
     }
   }
   return matches;
+}
+
+// Finds and returns the drm mode from |display| matching |request_mode| except
+// with the closest (or greater) refresh rate, or nullptr if no such mode
+// exists. If |is_seamless| is set, only modes which pass seamless verification
+// will be considered.
+const drmModeModeInfo* FindClosestModeWithGreaterRefreshRate(
+    const display::DisplayMode& request_mode,
+    const DrmDisplay& display,
+    bool is_seamless,
+    HardwareDisplayController* controller) {
+  if (!display.IsVrrCapable()) {
+    return nullptr;
+  }
+  if (is_seamless && !controller) {
+    LOG(ERROR) << "Could not find HardwareDisplayController for display_id: "
+               << display.display_id()
+               << " required to perform seamless verification.";
+    return nullptr;
+  }
+
+  const drmModeModeInfo* closest_mode = nullptr;
+  for (const auto& m : display.modes()) {
+    if (request_mode.size() != ModeSize(m) ||
+        request_mode.is_interlaced() != ModeIsInterlaced(m)) {
+      continue;
+    }
+    if (request_mode.refresh_rate() <
+        ModeVSyncRateMin(m, display.vsync_rate_min_from_edid())) {
+      continue;
+    }
+    if (is_seamless &&
+        !controller->TestSeamlessMode(display.GetPrimaryCrtcId(), m)) {
+      continue;
+    }
+    if (ModeRefreshRate(m) >= request_mode.refresh_rate() &&
+        (!closest_mode ||
+         ModeRefreshRate(m) < ModeRefreshRate(*closest_mode))) {
+      closest_mode = &m;
+    }
+  }
+  return closest_mode;
 }
 
 std::string GetEventPropertyByKey(const std::string& key,
@@ -274,9 +380,7 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
     // If the DrmDisplay was present previously, copy its origin to the
     // corresponding DisplaySnapshot before creating a new DrmDisplay.
     auto old_drm_display_it = base::ranges::find_if(
-        old_displays,
-        DisplayComparator(params.drm, params.display_info->crtc()->crtc_id,
-                          params.display_info->connector()->connector_id));
+        old_displays, DisplayComparator(params.drm, *params.display_info));
     if (old_drm_display_it != old_displays.end()) {
       params.snapshot->set_origin(old_drm_display_it->get()->origin());
       old_displays.erase(old_drm_display_it);
@@ -299,8 +403,15 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
 bool DrmGpuDisplayManager::TakeDisplayControl() {
   const DrmDeviceVector& devices = drm_device_manager_->GetDrmDevices();
   bool status = true;
-  for (const auto& drm : devices)
-    status &= drm->SetMaster();
+  for (const auto& drm : devices) {
+    const bool set_master_status = drm->SetMaster();
+    if (!set_master_status) {
+      LOG(ERROR) << __func__ << "Drm set master failed for: "  // nocheck
+                 << drm->device_path().value();
+    }
+
+    status &= set_master_status;
+  }
 
   // Roll-back any successful operation.
   if (!status) {
@@ -313,8 +424,12 @@ bool DrmGpuDisplayManager::TakeDisplayControl() {
 
 void DrmGpuDisplayManager::RelinquishDisplayControl() {
   const DrmDeviceVector& devices = drm_device_manager_->GetDrmDevices();
-  for (const auto& drm : devices)
-    drm->DropMaster();
+  for (const auto& drm : devices) {
+    if (!drm->DropMaster()) {
+      LOG(ERROR) << __func__ << "Drm drop master failed for: "  // nocheck
+                 << drm->device_path().value();
+    }
+  }
 }
 
 bool DrmGpuDisplayManager::ShouldDisplayEventTriggerConfiguration(
@@ -393,7 +508,8 @@ bool DrmGpuDisplayManager::ShouldDisplayEventTriggerConfiguration(
 
 bool DrmGpuDisplayManager::ConfigureDisplays(
     const std::vector<display::DisplayConfigurationParams>& config_requests,
-    display::ModesetFlags modeset_flags) {
+    display::ModesetFlags modeset_flags,
+    std::vector<display::DisplayConfigurationParams>& out_requests) {
   const bool is_commit =
       modeset_flags.Has(display::ModesetFlag::kCommitModeset);
   const bool is_seamless =
@@ -403,6 +519,7 @@ bool DrmGpuDisplayManager::ConfigureDisplays(
     controllers_to_configure = GetLatestModesetTestConfig(config_requests);
   }
 
+  out_requests.clear();
   if (controllers_to_configure.empty()) {
     for (const auto& request : config_requests) {
       int64_t display_id = request.id;
@@ -410,22 +527,45 @@ bool DrmGpuDisplayManager::ConfigureDisplays(
       if (!display) {
         LOG(WARNING) << __func__ << ": there is no display with ID "
                      << display_id;
+        out_requests = config_requests;
         return false;
       }
 
-      std::unique_ptr<drmModeModeInfo> found_mode =
-          request.mode
-              ? FindModeForDisplay(*request.mode, *display, is_seamless)
-              : nullptr;
-      if (request.mode && !found_mode) {
-        return false;
+      std::unique_ptr<drmModeModeInfo> found_mode = nullptr;
+      if (request.mode) {
+        found_mode = FindModeForDisplay(*request.mode, *display, is_seamless);
+
+        if (!found_mode) {
+          out_requests = config_requests;
+          return false;
+        }
+
+        // Populate |out_requests| with a new request which holds an updated
+        // DisplayMode that precisely matches the found drm mode.
+        std::unique_ptr<display::DisplayMode> out_mode =
+            CreateDisplayMode(*found_mode, display->vsync_rate_min_from_edid());
+
+        // For a tiled display, Ozone must always expose the tiled-composited
+        // mode size, rather than the tiled mode size from the tiled connector.
+        const std::optional<TileProperty>& tile_property =
+            display->GetTileProperty();
+        if (tile_property.has_value() &&
+            IsTileMode(out_mode->size(), *tile_property)) {
+          out_mode =
+              out_mode->CopyWithSize(GetTotalTileDisplaySize(*tile_property));
+        }
+        out_requests.emplace_back(request.id, request.origin, out_mode.get(),
+                                  request.enable_vrr);
+      } else {
+        out_requests.emplace_back(request);
       }
 
       scoped_refptr<DrmDevice> drm = display->drm();
-      ControllerConfigParams params(display->display_id(), drm, display->crtc(),
-                                    display->connector(), request.origin,
-                                    std::move(found_mode), request.enable_vrr,
-                                    display->base_connector_id());
+      ControllerConfigParams params(
+          display->display_id(), drm, display->GetPrimaryCrtcId(),
+          display->GetPrimaryConnectorId(), request.origin,
+          std::move(found_mode), request.enable_vrr,
+          display->base_connector_id());
       controllers_to_configure.push_back(std::move(params));
     }
   }
@@ -572,8 +712,8 @@ std::optional<std::vector<float>> DrmGpuDisplayManager::GetSeamlessRefreshRates(
     return std::nullopt;
   }
 
-  HardwareDisplayController* controller =
-      screen_manager_->GetDisplayController(display->drm(), display->crtc());
+  HardwareDisplayController* controller = screen_manager_->GetDisplayController(
+      display->drm(), display->GetPrimaryCrtcId());
   if (!controller) {
     LOG(ERROR) << "Could not find HardwareDisplayController for display_id: "
                << display_id;
@@ -590,7 +730,7 @@ std::optional<std::vector<float>> DrmGpuDisplayManager::GetSeamlessRefreshRates(
 
     // Do a test commit to check if this mode can be configured without
     // a modeset.
-    if (controller->TestSeamlessMode(display->crtc(), mode)) {
+    if (controller->TestSeamlessMode(display->GetPrimaryCrtcId(), mode)) {
       rates.push_back(ModeRefreshRate(mode));
     }
   }
@@ -609,7 +749,7 @@ DrmDisplay* DrmGpuDisplayManager::FindDisplay(int64_t display_id) const {
 DrmDisplay* DrmGpuDisplayManager::FindDisplayByConnectorId(
     uint32_t connector_id) const {
   for (const auto& display : displays_) {
-    if (display->connector() == connector_id) {
+    if (display->GetCrtcConnectorPairForConnectorId(connector_id) != nullptr) {
       return display.get();
     }
   }
@@ -624,8 +764,11 @@ void DrmGpuDisplayManager::NotifyScreenManager(
   for (const auto& old_display : old_displays) {
     if (base::ranges::none_of(new_displays,
                               DisplayComparator(old_display.get()))) {
-      controllers_to_remove.emplace_back(old_display->crtc(),
-                                         old_display->drm());
+      for (const auto& crtc_connector_pair :
+           old_display->crtc_connector_pairs()) {
+        controllers_to_remove.emplace_back(crtc_connector_pair.crtc_id,
+                                           old_display->drm());
+      }
     }
   }
   if (!controllers_to_remove.empty())
@@ -634,8 +777,7 @@ void DrmGpuDisplayManager::NotifyScreenManager(
   for (const auto& new_display : new_displays) {
     if (base::ranges::none_of(old_displays,
                               DisplayComparator(new_display.get()))) {
-      screen_manager_->AddDisplayController(
-          new_display->drm(), new_display->crtc(), new_display->connector());
+      screen_manager_->AddDisplayControllersForDisplay(*new_display);
     }
   }
 }
@@ -774,7 +916,8 @@ bool DrmGpuDisplayManager::UpdateDisplaysWithNewCrtcs(
 
   // TODO: b/327015722 - handle ReplaceDisplayControllersCrtcs() inside
   // ScreenManager.
-  std::vector<std::pair<DrmDisplay*, uint32_t /*new_crtc_id*/>>
+  base::flat_map<DrmDisplay*, base::flat_map<uint32_t /*current_crtc_id*/,
+                                             uint32_t /*new_crtc_id*/>>
       display_to_new_crtcs_pairs;
   for (const auto& [drm, config_list] : drm_device_to_configs) {
     ConnectorCrtcMap current_connector_to_crtc_pairings;
@@ -788,8 +931,17 @@ bool DrmGpuDisplayManager::UpdateDisplaysWithNewCrtcs(
         return false;
       }
 
-      display_to_new_crtcs_pairs.push_back({display, config_param.crtc});
-      current_connector_to_crtc_pairings[connector_id] = display->crtc();
+      const DrmDisplay::CrtcConnectorPair* crtc_connector_pair =
+          display->GetCrtcConnectorPairForConnectorId(connector_id);
+      if (!crtc_connector_pair) {
+        LOG(DFATAL) << "CrtcConnectorPair with connector ID " << connector_id
+                    << " not found.";
+        return false;
+      }
+
+      uint32_t current_crtc_id = crtc_connector_pair->crtc_id;
+      display_to_new_crtcs_pairs[display][current_crtc_id] = config_param.crtc;
+      current_connector_to_crtc_pairings[connector_id] = current_crtc_id;
       new_connector_to_crtc_pairings[connector_id] = config_param.crtc;
     }
 
@@ -800,8 +952,8 @@ bool DrmGpuDisplayManager::UpdateDisplaysWithNewCrtcs(
     }
   }
 
-  for (auto& [display, crtc_id] : display_to_new_crtcs_pairs) {
-    display->set_crtc(crtc_id);
+  for (auto& [display, new_crtc_pairs] : display_to_new_crtcs_pairs) {
+    display->ReplaceCrtcs(new_crtc_pairs);
   }
 
   return true;
@@ -833,25 +985,40 @@ std::unique_ptr<drmModeModeInfo> DrmGpuDisplayManager::FindModeForDisplay(
   std::vector<const drmModeModeInfo*> matching_modes =
       FindMatchingModes(request_mode, display.modes());
 
+  // If there's no matching mode for tiled display, that may be due to
+  // |request_mode| being tile-composited, while individual display.modes() are
+  // drmModeModeInfo, which have individual tile sized modes. Try to find
+  // matching modes again with tile sized request mode.
+  std::optional<TileProperty> tile_property = display.GetTileProperty();
+  if (matching_modes.empty() && tile_property.has_value()) {
+    if (request_mode.size() == GetTotalTileDisplaySize(*tile_property)) {
+      matching_modes = FindMatchingModes(
+          *request_mode.CopyWithSize(tile_property->tile_size),
+          display.modes());
+    }
+  }
+
+  // Filter the matched modes by testing for seamless configurability if needed.
+  HardwareDisplayController* controller = screen_manager_->GetDisplayController(
+      display.drm(), display.GetPrimaryCrtcId());
   if (is_seamless) {
-    HardwareDisplayController* controller =
-        screen_manager_->GetDisplayController(display.drm(), display.crtc());
     if (!controller) {
       LOG(ERROR) << "Could not find HardwareDisplayController for display_id: "
                  << display.display_id()
                  << ". Continuing without seamless verification.";
     } else {
-      std::erase_if(
-          matching_modes, [&display, &controller](const drmModeModeInfo* mode) {
-            return !controller->TestSeamlessMode(display.crtc(), *mode);
-          });
+      std::erase_if(matching_modes, [&display,
+                                     &controller](const drmModeModeInfo* mode) {
+        return !controller->TestSeamlessMode(display.GetPrimaryCrtcId(), *mode);
+      });
     }
   }
 
   // If the display doesn't have the mode natively, then lookup the mode
   // from other displays and try using it on the current display (some
   // displays support panel fitting and they can use different modes even
-  // if the mode isn't explicitly declared).
+  // if the mode isn't explicitly declared). Not attempted for seamless
+  // configuration requests.
   if (matching_modes.empty() && !is_seamless) {
     for (const auto& other_display : displays_) {
       matching_modes = FindMatchingModes(request_mode, other_display->modes());
@@ -859,6 +1026,24 @@ std::unique_ptr<drmModeModeInfo> DrmGpuDisplayManager::FindModeForDisplay(
         VLOG(3) << "Found matching mode from another display. Attempting to "
                    "apply via panel fitting.";
         break;
+      }
+    }
+  }
+
+  // If a matching mode hasn't been found and the display supports VRR, attempt
+  // to create a virtual mode with the requested properties.
+  if (matching_modes.empty() && display.IsVrrCapable()) {
+    const drmModeModeInfo* closest_mode = FindClosestModeWithGreaterRefreshRate(
+        request_mode, display, is_seamless, controller);
+
+    // Use the closest mode to create and return a virtual mode.
+    if (closest_mode) {
+      std::unique_ptr<drmModeModeInfo> out_virtual_mode =
+          CreateVirtualMode(*closest_mode, request_mode.refresh_rate());
+      if (out_virtual_mode) {
+        VLOG(3) << "Using virtual mode to achieve refresh_rate="
+                << request_mode.refresh_rate();
+        return out_virtual_mode;
       }
     }
   }

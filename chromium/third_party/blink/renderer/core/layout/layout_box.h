@@ -540,8 +540,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return MarginBoxOutsets().right;
   }
 
-  void AbsoluteQuads(Vector<gfx::QuadF>&,
-                     MapCoordinatesFlags mode = 0) const override;
+  void QuadsInAncestorInternal(Vector<gfx::QuadF>&,
+                               const LayoutBoxModelObject* ancestor,
+                               MapCoordinatesFlags) const override;
   gfx::RectF LocalBoundingBoxRectForAccessibility() const override;
 
   void LayoutSubtreeRoot();
@@ -917,8 +918,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     NOT_DESTROYED();
     // The offset is in the block direction (y for horizontal writing modes, x
     // for vertical writing modes).
-    if (LIKELY(!HasFlippedBlocksWritingMode()))
+    if (!HasFlippedBlocksWritingMode()) [[likely]] {
       return position;
+    }
     DCHECK(!IsHorizontalWritingMode());
     return Size().width - (position + width);
   }
@@ -1151,6 +1153,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     }
     return std::nullopt;
   }
+
+  void UpdateScrollMarkerControlsAfterScroll() const;
 
   // Sets the min/max sizes for this box.
   void SetIntrinsicLogicalWidths(LayoutUnit initial_block_size,
@@ -1405,8 +1409,10 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     NOT_DESTROYED();
     DCHECK_EQ(container_box, LocationContainer());
     LayoutPoint location = LocationInternal();
-    if (LIKELY(!container_box || !container_box->HasFlippedBlocksWritingMode()))
+    if (!container_box || !container_box->HasFlippedBlocksWritingMode())
+        [[likely]] {
       return PhysicalOffset(location);
+    }
 
     return PhysicalOffset(
         container_box->Size().width - Size().width - location.X(),

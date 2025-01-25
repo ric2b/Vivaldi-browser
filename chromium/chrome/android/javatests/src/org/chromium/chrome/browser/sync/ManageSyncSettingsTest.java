@@ -54,7 +54,6 @@ import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.platform.app.InstrumentationRegistry;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -66,6 +65,7 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ServiceLoaderUtil;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
@@ -76,8 +76,6 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.browser.AppHooks;
-import org.chromium.chrome.browser.AppHooksImpl;
 import org.chromium.chrome.browser.device_reauth.ReauthenticatorBridge;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -110,10 +108,11 @@ import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
+import org.chromium.components.sync.DataType;
 import org.chromium.components.sync.LocalDataDescription;
-import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.SyncFeatureMap;
 import org.chromium.components.sync.SyncService;
+import org.chromium.components.sync.TransportState;
 import org.chromium.components.sync.UserSelectableType;
 import org.chromium.components.sync.internal.SyncPrefNames;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -210,13 +209,8 @@ public class ManageSyncSettingsTest {
                                                     ProfileManager.getLastUsedRegularProfile()))
                             .thenReturn(true);
                 });
-        AppHooks.setInstanceForTesting(
-                new AppHooksImpl() {
-                    @Override
-                    public GoogleActivityController createGoogleActivityController() {
-                        return mGoogleActivityController;
-                    }
-                });
+        ServiceLoaderUtil.setInstanceForTesting(
+                GoogleActivityController.class, mGoogleActivityController);
 
         TemplateUrlServiceFactory.setInstanceForTesting(mTemplateUrlService);
         when(mTemplateUrlService.isEeaChoiceCountry()).thenReturn(false);
@@ -239,12 +233,6 @@ public class ManageSyncSettingsTest {
         }
 
         mJniMocker.mock(PasswordManagerUtilBridgeJni.TEST_HOOKS, mPasswordManagerUtilBridgeJniMock);
-    }
-
-    @After
-    public void tearDown() {
-        AppHooks.setInstanceForTesting(null);
-        TemplateUrlServiceFactory.setInstanceForTesting(null);
     }
 
     @Test
@@ -901,6 +889,48 @@ public class ManageSyncSettingsTest {
 
     @Test
     @LargeTest
+    @EnableFeatures({
+        ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS,
+        ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS
+    })
+    public void testSigninSettingsBatchUploadCardVisibilityWhenSyncIsConfiguring()
+            throws Exception {
+        ReauthenticatorBridge.setInstanceForTesting(mReauthenticatorMock);
+        when(mReauthenticatorMock.canUseAuthenticationWithBiometricOrScreenLock()).thenReturn(true);
+        SyncServiceFactory.setInstanceForTesting(mSyncService);
+        when(mSyncService.getTransportState()).thenReturn(TransportState.CONFIGURING);
+        doAnswer(
+                        args -> {
+                            HashMap<Integer, LocalDataDescription> localDataDescription =
+                                    new HashMap<>();
+                            localDataDescription.put(
+                                    DataType.PASSWORDS,
+                                    new LocalDataDescription(1, new String[] {"example.com"}, 1));
+                            localDataDescription.put(
+                                    DataType.BOOKMARKS,
+                                    new LocalDataDescription(0, new String[] {}, 0));
+                            localDataDescription.put(
+                                    DataType.READING_LIST,
+                                    new LocalDataDescription(0, new String[] {}, 0));
+                            args.getArgument(1, Callback.class).onResult(localDataDescription);
+                            return null;
+                        })
+                .when(mSyncService)
+                .getLocalDataDescriptions(
+                        eq(Set.of(DataType.BOOKMARKS, DataType.PASSWORDS, DataType.READING_LIST)),
+                        any(Callback.class));
+
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+
+        final ManageSyncSettings fragment = startManageSyncPreferences();
+        Assert.assertFalse(
+                fragment.findPreference(ManageSyncSettings.PREF_BATCH_UPLOAD_CARD_PREFERENCE)
+                        .isVisible());
+        Assert.assertNull(fragment.getView().findViewById(R.id.signin_settings_card));
+    }
+
+    @Test
+    @LargeTest
     @Feature({"Sync", "RenderTest"})
     @EnableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
     public void testSigninSettingsTopAvatar() throws Exception {
@@ -991,24 +1021,20 @@ public class ManageSyncSettingsTest {
                             HashMap<Integer, LocalDataDescription> localDataDescription =
                                     new HashMap<>();
                             localDataDescription.put(
-                                    ModelType.PASSWORDS,
+                                    DataType.PASSWORDS,
                                     new LocalDataDescription(1, new String[] {"example.com"}, 1));
                             localDataDescription.put(
-                                    ModelType.BOOKMARKS,
+                                    DataType.BOOKMARKS,
                                     new LocalDataDescription(0, new String[] {}, 0));
                             localDataDescription.put(
-                                    ModelType.READING_LIST,
+                                    DataType.READING_LIST,
                                     new LocalDataDescription(0, new String[] {}, 0));
                             args.getArgument(1, Callback.class).onResult(localDataDescription);
                             return null;
                         })
                 .when(mSyncService)
                 .getLocalDataDescriptions(
-                        eq(
-                                Set.of(
-                                        ModelType.BOOKMARKS,
-                                        ModelType.PASSWORDS,
-                                        ModelType.READING_LIST)),
+                        eq(Set.of(DataType.BOOKMARKS, DataType.PASSWORDS, DataType.READING_LIST)),
                         any(Callback.class));
 
         mSyncTestRule.setUpAccountAndSignInForTesting();
@@ -1039,24 +1065,20 @@ public class ManageSyncSettingsTest {
                             HashMap<Integer, LocalDataDescription> localDataDescription =
                                     new HashMap<>();
                             localDataDescription.put(
-                                    ModelType.PASSWORDS,
+                                    DataType.PASSWORDS,
                                     new LocalDataDescription(0, new String[] {}, 0));
                             localDataDescription.put(
-                                    ModelType.BOOKMARKS,
+                                    DataType.BOOKMARKS,
                                     new LocalDataDescription(1, new String[] {"example.com"}, 1));
                             localDataDescription.put(
-                                    ModelType.READING_LIST,
+                                    DataType.READING_LIST,
                                     new LocalDataDescription(0, new String[] {}, 0));
                             args.getArgument(1, Callback.class).onResult(localDataDescription);
                             return null;
                         })
                 .when(mSyncService)
                 .getLocalDataDescriptions(
-                        eq(
-                                Set.of(
-                                        ModelType.BOOKMARKS,
-                                        ModelType.PASSWORDS,
-                                        ModelType.READING_LIST)),
+                        eq(Set.of(DataType.BOOKMARKS, DataType.PASSWORDS, DataType.READING_LIST)),
                         any(Callback.class));
 
         mSyncTestRule.setUpAccountAndSignInForTesting();
@@ -1087,24 +1109,20 @@ public class ManageSyncSettingsTest {
                             HashMap<Integer, LocalDataDescription> localDataDescription =
                                     new HashMap<>();
                             localDataDescription.put(
-                                    ModelType.PASSWORDS,
+                                    DataType.PASSWORDS,
                                     new LocalDataDescription(1, new String[] {"example.com"}, 1));
                             localDataDescription.put(
-                                    ModelType.BOOKMARKS,
+                                    DataType.BOOKMARKS,
                                     new LocalDataDescription(1, new String[] {"example.com"}, 1));
                             localDataDescription.put(
-                                    ModelType.READING_LIST,
+                                    DataType.READING_LIST,
                                     new LocalDataDescription(1, new String[] {"example.com"}, 1));
                             args.getArgument(1, Callback.class).onResult(localDataDescription);
                             return null;
                         })
                 .when(mSyncService)
                 .getLocalDataDescriptions(
-                        eq(
-                                Set.of(
-                                        ModelType.BOOKMARKS,
-                                        ModelType.PASSWORDS,
-                                        ModelType.READING_LIST)),
+                        eq(Set.of(DataType.BOOKMARKS, DataType.PASSWORDS, DataType.READING_LIST)),
                         any(Callback.class));
 
         mSyncTestRule.setUpAccountAndSignInForTesting();

@@ -7,11 +7,13 @@
 <translation id="1158211211994409885">Spletno mesto <ph name="HOST_NAME" /> je nepričakovano prekinilo povezavo.</translation>
 <translation id="1161325031994447685">znova vzpostavite povezavo z omrežjem Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Natisni...</translation>
+<translation id="132390688737681464">Shrani in izpolni naslove</translation>
 <translation id="1375198122581997741">O različici</translation>
 <translation id="139305205187523129">Spletno mesto <ph name="HOST_NAME" /> ni poslalo nobenih podatkov.</translation>
 <translation id="1559528461873125649">Taka datoteka ali imenik ne obstaja</translation>
 <translation id="1640244768702815859">Poskusite <ph name="BEGIN_LINK" />obiskati domačo stran spletnega mesta<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nepodprt protokol</translation>
+<translation id="1662550410081243962">Shrani in izpolni načine plačila</translation>
 <translation id="1710259589646384581">Operacijski sistem</translation>
 <translation id="1728677426644403582">Ogledujete si izvorno kodo spletne strani</translation>
 <translation id="1734878702283171397">Poskusite se obrniti na skrbnika sistema.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">To spletno mesto ne more zagotoviti varne povezave</translation>
 <translation id="2187317261103489799">Zaznava (privzeto)</translation>
 <translation id="2224337661447660594">Brez internetne povezave</translation>
+<translation id="2283340219607151381">Shrani in izpolni naslove</translation>
 <translation id="2292556288342944218">Internetni dostop je blokiran</translation>
 <translation id="2317259163369394535">Domena <ph name="DOMAIN" /> zahteva uporabniško ime in geslo.</translation>
 <translation id="2337852623177822836">Nastavitev nadzira skrbnik</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Za šifriranje in preverjanje pristnosti povezave se uporablja <ph name="CIPHER" />, kot mehanizem za izmenjavo ključev pa <ph name="KX" />.</translation>
 <translation id="2909946352844186028">Zaznana je bila sprememba omrežja.</translation>
 <translation id="2948083400971632585">Na strani nastavitev lahko onemogočite vse strežnike, konfigurirane za povezavo.</translation>
+<translation id="2954624054936281172">Tabela shranjenih načinov plačila</translation>
 <translation id="2991571918955627853">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, saj uporablja protokol HSTS. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="3005723025932146533">Pokaži shranjeno kopijo</translation>
 <translation id="301521992641321250">Samodejno blokirano</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Vedno zaznaj pomembno vsebino na tem spletnem mestu</translation>
 <translation id="3308738399950580893">oglasi</translation>
 <translation id="3384522979010096022">Vaša organizacija vam ne dovoli ogleda tega spletnega mesta</translation>
+<translation id="3387261909427947069">Načini plačila</translation>
 <translation id="3422472998109090673">Spletno mesto <ph name="HOST_NAME" /> trenutno ni dosegljivo.</translation>
 <translation id="3427092606871434483">Dovoli (privzeto)</translation>
 <translation id="3447661539832366887">Lastnik te naprave je izklopil to zastarelo igro.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">Veriga certifikata za to spletno mesto vsebuje certifikat, podpisan z algoritmom SHA-1.</translation>
 <translation id="5452270690849572955">Te strani spletnega mesta <ph name="HOST_NAME" /> ni mogoče najti</translation>
 <translation id="5457113250005438886">Neveljavno</translation>
+<translation id="5490432419156082418">Naslovi in drugo</translation>
 <translation id="5492298309214877701">To spletno mesto v intranetu podjetja, organizacije ali šole ima enak URL kot zunanje spletno mesto.
     <ph name="LINE_BREAK" />
     Poskusite se obrniti na skrbnika sistema.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Dovoljeno z razširitvijo</translation>
 <translation id="7111012039238467737">(Veljavno)</translation>
 <translation id="7113310725918019676">Dovoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Shrani in izpolni načine plačila</translation>
 <translation id="7210863904660874423">Spletno mesto <ph name="HOST_NAME" /> ne upošteva varnostnih standardov.</translation>
 <translation id="7219179957768738017">Povezava uporablja <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Prikaži obvestila</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">Če niste prepričani, kaj to pomeni, se obrnite na skrbnika omrežja.</translation>
 <translation id="8332188693563227489">Dostop do spletnega mesta <ph name="HOST_NAME" /> je bil zavrnjen</translation>
 <translation id="8422228580902424274">Napadalci na spletno mesto, ki ga poskušate obiskati, vas lahko zavedejo, da namestite programsko opremo ali razkrijete stvari, kot so vaše geslo, telefon ali številka kreditne kartice.</translation>
+<translation id="8473863474539038330">Naslovi in drugo</translation>
 <translation id="8498891568109133222">Spletno mesto <ph name="HOST_NAME" /> se ni odzvalo v ustreznem času.</translation>
 <translation id="8503813439785031346">Uporabniško ime</translation>
 <translation id="8703575177326907206">Vaša povezava z <ph name="DOMAIN" /> ni šifrirana.</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">Zaznamki</translation>
 <translation id="8940028675168378100">Blokiral <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Pojdi na nastavitve spletnega mesta</translation>
+<translation id="8975012916872825179">Vključuje podatke, kot so telefonske številke, e-poštni naslovi in naslovi za dostavo</translation>
 <translation id="9001074447101275817">Strežnik proxy <ph name="DOMAIN" /> zahteva uporabniško ime in geslo.</translation>
 <translation id="9008201768610948239">Prezri</translation>
 <translation id="9025348182339809926">(Neveljavno)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419">Spletno mesto <ph name="HOST_NAME" /> uporablja nepodprt protokol.</translation>
 <translation id="936602727769022409">Izgubite lahko dostop do Google Računa. Chromium priporoča spremembo gesla. Pozvani boste k prijavi.</translation>
 <translation id="969892804517981540">Uradna različica</translation>
+<translation id="984275831282074731">Načini plačila</translation>
 <translation id="988159990683914416">Različica za razvijalce</translation>
 </translationbundle>

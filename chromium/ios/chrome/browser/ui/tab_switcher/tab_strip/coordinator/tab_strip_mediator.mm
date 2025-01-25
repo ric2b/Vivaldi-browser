@@ -7,18 +7,21 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #import "base/apple/foundation_util.h"
+#import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "components/favicon/ios/web_favicon_driver.h"
+#import "components/saved_tab_groups/saved_tab_group.h"
+#import "components/saved_tab_groups/tab_group_sync_service.h"
 #import "components/tab_groups/tab_group_color.h"
 #import "components/tab_groups/tab_group_visual_data.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
-#import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/browser/browser_list.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/url/url_util.h"
 #import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
@@ -29,8 +32,10 @@
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/tab_strip_commands.h"
+#import "ios/chrome/browser/shared/public/commands/tab_strip_last_tab_dragged_alert_command.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_drag_drop_metrics.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_group_action_type.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_group_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/coordinator/tab_strip_mediator_utils.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/ui/swift.h"
@@ -173,7 +178,13 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 
 @interface TabStripMediator () <CRWWebStateObserver,
                                 WebStateFaviconDriverObserver,
-                                WebStateListObserving> {
+                                WebStateListObserving>
+// The consumer for this object.
+@property(nonatomic, weak) id<TabStripConsumer> consumer;
+
+@end
+
+@implementation TabStripMediator {
   // Bridge C++ WebStateListObserver methods to this TabStripController.
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
   // Bridge C++ WebStateObserver methods to this TabStripController.
@@ -189,30 +200,28 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   // Browser list.
   BrowserList* _browserList;
 
-  // ItemID of the dragged tab. Used to check if the dropped tab is from the
-  // same Chrome window.
-  web::WebStateID _dragItemID;
   // List of items in the tab strip when a drag operation starts.
   // Should be set back to `nil` when the drag operation ends.
   NSMutableArray<TabStripItemIdentifier*>* _dragItems;
+
+  // Used to get info about saved groups and to mutate them.
+  raw_ptr<tab_groups::TabGroupSyncService> _tabGroupSyncService;
 }
 
-// The consumer for this object.
-@property(nonatomic, weak) id<TabStripConsumer> consumer;
-
-@end
-
-@implementation TabStripMediator
-
 - (instancetype)initWithConsumer:(id<TabStripConsumer>)consumer
+             tabGroupSyncService:
+                 (tab_groups::TabGroupSyncService*)tabGroupSyncService
                      browserList:(BrowserList*)browserList {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     CHECK(browserList);
     _browserList = browserList;
+    _tabGroupSyncService = tabGroupSyncService;
     _consumer = consumer;
   }
   return self;
 }
+
+#pragma mark - Public methods
 
 - (void)disconnect {
   if (_webStateList) {
@@ -224,6 +233,100 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   }
   _tabStripHandler = nil;
   _browserList = nullptr;
+}
+
+- (void)cancelMoveForTab:(web::WebStateID)tabID
+           originBrowser:(Browser*)originBrowser
+             originIndex:(int)originIndex
+              visualData:(const tab_groups::TabGroupVisualData&)visualData
+            localGroupID:(const tab_groups::TabGroupId&)localGroupID
+                 savedID:(const base::Uuid&)savedID {
+  BrowserAndIndex browserAndIndex = FindBrowserAndIndex(
+      tabID, _browserList->BrowsersOfType(BrowserList::BrowserType::kRegular));
+  if (!browserAndIndex.browser || !originBrowser) {
+    return;
+  }
+
+  originIndex =
+      std::min(originIndex, originBrowser->GetWebStateList()->count() - 1);
+  if (!originBrowser->GetWebStateList()->ContainsIndex(originIndex)) {
+    return;
+  }
+
+  if (!_tabGroupSyncService) {
+    return;
+  }
+  std::optional<tab_groups::SavedTabGroup> savedGroup =
+      _tabGroupSyncService->GetGroup(savedID);
+  if (!savedGroup || savedGroup->local_group_id() ||
+      savedGroup->saved_tabs().size() != 1) {
+    // Don't cancel if the saved group has been modified (deleted, associated
+    // with another local group or changed its tabs).
+    return;
+  }
+
+  const WebStateList::InsertionParams insertionParams =
+      WebStateList::InsertionParams::AtIndex(originIndex);
+  MoveTabToBrowser(tabID, originBrowser, insertionParams);
+
+  // Move to the new group
+  BrowserAndIndex browserAndIndexAfterMove = FindBrowserAndIndex(
+      tabID, _browserList->BrowsersOfType(BrowserList::BrowserType::kRegular));
+  if (!browserAndIndexAfterMove.browser) {
+    return;
+  }
+  WebStateList* afterMoveWebStateList =
+      browserAndIndexAfterMove.browser->GetWebStateList();
+  const int afterMoveIndex = browserAndIndexAfterMove.tab_index;
+
+  const web::WebState* const webState =
+      afterMoveWebStateList->GetWebStateAt(afterMoveIndex);
+  const std::u16string title = webState->GetTitle();
+  const GURL url = webState->GetVisibleURL();
+
+  {
+    // As this is a "undo" the usual mechanisms should be paused as the tab
+    // moved back to its original position shouldn't be treated as a "new" tab
+    // added to the group.
+    auto localObservationPauser =
+        _tabGroupSyncService->CreateScopedLocalObserverPauser();
+
+    afterMoveWebStateList->CreateGroup({afterMoveIndex}, visualData,
+                                       localGroupID);
+    _tabGroupSyncService->UpdateLocalTabGroupMapping(savedID, localGroupID);
+
+    // In case the tab has changed (URL or title), update it.
+    _tabGroupSyncService->UpdateLocalTabId(
+        localGroupID, savedGroup->saved_tabs()[0].saved_tab_guid(),
+        tabID.identifier());
+
+    tab_groups::SavedTabGroupTabBuilder tab_builder;
+    tab_builder.SetURL(url);
+    tab_builder.SetTitle(title);
+    _tabGroupSyncService->UpdateTab(localGroupID, tabID.identifier(),
+                                    std::move(tab_builder));
+  }
+}
+
+- (void)deleteSavedGroupWithID:(const base::Uuid&)savedID {
+  _tabGroupSyncService->RemoveGroup(savedID);
+}
+
+- (void)ungroupGroup:(TabGroupItem*)tabGroupItem {
+  if (!self.webStateList || !tabGroupItem.tabGroup) {
+    return;
+  }
+  base::RecordAction(base::UserMetricsAction("MobileTabStripUngroupTabs"));
+  self.webStateList->DeleteGroup(tabGroupItem.tabGroup);
+}
+
+- (void)deleteGroup:(TabGroupItem*)tabGroupItem {
+  if (!self.webStateList || !tabGroupItem.tabGroup) {
+    return;
+  }
+  base::RecordAction(base::UserMetricsAction("MobileTabStripDeleteGroup"));
+  CloseAllWebStatesInGroup(*_webStateList, tabGroupItem.tabGroup,
+                           WebStateList::CLOSE_USER_ACTION);
 }
 
 #pragma mark - Public properties
@@ -620,12 +723,31 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   if (!self.webStateList) {
     return;
   }
-  auto indexToKeepSearchCriteria = WebStateSearchCriteria(item.identifier);
+  int indexToKeep = GetWebStateIndex(self.webStateList,
+                                     WebStateSearchCriteria(item.identifier));
+
+  int closedGroupCount = 0;
+  if (IsTabGroupSyncEnabled()) {
+    for (const TabGroup* group : _webStateList->GetGroups()) {
+      // Remove the local tab group mapping if the `indexToKeep` is not in the
+      // group.
+      if (!group->range().contains(indexToKeep) &&
+          _tabGroupSyncService->GetGroup(group->tab_group_id())) {
+        _tabGroupSyncService->RemoveLocalTabGroupMapping(group->tab_group_id());
+        closedGroupCount++;
+      }
+    }
+  }
+
   // Closes all non-pinned items except for `item`.
-  CloseOtherWebStates(
-      *(self.webStateList),
-      GetWebStateIndex(self.webStateList, indexToKeepSearchCriteria),
-      WebStateList::CLOSE_USER_ACTION);
+  CloseOtherWebStates(*(self.webStateList), indexToKeep,
+                      WebStateList::CLOSE_USER_ACTION);
+
+  // Show the tab group snackbar if some groups have been closed.
+  if (IsTabGroupSyncEnabled() && closedGroupCount > 0) {
+    [self.tabStripHandler
+        showTabStripTabGroupSnackbarAfterClosingGroups:closedGroupCount];
+  }
 }
 
 - (void)createNewGroupWithItem:(TabSwitcherItem*)item {
@@ -666,7 +788,8 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
     return;
   }
   base::RecordAction(base::UserMetricsAction("MobileTabStripRenameGroup"));
-  [_tabStripHandler showTabStripGroupEditionForGroup:tabGroupItem.tabGroup];
+  [_tabStripHandler
+      showTabStripGroupEditionForGroup:tabGroupItem.tabGroup->GetWeakPtr()];
 }
 
 - (void)addNewTabInGroup:(TabGroupItem*)tabGroupItem {
@@ -679,34 +802,44 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   [self insertAndActivateNewWebStateWithInsertionParams:insertionParams];
 }
 
-- (void)ungroupGroup:(TabGroupItem*)tabGroupItem {
-  if (!self.webStateList) {
+- (void)ungroupGroup:(TabGroupItem*)tabGroupItem
+          sourceView:(UIView*)sourceView {
+  if (IsTabGroupSyncEnabled()) {
+    // Show the confirmation dialog only when the tab group sync feature is
+    // enabled.
+    [_tabStripHandler
+        showTabGroupConfirmationForAction:TabGroupActionType::kUngroupTabGroup
+                                groupItem:tabGroupItem
+                               sourceView:sourceView];
     return;
   }
-  base::RecordAction(base::UserMetricsAction("MobileTabStripUngroupTabs"));
-  self.webStateList->DeleteGroup(tabGroupItem.tabGroup);
+
+  [self ungroupGroup:tabGroupItem];
 }
 
-- (void)deleteGroup:(TabGroupItem*)tabGroupItem {
-  if (!self.webStateList) {
+- (void)deleteGroup:(TabGroupItem*)tabGroupItem sourceView:(UIView*)sourceView {
+  if (IsTabGroupSyncEnabled()) {
+    // Show the confirmation dialog only when the tab group sync feature is
+    // enabled.
+    [_tabStripHandler
+        showTabGroupConfirmationForAction:TabGroupActionType::kDeleteTabGroup
+                                groupItem:tabGroupItem
+                               sourceView:sourceView];
     return;
   }
-  base::RecordAction(base::UserMetricsAction("MobileTabStripDeleteGroup"));
-  CloseAllWebStatesInGroup(*_webStateList, tabGroupItem.tabGroup,
-                           WebStateList::CLOSE_USER_ACTION);
+
+  [self deleteGroup:tabGroupItem];
 }
 
 - (void)closeGroup:(TabGroupItem*)tabGroupItem {
-  if (!self.webStateList) {
+  if (!self.webStateList || !tabGroupItem.tabGroup) {
     return;
   }
 
   if (IsTabGroupSyncEnabled()) {
-    tab_groups::TabGroupSyncService* syncService =
-        tab_groups::TabGroupSyncServiceFactory::GetForBrowserState(
-            self.browser->GetBrowserState());
-    tab_groups::utils::CloseTabGroupLocally(tabGroupItem.tabGroup,
-                                            self.webStateList, syncService);
+    tab_groups::utils::CloseTabGroupLocally(
+        tabGroupItem.tabGroup, self.webStateList, _tabGroupSyncService);
+    [self.tabStripHandler showTabStripTabGroupSnackbarAfterClosingGroups:1];
   } else {
     CloseAllWebStatesInGroup(*self.webStateList, tabGroupItem.tabGroup,
                              WebStateList::CLOSE_USER_ACTION);
@@ -752,7 +885,6 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 }
 
 - (void)dragWillBeginForTabSwitcherItem:(TabSwitcherItem*)item {
-  _dragItemID = item.identifier;
   _dragItems = CreateItemIdentifiers(_webStateList,
                                      /*including_hidden_tab_items=*/false);
   // When a tab is dragged, it is visually removed from the collection view.
@@ -774,7 +906,6 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
 }
 
 - (void)dragSessionDidEnd {
-  _dragItemID = web::WebStateID();
   _dragItems = nil;
 }
 
@@ -859,6 +990,37 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
   // asynchronous drops.
   if ([dragItem.localObject isKindOfClass:[TabInfo class]]) {
     TabInfo* tabInfo = static_cast<TabInfo*>(dragItem.localObject);
+    if (IsTabGroupSyncEnabled()) {
+      BrowserAndIndex browserAndIndex = FindBrowserAndIndex(
+          tabInfo.tabID,
+          _browserList->BrowsersOfType(BrowserList::BrowserType::kRegular));
+      if (browserAndIndex.browser) {
+        const TabGroup* group =
+            browserAndIndex.browser->GetWebStateList()->GetGroupOfWebStateAt(
+                browserAndIndex.tab_index);
+        if (group && group->range().count() == 1) {
+          // `_tabGroupSyncService` is nullptr in incognito.
+          const tab_groups::TabGroupId& localID = group->tab_group_id();
+          if (_tabGroupSyncService && _tabGroupSyncService->GetGroup(localID)) {
+            const base::Uuid savedID =
+                _tabGroupSyncService->GetGroup(localID)->saved_guid();
+
+            _tabGroupSyncService->RemoveLocalTabGroupMapping(localID);
+
+            // Trying to move the last tab of group.
+            TabStripLastTabDraggedAlertCommand* command =
+                [[TabStripLastTabDraggedAlertCommand alloc] init];
+            command.tabID = tabInfo.tabID;
+            command.originBrowser = browserAndIndex.browser;
+            command.originIndex = browserAndIndex.tab_index;
+            command.visualData = group->visual_data();
+            command.localGroupID = localID;
+            command.savedGroupID = savedID;
+            [_tabStripHandler showAlertForLastTabDragged:command];
+          }
+        }
+      }
+    }
     if (fromSameCollection) {
       base::UmaHistogramEnumeration(kUmaTabStripViewDragOrigin,
                                     DragItemOrigin::kSameCollection);
@@ -944,11 +1106,6 @@ NSMutableArray<TabStripItemIdentifier*>* CreateItemIdentifiers(
         });
       };
   [itemProvider loadObjectOfClass:[NSURL class] completionHandler:loadHandler];
-}
-
-- (NSArray<UIDragItem*>*)allSelectedDragItems {
-  NOTREACHED_NORETURN() << "You should not be able to drag and drop multiple "
-                           "items. There is no selection mode in tab strip.";
 }
 
 #pragma mark - Private

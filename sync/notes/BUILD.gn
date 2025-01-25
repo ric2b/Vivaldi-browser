@@ -6,12 +6,12 @@ import("//build/config/features.gni")
 
 static_library("sync_notes") {
   sources = [
+    "note_data_type_processor.cc",
+    "note_data_type_processor.h",
     "note_local_changes_builder.cc",
     "note_local_changes_builder.h",
     "note_model_merger.cc",
     "note_model_merger.h",
-    "note_model_type_processor.cc",
-    "note_model_type_processor.h",
     "note_model_view.cc",
     "note_model_view.h",
     "note_remote_updates_handler.cc",

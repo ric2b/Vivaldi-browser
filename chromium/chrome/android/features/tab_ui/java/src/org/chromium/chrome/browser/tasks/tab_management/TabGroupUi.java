@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsContentDelegate;
 
 // Vivaldi
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 
 /** Interface for the Tab Groups related UI. */
@@ -17,7 +18,7 @@ public interface TabGroupUi extends BottomControlsContentDelegate {
     boolean isTabGridDialogVisible();
 
     // Vivaldi
-    void setThemeColorProvider(ThemeColorProvider provider);
+    void setThemeColorProvider(ThemeColorProvider provider, TabModelSelector selector);
 
     /** Vivaldi **/
     void resetTabListForCurrentTab();

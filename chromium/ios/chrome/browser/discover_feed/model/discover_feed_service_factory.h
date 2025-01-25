@@ -5,19 +5,23 @@
 #ifndef IOS_CHROME_BROWSER_DISCOVER_FEED_MODEL_DISCOVER_FEED_SERVICE_FACTORY_H_
 #define IOS_CHROME_BROWSER_DISCOVER_FEED_MODEL_DISCOVER_FEED_SERVICE_FACTORY_H_
 
-#include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "base/no_destructor.h"
+#import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
 class DiscoverFeedService;
 
 // Singleton that owns all DiscoverFeedServices and associates them with
 // ChromeBrowserState.
 class DiscoverFeedServiceFactory : public BrowserStateKeyedServiceFactory {
  public:
+  // TODO(crbug.com/358299863): Remove when fully migrated.
   static DiscoverFeedService* GetForBrowserState(
       ChromeBrowserState* browser_state,
       bool create = true);
+
+  static DiscoverFeedService* GetForProfile(ProfileIOS* profile,
+                                            bool create = true);
 
   static DiscoverFeedServiceFactory* GetInstance();
 

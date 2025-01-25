@@ -22,6 +22,7 @@ namespace skgpu::graphite {
 
 class ShaderCodeDictionary;
 class TextureProxy;
+class UploadList;
 
 class RecorderPriv {
 public:
@@ -53,6 +54,7 @@ public:
         return fRecorder->fSharedContext->isProtected();
     }
 
+    UploadList* rootUploadList() { return fRecorder->fRootUploads.get(); }
     UniformDataCache* uniformDataCache() { return fRecorder->fUniformDataCache.get(); }
     TextureDataCache* textureDataCache() { return fRecorder->fTextureDataCache.get(); }
     DrawBufferManager* drawBufferManager() { return fRecorder->fDrawBufferManager.get(); }
@@ -81,13 +83,14 @@ public:
 
     size_t getResourceCacheLimit() const;
 
-#if defined(GRAPHITE_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     bool deviceIsRegistered(Device*) const;
     ResourceCache* resourceCache() { return fRecorder->fResourceProvider->resourceCache(); }
     SharedContext* sharedContext() { return fRecorder->fSharedContext.get(); }
     // used by the Context that created this Recorder to set a back pointer
     void setContext(Context*);
     Context* context() { return fRecorder->fContext; }
+    void issueFlushToken();
 #endif
 
 private:

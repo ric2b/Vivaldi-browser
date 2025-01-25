@@ -23,9 +23,11 @@
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/push_notification/model/constants.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_attributes_ios.h"
+#import "ios/chrome/browser/shared/model/profile/profile_attributes_storage_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -34,7 +36,6 @@
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
-#import "ios/chrome/test/testing_application_context.h"
 #import "ios/web/public/test/fakes/fake_browser_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
@@ -50,11 +51,7 @@ class SetUpListTest : public PlatformTest {
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetDefaultFactory());
-    std::unique_ptr<TestChromeBrowserState> browser_state = builder.Build();
-    test_manager_ = std::make_unique<TestChromeBrowserStateManager>(
-        std::move(browser_state));
-    TestingApplicationContext::GetGlobal()->SetChromeBrowserStateManager(
-        test_manager_.get());
+    browser_state_ = profile_manager_.AddProfileWithBuilder(std::move(builder));
     prefs_ = GetBrowserState()->GetPrefs();
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         GetBrowserState(),
@@ -67,9 +64,7 @@ class SetUpListTest : public PlatformTest {
   ~SetUpListTest() override { [set_up_list_ disconnect]; }
 
   // Get the test BrowserState.
-  ChromeBrowserState* GetBrowserState() {
-    return test_manager_->GetLastUsedBrowserStateForTesting();
-  }
+  ChromeBrowserState* GetBrowserState() { return browser_state_.get(); }
 
   // Get the LocalState prefs.
   PrefService* GetLocalState() {
@@ -99,9 +94,18 @@ class SetUpListTest : public PlatformTest {
                           signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
     auth_service_->GrantSyncConsent(
         identity, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-    test_manager_->GetBrowserStateInfoCache()->SetAuthInfoOfBrowserStateAtIndex(
-        0, base::SysNSStringToUTF8(identity.gaiaID),
-        base::SysNSStringToUTF16(identity.userEmail));
+
+    profile_manager_.GetProfileAttributesStorage()
+        ->UpdateAttributesForProfileWithName(
+            browser_state_->GetProfileName(),
+            base::BindOnce(
+                [](id<SystemIdentity> identity, ProfileAttributesIOS attr) {
+                  attr.SetAuthenticationInfo(
+                      base::SysNSStringToUTF8(identity.gaiaID),
+                      base::SysNSStringToUTF8(identity.userEmail));
+                  return attr;
+                },
+                identity));
   }
 
   // Ensures that Chrome is considered as default browser.
@@ -176,8 +180,10 @@ class SetUpListTest : public PlatformTest {
  protected:
   web::WebTaskEnvironment task_environment_;
   base::test::ScopedFeatureList feature_list_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
+  TestProfileManagerIOS profile_manager_;
+  raw_ptr<ChromeBrowserState> browser_state_;
   raw_ptr<PrefService> prefs_;
-  std::unique_ptr<TestChromeBrowserStateManager> test_manager_;
   raw_ptr<AuthenticationService> auth_service_;
   SetUpList* set_up_list_;
   bool content_notification_feature_enabled_;

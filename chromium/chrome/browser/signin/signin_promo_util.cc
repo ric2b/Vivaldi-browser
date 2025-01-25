@@ -10,6 +10,7 @@
 #include "chrome/browser/signin/reauth_result.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
+#include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/base/signin_prefs.h"
 #include "components/signin/public/base/signin_switches.h"
@@ -106,7 +107,7 @@ bool ShouldShowSyncPromo(Profile& profile) {
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 bool ShouldShowSignInPromo(Profile& profile,
-                           SignInAutofillBubblePromoType promo_type) {
+                           signin_metrics::AccessPoint access_point) {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   // Don't show the promo if it does not pass the base checks.
   if (!ShouldShowPromoCommon(profile)) {
@@ -115,6 +116,11 @@ bool ShouldShowSignInPromo(Profile& profile,
 
   // Don't show the promo if the user is off-the-record.
   if (profile.IsOffTheRecord()) {
+    return false;
+  }
+
+  // Don't show promo if the access point is not for autofill types.
+  if (!IsAutofillSigninPromo(access_point)) {
     return false;
   }
 
@@ -154,21 +160,17 @@ bool ShouldShowSignInPromo(Profile& profile,
   }
 
   // Don't show the promo again if it has already been shown 5 times.
-  int show_count = 0;
-  switch (promo_type) {
-    case SignInAutofillBubblePromoType::Addresses:
-    case SignInAutofillBubblePromoType::Payments:
-      break;
-    case SignInAutofillBubblePromoType::Passwords:
-      show_count =
-          account.gaia.empty()
-              ? profile.GetPrefs()->GetInteger(
-                    prefs::kPasswordSignInPromoShownCountPerProfile)
-              : SigninPrefs(*profile.GetPrefs())
-                    .GetPasswordSigninPromoImpressionCount(account.gaia);
-  }
-  if (show_count >= kSigninPromoShownThreshold) {
-    return false;
+  if (access_point ==
+      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE) {
+    int show_count =
+        account.gaia.empty()
+            ? profile.GetPrefs()->GetInteger(
+                  prefs::kPasswordSignInPromoShownCountPerProfile)
+            : SigninPrefs(*profile.GetPrefs())
+                  .GetPasswordSigninPromoImpressionCount(account.gaia);
+    if (show_count >= kSigninPromoShownThreshold) {
+      return false;
+    }
   }
 
   // Only show the promo if explicit browser signin is enabled.
@@ -176,6 +178,13 @@ bool ShouldShowSignInPromo(Profile& profile,
 #else
   return false;
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+}
+
+bool IsAutofillSigninPromo(signin_metrics::AccessPoint access_point) {
+  return access_point ==
+             signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE ||
+         access_point ==
+             signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE;
 }
 
 }  // namespace signin

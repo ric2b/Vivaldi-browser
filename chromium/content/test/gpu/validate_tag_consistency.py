@@ -47,6 +47,7 @@ TAG_SPECIALIZATIONS = {
             'monterey',
             'ventura',
             'sonoma',
+            'sequoia',
         ],
         'win': [
             'win8',
@@ -89,6 +90,7 @@ TAG_SPECIALIZATIONS = {
             'google-0xffff',
             'google-0xc0de',
         ],
+        'imagination': [],
         'intel': [
             # Individual GPUs should technically fit under intel-gen-X, but we
             # only support one level of nesting, so treat the generation tags as
@@ -108,6 +110,7 @@ TAG_SPECIALIZATIONS = {
             'nvidia-0xfe9',
             'nvidia-0x1cb3',
             'nvidia-0x2184',
+            'nvidia-0x2783',
         ],
         'qualcomm': [
             # 043a = 0x41333430 = older Adreno GPU
@@ -178,7 +181,7 @@ TAG_HEADER = """\
 # Devices
 # tags: [ android-nexus-5x android-pixel-2 android-pixel-4
 #             android-pixel-6 android-shield-android-tv android-sm-a135m
-#             android-sm-a235m android-sm-s911u1
+#             android-sm-a235m android-sm-s911u1 android-moto-g-power-5g---2023
 #         chromeos-board-amd64-generic chromeos-board-eve chromeos-board-jacuzzi
 #             chromeos-board-octopus chromeos-board-volteer
 #         fuchsia-board-astro fuchsia-board-nelson fuchsia-board-sherlock
@@ -211,7 +214,8 @@ TAG_HEADER = """\
 # tags: [ mesa_lt_19.1
 #         mesa_ge_21.0
 #         mesa_ge_23.2
-#         nvidia_ge_31.0.15.4601 nvidia_lt_31.0.15.4601 ]
+#         nvidia_ge_31.0.15.4601 nvidia_lt_31.0.15.4601
+#         nvidia_ge_535.183.01 nvidia_lt_535.183.01 ]
 # ASan
 # tags: [ asan no-asan ]
 # Display Server

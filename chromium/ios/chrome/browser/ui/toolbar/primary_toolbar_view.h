@@ -9,10 +9,7 @@
 
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view.h"
 
-// Vivaldi
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
-// End Vivaldi
-
+@class TabGroupIndicatorView;
 @class ToolbarButtonFactory;
 
 // View for the primary toolbar. In an adaptive toolbar paradigm, this is the
@@ -66,6 +63,9 @@
 // Whether the height should match the height of the "fake" toolbar of the NTP.
 @property(nonatomic, assign) BOOL matchNTPHeight;
 
+// View that contains tab group information.
+@property(nonatomic, weak) TabGroupIndicatorView* tabGroupIndicatorView;
+
 // Sets all the subviews and constraints of the view. The `topSafeAnchor` needs
 // to be set before calling this.
 - (void)setUp;
@@ -77,8 +77,10 @@
 // Removes `fakeOmniboxTarget` from the view hierarchy.
 - (void)removeFakeOmniboxTarget;
 
+// Updates the `tabGroupIndicatorView` availability.
+- (void)updateTabGroupIndicatorAvailability;
+
 // Vivaldi
-@property(nonatomic, assign) ATBSettingType atbSettingForActiveWebState;
 @property(nonatomic, assign, readwrite) BOOL isNTP;
 /// Redraws the primary toolbar buttons based on device
 /// orientation.

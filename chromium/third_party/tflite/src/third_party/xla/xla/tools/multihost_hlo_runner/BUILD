@@ -30,7 +30,7 @@ cc_library(
     srcs = ["hlo_runner_main.cc"],
     compatible_with = None,
     tags = [
-        "nomac",
+        "no_mac",
     ],
     deps = [
         ":create_client",
@@ -72,7 +72,7 @@ xla_cc_binary(
     name = "hlo_runner_main",
     testonly = True,
     tags = [
-        "nomac",
+        "no_mac",
     ],
     deps = [
         ":hlo_runner_main_lib",
@@ -84,7 +84,8 @@ xla_cc_binary(
     testonly = True,
     tags = [
         "gpu",
-        "nomac",
+        "no_mac",
+        "no_rocm",
     ] + tf_gpu_tests_tags(),
     deps = [
         ":hlo_runner_main_lib",
@@ -171,12 +172,10 @@ xla_test(
     name = "functional_hlo_runner_test",
     srcs = ["functional_hlo_runner_test.cc"],
     backend_tags = {
-        # This test is tagged "manual" because it requires multiple (2) GPUs.
         "gpu": [
-            "manual",
-            "multi_gpu",
+            "multi_gpu_h100",
             "no_oss",
-            "notap",
+            "nomsan",
         ],
     },
     backends = [
@@ -190,7 +189,7 @@ xla_test(
         "data/single_device.hlo",
         "data/single_device_tupled.hlo",
     ],
-    tags = ["nomac"],
+    tags = ["no_mac"],
     deps = [
         ":create_client",
         ":functional_hlo_runner",
@@ -198,6 +197,7 @@ xla_test(
         "//xla:xla_proto_cc",
         "//xla/pjrt:pjrt_client",
         "//xla/tests:filecheck",
+        "//xla/tsl/lib/core:status_test_util",
         "//xla/tsl/util:command_line_flags",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
@@ -206,7 +206,6 @@ xla_test(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
-        "@local_tsl//tsl/lib/core:status_test_util",
         "@local_tsl//tsl/platform:env",
         "@local_tsl//tsl/platform:errors",
         "@local_tsl//tsl/platform:path",

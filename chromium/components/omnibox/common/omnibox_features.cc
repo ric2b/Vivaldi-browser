@@ -275,17 +275,12 @@ BASE_FEATURE(kMostVisitedTilesHorizontalRenderGroup,
 // accommodate the autocompletions.
 BASE_FEATURE(kRichAutocompletion,
              "OmniboxRichAutocompletion",
-             enabled_by_default_desktop_only);
+             enabled_by_default_desktop_ios);
 
 // Feature used to enable Pedals in the NTP Realbox.
 BASE_FEATURE(kNtpRealboxPedals,
              "NtpRealboxPedals",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, appends Query Tiles to the Omnibox ZPS on New Tab Page.
-BASE_FEATURE(kQueryTilesInZPSOnNTP,
-             "OmniboxQueryTilesInZPSOnNTP",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, adds a grey square background to search icons, and makes answer
 // icon square instead of round.
@@ -418,6 +413,13 @@ BASE_FEATURE(kLogUrlScoringSignals,
              "LogUrlScoringSignals",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// If true, enables history scoring signal annotator for populating history
+// scoring signals associated with Search suggestions. These signals will be
+// empty for Search suggestions otherwise.
+BASE_FEATURE(kEnableHistoryScoringSignalsAnnotatorForSearches,
+             "EnableHistoryScoringSignalsAnnotatorForSearches",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If enabled, (floating-point) ML model scores are mapped to (integral)
 // relevance scores by means of a piecewise function. This allows for the
 // integration of URL model scores with search traditional scores.
@@ -446,12 +448,6 @@ BASE_FEATURE(kMlUrlSearchBlending,
 BASE_FEATURE(kUrlScoringModel,
              "UrlScoringModel",
              enabled_by_default_desktop_only);
-
-// If enabled, skips ML scoring for those autocomplete matches which were
-// constructed by deduping an ML-eligible and ML-ineligible match.
-BASE_FEATURE(kEnableForceSkipMlScoring,
-             "EnableForceSkipMlScoring",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Actions in Suggest is a data-driven feature; it's considered enabled when the
 // data is available.
@@ -490,17 +486,11 @@ BASE_FEATURE(kOmniboxTouchDownTriggerForPrefetch,
              "OmniboxTouchDownTriggerForPrefetch",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, shows the policy indicator for Default Search Provider set by
-// Enterprise policy chrome://settings.
-BASE_FEATURE(kPolicyIndicationForManagedDefaultSearch,
-             "PolicyIndicationForManagedDefaultSearch",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // If enabled, site search engines featured by policy are shown on @ state in
 // the omnibox above starter pack suggestions.
 BASE_FEATURE(kShowFeaturedEnterpriseSiteSearch,
              "ShowFeaturedEnterpriseSiteSearch",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             enabled_by_default_desktop_only);
 
 // Enables an informational IPH message at the bottom of the Omnibox directing
 // users to featured Enterprise search engines created by policy.
@@ -550,11 +540,6 @@ BASE_FEATURE(kReportApplicationLanguageInSearchRequest,
              "ReportApplicationLanguageInSearchRequest",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enables storing successful query/match in the shortcut database On Android.
-BASE_FEATURE(kOmniboxShortcutsAndroid,
-             "OmniboxShortcutsAndroid",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enable asynchronous Omnibox/Suggest view inflation.
 BASE_FEATURE(kOmniboxAsyncViewInflation,
              "OmniboxAsyncViewInflation",
@@ -565,6 +550,16 @@ BASE_FEATURE(kUseFusedLocationProvider,
              "UseFusedLocationProvider",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables storing successful query/match in the shortcut database On Android.
+BASE_FEATURE(kOmniboxShortcutsAndroid,
+             "OmniboxShortcutsAndroid",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables deletion of old shortcuts on profile load.
+BASE_FEATURE(kOmniboxDeleteOldShortcuts,
+             "OmniboxDeleteOldShortcuts",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_ANDROID)
 // Enable the Elegant Text Height attribute on the UrlBar.
 // This attribute increases line height by up to 60% to accommodate certain
@@ -573,19 +568,33 @@ BASE_FEATURE(kOmniboxElegantTextHeight,
              "OmniboxElegantTextHeight",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kOmniboxAblateVisibleNetworks,
+             "OmniboxAblateVisibleNetworks",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Whether the contents of the omnibox should be retained on focus as opposed to
+// being cleared. When this feature flag is enabled and the omnibox contents are
+// retained, focus events will also result in the omnibox contents being fully
+// selected so as to allow for easy replacement by the user. Note that even with
+// this feature flag enabled, only large screen devices with an attached
+// keyboard and precision pointer will exhibit a change in behavior.
+BASE_FEATURE(kRetainOmniboxOnFocus,
+             "RetainOmniboxOnFocus",
+             base::FEATURE_ENABLED_BY_DEFAULT); // Vivaldi VAB-10175
+
 namespace android {
 static jlong JNI_OmniboxFeatureMap_GetNativeMap(JNIEnv* env) {
   static base::NoDestructor<base::android::FeatureMap> kFeatureMap(
       std::vector<const base::Feature*>{{
           &kOmniboxAnswerActions,
-          &kQueryTilesInZPSOnNTP,
           &kAnimateSuggestionsListAppearance,
-          &kGroupingFrameworkForNonZPS,
           &kOmniboxTouchDownTriggerForPrefetch,
           &kOmniboxAsyncViewInflation,
           &kRichAutocompletion,
           &kUseFusedLocationProvider,
           &kOmniboxElegantTextHeight,
+          &kOmniboxAblateVisibleNetworks,
+          &kRetainOmniboxOnFocus,
       }});
 
   return reinterpret_cast<jlong>(kFeatureMap.get());

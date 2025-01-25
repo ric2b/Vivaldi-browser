@@ -22,7 +22,6 @@ import org.chromium.chrome.browser.logo.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.logo.LogoCoordinator.VisibilityObserver;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.components.image_fetcher.ImageFetcher;
 import org.chromium.components.image_fetcher.ImageFetcherConfig;
@@ -85,6 +84,7 @@ public class LogoMediator implements TemplateUrlServiceObserver {
     private String mOnLogoClickUrl;
     private String mAnimatedLogoUrl;
     private boolean mShouldRecordLoadTime = true;
+    private String mSearchEngineKeyword;
 
     private final ObserverList<LogoCoordinator.VisibilityObserver> mVisibilityObservers =
             new ObserverList<>();
@@ -122,11 +122,16 @@ public class LogoMediator implements TemplateUrlServiceObserver {
     /**
      * Initialize the mediator with the components that had native initialization dependencies, i.e.
      * Profile..
+     *
+     * @param profile The Profile associated with this Logo component.
      */
-    void initWithNative() {
-        if (mProfile != null) return;
+    void initWithNative(Profile profile) {
+        if (mProfile != null) {
+            assert false : "Attempting to initialize LogoMediator twice";
+            return;
+        }
 
-        mProfile = ProfileManager.getLastUsedRegularProfile();
+        mProfile = profile;
         updateVisibility();
 
         if (mShouldShowLogo) {
@@ -137,9 +142,19 @@ public class LogoMediator implements TemplateUrlServiceObserver {
         TemplateUrlServiceFactory.getForProfile(mProfile).addObserver(this);
     }
 
-    /** Update the logo based on default search engine changes.*/
+    /** Update the logo based on default search engine changes. */
     @Override
     public void onTemplateURLServiceChanged() {
+        String currentSearchEngineKeyword =
+                TemplateUrlServiceFactory.getForProfile(mProfile)
+                        .getDefaultSearchEngineTemplateUrl()
+                        .getKeyword();
+        if (mSearchEngineKeyword != null
+                && mSearchEngineKeyword.equals(currentSearchEngineKeyword)) {
+            return;
+        }
+
+        mSearchEngineKeyword = currentSearchEngineKeyword;
         mHasLogoLoadedForCurrentSearchEngine = false;
         loadSearchProviderLogoWithAnimation();
     }
@@ -371,6 +386,10 @@ public class LogoMediator implements TemplateUrlServiceObserver {
 
     void setOnLogoClickUrlForTesting(String onLogoClickUrl) {
         mOnLogoClickUrl = onLogoClickUrl;
+    }
+
+    void resetSearchEngineKeywordForTesting() {
+        mSearchEngineKeyword = null;
     }
 
     ImageFetcher getImageFetcherForTesting() {

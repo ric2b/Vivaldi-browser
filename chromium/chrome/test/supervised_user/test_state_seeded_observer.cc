@@ -25,13 +25,14 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/supervised_user/core/browser/fetcher_config.h"
 #include "components/supervised_user/core/browser/proto/kidsmanagement_messages.pb.h"
-#include "components/supervised_user/core/browser/proto_fetcher.h"
+#include "components/supervised_user/core/browser/proto_fetcher_status.h"
 #include "components/supervised_user/core/browser/supervised_user_preferences.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_service_observer.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "components/supervised_user/test_support/testutil_proto_fetcher.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
@@ -63,7 +64,7 @@ std::string GetToggleAbbrev(FamilyLinkToggleType toggle) {
     case FamilyLinkToggleType::kCookiesToggle:
       return "COOKIES";
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -146,14 +147,17 @@ void WaitForRequestToComplete(const FamilyMember& supervising_user,
                               std::string_view serialized_request) {
   // Start fetching and wait for the response.
   base::RunLoop run_loop{base::RunLoop::Type::kNestableTasksAllowed};
-  StatusFetcher fetcher(
+  ProtoFetcher<std::string> fetcher(
       *supervising_user.identity_manager(),
-      supervising_user.url_loader_factory(), serialized_request, config,
-      {browser_user.GetAccountId().ToString()}, version_info::Channel::UNKNOWN,
-      base::BindLambdaForTesting([&](const ProtoFetcherStatus& status) {
+      supervising_user.url_loader_factory(), serialized_request,
+      base::BindLambdaForTesting([&](const ProtoFetcherStatus& status,
+                                     std::unique_ptr<std::string> response) {
         CHECK(status.IsOk()) << "WaitForRequestToComplete failed";
         run_loop.Quit();
-      }));
+      }),
+
+      config, {browser_user.GetAccountId().ToString()},
+      version_info::Channel::UNKNOWN);
   run_loop.Run();
 }
 

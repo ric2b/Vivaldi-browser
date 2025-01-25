@@ -11,6 +11,7 @@
 
 #include <optional>
 
+#include "base/containers/span.h"
 #include "media/base/audio_sample_types.h"
 #include "media/base/test_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -290,7 +291,7 @@ TEST_F(AudioDataTest, CopyTo_PlaneIndex) {
 TEST_F(AudioDataTest, TransferBuffer) {
   V8TestingScope scope;
   std::string data = "audio data";
-  auto* buffer = DOMArrayBuffer::Create(data.data(), data.size());
+  auto* buffer = DOMArrayBuffer::Create(base::as_byte_span(data));
   auto* buffer_source = MakeGarbageCollected<AllowSharedBufferSource>(buffer);
   const void* buffer_data_ptr = buffer->Data();
 
@@ -326,8 +327,7 @@ TEST_F(AudioDataTest, FailToTransferUnAlignedBuffer) {
   V8TestingScope scope;
   const uint32_t frames = 3;
   std::vector<float> data{0.0, 1.0, 2.0, 3.0, 4.0};
-  auto* buffer =
-      DOMArrayBuffer::Create(data.data(), data.size() * sizeof(float));
+  auto* buffer = DOMArrayBuffer::Create(base::as_byte_span(data));
   auto* view = DOMDataView::Create(
       buffer, 1 /* offset one byte from the float ptr, that how we are sure that
                    the view is not aligned to sizeof(float) */
@@ -457,18 +457,20 @@ TEST_F(AudioDataTest, Interleaved) {
 
   EXPECT_EQ("s16", frame->format());
 
-  // Verify that plane indexes > 1 throw, for interleaved formats.
   auto* options = CreateCopyToOptions(/*index=*/1, kOffset, kPartialFrameCount);
-  int allocations_size =
-      frame->allocationSize(options, scope.GetExceptionState());
 
-  EXPECT_TRUE(scope.GetExceptionState().HadException());
-  scope.GetExceptionState().ClearException();
+  // Verify that plane indexes > 1 throw, for interleaved formats.
+  {
+    DummyExceptionStateForTesting exception_state;
+    frame->allocationSize(options, exception_state);
+    EXPECT_TRUE(exception_state.HadException());
+  }
 
   // Verify that copy conversion to a planar format supports indexes > 1,
   // even if the source is interleaved.
   options->setFormat(V8AudioSampleFormat::Enum::kF32Planar);
-  allocations_size = frame->allocationSize(options, scope.GetExceptionState());
+  int allocations_size =
+      frame->allocationSize(options, scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
 
   // Verify we get the expected allocation size, for valid formats.

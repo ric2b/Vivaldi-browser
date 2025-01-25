@@ -297,22 +297,12 @@ class TestBaselineSet(collections.abc.Set):
             build: A Build object. Along with the step name, this specifies
                 where to fetch baselines from.
             step_name: The name of the build step this test was run for.
-            port_name: This specifies what platform the baseline is for.
+            port_name: This specifies what platform the baseline is for. It's
+                usually deduced from the builder name, but can be overridden.
         """
         if not port_name:
-            # TODO(crbug.com/1512219): Remove this special logic by either:
-            #  1. Making port a per-suite, not per-builder, property in
-            #     `BuilderList` (e.g., `linux-blink-rel` is `chrome` for
-            #     `webdriver_wpt_tests` or `linux` for `blink_wpt_tests`).
-            #  2. Replace the `chrome` port with regular platform ports with
-            #     chrome-specific logic (detected via the `driver_name` option).
-            product = self._builders.product_for_build_step(
-                build.builder_name, step_name)
-            if product == 'content_shell':
-                port_name = self._builders.port_name_for_builder_name(
-                    build.builder_name)
-            else:
-                port_name = product
+            port_name = self._builders.port_name_for_builder_name(
+                build.builder_name)
         self._build_steps.add((build.builder_name, step_name))
         build_step = (build, step_name, port_name)
         self._test_map[test].append(build_step)

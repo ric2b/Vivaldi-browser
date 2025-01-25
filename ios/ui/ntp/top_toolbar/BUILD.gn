@@ -1,6 +1,6 @@
 # Copyright 2024 Vivaldi Technologies AS. All rights reserved.
 
-import("//build/config/ios/swift_source_set.gni")
+import("//build/config/apple/swift_source_set.gni")
 
 source_set("top_toolbar") {
   sources = [

@@ -10,9 +10,11 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/ash_switches.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -21,11 +23,14 @@
 #include "base/time/time.h"
 #include "base/version.h"
 #include "base/version_info/version_info.h"
+#include "chromeos/ash/components/growth/campaigns_logger.h"
 #include "chromeos/ash/components/growth/campaigns_model.h"
 #include "chromeos/ash/components/growth/growth_metrics.h"
 #include "chromeos/ash/components/growth/mock_campaigns_manager_client.h"
+#include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/user_manager/fake_user_manager.h"
 #include "components/version_info/version_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -223,6 +228,7 @@ inline const base::Version kDefaultVersion("1.0.0.0");
 
 inline constexpr char kTestPref1[] = "pref1";
 inline constexpr char kTestPref2[] = "pref2";
+inline constexpr char kTestPref3[] = "pref3";
 
 // testing::InvokeArgument<N> does not work with base::OnceCallback. Use this
 // gmock action template to invoke base::OnceCallback. `k` is the k-th argument
@@ -261,11 +267,21 @@ class CampaignsManagerTest : public testing::Test {
     testing::Test::SetUp();
 
     InitializePrefService();
+    InitializeUserManager();
 
     campaigns_manager_ =
         std::make_unique<CampaignsManager>(&mock_client_, local_state_.get());
     campaigns_manager_->SetPrefs(pref_.get());
     campaigns_manager_->SetTrackerInitializedForTesting();
+  }
+
+  void TearDown() override {
+    // Clean up user manager.
+    fake_user_manager_->Shutdown();
+    fake_user_manager_->Destroy();
+    fake_user_manager_.reset();
+
+    testing::Test::TearDown();
   }
 
  protected:
@@ -377,6 +393,11 @@ class CampaignsManagerTest : public testing::Test {
 
     scoped_feature_list_.InitWithFeaturesAndParameters(
         {campaigns_experiment_tag}, {});
+  }
+
+  void VerifyOwnerAccountValid(bool is_valid) {
+    const AccountId& owner_account_id = fake_user_manager_->GetOwnerAccountId();
+    ASSERT_EQ(is_valid, owner_account_id.is_valid());
   }
 
   void VerifyDemoModePayload(const Campaign* campaign) {
@@ -525,9 +546,11 @@ class CampaignsManagerTest : public testing::Test {
           )",
                                         runtime_targeting.c_str());
     LoadComponentAndVerifyLoadComplete(
-        base::StringPrintf(has_group_id ? kValidCampaignsFileWithGroupIdTemplate
-                                        : kValidCampaignsFileTemplate,
-                           targeting.c_str()));
+        has_group_id
+            ? base::StringPrintf(kValidCampaignsFileWithGroupIdTemplate,
+                                 targeting.c_str())
+            : base::StringPrintf(kValidCampaignsFileTemplate,
+                                 targeting.c_str()));
   }
 
   void LoadComponentWithMultiTargetings(const std::string& targetings) {
@@ -576,6 +599,7 @@ class CampaignsManagerTest : public testing::Test {
   std::unique_ptr<CampaignsManager> campaigns_manager_;
   // A sub-class might override this from `InitializeScopedFeatureList`.
   base::test::ScopedFeatureList scoped_feature_list_;
+  std::unique_ptr<user_manager::FakeUserManager> fake_user_manager_;
 
  private:
   void InitializePrefService() {
@@ -589,8 +613,16 @@ class CampaignsManagerTest : public testing::Test {
     local_state_->registry()->RegisterStringPref(ash::prefs::kDemoModeStoreId,
                                                  std::string());
     pref_->registry()->RegisterListPref(
-        kTestPref1, base::Value::List().Append("value_0").Append("value_1"));
-    pref_->registry()->RegisterStringPref(kTestPref2, "value_2");
+        kTestPref1, base::Value::List().Append("v0").Append("v1"));
+    pref_->registry()->RegisterStringPref(kTestPref2, "v2");
+    pref_->registry()->RegisterStringPref(kTestPref3, "v3");
+  }
+
+  void InitializeUserManager() {
+    user_manager::UserManagerBase::RegisterPrefs(local_state_->registry());
+    fake_user_manager_ =
+        std::make_unique<user_manager::FakeUserManager>(local_state_.get());
+    fake_user_manager_->Initialize();
   }
 };
 
@@ -1016,6 +1048,7 @@ TEST_F(CampaignsManagerTest, LoadCampaignsFailed) {
   EXPECT_CALL(mock_client_, LoadCampaignsComponent(_))
       .WillOnce(InvokeCallbackArgument<0, CampaignComponentLoadedCallback>(
           std::nullopt));
+  EXPECT_FALSE(CampaignsLogger::Get()->HasLogForTesting());
 
   campaigns_manager_->LoadCampaigns(base::DoNothing());
   observer.Wait();
@@ -1027,6 +1060,7 @@ TEST_F(CampaignsManagerTest, LoadCampaignsFailed) {
   ASSERT_TRUE(observer.load_completed());
 
   ASSERT_EQ(nullptr, campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
+  EXPECT_TRUE(CampaignsLogger::Get()->HasLogForTesting());
 
   histogram_tester.ExpectBucketCount(
       kCampaignsManagerErrorHistogramName,
@@ -1702,6 +1736,24 @@ TEST_F(CampaignsManagerTest, GetSchedulingCampaignMismatch) {
   ASSERT_EQ(nullptr, campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
 }
 
+TEST_F(CampaignsManagerTest, GetSchedulingCampaignMismatchWithSwitch) {
+  const auto now = base::Time::Now();
+  auto start = now + base::Seconds(5);
+  auto end = now + base::Seconds(10);
+  auto fake_now = now + base::Seconds(8);
+
+  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+  command_line.AppendSwitchASCII(
+      ash::switches::kGrowthCampaignsCurrentTimeSecondsSinceUnixEpoch,
+      base::NumberToString(fake_now.InSecondsFSinceUnixEpoch()));
+  LoadComponentWithScheduling(base::StringPrintf(
+      R"([{"start": %f, "end": %f}])", start.InSecondsFSinceUnixEpoch(),
+      end.InSecondsFSinceUnixEpoch()));
+
+  VerifyDemoModePayload(
+      campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
+}
+
 TEST_F(CampaignsManagerTest, GetSchedulingCampaignStartOnly) {
   const auto now = base::Time::Now();
   LoadComponentWithScheduling(
@@ -1866,6 +1918,17 @@ TEST_F(CampaignsManagerTest,
   ASSERT_EQ(nullptr, campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
 }
 
+TEST_F(CampaignsManagerTest, GetCampaignWithRegisteredTimeNoOwner) {
+  const auto now = base::Time::Now();
+  auto start = now - base::Seconds(2);
+  VerifyOwnerAccountValid(false);
+
+  LoadComponentWithRegisteredTimeTargeting(
+      base::StringPrintf(R"({"start": %f})", start.InSecondsFSinceUnixEpoch()));
+  VerifyDemoModePayload(
+      campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
+}
+
 TEST_F(CampaignsManagerTest, GetCampaignActiveUrl) {
   campaigns_manager_->SetActiveUrl(GURL("https://www.google.com/?foo=bar"));
 
@@ -1971,6 +2034,18 @@ TEST_F(CampaignsManagerTest, GetCampaignTriggersWithEvent) {
       campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
 }
 
+TEST_F(CampaignsManagerTest, GetCampaignTriggersWithDelayedOneShotTimer) {
+  growth::Trigger trigger(growth::TriggerType::kDelayedOneShotTimer);
+  campaigns_manager_->SetTrigger(std::move(trigger));
+
+  LoadComponentWithTriggerTargeting(R"([
+    {"triggerType": 3, "triggerEvents": []}
+  ])");
+
+  VerifyDemoModePayload(
+      campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
+}
+
 TEST_F(CampaignsManagerTest, GetCampaignTriggersMissmatch) {
   growth::Trigger trigger(growth::TriggerType::kAppOpened);
   campaigns_manager_->SetTrigger(std::move(trigger));
@@ -2066,20 +2141,30 @@ TEST_F(CampaignsManagerTest, GetCampaignMatchMultiTargetingsMismatch) {
 
 TEST_F(CampaignsManagerTest, GetCampaignWithInvalidPrefTargeting) {
   LoadComponentWithUserPrefTargeting(R"(
-    {
-      "pref1": "value_0",
-      "pref2": ["value_2"]
-    })");
+    [
+      {
+        "name": "pref1",
+        "value": "v0"
+      }
+    ])");
 
   ASSERT_EQ(nullptr, campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
 }
 
 TEST_F(CampaignsManagerTest, GetCampaignWithPrefTargetingMismatch) {
   LoadComponentWithUserPrefTargeting(R"(
-    {
-      "pref1": ["value_2"],
-      "pref2": ["value_0"]
-    })");
+    [
+      {
+        "name": "pref1",
+        "value": ["v1"]
+      }
+    ],
+    [
+      {
+        "name": "pref2",
+        "value": ["v"]
+      }
+    ])");
 
   ASSERT_EQ(nullptr, campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
 }
@@ -2087,13 +2172,22 @@ TEST_F(CampaignsManagerTest, GetCampaignWithPrefTargetingMismatch) {
 TEST_F(CampaignsManagerTest, GetCampaignWithPrefTargetingMatch) {
   // This 2nd set of considtion match pref1 = value_0 and pref2 = value_2.
   LoadComponentWithUserPrefTargeting(R"(
-    {
-      "pref1": ["value_2"]
-    },
-    {
-      "pref1": ["value_0", "value_3"],
-      "pref2": ["value_2"]
-    })");
+    [
+      {
+        "name": "pref1",
+        "value": ["v", "v1"]
+      },
+      {
+        "name": "pref2",
+        "value": ["v2"]
+      }
+    ],
+    [
+      {
+        "name": "pref3",
+        "value": ["v3"]
+      }
+    ])");
 
   VerifyDemoModePayload(
       campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
@@ -2452,6 +2546,28 @@ TEST_F(CampaignsManagerTest, GetCampaignReachGroupDismissalCap) {
       /*has_group_id=*/true);
 
   ASSERT_EQ(nullptr, campaigns_manager_->GetCampaignBySlot(Slot::kDemoModeApp));
+}
+
+TEST_F(CampaignsManagerTest, GetTestingRegisteredTimeWithSwitch) {
+  // Timestamp of "2024-08-01".
+  const std::string seconds_since_epoch = "1722495600";
+  const double seconds_since_epoch_double = 1722495600;
+  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+  command_line.AppendSwitchASCII(
+      ash::switches::kGrowthCampaignsRegisteredTimeSecondsSinceUnixEpoch,
+      seconds_since_epoch);
+
+  auto registered_time = campaigns_manager_->GetRegisteredTimeForTesting();
+  EXPECT_TRUE(registered_time);
+
+  const auto expected_time =
+      base::Time::FromSecondsSinceUnixEpoch(seconds_since_epoch_double);
+  EXPECT_EQ(expected_time, registered_time);
+}
+
+TEST_F(CampaignsManagerTest, GetTestingRegisteredTimeWithoutSwitch) {
+  auto registered_time = campaigns_manager_->GetRegisteredTimeForTesting();
+  EXPECT_FALSE(registered_time);
 }
 
 }  // namespace growth

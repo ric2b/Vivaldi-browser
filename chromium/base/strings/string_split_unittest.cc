@@ -16,6 +16,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::ElementsAre;
+using ::testing::Optional;
+using ::testing::Pair;
 
 namespace base {
 
@@ -398,6 +400,74 @@ TEST(SplitStringPieceUsingSubstrTest, SplitWantNonEmpty) {
       base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   ASSERT_EQ(3u, results.size());
   EXPECT_THAT(results, ElementsAre("un", "deux", "trois"));
+}
+
+TEST(StringSplitTest, SplitStringOnce) {
+  // None of the separators are in the input, so should always be std::nullopt.
+  EXPECT_EQ(std::nullopt, SplitStringOnce("", ""));
+  EXPECT_EQ(std::nullopt, SplitStringOnce("a", ""));
+  EXPECT_EQ(std::nullopt, SplitStringOnce("ab", ""));
+
+  EXPECT_THAT(SplitStringOnce("a:b:c", ':'), Optional(Pair("a", "b:c")));
+  EXPECT_THAT(SplitStringOnce("a:", ':'), Optional(Pair("a", "")));
+  EXPECT_THAT(SplitStringOnce(":b", ':'), Optional(Pair("", "b")));
+
+  // Now the same using the multiple separators overload, but with only one
+  // separator specified.
+  EXPECT_THAT(SplitStringOnce("a:b:c", ":"), Optional(Pair("a", "b:c")));
+  EXPECT_THAT(SplitStringOnce("a:", ":"), Optional(Pair("a", "")));
+  EXPECT_THAT(SplitStringOnce(":b", ":"), Optional(Pair("", "b")));
+
+  // Multiple separators overload, but only the first one present.
+  EXPECT_THAT(SplitStringOnce("a:b:c", ":="), Optional(Pair("a", "b:c")));
+  EXPECT_THAT(SplitStringOnce("a:", ":="), Optional(Pair("a", "")));
+  EXPECT_THAT(SplitStringOnce(":b", ":="), Optional(Pair("", "b")));
+
+  // Multiple separators overload, but only the second one present.
+  EXPECT_THAT(SplitStringOnce("a:b:c", "=:"), Optional(Pair("a", "b:c")));
+  EXPECT_THAT(SplitStringOnce("a:", "=:"), Optional(Pair("a", "")));
+  EXPECT_THAT(SplitStringOnce(":b", "=:"), Optional(Pair("", "b")));
+
+  // Multiple separators overload, both present. The separator that comes first
+  // in the input string (not separators string) should win.
+  EXPECT_THAT(SplitStringOnce("a:b=c", ":="), Optional(Pair("a", "b=c")));
+  EXPECT_THAT(SplitStringOnce("a:b=c", "=:"), Optional(Pair("a", "b=c")));
+  EXPECT_THAT(SplitStringOnce("a=b:c", ":="), Optional(Pair("a", "b:c")));
+  EXPECT_THAT(SplitStringOnce("a=b:c", "=:"), Optional(Pair("a", "b:c")));
+}
+
+TEST(StringSplitTest, RSplitStringOnce) {
+  // None of the separators are in the input, so should always be std::nullopt.
+  EXPECT_EQ(std::nullopt, RSplitStringOnce("", ""));
+  EXPECT_EQ(std::nullopt, RSplitStringOnce("a", ""));
+  EXPECT_EQ(std::nullopt, RSplitStringOnce("ab", ""));
+
+  EXPECT_THAT(RSplitStringOnce("a:b:c", ':'), Optional(Pair("a:b", "c")));
+  EXPECT_THAT(RSplitStringOnce("a:", ':'), Optional(Pair("a", "")));
+  EXPECT_THAT(RSplitStringOnce(":b", ':'), Optional(Pair("", "b")));
+
+  // Now the same using the multiple separators overload, but with only one
+  // separator specified.
+  EXPECT_THAT(RSplitStringOnce("a:b:c", ":"), Optional(Pair("a:b", "c")));
+  EXPECT_THAT(RSplitStringOnce("a:", ":"), Optional(Pair("a", "")));
+  EXPECT_THAT(RSplitStringOnce(":b", ":"), Optional(Pair("", "b")));
+
+  // Multiple separators overload, but only the first one present.
+  EXPECT_THAT(RSplitStringOnce("a:b:c", ":="), Optional(Pair("a:b", "c")));
+  EXPECT_THAT(RSplitStringOnce("a:", ":="), Optional(Pair("a", "")));
+  EXPECT_THAT(RSplitStringOnce(":b", ":="), Optional(Pair("", "b")));
+
+  // Multiple separators overload, but only the second one present.
+  EXPECT_THAT(RSplitStringOnce("a:b:c", "=:"), Optional(Pair("a:b", "c")));
+  EXPECT_THAT(RSplitStringOnce("a:", "=:"), Optional(Pair("a", "")));
+  EXPECT_THAT(RSplitStringOnce(":b", "=:"), Optional(Pair("", "b")));
+
+  // Multiple separators overload, both present. The separator that comes first
+  // in the input string (not separators string) should win.
+  EXPECT_THAT(RSplitStringOnce("a:b=c", ":="), Optional(Pair("a:b", "c")));
+  EXPECT_THAT(RSplitStringOnce("a:b=c", "=:"), Optional(Pair("a:b", "c")));
+  EXPECT_THAT(RSplitStringOnce("a=b:c", ":="), Optional(Pair("a=b", "c")));
+  EXPECT_THAT(RSplitStringOnce("a=b:c", "=:"), Optional(Pair("a=b", "c")));
 }
 
 TEST(StringSplitTest, StringSplitKeepWhitespace) {

@@ -118,7 +118,7 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDetachExternallyOwned(
   std::unique_ptr<WebContents> inner_contents =
       outer_web_contents_->node_.DetachInnerWebContents(current_web_contents_);
   OuterContentsFrameTreeNode()->RemoveObserver(this);
-  outer_contents_frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
+  outer_contents_frame_tree_node_id_ = FrameTreeNodeId();
   outer_web_contents_ = nullptr;
 
   inner_contents.release();
@@ -155,6 +155,40 @@ void WebContentsImpl::SetResumePending(bool resume) {
 void WebContentsImpl::SetJavaScriptDialogManager(
     JavaScriptDialogManager* dialog_manager) {
   dialog_manager_ = dialog_manager;
+}
+
+// Loop through all web contents and check if it cointains the point.
+// Returns true if the point is only contained by the UI content.
+bool WebContentsImpl::IsVivaldiUI(const gfx::Point& point) {
+  bool uiContainsPoint = false;
+
+  if (this->GetVisibility() == Visibility::VISIBLE &&
+      this->GetViewBounds().Contains(point)) {
+    if (vivaldi::IsVivaldiUrl(this->GetVisibleURL().spec())) {
+      uiContainsPoint = true;
+    } else {
+      return false;
+    }
+  }
+
+  std::vector<WebContentsImpl*> relevant_contents(1, this);
+  for (size_t i = 0; i != relevant_contents.size(); ++i) {
+    for (auto* inner : relevant_contents[i]->GetInnerWebContents()) {
+
+      if (inner->GetVisibility() == Visibility::VISIBLE &&
+          inner->GetViewBounds().Contains(point)) {
+        if (vivaldi::IsVivaldiUrl(inner->GetVisibleURL().spec())) {
+          uiContainsPoint = true;
+        }
+        if (!vivaldi::IsVivaldiUrl(inner->GetVisibleURL().spec())) {
+          return false;
+        }
+        relevant_contents.push_back(static_cast<WebContentsImpl*>(inner));
+      }
+    }
+  }
+
+  return uiContainsPoint;
 }
 
 }  // namespace content

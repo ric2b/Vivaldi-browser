@@ -17,12 +17,14 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/color/color_provider.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
@@ -49,9 +51,10 @@ LensPreselectionBubble::LensPreselectionBubble(views::View* anchor_view,
   SetShowCloseButton(false);
   SetCanActivate(false);
   set_focus_traversable_from_anchor_view(false);
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
+  DialogDelegate::SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   set_corner_radius(48);
   SetProperty(views::kElementIdentifierKey, kLensPreselectionBubbleElementId);
+  SetAccessibleWindowRole(ax::mojom::Role::kAlertDialog);
 }
 
 LensPreselectionBubble::~LensPreselectionBubble() = default;
@@ -69,6 +72,7 @@ void LensPreselectionBubble::Init() {
           ? l10n_util::GetStringUTF16(
                 IDS_LENS_OVERLAY_INITIAL_TOAST_ERROR_MESSAGE)
           : l10n_util::GetStringUTF16(IDS_LENS_OVERLAY_INITIAL_TOAST_MESSAGE);
+  SetAccessibleTitle(toast_text);
   icon_view_ = AddChildView(std::make_unique<views::ImageView>());
   label_ = AddChildView(std::make_unique<views::Label>(toast_text));
   label_->SetMultiLine(false);
@@ -91,6 +95,19 @@ void LensPreselectionBubble::Init() {
     exit_button_->SetProperty(views::kElementIdentifierKey,
                               kLensPreselectionBubbleExitButtonElementId);
   }
+  NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+}
+
+void LensPreselectionBubble::SetLabelText(int string_id) {
+  // If the bubble had offline state, we don't want to reset the text.
+  if (offline_) {
+    return;
+  }
+
+  const std::u16string new_toast_text = l10n_util::GetStringUTF16(string_id);
+  SetAccessibleTitle(new_toast_text);
+  label_->SetText(new_toast_text);
+  SizeToContents();
 }
 
 gfx::Rect LensPreselectionBubble::GetBubbleBounds() {
@@ -120,7 +137,8 @@ void LensPreselectionBubble::OnThemeChanged() {
       offline_ ? vector_icons::kErrorOutlineIcon
                : vector_icons::kGoogleLensMonochromeLogoIcon,
 #else
-      offline_ ? vector_icons::kErrorOutlineIcon : vector_icons::kSearchIcon,
+      offline_ ? vector_icons::kErrorOutlineIcon
+               : vector_icons::kSearchChromeRefreshIcon,
 #endif
       color_provider->GetColor(ui::kColorToastForeground), 24));
   label_->SetEnabledColor(color_provider->GetColor(ui::kColorToastForeground));

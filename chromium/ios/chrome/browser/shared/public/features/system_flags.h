@@ -5,10 +5,10 @@
 #ifndef IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_SYSTEM_FLAGS_H_
 #define IOS_CHROME_BROWSER_SHARED_PUBLIC_FEATURES_SYSTEM_FLAGS_H_
 
+#import <Foundation/Foundation.h>
+
 #import <optional>
 #import <string>
-
-#import <Foundation/Foundation.h>
 
 enum class UpdateChromeSafetyCheckState;
 enum class PasswordSafetyCheckState;
@@ -19,6 +19,9 @@ enum class SafeBrowsingSafetyCheckState;
 // them) should be added.
 
 namespace experimental_flags {
+
+// NSUserDefaults key to list the number of profile available.
+extern NSString* const kDisplaySwitchProfile;
 
 // Whether the First Run UI will always be displayed.
 bool AlwaysDisplayFirstRun();
@@ -130,6 +133,12 @@ std::optional<int> GetFirstRunRecency();
 // switches, but the former takes precedence.
 std::string GetSegmentForForcedDeviceSwitcherExperience();
 
+// Returns the selected shopper segment the user wants to simulate as a string.
+// The string should either be nil, "ShoppingUser", or "Other". The value could
+// be set both from Experimental Settings and command line switches, but the
+// former takes precedence.
+std::string GetSegmentForForcedShopperExperience();
+
 // Whether a phone backup/restore state should be simulated.
 bool SimulatePostDeviceRestore();
 
@@ -141,6 +150,17 @@ bool ShouldIgnoreHistorySyncDeclineLimits();
 // Whether the developer-mode Switch Profile UI will be be displayed, returns
 // the number of test profiles that should be created.
 std::optional<int> DisplaySwitchProfile();
+
+// Returns the inactivity threshold to be used for displaying Safety Check
+// notifications, overriding the default value stored in the code or any value
+// set by Finch.
+//
+// Returns `std::nullopt` if no override is specified.
+std::optional<int> GetForcedInactivityThresholdForSafetyCheckNotifications();
+
+// Returns the override for Tab Resumption decoration.
+// Returns nil is not set.
+NSString* GetTabResumptionDecorationOverride();
 
 }  // namespace experimental_flags
 

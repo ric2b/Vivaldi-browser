@@ -45,9 +45,9 @@ void ProfileResetterTestBase::ResetAndWait(
     ProfileResetter::ResettableFlags resettable_flags) {
   std::unique_ptr<BrandcodedDefaultSettings> master_settings(
       new BrandcodedDefaultSettings);
-  resetter_->Reset(resettable_flags, std::move(master_settings),
-                   base::BindOnce(&ProfileResetterMockObject::StopLoop,
-                                  base::Unretained(&mock_object_)));
+  resetter_->ResetSettings(resettable_flags, std::move(master_settings),
+                           base::BindOnce(&ProfileResetterMockObject::StopLoop,
+                                          base::Unretained(&mock_object_)));
   mock_object_.RunLoop();
 }
 
@@ -56,9 +56,9 @@ void ProfileResetterTestBase::ResetAndWait(
     const std::string& prefs) {
   std::unique_ptr<BrandcodedDefaultSettings> master_settings(
       new BrandcodedDefaultSettings(prefs));
-  resetter_->Reset(resettable_flags, std::move(master_settings),
-                   base::BindOnce(&ProfileResetterMockObject::StopLoop,
-                                  base::Unretained(&mock_object_)));
+  resetter_->ResetSettings(resettable_flags, std::move(master_settings),
+                           base::BindOnce(&ProfileResetterMockObject::StopLoop,
+                                          base::Unretained(&mock_object_)));
   mock_object_.RunLoop();
 }
 
@@ -66,8 +66,8 @@ std::unique_ptr<KeyedService> CreateTemplateURLServiceForTesting(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
   return std::make_unique<TemplateURLService>(
-      profile->GetPrefs(),
-      search_engines::SearchEngineChoiceServiceFactory::GetForProfile(profile),
+      *profile->GetPrefs(),
+      *search_engines::SearchEngineChoiceServiceFactory::GetForProfile(profile),
       std::make_unique<UIThreadSearchTermsData>(),
       WebDataServiceFactory::GetKeywordWebDataForProfile(
           profile, ServiceAccessType::EXPLICIT_ACCESS),

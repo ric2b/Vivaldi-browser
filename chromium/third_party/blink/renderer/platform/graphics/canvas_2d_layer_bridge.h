@@ -56,7 +56,6 @@ class PLATFORM_EXPORT Canvas2DLayerBridge {
 
   void FinalizeFrame(FlushReason);
   void PageVisibilityChanged();
-  bool Restore();
 
   bool WritePixels(const SkImageInfo&,
                    const void* pixels,
@@ -108,9 +107,6 @@ class PLATFORM_EXPORT Canvas2DLayerBridge {
   static void HibernateOrLogFailure(base::WeakPtr<Canvas2DLayerBridge> bridge,
                                     base::TimeTicks /*idleDeadline*/);
   void Hibernate();
-
-  CanvasResourceProvider* ResourceProvider() const;
-  void ResetResourceProvider();
 
   CanvasHibernationHandler hibernation_handler_;
 

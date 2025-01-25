@@ -86,6 +86,7 @@
 #include "third_party/blink/renderer/core/layout/list/list_marker.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/style/style_intrinsic_length.h"
 #include "third_party/blink/renderer/core/svg/svg_foreign_object_element.h"
@@ -99,6 +100,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/transforms/transform_operations.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "ui/base/ui_base_features.h"
 
 namespace blink {
@@ -193,6 +195,7 @@ static EDisplay EquivalentBlockDisplay(EDisplay display) {
     case EDisplay::kListItem:
     case EDisplay::kFlowRoot:
     case EDisplay::kLayoutCustom:
+    case EDisplay::kMasonry:
       return display;
     case EDisplay::kInlineTable:
       return EDisplay::kTable;
@@ -212,6 +215,8 @@ static EDisplay EquivalentBlockDisplay(EDisplay display) {
       return EDisplay::kListItem;
     case EDisplay::kInlineFlowRootListItem:
       return EDisplay::kFlowRootListItem;
+    case EDisplay::kInlineMasonry:
+      return EDisplay::kMasonry;
 
     case EDisplay::kContents:
     case EDisplay::kInline:
@@ -250,6 +255,8 @@ static EDisplay EquivalentInlineDisplay(EDisplay display) {
       return EDisplay::kInlineFlex;
     case EDisplay::kGrid:
       return EDisplay::kInlineGrid;
+    case EDisplay::kMasonry:
+      return EDisplay::kInlineMasonry;
     case EDisplay::kBlockMath:
       return EDisplay::kMath;
     case EDisplay::kBlockRuby:
@@ -264,6 +271,7 @@ static EDisplay EquivalentInlineDisplay(EDisplay display) {
     case EDisplay::kInlineGrid:
     case EDisplay::kInlineLayoutCustom:
     case EDisplay::kInlineListItem:
+    case EDisplay::kInlineMasonry:
     case EDisplay::kInlineTable:
     case EDisplay::kMath:
     case EDisplay::kRuby:
@@ -620,12 +628,28 @@ void StyleAdjuster::AdjustOverflow(ComputedStyleBuilder& builder,
   }
 }
 
+// g-issues.chromium.org/issues/349835587
+// https://github.com/WICG/canvas-place-element
+static bool IsCanvasPlacedElement(const Element* element) {
+  if (RuntimeEnabledFeatures::CanvasPlaceElementEnabled() && element) {
+    // Only want to do the different layout if placeElement has been called.
+    if (const auto* canvas =
+            DynamicTo<HTMLCanvasElement>(element->parentElement())) {
+      return canvas->HasPlacedElements();
+    }
+  }
+
+  return false;
+}
+
 static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
                                   const ComputedStyle& layout_parent_style,
                                   const Element* element,
                                   Document* document) {
-  // Blockify the children of flex, grid, math or LayoutCustom containers.
-  if (layout_parent_style.BlockifiesChildren() && !HostIsInputFile(element)) {
+  bool is_canvas_placed_element = IsCanvasPlacedElement(element);
+
+  if ((layout_parent_style.BlockifiesChildren() && !HostIsInputFile(element)) ||
+      is_canvas_placed_element) {
     builder.SetIsInBlockifyingDisplay();
     if (builder.Display() != EDisplay::kContents) {
       builder.SetDisplay(EquivalentBlockDisplay(builder.Display()));
@@ -634,8 +658,12 @@ static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
       }
     }
     if (layout_parent_style.IsDisplayFlexibleOrGridBox() ||
-        layout_parent_style.IsDisplayMathType()) {
+        layout_parent_style.IsDisplayMathType() || is_canvas_placed_element) {
       builder.SetIsInsideDisplayIgnoringFloatingChildren();
+    }
+
+    if (is_canvas_placed_element) {
+      builder.SetPosition(EPosition::kStatic);
     }
   }
 
@@ -699,6 +727,20 @@ static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
   // Blockify the child boxes of media elements. crbug.com/1379779.
   if (IsAtMediaUAShadowBoundary(element)) {
     builder.SetDisplay(EquivalentBlockDisplay(builder.Display()));
+  }
+
+  // display: -webkit-box when used with (-webkit)-line-clamp
+  if (RuntimeEnabledFeatures::CSSLineClampWebkitBoxBlockificationEnabled() &&
+      builder.BoxOrient() == EBoxOrient::kVertical &&
+      (builder.WebkitLineClamp() != 0 || builder.StandardLineClamp() != 0 ||
+       builder.HasAutoStandardLineClamp())) {
+    if (builder.Display() == EDisplay::kWebkitBox) {
+      builder.SetDisplay(EDisplay::kFlowRoot);
+      builder.SetIsSpecifiedDisplayWebkitBox();
+    } else if (builder.Display() == EDisplay::kWebkitInlineBox) {
+      builder.SetDisplay(EDisplay::kInlineBlock);
+      builder.SetIsSpecifiedDisplayWebkitBox();
+    }
   }
 }
 
@@ -839,8 +881,8 @@ static void AdjustStyleForInert(ComputedStyleBuilder& builder,
   }
 
   if (element->IsInertRoot()) {
-    builder.SetIsInert(true);
-    builder.SetIsInertIsInherited(false);
+    builder.SetIsHTMLInert(true);
+    builder.SetIsHTMLInertIsInherited(false);
     return;
   }
 
@@ -850,23 +892,22 @@ static void AdjustStyleForInert(ComputedStyleBuilder& builder,
     modal_element = Fullscreen::FullscreenElementFrom(document);
   }
   if (modal_element == element) {
-    builder.SetIsInert(false);
-    builder.SetIsInertIsInherited(false);
+    builder.SetIsHTMLInert(false);
+    builder.SetIsHTMLInertIsInherited(false);
     return;
   }
   if (modal_element && element == document.documentElement()) {
-    builder.SetIsInert(true);
-    builder.SetIsInertIsInherited(false);
+    builder.SetIsHTMLInert(true);
+    builder.SetIsHTMLInertIsInherited(false);
     return;
   }
 
   if (StyleBaseData* base_data = builder.BaseData()) {
-    if (RuntimeEnabledFeatures::InertDisplayTransitionEnabled() &&
-        base_data->GetBaseComputedStyle()->Display() == EDisplay::kNone) {
+    if (base_data->GetBaseComputedStyle()->Display() == EDisplay::kNone) {
       // Elements which are transitioning to display:none should become inert:
       // https://github.com/w3c/csswg-drafts/issues/8389
-      builder.SetIsInert(true);
-      builder.SetIsInertIsInherited(false);
+      builder.SetIsHTMLInert(true);
+      builder.SetIsHTMLInertIsInherited(false);
       return;
     }
   }
@@ -898,6 +939,7 @@ void StyleAdjuster::AdjustForForcedColorsMode(ComputedStyleBuilder& builder,
   }
   const ui::ColorProvider* color_provider =
       document.GetColorProviderForPainting(color_scheme);
+  auto is_in_web_app_scope = document.IsInWebAppScope();
 
   // Re-resolve some internal forced color properties whose initial
   // values are system colors. This is necessary to ensure we get
@@ -906,17 +948,17 @@ void StyleAdjuster::AdjustForForcedColorsMode(ComputedStyleBuilder& builder,
   if (builder.InternalForcedBackgroundColor().IsSystemColor()) {
     builder.SetInternalForcedBackgroundColor(
         builder.InternalForcedBackgroundColor().ResolveSystemColor(
-            color_scheme, color_provider));
+            color_scheme, color_provider, is_in_web_app_scope));
   }
   if (builder.InternalForcedColor().IsSystemColor()) {
     builder.SetInternalForcedColor(
-        builder.InternalForcedColor().ResolveSystemColor(color_scheme,
-                                                         color_provider));
+        builder.InternalForcedColor().ResolveSystemColor(
+            color_scheme, color_provider, is_in_web_app_scope));
   }
   if (builder.InternalForcedVisitedColor().IsSystemColor()) {
     builder.SetInternalForcedVisitedColor(
         builder.InternalForcedVisitedColor().ResolveSystemColor(
-            color_scheme, color_provider));
+            color_scheme, color_provider, is_in_web_app_scope));
   }
 }
 
@@ -966,14 +1008,13 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
 
     bool is_document_element =
         element && element->GetDocument().documentElement() == element;
-    // Per the spec, position 'static' and 'relative' in the top layer compute
-    // to 'absolute'. Root elements that are in the top layer should just
-    // be left alone because the fullscreen.css doesn't apply any style to
-    // them.
+    // https://drafts.csswg.org/css-position-4/#top-styling
+    // Elements in the top layer must be out-of-flow positioned.
+    // Root elements that are in the top layer should just be left alone
+    // because the fullscreen.css doesn't apply any style to them.
     if ((builder.Overlay() == EOverlay::kAuto && !is_document_element) ||
         builder.StyleType() == kPseudoIdBackdrop) {
-      if (builder.GetPosition() == EPosition::kStatic ||
-          builder.GetPosition() == EPosition::kRelative) {
+      if (!builder.HasOutOfFlowPosition()) {
         builder.SetPosition(EPosition::kAbsolute);
       }
       if (builder.Display() == EDisplay::kContents) {

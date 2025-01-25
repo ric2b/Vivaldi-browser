@@ -25,21 +25,34 @@ namespace blink {
 
 using testing::Test;
 
-class CanvasHibernationHandlerTest : public Test {
+class CanvasHibernationHandlerTest
+    : public testing::TestWithParam<
+          CanvasHibernationHandler::CompressionAlgorithm> {
  public:
-  std::unique_ptr<Canvas2DLayerBridge> MakeBridge(
-      const gfx::Size& size,
-      RasterModeHint raster_mode,
-      OpacityMode opacity_mode,
-      std::unique_ptr<FakeCanvasResourceHost> custom_host = nullptr) {
+  CanvasHibernationHandlerTest() {
+    // This only enabled the feature, not necessarily compression using this
+    // algorithm, since the current platform may not support it. This is the
+    // correct thing to do though, as we care about code behaving well with the
+    // two feature states, even on platforms that don't support ZSTD.
+    CanvasHibernationHandler::CompressionAlgorithm algorithm = GetParam();
+    switch (algorithm) {
+      case CanvasHibernationHandler::CompressionAlgorithm::kZlib:
+        scoped_feature_list_.InitWithFeatures({},
+                                              {kCanvasHibernationSnapshotZstd});
+        break;
+      case blink::CanvasHibernationHandler::CompressionAlgorithm::kZstd:
+        scoped_feature_list_.InitWithFeatures({kCanvasHibernationSnapshotZstd},
+                                              {});
+        break;
+    }
+  }
+
+  std::unique_ptr<Canvas2DLayerBridge> MakeBridge(const gfx::Size& size,
+                                                  RasterModeHint raster_mode,
+                                                  OpacityMode opacity_mode) {
     std::unique_ptr<Canvas2DLayerBridge> bridge =
         std::make_unique<Canvas2DLayerBridge>();
-    if (custom_host) {
-      host_ = std::move(custom_host);
-    }
-    if (!host_) {
-      host_ = std::make_unique<FakeCanvasResourceHost>(size);
-    }
+    host_ = std::make_unique<FakeCanvasResourceHost>(size);
     host_->SetPreferred2DRasterMode(raster_mode);
     host_->SetOpacityMode(opacity_mode);
     bridge->SetCanvasResourceHost(host_.get());
@@ -54,7 +67,7 @@ class CanvasHibernationHandlerTest : public Test {
   virtual bool NeedsMockGL() { return false; }
 
   void TearDown() override {
-    SharedGpuContext::ResetForTesting();
+    SharedGpuContext::Reset();
     test_context_provider_.reset();
   }
 
@@ -67,6 +80,7 @@ class CanvasHibernationHandlerTest : public Test {
   test::TaskEnvironment task_environment_;
   scoped_refptr<viz::TestContextProvider> test_context_provider_;
   std::unique_ptr<FakeCanvasResourceHost> host_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 namespace {
@@ -157,7 +171,13 @@ class TestSingleThreadTaskRunner : public base::SingleThreadTaskRunner {
 
 }  // namespace
 
-TEST_F(CanvasHibernationHandlerTest, SimpleTest) {
+INSTANTIATE_TEST_SUITE_P(
+    CompressionAlgorithm,
+    CanvasHibernationHandlerTest,
+    ::testing::Values(CanvasHibernationHandler::CompressionAlgorithm::kZlib,
+                      CanvasHibernationHandler::CompressionAlgorithm::kZstd));
+
+TEST_P(CanvasHibernationHandlerTest, SimpleTest) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
   base::HistogramTester histogram_tester;
@@ -213,7 +233,7 @@ TEST_F(CanvasHibernationHandlerTest, SimpleTest) {
   EXPECT_TRUE(Host()->IsResourceValid());
 }
 
-TEST_F(CanvasHibernationHandlerTest, ForegroundTooEarly) {
+TEST_P(CanvasHibernationHandlerTest, ForegroundTooEarly) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 
@@ -239,7 +259,7 @@ TEST_F(CanvasHibernationHandlerTest, ForegroundTooEarly) {
   EXPECT_FALSE(handler.is_encoded());
 }
 
-TEST_F(CanvasHibernationHandlerTest, BackgroundForeground) {
+TEST_P(CanvasHibernationHandlerTest, BackgroundForeground) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 
@@ -264,7 +284,7 @@ TEST_F(CanvasHibernationHandlerTest, BackgroundForeground) {
   EXPECT_TRUE(handler.is_encoded());
 }
 
-TEST_F(CanvasHibernationHandlerTest, ForegroundAfterEncoding) {
+TEST_P(CanvasHibernationHandlerTest, ForegroundAfterEncoding) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 
@@ -292,7 +312,7 @@ TEST_F(CanvasHibernationHandlerTest, ForegroundAfterEncoding) {
   EXPECT_FALSE(bridge->IsHibernating());
 }
 
-TEST_F(CanvasHibernationHandlerTest, ForegroundFlipForAfterEncoding) {
+TEST_P(CanvasHibernationHandlerTest, ForegroundFlipForAfterEncoding) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 
@@ -330,7 +350,7 @@ TEST_F(CanvasHibernationHandlerTest, ForegroundFlipForAfterEncoding) {
   EXPECT_TRUE(bridge->IsHibernating());
 }
 
-TEST_F(CanvasHibernationHandlerTest, ForegroundFlipForBeforeEncoding) {
+TEST_P(CanvasHibernationHandlerTest, ForegroundFlipForBeforeEncoding) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 
@@ -361,7 +381,7 @@ TEST_F(CanvasHibernationHandlerTest, ForegroundFlipForBeforeEncoding) {
   EXPECT_TRUE(bridge->IsHibernating());
 }
 
-TEST_F(CanvasHibernationHandlerTest, CanvasSnapshottedInBackground) {
+TEST_P(CanvasHibernationHandlerTest, CanvasSnapshottedInBackground) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 
@@ -387,7 +407,7 @@ TEST_F(CanvasHibernationHandlerTest, CanvasSnapshottedInBackground) {
   EXPECT_TRUE(handler.is_encoded());
 }
 
-TEST_F(CanvasHibernationHandlerTest, CanvasWriteInBackground) {
+TEST_P(CanvasHibernationHandlerTest, CanvasWriteInBackground) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 
@@ -412,7 +432,7 @@ TEST_F(CanvasHibernationHandlerTest, CanvasWriteInBackground) {
   EXPECT_FALSE(handler.is_encoded());
 }
 
-TEST_F(CanvasHibernationHandlerTest, CanvasWriteWhileCompressing) {
+TEST_P(CanvasHibernationHandlerTest, CanvasWriteWhileCompressing) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 
@@ -439,7 +459,7 @@ TEST_F(CanvasHibernationHandlerTest, CanvasWriteWhileCompressing) {
   EXPECT_FALSE(handler.is_encoded());
 }
 
-TEST_F(CanvasHibernationHandlerTest, HibernationMemoryMetrics) {
+TEST_P(CanvasHibernationHandlerTest, HibernationMemoryMetrics) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures({features::kCanvas2DHibernation}, {});
 

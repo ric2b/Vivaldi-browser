@@ -459,6 +459,21 @@ class GerritUtilTest(unittest.TestCase):
         self.assertEqual(2, len(conn.request.mock_calls))
         gerrit_util.time_sleep.assert_called_once_with(12.0)
 
+    def testReadHttpResponse_SetMaxTries(self):
+        conn = mock.Mock(req_params={'uri': 'uri', 'method': 'method'})
+        conn.request.side_effect = [
+            (mock.Mock(status=409), b'error!'),
+            (mock.Mock(status=409), b'error!'),
+            (mock.Mock(status=409), b'error!'),
+        ]
+
+        self.assertRaises(gerrit_util.GerritError,
+                          gerrit_util.ReadHttpResponse,
+                          conn,
+                          max_tries=2)
+        self.assertEqual(2, len(conn.request.mock_calls))
+        gerrit_util.time_sleep.assert_called_once_with(12.0)
+
     def testReadHttpResponse_Expected404(self):
         conn = mock.Mock()
         conn.req_params = {'uri': 'uri', 'method': 'method'}
@@ -716,17 +731,15 @@ class ShouldUseSSOTest(unittest.TestCase):
     def setUp(self) -> None:
         self.newauth = mock.patch('newauth.Enabled', return_value=True)
         self.newauth.start()
-
         self.cwd = mock.patch('os.getcwd', return_value='/fake/cwd')
         self.cwd.start()
-
         self.sso = mock.patch('gerrit_util.ssoHelper.find_cmd',
                               return_value='/fake/git-remote-sso')
         self.sso.start()
-
         scm_mock.GIT(self)
-
         self.addCleanup(mock.patch.stopall)
+
+        gerrit_util.ShouldUseSSO.cache_clear()
         return super().setUp()
 
     def tearDown(self) -> None:
@@ -737,23 +750,33 @@ class ShouldUseSSOTest(unittest.TestCase):
     @mock.patch('newauth.Enabled', return_value=False)
     def testDisabled(self, _):
         self.assertFalse(
-            gerrit_util.ShouldUseSSO('fake-host', 'firefly@google.com'))
+            gerrit_util.ShouldUseSSO('fake-host.googlesource.com',
+                                     'firefly@google.com'))
 
     @mock.patch('gerrit_util.ssoHelper.find_cmd', return_value='')
     def testMissingCommand(self, _):
         self.assertFalse(
-            gerrit_util.ShouldUseSSO('fake-host', 'firefly@google.com'))
+            gerrit_util.ShouldUseSSO('fake-host.googlesource.com',
+                                     'firefly@google.com'))
+
+    def testBadHost(self):
+        self.assertFalse(
+            gerrit_util.ShouldUseSSO('fake-host.coreboot.org',
+                                     'firefly@google.com'))
 
     def testEmptyEmail(self):
-        self.assertTrue(gerrit_util.ShouldUseSSO('fake-host', ''))
+        self.assertTrue(
+            gerrit_util.ShouldUseSSO('fake-host.googlesource.com', ''))
 
     def testGoogleEmail(self):
         self.assertTrue(
-            gerrit_util.ShouldUseSSO('fake-host', 'firefly@google.com'))
+            gerrit_util.ShouldUseSSO('fake-host.googlesource.com',
+                                     'firefly@google.com'))
 
     def testGmail(self):
         self.assertFalse(
-            gerrit_util.ShouldUseSSO('fake-host', 'firefly@gmail.com'))
+            gerrit_util.ShouldUseSSO('fake-host.googlesource.com',
+                                     'firefly@gmail.com'))
 
     @mock.patch('gerrit_util.GetAccountEmails',
                 return_value=[{
@@ -761,8 +784,11 @@ class ShouldUseSSOTest(unittest.TestCase):
                 }])
     def testLinkedChromium(self, email):
         self.assertTrue(
-            gerrit_util.ShouldUseSSO('fake-host', 'firefly@chromium.org'))
-        email.assert_called_with('fake-host', 'self', authenticator=mock.ANY)
+            gerrit_util.ShouldUseSSO('fake-host.googlesource.com',
+                                     'firefly@chromium.org'))
+        email.assert_called_with('fake-host.googlesource.com',
+                                 'self',
+                                 authenticator=mock.ANY)
 
     @mock.patch('gerrit_util.GetAccountEmails',
                 return_value=[{
@@ -770,8 +796,11 @@ class ShouldUseSSOTest(unittest.TestCase):
                 }])
     def testUnlinkedChromium(self, email):
         self.assertFalse(
-            gerrit_util.ShouldUseSSO('fake-host', 'firefly@chromium.org'))
-        email.assert_called_with('fake-host', 'self', authenticator=mock.ANY)
+            gerrit_util.ShouldUseSSO('fake-host.googlesource.com',
+                                     'firefly@chromium.org'))
+        email.assert_called_with('fake-host.googlesource.com',
+                                 'self',
+                                 authenticator=mock.ANY)
 
 
 if __name__ == '__main__':

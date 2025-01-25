@@ -9,6 +9,7 @@
 
 #include "base/test/perf_log.h"
 
+#include "base/check.h"
 #include "base/files/file_util.h"
 #include "base/notreached.h"
 
@@ -19,8 +20,7 @@ static FILE* perf_log_file = nullptr;
 bool InitPerfLog(const FilePath& log_file) {
   if (perf_log_file) {
     // trying to initialize twice
-    NOTREACHED_IN_MIGRATION();
-    return false;
+    NOTREACHED();
   }
 
   perf_log_file = OpenFile(log_file, "w");
@@ -30,17 +30,13 @@ bool InitPerfLog(const FilePath& log_file) {
 void FinalizePerfLog() {
   if (!perf_log_file) {
     // trying to cleanup without initializing
-    NOTREACHED_IN_MIGRATION();
-    return;
+    NOTREACHED();
   }
   base::CloseFile(perf_log_file);
 }
 
 void LogPerfResult(const char* test_name, double value, const char* units) {
-  if (!perf_log_file) {
-    NOTREACHED_IN_MIGRATION();
-    return;
-  }
+  CHECK(perf_log_file);
 
   fprintf(perf_log_file, "%s\t%g\t%s\n", test_name, value, units);
   printf("%s\t%g\t%s\n", test_name, value, units);

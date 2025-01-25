@@ -8,22 +8,17 @@
 #include <string_view>
 
 #include "base/containers/contains.h"
-#include "components/guest_view/browser/guest_view_base.h"
+#include "base/metrics/histogram_functions.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_host_registry.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/browser/guest_view/app_view/app_view_guest.h"
-#include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_embedder.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/url_request_util.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/constants.h"
@@ -39,6 +34,19 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "ui/base/page_transition_types.h"
+#include "url/origin.h"
+
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+#include "components/guest_view/browser/guest_view_base.h"
+#include "extensions/browser/guest_view/app_view/app_view_guest.h"
+#include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_embedder.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
+#include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/app_window/app_window_registry.h"
+#endif
 
 #include "app/vivaldi_apptools.h"
 
@@ -66,6 +74,7 @@ bool ShouldBlockNavigationToPlatformAppResource(
   if (view_type == mojom::ViewType::kExtensionBackgroundPage)
     return false;
 
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
   // Navigation within an app window. The app window must belong to the
   // |platform_app|.
   if (view_type == mojom::ViewType::kAppWindow) {
@@ -80,7 +89,9 @@ bool ShouldBlockNavigationToPlatformAppResource(
     DCHECK(app_window);
     return app_window->extension_id() != platform_app->id();
   }
+#endif
 
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
   // Navigation within a guest web contents.
   if (view_type == mojom::ViewType::kExtensionGuest) {
     // Navigating within a PDF viewer extension (see crbug.com/1252154). This
@@ -111,13 +122,15 @@ bool ShouldBlockNavigationToPlatformAppResource(
     // (such as an extensionoptions view). Disallow.
     return true;
   }
+#endif
 
   DCHECK(view_type == mojom::ViewType::kBackgroundContents ||
          view_type == mojom::ViewType::kComponent ||
          view_type == mojom::ViewType::kExtensionPopup ||
          view_type == mojom::ViewType::kTabContents ||
          view_type == mojom::ViewType::kOffscreenDocument ||
-         view_type == mojom::ViewType::kExtensionSidePanel)
+         view_type == mojom::ViewType::kExtensionSidePanel ||
+         view_type == mojom::ViewType::kDeveloperTools)
       << "Unhandled view type: " << view_type;
 
   return true;
@@ -156,10 +169,12 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     }
   }
 
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
   // Some checks below will need to know whether this navigation is in a
   // <webview> guest.
   guest_view::GuestViewBase* guest =
       guest_view::GuestViewBase::FromWebContents(web_contents);
+#endif
 
   // Is this navigation targeting an extension resource?
   ExtensionRegistry* registry = ExtensionRegistry::Get(browser_context);
@@ -177,6 +192,7 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     target_extension =
         registry->enabled_extensions().GetByID(target_origin.host());
   } else {
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
 
     // If this is a <webview> owned by Vivaldi let the navigation through. This
     // was introduced for VB-85798 where webstore navigation inside webviews was
@@ -200,6 +216,7 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
         return content::NavigationThrottle::BLOCK_REQUEST;
     }
     }// Vivaldi owned
+#endif
 
     // Otherwise, the navigation is not to a chrome-extension resource, and
     // there is no need to perform any more checks; it's outside of the purview
@@ -244,6 +261,7 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
     }
   }
 
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
   if (url_has_extension_scheme && guest) {
     // Check whether the guest is allowed to load the extension URL. This is
     // usually allowed only for the guest's owner extension resources, and only
@@ -279,11 +297,34 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
       return content::NavigationThrottle::BLOCK_REQUEST;
     }
   }
+#endif
 
   if (target_extension->is_platform_app() &&
       ShouldBlockNavigationToPlatformAppResource(target_extension,
                                                  *navigation_handle())) {
     return content::NavigationThrottle::BLOCK_REQUEST;
+  }
+
+  // `redirect_chain` is the current page and each one before is an ancestor.
+  const auto& redirect_chain = navigation_handle()->GetRedirectChain();
+
+  // Record if the redirection is to an extension resource that isn't web
+  // accessible.
+  if (redirect_chain.size() > 1) {
+    // Looking back to the previous should be okay since this block is expected
+    // to be reached again if there are more redirects in the same navigation.
+    const GURL& upstream = redirect_chain[redirect_chain.size() - 2];
+    auto upstream_origin = url::Origin::Create(upstream);
+    // Cross-origin-redirects require that the resource is accessible in the
+    // "web_accessible_resources" section of the manifest.
+    if (!upstream_origin.opaque() && upstream_origin != target_origin) {
+      base::UmaHistogramBoolean(
+          target_extension->manifest_version() < 3
+              ? "Extensions.WAR.XOriginWebAccessible.MV2"
+              : "Extensions.WAR.XOriginWebAccessible.MV3",
+          WebAccessibleResourcesInfo::IsResourceWebAccessibleRedirect(
+              target_extension, url, target_origin, upstream));
+    }
   }
 
   // Automatically trusted navigation:
@@ -334,8 +375,6 @@ ExtensionNavigationThrottle::WillStartOrRedirectRequest() {
 
   // Cross-origin-initiator navigations require that the `url` is in the
   // manifest's "web_accessible_resources" section. The last GURL in
-  // `redirect_chain` is the current page and each one before is an ancestor.
-  auto redirect_chain = navigation_handle()->GetRedirectChain();
   GURL upstream_url = redirect_chain.size() > 1
                           ? redirect_chain[redirect_chain.size() - 2]
                           : GURL();
@@ -388,6 +427,7 @@ ExtensionNavigationThrottle::WillProcessResponse() {
     return PROCEED;
   }
 
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
   auto* mime_handler_view_embedder =
       MimeHandlerViewEmbedder::Get(navigation_handle()->GetFrameTreeNodeId());
   if (!mime_handler_view_embedder)
@@ -405,6 +445,9 @@ ExtensionNavigationThrottle::WillProcessResponse() {
   // that we don't have to remove it soon after creation.
   mime_handler_view_embedder->OnFrameSandboxed();
   return ThrottleCheckResult(CANCEL, net::ERR_BLOCKED_BY_CLIENT);
+#else
+  return PROCEED;
+#endif
 }
 
 const char* ExtensionNavigationThrottle::GetNameForLogging() {

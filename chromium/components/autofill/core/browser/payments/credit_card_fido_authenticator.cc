@@ -9,8 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "build/build_config.h"
-
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
 #endif
@@ -18,6 +16,7 @@
 #include "base/containers/flat_set.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_progress_dialog_type.h"
@@ -765,18 +764,6 @@ void CreditCardFidoAuthenticator::HandleGetAssertionSuccess(
             autofill_client_->GetLastCommittedPrimaryMainFrameURL()
                 .DeprecatedGetOriginAsURL();
       }
-#if BUILDFLAG(IS_ANDROID)
-      if (base::FeatureList::IsEnabled(
-              features::kAutofillEnableFIDOProgressDialog)) {
-        // Open the progress dialog when authenticating and getting the full
-        // card from FIDO.
-        autofill_client_->GetPaymentsAutofillClient()
-            ->ShowAutofillProgressDialog(
-                AutofillProgressDialogType::kAndroidFIDOProgressDialog,
-                base::BindOnce(&CreditCardFidoAuthenticator::CancelVerification,
-                               weak_ptr_factory_.GetWeakPtr()));
-      }
-#endif
       full_card_request_->GetFullCardViaFIDO(
           *card_, payments::PaymentsAutofillClient::UnmaskCardReason::kAutofill,
           weak_ptr_factory_.GetWeakPtr(), std::move(response),
@@ -868,8 +855,9 @@ void CreditCardFidoAuthenticator::HandleGetAssertionFailure() {
 
 webauthn::InternalAuthenticator* CreditCardFidoAuthenticator::authenticator() {
   if (!authenticator_) {
-    authenticator_ = autofill_client_->CreateCreditCardInternalAuthenticator(
-        autofill_driver_.get());
+    authenticator_ =
+        autofill_client_->GetPaymentsAutofillClient()
+            ->CreateCreditCardInternalAuthenticator(autofill_driver_.get());
     // `authenticator_` may be null for unsupported platforms.
     if (authenticator_) {
       authenticator_->SetEffectiveOrigin(

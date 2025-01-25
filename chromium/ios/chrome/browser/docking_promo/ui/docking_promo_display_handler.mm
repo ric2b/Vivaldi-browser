@@ -18,7 +18,7 @@
 
 - (instancetype)initWithHandler:(id<DockingPromoCommands>)handler
        showRemindMeLaterVersion:(BOOL)showRemindMeLaterVersion {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     CHECK(handler);
     _handler = handler;
     _showRemindMeLaterVersion = showRemindMeLaterVersion;
@@ -30,7 +30,7 @@
 #pragma mark - StandardPromoDisplayHandler
 
 - (void)handleDisplay {
-  [_handler showDockingPromo];
+  [_handler showDockingPromo:NO];
 }
 
 #pragma mark - PromoProtocol

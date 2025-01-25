@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 
 #include <algorithm>
@@ -65,6 +70,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -79,6 +85,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/views/accessibility/accessibility_paint_checks.h"
+#include "ui/views/accessibility/view_accessibility.h"
 
 namespace ash {
 
@@ -403,7 +410,8 @@ TEST_F(WindowCycleControllerTest, HandleCycleWindow) {
       Shell::GetPrimaryRootWindow(), kShellWindowId_SystemModalContainer);
   std::unique_ptr<Window> modal_window(
       CreateTestWindowWithId(-2, modal_container));
-  modal_window->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_SYSTEM);
+  modal_window->SetProperty(aura::client::kModalKey,
+                            ui::mojom::ModalType::kSystem);
   wm::ActivateWindow(modal_window.get());
   EXPECT_TRUE(wm::IsActiveWindow(modal_window.get()));
   controller->HandleCycleWindow(
@@ -1848,6 +1856,42 @@ TEST_F(WindowCycleControllerTest, SimulateFlingInAltTab) {
   cycle_controller->HandleCycleWindow(
       WindowCycleController::WindowCyclingDirection::kForward);
   EXPECT_TRUE(cycle_controller->IsCycling());
+}
+
+TEST_F(WindowCycleControllerTest, WindowCycleItemViewAccessibleProperties) {
+  std::unique_ptr<Window> window = CreateTestWindow();
+  std::unique_ptr<WindowCycleItemView> item_view =
+      std::make_unique<WindowCycleItemView>(window.get());
+
+  ui::AXNodeData data;
+  item_view->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.role, ax::mojom::Role::kWindow);
+  // Default title for test window.
+  ASSERT_EQ(window->GetTitle(), u"Window -1");
+  EXPECT_EQ(data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+            u"Window -1");
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+
+  // Test when source window title is empty.
+  data = ui::AXNodeData();
+  item_view->source_window()->SetTitle(std::u16string());
+  item_view->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetStringAttribute(ax::mojom::StringAttribute::kName),
+            l10n_util::GetStringUTF8(IDS_WM_WINDOW_CYCLER_UNTITLED_WINDOW));
+
+  // Test that accessible name is updated when source window title changes.
+  data = ui::AXNodeData();
+  item_view->source_window()->SetTitle(u"Some title");
+  item_view->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+            u"Some title");
+
+  // Test that view is hidden to a11y when source window is destroyed.
+  item_view->OnWindowDestroying(window.get());
+  ASSERT_TRUE(item_view);
+  data = ui::AXNodeData();
+  item_view->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
 }
 
 class ReverseGestureWindowCycleControllerTest

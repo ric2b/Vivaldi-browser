@@ -32,6 +32,7 @@
 #include "content/browser/interest_group/header_direct_from_seller_signals.h"
 #include "content/browser/interest_group/interest_group_k_anonymity_manager.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
+#include "content/browser/interest_group/interest_group_pa_report_util.h"
 #include "content/browser/interest_group/mock_auction_process_manager.h"
 #include "content/browser/interest_group/subresource_url_builder.h"
 #include "content/browser/interest_group/test_interest_group_manager_impl.h"
@@ -63,9 +64,6 @@
 
 namespace content {
 namespace {
-
-using PrivateAggregationKey =
-    InterestGroupAuctionReporter::PrivateAggregationKey;
 
 InterestGroupAuctionReporter::SellerWinningBidInfo CreateSellerWinningBidInfo(
     blink::AuctionConfig* auction_config) {
@@ -129,6 +127,7 @@ class EventReportingAttestationBrowserClient : public TestContentBrowserClient {
 // to auction worklets and sending reports. All tests use mock auction worklets.
 // Passing arguments correctly to reporting worklets is not covered by these
 // tests, but rather by the AuctionRunner tests.
+// TODO(crbug.com/334053709): Add test with reporting IDs.
 class InterestGroupAuctionReporterTest
     : public RenderViewHostTestHarness,
       public AuctionWorkletManager::Delegate {
@@ -199,8 +198,9 @@ class InterestGroupAuctionReporterTest
     std::vector<std::string> k_anon_keys_to_join{
         HashedKAnonKeyForAdBid(interest_group,
                                (*interest_group.ads)[0].render_url()),
-        HashedKAnonKeyForAdNameReporting(interest_group,
-                                         (*interest_group.ads)[0]),
+        HashedKAnonKeyForAdNameReporting(
+            interest_group, (*interest_group.ads)[0],
+            /*selected_buyer_and_seller_reporting_id=*/std::nullopt),
     };
     k_anon_keys_to_join_ =
         base::flat_set<std::string>(std::move(k_anon_keys_to_join));
@@ -288,6 +288,7 @@ class InterestGroupAuctionReporterTest
             std::move(debug_loss_report_urls_), k_anon_keys_to_join_,
             std::move(private_aggregation_requests_reserved_),
             std::move(private_aggregation_event_map_),
+            std::move(all_participanta_data_),
             std::move(real_time_contributions_));
     interest_group_auction_reporter_->Start(
         base::BindOnce(&InterestGroupAuctionReporterTest::OnCompleteCallback,
@@ -616,6 +617,23 @@ class InterestGroupAuctionReporterTest
               blink::mojom::AggregationServiceMode::kDefault,
               blink::mojom::DebugModeDetails::New());
   const auction_worklet::mojom::PrivateAggregationRequestPtr
+      kReservedOncePrivateAggregationRequest =
+          auction_worklet::mojom::PrivateAggregationRequest::New(
+              auction_worklet::mojom::AggregatableReportContribution::
+                  NewForEventContribution(
+                      auction_worklet::mojom::
+                          AggregatableReportForEventContribution::New(
+                              auction_worklet::mojom::ForEventSignalBucket::
+                                  NewIdBucket(1),
+                              auction_worklet::mojom::ForEventSignalValue::
+                                  NewIntValue(2),
+                              /*filtering_id=*/std::nullopt,
+                              auction_worklet::mojom::EventType::NewReserved(
+                                  auction_worklet::mojom::ReservedEventType::
+                                      kReservedOnce))),
+              blink::mojom::AggregationServiceMode::kDefault,
+              blink::mojom::DebugModeDetails::New());
+  const auction_worklet::mojom::PrivateAggregationRequestPtr
       kBonusNonReservedPrivateAggregationRequest =
           auction_worklet::mojom::PrivateAggregationRequest::New(
               auction_worklet::mojom::AggregatableReportContribution::
@@ -739,6 +757,9 @@ class InterestGroupAuctionReporterTest
            InterestGroupAuctionReporter::PrivateAggregationRequests>
       private_aggregation_event_map_;
 
+  InterestGroupAuctionReporter::PrivateAggregationAllParticipantsData
+      all_participanta_data_;
+
   // The real time reporting histograms passed in to the constructor.
   std::map<url::Origin,
            InterestGroupAuctionReporter::RealTimeReportingContributions>
@@ -765,7 +786,7 @@ class InterestGroupAuctionReporterTest
 TEST_F(InterestGroupAuctionReporterTest, SingleSellerNoReports) {
   SetUpAndStartSingleSellerAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, std::nullopt);
@@ -779,7 +800,7 @@ TEST_F(InterestGroupAuctionReporterTest, SingleSellerNoReports) {
 TEST_F(InterestGroupAuctionReporterTest, ComponentAuctionNoReports) {
   SetUpAndStartComponentAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, std::nullopt);
@@ -795,7 +816,7 @@ TEST_F(InterestGroupAuctionReporterTest, ComponentAuctionNoReports) {
 TEST_F(InterestGroupAuctionReporterTest, SingleSellerReports) {
   SetUpAndStartSingleSellerAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl);
@@ -845,7 +866,7 @@ TEST_F(InterestGroupAuctionReporterTest, ComponentAuctionReports) {
   SetUpAndStartComponentAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl);
@@ -877,7 +898,7 @@ TEST_F(InterestGroupAuctionReporterTest, ComponentAuctionErrors) {
 
   SetUpAndStartComponentAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl,
@@ -920,7 +941,7 @@ TEST_F(InterestGroupAuctionReporterTest, SingleSellerReportsLateNavigation) {
   EXPECT_FALSE(reporter_run_loop_.AnyQuitCalled());
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   WaitForCompletion();
   interest_group_manager_impl_->ExpectReports(
@@ -948,7 +969,7 @@ TEST_F(InterestGroupAuctionReporterTest,
   EXPECT_FALSE(reporter_run_loop_.AnyQuitCalled());
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   WaitForCompletion();
   interest_group_manager_impl_->ExpectReports(
@@ -966,7 +987,7 @@ TEST_F(InterestGroupAuctionReporterTest, SingleSellerSellerCrash) {
   SetUpAndStartSingleSellerAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   auction_process_manager_.WaitForWinningSellerReload();
@@ -991,7 +1012,7 @@ TEST_F(InterestGroupAuctionReporterTest, SingleSellerBuyerCrash) {
   SetUpAndStartSingleSellerAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl);
@@ -1016,7 +1037,7 @@ TEST_F(InterestGroupAuctionReporterTest, ComponentAuctionTopLevelSellerCrash) {
   SetUpAndStartComponentAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   auction_process_manager_.WaitForWinningSellerReload();
@@ -1048,7 +1069,7 @@ TEST_F(InterestGroupAuctionReporterTest, ComponentAuctionComponentSellerCrash) {
   SetUpAndStartComponentAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl);
@@ -1082,7 +1103,7 @@ TEST_F(InterestGroupAuctionReporterTest, SingleSellerBadSellerReportUrl) {
   SetUpAndStartSingleSellerAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl,
@@ -1106,7 +1127,7 @@ TEST_F(InterestGroupAuctionReporterTest, ComponentAuctionBadSellerReportUrl) {
   SetUpAndStartComponentAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl);
@@ -1135,7 +1156,7 @@ TEST_F(InterestGroupAuctionReporterTest, SingleSellerBadBidderReportUrl) {
   SetUpAndStartSingleSellerAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl);
@@ -1190,7 +1211,7 @@ TEST_F(InterestGroupAuctionReporterTest, SingleSellerReportBeaconMap) {
   // no need to hold them back until a fenced frame is navigated to the winning
   // ad.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForCompletion();
@@ -1252,7 +1273,7 @@ TEST_F(InterestGroupAuctionReporterTest, ComponentAuctionReportBeaconMap) {
   // no need to hold them back until a fenced frame is navigated to the winning
   // ad.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForCompletion();
@@ -1319,7 +1340,7 @@ TEST_F(InterestGroupAuctionReporterTest,
                         testing::UnorderedElementsAreArray(kBuyerBeaconMap))));
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   WaitForCompletion();
 }
@@ -1373,7 +1394,7 @@ TEST_F(InterestGroupAuctionReporterTest,
                         testing::UnorderedElementsAre())));
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   WaitForCompletion();
 }
@@ -1389,7 +1410,7 @@ TEST_F(InterestGroupAuctionReporterTest, DebugReportsEarlyNavigation) {
 
   SetUpAndStartSingleSellerAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   interest_group_manager_impl_->ExpectReports(
       {{InterestGroupManagerImpl::ReportType::kDebugWin, kDebugWinReport1},
@@ -1422,7 +1443,7 @@ TEST_F(InterestGroupAuctionReporterTest, DebugReportsLateNavigation) {
   interest_group_manager_impl_->ExpectReports({});
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   interest_group_manager_impl_->ExpectReports(
       {{InterestGroupManagerImpl::ReportType::kDebugWin, kDebugWinReport1},
@@ -1443,7 +1464,7 @@ TEST_F(InterestGroupAuctionReporterTest, RecordWinAndBids) {
 
   // The win and bids should be recorded immediately upon navigation.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   ExpectWinRecordedOnce();
   ExpectBidsRecordedOnce();
@@ -1474,7 +1495,7 @@ TEST_F(InterestGroupAuctionReporterTest, RecordWinAndBidsLateNavigation) {
 
   // The bids should be recorded immediately upon navigation.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   ExpectWinRecordedOnce();
   ExpectBidsRecordedOnce();
@@ -1499,7 +1520,7 @@ TEST_F(InterestGroupAuctionReporterTest, RecordKAnonKeysToJoin) {
 
   // The k-anon keys be recorded immediately upon navigation.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   task_environment()->RunUntilIdle();
   EXPECT_THAT(interest_group_manager_impl_->TakeJoinedKAnonSets(),
@@ -1535,7 +1556,7 @@ TEST_F(InterestGroupAuctionReporterTest, RecordKAnonKeysToJoinLateNavigation) {
 
   // The k-anon keys recorded immediately upon navigation.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   task_environment()->RunUntilIdle();
   EXPECT_THAT(interest_group_manager_impl_->TakeJoinedKAnonSets(),
@@ -1569,7 +1590,7 @@ TEST_F(InterestGroupAuctionReporterTest, PrivateAggregationRequests) {
   SetUpAndStartSingleSellerAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(
@@ -1604,6 +1625,82 @@ TEST_F(InterestGroupAuctionReporterTest, PrivateAggregationRequests) {
               kLosingBidderOrigin,
               ElementsAreRequests(
                   kLosingBidderGenerateBidPrivateAggregationRequest))));
+
+  WaitForCompletion();
+}
+
+TEST_F(InterestGroupAuctionReporterTest, InvalidPrivateAggregationRequests) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      blink::features::
+          kPrivateAggregationApiProtectedAudienceAdditionalExtensions);
+  SetUpAndStartSingleSellerAuction();
+
+  interest_group_auction_reporter_
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
+      .Run();
+
+  WaitForReportResultAndRunCallback(
+      kSellerScriptUrl, /*report_url=*/std::nullopt, /*ad_beacon_map=*/{},
+      MakeRequestPtrVector(kReportResultPrivateAggregationRequest.Clone(),
+                           kReservedOncePrivateAggregationRequest.Clone()));
+
+  // No requests should be sent until all phases are complete.
+  EXPECT_THAT(private_aggregation_manager_.TakePrivateAggregationRequests(),
+              testing::UnorderedElementsAre());
+  EXPECT_EQ("Private Aggregation request using disabled features",
+            TakeBadMessage());
+
+  // All reserved aggregation requests should be immediately passed along once
+  // the auction is complete.
+  WaitForReportWinAndRunCallback(
+      /*report_url=*/std::nullopt, /*ad_beacon_map=*/{}, /*ad_macro_map=*/{},
+      MakeRequestPtrVector(kReportWinPrivateAggregationRequest.Clone(),
+                           kReservedOncePrivateAggregationRequest.Clone()));
+  EXPECT_EQ("Private Aggregation request using disabled features",
+            TakeBadMessage());
+
+  // Due to the invalid messages, incoming PA stuff got discarded.
+  EXPECT_THAT(private_aggregation_manager_.TakePrivateAggregationRequests(),
+              testing::UnorderedElementsAre());
+
+  WaitForCompletion();
+}
+
+TEST_F(InterestGroupAuctionReporterTest, InvalidPrivateAggregationRequests2) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      blink::features::
+          kPrivateAggregationApiProtectedAudienceAdditionalExtensions);
+  SetUpAndStartSingleSellerAuction();
+
+  interest_group_auction_reporter_
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
+      .Run();
+
+  WaitForReportResultAndRunCallback(
+      kSellerScriptUrl, /*report_url=*/std::nullopt, /*ad_beacon_map=*/{},
+      MakeRequestPtrVector(kReportResultPrivateAggregationRequest.Clone(),
+                           kReservedOncePrivateAggregationRequest.Clone()));
+
+  // No requests should be sent until all phases are complete.
+  EXPECT_THAT(private_aggregation_manager_.TakePrivateAggregationRequests(),
+              testing::UnorderedElementsAre());
+  EXPECT_EQ("Reporting Private Aggregation request using reserved.once",
+            TakeBadMessage());
+
+  // All reserved aggregation requests should be immediately passed along once
+  // the auction is complete.
+  WaitForReportWinAndRunCallback(
+      /*report_url=*/std::nullopt, /*ad_beacon_map=*/{}, /*ad_macro_map=*/{},
+      MakeRequestPtrVector(kReportWinPrivateAggregationRequest.Clone(),
+                           kReservedOncePrivateAggregationRequest.Clone()));
+  EXPECT_EQ("Reporting Private Aggregation request using reserved.once",
+            TakeBadMessage());
+
+  // The invalid PA stuff got discarded.
+  EXPECT_THAT(private_aggregation_manager_.TakePrivateAggregationRequests(),
+              testing::UnorderedElementsAre());
 
   WaitForCompletion();
 }
@@ -1647,7 +1744,7 @@ TEST_F(InterestGroupAuctionReporterTest,
   // When the navigation finally occurs, all previously queued aggregated
   // requests should be passed along.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   EXPECT_THAT(
       private_aggregation_manager_.TakePrivateAggregationRequests(),
@@ -1686,7 +1783,7 @@ TEST_F(InterestGroupAuctionReporterTest,
   SetUpAndStartSingleSellerAuction();
 
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   // Nothing should be sent until all phases are complete.
@@ -1748,7 +1845,7 @@ TEST_F(InterestGroupAuctionReporterTest,
   // When the navigation finally occurs, all previously queued aggregated
   // requests should be passed along.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   EXPECT_THAT(
       interest_group_auction_reporter_->fenced_frame_reporter()
@@ -1775,7 +1872,7 @@ TEST_F(InterestGroupAuctionReporterTest, RealTimeReporting) {
 
   SetUpAndStartSingleSellerAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   EXPECT_THAT(
@@ -1821,7 +1918,7 @@ TEST_F(InterestGroupAuctionReporterTest, RealTimeReportingLateNavigation) {
   // When the navigation finally occurs, all previously queued requests should
   // be passed along.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   EXPECT_THAT(
@@ -1894,7 +1991,7 @@ TEST_F(InterestGroupAuctionReporterTest,
 TEST_F(InterestGroupAuctionReporterTest, DestroyedDuringSellerReportResult) {
   SetUpAndStartComponentAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   auction_process_manager_.WaitForWinningSellerReload();
@@ -1916,7 +2013,7 @@ TEST_F(InterestGroupAuctionReporterTest,
        DestroyedDuringComponentSellerReportResult) {
   SetUpAndStartComponentAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl);
@@ -1942,7 +2039,7 @@ TEST_F(InterestGroupAuctionReporterTest,
 TEST_F(InterestGroupAuctionReporterTest, DestroyedDuringReportWin) {
   SetUpAndStartComponentAuction();
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForReportResultAndRunCallback(kSellerScriptUrl, kSellerReportUrl);
@@ -2032,7 +2129,7 @@ TEST_F(InterestGroupAuctionReporterTest, MultipleNavigations) {
   SetUpAndStartSingleSellerAuction();
   base::RepeatingClosure callback =
       interest_group_auction_reporter_->OnNavigateToWinningAdCallback(
-          FrameTreeNode::kFrameTreeNodeInvalidId);
+          FrameTreeNodeId());
   callback.Run();
   callback.Run();
 
@@ -2141,7 +2238,7 @@ TEST_F(InterestGroupAuctionReporterPrivateAggregationDisabledTest,
   // The requests from the bidding and scoring phase of the auction should not
   // be passed along.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   EXPECT_TRUE(interest_group_auction_reporter_->fenced_frame_reporter()
                   ->GetPrivateAggregationEventMapForTesting()
@@ -2203,7 +2300,7 @@ TEST_F(
   // The requests from the bidding and scoring phase of the auction should not
   // be passed along.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
   EXPECT_TRUE(interest_group_auction_reporter_->fenced_frame_reporter()
                   ->GetPrivateAggregationEventMapForTesting()
@@ -2379,7 +2476,7 @@ TEST_F(InterestGroupAuctionReporterAdMacroReportingEnabledTest,
   // to the winning ad use them to trigger reports, so no need to hold them back
   // until a fenced frame is navigated to the winning ad.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForCompletion();
@@ -2416,7 +2513,7 @@ TEST_F(InterestGroupAuctionReporterAdMacroReportingEnabledTest,
   // no need to hold them back until a fenced frame is navigated to the winning
   // ad.
   interest_group_auction_reporter_
-      ->OnNavigateToWinningAdCallback(FrameTreeNode::kFrameTreeNodeInvalidId)
+      ->OnNavigateToWinningAdCallback(FrameTreeNodeId())
       .Run();
 
   WaitForCompletion();

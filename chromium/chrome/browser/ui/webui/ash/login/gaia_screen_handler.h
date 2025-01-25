@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
-#include "chrome/browser/ash/http_auth_dialog.h"
 #include "chrome/browser/ash/login/login_client_cert_usage_observer.h"
 #include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ash/login/screens/network_error.h"
@@ -22,9 +21,10 @@
 #include "chrome/browser/ui/webui/ash/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/network_state_informer.h"
 #include "chrome/browser/ui/webui/ash/login/online_login_utils.h"
-#include "chrome/browser/ui/webui/ash/login/saml_challenge_key_handler.h"
+#include "chromeos/ash/components/http_auth_dialog/http_auth_dialog.h"
 #include "chromeos/components/security_token_pin/constants.h"
 #include "components/user_manager/user_type.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
@@ -43,6 +43,7 @@ namespace ash {
 
 class PublicSamlUrlFetcher;
 class ErrorScreensHistogramHelper;
+class SamlChallengeKeyHandler;
 
 class GaiaView {
  public:
@@ -126,15 +127,6 @@ class GaiaScreenHandler final
  public:
   using TView = GaiaView;
 
-  // The possible modes that the Gaia signin screen can be in.
-  enum GaiaScreenMode {
-    // Default Gaia authentication will be used.
-    GAIA_SCREEN_MODE_DEFAULT = 0,
-
-    // SAML authentication will be used by default.
-    GAIA_SCREEN_MODE_SAML_REDIRECT = 1,
-  };
-
   enum FrameState {
     FRAME_STATE_UNKNOWN = 0,
     FRAME_STATE_LOADING,
@@ -189,7 +181,8 @@ class GaiaScreenHandler final
 
   // Returns the initial mode of the Gaia signin screen for a given user email
   // address. Note this also affects which Gaia endpoint is used.
-  static GaiaScreenMode GetGaiaScreenMode(const std::string& email);
+  static WizardContext::GaiaScreenMode GetGaiaScreenMode(
+      const std::string& email);
 
   void SetNextSamlChallengeKeyHandlerForTesting(
       std::unique_ptr<SamlChallengeKeyHandler> handler_for_test);
@@ -357,9 +350,11 @@ class GaiaScreenHandler final
   // Gaia sign-in page.
   bool IsGaiaHiddenByError();
 
-  // After proxy auth information has been supplied, this function re-enables
-  // responding to network state notifications.
-  void ReenableNetworkStateUpdatesAfterProxyAuth();
+  // After proxy auth is cancelled or information has been supplied, this
+  // function re-enables responding to network state notifications, and
+  // reactivates the authentication flow autoreload functionality (if enabled by
+  // policy).
+  void OnProxyAuthDone();
 
   // Error screen hide callback which records error screen metrics and shows
   // GAIA.
@@ -426,7 +421,8 @@ class GaiaScreenHandler final
       untrusted_authority_certs_cache_;
 
   // The type of Gaia page to show.
-  GaiaScreenMode screen_mode_ = GAIA_SCREEN_MODE_DEFAULT;
+  WizardContext::GaiaScreenMode screen_mode_ =
+      WizardContext::GaiaScreenMode::kDefault;
 
   std::unique_ptr<LoginClientCertUsageObserver>
       extension_provided_client_cert_usage_observer_;

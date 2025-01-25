@@ -35,7 +35,7 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/credit_card_number_validation.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/service/sync_user_settings.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -101,7 +101,7 @@ bool FindByGUID(const C& container, std::string_view guid) {
 
 template <typename C, typename T>
 bool FindByContents(const C& container, const T& needle) {
-  return base::ranges::any_of(container, [&needle](const auto& element) {
+  return std::ranges::any_of(container, [&needle](const auto& element) {
     return element->Compare(needle) == 0;
   });
 }
@@ -238,7 +238,7 @@ PaymentsDataManager::PaymentsDataManager(
       this, profile_database, account_database);
   SetPrefService(pref_service);
   if (pref_service_) {
-    autofill_metrics::LogIsAutofillCreditCardEnabledAtStartup(
+    autofill_metrics::LogIsAutofillPaymentMethodsEnabledAtStartup(
         IsAutofillPaymentMethodsEnabled());
     if (IsAutofillPaymentMethodsEnabled()) {
       autofill_metrics::LogIsAutofillPaymentsCvcStorageEnabledAtStartup(
@@ -247,6 +247,9 @@ PaymentsDataManager::PaymentsDataManager(
         autofill_metrics::LogIsCreditCardBenefitsEnabledAtStartup(
             prefs::IsPaymentCardBenefitsEnabled(pref_service_));
       }
+    } else {
+      autofill_metrics::LogAutofillPaymentMethodsDisabledReasonAtStartup(
+          *pref_service_);
     }
   }
   if (sync_service_) {
@@ -267,13 +270,12 @@ void PaymentsDataManager::Shutdown() {
   sync_observer_.Reset();
 }
 
-void PaymentsDataManager::OnAutofillChangedBySync(
-    syncer::ModelType model_type) {
-  if (model_type == syncer::AUTOFILL_WALLET_CREDENTIAL ||
-      model_type == syncer::AUTOFILL_WALLET_DATA ||
-      model_type == syncer::AUTOFILL_WALLET_METADATA ||
-      model_type == syncer::AUTOFILL_WALLET_OFFER ||
-      model_type == syncer::AUTOFILL_WALLET_USAGE) {
+void PaymentsDataManager::OnAutofillChangedBySync(syncer::DataType data_type) {
+  if (data_type == syncer::AUTOFILL_WALLET_CREDENTIAL ||
+      data_type == syncer::AUTOFILL_WALLET_DATA ||
+      data_type == syncer::AUTOFILL_WALLET_METADATA ||
+      data_type == syncer::AUTOFILL_WALLET_OFFER ||
+      data_type == syncer::AUTOFILL_WALLET_USAGE) {
     Refresh();
   }
 }
@@ -685,9 +687,9 @@ std::vector<Iban> PaymentsDataManager::GetOrderedIbansToSuggest() const {
   // prefix, suffix, and length matches any existing server IBAN.
   std::erase_if(available_ibans, [this](const Iban* iban) {
     return iban->record_type() == Iban::kLocalIban &&
-           base::ranges::any_of(
+           std::ranges::any_of(
                server_ibans_, [&](const std::unique_ptr<Iban>& server_iban) {
-                 return server_iban->MatchesPrefixSuffixAndLength(*iban);
+                 return server_iban->MatchesPrefixAndSuffix(*iban);
                });
   });
 
@@ -712,17 +714,12 @@ bool PaymentsDataManager::HasMaskedBankAccounts() const {
   return !masked_bank_accounts_.empty();
 }
 
-std::vector<BankAccount> PaymentsDataManager::GetMaskedBankAccounts() const {
+base::span<const BankAccount> PaymentsDataManager::GetMaskedBankAccounts()
+    const {
   if (!HasMaskedBankAccounts()) {
     return {};
   }
-  std::vector<BankAccount> bank_accounts;
-  bank_accounts.reserve(masked_bank_accounts_.size());
-  for (const std::unique_ptr<BankAccount>& bank_account :
-       masked_bank_accounts_) {
-    bank_accounts.push_back(*bank_account);
-  }
-  return bank_accounts;
+  return masked_bank_accounts_;
 }
 
 PaymentsCustomerData* PaymentsDataManager::GetPaymentsCustomerData() const {
@@ -798,8 +795,10 @@ gfx::Image* PaymentsDataManager::GetCreditCardArtImageForUrl(
   if (cached_image) {
     return cached_image;
   }
-
-  FetchImagesForURLs(base::span_from_ref(card_art_url));
+  // The sizes are used on Android, but ignored on desktop.
+  FetchImagesForURLs(base::span_from_ref(card_art_url),
+                     base::span({AutofillImageFetcherBase::ImageSize::kSmall,
+                                 AutofillImageFetcherBase::ImageSize::kLarge}));
   return nullptr;
 }
 
@@ -1069,8 +1068,10 @@ bool PaymentsDataManager::ShouldShowCardsFromAccountOption() const {
   bool is_opted_in = prefs::IsUserOptedInWalletSyncTransport(
       pref_service_, sync_service_->GetAccountInfo().account_id);
 
-  // The option should only be shown if the user has not already opted-in.
-  return !is_opted_in;
+  // The option should only be shown if the user has not already opted-in and
+  // the flag to remove the dropdown is disabled.
+  return !is_opted_in && !base::FeatureList::IsEnabled(
+                             features::kAutofillRemovePaymentsButterDropdown);
 #else
   return false;
 #endif  // #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS) ||
@@ -1155,20 +1156,16 @@ bool PaymentsDataManager::IsPaymentCvcStorageEnabled() {
          prefs::IsPaymentCvcStorageEnabled(pref_service_);
 }
 
-std::vector<VirtualCardUsageData*>
+base::span<const VirtualCardUsageData>
 PaymentsDataManager::GetVirtualCardUsageData() const {
   if (!IsAutofillWalletImportEnabled() || !IsAutofillPaymentMethodsEnabled()) {
     return {};
   }
-  std::vector<VirtualCardUsageData*> result;
-  result.reserve(autofill_virtual_card_usage_data_.size());
-  for (const auto& data : autofill_virtual_card_usage_data_) {
-    result.push_back(data.get());
-  }
-  return result;
+  return autofill_virtual_card_usage_data_;
 }
 
-std::vector<CreditCard*> PaymentsDataManager::GetCreditCardsToSuggest() const {
+std::vector<CreditCard*> PaymentsDataManager::GetCreditCardsToSuggest(
+    bool should_use_legacy_algorithm) const {
   if (!IsAutofillPaymentMethodsEnabled()) {
     return {};
   }
@@ -1193,13 +1190,15 @@ std::vector<CreditCard*> PaymentsDataManager::GetCreditCardsToSuggest() const {
   base::Time comparison_time = AutofillClock::Now();
   if (cards_to_suggest.size() > 1) {
     std::sort(cards_to_suggest.begin(), cards_to_suggest.end(),
-              [comparison_time](const CreditCard* a, const CreditCard* b) {
+              [comparison_time, should_use_legacy_algorithm](
+                  const CreditCard* a, const CreditCard* b) {
                 const bool a_is_expired = a->IsExpired(comparison_time);
                 if (a_is_expired != b->IsExpired(comparison_time)) {
                   return !a_is_expired;
                 }
 
-                return a->HasGreaterRankingThan(b, comparison_time);
+                return a->HasGreaterRankingThan(*b, comparison_time,
+                                                should_use_legacy_algorithm);
               });
   }
 
@@ -1232,11 +1231,11 @@ std::string PaymentsDataManager::AddAsLocalIban(Iban iban) {
   // Search through `local_ibans_` to ensure no IBAN that already saved has the
   // same value and nickname as `iban`, because we do not want to add two IBANs
   // with the exact same data.
-  if (base::ranges::any_of(local_ibans_,
-                           [&iban](const std::unique_ptr<Iban>& local_iban) {
-                             return iban.value() == local_iban->value() &&
-                                    iban.nickname() == local_iban->nickname();
-                           })) {
+  if (std::ranges::any_of(local_ibans_,
+                          [&iban](const std::unique_ptr<Iban>& local_iban) {
+                            return iban.value() == local_iban->value() &&
+                                   iban.nickname() == local_iban->nickname();
+                          })) {
     return std::string();
   }
 
@@ -1548,6 +1547,23 @@ bool PaymentsDataManager::RemoveByGUID(const std::string& guid) {
   return false;
 }
 
+void PaymentsDataManager::RemoveLocalDataModifiedBetween(base::Time begin,
+                                                         base::Time end) {
+  if (end.is_null()) {
+    end = base::Time::Max();
+  }
+  for (const CreditCard* card : GetLocalCreditCards()) {
+    if (card->modification_date() >= begin && card->modification_date() < end) {
+      RemoveByGUID(card->guid());
+    } else if (base::FeatureList::IsEnabled(
+                   features::kAutofillEnableCvcStorageAndFilling) &&
+               card->cvc_modification_date() >= begin &&
+               card->cvc_modification_date() < end) {
+      UpdateLocalCvc(card->guid(), u"");
+    }
+  }
+}
+
 void PaymentsDataManager::RecordUseOfCard(const CreditCard* card) {
   CreditCard* credit_card = GetCreditCardByGUID(card->guid());
   if (!credit_card) {
@@ -1655,11 +1671,16 @@ bool PaymentsDataManager::ShouldSuggestServerPaymentMethods() const {
   // TODO(crbug.com/40066949): Simplify once ConsentLevel::kSync and
   // SyncService::IsSyncFeatureEnabled() are deleted from the codebase.
   if (!sync_service_->IsSyncFeatureEnabled()) {
-    // For SyncTransport, only show server payment methods if the user has opted
-    // in to seeing them in the dropdown.
+    // For SyncTransport, only show server payment methods if the user has
+    // opted in to seeing them in the dropdown.
     if (!prefs::IsUserOptedInWalletSyncTransport(
             pref_service_, sync_service_->GetAccountInfo().account_id)) {
-      return false;
+      // If the AutofillRemovePaymentsButterDropdown feature is enabled, all
+      // users can see server payment methods, even in SyncTransport mode.
+      if (!base::FeatureList::IsEnabled(
+              features::kAutofillRemovePaymentsButterDropdown)) {
+        return false;
+      }
     }
   }
 
@@ -1791,14 +1812,16 @@ void PaymentsDataManager::LoadPaymentsCustomerData() {
 }
 
 void PaymentsDataManager::FetchImagesForURLs(
-    base::span<const GURL> updated_urls) const {
+    base::span<const GURL> updated_urls,
+    base::span<const AutofillImageFetcherBase::ImageSize> image_sizes) const {
   if (!image_fetcher_) {
     return;
   }
 
   image_fetcher_->FetchImagesForURLs(
-      updated_urls, base::BindOnce(&PaymentsDataManager::OnCardArtImagesFetched,
-                                   weak_factory_.GetMutableWeakPtr()));
+      updated_urls, image_sizes,
+      base::BindOnce(&PaymentsDataManager::OnCardArtImagesFetched,
+                     weak_factory_.GetMutableWeakPtr()));
 }
 
 void PaymentsDataManager::LogStoredPaymentsDataMetrics() const {
@@ -1855,7 +1878,7 @@ void PaymentsDataManager::SetSyncServiceForTest(
 
 void PaymentsDataManager::AddMaskedBankAccountForTest(
     const BankAccount& bank_account) {
-  masked_bank_accounts_.push_back(std::make_unique<BankAccount>(bank_account));
+  masked_bank_accounts_.push_back(bank_account);
 }
 
 void PaymentsDataManager::AddServerCreditCardForTest(
@@ -1928,7 +1951,10 @@ void PaymentsDataManager::ProcessCardArtUrlChanges() {
     }
   }
   if (!updated_urls.empty()) {
-    FetchImagesForURLs(updated_urls);
+    FetchImagesForURLs(
+        updated_urls,
+        base::span({AutofillImageFetcherBase::ImageSize::kSmall,
+                    AutofillImageFetcherBase::ImageSize::kLarge}));
   }
 }
 
@@ -1973,16 +1999,18 @@ std::string PaymentsDataManager::SaveImportedCreditCard(
 
 void PaymentsDataManager::OnMaskedBankAccountsRefreshed() {
   std::vector<GURL> updated_urls;
-  for (auto& bank_account : masked_bank_accounts_) {
+  for (const BankAccount& bank_account : masked_bank_accounts_) {
     const GURL& display_icon_url =
-        bank_account->payment_instrument().display_icon_url();
+        bank_account.payment_instrument().display_icon_url();
     if (!display_icon_url.is_valid()) {
       continue;
     }
     updated_urls.emplace_back(display_icon_url);
   }
   if (!updated_urls.empty()) {
-    FetchImagesForURLs(updated_urls);
+    FetchImagesForURLs(
+        updated_urls,
+        base::span({AutofillImageFetcherBase::ImageSize::kSquare}));
   }
 }
 

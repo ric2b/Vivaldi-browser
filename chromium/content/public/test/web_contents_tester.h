@@ -155,14 +155,21 @@ class WebContentsTester {
   // Simulates terminating an load with a network error.
   virtual void TestDidFailLoadWithError(const GURL& url, int error_code) = 0;
 
+  // Simulates the first non-empty paint.
+  virtual void TestDidFirstVisuallyNonEmptyPaint() = 0;
+
   // Returns whether PauseSubresourceLoading was called on this web contents.
   virtual bool GetPauseSubresourceLoadingCalled() = 0;
 
   // Resets the state around PauseSubresourceLoadingCalled.
   virtual void ResetPauseSubresourceLoadingCalled() = 0;
 
+  // Sets the last active time ticks.
+  virtual void SetLastActiveTimeTicks(
+      base::TimeTicks last_active_time_ticks) = 0;
+
   // Sets the last active time.
-  virtual void SetLastActiveTime(base::TimeTicks last_active_time) = 0;
+  virtual void SetLastActiveTime(base::Time last_active_time) = 0;
 
   // Increments/decrements the number of frames with connected USB devices.
   virtual void TestIncrementUsbActiveFrameCount() = 0;
@@ -179,7 +186,7 @@ class WebContentsTester {
   // Starts prerendering a page with |url|, and returns the root frame tree node
   // id of the page. The page has a pending navigation in the root frame tree
   // node when this method returns.
-  virtual int AddPrerender(const GURL& url) = 0;
+  virtual FrameTreeNodeId AddPrerender(const GURL& url) = 0;
   // Starts prerendering a page, simulates a navigation to |url| in the main
   // frame and returns the main frame of the page after the navigation is
   // complete.

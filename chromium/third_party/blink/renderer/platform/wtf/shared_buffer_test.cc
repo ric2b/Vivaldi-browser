@@ -161,7 +161,7 @@ TEST(SharedBufferTest, copy) {
   ASSERT_EQ(contiguous.size(), shared_buffer->size());
   ASSERT_EQ(0, memcmp(clone.data(), contiguous.data(), clone.size()));
 
-  clone.Append(test_data.data(), length);
+  clone.AppendVector(test_data);
   ASSERT_EQ(length * 5, clone.size());
 }
 
@@ -170,18 +170,18 @@ TEST(SharedBufferTest, constructorWithFlatData) {
 
   while (data.size() < 10000ul) {
     data.Append("FooBarBaz", 9ul);
-    auto shared_buffer = SharedBuffer::Create(data.begin(), data.size());
+    auto shared_buffer = SharedBuffer::Create(base::span(data));
 
     Vector<Vector<char>> segments;
     for (const auto& span : *shared_buffer) {
       segments.emplace_back();
-      segments.back().Append(span.data(), span.size());
+      segments.back().AppendSpan(span);
     }
 
     // Shared buffers constructed from flat data should stay flat.
     ASSERT_EQ(segments.size(), 1ul);
     ASSERT_EQ(segments.front().size(), data.size());
-    EXPECT_EQ(memcmp(segments.front().begin(), data.begin(), data.size()), 0);
+    EXPECT_EQ(memcmp(segments.front().data(), data.data(), data.size()), 0);
   }
 }
 
@@ -192,13 +192,12 @@ TEST(SharedBufferTest, FlatData) {
     EXPECT_EQ(shared_buffer->size(), flat_buffer.size());
     size_t offset = 0;
     for (const auto& span : *shared_buffer) {
-      EXPECT_EQ(memcmp(span.data(), flat_buffer.Data() + offset, span.size()),
-                0);
+      EXPECT_EQ(span, base::span(flat_buffer).subspan(offset, span.size()));
       offset += span.size();
 
       // If the SharedBuffer is not segmented, FlatData doesn't copy any data.
       EXPECT_EQ(span.size() == flat_buffer.size(),
-                span.data() == flat_buffer.Data());
+                span.data() == flat_buffer.data());
     }
   };
 

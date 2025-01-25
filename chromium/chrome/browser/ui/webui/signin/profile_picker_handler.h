@@ -17,7 +17,6 @@
 #include "base/values.h"
 #include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_statistics_common.h"
@@ -27,10 +26,10 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/lacros/account_manager/account_profile_mapper.h"
 #include "chrome/browser/lacros/account_manager/get_account_information_helper.h"
-#include "chrome/browser/lacros/identity_manager_lacros.h"
 #include "chrome/browser/ui/webui/signin/profile_picker_lacros_sign_in_provider.h"
 
 class ProfilePickerLacrosSignInProvider;
+class IdentityManagerLacros;
 
 namespace account_manager {
 struct Account;
@@ -38,8 +37,9 @@ struct Account;
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 class Browser;
+class ScopedProfileKeepAlive;
 
-enum class ReauthUIError;
+class ForceSigninUIError;
 
 // The handler for Javascript messages related to the profile picker main view.
 class ProfilePickerHandler : public content::WebUIMessageHandler,
@@ -59,6 +59,13 @@ class ProfilePickerHandler : public content::WebUIMessageHandler,
   // Enables the startup performance metrics. Should only be called when the
   // profile picker is shown on startup.
   void EnableStartupMetrics();
+
+  // Displays an error dialog on top of the profile picker based on the error
+  // enum.
+  // Empty `profile_path` will not show an additional "Sign in" button that
+  // allows to reach reauth step.
+  void DisplayForceSigninErrorDialog(const base::FilePath& profile_path,
+                                     const ForceSigninUIError& error);
 
   // content::WebUIMessageHandler:
   void RegisterMessages() override;
@@ -131,11 +138,12 @@ class ProfilePickerHandler : public content::WebUIMessageHandler,
   void OnProfileCreationFinished(bool finished_successfully);
   void PushProfilesList();
   base::Value::List GetProfilesList();
-  // Adds a profile with `profile_path` to `profiles_order_`.
-  void AddProfileToList(const base::FilePath& profile_path);
-  // Removes a profile with `profile_path` from `profiles_order_`. Returns
-  // true if the profile was found and removed. Otherwise, returns false.
-  bool RemoveProfileFromList(const base::FilePath& profile_path);
+  // Adds a profile with `profile_path` to `profiles_order_` and notifies
+  // the JS listeners on ui updates.
+  void AddProfileToListAndPushUpdates(const base::FilePath& profile_path);
+  // Removes a profile with `profile_path` from `profiles_order_` and notifies
+  // the JS listeners on ui updates.
+  void RemoveProfileFromListAndPushUpdates(const base::FilePath& profile_path);
 
   // ProfileAttributesStorage::Observer:
   void OnProfileAdded(const base::FilePath& profile_path) override;
@@ -149,6 +157,8 @@ class ProfilePickerHandler : public content::WebUIMessageHandler,
                             const std::u16string& old_profile_name) override;
   void OnProfileHostedDomainChanged(
       const base::FilePath& profile_path) override;
+  void OnProfileSupervisedUserIdChanged(
+      const base::FilePath& profile_path) override;
 
   // content::WebContentsObserver:
   void DidFirstVisuallyNonEmptyPaint() override;
@@ -161,15 +171,10 @@ class ProfilePickerHandler : public content::WebUIMessageHandler,
   // Displays either a sign-in or an error dialog within the profile picker
   // using `profile`.
   void OnProfileForDialogLoaded(Profile* profile);
-  // Displays an error dialog on top of the profile picker based on the error
-  // enum.
-  // Empty `profile_path` will not show an additional "Sign in"
-  // button that allows to reach reauth step.
-  // The `email` value is only used when the error is
-  // `ReauthUIError::kWrongAccount` in order to show the expected email address.
-  void DisplayForceSigninErrorDialog(const base::FilePath& profile_path,
-                                     const std::string& email,
-                                     ReauthUIError error);
+
+  // Updates if guest mode is available following a profile addition, removal,
+  // or changed supervision status.
+  void MaybeUpdateGuestMode();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // GaiaId as input string.

@@ -27,6 +27,7 @@
 #include "content/browser/origin_agent_cluster_isolation_state.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/child_process_security_policy.h"
+#include "content/public/common/bindings_policy.h"
 #include "storage/common/file_system/file_system_types.h"
 #include "url/origin.h"
 
@@ -418,9 +419,8 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // Revokes all permissions granted to the given file.
   void RevokeAllPermissionsForFile(int child_id, const base::FilePath& file);
 
-  // Grant the child process the ability to use Web UI Bindings where |bindings|
-  // is either BINDINGS_POLICY_WEB_UI or BINDINGS_POLICY_MOJO_WEB_UI or both.
-  void GrantWebUIBindings(int child_id, int bindings);
+  // Grant the child process the ability to use Web UI Bindings.
+  void GrantWebUIBindings(int child_id, BindingsPolicySet bindings);
 
   // Grant the child process the ability to read raw cookies.
   void GrantReadRawCookies(int child_id);
@@ -885,20 +885,22 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
       EXCLUSIVE_LOCKS_REQUIRED(origins_isolation_opt_in_lock_);
 
   // You must acquire this lock before reading or writing any members of this
-  // class, except for isolated_origins_ which uses its own lock.  You must not
-  // block while holding this lock.
+  // class, except for isolated_origins_, schemes_okay_to_*, and
+  // pseudo_schemes_, which use their own locks.  You must not block while
+  // holding this lock.
   base::Lock lock_;
 
-  // These schemes are white-listed for all child processes in various contexts.
-  // These sets are protected by |lock_|.
-  SchemeSet schemes_okay_to_commit_in_any_process_ GUARDED_BY(lock_);
-  SchemeSet schemes_okay_to_request_in_any_process_ GUARDED_BY(lock_);
-  SchemeSet schemes_okay_to_appear_as_origin_headers_ GUARDED_BY(lock_);
+  // These schemes are allow-listed for all child processes in various contexts.
+  // These sets are protected by |schemes_lock_| rather than |lock_|.
+  base::Lock schemes_lock_;
+  SchemeSet schemes_okay_to_commit_in_any_process_ GUARDED_BY(schemes_lock_);
+  SchemeSet schemes_okay_to_request_in_any_process_ GUARDED_BY(schemes_lock_);
+  SchemeSet schemes_okay_to_appear_as_origin_headers_ GUARDED_BY(schemes_lock_);
 
   // These schemes do not actually represent retrievable URLs.  For example,
   // the the URLs in the "about" scheme are aliases to other URLs.  This set is
-  // protected by |lock_|.
-  SchemeSet pseudo_schemes_ GUARDED_BY(lock_);
+  // protected by |schemes_lock_|.
+  SchemeSet pseudo_schemes_ GUARDED_BY(schemes_lock_);
 
   // This map holds a SecurityState for each child process.  The key for the
   // map is the ID of the ChildProcessHost.  The SecurityState objects are

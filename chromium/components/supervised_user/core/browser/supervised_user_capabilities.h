@@ -20,7 +20,8 @@ namespace supervised_user {
 enum class CapabilityUpdateState { kSetToTrue, kSetToFalse, kDetached };
 
 // Returns the IsSubjectToParentalControls capability value of the primary
-// account if available, and Tribool::kUnknown otherwise.
+// account if available. Signed-out users will default to
+// signin::Tribool::kFalse.
 signin::Tribool IsPrimaryAccountSubjectToParentalControls(
     signin::IdentityManager* identity_manager);
 
@@ -64,7 +65,6 @@ class SupervisedUserCapabilitiesObserver
       identity_manager_observation_{this};
 
   raw_ptr<signin::IdentityManager> identity_manager_;
-  base::flat_map<std::string, signin::Tribool> capabilities_map_;
 };
 
 }  // namespace supervised_user

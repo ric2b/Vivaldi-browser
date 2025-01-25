@@ -195,16 +195,10 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
                               std::optional<blink::scheduler::TaskAttributionId>
                                   soft_navigation_heuristics_task_id);
 
-  // A variation of `NavigationController::GoToIndex()`. If the navigation
-  // occurs in the primary main frame, the valid `NavigationRequest` is
-  // returned. If the navigation occurs in subframes or the navigation does not
-  // create a `NavigationRequest`, the return value is null.
-  //
-  // TODO(http://crbug.com/41490714): Consider returning a `std::optional` and
-  // nullopt in the case that no such request was created, or returning a vector
-  // including subframe NavigationRequests if future use cases need access to
-  // those.
-  base::WeakPtr<NavigationRequest> GoToIndexAndReturnPrimaryMainFrameRequest(
+  // A variation of `NavigationController::GoToIndex()`, that also returns all
+  // the created `NavigationRequest`s. If no navigation request is created, the
+  // vector is empty.
+  std::vector<base::WeakPtr<NavigationRequest>> GoToIndexAndReturnAllRequests(
       int index);
 
 #if BUILDFLAG(IS_ANDROID)
@@ -590,24 +584,24 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
     // to their respective FrameTreeNodes, and FrameTreeNode ids to their
     // current document sequences numbers.
     std::map<std::string, FrameTreeNode*> names_to_nodes_;
-    std::map<int, int64_t> frame_tree_node_id_to_doc_seq_nos_;
+    std::map<FrameTreeNodeId, int64_t> frame_tree_node_id_to_doc_seq_nos_;
 
     // The output of PopulateKeySet(), which maps FrameTreeNode ids to the keys
     // that frame knows about in the renderer. Used in the destructor.
-    std::map<int, std::set<std::string>> frame_tree_node_id_to_keys_;
+    std::map<FrameTreeNodeId, std::set<std::string>>
+        frame_tree_node_id_to_keys_;
   };
 
-  // Navigates in session history to the given index. Returns the valid
-  // `NavigationRequest` if the navigation occurs in the primary main frame, and
-  // returns null if no request was created, or if the navigation targets the
-  // subframes instead.
+  // Navigates in session history to the given index. Returns all the created
+  // `NavigationRequest`s. If no request was created, the returned vector is
+  // empty.
   // |initiator_rfh| is nullptr for browser-initiated navigations.
   // |soft_navigation_heuristics_task_id|: The task in the renderer that
   // initiated this call (if any).
   // If this navigation originated from the navigation API, |navigation_api_key|
   // will be set and indicate the navigation api key that |initiator_rfh|
   // asked to be navigated to.
-  base::WeakPtr<NavigationRequest> GoToIndex(
+  std::vector<base::WeakPtr<NavigationRequest>> GoToIndex(
       int index,
       RenderFrameHostImpl* initiator_rfh,
       std::optional<blink::scheduler::TaskAttributionId>
@@ -615,16 +609,15 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       const std::string* navigation_api_key);
 
   // Starts a navigation to an already existing pending NavigationEntry. Returns
-  // the valid `NavigationRequest` if the navigation occurs in the primary main
-  // frame, and returns null if no request was created, or if the navigation
-  // targets the subframes instead.
+  // all the created `NavigationRequest`s. If no request was created, the
+  // returned vector is empty.
   // |initiator_rfh| is nullptr for browser-initiated navigations.
   // If this navigation originated from the navigation API, |navigation_api_key|
   // will be set and indicate the navigation api key that |initiator_rfh|
   // asked to be navigated to.
   // |soft_navigation_heuristics_task_id|: The task in the renderer that
   // initiated this call (if any).
-  base::WeakPtr<NavigationRequest> NavigateToExistingPendingEntry(
+  std::vector<base::WeakPtr<NavigationRequest>> NavigateToExistingPendingEntry(
       ReloadType reload_type,
       RenderFrameHostImpl* initiator_rfh,
       std::optional<blink::scheduler::TaskAttributionId>
@@ -861,6 +854,7 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   std::unique_ptr<PolicyContainerPolicies>
   ComputePolicyContainerPoliciesForFrameEntry(RenderFrameHostImpl* rfh,
                                               bool is_same_document,
+                                              bool navigation_encountered_error,
                                               const GURL& url);
 
   // Adds details from a committed navigation to `entry` and the

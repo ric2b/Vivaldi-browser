@@ -23,6 +23,9 @@ TEST(SimpleParserTest, GetWord) {
       // Mixed whitespaces and comments.
       STR_IN_OUT_CASE(" \t \0%try()%haha\n %another line \aa", ""),
       // Name.
+      STR_IN_OUT_CASE("/", ""),
+      STR_IN_OUT_CASE("/99", ""),
+      STR_IN_OUT_CASE("/99}", "/99"),
       STR_IN_OUT_CASE(" /Tester ", "/Tester"),
       // String.
       STR_IN_OUT_CASE("\t(nice day)!\n ", "(nice day)"),
@@ -31,18 +34,25 @@ TEST(SimpleParserTest, GetWord) {
       // String with escaped chars.
       STR_IN_OUT_CASE("\t(It is a \\(long\\) day!)hi\n ",
                       "(It is a \\(long\\) day!)"),
+      // Angle brackets.
+      STR_IN_OUT_CASE("<", "<"),
+      STR_IN_OUT_CASE(">", ">"),
       // Hex string.
       STR_IN_OUT_CASE(" \n<4545acdfedertt>abc ", "<4545acdfedertt>"),
       STR_IN_OUT_CASE(" \n<4545a<ed>ertt>abc ", "<4545a<ed>"),
       // Dictionary.
       STR_IN_OUT_CASE("<</oc 234 /color 2 3 R>>", "<<"),
       STR_IN_OUT_CASE("\t\t<< /abc>>", "<<"),
+      // Parentheses.
+      STR_IN_OUT_CASE("(\\", "(\\"),
       // Handling ending delimiters.
       STR_IN_OUT_CASE("> little bear", ">"),
       STR_IN_OUT_CASE(") another bear", ")"),
       STR_IN_OUT_CASE(">> end ", ">>"),
       // No ending delimiters.
       STR_IN_OUT_CASE("(sdfgfgbcv", "(sdfgfgbcv"),
+      // Other delimiters.
+      STR_IN_OUT_CASE("}", "}"),
       // Regular cases.
       STR_IN_OUT_CASE("apple pear", "apple"),
       STR_IN_OUT_CASE(" pi=3.1415 ", "pi=3.1415"),
@@ -58,4 +68,18 @@ TEST(SimpleParserTest, GetWord) {
         << " for case " << i;
     ++i;
   }
+}
+
+TEST(SimpleParserTest, Bug358381390) {
+  const char kInput[] = "1 beginbfchar\n<01> <>\nendbfchar\n1 beginbfchar";
+
+  CPDF_SimpleParser parser(pdfium::as_byte_span(kInput));
+  EXPECT_EQ(parser.GetWord(), "1");
+  EXPECT_EQ(parser.GetWord(), "beginbfchar");
+  EXPECT_EQ(parser.GetWord(), "<01>");
+  EXPECT_EQ(parser.GetWord(), "<>");
+  EXPECT_EQ(parser.GetWord(), "endbfchar");
+  EXPECT_EQ(parser.GetWord(), "1");
+  EXPECT_EQ(parser.GetWord(), "beginbfchar");
+  EXPECT_EQ(parser.GetWord(), "");
 }

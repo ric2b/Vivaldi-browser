@@ -1,4 +1,3 @@
-
 // Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -7,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <string>
 
 #include "base/ranges/algorithm.h"
@@ -20,11 +20,11 @@ TEST(Base32Test, EncodesRfcTestVectorsCorrectlyWithoutPadding) {
   static constexpr uint8_t test_data[] = "foobar";
   constexpr base::span test_subspan(test_data);
 
-  constexpr const char* expected[] = {
-      "", "MY", "MZXQ", "MZXW6", "MZXW6YQ", "MZXW6YTB", "MZXW6YTBOI"};
+  constexpr auto expected = std::to_array<const char*>(
+      {"", "MY", "MZXQ", "MZXW6", "MZXW6YQ", "MZXW6YTB", "MZXW6YTBOI"});
 
   // Run the tests, with one more letter in the input every pass.
-  for (size_t i = 0; i < std::size(expected); ++i) {
+  for (size_t i = 0; i < expected.size(); ++i) {
     auto encoded_output =
         Base32Encode(test_subspan.first(i), Base32EncodePolicy::OMIT_PADDING);
     EXPECT_EQ(expected[i], encoded_output);
@@ -38,12 +38,12 @@ TEST(Base32Test, EncodesRfcTestVectorsCorrectlyWithPadding) {
   static constexpr uint8_t test_data[] = "foobar";
   constexpr base::span test_subspan(test_data);
 
-  constexpr const char* expected[] = {
-      "",         "MY======", "MZXQ====",        "MZXW6===",
-      "MZXW6YQ=", "MZXW6YTB", "MZXW6YTBOI======"};
+  constexpr auto expected = std::to_array<const char*>(
+      {"", "MY======", "MZXQ====", "MZXW6===", "MZXW6YQ=", "MZXW6YTB",
+       "MZXW6YTBOI======"});
 
   // Run the tests, with one more letter in the input every pass.
-  for (size_t i = 0; i < std::size(expected); ++i) {
+  for (size_t i = 0; i < expected.size(); ++i) {
     std::string encoded_output = Base32Encode(test_subspan.first(i));
     EXPECT_EQ(expected[i], encoded_output);
     std::vector<uint8_t> decoded_output = Base32Decode(encoded_output);

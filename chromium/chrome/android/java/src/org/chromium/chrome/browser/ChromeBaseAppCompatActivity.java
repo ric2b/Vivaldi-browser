@@ -75,6 +75,7 @@ import androidx.fragment.app.FragmentActivity;
 
 import org.chromium.base.Log;
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.lifetime.ApplicationLifetime;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.oem_extensions.CarDataProvider;
 import org.vivaldi.browser.oem_extensions.inapp_dd.OemInAppDistractionDialog;
@@ -350,7 +351,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     @CallSuper
     protected boolean applyOverrides(Context baseContext, Configuration overrideConfig) {
         if (BuildConfig.IS_VIVALDI)
-            adjustDisplayScale(overrideConfig);
+            VivaldiUtils.adjustDisplayScale(baseContext, overrideConfig);
         else
         applyOverridesForAutomotive(baseContext, overrideConfig);
         return NightModeUtils.applyOverridesForNightMode(
@@ -594,15 +595,6 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
                     });
         }
     }
-
-    /** Vivaldi **/
-    public void adjustDisplayScale(Configuration configuration) {
-        if (configuration != null) {
-            configuration.densityDpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
-                    VivaldiPreferences.UI_SCALE_VALUE);
-        }
-    }
-
     // Vivaldi OEM (Lynk&Co)
     private void requestAllPermissions() {
         assert BuildConfig.IS_OEM_LYNKCO_BUILD;

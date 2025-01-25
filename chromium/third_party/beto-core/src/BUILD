@@ -114,7 +114,10 @@ rust_library(
 rust_library(
     name = "handle_map",
     srcs = glob(include = ["common/handle_map/src/**/*.rs"]),
-    deps = [":lock_adapter"],
+    deps = [
+        ":lock_adapter",
+        "@crate_index//:lazy_static",
+    ],
 )
 
 rust_library(
@@ -141,6 +144,7 @@ rust_library(
         "@crate_index//:nom",
         "@crate_index//:strum",
         "@crate_index//:tinyvec",
+        "@crate_index//:itertools"
     ],
 )
 

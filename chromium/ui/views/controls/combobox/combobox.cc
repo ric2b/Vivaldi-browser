@@ -160,6 +160,7 @@ Combobox::Combobox(ui::ComboboxModel* model) {
             combobox->GetEnabled() ? ui::kColorComboboxBackground
                                    : ui::kColorComboboxBackgroundDisabled);
         combobox->UpdateBorder();
+        combobox->UpdateAccessibleDefaultActionVerb();
       },
       base::Unretained(this)));
 
@@ -171,8 +172,11 @@ Combobox::Combobox(ui::ComboboxModel* model) {
   views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
                                                 GetCornerRadius());
 
-  GetViewAccessibility().SetProperties(ax::mojom::Role::kComboBoxSelect);
+  GetViewAccessibility().SetRole(ax::mojom::Role::kComboBoxSelect);
+
+  UpdateAccessibleValue();
   UpdateExpandedCollapsedAccessibleState();
+  UpdateAccessibleDefaultActionVerb();
 }
 
 Combobox::~Combobox() {
@@ -191,12 +195,20 @@ void Combobox::SetSelectedIndex(std::optional<size_t> index) {
     return;
   // TODO(pbos): Add (D)CHECKs to validate the selected index.
   selected_index_ = index;
+
+  if (selected_index_.has_value()) {
+    GetViewAccessibility().SetPosInSet(
+        base::checked_cast<int>(selected_index_.value()));
+  }
+
   if (size_to_largest_label_) {
     OnPropertyChanged(&selected_index_, kPropertyEffectsPaint);
   } else {
     content_size_ = GetContentSize();
     OnPropertyChanged(&selected_index_, kPropertyEffectsPreferredSizeChanged);
   }
+
+  UpdateAccessibleValue();
 }
 
 base::CallbackListSubscription Combobox::AddSelectedIndexChangedCallback(
@@ -492,22 +504,6 @@ void Combobox::OnBlur() {
   SchedulePaint();
 }
 
-void Combobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  View::GetAccessibleNodeData(node_data);
-
-  if (GetEnabled()) {
-    node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kOpen);
-  }
-  if (selected_index_.has_value()) {
-    node_data->SetValue(model_->GetItemAt(selected_index_.value()));
-    node_data->AddIntAttribute(
-        ax::mojom::IntAttribute::kPosInSet,
-        base::checked_cast<int>(selected_index_.value()));
-  }
-  node_data->AddIntAttribute(ax::mojom::IntAttribute::kSetSize,
-                             base::checked_cast<int>(model_->GetItemCount()));
-}
-
 bool Combobox::HandleAccessibleAction(const ui::AXActionData& action_data) {
   // The action handling in View would generate a mouse event and send it to
   // |this|. However, mouse events for Combobox are handled by |arrow_button_|,
@@ -541,6 +537,9 @@ void Combobox::OnComboboxModelChanged(ui::ComboboxModel* model) {
 
   OnContentSizeMaybeChanged();
   SchedulePaint();
+
+  GetViewAccessibility().SetSetSize(
+      base::checked_cast<int>(model_->GetItemCount()));
 }
 
 void Combobox::OnComboboxModelDestroying(ui::ComboboxModel* model) {
@@ -715,7 +714,6 @@ void Combobox::MenuSelectionAt(size_t index) {
 }
 
 void Combobox::OnPerformAction() {
-  NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
   SchedulePaint();
 
   if (callback_)
@@ -795,6 +793,23 @@ void Combobox::UpdateExpandedCollapsedAccessibleState() const {
     GetViewAccessibility().SetIsExpanded();
   } else {
     GetViewAccessibility().SetIsCollapsed();
+  }
+}
+
+void Combobox::UpdateAccessibleValue() const {
+  if (model_->GetItemCount() > 0 && selected_index_.has_value()) {
+    GetViewAccessibility().SetValue(model_->GetItemAt(selected_index_.value()));
+  } else {
+    GetViewAccessibility().RemoveValue();
+  }
+}
+
+void Combobox::UpdateAccessibleDefaultActionVerb() {
+  if (GetEnabled()) {
+    GetViewAccessibility().SetDefaultActionVerb(
+        ax::mojom::DefaultActionVerb::kOpen);
+  } else {
+    GetViewAccessibility().RemoveDefaultActionVerb();
   }
 }
 

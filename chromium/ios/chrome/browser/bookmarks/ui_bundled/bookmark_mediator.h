@@ -62,6 +62,15 @@ class PrefRegistrySyncable;
 - (MDCSnackbarMessage*)addBookmarks:(NSArray<URLWithTitle*>*)URLs
                            toFolder:(const bookmarks::BookmarkNode*)folder;
 
+// Vivaldi
+// Adds a Speed Dial with a `title` and a `URL` and display a snackbar with an
+// `editAction`. Returns a message to be displayed after the Speed Dial has been
+// added.
+- (MDCSnackbarMessage*)addSpeedDialWithTitle:(NSString*)title
+                                         URL:(const GURL&)URL
+                                  editAction:(void (^)())editAction;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_BOOKMARKS_UI_BUNDLED_BOOKMARK_MEDIATOR_H_

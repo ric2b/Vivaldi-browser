@@ -38,6 +38,7 @@ struct TokenResult {
   TokenServiceTable::Result db_result =
       TokenServiceTable::TOKEN_DB_RESULT_SQL_INVALID_STATEMENT;
   std::map<std::string, TokenServiceTable::TokenWithBindingKey> tokens;
+  bool should_reencrypt = false;
 };
 
 // TokenWebData is a data repository for storage of authentication tokens.
@@ -45,11 +46,7 @@ struct TokenResult {
 class TokenWebData : public WebDataServiceBase {
  public:
   TokenWebData(scoped_refptr<WebDatabaseService> wdbs,
-               scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
-               scoped_refptr<base::SequencedTaskRunner> db_task_runner);
-
-  TokenWebData(scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
-               scoped_refptr<base::SequencedTaskRunner> db_task_runner);
+               scoped_refptr<base::SequencedTaskRunner> ui_task_runner);
 
   TokenWebData(const TokenWebData&) = delete;
   TokenWebData& operator=(const TokenWebData&) = delete;

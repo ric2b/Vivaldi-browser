@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Gabim</translation>
 <translation id="1175364870820465910">&amp;Printoj…</translation>
 <translation id="1181037720776840403">Heq</translation>
+<translation id="1184037892196730210">Ekrani nuk transmetohet</translation>
 <translation id="1187722533808055681">Daljet nga pasiviteti</translation>
 <translation id="122082903575839559">Algoritmi i nënshkrimit të certifikatës</translation>
 <translation id="1221825588892235038">Vetëm përzgjedhjen</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Vlera e fushës</translation>
 <translation id="2662876636500006917">Dyqani i dedikuar i Chrome</translation>
 <translation id="2678063897982469759">Riaktivizoj</translation>
-<translation id="2678100101831051676">Nuk transmetohet.</translation>
 <translation id="2719936478972253983">Cookies e mëposhtme janë bllokuar</translation>
 <translation id="2721037002783622288">&amp;Kërkoj për imazhin në <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Jo pas</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Kjo shtesë mund të jetë dëmtuar.</translation>
 <translation id="3387614642886316601">Përdor korrektor drejtshkrimor të përmirësuar</translation>
 <translation id="3390013585654699824">Detaje për aplikacionin</translation>
-<translation id="3393582007140394275">Nuk transmetohet ekrani.</translation>
 <translation id="345693547134384690">Hap &amp;imazhin në skedë të re</translation>
 <translation id="3493881266323043047">Vlefshmëria</translation>
 <translation id="3511307672085573050">Kopjoj adr&amp;esën e lidhjes</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Ruaj ndryshimet</translation>
 <translation id="6824564591481349393">Kopjoj adresën e &amp;imejlit</translation>
 <translation id="6840155290835956714">Pyes para dërgimit</translation>
+<translation id="6878862640969460273">Horizontalisht</translation>
 <translation id="6886871292305414135">Hap lidhjen në &amp;skedë të re</translation>
 <translation id="6892812721183419409">Hap lidhjen si <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikacioni në sfond: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">U refuzua aksesi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrolloj drejtshkrimin gjatë shkrimit</translation>
+<translation id="7359680654975233185">Skeda nuk transmetohet</translation>
 <translation id="7385854874724088939">Diçka nuk funksionoi gjatë printimit. Lutemi të kontrolloni printerin dhe provojeni prapë.</translation>
 <translation id="7412226954991670867">Memoria e procesorit grafik</translation>
 <translation id="7421925624202799674">&amp;Shikoj burimin e faqes</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Lejoj uebsajtet të regjistrojnë dhe të lexojnë të dhënat e cookie</translation>
 <translation id="7663719505383602579">Marrësi: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Është instaluar nga administratori</translation>
+<translation id="7685038817958445325">Nuk transmetohet</translation>
 <translation id="7685049629764448582">Memoria JavaScript</translation>
 <translation id="7701869757853594372">Objektet USER</translation>
 <translation id="7704305437604973648">Detyra</translation>
@@ -410,7 +412,6 @@ Shtesa: <ph name="EXTENSION_FILE" />
 Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të reja të shtesës.</translation>
 <translation id="8004582292198964060">Shfletuesi</translation>
 <translation id="8018313076035239964">Kontrolloni informacionet që mund të përdorin uebsajtet ose materialet që ju shfaqen</translation>
-<translation id="8032244173881942855">Nuk transmetohet skeda.</translation>
 <translation id="8071432093239591881">Printoj si imazh</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +467,6 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="9218430445555521422">Caktoj si standard</translation>
 <translation id="93766956588638423">Riparoj shtesën</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Horizontalisht</translation>
 <translation id="994289308992179865">&amp;Përsërit</translation>
 <translation id="998747458861718449">I&amp;nspektoj</translation>
 </translationbundle>

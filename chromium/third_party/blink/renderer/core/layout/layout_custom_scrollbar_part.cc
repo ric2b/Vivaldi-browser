@@ -106,10 +106,13 @@ void LayoutCustomScrollbarPart::Trace(Visitor* visitor) const {
 
 // TODO(crbug.com/1020913): Support subpixel layout of scrollbars and remove
 // ToInt() in the following functions.
+// TODO(crbug.com/40339056): This could handle intrinsic sizing keywords
+// and calc-size() a bit better than it does.
 int LayoutCustomScrollbarPart::ComputeSize(const Length& length,
                                            int container_size) const {
   NOT_DESTROYED();
-  if (length.IsSpecified()) {
+  if (!length.HasAutoOrContentOrIntrinsic() && !length.HasStretch()) {
+    CHECK(length.IsSpecified());
     return MinimumValueForLength(length, LayoutUnit(container_size)).ToInt();
   }
   return CustomScrollbarTheme::GetCustomScrollbarTheme()->ScrollbarThickness(
@@ -165,11 +168,10 @@ int LayoutCustomScrollbarPart::ComputeLength() const {
   NOT_DESTROYED();
   DCHECK_NE(kScrollbarBGPart, part_);
 
-  gfx::Rect visible_content_rect =
-      scrollbar_->GetScrollableArea()->VisibleContentRect(kIncludeScrollbars);
-  if (scrollbar_->Orientation() == kHorizontalScrollbar)
-    return ComputeWidth(visible_content_rect.width());
-  return ComputeHeight(visible_content_rect.height());
+  if (scrollbar_->Orientation() == kHorizontalScrollbar) {
+    return ComputeWidth(scrollbar_->FrameRect().width());
+  }
+  return ComputeHeight(scrollbar_->FrameRect().height());
 }
 
 void LayoutCustomScrollbarPart::SetOverriddenSize(const PhysicalSize& size) {
@@ -179,7 +181,7 @@ void LayoutCustomScrollbarPart::SetOverriddenSize(const PhysicalSize& size) {
 
 LayoutPoint LayoutCustomScrollbarPart::LocationInternal() const {
   NOT_DESTROYED();
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 PhysicalSize LayoutCustomScrollbarPart::Size() const {

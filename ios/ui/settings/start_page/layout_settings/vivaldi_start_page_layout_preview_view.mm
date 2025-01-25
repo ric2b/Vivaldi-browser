@@ -54,7 +54,8 @@ const CGFloat numberOfItems = 30;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithNumberOfRows:(NSInteger)rows {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     _numberOfRows = rows;
     self.backgroundColor = UIColor.clearColor;
     [self setUpUI];

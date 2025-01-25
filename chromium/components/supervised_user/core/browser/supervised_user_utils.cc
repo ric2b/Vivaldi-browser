@@ -103,24 +103,8 @@ std::string FamilyRoleToString(kidsmanagement::FamilyRole role) {
       return "family_manager";
     default:
       // Keep the previous semantics - other values were not allowed.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
-}
-
-std::string FilteringBehaviorReasonToString(FilteringBehaviorReason reason) {
-  switch (reason) {
-    case FilteringBehaviorReason::DEFAULT:
-      return "Default";
-    case FilteringBehaviorReason::ASYNC_CHECKER:
-      return "AsyncChecker";
-    case FilteringBehaviorReason::MANUAL:
-      return "Manual";
-    case FilteringBehaviorReason::ALLOWLIST:
-      return "Allowlist";
-    case FilteringBehaviorReason::NOT_SIGNED_IN:
-      return "NotSignedIn";
-  }
-  return "Unknown";
 }
 
 GURL NormalizeUrl(const GURL& url) {

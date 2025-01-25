@@ -143,6 +143,10 @@ CpuProbeManager::state_thresholds() const {
                                         : kStateBaseThresholds;
 }
 
+double CpuProbeManager::hysteresis_threshold_delta() const {
+  return kThresholdDelta;
+}
+
 void CpuProbeManager::ToggleStateRandomization() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -176,7 +180,7 @@ mojom::PressureState CpuProbeManager::CalculateState(
 
   auto it = base::ranges::lower_bound(kStateThresholds, sample.cpu_utilization);
   if (it == kStateThresholds.end()) {
-    NOTREACHED_NORETURN() << "unexpected value: " << sample.cpu_utilization;
+    NOTREACHED() << "unexpected value: " << sample.cpu_utilization;
   }
 
   size_t state_index = std::distance(kStateThresholds.begin(), it);

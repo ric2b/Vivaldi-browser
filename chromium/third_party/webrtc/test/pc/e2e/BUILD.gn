@@ -48,8 +48,10 @@ if (!build_with_chromium) {
         "echo/echo_emulation.h",
       ]
       deps = [
+        "../../../api:sequence_checker",
         "../../../api/test/pclf:media_configuration",
         "../../../modules/audio_device:test_audio_device_module",
+        "../../../rtc_base:logging",
         "../../../rtc_base:swap_queue",
       ]
     }
@@ -78,7 +80,6 @@ if (!build_with_chromium) {
         "../../../rtc_base/synchronization:mutex",
         "//third_party/abseil-cpp/absl/memory",
         "//third_party/abseil-cpp/absl/strings:string_view",
-        "//third_party/abseil-cpp/absl/types:optional",
       ]
     }
 
@@ -124,7 +125,6 @@ if (!build_with_chromium) {
         "../../../api:sequence_checker",
         "../../../api/test/video:test_video_track_source",
         "../../../api/video:video_frame",
-        "//third_party/abseil-cpp/absl/types:optional",
       ]
     }
 
@@ -199,7 +199,6 @@ if (!build_with_chromium) {
         "../../../rtc_base/task_utils:repeating_task",
         "../../../system_wrappers",
         "//third_party/abseil-cpp/absl/memory",
-        "//third_party/abseil-cpp/absl/types:optional",
       ]
     }
 
@@ -302,6 +301,7 @@ if (!build_with_chromium) {
         "../../../api/test/pclf:peer_configurer",
         "../../../api/video_codecs:builtin_video_decoder_factory",
         "../../../api/video_codecs:builtin_video_encoder_factory",
+        "../../../media:media_constants",
         "../../../media:rtc_audio_video",
         "../../../modules/audio_device:audio_device_impl",
         "../../../p2p:rtc_p2p",
@@ -368,7 +368,6 @@ if (!build_with_chromium) {
         "../../../api/test/pclf:peer_configurer",
         "../../../api/units:time_delta",
         "//third_party/abseil-cpp/absl/strings:string_view",
-        "//third_party/abseil-cpp/absl/types:optional",
       ]
     }
 
@@ -437,7 +436,6 @@ if (!build_with_chromium) {
       "../../../api:track_id_stream_info_map",
       "../../../rtc_base:macromagic",
       "//third_party/abseil-cpp/absl/strings:string_view",
-      "//third_party/abseil-cpp/absl/types:optional",
     ]
   }
 
@@ -550,7 +548,6 @@ if (!build_with_chromium) {
       "../../../rtc_base/synchronization:mutex",
       "../../../system_wrappers:field_trial",
       "//third_party/abseil-cpp/absl/strings:string_view",
-      "//third_party/abseil-cpp/absl/types:optional",
     ]
   }
 
@@ -575,7 +572,6 @@ if (!build_with_chromium) {
       "../../../rtc_base:stringutils",
       "//third_party/abseil-cpp/absl/memory",
       "//third_party/abseil-cpp/absl/strings:string_view",
-      "//third_party/abseil-cpp/absl/types:optional",
     ]
   }
 }

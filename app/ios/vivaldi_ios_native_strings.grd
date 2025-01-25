@@ -595,6 +595,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARKED_IN" desc="Title of the snacback message for new bookmark">
         Bookmarked in
       </message>
+      <message name="IDS_IOS_ADDED_TO" desc="Title of the snacback message for new speed dial">
+        Added to
+      </message>
       <message name="IDS_IOS_NEW_ITEM_WITH_TYPE" desc='Title of the New item with a provided type in editor'>
         New <ph name="ITEM_TYPE">$1</ph>
       </message>
@@ -628,9 +631,22 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_BOOKMARK_SHOW_GROUPS_DESCRIPTION" desc="Description for the speed dial/group toggle on bookmarks editor group view">
         Enable Display Speed Dials to have this group visible on start page. You will still be able to access the group through bookmarks panels.
       </message>
+      <message name="IDS_IOS_BOOKMARKS_DEFAULT_HOME_GROUP_TITLE" desc="Title of group created if user does not have a group and adds a page to start page from menu">
+        Home
+      </message>
+      <message name="IDS_IOS_BOOKMARK_PAGE_MOVED_TO_TRASH" desc="This confirmation message is intended to help users understand that a bookmark has been moved to trash.">
+          {count, plural,
+          =1 {Bookmark moved to "{title}"}
+          other {Bookmarks moved to "{title}"}}
+      </message>
+      <message name="IDS_IOS_BOOKMARK_PAGE_BULK_MOVED_TO_TRASH" desc="This confirmation message is intended to help users understand that a bookmark has been moved to trash.">
+          {count, plural,
+          =1 {Bookmark moved to "{title}"}
+          other {{count} bookmarks moved to "{title}"}}
+      </message>
       <!-- END BOOKMARK EDITOR -->
       <message name="IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE" desc="Title of the action used to open an URL in a new Private tab. [iOS only]">
-        Open in Private
+        Open in private
       </message>
       <message name="IDS_IOS_NEW_TAB_PRIVATE_TITLE" desc="Header shown when a user opens an private tab explaining private mode">
         Private Tab
@@ -1340,6 +1356,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_START_PAGE_FREQUENTLY_VISITED_EMPTY_DESCRIPTION" desc="Description for the frequently visited pages when there are no items to show">
         As soon as you start browsing, your Top Sites will show here.
       </message>
+      <message name="IDS_IOS_START_PAGE_SETTINGS_TOP_SITES_TITLE" desc="Title for the Top Sites toggle on start page settings">
+        Display Top Sites
+      </message>
       <message name="IDS_IOS_START_PAGE_SETTINGS_SPEED_DIALS_TITLE" desc="Title for the speed dial toggle on start page settings">
         Display Speed Dials
       </message>
@@ -1405,7 +1424,39 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_TABS_INACTIVE_TABS_OPTION_TITLE" desc="Title for inactive tabs settings option on tabs settings">
         Inactive After Days
       </message>
+      <message name="IDS_IOS_TABS_HOMEPAGE_SETTING_OPTION_TITLE" desc="Title for homepage option on tabs settings">
+        Homepage
+      </message>
+      <message name="IDS_IOS_TABS_BLANKPAGE_SETTING_OPTION_TITLE" desc="Title for blank option on tabs settings">
+        Blank Page
+      </message>
+      <message name="IDS_IOS_TABS_SPECIFICPAGE_SETTING_OPTION_TITLE" desc="Title for specific page option on tabs settings">
+        Specific Page
+      </message>
+      <message name="IDS_IOS_TABS_NEWTAB_SETTING_FOOTER_CAPTION" desc="Title for New Tab settings footer caption on tabs settings">
+        Select which page to open when the New Tab button is tapped.
+      </message>
+      <message name="IDS_IOS_TABS_NEWTAB_SETTING_TITLE" desc="Title for New tab settings option on tabs settings">
+        New Tab Page
+      </message>
       <!-- END TABS SETTINGS -->
+      <!--GENERAL SETTINGS -->
+      <message name="IDS_IOS_GENERAL_SETTING_TITLE" desc="Title for General settings title">
+        General
+      </message>
+      <message name="IDS_IOS_GENERAL_HOMEPAGE_SETTING_TITLE" desc="Title for Homepage settings on general settings">
+        Homepage
+      </message>
+      <message name="IDS_IOS_GENERAL_HOMEPAGE_SETTING_FOOTER_CAPTION" desc="Title for Homepage settings footer caption on general settings">
+        Select which page to open when the Home button is tapped.
+      </message>
+      <message name="IDS_IOS_GENERAL_HOMEPAGE_SETTING_OPTION_STARTPAGE_TITLE" desc="Title for homepage settings option on general settings">
+        Start Page
+      </message>
+      <message name="IDS_IOS_GENERAL_HOMEPAGE_SETTING_DISPLAY_HOME_TITLE" desc="Title for display home button on general settings">
+        Display Home Button
+      </message>
+      <!--END GENERAL SETTINGS -->
       <!-- ADDRESSBAR SETTINGS -->
       <message name="IDS_IOS_PREFS_VIVALDI_ADDRESSBAR" desc="Title for the addressbar settings">
         Address Bar
@@ -1430,6 +1481,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_ADDRESSBAR_ENABLE_DIRECT_MATCH_TITLE" desc="Title for the enable direct match option for addressbar settings">
         Enable Direct Match
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_ENABLE_DIRECT_MATCH_DESCRIPTION" desc="Description for the enable direct match option for addressbar settings">
+        Enables quick access to specific websites directly from the address bar, saving clicks compared to going through a search engine. Learn more about [Direct Match]
       </message>
       <!-- END ADDRESSBAR SETTINGS -->
       <!-- TOOLBAR -->
@@ -1461,21 +1515,69 @@ locale.  The strings in this file are specific to iOS.
         Share
       </message>
       <message name="IDS_ACCNAME_ATB" desc="The accessible name for the ad and tracker blocker button.">
-        Ad and Tracker Blocker
+        Ad and Tracker Blocker, and Site Settings
       </message>
       <message name="IDS_ACCNAME_SEARCH" desc="The accessible name for the search button.">
         Search
       </message>
       <!-- END TOOLBAR -->
       <!-- OVERFLOW MENU/MAIN MENU -->
-      <message name="IDS_VIVALDI_TOOLS_MENU_SHARE" desc="The title for the share item on the overflow menu">
+      <message name="IDS_VIVALDI_TOOLS_MENU_SHARE" desc="The title for the share item on the overflow menu destination">
         Share
       </message>
-      <message name="IDS_VIVALDI_TOOLS_MENU_PAGE_INFO" desc="The title for the page info item on the overflow menu">
-        Page Info
+      <message name="IDS_VIVALDI_TOOLS_MENU_ZOOM_TEXT" desc="The title for the zoom text item on the overflow menu destination">
+        Zoom Text
       </message>
-      <message name="IDS_VIVALDI_TOOLS_MENU_NEW_PRIVATE_TAB" desc="The title for the new private tab item on the overflow menu">
-        New private Tab
+      <message name="IDS_VIVALDI_TOOLS_MENU_FIND_IN_PAGE" desc="The title for the find in page item on the overflow menu destination">
+        Find In Page
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_DESTINATION_DESKTOP_SITE" desc="The title for the request desktop site item on the overflow menu destination">
+        Desktop Site
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_DESTINATION_MOBILE_SITE" desc="The title for the request mobile site item on the overflow menu destination">
+        Mobile Site
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_ACTION_ADD_PAGE_TO" desc="Title of the button in the overflow menu that when tapped, will provide the user with a menu to add open page to bookmarks, to the reading list or to the start page. [iOS only]">
+        Add page to...
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_ACTION_EDIT" desc="Title of the button in the overflow menu that when tapped, will provide the user with a menu to add open page to bookmarks, to the reading list or to the start page. [iOS only]">
+        Edit
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_ACTION_BOOKMARKS" desc="The title for the bookmarks item on the overflow menu action">
+        Bookmarks
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_ACTION_HISTORY" desc="The title for the history item on the overflow menu action">
+        History
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_ACTION_READING_LIST" desc="The title for the reading list item on the overflow menu action">
+        Reading List
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_ACTION_DOWNLOADS" desc="The title for the downloads item on the overflow menu action">
+        Downloads
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_ACTION_START_PAGE" desc="The title for the Add To.. or edit start page item on the overflow menu action">
+        Start Page
+      </message>
+      <message name="IDS_VIVALDI_OVERFLOW_MENU_HIDE_DESTINATION_TEXT_ZOOM" desc="The title for the context menu item to hide Zoom Text. This should match the title of the Zoom Text destination in the menu." meaning="[In Title case] [iOS only] [Length: Unlimited]">
+        Hide Zoom Text
+      </message>
+      <message name="IDS_VIVALDI_OVERFLOW_MENU_HIDE_DESTINATION_FIND_IN_PAGE" desc="The title for the context menu item to hide Find In Page. This should match the title of the Find In Page destination in the menu." meaning="[In Title case] [iOS only] [Length: Unlimited]">
+        Hide Find In Page
+      </message>
+      <message name="IDS_VIVALDI_OVERFLOW_MENU_HIDE_DESTINATION_DESKTOP_SITE" desc="The title for the context menu item to hide Desktop Site. This should match the title of the Desktop Site destination in the menu." meaning="[In Title case] [iOS only] [Length: Unlimited]">
+        Hide Desktop Site
+      </message>
+      <message name="IDS_VIVALDI_OVERFLOW_MENU_HIDE_DESTINATION_MOBILE_SITE" desc="The title for the context menu item to hide Mobile Site. This should match the title of the Mobile Site destination in the menu." meaning="[In Title case] [iOS only] [Length: Unlimited]">
+        Hide Mobile Site
+      </message>
+      <message name="IDS_IOS_OVERFLOW_MENU_HIDE_ACTIONS_NOTES" desc="The title for the context menu item to hide Notes. This should match the title of the Notes action in the menu." meaning="[In Title case] [iOS only] [Length: Unlimited]">
+        Hide Notes
+      </message>
+      <message name="IDS_IOS_OVERFLOW_MENU_HIDE_ACTIONS_ADD_TO" desc="The title for the context menu item to hide Add To. This should match the title of the Add To action in the menu." meaning="[In Title case] [iOS only] [Length: Unlimited]">
+        Hide Add To...
+      </message>
+      <message name="IDS_IOS_OVERFLOW_MENU_HIDE_ACTIONS_EDIT" desc="The title for the context menu item to hide Edit action. This should match the title of the Edit action in the menu." meaning="[In Title case] [iOS only] [Length: Unlimited]">
+        Hide Edit
       </message>
       <message name="IDS_VIVALDI_TOOLS_MENU_DELETE_HISTORY" desc="The title for the delete browsing history item on the overflow menu">
         Delete Browsing History
@@ -1721,14 +1823,19 @@ locale.  The strings in this file are specific to iOS.
         Tap to select this color
       </message>
       <!-- END APPEARANCE SETTING -->
+      <!-- AUTOCOMPLETE MATCH TYPES -->
+      <message name="IDS_IOS_AUTOCOMPLETE_MATCH_DIRECT_MATCH_TITLE" desc="Title for label of direct match autocomplete type">
+        Direct Match
+      </message>
+      <!-- END AUTOCOMPLETE MATCH TYPES -->
       <message name="IDS_IOS_CONTENT_CONTEXT_OPENLINK_NEWBACKGROUNDTAB" desc="The iOS menu item for opening a link in a background tab.">
-        Open in New Background Tab
+        Open in new background tab
       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_OPEN_ALL_INBACKGROUND" desc="The iOS menu item for opening selected links in background tab.">
-        Open All in Background
+        Open all in background
       </message>
       <message name="IDS_IOS_CONTENT_CONTEXT_OPENIMAGENEWBACKGROUNDTAB" desc="The iOS menu item for opening selected image in background tab.">
-        Open Image in Background Tab
+        Open image in background tab
       </message>
       <message name="IDS_IOS_RENAME_TITLE" desc="Title for rename button in different places of the UI">
         Rename
@@ -1736,6 +1843,244 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_REMOVE_TITLE" desc="Title for remove button in different places of the UI">
         Remove
       </message>
+      <!-- SEND TABS TO YOUR DEVICES -->
+      <message name="IDS_IOS_SEND_TAB_TO_SELF_MANAGE_DEVICES_LINK" desc="Text with a link to a page where the user can manage the devices they can share a tab to.">
+        <ph name="USERNAME">$1</ph>'s devices
+      </message>
+      <!-- END SEND TABS TO YOUR DEVICES -->
+      <!-- FEEDBACK PROMPT -->
+      <message name="IDS_IOS_FEEDBACK_SUBMIT_TITLE" desc="Title for submit button on the feedback prompt.">
+        Submit
+      </message>
+      <message name="IDS_IOS_FEEDBACK_EDITOR_TITLE" desc="Title for editor for more information on the feedback propmt when user selects any issue.">
+        Anything else you want to add?
+      </message>
+      <message name="IDS_IOS_FEEDBACK_EDITOR_PLACEHOLDER" desc="Placeholder for editor for more information on the feedback propmt when user selects any issue.">
+        Please be as specific as possible
+      </message>
+      <message name="IDS_IOS_FEEDBACK_EDITOR_ACC_LABEL" desc="Accessibility label for editor for more information on the feedback propmt when user selects any issue.">
+        Provides additional details about your feedback
+      </message>
+      <message name="IDS_IOS_FEEDBACK_HAPPY_TITLE" desc="Title for the happy path animation on the feedback prompt.">
+        Happy
+      </message>
+      <message name="IDS_IOS_FEEDBACK_DISAPPOINTED_TITLE" desc="Title for the sad path animation on the feedback prompt.">
+        Disappointed
+      </message>
+      <message name="IDS_IOS_FEEDBACK_RATE_APP_TITLE" desc="Title for the Rate App button for happy path on the feedback prompt.">
+        Rate App
+      </message>
+      <message name="IDS_IOS_FEEDBACK_NO_THANKS_TITLE" desc="Title for the No Thanks button for happy path on the feedback prompt.">
+        No Thanks
+      </message>
+      <message name="IDS_IOS_FEEDBACK_LANDING_TITLE" desc="Title for the landing page on the feedback prompt.">
+        We're so glad you're using Vivaldi!
+      </message>
+      <message name="IDS_IOS_FEEDBACK_LANDING_SUBTITLE" desc="Sub-title for the landing page on the feedback prompt.">
+        Can you take a quick moment to share your thoughts with us?
+      </message>
+      <message name="IDS_IOS_FEEDBACK_HAPPY_PATH_TITLE" desc="Title for the happy path on the feedback prompt.">
+        Wow, we're so happy to hear that!
+      </message>
+      <message name="IDS_IOS_FEEDBACK_HAPPY_PATH_SUBTITLE" desc="Sub-title for the happy path on the feedback prompt.">
+        Please share the love by rating Vivaldi on the App Store.
+      </message>
+      <message name="IDS_IOS_FEEDBACK_SAD_PATH_TITLE" desc="Title for the sad path on the feedback prompt.">
+        We're sorry to hear that!
+      </message>
+      <message name="IDS_IOS_FEEDBACK_SAD_PATH_SUBTITLE" desc="Sub-title for the sad path on the feedback prompt.">
+        Could you share with us what's not quite right?
+      </message>
+      <message name="IDS_IOS_FEEDBACK_SAD_REPORT_SUCCESS_MESSAGE" desc="Message for the sad path when issue is successfully submitted on the feedback prompt.">
+        Thanks for taking time to share your feedback!
+      </message>
+
+      <!-- UI Issues -->
+      <message name="IDS_FEEDBACK_UI_ISSUES_TITLE" desc="Title for UI issues section">
+        The layout or buttons are confusing
+      </message>
+      <message name="IDS_FEEDBACK_UI_ISSUES_SUB_1" desc="Sub-issue for UI being confusing or cluttered">
+        The UI is confusing or cluttered
+      </message>
+      <message name="IDS_FEEDBACK_UI_ISSUES_SUB_2" desc="Sub-issue for tabs being hard to manage">
+        Tabs are hard to manage or organize
+      </message>
+      <message name="IDS_FEEDBACK_UI_ISSUES_SUB_3" desc="Sub-issue for bookmarks being hard to use or manage">
+        Bookmarks are hard to use or manage
+      </message>
+      <message name="IDS_FEEDBACK_UI_ISSUES_SUB_4" desc="Sub-issue for gestures or navigation being difficult to use">
+        I find gestures or navigation difficult to use
+      </message>
+      <message name="IDS_FEEDBACK_UI_ISSUES_SUB_5" desc="Sub-issue for customizing Start Page">
+        It's hard to customize the Start Page of Vivaldi
+      </message>
+      <message name="IDS_FEEDBACK_UI_ISSUES_SUB_6" desc="Sub-issue for none of the above">
+        None of these
+      </message>
+
+      <!-- Website Loading Issues -->
+      <message name="IDS_FEEDBACK_WEBSITE_LOADING_TITLE" desc="Title for Website loading issues section">
+        Websites load slowly or won’t open
+      </message>
+      <message name="IDS_FEEDBACK_WEBSITE_LOADING_SUB_1" desc="Sub-issue for slow website loading">
+        Websites load too slowly
+      </message>
+      <message name="IDS_FEEDBACK_WEBSITE_LOADING_SUB_2" desc="Sub-issue for certain websites not opening">
+        Certain websites won't open
+      </message>
+      <message name="IDS_FEEDBACK_WEBSITE_LOADING_SUB_3" desc="Sub-issue for images or videos not loading">
+        Images or videos on websites don't load
+      </message>
+      <message name="IDS_FEEDBACK_WEBSITE_LOADING_SUB_4" desc="Sub-issue for website layout issues">
+        Website layout is broken or looks weird
+      </message>
+      <message name="IDS_FEEDBACK_WEBSITE_LOADING_SUB_5" desc="Sub-issue for unexpected web page reloads">
+        Vivaldi reloads web pages unexpectedly
+      </message>
+      <message name="IDS_FEEDBACK_WEBSITE_LOADING_SUB_6" desc="Sub-issue for none of the above">
+        None of these
+      </message>
+
+      <!-- Malfunctioning Features -->
+      <message name="IDS_FEEDBACK_MALFUNCTIONING_TITLE" desc="Title for Malfunctioning Features section">
+        A feature doesn’t work correctly
+      </message>
+      <message name="IDS_FEEDBACK_MALFUNCTIONING_SUB_1" desc="Sub-issue for ad blocker not working well">
+        The ad blocker doesn't work well
+      </message>
+      <message name="IDS_FEEDBACK_MALFUNCTIONING_SUB_2" desc="Sub-issue for search suggestions not working">
+        The search suggestions don't work for me
+      </message>
+      <message name="IDS_FEEDBACK_MALFUNCTIONING_SUB_3" desc="Sub-issue for syncing data issues">
+        I'm having trouble syncing my data across devices
+      </message>
+      <message name="IDS_FEEDBACK_MALFUNCTIONING_SUB_4" desc="Sub-issue for trouble signing into Vivaldi Sync">
+        I can't sign into my Vivaldi Sync account
+      </message>
+      <message name="IDS_FEEDBACK_MALFUNCTIONING_SUB_5" desc="Sub-issue for saving websites as Speed Dial">
+        I find it difficult to save website as a Speed Dial
+      </message>
+      <message name="IDS_FEEDBACK_MALFUNCTIONING_SUB_6" desc="Sub-issue for none of the above">
+        None of these
+      </message>
+
+      <!-- Missing Features -->
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_TITLE" desc="Title for Missing Features section">
+        A feature I want is missing
+      </message>
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_SUB_1" desc="Sub-issue for wanting a built-in VPN feature">
+        I want a built-in VPN feature
+      </message>
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_SUB_2" desc="Sub-issue for wanting AI-powered features">
+        I want AI-powered features (summarization, chat, etc.)
+      </message>
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_SUB_3" desc="Sub-issue for wanting browser extensions/add-ons">
+        I want to use browser extensions/add-ons
+      </message>
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_SUB_4" desc="Sub-issue for wanting to save pages as PDFs">
+        I wish I could save pages as PDFs
+      </message>
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_SUB_5" desc="Sub-issue for exporting or importing passwords and bookmarks">
+        I want to export or import passwords and bookmarks
+      </message>
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_SUB_6" desc="Sub-issue for wanting a built-in translator">
+        I need a built-in translator
+      </message>
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_SUB_7" desc="Sub-issue for wanting video background playback">
+        I want to be able to play videos in the background
+      </message>
+      <message name="IDS_FEEDBACK_MISSING_FEATURES_SUB_8" desc="Sub-issue for none of the above">
+        None of these
+      </message>
+
+      <!-- Performance and Stability Issues -->
+      <message name="IDS_FEEDBACK_PERFORMANCE_TITLE" desc="Title for Performance and Stability Issues section">
+        Vivaldi is slow, crashes, or heating up device
+      </message>
+      <message name="IDS_FEEDBACK_PERFORMANCE_SUB_1" desc="Sub-issue for Vivaldi being slow or laggy">
+        Vivaldi is slow or laggy
+      </message>
+      <message name="IDS_FEEDBACK_PERFORMANCE_SUB_2" desc="Sub-issue for Vivaldi heating up the device">
+        Vivaldi heats up my device
+      </message>
+      <message name="IDS_FEEDBACK_PERFORMANCE_SUB_3" desc="Sub-issue for Vivaldi draining battery quickly">
+        Vivaldi drains my battery quickly
+      </message>
+      <message name="IDS_FEEDBACK_PERFORMANCE_SUB_4" desc="Sub-issue for Vivaldi crashing or freezing">
+        Vivaldi keeps crashing or freezing
+      </message>
+      <message name="IDS_FEEDBACK_PERFORMANCE_SUB_5" desc="Sub-issue for none of the above">
+        None of these
+      </message>
+
+      <!-- Display Issues -->
+      <message name="IDS_FEEDBACK_DISPLAY_ISSUES_TITLE" desc="Title for Display Issues section">
+        Dark mode, refresh rate, or theme problems
+      </message>
+      <message name="IDS_FEEDBACK_DISPLAY_ISSUES_SUB_1" desc="Sub-issue for dark mode being glitchy">
+        Dark mode is glitchy or doesn't look right
+      </message>
+      <message name="IDS_FEEDBACK_DISPLAY_ISSUES_SUB_2" desc="Sub-issue for wanting better theme options">
+        I'd like more or better theme options
+      </message>
+      <message name="IDS_FEEDBACK_DISPLAY_ISSUES_SUB_3" desc="Sub-issue for screen rotation issues">
+        Screen doesn't rotate properly
+      </message>
+      <message name="IDS_FEEDBACK_DISPLAY_ISSUES_SUB_4" desc="Sub-issue for text size issues">
+        Text size is too small or large
+      </message>
+      <message name="IDS_FEEDBACK_DISPLAY_ISSUES_SUB_5" desc="Sub-issue for none of the above">
+        None of these
+      </message>
+
+      <!-- Security and Privacy Issues -->
+      <message name="IDS_FEEDBACK_SECURITY_ISSUES_TITLE" desc="Title for Security and Privacy Issues section">
+        I’m worried about privacy or security
+      </message>
+      <message name="IDS_FEEDBACK_SECURITY_ISSUES_SUB_1" desc="Sub-issue for concerns about tracking or data collection">
+        I'm concerned about tracking or data collection
+      </message>
+      <message name="IDS_FEEDBACK_SECURITY_ISSUES_SUB_2" desc="Sub-issue for control over cookies and site permissions">
+        I need more control over cookies and site permissions
+      </message>
+      <message name="IDS_FEEDBACK_SECURITY_ISSUES_SUB_3" desc="Sub-issue for preference for Open Source software">
+        I prefer Open Source software for transparency
+      </message>
+      <message name="IDS_FEEDBACK_SECURITY_ISSUES_SUB_4" desc="Sub-issue for password management security concerns">
+        I want better password management security
+      </message>
+      <message name="IDS_FEEDBACK_SECURITY_ISSUES_SUB_5" desc="Sub-issue for not wanting preloaded bookmarks">
+        I don't want preloaded bookmarks and Speed Dials
+      </message>
+      <message name="IDS_FEEDBACK_SECURITY_ISSUES_SUB_6" desc="Sub-issue for none of the above">
+        None of these
+      </message>
+
+      <!-- Media Playback Issues -->
+      <message name="IDS_FEEDBACK_MEDIA_PLAYBACK_TITLE" desc="Title for Media Playback Issues section">
+        Videos or music won’t play properly
+      </message>
+      <message name="IDS_FEEDBACK_MEDIA_PLAYBACK_SUB_1" desc="Sub-issue for YouTube videos not playing">
+        YouTube videos won't play or have issues
+      </message>
+      <message name="IDS_FEEDBACK_MEDIA_PLAYBACK_SUB_2" desc="Sub-issue for streaming services not working">
+        Streaming services don't work properly
+      </message>
+      <message name="IDS_FEEDBACK_MEDIA_PLAYBACK_SUB_3" desc="Sub-issue for audio or video buffering issues">
+        Audio or video keeps buffering or freezing
+      </message>
+      <message name="IDS_FEEDBACK_MEDIA_PLAYBACK_SUB_4" desc="Sub-issue for media controls not working as expected">
+        Media controls don't work as expected
+      </message>
+      <message name="IDS_FEEDBACK_MEDIA_PLAYBACK_SUB_5" desc="Sub-issue for none of the above">
+        None of these
+      </message>
+
+      <!-- Other Issues -->
+      <message name="IDS_FEEDBACK_OTHER_ISSUES_TITLE" desc="Title for Other Issues section">
+        Something else
+      </message>
+      <!-- END FEEDBACK PROMPT -->
     </messages>
   </release>
 </grit>

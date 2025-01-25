@@ -22,7 +22,7 @@
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/supervised_user/core/browser/proto/families_common.pb.h"
 #include "components/supervised_user/core/browser/proto/kidsmanagement_messages.pb.h"
-#include "components/supervised_user/core/browser/proto_fetcher.h"
+#include "components/supervised_user/core/browser/proto_fetcher_status.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/browser/supervised_user_utils.h"
@@ -163,7 +163,7 @@ TEST_P(FamilyInfoFeedbackSourceForChildFilterBehaviorTest,
       break;
     default:
       // Remaining combinations are not tested.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -301,7 +301,7 @@ TEST_P(FamilyInfoFeedbackSourceTest, GetFamilyMembersSignedIn) {
       EXPECT_EQ("child", GetFeedbackValue());
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

@@ -86,7 +86,7 @@ extern "system" fn nativeAddV0DiscoveryCredential<'local>(
 
         let core_cred = credential.get_as_core(&mut env)?;
         let match_data = MatchedCredential::from_arc_bytes(
-            cred_id as u32,
+            cred_id as i64,
             env.convert_byte_array(&encrypted_metadata_bytes)?.into(),
         );
 
@@ -122,7 +122,7 @@ extern "system" fn nativeAddV1DiscoveryCredential<'local>(
 
         let core_cred = credential.get_as_core(&mut env)?;
         let match_data = MatchedCredential::from_arc_bytes(
-            cred_id as u32,
+            cred_id as i64,
             env.convert_byte_array(&encrypted_metadata_bytes)?.into(),
         );
 

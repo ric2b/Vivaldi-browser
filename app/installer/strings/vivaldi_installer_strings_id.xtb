@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Pasang mandiri</translation>
 <translation id="1682285232070778125">Atur Vivaldi sebagai peramban standar</translation>
 <translation id="1974060860693918893">Tingkat Lanjut</translation>
+<translation id="2053560788696003312">Vivaldi memerlukan Windows 10 atau di atasnya.</translation>
 <translation id="2134216661302048561">Pemasang Vivaldi tidak selesai memasang Peramban Vivaldi. Anda yakin ingin keluar sekarang?</translation>
 <translation id="2286454467119466181">Simpel</translation>
 <translation id="237789874664518125">Hak cipta <ph name="YEAR" /> Vivaldi Technologies AS. Hak cipta dilindungi undang-undang. &lt;a&gt;Kebijakan Privasi&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Terima dan Perbarui</translation>
 <translation id="5302048478445481009">Bahasa</translation>
 <translation id="694714344624446243">Pemasang Vivaldi</translation>
+<translation id="7467493612551448880">Versi Vivaldi yang Anda pasang tidak teroptimasi untuk versi Windows yang Anda jalankan.
+
+Kunjungi vivaldi.com/download untuk mengunduh versi Arm Windows.</translation>
 <translation id="7658239707568436148">Batal</translation>
 <translation id="8773751185824654197">Catatan: Saat memperbarui peramban Vivaldi yang sedang berjalan, aplikasi akan ditutup dan dibuka kembali</translation>
 <translation id="933060950687965486">Tipe Pemasangan</translation>

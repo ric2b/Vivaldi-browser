@@ -49,29 +49,29 @@ class UrlAvailabilityRequesterTest : public Test {
       : fake_clock_(Clock::time_point(std::chrono::milliseconds(1298424))),
         task_runner_(fake_clock_),
         quic_bridge_(task_runner_, FakeClock::now) {
-    info1_ = {instance_name_, friendly_name_, quic_bridge_.kFingerprint, 1,
+    info1_ = {instance_name_,
+              friendly_name_,
+              quic_bridge_.kFingerprint,
+              quic_bridge_.kAuthToken,
+              1,
               quic_bridge_.kReceiverEndpoint};
   }
 
   void SetUp() override {
-    NetworkServiceManager::Create(nullptr, nullptr,
-                                  std::move(quic_bridge_.quic_client),
-                                  std::move(quic_bridge_.quic_server));
+    quic_bridge_.CreateNetworkServiceManager(nullptr, nullptr);
     availability_watch_ =
-        quic_bridge_.receiver_demuxer->SetDefaultMessageTypeWatch(
+        quic_bridge_.GetReceiverDemuxer().SetDefaultMessageTypeWatch(
             msgs::Type::kPresentationUrlAvailabilityRequest, &mock_callback_);
   }
 
-  void TearDown() override {
-    availability_watch_ = MessageDemuxer::MessageWatch();
-    NetworkServiceManager::Dispose();
-  }
+  void TearDown() override { availability_watch_.Reset(); }
 
  protected:
   std::unique_ptr<ProtocolConnection> ExpectIncomingConnection() {
     std::unique_ptr<ProtocolConnection> stream;
 
-    EXPECT_CALL(quic_bridge_.mock_server_observer, OnIncomingConnectionMock(_))
+    EXPECT_CALL(quic_bridge_.mock_server_observer(),
+                OnIncomingConnectionMock(_))
         .WillOnce(
             Invoke([&stream](std::unique_ptr<ProtocolConnection>& connection) {
               stream = std::move(connection);

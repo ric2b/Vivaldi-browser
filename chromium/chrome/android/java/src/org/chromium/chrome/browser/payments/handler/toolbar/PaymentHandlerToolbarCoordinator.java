@@ -135,7 +135,7 @@ public class PaymentHandlerToolbarCoordinator implements PaymentHandlerToolbarMe
                 securityLevel,
                 mIsSmallDevice,
                 /* skipIconForNeutralState= */ false,
-                /* useUpdatedConnectionSecurityIndicators= */ false);
+                /* useUpdatedConnectionSecurityIndicators= */ false, null); // Vivaldi
     }
 
     // Implement PaymentHandlerToolbarMediatorDelegate.

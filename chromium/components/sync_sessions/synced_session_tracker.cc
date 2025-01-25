@@ -13,6 +13,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/sync/protocol/session_specifics.pb.h"
+#include "components/sync/protocol/sync_enums.pb.h"
 #include "components/sync_device_info/device_info_proto_enum_util.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 
@@ -128,6 +129,10 @@ void PopulateSyncedSessionFromSpecifics(
   if (header_specifics.has_client_name()) {
     synced_session->SetSessionName(header_specifics.client_name());
   }
+  if (header_specifics.has_session_start_time_unix_epoch_millis()) {
+    synced_session->SetStartTime(base::Time::FromMillisecondsSinceUnixEpoch(
+        header_specifics.session_start_time_unix_epoch_millis()));
+  }
 
   syncer::DeviceInfo::FormFactor device_form_factor =
       syncer::ToDeviceInfoFormFactor(header_specifics.device_form_factor());
@@ -186,6 +191,15 @@ void SyncedSessionTracker::InitLocalSession(
   local_session->SetDeviceTypeAndFormFactor(local_device_type,
                                             local_device_form_factor);
   local_session->SetSessionTag(local_session_tag);
+  // Note: Do *not* call `SetStartTime()` here! `InitLocalSession()` gets called
+  // on every browser startup (if sessions sync is enabled), but the session
+  // start time should only be set when the session is initially created.
+}
+
+void SyncedSessionTracker::SetLocalSessionStartTime(
+    base::Time local_session_start_time) {
+  SyncedSession* local_session = GetSession(local_session_tag_);
+  local_session->SetStartTime(local_session_start_time);
 }
 
 const std::string& SyncedSessionTracker::GetLocalSessionTag() const {
@@ -713,6 +727,22 @@ void UpdateTrackerWithSpecifics(const sync_pb::SessionSpecifics& specifics,
                                 SyncedSessionTracker* tracker) {
   std::string session_tag = specifics.session_tag();
   SyncedSession* session = tracker->GetSession(session_tag);
+
+  if (specifics.has_vivaldi_specific()) {
+    CHECK(specifics.tab_node_id() == TabNodePool::kVivaldiTabNodeID);
+    sync_sessions::VivaldiSpecific vivaldi_specific;
+    SetVivaldiSpecificFromSyncData(specifics.vivaldi_specific(), &vivaldi_specific);
+    session->SetVivaldiSpecific(vivaldi_specific);
+    return;
+  }
+
+  DCHECK(specifics.tab_node_id() != TabNodePool::kVivaldiTabNodeID);
+
+  if (specifics.tab_node_id() == TabNodePool::kVivaldiTabNodeID) {
+    LOG(WARNING) << "Invalid vivaldi session node received";
+    return;
+  }
+
   if (specifics.has_header()) {
     // Read in the header data for this session. Header data is
     // essentially a collection of windows, each of which has an ordered id list
@@ -726,10 +756,6 @@ void UpdateTrackerWithSpecifics(const sync_pb::SessionSpecifics& specifics,
 
     // Load (or create) the SyncedSession object for this client.
     const sync_pb::SessionHeader& header = specifics.header();
-
-    if (header.has_vivaldi_specific()) {
-      session->SetExtData(header.vivaldi_specific());
-    }
 
     // Reset the tab/window tracking for this session (must do this before
     // we start calling PutWindowInSession and PutTabInWindow so that all
@@ -846,6 +872,17 @@ void SerializePartialTrackerToSpecifics(
         header_pb.set_session_tag(session_tag);
         session->ToSessionHeaderProto().Swap(header_pb.mutable_header());
         output_cb.Run(session->GetSessionName(), &header_pb);
+        continue;
+      }
+
+      if (tab_node_id == TabNodePool::kVivaldiTabNodeID) {
+        sync_pb::SessionSpecifics viv_pb;
+        viv_pb.set_session_tag(session_tag);
+        viv_pb.set_tab_node_id(TabNodePool::kVivaldiTabNodeID);
+        auto* vivaldi_specific = viv_pb.mutable_vivaldi_specific();
+        SetSyncDataFromVivaldiSpecific(session->GetVivaldiSpecific(),
+                                       vivaldi_specific);
+        output_cb.Run(session->GetSessionName(), &viv_pb);
         continue;
       }
 

@@ -9,6 +9,9 @@
 
 #import <set>
 
+#import "base/memory/weak_ptr.h"
+#import "components/saved_tab_groups/types.h"
+
 class TabGroup;
 
 namespace web {
@@ -23,9 +26,11 @@ class WebStateID;
 // Tells the receiver to select the item with identifier `itemID`. If there is
 // no item with that identifier, no change in selection should be made.
 - (BOOL)isItemWithIDSelected:(web::WebStateID)itemID;
-// Tells the receiver to close the items with the identifiers in `itemIDs`.
-// ItemIDs which are not associated with any item are ignored.
-- (void)closeItemsWithIDs:(const std::set<web::WebStateID>&)itemIDs;
+// Tells the receiver to close the items with the`tabIDs` and `groupIDs`.
+// IDs which are not associated with any item are ignored.
+- (void)closeItemsWithTabIDs:(const std::set<web::WebStateID>&)tabIDs
+                    groupIDs:(const std::set<tab_groups::TabGroupId>&)groupIDs
+                    tabCount:(int)tabCount;
 // Tells the receiver to close all items.
 - (void)closeAllItems;
 // Tells the receiver to save all items for an undo operation, then close all
@@ -46,11 +51,6 @@ class WebStateID;
 // active item.
 - (void)resetToAllItems;
 
-// Tells the receiver to fetch the search history results count for `searchText`
-// and provide it to the `completion` block.
-- (void)fetchSearchHistoryResultsCountForText:(NSString*)searchText
-                                   completion:(void (^)(size_t))completion;
-
 // Tells the receiver to select the item with identifier `itemID`. If there is
 // no item with that identifier, no change in selection should be made. `pinned`
 // is `YES` If the selected item is a pinned item. `isFirstActionOnTabGrid` is
@@ -69,14 +69,16 @@ class WebStateID;
 
 // Tells the receiver to delete the `group`. `sourceView` is the view that the
 // delete action originated from.
-- (void)deleteTabGroup:(const TabGroup*)group sourceView:(UIView*)sourceView;
+- (void)deleteTabGroup:(base::WeakPtr<const TabGroup>)group
+            sourceView:(UIView*)sourceView;
 
 // Tells the receiver to close the `group`.
-- (void)closeTabGroup:(const TabGroup*)group;
+- (void)closeTabGroup:(base::WeakPtr<const TabGroup>)group;
 
 // Tells the receiver to ungroup the `group`. `sourceView` is the view that the
 // ungroup action originated from.
-- (void)ungroupTabGroup:(const TabGroup*)group sourceView:(UIView*)sourceView;
+- (void)ungroupTabGroup:(base::WeakPtr<const TabGroup>)group
+             sourceView:(UIView*)sourceView;
 
 // Tells the receiver to pin or unpin the tab with identifier `itemID`.
 - (void)setPinState:(BOOL)pinState forItemWithID:(web::WebStateID)itemID;

@@ -1,4 +1,4 @@
-#!/usr/bin/env vpython3
+#!/usr/bin/env python3
 # Copyright (c) 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -14,13 +14,12 @@ does handle import statements, but it can't handle conditional setting of build
 settings.
 """
 
+import uuid
 import logging
-import json
 import multiprocessing
 import os
 import platform
 import re
-import shelve
 import shlex
 import shutil
 import subprocess
@@ -28,10 +27,9 @@ import sys
 import time
 import warnings
 
-import google.auth
-from google.auth.transport.requests import AuthorizedSession
-
 import build_telemetry
+import gclient_paths
+import gclient_utils
 import gn_helper
 import ninja
 import ninjalog_uploader
@@ -55,114 +53,46 @@ _UNSAFE_FOR_CMD = set("^<>&|()%")
 _ALL_META_CHARS = _UNSAFE_FOR_CMD.union(set('"'))
 
 
-def _adc_account():
-    """Returns account used to authenticate with GCP application default credentials."""
-
-    try:
-        # Suppress warnings from google.auth.default.
-        # https://github.com/googleapis/google-auth-library-python/issues/271
-        warnings.filterwarnings(
-            "ignore",
-            "Your application has authenticated using end user credentials from"
-            " Google Cloud SDK without a quota project.",
-        )
-        credentials, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/userinfo.email"])
-    except google.auth.exceptions.DefaultCredentialsError:
-        # Application Default Crendetials is not configured.
-        return None
-    finally:
-        warnings.resetwarnings()
-
-    with AuthorizedSession(credentials) as session:
-        try:
-            response = session.get(
-                "https://www.googleapis.com/oauth2/v1/userinfo")
-        except Exception:
-            # Ignore exception.
-            return None
-
-    return response.json().get("email")
-
-
-def _gcloud_auth_account():
-    """Returns active account authenticated with `gcloud auth login`."""
-    if shutil.which("gcloud") is None:
-        return None
-
-    accounts = json.loads(
-        subprocess.check_output("gcloud auth list --format=json",
-                                shell=True,
-                                text=True))
-    for account in accounts:
-        if account["status"] == "ACTIVE":
-            return account["account"]
-    return None
-
-
-def _luci_auth_account():
-    """Returns active account authenticated with `luci-auth login -scopes-context`."""
-    if shutil.which("luci-auth") is None:
-        return None
-
-    # First line returned should be "Logged in as account@domain.com."
-    # Extract the account@domain.com from that line.
-    try:
-        info = subprocess.check_output("luci-auth info -scopes-context",
-                                       shell=True,
-                                       stderr=subprocess.STDOUT,
-                                       text=True).split('\n')[0]
-        if info.startswith("Logged in as "):
-            return info[len("Logged in as "):-1]
-    except subprocess.CalledProcessError:
-        return None
-    return None
-
-
 def _is_google_corp_machine():
     """This assumes that corp machine has gcert binary in known location."""
     return shutil.which("gcert") is not None
 
 
-def _is_google_corp_machine_using_external_account():
-    if os.environ.get("AUTONINJA_SKIP_EXTERNAL_ACCOUNT_CHECK") == "1":
-        print(
-            "WARNING: AUTONINJA_SKIP_EXTERNAL_ACCOUNT_CHECK env var is set.\n"
-            "This is only for some infra, do not set this in personal"
-            " development machine.",
-            file=sys.stderr)
-        return False
+def _reclient_rbe_project():
+    """Returns RBE project used by reclient."""
+    instance = os.environ.get('RBE_instance')
+    if instance:
+        m = re.match(instance, r'projects/([^/]*)/instances/.*')
+        if m:
+            return m[1]
+    reproxy_cfg_path = reclient_helper.find_reclient_cfg()
+    if not reproxy_cfg_path:
+        return ""
+    with open(reproxy_cfg_path) as f:
+        for line in f:
+            m = re.match(r'instance\s*=\s*projects/([^/]*)/instances/.*', line)
+            if m:
+                return m[1]
+    return ""
 
-    if not _is_google_corp_machine():
-        return False
 
-    with shelve.open(os.path.join(_SCRIPT_DIR, ".autoninja")) as db:
-        last_false = db.get("last_false")
-        now = time.time()
-        if last_false is not None and now < last_false + 12 * 60 * 60:
-            # Do not check account if it is checked in last 12 hours.
-            return False
-
-        account = _adc_account()
-        if account and not account.endswith("@google.com"):
-            return True
-
-        account = _luci_auth_account()
-        if account and not account.endswith("@google.com"):
-            return True
-
-        account = _gcloud_auth_account()
-        if not account:
-            db["last_false"] = now
-            return False
-
-        # Handle service account and google account as internal account.
-        if not (account.endswith("@google.com")
-                or account.endswith("gserviceaccount.com")):
-            return True
-
-        db["last_false"] = now
-        return False
+def _siso_rbe_project():
+    """Returns RBE project used by siso."""
+    siso_project = os.environ.get('SISO_PROJECT')
+    if siso_project:
+        return siso_project
+    root_dir = gclient_paths.GetPrimarySolutionPath()
+    if not root_dir:
+        return ""
+    sisoenv_path = os.path.join(root_dir, 'build/config/siso/.sisoenv')
+    if not os.path.exists(sisoenv_path):
+        return ""
+    with open(sisoenv_path) as f:
+        for line in f:
+            m = re.match(r'SISO_PROJECT=\s*(\S*)\s*', line)
+            if m:
+                return m[1]
+    return ""
 
 
 def _quote_for_cmd(arg):
@@ -186,7 +116,7 @@ def _print_cmd(cmd):
     print(*[shell_quoter(arg) for arg in cmd], file=sys.stderr)
 
 
-def main(args, should_collect_logs=False):
+def _main_inner(input_args, build_id, should_collect_logs=False):
     # if user doesn't set PYTHONPYCACHEPREFIX and PYTHONDONTWRITEBYTECODE
     # set PYTHONDONTWRITEBYTECODE=1 not to create many *.pyc in workspace
     # and keep workspace clean.
@@ -197,17 +127,8 @@ def main(args, should_collect_logs=False):
     j_specified = False
     offline = False
     output_dir = "."
-    input_args = args
     summarize_build = os.environ.get("NINJA_SUMMARIZE_BUILD") == "1"
-    # On Windows the autoninja.bat script passes along the arguments enclosed in
-    # double quotes. This prevents multiple levels of parsing of the special '^'
-    # characters needed when compiling a single file but means that this script
-    # gets called with a single argument containing all of the actual arguments,
-    # separated by spaces. When this case is detected we need to do argument
-    # splitting ourselves. This means that arguments containing actual spaces
-    # are not supported by autoninja, but that is not a real limitation.
-    if sys.platform.startswith("win") and len(args) == 2:
-        input_args = args[:1] + args[1].split()
+    project = None
 
     # Ninja uses getopt_long, which allow to intermix non-option arguments.
     # To leave non supported parameters untouched, we do not use getopt.
@@ -225,6 +146,12 @@ def main(args, should_collect_logs=False):
             output_dir = arg[2:]
         elif arg in ("-o", "--offline"):
             offline = True
+        elif arg in ("--project", "-project"):
+            project = input_args[index + 2]
+        elif arg.startswith("--project="):
+            project = arg[len("--project="):]
+        elif arg.startswith("-project="):
+            project = arg[len("-project="):]
         elif arg in ("-h", "--help"):
             print(
                 "autoninja: Use -o/--offline to temporary disable remote execution.",
@@ -251,8 +178,17 @@ def main(args, should_collect_logs=False):
             if k == "use_remoteexec" and v == "true":
                 use_remoteexec = True
                 continue
+            if k == "use_remoteexec" and v == "false":
+                use_remoteexec = False
+                continue
             if k == "use_siso" and v == "true":
                 use_siso = True
+                continue
+            if k == "use_siso" and v == "false":
+                use_siso = False
+                continue
+            if k == "use_reclient" and v == "true":
+                use_reclient = True
                 continue
             if k == "use_reclient" and v == "false":
                 use_reclient = False
@@ -261,16 +197,52 @@ def main(args, should_collect_logs=False):
             use_reclient = use_remoteexec
 
         if use_remoteexec:
-            if _is_google_corp_machine_using_external_account():
+            if use_reclient:
+                project = _reclient_rbe_project()
+            elif use_siso and project is None:
+                # siso runs locally if empty project is given
+                # even if use_remoteexec=true is set.
+                project = _siso_rbe_project()
+
+            if _is_google_corp_machine():
+                # user may login on non-@google.com account on corp,
+                # but need to use @google.com and rbe-chrome-untrusted
+                # on corp machine.
+                if project == 'rbe-chromium-untrusted':
+                    print(
+                        "You can't use rbe-chromium-untrusted on corp "
+                        "machine.\n"
+                        "Please use rbe-chrome-untrusted and @google.com "
+                        "account instead to build chromium.\n",
+                        file=sys.stderr,
+                    )
+                    return 1
+            else:
+                # only @google.com is allowed to use rbe-chrome-untrusted
+                # and use @google.com on non-corp machine is not allowed
+                # by corp security policy.
+                if project == 'rbe-chrome-untrusted':
+                    print(
+                        "You can't use rbe-chrome-untrusted on non-corp "
+                        "machine.\n"
+                        "Plase use rbe-chromium-untrusted and non-@google.com "
+                        "account instead to build chromium.",
+                        file=sys.stderr,
+                    )
+                    return 1
+
+        if gclient_utils.IsEnvCog():
+            if not use_remoteexec or use_reclient or not use_siso:
                 print(
-                    "You can't use a non-@google.com account (%s and/or %s) on"
-                    " a corp machine.\n"
-                    "Please login via `gcloud auth login --update-adc` with"
-                    " your @google.com account instead.\n" %
-                    (_adc_account(), _gcloud_auth_account()),
+                    "WARNING: You're not using Siso's built-in remote "
+                    "execution. The build will be slow.\n"
+                    "You should set the following in args.gn to get better "
+                    "performance:\n"
+                    "  use_remoteexec=true\n"
+                    "  use_reclient=false\n"
+                    "  use_siso=true\n",
                     file=sys.stderr,
                 )
-                return 1
 
         siso_marker = os.path.join(output_dir, ".siso_deps")
         if use_siso:
@@ -286,6 +258,8 @@ def main(args, should_collect_logs=False):
                     file=sys.stderr,
                 )
                 return 1
+            # Build ID consistently used in other tools. e.g. Reclient, ninjalog.
+            os.environ.setdefault("SISO_BUILD_ID", build_id)
             if use_remoteexec:
                 if use_reclient:
                     return reclient_helper.run_siso(
@@ -349,11 +323,11 @@ def main(args, should_collect_logs=False):
             fileno_limit, hard_limit = resource.getrlimit(
                 resource.RLIMIT_NOFILE)
 
-    args = ['ninja']
+    ninja_args = ['ninja']
     num_cores = multiprocessing.cpu_count()
     if not j_specified and not t_specified:
         if not offline and use_remoteexec:
-            args.append("-j")
+            ninja_args.append("-j")
             default_core_multiplier = 80
             if platform.machine() in ("x86_64", "AMD64"):
                 # Assume simultaneous multithreading and therefore half as many
@@ -379,51 +353,84 @@ def main(args, should_collect_logs=False):
             if sys.platform in ["darwin", "linux"]:
                 j_value = min(j_value, int(fileno_limit * 0.8))
 
-            args.append("%d" % j_value)
+            ninja_args.append("%d" % j_value)
         else:
             j_value = num_cores
             # Ninja defaults to |num_cores + 2|
             j_value += int(os.environ.get("NINJA_CORE_ADDITION", "2"))
-            args.append("-j")
-            args.append("%d" % j_value)
+            ninja_args.append("-j")
+            ninja_args.append("%d" % j_value)
 
     if summarize_build:
         # Enable statistics collection in Ninja.
-        args += ["-d", "stats"]
+        ninja_args += ["-d", "stats"]
 
-    args += input_args[1:]
+    ninja_args += input_args[1:]
 
     if summarize_build:
         # Print the command-line to reassure the user that the right settings
         # are being used.
-        _print_cmd(args)
+        _print_cmd(ninja_args)
 
     if use_reclient:
-        return reclient_helper.run_ninja(args, should_collect_logs)
-    return ninja.main(args)
+        return reclient_helper.run_ninja(ninja_args, should_collect_logs)
+    return ninja.main(ninja_args)
 
 
-def _upload_ninjalog(args):
+def _upload_ninjalog(args, exit_code, build_duration):
+    warnings.simplefilter("ignore", ResourceWarning)
     # Run upload script without wait.
     creationflags = 0
     if platform.system() == "Windows":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+    cmd = [
+        sys.executable,
+        _NINJALOG_UPLOADER,
+        "--exit_code",
+        str(exit_code),
+        "--build_duration",
+        str(int(build_duration)),
+        "--cmdline",
+    ] + args[1:]
     subprocess.Popen(
-        [sys.executable, _NINJALOG_UPLOADER, "--cmdline"] + args[1:],
+        cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         creationflags=creationflags,
     )
 
 
-if __name__ == "__main__":
+def main(args):
+    start = time.time()
+    # Generate Build ID randomly.
+    # This ID is expected to be used consistently in all build tools.
+    build_id = os.environ.get("AUTONINJA_BUILD_ID")
+    if not build_id:
+        build_id = str(uuid.uuid4())
+        os.environ.setdefault("AUTONINJA_BUILD_ID", build_id)
+
     # Check the log collection opt-in/opt-out status, and display notice if necessary.
-    _should_collect_logs = build_telemetry.enabled()
+    should_collect_logs = build_telemetry.enabled()
+    # On Windows the autoninja.bat script passes along the arguments enclosed in
+    # double quotes. This prevents multiple levels of parsing of the special '^'
+    # characters needed when compiling a single file but means that this script
+    # gets called with a single argument containing all of the actual arguments,
+    # separated by spaces. When this case is detected we need to do argument
+    # splitting ourselves. This means that arguments containing actual spaces
+    # are not supported by autoninja, but that is not a real limitation.
+    input_args = args
+    if sys.platform.startswith("win") and len(args) == 2:
+        input_args = args[:1] + args[1].split()
     try:
-        exit_code = main(sys.argv, _should_collect_logs)
+        exit_code = _main_inner(input_args, build_id, should_collect_logs)
     except KeyboardInterrupt:
         exit_code = 1
     finally:
-        if _should_collect_logs:
-            _upload_ninjalog(sys.argv)
-    sys.exit(exit_code)
+        if should_collect_logs:
+            elapsed = time.time() - start
+            _upload_ninjalog(input_args, exit_code, elapsed)
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -5,6 +5,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "renderer/blink/vivaldi_spatial_navigation.h"
 #include "third_party/blink/public/web/web_view.h"
+#include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
@@ -23,8 +24,7 @@ const char* kSpatnavIndicatorStyle =
     "position: absolute; "
     "box-shadow: 0 0 10px 4px rgba(255,122,0,0.70), 0 0 0 2px #FF7A00; "
     "z-index: 9999999; "
-    "visibility: visible !important; "
-    "display: block; ";
+    "visibility: visible !important; ";
 
 // Use a random number to avoid collision with an actual element id.
 const char* kVivaldiIndicatorId = "vivaldi-indicator-212822325015";
@@ -504,6 +504,9 @@ void VivaldiSpatialNavigationController::MoveRect(
   // This can fail in some edge cases, like fullscreen videos.
   blink::Node* indicator_node = indicator;
 
+  elm->GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      blink::DocumentUpdateReason::kSpatialNavigation);
+
   FocusElement(elm);
 
   if (old_container != new_container && indicator_node) {
@@ -537,8 +540,10 @@ void VivaldiSpatialNavigationController::CreateIndicator() {
                           WTF::AtomicString(kVivaldiIndicatorId));
   GetScrollContainerForCurrentElement()->AppendChild(indicator);
 
-  indicator->setAttribute(blink::html_names::kStyleAttr,
-      WTF::AtomicString(kSpatnavIndicatorStyle));
+  // Set Style directly to avoid injection blocking.
+  indicator->style()->setCSSText(document->GetExecutionContext(),
+                                 kSpatnavIndicatorStyle, ASSERT_NO_EXCEPTION);
+
   indicator_ = indicator;
 
   scroll_listener_ =
@@ -652,9 +657,7 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
       new_rect->setHeight(wr.height());
     }
 
-    if (builder.Visibility() == blink::EVisibility::kHidden) {
-      builder.SetVisibility(blink::EVisibility::kVisible);
-    }
+    builder.SetVisibility(blink::EVisibility::kVisible);
   }
 
   indicator_node->GetLayoutObject()->SetStyle(builder.TakeStyle());

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       index.c
@@ -5,11 +7,9 @@
 //
 //  Author:     Lasse Collin
 //
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
-//
 ///////////////////////////////////////////////////////////////////////////////
 
+#include "common.h"
 #include "index.h"
 #include "stream_flags_common.h"
 
@@ -105,7 +105,7 @@ typedef struct {
 
 
 typedef struct {
-	/// Every index_stream is a node in the tree of Sreams.
+	/// Every index_stream is a node in the tree of Streams.
 	index_tree_node node;
 
 	/// Number of this Stream (first one is 1)
@@ -166,7 +166,7 @@ struct lzma_index_s {
 	lzma_vli index_list_size;
 
 	/// How many Records to allocate at once in lzma_index_append().
-	/// This defaults to INDEX_GROUP_SIZE but can be overriden with
+	/// This defaults to INDEX_GROUP_SIZE but can be overridden with
 	/// lzma_index_prealloc().
 	size_t prealloc;
 
@@ -191,8 +191,8 @@ index_tree_init(index_tree *tree)
 
 /// Helper for index_tree_end()
 static void
-index_tree_node_end(index_tree_node *node, lzma_allocator *allocator,
-		void (*free_func)(void *node, lzma_allocator *allocator))
+index_tree_node_end(index_tree_node *node, const lzma_allocator *allocator,
+		void (*free_func)(void *node, const lzma_allocator *allocator))
 {
 	// The tree won't ever be very huge, so recursion should be fine.
 	// 20 levels in the tree is likely quite a lot already in practice.
@@ -202,22 +202,21 @@ index_tree_node_end(index_tree_node *node, lzma_allocator *allocator,
 	if (node->right != NULL)
 		index_tree_node_end(node->right, allocator, free_func);
 
-	if (free_func != NULL)
-		free_func(node, allocator);
-
-	lzma_free(node, allocator);
+	free_func(node, allocator);
 	return;
 }
 
 
-/// Free the meory allocated for a tree. If free_func is not NULL,
-/// it is called on each node before freeing the node. This is used
-/// to free the Record groups from each index_stream before freeing
-/// the index_stream itself.
+/// Free the memory allocated for a tree. Each node is freed using the
+/// given free_func which is either &lzma_free or &index_stream_end.
+/// The latter is used to free the Record groups from each index_stream
+/// before freeing the index_stream itself.
 static void
-index_tree_end(index_tree *tree, lzma_allocator *allocator,
-		void (*free_func)(void *node, lzma_allocator *allocator))
+index_tree_end(index_tree *tree, const lzma_allocator *allocator,
+		void (*free_func)(void *node, const lzma_allocator *allocator))
 {
+	assert(free_func != NULL);
+
 	if (tree->root != NULL)
 		index_tree_node_end(tree->root, allocator, free_func);
 
@@ -339,8 +338,8 @@ index_tree_locate(const index_tree *tree, lzma_vli target)
 /// Allocate and initialize a new Stream using the given base offsets.
 static index_stream *
 index_stream_init(lzma_vli compressed_base, lzma_vli uncompressed_base,
-		lzma_vli stream_number, lzma_vli block_number_base,
-		lzma_allocator *allocator)
+		uint32_t stream_number, lzma_vli block_number_base,
+		const lzma_allocator *allocator)
 {
 	index_stream *s = lzma_alloc(sizeof(index_stream), allocator);
 	if (s == NULL)
@@ -368,16 +367,17 @@ index_stream_init(lzma_vli compressed_base, lzma_vli uncompressed_base,
 
 /// Free the memory allocated for a Stream and its Record groups.
 static void
-index_stream_end(void *node, lzma_allocator *allocator)
+index_stream_end(void *node, const lzma_allocator *allocator)
 {
 	index_stream *s = node;
-	index_tree_end(&s->groups, allocator, NULL);
+	index_tree_end(&s->groups, allocator, &lzma_free);
+	lzma_free(s, allocator);
 	return;
 }
 
 
 static lzma_index *
-index_init_plain(lzma_allocator *allocator)
+index_init_plain(const lzma_allocator *allocator)
 {
 	lzma_index *i = lzma_alloc(sizeof(lzma_index), allocator);
 	if (i != NULL) {
@@ -395,7 +395,7 @@ index_init_plain(lzma_allocator *allocator)
 
 
 extern LZMA_API(lzma_index *)
-lzma_index_init(lzma_allocator *allocator)
+lzma_index_init(const lzma_allocator *allocator)
 {
 	lzma_index *i = index_init_plain(allocator);
 	if (i == NULL)
@@ -414,7 +414,7 @@ lzma_index_init(lzma_allocator *allocator)
 
 
 extern LZMA_API(void)
-lzma_index_end(lzma_index *i, lzma_allocator *allocator)
+lzma_index_end(lzma_index *i, const lzma_allocator *allocator)
 {
 	// NOTE: If you modify this function, check also the bottom
 	// of lzma_index_cat().
@@ -637,7 +637,7 @@ lzma_index_stream_padding(lzma_index *i, lzma_vli stream_padding)
 
 
 extern LZMA_API(lzma_ret)
-lzma_index_append(lzma_index *i, lzma_allocator *allocator,
+lzma_index_append(lzma_index *i, const lzma_allocator *allocator,
 		lzma_vli unpadded_size, lzma_vli uncompressed_size)
 {
 	// Validate.
@@ -655,6 +655,16 @@ lzma_index_append(lzma_index *i, lzma_allocator *allocator,
 			: g->records[g->last].uncompressed_sum;
 	const uint32_t index_list_size_add = lzma_vli_size(unpadded_size)
 			+ lzma_vli_size(uncompressed_size);
+
+	// Check that uncompressed size will not overflow.
+	if (uncompressed_base + uncompressed_size > LZMA_VLI_MAX)
+		return LZMA_DATA_ERROR;
+
+	// Check that the new unpadded sum will not overflow. This is
+	// checked again in index_file_size(), but the unpadded sum is
+	// passed to vli_ceil4() which expects a valid lzma_vli value.
+	if (compressed_base + unpadded_size > UNPADDED_SIZE_MAX)
+		return LZMA_DATA_ERROR;
 
 	// Check that the file size will stay within limits.
 	if (index_file_size(s->node.compressed_base,
@@ -765,8 +775,11 @@ index_cat_helper(const index_cat_info *info, index_stream *this)
 
 extern LZMA_API(lzma_ret)
 lzma_index_cat(lzma_index *restrict dest, lzma_index *restrict src,
-		lzma_allocator *allocator)
+		const lzma_allocator *allocator)
 {
+	if (dest == NULL || src == NULL)
+		return LZMA_PROG_ERROR;
+
 	const lzma_vli dest_file_size = lzma_index_file_size(dest);
 
 	// Check that we don't exceed the file size limits.
@@ -825,12 +838,20 @@ lzma_index_cat(lzma_index *restrict dest, lzma_index *restrict src,
 				s->groups.root = &newg->node;
 			}
 
-			if (s->groups.rightmost == &g->node)
-				s->groups.rightmost = &newg->node;
+			assert(s->groups.rightmost == &g->node);
+			s->groups.rightmost = &newg->node;
 
 			lzma_free(g, allocator);
+
+			// NOTE: newg isn't leaked here because
+			// newg == (void *)&newg->node.
 		}
 	}
+
+	// dest->checks includes the check types of all except the last Stream
+	// in dest. Set the bit for the check type of the last Stream now so
+	// that it won't get lost when Stream(s) from src are appended to dest.
+	dest->checks = lzma_index_checks(dest);
 
 	// Add all the Streams from src to dest. Update the base offsets
 	// of each Stream from src.
@@ -848,7 +869,7 @@ lzma_index_cat(lzma_index *restrict dest, lzma_index *restrict src,
 	dest->total_size += src->total_size;
 	dest->record_count += src->record_count;
 	dest->index_list_size += src->index_list_size;
-	dest->checks = lzma_index_checks(dest) | src->checks;
+	dest->checks |= src->checks;
 
 	// There's nothing else left in src than the base structure.
 	lzma_free(src, allocator);
@@ -859,7 +880,7 @@ lzma_index_cat(lzma_index *restrict dest, lzma_index *restrict src,
 
 /// Duplicate an index_stream.
 static index_stream *
-index_dup_stream(const index_stream *src, lzma_allocator *allocator)
+index_dup_stream(const index_stream *src, const lzma_allocator *allocator)
 {
 	// Catch a somewhat theoretical integer overflow.
 	if (src->record_count > PREALLOC_MAX)
@@ -869,17 +890,18 @@ index_dup_stream(const index_stream *src, lzma_allocator *allocator)
 	index_stream *dest = index_stream_init(src->node.compressed_base,
 			src->node.uncompressed_base, src->number,
 			src->block_number_base, allocator);
-
-	// Return immediately if allocation failed or if there are
-	// no groups to duplicate.
-	if (dest == NULL || src->groups.leftmost == NULL)
-		return dest;
+	if (dest == NULL)
+		return NULL;
 
 	// Copy the overall information.
 	dest->record_count = src->record_count;
 	dest->index_list_size = src->index_list_size;
 	dest->stream_flags = src->stream_flags;
 	dest->stream_padding = src->stream_padding;
+
+	// Return if there are no groups to duplicate.
+	if (src->groups.leftmost == NULL)
+		return dest;
 
 	// Allocate memory for the Records. We put all the Records into
 	// a single group. It's simplest and also tends to make
@@ -919,7 +941,7 @@ index_dup_stream(const index_stream *src, lzma_allocator *allocator)
 
 
 extern LZMA_API(lzma_index *)
-lzma_index_dup(const lzma_index *src, lzma_allocator *allocator)
+lzma_index_dup(const lzma_index *src, const lzma_allocator *allocator)
 {
 	// Allocate the base structure (no initial Stream).
 	lzma_index *dest = index_init_plain(allocator);
@@ -1008,6 +1030,8 @@ iter_set_info(lzma_index_iter *iter)
 		iter->internal[ITER_GROUP].p = NULL;
 	}
 
+	// NOTE: lzma_index_iter.stream.number is lzma_vli but we use uint32_t
+	// internally.
 	iter->stream.number = stream->number;
 	iter->stream.block_count = stream->record_count;
 	iter->stream.compressed_offset = stream->node.compressed_base;
@@ -1220,7 +1244,7 @@ lzma_index_iter_locate(lzma_index_iter *iter, lzma_vli target)
 
 	// Use binary search to locate the exact Record. It is the first
 	// Record whose uncompressed_sum is greater than target.
-	// This is because we want the rightmost Record that fullfills the
+	// This is because we want the rightmost Record that fulfills the
 	// search criterion. It is possible that there are empty Blocks;
 	// we don't want to return them.
 	size_t left = 0;

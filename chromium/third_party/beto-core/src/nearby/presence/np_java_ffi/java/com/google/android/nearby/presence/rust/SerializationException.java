@@ -29,6 +29,19 @@ public abstract class SerializationException extends Exception {
     }
   }
 
+  public static final class UnclosedActiveSectionException extends RuntimeException {
+    public UnclosedActiveSectionException() {
+      super(
+          "There is currently an active section builder which must be finished before continuing");
+    }
+  }
+
+  public static final class InvalidSectionKindException extends RuntimeException {
+    public InvalidSectionKindException() {
+      super("A section of this kind is not allowed in this advertisement");
+    }
+  }
+
   public static final class InsufficientSpaceException extends SerializationException {
     public InsufficientSpaceException() {
       super("There isn't enough space remaining in the advertisement");

@@ -17,6 +17,7 @@
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/mojom/window_show_state.mojom-forward.h"
 #include "ui/base/ui_base_types.h"
 
 namespace base {
@@ -64,7 +65,7 @@ class SESSIONS_EXPORT LiveTabContext {
       const tab_groups::TabGroupId& group,
       const tab_groups::TabGroupVisualData& visual_data) = 0;
   virtual const gfx::Rect GetRestoredBounds() const = 0;
-  virtual ui::WindowShowState GetRestoredState() const = 0;
+  virtual ui::mojom::WindowShowState GetRestoredState() const = 0;
   virtual std::string GetWorkspace() const = 0;
 
   // Note: |tab.platform_data| may be null (e.g., if restoring from last session
@@ -72,9 +73,12 @@ class SESSIONS_EXPORT LiveTabContext {
   // platform-specific data).
   // |tab.id| is the tab's unique SessionID. Only present if a historical tab
   // has been created by TabRestoreService.
+  // |original_session_type| indicates the type of session entry the tab
+  // belongs to.
   virtual LiveTab* AddRestoredTab(const tab_restore::Tab& tab,
                                   int tab_index,
-                                  bool select);
+                                  bool select,
+                                  tab_restore::Type original_session_type);
 
   // Note: |tab.platform_data| may be null (e.g., if restoring from last session
   // as this data is not persisted, or if the platform does not provide
@@ -85,9 +89,11 @@ class SESSIONS_EXPORT LiveTabContext {
   // see Browser::viv_ext_data()
   virtual std::string GetVivExtData() const;
 
-  virtual LiveTab* AddRestoredTab(const tab_restore::Tab& tab,
-                                  int tab_index,
-                                  bool select,
+  virtual LiveTab* AddRestoredTab(
+      const tab_restore::Tab& tab,
+      int tab_index,
+      bool select,
+      tab_restore::Type original_session_type,
       const std::map<std::string, bool> page_action_overrides,
       const std::string& viv_ext_data);
 

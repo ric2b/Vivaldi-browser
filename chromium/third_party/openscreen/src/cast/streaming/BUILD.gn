@@ -24,18 +24,20 @@ fuzzable_proto_library("sender_stats_proto") {
   sources = [ "sender_stats.proto" ]
 }
 
+# FIXME: Merge this target into :common once Chromium also depends on :common.
 openscreen_source_set("streaming_configs") {
-  # Used in //components/cast_streaming in Chromium.
+  # Used in //components/cast_streaming and //media/cast in Chromium.
   visibility += [ "*" ]
   public = [
-    "capture_configs.h",
+    "capture_configs.h",  # FIXME
     "constants.h",
-    "message_fields.h",
-    "resolution.h",
+    "message_fields.h",  # FIXME
+    "public/constants.h",
+    "resolution.h",  # FIXME
   ]
   sources = [
-    "constants.cc",
     "message_fields.cc",
+    "public/constants.cc",
     "resolution.cc",
   ]
 
@@ -60,47 +62,56 @@ openscreen_source_set("common") {
     "environment.h",
     "frame_id.h",
     "offer_messages.h",
+    "public/answer_messages.h",
+    "public/capture_recommendations.h",
+    "public/encoded_frame.h",
+    "public/environment.h",
+    "public/frame_id.h",
+    "public/offer_messages.h",
+    "public/receiver_message.h",
+    "public/rpc_messenger.h",
+    "public/session_messenger.h",
     "receiver_message.h",
     "rpc_messenger.h",
-    "rtp_time.h",
+    "rtp_time.h",  # FIXME
     "sender_message.h",  # FIXME: Remove Chromium #include and make private
     "session_messenger.h",
     "ssrc.h",  # FIXME: Remove Chromium #include and make private
   ]
   sources = [
-    "answer_messages.cc",
-    "capture_recommendations.cc",
-    "clock_drift_smoother.cc",
-    "clock_drift_smoother.h",
-    "encoded_frame.cc",
-    "environment.cc",
-    "expanded_value_base.h",
-    "frame_crypto.cc",
-    "frame_crypto.h",
-    "frame_id.cc",
-    "ntp_time.cc",
-    "ntp_time.h",
-    "offer_messages.cc",
-    "packet_util.cc",
-    "packet_util.h",
-    "receiver_message.cc",
-    "rpc_messenger.cc",
-    "rtcp_common.cc",
-    "rtcp_common.h",
-    "rtcp_session.cc",
-    "rtcp_session.h",
-    "rtp_defines.cc",
-    "rtp_defines.h",
+    "impl/clock_drift_smoother.cc",
+    "impl/clock_drift_smoother.h",
+    "impl/expanded_value_base.h",
+    "impl/frame_crypto.cc",
+    "impl/frame_crypto.h",
+    "impl/ntp_time.cc",
+    "impl/ntp_time.h",
+    "impl/packet_util.cc",
+    "impl/packet_util.h",
+    "impl/rtcp_common.cc",
+    "impl/rtcp_common.h",
+    "impl/rtcp_session.cc",
+    "impl/rtcp_session.h",
+    "impl/rtp_defines.cc",
+    "impl/rtp_defines.h",
+    "impl/session_config.cc",
+    "impl/session_config.h",
+    "impl/statistics_collector.cc",
+    "impl/statistics_collector.h",
+    "impl/statistics_defines.cc",
+    "impl/statistics_defines.h",
+    "public/answer_messages.cc",
+    "public/capture_recommendations.cc",
+    "public/encoded_frame.cc",
+    "public/environment.cc",
+    "public/frame_id.cc",
+    "public/offer_messages.cc",
+    "public/receiver_message.cc",
+    "public/rpc_messenger.cc",
+    "public/session_messenger.cc",
     "rtp_time.cc",
     "sender_message.cc",
-    "session_config.cc",
-    "session_config.h",
-    "session_messenger.cc",
     "ssrc.cc",
-    "statistics_collector.cc",
-    "statistics_collector.h",
-    "statistics_defines.cc",
-    "statistics_defines.h",
   ]
 
   public_deps = [
@@ -135,28 +146,31 @@ openscreen_source_set("receiver") {
   # Chromium.
   visibility += [ "*" ]
   public = [
+    "public/receiver.h",
+    "public/receiver_constraints.h",
+    "public/receiver_session.h",
     "receiver.h",
     "receiver_constraints.h",
     "receiver_session.h",
   ]
   sources = [
-    "compound_rtcp_builder.cc",
-    "compound_rtcp_builder.h",
-    "frame_collector.cc",
-    "frame_collector.h",
-    "packet_receive_stats_tracker.cc",
-    "packet_receive_stats_tracker.h",
-    "receiver.cc",
-    "receiver_base.cc",
-    "receiver_base.h",
-    "receiver_constraints.cc",
-    "receiver_packet_router.cc",
-    "receiver_packet_router.h",
-    "receiver_session.cc",
-    "rtp_packet_parser.cc",
-    "rtp_packet_parser.h",
-    "sender_report_parser.cc",
-    "sender_report_parser.h",
+    "impl/compound_rtcp_builder.cc",
+    "impl/compound_rtcp_builder.h",
+    "impl/frame_collector.cc",
+    "impl/frame_collector.h",
+    "impl/packet_receive_stats_tracker.cc",
+    "impl/packet_receive_stats_tracker.h",
+    "impl/receiver_base.cc",
+    "impl/receiver_base.h",
+    "impl/receiver_packet_router.cc",
+    "impl/receiver_packet_router.h",
+    "impl/rtp_packet_parser.cc",
+    "impl/rtp_packet_parser.h",
+    "impl/sender_report_parser.cc",
+    "impl/sender_report_parser.h",
+    "public/receiver.cc",
+    "public/receiver_constraints.cc",
+    "public/receiver_session.cc",
   ]
 
   public_deps = [ ":common" ]
@@ -174,6 +188,10 @@ openscreen_source_set("sender") {
   # Used by //components/mirroring and //media/cast in Chromium.
   visibility += [ "*" ]
   public = [
+    "impl/compound_rtcp_parser.h",  # For use in tests only.
+    "public/sender.h",
+    "public/sender_session.h",
+    "public/statistics.h",
     "remoting_capabilities.h",  # FIXME: Only for Chromium tests.
     "sender.h",
     "sender_packet_router.h",  # FIXME: Only for Chromium tests.
@@ -181,23 +199,22 @@ openscreen_source_set("sender") {
     "statistics.h",
   ]
   sources = [
-    "bandwidth_estimator.cc",
-    "bandwidth_estimator.h",
-    "clock_offset_estimator.h",
-    "clock_offset_estimator_impl.cc",
-    "clock_offset_estimator_impl.h",
-    "compound_rtcp_parser.cc",
-    "compound_rtcp_parser.h",
-    "rtp_packetizer.cc",
-    "rtp_packetizer.h",
-    "sender.cc",
+    "impl/bandwidth_estimator.cc",
+    "impl/bandwidth_estimator.h",
+    "impl/clock_offset_estimator.h",
+    "impl/clock_offset_estimator_impl.cc",
+    "impl/clock_offset_estimator_impl.h",
+    "impl/compound_rtcp_parser.cc",
+    "impl/rtp_packetizer.cc",
+    "impl/rtp_packetizer.h",
+    "impl/sender_report_builder.cc",
+    "impl/sender_report_builder.h",
+    "impl/statistics_analyzer.cc",
+    "impl/statistics_analyzer.h",
+    "public/sender.cc",
+    "public/sender_session.cc",
+    "public/statistics.cc",
     "sender_packet_router.cc",
-    "sender_report_builder.cc",
-    "sender_report_builder.h",
-    "sender_session.cc",
-    "statistics.cc",
-    "statistics_analyzer.cc",
-    "statistics_analyzer.h",
   ]
 
   public_deps = [ ":common" ]
@@ -210,11 +227,13 @@ openscreen_source_set("sender") {
   ]
 }
 
-openscreen_source_set("test_helpers") {
+openscreen_source_set("testing") {
   testonly = true
   public = []
   sources = [
     "testing/message_pipe.h",
+    "testing/mock_compound_rtcp_parser_client.h",
+    "testing/mock_environment.h",
     "testing/simple_message_port.h",
     "testing/simple_socket_subscriber.h",
   ]
@@ -222,6 +241,7 @@ openscreen_source_set("test_helpers") {
   public_deps = [ ":common" ]
 
   deps = [
+    ":sender",
     "../../third_party/googletest:gmock",
     "../../third_party/googletest:gtest",
     "../../util",
@@ -236,47 +256,45 @@ openscreen_source_set("unittests") {
   visibility += [ "../..:openscreen_unittests_all" ]
   public = []
   sources = [
-    "answer_messages_unittest.cc",
-    "bandwidth_estimator_unittest.cc",
-    "capture_recommendations_unittest.cc",
-    "clock_offset_estimator_impl_unittest.cc",
-    "compound_rtcp_builder_unittest.cc",
-    "compound_rtcp_parser_unittest.cc",
-    "expanded_value_base_unittest.cc",
-    "frame_collector_unittest.cc",
-    "frame_crypto_unittest.cc",
+    "impl/answer_messages_unittest.cc",
+    "impl/bandwidth_estimator_unittest.cc",
+    "impl/capture_recommendations_unittest.cc",
+    "impl/clock_offset_estimator_impl_unittest.cc",
+    "impl/compound_rtcp_builder_unittest.cc",
+    "impl/compound_rtcp_parser_unittest.cc",
+    "impl/expanded_value_base_unittest.cc",
+    "impl/frame_collector_unittest.cc",
+    "impl/frame_crypto_unittest.cc",
+    "impl/mock_environment.cc",
+    "impl/ntp_time_unittest.cc",
+    "impl/offer_messages_unittest.cc",
+    "impl/packet_receive_stats_tracker_unittest.cc",
+    "impl/packet_util_unittest.cc",
+    "impl/receiver_constraints_unittest.cc",
+    "impl/receiver_message_unittest.cc",
+    "impl/receiver_session_unittest.cc",
+    "impl/receiver_unittest.cc",
+    "impl/rpc_messenger_unittest.cc",
+    "impl/rtcp_common_unittest.cc",
+    "impl/rtp_packet_parser_unittest.cc",
+    "impl/rtp_packetizer_unittest.cc",
+    "impl/sender_report_unittest.cc",
+    "impl/sender_session_unittest.cc",
+    "impl/sender_unittest.cc",
+    "impl/session_messenger_unittest.cc",
+    "impl/statistics_analyzer_unittest.cc",
+    "impl/statistics_collector_unittest.cc",
+    "impl/statistics_unittest.cc",
     "message_fields_unittest.cc",
-    "mock_compound_rtcp_parser_client.h",
-    "mock_environment.cc",
-    "mock_environment.h",
-    "ntp_time_unittest.cc",
-    "offer_messages_unittest.cc",
-    "packet_receive_stats_tracker_unittest.cc",
-    "packet_util_unittest.cc",
-    "receiver_constraints_unittest.cc",
-    "receiver_message_unittest.cc",
-    "receiver_session_unittest.cc",
-    "receiver_unittest.cc",
-    "rpc_messenger_unittest.cc",
-    "rtcp_common_unittest.cc",
-    "rtp_packet_parser_unittest.cc",
-    "rtp_packetizer_unittest.cc",
     "rtp_time_unittest.cc",
     "sender_packet_router_unittest.cc",
-    "sender_report_unittest.cc",
-    "sender_session_unittest.cc",
-    "sender_unittest.cc",
-    "session_messenger_unittest.cc",
     "ssrc_unittest.cc",
-    "statistics_analyzer_unittest.cc",
-    "statistics_collector_unittest.cc",
-    "statistics_unittest.cc",
   ]
 
   deps = [
     ":receiver",
     ":sender",
-    ":test_helpers",
+    ":testing",
     "../../platform:test",
     "../../third_party/googletest:gmock",
     "../../third_party/googletest:gtest",
@@ -290,7 +308,7 @@ openscreen_source_set("unittests") {
 
 openscreen_fuzzer_test("compound_rtcp_parser_fuzzer") {
   public = []
-  sources = [ "compound_rtcp_parser_fuzzer.cc" ]
+  sources = [ "impl/compound_rtcp_parser_fuzzer.cc" ]
 
   deps = [
     ":sender",
@@ -305,7 +323,7 @@ openscreen_fuzzer_test("compound_rtcp_parser_fuzzer") {
 
 openscreen_fuzzer_test("rtp_packet_parser_fuzzer") {
   public = []
-  sources = [ "rtp_packet_parser_fuzzer.cc" ]
+  sources = [ "impl/rtp_packet_parser_fuzzer.cc" ]
 
   deps = [
     ":receiver",
@@ -320,7 +338,7 @@ openscreen_fuzzer_test("rtp_packet_parser_fuzzer") {
 
 openscreen_fuzzer_test("sender_report_parser_fuzzer") {
   public = []
-  sources = [ "sender_report_parser_fuzzer.cc" ]
+  sources = [ "impl/sender_report_parser_fuzzer.cc" ]
 
   deps = [
     ":receiver",

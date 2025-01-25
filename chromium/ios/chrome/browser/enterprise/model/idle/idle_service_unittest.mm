@@ -12,7 +12,7 @@
 #import "components/enterprise/idle/metrics.h"
 #import "ios/chrome/browser/enterprise/model/idle/action_runner.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
@@ -28,7 +28,6 @@ using ::testing::_;
 
 namespace enterprise_idle {
 
-class ChromeBrowserState;
 class ActionRunner;
 
 // Tests that the idle service schedules tasks and runs actions as expected when
@@ -70,7 +69,7 @@ class IdleTimeoutServiceTest : public PlatformTest {
   }
 
   void SetLastActiveTime(base::Time time) {
-    local_state_.Get()->SetTime(prefs::kLastActiveTimestamp, time);
+    local_state()->SetTime(prefs::kLastActiveTimestamp, time);
   }
 
   base::Time GetLastIdleTime() {
@@ -103,7 +102,7 @@ class IdleTimeoutServiceTest : public PlatformTest {
     test_cbs_builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetDefaultFactory());
-    browser_state_ = test_cbs_builder.Build();
+    browser_state_ = std::move(test_cbs_builder).Build();
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         browser_state_.get(),
         std::make_unique<FakeAuthenticationServiceDelegate>());
@@ -120,6 +119,10 @@ class IdleTimeoutServiceTest : public PlatformTest {
     run_loop.RunUntilIdle();
   }
 
+  PrefService* local_state() {
+    return GetApplicationContext()->GetLocalState();
+  }
+
  protected:
   web::WebTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
@@ -127,7 +130,7 @@ class IdleTimeoutServiceTest : public PlatformTest {
   raw_ptr<MockActionRunner> action_runner_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<IdleService> idle_service_;
-  IOSChromeScopedTestingLocalState local_state_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   raw_ptr<AuthenticationService> authentication_service_;
 };
 

@@ -25,7 +25,6 @@ component("soda") {
 
   deps = [
     ":constants",
-    ":utils",
     "//base",
     "//build:chromeos_buildflags",
     "//components/live_caption:constants",
@@ -64,6 +63,8 @@ source_set("constants") {
     "//base",
     "//components/component_updater:component_updater_paths",
     "//components/crx_file",
+    "//components/language/core/browser",
+    "//components/prefs:prefs",
     "//components/strings/",
     "//media",
     "//ui/base",
@@ -76,7 +77,13 @@ source_set("utils") {
     "soda_util.h",
   ]
 
-  deps = [ "//base" ]
+  deps = [
+    ":constants",
+    ":soda",
+    "//base",
+    "//media",
+    "//ui/base",
+  ]
 
   if (is_chromeos_ash) {
     deps += [ "//ash/constants:constants" ]

@@ -14,7 +14,7 @@
 #include "cast/standalone_receiver/decoder.h"
 #include "cast/standalone_receiver/sdl_glue.h"
 #include "cast/streaming/message_fields.h"
-#include "cast/streaming/receiver.h"
+#include "cast/streaming/public/receiver.h"
 #include "platform/api/task_runner.h"
 #include "platform/api/time.h"
 #include "platform/base/error.h"

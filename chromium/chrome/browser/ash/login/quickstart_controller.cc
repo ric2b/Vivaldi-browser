@@ -16,11 +16,11 @@
 #include "chrome/browser/ash/login/oobe_quick_start/oobe_quick_start_pref_names.h"
 #include "chrome/browser/ash/login/oobe_quick_start/target_device_bootstrap_controller.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
 #include "chrome/browser/ui/webui/ash/login/add_child_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/consumer_update_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
@@ -279,9 +279,6 @@ void QuickStartController::ForceEnableQuickStart() {
 
   InitTargetDeviceBootstrapController();
   StartObservingBluetoothState();
-
-  QS_LOG(INFO) << "Force enabling LocalPasswordsForConsumers!";
-  ash::features::ForceEnableLocalPasswordsForConsumers();
 }
 
 void QuickStartController::DetermineEntryPointVisibility(
@@ -376,7 +373,6 @@ void QuickStartController::RecordFlowFinished() {
   metrics_->RecordScreenClosed(
       QuickStartMetrics::ScreenName::kQSComplete,
       QuickStartMetrics::ScreenClosedReason::kSetupComplete);
-  metrics_.reset();
 }
 
 void QuickStartController::InitTargetDeviceBootstrapController() {
@@ -403,7 +399,10 @@ void QuickStartController::InitTargetDeviceBootstrapController() {
 void QuickStartController::OnGetQuickStartFeatureSupportStatus(
     EntryPointButtonVisibilityCallback set_button_visibility_callback,
     TargetDeviceConnectionBroker::FeatureSupportStatus status) {
+  // Maybe prevent a delayed repeated call from TargetDeviceConnectionBroker by
+  // re-checking that the flow is not ongoing.
   const bool visible =
+      !IsSetupOngoing() &&
       status == TargetDeviceConnectionBroker::FeatureSupportStatus::kSupported;
 
   // Make the entry point button visible when supported, otherwise keep hidden.
@@ -438,9 +437,11 @@ void QuickStartController::OnStatusChanged(
       OnPhoneConnectionEstablished();
       return;
     case Step::REQUESTING_WIFI_CREDENTIALS:
+      CHECK(did_request_wifi_credentials_) << "Unrequested WiFi credentials!";
       UpdateUiState(UiState::CONNECTING_TO_WIFI);
       return;
     case Step::WIFI_CREDENTIALS_RECEIVED:
+      CHECK(did_request_wifi_credentials_) << "Unrequested WiFi credentials!";
       CHECK(absl::holds_alternative<mojom::WifiCredentials>(status.payload))
           << "Missing expected WifiCredentials";
 
@@ -450,11 +451,14 @@ void QuickStartController::OnStatusChanged(
           absl::get<mojom::WifiCredentials>(status.payload);
       ABSL_FALLTHROUGH_INTENDED;
     case Step::EMPTY_WIFI_CREDENTIALS_RECEIVED:
+      CHECK(did_request_wifi_credentials_) << "Unrequested WiFi credentials!";
       UpdateUiState(UiState::WIFI_CREDENTIALS_RECEIVED);
       return;
     case Step::REQUESTING_GOOGLE_ACCOUNT_INFO:
+      CHECK(did_request_account_info_) << "Unrequested account info received!";
       return;
     case Step::GOOGLE_ACCOUNT_INFO_RECEIVED:
+      CHECK(did_request_account_info_) << "Unrequested account info received!";
       CHECK(absl::holds_alternative<EmailString>(status.payload))
           << "Missing expected EmailString";
       // If there aren't any accounts on the phone, the flow is aborted.
@@ -470,9 +474,11 @@ void QuickStartController::OnStatusChanged(
       // Populate the 'UserInfo' that is shown on the UI and start the transfer.
       user_info_.email = *absl::get<EmailString>(status.payload);
       UpdateUiState(UiState::SIGNING_IN);
+      did_request_account_transfer_ = true;
       bootstrap_controller_->AttemptGoogleAccountTransfer();
       return;
     case Step::TRANSFERRING_GOOGLE_ACCOUNT_DETAILS:
+      CHECK(did_request_account_transfer_) << "Unrequested account transfer!";
       // Intermediate state. Nothing to do.
       if (controller_state_ != ControllerState::CONNECTED) {
         QS_LOG(ERROR) << "Expected controller_state_ to be CONNECTED. Actual "
@@ -482,6 +488,7 @@ void QuickStartController::OnStatusChanged(
       }
       return;
     case Step::TRANSFERRED_GOOGLE_ACCOUNT_DETAILS:
+      CHECK(did_request_account_transfer_) << "Unrequested account transfer!";
       if (controller_state_ != ControllerState::CONNECTED) {
         QS_LOG(ERROR) << "Expected controller_state_ to be CONNECTED. Actual "
                          "controller_state_: "
@@ -699,6 +706,7 @@ void QuickStartController::HandleTransitionToQuickStartScreen() {
 void QuickStartController::StartAccountTransfer() {
   UpdateUiState(UiState::CONFIRM_GOOGLE_ACCOUNT);
   QuickStartMetrics::RecordGaiaTransferStarted();
+  did_request_account_info_ = true;
   bootstrap_controller_->RequestGoogleAccountInfo();
 }
 
@@ -715,6 +723,7 @@ void QuickStartController::OnPhoneConnectionEstablished() {
       // will be shown next.
       UpdateUiState(UiState::WIFI_CREDENTIALS_RECEIVED);
     } else {
+      did_request_wifi_credentials_ = true;
       bootstrap_controller_->AttemptWifiCredentialTransfer();
     }
   } else {
@@ -782,6 +791,9 @@ void QuickStartController::ResetState() {
   auto* wizard_context = LoginDisplayHost::default_host()->GetWizardContext();
   wizard_context->quick_start_setup_ongoing = false;
   wizard_context->quick_start_wifi_credentials.reset();
+  did_request_wifi_credentials_ = false;
+  did_request_account_info_ = false;
+  did_request_account_transfer_ = false;
   // Don't cleanup |bootstrap_controller_| state here, since it may be waiting
   // for source device to gracefully drop connection.
 }

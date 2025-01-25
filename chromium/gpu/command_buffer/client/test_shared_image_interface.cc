@@ -19,7 +19,6 @@
 #include "build/build_config.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
-#include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -180,6 +179,8 @@ scoped_refptr<ClientSharedImage>
 TestSharedImageInterface::CreateSharedImage(const SharedImageInfo& si_info,
                                             SurfaceHandle surface_handle,
                                             gfx::BufferUsage buffer_usage) {
+  DoCreateSharedImage(si_info.meta.size, si_info.meta.format, surface_handle,
+                      buffer_usage);
   if (fail_shared_image_creation_with_buffer_usage_) {
     return nullptr;
   }
@@ -233,6 +234,26 @@ TestSharedImageInterface::CreateSharedImage(
   shared_images_.insert(mailbox);
   most_recent_size_ = si_info.meta.size;
 
+  auto buffer_format =
+      viz::SharedImageFormatToBufferFormatRestrictedUtils::ToBufferFormat(
+          si_info.meta.format);
+  if (test_gmb_manager_) {
+    auto gpu_memory_buffer = test_gmb_manager_->CreateGpuMemoryBuffer(
+        si_info.meta.size, buffer_format, buffer_usage, surface_handle,
+        nullptr);
+
+    // Since the |gpu_memory_buffer| here is always a shared memory, clear the
+    // external sampler prefs if it is already set by client.
+    // https://issues.chromium.org/339546249.
+    SharedImageInfo si_info_copy = si_info;
+    if (si_info_copy.meta.format.PrefersExternalSampler()) {
+      si_info_copy.meta.format.ClearPrefersExternalSampler();
+    }
+    return ClientSharedImage::CreateForTesting(
+        mailbox, si_info_copy.meta, sync_token, std::move(gpu_memory_buffer),
+        holder_);
+  }
+
   return base::MakeRefCounted<ClientSharedImage>(
       mailbox, si_info.meta, sync_token,
       GpuMemoryBufferHandleInfo(std::move(buffer_handle),
@@ -273,14 +294,37 @@ TestSharedImageInterface::CreateSharedImage(
 SharedImageInterface::SharedImageMapping
 TestSharedImageInterface::CreateSharedImage(
     const SharedImageInfo& si_info) {
-  SyncToken sync_token = GenUnverifiedSyncToken();
-  base::AutoLock locked(lock_);
+  SharedImageInterface::SharedImageMapping shared_image_mapping;
+  gfx::BufferFormat buffer_format =
+      viz::SinglePlaneSharedImageFormatToBufferFormat(si_info.meta.format);
+  const size_t buffer_size =
+      gfx::BufferSizeForBufferFormat(si_info.meta.size, buffer_format);
+  auto shared_memory_region =
+      base::UnsafeSharedMemoryRegion::Create(buffer_size);
+
+  if (!shared_memory_region.IsValid()) {
+    return shared_image_mapping;
+  }
+
+  shared_image_mapping.mapping = shared_memory_region.Map();
+  if (!shared_image_mapping.mapping.IsValid()) {
+    return shared_image_mapping;
+  }
+
+  gfx::GpuMemoryBufferHandle handle;
+  handle.type = gfx::SHARED_MEMORY_BUFFER;
+  handle.offset = 0;
+  handle.stride = static_cast<int32_t>(
+      gfx::RowSizeForBufferFormat(si_info.meta.size.width(), buffer_format, 0));
+  handle.region = std::move(shared_memory_region);
+
   auto mailbox = Mailbox::Generate();
   shared_images_.insert(mailbox);
   most_recent_size_ = si_info.meta.size;
-  return {base::MakeRefCounted<ClientSharedImage>(
-              mailbox, si_info.meta, sync_token, holder_, gfx::EMPTY_BUFFER),
-          base::WritableSharedMemoryMapping()};
+
+  shared_image_mapping.shared_image = base::MakeRefCounted<ClientSharedImage>(
+      mailbox, si_info.meta, GenUnverifiedSyncToken(), holder_, handle.type);
+  return shared_image_mapping;
 }
 
 void TestSharedImageInterface::UpdateSharedImage(
@@ -357,10 +401,10 @@ void TestSharedImageInterface::PresentSwapChain(
 void TestSharedImageInterface::RegisterSysmemBufferCollection(
     zx::eventpair service_handle,
     zx::channel sysmem_token,
-    gfx::BufferFormat format,
+    const viz::SharedImageFormat& format,
     gfx::BufferUsage usage,
     bool register_with_image_pipe) {
-  EXPECT_EQ(format, gfx::BufferFormat::YUV_420_BIPLANAR);
+  EXPECT_EQ(format, viz::MultiPlaneFormat::kNV12);
   EXPECT_EQ(usage, gfx::BufferUsage::GPU_READ);
   zx_koid_t id = base::GetKoid(service_handle).value();
   std::unique_ptr<TestBufferCollection>& collection =

@@ -36,7 +36,7 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE T* constCast(const T* data) {
 // used for referring to a Pointer on TensorEvaluator class. While the TensorExpression
 // is a device-agnostic type and need MakePointer class for type conversion,
 // the TensorEvaluator class can be specialized for a device, hence it is possible
-// to construct different types of temproray storage memory in TensorEvaluator
+// to construct different types of temporary storage memory in TensorEvaluator
 // for different devices by specializing the following StorageMemory class.
 template <typename T, typename device>
 struct StorageMemory : MakePointer<T> {};

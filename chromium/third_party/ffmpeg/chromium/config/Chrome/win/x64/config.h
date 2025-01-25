@@ -6,7 +6,7 @@
 #define CONFIG_THIS_YEAR 2024
 #define FFMPEG_DATADIR "/usr/local/share/ffmpeg"
 #define AVCONV_DATADIR "/usr/local/share/ffmpeg"
-#define CC_IDENT "clang version 19.0.0git (https://chromium.googlesource.com/a/external/github.com/llvm/llvm-project 084e2b53d22c11e013b0a495b65d39aa7f934048)"
+#define CC_IDENT "clang version 19.0.0git (https://chromium.googlesource.com/a/external/github.com/llvm/llvm-project ecea8371ff03c15fb3dc27ee4108b98335fd2d63)"
 #define OS_NAME win64
 #define EXTERN_PREFIX ""
 #define EXTERN_ASM 

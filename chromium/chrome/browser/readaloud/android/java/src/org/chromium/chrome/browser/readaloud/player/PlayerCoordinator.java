@@ -71,8 +71,8 @@ public class PlayerCoordinator implements Player {
                         delegate.getLayoutManager(),
                         this,
                         delegate.getUserEducationHelper());
-        mExpandedPlayer = new ExpandedPlayerCoordinator(contextForInflation, delegate, model);
         mMediator = new PlayerMediator(/* coordinator= */ this, delegate, model);
+        mExpandedPlayer = new ExpandedPlayerCoordinator(contextForInflation, delegate, model);
         mDelegate = delegate;
         mActivityLifecycleDispatcher = delegate.getActivityLifecycleDispatcher();
         if (mActivityLifecycleDispatcher != null) {
@@ -166,8 +166,10 @@ public class PlayerCoordinator implements Player {
         // dismissed when stopping the playback.
         mMediator.setPlayback(null);
         mMediator.setPlaybackState(PlaybackListener.State.STOPPED);
-        mMiniPlayer.dismiss(/* animate= */ true);
-        mExpandedPlayer.dismiss();
+        if (!mMediator.isPlayerRestorable()) {
+            mMiniPlayer.dismiss(/* animate= */ true);
+            mExpandedPlayer.dismiss();
+        }
         mMediator.setHiddenAndPlaying(false);
     }
 
@@ -220,6 +222,11 @@ public class PlayerCoordinator implements Player {
     @Override
     public void onScreenStatusChanged(boolean isScreenLocked) {
         mMediator.onScreenStatusChanged(isScreenLocked);
+    }
+
+    @Override
+    public void setPlayerRestorable(boolean isPlayerRestorable) {
+        mMediator.setPlayerRestorable(isPlayerRestorable);
     }
 
     /** To be called when the close button is clicked. */

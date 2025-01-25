@@ -68,6 +68,7 @@
 #include "chromeos/ash/components/dbus/patchpanel/patchpanel_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/dbus/upstart/upstart_client.h"
+#include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "chromeos/dbus/common/dbus_callback.h"
 #include "chromeos/system/core_scheduling.h"
 #include "components/user_manager/user_manager.h"
@@ -409,8 +410,6 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
       const int ram_percentage = kVmMemorySizePercentage.Get();
       int vm_ram_mib =
           std::min(max_mib, ram_percentage * ram_mib / 100 + shift_mib);
-      constexpr int kVmRamMinMib = 2048;
-
       if (delegate->IsCrosvm32bit()) {
         // This is a workaround for ARM Chromebooks where userland including
         // crosvm is compiled in 32 bit.
@@ -422,15 +421,8 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
         }
       }
 
-      if (vm_ram_mib > kVmRamMinMib) {
-        request.set_memory_mib(vm_ram_mib);
-        VLOG(2) << "VmMemorySize is enabled. memory_mib=" << vm_ram_mib;
-      } else {
-        VLOG(2) << "VmMemorySize is enabled, but computed size is "
-                << "min(" << ram_mib << " + " << shift_mib << "," << max_mib
-                << ") == " << vm_ram_mib << "MiB, less than " << kVmRamMinMib
-                << " MiB safe minium.";
-      }
+      request.set_memory_mib(vm_ram_mib);
+      VLOG(2) << "VmMemorySize is enabled. memory_mib=" << vm_ram_mib;
     } else {
       VLOG(2) << "VmMemorySize is enabled, but GetSystemMemoryInfo failed.";
     }
@@ -457,8 +449,13 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
       base::FeatureList::IsEnabled(arc::kVmBroadcastPreNotifyANR));
 
   request.set_enable_virtio_blk_data(start_params.use_virtio_blk_data);
+
+  // Enable block IO scheduler for virtio-blk /data devices.
+  // LVM-backed devices are excluded to mitigate boot time regression.
+  // (See go/arcvm-data-block-io-scheduler)
   request.set_enable_data_block_io_scheduler(
       start_params.use_virtio_blk_data &&
+      !ShouldUseLvmApplicationContainerForVirtioBlkData() &&
       base::FeatureList::IsEnabled(kBlockIoScheduler) &&
       kEnableDataBlockIoScheduler.Get());
 
@@ -549,7 +546,12 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
       request.set_ureadahead_mode(StartArcVmRequest::UREADAHEAD_MODE_DISABLED);
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
+  }
+
+  if (request.memory_mib() < kMinVmMemorySizeMiB) {
+    request.set_memory_mib(kMinVmMemorySizeMiB);
+    VLOG(2) << "Overriding VM memory size to 3243 MiB for app compatibility";
   }
 
   request.set_use_gki(base::FeatureList::IsEnabled(kArcVmGki));

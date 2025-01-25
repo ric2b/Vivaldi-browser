@@ -2,6 +2,7 @@
 
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 
+#import "app/vivaldi_apptools.h"
 #import "app/vivaldi_constants.h"
 #import "base/apple/bundle_locations.h"
 #import "base/apple/foundation_util.h"
@@ -11,6 +12,10 @@
 using vivaldi::kVivaldiUIScheme;
 
 @implementation VivaldiGlobalHelpers
+
++ (BOOL)isVivaldiRunning {
+  return vivaldi::IsVivaldiRunning();
+}
 
 + (nullable UIWindow*)keyWindow {
   NSSet<UIScene*>* windowScenes =

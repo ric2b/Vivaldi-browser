@@ -20,8 +20,8 @@
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTemplates.h"
 #include "tests/CtsEnforcement.h"
@@ -194,7 +194,7 @@ DEF_GANESH_TEST_FOR_GL_CONTEXT(ES2BlendWithNoTexture,
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(BlendRequiringDstReadWithLargeCoordinates,
                                        reporter,
                                        contextInfo,
-                                       CtsEnforcement::kNextRelease) {
+                                       CtsEnforcement::kApiLevel_V) {
     static constexpr SkColorType kColorType = kRGBA_8888_SkColorType;
 
     GrDirectContext* context = contextInfo.directContext();

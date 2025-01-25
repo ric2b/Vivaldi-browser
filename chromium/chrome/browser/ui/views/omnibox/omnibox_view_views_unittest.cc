@@ -268,7 +268,6 @@ class TestLocationBar : public LocationBar {
   void UpdateContentSettingsIcons() override {}
   void SaveStateToContents(content::WebContents* contents) override {}
   void Revert() override {}
-  const OmniboxView* GetOmniboxView() const override { return nullptr; }
   OmniboxView* GetOmniboxView() override { return nullptr; }
   LocationBarTesting* GetLocationBarForTesting() override { return nullptr; }
   LocationBarModel* GetLocationBarModel() override {
@@ -1042,6 +1041,47 @@ TEST_F(OmniboxViewViewsTestIsPopupWindowMode, InitialAccessibilityProperties) {
             "Address and search bar");
   EXPECT_EQ(node_data.GetRestriction(), ax::mojom::Restriction::kReadOnly);
   EXPECT_TRUE(omnibox_view()->GetViewAccessibility().IsLeaf());
+}
+
+TEST_F(OmniboxViewViewsTest, AccessibleValue) {
+  // Initial value should be empty.
+  ui::AXNodeData node_data;
+  omnibox_view()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(std::string(""),
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kValue));
+
+  // Set a value and check that it's reflected in the accessibility tree.
+  omnibox_view()->SetWindowTextAndCaretPos(u"google.com", 5, false, false);
+  EXPECT_EQ(u"google.com", omnibox_view()->GetText());
+  node_data = ui::AXNodeData();
+  omnibox_view()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ("google.com",
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kValue));
+
+  // Set a user value and check that it's reflected in the accessibility tree.
+  location_bar_model()->set_url(GURL("https://permanent-text.com/"));
+  omnibox_view()->model()->ResetDisplayTexts();
+  omnibox_view()->RevertAll();
+
+  EXPECT_EQ(u"https://permanent-text.com/", omnibox_view()->GetText());
+  EXPECT_FALSE(omnibox_view()->model()->user_input_in_progress());
+
+  omnibox_view()->SetUserText(u"user text");
+  EXPECT_EQ(u"user text", omnibox_view()->GetText());
+  EXPECT_TRUE(omnibox_view()->model()->user_input_in_progress());
+  node_data = ui::AXNodeData();
+  omnibox_view()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ("user text",
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kValue));
+
+  // Expect that on Escape, the text is reverted to the permanent URL.
+  ui::KeyEvent escape(ui::EventType::kKeyPressed, ui::VKEY_ESCAPE, 0);
+  omnibox_textfield()->OnKeyEvent(&escape);
+
+  node_data = ui::AXNodeData();
+  omnibox_view()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ("https://permanent-text.com/",
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kValue));
 }
 
 class OmniboxViewViewsClipboardTest

@@ -29,14 +29,13 @@ use crate::{
             DataElementParsingIterator, Section, SectionMic,
         },
         salt::MultiSalt,
-        NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT, NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT,
+        NP_V1_ADV_MAX_SECTION_COUNT,
     },
     header::V1AdvHeader,
 };
 use crypto_provider::CryptoProvider;
 use nom::{branch, bytes, combinator, error, multi};
 
-use crate::extended::deserialize::data_element::DataElementParseError;
 #[cfg(feature = "devtools")]
 use crate::{
     credential::v1::V1DiscoveryCryptoMaterial, deserialization_arena::DeserializationArenaAllocator,
@@ -55,14 +54,14 @@ pub(crate) fn parse_sections(
     adv_header: V1AdvHeader,
     adv_body: &[u8],
 ) -> Result<
-    ArrayVecOption<IntermediateSection, NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT>,
+    ArrayVecOption<IntermediateSection, NP_V1_ADV_MAX_SECTION_COUNT>,
     nom::Err<error::Error<&[u8]>>,
 > {
     combinator::all_consuming(branch::alt((
         // Public advertisement
         multi::fold_many_m_n(
             1,
-            NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT,
+            NP_V1_ADV_MAX_SECTION_COUNT,
             IntermediateSection::parser_unencrypted_section,
             ArrayVecOption::default,
             |mut acc, item| {
@@ -73,7 +72,7 @@ pub(crate) fn parse_sections(
         // Encrypted advertisement
         multi::fold_many_m_n(
             1,
-            NP_V1_ADV_MAX_ENCRYPTED_SECTION_COUNT,
+            NP_V1_ADV_MAX_SECTION_COUNT,
             IntermediateSection::parser_encrypted_with_header(adv_header),
             ArrayVecOption::default,
             |mut acc, item| {
@@ -225,7 +224,7 @@ impl<'adv> PlaintextSection<'adv> {
     }
 }
 
-impl<'adv> Section<'adv, DataElementParseError> for PlaintextSection<'adv> {
+impl<'adv> Section<'adv> for PlaintextSection<'adv> {
     type Iterator = DataElementParsingIterator<'adv>;
 
     fn iter_data_elements(&self) -> Self::Iterator {

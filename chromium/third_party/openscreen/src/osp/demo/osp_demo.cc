@@ -100,14 +100,14 @@ class DemoListenerObserver final : public ServiceListener::Observer {
   void OnMetrics(ServiceListener::Metrics) override {}
 };
 
-std::string SanitizeInstanceId(std::string_view instance_id) {
-  std::string safe_instance_id(instance_id);
-  for (auto& c : safe_instance_id) {
+std::string SanitizeInstanceName(std::string_view instance_name) {
+  std::string safe_instance_name(instance_name);
+  for (auto& c : safe_instance_name) {
     if (c < ' ' || c > '~') {
       c = '.';
     }
   }
-  return safe_instance_id;
+  return safe_instance_name;
 }
 
 class DemoReceiverObserver final : public ReceiverObserver {
@@ -115,33 +115,33 @@ class DemoReceiverObserver final : public ReceiverObserver {
   ~DemoReceiverObserver() override = default;
 
   void OnRequestFailed(const std::string& presentation_url,
-                       const std::string& instance_id) override {
-    std::string safe_instance_id = SanitizeInstanceId(instance_id);
+                       const std::string& instance_name) override {
+    std::string safe_instance_name = SanitizeInstanceName(instance_name);
     OSP_LOG_WARN << "request failed: (" << presentation_url << ", "
-                 << safe_instance_id << ")";
+                 << safe_instance_name << ")";
   }
   void OnReceiverAvailable(const std::string& presentation_url,
-                           const std::string& instance_id) override {
-    std::string safe_instance_id = SanitizeInstanceId(instance_id);
-    safe_instance_ids_.emplace(safe_instance_id, instance_id);
-    OSP_LOG_INFO << "available! " << safe_instance_id;
+                           const std::string& instance_name) override {
+    std::string safe_instance_name = SanitizeInstanceName(instance_name);
+    safe_instance_names_.emplace(safe_instance_name, instance_name);
+    OSP_LOG_INFO << "available! " << safe_instance_name;
   }
   void OnReceiverUnavailable(const std::string& presentation_url,
-                             const std::string& instance_id) override {
-    std::string safe_instance_id = SanitizeInstanceId(instance_id);
-    safe_instance_ids_.erase(safe_instance_id);
-    OSP_LOG_INFO << "unavailable! " << safe_instance_id;
+                             const std::string& instance_name) override {
+    std::string safe_instance_name = SanitizeInstanceName(instance_name);
+    safe_instance_names_.erase(safe_instance_name);
+    OSP_LOG_INFO << "unavailable! " << safe_instance_name;
   }
 
-  const std::string& GetInstanceId(const std::string& safe_instance_id) {
-    OSP_CHECK(safe_instance_ids_.find(safe_instance_id) !=
-              safe_instance_ids_.end())
-        << safe_instance_id << " not found in map";
-    return safe_instance_ids_[safe_instance_id];
+  const std::string& GetInstanceName(const std::string& safe_instance_name) {
+    OSP_CHECK(safe_instance_names_.find(safe_instance_name) !=
+              safe_instance_names_.end())
+        << safe_instance_name << " not found in map";
+    return safe_instance_names_[safe_instance_name];
   }
 
  private:
-  std::map<std::string, std::string> safe_instance_ids_;
+  std::map<std::string, std::string> safe_instance_names_;
 };
 
 class DemoPublisherObserver final : public ServicePublisher::Observer {
@@ -436,12 +436,12 @@ void RunControllerPollLoop(Controller* controller) {
       const std::string_view& argument_tail =
           command_result.command_line.argument_tail;
       size_t next_split = argument_tail.find_first_of(' ');
-      const std::string& instance_id = receiver_observer.GetInstanceId(
+      const std::string& instance_name = receiver_observer.GetInstanceName(
           std::string(argument_tail.substr(next_split + 1)));
       const std::string url =
           static_cast<std::string>(argument_tail.substr(0, next_split));
       connect_request = controller->StartPresentation(
-          url, instance_id, &request_delegate, &connection_delegate);
+          url, instance_name, &request_delegate, &connection_delegate);
     } else if (command_result.command_line.command == "msg") {
       request_delegate.connection_->SendString(
           command_result.command_line.argument_tail);
@@ -477,11 +477,11 @@ void ListenerDemo() {
   OSP_LOG_IF(WARN, listener_config.network_interfaces.empty())
       << "No network interfaces had usable addresses for mDNS Listening.";
 
-  MessageDemuxer demuxer(Clock::now, MessageDemuxer::kDefaultBufferLimit);
   DemoConnectionClientObserver client_observer;
   auto connection_client = ProtocolConnectionClientFactory::Create(
-      client_config, demuxer, client_observer,
-      PlatformClientPosix::GetInstance()->GetTaskRunner());
+      client_config, client_observer,
+      PlatformClientPosix::GetInstance()->GetTaskRunner(),
+      MessageDemuxer::kDefaultBufferLimit);
 
   DemoListenerObserver listener_observer;
   auto service_listener = ServiceListenerFactory::Create(
@@ -584,14 +584,16 @@ void PublisherDemo(std::string_view friendly_name) {
   OSP_LOG_IF(WARN, publisher_config.network_interfaces.empty())
       << "No network interfaces had usable addresses for mDNS publishing.";
 
-  MessageDemuxer demuxer(Clock::now, MessageDemuxer::kDefaultBufferLimit);
   DemoConnectionServerObserver server_observer;
   auto connection_server = ProtocolConnectionServerFactory::Create(
-      server_config, demuxer, server_observer,
-      PlatformClientPosix::GetInstance()->GetTaskRunner());
+      server_config, server_observer,
+      PlatformClientPosix::GetInstance()->GetTaskRunner(),
+      MessageDemuxer::kDefaultBufferLimit);
 
   publisher_config.fingerprint = connection_server->GetAgentFingerprint();
   OSP_CHECK(!publisher_config.fingerprint.empty());
+  publisher_config.auth_token = connection_server->GetAuthToken();
+  OSP_CHECK(!publisher_config.auth_token.empty());
 
   DemoPublisherObserver publisher_observer;
   auto service_publisher = ServicePublisherFactory::Create(

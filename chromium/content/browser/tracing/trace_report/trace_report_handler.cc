@@ -34,7 +34,7 @@ TraceReportHandler::TraceReportHandler(
     mojo::PendingReceiver<trace_report::mojom::PageHandler> receiver,
     mojo::PendingRemote<trace_report::mojom::Page> page,
     TraceUploadList& trace_upload_list,
-    BackgroundTracingManager& background_tracing_manager)
+    BackgroundTracingManagerImpl& background_tracing_manager)
     : receiver_(this, std::move(receiver)),
       page_(std::move(page)),
       trace_upload_list_(trace_upload_list),
@@ -96,6 +96,7 @@ void TraceReportHandler::OnGetAllReportsTaskComplete(
     new_trace->upload_state = single_report.upload_state;
     new_trace->upload_time = single_report.upload_time;
     new_trace->skip_reason = single_report.skip_reason;
+    new_trace->has_trace_content = single_report.has_trace_content;
     reports.push_back(std::move(new_trace));
   }
   std::move(callback).Run(std::move(reports));
@@ -103,21 +104,17 @@ void TraceReportHandler::OnGetAllReportsTaskComplete(
 
 void TraceReportHandler::GetAllPresetScenarios(
     GetAllPresetScenariosCallback callback) {
-  auto scenarios = background_tracing_manager_->GetAllPresetScenarios();
-  std::vector<trace_report::mojom::ScenarioPtr> all_config_scenarios;
-  for (const auto& scenario : scenarios) {
-    auto new_scenario = trace_report::mojom::Scenario::New();
-    new_scenario->hash = scenario.first;
-    new_scenario->scenario_name = scenario.second;
-    all_config_scenarios.push_back(std::move(new_scenario));
-  }
-  std::move(callback).Run(std::move(all_config_scenarios));
+  std::move(callback).Run(background_tracing_manager_->GetAllPresetScenarios());
+}
+
+void TraceReportHandler::GetAllFieldScenarios(
+    GetAllFieldScenariosCallback callback) {
+  std::move(callback).Run(background_tracing_manager_->GetAllFieldScenarios());
 }
 
 void TraceReportHandler::GetEnabledScenarios(
     GetEnabledScenariosCallback callback) {
-  std::move(callback).Run(
-      std::move(background_tracing_manager_->GetEnabledScenarios()));
+  std::move(callback).Run(background_tracing_manager_->GetEnabledScenarios());
 }
 
 void TraceReportHandler::SetEnabledScenarios(

@@ -40,6 +40,7 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/button_test_api.h"
@@ -94,6 +95,7 @@ class PinRequestViewTest : public LoginTestBase,
     request.help_button_enabled = true;
     request.obscure_pin = false;
     request.pin_length = pin_length;
+    request.title = u"Sample Title";
     request.on_pin_request_done = base::DoNothing();
     view_ = new PinRequestView(std::move(request), this);
 
@@ -146,7 +148,8 @@ class PinRequestViewTest : public LoginTestBase,
   void ExpectTextSelection(int start, int end) {
     PinRequestView::TestApi test_api(view_);
     ui::AXNodeData ax_node_data;
-    test_api.access_code_view()->GetAccessibleNodeData(&ax_node_data);
+    test_api.access_code_view()->GetViewAccessibility().GetAccessibleNodeData(
+        &ax_node_data);
     EXPECT_EQ(start, ax_node_data.GetIntAttribute(
                          ax::mojom::IntAttribute::kTextSelStart));
     EXPECT_EQ(end, ax_node_data.GetIntAttribute(
@@ -155,10 +158,11 @@ class PinRequestViewTest : public LoginTestBase,
 
   void ExpectTextValue(const std::string& value) {
     PinRequestView::TestApi test_api(view_);
-    ui::AXNodeData ax_node_data;
-    test_api.access_code_view()->GetAccessibleNodeData(&ax_node_data);
-    EXPECT_EQ(value, ax_node_data.GetStringAttribute(
-                         ax::mojom::StringAttribute::kValue));
+    ui::AXNodeData node_data;
+    test_api.access_code_view()->GetViewAccessibility().GetAccessibleNodeData(
+        &node_data);
+    EXPECT_EQ(value,
+              node_data.GetStringAttribute(ax::mojom::StringAttribute::kValue));
   }
 
   std::unique_ptr<MockLoginScreenClient> login_client_;
@@ -521,6 +525,16 @@ TEST_F(PinRequestViewTest, BackwardTabKeyTraversal) {
 
   generator->PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_SHIFT_DOWN);
   EXPECT_TRUE(HasFocusInAnyChildView(test_api.access_code_view()));
+}
+
+TEST_F(PinRequestViewTest, AccessibleProperties) {
+  StartView();
+  ui::AXNodeData data;
+
+  view_->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(ax::mojom::Role::kDialog, data.role);
+  EXPECT_EQ(data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+            u"Sample Title");
 }
 
 class PinRequestWidgetTest : public PinRequestViewTest {

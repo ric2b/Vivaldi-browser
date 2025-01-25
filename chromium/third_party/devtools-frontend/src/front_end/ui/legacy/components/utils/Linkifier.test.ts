@@ -332,17 +332,17 @@ describeWithMockConnection('Linkifier', () => {
     it('fires the LiveLocationUpdate event for each LiveLocation update', async () => {
       const {target, linkifier, backend} = setUpEnvironment();
       const eventCallback = sinon.stub();
-      linkifier.addEventListener(Components.Linkifier.Events.LiveLocationUpdated, eventCallback);
+      linkifier.addEventListener(Components.Linkifier.Events.LIVE_LOCATION_UPDATED, eventCallback);
       const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance();
       const lineNumber = 1;
       const url = 'https://www.google.com/script.js' as Platform.DevToolsPath.UrlString;
       const sourceMapContent = JSON.stringify({
-        'version': 3,
-        'names': ['adder', 'param1', 'param2', 'result'],
-        'sources': ['/original-script.js'],
-        'sourcesContent':
+        version: 3,
+        names: ['adder', 'param1', 'param2', 'result'],
+        sources: ['/original-script.js'],
+        sourcesContent:
             ['function adder(param1, param2) {\n  const result = param1 + param2;\n  return result;\n}\n\n'],
-        'mappings': 'AAAA,SAASA,MAAMC,EAAQC,GACrB,MAAMC,EAASF,EAASC,EACxB,OAAOC,CACT',
+        mappings: 'AAAA,SAASA,MAAMC,EAAQC,GACrB,MAAMC,EAASF,EAASC,EACxB,OAAOC,CACT',
       });
 
       const script = await backend.addScript(target, {content: 'function adder(n,r){const t=n+r;return t}', url}, {

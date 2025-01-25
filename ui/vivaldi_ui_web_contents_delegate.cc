@@ -107,7 +107,7 @@ bool VivaldiUIWebContentsDelegate::HandleKeyboardEvent(
 void VivaldiUIWebContentsDelegate::ContentsMouseEvent(
     content::WebContents* source,
     const ui::Event& event) {
-  window_->HandleMouseChange(event.type() == ui::kMouseMoved);
+  window_->HandleMouseChange(event.type() == ui::EventType::kMouseMoved);
 }
 
 bool VivaldiUIWebContentsDelegate::PreHandleGestureEvent(
@@ -374,7 +374,7 @@ blink::mojom::DisplayMode VivaldiUIWebContentsDelegate::GetDisplayMode(
                         : blink::mojom::DisplayMode::kBrowser;
 }
 
-void VivaldiUIWebContentsDelegate::AddNewContents(
+content::WebContents* VivaldiUIWebContentsDelegate::AddNewContents(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
     const GURL& target_url,
@@ -383,7 +383,7 @@ void VivaldiUIWebContentsDelegate::AddNewContents(
     bool user_gesture,
     bool* was_blocked) {
   if (g_browser_process->IsShuttingDown()) {
-    return;
+    return nullptr;
   }
 
   Profile* profile =
@@ -416,6 +416,8 @@ void VivaldiUIWebContentsDelegate::AddNewContents(
   if (browser_created && (target_browser != params.browser)) {
     target_browser->window()->Close();
   }
+
+  return params.navigated_or_inserted_contents;
 }
 
 void VivaldiUIWebContentsDelegate::DraggableRegionsChanged(

@@ -13,6 +13,7 @@
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/dynamic_type_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
+#import "ios/chrome/common/ui/util/ui_util.h"
 
 namespace {
 
@@ -381,6 +382,19 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
     self.imageViewAspectRatioConstraint.active = YES;
   }
   [self updateButtonState];
+
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits = @[
+      UITraitPreferredContentSizeCategory.self, UITraitHorizontalSizeClass.self,
+      UITraitVerticalSizeClass.self
+    ];
+    auto* __weak weakSelf = self;
+    id handler = ^(id<UITraitEnvironment> traitEnvironment,
+                   UITraitCollection* previousCollection) {
+      [weakSelf updateRegisteredTraits:previousCollection];
+    };
+    [self registerForTraitChanges:traits withHandler:handler];
+  }
 }
 
 - (void)setIsLoading:(BOOL)isLoading {
@@ -404,38 +418,16 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
   [self.scrollView flashScrollIndicators];
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-
-  // Update fonts for specific content sizes.
-  if (previousTraitCollection.preferredContentSizeCategory !=
-      self.traitCollection.preferredContentSizeCategory) {
-    SetConfigurationFont(self.primaryActionButton,
-                         PreferredFontForTextStyleWithMaxCategory(
-                             UIFontTextStyleHeadline,
-                             self.traitCollection.preferredContentSizeCategory,
-                             UIContentSizeCategoryExtraExtraExtraLarge));
-
-    UIFont* newFont = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-    if (self.secondaryActionString) {
-      SetConfigurationFont(self.secondaryActionButton, newFont);
-    }
-    if (self.tertiaryActionString) {
-      SetConfigurationFont(self.tertiaryActionButton, newFont);
-    }
+  if (@available(iOS 17, *)) {
+    return;
   }
 
-  // Update constraints for different size classes.
-  BOOL hasNewHorizontalSizeClass =
-      previousTraitCollection.horizontalSizeClass !=
-      self.traitCollection.horizontalSizeClass;
-  BOOL hasNewVerticalSizeClass = previousTraitCollection.verticalSizeClass !=
-                                 self.traitCollection.verticalSizeClass;
-
-  if (hasNewHorizontalSizeClass || hasNewVerticalSizeClass) {
-    [self.view setNeedsUpdateConstraints];
-  }
+  [self updateRegisteredTraits:previousTraitCollection];
 }
+#endif
 
 - (void)viewSafeAreaInsetsDidChange {
   [super viewSafeAreaInsetsDidChange];
@@ -508,16 +500,23 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
   CGSize fittingSize =
       CGSizeMake(fittingWidth, UILayoutFittingCompressedSize.height);
   CGFloat height = [self.view systemLayoutSizeFittingSize:fittingSize].height;
-  height -= containerView.safeAreaInsets.bottom;
 
-  // Replace bottom margin calculated based on view's own safe area with bottom
-  // margin calculated based on the safe area of the container view it will
-  // eventually live in. This is needed in case the detent value is requested
-  // before the view has been added to its superview.
-  height -= MAX(self.actionStackBottomMargin, self.view.safeAreaInsets.bottom);
-  height +=
-      MAX(self.actionStackBottomMargin, containerView.safeAreaInsets.bottom);
+  // These adjustments are necessary for devices in a non regular x regular size
+  // class with home indicators in their displays, as they have a non zero safe
+  // area inset at their bottom edge and a bottom sheet that attaches to it.
+  if (!IsRegularXRegularSizeClass(containerView.traitCollection) &&
+      containerView.safeAreaInsets.bottom != 0) {
+    height -= containerView.safeAreaInsets.bottom;
 
+    // Replace bottom margin calculated based on view's own safe area with
+    // bottom margin calculated based on the safe area of the container view
+    // it will eventually live in. This is needed in case the detent value
+    // is requested before the view has been added to its superview.
+    height -=
+        MAX(self.actionStackBottomMargin, self.view.safeAreaInsets.bottom);
+    height +=
+        MAX(self.actionStackBottomMargin, containerView.safeAreaInsets.bottom);
+  }
   return height;
 }
 
@@ -984,6 +983,39 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
 
   _secondaryActionButton.enabled = !showingProgressState;
   _tertiaryActionButton.enabled = !showingProgressState;
+}
+
+// Checks which trait has been changed and adapts the UI to reflect this new
+// environment.
+- (void)updateRegisteredTraits:(UITraitCollection*)previousTraitCollection {
+  // Update fonts for specific content sizes.
+  if (previousTraitCollection.preferredContentSizeCategory !=
+      self.traitCollection.preferredContentSizeCategory) {
+    SetConfigurationFont(self.primaryActionButton,
+                         PreferredFontForTextStyleWithMaxCategory(
+                             UIFontTextStyleHeadline,
+                             self.traitCollection.preferredContentSizeCategory,
+                             UIContentSizeCategoryExtraExtraExtraLarge));
+
+    UIFont* newFont = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    if (self.secondaryActionString) {
+      SetConfigurationFont(self.secondaryActionButton, newFont);
+    }
+    if (self.tertiaryActionString) {
+      SetConfigurationFont(self.tertiaryActionButton, newFont);
+    }
+  }
+
+  // Update constraints for different size classes.
+  BOOL hasNewHorizontalSizeClass =
+      previousTraitCollection.horizontalSizeClass !=
+      self.traitCollection.horizontalSizeClass;
+  BOOL hasNewVerticalSizeClass = previousTraitCollection.verticalSizeClass !=
+                                 self.traitCollection.verticalSizeClass;
+
+  if (hasNewHorizontalSizeClass || hasNewVerticalSizeClass) {
+    [self.view setNeedsUpdateConstraints];
+  }
 }
 
 @end

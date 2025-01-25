@@ -737,10 +737,6 @@ void ExtensionService::LoadExtensionsFromCommandLineFlag(
       UnpackedInstaller::Create(this)->LoadFromCommandLine(
           base::FilePath(t.token_piece()), &extension_id,
           false /*only-allow-apps*/);
-      // Extension id is added to allowlist after its extension is loaded
-      // because code is executed asynchronously. TODO(michaelpg): Remove this
-      // assumption so loading extensions does not have to be asynchronous:
-      // crbug.com/708354.
       if (switch_name == ::switches::kDisableExtensionsExcept)
         disable_flag_exempted_extensions_.insert(extension_id);
     }
@@ -1333,9 +1329,7 @@ void ExtensionService::CheckManagementPolicy() {
 
     // If this profile is not supervised, then remove any supervised user
     // related disable reasons.
-    bool is_supervised =
-        profile() &&
-        supervised_user::IsSubjectToParentalControls(*profile()->GetPrefs());
+    bool is_supervised = profile() && profile()->IsChild();
     if (!is_supervised) {
       disable_reasons &= (~disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
     }

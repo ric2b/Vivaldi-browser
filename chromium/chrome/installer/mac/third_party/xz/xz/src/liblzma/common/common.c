@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
-/// \file       common.h
+/// \file       common.c
 /// \brief      Common functions needed in many places in liblzma
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -35,8 +34,9 @@ lzma_version_string(void)
 // Memory allocation //
 ///////////////////////
 
-extern void * lzma_attribute((__malloc__)) lzma_attr_alloc_size(1)
-lzma_alloc(size_t size, lzma_allocator *allocator)
+lzma_attr_alloc_size(1)
+extern void *
+lzma_alloc(size_t size, const lzma_allocator *allocator)
 {
 	// Some malloc() variants return NULL if called with size == 0.
 	if (size == 0)
@@ -53,8 +53,30 @@ lzma_alloc(size_t size, lzma_allocator *allocator)
 }
 
 
+lzma_attr_alloc_size(1)
+extern void *
+lzma_alloc_zero(size_t size, const lzma_allocator *allocator)
+{
+	// Some calloc() variants return NULL if called with size == 0.
+	if (size == 0)
+		size = 1;
+
+	void *ptr;
+
+	if (allocator != NULL && allocator->alloc != NULL) {
+		ptr = allocator->alloc(allocator->opaque, 1, size);
+		if (ptr != NULL)
+			memzero(ptr, size);
+	} else {
+		ptr = calloc(1, size);
+	}
+
+	return ptr;
+}
+
+
 extern void
-lzma_free(void *ptr, lzma_allocator *allocator)
+lzma_free(void *ptr, const lzma_allocator *allocator)
 {
 	if (allocator != NULL && allocator->free != NULL)
 		allocator->free(allocator->opaque, ptr);
@@ -78,7 +100,11 @@ lzma_bufcpy(const uint8_t *restrict in, size_t *restrict in_pos,
 	const size_t out_avail = out_size - *out_pos;
 	const size_t copy_size = my_min(in_avail, out_avail);
 
-	memcpy(out + *out_pos, in + *in_pos, copy_size);
+	// Call memcpy() only if there is something to copy. If there is
+	// nothing to copy, in or out might be NULL and then the memcpy()
+	// call would trigger undefined behavior.
+	if (copy_size > 0)
+		memcpy(out + *out_pos, in + *in_pos, copy_size);
 
 	*in_pos += copy_size;
 	*out_pos += copy_size;
@@ -88,7 +114,7 @@ lzma_bufcpy(const uint8_t *restrict in, size_t *restrict in_pos,
 
 
 extern lzma_ret
-lzma_next_filter_init(lzma_next_coder *next, lzma_allocator *allocator,
+lzma_next_filter_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter_info *filters)
 {
 	lzma_next_coder_init(filters[0].init, next, allocator);
@@ -99,7 +125,7 @@ lzma_next_filter_init(lzma_next_coder *next, lzma_allocator *allocator,
 
 
 extern lzma_ret
-lzma_next_filter_update(lzma_next_coder *next, lzma_allocator *allocator,
+lzma_next_filter_update(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter *reversed_filters)
 {
 	// Check that the application isn't trying to change the Filter ID.
@@ -117,7 +143,7 @@ lzma_next_filter_update(lzma_next_coder *next, lzma_allocator *allocator,
 
 
 extern void
-lzma_next_end(lzma_next_coder *next, lzma_allocator *allocator)
+lzma_next_end(lzma_next_coder *next, const lzma_allocator *allocator)
 {
 	if (next->init != (uintptr_t)(NULL)) {
 		// To avoid tiny end functions that simply call
@@ -156,10 +182,8 @@ lzma_strm_init(lzma_stream *strm)
 		strm->internal->next = LZMA_NEXT_CODER_INIT;
 	}
 
-	strm->internal->supported_actions[LZMA_RUN] = false;
-	strm->internal->supported_actions[LZMA_SYNC_FLUSH] = false;
-	strm->internal->supported_actions[LZMA_FULL_FLUSH] = false;
-	strm->internal->supported_actions[LZMA_FINISH] = false;
+	memzero(strm->internal->supported_actions,
+			sizeof(strm->internal->supported_actions));
 	strm->internal->sequence = ISEQ_RUN;
 	strm->internal->allow_buf_error = false;
 
@@ -178,7 +202,7 @@ lzma_code(lzma_stream *strm, lzma_action action)
 			|| (strm->next_out == NULL && strm->avail_out != 0)
 			|| strm->internal == NULL
 			|| strm->internal->next.code == NULL
-			|| (unsigned int)(action) > LZMA_FINISH
+			|| (unsigned int)(action) > LZMA_ACTION_MAX
 			|| !strm->internal->supported_actions[action])
 		return LZMA_PROG_ERROR;
 
@@ -188,7 +212,6 @@ lzma_code(lzma_stream *strm, lzma_action action)
 			|| strm->reserved_ptr2 != NULL
 			|| strm->reserved_ptr3 != NULL
 			|| strm->reserved_ptr4 != NULL
-			|| strm->reserved_int1 != 0
 			|| strm->reserved_int2 != 0
 			|| strm->reserved_int3 != 0
 			|| strm->reserved_int4 != 0
@@ -212,6 +235,10 @@ lzma_code(lzma_stream *strm, lzma_action action)
 
 		case LZMA_FINISH:
 			strm->internal->sequence = ISEQ_FINISH;
+			break;
+
+		case LZMA_FULL_BARRIER:
+			strm->internal->sequence = ISEQ_FULL_BARRIER;
 			break;
 		}
 
@@ -240,6 +267,13 @@ lzma_code(lzma_stream *strm, lzma_action action)
 
 		break;
 
+	case ISEQ_FULL_BARRIER:
+		if (action != LZMA_FULL_BARRIER
+				|| strm->internal->avail_in != strm->avail_in)
+			return LZMA_PROG_ERROR;
+
+		break;
+
 	case ISEQ_END:
 		return LZMA_STREAM_END;
 
@@ -255,13 +289,21 @@ lzma_code(lzma_stream *strm, lzma_action action)
 			strm->next_in, &in_pos, strm->avail_in,
 			strm->next_out, &out_pos, strm->avail_out, action);
 
-	strm->next_in += in_pos;
-	strm->avail_in -= in_pos;
-	strm->total_in += in_pos;
+	// Updating next_in and next_out has to be skipped when they are NULL
+	// to avoid null pointer + 0 (undefined behavior). Do this by checking
+	// in_pos > 0 and out_pos > 0 because this way NULL + non-zero (a bug)
+	// will get caught one way or other.
+	if (in_pos > 0) {
+		strm->next_in += in_pos;
+		strm->avail_in -= in_pos;
+		strm->total_in += in_pos;
+	}
 
-	strm->next_out += out_pos;
-	strm->avail_out -= out_pos;
-	strm->total_out += out_pos;
+	if (out_pos > 0) {
+		strm->next_out += out_pos;
+		strm->avail_out -= out_pos;
+		strm->total_out += out_pos;
+	}
 
 	strm->internal->avail_in = strm->avail_in;
 
@@ -281,9 +323,27 @@ lzma_code(lzma_stream *strm, lzma_action action)
 		}
 		break;
 
+	case LZMA_TIMED_OUT:
+		strm->internal->allow_buf_error = false;
+		ret = LZMA_OK;
+		break;
+
+	case LZMA_SEEK_NEEDED:
+		strm->internal->allow_buf_error = false;
+
+		// If LZMA_FINISH was used, reset it back to the
+		// LZMA_RUN-based state so that new input can be supplied
+		// by the application.
+		if (strm->internal->sequence == ISEQ_FINISH)
+			strm->internal->sequence = ISEQ_RUN;
+
+		break;
+
 	case LZMA_STREAM_END:
 		if (strm->internal->sequence == ISEQ_SYNC_FLUSH
-				|| strm->internal->sequence == ISEQ_FULL_FLUSH)
+				|| strm->internal->sequence == ISEQ_FULL_FLUSH
+				|| strm->internal->sequence
+					== ISEQ_FULL_BARRIER)
 			strm->internal->sequence = ISEQ_RUN;
 		else
 			strm->internal->sequence = ISEQ_END;
@@ -317,6 +377,36 @@ lzma_end(lzma_stream *strm)
 		lzma_next_end(&strm->internal->next, strm->allocator);
 		lzma_free(strm->internal, strm->allocator);
 		strm->internal = NULL;
+	}
+
+	return;
+}
+
+
+#ifdef HAVE_SYMBOL_VERSIONS_LINUX
+// This is for compatibility with binaries linked against liblzma that
+// has been patched with xz-5.2.2-compat-libs.patch from RHEL/CentOS 7.
+LZMA_SYMVER_API("lzma_get_progress@XZ_5.2.2",
+	void, lzma_get_progress_522)(lzma_stream *strm,
+		uint64_t *progress_in, uint64_t *progress_out) lzma_nothrow
+		__attribute__((__alias__("lzma_get_progress_52")));
+
+LZMA_SYMVER_API("lzma_get_progress@@XZ_5.2",
+	void, lzma_get_progress_52)(lzma_stream *strm,
+		uint64_t *progress_in, uint64_t *progress_out) lzma_nothrow;
+
+#define lzma_get_progress lzma_get_progress_52
+#endif
+extern LZMA_API(void)
+lzma_get_progress(lzma_stream *strm,
+		uint64_t *progress_in, uint64_t *progress_out)
+{
+	if (strm->internal->next.get_progress != NULL) {
+		strm->internal->next.get_progress(strm->internal->next.coder,
+				progress_in, progress_out);
+	} else {
+		*progress_in = strm->total_in;
+		*progress_out = strm->total_out;
 	}
 
 	return;
@@ -380,8 +470,10 @@ lzma_memlimit_set(lzma_stream *strm, uint64_t new_memlimit)
 			|| strm->internal->next.memconfig == NULL)
 		return LZMA_PROG_ERROR;
 
-	if (new_memlimit != 0 && new_memlimit < LZMA_MEMUSAGE_BASE)
-		return LZMA_MEMLIMIT_ERROR;
+	// Zero is a special value that cannot be used as an actual limit.
+	// If 0 was specified, use 1 instead.
+	if (new_memlimit == 0)
+		new_memlimit = 1;
 
 	return strm->internal->next.memconfig(strm->internal->next.coder,
 			&memusage, &old_memlimit, new_memlimit);

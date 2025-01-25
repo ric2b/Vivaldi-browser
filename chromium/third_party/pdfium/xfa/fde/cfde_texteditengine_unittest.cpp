@@ -11,6 +11,8 @@
 #include "testing/xfa_test_environment.h"
 #include "xfa/fgas/font/cfgas_gefont.h"
 
+namespace pdfium {
+
 class CFDE_TextEditEngineTest : public testing::Test {
  public:
   class Delegate final : public CFDE_TextEditEngine::Delegate {
@@ -297,9 +299,7 @@ TEST_F(CFDE_TextEditEngineTest, Selection) {
   EXPECT_EQ(L"", engine()->GetSelectedText());
 
   engine()->SelectAll();
-  size_t start_idx;
-  size_t count;
-  std::tie(start_idx, count) = engine()->GetSelection();
+  auto [start_idx, count] = engine()->GetSelection();
   EXPECT_EQ(0U, start_idx);
   EXPECT_EQ(11U, count);
 
@@ -562,10 +562,7 @@ TEST_F(CFDE_TextEditEngineTest, GetCharacterInfo) {
 }
 
 TEST_F(CFDE_TextEditEngineTest, BoundsForWordAt) {
-  size_t start_idx;
-  size_t count;
-
-  std::tie(start_idx, count) = engine()->BoundsForWordAt(100);
+  auto [start_idx, count] = engine()->BoundsForWordAt(100);
   EXPECT_EQ(0U, start_idx);
   EXPECT_EQ(0U, count);
   engine()->SetSelection(start_idx, count);
@@ -842,3 +839,5 @@ TEST_F(CFDE_TextEditEngineTest, CursorMovement) {
   engine()->SetSelection(engine()->GetIndexRight(5U), 5);
   EXPECT_EQ(L"World", engine()->GetSelectedText());
 }
+
+}  // namespace pdfium

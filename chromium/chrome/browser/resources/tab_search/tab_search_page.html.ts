@@ -30,17 +30,17 @@ export function getHtml(this: TabSearchPageElement) {
   </div>
   <div id="divider"></div>
   <div ?hidden="${!this.filteredItems_.length}">
-    <infinite-list id="tabsList"
+    <selectable-lazy-list id="tabsList"
         max-height="${this.listMaxHeight_}"
+        item-size="${this.listItemSize_}"
         .items="${this.filteredItems_}"
-        @iron-select="${this.onSelectedItemChanged_}"
-        @iron-deselect="${this.onSelectedItemDeselected_}"
+        @selected-change="${this.onSelectedChanged_}"
         role="listbox"
         .isSelectable=${(item: any) => {
           return item.constructor.name === 'TabData' ||
               item.constructor.name === 'TabGroupData';
         }}
-        .template=${(item: any) => {
+        .template=${(item: any, index: number) => {
       switch (item.constructor.name) {
        case 'TitleItem':
         return html`
@@ -49,6 +49,7 @@ export function getHtml(this: TabSearchPageElement) {
             ${item.expandable ? html`<cr-expand-button
                   aria-label="$i18n{recentlyClosedExpandA11yLabel}"
                   data-title="${item.title}"
+                  data-index="${index}"
                   expand-icon="cr:arrow-drop-down"
                   collapse-icon="cr:arrow-drop-up"
                   ?expanded="${item.expanded}"
@@ -62,6 +63,7 @@ export function getHtml(this: TabSearchPageElement) {
         return html`<tab-search-item id="${item.tab.tabId}"
             aria-label="${this.ariaLabel_(item)}"
             class="mwb-list-item selectable" .data="${item}"
+            data-index="${index}"
             @click="${this.onItemClick_}"
             @close="${this.onItemClose_}"
             @focus="${this.onItemFocus_}"
@@ -73,6 +75,7 @@ export function getHtml(this: TabSearchPageElement) {
         return html`<tab-search-group-item id="${item.tabGroup.id}"
             class="mwb-list-item selectable"
             .data="${item}"
+            data-index="${index}"
             aria-label="${this.ariaLabel_(item)}"
             @click="${this.onItemClick_}"
             @focus="${this.onItemFocus_}"
@@ -83,7 +86,7 @@ export function getHtml(this: TabSearchPageElement) {
         return '';
       }
     }}
-    </infinite-list>
+    </selectable-lazy-list>
   </div>
   <div id="no-results" ?hidden="${this.filteredItems_.length}">
     $i18n{noResultsFound}

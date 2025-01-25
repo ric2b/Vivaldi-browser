@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/search_engines/template_url_prepopulate_data.h"
 
 #include <algorithm>
@@ -59,9 +64,7 @@ std::string GetLangFromPrefs(PrefService* prefs) {
 std::vector<std::unique_ptr<TemplateURLData>>
 GetPrepopulatedEnginesForEeaRegionCountries(int country_id,
                                             PrefService* prefs) {
-  CHECK(search_engines::IsEeaChoiceCountry(country_id) &&
-        search_engines::IsChoiceScreenFlagEnabled(
-            search_engines::ChoicePromo::kAny));
+  CHECK(search_engines::IsEeaChoiceCountry(country_id));
 
   uint64_t profile_seed;
   if (prefs) {
@@ -113,9 +116,7 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedTemplateURLData(
     // Possible only in tests.
     // TODO(crbug.com/40287734): Update tests and remove associated branches.
     CHECK_IS_TEST();
-  } else if (search_engines::IsEeaChoiceCountry(country_id) && !vivaldi::IsVivaldiRunning() &&
-      search_engines::IsChoiceScreenFlagEnabled(
-          search_engines::ChoicePromo::kAny)) {
+  } else if (search_engines::IsEeaChoiceCountry(country_id) && !vivaldi::IsVivaldiRunning()) {
     if (search_engines::HasSearchEngineCountryListOverride()) {
       auto country_override =
           absl::get<search_engines::SearchEngineCountryListOverride>(

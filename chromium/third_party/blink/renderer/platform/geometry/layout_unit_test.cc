@@ -35,6 +35,12 @@
 
 namespace blink {
 
+template <class T>
+class LayoutUnitTypedTest : public testing::Test {};
+using LayoutUnitTypes =
+    ::testing::Types<LayoutUnit, TextRunLayoutUnit, InlineLayoutUnit>;
+TYPED_TEST_SUITE(LayoutUnitTypedTest, LayoutUnitTypes);
+
 TEST(LayoutUnitTest, LayoutUnitInt) {
   EXPECT_EQ(LayoutUnit::kIntMin, LayoutUnit(INT_MIN).ToInt());
   EXPECT_EQ(LayoutUnit::kIntMin, LayoutUnit(INT_MIN / 2).ToInt());
@@ -327,6 +333,14 @@ TEST(LayoutUnitTest, LayoutUnitMultiplication) {
   }
 }
 
+TYPED_TEST(LayoutUnitTypedTest, MultiplicationByInt) {
+  const auto quarter_max = TypeParam::kIntMax / 4;
+  EXPECT_EQ(TypeParam(quarter_max * 2), TypeParam(quarter_max) * 2);
+  EXPECT_EQ(TypeParam(quarter_max * 3), TypeParam(quarter_max) * 3);
+  EXPECT_EQ(TypeParam(quarter_max * 4), TypeParam(quarter_max) * 4);
+  EXPECT_EQ(TypeParam::Max(), TypeParam(quarter_max) * 5);
+}
+
 TEST(LayoutUnitTest, LayoutUnitDivision) {
   EXPECT_EQ(1, (LayoutUnit(1) / LayoutUnit(1)).ToInt());
   EXPECT_EQ(0, (LayoutUnit(1) / LayoutUnit(2)).ToInt());
@@ -364,6 +378,20 @@ TEST(LayoutUnitTest, LayoutUnitDivision) {
             (LayoutUnit(LayoutUnit::kIntMax) / LayoutUnit(2)).ToInt());
   EXPECT_EQ(LayoutUnit::kIntMax,
             (LayoutUnit(LayoutUnit::kIntMax) / LayoutUnit(0.5)).ToInt());
+}
+
+TEST(LayoutUnitTest, LayoutUnitDivisionByInt) {
+  EXPECT_EQ(LayoutUnit(1), LayoutUnit(1) / 1);
+  EXPECT_EQ(LayoutUnit(0.5), LayoutUnit(1) / 2);
+  EXPECT_EQ(LayoutUnit(-0.5), LayoutUnit(1) / -2);
+  EXPECT_EQ(LayoutUnit(-0.5), LayoutUnit(-1) / 2);
+  EXPECT_EQ(LayoutUnit(0.5), LayoutUnit(-1) / -2);
+
+  EXPECT_DOUBLE_EQ(LayoutUnit::kIntMax / 2.0,
+                   (LayoutUnit(LayoutUnit::kIntMax) / 2).ToDouble());
+  EXPECT_DOUBLE_EQ(
+      InlineLayoutUnit::kIntMax / 2.0,
+      (InlineLayoutUnit(InlineLayoutUnit::kIntMax) / 2).ToDouble());
 }
 
 TEST(LayoutUnitTest, LayoutUnitMulDiv) {
@@ -489,6 +517,108 @@ TEST(LayoutUnitTest, Fraction) {
   EXPECT_TRUE(LayoutUnit::FromFloatRound(0.51f).HasFraction());
   EXPECT_TRUE(LayoutUnit(0.95f).HasFraction());
   EXPECT_FALSE(LayoutUnit(1.0f).HasFraction());
+}
+
+TEST(LayoutUnitTest, FixedConsts) {
+  EXPECT_EQ(LayoutUnit::kFractionalBits, 6u);
+  EXPECT_EQ(LayoutUnit::kIntegralBits, 26u);
+  EXPECT_EQ(TextRunLayoutUnit::kFractionalBits, 16u);
+  EXPECT_EQ(TextRunLayoutUnit::kIntegralBits, 16u);
+  EXPECT_EQ(InlineLayoutUnit::kFractionalBits, 16u);
+  EXPECT_EQ(InlineLayoutUnit::kIntegralBits, 48u);
+}
+
+TEST(LayoutUnitTest, Fixed) {
+  constexpr int raw_value16 = 0x12345678;
+  constexpr int raw_value6 = raw_value16 >> 10;
+  const auto value16 = TextRunLayoutUnit::FromRawValue(raw_value16);
+  const auto value6 = LayoutUnit::FromRawValue(raw_value6);
+  EXPECT_EQ(value16.To<LayoutUnit>(), value6);
+}
+
+TEST(LayoutUnitTest, Raw64FromInt32) {
+  constexpr int32_t int32_max_plus = LayoutUnit::kIntMax + 10;
+  LayoutUnit int32_max_plus_32(int32_max_plus);
+  EXPECT_NE(int32_max_plus_32.ToInt(), int32_max_plus);
+  InlineLayoutUnit int32_max_plus_64(int32_max_plus);
+  EXPECT_EQ(int32_max_plus_64.ToInt(), int32_max_plus);
+
+  constexpr int32_t int32_min_minus = LayoutUnit::kIntMin - 10;
+  LayoutUnit int32_min_minus_32(int32_min_minus);
+  EXPECT_NE(int32_min_minus_32.ToInt(), int32_min_minus);
+  InlineLayoutUnit int32_min_minus_64(int32_min_minus);
+  EXPECT_EQ(int32_min_minus_64.ToInt(), int32_min_minus);
+
+  constexpr int64_t raw32_max_plus =
+      static_cast<int64_t>(LayoutUnit::kRawValueMax) + 10;
+  LayoutUnit raw32_max_plus_32(raw32_max_plus);
+  EXPECT_NE(raw32_max_plus_32.ToInt(), raw32_max_plus);
+  InlineLayoutUnit raw32_max_plus_64(raw32_max_plus);
+  EXPECT_EQ(raw32_max_plus_64.ToInt(), raw32_max_plus);
+
+  constexpr int64_t raw32_min_minus =
+      static_cast<int64_t>(LayoutUnit::kRawValueMin) - 10;
+  LayoutUnit raw32_min_minus_32(raw32_min_minus);
+  EXPECT_NE(raw32_min_minus_32.ToInt(), raw32_min_minus);
+  InlineLayoutUnit raw32_min_minus_64(raw32_min_minus);
+  EXPECT_EQ(raw32_min_minus_64.ToInt(), raw32_min_minus);
+}
+
+TEST(LayoutUnitTest, Raw64FromRaw32) {
+  constexpr float value = 1.f + LayoutUnit::Epsilon() * 234;
+  LayoutUnit value32_6(value);
+  EXPECT_EQ(InlineLayoutUnit(value32_6), InlineLayoutUnit(value));
+  TextRunLayoutUnit value32_16(value);
+  EXPECT_EQ(InlineLayoutUnit(value32_16), InlineLayoutUnit(value));
+
+  // The following code should fail to compile.
+  // TextRunLayoutUnit back_to_32{InlineLayoutUnit(value)};
+}
+
+TEST(LayoutUnitTest, To) {
+#define TEST_ROUND_TRIP(T1, T2)                      \
+  EXPECT_EQ(T1(value), T2(value).To<T1>()) << value; \
+  EXPECT_EQ(T2(value), T1(value).To<T2>()) << value;
+
+  for (const float value : {1.0f, 1.5f, -1.0f}) {
+    TEST_ROUND_TRIP(LayoutUnit, TextRunLayoutUnit);
+    TEST_ROUND_TRIP(LayoutUnit, InlineLayoutUnit);
+    TEST_ROUND_TRIP(TextRunLayoutUnit, InlineLayoutUnit);
+  }
+#undef TEST_ROUND_TRIP
+}
+
+TEST(LayoutUnitTest, ToClampSameFractional64To32) {
+  EXPECT_EQ(
+      TextRunLayoutUnit::Max(),
+      InlineLayoutUnit(TextRunLayoutUnit::kIntMax + 1).To<TextRunLayoutUnit>());
+  EXPECT_EQ(
+      TextRunLayoutUnit::Min(),
+      InlineLayoutUnit(TextRunLayoutUnit::kIntMin - 1).To<TextRunLayoutUnit>());
+}
+
+TEST(LayoutUnitTest, ToClampLessFractional64To32) {
+  EXPECT_EQ(LayoutUnit::Max(),
+            InlineLayoutUnit(LayoutUnit::kIntMax + 1).To<LayoutUnit>());
+  EXPECT_EQ(LayoutUnit::Min(),
+            InlineLayoutUnit(LayoutUnit::kIntMin - 1).To<LayoutUnit>());
+}
+
+TEST(LayoutUnitTest, ToClampMoreFractional) {
+  EXPECT_EQ(TextRunLayoutUnit::Max(),
+            LayoutUnit(TextRunLayoutUnit::kIntMax + 1).To<TextRunLayoutUnit>());
+  EXPECT_EQ(TextRunLayoutUnit::Min(),
+            LayoutUnit(TextRunLayoutUnit::kIntMin - 1).To<TextRunLayoutUnit>());
+}
+
+TEST(LayoutUnitTest, Raw64Ceil) {
+  LayoutUnit layout(1.234);
+  InlineLayoutUnit inline_value(layout);
+  EXPECT_EQ(layout, inline_value.ToCeil<LayoutUnit>());
+
+  inline_value = inline_value.AddEpsilon();
+  EXPECT_NE(layout, inline_value.ToCeil<LayoutUnit>());
+  EXPECT_EQ(layout.AddEpsilon(), inline_value.ToCeil<LayoutUnit>());
 }
 
 }  // namespace blink

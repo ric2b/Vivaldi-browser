@@ -48,7 +48,7 @@ constexpr char kModifierSplitHashKey[] =
     "\x10\x99";
 
 // Whether checking the mahi secret key is ignored.
-bool g_ignore_modifier_split_secret_key = false;
+bool g_ignore_modifier_split_secret_key = true;
 
 // The hash value for the secret key of the sparky feature.
 constexpr char kSparkyHashKey[] =
@@ -598,10 +598,6 @@ const char kEnterpriseEnableForcedReEnrollmentOnFlex[] =
 const char kEnterpriseEnableInitialEnrollment[] =
     "enterprise-enable-initial-enrollment";
 
-// Enables the zero-touch enterprise enrollment flow.
-const char kEnterpriseEnableZeroTouchEnrollment[] =
-    "enterprise-enable-zero-touch-enrollment";
-
 // Power of the power-of-2 initial modulus that will be used by the
 // auto-enrollment client. E.g. "4" means the modulus will be 2^4 = 16.
 const char kEnterpriseEnrollmentInitialModulus[] =
@@ -666,6 +662,9 @@ const char kFingerprintSensorLocation[] = "fingerprint-sensor-location";
 // Not passed on restart after sign out.
 const char kFirstExecAfterBoot[] = "first-exec-after-boot";
 
+// Forces a chip with fake coral data to be shown.
+const char kForceBirchFakeCoral[] = "force-birch-fake-coral";
+
 // Forces a fetch of Birch data whenever an informed restore session starts.
 const char kForceBirchFetch[] = "force-birch-fetch";
 
@@ -713,9 +712,6 @@ const char kForceShowReleaseTrack[] = "force-show-release-track";
 // screen off) is used even if the device is in laptop mode.
 const char kForceTabletPowerButton[] = "force-tablet-power-button";
 
-// Supply secret key for the Forest feature.
-const char kForestFeatureKey[] = "forest-feature-key";
-
 // Specifies the device's form factor. If provided, this flag overrides the
 // value from the LSB release info. Possible values are: "CHROMEBASE",
 // "CHROMEBIT", "CHROMEBOOK", "REFERENCE", "CHROMEBOX"
@@ -724,9 +720,28 @@ const char kFormFactor[] = "form-factor";
 // Specifies campaigns to override for testing.
 const char kGrowthCampaigns[] = "growth-campaigns";
 
+// Clear all growth framework Feature Engagement events at session start for
+// testing.
+const char kGrowthCampaignsClearEventsAtSessionStart[] =
+    "growth-campaigns-clear-events-at-session-start";
+
 // Path for which to load growth campaigns file for testing (instead of
 // downloading from Omaha).
 const char kGrowthCampaignsPath[] = "growth-campaigns-path";
+
+// Specifies the device current time in `SecondsSinceUnixEpoch` format for
+// testing.
+const char kGrowthCampaignsCurrentTimeSecondsSinceUnixEpoch[] =
+    "growth-campaigns-current-time";
+
+// Specifies the device registered time in `SecondsSinceUnixEpoch` format for
+// testing.
+const char kGrowthCampaignsRegisteredTimeSecondsSinceUnixEpoch[] =
+    "growth-campaigns-registered-time";
+
+// Specifies the delay time to trigger campaigns for testing.
+const char kGrowthCampaignsDelayedTriggerTimeInSecs[] =
+    "growth-campaigns-delayed-trigger-time-in-secs";
 
 // Indicates that the browser is in "browse without sign-in" (Guest session)
 // mode. Should completely disable extensions, sync and bookmarks.
@@ -904,6 +919,14 @@ const char kDisallowLacros[] = "disallow-lacros";
 // used, event if --disallow-lacros is set.
 const char kDisableDisallowLacros[] = "disable-disallow-lacros";
 
+// This flag is a replacement for
+// `features::kLacrosOnly` during the in-between phase where users should not be
+// able to enable Lacros but developers should for debugging. Just like
+// `features::kLacrosOnly`, passing the flag alone does not guarantee that
+// Lacros is enabled and other conditions like whether Lacros is allowed to be
+// enabled i.e. `standalone_browser::BrowserSupport::IsAllowed()` still apply.
+const char kEnableLacrosForTesting[] = "enable-lacros-for-testing";
+
 // Supply secret key for the mahi feature.
 const char kMahiFeatureKey[] = "mahi-feature-key";
 
@@ -985,6 +1008,11 @@ const char kOobeSkipNewUserCheckForTesting[] =
 
 // Skips all other OOBE pages after user login.
 const char kOobeSkipPostLogin[] = "oobe-skip-postlogin";
+
+// Returns true if we should skip split modifier check on the split modifier
+// info screen.
+const char kOobeSkipSplitModifierCheckForTesting[] =
+    "oobe-skip-split-modifier-check-for-testing";
 
 // Skip to login screen.
 const char kOobeSkipToLogin[] = "oobe-skip-to-login";
@@ -1234,6 +1262,11 @@ bool ShouldSkipNewUserCheckForTesting() {
       kOobeSkipNewUserCheckForTesting);
 }
 
+bool ShouldSkipSplitModifierCheckForTesting() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kOobeSkipSplitModifierCheckForTesting);
+}
+
 bool ShouldSkipOobePostLogin() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kOobeSkipPostLogin);
 }
@@ -1459,19 +1492,23 @@ bool IsModifierSplitSecretKeyMatched() {
     return true;
   }
 
-  // Commandline looks like:
-  //  out/Default/chrome --user-data-dir=/tmp/tmp123
-  //  --modifier-split-feature-key="INSERT KEY HERE"
-  //  --enable-features=ModifierSplit
-  const std::string provided_key_hash = base::SHA1HashString(
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          kModifierSplitFeatureKey));
+  static const bool modifier_split_key_matched = []() {
+    // Commandline looks like:
+    //  out/Default/chrome --user-data-dir=/tmp/tmp123
+    //  --modifier-split-feature-key="INSERT KEY HERE"
+    //  --enable-features=ModifierSplit
+    const std::string provided_key_hash = base::SHA1HashString(
+        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+            kModifierSplitFeatureKey));
 
-  bool modifier_split_key_matched =
-      (provided_key_hash == kModifierSplitHashKey);
-  if (!modifier_split_key_matched) {
-    LOG(ERROR) << "Provided secret key does not match with the expected one.";
-  }
+    const bool modifier_split_key_matched =
+        (provided_key_hash == kModifierSplitHashKey);
+    if (!modifier_split_key_matched) {
+      LOG(ERROR) << "Provided secret key does not match with the expected one.";
+    }
+
+    return modifier_split_key_matched;
+  }();
 
   return modifier_split_key_matched;
 }

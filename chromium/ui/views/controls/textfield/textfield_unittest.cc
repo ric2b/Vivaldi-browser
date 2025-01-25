@@ -965,6 +965,39 @@ TEST_F(TextfieldTest, Scroll) {
   EXPECT_EQ(GetTextfieldTestApi().GetDisplayOffsetX(), -100);
 }
 
+TEST_F(TextfieldTest, ScrollUpdatesScrollXAccessibilityAttribute) {
+  InitTextfield();
+  // Size the textfield wide enough to hold 10 characters.
+  gfx::test::RenderTextTestApi render_text_test_api(
+      GetTextfieldTestApi().GetRenderText());
+  constexpr int kGlyphWidth = 10;
+  render_text_test_api.SetGlyphWidth(kGlyphWidth);
+  constexpr int kCursorWidth = 1;
+  GetTextfieldTestApi().GetRenderText()->SetDisplayRect(
+      gfx::Rect(kGlyphWidth * 10 + kCursorWidth, 20));
+  textfield_->SetTextWithoutCaretBoundsChangeNotification(
+      u"0123456789_123456789_123456789", 0);
+  GetTextfieldTestApi().SetDisplayOffsetX(0);
+
+  ui::AXNodeData textfield_node_data;
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(
+      &textfield_node_data);
+  int scroll_x =
+      textfield_node_data.GetIntAttribute(ax::mojom::IntAttribute::kScrollX);
+  EXPECT_EQ(GetTextfieldTestApi().GetDisplayOffsetX(), scroll_x);
+
+  textfield_->SetSelectedRange({0, 20});
+  textfield_->Scroll({20});
+  textfield_node_data = ui::AXNodeData();
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(
+      &textfield_node_data);
+  EXPECT_EQ(
+      GetTextfieldTestApi().GetDisplayOffsetX(),
+      textfield_node_data.GetIntAttribute(ax::mojom::IntAttribute::kScrollX));
+  EXPECT_NE(scroll_x, textfield_node_data.GetIntAttribute(
+                          ax::mojom::IntAttribute::kScrollX));
+}
+
 TEST_F(TextfieldTest,
        SetTextWithoutCaretBoundsChangeNotification_ModelEditHistory) {
   InitTextfield();
@@ -4729,6 +4762,34 @@ TEST_F(TextfieldTest, CursorVisibility) {
   EXPECT_TRUE(GetTextfieldTestApi().IsCursorVisible());
 }
 
+TEST_F(TextfieldTest, AccessibleValue) {
+  InitTextfield();
+  textfield_->SetText(u"password");
+
+  ui::AXNodeData node_data_regular;
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&node_data_regular);
+  EXPECT_EQ(ax::mojom::Role::kTextField, node_data_regular.role);
+  EXPECT_EQ(u"password", node_data_regular.GetString16Attribute(
+                             ax::mojom::StringAttribute::kValue));
+  EXPECT_FALSE(node_data_regular.HasState(ax::mojom::State::kProtected));
+
+  textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
+  ui::AXNodeData node_data_protected;
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(
+      &node_data_protected);
+  EXPECT_EQ(ax::mojom::Role::kTextField, node_data_protected.role);
+  EXPECT_EQ(u"••••••••", node_data_protected.GetString16Attribute(
+                             ax::mojom::StringAttribute::kValue));
+  EXPECT_TRUE(node_data_protected.HasState(ax::mojom::State::kProtected));
+
+  textfield_->SetText(u"password");
+  node_data_protected = ui::AXNodeData();
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(
+      &node_data_protected);
+  EXPECT_EQ(u"••••••••", node_data_protected.GetString16Attribute(
+                             ax::mojom::StringAttribute::kValue));
+}
+
 // Tests that Textfield::FitToLocalBounds() sets the RenderText's display rect
 // to the view's bounds, taking the border into account.
 TEST_F(TextfieldTest, FitToLocalBounds) {
@@ -4822,7 +4883,7 @@ TEST_F(TextfieldTest, TextfieldBoundsChangeTest) {
 // automatically receive focus and the text cursor is not visible.
 TEST_F(TextfieldTest, TextfieldInitialization) {
   std::unique_ptr<Widget> widget =
-      CreateTestWidget(Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
+      CreateTestWidget(Widget::InitParams::CLIENT_OWNS_WIDGET);
   {
     View* container = widget->SetContentsView(std::make_unique<View>());
     TestTextfield* new_textfield =
@@ -5287,6 +5348,26 @@ TEST_F(TextfieldTest, AccessibleTextDirectionRTL) {
   textfield_->GetViewAccessibility().GetAccessibleNodeData(&node_data);
   EXPECT_EQ(node_data.GetIntAttribute(ax::mojom::IntAttribute::kTextDirection),
             static_cast<int32_t>(ax::mojom::WritingDirection::kRtl));
+}
+
+TEST_F(TextfieldTest, AccessibleDefaultActionVerb) {
+  InitTextfield();
+  ui::AXNodeData data;
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetDefaultActionVerb(),
+            ax::mojom::DefaultActionVerb::kActivate);
+
+  data = ui::AXNodeData();
+  textfield_->SetEnabled(false);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(
+      data.HasIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb));
+
+  data = ui::AXNodeData();
+  textfield_->SetEnabled(true);
+  textfield_->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.GetDefaultActionVerb(),
+            ax::mojom::DefaultActionVerb::kActivate);
 }
 
 #if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)

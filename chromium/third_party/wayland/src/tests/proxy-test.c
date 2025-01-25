@@ -118,6 +118,8 @@ TEST(proxy_tag)
 	wl_proxy_set_tag((struct wl_proxy *) client.callback_b,
 			 &tag_b);
 
+	assert(wl_proxy_get_display((struct wl_proxy *) client.callback_b) == client.display);
+
 	wl_display_flush(client.display);
 
 	while (server.sync_count < 2) {

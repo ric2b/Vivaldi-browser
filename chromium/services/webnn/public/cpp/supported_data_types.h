@@ -14,6 +14,39 @@ using SupportedDataTypes = base::EnumSet<OperandDataType,
                                          OperandDataType::kMinValue,
                                          OperandDataType::kMaxValue>;
 
+namespace DataTypeConstraint {
+
+static constexpr SupportedDataTypes kUint8 = {OperandDataType::kUint8};
+
+static constexpr SupportedDataTypes kInts8 = {OperandDataType::kUint8,
+                                              OperandDataType::kInt8};
+
+static constexpr SupportedDataTypes kInt32To64 = {OperandDataType::kInt32,
+                                                  OperandDataType::kInt64};
+
+static constexpr SupportedDataTypes kFloat32 = {OperandDataType::kFloat32};
+
+static constexpr SupportedDataTypes kFloat16To32 = {OperandDataType::kFloat16,
+                                                    OperandDataType::kFloat32};
+
+static constexpr SupportedDataTypes kFloat16To32Int8To32 = {
+    OperandDataType::kFloat16, OperandDataType::kFloat32,
+    OperandDataType::kInt8, OperandDataType::kInt32};
+
+static constexpr SupportedDataTypes kFloat16To32Int8To64 = {
+    OperandDataType::kFloat16, OperandDataType::kFloat32,
+    OperandDataType::kInt8, OperandDataType::kInt32, OperandDataType::kInt64};
+
+static constexpr SupportedDataTypes kFloat16To32Ints32To64 = {
+    OperandDataType::kFloat16, OperandDataType::kFloat32,
+    OperandDataType::kInt32,   OperandDataType::kUint32,
+    OperandDataType::kInt64,   OperandDataType::kUint64};
+
+static constexpr SupportedDataTypes kGatherScatterIndicesSupportedDataTypes = {
+    OperandDataType::kInt32, OperandDataType::kUint32, OperandDataType::kInt64};
+
+}  // namespace DataTypeConstraint
+
 }  // namespace webnn
 
 #endif  // SERVICES_WEBNN_PUBLIC_CPP_SUPPORTED_DATA_TYPES_H_

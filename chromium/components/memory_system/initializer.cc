@@ -6,6 +6,7 @@
 
 #include <string_view>
 
+#include "base/profiler/process_type.h"
 #include "components/memory_system/memory_system.h"
 
 namespace memory_system {
@@ -15,13 +16,13 @@ Initializer::~Initializer() = default;
 
 Initializer& Initializer::SetGwpAsanParameters(bool boost_sampling,
                                                std::string_view process_type) {
-  gwp_asan_parameters_.emplace(boost_sampling, std::move(process_type));
+  gwp_asan_parameters_.emplace(boost_sampling, process_type);
   return *this;
 }
 
 Initializer& Initializer::SetProfilingClientParameters(
     version_info::Channel channel,
-    metrics::CallStackProfileParams::Process process_type) {
+    base::ProfilerProcessType process_type) {
   profiling_client_parameters_.emplace(channel, process_type);
   return *this;
 }

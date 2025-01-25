@@ -95,12 +95,9 @@ void QuicSessionPool::ProxyJob::PopulateNetErrorDetails(
   }
 
   // Finally, return the error from the session attempt.
-  if (!session_attempt_ || !session_attempt_->session()) {
-    return;
+  if (session_attempt_) {
+    session_attempt_->PolulateNetErrorDetails(details);
   }
-  details->connection_info = QuicHttpStream::ConnectionInfoFromQuicVersion(
-      session_attempt_->session()->connection()->version());
-  details->quic_connection_error = session_attempt_->session()->error();
 }
 
 int QuicSessionPool::ProxyJob::DoLoop(int rv) {
@@ -244,7 +241,7 @@ int QuicSessionPool::ProxyJob::DoAttemptSession() {
     return rv;
   }
 
-  session_attempt_ = std::make_unique<SessionAttempt>(
+  session_attempt_ = std::make_unique<QuicSessionAttempt>(
       this, std::move(local_address), std::move(peer_address),
       target_quic_version_, cert_verify_flags_, std::move(proxy_stream_),
       http_user_agent_settings_);

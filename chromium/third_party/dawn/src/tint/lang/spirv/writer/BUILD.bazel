@@ -53,11 +53,6 @@ cc_library(
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/ir",
     "//src/tint/lang/core/type",
-    "//src/tint/lang/wgsl",
-    "//src/tint/lang/wgsl/ast",
-    "//src/tint/lang/wgsl/features",
-    "//src/tint/lang/wgsl/program",
-    "//src/tint/lang/wgsl/sem",
     "//src/tint/utils/containers",
     "//src/tint/utils/diagnostic",
     "//src/tint/utils/ice",
@@ -71,6 +66,7 @@ cc_library(
     "//src/tint/utils/symbol",
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
+    "//src/utils",
   ] + select({
     ":tint_build_spv_reader_or_tint_build_spv_writer": [
       "@spirv_headers//:spirv_cpp11_headers", "@spirv_headers//:spirv_c_headers",
@@ -78,7 +74,6 @@ cc_library(
     "//conditions:default": [],
   }) + select({
     ":tint_build_spv_writer": [
-      "//src/tint/lang/spirv/writer/ast_printer",
       "//src/tint/lang/spirv/writer/common",
       "//src/tint/lang/spirv/writer/printer",
       "//src/tint/lang/spirv/writer/raise",
@@ -134,6 +129,7 @@ cc_library(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@gtest",
+    "//src/utils",
   ] + select({
     ":tint_build_spv_reader_or_tint_build_spv_writer": [
       "@spirv_headers//:spirv_cpp11_headers", "@spirv_headers//:spirv_c_headers",
@@ -142,10 +138,9 @@ cc_library(
     "//conditions:default": [],
   }) + select({
     ":tint_build_spv_writer": [
+      "//src/tint/lang/spirv/writer",
       "//src/tint/lang/spirv/writer/common",
       "//src/tint/lang/spirv/writer/common:test",
-      "//src/tint/lang/spirv/writer/printer",
-      "//src/tint/lang/spirv/writer/raise",
     ],
     "//conditions:default": [],
   }),
@@ -160,7 +155,6 @@ cc_library(
   ],
   deps = [
     "//src/tint/api/common",
-    "//src/tint/cmd/bench:bench",
     "//src/tint/lang/core",
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/ir",
@@ -185,6 +179,7 @@ cc_library(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@benchmark",
+    "//src/utils",
   ] + select({
     ":tint_build_spv_writer": [
       "//src/tint/lang/spirv/writer",
@@ -193,6 +188,7 @@ cc_library(
     "//conditions:default": [],
   }) + select({
     ":tint_build_wgsl_reader": [
+      "//src/tint/cmd/bench:bench",
       "//src/tint/lang/wgsl/reader",
     ],
     "//conditions:default": [],
@@ -221,6 +217,14 @@ selects.config_setting_group(
     match_any = [
         "tint_build_spv_reader",
         "tint_build_spv_writer",
+    ],
+)
+
+selects.config_setting_group(
+    name = "tint_build_spv_writer_and_tint_build_wgsl_reader",
+    match_all = [
+        ":tint_build_spv_writer",
+        ":tint_build_wgsl_reader",
     ],
 )
 

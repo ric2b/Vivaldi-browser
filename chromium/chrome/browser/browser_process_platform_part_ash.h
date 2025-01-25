@@ -28,7 +28,9 @@ class ChromeSessionManager;
 class CrosSettingsHolder;
 class InSessionPasswordChangeManager;
 class ProfileHelper;
+class ProfileUserManagerController;
 class SchedulerConfigurationManager;
+class SecureDnsManager;
 class UserImageManagerRegistry;
 
 namespace system {
@@ -42,6 +44,8 @@ class SystemClock;
 
 namespace policy {
 class BrowserPolicyConnectorAsh;
+class DeviceRestrictionScheduleController;
+class DeviceRestrictionScheduleControllerDelegateImpl;
 }  // namespace policy
 
 namespace user_manager {
@@ -63,6 +67,9 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartChromeOS {
 
   void InitializeUserManager();
   void DestroyUserManager();
+
+  void InitializeDeviceRestrictionScheduleController();
+  void ShutdownDeviceRestrictionScheduleController();
 
   void InitializeDeviceDisablingManager();
   void ShutdownDeviceDisablingManager();
@@ -117,6 +124,11 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartChromeOS {
     return scheduler_configuration_manager_.get();
   }
 
+  policy::DeviceRestrictionScheduleController*
+  device_restriction_schedule_controller() {
+    return device_restriction_schedule_controller_.get();
+  }
+
   ash::system::DeviceDisablingManager* device_disabling_manager() {
     return device_disabling_manager_.get();
   }
@@ -127,6 +139,10 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartChromeOS {
   }
 
   ash::AshProxyMonitor* ash_proxy_monitor() { return ash_proxy_monitor_.get(); }
+
+  ash::SecureDnsManager* secure_dns_manager() {
+    return secure_dns_manager_.get();
+  }
 
   app_list::EssentialSearchManager* essential_search_manager() {
     return essential_search_manager_.get();
@@ -172,7 +188,15 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartChromeOS {
 
   std::unique_ptr<user_manager::UserManager> user_manager_;
 
+  std::unique_ptr<ash::ProfileUserManagerController>
+      profile_user_manager_controller_;
+
   std::unique_ptr<ash::UserImageManagerRegistry> user_image_manager_registry_;
+
+  std::unique_ptr<policy::DeviceRestrictionScheduleControllerDelegateImpl>
+      device_restriction_schedule_controller_delegate_impl_;
+  std::unique_ptr<policy::DeviceRestrictionScheduleController>
+      device_restriction_schedule_controller_;
 
   std::unique_ptr<ash::system::DeviceDisablingManagerDefaultDelegate>
       device_disabling_manager_delegate_;
@@ -206,6 +230,8 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartChromeOS {
       scheduler_configuration_manager_;
 
   std::unique_ptr<ash::AshProxyMonitor> ash_proxy_monitor_;
+
+  std::unique_ptr<ash::SecureDnsManager> secure_dns_manager_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

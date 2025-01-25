@@ -289,21 +289,52 @@ bool IsGoogleSearchHostname(const GURL& url) {
   return result && result.value() == "www";
 }
 
-bool IsGoogleSearchResultUrl(const GURL& url) {
+bool IsProbablyGoogleSearchUrl(const GURL& url) {
+  if (!page_load_metrics::IsGoogleSearchHostname(url)) {
+    return false;
+  }
+
+  const std::string_view path = url.path_piece();
+  if (path == "/maps" || path.find("/maps/") != std::string_view::npos) {
+    return false;
+  }
+
+  return true;
+}
+
+// Determine if the given url has query associated with it.
+bool HasGoogleSearchQuery(const GURL& url) {
   // NOTE: we do not require 'q=' in the query, as AJAXy search may instead
   // store the query in the URL fragment.
+  return QueryContainsComponentPrefix(url.query_piece(), "q=") ||
+         QueryContainsComponentPrefix(url.ref_piece(), "q=");
+}
+
+bool IsGoogleSearchResultUrl(const GURL& url) {
   if (!IsGoogleSearchHostname(url)) {
     return false;
   }
 
-  if (!QueryContainsComponentPrefix(url.query_piece(), "q=") &&
-      !QueryContainsComponentPrefix(url.ref_piece(), "q=")) {
+  if (!HasGoogleSearchQuery(url)) {
     return false;
   }
 
   const std::string_view path = url.path_piece();
   return path == "/search" || path == "/webhp" || path == "/custom" ||
          path == "/";
+}
+
+bool IsGoogleSearchHomepageUrl(const GURL& url) {
+  if (!IsGoogleSearchHostname(url)) {
+    return false;
+  }
+
+  const std::string_view path = url.path_piece();
+  if (path == "/webhp" || path == "/") {
+    return true;
+  }
+
+  return (path == "/custom" || path == "/search") && !HasGoogleSearchQuery(url);
 }
 
 bool IsGoogleSearchRedirectorUrl(const GURL& url) {

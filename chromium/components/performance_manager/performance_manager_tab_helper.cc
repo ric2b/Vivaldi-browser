@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
@@ -27,6 +28,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
+#include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom.h"
 #include "url/origin.h"
 
 namespace performance_manager {
@@ -79,9 +81,8 @@ PerformanceManagerTabHelper::PerformanceManagerTabHelper(
     : content::WebContentsObserver(web_contents),
       content::WebContentsUserData<PerformanceManagerTabHelper>(*web_contents) {
   // We have an early WebContents creation hook so should see it when there is
-  // only a single frame, and it is not yet created. We sanity check that here.
+  // only a single frame. We sanity check that here.
 #if DCHECK_IS_ON()
-  DCHECK(!web_contents->GetPrimaryMainFrame()->IsRenderFrameLive());
   size_t frame_count = 0;
   web_contents->ForEachRenderFrameHost(
       [&frame_count](content::RenderFrameHost* render_frame_host) {
@@ -109,9 +110,15 @@ PerformanceManagerTabHelper::PerformanceManagerTabHelper(
   page_node_ = PerformanceManagerImpl::CreatePageNode(
       web_contents->GetWeakPtr(), web_contents->GetBrowserContext()->UniqueId(),
       web_contents->GetVisibleURL(), initial_property_flags,
-      web_contents->GetLastActiveTime());
+      web_contents->GetLastActiveTimeTicks());
+
+  // If the main frame was activated during WebContentsImpl::Init, we missed the
+  // RenderFrameCreated notification, so synthesize it now.
   content::RenderFrameHost* main_rfh = web_contents->GetPrimaryMainFrame();
-  DCHECK(main_rfh);
+  CHECK(main_rfh);
+  if (main_rfh->IsRenderFrameLive()) {
+    RenderFrameCreated(main_rfh);
+  }
 
   ConnectWindowOpenRelationshipIfExists(this, web_contents);
 }
@@ -210,9 +217,10 @@ void PerformanceManagerTabHelper::RenderFrameCreated(
           base::BindOnce(
               [](GURL url, url::Origin origin, FrameNodeImpl* frame_node) {
                 if (!url.is_empty())
-                  frame_node->OnNavigationCommitted(std::move(url),
-                                                    std::move(origin),
-                                                    /*same_document=*/false);
+                  frame_node->OnNavigationCommitted(
+                      std::move(url), std::move(origin),
+                      /*same_document=*/false,
+                      /*is_served_from_back_forward_cache=*/false);
               },
               render_frame_host->GetLastCommittedURL(),
               render_frame_host->GetLastCommittedOrigin()));
@@ -271,30 +279,17 @@ void PerformanceManagerTabHelper::RenderFrameHostChanged(
            "dispatched before RenderFrameCreated with a live RenderFrame\n";
   }
   // If neither frame could be looked up there's nothing to do.
-  if (!old_frame && !new_frame)
+  if (!old_frame && !new_frame) {
     return;
+  }
 
   // Perform the swap in the graph.
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE, base::BindOnce(
-                     [](FrameNodeImpl* old_frame, FrameNodeImpl* new_frame) {
-                       if (old_frame) {
-                         // Prerendering is a special case where
-                         // old_frame->is_current() may be false.
-                         // TODO(crbug.com/40182881): assert that
-                         // old_frame->is_current() or its PageState is
-                         // kPrerendering.
-                         old_frame->SetIsCurrent(false);
-                       }
-
-                       if (new_frame) {
-                         // The very first frame to be created is already
-                         // current by default except in the special case of
-                         // prerendering.
-                         // TODO(crbug.com/40182881): assert that
-                         // old_frame is null or its PageState is kPrerendering.
-                         new_frame->SetIsCurrent(true);
-                       }
+                     [](FrameNodeImpl* old_frame, FrameNodeImpl* new_frame,
+                        GraphImpl* graph) {
+                       FrameNodeImpl::UpdateCurrentFrame(old_frame, new_frame,
+                                                         graph);
                      },
                      old_frame, new_frame));
 }
@@ -332,6 +327,33 @@ void PerformanceManagerTabHelper::OnFrameAudioStateChanged(
                                 base::Unretained(frame_node), is_audible));
 }
 
+void PerformanceManagerTabHelper::
+    OnRemoteSubframeViewportIntersectionStateChanged(
+        content::RenderFrameHost* render_frame_host,
+        const blink::mojom::ViewportIntersectionState&
+            viewport_intersection_state) {
+  auto frame_it = frames_.find(render_frame_host);
+  // This can be invoked for a crashed RenderFrameHost, as its view still
+  // occupies space on the page. Just ignore it as clearly its content is not
+  // visible.
+  if (frame_it == frames_.end()) {
+    CHECK(!render_frame_host->IsRenderFrameLive());
+    return;
+  }
+  CHECK(render_frame_host->IsRenderFrameLive());
+
+  // Getting address of overloaded function.
+  void (FrameNodeImpl::*set_viewport_intersection_state_fn)(
+      const blink::mojom::ViewportIntersectionState&) =
+      &FrameNodeImpl::SetViewportIntersectionState;
+
+  auto* frame_node = frame_it->second.get();
+  PerformanceManagerImpl::CallOnGraphImpl(
+      FROM_HERE, base::BindOnce(set_viewport_intersection_state_fn,
+                                base::Unretained(frame_node),
+                                viewport_intersection_state));
+}
+
 void PerformanceManagerTabHelper::OnFrameVisibilityChanged(
     content::RenderFrameHost* render_frame_host,
     blink::mojom::FrameVisibility visibility) {
@@ -345,12 +367,15 @@ void PerformanceManagerTabHelper::OnFrameVisibilityChanged(
   }
   CHECK(render_frame_host->IsRenderFrameLive());
 
+  // Getting address of overloaded function.
+  void (FrameNodeImpl::*set_viewport_intersection_state_fn)(
+      blink::mojom::FrameVisibility) =
+      &FrameNodeImpl::SetViewportIntersectionState;
+
   auto* frame_node = frame_it->second.get();
   PerformanceManagerImpl::CallOnGraphImpl(
-      FROM_HERE,
-      base::BindOnce(
-          &FrameNodeImpl::SetIntersectsViewport, base::Unretained(frame_node),
-          visibility == blink::mojom::FrameVisibility::kRenderedInViewport));
+      FROM_HERE, base::BindOnce(set_viewport_intersection_state_fn,
+                                base::Unretained(frame_node), visibility));
 }
 
 void PerformanceManagerTabHelper::OnFrameIsCapturingMediaStreamChanged(
@@ -391,11 +416,13 @@ void PerformanceManagerTabHelper::DidFinishNavigation(
 
   // Notify the frame of the committed URL.
   PerformanceManagerImpl::CallOnGraphImpl(
-      FROM_HERE, base::BindOnce(&FrameNodeImpl::OnNavigationCommitted,
-                                base::Unretained(frame_node),
-                                render_frame_host->GetLastCommittedURL(),
-                                render_frame_host->GetLastCommittedOrigin(),
-                                navigation_handle->IsSameDocument()));
+      FROM_HERE,
+      base::BindOnce(&FrameNodeImpl::OnNavigationCommitted,
+                     base::Unretained(frame_node),
+                     render_frame_host->GetLastCommittedURL(),
+                     render_frame_host->GetLastCommittedOrigin(),
+                     navigation_handle->IsSameDocument(),
+                     navigation_handle->IsServedFromBackForwardCache()));
 
   if (!navigation_handle->IsInPrimaryMainFrame())
     return;
@@ -440,8 +467,9 @@ std::optional<blink::mojom::PermissionStatus> PerformanceManagerTabHelper::
   permission_controller_subscription_id_ =
       permission_controller->SubscribeToPermissionStatusChange(
           blink::PermissionType::NOTIFICATIONS,
-          web_contents()->GetPrimaryMainFrame()->GetProcess(),
-          url::Origin::Create(web_contents()->GetLastCommittedURL()),
+          /*render_process_host=*/nullptr,
+          web_contents()->GetPrimaryMainFrame(),
+          url::Origin::Create(web_contents()->GetLastCommittedURL()).GetURL(),
           /*should_include_device_status=*/false,
           base::BindRepeating(&PerformanceManagerTabHelper::
                                   OnNotificationPermissionStatusChange,
@@ -476,6 +504,19 @@ void PerformanceManagerTabHelper::
       permission_controller_subscription_id_);
 }
 
+void PerformanceManagerTabHelper::FrameReceivedUserActivation(
+    content::RenderFrameHost* render_frame_host) {
+  // Ignore notifications that are received after the frame was deleted.
+  auto frame_it = frames_.find(render_frame_host);
+  if (frame_it == frames_.end()) {
+    return;
+  }
+  auto* frame_node = frame_it->second.get();
+  PerformanceManagerImpl::CallOnGraphImpl(
+      FROM_HERE, base::BindOnce(&FrameNodeImpl::SetHadUserActivation,
+                                base::Unretained(frame_node)));
+}
+
 void PerformanceManagerTabHelper::TitleWasSet(content::NavigationEntry* entry) {
   DCHECK(page_node_);
 
@@ -493,8 +534,7 @@ void PerformanceManagerTabHelper::TitleWasSet(content::NavigationEntry* entry) {
 
 void PerformanceManagerTabHelper::InnerWebContentsAttached(
     content::WebContents* inner_web_contents,
-    content::RenderFrameHost* render_frame_host,
-    bool /* is_full_page */) {
+    content::RenderFrameHost* render_frame_host) {
   // Note that we sometimes learn of contents creation at this point (before
   // other helpers get a chance to attach), so we need to ensure our helper
   // exists.

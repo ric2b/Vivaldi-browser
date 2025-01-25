@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/download/public/common/base_file.h"
 
 #include <memory>
@@ -620,6 +625,7 @@ void BaseFile::AnnotateWithSourceInformation(
     const std::string& client_guid,
     const GURL& source_url,
     const GURL& referrer_url,
+    const std::optional<url::Origin>& request_initiator,
     mojo::PendingRemote<quarantine::mojom::Quarantine> remote_quarantine,
     OnAnnotationDoneCallback on_annotation_done_callback) {
   GURL authority_url = GetEffectiveAuthorityURL(source_url, referrer_url);
@@ -644,7 +650,7 @@ void BaseFile::AnnotateWithSourceInformation(
         authority_url, referrer_url));
 
     quarantine_service_->QuarantineFile(
-        full_path_, authority_url, referrer_url, client_guid,
+        full_path_, authority_url, referrer_url, request_initiator, client_guid,
         base::BindOnce(&BaseFile::OnFileQuarantined,
                        weak_factory_.GetWeakPtr()));
   }

@@ -17,15 +17,16 @@
 namespace {
 // Increment this whenever an incompatible change is made to
 // adblock_rules_list.fbs or to the parser
-constexpr int kRulesListFormatVersion = 7;
+constexpr int kRulesListFormatVersion = 10;
 
 // Increment this whenever an incompatible change is made to
 // adblock_rules_index.fbs
-constexpr int kIndexFormatVersion = 5;
+constexpr int kIndexFormatVersion = 6;
 
 enum RulePriorities {
   kModifyPriority = 0,
   kPassPriority,
+  kPassAdAttributionPriority,
   kPassAllPriority,
   kModifyImportantPriority,
   kMaxPriority = kModifyImportantPriority
@@ -46,10 +47,10 @@ std::string CalculateBufferChecksum(base::span<const uint8_t> data) {
   return base::NumberToString(base::PersistentHash(data));
 }
 
-int CompareDomains(std::string_view lhs_domain, std::string_view rhs_domain) {
-  if (lhs_domain.size() != rhs_domain.size())
-    return lhs_domain.size() > rhs_domain.size() ? -1 : 1;
-  return lhs_domain.compare(rhs_domain);
+int SizePrioritizedStringCompare(std::string_view lhs, std::string_view rhs) {
+  if (lhs.size() != rhs.size())
+    return lhs.size() > rhs.size() ? -1 : 1;
+  return lhs.compare(rhs);
 }
 
 std::string_view ToStringPiece(const flatbuffers::String* string) {
@@ -66,6 +67,9 @@ int GetRulePriority(const flat::RequestFilterRule& rule) {
     case flat::Decision_MODIFY:
       return kModifyPriority;
     case flat::Decision_PASS:
+      if (rule.ad_domains_and_query_triggers()) {
+        return kPassAdAttributionPriority;
+      }
       if (IsFullModifierPassRule(rule)) {
         return kPassAllPriority;
       }
@@ -78,7 +82,7 @@ int GetRulePriority(const flat::RequestFilterRule& rule) {
 bool IsFullModifierPassRule(const flat::RequestFilterRule& rule) {
   return rule.decision() == flat::Decision_PASS &&
          rule.modifier() != flat::Modifier_NO_MODIFIER &&
-         !rule.modifier_value();
+         !rule.modifier_values();
 }
 
 bool IsThirdParty(const GURL& url, const url::Origin& origin) {

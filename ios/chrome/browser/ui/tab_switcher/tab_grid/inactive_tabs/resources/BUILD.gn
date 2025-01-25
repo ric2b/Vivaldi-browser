@@ -1,10 +1,12 @@
 # Copyright 2024 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-imageset("vivaldi_inactive_tabs_edu_icon") {
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
   sources = [
-    "vivaldi_inactive_tabs_edu_icon.imageset/Contents.json",
-    "vivaldi_inactive_tabs_edu_icon.imageset/vivaldi_inactive_tabs_edu_icon.pdf",
+    # vivaldi_inactive_tabs_edu_icon
+    "Assets.xcassets/vivaldi_inactive_tabs_edu_icon.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_inactive_tabs_edu_icon.imageset/vivaldi_inactive_tabs_edu_icon.pdf",
   ]
 }

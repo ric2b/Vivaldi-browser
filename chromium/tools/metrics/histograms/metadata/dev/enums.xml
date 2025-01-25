@@ -805,6 +805,19 @@ Called by update_protocol_commands_enum.py.-->
   <int value="157" label="Console insight onboarding moving to next page"/>
   <int value="158" label="Console insight onboarding moving to previous page"/>
   <int value="159" label="Console insight onboarding disabling feature"/>
+  <int value="160" label="Console insight opt-in teaser shown"/>
+  <int value="161"
+      label="Console insight opt-in teaser link to settings clicked"/>
+  <int value="162"
+      label="Console insight opt-in teaser confirmed via settings"/>
+  <int value="163" label="Console insight reminder teaser shown"/>
+  <int value="164" label="Console insight reminder teaser confirmed"/>
+  <int value="165" label="Console insight reminder teaser canceled"/>
+  <int value="166"
+      label="Console insight reminder teaser link to settings clicked"/>
+  <int value="167"
+      label="Console insight reminder teaser aborted via settings"/>
+  <int value="168" label="Console insight generated skipping disclaimers"/>
 </enum>
 
 <enum name="DevToolsAnimationPlaybackRateChanged">
@@ -820,11 +833,6 @@ Called by update_protocol_commands_enum.py.-->
   <int value="2" label="Animation start point is moved"/>
   <int value="3" label="Animation finish point is moved"/>
   <int value="4" label="Other"/>
-</enum>
-
-<enum name="DevToolsColorConvertedFrom">
-  <int value="0" label="Color Swatch (Shift + Click menu)"/>
-  <int value="1" label="Color Picker"/>
 </enum>
 
 <enum name="DevToolsColorPickerOpenedFrom">
@@ -971,6 +979,7 @@ Called by update_protocol_commands_enum.py.-->
   <int value="94" label="timelineAnnotations"/>
   <int value="95" label="timeline-rpp-sidebar"/>
   <int value="96" label="timelineObservations"/>
+  <int value="97" label="genAISettingsPanel"/>
 </enum>
 
 <enum name="DevToolsIssueCreated">
@@ -1420,6 +1429,8 @@ Called by update_protocol_commands_enum.py.-->
   <int value="33" label="text/javascript+sourcemapped"/>
   <int value="34" label="text/x.angular"/>
   <int value="35" label="text/x.vue"/>
+  <int value="36" label="text/javascript+snippet"/>
+  <int value="37" label="text/javascript+eval"/>
 </enum>
 
 <enum name="DevToolsNetworkPanelMoreFiltersItemSelected">
@@ -1769,15 +1780,6 @@ Called by update_protocol_commands_enum.py.-->
   <int value="10" label="Sources - Overrides"/>
   <int value="11" label="Sources - Content Scripts"/>
   <int value="12" label="Sources - Snippets"/>
-</enum>
-
-<enum name="DevToolsSourcesSidebarTab">
-  <int value="0" label="Other sidebar pane"/>
-  <int value="1" label="Sources - Page"/>
-  <int value="2" label="Sources - Workspace"/>
-  <int value="3" label="Sources - Overrides"/>
-  <int value="4" label="Sources - Content Scripts"/>
-  <int value="5" label="Sources - Snippets"/>
 </enum>
 
 <enum name="DevToolsStyleTextCopied">

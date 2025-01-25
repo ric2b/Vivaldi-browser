@@ -39,6 +39,8 @@
 # Kind:      lib
 ################################################################################
 tint_add_target(tint_lang_msl_ir lib
+  lang/msl/ir/binary.cc
+  lang/msl/ir/binary.h
   lang/msl/ir/builtin_call.cc
   lang/msl/ir/builtin_call.h
   lang/msl/ir/component.cc
@@ -73,11 +75,16 @@ tint_target_add_dependencies(tint_lang_msl_ir lib
   tint_utils_traits
 )
 
+tint_target_add_external_dependencies(tint_lang_msl_ir lib
+  "src_utils"
+)
+
 ################################################################################
 # Target:    tint_lang_msl_ir_test
 # Kind:      test
 ################################################################################
 tint_add_target(tint_lang_msl_ir_test test
+  lang/msl/ir/binary_test.cc
   lang/msl/ir/builtin_call_test.cc
   lang/msl/ir/member_builtin_call_test.cc
 )
@@ -110,4 +117,5 @@ tint_target_add_dependencies(tint_lang_msl_ir_test test
 
 tint_target_add_external_dependencies(tint_lang_msl_ir_test test
   "gtest"
+  "src_utils"
 )

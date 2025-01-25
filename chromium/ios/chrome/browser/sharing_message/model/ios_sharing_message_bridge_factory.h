@@ -7,17 +7,19 @@
 
 #import "base/no_destructor.h"
 #import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
 class SharingMessageBridge;
 
 // Singleton that owns all SharingMessageBridge and associates them with
-// ChromeBrowserState.
+// Profile.
 class IOSSharingMessageBridgeFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static SharingMessageBridge* GetForBrowserState(
-      ChromeBrowserState* browser_state);
-  static SharingMessageBridge* GetForBrowserStateIfExists(
+  // TODO(crbug.com/358301380): remove this method.
+  static SharingMessageBridge* GetForBrowserState(ProfileIOS* profile);
+
+  static SharingMessageBridge* GetForProfile(ProfileIOS* profile);
+  static SharingMessageBridge* GetForProfileIfExists(
       ChromeBrowserState* browser_state);
   static IOSSharingMessageBridgeFactory* GetInstance();
 

@@ -6,7 +6,6 @@
 #include "base/containers/contains.h"
 #include "base/time/time.h"
 #include "components/country_codes/country_codes.h"
-#include "components/feed/buildflags.h"
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
@@ -95,14 +94,6 @@ BASE_FEATURE(kInfoCardAcknowledgementTracking,
              "InfoCardAcknowledgementTracking",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kFeedCloseRefresh,
-             "FeedCloseRefresh",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-const base::FeatureParam<int> kFeedCloseRefreshDelayMinutes{
-    &kFeedCloseRefresh, "delay_minutes", 30};
-const base::FeatureParam<bool> kFeedCloseRefreshRequireInteraction{
-    &kFeedCloseRefresh, "require_interaction", true};
-
 BASE_FEATURE(kFeedNoViewCache,
              "FeedNoViewCache",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -125,7 +116,7 @@ BASE_FEATURE(kFeedSignedOutViewDemotion,
 
 BASE_FEATURE(kFeedDynamicColors,
              "FeedDynamicColors",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kFeedFollowUiUpdate,
              "FeedFollowUiUpdate",
@@ -137,7 +128,7 @@ BASE_FEATURE(kRefreshFeedOnRestart,
 
 BASE_FEATURE(kFeedContainment,
              "FeedContainment",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kWebFeedKillSwitch,
              "WebFeedKillSwitch",

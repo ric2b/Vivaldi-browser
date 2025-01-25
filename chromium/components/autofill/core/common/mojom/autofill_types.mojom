@@ -166,7 +166,10 @@ enum SubmissionSource {
   // Normal form submission (i.e. user presses the submit button and no
   // JavaScript is involved). Observed via RenderFrameObserver::WillSubmitForm.
   FORM_SUBMISSION = 5,
-  // The form or field was hidden or removed after autofilling it.
+  // The form or field was hidden or removed after autofilling it. Autofill
+  // ignores such submissions on non-WebView because mutations of the form can
+  // happen for other reasons than submission. PWM however considers this a
+  // valid source since mutations of password forms are more rare.
   DOM_MUTATION_AFTER_AUTOFILL = 6,
 };
 
@@ -238,9 +241,9 @@ enum SubmissionReadinessState {
   // forms.
   kNoPasswordField = 8,
 
-  // One or more child frames are detected within the password form. They may
-  // contain a CAPTCHA or other input fields, so don't trigger submission.
-  kHasChildFrames = 9,
+  // A child frame which is likely to be CAPTCHA was detected within the
+  // password form. Do not trigger submission in this case.
+  kLikelyHasCaptcha = 9,
 };
 
 // autofill::FrameToken (components/autofill/core/common/unique_ids.h)
@@ -425,6 +428,7 @@ struct FormData {
   array<FormFieldData> fields;
   array<FieldRendererId> username_predictions;
   bool is_gaia_with_skip_save_password_form;
+  bool likely_contains_captcha;
 };
 
 // autofill::FormFieldDataPredictions
@@ -475,6 +479,7 @@ struct PasswordFormFillData {
   PasswordAndMetadata preferred_login;
   array<PasswordAndMetadata> additional_logins;
   bool wait_for_username;
+  array<FieldRendererId> suggestion_banned_fields;
 };
 
 // autofill::PasswordFormGenerationData
@@ -633,4 +638,12 @@ enum AutofillSuggestionTriggerSource {
   // Password manager renderer received password suggestions from the browser
   // after the field was focused (likely due to autofocus on the page load).
   kPasswordManagerProcessedFocusedField,
+  // Prediction improvements was invoked.
+  kPredictionImprovements,
+  // An update to the suggestions is triggered, e.g. because a user decided
+  // to refresh a plus address suggestion or because a network request for a
+  // plus address suggestion terminated and its result needs to be shown.
+  // This value is not allowed to be sent from the renderer to the browser since
+  // it disables some of the click-jacking protections in the browser.
+  kPlusAddressUpdatedInBrowserProcess
 };

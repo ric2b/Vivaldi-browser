@@ -231,7 +231,7 @@ void openglsupport_test_loop() {
   std::cerr << "GL version: " << gl_version_string << std::endl;
   std::cerr << "GLSL version: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
   // Parse version from string since GL_MAJOR_VERSION is only supported in GL 3.0+.
-  // Version string guaranteed to be <major>.<minor><vender extension>.
+  // Version string guaranteed to be <major>.<minor><vendor extension>.
   GLint gl_major_version = gl_version_string[0] - '0';
   GLint gl_minor_version = gl_version_string[2] - '0';
   bool legacy_gl = gl_major_version < 3 || (gl_major_version == 3 && gl_minor_version < 2);

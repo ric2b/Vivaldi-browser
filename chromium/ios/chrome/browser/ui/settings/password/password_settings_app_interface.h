@@ -30,7 +30,7 @@
 // `mockReauthenticationModuleReturnMockedResult` to be invoked. Defaults to
 // sync. Use it for testing state before the result is returned (e.g. View X
 // shouldn't be visible until successful reauth).
-+ (void)mockReauthenticationModuleShouldReturnSynchronously:(BOOL)returnSync;
++ (void)mockReauthenticationModuleShouldSkipReAuth:(BOOL)returnSync;
 
 // Makes the mock reauthentication module return its mocked result by invoking
 // the handler of the last reauthentication request.
@@ -88,8 +88,7 @@
                                           origin:(NSString*)origin;
 
 // Creates a passkey in the passkey store.
-+ (void)saveExamplePasskeyToStore:(NSString*)credentialId
-                             rpId:(NSString*)rpId
++ (void)saveExamplePasskeyToStore:(NSString*)rpId
                            userId:(NSString*)userId
                          username:(NSString*)username
                   userDisplayName:(NSString*)userDisplayName;

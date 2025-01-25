@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,7 +26,6 @@
 #include "remoting/base/fqdn.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/host/host_config.h"
-#include "remoting/host/pin_hash.h"
 #include "remoting/host/setup/daemon_controller.h"
 #include "remoting/host/setup/host_starter.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -91,13 +91,14 @@ void HostStarterBase::OnExistingConfigLoaded(
             base::BindOnce(&HostStarterBase::OnUserTokensRetrieved, weak_ptr_),
             base::BindOnce(&HostStarterBase::HandleError, weak_ptr_));
   } else {
-    RegisterNewHost(std::string(), key_pair_->GetPublicKey());
+    RegisterNewHost(key_pair_->GetPublicKey(), /*access_token=*/std::nullopt);
   }
 }
 
 void HostStarterBase::OnUserTokensRetrieved(const std::string& user_email,
                                             const std::string& access_token,
-                                            const std::string& refresh_token) {
+                                            const std::string& refresh_token,
+                                            const std::string& scope_str) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // If an owner email was not provided, then use the account which created the
@@ -106,9 +107,17 @@ void HostStarterBase::OnUserTokensRetrieved(const std::string& user_email,
     start_host_params_.owner_email = base::ToLowerASCII(user_email);
   }
 
+  // TODO(garykac): Setup host based on the scope.
+  std::vector<std::string> scopes = SplitString(
+      scope_str, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  LOG(INFO) << "User scopes:";
+  for (auto s : scopes) {
+    LOG(INFO) << "   " << s;
+  }
+
   // We don't need a `refresh_token` for the user so ignore it even if the
   // authorization_code was created with the offline param.
-  RegisterNewHost(access_token, key_pair_->GetPublicKey());
+  RegisterNewHost(key_pair_->GetPublicKey(), access_token);
 }
 
 void HostStarterBase::OnNewHostRegistered(
@@ -171,7 +180,8 @@ void HostStarterBase::OnNewHostRegistered(
 void HostStarterBase::OnServiceAccountTokensRetrieved(
     const std::string& service_account_email,
     const std::string& access_token,
-    const std::string& refresh_token) {
+    const std::string& refresh_token,
+    const std::string& scopes) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (service_account_email_.empty()) {
@@ -228,11 +238,11 @@ void HostStarterBase::GenerateConfigFile() {
   if (!start_host_params_.name.empty()) {
     config.Set(kHostNameConfigPath, start_host_params_.name);
   }
-  if (!start_host_params_.pin.empty()) {
-    std::string host_secret_hash = remoting::MakeHostPinHash(
-        start_host_params_.id, start_host_params_.pin);
-    config.Set(kHostSecretHashConfigPath, host_secret_hash);
-  }
+
+  ApplyConfigValues(config);
+
+  config.Set(kUsageStatsConsentConfigPath,
+             start_host_params_.enable_crash_reporting);
 
   daemon_controller_->SetConfigAndStart(
       std::move(config), start_host_params_.enable_crash_reporting,

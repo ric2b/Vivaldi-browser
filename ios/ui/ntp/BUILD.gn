@@ -1,6 +1,6 @@
 # Copyright 2022 Vivaldi Technologies AS. All rights reserved.
 
-import("//build/config/ios/swift_source_set.gni")
+import("//build/config/apple/swift_source_set.gni")
 
 source_set("vivaldi_ntp") {
   sources = [
@@ -43,7 +43,7 @@ source_set("vivaldi_ntp") {
     "//base",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/bookmarks/model",
-    "//ios/chrome/browser/ui/first_run:utils",
+    "//ios/chrome/browser/shared/model/utils",
     "//ios/chrome/common/ui/util",
     "//ui/base",
     "//vivaldi/ios/most_visited_sites",
@@ -52,7 +52,7 @@ source_set("vivaldi_ntp") {
     "//vivaldi/ios/ui/ntp/top_toolbar:top_toolbar_swift",
     "//vivaldi/ios/ui/ntp/top_toolbar",
     "//vivaldi/ios/ui/thumbnail:service",
-    "resources"
+    "resources:assets"
   ]
 
   frameworks = [

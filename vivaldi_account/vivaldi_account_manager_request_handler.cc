@@ -139,7 +139,7 @@ void VivaldiAccountManagerRequestHandler::Retry() {
                           base::Unretained(this)));
 }
 
-base::Time VivaldiAccountManagerRequestHandler::GetNextRequestTime() {
+base::Time VivaldiAccountManagerRequestHandler::GetNextRequestTime() const {
   if (request_backoff_timer_.IsRunning()) {
     return base::Time::Now() +
            (request_backoff_timer_.desired_run_time() - base::TimeTicks::Now());

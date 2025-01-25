@@ -109,7 +109,7 @@ v8::Local<v8::Object> DOMWindow::AssociateWithWrapper(
     v8::Isolate*,
     const WrapperTypeInfo*,
     v8::Local<v8::Object> wrapper) {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 v8::Local<v8::Object> DOMWindow::AssociateWithWrapper(
@@ -294,10 +294,6 @@ void DOMWindow::postMessage(v8::Isolate* isolate,
                             const String& target_origin,
                             HeapVector<ScriptValue>& transfer,
                             ExceptionState& exception_state) {
-  RecordWindowProxyAccessMetrics(
-      WebFeature::kWindowProxyCrossOriginAccessPostMessage,
-      WebFeature::kWindowProxyCrossOriginAccessFromOtherPagePostMessage,
-      mojom::blink::WindowProxyAccessType::kPostMessage);
   WindowPostMessageOptions* options = WindowPostMessageOptions::Create();
   options->setTargetOrigin(target_origin);
   if (!transfer.empty())
@@ -769,7 +765,7 @@ void DOMWindow::ReportCoopAccess(const char* property_name) {
   const LocalFrameToken accessing_main_frame_token =
       accessing_main_frame.GetLocalFrameToken();
 
-  auto* it = coop_access_monitor_.begin();
+  auto it = coop_access_monitor_.begin();
   while (it != coop_access_monitor_.end()) {
     if ((*it)->accessing_main_frame != accessing_main_frame_token) {
       ++it;
@@ -1030,10 +1026,11 @@ void DOMWindow::RecordWindowProxyAccessMetrics(
   }
 }
 
-bool DOMWindow::IsAccessBlockedByCoopRestrictProperties(
-    v8::Isolate* isolate) const {
+std::optional<DOMWindow::ProxyAccessBlockedReason>
+DOMWindow::GetProxyAccessBlockedReason(v8::Isolate* isolate) const {
   if (!GetFrame()) {
-    return false;
+    // Proxy is disconnected so we cannot take any action anyway.
+    return std::nullopt;
   }
 
   LocalDOMWindow* accessing_window = CurrentDOMWindow(isolate);
@@ -1041,30 +1038,47 @@ bool DOMWindow::IsAccessBlockedByCoopRestrictProperties(
 
   LocalFrame* accessing_frame = accessing_window->GetFrame();
   if (!accessing_frame) {
-    return false;
+    // Context is disconnected so we cannot take any action anyway.
+    return std::nullopt;
   }
 
-  // If the two windows are not in the same CoopRelatedGroup, we should not
-  // restrict window proxy access here. This prevents restricting things that
-  // were not meant to. These are the cross browsing context group  accesses
-  // that already existed before COOP: restrict-properties.
+  // Returns an exception message if this window proxy or the window accessing
+  // are not in the same page and one is in a partitioned popin. We check this
+  // case first as it overlaps with the COOP:RP case below.
+  // See https://explainers-by-googlers.github.io/partitioned-popins/
+  if (GetFrame()->GetPage() != accessing_frame->GetPage() &&
+      (accessing_frame->GetPage()->IsPartitionedPopin() ||
+       GetFrame()->GetPage()->IsPartitionedPopin())) {
+    return DOMWindow::ProxyAccessBlockedReason::kPartitionedPopins;
+  }
+
+  // Returns an exception message if the two windows are in the same
+  // CoopRelatedGroup but not in the same BrowsingInstance as this means COOP:
+  // restrict-properties is blocking access between the contexts.
   // TODO(https://crbug.com/1464618): Is there actually any scenario where
   // cross browsing context group was allowed before COOP: restrict-properties?
   // Verify that we need to have this check.
-  if (accessing_frame->GetPage()->CoopRelatedGroupToken() !=
-      GetFrame()->GetPage()->CoopRelatedGroupToken()) {
-    return false;
+  if (accessing_frame->GetPage()->CoopRelatedGroupToken() ==
+          GetFrame()->GetPage()->CoopRelatedGroupToken() &&
+      accessing_frame->GetPage()->BrowsingContextGroupToken() !=
+          GetFrame()->GetPage()->BrowsingContextGroupToken()) {
+    return DOMWindow::ProxyAccessBlockedReason::kCoopRp;
   }
 
-  // If we're dealing with an actual COOP: restrict-properties case, then
-  // compare the BrowsingInstance tokens. If they are different, the access
-  // should be restricted.
-  if (accessing_frame->GetPage()->BrowsingContextGroupToken() !=
-      GetFrame()->GetPage()->BrowsingContextGroupToken()) {
-    return true;
-  }
+  // Our fallback allows access.
+  return std::nullopt;
+}
 
-  return false;
+// static
+String DOMWindow::GetProxyAccessBlockedExceptionMessage(
+    DOMWindow::ProxyAccessBlockedReason reason) {
+  switch (reason) {
+    case ProxyAccessBlockedReason::kCoopRp:
+      return "Cross-Origin-Opener-Policy: 'restrict-properties' blocked the "
+             "access.";
+    case ProxyAccessBlockedReason::kPartitionedPopins:
+      return "Partitioned Popin blocked the access.";
+  }
 }
 
 void DOMWindow::PostedMessage::Trace(Visitor* visitor) const {
@@ -1104,7 +1118,7 @@ void DOMWindow::Trace(Visitor* visitor) const {
 
 void DOMWindow::DisconnectCoopAccessMonitor(
     const LocalFrameToken& accessing_main_frame) {
-  auto* it = coop_access_monitor_.begin();
+  auto it = coop_access_monitor_.begin();
   while (it != coop_access_monitor_.end()) {
     if ((*it)->accessing_main_frame == accessing_main_frame) {
       it = coop_access_monitor_.erase(it);

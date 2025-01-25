@@ -604,10 +604,10 @@ fn signature_encrypted_section_de_lengths_allow_room_for_suffix() {
 #[test]
 fn serialize_max_number_of_public_sections() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-    for _ in 0..NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT {
+    for _ in 0..NP_V1_ADV_MAX_SECTION_COUNT {
         let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
         section_builder
-            .add_de(|_| DummyDataElement { de_type: 100_u32.into(), data: vec![0; 98] })
+            .add_de(|_| DummyDataElement { de_type: 100_u32.into(), data: vec![0; 27] })
             .unwrap();
         section_builder.add_to_advertisement::<CryptoProviderImpl>();
     }

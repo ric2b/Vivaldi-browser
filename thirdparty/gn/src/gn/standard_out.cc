@@ -297,7 +297,6 @@ void PrintLongHelp(const std::string& text, const std::string& tag) {
         if (first_header && !tag.empty()) {
           OutputString("### <a name=\"" + tag + "\"></a>", DECORATION_NONE,
                        NO_ESCAPING);
-          first_header = false;
         } else {
           OutputString("#### ", DECORATION_NONE);
         }
@@ -310,6 +309,12 @@ void PrintLongHelp(const std::string& text, const std::string& tag) {
 
       OutputString(line.substr(0, chars_to_highlight), DECORATION_YELLOW);
       OutputString(line.substr(chars_to_highlight));
+      if (first_header) {
+        if (is_markdown) {
+          OutputString("&nbsp;[Back to Top](#gn-reference)", DECORATION_NONE);
+        }
+        first_header = false;
+      }
       OutputString("\n");
       continue;
     } else if (is_markdown && !line.empty() && !in_body) {

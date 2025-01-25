@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/visitedlink/renderer/visitedlink_reader.h"
 
 #include <stddef.h>
@@ -60,7 +65,9 @@ void VisitedLinkReader::UpdateVisitedLinks(
   FreeTable();
   DCHECK(hash_table_ == nullptr);
   if (base::FeatureList::IsEnabled(
-          blink::features::kPartitionVisitedLinkDatabase)) {
+          blink::features::kPartitionVisitedLinkDatabase) ||
+      base::FeatureList::IsEnabled(
+          blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks)) {
     return UpdatePartitionedVisitedLinks(std::move(table_region));
   }
   return UpdateUnpartitionedVisitedLinks(std::move(table_region));

@@ -41,13 +41,12 @@ var __setFunctionName = (this && this.__setFunctionName) || function (f, name, p
     if (typeof name === "symbol") name = name.description ? "[".concat(name.description, "]") : "";
     return Object.defineProperty(f, "name", { configurable: true, value: prefix ? "".concat(prefix, " ", name) : name });
 };
-import * as Bidi from 'chromium-bidi/lib/cjs/protocol/protocol.js';
 import { combineLatest, defer, delayWhen, filter, first, firstValueFrom, map, of, raceWith, switchMap, } from '../../third_party/rxjs/rxjs.js';
 import { Frame, throwIfDetached, } from '../api/Frame.js';
 import { Accessibility } from '../cdp/Accessibility.js';
 import { ConsoleMessage, } from '../common/ConsoleMessage.js';
 import { TargetCloseError, UnsupportedOperation } from '../common/Errors.js';
-import { debugError, fromEmitterEvent, timeout } from '../common/util.js';
+import { debugError, fromAbortSignal, fromEmitterEvent, timeout, } from '../common/util.js';
 import { isErrorLike } from '../util/ErrorLike.js';
 import { BidiCdpSession } from './CDPSession.js';
 import { BidiDeserializer } from './Deserializer.js';
@@ -288,9 +287,6 @@ let BidiFrame = (() => {
             }
             return parent;
         }
-        isOOPFrame() {
-            throw new UnsupportedOperation();
-        }
         url() {
             return this.browsingContext.url;
         }
@@ -344,12 +340,14 @@ let BidiFrame = (() => {
             ]);
         }
         async waitForNavigation(options = {}) {
-            const { timeout: ms = this.timeoutSettings.navigationTimeout() } = options;
+            const { timeout: ms = this.timeoutSettings.navigationTimeout(), signal } = options;
             const frames = this.childFrames().map(frame => {
                 return frame.#detached$();
             });
             return await firstValueFrom(combineLatest([
-                fromEmitterEvent(this.browsingContext, 'navigation').pipe(switchMap(({ navigation }) => {
+                fromEmitterEvent(this.browsingContext, 'navigation')
+                    .pipe(first())
+                    .pipe(switchMap(({ navigation }) => {
                     return this.#waitForLoad$(options).pipe(delayWhen(() => {
                         if (frames.length === 0) {
                             return of(undefined);
@@ -389,7 +387,7 @@ let BidiFrame = (() => {
                 const lastRequest = request.lastRedirect ?? request;
                 const httpRequest = requests.get(lastRequest);
                 return httpRequest.response();
-            }), raceWith(timeout(ms), this.#detached$().pipe(map(() => {
+            }), raceWith(timeout(ms), fromAbortSignal(signal), this.#detached$().pipe(map(() => {
                 throw new TargetCloseError('Frame detached.');
             })))));
         }
@@ -416,12 +414,11 @@ let BidiFrame = (() => {
             await exposedFunction[Symbol.asyncDispose]();
         }
         async createCDPSession() {
-            const { sessionId } = await this.client.send('Target.attachToTarget', {
-                targetId: this._id,
-                flatten: true,
-            });
-            await this.browsingContext.subscribe([Bidi.ChromiumBidi.BiDiModule.Cdp]);
-            return new BidiCdpSession(this, sessionId);
+            if (!this.page().browser().cdpSupported) {
+                throw new UnsupportedOperation();
+            }
+            const cdpConnection = this.page().browser().cdpConnection;
+            return await cdpConnection._createSession({ targetId: this._id });
         }
         get #waitForLoad$() { return _private_waitForLoad$_descriptor.value; }
         get #waitForNetworkIdle$() { return _private_waitForNetworkIdle$_descriptor.value; }

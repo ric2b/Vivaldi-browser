@@ -5,8 +5,9 @@
 #                      \___/_/\_\ .__/ \__,_|\__|
 #                               |_| XML parser
 #
-# Copyright (c) 2021-2023 Sebastian Pipping <sebastian@pipping.org>
+# Copyright (c) 2021-2024 Sebastian Pipping <sebastian@pipping.org>
 # Copyright (c) 2023      Joyce Brum <joycebrum@google.com>
+# Copyright (c) 2024      Dag-Erling Smørgrav <des@des.dev>
 # Licensed under the MIT license:
 #
 # Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -47,7 +48,7 @@ jobs:
     env:
       CFLAGS: -g3 -pipe
     steps:
-    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
     - name: Install build dependencies
       run: |-
         set -x -u
@@ -59,18 +60,16 @@ jobs:
 
         sudo apt-get install --yes --no-install-recommends -V \
             cmake \
+            docbook-xml \
             docbook2x \
-            dos2unix \
             gcc-multilib \
             g++-multilib \
             lcov \
             libbsd-dev \
             lzip \
-            moreutils \
-            ppa-purge
+            moreutils
 
         # Install 32bit Wine
-        sudo ppa-purge -y ppa:ubuntu-toolchain-r/test  # to unblock
         sudo apt-get install --yes --no-install-recommends -V \
             mingw-w64 \
             wine-stable \
@@ -85,7 +84,7 @@ jobs:
         exec ./.ci.sh
 
     - name: Store coverage .info and HTML report
-      uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3  # v4.3.1
+      uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874  # v4.4.0
       with:
         name: coverage
         path: expat/coverage__*/

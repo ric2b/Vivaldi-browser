@@ -275,7 +275,7 @@ const typename NNLS<MatrixType>::SolutionVectorType &NNLS<MatrixType>::solve(con
     const Index numActive = A_.cols() - numInactive_;
     Index argmaxGradient = -1;
     const Scalar maxGradient = gradient_(index_sets_.tail(numActive)).maxCoeff(&argmaxGradient);
-    argmaxGradient += numInactive_;  // beacause tail() skipped the first numInactive_ elements
+    argmaxGradient += numInactive_;  // because tail() skipped the first numInactive_ elements
 
     if (maxGradient < tolerance_) {
       info_ = ComputationInfo::Success;
@@ -299,7 +299,7 @@ const typename NNLS<MatrixType>::SolutionVectorType &NNLS<MatrixType>::solve(con
       solveInactiveSet_(b);
       ++iterations_;  // The solve is expensive, so that is what we count as an iteration.
 
-      // Check feasability...
+      // Check feasibility...
       bool feasible = true;
       Scalar alpha = NumTraits<Scalar>::highest();
       Index infeasibleIdx = -1;  // Which variable became infeasible first.

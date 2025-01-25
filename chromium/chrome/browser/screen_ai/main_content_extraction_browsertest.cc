@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
@@ -118,7 +123,7 @@ class MainContentExtractionTest : public InProcessBrowserTest {
         browser()->tab_strip_model()->GetActiveWebContents();
     EXPECT_EQ(web_contents->GetURL(), page);
 
-    base::test::TestFuture<const ui::AXTreeUpdate&> future;
+    base::test::TestFuture<ui::AXTreeUpdate&> future;
     web_contents->RequestAXTreeSnapshot(
         future.GetCallback(), ui::kAXModeComplete,
         /* max_nodes= */ 0,

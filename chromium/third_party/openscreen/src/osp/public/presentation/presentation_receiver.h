@@ -12,23 +12,19 @@
 
 #include "osp/msgs/osp_messages.h"
 #include "osp/public/message_demuxer.h"
+#include "osp/public/presentation/presentation_common.h"
 #include "osp/public/presentation/presentation_connection.h"
 
 namespace openscreen::osp {
 
-enum class ResponseResult {
-  kSuccess = 0,
-  kInvalidUrl,
-  kRequestTimedOut,
-  kRequestFailedTransient,
-  kRequestFailedPermanent,
-  kHttpError,
-  kUnknown,
-};
-
 class ReceiverDelegate {
  public:
-  virtual ~ReceiverDelegate() = default;
+  ReceiverDelegate();
+  ReceiverDelegate(const ReceiverDelegate&) = delete;
+  ReceiverDelegate& operator=(const ReceiverDelegate&) = delete;
+  ReceiverDelegate(ReceiverDelegate&&) noexcept = delete;
+  ReceiverDelegate& operator=(ReceiverDelegate&&) noexcept = delete;
+  virtual ~ReceiverDelegate();
 
   // Called when the availability (compatible, not compatible, or invalid)
   // for specific URLs is needed to be supplied by the delegate.
@@ -59,10 +55,30 @@ class ReceiverDelegate {
 };
 
 class Receiver final : public MessageDemuxer::MessageCallback,
-                       public Connection::ParentDelegate {
+                       public Connection::Controller {
  public:
   Receiver();
+  Receiver(const Receiver&) = delete;
+  Receiver& operator=(const Receiver&) = delete;
+  Receiver(Receiver&&) noexcept = delete;
+  Receiver& operator=(Receiver&&) noexcept = delete;
   ~Receiver() override;
+
+  // Connection::Controller overrides.
+  Error CloseConnection(Connection* connection,
+                        Connection::CloseReason reason) override;
+  Error OnPresentationTerminated(const std::string& presentation_id,
+                                 TerminationSource source,
+                                 TerminationReason reason) override;
+  void OnConnectionDestroyed(Connection* connection) override;
+
+  // MessageDemuxer::MessageCallback overrides.
+  ErrorOr<size_t> OnStreamMessage(uint64_t instance_id,
+                                  uint64_t connection_id,
+                                  msgs::Type message_type,
+                                  const uint8_t* buffer,
+                                  size_t buffer_size,
+                                  Clock::time_point now) override;
 
   void Init();
   void Deinit();
@@ -81,24 +97,6 @@ class Receiver final : public MessageDemuxer::MessageCallback,
   Error OnConnectionCreated(uint64_t request_id,
                             Connection* connection,
                             ResponseResult result);
-
-  // Connection::ParentDelegate overrides.
-  Error CloseConnection(Connection* connection,
-                        Connection::CloseReason reason) override;
-  // Also called by the embedder to report that a presentation has been
-  // terminated.
-  Error OnPresentationTerminated(const std::string& presentation_id,
-                                 TerminationSource source,
-                                 TerminationReason reason) override;
-  void OnConnectionDestroyed(Connection* connection) override;
-
-  // MessageDemuxer::MessageCallback overrides.
-  ErrorOr<size_t> OnStreamMessage(uint64_t instance_id,
-                                  uint64_t connection_id,
-                                  msgs::Type message_type,
-                                  const uint8_t* buffer,
-                                  size_t buffer_size,
-                                  Clock::time_point now) override;
 
  private:
   struct QueuedResponse {

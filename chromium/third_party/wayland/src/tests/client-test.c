@@ -40,7 +40,11 @@
 
 struct client_destroy_listener {
 	struct wl_listener listener;
-	int done;
+	bool done;
+	struct wl_listener late_listener;
+	bool late_done;
+	struct wl_listener resource_listener;
+	bool resource_done;
 };
 
 static void
@@ -49,14 +53,48 @@ client_destroy_notify(struct wl_listener *l, void *data)
 	struct client_destroy_listener *listener =
 		wl_container_of(l, listener, listener);
 
-	listener->done = 1;
+	listener->done = true;
+	assert(!listener->resource_done);
+	assert(!listener->late_done);
+}
+
+static void
+client_resource_destroy_notify(struct wl_listener *l, void *data)
+{
+	struct client_destroy_listener *listener =
+		wl_container_of(l, listener, resource_listener);
+
+	assert(listener->done);
+	listener->resource_done = true;
+	assert(!listener->late_done);
+}
+
+static void
+client_late_destroy_notify(struct wl_listener *l, void *data)
+{
+	struct client_destroy_listener *listener =
+		wl_container_of(l, listener, late_listener);
+
+	assert(listener->done);
+	assert(listener->resource_done);
+	listener->late_done = true;
+}
+
+static void
+client_user_data_destroy(void *data)
+{
+	bool *user_data_destroyed = data;
+
+	*user_data_destroyed = true;
 }
 
 TEST(client_destroy_listener)
 {
 	struct wl_display *display;
 	struct wl_client *client;
+	struct wl_resource *resource;
 	struct client_destroy_listener a, b;
+	bool user_data_destroyed = false;
 	int s[2];
 
 	assert(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, s) == 0);
@@ -65,23 +103,54 @@ TEST(client_destroy_listener)
 	client = wl_client_create(display, s[0]);
 	assert(client);
 
+	wl_client_set_user_data(client, &user_data_destroyed, client_user_data_destroy);
+	assert(wl_client_get_user_data(client) == &user_data_destroyed);
+
+	resource = wl_resource_create(client, &wl_callback_interface, 1, 0);
+	assert(resource);
+
 	a.listener.notify = client_destroy_notify;
-	a.done = 0;
+	a.done = false;
+	a.resource_listener.notify = client_resource_destroy_notify;
+	a.resource_done = false;
+	a.late_listener.notify = client_late_destroy_notify;
+	a.late_done = false;
 	wl_client_add_destroy_listener(client, &a.listener);
+	wl_resource_add_destroy_listener(resource, &a.resource_listener);
+	wl_client_add_destroy_late_listener(client, &a.late_listener);
 
 	assert(wl_client_get_destroy_listener(client, client_destroy_notify) ==
 	       &a.listener);
+	assert(wl_resource_get_destroy_listener(resource, client_resource_destroy_notify) ==
+	       &a.resource_listener);
+	assert(wl_client_get_destroy_late_listener(client, client_late_destroy_notify) ==
+	       &a.late_listener);
 
 	b.listener.notify = client_destroy_notify;
-	b.done = 0;
+	b.done = false;
+	b.resource_listener.notify = client_resource_destroy_notify;
+	b.resource_done = false;
+	b.late_listener.notify = client_late_destroy_notify;
+	b.late_done = false;
 	wl_client_add_destroy_listener(client, &b.listener);
+	wl_resource_add_destroy_listener(resource, &b.resource_listener);
+	wl_client_add_destroy_late_listener(client, &b.late_listener);
 
 	wl_list_remove(&a.listener.link);
+	wl_list_remove(&a.resource_listener.link);
+	wl_list_remove(&a.late_listener.link);
+
+	assert(!user_data_destroyed);
 
 	wl_client_destroy(client);
 
 	assert(!a.done);
+	assert(!a.resource_done);
+	assert(!a.late_done);
 	assert(b.done);
+	assert(b.resource_done);
+	assert(b.late_done);
+	assert(user_data_destroyed);
 
 	close(s[0]);
 	close(s[1]);
@@ -89,3 +158,50 @@ TEST(client_destroy_listener)
 	wl_display_destroy(display);
 }
 
+static void
+client_destroy_remove_link_notify(struct wl_listener *l, void *data)
+{
+	struct wl_client *client = data;
+	struct client_destroy_listener *listener =
+		wl_container_of(l, listener, listener);
+
+	/* The client destruction signal should not be emitted more than once. */
+	assert(!listener->done);
+	listener->done = true;
+
+	/* The client should have been removed from the display's list. */
+	assert(wl_list_empty(wl_client_get_link(client)));
+}
+
+/*
+ * Tests that wl_client_destroy() will remove the client from the display's
+ * client list to prevent client access during destruction.
+ */
+TEST(client_destroy_removes_link)
+{
+	struct wl_display *display;
+	struct wl_client *client;
+	struct client_destroy_listener destroy_listener;
+	int s[2];
+
+	assert(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, s) == 0);
+	display = wl_display_create();
+	assert(display);
+	client = wl_client_create(display, s[0]);
+	assert(client);
+
+	destroy_listener.listener.notify = client_destroy_remove_link_notify;
+	destroy_listener.done = false;
+	wl_client_add_destroy_listener(client, &destroy_listener.listener);
+
+	assert(wl_client_get_destroy_listener(client,
+		client_destroy_remove_link_notify) == &destroy_listener.listener);
+
+	wl_client_destroy(client);
+	assert(destroy_listener.done);
+
+	close(s[0]);
+	close(s[1]);
+
+	wl_display_destroy(display);
+}

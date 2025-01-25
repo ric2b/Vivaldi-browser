@@ -13,11 +13,11 @@
 #include "base/sequence_checker.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
-#include "sync/notes/note_model_type_processor.h"
+#include "sync/notes/note_data_type_processor.h"
 #include "sync/notes/note_model_view.h"
 
 namespace syncer {
-class ModelTypeControllerDelegate;
+class DataTypeControllerDelegate;
 }
 
 namespace vivaldi {
@@ -29,9 +29,9 @@ class SyncedFileStore;
 }
 
 namespace sync_notes {
-class NoteModelTypeProcessor;
+class NoteDataTypeProcessor;
 
-// This service owns the NoteModelTypeProcessor.
+// This service owns the NoteDataTypeProcessor.
 class NoteSyncService : public KeyedService {
  public:
   NoteSyncService(file_sync::SyncedFileStore* synced_file_store,
@@ -51,8 +51,8 @@ class NoteSyncService : public KeyedService {
       const base::RepeatingClosure& schedule_save_closure,
       std::unique_ptr<sync_notes::NoteModelView> model);
 
-  // Returns the ModelTypeControllerDelegate for syncer::NOTES.
-  virtual base::WeakPtr<syncer::ModelTypeControllerDelegate>
+  // Returns the DataTypeControllerDelegate for syncer::NOTES.
+  virtual base::WeakPtr<syncer::DataTypeControllerDelegate>
   GetNoteSyncControllerDelegate();
 
   // Returns true if sync metadata is being tracked. This means sync is enabled
@@ -75,9 +75,9 @@ class NoteSyncService : public KeyedService {
 
  private:
   std::unique_ptr<NoteModelView> note_model_view_;
-  // NoteModelTypeProcessor handles communications between sync engine and
+  // NoteDataTypeProcessor handles communications between sync engine and
   // NotesModel.
-  NoteModelTypeProcessor note_model_type_processor_;
+  NoteDataTypeProcessor note_data_type_processor_;
   bool is_tracking_metadata_for_testing_ = false;
 };
 

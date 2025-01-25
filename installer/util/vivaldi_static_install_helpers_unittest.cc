@@ -31,10 +31,8 @@ TEST(VivaldiStaticInstallHelpers, IsSystemInstallExecutable) {
         IsSystemInstallExecutable(base::ToUpperASCII(exe_path.value())));
   }
   static const char file_header[] = "Hello, world!";
-  const int file_header_size = ::strlen(file_header);
-  EXPECT_EQ(file_header_size,
-            base::WriteFile(dir.Append(vivaldi::constants::kSystemMarkerFile),
-                            file_header, file_header_size));
+  EXPECT_TRUE(base::WriteFile(dir.Append(vivaldi::constants::kSystemMarkerFile),
+                            file_header));
   for (const std::wstring& path : kTestExePaths) {
     base::FilePath exe_path = dir.Append(path);
     EXPECT_TRUE(IsSystemInstallExecutable(exe_path.value()));

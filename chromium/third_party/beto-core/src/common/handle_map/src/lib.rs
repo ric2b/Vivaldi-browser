@@ -29,6 +29,11 @@ pub use guard::{ObjectReadGuardImpl, ObjectReadWriteGuardImpl};
 
 use shard::{HandleMapShard, ShardAllocationError};
 
+#[doc(hidden)]
+pub mod reexport {
+    pub use lazy_static;
+}
+
 /// An individual handle to be given out by a [`HandleMap`].
 /// This representation is untyped, and just a wrapper
 /// around a handle-id, in contrast to implementors of `HandleLike`.

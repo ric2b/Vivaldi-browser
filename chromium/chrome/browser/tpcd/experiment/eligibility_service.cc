@@ -62,14 +62,6 @@ EligibilityService::EligibilityService(
   CHECK(experiment_manager_);
   CHECK(privacy_sandbox_settings_);
 
-  if (onboarding_service_) {
-    onboarding_observation_.Observe(onboarding_service_);
-
-    if (experiment_manager_->DidVersionChange()) {
-      onboarding_service_->MaybeResetModeBOnboardingPrefs();
-    }
-  }
-
   profile_eligibility_ = ProfileEligibility();
   BroadcastProfileEligibility();
 }
@@ -83,7 +75,6 @@ EligibilityService* EligibilityService::Get(Profile* profile) {
 
 void EligibilityService::Shutdown() {
   if (onboarding_service_) {
-    onboarding_observation_.Reset();
     onboarding_service_ = nullptr;
   }
   privacy_sandbox_settings_ = nullptr;
@@ -124,25 +115,11 @@ void EligibilityService::MarkProfileEligibility(bool is_client_eligible) {
   // Update the eligibility for the onboarding UX flow.
   if (onboarding_service_) {
     if (kDisable3PCookies.Get()) {
-      onboarding_service_->MaybeMarkModeBSilentIneligible();
-      if (is_client_eligible) {
-        onboarding_service_->MaybeMarkModeBEligible();
-      } else {
-        onboarding_service_->MaybeMarkModeBIneligible();
-      }
       MaybeNotifyManagerTrackingProtectionOnboarded(
           onboarding_service_->GetOnboardingStatus());
-    } else {
-      onboarding_service_->MaybeMarkModeBIneligible();
-      if (kEnableSilentOnboarding.Get()) {
-        if (is_client_eligible) {
-          onboarding_service_->MaybeMarkModeBSilentEligible();
-        } else {
-          onboarding_service_->MaybeMarkModeBSilentIneligible();
-        }
-        MaybeNotifyManagerTrackingProtectionSilentOnboarded(
-            onboarding_service_->GetSilentOnboardingStatus());
-      }
+    } else if (kEnableSilentOnboarding.Get()) {
+      MaybeNotifyManagerTrackingProtectionSilentOnboarded(
+          onboarding_service_->GetSilentOnboardingStatus());
     }
   }
 }
@@ -165,26 +142,6 @@ void EligibilityService::UpdateCookieDeprecationLabel() {
               cookie_deprecation_label_manager->GetValue().value_or(""));
         }
       });
-}
-
-void EligibilityService::OnTrackingProtectionOnboardingUpdated(
-    privacy_sandbox::TrackingProtectionOnboarding::OnboardingStatus
-        onboarding_status) {
-  if (!kDisable3PCookies.Get()) {
-    return;
-  }
-  MaybeNotifyManagerTrackingProtectionOnboarded(onboarding_status);
-  UpdateCookieDeprecationLabel();
-}
-
-void EligibilityService::OnTrackingProtectionSilentOnboardingUpdated(
-    privacy_sandbox::TrackingProtectionOnboarding::SilentOnboardingStatus
-        onboarding_status) {
-  if (kDisable3PCookies.Get()) {
-    return;
-  }
-  MaybeNotifyManagerTrackingProtectionSilentOnboarded(onboarding_status);
-  UpdateCookieDeprecationLabel();
 }
 
 void EligibilityService::MaybeNotifyManagerTrackingProtectionOnboarded(

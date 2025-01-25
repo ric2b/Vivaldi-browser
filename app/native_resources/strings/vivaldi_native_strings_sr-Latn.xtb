@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Pejzaž 12</translation>
 <translation id="1158503667684816647">Ne prikazuj ponovo potvrdu</translation>
 <translation id="1222195720020481779">Pokretanje instalacije...</translation>
+<translation id="1224683873953469764">Nabavite Vivaldi za mobilne uređaje</translation>
 <translation id="1270785070369717623">Nažalost, vaša podešavanja Opera GX pregledača nisu dostupna dok taj pregledač radi. Da biste uvezli ta podešavanja u Vivaldi, sačuvajte svoj rad i zatvorite sve prozore Opera GX pregledača a zatim kliknite na Nastavi.</translation>
 <translation id="1276145862619442150">Brza biranja</translation>
 <translation id="1281950884873973195">Životinja 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Ne prikazuj ponovo potvrdu</translation>
 <translation id="1462666970065907900">Da li zaista želite da zatvorite ovaj prozor?</translation>
 <translation id="1480046233931937785">Zasluge</translation>
+<translation id="1521774566618522728">Aktivno danas</translation>
 <translation id="1526344461589023948">Došlo je do greške prilikom pokušaja čuvanja preuzetog ažuriranja. Proverite da li računar ima dovoljno prostora na disku i pokušajte ponovo kasnije.</translation>
 <translation id="1635542496948266458">Promeni profil</translation>
 <translation id="1657174850639146440">Čudovište 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Jačina zvuka</translation>
 <translation id="443008484043213881">Alati</translation>
 <translation id="4456211719108566931">Čudovište 6</translation>
+<translation id="4459169140545916303">Aktivno pre <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dana</translation>
 <translation id="4512900838580567989">Otvori vezu u novoj kartici u pozadini</translation>
 <translation id="4545097004879999966">Opera pošta</translation>
 <translation id="4548358047305717967">Otvori sliku u novoj kartici u pozadini</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Nadogradnja bezbednog skladišta ključeva</translation>
 <translation id="7111492742514999492">Pejzaž 9</translation>
 <translation id="7208252576848052204">Nažalost, vaša podešavanja Arc pregledača nisu dostupna dok taj pregledač radi. Da biste uvezli ta podešavanja u Vivaldi, sačuvajte svoj rad i zatvorite sve prozore Arc pregledača a zatim kliknite na Nastavi.</translation>
+<translation id="7321500017121629018">Aktivno juče</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Pokretanje programa za ažuriranje nije uspelo. Proverite da li računar ima dovoljno memorije ili prostora na disku i pokušajte ponovo kasnije.</translation>
 <translation id="7658239707568436148">Otkaži</translation>

@@ -19,6 +19,7 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -27,10 +28,12 @@ import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.ui.modaldialog.ModalDialogManager;
+
+// Vivaldi
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 
 /**
  * A custom {@link OneshotSupplier} for a {@link TabGroupUi}. The supplied value will remain null
@@ -127,11 +130,11 @@ public class TabGroupUiOneshotSupplier extends OneshotSupplierImpl<TabGroupUi> {
      * @param scrimCoordinator The {@link ScrimCoordinator} to control scrim view.
      * @param omniboxFocusStateSupplier Supplier to access the focus state of the omnibox.
      * @param bottomSheetController The {@link BottomSheetController} for the current activity.
+     * @param dataSharingTabManager The {@link} DataSharingTabManager managing communication between
+     *     UI and DataSharing services.
      * @param tabContentManager Gives access to the tab content.
-     * @param rootView The root view of the app.
      * @param tabCreatorManager Manages creation of tabs.
      * @param layoutStateProviderSupplier Supplies the {@link LayoutStateProvider}.
-     * @param snackbarManager Manages the display of snackbars.
      * @param modalDialogManager Used to show confirmation dialogs.
      */
     public TabGroupUiOneshotSupplier(
@@ -144,12 +147,12 @@ public class TabGroupUiOneshotSupplier extends OneshotSupplierImpl<TabGroupUi> {
             ScrimCoordinator scrimCoordinator,
             ObservableSupplier<Boolean> omniboxFocusStateSupplier,
             BottomSheetController bottomSheetController,
+            DataSharingTabManager dataSharingTabManager,
             TabContentManager tabContentManager,
-            ViewGroup rootView,
             TabCreatorManager tabCreatorManager,
             OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
-            SnackbarManager snackbarManager,
-            ModalDialogManager modalDialogManager) {
+            ModalDialogManager modalDialogManager,
+            ThemeColorProvider themeColorProvider) { // Vivaldi
         Runnable setter =
                 () -> {
                     var tabGroupUi =
@@ -162,13 +165,14 @@ public class TabGroupUiOneshotSupplier extends OneshotSupplierImpl<TabGroupUi> {
                                             scrimCoordinator,
                                             omniboxFocusStateSupplier,
                                             bottomSheetController,
+                                            dataSharingTabManager,
                                             tabModelSelector,
                                             tabContentManager,
-                                            rootView,
                                             tabCreatorManager,
                                             layoutStateProviderSupplier,
-                                            snackbarManager,
                                             modalDialogManager);
+                    tabGroupUi.setThemeColorProvider(
+                            themeColorProvider, tabModelSelector); // Vivaldi
                     set(tabGroupUi);
                     maybeDestroyTabGroupUiCreationController();
                 };

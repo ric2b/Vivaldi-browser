@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #ifndef MEDIA_BASE_VIDEO_FRAME_H_
 #define MEDIA_BASE_VIDEO_FRAME_H_
 
@@ -242,27 +247,13 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       base::TimeDelta timestamp,
       bool zero_initialize_memory);
 
-  // Wraps a set of native textures with a VideoFrame.
-  // |mailbox_holders_release_cb| will be called with a sync token as the
+  // Wraps a native texture with a VideoFrame.
+  // |mailbox_holder_release_cb| will be called with a sync token as the
   // argument when the VideoFrame is to be destroyed.
-  static scoped_refptr<VideoFrame> WrapNativeTextures(
+  static scoped_refptr<VideoFrame> WrapNativeTexture(
       VideoPixelFormat format,
-      const gpu::MailboxHolder (&mailbox_holder)[kMaxPlanes],
-      ReleaseMailboxCB mailbox_holders_release_cb,
-      const gfx::Size& coded_size,
-      const gfx::Rect& visible_rect,
-      const gfx::Size& natural_size,
-      base::TimeDelta timestamp);
-
-  // Wraps a set of native texture shared images with a VideoFrame.
-  // |mailbox_holders_release_cb| will be called with a sync token as the
-  // argument when the VideoFrame is to be destroyed.
-  static scoped_refptr<VideoFrame> WrapSharedImages(
-      VideoPixelFormat format,
-      scoped_refptr<gpu::ClientSharedImage> shared_images[kMaxPlanes],
-      gpu::SyncToken sync_token,
-      uint32_t texture_target,
-      ReleaseMailboxCB mailbox_holders_release_cb,
+      const gpu::MailboxHolder& mailbox_holder,
+      ReleaseMailboxCB mailbox_holder_release_cb,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
@@ -376,7 +367,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   // Wraps |gpu_memory_buffer|. This will transfer ownership of
   // |gpu_memory_buffer| to the returned VideoFrame.
-  // For use in contexts where the GPUMemoryBuffer has no SharedImages
+  // For use in contexts where the GPUMemoryBuffer has no SharedImage
   // associated with it.
   // NOTE: Clients who want to set a callback on the VideoFrame being destroyed
   // should call SetReleaseMailboxAndGpuMemoryBufferCB() after creating the
@@ -575,7 +566,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   size_t NumTextures() const;
 
   // Returns true if the video frame uses ClientSharedImage.
-  bool HasSharedImages() const;
+  bool HasSharedImage() const;
 
   // Returns true if the |storage_type_| is STOAGE_GPU_MEMORY_BUFFER which
   // indicates that the VideoFrame is backed by GMB or a MappableSharedImage
@@ -714,12 +705,11 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // mailbox, the caller must wait for the included sync point.
   const gpu::MailboxHolder& mailbox_holder(size_t texture_index) const;
 
-  // Returns a ClientSharedImage for a given texture.
+  // Returns the ClientSharedImage.
   // Only valid to call if this is a NATIVE_TEXTURE frame and contains valid
-  // ClientSharedImage pointers. Before using the shared_image, the caller must
+  // ClientSharedImage pointer. Before using the shared_image, the caller must
   // wait for the included sync point.
-  scoped_refptr<gpu::ClientSharedImage> shared_image(
-      size_t texture_index) const;
+  scoped_refptr<gpu::ClientSharedImage> shared_image() const;
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   // The number of DmaBufs will be equal or less than the number of planes of
@@ -939,13 +929,13 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // VideoFrame.
   const uint8_t* data_[kMaxPlanes];
 
-  // Native texture mailboxes, if this is a IsTexture() frame.
-  gpu::MailboxHolder mailbox_holders_[kMaxPlanes];
-  ReleaseMailboxAndGpuMemoryBufferCB mailbox_holders_and_gmb_release_cb_;
+  // Native texture mailbox, if this is a IsTexture() frame.
+  gpu::MailboxHolder mailbox_holder_;
+  ReleaseMailboxAndGpuMemoryBufferCB mailbox_holder_and_gmb_release_cb_;
 
-  // Native texture shared images that are only set when the VideoFrame is
-  // created via VideoFrame::WrapSharedImages().
-  scoped_refptr<gpu::ClientSharedImage> shared_images_[kMaxPlanes];
+  // Native texture shared image that is only set when the VideoFrame is
+  // created via VideoFrame::WrapSharedImage().
+  scoped_refptr<gpu::ClientSharedImage> shared_image_;
 
   // Shared memory handle, if this frame is STORAGE_SHMEM.  The region pointed
   // to is unowned.

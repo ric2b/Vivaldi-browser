@@ -18,6 +18,7 @@ static_library("drive") {
 
   public_deps = [
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/profiles:profile",
     "//chromeos/ash/components/drivefs",
     "//chromeos/ash/components/drivefs/mojom",
@@ -34,26 +35,11 @@ static_library("drive") {
   deps = [
     "//ash/constants",
     "//chrome/browser:browser_process",
-    "//chrome/browser/ash/app_list/search",
-    "//chrome/browser/ash/arc/fileapi",
-    "//chrome/browser/ash/crosapi",
     "//chrome/browser/ash/crosapi:browser_util",
-    "//chrome/browser/ash/crostini",
-    "//chrome/browser/ash/extensions/file_manager",
-    "//chrome/browser/ash/file_manager",
-    "//chrome/browser/ash/fileapi",
-    "//chrome/browser/ash/guest_os",
-    "//chrome/browser/ash/login",
-    "//chrome/browser/ash/login/session",
-    "//chrome/browser/ash/policy/dlp",
     "//chrome/browser/ash/profiles",
-    "//chrome/browser/ash/system_web_apps/apps",
-    "//chrome/browser/ash/wallpaper",
     "//chrome/browser/chromeos/drivefs",
     "//chrome/browser/chromeos/drivefs:native_message_host_origins",
-    "//chrome/browser/extensions",
     "//chrome/browser/profiles",
-    "//chrome/browser/web_applications",
     "//chrome/common:constants",
     "//chromeos/ash/components/drivefs/mojom:mojom_shared",
     "//chromeos/ash/components/drivefs/mojom:mojom_shared_cpp_sources",
@@ -71,24 +57,6 @@ static_library("drive") {
     "//storage/browser",
     "//ui/base",
     "//ui/chromeos/strings",
-  ]
-
-  allow_circular_includes_from = [
-    "//chrome/browser/ash/app_list/search",
-    "//chrome/browser/ash/arc/fileapi",
-    "//chrome/browser/ash/fileapi",
-    "//chrome/browser/ash/crosapi",
-    "//chrome/browser/ash/crostini",
-    "//chrome/browser/ash/extensions/file_manager",
-    "//chrome/browser/ash/file_manager",
-    "//chrome/browser/ash/guest_os",
-    "//chrome/browser/ash/login",
-    "//chrome/browser/ash/login/session",
-    "//chrome/browser/ash/policy/dlp",
-    "//chrome/browser/ash/system_web_apps/apps",
-    "//chrome/browser/ash/wallpaper",
-    "//chrome/browser/extensions",
-    "//chrome/browser/web_applications",
   ]
 }
 
@@ -113,7 +81,6 @@ static_library("test_support") {
 
   deps = [
     "//base/test:test_support",
-    "//chrome/browser/ash",
     "//chrome/browser/ash/profiles",
     "//chrome/browser/profiles:profile",
     "//chrome/common:constants",
@@ -138,7 +105,6 @@ source_set("browser_tests") {
     "//base",
     "//base/test:test_support",
     "//chrome/browser",
-    "//chrome/browser/ash",
     "//chrome/browser/ash/file_manager",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui",
@@ -167,8 +133,7 @@ source_set("unit_tests") {
     ":drive",
     "//ash/constants",
     "//base",
-    "//chrome/browser/ash",
-    "//chrome/browser/ash:test_support",
+    "//chrome/browser/ash/login/users:test_support",
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",
     "//chromeos/ash/components/login/login_state",

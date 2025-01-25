@@ -13,7 +13,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/app_list/search/app_search_provider.h"
-#include "chrome/browser/ash/app_list/search/app_shortcuts_search_provider.h"
 #include "chrome/browser/ash/app_list/search/app_zero_state_provider.h"
 #include "chrome/browser/ash/app_list/search/arc/arc_app_shortcuts_search_provider.h"
 #include "chrome/browser/ash/app_list/search/arc/arc_playstore_search_provider.h"
@@ -28,7 +27,6 @@
 #include "chrome/browser/ash/app_list/search/help_app_zero_state_provider.h"
 #include "chrome/browser/ash/app_list/search/keyboard_shortcut_provider.h"
 #include "chrome/browser/ash/app_list/search/local_image_search/local_image_search_provider.h"
-#include "chrome/browser/ash/app_list/search/omnibox/omnibox_lacros_provider.h"
 #include "chrome/browser/ash/app_list/search/omnibox/omnibox_provider.h"
 #include "chrome/browser/ash/app_list/search/os_settings_provider.h"
 #include "chrome/browser/ash/app_list/search/personalization_provider.h"
@@ -36,13 +34,11 @@
 #include "chrome/browser/ash/app_list/search/search_features.h"
 #include "chrome/browser/ash/app_list/search/system_info/system_info_card_provider.h"
 #include "chrome/browser/ash/arc/arc_util.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_utils.h"
 #include "chrome/browser/chromeos/launcher_search/search_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/session_manager/core/session_manager.h"
 
@@ -72,16 +68,8 @@ std::unique_ptr<SearchController> CreateSearchController(
       controller->GetAppSearchDataSource()));
   controller->AddProvider(std::make_unique<AppZeroStateProvider>(
       controller->GetAppSearchDataSource()));
-
-  if (crosapi::browser_util::IsLacrosEnabled()) {
-    controller->AddProvider(std::make_unique<OmniboxLacrosProvider>(
-        profile, list_controller,
-        OmniboxLacrosProvider::GetSingletonControllerCallback()));
-  } else {
-    controller->AddProvider(std::make_unique<OmniboxProvider>(
-        profile, list_controller, crosapi::ProviderTypes()));
-  }
-
+  controller->AddProvider(std::make_unique<OmniboxProvider>(
+      profile, list_controller, crosapi::ProviderTypes()));
   controller->AddProvider(std::make_unique<AssistantTextSearchProvider>());
 
   // File search providers are added only when not in guest session and running
@@ -98,10 +86,6 @@ std::unique_ptr<SearchController> CreateSearchController(
     if (search_features::IsLauncherImageSearchEnabled()) {
       controller->AddProvider(
           std::make_unique<LocalImageSearchProvider>(profile));
-    }
-    if (chromeos::features::IsCrosWebAppShortcutUiUpdateEnabled()) {
-      controller->AddProvider(std::make_unique<AppShortcutsSearchProvider>(
-          profile, list_controller));
     }
   }
 

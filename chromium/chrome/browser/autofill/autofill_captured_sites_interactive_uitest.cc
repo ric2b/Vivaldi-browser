@@ -30,6 +30,8 @@
 #include "chrome/browser/autofill/automated_tests/cache_replayer.h"
 #include "chrome/browser/autofill/captured_sites_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
+#include "chrome/browser/ui/autofill/autofill_popup_controller_impl_test_api.h"
 #include "chrome/browser/ui/autofill/autofill_suggestion_controller.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -67,7 +69,6 @@ using captured_sites_test_utils::TestRecipeReplayer;
 using captured_sites_test_utils::WebPageReplayServerWrapper;
 
 namespace autofill {
-
 namespace {
 
 // The timeout for actions like bringing up the Autofill popup or showing the
@@ -158,7 +159,6 @@ class MetricsScraper {
   const base::HistogramTester histogram_tester_;
 };
 
-}  // namespace
 
 class AutofillCapturedSitesInteractiveTest
     : public AutofillUiTest,
@@ -290,6 +290,8 @@ class AutofillCapturedSitesInteractiveTest
     recipe_replayer_ =
         std::make_unique<captured_sites_test_utils::TestRecipeReplayer>(
             browser(), this);
+    profile_controller_ =
+        std::make_unique<captured_sites_test_utils::ProfileDataController>();
 
     SetServerUrlLoader(std::make_unique<test::ServerUrlLoader>(
         std::make_unique<test::ServerCacheReplayer>(
@@ -340,8 +342,6 @@ class AutofillCapturedSitesInteractiveTest
                                {}},
                               {features::test::kAutofillShowTypePredictions,
                                {}},
-                              {features::kAutofillParsingPatternProvider,
-                               {{"prediction_source", "experimental"}}},
                               {features::test::
                                    kAutofillCapturedSiteTestsUseAutofillFlow,
                                {}}},
@@ -349,6 +349,11 @@ class AutofillCapturedSitesInteractiveTest
                                features::kAutofillSkipPreFilledFields});
     command_line->AppendSwitchASCII(
         variations::switches::kVariationsOverrideCountry, "us");
+    // SelectParserRelaxation affects the results from the test data because the
+    // test data may have unclosed <select> tags. Since SelectParserRelaxation
+    // is not enabled by default, we are disabling it for these tests.
+    command_line->AppendSwitchASCII("disable-blink-features",
+                                    "SelectParserRelaxation");
     AutofillUiTest::SetUpCommandLine(command_line);
     SetUpHostResolverRules(command_line);
     captured_sites_test_utils::TestRecipeReplayer::SetUpCommandLine(
@@ -377,7 +382,8 @@ class AutofillCapturedSitesInteractiveTest
       CHECK_NE(client, nullptr);
       if (base::WeakPtr<AutofillSuggestionController> controller =
               client->suggestion_controller_for_testing()) {
-        controller->DisableThresholdForTesting(true);
+        test_api(static_cast<AutofillPopupControllerImpl&>(*controller))
+            .DisableThreshold(true);
       }
     };
     // First, automation should focus on the frame containing the autofill
@@ -470,8 +476,7 @@ class AutofillCapturedSitesInteractiveTest
   std::unique_ptr<captured_sites_test_utils::TestRecipeReplayer>
       recipe_replayer_;
   std::unique_ptr<captured_sites_test_utils::ProfileDataController>
-      profile_controller_ =
-          std::make_unique<captured_sites_test_utils::ProfileDataController>();
+      profile_controller_;
 
   base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<test::ServerUrlLoader> server_url_loader_;
@@ -618,4 +623,5 @@ INSTANTIATE_TEST_SUITE_P(
     testing::ValuesIn(GetCapturedSites(GetReplayFilesRootDirectory())),
     captured_sites_test_utils::GetParamAsString());
 
+}  // namespace
 }  // namespace autofill

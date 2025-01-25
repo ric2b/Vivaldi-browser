@@ -92,12 +92,18 @@ std::string NotSupportedOutputTypeError(std::string_view output_name,
                        SupportedDataTypesString(supported_types)});
 }
 
-std::string GetLabelErrorSuffix(std::string_view label) {
+std::string NotSupportedMLTensorTypeError(OperandDataType type,
+                                          SupportedDataTypes supported_types) {
+  return base::StrCat({"Unsupported data type ", DataTypeToString(type),
+                       " for MLTensor",
+                       SupportedDataTypesString(supported_types)});
+}
+
+std::string GetErrorLabelPrefix(std::string_view label) {
   if (label.empty()) {
     return "";
   }
   return base::StrCat({"[", label, "] "});
-
 }
 
 }  // namespace webnn

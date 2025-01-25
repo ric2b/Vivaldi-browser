@@ -10,6 +10,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/threading/thread_restrictions.h" // VivaldiScopedAllowBlocking
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -89,6 +90,13 @@ std::string VivaldiDataSource::GetMimeType(const GURL& url) {
   // We need to explicitly return a mime type, otherwise if the user tries to
   // drag the image they get no extension.
   // The |path| received here had its first '/' stripped
+
+#if BUILDFLAG(IS_LINUX)
+  // Determining mime-type triggers file access on Linux. We must keep this
+  // synchronous. TODO: Can we avoid it? Original issue VB-109734
+  base::VivaldiScopedAllowBlocking allow_blocking;
+#endif
+
   std::string data;
   std::optional<PathType> type =
       vivaldi_data_url_utils::ParsePath(url.path_piece(), &data);

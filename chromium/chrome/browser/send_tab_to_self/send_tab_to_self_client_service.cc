@@ -20,6 +20,8 @@
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_toolbar_icon_controller.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace send_tab_to_self {
 
 SendTabToSelfClientService::SendTabToSelfClientService(
@@ -51,6 +53,9 @@ void SendTabToSelfClientService::EntriesAddedRemotely(
   for (const std::unique_ptr<ReceivingUiHandler>& handler : GetHandlers()) {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
+    if (vivaldi::IsVivaldiRunning()) {
+      handler->DisplayNewEntries(new_entries);
+    } else {
     // Only respond to notifications corresponding to this service's profile
     // for these OSes; mobile does not have a Profile.
     // Cast note: on desktop, handlers are guaranteed to be the derived class
@@ -64,6 +69,7 @@ void SendTabToSelfClientService::EntriesAddedRemotely(
         static_cast<SendTabToSelfToolbarIconController*>(handler.get());
     if (button_controller && button_controller->profile() == profile_) {
       handler->DisplayNewEntries(new_entries);
+    }
     }
 #else
     handler->DisplayNewEntries(new_entries);

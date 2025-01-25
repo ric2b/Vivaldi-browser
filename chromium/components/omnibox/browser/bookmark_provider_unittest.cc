@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/omnibox/browser/bookmark_provider.h"
 
 #include <stddef.h>
@@ -201,7 +206,7 @@ void BookmarkProviderTest::SetUp() {
       .WillByDefault(testing::ReturnRef(classifier_));
 
   provider_client_->set_template_url_service(
-      search_engines_test_environment_.ReleaseTemplateURLService());
+      search_engines_test_environment_.template_url_service());
 
   ResetProvider();
 

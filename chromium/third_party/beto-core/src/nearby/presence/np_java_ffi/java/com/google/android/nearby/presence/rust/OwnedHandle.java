@@ -16,8 +16,8 @@
 
 package com.google.android.nearby.presence.rust;
 
+import androidx.annotation.GuardedBy;
 import androidx.annotation.Nullable;
-import java.lang.ref.Cleaner;
 
 /**
  * A handle to natively-allocated object with lifetime control. This is a {@code Handle} that also
@@ -25,7 +25,8 @@ import java.lang.ref.Cleaner;
  *
  * <p>Users should call {@link OwnedHandle#close()} when finished with this handle to free the
  * native resources. This can be automatically done when using try-with-resources. If neither are
- * use the handle will still be closed when it is garbage collected.
+ * use the handle will still be freed sometime after this object has been garbage collected by a
+ * subsequent call to {@link OwnedHandle#close()} on another {@code OwnedHandle} instance.
  */
 public abstract class OwnedHandle extends Handle implements AutoCloseable {
 
@@ -34,6 +35,11 @@ public abstract class OwnedHandle extends Handle implements AutoCloseable {
    *
    * <p>This MUST not hold a reference to the {@link OwnedHandle} instance. Do not implement this on
    * your subclass; however, it may be implemented by a method reference to a static method.
+   *
+   * <p>This destructor will be run unless {@link OwnedHandle#leak()} is called. It will be run on
+   * the thread that calls {@link OwnedHandle#close()} if the handle is closed. If neither leak nor
+   * close are called and this handle is garbage collected, then it will be run on an unspecified
+   * thread. See {@link CooperativeCleaner}.
    */
   public interface Destructor {
     void deallocate(long handleId);
@@ -47,6 +53,7 @@ public abstract class OwnedHandle extends Handle implements AutoCloseable {
   }
 
   private final CleanupAction cleanupAction;
+  private final CooperativeCleaner.Registration cleanerRegistration;
 
   /**
    * Create a new instance and register it with the given cleaner.
@@ -55,22 +62,23 @@ public abstract class OwnedHandle extends Handle implements AutoCloseable {
    * @param cleaner The cleaner thread to register with for GC cleanup
    * @param destructor The destructor to run when this handle is closed
    */
-  protected OwnedHandle(long handleId, Cleaner cleaner, Destructor destructor) {
+  protected OwnedHandle(long handleId, CooperativeCleaner cleaner, Destructor destructor) {
     super(handleId);
     this.cleanupAction = new CleanupAction(handleId, destructor);
 
-    cleaner.register(this, this.cleanupAction);
+    cleanerRegistration = cleaner.register(this, this.cleanupAction);
   }
 
   /** Leak this handle. The associated native object will not be deallocated. */
   protected final void leak() {
-    this.cleanupAction.leak();
+    cleanupAction.leak();
+    close();
   }
 
   /** Implement AutoCloseable for try-with-resources support */
   @Override
   public final void close() {
-    this.cleanupAction.cleanupFromCloseable();
+    cleanerRegistration.close();
   }
 
   /**
@@ -79,8 +87,10 @@ public abstract class OwnedHandle extends Handle implements AutoCloseable {
    */
   private static final class CleanupAction implements Runnable {
     private final long handleId;
-    private @Nullable Destructor destructor;
-    private boolean freed = false;
+
+    @GuardedBy("this")
+    @Nullable
+    private Destructor destructor;
 
     public CleanupAction(long handleId, Destructor destructor) {
       this.handleId = handleId;
@@ -89,7 +99,9 @@ public abstract class OwnedHandle extends Handle implements AutoCloseable {
 
     /** Skip performing cleanup and leak the object instead */
     private void leak() {
-      this.destructor = null;
+      synchronized (this) {
+        this.destructor = null;
+      }
     }
 
     /**
@@ -101,29 +113,26 @@ public abstract class OwnedHandle extends Handle implements AutoCloseable {
      * @return {@code true} if the destructor was called.
      */
     private boolean deallocate() {
-      if (this.destructor != null) {
-        this.destructor.deallocate(this.handleId);
-        this.destructor = null;
+      // Take the destructor if present
+      Destructor destructor = null;
+      synchronized (this) {
+        if (this.destructor != null) {
+          destructor = this.destructor;
+          this.destructor = null;
+        }
+      }
+
+      // Run destructor if it was present
+      if (destructor != null) {
+        destructor.deallocate(handleId);
         return true;
       }
       return false;
     }
 
-    /**
-     * Perform the cleanup action. This is separate from {@link #run()} so that we can track if the
-     * handle was manually closed or if it was cleaned up via the {@link Cleaner}.
-     */
-    public void cleanupFromCloseable() {
-      if (!deallocate()) {
-        // FUTURE: log that OwnedHandle#close() was called multiple times.
-      }
-    }
-
     @Override
     public void run() {
-      if (deallocate()) {
-        // FUTURE: log that OwnedHandle#close() was not called.
-      }
+      boolean unused = deallocate();
     }
   }
 }

@@ -266,6 +266,23 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
     bool viewport_cannot_scroll = false;
   };
 
+  // ViewportScrollResult records, for a scroll gesture affecting a page's
+  // viewport:
+  // - the amount from the scroll gesture's delta that actually resulted in
+  //   scrolling: |consumed_delta|,
+  // - the amount from the scroll gesture's delta that applied to the content of
+  //   the page, i.e. excluding movement of browser controls.
+  // - the distribution of the scroll gesture's delta between the inner and
+  //   outer viewports, {inner,outer}_viewport_consumed_delta_
+  // TODO(tdresser): eventually |consumed_delta| should equal
+  // |content_scrolled_delta|. See crbug.com/510045 for details.
+  struct ViewportScrollResult {
+    gfx::Vector2dF consumed_delta;
+    gfx::Vector2dF content_scrolled_delta;
+    gfx::Vector2dF outer_viewport_scrolled_delta;
+    gfx::Vector2dF inner_viewport_scrolled_delta;
+  };
+
   enum class TouchStartOrMoveEventListenerType {
     kNoHandler,
     kHandler,
@@ -309,7 +326,7 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
   // taken into account when determining the duration of the animation if one
   // is created.
   virtual InputHandlerScrollResult ScrollUpdate(
-      ScrollState* scroll_state,
+      ScrollState scroll_state,
       base::TimeDelta delayed_by = base::TimeDelta());
 
   // Stop scrolling the selected layer. Must be called only if ScrollBegin()
@@ -502,6 +519,10 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
     return snap_strategy_;
   }
 
+  // Detects whether or not the scroll generating the |result| affected the
+  // inner or outer viewports.
+  void SetViewportConsumedDelta(const ViewportScrollResult& result);
+
   // =========== InputDelegateForCompositor Interface - This section implements
   // the interface that LayerTreeHostImpl uses to communicate with the input
   // system.
@@ -580,7 +601,7 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
 
   // Applies the scroll_state to the currently latched scroller. See comment in
   // InputHandler::ScrollUpdate declaration for the meaning of |delayed_by|.
-  void ScrollLatchedScroller(ScrollState* scroll_state,
+  void ScrollLatchedScroller(ScrollState& scroll_state,
                              base::TimeDelta delayed_by);
 
   enum class SnapReason { kGestureScrollEnd, kScrollOffsetAnimationFinished };
@@ -667,7 +688,7 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
   gfx::Vector2dF UserScrollableDelta(const ScrollNode& node,
                                      const gfx::Vector2dF& delta) const;
 
-  void AdjustScrollDeltaForScrollbarSnap(ScrollState* scroll_state);
+  void AdjustScrollDeltaForScrollbarSnap(ScrollState& scroll_state);
 
   FrameSequenceTrackerType GetTrackerTypeForScroll(
       ui::ScrollInputType input_type) const;

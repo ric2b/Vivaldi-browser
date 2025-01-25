@@ -10,6 +10,7 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_helpers.h"
+#include "base/i18n/message_formatter.h"
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -20,7 +21,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/extensions/extension_icon_manager.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
 #include "chrome/browser/extensions/extension_install_prompt_test_helper.h"
@@ -40,6 +40,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/browser/extension_icon_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/test_extension_registry_observer.h"
@@ -51,6 +52,7 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/scroll_view.h"
@@ -126,8 +128,8 @@ ExtensionInstallDialogViewTestBase::CreatePrompt(
       new ExtensionInstallPrompt::Prompt(prompt_type));
   prompt->set_extension(extension);
 
-  std::unique_ptr<ExtensionIconManager> icon_manager(
-      new ExtensionIconManager());
+  std::unique_ptr<extensions::ExtensionIconManager> icon_manager(
+      new extensions::ExtensionIconManager());
   prompt->set_icon(icon_manager->GetIcon(extension->id()));
 
   return prompt;
@@ -310,13 +312,16 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewTest, InstallButtonDelay) {
   EXPECT_TRUE(delegate_view->GetVisible());
 
   // Check initial button states.
-  EXPECT_FALSE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
-  EXPECT_TRUE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_CANCEL));
+  EXPECT_FALSE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
+  EXPECT_TRUE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kCancel));
   EXPECT_TRUE(delegate_view->GetInitiallyFocusedView()->HasFocus());
 
   // Check OK button state after timeout to verify that it is re-enabled.
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  EXPECT_TRUE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
 
   // Ensure default button (cancel) has focus.
   EXPECT_TRUE(delegate_view->GetInitiallyFocusedView()->HasFocus());
@@ -378,7 +383,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewTest,
         // simplicity's sake as this test doesn't serve webstore url and
         // the url doesn't commit.
         const GURL& url = contents.contents->GetVisibleURL();
-        if (url.host() == extension_urls::GetWebstoreLaunchURL().host()) {
+        if (url.host() == extension_urls::GetNewWebstoreLaunchURL().host()) {
           run_loop_.Quit();
           return;
         }
@@ -706,6 +711,18 @@ void ExtensionInstallDialogRatingsSectionTest::TestRatingsSectionA11y(
     EXPECT_EQ(ax::mojom::Role::kStaticText, node_data.role);
     EXPECT_EQ(expected_text,
               node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+
+    if (num_ratings == 0) {
+      EXPECT_EQ(rating_view->GetViewAccessibility().GetCachedName(),
+                l10n_util::GetStringUTF16(
+                    IDS_EXTENSION_PROMPT_NO_RATINGS_ACCESSIBLE_TEXT));
+    } else {
+      EXPECT_EQ(rating_view->GetViewAccessibility().GetCachedName(),
+                base::i18n::MessageFormatter::FormatWithNumberedArgs(
+                    l10n_util::GetStringUTF16(
+                        IDS_EXTENSION_PROMPT_RATING_ACCESSIBLE_TEXT),
+                    average_rating, num_ratings));
+    }
   }
 
   for (views::View* child : rating_view->children()) {
@@ -864,12 +881,15 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewRequestTest,
   EXPECT_TRUE(delegate_view->IsJustificationFieldVisibleForTesting());
 
   // Check initial button states.
-  EXPECT_FALSE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
-  EXPECT_TRUE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_CANCEL));
+  EXPECT_FALSE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
+  EXPECT_TRUE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kCancel));
 
   // Check OK button state after timeout to verify that it is re-enabled.
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  EXPECT_TRUE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
 
   CloseAndWait(delegate_view->GetWidget());
 }
@@ -889,7 +909,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewRequestTest,
 
   // Check OK button state after timeout to verify that it is re-enabled.
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  EXPECT_TRUE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
 
   // Add long justification and verify that OK button is disabled.
   delegate_view->SetJustificationTextForTesting(
@@ -899,11 +920,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewRequestTest,
       u"really, really, really, really, really, really, really, really, "
       u"really, really, really, really, really need this extension. Pretty "
       u"please!");
-  EXPECT_FALSE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  EXPECT_FALSE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
 
   // Add short justificastion and verify that OK button is enabled.
   delegate_view->SetJustificationTextForTesting(u"I need it now.");
-  EXPECT_TRUE(delegate_view->IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  EXPECT_TRUE(
+      delegate_view->IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
 
   CloseAndWait(delegate_view->GetWidget());
 }

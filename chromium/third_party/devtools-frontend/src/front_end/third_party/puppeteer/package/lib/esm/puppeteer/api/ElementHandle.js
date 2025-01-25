@@ -375,7 +375,7 @@ let ElementHandle = (() => {
          *
          * @param selector -
          * {@link https://pptr.dev/guides/page-interactions#selectors | selector}
-         * to query page for.
+         * to query the page for.
          * {@link https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors | CSS selectors}
          * can be passed as-is and a
          * {@link https://pptr.dev/guides/page-interactions#non-css-selectors | Puppeteer-specific selector syntax}
@@ -400,7 +400,7 @@ let ElementHandle = (() => {
          *
          * @param selector -
          * {@link https://pptr.dev/guides/page-interactions#selectors | selector}
-         * to query page for.
+         * to query the page for.
          * {@link https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors | CSS selectors}
          * can be passed as-is and a
          * {@link https://pptr.dev/guides/page-interactions#non-css-selectors | Puppeteer-specific selector syntax}
@@ -458,7 +458,7 @@ let ElementHandle = (() => {
          *
          * @param selector -
          * {@link https://pptr.dev/guides/page-interactions#selectors | selector}
-         * to query page for.
+         * to query the page for.
          * {@link https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors | CSS selectors}
          * can be passed as-is and a
          * {@link https://pptr.dev/guides/page-interactions#non-css-selectors | Puppeteer-specific selector syntax}
@@ -523,7 +523,7 @@ let ElementHandle = (() => {
          *
          * @param selector -
          * {@link https://pptr.dev/guides/page-interactions#selectors | selector}
-         * to query page for.
+         * to query the page for.
          * {@link https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_Selectors | CSS selectors}
          * can be passed as-is and a
          * {@link https://pptr.dev/guides/page-interactions#non-css-selectors | Puppeteer-specific selector syntax}
@@ -1092,8 +1092,8 @@ let ElementHandle = (() => {
                 const border = [
                     { x: rect.left, y: rect.top },
                     { x: rect.left + rect.width, y: rect.top },
-                    { x: rect.left + rect.width, y: rect.top + rect.bottom },
-                    { x: rect.left, y: rect.top + rect.bottom },
+                    { x: rect.left + rect.width, y: rect.top + rect.height },
+                    { x: rect.left, y: rect.top + rect.height },
                 ];
                 const padding = transformQuadWithOffsets(border, offsets.border);
                 const content = transformQuadWithOffsets(padding, offsets.padding);

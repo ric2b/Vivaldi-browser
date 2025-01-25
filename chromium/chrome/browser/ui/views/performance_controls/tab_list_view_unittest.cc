@@ -18,6 +18,7 @@
 #include "ui/events/event.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/types/event_type.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/view.h"
@@ -161,7 +162,7 @@ TEST_F(TabListViewUnitTest, CloseButtonShowsAndHidesUpdate) {
   EXPECT_FALSE(close_button->GetVisible());
   EXPECT_TRUE(second_close_button->GetVisible());
 
-  ui::MouseEvent e(ui::kMousePressed, gfx::Point(), gfx::Point(),
+  ui::MouseEvent e(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
                    ui::EventTimeForNow(), 0, 0);
   views::test::ButtonTestApi test_api(second_close_button);
   test_api.NotifyClick(e);
@@ -220,9 +221,31 @@ TEST_F(TabListViewUnitTest, CloseButtonShowsAndHidesWithFocus) {
   // Remove the second row from the suggested tab list. The close button for the
   // first row should be hidden at this point because there is only one row left
   // in the list and a single item in the list is not removable.
-  ui::MouseEvent e(ui::kMousePressed, gfx::Point(), gfx::Point(),
+  ui::MouseEvent e(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
                    ui::EventTimeForNow(), 0, 0);
   views::test::ButtonTestApi test_api(second_close_button);
   test_api.NotifyClick(e);
   EXPECT_FALSE(close_button->GetVisible());
+}
+
+TEST_F(TabListViewUnitTest, AccessibleProperties) {
+  AddTab(browser(), GURL("https://a.com"));
+
+  // TabListView accessible properties test.
+  auto tab_list_model =
+      std::make_unique<TabListModel>(GetPageContextAtIndices({0}));
+  auto tab_list_view = std::make_unique<TabListView>(tab_list_model.get());
+  ui::AXNodeData data;
+
+  tab_list_view->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.role, ax::mojom::Role::kListBox);
+
+  // TabListRowView text container accessible properties test.
+  TabListRowView* const row =
+      views::AsViewClass<TabListRowView>(tab_list_view->children()[0]);
+  auto* const text_container = row->GetTextContainerForTesting();
+
+  data = ui::AXNodeData();
+  text_container->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.role, ax::mojom::Role::kListBoxOption);
 }

@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/views/mahi/mahi_condensed_menu_view.h"
 #include "chrome/browser/ui/views/mahi/mahi_menu_constants.h"
 #include "chrome/browser/ui/views/mahi/mahi_menu_view.h"
+#include "chromeos/components/magic_boost/public/cpp/magic_boost_state.h"
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
 #include "chromeos/components/mahi/public/cpp/mahi_switches.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -47,6 +48,16 @@ void MahiMenuController::OnTextAvailable(const gfx::Rect& anchor_bounds,
       !::mahi::MahiWebContentsManager::Get()->GetPrefValue()) {
     return;
   }
+
+  // TODO(b:356035887): `MahiManager::Get()->IsEnabled()` is the source of truth
+  // because it checks flag & prefs, as well as age & country restrictions. But
+  // it is not accessible from lacros. Let's remove the macros and the checks
+  // above when the lacros support is removed.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (!MahiManager::Get() || !MahiManager::Get()->IsEnabled()) {
+    return;
+  }
+#endif
 
   // Only shows mahi menu for distillable pages or when the switch
   // `kUseFakeMahiManager` is enabled.
@@ -91,13 +102,17 @@ void MahiMenuController::OnPdfContextMenuShown(const gfx::Rect& anchor) {
     return;
   }
 
+  if (!MagicBoostState::Get()->ShouldShowHmrCard()) {
+    return;
+  }
+
   menu_widget_ =
       MahiMenuView::CreateWidget(anchor, MahiMenuView::Surface::kMediaApp);
   menu_widget_->ShowInactive();
 }
 
 void MahiMenuController::OnPdfContextMenuHide() {
-  OnDismiss(false);
+  OnDismiss(/*is_other_command_executed=*/false);
 }
 
 bool MahiMenuController::IsFocusedPageDistillable() {

@@ -60,8 +60,6 @@ bool FindBadConstructsAction::ParseArgs(const CompilerInstance& instance,
     if (arg.starts_with(kExcludeFieldsArgPrefix)) {
       options_.exclude_fields_file =
           arg.substr(strlen(kExcludeFieldsArgPrefix)).str();
-    } else if (arg == "check-allow-auto-typedefs-better-nested") {
-      // This flag to be removed once clang rolls.
     } else if (arg == "check-base-classes") {
       // TODO(rsleevi): Remove this once http://crbug.com/123295 is fixed.
       options_.check_base_classes = true;
@@ -73,6 +71,8 @@ bool FindBadConstructsAction::ParseArgs(const CompilerInstance& instance,
       options_.check_layout_object_methods = true;
     } else if (arg == "raw-ref-template-as-trivial-member") {
       options_.raw_ref_template_as_trivial_member = true;
+    } else if (arg == "raw-span-template-as-trivial-member") {
+      options_.raw_span_template_as_trivial_member = true;
     } else if (arg == "check-stack-allocated") {
       options_.check_stack_allocated = true;
     } else if (arg == "check-ptrs-to-non-string-literals") {

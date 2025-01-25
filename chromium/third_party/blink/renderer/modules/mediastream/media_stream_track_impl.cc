@@ -93,6 +93,7 @@ bool ConstraintSetHasImageCapture(
          constraint_set->hasFocusDistance() || constraint_set->hasPan() ||
          constraint_set->hasTilt() || constraint_set->hasZoom() ||
          constraint_set->hasTorch() || constraint_set->hasBackgroundBlur() ||
+         constraint_set->hasBackgroundSegmentationMask() ||
          constraint_set->hasEyeGazeCorrection() ||
          constraint_set->hasFaceFraming();
 }
@@ -939,25 +940,6 @@ void MediaStreamTrackImpl::PropagateTrackEnded() {
   }
   is_iterating_registered_media_streams_ = false;
 }
-
-#if !BUILDFLAG(IS_ANDROID)
-void MediaStreamTrackImpl::SendWheel(
-    double relative_x,
-    double relative_y,
-    int wheel_delta_x,
-    int wheel_delta_y,
-    base::OnceCallback<void(DOMException*)> callback) {
-  std::move(callback).Run(MakeGarbageCollected<DOMException>(
-      DOMExceptionCode::kNotSupportedError, "Unsupported."));
-}
-
-void MediaStreamTrackImpl::SetZoomLevel(
-    int zoom_level,
-    base::OnceCallback<void(DOMException*)> callback) {
-  std::move(callback).Run(MakeGarbageCollected<DOMException>(
-      DOMExceptionCode::kNotSupportedError, "Unsupported."));
-}
-#endif
 
 bool MediaStreamTrackImpl::HasPendingActivity() const {
   // If 'ended' listeners exist and the object hasn't yet reached

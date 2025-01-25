@@ -17,8 +17,10 @@
 #include "base/types/cxx23_to_underlying.h"
 #include "base/types/strong_alias.h"
 #include "build/build_config.h"
+#include "components/autofill/core/browser/field_filling_skip_reason.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/ui/suggestion_type.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
@@ -27,9 +29,12 @@ namespace autofill {
 
 struct Suggestion {
   struct PasswordSuggestionDetails {
-    friend bool operator==(const PasswordSuggestionDetails&,
-                           const PasswordSuggestionDetails&) = default;
+    std::u16string username;
     std::u16string password;
+    // The signon realm of the password. Unlike the `display_signon_realm`, it
+    // is not necessarily user friendly/readable, but rather has the raw
+    // `PasswordForm::signon_realm` value.
+    std::string signon_realm;
     // Stores either the password signon realm or the Android app name for which
     // the password was saved.
     std::u16string display_signon_realm;
@@ -37,7 +42,67 @@ struct Suggestion {
     // represent exact, strongly affiliated, PSL and weakly affiliated matches
     // for the domain the suggestions are shown for. All other suggestions have
     // this flag set to `true`.
-    bool is_cross_domain;
+    bool is_cross_domain = false;
+
+    PasswordSuggestionDetails();
+    PasswordSuggestionDetails(std::u16string_view username,
+                              std::u16string_view password,
+                              std::string_view signon_realm,
+                              std::u16string_view display_signon_realm,
+                              bool is_cross_domain);
+    PasswordSuggestionDetails(const PasswordSuggestionDetails&);
+    PasswordSuggestionDetails(PasswordSuggestionDetails&);
+    PasswordSuggestionDetails& operator=(const PasswordSuggestionDetails&);
+    PasswordSuggestionDetails& operator=(PasswordSuggestionDetails&&);
+    virtual ~PasswordSuggestionDetails();
+
+    friend bool operator==(const PasswordSuggestionDetails&,
+                           const PasswordSuggestionDetails&) = default;
+  };
+
+  struct PlusAddressPayload final {
+    PlusAddressPayload();
+    explicit PlusAddressPayload(std::optional<std::u16string> address);
+    PlusAddressPayload(const PlusAddressPayload&);
+    PlusAddressPayload(PlusAddressPayload&&);
+    PlusAddressPayload& operator=(const PlusAddressPayload&);
+    PlusAddressPayload& operator=(PlusAddressPayload&&);
+    ~PlusAddressPayload();
+
+    friend bool operator==(const PlusAddressPayload&,
+                           const PlusAddressPayload&) = default;
+
+    // The proposed plus address string. If it is `nullopt`, then it is
+    // currently loading and nothing is previewed.
+    std::optional<std::u16string> address;
+    // Whether the suggestion should display a refresh button.
+    bool offer_refresh = true;
+  };
+
+  struct PredictionImprovementsPayload final {
+    PredictionImprovementsPayload();
+    PredictionImprovementsPayload(
+        const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill,
+        const FieldTypeSet& field_types_to_fill,
+        const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons);
+    PredictionImprovementsPayload(const PredictionImprovementsPayload&);
+    PredictionImprovementsPayload(PredictionImprovementsPayload&&);
+    PredictionImprovementsPayload& operator=(
+        const PredictionImprovementsPayload&);
+    PredictionImprovementsPayload& operator=(PredictionImprovementsPayload&&);
+    ~PredictionImprovementsPayload();
+
+    friend bool operator==(const PredictionImprovementsPayload&,
+                           const PredictionImprovementsPayload&) = default;
+
+    // Values to be filled into fields with corresponding ids.
+    base::flat_map<FieldGlobalId, std::u16string> values_to_fill;
+    // Field types to be filled. Fields not matching a type in the set will be
+    // skipped during filling.
+    FieldTypeSet field_types_to_fill;
+    // Autofill skip reasons that need to be ignored for filling improved
+    // predictions.
+    DenseSet<FieldFillingSkipReason> ignorable_skip_reasons;
   };
 
   using IsLoading = base::StrongAlias<class IsLoadingTag, bool>;
@@ -45,8 +110,12 @@ struct Suggestion {
   using InstrumentId = base::StrongAlias<class InstrumentIdTag, uint64_t>;
   using BackendId = absl::variant<Guid, InstrumentId>;
   using ValueToFill = base::StrongAlias<struct ValueToFill, std::u16string>;
-  using Payload =
-      absl::variant<BackendId, GURL, ValueToFill, PasswordSuggestionDetails>;
+  using Payload = absl::variant<BackendId,
+                                GURL,
+                                ValueToFill,
+                                PasswordSuggestionDetails,
+                                PlusAddressPayload,
+                                PredictionImprovementsPayload>;
 
   // This struct is used to provide password suggestions with custom icons,
   // using the favicon of the website associated with the credentials. While
@@ -108,6 +177,7 @@ struct Suggestion {
     kEdit,
     kEmail,
     kEmpty,
+    kError,
     kGlobe,
     kGoogle,
     kGoogleMonochrome,
@@ -140,6 +210,25 @@ struct Suggestion {
     kCardVerve,
     kCardVisa,
     kIban,
+  };
+
+  // This enum is used to control filtration of suggestions (see it's used in
+  // the `PopupViewViews` search bar and `AutofillPopupControllerImpl` where
+  // the logic is implemented) by explicitly marking special suggestions at
+  // creation.
+  enum class FiltrationPolicy {
+    // Suggestions, that are normally filtered. The match is highlighted on
+    // the UI and those that don't match are removed from the list.
+    kFilterable,
+
+    // Suggestions, that are excluded from filtration by always disappearing
+    // from the list as soon as any filter is applied (in other words, these
+    // suggestion don't match any filter except the empty one).
+    kPresentOnlyWithoutFilter,
+
+    // Suggestions, that are excluded from filtration by always staying in
+    // in the list (basically, these suggestions ignore filter).
+    kStatic,
   };
 
   // TODO(crbug.com/335194240): Consolidate expected param types for these
@@ -188,6 +277,9 @@ struct Suggestion {
 #if DCHECK_IS_ON()
   bool Invariant() const {
     switch (type) {
+      case SuggestionType::kCreateNewPlusAddressInline:
+      case SuggestionType::kPlusAddressError:
+        return absl::holds_alternative<PlusAddressPayload>(payload);
       case SuggestionType::kPasswordEntry:
         // Manual fallback password suggestions store the password to preview or
         // fill in the suggestion's payload. Regular per-domain contain empty
@@ -197,12 +289,16 @@ struct Suggestion {
         return absl::holds_alternative<BackendId>(payload) ||
                absl::holds_alternative<PasswordSuggestionDetails>(payload);
       case SuggestionType::kFillPassword:
+      case SuggestionType::kViewPasswordDetails:
         return absl::holds_alternative<PasswordSuggestionDetails>(payload);
       case SuggestionType::kSeePromoCodeDetails:
         return absl::holds_alternative<GURL>(payload);
       case SuggestionType::kIbanEntry:
         return absl::holds_alternative<ValueToFill>(payload) ||
                absl::holds_alternative<BackendId>(payload);
+      case SuggestionType::kFillPredictionImprovements:
+        return absl::holds_alternative<ValueToFill>(payload) ||
+               absl::holds_alternative<PredictionImprovementsPayload>(payload);
       default:
         return absl::holds_alternative<BackendId>(payload);
     }
@@ -296,10 +392,27 @@ struct Suggestion {
   // accept it by clicking on it.
   bool is_acceptable = true;
 
+  // How the suggestion should be handled by the filtration logic, see the enum
+  // values doc for details.
+  // Now used for filtering manually triggered password suggestions only and
+  // has no effect on other suggestions.
+  FiltrationPolicy filtration_policy = FiltrationPolicy::kFilterable;
+
   // If true, the user will see the suggestion in a "disabled and grayed-out"
   // form. This field should be true only when `is_acceptable` is false  which
   // will make the suggestion deactivated and unclickable.
   bool apply_deactivated_style = false;
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  // If true, selecting a suggestion or, when it exists, expanding its
+  // sub-popup, highlights the background of the suggestion row and its
+  // contained cells.
+  bool highlight_on_select = true;
+#endif
+
+  // If true, the user will be presented with the terms message alongside the
+  // suggestions.
+  bool should_display_terms_available = false;
 };
 
 std::string_view ConvertIconToPrintableString(Suggestion::Icon icon);

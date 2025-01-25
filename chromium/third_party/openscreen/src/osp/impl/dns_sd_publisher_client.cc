@@ -26,7 +26,8 @@ discovery::DnsSdInstance ServiceConfigToDnsSdInstance(
   discovery::DnsSdTxtRecord txt;
   const bool did_set_everything =
       txt.SetValue(kFriendlyNameTxtKey, config.friendly_name).ok() &&
-      txt.SetValue(kFingerprint, config.fingerprint).ok();
+      txt.SetValue(kFingerprint, config.fingerprint).ok() &&
+      txt.SetValue(kAuthToken, config.auth_token).ok();
   OSP_CHECK(did_set_everything);
 
   return discovery::DnsSdInstance(config.instance_name, kOpenScreenServiceName,

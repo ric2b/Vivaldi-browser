@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ash/arc/input_overlay/ui/action_label.h"
 
 #include <set>
@@ -286,8 +291,8 @@ void ActionLabel::Init() {
   SetRequestFocusOnPress(true);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, kSideInset)));
-  GetViewAccessibility().SetProperties(ax::mojom::Role::kLabelText,
-                                       CalculateAccessibleName());
+  GetViewAccessibility().SetRole(ax::mojom::Role::kLabelText);
+  GetViewAccessibility().SetName(CalculateAccessibleName());
 }
 
 ActionLabel::ActionLabel(MouseAction mouse_action)

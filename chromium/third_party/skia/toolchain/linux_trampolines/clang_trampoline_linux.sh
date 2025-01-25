@@ -8,7 +8,7 @@ export LD_LIBRARY_PATH="external/clang_linux_amd64/usr/lib/x86_64-linux-gnu"
 
 set -euo pipefail
 
-if [[ "$@" == *DSKIA_SKIP_LINKING* ]]; then
+if [[ "$@" == *SKIA_SKIP_LINKING* ]]; then
   # The output executable binary file is listed as the second argument to this script, and we must
   # make sure it exists or Bazel will fail a validation step.
   touch $2
@@ -37,22 +37,14 @@ supported_files_or_dirs=(
   "modules/sksg/"
   "modules/skshaper/"
   "modules/skunicode/"
+  "modules/svg/"
   "src/base/"
   "src/codec/"
   "src/core/"
   "src/effects/"
   "src/encode/"
-  "src/gpu/ganesh/effects/"
-  "src/gpu/ganesh/gen/"
-  "src/gpu/ganesh/geometry/"
-  "src/gpu/ganesh/gl/"
-  "src/gpu/ganesh/glsl/"
-  "src/gpu/ganesh/gradients/"
-  "src/gpu/ganesh/image/"
-  "src/gpu/ganesh/mock/"
-  "src/gpu/ganesh/surface/"
-  "src/gpu/ganesh/tessellate/"
-  "src/gpu/ganesh/text/"
+  "src/gpu/ganesh/"
+  "src/gpu/graphite/geom/"
   "src/gpu/tessellate/"
   "src/gpu/gen/"
   "src/gpu/vk/"
@@ -81,17 +73,6 @@ supported_files_or_dirs=(
   "src/gpu/R"
   "src/gpu/S"
   "src/gpu/MutableTextureState.cpp"
-  "src/gpu/ganesh/C"
-  "src/gpu/ganesh/D"
-  "src/gpu/ganesh/G"
-  "src/gpu/ganesh/P"
-  "src/gpu/ganesh/S"
-  "src/gpu/ganesh/T"
-  "src/gpu/ganesh/ops/AtlasInstancedHelper.cpp"
-  "src/gpu/ganesh/ops/AtlasTextOp.cpp"
-  "src/gpu/ganesh/ops/DrawAtlasPathOp.cpp"
-  "src/gpu/ganesh/vk/GrVkContextThread"
-  "src/gpu/ganesh/vk/GrVkDirectContext.cpp"
   "tools/DecodeUtils.cpp"
   "tools/EncodeUtils.cpp"
   "tools/GpuToolUtils.cpp"

@@ -16,20 +16,17 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
 #include "include/core/SkPoint.h"
-#include "include/core/SkRRect.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkStrokeRec.h"
 #include "include/core/SkSurfaceProps.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkDashPathEffect.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkOnce.h"
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTLogic.h"
 #include "include/private/base/SkTo.h"
-#include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkZip.h"
 #include "src/core/SkDevice.h"
 #include "src/core/SkDistanceFieldGen.h"
@@ -39,7 +36,6 @@
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMatrixPriv.h"
-#include "src/core/SkPaintPriv.h"
 #include "src/core/SkReadBuffer.h"
 #include "src/core/SkScalerContext.h"
 #include "src/core/SkStrike.h"
@@ -52,8 +48,8 @@
 #include "src/text/gpu/Glyph.h"
 #include "src/text/gpu/GlyphVector.h"
 #include "src/text/gpu/SDFMaskFilter.h"
-#include "src/text/gpu/SDFTControl.h"
 #include "src/text/gpu/SubRunAllocator.h"
+#include "src/text/gpu/SubRunControl.h"
 #include "src/text/gpu/VertexFiller.h"
 
 #include <algorithm>
@@ -64,9 +60,11 @@
 #include <optional>
 #include <vector>
 
-class GrRecordingContext;
-
 #if defined(SK_GANESH) || defined(SK_USE_LEGACY_GANESH_TEXT_APIS)
+#include "include/core/SkRRect.h"
+#include "include/private/SkColorData.h"
+#include "include/private/gpu/ganesh/GrTypesPriv.h"
+#include "src/core/SkPaintPriv.h"
 #include "src/gpu/ganesh/GrClip.h"
 #include "src/gpu/ganesh/GrColorInfo.h"
 #include "src/gpu/ganesh/GrFragmentProcessor.h"
@@ -75,6 +73,9 @@ class GrRecordingContext;
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
 #include "src/gpu/ganesh/effects/GrDistanceFieldGeoProc.h"
 #include "src/gpu/ganesh/ops/AtlasTextOp.h"
+
+class GrRecordingContext;
+
 using AtlasTextOp = skgpu::ganesh::AtlasTextOp;
 #endif  // defined(SK_GANESH) || defined(SK_USE_LEGACY_GANESH_TEXT_APIS)
 
@@ -1637,7 +1638,7 @@ std::tuple<SkZip<const SkGlyphID, const SkPoint>, SkZip<SkGlyphID, SkPoint>>
 static std::tuple<SkStrikeSpec, SkScalar, sktext::gpu::SDFTMatrixRange>
 make_sdft_strike_spec(const SkFont& font, const SkPaint& paint,
                       const SkSurfaceProps& surfaceProps, const SkMatrix& deviceMatrix,
-                      const SkPoint& textLocation, const sktext::gpu::SDFTControl& control) {
+                      const SkPoint& textLocation, const sktext::gpu::SubRunControl& control) {
     // Add filter to the paint which creates the SDFT data for A8 masks.
     SkPaint dfPaint{paint};
     dfPaint.setMaskFilter(sktext::gpu::SDFMaskFilter::Make());
@@ -1689,19 +1690,19 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
         SubRunCreationBehavior creationBehavior,
         const char* tag) {
     SkASSERT(alloc != nullptr);
-    SkASSERT(strikeDeviceInfo.fSDFTControl != nullptr);
+    SkASSERT(strikeDeviceInfo.fSubRunControl != nullptr);
 
     SubRunContainerOwner container = alloc->makeUnique<SubRunContainer>(positionMatrix);
-    // If there is no SDFT description ignore all SubRuns.
-    if (strikeDeviceInfo.fSDFTControl == nullptr) {
+    // If there is no SubRunControl description ignore all SubRuns.
+    if (strikeDeviceInfo.fSubRunControl == nullptr) {
         return container;
     }
 
     const SkSurfaceProps deviceProps = strikeDeviceInfo.fSurfaceProps;
     const SkScalerContextFlags scalerContextFlags = strikeDeviceInfo.fScalerContextFlags;
+    const SubRunControl* subRunControl = strikeDeviceInfo.fSubRunControl;
 #if !defined(SK_DISABLE_SDF_TEXT)
-    const SDFTControl SDFTControl = *strikeDeviceInfo.fSDFTControl;
-    const SkScalar maxMaskSize = SDFTControl.maxSize();
+    const SkScalar maxMaskSize = subRunControl->maxSize();
 #else
     const SkScalar maxMaskSize = 256;
 #endif
@@ -1747,12 +1748,12 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
 
 #if !defined(SK_DISABLE_SDF_TEXT)
             // SDFT case
-            if (SDFTControl.isSDFT(approximateDeviceTextSize, runPaint, positionMatrix)) {
+            if (subRunControl->isSDFT(approximateDeviceTextSize, runPaint, positionMatrix)) {
                 // Process SDFT - This should be the .009% case.
                 const auto& [strikeSpec, strikeToSourceScale, matrixRange] =
                         make_sdft_strike_spec(
                                 runFont, runPaint, deviceProps, positionMatrix,
-                                glyphRunListLocation, SDFTControl);
+                                glyphRunListLocation, *subRunControl);
 
                 if (!SkScalarNearlyZero(strikeToSourceScale)) {
                     sk_sp<StrikeForGPU> strike = strikeSpec.findOrCreateScopedStrike(strikeCache);
@@ -1864,9 +1865,11 @@ SubRunContainerOwner SubRunContainer::MakeInAlloc(
                 source = rejected;
 
                 if (creationBehavior == kAddSubRuns && !accepted.empty()) {
+                    const bool isAntiAliased =
+                            subRunControl->forcePathAA() || has_some_antialiasing(runFont);
                     container->fSubRuns.append(
                             PathSubRun::Make(accepted,
-                                             has_some_antialiasing(runFont),
+                                             isAntiAliased,
                                              strikeToSourceScale,
                                              strike->strikePromise(),
                                              alloc));

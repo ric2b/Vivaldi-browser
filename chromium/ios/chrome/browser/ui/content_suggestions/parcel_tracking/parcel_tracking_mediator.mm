@@ -10,17 +10,19 @@
 #import "components/commerce/core/shopping_service.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
+#import "ios/chrome/browser/ntp/shared/metrics/home_metrics.h"
+#import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_actions_delegate.h"
 #import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/parcel_tracking/metrics.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_prefs.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_util.h"
 #import "ios/chrome/browser/parcel_tracking/tracking_source.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/parcel_tracking/parcel_tracking_item.h"
-#import "ios/chrome/browser/ui/ntp/metrics/home_metrics.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_metrics_delegate.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 
@@ -31,26 +33,36 @@
   raw_ptr<commerce::ShoppingService> _shoppingService;
   NSArray<ParcelTrackingItem*>* _parcelTrackingItems;
   UrlLoadingBrowserAgent* _URLLoadingBrowserAgent;
-  raw_ptr<PrefService> _localState;
+  raw_ptr<PrefService> _prefService;
   // Bridge to listen to pref changes.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
   PrefChangeRegistrar _prefChangeRegistrar;
+  base::CancelableOnceCallback<commerce::GetParcelStatusCallback::RunType>
+      _parcelFetchTimeoutClosure;
 }
 
 - (instancetype)
     initWithShoppingService:(commerce::ShoppingService*)shoppingService
-     URLLoadingBrowserAgent:(UrlLoadingBrowserAgent*)URLLoadingBrowserAgent {
+     URLLoadingBrowserAgent:(UrlLoadingBrowserAgent*)URLLoadingBrowserAgent
+                prefService:(PrefService*)prefService {
   self = [super init];
   if (self) {
     _shoppingService = shoppingService;
     _URLLoadingBrowserAgent = URLLoadingBrowserAgent;
 
-    _localState = GetApplicationContext()->GetLocalState();
+    _prefService = prefService;
     _prefObserverBridge = std::make_unique<PrefObserverBridge>(self);
-    _prefChangeRegistrar.Init(_localState);
-    _prefObserverBridge->ObserveChangesForPreference(kParcelTrackingDisabled,
-                                                     &_prefChangeRegistrar);
+    _prefChangeRegistrar.Init(_prefService);
+
+    if (IsHomeCustomizationEnabled()) {
+      _prefObserverBridge->ObserveChangesForPreference(
+          prefs::kHomeCustomizationMagicStackParcelTrackingEnabled,
+          &_prefChangeRegistrar);
+    } else {
+      _prefObserverBridge->ObserveChangesForPreference(kParcelTrackingDisabled,
+                                                       &_prefChangeRegistrar);
+    }
   }
   return self;
 }
@@ -61,15 +73,26 @@
   _delegate = nil;
   _prefChangeRegistrar.RemoveAll();
   _prefObserverBridge.reset();
-  _localState = nullptr;
+  _prefService = nullptr;
 }
 
 - (void)reset {
   _parcelTrackingItems = nil;
-  if (IsIOSParcelTrackingEnabled() &&
-      _shoppingService->IsParcelTrackingEligible()) {
-    [self fetchTrackedParcels];
-  }
+}
+
+- (void)fetchTrackedParcels {
+  _parcelFetchTimeoutClosure.Cancel();
+  __weak ParcelTrackingMediator* weakSelf = self;
+  _parcelFetchTimeoutClosure.Reset(base::BindOnce(
+      ^(bool success,
+        std::unique_ptr<std::vector<commerce::ParcelTrackingStatus>> parcels) {
+        ParcelTrackingMediator* strongSelf = weakSelf;
+        if (!strongSelf || !success || !strongSelf.delegate) {
+          return;
+        }
+        [strongSelf parcelStatusesSuccessfullyReceived:std::move(parcels)];
+      }));
+  _shoppingService->GetAllParcelStatuses(_parcelFetchTimeoutClosure.callback());
 }
 
 #pragma mark - Public
@@ -88,7 +111,7 @@
 }
 
 - (void)disableModule {
-  DisableParcelTracking(_localState);
+  DisableParcelTracking(_prefService);
   _shoppingService->StopTrackingAllParcels(base::BindOnce(^(bool){
   }));
 
@@ -127,7 +150,7 @@
 #pragma mark - ParcelTrackingCommands
 
 - (void)loadParcelTrackingPage:(GURL)parcelTrackingURL {
-  [self.NTPMetricsDelegate parcelTrackingOpened];
+  [self.NTPActionsDelegate parcelTrackingOpened];
   [self.delegate logMagicStackEngagementForType:ContentSuggestionsModuleType::
                                                     kParcelTracking];
   _URLLoadingBrowserAgent->Load(UrlLoadParams::InCurrentTab(parcelTrackingURL));
@@ -137,26 +160,21 @@
 
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
   if (preferenceName == kParcelTrackingDisabled) {
-    if (IsParcelTrackingDisabled(_localState)) {
+    if (IsParcelTrackingDisabled(_prefService)) {
+      [self disableModule];
+    }
+  }
+
+  if (preferenceName ==
+      prefs::kHomeCustomizationMagicStackParcelTrackingEnabled) {
+    CHECK(IsHomeCustomizationEnabled());
+    if (IsParcelTrackingDisabled(_prefService)) {
       [self disableModule];
     }
   }
 }
 
 #pragma mark - Private
-
-- (void)fetchTrackedParcels {
-  __weak ParcelTrackingMediator* weakSelf = self;
-  _shoppingService->GetAllParcelStatuses(base::BindOnce(
-      ^(bool success,
-        std::unique_ptr<std::vector<commerce::ParcelTrackingStatus>> parcels) {
-        ParcelTrackingMediator* strongSelf = weakSelf;
-        if (!strongSelf || !success || !strongSelf.delegate) {
-          return;
-        }
-        [strongSelf parcelStatusesSuccessfullyReceived:std::move(parcels)];
-      }));
-}
 
 // Handles a parcel tracking status fetch result from the
 // commerce::ShoppingService.

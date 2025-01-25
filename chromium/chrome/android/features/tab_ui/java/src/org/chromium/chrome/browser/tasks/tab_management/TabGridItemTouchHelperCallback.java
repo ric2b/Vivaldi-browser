@@ -39,6 +39,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
 
 import java.util.List;
@@ -164,6 +165,17 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
                 || type == UiType.CUSTOM_MESSAGE;
     }
 
+    boolean hasCollaboration(@Nullable RecyclerView.ViewHolder viewHolder) {
+        if (viewHolder instanceof SimpleRecyclerViewAdapter.ViewHolder simpleViewHolder) {
+            PropertyModel model = simpleViewHolder.model;
+            if (model.get(CARD_TYPE) == TAB) {
+                return TabShareUtils.isCollaborationIdValid(
+                        model.get(TabProperties.COLLABORATION_ID));
+            }
+        }
+        return false;
+    }
+
     @Override
     public int getMovementFlags(RecyclerView recyclerView, RecyclerView.ViewHolder viewHolder) {
         final int dragFlags = isMessageType(viewHolder) ? 0 : mDragFlags;
@@ -194,6 +206,10 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
         if (target.getItemViewType() == TabProperties.UiType.MESSAGE
                 || target.getItemViewType() == TabProperties.UiType.LARGE_MESSAGE
                 || target.getItemViewType() == TabProperties.UiType.CUSTOM_MESSAGE) {
+            return false;
+        }
+        // Collaborations cannot be dropped as it would destroy the collaboration.
+        if (hasCollaboration(current)) {
             return false;
         }
         return super.canDropOver(recyclerView, current, target);
@@ -388,11 +404,31 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
         mCurrentActionState = ItemTouchHelper.ACTION_STATE_IDLE;
         if (prevActionState != ItemTouchHelper.ACTION_STATE_DRAG) return;
         // If this item view becomes stale after the dragging animation is finished, manually clean
-        // it out. TODO(yuezhanggg): Figure out why the deleting signal is not properly sent when
-        // item is being dragged (crbug: 995799).
-        if (recyclerView.getAdapter().getItemCount() == 0 && recyclerView.getChildCount() != 0) {
-            recyclerView.getLayoutManager().removeView(viewHolder.itemView);
-        }
+        // it out. Post this call as otherwise there is an IllegalStateException. See:
+        // crbug.com/361498419. When the post task is executed we need to ensure that the
+        // state is still inconcistent i.e. the view holder is a child of the recycler view,
+        // but the adapter doesn't contain the item. If so we should remove the view. Previous
+        // attempts to fix this also checked for matching item positions in the adapter, but
+        // this led to phantom items in the recycler view due to the position the item view
+        // thought it had pre-post being inconsistent with the state after the post.
+        // TODO(crbug.com/40641179): Figure out why the deleting signal is not properly sent when
+        // item is being dragged.
+        Runnable removeViewHolderRunnable =
+                () -> {
+                    if (viewHolder.itemView.getParent() == null
+                            || recyclerView.getChildCount() == 0) {
+                        return;
+                    }
+
+                    @Nullable var adapter = recyclerView.getAdapter();
+                    if (adapter == null) return;
+
+                    @Nullable var layoutManager = recyclerView.getLayoutManager();
+                    if (layoutManager != null && adapter.getItemCount() == 0) {
+                        layoutManager.removeView(viewHolder.itemView);
+                    }
+                };
+        recyclerView.post(removeViewHolderRunnable);
     }
 
     @Override
@@ -450,14 +486,13 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
             RecyclerView.ViewHolder hoveredViewHolder =
                     mRecyclerView.findViewHolderForAdapterPosition(mHoveredTabIndex);
 
-            if (hoveredViewHolder instanceof SimpleRecyclerViewAdapter.ViewHolder
-                    && !hasTabPropertiesModel(hoveredViewHolder)) {
-                mHoveredTabIndex = TabModel.INVALID_TAB_INDEX;
-            } else {
+            if (hasTabPropertiesModel(hoveredViewHolder) && !hasCollaboration(viewHolder)) {
                 mModel.updateHoveredTabForMergeToGroup(mHoveredTabIndex, true);
-                if (prev_hovered != mHoveredTabIndex) {
-                    mModel.updateHoveredTabForMergeToGroup(prev_hovered, false);
-                }
+            } else {
+                mHoveredTabIndex = TabModel.INVALID_TAB_INDEX;
+            }
+            if (prev_hovered != mHoveredTabIndex) {
+                mModel.updateHoveredTabForMergeToGroup(prev_hovered, false);
             }
         } else if (actionState == ItemTouchHelper.ACTION_STATE_DRAG
                 && mTabGridDialogHandler != null) {
@@ -500,7 +535,8 @@ public class TabGridItemTouchHelperCallback extends ItemTouchHelper.SimpleCallba
         if (ChromeFeatureList.sTabGroupParityAndroid.isEnabled()
                 && willMergingCreateNewGroup
                 && !TabGroupCreationDialogManager.shouldSkipGroupCreationDialog(
-                        /* shouldShow= */ true)) {
+                        /* shouldShow= */ TabGroupCreationDialogManager
+                                .shouldShowGroupCreationDialogViaSettingsSwitch())) {
             mTabGroupCreationDialogManager.showDialog(hoveredCard.getRootId(), filter);
         }
 

@@ -51,6 +51,7 @@
 #include "chrome/browser/ash/accessibility/accessibility_event_rewriter_delegate_impl.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/accessibility/magnification_manager.h"
+#include "chrome/browser/ash/ambient/ambient_client_impl.h"
 #include "chrome/browser/ash/app_mode/app_launch_utils.h"
 #include "chrome/browser/ash/app_mode/kiosk_controller_impl.h"
 #include "chrome/browser/ash/app_mode/kiosk_mode_idle_app_name_notification.h"
@@ -60,10 +61,9 @@
 #include "chrome/browser/ash/audio/cras_audio_handler_delegate_impl.h"
 #include "chrome/browser/ash/bluetooth/bluetooth_log_controller.h"
 #include "chrome/browser/ash/bluetooth/hats_bluetooth_revamp_trigger_impl.h"
-#include "chrome/browser/ash/boot_times_recorder.h"
+#include "chrome/browser/ash/boot_times_recorder/boot_times_recorder.h"
 #include "chrome/browser/ash/camera/camera_general_survey_handler.h"
-#include "chrome/browser/ash/crosapi/browser_data_back_migrator.h"
-#include "chrome/browser/ash/crosapi/browser_data_migrator.h"
+#include "chrome/browser/ash/certs/system_token_cert_db_initializer.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/lacros_availability_policy_observer.h"
@@ -99,14 +99,17 @@
 #include "chrome/browser/ash/diagnostics/diagnostics_browser_delegate_impl.h"
 #include "chrome/browser/ash/display/quirks_manager_delegate_impl.h"
 #include "chrome/browser/ash/events/event_rewriter_delegate_impl.h"
+#include "chrome/browser/ash/events/shortcut_mapping_pref_service.h"
 #include "chrome/browser/ash/extensions/default_app_order.h"
 #include "chrome/browser/ash/extensions/login_screen_ui/ui_handler.h"
-#include "chrome/browser/ash/external_metrics.h"
+#include "chrome/browser/ash/external_metrics/external_metrics.h"
+#include "chrome/browser/ash/fwupd/fwupd_download_client_impl.h"
+#include "chrome/browser/ash/image_downloader/image_downloader_impl.h"
 #include "chrome/browser/ash/input_method/input_method_configuration.h"
-#include "chrome/browser/ash/language_preferences.h"
+#include "chrome/browser/ash/lobster/lobster_client_factory_impl.h"
+#include "chrome/browser/ash/locale/startup_settings_cache.h"
 #include "chrome/browser/ash/lock_screen_apps/state_controller.h"
-#include "chrome/browser/ash/logging.h"
-#include "chrome/browser/ash/login/demo_mode/demo_mode_resources_remover.h"
+#include "chrome/browser/ash/logging/logging.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/lock/screen_locker.h"
@@ -126,10 +129,9 @@
 #include "chrome/browser/ash/net/network_pref_state_observer.h"
 #include "chrome/browser/ash/net/network_throttling_observer.h"
 #include "chrome/browser/ash/net/rollback_network_config/rollback_network_config_service.h"
-#include "chrome/browser/ash/net/secure_dns_manager.h"
 #include "chrome/browser/ash/net/system_proxy_manager.h"
-#include "chrome/browser/ash/network_change_manager_client.h"
-#include "chrome/browser/ash/note_taking_helper.h"
+#include "chrome/browser/ash/network_change_manager/network_change_manager_client.h"
+#include "chrome/browser/ash/note_taking/note_taking_helper.h"
 #include "chrome/browser/ash/notifications/debugd_notification_handler.h"
 #include "chrome/browser/ash/notifications/gnubby_notification.h"
 #include "chrome/browser/ash/notifications/low_disk_notification.h"
@@ -153,21 +155,18 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/profiles/signin_profile_handler.h"
 #include "chrome/browser/ash/quick_pair/quick_pair_browser_delegate_impl.h"
-#include "chrome/browser/ash/report_controller_initializer.h"
-#include "chrome/browser/ash/scheduler_configuration_manager.h"
+#include "chrome/browser/ash/report_controller_initializer/report_controller_initializer.h"
+#include "chrome/browser/ash/scheduler_config/scheduler_configuration_manager.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/ash/settings/shutdown_policy_forwarder.h"
-#include "chrome/browser/ash/shortcut_mapping_pref_service.h"
-#include "chrome/browser/ash/startup_settings_cache.h"
+#include "chrome/browser/ash/smb_client/smb_service_factory.h"
 #include "chrome/browser/ash/system/input_device_settings.h"
 #include "chrome/browser/ash/system/user_removal_manager.h"
-#include "chrome/browser/ash/system_token_cert_db_initializer.h"
 #include "chrome/browser/ash/usb/cros_usb_detector.h"
 #include "chrome/browser/ash/video_conference/video_conference_app_service_client.h"
 #include "chrome/browser/ash/video_conference/video_conference_ash_feature_client.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_ash.h"
-#include "chrome/browser/chromeos/kcer/kcer_factory.h"
 #include "chrome/browser/chromeos/mahi/mahi_web_contents_manager.h"
 #include "chrome/browser/chromeos/printing/print_preview/print_preview_webcontents_manager.h"
 #include "chrome/browser/chromeos/video_conference/video_conference_manager_client.h"
@@ -186,10 +185,8 @@
 #include "chrome/browser/tracing/chrome_tracing_delegate.h"
 #include "chrome/browser/ui/ash/assistant/assistant_browser_delegate_impl.h"
 #include "chrome/browser/ui/ash/assistant/assistant_state_client.h"
-#include "chrome/browser/ui/ash/fwupd_download_client_impl.h"
-#include "chrome/browser/ui/ash/image_downloader_impl.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
-#include "chrome/browser/ui/ash/session_controller_client_impl.h"
+#include "chrome/browser/ui/ash/session/session_controller_client_impl.h"
 #include "chrome/browser/ui/webui/ash/emoji/emoji_ui.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
@@ -222,6 +219,7 @@
 #include "chromeos/ash/components/fwupd/firmware_update_manager.h"
 #include "chromeos/ash/components/geolocation/simple_geolocation_provider.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/ash/components/language_preferences/language_preferences.h"
 #include "chromeos/ash/components/local_search_service/public/cpp/local_search_service_proxy_factory.h"
 #include "chromeos/ash/components/login/auth/auth_events_recorder.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
@@ -890,6 +888,17 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
   bluetooth_log_controller_ = std::make_unique<ash::BluetoothLogController>(
       user_manager::UserManager::Get());
 
+  // Registers `SmbServiceFactory` with `SessionManagerObserver` to instantiate
+  // `SmbService` when the user session task is completed if
+  // `kSmbServiceIsCreatedOnUserSessionStartUpTaskCompleted` is enabled.
+  // If you register it in the `SmbServiceFactory` constructor, it will be
+  // called in the unit test, requiring the preparation of various objects.
+  if (base::FeatureList::IsEnabled(
+          features::kSmbServiceIsCreatedOnUserSessionStartUpTaskCompleted)) {
+    smb_client::SmbServiceFactory::GetInstance()
+        ->StartObservingSessionManager();
+  }
+
   // Enable per-user metrics support as soon as user_manager is created.
   g_browser_process->metrics_service()->InitPerUserMetrics();
 
@@ -975,6 +984,8 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
 
   kiosk_controller_ =
       std::make_unique<KioskControllerImpl>(user_manager::UserManager::Get());
+
+  ambient_client_ = std::make_unique<AmbientClientImpl>();
 
   if (base::FeatureList::IsEnabled(features::kEnableHostnameSetting)) {
     DeviceNameStore::Initialize(g_browser_process->local_state(),
@@ -1086,33 +1097,8 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
             switches::kLoginProfile);
 
-    if (BrowserDataMigratorImpl::MaybeForceResumeMoveMigration(
-            g_browser_process->local_state(), account_id, user_id_hash,
-            ash::standalone_browser::migrator_util::PolicyInitState::
-                kBeforeInit)) {
-      LOG(WARNING) << "Restarting chrome to resume move migration.";
-      return;
-    }
-
-    if (BrowserDataMigratorImpl::MaybeRestartToMigrate(
-            account_id, user_id_hash,
-            ash::standalone_browser::migrator_util::PolicyInitState::
-                kBeforeInit)) {
-      LOG(WARNING) << "Restarting chrome to run profile migration.";
-      return;
-    }
-
-    if (BrowserDataBackMigrator::MaybeRestartToMigrateBack(
-            account_id, user_id_hash,
-            ash::standalone_browser::migrator_util::PolicyInitState::
-                kBeforeInit)) {
-      LOG(WARNING) << "Restarting chrome to run backward profile migration.";
-      return;
-    }
-
     session_manager::SessionManager::Get()->CreateSessionForRestart(
         account_id, user_id_hash);
-    ash::Shell::Get()->login_unlock_throughput_recorder()->OnAshRestart();
 
     // If restarting demo session, mark demo session as started before primary
     // profile starts initialization so browser context keyed services created
@@ -1305,18 +1291,14 @@ void ChromeBrowserMainPartsAsh::PostProfileInit(Profile* profile,
     }
 
     gnubby_notification_ = std::make_unique<GnubbyNotification>();
-    demo_mode_resources_remover_ = DemoModeResourcesRemover::CreateIfNeeded(
-        g_browser_process->local_state());
 
     login_screen_extensions_storage_cleaner_ =
         std::make_unique<LoginScreenExtensionsStorageCleaner>();
 
-    // Initialize a local state observer for secure DNS (DNS-over-HTTPS).
-    // The lifetime of the class should match the browser's lifetime for its
-    // secure DNS settings UI. This is only modifiable when a user (including
-    // guest) is logged in, but is active for the entire browser session.
-    secure_dns_manager_ =
-        std::make_unique<SecureDnsManager>(g_browser_process->local_state());
+    if (auto* lobster_controller = Shell::Get()->lobster_controller()) {
+      lobster_client_factory_ =
+          std::make_unique<LobsterClientFactoryImpl>(lobster_controller);
+    }
 
     ash::ShillManagerClient::Get()->SetProperty(
         shill::kEnableRFC8925Property,
@@ -1336,8 +1318,15 @@ void ChromeBrowserMainPartsAsh::PostProfileInit(Profile* profile,
                        shill::kDisconnectWiFiOnEthernetProperty));
 
     // Notify patchpanel and shill about QoS feature enabled flag.
-    const bool wifi_qos_enabled =
+    bool wifi_qos_enabled =
         base::FeatureList::IsEnabled(features::kEnableWifiQos);
+    if (InstallAttributes::Get()->IsEnterpriseManaged()) {
+      // For an Enterprise enrolled device, enable the feature only if the
+      // separate flag for enterprise is also on.
+      wifi_qos_enabled =
+          wifi_qos_enabled &&
+          base::FeatureList::IsEnabled(features::kEnableWifiQosEnterprise);
+    }
     ash::PatchPanelClient::Get()->SetFeatureFlag(
         patchpanel::SetFeatureFlagRequest::WIFI_QOS, wifi_qos_enabled);
     ash::ShillManagerClient::Get()->SetProperty(
@@ -1575,9 +1564,10 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
   // UsbDeviceManager
   cros_usb_detector_.reset();
 
+  lobster_client_factory_.reset();
+
   // We should remove observers attached to D-Bus clients before
   // DBusThreadManager is shut down.
-  secure_dns_manager_.reset();
   network_pref_state_observer_.reset();
   suspend_perf_reporter_.reset();
   power_metrics_reporter_.reset();
@@ -1588,7 +1578,6 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
     ScreenLocker::ShutDownClass();
   }
   low_disk_notification_.reset();
-  demo_mode_resources_remover_.reset();
   smart_charging_manager_.reset();
   adaptive_screen_brightness_manager_.reset();
   auto_screen_brightness_controller_.reset();
@@ -1647,12 +1636,17 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
     user_image_manager_registry->Shutdown();
   }
   if (g_browser_process->platform_part()->user_manager()) {
+    g_browser_process->platform_part()
+        ->browser_policy_connector_ash()
+        ->OnUserManagerShutdown();
     g_browser_process->platform_part()->user_manager()->Shutdown();
   }
 
   // Let the DeviceDisablingManager unregister itself as an observer of the
   // CrosSettings singleton before it is destroyed.
   g_browser_process->platform_part()->ShutdownDeviceDisablingManager();
+  g_browser_process->platform_part()
+      ->ShutdownDeviceRestrictionScheduleController();
 
   // Let the AutomaticRebootManager unregister itself as an observer of several
   // subsystems.
@@ -1661,6 +1655,7 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
   // Dependens on Profile, so needs to be destroyed before ProfileManager, which
   // happens in `ChromeBrowserMainPartsLinux::PostMainMessageLoopRun()` below.
   kiosk_controller_.reset();
+  ambient_client_.reset();
 
   // Make sure that there is no pending URLRequests.
   if (pre_profile_init_called_) {
@@ -1722,10 +1717,6 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
 
   // NOTE: Closes ash and destroys `Shell`.
   ChromeBrowserMainPartsLinux::PostMainMessageLoopRun();
-
-  // Contains a raw_ptr to ChapsService (an object owned by `crosapi_manager_`)
-  // and should be shut down before `crosapi_manager_`.
-  kcer::KcerFactory::Shutdown();
 
   // BrowserManager and CrosapiManager need to outlive the Profile, which
   // is destroyed inside ChromeBrowserMainPartsLinux::PostMainMessageLoopRun().

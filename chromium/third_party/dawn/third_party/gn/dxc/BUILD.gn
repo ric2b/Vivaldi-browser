@@ -46,8 +46,8 @@ llvm_version_patch = 0
 llvm_version = "$llvm_version_major.$llvm_version_minor.$llvm_version_patch"
 
 declare_args() {
-  # DXC sometimes asserts on valid HLSL. Set this to true to disable assertions in debug builds.
-  dawn_dxc_disable_asserts_debug = false
+  # Enable DXC asserts in non-debug builds
+  dawn_dxc_enable_asserts_in_ndebug = true
 }
 
 # Native ARCH values can be found in LLVM's llvm/cmake/config-ix.cmake
@@ -562,10 +562,46 @@ config("common_config") {
       "$dawn_dxc_dir/include/llvm/llvm_assert",
     ]
   }
+}
 
-  defines = []
-  if (is_debug && dawn_dxc_disable_asserts_debug) {
-    defines += [ "NDEBUG" ]
+# Template with common configs and defines used by all static_library and source_set targets.
+# Do not use this for the top-level targets (executable, loadable_module) to avoid exposing
+# includes and defines.
+template("dxc_module") {
+  assert(defined(invoker.target_type), "must set target_type")
+  assert(invoker.target_type == "static_library" ||
+             invoker.target_type == "source_set",
+         "do not use for top-level targets")
+
+  target(invoker.target_type, target_name) {
+    forward_variables_from(invoker, "*")
+    if (!defined(defines)) {
+      defines = []
+    }
+
+    public_configs = [ ":common_config" ]
+    if (dawn_has_build) {
+      configs -= [ "//build/config/compiler:chromium_code" ]
+      configs += [ "//build/config/compiler:no_chromium_code" ]
+    }
+    if (is_win) {
+      # DXC is built with multibyte character set, so it expects Win32 functions to map the ANSI ones, not the UNICODE ones.
+      configs -= [ "//build/config/win:unicode" ]
+    }
+    if (dawn_dxc_enable_asserts_in_ndebug && !is_debug) {
+      # Do as CMake option "LLVM_ENABLE_ASSERTIONS" does: undef NDEBUG and define _DEBUG
+      configs -= [ "//build/config:release" ]
+      if (!is_win) {
+        defines += [ "_DEBUG" ]
+      }
+      defines += [
+        # Reduce binary size by dropping assertion strings
+        "LLVM_ASSERTIONS_NO_STRINGS",
+
+        # Always trap on asserts for consistent crash logging
+        "LLVM_ASSERTIONS_TRAP",
+      ]
+    }
   }
 }
 
@@ -574,16 +610,9 @@ config("common_config") {
 #######################################################################
 
 # Target shared by tbl-gen and dxc targets
-static_library("Support") {
+dxc_module("Support") {
+  target_type = "static_library"
   output_name = "LLVMSupport"
-
-  if (dawn_has_build) {
-    configs -= [ "//build/config/compiler:chromium_code" ]
-    configs += [ "//build/config/compiler:no_chromium_code" ]
-  }
-
-  public_configs = [ ":common_config" ]
-
   public_deps = [
     ":AsmParsers-def",
     ":AsmPrinters-def",
@@ -595,7 +624,6 @@ static_library("Support") {
     ":dxc-config-h",
     ":llvm-config-header",
   ]
-
   sources = [
     "$dawn_dxc_dir/lib/MSSupport/MSFileSystemImpl.cpp",
     "$dawn_dxc_dir/lib/Support/APFloat.cpp",
@@ -1117,7 +1145,7 @@ add_hlsl_hctgen("DxcDisassembler-inc") {
 }
 add_hlsl_hctgen("DxilValidation-inc") {
   mode = "DxilValidationInc"
-  output = "/include/dxc/HLSL/DxilValidation.inc"
+  output = "/include/dxc/DxilValidation/DxilValidation.inc"
   build_dir = true
 }
 add_hlsl_hctgen("DxcOptimizer-inc") {
@@ -1127,7 +1155,7 @@ add_hlsl_hctgen("DxcOptimizer-inc") {
 }
 add_hlsl_hctgen("DxilValidationImpl-inc") {
   mode = "DxilValidation"
-  output = "/lib/HLSL/DxilValidationImpl.inc"
+  output = "/lib/DxilValidation/DxilValidationImpl.inc"
   build_dir = true
 }
 add_hlsl_hctgen("gen_intrin_main_tables_15-h") {
@@ -1146,13 +1174,8 @@ add_hlsl_hctgen("DxilPIXPasses-inc") {
 #######################################################################
 
 # This target contains common code shared by both 'dxc' and 'dxcompiler' targets
-static_library("dxclib") {
-  public_configs = [ ":common_config" ]
-
-  if (dawn_has_build) {
-    configs -= [ "//build/config/compiler:chromium_code" ]
-    configs += [ "//build/config/compiler:no_chromium_code" ]
-  }
+dxc_module("dxclib") {
+  target_type = "static_library"
   public_deps = [
     ":HLSLOptions-inc",
     ":Intrinsics-td",
@@ -1184,7 +1207,6 @@ static_library("dxclib") {
     "$dawn_dxc_dir/lib/DXIL/DxilTypeSystem.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilUtil.cpp",
     "$dawn_dxc_dir/lib/DXIL/DxilUtilDbgInfoAndMisc.cpp",
-    "$dawn_dxc_dir/lib/DXIL/DxilWaveMatrix.cpp",
     "$dawn_dxc_dir/lib/DxcSupport/FileIOHelper.cpp",
     "$dawn_dxc_dir/lib/DxcSupport/Global.cpp",
     "$dawn_dxc_dir/lib/DxcSupport/HLSLOptions.cpp",
@@ -1198,9 +1220,11 @@ static_library("dxclib") {
     "$dawn_dxc_dir/lib/DxilContainer/DxilContainer.cpp",
     "$dawn_dxc_dir/lib/DxilContainer/DxilContainerAssembler.cpp",
     "$dawn_dxc_dir/lib/DxilContainer/DxilContainerReader.cpp",
+    "$dawn_dxc_dir/lib/DxilContainer/DxilPipelineStateValidation.cpp",
     "$dawn_dxc_dir/lib/DxilContainer/DxilRDATBuilder.cpp",
     "$dawn_dxc_dir/lib/DxilContainer/DxilRuntimeReflection.cpp",
     "$dawn_dxc_dir/lib/DxilContainer/RDATDxilSubobjects.cpp",
+    "$dawn_dxc_dir/lib/DxilHash/DxilHash.cpp",
     "$dawn_dxc_dir/lib/Option/Arg.cpp",
     "$dawn_dxc_dir/lib/Option/ArgList.cpp",
     "$dawn_dxc_dir/lib/Option/OptTable.cpp",
@@ -1213,24 +1237,17 @@ static_library("dxclib") {
 template("dxcompiler_sourceset") {
   assert(defined(invoker.target_type), "must set target_type")
 
-  target(invoker.target_type, target_name) {
-    forward_variables_from(invoker, [ "sources" ])
-
-    public_configs = [ ":common_config" ]
-
-    if (is_win) {
-      # DXC is built with multibyte character set, so it expects Win32 functions to map the ANSI ones, not the UNICODE ones.
-      configs -= [ "//build/config/win:unicode" ]
+  dxc_module(target_name) {
+    forward_variables_from(invoker, "*")
+    if (!defined(deps)) {
+      deps = []
     }
-
-    deps = [
+    deps += [
       ":AttrPCHRead-inc",
       ":AttrPCHWrite-inc",
       ":AttrParserStringSwitches-inc",
       ":DxcOptimizer-inc",
       ":DxilPIXPasses-inc",
-      ":DxilValidation-inc",
-      ":DxilValidationImpl-inc",
       ":clang-Driver-Options-inc",
       ":clang-basic-version-inc",
       ":clang-config-h",
@@ -1242,7 +1259,11 @@ template("dxcompiler_sourceset") {
     deps += ClangASTDeps
     deps += ClangSemaDeps
 
-    include_dirs = [
+    if (!defined(include_dirs)) {
+      include_dirs = []
+    }
+    include_dirs += [
+      "${dawn_dxc_dir}/tools/clang/tools/dxcvalidator",
       "${target_gen_dir}/utils/version",  # hlsl_dxcversion_autogen
       "${target_gen_dir}/tools/clang/include",
       "${target_gen_dir}/tools/clang/tools/dxcompiler",
@@ -1266,16 +1287,15 @@ template("dxcompiler_sourceset") {
       ]
     }
 
-    defines = [
+    if (!defined(defines)) {
+      defines = []
+    }
+    defines += [
       "DXC_API_IMPORT=",  # Don't import locally defined symbols
       "CINDEX_LINKAGE=",
       "LIBCLANG_CC=",
       "_CINDEX_LIB_",
     ]
-
-    if (defined(invoker.defines)) {
-      defines += invoker.defines
-    }
   }
 }
 
@@ -1448,6 +1468,22 @@ dxcompiler_sourceset("lib_dxilrootsignature") {
     "$dawn_dxc_dir/lib/DxilRootSignature/DxilRootSignatureValidator.cpp",
   ]
 }
+dxcompiler_sourceset("lib_dxilvalidation") {
+  target_type = "static_library"  # Ensure unused globals are stripped
+  deps = [
+    ":DxilValidation-inc",
+    ":DxilValidationImpl-inc",
+  ]
+  sources = [
+    "$dawn_dxc_dir/lib/DxilValidation/DxilContainerValidation.cpp",
+    "$dawn_dxc_dir/lib/DxilValidation/DxilValidation.cpp",
+    "$dawn_dxc_dir/lib/DxilValidation/DxilValidationUtils.cpp",
+  ]
+  include_dirs = [
+    "${target_gen_dir}/lib/DxilValidation",
+    "${target_gen_dir}/include/dxc/DxilValidation",
+  ]
+}
 dxcompiler_sourceset("lib_hlsl") {
   target_type = "static_library"  # Ensure unused globals are stripped
   sources = [
@@ -1482,7 +1518,6 @@ dxcompiler_sourceset("lib_hlsl") {
     "$dawn_dxc_dir/lib/HLSL/DxilTargetLowering.cpp",
     "$dawn_dxc_dir/lib/HLSL/DxilTargetTransformInfo.cpp",
     "$dawn_dxc_dir/lib/HLSL/DxilTranslateRawBuffer.cpp",
-    "$dawn_dxc_dir/lib/HLSL/DxilValidation.cpp",
     "$dawn_dxc_dir/lib/HLSL/HLDeadFunctionElimination.cpp",
     "$dawn_dxc_dir/lib/HLSL/HLExpandStoreIntrinsics.cpp",
     "$dawn_dxc_dir/lib/HLSL/HLLegalizeParameter.cpp",
@@ -2265,6 +2300,11 @@ dxcompiler_sourceset("dxcompiler_sources") {
   ]
 }
 
+dxcompiler_sourceset("dxcvalidator_lib") {
+  target_type = "static_library"
+  sources = [ "$dawn_dxc_dir/tools/clang/tools/dxcvalidator/dxcvalidator.cpp" ]
+}
+
 source_set("windows_version_resource") {
   defines = [
     # Include version.inc
@@ -2307,6 +2347,7 @@ loadable_module("dxcompiler") {
     ":clang_lib_tooling",
     ":clang_tools_libclang",
     ":dxcompiler_sources",
+    ":dxcvalidator_lib",
     ":lib_analysis",
     ":lib_asmparser",
     ":lib_astmatchers",
@@ -2316,6 +2357,7 @@ loadable_module("dxcompiler") {
     ":lib_dxildia",
     ":lib_dxilpixpasses",
     ":lib_dxilrootsignature",
+    ":lib_dxilvalidation",
     ":lib_hlsl",
     ":lib_ir",
     ":lib_irreader",

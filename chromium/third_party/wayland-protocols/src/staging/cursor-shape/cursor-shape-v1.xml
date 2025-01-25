@@ -59,8 +59,7 @@
 
   <interface name="wp_cursor_shape_device_v1" version="1">
     <description summary="cursor shape for a device">
-      This interface advertises the list of supported cursor shapes for a
-      device, and allows clients to set the cursor shape.
+      This interface allows clients to set the cursor shape.
     </description>
 
     <enum name="shape">

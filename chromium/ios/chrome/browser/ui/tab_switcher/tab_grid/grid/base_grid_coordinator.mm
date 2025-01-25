@@ -2,24 +2,36 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#import <MaterialComponents/MaterialSnackbar.h>
+
 #import "base/check.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/feature_engagement/public/feature_constants.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/public/commands/tab_grid_commands.h"
 #import "ios/chrome/browser/shared/public/commands/tab_grid_toolbar_commands.h"
+#import "ios/chrome/browser/shared/public/commands/tab_group_confirmation_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_coordinator+subclassing.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/base_grid_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_container_view_controller.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item_identifier.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/tab_group_grid_view_controller.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_group_confirmation_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/create_tab_group_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_group_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_groups/tab_group_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/legacy_grid_transition_layout.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_group_action_type.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_group_confirmation_coordinator.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/web_state.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -47,8 +59,8 @@
                       gridMediatorDelegate:(id<GridMediatorDelegate>)delegate {
   CHECK(baseViewController);
   CHECK(browser);
-  if (self = [super initWithBaseViewController:baseViewController
-                                       browser:browser]) {
+  if ((self = [super initWithBaseViewController:baseViewController
+                                        browser:browser])) {
     CHECK(toolbarsMutator);
     CHECK(delegate);
     _toolbarsMutator = toolbarsMutator;
@@ -58,19 +70,32 @@
 }
 
 - (BaseGridMediator*)mediator {
-  NOTREACHED_NORETURN() << "This should be implemented in subclasses.";
+  NOTREACHED() << "This should be implemented in subclasses.";
 }
 
 - (BaseGridViewController*)gridViewController {
-  NOTREACHED_NORETURN() << "This should be implemented in subclasses.";
+  NOTREACHED() << "This should be implemented in subclasses.";
 }
 
 - (void)showTabGroupForTabGridOpening:(const TabGroup*)tabGroup {
   [self showTabGroup:tabGroup forTabGridOpening:YES];
 }
 
+- (BOOL)bringTabGroupIntoViewIfPresent:(const TabGroup*)tabGroup
+                              animated:(BOOL)animated {
+  WebStateList* webStateList = self.browser->GetWebStateList();
+  if (!webStateList->ContainsGroup(tabGroup)) {
+    return NO;
+  }
+  GridItemIdentifier* groupIdentifier =
+      [GridItemIdentifier groupIdentifier:tabGroup
+                         withWebStateList:webStateList];
+  [self.gridViewController bringItemIntoView:groupIdentifier animated:animated];
+  return YES;
+}
+
 - (LegacyGridTransitionLayout*)transitionLayout {
-  NOTREACHED_NORETURN() << "This should be implemented in subclasses.";
+  NOTREACHED() << "This should be implemented in subclasses.";
 }
 
 - (BOOL)isSelectedCellVisible {
@@ -173,6 +198,11 @@
   self.mediator.browser = self.browser;
   self.mediator.delegate = self.gridMediatorDelegate;
   self.mediator.toolbarsMutator = self.toolbarsMutator;
+  self.mediator.tabGridHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), TabGridCommands);
+
+  self.gridViewController.tabGridHandler =
+      HandlerForProtocol(dispatcher, TabGridCommands);
 }
 
 - (void)stop {
@@ -254,27 +284,78 @@
 }
 
 - (void)showTabGroupConfirmationForAction:(TabGroupActionType)actionType
-                                    group:(const TabGroup*)tabGroup
+                                    group:
+                                        (base::WeakPtr<const TabGroup>)tabGroup
                                sourceView:(UIView*)sourceView {
   _tabGroupConfirmationCoordinator = [[TabGroupConfirmationCoordinator alloc]
       initWithBaseViewController:self.baseViewController
                          browser:self.browser
                       actionType:actionType
                       sourceView:sourceView];
-  base::WeakPtr<const TabGroup> weakGroup = tabGroup->GetWeakPtr();
   __weak BaseGridCoordinator* weakSelf = self;
   _tabGroupConfirmationCoordinator.action = ^{
-    switch (actionType) {
-      case TabGroupActionType::kUngroupTabGroup:
-        [weakSelf ungroupTabGroup:weakGroup];
-        break;
-      case TabGroupActionType::kDeleteTabGroup:
-        [weakSelf closeTabsAndDeleteGroup:weakGroup];
-        break;
-    }
+    [weakSelf takeActionForActionType:actionType weakGroup:tabGroup];
+  };
+  [_tabGroupConfirmationCoordinator start];
+  self.gridViewController.tabGroupConfirmationHandler =
+      _tabGroupConfirmationCoordinator;
+}
+
+- (void)showTabGroupConfirmationForAction:(TabGroupActionType)actionType
+                                    group:
+                                        (base::WeakPtr<const TabGroup>)tabGroup
+                         sourceButtonItem:(UIBarButtonItem*)sourceButtonItem {
+  _tabGroupConfirmationCoordinator = [[TabGroupConfirmationCoordinator alloc]
+      initWithBaseViewController:self.baseViewController
+                         browser:self.browser
+                      actionType:actionType
+                sourceButtonItem:sourceButtonItem];
+  __weak BaseGridCoordinator* weakSelf = self;
+  _tabGroupConfirmationCoordinator.action = ^{
+    [weakSelf takeActionForActionType:actionType weakGroup:tabGroup];
+  };
+  [_tabGroupConfirmationCoordinator start];
+  self.gridViewController.tabGroupConfirmationHandler =
+      _tabGroupConfirmationCoordinator;
+}
+
+- (void)showTabGridTabGroupSnackbarAfterClosingGroups:
+    (int)numberOfClosedGroups {
+  if (!IsTabGroupSyncEnabled() ||
+      self.browser->GetBrowserState()->IsOffTheRecord()) {
+    return;
+  }
+
+  // Don't show the snackbar if the IPH will be presented.
+  feature_engagement::Tracker* tracker =
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  if (tracker->WouldTriggerHelpUI(
+          feature_engagement::kIPHiOSSavedTabGroupClosed)) {
+    return;
+  }
+
+  // Create the "Open Tab Groups" action.
+  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
+  __weak id<TabGridCommands> tabGridHandler =
+      HandlerForProtocol(dispatcher, TabGridCommands);
+  void (^openTabGroupPanelAction)() = ^{
+    [tabGridHandler showTabGroupsPanelAnimated:YES];
   };
 
-  [_tabGroupConfirmationCoordinator start];
+  // Create and config the snackbar.
+  NSString* messageLabel =
+      base::SysUTF16ToNSString(l10n_util::GetPluralStringFUTF16(
+          IDS_IOS_TAB_GROUP_SNACKBAR_LABEL, numberOfClosedGroups));
+  MDCSnackbarMessage* message = CreateSnackbarMessage(messageLabel);
+  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
+  action.handler = openTabGroupPanelAction;
+  action.title = l10n_util::GetNSString(IDS_IOS_TAB_GROUP_SNACKBAR_ACTION);
+  message.action = action;
+
+  id<SnackbarCommands> snackbarCommandsHandler =
+      HandlerForProtocol(dispatcher, SnackbarCommands);
+  [snackbarCommandsHandler showSnackbarMessage:message];
 }
 
 #pragma mark - CreateOrEditTabGroupCoordinatorDelegate
@@ -311,6 +392,8 @@
   _tabGroupCoordinator.tabGroupPositioner = self.tabGroupPositioner;
   _tabGroupCoordinator.tabGridIdleStatusHandler =
       self.mediator.tabGridIdleStatusHandler;
+  _tabGroupCoordinator.modeHolder = self.modeHolder;
+
   [_tabGroupCoordinator start];
 }
 
@@ -330,20 +413,25 @@
       arrayByAddingObjectsFromArray:secondaryInactiveItems];
 }
 
-// Helper method to close a tab group and dismiss the confirmation coordinator.
-- (void)closeTabsAndDeleteGroup:(base::WeakPtr<const TabGroup>)weakGroup {
-  if (weakGroup) {
-    [self.mediator closeTabGroup:weakGroup.get() andDeleteGroup:YES];
+// Helper method to execute a corresponded action to `actionType` and dismiss
+// the confirmation coordinator.
+- (void)takeActionForActionType:(TabGroupActionType)actionType
+                      weakGroup:(base::WeakPtr<const TabGroup>)weakGroup {
+  switch (actionType) {
+    case TabGroupActionType::kUngroupTabGroup:
+      if (weakGroup) {
+        [self.mediator ungroupTabGroup:weakGroup.get()];
+      }
+      break;
+    case TabGroupActionType::kDeleteTabGroup:
+      if (weakGroup) {
+        [self.mediator closeTabGroup:weakGroup.get() andDeleteGroup:YES];
+      }
+      break;
   }
-  [_tabGroupConfirmationCoordinator stop];
-  _tabGroupConfirmationCoordinator = nil;
-}
 
-// Helper method to ungroup a tab group and dismiss the confirmation
-// coordinator.
-- (void)ungroupTabGroup:(base::WeakPtr<const TabGroup>)weakGroup {
-  if (weakGroup) {
-    [self.mediator ungroupTabGroup:weakGroup.get()];
+  if (_tabGroupCoordinator) {
+    [self hideTabGroup];
   }
   [_tabGroupConfirmationCoordinator stop];
   _tabGroupConfirmationCoordinator = nil;

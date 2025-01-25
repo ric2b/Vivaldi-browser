@@ -156,9 +156,11 @@ pub(in crate::legacy) mod test_des {
         DataElementDeserializeError, DataElementSerializationBuffer, DataElementSerializeError,
         DeserializeDataElement, LengthMapper, SerializeDataElement,
     };
-    use crate::legacy::deserialize::{DataElementDeserializer, LengthError, RawDataElement};
+    use crate::legacy::deserialize::{
+        DataElementDeserializer, Deserialized, LengthError, RawDataElement,
+    };
     use crate::legacy::serialize::tests::helpers::{LongDataElement, ShortDataElement};
-    use crate::legacy::{PacketFlavor, NP_MAX_DE_CONTENT_LEN};
+    use crate::legacy::{PacketFlavor, Plaintext, NP_MAX_DE_CONTENT_LEN};
     use crate::private::Sealed;
 
     /// A [DataElementDeserializer] that can deserialize the test stubs [ShortDataElement] and
@@ -212,6 +214,19 @@ pub(in crate::legacy) mod test_des {
     pub(in crate::legacy) enum TestDataElement {
         Short(ShortDataElement),
         Long(LongDataElement),
+    }
+
+    impl Deserialized for TestDataElement {
+        fn de_type_code(&self) -> DeTypeCode {
+            match self {
+                TestDataElement::Short(s) => {
+                    <ShortDataElement as SerializeDataElement<Plaintext>>::de_type_code(s)
+                }
+                TestDataElement::Long(l) => {
+                    <LongDataElement as SerializeDataElement<Plaintext>>::de_type_code(l)
+                }
+            }
+        }
     }
 
     impl From<ShortDataElement> for TestDataElement {

@@ -870,6 +870,8 @@ EXPORTS
     ; GL_EXT_semaphore_fd
     glImportSemaphoreFdEXT
 
+    ; GL_EXT_separate_depth_stencil
+
     ; GL_EXT_separate_shader_objects
     glActiveShaderProgramEXT
     glBindProgramPipelineEXT
@@ -979,6 +981,8 @@ EXPORTS
     ; GL_EXT_texture_sRGB_RG8
 
     ; GL_EXT_texture_sRGB_decode
+
+    ; GL_EXT_texture_shadow_lod
 
     ; GL_EXT_texture_storage
     glTexStorage1DEXT

@@ -20,6 +20,9 @@ import org.chromium.ui.base.WindowAndroid;
 
 import java.util.List;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Class that, while attached, consumes all IME window insets and listens for insets animation
  * updates. This combination lets it selectively defer the application of IME insets until the
@@ -57,7 +60,7 @@ public class DeferredIMEWindowInsetApplicationCallback
 
         Activity activity = windowAndroid.getActivity().get();
         if (activity != null && activity.isFinishing()) return;
-
+        if (BuildConfig.IS_VIVALDI) return; // Vivaldi VAB-8066 TODO FIX UNDERLYING CAUSE OF THIS
         InsetObserver insetObserver = windowAndroid.getInsetObserver();
         assert insetObserver != null
                 : "DeferredIMEWindowInsetApplicationCallback can only be used in activities with an"
@@ -92,12 +95,10 @@ public class DeferredIMEWindowInsetApplicationCallback
         mDeferredKeyboardHeight = NO_DEFERRED_KEYBOARD_HEIGHT;
     }
 
-    @NonNull
     @Override
     public void onStart(
             @NonNull WindowInsetsAnimationCompat animation, @NonNull BoundsCompat bounds) {}
 
-    @NonNull
     @Override
     public void onProgress(
             @NonNull WindowInsetsCompat windowInsetsCompat,

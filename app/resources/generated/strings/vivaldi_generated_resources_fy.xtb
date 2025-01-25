@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Flater</translation>
 <translation id="1175364870820465910">&amp;Printsje...</translation>
 <translation id="1181037720776840403">Wiskje</translation>
+<translation id="1184037892196730210">Skerm oerbringe net mooglik</translation>
 <translation id="1187722533808055681">Aktivearing fanút ynaktyf</translation>
 <translation id="122082903575839559">Sertifikaat hântekening algoritme</translation>
 <translation id="1221825588892235038">Seleksje allinne</translation>
@@ -37,6 +38,7 @@
 <translation id="1601560923496285236">Tapasse</translation>
 <translation id="1603914832182249871">(Privee)</translation>
 <translation id="1627276047960621195">Triem omskriuwers</translation>
+<translation id="1654713139320245449">Gjin cast bestemming fûn. Help nedich?</translation>
 <translation id="166278006618318542">Iepenbiere kaai fan entiteit algoritme</translation>
 <translation id="1682548588986054654">Nij privee finster</translation>
 <translation id="1708338024780164500">(Ynaktyf)</translation>
@@ -98,7 +100,6 @@
 <translation id="265390580714150011">Fjild wearde</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Op 'e nij ynskeakelje</translation>
-<translation id="2678100101831051676">Kin net caste.</translation>
 <translation id="2719936478972253983">De folgjende koekjes binne tsjinkeard</translation>
 <translation id="2721037002783622288">&amp;Sykje om ôfbylding mei <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Net nei</translation>
@@ -148,7 +149,6 @@
 <translation id="3378572629723696641">Dizze tafoeging is mooglik beskeadige.</translation>
 <translation id="3387614642886316601">Ferbettere staveringshifker brûke</translation>
 <translation id="3390013585654699824">App details</translation>
-<translation id="3393582007140394275">Skerm oerbringe net mooglik.</translation>
 <translation id="345693547134384690">&amp;Ofbylding yn nije ljepper iepenje</translation>
 <translation id="3493881266323043047">Jildigens</translation>
 <translation id="3511307672085573050">Keppeling adr&amp;es kopiearje</translation>
@@ -346,6 +346,7 @@
 <translation id="6812841287760418429">Feroaringen behâlde</translation>
 <translation id="6824564591481349393">&amp;E-post adres kopiearje</translation>
 <translation id="6840155290835956714">Freegje foarôf it stjoeren</translation>
+<translation id="6878862640969460273">Lizzend</translation>
 <translation id="6886871292305414135">Keppeling yn nije &amp;ljepper iepenje</translation>
 <translation id="6892812721183419409">Keppeling iepenje as <ph name="USER" /></translation>
 <translation id="6900284862687837908">Eftergrûn app: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -366,6 +367,7 @@
 <translation id="7287143125007575591">Tagong wegere.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Hifkje stavering ûnder it ynfieren</translation>
+<translation id="7359680654975233185">Kin ljepper net oerbringe</translation>
 <translation id="7385854874724088939">Der barde in flater by it printsjen. Kontrolearje jo printer en besykje nochris.</translation>
 <translation id="7412226954991670867">GPU ûnthâld</translation>
 <translation id="7421925624202799674">&amp;Side boarne besjen</translation>
@@ -379,6 +381,7 @@
 <translation id="7661259717474717992">Stean websteeën it ta om koekje gegevens te bewarjen en te lêzen</translation>
 <translation id="7663719505383602579">Untfanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Ynstallearre troch jo systeembehearder</translation>
+<translation id="7685038817958445325">Kin net oerbringe</translation>
 <translation id="7685049629764448582">JavaSkript ûnthâld</translation>
 <translation id="7701869757853594372">USER handles</translation>
 <translation id="7704305437604973648">Taak</translation>
@@ -409,7 +412,6 @@ Kaai triem: <ph name="KEY_FILE" />
 Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo tafoeging te meitsjen.</translation>
 <translation id="8004582292198964060">Sneuper</translation>
 <translation id="8018313076035239964">Haw kontrôle oer hokfoar ynformaasje websteeën brûke kinne en hokfoar ynhâld se sjen litte</translation>
-<translation id="8032244173881942855">Net mooglik Cast ljepper.</translation>
 <translation id="8071432093239591881">As ôfbylding printsje</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> Kb</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -465,7 +467,6 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="9218430445555521422">As standert ynstelle</translation>
 <translation id="93766956588638423">Tafoeging reparearje</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Lizzend</translation>
 <translation id="994289308992179865">&amp;Werhelje</translation>
 <translation id="998747458861718449">Y&amp;nspektearje</translation>
 </translationbundle>

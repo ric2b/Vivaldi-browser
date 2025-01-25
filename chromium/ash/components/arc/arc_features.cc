@@ -8,6 +8,12 @@
 
 namespace arc {
 
+// When enabled, the versions of ChromeOS and ARC are exchanged during
+// handshake. This feature reduces unnecessary inter-process communications.
+BASE_FEATURE(kArcExchangeVersionOnMojoHandshake,
+             "ArcExchangeVersionOnMojoHandshake",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls whether to always start ARC automatically, or wait for the user's
 // action to start it later in an on-demand manner. Already enabled by default
 // for managed users. In V2, it will be expand to more users such as unmanaged
@@ -34,7 +40,7 @@ BASE_FEATURE(kArcVmGki,
 // Controls block IO schedulers in ARCVM.
 BASE_FEATURE(kBlockIoScheduler,
              "ArcBlockIoScheduler",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether to enable block IO scheduler for virtio-blk /data.
 const base::FeatureParam<bool> kEnableDataBlockIoScheduler{
@@ -112,13 +118,6 @@ const base::FeatureParam<int> kEnableArcIdleManagerDelayMs{
 const base::FeatureParam<bool> kEnableArcIdleManagerPendingIdleReactivate{
     &kEnableArcIdleManager, "pending_idle_reactivate", false};
 
-// Controls whether files shared to ARC Nearby Share are shared through the
-// FuseBox filesystem, instead of the default method (through a temporary path
-// managed by file manager).
-BASE_FEATURE(kEnableArcNearbyShareFuseBox,
-             "ArcNearbyShareFuseBox",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Controls whether to enable support for s2idle in ARCVM.
 BASE_FEATURE(kEnableArcS2Idle, "ArcS2Idle", base::FEATURE_DISABLED_BY_DEFAULT);
 
@@ -186,7 +185,7 @@ BASE_FEATURE(kEnableVirtioBlkMultipleWorkers,
 // Controls whether to extend the input event ANR timeout time.
 BASE_FEATURE(kExtendInputAnrTimeout,
              "ArcExtendInputAnrTimeout",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether to extend the broadcast of intent ANR timeout time.
 BASE_FEATURE(kExtendIntentAnrTimeout,
@@ -270,7 +269,7 @@ BASE_FEATURE(kArcVmPvclock,
 // Controls whether enable ignoring hover event ANR in input dispatcher.
 BASE_FEATURE(kIgnoreHoverEventAnr,
              "IgnoreHoverEventAnr",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables/disables ghost when user launch ARC app from shelf/launcher when
 // App already ready for launch.
@@ -405,7 +404,7 @@ BASE_FEATURE(kTouchscreenEmulation,
 // from ARC.
 BASE_FEATURE(kUnthrottleOnActiveAudio,
              "ArcUnthrottleOnActiveAudio",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls ARC USB Storage UI feature.
 // When enabled, chrome://settings and Files.app will ask if the user wants
@@ -513,9 +512,6 @@ const base::FeatureParam<base::TimeDelta> kVmmSwapTrimInterval{
 // when swap is enabled or swap trimming is performed.
 const base::FeatureParam<base::TimeDelta> kVmmSwapMinShrinkInterval{
     &kVmmSwapPolicy, "min_shrink_interval", base::Minutes(10)};
-
-// When enabled, ARC uses XDG-based Wayland protocols.
-BASE_FEATURE(kXdgMode, "ArcXdgMode", base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls the feature to delay low memory kills of high priority apps when the
 // memory pressure is below foreground.

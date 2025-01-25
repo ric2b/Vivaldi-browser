@@ -15,25 +15,26 @@
 #include "chrome/browser/ash/input_method/editor_metrics_recorder.h"
 #include "chrome/browser/ash/input_method/editor_text_insertion.h"
 #include "chrome/browser/ash/input_method/url_utils.h"
+#include "chromeos/strings/grit/chromeos_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/url_constants.h"
 
 namespace ash::input_method {
 namespace {
 
 constexpr base::TimeDelta kAnnouncementDelay = base::Milliseconds(200);
-constexpr char16_t kAnnouncementForFeedback[] = u"Feedback submitted";
-constexpr char16_t kAnnouncementForInsertion[] =
-    u"Replacing selected text with suggestion";
 
 constexpr std::string_view
     kDomainsRequiringParagraphConcatenationWhenInsertingText[] = {
         "notion",
         "medium",
+        "onedrive.live",
 };
 
 bool IsUrlAllowed(const GURL& url) {
   return url.SchemeIs(url::kHttpsScheme) ||
-         url.spec().starts_with("chrome://os-settings/osLanguages/input");
+         url.spec().starts_with("chrome://os-settings/osLanguages/input") ||
+         url.spec().starts_with("chrome://os-settings/systemPreferences");
 }
 
 EditorTextInsertion::InsertionStrategy GetInsertionStrategy(const GURL& url) {
@@ -64,7 +65,8 @@ void EditorSystemActuator::InsertText(const std::string& text) {
   // After making an announcement there needs to be a small delay to ensure any
   // other announcements triggered from a text insertion do not collide with the
   // original announcement.
-  system_->Announce(kAnnouncementForInsertion);
+  system_->Announce(
+      l10n_util::GetStringUTF16(IDS_EDITOR_ANNOUNCEMENT_TEXT_FOR_INSERTION));
   announcement_delay_.Start(
       FROM_HERE, kAnnouncementDelay,
       base::BindOnce(&EditorSystemActuator::QueueTextInsertion,
@@ -73,8 +75,16 @@ void EditorSystemActuator::InsertText(const std::string& text) {
 
 void EditorSystemActuator::ApproveConsent() {
   system_->ProcessConsentAction(ConsentAction::kApprove);
-  system_->HandleTrigger(/*preset_query_id=*/std::nullopt,
-                         /*freeform_text=*/std::nullopt);
+
+  switch (notice_transition_action_) {
+    case EditorNoticeTransitionAction::kShowEditorPanel:
+      system_->HandleTrigger(/*preset_query_id=*/std::nullopt,
+                             /*freeform_text=*/std::nullopt);
+      return;
+    case EditorNoticeTransitionAction::kDoNothing:
+      system_->CloseUI();
+      return;
+  }
 }
 
 void EditorSystemActuator::DeclineConsent() {
@@ -104,7 +114,8 @@ void EditorSystemActuator::CloseUI() {
 
 void EditorSystemActuator::SubmitFeedback(const std::string& description) {
   SendEditorFeedback(profile_, description);
-  system_->Announce(kAnnouncementForFeedback);
+  system_->Announce(
+      l10n_util::GetStringUTF16(IDS_EDITOR_ANNOUNCEMENT_TEXT_FOR_FEEDBACK));
 }
 
 void EditorSystemActuator::OnTrigger(
@@ -157,6 +168,11 @@ void EditorSystemActuator::QueueTextInsertion(const std::string pending_text) {
 
 void EditorSystemActuator::OnInputContextUpdated(const GURL& url) {
   current_url_ = url;
+}
+
+void EditorSystemActuator::SetNoticeTransitionAction(
+    EditorNoticeTransitionAction transition_action) {
+  notice_transition_action_ = transition_action;
 }
 
 }  // namespace ash::input_method

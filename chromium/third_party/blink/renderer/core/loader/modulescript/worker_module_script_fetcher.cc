@@ -85,10 +85,12 @@ void WorkerModuleScriptFetcher::Fetch(
       kNoCompileHintsProducer = nullptr;
   constexpr v8_compile_hints::V8CrowdsourcedCompileHintsConsumer*
       kNoCompileHintsConsumer = nullptr;
+  constexpr bool kNoV8CompileHintsMagicCommentRuntimeEnabledFeature = false;
   ScriptResource::Fetch(fetch_params, fetch_client_settings_object_fetcher,
                         this, global_scope_->GetIsolate(),
                         ScriptResource::kNoStreaming, kNoCompileHintsProducer,
-                        kNoCompileHintsConsumer);
+                        kNoCompileHintsConsumer,
+                        kNoV8CompileHintsMagicCommentRuntimeEnabledFeature);
 }
 
 void WorkerModuleScriptFetcher::Trace(Visitor* visitor) const {
@@ -209,7 +211,7 @@ void WorkerModuleScriptFetcher::DidReceiveDataWorkerMainScript(
   if (!span.size()) {
     return;
   }
-  source_text_.Append(decoder_->Decode(span.data(), span.size()));
+  source_text_.Append(decoder_->Decode(span));
 }
 
 void WorkerModuleScriptFetcher::OnStartLoadingBodyWorkerMainScript(

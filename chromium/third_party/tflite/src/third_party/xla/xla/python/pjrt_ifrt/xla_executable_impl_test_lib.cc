@@ -22,9 +22,9 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/OwningOpRef.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OwningOpRef.h"
 #include "xla/client/executable_build_options.h"
 #include "xla/pjrt/mlir_to_hlo.h"
 #include "xla/pjrt/pjrt_executable.h"
@@ -32,6 +32,7 @@ limitations under the License.
 #include "xla/python/ifrt/client.h"
 #include "xla/python/ifrt/compiler.h"
 #include "xla/python/ifrt/device.h"
+#include "xla/python/ifrt/device_list.h"
 #include "xla/python/ifrt/dtype.h"
 #include "xla/python/ifrt/executable.h"
 #include "xla/python/ifrt/hlo/hlo_program.h"
@@ -40,7 +41,7 @@ limitations under the License.
 #include "xla/python/ifrt/sharding.h"
 #include "xla/python/ifrt/test_util.h"
 #include "xla/python/pjrt_ifrt/xla_compiler.h"
-#include "tsl/lib/core/status_test_util.h"
+#include "xla/tsl/lib/core/status_test_util.h"
 #include "tsl/platform/statusor.h"
 #include "tsl/platform/test.h"
 
@@ -80,18 +81,24 @@ absl::StatusOr<std::unique_ptr<LoadedExecutable>> CompileOnDevices(
   } else {
     build_options.set_device_ordinal(devices.front()->Id().value());
     if (replicated) {
+      build_options.set_num_replicas(devices.size());
+      build_options.set_num_partitions(1);
+      build_options.set_use_spmd_partitioning(false);
       DeviceAssignment device_assignment(/*replica_count=*/devices.size(),
                                          /*computation_count=*/1);
       for (int i = 0; i < devices.size(); ++i) {
-        device_assignment(i, 0) = i;
+        device_assignment(i, 0) = devices[i]->Id().value();
       }
       build_options.set_device_assignment(device_assignment);
     } else {
+      build_options.set_num_replicas(1);
+      build_options.set_num_partitions(devices.size());
+      build_options.set_use_spmd_partitioning(true);
       DeviceAssignment device_assignment(
           /*replica_count=*/1,
           /*computation_count=*/devices.size());
       for (int i = 0; i < devices.size(); ++i) {
-        device_assignment(i, 0) = i;
+        device_assignment(0, i) = devices[i]->Id().value();
       }
       build_options.set_device_assignment(device_assignment);
     }
@@ -170,10 +177,10 @@ TEST(LoadedExecutableImplTest, CompileAndExecutePortable) {
                       /*on_done_with_host_buffer=*/{}));
 
   ExecuteOptions execute_options;
-  TF_ASSERT_OK_AND_ASSIGN(
-      LoadedExecutable::ExecuteResult result,
-      loaded_executable->Execute(absl::MakeSpan(&array, 1), execute_options,
-                                 /*devices=*/xla::ifrt::DeviceList({device})));
+  TF_ASSERT_OK_AND_ASSIGN(LoadedExecutable::ExecuteResult result,
+                          loaded_executable->Execute(
+                              absl::MakeSpan(&array, 1), execute_options,
+                              /*devices=*/BasicDeviceList::Create({device})));
   TF_ASSERT_OK(result.status.Await());
   EXPECT_THAT(result.outputs, SizeIs(1));
 

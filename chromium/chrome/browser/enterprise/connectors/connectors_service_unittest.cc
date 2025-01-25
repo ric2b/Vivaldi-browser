@@ -20,9 +20,10 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/enterprise/browser/controller/fake_browser_dm_token_storage.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
-#include "components/enterprise/connectors/service_provider_config.h"
+#include "components/enterprise/connectors/core/common.h"
+#include "components/enterprise/connectors/core/connectors_prefs.h"
+#include "components/enterprise/connectors/core/service_provider_config.h"
 #include "components/policy/core/common/policy_types.h"
-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/test/browser_task_environment.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -41,8 +42,17 @@ namespace enterprise_connectors {
 
 namespace {
 
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 constexpr char kEmptySettingsPref[] = "[]";
 
+constexpr char kNormalReportingSettingsPref[] = R"([
+  {
+    "service_provider": "google"
+  }
+])";
+#endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
+
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 constexpr char kWildcardAnalysisSettingsPref[] = R"([
   {
     "service_provider": "google",
@@ -52,20 +62,16 @@ constexpr char kWildcardAnalysisSettingsPref[] = R"([
   }
 ])";
 
-constexpr char kNormalReportingSettingsPref[] = R"([
-  {
-    "service_provider": "google"
-  }
-])";
-
 constexpr char kCustomMessage[] = "Custom Admin Message";
 constexpr char kCustomUrl[] = "https://learn.more.com";
+#endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 
 constexpr char kFakeDmToken[] = "fake-token";
 #if !BUILDFLAG(IS_CHROMEOS)
 constexpr char kFakeDeviceId[] = "fake-device-id";
 #endif
 
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 std::string CreateCustomUIPref(const char* custom_message,
                                const char* custom_url,
                                bool bypass_enabled) {
@@ -105,6 +111,8 @@ std::string CreateCustomUIPref(const char* custom_message,
       custom_messages_section.c_str(), bypass_enabled_section.c_str());
   return pref;
 }
+#endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
+
 }  // namespace
 
 class ConnectorsServiceTest : public testing::Test {
@@ -136,6 +144,7 @@ class ConnectorsServiceTest : public testing::Test {
 #endif
 };
 
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 // Test to make sure that HasExtraUiToDisplay returns the right value to
 // show the extra UI from opt in features like custom message, URL and bypass
 // on Download.
@@ -170,6 +179,7 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(CreateCustomUIPref(nullptr, kCustomUrl, false), true),
         std::make_tuple(CreateCustomUIPref(nullptr, nullptr, true), true),
         std::make_tuple(CreateCustomUIPref(nullptr, nullptr, false), false)));
+#endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 
 // Tests to make sure getting reporting settings work with both the feature flag
 // and the OnSecurityEventEnterpriseConnector policy. The parameter for these
@@ -178,31 +188,24 @@ INSTANTIATE_TEST_SUITE_P(
 //   enum class ReportingConnector[]: array of all reporting connectors.
 //   bool: enable feature flag.
 //   int: policy value.  0: don't set, 1: set to normal, 2: set to empty.
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 class ConnectorsServiceReportingFeatureTest
     : public ConnectorsServiceTest,
-      public testing::WithParamInterface<std::tuple<ReportingConnector, int>> {
+      public testing::WithParamInterface<
+          std::tuple<ReportingConnector, const char*>> {
  public:
   ReportingConnector connector() const { return std::get<0>(GetParam()); }
-  int policy_value() const { return std::get<1>(GetParam()); }
+  const char* pref_value() const { return std::get<1>(GetParam()); }
 
-  const char* pref() const { return ConnectorPref(connector()); }
+  const char* pref() const { return kOnSecurityEventPref; }
 
-  const char* scope_pref() const { return ConnectorScopePref(connector()); }
-
-  const char* pref_value() const {
-    switch (policy_value()) {
-      case 1:
-        return kNormalReportingSettingsPref;
-      case 2:
-        return kEmptySettingsPref;
-    }
-    NOTREACHED_IN_MIGRATION();
-    return nullptr;
-  }
+  const char* scope_pref() const { return kOnSecurityEventScopePref; }
 
   PrefService* pref_service() const { return profile_->GetPrefs(); }
 
-  bool reporting_enabled() const { return policy_value() == 1; }
+  bool reporting_enabled() const {
+    return pref_value() == kNormalReportingSettingsPref;
+  }
 
   void ValidateSettings(const ReportingSettings& settings) {
     // For now, the URL is the same for both legacy and new policies, so
@@ -213,33 +216,13 @@ class ConnectorsServiceReportingFeatureTest
   }
 };
 
-TEST_P(ConnectorsServiceReportingFeatureTest, Test) {
-  if (policy_value() != 0) {
-    profile_->GetPrefs()->Set(pref(), *base::JSONReader::Read(pref_value()));
-    profile_->GetPrefs()->SetInteger(scope_pref(),
-                                     policy::POLICY_SCOPE_MACHINE);
-  }
-
-  auto settings = ConnectorsServiceFactory::GetForBrowserContext(profile_)
-                      ->GetReportingSettings(connector());
-  EXPECT_EQ(reporting_enabled(), settings.has_value());
-  if (settings.has_value())
-    ValidateSettings(settings.value());
-
-  EXPECT_EQ(policy_value() == 1,
-            !ConnectorsServiceFactory::GetForBrowserContext(profile_)
-                 ->ConnectorsManagerForTesting()
-                 ->GetReportingConnectorsSettingsForTesting()
-                 .empty());
-}
-
 #if BUILDFLAG(IS_CHROMEOS)
 TEST_P(ConnectorsServiceReportingFeatureTest,
        ChromeOsManagedGuestSessionFlagSetInMgs) {
   // A fake Managed Guest Session that gets destroyed at the end of the test.
   chromeos::FakeManagedGuestSession fake_mgs;
 
-  if (policy_value() != 0) {
+  if (pref_value()) {
     profile_->GetPrefs()->Set(pref(), *base::JSONReader::Read(pref_value()));
     profile_->GetPrefs()->SetInteger(scope_pref(),
                                      policy::POLICY_SCOPE_MACHINE);
@@ -257,7 +240,7 @@ TEST_P(ConnectorsServiceReportingFeatureTest,
 
 TEST_P(ConnectorsServiceReportingFeatureTest,
        ChromeOsManagedGuestSessionFlagNotSetInUserSession) {
-  if (policy_value() != 0) {
+  if (pref_value()) {
     profile_->GetPrefs()->Set(pref(), *base::JSONReader::Read(pref_value()));
     profile_->GetPrefs()->SetInteger(scope_pref(),
                                      policy::POLICY_SCOPE_MACHINE);
@@ -273,6 +256,7 @@ TEST_P(ConnectorsServiceReportingFeatureTest,
 }
 #endif
 
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 TEST_P(ConnectorsServiceReportingFeatureTest, CheckTelemetryPolicyObserver) {
   ConnectorsService* connectors_service =
       ConnectorsServiceFactory::GetForBrowserContext(profile_);
@@ -304,20 +288,24 @@ TEST_P(ConnectorsServiceReportingFeatureTest, CheckTelemetryPolicyObserver) {
                                     {kExtensionTelemetryEvent}, {});
   EXPECT_TRUE(future.WaitAndClear());
 }
+#endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 
 INSTANTIATE_TEST_SUITE_P(
     ,
     ConnectorsServiceReportingFeatureTest,
     testing::Combine(testing::Values(ReportingConnector::SECURITY_EVENT),
-                     testing::ValuesIn({0, 1, 2})));
+                     testing::Values(nullptr,
+                                     kNormalReportingSettingsPref,
+                                     kEmptySettingsPref)));
+
+#endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 
 TEST_F(ConnectorsServiceTest, RealtimeURLCheck) {
   profile_->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode,
-      safe_browsing::REAL_TIME_CHECK_FOR_MAINFRAME_ENABLED);
-  profile_->GetPrefs()->SetInteger(
-      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope,
-      policy::POLICY_SCOPE_MACHINE);
+      kEnterpriseRealTimeUrlCheckMode,
+      enterprise_connectors::REAL_TIME_CHECK_FOR_MAINFRAME_ENABLED);
+  profile_->GetPrefs()->SetInteger(kEnterpriseRealTimeUrlCheckScope,
+                                   policy::POLICY_SCOPE_MACHINE);
 
   auto maybe_dm_token = ConnectorsServiceFactory::GetForBrowserContext(profile_)
                             ->GetDMTokenForRealTimeUrlCheck();
@@ -344,6 +332,7 @@ TEST_F(ConnectorsServiceTest, RealtimeURLCheck) {
 #endif
 }
 
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 class ConnectorsServiceExemptURLsTest
     : public ConnectorsServiceTest,
       public testing::WithParamInterface<AnalysisConnector> {
@@ -352,9 +341,9 @@ class ConnectorsServiceExemptURLsTest
 
   void SetUp() override {
     profile_->GetPrefs()->Set(
-        ConnectorPref(connector()),
+        AnalysisConnectorPref(connector()),
         *base::JSONReader::Read(kWildcardAnalysisSettingsPref));
-    profile_->GetPrefs()->SetInteger(ConnectorScopePref(connector()),
+    profile_->GetPrefs()->SetInteger(AnalysisConnectorScopePref(connector()),
                                      policy::POLICY_SCOPE_MACHINE);
   }
 
@@ -401,7 +390,7 @@ TEST_P(ConnectorsServiceExemptURLsTest, BlobAndFilesystem) {
 
   // Test against a specific pattern policy to validate the correct inner URL is
   // used.
-  profile_->GetPrefs()->Set(ConnectorPref(connector()),
+  profile_->GetPrefs()->Set(AnalysisConnectorPref(connector()),
                             *base::JSONReader::Read(R"([
         {
           "service_provider": "google",
@@ -451,6 +440,7 @@ INSTANTIATE_TEST_SUITE_P(
     ,
     ConnectorsServiceExemptURLsTest,
     testing::Values(FILE_ATTACHED, FILE_DOWNLOADED, BULK_DATA_ENTRY, PRINT));
+#endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 

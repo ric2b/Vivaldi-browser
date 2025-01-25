@@ -25,6 +25,17 @@ export class ScreenshotError extends Error {
     this.cause = cause;
     this.stack = cause?.stack ?? '';
     this.screenshots = screenshots;
+
+    // To show Diffs mocha Spec reporter expects some properties.
+    // See node_modules/mocha/lib/reporters/base.js.
+    // @ts-ignore forwarding error properties for Mocha.
+    this.showDiff = cause?.showDiff;
+    // @ts-ignore forwarding error properties for Mocha.
+    this.actual = cause?.actual;
+    // @ts-ignore forwarding error properties for Mocha.
+    this.expected = cause?.expected;
+    // @ts-ignore forwarding error properties for Mocha.
+    this.operator = cause?.operator;
   }
 
   /**
@@ -32,7 +43,7 @@ export class ScreenshotError extends Error {
    */
   static fromMessage(message: string, generatedImgPath: string) {
     const screenshots = {
-      'generated': {filePath: this.stashArtifact(generatedImgPath, 'generated')},
+      generated: {filePath: this.stashArtifact(generatedImgPath, 'generated')},
     };
     return new ScreenshotError(screenshots, message, undefined);
   }
@@ -43,9 +54,9 @@ export class ScreenshotError extends Error {
    */
   static fromError(error: Error, goldenImgPath: string, generatedImgPath: string, diffImgPath: string) {
     const screenshots = {
-      'expected_image': {filePath: this.stashArtifact(goldenImgPath, 'expected')},
-      'actual_image': {filePath: this.stashArtifact(generatedImgPath, 'actual')},
-      'image_diff': {filePath: this.stashArtifact(diffImgPath, 'diff')},
+      expected_image: {filePath: this.stashArtifact(goldenImgPath, 'expected')},
+      actual_image: {filePath: this.stashArtifact(generatedImgPath, 'actual')},
+      image_diff: {filePath: this.stashArtifact(diffImgPath, 'diff')},
     };
     return new ScreenshotError(screenshots, undefined, error);
   }
@@ -54,14 +65,14 @@ export class ScreenshotError extends Error {
    * Creates a ScreenshotError an unexpected error occurs. Screenshots are
    * were taken for both the target and the frontend.
    */
-  static fromBase64Images(error: unknown, targetScreenshot?: string, frontendScreenshot?: string) {
+  static fromBase64Images(error: Error, targetScreenshot?: string, frontendScreenshot?: string) {
     if (!targetScreenshot || !frontendScreenshot) {
       console.error('No artifacts to save.');
       return error;
     }
     const screenshots = {
-      'target': {filePath: this.saveArtifact(targetScreenshot)},
-      'frontend': {filePath: this.saveArtifact(frontendScreenshot)},
+      target: {filePath: this.saveArtifact(targetScreenshot)},
+      frontend: {filePath: this.saveArtifact(frontendScreenshot)},
     };
     return new ScreenshotError(screenshots, undefined, error as Error);
   }

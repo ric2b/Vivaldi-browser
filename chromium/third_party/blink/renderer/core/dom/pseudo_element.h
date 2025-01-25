@@ -62,6 +62,7 @@ class CORE_EXPORT PseudoElement : public Element {
   bool LayoutObjectIsNeeded(const DisplayStyle&) const override;
   bool CanGeneratePseudoElement(PseudoId) const override;
 
+  bool CanGenerateContent() const;
   bool CanStartSelection() const override { return false; }
   bool CanContainRangeEndPoint() const override { return false; }
   PseudoId GetPseudoId() const override { return pseudo_id_; }
@@ -74,17 +75,8 @@ class CORE_EXPORT PseudoElement : public Element {
   static AtomicString PseudoElementNameForEvents(Element*);
   static bool IsWebExposed(PseudoId, const Node*);
 
-  int DefaultTabIndex() const override;
-  bool HasActivationBehavior() const final {
-    return IsScrollMarkerPseudoElement();
-  }
-  void DefaultEventHandler(Event&) override;
-  bool WillRespondToMouseClickEvents() override {
-    return IsScrollMarkerPseudoElement();
-  }
-
-  // Pseudo element (apart from ::scroll-marker) are not allowed to be the inner
-  // node for hit testing. Find the closest ancestor which is a real dom node.
+  // Pseudo elements are not allowed to be the inner node for hit testing.
+  // Find the closest ancestor which is a real dom node.
   virtual Node* InnerNodeForHitTesting();
 
   void AccessKeyAction(SimulatedClickCreationScope creation_scope) override;

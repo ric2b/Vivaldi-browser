@@ -20,6 +20,7 @@ NSData* StringToData(std::string str) {
 
 ArchivableCredential* TestCredential() {
   return [[ArchivableCredential alloc] initWithFavicon:@"favicon"
+                                                  gaia:nil
                                               password:@"qwery123"
                                                   rank:5
                                       recordIdentifier:@"recordIdentifier"
@@ -32,6 +33,7 @@ ArchivableCredential* TestCredential() {
 ArchivableCredential* TestPasskeyCredential() {
   return
       [[ArchivableCredential alloc] initWithFavicon:@"favicon"
+                                               gaia:nil
                                    recordIdentifier:@"recordIdentifier"
                                              syncId:StringToData("syncId")
                                            username:@"username"
@@ -41,13 +43,15 @@ ArchivableCredential* TestPasskeyCredential() {
                                                rpId:@"rpId"
                                          privateKey:StringToData("privateKey")
                                           encrypted:StringToData("encrypted")
-                                       creationTime:kJan1st2024];
+                                       creationTime:kJan1st2024
+                                       lastUsedTime:kJan1st2024];
 }
 
 // Tests that an ArchivableCredential can be created.
 TEST_F(ArchivableCredentialTest, create) {
   ArchivableCredential* credential =
       [[ArchivableCredential alloc] initWithFavicon:@"favicon"
+                                               gaia:nil
                                            password:@"test"
                                                rank:5
                                    recordIdentifier:@"recordIdentifier"
@@ -68,6 +72,7 @@ TEST_F(ArchivableCredentialTest, createPasskey) {
 
   ArchivableCredential* credential =
       [[ArchivableCredential alloc] initWithFavicon:@"favicon"
+                                               gaia:nil
                                    recordIdentifier:@"recordIdentifier"
                                              syncId:StringToData("syncId")
                                            username:@"username"
@@ -77,12 +82,14 @@ TEST_F(ArchivableCredentialTest, createPasskey) {
                                                rpId:@"rpId"
                                          privateKey:StringToData("test")
                                           encrypted:nil
-                                       creationTime:kJan1st2024];
+                                       creationTime:kJan1st2024
+                                       lastUsedTime:kJan1st2024];
   EXPECT_TRUE(credential);
   EXPECT_TRUE(credential.isPasskey);
 
   credential =
       [[ArchivableCredential alloc] initWithFavicon:@"favicon"
+                                               gaia:nil
                                    recordIdentifier:@"recordIdentifier"
                                              syncId:StringToData("syncId")
                                            username:@"username"
@@ -92,7 +99,8 @@ TEST_F(ArchivableCredentialTest, createPasskey) {
                                                rpId:@"rpId"
                                          privateKey:nil
                                           encrypted:StringToData("test")
-                                       creationTime:kJan1st2024];
+                                       creationTime:kJan1st2024
+                                       lastUsedTime:kJan1st2024];
   EXPECT_TRUE(credential);
   EXPECT_TRUE(credential.isPasskey);
 }
@@ -193,6 +201,7 @@ TEST_F(ArchivableCredentialTest, equality) {
 
   ArchivableCredential* credentialSameIdentifier =
       [[ArchivableCredential alloc] initWithFavicon:@"other_favicon"
+                                               gaia:nil
                                            password:@"Qwerty123!"
                                                rank:credential.rank + 10
                                    recordIdentifier:@"recordIdentifier"
@@ -204,6 +213,7 @@ TEST_F(ArchivableCredentialTest, equality) {
 
   ArchivableCredential* credentialDiferentIdentifier =
       [[ArchivableCredential alloc] initWithFavicon:@"favicon"
+                                               gaia:nil
                                            password:@"123456789"
                                                rank:credential.rank
                                    recordIdentifier:@"other_recordIdentifier"
@@ -225,6 +235,7 @@ TEST_F(ArchivableCredentialTest, passkeyEquality) {
 
   ArchivableCredential* credentialSameIdentifier = [[ArchivableCredential alloc]
        initWithFavicon:@"other_favicon"
+                  gaia:nil
       recordIdentifier:@"recordIdentifier"
                 syncId:StringToData("other_syncId")
               username:@"other_username"
@@ -234,11 +245,13 @@ TEST_F(ArchivableCredentialTest, passkeyEquality) {
                   rpId:@"other_rpId"
             privateKey:StringToData("other_privateKey")
              encrypted:StringToData("other_encrypted")
-          creationTime:kJan1st2024 + 10];
+          creationTime:kJan1st2024 + 10
+          lastUsedTime:kJan1st2024 + 10];
   EXPECT_NSNE(credential, credentialSameIdentifier);
 
   ArchivableCredential* credentialDiferentIdentifier =
       [[ArchivableCredential alloc] initWithFavicon:@"favicon"
+                                               gaia:nil
                                    recordIdentifier:@"other_recordIdentifier"
                                              syncId:StringToData("syncId")
                                            username:@"username"
@@ -248,7 +261,8 @@ TEST_F(ArchivableCredentialTest, passkeyEquality) {
                                                rpId:@"rpId"
                                          privateKey:StringToData("privateKey")
                                           encrypted:StringToData("encrypted")
-                                       creationTime:kJan1st2024];
+                                       creationTime:kJan1st2024
+                                       lastUsedTime:kJan1st2024];
   EXPECT_NSNE(credential, credentialDiferentIdentifier);
 
   EXPECT_NSNE(credential, nil);

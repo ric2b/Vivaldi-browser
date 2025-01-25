@@ -9,7 +9,6 @@
 #include "browser/menus/vivaldi_render_view_context_menu.h"
 
 #include <map>
-
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_resources.h"
 #include "base/files/file_util.h"
@@ -43,11 +42,13 @@
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/search_engines/template_url.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/api/context_menu/context_menu_api.h"
+#include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "media/base/media_switches.h"
@@ -62,6 +63,8 @@
 #if BUILDFLAG(IS_MAC)
 #include "browser/menus/vivaldi_speech_menu_controller.h"
 #endif
+
+const char* kGetVivaldiForMobileUrl = "https://www.vivaldi.com/mobile";
 
 // Comment out if original chrome menu behavior is needed.
 #define ENABLE_VIVALDI_CONTEXT_MENU
@@ -204,6 +207,7 @@ VivaldiRenderViewContextMenu::VivaldiRenderViewContextMenu(
       id_(active_id_counter_++),
       parent_view_(parent_view),
       embedder_web_contents_(GetWebContentsToUse(source_web_contents_)) {
+
   active_controller_ = this;
 }
 
@@ -290,6 +294,8 @@ void VivaldiRenderViewContextMenu::InitMenu() {
       content_type->SupportsGroup(ContextMenuContentType::ITEM_GROUP_FRAME);
   request.ismailcontent = web_view_guest && web_view_guest->IsVivaldiMail();
   request.iswebpanel = web_view_guest && web_view_guest->IsVivaldiWebPanel();
+  request.iswebpagewidget =
+      web_view_guest && web_view_guest->IsVivaldiWebPageWidget();
   request.ismailto = params_.link_url.SchemeIs(url::kMailToScheme);
   request.support.copy =
       content_type->SupportsGroup(ContextMenuContentType::ITEM_GROUP_COPY);
@@ -298,14 +304,9 @@ void VivaldiRenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_ALL_EXTENSION) ||
       content_type->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
-  // request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
-  //     browser->tab_strip_model()->GetActiveWebContents());
-  //  Link support was fully removed with ch 102. Keeping the code around to see
-  //  if we can reintroduce it.
-  // request.support.sendlinktodevices =
-  // send_tab_to_self::ShouldOfferToShareUrl(
-  //     SendTabToSelfSyncServiceFactory::GetForProfile(browser->profile()),
-  //     params_.link_url);
+  request.support.sendtodevices = send_tab_to_self::ShouldDisplayEntryPoint(
+      embedder_web_contents_);
+
   request.support.qrcode = QRCodeGeneratorEnabled(embedder_web_contents_);
   request.support.emoji = params_.form_control_type.has_value()
     ? DoesFormControlTypeSupportEmoji(*params_.form_control_type) &&
@@ -339,12 +340,14 @@ void VivaldiRenderViewContextMenu::InitMenu() {
       }
     } else {
       request.textfield = context_menu::TextfieldType::kDocument;
-      request.support.password = content_type->SupportsGroup(
-          ContextMenuContentType::ITEM_GROUP_PASSWORD);
+      password_manager::ContentPasswordManagerDriver* driver =
+          password_manager::ContentPasswordManagerDriver::GetForRenderFrameHost(
+              GetRenderFrameHost());
+      request.support.password =
+        driver &&
+        driver->IsPasswordFieldForPasswordManager(
+            autofill::FieldRendererId(params_.field_renderer_id), params_);
       if (request.support.password) {
-        password_manager::ContentPasswordManagerDriver* driver =
-            password_manager::ContentPasswordManagerDriver::
-                GetForRenderFrameHost(GetRenderFrameHost());
         request.support.passwordgeneration =
             password_manager_util::ManualPasswordGenerationEnabled(driver);
         request.support.passwordshowall =
@@ -353,6 +356,17 @@ void VivaldiRenderViewContextMenu::InitMenu() {
       }
     }
   }
+
+  if (request.textfield == context_menu::TextfieldType::kAddressfield ||
+      request.textfield == context_menu::TextfieldType::kSearchfield ||
+      request.textfield == context_menu::TextfieldType::kRegular) {
+    gfx::Point point(0, 0);
+    developertools_controller_.reset(
+        new DeveloperToolsMenuController(embedder_web_contents_, point));
+    developertools_controller_->SetHandleInspectElement(false);
+  }
+
+  is_webpage_widget_ = request.iswebpagewidget;
 
   extensions::ContextMenuAPI::RequestMenu(
       GetBrowserContext(), browser->session_id().id(), id_, request);
@@ -568,6 +582,16 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
                                                     &enabled)) {
     return enabled;
   }
+  if (sendtopage_controller_ &&
+      sendtopage_controller_->IsCommandIdEnabled(command_id, params_,
+                                                 &enabled)) {
+    return enabled;
+  }
+  if (sendtolink_controller_ &&
+      sendtolink_controller_->IsCommandIdEnabled(command_id, params_,
+                                                 &enabled)) {
+    return enabled;
+  }
   if (extensions_controller_ &&
       extensions::ContextMenuMatcher::IsExtensionsCustomCommandId(command_id)) {
     return extensions_controller_->get_extension_items()->IsCommandIdEnabled(
@@ -677,6 +701,10 @@ bool VivaldiRenderViewContextMenu::IsCommandIdEnabled(int command_id) const {
 bool VivaldiRenderViewContextMenu::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
+  if (is_webpage_widget_) {
+    return false; // Always
+  }
+
   if (menu_delegate_ && !menu_delegate_->GetShowShortcuts()) {
     return false;
   }
@@ -688,6 +716,17 @@ bool VivaldiRenderViewContextMenu::GetAcceleratorForCommandId(
     // Accelerators that have to match hardcoded shortcuts in chromium.
     return GetFixedAcceleratorForCommandId(command_id, accelerator);
   }
+}
+
+void VivaldiRenderViewContextMenu::VivaldiCommandIdHighlighted(int command_id) {
+  std::string text;
+  if (sendtopage_controller_ &&
+      sendtopage_controller_->GetHighlightText(command_id, text)) {
+  } else if (sendtolink_controller_ &&
+      sendtolink_controller_->GetHighlightText(command_id, text)) {
+  }
+
+  extensions::MenubarMenuAPI::SendHover(GetProfile(), window_id_, text);
 }
 
 void VivaldiRenderViewContextMenu::ExecuteCommand(int command_id,
@@ -761,6 +800,11 @@ VivaldiRenderViewContextMenu::HandleCommand(int command_id, int event_flags) {
     return ActionChain::kStop;
   } else if (sendtolink_controller_ &&
              sendtolink_controller_->HandleCommand(command_id, event_flags)) {
+    return ActionChain::kStop;
+  }  // Let RenderViewContextMenu::ExecuteCommand handle
+     // IDC_CONTENT_CONTEXT_INSPECTELEMENT as it has the coordinates.
+  else if (developertools_controller_ &&
+           developertools_controller_->HandleCommand(command_id)) {
     return ActionChain::kStop;
 #if BUILDFLAG(IS_MAC)
   } else if (speech_controller_ &&
@@ -947,6 +991,7 @@ bool VivaldiRenderViewContextMenu::HasContainerContent(
     case context_menu::ContainerContent::kLinktohighlight:
     case context_menu::ContainerContent::kSendpagetodevices:
     case context_menu::ContainerContent::kSendlinktodevices:
+    case context_menu::ContainerContent::kSendimagetodevices:
     case context_menu::ContainerContent::kSpellcheck:
     case context_menu::ContainerContent::kSpellcheckoptions:
       return true;
@@ -958,6 +1003,7 @@ bool VivaldiRenderViewContextMenu::HasContainerContent(
 void VivaldiRenderViewContextMenu::PopulateContainer(
     const Container& container,
     int id,
+    bool dark_text_color,
     ui::SimpleMenuModel* menu_model) {
   namespace context_menu = extensions::vivaldi::context_menu;
   switch (container.content) {
@@ -999,18 +1045,38 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
     }
     case context_menu::ContainerContent::kSendpagetodevices:
       sendtopage_controller_.reset(
-          new DeviceMenuController(this, DeviceMenuController::kPage));
+          new DeviceMenuController(
+              this,
+              params_.page_url,
+              base::UTF16ToUTF8(source_web_contents_->GetTitle())));
       if (GetBrowser()) {
         sendtopage_controller_->Populate(
-            GetBrowser(), base::UTF8ToUTF16(container.name), menu_model, this);
+            GetBrowser(), base::UTF8ToUTF16(container.name), container.icons,
+            dark_text_color, menu_model, this);
       }
       break;
     case context_menu::ContainerContent::kSendlinktodevices:
       sendtolink_controller_.reset(
-          new DeviceMenuController(this, DeviceMenuController::kLink));
+          new DeviceMenuController(
+              this,
+              params_.link_url,
+              base::UTF16ToUTF8(source_web_contents_->GetTitle())));
       if (GetBrowser()) {
         sendtolink_controller_->Populate(
-            GetBrowser(), base::UTF8ToUTF16(container.name), menu_model, this);
+            GetBrowser(), base::UTF8ToUTF16(container.name), container.icons,
+            dark_text_color, menu_model, this);
+      }
+      break;
+    case context_menu::ContainerContent::kSendimagetodevices:
+      sendtolink_controller_.reset(
+          new DeviceMenuController(
+              this,
+              params_.src_url,
+              base::UTF16ToUTF8(source_web_contents_->GetTitle())));
+      if (GetBrowser()) {
+        sendtolink_controller_->Populate(
+            GetBrowser(), base::UTF8ToUTF16(container.name), container.icons,
+            dark_text_color, menu_model, this);
       }
       break;
     case context_menu::ContainerContent::kSpeech:
@@ -1119,6 +1185,31 @@ ui::ImageModel VivaldiRenderViewContextMenu::GetImageForAction(
       return ui::ImageModel();
   }
 #endif
+}
+
+ui::ImageModel VivaldiRenderViewContextMenu::GetImageForContainer(
+    const Container& container) {
+  namespace context_menu = extensions::vivaldi::context_menu;
+#if BUILDFLAG(IS_MAC)
+  return ui::ImageModel();
+#else
+  switch (container.content) {
+    case context_menu::ContainerContent::kSendpagetodevices:
+    case context_menu::ContainerContent::kSendlinktodevices:
+    case context_menu::ContainerContent::kSendimagetodevices:
+      return ui::ImageModel::FromVectorIcon(vector_icons::kDevicesIcon);
+    default:
+      return ui::ImageModel();
+  }
+#endif
+}
+
+void VivaldiRenderViewContextMenu::OnGetMobile() {
+  OpenURLWithExtraHeaders(GURL(kGetVivaldiForMobileUrl),
+                          GetDocumentURL(params_),
+                          url::Origin(),
+                          GetNewTabDispostion(GetWebContents()),
+                          ui::PAGE_TRANSITION_LINK, "", true);
 }
 
 }  // namespace vivaldi

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 // Unit tests for implementation of google_api_keys namespace.
 //
 // Because the file deals with a lot of preprocessor defines and
@@ -41,10 +46,12 @@
 #include <stddef.h>
 
 #include <string>
+
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/strings/stringize_macros.h"
+#include "base/version_info/channel.h"
 
 #if BUILDFLAG(IS_APPLE)
 #include "google_apis/google_api_keys_mac.h"
@@ -141,21 +148,18 @@ TEST_F(GoogleAPIKeysTest, OfficialKeys) {
   EXPECT_TRUE(testcase::HasAPIKeyConfigured());
   EXPECT_TRUE(testcase::HasOAuthClientConfigured());
 
-  std::string api_key = testcase::g_api_key_cache.Get().api_key();
-  std::string id_main = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_MAIN);
+  std::string api_key = testcase::GetAPIKey();
+  std::string id_main = testcase::GetOAuth2ClientID(testcase::CLIENT_MAIN);
   std::string secret_main =
-      testcase::g_api_key_cache.Get().GetClientSecret(testcase::CLIENT_MAIN);
-  std::string id_remoting = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_MAIN);
+  std::string id_remoting =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING);
   std::string secret_remoting =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING);
-  std::string id_remoting_host = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING);
+  std::string id_remoting_host =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING_HOST);
   std::string secret_remoting_host =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING_HOST);
 
   EXPECT_NE(0u, api_key.size());
   EXPECT_NE(DUMMY_API_TOKEN, api_key);
@@ -227,21 +231,18 @@ TEST_F(GoogleAPIKeysTest, DefaultKeys) {
   EXPECT_FALSE(testcase::HasAPIKeyConfigured());
   EXPECT_FALSE(testcase::HasOAuthClientConfigured());
 
-  std::string api_key = testcase::g_api_key_cache.Get().api_key();
-  std::string id_main = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_MAIN);
+  std::string api_key = testcase::GetAPIKey();
+  std::string id_main = testcase::GetOAuth2ClientID(testcase::CLIENT_MAIN);
   std::string secret_main =
-      testcase::g_api_key_cache.Get().GetClientSecret(testcase::CLIENT_MAIN);
-  std::string id_remoting = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_MAIN);
+  std::string id_remoting =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING);
   std::string secret_remoting =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING);
-  std::string id_remoting_host = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING);
+  std::string id_remoting_host =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING_HOST);
   std::string secret_remoting_host =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING_HOST);
 
   EXPECT_EQ(kDummyToken, api_key);
   EXPECT_EQ(kDummyToken, id_main);
@@ -284,21 +285,18 @@ TEST_F(GoogleAPIKeysTest, OverrideSomeKeys) {
   EXPECT_TRUE(testcase::HasAPIKeyConfigured());
   EXPECT_FALSE(testcase::HasOAuthClientConfigured());
 
-  std::string api_key = testcase::g_api_key_cache.Get().api_key();
-  std::string id_main = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_MAIN);
+  std::string api_key = testcase::GetAPIKey();
+  std::string id_main = testcase::GetOAuth2ClientID(testcase::CLIENT_MAIN);
   std::string secret_main =
-      testcase::g_api_key_cache.Get().GetClientSecret(testcase::CLIENT_MAIN);
-  std::string id_remoting = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_MAIN);
+  std::string id_remoting =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING);
   std::string secret_remoting =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING);
-  std::string id_remoting_host = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING);
+  std::string id_remoting_host =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING_HOST);
   std::string secret_remoting_host =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING_HOST);
 
   EXPECT_EQ("API_KEY override", api_key);
   EXPECT_EQ(kDummyToken, id_main);
@@ -346,21 +344,18 @@ TEST_F(GoogleAPIKeysTest, OverrideAllKeys) {
   EXPECT_TRUE(testcase::HasAPIKeyConfigured());
   EXPECT_TRUE(testcase::HasOAuthClientConfigured());
 
-  std::string api_key = testcase::g_api_key_cache.Get().api_key();
-  std::string id_main = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_MAIN);
+  std::string api_key = testcase::GetAPIKey();
+  std::string id_main = testcase::GetOAuth2ClientID(testcase::CLIENT_MAIN);
   std::string secret_main =
-      testcase::g_api_key_cache.Get().GetClientSecret(testcase::CLIENT_MAIN);
-  std::string id_remoting = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_MAIN);
+  std::string id_remoting =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING);
   std::string secret_remoting =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING);
-  std::string id_remoting_host = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING);
+  std::string id_remoting_host =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING_HOST);
   std::string secret_remoting_host =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING_HOST);
 
   EXPECT_EQ("API_KEY", api_key);
   EXPECT_EQ("ID_MAIN", id_main);
@@ -409,7 +404,7 @@ TEST_F(GoogleAPIKeysTest, OverrideApiKeyViaFeatureWithNoParamIsIgnored) {
   scoped_feature_list.InitFromCommandLine("OverrideAPIKey", "");
 
   base::HistogramTester tester;
-  EXPECT_EQ("API_KEY", testcase::g_api_key_cache.Get().api_key());
+  EXPECT_EQ("API_KEY", testcase::GetAPIKey());
 
   // |g_api_key_cache| is loaded only once, so the histogram is only logged
   // during the first iteration of the test.
@@ -458,7 +453,7 @@ TEST_F(GoogleAPIKeysTest, OverrideApiKeyViaFeature) {
       "OverrideAPIKey<foo.bar:api_key/API_KEY2", "");
 
   base::HistogramTester tester;
-  EXPECT_EQ("API_KEY2", testcase::g_api_key_cache.Get().api_key());
+  EXPECT_EQ("API_KEY2", testcase::GetAPIKey());
   // |g_api_key_cache| is loaded only once, so the histogram is only logged
   // during the first iteration of the test.
   if (test_iteration == 1) {
@@ -519,21 +514,18 @@ TEST_F(GoogleAPIKeysTest, OverrideAllKeysUsingEnvironment) {
 
   // It's important that the first call to Get() only happen after the
   // environment variables have been set.
-  std::string api_key = testcase::g_api_key_cache.Get().api_key();
-  std::string id_main = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_MAIN);
+  std::string api_key = testcase::GetAPIKey();
+  std::string id_main = testcase::GetOAuth2ClientID(testcase::CLIENT_MAIN);
   std::string secret_main =
-      testcase::g_api_key_cache.Get().GetClientSecret(testcase::CLIENT_MAIN);
-  std::string id_remoting = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_MAIN);
+  std::string id_remoting =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING);
   std::string secret_remoting =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING);
-  std::string id_remoting_host = testcase::g_api_key_cache.Get().GetClientID(
-      testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING);
+  std::string id_remoting_host =
+      testcase::GetOAuth2ClientID(testcase::CLIENT_REMOTING_HOST);
   std::string secret_remoting_host =
-      testcase::g_api_key_cache.Get().GetClientSecret(
-          testcase::CLIENT_REMOTING_HOST);
+      testcase::GetOAuth2ClientSecret(testcase::CLIENT_REMOTING_HOST);
 
   EXPECT_EQ("env-API_KEY", api_key);
   EXPECT_EQ("env-ID_MAIN", id_main);
@@ -604,6 +596,7 @@ TEST_F(GoogleAPIKeysTest, OverrideAllKeysUsingSetters) {
   EXPECT_TRUE(testcase::HasAPIKeyConfigured());
   EXPECT_TRUE(testcase::HasOAuthClientConfigured());
 
+  EXPECT_EQ(api_key, testcase::GetAPIKey(::version_info::Channel::STABLE));
   EXPECT_EQ(api_key, testcase::GetAPIKey());
 
   EXPECT_EQ(id_main, testcase::GetOAuth2ClientID(testcase::CLIENT_MAIN));
@@ -665,6 +658,8 @@ TEST_F(GoogleAPIKeysTest, OverrideAllKeysUsingConfig) {
   EXPECT_TRUE(testcase::HasAPIKeyConfigured());
   EXPECT_TRUE(testcase::HasOAuthClientConfigured());
 
+  EXPECT_EQ("config-API_KEY",
+            testcase::GetAPIKey(::version_info::Channel::STABLE));
   EXPECT_EQ("config-API_KEY", testcase::GetAPIKey());
   EXPECT_EQ("config-ID_MAIN",
             testcase::GetOAuth2ClientID(testcase::CLIENT_MAIN));

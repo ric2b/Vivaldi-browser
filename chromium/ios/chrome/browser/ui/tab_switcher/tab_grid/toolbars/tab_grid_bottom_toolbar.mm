@@ -9,10 +9,10 @@
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_new_tab_button.h"
@@ -46,16 +46,17 @@ using vivaldi::IsVivaldiRunning;
   UIBarButtonItem* _shareButton;
   BOOL _undoActive;
   BOOL _scrolledToEdge;
-  UIView* _scrolledToBottomBackgroundView;
   UIView* _scrolledBackgroundView;
   // Configures the responder following the receiver in the responder chain.
   UIResponder* _followingNextResponder;
+  UIView* _scrolledToBottomBackgroundView;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
     [self setupViews];
+    [self updateLayout];
   }
   return self;
 }
@@ -145,6 +146,10 @@ using vivaldi::IsVivaldiRunning;
   _doneButton.enabled = enabled;
 }
 
+- (void)setDoneButtonHidden:(BOOL)hidden {
+  _doneButton.hidden = hidden;
+}
+
 - (void)setCloseAllButtonEnabled:(BOOL)enabled {
   _closeAllOrUndoButton.enabled = enabled;
 }
@@ -179,19 +184,15 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)hide {
-  if (@available(iOS 16.0, *)) {
-    // The `_editButton` is hidden to dismiss its context menu if it's still
-    // presented.
-    _editButton.hidden = YES;
-  }
+  // The `_editButton` is hidden to dismiss its context menu if it's still
+  // presented.
+  _editButton.hidden = YES;
   _smallNewTabButton.alpha = 0.0;
   _largeNewTabButton.alpha = 0.0;
 }
 
 - (void)show {
-  if (@available(iOS 16.0, *)) {
-    _editButton.hidden = NO;
-  }
+  _editButton.hidden = NO;
   _smallNewTabButton.alpha = 1.0;
   _largeNewTabButton.alpha = 1.0;
 }
@@ -236,6 +237,10 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)setEditButtonEnabled:(BOOL)enabled {
   _editButton.enabled = enabled;
+}
+
+- (void)setEditButtonHidden:(BOOL)hidden {
+  _editButton.hidden = hidden;
 }
 
 #pragma mark - Private
@@ -383,7 +388,7 @@ using vivaldi::IsVivaldiRunning;
 - (void)updateLayout {
   // Search mode doesn't have bottom toolbar or floating buttons, Handle it and
   // return early in that case.
-  if (self.mode == TabGridModeSearch) {
+  if (self.mode == TabGridMode::kSearch) {
     [NSLayoutConstraint deactivateConstraints:_compactConstraints];
     [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
     [_toolbar removeFromSuperview];
@@ -395,7 +400,7 @@ using vivaldi::IsVivaldiRunning;
   _largeNewTabButtonBottomAnchor.constant =
       -kTabGridFloatingButtonVerticalInset;
 
-  if (self.mode == TabGridModeSelection) {
+  if (self.mode == TabGridMode::kSelection) {
     [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
     [_largeNewTabButton removeFromSuperview];
     [_toolbar setItems:@[
@@ -509,7 +514,8 @@ using vivaldi::IsVivaldiRunning;
 // Updates the visibility of the backgrounds based on the state of the TabGrid.
 - (void)updateBackgroundVisibility {
   _scrolledToBottomBackgroundView.hidden =
-      [self isShowingFloatingButton] || !_scrolledToEdge;
+      _hideScrolledToEdgeBackground ||
+      ([self isShowingFloatingButton] || !_scrolledToEdge);
   _scrolledBackgroundView.hidden =
       [self isShowingFloatingButton] || _scrolledToEdge;
 }
@@ -590,6 +596,16 @@ using vivaldi::IsVivaldiRunning;
   if (_shareButton.enabled) {
     [self.buttonsDelegate shareSelectedTabs:sender];
   }
+}
+
+#pragma mark - Setters
+
+- (void)setHideScrolledToEdgeBackground:(BOOL)hideScrolledToEdgeBackground {
+  if (_hideScrolledToEdgeBackground == hideScrolledToEdgeBackground) {
+    return;
+  }
+  _hideScrolledToEdgeBackground = hideScrolledToEdgeBackground;
+  [self updateBackgroundVisibility];
 }
 
 @end

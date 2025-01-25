@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Instal·la independentment</translation>
 <translation id="1682285232070778125">Estableix Vivaldi com a navegador predeterminat</translation>
 <translation id="1974060860693918893">Avançat</translation>
+<translation id="2053560788696003312">Vivaldi requereix Windows 19 o superior.</translation>
 <translation id="2134216661302048561">L'instal·lador de Vivaldi no ha acabat d'instal·lar el navegador. Estàs segur que vols sortir?</translation>
 <translation id="2286454467119466181">Simple</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tots els drets reservats. &lt;a&gt;Política de privacitat&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Accepta i actualitza</translation>
 <translation id="5302048478445481009">Idioma</translation>
 <translation id="694714344624446243">Instal·lador de Vivaldi</translation>
+<translation id="7467493612551448880">LA versió de Vivaldi que vols instal·lar no està optimitzada per la teva versió de Windows.
+
+Visita vivaldi.com/download per descarregar la versió de Windows per ARM.</translation>
 <translation id="7658239707568436148">Cancel·la</translation>
 <translation id="8773751185824654197">Nota: Si s'actualitza Vivaldi mentre funciona, aquesta instància es tancarà i es tornarà a obrir</translation>
 <translation id="933060950687965486">Tipus d'instal·lació</translation>

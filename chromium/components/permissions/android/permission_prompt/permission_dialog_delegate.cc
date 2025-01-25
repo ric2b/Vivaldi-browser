@@ -145,8 +145,7 @@ void PermissionDialogJavaDelegate::OnRequestingOriginFaviconLoaded(
     const favicon_base::FaviconRawBitmapResult& favicon_result) {
   if (favicon_result.is_valid()) {
     gfx::Image image =
-        gfx::Image::CreateFrom1xPNGBytes(favicon_result.bitmap_data->front(),
-                                         favicon_result.bitmap_data->size());
+        gfx::Image::CreateFrom1xPNGBytes(favicon_result.bitmap_data);
     const SkBitmap* bitmap = image.ToSkBitmap();
     JNIEnv* env = base::android::AttachCurrentThread();
     Java_PermissionDialogDelegate_updateIcon(env, j_delegate_,
@@ -209,13 +208,19 @@ void PermissionDialogDelegate::Dismissed(JNIEnv* env,
   CHECK(permission_prompt_);
   std::vector<ContentSettingsType> content_settings_types;
   for (size_t i = 0; i < permission_prompt_->PermissionCount(); ++i) {
-    content_settings_types.push_back(
-        permission_prompt_->GetContentSettingType(i));
+    ContentSettingsType type = permission_prompt_->GetContentSettingType(i);
+    // Not all request types have an associated ContentSettingsType.
+    if (type == ContentSettingsType::DEFAULT) {
+      break;
+    }
+    content_settings_types.push_back(type);
   }
 
-  PermissionUmaUtil::RecordDismissalType(
-      content_settings_types, permission_prompt_->GetPromptDisposition(),
-      static_cast<DismissalType>(dismissalType));
+  if (content_settings_types.size() == permission_prompt_->PermissionCount()) {
+    PermissionUmaUtil::RecordDismissalType(
+        content_settings_types, permission_prompt_->GetPromptDisposition(),
+        static_cast<DismissalType>(dismissalType));
+  }
 
   permission_prompt_->Closing();
 }

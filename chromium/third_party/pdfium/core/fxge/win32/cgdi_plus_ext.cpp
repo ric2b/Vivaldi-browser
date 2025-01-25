@@ -16,12 +16,12 @@
 #include <utility>
 #include <vector>
 
+#include "core/fxcrt/check_op.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_memory.h"
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/fx_string_wrappers.h"
 #include "core/fxcrt/fx_system.h"
-#include "core/fxcrt/notreached.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
@@ -60,7 +60,6 @@ enum {
   FuncId_GdipDeleteGraphics,
   FuncId_GdipDisposeImage,
   FuncId_GdipCreateBitmapFromScan0,
-  FuncId_GdipSetImagePalette,
   FuncId_GdipSetInterpolationMode,
   FuncId_GdipDrawImagePointsI,
   FuncId_GdiplusStartup,
@@ -98,7 +97,6 @@ LPCSTR g_GdipFuncNames[] = {
     "GdipDeleteGraphics",
     "GdipDisposeImage",
     "GdipCreateBitmapFromScan0",
-    "GdipSetImagePalette",
     "GdipSetInterpolationMode",
     "GdipDrawImagePointsI",
     "GdiplusStartup",
@@ -150,8 +148,6 @@ using FuncType_GdipDisposeImage =
     decltype(&Gdiplus::DllExports::GdipDisposeImage);
 using FuncType_GdipCreateBitmapFromScan0 =
     decltype(&Gdiplus::DllExports::GdipCreateBitmapFromScan0);
-using FuncType_GdipSetImagePalette =
-    decltype(&Gdiplus::DllExports::GdipSetImagePalette);
 using FuncType_GdipSetInterpolationMode =
     decltype(&Gdiplus::DllExports::GdipSetInterpolationMode);
 using FuncType_GdipDrawImagePointsI =
@@ -182,9 +178,10 @@ using FuncType_GdipSetWorldTransform =
     decltype(&Gdiplus::DllExports::GdipSetWorldTransform);
 using FuncType_GdipSetPixelOffsetMode =
     decltype(&Gdiplus::DllExports::GdipSetPixelOffsetMode);
-#define CallFunc(funcname)               \
-  reinterpret_cast<FuncType_##funcname>( \
-      GdiplusExt.functions()[FuncId_##funcname])
+
+#define CALLFUNC(gdi_plus_ext, funcname, ...) \
+  reinterpret_cast<FuncType_##funcname>(      \
+      (gdi_plus_ext).functions()[FuncId_##funcname])(__VA_ARGS__)
 
 Gdiplus::GpFillMode FillType2Gdip(CFX_FillRenderOptions::FillType fill_type) {
   return fill_type == CFX_FillRenderOptions::FillType::kEvenOdd
@@ -199,105 +196,54 @@ const CGdiplusExt& GetGdiplusExt() {
 }
 
 Gdiplus::GpBrush* GdipCreateBrushImpl(DWORD argb) {
-  const CGdiplusExt& GdiplusExt = GetGdiplusExt();
   Gdiplus::GpSolidFill* solidBrush = nullptr;
-  CallFunc(GdipCreateSolidFill)((Gdiplus::ARGB)argb, &solidBrush);
+  CALLFUNC(GetGdiplusExt(), GdipCreateSolidFill,
+           static_cast<Gdiplus::ARGB>(argb), &solidBrush);
   return solidBrush;
 }
 
-void OutputImage(Gdiplus::GpGraphics* pGraphics,
+void OutputImage(Gdiplus::GpGraphics* graphics,
                  RetainPtr<const CFX_DIBBase> source,
-                 const FX_RECT& src_rect,
                  int dest_left,
                  int dest_top,
                  int dest_width,
                  int dest_height) {
-  int src_width = src_rect.Width();
-  int src_height = src_rect.Height();
-  const CGdiplusExt& GdiplusExt = GetGdiplusExt();
-  if (source->GetBPP() == 1 && (src_rect.left % 8)) {
-    FX_RECT new_rect(0, 0, src_width, src_height);
-    source = source->ClipTo(src_rect);
-    if (!source) {
-      return;
-    }
-    OutputImage(pGraphics, std::move(source), new_rect, dest_left, dest_top,
-                dest_width, dest_height);
-    return;
-  }
+  CHECK_EQ(FXDIB_Format::kBgra, source->GetFormat());
+  const CGdiplusExt& gdi_plus_ext = GetGdiplusExt();
 
   RetainPtr<const CFX_DIBitmap> realized_source = source->RealizeIfNeeded();
   if (!realized_source) {
     return;
   }
 
-  int src_pitch = realized_source->GetPitch();
-
   // `GdipCreateBitmapFromScan0()` requires a `BYTE*` scanline buffer, but in
   // this case, the bitmap only gets read by `GdipDrawImagePointsI()`, then
   // disposed of, so it's safe to cast away `const` here.
-  uint8_t* scan0 = const_cast<uint8_t*>(
-      realized_source->GetBuffer()
-          .subspan(src_rect.top * src_pitch +
-                   realized_source->GetBPP() * src_rect.left / 8)
-          .data());
+  uint8_t* scan0 = const_cast<uint8_t*>(realized_source->GetBuffer().data());
   Gdiplus::GpBitmap* bitmap = nullptr;
-  switch (source->GetFormat()) {
-    case FXDIB_Format::kArgb:
-      CallFunc(GdipCreateBitmapFromScan0)(src_width, src_height, src_pitch,
-                                          PixelFormat32bppARGB, scan0, &bitmap);
-      break;
-    case FXDIB_Format::kRgb32:
-      CallFunc(GdipCreateBitmapFromScan0)(src_width, src_height, src_pitch,
-                                          PixelFormat32bppRGB, scan0, &bitmap);
-      break;
-    case FXDIB_Format::kRgb:
-      CallFunc(GdipCreateBitmapFromScan0)(src_width, src_height, src_pitch,
-                                          PixelFormat24bppRGB, scan0, &bitmap);
-      break;
-    case FXDIB_Format::k8bppRgb: {
-      CallFunc(GdipCreateBitmapFromScan0)(src_width, src_height, src_pitch,
-                                          PixelFormat8bppIndexed, scan0,
-                                          &bitmap);
-      std::array<UINT, 258> pal;
-      pal[0] = 0;
-      pal[1] = 256;
-      for (int i = 0; i < 256; i++) {
-        pal[i + 2] = realized_source->GetPaletteArgb(i);
-      }
-      CallFunc(GdipSetImagePalette)(bitmap, (Gdiplus::ColorPalette*)pal.data());
-      break;
-    }
-    case FXDIB_Format::k1bppRgb: {
-      CallFunc(GdipCreateBitmapFromScan0)(src_width, src_height, src_pitch,
-                                          PixelFormat1bppIndexed, scan0,
-                                          &bitmap);
-      break;
-    }
-    case FXDIB_Format::kInvalid:
-    case FXDIB_Format::k1bppMask:
-    case FXDIB_Format::k8bppMask:
-      NOTREACHED_NORETURN();
-  }
+  CALLFUNC(gdi_plus_ext, GdipCreateBitmapFromScan0, realized_source->GetWidth(),
+           realized_source->GetHeight(), realized_source->GetPitch(),
+           PixelFormat32bppARGB, scan0, &bitmap);
   if (dest_height < 0) {
     dest_height--;
   }
   if (dest_width < 0) {
     dest_width--;
   }
-  Gdiplus::Point destinationPoints[] = {
+  const Gdiplus::Point destination_points[] = {
       Gdiplus::Point(dest_left, dest_top),
       Gdiplus::Point(dest_left + dest_width, dest_top),
       Gdiplus::Point(dest_left, dest_top + dest_height)};
-  CallFunc(GdipDrawImagePointsI)(pGraphics, bitmap, destinationPoints, 3);
-  CallFunc(GdipDisposeImage)(bitmap);
+  CALLFUNC(gdi_plus_ext, GdipDrawImagePointsI, graphics, bitmap,
+           destination_points, std::size(destination_points));
+  CALLFUNC(gdi_plus_ext, GdipDisposeImage, bitmap);
 }
 
 Gdiplus::GpPen* GdipCreatePenImpl(const CFX_GraphStateData* pGraphState,
                                   const CFX_Matrix* pMatrix,
                                   DWORD argb,
                                   bool bTextMode) {
-  const CGdiplusExt& GdiplusExt = GetGdiplusExt();
+  const CGdiplusExt& gdi_plus_ext = GetGdiplusExt();
   float width = pGraphState->m_LineWidth;
   if (!bTextMode) {
     float unit = pMatrix
@@ -306,8 +252,8 @@ Gdiplus::GpPen* GdipCreatePenImpl(const CFX_GraphStateData* pGraphState,
     width = std::max(width, unit);
   }
   Gdiplus::GpPen* pPen = nullptr;
-  CallFunc(GdipCreatePen1)((Gdiplus::ARGB)argb, width, Gdiplus::UnitWorld,
-                           &pPen);
+  CALLFUNC(gdi_plus_ext, GdipCreatePen1, static_cast<Gdiplus::ARGB>(argb),
+           width, Gdiplus::UnitWorld, &pPen);
   Gdiplus::LineCap lineCap = Gdiplus::LineCapFlat;
   Gdiplus::DashCap dashCap = Gdiplus::DashCapFlat;
   bool bDashExtend = false;
@@ -325,7 +271,8 @@ Gdiplus::GpPen* GdipCreatePenImpl(const CFX_GraphStateData* pGraphState,
       bDashExtend = true;
       break;
   }
-  CallFunc(GdipSetPenLineCap197819)(pPen, lineCap, lineCap, dashCap);
+  CALLFUNC(gdi_plus_ext, GdipSetPenLineCap197819, pPen, lineCap, lineCap,
+           dashCap);
   Gdiplus::LineJoin lineJoin = Gdiplus::LineJoinMiterClipped;
   switch (pGraphState->m_LineJoin) {
     case CFX_GraphStateData::LineJoin::kMiter:
@@ -338,7 +285,7 @@ Gdiplus::GpPen* GdipCreatePenImpl(const CFX_GraphStateData* pGraphState,
       lineJoin = Gdiplus::LineJoinBevel;
       break;
   }
-  CallFunc(GdipSetPenLineJoin)(pPen, lineJoin);
+  CALLFUNC(gdi_plus_ext, GdipSetPenLineJoin, pPen, lineJoin);
   if (!pGraphState->m_DashArray.empty()) {
     float* pDashArray =
         FX_Alloc(float, FxAlignToBoundary<2>(pGraphState->m_DashArray.size()));
@@ -385,7 +332,7 @@ Gdiplus::GpPen* GdipCreatePenImpl(const CFX_GraphStateData* pGraphState,
         });
       }
     }
-    CallFunc(GdipSetPenDashArray)(pPen, pDashArray, nCount);
+    CALLFUNC(gdi_plus_ext, GdipSetPenDashArray, pPen, pDashArray, nCount);
     float phase = pGraphState->m_DashPhase;
     if (bDashExtend) {
       if (phase < 0.5f)
@@ -393,11 +340,11 @@ Gdiplus::GpPen* GdipCreatePenImpl(const CFX_GraphStateData* pGraphState,
       else
         phase -= 0.5f;
     }
-    CallFunc(GdipSetPenDashOffset)(pPen, phase);
+    CALLFUNC(gdi_plus_ext, GdipSetPenDashOffset, pPen, phase);
     FX_Free(pDashArray);
     pDashArray = nullptr;
   }
-  CallFunc(GdipSetPenMiterLimit)(pPen, pGraphState->m_MiterLimit);
+  CALLFUNC(gdi_plus_ext, GdipSetPenMiterLimit, pPen, pGraphState->m_MiterLimit);
   return pPen;
 }
 
@@ -601,29 +548,23 @@ bool CGdiplusExt::StretchDIBits(HDC hDC,
                                 int dest_left,
                                 int dest_top,
                                 int dest_width,
-                                int dest_height,
-                                const FX_RECT* pClipRect,
-                                const FXDIB_ResampleOptions& options) {
+                                int dest_height) {
+  CHECK(source->IsAlphaFormat());
   Gdiplus::GpGraphics* pGraphics;
-  const CGdiplusExt& GdiplusExt = GetGdiplusExt();
-  CallFunc(GdipCreateFromHDC)(hDC, &pGraphics);
-  CallFunc(GdipSetPageUnit)(pGraphics, Gdiplus::UnitPixel);
-  if (options.bNoSmoothing) {
-    CallFunc(GdipSetInterpolationMode)(
-        pGraphics, Gdiplus::InterpolationModeNearestNeighbor);
-  } else if (source->GetWidth() > abs(dest_width) / 2 ||
-             source->GetHeight() > abs(dest_height) / 2) {
-    CallFunc(GdipSetInterpolationMode)(pGraphics,
-                                       Gdiplus::InterpolationModeHighQuality);
+  const CGdiplusExt& gdi_plus_ext = GetGdiplusExt();
+  CALLFUNC(gdi_plus_ext, GdipCreateFromHDC, hDC, &pGraphics);
+  CALLFUNC(gdi_plus_ext, GdipSetPageUnit, pGraphics, Gdiplus::UnitPixel);
+  if (source->GetWidth() > abs(dest_width) / 2 ||
+      source->GetHeight() > abs(dest_height) / 2) {
+    CALLFUNC(gdi_plus_ext, GdipSetInterpolationMode, pGraphics,
+             Gdiplus::InterpolationModeHighQuality);
   } else {
-    CallFunc(GdipSetInterpolationMode)(pGraphics,
-                                       Gdiplus::InterpolationModeBilinear);
+    CALLFUNC(gdi_plus_ext, GdipSetInterpolationMode, pGraphics,
+             Gdiplus::InterpolationModeBilinear);
   }
-  FX_RECT src_rect(0, 0, source->GetWidth(), source->GetHeight());
-  OutputImage(pGraphics, std::move(source), src_rect, dest_left, dest_top,
-              dest_width, dest_height);
-  CallFunc(GdipDeleteGraphics)(pGraphics);
-  CallFunc(GdipDeleteGraphics)(pGraphics);
+  OutputImage(pGraphics, std::move(source), dest_left, dest_top, dest_width,
+              dest_height);
+  CALLFUNC(gdi_plus_ext, GdipDeleteGraphics, pGraphics);
   return true;
 }
 
@@ -639,16 +580,17 @@ bool CGdiplusExt::DrawPath(HDC hDC,
     return true;
 
   Gdiplus::GpGraphics* pGraphics = nullptr;
-  const CGdiplusExt& GdiplusExt = GetGdiplusExt();
-  CallFunc(GdipCreateFromHDC)(hDC, &pGraphics);
-  CallFunc(GdipSetPageUnit)(pGraphics, Gdiplus::UnitPixel);
-  CallFunc(GdipSetPixelOffsetMode)(pGraphics, Gdiplus::PixelOffsetModeHalf);
+  const CGdiplusExt& gdi_plus_ext = GetGdiplusExt();
+  CALLFUNC(gdi_plus_ext, GdipCreateFromHDC, hDC, &pGraphics);
+  CALLFUNC(gdi_plus_ext, GdipSetPageUnit, pGraphics, Gdiplus::UnitPixel);
+  CALLFUNC(gdi_plus_ext, GdipSetPixelOffsetMode, pGraphics,
+           Gdiplus::PixelOffsetModeHalf);
   Gdiplus::GpMatrix* pMatrix = nullptr;
   if (pObject2Device) {
-    CallFunc(GdipCreateMatrix2)(pObject2Device->a, pObject2Device->b,
-                                pObject2Device->c, pObject2Device->d,
-                                pObject2Device->e, pObject2Device->f, &pMatrix);
-    CallFunc(GdipSetWorldTransform)(pGraphics, pMatrix);
+    CALLFUNC(gdi_plus_ext, GdipCreateMatrix2, pObject2Device->a,
+             pObject2Device->b, pObject2Device->c, pObject2Device->d,
+             pObject2Device->e, pObject2Device->f, &pMatrix);
+    CALLFUNC(gdi_plus_ext, GdipSetWorldTransform, pGraphics, pMatrix);
   }
   std::vector<Gdiplus::PointF> gp_points(points.size());
   std::vector<BYTE> gp_types(points.size());
@@ -715,77 +657,77 @@ bool CGdiplusExt::DrawPath(HDC hDC,
       fill_options.fill_type != CFX_FillRenderOptions::FillType::kNoFill;
   if (fill_options.aliased_path) {
     bSmooth = false;
-    CallFunc(GdipSetSmoothingMode)(pGraphics, Gdiplus::SmoothingModeNone);
+    CALLFUNC(gdi_plus_ext, GdipSetSmoothingMode, pGraphics,
+             Gdiplus::SmoothingModeNone);
   } else if (!fill_options.full_cover) {
     if (!bSmooth && fill)
       bSmooth = true;
 
     if (bSmooth || (pGraphState && pGraphState->m_LineWidth > 2)) {
-      CallFunc(GdipSetSmoothingMode)(pGraphics,
-                                     Gdiplus::SmoothingModeAntiAlias);
+      CALLFUNC(gdi_plus_ext, GdipSetSmoothingMode, pGraphics,
+               Gdiplus::SmoothingModeAntiAlias);
     }
   }
   if (points.size() == 4 && !pGraphState) {
     auto indices = IsSmallTriangle(gp_points, pObject2Device);
     if (indices.has_value()) {
-      size_t v1;
-      size_t v2;
-      std::tie(v1, v2) = indices.value();
+      auto [v1, v2] = indices.value();
       Gdiplus::GpPen* pPen = nullptr;
-      CallFunc(GdipCreatePen1)(fill_argb, 1.0f, Gdiplus::UnitPixel, &pPen);
-      CallFunc(GdipDrawLineI)(pGraphics, pPen, FXSYS_roundf(gp_points[v1].X),
-                              FXSYS_roundf(gp_points[v1].Y),
-                              FXSYS_roundf(gp_points[v2].X),
-                              FXSYS_roundf(gp_points[v2].Y));
-      CallFunc(GdipDeletePen)(pPen);
+      CALLFUNC(gdi_plus_ext, GdipCreatePen1, fill_argb, 1.0f,
+               Gdiplus::UnitPixel, &pPen);
+      CALLFUNC(gdi_plus_ext, GdipDrawLineI, pGraphics, pPen,
+               FXSYS_roundf(gp_points[v1].X), FXSYS_roundf(gp_points[v1].Y),
+               FXSYS_roundf(gp_points[v2].X), FXSYS_roundf(gp_points[v2].Y));
+      CALLFUNC(gdi_plus_ext, GdipDeletePen, pPen);
       return true;
     }
   }
   Gdiplus::GpPath* pGpPath = nullptr;
   const Gdiplus::GpFillMode gp_fill_mode =
       FillType2Gdip(fill_options.fill_type);
-  CallFunc(GdipCreatePath2)(gp_points.data(), gp_types.data(),
-                            pdfium::checked_cast<int>(points.size()),
-                            gp_fill_mode, &pGpPath);
+  CALLFUNC(gdi_plus_ext, GdipCreatePath2, gp_points.data(), gp_types.data(),
+           pdfium::checked_cast<int>(points.size()), gp_fill_mode, &pGpPath);
   if (!pGpPath) {
-    if (pMatrix)
-      CallFunc(GdipDeleteMatrix)(pMatrix);
+    if (pMatrix) {
+      CALLFUNC(gdi_plus_ext, GdipDeleteMatrix, pMatrix);
+    }
 
-    CallFunc(GdipDeleteGraphics)(pGraphics);
+    CALLFUNC(gdi_plus_ext, GdipDeleteGraphics, pGraphics);
     return false;
   }
   if (fill) {
     Gdiplus::GpBrush* pBrush = GdipCreateBrushImpl(fill_argb);
-    CallFunc(GdipSetPathFillMode)(pGpPath, gp_fill_mode);
-    CallFunc(GdipFillPath)(pGraphics, pBrush, pGpPath);
-    CallFunc(GdipDeleteBrush)(pBrush);
+    CALLFUNC(gdi_plus_ext, GdipSetPathFillMode, pGpPath, gp_fill_mode);
+    CALLFUNC(gdi_plus_ext, GdipFillPath, pGraphics, pBrush, pGpPath);
+    CALLFUNC(gdi_plus_ext, GdipDeleteBrush, pBrush);
   }
   if (pGraphState && stroke_argb) {
     Gdiplus::GpPen* pPen =
         GdipCreatePenImpl(pGraphState, pObject2Device, stroke_argb,
                           fill_options.stroke_text_mode);
     if (nSubPathes == 1) {
-      CallFunc(GdipDrawPath)(pGraphics, pPen, pGpPath);
+      CALLFUNC(gdi_plus_ext, GdipDrawPath, pGraphics, pPen, pGpPath);
     } else {
       size_t iStart = 0;
       for (size_t i = 0; i < points.size(); ++i) {
         if (i + 1 == points.size() ||
             gp_types[i + 1] == Gdiplus::PathPointTypeStart) {
           Gdiplus::GpPath* pSubPath;
-          CallFunc(GdipCreatePath2)(&gp_points[iStart], &gp_types[iStart],
-                                    pdfium::checked_cast<int>(i - iStart + 1),
-                                    gp_fill_mode, &pSubPath);
+          CALLFUNC(gdi_plus_ext, GdipCreatePath2, &gp_points[iStart],
+                   &gp_types[iStart], pdfium::checked_cast<int>(i - iStart + 1),
+                   gp_fill_mode, &pSubPath);
           iStart = i + 1;
-          CallFunc(GdipDrawPath)(pGraphics, pPen, pSubPath);
-          CallFunc(GdipDeletePath)(pSubPath);
+          CALLFUNC(gdi_plus_ext, GdipDrawPath, pGraphics, pPen, pSubPath);
+          CALLFUNC(gdi_plus_ext, GdipDeletePath, pSubPath);
         }
       }
     }
-    CallFunc(GdipDeletePen)(pPen);
+    CALLFUNC(gdi_plus_ext, GdipDeletePen, pPen);
   }
-  if (pMatrix)
-    CallFunc(GdipDeleteMatrix)(pMatrix);
-  CallFunc(GdipDeletePath)(pGpPath);
-  CallFunc(GdipDeleteGraphics)(pGraphics);
+  if (pMatrix) {
+    CALLFUNC(gdi_plus_ext, GdipDeleteMatrix, pMatrix);
+  }
+  CALLFUNC(gdi_plus_ext, GdipDeletePath, pGpPath);
+  CALLFUNC(gdi_plus_ext, GdipDeleteGraphics, pGraphics);
   return true;
 }

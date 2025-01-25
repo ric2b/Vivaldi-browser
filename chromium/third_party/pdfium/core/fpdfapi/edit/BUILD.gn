@@ -7,14 +7,18 @@ import("../../../testing/test.gni")
 
 source_set("edit") {
   sources = [
-    "cpdf_contentstream_write_utils.cpp",
-    "cpdf_contentstream_write_utils.h",
     "cpdf_creator.cpp",
     "cpdf_creator.h",
+    "cpdf_npagetooneexporter.cpp",
+    "cpdf_npagetooneexporter.h",
     "cpdf_pagecontentgenerator.cpp",
     "cpdf_pagecontentgenerator.h",
     "cpdf_pagecontentmanager.cpp",
     "cpdf_pagecontentmanager.h",
+    "cpdf_pageexporter.cpp",
+    "cpdf_pageexporter.h",
+    "cpdf_pageorganizer.cpp",
+    "cpdf_pageorganizer.h",
     "cpdf_stringarchivestream.cpp",
     "cpdf_stringarchivestream.h",
   ]
@@ -23,6 +27,7 @@ source_set("edit") {
     "../../../:pdfium_noshorten_config",
   ]
   deps = [
+    ":contentstream_write_utils",
     "../../../constants",
     "../../fxcrt",
     "../font",
@@ -32,8 +37,23 @@ source_set("edit") {
   visibility = [ "../../../*" ]
 }
 
+source_set("contentstream_write_utils") {
+  sources = [
+    "cpdf_contentstream_write_utils.cpp",
+    "cpdf_contentstream_write_utils.h",
+  ]
+  configs += [
+    "../../../:pdfium_strict_config",
+    "../../../:pdfium_noshorten_config",
+  ]
+  deps = [ "../../fxcrt" ]
+}
+
 pdfium_unittest_source_set("unittests") {
-  sources = [ "cpdf_pagecontentgenerator_unittest.cpp" ]
+  sources = [
+    "cpdf_npagetooneexporter_unittest.cpp",
+    "cpdf_pagecontentgenerator_unittest.cpp",
+  ]
   deps = [
     ":edit",
     "../../fxge",

@@ -576,7 +576,6 @@ void OpenNewWindowForFirstRun(
     const std::vector<GURL>& first_run_urls,
     chrome::startup::IsProcessStartup process_startup,
     chrome::startup::IsFirstRun is_first_run,
-    std::unique_ptr<OldLaunchModeRecorder> launch_mode_recorder,
     bool proceed) {
   if (!proceed)
     return;
@@ -584,8 +583,7 @@ void OpenNewWindowForFirstRun(
   StartupBrowserCreator browser_creator;
   browser_creator.AddFirstRunTabs(first_run_urls);
   browser_creator.LaunchBrowser(command_line, profile, cur_dir, process_startup,
-                                is_first_run, std::move(launch_mode_recorder),
-                                /*restore_tabbed_browser=*/true);
+                                is_first_run, /*restore_tabbed_browser=*/true);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(ENABLE_DICE_SUPPORT)
 
@@ -690,7 +688,6 @@ void StartupBrowserCreator::LaunchBrowser(
     const base::FilePath& cur_dir,
     chrome::startup::IsProcessStartup process_startup,
     chrome::startup::IsFirstRun is_first_run,
-    std::unique_ptr<OldLaunchModeRecorder> launch_mode_recorder,
     bool restore_tabbed_browser) {
   TRACE_EVENT0("ui", "StartupBrowserCreator::LaunchBrowser");
   SCOPED_UMA_HISTOGRAM_TIMER("Startup.StartupBrowserCreator.LaunchBrowser");
@@ -717,7 +714,7 @@ void StartupBrowserCreator::LaunchBrowser(
           FirstRunService::EntryPoint::kProcessStartup,
           base::BindOnce(&OpenNewWindowForFirstRun, command_line, profile,
                          cur_dir, first_run_tabs_, process_startup,
-                         is_first_run, std::move(launch_mode_recorder)));
+                         is_first_run));
       return;
     }
 #endif
@@ -727,7 +724,7 @@ void StartupBrowserCreator::LaunchBrowser(
                in_synchronous_profile_launch_
                    ? chrome::startup::IsProcessStartup::kYes
                    : chrome::startup::IsProcessStartup::kNo,
-               std::move(launch_mode_recorder), restore_tabbed_browser);
+               restore_tabbed_browser);
   }
   in_synchronous_profile_launch_ = false;
   profile_launch_observer.Get().AddLaunched(profile);
@@ -805,8 +802,7 @@ void StartupBrowserCreator::LaunchBrowserForLastProfiles(
       }
 #endif
       LaunchBrowser(command_line, profile_to_open, cur_dir, process_startup,
-                    is_first_run, std::make_unique<OldLaunchModeRecorder>(),
-                    restore_tabbed_browser);
+                    is_first_run, restore_tabbed_browser);
       return;
     }
 
@@ -1034,7 +1030,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
   if (command_line.HasSwitch(ash::switches::kLoginManager))
     silent_launch = true;
 
-  if (chrome::IsRunningInForcedAppMode()) {
+  if (IsRunningInForcedAppMode()) {
     // If we are here, it means the Chrome browser crashed/restarted while in
     // Kiosk mode, since the 'force app mode' switch is only added to the
     // commandline while in a kiosk session.
@@ -1166,8 +1162,17 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
 
   // If we don't want to launch a new browser window or tab we are done here.
   if (silent_launch) {
-    if (process_startup == chrome::startup::IsProcessStartup::kYes)
+    bool should_block_browser_startup_metrics =
+        process_startup == chrome::startup::IsProcessStartup::kYes;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    // Login screen is an expected common case. Startup metrics should still be
+    // recorded after the user logs in even though this is a `silent_launch`.
+    should_block_browser_startup_metrics &=
+        !command_line.HasSwitch(ash::switches::kLoginManager);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+    if (should_block_browser_startup_metrics) {
       startup_metric_utils::GetBrowser().SetNonBrowserUIDisplayed();
+    }
     return true;
   }
 
@@ -1254,8 +1259,6 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
   // Delegate to the notification system; do not open a browser window here.
   if (command_line.HasSwitch(switches::kNotificationLaunchId)) {
     if (NotificationPlatformBridgeWin::HandleActivation(command_line)) {
-      OldLaunchModeRecorder().SetLaunchMode(
-          OldLaunchMode::kWinPlatformNotification);
       return true;
     }
     return false;
@@ -1284,8 +1287,6 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
     if (!StartGCPWSignin(command_line, incognito_profile))
       return false;
 
-    OldLaunchModeRecorder().SetLaunchMode(
-        OldLaunchMode::kCredentialProviderSignIn);
     return true;
   }
 #endif  // BUILDFLAG(IS_WIN)
@@ -1414,9 +1415,6 @@ void StartupBrowserCreator::ProcessLastOpenedProfiles(
     LaunchBrowser((profile == last_used_profile) ? command_line
                                                  : command_line_without_urls,
                   profile, cur_dir, process_startup, is_first_run,
-                  profile == last_used_profile
-                      ? std::make_unique<OldLaunchModeRecorder>()
-                      : nullptr,
                   /*restore_tabbed_browser=*/true);
     // We've launched at least one browser.
     process_startup = chrome::startup::IsProcessStartup::kNo;

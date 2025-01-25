@@ -6,9 +6,7 @@
 // and a test protocol manager. It is used to test logics in safebrowsing
 // service.
 
-#include "base/memory/raw_ptr.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "content/public/test/browser_test.h"
 
 #include <map>
 #include <set>
@@ -24,6 +22,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/hash/sha1.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial.h"
 #include "base/path_service.h"
@@ -42,6 +41,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/browsertest_util.h"
+#include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
@@ -63,7 +63,6 @@
 #include "components/safe_browsing/content/browser/safe_browsing_blocking_page.h"
 #include "components/safe_browsing/content/browser/ui_manager.h"
 #include "components/safe_browsing/core/browser/db/database_manager.h"
-#include "components/safe_browsing/core/browser/db/metadata.pb.h"
 #include "components/safe_browsing/core/browser/db/test_database_manager.h"
 #include "components/safe_browsing/core/browser/db/util.h"
 #include "components/safe_browsing/core/browser/db/v4_database.h"
@@ -79,6 +78,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -117,10 +117,6 @@ namespace safe_browsing {
 
 namespace {
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-const char kBlocklistResource[] = "/blacklisted/script.js";
-const char kMaliciousResource[] = "/malware/script.js";
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 const char kEmptyPage[] = "/empty.html";
 const char kMalwareFile[] = "/downloads/dangerous/dangerous.exe";
 const char kMalwarePage[] = "/safe_browsing/malware.html";
@@ -336,8 +332,6 @@ class TestSBClient : public base::RefCountedThreadSafe<TestSBClient>,
 
   SBThreatType GetThreatType() const { return threat_type_; }
 
-  std::string GetThreatHash() const { return threat_hash_; }
-
   void CheckDownloadUrl(const std::vector<GURL>& url_chain) {
     base::RunLoop loop;
     bool synchronous_safe_signal =
@@ -364,19 +358,6 @@ class TestSBClient : public base::RefCountedThreadSafe<TestSBClient>,
         safe_browsing_service_->database_manager()->CheckBrowseUrl(
             url, threat_types, this,
             CheckBrowseUrlType::kHashDatabase);
-    if (synchronous_safe_signal) {
-      threat_type_ = SB_THREAT_TYPE_SAFE;
-      content::GetUIThreadTaskRunner({})->PostTask(
-          FROM_HERE, base::BindOnce(&TestSBClient::CheckDone, this));
-    }
-    set_quit_closure(loop.QuitWhenIdleClosure());
-    loop.Run();
-  }
-
-  void CheckResourceUrl(const GURL& url) {
-    base::RunLoop loop;
-    bool synchronous_safe_signal =
-        safe_browsing_service_->database_manager()->CheckResourceUrl(url, this);
     if (synchronous_safe_signal) {
       threat_type_ = SB_THREAT_TYPE_SAFE;
       content::GetUIThreadTaskRunner({})->PostTask(
@@ -413,20 +394,9 @@ class TestSBClient : public base::RefCountedThreadSafe<TestSBClient>,
         FROM_HERE, base::BindOnce(&TestSBClient::CheckDone, this));
   }
 
-  // Called when the result of checking a resource URL is known.
-  void OnCheckResourceUrlResult(const GURL& /* url */,
-                                SBThreatType threat_type,
-                                const std::string& threat_hash) override {
-    threat_type_ = threat_type;
-    threat_hash_ = threat_hash;
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE, base::BindOnce(&TestSBClient::CheckDone, this));
-  }
-
   void CheckDone() { std::move(quit_closure_).Run(); }
 
   SBThreatType threat_type_;
-  std::string threat_hash_;
   raw_ptr<SafeBrowsingService> safe_browsing_service_;
   base::OnceClosure quit_closure_;
 };
@@ -522,13 +492,6 @@ class V4SafeBrowsingServiceTest : public InProcessBrowserTest {
   }
 
   // Sets up the prefix database and the full hash cache to match one of the
-  // prefixes for the given URL in the client incident store.
-  void MarkUrlForResourceUnexpired(const GURL& bad_url) {
-    MarkUrlForListIdUnexpired(bad_url, GetChromeUrlClientIncidentId(),
-                              ThreatPatternType::NONE);
-  }
-
-  // Sets up the prefix database and the full hash cache to match one of the
   // prefixes for the given URL in the Billing store.
   void MarkUrlForBillingUnexpired(const GURL& bad_url) {
     MarkUrlForListIdUnexpired(bad_url, GetUrlBillingId(),
@@ -563,13 +526,7 @@ class V4SafeBrowsingServiceTest : public InProcessBrowserTest {
 
   bool ShowingInterstitialPage(Browser* browser) {
     WebContents* contents = browser->tab_strip_model()->GetActiveWebContents();
-    security_interstitials::SecurityInterstitialTabHelper* helper =
-        security_interstitials::SecurityInterstitialTabHelper::FromWebContents(
-            contents);
-    return helper &&
-           (helper
-                ->GetBlockingPageForCurrentlyCommittedNavigationForTesting() !=
-            nullptr);
+    return chrome_browser_interstitials::IsShowingInterstitial(contents);
   }
 
   bool ShowingInterstitialPage() { return ShowingInterstitialPage(browser()); }
@@ -941,41 +898,6 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, CheckDownloadUrlRedirects) {
   // Now, the badbin_url is not safe since it is added to download database.
   EXPECT_EQ(SB_THREAT_TYPE_URL_BINARY_MALWARE, client->GetThreatType());
 }
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-// This test is only enabled when GOOGLE_CHROME_BRANDING is true because the
-// store that this test uses is only populated on GOOGLE_CHROME_BRANDING builds.
-IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, CheckResourceUrl) {
-  GURL blocklist_url = embedded_test_server()->GetURL(kBlocklistResource);
-  GURL malware_url = embedded_test_server()->GetURL(kMaliciousResource);
-  std::string blocklist_url_hash, malware_url_hash;
-
-  scoped_refptr<TestSBClient> client(new TestSBClient);
-  {
-    MarkUrlForResourceUnexpired(blocklist_url);
-    blocklist_url_hash = V4ProtocolManagerUtil::GetFullHash(blocklist_url);
-
-    client->CheckResourceUrl(blocklist_url);
-    EXPECT_EQ(SB_THREAT_TYPE_BLOCKLISTED_RESOURCE, client->GetThreatType());
-    EXPECT_EQ(blocklist_url_hash, client->GetThreatHash());
-  }
-  {
-    MarkUrlForMalwareUnexpired(malware_url);
-    MarkUrlForResourceUnexpired(malware_url);
-    malware_url_hash = V4ProtocolManagerUtil::GetFullHash(malware_url);
-
-    // Since we're checking a resource url, we should receive result that it's
-    // a blocklisted resource, not a malware.
-    client = new TestSBClient;
-    client->CheckResourceUrl(malware_url);
-    EXPECT_EQ(SB_THREAT_TYPE_BLOCKLISTED_RESOURCE, client->GetThreatType());
-    EXPECT_EQ(malware_url_hash, client->GetThreatHash());
-  }
-
-  client->CheckResourceUrl(embedded_test_server()->GetURL(kEmptyPage));
-  EXPECT_EQ(SB_THREAT_TYPE_SAFE, client->GetThreatType());
-}
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 ///////////////////////////////////////////////////////////////////////////////
 // END: These tests use SafeBrowsingService::Client to directly interact with

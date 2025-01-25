@@ -93,7 +93,6 @@ import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 import org.chromium.content_public.common.ContentUrlConstants;
-import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -109,7 +108,7 @@ import java.util.concurrent.TimeoutException;
 public class FirstRunIntegrationTest {
     private static final String TEST_URL = "https://test.com";
     private static final String FOO_URL = "https://foo.com";
-    private static final long ACTIVITY_WAIT_LONG_MS = TimeUnit.SECONDS.toMillis(10);
+    private static final long ACTIVITY_WAIT_LONG_MS = TimeUnit.SECONDS.toMillis(20);
     private static final String TEST_ENROLLMENT_TOKEN = "enrollment-token";
 
     @Rule public JniMocker mJniMocker = new JniMocker();
@@ -128,7 +127,6 @@ public class FirstRunIntegrationTest {
             CollectionUtil.newHashSet(
                     ChromeLauncherActivity.class,
                     FirstRunActivity.class,
-                    TabbedModeFirstRunActivity.class,
                     ChromeTabbedActivity.class,
                     CustomTabActivity.class);
     private final Map<Class, ActivityMonitor> mMonitorMap = new HashMap<>();
@@ -137,7 +135,6 @@ public class FirstRunIntegrationTest {
 
     private FirstRunActivityTestObserver mTestObserver = new FirstRunActivityTestObserver();
     private Activity mLastActivity;
-    private Class mFirstRunActivityClass;
 
     @Before
     public void setUp() {
@@ -155,10 +152,6 @@ public class FirstRunIntegrationTest {
 
         mInstrumentation = InstrumentationRegistry.getInstrumentation();
         mContext = mInstrumentation.getTargetContext();
-        mFirstRunActivityClass =
-                DeviceFormFactor.isTablet()
-                        ? TabbedModeFirstRunActivity.class
-                        : FirstRunActivity.class;
         for (Class clazz : mSupportedActivities) {
             ActivityMonitor monitor = new ActivityMonitor(clazz.getName(), null, false);
             mMonitorMap.put(clazz, monitor);
@@ -183,7 +176,6 @@ public class FirstRunIntegrationTest {
                 });
 
         FirstRunStatus.setFirstRunSkippedByPolicy(false);
-        AccountManagerFacadeProvider.resetInstanceForTests();
     }
 
     private ActivityMonitor getMonitor(Class activityClass) {
@@ -283,7 +275,7 @@ public class FirstRunIntegrationTest {
     }
 
     private FirstRunActivity waitForFirstRunActivity() {
-        return (FirstRunActivity) waitForActivity(mFirstRunActivityClass);
+        return (FirstRunActivity) waitForActivity(FirstRunActivity.class);
     }
 
     /**
@@ -299,7 +291,7 @@ public class FirstRunIntegrationTest {
                     for (Activity runningActivity : ApplicationStatus.getRunningActivities()) {
                         @ActivityState
                         int state = ApplicationStatus.getStateForActivity(runningActivity);
-                        if (runningActivity.getClass() == mFirstRunActivityClass
+                        if (runningActivity.getClass() == FirstRunActivity.class
                                 && runningActivity != previousFreActivity
                                 && (state == ActivityState.STARTED
                                         || state == ActivityState.RESUMED)) {
@@ -334,11 +326,6 @@ public class FirstRunIntegrationTest {
                 () -> {
                     Assert.assertNull("mAccountsPromise is already initialized!", mAccountsPromise);
                     mAccountsPromise = new Promise<>();
-                    // getCoreAccountInfos() is called by AccountTrackerService.seedAccounts();
-                    // TODO(crbug.com/40228999): Remove when account manager facade initiates
-                    //  seeding.
-                    Mockito.when(mAccountManagerFacade.getCoreAccountInfos())
-                            .thenReturn(new Promise<>());
                 });
         Mockito.when(mAccountManagerFacade.getCoreAccountInfos()).thenReturn(mAccountsPromise);
         AccountManagerFacadeProvider.setInstanceForTests(mAccountManagerFacade);
@@ -376,7 +363,7 @@ public class FirstRunIntegrationTest {
         Assert.assertFalse(mLastActivity.isFinishing());
 
         // First run should be skipped for this Activity.
-        Assert.assertEquals(0, getMonitor(mFirstRunActivityClass).getHits());
+        Assert.assertEquals(0, getMonitor(FirstRunActivity.class).getHits());
     }
 
     @Test
@@ -638,6 +625,7 @@ public class FirstRunIntegrationTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "issuetracker.google.com/360931705")
     public void testFirstRunSkippedSharedPreferenceRefresh() throws Exception {
         // Set that the first run was previous skipped by policy in shared preference, then
         // refreshing shared preference should cause its value to become false, since there's no
@@ -649,7 +637,8 @@ public class FirstRunIntegrationTest {
                         mContext, ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
         mContext.startActivity(intent);
         CustomTabActivity activity = waitForActivity(CustomTabActivity.class);
-        CriteriaHelper.pollUiThread(activity::didFinishNativeInitialization);
+        CriteriaHelper.pollUiThreadLongTimeout(
+                "Native init never completed", activity::didFinishNativeInitialization);
 
         // DeferredStartupHandler could not finish with CriteriaHelper#DEFAULT_MAX_TIME_TO_POLL.
         // Use longer timeout here to avoid flakiness. See https://crbug.com/1157611.

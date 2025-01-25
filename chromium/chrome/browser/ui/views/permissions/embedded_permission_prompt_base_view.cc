@@ -14,11 +14,14 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/permissions/features.h"
 #include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -91,6 +94,13 @@ EmbeddedPermissionPromptBaseView::EmbeddedPermissionPromptBaseView(
   CHECK_GT(delegate_->Requests().size(), 0u);
   element_rect_ = delegate_->Requests()[0]->GetAnchorElementPosition().value_or(
       gfx::Rect());
+  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
+      delegate_->Requests()[0]->get_requesting_frame_id());
+  if (rfh && rfh->GetView()) {
+    element_rect_ = gfx::Rect(
+        rfh->GetView()->TransformPointToRootCoordSpace(element_rect_.origin()),
+        element_rect_.size());
+  }
 }
 
 EmbeddedPermissionPromptBaseView::~EmbeddedPermissionPromptBaseView() = default;
@@ -193,7 +203,7 @@ EmbeddedPermissionPromptBaseView::GetPromptPosition() const {
   CHECK(base::FeatureList::IsEnabled(blink::features::kPermissionElement));
   if (!base::FeatureList::IsEnabled(
           permissions::features::kPermissionElementPromptPositioning)) {
-    return PermissionElementPromptPosition::kNearElement;
+    return PermissionElementPromptPosition::kWindowMiddle;
   }
 
   if (permissions::feature_params::kPermissionElementPromptPositioningParam
@@ -245,7 +255,7 @@ void EmbeddedPermissionPromptBaseView::Init() {
     AddRequestLine(request, index++);
   }
 
-  SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
 
   auto buttons_container = std::make_unique<views::View>();
   buttons_container->SetLayoutManager(std::make_unique<views::BoxLayout>(

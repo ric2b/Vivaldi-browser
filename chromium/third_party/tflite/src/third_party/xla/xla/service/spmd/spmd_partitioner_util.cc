@@ -245,9 +245,22 @@ HloInstruction* GetInGroupPartitionId(
 
 namespace {
 
+bool IsIota(absl::Span<const int64_t> x) {
+  for (int64_t i = 0; i < x.size(); ++i) {
+    if (x[i] != i) {
+      return false;
+    }
+  }
+  return true;
+}
+
 SPMDCollectiveOpsCreator GetPerGroupCollectiveOpsCreator(
     const SPMDCollectiveOpsCreator& creator,
     const std::vector<std::vector<int64_t>>& device_groups) {
+  if (device_groups.size() == 1 && IsIota(device_groups[0])) {
+    return creator;
+  }
+
   SPMDCollectiveOpsCreator result;
   auto device_groups_ptr =
       std::make_shared<const std::vector<std::vector<int64_t>>>(device_groups);
@@ -1522,6 +1535,13 @@ std::optional<HloInstruction*> ExchangeHaloAndGetValidData(
             ? b->AddInstruction(HloInstruction::CreateBinary(
                   mask_shape, HloOpcode::kAnd, predicates[0], predicates[1]))
             : predicates[0];
+    if (pad_value->shape().element_type() !=
+        valid_slice->shape().element_type()) {
+      pad_value = b->AddInstruction(HloInstruction::CreateConvert(
+          ShapeUtil::MakeShape(valid_slice->shape().element_type(),
+                               pad_value->shape().dimensions()),
+          pad_value));
+    }
     auto masking_value = b->AddInstruction(
         HloInstruction::CreateBroadcast(valid_slice->shape(), pad_value, {}));
     valid_slice = b->AddInstruction(

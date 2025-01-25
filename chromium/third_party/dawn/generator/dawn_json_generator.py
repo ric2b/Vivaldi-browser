@@ -28,6 +28,7 @@
 
 import json, os, sys
 from collections import namedtuple, defaultdict
+from copy import deepcopy
 
 from generator_lib import Generator, run_generator, FileRender, GeneratorOutput
 
@@ -144,7 +145,8 @@ class EnumType(Type):
             value += prefix
 
             if value_name == "undefined":
-                assert value == 0
+                if name != "optional bool":
+                    assert value == 0
                 self.hasUndefined = True
             if value != lastValue + 1:
                 self.contiguousFromZero = False
@@ -426,18 +428,6 @@ def linked_record_members(json_data, types):
     return members
 
 
-def mark_lengths_non_serializable_lpm(record_members):
-    # Remove member length values from command metadata,
-    # these are set to the length of the protobuf array.
-    for record_member in record_members:
-        lengths = set()
-        for member in record_member.members:
-            lengths.add(member.length)
-
-        for member in record_member.members:
-            if member in lengths:
-                member.skip_serialize = True
-
 ############################################################
 # PARSE
 ############################################################
@@ -706,104 +696,6 @@ def compute_wire_params(api_params, wire_json):
 
     return wire_params
 
-############################################################
-# DAWN LPM FUZZ STUFF
-############################################################
-
-
-def compute_lpm_params(api_and_wire_params, lpm_json):
-    # Start with all commands in dawn.json and dawn_wire.json
-    lpm_params = api_and_wire_params.copy()
-
-    # Commands that are built through codegen
-    generated_commands = []
-
-    # All commands, including hand written commands that we can't generate
-    # through codegen
-    all_commands = []
-
-    # Remove blocklisted commands from protobuf generation params
-    blocklisted_cmds_proto = lpm_json.get('blocklisted_cmds')
-    custom_cmds_proto = lpm_json.get('custom_cmds')
-    for command in lpm_params['cmd_records']['command']:
-        blocklisted = command.name.get() in blocklisted_cmds_proto
-        custom = command.name.get() in custom_cmds_proto
-
-        if blocklisted:
-            continue
-
-        if not custom:
-            generated_commands.append(command)
-        all_commands.append(command)
-
-    # Set all fields that are marked as the "length" of another field to
-    # skip_serialize. The values passed by libprotobuf-mutator will cause
-    # an instant crash during serialization if these don't match the length
-    # of the data they are passing. These values aren't used in
-    # deserialization.
-    mark_lengths_non_serializable_lpm(
-        api_and_wire_params['cmd_records']['command'])
-    mark_lengths_non_serializable_lpm(
-        api_and_wire_params['by_category']['structure'])
-
-    lpm_params['cmd_records'] = {
-        'proto_generated_commands': generated_commands,
-        'proto_all_commands': all_commands,
-        'cpp_generated_commands': generated_commands,
-        'lpm_info': lpm_json.get("lpm_info")
-    }
-
-    return lpm_params
-
-
-def as_protobufTypeLPM(member):
-    assert 'type' in member.json_data
-
-    if member.type.name.native:
-        typ = member.json_data['type']
-        cpp_to_protobuf_type = {
-            "bool": "bool",
-            "float": "float",
-            "double": "double",
-            "int8_t": "int32",
-            "int16_t": "int32",
-            "int32_t": "int32",
-            "int64_t": "int64",
-            "uint8_t": "uint32",
-            "uint16_t": "uint32",
-            "uint32_t": "uint32",
-            "uint64_t": "uint64",
-            "size_t": "uint64",
-        }
-
-        assert typ in cpp_to_protobuf_type
-
-        return cpp_to_protobuf_type[typ]
-
-    return member.type.name.CamelCase()
-
-
-# Helper that generates names for protobuf grammars from contents
-# of dawn*.json like files. example: membera
-def as_protobufNameLPM(*names):
-    # `descriptor` is a reserved keyword in lib-protobuf-mutator
-    if (names[0].concatcase() == "descriptor"):
-        return "desc"
-    return as_varName(*names)
-
-
-# Helper to generate member accesses within C++ of protobuf objects
-# example: cmd.membera().memberb()
-def as_protobufMemberNameLPM(*names):
-    # `descriptor` is a reserved keyword in lib-protobuf-mutator
-    if (names[0].concatcase() == "descriptor"):
-        return "desc"
-    return ''.join([name.concatcase().lower() for name in names])
-
-
-def unreachable_code():
-    assert False
-
 
 ############################################################
 # KOTLIN STUFF
@@ -814,6 +706,7 @@ def compute_kotlin_params(loaded_json, kotlin_json):
     params_kotlin = parse_json(loaded_json, enabled_tags=['art'])
     params_kotlin['kotlin_package'] = kotlin_json['kotlin_package']
     params_kotlin['jni_primitives'] = kotlin_json['jni_primitives']
+    params_kotlin['jni_signatures'] = kotlin_json['jni_signatures']
     kt_file_path = params_kotlin['kotlin_package'].replace('.', '/')
 
     def kotlin_record_members(members):
@@ -844,39 +737,36 @@ def compute_kotlin_params(loaded_json, kotlin_json):
                 # TODO(b/352048981): Use handwritten methods for container returns to avoid the need
                 # for special casing logic.
                 if method.return_type.name.get() == 'size_t':
+                    # Convert the output parameter to a Kotlin return container.
+                    container_type = deepcopy(argument)
+                    container_type.length = 'size_t'
+                    return container_type
+                if (method.return_type.name.get() == 'status'
+                        and argument.type.category == 'structure'):
                     return argument
 
-        return {"type": method.return_type}
+        return {"type": method.return_type, "name": None}
 
     # TODO(b/352047733): Replace methods that require special handling with an exceptions list.
     def include_method(method):
+        if method.name.canonical_case().endswith(" free members"):
+            return False
         if method.return_type.category == 'function pointer':
             # Kotlin doesn't support returning functions.
             return False
         for argument in method.arguments:
-            if (argument.annotation == '*'
-                    and method.return_type.name.get() != 'size_t'):
-                # Dawn uses 'annotation = *' for output parameters, for example to return arrays.
-                # Kotlin doesn't support that at the moment, unless a container is returned.
+            # Any method that has unsupported structures as parameters is itself unsupported.
+            if argument.type.category == 'structure' and not include_structure(
+                    argument.type):
                 return False
-            if argument.type.category == 'callback info':
-                # We don't handle this yet.
-                return False
-            if argument.annotation == 'value' and argument.type.category == 'structure':
-                # Passing structures by value is not supported at the moment.
-                return False
-            if argument.type.category == 'function pointer':
-                # Currently returning structures in callbacks is not supported.
-                for callback_arg in argument.type.arguments:
-                    if callback_arg.type.category == 'structure':
-                        return False
         return True
 
-    # TODO(42240932): Remove this filtering once the deprecated "callback info" structures are
-    # removed.
     def include_structure(structure):
         # TODO(352710628) support converting callback info.
         if structure.name.canonical_case().endswith(" callback info"):
+            return False
+        if (structure.name.canonical_case() == "string view"
+                or structure.name.canonical_case() == "nullable string view"):
             return False
         return True
 
@@ -886,7 +776,7 @@ def compute_kotlin_params(loaded_json, kotlin_json):
     # We assume that if the final two parameters are named 'userdata' and 'callback' respectively
     # that this is an async method that uses function pointer based callbacks.
     def is_async_method(method):
-        if len(method.arguments) < 3:
+        if len(method.arguments) < 2:
             return False  # Not enough parameters to be an async method.
         if method.arguments[-1].name.get() != 'userdata':
             return False
@@ -924,6 +814,9 @@ def as_cType(c_prefix, name):
     # Special case for 'bool' because it has a typedef for compatibility.
     if name.native and name.get() != 'bool':
         return name.concatcase()
+    elif name.get() == 'nullable string view':
+        # nullable string view type doesn't exist in C.
+        return c_prefix + 'StringView'
     else:
         return c_prefix + name.CamelCase()
 
@@ -962,8 +855,7 @@ def as_wasmType(x):
         if x.category == 'enum':
             return 'i'
         elif x.category == 'bitmask':
-            # TODO(crbug.com/347732150): Change to 'j' when bitmasks are 64-bit
-            return 'i'
+            return 'j'
         elif x.category in ['object', 'function pointer']:
             return 'p'
         elif x.category == 'native':
@@ -1120,6 +1012,10 @@ def is_wire_serializable(type):
             and type.name.get() != 'void *')
 
 
+def unreachable_code(msg="unreachable_code"):
+    assert False, msg
+
+
 def make_base_render_params(metadata):
     c_prefix = metadata.c_prefix
 
@@ -1178,7 +1074,7 @@ def make_base_render_params(metadata):
             'has_callbackInfoStruct': has_callbackInfoStruct,
             'find_by_name': find_by_name,
             'print': print,
-            'unreachable_code': unreachable_code
+            'unreachable_code': unreachable_code,
         }
 
 
@@ -1189,7 +1085,7 @@ class MultiGeneratorFromDawnJSON(Generator):
     def add_commandline_arguments(self, parser):
         allowed_targets = [
             'dawn_headers', 'cpp_headers', 'cpp', 'proc', 'mock_api', 'wire',
-            'native_utils', 'dawn_lpmfuzz_cpp', 'dawn_lpmfuzz_proto', 'kotlin'
+            'native_utils', 'kotlin'
         ]
 
         parser.add_argument('--dawn-json',
@@ -1204,10 +1100,6 @@ class MultiGeneratorFromDawnJSON(Generator):
                             default=None,
                             type=str,
                             help='The KOTLIN JSON definition to use.')
-        parser.add_argument("--lpm-json",
-                            default=None,
-                            type=str,
-                            help='The DAWN LPM FUZZER definitions to use.')
         parser.add_argument(
             '--targets',
             required=True,
@@ -1231,11 +1123,6 @@ class MultiGeneratorFromDawnJSON(Generator):
         if args.kotlin_json:
             with open(args.kotlin_json) as f:
                 kotlin_json = json.loads(f.read())
-
-        lpm_json = None
-        if args.lpm_json:
-            with open(args.lpm_json) as f:
-                lpm_json = json.loads(f.read())
 
         renders = []
         imported_templates = []
@@ -1270,6 +1157,10 @@ class MultiGeneratorFromDawnJSON(Generator):
                            [RENDER_PARAMS_BASE, params_dawn]))
 
         if 'cpp_headers' in targets:
+            imported_templates += [
+                "dawn/cpp_macros.tmpl",
+            ]
+
             renders.append(
                 FileRender('api_cpp.h', 'include/dawn/' + api + '_cpp.h', [
                     RENDER_PARAMS_BASE, params_all, {
@@ -1324,6 +1215,10 @@ class MultiGeneratorFromDawnJSON(Generator):
                            [RENDER_PARAMS_BASE, params_upstream]))
 
         if 'emdawnwebgpu_headers' in targets:
+            imported_templates += [
+                "dawn/cpp_macros.tmpl",
+            ]
+
             assert api == 'webgpu'
             params_emscripten = parse_json(
                 loaded_json, enabled_tags=['compat', 'emscripten'])
@@ -1388,6 +1283,10 @@ class MultiGeneratorFromDawnJSON(Generator):
                     'as_annotated_frontendType': \
                         lambda arg: annotated(as_frontendType(metadata, arg.type), arg),
                 }
+            ]
+
+            imported_templates += [
+                "dawn/cpp_macros.tmpl",
             ]
 
             impl_dir = metadata.impl_dir + '/' if metadata.impl_dir else ''
@@ -1521,70 +1420,6 @@ class MultiGeneratorFromDawnJSON(Generator):
                            'src/dawn/wire/server/WGPUTraits_autogen.h',
                            wire_params))
 
-
-        if 'dawn_lpmfuzz_proto' in targets:
-            params_dawn_wire = parse_json(
-                loaded_json,
-                enabled_tags=['compat', 'dawn', 'deprecated'],
-                disabled_tags=['native'])
-            api_and_wire_params = compute_wire_params(params_dawn_wire,
-                                                      wire_json)
-
-            fuzzer_params = compute_lpm_params(api_and_wire_params, lpm_json)
-
-            lpm_params = [
-                RENDER_PARAMS_BASE, params_dawn_wire, {
-                    'as_protobufTypeLPM': as_protobufTypeLPM,
-                    'as_protobufNameLPM': as_protobufNameLPM,
-                    'unreachable': unreachable_code
-                }, api_and_wire_params, fuzzer_params
-            ]
-
-            renders.append(
-                FileRender('dawn/fuzzers/lpmfuzz/dawn_lpm.proto',
-                           'src/dawn/fuzzers/lpmfuzz/dawn_lpm_autogen.proto',
-                           lpm_params))
-
-            renders.append(
-                FileRender(
-                    'dawn/fuzzers/lpmfuzz/dawn_object_types_lpm.proto',
-                    'src/dawn/fuzzers/lpmfuzz/dawn_object_types_lpm_autogen.proto',
-                    lpm_params))
-
-        if 'dawn_lpmfuzz_cpp' in targets:
-            params_dawn_wire = parse_json(
-                loaded_json,
-                enabled_tags=['compat', 'dawn', 'deprecated'],
-                disabled_tags=['native'])
-            api_and_wire_params = compute_wire_params(params_dawn_wire,
-                                                      wire_json)
-
-            fuzzer_params = compute_lpm_params(api_and_wire_params, lpm_json)
-
-            lpm_params = [
-                RENDER_PARAMS_BASE, params_dawn_wire, {
-                    'as_protobufMemberName': as_protobufMemberNameLPM
-                }, api_and_wire_params, fuzzer_params
-            ]
-
-            renders.append(
-                FileRender(
-                    'dawn/fuzzers/lpmfuzz/DawnLPMSerializer.cpp',
-                    'src/dawn/fuzzers/lpmfuzz/DawnLPMSerializer_autogen.cpp',
-                    lpm_params))
-
-            renders.append(
-                FileRender(
-                    'dawn/fuzzers/lpmfuzz/DawnLPMSerializer.h',
-                    'src/dawn/fuzzers/lpmfuzz/DawnLPMSerializer_autogen.h',
-                    lpm_params))
-
-            renders.append(
-                FileRender(
-                    'dawn/fuzzers/lpmfuzz/DawnLPMConstants.h',
-                    'src/dawn/fuzzers/lpmfuzz/DawnLPMConstants_autogen.h',
-                    lpm_params))
-
         if 'kotlin' in targets:
             params_kotlin = compute_kotlin_params(loaded_json, kotlin_json)
             kt_file_path = params_kotlin['kotlin_package'].replace('.', '/')
@@ -1596,13 +1431,15 @@ class MultiGeneratorFromDawnJSON(Generator):
 
             by_category = params_kotlin['by_category']
             for structure in by_category['structure']:
-                renders.append(
-                    FileRender('art/api_kotlin_structure.kt',
-                               'java/' + jni_name(structure) + '.kt', [
-                                   RENDER_PARAMS_BASE, params_kotlin, {
-                                       'structure': structure
-                                   }
-                               ]))
+                if (structure.name.get() != "string view"
+                        and structure.name.get() != "nullable string view"):
+                    renders.append(
+                        FileRender('art/api_kotlin_structure.kt',
+                                   'java/' + jni_name(structure) + '.kt', [
+                                       RENDER_PARAMS_BASE, params_kotlin, {
+                                           'structure': structure
+                                       }
+                                   ]))
             for obj in by_category['object']:
                 renders.append(
                     FileRender(
@@ -1648,6 +1485,7 @@ class MultiGeneratorFromDawnJSON(Generator):
 
             imported_templates += [
                 "art/api_jni_types.kt",
+                "art/kotlin_record_conversion.cpp",
             ]
 
             renders.append(
@@ -1669,8 +1507,6 @@ class MultiGeneratorFromDawnJSON(Generator):
             deps += [os.path.abspath(args.wire_json)]
         if args.kotlin_json != None:
             deps += [os.path.abspath(args.kotlin_json)]
-        if args.lpm_json != None:
-            deps += [os.path.abspath(args.lpm_json)]
         return deps
 
 

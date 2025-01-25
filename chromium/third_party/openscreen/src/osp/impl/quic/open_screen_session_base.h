@@ -25,6 +25,8 @@ class OpenScreenSessionBase : public quic::QuicSession {
    public:
     virtual void OnCryptoHandshakeComplete() = 0;
     virtual void OnIncomingStream(QuicStream* stream) = 0;
+    virtual void OnClientCertificates(
+        const std::vector<std::string>& certs) = 0;
     virtual QuicConnection::Delegate& GetConnectionDelegate() = 0;
     virtual uint64_t GetInstanceID() = 0;
   };
@@ -50,6 +52,7 @@ class OpenScreenSessionBase : public quic::QuicSession {
       const std::vector<absl::string_view>& alpns) const override;
 
   QuicStream* CreateOutgoingStream(QuicStream::Delegate& delegate);
+  Visitor& visitor() { return visitor_; }
 
  protected:
   virtual std::unique_ptr<quic::QuicCryptoStream> CreateCryptoStream() = 0;
@@ -61,10 +64,11 @@ class OpenScreenSessionBase : public quic::QuicSession {
   quic::QuicStream* CreateIncomingStream(quic::PendingStream* pending) override;
   bool ShouldKeepConnectionAlive() const override;
 
+  std::unique_ptr<quic::QuicConnection> connection_;
+
  private:
   // Used for the crypto handshake.
   std::unique_ptr<quic::QuicCryptoStream> crypto_stream_;
-  std::unique_ptr<quic::QuicConnection> connection_;
   Visitor& visitor_;
 };
 

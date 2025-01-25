@@ -225,6 +225,16 @@ TEST(HTTPParsersTest, ExtractMIMETypeFromMediaType) {
   EXPECT_EQ(text_html.Impl(), passthrough.Impl());
 }
 
+TEST(HTTPParsersTest, MinimizedMIMEType) {
+  EXPECT_EQ("text/javascript",
+            MinimizedMIMEType(AtomicString("application/javascript")));
+  EXPECT_EQ("application/json", MinimizedMIMEType(AtomicString("text/json")));
+  EXPECT_EQ("image/svg+xml", MinimizedMIMEType(AtomicString("image/svg+xml")));
+  EXPECT_EQ("application/xml",
+            MinimizedMIMEType(AtomicString("application/rss+xml")));
+  EXPECT_EQ("image/png", MinimizedMIMEType(AtomicString("image/png")));
+}
+
 TEST(HTTPParsersTest, ExtractMIMETypeFromMediaTypeInvalidInput) {
   // extractMIMETypeFromMediaType() returns the string before the first
   // semicolon after trimming OWSes at the head and the tail even if the
@@ -736,7 +746,6 @@ TEST(HTTPParsersTest, ParseContentSecurityPoliciesDirectiveName) {
       "frame-ancestors 'none', "
       "sandbox allow-script, "
       "form-action 'none', "
-      "navigate-to 'none', "
       "frame-src 'none', "
       "child-src 'none', "
       "script-src 'none', "
@@ -745,25 +754,23 @@ TEST(HTTPParsersTest, ParseContentSecurityPoliciesDirectiveName) {
       network::mojom::blink::ContentSecurityPolicyType::kEnforce,
       network::mojom::blink::ContentSecurityPolicySource::kHTTP,
       KURL("http://example.com"));
-  EXPECT_EQ(9u, policies.size());
+  EXPECT_EQ(8u, policies.size());
   // frame-ancestors
   EXPECT_EQ(1u, policies[0]->directives.size());
   // sandbox. TODO(https://crbug.com/1041376) Implement this.
   EXPECT_EQ(0u, policies[1]->directives.size());
   // form-action.
   EXPECT_EQ(1u, policies[2]->directives.size());
-  // navigate-to.
-  EXPECT_EQ(1u, policies[3]->directives.size());
   // frame-src.
-  EXPECT_EQ(1u, policies[4]->directives.size());
+  EXPECT_EQ(1u, policies[3]->directives.size());
   // child-src.
-  EXPECT_EQ(1u, policies[5]->directives.size());
+  EXPECT_EQ(1u, policies[4]->directives.size());
   // script-src.
-  EXPECT_EQ(1u, policies[6]->directives.size());
+  EXPECT_EQ(1u, policies[5]->directives.size());
   // default-src.
-  EXPECT_EQ(1u, policies[7]->directives.size());
+  EXPECT_EQ(1u, policies[6]->directives.size());
   // upgrade-insecure-policies.
-  EXPECT_EQ(true, policies[8]->upgrade_insecure_requests);
+  EXPECT_EQ(true, policies[7]->upgrade_insecure_requests);
 }
 
 TEST(HTTPParsersTest, ParseContentSecurityPoliciesReportTo) {
@@ -808,7 +815,6 @@ TEST(HTTPParsersTest, ParseContentSecurityPoliciesSourceBasic) {
     EXPECT_EQ(0u, source_list->sources.size());
     EXPECT_FALSE(source_list->allow_self);
     EXPECT_FALSE(source_list->allow_star);
-    EXPECT_FALSE(source_list->allow_response_redirects);
   }
 
   // *
@@ -817,7 +823,6 @@ TEST(HTTPParsersTest, ParseContentSecurityPoliciesSourceBasic) {
     EXPECT_EQ(0u, source_list->sources.size());
     EXPECT_FALSE(source_list->allow_self);
     EXPECT_TRUE(source_list->allow_star);
-    EXPECT_FALSE(source_list->allow_response_redirects);
   }
 
   // 'self'
@@ -826,7 +831,6 @@ TEST(HTTPParsersTest, ParseContentSecurityPoliciesSourceBasic) {
     EXPECT_EQ(0u, source_list->sources.size());
     EXPECT_TRUE(source_list->allow_self);
     EXPECT_FALSE(source_list->allow_star);
-    EXPECT_FALSE(source_list->allow_response_redirects);
   }
 
   // http://a.com:22/path
@@ -834,7 +838,6 @@ TEST(HTTPParsersTest, ParseContentSecurityPoliciesSourceBasic) {
     auto source_list = policies[3]->directives.Take(frame_ancestors);
     EXPECT_FALSE(source_list->allow_self);
     EXPECT_FALSE(source_list->allow_star);
-    EXPECT_FALSE(source_list->allow_response_redirects);
     EXPECT_EQ(1u, source_list->sources.size());
     auto& source = source_list->sources[0];
     EXPECT_EQ("http", source->scheme);
@@ -849,7 +852,6 @@ TEST(HTTPParsersTest, ParseContentSecurityPoliciesSourceBasic) {
     auto source_list = policies[4]->directives.Take(frame_ancestors);
     EXPECT_FALSE(source_list->allow_self);
     EXPECT_FALSE(source_list->allow_star);
-    EXPECT_FALSE(source_list->allow_response_redirects);
     EXPECT_EQ(1u, source_list->sources.size());
     auto& source = source_list->sources[0];
     EXPECT_EQ("", source->scheme);
@@ -864,7 +866,6 @@ TEST(HTTPParsersTest, ParseContentSecurityPoliciesSourceBasic) {
     auto source_list = policies[5]->directives.Take(frame_ancestors);
     EXPECT_FALSE(source_list->allow_self);
     EXPECT_FALSE(source_list->allow_star);
-    EXPECT_FALSE(source_list->allow_response_redirects);
     EXPECT_EQ(1u, source_list->sources.size());
     auto& source = source_list->sources[0];
     EXPECT_EQ("", source->scheme);

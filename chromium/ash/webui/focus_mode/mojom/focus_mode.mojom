@@ -5,6 +5,7 @@
 module ash.focus_mode.mojom;
 
 import "url/mojom/url.mojom";
+import "mojo/public/mojom/base/time.mojom";
 
 // Defines metadata and source URL for a track to play.
 struct TrackDefinition {
@@ -31,6 +32,49 @@ interface MediaClient {
   StartPlay(TrackDefinition track);
 };
 
+// State of the media player.
+enum PlaybackState {
+  kPlaying,
+  kPaused,
+  kSwitchedToNext,
+  kEnded,
+  kNone,
+};
+
+// Defines player playback data. Values are from Typescript and used by Ash to
+// report the playback status.
+struct PlaybackData {
+  // Playback state.
+  PlaybackState state;
+
+  // Track title.
+  string title;
+
+  // Track media url.
+  url.mojom.Url url;
+
+  // Client current time.
+  mojo_base.mojom.JSTime client_current_time;
+
+  // Playback start offset in seconds.
+  int32 playback_start_offset;
+
+  // Current media time in seconds.
+  int32 media_time_current;
+
+  // Start time in seconds of the period that the playback event covers.
+  int32 media_start;
+
+  // End time in seconds of the period that the playback event covers.
+  int32 media_end;
+
+  // Client start time.
+  mojo_base.mojom.JSTime client_start_time;
+
+  // Indicate if it's the initial playback, i.e. first playback after loading.
+  bool initial_playback;
+};
+
 // Implemented in Ash and used by the WebUI side (Typescript) code to get track
 // data from Ash.
 interface TrackProvider {
@@ -41,4 +85,10 @@ interface TrackProvider {
 
   // Used at startup to install its implementation of `MediaClient`.
   SetMediaClient(pending_remote<MediaClient> client);
+
+  // Used by the player to report playback.
+  ReportPlayback(PlaybackData data);
+
+  // Used by the player to report an error.
+  ReportPlayerError();
 };

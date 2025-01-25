@@ -8,7 +8,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service_factory.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
@@ -137,6 +136,8 @@ class SearchEngineChoiceDialogServiceTest : public BrowserWithTestWindowTest {
     base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
         switches::kSearchEngineChoiceCountry,
         country_codes::CountryIDToCountryString(kBelgiumCountryId));
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kIgnoreNoFirstRunForSearchEngineChoiceScreen);
   }
 
   std::unique_ptr<BrowserWindow> CreateBrowserWindow() override {
@@ -167,11 +168,7 @@ class SearchEngineChoiceDialogServiceTest : public BrowserWithTestWindowTest {
     return user_action_tester_;
   }
 
-  base::test::ScopedFeatureList& feature_list() { return feature_list_; }
-
  private:
-  base::test::ScopedFeatureList feature_list_{
-      switches::kSearchEngineChoiceTrigger};
   base::HistogramTester histogram_tester_;
   base::UserActionTester user_action_tester_;
   std::unique_ptr<base::AutoReset<bool>> scoped_chrome_build_override_;
@@ -296,6 +293,7 @@ TEST_F(SearchEngineChoiceDialogServiceTest, NotifyChoiceMade_Dialog) {
 
   search_engine_choice_dialog_service->NotifyChoiceMade(
       TemplateURLPrepopulateData::google.id,
+      /*save_guest_mode_selection=*/false,
       SearchEngineChoiceDialogService::EntryPoint::kDialog);
   histogram_tester().ExpectBucketCount(
       search_engines::kSearchEngineChoiceScreenEventsHistogram,
@@ -312,6 +310,7 @@ TEST_F(SearchEngineChoiceDialogServiceTest, NotifyChoiceMade_Fre) {
 
   search_engine_choice_dialog_service->NotifyChoiceMade(
       TemplateURLPrepopulateData::google.id,
+      /*save_guest_mode_selection=*/false,
       SearchEngineChoiceDialogService::EntryPoint::kFirstRunExperience);
   histogram_tester().ExpectBucketCount(
       search_engines::kSearchEngineChoiceScreenEventsHistogram,
@@ -327,6 +326,7 @@ TEST_F(SearchEngineChoiceDialogServiceTest, NotifyChoiceMade_ProfileCreation) {
 
   search_engine_choice_dialog_service->NotifyChoiceMade(
       TemplateURLPrepopulateData::google.id,
+      /*save_guest_mode_selection=*/false,
       SearchEngineChoiceDialogService::EntryPoint::kProfileCreation);
   histogram_tester().ExpectBucketCount(
       search_engines::kSearchEngineChoiceScreenEventsHistogram,
@@ -336,6 +336,55 @@ TEST_F(SearchEngineChoiceDialogServiceTest, NotifyChoiceMade_ProfileCreation) {
   histogram_tester().ExpectUniqueSample(
       search_engines::kSearchEngineChoiceScreenDefaultSearchEngineTypeHistogram,
       SearchEngineType::SEARCH_ENGINE_GOOGLE, 1);
+}
+
+TEST_F(SearchEngineChoiceDialogServiceTest,
+       NotifyChoiceMade_Guest_SaveSelection) {
+  base::test::ScopedFeatureList feature_list{
+      switches::kSearchEngineChoiceGuestExperience};
+
+  EXPECT_FALSE(g_browser_process->local_state()->HasPrefPath(
+      prefs::kDefaultSearchProviderGuestModePrepopulatedId));
+
+  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(profile());
+  profile()->SetGuestSession(/*guest=*/true);
+
+  const int kPrepopulatedId =
+      search_engine_choice_dialog_service->GetSearchEngines()
+          .at(0)
+          ->prepopulate_id();
+
+  search_engine_choice_dialog_service->NotifyChoiceMade(
+      kPrepopulatedId, /*save_guest_mode_selection=*/true,
+      SearchEngineChoiceDialogService::EntryPoint::kDialog);
+  EXPECT_EQ(g_browser_process->local_state()->GetInt64(
+                prefs::kDefaultSearchProviderGuestModePrepopulatedId),
+            kPrepopulatedId);
+}
+
+TEST_F(SearchEngineChoiceDialogServiceTest,
+       NotifyChoiceMade_Guest_DontSaveSelection) {
+  base::test::ScopedFeatureList feature_list{
+      switches::kSearchEngineChoiceGuestExperience};
+
+  EXPECT_FALSE(g_browser_process->local_state()->HasPrefPath(
+      prefs::kDefaultSearchProviderGuestModePrepopulatedId));
+
+  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(profile());
+  profile()->SetGuestSession(/*guest=*/true);
+
+  const int kPrepopulatedId =
+      search_engine_choice_dialog_service->GetSearchEngines()
+          .at(0)
+          ->prepopulate_id();
+
+  search_engine_choice_dialog_service->NotifyChoiceMade(
+      kPrepopulatedId, /*save_guest_mode_selection=*/false,
+      SearchEngineChoiceDialogService::EntryPoint::kDialog);
+  EXPECT_FALSE(g_browser_process->local_state()->HasPrefPath(
+      prefs::kDefaultSearchProviderGuestModePrepopulatedId));
 }
 
 TEST_F(SearchEngineChoiceDialogServiceTest,
@@ -371,7 +420,8 @@ TEST_F(SearchEngineChoiceDialogServiceTest,
   int prepopulate_id =
       parent_profile_choice_service->GetSearchEngines().at(0)->prepopulate_id();
   parent_profile_choice_service->NotifyChoiceMade(
-      prepopulate_id, SearchEngineChoiceDialogService::EntryPoint::kDialog);
+      prepopulate_id, /*save_guest_mode_selection=*/false,
+      SearchEngineChoiceDialogService::EntryPoint::kDialog);
 
   EXPECT_EQ(TemplateURLServiceFactory::GetForProfile(profile())
                 ->GetDefaultSearchProvider()
@@ -398,7 +448,8 @@ TEST_F(SearchEngineChoiceDialogServiceTest,
                            .at(0)
                            ->prepopulate_id();
   incognito_profile_choice_service->NotifyChoiceMade(
-      prepopulate_id, SearchEngineChoiceDialogService::EntryPoint::kDialog);
+      prepopulate_id, /*save_guest_mode_selection=*/false,
+      SearchEngineChoiceDialogService::EntryPoint::kDialog);
 
   EXPECT_EQ(TemplateURLServiceFactory::GetForProfile(incognito_profile)
                 ->GetDefaultSearchProvider()
@@ -433,7 +484,8 @@ TEST_F(SearchEngineChoiceDialogServiceTest,
       search_engine_choice_service->GetSearchEngines().at(0)->prepopulate_id();
 
   search_engine_choice_service->NotifyChoiceMade(
-      prepopulated_id, SearchEngineChoiceDialogService::EntryPoint::kDialog);
+      prepopulated_id, /*save_guest_mode_selection=*/false,
+      SearchEngineChoiceDialogService::EntryPoint::kDialog);
   EXPECT_TRUE(search_engine_choice_service->CanSuppressPrivacySandboxPromo());
 }
 
@@ -445,7 +497,7 @@ TEST_F(SearchEngineChoiceDialogServiceTest,
       search_engine_choice_service->GetSearchEngines().at(0)->prepopulate_id();
 
   search_engine_choice_service->NotifyChoiceMade(
-      prepopulated_id,
+      prepopulated_id, /*save_guest_mode_selection=*/false,
       SearchEngineChoiceDialogService::EntryPoint::kFirstRunExperience);
   EXPECT_FALSE(search_engine_choice_service->CanSuppressPrivacySandboxPromo());
 }
@@ -458,7 +510,7 @@ TEST_F(SearchEngineChoiceDialogServiceTest,
       search_engine_choice_service->GetSearchEngines().at(0)->prepopulate_id();
 
   search_engine_choice_service->NotifyChoiceMade(
-      prepopulated_id,
+      prepopulated_id, /*save_guest_mode_selection=*/false,
       SearchEngineChoiceDialogService::EntryPoint::kProfileCreation);
   EXPECT_FALSE(search_engine_choice_service->CanSuppressPrivacySandboxPromo());
 }

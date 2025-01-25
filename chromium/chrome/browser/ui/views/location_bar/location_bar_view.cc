@@ -31,7 +31,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sharing_hub/sharing_hub_features.h"
-#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -98,6 +97,7 @@
 #include "components/safe_browsing/core/common/features.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/security_state/content/security_state_tab_helper.h"
 #include "components/security_state/core/security_state.h"
 #include "components/sharing_message/features.h"
 #include "components/strings/grit/components_strings.h"
@@ -139,6 +139,7 @@
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/vector_icon_types.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/button_drag_utils.h"
@@ -223,6 +224,7 @@ LocationBarView::LocationBarView(Browser* browser,
       AppShimRegistry::Get()->RegisterAppChangedCallback(base::BindRepeating(
           &LocationBarView::OnAppShimChanged, base::Unretained(this)));
 #endif
+  GetViewAccessibility().SetRole(ax::mojom::Role::kGroup);
 }
 
 LocationBarView::~LocationBarView() = default;
@@ -589,10 +591,6 @@ bool LocationBarView::HasFocus() const {
   return omnibox_view_ && omnibox_view_->model()->has_focus();
 }
 
-void LocationBarView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ax::mojom::Role::kGroup;
-}
-
 gfx::Size LocationBarView::GetMinimumSize() const {
   const int height = GetLayoutConstant(LOCATION_BAR_HEIGHT);
   if (!IsInitialized())
@@ -939,6 +937,10 @@ void LocationBarView::OnThemeChanged() {
 void LocationBarView::ChildPreferredSizeChanged(views::View* child) {
   InvalidateLayout();
   SchedulePaint();
+}
+
+bool LocationBarView::HasSecurityStateChanged() {
+  return location_icon_view_->HasSecurityStateChanged();
 }
 
 void LocationBarView::Update(WebContents* contents) {
@@ -1301,10 +1303,6 @@ void LocationBarView::SaveStateToContents(WebContents* contents) {
   omnibox_view_->SaveStateToTab(contents);
 }
 
-const OmniboxView* LocationBarView::GetOmniboxView() const {
-  return omnibox_view_;
-}
-
 LocationBarTesting* LocationBarView::GetLocationBarForTesting() {
   return this;
 }
@@ -1588,7 +1586,8 @@ bool LocationBarView::ShowPageInfoDialog() {
           this, gfx::Rect(), GetWidget()->GetNativeWindow(), contents,
           entry->GetVirtualURL(), std::move(initialized_callback),
           base::BindOnce(&LocationBarView::OnPageInfoBubbleClosed,
-                         weak_factory_.GetWeakPtr()));
+                         weak_factory_.GetWeakPtr()),
+          /*allow_about_this_site=*/true);
   bubble->SetHighlightedButton(location_icon_view_);
   bubble->GetWidget()->Show();
   RecordPageInfoMetrics();

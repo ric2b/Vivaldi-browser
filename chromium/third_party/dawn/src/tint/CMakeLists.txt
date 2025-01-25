@@ -259,6 +259,8 @@ endfunction()
 
 function(tint_bench_compile_options TARGET)
   tint_core_compile_options(${TARGET})
+  add_dependencies(${TARGET} tint_generate_benchmark_inputs)
+  target_include_directories(${TARGET} PUBLIC "${DAWN_BUILD_GEN_DIR}")
   set_target_properties(${TARGET} PROPERTIES FOLDER "Benchmarks")
 endfunction()
 
@@ -320,47 +322,20 @@ endif()
 ################################################################################
 # Benchmarks
 ################################################################################
-if(TINT_BUILD_BENCHMARKS AND TINT_EXTERNAL_BENCHMARK_CORPUS_DIR)
-  # Glob all the files at TINT_EXTERNAL_BENCHMARK_CORPUS_DIR, and create a header
-  # that lists these with the macros:
-  # TINT_BENCHMARK_EXTERNAL_WGSL_PROGRAMS()
-  # TINT_BENCHMARK_EXTERNAL_SPV_PROGRAMS()
-  set(TINT_BENCHMARK_GEN_DIR "${DAWN_BUILD_GEN_DIR}/src/tint/benchmark/")
-  set(TINT_BENCHMARK_EXTERNAL_SHADERS_HEADER "${TINT_BENCHMARK_GEN_DIR}/external_wgsl_programs.h")
-  message("Globbing ${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}...")
-
-  file(GLOB_RECURSE
-    TINT_EXTERNAL_WGSL_BENCHMARK_FILES
-    RELATIVE "${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}"
-    "${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}/**.wgsl"
+if(TINT_BUILD_BENCHMARKS)
+  set(SCRIPT "${TINT_ROOT_SOURCE_DIR}/src/tint/cmd/bench/generate_benchmark_inputs.py")
+  set(GENERATED_HEADER_REL_PATH "gen/src/tint/cmd/bench/benchmark_inputs.h")
+  set(GENERATED_HEADER_ABS_PATH "${Dawn_BINARY_DIR}/${GENERATED_HEADER_REL_PATH}")
+  set(ARGS ${Python3_EXECUTABLE} ${SCRIPT} header ${Dawn_BINARY_DIR} ${GENERATED_HEADER_REL_PATH})
+  add_custom_command(
+    COMMAND ${ARGS}
+    OUTPUT ${GENERATED_HEADER_ABS_PATH}
+    DEPENDS ${SCRIPT}
+    DEPFILE ${GENERATED_HEADER_ABS_PATH}.d
+    COMMENT "Tint benchmark: Generating ${GENERATED_HEADER_ABS_PATH}."
   )
-  list(TRANSFORM TINT_EXTERNAL_WGSL_BENCHMARK_FILES REPLACE
-    "(.+)"
-    "    BENCHMARK_CAPTURE\(FUNC, \"\\1\", \"${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}/\\1\")"
-  )
-  list(JOIN TINT_EXTERNAL_WGSL_BENCHMARK_FILES "; \\\n" TINT_EXTERNAL_WGSL_BENCHMARK_FILES)
-
-  file(GLOB_RECURSE
-    TINT_EXTERNAL_SPV_BENCHMARK_FILES
-    RELATIVE "${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}"
-    "${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}/**.spv")
-
-  list(TRANSFORM TINT_EXTERNAL_SPV_BENCHMARK_FILES REPLACE
-    "(.+)"
-    "    BENCHMARK_CAPTURE\(FUNC, \"\\1\", \"${TINT_EXTERNAL_BENCHMARK_CORPUS_DIR}/\\1\")"
-  )
-  list(JOIN TINT_EXTERNAL_SPV_BENCHMARK_FILES "; \\\n" TINT_EXTERNAL_SPV_BENCHMARK_FILES)
-
-  file(CONFIGURE
-    OUTPUT "${TINT_BENCHMARK_EXTERNAL_SHADERS_HEADER}"
-    CONTENT "
-#define TINT_BENCHMARK_EXTERNAL_WGSL_PROGRAMS(FUNC) \\
-${TINT_EXTERNAL_WGSL_BENCHMARK_FILES};
-
-#define TINT_BENCHMARK_EXTERNAL_SPV_PROGRAMS(FUNC) \\
-${TINT_EXTERNAL_SPV_BENCHMARK_FILES};"
-  )
-endif(TINT_BUILD_BENCHMARKS AND TINT_EXTERNAL_BENCHMARK_CORPUS_DIR)
+  add_custom_target(tint_generate_benchmark_inputs DEPENDS ${GENERATED_HEADER_ABS_PATH})
+endif()
 
 ################################################################################
 # Functions used by BUILD.cmake files
@@ -567,11 +542,6 @@ function(tint_target_add_external_dependencies TARGET KIND)
     elseif(${DEPENDENCY} STREQUAL "google-benchmark")
       set_target_properties(${TARGET} PROPERTIES FOLDER "Benchmarks")
       target_link_libraries(${TARGET} PRIVATE benchmark::benchmark)
-      if(TINT_BENCHMARK_EXTERNAL_SHADERS_HEADER)
-        target_compile_definitions(${TARGET} PRIVATE
-          "TINT_BENCHMARK_EXTERNAL_SHADERS_HEADER=\"${TINT_BENCHMARK_EXTERNAL_SHADERS_HEADER}\""
-        )
-      endif()
     elseif(${DEPENDENCY} STREQUAL "gtest")
       target_include_directories(${TARGET} PRIVATE ${gmock_SOURCE_DIR}/include)
       target_link_libraries(${TARGET} PRIVATE gmock)
@@ -605,6 +575,8 @@ function(tint_target_add_external_dependencies TARGET KIND)
       target_link_libraries(${TARGET} PRIVATE Threads::Threads)
     elseif(${DEPENDENCY} STREQUAL "winsock")
       target_link_libraries(${TARGET} PRIVATE ws2_32)
+    elseif(${DEPENDENCY} STREQUAL "src_utils")
+      target_link_libraries(${TARGET} PRIVATE dawn_shared_utils)
     else()
       message(FATAL_ERROR "unhandled external dependency ${DEPENDENCY}")
     endif()

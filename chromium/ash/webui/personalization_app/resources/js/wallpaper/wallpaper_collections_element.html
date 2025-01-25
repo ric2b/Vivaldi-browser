@@ -90,7 +90,8 @@
     text-shadow: none;
   }
 
-  wallpaper-grid-item[data-sea-pen][aria-disabled='true'] p {
+  wallpaper-grid-item[data-sea-pen][aria-disabled='true'] p,
+  wallpaper-grid-item[data-sea-pen-freeform][aria-disabled='true'] p {
     color: white;
     margin: 0;
   }
@@ -156,6 +157,11 @@
     top: 20px;
   }
 
+  #promoted wallpaper-grid-item[data-is-time-of-day-collection]::part(info-icon) {
+    right: 36px;
+    top: 20px;
+  }
+
   .tile-tag {
     background-color: var(--cros-sys-complement_variant);
     border-radius: 36px;
@@ -169,11 +175,6 @@
     top: 32px;
     transform: translate(-50%, 0);
     z-index: 1;
-  }
-
-  @keyframes gradient-animation {
-    0%{background-position: 0% 0%}
-    100%{background-position: 100% 100%}
   }
 </style>
 <template is="dom-if" if="[[hasError_]]">
@@ -201,12 +202,13 @@
             </wallpaper-grid-item>
           </template>
           <template is="dom-if" if="[[isSeaPenPromptingTile_(item)]]" restamp>
-            <div id="freeformTileTag" class="tile-tag">[[getSeaPenTileTagLabel_(item)]]</div>
-            <!-- TODO(345856242) update the real string for primary-text -->
+            <div id="freeformTileTag" class="tile-tag">
+              $i18n{seaPenExperimentLabel}
+            </div>
             <wallpaper-grid-item
                 data-sea-pen-freeform
                 data-is-promoted-tile
-                aria-description$="[[getSeaPenTileAriaDescription_(item)]]"
+                aria-description="$i18n{seaPenExperimentLabel}"
                 aria-posinset$="[[getAriaIndex_(index)]]"
                 disabled="[[!isSelectableTile_(item)]]"
                 index="[[index]]"
@@ -221,20 +223,21 @@
                   <cr-tooltip-icon
                       class="tooltip-icon"
                       icon-class="personalization:managed"
-                      tooltip-text="$i18n{managedSetting}"
-                      icon-aria-label="$i18n{managedSetting}">
+                      tooltip-text="$i18n{managedFeature}"
+                      icon-aria-label="$i18n{managedFeature}">
                   </cr-tooltip-icon>
-                  <p title$="$i18n{seaPenManagedLabel}">$i18n{seaPenManagedLabel}</p>
                 </div>
               </template>
             </wallpaper-grid-item>
           </template>
           <template is="dom-if" if="[[isSeaPenTemplatesTile_(item)]]" restamp>
-            <div id="templatesTileTag" class="tile-tag">[[getSeaPenTileTagLabel_(item)]]</div>
+            <div id="templatesTileTag" class="tile-tag">
+              $i18n{seaPenExperimentLabel}
+            </div>
             <wallpaper-grid-item
                 data-sea-pen
                 data-is-promoted-tile
-                aria-description$="[[getSeaPenTileAriaDescription_(item)]]"
+                aria-description="$i18n{seaPenExperimentLabel}"
                 aria-posinset$="[[getAriaIndex_(index)]]"
                 disabled="[[!isSelectableTile_(item)]]"
                 index="[[index]]"
@@ -249,10 +252,9 @@
                   <cr-tooltip-icon
                       class="tooltip-icon"
                       icon-class="personalization:managed"
-                      tooltip-text="$i18n{managedSetting}"
-                      icon-aria-label="$i18n{managedSetting}">
+                      tooltip-text="$i18n{managedFeature}"
+                      icon-aria-label="$i18n{managedFeature}">
                   </cr-tooltip-icon>
-                  <p title$="$i18n{seaPenManagedLabel}">$i18n{seaPenManagedLabel}</p>
                 </div>
               </template>
             </wallpaper-grid-item>

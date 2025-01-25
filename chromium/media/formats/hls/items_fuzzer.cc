@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/formats/hls/items.h"
 
 #include <cstddef>
@@ -15,8 +20,8 @@
 namespace {
 
 bool IsSubstring(std::string_view sub, std::string_view base) {
-  return base.data() <= sub.data() &&
-         base.data() + base.size() >= sub.data() + sub.size();
+  return sub.empty() || (base.data() <= sub.data() &&
+                         base.data() + base.size() >= sub.data() + sub.size());
 }
 
 std::optional<media::hls::SourceString> GetItemContent(
@@ -90,8 +95,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                       prev_iterator.SourceForTesting()));
 
     // Ensure that the content associated with this item is NOT a substring of
-    // the updated iterator
-    if (content) {
+    // the updated iterator, if the content has any associated data.
+    if (content && content->Size()) {
       CHECK(!IsSubstring(content->Str(), iterator.SourceForTesting()));
     }
   }

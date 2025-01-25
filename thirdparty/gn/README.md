@@ -13,7 +13,7 @@ Related resources:
        (all builtin help converted to a single file).
   * An introductory [presentation](https://docs.google.com/presentation/d/15Zwb53JcncHfEwHpnG_PoIbbzQ3GQi_cpujYwbpcbZo/edit?usp=sharing).
   * The [mailing list](https://groups.google.com/a/chromium.org/forum/#!forum/gn-dev).
-  * The [bug database](https://bugs.chromium.org/p/gn/issues/list).
+  * The [bug database](https://gn.issues.chromium.org/issues?q=status:open).
 
 ## What GN is for
 

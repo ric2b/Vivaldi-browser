@@ -38,7 +38,7 @@
 #include "components/safe_browsing/content/browser/client_side_phishing_model.h"
 #include "components/safe_browsing/content/browser/ui_manager.h"
 #include "components/safe_browsing/content/browser/unsafe_resource_util.h"
-#include "components/safe_browsing/content/browser/url_checker_on_sb.h"
+#include "components/safe_browsing/content/browser/url_checker_holder.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom-shared.h"
 #include "components/safe_browsing/core/browser/db/database_manager.h"
 #include "components/safe_browsing/core/browser/db/test_database_manager.h"
@@ -202,8 +202,7 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
  public:
   MockSafeBrowsingDatabaseManager()
       : safe_browsing::TestSafeBrowsingDatabaseManager(
-            content::GetUIThreadTaskRunner({}),
-            content::GetIOThreadTaskRunner({})) {}
+            content::GetUIThreadTaskRunner({})) {}
 
   MockSafeBrowsingDatabaseManager(const MockSafeBrowsingDatabaseManager&) =
       delete;
@@ -225,7 +224,7 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
     std::string url = gurl.spec();
     DCHECK(base::Contains(urls_allowlist_match_, url));
 
-    sb_task_runner()->PostTask(
+    ui_task_runner()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback), urls_allowlist_match_[url]));
     return std::nullopt;
@@ -1737,8 +1736,10 @@ class ClientSideDetectionRTLookupResponseForceRequestTest
     SetEnhancedProtectionPrefForTests(profile()->GetPrefs(), true);
     SetFeatures({kSafeBrowsingAsyncRealTimeCheck}, {});
 
-    AsyncCheckTracker::CreateForWebContents(web_contents(),
-                                            /*ui_manager=*/nullptr);
+    AsyncCheckTracker::CreateForWebContents(
+        web_contents(),
+        /*ui_manager=*/nullptr,
+        /*should_sync_checker_check_allowlist=*/false);
     csd_host_->RegisterAsyncCheckTracker();
   }
 
@@ -1767,9 +1768,10 @@ class ClientSideDetectionRTLookupResponseForceRequestTest
 
   void CompleteAsyncCheck() {
     auto* tracker = AsyncCheckTracker::GetOrCreateForWebContents(
-        web_contents(), /*ui_manager=*/nullptr);
-    auto checker = std::make_unique<UrlCheckerOnSB>(
-        /*delegate_getter=*/base::NullCallback(), /*frame_tree_node_id=*/-1,
+        web_contents(), /*ui_manager=*/nullptr,
+        /*should_sync_checker_check_allowlist=*/false);
+    auto checker = std::make_unique<UrlCheckerHolder>(
+        /*delegate_getter=*/base::NullCallback(), content::FrameTreeNodeId(),
         /*navigation_id=*/0,
         /*web_contents_getter=*/base::NullCallback(),
         /*complete_callback=*/base::NullCallback(),
@@ -1781,11 +1783,12 @@ class ClientSideDetectionRTLookupResponseForceRequestTest
         /*hash_realtime_service=*/nullptr,
         /*hash_realtime_selection=*/
         hash_realtime_utils::HashRealTimeSelection::kNone,
-        /*is_async_check=*/true, SessionID::InvalidValue());
+        /*is_async_check=*/true, /*check_allowlist_before_hash_database=*/false,
+        SessionID::InvalidValue());
     tracker->TransferUrlChecker(std::move(checker));
     // all_checks_completed must be set to true to notify
     // ClientSideDetectionHost.
-    UrlCheckerOnSB::OnCompleteCheckResult result(
+    UrlCheckerHolder::OnCompleteCheckResult result(
         /*proceed=*/true, /*showed_interstitial=*/false,
         /*has_post_commit_interstitial_skipped=*/false,
         SafeBrowsingUrlCheckerImpl::PerformedCheck::kUrlRealTimeCheck,

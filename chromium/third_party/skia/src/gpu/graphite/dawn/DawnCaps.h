@@ -31,6 +31,7 @@ public:
     std::optional<wgpu::LoadOp> resolveTextureLoadOp() const {
         return fSupportedResolveTextureLoadOp;
     }
+    bool supportsPartialLoadResolve() const { return fSupportsPartialLoadResolve; }
 
     TextureInfo getDefaultSampledTextureInfo(SkColorType,
                                              Mipmapped mipmapped,
@@ -51,12 +52,21 @@ public:
                                          const SkISize colorAttachmentDimensions) const override;
     UniqueKey makeGraphicsPipelineKey(const GraphicsPipelineDesc&,
                                       const RenderPassDesc&) const override;
+    bool extractGraphicsDescs(const UniqueKey&,
+                              GraphicsPipelineDesc*,
+                              RenderPassDesc*,
+                              const RendererProvider*) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override;
     ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy* proxy) const override;
     GraphiteResourceKey makeSamplerKey(const SamplerDesc&) const override;
     uint32_t channelMask(const TextureInfo&) const override;
     bool isRenderable(const TextureInfo&) const override;
     bool isStorage(const TextureInfo&) const override;
+
+    bool loadOpAffectsMSAAPipelines() const override {
+        return fSupportedResolveTextureLoadOp.has_value();
+    }
+
     void buildKeyForTexture(SkISize dimensions,
                             const TextureInfo&,
                             ResourceType,
@@ -134,6 +144,10 @@ private:
     wgpu::TextureUsage fSupportedTransientAttachmentUsage = wgpu::TextureUsage::None;
     // When supported this holds the ExpandResolveTexture load op, otherwise holds no value.
     std::optional<wgpu::LoadOp> fSupportedResolveTextureLoadOp;
+    // When 'fSupportedResolveTextureLoadOp' is supported, it by default performs full size expand
+    // and resolve. With this feature, we can do that partially according to the actual damage
+    // region.
+    bool fSupportsPartialLoadResolve = false;
 
     bool fUseAsyncPipelineCreation = true;
     bool fAllowScopedErrorChecks = true;

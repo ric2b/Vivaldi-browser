@@ -25,7 +25,9 @@
 
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -178,6 +180,65 @@ FAIL_TEST(tc_client_fd_leaks_exec)
 	display_run(d);
 
 	test_disable_coredumps();
+	display_destroy(d);
+}
+
+static char *
+map_file(int fd, size_t *len)
+{
+	char *data;
+
+	*len = lseek(fd, 0, SEEK_END);
+	data = mmap(0, *len, PROT_READ, MAP_PRIVATE, fd, 0);
+	assert(data != MAP_FAILED && "Failed to mmap file");
+
+	return data;
+}
+
+static void
+sanity_client_log(void)
+{
+	char *log;
+	size_t log_len;
+	char *wayland_socket = strdup(getenv("WAYLAND_SOCKET"));
+	char *xdg_runtime_dir = strdup(getenv("XDG_RUNTIME_DIR"));
+
+	unsetenv("WAYLAND_SOCKET");
+	unsetenv("XDG_RUNTIME_DIR");
+
+	/* Try to connect to the default wayland display, which should fail since
+	 * we have neither WAYLAND_SOCKET nor XDG_RUNTIME_DIR. */
+	assert(!wl_display_connect(NULL));
+
+	/* Check that the client log contains some mention of XDG_RUNTIME_DIR. */
+	log = map_file(client_log_fd, &log_len);
+	assert(strstr(log, "XDG_RUNTIME_DIR"));
+	munmap(log, log_len);
+
+	/* Reset the environment variables we unset for the test. The test harness
+	 * leak checker cares about the value of WAYLAND_SOCKET during teardown for
+	 * correct fd accounting. */
+	setenv("XDG_RUNTIME_DIR", xdg_runtime_dir, 0);
+	setenv("WAYLAND_SOCKET", wayland_socket, 0);
+	free(xdg_runtime_dir);
+	free(wayland_socket);
+}
+
+TEST(tc_client_log)
+{
+	struct display *d = display_create();
+	struct client_info *ci;
+	char *log;
+	size_t log_len;
+
+	ci = client_create_noarg(d, sanity_client_log);
+	display_run(d);
+
+	/* Check that the client log contains some mention of XDG_RUNTIME_DIR. */
+	log = map_file(ci->log_fd, &log_len);
+	assert(strstr(log, "XDG_RUNTIME_DIR"));
+	munmap(log, log_len);
+
 	display_destroy(d);
 }
 

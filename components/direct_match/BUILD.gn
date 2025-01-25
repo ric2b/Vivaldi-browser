@@ -9,8 +9,12 @@ source_set("direct_match") {
   ]
   deps = [
     "//base",
-    "//content/public/browser",
   ]
+  if (!is_ios) {
+    deps += [
+      "//content/public/browser",
+    ]
+  }
 }
 
 static_library("browser") {

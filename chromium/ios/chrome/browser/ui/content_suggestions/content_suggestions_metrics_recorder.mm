@@ -37,7 +37,7 @@ const float kMaxModuleEngagementIndex = 50;
 }
 
 - (instancetype)initWithLocalState:(PrefService*)localState {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _localState = localState;
   }
   return self;
@@ -79,6 +79,11 @@ const float kMaxModuleEngagementIndex = 50;
           kMagicStackModuleEngagementParcelTrackingIndexHistogram, index,
           kMaxModuleEngagementIndex);
       break;
+    case ContentSuggestionsModuleType::kPriceTrackingPromo:
+      UMA_HISTOGRAM_EXACT_LINEAR(
+          kMagicStackModuleEngagementPriceTrackingPromoIndexHistogram, index,
+          kMaxModuleEngagementIndex);
+      break;
     case ContentSuggestionsModuleType::kSetUpListSync:
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
@@ -90,6 +95,7 @@ const float kMaxModuleEngagementIndex = 50;
           kMaxModuleEngagementIndex);
       break;
     case ContentSuggestionsModuleType::kPlaceholder:
+    case ContentSuggestionsModuleType::kInvalid:
       break;
   }
 }

@@ -58,14 +58,6 @@ BASE_FEATURE(kPrefetchVirtualMemoryPolicy,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-BASE_FEATURE(kMemorySaverModeAggressiveness,
-             "MemorySaverModeAggressiveness",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kDiscardRingImprovements,
-             "DiscardRingImprovements",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPerformanceIntervention,
              "PerformanceIntervention",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -118,12 +110,6 @@ const base::FeatureParam<int> kMemoryFreeBytesThreshold{
     &kPerformanceIntervention, "memory_free_bytes_threshold",
     1024 * 1024 * 1024};
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-BASE_FEATURE(kAshUrgentDiscardingFromPerformanceManager,
-             "AshUrgentDiscardingFromPerformanceManager",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 #if BUILDFLAG(IS_CHROMEOS)
 BASE_FEATURE(kUnthrottledTabProcessReporting,
              "UnthrottledTabProcessReporting",
@@ -154,17 +140,6 @@ BASE_FEATURE(kUrgentPageDiscarding,
              "UrgentPageDiscarding",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kCPUInterventionEvaluationLogging,
-             "CPUInterventionEvaluationLogging",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-const base::FeatureParam<base::TimeDelta> kDelayBeforeLogging{
-    &kCPUInterventionEvaluationLogging, "delay_before_logging",
-    base::Seconds(60)};
-
-const base::FeatureParam<int> kThresholdChromeCPUPercent{
-    &kCPUInterventionEvaluationLogging, "threshold_chrome_cpu_percent", 25};
-
 BASE_FEATURE(kCPUMeasurementInFreezingPolicy,
              "CPUMeasurementInFreezingPolicy",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -180,8 +155,16 @@ BASE_FEATURE(kFreezingOnBatterySaver,
              "FreezingOnBatterySaver",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kFreezingOnBatterySaverForTesting,
+             "FreezingOnBatterySaverForTesting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kResourceAttributionIncludeOrigins,
              "ResourceAttributionIncludeOrigins",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSeamlessRenderFrameSwap,
+             "SeamlessRenderFrameSwap",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace performance_manager::features

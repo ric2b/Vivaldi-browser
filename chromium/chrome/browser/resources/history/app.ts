@@ -30,7 +30,7 @@ import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_element
 import type {CrDrawerElement} from 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
 import type {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import type {CrPageSelectorElement} from 'chrome://resources/cr_elements/cr_page_selector/cr_page_selector.js';
-import type {FindShortcutMixinInterface} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
+import type {FindShortcutListener} from 'chrome://resources/cr_elements/find_shortcut_manager.js';
 import {FindShortcutMixin} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
 import type {WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
@@ -139,6 +139,7 @@ export interface HistoryAppElement {
     tabsScrollContainer: HTMLElement,
     router: HistoryRouterElement,
     historyEmbeddingsContainer: HTMLElement,
+    historyEmbeddingsDisclaimerLink: HTMLElement,
   };
 }
 
@@ -146,9 +147,8 @@ const HistoryAppElementBase = mixinBehaviors(
                                   [IronScrollTargetBehavior],
                                   HelpBubbleMixin(FindShortcutMixin(
                                       WebUiListenerMixin(PolymerElement)))) as {
-  new (): PolymerElement & HelpBubbleMixinInterface &
-      FindShortcutMixinInterface & IronScrollTargetBehavior &
-      WebUiListenerMixinInterface,
+  new (): PolymerElement & HelpBubbleMixinInterface & FindShortcutListener &
+      IronScrollTargetBehavior & WebUiListenerMixinInterface,
 };
 
 export class HistoryAppElement extends HistoryAppElementBase {
@@ -279,7 +279,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
         reflectToAttribute: true,
       },
 
-      productSpecificationsListsEnabled_: Boolean,
+      compareHistoryEnabled_: Boolean,
       tabContentScrollOffset_: Number,
     };
   }
@@ -310,9 +310,10 @@ export class HistoryAppElement extends HistoryAppElementBase {
   private scrollTarget_: HTMLElement;
   private queryStateAfterDate_?: Date;
   private hasHistoryEmbeddingsResults_: boolean;
-  private productSpecificationsListsEnabled_: boolean =
-      loadTimeData.getBoolean('productSpecificationsListsEnabled');
+  private compareHistoryEnabled_: boolean =
+      loadTimeData.getBoolean('compareHistoryEnabled');
   private historyEmbeddingsResizeObserver_?: ResizeObserver;
+  private historyEmbeddingsDisclaimerLinkClicked_ = false;
   private tabContentScrollOffset_: number = 0;
   private dataFromNativeBeforeInput_: string|null = null;
   private numCharsTypedInSearch_: number = 0;
@@ -367,7 +368,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
     this.addEventListener('history-view-changed', this.historyViewChanged_);
     this.addEventListener('unselect-all', this.unselectAll);
 
-    if (loadTimeData.getBoolean('enableHistoryEmbeddings')) {
+    if (loadTimeData.getBoolean('maybeShowEmbeddingsIph')) {
       this.registerHelpBubble(
           'kHistorySearchInputElementId', this.$.toolbar.searchField);
       // TODO(crbug.com/40075330): There might be a race condition if the call
@@ -420,8 +421,8 @@ export class HistoryAppElement extends HistoryAppElementBase {
         this.showHistoryClusters_;
   }
 
-  private productSpecificationsListsSelected_(_selectedPage: string): boolean {
-    return this.productSpecificationsListsEnabled_ &&
+  private comparisonTablesSelected_(_selectedPage: string): boolean {
+    return this.compareHistoryEnabled_ &&
         this.selectedPage_ === Page.PRODUCT_SPECIFICATIONS_LISTS;
   }
 
@@ -734,10 +735,6 @@ export class HistoryAppElement extends HistoryAppElementBase {
     // page or tab has changed.
     setTimeout(() => {
       this.$.history.notifyResize();
-      const clusters = this.shadowRoot!.querySelector('history-clusters');
-      if (clusters) {
-        clusters.notifyResize();
-      }
     }, 0);
   }
 
@@ -884,6 +881,10 @@ export class HistoryAppElement extends HistoryAppElementBase {
     }
 
     return afterDate;
+  }
+
+  private onHistoryEmbeddingsDisclaimerLinkClick_() {
+    this.historyEmbeddingsDisclaimerLinkClicked_ = true;
   }
 
   private onHistoryEmbeddingsItemMoreFromSiteClick_(

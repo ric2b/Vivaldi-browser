@@ -316,8 +316,14 @@ void SetupFragmentBuilderForFragmentation(
     const BlockBreakToken* previous_break_token,
     BoxFragmentBuilder*);
 
+// Return whether any block-start border+padding should be included in the
+// fragment being generated. Only one of the fragments should include this,
+// unless box decorations are to be cloned.
+bool ShouldIncludeBlockStartBorderPadding(const BoxFragmentBuilder&);
+
 // Return whether any block-end border+padding should be included in the
-// fragment being generated. Only one of the fragments should include this.
+// fragment being generated. Only one of the fragments should include this,
+// unless box decorations are to be cloned.
 bool ShouldIncludeBlockEndBorderPadding(const BoxFragmentBuilder&);
 
 // Return the size of the block-start box decorations, if they are cloned. In
@@ -378,8 +384,7 @@ enum class BreakStatus {
 // fragmentation (kDisableFragmentation). kBrokeBefore is never returned here
 // (if we need a break before the node, that's something that will be determined
 // by the parent algorithm).
-BreakStatus FinishFragmentation(LayoutUnit trailing_border_padding,
-                                BoxFragmentBuilder*);
+BreakStatus FinishFragmentation(BoxFragmentBuilder*);
 
 // Special rules apply for finishing fragmentation when building fragmentainers.
 BreakStatus FinishFragmentationForFragmentainer(BoxFragmentBuilder*);

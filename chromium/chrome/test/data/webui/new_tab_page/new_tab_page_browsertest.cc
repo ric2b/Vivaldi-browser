@@ -19,10 +19,6 @@ class NewTabPageBrowserTest : public WebUIMochaBrowserTest {
 
 using NewTabPageTest = NewTabPageBrowserTest;
 
-IN_PROC_BROWSER_TEST_F(NewTabPageTest, Utils) {
-  RunTest("new_tab_page/utils_test.js", "mocha.run()");
-}
-
 IN_PROC_BROWSER_TEST_F(NewTabPageTest, MetricsUtils) {
   RunTest("new_tab_page/metrics_utils_test.js", "mocha.run()");
 }
@@ -145,10 +141,6 @@ IN_PROC_BROWSER_TEST_F(NewTabPageModulesTest, FileSuggestionModule) {
           "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(NewTabPageModulesTest, FeedModule) {
-  RunTest("new_tab_page/modules/feed/module_test.js", "mocha.run()");
-}
-
 using NewTabPageAppTest = NewTabPageBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, Misc) {
@@ -209,23 +201,6 @@ IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, LensUploadDialog) {
 IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, WallpaperSearch) {
   RunTest("new_tab_page/app_test.js",
           "runMochaSuite('NewTabPageAppTest WallpaperSearch')");
-}
-
-class NewTabPageModulesTabResumptionModuleTest : public NewTabPageBrowserTest {
- protected:
-  NewTabPageModulesTabResumptionModuleTest() {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{ntp_features::kNtpTabResumptionModule},
-        /*disabled_features=*/{});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(NewTabPageModulesTabResumptionModuleTest, Core) {
-  RunTest("new_tab_page/modules/v2/tab_resumption/module_test.js",
-          "runMochaSuite('NewTabPageModulesTabResumptionModuleTest Core')");
 }
 
 class NewTabPageModulesMostRelevantTabResumptionModuleTest

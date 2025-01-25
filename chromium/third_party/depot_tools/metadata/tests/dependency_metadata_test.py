@@ -325,6 +325,27 @@ class DependencyValidationTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 0)
 
+    def test_dep_is_canonical_skips_versioning_requirement(self):
+        """
+        Check versioning information isn't required for dependencies where
+        Chromium is the canonical repository.
+        """
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.NAME.get_name(),
+                             "Test valid metadata")
+        dependency.add_entry(known_fields.URL.get_name(),
+                             "This is the canonical repository")
+        dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
+        dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "yes")
+        dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
+
+        results = dependency.validate(
+            source_file_dir=os.path.join(_THIS_DIR, "data"),
+            repo_root_dir=_THIS_DIR,
+        )
+        self.assertEqual(len(results), 0)
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,6 +8,10 @@
 #include "ash/ash_export.h"
 #include "ui/events/event_rewriter.h"
 
+namespace ui {
+class MouseEvent;
+}
+
 namespace ash {
 
 // EventRewriter that cancels events from the built-in trackpad.
@@ -28,7 +32,15 @@ class ASH_EXPORT DisableTrackpadEventRewriter : public ui::EventRewriter {
       const ui::Event& event,
       const Continuation continuation) override;
 
+  void HandleKeyEvent(const ui::KeyEvent* event);
+  void HandleEscapeKeyPress();
+  void ResetEscapeKeyPressTracking();
+  ui::EventDispatchDetails HandleMouseEvent(const ui::MouseEvent* event,
+                                            const Continuation continuation);
+
   bool enabled_ = false;
+  int escape_press_count_ = 0;
+  base::TimeTicks first_escape_press_time_ = base::TimeTicks();
 };
 
 }  // namespace ash

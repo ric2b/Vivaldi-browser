@@ -20,6 +20,7 @@
 #include "components/sync/base/features.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/base/user_selectable_type.h"
+#include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/service/glue/sync_transport_data_prefs.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,7 +61,6 @@ class SyncPrefsTest : public testing::Test {
   std::unique_ptr<SyncPrefs> sync_prefs_;
   signin::GaiaIdHash gaia_id_hash_;
 };
-
 
 TEST_F(SyncPrefsTest, EncryptionBootstrapTokenPerAccountSignedOut) {
   auto gaia_id_hash_empty = signin::GaiaIdHash::FromGaiaId("");
@@ -458,15 +458,16 @@ TEST_F(SyncPrefsTest,
 #endif  // !BUILDFLAG(IS_IOS)
                             kEnablePasswordsAccountStorageForNonSyncingUsers,
                             kSyncEnableContactInfoDataTypeInTransportMode,
-                            kEnablePreferencesAccountStorage},
+                            kEnablePreferencesAccountStorage,
+                            kSyncEnableExtensionsInTransportMode},
       /*disabled_features=*/{kReplaceSyncPromosWithSignInPromos});
 
-  // Based on the feature flags set above, Passwords, Autofill and Payments
-  // are supported and enabled by default. Bookmarks and ReadingList are
-  // supported, but not enabled by default. Preferences, History, and Tabs are
-  // not supported without kReplaceSyncPromosWithSignInPromos. Transport
-  // mode is required for new sync types moving forward. Compare is one of
-  // those and is enabled when kReplaceSyncPromosWithSignInPromos is enabled.
+  // Based on the feature flags set above, Passwords, Autofill and Payments are
+  // supported and enabled by default. Bookmarks, ReadingList, and Extensions
+  // are supported, but not enabled by default. Preferences, History, and Tabs
+  // are not supported without kReplaceSyncPromosWithSignInPromos. Transport
+  // mode is required for new sync types moving forward. Compare is one of those
+  // and is enabled when kReplaceSyncPromosWithSignInPromos is enabled.
   UserSelectableTypeSet expected_types{UserSelectableType::kPasswords,
                                        UserSelectableType::kAutofill,
                                        UserSelectableType::kPayments};
@@ -492,15 +493,16 @@ TEST_F(SyncPrefsTest,
 #endif  // !BUILDFLAG(IS_IOS)
                             kEnablePasswordsAccountStorageForNonSyncingUsers,
                             kSyncEnableContactInfoDataTypeInTransportMode,
-                            kEnablePreferencesAccountStorage},
+                            kEnablePreferencesAccountStorage,
+                            kSyncEnableExtensionsInTransportMode},
       /*disabled_features=*/{});
 
   // Based on the feature flags set above, Bookmarks, ReadingList, Passwords,
   // Autofill, Payments and Preferences are supported and enabled by default.
-  // (History and Tabs are also supported, but require a separate opt-in.)
-  // Transport mode is required for new sync types moving forward. Compare is
-  // one of those and is enabled when kReplaceSyncPromosWithSignInPromos is
-  // enabled.
+  // Extensions is supported, but not enabled by default. (History and Tabs are
+  // also supported, but require a separate opt-in.) Transport mode is required
+  // for new sync types moving forward. Compare is one of those and is enabled
+  // when kReplaceSyncPromosWithSignInPromos is enabled.
   UserSelectableTypeSet expected_types{
       UserSelectableType::kBookmarks,   UserSelectableType::kProductComparison,
       UserSelectableType::kReadingList, UserSelectableType::kPasswords,
@@ -525,6 +527,7 @@ class SyncPrefsExplicitBrowserSigninTest : public SyncPrefsTest {
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{syncer::
                                   kSyncEnableContactInfoDataTypeInTransportMode,
+                              kSyncEnableExtensionsInTransportMode,
                               switches::kExplicitBrowserSigninUIOnDesktop},
         /*disabled_features=*/{});
   }
@@ -541,15 +544,20 @@ TEST_F(SyncPrefsExplicitBrowserSigninTest, DefaultWithExplicitBrowserSignin) {
                    .Has(UserSelectableType::kAutofill));
   EXPECT_FALSE(sync_prefs_->GetSelectedTypesForAccount(gaia_id_hash_)
                    .Has(UserSelectableType::kPasswords));
+  EXPECT_FALSE(sync_prefs_->GetSelectedTypesForAccount(gaia_id_hash_)
+                   .Has(UserSelectableType::kExtensions));
 
   // Set an explicit browser signin.
   pref_service_.SetBoolean(::prefs::kExplicitBrowserSignin, true);
 
-  // With an explicit sign in, passwords and autofill are enabled by default.
+  // With an explicit sign in, apps, extensions, themes, passwords and autofill
+  // are enabled by default.
   EXPECT_TRUE(sync_prefs_->GetSelectedTypesForAccount(gaia_id_hash_)
                   .Has(UserSelectableType::kAutofill));
   EXPECT_TRUE(sync_prefs_->GetSelectedTypesForAccount(gaia_id_hash_)
                   .Has(UserSelectableType::kPasswords));
+  EXPECT_TRUE(sync_prefs_->GetSelectedTypesForAccount(gaia_id_hash_)
+                  .Has(UserSelectableType::kExtensions));
 }
 
 #endif

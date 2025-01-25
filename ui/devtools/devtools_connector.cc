@@ -209,7 +209,7 @@ void DevtoolsConnectorItem::ActivateContents(content::WebContents* contents) {
   // guest view does not need notification, WebContents gets it above.
 }
 
-void DevtoolsConnectorItem::AddNewContents(
+content::WebContents* DevtoolsConnectorItem::AddNewContents(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
     const GURL& target_url,
@@ -219,10 +219,12 @@ void DevtoolsConnectorItem::AddNewContents(
     bool* was_blocked) {
   if (devtools_delegate_) {
     // The webview is called in devtools_delegate_
-    devtools_delegate_->AddNewContents(source, std::move(new_contents),
+    return devtools_delegate_->AddNewContents(source, std::move(new_contents),
                                        target_url, disposition, window_features,
                                        user_gesture, was_blocked);
   }
+
+  return nullptr;
 }
 
 void DevtoolsConnectorItem::WebContentsCreated(

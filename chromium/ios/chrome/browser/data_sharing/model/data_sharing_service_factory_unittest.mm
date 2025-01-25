@@ -10,7 +10,7 @@
 #import "base/test/task_environment.h"
 #import "components/data_sharing/public/data_sharing_service.h"
 #import "components/data_sharing/public/features.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/platform_test.h"
@@ -33,7 +33,7 @@ class DataSharingServiceFactoryTest : public PlatformTest {
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(DataSharingServiceFactory::GetInstance(),
                               DataSharingServiceFactory::GetDefaultFactory());
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
   }
 
   void TearDown() override { web_task_env_.RunUntilIdle(); }

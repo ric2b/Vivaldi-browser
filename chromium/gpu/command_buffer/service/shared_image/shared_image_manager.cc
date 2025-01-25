@@ -10,6 +10,8 @@
 #include <utility>
 
 #include "base/containers/contains.h"
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "base/memory/stack_allocated.h"
 #include "base/metrics/histogram_macros.h"
@@ -28,6 +30,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "gpu/command_buffer/service/dxgi_shared_handle_manager.h"
 #include "ui/gfx/win/d3d_shared_fence.h"
+#include "ui/gl/direct_composition_support.h"
 #include "ui/gl/gl_angle_util_win.h"
 #endif
 
@@ -50,6 +53,27 @@
 #endif
 
 namespace gpu {
+
+namespace {
+
+// `DCHECKS` and dumps without crashing that `backing`'s usage overlaps with
+// `usage`.
+void EnforceSharedImageUsage(const SharedImageBacking& backing,
+                             SharedImageUsageSet usage) {
+  if (!(backing.usage() & usage)) {
+    SCOPED_CRASH_KEY_STRING32("SharedImageUsage", "debug_label",
+                              backing.debug_label());
+    SCOPED_CRASH_KEY_STRING32("SharedImageUsage", "name", backing.GetName());
+    SCOPED_CRASH_KEY_NUMBER("SharedImageUsage", "required_usage",
+                            static_cast<int>(usage));
+    SCOPED_CRASH_KEY_NUMBER("ShareDImageUsage", "actual_usage",
+                            backing.usage());
+    base::debug::DumpWithoutCrashing();
+  }
+}
+
+}  // namespace
+
 // Overrides for flat_set lookups:
 bool operator<(const std::unique_ptr<SharedImageBacking>& lhs,
                const std::unique_ptr<SharedImageBacking>& rhs) {
@@ -254,12 +278,41 @@ std::unique_ptr<DawnImageRepresentation> SharedImageManager::ProduceDawn(
     return nullptr;
   }
 
+  EnforceSharedImageUsage(**found, {SHARED_IMAGE_USAGE_WEBGPU_READ,
+                                    SHARED_IMAGE_USAGE_WEBGPU_WRITE});
   auto representation =
       (*found)->ProduceDawn(this, tracker, device, backend_type,
                             std::move(view_formats), context_state);
   if (!representation) {
     LOG(ERROR) << "SharedImageManager::ProduceDawn: Trying to produce a "
                   "Dawn representation from an incompatible backing: "
+               << (*found)->GetName();
+    return nullptr;
+  }
+
+  return representation;
+}
+
+std::unique_ptr<DawnBufferRepresentation> SharedImageManager::ProduceDawnBuffer(
+    const Mailbox& mailbox,
+    MemoryTypeTracker* tracker,
+    const wgpu::Device& device,
+    wgpu::BackendType backend_type) {
+  CALLED_ON_VALID_THREAD();
+
+  AutoLock autolock(this);
+  auto found = images_.find(mailbox);
+  if (found == images_.end()) {
+    LOG(ERROR) << "SharedImageManager::ProduceDawnBuffer: Trying to produce a "
+                  "Dawn buffer representation from a non-existent mailbox.";
+    return nullptr;
+  }
+
+  auto representation =
+      (*found)->ProduceDawnBuffer(this, tracker, device, backend_type);
+  if (!representation) {
+    LOG(ERROR) << "SharedImageManager::ProduceDawnBuffer: Trying to produce a "
+                  "Dawn buffer representation from an incompatible backing: "
                << (*found)->GetName();
     return nullptr;
   }
@@ -280,6 +333,7 @@ std::unique_ptr<OverlayImageRepresentation> SharedImageManager::ProduceOverlay(
     return nullptr;
   }
 
+  EnforceSharedImageUsage(**found, {SHARED_IMAGE_USAGE_SCANOUT});
   auto representation = (*found)->ProduceOverlay(this, tracker);
   if (!representation) {
     LOG(ERROR) << "SharedImageManager::ProduceOverlay: Trying to produce a "
@@ -288,31 +342,6 @@ std::unique_ptr<OverlayImageRepresentation> SharedImageManager::ProduceOverlay(
     return nullptr;
   }
 
-  return representation;
-}
-
-std::unique_ptr<VaapiImageRepresentation> SharedImageManager::ProduceVASurface(
-    const Mailbox& mailbox,
-    MemoryTypeTracker* tracker,
-    VaapiDependenciesFactory* dep_factory) {
-  CALLED_ON_VALID_THREAD();
-
-  AutoLock autolock(this);
-  auto found = images_.find(mailbox);
-  if (found == images_.end()) {
-    LOG(ERROR) << "SharedImageManager::ProduceVASurface: Trying to produce a "
-                  "VA-API representation from a non-existent mailbox.";
-    return nullptr;
-  }
-
-  auto representation = (*found)->ProduceVASurface(this, tracker, dep_factory);
-
-  if (!representation) {
-    LOG(ERROR) << "SharedImageManager::ProduceVASurface: Trying to produce a "
-                  "VA-API representation from an incompatible backing: "
-               << (*found)->GetName();
-    return nullptr;
-  }
   return representation;
 }
 
@@ -347,15 +376,16 @@ std::unique_ptr<RasterImageRepresentation> SharedImageManager::ProduceRaster(
     return nullptr;
   }
 
+  EnforceSharedImageUsage(**found, {SHARED_IMAGE_USAGE_RAW_DRAW});
   // This is expected to fail based on the SharedImageBacking type, so don't log
   // error here. Caller is expected to handle nullptr.
   return (*found)->ProduceRaster(this, tracker);
 }
 
-std::unique_ptr<VideoDecodeImageRepresentation>
-SharedImageManager::ProduceVideoDecode(VideoDecodeDevice device,
-                                       const Mailbox& mailbox,
-                                       MemoryTypeTracker* tracker) {
+std::unique_ptr<VideoImageRepresentation> SharedImageManager::ProduceVideo(
+    VideoDevice device,
+    const Mailbox& mailbox,
+    MemoryTypeTracker* tracker) {
   CALLED_ON_VALID_THREAD();
 
   AutoLock autolock(this);
@@ -369,7 +399,7 @@ SharedImageManager::ProduceVideoDecode(VideoDecodeDevice device,
 
   // This is expected to fail based on the SharedImageBacking type, so don't log
   // error here. Caller is expected to handle nullptr.
-  return (*found)->ProduceVideoDecode(this, tracker, device);
+  return (*found)->ProduceVideo(this, tracker, device);
 }
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -410,6 +440,7 @@ SharedImageManager::ProduceLegacyOverlay(const Mailbox& mailbox,
     return nullptr;
   }
 
+  EnforceSharedImageUsage(**found, {SHARED_IMAGE_USAGE_SCANOUT});
   auto representation = (*found)->ProduceLegacyOverlay(this, tracker);
   if (!representation) {
     LOG(ERROR)
@@ -577,7 +608,7 @@ bool SharedImageManager::SupportsScanoutImages() {
       ->GetPlatformRuntimeProperties()
       .supports_native_pixmaps;
 #elif BUILDFLAG(IS_WIN)
-  return false;
+  return gl::DirectCompositionTextureSupported();
 #else
   return false;
 #endif

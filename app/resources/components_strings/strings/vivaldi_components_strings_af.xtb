@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> het die verbinding onverwags gesluit.</translation>
 <translation id="1161325031994447685">Herverbind tans aan Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Druk Af…</translation>
+<translation id="132390688737681464">Bewaar en vul adresse in</translation>
 <translation id="1375198122581997741">Oor Weergawe</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> het geen data verstuur nie.</translation>
 <translation id="1559528461873125649">So ’n lêer of gids bestaan nie</translation>
 <translation id="1640244768702815859">Probeer <ph name="BEGIN_LINK" />om die werf se tuisblad te besoek<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Onondersteunde protokol</translation>
+<translation id="1662550410081243962">Bewaar en vul betaalmetodes in</translation>
 <translation id="1710259589646384581">Bedryfstelsel</translation>
 <translation id="1728677426644403582">U bekyk die bron van ’n webblad</translation>
 <translation id="1734878702283171397">Probeer tans die stelseladmin kontak.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Hierdie werf kan nie ’n beveilgde verbinding bied nie</translation>
 <translation id="2187317261103489799">Bespeur (verstek)</translation>
 <translation id="2224337661447660594">Geen internet</translation>
+<translation id="2283340219607151381">Bewaar en vul adresse in</translation>
 <translation id="2292556288342944218">U Internettoegang is geblokkeer</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> vereis ’n gebruikersnaam en wagwoord.</translation>
 <translation id="2337852623177822836">Instelling word deur u administrateur beheer</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">Die verbinding is geënkripteer en bekragtig met <ph name="CIPHER" /> en gebruik <ph name="KX" /> as die sleuteluitruilmeganisme.</translation>
 <translation id="2909946352844186028">’n Netwerkverandering is bespeur.</translation>
 <translation id="2948083400971632585">U kan enige instaanbedieners wat vir ’n verbinding opgestel is, vanuit die instellingsblad deaktiveer.</translation>
+<translation id="2954624054936281172">Tabel van bewaarde betaalmetodes</translation>
 <translation id="2991571918955627853">U kan nie nou <ph name="SITE" /> besoek nie omdat die webwerf HSTS gebruik. Netwerkfoute en -aanvalle is gewoonlik tydelik, dus sal hierdie blad waarskynlik later werk.</translation>
 <translation id="3005723025932146533">Toon bewaarde kopie</translation>
 <translation id="301521992641321250">Outomaties versper</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Bespeur altyd belangrike inhoud op hierdie werf</translation>
 <translation id="3308738399950580893">advertensies</translation>
 <translation id="3384522979010096022">U organisasie laat u nie toe om hierdie werf te bekyk nie</translation>
+<translation id="3387261909427947069">Betaalmetodes</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is tans onbereikbaar.</translation>
 <translation id="3427092606871434483">Laat Toe (verstek)</translation>
 <translation id="3447661539832366887">Die eienaar van hierdie toestel het die dinosourusspel afgeskakel.</translation>
@@ -67,6 +72,7 @@
 <translation id="3566021033012934673">U verbinding is nie privaat nie</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Versteek details</translation>
+<translation id="3614001939154393113">Aanvallers probeer dalk jou inligting van <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> af steel (byvoorbeeld wagwoorde, boodskappe of kredietkaarte). <ph name="BEGIN_LEARN_MORE_LINK" />Kry meer inligting oor hierdie waarskuwing<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Indien hierdie program reeds gelys is vir netwerktoegang, probeer dit
       van die lys verwyder en weer toevoeg.</translation>
 <translation id="3658742229777143148">Hersiening</translation>
@@ -114,6 +120,7 @@
 <translation id="5386426401304769735">Die sertifikaatketting vir hierdie werf bevat ’n sertifikaat wat met SHA-1 onderteken is.</translation>
 <translation id="5452270690849572955">Hierdie <ph name="HOST_NAME" /> blad kan nie gevind word nie</translation>
 <translation id="5457113250005438886">Ongeldig</translation>
+<translation id="5490432419156082418">Adresse en meer</translation>
 <translation id="5492298309214877701">Hierdie werf op die maatskappy, organisasie of skool se intranet het dieselfde bronadres as ’n eksterne webwerf.
     <ph name="LINE_BREAK" />
     Probeer u stelseladministrateur kontak.</translation>
@@ -158,9 +165,11 @@
 <translation id="7108819624672055576">Deur ’n uitbreiding toegelaat</translation>
 <translation id="7111012039238467737">(Geldig)</translation>
 <translation id="7113310725918019676">Laat <ph name="BLOCKED_TYPE" /> van <ph name="DOMAIN" /> toe</translation>
+<translation id="7179323680825933600">Bewaar en vul betaalmetodes in</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> voldoen nie aan sekuriteitstandaarde nie.</translation>
 <translation id="7219179957768738017">Die verbinding gebruik <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Toon kennisgewings</translation>
+<translation id="7227747683324411744">Aanvallers op die werf wat u probeer besoek, kan u dalk mislei om skadelike programmatuur te installeer wat die manier waarop u blaai beïnvloed — byvoorbeeld deur u tuisblad te verander of vir u ekstra advertensies te wys op werwe wat u besoek.</translation>
 <translation id="7353601530677266744">Opdragreël</translation>
 <translation id="7364115444476960850">Die blad wat u probeer besoek is versper deur Vivaldi se <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profielpad</translation>
@@ -168,6 +177,7 @@
 <translation id="7518003948725431193">Geen webbled is gevind vir die webadres: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Hierdie webwerf kan slegs korrek vertoon word met data wat u vroeër ingevoer het. U kan hierdie data weer verstuur, maar daardeur sal enige aksie wat hierdie blad reeds uitgevoer het, weer plaasvind.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan tans nie hierdie versoek verwerk nie.</translation>
+<translation id="7605377493722372900">Aanvallers op die werf wat u probeer besoek, kan skadelike programmatuur installeer wat dinge soos u wagwoord, foto’s, boodskappe of kredietkaartnommer steel of uitvee.</translation>
 <translation id="7662298039739062396">Instelling word deur uitbreiding beheer</translation>
 <translation id="7663736086183791259">Sertifikaat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Sertifikaat</translation>
@@ -193,6 +203,8 @@
 <translation id="8288807391153049143">Toon sertifikaat</translation>
 <translation id="8289355894181816810">Kontak u netwerkadministrateur indien u onsker is oor wat dit beteken.</translation>
 <translation id="8332188693563227489">Toegang tot <ph name="HOST_NAME" /> is geweier</translation>
+<translation id="8422228580902424274">Aanvallers op die werf wat u probeer besoek, kan u dalk mislei om programmatuur te installeer of dinge soos u wagwoord, telefoon- of kredietkaartnommer te openbaar.</translation>
+<translation id="8473863474539038330">Adresse en meer</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> het te lank geneem om te reageer.</translation>
 <translation id="8503813439785031346">Gebruikersnaam</translation>
 <translation id="8703575177326907206">U verbinding aan <ph name="DOMAIN" /> is nie geënkripteer nie.</translation>
@@ -200,6 +212,7 @@
 <translation id="8820817407110198400">Boekmerke</translation>
 <translation id="8940028675168378100">Versper deur <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Gaan na werfinstellings</translation>
+<translation id="8975012916872825179">Sluit inligting soos telefoonnommers, e-posadresse en versendingadresse in</translation>
 <translation id="9001074447101275817">Die instaanbediener <ph name="DOMAIN" /> vereis ’n gebruikernaam en wagwoord.</translation>
 <translation id="9008201768610948239">Ignoreer</translation>
 <translation id="9025348182339809926">(Ongeldig)</translation>
@@ -212,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> gebruik ’n onondersteunde protokol.</translation>
 <translation id="936602727769022409">U kan toegang tot u Google-rekening verloor. Chromium beveel aan dat u nou u wagwoord verander. U sal gevra word om aan te teken.</translation>
 <translation id="969892804517981540">Amptelike Bou</translation>
+<translation id="984275831282074731">Betaalmetodes</translation>
 <translation id="988159990683914416">Ontwikkelaarsbou</translation>
 </translationbundle>

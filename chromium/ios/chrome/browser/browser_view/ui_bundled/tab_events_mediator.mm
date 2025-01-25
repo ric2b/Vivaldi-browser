@@ -9,14 +9,14 @@
 #import "ios/chrome/browser/feature_engagement/model/tracker_util.h"
 #import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_coordinator.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/all_web_state_observation_forwarder.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator.h"
-#import "ios/chrome/browser/ui/tabs/switch_to_tab_animation_view.h"
+#import "ios/chrome/browser/tabs/ui_bundled/switch_to_tab_animation_view.h"
 #import "ios/chrome/browser/ui/toolbar/public/side_swipe_toolbar_snapshot_providing.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
 #import "ios/chrome/browser/url_loading/model/new_tab_animation_tab_helper.h"
@@ -51,20 +51,20 @@
   raw_ptr<WebStateList> _webStateList;
   __weak NewTabPageCoordinator* _ntpCoordinator;
   raw_ptr<UrlLoadingNotifierBrowserAgent> _loadingNotifier;
-  raw_ptr<ChromeBrowserState> _browserState;
+  raw_ptr<ProfileIOS> _profile;
 }
 
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
                       ntpCoordinator:(NewTabPageCoordinator*)ntpCoordinator
-                        browserState:(ChromeBrowserState*)browserState
+                             profile:(ProfileIOS*)profile
                      loadingNotifier:
                          (UrlLoadingNotifierBrowserAgent*)urlLoadingNotifier {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _webStateList = webStateList;
     // TODO(crbug.com/40233361): Stop lazy loading in NTPCoordinator and remove
     // this dependency.
     _ntpCoordinator = ntpCoordinator;
-    _browserState = browserState;
+    _profile = profile;
 
     _webStateObserverBridge =
         std::make_unique<web::WebStateObserverBridge>(self);
@@ -93,7 +93,7 @@
 
   _webStateList = nullptr;
   _ntpCoordinator = nil;
-  _browserState = nil;
+  _profile = nil;
   self.consumer = nil;
 }
 
@@ -309,8 +309,7 @@
   if (isUserInitiated) {
     // Send either the "New Tab Opened" or "New Incognito Tab" opened to the
     // feature_engagement::Tracker based on `inIncognito`.
-    feature_engagement::NotifyNewTabEvent(_browserState,
-                                          _browserState->IsOffTheRecord());
+    feature_engagement::NotifyNewTabEvent(_profile, _profile->IsOffTheRecord());
   }
 }
 
@@ -322,7 +321,7 @@
   if (currentWebState &&
       (transitionType & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)) {
     new_tab_page_uma::RecordActionFromOmnibox(
-        _browserState->IsOffTheRecord(), currentWebState, URL, transitionType);
+        _profile->IsOffTheRecord(), currentWebState, URL, transitionType);
   }
 }
 - (void)willSwitchToTabWithURL:(const GURL&)URL

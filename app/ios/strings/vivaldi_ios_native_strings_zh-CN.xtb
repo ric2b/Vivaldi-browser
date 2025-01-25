@@ -23,6 +23,7 @@
 <translation id="1325473901257014816">使用 Vivaldi，将所有标签页保存在一个浏览器中，并在所有设备上同步它们。</translation>
 <translation id="132683371494960526">双击修改上级文件夹。</translation>
 <translation id="1341156196125040601">选择您希望放置地址字段的位置。</translation>
+<translation id="1344236299365524156">喜欢 Vivaldi 吗？</translation>
 <translation id="1354002567845495520">同步 Vivaldi 笔记（不能同步附件）</translation>
 <translation id="1365181765792690850">启用此设置可能会破坏某些网站和/或图像。需要重新启动才能完全生效。</translation>
 <translation id="1379470994139227452">将 Vivaldi 设为默认</translation>
@@ -30,6 +31,7 @@
 <translation id="1383876407941801731">搜索</translation>
 <translation id="1397515084080510783">没有同步标签页</translation>
 <translation id="1410197035576869800">应用程序图标</translation>
+<translation id="1430308140197327248">显示完整地址</translation>
 <translation id="1430638949087011281">不拦截</translation>
 <translation id="1446108955355168157">为了加密并保护您的同步数据（密码、书签、笔记等），请设置加密密钥。此密钥不会传送给我们。</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> 项目</translation>
@@ -46,6 +48,7 @@
 <translation id="1751280147639351837">跟踪器和广告拦截器</translation>
 <translation id="1752547299766512813">保存密码</translation>
 <translation id="1754797958074421486">使用条款</translation>
+<translation id="1763111582687651119">启用搜索引擎简称</translation>
 <translation id="1771413903824396513">按昵称</translation>
 <translation id="1804522390855853698">中文(<ph name="ORIGIN" />)</translation>
 <translation id="1807246157184219062">浅色</translation>
@@ -53,7 +56,6 @@
 <translation id="1813686536470127172">其他文件夹</translation>
 <translation id="1828800626900562968">点下面的 + 号图标新建标签页。</translation>
 <translation id="1861262398884155592">此文件夹为空</translation>
-<translation id="1887193815546011584">新建快速拨号</translation>
 <translation id="1929299157575856072">默认拦截级别</translation>
 <translation id="2030706494969937066">取回您的证书失败，请重新登录。</translation>
 <translation id="2034405583989639424">编辑快速拨号</translation>
@@ -66,6 +68,7 @@
 <translation id="2272338747456392228">账号已锁定</translation>
 <translation id="2273327106802955778">更多菜单</translation>
 <translation id="2324160330092901720">验证码已发送至 <ph name="EMAIL_ID" /></translation>
+<translation id="2330644510603114741">标签页行为</translation>
 <translation id="2336309953058658733">清空回收站</translation>
 <translation id="2359808026110333948">继续</translation>
 <translation id="2386793615875593361">已选择 1 项</translation>
@@ -92,6 +95,7 @@
 <translation id="2678542925523700624">爱沙尼亚语 (<ph name="ORIGIN" />)</translation>
 <translation id="2709516037105925701">自动填充</translation>
 <translation id="271033894570825754">新增</translation>
+<translation id="2725892265692641195">新建 <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">加密密钥</translation>
 <translation id="276436995507680929">同步阅读清单</translation>
 <translation id="2765217105034171413">小</translation>
@@ -103,25 +107,28 @@
 <translation id="2874111661876416905">用 Vivaldi 搜索</translation>
 <translation id="2884735088411646852">排序</translation>
 <translation id="2898963176829412617">新文件夹…</translation>
+<translation id="2918704853620385162">关闭最后一个标签页时打开新标签页</translation>
 <translation id="2924890236896835588">组名</translation>
 <translation id="2961573414320947355">想在 Vivaldi 中打开所有链接吗？请务必将我们设置为默认值。</translation>
 <translation id="3006429105107822794">您无需记住此密码。 它将保存到 Vivaldi 密码管理器。</translation>
 <translation id="3018244467214569202">希腊语 (<ph name="ORIGIN" />)</translation>
 <translation id="3029426144711327484">显示快速拨号</translation>
 <translation id="3039671569659952257">删除文件夹</translation>
+<translation id="3065031457538473619">在自动完成建议中书签优先</translation>
 <translation id="3073196329485613487">登录您的账号</translation>
 <translation id="307859903981308731">若继续，即表示您同意 Vivaldi 的</translation>
 <translation id="3086746722712840547">笔记</translation>
 <translation id="3087734570205094154">底部</translation>
 <translation id="3091563570137981919">拦截跟踪器和广告</translation>
 <translation id="3134385238404760368">没有最近的标签</translation>
+<translation id="3142562627629111859">新建组</translation>
 <translation id="3157931365184549694">还原</translation>
 <translation id="3159285901314605198">背景图片</translation>
 <translation id="3177673846235066154">服务器拒绝了您的凭证。</translation>
 <translation id="3229182533910980085">点击下面的 + 号添加您的第一个书签</translation>
 <translation id="3236835587712044564">对 Vivaldi 满意吗？ 将其设为默认应用。</translation>
 <translation id="3270894089048358271">将 Vivaldi 设为您的默认浏览器</translation>
-<translation id="3270930591809084274">已同步的标签</translation>
+<translation id="3270930591809084274">已同步的标签页</translation>
 <translation id="3335772982573114336">新笔记</translation>
 <translation id="33451081266695216">服务器限制连接。</translation>
 <translation id="3346386541263128307">电子邮件不匹配。</translation>
@@ -135,7 +142,6 @@
 <translation id="3513566764071045027">退出登录</translation>
 <translation id="3527085408025491307">文件夹</translation>
 <translation id="3530991200302302959">保加利亚语(<ph name="ORIGIN" />)</translation>
-<translation id="3536029647154100190">添加组</translation>
 <translation id="3601414719864711130">按日期</translation>
 <translation id="3602290021589620013">预览</translation>
 <translation id="3607176258839749451">发生错误导致注册失败。请您稍后重试。</translation>
@@ -222,13 +228,15 @@
 <translation id="4807415245238822255">密码需相符。</translation>
 <translation id="4818836520802586445">强调色</translation>
 <translation id="4821701638681626529">使用隐身标签页时，Vivaldi 不会记录浏览历史记录</translation>
-<translation id="4833044618885331665">您必须升级Vivaldi才能使用同步。</translation>
+<translation id="4833044618885331665">您必须升级 Vivaldi 才能使用同步。</translation>
 <translation id="484462545196658690">自动</translation>
 <translation id="4852383705713307704">广告屏蔽器</translation>
 <translation id="4903325570808402486">同步 Vivaldi 设置（暂时无法同步所有设置项）</translation>
 <translation id="4929196061847506605">强大、个性、私密。</translation>
+<translation id="4935075658237181291">捐赠！</translation>
 <translation id="4936710149174207991">尚未同步</translation>
 <translation id="4943266325467647391">Vivaldi 的内置跟踪拦截器和广告拦截器可保护您免受恶意软件和广告的侵害。</translation>
+<translation id="4950266778127803750">显示后台标签页的×按钮</translation>
 <translation id="495421405224926623">我已阅读并同意使用条款和隐私政策</translation>
 <translation id="497942794017668482">正在拦截跟踪器和广告</translation>
 <translation id="4993477362660748586">同步</translation>
@@ -247,11 +255,11 @@
 <translation id="5245732982828228444">你会在这里找到你的笔记</translation>
 <translation id="5249199221558969362">请输入真实年龄。</translation>
 <translation id="5271549068863921519">保存密码</translation>
-<translation id="5273620430932404871">启用书签简称匹配</translation>
 <translation id="5290452628447338707">无笔记</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5349678548463426691">按描述</translation>
 <translation id="5350737901534958404">允许来自我们合作伙伴的广告（以此赞助 Vivaldi）</translation>
+<translation id="5350868038818774118">书签匹配</translation>
 <translation id="5351912500249789547">Vivaldi.net 已拒绝您的凭证：错误代码 <ph name="ERROR_CODE" /></translation>
 <translation id="5378841821586202982">回收站文件夹</translation>
 <translation id="5398772614898833570">条广告已屏蔽</translation>
@@ -261,6 +269,7 @@
 <translation id="5494016731375030300">最近关闭的标签页</translation>
 <translation id="5564687523685713029">仅显示组</translation>
 <translation id="5600792731098584229">快速拨号大小</translation>
+<translation id="5607445917275004427">在地址栏中显示完整地址，而不是仅显示域名。</translation>
 <translation id="5639137028584114536">您的组织要求您隐身浏览。隐身模式下不会保存标签。
          <ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">列表</translation>
@@ -274,6 +283,7 @@
 <translation id="5859825823508296659">编辑网域</translation>
 <translation id="5867841422488265304">搜索或输入网址</translation>
 <translation id="5869217094746242845">了解有关隐私和安全的更多信息</translation>
+<translation id="587130020764788326">简称匹配</translation>
 <translation id="5871497086027727873">已移动 1 项</translation>
 <translation id="5898502570200301364">您可以在 iPhone 上的其他应用程序中使用保存到 Vivaldi 密码管理器的密码。</translation>
 <translation id="5900160494089383343">此用户名不可用。</translation>
@@ -294,7 +304,6 @@
 <translation id="6517411226162529295">后备密钥</translation>
 <translation id="6527303717912515753">分享</translation>
 <translation id="6535988230515403205">波兰语 (<ph name="ORIGIN" />)</translation>
-<translation id="6566198107563125484">启用书签匹配</translation>
 <translation id="659351303388691480">清除浏览数据...</translation>
 <translation id="6602272356389933803">外观与主题</translation>
 <translation id="6614744450826097546">广告详情</translation>
@@ -322,6 +331,7 @@
 <translation id="6951948201878750661">点击选择此颜色</translation>
 <translation id="6967884871145366229">管理隐私设置</translation>
 <translation id="6973630695168034713">文件夹</translation>
+<translation id="6976865195058364361">在自动完成建议中书签简称优先</translation>
 <translation id="7006864796794806241">找回密码</translation>
 <translation id="7029809446516969842">密码</translation>
 <translation id="7041964446309059643">手动</translation>
@@ -346,6 +356,7 @@
 <translation id="7454640759045234067">个跟踪器被拦截</translation>
 <translation id="7461899062138731833">订阅源</translation>
 <translation id="7490291412537629707">在新后台标签页中打开</translation>
+<translation id="749277285729135008">新标签页聚焦到地址栏</translation>
 <translation id="750493650310597496">已选 0 个</translation>
 <translation id="7525067979554623046">创建</translation>
 <translation id="753732157349120914">标签切换器</translation>
@@ -417,7 +428,7 @@
 <translation id="8684294196284714094">准备好将 Vivaldi 设置为默认浏览器了吗？</translation>
 <translation id="8733945742171960420">一旦您开始浏览，您的热门网站就会显示在这里。</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> 个项目已删除</translation>
-<translation id="8763006697839582351">以Vivaldi隐身模式打开</translation>
+<translation id="8763006697839582351">以 Vivaldi 隐身模式打开</translation>
 <translation id="8765173886020357878">搜索建议</translation>
 <translation id="8804164990146287819">隐私政策</translation>
 <translation id="8818152010000655963">壁纸</translation>

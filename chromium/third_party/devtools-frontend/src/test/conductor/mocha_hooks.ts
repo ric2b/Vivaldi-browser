@@ -3,18 +3,13 @@
 // found in the LICENSE file.
 
 import * as fs from 'fs';
-import {createCoverageMap, createFileCoverage} from 'istanbul-lib-coverage';
-import * as report from 'istanbul-lib-report';
-import {createSourceMapStore} from 'istanbul-lib-source-maps';
-import * as reports from 'istanbul-reports';
 import * as path from 'path';
-import * as rimraf from 'rimraf';
 
 import {
-  collectCoverageFromPage,
   postFileTeardown,
   preFileSetup,
   resetPages,
+  setupPages,
   unregisterAllServiceWorkers,
   watchForHang,
 } from './hooks.js';
@@ -40,12 +35,7 @@ process.on('SIGINT', postFileTeardown);
 // https://mochajs.org/#global-setup-fixtures. These let us start one hosted
 // mode server and share it between all the parallel test runners.
 export async function mochaGlobalSetup(this: Mocha.Suite) {
-  const commandLineArgs = [];
-  if (TestConfig.coverage) {
-    commandLineArgs.push('--coverage');
-  }
-  process.env.testServerPort = String(await startServer(TestConfig.serverType, commandLineArgs));
-
+  process.env.testServerPort = String(await startServer(TestConfig.serverType, []));
   console.log(`Started ${TestConfig.serverType} server on port ${process.env.testServerPort}`);
 }
 
@@ -53,11 +43,6 @@ export function mochaGlobalTeardown() {
   console.log('Stopping server');
   stopServer();
 }
-
-const testSuiteCoverageMap = createCoverageMap();
-
-const SHOULD_GATHER_COVERAGE_INFORMATION = TestConfig.coverage && TestConfig.serverType === 'component-docs';
-const INTERACTIONS_COVERAGE_LOCATION = path.join(TestConfig.artifactsDir, 'interactions-coverage/');
 
 let didPauseAtBeginning = false;
 
@@ -79,31 +64,13 @@ export const mochaHooks = {
   afterAll: async function(this: Mocha.Suite) {
     await postFileTeardown();
     copyGoldens();
-
-    if (!SHOULD_GATHER_COVERAGE_INFORMATION) {
-      return;
-    }
-
-    // Writing the coverage files to disk can take a lot longer on CQ than the
-    // default timeout. Since all of this work is synchronous (and would
-    // immediately fail if it went wrong), we can set the timeout to infinite
-    // here.
-    this.timeout(0);
-
-    // Make sure that any previously existing coverage reports are purged.
-    if (fs.existsSync(INTERACTIONS_COVERAGE_LOCATION)) {
-      rimraf.sync(INTERACTIONS_COVERAGE_LOCATION);
-    }
-
-    await writeCoverageReports();
   },
   // In both modes, run before each test.
   beforeEach: async function(this: Mocha.Context) {
     // Sets the timeout higher for this hook only.
     this.timeout(20000);
     const currentTest = this.currentTest?.fullTitle();
-    await watchForHang(currentTest, resetPages);
-    await watchForHang(currentTest, unregisterAllServiceWorkers);
+    await watchForHang(currentTest, setupPages);
 
     // Pause when running interactively in debug mode. This is mututally
     // exclusive with parallel mode.
@@ -128,36 +95,13 @@ export const mochaHooks = {
       });
     }
   },
-  afterEach: async function(this: Mocha.Suite) {
-    if (!SHOULD_GATHER_COVERAGE_INFORMATION) {
-      return;
-    }
-
-    const coverageData = await collectCoverageFromPage();
-    const testCoverageMap = createCoverageMap();
-
-    if (coverageData) {
-      for (const file of Object.values(coverageData)) {
-        testCoverageMap.addFileCoverage(createFileCoverage(file));
-      }
-    }
-
-    testSuiteCoverageMap.merge(testCoverageMap);
+  afterEach: async function(this: Mocha.Context) {
+    this.timeout(20000);
+    const currentTest = this.currentTest?.fullTitle();
+    await watchForHang(currentTest, resetPages);
+    await watchForHang(currentTest, unregisterAllServiceWorkers);
   },
 };
-
-async function writeCoverageReports() {
-  const remappedCoverageMap = await createSourceMapStore().transformCoverage(testSuiteCoverageMap);
-  const context = report.createContext({
-    dir: INTERACTIONS_COVERAGE_LOCATION,
-    coverageMap: remappedCoverageMap,
-    defaultSummarizer: 'nested',
-  });
-  reports.create('html').execute(context);
-  reports.create('json').execute(context);
-  reports.create('text', {file: 'coverage.txt'}).execute(context);
-  reports.create('json-summary').execute(context);
-}
 
 function copyGoldens() {
   if (TestConfig.artifactsDir === SOURCE_ROOT) {

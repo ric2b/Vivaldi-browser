@@ -16,10 +16,10 @@
 #include "third_party/angle/include/EGL/eglext_angle.h"
 #include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkSurface.h"
-#include "third_party/skia/include/gpu/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
-#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLTypes.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/color_space_win.h"
 #include "ui/gl/debug_utils.h"
@@ -163,7 +163,10 @@ class DCompSurfaceImageBacking::D3DTextureGLSurfaceEGL
   }
 
  protected:
-  ~D3DTextureGLSurfaceEGL() override { Destroy(); }
+  ~D3DTextureGLSurfaceEGL() override {
+    InvalidateWeakPtrs();
+    Destroy();
+  }
 
  private:
   gfx::Size size_;
@@ -294,7 +297,7 @@ DCompSurfaceImageBacking::ProduceSkiaGraphite(
       std::move(dawn_representation), context_state,
       context_state->gpu_main_graphite_recorder(), manager, this, tracker);
 #else
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 #endif  // BUILDFLAG(SKIA_USE_DAWN)
 }
 

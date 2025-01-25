@@ -30,7 +30,7 @@ DECLARE_ALIGNED(32, static const uint16_t, kSlidingWindowMask[]) = {
   0x0000, 0x0000, 0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF
 };
 
-static INLINE void get_squared_error(
+static inline void get_squared_error(
     const uint8_t *frame1, const uint32_t stride1, const uint8_t *frame2,
     const uint32_t stride2, const uint32_t block_width,
     const uint32_t block_height, uint16_t *frame_sse,
@@ -60,7 +60,7 @@ static INLINE void get_squared_error(
   } while (++i < block_height);
 }
 
-static INLINE uint16x8_t load_and_pad(const uint16_t *src, const uint32_t col,
+static inline uint16x8_t load_and_pad(const uint16_t *src, const uint32_t col,
                                       const uint32_t block_width) {
   uint16x8_t s = vld1q_u16(src);
 

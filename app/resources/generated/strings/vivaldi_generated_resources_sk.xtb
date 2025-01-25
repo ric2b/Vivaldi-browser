@@ -98,7 +98,6 @@
 <translation id="265390580714150011">Hodnota poľa</translation>
 <translation id="2662876636500006917">Internetový obchod Chrome</translation>
 <translation id="2678063897982469759">Znova povoliť</translation>
-<translation id="2678100101831051676">Nedá sa prenášať.</translation>
 <translation id="2719936478972253983">Boli zablokované nasledujúce súbory cookies</translation>
 <translation id="2721037002783622288">&amp;Vyhľadať obrázok v službe <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Nie po</translation>
@@ -148,7 +147,6 @@
 <translation id="3378572629723696641">Toto rozšírenie mohlo byť poškodené.</translation>
 <translation id="3387614642886316601">Použiť rozšírenú kontrolu pravopisu</translation>
 <translation id="3390013585654699824">Podrobnosti o aplikácii</translation>
-<translation id="3393582007140394275">Obrazovka sa nedá prenášať.</translation>
 <translation id="345693547134384690">Otvoriť &amp;obrázok v novom liste</translation>
 <translation id="3493881266323043047">Platnosť</translation>
 <translation id="3511307672085573050">Kopírovať adre&amp;su odkazu</translation>
@@ -346,6 +344,7 @@
 <translation id="6812841287760418429">Zachovať zmeny</translation>
 <translation id="6824564591481349393">Kopírovať &amp;e-mailovú adresu</translation>
 <translation id="6840155290835956714">Spýtať sa pred odoslaním</translation>
+<translation id="6878862640969460273">Na šírku</translation>
 <translation id="6886871292305414135">Otvoriť odkaz v novom &amp;liste</translation>
 <translation id="6892812721183419409">Otvoriť odkaz ako <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikácia na pozadí: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -409,7 +408,6 @@ Súbor kľúča: <ph name="KEY_FILE" />
 Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvorenie nových verzií svojho rozšírenia.</translation>
 <translation id="8004582292198964060">Prehliadač</translation>
 <translation id="8018313076035239964">Ovládajte, aké informácie môžu webové stránky používať a aký obsah vám môžu zobrazovať</translation>
-<translation id="8032244173881942855">List sa nepodarilo prenášať.</translation>
 <translation id="8071432093239591881">Vytlačiť ako obrázok</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, množné číslo,
@@ -465,7 +463,6 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="9218430445555521422">Nastaviť ako predvolený</translation>
 <translation id="93766956588638423">Opraviť rozšírenie</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Na šírku</translation>
 <translation id="994289308992179865">Opa&amp;kovať</translation>
 <translation id="998747458861718449">P&amp;reskúmať</translation>
 </translationbundle>

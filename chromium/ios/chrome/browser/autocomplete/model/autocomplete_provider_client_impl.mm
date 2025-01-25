@@ -39,14 +39,18 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/components/webui/web_ui_url_constants.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
+
+// Vivaldi
+#import "ios/direct_match/direct_match_service_factory.h"
+// End Vivaldi
 
 namespace {
 
@@ -59,21 +63,20 @@ BASE_FEATURE(kIosAutocompleteProviderRequireSync,
 }  // namespace
 
 AutocompleteProviderClientImpl::AutocompleteProviderClientImpl(
-    ChromeBrowserState* browser_state)
-    : browser_state_(browser_state),
+    ProfileIOS* profile)
+    : profile_(profile),
       url_consent_helper_(
           base::FeatureList::IsEnabled(
               omnibox::kPrefBasedDataCollectionConsentHelper)
               ? unified_consent::UrlKeyedDataCollectionConsentHelper::
                     NewAnonymizedDataCollectionConsentHelper(
-                        browser_state_->GetPrefs())
+                        profile_->GetPrefs())
               : unified_consent::UrlKeyedDataCollectionConsentHelper::
                     NewPersonalizedDataCollectionConsentHelper(
-                        SyncServiceFactory::GetForBrowserState(
-                            browser_state_))),
+                        SyncServiceFactory::GetForProfile(profile_))),
       omnibox_triggered_feature_service_(
           std::make_unique<OmniboxTriggeredFeatureService>()),
-      tab_matcher_(browser_state_) {
+      tab_matcher_(profile_) {
   pedal_provider_ = std::make_unique<OmniboxPedalProvider>(
       *this, GetPedalImplementations(IsOffTheRecord(), false));
 }
@@ -82,11 +85,11 @@ AutocompleteProviderClientImpl::~AutocompleteProviderClientImpl() {}
 
 scoped_refptr<network::SharedURLLoaderFactory>
 AutocompleteProviderClientImpl::GetURLLoaderFactory() {
-  return browser_state_->GetSharedURLLoaderFactory();
+  return profile_->GetSharedURLLoaderFactory();
 }
 
 PrefService* AutocompleteProviderClientImpl::GetPrefs() const {
-  return browser_state_->GetPrefs();
+  return profile_->GetPrefs();
 }
 
 PrefService* AutocompleteProviderClientImpl::GetLocalState() {
@@ -104,20 +107,20 @@ AutocompleteProviderClientImpl::GetSchemeClassifier() const {
 
 AutocompleteClassifier*
 AutocompleteProviderClientImpl::GetAutocompleteClassifier() {
-  return ios::AutocompleteClassifierFactory::GetForBrowserState(browser_state_);
+  return ios::AutocompleteClassifierFactory::GetForProfile(profile_);
 }
 
 history::HistoryService* AutocompleteProviderClientImpl::GetHistoryService() {
-  return ios::HistoryServiceFactory::GetForBrowserState(
-      browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
+  return ios::HistoryServiceFactory::GetForProfile(
+      profile_, ServiceAccessType::EXPLICIT_ACCESS);
 }
 
 scoped_refptr<history::TopSites> AutocompleteProviderClientImpl::GetTopSites() {
-  return ios::TopSitesFactory::GetForBrowserState(browser_state_);
+  return ios::TopSitesFactory::GetForProfile(profile_);
 }
 
 bookmarks::BookmarkModel* AutocompleteProviderClientImpl::GetBookmarkModel() {
-  return ios::BookmarkModelFactory::GetForBrowserState(browser_state_);
+  return ios::BookmarkModelFactory::GetForProfile(profile_);
 }
 
 history::URLDatabase* AutocompleteProviderClientImpl::GetInMemoryDatabase() {
@@ -128,35 +131,33 @@ history::URLDatabase* AutocompleteProviderClientImpl::GetInMemoryDatabase() {
 }
 
 InMemoryURLIndex* AutocompleteProviderClientImpl::GetInMemoryURLIndex() {
-  return ios::InMemoryURLIndexFactory::GetForBrowserState(browser_state_);
+  return ios::InMemoryURLIndexFactory::GetForProfile(profile_);
 }
 
 TemplateURLService* AutocompleteProviderClientImpl::GetTemplateURLService() {
-  return ios::TemplateURLServiceFactory::GetForBrowserState(browser_state_);
+  return ios::TemplateURLServiceFactory::GetForProfile(profile_);
 }
 
 const TemplateURLService*
 AutocompleteProviderClientImpl::GetTemplateURLService() const {
-  return ios::TemplateURLServiceFactory::GetForBrowserState(browser_state_);
+  return ios::TemplateURLServiceFactory::GetForProfile(profile_);
 }
 
 RemoteSuggestionsService*
 AutocompleteProviderClientImpl::GetRemoteSuggestionsService(
     bool create_if_necessary) const {
-  return RemoteSuggestionsServiceFactory::GetForBrowserState(
-      browser_state_, create_if_necessary);
+  return RemoteSuggestionsServiceFactory::GetForProfile(profile_,
+                                                        create_if_necessary);
 }
 
 ZeroSuggestCacheService*
 AutocompleteProviderClientImpl::GetZeroSuggestCacheService() {
-  return ios::ZeroSuggestCacheServiceFactory::GetForBrowserState(
-      browser_state_);
+  return ios::ZeroSuggestCacheServiceFactory::GetForProfile(profile_);
 }
 
 const ZeroSuggestCacheService*
 AutocompleteProviderClientImpl::GetZeroSuggestCacheService() const {
-  return ios::ZeroSuggestCacheServiceFactory::GetForBrowserState(
-      browser_state_);
+  return ios::ZeroSuggestCacheServiceFactory::GetForProfile(profile_);
 }
 
 OmniboxPedalProvider* AutocompleteProviderClientImpl::GetPedalProvider() const {
@@ -165,23 +166,17 @@ OmniboxPedalProvider* AutocompleteProviderClientImpl::GetPedalProvider() const {
 
 scoped_refptr<ShortcutsBackend>
 AutocompleteProviderClientImpl::GetShortcutsBackend() {
-  return ios::ShortcutsBackendFactory::GetForBrowserState(browser_state_);
+  return ios::ShortcutsBackendFactory::GetForProfile(profile_);
 }
 
 scoped_refptr<ShortcutsBackend>
 AutocompleteProviderClientImpl::GetShortcutsBackendIfExists() {
-  return ios::ShortcutsBackendFactory::GetForBrowserStateIfExists(
-      browser_state_);
+  return ios::ShortcutsBackendFactory::GetForProfileIfExists(profile_);
 }
 
 std::unique_ptr<KeywordExtensionsDelegate>
 AutocompleteProviderClientImpl::GetKeywordExtensionsDelegate(
     KeywordProvider* keyword_provider) {
-  return nullptr;
-}
-
-query_tiles::TileService* AutocompleteProviderClientImpl::GetQueryTileService()
-    const {
   return nullptr;
 }
 
@@ -192,8 +187,7 @@ AutocompleteProviderClientImpl::GetOmniboxTriggeredFeatureService() const {
 
 AutocompleteScoringModelService*
 AutocompleteProviderClientImpl::GetAutocompleteScoringModelService() const {
-  return ios::AutocompleteScoringModelServiceFactory::GetForBrowserState(
-      browser_state_);
+  return ios::AutocompleteScoringModelServiceFactory::GetForProfile(profile_);
 }
 
 OnDeviceTailModelService*
@@ -204,12 +198,11 @@ AutocompleteProviderClientImpl::GetOnDeviceTailModelService() const {
 
 ProviderStateService* AutocompleteProviderClientImpl::GetProviderStateService()
     const {
-  return ios::ProviderStateServiceFactory::GetForBrowserState(browser_state_);
+  return ios::ProviderStateServiceFactory::GetForProfile(profile_);
 }
 
 std::string AutocompleteProviderClientImpl::GetAcceptLanguages() const {
-  return browser_state_->GetPrefs()->GetString(
-      language::prefs::kAcceptLanguages);
+  return profile_->GetPrefs()->GetString(language::prefs::kAcceptLanguages);
 }
 
 std::string
@@ -242,15 +235,15 @@ AutocompleteProviderClientImpl::GetComponentUpdateService() {
 
 signin::IdentityManager* AutocompleteProviderClientImpl::GetIdentityManager()
     const {
-  return IdentityManagerFactory::GetForBrowserState(browser_state_);
+  return IdentityManagerFactory::GetForProfile(profile_);
 }
 
 bool AutocompleteProviderClientImpl::IsOffTheRecord() const {
-  return browser_state_->IsOffTheRecord();
+  return profile_->IsOffTheRecord();
 }
 
 bool AutocompleteProviderClientImpl::IsIncognitoProfile() const {
-  return browser_state_->IsOffTheRecord();
+  return profile_->IsOffTheRecord();
 }
 
 bool AutocompleteProviderClientImpl::IsGuestSession() const {
@@ -258,7 +251,7 @@ bool AutocompleteProviderClientImpl::IsGuestSession() const {
 }
 
 bool AutocompleteProviderClientImpl::SearchSuggestEnabled() const {
-  return browser_state_->GetPrefs()->GetBoolean(prefs::kSearchSuggestEnabled);
+  return profile_->GetPrefs()->GetBoolean(prefs::kSearchSuggestEnabled);
 }
 
 bool AutocompleteProviderClientImpl::IsPersonalizedUrlDataCollectionActive()
@@ -268,7 +261,7 @@ bool AutocompleteProviderClientImpl::IsPersonalizedUrlDataCollectionActive()
 
 bool AutocompleteProviderClientImpl::IsAuthenticated() const {
   signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForBrowserState(browser_state_);
+      IdentityManagerFactory::GetForProfile(profile_);
   signin::ConsentLevel level =
       base::FeatureList::IsEnabled(kIosAutocompleteProviderRequireSync)
           ? signin::ConsentLevel::kSync
@@ -277,8 +270,7 @@ bool AutocompleteProviderClientImpl::IsAuthenticated() const {
 }
 
 bool AutocompleteProviderClientImpl::IsSyncActive() const {
-  syncer::SyncService* sync =
-      SyncServiceFactory::GetForBrowserState(browser_state_);
+  syncer::SyncService* sync = SyncServiceFactory::GetForProfile(profile_);
   // TODO(crbug.com/40066949): Remove usage of IsSyncFeatureActive() after kSync
   // users are migrated to kSignin in phase 3. See ConsentLevel::kSync
   // documentation for details.
@@ -317,3 +309,10 @@ void AutocompleteProviderClientImpl::set_in_background_state(
     bool in_background_state) {
   in_background_state_ = in_background_state;
 }
+
+#pragma mark - Vivaldi
+direct_match::DirectMatchService*
+AutocompleteProviderClientImpl::GetDirectMatchService() {
+  return direct_match::DirectMatchServiceFactory::GetForBrowserState(profile_);
+}
+// End Vivaldi

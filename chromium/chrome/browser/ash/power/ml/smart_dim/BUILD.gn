@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/chromeos/crosier_tests.gni")
 import("//build/config/chromeos/ui_mode.gni")
 
 assert(is_chromeos_ash)
@@ -71,20 +72,16 @@ source_set("unit_tests") {
 }
 
 if (is_chromeos_device) {
-  source_set("integration_tests") {
-    testonly = true
-
-    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-
+  crosier_tests("integration_tests") {
     sources = [ "smart_dim_integration_test.cc" ]
+
+    sources_metadata = [ "smart_dim_integration_test.yaml" ]
 
     deps = [
       ":smart_dim",
       "//base/test:test_support",
       "//chrome/browser",
       "//chrome/browser:browser_process",
-      "//chrome/browser/ash/crosapi",
-      "//chrome/browser/ash/crosapi:browser_util",
       "//chrome/browser/ash/power/ml",
       "//chrome/common",
       "//chrome/test:ash_integration_test_support",

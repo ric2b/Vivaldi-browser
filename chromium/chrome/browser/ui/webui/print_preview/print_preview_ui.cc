@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
 
 #include <string>
@@ -319,12 +324,6 @@ void AddPrintPreviewStrings(content::WebUIDataSource* source) {
 void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS)
   source->AddBoolean("useSystemDefaultPrinter", false);
-  source->AddBoolean(
-      "isPrintPreviewSetupAssistanceEnabled",
-      base::FeatureList::IsEnabled(::features::kPrintPreviewSetupAssistance));
-  source->AddBoolean(
-      "isLocalPrinterObservingEnabled",
-      base::FeatureList::IsEnabled(::features::kLocalPrinterObserving));
 #else
   bool system_default_printer = profile->GetPrefs()->GetBoolean(
       prefs::kPrintPreviewUseSystemDefaultPrinter);
@@ -388,7 +387,8 @@ PrintPreviewHandler* CreatePrintPreviewHandlers(content::WebUI* web_ui) {
 }  // namespace
 
 PrintPreviewUIConfig::PrintPreviewUIConfig()
-    : WebUIConfig(content::kChromeUIScheme, chrome::kChromeUIPrintHost) {}
+    : DefaultWebUIConfig(content::kChromeUIScheme, chrome::kChromeUIPrintHost) {
+}
 
 bool PrintPreviewUIConfig::IsWebUIEnabled(
     content::BrowserContext* browser_context) {
@@ -402,12 +402,6 @@ bool PrintPreviewUIConfig::ShouldHandleURL(const GURL& url) {
 }
 
 PrintPreviewUIConfig::~PrintPreviewUIConfig() = default;
-
-std::unique_ptr<content::WebUIController>
-PrintPreviewUIConfig::CreateWebUIController(content::WebUI* web_ui,
-                                            const GURL& url) {
-  return std::make_unique<PrintPreviewUI>(web_ui);
-}
 
 WEB_UI_CONTROLLER_TYPE_IMPL(PrintPreviewUI)
 

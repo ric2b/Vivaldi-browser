@@ -133,14 +133,6 @@ DEPS_RE = re.compile(r'\bdeps \+?= \[(?P<deps>.*?)\]',
 FILE_PATH_RE = re.compile(r'"(?P<file_path>(\w|\/)+)(?P<extension>\.\w+)"')
 
 
-def FindSrcDirPath(starting_dir):
-    """Returns the abs path to the src/ dir of the project."""
-    src_dir = starting_dir
-    while os.path.basename(src_dir) != 'src':
-        src_dir = os.path.normpath(os.path.join(src_dir, os.pardir))
-    return src_dir
-
-
 @contextmanager
 def _AddToPath(*paths):
     original_sys_path = sys.path
@@ -658,8 +650,8 @@ def CheckGnGen(input_api, output_api):
     with _AddToPath(
             input_api.os_path.join(input_api.PresubmitLocalPath(),
                                    'tools_webrtc', 'presubmit_checks_lib')):
-        from build_helpers import RunGnCheck
-    errors = RunGnCheck(FindSrcDirPath(input_api.PresubmitLocalPath()))[:5]
+        from build_helpers import run_gn_check
+    errors = run_gn_check(input_api.change.RepositoryRoot())[:5]
     if errors:
         return [
             output_api.PresubmitPromptWarning(
@@ -681,8 +673,8 @@ def CheckUnwantedDependencies(input_api, output_api, source_file_filter):
     # We need to wait until we have an input_api object and use this
     # roundabout construct to import checkdeps because this file is
     # eval-ed and thus doesn't have __file__.
-    src_path = FindSrcDirPath(input_api.PresubmitLocalPath())
-    checkdeps_path = input_api.os_path.join(src_path, 'buildtools',
+    repo_root = input_api.change.RepositoryRoot()
+    checkdeps_path = input_api.os_path.join(repo_root, 'buildtools',
                                             'checkdeps')
     if not os.path.exists(checkdeps_path):
         return [
@@ -1055,7 +1047,13 @@ def CommonChecks(input_api, output_api):
         CheckBannedAbslMakeUnique(input_api, output_api,
                                   non_third_party_sources))
     results.extend(
+        CheckBannedAbslOptional(input_api, output_api,
+                                non_third_party_sources))
+    results.extend(
         CheckObjcApiSymbols(input_api, output_api, non_third_party_sources))
+    results.extend(
+        CheckConditionalIncludes(input_api, output_api,
+                                 non_third_party_sources))
     return results
 
 
@@ -1134,6 +1132,59 @@ def CheckBannedAbslMakeUnique(input_api, output_api, source_file_filter):
                 'Affected files:', files)
         ]
     return []
+
+
+def CheckBannedAbslOptional(input_api, output_api, source_file_filter):
+    absl_optional = re.compile(r'absl::(optional|make_optional|nullopt)',
+                               re.MULTILINE)
+    absl_optional_include = re.compile(r'^#include\s*"absl/types/optional\.h"',
+                                       input_api.re.MULTILINE)
+    file_filter = lambda f: (f.LocalPath().endswith(
+        ('.cc', '.h')) and source_file_filter(f))
+
+    files = []
+    for f in input_api.AffectedFiles(include_deletes=False,
+                                     file_filter=file_filter):
+        for _, line in f.ChangedContents():
+            if absl_optional.search(line) or absl_optional_include.search(
+                    line):
+                files.append(f.LocalPath())
+                break
+
+    if files:
+        return [
+            output_api.PresubmitError(
+                'Please use std::optional instead of absl::optional.\n'
+                'Affected files:', files)
+        ]
+    return []
+
+
+def CheckConditionalIncludes(input_api, output_api, source_file_filter):
+    conditional_includes = {
+        '<netinet/in.h>': '"rtc_base/ip_address.h"',
+        '<sys/socket.h>': '"rtc_base/net_helpers.h"',
+    }
+    file_filter = lambda f: (f.LocalPath().endswith(
+        ('.cc', '.h')) and source_file_filter(f))
+    results = []
+    for key, value in conditional_includes.items():
+        include_regex = re.compile('^#include ' + key +
+                                   '((?!IWYU pragma|no-presubmit-check).)*$')
+        files = []
+        for f in input_api.AffectedFiles(include_deletes=False,
+                                         file_filter=file_filter):
+            for _, line in f.ChangedContents():
+                if include_regex.search(line):
+                    files.append(f.LocalPath())
+                    break
+
+        if files:
+            results.append(
+                output_api.PresubmitError(
+                    'Please include ' + value + ' instead of ' + key +
+                    '.\nAffected files:', files))
+    return results
 
 
 def CheckObjcApiSymbols(input_api, output_api, source_file_filter):

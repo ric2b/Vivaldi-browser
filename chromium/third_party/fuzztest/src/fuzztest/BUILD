@@ -37,6 +37,20 @@ config_setting(
 )
 ################################################################################
 
+################################################################################
+# Flag and setting to enable use of Riegeli
+################################################################################
+bool_flag(
+    name = "use_riegeli",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "disable_riegeli",
+    flag_values = {":use_riegeli": "False"},
+)
+################################################################################
+
 cc_library(
     name = "fuzztest",
     hdrs = ["fuzztest.h"],
@@ -220,13 +234,13 @@ cc_library(
         "@com_google_fuzztest//centipede:centipede_callbacks",
         "@com_google_fuzztest//centipede:centipede_interface",
         "@com_google_fuzztest//centipede:centipede_runner_no_main",
-        "@com_google_fuzztest//centipede:defs",
         "@com_google_fuzztest//centipede:early_exit",
         "@com_google_fuzztest//centipede:environment",
         "@com_google_fuzztest//centipede:mutation_input",
         "@com_google_fuzztest//centipede:runner_result",
         "@com_google_fuzztest//centipede:shared_memory_blob_sequence",
         "@com_google_fuzztest//centipede:workdir",
+        "@com_google_fuzztest//common:defs",
     ],
 )
 
@@ -282,6 +296,7 @@ cc_library(
         ":io",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/time",
     ],
 )
 
@@ -330,6 +345,7 @@ cc_library(
         "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/random:distributions",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
@@ -360,6 +376,7 @@ cc_library(
         "internal/domains/optional_of_impl.h",
         "internal/domains/serialization_helpers.h",
         "internal/domains/smart_pointer_of_impl.h",
+        "internal/domains/special_values.h",
         "internal/domains/unique_elements_container_of_impl.h",
         "internal/domains/value_mutation_helpers.h",
         "internal/domains/variant_of_impl.h",
@@ -466,9 +483,16 @@ cc_library(
     hdrs = ["internal/io.h"],
     deps = [
         ":logging",
+        "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:span",
+        "@com_google_fuzztest//common:blob_file",
+        "@com_google_fuzztest//common:defs",
+        "@com_google_fuzztest//common:remote_file",
     ] + select({
         "//conditions:default": [],
     }),
@@ -480,7 +504,12 @@ cc_test(
     deps = [
         ":fuzztest_core",
         ":io",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@com_google_fuzztest//common:blob_file",
+        "@com_google_fuzztest//common:defs",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -520,6 +549,9 @@ cc_library(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/random:distributions",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
         "@com_googlesource_code_re2//:re2",
     ],
@@ -571,19 +603,20 @@ cc_library(
         ":flag_name",
         ":io",
         ":logging",
-        ":meta",
         ":printer",
         ":registration",
         ":seed_seq",
         ":serialization",
-        ":type_support",
+        ":status",
         "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:bit_gen_ref",
         "@com_google_absl//absl/random:distributions",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
@@ -598,6 +631,7 @@ cc_test(
         ":domain_core",
         ":runtime",
         ":test_protobuf_cc_proto",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest_main",
     ],
@@ -729,7 +763,6 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
-        "@com_google_protobuf//:protobuf",
     ],
 )
 

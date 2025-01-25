@@ -29,7 +29,7 @@
 #import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #import "ios/chrome/browser/safe_browsing/model/safe_browsing_metrics_collector_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/sync/model/ios_user_event_service_factory.h"
 #import "ios/components/security_interstitials/safe_browsing/fake_safe_browsing_service.h"
 #import "ios/web/public/navigation/referrer.h"
@@ -152,7 +152,7 @@ class ChromePasswordProtectionServiceTest : public PlatformTest {
                             password_manager::MockPasswordStoreInterface>));
     builder.AddTestingFactory(IOSUserEventServiceFactory::GetInstance(),
                               base::BindRepeating(&CreateFakeUserEventService));
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
 
     web::WebState::CreateParams params(browser_state_.get());
     web_state_ = web::WebState::Create(params);

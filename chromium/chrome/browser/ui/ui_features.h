@@ -78,15 +78,11 @@ bool IsExtensionMenuInRootAppMenu();
 BASE_DECLARE_FEATURE(kAccessCodeCastUI);
 #endif
 
-BASE_DECLARE_FEATURE(kEvDetailsInPageInfo);
-
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 BASE_DECLARE_FEATURE(kFewerUpdateConfirmations);
 #endif
 
 #if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-BASE_DECLARE_FEATURE(kGetTheMostOutOfChrome);
-
 BASE_DECLARE_FEATURE(kIOSPromoRefreshedPasswordBubble);
 
 BASE_DECLARE_FEATURE(kIOSPromoAddressBubble);
@@ -128,17 +124,41 @@ extern const char kPreloadTopChromeWebUIModePreloadOnWarmupName[];
 extern const char kPreloadTopChromeWebUIModePreloadOnMakeContentsName[];
 extern const base::FeatureParam<PreloadTopChromeWebUIMode>
     kPreloadTopChromeWebUIMode;
-extern const char kPreloadTopChromeWebUISmartPreloadName[];
+
 // If smart preload is enabled, the preload WebUI is determined by historical
 // engagement scores and whether a WebUI is currently being shown.
 // If disabled, always preload Tab Search.
+extern const char kPreloadTopChromeWebUISmartPreloadName[];
 extern const base::FeatureParam<bool> kPreloadTopChromeWebUISmartPreload;
+
+// If delay preload is enabled, the preloading is delayed until the first
+// non empty paint of an observed web contents.
+//
+// In case of browser startup, the observed web contents is the active web
+// contents of the last created browser.
+//
+// In case of Request() is called, the requested web contents is observed.
+//
+// In case of web contents destroy, the preloading simply waits for a fixed
+// amount of time.
+extern const char kPreloadTopChromeWebUIDelayPreloadName[];
+extern const base::FeatureParam<bool> kPreloadTopChromeWebUIDelayPreload;
+
+// An list of exclude origins for WebUIs that don't participate in preloading.
+// The list is a string of format "<origin>,<origin2>,...,<origin-n>", where
+// each <origin> is a WebUI origin, e.g. "chrome://tab-search.top-chrome". This
+// is used for emergency preloading shutoff for problematic WebUIs.
+extern const char kPreloadTopChromeWebUIExcludeOriginsName[];
+extern const base::FeatureParam<std::string>
+    kPreloadTopChromeWebUIExcludeOrigins;
 
 #if !BUILDFLAG(IS_ANDROID)
 BASE_DECLARE_FEATURE(kPressAndHoldEscToExitBrowserFullscreen);
 #endif
 
 BASE_DECLARE_FEATURE(kResponsiveToolbar);
+
+BASE_DECLARE_FEATURE(kTabDuplicateMetrics);
 
 BASE_DECLARE_FEATURE(kTabScrollingButtonPosition);
 extern const char kTabScrollingButtonPositionParameterName[];
@@ -189,6 +209,9 @@ extern const char kTabHoverCardAdditionalMaxWidthDelay[];
 BASE_DECLARE_FEATURE(kTabOrganization);
 bool IsTabOrganization();
 
+BASE_DECLARE_FEATURE(kTabstripDeclutter);
+bool IsTabstripDeclutterEnabled();
+
 BASE_DECLARE_FEATURE(kMultiTabOrganization);
 
 BASE_DECLARE_FEATURE(kTabOrganizationAppMenuItem);
@@ -196,6 +219,10 @@ BASE_DECLARE_FEATURE(kTabOrganizationAppMenuItem);
 BASE_DECLARE_FEATURE(kTabReorganization);
 
 BASE_DECLARE_FEATURE(kTabReorganizationDivider);
+
+BASE_DECLARE_FEATURE(kTabOrganizationModelStrategy);
+
+BASE_DECLARE_FEATURE(kTabOrganizationEnableNudgeForEnterprise);
 
 // The target (and minimum) interval between proactive nudge triggers. Measured
 // against a clock that only runs while Chrome is in the foreground.
@@ -248,8 +275,7 @@ BASE_DECLARE_FEATURE(kEnterpriseProfileBadging);
 BASE_DECLARE_FEATURE(kEnterpriseUpdatedProfileCreationScreen);
 
 BASE_DECLARE_FEATURE(kManagementToolbarButton);
-
-BASE_DECLARE_FEATURE(kWebUIBubblePerProfilePersistence);
+BASE_DECLARE_FEATURE(kManagementToolbarButtonForTrustedManagementSources);
 
 BASE_DECLARE_FEATURE(kWebUITabStrip);
 
@@ -260,7 +286,6 @@ BASE_DECLARE_FEATURE(kWebUITabStripContextMenuAfterTap);
 // Cocoa to views migration.
 #if BUILDFLAG(IS_MAC)
 BASE_DECLARE_FEATURE(kViewsFirstRunDialog);
-BASE_DECLARE_FEATURE(kViewsTaskManager);
 BASE_DECLARE_FEATURE(kViewsJSAppModalDialog);
 #endif
 
@@ -269,6 +294,15 @@ BASE_DECLARE_FEATURE(kStopLoadingAnimationForHiddenWindow);
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 BASE_DECLARE_FEATURE(kUsePortalAccentColor);
 #endif
+
+// This feature introduces a toggle that allows users to switch between the
+// standard UI and a compact version of the UI by right clicking the empty area
+// in the Tabstrip.
+BASE_DECLARE_FEATURE(kCompactMode);
+
+// Controls whether the site-specific data dialog shows a related installed
+// applications section.
+BASE_DECLARE_FEATURE(kPageSpecificDataDialogRelatedInstalledAppsSection);
 
 }  // namespace features
 

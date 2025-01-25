@@ -283,7 +283,7 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
         }
       }
     };
-    document.body.addEventListener(UI.InspectorView.Events.DrawerChange, drawerChangeHandler);
+    document.body.addEventListener(UI.InspectorView.Events.DRAWER_CHANGE, drawerChangeHandler);
   }
 
   modelAdded(serviceWorkerManager: SDK.ServiceWorkerManager.ServiceWorkerManager): void {
@@ -301,9 +301,9 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
 
     this.eventListeners.set(serviceWorkerManager, [
       this.manager.addEventListener(
-          SDK.ServiceWorkerManager.Events.RegistrationUpdated, this.registrationUpdated, this),
+          SDK.ServiceWorkerManager.Events.REGISTRATION_UPDATED, this.registrationUpdated, this),
       this.manager.addEventListener(
-          SDK.ServiceWorkerManager.Events.RegistrationDeleted, this.registrationDeleted, this),
+          SDK.ServiceWorkerManager.Events.REGISTRATION_DELETED, this.registrationDeleted, this),
       this.securityOriginManager.addEventListener(
           SDK.SecurityOriginManager.Events.SecurityOriginAdded, this.updateSectionVisibility, this),
       this.securityOriginManager.addEventListener(
@@ -327,10 +327,10 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
 
     let timestamp: number|undefined = 0;
 
-    const active = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Active);
-    const installing = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Installing);
-    const waiting = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Waiting);
-    const redundant = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Redundant);
+    const active = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.ACTIVE);
+    const installing = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.INSTALLING);
+    const waiting = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.WAITING);
+    const redundant = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.REDUNDANT);
 
     if (active) {
       timestamp = active.scriptResponseTime;
@@ -666,10 +666,10 @@ export class Section {
     const title = this.registration.isDeleted ? i18nString(UIStrings.sDeleted, {PH1: scopeURL}) : scopeURL;
     this.section.setTitle(title);
 
-    const active = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Active);
-    const waiting = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Waiting);
-    const installing = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Installing);
-    const redundant = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Redundant);
+    const active = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.ACTIVE);
+    const waiting = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.WAITING);
+    const installing = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.INSTALLING);
+    const redundant = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.REDUNDANT);
 
     this.statusField.removeChildren();
     const versionsStack = this.statusField.createChild('div', 'service-worker-version-stack');
@@ -711,13 +711,23 @@ export class Section {
     if (waiting) {
       const waitingEntry = this.addVersion(
           versionsStack, 'service-worker-waiting-circle', i18nString(UIStrings.sWaitingToActivate, {PH1: waiting.id}));
-      this.createLink(waitingEntry, i18n.i18n.lockedString('skipWaiting'), this.skipButtonClicked.bind(this));
+      const skipWaitingButton =
+          UI.UIUtils.createTextButton(i18n.i18n.lockedString('skipWaiting'), this.skipButtonClicked.bind(this), {
+            title: i18n.i18n.lockedString('skipWaiting'),
+            jslogContext: 'skip-waiting',
+          });
+      waitingEntry.appendChild(skipWaitingButton);
       if (waiting.scriptResponseTime !== undefined) {
         waitingEntry.createChild('div', 'service-worker-subtitle').textContent =
             i18nString(UIStrings.receivedS, {PH1: new Date(waiting.scriptResponseTime * 1000).toLocaleString()});
       }
       if (!this.targetForVersionId(waiting.id) && (waiting.isRunning() || waiting.isStarting())) {
-        this.createLink(waitingEntry, i18nString(UIStrings.inspect), this.inspectButtonClicked.bind(this, waiting.id));
+        const inspectButton = UI.UIUtils.createTextButton(
+            i18nString(UIStrings.inspect), this.inspectButtonClicked.bind(this, waiting.id), {
+              title: i18nString(UIStrings.inspect),
+              jslogContext: 'waiting-entry-inspect',
+            });
+        waitingEntry.appendChild(inspectButton);
       }
     }
     if (installing) {
@@ -730,28 +740,18 @@ export class Section {
         });
       }
       if (!this.targetForVersionId(installing.id) && (installing.isRunning() || installing.isStarting())) {
-        this.createLink(
-            installingEntry, i18nString(UIStrings.inspect), this.inspectButtonClicked.bind(this, installing.id));
+        const inspectButton = UI.UIUtils.createTextButton(
+            i18nString(UIStrings.inspect), this.inspectButtonClicked.bind(this, installing.id), {
+              title: i18nString(UIStrings.inspect),
+              jslogContext: 'installing-entry-inspect',
+            });
+        installingEntry.appendChild(inspectButton);
       }
     }
 
     this.updateCycleView.refresh();
 
     return Promise.resolve();
-  }
-
-  private createLink(parent: Element, title: string, listener: () => void, className?: string, useCapture?: boolean):
-      Element {
-    const button = document.createElement('button');
-    if (className) {
-      button.className = className;
-    }
-    button.classList.add('link', 'devtools-link');
-    button.textContent = title;
-    button.tabIndex = 0;
-    button.addEventListener('click', listener, useCapture);
-    parent.appendChild(button);
-    return button;
   }
 
   private unregisterButtonClicked(): void {
@@ -765,7 +765,7 @@ export class Section {
 
   private maybeCreateRouterField(): void {
     const versions = this.registration.versionsByMode();
-    const active = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.Active);
+    const active = versions.get(SDK.ServiceWorkerManager.ServiceWorkerVersion.Modes.ACTIVE);
     const title = i18nString(UIStrings.routers);
     if (active && active.routerRules && active.routerRules.length > 0) {
       // If there is at least one registered rule in the active version, append the router filed.
@@ -795,7 +795,7 @@ export class Section {
     void Common.Revealer.reveal(NetworkForward.UIFilter.UIRequestFilter.filters([
       {
         filterType: NetworkForward.UIFilter.FilterType.Is,
-        filterValue: NetworkForward.UIFilter.IsFilterType.ServiceWorkerIntercepted,
+        filterValue: NetworkForward.UIFilter.IsFilterType.SERVICE_WORKER_INTERCEPTED,
       },
     ]));
 
@@ -814,7 +814,7 @@ export class Section {
     }
     if (lastRequest) {
       const requestLocation = NetworkForward.UIRequestLocation.UIRequestLocation.tab(
-          lastRequest, NetworkForward.UIRequestLocation.UIRequestTabs.Timing, {clearFilter: false});
+          lastRequest, NetworkForward.UIRequestLocation.UIRequestTabs.TIMING, {clearFilter: false});
       void Common.Revealer.reveal(requestLocation);
     }
 

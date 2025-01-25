@@ -6,7 +6,7 @@
 
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser_observer.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -64,7 +64,13 @@ Browser::Type TestBrowser::type() const {
   return type_;
 }
 
+// TODO(crbug.com/358301380): After all usage has changed to GetProfile(),
+// remove this method.
 ChromeBrowserState* TestBrowser::GetBrowserState() {
+  return GetProfile();
+}
+
+ChromeBrowserState* TestBrowser::GetProfile() {
   return browser_state_;
 }
 
@@ -116,5 +122,5 @@ Browser* TestBrowser::CreateInactiveBrowser() {
 }
 
 void TestBrowser::DestroyInactiveBrowser() {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }

@@ -29,16 +29,17 @@
 #import "ios/chrome/browser/sessions/model/session_service_ios.h"
 #import "ios/chrome/browser/sessions/model/session_window_ios.h"
 #import "ios/chrome/browser/sessions/model/test_session_restoration_observer.h"
+#import "ios/chrome/browser/sessions/model/web_session_state_cache.h"
+#import "ios/chrome/browser/sessions/model/web_session_state_cache_factory.h"
+#import "ios/chrome/browser/sessions/model/web_session_state_tab_helper.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/web/model/chrome_web_client.h"
-#import "ios/chrome/browser/web/model/session_state/web_session_state_cache.h"
-#import "ios/chrome/browser/web/model/session_state/web_session_state_cache_factory.h"
-#import "ios/chrome/browser/web/model/session_state/web_session_state_tab_helper.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/common/user_agent.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
@@ -460,6 +461,7 @@ class LegacySessionRestorationServiceTest : public PlatformTest {
   }
 
  private:
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   base::test::ScopedFeatureList scoped_feature_list_;
   FileModificationTracker file_tracker_;
 
@@ -1159,11 +1161,6 @@ TEST_F(LegacySessionRestorationServiceTest, PurgeUnassociatedData) {
   BrowserListFactory::GetForBrowserState(browser_state())
       ->RemoveBrowser(&browser);
   service()->Disconnect(&browser);
-}
-
-// Tests that PlaceholderTabsEnabled() can be called at any time.
-TEST_F(LegacySessionRestorationServiceTest, PlaceholderTabsEnabled) {
-  EXPECT_FALSE(service()->PlaceholderTabsEnabled());
 }
 
 // Tests that LoadWebStateStorage(...) loads the data from disk.

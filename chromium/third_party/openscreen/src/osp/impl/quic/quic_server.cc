@@ -5,42 +5,40 @@
 #include "osp/impl/quic/quic_server.h"
 
 #include <functional>
+#include <random>
 #include <utility>
 
+#include "quiche/quic/core/quic_utils.h"
+#include "util/base64.h"
 #include "util/osp_logging.h"
 
 namespace openscreen::osp {
 
-// static
-QuicAgentCertificate& QuicServer::GetAgentCertificate() {
-  static QuicAgentCertificate agent_certificate;
-  return agent_certificate;
-}
-
 QuicServer::QuicServer(
     const ServiceConfig& config,
-    MessageDemuxer& demuxer,
     std::unique_ptr<QuicConnectionFactoryServer> connection_factory,
     ProtocolConnectionServiceObserver& observer,
     ClockNowFunctionPtr now_function,
-    TaskRunner& task_runner)
+    TaskRunner& task_runner,
+    size_t buffer_limit)
     : QuicServiceBase(config,
-                      demuxer,
+                      std::move(connection_factory),
                       observer,
                       InstanceRequestIds::Role::kServer,
                       now_function,
-                      task_runner),
-      instance_name_(config.instance_name),
-      connection_factory_(std::move(connection_factory)) {}
-
-QuicServer::~QuicServer() {
-  CloseAllConnections();
+                      task_runner,
+                      buffer_limit),
+      instance_name_(config.instance_name) {
+  auth_token_ = GenerateToken(16);
 }
+
+QuicServer::~QuicServer() = default;
 
 bool QuicServer::Start() {
   bool result = StartImpl();
   if (result) {
-    connection_factory_->SetServerDelegate(this, connection_endpoints_);
+    static_cast<QuicConnectionFactoryServer*>(connection_factory_.get())
+        ->SetServerDelegate(this, connection_endpoints_);
   }
   return result;
 }
@@ -48,7 +46,8 @@ bool QuicServer::Start() {
 bool QuicServer::Stop() {
   bool result = StopImpl();
   if (result) {
-    connection_factory_->SetServerDelegate(nullptr, {});
+    static_cast<QuicConnectionFactoryServer*>(connection_factory_.get())
+        ->SetServerDelegate(nullptr, {});
   }
   return result;
 }
@@ -82,65 +81,42 @@ std::string QuicServer::GetAgentFingerprint() {
   return GetAgentCertificate().GetAgentFingerprint();
 }
 
-uint64_t QuicServer::OnCryptoHandshakeComplete(std::string_view instance_name) {
-  OSP_CHECK_EQ(state_, ProtocolConnectionEndpoint::State::kRunning);
-
-  auto pending_entry = pending_connections_.find(instance_name);
-  if (pending_entry == pending_connections_.end()) {
-    return 0;
-  }
-
-  ServiceConnectionData connection_data = std::move(pending_entry->second);
-  pending_connections_.erase(pending_entry);
-  uint64_t instance_id = next_instance_id_++;
-  instance_map_.emplace(instance_name, instance_id);
-  connection_data.stream_manager->set_quic_connection(
-      connection_data.connection.get());
-  connections_.emplace(instance_id, std::move(connection_data));
-  return instance_id;
+std::string QuicServer::GetAuthToken() {
+  return auth_token_;
 }
 
-void QuicServer::OnConnectionClosed(uint64_t instance_id) {
-  OSP_CHECK_EQ(state_, ProtocolConnectionEndpoint::State::kRunning);
-
-  auto connection_entry = connections_.find(instance_id);
-  if (connection_entry == connections_.end()) {
-    return;
-  }
-
-  connection_factory_->OnConnectionClosed(
-      connection_entry->second.connection.get());
-  delete_connections_.push_back(instance_id);
-  instance_request_ids_.ResetRequestId(instance_id);
-}
-
-void QuicServer::CloseAllConnections() {
-  for (auto& conn : pending_connections_) {
-    conn.second.connection->Close();
-    connection_factory_->OnConnectionClosed(conn.second.connection.get());
-  }
-  pending_connections_.clear();
-
-  for (auto& conn : connections_) {
-    conn.second.connection->Close();
-    connection_factory_->OnConnectionClosed(conn.second.connection.get());
-  }
-  connections_.clear();
-
-  instance_map_.clear();
-  next_instance_id_ = 1u;
-  instance_request_ids_.Reset();
+void QuicServer::OnClientCertificates(std::string_view instance_name,
+                                      const std::vector<std::string>& certs) {
+  fingerprint_map_.emplace(instance_name,
+                           base64::Encode(quic::RawSha256(certs[0])));
 }
 
 void QuicServer::OnIncomingConnection(
     std::unique_ptr<QuicConnection> connection) {
-  OSP_CHECK_EQ(state_, State::kRunning);
+  if (state_ != State::kRunning) {
+    return;
+  }
 
   const std::string& instance_name = connection->instance_name();
   pending_connections_.emplace(
       instance_name,
-      ServiceConnectionData(std::move(connection),
-                            std::make_unique<QuicStreamManager>(*this)));
+      PendingConnectionData(ServiceConnectionData(
+          std::move(connection), std::make_unique<QuicStreamManager>(*this))));
+}
+
+std::string QuicServer::GenerateToken(int length) {
+  constexpr char characters[] =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::random_device dev;
+  std::mt19937 gen(dev());
+  std::uniform_int_distribution<> dis(0, strlen(characters) - 1);
+  std::string token;
+  token.resize(length);
+  for (int i = 0; i < length; i++) {
+    token[i] = characters[dis(gen)];
+  }
+
+  return token;
 }
 
 }  // namespace openscreen::osp

@@ -28,16 +28,16 @@
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/price_notifications/cells/price_notifications_table_view_item.h"
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_mutator.h"
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_table_view_controller.h"
 #import "ios/chrome/browser/ui/price_notifications/test_price_notifications_consumer.h"
-#import "ios/chrome/test/testing_application_context.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/public/provider/chrome/browser/push_notification/push_notification_api.h"
 #import "ios/testing/scoped_block_swizzler.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
@@ -129,12 +129,12 @@ class PriceNotificationsPriceTrackingMediatorTest : public PlatformTest {
             [](web::BrowserState*) -> std::unique_ptr<KeyedService> {
               return commerce::MockShoppingService::Build();
             }));
-    std::unique_ptr<TestChromeBrowserState> test_chrome_browser_state =
-        builder.Build();
+    TestChromeBrowserState* test_chrome_browser_state =
+        profile_manager_.AddProfileWithBuilder(std::move(builder));
 
     browser_list_ =
-        BrowserListFactory::GetForBrowserState(test_chrome_browser_state.get());
-    browser_ = std::make_unique<TestBrowser>(test_chrome_browser_state.get());
+        BrowserListFactory::GetForBrowserState(test_chrome_browser_state);
+    browser_ = std::make_unique<TestBrowser>(test_chrome_browser_state);
     browser_list_->AddBrowser(browser_.get());
     web_state_ = std::make_unique<web::FakeWebState>();
     std::unique_ptr<web::FakeNavigationManager> navigation_manager =
@@ -143,31 +143,27 @@ class PriceNotificationsPriceTrackingMediatorTest : public PlatformTest {
     navigation_manager->SetLastCommittedItem(
         navigation_manager->GetItemAtIndex(0));
     web_state_->SetNavigationManager(std::move(navigation_manager));
-    web_state_->SetBrowserState(test_chrome_browser_state.get());
+    web_state_->SetBrowserState(test_chrome_browser_state);
     web_state_->SetNavigationItemCount(1);
     web_state_->SetCurrentURL(GURL(kTestUrl));
     image_fetcher_ = std::make_unique<image_fetcher::ImageDataFetcher>(
         test_chrome_browser_state->GetSharedURLLoaderFactory());
 
     bookmark_model_ = ios::BookmarkModelFactory::GetForBrowserState(
-        test_chrome_browser_state.get());
+        test_chrome_browser_state);
     bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
     bookmark_model_->CreateAccountPermanentFolders();
 
     shopping_service_ = static_cast<commerce::MockShoppingService*>(
         commerce::ShoppingServiceFactory::GetForBrowserState(
-            test_chrome_browser_state.get()));
+            test_chrome_browser_state));
     shopping_service_->SetupPermissiveMock();
-    test_manager_ = std::make_unique<TestChromeBrowserStateManager>(
-        std::move(test_chrome_browser_state));
-    TestingApplicationContext::GetGlobal()->SetChromeBrowserStateManager(
-        test_manager_.get());
     push_notification_service_ = ios::provider::CreatePushNotificationService();
     mediator_ = [[PriceNotificationsPriceTrackingMediator alloc]
         initWithShoppingService:(commerce::ShoppingService*)shopping_service_
                   bookmarkModel:bookmark_model_
                    imageFetcher:std::move(image_fetcher_)
-                       webState:(web::WebState*)web_state_.get()
+                       webState:web_state_.get()->GetWeakPtr()
         pushNotificationService:(PushNotificationService*)
                                     push_notification_service_.get()];
   }
@@ -188,9 +184,10 @@ class PriceNotificationsPriceTrackingMediatorTest : public PlatformTest {
   }
 
   web::WebTaskEnvironment task_environment_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
+  TestProfileManagerIOS profile_manager_;
   std::unique_ptr<Browser> browser_;
   PriceNotificationsPriceTrackingMediator* mediator_;
-  std::unique_ptr<ios::ChromeBrowserStateManager> test_manager_;
   std::unique_ptr<web::FakeWebState> web_state_;
   raw_ptr<commerce::MockShoppingService> shopping_service_;
   raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
@@ -279,7 +276,7 @@ TEST_F(PriceNotificationsPriceTrackingMediatorTest,
 
   price_insights_consumer_.didPriceTrack = NO;
   mediator_.priceInsightsConsumer = price_insights_consumer_;
-  [mediator_ priceInsightsTrackItem:GetPriceInsightsItem()];
+  [mediator_ tryPriceInsightsTrackItem:GetPriceInsightsItem()];
 
   ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
       base::test::ios::kWaitForActionTimeout, ^bool {
@@ -308,15 +305,16 @@ TEST_F(PriceNotificationsPriceTrackingMediatorTest,
   shopping_service_->SetResponseForGetProductInfoForUrl(optional_product_info);
   shopping_service_->SetSubscribeCallbackValue(false);
 
-  price_insights_consumer_.didPresentStartPriceTrackingErrorAlertForItem = NO;
+  price_insights_consumer_.didPresentStartPriceTrackingErrorSnackbarForItem =
+      NO;
   mediator_.priceInsightsConsumer = price_insights_consumer_;
-  [mediator_ priceInsightsTrackItem:GetPriceInsightsItem()];
+  [mediator_ tryPriceInsightsTrackItem:GetPriceInsightsItem()];
 
   ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
       base::test::ios::kWaitForActionTimeout, ^bool {
         base::RunLoop().RunUntilIdle();
         return price_insights_consumer_
-            .didPresentStartPriceTrackingErrorAlertForItem;
+            .didPresentStartPriceTrackingErrorSnackbarForItem;
       }));
 
   EXPECT_OCMOCK_VERIFY(mock_notification_center_);
@@ -365,7 +363,7 @@ TEST_F(PriceNotificationsPriceTrackingMediatorTest,
   shopping_service_->SetUnsubscribeCallbackValue(false);
   shopping_service_->SetResponseForGetProductInfoForUrl(optional_product_info);
 
-  price_insights_consumer_.didPresentStopPriceTrackingErrorAlertForItem = NO;
+  price_insights_consumer_.didPresentStopPriceTrackingErrorSnackbarForItem = NO;
   mediator_.priceInsightsConsumer = price_insights_consumer_;
   [mediator_ priceInsightsStopTrackingItem:GetPriceInsightsItem()];
 
@@ -373,7 +371,7 @@ TEST_F(PriceNotificationsPriceTrackingMediatorTest,
       base::test::ios::kWaitForActionTimeout, ^bool {
         base::RunLoop().RunUntilIdle();
         return price_insights_consumer_
-            .didPresentStopPriceTrackingErrorAlertForItem;
+            .didPresentStopPriceTrackingErrorSnackbarForItem;
       }));
 }
 
@@ -426,4 +424,75 @@ TEST_F(PriceNotificationsPriceTrackingMediatorTest,
         base::RunLoop().RunUntilIdle();
         return price_insights_consumer_.didPriceUntrack;
       }));
+}
+
+TEST_F(PriceNotificationsPriceTrackingMediatorTest,
+       PresentNotificationAlertWhenNotificationAuthorizationDenied) {
+  SetupMockNotificationCenter();
+  id settings = OCMClassMock([UNNotificationSettings class]);
+  OCMStub([mock_notification_center_
+      getNotificationSettingsWithCompletionHandler:
+          ([OCMArg invokeBlockWithArgs:settings, nil])]);
+  OCMStub([settings authorizationStatus])
+      .andReturn(UNAuthorizationStatusDenied);
+
+  commerce::ProductInfo product_info;
+  product_info.title = kBookmarkTitle;
+  product_info.product_cluster_id = std::make_optional(kClusterId);
+  std::optional<commerce::ProductInfo> optional_product_info;
+  optional_product_info.emplace(product_info);
+  shopping_service_->SetResponseForGetProductInfoForUrl(optional_product_info);
+
+  price_insights_consumer_.didPriceTrack = NO;
+  price_insights_consumer_.didPresentPushNotificationPermissionAlertForItem =
+      NO;
+  mediator_.priceInsightsConsumer = price_insights_consumer_;
+  [mediator_ tryPriceInsightsTrackItem:GetPriceInsightsItem()];
+
+  ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForActionTimeout, ^bool {
+        base::RunLoop().RunUntilIdle();
+        return price_insights_consumer_
+            .didPresentPushNotificationPermissionAlertForItem;
+      }));
+
+  ASSERT_FALSE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForActionTimeout, ^bool {
+        base::RunLoop().RunUntilIdle();
+        return price_insights_consumer_.didPriceTrack;
+      }));
+
+  EXPECT_OCMOCK_VERIFY(mock_notification_center_);
+}
+
+TEST_F(PriceNotificationsPriceTrackingMediatorTest,
+       NoTrackWhenNotificationAuthorizationUndetermined) {
+  SetupMockNotificationCenter();
+  id settings = OCMClassMock([UNNotificationSettings class]);
+  OCMStub([mock_notification_center_
+      getNotificationSettingsWithCompletionHandler:
+          ([OCMArg invokeBlockWithArgs:settings, nil])]);
+  OCMStub([settings authorizationStatus])
+      .andReturn(UNAuthorizationStatusNotDetermined);
+
+  commerce::ProductInfo product_info;
+  product_info.title = kBookmarkTitle;
+  product_info.product_cluster_id = std::make_optional(kClusterId);
+  std::optional<commerce::ProductInfo> optional_product_info;
+  optional_product_info.emplace(product_info);
+  shopping_service_->SetResponseForGetProductInfoForUrl(optional_product_info);
+
+  price_insights_consumer_.didPriceTrack = NO;
+  price_insights_consumer_.didPresentPushNotificationPermissionAlertForItem =
+      NO;
+  mediator_.priceInsightsConsumer = price_insights_consumer_;
+  [mediator_ tryPriceInsightsTrackItem:GetPriceInsightsItem()];
+
+  ASSERT_FALSE(base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForActionTimeout, ^bool {
+        base::RunLoop().RunUntilIdle();
+        return price_insights_consumer_.didPriceTrack;
+      }));
+
+  EXPECT_OCMOCK_VERIFY(mock_notification_center_);
 }

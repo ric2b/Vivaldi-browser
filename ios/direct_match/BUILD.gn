@@ -1,0 +1,14 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+source_set("direct_match") {
+  sources = [
+    "direct_match_service_factory.h",
+    "direct_match_service_factory.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/chrome/browser/shared/model/application_context",
+    "//services/network/public/cpp",
+    "//vivaldi/components/direct_match",
+  ]
+}

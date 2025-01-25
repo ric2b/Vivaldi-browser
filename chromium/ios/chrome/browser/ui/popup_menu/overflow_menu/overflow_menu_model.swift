@@ -10,6 +10,11 @@ import SwiftUI
   /// menu.
   struct CustomizationModel: Equatable {
     let actions: ActionCustomizationModel
+
+    #if VIVALDI_BUILD
+    let vivaldiActions: ActionCustomizationModel
+    #endif // Vivaldi
+
     let destinations: DestinationCustomizationModel
   }
 
@@ -18,6 +23,11 @@ import SwiftUI
 
   /// The action groups for the overflow menu.
   @Published public var actionGroups: [OverflowMenuActionGroup]
+
+  // Vivaldi
+  /// The vivaldi action groups for the overflow menu.
+  @Published public var vivaldiActionGroups: [OverflowMenuActionGroup]
+  // End Vivaldi
 
   /// If present, indicates that the menu should show a customization flow using
   /// the provided data.
@@ -34,13 +44,30 @@ import SwiftUI
   ) {
     self.destinations = destinations
     self.actionGroups = actionGroups
+
+    #if VIVALDI_BUILD
+    self.vivaldiActionGroups = []
+    #endif // End Vivaldi
+
   }
 
   public func startCustomization(
     actions: ActionCustomizationModel,
     destinations: DestinationCustomizationModel
   ) {
+
+    #if VIVALDI_BUILD
+    customization = CustomizationModel(
+      actions: actions,
+      vivaldiActions: ActionCustomizationModel(
+        actions: []
+      ),
+      destinations: destinations
+    )
+    #else
     customization = CustomizationModel(actions: actions, destinations: destinations)
+    #endif // End Vivaldi
+
   }
 
   public func endCustomization() {
@@ -52,4 +79,29 @@ import SwiftUI
       self.destinations = destinations
     }
   }
+
+  // MARK:  Vivaldi
+  public init(
+    destinations: [OverflowMenuDestination],
+    vivaldiActionGroups: [OverflowMenuActionGroup],
+    actionGroups: [OverflowMenuActionGroup]
+  ) {
+    self.destinations = destinations
+    self.actionGroups = actionGroups
+    self.vivaldiActionGroups = vivaldiActionGroups
+  }
+
+  public func startCustomization(
+    actions: ActionCustomizationModel,
+    vivaldiActions: ActionCustomizationModel,
+    destinations: DestinationCustomizationModel
+  ) {
+    customization = CustomizationModel(
+      actions: actions,
+      vivaldiActions: vivaldiActions,
+      destinations: destinations
+    )
+  }
+  // End Vivaldi
+
 }

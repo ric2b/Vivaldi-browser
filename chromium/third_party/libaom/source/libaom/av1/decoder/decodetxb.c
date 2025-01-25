@@ -42,7 +42,7 @@ static int read_golomb(MACROBLOCKD *xd, aom_reader *r) {
   return x - 1;
 }
 
-static INLINE int rec_eob_pos(const int eob_token, const int extra) {
+static inline int rec_eob_pos(const int eob_token, const int extra) {
   int eob = av1_eob_group_start[eob_token];
   if (eob > 2) {
     eob += extra;
@@ -50,7 +50,7 @@ static INLINE int rec_eob_pos(const int eob_token, const int extra) {
   return eob;
 }
 
-static INLINE int get_dqv(const int16_t *dequant, int coeff_idx,
+static inline int get_dqv(const int16_t *dequant, int coeff_idx,
                           const qm_val_t *iqmatrix) {
   int dqv = dequant[!!coeff_idx];
   if (iqmatrix != NULL)
@@ -59,7 +59,7 @@ static INLINE int get_dqv(const int16_t *dequant, int coeff_idx,
   return dqv;
 }
 
-static INLINE void read_coeffs_reverse_2d(aom_reader *r, TX_SIZE tx_size,
+static inline void read_coeffs_reverse_2d(aom_reader *r, TX_SIZE tx_size,
                                           int start_si, int end_si,
                                           const int16_t *scan, int bhl,
                                           uint8_t *levels,
@@ -83,7 +83,7 @@ static INLINE void read_coeffs_reverse_2d(aom_reader *r, TX_SIZE tx_size,
   }
 }
 
-static INLINE void read_coeffs_reverse(aom_reader *r, TX_SIZE tx_size,
+static inline void read_coeffs_reverse(aom_reader *r, TX_SIZE tx_size,
                                        TX_CLASS tx_class, int start_si,
                                        int end_si, const int16_t *scan, int bhl,
                                        uint8_t *levels, base_cdf_arr base_cdf,
@@ -303,8 +303,9 @@ uint8_t av1_read_coeffs_txb(const AV1_COMMON *const cm, DecoderCodingBlock *dcb,
       tran_low_t dq_coeff;
       // Bitmasking to clamp dq_coeff to valid range:
       //   The valid range for 8/10/12 bit video is at most 17/19/21 bit
-      dq_coeff = (tran_low_t)(
-          (int64_t)level * get_dqv(dequant, scan[c], iqmatrix) & 0xffffff);
+      dq_coeff =
+          (tran_low_t)((int64_t)level * get_dqv(dequant, scan[c], iqmatrix) &
+                       0xffffff);
       dq_coeff = dq_coeff >> shift;
       if (sign) {
         dq_coeff = -dq_coeff;

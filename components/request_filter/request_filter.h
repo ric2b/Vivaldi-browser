@@ -50,6 +50,8 @@ class RequestFilter {
     kPingBlock = 1,
   };
 
+  enum CancelDecision { kAllow = 0, kCancel, kPreventCancel };
+
   RequestFilter(Type type, int priority);
   virtual ~RequestFilter();
 
@@ -61,14 +63,14 @@ class RequestFilter {
   virtual bool WantsExtraHeadersForRequest(
       FilteredRequestInfo* request) const = 0;
 
-  using BeforeRequestCallback =
-      base::OnceCallback<void(bool cancel, bool collapse, const GURL& new_url)>;
+  using BeforeRequestCallback = base::OnceCallback<
+      void(CancelDecision cancel, bool collapse, const GURL& new_url)>;
   virtual bool OnBeforeRequest(content::BrowserContext* browser_context,
                                const FilteredRequestInfo* request,
                                BeforeRequestCallback callback) = 0;
 
   using BeforeSendHeadersCallback =
-      base::OnceCallback<void(bool cancel,
+      base::OnceCallback<void(CancelDecision cancel,
                               RequestHeaderChanges header_changes)>;
   virtual bool OnBeforeSendHeaders(content::BrowserContext* browser_context,
                                    const FilteredRequestInfo* request,
@@ -80,8 +82,8 @@ class RequestFilter {
                              const net::HttpRequestHeaders& headers) = 0;
 
   using HeadersReceivedCallback =
-      base::OnceCallback<void(bool cancel,
-                              //Ignored when responding asynchronously
+      base::OnceCallback<void(CancelDecision cancel,
+                              // Ignored when responding asynchronously
                               bool collapse,
                               const GURL& new_url,
                               ResponseHeaderChanges header_changes)>;

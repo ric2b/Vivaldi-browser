@@ -18,6 +18,9 @@ import androidx.preference.Preference;
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.PackageManagerUtils;
+import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.CustomTabsUiType;
@@ -35,7 +38,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.quick_delete.QuickDeleteController;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.FaviconLoader;
-import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
+import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
 import org.chromium.chrome.browser.tab.RequestDesktopUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
@@ -49,6 +52,7 @@ import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.components.webxr.WebXrAndroidFeatureMap;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.ContentFeatureMap;
@@ -93,14 +97,15 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     }
 
     /** Used to set an instance of {@link SnackbarManager} by the parent activity. */
-    public void setSnackbarManager(SnackbarManager manager) {
+    public void setSnackbarManagerSupplier(
+            OneshotSupplier<SnackbarManager> snackbarManagerSupplier) {
         /* disabled in vivaldi
-        if (manager != null) {
-            mPrivacySandboxController =
-                    new PrivacySandboxSnackbarController(
-                            mContext, manager, new SettingsLauncherImpl());
-        }
-        */
+        snackbarManagerSupplier.onAvailable(
+                (snackbarManager) -> {
+                    mPrivacySandboxController =
+                            new PrivacySandboxSnackbarController(mContext, snackbarManager);
+                });
+        */ // End Vivaldi
     }
 
     @Override
@@ -138,8 +143,8 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     @Override
     public boolean isCategoryVisible(@SiteSettingsCategory.Type int type) {
         switch (type) {
-                // TODO(csharrison): Remove this condition once the experimental UI lands. It is not
-                // great to dynamically remove the preference in this way.
+                // TODO(csharrison): Remove this condition once the experimental UI lands. It is
+                // not great to dynamically remove the preference in this way.
             case SiteSettingsCategory.Type.ADS:
                 return SiteSettingsCategory.adsCategoryEnabled();
             case SiteSettingsCategory.Type.ANTI_ABUSE:
@@ -155,8 +160,15 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
                         .hasSwitch(ContentSwitches.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES);
             case SiteSettingsCategory.Type.FEDERATED_IDENTITY_API:
                 return ContentFeatureMap.isEnabled(ContentFeatures.FED_CM);
+            case SiteSettingsCategory.Type.HAND_TRACKING:
+                return PackageManagerUtils.hasSystemFeature(
+                                PackageManagerUtils.XR_IMMERSIVE_FEATURE_NAME)
+                        && WebXrAndroidFeatureMap.isHandTrackingEnabled();
             case SiteSettingsCategory.Type.NFC:
                 return ContentFeatureMap.isEnabled(ContentFeatureList.WEB_NFC);
+            case SiteSettingsCategory.Type.REQUEST_DESKTOP_SITE:
+                // Desktop Android always requests desktop sites, so hide the category.
+                return !BuildConfig.IS_DESKTOP_ANDROID;
             case SiteSettingsCategory.Type.ZOOM:
                 return ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM)
                         && ContentFeatureMap.isEnabled(
@@ -240,9 +252,8 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
                         null);
     }
 
-    // TODO(crbug.com/40286347): Migrate to `HelpAndFeedbackLauncherImpl` when Chrome has migrated
-    // to
-    // Open-to-Context (OTC) and new p-links work.
+    // TODO(crbug.com/40286347): Migrate to `HelpAndFeedbackLauncherImpl` when
+    // Chrome has migrated to Open-to-Context (OTC) and new p-links work.
     @Override
     public void launchStorageAccessHelpActivity(Activity currentActivity) {
         CustomTabsIntent customTabIntent =
@@ -298,31 +309,43 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     }
 
     @Override
-    public boolean isFirstPartySetsDataAccessEnabled() {
+    public boolean isRelatedWebsiteSetsDataAccessEnabled() {
         return mPrivacySandboxBridge.isFirstPartySetsDataAccessEnabled();
     }
 
     @Override
-    public boolean isFirstPartySetsDataAccessManaged() {
+    public boolean isRelatedWebsiteSetsDataAccessManaged() {
         return mPrivacySandboxBridge.isFirstPartySetsDataAccessManaged();
     }
 
     @Override
-    public boolean isPartOfManagedFirstPartySet(String origin) {
+    public boolean isPartOfManagedRelatedWebsiteSet(String origin) {
         return mPrivacySandboxBridge.isPartOfManagedFirstPartySet(origin);
     }
 
     @Override
     public boolean shouldShowTrackingProtectionUI() {
         return UserPrefs.get(mProfile).getBoolean(Pref.TRACKING_PROTECTION3PCD_ENABLED)
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD)
-                || ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_LAUNCH);
+                || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD);
     }
 
     @Override
-    public boolean shouldShowTrackingProtectionLaunchUI() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_LAUNCH);
+    public boolean shouldShowTrackingProtectionACTFeaturesUI() {
+        return shouldDisplayIpProtection() || shouldDisplayFingerprintingProtection();
+    }
+
+    @Override
+    public boolean shouldDisplayIpProtection() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_USER_BYPASS)
+                // This is copied from the `IsIpProtectionEnabled` check in the TPS API.
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_V1)
+                && UserPrefs.get(mProfile).getBoolean(Pref.IP_PROTECTION_ENABLED);
+    }
+
+    @Override
+    public boolean shouldDisplayFingerprintingProtection() {
+        // Note: this is an interim check and will have to be updated for incognito FPP.
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.FINGERPRINTING_PROTECTION_USER_BYPASS);
     }
 
     @Override
@@ -331,12 +354,12 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     }
 
     @Override
-    public void setFirstPartySetsDataAccessEnabled(boolean enabled) {
+    public void setRelatedWebsiteSetsDataAccessEnabled(boolean enabled) {
         mPrivacySandboxBridge.setFirstPartySetsDataAccessEnabled(enabled);
     }
 
     @Override
-    public String getFirstPartySetOwner(String memberOrigin) {
+    public String getRelatedWebsiteSetOwner(String memberOrigin) {
         return mPrivacySandboxBridge.getFirstPartySetOwner(memberOrigin);
     }
 
@@ -348,12 +371,12 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     @Override
     public void launchClearBrowsingDataDialog(Activity currentActivity) {
         if (QuickDeleteController.isQuickDeleteFollowupEnabled()) {
-            new SettingsLauncherImpl()
+            SettingsLauncherFactory.createSettingsLauncher()
                     .launchSettingsActivity(
                             currentActivity,
                             SettingsLauncher.SettingsFragment.CLEAR_BROWSING_DATA_ADVANCED_PAGE);
         } else {
-            new SettingsLauncherImpl()
+            SettingsLauncherFactory.createSettingsLauncher()
                     .launchSettingsActivity(
                             currentActivity, SettingsLauncher.SettingsFragment.CLEAR_BROWSING_DATA);
         }
@@ -377,6 +400,9 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
         BrowsingDataBridge.buildBrowsingDataModelFromDisk(
                 mProfile,
                 model -> {
+                    if (mBrowsingDataModel != null) {
+                        mBrowsingDataModel.destroy();
+                    }
                     mBrowsingDataModel = model;
                     callback.onResult(mBrowsingDataModel);
                 });

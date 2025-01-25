@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Engine, TrackContext} from '../public';
+import {Engine} from '../trace_processor/engine';
+import {TrackContext} from '../public/track';
 import {
   CustomSqlDetailsPanelConfig,
   CustomSqlTableDefConfig,
@@ -40,11 +41,11 @@ export class SimpleSliceTrack extends CustomSqlTableSliceTrack {
   ) {
     super({
       engine,
-      trackKey: ctx.trackKey,
+      uri: ctx.trackUri,
     });
 
     this.config = config;
-    this.sqlTableName = `__simple_slice_${uuidv4Sql(ctx.trackKey)}`;
+    this.sqlTableName = `__simple_slice_${uuidv4Sql(ctx.trackUri)}`;
   }
 
   async getSqlDataSource(): Promise<CustomSqlTableDefConfig> {

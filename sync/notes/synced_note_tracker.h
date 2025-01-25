@@ -16,7 +16,7 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "components/sync/base/client_tag_hash.h"
-#include "components/sync/protocol/model_type_state.pb.h"
+#include "components/sync/protocol/data_type_state.pb.h"
 
 namespace sync_pb {
 class NotesModelMetadata;
@@ -47,7 +47,7 @@ class SyncedNoteTracker {
 
   // Creates an empty instance with no entities. Never returns null.
   static std::unique_ptr<SyncedNoteTracker> CreateEmpty(
-      sync_pb::ModelTypeState model_type_state,
+      sync_pb::DataTypeState data_type_state,
       file_sync::SyncedFileStore* synced_file_store);
 
   // Loads a tracker from a proto (usually from disk) after enforcing the
@@ -129,12 +129,12 @@ class SyncedNoteTracker {
   // Returns true if there are any local entities to be committed.
   bool HasLocalChanges() const;
 
-  const sync_pb::ModelTypeState& model_type_state() const {
-    return model_type_state_;
+  const sync_pb::DataTypeState& data_type_state() const {
+    return data_type_state_;
   }
 
-  void set_model_type_state(sync_pb::ModelTypeState model_type_state) {
-    model_type_state_ = std::move(model_type_state);
+  void set_data_type_state(sync_pb::DataTypeState data_type_state) {
+    data_type_state_ = std::move(data_type_state);
   }
 
   std::vector<const SyncedNoteTrackerEntity*> GetAllEntities() const;
@@ -209,7 +209,7 @@ class SyncedNoteTracker {
 
  private:
   explicit SyncedNoteTracker(
-      sync_pb::ModelTypeState model_type_state,
+      sync_pb::DataTypeState data_type_state,
       bool notes_reuploaded,
       std::optional<int64_t> num_ignored_updates_due_to_missing_parent,
       std::optional<int64_t>
@@ -268,7 +268,7 @@ class SyncedNoteTracker {
       ordered_local_tombstones_;
 
   // The model metadata (progress marker, initial sync done, etc).
-  sync_pb::ModelTypeState model_type_state_;
+  sync_pb::DataTypeState data_type_state_;
 
   // This field contains the value of
   // NotesMetadata::notes_hierarchy_fields_reuploaded.

@@ -263,6 +263,12 @@
       <message name="IDS_INSTALL_COPYRIGHT_AND_POLICY" desc="Copyright information and privacy policy link">
         Copyright <ph name="YEAR">$1</ph> Vivaldi Technologies AS. All rights reserved. &lt;a&gt;Privacy Policy&lt;/a&gt;
       </message>
+      <message name="IDS_INSTALL_OUTDATED_WINDOWS_VERSION" desc="Message shown when the user is running an unsupported version of Windows">
+        Vivaldi requires Windows 10 or higher.
+      </message>
+      <message name="IDS_INSTALL_RUNNING_EMULATED_ON_ARM64" desc="Message shown when starting in emulation mode on ARM64">
+        The version of Vivaldi you are installing is not optimized for the version of Windows you are running.\n\nVisit vivaldi.com/download to download the Windows on Arm version.
+      </message>
     </messages>
   </release>
 </grit>

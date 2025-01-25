@@ -5212,17 +5212,17 @@ void CaptureMidExecutionSetup(const gl::Context *context,
         // Filter out redundant buffer binding commands. Note that the code in the previous section
         // only binds to ARRAY_BUFFER. Therefore we only check the array binding against the binding
         // we set earlier.
-        bool isArray                  = binding == gl::BufferBinding::Array;
         const gl::Buffer *arrayBuffer = replayState.getArrayBuffer();
-        if ((isArray && arrayBuffer && arrayBuffer->id() != bufferID) ||
-            (!isArray && bufferID.value != 0))
+        bool isArray                  = binding == gl::BufferBinding::Array;
+        bool isArrayBufferChanging    = isArray && arrayBuffer && arrayBuffer->id() != bufferID;
+        if (isArrayBufferChanging || (!isArray && bufferID.value != 0))
         {
             cap(CaptureBindBuffer(replayState, true, binding, bufferID));
             replayState.setBufferBinding(context, binding, boundBuffers[binding].get());
         }
 
         // Restore all buffer bindings for Reset
-        if (bufferID.value != 0)
+        if (bufferID.value != 0 || isArrayBufferChanging)
         {
             CaptureBufferBindingResetCalls(replayState, resourceTracker, binding, bufferID);
 
@@ -8956,7 +8956,7 @@ void FrameCaptureShared::runMidExecutionCapture(gl::Context *mainContext)
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, contextState.getClientType(),
         contextState.getClientVersion(), contextState.getProfileMask(), false, true, true, true,
         false, EGL_CONTEXT_PRIORITY_MEDIUM_IMG, contextState.hasRobustAccess(),
-        contextState.hasProtectedContent());
+        contextState.hasProtectedContent(), false);
     mainContextReplayState.initializeForCapture(mainContext);
 
     CaptureShareGroupMidExecutionSetup(mainContext, &mShareGroupSetupCalls, &mResourceTracker,
@@ -9003,7 +9003,7 @@ void FrameCaptureShared::runMidExecutionCapture(gl::Context *mainContext)
                 shareContextState.getClientType(), shareContextState.getClientVersion(),
                 shareContextState.getProfileMask(), false, true, true, true, false,
                 EGL_CONTEXT_PRIORITY_MEDIUM_IMG, shareContextState.hasRobustAccess(),
-                shareContextState.hasProtectedContent());
+                shareContextState.hasProtectedContent(), false);
             auxContextReplayState.initializeForCapture(shareContext.second);
 
             egl::Error error = shareContext.second->makeCurrent(display, draw, read);

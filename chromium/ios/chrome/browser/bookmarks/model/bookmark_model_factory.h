@@ -5,12 +5,11 @@
 #ifndef IOS_CHROME_BROWSER_BOOKMARKS_MODEL_BOOKMARK_MODEL_FACTORY_H_
 #define IOS_CHROME_BROWSER_BOOKMARKS_MODEL_BOOKMARK_MODEL_FACTORY_H_
 
-#include <memory>
+#import <memory>
 
-#include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
-
-class ChromeBrowserState;
+#import "base/no_destructor.h"
+#import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
 namespace bookmarks {
 class BookmarkModel;
@@ -20,10 +19,11 @@ namespace ios {
 
 class BookmarkModelFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static bookmarks::BookmarkModel* GetForBrowserState(
-      ChromeBrowserState* browser_state);
-  static bookmarks::BookmarkModel* GetForBrowserStateIfExists(
-      ChromeBrowserState* browser_state);
+  // TODO(crbug.com/358299863): Remove when fully migrated.
+  static bookmarks::BookmarkModel* GetForBrowserState(ProfileIOS* profile);
+
+  static bookmarks::BookmarkModel* GetForProfile(ProfileIOS* profile);
+  static bookmarks::BookmarkModel* GetForProfileIfExists(ProfileIOS* profile);
 
   static BookmarkModelFactory* GetInstance();
 

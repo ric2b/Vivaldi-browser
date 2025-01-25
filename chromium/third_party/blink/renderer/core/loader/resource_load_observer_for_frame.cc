@@ -273,8 +273,7 @@ void ResourceLoadObserverForFrame::DidReceiveData(
   LocalFrame* frame = document_->GetFrame();
   DCHECK(frame);
   frame->Loader().Progress().IncrementProgress(identifier, chunk.size());
-  probe::DidReceiveData(GetProbe(), identifier, document_loader_,
-                        chunk.ptr_or_null_if_no_data(), chunk.size());
+  probe::DidReceiveData(GetProbe(), identifier, document_loader_, chunk);
 }
 
 void ResourceLoadObserverForFrame::DidReceiveTransferSizeUpdate(
@@ -354,6 +353,13 @@ void ResourceLoadObserverForFrame::DidChangeRenderBlockingBehavior(
             resource->GetResourceRequest(),
             params.GetResourceRequest().GetRenderBlockingBehavior());
       });
+}
+
+bool ResourceLoadObserverForFrame::InterestedInAllRequests() {
+  if (GetProbe()) {
+    return GetProbe()->HasInspectorNetworkAgents();
+  }
+  return false;
 }
 
 void ResourceLoadObserverForFrame::Trace(Visitor* visitor) const {

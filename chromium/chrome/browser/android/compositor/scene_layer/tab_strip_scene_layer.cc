@@ -157,6 +157,14 @@ void TabStripSceneLayer::FinishBuildingFrame(
                              group_bottom_layers_.end());
 }
 
+void TabStripSceneLayer::UpdateOffsetTag(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jobj,
+    const JavaParamRef<jobject>& joffset_tag) {
+  viz::OffsetTag tag = cc::android::FromJavaOffsetTag(env, joffset_tag);
+  layer()->SetOffsetTag(tag);
+}
+
 void TabStripSceneLayer::UpdateTabStripLayer(JNIEnv* env,
                                              const JavaParamRef<jobject>& jobj,
                                              jint width,
@@ -453,7 +461,6 @@ void TabStripSceneLayer::PutStripTabLayer(
     jboolean is_end_divider_visible,
     jboolean is_loading,
     jfloat spinner_rotation,
-    jfloat brightness,
     jfloat opacity,
     const JavaParamRef<jobject>& jlayer_title_cache,
     const JavaParamRef<jobject>& jresource_manager,
@@ -487,8 +494,7 @@ void TabStripSceneLayer::PutStripTabLayer(
       shouldShowTabOutline, close_pressed, toolbar_width, x, y, width, height,
       content_offset_y, divider_offset_x, bottom_margin, top_margin,
       close_button_padding, close_button_alpha, is_start_divider_visible,
-      is_end_divider_visible, is_loading, spinner_rotation, brightness,
-      opacity,
+      is_end_divider_visible, is_loading, spinner_rotation, opacity,
       tab_alpha, is_shown_as_favicon, title_offset); // Vivaldi
 }
 

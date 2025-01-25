@@ -77,6 +77,10 @@ tint_target_add_dependencies(tint_cmd_fuzz_wgsl_fuzz_cmd fuzz_cmd
   tint_utils_traits
 )
 
+tint_target_add_external_dependencies(tint_cmd_fuzz_wgsl_fuzz_cmd fuzz_cmd
+  "src_utils"
+)
+
 if(TINT_BUILD_GLSL_WRITER)
   tint_target_add_dependencies(tint_cmd_fuzz_wgsl_fuzz_cmd fuzz_cmd
     tint_lang_glsl_writer_fuzz
@@ -114,7 +118,6 @@ endif(TINT_BUILD_SPV_WRITER)
 if(TINT_BUILD_WGSL_READER)
   tint_target_add_dependencies(tint_cmd_fuzz_wgsl_fuzz_cmd fuzz_cmd
     tint_cmd_fuzz_wgsl_fuzz
-    tint_lang_wgsl_ast_transform_fuzz
   )
 endif(TINT_BUILD_WGSL_READER)
 
@@ -168,6 +171,7 @@ tint_target_add_dependencies(tint_cmd_fuzz_wgsl_fuzz fuzz
 )
 
 tint_target_add_external_dependencies(tint_cmd_fuzz_wgsl_fuzz fuzz
+  "src_utils"
   "thread"
 )
 

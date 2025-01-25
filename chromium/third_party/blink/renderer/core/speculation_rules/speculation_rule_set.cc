@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/speculation_rules/speculation_rule_set.h"
 
 #include "base/containers/contains.h"
+#include "base/not_fatal_until.h"
 #include "services/network/public/mojom/no_vary_search.mojom-shared.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "third_party/blink/public/mojom/speculation_rules/speculation_rules.mojom-shared.h"
@@ -549,13 +550,15 @@ void SpeculationRuleSet::SetError(SpeculationRuleSetErrorType error_type,
   error_message_ = error_message;
 }
 
-void SpeculationRuleSet::SetWarnings(Vector<String> warning_messages) {
-  warning_messages_ = std::move(warning_messages);
+void SpeculationRuleSet::AddWarnings(
+    base::span<const String> warning_messages) {
+  warning_messages_.AppendSpan(warning_messages);
 }
 
 // static
 SpeculationRuleSet* SpeculationRuleSet::Parse(Source* source,
                                               ExecutionContext* context) {
+  CHECK(context, base::NotFatalUntil::M131);
   // https://wicg.github.io/nav-speculation/speculation-rules.html#parse-speculation-rules
 
   const String& source_text = source->GetSourceText();
@@ -579,6 +582,34 @@ SpeculationRuleSet* SpeculationRuleSet::Parse(Source* source,
     return result;
   }
 
+  if (!parse_error.duplicate_keys.empty()) {
+    String duplicate_key_warning;
+    if (parse_error.duplicate_keys.size() == 1) {
+      String key = parse_error.duplicate_keys[0];
+      duplicate_key_warning =
+          "An object contained more than one key named " +
+          key.EncodeForDebugging() + ". All but the last are ignored." +
+          ((key == "prefetch" || key == "prerender")
+               ? " It is likely that either one of them was intended to be "
+                 "another action, or that their rules should be merged into a "
+                 "single array."
+               : String());
+    } else {
+      StringBuilder builder;
+      builder.Append(
+          "The following keys were duplicated on one or more objects: ");
+      for (wtf_size_t i = 0; i < parse_error.duplicate_keys.size(); i++) {
+        if (i != 0) {
+          builder.Append(", ");
+        }
+        builder.Append(parse_error.duplicate_keys[i].EncodeForDebugging());
+      }
+      builder.Append(". All but the last value for each key are ignored.");
+      duplicate_key_warning = builder.ReleaseString();
+    }
+    result->AddWarnings(base::span_from_ref(duplicate_key_warning));
+  }
+
   const auto parse_for_action =
       [&](const char* key, HeapVector<Member<SpeculationRule>>& destination,
           bool allow_target_hint,
@@ -597,6 +628,7 @@ SpeculationRuleSet* SpeculationRuleSet::Parse(Source* source,
           return;
         }
 
+        Vector<String> warning_messages;
         for (wtf_size_t i = 0; i < array->size(); ++i) {
           // If prefetch/prerenderRule is not a map, then continue.
           JSONObject* input_rule = JSONObject::Cast(array->at(i));
@@ -615,7 +647,6 @@ SpeculationRuleSet* SpeculationRuleSet::Parse(Source* source,
           // ParseSpeculationRule to return
           // `std::tuple<SpeculationRule*, String, Vector<String>>`.
           String error_message;
-          Vector<String> warning_messages;
           SpeculationRule* rule = ParseSpeculationRule(
               input_rule, base_url, context, source->IsFromBrowserInjected(),
               &error_message, warning_messages);
@@ -648,7 +679,8 @@ SpeculationRuleSet* SpeculationRuleSet::Parse(Source* source,
           }
 
           // Add the warnings and continue
-          result->SetWarnings(std::move(warning_messages));
+          result->AddWarnings(warning_messages);
+          warning_messages.clear();
 
           if (rule->predicate()) {
             result->has_document_rule_ = true;

@@ -4,9 +4,10 @@
 #define APP_VIVALDI_APPTOOLS_H_
 
 #include <string>
+#include <string_view>
+
 #include "base/base_export.h"
 #include "base/callback_list.h"
-#include "base/strings/string_piece.h"
 
 namespace base {
 class CommandLine;
@@ -29,6 +30,7 @@ BASE_EXPORT base::CallbackListSubscription SystemColorsUpdatedCallback(
 
 
 bool BASE_EXPORT IsVivaldiApp(std::string_view extension_id);
+bool BASE_EXPORT IsVivaldiUrl(const std::string& url_str);
 
 bool BASE_EXPORT IsVivaldiExtraLocale(std::string_view locale);
 

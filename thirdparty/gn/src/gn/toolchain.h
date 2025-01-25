@@ -101,8 +101,8 @@ class Toolchain : public Item {
 
   // Returns the tool that produces the final output for the given target type.
   // This isn't necessarily the tool you would expect. For copy target, this
-  // will return the stamp tool instead since the final output of a copy
-  // target is to stamp the set of copies done so there is one output.
+  // will return the phony tool instead since the final output of a copy
+  // target is a phony alias to the set of copies done so there is one output.
   const Tool* GetToolForTargetFinalOutput(const Target* target) const;
   const CTool* GetToolForTargetFinalOutputAsC(const Target* target) const;
   const GeneralTool* GetToolForTargetFinalOutputAsGeneral(

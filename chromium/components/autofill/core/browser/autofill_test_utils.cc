@@ -21,16 +21,19 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/autofill_profile_test_api.h"
 #include "components/autofill/core/browser/data_model/bank_account.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_test_api.h"
 #include "components/autofill/core/browser/data_model/iban.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/metrics/suggestions_list_metrics.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/browser/randomized_encoder.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/browser/ui/suggestion_type.h"
 #include "components/autofill/core/browser/webdata/payments/payments_autofill_table.h"
 #include "components/autofill/core/common/autofill_clock.h"
@@ -45,7 +48,6 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/form_field_data_predictions.h"
 #include "components/autofill/core/common/unique_ids.h"
-#include "components/os_crypt/sync/os_crypt_mocker.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
@@ -243,19 +245,20 @@ AutofillProfile GetIncompleteProfile2() {
 
 void SetProfileCategory(
     AutofillProfile& profile,
-    autofill_metrics::AutofillProfileSourceCategory category) {
+    autofill_metrics::AutofillProfileRecordTypeCategory category) {
   switch (category) {
-    case autofill_metrics::AutofillProfileSourceCategory::kLocalOrSyncable:
-      profile.set_source_for_testing(AutofillProfile::Source::kLocalOrSyncable);
+    case autofill_metrics::AutofillProfileRecordTypeCategory::kLocalOrSyncable:
+      test_api(profile).set_record_type(
+          AutofillProfile::RecordType::kLocalOrSyncable);
       break;
-    case autofill_metrics::AutofillProfileSourceCategory::kAccountChrome:
-    case autofill_metrics::AutofillProfileSourceCategory::kAccountNonChrome:
-      profile.set_source_for_testing(AutofillProfile::Source::kAccount);
+    case autofill_metrics::AutofillProfileRecordTypeCategory::kAccountChrome:
+    case autofill_metrics::AutofillProfileRecordTypeCategory::kAccountNonChrome:
+      test_api(profile).set_record_type(AutofillProfile::RecordType::kAccount);
       // Any value that is not kInitialCreatorOrModifierChrome works.
       const int kInitialCreatorOrModifierNonChrome =
           AutofillProfile::kInitialCreatorOrModifierChrome + 1;
       profile.set_initial_creator_id(
-          category == autofill_metrics::AutofillProfileSourceCategory::
+          category == autofill_metrics::AutofillProfileRecordTypeCategory::
                           kAccountChrome
               ? AutofillProfile::kInitialCreatorOrModifierChrome
               : kInitialCreatorOrModifierNonChrome);
@@ -288,7 +291,6 @@ Iban GetServerIban() {
   Iban iban(Iban::InstrumentId(1234567));
   iban.set_prefix(u"FR76");
   iban.set_suffix(u"0189");
-  iban.set_length(27);
   iban.set_nickname(u"My doctor's IBAN");
   return iban;
 }
@@ -297,7 +299,6 @@ Iban GetServerIban2() {
   Iban iban(Iban::InstrumentId(1234568));
   iban.set_prefix(u"BE71");
   iban.set_suffix(u"8676");
-  iban.set_length(16);
   iban.set_nickname(u"My sister's IBAN");
   return iban;
 }
@@ -306,7 +307,6 @@ Iban GetServerIban3() {
   Iban iban(Iban::InstrumentId(1234569));
   iban.set_prefix(u"DE91");
   iban.set_suffix(u"6789");
-  iban.set_length(22);
   iban.set_nickname(u"My IBAN");
   return iban;
 }
@@ -810,15 +810,6 @@ CreditCard CreateCreditCardWithInfo(const char* name_on_card,
   return credit_card;
 }
 
-void DisableSystemServices(PrefService* prefs) {
-  // Use a mock Keychain rather than the OS one to store credit card data.
-  OSCryptMocker::SetUp();
-}
-
-void ReenableSystemServices() {
-  OSCryptMocker::TearDown();
-}
-
 void SetServerCreditCards(PaymentsAutofillTable* table,
                           const std::vector<CreditCard>& cards) {
   for (const CreditCard& card : cards) {
@@ -871,8 +862,9 @@ void GenerateTestAutofillPopup(
 
   std::vector<Suggestion> suggestions;
   suggestions.push_back(Suggestion(u"Test suggestion"));
-  autofill_external_delegate->OnSuggestionsReturned(field.global_id(),
-                                                    suggestions);
+  autofill_metrics::SuggestionRankingContext context;
+  autofill_external_delegate->OnSuggestionsReturned(
+      field.global_id(), suggestions, std::move(context));
 }
 
 std::string ObfuscatedCardDigitsAsUTF8(const std::string& str,
@@ -999,6 +991,16 @@ Suggestion CreateAutofillSuggestion(SuggestionType type,
   suggestion.type = type;
   suggestion.main_text.value = main_text_value;
   suggestion.payload = payload;
+  return suggestion;
+}
+
+Suggestion CreateAutofillSuggestion(const std::u16string& main_text_value,
+                                    const std::u16string& minor_text_value,
+                                    bool apply_deactivated_style) {
+  Suggestion suggestion;
+  suggestion.main_text.value = main_text_value;
+  suggestion.minor_text.value = minor_text_value;
+  suggestion.apply_deactivated_style = apply_deactivated_style;
   return suggestion;
 }
 

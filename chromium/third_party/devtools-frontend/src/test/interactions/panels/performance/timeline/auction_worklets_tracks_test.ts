@@ -3,13 +3,10 @@
 // found in the LICENSE file.
 
 import {waitFor} from '../../../../shared/helper.js';
-import {describe, itScreenshot} from '../../../../shared/mocha-extensions.js';
 import {assertElementScreenshotUnchanged} from '../../../../shared/screenshots.js';
-import {loadComponentDocExample, preloadForCodeCoverage} from '../../../helpers/shared.js';
+import {loadComponentDocExample} from '../../../helpers/shared.js';
 
 describe('Auction Worklet tracks', function() {
-  preloadForCodeCoverage('performance_panel/track_example.html');
-
   const urlForTest =
       'performance_panel/track_example.html?track=Thread_AuctionWorklet&fileName=fenced-frame-fledge&windowStart=220391498.289&windowEnd=220391697.601';
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       simple_coder.c
@@ -8,9 +10,6 @@
 //
 //  Author:     Lasse Collin
 //
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
-//
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "simple_private.h"
@@ -18,7 +17,7 @@
 
 /// Copied or encodes/decodes more data to out[].
 static lzma_ret
-copy_or_code(lzma_coder *coder, lzma_allocator *allocator,
+copy_or_code(lzma_simple_coder *coder, const lzma_allocator *allocator,
 		const uint8_t *restrict in, size_t *restrict in_pos,
 		size_t in_size, uint8_t *restrict out,
 		size_t *restrict out_pos, size_t out_size, lzma_action action)
@@ -55,7 +54,7 @@ copy_or_code(lzma_coder *coder, lzma_allocator *allocator,
 
 
 static size_t
-call_filter(lzma_coder *coder, uint8_t *buffer, size_t size)
+call_filter(lzma_simple_coder *coder, uint8_t *buffer, size_t size)
 {
 	const size_t filtered = coder->filter(coder->simple,
 			coder->now_pos, coder->is_encoder,
@@ -66,11 +65,13 @@ call_filter(lzma_coder *coder, uint8_t *buffer, size_t size)
 
 
 static lzma_ret
-simple_code(lzma_coder *coder, lzma_allocator *allocator,
+simple_code(void *coder_ptr, const lzma_allocator *allocator,
 		const uint8_t *restrict in, size_t *restrict in_pos,
 		size_t in_size, uint8_t *restrict out,
 		size_t *restrict out_pos, size_t out_size, lzma_action action)
 {
+	lzma_simple_coder *coder = coder_ptr;
+
 	// TODO: Add partial support for LZMA_SYNC_FLUSH. We can support it
 	// in cases when the filter is able to filter everything. With most
 	// simple filters it can be done at offset that is a multiple of 2,
@@ -116,7 +117,15 @@ simple_code(lzma_coder *coder, lzma_allocator *allocator,
 		// coder->pos and coder->size yet. This way the coder can be
 		// restarted if the next filter in the chain returns e.g.
 		// LZMA_MEM_ERROR.
-		memcpy(out + *out_pos, coder->buffer + coder->pos, buf_avail);
+		//
+		// Do the memcpy() conditionally because out can be NULL
+		// (in which case buf_avail is always 0). Calling memcpy()
+		// with a null-pointer is undefined even if the third
+		// argument is 0.
+		if (buf_avail > 0)
+			memcpy(out + *out_pos, coder->buffer + coder->pos,
+					buf_avail);
+
 		*out_pos += buf_avail;
 
 		// Copy/Encode/Decode more data to out[].
@@ -129,9 +138,11 @@ simple_code(lzma_coder *coder, lzma_allocator *allocator,
 				return ret;
 		}
 
-		// Filter out[].
+		// Filter out[] unless there is nothing to filter.
+		// This way we avoid null pointer + 0 (undefined behavior)
+		// when out == NULL.
 		const size_t size = *out_pos - out_start;
-		const size_t filtered = call_filter(
+		const size_t filtered = size == 0 ? 0 : call_filter(
 				coder, out + out_start, size);
 
 		const size_t unfiltered = size - filtered;
@@ -198,8 +209,9 @@ simple_code(lzma_coder *coder, lzma_allocator *allocator,
 
 
 static void
-simple_coder_end(lzma_coder *coder, lzma_allocator *allocator)
+simple_coder_end(void *coder_ptr, const lzma_allocator *allocator)
 {
+	lzma_simple_coder *coder = coder_ptr;
 	lzma_next_end(&coder->next, allocator);
 	lzma_free(coder->simple, allocator);
 	lzma_free(coder, allocator);
@@ -208,10 +220,12 @@ simple_coder_end(lzma_coder *coder, lzma_allocator *allocator)
 
 
 static lzma_ret
-simple_coder_update(lzma_coder *coder, lzma_allocator *allocator,
+simple_coder_update(void *coder_ptr, const lzma_allocator *allocator,
 		const lzma_filter *filters_null lzma_attribute((__unused__)),
 		const lzma_filter *reversed_filters)
 {
+	lzma_simple_coder *coder = coder_ptr;
+
 	// No update support, just call the next filter in the chain.
 	return lzma_next_filter_update(
 			&coder->next, allocator, reversed_filters + 1);
@@ -219,59 +233,59 @@ simple_coder_update(lzma_coder *coder, lzma_allocator *allocator,
 
 
 extern lzma_ret
-lzma_simple_coder_init(lzma_next_coder *next, lzma_allocator *allocator,
+lzma_simple_coder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter_info *filters,
-		size_t (*filter)(lzma_simple *simple, uint32_t now_pos,
+		size_t (*filter)(void *simple, uint32_t now_pos,
 			bool is_encoder, uint8_t *buffer, size_t size),
 		size_t simple_size, size_t unfiltered_max,
 		uint32_t alignment, bool is_encoder)
 {
-	// Allocate memory for the lzma_coder structure if needed.
-	if (next->coder == NULL) {
+	// Allocate memory for the lzma_simple_coder structure if needed.
+	lzma_simple_coder *coder = next->coder;
+	if (coder == NULL) {
 		// Here we allocate space also for the temporary buffer. We
 		// need twice the size of unfiltered_max, because then it
 		// is always possible to filter at least unfiltered_max bytes
 		// more data in coder->buffer[] if it can be filled completely.
-		next->coder = lzma_alloc(sizeof(lzma_coder)
+		coder = lzma_alloc(sizeof(lzma_simple_coder)
 				+ 2 * unfiltered_max, allocator);
-		if (next->coder == NULL)
+		if (coder == NULL)
 			return LZMA_MEM_ERROR;
 
+		next->coder = coder;
 		next->code = &simple_code;
 		next->end = &simple_coder_end;
 		next->update = &simple_coder_update;
 
-		next->coder->next = LZMA_NEXT_CODER_INIT;
-		next->coder->filter = filter;
-		next->coder->allocated = 2 * unfiltered_max;
+		coder->next = LZMA_NEXT_CODER_INIT;
+		coder->filter = filter;
+		coder->allocated = 2 * unfiltered_max;
 
 		// Allocate memory for filter-specific data structure.
 		if (simple_size > 0) {
-			next->coder->simple = lzma_alloc(
-					simple_size, allocator);
-			if (next->coder->simple == NULL)
+			coder->simple = lzma_alloc(simple_size, allocator);
+			if (coder->simple == NULL)
 				return LZMA_MEM_ERROR;
 		} else {
-			next->coder->simple = NULL;
+			coder->simple = NULL;
 		}
 	}
 
 	if (filters[0].options != NULL) {
 		const lzma_options_bcj *simple = filters[0].options;
-		next->coder->now_pos = simple->start_offset;
-		if (next->coder->now_pos & (alignment - 1))
+		coder->now_pos = simple->start_offset;
+		if (coder->now_pos & (alignment - 1))
 			return LZMA_OPTIONS_ERROR;
 	} else {
-		next->coder->now_pos = 0;
+		coder->now_pos = 0;
 	}
 
 	// Reset variables.
-	next->coder->is_encoder = is_encoder;
-	next->coder->end_was_reached = false;
-	next->coder->pos = 0;
-	next->coder->filtered = 0;
-	next->coder->size = 0;
+	coder->is_encoder = is_encoder;
+	coder->end_was_reached = false;
+	coder->pos = 0;
+	coder->filtered = 0;
+	coder->size = 0;
 
-	return lzma_next_filter_init(
-			&next->coder->next, allocator, filters + 1);
+	return lzma_next_filter_init(&coder->next, allocator, filters + 1);
 }

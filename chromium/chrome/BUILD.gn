@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/chromeos/args.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/compiler/pgo/pgo.gni")
@@ -57,13 +58,21 @@ if (is_android) {
   import("//third_party/icu/config.gni")
 }
 
+# b/365489014: CrOS' chrome.sections_embedded target breaks on component builds;
+# there's no clear value of supporting it there, so disable it.
+_cros_generate_embed_section_target = is_chromeos_ash && !is_component_build
+
+if (_cros_generate_embed_section_target) {
+  import("//build/chromeos/embed_sections.gni")
+}
+
 if (defined(is_vivaldi) && is_vivaldi) {
   import("//vivaldi/gn/config/product.gni")
   import("//vivaldi/gn/config/version.gni")
   if (is_win || is_mac) {
     import("//vivaldi/installer/widevine.gni")
   }
-}
+} # End Vivaldi
 
 declare_args() {
   # On macOS, `is_chrome_branded` builds that have been signed locally will not
@@ -178,6 +187,9 @@ if (!is_android && !is_mac) {
           "//components/variations/cros_evaluate_seed:evaluate_seed",
           "//sandbox/linux:chrome_sandbox",
         ]
+        if (build_mojo_proxy) {
+          data_deps += [ "//mojo/proxy:mojo_proxy" ]
+        }
         deps += [
           "//components/exo/wayland:test_controller_stub",
           "//components/exo/wayland:ui_controls_protocol_stub",
@@ -349,6 +361,10 @@ if (!is_android && !is_mac) {
 
         if (is_chromeos_ash) {
           public_deps += [ "//ui/lottie" ]
+          deps += [
+            "//chrome/browser/ash/locale",
+            "//chrome/browser/ash/schedqos",
+          ]
         }
 
         if (is_chromeos_lacros) {
@@ -367,10 +383,6 @@ if (!is_android && !is_mac) {
             deps += [ "//ui/linux:display_server_utils" ]
           }
         }
-      }
-
-      if (is_chromeos_ash || is_win) {
-        data_deps += [ "//mojo/core:shared_library" ]
       }
 
       # These files are used by the installer so we need a public dep.
@@ -472,6 +484,10 @@ if (is_win) {
     if (use_aura) {
       deps += [ "//ui/compositor" ]
     }
+
+    if (is_chromeos_ash) {
+      deps += [ "//chrome/browser/ash/schedqos" ]
+    }
   }
 
   copy("copy_first_run") {
@@ -483,8 +499,7 @@ if (is_win) {
   chrome_framework_name = chrome_product_full_name + " Framework"
   chrome_framework_version = chrome_version_full
 
-  verify_dynamic_libraries = !is_component_build && !is_asan && !is_ubsan &&
-                             !is_ubsan_vptr && !is_ubsan_security
+  verify_dynamic_libraries = !is_component_build && !is_asan && !is_ubsan_any
   if (host_os == "mac") {
     objdump_path = mac_bin_path
   } else {
@@ -1172,6 +1187,10 @@ if (is_win) {
       "//third_party/cld_3/src/src:cld_3",
     ]
 
+    if (is_chromeos_ash) {
+      deps += [ "//chrome/browser/ash/schedqos" ]
+    }
+
     if (is_component_build) {
       frameworks = [ "Carbon.framework" ]
     }
@@ -1478,6 +1497,8 @@ group("dependencies") {
     public_deps += [
       "//ash/constants",
       "//chrome/browser/ash",
+      "//chrome/browser/ash/boot_times_recorder",
+      "//chrome/browser/ash/schedqos",
       "//chromeos",
       "//chromeos/ash/components/memory",
     ]
@@ -1705,6 +1726,7 @@ if (is_android) {
 
     if (is_chromeos_ash) {
       public_deps += [ "//ui/lottie" ]
+      deps += [ "//chrome/browser/ash/schedqos" ]
     }
   }
 }
@@ -1846,6 +1868,14 @@ if (is_linux || is_chromeos) {
 #         [ "//chrome/app/theme/$branding_path_component/product_logo_48.png" ]
 #   }
     outputs = [ "$root_out_dir/{{source_file_part}}" ]
+  }
+}
+
+if (_cros_generate_embed_section_target) {
+  embed_sections("section_embedded_chrome_binary") {
+    binary_input = "$root_out_dir/chrome"
+    sections_embedded_binary_output = "$root_out_dir/chrome.sections_embedded"
+    deps = [ ":chrome" ]
   }
 }
 

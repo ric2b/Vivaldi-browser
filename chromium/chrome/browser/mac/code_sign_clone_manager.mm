@@ -5,10 +5,14 @@
 #include "chrome/browser/mac/code_sign_clone_manager.h"
 
 #import <Foundation/Foundation.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <paths.h>
+#include <stdint.h>
 #include <sys/attr.h>
 #include <sys/clonefile.h>
 #include <sys/fcntl.h>
+#include <sys/ioccom.h>
 #include <sys/stat.h>
 #include <sys/syslimits.h>
 #include <unistd.h>
@@ -109,8 +113,8 @@ bool ValidateTempDir(const base::FilePath& path) {
 // Get a temporary directory that is cleaned on machine boot but not
 // periodically. `DIRHELPER_USER_LOCAL_TRANSLOCATION` and `Cleanup At Startup`
 // are the only found directories that have this behavior. Use
-// `DIRHELPER_USER_LOCAL_TRANSLOCATION` when running on macOS 11+, and `Cleanup
-// At Startup` otherwise.
+// `DIRHELPER_USER_LOCAL_TRANSLOCATION` as it can be obtained through an API,
+// albeit a private one.
 //
 // Returns true if a suitable temporary directory path is found. Returns false
 // otherwise.
@@ -162,70 +166,28 @@ bool GetCleanupOnBootTempDir(base::FilePath* path) {
     return true;
   }
 
-  // Remove the @available check and the else block when
-  // `MAC_OS_X_VERSION_MIN_REQUIRED` is macOS 11+.
-  NSString* temp_dir;
-  if (@available(macOS 11.0, *)) {
-    char buffer[PATH_MAX];
-    if (!g_dirhelper_path_for_testing &&
-        !_dirhelper(DIRHELPER_USER_LOCAL_TRANSLOCATION, buffer, PATH_MAX)) {
-      DLOG(ERROR) << "_dirhelper error";
-      return false;
-    }
+  char buffer[PATH_MAX];
+  if (!g_dirhelper_path_for_testing &&
+      !_dirhelper(DIRHELPER_USER_LOCAL_TRANSLOCATION, buffer, PATH_MAX)) {
+    DLOG(ERROR) << "_dirhelper error";
+    return false;
+  }
 
-    // /var/folders/.../X/
-    temp_dir = g_dirhelper_path_for_testing ?: @(buffer);
+  // /var/folders/.../X/
+  NSString* temp_dir = g_dirhelper_path_for_testing ?: @(buffer);
 
-    // `_dirhelper` with `DIRHELPER_USER_LOCAL_TRANSLOCATION` shouldn't return
-    // any user controlled paths, but validate just to be sure.
-    if (!ValidateTempDir(base::apple::NSStringToFilePath(temp_dir))) {
-      return false;
-    }
-  } else {
-    // /var/folders/.../T/
-    temp_dir = NSTemporaryDirectory();
-
-    if (![temp_dir.lastPathComponent isEqualToString:@"T"]) {
-      DLOG(ERROR) << " NSTemporaryDirectory last component is not \"T\" "
-                  << std::quoted(temp_dir.fileSystemRepresentation);
-      return false;
-    }
-
-    // /var/folders/.../
-    temp_dir = [temp_dir stringByDeletingLastPathComponent];
-
-    // Internal `NSTemporaryDirectory` failures could result in env `TMPDIR`
-    // being returned. Ensure we get an expected path.
-    // Validate before trying to create "Cleanup At Startup".
-    if (!ValidateTempDir(base::apple::NSStringToFilePath(temp_dir))) {
-      return false;
-    }
-
-    // /var/folders/.../Cleanup At Startup/
-    temp_dir = [temp_dir stringByAppendingPathComponent:@"Cleanup At Startup"];
-
-    // Create the "Cleanup At Startup" directory if needed. When created by
-    // macOS the mode is 0755, do the same here. If we are the ones who created
-    // the directory, `chmod` 0755 to overcome a restrictive umask.
-    if (mkdir(temp_dir.fileSystemRepresentation, 0755) == 0) {
-      if (chmod(temp_dir.fileSystemRepresentation, 0755) != 0) {
-        DPLOG(ERROR) << "chmod "
-                     << std::quoted(temp_dir.fileSystemRepresentation);
-        return false;
-      }
-    } else if (errno != EEXIST) {
-      DPLOG(ERROR) << "mkdir "
-                   << std::quoted(temp_dir.fileSystemRepresentation);
-      return false;
-    }
+  // `_dirhelper` with `DIRHELPER_USER_LOCAL_TRANSLOCATION` shouldn't return
+  // any user controlled paths, but validate just to be sure.
+  if (!ValidateTempDir(base::apple::NSStringToFilePath(temp_dir))) {
+    return false;
   }
 
   base::FilePath temporary_directory_path =
       base::apple::NSStringToFilePath(temp_dir);
 
-  // `DIRHELPER_USER_LOCAL_TRANSLOCATION` created by `_dirhelper` or `"Cleanup
-  // At Startup"` by `mkdir`, from the browser process, will be stamped with a
-  // quarantine attribute. Attempt to remove it.
+  // `DIRHELPER_USER_LOCAL_TRANSLOCATION` created by `_dirhelper`, from the
+  // browser process, will be stamped with a quarantine attribute. Attempt to
+  // remove it.
   RemoveQuarantineAttribute(temporary_directory_path);
 
   *path = temporary_directory_path;
@@ -535,7 +497,7 @@ MacCloneExists CloneExists(const base::FilePath& clone_app_path,
   } else if (!main_executable_exists && !info_plist_exists) {
     return MacCloneExists::kMissingMainExecutableAndInfoPlist;
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 }
 
@@ -785,6 +747,35 @@ int ChromeCodeSignCloneCleanupMain(
 
   base::DeletePathRecursively(unique_temp_dir_path);
   return 0;
+}
+
+// `FSIOC_FD_ONLY_OPEN_ONCE` is not a part of the SDK. The definition was
+// introduced in XNU 6153.11.26 (macOS 10.15). It may have existed earlier in
+// another location, but for Chrome's purposes macOS 10.15+ is just fine.
+// https://github.com/apple-oss-distributions/xnu/blob/xnu-6153.11.26/bsd/sys/fsctl.h#L327
+#ifndef FSIOC_FD_ONLY_OPEN_ONCE
+#define FSIOC_FD_ONLY_OPEN_ONCE _IOWR('A', 21, uint32_t)
+#endif
+
+FileOpenMoreThanOnce IsFileOpenMoreThanOnce(int file_descriptor) {
+  uint32_t val;
+  int result = ffsctl(file_descriptor, FSIOC_FD_ONLY_OPEN_ONCE, &val, 0);
+  if (result == -1) {
+    if (errno == EBUSY) {
+      return FileOpenMoreThanOnce::kYes;
+    }
+    return FileOpenMoreThanOnce::kError;
+  }
+  return FileOpenMoreThanOnce::kNo;
+}
+
+FileOpenMoreThanOnce IsFileOpenMoreThanOnce(const base::FilePath& path) {
+  base::ScopedFD fd(HANDLE_EINTR(open(path.value().c_str(), O_RDONLY)));
+  if (fd == -1) {
+    DPLOG(ERROR) << "open " << std::quoted(path.value());
+    return FileOpenMoreThanOnce::kError;
+  }
+  return IsFileOpenMoreThanOnce(fd.get());
 }
 
 }  // namespace internal

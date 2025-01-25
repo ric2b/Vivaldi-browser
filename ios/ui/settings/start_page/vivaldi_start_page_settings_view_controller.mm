@@ -5,8 +5,8 @@
 #import "base/apple/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
@@ -278,7 +278,7 @@ NSString* const kStartPageCustomizeStartPageSettingsCellId =
     _displayFrequentlyVisitedPagesItem = [[TableViewSwitchItem alloc]
         initWithType:SettingsItemTypeShowFrequentlyVisited];
     _displayFrequentlyVisitedPagesItem.text =
-        GetNSString(IDS_IOS_START_PAGE_FREQUENTLY_VISITED_TITLE);
+        GetNSString(IDS_IOS_START_PAGE_SETTINGS_TOP_SITES_TITLE);
     _displayFrequentlyVisitedPagesItem.on = self.showFrequentlyVisitedPages;
     _displayFrequentlyVisitedPagesItem.accessibilityIdentifier =
         kStartPageShowFrequentlyVisitedSettingsCellId;

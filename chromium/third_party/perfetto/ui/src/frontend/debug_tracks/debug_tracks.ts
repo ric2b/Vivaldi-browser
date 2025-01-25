@@ -13,18 +13,19 @@
 // limitations under the License.
 
 import {uuidv4, uuidv4Sql} from '../../base/uuid';
-import {Actions, DeferredAction} from '../../common/actions';
-import {PrimaryTrackSortKey, SCROLLING_TRACK_GROUP} from '../../common/state';
 import {globals} from '../globals';
-import {TrackDescriptor} from '../../public';
+import {TrackDescriptor} from '../../public/track';
 import {DebugSliceTrack} from './slice_track';
 import {
   createPerfettoTable,
   matchesSqlValue,
+  sqlValueToReadableString,
 } from '../../trace_processor/sql_utils';
 import {Engine} from '../../trace_processor/engine';
 import {DebugCounterTrack} from './counter_track';
 import {ARG_PREFIX} from './details_tab';
+import {TrackNode} from '../../public/workspace';
+import {raf} from '../../core/raf_scheduler';
 
 // We need to add debug tracks from the core and from plugins. In order to add a
 // debug track we need to pass a context through with we can add the track. This
@@ -38,7 +39,9 @@ import {ARG_PREFIX} from './details_tab';
 // this to work.
 interface Context {
   engine: Engine;
-  registerTrack(track: TrackDescriptor): unknown;
+  tracks: {
+    registerTrack(track: TrackDescriptor): unknown;
+  };
 }
 
 // Names of the columns of the underlying view to be used as
@@ -47,7 +50,6 @@ export interface SliceColumns {
   ts: string;
   dur: string;
   name: string;
-  pivot?: string;
 }
 
 let debugTrackCount = 0;
@@ -67,60 +69,44 @@ export interface SqlDataSource {
 // have an effect. Use this variant if you want to create many tracks at
 // once or want to tweak the actions once produced. Otherwise, use
 // addDebugSliceTrack().
-function createAddDebugTrackActions(
-  trackName: string,
-  uri: string,
-): DeferredAction<{}>[] {
+function addDebugTrack(trackName: string, uri: string): void {
   const debugTrackId = ++debugTrackCount;
-  const trackKey = uuidv4();
-
-  const actions: DeferredAction<{}>[] = [
-    Actions.addTrack({
-      key: trackKey,
-      name: trackName.trim() || `Debug Track ${debugTrackId}`,
-      uri,
-      trackSortKey: PrimaryTrackSortKey.DEBUG_TRACK,
-      trackGroup: SCROLLING_TRACK_GROUP,
-      closeable: true,
-    }),
-    Actions.toggleTrackPinned({trackKey}),
-  ];
-
-  return actions;
+  const displayName = trackName.trim() || `Debug Track ${debugTrackId}`;
+  const track = new TrackNode(uri, displayName);
+  globals.workspace.prependChild(track);
+  track.pin();
+  raf.scheduleFullRedraw();
 }
 
-export async function addPivotDebugSliceTracks(
+export async function addPivotedTracks(
   ctx: Context,
   data: SqlDataSource,
   trackName: string,
-  sliceColumns: SliceColumns,
-  argColumns: string[],
+  pivotColumn: string,
+  createTrack: (
+    ctx: Context,
+    data: SqlDataSource,
+    trackName: string,
+  ) => Promise<void>,
 ) {
-  if (sliceColumns.pivot) {
-    // Get distinct values to group by
-    const pivotValues = await ctx.engine.query(`
-      with all_vals as (${data.sqlSource})
-      select DISTINCT ${sliceColumns.pivot} from all_vals;`);
+  const iter = (
+    await ctx.engine.query(`
+    with all_vals as (${data.sqlSource})
+    select DISTINCT ${pivotColumn} from all_vals
+    order by ${pivotColumn}
+  `)
+  ).iter({});
 
-    const iter = pivotValues.iter({});
-
-    for (; iter.valid(); iter.next()) {
-      const pivotDataSource: SqlDataSource = {
+  for (; iter.valid(); iter.next()) {
+    await createTrack(
+      ctx,
+      {
         sqlSource: `select * from
         (${data.sqlSource})
-        where ${sliceColumns.pivot} ${matchesSqlValue(
-          iter.get(sliceColumns.pivot),
-        )}`,
-      };
-
-      await addDebugSliceTrack(
-        ctx,
-        pivotDataSource,
-        `${trackName.trim() || 'Pivot Track'}: ${iter.get(sliceColumns.pivot)}`,
-        sliceColumns,
-        argColumns,
-      );
-    }
+        where ${pivotColumn} ${matchesSqlValue(iter.get(pivotColumn))}`,
+      },
+      `${trackName.trim() || 'Pivot Track'}: ${sqlValueToReadableString(iter.get(pivotColumn))}`,
+    );
   }
 }
 
@@ -152,17 +138,14 @@ export async function addDebugSliceTrack(
   );
 
   const uri = `debug.slice.${uuidv4()}`;
-  ctx.registerTrack({
+  ctx.tracks.registerTrack({
     uri,
     title: trackName,
-    trackFactory: (trackCtx) => {
-      return new DebugSliceTrack(ctx.engine, trackCtx, tableName);
-    },
+    track: new DebugSliceTrack(ctx.engine, {trackUri: uri}, tableName),
   });
 
   // Create the actions to add this track to the tracklist
-  const actions = await createAddDebugTrackActions(trackName, uri);
-  globals.dispatchMultiple(actions);
+  addDebugTrack(trackName, uri);
 }
 
 function createDebugSliceTrackTableExpr(
@@ -237,17 +220,14 @@ export async function addDebugCounterTrack(
   );
 
   const uri = `debug.counter.${uuidv4()}`;
-  ctx.registerTrack({
+  ctx.tracks.registerTrack({
     uri,
     title: trackName,
-    trackFactory: (trackCtx) => {
-      return new DebugCounterTrack(ctx.engine, trackCtx, tableName);
-    },
+    track: new DebugCounterTrack(ctx.engine, {trackUri: uri}, tableName),
   });
 
   // Create the actions to add this track to the tracklist
-  const actions = await createAddDebugTrackActions(trackName, uri);
-  globals.dispatchMultiple(actions);
+  addDebugTrack(trackName, uri);
 }
 
 function createDebugCounterTrackTableExpr(

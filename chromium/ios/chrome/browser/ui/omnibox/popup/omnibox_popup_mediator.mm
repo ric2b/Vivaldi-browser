@@ -64,7 +64,10 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "prefs/vivaldi_pref_names.h"
+
+using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
@@ -122,6 +125,9 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   // Vivaldi
   /// Pref tracking if reverse search suggestions is enabled.
   PrefBackedBoolean* _reverseSearchResultsEnabled;
+  /// | YES | when omnibox is focused without user actions, such as when
+  /// | Focus Omnibox on NTP | is enabled and user opens a new tab.
+  BOOL _autofocusOmnibox;
   // End Vivaldi
 
 }
@@ -163,6 +169,11 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     [_bottomOmniboxEnabled setObserver:self];
     // Initialize to the correct value.
     [self booleanDidChange:_bottomOmniboxEnabled];
+
+    if (IsVivaldiRunning()) {
+      [self observeOmniboxFocusNotification];
+    } // End Vivaldi
+
   }
   return self;
 }
@@ -171,6 +182,20 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   [_bottomOmniboxEnabled stop];
   [_bottomOmniboxEnabled setObserver:nil];
   _bottomOmniboxEnabled = nil;
+  if (_remoteSuggestionsServiceObserverBridge) {
+    self.remoteSuggestionsService->RemoveObserver(
+        _remoteSuggestionsServiceObserverBridge.get());
+    _remoteSuggestionsServiceObserverBridge.reset();
+  }
+
+  if (IsVivaldiRunning()) {
+    _autofocusOmnibox = NO;
+    [[NSNotificationCenter defaultCenter]
+        removeObserver:self
+                  name:vNTPShowOmniboxPopupOnFocus
+                object: nil];
+  } // End Vivaldi
+
 }
 
 - (void)updateMatches:(const AutocompleteResult&)result {
@@ -192,6 +217,22 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
 }
 
 - (void)updateWithResults:(const AutocompleteResult&)result {
+
+  if (IsVivaldiRunning()) {
+    // Do not show the autocomplete popup if omnibox focus is triggered from
+    // opening NTP and not from user actions. And, if the omnibox is empty.
+    if (_autofocusOmnibox &&
+        self.autocompleteController->input().text().empty()) {
+      return;
+    }
+
+    // If user types something on the omnibox then reset the autofocus state
+    // as we then need to show the autocomplete popup.
+    if (!self.autocompleteController->input().text().empty()) {
+      _autofocusOmnibox = NO;
+    }
+  } // End Vivaldi
+
   [self updateMatches:result];
   self.open = !result.empty();
   if (!self.open) {
@@ -968,6 +1009,24 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
     [_reverseSearchResultsEnabled setObserver:nil];
     _reverseSearchResultsEnabled = nil;
   }
+}
+
+- (void)observeOmniboxFocusNotification {
+  [[NSNotificationCenter defaultCenter]
+      removeObserver:self
+                name:vNTPShowOmniboxPopupOnFocus
+              object: nil];
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(handleOmniboxFocusNotification:)
+             name:vNTPShowOmniboxPopupOnFocus
+           object:nil];
+}
+
+- (void)handleOmniboxFocusNotification:(NSNotification*)notification {
+  BOOL isAutofocusing =
+      [notification.userInfo[vNTPShowOmniboxPopupOnFocusBoolKey] boolValue];
+  _autofocusOmnibox = isAutofocusing;
 }
 
 - (BOOL)isBottomOmniboxEnabled {

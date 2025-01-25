@@ -257,9 +257,8 @@ const LayoutResult* TableRowLayoutAlgorithm::Layout() {
     container_builder_.SetPreviousBreakAfter(row_break_after);
   }
 
-  if (UNLIKELY(InvolvedInBlockFragmentation(container_builder_))) {
-    BreakStatus status = FinishFragmentation(
-        /*trailing_border_padding=*/LayoutUnit(), &container_builder_);
+  if (InvolvedInBlockFragmentation(container_builder_)) [[unlikely]] {
+    BreakStatus status = FinishFragmentation(&container_builder_);
 
     // TODO(mstensho): Deal with early-breaks.
     DCHECK_EQ(status, BreakStatus::kContinue);

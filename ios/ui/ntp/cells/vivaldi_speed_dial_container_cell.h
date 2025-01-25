@@ -30,6 +30,7 @@
          showAddGroup:(BOOL)showAddGroup
     frequentlyVisited:(BOOL)frequentlyVisited
     topSitesAvailable:(BOOL)topSitesAvailable
+     topToolbarHidden:(BOOL)topToolbarHidden
     verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass;
 - (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
                  layoutColumn:(VivaldiStartPageLayoutColumn)column;

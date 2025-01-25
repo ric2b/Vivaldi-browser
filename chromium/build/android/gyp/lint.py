@@ -24,6 +24,7 @@ _LINT_MD_URL = 'https://chromium.googlesource.com/chromium/src/+/main/build/andr
 # These checks are not useful for chromium.
 _DISABLED_ALWAYS = [
     "AppCompatResource",  # Lint does not correctly detect our appcompat lib.
+    "AppLinkUrlError",  # As a browser, we have intent filters without a host.
     "Assert",  # R8 --force-enable-assertions is used to enable java asserts.
     "InflateParams",  # Null is ok when inflating views for dialogs.
     "InlinedApi",  # Constants are copied so they are always available.
@@ -31,6 +32,7 @@ _DISABLED_ALWAYS = [
     "LintBaselineFixed",  # We dont care if baseline.xml has unused entries.
     "MissingInflatedId",  # False positives https://crbug.com/1394222
     "MissingApplicationIcon",  # False positive for non-production targets.
+    "MissingVersion",  # We set versions via aapt2, which runs after lint.
     "NetworkSecurityConfig",  # Breaks on library certificates b/269783280.
     "ObsoleteLintCustomCheck",  # We have no control over custom lint checks.
     "OldTargetApi",  # We sometimes need targetSdkVersion to not be latest.
@@ -215,7 +217,7 @@ def _RunLint(custom_lint_jar_path,
     lint_xmx = '4G'
   else:
     creating_baseline = False
-    lint_xmx = '2G'
+    lint_xmx = '3G'
 
   # Lint requires this directory to exist and be cleared.
   # See b/324598620
@@ -326,8 +328,14 @@ def _RunLint(custom_lint_jar_path,
   cmd += ['--project', project_xml_path]
 
   # This filter is necessary for JDK11.
-  stderr_filter = build_utils.FilterReflectiveAccessJavaWarnings
   stdout_filter = lambda x: build_utils.FilterLines(x, 'No issues found')
+
+  def stderr_filter(output):
+    output = build_utils.FilterReflectiveAccessJavaWarnings(output)
+    # Presumably a side-effect of our manual manifest merging, but does not
+    # seem to actually break anything:
+    # "Manifest merger failed with multiple errors, see logs"
+    return build_utils.FilterLines(output, 'Manifest merger failed')
 
   start = time.time()
   logging.debug('Lint command %s', ' '.join(cmd))

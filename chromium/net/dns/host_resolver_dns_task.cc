@@ -538,7 +538,7 @@ void HostResolverDnsTask::OnDnsTransactionComplete(
   }
 
   if (base::FeatureList::IsEnabled(features::kUseHostResolverCache) ||
-      base::FeatureList::IsEnabled(features::kUseServiceEndpointRequest)) {
+      base::FeatureList::IsEnabled(features::kHappyEyeballsV3)) {
     SortTransactionAndHandleResults(std::move(transaction_info),
                                     std::move(results).value());
   } else {

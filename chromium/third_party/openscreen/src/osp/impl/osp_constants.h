@@ -10,6 +10,9 @@ namespace openscreen::osp {
 // Spec: https://w3c.github.io/openscreenprotocol/#agent-fingerprint
 constexpr char kFingerprint[] = "fp";
 
+// Spec: https://w3c.github.io/openscreenprotocol/#discovery
+constexpr char kAuthToken[] = "at";
+
 // Spec: https://w3c.github.io/openscreenprotocol/#tls-13
 constexpr char kOpenScreenServiceName[] = "_openscreen._udp";
 

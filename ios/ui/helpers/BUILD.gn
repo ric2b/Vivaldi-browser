@@ -1,6 +1,6 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/swift_source_set.gni")
+import("//build/config/apple/swift_source_set.gni")
 
 source_set("helpers") {
   sources = [
@@ -12,8 +12,6 @@ source_set("helpers") {
     "vivaldi_uiview_style_helper.mm",
     "vivaldi_global_helpers.h",
     "vivaldi_global_helpers.mm",
-    "vivaldi_default_rating_manager.h",
-    "vivaldi_default_rating_manager.mm"
   ]
 
   deps = [

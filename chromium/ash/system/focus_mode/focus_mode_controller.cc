@@ -15,6 +15,7 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/system/anchored_nudge_data.h"
 #include "ash/root_window_controller.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
@@ -26,12 +27,14 @@
 #include "ash/system/focus_mode/focus_mode_tray.h"
 #include "ash/system/focus_mode/focus_mode_util.h"
 #include "ash/system/focus_mode/sounds/focus_mode_sounds_controller.h"
-#include "ash/system/focus_mode/sounds/youtube_music/youtube_music_controller.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/toast/anchored_nudge_manager_impl.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/rand_util.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/audio/sounds.h"
+#include "chromeos/ash/components/audio/system_sounds_delegate.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -47,6 +50,10 @@ FocusModeController* g_instance = nullptr;
 
 // The default Focus Mode session duration.
 constexpr base::TimeDelta kDefaultSessionDuration = base::Minutes(25);
+
+constexpr base::TimeDelta kSessionEndSoundDelay = base::Milliseconds(200);
+
+constexpr base::TimeDelta kEndingMomentBounceAnimationDelay = base::Minutes(1);
 
 bool IsQuietModeOnSetByFocusMode() {
   auto* message_center = message_center::MessageCenter::Get();
@@ -86,7 +93,9 @@ FocusModeTray* GetFocusModeTrayInActiveWindow() {
   return status_area_widget->focus_mode_tray();
 }
 
-void ShowEndingMomentNudge() {
+void ShowEndingMomentNudge(
+    const size_t congratulatory_index,
+    const std::optional<FocusModeSession>& current_session) {
   auto* tray = GetFocusModeTrayInActiveWindow();
   if (!tray) {
     return;
@@ -95,7 +104,7 @@ void ShowEndingMomentNudge() {
   // NOTE: we anchor to `tray->image_view()` in order to center the nudge
   // properly because there is extra spacing on the actual `FocusModeTray` view.
   const auto& title_and_emoji =
-      focus_mode_util::GetCongratulatoryTextAndEmoji();
+      focus_mode_util::GetCongratulatoryTextAndEmoji(congratulatory_index);
   AnchoredNudgeData nudge_data(focus_mode_util::kFocusModeEndingMomentNudgeId,
                                NudgeCatalogName::kFocusModeEndingMomentNudge,
                                title_and_emoji, tray->image_view());
@@ -107,7 +116,6 @@ void ShowEndingMomentNudge() {
       base::BindRepeating(&FocusModeTray::ShowBubble, base::Unretained(tray));
   AnchoredNudgeManager::Get()->Show(nudge_data);
 
-  auto current_session = FocusModeController::Get()->current_session();
   CHECK(current_session);
   const std::u16string duration_string =
       focus_mode_util::GetDurationString(current_session->session_duration(),
@@ -125,6 +133,16 @@ void HideEndingMomentNudge() {
   }
 }
 
+void OnTaskFetched(FocusModeTasksModel::Delegate::FetchTaskCallback callback,
+                   const FocusModeTask& task) {
+  if (task.empty()) {
+    std::move(callback).Run(std::nullopt);
+    return;
+  }
+
+  std::move(callback).Run(task);
+}
+
 }  // namespace
 
 FocusModeController::FocusModeController(
@@ -134,9 +152,8 @@ FocusModeController::FocusModeController(
   CHECK_EQ(g_instance, nullptr);
   g_instance = this;
 
-  focus_mode_sounds_controller_ = std::make_unique<FocusModeSoundsController>();
-  youtube_music_controller_ =
-      std::make_unique<youtube_music::YouTubeMusicController>();
+  focus_mode_sounds_controller_ =
+      std::make_unique<FocusModeSoundsController>(delegate_->GetLocale());
 
   focus_mode_sounds_controller_->AddObserver(this);
   tasks_model_.SetDelegate(weak_factory_.GetWeakPtr());
@@ -187,6 +204,17 @@ void FocusModeController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
       prefs::kFocusModeSoundSection,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
+  // Prefs for YouTube Music.
+  registry->RegisterBooleanPref(
+      prefs::kFocusModeYTMDisplayOAuthConsent, /*default_value=*/true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kFocusModeYTMDisplayFreeTrial, /*default_value=*/true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+
+  // Pref is device-local and should never be synced.
+  registry->RegisterStringPref(prefs::kFocusModeDeviceId, "");
+
   // Pref only set via policy.
   registry->RegisterStringPref(prefs::kFocusModeSoundsEnabled,
                                focus_mode_util::kFocusModeSoundsEnabled);
@@ -216,22 +244,52 @@ void FocusModeController::ToggleFocusMode(
 void FocusModeController::OnActiveUserSessionChanged(
     const AccountId& account_id) {
   ResetFocusSession();
-  UpdateFromUserPrefs();
+  tasks_model_.Reset();
+  tasks_provider_.Reset();
+
+  // Since we cannot guarantee that `TasksClientImpl::InvalidateCache()` has
+  // been called before this when the active user session changes, we should
+  // just call `FocusModeController::UpdateFromUserPrefs()` as a PostTask to
+  // prevent the `TasksClientImpl::GetTasks()` callback from potentially being
+  // failed.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&FocusModeController::UpdateFromUserPrefs,
+                                weak_factory_.GetWeakPtr()));
 }
 
-void FocusModeController::OnSelectedPlaylistChanged() {
-  if (!in_focus_session()) {
+void FocusModeController::OnSessionStateChanged(
+    session_manager::SessionState state) {
+  // Make the tray consistent with other pods for when it should be shown (i.e.
+  // not in the login screen).
+  if (Shell::Get()->session_controller()->IsUserSessionBlocked()) {
+    SetFocusTrayVisibility(false);
     return;
   }
 
-  focus_mode_metrics_recorder_->SetHasSelectedSoundType(
-      focus_mode_sounds_controller_->selected_playlist());
+  if (in_focus_session() || in_ending_moment()) {
+    SetFocusTrayVisibility(true);
+  }
+}
 
+void FocusModeController::OnSelectedPlaylistChanged() {
+  // If a user swaps playlists or deselects the playlist, we should close the
+  // previous media widget. The reason we don't just reuse the existing widget
+  // with a new playlist is that we need to refresh the web view source title so
+  // that it's populated correctly in the media controls.
   if (media_widget_) {
     CloseMediaWidget();
   }
 
-  MaybeCreateMediaWidget();
+  if (focus_mode_metrics_recorder_) {
+    focus_mode_metrics_recorder_->SetHasSelectedSoundType(
+        focus_mode_sounds_controller_->selected_playlist());
+  }
+
+  // Only attempt to create the media widget if we are in an active focus
+  // session.
+  if (in_focus_session()) {
+    MaybeCreateMediaWidget();
+  }
 }
 
 void FocusModeController::OnSelectedTaskChanged(
@@ -252,16 +310,6 @@ void FocusModeController::OnTaskCompleted(const FocusModeTask& completed_task) {
   if (focus_mode_metrics_recorder_) {
     focus_mode_metrics_recorder_->IncrementTasksCompletedCount();
   }
-}
-
-void OnTaskFetched(FocusModeTasksModel::Delegate::FetchTaskCallback callback,
-                   const FocusModeTask& task) {
-  if (task.empty()) {
-    std::move(callback).Run(std::nullopt);
-    return;
-  }
-
-  std::move(callback).Run(task);
 }
 
 void FocusModeController::FetchTask(
@@ -304,9 +352,12 @@ void FocusModeController::ExtendSessionDuration() {
 
   std::string message;
   if (was_in_ending_moment) {
-    MaybeCreateMediaWidget();
+    PerformActionsForMusic();
+    paused_by_ending_moment_ = false;
 
-    focus_mode_metrics_recorder_->RecordHistogramOnEndingMoment(
+    MaybeEnableDND();
+
+    focus_mode_metrics_recorder_->RecordEndingMomentBubbleHistogram(
         focus_mode_histogram_names::EndingMomentBubbleClosedReason::kExtended);
 
     message = l10n_util::GetStringUTF8(
@@ -333,7 +384,8 @@ void FocusModeController::ExtendSessionDuration() {
                  &FocusModeController::OnTimerTick, base::TimeTicks::Now());
 
     for (auto& observer : observers_) {
-      observer.OnFocusModeChanged(/*in_focus_session=*/true);
+      observer.OnFocusModeChanged(
+          /*session_state=*/FocusModeSession::State::kOn);
     }
   }
 
@@ -344,12 +396,8 @@ void FocusModeController::ResetFocusSession() {
   if (focus_mode_metrics_recorder_) {
     focus_mode_metrics_recorder_->RecordHistogramsOnEnd();
     if (!in_focus_session()) {
-      focus_mode_metrics_recorder_->RecordHistogramOnEndingMoment(
-          current_session()->persistent_ending()
-              ? focus_mode_histogram_names::EndingMomentBubbleClosedReason::
-                    kOpended
-              : focus_mode_histogram_names::EndingMomentBubbleClosedReason::
-                    kIgnored);
+      focus_mode_metrics_recorder_->RecordEndingMomentBubbleHistogram(
+          focus_mode_histogram_names::EndingMomentBubbleClosedReason::kOpended);
     }
 
     focus_mode_metrics_recorder_.reset();
@@ -376,15 +424,13 @@ void FocusModeController::ResetFocusSession() {
 
   if (was_in_focus_session) {
     for (auto& observer : observers_) {
-      observer.OnFocusModeChanged(/*in_focus_session=*/false);
+      observer.OnFocusModeChanged(
+          /*session_state=*/FocusModeSession::State::kOff);
     }
   }
 }
 
-void FocusModeController::EnablePersistentEnding() {
-  // This is only used right now for when we click the tray icon to open the
-  // bubble during the ending moment. This prevents the bubble from being closed
-  // automatically.
+void FocusModeController::OnEndingBubbleShown() {
   if (!in_ending_moment()) {
     return;
   }
@@ -392,8 +438,6 @@ void FocusModeController::EnablePersistentEnding() {
   if (timer_.IsRunning()) {
     timer_.Stop();
   }
-  // Update the session to stay in the ending moment state.
-  current_session_->set_persistent_ending();
 
   HideEndingMomentNudge();
 }
@@ -447,7 +491,7 @@ base::Time FocusModeController::GetActualEndTime() const {
   }
 
   return in_ending_moment() ? current_session_->end_time() +
-                                  focus_mode_util::kEndingMomentDuration
+                                  focus_mode_util::kInitialEndingMomentDuration
                             : current_session_->end_time();
 }
 
@@ -474,9 +518,9 @@ void FocusModeController::CompleteTask() {
 }
 
 void FocusModeController::MaybeShowEndingMomentNudge() {
-  // Do not show the nudge if there is a persistent tray bubble open during the
-  // ending moment.
-  if (!in_ending_moment() || current_session_->persistent_ending()) {
+  // Do not show the nudge if there is a tray bubble open during the ending
+  // moment.
+  if (!in_ending_moment() || IsFocusTrayBubbleVisible()) {
     return;
   }
 
@@ -486,7 +530,7 @@ void FocusModeController::MaybeShowEndingMomentNudge() {
     return;
   }
 
-  ShowEndingMomentNudge();
+  ShowEndingMomentNudge(congratulatory_index_, current_session_);
 }
 
 void FocusModeController::TriggerEndingMomentImmediately() {
@@ -495,6 +539,58 @@ void FocusModeController::TriggerEndingMomentImmediately() {
   }
   current_session_->set_end_time(base::Time::Now());
   OnTimerTick();
+}
+
+void FocusModeController::MaybeEnableDND() {
+  auto* message_center = message_center::MessageCenter::Get();
+  CHECK(message_center);
+  if (turn_on_do_not_disturb_ && !message_center->IsQuietMode()) {
+    // Only turn on DND if it is not enabled before starting a session and
+    // `turn_on_do_not_disturb_` is true.
+    message_center->SetQuietMode(
+        true, message_center::QuietModeSourceType::kFocusMode);
+  } else if (IsQuietModeOnSetByFocusMode()) {
+    if (turn_on_do_not_disturb_) {
+      // This can only happen if a new focus session is started during an ending
+      // moment. If the DND state is preserved (i.e. `turn_on_do_not_disturb_`
+      // is still true), then just update the notification.
+      MaybeUpdateDndNotification();
+    } else {
+      // This is the case where a user toggles off DND in the focus panel before
+      // it has been switched off by the termination of the ending moment.
+      message_center->SetQuietMode(
+          false, message_center::QuietModeSourceType::kFocusMode);
+    }
+  }
+}
+
+void FocusModeController::MaybeDisableDND() {
+  // We need to make sure the histogram is recorded before we make any changes
+  // to the DND state.
+  if (focus_mode_metrics_recorder_) {
+    focus_mode_metrics_recorder_->RecordDNDHistogram();
+  }
+
+  if (in_ending_moment() && IsQuietModeOnSetByFocusMode()) {
+    message_center::MessageCenter::Get()->SetQuietMode(
+        false, message_center::QuietModeSourceType::kFocusMode);
+  }
+}
+
+void FocusModeController::BounceTrayIcon() {
+  CHECK(in_ending_moment());
+
+  if (Shell::Get()->session_controller()->IsUserSessionBlocked()) {
+    return;
+  }
+
+  for (auto* root_window_controller : Shell::GetAllRootWindowControllers()) {
+    if (auto* status_area_widget =
+            root_window_controller->GetStatusAreaWidget()) {
+      auto* tray = status_area_widget->focus_mode_tray();
+      tray->MaybePlayBounceInAnimation();
+    }
+  }
 }
 
 const base::UnguessableToken& FocusModeController::GetMediaSessionRequestId() {
@@ -512,6 +608,10 @@ void FocusModeController::RequestTasksUpdateForTesting() {
   tasks_model_.RequestUpdate();
 }
 
+bool FocusModeController::TasksProviderHasCachedTasksForTesting() const {
+  return !tasks_provider_.TasksForTesting().empty();  // IN-TEST
+}
+
 media_session::mojom::MediaSessionInfoPtr
 FocusModeController::GetSystemMediaSessionInfo() {
   if (test_media_session_info_) {
@@ -523,6 +623,7 @@ FocusModeController::GetSystemMediaSessionInfo() {
 
 void FocusModeController::StartFocusSession(
     focus_mode_histogram_names::ToggleSource source) {
+  paused_by_ending_moment_ = false;
   focus_mode_sounds_controller_->reset_paused_event_count();
   focus_mode_metrics_recorder_ =
       std::make_unique<FocusModeMetricsRecorder>(session_duration_);
@@ -551,32 +652,14 @@ void FocusModeController::StartFocusSession(
   timer_.Start(FROM_HERE, base::Seconds(1), this,
                &FocusModeController::OnTimerTick, base::TimeTicks::Now());
 
-  auto* message_center = message_center::MessageCenter::Get();
-  CHECK(message_center);
-  if (turn_on_do_not_disturb_ && !message_center->IsQuietMode()) {
-    // Only turn on DND if it is not enabled before starting a session and
-    // `turn_on_do_not_disturb_` is true.
-    message_center->SetQuietMode(
-        true, message_center::QuietModeSourceType::kFocusMode);
-  } else if (!turn_on_do_not_disturb_ && IsQuietModeOnSetByFocusMode()) {
-    // This is the case where a user toggles off DND in the focus panel before
-    // it has been switched off by the termination of the ending moment.
-    message_center->SetQuietMode(
-        false, message_center::QuietModeSourceType::kFocusMode);
-  } else if (turn_on_do_not_disturb_ && IsQuietModeOnSetByFocusMode()) {
-    // This can only happen if a new focus session is started during an ending
-    // moment. If the DND state is preserved (i.e. `turn_on_do_not_disturb_` is
-    // still true), then just update the notification.
-    MaybeUpdateDndNotification();
-  }
-
+  MaybeEnableDND();
   CloseSystemTrayBubble();
   SetFocusTrayVisibility(true);
   HideEndingMomentNudge();
   MaybeCreateMediaWidget();
 
   for (auto& observer : observers_) {
-    observer.OnFocusModeChanged(/*in_focus_session=*/true);
+    observer.OnFocusModeChanged(/*session_state=*/FocusModeSession::State::kOn);
   }
 }
 
@@ -591,24 +674,50 @@ void FocusModeController::OnTimerTick() {
       return;
     case FocusModeSession::State::kEnding:
       timer_.Stop();
+      congratulatory_index_ = base::RandInt(
+          /*min=*/0, /*max=*/focus_mode_util::kCongratulatoryTitleNum - 1);
 
       if (media_widget_) {
-        CloseMediaWidget();
+        paused_by_ending_moment_ =
+            focus_mode_sounds_controller_->selected_playlist().state ==
+            focus_mode_util::SoundState::kPlaying;
+        if (paused_by_ending_moment_) {
+          focus_mode_sounds_controller_->PausePlayback();
+        }
       }
 
-      // Set a timer to terminate the ending moment. If the focus tray bubble is
-      // open, the ending moment will exist until the bubble is closed.
+      // Set a timer to nudge the user every `kEndingMomentBounceAnimationDelay`
+      // that the session has ended. The ending moment will exist until the user
+      // opens the bubble and takes an action.
       if (!IsFocusTrayBubbleVisible()) {
-        timer_.Start(FROM_HERE, focus_mode_util::kEndingMomentDuration, this,
-                     &FocusModeController::ResetFocusSession,
+        timer_.Start(FROM_HERE, kEndingMomentBounceAnimationDelay, this,
+                     &FocusModeController::BounceTrayIcon,
                      base::TimeTicks::Now());
         MaybeUpdateDndNotification();
-      } else {
-        current_session_->set_persistent_ending();
       }
+      current_session_->set_persistent_ending();
+
+      // If Focus Mode enabled DND, we will turn it off after a short delay and
+      // not allow it to persist with the ending moment.
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&FocusModeController::MaybeDisableDND,
+                         weak_factory_.GetWeakPtr()),
+          focus_mode_util::kInitialEndingMomentDuration);
+
+      // Play sounds effect after 200ms delay.
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE, base::BindOnce([]() {
+            if (Shell::HasInstance()) {
+              Shell::Get()->system_sounds_delegate()->Play(
+                  Sound::kFocusModeEndingMoment);
+            }
+          }),
+          kSessionEndSoundDelay);
 
       for (auto& observer : observers_) {
-        observer.OnFocusModeChanged(/*in_focus_session=*/false);
+        observer.OnFocusModeChanged(
+            /*session_state=*/FocusModeSession::State::kEnding);
       }
       return;
     case FocusModeSession::State::kOff:
@@ -709,6 +818,10 @@ void FocusModeController::CloseSystemTrayBubble() {
 }
 
 void FocusModeController::SetFocusTrayVisibility(bool visible) {
+  if (visible && Shell::Get()->session_controller()->IsUserSessionBlocked()) {
+    return;
+  }
+
   for (auto* root_window_controller : Shell::GetAllRootWindowControllers()) {
     if (auto* status_area_widget =
             root_window_controller->GetStatusAreaWidget()) {
@@ -732,10 +845,10 @@ bool FocusModeController::IsFocusTrayBubbleVisible() const {
   return false;
 }
 
-void FocusModeController::MaybeCreateMediaWidget() {
+bool FocusModeController::MaybeCreateMediaWidget() {
   if (media_widget_ ||
       focus_mode_sounds_controller_->selected_playlist().empty()) {
-    return;
+    return false;
   }
 
   CHECK(in_focus_session());
@@ -767,6 +880,7 @@ void FocusModeController::MaybeCreateMediaWidget() {
   focus_mode_media_view_ = media_widget_->SetContentsView(
       AshWebViewFactory::Get()->Create(web_view_params));
   focus_mode_media_view_->Navigate(GURL(chrome::kChromeUIFocusModeMediaURL));
+  return true;
 }
 
 void FocusModeController::CloseMediaWidget() {
@@ -774,6 +888,24 @@ void FocusModeController::CloseMediaWidget() {
   focus_mode_media_view_.ClearAndDelete();
   focus_mode_media_view_ = nullptr;
   media_widget_.reset();
+}
+
+void FocusModeController::PerformActionsForMusic() {
+  const auto& selected_playlist =
+      focus_mode_sounds_controller_->selected_playlist();
+  // Do nothing if there is no selected playlist, or a new media widget was
+  // created.
+  if (selected_playlist.empty() || MaybeCreateMediaWidget()) {
+    return;
+  }
+
+  // If the music was paused by the user before the ending moment, we should
+  // keep it in paused state after extending the session; otherwise, we will
+  // continue to play the existing music because it was paused by the ending
+  // moment.
+  if (paused_by_ending_moment_) {
+    focus_mode_sounds_controller_->ResumePlayingPlayback();
+  }
 }
 
 void FocusModeController::OnTasksReceived(

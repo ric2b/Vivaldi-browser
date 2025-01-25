@@ -60,9 +60,10 @@ class ProtocolConnectionEndpoint {
   // Returns InstanceRequestIds* used by the service.
   virtual InstanceRequestIds& GetInstanceRequestIds() = 0;
 
-  // Synchronously open a new connection to an instance identified by
-  // `instance_id`.  Returns nullptr if it can't be completed synchronously
-  // (e.g. there are no existing open connections to that instance).
+  // Synchronously open a new ProtocolConnection (corresponds to a underlying
+  // QuicStream) to an instance identified by `instance_id`.  Returns nullptr if
+  // it can't be completed synchronously (e.g. there are no existing open
+  // connections to that instance).
   virtual std::unique_ptr<ProtocolConnection> CreateProtocolConnection(
       uint64_t instance_id) = 0;
 };

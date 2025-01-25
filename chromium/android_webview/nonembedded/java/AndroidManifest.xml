@@ -59,6 +59,9 @@ by a child template that "extends" this file.
               <meta-data
                   android:name="STARTUP_FEATURE_SET_DIRECTORY_BASE_PATH"
                   android:value="true"/>
+              <meta-data
+                  android:name="STARTUP_FEATURE_CONFIGURE_PARTITIONED_COOKIES"
+                  android:value="true"/>
             </service>
             <!-- WebView Developer UI Activities. If you change these Activities, please update
                  android_webview/test/shell/AndroidManifest.xml as well. -->
@@ -149,9 +152,7 @@ by a child template that "extends" this file.
                       tools:ignore="ExportedContentProvider" />
             <!-- Disables at startup init of Emoji2. See http://crbug.com/1205141 -->
             <provider
-                android:authorities="{{ manifest_package }}.androidx-startup"
                 android:name="androidx.startup.InitializationProvider"
-                android:exported="false"
                 tools:node="remove">
             </provider>
             {% if donor_package is not defined %}

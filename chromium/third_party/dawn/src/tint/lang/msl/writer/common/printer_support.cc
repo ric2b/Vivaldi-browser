@@ -77,6 +77,8 @@ std::string BuiltinToAttribute(core::BuiltinValue builtin) {
             return "thread_index_in_simdgroup";
         case core::BuiltinValue::kSubgroupSize:
             return "threads_per_simdgroup";
+        case core::BuiltinValue::kClipDistances:
+            return "clip_distance";
         default:
             break;
     }
@@ -142,7 +144,7 @@ SizeAndAlign MslPackedTypeSizeAndAlign(const core::type::Type* ty) {
 
         [&](const core::type::Vector* vec) {
             auto num_els = vec->Width();
-            auto* el_ty = vec->type();
+            auto* el_ty = vec->Type();
             SizeAndAlign el_size_align = MslPackedTypeSizeAndAlign(el_ty);
             if (el_ty->IsAnyOf<core::type::U32, core::type::I32, core::type::F32,
                                core::type::F16>()) {
@@ -164,9 +166,9 @@ SizeAndAlign MslPackedTypeSizeAndAlign(const core::type::Type* ty) {
         [&](const core::type::Matrix* mat) {
             // https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf
             // 2.3 Matrix Data Types
-            auto cols = mat->columns();
-            auto rows = mat->rows();
-            auto* el_ty = mat->type();
+            auto cols = mat->Columns();
+            auto rows = mat->Rows();
+            auto* el_ty = mat->Type();
             // Metal only support half and float matrix.
             if (el_ty->IsAnyOf<core::type::F32, core::type::F16>()) {
                 static constexpr SizeAndAlign table_f32[] = {
@@ -204,7 +206,7 @@ SizeAndAlign MslPackedTypeSizeAndAlign(const core::type::Type* ty) {
         },
 
         [&](const core::type::Array* arr) {
-            if (TINT_UNLIKELY(!arr->IsStrideImplicit())) {
+            if (DAWN_UNLIKELY(!arr->IsStrideImplicit())) {
                 TINT_ICE()
                     << "arrays with explicit strides should not exist past the SPIR-V reader";
             }

@@ -9,10 +9,6 @@
 
 @class OverflowMenuAction;
 
-// Vivaldi
-@class OverflowMenuDestination;
-// End Vivaldi
-
 // A class that provides `OverflowMenuAction`s for given action types.
 @protocol OverflowMenuActionProvider <NSObject>
 
@@ -33,8 +29,8 @@
     (overflow_menu::ActionType)actionType;
 
 // Vivaldi
-- (ActionRanking)basePageActionsVivaldi;
-- (NSArray<OverflowMenuDestination*>*)baseDestinationsVivaldi;
+// The default base ranking of vivaldi actions.
+- (ActionRanking)vivaldiActions;
 // End Vivaldi
 
 @end

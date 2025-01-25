@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "base/check.h"
 #include "base/check_op.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
@@ -28,8 +29,7 @@ FilePath BuildSearchFilter(FileEnumerator::FolderSearchPolicy policy,
     case FileEnumerator::FolderSearchPolicy::ALL:
       return root_path.Append(FILE_PATH_LITERAL("*"));
   }
-  NOTREACHED_IN_MIGRATION();
-  return {};
+  NOTREACHED();
 }
 
 }  // namespace
@@ -126,10 +126,7 @@ FileEnumerator::~FileEnumerator() {
 
 FileEnumerator::FileInfo FileEnumerator::GetInfo() const {
   DCHECK(!(file_type_ & FileType::NAMES_ONLY));
-  if (!has_find_data_) {
-    NOTREACHED_IN_MIGRATION();
-    return FileInfo();
-  }
+  CHECK(has_find_data_);
   FileInfo ret;
   memcpy(&ret.find_data_, &find_data_, sizeof(find_data_));
   return ret;
@@ -221,8 +218,7 @@ bool FileEnumerator::IsPatternMatched(const FilePath& src) const {
       // manually.
       return PathMatchSpec(src.value().c_str(), pattern_.c_str()) == TRUE;
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 }  // namespace base

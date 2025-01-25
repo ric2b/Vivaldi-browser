@@ -17,6 +17,7 @@
 #include "components/viz/common/vertical_scroll_direction.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/allow_service_worker_result.h"
+#include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/visibility.h"
@@ -30,6 +31,7 @@
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
+#include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-forward.h"
 #include "third_party/blink/public/mojom/media/capture_handle_config.mojom-forward.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -40,6 +42,7 @@ class GURL;
 
 namespace blink {
 namespace mojom {
+class ViewportIntersectionState;
 enum class ViewportFit;
 }  // namespace mojom
 }  // namespace blink
@@ -181,7 +184,7 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // destroyed.
   // Use |RenderFrameHostChanged| to listen for when a RenderFrameHost object is
   // made the current host for a frame.
-  virtual void FrameDeleted(int frame_tree_node_id) {}
+  virtual void FrameDeleted(FrameTreeNodeId frame_tree_node_id) {}
 
   // This method is invoked whenever one of the frames of a WebContents changes
   // its |RenderFrameHost::GetLifecycleState()| i.e., when RenderFrameHost
@@ -387,11 +390,17 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
 
   // Document load events ------------------------------------------------------
 
-  // These three methods correspond to the points in time when a document starts
-  // loading for the first time (initiates outgoing requests), when incoming
-  // data subsequently starts arriving, and when it finishes loading. Note:
-  // There is no guarantee that calls to DidStartLoading/DidStopLoading are
-  // interleaved (e.g. there can be 2 calls to DidStartLoading in a row).
+  // These three methods correspond to the points in time when any document in
+  // the frame tree starts loading for the first time (initiates outgoing
+  // requests), when incoming data subsequently starts arriving, and when the
+  // whole frame tree finishes loading.
+  // Notes:
+  // - There is no guarantee that calls to DidStartLoading/DidStopLoading are
+  //   interleaved (e.g. there can be 2 calls to DidStartLoading in a row).
+  // - These functions are different and unrelated from DidFinishLoad, which
+  //   is a notification about a specific document instead of the whole frame
+  //   tree, and uses a slightly different trigger to signify that the load had
+  //   finished.
   virtual void DidStartLoading() {}
   virtual void DidStopLoading() {}
 
@@ -452,8 +461,12 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // content scripts marked "document_end" get injected into the frame.
   virtual void DOMContentLoaded(RenderFrameHost* render_frame_host) {}
 
-  // This method is invoked when the load is done, i.e. the spinner of the tab
-  // will stop spinning, and the onload event was dispatched.
+  // This method is invoked when the load is done for the document represented
+  // by `render_frame_host` on the renderer side, e.g. the onload event was
+  // dispatched. Note that this function is not related to
+  // `DidStartLoading()` or `DidStopLoading()` as those functions track the
+  // loading state of the whole frame tree and uses a different set of triggers
+  // to mark the load ending.
   //
   // If the WebContents is displaying replacement content, e.g. network error
   // pages, DidFinishLoad is invoked for frames that were not sending
@@ -679,8 +692,7 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // provided |render_frame_host|. By the time this is called the
   // |inner_web_contents| will have been added to the WebContents tree.
   virtual void InnerWebContentsAttached(WebContents* inner_web_contents,
-                                        RenderFrameHost* render_frame_host,
-                                        bool is_full_page) {}
+                                        RenderFrameHost* render_frame_host) {}
 
   // Invoked when WebContents::Clone() was used to clone a WebContents.
   virtual void DidCloneToNewWebContents(WebContents* old_web_contents,
@@ -712,6 +724,18 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
 
   // Called when the audio state of an individual frame changes.
   virtual void OnFrameAudioStateChanged(RenderFrameHost* rfh, bool audible) {}
+
+  // Called when an individual remote subframe's intersection with the viewport
+  // of the page changes. Note that this value is independent from the
+  // visibility of the page.
+  //
+  // Note: This is only called for remote frames. If you only care about if the
+  // frame intersects or not with the viewport, use OnFrameVisibilityChanged()
+  // below, as it is called for all frames.
+  virtual void OnRemoteSubframeViewportIntersectionStateChanged(
+      RenderFrameHost* rfh,
+      const blink::mojom::ViewportIntersectionState&
+          viewport_intersection_state) {}
 
   // Called when an individual frame's visibility inside the viewport of the
   // page changes. Note that this value is independent from the visibility of
@@ -924,7 +948,12 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // to work. This will be invoked right after `new_contents` is created, but
   // before its `WasDiscarded` is set to true and before it's attached to a tab
   // strip.
+  // TODO(crbug.com/347770670): Remove this once new WebContents are no longer
+  // created during discard operations.
   virtual void AboutToBeDiscarded(WebContents* new_contents) {}
+
+  // Called when WebContents has finished its discard operation.
+  virtual void WasDiscarded() {}
 
   // Called when WebContents received a request to lock the keyboard.
   virtual void KeyboardLockRequested() {}

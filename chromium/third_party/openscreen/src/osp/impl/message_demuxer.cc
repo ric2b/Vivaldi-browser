@@ -90,7 +90,33 @@ MessageDemuxer::MessageWatch::MessageWatch(
   *this = std::move(other);
 }
 
+MessageDemuxer::MessageWatch& MessageDemuxer::MessageWatch::operator=(
+    MessageWatch&& other) noexcept {
+  // Although all fields are POD, this does not use the default `operator=`
+  // implementation because it is important that we should stop current watch
+  // for `parent_` before taking values from `other` and make `other` invalid.
+  StopWatching();
+  parent_ = other.parent_;
+  is_default_ = other.is_default_;
+  instance_id_ = other.instance_id_;
+  message_type_ = other.message_type_;
+  other.parent_ = nullptr;
+  return *this;
+}
+
 MessageDemuxer::MessageWatch::~MessageWatch() {
+  StopWatching();
+}
+
+void MessageDemuxer::MessageWatch::Reset() {
+  StopWatching();
+  parent_ = nullptr;
+  is_default_ = false;
+  instance_id_ = 0u;
+  message_type_ = msgs::Type::kUnknown;
+}
+
+void MessageDemuxer::MessageWatch::StopWatching() {
   if (parent_) {
     if (is_default_) {
       OSP_VLOG << "dropping default handler for type: "
@@ -102,19 +128,6 @@ MessageDemuxer::MessageWatch::~MessageWatch() {
       parent_->StopWatchingMessageType(instance_id_, message_type_);
     }
   }
-}
-
-MessageDemuxer::MessageWatch& MessageDemuxer::MessageWatch::operator=(
-    MessageWatch&& other) noexcept {
-  // Although all fields are POD, this does not use the default `operator=`
-  // implementation because it is important that exactly one of `this` or
-  // `other` refers to `parent_`, so that the destructor behaves correctly.
-  using std::swap;
-  swap(parent_, other.parent_);
-  swap(is_default_, other.is_default_);
-  swap(instance_id_, other.instance_id_);
-  swap(message_type_, other.message_type_);
-  return *this;
 }
 
 MessageDemuxer::MessageDemuxer(ClockNowFunctionPtr now_function,
@@ -231,18 +244,32 @@ MessageDemuxer::HandleStreamBufferResult MessageDemuxer::HandleStreamBufferLoop(
     result = {false, 0};
     if (callbacks_entry != message_callbacks_.end()) {
       OSP_VLOG << "attempting endpoint-specific handling";
+      // There are several cases for `result`:
+      // case 1: `handled` is true and `consumed` is greater than 0.
+      //   This is the normal case and it means that we have successfully
+      //   processed a message. If `buffer` is not empty, we can continue
+      //   processing the next message. Otherwise, stop the do-while loop.
+      // case 2: `handled` is true and `consumed` is 0, `buffer` isn't cleared.
+      //   This means that we have a specific message callback to process
+      //   message but the message is incomplete now.
+      // case 3: `handled` is true and `consumed` is 0, `buffer` is cleared.
+      // case 4: `handled` is false and `consumed` is 0, `buffer` is cleared.
+      //   Both mean the message is invalid.
+      // case 5: `handled` is false and `consumed` is 0, `buffer` isn't cleared.
+      //   This means we don't a specific message callback to process message,
+      //   we should try to use the default one.
       result = HandleStreamBuffer(instance_id, connection_id,
                                   &callbacks_entry->second, buffer);
     }
-    if (!result.handled) {
-      if (!default_callbacks_.empty()) {
-        OSP_VLOG << "attempting generic message handling";
-        result = HandleStreamBuffer(instance_id, connection_id,
-                                    &default_callbacks_, buffer);
-      }
+
+    if (!result.handled && !buffer->empty() && !default_callbacks_.empty()) {
+      OSP_VLOG << "attempting generic message handling";
+      result = HandleStreamBuffer(instance_id, connection_id,
+                                  &default_callbacks_, buffer);
     }
     OSP_VLOG_IF(!result.handled) << "no message handler matched";
   } while (result.consumed && !buffer->empty());
+
   return result;
 }
 
@@ -253,47 +280,42 @@ MessageDemuxer::HandleStreamBufferResult MessageDemuxer::HandleStreamBuffer(
     uint64_t connection_id,
     std::map<msgs::Type, MessageCallback*>* message_callbacks,
     std::vector<uint8_t>* buffer) {
-  size_t consumed = 0;
-  size_t total_consumed = 0;
-  bool handled = false;
-  do {
-    consumed = 0;
-    size_t msg_type_byte_length;
-    ErrorOr<msgs::Type> message_type =
-        MessageTypeDecoder::DecodeType(*buffer, &msg_type_byte_length);
-    if (message_type.is_error()) {
-      buffer->clear();
-      break;
-    }
-    auto callback_entry = message_callbacks->find(message_type.value());
-    if (callback_entry == message_callbacks->end()) {
-      break;
-    }
-    handled = true;
-    OSP_VLOG << "handling message type "
-             << static_cast<int>(message_type.value());
-    auto consumed_or_error = callback_entry->second->OnStreamMessage(
-        instance_id, connection_id, message_type.value(),
-        buffer->data() + msg_type_byte_length,
-        buffer->size() - msg_type_byte_length, now_function_());
-    if (!consumed_or_error) {
-      if (consumed_or_error.error().code() !=
-          Error::Code::kCborIncompleteMessage) {
-        buffer->clear();
-        break;
-      }
-    } else {
-      consumed = consumed_or_error.value();
-      buffer->erase(buffer->begin(),
-                    buffer->begin() + consumed + msg_type_byte_length);
-    }
-    total_consumed += consumed;
-  } while (consumed && !buffer->empty());
-  return HandleStreamBufferResult{handled, total_consumed};
-}
+  size_t msg_type_byte_length;
+  ErrorOr<msgs::Type> message_type =
+      MessageTypeDecoder::DecodeType(*buffer, &msg_type_byte_length);
+  if (message_type.is_error()) {
+    buffer->clear();
+    return HandleStreamBufferResult{.handled = false, .consumed = 0};
+  }
 
-void StopWatching(MessageDemuxer::MessageWatch* watch) {
-  *watch = MessageDemuxer::MessageWatch();
+  auto callback_entry = message_callbacks->find(message_type.value());
+  if (callback_entry == message_callbacks->end()) {
+    return HandleStreamBufferResult{.handled = false, .consumed = 0};
+  }
+
+  OSP_VLOG << "handling message type "
+           << static_cast<int>(message_type.value());
+  auto consumed_or_error = callback_entry->second->OnStreamMessage(
+      instance_id, connection_id, message_type.value(),
+      buffer->data() + msg_type_byte_length,
+      buffer->size() - msg_type_byte_length, now_function_());
+  if (!consumed_or_error) {
+    // A message may be split into multiple QUIC packets when sent.
+    // `kCborIncompleteMessage` means that we are trying to process an
+    // incomplete message. We don't need to clear the `buffer` in this case and
+    // the message can be processed successfully when all its parts are received
+    // later. Other error codes mean that we are trying to process an invalid
+    // message. We should clear the `buffer` in this case.
+    if (consumed_or_error.error().code() !=
+        Error::Code::kCborIncompleteMessage) {
+      buffer->clear();
+    }
+    return HandleStreamBufferResult{.handled = true, .consumed = 0};
+  } else {
+    size_t consumed_size = consumed_or_error.value() + msg_type_byte_length;
+    buffer->erase(buffer->begin(), buffer->begin() + consumed_size);
+    return HandleStreamBufferResult{.handled = true, .consumed = consumed_size};
+  }
 }
 
 }  // namespace openscreen::osp

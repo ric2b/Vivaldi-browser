@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       sync_flush.c
@@ -5,14 +7,13 @@
 //
 //  Author:     Lasse Collin
 //
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
-//
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "sysdefs.h"
 #include "lzma.h"
 #include <stdio.h>
+
+#define CHUNK 64
 
 
 static lzma_stream strm = LZMA_STREAM_INIT;
@@ -22,7 +23,6 @@ static FILE *file_in;
 static void
 encode(size_t size, lzma_action action)
 {
-	static const size_t CHUNK = 64;
 	uint8_t in[CHUNK];
 	uint8_t out[CHUNK];
 	lzma_ret ret;

@@ -191,6 +191,10 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options) {
              ::tflite::ops::builtin::Register_SELECT_V2());
   AddBuiltin(::tflite::BuiltinOperator_SIN,
              ::tflite::ops::builtin::Register_SIN());
+  AddBuiltin(::tflite::BuiltinOperator_SIGN,
+             ::tflite::ops::builtin::Register_SIGN(),
+             /* min_version = */ 1,
+             /* max_version = */ 2);
   AddBuiltin(::tflite::BuiltinOperator_SLICE,
              ::tflite::ops::builtin::Register_SLICE(),
              /* min_version = */ 1,
@@ -201,6 +205,10 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options) {
              /* max_version = */ 3);
   AddBuiltin(::tflite::BuiltinOperator_SPLIT_V,
              ::tflite::ops::builtin::Register_SPLIT_V(),
+             /* min_version = */ 1,
+             /* max_version = */ 2);
+  AddBuiltin(::tflite::BuiltinOperator_SQUEEZE,
+             ::tflite::ops::builtin::Register_SQUEEZE(),
              /* min_version = */ 1,
              /* max_version = */ 2);
   AddBuiltin(::tflite::BuiltinOperator_SQRT,

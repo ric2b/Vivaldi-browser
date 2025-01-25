@@ -87,32 +87,15 @@ targets.variant(
 )
 
 targets.variant(
-    name = "IPHONE_7_15_4_1",
-    identifier = "iPhone 7 15.4.1",
+    name = "IPHONE_15_PRO_18_0",
+    identifier = "iPhone 15 Pro 18.0",
     swarming = targets.swarming(
         dimensions = {
-            "os": "iOS-15.4.1",
-            "device": "iPhone9,1",
+            "os": "iOS-18.0",
+            "device": "iPhone15 Pro",
         },
     ),
 )
-
-# This set of variants is encoded in a json file so that
-# chrome/official.infra/lacros-version-skew-roller can update the variant
-# definitions
-[targets.variant(
-    name = name,
-    identifier = v["identifier"],
-    description = v["description"],
-    args = v["args"],
-    swarming = targets.swarming(
-        cipd_packages = [targets.cipd_package(
-            package = p["cipd_package"],
-            location = p["location"],
-            revision = p["revision"],
-        ) for p in v["swarming"]["cipd_packages"]],
-    ),
-) for name, v in json.decode(io.read_file("./lacros-version-skew-variants.json")).items()]
 
 targets.variant(
     name = "LINUX_INTEL_UHD_630_STABLE",
@@ -191,6 +174,20 @@ targets.variant(
 )
 
 targets.variant(
+    name = "SIM_IPAD_AIR_5TH_GEN_18_1",
+    identifier = "iPad Air (5th generation) 18.1",
+    mixins = [
+        "ios_runtime_cache_18_1",
+    ],
+    args = [
+        "--platform",
+        "iPad Air (5th generation)",
+        "--version",
+        "18.1",
+    ],
+)
+
+targets.variant(
     name = "SIM_IPAD_AIR_6TH_GEN_18_0",
     identifier = "iPad Air (6th generation) 18.0",
     mixins = [
@@ -247,34 +244,6 @@ targets.variant(
 )
 
 targets.variant(
-    name = "SIM_IPAD_10TH_GEN_16_4",
-    identifier = "iPad (10th generation) 16.4",
-    mixins = [
-        "ios_runtime_cache_16_4",
-    ],
-    args = [
-        "--platform",
-        "iPad (10th generation)",
-        "--version",
-        "16.4",
-    ],
-)
-
-targets.variant(
-    name = "SIM_IPAD_10TH_GEN_17_5",
-    identifier = "iPad (10th generation) 17.5",
-    mixins = [
-        "ios_runtime_cache_17_5",
-    ],
-    args = [
-        "--platform",
-        "iPad (10th generation)",
-        "--version",
-        "17.5",
-    ],
-)
-
-targets.variant(
     name = "SIM_IPAD_10TH_GEN_18_0",
     identifier = "iPad (10th generation) 18.0",
     mixins = [
@@ -285,20 +254,6 @@ targets.variant(
         "iPad (10th generation)",
         "--version",
         "18.0",
-    ],
-)
-
-targets.variant(
-    name = "SIM_IPHONE_13_16_4",
-    identifier = "iPhone 13 16.4",
-    mixins = [
-        "ios_runtime_cache_16_4",
-    ],
-    args = [
-        "--platform",
-        "iPhone 13",
-        "--version",
-        "16.4",
     ],
 )
 
@@ -327,6 +282,34 @@ targets.variant(
         "iPhone 14",
         "--version",
         "17.5",
+    ],
+)
+
+targets.variant(
+    name = "SIM_IPHONE_14_18_0",
+    identifier = "iPhone 14 18.0",
+    mixins = [
+        "ios_runtime_cache_18_0",
+    ],
+    args = [
+        "--platform",
+        "iPhone 14",
+        "--version",
+        "18.0",
+    ],
+)
+
+targets.variant(
+    name = "SIM_IPHONE_14_18_1",
+    identifier = "iPhone 14 18.1",
+    mixins = [
+        "ios_runtime_cache_18_1",
+    ],
+    args = [
+        "--platform",
+        "iPhone 14",
+        "--version",
+        "18.1",
     ],
 )
 
@@ -373,16 +356,16 @@ targets.variant(
 )
 
 targets.variant(
-    name = "SIM_IPHONE_14_PRO_MAX_16_4",
-    identifier = "iPhone 14 Pro Max 16.4",
+    name = "SIM_IPHONE_14_PLUS_18_0",
+    identifier = "iPhone 14 Plus 18.0",
     mixins = [
-        "ios_runtime_cache_16_4",
+        "ios_runtime_cache_18_0",
     ],
     args = [
         "--platform",
-        "iPhone 14 Pro Max",
+        "iPhone 14 Plus",
         "--version",
-        "16.4",
+        "18.0",
     ],
 )
 
@@ -457,6 +440,20 @@ targets.variant(
 )
 
 targets.variant(
+    name = "SIM_IPHONE_SE_3RD_GEN_18_1",
+    identifier = "iPhone SE (3rd generation) 18.1",
+    mixins = [
+        "ios_runtime_cache_18_1",
+    ],
+    args = [
+        "--platform",
+        "iPhone SE (3rd generation)",
+        "--version",
+        "18.1",
+    ],
+)
+
+targets.variant(
     name = "SIM_IPHONE_X_16_4",
     identifier = "iPhone X 16.4",
     mixins = [
@@ -503,22 +500,6 @@ targets.variant(
         if k != "cros_chrome_version"
     }),
 ) for name, variant in json.decode(io.read_file("./cros-skylab-variants.json")).items()]
-
-targets.variant(
-    name = "LACROS_AMD64_GENERIC",
-    identifier = "amd64-generic",
-    args = [
-        "--board=amd64-generic",
-        "--use-vm",
-    ],
-    swarming = targets.swarming(
-        dimensions = {
-            "cpu": "x86-64",
-            "kvm": "1",
-            "os": "Ubuntu-22.04",
-        },
-    ),
-)
 
 targets.variant(
     name = "LACROS_ASH_TOT",

@@ -318,6 +318,7 @@ test("app_shell_unittests") {
     "//apps",
     "//base",
     "//base/test:test_support",
+    "//build:android_buildflags",
     "//build:chromeos_buildflags",
     "//components/crx_file",
     "//components/feedback",
@@ -339,7 +340,7 @@ test("app_shell_unittests") {
 
   data_deps = [
     # "//gin", # TODO(dpranke): Either gin or v8 data is needed ...
-    "//third_party/mesa_headers",
+    "//third_party/angle:includes",
   ]
 
   if (use_aura) {

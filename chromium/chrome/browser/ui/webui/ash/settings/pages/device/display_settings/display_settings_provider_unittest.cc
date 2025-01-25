@@ -107,7 +107,8 @@ class FakeDisplayBrightnessSettingsObserver
   double current_brightness() { return current_brightness_; }
 
   // mojom::DisplayBrightnessSettingsObserver:
-  void OnDisplayBrightnessChanged(double brightness_percent) override {
+  void OnDisplayBrightnessChanged(double brightness_percent,
+                                  bool triggered_by_als) override {
     ++num_display_brightness_changed_calls_;
     current_brightness_ = brightness_percent;
 
@@ -192,7 +193,10 @@ class FakeBrightnessControlDelegate : public BrightnessControlDelegate {
       base::OnceCallback<void(std::optional<double>)> callback) override {
     std::move(callback).Run(brightness_percent_);
   }
-  void SetAmbientLightSensorEnabled(bool enabled) override {
+  void SetAmbientLightSensorEnabled(
+      bool enabled,
+      BrightnessControlDelegate::AmbientLightSensorEnabledChangeSource source)
+      override {
     is_ambient_light_sensor_enabled_ = enabled;
   }
   void GetAmbientLightSensorEnabled(
@@ -235,6 +239,8 @@ class DisplaySettingsProviderTest : public ChromeAshTestBase {
 
   void SetUp() override {
     ChromeAshTestBase::SetUp();
+    feature_list_.InitAndDisableFeature(
+        features::kEnableBrightnessControlInSettings);
     provider_ = std::make_unique<DisplaySettingsProvider>();
     brightness_control_delegate_ =
         std::make_unique<FakeBrightnessControlDelegate>();
@@ -608,10 +614,6 @@ TEST_F(DisplaySettingsProviderTest, DisplayBrightnessSettingsObservation) {
 // the feature flag is disabled).
 TEST_F(DisplaySettingsProviderTest,
        SetInternalDisplayScreenBrightness_FeatureDisabled) {
-  feature_list_.Reset();
-  feature_list_.InitAndDisableFeature(
-      ash::features::kEnableBrightnessControlInSettings);
-
   // No histograms should have been recorded yet.
   histogram_tester_.ExpectTotalCount(
       "ChromeOS.Settings.Display.Internal.BrightnessSliderAdjusted",
@@ -701,10 +703,6 @@ TEST_F(DisplaySettingsProviderTest,
 // the feature flag is disabled).
 TEST_F(DisplaySettingsProviderTest,
        SetAmbientLightSensorEnabled_FeatureDisabled) {
-  feature_list_.Reset();
-  feature_list_.InitAndDisableFeature(
-      ash::features::kEnableBrightnessControlInSettings);
-
   // No histograms should have been recorded.
   histogram_tester_.ExpectTotalCount(
       "ChromeOS.Settings.Display.Internal.AutoBrightnessEnabled",
@@ -714,7 +712,9 @@ TEST_F(DisplaySettingsProviderTest,
   // that the value doesn't change if the feature flag is disabled.
   bool initial_sensor_enabled = true;
   brightness_control_delegate_->SetAmbientLightSensorEnabled(
-      initial_sensor_enabled);
+      initial_sensor_enabled,
+      BrightnessControlDelegate::AmbientLightSensorEnabledChangeSource::
+          kSettingsApp);
 
   provider_->SetBrightnessControlDelegateForTesting(
       brightness_control_delegate_.get());
@@ -751,7 +751,9 @@ TEST_F(DisplaySettingsProviderTest,
   // that the value changes if the feature flag is enabled.
   bool initial_sensor_enabled = true;
   brightness_control_delegate_->SetAmbientLightSensorEnabled(
-      initial_sensor_enabled);
+      initial_sensor_enabled,
+      BrightnessControlDelegate::AmbientLightSensorEnabledChangeSource::
+          kSettingsApp);
 
   provider_->SetBrightnessControlDelegateForTesting(
       brightness_control_delegate_.get());

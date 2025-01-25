@@ -30,6 +30,7 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         super(GClientSmokeGIT, self).setUp()
         self.env['PATH'] = (os.path.join(ROOT_DIR, 'testing_support') +
                             os.pathsep + self.env['PATH'])
+        self.env['GCLIENT_SUPPRESS_SUBMODULE_WARNING'] = '1'
         self.enabled = self.FAKE_REPOS.set_up_git()
         if not self.enabled:
             self.skipTest('git fake repos not available')

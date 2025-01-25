@@ -54,6 +54,9 @@ freetype_includedir = join_paths(get_option('includedir'), 'freetype2')
 
 ft2_defines = []
 
+freetype_aclocaldir = join_paths(get_option('datadir'), 'aclocal')
+
+
 # Generate a custom `ftmodule.h` version based on the content of
 # `modules.cfg`.
 
@@ -156,6 +159,7 @@ ft2_public_headers = files([
   'include/freetype/ftincrem.h',
   'include/freetype/ftlcdfil.h',
   'include/freetype/ftlist.h',
+  'include/freetype/ftlogging.h',
   'include/freetype/ftlzw.h',
   'include/freetype/ftmac.h',
   'include/freetype/ftmm.h',
@@ -231,7 +235,7 @@ endif
 # value from the environment, when this is supported.  A smaller refactor
 # might make these platform-specific files much smaller, and could be moved
 # into `ftsystem.c` as well.
-#
+
 if host_machine.system() == 'windows'
   winmod = import('windows')
   ft2_sources += [
@@ -251,7 +255,7 @@ common_ldflags = []
 #
 # OSX sets the compatibility_version (aka libtools version) differently from
 # the library name.
-#
+
 if host_machine.system() == 'darwin'
   # maintain compatibility with autotools on macOS
   common_ldflags = [
@@ -266,13 +270,13 @@ endif
 process_header_command = [python_exe,
   files('builds/meson/process_ftoption_h.py'),
   '@INPUT@', '--output=@OUTPUT@']
+
 ftoption_command = process_header_command
 
-
-# external GZip support
+# External GZip support.
 zlib_option = get_option('zlib')
 
-# Backwards-compatible aliases.
+# Backward-compatible aliases.
 if zlib_option == 'disabled'
   zlib_option = 'none'
 elif zlib_option == 'enabled'
@@ -315,10 +319,12 @@ else
   assert(false, 'Invalid zlib option ' + zlib_option)
 endif
 
-# BZip2 support
+# BZip2 support.
 bzip2_dep = dependency('bzip2', required: false)
 if not bzip2_dep.found()
-  bzip2_dep = cc.find_library('bz2', has_headers: ['bzlib.h'], required: get_option('bzip2'))
+  bzip2_dep = cc.find_library('bz2',
+    has_headers: ['bzlib.h'],
+    required: get_option('bzip2'))
 endif
 
 if bzip2_dep.found()
@@ -327,7 +333,7 @@ if bzip2_dep.found()
   ft2_deps += [bzip2_dep]
 endif
 
-# PNG support
+# PNG support.
 libpng_dep = dependency('libpng',
   required: get_option('png'),
   fallback: 'libpng')
@@ -337,7 +343,7 @@ if libpng_dep.found()
   ft2_deps += [libpng_dep]
 endif
 
-# Harfbuzz support
+# Harfbuzz support.
 harfbuzz_dep = dependency('harfbuzz',
   version: '>= 2.0.0',
   required: get_option('harfbuzz'),
@@ -348,7 +354,7 @@ if harfbuzz_dep.found()
   ft2_deps += [harfbuzz_dep]
 endif
 
-# Brotli decompression support
+# Brotli decompression support.
 brotli_dep = dependency('libbrotlidec',
   required: get_option('brotli'))
 
@@ -376,6 +382,7 @@ endif
 # Generate `ftconfig.h`.
 
 ftconfig_command = process_header_command
+
 if has_unistd_h
   ftconfig_command += '--enable=HAVE_UNISTD_H'
 endif
@@ -409,7 +416,8 @@ ft2_lib = library('freetype',
 )
 
 
-# To be used by other projects including this one through `subproject`.
+# To be used by other projects including this one via `subproject`.
+
 freetype_dep = declare_dependency(
   include_directories: ft2_includes,
   link_with: ft2_lib,
@@ -418,15 +426,19 @@ freetype_dep = declare_dependency(
 meson.override_dependency('freetype2', freetype_dep)
 
 
-# NOTE: Using both `install_dir` and `subdir` doesn't seem to work below,
-# i.e., the subdir value seems to be ignored, contrary to examples in the
-# Meson documentation.
+# NOTE: Using both `install_dir` and `subdir` doesn't seem to work
+# below, i.e., the `subdir` value seems to be ignored, contrary to
+# examples in the Meson documentation.
 install_headers('include/ft2build.h',
   install_dir: freetype_includedir)
 install_headers(ft2_public_headers,
   install_dir: join_paths(freetype_includedir, 'freetype'))
 install_headers(ft2_config_headers,
   install_dir: join_paths(freetype_includedir, 'freetype/config'))
+
+
+install_data('builds/unix/freetype2.m4',
+  install_dir: freetype_aclocaldir)
 
 
 pkgconfig = import('pkgconfig')
@@ -444,9 +456,11 @@ if get_option('tests').enabled()
   subdir('tests')
 endif
 
+
 # NOTE: Unlike the old `make refdoc` command, this generates the
 # documentation under `$BUILD/docs/` since Meson doesn't support modifying
 # the source root directory (which is a good thing).
+
 gen_docs = custom_target('freetype2 reference documentation',
   output: 'docs',
   input: ft2_public_headers + ft2_config_headers,

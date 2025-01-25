@@ -2,43 +2,54 @@
 
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
 
+#import <Foundation/Foundation.h>
+
 #import "base/check.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/sync/base/user_selectable_type.h"
-#import "components/sync/service/sync_service_observer.h"
 #import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_service_observer.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/sync/vivaldi_sync_service_factory.h"
+#import "ios/chrome/browser/sync/model/sync_service_factory.h"
+#import "ios/chrome/common/ui/util/image_util.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_observer_bridge.h"
 #import "ios/ui/settings/sync/manager/vivaldi_session_simplified_state.h"
 #import "ios/vivaldi_account/vivaldi_account_manager_factory.h"
 #import "sync/vivaldi_sync_service_impl.h"
+#import "sync/vivaldi_sync_ui_helpers.h"
 #import "vivaldi_account/vivaldi_account_manager.h"
 
 using syncer::SyncService;
 using syncer::UserSelectableType;
 using syncer::UserSelectableTypeSet;
-using vivaldi::EngineData;
-using vivaldi::EngineState;
 using vivaldi::VivaldiAccountManager;
-using vivaldi::VivaldiSyncServiceImpl;
-using vivaldi::VivaldiSyncUIHelper;
+using vivaldi::sync_ui_helpers::CycleData;
+using vivaldi::sync_ui_helpers::CycleStatus;
+using vivaldi::sync_ui_helpers::EngineData;
+using vivaldi::sync_ui_helpers::EngineState;
 
 namespace {
-  const std::string ERROR_ACCOUNT_NOT_ACTIVATED = "17006";
+const std::string ERROR_ACCOUNT_NOT_ACTIVATED = "17006";
+const double vConnectionTimeout = 60.0;
+const double kAvatarSize = 30.0;
+NSString* avatarPlaceholder = @"person.circle.fill";
 }
 
-@interface VivaldiAccountSyncManager()<VivaldiAccountSyncManagerConsumer> {
+@interface VivaldiAccountSyncManager () <VivaldiAccountSyncManagerConsumer> {
   std::unique_ptr<VivaldiAccountSyncManagerObserverBridge>
       _accountSyncManagerObserver;
   std::unique_ptr<syncer::SyncSetupInProgressHandle> _syncSetupInProgressHandle;
   EngineData engineData;
-  VivaldiSyncUIHelper::CycleData cycleData;
+  CycleData cycleData;
 }
 
 @property(nonatomic, assign) Browser* browser;
-@property(nonatomic, assign) VivaldiSyncServiceImpl* syncService;
+@property(nonatomic, assign) ChromeBrowserState* browserState;
+@property(nonatomic, assign) syncer::SyncService* syncService;
 @property(nonatomic, assign) VivaldiAccountManager* vivaldiAccountManager;
+@property(nonatomic, copy) NSURLSessionDataTask* task;
+@property(nonatomic, strong) UIImage* cachedAvatarImage;
 
 @end
 
@@ -49,35 +60,46 @@ namespace {
 
 #pragma mark - INITIALIZERS
 - (instancetype)initWithBrowser:(Browser*)browser {
-  if ((self = [super init])) {
+  if ((self = [self initWithBrowserState:browser->GetBrowserState()])) {
     _browser = browser;
+  }
+  return self;
+}
+
+- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState {
+  if ((self = [super init])) {
+    _browserState = browserState;
 
     _syncService =
-          vivaldi::VivaldiSyncServiceFactory::GetForBrowserStateVivaldi(
-                _browser->GetBrowserState());
+        SyncServiceFactory::GetForBrowserState(_browserState);
     _vivaldiAccountManager =
-          vivaldi::VivaldiAccountManagerFactory::GetForBrowserState(
-                _browser->GetBrowserState());
+        vivaldi::VivaldiAccountManagerFactory::
+            GetForBrowserState(_browserState);
 
     _accountSyncManagerObserver.reset(
-          new VivaldiAccountSyncManagerObserverBridge(self,
-                                                      _vivaldiAccountManager,
-                                                      _syncService));
+        new VivaldiAccountSyncManagerObserverBridge(
+            self, _vivaldiAccountManager, _syncService));
+
+    // Cache the account avatar at start
+    [self cacheUserAvatar];
   }
   return self;
 }
 
 - (instancetype)initWithAccountManager:
-      (vivaldi::VivaldiAccountManager*)vivaldiAccountManager
-      syncService:(vivaldi::VivaldiSyncServiceImpl*)syncService {
+                    (vivaldi::VivaldiAccountManager*)vivaldiAccountManager
+                           syncService:
+                               (syncer::SyncService*)syncService {
   if ((self = [super init])) {
     _vivaldiAccountManager = vivaldiAccountManager;
     _syncService = syncService;
 
     _accountSyncManagerObserver.reset(
-          new VivaldiAccountSyncManagerObserverBridge(self,
-                                                      _vivaldiAccountManager,
-                                                      _syncService));
+        new VivaldiAccountSyncManagerObserverBridge(
+            self, _vivaldiAccountManager, _syncService));
+
+    // Cache the account avatar at start
+    [self cacheUserAvatar];
   }
   return self;
 }
@@ -97,54 +119,78 @@ namespace {
   return [self getCurrentAccountState] == LOGGED_IN;
 }
 
+- (NSString*)accountUsername {
+  if (![self hasSyncConsent])
+    return nil;
+  VivaldiAccountManager::AccountInfo account_info =
+      _vivaldiAccountManager->account_info();
+  return base::SysUTF8ToNSString(account_info.username);
+}
+
+- (UIImage*)accountUserAvatar {
+  if (![self hasSyncConsent])
+    return nil;
+
+  UIImage* avatar = [UIImage systemImageNamed:avatarPlaceholder];
+
+  if (self.cachedAvatarImage) {
+    avatar = self.cachedAvatarImage;
+  }
+
+  return ResizeImage(avatar,
+                  CGSize(kAvatarSize, kAvatarSize),
+                  ProjectionMode::kAspectFit);
+}
+
 - (BOOL)isSyncBookmarksEnabled {
   return [self hasSyncConsent] &&
-    engineData.data_types.Has(UserSelectableType::kBookmarks);
+         engineData.data_types.Has(UserSelectableType::kBookmarks);
 }
 
 - (BOOL)isSyncSettingsEnabled {
   return [self hasSyncConsent] &&
-    engineData.data_types.Has(UserSelectableType::kPreferences);
+         engineData.data_types.Has(UserSelectableType::kPreferences);
 }
 
 - (BOOL)isSyncPasswordsEnabled {
   return [self hasSyncConsent] &&
-    engineData.data_types.Has(UserSelectableType::kPasswords);
+         engineData.data_types.Has(UserSelectableType::kPasswords);
 }
 
 - (BOOL)isSyncAutofillEnabled {
   return [self hasSyncConsent] &&
-    engineData.data_types.Has(UserSelectableType::kAutofill);
+         engineData.data_types.Has(UserSelectableType::kAutofill);
 }
 
 - (BOOL)isSyncHistoryEnabled {
   return [self hasSyncConsent] &&
-    engineData.data_types.Has(UserSelectableType::kHistory);
+         engineData.data_types.Has(UserSelectableType::kHistory);
 }
 
 - (BOOL)isSyncTabsEnabled {
   return [self hasSyncConsent] &&
-    engineData.data_types.Has(UserSelectableType::kTabs);
+         engineData.data_types.Has(UserSelectableType::kTabs);
 }
 
 - (BOOL)isSyncReadingListEnabled {
   return [self hasSyncConsent] &&
-    engineData.data_types.Has(UserSelectableType::kReadingList);
+         engineData.data_types.Has(UserSelectableType::kReadingList);
 }
 
 - (BOOL)isSyncNotesEnabled {
   return [self hasSyncConsent] &&
-    engineData.data_types.Has(UserSelectableType::kNotes);
+         engineData.data_types.Has(UserSelectableType::kNotes);
 }
 
 - (VivaldiAccountSimplifiedState)getCurrentAccountState {
   if (_vivaldiAccountManager->has_refresh_token()) {
     return LOGGED_IN;
-  } else if (_vivaldiAccountManager->last_token_fetch_error().
-      server_message.find(ERROR_ACCOUNT_NOT_ACTIVATED) != std::string::npos) {
+  } else if (_vivaldiAccountManager->last_token_fetch_error()
+                 .server_message.find(ERROR_ACCOUNT_NOT_ACTIVATED) !=
+             std::string::npos) {
     return NOT_ACTIVATED;
   } else if (_vivaldiAccountManager->last_token_fetch_error().type ==
-      VivaldiAccountManager::FetchErrorType::INVALID_CREDENTIALS) {
+             VivaldiAccountManager::FetchErrorType::INVALID_CREDENTIALS) {
     return LOGIN_FAILED;
   } else if (!_vivaldiAccountManager->GetTokenRequestTime().is_null()) {
     return LOGGING_IN;
@@ -160,8 +206,7 @@ namespace {
   if ([self isSyncTabsEnabled])
     return;
 
-  [self updateSettingsType:UserSelectableType::kTabs
-                      isOn:YES];
+  [self updateSettingsType:UserSelectableType::kTabs isOn:YES];
 }
 
 - (void)enableAllSync {
@@ -197,7 +242,7 @@ namespace {
 
   _syncService->GetUserSettings()->SetSelectedTypes(syncAll, types);
   _syncService->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
-        syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
+      syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
 
   _syncSetupInProgressHandle.reset();
 }
@@ -222,10 +267,8 @@ namespace {
     case EngineState::CONFIGURATION_PENDING:
       return SYNC_STATE_CONFIG_PENDING;
     case EngineState::STARTED:
-      if (cycleData.download_updates_status ==
-          VivaldiSyncUIHelper::CycleStatus::SUCCESS &&
-          cycleData.commit_status ==
-          VivaldiSyncUIHelper::CycleStatus::SUCCESS) {
+      if (cycleData.download_updates_status == CycleStatus::SUCCESS &&
+          cycleData.commit_status == CycleStatus::SUCCESS) {
         return SYNC_STATE_STARTED_SUCCESS;
       } else {
         return SYNC_STATE_STARTED_ERROR;
@@ -242,8 +285,8 @@ namespace {
 }
 
 - (VivaldiSessionSimplifiedState)getCurrentSessionState {
-  engineData = _syncService->ui_helper()->GetEngineData();
-  cycleData = _syncService->ui_helper()->GetCycleData();
+  engineData = vivaldi::sync_ui_helpers::GetEngineData(_syncService);
+  cycleData = vivaldi::sync_ui_helpers::GetCycleData(_syncService);
 
   switch ([self getCurrentAccountState]) {
     case LOGGING_IN:
@@ -251,12 +294,11 @@ namespace {
     case LOGGED_IN: {
       switch (engineData.engine_state) {
         case EngineState::STARTED:
-          if (cycleData.download_updates_status ==
-              VivaldiSyncUIHelper::CycleStatus::SUCCESS &&
-              cycleData.commit_status ==
-              VivaldiSyncUIHelper::CycleStatus::SUCCESS) {
+          if (cycleData.download_updates_status == CycleStatus::SUCCESS &&
+              cycleData.commit_status == CycleStatus::SUCCESS) {
             if (![self isSyncTabsEnabled]) {
-              return VivaldiSessionSimplifiedState::LOGGED_IN_SYNC_SUCCESS_NO_TABS;
+              return VivaldiSessionSimplifiedState::
+                  LOGGED_IN_SYNC_SUCCESS_NO_TABS;
             } else {
               return VivaldiSessionSimplifiedState::LOGGED_IN_SYNC_SUCCESS;
             }
@@ -278,8 +320,42 @@ namespace {
   }
 }
 
-#pragma mark: - OBSERVERS
-#pragma mark: - VivaldiAccountSyncManagerConsumer
+- (void)cacheUserAvatar {
+  VivaldiAccountManager::AccountInfo account_info =
+  _vivaldiAccountManager->account_info();
+  NSURL* avatarURL =
+      [NSURL URLWithString:base::SysUTF8ToNSString(account_info.picture_url)];
+
+  __weak __typeof(self) weakSelf = self;
+  [self fetchAccountAvatar:avatarURL
+         completionHandler:^(NSData* data, NSURLResponse* response,
+                              NSError* error) {
+    if (error) {
+      return;
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+      weakSelf.cachedAvatarImage = [UIImage imageWithData:data];
+    });
+  }];
+}
+
+- (void)fetchAccountAvatar:(NSURL*)url
+         completionHandler:(ServerRequestCompletionHandler)handler {
+  NSMutableURLRequest* request = [NSMutableURLRequest
+       requestWithURL:url
+          cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+      timeoutInterval:vConnectionTimeout];
+  [request setHTTPMethod:@"GET"];
+  [request setHTTPBody:nil];
+
+  NSURLSession* session = [NSURLSession sharedSession];
+  _task = [session dataTaskWithRequest:request completionHandler:handler];
+  [_task resume];
+}
+
+#pragma mark : - OBSERVERS
+#pragma mark : - VivaldiAccountSyncManagerConsumer
 - (void)onVivaldiAccountUpdated {
   [self notifyCurrentSessionState];
   SEL selector = @selector(onVivaldiAccountUpdated);

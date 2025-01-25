@@ -17,7 +17,8 @@ namespace ash {
 namespace {
 constexpr int kIconSize = 20;
 constexpr std::u16string_view kMathExamples[] = {
-    u"1 + 1", u"1/6 + 3/4", u"7^3", u"sqrt 1024", u"12 ft in m",
+    u"1/6 + 3/4",
+    u"12 ft in m",
 };
 }  // namespace
 
@@ -25,11 +26,11 @@ std::optional<PickerSearchResult> PickerMathSearch(std::u16string_view query) {
   std::optional<std::string> result =
       fend_core::evaluate(base::UTF16ToUTF8(query));
   if (result.has_value()) {
-    return PickerSearchResult::Text(
+    return PickerTextResult(
         base::UTF8ToUTF16(*result), u"",
         ui::ImageModel::FromVectorIcon(
             kPickerUnitsMathsIcon, cros_tokens::kCrosSysOnSurface, kIconSize),
-        PickerSearchResult::TextData::Source::kMath);
+        PickerTextResult::Source::kMath);
   }
   return std::nullopt;
 }
@@ -37,8 +38,12 @@ std::optional<PickerSearchResult> PickerMathSearch(std::u16string_view query) {
 std::vector<PickerSearchResult> PickerMathExamples() {
   std::vector<PickerSearchResult> results;
   for (const auto& query : kMathExamples) {
-    results.push_back(PickerSearchResult::SearchRequest(
-        query,
+    std::optional<std::string> result =
+        fend_core::evaluate(base::UTF16ToUTF8(query));
+    CHECK(result.has_value());
+
+    results.push_back(PickerSearchRequestResult(
+        query, base::UTF8ToUTF16(*result),
         ui::ImageModel::FromVectorIcon(
             kPickerUnitsMathsIcon, cros_tokens::kCrosSysOnSurface, kIconSize)));
   }

@@ -2,7 +2,6 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
 //
 #include "browser/menus/vivaldi_context_menu_controller.h"
-#include "base/base64.h"
 #include "base/strings/utf_string_conversions.h"
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "browser/menus/vivaldi_render_view_context_menu.h"
@@ -16,16 +15,10 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "include/core/SkBitmap.h"
-#include "skia/ext/image_operations.h"
-#include "ui/gfx/favicon_size.h"
 #include "ui/vivaldi_context_menu.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
-
-#define ICON_SIZE 16
-
 
 bool ContextMenuPostitionDelegate::CanSetPosition() const {
   return false;
@@ -86,6 +79,7 @@ ContextMenuController::ContextMenuController(
   if (rv_context_menu_) {
     rv_context_menu_->SetModelDelegate(this);
     rv_context_menu_->SetMenuDelegate(this);
+    rv_context_menu_->SetWindowId(params_->properties.window_id);
   }
 
   show_shortcuts_ = GetProfile()->GetPrefs()->GetBoolean(
@@ -166,7 +160,7 @@ void ContextMenuController::PopulateModel(const Element& child,
   namespace context_menu = extensions::vivaldi::context_menu;
   if (child.item) {
     const Item& item = *child.item;
-    int id = item.id + IDC_VIV_MENU_FIRST + 1;
+    int id = item.id + IDC_VIV_MENU_FIRST;
     if (rv_context_menu_) {
       if (item.action) {
         // Check if action is mapped with a known command id. If this is the
@@ -266,7 +260,7 @@ void ContextMenuController::PopulateModel(const Element& child,
     }
   } else if (child.container) {
     const Container& container = *child.container;
-    int id = container.id + IDC_VIV_MENU_FIRST + 1;
+    int id = container.id + IDC_VIV_MENU_FIRST;
     switch (container.content) {
       case context_menu::ContainerContent::kPwa:
         pwa_controller_ = std::make_unique<PWAMenuController>(
@@ -278,7 +272,8 @@ void ContextMenuController::PopulateModel(const Element& child,
         if (rv_context_menu_ &&
             rv_context_menu_->HasContainerContent(container)) {
           rv_context_menu_->PopulateContainer(
-              container, id, GetContainerModel(container, id, menu_model));
+              container, id, dark_text_color,
+              GetContainerModel(container, id, menu_model));
         }
         break;
     }
@@ -305,6 +300,12 @@ ui::SimpleMenuModel* ContextMenuController::GetContainerModel(
     models_.push_back(base::WrapUnique(child_menu_model));
     container_folder_models_.push_back(child_menu_model);
     menu_model->AddSubMenu(id, label, child_menu_model);
+    if (rv_context_menu_) {
+      ui::ImageModel img = rv_context_menu_->GetImageForContainer(container);
+      if (!img.IsEmpty()) {
+        menu_model->SetIcon(menu_model->GetIndexOfCommandId(id).value(), img);
+      }
+    }
     return child_menu_model;
   } else {
     return menu_model;
@@ -368,23 +369,8 @@ void ContextMenuController::SetIcon(int command_id,
                                     const std::string& icon,
                                     ui::SimpleMenuModel* menu_model) {
   if (icon.length() > 0) {
-    std::string png_data;
-    if (base::Base64Decode(icon, &png_data)) {
-      gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
-          reinterpret_cast<const unsigned char*>(png_data.c_str()),
-          png_data.length());
-      if (img.Width() > ICON_SIZE || img.Height() > ICON_SIZE) {
-        int width = img.Width();
-        int height = img.Height();
-        gfx::CalculateFaviconTargetSize(&width, &height);
-        SkBitmap bitmap(*img.ToSkBitmap());
-        img = gfx::Image::CreateFrom1xBitmap(skia::ImageOperations::Resize(
-            bitmap, skia::ImageOperations::RESIZE_GOOD, width, height));
-      }
-
-      menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id).value(),
-                          ui::ImageModel::FromImage(img));
-    }
+    menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id).value(),
+                        GetImageModel(icon));
   }
 }
 

@@ -27,7 +27,7 @@
 #import "ios/chrome/browser/passwords/model/ios_password_store_utils.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/signin/model/signin_util.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
@@ -87,9 +87,11 @@ IOSChromeProfilePasswordStoreFactory::~IOSChromeProfilePasswordStoreFactory() {}
 scoped_refptr<RefcountedKeyedService>
 IOSChromeProfilePasswordStoreFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+
   std::unique_ptr<password_manager::LoginDatabase> login_db(
       password_manager::CreateLoginDatabaseForProfileStorage(
-          context->GetStatePath()));
+          profile->GetStatePath(), profile->GetPrefs()));
 
   os_crypt_async::OSCryptAsync* os_crypt_async =
       base::FeatureList::IsEnabled(
@@ -102,27 +104,24 @@ IOSChromeProfilePasswordStoreFactory::BuildServiceInstanceFor(
           std::make_unique<password_manager::PasswordStoreBuiltInBackend>(
               std::move(login_db),
               GetWipeModelUponSyncDisabledBehaviorForProfileStore(),
-              ChromeBrowserState::FromBrowserState(context)->GetPrefs(),
-              os_crypt_async));
+              profile->GetPrefs(), os_crypt_async));
 
   AffiliationService* affiliation_service =
-      IOSChromeAffiliationServiceFactory::GetForBrowserState(context);
+      IOSChromeAffiliationServiceFactory::GetForBrowserState(profile);
   std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper =
       std::make_unique<AffiliatedMatchHelper>(affiliation_service);
   std::unique_ptr<password_manager::PasswordAffiliationSourceAdapter>
       password_affiliation_adapter = std::make_unique<
           password_manager::PasswordAffiliationSourceAdapter>();
 
-  store->Init(ChromeBrowserState::FromBrowserState(context)->GetPrefs(),
-              std::move(affiliated_match_helper));
+  store->Init(profile->GetPrefs(), std::move(affiliated_match_helper));
 
-  password_manager::RemoveUselessCredentials(
-      CredentialsCleanerRunnerFactory::GetForBrowserState(context), store,
-      ChromeBrowserState::FromBrowserState(context)->GetPrefs(),
-      base::Seconds(60), base::NullCallback());
-  if (!context->IsOffTheRecord()) {
-    DelayReportingPasswordStoreMetrics(
-        ChromeBrowserState::FromBrowserState(context));
+  password_manager::SanitizeAndMigrateCredentials(
+      CredentialsCleanerRunnerFactory::GetForBrowserState(profile), store,
+      password_manager::kProfileStore, profile->GetPrefs(), base::Seconds(60),
+      base::NullCallback());
+  if (!profile->IsOffTheRecord()) {
+    DelayReportingPasswordStoreMetrics(profile);
   }
 
   password_affiliation_adapter->RegisterPasswordStore(store.get());

@@ -2,16 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "net/base/mime_util.h"
 
 #include <algorithm>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -49,8 +45,8 @@ class MimeUtil : public PlatformMimeUtil {
       const std::string& mime_type,
       base::FilePath::StringType* extension) const;
 
-  bool MatchesMimeType(const std::string& mime_type_pattern,
-                       const std::string& mime_type) const;
+  bool MatchesMimeType(std::string_view mime_type_pattern,
+                       std::string_view mime_type) const;
 
   bool ParseMimeTypeWithoutParameter(std::string_view type_string,
                                      std::string* top_level_type,
@@ -73,11 +69,11 @@ static base::LazyInstance<MimeUtil>::Leaky g_mime_util =
     LAZY_INSTANCE_INITIALIZER;
 
 struct MimeInfo {
-  const char* const mime_type;
+  const std::string_view mime_type;
 
   // Comma-separated list of possible extensions for the type. The first
   // extension is considered preferred.
-  const char* const extensions;
+  const std::string_view extensions;
 };
 
 // How to use the MIME maps
@@ -236,6 +232,7 @@ static const MimeInfo kSecondaryMappings[] = {
     {"text/calendar", "ics"},
     {"text/html", "ehtml"},
     {"text/plain", "txt,text"},
+    {"text/vtt", "vtt"},
     {"text/x-sh", "sh"},
     {"text/xml", "xsl,xbl,xslt"},
     {"video/mpeg", "mpeg,mpg"},
@@ -243,26 +240,19 @@ static const MimeInfo kSecondaryMappings[] = {
 
 // Finds mime type of |ext| from |mappings|.
 template <size_t num_mappings>
-static const char* FindMimeType(const MimeInfo (&mappings)[num_mappings],
-                                const std::string& ext) {
+static std::optional<std::string_view> FindMimeType(
+    const MimeInfo (&mappings)[num_mappings],
+    const std::string& ext) {
   for (const auto& mapping : mappings) {
-    const char* extensions = mapping.extensions;
-    for (;;) {
-      size_t end_pos = strcspn(extensions, ",");
-      // The length check is required to prevent the std::string_view below from
-      // including uninitialized memory if ext is longer than extensions.
-      if (end_pos == ext.size() &&
-          base::EqualsCaseInsensitiveASCII(
-              std::string_view(extensions, ext.size()), ext)) {
+    for (std::string_view extension :
+         base::SplitStringPiece(mapping.extensions, ",", base::TRIM_WHITESPACE,
+                                base::SPLIT_WANT_ALL)) {
+      if (base::EqualsCaseInsensitiveASCII(extension, ext)) {
         return mapping.mime_type;
       }
-      extensions += end_pos;
-      if (!*extensions)
-        break;
-      extensions += 1;  // skip over comma
     }
   }
-  return nullptr;
+  return std::nullopt;
 }
 
 static base::FilePath::StringType StringToFilePathStringType(
@@ -286,11 +276,8 @@ static bool FindPreferredExtension(const MimeInfo (&mappings)[num_mappings],
 
   for (const auto& mapping : mappings) {
     if (mapping.mime_type == mime_type) {
-      const char* extensions = mapping.extensions;
-      const char* extension_end = strchr(extensions, ',');
-      size_t len =
-          extension_end ? extension_end - extensions : strlen(extensions);
-      *result = StringToFilePathStringType(std::string_view(extensions, len));
+      const size_t pos = mapping.extensions.find(',');
+      *result = StringToFilePathStringType(mapping.extensions.substr(0, pos));
       return true;
     }
   }
@@ -352,9 +339,10 @@ bool MimeUtil::GetMimeTypeFromExtensionHelper(
 
   base::FilePath path_ext(ext);
   const string ext_narrow_str = path_ext.AsUTF8Unsafe();
-  const char* mime_type = FindMimeType(kPrimaryMappings, ext_narrow_str);
+  std::optional<std::string_view> mime_type =
+      FindMimeType(kPrimaryMappings, ext_narrow_str);
   if (mime_type) {
-    *result = mime_type;
+    *result = mime_type.value();
     return true;
   }
 
@@ -363,7 +351,7 @@ bool MimeUtil::GetMimeTypeFromExtensionHelper(
 
   mime_type = FindMimeType(kSecondaryMappings, ext_narrow_str);
   if (mime_type) {
-    *result = mime_type;
+    *result = mime_type.value();
     return true;
   }
 
@@ -380,12 +368,12 @@ MimeUtil::MimeUtil() = default;
 // or may not be case-sensitive, but they are usually case-sensitive. So, this
 // function matches values in *case-sensitive* manner, however note that this
 // may produce some false negatives.
-bool MatchesMimeTypeParameters(const std::string& mime_type_pattern,
-                               const std::string& mime_type) {
+bool MatchesMimeTypeParameters(std::string_view mime_type_pattern,
+                               std::string_view mime_type) {
   typedef std::map<std::string, std::string> StringPairMap;
 
-  const std::string::size_type semicolon = mime_type_pattern.find(';');
-  const std::string::size_type test_semicolon = mime_type.find(';');
+  const std::string_view::size_type semicolon = mime_type_pattern.find(';');
+  const std::string_view::size_type test_semicolon = mime_type.find(';');
   if (semicolon != std::string::npos) {
     if (test_semicolon == std::string::npos)
       return false;
@@ -432,20 +420,20 @@ bool MatchesMimeTypeParameters(const std::string& mime_type_pattern,
 //      *
 // Also tests mime parameters -- all parameters in the pattern must be present
 // in the tested type for a match to succeed.
-bool MimeUtil::MatchesMimeType(const std::string& mime_type_pattern,
-                               const std::string& mime_type) const {
+bool MimeUtil::MatchesMimeType(std::string_view mime_type_pattern,
+                               std::string_view mime_type) const {
   if (mime_type_pattern.empty())
     return false;
 
-  std::string::size_type semicolon = mime_type_pattern.find(';');
-  const std::string base_pattern(mime_type_pattern.substr(0, semicolon));
+  std::string_view::size_type semicolon = mime_type_pattern.find(';');
+  const std::string_view base_pattern = mime_type_pattern.substr(0, semicolon);
   semicolon = mime_type.find(';');
-  const std::string base_type(mime_type.substr(0, semicolon));
+  const std::string_view base_type = mime_type.substr(0, semicolon);
 
   if (base_pattern == "*" || base_pattern == "*/*")
     return MatchesMimeTypeParameters(mime_type_pattern, mime_type);
 
-  const std::string::size_type star = base_pattern.find('*');
+  const std::string_view::size_type star = base_pattern.find('*');
   if (star == std::string::npos) {
     if (base::EqualsCaseInsensitiveASCII(base_pattern, base_type))
       return MatchesMimeTypeParameters(mime_type_pattern, mime_type);
@@ -646,8 +634,8 @@ bool GetPreferredExtensionForMimeType(const std::string& mime_type,
                                                             extension);
 }
 
-bool MatchesMimeType(const std::string& mime_type_pattern,
-                     const std::string& mime_type) {
+bool MatchesMimeType(std::string_view mime_type_pattern,
+                     std::string_view mime_type) {
   return g_mime_util.Get().MatchesMimeType(mime_type_pattern, mime_type);
 }
 

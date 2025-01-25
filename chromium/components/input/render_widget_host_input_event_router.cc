@@ -26,6 +26,8 @@
 #include "ui/gfx/geometry/dip_util.h"
 
 #include "app/vivaldi_apptools.h"
+#include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "ui/content/vivaldi_event_hooks.h"
 
 namespace {
@@ -695,8 +697,8 @@ void RenderWidgetHostInputEventRouter::DispatchMouseEvent(
 
   if (target) {
     ui::EventType type = mouse_event.GetTypeAsUiEventType();
-    bool hovering = (type ^ ui::EventType::kMouseDragged) &&
-                    (type ^ ui::EventType::kMousePressed);
+    bool hovering = (type != ui::EventType::kMouseDragged) &&
+                    (type != ui::EventType::kMousePressed);
     ForwardDelegatedInkPoint(target, root_view, mouse_event, mouse_event,
                              hovering);
   }
@@ -1236,8 +1238,13 @@ bool RenderWidgetHostInputEventRouter::BubbleScrollEvent(
     if (target_view == touchscreen_gesture_target_.get() ||
         target_view == touchpad_gesture_target_ ||
         target_view == touch_target_) {
-      TRACE_EVENT_INSTANT0("input", "EarlyOut-GestureInProgress",
-                           TRACE_EVENT_SCOPE_THREAD);
+      TRACE_EVENT_INSTANT("input", "EarlyOut-GestureInProgress", "target_view",
+                          static_cast<void*>(target_view),
+                          "touchscreen_gesture_target_",
+                          static_cast<void*>(touchscreen_gesture_target_.get()),
+                          "touchpad_gesture_target_",
+                          static_cast<void*>(touchpad_gesture_target_),
+                          "touch_target_", static_cast<void*>(touch_target_));
       return false;
     }
 
@@ -2130,18 +2137,16 @@ void RenderWidgetHostInputEventRouter::SetCursor(const ui::Cursor& cursor) {
   if (touch_emulator) {
     touch_emulator->SetDeviceScaleFactor(last_device_scale_factor_);
   }
-  /* if (auto* cursor_manager = last_mouse_move_root_view_->GetCursorManager()) {
+  if (auto* cursor_manager = last_mouse_move_root_view_->GetCursorManager()) {
     for (auto it : owner_map_) {
-      // NOTE(david@vivaldi.com): In Vivaldi we need to check if the device
-      // emulation is active for that specific view and then change the cursor
-      // accordingly.
-      if (it.second &&
-             (!vivaldi::IsVivaldiRunning() ||
-           it.second->GetViewRenderInputRouter()->IsDeviceEmulationActive()))
+      if (!vivaldi::IsVivaldiRunning() ||
+          (it.second &&
+           static_cast<content::RenderWidgetHostViewBase*>(it.second.get())
+           ->host()
+           ->IsDeviceEmulationActive()))
         cursor_manager->UpdateCursor(it.second.get(), cursor);
     }
   }
-  */
 }
 
 void RenderWidgetHostInputEventRouter::ShowContextMenuAtPoint(

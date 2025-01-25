@@ -48,8 +48,14 @@ extern "C" {
 #define AVIF_API
 #endif // defined(AVIF_DLL)
 
-#if defined(AVIF_ENABLE_NODISCARD) || (defined(__cplusplus) && __cplusplus >= 201703L) || \
-    (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L)
+// [[nodiscard]] requires C++17 and C23.
+//
+// If the -std=c2x or -std=gnu2x option is specified, __STDC_VERSION__ is
+//   * 202000L in GCC 13.2.0, Clang 16.0.6, and Apple Clang 15.0.0; or
+//   * 202311L in Clang 19.0.0git.
+// If the /std:clatest option is specified, __STDC_VERSION__ is
+//   * 202312L in Microsoft Visual Studio 17.10.5.
+#if (defined(__cplusplus) && __cplusplus >= 201703L) || (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202000L)
 #define AVIF_NODISCARD [[nodiscard]]
 #else
 // Starting with 3.9, clang allows defining the warn_unused_result attribute for enums.
@@ -73,7 +79,7 @@ extern "C" {
 // to leverage in-development code without breaking their stable builds.
 #define AVIF_VERSION_MAJOR 1
 #define AVIF_VERSION_MINOR 1
-#define AVIF_VERSION_PATCH 0
+#define AVIF_VERSION_PATCH 1
 #define AVIF_VERSION_DEVEL 1
 #define AVIF_VERSION \
     ((AVIF_VERSION_MAJOR * 1000000) + (AVIF_VERSION_MINOR * 10000) + (AVIF_VERSION_PATCH * 100) + AVIF_VERSION_DEVEL)
@@ -210,9 +216,9 @@ typedef enum avifHeaderFormat
 {
     // AVIF file with an "avif" brand, a MetaBox and all its required boxes for maximum compatibility.
     AVIF_HEADER_FULL,
-#if defined(AVIF_ENABLE_EXPERIMENTAL_METAV1)
-    // AVIF file with a "mif3" brand and a MetaBox with version 1 to reduce the encoded file size.
-    // This is based on the w23988 "Low-overhead image file format" MPEG proposal for HEIF.
+#if defined(AVIF_ENABLE_EXPERIMENTAL_MINI)
+    // AVIF file with a "mif3" brand and a MinimizedImageBox to reduce the encoded file size.
+    // This is based on the w24144 "Low-overhead image file format" MPEG proposal for HEIF.
     // WARNING: Experimental feature. Produces files that are incompatible with older decoders.
     AVIF_HEADER_REDUCED,
 #endif
@@ -394,8 +400,8 @@ enum
     AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_CL = 13,
     AVIF_MATRIX_COEFFICIENTS_ICTCP = 14,
 #if defined(AVIF_ENABLE_EXPERIMENTAL_YCGCO_R)
-    AVIF_MATRIX_COEFFICIENTS_YCGCO_RE = 15,
-    AVIF_MATRIX_COEFFICIENTS_YCGCO_RO = 16,
+    AVIF_MATRIX_COEFFICIENTS_YCGCO_RE = 16,
+    AVIF_MATRIX_COEFFICIENTS_YCGCO_RO = 17,
 #endif
     AVIF_MATRIX_COEFFICIENTS_LAST
 };
@@ -740,7 +746,16 @@ typedef enum avifSampleTransformRecipe
     // (ignoring the hidden image item), leading to a valid image but with
     // precision loss (16-bit samples truncated to the 12 most significant
     // bits).
-    AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_EXTENSION_12B_4B
+    AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_EXTENSION_12B_4B,
+    // Encode the 12 most significant bits of each input image sample lossily or
+    // losslessly into a base image. The difference between the original and
+    // decoded values of these samples is encoded as a separate 8-bit hidden
+    // image item. The two are combined at decoding into one image with the same
+    // bit depth as the original image. It is backward compatible in the sense
+    // that it is possible to decode only the base image (ignoring the hidden
+    // image item), leading to a valid image but with loss due to precision
+    // truncation and/or compression.
+    AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_EXTENSION_12B_8B_OVERLAP_4B
 } avifSampleTransformRecipe;
 #endif // AVIF_ENABLE_EXPERIMENTAL_SAMPLE_TRANSFORM
 
@@ -1297,24 +1312,21 @@ typedef struct avifDecoder
     // Version 1.1.0 ends here. Add any new members after this line.
 
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
-    // This is true when avifDecoderParse() detects a gain map.
-    avifBool gainMapPresent;
-    // Enable decoding the gain map image if present (defaults to AVIF_FALSE).
-    // (see also enableParsingGainMapMetadata below).
-    // gainMapPresent is still set if the presence of a gain map is detected, regardless
-    // of this setting.
-    avifBool enableDecodingGainMap;
     // Enable parsing the gain map metadata if present (defaults to AVIF_FALSE).
-    // gainMapPresent is still set if the presence of a gain map is detected, regardless
-    // of this setting.
     // Gain map metadata is read during avifDecoderParse(). Like Exif and XMP, this data
     // can be (unfortunately) packed at the end of the file, which will cause
     // avifDecoderParse() to return AVIF_RESULT_WAITING_ON_IO until it finds it.
     // If you don't actually use this data, it's best to leave this to AVIF_FALSE (default).
     avifBool enableParsingGainMapMetadata;
+    // Enable decoding the gain map image if present (defaults to AVIF_FALSE).
+    // If set to true, enableParsingGainMapMetadata must also be true.
+    avifBool enableDecodingGainMap;
     // Do not decode the color/alpha planes of the main image.
     // Can be useful to decode the gain map image only.
     avifBool ignoreColorAndAlpha;
+    // True when avifDecoderParse() detects a supported gain map.
+    // Requires enableParsingGainMapMetadata to be set to true.
+    avifBool gainMapPresent;
 #endif
 } avifDecoder;
 

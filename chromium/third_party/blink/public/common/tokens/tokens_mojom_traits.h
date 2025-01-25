@@ -394,6 +394,20 @@ struct BLINK_COMMON_EXPORT
   }
 };
 
+template <>
+struct StructTraits<blink::mojom::WebNNContextTokenDataView,
+                    blink::WebNNContextToken>
+    : public blink::TokenMojomTraitsHelper<
+          blink::mojom::WebNNContextTokenDataView,
+          blink::WebNNContextToken> {};
+
+template <>
+struct StructTraits<blink::mojom::WebNNTensorTokenDataView,
+                    blink::WebNNTensorToken>
+    : public blink::TokenMojomTraitsHelper<
+          blink::mojom::WebNNTensorTokenDataView,
+          blink::WebNNTensorToken> {};
+
 }  // namespace mojo
 
 #endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_TOKENS_TOKENS_MOJOM_TRAITS_H_

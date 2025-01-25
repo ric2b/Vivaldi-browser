@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "cc/paint/paint_op_buffer_serializer.h"
 
 #include <limits>
@@ -244,7 +249,7 @@ bool PaintOpBufferSerializer::WillSerializeNextOp<float>(
     const auto& draw_record_op = static_cast<const DrawRecordOp&>(op);
     int save_count = canvas->getSaveCount();
     const PaintOpBuffer& buffer = draw_record_op.record.buffer();
-    if (LIKELY(draw_record_op.local_ctm)) {
+    if (draw_record_op.local_ctm) [[likely]] {
       // This record has a local CTM, meaning that any transforms in `buffer`
       // must be isolated from the parent record. Saving ensures that transforms
       // won't leak out. Then, `SerializeBuffer` will set `original_ctm` to the

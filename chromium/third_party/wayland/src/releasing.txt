@@ -17,27 +17,11 @@ To make a release of Wayland, follow these steps.
 
   2.  Run the release.sh script to generate the tarballs, sign and
       upload them, and generate a release announcement template.
-      This script can be obtained from X.org's modular package:
 
-        http://cgit.freedesktop.org/xorg/util/modular/tree/release.sh
-
-      The script supports a --dry-run option to test it without actually
-      doing a release.  If the script fails on the distcheck step due to
-      a testsuite error that can't be fixed for some reason, you can
-      skip testsuite by specifying the --dist argument.  Pass --help to
-      see other supported options.
-
-      $ release.sh .
-
-      For Wayland official and point releases, also publish the publican
-      documentation to wayland.freedesktop.org:
-
-      $ ./publish-doc
-
-  3.  Compose the release announcements.  The script will generate
-      *.x.y.z.announce files with a list of changes and tags.  Prepend
-      it with a human-readable listing of the most notable changes.
-      For x.y.0 releases, indicate the schedule for the x.y+1.0
+  3.  Compose the release announcements.  The script will generate a
+      wayland-x.y.z-announce.eml file with a list of changes and tags.
+      Prepend it with a human-readable listing of the most notable
+      changes. For x.y.0 releases, indicate the schedule for the x.y+1.0
       release.
 
   4.  PGP sign the release announcements and send them to

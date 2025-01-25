@@ -4,16 +4,12 @@
 
 import type * as Types from '../types/types.js';
 
-const syntheticEventsManagerByTraceIndex: SyntheticEventsManager[] = [];
-
-const managerByRawEvents = new Map<readonly Types.TraceEvents.TraceEventData[], SyntheticEventsManager>();
-
 let activeManager: SyntheticEventsManager|null = null;
 
 export class SyntheticEventsManager {
   /**
    * All synthetic entries created in a trace from a corresponding trace events.
-   * (ProfileCalls are excluded because)
+   * (ProfileCalls are excluded because they are not based on a real trace event)
    */
   #syntheticTraceEvents: Types.TraceEvents.SyntheticBasedEvent[] = [];
   /**
@@ -21,24 +17,14 @@ export class SyntheticEventsManager {
    */
   #rawTraceEvents: readonly Types.TraceEvents.TraceEventData[] = [];
 
-  /**
-   * Initializes a SyntheticEventsManager for a trace. This needs to be
-   * called before running the trace engine handlers, since the instance
-   * created here will be used by the handlers to register their
-   * synthetic trace events.
-   *
-   * Can be called multiple times for the same set of raw events, in which case it will re-use the existing manager rather than recreate it again.
-   */
-  static initAndActivate(rawEvents: readonly Types.TraceEvents.TraceEventData[]): SyntheticEventsManager {
-    const existingManager = managerByRawEvents.get(rawEvents);
-    if (existingManager) {
-      activeManager = existingManager;
-    } else {
-      const manager = new SyntheticEventsManager(rawEvents);
-      managerByRawEvents.set(rawEvents, manager);
-      activeManager = manager;
-    }
-    return activeManager;
+  static activate(manager: SyntheticEventsManager): void {
+    activeManager = manager;
+  }
+
+  static createAndActivate(rawEvents: readonly Types.TraceEvents.TraceEventData[]): SyntheticEventsManager {
+    const manager = new SyntheticEventsManager(rawEvents);
+    SyntheticEventsManager.activate(manager);
+    return manager;
   }
 
   static getActiveManager(): SyntheticEventsManager {
@@ -49,7 +35,6 @@ export class SyntheticEventsManager {
   }
 
   static reset(): void {
-    syntheticEventsManagerByTraceIndex.length = 0;
     activeManager = null;
   }
 
@@ -64,6 +49,12 @@ export class SyntheticEventsManager {
       // modifications serialization.
       return syntheticEvent as T;
     }
+  }
+
+  static registerServerTiming(syntheticEvent: Omit<Types.TraceEvents.SyntheticServerTiming, '_tag'>):
+      Types.TraceEvents.SyntheticServerTiming {
+    // TODO(crbug.com/340811171): Implement
+    return syntheticEvent as Types.TraceEvents.SyntheticServerTiming;
   }
 
   private constructor(rawEvents: readonly Types.TraceEvents.TraceEventData[]) {

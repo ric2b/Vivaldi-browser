@@ -20,21 +20,23 @@ limitations under the License.
 
 #include "absl/status/status.h"
 #include "xla/stream_executor/event.h"
+#include "xla/stream_executor/gpu/context.h"
 #include "xla/stream_executor/gpu/gpu_types.h"
 
 namespace stream_executor {
 namespace gpu {
 
-class GpuExecutor;
+class GpuContext;
+
 // GpuEvent wraps a GpuEventHandle in the platform-independent Event interface.
 class GpuEvent : public Event {
  public:
-  explicit GpuEvent(GpuExecutor* parent);
+  explicit GpuEvent(Context* context);
 
   ~GpuEvent() override;
 
   // Populates the CUDA-platform-specific elements of this object.
-  absl::Status Init();
+  absl::Status Init(bool allow_timing);
 
   // Deallocates any platform-specific elements of this object. This is broken
   // out (not part of the destructor) to allow for error reporting.
@@ -49,11 +51,11 @@ class GpuEvent : public Event {
   absl::Status WaitForEventOnExternalStream(std::intptr_t stream) override;
 
  protected:
-  GpuExecutor* parent() const { return parent_; }
+  Context* context() const { return context_; }
 
  private:
   // The Executor used to which this object and GpuEventHandle are bound.
-  GpuExecutor* parent_;
+  Context* context_;
 
   // The underlying CUDA event element.
   GpuEventHandle gpu_event_;

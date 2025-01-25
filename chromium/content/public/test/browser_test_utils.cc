@@ -49,8 +49,6 @@
 #include "cc/test/pixel_test_utils.h"
 #include "components/input/render_widget_host_input_event_router.h"
 #include "components/viz/client/frame_evictor.h"
-#include "content/browser/accessibility/browser_accessibility.h"
-#include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/file_system/file_system_manager_impl.h"
 #include "content/browser/file_system_access/file_system_access_manager_impl.h"
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
@@ -86,6 +84,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/isolated_world_ids.h"
 #include "content/public/test/accessibility_notification_waiter.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
@@ -134,6 +133,8 @@
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom.h"
 #include "third_party/blink/public/mojom/keyboard_lock/keyboard_lock.mojom-shared.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/accessibility/platform/browser_accessibility.h"
+#include "ui/accessibility/platform/browser_accessibility_manager.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
@@ -586,7 +587,7 @@ ProxyHostObserver* GetProxyHostObserver() {
 
 bool IsRequestCompatibleWithSpeculativeRFH(NavigationRequest* request) {
   return request->state() <=
-             NavigationRequest::NavigationState::WILL_START_REQUEST &&
+             NavigationRequest::NavigationState::WILL_PROCESS_RESPONSE &&
          request->GetAssociatedRFHType() ==
              NavigationRequest::AssociatedRenderFrameHostType::NONE;
 }
@@ -871,7 +872,7 @@ void PrepContentsForBeforeUnloadTest(WebContents* web_contents,
       [trigger_user_activation](RenderFrameHost* render_frame_host) {
         if (trigger_user_activation) {
           render_frame_host->ExecuteJavaScriptWithUserGestureForTests(
-              std::u16string(), base::NullCallback());
+              std::u16string(), base::NullCallback(), ISOLATED_WORLD_ID_GLOBAL);
         }
 
         // Disable the hang monitor, otherwise there will be a race between
@@ -1227,8 +1228,6 @@ void SimulateGestureScrollSequence(RenderWidgetHost* render_widget_host,
   scroll_update.SetPositionInWidget(gfx::PointF(point));
   scroll_update.data.scroll_update.delta_x = delta.x();
   scroll_update.data.scroll_update.delta_y = delta.y();
-  scroll_update.data.scroll_update.velocity_x = 0;
-  scroll_update.data.scroll_update.velocity_y = 0;
   render_widget_host->ForwardGestureEvent(scroll_update);
 
   blink::WebGestureEvent scroll_end(
@@ -1535,14 +1534,16 @@ void ExecuteScriptAsync(const ToRenderFrameHost& adapter,
     ExecuteScriptAsyncWithoutUserGesture(adapter, script);
   } else {
     adapter.render_frame_host()->ExecuteJavaScriptWithUserGestureForTests(
-        base::UTF8ToUTF16(script), base::NullCallback());
+        base::UTF8ToUTF16(script), base::NullCallback(),
+        ISOLATED_WORLD_ID_GLOBAL);
   }
 }
 
 void ExecuteScriptAsyncWithoutUserGesture(const ToRenderFrameHost& adapter,
                                           std::string_view script) {
   adapter.render_frame_host()->ExecuteJavaScriptForTests(
-      base::UTF8ToUTF16(script), base::NullCallback());
+      base::UTF8ToUTF16(script), base::NullCallback(),
+      ISOLATED_WORLD_ID_GLOBAL);
 }
 
 // EvalJsResult methods.
@@ -1793,16 +1794,18 @@ EvalJsResult EvalJsRunner(
         base::Value(), "Error: EvalJs won't work on an already-crashed frame.");
   }
 
-  bool resolve_promises = !(options & EXECUTE_SCRIPT_NO_RESOLVE_PROMISES);
   bool user_gesture = rfh->GetLifecycleState() !=
                           RenderFrameHost::LifecycleState::kPrerendering &&
                       !(options & EXECUTE_SCRIPT_NO_USER_GESTURE) &&
                       world_id == ISOLATED_WORLD_ID_GLOBAL;
+  bool resolve_promises = !(options & EXECUTE_SCRIPT_NO_RESOLVE_PROMISES);
+  bool honor_js_content_settings =
+      options & EXECUTE_SCRIPT_HONOR_JS_CONTENT_SETTINGS;
 
   ExecuteJavaScriptForTestsWaiter waiter(rfh);
   rfh->ExecuteJavaScriptForTests(base::UTF8ToUTF16(script), user_gesture,
-                                 resolve_promises, world_id,
-                                 waiter.GetCallback());
+                                 resolve_promises, honor_js_content_settings,
+                                 world_id, waiter.GetCallback());
 
   std::move(after_script_invoke).Run();
 
@@ -2188,7 +2191,7 @@ bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
 
 void WaitForAccessibilityFocusChange() {
   base::RunLoop run_loop;
-  BrowserAccessibilityManager::SetFocusChangeCallbackForTesting(
+  ui::BrowserAccessibilityManager::SetFocusChangeCallbackForTesting(
       run_loop.QuitClosure());
   run_loop.Run();
 }
@@ -2196,15 +2199,15 @@ void WaitForAccessibilityFocusChange() {
 ui::AXNodeData GetFocusedAccessibilityNodeInfo(WebContents* web_contents) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
-  BrowserAccessibilityManager* manager =
+  ui::BrowserAccessibilityManager* manager =
       web_contents_impl->GetRootBrowserAccessibilityManager();
   if (!manager)
     return ui::AXNodeData();
-  BrowserAccessibility* focused_node = manager->GetFocus();
+  ui::BrowserAccessibility* focused_node = manager->GetFocus();
   return focused_node->GetData();
 }
 
-bool AccessibilityTreeContainsNodeWithName(BrowserAccessibility* node,
+bool AccessibilityTreeContainsNodeWithName(ui::BrowserAccessibility* node,
                                            std::string_view name) {
   // If an image annotation is set, it plays the same role as a name, so it
   // makes sense to check both in the same test helper.
@@ -2231,7 +2234,7 @@ void WaitForAccessibilityTreeToContainNodeWithName(WebContents* web_contents,
       static_cast<WebContentsImpl*>(web_contents);
   RenderFrameHostImpl* main_frame = static_cast<RenderFrameHostImpl*>(
       web_contents_impl->GetPrimaryMainFrame());
-  BrowserAccessibilityManager* main_frame_manager =
+  ui::BrowserAccessibilityManager* main_frame_manager =
       main_frame->browser_accessibility_manager();
   while (!main_frame_manager ||
          !AccessibilityTreeContainsNodeWithName(
@@ -2244,7 +2247,7 @@ void WaitForAccessibilityTreeToContainNodeWithName(WebContents* web_contents,
 ui::AXTreeUpdate GetAccessibilityTreeSnapshot(WebContents* web_contents) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
-  BrowserAccessibilityManager* manager =
+  ui::BrowserAccessibilityManager* manager =
       web_contents_impl->GetRootBrowserAccessibilityManager();
   if (!manager)
     return ui::AXTreeUpdate();
@@ -2253,8 +2256,8 @@ ui::AXTreeUpdate GetAccessibilityTreeSnapshot(WebContents* web_contents) {
 
 ui::AXTreeUpdate GetAccessibilityTreeSnapshotFromId(
     const ui::AXTreeID& tree_id) {
-  BrowserAccessibilityManager* manager =
-      BrowserAccessibilityManager::FromID(tree_id);
+  ui::BrowserAccessibilityManager* manager =
+      ui::BrowserAccessibilityManager::FromID(tree_id);
   return manager ? manager->SnapshotAXTreeForTesting() : ui::AXTreeUpdate();
 }
 
@@ -2262,7 +2265,7 @@ ui::AXPlatformNodeDelegate* GetRootAccessibilityNode(
     WebContents* web_contents) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
-  BrowserAccessibilityManager* manager =
+  ui::BrowserAccessibilityManager* manager =
       web_contents_impl->GetRootBrowserAccessibilityManager();
   return manager ? manager->GetBrowserAccessibilityRoot() : nullptr;
 }
@@ -2282,7 +2285,8 @@ ui::AXPlatformNodeDelegate* FindAccessibilityNode(
 ui::AXPlatformNodeDelegate* FindAccessibilityNodeInSubtree(
     ui::AXPlatformNodeDelegate* node,
     const FindAccessibilityNodeCriteria& criteria) {
-  auto* node_internal = BrowserAccessibility::FromAXPlatformNodeDelegate(node);
+  auto* node_internal =
+      ui::BrowserAccessibility::FromAXPlatformNodeDelegate(node);
   DCHECK(node_internal);
   if ((!criteria.name ||
        node_internal->GetStringAttribute(ax::mojom::StringAttribute::kName) ==
@@ -2292,7 +2296,7 @@ ui::AXPlatformNodeDelegate* FindAccessibilityNodeInSubtree(
   }
 
   for (unsigned int i = 0; i < node_internal->PlatformChildCount(); ++i) {
-    BrowserAccessibility* child = node_internal->PlatformGetChild(i);
+    ui::BrowserAccessibility* child = node_internal->PlatformGetChild(i);
     ui::AXPlatformNodeDelegate* result =
         FindAccessibilityNodeInSubtree(child, criteria);
     if (result)
@@ -2434,13 +2438,13 @@ RenderFrameMetadataProviderImpl* RenderFrameMetadataProviderFromRenderFrameHost(
 }  // namespace
 
 TitleWatcher::TitleWatcher(WebContents* web_contents,
-                           const std::u16string& expected_title)
+                           std::u16string_view expected_title)
     : WebContentsObserver(web_contents) {
-  expected_titles_.push_back(expected_title);
+  expected_titles_.emplace_back(expected_title);
 }
 
-void TitleWatcher::AlsoWaitForTitle(const std::u16string& expected_title) {
-  expected_titles_.push_back(expected_title);
+void TitleWatcher::AlsoWaitForTitle(std::u16string_view expected_title) {
+  expected_titles_.emplace_back(expected_title);
 }
 
 TitleWatcher::~TitleWatcher() = default;
@@ -2607,13 +2611,26 @@ void RenderProcessHostBadMojoMessageWaiter::OnBadMojoMessage(
 class DOMMessageQueue::MessageObserver : public WebContentsObserver {
  public:
   MessageObserver(DOMMessageQueue* queue, WebContents* contents)
-      : WebContentsObserver(contents), queue_(queue) {}
+      : WebContentsObserver(contents),
+        queue_(queue),
+        render_frame_host_(nullptr),
+        watching_frame_(false) {}
+
+  MessageObserver(DOMMessageQueue* queue, RenderFrameHost* render_frame_host)
+      : WebContentsObserver(
+            WebContents::FromRenderFrameHost(render_frame_host)),
+        queue_(queue),
+        render_frame_host_(render_frame_host),
+        watching_frame_(true) {}
+
   ~MessageObserver() override = default;
 
  private:
   void DomOperationResponse(RenderFrameHost* rfh,
                             const std::string& result) override {
-    queue_->OnDomMessageReceived(result);
+    if (!watching_frame_ || render_frame_host_ == rfh) {
+      queue_->OnDomMessageReceived(result);
+    }
   }
 
   void PrimaryMainFrameRenderProcessGone(
@@ -2622,7 +2639,11 @@ class DOMMessageQueue::MessageObserver : public WebContentsObserver {
   }
 
   void RenderFrameDeleted(RenderFrameHost* render_frame_host) override {
-    queue_->RenderFrameDeleted(render_frame_host);
+    if (render_frame_host_ != render_frame_host) {
+      return;
+    }
+    render_frame_host_ = nullptr;
+    queue_->RenderFrameDeleted();
   }
 
   void WebContentsDestroyed() override {
@@ -2630,6 +2651,8 @@ class DOMMessageQueue::MessageObserver : public WebContentsObserver {
   }
 
   raw_ptr<DOMMessageQueue> queue_;
+  raw_ptr<RenderFrameHost> render_frame_host_;
+  bool watching_frame_;
 };
 
 DOMMessageQueue::DOMMessageQueue() {
@@ -2647,9 +2670,9 @@ DOMMessageQueue::DOMMessageQueue(WebContents* web_contents) {
   observers_.emplace(std::make_unique<MessageObserver>(this, web_contents));
 }
 
-DOMMessageQueue::DOMMessageQueue(RenderFrameHost* render_frame_host)
-    : DOMMessageQueue(WebContents::FromRenderFrameHost(render_frame_host)) {
-  render_frame_host_ = render_frame_host;
+DOMMessageQueue::DOMMessageQueue(RenderFrameHost* render_frame_host) {
+  observers_.emplace(
+      std::make_unique<MessageObserver>(this, render_frame_host));
 }
 
 DOMMessageQueue::~DOMMessageQueue() = default;
@@ -2670,11 +2693,7 @@ void DOMMessageQueue::PrimaryMainFrameRenderProcessGone(
   }
 }
 
-void DOMMessageQueue::RenderFrameDeleted(RenderFrameHost* render_frame_host) {
-  if (!render_frame_host_)
-    return;
-  if (render_frame_host_ != render_frame_host)
-    return;
+void DOMMessageQueue::RenderFrameDeleted() {
   if (callback_) {
     std::move(callback_).Run();
   }
@@ -2707,7 +2726,6 @@ void DOMMessageQueue::OnBackingWebContentsDestroyed(MessageObserver* observer) {
 void DOMMessageQueue::SetOnMessageAvailableCallback(
     base::OnceClosure callback) {
   CHECK(!callback_);
-  CHECK(!render_frame_host_);  // Not supported for simplicity.
   if (!message_queue_.empty() || renderer_crashed_) {
     std::move(callback).Run();
   } else {
@@ -3108,7 +3126,7 @@ class FrameDeletedObserver::FrameTreeNodeObserverImpl
 
   bool IsDestroyed() const { return owner_ == nullptr; }
 
-  int frame_tree_node_id() const { return frame_tree_node_id_; }
+  FrameTreeNodeId frame_tree_node_id() const { return frame_tree_node_id_; }
 
  private:
   // FrameTreeNode::Observer:
@@ -3119,7 +3137,7 @@ class FrameDeletedObserver::FrameTreeNodeObserverImpl
     }
   }
 
-  const int frame_tree_node_id_;
+  const content::FrameTreeNodeId frame_tree_node_id_;
   raw_ptr<FrameTreeNode> owner_;
   base::RunLoop run_loop_;
 };
@@ -3138,7 +3156,7 @@ bool FrameDeletedObserver::IsDeleted() const {
   return impl_->IsDestroyed();
 }
 
-int FrameDeletedObserver::GetFrameTreeNodeId() const {
+content::FrameTreeNodeId FrameDeletedObserver::GetFrameTreeNodeId() const {
   return impl_->frame_tree_node_id();
 }
 
@@ -4410,6 +4428,36 @@ void SpeculativeRenderFrameHostObserver::RenderFrameCreated(
       IsRequestCompatibleWithSpeculativeRFH(request) &&
       request->GetURL() == url_) {
     run_loop_.Quit();
+  }
+}
+
+SpareRenderProcessObserver::SpareRenderProcessObserver() {
+  subscription_ =
+      RenderProcessHost::RegisterSpareRenderProcessHostChangedCallback(
+          base::BindRepeating(
+              &SpareRenderProcessObserver::SpareRenderProcessHostChanged,
+              weak_factory_.GetWeakPtr()));
+}
+
+SpareRenderProcessObserver::~SpareRenderProcessObserver() = default;
+
+void SpareRenderProcessObserver::SpareRenderProcessHostChanged(
+    RenderProcessHost* render_process_host) {
+  spare_render_process_host_ = render_process_host;
+  if (quit_closure_) {
+    std::move(quit_closure_).Run();
+  }
+}
+
+RenderProcessHost* SpareRenderProcessObserver::spare_render_process_host() {
+  return spare_render_process_host_;
+}
+
+void SpareRenderProcessObserver::WaitForSpareRenderProcessCreation() {
+  base::RunLoop loop;
+  quit_closure_ = loop.QuitClosure();
+  if (!spare_render_process_host_) {
+    loop.Run();
   }
 }
 

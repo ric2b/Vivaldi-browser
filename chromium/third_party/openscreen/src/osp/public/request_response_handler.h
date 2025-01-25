@@ -79,7 +79,7 @@ class RequestResponseHandler : public MessageDemuxer::MessageCallback {
       delegate_.OnError(&message.request, Error::Code::kRequestCancelled);
     }
     sent_.clear();
-    response_watch_ = MessageDemuxer::MessageWatch();
+    response_watch_.Reset();
   }
 
   // Write a message to the underlying protocol connection, or queue it until
@@ -94,7 +94,7 @@ class RequestResponseHandler : public MessageDemuxer::MessageCallback {
   WriteMessage(std::optional<uint64_t> id, RequestTRval&& message) {
     auto* request_msg = RequestCoderTraits::serial_request(message);
     if (connection_) {
-      request_msg->request_id = GetNextRequestId(connection_->instance_id());
+      request_msg->request_id = GetNextRequestId(connection_->GetInstanceID());
       Error result =
           connection_->WriteMessage(*request_msg, RequestCoderTraits::kEncoder);
       if (!result.ok()) {
@@ -131,7 +131,7 @@ class RequestResponseHandler : public MessageDemuxer::MessageCallback {
                     [&id](const RequestWithId& msg) { return id == msg.id; }),
                 sent_.end());
     if (sent_.empty()) {
-      response_watch_ = MessageDemuxer::MessageWatch();
+      response_watch_.Reset();
     }
   }
 
@@ -140,7 +140,7 @@ class RequestResponseHandler : public MessageDemuxer::MessageCallback {
     connection_ = connection;
     for (auto& message : to_send_) {
       auto* request_msg = RequestCoderTraits::serial_request(message.request);
-      request_msg->request_id = GetNextRequestId(connection_->instance_id());
+      request_msg->request_id = GetNextRequestId(connection_->GetInstanceID());
       Error result =
           connection_->WriteMessage(*request_msg, RequestCoderTraits::kEncoder);
       if (result.ok()) {
@@ -169,7 +169,11 @@ class RequestResponseHandler : public MessageDemuxer::MessageCallback {
     ssize_t result =
         RequestCoderTraits::kDecoder(buffer, buffer_size, response);
     if (result < 0) {
-      return 0;
+      if (result == msgs::kParserEOF) {
+        return Error::Code::kCborIncompleteMessage;
+      }
+      OSP_LOG_WARN << "parse error: " << result;
+      return Error::Code::kCborParsing;
     }
     auto it = std::find_if(
         sent_.begin(), sent_.end(), [&response](const RequestWithId& msg) {
@@ -178,10 +182,10 @@ class RequestResponseHandler : public MessageDemuxer::MessageCallback {
         });
     if (it != sent_.end()) {
       delegate_.OnMatchedResponse(&it->request, &response,
-                                  connection_->instance_id());
+                                  connection_->GetInstanceID());
       sent_.erase(it);
       if (sent_.empty()) {
-        response_watch_ = MessageDemuxer::MessageWatch();
+        response_watch_.Reset();
       }
     } else {
       OSP_LOG_WARN << "got response for unknown request id: "
@@ -201,7 +205,7 @@ class RequestResponseHandler : public MessageDemuxer::MessageCallback {
       response_watch_ = NetworkServiceManager::Get()
                             ->GetProtocolConnectionClient()
                             ->GetMessageDemuxer()
-                            .WatchMessageType(connection_->instance_id(),
+                            .WatchMessageType(connection_->GetInstanceID(),
                                               RequestT::kResponseType, this);
     }
   }

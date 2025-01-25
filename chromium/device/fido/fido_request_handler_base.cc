@@ -57,7 +57,7 @@ bool IsGpmPasskeyAuthenticator(const FidoAuthenticator& authenticator) {
     case AuthenticatorType::kChromeOSPasskeys:
       return true;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void MaybeRecordPlatformCredentialStatus(AuthenticatorType type,
@@ -213,7 +213,6 @@ void FidoRequestHandlerBase::InitDiscoveries(
     transport_availability_callback_readiness_->win_is_uvpaa_check_pending =
         true;
     WinWebAuthnApiAuthenticator::IsUserVerifyingPlatformAuthenticatorAvailable(
-        transport_availability_info_.is_off_the_record_context,
         device::WinWebAuthnApi::GetDefault(),
         base::BindOnce(&FidoRequestHandlerBase::OnWinIsUvpaa,
                        weak_factory_.GetWeakPtr()));
@@ -546,7 +545,7 @@ void FidoRequestHandlerBase::AuthenticatorAdded(
     transport_availability_info_
         .win_native_ui_shows_resident_credential_notice =
         static_cast<WinWebAuthnApiAuthenticator*>(authenticator)
-            ->ShowsPrivacyNotice();
+            ->ShowsResidentCredentialNotice();
   }
 #endif  // BUILDFLAG(IS_WIN)
 }

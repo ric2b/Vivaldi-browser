@@ -8,10 +8,12 @@
 
 #include "build/build_config.h"
 #include "components/performance_manager/decorators/frame_visibility_decorator.h"
+#include "components/performance_manager/decorators/page_aggregator.h"
 #include "components/performance_manager/decorators/page_load_tracker_decorator.h"
 #include "components/performance_manager/decorators/process_hosted_content_types_aggregator.h"
 #include "components/performance_manager/decorators/process_priority_aggregator.h"
 #include "components/performance_manager/execution_context_priority/execution_context_priority_decorator.h"
+#include "components/performance_manager/freezing/frozen_frame_aggregator.h"
 #include "components/performance_manager/graph/frame_node_impl_describer.h"
 #include "components/performance_manager/graph/page_node_impl_describer.h"
 #include "components/performance_manager/graph/process_node_impl_describer.h"
@@ -60,6 +62,12 @@ void GraphFeatures::ConfigureGraph(Graph* graph) const {
   }
   if (flags_.process_hosted_content_types_aggregator) {
     Install<ProcessHostedContentTypesAggregator>(graph);
+  }
+  if (flags_.page_aggregator) {
+    Install<PageAggregator>(graph);
+  }
+  if (flags_.frozen_frame_aggregator) {
+    Install<FrozenFrameAggregator>(graph);
   }
   if (flags_.resource_attribution_scheduler) {
     Install<resource_attribution::internal::QueryScheduler>(graph);

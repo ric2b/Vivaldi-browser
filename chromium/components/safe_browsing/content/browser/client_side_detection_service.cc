@@ -202,6 +202,7 @@ bool ClientSideDetectionService::IsLocalResource(
 void ClientSideDetectionService::OnURLLoaderComplete(
     network::SimpleURLLoader* url_loader,
     base::Time start_time,
+    bool has_access_token,
     std::unique_ptr<std::string> response_body) {
   base::UmaHistogramTimes("SBClientPhishing.NetworkRequestDuration",
                           base::Time::Now() - start_time);
@@ -219,6 +220,11 @@ void ClientSideDetectionService::OnURLLoaderComplete(
     RecordHttpResponseOrErrorCode("SBClientPhishing.NetworkResult",
                                   url_loader->NetError(),
                                   response_code.value());
+  }
+
+  if (has_access_token) {
+    MaybeLogCookieReset(
+        *url_loader, SafeBrowsingAuthenticatedEndpoint::kClientSideDetection);
   }
 
   DCHECK(base::Contains(client_phishing_reports_, url_loader));
@@ -332,7 +338,8 @@ void ClientSideDetectionService::StartClientReportPhishingRequest(
   loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       url_loader_factory_.get(),
       base::BindOnce(&ClientSideDetectionService::OnURLLoaderComplete,
-                     base::Unretained(this), loader.get(), base::Time::Now()));
+                     base::Unretained(this), loader.get(), base::Time::Now(),
+                     !access_token.empty()));
 
   // Remember which callback and URL correspond to the current fetcher object.
   std::unique_ptr<ClientPhishingReportInfo> info(new ClientPhishingReportInfo);
@@ -445,6 +452,14 @@ bool ClientSideDetectionService::AtPhishingReportLimit() {
     return true;
   }
 
+  // Clear the expired timestamps
+  const auto cutoff = base::Time::Now() - base::Days(kReportsIntervalDays);
+  // Erase items older than cutoff because we will never care about them again.
+  while (!phishing_report_times_.empty() &&
+         phishing_report_times_.front() < cutoff) {
+    phishing_report_times_.pop_front();
+  }
+
   // `delegate_` and prefs can be null in unit tests.
   if (base::FeatureList::IsEnabled(kSafeBrowsingDailyPhishingReportsLimit) &&
       (delegate_ && delegate_->GetPrefs()) &&
@@ -460,14 +475,6 @@ int ClientSideDetectionService::GetPhishingNumReports() {
 }
 
 bool ClientSideDetectionService::AddPhishingReport(base::Time timestamp) {
-  base::Time cutoff = base::Time::Now() - base::Days(kReportsIntervalDays);
-
-  // Erase items older than cutoff because we will never care about them again.
-  while (!phishing_report_times_.empty() &&
-         phishing_report_times_.front() < cutoff) {
-    phishing_report_times_.pop_front();
-  }
-
   // We should not be adding a report when we are at the limit when this
   // function calls, but in case it does, we want to track how far back the
   // last report was prior to the current report and exit the function early.
@@ -508,10 +515,13 @@ bool ClientSideDetectionService::LoadPhishingReportTimesFromPrefs() {
   }
 
   phishing_report_times_.clear();
+  const auto cutoff = base::Time::Now() - base::Days(kReportsIntervalDays);
   for (const base::Value& timestamp :
        delegate_->GetPrefs()->GetList(prefs::kSafeBrowsingCsdPingTimestamps)) {
-    phishing_report_times_.push_back(
-        base::Time::FromSecondsSinceUnixEpoch(timestamp.GetDouble()));
+    auto time = base::Time::FromSecondsSinceUnixEpoch(timestamp.GetDouble());
+    if (time >= cutoff) {
+      phishing_report_times_.push_back(time);
+    }
   }
 
   return true;

@@ -22,8 +22,8 @@
 #include "components/sync/base/deletion_origin.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
+#include "components/sync/protocol/data_type_state_helper.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
-#include "components/sync/protocol/model_type_state_helper.h"
 #include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 #include "components/sync_bookmarks/switches.h"
@@ -74,11 +74,11 @@ syncer::ClientTagHash SyncedNoteTracker::GetClientTagHashFromUuid(
 
 // static
 std::unique_ptr<SyncedNoteTracker> SyncedNoteTracker::CreateEmpty(
-    sync_pb::ModelTypeState model_type_state,
+    sync_pb::DataTypeState data_type_state,
     file_sync::SyncedFileStore* synced_file_store) {
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new SyncedNoteTracker(
-      std::move(model_type_state), /*notes_reuploaded=*/false,
+      std::move(data_type_state), /*notes_reuploaded=*/false,
       /*num_ignored_updates_due_to_missing_parent=*/std::optional<int64_t>(0),
       /*max_version_among_ignored_updates_due_to_missing_parent=*/
       std::nullopt, synced_file_store));
@@ -93,7 +93,7 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
   DCHECK(model);
 
   if (!syncer::IsInitialSyncDone(
-          model_metadata.model_type_state().initial_sync_state())) {
+          model_metadata.data_type_state().initial_sync_state())) {
     return nullptr;
   }
 
@@ -129,7 +129,7 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
 
   // base::WrapUnique() used because the constructor is private.
   auto tracker = base::WrapUnique(new SyncedNoteTracker(
-      model_metadata.model_type_state(), notes_reuploaded,
+      model_metadata.data_type_state(), notes_reuploaded,
       num_ignored_updates_due_to_missing_parent,
       max_version_among_ignored_updates_due_to_missing_parent,
       synced_file_store));
@@ -356,7 +356,7 @@ sync_pb::NotesModelMetadata SyncedNoteTracker::BuildNoteModelMetadata() const {
     sync_pb::NoteMetadata* note_metadata = model_metadata.add_notes_metadata();
     *note_metadata->mutable_metadata() = tombstone_entity->metadata();
   }
-  *model_metadata.mutable_model_type_state() = model_type_state_;
+  *model_metadata.mutable_data_type_state() = data_type_state_;
   // This is always true for all trackers that were allowed to initialize.
   model_metadata.set_notes_reset_for_attachment_suport(true);
   return model_metadata;
@@ -407,14 +407,14 @@ SyncedNoteTracker::GetEntitiesWithLocalChanges() const {
 }
 
 SyncedNoteTracker::SyncedNoteTracker(
-    sync_pb::ModelTypeState model_type_state,
+    sync_pb::DataTypeState data_type_state,
     bool notes_reuploaded,
     std::optional<int64_t> num_ignored_updates_due_to_missing_parent,
     std::optional<int64_t>
         max_version_among_ignored_updates_due_to_missing_parent,
     file_sync::SyncedFileStore* synced_file_store)
     : synced_file_store_(synced_file_store),
-      model_type_state_(std::move(model_type_state)),
+      data_type_state_(std::move(data_type_state)),
       notes_reuploaded_(notes_reuploaded),
       num_ignored_updates_due_to_missing_parent_(
           num_ignored_updates_due_to_missing_parent),
@@ -424,7 +424,7 @@ SyncedNoteTracker::SyncedNoteTracker(
 bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     const NoteModelView* model,
     sync_pb::NotesModelMetadata model_metadata) {
-  DCHECK(syncer::IsInitialSyncDone(model_type_state_.initial_sync_state()));
+  DCHECK(syncer::IsInitialSyncDone(data_type_state_.initial_sync_state()));
 
   // Build a temporary map to look up note nodes efficiently by node ID.
   std::unordered_map<int64_t, const vivaldi::NoteNode*> id_to_note_node_map =
@@ -759,7 +759,7 @@ size_t SyncedNoteTracker::EstimateMemoryUsage() const {
   memory_usage += EstimateMemoryUsage(sync_id_to_entities_map_);
   memory_usage += EstimateMemoryUsage(note_node_to_entities_map_);
   memory_usage += EstimateMemoryUsage(ordered_local_tombstones_);
-  memory_usage += EstimateMemoryUsage(model_type_state_);
+  memory_usage += EstimateMemoryUsage(data_type_state_);
   return memory_usage;
 }
 

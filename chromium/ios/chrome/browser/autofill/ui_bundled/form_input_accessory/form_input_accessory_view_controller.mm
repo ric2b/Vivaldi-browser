@@ -30,6 +30,43 @@
 using autofill::FillingProduct;
 using manual_fill::ManualFillDataType;
 
+namespace {
+
+// Logs the right metrics when the manual fallback menu is opened from the
+// keyboard accessory's expand icon.
+void LogManualFallbackEntryThroughExpandIcon(ManualFillDataType data_type,
+                                             NSInteger suggestion_count) {
+  switch (data_type) {
+    case ManualFillDataType::kPassword:
+      base::RecordAction(
+          base::UserMetricsAction("ManualFallback_ExpandIcon_OpenPassword"));
+      UMA_HISTOGRAM_COUNTS_100(
+          "ManualFallback.VisibleSuggestions.ExpandIcon.OpenPasswords",
+          suggestion_count);
+      break;
+    case ManualFillDataType::kPaymentMethod:
+      base::RecordAction(base::UserMetricsAction(
+          "ManualFallback_ExpandIcon_OpenPaymentMethod"));
+      UMA_HISTOGRAM_COUNTS_100(
+          "ManualFallback.VisibleSuggestions.ExpandIcon.OpenPaymentMethods",
+          suggestion_count);
+      break;
+    case ManualFillDataType::kAddress:
+      base::RecordAction(
+          base::UserMetricsAction("ManualFallback_ExpandIcon_OpenAddress"));
+      UMA_HISTOGRAM_COUNTS_100(
+          "ManualFallback.VisibleSuggestions.ExpandIcon.OpenAddresses",
+          suggestion_count);
+      break;
+    case manual_fill::ManualFillDataType::kOther:
+      // The expand icon should only be available if the mapped `data_type` is
+      // either associated with passwords, payment methods or addresses.
+      NOTREACHED_NORETURN();
+  }
+}
+
+}  // namespace
+
 @interface FormInputAccessoryViewController () <
     FormSuggestionViewDelegate,
     ManualFillAccessoryViewControllerDelegate>
@@ -168,7 +205,9 @@ using manual_fill::ManualFillDataType;
 #pragma mark - FormInputAccessoryConsumer
 
 - (void)showAccessorySuggestions:(NSArray<FormSuggestion*>*)suggestions {
-  BOOL hasSingleManualFillButton = suggestions.count > 0;
+  BOOL hasSingleManualFillButton =
+      suggestions.count > 0 &&
+      (_mainFillingProduct != FillingProduct::kAutocomplete);
   self.formInputAccessoryView.manualFillButton.hidden =
       !hasSingleManualFillButton;
   self.formInputAccessoryView.passwordManualFillButton.hidden =
@@ -186,7 +225,10 @@ using manual_fill::ManualFillDataType;
       weakSelf.showScrollHint = NO;
     }
   };
-  [self.formInputAccessoryView layoutIfNeeded];
+  // Check if the view is in the current hierarchy before performing the layout.
+  if (self.formInputAccessoryView.window) {
+    [self.formInputAccessoryView layoutIfNeeded];
+  }
   [self.formSuggestionView
           updateSuggestions:suggestions
              showScrollHint:self.showScrollHint
@@ -198,23 +240,33 @@ using manual_fill::ManualFillDataType;
 }
 
 - (void)manualFillButtonPressed:(UIButton*)button {
-  [self manualFillButtonPressed:button
-                    forDataType:[ManualFillUtil
-                                    manualFillDataTypeFromFillingProduct:
-                                        _mainFillingProduct]];
+  ManualFillDataType dataType =
+      [ManualFillUtil manualFillDataTypeFromFillingProduct:_mainFillingProduct];
+  LogManualFallbackEntryThroughExpandIcon(
+      dataType, self.formSuggestionView.suggestions.count);
+  [self manualFillButtonPressed:button forDataType:dataType];
 }
 
 - (void)passwordManualFillButtonPressed:(UIButton*)button {
+  base::RecordAction(base::UserMetricsAction("ManualFallback_OpenPassword"));
+  UMA_HISTOGRAM_COUNTS_100("ManualFallback.VisibleSuggestions.OpenPasswords",
+                           self.formSuggestionView.suggestions.count);
   [self manualFillButtonPressed:button
                     forDataType:ManualFillDataType::kPassword];
 }
 
 - (void)creditCardManualFillButtonPressed:(UIButton*)button {
+  base::RecordAction(base::UserMetricsAction("ManualFallback_OpenCreditCard"));
+  UMA_HISTOGRAM_COUNTS_100("ManualFallback.VisibleSuggestions.OpenCreditCards",
+                           self.formSuggestionView.suggestions.count);
   [self manualFillButtonPressed:button
                     forDataType:ManualFillDataType::kPaymentMethod];
 }
 
 - (void)addressManualFillButtonPressed:(UIButton*)button {
+  base::RecordAction(base::UserMetricsAction("ManualFallback_OpenProfile"));
+  UMA_HISTOGRAM_COUNTS_100("ManualFallback.VisibleSuggestions.OpenProfiles",
+                           self.formSuggestionView.suggestions.count);
   [self manualFillButtonPressed:button
                     forDataType:ManualFillDataType::kAddress];
 }
@@ -444,10 +496,11 @@ using manual_fill::ManualFillDataType;
         break;
       case FillingProduct::kMerchantPromoCode:
       case FillingProduct::kCompose:
+      case FillingProduct::kPredictionImprovements:
       case FillingProduct::kNone:
         // `kMerchantPromoCode` and `kCompose` cases are currently not available
         // on iOS. Also, there shouldn't be suggestions of type `kNone`.
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
 
     // VoiceOver message setup with
@@ -534,8 +587,9 @@ using manual_fill::ManualFillDataType;
 #pragma mark - FormSuggestionViewDelegate
 
 - (void)formSuggestionView:(FormSuggestionView*)formSuggestionView
-       didAcceptSuggestion:(FormSuggestion*)suggestion {
-  [self.formSuggestionClient didSelectSuggestion:suggestion];
+       didAcceptSuggestion:(FormSuggestion*)suggestion
+                   atIndex:(NSInteger)index {
+  [self.formSuggestionClient didSelectSuggestion:suggestion atIndex:index];
 }
 
 - (void)formSuggestionViewShouldResetFromPull:

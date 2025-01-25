@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {classNames} from '../base/classnames';
 import {Hotkey, Platform} from '../base/hotkeys';
 import {isString} from '../base/object_utils';
@@ -37,14 +36,13 @@ import {
 } from '../widgets/multiselect';
 import {Popup, PopupPosition} from '../widgets/popup';
 import {Portal} from '../widgets/portal';
-import {FilterableSelect, Select} from '../widgets/select';
+import {Select} from '../widgets/select';
 import {Spinner} from '../widgets/spinner';
 import {Switch} from '../widgets/switch';
 import {TextInput} from '../widgets/text_input';
 import {MultiParagraphText, TextParagraph} from '../widgets/text_paragraph';
 import {LazyTreeNode, Tree, TreeNode} from '../widgets/tree';
 import {VegaView} from '../widgets/vega_view';
-
 import {createPage} from './pages';
 import {PopupMenuButton} from './popup_menu';
 import {TableShowcase} from './tables/table_showcase';
@@ -56,6 +54,8 @@ import {
   VirtualTableRow,
 } from '../widgets/virtual_table';
 import {TagInput} from '../widgets/tag_input';
+import {SegmentedButtons} from '../widgets/segmented_buttons';
+import {MiddleEllipsis} from '../widgets/middle_ellipsis';
 
 const DATA_ENGLISH_LETTER_FREQUENCY = {
   table: [
@@ -628,6 +628,23 @@ function TagInputDemo() {
   };
 }
 
+function SegmentedButtonsDemo({attrs}: {attrs: {}}) {
+  let selectedIdx = 0;
+  return {
+    view: () => {
+      return m(SegmentedButtons, {
+        ...attrs,
+        options: [{label: 'Yes'}, {label: 'Maybe'}, {label: 'No'}],
+        selectedOption: selectedIdx,
+        onOptionSelected: (num) => {
+          selectedIdx = num;
+          raf.scheduleFullRedraw();
+        },
+      });
+    },
+  };
+}
+
 export const WidgetsPage = createPage({
   view() {
     return m(
@@ -651,6 +668,17 @@ export const WidgetsPage = createPage({
           active: false,
           compact: false,
           loading: false,
+        },
+      }),
+      m(WidgetShowcase, {
+        label: 'Segmented Buttons',
+        description: `
+          Segmented buttons are a group of buttons where one of them is
+          'selected'; they act similar to a set of radio buttons.
+        `,
+        renderWidget: (opts) => m(SegmentedButtonsDemo, opts),
+        initialOpts: {
+          disabled: false,
         },
       }),
       m(WidgetShowcase, {
@@ -693,14 +721,6 @@ export const WidgetsPage = createPage({
         initialOpts: {
           disabled: false,
         },
-      }),
-      m(WidgetShowcase, {
-        label: 'Filterable Select',
-        renderWidget: () =>
-          m(FilterableSelect, {
-            values: ['foo', 'bar', 'baz'],
-            onSelected: () => {},
-          }),
       }),
       m(WidgetShowcase, {
         label: 'Empty State',
@@ -1251,6 +1271,24 @@ export const WidgetsPage = createPage({
           TextInput, but the actual editable element appears after the last tag.
           Clicking anywhere on the container will focus the text input.`,
         renderWidget: () => m(TagInputDemo),
+      }),
+      m(WidgetShowcase, {
+        label: 'Middle Ellipsis',
+        description: `
+          Sometimes the start and end of a bit of text are more important than
+          the middle. This element puts the ellipsis in the midde if the content
+          is too wide for its container.`,
+        renderWidget: (opts) =>
+          m(
+            'div',
+            {style: {width: Boolean(opts.squeeze) ? '150px' : '450px'}},
+            m(MiddleEllipsis, {
+              text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit',
+            }),
+          ),
+        initialOpts: {
+          squeeze: false,
+        },
       }),
     );
   },

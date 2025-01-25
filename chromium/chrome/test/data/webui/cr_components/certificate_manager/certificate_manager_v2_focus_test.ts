@@ -11,8 +11,10 @@ import 'chrome://certificate-manager/strings.m.js';
 
 import type {CertificateManagerV2Element} from 'chrome://resources/cr_components/certificate_manager/certificate_manager_v2.js';
 import {CertificateSource} from 'chrome://resources/cr_components/certificate_manager/certificate_manager_v2.mojom-webui.js';
+import type {CertManagementMetadata} from 'chrome://resources/cr_components/certificate_manager/certificate_manager_v2.mojom-webui.js';
 import {CertificatesV2BrowserProxy} from 'chrome://resources/cr_components/certificate_manager/certificates_v2_browser_proxy.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
+import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {microtasksFinished} from 'chrome://webui-test/test_util.js';
 
@@ -57,7 +59,8 @@ suite('CertificateManagerV2FocusTest', () => {
     assertFalse(certManager.$.toast.open);
 
     const certEntries =
-        certManager.$.crsCerts.$.certs.querySelectorAll('certificate-entry-v2');
+        certManager.$.crsCertSection.$.crsCerts.$.certs.querySelectorAll(
+            'certificate-entry-v2');
     assertEquals(1, certEntries.length, 'no certs displayed');
     assertEquals('', await navigator.clipboard.readText());
     certEntries[0]!.$.copy.click();
@@ -82,17 +85,24 @@ suite('CertificateManagerV2FocusTest', () => {
       return {certs: []};
     });
     initializeElement();
+    certManager.$.clientMenuItem.click();
+    certManager.$.viewOsImportedClientCerts.click();
 
     await getCertificatesResolver.promise;
     await microtasksFinished();
     assertFalse(certManager.$.toast.open);
 
-    const entries = certManager.$.platformClientCerts.$.certs.querySelectorAll(
-        'certificate-entry-v2');
-    assertEquals(1, entries.length, 'no certs displayed');
+    const certLists =
+        certManager.$.platformClientCertsSection.shadowRoot!.querySelectorAll(
+            'certificate-list-v2');
+    assertEquals(1, certLists.length, 'no cert lists displayed');
+
+    const certEntries =
+        certLists[0]!.$.certs.querySelectorAll('certificate-entry-v2');
+    assertEquals(1, certEntries.length, 'no certs displayed');
 
     assertEquals('', await navigator.clipboard.readText());
-    entries[0]!.$.copy.click();
+    certEntries[0]!.$.copy.click();
     assertTrue(certManager.$.toast.open);
     assertEquals('deadbeef2', await navigator.clipboard.readText());
   });
@@ -166,4 +176,37 @@ suite('CertificateManagerV2FocusTest', () => {
     assertEquals('deadbeef4', await navigator.clipboard.readText());
   });
   // </if>
+
+  test('Check Focus when going in and out of subpages', async () => {
+    const metadata: CertManagementMetadata = {
+      includeSystemTrustStore: true,
+      numUserAddedSystemCerts: 5,
+      isIncludeSystemTrustStoreManaged: true,
+      numPolicyCerts: 0,
+    };
+    testProxy.handler.setCertManagementMetadata(metadata);
+    initializeElement();
+    await microtasksFinished();
+    certManager.$.localCertSection.$.viewOsImportedCerts.click();
+    await microtasksFinished();
+
+    // Check focus is on back button in platform certs section.
+    assertTrue(
+        certManager.$.platformCertsSection.classList.contains('selected'));
+    const elementInFocus = getDeepActiveElement();
+    assertTrue(!!elementInFocus);
+    assertEquals('backButton', elementInFocus.id);
+    const subsection = (elementInFocus.getRootNode() as ShadowRoot).host;
+    assertEquals('platformCertsSection', subsection.id);
+
+    (elementInFocus as HTMLElement).click();
+    await microtasksFinished();
+
+    // Check focus is on link row going to platform certs section.
+    assertTrue(certManager.$.localCertSection.classList.contains('selected'));
+    const newElementInFocus = getDeepActiveElement();
+    assertTrue(!!newElementInFocus);
+    const linkRow = (newElementInFocus.getRootNode() as ShadowRoot).host;
+    assertEquals('viewOsImportedCerts', linkRow.id);
+  });
 });

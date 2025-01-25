@@ -3,6 +3,7 @@ name = "crypto_provider_test-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
+license = "Apache-2.0"
 
 [package.metadata]
 cargo-fuzz = true
@@ -14,6 +15,9 @@ derive_fuzztest.workspace = true
 
 [target.'cfg(fuzzing)'.dependencies]
 libfuzzer-sys.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
 [features]
 default = ["crypto_provider_default/default"]

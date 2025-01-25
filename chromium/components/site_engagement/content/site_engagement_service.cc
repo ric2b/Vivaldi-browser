@@ -34,6 +34,8 @@
 #include "components/site_engagement/content/site_engagement_score.h"
 #include "components/site_engagement/core/pref_names.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/webapps/browser/webapps_client.h"
+#include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -300,11 +302,12 @@ void SiteEngagementService::HandleNotificationInteraction(const GURL& url) {
   if (!ShouldRecordEngagement(url))
     return;
 
+  double old_score = GetScore(url);
   AddPoints(url, SiteEngagementScore::GetNotificationInteractionPoints());
 
   MaybeRecordMetrics();
   OnEngagementEvent(nullptr /* web_contents */, url,
-                    EngagementType::kNotificationInteraction);
+                    EngagementType::kNotificationInteraction, old_score);
 }
 
 bool SiteEngagementService::IsBootstrapped() const {
@@ -329,7 +332,12 @@ void SiteEngagementService::ResetBaseScoreForURL(const GURL& url,
 
 void SiteEngagementService::SetLastShortcutLaunchTime(
     content::WebContents* web_contents,
+#if !BUILDFLAG(IS_ANDROID)
+    const webapps::AppId& app_id,
+#endif
     const GURL& url) {
+  double old_score = GetScore(url);
+
   SiteEngagementScore score = CreateEngagementScore(url);
 
   base::Time now = clock_->Now();
@@ -337,7 +345,14 @@ void SiteEngagementService::SetLastShortcutLaunchTime(
   score.set_last_shortcut_launch_time(now);
   score.Commit();
 
-  OnEngagementEvent(web_contents, url, EngagementType::kWebappShortcutLaunch);
+  std::optional<webapps::AppId> web_app_id;
+#if !BUILDFLAG(IS_ANDROID)
+  CHECK(!app_id.empty());
+  web_app_id = app_id;
+#endif
+
+  OnEngagementEvent(web_contents, url, EngagementType::kWebappShortcutLaunch,
+                    old_score, web_app_id);
 }
 
 double SiteEngagementService::GetScore(const GURL& url) const {
@@ -445,12 +460,12 @@ void SiteEngagementService::CleanupEngagementScores(
         // preferences. |rebase_time| is strictly in the past, so any score with
         // a last updated time in the future is caught by this branch.
         if (score.last_engagement_time() > rebase_time) {
-          score.set_last_engagement_time(now);
+          score.SetLastEngagementTime(now);
         } else if (score.last_engagement_time() > last_engagement_time) {
           // This score is newer than |last_engagement_time|, but older than
           // |rebase_time|. It should still be rebased with no offset as we
           // don't accurately know what the offset should be.
-          score.set_last_engagement_time(rebase_time);
+          score.SetLastEngagementTime(rebase_time);
         } else {
           // Work out the offset between this score's last engagement time and
           // the last time the service recorded any engagement. Set the score's
@@ -460,7 +475,7 @@ void SiteEngagementService::CleanupEngagementScores(
           base::TimeDelta offset =
               last_engagement_time - score.last_engagement_time();
           base::Time rebase_score_time = rebase_time - offset;
-          score.set_last_engagement_time(rebase_score_time);
+          score.SetLastEngagementTime(rebase_score_time);
         }
 
         if (score.last_engagement_time() > new_last_engagement_time)
@@ -602,13 +617,15 @@ void SiteEngagementService::HandleMediaPlaying(
   if (!ShouldRecordEngagement(url))
     return;
 
+  double old_score = GetScore(url);
   AddPoints(url, is_hidden ? SiteEngagementScore::GetHiddenMediaPoints()
                            : SiteEngagementScore::GetVisibleMediaPoints());
 
   MaybeRecordMetrics();
   OnEngagementEvent(
       web_contents, url,
-      is_hidden ? EngagementType::kMediaHidden : EngagementType::kMediaVisible);
+      is_hidden ? EngagementType::kMediaHidden : EngagementType::kMediaVisible,
+      old_score);
 }
 
 void SiteEngagementService::HandleNavigation(content::WebContents* web_contents,
@@ -617,10 +634,11 @@ void SiteEngagementService::HandleNavigation(content::WebContents* web_contents,
   if (!IsEngagementNavigation(transition) || !ShouldRecordEngagement(url))
     return;
 
+  double old_score = GetScore(url);
   AddPoints(url, SiteEngagementScore::GetNavigationPoints());
 
   MaybeRecordMetrics();
-  OnEngagementEvent(web_contents, url, EngagementType::kNavigation);
+  OnEngagementEvent(web_contents, url, EngagementType::kNavigation, old_score);
 }
 
 void SiteEngagementService::HandleUserInput(content::WebContents* web_contents,
@@ -629,21 +647,34 @@ void SiteEngagementService::HandleUserInput(content::WebContents* web_contents,
   if (!ShouldRecordEngagement(url))
     return;
 
+  double old_score = GetScore(url);
   AddPoints(url, SiteEngagementScore::GetUserInputPoints());
 
   MaybeRecordMetrics();
-  OnEngagementEvent(web_contents, url, type);
+  OnEngagementEvent(web_contents, url, type, old_score);
 }
 
 void SiteEngagementService::OnEngagementEvent(
     content::WebContents* web_contents,
     const GURL& url,
-    EngagementType type) {
+    EngagementType type,
+    double old_score,
+    const std::optional<webapps::AppId>& app_id_override) {
   SiteEngagementMetrics::RecordEngagement(type);
+
+  std::optional<webapps::AppId> app_id = app_id_override;
+  if (!app_id && web_contents && webapps::WebappsClient::Get()) {
+    app_id =
+        webapps::WebappsClient::Get()->GetAppIdForWebContents(web_contents);
+  }
+  // TODO(crbug.com/358168777): Possibly look up the app_id from the url
+  // for the notification use-case, if the notification system doesn't have the
+  // app_id to provide to this system.
 
   double score = GetScore(url);
   for (SiteEngagementObserver& observer : observer_list_)
-    observer.OnEngagementEvent(web_contents, url, score, type);
+    observer.OnEngagementEvent(web_contents, url, score, old_score, type,
+                               app_id);
 }
 
 bool SiteEngagementService::IsLastEngagementStale() const {

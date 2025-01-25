@@ -74,6 +74,7 @@ TestVadDtx::TestVadDtx()
           CreateAudioDecoderFactory<AudioDecoderIlbc, AudioDecoderOpus>()),
       acm_send_(AudioCodingModule::Create()),
       acm_receive_(std::make_unique<acm2::AcmReceiver>(
+          env_,
           acm2::AcmReceiver::Config(decoder_factory_))),
       channel_(std::make_unique<Channel>()),
       packetization_callback_(
@@ -85,7 +86,7 @@ TestVadDtx::TestVadDtx()
 }
 
 bool TestVadDtx::RegisterCodec(const SdpAudioFormat& codec_format,
-                               absl::optional<Vad::Aggressiveness> vad_mode) {
+                               std::optional<Vad::Aggressiveness> vad_mode) {
   constexpr int payload_type = 17, cn_payload_type = 117;
   bool added_comfort_noise = false;
 
@@ -189,7 +190,7 @@ void TestWebRtcVadDtx::Perform() {
 // Test various configurations on VAD/DTX.
 void TestWebRtcVadDtx::RunTestCases(const SdpAudioFormat& codec_format) {
   Test(/*new_outfile=*/true,
-       /*expect_dtx_enabled=*/RegisterCodec(codec_format, absl::nullopt));
+       /*expect_dtx_enabled=*/RegisterCodec(codec_format, std::nullopt));
 
   Test(/*new_outfile=*/false,
        /*expect_dtx_enabled=*/RegisterCodec(codec_format, Vad::kVadAggressive));
@@ -224,7 +225,7 @@ void TestOpusDtx::Perform() {
   // Register Opus as send codec
   std::string out_filename =
       webrtc::test::OutputPath() + "testOpusDtx_outFile_mono.pcm";
-  RegisterCodec({"opus", 48000, 2}, absl::nullopt);
+  RegisterCodec({"opus", 48000, 2}, std::nullopt);
   acm_send_->ModifyEncoder([](std::unique_ptr<AudioEncoder>* encoder_ptr) {
     (*encoder_ptr)->SetDtx(false);
   });

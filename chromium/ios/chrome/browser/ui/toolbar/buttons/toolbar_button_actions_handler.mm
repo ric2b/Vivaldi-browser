@@ -12,7 +12,7 @@
 #import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
 #import "ios/chrome/browser/iph_for_new_chrome_user/model/tab_based_iph_browser_agent.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
@@ -110,9 +110,9 @@
   [self.omniboxHandler focusOmnibox];
 }
 
-// Action when the shield button within omnibox is tapped.
-- (void)showTrackerBlockerManager {
-  [self.omniboxHandler showTrackerBlockerManager];
+// Action when home is tapped
+- (void)vivaldiHomeAction {
+  [_browserCommands showHomePage];
 }
 // End Vivaldi
 

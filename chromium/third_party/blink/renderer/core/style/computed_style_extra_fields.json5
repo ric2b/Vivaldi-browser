@@ -51,8 +51,9 @@
         "inline-flex", "grid", "inline-grid", "contents", "flow-root", "none",
         "layout-custom", "inline-layout-custom", "math", "block math",
         "inline list-item", "flow-root list-item", "inline flow-root list-item",
-        // Available only if CssDisplayRuby is enabled:
-        "ruby", "block ruby", "ruby-text"
+        "ruby", "block ruby", "ruby-text",
+        // Available only if CSSMasonryLayout is enabled:
+        "masonry", "inline-masonry"
       ],
       default_value: "inline",
     },
@@ -239,7 +240,7 @@
     {
       name: "PseudoElementStyles",
       field_template: "primitive",
-      field_size: 15,
+      field_size: 19,
       default_value: "kPseudoIdNone",
       type_name: "unsigned",
       reset_on_new_style: true,
@@ -711,13 +712,6 @@
       default_value: "false",
     },
     {
-      name: "HasCurrentClipPathAnimation",
-      field_template: "primitive",
-      type_name: "bool",
-      field_group: "*",
-      default_value: "false",
-    },
-    {
       name: "IsRunningOpacityAnimationOnCompositor",
       field_template: "primitive",
       type_name: "bool",
@@ -942,6 +936,8 @@
       invalidate: ["accent-color", "background-current-color", "border-visual", "paint"],
     },
     {
+      // This flag is set if both the computed value of color-scheme is 'normal'
+      // and the page's supported color-schemes is 'normal'.
       name: "ColorSchemeFlagsIsNormal",
       field_template: "primitive",
       type_name: "bool",
@@ -969,6 +965,13 @@
       field_template: "monotonic_flag",
       default_value: "false",
       custom_compare: true,
+    },
+    {
+      name: "IsSpecifiedDisplayWebkitBox",
+      name_for_methods: "IsSpecifiedDisplayWebkitBox",
+      field_template: "monotonic_flag",
+      default_value: "false",
+      invalidate: ["layout", "paint"],
     },
     {
       name: "IsFlexOrGridOrCustomItem",
@@ -1186,7 +1189,7 @@
     },
     {
       // https://html.spec.whatwg.org/multipage/interaction.html#inert
-      name: "IsInert",
+      name: "IsHTMLInert",
       inherited: true,
       independent: true,
       field_template: "primitive",
@@ -1275,12 +1278,12 @@
       default_value: "false",
     },
     {
-      name: "InsetAreaOffsets",
+      name: "PositionAreaOffsets",
       field_template: "external",
       field_group: "*",
-      include_paths: ["third_party/blink/renderer/core/style/inset_area.h"],
+      include_paths: ["third_party/blink/renderer/core/style/position_area.h"],
       default_value: "std::nullopt",
-      type_name: "std::optional<blink::InsetAreaOffsets>",
+      type_name: "std::optional<blink::PositionAreaOffsets>",
       custom_compare: true,
     },
     {

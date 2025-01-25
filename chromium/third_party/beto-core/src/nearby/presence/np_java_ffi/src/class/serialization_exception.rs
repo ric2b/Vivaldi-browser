@@ -57,83 +57,52 @@ impl<'local, Obj: AsRef<JObject<'local>>> InvalidDataElementException<Obj> {
     }
 }
 
-static INSUFFICIENT_SPACE_EXCEPTION: ClassDesc = ClassDesc::new(
-    "com/google/android/nearby/presence/rust/SerializationException$InsufficientSpaceException",
-);
+/// Helper to generate wrapper types for exception classes with no-arg constructors
+macro_rules! exception_wrapper {
+    ($(#[$docs:meta])* $name:ident, $cls:literal) => {
+        $(#[$docs])*
+        #[repr(transparent)]
+        pub struct $name<Obj>(pub Obj);
 
-/// Rust representation of `class SerializationException.InsufficientSpaceException`.
-#[repr(transparent)]
-pub struct InsufficientSpaceException<Obj>(pub Obj);
+        impl<'local> $name<JObject<'local>> {
+            /// Create a new instance.
+            pub fn construct(env: &mut JNIEnv<'local>) -> jni::errors::Result<Self> {
+                static CLS: ClassDesc = ClassDesc::new($cls);
+                pourover::call_constructor!(env, &CLS, "()V",).map(Self)
+            }
 
-impl<'local> InsufficientSpaceException<JObject<'local>> {
-    /// Create a new instance.
-    pub fn construct(env: &mut JNIEnv<'local>) -> jni::errors::Result<Self> {
-        pourover::call_constructor!(env, &INSUFFICIENT_SPACE_EXCEPTION, "()V",).map(Self)
-    }
+            /// Create a new instance and throw it.
+            pub fn throw_new(env: &mut JNIEnv<'local>) -> jni::errors::Result<()> {
+                Self::construct(env)?.throw(env)
+            }
+        }
 
-    /// Create a new instance and throw it.
-    pub fn throw_new(env: &mut JNIEnv<'local>) -> jni::errors::Result<()> {
-        Self::construct(env)?.throw(env)
-    }
-}
+        impl<'local, Obj: AsRef<JObject<'local>>> $name<Obj> {
+            /// Throw this exception.
+            pub fn throw<'env>(&self, env: &mut JNIEnv<'env>) -> jni::errors::Result<()> {
+                env.throw(<&JThrowable>::from(self.0.as_ref()))
+            }
+        }
 
-impl<'local, Obj: AsRef<JObject<'local>>> InsufficientSpaceException<Obj> {
-    /// Throw this exception.
-    pub fn throw<'env>(&self, env: &mut JNIEnv<'env>) -> jni::errors::Result<()> {
-        env.throw(<&JThrowable>::from(self.0.as_ref()))
-    }
-}
-
-static LDT_ENCRYPTION_EXCEPTION_CLASS: ClassDesc = ClassDesc::new(
-    "com/google/android/nearby/presence/rust/SerializationException$LdtEncryptionException",
-);
-
-/// Rust representation of `class SerializationException.LdtEncryptionException`.
-#[repr(transparent)]
-pub struct LdtEncryptionException<Obj>(pub Obj);
-
-impl<'local> LdtEncryptionException<JObject<'local>> {
-    /// Create a new instance.
-    pub fn construct(env: &mut JNIEnv<'local>) -> jni::errors::Result<Self> {
-        pourover::call_constructor!(env, &LDT_ENCRYPTION_EXCEPTION_CLASS, "()V").map(Self)
-    }
-
-    /// Create a new instance and throw it.
-    pub fn throw_new(env: &mut JNIEnv<'local>) -> jni::errors::Result<()> {
-        Self::construct(env)?.throw(env)
     }
 }
 
-impl<'local, Obj: AsRef<JObject<'local>>> LdtEncryptionException<Obj> {
-    /// Throw this exception.
-    pub fn throw<'env>(&self, env: &mut JNIEnv<'env>) -> jni::errors::Result<()> {
-        env.throw(<&JThrowable>::from(self.0.as_ref()))
-    }
-}
+exception_wrapper!(
+    /// Rust representation of `class SerializationException.UnclosedActiveSectionException`.
+    UnclosedActiveSectionException, "com/google/android/nearby/presence/rust/SerializationException$UnclosedActiveSectionException");
 
-static UNENCRYPTED_SIZE_EXCEPTION_CLASS: ClassDesc = ClassDesc::new(
-    "com/google/android/nearby/presence/rust/SerializationException$UnencryptedSizeException",
-);
+exception_wrapper!(
+    /// Rust representation of `class SerializationException.InvalidSectionKindException`.
+    InvalidSectionKindException, "com/google/android/nearby/presence/rust/SerializationException$InvalidSectionKindException");
 
-/// Rust representation of `class SerializationException.UnencryptedSizeException`.
-#[repr(transparent)]
-pub struct UnencryptedSizeException<Obj>(pub Obj);
+exception_wrapper!(
+    /// Rust representation of `class SerializationException.InsufficientSpaceException`.
+    InsufficientSpaceException, "com/google/android/nearby/presence/rust/SerializationException$InsufficientSpaceException");
 
-impl<'local> UnencryptedSizeException<JObject<'local>> {
-    /// Create a new instance.
-    pub fn construct(env: &mut JNIEnv<'local>) -> jni::errors::Result<Self> {
-        pourover::call_constructor!(env, &UNENCRYPTED_SIZE_EXCEPTION_CLASS, "()V").map(Self)
-    }
+exception_wrapper!(
+    /// Rust representation of `class SerializationException.LdtEncryptionException`.
+    LdtEncryptionException, "com/google/android/nearby/presence/rust/SerializationException$LdtEncryptionException");
 
-    /// Create a new instance and throw it.
-    pub fn throw_new(env: &mut JNIEnv<'local>) -> jni::errors::Result<()> {
-        Self::construct(env)?.throw(env)
-    }
-}
-
-impl<'local, Obj: AsRef<JObject<'local>>> UnencryptedSizeException<Obj> {
-    /// Throw this exception.
-    pub fn throw<'env>(&self, env: &mut JNIEnv<'env>) -> jni::errors::Result<()> {
-        env.throw(<&JThrowable>::from(self.0.as_ref()))
-    }
-}
+exception_wrapper!(
+    /// Rust representation of `class SerializationException.UnencryptedSizeException`.
+    UnencryptedSizeException, "com/google/android/nearby/presence/rust/SerializationException$UnencryptedSizeException");

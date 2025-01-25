@@ -22,6 +22,10 @@
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ui/base/device_form_factor.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace {
 
 const CGFloat kTextTopMargin = 6.0;
@@ -333,7 +337,13 @@ const CGFloat kActionScrollViewSeparatorSpace = 8;
 
   // Leading Icon.
   [_leadingIconView prepareForReuse];
+
+  if (vivaldi::IsVivaldiRunning() && configuration.leadingIconLocal != nil) {
+    [_leadingIconView setOmniboxIconFromLocal:configuration.leadingIconLocal];
+  } else {
   [_leadingIconView setOmniboxIcon:configuration.leadingIcon];
+  } // End Vivaldi
+
   _leadingIconView.highlighted = configuration.leadingIconHighlighted;
 
   // Primary Label.

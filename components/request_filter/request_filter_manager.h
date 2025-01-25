@@ -34,7 +34,6 @@ class HttpResponseHeaders;
 class SiteForCookies;
 }  // namespace net
 
-
 namespace network {
 class URLLoaderFactoryBuilder;
 }  // namespace network
@@ -207,14 +206,14 @@ class RequestFilterManager : public KeyedService {
 
     void OnBeforeRequestHandled(int64_t request_id,
                                 size_t filter_priorty,
-                                bool cancel,
+                                RequestFilter::CancelDecision cancel,
                                 bool collapse,
                                 const GURL& new_url);
 
     void OnBeforeSendHeadersHandled(
         int64_t request_id,
         size_t filter_priorty,
-        bool cancel,
+        RequestFilter::CancelDecision cancel,
         RequestFilter::RequestHeaderChanges header_changes);
 
     void MergeRequestHeaderChanges(PendingRequest* pending_request);
@@ -222,7 +221,7 @@ class RequestFilterManager : public KeyedService {
     void OnHeadersReceivedHandled(
         int64_t request_id,
         size_t filter_priorty,
-        bool cancel,
+        RequestFilter::CancelDecision cancel,
         bool collapse,
         const GURL& new_url,
         RequestFilter::ResponseHeaderChanges header_changes);

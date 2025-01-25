@@ -22,6 +22,7 @@ namespace variations {
 class VariationsService;
 }
 
+class PrefRegistrySimple;
 class PrefService;
 class TemplateURLService;
 
@@ -40,11 +41,6 @@ class SearchEngineChoiceService : public KeyedService {
                             PrefService* local_state,
                             variations::VariationsService* variations_service);
   ~SearchEngineChoiceService() override;
-
-  // Returns whether the version of the search engines settings screen showing
-  // additional search engine info should be shown.
-  // TODO(b/318824817): To be removed post-launch.
-  bool ShouldShowUpdatedSettings();
 
   // Returns the choice screen eligibility condition most relevant for the
   // profile associated with `profile_prefs` and `template_url_service`. Only
@@ -94,6 +90,9 @@ class SearchEngineChoiceService : public KeyedService {
   // Clears the country id cache to be able to change countries multiple times
   // in tests.
   void ClearCountryIdCacheForTesting();
+
+  // Register Local state preferences in `registry`.
+  static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
  private:
   // Checks if the search engine choice should be prompted again, based on

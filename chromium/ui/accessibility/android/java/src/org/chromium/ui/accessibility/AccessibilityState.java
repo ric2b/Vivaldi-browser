@@ -51,7 +51,7 @@ import java.util.WeakHashMap;
 
 /**
  * Provides utility methods relating to measuring accessibility state on Android. See native
- * counterpart in ui::accessibility::AccessibilityState.
+ * counterpart in accessibility::AccessibilityState.
  */
 @JNINamespace("ui")
 public class AccessibilityState {
@@ -730,15 +730,10 @@ public class AccessibilityState {
 
         // Calculate traditional state values.
         boolean isSpokenFeedbackServicePresent = (0 != (sFeedbackTypeMask & FEEDBACK_SPOKEN));
-        boolean isTouchExplorationEnabled;
-        if (UiAccessibilityFeatureMap.isEnabled(
-                UiAccessibilityFeatures.START_SURFACE_ACCESSIBILITY_CHECK)) {
-            isTouchExplorationEnabled =
-                    (0 != (sCapabilitiesMask & CAPABILITY_CAN_REQUEST_TOUCH_EXPLORATION))
-                            && (0 != (sFlagsMask & FLAG_REQUEST_TOUCH_EXPLORATION_MODE));
-        } else {
-            isTouchExplorationEnabled = sAccessibilityManager.isTouchExplorationEnabled();
-        }
+        boolean isTouchExplorationEnabled =
+                (0 != (sCapabilitiesMask & CAPABILITY_CAN_REQUEST_TOUCH_EXPLORATION))
+                        && (0 != (sFlagsMask & FLAG_REQUEST_TOUCH_EXPLORATION_MODE));
+
         boolean isPerformGesturesEnabled =
                 (0 != (sCapabilitiesMask & CAPABILITY_CAN_PERFORM_GESTURES));
 

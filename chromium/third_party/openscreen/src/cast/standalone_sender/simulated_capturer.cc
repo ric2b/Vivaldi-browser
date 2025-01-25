@@ -13,7 +13,7 @@
 #include <thread>
 
 #include "cast/standalone_sender/ffmpeg_glue.h"
-#include "cast/streaming/environment.h"
+#include "cast/streaming/public/environment.h"
 #include "util/osp_logging.h"
 
 namespace openscreen::cast {

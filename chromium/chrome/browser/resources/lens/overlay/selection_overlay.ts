@@ -22,6 +22,7 @@ import {BrowserProxyImpl} from './browser_proxy.js';
 import type {BrowserProxy} from './browser_proxy.js';
 import {getFallbackTheme} from './color_utils.js';
 import {type CursorTooltipData, CursorTooltipType} from './cursor_tooltip.js';
+import type {CenterRotatedBox} from './geometry.mojom-webui.js';
 import {UserAction} from './lens.mojom-webui.js';
 import {INVOCATION_SOURCE} from './lens_overlay_app.js';
 import {recordLensOverlayInteraction} from './metrics_utils.js';
@@ -30,13 +31,22 @@ import type {OverlayShimmerElement} from './overlay_shimmer.js';
 import type {OverlayShimmerCanvasElement} from './overlay_shimmer_canvas.js';
 import type {PostSelectionRendererElement} from './post_selection_renderer.js';
 import type {RegionSelectionElement} from './region_selection.js';
+import {ScreenshotBitmapBrowserProxyImpl} from './screenshot_bitmap_browser_proxy.js';
+import {renderScreenshot} from './screenshot_utils.js';
 import {getTemplate} from './selection_overlay.html.js';
 import {CursorType, DRAG_THRESHOLD, DragFeature, emptyGestureEvent, focusShimmerOnRegion, GestureState, ShimmerControlRequester, unfocusShimmer} from './selection_utils.js';
 import type {GestureEvent, OverlayShimmerFocusedRegion} from './selection_utils.js';
 import type {TextLayerElement} from './text_layer.js';
+import type {TranslateState} from './translate_button.js';
 import {toPercent} from './values_converter.js';
 
-const RESIZE_THRESHOLD = 8;
+// The amount of margins in pixels to add to the screenshot when the window is
+// resized.
+const SCREENSHOT_FULLSIZE_MARGIN_PIXEL = 24;
+
+// The number of pixels the screenshot can differ from the viewport before
+// adding margins.
+const SCREENSHOT_RESIZE_TOLERANCE_PIXELS = 2;
 
 // The size of our custom cursor.
 export const CURSOR_SIZE_PIXEL = 32;
@@ -67,32 +77,26 @@ export interface SelectedTextContextMenuData {
   selectionEndIndex: number;
 }
 
-export interface DetectedTextContextMenuData {
-  // The left-most position of the detected text.
-  left: number;
-  // The right-most position of the detected text.
-  right: number;
-  // The highest position of the detected text.
-  top: number;
-  // The lowest position of the detected text.
-  bottom: number;
-  // The selection start index of the text.
+export interface SelectedRegionContextMenuData {
+  // The bounds of the selected region.
+  box: CenterRotatedBox;
+  // The selection start index of the detected text, or -1 if none.
   selectionStartIndex: number;
-  // The end selection index of the text.
+  // The end selection index of the detected text, or -1 if none.
   selectionEndIndex: number;
 }
 
 export interface SelectionOverlayElement {
   $: {
-    backgroundImage: HTMLImageElement,
+    backgroundImageCanvas: HTMLCanvasElement,
     cursor: HTMLElement,
-    detectedTextContextMenu: HTMLElement,
     initialFlashScrim: HTMLDivElement,
     objectSelectionLayer: ObjectLayerElement,
     overlayShimmerCanvas: OverlayShimmerCanvasElement,
     overlayShimmer: OverlayShimmerElement,
     postSelectionRenderer: PostSelectionRendererElement,
     regionSelectionLayer: RegionSelectionElement,
+    selectedRegionContextMenu: HTMLElement,
     selectedTextContextMenu: HTMLElement,
     selectionOverlay: HTMLElement,
     textSelectionLayer: TextLayerElement,
@@ -119,6 +123,10 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
 
   static get properties() {
     return {
+      isScreenshotRendered: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
       isResized: {
         type: Boolean,
         reflectToAttribute: true,
@@ -127,21 +135,30 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         type: Boolean,
         reflectToAttribute: true,
       },
+      showTranslateContextMenuItem: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
       showSelectedTextContextMenu: {
         type: Boolean,
         value: false,
         reflectToAttribute: true,
       },
-      showDetectedTextContextMenu: {
+      showSelectedRegionContextMenu: {
         type: Boolean,
         value: false,
         reflectToAttribute: true,
       },
+      showDetectedTextContextMenuOptions: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
       selectedTextContextMenuX: Number,
       selectedTextContextMenuY: Number,
-      detectedTextContextMenuX: Number,
-      detectedTextContextMenuY: Number,
-      screenshotDataUri: String,
+      selectedRegionContextMenuX: Number,
+      selectedRegionContextMenuY: Number,
+      canvasHeight: Number,
+      canvasWidth: Number,
       isPointerInside: Boolean,
       currentGesture: emptyGestureEvent(),
       disableShimmer: {
@@ -154,7 +171,23 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         readOnly: true,
         value: loadTimeData.getBoolean('useShimmerCanvas'),
       },
+      enableCopyAsImage: {
+        type: Boolean,
+        readOnly: true,
+        value: loadTimeData.getBoolean('enableCopyAsImage'),
+        reflectToAttribute: true,
+      },
+      enableSaveAsImage: {
+        type: Boolean,
+        readOnly: true,
+        value: loadTimeData.getBoolean('enableSaveAsImage'),
+        reflectToAttribute: true,
+      },
       isClosing: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
+      suppressCopyAndSaveAsImage: {
         type: Boolean,
         reflectToAttribute: true,
       },
@@ -174,27 +207,45 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         type: Object,
         value: getFallbackTheme,
       },
+      translateModeEnabled: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
+      selectionOverlayRect: Object,
     };
   }
 
+  // Whether the screenshot has finished loading in.
+  private isScreenshotRendered: boolean = false;
   // Whether the selection overlay is its initial size, or has changed size.
   private isResized: boolean = false;
   private isInitialSize: boolean = true;
+  private showTranslateContextMenuItem: boolean = true;
   private showSelectedTextContextMenu: boolean;
-  private showDetectedTextContextMenu: boolean;
+  private showSelectedRegionContextMenu: boolean;
+  private showDetectedTextContextMenuOptions: boolean;
   // Location at which to show the context menus.
   private selectedTextContextMenuX: number;
   private selectedTextContextMenuY: number;
-  private detectedTextContextMenuX: number;
-  private detectedTextContextMenuY: number;
+  private selectedRegionContextMenuX: number;
+  private selectedRegionContextMenuY: number;
+  // Width and height values for rendering the background image canvas as the
+  // proper dimensions.
+  private canvasHeight: number;
+  private canvasWidth: number;
+  // The current content rectangle of the selection elements DIV. This is the
+  // bounds of the screenshot and the part the user interacts with. This should
+  // be used instead of call getBoundingClientRect().
+  private selectionOverlayRect: DOMRect;
+  // The selected region on which the context menu is being displayed. Used as
+  // argument for copy and save as image calls.
+  private selectedRegionContextMenuBox: CenterRotatedBox;
   private highlightedText: string = '';
   private contentLanguage: string = '';
   private textSelectionStartIndex: number = -1;
   private textSelectionEndIndex: number = -1;
   private detectedTextStartIndex: number = -1;
   private detectedTextEndIndex: number = -1;
-  // The data URI of the current overlay screenshot.
-  private screenshotDataUri: string;
   private isPointerInside = false;
   private isPointerInsideContextMenu = false;
   // The current gesture event. The coordinate values are only accurate if a
@@ -202,6 +253,11 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
   private currentGesture: GestureEvent = emptyGestureEvent();
   private disableShimmer: boolean;
   private useShimmerCanvas: boolean;
+  private enableCopyAsImage: boolean;
+  private enableSaveAsImage: boolean;
+  private suppressCopyAndSaveAsImage: boolean =
+      loadTimeData.getString('invocationSource') ===
+      'ContentAreaContextMenuImage';
   // Whether the overlay is being shut down.
   private isClosing: boolean = false;
   // Whether the default background scrim is currently being darkened.
@@ -216,30 +272,30 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
   // The feature currently being dragged. Once a feature responds to a drag
   // event, no other feature will receive gesture events.
   private draggingRespondent = DragFeature.NONE;
-  private resizeObserver: ResizeObserver = new ResizeObserver(() => {
-    this.handleResize();
-  });
-  // We need to listen to resizes on the selectionElements separately, since
-  // resizeObserver will trigger before the selectionElements have a chance to
-  // resize.
-  private selectionElementsResizeObserver: ResizeObserver =
-      new ResizeObserver(() => {
-        this.handleSelectionElementsResize();
-      });
+  private resizeObserver: ResizeObserver =
+      new ResizeObserver(this.handleResize.bind(this));
   // Used to listen for changes in the window.devicePixelRatio. Stored as a
   // variable so we can easily add and remove the listener.
   private matchMedia?: MediaQueryList;
-  private initialWidth: number = 0;
-  private initialHeight: number = 0;
   private cursorOffsetX: number = 3;
   private cursorOffsetY: number = 6;
   private hasInitialFlashAnimationEnded = false;
   private browserProxy: BrowserProxy = BrowserProxyImpl.getInstance();
 
+  // The ID returned by requestAnimationFrame for the updateCursorPosition,
+  // onPointerMove, and handleResize functions.
+  private updateCursorPositionRequestId?: number;
+  private onPointerMoveRequestId?: number;
+  private handleResizeRequestId?: number;
+
+  // Whether or not translate mode is enabled. If true, only text should
+  // be selectable, and it should be selectable from any point in the
+  // overlay.
+  private translateModeEnabled: boolean = false;
+
   override connectedCallback() {
     super.connectedCallback();
     this.resizeObserver.observe(this);
-    this.selectionElementsResizeObserver.observe(this.$.selectionOverlay);
     this.listenerIds = [
       this.browserProxy.callbackRouter.notifyOverlayClosing.addListener(() => {
         this.isClosing = true;
@@ -249,6 +305,8 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         this.handleCopy();
       }),
     ];
+    ScreenshotBitmapBrowserProxyImpl.getInstance().fetchScreenshot(
+        this.screenshotDataReceived.bind(this));
     this.eventTracker_.add(
         document, 'shimmer-fade-out-complete', (e: CustomEvent<boolean>) => {
           this.shimmerFadeOutComplete = e.detail;
@@ -264,6 +322,11 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
           } else {
             this.resetCursor();
           }
+        });
+    this.eventTracker_.add(
+        document, 'translate-mode-state-changed',
+        (e: CustomEvent<TranslateState>) => {
+          this.showTranslateContextMenuItem = !e.detail.translateModeEnabled;
         });
     this.eventTracker_.add(
         document, 'show-selected-text-context-menu',
@@ -293,24 +356,35 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
           this.textSelectionStartIndex = e.detail.selectionStartIndex;
           this.textSelectionEndIndex = e.detail.selectionEndIndex;
         });
-    this.eventTracker_.add(
-        document, 'show-detected-text-context-menu', (e: CustomEvent) => {
-          this.showDetectedTextContextMenu = true;
-          this.detectedTextContextMenuX = e.detail.left;
-          this.detectedTextContextMenuY = e.detail.bottom;
-          this.detectedTextStartIndex = e.detail.selectionStartIndex;
-          this.detectedTextEndIndex = e.detail.selectionEndIndex;
-        });
     this.eventTracker_.add(document, 'hide-selected-text-context-menu', () => {
       this.showSelectedTextContextMenu = false;
       this.textSelectionStartIndex = -1;
       this.textSelectionEndIndex = -1;
     });
-    this.eventTracker_.add(document, 'hide-detected-text-context-menu', () => {
-      this.showDetectedTextContextMenu = false;
-      this.detectedTextStartIndex = -1;
-      this.detectedTextEndIndex = -1;
-    });
+    this.eventTracker_.add(
+        document, 'show-selected-region-context-menu',
+        (e: CustomEvent<SelectedRegionContextMenuData>) => {
+          this.selectedRegionContextMenuX =
+              e.detail.box.box.x - e.detail.box.box.width / 2;
+          this.selectedRegionContextMenuY =
+              e.detail.box.box.y + e.detail.box.box.height / 2;
+          this.selectedRegionContextMenuBox = e.detail.box;
+          this.detectedTextStartIndex = e.detail.selectionStartIndex;
+          this.detectedTextEndIndex = e.detail.selectionEndIndex;
+          this.showDetectedTextContextMenuOptions =
+              this.detectedTextStartIndex !== -1 &&
+              this.detectedTextEndIndex !== -1;
+          this.showSelectedRegionContextMenu =
+              (!this.suppressCopyAndSaveAsImage &&
+               (this.enableCopyAsImage || this.enableSaveAsImage)) ||
+              this.showDetectedTextContextMenuOptions;
+        });
+    this.eventTracker_.add(
+        document, 'hide-selected-region-context-menu', () => {
+          this.showSelectedRegionContextMenu = false;
+          this.detectedTextStartIndex = -1;
+          this.detectedTextEndIndex = -1;
+        });
     this.eventTracker_.add(document, 'darken-extra-scrim-opacity', () => {
       this.darkenExtraScrim = true;
     });
@@ -336,14 +410,22 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     this.eventTracker_.add(document, 'unfocus-region', () => {
       this.shimmerOnSegmentation = false;
     });
+    this.eventTracker_.add(
+        document, 'translate-mode-state-changed',
+        (e: CustomEvent<TranslateState>) => {
+          this.translateModeEnabled = e.detail.translateModeEnabled;
+          // Resetting the cursor will properly set it to text or normal
+          // based on the current translate mode.
+          this.resetCursor();
+        });
 
+    this.updateSelectionOverlayRect();
     this.updateDevicePixelRatioListener();
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     this.resizeObserver.unobserve(this);
-    this.selectionElementsResizeObserver.unobserve(this.$.selectionOverlay);
     this.eventTracker_.removeAll();
     this.listenerIds.forEach(
         id => assert(this.browserProxy.callbackRouter.removeListener(id)));
@@ -389,43 +471,57 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
   private onDevicePixelRatioChanged() {
     // Update the listener to the new pixel ratio.
     this.updateDevicePixelRatioListener();
-    // Handle UI updates.
-    this.handleSelectionElementsResize();
+    // Resize the canvases to take the new pixel ratio change.\
+    this.resizeSelectionCanvases(
+        this.selectionOverlayRect.width, this.selectionOverlayRect.height);
   }
 
   private updateCursorPosition(event: PointerEvent) {
-    const mouseX = event.clientX;
-    const mouseY = event.clientY;
-
-    const cursorOffsetX = mouseX + this.cursorOffsetX;
-    const cursorOffsetY = mouseY + this.cursorOffsetY;
-
-    if (!this.disableShimmer &&
-        (this.isPointerInside ||
-         this.currentGesture.state === GestureState.DRAGGING)) {
-      this.updateShimmerForCursor(cursorOffsetX, cursorOffsetY);
+    // Cancel a pending event to prevent multiple updates per frame.
+    if (this.updateCursorPositionRequestId) {
+      cancelAnimationFrame(this.updateCursorPositionRequestId);
     }
 
-    this.$.cursor.style.transform =
-        `translate3d(${cursorOffsetX}px, ${cursorOffsetY}px, 0)`;
+    // Use requestAnimationFrame to only update the cursor once a frame instead
+    // of multiple times per frame. This helps ensure the cursor is being
+    // updated to the latest received pointer event.
+    this.updateCursorPositionRequestId = requestAnimationFrame(() => {
+      const mouseX = event.clientX;
+      const mouseY = event.clientY;
+
+      const cursorOffsetX = mouseX + this.cursorOffsetX;
+      const cursorOffsetY = mouseY + this.cursorOffsetY;
+
+      if (!this.disableShimmer &&
+          (this.isPointerInside ||
+           this.currentGesture.state === GestureState.DRAGGING)) {
+        this.updateShimmerForCursor(cursorOffsetX, cursorOffsetY);
+      }
+
+      this.$.cursor.style.transform =
+          `translate3d(${cursorOffsetX}px, ${cursorOffsetY}px, 0)`;
+      this.updateCursorPositionRequestId = undefined;
+    });
   }
 
   private updateShimmerForCursor(cursorLeft: number, cursorTop: number) {
-    const boundingRect = this.$.selectionOverlay.getBoundingClientRect();
-
     const relativeXPercent =
         Math.max(
-            0, Math.min(cursorLeft, boundingRect.right) - boundingRect.left) /
-        boundingRect.width;
+            0,
+            Math.min(cursorLeft, this.selectionOverlayRect.right) -
+                this.selectionOverlayRect.left) /
+        this.selectionOverlayRect.width;
     const relativeYPercent =
         Math.max(
-            0, Math.min(cursorTop, boundingRect.bottom) - boundingRect.top) /
-        boundingRect.height;
+            0,
+            Math.min(cursorTop, this.selectionOverlayRect.bottom) -
+                this.selectionOverlayRect.top) /
+        this.selectionOverlayRect.height;
 
     focusShimmerOnRegion(
         this, relativeYPercent, relativeXPercent,
-        CURSOR_SIZE_PIXEL / boundingRect.width,
-        CURSOR_SIZE_PIXEL / boundingRect.height,
+        CURSOR_SIZE_PIXEL / this.selectionOverlayRect.width,
+        CURSOR_SIZE_PIXEL / this.selectionOverlayRect.height,
         ShimmerControlRequester.CURSOR);
   }
 
@@ -461,12 +557,18 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
   // Called on object hover.
   private setCursorToPointer() {
     // No dragging for objects, so no need to set body cursor style.
-    this.cursorOffsetX = 4;
-    this.cursorOffsetY = 8;
+    this.cursorOffsetX = 11;
+    this.cursorOffsetY = 17;
     this.style.setProperty(CURSOR_IMG_URL, 'url("lens.svg")');
   }
 
   private resetCursor() {
+    if (this.translateModeEnabled) {
+      // If translate mode is enabled, the default cursor state should be
+      // text.
+      this.setCursorToText();
+      return;
+    }
     document.body.style.cursor = 'unset';
     this.cursorOffsetX = 3;
     this.cursorOffsetY = 6;
@@ -481,7 +583,11 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
           new CustomEvent<CursorTooltipData>('set-cursor-tooltip', {
             bubbles: true,
             composed: true,
-            detail: {tooltipType: CursorTooltipType.REGION_SEARCH},
+            detail: {
+              tooltipType: this.translateModeEnabled ?
+                  CursorTooltipType.TEXT_HIGHLIGHT :
+                  CursorTooltipType.REGION_SEARCH,
+            },
           }));
     }
   }
@@ -497,27 +603,11 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     }
   }
 
-  private onImageLoad() {
-    // The image is loaded, but not necessarily rendered to the user. To avoid
-    // adding the background scrim too early and it being noticeable to the
-    // user, we wait for two animation frames before notifying that the image is
-    // visible.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        this.onImageRendered();
-      });
-    });
-  }
-
   private onImageRendered() {
     // Let the parent know it is safe to blur the background.
     this.dispatchEvent(new CustomEvent(
         'screenshot-rendered', {bubbles: true, composed: true}));
-
-    // Tell the browser to blur the background on next animation frame.
-    requestAnimationFrame(() => {
-      this.browserProxy.handler.addBackgroundBlur();
-    });
+    this.browserProxy.handler.notifyOverlayInitialized();
   }
 
   private onPointerDown(event: PointerEvent) {
@@ -535,6 +625,7 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     this.addDragListeners();
     this.browserProxy.handler.closeSearchBubble();
     this.browserProxy.handler.closePreselectionBubble();
+    this.suppressCopyAndSaveAsImage = false;
 
     this.currentGesture = {
       state: GestureState.STARTING,
@@ -574,8 +665,14 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         if (this.draggingRespondent === DragFeature.TEXT) {
           this.$.textSelectionLayer.handleUpGesture();
           break;
-        } else if (this.$.objectSelectionLayer.handleUpGesture(
-                       this.currentGesture)) {
+        }
+        if (this.translateModeEnabled) {
+          // Don't allow clicks to select objects or regions if translate
+          // mode is enabled. The dragging respondent may not be TEXT if
+          // there is no selectable text on the screen at all.
+          break;
+        }
+        if (this.$.objectSelectionLayer.handleUpGesture(this.currentGesture)) {
           break;
         }
 
@@ -604,28 +701,37 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
 
     this.updateGestureCoordinates(event);
 
-    if (this.isDragging()) {
-      this.set('currentGesture.state', GestureState.DRAGGING);
-
-      // Capture pointer events so gestures still work if the users pointer
-      // leaves the selection overlay div. Pointer capture is implicitly
-      // released after pointerup or pointercancel events.
-      this.setPointerCapture(event.pointerId);
-
-      if (this.draggingRespondent === DragFeature.TEXT) {
-        this.setCursorToText();
-        this.$.textSelectionLayer.handleDragGesture(this.currentGesture);
-      } else if (this.draggingRespondent === DragFeature.POST_SELECTION) {
-        this.$.postSelectionRenderer.handleDragGesture(this.currentGesture);
-      } else {
-        // Let the features respond to the current drag if no other feature
-        // responded first.
-        this.setCursorToCrosshair();
-        this.$.postSelectionRenderer.clearSelection();
-        this.draggingRespondent = DragFeature.MANUAL_REGION;
-        this.$.regionSelectionLayer.handleDragGesture(this.currentGesture);
-      }
+    if (this.onPointerMoveRequestId) {
+      cancelAnimationFrame(this.onPointerMoveRequestId);
     }
+
+    this.onPointerMoveRequestId = requestAnimationFrame(() => {
+      if (this.isDragging()) {
+        this.set('currentGesture.state', GestureState.DRAGGING);
+
+        // Capture pointer events so gestures still work if the users pointer
+        // leaves the selection overlay div. Pointer capture is implicitly
+        // released after pointerup or pointercancel events.
+        this.setPointerCapture(event.pointerId);
+
+        if (this.draggingRespondent === DragFeature.TEXT) {
+          this.setCursorToText();
+          this.$.textSelectionLayer.handleDragGesture(this.currentGesture);
+        } else if (this.draggingRespondent === DragFeature.POST_SELECTION) {
+          this.$.postSelectionRenderer.handleDragGesture(this.currentGesture);
+        } else if (!this.translateModeEnabled) {
+          // Let the features respond to the current drag if no other feature
+          // responded first, but only if translate mode is not enabled.
+          // The dragging responding may not be TEXT in translate mode if
+          // there is no selectable text.
+          this.setCursorToCrosshair();
+          this.$.postSelectionRenderer.clearSelection();
+          this.draggingRespondent = DragFeature.MANUAL_REGION;
+          this.$.regionSelectionLayer.handleDragGesture(this.currentGesture);
+        }
+      }
+      this.onPointerMoveRequestId = undefined;
+    });
   }
 
   private onPointerCancel() {
@@ -640,38 +746,104 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     this.resetCursor();
   }
 
-  private handleResize() {
-    const newRect = this.getBoundingClientRect();
+  private handleResize(entries: ResizeObserverEntry[]) {
+    // Cancel a pending event to prevent multiple updates per frame.
+    if (this.handleResizeRequestId) {
+      cancelAnimationFrame(this.handleResizeRequestId);
+    }
 
-    if (this.initialHeight === 0 || this.initialWidth === 0) {
-      this.initialWidth = newRect.width;
-      this.initialHeight = newRect.height;
-    }
-    // We allow a buffer threshold when determining if the page has been
-    // resized so that subtle one pixel adjustments don't trigger an entire
-    // page reflow.
-    this.isResized =
-        Math.abs(newRect.height - this.initialHeight) >= RESIZE_THRESHOLD ||
-        Math.abs(newRect.width - this.initialWidth) >= RESIZE_THRESHOLD;
-    if (this.isResized) {
-      this.isInitialSize = false;
-      // The flash animation is cut short but animationend is never called if
-      // the overlay is resized before animationend is called. This is because
-      // the flash scrim is hidden on resize.
-      this.onInitialFlashAnimationEnd();
-    }
+    // Use requestAnimationFrame to only calculate the screenshot size once
+    // a frame instead of multiple times per frame.
+    this.handleResizeRequestId = requestAnimationFrame(() => {
+      assert(entries.length === 1);
+      const newRect = entries[0].contentRect;
+
+      // If the screenshot is not rendered yet, there is nothing to do yet.
+      if (!this.isScreenshotRendered ||
+          (newRect.width === 0 && newRect.height === 0)) {
+        this.handleResizeRequestId = undefined;
+        return;
+      }
+
+      // Set our own canvas size while preserving the canvas aspect ratio.
+      const screenshotHeight = this.$.backgroundImageCanvas.height;
+      const screenshotWidth = this.$.backgroundImageCanvas.width;
+
+      const doesScreenshotFillContainer =
+          Math.abs(
+              newRect.width - (screenshotWidth / window.devicePixelRatio)) <=
+              SCREENSHOT_RESIZE_TOLERANCE_PIXELS &&
+          Math.abs(
+              newRect.height - (screenshotHeight / window.devicePixelRatio)) <=
+              SCREENSHOT_RESIZE_TOLERANCE_PIXELS;
+
+      // Apply margins if the page is resized and not closing.
+      const margins = !doesScreenshotFillContainer && !this.isClosing ?
+          SCREENSHOT_FULLSIZE_MARGIN_PIXEL * 2 :
+          0;
+      const containerWidth = newRect.width - margins;
+      const containerHeight = newRect.height - margins;
+
+      // Get the aspect ratio to force the image to conform to.
+      const aspectRatio = this.$.backgroundImageCanvas.width /
+          this.$.backgroundImageCanvas.height;
+
+      // Calculate potential dimensions based on width and height
+      const widthBasedHeight = Math.round(containerWidth / aspectRatio);
+      const heightBasedWidth = Math.round(containerHeight * aspectRatio);
+
+      // Choose dimensions that fit within the container while preserving aspect
+      // ratio
+      if (widthBasedHeight <= containerHeight) {
+        // Width-based dimensions fit
+        this.canvasHeight = widthBasedHeight;
+        this.canvasWidth = containerWidth;
+      } else {
+        // Height-based dimensions fit
+        this.canvasWidth = heightBasedWidth;
+        this.canvasHeight = containerHeight;
+      }
+
+      this.isResized = !doesScreenshotFillContainer;
+      if (this.isResized) {
+        this.isInitialSize = false;
+        // The flash animation is cut short but animationend is never called if
+        // the overlay is resized before animationend is called. This is because
+        // the flash scrim is hidden on resize.
+        this.onInitialFlashAnimationEnd();
+      }
+
+      // Update our cached selection overlay rect to the new bounds.
+      this.updateSelectionOverlayRect();
+
+      // TODO(b/361798599): Since we now pass selectionOverlayRect, we can use
+      // polymer events to allow each client to resize their canvas once
+      // selectionOverlayRect changes. We should remove this and do the
+      // resizing via polymer techniques.
+      this.resizeSelectionCanvases(
+          this.selectionOverlayRect.width, this.selectionOverlayRect.height);
+
+      this.handleResizeRequestId = undefined;
+    });
   }
 
-  private handleSelectionElementsResize() {
-    const selectionOverlayBounds =
-        this.$.selectionOverlay.getBoundingClientRect();
-    this.$.regionSelectionLayer.setCanvasSizeTo(
-        selectionOverlayBounds.width, selectionOverlayBounds.height);
-    this.$.objectSelectionLayer.setCanvasSizeTo(
-        selectionOverlayBounds.width, selectionOverlayBounds.height);
+  private updateSelectionOverlayRect(): void {
+    // We use offsetXXX instead of call this.getBoundingClientRect() because
+    // offsetXXX is a cached DOM property, while this.getBoundingClientRect()
+    // recalculates the layout every time it is called. Since we have no
+    // scrolling, these calls should be equivalent.
+    this.selectionOverlayRect = new DOMRect(
+        this.$.selectionOverlay.offsetLeft, this.$.selectionOverlay.offsetTop,
+        this.$.selectionOverlay.offsetWidth,
+        this.$.selectionOverlay.offsetHeight);
+  }
+
+  private resizeSelectionCanvases(newWidth: number, newHeight: number) {
+    this.$.regionSelectionLayer.setCanvasSizeTo(newWidth, newHeight);
+    this.$.postSelectionRenderer.setCanvasSizeTo(newWidth, newHeight);
+    this.$.objectSelectionLayer.setCanvasSizeTo(newWidth, newHeight);
     if (this.useShimmerCanvas) {
-      this.$.overlayShimmerCanvas.setCanvasSizeTo(
-          selectionOverlayBounds.width, selectionOverlayBounds.height);
+      this.$.overlayShimmerCanvas.setCanvasSizeTo(newWidth, newHeight);
     }
   }
 
@@ -690,7 +862,7 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         this.shadowRoot!.elementsFromPoint(event.clientX, event.clientY);
     // Do not intercept events that should go to the following elements.
     if (elementsAtPoint.includes(this.$.selectedTextContextMenu) ||
-        elementsAtPoint.includes(this.$.detectedTextContextMenu)) {
+        elementsAtPoint.includes(this.$.selectedRegionContextMenu)) {
       return true;
     }
     // Ignore multi touch events and non-left/right click events.
@@ -754,6 +926,24 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     recordLensOverlayInteraction(INVOCATION_SOURCE, UserAction.kTranslateText);
   }
 
+  private handleCopyAsImage() {
+    BrowserProxyImpl.getInstance().handler.copyImage(
+        this.selectedRegionContextMenuBox);
+    this.showSelectedRegionContextMenu = false;
+    recordLensOverlayInteraction(INVOCATION_SOURCE, UserAction.kCopyAsImage);
+    this.dispatchEvent(new CustomEvent('copied-as-image', {
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  private handleSaveAsImage() {
+    BrowserProxyImpl.getInstance().handler.saveAsImage(
+        this.selectedRegionContextMenuBox);
+    this.showSelectedRegionContextMenu = false;
+    recordLensOverlayInteraction(INVOCATION_SOURCE, UserAction.kSaveAsImage);
+  }
+
   // Make the cursor disappear over the context menu, as if leaving the overlay.
   private handlePointerEnterContextMenu() {
     this.isPointerInside = false;
@@ -776,7 +966,11 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         new CustomEvent<CursorTooltipData>('set-cursor-tooltip', {
           bubbles: true,
           composed: true,
-          detail: {tooltipType: CursorTooltipType.REGION_SEARCH},
+          detail: {
+            tooltipType: this.translateModeEnabled ?
+                CursorTooltipType.TEXT_HIGHLIGHT :
+                CursorTooltipType.REGION_SEARCH,
+          },
         }));
   }
 
@@ -786,6 +980,8 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     }
     this.hasInitialFlashAnimationEnded = true;
     this.eventTracker_.remove(this.$.initialFlashScrim, 'animationend');
+
+    this.browserProxy.handler.addBackgroundBlur();
 
     // Let the parent know the initial flash image animation has finished.
     this.dispatchEvent(new CustomEvent(
@@ -802,12 +998,37 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     }
   }
 
-  getShowDetectedTextContextMenuForTesting() {
-    return this.showDetectedTextContextMenu;
+  private async screenshotDataReceived(screenshotBitmap: ImageBitmap) {
+    renderScreenshot(this.$.backgroundImageCanvas, screenshotBitmap);
+    // Start the canvas as the same dimensions as the viewport, since we are
+    // assuming the screenshot takes up the viewport dimensions. Our resize
+    // handler will adjust as needed.
+    this.canvasWidth = window.innerWidth;
+    this.canvasHeight = window.innerHeight;
+
+    this.isScreenshotRendered = true;
+    this.onImageRendered();
+  }
+
+  fetchNewScreenshotForTesting() {
+    ScreenshotBitmapBrowserProxyImpl.getInstance().fetchScreenshot(
+        this.screenshotDataReceived.bind(this));
+  }
+
+  getShowSelectedRegionContextMenuForTesting() {
+    return this.showSelectedRegionContextMenu;
   }
 
   getShowSelectedTextContextMenuForTesting() {
     return this.showSelectedTextContextMenu;
+  }
+
+  getShowDetectedTextContextMenuOptionsForTesting() {
+    return this.showDetectedTextContextMenuOptions;
+  }
+
+  getSuppressCopyAndSaveAsImageForTesting() {
+    return this.suppressCopyAndSaveAsImage;
   }
 
   handleSelectTextForTesting() {
@@ -818,8 +1039,20 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     this.handleTranslateDetectedText();
   }
 
+  handleCopyForTesting() {
+    this.handleCopy();
+  }
+
   handleTranslateForTesting() {
     this.handleTranslate();
+  }
+
+  handleCopyAsImageForTesting() {
+    this.handleCopyAsImage();
+  }
+
+  handleSaveAsImageForTesting() {
+    this.handleSaveAsImage();
   }
 }
 

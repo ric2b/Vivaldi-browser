@@ -125,4 +125,20 @@ public class OmniboxDrawableState {
         this.isLarge = isLarge;
         this.allowTint = allowTint;
     }
+
+    /** Vivaldi
+     * Create OmniboxDrawableState with dedicated image decoration.
+     *
+     * @param context current context
+     * @param bitmap dedicated bitmap
+     * @return newly created OmniboxDrawableState
+     */
+    public static @NonNull OmniboxDrawableState forImage(
+            @NonNull Context context, @NonNull Bitmap bitmap, boolean isLarge) {
+        return new OmniboxDrawableState(
+                new BitmapDrawable(context.getResources(), bitmap),
+                /* useRoundedCorners= */ true,
+                /* isLarge= */ isLarge, // Vivaldi VAB-10102
+                /* allowTint= */ false);
+    }
 }

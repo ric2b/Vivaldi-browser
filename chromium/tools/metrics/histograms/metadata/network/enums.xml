@@ -45,6 +45,11 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Default and Attach"/>
 </enum>
 
+<enum name="Band6GHzSupport">
+  <int value="0" label="Unsupported"/>
+  <int value="1" label="Supported"/>
+</enum>
+
 <enum name="BooleanEverConnected">
   <int value="0" label="Never connected"/>
   <int value="1" label="Previously connected"/>
@@ -590,11 +595,31 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="kWifiWithCellularNotConnected"/>
 </enum>
 
+<enum name="InstallationAttemptStep">
+  <int value="0" label="kInstallationRequested"/>
+  <int value="1" label="kHermesUnavailable"/>
+  <int value="2" label="kInstallationStarted"/>
+  <int value="3" label="kInstallationSucceeded"/>
+  <int value="4" label="kInstallationNoResponse"/>
+  <int value="5" label="kInstallationFailed"/>
+</enum>
+
 <enum name="IpProtectionEligibility">
   <int value="0" label="Unknown"/>
   <int value="1" label="Ineligible"/>
   <int value="2" label="Eligible"/>
 </enum>
+
+<!-- LINT.IfChange(IpProtectionGetAuthTokenResultForGeo) -->
+
+<enum name="IpProtectionGetAuthTokenResultForGeo">
+  <int value="0" label="Auth token unavailable and cache is empty"/>
+  <int value="1" label="Auth token unavailable but cache contains tokens"/>
+  <int value="2" label="Auth token available for current geo"/>
+  <int value="3" label="Auth token available for other geo"/>
+</enum>
+
+<!-- LINT.ThenChange(//services/network/ip_protection/ip_protection_token_cache_manager_impl.h:AuthTokenResultForGeo) -->
 
 <enum name="IpProtectionGetProxyListResult">
   <int value="0" label="Failed to acquire a list"/>
@@ -612,6 +637,16 @@ chromium-metrics-reviews@google.com.
 <enum name="IpProtectionProxyLayer">
   <int value="0" label="Proxy A"/>
   <int value="1" label="Proxy B"/>
+</enum>
+
+<enum name="IpProtectionTokenBatchRequestError">
+  <int value="58877100" label="Failed to read timestamp"/>
+  <int value="354921842" label="At least one extension is required"/>
+  <int value="1218093704" label="Failed to read extensions"/>
+  <int value="2528366448" label="Failed to parse GetInitialDataResponse"/>
+  <int value="2867080750" label="Failed to read timestamp_precision"/>
+  <int value="3336018440"
+      label="Non-Privacy Pass tokens are no longer supported"/>
 </enum>
 
 <enum name="IpProtectionTokenBatchRequestResult">
@@ -901,11 +936,6 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Disconnected without explicit user action"/>
 </enum>
 
-<enum name="NetworkDisconnectType">
-  <int value="0" label="System Disconnect"/>
-  <int value="1" label="User Disconnect"/>
-</enum>
-
 <enum name="NetworkEligibilityStatus">
   <int value="0" label="Network Is Eligible"/>
   <int value="1" label="No Metedata"/>
@@ -1088,17 +1118,6 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="NoInternet"/>
 </enum>
 
-<enum name="NetworkPortalStatus">
-  <summary>
-    DEPRECATED. Remove with Network.NetworkPortalDetectorResult 2024-07-21.
-  </summary>
-  <int value="0" label="Unknown"/>
-  <int value="1" label="Offline"/>
-  <int value="2" label="Online"/>
-  <int value="3" label="Portal"/>
-  <int value="4" label="ProxyAuthRequired"/>
-</enum>
-
 <enum name="NetworkProblemType">
   <int value="0" label="Congested TCP Queue"/>
   <int value="1" label="DNS Failure"/>
@@ -1242,6 +1261,16 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Cellular Metered"/>
   <int value="5" label="Tether"/>
   <int value="6" label="Tether Metered"/>
+</enum>
+
+<enum name="NetworkWiFiDisconnectType">
+  <int value="0" label="System Disconnect"/>
+  <int value="1" label="User Disconnect"/>
+  <int value="2" label="Suspend"/>
+  <int value="3" label="Switch Network"/>
+  <int value="4" label="Disable"/>
+  <int value="5" label="Service Unload"/>
+  <int value="6" label="Disconnect On Ethernet"/>
 </enum>
 
 <enum name="NotificationSuppressionState">

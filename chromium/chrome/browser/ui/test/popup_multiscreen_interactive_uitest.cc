@@ -44,6 +44,12 @@ namespace {
 #else
 #define MAYBE_PopupMultiScreenTest DISABLED_PopupMultiScreenTest
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN)
+// TODO(crbug.com/371121282): Re-enable the test.
+// TODO(crbug.com/365126887): Re-enable the test.
+#undef MAYBE_PopupMultiScreenTest
+#define MAYBE_PopupMultiScreenTest DISABLED_PopupMultiScreenTest
+#endif  // BUILDFLAG(IS_WIN)
 class MAYBE_PopupMultiScreenTest : public PopupTestBase,
                                    public ::testing::WithParamInterface<bool> {
  public:
@@ -167,7 +173,9 @@ IN_PROC_BROWSER_TEST_P(MAYBE_PopupMultiScreenTest, OpenOnAnotherScreen) {
 }
 
 // Tests opening a popup on the same screen, then moving it to another screen.
-IN_PROC_BROWSER_TEST_P(MAYBE_PopupMultiScreenTest, MoveToAnotherScreen) {
+// TODO(crbug.com/365057654): Test is failing on Mac bot.
+IN_PROC_BROWSER_TEST_P(MAYBE_PopupMultiScreenTest,
+                       DISABLED_MoveToAnotherScreen) {
   content::WebContents* opener_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   // Copy the display vector so references are not invalidated while looping.

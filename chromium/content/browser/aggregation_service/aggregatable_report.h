@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -16,6 +17,8 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/notreached.h"
+#include "base/numerics/checked_math.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "base/values.h"
@@ -53,7 +56,7 @@ struct CONTENT_EXPORT AggregationServicePayloadContents {
           contributions,
       blink::mojom::AggregationServiceMode aggregation_mode,
       std::optional<url::Origin> aggregation_coordinator_origin,
-      int max_contributions_allowed,
+      base::StrictNumeric<size_t> max_contributions_allowed,
       std::optional<size_t> filtering_id_max_bytes);
 
   AggregationServicePayloadContents(
@@ -70,7 +73,7 @@ struct CONTENT_EXPORT AggregationServicePayloadContents {
       contributions;
   blink::mojom::AggregationServiceMode aggregation_mode;
   std::optional<url::Origin> aggregation_coordinator_origin;
-  int max_contributions_allowed;
+  size_t max_contributions_allowed;
   std::optional<size_t> filtering_id_max_bytes;
 };
 
@@ -209,7 +212,7 @@ class CONTENT_EXPORT AggregatableReport {
   const std::vector<AggregationServicePayload>& payloads() const {
     return payloads_;
   }
-  const std::string& shared_info() const { return shared_info_; }
+  std::string_view shared_info() const { return shared_info_; }
   std::optional<uint64_t> debug_key() const { return debug_key_; }
   const base::flat_map<std::string, std::string>& additional_fields() const {
     return additional_fields_;
@@ -267,6 +270,13 @@ class CONTENT_EXPORT AggregatableReport {
       size_t number,
       blink::mojom::AggregationServiceMode aggregation_mode);
 
+  static std::optional<std::vector<uint8_t>> SerializeTeeBasedPayloadForTesting(
+      const AggregationServicePayloadContents& payload_contents);
+
+  static std::optional<size_t> ComputeTeeBasedPayloadLengthInBytesForTesting(
+      size_t num_contributions,
+      std::optional<size_t> filtering_id_max_bytes);
+
  private:
   // This vector should have an entry for each processing URL specified in
   // the original AggregatableReportRequest. Might be empty for reports created
@@ -311,7 +321,7 @@ class CONTENT_EXPORT AggregatableReportRequest {
       case DelayType::Unscheduled:
         return "Unscheduled";
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   // Returns `std::nullopt` if any of the following are true:
@@ -381,7 +391,7 @@ class CONTENT_EXPORT AggregatableReportRequest {
   const AggregatableReportSharedInfo& shared_info() const {
     return shared_info_;
   }
-  const std::string& reporting_path() const { return reporting_path_; }
+  std::string_view reporting_path() const { return reporting_path_; }
   std::optional<uint64_t> debug_key() const { return debug_key_; }
   const base::flat_map<std::string, std::string>& additional_fields() const {
     return additional_fields_;

@@ -10,8 +10,8 @@
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
@@ -585,7 +585,9 @@ NSUInteger toolbarVisibleThreshold = 2;
                       bottom:self.view.bottomAnchor
                     trailing:self.view.safeRightAnchor];
 
-  self.cvTopConstraint = [_collectionView.topAnchor constraintEqualToAnchor:self.view.safeTopAnchor];
+  self.cvTopConstraint =
+      [_collectionView.topAnchor
+          constraintEqualToAnchor:self.view.safeTopAnchor];
   self.cvTopConstraint.active = YES;
 
   if (IsTopSitesEnabled()) {
@@ -855,7 +857,8 @@ NSUInteger toolbarVisibleThreshold = 2;
   NSMutableArray* childItems =
       [[NSMutableArray alloc]
           initWithArray:@[newGroupAction, customizePageAction]];
-  if ([self showSpeedDials]) {
+
+  if ([self showSpeedDials] && ![self isTopSitesOrAddGroup]) {
     [childItems addObject:sortingMenu];
   }
 
@@ -872,6 +875,7 @@ NSUInteger toolbarVisibleThreshold = 2;
   VivaldiSpeedDialSharedState *sharedState =
       [VivaldiSpeedDialSharedState manager];
   sharedState.selectedIndex = index;
+  [self resetMoreButtonContextMenuOptions];
 }
 
 /// Returns the currently selected index of the menu from the shared state
@@ -1218,6 +1222,30 @@ NSUInteger toolbarVisibleThreshold = 2;
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
 }
 
+/// Returns whether current visible page is top sites
+/// or Add Group page; and not speed dials.
+- (BOOL)isTopSitesOrAddGroup {
+  BOOL showFrequentlyVisited =
+      IsTopSitesEnabled() && [self showFrequentlyVisited];
+  BOOL noSpeedDialItems = self.speedDialFolderItems.count <= 0;
+  BOOL isLastMenuItem =
+      self.selectedMenuItemIndex == (long(self.speedDialMenuItems.count) - 1);
+  BOOL isLastFolderItem =
+      self.selectedMenuItemIndex == long(self.speedDialFolderItems.count);
+
+  if (showFrequentlyVisited && self.selectedMenuItemIndex == 0) {
+    return YES;
+  }
+
+  if ((!showFrequentlyVisited && noSpeedDialItems) ||
+      (showFrequentlyVisited && isLastMenuItem) ||
+      (!showFrequentlyVisited && isLastFolderItem)) {
+    return YES;
+  }
+
+  return NO;
+}
+
 #pragma mark - COLLECTIONVIEW DATA SOURCE
 - (NSInteger)collectionView:(UICollectionView *)collectionView
      numberOfItemsInSection:(NSInteger)section{
@@ -1255,6 +1283,7 @@ NSUInteger toolbarVisibleThreshold = 2;
            showAddGroup:YES
       frequentlyVisited:NO
       topSitesAvailable:NO
+       topToolbarHidden:[self shouldHideToolbar]
       verticalSizeClass:self.view.traitCollection.verticalSizeClass];
   } else {
     [cell setCurrentPage:index];
@@ -1271,6 +1300,7 @@ NSUInteger toolbarVisibleThreshold = 2;
              showAddGroup:NO
         frequentlyVisited:YES
         topSitesAvailable:self.isTopSitesResultsAvailable
+         topToolbarHidden:[self shouldHideToolbar]
         verticalSizeClass:self.view.traitCollection.verticalSizeClass];
     } else {
       // When frequently visited pages enabled subtract 1 from index to
@@ -1288,6 +1318,7 @@ NSUInteger toolbarVisibleThreshold = 2;
              showAddGroup:NO
         frequentlyVisited:NO
         topSitesAvailable:NO
+         topToolbarHidden:[self shouldHideToolbar]
         verticalSizeClass:self.view.traitCollection.verticalSizeClass];
     }
   }

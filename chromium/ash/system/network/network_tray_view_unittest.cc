@@ -21,6 +21,7 @@
 #include "chromeos/services/network_config/public/cpp/fake_cros_network_config.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/widget/widget.h"
 
@@ -105,6 +106,27 @@ TEST_F(NetworkTrayViewTest, NetworkIconTooltip) {
             get_tooltip());
 }
 
+TEST_F(NetworkTrayViewTest, AccessibleDescription) {
+  auto cellular =
+      CrosNetworkConfigTestHelper::CreateStandaloneNetworkProperties(
+          "cellular", NetworkType::kCellular, ConnectionStateType::kConnected,
+          50);
+
+  auto cell = mojo::Clone(cellular);
+  cros_network()->AddNetworkAndDevice(std::move(cell));
+
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_SIGNAL_WEAK),
+            network_tray_view()->GetViewAccessibility().GetCachedDescription());
+
+  cellular->type_state->get_cellular()->signal_strength = 150;
+
+  cros_network()->UpdateNetworkProperties(std::move(cellular));
+
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_SIGNAL_STRONG),
+      network_tray_view()->GetViewAccessibility().GetCachedDescription());
+}
+
 // Regression test for http://b/284983806
 TEST_F(NetworkTrayViewTest, EthernetVpnIconIsNotClipped) {
   // Set up an Ethernet network with a VPN.
@@ -121,6 +143,13 @@ TEST_F(NetworkTrayViewTest, EthernetVpnIconIsNotClipped) {
   gfx::Size image_size = network_tray_view()->image_view()->GetImage().size();
   EXPECT_GE(view_size.width(), image_size.width());
   EXPECT_GE(view_size.height(), image_size.height());
+}
+
+TEST_F(NetworkTrayViewTest, AccessibleProperties) {
+  ui::AXNodeData data;
+
+  network_tray_view()->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(data.role, ax::mojom::Role::kImage);
 }
 
 }  // namespace ash

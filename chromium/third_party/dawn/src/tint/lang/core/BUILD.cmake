@@ -71,6 +71,8 @@ tint_add_target(tint_lang_core lib
   lang/core/number.h
   lang/core/parameter_usage.cc
   lang/core/parameter_usage.h
+  lang/core/subgroup_matrix_kind.cc
+  lang/core/subgroup_matrix_kind.h
   lang/core/texel_format.cc
   lang/core/texel_format.h
   lang/core/unary_op.cc
@@ -89,6 +91,10 @@ tint_target_add_dependencies(tint_lang_core lib
   tint_utils_rtti
   tint_utils_text
   tint_utils_traits
+)
+
+tint_target_add_external_dependencies(tint_lang_core lib
+  "src_utils"
 )
 
 ################################################################################
@@ -134,6 +140,7 @@ tint_target_add_dependencies(tint_lang_core_test test
 
 tint_target_add_external_dependencies(tint_lang_core_test test
   "gtest"
+  "src_utils"
 )
 
 ################################################################################
@@ -168,4 +175,5 @@ tint_target_add_dependencies(tint_lang_core_bench bench
 
 tint_target_add_external_dependencies(tint_lang_core_bench bench
   "google-benchmark"
+  "src_utils"
 )

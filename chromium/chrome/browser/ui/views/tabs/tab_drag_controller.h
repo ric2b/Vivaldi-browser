@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/views/tabs/tab_drag_context.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_scroll_session.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
+#include "components/saved_tab_groups/tab_group_sync_service.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/webapps/common/web_app_id.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
@@ -29,6 +30,11 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
+
+#if defined(USE_AURA)
+#include "ui/aura/client/drag_drop_client.h"
+#include "ui/aura/client/drag_drop_client_observer.h"
+#endif  // defined(USE_AURA)
 
 namespace ui {
 class ListSelectionModel;
@@ -86,7 +92,12 @@ class TabDragWithScrollManager {
 // and RunMoveLoop() is invoked on the Widget to drag the browser around. This
 // is the default on aura.
 class TabDragController : public views::WidgetObserver,
-                          public TabDragWithScrollManager {
+                          public TabDragWithScrollManager
+#if defined(USE_AURA)
+    ,
+                          public aura::client::DragDropClientObserver
+#endif  // defined(USE_AURA)
+{
  public:
   // Amount above or below the tabstrip the user has to drag before detaching.
   static const int kTouchVerticalDetachMagnetism;
@@ -422,6 +433,10 @@ class TabDragController : public views::WidgetObserver,
   Liveness StartSystemDnDSessionIfNecessary(TabDragContext* context,
                                             const gfx::Point& point_in_screen);
 
+  // Stored as a callback in `drag_started_callback_`. See the comment in
+  // StartSystemDnDSessionIfNecessary() for more details.
+  void HideAttachedContext();
+
   // Returns the compatible TabDragContext to drag to at the
   // specified point (screen coordinates), or nullptr if there is none.
   Liveness GetTargetTabStripForPoint(const gfx::Point& point_in_screen,
@@ -617,8 +632,6 @@ class TabDragController : public views::WidgetObserver,
   // from the old context or the tab dragging is ended.
   void ClearTabDraggingInfo();
 
-  DragState current_state_;
-
   // Tests whether a drag can be attached to a |window|.  Drags may be
   // disallowed for reasons such as the target: does not support tabs, is
   // showing a modal, has a different profile, is a different browser type
@@ -642,6 +655,14 @@ class TabDragController : public views::WidgetObserver,
   void MaybePauseTrackingSavedTabGroup();
 
   void MaybeResumeTrackingSavedTabGroup();
+
+#if defined(USE_AURA)
+  // aura::client::DragDropClientObserver:
+  void OnDragStarted() override;
+  void OnDragDropClientDestroying() override;
+#endif  // defined(USE_AURA)
+
+  DragState current_state_;
 
   ui::mojom::DragEventSource event_source_ = ui::mojom::DragEventSource::kMouse;
 
@@ -712,9 +733,12 @@ class TabDragController : public views::WidgetObserver,
   // group header, indicating that the entire group is being dragged together.
   std::optional<tab_groups::TabGroupId> group_;
 
-  // The GUID of the saved tab group whose tracking is paused between paired
-  // Detach() and Attach() calls, if dragging a saved tab group between windows.
-  std::optional<base::Uuid> paused_saved_group_id_;
+  // Used to pause observation of all open SavedTabGroups when a drag is
+  // occurring. This object is assigned when MaybePauseTrackingSavedTabGroup()
+  // is called and reset when MaybeResumeTrackingSavedTabGroup() is called. The
+  // primary use cases are when we are in the middle of a drag session (Paired
+  // Detach() and Attach() calls) or when reverting a drag (RevertDrag()).
+  std::unique_ptr<tab_groups::ScopedLocalObservationPauser> observation_pauser_;
 
   // True until MoveAttached() is first invoked.
   bool initial_move_;
@@ -761,6 +785,17 @@ class TabDragController : public views::WidgetObserver,
 
   // Called when the loop in RunMoveLoop finishes. Only for tests.
   base::OnceClosure drag_loop_done_callback_;
+
+  // Used in a system-DnD-based drag session if we need to hide a window with
+  // all of its tabs being dragged, as that needs to happen after starting the
+  // DnD session.
+  base::OnceClosure drag_started_callback_;
+
+#if defined(USE_AURA)
+  base::ScopedObservation<aura::client::DragDropClient,
+                          aura::client::DragDropClientObserver>
+      drag_drop_client_observation_{this};
+#endif  // defined(USE_AURA)
 
   std::unique_ptr<EventTracker> event_tracker_;
 

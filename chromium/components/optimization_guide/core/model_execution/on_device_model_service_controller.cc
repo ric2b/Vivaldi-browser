@@ -67,6 +67,25 @@ proto::OnDeviceModelVersions GetModelVersions(
   return versions;
 }
 
+const auto& GetTokenLimits() {
+  // TODO(b/302402959): Choose max_tokens based on device.
+  static const TokenLimits token_limits = []() {
+    auto context =
+        static_cast<uint32_t>(features::GetOnDeviceModelMaxTokensForContext());
+    auto execute =
+        static_cast<uint32_t>(features::GetOnDeviceModelMaxTokensForExecute());
+    auto output =
+        static_cast<uint32_t>(features::GetOnDeviceModelMaxTokensForOutput());
+    return TokenLimits{
+        .max_tokens = (context + execute + output),
+        .max_context_tokens = context,
+        .max_execute_tokens = execute,
+        .max_output_tokens = output,
+    };
+  }();
+  return token_limits;
+}
+
 }  // namespace
 
 OnDeviceModelServiceController::OnDeviceModelServiceController(
@@ -138,11 +157,6 @@ OnDeviceModelEligibilityReason OnDeviceModelServiceController::CanCreateSession(
     }
   }
 
-  if (features::internal::IsOnDeviceModelAdaptationEnabled(feature) &&
-      !base::Contains(model_adaptation_metadata_, feature)) {
-    return OnDeviceModelEligibilityReason::kModelAdaptationNotAvailable;
-  }
-
   return access_controller_->ShouldStartNewSession();
 }
 
@@ -192,11 +206,12 @@ OnDeviceModelServiceController::CreateSession(
 
   std::optional<on_device_model::AdaptationAssetPaths> adaptation_assets;
   std::optional<int64_t> adaptation_version;
-  if (features::internal::IsOnDeviceModelAdaptationEnabled(feature)) {
-    auto it = model_adaptation_metadata_.find(feature);
-    CHECK(it != model_adaptation_metadata_.end());
-    adaptation_assets = base::OptionalFromPtr(it->second.asset_paths());
-    adaptation_version = it->second.version();
+  auto adaptation_metadata_it = model_adaptation_metadata_.find(feature);
+  if (adaptation_metadata_it != model_adaptation_metadata_.end()) {
+    CHECK(features::internal::IsOnDeviceModelAdaptationEnabled(feature));
+    adaptation_assets =
+        base::OptionalFromPtr(adaptation_metadata_it->second.asset_paths());
+    adaptation_version = adaptation_metadata_it->second.version();
   }
 
   SessionImpl::OnDeviceOptions opts;
@@ -206,6 +221,7 @@ OnDeviceModelServiceController::CreateSession(
       *model_metadata_, safety_model_info_.get(), adaptation_version);
   opts.adapter = std::move(adapter);
   opts.safety_cfg = SafetyConfig(safety_config);
+  opts.token_limits = GetTokenLimits();
 
   has_started_session_ = true;
   return std::make_unique<SessionImpl>(
@@ -285,13 +301,9 @@ void OnDeviceModelServiceController::OnModelAssetsLoaded(
                                base::DoNothingWithBoundArgs(std::move(assets)));
     return;
   }
-  // TODO(b/302402959): Choose max_tokens based on device.
-  int max_tokens = features::GetOnDeviceModelMaxTokensForContext() +
-                   features::GetOnDeviceModelMaxTokensForExecute() +
-                   features::GetOnDeviceModelMaxTokensForOutput();
   auto params = on_device_model::mojom::LoadModelParams::New();
   params->assets = std::move(assets);
-  params->max_tokens = max_tokens;
+  params->max_tokens = GetTokenLimits().max_tokens;
   if (safety_model_info_) {
     params->ts_dimension = safety_model_info_->num_output_categories();
   }
@@ -312,13 +324,19 @@ void OnDeviceModelServiceController::SetLanguageDetectionModel(
     language_detection_model_path_.reset();
     return;
   }
-
+  base_model_remote_.reset();  // The remote's assets are outdated.
   language_detection_model_path_ = model_info->GetModelFilePath();
 }
 
 void OnDeviceModelServiceController::MaybeUpdateSafetyModel(
     base::optional_ref<const ModelInfo> model_info) {
-  safety_model_info_ = SafetyModelInfo::Load(model_info);
+  auto new_info = SafetyModelInfo::Load(model_info);
+  if (!new_info) {
+    safety_model_info_.reset();
+    return;
+  }
+  base_model_remote_.reset();  // The remote's assets are outdated.
+  safety_model_info_ = std::move(new_info);
 }
 
 on_device_model::ModelAssetPaths
@@ -544,7 +562,7 @@ void OnDeviceModelServiceController::NotifyModelAvailabilityChange(
   }
   auto can_create_session = CanCreateSession(feature);
   for (auto& observer : entry_it->second) {
-    observer.OnDeviceModelAvailablityChanged(feature, can_create_session);
+    observer.OnDeviceModelAvailabilityChanged(feature, can_create_session);
   }
 }
 

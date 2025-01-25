@@ -16,6 +16,7 @@ import {
   ref,
 } from 'chrome://resources/mwc/lit/index.js';
 
+import {focusToBody} from '../core/focus.js';
 import {i18n} from '../core/i18n.js';
 import {ReactiveLitElement} from '../core/reactive/lit.js';
 
@@ -23,6 +24,10 @@ import {CraDialog} from './cra/cra-dialog.js';
 
 export class DeleteRecordingDialog extends ReactiveLitElement {
   static override styles: CSSResultGroup = css`
+    :host {
+      display: contents;
+    }
+
     cra-dialog {
       width: 440px;
 
@@ -38,9 +43,12 @@ export class DeleteRecordingDialog extends ReactiveLitElement {
 
   current = false;
 
+  closedByDelete = false;
+
   private readonly dialog = createRef<CraDialog>();
 
   async show(): Promise<void> {
+    this.closedByDelete = false;
     await this.dialog.value?.show();
   }
 
@@ -48,23 +56,34 @@ export class DeleteRecordingDialog extends ReactiveLitElement {
     this.dialog.value?.close();
   }
 
+  private onClosed() {
+    if (this.closedByDelete) {
+      focusToBody();
+    }
+  }
+
   private emitDelete() {
     this.dispatchEvent(new CustomEvent('delete'));
+    this.closedByDelete = true;
     this.hide();
   }
 
   override render(): RenderResult {
     const classes = {
-      currnet: this.current,
+      current: this.current,
     };
 
     const headline = this.current ? i18n.recordDeleteDialogCurrentHeader :
                                     i18n.recordDeleteDialogHeader;
     const description = this.current ?
       nothing :
-      html` <div slot="content">${i18n.recordDeleteDialogDescription}</div> `;
+      html`<div slot="content">${i18n.recordDeleteDialogDescription}</div>`;
 
-    return html`<cra-dialog ${ref(this.dialog)} class=${classMap(classes)}>
+    return html`<cra-dialog
+      ${ref(this.dialog)}
+      class=${classMap(classes)}
+      @closed=${this.onClosed}
+    >
       <div slot="headline">${headline}</div>
       ${description}
       <div slot="actions">

@@ -361,8 +361,8 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
   if (process_lock.is_error_page())
     return true;
 
-  bool frame_has_bindings = ((render_frame_host->GetEnabledBindings() &
-                              kWebUIBindingsPolicyMask) != 0);
+  bool frame_has_webui_bindings =
+      render_frame_host->GetEnabledBindings().HasAny(kWebUIBindingsPolicySet);
   bool is_allowed_in_web_ui_renderer =
       WebUIControllerFactoryRegistry::GetInstance()->IsURLAcceptableForWebUI(
           render_frame_host->GetProcess()->GetBrowserContext(), url);
@@ -376,7 +376,7 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
 
   // If the |render_frame_host| has any WebUI bindings, disallow URLs that are
   // not allowed in a WebUI renderer process.
-  if (frame_has_bindings) {
+  if (frame_has_webui_bindings) {
     // The process itself must have WebUI bit in the security policy.
     // Otherwise it indicates that there is a bug in browser process logic and
     // the browser process must be terminated.
@@ -545,7 +545,8 @@ void Navigator::DidNavigate(
       navigation_request->browsing_context_group_swap()
           .ShouldClearProxiesOnCommit(),
       navigation_request->commit_params().frame_policy,
-      allow_subframe_paint_holding);
+      allow_subframe_paint_holding,
+      navigation_request->was_initiated_by_animated_transition());
 
   // Reset the old frame host's weak pointer to auction initiator page when it
   // is a cross-document navigation and the frame does not go into bfcache.
@@ -788,6 +789,62 @@ void Navigator::Navigate(std::unique_ptr<NavigationRequest> request,
   FrameTreeNode* frame_tree_node = request->frame_tree_node();
   DCHECK_EQ(&(frame_tree_node->frame_tree()), &controller_.frame_tree());
 
+  //  TODO(crbug.com/40496584):Resolved an issue where creating RPHI would cause
+  //  a crash when the browser context was shut down. We are actively exploring
+  //  the appropriate long-term solution. Please remove this condition once the
+  //  final fix is implemented.
+  if (controller_.GetBrowserContext()->ShutdownStarted()) {
+    return;
+  }
+
+  // Ignore potentially duplicated navigations, where the new navigation has the
+  // same params and details as the current ongoing navigations. These
+  // navigations are likely triggered unintentionally (e.g. due to double
+  // clicks).
+  NavigationRequest* ongoing_navigation_request =
+      frame_tree_node->navigation_request();
+  bool is_duplicate_navigation = false;
+  if (ongoing_navigation_request &&
+      request->common_params().navigation_start -
+              ongoing_navigation_request->common_params().navigation_start <=
+          features::kDuplicateNavThreshold.Get() &&
+      ongoing_navigation_request->IsRendererInitiated() ==
+          request->IsRendererInitiated() &&
+      request->GetURL() == ongoing_navigation_request->GetURL() &&
+      request->common_params().method == "GET" &&
+      ongoing_navigation_request->common_params().method == "GET" &&
+      request->GetInitiatorFrameToken() ==
+          ongoing_navigation_request->GetInitiatorFrameToken() &&
+      request->common_params().initiator_origin ==
+          ongoing_navigation_request->common_params().initiator_origin &&
+      request->common_params().has_user_gesture ==
+          ongoing_navigation_request->common_params().has_user_gesture &&
+      request->common_params().should_replace_current_entry ==
+          ongoing_navigation_request->common_params()
+              .should_replace_current_entry &&
+      request->GetNavigationEntryOffset() ==
+          ongoing_navigation_request->GetNavigationEntryOffset() &&
+      request->GetReloadType() == ongoing_navigation_request->GetReloadType() &&
+      request->GetRestoreType() ==
+          ongoing_navigation_request->GetRestoreType() &&
+      request->common_params().referrer ==
+          ongoing_navigation_request->common_params().referrer &&
+      request->common_params().transition ==
+          ongoing_navigation_request->common_params().transition) {
+    is_duplicate_navigation = true;
+  }
+  base::UmaHistogramBoolean("Navigation.IsDuplicate", is_duplicate_navigation);
+  if (is_duplicate_navigation) {
+    if (base::FeatureList::IsEnabled(features::kIgnoreDuplicateNavs)) {
+      request->set_navigation_discard_reason(
+          NavigationDiscardReason::kNeverStarted);
+      return;
+    } else {
+      ongoing_navigation_request->set_navigation_discard_reason(
+          NavigationDiscardReason::kNewDuplicateNavigation);
+    }
+  }
+
   metrics_data_ = std::make_unique<NavigationMetricsData>(
       request->common_params().navigation_start, request->common_params().url,
       GetPageUkmSourceId(*frame_tree_node->current_frame_host()),
@@ -871,7 +928,7 @@ void Navigator::RequestOpenURL(
   // redirects.  http://crbug.com/311721.
   std::vector<GURL> redirect_chain;
 
-  int frame_tree_node_id = FrameTreeNode::kFrameTreeNodeInvalidId;
+  FrameTreeNodeId frame_tree_node_id;
 
   // Send the navigation to the current FrameTreeNode if it's destined for a
   // subframe in the current tab.  We'll assume it's for the main frame
@@ -887,7 +944,7 @@ void Navigator::RequestOpenURL(
   // means this function currently can't be called for prerendering main frames.
   DCHECK(render_frame_host->lifecycle_state() !=
              RenderFrameHostImpl::LifecycleStateImpl::kPrerendering ||
-         frame_tree_node_id != FrameTreeNode::kFrameTreeNodeInvalidId);
+         frame_tree_node_id);
 
   OpenURLParams params(url, referrer, frame_tree_node_id, disposition,
                        ui::PAGE_TRANSITION_LINK,

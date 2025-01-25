@@ -71,8 +71,21 @@ std::optional<uint64_t> ParseDebugKey(const base::Value::Dict& dict);
 base::expected<std::optional<uint64_t>, ParseError> ParseDeduplicationKey(
     const base::Value::Dict&);
 
+// The given value must be a non-negative `int`, or a non-negative `double`
+// without a fractional part, or a string containing a base-10-formatted
+// unsigned 64-bit integer. That value is interpreted as a number of seconds
+// clamped to the given range.
 base::expected<base::TimeDelta, ParseError> ParseLegacyDuration(
-    const base::Value&);
+    const base::Value&,
+    base::TimeDelta clamp_min,
+    base::TimeDelta clamp_max);
+
+// The given value must be an `int` or a `double` without a fractional part.
+// That value is interpreted as a number of seconds. The only clamping applied
+// is that of `base::TimeDelta` itself, which only affects extremely large
+// `double` values that for the purposes of Attribution Reporting are
+// effectively infinity and will be clamped or tolerated properly elsewhere.
+base::expected<base::TimeDelta, ParseError> ParseDuration(const base::Value&);
 
 base::expected<std::optional<SuitableOrigin>, ParseError>
 ParseAggregationCoordinator(const base::Value::Dict&);
@@ -93,6 +106,9 @@ void SerializeDeduplicationKey(base::Value::Dict&,
 void SerializeTimeDeltaInSeconds(base::Value::Dict& dict,
                                  std::string_view key,
                                  base::TimeDelta value);
+
+COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
+base::expected<int, ParseError> ParseInt(const base::Value&);
 
 COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
 base::expected<uint32_t, ParseError> ParseUint32(const base::Value&);

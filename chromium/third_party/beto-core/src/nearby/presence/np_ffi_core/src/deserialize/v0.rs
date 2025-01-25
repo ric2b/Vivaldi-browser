@@ -184,7 +184,7 @@ pub enum DeserializedV0IdentityKind {
 pub struct DeserializedV0IdentityDetails {
     /// The ID of the credential which
     /// matched the deserialized adv
-    cred_id: u32,
+    cred_id: i64,
     /// The 14-byte legacy identity token
     identity_token: [u8; 14],
     /// The 2-byte advertisement salt
@@ -193,7 +193,7 @@ pub struct DeserializedV0IdentityDetails {
 
 impl DeserializedV0IdentityDetails {
     pub(crate) fn new(
-        cred_id: u32,
+        cred_id: i64,
         salt: ldt_np_adv::V0Salt,
         identity_token: ldt_np_adv::V0IdentityToken,
     ) -> Self {
@@ -201,7 +201,7 @@ impl DeserializedV0IdentityDetails {
         Self { cred_id, salt, identity_token: identity_token.bytes() }
     }
     /// Returns the ID of the credential which matched the deserialized adv
-    pub fn cred_id(&self) -> u32 {
+    pub fn cred_id(&self) -> i64 {
         self.cred_id
     }
     /// Returns the 14-byte legacy metadata key

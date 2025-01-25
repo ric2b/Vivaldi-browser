@@ -23,7 +23,7 @@
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
 
-namespace content {
+namespace content::indexed_db {
 class LevelDBScope;
 class LevelDBState;
 class PartitionedLockManager;
@@ -57,14 +57,15 @@ class LevelDBScopes {
 
   std::unique_ptr<LevelDBScope> CreateScope(std::vector<PartitionedLock> locks);
 
-  leveldb::Status Commit(std::unique_ptr<LevelDBScope> scope,
-                         bool sync_on_commit);
-
-  // |on_complete| will be called when the cleanup task for the scope has
-  // finished operating.
-  leveldb::Status Commit(std::unique_ptr<LevelDBScope> scope,
-                         bool sync_on_commit,
-                         base::OnceClosure on_complete);
+  // `on_commit_complete` will be called after the commit for `scope` completes
+  // but before the cleanup task (if applicable) is scheduled.
+  // `on_cleanup_complete` will be called when the cleanup task completes. It
+  // will not be called if the task was not scheduled at all.
+  leveldb::Status Commit(
+      std::unique_ptr<LevelDBScope> scope,
+      bool sync_on_commit,
+      base::OnceClosure on_commit_complete = base::OnceClosure(),
+      base::OnceClosure on_cleanup_complete = base::OnceClosure());
 
   const std::vector<uint8_t>& metadata_key_prefix() const {
     return metadata_key_prefix_;
@@ -104,6 +105,6 @@ class LevelDBScopes {
   base::WeakPtrFactory<LevelDBScopes> weak_factory_{this};
 };
 
-}  // namespace content
+}  // namespace content::indexed_db
 
 #endif  // COMPONENTS_SERVICES_STORAGE_INDEXED_DB_SCOPES_LEVELDB_SCOPES_H_

@@ -4,7 +4,8 @@
 
 export const enum ConverterIds {
   JSON = 'json',
-  Puppeteer = 'puppeteer',
-  Replay = '@puppeteer/replay',
-  Lighthouse = 'lighthouse',
+  PUPPETEER = 'puppeteer',
+  PUPPETEER_FIREFOX = 'puppeteer-firefox',
+  REPLAY = '@puppeteer/replay',
+  LIGHTHOUSE = 'lighthouse',
 }

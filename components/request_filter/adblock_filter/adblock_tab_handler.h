@@ -28,6 +28,10 @@ class TabHandler {
     virtual void OnNewBlockedUrlsReported(
         RuleGroup group,
         std::set<content::WebContents*> tabs_with_new_blocks) {}
+
+    virtual void OnAllowAttributionChanged(content::WebContents* web_contents) {}
+    virtual void OnNewAttributionTrackerAllowed(
+        std::set<content::WebContents*> tabs_with_new_attribution_trackers) {}
   };
   using CounterGroup = std::array<std::map<std::string, int>, kRuleGroupCount>;
   using TrackerInfo = std::map<uint32_t, base::Value>;
@@ -46,11 +50,23 @@ class TabHandler {
                              const ActiveRuleSource& source,
                              base::Value::Dict new_tracker_infos);
 
+  void SetFrameBlockState(RuleGroup group, content::RenderFrameHost* frame);
+  void ResetFrameBlockState(RuleGroup group, content::RenderFrameHost* frame);
   void OnUrlBlocked(RuleGroup group,
                     url::Origin origin,
                     GURL url,
                     content::RenderFrameHost* frame);
   void OnTabRemoved(content::WebContents* contents);
+  void OnAllowAttributionChanged(content::WebContents* contents);
+
+  void SetAdAttributionState(bool enabled, content::RenderFrameHost* frame);
+
+  void SetTabAdQueryTriggers(const GURL& ad_url,
+                             std::vector<std::string> ad_query_triggers,
+                             content::RenderFrameHost* frame);
+  bool DoesAdAttributionMatch(content::RenderFrameHost* frame,
+                              std::string_view tracker_url_spec,
+                              std::string_view ad_domain_and_query_trigger);
 
   const TrackerInfo* GetTrackerInfo(RuleGroup group,
                                     const std::string& domain) const;
@@ -60,18 +76,21 @@ class TabHandler {
   }
   base::Time GetReportingStart() const { return reporting_start_; }
   void ClearBlockedCounters();
+  bool WasFrameBlocked(RuleGroup group, content::RenderFrameHost* frame) const;
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
  private:
-  void NotifyOfNewBlockedUrls();
+  void PrepareNewNotifications();
+  void SendNotifications();
   void AddToCounter(CounterGroup& counter_group,
                     RuleGroup group,
                     std::string domain);
 
   std::array<std::set<content::WebContents*>, kRuleGroupCount>
       tabs_with_new_blocks_;
+  std::set<content::WebContents*> tabs_with_new_attribution_trackers_;
 
   std::array<std::map<std::string, TrackerInfo>, kRuleGroupCount>
       tracker_infos_;
@@ -81,7 +100,7 @@ class TabHandler {
   CounterGroup blocked_for_origin_;
 
   base::Time last_notification_time_;
-  base::OneShotTimer next_notifiaction_timer_;
+  base::OneShotTimer next_notification_timer_;
   base::RepeatingClosure schedule_save_;
 
   base::ObserverList<Observer> observers_;

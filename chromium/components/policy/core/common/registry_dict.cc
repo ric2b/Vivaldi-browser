@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/policy/core/common/registry_dict.h"
 
 #include <memory>
@@ -271,7 +276,7 @@ void RegistryDict::ReadRegistry(HKEY hive, const std::wstring& root) {
               // ValueSize() here is the number of non-NUL *bytes* in the
               // Value() string, so we cast the Value() to bytes which is what
               // we want in the end anyway.
-              UNSAFE_BUFFERS(
+              UNSAFE_TODO(
                   base::span(reinterpret_cast<const uint8_t*>(it.Value()),
                              it.ValueSize()))
                   .first<sizeof(DWORD)>();

@@ -39,6 +39,7 @@ public class NativePageBitmapCapturerTest {
     @SmallTest
     public void testWithNativePage() throws TimeoutException {
         mTabbedActivityTestRule.startMainActivityWithURL(UrlConstants.NTP_URL);
+
         CallbackHelper callbackHelper = new CallbackHelper();
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -57,6 +58,7 @@ public class NativePageBitmapCapturerTest {
     @SmallTest
     public void testWithNonNativePage() {
         mTabbedActivityTestRule.startMainActivityOnBlankPage();
+
         CallbackHelper callbackHelper = new CallbackHelper();
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {

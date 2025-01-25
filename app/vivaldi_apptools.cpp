@@ -40,6 +40,14 @@ const char *const vivaldi_extra_locales_array[] = {
 bool using_legacy_menu = false;
 }  // namespace
 
+bool IsVivaldiUrl(const std::string& url_str) {
+  if (!strncmp(url_str.c_str(), kVivaldiAppURLDomain,
+               strlen(kVivaldiAppURLDomain))) {
+    return true;
+  }
+  return false;
+}
+
 bool IsVivaldiApp(std::string_view extension_id) {
   return extension_id == kVivaldiAppIdHex || extension_id == kVivaldiAppId;
 }

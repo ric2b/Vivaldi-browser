@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Greška</translation>
 <translation id="1175364870820465910">&amp;Odštampaj...</translation>
 <translation id="1181037720776840403">Ukloni</translation>
+<translation id="1184037892196730210">Nije moguće prebacivanje ekrana</translation>
 <translation id="1187722533808055681">Aktiviranja iz stanja mirovanja</translation>
 <translation id="122082903575839559">Algoritam potpisa sertifikata</translation>
 <translation id="1221825588892235038">Samo izabrani sadržaj</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Vrednost polja</translation>
 <translation id="2662876636500006917">Chrome veb prodavnica</translation>
 <translation id="2678063897982469759">Ponovo omogući</translation>
-<translation id="2678100101831051676">Nije moguće prebaciti.</translation>
 <translation id="2719936478972253983">Sledeći kolačići su blokirani</translation>
 <translation id="2721037002783622288">&amp;Traži sliku pomoću <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Ne posle</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Ovo proširenje je možda oštećeno.</translation>
 <translation id="3387614642886316601">Koristi poboljšanu proveru pravopisa</translation>
 <translation id="3390013585654699824">Detalji o aplikaciji</translation>
-<translation id="3393582007140394275">Nije moguće prebacivanje ekrana.</translation>
 <translation id="345693547134384690">Otvori &amp;sliku u novoj kartici</translation>
 <translation id="3493881266323043047">Rok važenja</translation>
 <translation id="3511307672085573050">Kopiraj adr&amp;esu veze</translation>
@@ -194,7 +193,7 @@
 <translation id="4104163789986725820">I&amp;zvezi...</translation>
 <translation id="4109898769411476438">Zatvorite pregledač pre uvoza</translation>
 <translation id="4131410914670010031">Crno-belo</translation>
-<translation id="4165986682804962316">Podešavanja sajta</translation>
+<translation id="4165986682804962316">Podešavanja sajtova</translation>
 <translation id="4170314459383239649">Obriši pri izlasku</translation>
 <translation id="4176463684765177261">Onemogućeno</translation>
 <translation id="4200983522494130825">Nova kartica</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Zadrži promene</translation>
 <translation id="6824564591481349393">Kopiraj adresu &amp;e-pošte</translation>
 <translation id="6840155290835956714">Pitaj pre slanja</translation>
+<translation id="6878862640969460273">Položeno</translation>
 <translation id="6886871292305414135">Otvori vezu u novoj &amp;kartici</translation>
 <translation id="6892812721183419409">Otvori vezu kao <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikacija u pozadini: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Pristup je odbijen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> tpi</translation>
 <translation id="7339785458027436441">Proveri pravopis tokom kucanja</translation>
+<translation id="7359680654975233185">Nije moguće prebacivanje kartice</translation>
 <translation id="7385854874724088939">Došlo je do greške pri pokušaju štampanja. Proverite štampač i pokušajte ponovo.</translation>
 <translation id="7412226954991670867">GPU memorija</translation>
 <translation id="7421925624202799674">&amp;Prikaži izvor stranice</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Dozvoli sajtovima da čuvaju i čitaju podatke kolačića</translation>
 <translation id="7663719505383602579">Prijemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalirao administrator</translation>
+<translation id="7685038817958445325">Nije moguće prebacivanje</translation>
 <translation id="7685049629764448582">JavaScript memorija</translation>
 <translation id="7701869757853594372">USER regulatori</translation>
 <translation id="7704305437604973648">Zadatak</translation>
@@ -410,7 +412,6 @@ Datoteka ključa: <ph name="KEY_FILE" />
 Čuvajte datoteku ključa na bezbednom mestu. Biće vam potrebna za kreiranje novih verzija proširenja.</translation>
 <translation id="8004582292198964060">Pregledač</translation>
 <translation id="8018313076035239964">Kontrolišu koje informacije veb sajtovi mogu da koriste i koji sadržaj mogu da vam prikazuju</translation>
-<translation id="8032244173881942855">Nije moguće prebacivanje kartice.</translation>
 <translation id="8071432093239591881">Odštampaj kao sliku</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
@@ -466,7 +467,6 @@ Datoteka ključa: <ph name="KEY_FILE" />
 <translation id="9218430445555521422">Postavi kao podrazumevano</translation>
 <translation id="93766956588638423">Popravi proširenje</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Položeno</translation>
 <translation id="994289308992179865">&amp;Ponavljaj</translation>
 <translation id="998747458861718449">&amp;Ispitaj</translation>
 </translationbundle>

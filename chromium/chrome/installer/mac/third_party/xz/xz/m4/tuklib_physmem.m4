@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: 0BSD
+
+#############################################################################
 #
 # SYNOPSIS
 #
@@ -10,8 +13,8 @@
 #
 #   Supported methods:
 #
-#     - Windows (including Cygwin), OS/2, DJGPP (DOS), and OpenVMS have
-#       operating-system specific functions.
+#     - Windows (including Cygwin), OS/2, DJGPP (DOS), OpenVMS, AROS,
+#       and QNX have operating-system specific functions.
 #
 #     - AIX has _system_configuration.physmem.
 #
@@ -29,13 +32,11 @@
 #     - sysinfo() works on Linux/dietlibc and probably on other Linux
 #       systems whose libc may lack sysconf().
 #
-# COPYING
+#############################################################################
 #
-#   Author: Lasse Collin
+# Author: Lasse Collin
 #
-#   This file has been put into the public domain.
-#   You can do whatever you want with this file.
-#
+#############################################################################
 
 AC_DEFUN_ONCE([TUKLIB_PHYSMEM], [
 AC_REQUIRE([TUKLIB_COMMON])
@@ -53,7 +54,8 @@ AC_CACHE_CHECK([how to detect the amount of physical memory],
 # a non-compilable text instead of #error to generate an error.
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
 #if defined(_WIN32) || defined(__CYGWIN__) || defined(__OS2__) \
-		|| defined(__DJGPP__) || defined(__VMS)
+		|| defined(__DJGPP__) || defined(__VMS) \
+		|| defined(AMIGA) || defined(__AROS__) || defined(__QNX__)
 int main(void) { return 0; }
 #else
 compile error
@@ -87,7 +89,6 @@ main(void)
 ]])], [tuklib_cv_physmem_method=sysconf], [
 
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
-#include <sys/types.h>
 #ifdef HAVE_SYS_PARAM_H
 #	include <sys/param.h>
 #endif

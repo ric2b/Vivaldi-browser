@@ -57,6 +57,7 @@ tint_target_add_dependencies(tint_api lib
   tint_lang_wgsl_ast_transform
   tint_lang_wgsl_common
   tint_lang_wgsl_features
+  tint_lang_wgsl_inspector
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
   tint_lang_wgsl_writer_ir_to_program
@@ -73,6 +74,10 @@ tint_target_add_dependencies(tint_api lib
   tint_utils_symbol
   tint_utils_text
   tint_utils_traits
+)
+
+tint_target_add_external_dependencies(tint_api lib
+  "src_utils"
 )
 
 if(TINT_BUILD_GLSL_WRITER)

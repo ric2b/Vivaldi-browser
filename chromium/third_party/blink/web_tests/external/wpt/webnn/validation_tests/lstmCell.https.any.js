@@ -1,5 +1,8 @@
 // META: title=validation tests for WebNN API lstmCell operation
 // META: global=window,dedicatedworker
+// META: variant=?cpu
+// META: variant=?gpu
+// META: variant=?npu
 // META: script=../resources/utils_validation.js
 
 'use strict';
@@ -185,25 +188,6 @@ multi_builder_test(async (t, builder, otherBuilder) => {
           input, weight, recurrentWeight, hiddenState, cellState, hiddenSize,
           options));
 }, '[lstmCell] throw if peepholeWeight option is from another builder');
-
-multi_builder_test(async (t, builder, otherBuilder) => {
-  const activation = builder.relu();
-  const activationFromOtherBuilder = otherBuilder.relu();
-  const options = {activations: [activation, activationFromOtherBuilder]};
-
-  const input = builder.input('input', kExampleInputDescriptor);
-  const weight = builder.input('weight', kExampleWeightDescriptor);
-  const recurrentWeight =
-      builder.input('recurrentWeight', kExampleRecurrentWeightDescriptor);
-  const hiddenState =
-      builder.input('hiddenState', kExampleHiddenStateDescriptor);
-  const cellState = builder.input('cellState', kExampleCellStateDescriptor);
-  assert_throws_js(
-      TypeError,
-      () => builder.lstmCell(
-          input, weight, recurrentWeight, hiddenState, cellState, hiddenSize,
-          options));
-}, '[lstmCell] throw if activation option is from another builder');
 
 const tests = [
   {
@@ -532,6 +516,7 @@ const tests = [
 
 tests.forEach(
     test => promise_test(async t => {
+      const builder = new MLGraphBuilder(context);
       const input = builder.input(
           'input',
           {dataType: test.input.dataType, dimensions: test.input.dimensions});
@@ -575,13 +560,13 @@ tests.forEach(
           options.layout = test.options.layout;
         }
         if (test.options.activations) {
-          options.activations = [];
-          test.options.activations.forEach(
-              activation => options.activations.push(builder[activation]()));
+          options.activations = test.options.activations;
         }
       }
 
-      if (test.outputs) {
+      if (test.outputs &&
+          context.opSupportLimits().lstmCell.input.dataTypes.includes(
+              test.input.dataType)) {
         const outputs = builder.lstmCell(
             input, weight, recurrentWeight, hiddenState, cellState,
             test.hiddenSize, options);
@@ -591,10 +576,13 @@ tests.forEach(
           assert_array_equals(outputs[i].shape(), test.outputs[i].dimensions);
         }
       } else {
-        assert_throws_js(
-            TypeError,
+        const label = 'lstm_cell_xxx';
+        options.label = label;
+        const regrexp = new RegExp('\\[' + label + '\\]');
+        assert_throws_with_label(
             () => builder.lstmCell(
                 input, weight, recurrentWeight, hiddenState, cellState,
-                test.hiddenSize, options));
+                test.hiddenSize, options),
+            regrexp);
       }
     }, test.name));

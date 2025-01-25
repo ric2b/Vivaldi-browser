@@ -9,6 +9,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_math.h"
+#include "chrome/browser/ui/lens/ref_counted_lens_overlay_client_logs.h"
 #include "components/lens/lens_features.h"
 #include "third_party/lens_server_proto/lens_overlay_image_crop.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_image_data.pb.h"
@@ -17,6 +18,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/codec/jpeg_codec.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/codec/webp_codec.h"
 #include "ui/gfx/color_analysis.h"
 #include "ui/gfx/color_conversions.h"
@@ -69,11 +71,13 @@ gfx::Size GetPreferredSize(const gfx::Size& original_size,
   return gfx::Size(width, height);
 }
 
-void AddClientLogsForDownscale(lens::LensOverlayClientLogs& client_logs,
-                               const SkBitmap& original_image,
-                               const SkBitmap& downscaled_image) {
-  auto* downscale_phase =
-      client_logs.mutable_phase_latencies_metadata()->add_phase();
+void AddClientLogsForDownscale(
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs,
+    const SkBitmap& original_image,
+    const SkBitmap& downscaled_image) {
+  auto* downscale_phase = client_logs->client_logs()
+                              .mutable_phase_latencies_metadata()
+                              ->add_phase();
   downscale_phase->mutable_image_downscale_data()->set_original_image_size(
       original_image.width() * original_image.height());
   downscale_phase->mutable_image_downscale_data()->set_downscaled_image_size(
@@ -81,18 +85,20 @@ void AddClientLogsForDownscale(lens::LensOverlayClientLogs& client_logs,
 }
 
 void AddClientLogsForEncode(
-    lens::LensOverlayClientLogs& client_logs,
-    scoped_refptr<base::RefCountedBytes>* output_bytes) {
-  auto* encode_phase =
-      client_logs.mutable_phase_latencies_metadata()->add_phase();
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs,
+    scoped_refptr<base::RefCountedBytes> output_bytes) {
+  auto* encode_phase = client_logs->client_logs()
+                           .mutable_phase_latencies_metadata()
+                           ->add_phase();
   encode_phase->mutable_image_encode_data()->set_encoded_image_size_bytes(
-      (*output_bytes)->as_vector().size());
+      output_bytes->as_vector().size());
 }
 
-SkBitmap DownscaleImage(const SkBitmap& image,
-                        int target_width,
-                        int target_height,
-                        lens::LensOverlayClientLogs& client_logs) {
+SkBitmap DownscaleImage(
+    const SkBitmap& image,
+    int target_width,
+    int target_height,
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs) {
   auto size = gfx::Size(image.width(), image.height());
   auto preferred_size = GetPreferredSize(size, target_width, target_height);
   SkBitmap downscaled_image = skia::ImageOperations::Resize(
@@ -105,7 +111,7 @@ SkBitmap DownscaleImage(const SkBitmap& image,
 SkBitmap DownscaleImageIfNeededWithTieredApproach(
     const SkBitmap& image,
     int ui_scale_factor,
-    lens::LensOverlayClientLogs& client_logs) {
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs) {
   auto size = gfx::Size(image.width(), image.height());
   // Tier 3 Downscaling.
   if (ShouldDownscaleSizeWithUiScaling(
@@ -147,9 +153,10 @@ SkBitmap DownscaleImageIfNeededWithTieredApproach(
   return image;
 }
 
-SkBitmap DownscaleImageIfNeeded(const SkBitmap& image,
-                                int ui_scale_factor,
-                                lens::LensOverlayClientLogs& client_logs) {
+SkBitmap DownscaleImageIfNeeded(
+    const SkBitmap& image,
+    int ui_scale_factor,
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs) {
   if (lens::features::LensOverlayUseTieredDownscaling()) {
     return DownscaleImageIfNeededWithTieredApproach(image, ui_scale_factor,
                                                     client_logs);
@@ -170,7 +177,7 @@ SkBitmap DownscaleImageIfNeeded(const SkBitmap& image,
 SkBitmap CropAndDownscaleImageIfNeeded(
     const SkBitmap& image,
     gfx::Rect region,
-    lens::LensOverlayClientLogs& client_logs) {
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs) {
   SkBitmap output;
   auto full_image_size = gfx::Size(image.width(), image.height());
   auto region_size = gfx::Size(region.width(), region.height());
@@ -211,17 +218,32 @@ SkBitmap CropAndDownscaleImageIfNeeded(
   return output;
 }
 
+gfx::Rect GetRectForRegion(const SkBitmap& image,
+                           const lens::mojom::CenterRotatedBoxPtr& region) {
+  bool use_normalized_coordinates =
+      region->coordinate_type ==
+      lens::mojom::CenterRotatedBox_CoordinateType::kNormalized;
+  double x_scale = use_normalized_coordinates ? image.width() : 1;
+  double y_scale = use_normalized_coordinates ? image.height() : 1;
+  return gfx::Rect(
+      base::ClampFloor((region->box.x() - 0.5 * region->box.width()) * x_scale),
+      base::ClampFloor((region->box.y() - 0.5 * region->box.height()) *
+                       y_scale),
+      std::max(1, base::ClampFloor(region->box.width() * x_scale)),
+      std::max(1, base::ClampFloor(region->box.height() * y_scale)));
+}
+
 }  // namespace
 
 namespace lens {
 
-bool EncodeImage(const SkBitmap& image,
-                 int compression_quality,
-                 scoped_refptr<base::RefCountedBytes>* output,
-                 lens::LensOverlayClientLogs& client_logs) {
-  *output = base::MakeRefCounted<base::RefCountedBytes>();
+bool EncodeImage(
+    const SkBitmap& image,
+    int compression_quality,
+    scoped_refptr<base::RefCountedBytes> output,
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs) {
   if (gfx::JPEGCodec::Encode(image, compression_quality,
-                             &(*output)->as_vector())) {
+                             &output->as_vector())) {
     AddClientLogsForEncode(client_logs, output);
     return true;
   }
@@ -231,14 +253,13 @@ bool EncodeImage(const SkBitmap& image,
 bool EncodeImageMaybeWithTransparency(
     const SkBitmap& image,
     int compression_quality,
-    scoped_refptr<base::RefCountedBytes>* output,
-    lens::LensOverlayClientLogs& client_logs) {
+    scoped_refptr<base::RefCountedBytes> output,
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs) {
   if (image.isOpaque()) {
     return EncodeImage(image, compression_quality, output, client_logs);
   }
-  *output = base::MakeRefCounted<base::RefCountedBytes>();
   if (gfx::WebpCodec::Encode(image, compression_quality,
-                             &(*output)->as_vector())) {
+                             &output->as_vector())) {
     AddClientLogsForEncode(client_logs, output);
     return true;
   }
@@ -248,14 +269,16 @@ bool EncodeImageMaybeWithTransparency(
 lens::ImageData DownscaleAndEncodeBitmap(
     const SkBitmap& image,
     int ui_scale_factor,
-    lens::LensOverlayClientLogs& client_logs) {
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs) {
   lens::ImageData image_data;
-  scoped_refptr<base::RefCountedBytes> data;
+  scoped_refptr<base::RefCountedBytes> data =
+      base::MakeRefCounted<base::RefCountedBytes>();
+
   auto resized_bitmap =
       DownscaleImageIfNeeded(image, ui_scale_factor, client_logs);
   if (EncodeImage(resized_bitmap,
-                  lens::features::GetLensOverlayImageCompressionQuality(),
-                  &data, client_logs)) {
+                  lens::features::GetLensOverlayImageCompressionQuality(), data,
+                  client_logs)) {
     image_data.mutable_image_metadata()->set_height(resized_bitmap.height());
     image_data.mutable_image_metadata()->set_width(resized_bitmap.width());
 
@@ -280,30 +303,30 @@ void AddSignificantRegions(
   }
 }
 
+SkBitmap CropBitmapToRegion(const SkBitmap& image,
+                            lens::mojom::CenterRotatedBoxPtr region) {
+  gfx::Rect region_rect = GetRectForRegion(image, region);
+  return SkBitmapOperations::CreateTiledBitmap(
+      image, region_rect.x(), region_rect.y(), region_rect.width(),
+      region_rect.height());
+}
+
 std::optional<lens::ImageCrop> DownscaleAndEncodeBitmapRegionIfNeeded(
     const SkBitmap& image,
     lens::mojom::CenterRotatedBoxPtr region,
     std::optional<SkBitmap> region_bytes,
-    lens::LensOverlayClientLogs& client_logs) {
+    scoped_refptr<lens::RefCountedLensOverlayClientLogs> client_logs) {
   if (!region) {
     return std::nullopt;
   }
 
-  bool use_normalized_coordinates =
-      region->coordinate_type ==
-      lens::mojom::CenterRotatedBox_CoordinateType::kNormalized;
-  double x_scale = use_normalized_coordinates ? image.width() : 1;
-  double y_scale = use_normalized_coordinates ? image.height() : 1;
-  gfx::Rect region_rect(
-      static_cast<int>((region->box.x() - 0.5 * region->box.width()) * x_scale),
-      static_cast<int>((region->box.y() - 0.5 * region->box.height()) *
-                       y_scale),
-      std::max<int>(1, region->box.width() * x_scale),
-      std::max<int>(1, region->box.height() * y_scale));
+  gfx::Rect region_rect = GetRectForRegion(image, region);
 
   lens::ImageCrop image_crop;
   SkBitmap region_bitmap;
-  scoped_refptr<base::RefCountedBytes> data;
+  scoped_refptr<base::RefCountedBytes> data =
+      base::MakeRefCounted<base::RefCountedBytes>();
+  ;
   if (region_bytes.has_value()) {
     region_bitmap = DownscaleImageIfNeeded(*region_bytes, /*ui_scale_factor=*/0,
                                            client_logs);
@@ -313,7 +336,7 @@ std::optional<lens::ImageCrop> DownscaleAndEncodeBitmapRegionIfNeeded(
   }
   if (EncodeImageMaybeWithTransparency(
           region_bitmap,
-          lens::features::GetLensOverlayImageCompressionQuality(), &data,
+          lens::features::GetLensOverlayImageCompressionQuality(), data,
           client_logs)) {
     auto* mutable_zoomed_crop = image_crop.mutable_zoomed_crop();
     mutable_zoomed_crop->set_parent_height(image.height());

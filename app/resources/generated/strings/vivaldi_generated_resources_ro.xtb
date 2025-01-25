@@ -25,7 +25,7 @@
 <translation id="1682548588986054654">Fereastră incognito nouă</translation>
 <translation id="1708338024780164500">(Inactive)</translation>
 <translation id="1723824996674794290">Fereastră &amp;nouă</translation>
-<translation id="1729533290416704613">De asemenea controlează ce pagină să fie afișată la căutare din Omnibox.</translation>
+<translation id="1729533290416704613">De asemenea controlează ce pagină să fie arătată la căutarea din Omnibox.</translation>
 <translation id="174123615272205933">Personalizat</translation>
 <translation id="1744108098763830590">pagina de fundal</translation>
 <translation id="176587472219019965">Fereastră &amp;nouă</translation>
@@ -155,9 +155,11 @@
 <translation id="5804241973901381774">Permisiuni</translation>
 <translation id="5828633471261496623">Se tipărește...</translation>
 <translation id="583281660410589416">Necunoscut</translation>
+<translation id="5851868085455377790">Emitent</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maximum <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5978277834170881274">Folosește verificarea de bază a ortografiei</translation>
 <translation id="6042308850641462728">Mai multe</translation>
+<translation id="6086846494333236931">Instalată de administrator</translation>
 <translation id="6101226222197207147">A fost adăugată o aplicație nouă (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6147020289383635445">Previzualizarea tipăririi a eșuat.</translation>
 <translation id="6196854373336333322">Extensia „<ph name="EXTENSION_NAME" />” a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faceți online. Dacă nu știți sigur de ce a apărut această modificare, probabil că nu este ceea ce vreți.</translation>
@@ -178,7 +180,9 @@
 <translation id="6550675742724504774">Opțiuni</translation>
 <translation id="6686817083349815241">Salvați parola</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
+<translation id="6812841287760418429">Păstrează modificările</translation>
 <translation id="6840155290835956714">Întreabă înainte de a trimite</translation>
+<translation id="6878862640969460273">Peisaj</translation>
 <translation id="6900284862687837908">Aplicație de fundal: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6945221475159498467">Selectare</translation>
 <translation id="6970856801391541997">Tipărește anumite pagini</translation>
@@ -199,6 +203,8 @@
 <translation id="7629827748548208700">Filă: <ph name="TAB_NAME" /></translation>
 <translation id="7661259717474717992">Permite site-urilor web să salveze și să citească datele asociate cookie-urilor</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7684212569183643648">Instalată de administrator</translation>
+<translation id="7685049629764448582">Memorie JavaScript</translation>
 <translation id="7704305437604973648">Activitate</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
 <translation id="7771452384635174008">Aspect</translation>
@@ -220,7 +226,6 @@ Fișier cheie: <ph name="KEY_FILE" />
 Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crearea noilor versiuni ale extensiei.</translation>
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8018313076035239964">Controlează ce informații pot să folosească site-urile web și ce conținut pot acestea să vă arate</translation>
-<translation id="8032244173881942855">Nu se poate proiecta fila.</translation>
 <translation id="8071432093239591881">Tipărește ca imagine</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KiB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
@@ -228,6 +233,7 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8230134520748321204">Salvați parola pentru <ph name="ORIGIN" /> ?</translation>
 <translation id="8261378640211443080">Această extensie nu este inclusă în <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> și este posibil să fi fost adăugată fără să aveți cunoștință despre acest lucru.</translation>
 <translation id="8351419472474436977">Această extensie a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faceți online. Dacă nu știți sigur de ce a apărut această modificare, probabil că nu este ceea ce vreți.</translation>
+<translation id="8523493869875972733">Păstrează modificările</translation>
 <translation id="8569682776816196752">Nu s-a găsit nicio destinație</translation>
 <translation id="8584280235376696778">Deschide vide&amp;oul într-o filă nouă</translation>
 <translation id="8615618338313291042">Aplicație incognito: <ph name="APP_NAME" /></translation>
@@ -241,6 +247,7 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8859174528519900719">Subcadru: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8915370057835397490">Se încarcă sugestiile</translation>
 <translation id="8916476537757519021">Subcadru incognito: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="895944840846194039">Memorie JavaScript</translation>
 <translation id="8962083179518285172">Ascunde detaliile</translation>
 <translation id="8973557916016709913">Elimină nivelul de zoom</translation>
 <translation id="9003647077635673607">Permite pe toate site-urile web</translation>
@@ -248,6 +255,5 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="9215293857209265904">S-a adăugat „<ph name="EXTENSION_NAME" />”</translation>
 <translation id="9218430445555521422">Setează ca implicit</translation>
 <translation id="93766956588638423">Repară extensia</translation>
-<translation id="98515147261107953">Peisaj</translation>
 <translation id="998747458861718449">I&amp;nspectează</translation>
 </translationbundle>

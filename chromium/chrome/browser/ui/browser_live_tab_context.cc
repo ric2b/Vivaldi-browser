@@ -26,9 +26,9 @@
 #include "chrome/browser/ui/browser_tab_strip_model_delegate.h"
 #include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_action_context_desktop.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_service_proxy.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -156,10 +156,13 @@ std::optional<tab_groups::TabGroupId> BrowserLiveTabContext::GetTabGroupForTab(
 const tab_groups::TabGroupVisualData*
 BrowserLiveTabContext::GetVisualDataForGroup(
     const tab_groups::TabGroupId& group) const {
-  return browser_->tab_strip_model()
-      ->group_model()
-      ->GetTabGroup(group)
-      ->visual_data();
+  TabStripModel* tab_strip_model = browser_->tab_strip_model();
+  CHECK(tab_strip_model);
+  TabGroupModel* group_model = tab_strip_model->group_model();
+  CHECK(group_model);
+  TabGroup* tab_group = group_model->GetTabGroup(group);
+  CHECK(tab_group);
+  return tab_group->visual_data();
 }
 
 const std::optional<base::Uuid>
@@ -170,17 +173,15 @@ BrowserLiveTabContext::GetSavedTabGroupIdForGroup(
   }
 
   Profile* profile = browser_->profile();
-  tab_groups::SavedTabGroupKeyedService* const service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(profile);
+  tab_groups::TabGroupSyncService* tab_group_service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(profile);
+  CHECK(tab_group_service);
 
-  const tab_groups::SavedTabGroup* const saved_group =
-      service->model()->Get(group);
+  const std::optional<tab_groups::SavedTabGroup> saved_group =
+      tab_group_service->GetGroup(group);
 
-  if (!saved_group) {
-    return std::nullopt;
-  }
-
-  return saved_group->saved_guid();
+  return saved_group ? std::make_optional(saved_group->saved_guid())
+                     : std::nullopt;
 }
 
 bool BrowserLiveTabContext::IsTabPinned(int index) const {
@@ -190,8 +191,13 @@ bool BrowserLiveTabContext::IsTabPinned(int index) const {
 void BrowserLiveTabContext::SetVisualDataForGroup(
     const tab_groups::TabGroupId& group,
     const tab_groups::TabGroupVisualData& visual_data) {
-  browser_->tab_strip_model()->group_model()->GetTabGroup(group)->SetVisualData(
-      std::move(visual_data));
+  TabStripModel* tab_strip_model = browser_->tab_strip_model();
+  CHECK(tab_strip_model);
+  TabGroupModel* group_model = tab_strip_model->group_model();
+  CHECK(group_model);
+  TabGroup* tab_group = group_model->GetTabGroup(group);
+  CHECK(tab_group);
+  tab_group->SetVisualData(std::move(visual_data));
 }
 
 const gfx::Rect BrowserLiveTabContext::GetRestoredBounds() const {
@@ -210,12 +216,12 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     const sessions::tab_restore::Tab& tab,
     int tab_index,
     bool select,
+    sessions::tab_restore::Type original_session_type,
     const std::map<std::string, bool> viv_page_action_overrides,
     const std::string& viv_ext_data) {
-  tab_groups::SavedTabGroupKeyedService* saved_tab_group_service =
-      tab_groups::SavedTabGroupServiceFactory::GetForProfile(
-          browser_->profile());
-  CHECK(saved_tab_group_service);
+  tab_groups::TabGroupSyncService* tab_group_service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(browser_->profile());
+  CHECK(tab_group_service);
 
   SessionStorageNamespace* storage_namespace =
       tab.platform_data
@@ -224,7 +230,11 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
                 ->session_storage_namespace()
           : nullptr;
 
-  std::optional<tab_groups::TabGroupId> group_id = tab.group;
+  // If the browser does not support tabs groups, restore the grouped tab as a
+  // normal tab instead. See crbug.com/368139715.
+  std::optional<tab_groups::TabGroupId> group_id =
+      browser_->tab_strip_model()->SupportsTabGroups() ? tab.group
+                                                       : std::nullopt;
   std::optional<base::Uuid> saved_group_id = tab.saved_group_id;
   content::WebContents* web_contents = nullptr;
 
@@ -233,13 +243,14 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
       group_id.has_value() && !saved_group_id.has_value();
   const bool group_deleted_from_model =
       group_id.has_value() && saved_group_id.has_value() &&
-      !saved_tab_group_service->model()->Contains(saved_group_id.value());
+      !tab_group_service->GetGroup(saved_group_id.value()).has_value();
   if (is_normal_tab || is_grouped_tab_unsaved || group_deleted_from_model) {
     // This is either a normal tab or tab in an unsaved group.
     web_contents = chrome::AddRestoredTab(
         browser_, tab.navigations, tab_index, tab.normalized_navigation_index(),
         tab.extension_app_id, group_id, select, tab.pinned, base::TimeTicks(),
-        storage_namespace, tab.user_agent_override, tab.extra_data,
+        base::Time(), storage_namespace, tab.user_agent_override,
+        tab.extra_data,
         /*from_session_restore=*/false, /*is_active_browser=*/std::nullopt,
         viv_page_action_overrides, viv_ext_data);
 
@@ -248,23 +259,29 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
           group_id.value(), tab.group_visual_data.value());
 
       // Save the group if it was not saved.
-      if (!saved_tab_group_service->model()->Contains(group_id.value()) &&
+      if (!tab_group_service->GetGroup(group_id.value()).has_value() &&
           tab_groups::IsTabGroupsSaveV2Enabled()) {
-        saved_tab_group_service->SaveGroup(tab.group.value());
+        tab_group_service->AddGroup(
+            tab_groups::SavedTabGroupUtils::CreateSavedTabGroupFromLocalId(
+                tab.group.value()));
       }
     }
   } else {
-    CHECK(saved_tab_group_service->model()->Contains(saved_group_id.value()));
+    CHECK(tab_group_service->GetGroup(saved_group_id.value()).has_value());
 
-    auto* saved_group =
-        saved_tab_group_service->model()->Get(saved_group_id.value());
+    const std::optional<tab_groups::SavedTabGroup> saved_group =
+        tab_group_service->GetGroup(saved_group_id.value());
     group_id = saved_group->local_group_id();
 
     if (!group_id.has_value()) {
       // Open the group in this browser if it is closed.
-      group_id = saved_tab_group_service->OpenSavedTabGroupInBrowser(
-          browser_, saved_group_id.value(),
-          tab_groups::OpeningSource::kOpenedFromTabRestore);
+      tab_group_service->OpenTabGroup(
+          saved_group_id.value(),
+          std::make_unique<tab_groups::TabGroupActionContextDesktop>(
+              browser_, tab_groups::OpeningSource::kOpenedFromTabRestore));
+
+      group_id =
+          tab_group_service->GetGroup(saved_group_id.value())->local_group_id();
     } else {
       Browser* source_browser =
           tab_groups::SavedTabGroupUtils::GetBrowserWithTabGroupId(
@@ -281,7 +298,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
 
     std::unordered_set<std::string> saved_urls =
         tab_groups::SavedTabGroupUtils::GetURLsInSavedTabGroup(
-            *saved_tab_group_service, saved_group_id.value());
+            browser_->profile(), saved_group_id.value());
     const sessions::SerializedNavigationEntry& entry =
         tab.navigations.at(tab.normalized_navigation_index());
     if (!saved_urls.contains(entry.virtual_url().spec())) {
@@ -290,8 +307,8 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
       web_contents = chrome::AddRestoredTab(
           browser_, tab.navigations, tab_index,
           tab.normalized_navigation_index(), tab.extension_app_id, group_id,
-          select, tab.pinned, base::TimeTicks(), storage_namespace,
-          tab.user_agent_override, tab.extra_data,
+          select, tab.pinned, base::TimeTicks(), base::Time(),
+          storage_namespace, tab.user_agent_override, tab.extra_data,
           /*from_session_restore=*/false, /*is_active_browser=*/std::nullopt,
           viv_page_action_overrides, viv_ext_data);
     } else {

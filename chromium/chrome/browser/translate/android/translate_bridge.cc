@@ -98,7 +98,7 @@ static ChromeTranslateClient* GetTranslateClient(
       content::WebContents::FromJavaWebContents(j_web_contents);
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
-  DCHECK(client);
+  CHECK(client);
   return client;
 }
 #endif
@@ -115,7 +115,7 @@ static void JNI_TranslateBridge_ManualTranslateWhenReady(
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
 #endif
-  DCHECK(client);
+  CHECK(client);
   client->ManualTranslateWhenReady();
 }
 
@@ -129,7 +129,7 @@ static jboolean JNI_TranslateBridge_CanManuallyTranslate(
   ChromeTranslateClient* client = GetTranslateClient(j_web_contents);
 #endif
   translate::TranslateManager* manager = client->GetTranslateManager();
-  DCHECK(manager);
+  CHECK(manager);
   return manager->CanManuallyTranslate(menuLogging);
 }
 
@@ -142,7 +142,7 @@ static jboolean JNI_TranslateBridge_ShouldShowManualTranslateIPH(
   ChromeTranslateClient* client = GetTranslateClient(j_web_contents);
 #endif
   translate::TranslateManager* manager = client->GetTranslateManager();
-  DCHECK(manager);
+  CHECK(manager);
 
   const std::string page_lang = manager->GetLanguageState()->source_language();
   std::unique_ptr<translate::TranslatePrefs> translate_prefs(
@@ -171,7 +171,7 @@ static void JNI_TranslateBridge_SetPredefinedTargetLanguage(
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
 #endif
-  DCHECK(client);
+  CHECK(client);
   client->SetPredefinedTargetLanguage(translate_language);
 }
 
@@ -183,11 +183,11 @@ JNI_TranslateBridge_GetTargetLanguage(JNIEnv* env,
   language::LanguageModel* language_model =
       LanguageModelManagerFactory::GetForBrowserContext(profile)
           ->GetPrimaryModel();
-  DCHECK(language_model);
+  CHECK(language_model);
   PrefService* pref_service = profile->GetPrefs();
   std::string target_language =
       TranslateService::GetTargetLanguage(pref_service, language_model);
-  DCHECK(!target_language.empty());
+  CHECK(!target_language.empty());
   base::android::ScopedJavaLocalRef<jstring> j_target_language =
       base::android::ConvertUTF8ToJavaString(env, target_language);
   return j_target_language;
@@ -222,7 +222,7 @@ static jboolean JNI_TranslateBridge_IsBlockedLanguage(
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService(j_profile));
 #endif // Vivaldi
-  DCHECK(translate_prefs);
+  CHECK(translate_prefs);
   return translate_prefs->IsBlockedLanguage(language_code);
 }
 
@@ -266,8 +266,21 @@ static void JNI_TranslateBridge_SetLanguageAlwaysTranslateState(
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetPrefService(j_profile));
 
-  translate_prefs->SetLanguageAlwaysTranslateState(language_code,
-                                                   alwaysTranslate);
+  if (alwaysTranslate) {
+    Profile* profile = Profile::FromJavaObject(j_profile);
+    language::LanguageModel* language_model =
+        LanguageModelManagerFactory::GetForBrowserContext(profile)
+            ->GetPrimaryModel();
+    CHECK(language_model);
+    PrefService* pref_service = profile->GetPrefs();
+    std::string target_language =
+        TranslateService::GetTargetLanguage(pref_service, language_model);
+    CHECK(!target_language.empty());
+    translate_prefs->AddLanguagePairToAlwaysTranslateList(language_code,
+                                                          target_language);
+  } else {
+    translate_prefs->RemoveLanguagePairFromAlwaysTranslateList(language_code);
+  }
 }
 
 // static
@@ -518,7 +531,7 @@ JNI_TranslateBridge_GetCurrentLanguage(
       content::WebContents::FromJavaWebContents(j_web_contents);
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
-  DCHECK(client);
+  CHECK(client);
   const std::string& current_language_code =
       client->GetLanguageState().current_language();
   base::android::ScopedJavaLocalRef<jstring> j_current_language =
@@ -533,7 +546,7 @@ static jboolean JNI_TranslateBridge_IsPageTranslated(
       content::WebContents::FromJavaWebContents(j_web_contents);
   ChromeTranslateClient* client =
       ChromeTranslateClient::FromWebContents(web_contents);
-  DCHECK(client);
+  CHECK(client);
   return client->GetLanguageState().IsPageTranslated();
 }
 

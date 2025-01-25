@@ -38,7 +38,6 @@ import java.util.List;
 import java.util.Set;
 
 // Vivaldi
-import android.net.Uri;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.build.BuildConfig;
@@ -198,25 +197,24 @@ public class MediaSessionHelper implements MediaImageCallback {
                 Intent contentIntent = mDelegate.createBringTabToFrontIntent();
                 // Vivaldi
                 if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
-                    Intent intent = getActivity().getIntent();
-                    if (intent != null) {
-                        String referrer = IntentUtils.safeGetStringExtra(
-                                intent, VivaldiIntentHandler.CHROMIUM_EXTRA_ACTIVITY_REFERRER);
-                        Log.d("MediaSessionHelper", "referrer = " + referrer);
-                        if (referrer != null && !referrer.isEmpty()) {
-                            contentIntent.putExtra(
-                                    VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER,
-                                    referrer);
-                        } else {
-                            Uri extraReferrer = getActivity().getReferrer();
-                            if (extraReferrer != null)
-                                referrer = extraReferrer.toString();
-                            else
-                                referrer = "null";
-
-                            contentIntent.putExtra(
-                                    VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER,
-                                    referrer);
+                    if (!isPaused) {
+                        Activity activity = getActivity();
+                        if (activity != null) {
+                            Intent intent = activity.getIntent();
+                            if (intent != null) {
+                                String referrer = IntentUtils.safeGetStringExtra(intent,
+                                        VivaldiIntentHandler.CHROMIUM_EXTRA_ACTIVITY_REFERRER);
+                                Log.i("MediaSessionHelper", "referrer = " + referrer);
+                                if (referrer != null && !referrer.isEmpty()) {
+                                    contentIntent.putExtra(
+                                            VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER, referrer);
+                                } else {
+                                    referrer = activity.getPackageName();
+                                    Log.i("MediaSessionHelper", "referrer set to: " + referrer);
+                                    contentIntent.putExtra(
+                                            VivaldiIntentHandler.EXTRA_ACTIVITY_REFERRER, referrer);
+                                }
+                            }
                         }
                     }
                 }
@@ -490,7 +488,8 @@ public class MediaSessionHelper implements MediaImageCallback {
     }
 
     private Activity getActivity() {
-        assert mWebContents != null;
+        if (mWebContents == null) return null;
+
         WindowAndroid windowAndroid = mWebContents.getTopLevelNativeWindow();
         if (windowAndroid == null) return null;
 

@@ -421,6 +421,7 @@ mojom("registration_mojom") {
         {
           mojom = "attribution_reporting.mojom.AttributionScopesData"
           cpp = "::attribution_reporting::AttributionScopesData"
+          default_constructible = false
           forward_declaration =
               "namespace attribution_reporting { class AttributionScopesData; }"
         },
@@ -545,7 +546,10 @@ mojom("data_host_mojom") {
 test("privacy_math_fuzztest") {
   sources = [ "privacy_math_fuzztest.cc" ]
 
-  fuzztests = [ "PrivacyMathTest.SingleSpecNumStatesMatchesRecursive" ]
+  fuzztests = [
+    "PrivacyMathTest.GetKCombinationAtIndex",
+    "PrivacyMathTest.SingleSpecNumStatesMatchesRecursive",
+  ]
 
   deps = [
     ":attribution_reporting",

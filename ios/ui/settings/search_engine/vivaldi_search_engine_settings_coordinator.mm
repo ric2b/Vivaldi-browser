@@ -2,8 +2,8 @@
 
 #import "ios/ui/settings/search_engine/vivaldi_search_engine_settings_coordinator.h"
 
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/settings/search_engine/vivaldi_search_engine_settings_mediator.h"
 #import "ios/ui/settings/search_engine/vivaldi_search_engine_settings_view_controller.h"

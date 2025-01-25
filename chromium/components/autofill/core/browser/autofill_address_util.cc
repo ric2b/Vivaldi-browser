@@ -84,7 +84,7 @@ AutofillAddressUIComponent::LengthHint ConvertLengthHint(
     case AddressUiComponent::LengthHint::HINT_SHORT:
       return AutofillAddressUIComponent::LengthHint::HINT_SHORT;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 }  // namespace
 
@@ -264,13 +264,12 @@ std::vector<ProfileValueDifference> GetProfileDifferenceForUi(
     const AutofillProfile& first_profile,
     const AutofillProfile& second_profile,
     const std::string& app_locale) {
-  static constexpr auto kTypeToCompare = std::array{
+  static constexpr auto kTypeToCompare = {
       NAME_FULL, ADDRESS_HOME_ADDRESS, EMAIL_ADDRESS, PHONE_HOME_WHOLE_NUMBER};
 
   base::flat_map<FieldType, std::pair<std::u16string, std::u16string>>
       differences = AutofillProfileComparator::GetProfileDifferenceMap(
-          first_profile, second_profile,
-          FieldTypeSet(std::begin(kTypeToCompare), std::end(kTypeToCompare)),
+          first_profile, second_profile, FieldTypeSet(kTypeToCompare),
           app_locale);
 
   std::u16string first_address = GetEnvelopeStyleAddress(

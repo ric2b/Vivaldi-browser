@@ -19,8 +19,6 @@ import androidx.test.espresso.ViewAction;
 import androidx.test.espresso.util.HumanReadables;
 
 import org.hamcrest.Matcher;
-import org.jni_zero.JNINamespace;
-import org.jni_zero.NativeMethods;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
@@ -28,10 +26,10 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.Iban;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.components.autofill.AddressNormalizer;
 import org.chromium.components.autofill.AutofillProfile;
+import org.chromium.components.autofill.AutofillSuggestion;
 import org.chromium.components.autofill.SubKeyRequester;
 import org.chromium.components.autofill.VirtualCardEnrollmentState;
 import org.chromium.components.autofill.payments.BankAccount;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.url.GURL;
 
@@ -40,7 +38,6 @@ import java.util.List;
 import java.util.concurrent.TimeoutException;
 
 /** Helper class for testing AutofillProfiles. */
-@JNINamespace("autofill")
 public class AutofillTestHelper {
     private final CallbackHelper mOnPersonalDataChangedHelper = new CallbackHelper();
 
@@ -389,7 +386,7 @@ public class AutofillTestHelper {
     /** Creates a simple {@link CreditCard}. */
     public static CreditCard createLocalCreditCard(
             String name, String number, String month, String year) {
-        return new CreditCard("", "", true, false, name, number, "", month, year, "", 0, "", "");
+        return new CreditCard("", "", true, name, number, "", month, year, "", 0, "", "");
     }
 
     /** Creates a virtual credit card. */
@@ -406,7 +403,6 @@ public class AutofillTestHelper {
                 /* guid= */ "",
                 /* origin= */ "",
                 /* isLocal= */ false,
-                /* isCached= */ false,
                 /* isVirtual= */ true,
                 /* name= */ name,
                 /* number= */ number,
@@ -442,7 +438,6 @@ public class AutofillTestHelper {
                 /* guid= */ "",
                 /* origin= */ "",
                 /* isLocal= */ isLocal,
-                /* isCached= */ false,
                 /* isVirtual= */ false,
                 /* name= */ name,
                 /* number= */ number,
@@ -462,6 +457,23 @@ public class AutofillTestHelper {
                 /* cardNameForAutofillDisplay= */ nameForAutofillDisplay,
                 /* obfuscatedLastFourDigits= */ obfuscatedLastFourDigits,
                 /* cvc= */ "");
+    }
+
+    public static AutofillSuggestion createCreditCardSuggestion(
+            String label,
+            String secondaryLabel,
+            String subLabel,
+            String secondarySubLabel,
+            boolean applyDeactivatedStyle,
+            boolean shouldDisplayTermsAvailable) {
+        return new AutofillSuggestion.Builder()
+                .setLabel(label)
+                .setSecondaryLabel(secondaryLabel)
+                .setSubLabel(subLabel)
+                .setSecondarySubLabel(secondarySubLabel)
+                .setApplyDeactivatedStyle(applyDeactivatedStyle)
+                .setShouldDisplayTermsAvailable(shouldDisplayTermsAvailable)
+                .build();
     }
 
     public static void addMaskedBankAccount(BankAccount bankAccount) {
@@ -486,12 +498,6 @@ public class AutofillTestHelper {
         } catch (TimeoutException e) {
             throw new AssertionError(e);
         }
-    }
-
-    // Disables minimum time that popup needs to be shown prior to click being processed.
-    // Only has an effect if autofill popup is being shown.
-    public static void disableThresholdForCurrentlyShownAutofillPopup(WebContents webContents) {
-        AutofillTestHelperJni.get().disableThresholdForCurrentlyShownAutofillPopup(webContents);
     }
 
     // Creates an action which dispatches 2 motion events to the target view:
@@ -569,10 +575,5 @@ public class AutofillTestHelper {
                 /* edgeFlags= */ 0,
                 /* source= */ InputDevice.SOURCE_CLASS_POINTER,
                 /* flags= */ flags);
-    }
-
-    @NativeMethods
-    interface Natives {
-        void disableThresholdForCurrentlyShownAutofillPopup(WebContents webContents);
     }
 }

@@ -386,11 +386,11 @@ void LayoutBoxModelObject::AddOutlineRectsForDescendant(
   }
 
   if (descendant.HasLayer()) {
-    OutlineRectCollector* descendant_collector =
+    std::unique_ptr<OutlineRectCollector> descendant_collector =
         collector.ForDescendantCollector();
     descendant.AddOutlineRects(*descendant_collector, nullptr, PhysicalOffset(),
                                include_block_overflows);
-    collector.Combine(descendant_collector, descendant, this,
+    collector.Combine(descendant_collector.get(), descendant, this,
                       additional_offset);
     return;
   }
@@ -725,9 +725,9 @@ PhysicalOffset LayoutBoxModelObject::AdjustedPositionRelativeTo(
         reference_point +=
             To<LayoutBox>(offset_parent_object)->PhysicalLocation();
       }
-    } else if (UNLIKELY(IsBox() &&
-                        To<LayoutBox>(this)
-                            ->NeedsAnchorPositionScrollAdjustment())) {
+    } else if (IsBox() &&
+               To<LayoutBox>(this)->NeedsAnchorPositionScrollAdjustment())
+        [[unlikely]] {
       reference_point +=
           To<LayoutBox>(this)->AnchorPositionScrollTranslationOffset();
     }

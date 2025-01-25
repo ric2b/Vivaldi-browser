@@ -45,7 +45,6 @@
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_main_resource_loader_interceptor.h"
 #include "content/browser/storage_partition_impl.h"
-#include "content/browser/url_loader_factory_getter.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
 #include "content/browser/web_package/signed_exchange_consts.h"
@@ -294,7 +293,7 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
   int load_flags = request_info.begin_params->load_flags;
   if (request_info.is_outermost_main_frame) {
     load_flags |= net::LOAD_MAIN_FRAME_DEPRECATED;
-    load_flags |= net::LOAD_CAN_USE_RESTRICTED_PREFETCH;
+    load_flags |= net::LOAD_CAN_USE_RESTRICTED_PREFETCH_FOR_MAIN_FRAME;
   }
 
   // Sync loads should have maximum priority and should be the only
@@ -675,32 +674,8 @@ void NavigationURLLoaderImpl::MaybeStartLoader(
     }
 
     // Intercept the request with `interceptor_result->single_request_factory`.
-    std::vector<std::unique_ptr<blink::URLLoaderThrottle>> additional_throttles;
-    // Intercepted requests need MimeSniffingThrottle to do mime sniffing.
-    // Non-intercepted requests usually go through the regular network
-    // URLLoader, which does mime sniffing.
-    additional_throttles.push_back(
-        std::make_unique<blink::MimeSniffingThrottle>(GetUIThreadTaskRunner(
-            {BrowserTaskType::kNavigationNetworkResponse})));
-
-    default_loader_used_ = false;
-    // If `url_loader_` already exists, this means we are following a redirect
-    // using an interceptor. In this case we should make sure to reset the
-    // loader, similar to what is done in Restart().
-    if (url_loader_) {
-      url_loader_->ResetForFollowRedirect(
-          *resource_request_.get(), url_loader_removed_headers_,
-          url_loader_modified_headers_,
-          url_loader_modified_cors_exempt_headers_);
-      url_loader_removed_headers_.clear();
-      url_loader_modified_headers_.Clear();
-      url_loader_modified_cors_exempt_headers_.Clear();
-      url_loader_.reset();
-    }
-
-    CreateThrottlingLoaderAndStart(
-        std::move(interceptor_result->single_request_factory),
-        std::move(additional_throttles));
+    StartInterceptedRequest(
+        std::move(interceptor_result->single_request_factory));
     return;
   }
 
@@ -721,6 +696,33 @@ void NavigationURLLoaderImpl::MaybeStartLoader(
                      weak_factory_.GetWeakPtr(), next_interceptor_index + 1),
       base::BindOnce(&NavigationURLLoaderImpl::FallbackToNonInterceptedRequest,
                      weak_factory_.GetWeakPtr()));
+}
+
+void NavigationURLLoaderImpl::StartInterceptedRequest(
+    scoped_refptr<network::SharedURLLoaderFactory> single_request_factory) {
+  std::vector<std::unique_ptr<blink::URLLoaderThrottle>> additional_throttles;
+  // Intercepted requests need MimeSniffingThrottle to do mime sniffing.
+  // Non-intercepted requests usually go through the regular network
+  // URLLoader, which does mime sniffing.
+  additional_throttles.push_back(std::make_unique<blink::MimeSniffingThrottle>(
+      GetUIThreadTaskRunner({BrowserTaskType::kNavigationNetworkResponse})));
+
+  default_loader_used_ = false;
+  // If `url_loader_` already exists, this means we are following a redirect
+  // using an interceptor. In this case we should make sure to reset the
+  // loader, similar to what is done in Restart().
+  if (url_loader_) {
+    url_loader_->ResetForFollowRedirect(
+        *resource_request_.get(), url_loader_removed_headers_,
+        url_loader_modified_headers_, url_loader_modified_cors_exempt_headers_);
+    url_loader_removed_headers_.clear();
+    url_loader_modified_headers_.Clear();
+    url_loader_modified_cors_exempt_headers_.Clear();
+    url_loader_.reset();
+  }
+
+  CreateThrottlingLoaderAndStart(std::move(single_request_factory),
+                                 std::move(additional_throttles));
 }
 
 void NavigationURLLoaderImpl::StartNonInterceptedRequest(
@@ -967,6 +969,14 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
   // See https://github.com/whatwg/html/issues/7823
   if (head->mime_type == "application/pdf" || head->mime_type == "text/pdf") {
     early_hints_manager_.reset();
+  }
+
+  //  TODO(crbug.com/40496584):Resolved an issue where creating RPHI would cause
+  //  a crash when the browser context was shut down. We are actively exploring
+  //  the appropriate long-term solution. Please remove this condition once the
+  //  final fix is implemented.
+  if (browser_context_->ShutdownStarted()) {
+    return;
   }
 
   if (!response_body)
@@ -1714,6 +1724,10 @@ bool NavigationURLLoaderImpl::SetNavigationTimeout(base::TimeDelta timeout) {
                      base::Unretained(this),
                      network::URLLoaderCompletionStatus(net::ERR_TIMED_OUT)));
   return true;
+}
+
+void NavigationURLLoaderImpl::CancelNavigationTimeout() {
+  timeout_timer_.Stop();
 }
 
 void NavigationURLLoaderImpl::NotifyResponseStarted(

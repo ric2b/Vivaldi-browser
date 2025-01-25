@@ -7,6 +7,7 @@
 #import <memory>
 
 #import "base/apple/foundation_util.h"
+#import "base/feature_list.h"
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
@@ -18,6 +19,7 @@
 #import "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #import "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #import "components/search_engines/search_engines_pref_names.h"
+#import "components/search_engines/search_engines_switches.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/search_engines/template_url_service_observer.h"
 #import "components/signin/public/base/signin_switches.h"
@@ -26,7 +28,7 @@
 #import "ios/chrome/browser/search_engines/model/search_engine_choice_service_factory.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
@@ -149,8 +151,10 @@ enum class SearchEngineSettingVersion {
 
     _searchEngineChoiceService =
         ios::SearchEngineChoiceServiceFactory::GetForBrowserState(browserState);
+    // TODO(b/362460183): Remove `kDeprecatedSettings` and deprecated settings
+    // UI.
     BOOL shouldShowUpdatedSettings =
-        _searchEngineChoiceService->ShouldShowUpdatedSettings();
+        base::FeatureList::IsEnabled(switches::kSearchEngineChoiceTrigger);
     if (search_engines::IsEeaChoiceCountry(
             _searchEngineChoiceService->GetCountryId()) &&
         shouldShowUpdatedSettings) {
@@ -404,7 +408,7 @@ enum class SearchEngineSettingVersion {
           [self.tableViewModel hasItemForItemType:ItemTypeCustomEngine
                                 sectionIdentifier:SectionIdentifierSecondList];
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 - (void)updateUIForEditState {
@@ -524,7 +528,7 @@ enum class SearchEngineSettingVersion {
       return sectionIdentifier == SectionIdentifierSecondList;
     }
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 - (void)tableView:(UITableView*)tableView

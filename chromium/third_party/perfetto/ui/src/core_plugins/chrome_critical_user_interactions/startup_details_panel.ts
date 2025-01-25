@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {duration, Time, time} from '../../base/time';
 import {BottomTab, NewBottomTabArgs} from '../../frontend/bottom_tab';
 import {GenericSliceDetailsTabConfig} from '../../frontend/generic_slice_details_tab';
@@ -25,7 +24,7 @@ import {GridLayout, GridLayoutColumn} from '../../widgets/grid_layout';
 import {Section} from '../../widgets/section';
 import {SqlRef} from '../../widgets/sql_ref';
 import {dictToTreeNodes, Tree} from '../../widgets/tree';
-import {asUpid, Upid} from '../../frontend/sql_types';
+import {asUpid, Upid} from '../../trace_processor/sql_utils/core_types';
 
 interface Data {
   startupId: number;

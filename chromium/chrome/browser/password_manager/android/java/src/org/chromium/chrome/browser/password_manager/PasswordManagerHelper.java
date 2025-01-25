@@ -10,7 +10,6 @@ import android.app.PendingIntent.CanceledException;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -20,8 +19,8 @@ import android.text.TextUtils;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.fragment.app.FragmentActivity;
 
-import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.api.ApiException;
 
 import org.jni_zero.JniType;
@@ -31,19 +30,23 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.access_loss.PasswordAccessLossDialogSettingsCoordinator;
+import org.chromium.chrome.browser.access_loss.PasswordAccessLossWarningType;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.loading_modal.LoadingModalDialogCoordinator;
 import org.chromium.chrome.browser.password_manager.CredentialManagerLauncher.CredentialManagerBackendException;
 import org.chromium.chrome.browser.password_manager.CredentialManagerLauncher.CredentialManagerError;
 import org.chromium.chrome.browser.password_manager.PasswordCheckupClientHelper.PasswordCheckBackendException;
+import org.chromium.chrome.browser.password_manager.settings.PasswordAccessLossExportFlowCoordinator;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileKeyedMap;
+import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.SettingsLauncher.SettingsFragment;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.base.CoreAccountInfo;
-import org.chromium.components.sync.ModelType;
+import org.chromium.components.sync.DataType;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -78,9 +81,6 @@ public class PasswordManagerHelper {
     }
 
     private static final String UPM_VARIATION_FEATURE_PARAM = "stage";
-
-    // Referrer string for the Google Play Store when installing GMS Core package
-    private static final String STORE_REFERER = "chrome_upm";
 
     // Loading dialog is dismissed with this delay after sending an intent to prevent
     // the old activity from showing up before the new one is shown.
@@ -146,16 +146,23 @@ public class PasswordManagerHelper {
      * Services.
      *
      * @param context used to show the UI to manage passwords.
+     * @param referrer indicates where the request to show the password settings UI comes from.
+     * @param modalDialogManagerSupplier provides a {@link ModalDialogManager}. Used to show error
+     *     modal dialogs or a loading dialog if opening the UI takes too long.
      * @param managePasskeys indicates whether passkey management is needed, which when true will
      *     attempt to launch the credential manager even without syncing enabled.
+     * @param account the account for which to open the UI. An empty or null account signals that
+     *     the UI should be opened for the local storage.
+     * @param customTabIntentHelper provides an intent to open a custom tab displaying a help center
+     *     article.
      */
     public void showPasswordSettings(
             Context context,
             @ManagePasswordsReferrer int referrer,
-            SettingsLauncher settingsLauncher,
             Supplier<ModalDialogManager> modalDialogManagerSupplier,
             boolean managePasskeys,
-            @Nullable String account) {
+            @Nullable String account,
+            CustomTabIntentHelper customTabIntentHelper) {
         RecordHistogram.recordEnumeratedHistogram(
                 "PasswordManager.ManagePasswordsReferrer",
                 referrer,
@@ -163,10 +170,28 @@ public class PasswordManagerHelper {
         SyncService syncService = SyncServiceFactory.getForProfile(mProfile);
         PrefService prefService = UserPrefs.get(mProfile);
 
+        @PasswordAccessLossWarningType int warningType = getAccessLossWarningType(prefService);
+        if (warningType != PasswordAccessLossWarningType.NONE) {
+            // Always start export flow from Chrome main settings. If this is already being called
+            // from main settings, then launch export flow right away.
+            Runnable startExportFlow =
+                    referrer == ManagePasswordsReferrer.CHROME_SETTINGS
+                            ? () -> launchExportFlow(context, modalDialogManagerSupplier)
+                            : () -> PasswordExportLauncher.showMainSettingsAndStartExport(context);
+            new PasswordAccessLossDialogSettingsCoordinator()
+                    .showPasswordAccessLossDialog(
+                            context,
+                            modalDialogManagerSupplier.get(),
+                            warningType,
+                            GmsUpdateLauncher::launch,
+                            startExportFlow,
+                            customTabIntentHelper);
+            return;
+        }
+
         // Force instantiation of GMSCore password settings if GMSCore update is required. Launching
         // Password settings will fail and instead the blocking dialog with the suggestion to update
-        // will be displayed. This is the desired behavior with the
-        // `UnifiedPasswordManagerSyncOnlyInGMSCore` feature on.
+        // will be displayed.
         if (canUseUpm()
                 || PasswordManagerUtilBridge.isGmsCoreUpdateRequired(prefService, syncService)) {
             LoadingModalDialogCoordinator loadingDialogCoordinator =
@@ -212,8 +237,9 @@ public class PasswordManagerHelper {
         Bundle fragmentArgs = new Bundle();
         fragmentArgs.putInt(MANAGE_PASSWORDS_REFERRER, referrer);
         context.startActivity(
-                settingsLauncher.createSettingsActivityIntent(
-                        context, SettingsFragment.PASSWORDS, fragmentArgs));
+                SettingsLauncherFactory.createSettingsLauncher()
+                        .createSettingsActivityIntent(
+                                context, SettingsFragment.PASSWORDS, fragmentArgs));
     }
 
     /**
@@ -382,7 +408,7 @@ public class PasswordManagerHelper {
     public static boolean isSyncingPasswordsWithNoCustomPassphrase(SyncService syncService) {
         assert syncService.isEngineInitialized();
         if (syncService == null || !syncService.hasSyncConsent()) return false;
-        if (!syncService.getActiveDataTypes().contains(ModelType.PASSWORDS)) return false;
+        if (!syncService.getActiveDataTypes().contains(DataType.PASSWORDS)) return false;
         if (syncService.isUsingExplicitPassphrase()) return false;
         return true;
     }
@@ -400,37 +426,17 @@ public class PasswordManagerHelper {
         prefs.setBoolean(Pref.UNENROLLED_FROM_GOOGLE_MOBILE_SERVICES_DUE_TO_ERRORS, false);
     }
 
-    public static void launchGmsUpdate(Context context) {
-        Intent intent = new Intent(Intent.ACTION_VIEW);
-        String deepLinkUrl =
-                "market://details?id="
-                        + GoogleApiAvailability.GOOGLE_PLAY_SERVICES_PACKAGE
-                        + "&referrer="
-                        + STORE_REFERER;
+    public void launchExportFlow(
+            Context context, Supplier<ModalDialogManager> modalDialogManagerSupplier) {
+        FragmentActivity activity = (FragmentActivity) ContextUtils.activityFromContext(context);
+        assert activity != null : "Context is expected to be a fragment activity";
 
-        intent.setPackage("com.android.vending");
-        intent.setData(Uri.parse(deepLinkUrl));
-        intent.putExtra("callerId", context.getPackageName());
-
-        // Request for overlay flow, Play Store will fallback to the default
-        // behaviour if overlay is not available.
-        // TODO(crbug.com/40855336): Use AlleyOop v3 overlay UI after fixing Chrome restart
-        // during the GMS Core installation.
-        // intent.putExtra("overlay", true);
-
-        try {
-            context.startActivity(intent);
-        } catch (ActivityNotFoundException e) {
-            // In case that Google Play Store isn't present on the device, its activity could not
-            // have been started.
-            // TODO: b/334051261 - Instead of silently failing to open Google Play Store to offer
-            // updating GMS Core, either don't offer the option at all or indicate why the update
-            // button didn't work.
-        }
+        new PasswordAccessLossExportFlowCoordinator(activity, mProfile, modalDialogManagerSupplier)
+                .startExportFlow();
     }
 
     @VisibleForTesting
-    void launchTheCredentialManager(
+    public void launchTheCredentialManager(
             @ManagePasswordsReferrer int referrer,
             SyncService syncService,
             LoadingModalDialogCoordinator loadingDialogCoordinator,
@@ -673,7 +679,7 @@ public class PasswordManagerHelper {
                         modalDialogManager,
                         context,
                         isAccepted -> {
-                            if (isAccepted) launchGmsUpdate(context);
+                            if (isAccepted) GmsUpdateLauncher.launch(context);
                         });
         dialog.show();
     }
@@ -694,10 +700,8 @@ public class PasswordManagerHelper {
                     "Backend version is not supported.",
                     CredentialManagerError.BACKEND_VERSION_NOT_SUPPORTED);
         }
-        // This check only may return true if the feature flag
-        // `UnifiedPasswordManagerSyncOnlyInGMSCore` is enabled. This checks against the account
-        // store GMSCore version if the user is syncing and against the local version if the user is
-        // not syncing.
+        // This checks against the account store GMSCore version if the user is syncing and against
+        // the local version if the user is not syncing.
         if (PasswordManagerUtilBridge.isGmsCoreUpdateRequired(
                 UserPrefs.get(mProfile), SyncServiceFactory.getForProfile(mProfile))) {
             throw new PasswordCheckBackendException(
@@ -726,10 +730,8 @@ public class PasswordManagerHelper {
                     "Backend version is not supported.",
                     CredentialManagerError.BACKEND_VERSION_NOT_SUPPORTED);
         }
-        // This check only may return true if the feature flag
-        // UnifiedPasswordManagerSyncOnlyInGMSCore is enabled. This checks against the account store
-        // GMSCore version if the user is syncing and against the local version if the user is not
-        // syncing.
+        // This checks against the account store GMSCore version if the user is syncing and against
+        // the local version if the user is not syncing.
         if (PasswordManagerUtilBridge.isGmsCoreUpdateRequired(
                 UserPrefs.get(mProfile), SyncServiceFactory.getForProfile(mProfile))) {
             throw new CredentialManagerBackendException(
@@ -753,6 +755,18 @@ public class PasswordManagerHelper {
             } catch (ActivityNotFoundException e) {
             }
         }
+    }
+
+    public static @PasswordAccessLossWarningType int getAccessLossWarningType(
+            PrefService prefService) {
+        // TODO(crbug.com/323149739): Enable this feature flag in SafetyCheckMediatorTest and
+        // PasswordManagerHelperTest in all tests before launch.
+        if (!ChromeFeatureList.isEnabled(
+                ChromeFeatureList
+                        .UNIFIED_PASSWORD_MANAGER_LOCAL_PASSWORDS_ANDROID_ACCESS_LOSS_WARNING)) {
+            return PasswordAccessLossWarningType.NONE;
+        }
+        return PasswordManagerUtilBridge.getPasswordAccessLossWarningType(prefService);
     }
 
     @NativeMethods

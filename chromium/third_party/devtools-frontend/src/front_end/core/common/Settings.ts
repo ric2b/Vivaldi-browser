@@ -37,6 +37,7 @@ import {ObjectWrapper} from './Object.js';
 import {
   getLocalizedSettingsCategory,
   getRegisteredSettings as getRegisteredSettingsInternal,
+  type LearnMore,
   maybeRemoveSettingExtension,
   type RegExpSettingItem,
   registerSettingExtension,
@@ -57,7 +58,7 @@ export class Settings {
   #eventSupport: ObjectWrapper<GenericEvents>;
   #registry: Map<string, Setting<unknown>>;
   readonly moduleSettings: Map<string, Setting<unknown>>;
-  readonly #config?: Root.Runtime.HostConfig;
+  readonly #config: Root.Runtime.HostConfig;
 
   private constructor(
       readonly syncedStorage: SettingsStorage, readonly globalStorage: SettingsStorage,
@@ -72,7 +73,7 @@ export class Settings {
     this.#registry = new Map();
     this.moduleSettings = new Map();
 
-    this.#config = config;
+    this.#config = config || {};
     for (const registration of this.getRegisteredSettings()) {
       const {settingName, defaultValue, storageType} = registration;
       const isRegex = registration.settingType === SettingType.REGEX;
@@ -123,7 +124,7 @@ export class Settings {
     settingsInstance = undefined;
   }
 
-  getHostConfig(): Root.Runtime.HostConfig|undefined {
+  getHostConfig(): Root.Runtime.HostConfig {
     return this.#config;
   }
 
@@ -191,7 +192,7 @@ export class Settings {
   }
 
   createLocalSetting<T>(key: string, defaultValue: T): Setting<T> {
-    return this.createSetting(key, defaultValue, SettingStorageType.Local);
+    return this.createSetting(key, defaultValue, SettingStorageType.LOCAL);
   }
 
   createRegExpSetting(key: string, defaultValue: string, regexFlags?: string, storageType?: SettingStorageType):
@@ -212,13 +213,13 @@ export class Settings {
 
   private storageFromType(storageType?: SettingStorageType): SettingsStorage {
     switch (storageType) {
-      case SettingStorageType.Local:
+      case SettingStorageType.LOCAL:
         return this.localStorage;
-      case SettingStorageType.Session:
+      case SettingStorageType.SESSION:
         return this.#sessionStorage;
-      case SettingStorageType.Global:
+      case SettingStorageType.GLOBAL:
         return this.globalStorage;
-      case SettingStorageType.Synced:
+      case SettingStorageType.SYNCED:
         return this.syncedStorage;
     }
     return this.globalStorage;
@@ -450,6 +451,16 @@ export class Setting<V> {
     return this.#value;
   }
 
+  // Prefer this getter for settings which are "disableable". The plain getter returns `this.#value`,
+  // even if the setting is disabled, which means the callsite has to explicitly call the `disabled()`
+  // getter and add its own logic for the disabled state.
+  getIfNotDisabled(): V|undefined {
+    if (this.disabled()) {
+      return;
+    }
+    return this.get();
+  }
+
   async forceGet(): Promise<V> {
     const name = this.name;
     const oldValue = this.storage.get(name);
@@ -512,10 +523,10 @@ export class Setting<V> {
       return this.#registration.options.map(opt => {
         const {value, title, text, raw} = opt;
         return {
-          value: value,
+          value,
           title: title(),
           text: typeof text === 'function' ? text() : text,
-          raw: raw,
+          raw,
         };
       });
     }
@@ -549,6 +560,10 @@ export class Setting<V> {
       return this.#registration.order || null;
     }
     return null;
+  }
+
+  learnMore(): LearnMore|null {
+    return this.#registration?.learnMore ?? null;
   }
 
   get deprecation(): Deprecation|null {
@@ -638,11 +653,11 @@ export class VersionController {
   constructor() {
     // If no version setting is found, we initialize with the current version and don't do anything.
     this.#globalVersionSetting = Settings.instance().createSetting(
-        VersionController.GLOBAL_VERSION_SETTING_NAME, VersionController.CURRENT_VERSION, SettingStorageType.Global);
+        VersionController.GLOBAL_VERSION_SETTING_NAME, VersionController.CURRENT_VERSION, SettingStorageType.GLOBAL);
     this.#syncedVersionSetting = Settings.instance().createSetting(
-        VersionController.SYNCED_VERSION_SETTING_NAME, VersionController.CURRENT_VERSION, SettingStorageType.Synced);
+        VersionController.SYNCED_VERSION_SETTING_NAME, VersionController.CURRENT_VERSION, SettingStorageType.SYNCED);
     this.#localVersionSetting = Settings.instance().createSetting(
-        VersionController.LOCAL_VERSION_SETTING_NAME, VersionController.CURRENT_VERSION, SettingStorageType.Local);
+        VersionController.LOCAL_VERSION_SETTING_NAME, VersionController.CURRENT_VERSION, SettingStorageType.LOCAL);
   }
 
   /**
@@ -709,25 +724,25 @@ export class VersionController {
     const settingNames: {
       [x: string]: string,
     } = {
-      'FileSystemViewSidebarWidth': 'fileSystemViewSplitViewState',
-      'elementsSidebarWidth': 'elementsPanelSplitViewState',
-      'StylesPaneSplitRatio': 'stylesPaneSplitViewState',
-      'heapSnapshotRetainersViewSize': 'heapSnapshotSplitViewState',
+      FileSystemViewSidebarWidth: 'fileSystemViewSplitViewState',
+      elementsSidebarWidth: 'elementsPanelSplitViewState',
+      StylesPaneSplitRatio: 'stylesPaneSplitViewState',
+      heapSnapshotRetainersViewSize: 'heapSnapshotSplitViewState',
       'InspectorView.splitView': 'InspectorView.splitViewState',
       'InspectorView.screencastSplitView': 'InspectorView.screencastSplitViewState',
       'Inspector.drawerSplitView': 'Inspector.drawerSplitViewState',
-      'layerDetailsSplitView': 'layerDetailsSplitViewState',
-      'networkSidebarWidth': 'networkPanelSplitViewState',
-      'sourcesSidebarWidth': 'sourcesPanelSplitViewState',
-      'scriptsPanelNavigatorSidebarWidth': 'sourcesPanelNavigatorSplitViewState',
-      'sourcesPanelSplitSidebarRatio': 'sourcesPanelDebuggerSidebarSplitViewState',
+      layerDetailsSplitView: 'layerDetailsSplitViewState',
+      networkSidebarWidth: 'networkPanelSplitViewState',
+      sourcesSidebarWidth: 'sourcesPanelSplitViewState',
+      scriptsPanelNavigatorSidebarWidth: 'sourcesPanelNavigatorSplitViewState',
+      sourcesPanelSplitSidebarRatio: 'sourcesPanelDebuggerSidebarSplitViewState',
       'timeline-details': 'timelinePanelDetailsSplitViewState',
       'timeline-split': 'timelinePanelRecorsSplitViewState',
       'timeline-view': 'timelinePanelTimelineStackSplitViewState',
-      'auditsSidebarWidth': 'auditsPanelSplitViewState',
-      'layersSidebarWidth': 'layersPanelSplitViewState',
-      'profilesSidebarWidth': 'profilesPanelSplitViewState',
-      'resourcesSidebarWidth': 'resourcesPanelSplitViewState',
+      auditsSidebarWidth: 'auditsPanelSplitViewState',
+      layersSidebarWidth: 'layersPanelSplitViewState',
+      profilesSidebarWidth: 'profilesPanelSplitViewState',
+      resourcesSidebarWidth: 'resourcesPanelSplitViewState',
     };
     const empty = {};
     for (const oldName in settingNames) {
@@ -763,8 +778,8 @@ export class VersionController {
     const settingNames: {
       [x: string]: string,
     } = {
-      'debuggerSidebarHidden': 'sourcesPanelSplitViewState',
-      'navigatorHidden': 'sourcesPanelNavigatorSplitViewState',
+      debuggerSidebarHidden: 'sourcesPanelSplitViewState',
+      navigatorHidden: 'sourcesPanelNavigatorSplitViewState',
       'WebInspector.Drawer.showOnLoad': 'Inspector.drawerSplitViewState',
     };
 
@@ -801,10 +816,10 @@ export class VersionController {
 
   private updateVersionFrom6To7(): void {
     const settingNames = {
-      'sourcesPanelNavigatorSplitViewState': 'sourcesPanelNavigatorSplitViewState',
-      'elementsPanelSplitViewState': 'elementsPanelSplitViewState',
-      'stylesPaneSplitViewState': 'stylesPaneSplitViewState',
-      'sourcesPanelDebuggerSidebarSplitViewState': 'sourcesPanelDebuggerSidebarSplitViewState',
+      sourcesPanelNavigatorSplitViewState: 'sourcesPanelNavigatorSplitViewState',
+      elementsPanelSplitViewState: 'elementsPanelSplitViewState',
+      stylesPaneSplitViewState: 'stylesPaneSplitViewState',
+      sourcesPanelDebuggerSidebarSplitViewState: 'sourcesPanelDebuggerSidebarSplitViewState',
     };
 
     const empty = {};
@@ -913,7 +928,7 @@ export class VersionController {
   }
 
   private updateVersionFrom13To14(): void {
-    const defaultValue = {'throughput': -1, 'latency': 0};
+    const defaultValue = {throughput: -1, latency: 0};
     Settings.instance().createSetting('networkConditions', defaultValue).set(defaultValue);
   }
 
@@ -1327,13 +1342,13 @@ export const enum SettingStorageType {
    * Synced storage persists settings with the active Chrome profile but also
    * syncs the settings across devices via Chrome Sync.
    */
-  Synced = 'Synced',
+  SYNCED = 'Synced',
   /** Global storage persists settings with the active Chrome profile */
-  Global = 'Global',
+  GLOBAL = 'Global',
   /** Uses Window.localStorage */
-  Local = 'Local',
+  LOCAL = 'Local',
   /** Session storage dies when DevTools window closes */
-  Session = 'Session',
+  SESSION = 'Session',
 }
 
 export function moduleSetting(settingName: string): Setting<unknown> {

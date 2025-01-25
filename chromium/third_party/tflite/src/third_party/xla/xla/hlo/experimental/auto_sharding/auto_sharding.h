@@ -31,8 +31,8 @@ limitations under the License.
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "xla/array.h"
 #include "xla/hlo/experimental/auto_sharding/auto_sharding_cost_graph.h"
+#include "xla/hlo/experimental/auto_sharding/auto_sharding_device_mesh.h"
 #include "xla/hlo/experimental/auto_sharding/auto_sharding_option.h"
 #include "xla/hlo/experimental/auto_sharding/auto_sharding_solver.h"
 #include "xla/hlo/experimental/auto_sharding/auto_sharding_strategy.h"
@@ -48,18 +48,6 @@ limitations under the License.
 #include "xla/shape.h"
 
 namespace xla {
-
-class DummyAutoSharding : public HloModulePass {
- public:
-  DummyAutoSharding() = default;
-  ~DummyAutoSharding() override = default;
-  absl::string_view name() const override { return "dummy_auto_sharding"; }
-
-  using HloPassInterface::Run;
-  absl::StatusOr<bool> Run(
-      HloModule* module,
-      const absl::flat_hash_set<absl::string_view>& execution_threads) override;
-};
 
 enum class AutoShardingResult {
   kModuleUnchanged,
@@ -140,7 +128,7 @@ namespace spmd {
 // Their comments can be found in their definitions in *.cc files.
 HloSharding Tile(const Shape& shape, absl::Span<const int64_t> tensor_dims,
                  absl::Span<const int64_t> mesh_dims,
-                 const Array<int64_t>& device_mesh);
+                 const DeviceMesh& device_mesh);
 
 std::vector<double> CommunicationReshardingCostVector(
     const StrategyGroup* strategy_group, const Shape& shape,
@@ -214,6 +202,9 @@ absl::Status CheckAliasSetCompatibility(const AliasSet& alias_set,
                                         const StrategyGroups& strategy_groups,
                                         const HloInstructionSequence& sequence,
                                         bool crash_on_error);
+absl::Status RemoveFollowersIfMismatchedStrategies(
+    const AliasSet& alias_set, const StrategyGroups& strategy_groups,
+    const HloInstructionSequence& sequence, bool crash_on_error);
 
 absl::Status GenerateReduceScatter(
     const HloInstructionSequence& sequence, const AliasMap& alias_map,
@@ -221,10 +212,11 @@ absl::Status GenerateReduceScatter(
     const CostGraph& cost_graph, absl::Span<const int64_t> s_val,
     const ClusterEnvironment& cluster_env, const AutoShardingOption& option);
 
-bool HasReduceScatterOpportunity(
-    const HloInstruction* inst, const StrategyMap& strategy_map,
-    const CostGraph& cost_graph, absl::Span<const int64_t> s_val,
-    const StableHashSet<const HloInstruction*>& modified);
+bool HasReduceScatterOpportunity(const HloInstruction* inst,
+                                 const StrategyMap& strategy_map,
+                                 const CostGraph& cost_graph,
+                                 absl::Span<const int64_t> s_val,
+                                 const ConstInstructionSet& modified);
 
 HloSharding GetReduceScatterOutput(const HloInstruction* ins,
                                    const ShardingStrategy& strategy,
@@ -285,7 +277,7 @@ std::unique_ptr<StrategyGroup> CreateElementwiseOperatorStrategies(
     size_t instruction_id, const HloInstruction* ins,
     const StrategyMap& strategy_map, const ClusterEnvironment& cluster_env,
     const InstructionDepthMap& depth_map, const AliasMap& alias_map,
-    const StableHashMap<int64_t, std::vector<ShardingStrategy>>&
+    const StableMap<int64_t, std::vector<ShardingStrategy>>&
         pretrimmed_strategy_map,
     int64_t max_depth, StrategyGroups& strategy_groups,
     AssociativeDotPairs& associative_dot_pairs);
@@ -318,7 +310,7 @@ std::unique_ptr<StrategyGroup> CreateTupleStrategyGroup(size_t instruction_id);
 
 // Enumerate all 1d partition strategies.
 void EnumerateAll1DPartition(const HloInstruction* ins, const Shape& shape,
-                             const Array<int64_t>& device_mesh,
+                             const DeviceMesh& device_mesh,
                              const ClusterEnvironment& cluster_env,
                              const StrategyMap& strategy_map,
                              std::unique_ptr<StrategyGroup>& strategy_group,
@@ -328,7 +320,7 @@ void EnumerateAll1DPartition(const HloInstruction* ins, const Shape& shape,
 
 // Enumerate all partitions recursively.
 void EnumerateAllPartition(const HloInstruction* ins, const Shape& shape,
-                           const Array<int64_t>& device_mesh,
+                           const DeviceMesh& device_mesh,
                            const ClusterEnvironment& cluster_env,
                            const StrategyMap& strategy_map,
                            std::unique_ptr<StrategyGroup>& strategy_group,
@@ -362,7 +354,7 @@ std::unique_ptr<StrategyGroup> MaybeFollowInsStrategyGroup(
     const StrategyGroup* src_strategy_group, const Shape& shape,
     size_t instruction_id, StrategyGroups& strategy_groups,
     const ClusterEnvironment& cluster_env,
-    const StableHashMap<NodeIdx, std::vector<ShardingStrategy>>&
+    const StableMap<NodeIdx, std::vector<ShardingStrategy>>&
         pretrimmed_strategy_map);
 
 void RemoveShardingsWhereSmallDimsShardedAcrossManyDevices(
@@ -379,8 +371,7 @@ void TrimOrGenerateStrategiesBasedOnExistingSharding(
     const StrategyMap& strategy_map,
     const std::vector<HloInstruction*>& instructions,
     const HloSharding& existing_sharding, const ClusterEnvironment& cluster_env,
-    StableHashMap<int64_t, std::vector<ShardingStrategy>>&
-        pretrimmed_strategy_map,
+    StableMap<int64_t, std::vector<ShardingStrategy>>& pretrimmed_strategy_map,
     const CallGraph& call_graph, bool strict);
 
 // Build possible sharding strategies and their costs for all instructions.

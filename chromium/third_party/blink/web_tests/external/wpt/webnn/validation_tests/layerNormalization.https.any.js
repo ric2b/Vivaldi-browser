@@ -1,5 +1,8 @@
 // META: title=validation tests for WebNN API layerNormalization operation
 // META: global=window,dedicatedworker
+// META: variant=?cpu
+// META: variant=?gpu
+// META: variant=?npu
 // META: script=../resources/utils_validation.js
 
 'use strict';
@@ -29,6 +32,7 @@ multi_builder_test(async (t, builder, otherBuilder) => {
   assert_throws_js(TypeError, () => builder.layerNormalization(input, options));
 }, '[layerNormalization] throw if bias option is from another builder');
 
+const label = 'instance_normalization';
 const tests = [
   {
     name: '[layerNormalization] Test with default options for scalar input.',
@@ -39,6 +43,7 @@ const tests = [
     name: '[layerNormalization] Test when the input data type is float16.',
     input: {dataType: 'float16', dimensions: []},
     output: {dataType: 'float16', dimensions: []},
+    options: {label}
   },
   {
     name: '[layerNormalization] Test with given axes.',
@@ -98,6 +103,7 @@ const tests = [
     name:
         '[layerNormalization] Throw if the input data type is not one of the floating point types.',
     input: {dataType: 'uint32', dimensions: [1, 2, 3, 4]},
+    options: {label}
   },
   {
     name:
@@ -105,12 +111,16 @@ const tests = [
     input: {dataType: 'float32', dimensions: [1, 2, 3, 4]},
     options: {
       axes: [1, 2, 4],
+      label: label,
     },
   },
   {
     name: '[layerNormalization] Throw if the axes have duplications.',
     input: {dataType: 'float32', dimensions: [1, 2, 3, 4]},
-    options: {axes: [3, 3]},
+    options: {
+      axes: [3, 3],
+      label: label,
+    },
   },
   {
     name:
@@ -120,6 +130,7 @@ const tests = [
       scale: {dataType: 'float32', dimensions: [3, 4]},
       bias: {dataType: 'float16', dimensions: [3, 4]},
       axes: [2, 3],
+      label: label,
     },
   },
   {
@@ -130,6 +141,7 @@ const tests = [
       scale: {dataType: 'float16', dimensions: [3, 4]},
       bias: {dataType: 'float32', dimensions: [3, 4]},
       axes: [2, 3],
+      label: label,
     },
   },
   {
@@ -141,6 +153,7 @@ const tests = [
         dataType: 'float32',
         dimensions: [3, 3, 4]
       },  // for 4D input, default axes = [1,2,3]
+      label: label,
     },
   },
   {
@@ -152,6 +165,7 @@ const tests = [
         dataType: 'float32',
         dimensions: [3, 3, 4]
       },  // for 4D input, default axes = [1,2,3]
+      label: label,
     },
   },
   {
@@ -163,6 +177,7 @@ const tests = [
         dataType: 'float32',
         dimensions: [1, 2, 3, 4]
       },  // for 4D input, default axes = [1,2,3]
+      label: label,
     },
   },
   {
@@ -174,12 +189,14 @@ const tests = [
         dataType: 'float32',
         dimensions: [1, 2, 3, 4]
       },  // for 4D input, default axes = [1,2,3]
+      label: label,
     },
   },
 ];
 
 tests.forEach(
     test => promise_test(async t => {
+      const builder = new MLGraphBuilder(context);
       const input = builder.input(
           'input',
           {dataType: test.input.dataType, dimensions: test.input.dimensions});
@@ -197,12 +214,15 @@ tests.forEach(
         });
       }
 
-      if (test.output) {
+      if (test.output &&
+          context.opSupportLimits().layerNormalization.input.dataTypes.includes(
+              test.input.dataType)) {
         const output = builder.layerNormalization(input, test.options);
         assert_equals(output.dataType(), test.output.dataType);
         assert_array_equals(output.shape(), test.output.dimensions);
       } else {
-        assert_throws_js(
-            TypeError, () => builder.layerNormalization(input, test.options));
+        const regrexp = new RegExp('\\[' + label + '\\]');
+        assert_throws_with_label(
+            () => builder.layerNormalization(input, test.options), regrexp);
       }
     }, test.name));

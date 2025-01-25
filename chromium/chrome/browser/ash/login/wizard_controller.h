@@ -16,8 +16,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/ash/accessibility/accessibility_manager.h"
-#include "chrome/browser/ash/app_mode/kiosk_controller.h"
 #include "chrome/browser/ash/login/choobe_flow_controller.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/enrollment/auto_enrollment_check_screen.h"
@@ -49,7 +47,6 @@
 #include "chrome/browser/ash/login/screens/guest_tos_screen.h"
 #include "chrome/browser/ash/login/screens/hardware_data_collection_screen.h"
 #include "chrome/browser/ash/login/screens/hid_detection_screen.h"
-#include "chrome/browser/ash/login/screens/kiosk_autolaunch_screen.h"
 #include "chrome/browser/ash/login/screens/locale_switch_screen.h"
 #include "chrome/browser/ash/login/screens/marketing_opt_in_screen.h"
 #include "chrome/browser/ash/login/screens/multidevice_setup_screen.h"
@@ -70,6 +67,7 @@
 #include "chrome/browser/ash/login/screens/osauth/recovery_eligibility_screen.h"
 #include "chrome/browser/ash/login/screens/packaged_license_screen.h"
 #include "chrome/browser/ash/login/screens/parental_handoff_screen.h"
+#include "chrome/browser/ash/login/screens/perks_discovery_screen.h"
 #include "chrome/browser/ash/login/screens/personalized_recommend_apps_screen.h"
 #include "chrome/browser/ash/login/screens/pin_setup_screen.h"
 #include "chrome/browser/ash/login/screens/quick_start_screen.h"
@@ -78,6 +76,7 @@
 #include "chrome/browser/ash/login/screens/saml_confirm_password_screen.h"
 #include "chrome/browser/ash/login/screens/signin_fatal_error_screen.h"
 #include "chrome/browser/ash/login/screens/smart_privacy_protection_screen.h"
+#include "chrome/browser/ash/login/screens/split_modifier_keyboard_info_screen.h"
 #include "chrome/browser/ash/login/screens/sync_consent_screen.h"
 #include "chrome/browser/ash/login/screens/terms_of_service_screen.h"
 #include "chrome/browser/ash/login/screens/theme_selection_screen.h"
@@ -93,6 +92,7 @@
 #include "components/account_id/account_id.h"
 
 class PrefService;
+struct AccessibilityStatusEventDetails;
 
 namespace policy {
 class AutoEnrollmentController;
@@ -104,6 +104,7 @@ class BaseScreen;
 class DemoSetupController;
 class ErrorScreen;
 struct Geoposition;
+class KioskApp;
 class SimpleGeolocationProvider;
 class TimeZoneProvider;
 struct TimeZoneResponseData;
@@ -302,10 +303,8 @@ class WizardController : public OobeUI::Observer {
   void ShowDemoModeSetupScreen();
   void ShowDemoModePreferencesScreen();
   void ShowResetScreen();
-  void ShowKioskAutolaunchScreen();
   void ShowEnableAdbSideloadingScreen();
   void ShowEnableDebuggingScreen();
-  void ShowKioskEnableScreen();
   void ShowTermsOfServiceScreen();
   void ShowSyncConsentScreen();
   void ShowFingerprintSetupScreen();
@@ -355,6 +354,8 @@ class WizardController : public OobeUI::Observer {
   void ShowFactorSetupSuccessScreen();
   void ShowCategoriesSelectionScreen();
   void ShowPersonalizedRecomendAppsScreen();
+  void ShowPerksDiscoveryScreen();
+  void ShowSplitModifierKeyboardInfoScreen();
 
   // Shows images login screen.
   void ShowLoginScreen();
@@ -389,8 +390,6 @@ class WizardController : public OobeUI::Observer {
   void OnEnrollmentDone();
   void OnEnableAdbSideloadingScreenExit();
   void OnEnableDebuggingScreenExit();
-  void OnKioskEnableScreenExit();
-  void OnKioskAutolaunchScreenExit(KioskAutolaunchScreen::Result result);
   void OnDemoPreferencesScreenExit(DemoPreferencesScreen::Result result);
   void OnDemoSetupScreenExit(DemoSetupScreen::Result result);
   void OnUserCreationScreenExit(UserCreationScreen::Result result);
@@ -472,9 +471,12 @@ class WizardController : public OobeUI::Observer {
       CategoriesSelectionScreen::Result result);
   void OnPersonalizedRecomendAppsScreenExit(
       PersonalizedRecommendAppsScreen::Result result);
+  void OnPerksDiscoveryScreenExit(PerksDiscoveryScreen::Result result);
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
   void OnDeviceDisabledChecked(bool device_disabled);
+  void OnSplitModifierKeyboardInfoScreenExit(
+      SplitModifierKeyboardInfoScreen::Result result);
 
   // Shows update screen and starts update process.
   void InitiateOOBEUpdate();
@@ -542,11 +544,8 @@ class WizardController : public OobeUI::Observer {
   bool SetOnTimeZoneResolvedForTesting(base::OnceClosure callback);
 
   // Start the enrollment screen using the config from
-  // `prescribed_enrollment_config_`. If `force_interactive` is true,
-  // the user will be presented with a manual enrollment screen requiring
-  // Gaia credentials. If it is false, the screen may return after trying
-  // attestation-based enrollment if appropriate.
-  void StartEnrollmentScreen(bool force_interactive);
+  // `prescribed_enrollment_config_`.
+  void StartEnrollmentScreen();
   void ShowEnrollmentScreenIfEligible();
 
   void NotifyScreenChanged();

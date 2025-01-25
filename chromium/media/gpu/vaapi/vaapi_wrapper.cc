@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 
 #include <dlfcn.h>
@@ -1944,7 +1949,7 @@ bool VaapiWrapper::GetJpegDecodeSuitableImageFourCC(unsigned int rt_format,
       // 4:4:4), this driver should only support the first two. Since we check
       // for supported internal formats at the beginning of this function, we
       // shouldn't get here.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     }
   } else if (GetImplementationType() == VAImplementation::kIntelI965) {
     // Workaround deduced from observations in samus and nocturne: we found that
@@ -2094,7 +2099,7 @@ VAEntrypoint VaapiWrapper::GetDefaultVaEntryPoint(CodecMode mode,
     case VaapiWrapper::kVideoProcess:
       return VAEntrypointVideoProc;
     case VaapiWrapper::kCodecModeMax:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

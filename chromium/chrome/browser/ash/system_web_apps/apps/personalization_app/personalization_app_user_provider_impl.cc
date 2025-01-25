@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_user_provider_impl.h"
 
 #include "ash/public/cpp/default_user_image.h"
@@ -16,7 +21,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/ash/camera_presence_notifier.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_file_selector.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_impl.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_registry.h"
@@ -27,6 +31,7 @@
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_manager_factory.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chromeos/ash/components/camera_presence_notifier/camera_presence_notifier.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_image/user_image.h"
@@ -212,8 +217,7 @@ void PersonalizationAppUserProviderImpl::SelectCameraImage(
     return;
   }
   // Make a copy of the data.
-  auto ref_counted =
-      base::MakeRefCounted<base::RefCountedBytes>(data.data(), data.size());
+  auto ref_counted = base::MakeRefCounted<base::RefCountedBytes>(data);
   // Get a view of the same data copied above.
   auto as_span = base::make_span(ref_counted->front(), ref_counted->size());
 

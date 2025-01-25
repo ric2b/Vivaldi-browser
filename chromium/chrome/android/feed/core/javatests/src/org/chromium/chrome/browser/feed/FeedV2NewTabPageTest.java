@@ -89,12 +89,11 @@ import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
-import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
+import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.chrome.test.util.browser.suggestions.mostvisited.FakeMostVisitedSites;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.externalauth.ExternalAuthUtils;
-import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.test.util.AccountCapabilitiesBuilder;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
@@ -159,14 +158,13 @@ public class FeedV2NewTabPageTest {
                             ChromeRenderTestRule.Component.UI_BROWSER_CONTENT_SUGGESTIONS_FEED)
                     .build();
 
-    public final AccountManagerTestRule mAccountManagerTestRule =
-            new AccountManagerTestRule(mFakeAccountManagerFacade);
+    public final SigninTestRule mSigninTestRule = new SigninTestRule(mFakeAccountManagerFacade);
 
     // Mock sign-in environment needs to be destroyed after ChromeActivity in case there are
     // observers registered in the AccountManagerFacade mock.
     @Rule
     public final RuleChain mRuleChain =
-            RuleChain.outerRule(mAccountManagerTestRule).around(mActivityTestRule);
+            RuleChain.outerRule(mSigninTestRule).around(mActivityTestRule);
 
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -327,7 +325,6 @@ public class FeedV2NewTabPageTest {
     @Test
     @MediumTest
     @Feature({"FeedNewTabPage"})
-    @Features.EnableFeatures({SigninFeatures.SEED_ACCOUNTS_REVAMP})
     public void testSignInPromo_NotShownAfterSignIn() {
         mIsCachePopulatedInAccountManagerFacade = true;
         openNewTabPage();
@@ -336,9 +333,7 @@ public class FeedV2NewTabPageTest {
                 .perform(RecyclerViewActions.scrollToPosition(SIGNIN_PROMO_POSITION));
         onView(withId(R.id.signin_promo_view_container)).check(matches(isDisplayed()));
 
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_1);
-        // TODO(crbug.com/344816076): Use SigninTestRule in this suite instead.
-        SigninTestUtil.signin(AccountManagerTestRule.TEST_ACCOUNT_1);
+        mSigninTestRule.addAccountThenSignin(AccountManagerTestRule.TEST_ACCOUNT_1);
 
         onView(withId(R.id.feed_stream_recycler_view))
                 .perform(RecyclerViewActions.scrollToPosition(SIGNIN_PROMO_POSITION));
@@ -350,7 +345,7 @@ public class FeedV2NewTabPageTest {
     @Feature({"FeedNewTabPage"})
     public void testSignInPromoWhenDefaultAccountCannotShowHistorySyncWithoutMinorRestrictions() {
         final AccountCapabilitiesBuilder capabilitiesBuilder = new AccountCapabilitiesBuilder();
-        mAccountManagerTestRule.addAccount(
+        mSigninTestRule.addAccount(
                 "test@gmail.com",
                 capabilitiesBuilder
                         .setCanShowHistorySyncOptInsWithoutMinorModeRestrictions(false)

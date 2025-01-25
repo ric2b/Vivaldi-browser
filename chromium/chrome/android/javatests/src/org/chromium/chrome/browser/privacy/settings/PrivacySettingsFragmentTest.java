@@ -15,6 +15,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.Matchers.allOf;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,6 +65,7 @@ import org.chromium.chrome.browser.privacy_sandbox.FakePrivacySandboxBridge;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxBridgeJni;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
+import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
 import org.chromium.chrome.browser.signin.SigninCheckerProvider;
 import org.chromium.chrome.browser.sync.settings.GoogleServicesSettings;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -294,10 +296,9 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
-    @Features.EnableFeatures(ChromeFeatureList.IP_PROTECTION_V1)
+    @Features.EnableFeatures(ChromeFeatureList.IP_PROTECTION_UX)
     @Features.DisableFeatures({
         ChromeFeatureList.TRACKING_PROTECTION_3PCD,
-        ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_LAUNCH
     })
     public void testIpProtectionFragment() throws IOException {
         setShowTrackingProtection(false);
@@ -373,10 +374,9 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
-    @Features.EnableFeatures(ChromeFeatureList.IP_PROTECTION_V1)
+    @Features.EnableFeatures(ChromeFeatureList.IP_PROTECTION_UX)
     @Features.DisableFeatures({
         ChromeFeatureList.TRACKING_PROTECTION_3PCD,
-        ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_LAUNCH
     })
     public void testIpProtectionSettingsE2E() throws ExecutionException {
         setIpProtection(false);
@@ -393,10 +393,9 @@ public class PrivacySettingsFragmentTest {
 
     @Test
     @LargeTest
-    @Features.EnableFeatures(ChromeFeatureList.FINGERPRINTING_PROTECTION_SETTING)
+    @Features.EnableFeatures(ChromeFeatureList.FINGERPRINTING_PROTECTION_UX)
     @Features.DisableFeatures({
         ChromeFeatureList.TRACKING_PROTECTION_3PCD,
-        ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_LAUNCH
     })
     public void testFingerprintingProtectionSettingsE2E() throws ExecutionException {
         setFpProtection(false);
@@ -416,9 +415,8 @@ public class PrivacySettingsFragmentTest {
     @Test
     @LargeTest
     @Features.EnableFeatures({
-        ChromeFeatureList.IP_PROTECTION_V1,
+        ChromeFeatureList.IP_PROTECTION_UX,
         ChromeFeatureList.TRACKING_PROTECTION_3PCD,
-        ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_LAUNCH
     })
     public void testIpProtectionSettingsWithTrackingProtectionEnabled() {
         setIpProtection(false);
@@ -435,9 +433,8 @@ public class PrivacySettingsFragmentTest {
     @Test
     @LargeTest
     @Features.EnableFeatures({
-        ChromeFeatureList.FINGERPRINTING_PROTECTION_SETTING,
+        ChromeFeatureList.FINGERPRINTING_PROTECTION_UX,
         ChromeFeatureList.TRACKING_PROTECTION_3PCD,
-        ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_LAUNCH
     })
     public void testFingerprintingProtectionSettingsWithTrackingProtectionEnabled() {
         setFpProtection(false);
@@ -585,7 +582,7 @@ public class PrivacySettingsFragmentTest {
     @Features.EnableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
     public void testSignedOutFooterLink() {
         mSettingsActivityTestRule.startSettingsActivity();
-        mSettingsActivityTestRule.getFragment().setSettingsLauncher(mSettingsLauncher);
+        SettingsLauncherFactory.setInstanceForTesting(mSettingsLauncher);
 
         onView(withId(R.id.recycler_view)).perform(RecyclerViewActions.scrollToLastPosition());
         String footer =
@@ -599,5 +596,19 @@ public class PrivacySettingsFragmentTest {
         onView(withText(containsString(footerWithoutSpans))).perform(clickOnClickableSpan(0));
 
         verify(mSettingsLauncher).launchSettingsActivity(any(), eq(GoogleServicesSettings.class));
+    }
+
+    @Test
+    @LargeTest
+    public void testSettingsFragmentAttachedMetric() {
+        // Expect "PrivacySettings".hashCode() to be logged.
+        int expectedValue = 1505293227;
+        assertEquals(expectedValue, "PrivacySettings".hashCode());
+        try (var histogram =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Settings.FragmentAttached", expectedValue)) {
+            mSettingsActivityTestRule.startSettingsActivity();
+            SettingsLauncherFactory.setInstanceForTesting(mSettingsLauncher);
+        }
     }
 }

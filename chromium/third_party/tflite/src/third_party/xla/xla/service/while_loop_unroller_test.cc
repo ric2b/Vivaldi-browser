@@ -19,6 +19,7 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -27,6 +28,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_replace.h"
 #include "absl/types/span.h"
+#include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/literal.h"
@@ -554,9 +556,10 @@ TEST_F(WhileLoopUnrollerTest, UnrollMutipleLoops) {
 
   // Unroll the first loop
   TF_ASSERT_OK_AND_ASSIGN(
-      bool unrolled1,
-      WhileLoopUnroller::Unroll(
+      UnrollResult unrolled_result,
+      WhileLoopUnroller::UnrollAndReturnReplacement(
           module->entry_computation()->GetInstructionWithName("while1")));
+  bool unrolled1 = unrolled_result.unrolled;
   EXPECT_TRUE(unrolled1);
 
   // There should be no call instructions after unrolling either loops since we
@@ -570,9 +573,10 @@ TEST_F(WhileLoopUnrollerTest, UnrollMutipleLoops) {
 
   // Unroll the second loop
   TF_ASSERT_OK_AND_ASSIGN(
-      bool unrolled2,
-      WhileLoopUnroller::Unroll(
+      UnrollResult unrolled_result2,
+      WhileLoopUnroller::UnrollAndReturnReplacement(
           module->entry_computation()->GetInstructionWithName("while2")));
+  bool unrolled2 = unrolled_result2.unrolled;
   EXPECT_TRUE(unrolled2);
   std::vector<HloInstruction*> call_instrs_2;
   for (auto* comp : module->MakeComputationPostOrder()) {
@@ -685,6 +689,16 @@ TEST_F(WhileLoopUnrollerTest, LoopWithControlDep) {
 TEST_F(WhileLoopUnrollerTest, SimpleLoopPartialUnroll) {
   auto m = MakeModuleWithSimpleLoop(/*num_iters=*/5);
   EXPECT_FALSE(WhileLoopUnroller(/*unroll_factor=*/3).Run(m.get()).value());
+}
+
+TEST_F(WhileLoopUnrollerTest, SimpleLoopNoUnrollDueToTripCountThreshold) {
+  auto m = MakeModuleWithSimpleLoop(/*num_iters=*/5);
+  UnrollConfig config;
+  config.trip_count_threshold = 0;  // Set the trip count threshold to 0.
+  EXPECT_FALSE(WhileLoopUnroller(/*unroll_factor=*/-1,
+                                 /*wrap_in_trivial_loop=*/false, config)
+                   .Run(m.get())
+                   .value());
 }
 
 TEST_F(WhileLoopUnrollerTest, IndirectBodyInc) {
@@ -1029,6 +1043,273 @@ TEST_F(WhileLoopUnrollerTest, MatchShapeCoveringDSNested) {
                   instr, inner_fusion_comp->parameter_instruction(0),
                   HloOpcode::kDynamicSlice, config.value())
                   .has_value());
+}
+
+// Unroller pass must remove all the DynamicGte custom-calls.
+TEST_F(WhileLoopUnrollerTest, UnrollLoopWithDynamicGte) {
+  std::string hlo_string = R"(
+  HloModule SimpleLoop, entry_computation_layout={(s8[6,128,128]{2,1,0}, bf16[8,128]{1,0})->bf16[8,128]{1,0}}
+    %fused_computation (param_0: s8[1,128,128]) -> s8[128,128] {
+      %param_0 = s8[1,128,128]{2,1,0} parameter(0)
+      ROOT %bitcast.1 = s8[128,128]{1,0} bitcast(s8[1,128,128]{2,1,0} %param_0)
+    }
+
+    %fused_computation.inner (param_0.34523: bf16[8,128], sliced: s8[1,128,128]) -> bf16[8,128] {
+      %sliced = s8[1,128,128]{2,1,0} parameter(1)
+      %param_0.34523 = bf16[8,128]{1,0} parameter(0)
+      %fusion = s8[128,128]{1,0} fusion(s8[1,128,128]{2,1,0} %sliced), kind=kLoop, calls=%fused_computation
+      ROOT %convolution.3447 = bf16[8,128]{1,0} convolution(bf16[8,128]{1,0} %param_0.34523, s8[128,128]{1,0} %fusion), dim_labels=bf_io->bf
+    }
+
+    %while.body (unstacked: (s32[], bf16[8,128], (s8[1,128,128], s8[1,128,128], s8[1,128,128], s8[1,128,128], s8[1,128,128], /*index=5*/s8[1,128,128]))) -> (s32[], bf16[8,128], (s8[1,128,128], s8[1,128,128], s8[1,128,128], s8[1,128,128], s8[1,128,128], /*index=5*/s8[1,128,128])) {
+      %unstacked = (s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) parameter(0)
+      %i = s32[] get-tuple-element((s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) %unstacked), index=0
+      %one = s32[] constant(1)
+      %inc = s32[] add(s32[] %i, s32[] %one)
+      %p0 = bf16[8,128]{1,0} get-tuple-element((s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) %unstacked), index=1
+      %p1.1 = (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0}) get-tuple-element((s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) %unstacked), index=2
+      %two = s32[] constant(2)
+      %mult = s32[] multiply(s32[] %i, s32[] %two)
+      %custom-call = s8[1,128,128]{2,1,0} custom-call((s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0}) %p1.1, s32[] %mult), custom_call_target="DynamicGte"
+      %fusion.conv = bf16[8,128]{1,0} fusion(bf16[8,128]{1,0} %p0, s8[1,128,128]{2,1,0} %custom-call), kind=kOutput, calls=%fused_computation.inner
+      ROOT %out = (s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) tuple(s32[] %inc, bf16[8,128]{1,0} %fusion.conv, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0}) %p1.1)
+    }
+
+    %while.cond (unstacked.1: (s32[], bf16[8,128], (s8[1,128,128], s8[1,128,128], s8[1,128,128], s8[1,128,128], s8[1,128,128], /*index=5*/s8[1,128,128]))) -> pred[] {
+      %unstacked.1 = (s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) parameter(0)
+      %i.1 = s32[] get-tuple-element((s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) %unstacked.1), index=0
+      %constant.12857 = s32[] constant(3)
+      ROOT %compare.1921 = pred[]{:T(512)} compare(s32[] %i.1, s32[] %constant.12857), direction=LT
+    }
+
+    ENTRY %main (p0.1: s8[6,128,128], p1.2: bf16[8,128]) -> bf16[8,128] {
+      %init = s32[] constant(0)
+      %p1.2 = bf16[8,128]{1,0} parameter(1)
+      %p0.1 = s8[6,128,128]{2,1,0} parameter(0)
+      %while.input = (s32[], bf16[8,128]{1,0}, s8[6,128,128]{2,1,0}) tuple(s32[] %init, bf16[8,128]{1,0} %p1.2, s8[6,128,128]{2,1,0} %p0.1)
+      %slice = s8[1,128,128]{2,1,0} slice(s8[6,128,128]{2,1,0} %p0.1), slice={[0:1], [0:128], [0:128]}
+      %slice.1 = s8[1,128,128]{2,1,0} slice(s8[6,128,128]{2,1,0} %p0.1), slice={[1:2], [0:128], [0:128]}
+      %slice.2 = s8[1,128,128]{2,1,0} slice(s8[6,128,128]{2,1,0} %p0.1), slice={[2:3], [0:128], [0:128]}
+      %slice.3 = s8[1,128,128]{2,1,0} slice(s8[6,128,128]{2,1,0} %p0.1), slice={[3:4], [0:128], [0:128]}
+      %slice.4 = s8[1,128,128]{2,1,0} slice(s8[6,128,128]{2,1,0} %p0.1), slice={[4:5], [0:128], [0:128]}
+      %slice.5 = s8[1,128,128]{2,1,0} slice(s8[6,128,128]{2,1,0} %p0.1), slice={[5:6], [0:128], [0:128]}
+      %tuple = (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0}) tuple(s8[1,128,128]{2,1,0} %slice, s8[1,128,128]{2,1,0} %slice.1, s8[1,128,128]{2,1,0} %slice.2, s8[1,128,128]{2,1,0} %slice.3, s8[1,128,128]{2,1,0} %slice.4, /*index=5*/s8[1,128,128]{2,1,0} %slice.5)
+      %tuple.1 = (s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) tuple(s32[] %init, bf16[8,128]{1,0} %p1.2, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0}) %tuple)
+      %while.out = (s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) while((s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) %tuple.1), condition=%while.cond, body=%while.body
+      %while_use = (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0}) get-tuple-element((s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) %while.out), index=2
+      ROOT %out.1 = bf16[8,128]{1,0} get-tuple-element((s32[], bf16[8,128]{1,0}, (s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, s8[1,128,128]{2,1,0}, /*index=5*/s8[1,128,128]{2,1,0})) %while.out), index=1
+  })";
+
+  auto module = ParseAndReturnVerifiedModule(hlo_string).value();
+  HloInstruction* loop =
+      module->entry_computation()->root_instruction()->mutable_operand(0);
+  TF_ASSERT_OK_AND_ASSIGN(UnrollResult unrolled_result,
+                          WhileLoopUnroller::UnrollAndReturnReplacement(
+                              loop, -1, false, true, true));
+  bool unrolled = unrolled_result.unrolled;
+  EXPECT_TRUE(unrolled);
+  // Below method is successful only if all the DynamicGte and DynamicTuple
+  // custom-calls are removed.
+  for (HloInstruction* instr :
+       module->entry_computation()->MakeInstructionPostOrder()) {
+    EXPECT_FALSE(instr->IsCustomCall("DynamicGte"));
+    EXPECT_FALSE(instr->IsCustomCall("DynamicTuple"));
+  }
+}
+
+TEST_F(WhileLoopUnrollerTest, IsEffectivelyStaticDynamicSlice) {
+  std::string hlo_string = R"(
+  HloModule SimpleLoop
+  %fused_computation.slice (param_0.51117: s8[6,128,128], p1: s32[]) -> s8[128,128] {
+    %param_0.51117 = s8[6,128,128] parameter(0)
+    static.p1 = s32[] parameter(1)
+    %constant.85694 = s32[] constant(0)
+    %dynamic-slice.static = s8[1,128,128] dynamic-slice(s8[6,128,128] %param_0.51117, static.p1, s32[] %constant.85694, s32[] %constant.85694), dynamic_slice_sizes={1,128,128}
+    ROOT %bitcast.31250 = s8[128,128] bitcast(s8[1,128,128] %dynamic-slice.static)
+  }
+  
+  %fused_computation.slice.2 (param_0.51117: s8[6,128,128], p1: s32[]) -> s8[128,128] {
+    %param_0.51117 = s8[6,128,128] parameter(0)
+    dynamic.p1 = s32[] parameter(1)
+    %constant.85694 = s32[] constant(0)
+    %dynamic-slice.dynamic = s8[1,128,128] dynamic-slice(s8[6,128,128] %param_0.51117, dynamic.p1, s32[] %constant.85694, s32[] %constant.85694), dynamic_slice_sizes={1,128,128}
+    ROOT %bitcast.31250 = s8[128,128] bitcast(s8[1,128,128] %dynamic-slice.dynamic)
+  }
+
+  %fused_computation.inner (param_0.34523: bf16[8,128], param_1.30691: s8[6,128,128], p2: s32[], p3: s32[]) -> bf16[8,128] {
+    %param_0.34523 = bf16[8,128] parameter(0)
+    %param_1.30691 = s8[6,128,128] parameter(1)
+    static.p2 = s32[] parameter(2)
+    %fusion.1 = s8[128,128] fusion(s8[6,128,128] %param_1.30691, static.p2), kind=kLoop, calls=%fused_computation.slice
+    dynamic.p3 = s32[] parameter(3)
+    %fusion.2 = s8[128,128] fusion(s8[6,128,128] %param_1.30691, dynamic.p3), kind=kLoop, calls=%fused_computation.slice.2
+    out = s8[128,128] add(%fusion.1, %fusion.2)
+    ROOT %convolution.3447 = bf16[8,128] convolution(bf16[8,128] %param_0.34523, s8[128,128] out), dim_labels=bf_io->bf
+  }
+
+  %while.body (wide_param: (s32[], bf16[8,128], s8[6,128,128], s32[])) -> (s32[], bf16[8,128], s8[6,128,128], s32[]) {
+    wide_p = (s32[], bf16[8,128], s8[6,128,128], s32[]) parameter(0)
+    i = s32[] get-tuple-element(wide_p), index=0
+    p0 = bf16[8,128] get-tuple-element(wide_p), index=1
+    p1 = s8[6,128,128] get-tuple-element(wide_p), index=2
+    dynamic.p2 = s32[] get-tuple-element(wide_p), index=3
+    one = s32[] constant(1)
+    inc = s32[] add(i, one)
+    two = s32[] constant(2)
+    mult = s32[] multiply(i, two)
+    fusion.conv = bf16[8,128] fusion(p0, p1, mult, dynamic.p2), kind=kOutput, calls=%fused_computation.inner
+    ROOT out = (s32[], bf16[8,128], s8[6,128,128], s32[]) tuple(inc, fusion.conv, p1, dynamic.p2)
+  }
+
+  %while.cond (wide_param: (s32[], bf16[8,128], s8[6,128,128], s32[])) -> pred[] {
+    wide_p = (s32[], bf16[8,128], s8[6,128,128], s32[]) parameter(0)
+    i = s32[] get-tuple-element(wide_p), index=0
+    %constant.12857 = s32[] constant(3)
+    ROOT %compare.1921 = pred[]{:T(512)} compare(s32[] i, s32[] %constant.12857), direction=LT
+  }
+
+  ENTRY main {
+    p0 = s8[6,128,128] parameter(0)
+    p1 = bf16[8,128] parameter(1)
+    p2 = s32[] parameter(2)
+    init = s32[] constant(0)
+    while.input = (s32[], bf16[8,128], s8[6,128,128], s32[]) tuple(init, p1, p0, p2)
+    while.out = (s32[], bf16[8,128], s8[6,128,128], s32[]) while(while.input), condition=%while.cond , body=%while.body
+    while_use = s8[6,128,128] get-tuple-element(while.out), index=2
+    ROOT out = bf16[8,128] get-tuple-element(while.out), index=1
+  }
+  )";
+  auto module = ParseAndReturnVerifiedModule(hlo_string).value();
+  HloInstruction* loop =
+      module->entry_computation()->root_instruction()->mutable_operand(0);
+  std::optional<WhileLoopConfig> config =
+      WhileLoopUnroller::IsLoopUnrollable(loop);
+  EXPECT_TRUE(config.has_value());
+  for (HloComputation* comp : module->MakeComputationPostOrder()) {
+    HloInstruction* static_slice =
+        comp->GetInstructionWithName("dynamic-slice.static");
+    if (static_slice != nullptr) {
+      auto index = MatchEffectivelyStaticDynamicSliceInsideLoop(
+          static_slice, static_slice->operand(0), *config);
+      EXPECT_TRUE(index.has_value());
+    }
+    HloInstruction* dynamic_slice =
+        comp->GetInstructionWithName("dynamic-slice.dynamic");
+    if (dynamic_slice != nullptr) {
+      auto index = MatchEffectivelyStaticDynamicSliceInsideLoop(
+          dynamic_slice, dynamic_slice->operand(0), *config);
+      EXPECT_FALSE(index.has_value());
+    }
+  }
+}
+// We do not support case where there is no tuple for input.
+TEST_F(WhileLoopUnrollerTest, SimpleLoopWithCustomCallNoTuple) {
+  std::string hlo_string = R"(
+  HloModule SimpleLoop
+  SimpleLoop.body {
+    loop_var.1 = (s32[]{:T(128)}, s32[3]{0}) parameter(0)
+    get-tuple-element.1 = s32[]{:T(128)} get-tuple-element(loop_var.1), index=0
+    get-tuple-element.2 = s32[3]{0} get-tuple-element(loop_var.1), index=1
+    custom-call.1 = (s32[]{:T(128)}, s32[3]{0}) custom-call(get-tuple-element.1, get-tuple-element.2), custom_call_target="CustomCallStart"
+    get-tuple-element.3 = s32[]{:T(128)} get-tuple-element(custom-call.1), index=0
+    constant.1 = s32[]{:T(128)} constant(1)
+    idx = s32[]{:T(128)} add(get-tuple-element.3, constant.1)
+    get-tuple-element.4 = s32[3]{0} get-tuple-element(custom-call.1), index=1
+    output = s32[3]{0} add(get-tuple-element.4, get-tuple-element.4)
+    tuple = (s32[]{:T(128)}, s32[3]{0}) tuple(idx, output)
+    ROOT custom-call.2 = (s32[]{:T(128)}, s32[3]{0}) custom-call(idx, output), custom_call_target="CustomCallEnd"
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[]{:T(128)}, s32[3]{0}) parameter(0)
+    get-tuple-element.5 = s32[] get-tuple-element(loop_var.2), index=0
+    constant.2 = s32[]{:T(128)} constant(5)
+    ROOT less-than = pred[] compare(get-tuple-element.5, constant.2), direction=LT
+  }
+  ENTRY SimpleLoop {
+    constant.3 = s32[]{:T(128)} constant(0)
+    constant.4 = s32[3]{0} constant({0, 1, 2})
+    tuple.1 = (s32[]{:T(128)}, s32[3]{0}) tuple(constant.3, constant.4)
+    ROOT while = (s32[]{:T(128)}, s32[3]{0}) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+  }
+  )";
+  auto m = ParseAndReturnVerifiedModule(hlo_string).value();
+  UnrollConfig config;
+  EXPECT_FALSE(WhileLoopUnroller(/*unroll_factor=*/-1,
+                                 /*wrap_in_trivial_loop=*/false, config)
+                   .Run(m.get())
+                   .value());
+}
+
+TEST_F(WhileLoopUnrollerTest, SimpleLoopWithCustomCallNonTupleForRoot) {
+  std::string hlo_string = R"(
+  HloModule SimpleLoop
+  SimpleLoop.body {
+    loop_var.1 = (s32[]{:T(128)}, s32[3]{0}) parameter(0)
+    custom-call.1 = (s32[]{:T(128)}, s32[3]{0}) custom-call(loop_var.1), custom_call_target="CustomCallStart"
+    get-tuple-element.1 = s32[]{:T(128)} get-tuple-element(custom-call.1), index=0
+    constant.1 = s32[]{:T(128)} constant(1)
+    idx = s32[]{:T(128)} add(get-tuple-element.1, constant.1)
+    get-tuple-element.2 = s32[3]{0} get-tuple-element(custom-call.1), index=1
+    output = s32[3]{0} add(get-tuple-element.2, get-tuple-element.2)
+    ROOT custom-call.2 = (s32[]{:T(128)}, s32[3]{0}) custom-call(idx, output), custom_call_target="CustomCallEnd"
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[]{:T(128)}, s32[3]{0}) parameter(0)
+    get-tuple-element.5 = s32[] get-tuple-element(loop_var.2), index=0
+    constant.2 = s32[]{:T(128)} constant(5)
+    ROOT less-than = pred[] compare(get-tuple-element.5, constant.2), direction=LT
+  }
+  ENTRY SimpleLoop {
+    constant.3 = s32[]{:T(128)} constant(0)
+    constant.4 = s32[3]{0} constant({0, 1, 2})
+    tuple.1 = (s32[]{:T(128)}, s32[3]{0}) tuple(constant.3, constant.4)
+    ROOT while = (s32[]{:T(128)}, s32[3]{0}) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+  }
+  )";
+  auto m = ParseAndReturnVerifiedModule(hlo_string).value();
+  UnrollConfig config;
+  EXPECT_TRUE(WhileLoopUnroller(/*unroll_factor=*/-1,
+                                /*wrap_in_trivial_loop=*/false, config)
+                  .Run(m.get())
+                  .value());
+}
+
+TEST_F(WhileLoopUnrollerTest, SimpleLoopWithCustomCall) {
+  std::string hlo_string = R"(
+  HloModule SimpleLoop
+  SimpleLoop.body {
+    loop_var.1 = (s32[]{:T(128)}, s32[3]{0}) parameter(0)
+    custom-call.1 = (s32[]{:T(128)}, s32[3]{0}) custom-call(loop_var.1), custom_call_target="CustomCallStart"
+    get-tuple-element.1 = s32[]{:T(128)} get-tuple-element(custom-call.1), index=0
+    constant.1 = s32[]{:T(128)} constant(1)
+    idx = s32[]{:T(128)} add(get-tuple-element.1, constant.1)
+    get-tuple-element.2 = s32[3]{0} get-tuple-element(custom-call.1), index=1
+    output = s32[3]{0} add(get-tuple-element.2, get-tuple-element.2)
+    tuple = (s32[]{:T(128)}, s32[3]{0}) tuple(idx, output)
+    ROOT custom-call.2 = (s32[]{:T(128)}, s32[3]{0}) custom-call(tuple), custom_call_target="CustomCallEnd"
+  }
+  SimpleLoop.condition {
+    loop_var.2 = (s32[]{:T(128)}, s32[3]{0}) parameter(0)
+    get-tuple-element.3 = s32[] get-tuple-element(loop_var.2), index=0
+    constant.2 = s32[]{:T(128)} constant(5)
+    ROOT less-than = pred[] compare(get-tuple-element.3, constant.2), direction=LT
+  }
+  ENTRY SimpleLoop {
+    constant.3 = s32[]{:T(128)} constant(0)
+    constant.4 = s32[3]{0} constant({0, 1, 2})
+    tuple.1 = (s32[]{:T(128)}, s32[3]{0}) tuple(constant.3, constant.4)
+    ROOT while = (s32[]{:T(128)}, s32[3]{0}) while(tuple.1), condition=
+      SimpleLoop.condition, body=SimpleLoop.body
+  }
+  )";
+  auto m = ParseAndReturnVerifiedModule(hlo_string).value();
+  UnrollConfig config;
+  EXPECT_TRUE(WhileLoopUnroller(/*unroll_factor=*/-1,
+                                /*wrap_in_trivial_loop=*/false, config)
+                  .Run(m.get())
+                  .value());
 }
 
 }  // namespace

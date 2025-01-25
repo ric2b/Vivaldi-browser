@@ -323,15 +323,12 @@ class ContainerAppInteractiveUiTestBase
     AppListClientImpl::GetInstance()->UpdateProfile();
 
     // Fetch `device_info` from echo.
-    base::test::TestFuture<
-        base::expected</*oobe_timestamp*/ std::string, /*error=*/std::string>>
-        oobe_timestamp_or_error;
-    chromeos::echo_util::GetOobeTimestamp(
-        oobe_timestamp_or_error.GetCallback());
-    ASSERT_TRUE(oobe_timestamp_or_error.Wait());
-    ASSERT_TRUE(oobe_timestamp_or_error.Get().has_value());
+    base::test::TestFuture<std::optional<base::Time>> oobe_timestamp;
+    chromeos::echo_util::GetOobeTimestamp(oobe_timestamp.GetCallback());
+    ASSERT_TRUE(oobe_timestamp.Wait());
+    ASSERT_TRUE(oobe_timestamp.Get().has_value());
     web_app::DeviceInfo device_info;
-    device_info.oobe_timestamp = oobe_timestamp_or_error.Get().value();
+    device_info.oobe_timestamp = oobe_timestamp.Get().value();
 
     // Cache install info for the container app.
     container_app_install_info_ =
@@ -367,6 +364,10 @@ class ContainerAppInteractiveUiTestBase
 
   // Used to retrieve expected title/URL for the container app.
   std::unique_ptr<web_app::WebAppInstallInfo> container_app_install_info_;
+
+  // Used to conditionally ignore the container app preinstallation debug key.
+  std::unique_ptr<base::AutoReset<bool>>
+      ignore_container_app_preinstall_debug_key_;
 };
 
 // ContainerAppInteractiveUiTest -----------------------------------------------
@@ -455,6 +456,7 @@ IN_PROC_BROWSER_TEST_P(ContainerAppInteractiveUiTest, LaunchFromAppList) {
   RunTestSequence(
       // Launch app list.
       DoDefaultAction(ash::kHomeButtonElementId),
+      WaitForShow(ash::kAppListBubbleViewElementId),
 
       // Find apps page.
       NameDescendantViewByType<ash::AppListBubbleAppsPage>(
@@ -677,6 +679,7 @@ IN_PROC_BROWSER_TEST_P(ContainerAppInteractiveUiTest, UninstallFromAppList) {
   RunTestSequence(
       // Launch app list.
       DoDefaultAction(ash::kHomeButtonElementId),
+      WaitForShow(ash::kAppListBubbleViewElementId),
 
       // Find apps page.
       NameDescendantViewByType<ash::AppListBubbleAppsPage>(
@@ -832,8 +835,8 @@ IN_PROC_BROWSER_TEST_P(ContainerAppInteractiveUiTest, UninstallFromShelf) {
 // Reasons why the user may be ineligible for container app preinstallation.
 enum class IneligibilityReason {
   kMinValue = 0,
-  kFeatureFlagDisabled = kMinValue,
-  kFeatureManagementFlagDisabled,
+  kFeatureDebugAndManagementFlagsDisabled = kMinValue,
+  kFeatureFlagDisabled,
   kUserManaged,
   kUserTypeChild,
   kUserTypeGuest,
@@ -846,8 +849,8 @@ enum class IneligibilityReason {
 
 inline std::ostream& operator<<(std::ostream& os, IneligibilityReason reason) {
   switch (reason) {
+    INELIGIBILITY_REASON_CASE(kFeatureDebugAndManagementFlagsDisabled);
     INELIGIBILITY_REASON_CASE(kFeatureFlagDisabled);
-    INELIGIBILITY_REASON_CASE(kFeatureManagementFlagDisabled);
     INELIGIBILITY_REASON_CASE(kUserManaged);
     INELIGIBILITY_REASON_CASE(kUserTypeChild);
     INELIGIBILITY_REASON_CASE(kUserTypeGuest);
@@ -862,12 +865,15 @@ class ContainerAppInteractiveUiIneligibilityTest
   ContainerAppInteractiveUiIneligibilityTest()
       : ContainerAppInteractiveUiTestBase(GetLoginType()) {
     scoped_feature_list_.InitWithFeatureStates(
-        {{chromeos::features::kContainerAppPreinstall, IsFeatureFlagDisabled()},
+        {{chromeos::features::kContainerAppPreinstall, IsFeatureFlagEnabled()},
+         {chromeos::features::kContainerAppPreinstallDebug,
+          IsFeatureDebugFlagEnabled()},
          {chromeos::features::kFeatureManagementContainerAppPreinstall,
-          IsFeatureManagementFlagDisabled()}});
+          IsFeatureManagementFlagEnabled()}});
   }
 
  private:
+  // ContainerAppInteractiveUiTestBase:
   void SetUpOnMainThread() override {
     // Web app preinstallation times out for child user types due to failure to
     // install some default web apps. Since this test suite only cares about the
@@ -897,15 +903,23 @@ class ContainerAppInteractiveUiIneligibilityTest
     }
   }
 
-  // Returns whether the feature flag is disabled given test parameterization.
-  bool IsFeatureFlagDisabled() const {
-    return GetParam() == IneligibilityReason::kFeatureFlagDisabled;
+  // Returns whether the feature debug flag is enabled given test
+  // parameterization.
+  bool IsFeatureDebugFlagEnabled() const {
+    return GetParam() !=
+           IneligibilityReason::kFeatureDebugAndManagementFlagsDisabled;
   }
 
-  // Returns whether the feature management flag is disabled given test
+  // Returns whether the feature flag is enabled given test parameterization.
+  bool IsFeatureFlagEnabled() const {
+    return GetParam() != IneligibilityReason::kFeatureFlagDisabled;
+  }
+
+  // Returns whether the feature management flag is enabled given test
   // parameterization.
-  bool IsFeatureManagementFlagDisabled() const {
-    return GetParam() == IneligibilityReason::kFeatureManagementFlagDisabled;
+  bool IsFeatureManagementFlagEnabled() const {
+    return GetParam() !=
+           IneligibilityReason::kFeatureDebugAndManagementFlagsDisabled;
   }
 
   // Used to enable/disable the container app preinstallation based on test
@@ -937,6 +951,7 @@ IN_PROC_BROWSER_TEST_P(ContainerAppInteractiveUiIneligibilityTest,
   RunTestSequence(
       // Launch app list.
       DoDefaultAction(ash::kHomeButtonElementId),
+      WaitForShow(ash::kAppListBubbleViewElementId),
 
       // Find apps page.
       NameDescendantViewByType<ash::AppListBubbleAppsPage>(
@@ -975,5 +990,3 @@ IN_PROC_BROWSER_TEST_P(ContainerAppInteractiveUiIneligibilityTest,
                    });
       }));
 }
-
-// TODO(http://b/331668699): Test container app position for existing users.

@@ -2,17 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {loadComponentDocExample, preloadForCodeCoverage} from '../../../../test/interactions/helpers/shared.js';
+import {loadComponentDocExample} from '../../../../test/interactions/helpers/shared.js';
 import {waitFor} from '../../../../test/shared/helper.js';
-import {describe, itScreenshot} from '../../../../test/shared/mocha-extensions.js';
 import {
   assertElementScreenshotUnchanged,
   waitForDialogAnimationEnd,
 } from '../../../shared/screenshots.js';
 
 describe('Shortcut dialog screenshot tests', () => {
-  preloadForCodeCoverage('shortcut_dialog/basic.html');
-
   itScreenshot('renders the shortcut dialog button', async () => {
     await loadComponentDocExample('shortcut_dialog/basic.html');
     const container = await waitFor('#container');

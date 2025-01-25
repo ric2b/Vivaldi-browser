@@ -10,7 +10,7 @@ import {
   describeWithMockConnection,
   setMockConnectionResponseHandler,
 } from '../../testing/MockConnection.js';
-import * as Platform from '../platform/platform.js';
+import type * as Platform from '../platform/platform.js';
 
 import * as SDK from './sdk.js';
 
@@ -26,7 +26,7 @@ describe('NetworkRequest', () => {
         'OK');
   });
 
-  it('parses reponse cookies from headers', () => {
+  it('parses response cookies from headers', () => {
     const request = SDK.NetworkRequest.NetworkRequest.createWithoutBackendRequest(
         'requestId', 'url' as Platform.DevToolsPath.UrlString, 'documentURL' as Platform.DevToolsPath.UrlString, null);
     request.addExtraResponseInfo({
@@ -179,8 +179,8 @@ describe('NetworkRequest', () => {
         'documentURL' as Platform.DevToolsPath.UrlString, null, null, null);
 
     const cookie = new SDK.Cookie.Cookie('name', 'value');
-    cookie.addAttribute(SDK.Cookie.Attribute.SameSite, 'None');
-    cookie.addAttribute(SDK.Cookie.Attribute.Secure, true);
+    cookie.addAttribute(SDK.Cookie.Attribute.SAME_SITE, 'None');
+    cookie.addAttribute(SDK.Cookie.Attribute.SECURE, true);
     cookie.setCookieLine('name=value; Path=/; SameSite=None; Secure;');
     request.addExtraResponseInfo({
       responseHeaders: [{name: 'Set-Cookie', value: cookie.getCookieLine() as string}],
@@ -190,7 +190,7 @@ describe('NetworkRequest', () => {
       cookiePartitionKey: undefined,
       cookiePartitionKeyOpaque: undefined,
       exemptedResponseCookies: [{
-        cookie: cookie,
+        cookie,
         cookieLine: cookie.getCookieLine() as string,
         exemptionReason: Protocol.Network.CookieExemptionReason.TPCDHeuristics,
       }],
@@ -286,11 +286,13 @@ describeWithMockConnection('NetworkRequest', () => {
       cookiePartitionKeyOpaque: undefined,
       exemptedResponseCookies: undefined,
     });
-    assert.isTrue(addBlockedCookieSpy.calledOnceWith(
-        cookie, [{
-          attribute: null,
-          uiString: 'Setting this cookie was blocked due to third-party cookie phaseout. Learn more in the Issues tab.',
-        }]));
+    assert.isTrue(addBlockedCookieSpy.calledOnceWith(cookie, [
+      {
+        attribute: null,
+        uiString:
+            'Setting this cookie was blocked either because of Chrome flags or browser configuration. Learn more in the Issues panel.',
+      },
+    ]));
     assert.deepStrictEqual(await cookieModel.getCookiesForDomain(''), [cookie]);
 
     request.addExtraResponseInfo({
@@ -338,7 +340,7 @@ describeWithMockConnection('ServerSentEvents', () => {
 
     const networkEvents: SDK.NetworkRequest.EventSourceMessage[] = [];
     networkManager.requestForId('1')!.addEventListener(
-        SDK.NetworkRequest.Events.EventSourceMessageAdded, ({data}) => networkEvents.push(data));
+        SDK.NetworkRequest.Events.EVENT_SOURCE_MESSAGE_ADDED, ({data}) => networkEvents.push(data));
 
     networkManager.dispatcher.eventSourceMessageReceived({
       requestId: '1' as Protocol.Network.RequestId,
@@ -383,13 +385,14 @@ describeWithMockConnection('ServerSentEvents', () => {
     } as Protocol.Network.ResponseReceivedEvent);
 
     const networkEvents: SDK.NetworkRequest.EventSourceMessage[] = [];
-    const {promise: twoEventsReceivedPromise, resolve} = Platform.PromiseUtilities.promiseWithResolvers<void>();
-    networkManager.requestForId('1')!.addEventListener(SDK.NetworkRequest.Events.EventSourceMessageAdded, ({data}) => {
-      networkEvents.push(data);
-      if (networkEvents.length === 2) {
-        resolve();
-      }
-    });
+    const {promise: twoEventsReceivedPromise, resolve} = Promise.withResolvers<void>();
+    networkManager.requestForId('1')!.addEventListener(
+        SDK.NetworkRequest.Events.EVENT_SOURCE_MESSAGE_ADDED, ({data}) => {
+          networkEvents.push(data);
+          if (networkEvents.length === 2) {
+            resolve();
+          }
+        });
 
     const message = `
 id: fooId
@@ -501,7 +504,7 @@ describeWithMockConnection('requestStreamingContent', () => {
     const maybeStreamingContent = await networkManager.requestForId('1')!.requestStreamingContent();
     assert.isFalse(TextUtils.StreamingContentData.isError(maybeStreamingContent));
     const streamingContent = maybeStreamingContent as TextUtils.StreamingContentData.StreamingContentData;
-    const eventPromise = streamingContent.once(TextUtils.StreamingContentData.Events.ChunkAdded);
+    const eventPromise = streamingContent.once(TextUtils.StreamingContentData.Events.CHUNK_ADDED);
 
     networkManager.dispatcher.dataReceived({
       requestId: '1' as Protocol.Network.RequestId,

@@ -128,6 +128,15 @@ public class DataSharingServiceFactoryTest {
                                             PeopleGroupActionOutcome.TRANSIENT_FAILURE);
                                     callbackReceived();
                                 });
+                        dataSharingService.addMember(
+                                "bad_id",
+                                "bad_token",
+                                result -> {
+                                    Assert.assertEquals(
+                                            result.intValue(),
+                                            PeopleGroupActionOutcome.TRANSIENT_FAILURE);
+                                    callbackReceived();
+                                });
                         dataSharingService.removeMember(
                                 "bad_id",
                                 "bad_email",
@@ -135,6 +144,15 @@ public class DataSharingServiceFactoryTest {
                                     Assert.assertEquals(
                                             result.intValue(),
                                             PeopleGroupActionOutcome.TRANSIENT_FAILURE);
+                                    callbackReceived();
+                                });
+                        dataSharingService.ensureGroupVisibility(
+                                "bad_id",
+                                result -> {
+                                    Assert.assertTrue(result.groupData == null);
+                                    Assert.assertEquals(
+                                            result.actionFailure,
+                                            PeopleGroupActionFailure.TRANSIENT_FAILURE);
                                     callbackReceived();
                                 });
                     }

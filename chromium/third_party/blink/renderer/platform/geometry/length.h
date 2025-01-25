@@ -28,9 +28,9 @@
 #include <optional>
 
 #include "base/check_op.h"
-#include "base/functional/function_ref.h"
 #include "base/memory/stack_allocated.h"
 #include "base/notreached.h"
+#include "third_party/blink/renderer/platform/geometry/evaluation_input.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -363,16 +363,6 @@ class PLATFORM_EXPORT Length {
     DCHECK(!IsCalculated());
     return value_;
   }
-
-  using IntrinsicLengthEvaluator = base::FunctionRef<LayoutUnit(const Length&)>;
-
-  struct EvaluationInput {
-    STACK_ALLOCATED();
-
-   public:
-    std::optional<float> size_keyword_basis = std::nullopt;
-    std::optional<IntrinsicLengthEvaluator> intrinsic_evaluator = std::nullopt;
-  };
 
   float NonNanCalculatedValue(float max_value, const EvaluationInput&) const;
 

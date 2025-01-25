@@ -7,10 +7,7 @@ import json
 import os
 import sys
 
-# Add src/testing/ into sys.path for importing common without pylint errors.
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
-from scripts import common
+import common
 
 
 def main_run(args):
@@ -19,8 +16,7 @@ def main_run(args):
         sys.executable,
         os.path.join(common.SRC_DIR, 'build', 'check_gn_headers.py'),
         '--out-dir',
-        args.build_dir
-        or os.path.join(args.paths['checkout'], 'out', args.build_config_fs),
+        args.build_dir,
         '--whitelist',
         os.path.join(common.SRC_DIR, 'build', 'check_gn_headers_whitelist.txt'),
         '--json',

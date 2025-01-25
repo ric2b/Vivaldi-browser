@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
+#include "ui/display/types/display_configuration_params.h"
 #include "ui/gfx/linux/drm_util_linux.h"
 // For standard Linux/system libgbm
 #include "ui/gfx/linux/gbm_defines.h"
@@ -353,15 +354,15 @@ void DrmThread::GetHardwareCapabilities(
   }
 
   const auto& crtc_controllers = hdc->crtc_controllers();
-  // We almost always expect only one CRTC. Multiple CRTCs for one widget was
-  // the old way mirror mode was supported.
-  if (crtc_controllers.size() == 1) {
+  const bool multiple_controllers_but_tiled =
+      (crtc_controllers.size() > 1 && hdc->IsTiled() && !hdc->IsMirrored());
+  if (crtc_controllers.size() == 1 || multiple_controllers_but_tiled) {
     std::move(receive_callback)
         .Run(plane_manager->GetHardwareCapabilities(
             crtc_controllers[0]->crtc()));
   } else {
-    // If there are multiple CRTCs for this widget we shouldn't rely on overlays
-    // working.
+    // We should not rely on overlays if there are multiple non-tiled CRTCs for
+    // this widget.
     HardwareCapabilities hardware_capabilities;
     hardware_capabilities.is_valid = false;
     std::move(receive_callback).Run(hardware_capabilities);
@@ -382,12 +383,13 @@ void DrmThread::RefreshNativeDisplays(
 void DrmThread::ConfigureNativeDisplays(
     const std::vector<display::DisplayConfigurationParams>& config_requests,
     display::ModesetFlags modeset_flags,
-    base::OnceCallback<void(bool)> callback) {
+    ConfigureNativeDisplaysCallback callback) {
   TRACE_EVENT0("drm", "DrmThread::ConfigureNativeDisplays");
 
-  bool config_success =
-      display_manager_->ConfigureDisplays(config_requests, modeset_flags);
-  std::move(callback).Run(config_success);
+  std::vector<display::DisplayConfigurationParams> request_results;
+  bool config_success = display_manager_->ConfigureDisplays(
+      config_requests, modeset_flags, request_results);
+  std::move(callback).Run(request_results, config_success);
 }
 
 void DrmThread::TakeDisplayControl(base::OnceCallback<void(bool)> callback) {

@@ -15,6 +15,7 @@
 #include "base/allocator/partition_alloc_features.h"
 #include "base/at_exit.h"
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/cpu.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/debug/stack_trace.h"
@@ -66,6 +67,11 @@
 
 #if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 #include "partition_alloc/memory_reclaimer.h"
+#endif
+
+#if PA_BUILDFLAG( \
+    ENABLE_ALLOCATOR_SHIM_PARTITION_ALLOC_DISPATCH_WITH_ADVANCED_CHECKS_SUPPORT)
+#include "partition_alloc/shim/allocator_shim_default_dispatch_to_partition_alloc_with_advanced_checks.h"
 #endif
 
 #if BUILDFLAG(IS_ANDROID) && PA_BUILDFLAG(HAS_MEMORY_TAGGING)
@@ -141,7 +147,7 @@ BASE_FEATURE(kDisableMemoryReclaimerInBackground,
 // exceeded.
 BASE_FEATURE(kPartitionAllocShortMemoryReclaim,
              "PartitionAllocShortMemoryReclaim",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // static
 MemoryReclaimerSupport& MemoryReclaimerSupport::Instance() {
@@ -602,14 +608,22 @@ void CheckDanglingRawPtrBufferEmpty() {
                << entry->task_trace << "\n"
                << entry->stack_trace << "\n";
 #if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_INSTANCE_TRACER)
+    auto is_frame_ptr_not_null = [](const void* frame_ptr) {
+      return frame_ptr != nullptr;
+    };
     std::vector<std::array<const void*, 32>> stack_traces =
         internal::InstanceTracer::GetStackTracesForDanglingRefs(entry->id);
     for (const auto& raw_stack_trace : stack_traces) {
+      CHECK(ranges::is_partitioned(raw_stack_trace, is_frame_ptr_not_null))
+          << "`raw_stack_trace` is expected to be partitioned: non-null values "
+             "at the begining followed by `nullptr`s.";
       LOG(ERROR) << "Dangling reference from:\n";
-      LOG(ERROR) << debug::StackTrace(raw_stack_trace.data(),
-                                      raw_stack_trace.size() -
-                                          static_cast<size_t>(ranges::count(
-                                              raw_stack_trace, nullptr)))
+      LOG(ERROR) << debug::StackTrace(
+                        // This call truncates the `nullptr` tail of the stack
+                        // trace (see the `is_partitioned` CHECK above).
+                        make_span(raw_stack_trace.begin(),
+                                  ranges::partition_point(
+                                      raw_stack_trace, is_frame_ptr_not_null)))
                  << "\n";
     }
 #else
@@ -779,6 +793,46 @@ bool PartitionAllocSupport::ShouldEnableMemoryTagging(
 bool PartitionAllocSupport::ShouldEnableMemoryTaggingInRendererProcess() {
   return ShouldEnableMemoryTagging(switches::kRendererProcess);
 }
+
+// static
+bool PartitionAllocSupport::ShouldEnablePartitionAllocWithAdvancedChecks(
+    const std::string& process_type) {
+#if !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  return false;
+#else
+  if (!base::FeatureList::IsEnabled(
+          base::features::kPartitionAllocWithAdvancedChecks)) {
+    return false;
+  }
+
+  switch (base::features::kPartitionAllocWithAdvancedChecksEnabledProcessesParam
+              .Get()) {
+    case base::features::PartitionAllocWithAdvancedChecksEnabledProcesses::
+        kBrowserOnly:
+      return process_type.empty();
+    case base::features::PartitionAllocWithAdvancedChecksEnabledProcesses::
+        kBrowserAndRenderer:
+      return process_type.empty() || process_type == switches::kRendererProcess;
+    case base::features::PartitionAllocWithAdvancedChecksEnabledProcesses::
+        kNonRenderer:
+      return process_type != switches::kRendererProcess;
+    case base::features::PartitionAllocWithAdvancedChecksEnabledProcesses::
+        kAllProcesses:
+      return true;
+  }
+#endif  // !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+}
+
+#if PA_BUILDFLAG( \
+    ENABLE_ALLOCATOR_SHIM_PARTITION_ALLOC_DISPATCH_WITH_ADVANCED_CHECKS_SUPPORT)
+allocator_shim::AllocatorDispatch g_dispatch_for_advanced_checks = {
+    .realloc_function =
+        &allocator_shim::internal::PartitionReallocWithAdvancedChecks,
+    .free_function = &allocator_shim::internal::PartitionFreeWithAdvancedChecks,
+    .next = nullptr,
+};
+#endif  // PA_BUILDFLAG(
+        // ENABLE_ALLOCATOR_SHIM_PARTITION_ALLOC_DISPATCH_WITH_ADVANCED_CHECKS_SUPPORT)
 
 // static
 PartitionAllocSupport::BrpConfiguration
@@ -1074,6 +1128,17 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
     allocator_shim::internal::PartitionAllocMalloc::Allocator()
         ->EnableLargeEmptySlotSpanRing();
   }
+
+#if PA_BUILDFLAG( \
+    ENABLE_ALLOCATOR_SHIM_PARTITION_ALLOC_DISPATCH_WITH_ADVANCED_CHECKS_SUPPORT)
+  bool enable_pa_with_advanced_checks =
+      ShouldEnablePartitionAllocWithAdvancedChecks(process_type);
+  if (enable_pa_with_advanced_checks) {
+    allocator_shim::InstallDispatchToPartitionAllocWithAdvancedChecks(
+        &g_dispatch_for_advanced_checks);
+  }
+#endif  // PA_BUILDFLAG(
+        // ENABLE_ALLOCATOR_SHIM_PARTITION_ALLOC_DISPATCH_WITH_ADVANCED_CHECKS_SUPPORT)
 #endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
 #if BUILDFLAG(IS_WIN)

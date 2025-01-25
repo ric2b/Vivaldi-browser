@@ -159,7 +159,7 @@ bool PreLockdownSandboxHook(base::span<const uint8_t> delegate_blob) {
   content::mojom::sandbox::UtilityConfigPtr sandbox_config;
   if (!content::mojom::sandbox::UtilityConfig::Deserialize(
           delegate_blob.data(), delegate_blob.size(), &sandbox_config)) {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
   if (!sandbox_config->preload_libraries.empty()) {
     for (const auto& library_path : sandbox_config->preload_libraries) {
@@ -176,7 +176,7 @@ bool PreLockdownSandboxHook(base::span<const uint8_t> delegate_blob) {
         base::wcslcpy(dll_name, library_path.value().c_str(), MAX_PATH);
         base::debug::Alias(dll_name);
         base::debug::Alias(&lib_error);
-        NOTREACHED_NORETURN();
+        NOTREACHED();
       }
     }
   }
@@ -296,6 +296,9 @@ int UtilityMain(MainFunctionParams parameters) {
                              screen_ai::GetBinaryPathSwitch()));
       break;
 #endif
+    case sandbox::mojom::Sandbox::kVideoEffects:
+      // TODO(crbug.com/361128453): Implement this.
+      NOTREACHED() << "kVideoEffects sandbox not implemented.";
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
     case sandbox::mojom::Sandbox::kHardwareVideoDecoding:
       pre_sandbox_hook =
@@ -392,7 +395,7 @@ int UtilityMain(MainFunctionParams parameters) {
   // base::HighResolutionTimerManager here for future possible usage of high
   // resolution timer in service utility process.
   std::optional<base::HighResolutionTimerManager> hi_res_timer_manager;
-  if (base::PowerMonitor::IsInitialized()) {
+  if (base::PowerMonitor::GetInstance()->IsInitialized()) {
     hi_res_timer_manager.emplace();
   }
 

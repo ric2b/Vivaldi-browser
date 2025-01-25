@@ -176,12 +176,12 @@ int64_t av1_lowbd_pixel_proj_error_neon(
   return sse;
 }
 
-// We can accumulate up to 65536 8-bit multiplication results in 32-bit. We are
-// processing 2 pixels at a time, so the accumulator max can be as high as 32768
-// for the compute stats.
-#define STAT_ACCUMULATOR_MAX 32768
+// We can accumulate up to 32768 8-bit multiplication results in a signed
+// 32-bit integer. We are processing 2 pixels at a time, so the accumulator max
+// can be as high as 16384 for the compute stats.
+#define STAT_ACCUMULATOR_MAX 16384
 
-static INLINE uint8x8_t tbl2(uint8x16_t a, uint8x16_t b, uint8x8_t idx) {
+static inline uint8x8_t tbl2(uint8x16_t a, uint8x16_t b, uint8x8_t idx) {
 #if AOM_ARCH_AARCH64
   uint8x16x2_t table = { { a, b } };
   return vqtbl2_u8(table, idx);
@@ -192,7 +192,7 @@ static INLINE uint8x8_t tbl2(uint8x16_t a, uint8x16_t b, uint8x8_t idx) {
 #endif
 }
 
-static INLINE uint8x16_t tbl2q(uint8x16_t a, uint8x16_t b, uint8x16_t idx) {
+static inline uint8x16_t tbl2q(uint8x16_t a, uint8x16_t b, uint8x16_t idx) {
 #if AOM_ARCH_AARCH64
   uint8x16x2_t table = { { a, b } };
   return vqtbl2q_u8(table, idx);
@@ -208,7 +208,7 @@ static INLINE uint8x16_t tbl2q(uint8x16_t a, uint8x16_t b, uint8x16_t idx) {
 // computation. This function computes the final M from the accumulated
 // (src_s64) and the residual parts (src_s32). It also transposes the result as
 // the output needs to be column-major.
-static INLINE void acc_transpose_M(int64_t *dst, const int64_t *src_s64,
+static inline void acc_transpose_M(int64_t *dst, const int64_t *src_s64,
                                    const int32_t *src_s32, const int wiener_win,
                                    int scale) {
   for (int i = 0; i < wiener_win; ++i) {
@@ -281,7 +281,7 @@ static void update_H(int64_t *dst, const int64_t *src_s64,
 
 // Load 7x7 matrix into 3 and a half 128-bit vectors from consecutive rows, the
 // last load address is offset to prevent out-of-bounds access.
-static INLINE void load_and_pack_u8_8x7(uint8x16_t dst[4], const uint8_t *src,
+static inline void load_and_pack_u8_8x7(uint8x16_t dst[4], const uint8_t *src,
                                         ptrdiff_t stride) {
   dst[0] = vcombine_u8(vld1_u8(src), vld1_u8(src + stride));
   src += 2 * stride;
@@ -292,7 +292,7 @@ static INLINE void load_and_pack_u8_8x7(uint8x16_t dst[4], const uint8_t *src,
   dst[3] = vcombine_u8(vld1_u8(src - 1), vdup_n_u8(0));
 }
 
-static INLINE void compute_stats_win7_neon(const uint8_t *dgd,
+static inline void compute_stats_win7_neon(const uint8_t *dgd,
                                            const uint8_t *src, int width,
                                            int height, int dgd_stride,
                                            int src_stride, int avg, int64_t *M,
@@ -580,7 +580,7 @@ static INLINE void compute_stats_win7_neon(const uint8_t *dgd,
 
 // Load 5x5 matrix into 2 and a half 128-bit vectors from consecutive rows, the
 // last load address is offset to prevent out-of-bounds access.
-static INLINE void load_and_pack_u8_6x5(uint8x16_t dst[3], const uint8_t *src,
+static inline void load_and_pack_u8_6x5(uint8x16_t dst[3], const uint8_t *src,
                                         ptrdiff_t stride) {
   dst[0] = vcombine_u8(vld1_u8(src), vld1_u8(src + stride));
   src += 2 * stride;
@@ -589,7 +589,7 @@ static INLINE void load_and_pack_u8_6x5(uint8x16_t dst[3], const uint8_t *src,
   dst[2] = vcombine_u8(vld1_u8(src - 3), vdup_n_u8(0));
 }
 
-static INLINE void compute_stats_win5_neon(const uint8_t *dgd,
+static inline void compute_stats_win5_neon(const uint8_t *dgd,
                                            const uint8_t *src, int width,
                                            int height, int dgd_stride,
                                            int src_stride, int avg, int64_t *M,
@@ -826,7 +826,7 @@ static INLINE void compute_stats_win5_neon(const uint8_t *dgd,
            downsample_factor);
 }
 
-static INLINE uint8_t find_average_neon(const uint8_t *src, int src_stride,
+static inline uint8_t find_average_neon(const uint8_t *src, int src_stride,
                                         int width, int height) {
   uint64_t sum = 0;
 
@@ -986,7 +986,7 @@ void av1_compute_stats_neon(int wiener_win, const uint8_t *dgd,
   }
 }
 
-static INLINE void calc_proj_params_r0_r1_neon(
+static inline void calc_proj_params_r0_r1_neon(
     const uint8_t *src8, int width, int height, int src_stride,
     const uint8_t *dat8, int dat_stride, int32_t *flt0, int flt0_stride,
     int32_t *flt1, int flt1_stride, int64_t H[2][2], int64_t C[2]) {
@@ -1075,7 +1075,7 @@ static INLINE void calc_proj_params_r0_r1_neon(
   C[1] = horizontal_add_s64x2(vaddq_s64(c1_lo, c1_hi)) / size;
 }
 
-static INLINE void calc_proj_params_r0_neon(const uint8_t *src8, int width,
+static inline void calc_proj_params_r0_neon(const uint8_t *src8, int width,
                                             int height, int src_stride,
                                             const uint8_t *dat8, int dat_stride,
                                             int32_t *flt0, int flt0_stride,
@@ -1133,7 +1133,7 @@ static INLINE void calc_proj_params_r0_neon(const uint8_t *src8, int width,
   C[0] = horizontal_add_s64x2(vaddq_s64(c0_lo, c0_hi)) / size;
 }
 
-static INLINE void calc_proj_params_r1_neon(const uint8_t *src8, int width,
+static inline void calc_proj_params_r1_neon(const uint8_t *src8, int width,
                                             int height, int src_stride,
                                             const uint8_t *dat8, int dat_stride,
                                             int32_t *flt1, int flt1_stride,

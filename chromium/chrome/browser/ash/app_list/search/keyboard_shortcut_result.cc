@@ -11,6 +11,7 @@
 
 #include "ash/accelerators/keyboard_code_util.h"
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/mojom/accelerator_info.mojom-shared.h"
 #include "ash/public/mojom/accelerator_info.mojom.h"
 #include "ash/shell.h"
@@ -19,6 +20,7 @@
 #include "base/check.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/i18n/rtl.h"
+#include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -35,6 +37,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#include "chromeos/ash/resources/internal/strings/grit/ash_internal_strings.h"
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 namespace app_list {
 
@@ -67,6 +73,8 @@ std::optional<int> GetStringIdForIconCode(IconCode icon_code) {
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_BROWSER_BACK;
     case ash::SearchResultTextItem::kKeyboardShortcutBrowserForward:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_BROWSER_FORWARD;
+    case ash::SearchResultTextItem::kKeyboardShortcutBrowserHome:
+      return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_BROWSER_HOME;
     case ash::SearchResultTextItem::kKeyboardShortcutBrowserRefresh:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_BROWSER_REFRESH;
     case ash::SearchResultTextItem::kKeyboardShortcutBrowserSearch:
@@ -82,9 +90,12 @@ std::optional<int> GetStringIdForIconCode(IconCode icon_code) {
     case ash::SearchResultTextItem::kKeyboardShortcutZoom:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_ZOOM_TOGGLE;
     case ash::SearchResultTextItem::kKeyboardShortcutMediaLaunchApp1:
+    case ash::SearchResultTextItem::kKeyboardShortcutMediaLaunchApp1Refresh:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_LAUNCH_APPLICATION1;
     case ash::SearchResultTextItem::kKeyboardShortcutMediaFastForward:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_MEDIA_FAST_FORWARD;
+    case ash::SearchResultTextItem::kKeyboardShortcutMediaLaunchMail:
+      return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_LAUNCH_MAIL;
     case ash::SearchResultTextItem::kKeyboardShortcutMediaPause:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_MEDIA_PAUSE;
     case ash::SearchResultTextItem::kKeyboardShortcutMediaPlay:
@@ -100,6 +111,7 @@ std::optional<int> GetStringIdForIconCode(IconCode icon_code) {
     case ash::SearchResultTextItem::kKeyboardShortcutKeyboardBrightnessDown:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_KEYBOARD_BRIGHTNESS_DOWN;
     case ash::SearchResultTextItem::kKeyboardShortcutBrightnessUp:
+    case ash::SearchResultTextItem::kKeyboardShortcutBrightnessUpRefresh:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_BRIGHTNESS_UP;
     case ash::SearchResultTextItem::kKeyboardShortcutKeyboardBrightnessUp:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_KEYBOARD_BRIGHTNESS_UP;
@@ -124,9 +136,18 @@ std::optional<int> GetStringIdForIconCode(IconCode icon_code) {
     case ash::SearchResultTextItem::kKeyboardShortcutSnapshot:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_PRINT_SCREEN;
     case ash::SearchResultTextItem::kKeyboardShortcutLauncher:
+    case ash::SearchResultTextItem::kKeyboardShortcutLauncherRefresh:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_OPEN_LAUNCHER;
     case ash::SearchResultTextItem::kKeyboardShortcutSearch:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_OPEN_SEARCH;
+    case ash::SearchResultTextItem::kKeyboardShortcutAccessibility:
+      return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_ACCESSIBILITY;
+    case ash::SearchResultTextItem::kKeyboardShortcutKeyboardRightAlt:
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      return IDS_KEYBOARD_RIGHT_ALT_LABEL;
+#else
+      return IDS_SHORTCUT_CUSTOMIZATION_INPUT_KEY_PLACEHOLDER;
+#endif
   }
 }
 
@@ -167,6 +188,8 @@ std::optional<IconCode> KeyboardShortcutResult::GetIconCodeFromKeyboardCode(
       return IconCode::kKeyboardShortcutBrowserBack;
     case (KeyboardCode::VKEY_BROWSER_FORWARD):
       return IconCode::kKeyboardShortcutBrowserForward;
+    case (KeyboardCode::VKEY_BROWSER_HOME):
+      return IconCode::kKeyboardShortcutBrowserHome;
     case (KeyboardCode::VKEY_BROWSER_REFRESH):
       return IconCode::kKeyboardShortcutBrowserRefresh;
     case (KeyboardCode::VKEY_BROWSER_SEARCH):
@@ -178,7 +201,11 @@ std::optional<IconCode> KeyboardShortcutResult::GetIconCodeFromKeyboardCode(
     case (KeyboardCode::VKEY_ZOOM):
       return IconCode::kKeyboardShortcutZoom;
     case (KeyboardCode::VKEY_MEDIA_LAUNCH_APP1):
-      return IconCode::kKeyboardShortcutMediaLaunchApp1;
+      return ash::Shell::Get()->keyboard_capability()->UseRefreshedIcons()
+                 ? IconCode::kKeyboardShortcutMediaLaunchApp1Refresh
+                 : IconCode::kKeyboardShortcutMediaLaunchApp1;
+    case (KeyboardCode::VKEY_MEDIA_LAUNCH_MAIL):
+      return IconCode::kKeyboardShortcutMediaLaunchMail;
     case (KeyboardCode::VKEY_MEDIA_NEXT_TRACK):
       return IconCode::kKeyboardShortcutMediaTrackNext;
     case (KeyboardCode::VKEY_MEDIA_PREV_TRACK):
@@ -189,12 +216,20 @@ std::optional<IconCode> KeyboardShortcutResult::GetIconCodeFromKeyboardCode(
       return IconCode::kKeyboardShortcutMediaPause;
     case (KeyboardCode::VKEY_MEDIA_PLAY_PAUSE):
       return IconCode::kKeyboardShortcutMediaPlayPause;
+    case (KeyboardCode::VKEY_KBD_BACKLIGHT_TOGGLE):
+      return IconCode::kKeyboardShortcutKeyboardBacklightToggle;
+    case (KeyboardCode::VKEY_KBD_BRIGHTNESS_DOWN):
+      return IconCode::kKeyboardShortcutKeyboardBrightnessDown;
+    case (KeyboardCode::VKEY_KBD_BRIGHTNESS_UP):
+      return IconCode::kKeyboardShortcutKeyboardBrightnessUp;
     case (KeyboardCode::VKEY_OEM_104):
       return IconCode::kKeyboardShortcutMediaFastForward;
     case (KeyboardCode::VKEY_BRIGHTNESS_DOWN):
       return IconCode::kKeyboardShortcutBrightnessDown;
     case (KeyboardCode::VKEY_BRIGHTNESS_UP):
-      return IconCode::kKeyboardShortcutBrightnessUp;
+      return ash::Shell::Get()->keyboard_capability()->UseRefreshedIcons()
+                 ? IconCode::kKeyboardShortcutBrightnessUpRefresh
+                 : IconCode::kKeyboardShortcutBrightnessUp;
     case (KeyboardCode::VKEY_VOLUME_MUTE):
       return IconCode::kKeyboardShortcutVolumeMute;
     case (KeyboardCode::VKEY_VOLUME_DOWN):
@@ -220,11 +255,17 @@ std::optional<IconCode> KeyboardShortcutResult::GetIconCodeFromKeyboardCode(
       // The search and launcher are the same. The icon we display is dependent
       // on a best-attempt heuristic on whether the chromebook internal keyboard
       // is a launcher or magnifier icon.
-      return ash::Shell::Get()
-                     ->keyboard_capability()
-                     ->HasLauncherButtonOnAnyKeyboard()
-                 ? IconCode::kKeyboardShortcutLauncher
-                 : IconCode::kKeyboardShortcutSearch;
+      switch (ash::Shell::Get()->keyboard_capability()->GetMetaKeyToDisplay()) {
+        case ui::mojom::MetaKey::kSearch:
+          return IconCode::kKeyboardShortcutSearch;
+        case ui::mojom::MetaKey::kLauncher:
+          return IconCode::kKeyboardShortcutLauncher;
+        case ui::mojom::MetaKey::kLauncherRefresh:
+          return IconCode::kKeyboardShortcutLauncherRefresh;
+        case ui::mojom::MetaKey::kExternalMeta:
+        case ui::mojom::MetaKey::kCommand:
+          NOTREACHED();
+      }
     case (KeyboardCode::VKEY_MEDIA_LAUNCH_APP2):
       return IconCode::kKeyboardShortcutCalculator;
     case (KeyboardCode::VKEY_ALL_APPLICATIONS):
@@ -235,6 +276,12 @@ std::optional<IconCode> KeyboardShortcutResult::GetIconCodeFromKeyboardCode(
       return IconCode::kKeyboardShortcutInputModeChange;
     case (KeyboardCode::VKEY_MICROPHONE_MUTE_TOGGLE):
       return IconCode::kKeyboardShortcutMicrophone;
+    case (KeyboardCode::VKEY_ACCESSIBILITY):
+      return IconCode::kKeyboardShortcutAccessibility;
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+    case (KeyboardCode::VKEY_RIGHT_ALT):
+      return IconCode::kKeyboardShortcutKeyboardRightAlt;
+#endif
     default:
       return std::nullopt;
   }
@@ -246,7 +293,8 @@ std::optional<ash::SearchResultTextItem::IconCode>
 KeyboardShortcutResult::GetIconCodeByKeyString(std::u16string_view key_string) {
   static constexpr auto kIconCodes = base::MakeFixedFlatMap<std::u16string_view,
                                                             IconCode>(
-      {{u"ArrowDown", IconCode::kKeyboardShortcutDown},
+      {{u"Accessibility", IconCode::kKeyboardShortcutAccessibility},
+       {u"ArrowDown", IconCode::kKeyboardShortcutDown},
        {u"ArrowLeft", IconCode::kKeyboardShortcutLeft},
        {u"ArrowRight", IconCode::kKeyboardShortcutRight},
        {u"ArrowUp", IconCode::kKeyboardShortcutUp},
@@ -257,6 +305,7 @@ KeyboardShortcutResult::GetIconCodeByKeyString(std::u16string_view key_string) {
        {u"BrightnessUp", IconCode::kKeyboardShortcutBrightnessUp},
        {u"BrowserBack", IconCode::kKeyboardShortcutBrowserBack},
        {u"BrowserForward", IconCode::kKeyboardShortcutBrowserForward},
+       {u"BrowserHome", IconCode::kKeyboardShortcutBrowserHome},
        {u"BrowserRefresh", IconCode::kKeyboardShortcutBrowserRefresh},
        {u"BrowserSearch", IconCode::kKeyboardShortcutBrowserSearch},
        {u"EmojiPicker", IconCode::kKeyboardShortcutEmojiPicker},
@@ -271,6 +320,7 @@ KeyboardShortcutResult::GetIconCodeByKeyString(std::u16string_view key_string) {
        {u"LaunchApplication2", IconCode::kKeyboardShortcutCalculator},
        {u"LaunchAssistant", IconCode::kKeyboardShortcutAssistant},
        {u"MediaFastForward", IconCode::kKeyboardShortcutMediaFastForward},
+       {u"MediaLaunchMail", IconCode::kKeyboardShortcutMediaLaunchMail},
        {u"MediaPause", IconCode::kKeyboardShortcutMediaPause},
        {u"MediaPlay", IconCode::kKeyboardShortcutMediaPlay},
        {u"MediaPlayPause", IconCode::kKeyboardShortcutMediaPlayPause},
@@ -281,9 +331,26 @@ KeyboardShortcutResult::GetIconCodeByKeyString(std::u16string_view key_string) {
        {u"Power", IconCode::kKeyboardShortcutPower},
        {u"PrintScreen", IconCode::kKeyboardShortcutSnapshot},
        {u"PrivacyScreenToggle", IconCode::kKeyboardShortcutPrivacyScreenToggle},
+       {u"RightAlt", IconCode::kKeyboardShortcutKeyboardRightAlt},
        {u"Settings", IconCode::kKeyboardShortcutSettings},
        {u"ViewAllApps", IconCode::kKeyboardShortcutAllApps},
        {u"ZoomToggle", IconCode::kKeyboardShortcutZoom}});
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  static constexpr auto kRefreshIconCodes =
+      base::MakeFixedFlatMap<std::u16string_view, IconCode>(
+          {{u"LaunchApplication1",
+            IconCode::kKeyboardShortcutMediaLaunchApp1Refresh},
+           {u"BrightnessUp", IconCode::kKeyboardShortcutBrightnessUpRefresh}});
+
+  // If there is a refreshed version of the given key, give priority to the new
+  // icons.
+  auto it_refresh = kRefreshIconCodes.find(key_string);
+  if (ash::Shell::Get()->keyboard_capability()->UseRefreshedIcons() &&
+      it_refresh != kRefreshIconCodes.end()) {
+    return it_refresh->second;
+  }
+#endif
 
   auto it = kIconCodes.find(key_string);
   if (it == kIconCodes.end()) {

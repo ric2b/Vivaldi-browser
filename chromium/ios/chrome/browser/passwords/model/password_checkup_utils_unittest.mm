@@ -20,7 +20,7 @@
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_password_check_manager_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
@@ -105,7 +105,7 @@ class PasswordCheckupUtilsTest : public PlatformTest {
           return std::unique_ptr<KeyedService>(
               std::make_unique<affiliations::FakeAffiliationService>());
         })));
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
     store_ =
         base::WrapRefCounted(static_cast<password_manager::TestPasswordStore*>(
             IOSChromeProfilePasswordStoreFactory::GetForBrowserState(
@@ -253,8 +253,8 @@ TEST_F(PasswordCheckupUtilsTest, CheckPasswordCountForWarningType) {
 
 // Tests that the correct string is returned with the right timestamp.
 TEST_F(PasswordCheckupUtilsTest, ElapsedTimeSinceLastCheck) {
-  EXPECT_NSEQ(@"Check never run.", FormatElapsedTimeSinceLastCheck(
-                                       manager().GetLastPasswordCheckTime()));
+  EXPECT_NSEQ(@"Check never run", FormatElapsedTimeSinceLastCheck(
+                                      manager().GetLastPasswordCheckTime()));
 
   base::Time expected1 = base::Time::Now() - base::Seconds(10);
   browser_state()->GetPrefs()->SetDouble(
@@ -272,28 +272,6 @@ TEST_F(PasswordCheckupUtilsTest, ElapsedTimeSinceLastCheck) {
   EXPECT_NSEQ(
       @"Checked 5 minutes ago",
       FormatElapsedTimeSinceLastCheck(manager().GetLastPasswordCheckTime()));
-}
-
-// Verifies the title case format of elapsed time string.
-TEST_F(PasswordCheckupUtilsTest, ElapsedTimeSinceLastCheckInTitleCase) {
-  base::Time expected1 = base::Time::Now() - base::Seconds(10);
-  browser_state()->GetPrefs()->SetDouble(
-      password_manager::prefs::kLastTimePasswordCheckCompleted,
-      expected1.InSecondsFSinceUnixEpoch());
-
-  EXPECT_NSEQ(@"Checked Just Now", FormatElapsedTimeSinceLastCheck(
-                                       manager().GetLastPasswordCheckTime(),
-                                       /*use_title_case=*/true));
-
-  base::Time expected2 = base::Time::Now() - base::Minutes(5);
-  browser_state()->GetPrefs()->SetDouble(
-      password_manager::prefs::kLastTimePasswordCheckCompleted,
-      expected2.InSecondsFSinceUnixEpoch());
-
-  EXPECT_NSEQ(
-      @"Checked 5 Minutes Ago",
-      FormatElapsedTimeSinceLastCheck(manager().GetLastPasswordCheckTime(),
-                                      /*use_title_case=*/true));
 }
 
 // Tests that the correct passwords are returned for each warning type.

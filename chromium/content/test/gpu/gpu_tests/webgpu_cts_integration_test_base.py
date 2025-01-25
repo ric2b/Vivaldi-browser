@@ -19,6 +19,7 @@ from gpu_tests import common_typing as ct
 from gpu_tests import gpu_integration_test
 from gpu_tests.util import host_information
 from gpu_tests.util import websocket_server as wss
+from gpu_tests.util import websocket_utils as wsu
 from typ import expectations_parser
 
 import gpu_path_util
@@ -93,6 +94,12 @@ class WebGpuCtsIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
   # faster than checking the URL every time, and given how fast these tests are,
   # additional overhead like that can add up quickly.
   page_loaded = False
+
+  # The first attempt to handle the websocket connection flakily takes
+  # significantly longer, potentially due to resource contention from all
+  # parallel browsers starting at the same time. See crbug.com/344009517 for
+  # more information.
+  attempted_websocket_connection = False
 
   _test_timeout = DEFAULT_TEST_TIMEOUT
   _enable_dawn_backend_validation = False
@@ -205,6 +212,10 @@ class WebGpuCtsIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
         disable_dawn_features.append('use_dxc')
       else:
         enable_dawn_features.append('use_dxc')
+
+    # TODO(crbug.com/364675466): Remove this when Tint IR is launched on macOS.
+    if host_information.IsMac():
+      enable_dawn_features.append('use_tint_ir')
 
     if enable_dawn_features:
       browser_args.append('--enable-dawn-features=%s' %
@@ -583,7 +594,12 @@ class WebGpuCtsIntegrationTestBase(gpu_integration_test.GpuIntegrationTest):
         'window.setupWebsocket != undefined')
     self.tab.action_runner.ExecuteJavaScript('window.setupWebsocket("%s")' %
                                              cls.websocket_server.server_port)
-    cls.websocket_server.WaitForConnection()
+    timeout_multiplier = 1
+    if not cls.attempted_websocket_connection:
+      cls.attempted_websocket_connection = True
+      timeout_multiplier = 2
+    cls.websocket_server.WaitForConnection(
+        timeout_multiplier * wsu.GetScaledConnectionTimeout(self.child.jobs))
 
     # Wait for the page to set up the websocket.
     response = cls.websocket_server.Receive(MESSAGE_TIMEOUT_CONNECTION_ACK)

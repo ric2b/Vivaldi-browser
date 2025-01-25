@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <drm_fourcc.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -208,6 +213,7 @@ TEST_P(HardwareDisplayPlaneManagerTest, ResettingConnectorCache) {
   for (size_t i = 0; i < connector_and_crtc_count; ++i) {
     auto& connector_properties = drm_state.connector_properties.emplace_back();
     connector_properties.id = kConnectorIdBase + i;
+    connector_properties.connection = true;
     connector_properties.properties.push_back(
         {.id = kCrtcIdPropId, .value = 0});
   }
@@ -1966,6 +1972,109 @@ TEST_P(HardwareDisplayPlaneManagerAtomicTest, OverlaySourceCrop) {
   }
 }
 
+TEST_P(HardwareDisplayPlaneManagerAtomicTest, ColorEncodingAndRange) {
+  // These values are chosen arbitrarily % avoiding 0 in order to test that the
+  // classes under test don't assume that a value of 0 is special,
+  constexpr uint64_t kColorEncodingBT601 = 2u;
+  constexpr uint64_t kColorEncodingBT709 = 3u;
+  constexpr uint64_t kColorRangeLimited = 4u;
+  constexpr uint64_t kColorRangeFull = 5u;
+
+  fake_drm_->ResetStateWithDefaultObjects(
+      /*crtc_count=*/1, /*planes_per_crtc=*/1, /*movable_planes=*/0,
+      /*plane_supported_formats=*/{DRM_FORMAT_NV12});
+
+  fake_drm_->SetPossibleValuesForEnumProperty(
+      /*property_id=*/kColorEncodingPropId, /*values=*/{
+          {kColorEncodingBT601, "ITU-R BT.601 YCbCr"},
+          {kColorEncodingBT709, "ITU-R BT.709 YCbCr"},
+      });
+  fake_drm_->AddProperty(
+      /*object_id=*/fake_drm_->plane_property(0).id,
+      {.id = kColorEncodingPropId, .value = kColorEncodingBT601});
+
+  fake_drm_->SetPossibleValuesForEnumProperty(
+      /*property_id=*/kColorRangePropId, /*values=*/{
+          {kColorRangeLimited, "YCbCr limited range"},
+          {kColorRangeFull, "YCbCr full range"},
+      });
+  fake_drm_->AddProperty(/*object_id=*/fake_drm_->plane_property(0).id,
+                         {.id = kColorRangePropId, .value = kColorRangeFull});
+
+  fake_drm_->InitializeState(use_atomic_);
+
+  // TODO: bug 233667677 - Notice that the `expected_color_range` is always
+  // limited regardless of the `color_space`. That's because we're currently not
+  // confident about having widespread support for full range, so the
+  // HardwareDisplayPlaneAtomic should always set the range to limited.
+  // Eventually, we'll probably want to plumb the right range.
+  struct TestCase {
+    gfx::ColorSpace color_space;
+    uint64_t expected_color_encoding;
+    uint64_t expected_color_range;
+  };
+  std::vector<TestCase> test_cases = {
+      {
+          .color_space = gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT709,
+                                         gfx::ColorSpace::TransferID::BT709,
+                                         gfx::ColorSpace::MatrixID::BT709,
+                                         gfx::ColorSpace::RangeID::LIMITED),
+          .expected_color_encoding = kColorEncodingBT709,
+          .expected_color_range = kColorRangeLimited,
+      },
+      {
+          .color_space = gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT709,
+                                         gfx::ColorSpace::TransferID::BT709,
+                                         gfx::ColorSpace::MatrixID::BT709,
+                                         gfx::ColorSpace::RangeID::FULL),
+          .expected_color_encoding = kColorEncodingBT709,
+          .expected_color_range = kColorRangeLimited,
+      },
+      {
+          .color_space = gfx::ColorSpace(gfx::ColorSpace::PrimaryID::SMPTE170M,
+                                         gfx::ColorSpace::TransferID::SMPTE170M,
+                                         gfx::ColorSpace::MatrixID::SMPTE170M,
+                                         gfx::ColorSpace::RangeID::LIMITED),
+          .expected_color_encoding = kColorEncodingBT601,
+          .expected_color_range = kColorRangeLimited,
+      },
+      {
+          .color_space = gfx::ColorSpace(gfx::ColorSpace::PrimaryID::SMPTE170M,
+                                         gfx::ColorSpace::TransferID::SMPTE170M,
+                                         gfx::ColorSpace::MatrixID::SMPTE170M,
+                                         gfx::ColorSpace::RangeID::FULL),
+          .expected_color_encoding = kColorEncodingBT601,
+          .expected_color_range = kColorRangeLimited,
+      },
+  };
+
+  for (const auto& test_case : test_cases) {
+    DrmOverlayPlaneList assigns;
+    std::unique_ptr<GbmBuffer> buffer = fake_drm_->gbm_device()->CreateBuffer(
+        DRM_FORMAT_NV12, kDefaultBufferSize, GBM_BO_USE_SCANOUT);
+    scoped_refptr<DrmFramebuffer> framebuffer_original =
+        DrmFramebuffer::AddFramebuffer(fake_drm_, buffer.get(),
+                                       kDefaultBufferSize, {}, true);
+    assigns.push_back(DrmOverlayPlane::TestPlane(framebuffer_original));
+    assigns.back().color_space = test_case.color_space;
+
+    fake_drm_->plane_manager()->BeginFrame(&state_);
+    EXPECT_TRUE(fake_drm_->plane_manager()->AssignOverlayPlanes(
+        &state_, assigns, fake_drm_->crtc_property(0).id));
+
+    scoped_refptr<PageFlipRequest> page_flip_request =
+        base::MakeRefCounted<PageFlipRequest>(base::TimeDelta());
+    gfx::GpuFenceHandle release_fence;
+    EXPECT_TRUE(fake_drm_->plane_manager()->Commit(&state_, page_flip_request,
+                                                   &release_fence));
+
+    EXPECT_EQ(test_case.expected_color_encoding,
+              GetPlanePropertyValue(kPlaneOffset, "COLOR_ENCODING"));
+    EXPECT_EQ(test_case.expected_color_range,
+              GetPlanePropertyValue(kPlaneOffset, "COLOR_RANGE"));
+  }
+}
+
 TEST_P(HardwareDisplayPlaneManagerAtomicTest, OldPlaneInAnotherList) {
   fake_drm_->ResetStateWithDefaultObjects(/*connector_and_crtc_count=*/2,
                                           /*planes_per_crtc=*/1);
@@ -2071,11 +2180,13 @@ TEST(HardwareDisplayPlaneManagerAtomic, EnableBlend) {
       drm_device, buffer.get(), kDefaultBufferSize);
   DrmOverlayPlane overlay(DrmOverlayPlane::TestPlane(framebuffer));
   overlay.enable_blend = true;
-  plane_manager->SetPlaneData(&plane_list, &hw_plane, overlay, 1, gfx::Rect());
+  plane_manager->SetPlaneData(&plane_list, &hw_plane, overlay, 1, std::nullopt,
+                              gfx::Rect());
   EXPECT_EQ(hw_plane.framebuffer(), framebuffer->framebuffer_id());
 
   overlay.enable_blend = false;
-  plane_manager->SetPlaneData(&plane_list, &hw_plane, overlay, 1, gfx::Rect());
+  plane_manager->SetPlaneData(&plane_list, &hw_plane, overlay, 1, std::nullopt,
+                              gfx::Rect());
   EXPECT_EQ(hw_plane.framebuffer(), framebuffer->opaque_framebuffer_id());
 }
 
@@ -2143,5 +2254,31 @@ TEST_F(HardwareDisplayPlaneManagerSeamlessModeTest,
   EXPECT_NE(wrong_crtc_id, crtc_id_);
   EXPECT_DCHECK_DEATH(
       plane_manager_->TestSeamlessMode(wrong_crtc_id, arbitrary_mode));
+}
+
+TEST_P(HardwareDisplayPlaneManagerAtomicTest, CrtcOffsetPageFlip) {
+  fake_drm_->ResetStateWithDefaultObjects(
+      /*crtc_count=*/1, /*planes_per_crtc=*/1);
+  fake_drm_->InitializeState(/*use_atomic=*/true);
+
+  DrmOverlayPlaneList assigns;
+  assigns.push_back(DrmOverlayPlane::TestPlane(fake_buffer_));
+  HardwareDisplayPlaneList hdpl;
+
+  const gfx::Point crtc_offset = gfx::Point(-100, -200);
+  scoped_refptr<PageFlipRequest> page_flip_request =
+      base::MakeRefCounted<PageFlipRequest>(base::TimeDelta());
+  fake_drm_->plane_manager()->BeginFrame(&hdpl);
+  EXPECT_TRUE(fake_drm_->plane_manager()->AssignOverlayPlanes(
+      &hdpl, assigns, fake_drm_->crtc_property(0).id, crtc_offset));
+  EXPECT_TRUE(
+      fake_drm_->plane_manager()->Commit(&hdpl, page_flip_request, nullptr));
+
+  // DrmWrapper::Property::value is a uint64_t, even though the crtc offset is
+  // negative.
+  EXPECT_EQ(GetPlanePropertyValue(kPlaneOffset, "CRTC_X"),
+            static_cast<uint64_t>(-100));
+  EXPECT_EQ(GetPlanePropertyValue(kPlaneOffset, "CRTC_Y"),
+            static_cast<uint64_t>(-200));
 }
 }  // namespace ui

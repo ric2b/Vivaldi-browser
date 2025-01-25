@@ -93,25 +93,10 @@ def update(options):
     subprocess.check_call(['gclient', 'sync'], cwd=options.chromium_dir)
 
 
-def get_hook_action(options, hook_name, project_dir):
-    """Parses Chromium DEPS file and returns the action for the given hook.
-    """
-    sys.path.append(os.path.join(project_dir, 'third_party', 'depot_tools'))
-    import gclient_eval
-
-    filepath = os.path.join(project_dir, 'DEPS')
-    with open(filepath) as deps_file:
-        deps = gclient_eval.Parse(deps_file.read(), filepath)
-    for hook in deps['hooks']:
-        if hook['name'] == hook_name:
-            return hook['action']
-    raise RuntimeError(f'{hook_name} hook not found in DEPS')
-
-
 def sync_node(options):
-    """Executes the nodejs sync hook from Devtools DEPS file."""
-    action = get_hook_action(options, 'node_linux64', options.devtools_dir)
-    subprocess.check_call(action, cwd=options.devtools_dir)
+    """Node is managed as a standard GCS deps so we run gclient sync but without hooks"""
+    subprocess.check_call(['gclient', 'sync', '--nohooks'],
+                          cwd=options.devtools_dir)
 
 
 def copy_files(options):
@@ -130,15 +115,6 @@ def generate_signatures(options):
         node_path(options),
         os.path.join(options.devtools_dir, 'scripts', 'javascript_natives',
                      'index.js'), options.chromium_dir, options.devtools_dir
-    ])
-
-
-def generate_dom_pinned_properties(options):
-    print('generating DOM pinned properties dataset from .idl definitions')
-    subprocess.check_call([
-        node_path(options),
-        os.path.join(options.devtools_dir, 'scripts', 'webidl-properties',
-                     'index.js'), options.devtools_dir
     ])
 
 
@@ -170,9 +146,15 @@ def run_eslint(options):
     subprocess.check_call([
         node_path(options),
         os.path.join(options.devtools_dir, 'scripts', 'test',
-                     'run_lint_check_js.mjs')
+                     'run_lint_check.js')
     ] + generated_source_files,
                           cwd=options.devtools_dir)
+
+
+def files_changed(options):
+    return subprocess.check_output(['git', 'diff', '--name-only'],
+                                   cwd=options.devtools_dir,
+                                   text=True).strip()
 
 
 def update_deps_revision(options):
@@ -205,12 +187,12 @@ if __name__ == '__main__':
     OPTIONS = parse_options(sys.argv[1:])
     if OPTIONS.ref == ReferenceMode.Tot:
         update(OPTIONS)
-    if OPTIONS.update_node:
+    elif OPTIONS.update_node:
         sync_node(OPTIONS)
     copy_files(OPTIONS)
     generate_signatures(OPTIONS)
-    generate_dom_pinned_properties(OPTIONS)
     generate_protocol_resources(OPTIONS)
-    run_git_cl_format(OPTIONS)
-    run_eslint(OPTIONS)
-    update_deps_revision(OPTIONS)
+    if files_changed(OPTIONS):
+        run_git_cl_format(OPTIONS)
+        run_eslint(OPTIONS)
+        update_deps_revision(OPTIONS)

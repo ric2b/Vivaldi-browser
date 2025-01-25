@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/extensions/extensions_ui.h"
 
 #include <memory>
@@ -18,11 +23,10 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/extensions/chrome_extension_browser_constants.h"
 #include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
 #include "chrome/browser/extensions/mv2_experiment_stage.h"
+#include "chrome/browser/extensions/permissions_url_constants.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/extensions/extensions_hats_handler.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/managed_ui_handler.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
@@ -57,8 +61,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/crosapi/browser_util.h"
-#include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
-#include "chrome/browser/ui/webui/extensions/ash/kiosk_apps_handler.h"
 #endif
 
 namespace extensions {
@@ -443,8 +445,9 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
                   extension_urls::kExtensionsSidebarUtmSource),
               g_browser_process->GetApplicationLocale())
               .spec()));
-  source->AddString("hostPermissionsLearnMoreLink",
-                    chrome_extension_constants::kRuntimeHostPermissionsHelpURL);
+  source->AddString(
+      "hostPermissionsLearnMoreLink",
+      extension_permissions_constants::kRuntimeHostPermissionsHelpURL);
   source->AddBoolean(kInDevModeKey, in_dev_mode);
   source->AddBoolean(kShowActivityLogKey,
                      base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -461,7 +464,7 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
                          extensions_features::kExtensionsMenuAccessControl));
   source->AddString(
       "showAccessRequestsInToolbarLearnMoreLink",
-      chrome_extension_constants::kShowAccessRequestsInToolbarHelpURL);
+      extension_permissions_constants::kShowAccessRequestsInToolbarHelpURL);
   source->AddBoolean(
       "enableUserPermittedSites",
       base::FeatureList::IsEnabled(
@@ -527,15 +530,6 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui)
 
   source = CreateAndAddExtensionsSource(profile, *in_dev_mode_);
   ManagedUIHandler::Initialize(web_ui, source);
-
-  auto safety_check_hats_handler =
-      std::make_unique<ExtensionsHatsHandler>(profile);
-  web_ui->AddMessageHandler(std::move(safety_check_hats_handler));
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  web_ui->AddMessageHandler(std::make_unique<ash::KioskAppsHandler>(
-      ash::OwnerSettingsServiceAshFactory::GetForBrowserContext(profile)));
-#endif
 
   // Need to allow <object> elements so that the <extensionoptions> browser
   // plugin can be loaded within chrome://extensions.

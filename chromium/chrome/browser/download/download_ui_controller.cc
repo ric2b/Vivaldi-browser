@@ -18,9 +18,9 @@
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_shelf.h"
 #include "chrome/browser/download/download_stats.h"
-#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/common/pref_names.h"
 #include "components/download/public/common/download_item.h"
+#include "components/security_state/content/security_state_tab_helper.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/web_contents.h"
@@ -327,6 +327,7 @@ void DownloadUIController::OnDownloadUpdated(content::DownloadManager* manager,
   if (manager && manager->GetDelegate() &&
       manager->GetDelegate()->ShouldOpenPdfInline() &&
       !item->IsMustDownload() &&
+      item->GetState() == download::DownloadItem::IN_PROGRESS &&
       base::EqualsCaseInsensitiveASCII(item->GetMimeType(),
                                        pdf::kPDFMimeType)) {
     needs_to_render = true;

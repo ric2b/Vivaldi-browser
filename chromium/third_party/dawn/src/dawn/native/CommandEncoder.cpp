@@ -58,6 +58,7 @@
 #include "dawn/native/RenderPassWorkaroundsHelper.h"
 #include "dawn/native/RenderPipeline.h"
 #include "dawn/native/ValidationUtils_autogen.h"
+#include "dawn/native/utils/WGPUHelpers.h"
 #include "dawn/platform/DawnPlatform.h"
 #include "dawn/platform/tracing/TraceEvent.h"
 
@@ -823,6 +824,26 @@ ResultOrError<UnpackedPtr<RenderPassDescriptor>> ValidateRenderPassDescriptor(
                         wgpu::LoadOp::ExpandResolveTexture);
     }
 
+    if (const auto* rect = descriptor.Get<RenderPassDescriptorExpandResolveRect>()) {
+        DAWN_INVALID_IF(!device->HasFeature(Feature::DawnPartialLoadResolveTexture),
+                        "RenderPassDescriptorExpandResolveRect can't be used without %s.",
+                        ToAPI(Feature::DawnPartialLoadResolveTexture));
+        DAWN_INVALID_IF(
+            !validationState->WillExpandResolveTexture(),
+            "ExpandResolveRect is invalid to use without wgpu::LoadOp::ExpandResolveTexture.");
+
+        DAWN_INVALID_IF(
+            static_cast<uint64_t>(rect->x) + static_cast<uint64_t>(rect->width) >
+                validationState->GetRenderWidth(),
+            "The x (%u) and width (%u) of ExpandResolveRect is out of the render area width(% u).",
+            rect->x, rect->width, validationState->GetRenderWidth());
+        DAWN_INVALID_IF(static_cast<uint64_t>(rect->y) + static_cast<uint64_t>(rect->height) >
+                            validationState->GetRenderHeight(),
+                        "The y (%u) and height (%u) of ExpandResolveRect is out of the render area "
+                        "height(% u).",
+                        rect->y, rect->height, validationState->GetRenderHeight());
+    }
+
     return descriptor;
 }
 
@@ -1057,12 +1078,8 @@ CommandEncoder::CommandEncoder(DeviceBase* device,
 
 CommandEncoder::CommandEncoder(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label)
     : ApiObjectBase(device, tag, label),
-      mEncodingContext(device, this),
-      mUsageValidationMode(UsageValidationMode::Default) {
-    GetObjectTrackingList()->Track(this);
-
-    mEncodingContext.HandleError(DAWN_VALIDATION_ERROR("%s is invalid.", this));
-}
+      mEncodingContext(device, tag),
+      mUsageValidationMode(UsageValidationMode::Default) {}
 
 ObjectType CommandEncoder::GetType() const {
     return ObjectType::CommandEncoder;
@@ -1095,6 +1112,10 @@ void CommandEncoder::TrackQueryAvailability(QuerySetBase* querySet, uint32_t que
 
     // Set the query at queryIndex to available for resolving in query set.
     querySet->SetQueryAvailability(queryIndex, true);
+}
+
+std::vector<IndirectDrawMetadata> CommandEncoder::AcquireIndirectDrawMetadata() {
+    return mEncodingContext.AcquireIndirectDrawMetadata();
 }
 
 // Implementation of the API's command recording methods
@@ -1189,7 +1210,7 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
     ClearWithDrawHelper clearWithDrawHelper;
     RenderPassWorkaroundsHelper renderpassWorkaroundsHelper;
 
-    std::function<void()> passEndCallback = nullptr;
+    RenderPassEncoder::EndCallback passEndCallback = nullptr;
 
     bool success = mEncodingContext.TryEncode(
         this,
@@ -1200,8 +1221,8 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
 
             DAWN_ASSERT(validationState.IsValidState());
 
-            DAWN_TRY(clearWithDrawHelper.Initialize(this, *descriptor));
-            DAWN_TRY(renderpassWorkaroundsHelper.Initialize(this, *descriptor));
+            DAWN_TRY(clearWithDrawHelper.Initialize(this, descriptor));
+            DAWN_TRY(renderpassWorkaroundsHelper.Initialize(this, descriptor));
 
             mEncodingContext.WillBeginRenderPass();
             BeginRenderPassCmd* cmd =
@@ -1376,8 +1397,8 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
                 }
             }
 
-            DAWN_TRY(renderpassWorkaroundsHelper.ApplyOnPostEncoding(this, &usageTracker, cmd,
-                                                                     &passEndCallback));
+            DAWN_TRY(renderpassWorkaroundsHelper.ApplyOnPostEncoding(
+                this, descriptor, &usageTracker, cmd, &passEndCallback));
 
             return {};
         },
@@ -1398,8 +1419,8 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
             // TODO(341129591): move inside RenderPassWorkaroundsHelper.
             DAWN_TRY(clearWithDrawHelper.Apply(passEncoder.Get()));
 
-            DAWN_TRY(renderpassWorkaroundsHelper.ApplyOnRenderPassStart(passEncoder.Get(),
-                                                                        rawDescriptor));
+            DAWN_TRY(
+                renderpassWorkaroundsHelper.ApplyOnRenderPassStart(passEncoder.Get(), descriptor));
 
             return {};
         }();
@@ -1875,23 +1896,25 @@ void CommandEncoder::APIClearBuffer(BufferBase* buffer, uint64_t offset, uint64_
         "encoding %s.ClearBuffer(%s, %u, %u).", this, buffer, offset, size);
 }
 
-void CommandEncoder::APIInjectValidationError(const char* message) {
-    if (!mEncodingContext.ConsumedError(mEncodingContext.CheckCurrentEncoder(this),
-                                        "injecting validation error: %s.", message)) {
-        mEncodingContext.HandleError(DAWN_MAKE_ERROR(InternalErrorType::Validation, message));
-    }
+void CommandEncoder::APIInjectValidationError2(std::string_view message) {
+    message = utils::NormalizeLabel(message);
+    mEncodingContext.TryEncode(
+        this,
+        [&](CommandAllocator*) -> MaybeError {
+            return DAWN_MAKE_ERROR(InternalErrorType::Validation, std::string(message));
+        },
+        "injecting validation error: %s.", message);
 }
 
-void CommandEncoder::APIInsertDebugMarker(const char* groupLabel) {
+void CommandEncoder::APIInsertDebugMarker2(std::string_view groupLabel) {
+    groupLabel = utils::NormalizeLabel(groupLabel);
     mEncodingContext.TryEncode(
         this,
         [&](CommandAllocator* allocator) -> MaybeError {
             InsertDebugMarkerCmd* cmd =
                 allocator->Allocate<InsertDebugMarkerCmd>(Command::InsertDebugMarker);
-            cmd->length = strlen(groupLabel);
-
-            char* label = allocator->AllocateData<char>(cmd->length + 1);
-            memcpy(label, groupLabel, cmd->length + 1);
+            cmd->length = groupLabel.length();
+            allocator->CopyAsNullTerminatedString(groupLabel);
 
             return {};
         },
@@ -1915,19 +1938,18 @@ void CommandEncoder::APIPopDebugGroup() {
         "encoding %s.PopDebugGroup().", this);
 }
 
-void CommandEncoder::APIPushDebugGroup(const char* groupLabel) {
+void CommandEncoder::APIPushDebugGroup2(std::string_view groupLabel) {
+    groupLabel = utils::NormalizeLabel(groupLabel);
     mEncodingContext.TryEncode(
         this,
         [&](CommandAllocator* allocator) -> MaybeError {
             PushDebugGroupCmd* cmd =
                 allocator->Allocate<PushDebugGroupCmd>(Command::PushDebugGroup);
-            cmd->length = strlen(groupLabel);
-
-            char* label = allocator->AllocateData<char>(cmd->length + 1);
-            memcpy(label, groupLabel, cmd->length + 1);
+            cmd->length = groupLabel.length();
+            const char* label = allocator->CopyAsNullTerminatedString(groupLabel);
 
             mDebugGroupStackSize++;
-            mEncodingContext.PushDebugGroupLabel(groupLabel);
+            mEncodingContext.PushDebugGroupLabel(std::string_view(label, cmd->length));
 
             return {};
         },
@@ -2036,12 +2058,13 @@ CommandBufferBase* CommandEncoder::APIFinish(const CommandBufferDescriptor* desc
     auto deviceLock(GetDevice()->GetScopedLock());
 
     Ref<CommandBufferBase> commandBuffer;
-    if (GetDevice()->ConsumedError(Finish(descriptor), &commandBuffer)) {
+    if (GetDevice()->ConsumedError(Finish(descriptor), &commandBuffer, "finishing %s.", this)) {
         Ref<CommandBufferBase> errorCommandBuffer =
             CommandBufferBase::MakeError(GetDevice(), descriptor ? descriptor->label : nullptr);
         errorCommandBuffer->SetEncoderLabel(this->GetLabel());
         return ReturnToAPI(std::move(errorCommandBuffer));
     }
+
     DAWN_ASSERT(!IsError());
     return ReturnToAPI(std::move(commandBuffer));
 }

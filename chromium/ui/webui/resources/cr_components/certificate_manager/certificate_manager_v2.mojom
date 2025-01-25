@@ -78,13 +78,17 @@ struct CertManagementMetadata {
   uint8 num_policy_certs;
 };
 
+enum SuccessResult {
+  // The operation was successful and the list should be refreshed.
+  kSuccess,
+};
+
 union ImportResult {
   // If present, the import failed and will contain an error message about why.
   string error;
 
-  // TODO(crbug.com/40928765): add message for successful import. (On
-  // successful import the certificate list should be refreshed to show the
-  // newly imported certificate.)
+  // If present, the import succeeded.
+  SuccessResult success;
 };
 
 // Calls from TS -> C++  (Renderer -> Browser).
@@ -111,6 +115,9 @@ interface CertificateManagerPageHandler {
   // actually imports both a certificate and a private key.
   ImportCertificate(CertificateSource source) => (ImportResult? result);
 
+  // Begin a client certificate import and bind the private key to the TPM.
+  ImportAndBindCertificate(CertificateSource source) => (ImportResult? result);
+
   // Show the platform's native certificate management UI.
   [EnableIf=native_cert_management]
   ShowNativeManageCertificates();
@@ -119,5 +126,6 @@ interface CertificateManagerPageHandler {
 
 // Calls from C++ -> TS (Browser -> Renderer).
 interface CertificateManagerPage {
-  // TODO(crbug.com/40928765): Currently empty, add methods as needed.
+  // Show dialog prompting user to enter a password to import a file.
+  AskForImportPassword() => (string? password);
 };

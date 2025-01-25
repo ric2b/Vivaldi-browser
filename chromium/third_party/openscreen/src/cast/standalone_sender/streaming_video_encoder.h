@@ -15,10 +15,10 @@
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
-#include "cast/streaming/constants.h"
-#include "cast/streaming/frame_id.h"
+#include "cast/streaming/public/constants.h"
+#include "cast/streaming/public/frame_id.h"
+#include "cast/streaming/public/sender.h"
 #include "cast/streaming/rtp_time.h"
-#include "cast/streaming/sender.h"
 #include "platform/api/task_runner.h"
 #include "platform/api/time.h"
 

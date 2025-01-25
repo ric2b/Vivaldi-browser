@@ -34,23 +34,10 @@ namespace content {
 
 namespace {
 
-void PopulateSourceDebugKey(base::Value::Dict& dict,
-                            std::optional<uint64_t> debug_key) {
-  if (debug_key.has_value()) {
-    dict.Set("source_debug_key", base::NumberToString(*debug_key));
-  }
-}
-
-void PopulateTriggerDebugKey(base::Value::Dict& dict,
-                             std::optional<uint64_t> debug_key) {
-  if (debug_key.has_value()) {
-    dict.Set("trigger_debug_key", base::NumberToString(*debug_key));
-  }
-}
+using ::attribution_reporting::SuitableOrigin;
 
 void PopulateReportBody(base::Value::Dict& dict,
-                        const AttributionReport::CommonAggregatableData& data,
-                        std::optional<uint64_t> trigger_debug_key) {
+                        const AttributionReport::CommonAggregatableData& data) {
   if (const auto& assembled_report = data.assembled_report;
       assembled_report.has_value()) {
     dict = assembled_report->GetAsJson();
@@ -60,8 +47,6 @@ void PopulateReportBody(base::Value::Dict& dict,
     dict.Set("shared_info", "not generated prior to send");
     dict.Set("aggregation_service_payloads", "not generated prior to send");
   }
-
-  PopulateTriggerDebugKey(dict, trigger_debug_key);
 
   if (const auto& trigger_context_id =
           data.aggregatable_trigger_config.trigger_context_id();
@@ -100,8 +85,7 @@ AttributionReport::EventLevelData& AttributionReport::EventLevelData::operator=(
 AttributionReport::EventLevelData::~EventLevelData() = default;
 
 AttributionReport::CommonAggregatableData::CommonAggregatableData(
-    std::optional<attribution_reporting::SuitableOrigin>
-        aggregation_coordinator_origin,
+    std::optional<SuitableOrigin> aggregation_coordinator_origin,
     attribution_reporting::AggregatableTriggerConfig
         aggregatable_trigger_config)
     : aggregation_coordinator_origin(std::move(aggregation_coordinator_origin)),
@@ -178,15 +162,14 @@ AttributionReport::NullAggregatableData::operator=(NullAggregatableData&&) =
 
 AttributionReport::NullAggregatableData::~NullAggregatableData() = default;
 
-AttributionReport::AttributionReport(
-    AttributionInfo attribution_info,
-    Id id,
-    base::Time report_time,
-    base::Time initial_report_time,
-    base::Uuid external_report_id,
-    int failed_send_attempts,
-    Data data,
-    attribution_reporting::SuitableOrigin reporting_origin)
+AttributionReport::AttributionReport(AttributionInfo attribution_info,
+                                     Id id,
+                                     base::Time report_time,
+                                     base::Time initial_report_time,
+                                     base::Uuid external_report_id,
+                                     int failed_send_attempts,
+                                     Data data,
+                                     SuitableOrigin reporting_origin)
     : attribution_info_(std::move(attribution_info)),
       id_(id),
       report_time_(report_time),
@@ -261,9 +244,6 @@ base::Value::Dict AttributionReport::ReportBody() const {
                 round(data.randomized_response_rate * 10000000) / 10000000.0;
             dict.Set("randomized_trigger_rate", rounded_rate);
 
-            PopulateSourceDebugKey(dict, data.source_debug_key);
-            PopulateTriggerDebugKey(dict, attribution_info_.debug_key);
-
             dict.Set("scheduled_report_time",
                      base::NumberToString(
                          (initial_report_time_ - base::Time::UnixEpoch())
@@ -271,18 +251,23 @@ base::Value::Dict AttributionReport::ReportBody() const {
           },
 
           [&](const AggregatableAttributionData& data) {
-            PopulateReportBody(dict, data.common_data,
-                               attribution_info_.debug_key);
-
-            PopulateSourceDebugKey(dict, data.source_debug_key);
+            PopulateReportBody(dict, data.common_data);
           },
 
           [&](const NullAggregatableData& data) {
-            PopulateReportBody(dict, data.common_data,
-                               attribution_info_.debug_key);
+            PopulateReportBody(dict, data.common_data);
           },
       },
       data_);
+
+  if (CanDebuggingBeEnabled()) {
+    std::optional<uint64_t> source_debug_key = GetSourceDebugKey();
+    CHECK(source_debug_key.has_value());
+    std::optional<uint64_t> trigger_debug_key = attribution_info_.debug_key;
+    CHECK(trigger_debug_key.has_value());
+    dict.Set("source_debug_key", base::NumberToString(*source_debug_key));
+    dict.Set("trigger_debug_key", base::NumberToString(*trigger_debug_key));
+  }
 
   return dict;
 }
@@ -318,6 +303,26 @@ std::optional<uint64_t> AttributionReport::GetSourceDebugKey() const {
           },
       },
       data_);
+}
+
+const SuitableOrigin& AttributionReport::GetSourceOrigin() const {
+  return absl::visit(
+      base::Overloaded{
+          [](const AttributionReport::EventLevelData& data)
+              -> const SuitableOrigin& { return data.source_origin; },
+          [](const AttributionReport::AggregatableAttributionData& data)
+              -> const SuitableOrigin& { return data.source_origin; },
+          [&](const AttributionReport::NullAggregatableData&)
+              -> const SuitableOrigin& {
+            return attribution_info_.context_origin;
+          },
+      },
+      data_);
+}
+
+bool AttributionReport::CanDebuggingBeEnabled() const {
+  return attribution_info_.debug_key.has_value() &&
+         GetSourceDebugKey().has_value();
 }
 
 }  // namespace content

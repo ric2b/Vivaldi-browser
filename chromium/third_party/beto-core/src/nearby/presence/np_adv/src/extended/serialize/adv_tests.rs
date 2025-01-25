@@ -16,7 +16,6 @@
 
 extern crate std;
 use super::*;
-use crate::extended::serialize::section::header::SectionHeader;
 use crate::extended::serialize::section_tests::{fill_section_builder, DummyDataElement};
 use crate::extended::V1_ENCODING_UNENCRYPTED;
 use crypto_provider_default::CryptoProviderImpl;
@@ -95,29 +94,3 @@ fn building_capacity_0_ble5_section_works() {
 }
 
 // TODO tests for other encoding types interacting with maximum possible section len
-
-/// A placeholder identity with a huge prefix
-#[derive(Default, PartialEq, Eq, Debug)]
-struct EnormousIdentity {}
-
-impl SectionEncoder for EnormousIdentity {
-    const SUFFIX_LEN: usize = 0;
-    const ADVERTISEMENT_TYPE: AdvertisementType = AdvertisementType::Plaintext;
-    type DerivedSalt = ();
-
-    fn header(&self) -> SectionHeader {
-        unimplemented!("Should never be hit")
-    }
-    fn postprocess<C: CryptoProvider>(
-        &mut self,
-        _section_header_without_length: &mut [u8],
-        _section_len: u8,
-        _remaining_content_bytes: &mut [u8],
-    ) {
-        panic!("should never be called, just used for its huge prefix")
-    }
-
-    fn de_salt(&self, _de_offset: DataElementOffset) -> Self::DerivedSalt {
-        panic!("should never be called, just used for its huge prefix")
-    }
-}

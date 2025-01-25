@@ -262,6 +262,21 @@ class QUICHE_EXPORT QuicPacketCreator {
       const quiche::QuicheCircularDeque<QuicPathFrameBuffer>& payloads,
       const bool is_padded);
 
+  // Create a CONNECTION_CLOSE packet with a large packet number.
+  // This packet can be pre-generated and other processes can send it later to
+  // close the connection.
+  // For example, on Android, the system server stores this packet and sends it
+  // to the server when the app is frozen, loses network access due to the
+  // firewall, or crashes. This will stop servers sending packets to the
+  // device and wasting the device battery.
+  // Note that the generated packet uses the packet number larger than the
+  // current largest acked packet number by (1 << 31) + 1 but the server will
+  // ignore this packet after the connection uses this packet number.
+  std::unique_ptr<SerializedPacket>
+  SerializeLargePacketNumberConnectionClosePacket(
+      QuicPacketNumber largest_acked_packet, QuicErrorCode error,
+      const std::string& error_details);
+
   // Add PATH_RESPONSE to current packet, flush before or afterwards if needed.
   bool AddPathResponseFrame(const QuicPathFrameBuffer& data_buffer);
 
@@ -312,6 +327,14 @@ class QUICHE_EXPORT QuicPacketCreator {
   // packet number of the last created packet, or 0 if no packets have been
   // created.
   QuicPacketNumber packet_number() const { return packet_.packet_number; }
+
+  // Sets the packet number of the last sent packet on this connection prior to
+  // the birth of this creator.
+  // Must be called before any packet is created by this creator.
+  void set_packet_number(QuicPacketNumber packet_number) {
+    QUICHE_DCHECK(!packet_.packet_number.IsInitialized());
+    packet_.packet_number = packet_number;
+  }
 
   QuicByteCount max_packet_length() const { return max_packet_length_; }
 

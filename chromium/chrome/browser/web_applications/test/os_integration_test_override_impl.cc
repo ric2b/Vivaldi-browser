@@ -4,7 +4,6 @@
 
 #include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 
-#include <codecvt>
 #include <map>
 #include <memory>
 #include <optional>
@@ -546,11 +545,14 @@ bool OsIntegrationTestOverrideImpl::IsShortcutsMenuRegisteredForApp(
   return base::Contains(jump_list_entry_map_, app_user_model_id);
 }
 
+#endif  // BUILDFLAG(IS_WIN)
+
 base::expected<bool, std::string>
 OsIntegrationTestOverrideImpl::IsUninstallRegisteredWithOs(
     const webapps::AppId& app_id,
     const std::string& app_name,
     Profile* profile) {
+#if BUILDFLAG(IS_WIN)
   base::win::RegKey uninstall_reg_key;
   LONG result = uninstall_reg_key.Open(HKEY_CURRENT_USER, kUninstallRegistryKey,
                                        KEY_READ);
@@ -639,8 +641,10 @@ OsIntegrationTestOverrideImpl::IsUninstallRegisteredWithOs(
   }
 
   return true;
-}
+#else
+  return base::unexpected("Uninstall registration not supported.");
 #endif  // BUILDFLAG(IS_WIN)
+}
 
 const OsIntegrationTestOverrideImpl::AppProtocolList&
 OsIntegrationTestOverrideImpl::protocol_scheme_registrations() {

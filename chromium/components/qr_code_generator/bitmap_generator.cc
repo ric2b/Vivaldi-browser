@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/qr_code_generator/bitmap_generator.h"
 
 #include "base/metrics/histogram_macros.h"
@@ -223,7 +228,7 @@ int CalculateMargin(QuietZone quiet_zone) {
     case QuietZone::kWillBeAddedByClient:
       return 0;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 SkBitmap RenderBitmap(base::span<const uint8_t> data,

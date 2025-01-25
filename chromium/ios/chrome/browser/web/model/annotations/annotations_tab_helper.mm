@@ -20,8 +20,9 @@
 #import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_prefs.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/parcel_tracking_opt_in_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/text_selection/model/text_classifier_model_service.h"
 #import "ios/chrome/browser/text_selection/model/text_classifier_model_service_factory.h"
 #import "ios/public/provider/chrome/browser/context_menu/context_menu_api.h"
@@ -138,8 +139,8 @@ void AnnotationsTabHelper::OnTextExtracted(web::WebState* web_state,
   metadata_ = std::make_unique<base::Value::Dict>(metadata.Clone());
 
   TextClassifierModelService* service =
-      TextClassifierModelServiceFactory::GetForBrowserState(
-          ChromeBrowserState::FromBrowserState(web_state->GetBrowserState()));
+      TextClassifierModelServiceFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(web_state->GetBrowserState()));
   base::FilePath model_path =
       service ? service->GetModelPath() : base::FilePath();
 
@@ -219,8 +220,14 @@ void AnnotationsTabHelper::ApplyDeferredProcessing(
       web_state_->GetWebFramesManager(content_world)->GetMainWebFrame();
   if (main_frame && deferred) {
     std::vector<web::TextAnnotation> annotations(std::move(deferred.value()));
-    if (IsIOSParcelTrackingEnabled() &&
-        !IsParcelTrackingDisabled(GetApplicationContext()->GetLocalState())) {
+
+    PrefService* prefs =
+        IsHomeCustomizationEnabled()
+            ? ProfileIOS::FromBrowserState(web_state_->GetBrowserState())
+                  ->GetPrefs()
+            : GetApplicationContext()->GetLocalState();
+
+    if (IsIOSParcelTrackingEnabled() && !IsParcelTrackingDisabled(prefs)) {
       parcel_number_tracker_.ProcessAnnotations(annotations);
       // Show UI only if this is the currently active WebState.
       if (parcel_number_tracker_.HasNewTrackingNumbers() &&

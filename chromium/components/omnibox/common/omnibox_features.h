@@ -89,7 +89,6 @@ BASE_DECLARE_FEATURE(kExpandedStateColors);
 BASE_DECLARE_FEATURE(kExpandedStateSuggestIcons);
 BASE_DECLARE_FEATURE(kExpandedLayout);
 BASE_DECLARE_FEATURE(kSuggestionHoverFillShape);
-BASE_DECLARE_FEATURE(kQueryTilesInZPSOnNTP);
 
 // Omnibox UI - these affect the UI or function of the location bar (not the
 // popup).
@@ -120,12 +119,12 @@ inline constexpr base::FeatureParam<int> kOmniboxSpareRendererDelayMs{
 
 // Omnibox ML scoring.
 BASE_DECLARE_FEATURE(kLogUrlScoringSignals);
+BASE_DECLARE_FEATURE(kEnableHistoryScoringSignalsAnnotatorForSearches);
 BASE_DECLARE_FEATURE(kMlUrlPiecewiseMappedSearchBlending);
 BASE_DECLARE_FEATURE(kMlUrlScoreCaching);
 BASE_DECLARE_FEATURE(kMlUrlScoring);
 BASE_DECLARE_FEATURE(kMlUrlSearchBlending);
 BASE_DECLARE_FEATURE(kUrlScoringModel);
-BASE_DECLARE_FEATURE(kEnableForceSkipMlScoring);
 
 // Actions in Suggest - Action Chips for Entity Suggestions.
 // Data driven feature; flag helps tune behavior.
@@ -147,7 +146,6 @@ BASE_DECLARE_FEATURE(kMergeSubtypes);
 BASE_DECLARE_FEATURE(kOmniboxTouchDownTriggerForPrefetch);
 
 // Site search/Keyword mode related features.
-BASE_DECLARE_FEATURE(kPolicyIndicationForManagedDefaultSearch);
 BASE_DECLARE_FEATURE(kShowFeaturedEnterpriseSiteSearch);
 BASE_DECLARE_FEATURE(kShowFeaturedEnterpriseSiteSearchIPH);
 BASE_DECLARE_FEATURE(kSiteSearchSettingsPolicy);
@@ -159,9 +157,16 @@ BASE_DECLARE_FEATURE(kAblateSearchProviderWarmup);
 BASE_DECLARE_FEATURE(kDropUnrecognizedTemplateUrlParameters);
 BASE_DECLARE_FEATURE(kReportApplicationLanguageInSearchRequest);
 
-BASE_DECLARE_FEATURE(kOmniboxShortcutsAndroid);
 BASE_DECLARE_FEATURE(kOmniboxAsyncViewInflation);
 BASE_DECLARE_FEATURE(kUseFusedLocationProvider);
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_DECLARE_FEATURE(kRetainOmniboxOnFocus);
+#endif  // BUILDFLAG(IS_ANDROID)
+
+// `ShortcutsProvider` features.
+BASE_DECLARE_FEATURE(kOmniboxShortcutsAndroid);
+BASE_DECLARE_FEATURE(kOmniboxDeleteOldShortcuts);
 
 }  // namespace omnibox
 

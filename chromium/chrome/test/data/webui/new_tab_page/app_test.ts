@@ -16,9 +16,8 @@ import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
 import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
-import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import type {TestMock} from 'chrome://webui-test/test_mock.js';
-import {eventToPromise} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 import {assertNotStyle, assertStyle, createBackgroundImage, createTheme, installMock} from './test_support.js';
 
@@ -74,7 +73,6 @@ suite('NewTabPageAppTest', () => {
 
     app = document.createElement('ntp-app');
     document.body.appendChild(app);
-    await flushTasks();
   });
 
   suite('Misc', () => {
@@ -95,8 +93,8 @@ suite('NewTabPageAppTest', () => {
 
     test('open voice search event opens voice search overlay', async () => {
       // Act.
-      $$(app, '#realbox')!.dispatchEvent(new Event('open-voice-search'));
-      await flushTasks();
+      $$(app, '#searchbox')!.dispatchEvent(new Event('open-voice-search'));
+      await microtasksFinished();
 
       // Assert.
       assertTrue(!!app.shadowRoot!.querySelector('ntp-voice-search-overlay'));
@@ -115,7 +113,7 @@ suite('NewTabPageAppTest', () => {
         shiftKey: true,
         code: 'Period',
       }));
-      await flushTasks();
+      await microtasksFinished();
 
       // Assert.
       assertTrue(!!app.shadowRoot!.querySelector('ntp-voice-search-overlay'));
@@ -132,7 +130,7 @@ suite('NewTabPageAppTest', () => {
         shiftKey: true,
         code: 'Enter',
       }));
-      await flushTasks();
+      await microtasksFinished();
 
       // Assert.
       assertTrue(!!app.shadowRoot!.querySelector('ntp-voice-search-overlay'));
@@ -146,7 +144,7 @@ suite('NewTabPageAppTest', () => {
           shiftKey: true,
           code: 'Period',
         }));
-        await flushTasks();
+        await microtasksFinished();
 
         // Assert.
         assertTrue(!!app.shadowRoot!.querySelector('ntp-voice-search-overlay'));
@@ -194,7 +192,7 @@ suite('NewTabPageAppTest', () => {
       // Act.
 
       // Create a dark mode theme with a custom background.
-      const theme = createTheme(true);
+      const theme = createTheme({isDark: true});
       theme.backgroundImage = createBackgroundImage('https://foo.com');
       callbackRouterRemote.setTheme(theme);
       await callbackRouterRemote.$.flushForTesting();
@@ -208,6 +206,7 @@ suite('NewTabPageAppTest', () => {
         source: window,
         origin: window.origin,
       }));
+      await microtasksFinished();
 
       // Assert.
 
@@ -227,7 +226,7 @@ suite('NewTabPageAppTest', () => {
       // Arrange.
 
       // Set theme that triggers the scrim.
-      const theme = createTheme(true);
+      const theme = createTheme({isDark: true});
       theme.backgroundImage = createBackgroundImage('https://foo.com');
       callbackRouterRemote.setTheme(theme);
       await callbackRouterRemote.$.flushForTesting();
@@ -268,6 +267,7 @@ suite('NewTabPageAppTest', () => {
       // Act.
       callbackRouterRemote.setTheme(createTheme());
       await callbackRouterRemote.$.flushForTesting();
+      await microtasksFinished();
 
       // Assert.
       assertEquals(1, backgroundManager.getCallCount('setBackgroundColor'));
@@ -295,6 +295,7 @@ suite('NewTabPageAppTest', () => {
       // Act.
       callbackRouterRemote.setTheme(theme);
       await callbackRouterRemote.$.flushForTesting();
+      await microtasksFinished();
 
       assertNotStyle($$(app, '#themeAttribution')!, 'display', 'none');
       assertEquals(
@@ -400,7 +401,7 @@ suite('NewTabPageAppTest', () => {
             // Act.
 
             // Create a theme with a custom background.
-            const theme = createTheme(isDark);
+            const theme = createTheme({isDark: isDark});
             theme.backgroundImage = createBackgroundImage('https://foo.com');
             callbackRouterRemote.setTheme(theme);
             await callbackRouterRemote.$.flushForTesting();
@@ -414,6 +415,7 @@ suite('NewTabPageAppTest', () => {
               source: window,
               origin: window.origin,
             }));
+            await microtasksFinished();
 
             // Assert.
             assertEquals(1, windowProxy.getCallCount('postMessage'));
@@ -666,7 +668,7 @@ suite('NewTabPageAppTest', () => {
     ([
       ['#content', NtpElement.BACKGROUND],
       ['ntp-logo', NtpElement.LOGO],
-      ['cr-realbox', NtpElement.REALBOX],
+      ['cr-searchbox', NtpElement.REALBOX],
       ['cr-most-visited', NtpElement.MOST_VISITED],
       ['ntp-middle-slot-promo', NtpElement.MIDDLE_SLOT_PROMO],
       ['#modules', NtpElement.MODULE],
@@ -722,6 +724,7 @@ suite('NewTabPageAppTest', () => {
 
       // Act.
       modules.dispatchEvent(new Event('modules-loaded'));
+      await microtasksFinished();
 
       // Assert.
       assertNotStyle(middleSlotPromo, 'display', 'none');
@@ -767,12 +770,13 @@ suite('NewTabPageAppTest', () => {
       document.body.setAttribute('style', `width:${sampleMaxWidthPx}px`);
       app = document.createElement('ntp-app');
       document.body.appendChild(app);
-      await flushTasks();
+      await microtasksFinished();
 
       const middleSlotPromo = $$(app, 'ntp-middle-slot-promo')!;
       middleSlotPromo.dispatchEvent(new Event('ntp-middle-slot-promo-loaded'));
       const modules = $$(app, 'ntp-modules')!;
       modules.dispatchEvent(new Event('modules-loaded'));
+      await microtasksFinished();
 
       assertStyle(modules, 'width', `${sampleMaxWidthPx}px`);
     });
@@ -859,7 +863,7 @@ suite('NewTabPageAppTest', () => {
         },
       ]);
       await counterfactualLoad();
-      await flushTasks();
+      await microtasksFinished();
 
       // Assert.
       assertTrue(moduleRegistry.getCallCount('initializeModules') > 0);
@@ -977,7 +981,7 @@ suite('NewTabPageAppTest', () => {
   suite('LensUploadDialog', () => {
     suiteSetup(() => {
       loadTimeData.overrideValues({
-        realboxLensSearch: true,
+        searchboxLensSearch: true,
       });
     });
 
@@ -992,20 +996,20 @@ suite('NewTabPageAppTest', () => {
       await callbackRouterRemote.$.flushForTesting();
 
       // Act.
-      $$(app, '#realbox')!.dispatchEvent(new Event('open-lens-search'));
-      await flushTasks();
+      $$(app, '#searchbox')!.dispatchEvent(new Event('open-lens-search'));
+      await microtasksFinished();
 
       // Assert.
       const dialog = app.shadowRoot!.querySelector('ntp-lens-upload-dialog');
       assertTrue(!!dialog);
-      assertStyle($$(app, '#realbox')!, 'visibility', 'hidden');
+      assertStyle($$(app, '#searchbox')!, 'visibility', 'hidden');
 
       // Act.
       dialog.closeDialog();
-      await flushTasks();
+      await microtasksFinished();
 
       // Assert.
-      assertStyle($$(app, '#realbox')!, 'visibility', 'visible');
+      assertStyle($$(app, '#searchbox')!, 'visibility', 'visible');
     });
   });
 
@@ -1042,7 +1046,7 @@ suite('NewTabPageAppTest', () => {
                 $$(app, '#customizeButton .customize-icon')!,
                 'background-color', 'rgb(255, 255, 255)');
 
-            const theme = createTheme(true);
+            const theme = createTheme({isDark: true});
             theme.backgroundImage = createBackgroundImage('https://foo.com');
             callbackRouterRemote.setTheme(theme);
             await callbackRouterRemote.$.flushForTesting();
@@ -1201,6 +1205,7 @@ suite('NewTabPageAppTest', () => {
 
         // Open wallpaper search page.
         $$<HTMLElement>(app, '#wallpaperSearchButton')!.click();
+        await microtasksFinished();
 
         // Both buttons should be labeled as pressed.
         assertEquals(
@@ -1227,21 +1232,25 @@ suite('NewTabPageAppTest', () => {
                 app, '#customizeButton')!.getAttribute('aria-pressed'));
       });
 
-      test('clicking wallpaper search button collapses/expands it', () => {
-        assertNotEquals(
-            32, $$<HTMLElement>(app, '#wallpaperSearchButton')!.offsetWidth);
-        assertNotStyle(
-            $$(app, '#wallpaperSearchButton .customize-text')!, 'display',
-            'none');
+      test(
+          'clicking wallpaper search button collapses/expands it', async () => {
+            assertNotEquals(
+                32,
+                $$<HTMLElement>(app, '#wallpaperSearchButton')!.offsetWidth);
+            assertNotStyle(
+                $$(app, '#wallpaperSearchButton .customize-text')!, 'display',
+                'none');
 
-        $$<HTMLElement>(app, '#wallpaperSearchButton')!.click();
+            $$<HTMLElement>(app, '#wallpaperSearchButton')!.click();
+            await microtasksFinished();
 
-        assertEquals(
-            32, $$<HTMLElement>(app, '#wallpaperSearchButton')!.offsetWidth);
-        assertStyle(
-            $$(app, '#wallpaperSearchButton .customize-text')!, 'display',
-            'none');
-      });
+            assertEquals(
+                32,
+                $$<HTMLElement>(app, '#wallpaperSearchButton')!.offsetWidth);
+            assertStyle(
+                $$(app, '#wallpaperSearchButton .customize-text')!, 'display',
+                'none');
+          });
 
       test(
           'setting background styles both customize chrome buttons',
@@ -1267,7 +1276,7 @@ suite('NewTabPageAppTest', () => {
                 32, $$<HTMLElement>(app, '#customizeButton')!.offsetWidth);
 
             // Create and set theme.
-            const theme = createTheme(true);
+            const theme = createTheme({isDark: true});
             theme.backgroundImage = createBackgroundImage('https://foo.com');
             callbackRouterRemote.setTheme(theme);
             await callbackRouterRemote.$.flushForTesting();
@@ -1302,17 +1311,19 @@ suite('NewTabPageAppTest', () => {
 
             callbackRouterRemote.setWallpaperSearchButtonVisibility(false);
             await callbackRouterRemote.$.flushForTesting();
+            await microtasksFinished();
 
             // Wallpaper search button hides.
             assertNotStyle($$(app, '#customizeButton')!, 'display', 'none');
-            assertStyle($$(app, '#wallpaperSearchButton')!, 'display', 'none');
+            assertEquals(null, $$(app, '#wallpaperSearchButton'));
 
             callbackRouterRemote.setWallpaperSearchButtonVisibility(true);
             await callbackRouterRemote.$.flushForTesting();
+            await microtasksFinished();
 
             // Wallpaper search button remains hidden.
             assertNotStyle($$(app, '#customizeButton')!, 'display', 'none');
-            assertStyle($$(app, '#wallpaperSearchButton')!, 'display', 'none');
+            assertEquals(null, $$(app, '#wallpaperSearchButton'));
           });
     });
 
@@ -1327,6 +1338,95 @@ suite('NewTabPageAppTest', () => {
       test('button has no animation if the flag is disabled', () => {
         assertButtonNotAnimated();
       });
+    });
+
+    suite('ConditionalVisibility', () => {
+      suiteSetup(() => {
+        loadTimeData.overrideValues({
+          wallpaperSearchButtonEnabled: true,
+        });
+      });
+
+      test(
+          'hide condition 0 shows button unconditonally', async () => {
+            loadTimeData.overrideValues({
+              wallpaperSearchButtonHideCondition: /*NONE*/ 0,
+            });
+
+            assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
+            assertTrue(
+                !!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
+
+            const theme = createTheme({isBaseline: false});
+            theme.backgroundImage = createBackgroundImage('https://foo.com');
+            await callbackRouterRemote.$.flushForTesting();
+
+            assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
+            assertTrue(
+                !!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
+          });
+
+      test('hideCondition 1 hides button if background is set', async () => {
+        loadTimeData.overrideValues({
+          wallpaperSearchButtonHideCondition: 1,
+        });
+
+        assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
+        assertTrue(!!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
+
+        // Set theme with a background image and baseline color.
+        const theme = createTheme({isBaseline: true});
+        theme.backgroundImage = createBackgroundImage('https://img.png');
+        callbackRouterRemote.setTheme(theme);
+        await backgroundManager.whenCalled('setShowBackgroundImage');
+        await microtasksFinished();
+
+        assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
+        assertFalse(!!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
+      });
+
+      test(
+          'hide condition 2 hides button if background or' +
+              ' non-baseline color is set',
+          async () => {
+            loadTimeData.overrideValues({
+              wallpaperSearchButtonHideCondition: /*THEME_SET*/ 2,
+            });
+
+            assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
+            assertTrue(
+                !!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
+
+            // Set theme with a non-baseline color that has no background image.
+            callbackRouterRemote.setTheme(createTheme({isBaseline: false}));
+            await callbackRouterRemote.$.flushForTesting();
+            await microtasksFinished();
+
+            assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
+            assertFalse(
+                !!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
+
+            // Resurface button by setting a theme with a baseline color (and no
+            // background image).
+            callbackRouterRemote.setTheme(createTheme({isBaseline: true}));
+            await callbackRouterRemote.$.flushForTesting();
+            await microtasksFinished();
+
+            assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
+            assertTrue(
+                !!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
+
+            // Set theme with a background image and baseline color.
+            const theme = createTheme({isBaseline: true});
+            theme.backgroundImage = createBackgroundImage('https://img.png');
+            callbackRouterRemote.setTheme(theme);
+            await backgroundManager.whenCalled('setShowBackgroundImage');
+            await microtasksFinished();
+
+            assertTrue(!!app.shadowRoot!.querySelector('#customizeButton'));
+            assertFalse(
+                !!app.shadowRoot!.querySelector('#wallpaperSearchButton'));
+          });
     });
   });
 });

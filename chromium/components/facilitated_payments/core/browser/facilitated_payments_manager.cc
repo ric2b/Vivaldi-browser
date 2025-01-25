@@ -47,6 +47,7 @@ void FacilitatedPaymentsManager::Reset() {
   if (is_test_) {
     return;
   }
+  has_payflow_started_ = false;
   pix_code_detection_attempt_count_ = 0;
   ukm_source_id_ = 0;
   trigger_source_ = TriggerSource::kUnknown;
@@ -60,6 +61,7 @@ void FacilitatedPaymentsManager::
     DelayedCheckAllowlistAndTriggerPixCodeDetection(const GURL& url,
                                                     ukm::SourceId ukm_source_id,
                                                     int attempt_number) {
+  // TODO: b/362781719 - Deprecate Pix code detection.
   Reset();
   switch (GetAllowlistCheckResult(url)) {
     case optimization_guide::OptimizationGuideDecision::kTrue: {
@@ -97,6 +99,10 @@ void FacilitatedPaymentsManager::OnPixCodeCopiedToClipboard(
     const GURL& render_frame_host_url,
     const std::string& pix_code,
     ukm::SourceId ukm_source_id) {
+  if (has_payflow_started_) {
+    return;
+  }
+  has_payflow_started_ = true;
   ukm_source_id_ = ukm_source_id;
   trigger_source_ = TriggerSource::kCopyEvent;
   // Check whether the domain for the render_frame_host_url is allowlisted.
@@ -108,17 +114,13 @@ void FacilitatedPaymentsManager::OnPixCodeCopiedToClipboard(
     // The merchant is not part of the allowlist, ignore the copy event.
     return;
   }
-  if (valid_pix_code_detected_) {
-    // A valid Pix code has already been detected previously. This can happen
-    // because a Pix code would've already been found via DOM search.
-    return;
-  }
   initiate_payment_request_details_->merchant_payment_page_hostname_ =
       render_frame_host_url.host();
   // Trigger Pix code validation.
   utility_process_validator_.ValidatePixCode(
       pix_code, base::BindOnce(&FacilitatedPaymentsManager::OnPixCodeValidated,
-                               weak_ptr_factory_.GetWeakPtr(), pix_code));
+                               weak_ptr_factory_.GetWeakPtr(), pix_code,
+                               base::TimeTicks::Now()));
 }
 
 void FacilitatedPaymentsManager::RegisterPixAllowlist() const {
@@ -158,11 +160,6 @@ void FacilitatedPaymentsManager::TriggerPixCodeDetection() {
 
 void FacilitatedPaymentsManager::ProcessPixCodeDetectionResult(
     mojom::PixCodeDetectionResult result, const std::string& pix_code) {
-  if (valid_pix_code_detected_) {
-    // A valid Pix code has already been detected previously. This can happen
-    // because a Pix code would've already been found via copy event.
-    return;
-  }
   // If a PIX code was not found, re-trigger PIX code detection after a short
   // duration to allow async content to load completely.
   if (result == mojom::PixCodeDetectionResult::kPixCodeNotFound &&
@@ -182,15 +179,20 @@ void FacilitatedPaymentsManager::ProcessPixCodeDetectionResult(
     Reset();
     return;
   }
+  // Clicking on the copy button could have initiated the payflow.
+  if (has_payflow_started_) {
+    return;
+  }
+  has_payflow_started_ = true;
   trigger_source_ = TriggerSource::kDOMSearch;
-  utility_process_validator_.ValidatePixCode(
-      pix_code, base::BindOnce(&FacilitatedPaymentsManager::OnPixCodeValidated,
-                               weak_ptr_factory_.GetWeakPtr(), pix_code));
 }
 
 void FacilitatedPaymentsManager::OnPixCodeValidated(
     std::string pix_code,
+    base::TimeTicks start_time,
     base::expected<bool, std::string> is_pix_code_valid) {
+  LogPaymentCodeValidationResultAndLatency(
+      is_pix_code_valid, (base::TimeTicks::Now() - start_time));
   if (!is_pix_code_valid.has_value()) {
     // Pix code validator encountered an error.
     LogPaymentNotOfferedReason(PaymentNotOfferedReason::kCodeValidatorFailed);
@@ -204,15 +206,23 @@ void FacilitatedPaymentsManager::OnPixCodeValidated(
     Reset();
     return;
   }
-  valid_pix_code_detected_ = true;
   // If a valid PIX code is found, and the user has Google wallet linked PIX
   // accounts, verify that the payments API is available, and then show the PIX
   // payment prompt.
   auto* payments_data_manager = client_->GetPaymentsDataManager();
   if (!payments_data_manager ||
       !payments_data_manager->IsFacilitatedPaymentsPixUserPrefEnabled() ||
-      !payments_data_manager->HasMaskedBankAccounts() ||
-      !base::FeatureList::IsEnabled(kEnablePixPayments)) {
+      !payments_data_manager->HasMaskedBankAccounts()) {
+    Reset();
+    return;
+  }
+
+  // Pix payment flow can't be completed in the landscape mode as platform
+  // doesn't support it yet.
+  if (client_->IsInLandscapeMode() &&
+      !base::FeatureList::IsEnabled(kEnablePixPaymentsInLandscapeMode)) {
+    LogPaymentNotOfferedReason(
+        PaymentNotOfferedReason::kLandscapeScreenOrientation);
     Reset();
     return;
   }
@@ -266,14 +276,6 @@ void FacilitatedPaymentsManager::OnApiAvailabilityReceived(
   initiate_payment_request_details_->billing_customer_number_ =
       autofill::payments::GetBillingCustomerId(
           client_->GetPaymentsDataManager());
-  // Before showing the payment prompt, load the risk data required for
-  // initiating payment request. The risk data is collected once per page load
-  // if a PIX code was detected.
-  if (initiate_payment_request_details_->risk_data_.empty()) {
-    client_->LoadRiskData(
-        base::BindOnce(&FacilitatedPaymentsManager::OnRiskDataLoaded,
-                       weak_ptr_factory_.GetWeakPtr()));
-  }
 
   bool promptShown = client_->ShowPixPaymentPrompt(
       client_->GetPaymentsDataManager()->GetMaskedBankAccounts(),
@@ -282,25 +284,6 @@ void FacilitatedPaymentsManager::OnApiAvailabilityReceived(
   LogFopSelectorShown(promptShown);
   if (promptShown) {
     fop_selector_shown_time_ = base::TimeTicks::Now();
-  }
-}
-
-void FacilitatedPaymentsManager::OnRiskDataLoaded(
-    const std::string& risk_data) {
-  if (risk_data.empty()) {
-    // TODO: b/348143700 - Show error screen if the loading screen is being
-    // shown.
-    LogPaymentNotOfferedReason(PaymentNotOfferedReason::kRiskDataEmpty);
-    Reset();
-    return;
-  }
-  initiate_payment_request_details_->risk_data_ = risk_data;
-
-  // Populating the risk data and showing the payment prompt may occur
-  // asynchronously. If the user has already selected the payment account, send
-  // the request to initiate payment.
-  if (initiate_payment_request_details_->IsReadyForPixPayment()) {
-    SendInitiatePaymentRequest();
   }
 }
 
@@ -318,6 +301,25 @@ void FacilitatedPaymentsManager::OnPixPaymentPromptResult(
   client_->ShowProgressScreen();
 
   initiate_payment_request_details_->instrument_id_ = selected_instrument_id;
+
+  client_->LoadRiskData(
+      base::BindOnce(&FacilitatedPaymentsManager::OnRiskDataLoaded,
+                     weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
+}
+
+void FacilitatedPaymentsManager::OnRiskDataLoaded(
+    base::TimeTicks start_time,
+    const std::string& risk_data) {
+  LogLoadRiskDataResultAndLatency(/*was_successful=*/!risk_data.empty(),
+                                  base::TimeTicks::Now() - start_time);
+  if (risk_data.empty()) {
+    client_->ShowErrorScreen();
+    LogPaymentNotOfferedReason(PaymentNotOfferedReason::kRiskDataEmpty);
+    Reset();
+    return;
+  }
+  initiate_payment_request_details_->risk_data_ = risk_data;
+
   get_client_token_loading_start_time_ = base::TimeTicks::Now();
   GetApiClient()->GetClientToken(
       base::BindOnce(&FacilitatedPaymentsManager::OnGetClientToken,

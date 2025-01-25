@@ -26,23 +26,12 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "src/tint/utils/macros/concat.h"
+#include "src/utils/compiler.h"
 
 #ifndef SRC_TINT_UTILS_MACROS_COMPILER_H_
 #define SRC_TINT_UTILS_MACROS_COMPILER_H_
 
 #define TINT_REQUIRE_SEMICOLON static_assert(true)
-
-#if defined(__has_attribute)
-#define TINT_HAS_ATTRIBUTE(x) __has_attribute(x)
-#else
-#define TINT_HAS_ATTRIBUTE(x) 0
-#endif
-
-#if TINT_HAS_ATTRIBUTE(no_sanitize)
-#define TINT_NO_SANITIZE(instrumentation) __attribute__((no_sanitize(instrumentation)))
-#else
-#define TINT_NO_SANITIZE(instrumentation)
-#endif
 
 #if defined(_MSC_VER) && !defined(__clang__)
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,9 +76,6 @@
 #define TINT_BEGIN_DISABLE_PROTOBUF_WARNINGS() \
     __pragma(warning(push)) TINT_DISABLE_WARNING_UNUSED_PARAMETER TINT_REQUIRE_SEMICOLON
 #define TINT_END_DISABLE_PROTOBUF_WARNINGS() __pragma(warning(pop)) TINT_REQUIRE_SEMICOLON
-
-#define TINT_UNLIKELY(x) x /* currently no-op */
-#define TINT_LIKELY(x) x   /* currently no-op */
 
 #if defined(__SANITIZE_ADDRESS__)
 #define TINT_ASAN_ENABLED
@@ -171,9 +157,6 @@
     TINT_REQUIRE_SEMICOLON
 // clang-format on
 
-#define TINT_UNLIKELY(x) __builtin_expect(!!(x), false)
-#define TINT_LIKELY(x) __builtin_expect(!!(x), true)
-
 #if __has_feature(address_sanitizer)
 #define TINT_ASAN_ENABLED
 #endif
@@ -246,9 +229,6 @@
     TINT_REQUIRE_SEMICOLON
 // clang-format on
 
-#define TINT_UNLIKELY(x) __builtin_expect(!!(x), false)
-#define TINT_LIKELY(x) __builtin_expect(!!(x), true)
-
 #if defined(__SANITIZE_ADDRESS__)
 #define TINT_ASAN_ENABLED
 #endif
@@ -265,8 +245,6 @@
 #define TINT_END_DISABLE_WARNING(name) TINT_REQUIRE_SEMICOLON
 #define TINT_BEGIN_DISABLE_PROTOBUF_WARNINGS() TINT_REQUIRE_SEMICOLON
 #define TINT_END_DISABLE_PROTOBUF_WARNINGS() TINT_REQUIRE_SEMICOLON
-#define TINT_UNLIKELY(x) x
-#define TINT_LIKELY(x) x
 
 #endif
 

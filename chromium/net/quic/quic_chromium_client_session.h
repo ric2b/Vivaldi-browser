@@ -42,6 +42,7 @@
 #include "net/quic/quic_connection_logger.h"
 #include "net/quic/quic_crypto_client_config_handle.h"
 #include "net/quic/quic_http3_logger.h"
+#include "net/quic/quic_session_alias_key.h"
 #include "net/quic/quic_session_key.h"
 #include "net/socket/socket_performance_watcher.h"
 #include "net/spdy/http2_priority_dependencies.h"
@@ -604,7 +605,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       TransportSecurityState* transport_security_state,
       SSLConfigService* ssl_config_service,
       std::unique_ptr<QuicServerInfo> server_info,
-      const QuicSessionKey& session_key,
+      QuicSessionAliasKey session_alias_key,
       bool require_confirmation,
       bool migrate_sesion_early_v2,
       bool migrate_session_on_network_change_v2,
@@ -630,6 +631,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
       const ConnectionEndpointMetadata& metadata,
       bool report_ecn,
+      bool enable_origin_frame,
       const NetLogWithSource& net_log);
 
   QuicChromiumClientSession(const QuicChromiumClientSession&) = delete;
@@ -714,6 +716,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   void OnHttp3GoAway(uint64_t id) override;
   void OnAcceptChFrameReceivedViaAlps(
       const quic::AcceptChFrame& frame) override;
+  void OnOriginFrame(const quic::OriginFrame& frame) override;
 
   // quic::QuicSession methods:
   QuicChromiumClientStream* CreateOutgoingBidirectionalStream() override;
@@ -827,6 +830,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   const QuicSessionKey& quic_session_key() const { return session_key_; }
 
+  const QuicSessionAliasKey& session_alias_key() const {
+    return session_alias_key_;
+  }
+
   // Attempts to migrate session when |writer| encounters a write error.
   // If |writer| is no longer actively used, abort migration.
   void MigrateSessionOnWriteError(int error_code,
@@ -923,6 +930,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // order.
   const std::set<std::string>& GetDnsAliasesForSessionKey(
       const QuicSessionKey& key) const;
+
+  const std::set<url::SchemeHostPort>& received_origins() const {
+    return received_origins_;
+  }
 
   void SetGoingAwayForTesting(bool going_away) { going_away_ = going_away; }
 
@@ -1061,6 +1072,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       StreamRequest* stream_request);
 #endif  // BUILDFLAG(ENABLE_WEBSOCKETS)
 
+  const QuicSessionAliasKey session_alias_key_;
   QuicSessionKey session_key_;
   bool require_confirmation_;
   bool migrate_session_early_v2_;
@@ -1107,6 +1119,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   bool pkp_bypassed_ = false;
   bool is_fatal_cert_error_ = false;
   bool report_ecn_;
+  const bool enable_origin_frame_;
   HandleSet handles_;
   StreamRequestQueue stream_requests_;
   std::vector<CompletionOnceCallback> waiting_for_confirmation_callbacks_;
@@ -1161,6 +1174,9 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // Map of origin to Accept-CH header field values received via ALPS.
   base::flat_map<url::SchemeHostPort, std::string>
       accept_ch_entries_received_via_alps_;
+
+  // Stores origins received in ORIGIN frame.
+  std::set<url::SchemeHostPort> received_origins_;
 
   std::vector<uint8_t> ech_config_list_;
 

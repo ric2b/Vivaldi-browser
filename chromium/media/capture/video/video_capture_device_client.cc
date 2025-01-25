@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/capture/video/video_capture_device_client.h"
 
 #include <memory>
@@ -178,7 +183,7 @@ FourccAndFlip GetFourccAndFlipFromPixelFormat(
         // indicates that vertical flipping is needed.
         return {libyuv::FOURCC_24BG, true};
       } else {
-        NOTREACHED_NORETURN()
+        NOTREACHED()
             << "RGB24 is only available in Linux and Windows platforms";
       }
     case media::PIXEL_FORMAT_ARGB:
@@ -187,7 +192,7 @@ FourccAndFlip GetFourccAndFlipFromPixelFormat(
     case media::PIXEL_FORMAT_MJPEG:
       return {libyuv::FOURCC_MJPG};
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -736,7 +741,7 @@ VideoCaptureDeviceClient::ReserveOutputBuffer(const gfx::Size& frame_size,
             buffer_pool_->DuplicateAsUnsafeRegion(buffer_id));
         break;
       case VideoCaptureBufferType::kMailboxHolder:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
       case VideoCaptureBufferType::kGpuMemoryBuffer:
         buffer_handle =
             media::mojom::VideoBufferHandle::NewGpuMemoryBufferHandle(

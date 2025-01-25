@@ -192,6 +192,10 @@ void DownloadBubbleContentsView::ProcessDeepScanPress(
   if (DownloadUIModel* model = GetDownloadModel(id); model) {
     LogDeepScanEvent(model->GetDownloadItem(),
                      safe_browsing::DeepScanEvent::kPromptAccepted);
+    DownloadItemWarningData::AddWarningActionEvent(
+        model->GetDownloadItem(),
+        DownloadItemWarningData::WarningSurface::BUBBLE_SUBPAGE,
+        DownloadItemWarningData::WarningAction::ACCEPT_DEEP_SCAN);
     safe_browsing::DownloadProtectionService::UploadForConsumerDeepScanning(
         model->GetDownloadItem(), trigger, password);
   }
@@ -257,7 +261,7 @@ void DownloadBubbleContentsView::ProcessLocalPasswordInProgressClick(
 
 bool DownloadBubbleContentsView::IsEncryptedArchive(const ContentId& id) {
   if (DownloadUIModel* model = GetDownloadModel(id); model) {
-    return DownloadItemWarningData::IsEncryptedArchive(
+    return DownloadItemWarningData::IsTopLevelEncryptedArchive(
         model->GetDownloadItem());
   }
 

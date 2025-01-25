@@ -146,7 +146,7 @@ GetBenefitCategoryForOptimizationType(
     case optimization_guide::proto::CAPITAL_ONE_CREDIT_CARD_STREAMING_BENEFITS:
       return CreditCardCategoryBenefit::BenefitCategory::kStreaming;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -169,7 +169,7 @@ void AutofillOptimizationGuide::OnDidParseForm(
       optimization_types;
 
   bool has_iban_field =
-      base::ranges::any_of(form_structure, [](const auto& field) {
+      std::ranges::any_of(form_structure, [](const auto& field) {
         return field->Type().GetStorableType() == IBAN_VALUE;
       });
   if (has_iban_field) {
@@ -177,13 +177,28 @@ void AutofillOptimizationGuide::OnDidParseForm(
   }
   if (personal_data_manager) {
     bool has_credit_card_field =
-        base::ranges::any_of(form_structure, [](const auto& field) {
+        std::ranges::any_of(form_structure, [](const auto& field) {
           return field->Type().group() == FieldTypeGroup::kCreditCard;
         });
 
     if (has_credit_card_field) {
       AddCreditCardOptimizationTypes(personal_data_manager, optimization_types);
     }
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+    if (has_credit_card_field &&
+        !personal_data_manager->payments_data_manager()
+             .GetServerCreditCards()
+             .empty() &&
+        base::FeatureList::IsEnabled(
+            features::kAutofillEnableAmountExtractionDesktop)) {
+      optimization_types.insert(
+          optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM);
+      optimization_types.insert(
+          optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_ZIP);
+    }
+#endif
   }
 
   if (base::FeatureList::IsEnabled(

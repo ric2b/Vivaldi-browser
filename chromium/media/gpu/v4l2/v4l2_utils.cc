@@ -50,6 +50,18 @@ namespace {
 int HandledIoctl(int fd, int request, void* arg) {
   return HANDLE_EINTR(ioctl(fd, request, arg));
 }
+
+std::string GetDriverName(const media::IoctlAsCallback& ioctl_cb) {
+  struct v4l2_capability caps;
+  memset(&caps, 0, sizeof(caps));
+  if (ioctl_cb.Run(VIDIOC_QUERYCAP, &caps) != 0) {
+    VPLOGF(1) << "ioctl() failed: VIDIOC_QUERYCAP" << ", caps check failed: 0x"
+              << std::hex << caps.capabilities;
+    return "";
+  }
+
+  return std::string(reinterpret_cast<const char*>(caps.driver));
+}
 }  // namespace
 namespace media {
 
@@ -375,6 +387,63 @@ static const std::map<VideoCodecProfile,
 
 }  // namespace
 
+std::vector<SVCScalabilityMode> GetSupportedScalabilityModesForV4L2Codec(
+    const IoctlAsCallback& ioctl_cb,
+    VideoCodecProfile media_profile) {
+  std::vector<SVCScalabilityMode> scalability_modes;
+  scalability_modes.push_back(SVCScalabilityMode::kL1T1);
+
+  if (base::FeatureList::IsEnabled(kV4L2H264TemporalLayerHWEncoding) &&
+      media_profile >= H264PROFILE_MIN && media_profile <= H264PROFILE_MAX) {
+    struct v4l2_queryctrl query_ctrl;
+    memset(&query_ctrl, 0, sizeof(query_ctrl));
+    query_ctrl.id = V4L2_CID_MPEG_VIDEO_H264_HIERARCHICAL_CODING;
+    if (ioctl_cb.Run(VIDIOC_QUERYCTRL, &query_ctrl) != kIoctlOk) {
+      DPLOG(WARNING) << "h.264 hierarchical coding not supported.";
+      return {};
+    }
+
+    memset(&query_ctrl, 0, sizeof(query_ctrl));
+    query_ctrl.id = V4L2_CID_MPEG_VIDEO_H264_HIERARCHICAL_CODING_TYPE;
+    if (ioctl_cb.Run(VIDIOC_QUERYCTRL, &query_ctrl) != kIoctlOk) {
+      DPLOG(WARNING) << "h.264 hierarchical coding type not supported.";
+      return {};
+    }
+
+    struct v4l2_querymenu query_menu = {
+        .id = query_ctrl.id, .index = static_cast<__u32>(query_ctrl.minimum)};
+    for (; static_cast<int>(query_menu.index) <= query_ctrl.maximum;
+         query_menu.index++) {
+      if (ioctl_cb.Run(VIDIOC_QUERYMENU, &query_menu) != kIoctlOk) {
+        continue;
+      }
+
+      if (query_menu.index == V4L2_MPEG_VIDEO_H264_HIERARCHICAL_CODING_P) {
+        break;
+      }
+    }
+
+    if (query_menu.index != V4L2_MPEG_VIDEO_H264_HIERARCHICAL_CODING_P) {
+      DPLOG(WARNING) << "h.264 hierarchical P coding not supported.";
+      return {};
+    }
+
+    memset(&query_ctrl, 0, sizeof(query_ctrl));
+    query_ctrl.id = V4L2_CID_MPEG_VIDEO_H264_HIERARCHICAL_CODING_LAYER;
+    if (ioctl_cb.Run(VIDIOC_QUERYCTRL, &query_ctrl) != kIoctlOk) {
+      DPLOG(WARNING) << "Unable to determine the number of layers supported.";
+      return {};
+    }
+
+    if (query_ctrl.maximum >= 2) {
+      DVLOGF(2) << "h.264 kL1T2 scalability mode supported.";
+      scalability_modes.push_back(SVCScalabilityMode::kL1T2);
+    }
+  }
+
+  return scalability_modes;
+}
+
 std::vector<VideoCodecProfile> EnumerateSupportedProfilesForV4L2Codec(
     const IoctlAsCallback& ioctl_cb,
     uint32_t codec_as_pix_fmt) {
@@ -573,6 +642,20 @@ bool IsV4L2DecoderStateful() {
                             kSupportedStatefulInputCodecs.begin(),
                             kSupportedStatefulInputCodecs.end()) !=
          v4l2_codecs.end();
+}
+
+bool IsVislDriver() {
+  constexpr char kVideoDeviceDriverPath[] = "/dev/video-dec0";
+  base::ScopedFD device_fd(HANDLE_EINTR(
+      open(kVideoDeviceDriverPath, O_RDWR | O_NONBLOCK | O_CLOEXEC)));
+  if (!device_fd.is_valid()) {
+    return false;
+  }
+
+  std::string v4l2_driver_name =
+      GetDriverName(base::BindRepeating(&HandledIoctl, device_fd.get()));
+
+  return v4l2_driver_name.compare("visl") == 0;
 }
 
 #ifndef NDEBUG

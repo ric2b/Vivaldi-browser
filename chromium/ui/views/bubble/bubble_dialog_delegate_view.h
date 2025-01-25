@@ -20,6 +20,8 @@
 #include "ui/base/class_property.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_utils.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/metadata/view_factory.h"
@@ -60,8 +62,14 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   ax::mojom::Role GetAccessibleWindowRole() final;
 
   // Create and initialize the bubble Widget with proper bounds.
+  // The default ownership for now is NATIVE_WIDGET_OWNS_WIDGET. If any other
+  // ownership mode is used, the returned Widget's lifetime must be managed by
+  // the caller. This is usually done by wrapping the pointer as a unique_ptr
+  // using base::WrapUnique().
   static Widget* CreateBubble(
-      std::unique_ptr<BubbleDialogDelegate> bubble_delegate);
+      std::unique_ptr<BubbleDialogDelegate> bubble_delegate,
+      Widget::InitParams::Ownership ownership =
+          Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET);
 
   //////////////////////////////////////////////////////////////////////////////
   // The anchor view and rectangle:
@@ -520,7 +528,7 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
 #endif
 
   // Used to ensure the button remains anchored while this dialog is open.
-  std::optional<Button::ScopedAnchorHighlight> button_anchor_higlight_;
+  std::optional<Button::ScopedAnchorHighlight> button_anchor_highlight_;
 
   // The helper class that logs common bubble metrics.
   BubbleUmaLogger bubble_uma_logger_;
@@ -550,12 +558,22 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public View,
   }
 
   // Create and initialize the bubble Widget(s) with proper bounds.
+  // Like BubbleDialogDelegate::CreateBubble, the default ownership for now is
+  // NATIVE_WIDGET_OWNS_WIDGET. If any other ownership mode is used, the
+  // returned Widget's lifetime must be managed by the caller. This is usually
+  // done by wrapping the pointer as a unique_ptr using base::WrapUnique().
   template <typename T>
-  static Widget* CreateBubble(std::unique_ptr<T> delegate) {
+  static Widget* CreateBubble(
+      std::unique_ptr<T> delegate,
+      Widget::InitParams::Ownership ownership =
+          Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET) {
     CHECK(IsBubbleDialogDelegateView<T>(delegate.get()));
-    return BubbleDialogDelegate::CreateBubble(std::move(delegate));
+    return BubbleDialogDelegate::CreateBubble(std::move(delegate), ownership);
   }
-  static Widget* CreateBubble(BubbleDialogDelegateView* bubble_delegate);
+  static Widget* CreateBubble(
+      BubbleDialogDelegateView* bubble_delegate,
+      Widget::InitParams::Ownership ownership =
+          Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET);
 
   BubbleDialogDelegateView();
   // |shadow| usually doesn't need to be explicitly set, just uses the default
@@ -604,7 +622,7 @@ VIEW_BUILDER_PROPERTY(bool, EnableArrowKeyTraversal)
 VIEW_BUILDER_PROPERTY(ui::ImageModel, Icon)
 VIEW_BUILDER_PROPERTY(ui::ImageModel, AppIcon)
 VIEW_BUILDER_PROPERTY(ui::ImageModel, MainImage)
-VIEW_BUILDER_PROPERTY(ui::ModalType, ModalType)
+VIEW_BUILDER_PROPERTY(ui::mojom::ModalType, ModalType)
 VIEW_BUILDER_PROPERTY(bool, OwnedByWidget)
 VIEW_BUILDER_PROPERTY(bool, ShowCloseButton)
 VIEW_BUILDER_PROPERTY(bool, ShowIcon)
@@ -618,8 +636,8 @@ VIEW_BUILDER_PROPERTY(bool, CenterTitle)
 #endif
 VIEW_BUILDER_PROPERTY(int, Buttons)
 VIEW_BUILDER_PROPERTY(int, DefaultButton)
-VIEW_BUILDER_METHOD(SetButtonLabel, ui::DialogButton, std::u16string)
-VIEW_BUILDER_METHOD(SetButtonEnabled, ui::DialogButton, bool)
+VIEW_BUILDER_METHOD(SetButtonLabel, ui::mojom::DialogButton, std::u16string)
+VIEW_BUILDER_METHOD(SetButtonEnabled, ui::mojom::DialogButton, bool)
 VIEW_BUILDER_METHOD(set_margins, gfx::Insets)
 VIEW_BUILDER_METHOD(set_use_round_corners, bool)
 VIEW_BUILDER_METHOD(set_corner_radius, int)

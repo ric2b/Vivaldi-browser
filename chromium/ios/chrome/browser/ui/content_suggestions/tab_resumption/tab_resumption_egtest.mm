@@ -11,6 +11,8 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/start_surface/ui_bundled/start_surface_features.h"
+#import "ios/chrome/browser/tabs/ui_bundled/tests/distant_tabs_app_interface.h"
+#import "ios/chrome/browser/tabs/ui_bundled/tests/fake_distant_tab.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
@@ -18,8 +20,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/new_tab_page_app_interface.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_constants.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_constants.h"
-#import "ios/chrome/browser/ui/tabs/tests/distant_tabs_app_interface.h"
-#import "ios/chrome/browser/ui/tabs/tests/fake_distant_tab.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -103,7 +103,6 @@ NSString* HostnameFromGURL(GURL URL) {
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
-  config.features_enabled.push_back(syncer::kSyncSessionOnVisibilityChanged);
   if ([self isUsingTabResumption15]) {
     config.features_enabled.push_back(kTabResumption1_5);
   } else {
@@ -352,7 +351,7 @@ NSString* HostnameFromGURL(GURL URL) {
   // Check that the tile is displayed when there is a local tab.
   WaitUntilTabResumptionTileVisibleOrTimeout(true);
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityID(@"See More"),
+      selectElementWithMatcher:grey_allOf(grey_accessibilityID(@"See more"),
                                           grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
   [[EarlGrey
@@ -377,7 +376,7 @@ NSString* HostnameFromGURL(GURL URL) {
   WaitUntilTabResumptionTileVisibleOrTimeout(true);
   NSError* error = nil;
   [[EarlGrey
-      selectElementWithMatcher:grey_allOf(grey_accessibilityID(@"See More"),
+      selectElementWithMatcher:grey_allOf(grey_accessibilityID(@"See more"),
                                           grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_sufficientlyVisible()
                   error:&error];

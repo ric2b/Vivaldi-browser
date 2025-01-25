@@ -20,12 +20,15 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "mojo/public/cpp/bindings/unique_associated_receiver_set.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "services/webnn/public/cpp/context_properties.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
 #include "services/webnn/public/mojom/features.mojom-blink.h"
-#include "services/webnn/public/mojom/webnn_buffer.mojom-blink.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom-blink.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom-blink.h"
+#include "services/webnn/public/mojom/webnn_graph_builder.mojom-blink.h"
+#include "services/webnn/public/mojom/webnn_tensor.mojom-blink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
@@ -36,7 +39,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_buffer_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_clamp_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_compute_result.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_context_options.h"
@@ -48,6 +50,9 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_linear_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_operand_data_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_operator_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_recurrent_network_activation.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_tensor_descriptor.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_tensor_usage.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_triangular_options.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
@@ -57,13 +62,12 @@
 #include "third_party/blink/renderer/modules/ml/ml.h"
 #include "third_party/blink/renderer/modules/ml/ml_context.h"
 #include "third_party/blink/renderer/modules/ml/ml_trace.h"
-#include "third_party/blink/renderer/modules/ml/webnn/ml_activation.h"
-#include "third_party/blink/renderer/modules/ml/webnn/ml_buffer.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_builder.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_builder_test_utils.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_type_converter.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_utils.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_operand.h"
+#include "third_party/blink/renderer/modules/ml/webnn/ml_tensor.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -79,7 +83,7 @@ namespace blink {
 
 namespace blink_mojom = webnn::mojom::blink;
 
-class FakeWebNNBuffer;
+class FakeWebNNTensor;
 
 namespace {
 
@@ -187,23 +191,16 @@ Vector<T> GetArrayBufferViewValues(
   return values;
 }
 
-ScriptPromise<MLContext> CreateContext(V8TestingScope& scope,
-                                       MLContextOptions* options) {
+MLContext* CreateContext(V8TestingScope& scope, MLContextOptions* options) {
   auto* ml = MakeGarbageCollected<ML>(scope.GetExecutionContext());
-  return ml->createContext(scope.GetScriptState(), options,
-                           scope.GetExceptionState());
-}
-
-MLGraphBuilder* CreateGraphBuilder(V8TestingScope& scope,
-                                   MLContextOptions* options) {
   ScriptPromiseTester tester(scope.GetScriptState(),
-                             CreateContext(scope, options));
+                             ml->createContext(scope.GetScriptState(), options,
+                                               scope.GetExceptionState()));
   tester.WaitUntilSettled();
   CHECK(tester.IsFulfilled());
 
-  auto* context = NativeValueTraits<MLContext>::NativeValue(
+  return NativeValueTraits<MLContext>::NativeValue(
       scope.GetIsolate(), tester.Value().V8Value(), scope.GetExceptionState());
-  return MLGraphBuilder::Create(context);
 }
 
 std::pair<String, String> ComputeGraph(V8TestingScope& scope,
@@ -260,7 +257,6 @@ MLOperand* BuildConv2d(
   auto* conv2d = output->Operator();
   EXPECT_THAT(conv2d, testing::NotNull());
   EXPECT_EQ(conv2d->Kind(), webnn::mojom::blink::Operation::Tag::kConv2d);
-  EXPECT_TRUE(conv2d->IsConnected());
   EXPECT_THAT(conv2d->Options(), testing::NotNull());
   return output;
 }
@@ -277,7 +273,6 @@ MLOperand* BuildGemm(V8TestingScope& scope,
   auto* gemm = output->Operator();
   EXPECT_THAT(gemm, testing::NotNull());
   EXPECT_EQ(gemm->Kind(), webnn::mojom::blink::Operation::Tag::kGemm);
-  EXPECT_TRUE(gemm->IsConnected());
   EXPECT_THAT(gemm->Options(), testing::NotNull());
   return output;
 }
@@ -340,7 +335,6 @@ MLOperand* BuildElementWiseBinary(
   EXPECT_EQ(op->Kind(),
             webnn::mojom::blink::Operation::Tag::kElementWiseBinary);
   EXPECT_EQ(op->SubKind<webnn::mojom::blink::ElementWiseBinary::Kind>(), kind);
-  EXPECT_TRUE(op->IsConnected());
   return output;
 }
 
@@ -374,10 +368,16 @@ class MLGraphTest : public testing::Test {
   BuildResult BuildGraph(V8TestingScope& scope,
                          MLGraphBuilder* builder,
                          const MLNamedOperands& named_operands) {
-    ScriptPromiseTester tester(
-        scope.GetScriptState(),
-        builder->build(scope.GetScriptState(), named_operands,
-                       scope.GetExceptionState()));
+    ScriptPromise<MLGraph> build_promise = builder->build(
+        scope.GetScriptState(), named_operands, scope.GetExceptionState());
+    // An empty promise will be returned if `build()` synchronously rejects.
+    if (build_promise.IsEmpty()) {
+      return BuildResult{
+          .error_name = ExceptionCodeToString(scope.GetExceptionState().Code()),
+          .error_message = scope.GetExceptionState().Message()};
+    }
+
+    ScriptPromiseTester tester(scope.GetScriptState(), build_promise);
     tester.WaitUntilSettled();
     if (tester.IsFulfilled()) {
       return BuildResult{.graph = V8ToObject<MLGraph>(&scope, tester.Value())};
@@ -401,21 +401,23 @@ class WebNNContextHelper {
   WebNNContextHelper() = default;
   ~WebNNContextHelper() = default;
 
-  void ConnectWebNNBufferImpl(const base::UnguessableToken& handle,
-                              std::unique_ptr<FakeWebNNBuffer> buffer) {
-    const auto it = buffer_impls_.find(handle);
-    ASSERT_TRUE(it == buffer_impls_.end());
-    buffer_impls_.try_emplace(handle, std::move(buffer));
+  void ConnectWebNNTensorImpl(const blink::WebNNTensorToken& handle,
+                              std::unique_ptr<FakeWebNNTensor> tensor) {
+    const auto it = tensor_impls_.find(handle);
+    ASSERT_TRUE(it == tensor_impls_.end());
+    tensor_impls_.try_emplace(handle, std::move(tensor));
   }
 
-  void DisconnectAndDestroyWebNNBufferImpl(
-      const base::UnguessableToken& handle) {
-    buffer_impls_.erase(handle);
+  void DisconnectAndDestroyWebNNTensorImpl(
+      const blink::WebNNTensorToken& handle) {
+    tensor_impls_.erase(handle);
   }
 
  private:
-  std::map<base::UnguessableToken, std::unique_ptr<FakeWebNNBuffer>>
-      buffer_impls_;
+  std::map<blink::WebNNTensorToken, std::unique_ptr<FakeWebNNTensor>>
+      tensor_impls_;
+
+  mojo::UniqueAssociatedReceiverSet<blink_mojom::WebNNGraphBuilder> builders_;
 };
 
 class FakeWebNNGraph : public blink_mojom::WebNNGraph {
@@ -443,73 +445,72 @@ class FakeWebNNGraph : public blink_mojom::WebNNGraph {
 
   // Just return for testing the validation of inputs and outputs.
   void Dispatch(
-      const HashMap<WTF::String, base::UnguessableToken>& named_inputs,
-      const HashMap<WTF::String, base::UnguessableToken>& named_outputs)
+      const HashMap<WTF::String, blink::WebNNTensorToken>& named_inputs,
+      const HashMap<WTF::String, blink::WebNNTensorToken>& named_outputs)
       override {}
 
+  // TODO(crbug.com/354741414): Fix this dangling pointer.
   const raw_ref<MLGraphTest, DanglingUntriaged> helper_;
 };
 
-class FakeWebNNBuffer : public blink_mojom::WebNNBuffer {
+class FakeWebNNTensor : public blink_mojom::WebNNTensor {
  public:
-  FakeWebNNBuffer(
+  FakeWebNNTensor(
       WebNNContextHelper& helper,
-      mojo::PendingAssociatedReceiver<blink_mojom::WebNNBuffer> receiver,
-      const base::UnguessableToken& buffer_handle,
-      blink_mojom::BufferInfoPtr buffer_info)
+      mojo::PendingAssociatedReceiver<blink_mojom::WebNNTensor> receiver,
+      const blink::WebNNTensorToken& tensor_handle,
+      blink_mojom::TensorInfoPtr tensor_info)
       : helper_(helper),
         receiver_(this, std::move(receiver)),
-        handle_(buffer_handle) {
-    buffer_ = mojo_base::BigBuffer(buffer_info->descriptor.PackedByteLength());
+        handle_(tensor_handle) {
+    buffer_ = mojo_base::BigBuffer(tensor_info->descriptor.PackedByteLength());
     receiver_.set_disconnect_handler(WTF::BindOnce(
-        &FakeWebNNBuffer::OnConnectionError, WTF::Unretained(this)));
+        &FakeWebNNTensor::OnConnectionError, WTF::Unretained(this)));
   }
 
-  ~FakeWebNNBuffer() override = default;
+  ~FakeWebNNTensor() override = default;
 
-  FakeWebNNBuffer(const FakeWebNNBuffer&) = delete;
-  FakeWebNNBuffer(FakeWebNNBuffer&&) = delete;
+  FakeWebNNTensor(const FakeWebNNTensor&) = delete;
+  FakeWebNNTensor(FakeWebNNTensor&&) = delete;
 
-  const base::UnguessableToken& handle() const { return handle_; }
+  const blink::WebNNTensorToken& handle() const { return handle_; }
 
  private:
-  void ReadBuffer(ReadBufferCallback callback) override {
+  void ReadTensor(ReadTensorCallback callback) override {
     mojo_base::BigBuffer dst_buffer(buffer_.byte_span());
 
     std::move(callback).Run(
-        blink_mojom::ReadBufferResult::NewBuffer(std::move(dst_buffer)));
+        blink_mojom::ReadTensorResult::NewBuffer(std::move(dst_buffer)));
   }
 
-  void WriteBuffer(mojo_base::BigBuffer src_buffer) override {
+  void WriteTensor(mojo_base::BigBuffer src_buffer) override {
     ASSERT_LE(src_buffer.size(), buffer_.size());
-    base::span(buffer_).first(src_buffer.size()).copy_from(src_buffer);
+    base::span(buffer_).copy_prefix_from(src_buffer);
   }
 
   void OnConnectionError() {
-    helper_->DisconnectAndDestroyWebNNBufferImpl(handle());
+    helper_->DisconnectAndDestroyWebNNTensorImpl(handle());
   }
 
+  // TODO(crbug.com/354741414): Fix this dangling pointer.
   const raw_ref<WebNNContextHelper, DanglingUntriaged> helper_;
 
-  mojo::AssociatedReceiver<blink_mojom::WebNNBuffer> receiver_;
+  mojo::AssociatedReceiver<blink_mojom::WebNNTensor> receiver_;
 
-  const base::UnguessableToken handle_;
+  const blink::WebNNTensorToken handle_;
 
   mojo_base::BigBuffer buffer_;
 };
 
-class FakeWebNNContext : public blink_mojom::WebNNContext {
+class FakeWebNNGraphBuilder : public blink_mojom::WebNNGraphBuilder {
  public:
-  explicit FakeWebNNContext(
-      MLGraphTest& helper,
-      mojo::PendingRemote<blink_mojom::WebNNContextClient> client_remote)
-      : helper_(helper), client_remote_(std::move(client_remote)) {}
-  FakeWebNNContext(const FakeWebNNContext&) = delete;
-  FakeWebNNContext(FakeWebNNContext&&) = delete;
-  ~FakeWebNNContext() override = default;
+  explicit FakeWebNNGraphBuilder(MLGraphTest& helper) : helper_(helper) {}
+  FakeWebNNGraphBuilder(const FakeWebNNGraphBuilder&) = delete;
+  FakeWebNNGraphBuilder(FakeWebNNGraphBuilder&&) = delete;
+  ~FakeWebNNGraphBuilder() override = default;
 
  private:
-  // Override methods from webnn::mojom::WebNNContext.
+  // webnn::mojom::blink::WebNNGraphBuilder:
   void CreateGraph(blink_mojom::GraphInfoPtr graph_info,
                    CreateGraphCallback callback) override {
     helper_->SetGraphInfo(std::move(graph_info));
@@ -524,20 +525,46 @@ class FakeWebNNContext : public blink_mojom::WebNNContext {
         std::move(blink_remote)));
   }
 
-  void CreateBuffer(
-      mojo::PendingAssociatedReceiver<blink_mojom::WebNNBuffer> receiver,
-      blink_mojom::BufferInfoPtr buffer_info,
-      const base::UnguessableToken& buffer_handle) override {
-    context_helper_.ConnectWebNNBufferImpl(
-        buffer_handle, std::make_unique<FakeWebNNBuffer>(
-                           context_helper_, std::move(receiver), buffer_handle,
-                           std::move(buffer_info)));
+  // TODO(crbug.com/354741414): Fix this dangling pointer.
+  const raw_ref<MLGraphTest, DanglingUntriaged> helper_;
+};
+
+class FakeWebNNContext : public blink_mojom::WebNNContext {
+ public:
+  explicit FakeWebNNContext(MLGraphTest& helper) : helper_(helper) {}
+  FakeWebNNContext(const FakeWebNNContext&) = delete;
+  FakeWebNNContext(FakeWebNNContext&&) = delete;
+  ~FakeWebNNContext() override = default;
+
+ private:
+  // Override methods from webnn::mojom::WebNNContext.
+  void CreateGraphBuilder(
+      mojo::PendingAssociatedReceiver<blink_mojom::WebNNGraphBuilder> receiver)
+      override {
+    mojo::MakeSelfOwnedAssociatedReceiver<blink_mojom::WebNNGraphBuilder>(
+        std::make_unique<FakeWebNNGraphBuilder>(*helper_), std::move(receiver));
   }
 
-  WebNNContextHelper context_helper_;
+  void CreateTensor(blink_mojom::TensorInfoPtr tensor_info,
+                    CreateTensorCallback callback) override {
+    mojo::PendingAssociatedRemote<blink_mojom::WebNNTensor> blink_remote;
+    auto blink_receiver = blink_remote.InitWithNewEndpointAndPassReceiver();
+    blink::WebNNTensorToken tensor_handle;
+    context_helper_.ConnectWebNNTensorImpl(
+        tensor_handle, std::make_unique<FakeWebNNTensor>(
+                           context_helper_, std::move(blink_receiver),
+                           tensor_handle, std::move(tensor_info)));
 
+    auto success = blink_mojom::CreateTensorSuccess::New(
+        std::move(blink_remote), std::move(tensor_handle));
+    std::move(callback).Run(
+        blink_mojom::CreateTensorResult::NewSuccess(std::move(success)));
+  }
+
+  // TODO(crbug.com/354741414): Fix this dangling pointer.
   const raw_ref<MLGraphTest, DanglingUntriaged> helper_;
-  mojo::PendingRemote<blink_mojom::WebNNContextClient> client_remote_;
+
+  WebNNContextHelper context_helper_;
 };
 
 class FakeWebNNContextProvider : public blink_mojom::WebNNContextProvider {
@@ -565,34 +592,117 @@ class FakeWebNNContextProvider : public blink_mojom::WebNNContextProvider {
   void CreateWebNNContext(blink_mojom::CreateContextOptionsPtr options,
                           CreateWebNNContextCallback callback) override {
     mojo::PendingRemote<blink_mojom::WebNNContext> blink_remote;
-    mojo::PendingRemote<blink_mojom::WebNNContextClient> client_remote;
-    auto client_receiver = client_remote.InitWithNewPipeAndPassReceiver();
     // The receiver bind to FakeWebNNContext.
     mojo::MakeSelfOwnedReceiver<blink_mojom::WebNNContext>(
-        std::make_unique<FakeWebNNContext>(*helper_, std::move(client_remote)),
+        std::make_unique<FakeWebNNContext>(*helper_),
         blink_remote.InitWithNewPipeAndPassReceiver());
 
     webnn::ContextProperties context_properties(
-        webnn::InputOperandLayout::kNchw,
+        webnn::InputOperandLayout::kNchw, webnn::Resample2DAxes::kAny,
         {/*input=*/webnn::SupportedDataTypes::All(),
          /*constant=*/webnn::SupportedDataTypes::All(),
          /*arg_min_max_input=*/
          webnn::SupportedDataTypes::All(),
          /*arg_min_max_output=*/
          webnn::SupportedDataTypes::All(),
-         /*concat_input=*/webnn::SupportedDataTypes::All(),
+         /*batch_normalization_input=*/webnn::SupportedDataTypes::All(),
+         /*cast_input=*/webnn::SupportedDataTypes::All(),
+         /*clamp_input=*/webnn::SupportedDataTypes::All(),
+         /*concat_inputs=*/
+         webnn::SupportedDataTypes::All(),
+         /*conv2d_input=*/webnn::SupportedDataTypes::All(),
+         /*conv_transpose2d_input=*/webnn::SupportedDataTypes::All(),
+         /*cumulative_sum_input=*/webnn::SupportedDataTypes::All(),
+         /*dequantize_linear_input=*/webnn::SupportedDataTypes::All(),
+         /*dequantize_linear_scale=*/webnn::SupportedDataTypes::All(),
+         /*add_input=*/webnn::SupportedDataTypes::All(),
+         /*sub_input=*/webnn::SupportedDataTypes::All(),
+         /*mul_input=*/webnn::SupportedDataTypes::All(),
+         /*div_input=*/webnn::SupportedDataTypes::All(),
+         /*max_input=*/webnn::SupportedDataTypes::All(),
+         /*min_input=*/webnn::SupportedDataTypes::All(),
+         /*pow_input=*/webnn::SupportedDataTypes::All(),
+         /*equal_input=*/webnn::SupportedDataTypes::All(),
+         /*greater_input=*/webnn::SupportedDataTypes::All(),
+         /*greater_or_equal_input=*/webnn::SupportedDataTypes::All(),
+         /*lesser_input=*/webnn::SupportedDataTypes::All(),
+         /*lesser_or_equal_input=*/webnn::SupportedDataTypes::All(),
+         /*logical_not_input=*/webnn::SupportedDataTypes::All(),
+         /*logical_output=*/webnn::SupportedDataTypes::All(),
+         /*abs_input=*/webnn::SupportedDataTypes::All(),
+         /*ceil_input=*/webnn::SupportedDataTypes::All(),
+         /*cos_input=*/webnn::SupportedDataTypes::All(),
+         /*erf_input=*/webnn::SupportedDataTypes::All(),
+         /*exp_input=*/webnn::SupportedDataTypes::All(),
+         /*floor_input=*/webnn::SupportedDataTypes::All(),
+         /*identity_input=*/webnn::SupportedDataTypes::All(),
+         /*log_input=*/webnn::SupportedDataTypes::All(),
+         /*neg_input=*/webnn::SupportedDataTypes::All(),
+         /*reciprocal_input=*/webnn::SupportedDataTypes::All(),
+         /*sign_input=*/webnn::SupportedDataTypes::All(),
+         /*sin_input=*/webnn::SupportedDataTypes::All(),
+         /*sqrt_input=*/webnn::SupportedDataTypes::All(),
+         /*tan_input=*/webnn::SupportedDataTypes::All(),
+         /*elu_input=*/webnn::SupportedDataTypes::All(),
+         /*expand_input=*/webnn::SupportedDataTypes::All(),
          /*gather_input=*/webnn::SupportedDataTypes::All(),
          /*gather_indices=*/
          webnn::SupportedDataTypes::All(),
+         /*gather_elements_input=*/webnn::SupportedDataTypes::All(),
+         /*gather_elements_indices=*/
+         webnn::SupportedDataTypes::All(),
+         /*gelu_input=*/webnn::SupportedDataTypes::All(),
+         /*gemm_input=*/webnn::SupportedDataTypes::All(),
+         /*gru_input=*/webnn::SupportedDataTypes::All(),
+         /*gru_cell_input=*/webnn::SupportedDataTypes::All(),
+         /*hard_sigmoid_input=*/webnn::SupportedDataTypes::All(),
+         /*hard_swish_input=*/webnn::SupportedDataTypes::All(),
+         /*instance_normalization_input=*/webnn::SupportedDataTypes::All(),
+         /*layer_normalization_input=*/webnn::SupportedDataTypes::All(),
+         /*leaky_relu_input=*/webnn::SupportedDataTypes::All(),
+         /*linear_input=*/webnn::SupportedDataTypes::All(),
+         /*lstm_input=*/webnn::SupportedDataTypes::All(),
+         /*lstm_cell_input=*/webnn::SupportedDataTypes::All(),
+         /*matmul_input=*/webnn::SupportedDataTypes::All(),
+         /*pad_input=*/webnn::SupportedDataTypes::All(),
+         /*average_pool2d_input=*/webnn::SupportedDataTypes::All(),
+         /*l2_pool2d_input=*/webnn::SupportedDataTypes::All(),
+         /*max_pool2d_input=*/webnn::SupportedDataTypes::All(),
+         /*prelu_input=*/webnn::SupportedDataTypes::All(),
+         /*quantize_linear_input=*/webnn::SupportedDataTypes::All(),
+         /*quantize_linear_zero_point=*/webnn::SupportedDataTypes::All(),
+         /*reduce_l1_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_l2_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_log_sum_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_log_sum_exp_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_max_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_mean_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_min_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_product_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_sum_input=*/webnn::SupportedDataTypes::All(),
+         /*reduce_sum_square_input=*/webnn::SupportedDataTypes::All(),
+         /*relu_input=*/webnn::SupportedDataTypes::All(),
+         /*resample2d_input=*/webnn::SupportedDataTypes::All(),
+         /*reshape_input=*/webnn::SupportedDataTypes::All(),
+         /*scatter_nd_input=*/webnn::SupportedDataTypes::All(),
+         /*scatter_nd_indices=*/webnn::SupportedDataTypes::All(),
+         /*sigmoid_input=*/webnn::SupportedDataTypes::All(),
+         /*slice_input=*/webnn::SupportedDataTypes::All(),
+         /*softmax_input=*/webnn::SupportedDataTypes::All(),
+         /*softplus_input=*/webnn::SupportedDataTypes::All(),
+         /*softsign_input=*/webnn::SupportedDataTypes::All(),
+         /*split_input=*/webnn::SupportedDataTypes::All(),
+         /*tanh_input=*/webnn::SupportedDataTypes::All(),
+         /*tile_input=*/webnn::SupportedDataTypes::All(),
+         /*transpose_input=*/webnn::SupportedDataTypes::All(),
+         /*triangular_input=*/webnn::SupportedDataTypes::All(),
          /*where_condition=*/
          webnn::SupportedDataTypes::All(),
-         /*where_true_value=*/
-         webnn::SupportedDataTypes::All(),
-         /*where_false_value=*/
+         /*where_value=*/
          webnn::SupportedDataTypes::All()});
     auto success = blink_mojom::CreateContextSuccess::New(
-        std::move(blink_remote), std::move(client_receiver),
-        std::move(context_properties), base::UnguessableToken::Create());
+        std::move(blink_remote), std::move(context_properties),
+        blink::WebNNContextToken());
     std::move(callback).Run(
         blink_mojom::CreateContextResult::NewSuccess(std::move(success)));
   }
@@ -633,7 +743,9 @@ class ScopedWebNNServiceBinder {
 // Build a simple MLGraph asynchronously with only one relu operator.
 ScriptPromise<MLGraph> BuildSimpleGraph(V8TestingScope& scope,
                                         MLContextOptions* context_options) {
-  auto* builder = CreateGraphBuilder(scope, context_options);
+  auto* context = CreateContext(scope, context_options);
+  auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                         scope.GetExceptionState());
   if (builder == nullptr) {
     return ScriptPromise<MLGraph>::RejectWithDOMException(
         scope.GetScriptState(),
@@ -664,23 +776,23 @@ bool IsBufferDataEqual(DOMArrayBuffer* array_buffer,
 MaybeShared<DOMArrayBufferView> CreateArrayBufferViewFromBytes(
     DOMArrayBuffer* array_buffer,
     base::span<const uint8_t> data) {
-  array_buffer->ByteSpan().first(data.size()).copy_from(data);
+  array_buffer->ByteSpan().copy_prefix_from(data);
   return MaybeShared<DOMArrayBufferView>(
       blink::DOMUint8Array::Create(array_buffer, /*byte_offset=*/0,
                                    /*length=*/array_buffer->ByteLength()));
 }
 
-// Checks the contents of a MLBuffer.
-// Returns false if unable to download or the buffer data did not match
+// Checks the contents of a MLTensor.
+// Returns false if unable to download or the tensor data did not match
 // expected.
-bool DownloadMLBufferAndCheck(V8TestingScope& scope,
+bool DownloadMLTensorAndCheck(V8TestingScope& scope,
                               MLContext* context,
-                              MLBuffer* src_buffer,
+                              MLTensor* src_tensor,
                               base::span<const uint8_t> expected_data) {
   auto* script_state = scope.GetScriptState();
   ScriptPromiseTester tester(
       script_state,
-      context->readBuffer(script_state, src_buffer, scope.GetExceptionState()));
+      context->readTensor(script_state, src_tensor, scope.GetExceptionState()));
   tester.WaitUntilSettled();
   if (tester.IsRejected()) {
     return false;
@@ -690,29 +802,38 @@ bool DownloadMLBufferAndCheck(V8TestingScope& scope,
   return IsBufferDataEqual(array_buffer, expected_data);
 }
 
-MLBuffer* CreateMLBufferForOperand(V8TestingScope& scope,
+MLTensor* CreateMLTensorForOperand(V8TestingScope& scope,
                                    MLContext* ml_context,
                                    const MLOperand* operand) {
   auto array_buffer_view = CreateArrayBufferViewForOperand(operand);
-  auto* desc = MLBufferDescriptor::Create();
+  auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(operand->dataType());
   desc->setDimensions(operand->shape());
+  desc->setUsage(V8MLTensorUsage::Constant::kWrite |
+                 V8MLTensorUsage::Constant::kRead);
 
-  MLBuffer* ml_buffer = ml_context->createBuffer(scope.GetScriptState(), desc,
-                                                 scope.GetExceptionState());
-  ml_context->writeBuffer(
-      scope.GetScriptState(), ml_buffer,
-      MaybeShared<DOMArrayBufferView>(array_buffer_view.Get()),
-      /*src_element_offset=*/0, scope.GetExceptionState());
-  return ml_buffer;
-}
-
-Vector<uint8_t> GetMLBufferValues(V8TestingScope& scope,
-                                  MLContext* ml_context,
-                                  MLBuffer* ml_buffer) {
   ScriptPromiseTester tester(
       scope.GetScriptState(),
-      ml_context->readBuffer(scope.GetScriptState(), ml_buffer,
+      ml_context->createTensor(scope.GetScriptState(), desc,
+                               scope.GetExceptionState()));
+  tester.WaitUntilSettled();
+  CHECK(tester.IsFulfilled());
+
+  MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tester.Value());
+
+  ml_context->writeTensor(
+      scope.GetScriptState(), ml_tensor,
+      MaybeShared<DOMArrayBufferView>(array_buffer_view.Get()),
+      /*src_element_offset=*/0, scope.GetExceptionState());
+  return ml_tensor;
+}
+
+Vector<uint8_t> GetMLTensorValues(V8TestingScope& scope,
+                                  MLContext* ml_context,
+                                  MLTensor* ml_tensor) {
+  ScriptPromiseTester tester(
+      scope.GetScriptState(),
+      ml_context->readTensor(scope.GetScriptState(), ml_tensor,
                              scope.GetExceptionState()));
   tester.WaitUntilSettled();
   if (tester.IsRejected()) {
@@ -721,7 +842,7 @@ Vector<uint8_t> GetMLBufferValues(V8TestingScope& scope,
   auto* array_buffer = V8ToObject<DOMArrayBuffer>(&scope, tester.Value());
   return GetArrayBufferViewValues<uint8_t>(
       NotShared<DOMArrayBufferView>(blink::DOMUint8Array::Create(
-          array_buffer, /*byte_offset=*/0, ml_buffer->PackedByteLength())));
+          array_buffer, /*byte_offset=*/0, ml_tensor->PackedByteLength())));
 }
 
 TEST_F(MLGraphTest, BuildTest) {
@@ -729,12 +850,14 @@ TEST_F(MLGraphTest, BuildTest) {
   // Bind fake WebNN Context in the service for testing.
   ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
 
-  auto* builder =
-      CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
-                           scope.GetExceptionState());
+  MLContext* context = CreateContext(scope, MLContextOptions::Create());
   {
     // Test throwing exception if the named outputs is empty.
+    DummyExceptionStateForTesting exception_state;
     MLNamedOperands named_outputs;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, named_outputs);
     EXPECT_EQ(error_name, "TypeError");
@@ -742,9 +865,13 @@ TEST_F(MLGraphTest, BuildTest) {
   }
   {
     // Test throwing exception if the named output is an input operand.
-    auto* input = BuildInput(builder, "input", {3, 4, 5},
-                             V8MLOperandDataType::Enum::kFloat32,
-                             scope.GetExceptionState());
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
+    auto* input =
+        BuildInput(builder, "input", {3, 4, 5},
+                   V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, {{"output", input}});
     EXPECT_EQ(error_name, "TypeError");
@@ -753,9 +880,13 @@ TEST_F(MLGraphTest, BuildTest) {
   }
   {
     // Test throwing exception if the named output is a constant operand.
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
     auto* constant =
         BuildConstant(builder, {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                      scope.GetExceptionState());
+                      exception_state);
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, {{"output", constant}});
     EXPECT_EQ(error_name, "TypeError");
@@ -765,12 +896,16 @@ TEST_F(MLGraphTest, BuildTest) {
   {
     // Test throwing exception if the named outputs is a mix of input and
     // constant operands.
-    auto* input = BuildInput(builder, "input", {3, 4, 5},
-                             V8MLOperandDataType::Enum::kFloat32,
-                             scope.GetExceptionState());
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
+    auto* input =
+        BuildInput(builder, "input", {3, 4, 5},
+                   V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* constant =
         BuildConstant(builder, {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                      scope.GetExceptionState());
+                      exception_state);
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, {{"output1", input}, {"output2", constant}});
     EXPECT_EQ(error_name, "TypeError");
@@ -779,14 +914,16 @@ TEST_F(MLGraphTest, BuildTest) {
   }
   {
     // Test throwing exception if two inputs have the same name.
-    auto* a =
-        BuildInput(builder, "a", {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                   scope.GetExceptionState());
-    auto* b =
-        BuildInput(builder, "a", {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                   scope.GetExceptionState());
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
+    auto* a = BuildInput(builder, "a", {3, 4, 5},
+                         V8MLOperandDataType::Enum::kFloat32, exception_state);
+    auto* b = BuildInput(builder, "a", {3, 4, 5},
+                         V8MLOperandDataType::Enum::kFloat32, exception_state);
     const MLOperatorOptions* options = MLOperatorOptions::Create();
-    auto* c = builder->add(a, b, options, scope.GetExceptionState());
+    auto* c = builder->add(a, b, options, exception_state);
     ASSERT_THAT(c, testing::NotNull());
 
     auto [graph, error_name, error_message] =
@@ -803,11 +940,14 @@ TEST_F(MLGraphTest, BuildTest) {
     //   add
     //    |
     //   [b]
-    auto* a =
-        BuildInput(builder, "a", {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                   scope.GetExceptionState());
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
+    auto* a = BuildInput(builder, "a", {3, 4, 5},
+                         V8MLOperandDataType::Enum::kFloat32, exception_state);
     const MLOperatorOptions* options = MLOperatorOptions::Create();
-    auto* output = builder->add(a, a, options, scope.GetExceptionState());
+    auto* output = builder->add(a, a, options, exception_state);
     ASSERT_THAT(output, testing::NotNull());
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, {{"b", output}});
@@ -826,12 +966,16 @@ TEST_F(MLGraphTest, BuildTest) {
     //  relu   sigmoid
     //    |      |
     //   [b]    [c]
-    auto* a =
-        BuildInput(builder, "a", {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                   scope.GetExceptionState());
-    auto* b = builder->relu(a, scope.GetExceptionState());
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
+    auto* a = BuildInput(builder, "a", {3, 4, 5},
+                         V8MLOperandDataType::Enum::kFloat32, exception_state);
+    const MLOperatorOptions* options = MLOperatorOptions::Create();
+    auto* b = builder->relu(a, options, exception_state);
     ASSERT_THAT(b, testing::NotNull());
-    auto* c = builder->sigmoid(a, scope.GetExceptionState());
+    auto* c = builder->sigmoid(a, options, exception_state);
     ASSERT_THAT(c, testing::NotNull());
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, {{"b", b}, {"c", c}});
@@ -847,12 +991,14 @@ TEST_F(MLGraphTest, BuildTest) {
   {
     // Test building a fake graph with two inputs, one gemm operation and one
     // output.
-    auto* a =
-        BuildInput(builder, "a", {3, 4}, V8MLOperandDataType::Enum::kFloat32,
-                   scope.GetExceptionState());
-    auto* b =
-        BuildInput(builder, "b", {4, 3}, V8MLOperandDataType::Enum::kFloat32,
-                   scope.GetExceptionState());
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
+    auto* a = BuildInput(builder, "a", {3, 4},
+                         V8MLOperandDataType::Enum::kFloat32, exception_state);
+    auto* b = BuildInput(builder, "b", {4, 3},
+                         V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* c = BuildGemm(scope, builder, a, b);
 
     auto [graph, error_name, error_message] =
@@ -867,21 +1013,24 @@ TEST_F(MLGraphTest, BuildTest) {
     EXPECT_EQ(*outputs.at("c"), c->Descriptor());
   }
   {
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
     // Test building a fake graph with conv2d, add and relu operations.
-    auto* input = BuildInput(builder, "input", {1, 1, 5, 5},
-                             V8MLOperandDataType::Enum::kFloat32,
-                             scope.GetExceptionState());
-    auto* filter = BuildConstant(builder, {1, 1, 3, 3},
-                                 V8MLOperandDataType::Enum::kFloat32,
-                                 scope.GetExceptionState());
+    auto* input =
+        BuildInput(builder, "input", {1, 1, 5, 5},
+                   V8MLOperandDataType::Enum::kFloat32, exception_state);
+    auto* filter =
+        BuildConstant(builder, {1, 1, 3, 3},
+                      V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* conv2d = BuildConv2d(scope, builder, input, filter);
-    auto* bias =
-        BuildConstant(builder, {1}, V8MLOperandDataType::Enum::kFloat32,
-                      scope.GetExceptionState());
+    auto* bias = BuildConstant(
+        builder, {1}, V8MLOperandDataType::Enum::kFloat32, exception_state);
     const MLOperatorOptions* options = MLOperatorOptions::Create();
-    auto* add = builder->add(conv2d, bias, options, scope.GetExceptionState());
+    auto* add = builder->add(conv2d, bias, options, exception_state);
     ASSERT_THAT(add, testing::NotNull());
-    auto* output = builder->relu(add, scope.GetExceptionState());
+    auto* output = builder->relu(add, options, exception_state);
     ASSERT_THAT(output, testing::NotNull());
 
     auto [graph, error_name, error_message] =
@@ -924,9 +1073,11 @@ TEST_F(MLGraphTest, CreateNamedArrayBufferViewsTest) {
   // Bind fake WebNN Context in the service for testing.
   ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
 
-  auto* builder =
-      CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
-                           scope.GetExceptionState());
+  MLContext* context = CreateContext(scope, MLContextOptions::Create());
+  auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                         scope.GetExceptionState());
+  ASSERT_THAT(builder, testing::NotNull());
+
   {
     for (auto operand_data_type : kOperandDataTypes) {
       SCOPED_TRACE(testing::Message()
@@ -978,9 +1129,11 @@ TEST_F(MLGraphTest, ComputeTest) {
   // Bind fake WebNN Context in the service for testing.
   ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
 
-  auto* builder =
-      CreateMLGraphBuilder(scope.GetExecutionContext(), scope.GetScriptState(),
-                           scope.GetExceptionState());
+  MLContext* context = CreateContext(scope, MLContextOptions::Create());
+  auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                         scope.GetExceptionState());
+  ASSERT_THAT(builder, testing::NotNull());
+
   // Build a fake graph represents computation 'c = a * b';
   auto* a =
       BuildInput(builder, "a", {3, 4}, V8MLOperandDataType::Enum::kFloat32,
@@ -1151,7 +1304,7 @@ TEST_F(MLGraphTest, ComputeTest) {
   }
 }
 
-TEST_F(MLGraphTest, CreateWebNNBufferTest) {
+TEST_F(MLGraphTest, CreateWebNNTensorTest) {
   V8TestingScope scope;
   // Bind fake WebNN Context in the service for testing.
   ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
@@ -1161,30 +1314,31 @@ TEST_F(MLGraphTest, CreateWebNNBufferTest) {
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
   auto* script_state = scope.GetScriptState();
 
-  ScriptPromiseTester context_tester(script_state,
-                                     CreateContext(scope, options));
-  context_tester.WaitUntilSettled();
-  EXPECT_TRUE(context_tester.IsFulfilled());
-  MLContext* ml_context = V8ToObject<MLContext>(&scope, context_tester.Value());
+  MLContext* ml_context = CreateContext(scope, options);
 
-  auto* desc = MLBufferDescriptor::Create();
+  auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(V8MLOperandDataType::Enum::kFloat32);
   desc->setDimensions({2, 2});
 
-  MLBuffer* ml_buffer =
-      ml_context->createBuffer(script_state, desc, scope.GetExceptionState());
+  ScriptPromiseTester tensor_tester(
+      script_state,
+      ml_context->createTensor(script_state, desc, scope.GetExceptionState()));
+  tensor_tester.WaitUntilSettled();
+  EXPECT_TRUE(tensor_tester.IsFulfilled());
 
   if (scope.GetExceptionState().Code() ==
       ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLBuffer has not been implemented on this platform.";
+    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
   }
 
-  ASSERT_THAT(ml_buffer, testing::NotNull());
-  EXPECT_EQ(ml_buffer->dataType(), desc->dataType());
-  EXPECT_EQ(ml_buffer->shape(), desc->dimensions());
+  MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tensor_tester.Value());
+
+  ASSERT_THAT(ml_tensor, testing::NotNull());
+  EXPECT_EQ(ml_tensor->dataType(), desc->dataType());
+  EXPECT_EQ(ml_tensor->shape(), desc->dimensions());
 }
 
-TEST_F(MLGraphTest, WriteWebNNBufferTest) {
+TEST_F(MLGraphTest, WriteWebNNTensorTest) {
   V8TestingScope scope;
   // Bind fake WebNN Context in the service for testing.
   ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
@@ -1194,44 +1348,46 @@ TEST_F(MLGraphTest, WriteWebNNBufferTest) {
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
   auto* script_state = scope.GetScriptState();
 
-  ScriptPromiseTester context_tester(script_state,
-                                     CreateContext(scope, options));
-  context_tester.WaitUntilSettled();
-  EXPECT_TRUE(context_tester.IsFulfilled());
-  MLContext* ml_context = V8ToObject<MLContext>(&scope, context_tester.Value());
+  MLContext* ml_context = CreateContext(scope, options);
 
-  constexpr size_t kBufferSize = 4ull;
-  const Vector<uint32_t> kBufferShape{2, 2};
+  constexpr size_t kTensorSize = 4ull;
+  const Vector<uint32_t> kTensorShape{2, 2};
 
-  auto* desc = MLBufferDescriptor::Create();
+  auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(V8MLOperandDataType::Enum::kUint8);
-  desc->setDimensions(kBufferShape);
+  desc->setDimensions(kTensorShape);
+  desc->setUsage(V8MLTensorUsage::Constant::kWrite |
+                 V8MLTensorUsage::Constant::kRead);
 
-  MLBuffer* ml_buffer =
-      ml_context->createBuffer(script_state, desc, scope.GetExceptionState());
+  ScriptPromiseTester tensor_tester(
+      script_state,
+      ml_context->createTensor(script_state, desc, scope.GetExceptionState()));
+  tensor_tester.WaitUntilSettled();
+  EXPECT_TRUE(tensor_tester.IsFulfilled());
 
   if (scope.GetExceptionState().Code() ==
       ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLBuffer has not been implemented on this platform.";
+    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
   }
 
-  ASSERT_THAT(ml_buffer, testing::NotNull());
+  MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tensor_tester.Value());
 
-  const std::array<const uint8_t, kBufferSize> input_data = {0xAA, 0xAA, 0xAA,
+  ASSERT_THAT(ml_tensor, testing::NotNull());
+
+  const std::array<const uint8_t, kTensorSize> input_data = {0xAA, 0xAA, 0xAA,
                                                              0xAA};
-  DOMArrayBuffer* array_buffer =
-      DOMArrayBuffer::Create(input_data.data(), input_data.size());
+  DOMArrayBuffer* array_buffer = DOMArrayBuffer::Create(input_data);
   ASSERT_THAT(array_buffer, testing::NotNull());
 
-  // Writing the full buffer.
-  ml_context->writeBuffer(
-      script_state, ml_buffer,
+  // Writing the full tensor.
+  ml_context->writeTensor(
+      script_state, ml_tensor,
       CreateArrayBufferViewFromBytes(array_buffer, input_data),
       /*src_element_offset=*/0, scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
 
-  ml_context->writeBuffer(
-      script_state, ml_buffer,
+  ml_context->writeTensor(
+      script_state, ml_tensor,
       MaybeShared<DOMArrayBufferView>(blink::DOMUint32Array::Create(
           array_buffer, /*byte_offset=*/0,
           /*length=*/array_buffer->ByteLength() / 4)),
@@ -1239,47 +1395,47 @@ TEST_F(MLGraphTest, WriteWebNNBufferTest) {
   EXPECT_FALSE(scope.GetExceptionState().HadException());
 
   EXPECT_TRUE(
-      DownloadMLBufferAndCheck(scope, ml_context, ml_buffer, input_data));
+      DownloadMLTensorAndCheck(scope, ml_context, ml_tensor, input_data));
 
-  // Writing to the remainder of the buffer from source offset.
-  ml_context->writeBuffer(
-      script_state, ml_buffer,
+  // Writing to the remainder of the tensor from source offset.
+  ml_context->writeTensor(
+      script_state, ml_tensor,
       CreateArrayBufferViewFromBytes(
           array_buffer,
-          std::array<const uint8_t, kBufferSize>{0xAA, 0xAA, 0xBB, 0xBB}),
+          std::array<const uint8_t, kTensorSize>{0xAA, 0xAA, 0xBB, 0xBB}),
       /*src_element_offset=*/2, scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
 
-  // Writing zero bytes at the end of the buffer.
-  ml_context->writeBuffer(
-      script_state, ml_buffer,
+  // Writing zero bytes at the end of the tensor.
+  ml_context->writeTensor(
+      script_state, ml_tensor,
       MaybeShared<DOMArrayBufferView>(blink::DOMUint32Array::Create(
           array_buffer, /*byte_offset=*/0,
           /*length=*/array_buffer->ByteLength() / 4)),
       /*src_element_offset=*/1, scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
 
-  EXPECT_TRUE(DownloadMLBufferAndCheck(
-      scope, ml_context, ml_buffer,
-      std::array<const uint8_t, kBufferSize>{0xBB, 0xBB, 0xAA, 0xAA}));
+  EXPECT_TRUE(DownloadMLTensorAndCheck(
+      scope, ml_context, ml_tensor,
+      std::array<const uint8_t, kTensorSize>{0xBB, 0xBB, 0xAA, 0xAA}));
 
   // Writing with both a source offset and size.
-  ml_context->writeBuffer(
-      script_state, ml_buffer,
+  ml_context->writeTensor(
+      script_state, ml_tensor,
       CreateArrayBufferViewFromBytes(
           array_buffer,
-          std::array<const uint8_t, kBufferSize>{0xCC, 0xCC, 0xCC, 0xCC}),
+          std::array<const uint8_t, kTensorSize>{0xCC, 0xCC, 0xCC, 0xCC}),
       /*src_element_offset=*/2, /*src_element_count=*/1,
       scope.GetExceptionState());
   EXPECT_FALSE(scope.GetExceptionState().HadException());
 
-  EXPECT_TRUE(DownloadMLBufferAndCheck(
-      scope, ml_context, ml_buffer,
-      std::array<const uint8_t, kBufferSize>{0xCC, 0xBB, 0xAA, 0xAA}));
+  EXPECT_TRUE(DownloadMLTensorAndCheck(
+      scope, ml_context, ml_tensor,
+      std::array<const uint8_t, kTensorSize>{0xCC, 0xBB, 0xAA, 0xAA}));
 }
 
-// Writing data from an array buffer to a destroyed MLBuffer should not crash.
-TEST_F(MLGraphTest, WriteWebNNBufferThenDestroyTest) {
+// Writing data from an array buffer to a destroyed MLTensor should not crash.
+TEST_F(MLGraphTest, WriteWebNNTensorThenDestroyTest) {
   V8TestingScope scope;
   // Bind fake WebNN Context in the service for testing.
   ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
@@ -1289,38 +1445,40 @@ TEST_F(MLGraphTest, WriteWebNNBufferThenDestroyTest) {
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
   auto* script_state = scope.GetScriptState();
 
-  ScriptPromiseTester context_tester(script_state,
-                                     CreateContext(scope, options));
-  context_tester.WaitUntilSettled();
-  EXPECT_TRUE(context_tester.IsFulfilled());
-  MLContext* ml_context = V8ToObject<MLContext>(&scope, context_tester.Value());
+  MLContext* ml_context = CreateContext(scope, options);
 
-  auto* desc = MLBufferDescriptor::Create();
+  auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(V8MLOperandDataType::Enum::kUint8);
   desc->setDimensions({2, 2});
+  desc->setUsage(V8MLTensorUsage::Constant::kWrite);
 
-  MLBuffer* ml_buffer =
-      ml_context->createBuffer(script_state, desc, scope.GetExceptionState());
+  ScriptPromiseTester tensor_tester(
+      script_state,
+      ml_context->createTensor(script_state, desc, scope.GetExceptionState()));
+  tensor_tester.WaitUntilSettled();
+  EXPECT_TRUE(tensor_tester.IsFulfilled());
 
   if (scope.GetExceptionState().Code() ==
       ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLBuffer has not been implemented on this platform.";
+    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
   }
 
-  ASSERT_THAT(ml_buffer, testing::NotNull());
+  MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tensor_tester.Value());
 
-  ml_buffer->destroy();
+  ASSERT_THAT(ml_tensor, testing::NotNull());
 
-  ml_context->writeBuffer(
-      script_state, ml_buffer,
-      CreateDOMArrayBufferView(ml_buffer->PackedByteLength(),
+  ml_tensor->destroy();
+
+  ml_context->writeTensor(
+      script_state, ml_tensor,
+      CreateDOMArrayBufferView(ml_tensor->PackedByteLength(),
                                V8MLOperandDataType::Enum::kUint8)
           ->BufferBase(),
       /*src_byte_offset=*/0, scope.GetExceptionState());
 }
 
-// Reading data from an array buffer to a destroyed MLBuffer should not crash.
-TEST_F(MLGraphTest, ReadWebNNBufferThenDestroyTest) {
+// Reading data from an array buffer to a destroyed MLTensor should not crash.
+TEST_F(MLGraphTest, ReadWebNNTensorThenDestroyTest) {
   V8TestingScope scope;
   // Bind fake WebNN Context in the service for testing.
   ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
@@ -1330,33 +1488,34 @@ TEST_F(MLGraphTest, ReadWebNNBufferThenDestroyTest) {
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
   auto* script_state = scope.GetScriptState();
 
-  ScriptPromiseTester context_tester(script_state,
-                                     CreateContext(scope, options));
-  context_tester.WaitUntilSettled();
-  EXPECT_TRUE(context_tester.IsFulfilled());
-  MLContext* ml_context = V8ToObject<MLContext>(&scope, context_tester.Value());
+  MLContext* ml_context = CreateContext(scope, options);
 
-  auto* desc = MLBufferDescriptor::Create();
+  auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(V8MLOperandDataType::Enum::kFloat32);
   desc->setDimensions({2, 2});
+  desc->setUsage(V8MLTensorUsage::Constant::kRead);
 
-  MLBuffer* ml_buffer =
-      ml_context->createBuffer(script_state, desc, scope.GetExceptionState());
+  ScriptPromiseTester create_tensor_tester(
+      script_state,
+      ml_context->createTensor(script_state, desc, scope.GetExceptionState()));
+  create_tensor_tester.WaitUntilSettled();
+  EXPECT_TRUE(create_tensor_tester.IsFulfilled());
 
   if (scope.GetExceptionState().Code() ==
       ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLBuffer has not been implemented on this platform.";
+    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
   }
 
-  ASSERT_THAT(ml_buffer, testing::NotNull());
+  MLTensor* ml_tensor =
+      V8ToObject<MLTensor>(&scope, create_tensor_tester.Value());
 
-  ml_buffer->destroy();
+  ASSERT_THAT(ml_tensor, testing::NotNull());
 
-  ScriptPromiseTester buffer_tester(
-      script_state, ml_context->readBuffer(script_state, ml_buffer,
-                                           scope.GetExceptionState()));
-  buffer_tester.WaitUntilSettled();
-  EXPECT_TRUE(buffer_tester.IsRejected());
+  ml_tensor->destroy();
+
+  ScriptPromise<DOMArrayBuffer> read_promise = ml_context->readTensor(
+      script_state, ml_tensor, scope.GetExceptionState());
+  EXPECT_TRUE(read_promise.IsEmpty());
 }
 
 TEST_F(MLGraphTest, WebNNGraphDispatchTest) {
@@ -1367,7 +1526,9 @@ TEST_F(MLGraphTest, WebNNGraphDispatchTest) {
   auto* options = MLContextOptions::Create();
   // Create WebNN Context with GPU device type.
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
-  auto* builder = CreateGraphBuilder(scope, options);
+  MLContext* ml_context = CreateContext(scope, options);
+  auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), ml_context,
+                                         scope.GetExceptionState());
   ASSERT_THAT(builder, testing::NotNull());
   const Vector<uint32_t> dimensions = {3, 5};
   const wtf_size_t number_of_elements = 15;
@@ -1386,23 +1547,21 @@ TEST_F(MLGraphTest, WebNNGraphDispatchTest) {
       BuildGraph(scope, builder, {{"output", output_operand}});
   ASSERT_THAT(graph, testing::NotNull());
 
-  MLContext* ml_context = builder->GetContext();
-
-  // Check if MLBuffer is supported.
-  MLBuffer* input_buffer =
-      CreateMLBufferForOperand(scope, ml_context, lhs_operand);
+  // Check if MLTensor is supported.
+  MLTensor* input_tensor =
+      CreateMLTensorForOperand(scope, ml_context, lhs_operand);
 
   if (scope.GetExceptionState().Code() ==
       ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLBuffer has not been implemented on this platform.";
+    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
   }
 
-  ASSERT_THAT(input_buffer, testing::NotNull());
+  ASSERT_THAT(input_tensor, testing::NotNull());
 
-  MLNamedBuffers inputs(
-      {{"lhs", input_buffer},
-       {"rhs", CreateMLBufferForOperand(scope, ml_context, rhs_operand)}});
-  MLNamedBuffers outputs({{"output", CreateMLBufferForOperand(
+  MLNamedTensors inputs(
+      {{"lhs", input_tensor},
+       {"rhs", CreateMLTensorForOperand(scope, ml_context, rhs_operand)}});
+  MLNamedTensors outputs({{"output", CreateMLTensorForOperand(
                                          scope, ml_context, output_operand)}});
 
   {
@@ -1412,7 +1571,7 @@ TEST_F(MLGraphTest, WebNNGraphDispatchTest) {
     EXPECT_EQ(scope.GetExceptionState().Code(),
               ToExceptionCode(DOMExceptionCode::kNoError));
     Vector<uint8_t> results =
-        GetMLBufferValues(scope, ml_context, outputs[0].second);
+        GetMLTensorValues(scope, ml_context, outputs[0].second);
     EXPECT_EQ(results, Vector<uint8_t>(number_of_elements, 0));
 
     // Dispatch again successfully.
@@ -1420,7 +1579,7 @@ TEST_F(MLGraphTest, WebNNGraphDispatchTest) {
                          scope.GetExceptionState());
     EXPECT_EQ(scope.GetExceptionState().Code(),
               ToExceptionCode(DOMExceptionCode::kNoError));
-    results = GetMLBufferValues(scope, ml_context, outputs[0].second);
+    results = GetMLTensorValues(scope, ml_context, outputs[0].second);
     EXPECT_EQ(results, Vector<uint8_t>(number_of_elements, 0));
   }
 }
@@ -1450,90 +1609,21 @@ struct ClampOptions {
   std::optional<float> max_value;
 };
 
-// TODO: crbug.com/325598628 - Consider replacing this with direct use of the
-// mojo Activation struct.
-struct Activation {
-  webnn::mojom::blink::Activation::Tag kind;
-  std::optional<ClampOptions> clamp_options;
-  std::optional<float> hard_sigmoid_alpha;
-  std::optional<float> hard_sigmoid_beta;
-  std::optional<float> elu_alpha;
-  std::optional<float> leaky_relu_alpha;
-  std::optional<float> linear_alpha;
-  std::optional<float> linear_beta;
-};
-
-MLActivation* CreateActivation(V8TestingScope& scope,
-                               MLGraphBuilder* builder,
-                               const Activation& activation) {
-  switch (activation.kind) {
-    case webnn::mojom::blink::Activation::Tag::kElu: {
-      auto* elu_options = MLEluOptions::Create();
-      CHECK(elu_options);
-      if (activation.elu_alpha.has_value()) {
-        elu_options->setAlpha(activation.elu_alpha.value());
-      }
-      return builder->elu(elu_options, scope.GetExceptionState());
-    }
-    case webnn::mojom::blink::Activation::Tag::kGelu:
-      return builder->gelu(scope.GetExceptionState());
-    case webnn::mojom::blink::Activation::Tag::kHardSigmoid: {
-      auto* hard_sigmoid_options = MLHardSigmoidOptions::Create();
-      CHECK(hard_sigmoid_options);
-      if (activation.hard_sigmoid_alpha.has_value()) {
-        hard_sigmoid_options->setAlpha(activation.hard_sigmoid_alpha.value());
-      }
-      if (activation.hard_sigmoid_beta.has_value()) {
-        hard_sigmoid_options->setBeta(activation.hard_sigmoid_beta.value());
-      }
-      return builder->hardSigmoid(hard_sigmoid_options,
-                                  scope.GetExceptionState());
-    }
-    case webnn::mojom::blink::Activation::Tag::kLeakyRelu: {
-      auto* leaky_relu_options = MLLeakyReluOptions::Create();
-      CHECK(leaky_relu_options);
-      if (activation.leaky_relu_alpha.has_value()) {
-        leaky_relu_options->setAlpha(activation.leaky_relu_alpha.value());
-      }
-      return builder->leakyRelu(leaky_relu_options, scope.GetExceptionState());
-    }
-    case webnn::mojom::blink::Activation::Tag::kLinear: {
-      auto* linear_options = MLLinearOptions::Create();
-      CHECK(linear_options);
-      if (activation.linear_alpha.has_value()) {
-        linear_options->setAlpha(activation.linear_alpha.value());
-      }
-      if (activation.linear_beta.has_value()) {
-        linear_options->setBeta(activation.linear_beta.value());
-      }
-      return builder->linear(linear_options, scope.GetExceptionState());
-    }
-    case webnn::mojom::blink::Activation::Tag::kRelu:
-      return builder->relu(scope.GetExceptionState());
-    case webnn::mojom::blink::Activation::Tag::kSigmoid:
-      return builder->sigmoid(scope.GetExceptionState());
-    case webnn::mojom::blink::Activation::Tag::kSoftplus:
-      return builder->softplus(scope.GetExceptionState());
-    case webnn::mojom::blink::Activation::Tag::kSoftsign:
-      return builder->softsign(scope.GetExceptionState());
-    case webnn::mojom::blink::Activation::Tag::kTanh:
-      return builder->tanh(scope.GetExceptionState());
-  }
-}
-
 struct SoftmaxTester {
   OperandInfo<float> input;
   webnn::OperandDescriptor expected_descriptor;
 
-  void Test(MLGraphTest& helper,
-            V8TestingScope& scope,
-            MLGraphBuilder* builder) {
+  void Test(MLGraphTest& helper, V8TestingScope& scope, MLContext* context) {
     // Build the graph.
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           scope.GetExceptionState());
+    ASSERT_THAT(builder, testing::NotNull());
     auto* input_operand =
         BuildInput(builder, "input", input.dimensions, input.data_type,
                    scope.GetExceptionState());
+    const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output_operand =
-        builder->softmax(input_operand, scope.GetExceptionState());
+        builder->softmax(input_operand, options, scope.GetExceptionState());
     auto [graph, error_name, error_message] =
         helper.BuildGraph(scope, builder, {{"output", output_operand}});
     ASSERT_THAT(graph, testing::NotNull());
@@ -1560,8 +1650,7 @@ TEST_F(MLGraphTest, SoftmaxTest) {
   auto* options = MLContextOptions::Create();
   // Create WebNN Context with GPU device type.
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
-  auto* builder = CreateGraphBuilder(scope, options);
-  ASSERT_THAT(builder, testing::NotNull());
+  MLContext* context = CreateContext(scope, options);
 
   {
     // Test building softmax with float32 input.
@@ -1570,7 +1659,7 @@ TEST_F(MLGraphTest, SoftmaxTest) {
                   .dimensions = {2, 4}},
         .expected_descriptor = ToDescriptor(webnn::OperandDataType::kFloat32,
                                             std::array<uint32_t, 2>{2, 4})}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
   }
   {
     // Test building softmax with float16 input.
@@ -1579,7 +1668,7 @@ TEST_F(MLGraphTest, SoftmaxTest) {
                   .dimensions = {1, 5}},
         .expected_descriptor = ToDescriptor(webnn::OperandDataType::kFloat16,
                                             std::array<uint32_t, 2>{1, 5})}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
   }
 }
 
@@ -1589,15 +1678,17 @@ struct ConstantTester {
   webnn::OperandDescriptor expected_descriptor;
   Vector<T> expected_constant_data;
 
-  void Test(MLGraphTest& helper,
-            V8TestingScope& scope,
-            MLGraphBuilder* builder) {
+  void Test(MLGraphTest& helper, V8TestingScope& scope, MLContext* context) {
     // Build the graph.
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           scope.GetExceptionState());
+    ASSERT_THAT(builder, testing::NotNull());
     auto* constant_operand =
         BuildConstant(builder, constant.dimensions, constant.data_type,
                       constant.values, scope.GetExceptionState());
+    const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output_operand =
-        builder->relu(constant_operand, scope.GetExceptionState());
+        builder->relu(constant_operand, options, scope.GetExceptionState());
     auto [graph, error_name, error_message] =
         helper.BuildGraph(scope, builder, {{"output", output_operand}});
     ASSERT_THAT(graph, testing::NotNull());
@@ -1635,8 +1726,8 @@ TEST_F(MLGraphTest, ConstantTest) {
   auto* options = MLContextOptions::Create();
   // Create WebNN Context with GPU device type.
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
-  auto* builder = CreateGraphBuilder(scope, options);
-  ASSERT_THAT(builder, testing::NotNull());
+  MLContext* context = CreateContext(scope, options);
+
   {  // Test scalar constant operand.
     ConstantTester<float>{
         .constant = {.data_type = V8MLOperandDataType::Enum::kFloat32,
@@ -1645,7 +1736,7 @@ TEST_F(MLGraphTest, ConstantTest) {
         .expected_descriptor = ToDescriptor(webnn::OperandDataType::kFloat32,
                                             std::array<uint32_t, 0>{}),
         .expected_constant_data = {1.0}}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
   }
   {
     // Test Constant operand for Float32 data type.
@@ -1656,7 +1747,7 @@ TEST_F(MLGraphTest, ConstantTest) {
         .expected_descriptor = ToDescriptor(webnn::OperandDataType::kFloat32,
                                             std::array<uint32_t, 2>{2, 3}),
         .expected_constant_data = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0}}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
   }
   {
     // Test Constant operand for Float16 data type.
@@ -1667,7 +1758,7 @@ TEST_F(MLGraphTest, ConstantTest) {
         .expected_descriptor = ToDescriptor(webnn::OperandDataType::kFloat16,
                                             std::array<uint32_t, 2>{2, 3}),
         .expected_constant_data = {1, 2, 3, 4, 5, 6}}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
   }
   {
     // Test Constant operand for Int32 data type.
@@ -1678,7 +1769,7 @@ TEST_F(MLGraphTest, ConstantTest) {
         .expected_descriptor = ToDescriptor(webnn::OperandDataType::kInt32,
                                             std::array<uint32_t, 2>{2, 3}),
         .expected_constant_data = {1, 2, 3, 4, 5, 6}}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
   }
   {
     // Test Constant operand for Int8 data type.
@@ -1689,7 +1780,7 @@ TEST_F(MLGraphTest, ConstantTest) {
         .expected_descriptor = ToDescriptor(webnn::OperandDataType::kInt8,
                                             std::array<uint32_t, 2>{2, 3}),
         .expected_constant_data = {1, 2, 3, 4, 5, 6}}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
   }
 }
 
@@ -1698,16 +1789,18 @@ struct CastTester {
   V8MLOperandDataType::Enum output_data_type;
   webnn::OperandDescriptor expected_descriptor;
 
-  void Test(MLGraphTest& helper,
-            V8TestingScope& scope,
-            MLGraphBuilder* builder) {
+  void Test(MLGraphTest& helper, V8TestingScope& scope, MLContext* context) {
     // Build the graph.
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           scope.GetExceptionState());
+    ASSERT_THAT(builder, testing::NotNull());
     auto* input_operand =
         BuildInput(builder, "input", input.dimensions, input.data_type,
                    scope.GetExceptionState());
+    const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output_operand =
         builder->cast(input_operand, V8MLOperandDataType(output_data_type),
-                      scope.GetExceptionState());
+                      options, scope.GetExceptionState());
     auto [graph, error_name, error_message] =
         helper.BuildGraph(scope, builder, {{"output", output_operand}});
     ASSERT_THAT(graph, testing::NotNull());
@@ -1738,7 +1831,8 @@ TEST_F(MLGraphTest, CastTester) {
   auto* options = MLContextOptions::Create();
   // Create WebNN Context with GPU device type.
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
-  auto* builder = CreateGraphBuilder(scope, options);
+  MLContext* context = CreateContext(scope, options);
+
   const std::array<uint32_t, 2> shape{2, 2};
   const Vector<uint32_t> wtf_shape(shape);
   {
@@ -1747,181 +1841,181 @@ TEST_F(MLGraphTest, CastTester) {
                .output_data_type = V8MLOperandDataType::Enum::kInt32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat16,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat16, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat16,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat16,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat16,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat16,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kFloat16,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat16,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat16, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat16,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat16, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint32,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat16,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat16, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kUint8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kUint8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kInt8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kFloat16,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kFloat16, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt8,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt8, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
     CastTester{.input = {.data_type = V8MLOperandDataType::Enum::kUint8,
                          .dimensions = wtf_shape},
                .output_data_type = V8MLOperandDataType::Enum::kInt32,
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt32, shape)}
-        .Test(*this, scope, builder);
+        .Test(*this, scope, context);
   }
 }
 
@@ -1933,7 +2027,9 @@ TEST_F(MLGraphTest, WebNNGraphComputeTest) {
   auto* options = MLContextOptions::Create();
   // Create WebNN Context with GPU device type.
   options->setDeviceType(V8MLDeviceType::Enum::kGpu);
-  auto* builder = CreateGraphBuilder(scope, options);
+  MLContext* context = CreateContext(scope, options);
+  auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                         scope.GetExceptionState());
   ASSERT_THAT(builder, testing::NotNull());
   const Vector<uint32_t> dimensions = {3, 5};
   const wtf_size_t number_of_elements = 15;

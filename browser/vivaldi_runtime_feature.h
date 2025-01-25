@@ -3,9 +3,10 @@
 #ifndef BROWSER_VIVALDI_RUNTIME_FEATURE_H_
 #define BROWSER_VIVALDI_RUNTIME_FEATURE_H_
 
+#include <string_view>
+
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
 
 namespace content {

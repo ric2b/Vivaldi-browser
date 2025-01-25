@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ui/views/web_apps/web_app_integration_test_driver.h"
 
-#include <codecvt>
 #include <cstddef>
 #include <cstring>
+#include <ios>
 #include <map>
 #include <optional>
 #include <ostream>
@@ -19,6 +19,7 @@
 #include "base/containers/extend.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -160,7 +161,6 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/ui/views/apps/app_dialog/app_uninstall_dialog_view.h"
-#include "chromeos/constants/chromeos_features.h"
 #else
 #include "chrome/browser/ui/webui/app_home/app_home.mojom.h"
 #include "chrome/browser/ui/webui/app_home/app_home_page_handler.h"
@@ -493,7 +493,7 @@ std::string GetSiteId(Site site) {
   return base::NumberToString(base::to_underlying(site));
 }
 
-web_package::WebBundleSigner::Ed25519KeyPair GetKeyPairForSite(Site site) {
+web_package::test::Ed25519KeyPair GetKeyPairForSite(Site site) {
   std::string site_id = GetSiteId(site);
   size_t seed_length = 32;
   site_id.resize(seed_length, 'a');
@@ -502,7 +502,7 @@ web_package::WebBundleSigner::Ed25519KeyPair GetKeyPairForSite(Site site) {
   uint8_t public_key[ED25519_PUBLIC_KEY_LEN];
   uint8_t private_key[ED25519_PRIVATE_KEY_LEN];
   ED25519_keypair_from_seed(public_key, private_key, seed.data());
-  return web_package::WebBundleSigner::Ed25519KeyPair(public_key, private_key);
+  return web_package::test::Ed25519KeyPair(public_key, private_key);
 }
 
 std::string GetFileExtension(FileExtension file_extension) {
@@ -815,8 +815,8 @@ void LoadFileFromDisk(const base::FilePath& path,
   std::string result;
   CHECK(base::ReadFileToString(path, &result));
 
-  std::move(callback).Run(new base::RefCountedBytes(
-      reinterpret_cast<const unsigned char*>(result.data()), result.size()));
+  std::move(callback).Run(
+      new base::RefCountedBytes(base::as_byte_span(result)));
 }
 
 void LoadResponseFromDisk(const base::FilePath& root,
@@ -1107,7 +1107,7 @@ void WebAppIntegrationTestDriver::HandleAppIdentityUpdateDialogResponse(
       break;
     }
     case UpdateDialogResponse::kSkipDialog:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -1294,12 +1294,7 @@ void WebAppIntegrationTestDriver::CreateShortcut(Site site,
                                                  WindowOptions options) {
   bool open_in_window = options == WindowOptions::kWindowed;
 
-#if BUILDFLAG(IS_CHROMEOS)
-  if (chromeos::features::IsCrosShortstandEnabled() && open_in_window) {
-    GTEST_SKIP() << "With project Shortstand, users are no longer allowed to "
-                    "create shortcut and open in window.";
-  }
-#else
+#if !BUILDFLAG(IS_CHROMEOS)
   // TODO(crbug.com/344912771): Remove tests that use the current create
   // shortcut flow once ShortcutsNotApps is launched to 100% Stable.
   if (base::FeatureList::IsEnabled(features::kShortcutsNotApps)) {
@@ -1871,7 +1866,7 @@ void WebAppIntegrationTestDriver::LaunchFromMenuOption(Site site) {
 
 void WebAppIntegrationTestDriver::LaunchFromPlatformShortcut(Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   if (!BeforeStateChangeAction(__FUNCTION__)) {
     return;
@@ -1903,7 +1898,8 @@ void WebAppIntegrationTestDriver::LaunchFromPlatformShortcut(Site site) {
     }
     base::RunLoop run_loop;
     apps::SetMacShimStartupDoneCallbackForTesting(run_loop.QuitClosure());
-    LaunchFromAppShim(site, /*urls=*/{}, /*wait_for_complete_launch=*/true);
+    ASSERT_TRUE(LaunchFromAppShim(site, /*urls=*/{},
+                                  /*wait_for_complete_launch=*/true));
     run_loop.Run();
     if (!app_browser_ && !had_open_browsers) {
       browser_added_waiter.Wait();
@@ -1916,7 +1912,8 @@ void WebAppIntegrationTestDriver::LaunchFromPlatformShortcut(Site site) {
   } else {
     base::RunLoop run_loop;
     apps::SetMacShimStartupDoneCallbackForTesting(run_loop.QuitClosure());
-    LaunchFromAppShim(site, /*urls=*/{}, /*wait_for_complete_launch=*/true);
+    ASSERT_TRUE(LaunchFromAppShim(site, /*urls=*/{},
+                                  /*wait_for_complete_launch=*/true));
     run_loop.Run();
   }
 #else
@@ -1980,7 +1977,7 @@ void WebAppIntegrationTestDriver::LaunchFromAppShimFallback(Site site) {
 
 void WebAppIntegrationTestDriver::OpenAppSettingsFromAppMenu(Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   if (!BeforeStateChangeAction(__FUNCTION__)) {
     return;
@@ -2014,7 +2011,7 @@ void WebAppIntegrationTestDriver::OpenAppSettingsFromAppMenu(Site site) {
 
 void WebAppIntegrationTestDriver::OpenAppSettingsFromChromeApps(Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   if (!BeforeStateChangeAction(__FUNCTION__)) {
     return;
@@ -2040,7 +2037,7 @@ void WebAppIntegrationTestDriver::OpenAppSettingsFromChromeApps(Site site) {
 
 void WebAppIntegrationTestDriver::OpenAppSettingsFromCommand(Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   if (!BeforeStateChangeAction(__FUNCTION__)) {
     return;
@@ -2060,7 +2057,7 @@ void WebAppIntegrationTestDriver::OpenAppSettingsFromCommand(Site site) {
 
 void WebAppIntegrationTestDriver::CreateShortcutsFromList(Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else  // !BUILDFLAG(IS_CHROMEOS)
   if (!BeforeStateChangeAction(__FUNCTION__)) {
     return;
@@ -2118,7 +2115,7 @@ void WebAppIntegrationTestDriver::CheckAppSettingsAppState(
     Profile* profile,
     const AppState& app_state) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   auto app_management_page_handler = CreateAppManagementPageHandler(profile);
 
@@ -2577,7 +2574,7 @@ void WebAppIntegrationTestDriver::UninstallFromList(Site site) {
 
 void WebAppIntegrationTestDriver::UninstallFromAppSettings(Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   if (!BeforeStateChangeAction(__FUNCTION__)) {
     return;
@@ -2719,7 +2716,7 @@ void WebAppIntegrationTestDriver::UninstallFromOs(Site site) {
   site_remember_deny_open_file_.erase(site);
   AfterStateChangeAction();
 #else
-  NOTREACHED_NORETURN() << "Not supported on non-Windows platforms";
+  NOTREACHED() << "Not supported on non-Windows platforms";
 #endif
 }
 
@@ -3011,7 +3008,7 @@ void WebAppIntegrationTestDriver::CheckBrowserNavigation(Site site) {
 void WebAppIntegrationTestDriver::CheckBrowserNavigationIsAppSettings(
     Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   if (!BeforeStateCheckAction(__FUNCTION__)) {
     return;
@@ -3488,7 +3485,7 @@ void WebAppIntegrationTestDriver::CheckSiteNotHandlesFile(
 void WebAppIntegrationTestDriver::CheckUserCannotSetRunOnOsLoginAppSettings(
     Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   if (!BeforeStateCheckAction(__FUNCTION__)) {
     return;
@@ -3521,7 +3518,7 @@ void WebAppIntegrationTestDriver::CheckUserCannotSetRunOnOsLoginAppSettings(
 void WebAppIntegrationTestDriver::CheckUserCannotSetRunOnOsLoginAppHome(
     Site site) {
 #if BUILDFLAG(IS_CHROMEOS)
-  NOTREACHED_NORETURN() << "Not implemented on Chrome OS.";
+  NOTREACHED() << "Not implemented on Chrome OS.";
 #else
   if (!BeforeStateCheckAction(__FUNCTION__)) {
     return;
@@ -4105,7 +4102,7 @@ void WebAppIntegrationTestDriver::AwaitManifestSystemIdle() {
 
 webapps::AppId GetAppIdForIsolatedSite(Site site) {
   auto parent_site = GetSiteConfiguration(site).parent_site;
-  web_package::WebBundleSigner::Ed25519KeyPair key_pair =
+  web_package::test::Ed25519KeyPair key_pair =
       GetKeyPairForSite(parent_site ? parent_site.value() : site);
 
   auto url_info = IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(
@@ -4795,7 +4792,7 @@ WebAppIntegrationTest::WebAppIntegrationTest() : helper_(this) {
   enabled_features.push_back(apps::features::kLinkCapturingUiUpdate);
 #else
   // TODO(b/313492499): Update test driver to work with new intent picker UI.
-  enabled_features.push_back(features::kDesktopPWAsLinkCapturing);
+  enabled_features.push_back(features::kPwaNavigationCapturing);
 #endif  // BUILDFLAG(IS_CHROMEOS)
   scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
 }
@@ -4844,16 +4841,16 @@ bool WebAppIntegrationTest::IsSyncTest() {
 }
 
 void WebAppIntegrationTest::SyncTurnOff() {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 void WebAppIntegrationTest::SyncTurnOn() {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 void WebAppIntegrationTest::AwaitWebAppQuiescence() {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 Profile* WebAppIntegrationTest::GetProfileClient(ProfileClient client) {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace web_app::integration_tests

@@ -65,7 +65,7 @@ const char* BackingTypeToString(SharedImageBackingType type) {
     case SharedImageBackingType::kWrappedGraphiteTexture:
       return "WrappedGraphiteTexture";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace
@@ -204,8 +204,13 @@ std::unique_ptr<SkiaImageRepresentation> SharedImageBacking::ProduceSkia(
     case gpu::GrContextType::kNone:
       // `kNone` signifies that the GPU process is being used only for WebGL via
       // SwiftShader. Skia is not initialized and should never be used in this
-      // case.
-      NOTREACHED_NORETURN();
+      // case but renderer/extension processes find out about software
+      // compositing fallback asynchronously. They could issue GPU work before
+      // finding out.
+      // TODO(crbug.com/335279173): This would never be reached if clients found
+      // out about compositing mode from the GPU process when they initialize a
+      // GPU channel.
+      return nullptr;
     case gpu::GrContextType::kGL:
     case gpu::GrContextType::kVulkan:
       return ProduceSkiaGanesh(manager, tracker, context_state);
@@ -216,7 +221,7 @@ std::unique_ptr<SkiaImageRepresentation> SharedImageBacking::ProduceSkia(
       // handled here on addition.
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 std::unique_ptr<SkiaGaneshImageRepresentation>
@@ -245,16 +250,17 @@ std::unique_ptr<DawnImageRepresentation> SharedImageBacking::ProduceDawn(
   return nullptr;
 }
 
-std::unique_ptr<OverlayImageRepresentation> SharedImageBacking::ProduceOverlay(
+std::unique_ptr<DawnBufferRepresentation> SharedImageBacking::ProduceDawnBuffer(
     SharedImageManager* manager,
-    MemoryTypeTracker* tracker) {
+    MemoryTypeTracker* tracker,
+    const wgpu::Device& device,
+    wgpu::BackendType backend_type) {
   return nullptr;
 }
 
-std::unique_ptr<VaapiImageRepresentation> SharedImageBacking::ProduceVASurface(
+std::unique_ptr<OverlayImageRepresentation> SharedImageBacking::ProduceOverlay(
     SharedImageManager* manager,
-    MemoryTypeTracker* tracker,
-    VaapiDependenciesFactory* dep_factory) {
+    MemoryTypeTracker* tracker) {
   return nullptr;
 }
 
@@ -270,10 +276,10 @@ std::unique_ptr<RasterImageRepresentation> SharedImageBacking::ProduceRaster(
   return nullptr;
 }
 
-std::unique_ptr<VideoDecodeImageRepresentation>
-SharedImageBacking::ProduceVideoDecode(SharedImageManager* manager,
-                                       MemoryTypeTracker* tracker,
-                                       VideoDecodeDevice device) {
+std::unique_ptr<VideoImageRepresentation> SharedImageBacking::ProduceVideo(
+    SharedImageManager* manager,
+    MemoryTypeTracker* tracker,
+    VideoDevice device) {
   return nullptr;
 }
 

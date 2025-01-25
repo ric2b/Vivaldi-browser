@@ -4,7 +4,11 @@
 
 module blink.mojom;
 
+import "third_party/blink/public/mojom/ai/ai_rewriter.mojom";
 import "third_party/blink/public/mojom/ai/ai_text_session.mojom";
+import "third_party/blink/public/mojom/ai/ai_text_session_info.mojom";
+import "third_party/blink/public/mojom/ai/ai_writer.mojom";
+import "third_party/blink/public/mojom/ai/ai_summarizer.mojom";
 
 // LINT.IfChange(ModelAvailabilityCheckResult)
 enum ModelAvailabilityCheckResult {
@@ -61,9 +65,43 @@ enum ModelAvailabilityCheckResult {
 };
 // LINT.ThenChange(//third_party/blink/renderer/modules/ai/exception_helpers.cc:ConvertModelAvailabilityCheckResultToDebugString)
 
-struct AITextSessionSamplingParams {
-  uint32 top_k;
-  float temperature;
+// The client interface that receives an AIWriter from an AIManager.
+interface AIManagerCreateWriterClient {
+  // Called with a created writer's mojo interface as a result for the
+  // CreateWriter() method of the AIManager. When failed to create a
+  // AIWriter, this method is called with a null pending remote.
+  OnResult(pending_remote<blink.mojom.AIWriter>? writer);
+};
+
+// The client interface that receives an AIRewriter from an AIManager.
+interface AIManagerCreateRewriterClient {
+  // Called with a created rewriter's mojo interface as a result for the
+  // CreateRewriter() method of the AIManager. When failed to create a
+  // AIRewriter, this method is called with a null pending remote.
+  OnResult(pending_remote<blink.mojom.AIRewriter>? rewriter);
+};
+
+// The client interface that receives an AISummarizer from an AIManager.
+interface AIManagerCreateSummarizerClient {
+  // Called with a created writer's mojo interface as a result for the
+  // CreateSummarizer() method of the AIManager. When failed to create a
+  // AISummarizer, this method is called with a null pending remote.
+  OnResult(pending_remote<blink.mojom.AISummarizer>? summarizer);
+};
+
+// The enum describes the possible roles in the initial prompt.
+enum AIAssistantInitialPromptRole {
+  kSystem = 0,
+  kUser = 1,
+  kAssistant = 2,
+
+  // Append new line here
+};
+
+// Each initial prompt contains a role and the actual content.
+struct AIAssistantInitialPrompt {
+  AIAssistantInitialPromptRole role;
+  string content;
 };
 
 // The manager that could create a new session for the model.
@@ -72,16 +110,42 @@ interface AIManager {
   // the service in charge of model loading and session creation is not
   // available, this should return false.
   CanCreateTextSession() => (ModelAvailabilityCheckResult result);
-  // Creates a new session and returns if the session is created successfully.
-  // Note that this could return false even if the previous
-  // `CanCreateTextSession()` returns true, because some errors can only
+  // Creates a new session and returns the text session info if the session is
+  // created successfully.
+  // Note that this could return nullptr even if the previous
+  // `CanCreateTextSession()` returns `kReadily`, because some errors can only
   // occur when we actually create the text session.
+  // See the explainer (https://github.com/explainers-by-googlers/prompt-api)
+  // for more information about the meaning of each parameter.
   CreateTextSession(
     pending_receiver<blink.mojom.AITextSession> session,
-    AITextSessionSamplingParams? sampling_params
-  ) => (bool success);
-  // Returns the default configuration for `AITextSessionSamplingParams`.
-  GetDefaultTextSessionSamplingParams() => (
-    AITextSessionSamplingParams default_sampling_params
+    AITextSessionSamplingParams? sampling_params,
+    string? system_prompt,
+    array<AIAssistantInitialPrompt> initial_prompts
+  ) => (AITextSessionInfo? info);
+  // Returns if it is possible to create a summarizer. For example, when
+  // the service in charge of model loading and session creation is not
+  // available, this should return false.
+  CanCreateSummarizer() => (ModelAvailabilityCheckResult result);
+  // Creates a summarizer.
+  CreateSummarizer(
+    pending_remote<AIManagerCreateSummarizerClient> client,
+    AISummarizerCreateOptions options);
+  // Returns the default configuration for the text model information.
+  GetTextModelInfo() => (
+    AITextModelInfo text_model_info
   );
+  // Creates a new AIWriter, and returns it through the passed client. When
+  // the passed client is disconnected, the creation process will be aborted.
+  // `shared_context` in `options` is a string that is set in the
+  // AIWriterCreateOptions when the JS API `ai.writer.create()` is called.
+  CreateWriter(pending_remote<AIManagerCreateWriterClient> client,
+               AIWriterCreateOptions options);
+  // Creates a new AIRewriter, and returns it through the passed client.
+  // When the passed client is disconnected, the creation process will be
+  // aborted.
+  // `shared_context`, `tone` and `length` in `options` are set in the
+  // AIRewriterCreateOptions when the JS API `ai.rewriter.create()` is called.
+  CreateRewriter(pending_remote<AIManagerCreateRewriterClient> client,
+                 AIRewriterCreateOptions options);
 };

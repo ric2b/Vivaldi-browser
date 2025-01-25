@@ -6,10 +6,10 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/test/with_feature_override.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_text_cell.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller_test.h"
-#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_text_cell.h"
 
 namespace {
 
@@ -162,10 +162,10 @@ TEST_P(FallbackViewControllerTest, CheckNoDataItemsMessage) {
 
   NSArray<TableViewItem*>* data_items;
   if (IsKeyboardAccessoryUpgradeEnabled()) {
-    // Set `noDataItemsToShowHeaderItem`.
+    // Set `noRegularDataItemsToShowHeaderItem`.
     TableViewTextHeaderFooterItem* header_item =
         [[TableViewTextHeaderFooterItem alloc] initWithType:ItemTypeSampleOne];
-    fallback_view_controller.noDataItemsToShowHeaderItem = header_item;
+    fallback_view_controller.noRegularDataItemsToShowHeaderItem = header_item;
     data_items = @[];
   } else {
     ManualFillTextItem* empty_credential_item =
@@ -185,15 +185,17 @@ TEST_P(FallbackViewControllerTest, CheckNoDataItemsMessage) {
   // section. When disabled, it is displayed as a regular table view item in the
   // data items section.
   if (IsKeyboardAccessoryUpgradeEnabled()) {
-    // Only the actions section should be present in the table view.
-    EXPECT_EQ(NumberOfSections(), 1);
+    // Only the actions section and no data item section should be present in
+    // the table view.
+    EXPECT_EQ(NumberOfSections(), 2);
 
     // The actions section should have a header and an item.
     EXPECT_TRUE(GetHeaderItem(/*section=*/0));
-    EXPECT_EQ(NumberOfItemsInSection(0), 1);
+    EXPECT_EQ(NumberOfItemsInSection(0), 0);
+    EXPECT_EQ(NumberOfItemsInSection(1), 1);
 
     EXPECT_EQ(GetHeaderItemType(/*section=*/0), ItemTypeSampleOne);
-    EXPECT_EQ(GetTableViewItemType(/*section=*/0, /*item=*/0),
+    EXPECT_EQ(GetTableViewItemType(/*section=*/1, /*item=*/0),
               ItemTypeSampleThree);
   } else {
     // Both the data items and the actions sections should be present in the
@@ -225,10 +227,10 @@ TEST_P(FallbackViewControllerTest, CheckNoDataItemsMessageWhenNoActions) {
   FallbackViewController* fallback_view_controller =
       GetFallbackViewController();
 
-  // Set `noDataItemsToShowHeaderItem`.
+  // Set `noRegularDataItemsToShowHeaderItem`.
   TableViewTextHeaderFooterItem* header_item =
       [[TableViewTextHeaderFooterItem alloc] initWithType:ItemTypeSampleOne];
-  fallback_view_controller.noDataItemsToShowHeaderItem = header_item;
+  fallback_view_controller.noRegularDataItemsToShowHeaderItem = header_item;
 
   [fallback_view_controller presentDataItems:@[]];
   [fallback_view_controller presentActionItems:@[]];
@@ -243,54 +245,27 @@ TEST_P(FallbackViewControllerTest, CheckNoDataItemsMessageWhenNoActions) {
   EXPECT_EQ(GetHeaderItemType(/*section=*/0), ItemTypeSampleOne);
 }
 
-// Tests that the "no data items to show" message is removed once there are data
-// items to show.
-TEST_P(FallbackViewControllerTest, CheckNoDataItemsMessageRemoved) {
-  // This test is only relevant when the Keyboard Accessory Upgrade feature is
-  // enabled.
-  if (!IsKeyboardAccessoryUpgradeEnabled()) {
-    return;
-  }
-
-  FallbackViewController* fallback_view_controller =
-      GetFallbackViewController();
-
-  // Set `noDataItemsToShowHeaderItem`.
-  TableViewTextHeaderFooterItem* header_item =
-      [[TableViewTextHeaderFooterItem alloc] initWithType:ItemTypeSampleOne];
-  fallback_view_controller.noDataItemsToShowHeaderItem = header_item;
-
-  TableViewItem* action_item =
+// Tests that the actions are separated by sections if they belong to different
+// types.
+TEST_P(FallbackViewControllerTest,
+       CheckDifferentSectionsForActionsOfDifferentTypes) {
+  TableViewItem* item_one =
+      [[TableViewItem alloc] initWithType:ItemTypeSampleOne];
+  TableViewItem* item_two =
       [[TableViewItem alloc] initWithType:ItemTypeSampleTwo];
 
-  // First, send no data items so that the "no data items to show" message is
-  // displayed.
-  [fallback_view_controller presentDataItems:@[]];
-  [fallback_view_controller presentActionItems:@[ action_item ]];
+  FallbackViewController* fallbackViewController = GetFallbackViewController();
 
-  // Make sure that the table view content is as expected.
-  EXPECT_EQ(NumberOfSections(), 1);
-  EXPECT_TRUE(GetHeaderItem(/*section=*/0));
-  EXPECT_EQ(NumberOfItemsInSection(0), 1);
-  EXPECT_EQ(GetHeaderItemType(/*section=*/0), ItemTypeSampleOne);
-  EXPECT_EQ(GetTableViewItemType(/*section=*/0, /*item=*/0), ItemTypeSampleTwo);
+  [fallbackViewController presentActionItems:@[ item_one ]];
+  [fallbackViewController presentPlusAddressActionItems:@[ item_two ]];
 
-  // Second, add a data item. This should have the effect of removing the "no
-  // data items to show" message.
-  TableViewItem* data_item =
-      [[TableViewItem alloc] initWithType:ItemTypeSampleThree];
-  [fallback_view_controller presentDataItems:@[ data_item ]];
-
-  // There should now be two sections with one item each.
   EXPECT_EQ(NumberOfSections(), 2);
+
   EXPECT_EQ(NumberOfItemsInSection(0), 1);
   EXPECT_EQ(NumberOfItemsInSection(1), 1);
-  EXPECT_EQ(GetTableViewItemType(/*section=*/0, /*item=*/0),
-            ItemTypeSampleThree);
-  EXPECT_EQ(GetTableViewItemType(/*section=*/1, /*item=*/0), ItemTypeSampleTwo);
 
-  // The "no data items to show" message shouldn't be present anymore.
-  EXPECT_FALSE(GetHeaderItem(/*section=*/1));
+  EXPECT_EQ(GetTableViewItemType(/*section=*/0, /*item=*/0), ItemTypeSampleOne);
+  EXPECT_EQ(GetTableViewItemType(/*section=*/1, /*item=*/0), ItemTypeSampleTwo);
 }
 
 INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(FallbackViewControllerTest);

@@ -47,6 +47,10 @@ void PictureLayer::PushPropertiesTo(
     const ThreadUnsafeCommitState& unsafe_state) {
   PictureLayerImpl* layer_impl = static_cast<PictureLayerImpl*>(base_layer);
 
+  if (!update_rect().IsEmpty()) {
+    layer_impl->set_has_non_animated_image_update_rect();
+  }
+
   Layer::PushPropertiesTo(base_layer, commit_state, unsafe_state);
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "PictureLayer::PushPropertiesTo");
@@ -139,7 +143,15 @@ sk_sp<const SkPicture> PictureLayer::GetPicture() const {
   SkCanvas* canvas =
       recorder.beginRecording(bounds().width(), bounds().height());
   canvas->clear(SK_ColorTRANSPARENT);
-  display_list->Raster(canvas);
+  ScrollOffsetMap raster_inducing_scroll_offsets;
+  const ScrollTree& scroll_tree =
+      layer_tree_host()->property_trees()->scroll_tree();
+  for (auto [element_id, _] : display_list->raster_inducing_scrolls()) {
+    raster_inducing_scroll_offsets[element_id] =
+        scroll_tree.current_scroll_offset(element_id);
+  }
+  display_list->Raster(canvas, /*image_provider=*/nullptr,
+                       &raster_inducing_scroll_offsets);
   return recorder.finishRecordingAsPicture();
 }
 

@@ -15,7 +15,6 @@
 import {ErrorDetails} from '../base/logging';
 import {getCurrentChannel} from '../common/channels';
 import {VERSION} from '../gen/perfetto_version';
-
 import {globals} from './globals';
 import {Router} from './router';
 
@@ -93,7 +92,7 @@ export interface Analytics {
   isEnabled(): boolean;
 }
 
-export class NullAnalytics implements Analytics {
+class NullAnalytics implements Analytics {
   initialize() {}
   updatePath(_: string) {}
   logEvent(_category: TraceCategories | null, _event: string) {}

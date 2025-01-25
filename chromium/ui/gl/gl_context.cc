@@ -133,7 +133,34 @@ bool GLContext::MakeCurrent(GLSurface* surface) {
     LOG(ERROR) << "Failed to make current since context is marked as lost";
     return false;
   }
-  return MakeCurrentImpl(surface);
+  if (!MakeCurrentImpl(surface)) {
+    return false;
+  }
+
+#if BUILDFLAG(IS_ANDROID)
+  // Record the maximum GLES version supported for metrics if not using ANGLE
+  // (we don't record this for ANGLE currently because ANGLE reports the exact
+  // version recorded by the client, which is always <= 3.0 for Chrome).
+  static bool recorded_max_gles_version_if_feasible = false;
+  if (!recorded_max_gles_version_if_feasible) {
+    const GLVersionInfo* version_info = GetVersionInfo();
+    DCHECK(version_info);
+    if (!version_info->is_angle) {
+      MaximumGLESVersion max_gles_version = MaximumGLESVersion::kGLES2_0;
+      if (current_gl_->Version->IsAtLeastGLES(3, 2)) {
+        max_gles_version = MaximumGLESVersion::kGLES3_2;
+      } else if (current_gl_->Version->IsAtLeastGLES(3, 1)) {
+        max_gles_version = MaximumGLESVersion::kGLES3_1;
+      } else if (current_gl_->Version->IsAtLeastGLES(3, 0)) {
+        max_gles_version = MaximumGLESVersion::kGLES3_0;
+      }
+      base::UmaHistogramEnumeration("GPU.MaximumGLESVersion", max_gles_version);
+    }
+    recorded_max_gles_version_if_feasible = true;
+  }
+#endif
+
+  return true;
 }
 
 bool GLContext::MakeCurrentDefault() {
@@ -210,27 +237,6 @@ CurrentGL* GLContext::GetCurrentGL() {
     current_gl_->Api = gl_api_wrapper_->api();
     current_gl_->Version = version_info_.get();
 
-#if BUILDFLAG(IS_ANDROID)
-    // Record the maximum GLES version supported for metrics if not using ANGLE
-    // (we don't record this for ANGLE currently because ANGLE reports the exact
-    // version recorded by the client, which is always <= 3.0 for Chrome).
-    static bool recorded_max_gles_version_if_feasible = false;
-    if (!recorded_max_gles_version_if_feasible &&
-        GetGLImplementation() == kGLImplementationEGLGLES2 &&
-        current_gl_->Version) {
-      MaximumGLESVersion max_gles_version = MaximumGLESVersion::kGLES2_0;
-      if (current_gl_->Version->IsAtLeastGLES(3, 2)) {
-        max_gles_version = MaximumGLESVersion::kGLES3_2;
-      } else if (current_gl_->Version->IsAtLeastGLES(3, 1)) {
-        max_gles_version = MaximumGLESVersion::kGLES3_1;
-      } else if (current_gl_->Version->IsAtLeastGLES(3, 0)) {
-        max_gles_version = MaximumGLESVersion::kGLES3_0;
-      }
-      base::UmaHistogramEnumeration("GPU.MaximumGLESVersion", max_gles_version);
-    }
-    recorded_max_gles_version_if_feasible = true;
-#endif
-
     static_bindings_initialized_ = true;
   }
 
@@ -265,30 +271,34 @@ constexpr uint64_t kInvalidFenceId = 0;
 
 void GLContext::AddMetalSharedEventsForBackpressure(
     std::vector<std::unique_ptr<gpu::BackpressureMetalSharedEvent>> events) {
-  // Only enqueue events if fences are supported since they are only consumed
-  // along with fences.
-  if (gl::GLFence::IsSupported()) {
-    for (auto& e : events) {
-      next_backpressure_events_.push_back(std::move(e));
-    }
+  for (auto& e : events) {
+    next_backpressure_events_.push_back(std::move(e));
   }
 }
 
 uint64_t GLContext::BackpressureFenceCreate() {
   TRACE_EVENT0("gpu", "GLContext::BackpressureFenceCreate");
 
-  // This flush will trigger a crash if FlushForDriverCrashWorkaround is not
-  // called sufficiently frequently.
-  glFlush();
+  std::vector<std::unique_ptr<gpu::BackpressureMetalSharedEvent>>
+      backpressure_events = std::move(next_backpressure_events_);
 
-  if (gl::GLFence::IsSupported()) {
-    next_backpressure_fence_ += 1;
-    backpressure_fences_[next_backpressure_fence_] = {
-        GLFence::Create(), std::move(next_backpressure_events_)};
+  if (gl::GetANGLEImplementation() == gl::ANGLEImplementation::kMetal) {
+    // Don't use a GLFence here since we already have Metal shared events
+    // corresponding to each GL access and we can avoid any fence overhead.
+    backpressure_fences_[++next_backpressure_fence_] = {
+        nullptr, std::move(backpressure_events)};
     return next_backpressure_fence_;
+  } else if (gl::GLFence::IsSupported()) {
+    // This flush will trigger a crash if FlushForDriverCrashWorkaround is not
+    // called sufficiently frequently.
+    glFlush();
+    backpressure_fences_[++next_backpressure_fence_] = {
+        GLFence::Create(), std::move(backpressure_events)};
+    return next_backpressure_fence_;
+  } else {
+    glFinish();
+    return kInvalidFenceId;
   }
-  glFinish();
-  return kInvalidFenceId;
 }
 
 void GLContext::BackpressureFenceWait(uint64_t fence_id) {
@@ -298,11 +308,12 @@ void GLContext::BackpressureFenceWait(uint64_t fence_id) {
   }
 
   // If a fence is not found, then it has already been waited on.
-  auto found = backpressure_fences_.find(fence_id);
-  if (found == backpressure_fences_.end())
+  auto it = backpressure_fences_.find(fence_id);
+  if (it == backpressure_fences_.end()) {
     return;
-  auto [fence, events] = std::move(found->second);
-  backpressure_fences_.erase(found);
+  }
+  auto [fence, events] = std::move(it->second);
+  backpressure_fences_.erase(it);
 
   // Poll for all Metal shared events to be signaled with a 1ms delay.
   bool events_complete = false;
@@ -322,8 +333,10 @@ void GLContext::BackpressureFenceWait(uint64_t fence_id) {
     }
   }
 
-  fence->ClientWait();
-  fence.reset();
+  if (fence) {
+    fence->ClientWait();
+    fence.reset();
+  }
 
   // Waiting on |fence_id| has implicitly waited on all previous fences, so
   // remove them.

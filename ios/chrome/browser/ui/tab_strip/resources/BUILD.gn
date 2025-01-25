@@ -1,37 +1,31 @@
 # Copyright 2022 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-colorset("vivaldi_tab_strip_background_color") {
-  sources = [ "vivaldi_tab_strip_background_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_tab_view_selected_color") {
-  sources = [ "vivaldi_tab_view_selected_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_tab_view_not_selected_color") {
-  sources = [ "vivaldi_tab_view_not_selected_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_tab_view_selected_tint_color") {
-  sources = [ "vivaldi_tab_view_selected_tint_color.colorset/Contents.json" ]
-}
-
-colorset("vivaldi_tab_view_not_selected_tint_color") {
-  sources = [ "vivaldi_tab_view_not_selected_tint_color.colorset/Contents.json" ]
-}
-
-imageset("tabstrip_new_tab") {
+bundle_data_xcassets("vivaldi_tab_strip_assets") {
+  catalog = "VivaldiTabStripAssets.xcassets"
   sources = [
-    "tabstrip_new_tab.imageset/Contents.json",
-    "tabstrip_new_tab.imageset/tabstrip_new_tab@2x.png",
-  ]
-}
+    # vivaldi_tab_strip_background_color
+    "VivaldiTabStripAssets.xcassets/vivaldi_tab_strip_background_color.colorset/Contents.json",
 
-imageset("tabstrip_close_tab") {
-  sources = [
-    "tabstrip_close_tab.imageset/Contents.json",
-    "tabstrip_close_tab.imageset/tabstrip_close_tab.pdf",
+    # vivaldi_tab_view_selected_color
+    "VivaldiTabStripAssets.xcassets/vivaldi_tab_view_selected_color.colorset/Contents.json",
+
+    # vivaldi_tab_view_not_selected_color
+    "VivaldiTabStripAssets.xcassets/vivaldi_tab_view_not_selected_color.colorset/Contents.json",
+
+    # vivaldi_tab_view_selected_tint_color
+    "VivaldiTabStripAssets.xcassets/vivaldi_tab_view_selected_tint_color.colorset/Contents.json",
+
+    # vivaldi_tab_view_not_selected_tint_color
+    "VivaldiTabStripAssets.xcassets/vivaldi_tab_view_not_selected_tint_color.colorset/Contents.json",
+
+    # tabstrip_new_tab
+    "VivaldiTabStripAssets.xcassets/tabstrip_new_tab.imageset/Contents.json",
+    "VivaldiTabStripAssets.xcassets/tabstrip_new_tab.imageset/tabstrip_new_tab@2x.png",
+
+    # tabstrip_close_tab
+    "VivaldiTabStripAssets.xcassets/tabstrip_close_tab.imageset/Contents.json",
+    "VivaldiTabStripAssets.xcassets/tabstrip_close_tab.imageset/tabstrip_close_tab.pdf",
   ]
 }

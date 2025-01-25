@@ -14,7 +14,7 @@
 -- limitations under the License.
 
 CREATE PERFETTO MACRO _ii_df_agg(x Expr, y Expr)
-RETURNS Expr AS __intrinsic_stringify!($x), $y;
+RETURNS Expr AS __intrinsic_stringify!($x), input.$y;
 
 CREATE PERFETTO MACRO _ii_df_bind(x Expr, y Expr)
 RETURNS Expr AS __intrinsic_table_ptr_bind($x, __intrinsic_stringify!($y));
@@ -22,31 +22,30 @@ RETURNS Expr AS __intrinsic_table_ptr_bind($x, __intrinsic_stringify!($y));
 CREATE PERFETTO MACRO _ii_df_select(x Expr, y Expr)
 RETURNS Expr AS $x AS $y;
 
+CREATE PERFETTO MACRO __first_arg(x Expr, y Expr)
+RETURNS Expr AS $x;
+
 CREATE PERFETTO MACRO _interval_agg(
   tab TableOrSubquery,
   agg_columns _ColumnNameList
 )
 RETURNS TableOrSubquery AS
 (
-  SELECT
-    __intrinsic_interval_tree_intervals_agg(
-      id,
-      ts,
-      dur
-      __intrinsic_prefixed_token_zip_join!(
-        $agg_columns,
-        $agg_columns,
-        _ii_df_agg,
-        __intrinsic_token_comma!()
-      )
+  SELECT __intrinsic_interval_tree_intervals_agg(
+    input.id,
+    input.ts,
+    input.dur
+    __intrinsic_token_apply_prefix!(
+      _ii_df_agg,
+      $agg_columns,
+      $agg_columns
     )
-  FROM $tab
-  ORDER BY ts
+  )
+  FROM (SELECT * FROM $tab ORDER BY ts) input
 );
 
 CREATE PERFETTO MACRO _interval_intersect(
-  t1 TableOrSubquery,
-  t2 TableOrSubquery,
+  tabs _TableNameList,
   agg_columns _ColumnNameList
 )
 RETURNS TableOrSubquery AS
@@ -54,31 +53,46 @@ RETURNS TableOrSubquery AS
   SELECT
     c0 AS ts,
     c1 AS dur,
-    c2 AS id_0,
-    c3 AS id_1
-    __intrinsic_prefixed_token_zip_join!(
-      (c4, c5, c6, c7, c8, c9, c10),
-      $agg_columns,
-      _ii_df_select,
-      __intrinsic_token_comma!()
+    -- Columns for tables ids, in the order of provided tables.
+    __intrinsic_token_apply!(
+      __first_arg,
+      (c2 AS id_0, c3 AS id_1, c4 AS id_2, c5 AS id_3, c6 AS id_4),
+      $tabs
     )
+    -- Columns for partitions, one for each column with partition.
+    __intrinsic_token_apply_prefix!(
+      _ii_df_select,
+      (c7, c8, c9, c10),
+      $agg_columns
+    )
+  -- Interval intersect result table.
   FROM __intrinsic_table_ptr(
     __intrinsic_interval_intersect(
-      _interval_agg!($t1, $agg_columns),
-      _interval_agg!($t2, $agg_columns),
+      __intrinsic_token_apply!(
+        _interval_agg,
+        $tabs,
+        ($agg_columns, $agg_columns, $agg_columns, $agg_columns, $agg_columns)
+      ),
       __intrinsic_stringify!($agg_columns)
     )
   )
+
+  -- Bind the resulting columns
   WHERE __intrinsic_table_ptr_bind(c0, 'ts')
     AND __intrinsic_table_ptr_bind(c1, 'dur')
+    -- Id columns
     AND __intrinsic_table_ptr_bind(c2, 'id_0')
     AND __intrinsic_table_ptr_bind(c3, 'id_1')
-    __intrinsic_prefixed_token_zip_join!(
-        (c4, c5, c6, c7, c8, c9, c10),
-        $agg_columns,
-        _ii_df_bind,
-        AND
-      )
+    AND __intrinsic_table_ptr_bind(c4, 'id_2')
+    AND __intrinsic_table_ptr_bind(c5, 'id_3')
+    AND __intrinsic_table_ptr_bind(c6, 'id_4')
+
+    -- Partition columns.
+    __intrinsic_token_apply_and_prefix!(
+      _ii_df_bind,
+      (c7, c8, c9, c10),
+      $agg_columns
+    )
 );
 
 CREATE PERFETTO MACRO _interval_intersect_single(
@@ -93,8 +107,7 @@ RETURNS TableOrSubquery AS
   ts,
   dur
   FROM _interval_intersect!(
-    $t,
-    (SELECT 0 AS id, $ts AS ts, $dur AS dur),
+    ($t, (SELECT 0 AS id, $ts AS ts, $dur AS dur)),
     ()
   )
 );

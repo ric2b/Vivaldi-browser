@@ -19,7 +19,6 @@ limitations under the License.
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <iterator>
 #include <optional>
 #include <ostream>
@@ -35,13 +34,12 @@ limitations under the License.
 #include "absl/container/inlined_vector.h"
 #include "absl/log/check.h"
 #include "absl/types/span.h"
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "mlir/IR/AffineExpr.h"  // from @llvm-project
-#include "mlir/IR/AffineMap.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
+#include "mlir/IR/AffineExpr.h"
+#include "mlir/IR/AffineMap.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/Support/LLVM.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
@@ -49,7 +47,6 @@ limitations under the License.
 #include "xla/layout.h"
 #include "xla/permutation_util.h"
 #include "xla/service/gather_simplifier.h"
-#include "xla/service/gpu/fusions/tiling_util.h"
 #include "xla/service/gpu/hlo_traversal.h"
 #include "xla/service/gpu/matmul_utils.h"
 #include "xla/service/gpu/model/affine_map_printer.h"
@@ -81,12 +78,23 @@ HloInstructionIndexing CreateUnknownIndexing(int64_t count = 1) {
 HloInstructionIndexing ComputeOutputToInputCwiseOpIndexing(
     const HloInstruction* instr, MLIRContext* mlir_context) {
   IndexingMap identity_map = CreateIdentityMap(instr->shape(), mlir_context);
+  IndexingMap unit_map(
+      mlir::AffineMap::get(identity_map.GetAffineMap().getNumDims(),
+                           /*symbolCount=*/0, mlir_context),
+      identity_map.GetDimVars(), /*range_vars=*/{}, /*rt_vars=*/{});
 
   HloInstructionIndexing instr_indexing;
   instr_indexing.indexing_maps.resize(instr->operand_count());
   int64_t operand_count = instr->operand_count();
   for (int64_t operand_id = 0; operand_id < operand_count; ++operand_id) {
-    instr_indexing.indexing_maps[operand_id].insert(identity_map);
+    // Select allows implicit broadcasting in the predicate. We just handle it
+    // generically here.
+    auto* operand = instr->operand(operand_id);
+    if (operand->shape().rank() == 0 && instr->shape().rank() > 0) {
+      instr_indexing.indexing_maps[operand_id].insert(unit_map);
+    } else {
+      instr_indexing.indexing_maps[operand_id].insert(identity_map);
+    }
   }
   return instr_indexing;
 }
@@ -336,6 +344,7 @@ HloInstructionIndexing ComputeOutputToInputDynamicUpdateSliceOpIndexing(
 
   // operand: (d0, ... d_{N-1}) -> (d0, ... d_{N-1})
   std::vector<AffineExpr> identity;
+  identity.reserve(rank);
   for (int64_t dim = 0; dim < rank; ++dim) {
     identity.push_back(getAffineDimExpr(dim, mlir_context));
   }
@@ -520,7 +529,7 @@ HloInstructionIndexing ComputeOutputToInputReduceOpIndexing(
       output_shape.dimensions(), parallel_dims_sizes);
   IndexingMap inits_indexing_map = IndexingMap::FromTensorSizes(
       AffineMap::get(output_shape.rank(), /*symbolCount=*/0, {}, mlir_context),
-      output_shape.dimensions(), {});
+      output_shape.dimensions(), {}, /*is_simplified=*/true);
 
   HloInstructionIndexing instr_indexing;
   instr_indexing.indexing_maps.resize(reduce->operand_count());
@@ -653,7 +662,8 @@ HloInstructionIndexing ComputeOutputToInputReduceWindowOpIndexing(
   // Indexing map for the init value.
   IndexingMap inits_indexing_map = IndexingMap::FromTensorSizes(
       AffineMap::get(output_shape.rank(), /*symbolCount=*/0, {}, mlir_context),
-      output_shape.dimensions(), /*symbol_upper_bounds=*/{});
+      output_shape.dimensions(), /*symbol_upper_bounds=*/{},
+      /*is_simplified=*/true);
 
   HloInstructionIndexing instr_indexing;
   instr_indexing.indexing_maps.resize(reduce_window->operand_count());
@@ -1131,13 +1141,6 @@ std::vector<int64_t> ToTransposeDimensions(const Layout& l) {
   return out;
 }
 
-AffineMap GetTilingAffineMap(llvm::ArrayRef<AffineExpr> exprs,
-                             int64_t num_symbols) {
-  return AffineMap::get(
-      /*dimCount=*/6, /*symbolCount=*/num_symbols, exprs,
-      exprs[0].getContext());
-}
-
 }  // namespace
 
 IndexingMap CreateIdentityMap(const Shape& shape, MLIRContext* mlir_context) {
@@ -1150,7 +1153,7 @@ IndexingMap CreateIdentityMap(const Shape& shape, MLIRContext* mlir_context) {
   auto dimensions = shape.dimensions();
   IndexingMap identity_map = IndexingMap::FromTensorSizes(
       AffineMap::getMultiDimIdentityMap(dimensions.size(), mlir_context),
-      dimensions, {});
+      dimensions, {}, /*is_simplified=*/dimensions.empty());
   return identity_map;
 }
 
@@ -1206,83 +1209,6 @@ IndexingMap GetIndexingMapFromLogicalToPhysicalLayout(
       ComputeTransposeIndexingMap(ToTransposeDimensions(shape.layout()),
                                   mlir_context),
       shape.dimensions(), {});
-}
-
-AffineMap GetBlockOffsetsForTiling(
-    absl::Span<const int64_t> num_blocks,
-    absl::Span<const int64_t> tile_sizes_per_block, int64_t rank,
-    MLIRContext* mlir_context) {
-  auto offsets =
-      DelinearizeInBoundsIndex(getAffineDimExpr(3, mlir_context), num_blocks);
-  for (auto&& [offset, tile_size] : llvm::zip(offsets, tile_sizes_per_block)) {
-    offset = offset * tile_size;
-  }
-  return GetTilingAffineMap(offsets, rank);
-}
-
-AffineMap GetBlockOffsetsForTiling(const Tiling& tiling,
-                                   MLIRContext* mlir_context) {
-  return GetBlockOffsetsForTiling(tiling.GetBlockCounts(),
-                                  tiling.GetBlockTileSize(),
-                                  tiling.GetShape().size(), mlir_context);
-}
-
-AffineMap GetThreadOffsetsForTiling(
-    absl::Span<const int64_t> num_threads,
-    absl::Span<const int64_t> tile_sizes_per_thread, int64_t rank,
-    MLIRContext* mlir_context) {
-  auto offsets =
-      DelinearizeInBoundsIndex(getAffineDimExpr(0, mlir_context), num_threads);
-  for (int dim = 0; dim < rank; ++dim) {
-    if (tile_sizes_per_thread[dim] > 1) {
-      offsets[dim] = offsets[dim] +
-                     getAffineSymbolExpr(dim, mlir_context) * num_threads[dim];
-    }
-  }
-  return GetTilingAffineMap(offsets, rank);
-}
-
-AffineMap GetThreadOffsetsForTiling(const Tiling& tiling,
-                                    MLIRContext* mlir_context) {
-  return GetThreadOffsetsForTiling(tiling.GetThreadsPerBlock(),
-                                   tiling.GetThreadTileSize(),
-                                   tiling.GetShape().size(), mlir_context);
-}
-
-IndexingMap GetIndexingMapForTiling(const Tiling& tiling,
-                                    MLIRContext* mlir_context) {
-  return GetIndexingMapForTiling(
-      GetBlockOffsetsForTiling(tiling, mlir_context),
-      GetThreadOffsetsForTiling(tiling, mlir_context),
-      tiling.GetNumThreadsPerBlock(), tiling.GetNumBlocks(),
-      tiling.GetThreadTileSize(), tiling.GetShape());
-}
-
-IndexingMap GetIndexingMapForTiling(AffineMap block_offsets,
-                                    AffineMap thread_offsets,
-                                    int64_t threads_per_block,
-                                    int64_t num_blocks,
-                                    absl::Span<const int64_t> thread_tile_sizes,
-                                    absl::Span<const int64_t> tiled_shape) {
-  auto* mlir_context = block_offsets.getContext();
-  llvm::SmallVector<AffineExpr, 4> offsets;
-  offsets.reserve(block_offsets.getNumResults());
-  for (auto [block, thread] :
-       llvm::zip(block_offsets.getResults(), thread_offsets.getResults())) {
-    offsets.push_back(block + thread);
-  }
-  std::vector<DimVar> dimension_ranges{
-      {{0, threads_per_block - 1}}, {}, {}, {{0, num_blocks - 1}}, {}, {},
-  };
-  auto affine_map = mlir::AffineMap::get(block_offsets.getNumDims(),
-                                         block_offsets.getNumSymbols(), offsets,
-                                         mlir_context);
-  IndexingMap map{affine_map, dimension_ranges,
-                  RangeVarsFromTensorSizes(thread_tile_sizes), /*rt_vars=*/{}};
-  for (int i = 0; i < tiled_shape.size(); ++i) {
-    map.AddConstraint(affine_map.getResult(i), {0, tiled_shape[i] - 1});
-  }
-  return map;
 }
 
 bool HloInstructionIndexing::Simplify() {

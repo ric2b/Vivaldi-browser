@@ -39,11 +39,11 @@
 #include "include/core/SkVertices.h"
 #include "include/effects/SkRuntimeEffect.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/GrBackendSurface.h"
-#include "include/gpu/GrContextOptions.h"
-#include "include/gpu/GrDirectContext.h"
-#include "include/gpu/GrRecordingContext.h"
-#include "include/gpu/GrTypes.h"
+#include "include/gpu/ganesh/GrBackendSurface.h"
+#include "include/gpu/ganesh/GrContextOptions.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/GrRecordingContext.h"
+#include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/SkColorData.h"
 #include "include/private/base/SingleOwner.h"
@@ -120,7 +120,7 @@ using namespace skia_private;
 
 #define ASSERT_SINGLE_OWNER SKGPU_ASSERT_SINGLE_OWNER(fContext->priv().singleOwner())
 
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
 // GrContextOptions::fMaxTextureSizeOverride exists but doesn't allow for changing the
 // maxTextureSize on the fly.
 int gOverrideMaxTextureSizeGanesh = 0;
@@ -312,8 +312,8 @@ sk_sp<Device> Device::Make(GrRecordingContext* rContext,
 Device::Device(std::unique_ptr<SurfaceDrawContext> sdc, DeviceFlags flags)
         : SkDevice(MakeInfo(sdc.get(), flags), sdc->surfaceProps())
         , fContext(sk_ref_sp(sdc->recordingContext()))
-        , fSDFTControl(sdc->recordingContext()->priv().getSDFTControl(
-                       sdc->surfaceProps().isUseDeviceIndependentFonts()))
+        , fSubRunControl(sdc->recordingContext()->priv().getSubRunControl(
+                         sdc->surfaceProps().isUseDeviceIndependentFonts()))
         , fSurfaceDrawContext(std::move(sdc))
         , fClip(SkIRect::MakeSize(fSurfaceDrawContext->dimensions()),
                 &this->localToDevice(),
@@ -382,7 +382,7 @@ void Device::clearAll() {
 ///////////////////////////////////////////////////////////////////////////////
 
 void Device::clipPath(const SkPath& path, SkClipOp op, bool aa) {
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     if (fContext->priv().options().fAllPathsVolatile && !path.isVolatile()) {
         this->clipPath(SkPath(path).setIsVolatile(true), op, aa);
         return;
@@ -801,7 +801,7 @@ void Device::drawArc(const SkArc& arc, const SkPaint& paint) {
 ///////////////////////////////////////////////////////////////////////////////
 
 void Device::drawPath(const SkPath& origSrcPath, const SkPaint& paint, bool pathIsMutable) {
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     if (fContext->priv().options().fAllPathsVolatile && !origSrcPath.isVolatile()) {
         this->drawPath(SkPath(origSrcPath).setIsVolatile(true), paint, true);
         return;
@@ -1023,7 +1023,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
         cacheSize = dCtx->getResourceCacheLimit();
     }
     size_t maxTextureSize = rCtx->maxTextureSize();
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     if (gOverrideMaxTextureSizeGanesh) {
         maxTextureSize = gOverrideMaxTextureSizeGanesh;
     }
@@ -1041,7 +1041,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
             constraint,
             cacheSize,
             maxTextureSize);
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     gNumTilesDrawnGanesh.store(numTiles, std::memory_order_relaxed);
 #endif
     return wasTiled;
@@ -1177,7 +1177,7 @@ void Device::drawMesh(const SkMesh& mesh, sk_sp<SkBlender> blender, const SkPain
 
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 void Device::drawShadow(const SkPath& path, const SkDrawShadowRec& rec) {
-#if defined(GR_TEST_UTILS)
+#if defined(GPU_TEST_UTILS)
     if (fContext->priv().options().fAllPathsVolatile && !path.isVolatile()) {
         this->drawShadow(SkPath(path).setIsVolatile(true), rec);
         return;
@@ -1359,7 +1359,7 @@ bool Device::replaceBackingProxy(SkSurface::ContentChangeMode mode) {
                                        oldView.mipmapped(),
                                        SkBackingFit::kExact,
                                        oldRTP->isBudgeted(),
-                                       GrProtected::kNo,
+                                       oldRTP->isProtected(),
                                        /*label=*/"BaseDevice_ReplaceBackingProxy");
     if (!proxy) {
         return false;
@@ -1489,7 +1489,7 @@ bool Device::android_utils_clipWithStencil() {
 }
 
 SkStrikeDeviceInfo Device::strikeDeviceInfo() const {
-    return {this->surfaceProps(), this->scalerContextFlags(), &fSDFTControl};
+    return {this->surfaceProps(), this->scalerContextFlags(), &fSubRunControl};
 }
 
 sk_sp<sktext::gpu::Slug> Device::convertGlyphRunListToSlug(const sktext::GlyphRunList& glyphRunList,

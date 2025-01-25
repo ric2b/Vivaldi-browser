@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Fel</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
 <translation id="1181037720776840403">Ta bort</translation>
+<translation id="1184037892196730210">Det går inte att casta skärmen</translation>
 <translation id="1187722533808055681">Uppvakningar ur vila</translation>
 <translation id="122082903575839559">Algoritm för certifikatsignatur</translation>
 <translation id="1221825588892235038">Endast markering</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Fältvärde</translation>
 <translation id="2662876636500006917">Chrome webbutik</translation>
 <translation id="2678063897982469759">Aktivera igen</translation>
-<translation id="2678100101831051676">Det gick inte att casta.</translation>
 <translation id="2719936478972253983">Följande cookies blockerades</translation>
 <translation id="2721037002783622288">&amp;Sök efter bild på <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Inte efter</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Det här tillägget kan vara skadat.</translation>
 <translation id="3387614642886316601">Använd förbättrad stavningskontroll</translation>
 <translation id="3390013585654699824">Appdetaljer</translation>
-<translation id="3393582007140394275">Det gick inte att casta skärmen.</translation>
 <translation id="345693547134384690">Öppna &amp;bild i ny flik</translation>
 <translation id="3493881266323043047">Giltighet</translation>
 <translation id="3511307672085573050">Kopiera länk&amp;adress</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Behåll ändringarna</translation>
 <translation id="6824564591481349393">Kopiera &amp;e-postadress</translation>
 <translation id="6840155290835956714">Fråga innan något skickas</translation>
+<translation id="6878862640969460273">Liggande</translation>
 <translation id="6886871292305414135">Öppna länk i ny &amp;flik</translation>
 <translation id="6892812721183419409">Öppna länk som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrundsapp: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Åtkomst nekad.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrollera stavning medan jag skriver</translation>
+<translation id="7359680654975233185">Det gick inte att casta fliken</translation>
 <translation id="7385854874724088939">Det uppstod ett problem vid utskriften.  Kontrollera skrivaren och försök igen.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
 <translation id="7421925624202799674">&amp;Visa sidkälla</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Tillåt att webbplatser sparar och läser data i kakor</translation>
 <translation id="7663719505383602579">Mottagare: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installerades av din administratör</translation>
+<translation id="7685038817958445325">Det går inte att casta</translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
 <translation id="7701869757853594372">ANVÄNDAR-handtag</translation>
 <translation id="7704305437604973648">Åtgärd</translation>
@@ -410,7 +412,6 @@ Nyckelfil: <ph name="KEY_FILE" />
 Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versioner av ditt tillägg.</translation>
 <translation id="8004582292198964060">Webbläsare</translation>
 <translation id="8018313076035239964">Styr vilken information webbplatserna får ta del av och vilket slags innehåll som får visas på dem</translation>
-<translation id="8032244173881942855">Det gick inte att casta fliken.</translation>
 <translation id="8071432093239591881">Skriv ut som bild</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +467,6 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="9218430445555521422">Använd som standard</translation>
 <translation id="93766956588638423">Reparera tillägg</translation>
 <translation id="961012016278832836">Äldre Microsoft Edge</translation>
-<translation id="98515147261107953">Liggande</translation>
 <translation id="994289308992179865">&amp;Repetera</translation>
 <translation id="998747458861718449">I&amp;nspektera</translation>
 </translationbundle>

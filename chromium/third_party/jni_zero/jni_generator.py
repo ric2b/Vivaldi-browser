@@ -209,7 +209,8 @@ class JniObject:
 
     # These are different only for legacy reasons.
     if from_javap:
-      self.jni_namespace = options.namespace or 'JNI_' + self.java_class.name
+      self.jni_namespace = options.namespace or 'JNI_' + self.java_class.name.replace(
+          '$', '__')
     else:
       self.jni_namespace = parsed_file.jni_namespace or options.namespace
 
@@ -242,7 +243,8 @@ class JniObject:
       self.final_gen_jni_class = proxy.get_gen_jni_class(
           short=options.use_proxy_hash or options.enable_jni_multiplexing,
           name_prefix=self.module_name,
-          package_prefix=options.package_prefix)
+          package_prefix=options.package_prefix,
+          package_prefix_filter=options.package_prefix_filter)
     else:
       self.final_gen_jni_class = None
 
@@ -290,12 +292,9 @@ class JniObject:
       elif self.options.enable_jni_multiplexing:
         return f'Java_{method_name}'
       else:
-        return 'Java_%s_%s' % (common.escape_class_name(
-            self.final_gen_jni_class.full_name_with_slashes), method_name)
+        return 'Java_%s_%s' % (self.final_gen_jni_class.to_cpp(), method_name)
 
-    escaped_name = common.escape_class_name(
-        self.java_class.full_name_with_slashes)
-    return f'Java_{escaped_name}_native{native.cpp_name}'
+    return f'Java_{self.java_class.to_cpp()}_native{native.cpp_name}'
 
 
 def _CollectReferencedClasses(jni_obj):
@@ -564,7 +563,9 @@ def GenerateFromSource(parser, args):
 
   try:
     parsed_files = [
-        parse.parse_java_file(f, package_prefix=args.package_prefix)
+        parse.parse_java_file(f,
+                              package_prefix=args.package_prefix,
+                              package_prefix_filter=args.package_prefix_filter)
         for f in args.input_files
     ]
     jni_objs = [JniObject(x, args, from_javap=False) for x in parsed_files]
@@ -583,7 +584,8 @@ def GenerateFromSource(parser, args):
       gen_jni_class = proxy.get_gen_jni_class(
           short=False,
           name_prefix=jni_objs_with_proxy_natives[0].module_name,
-          package_prefix=args.package_prefix)
+          package_prefix=args.package_prefix,
+          package_prefix_filter=args.package_prefix_filter)
       _CreateSrcJar(args.srcjar_path,
                     gen_jni_class,
                     jni_objs_with_proxy_natives,

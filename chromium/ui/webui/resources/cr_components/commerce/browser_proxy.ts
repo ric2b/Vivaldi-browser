@@ -6,7 +6,7 @@ import type {String16} from '//resources/mojo/mojo/public/mojom/base/string16.mo
 import type {Uuid} from '//resources/mojo/mojo/public/mojom/base/uuid.mojom-webui.js';
 import type {Url} from '//resources/mojo/url/mojom/url.mojom-webui.js';
 
-import type {BookmarkProductInfo, PriceInsightsInfo, ProductInfo, ProductSpecifications, ProductSpecificationsSet, UrlInfo, UserFeedback} from './shopping_service.mojom-webui.js';
+import type {BookmarkProductInfo, PriceInsightsInfo, ProductInfo, ProductSpecifications, ProductSpecificationsDisclosureVersion, ProductSpecificationsFeatureState, ProductSpecificationsSet, UrlInfo, UserFeedback} from './shopping_service.mojom-webui.js';
 import {PageCallbackRouter, ShoppingServiceHandlerFactory, ShoppingServiceHandlerRemote} from './shopping_service.mojom-webui.js';
 
 let instance: BrowserProxy|null = null;
@@ -32,9 +32,11 @@ export interface BrowserProxy {
   switchToOrOpenTab(url: Url): void;
   getParentBookmarkFolderNameForCurrentUrl(): Promise<{name: String16}>;
   showBookmarkEditorForCurrentUrl(): void;
-  showProductSpecificationsSetForUuid(uuid: Uuid): void;
+  showProductSpecificationsSetForUuid(uuid: Uuid, inNewTab: boolean): void;
   showFeedbackForPriceInsights(): void;
   getCallbackRouter(): PageCallbackRouter;
+  getPriceInsightsInfoForUrl(url: Url):
+      Promise<{priceInsightsInfo: PriceInsightsInfo}>;
   getProductInfoForUrl(url: Url): Promise<{productInfo: ProductInfo}>;
   getProductSpecificationsForUrls(urls: Url[]):
       Promise<{productSpecs: ProductSpecifications}>;
@@ -50,6 +52,16 @@ export interface BrowserProxy {
   setUrlsForProductSpecificationsSet(uuid: Uuid, urls: Url[]):
       Promise<{updatedSet: ProductSpecificationsSet | null}>;
   setProductSpecificationsUserFeedback(feedback: UserFeedback): void;
+  setProductSpecificationDisclosureAcceptVersion(
+      version: ProductSpecificationsDisclosureVersion): void;
+  maybeShowProductSpecificationDisclosure(
+      urls: Url[], name: string,
+      setId: string): Promise<{disclosureShown: boolean}>;
+  declineProductSpecificationDisclosure(): void;
+  showSyncSetupFlow(): void;
+  getProductSpecificationsFeatureState():
+      Promise<{state: ProductSpecificationsFeatureState | null}>;
+  getPageTitleFromHistory(url: Url): Promise<{title: string}>;
 }
 
 export class BrowserProxyImpl implements BrowserProxy {
@@ -65,6 +77,10 @@ export class BrowserProxyImpl implements BrowserProxy {
     factory.createShoppingServiceHandler(
         this.callbackRouter.$.bindNewPipeAndPassRemote(),
         this.handler.$.bindNewPipeAndPassReceiver());
+  }
+
+  showSyncSetupFlow() {
+    this.handler.showSyncSetupFlow();
   }
 
   getAllPriceTrackedBookmarkProductInfo() {
@@ -93,6 +109,10 @@ export class BrowserProxyImpl implements BrowserProxy {
 
   getPriceInsightsInfoForCurrentUrl() {
     return this.handler.getPriceInsightsInfoForCurrentUrl();
+  }
+
+  getPriceInsightsInfoForUrl(url: Url) {
+    return this.handler.getPriceInsightsInfoForUrl(url);
   }
 
   getProductSpecificationsForUrls(urls: Url[]) {
@@ -135,6 +155,11 @@ export class BrowserProxyImpl implements BrowserProxy {
     this.handler.switchToOrOpenTab(url);
   }
 
+  setProductSpecificationDisclosureAcceptVersion(
+      version: ProductSpecificationsDisclosureVersion) {
+    this.handler.setProductSpecificationAcceptedDisclosureVersion(version);
+  }
+
   getParentBookmarkFolderNameForCurrentUrl() {
     return this.handler.getParentBookmarkFolderNameForCurrentUrl();
   }
@@ -143,8 +168,8 @@ export class BrowserProxyImpl implements BrowserProxy {
     this.handler.showBookmarkEditorForCurrentUrl();
   }
 
-  showProductSpecificationsSetForUuid(uuid: Uuid) {
-    this.handler.showProductSpecificationsSetForUuid(uuid);
+  showProductSpecificationsSetForUuid(uuid: Uuid, inNewTab: boolean) {
+    this.handler.showProductSpecificationsSetForUuid(uuid, inNewTab);
   }
 
   showFeedbackForPriceInsights() {
@@ -177,6 +202,24 @@ export class BrowserProxyImpl implements BrowserProxy {
 
   setProductSpecificationsUserFeedback(feedback: UserFeedback) {
     this.handler.setProductSpecificationsUserFeedback(feedback);
+  }
+
+  maybeShowProductSpecificationDisclosure(
+      urls: Url[], name: string, setId: string) {
+    return this.handler.maybeShowProductSpecificationDisclosure(
+        urls, name, setId);
+  }
+
+  declineProductSpecificationDisclosure() {
+    this.handler.declineProductSpecificationDisclosure();
+  }
+
+  getProductSpecificationsFeatureState() {
+    return this.handler.getProductSpecificationsFeatureState();
+  }
+
+  getPageTitleFromHistory(url: Url): Promise<{title: string}> {
+    return this.handler.getPageTitleFromHistory(url);
   }
 
   getCallbackRouter() {

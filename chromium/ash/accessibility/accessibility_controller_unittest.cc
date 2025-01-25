@@ -11,6 +11,8 @@
 #include "ash/accessibility/a11y_feature_type.h"
 #include "ash/accessibility/accessibility_observer.h"
 #include "ash/accessibility/disable_trackpad_event_rewriter.h"
+#include "ash/accessibility/filter_keys_event_rewriter.h"
+#include "ash/accessibility/flash_screen_controller.h"
 #include "ash/accessibility/magnifier/docked_magnifier_controller.h"
 #include "ash/accessibility/sticky_keys/sticky_keys_controller.h"
 #include "ash/accessibility/test_accessibility_controller_client.h"
@@ -31,6 +33,7 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -39,10 +42,10 @@
 #include "components/live_caption/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
-#include "media/base/media_switches.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/aura/aura_window_properties.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/animation/animation_test_api.h"
 #include "ui/message_center/message_center.h"
 
 using message_center::MessageCenter;
@@ -117,13 +120,13 @@ class AccessibilityControllerTest : public AshTestBase {
 
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{media::kLiveCaption,
-                              ash::features::kOnDeviceSpeechRecognition,
+        /*enabled_features=*/{ash::features::kOnDeviceSpeechRecognition,
                               ::features::kAccessibilityAccelerator,
                               ::features::kAccessibilityFaceGaze,
                               ::features::kAccessibilityMouseKeys,
                               ::features::
-                                  kAccessibilityCaretBlinkIntervalSetting},
+                                  kAccessibilityCaretBlinkIntervalSetting,
+                              ::features::kAccessibilityFlashScreenFeature},
         /*disabled_features=*/{});
     AshTestBase::SetUp();
   }
@@ -132,6 +135,23 @@ class AccessibilityControllerTest : public AshTestBase {
                                         int count) {
     histogram_tester_.ExpectTotalCount(
         "Accessibility." + feature_name + ".SessionDuration", count);
+  }
+
+  void ExpectFlashNotificationShown() {
+    gfx::AnimationTestApi animation_api(
+        AccessibilityController::Get()
+            ->GetFlashScreenControllerForTesting()
+            ->GetAnimationForTesting());
+    base::TimeTicks now = base::TimeTicks::Now();
+    animation_api.SetStartTime(now);
+    animation_api.Step(now + base::Milliseconds(1));
+
+    // A custom color matrix has been shown.
+    for (aura::Window* root_window : Shell::GetAllRootWindows()) {
+      const cc::FilterOperation::Matrix* matrix =
+          root_window->layer()->GetLayerCustomColorMatrix();
+      EXPECT_TRUE(matrix);
+    }
   }
 
  private:
@@ -151,7 +171,7 @@ TEST_F(AccessibilityControllerTest, ChangingCursorSizePrefChangesCursorSize) {
   // Test all possible sizes
   for (int size = 25; size <= 128; ++size) {
     prefs->SetInteger(prefs::kAccessibilityLargeCursorDipSize, size);
-    auto bounds = cursor_window_controller->GetBoundsForTest();
+    auto bounds = cursor_window_controller->GetCursorBoundsInScreenForTest();
     EXPECT_EQ(bounds.height(), size);
     EXPECT_EQ(bounds.width(), size);
   }
@@ -286,6 +306,10 @@ TEST_F(AccessibilityControllerTest, PrefsAreRegistered) {
   EXPECT_TRUE(prefs->FindPreference(
       prefs::kAccessibilityFaceGazeAdjustSpeedSeparately));
   EXPECT_TRUE(prefs->FindPreference(prefs::kAccessibilityCaretBlinkInterval));
+  EXPECT_TRUE(
+      prefs->FindPreference(prefs::kAccessibilityFlashNotificationsEnabled));
+  EXPECT_TRUE(
+      prefs->FindPreference(prefs::kAccessibilityFlashNotificationsColor));
 }
 
 TEST_F(AccessibilityControllerTest, SetAutoclickEnabled) {
@@ -1311,8 +1335,10 @@ TEST_F(AccessibilityControllerTest, DisableLargeCursorDoesNotResetSize) {
 
   // Cursor compositing should be enabled and the size should be 48 dip.
   EXPECT_TRUE(cursor_window_controller->is_cursor_compositing_enabled());
-  EXPECT_EQ(cursor_window_controller->GetBoundsForTest().width(), 48);
-  EXPECT_EQ(cursor_window_controller->GetBoundsForTest().height(), 48);
+  EXPECT_EQ(cursor_window_controller->GetCursorBoundsInScreenForTest().width(),
+            48);
+  EXPECT_EQ(cursor_window_controller->GetCursorBoundsInScreenForTest().height(),
+            48);
 
   // Turning off large cursor does not reset the size to the default.
   prefs->SetBoolean(prefs::kAccessibilityLargeCursorEnabled, false);
@@ -1324,8 +1350,10 @@ TEST_F(AccessibilityControllerTest, DisableLargeCursorDoesNotResetSize) {
   prefs->SetBoolean(prefs::kAccessibilityLargeCursorEnabled, true);
   EXPECT_EQ(48, prefs->GetInteger(prefs::kAccessibilityLargeCursorDipSize));
   EXPECT_TRUE(cursor_window_controller->is_cursor_compositing_enabled());
-  EXPECT_EQ(cursor_window_controller->GetBoundsForTest().width(), 48);
-  EXPECT_EQ(cursor_window_controller->GetBoundsForTest().height(), 48);
+  EXPECT_EQ(cursor_window_controller->GetCursorBoundsInScreenForTest().width(),
+            48);
+  EXPECT_EQ(cursor_window_controller->GetCursorBoundsInScreenForTest().height(),
+            48);
 }
 
 TEST_F(AccessibilityControllerTest, ChangingCursorColorPrefChangesCursorColor) {
@@ -1706,6 +1734,63 @@ TEST_F(AccessibilityControllerTest, ChangingPrefChangesCaretBlinkInterval) {
   EXPECT_EQ(expected_interval, native_theme->GetCaretBlinkInterval());
 }
 
+TEST_F(AccessibilityControllerTest, FlashNotificationsWhenEnabled) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  EXPECT_FALSE(
+      prefs->GetBoolean(prefs::kAccessibilityFlashNotificationsEnabled));
+
+  auto* accessibility_controller = Shell::Get()->accessibility_controller();
+  accessibility_controller->flash_notifications().SetEnabled(true);
+  EXPECT_TRUE(
+      prefs->GetBoolean(prefs::kAccessibilityFlashNotificationsEnabled));
+
+  // Show a normal notification. Flashing should occur.
+  // Use dictation notification as an easy way to show any notification.
+  accessibility_controller->ShowNotificationForDictation(
+      DictationNotificationType::kAllDlcsDownloaded, u"en-us");
+
+  ExpectFlashNotificationShown();
+
+  accessibility_controller->flash_notifications().SetEnabled(false);
+}
+
+TEST_F(AccessibilityControllerTest, FlashNotificationsPreview) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  EXPECT_FALSE(
+      prefs->GetBoolean(prefs::kAccessibilityFlashNotificationsEnabled));
+
+  auto* accessibility_controller = Shell::Get()->accessibility_controller();
+  accessibility_controller->flash_notifications().SetEnabled(true);
+  EXPECT_TRUE(
+      prefs->GetBoolean(prefs::kAccessibilityFlashNotificationsEnabled));
+
+  // Preview flash notifications.
+  accessibility_controller->PreviewFlashNotification();
+
+  ExpectFlashNotificationShown();
+
+  accessibility_controller->flash_notifications().SetEnabled(false);
+}
+
+TEST_F(AccessibilityControllerTest, DoesNotFlashNotificationsWhenNotEnabled) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  EXPECT_FALSE(
+      prefs->GetBoolean(prefs::kAccessibilityFlashNotificationsEnabled));
+
+  auto* accessibility_controller = Shell::Get()->accessibility_controller();
+  accessibility_controller->ShowNotificationForDictation(
+      DictationNotificationType::kAllDlcsDownloaded, u"en-us");
+  // A custom color matrix has been shown.
+  for (aura::Window* root_window : Shell::GetAllRootWindows()) {
+    const cc::FilterOperation::Matrix* matrix =
+        root_window->layer()->GetLayerCustomColorMatrix();
+    EXPECT_FALSE(matrix);
+  }
+}
+
 TEST_F(AccessibilityControllerTest, EnableOrToggleDictation) {
   AccessibilityController* controller =
       Shell::Get()->accessibility_controller();
@@ -1806,6 +1891,54 @@ TEST_F(AccessibilityControllerTest,
   // AccessibilityController shouldn't have a reference to the
   // DisableTrackpadEventRewriter.
   ASSERT_EQ(nullptr, controller->GetDisableTrackpadEventRewriterForTest());
+}
+
+// Verifies that the FilterKeysEventRewriter isn't initialized, since the
+// feature flag is off in this test suite.
+TEST_F(AccessibilityControllerTest, FilterKeysEventRewriterNotInitialized) {
+  // Initialize the EventRewriterController manually so that all EventRewriters
+  // get initialized.
+  EventRewriterController::Get()->Initialize(nullptr, nullptr);
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  // AccessibilityController shouldn't have a reference to the
+  // FilterKeysEventRewriter.
+  ASSERT_EQ(controller->GetFilterKeysEventRewriterForTest(), nullptr);
+}
+
+TEST_F(AccessibilityControllerTest, FaceGazeNotificationsOnlyShownOnce) {
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  ASSERT_FALSE(
+      prefs->GetBoolean(prefs::kFaceGazeDlcSuccessNotificationHasBeenShown));
+  ASSERT_FALSE(
+      prefs->GetBoolean(prefs::kFaceGazeDlcFailureNotificationHasBeenShown));
+
+  controller->ShowNotificationForFaceGaze(
+      FaceGazeNotificationType::kDlcSucceeded);
+  ASSERT_EQ(1u, MessageCenter::Get()->GetVisibleNotifications().size());
+  ASSERT_TRUE(
+      prefs->GetBoolean(prefs::kFaceGazeDlcSuccessNotificationHasBeenShown));
+  message_center::MessageCenter::Get()->RemoveAllNotifications(
+      /*by_user=*/false, message_center::MessageCenter::RemoveType::ALL);
+
+  // The success notification shouldn't be shown again.
+  controller->ShowNotificationForFaceGaze(
+      FaceGazeNotificationType::kDlcSucceeded);
+  ASSERT_EQ(0u, MessageCenter::Get()->GetVisibleNotifications().size());
+
+  controller->ShowNotificationForFaceGaze(FaceGazeNotificationType::kDlcFailed);
+  ASSERT_EQ(1u, MessageCenter::Get()->GetVisibleNotifications().size());
+  ASSERT_TRUE(
+      prefs->GetBoolean(prefs::kFaceGazeDlcFailureNotificationHasBeenShown));
+  message_center::MessageCenter::Get()->RemoveAllNotifications(
+      /*by_user=*/false, message_center::MessageCenter::RemoveType::ALL);
+
+  // The failure notification shouldn't be shown again.
+  controller->ShowNotificationForFaceGaze(FaceGazeNotificationType::kDlcFailed);
+  ASSERT_EQ(0u, MessageCenter::Get()->GetVisibleNotifications().size());
 }
 
 namespace {
@@ -2185,12 +2318,14 @@ TEST_F(AccessibilityControllerDisableTrackpadTest,
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   ASSERT_FALSE(prefs->GetBoolean(prefs::kAccessibilityDisableTrackpadEnabled));
   ASSERT_FALSE(controller->disable_trackpad().enabled());
+  ASSERT_EQ(prefs->GetInteger(prefs::kAccessibilityDisableTrackpadMode),
+            static_cast<int>(DisableTrackpadMode::kNever));
 
   // AccessibilityController should have a reference to the
   // DisableTrackpadEventRewriter and it should also be off by default.
   auto* disable_trackpad_event_rewriter =
       controller->GetDisableTrackpadEventRewriterForTest();
-  ASSERT_NE(nullptr, disable_trackpad_event_rewriter);
+  ASSERT_NE(disable_trackpad_event_rewriter, nullptr);
   ASSERT_FALSE(disable_trackpad_event_rewriter->IsEnabled());
 
   // Enabling the disable trackpad feature should enable the

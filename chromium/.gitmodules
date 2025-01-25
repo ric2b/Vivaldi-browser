@@ -93,6 +93,9 @@
 [submodule "third_party/farmhash/src"]
 	path = third_party/farmhash/src
 	url = ../../external/github.com/google/farmhash.git
+[submodule "third_party/fast_float/src"]
+	path = third_party/fast_float/src
+	url = ../../external/github.com/fastfloat/fast_float.git
 [submodule "third_party/ffmpeg"]
 	path = third_party/ffmpeg
 	url = ../third_party/ffmpeg.git
@@ -159,6 +162,9 @@
 [submodule "third_party/fuzztest/src"]
 	path = third_party/fuzztest/src
 	url = ../../external/github.com/google/fuzztest.git
+[submodule "third_party/domato/src"]
+	path = third_party/domato/src
+	url = ../../external/github.com/googleprojectzero/domato.git
 [submodule "third_party/libaddressinput/src"]
 	path = third_party/libaddressinput/src
 	url = ../../external/libaddressinput.git

@@ -6,7 +6,7 @@ bazel_deps()
 
 load("//toolchain:download_toolchains.bzl", "download_toolchains_for_skia")
 
-download_toolchains_for_skia("clang_linux_amd64", "clang_mac", "ndk_linux_amd64")
+download_toolchains_for_skia("clang_linux_amd64", "clang_mac", "clang_windows_amd64", "ndk_linux_amd64")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
 load("//bazel:gcs_mirror.bzl", "gcs_mirror_url")
@@ -80,44 +80,6 @@ pip_install(
     name = "py_deps",
     python_interpreter_target = interpreter,
     requirements = "//:requirements.txt",
-)
-
-#######################################################################################
-# Maven
-#######################################################################################
-
-# https://github.com/bazelbuild/rules_jvm_external
-http_archive(
-    name = "rules_jvm_external",
-    sha256 = "cd1a77b7b02e8e008439ca76fd34f5b07aecb8c752961f9640dea15e9e5ba1ca",
-    strip_prefix = "rules_jvm_external-4.2",
-    urls = gcs_mirror_url(
-        sha256 = "cd1a77b7b02e8e008439ca76fd34f5b07aecb8c752961f9640dea15e9e5ba1ca",
-        url = "https://github.com/bazelbuild/rules_jvm_external/archive/4.2.zip",
-    ),
-)
-
-load("@rules_jvm_external//:repositories.bzl", "rules_jvm_external_deps")
-
-rules_jvm_external_deps()
-
-load("@rules_jvm_external//:setup.bzl", "rules_jvm_external_setup")
-
-rules_jvm_external_setup()
-
-load("@rules_jvm_external//:defs.bzl", "maven_install")
-
-maven_install(
-    artifacts = [
-        # The version released after this one (1.6.0-rc1) did not resolve unknown symbol errors when
-        # building.
-        # https://b.corp.google.com/issues/269331711
-        "androidx.annotation:annotation:1.5.0",
-    ],
-    repositories = [
-        "https://maven.google.com",
-        "https://repo1.maven.org/maven2",
-    ],
 )
 
 #######################################################################################
@@ -513,22 +475,22 @@ c_plus_plus_deps()
 # https://bazel.build/reference/be/workspace#new_local_repository
 local_repository(
     name = "freetype_config",
-    path = "bazel/external/freetype/config",
+    path = "third_party/freetype2/include",
 )
 
 local_repository(
     name = "harfbuzz_config",
-    path = "bazel/external/harfbuzz/config",
+    path = "third_party/harfbuzz",
 )
 
 local_repository(
     name = "icu_utils",
-    path = "bazel/external/icu/utils",
+    path = "third_party/icu",
 )
 
 local_repository(
     name = "expat_config",
-    path = "bazel/external/expat/config",
+    path = "third_party/expat/include",
 )
 
 load("//bazel:cipd_install.bzl", "cipd_install")
@@ -658,11 +620,10 @@ http_file(
 
 http_archive(
     name = "io_bazel_rules_docker",
-    sha256 = "27d53c1d646fc9537a70427ad7b034734d08a9c38924cc6357cc973fed300820",
-    strip_prefix = "rules_docker-0.24.0",
+    sha256 = "b1e80761a8a8243d03ebca8845e9cc1ba6c82ce7c5179ce2b295cd36f7e394bf",
     urls = gcs_mirror_url(
-        sha256 = "27d53c1d646fc9537a70427ad7b034734d08a9c38924cc6357cc973fed300820",
-        url = "https://github.com/bazelbuild/rules_docker/releases/download/v0.24.0/rules_docker-v0.24.0.tar.gz",
+        sha256 = "b1e80761a8a8243d03ebca8845e9cc1ba6c82ce7c5179ce2b295cd36f7e394bf",
+        url = "https://github.com/bazelbuild/rules_docker/releases/download/v0.25.0/rules_docker-v0.25.0.tar.gz",
     ),
 )
 
@@ -689,7 +650,7 @@ load(
 # Pulls the gcr.io/skia-public/debugger-app-base container.
 container_pull(
     name = "debugger-app-base",
-    digest = "sha256:b7ecdc86a7b41445df24d1d2779a6c5a1e9323557638ed930554ced1477c9de4",
+    digest = "sha256:ebfa46371f66b4fe233c4470803ed1e1bdf7e149e2a30d93579e4f5cc78189c0",
     registry = "gcr.io",
     repository = "skia-public/debugger-app-base",
 )
@@ -697,7 +658,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:ca44dd6ab7bfe8f520137165056c4f358b30c73fea505e177f1585c4caf8c5c7",
+    digest = "sha256:dadc8978c6e993f54c4020b05650faa8e074c0fdedc7d38db25a62baba630969",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -705,7 +666,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:5084439cd9c3b1872f48c58ff283683a0fc3744680fb74a911d047c8e969293f",
+    digest = "sha256:4a9e92f23d7fca8810ead2fddd329f8fa9b00f1f760979431c31f8a8a5987a9b",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
 )
@@ -713,7 +674,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:52a246a737a25c4385a20efe75cc9607186c38ee844fba2306e23c3e97b49f12",
+    digest = "sha256:20f5d28635bda984b7fc4cc935428c00a4829c1066ec02866cc0b08eb855bdcb",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )

@@ -143,38 +143,67 @@ std::string StringImpl::AsciiForDebugging() const {
 }
 #endif
 
-scoped_refptr<StringImpl> StringImpl::CreateUninitialized(wtf_size_t length,
-                                                          LChar*& data) {
+scoped_refptr<StringImpl> StringImpl::CreateUninitialized(
+    size_t length,
+    base::span<LChar>& data) {
   if (!length) {
-    data = nullptr;
+    data = {};
     return empty_;
   }
+  const wtf_size_t narrowed_length = base::checked_cast<wtf_size_t>(length);
 
   // Allocate a single buffer large enough to contain the StringImpl
   // struct as well as the data which it contains. This removes one
   // heap allocation from this call.
   StringImpl* string = static_cast<StringImpl*>(Partitions::BufferMalloc(
-      AllocationSize<LChar>(length), "WTF::StringImpl"));
+      AllocationSize<LChar>(narrowed_length), "WTF::StringImpl"));
 
-  data = reinterpret_cast<LChar*>(string + 1);
-  return base::AdoptRef(new (string) StringImpl(length, kForce8BitConstructor));
+  // SAFETY: The AllocationSize<LChar>() helper function computes a size that
+  // includes `narrowed_length` LChar characters in addition to the size
+  // required for the StringImpl.
+  data = UNSAFE_BUFFERS(
+      base::span(reinterpret_cast<LChar*>(string + 1), narrowed_length));
+  return base::AdoptRef(new (string)
+                            StringImpl(narrowed_length, kForce8BitConstructor));
+}
+
+scoped_refptr<StringImpl> StringImpl::CreateUninitialized(wtf_size_t length,
+                                                          LChar*& data) {
+  base::span<LChar> data_span;
+  auto impl = CreateUninitialized(length, data_span);
+  data = data_span.data();
+  return impl;
+}
+
+scoped_refptr<StringImpl> StringImpl::CreateUninitialized(
+    size_t length,
+    base::span<UChar>& data) {
+  if (!length) {
+    data = {};
+    return empty_;
+  }
+  const wtf_size_t narrowed_length = base::checked_cast<wtf_size_t>(length);
+
+  // Allocate a single buffer large enough to contain the StringImpl
+  // struct as well as the data which it contains. This removes one
+  // heap allocation from this call.
+  StringImpl* string = static_cast<StringImpl*>(Partitions::BufferMalloc(
+      AllocationSize<UChar>(narrowed_length), "WTF::StringImpl"));
+
+  // SAFETY: The AllocationSize<UChar>() helper function computes a size that
+  // includes `narrowed_length` UChar characters in addition to the size
+  // required for the StringImpl.
+  data = UNSAFE_BUFFERS(
+      base::span(reinterpret_cast<UChar*>(string + 1), narrowed_length));
+  return base::AdoptRef(new (string) StringImpl(narrowed_length));
 }
 
 scoped_refptr<StringImpl> StringImpl::CreateUninitialized(wtf_size_t length,
                                                           UChar*& data) {
-  if (!length) {
-    data = nullptr;
-    return empty_;
-  }
-
-  // Allocate a single buffer large enough to contain the StringImpl
-  // struct as well as the data which it contains. This removes one
-  // heap allocation from this call.
-  StringImpl* string = static_cast<StringImpl*>(Partitions::BufferMalloc(
-      AllocationSize<UChar>(length), "WTF::StringImpl"));
-
-  data = reinterpret_cast<UChar*>(string + 1);
-  return base::AdoptRef(new (string) StringImpl(length));
+  base::span<UChar> data_span;
+  auto impl = CreateUninitialized(length, data_span);
+  data = data_span.data();
+  return impl;
 }
 
 static StaticStringsTable& StaticStrings() {
@@ -224,8 +253,7 @@ StringImpl* StringImpl::CreateStatic(const char* string, wtf_size_t length) {
   DCHECK(string);
   DCHECK(length);
 
-  unsigned hash = StringHasher::ComputeHashAndMaskTop8Bits(
-      reinterpret_cast<const LChar*>(string), length);
+  unsigned hash = StringHasher::ComputeHashAndMaskTop8Bits(string, length);
 
   StaticStringsTable::const_iterator it = StaticStrings().find(hash);
   if (it != StaticStrings().end()) {
@@ -270,26 +298,38 @@ void StringImpl::ReserveStaticStringsCapacityForSize(wtf_size_t size) {
   StaticStrings().ReserveCapacityForSize(size);
 }
 
+scoped_refptr<StringImpl> StringImpl::Create(
+    base::span<const UChar> utf16_data) {
+  if (utf16_data.empty()) {
+    return empty_;
+  }
+  base::span<UChar> string_data;
+  scoped_refptr<StringImpl> string =
+      CreateUninitialized(utf16_data.size(), string_data);
+  string_data.copy_from(utf16_data);
+  return string;
+}
+
 scoped_refptr<StringImpl> StringImpl::Create(const UChar* characters,
                                              wtf_size_t length) {
-  if (!characters || !length)
-    return empty_;
+  return Create({characters, length});
+}
 
-  UChar* data;
-  scoped_refptr<StringImpl> string = CreateUninitialized(length, data);
-  memcpy(data, characters, length * sizeof(UChar));
+scoped_refptr<StringImpl> StringImpl::Create(
+    base::span<const LChar> latin1_data) {
+  if (latin1_data.empty()) {
+    return empty_;
+  }
+  base::span<LChar> string_data;
+  scoped_refptr<StringImpl> string =
+      CreateUninitialized(latin1_data.size(), string_data);
+  string_data.copy_from(latin1_data);
   return string;
 }
 
 scoped_refptr<StringImpl> StringImpl::Create(const LChar* characters,
                                              wtf_size_t length) {
-  if (!characters || !length)
-    return empty_;
-
-  LChar* data;
-  scoped_refptr<StringImpl> string = CreateUninitialized(length, data);
-  memcpy(data, characters, length * sizeof(LChar));
-  return string;
+  return Create({characters, length});
 }
 
 scoped_refptr<StringImpl> StringImpl::Create(
@@ -367,9 +407,9 @@ scoped_refptr<StringImpl> StringImpl::Substring(wtf_size_t start,
     length = max_length;
   }
   if (Is8Bit())
-    return Create(Characters8() + start, length);
+    return Create(Span8().subspan(start, length));
 
-  return Create(Characters16() + start, length);
+  return Create(Span16().subspan(start, length));
 }
 
 UChar32 StringImpl::CharacterStartingAt(wtf_size_t i) {
@@ -421,16 +461,14 @@ scoped_refptr<StringImpl> StringImpl::UpperASCII() {
 
 scoped_refptr<StringImpl> StringImpl::Fill(UChar character) {
   if (!(character & ~0x7F)) {
-    LChar* data;
+    base::span<LChar> data;
     scoped_refptr<StringImpl> new_impl = CreateUninitialized(length_, data);
-    for (wtf_size_t i = 0; i < length_; ++i)
-      data[i] = static_cast<LChar>(character);
+    base::ranges::fill(data, static_cast<LChar>(character));
     return new_impl;
   }
-  UChar* data;
+  base::span<UChar> data;
   scoped_refptr<StringImpl> new_impl = CreateUninitialized(length_, data);
-  for (wtf_size_t i = 0; i < length_; ++i)
-    data[i] = character;
+  base::ranges::fill(data, character);
   return new_impl;
 }
 
@@ -490,8 +528,8 @@ scoped_refptr<StringImpl> StringImpl::Truncate(wtf_size_t length) {
   if (length >= length_)
     return this;
   if (Is8Bit())
-    return Create(Characters8(), length);
-  return Create(Characters16(), length);
+    return Create(Span8().first(length));
+  return Create(Span16().first(length));
 }
 
 template <class UCharPredicate>
@@ -549,8 +587,8 @@ inline scoped_refptr<StringImpl> StringImpl::StripMatchedCharacters(
   if (!start && end == length_ - 1)
     return this;
   if (Is8Bit())
-    return Create(Characters8() + start, end + 1 - start);
-  return Create(Characters16() + start, end + 1 - start);
+    return Create(Span8().subspan(start, end + 1 - start));
+  return Create(Span16().subspan(start, end + 1 - start));
 }
 
 class UCharPredicate final {
@@ -722,54 +760,54 @@ scoped_refptr<StringImpl> StringImpl::SimplifyWhiteSpace(
 
 int StringImpl::ToInt(NumberParsingOptions options, bool* ok) const {
   if (Is8Bit())
-    return CharactersToInt(Characters8(), length_, options, ok);
-  return CharactersToInt(Characters16(), length_, options, ok);
+    return CharactersToInt(Span8(), options, ok);
+  return CharactersToInt(Span16(), options, ok);
 }
 
 wtf_size_t StringImpl::ToUInt(NumberParsingOptions options, bool* ok) const {
   if (Is8Bit())
-    return CharactersToUInt(Characters8(), length_, options, ok);
-  return CharactersToUInt(Characters16(), length_, options, ok);
+    return CharactersToUInt(Span8(), options, ok);
+  return CharactersToUInt(Span16(), options, ok);
 }
 
 wtf_size_t StringImpl::HexToUIntStrict(bool* ok) {
   constexpr auto kStrict = NumberParsingOptions::Strict();
   if (Is8Bit()) {
-    return HexCharactersToUInt(Characters8(), length_, kStrict, ok);
+    return HexCharactersToUInt(Span8(), kStrict, ok);
   }
-  return HexCharactersToUInt(Characters16(), length_, kStrict, ok);
+  return HexCharactersToUInt(Span16(), kStrict, ok);
 }
 
 uint64_t StringImpl::HexToUInt64Strict(bool* ok) {
   constexpr auto kStrict = NumberParsingOptions::Strict();
   if (Is8Bit()) {
-    return HexCharactersToUInt64(Characters8(), length_, kStrict, ok);
+    return HexCharactersToUInt64(Span8(), kStrict, ok);
   }
-  return HexCharactersToUInt64(Characters16(), length_, kStrict, ok);
+  return HexCharactersToUInt64(Span16(), kStrict, ok);
 }
 
 int64_t StringImpl::ToInt64(NumberParsingOptions options, bool* ok) const {
   if (Is8Bit())
-    return CharactersToInt64(Characters8(), length_, options, ok);
-  return CharactersToInt64(Characters16(), length_, options, ok);
+    return CharactersToInt64(Span8(), options, ok);
+  return CharactersToInt64(Span16(), options, ok);
 }
 
 uint64_t StringImpl::ToUInt64(NumberParsingOptions options, bool* ok) const {
   if (Is8Bit())
-    return CharactersToUInt64(Characters8(), length_, options, ok);
-  return CharactersToUInt64(Characters16(), length_, options, ok);
+    return CharactersToUInt64(Span8(), options, ok);
+  return CharactersToUInt64(Span16(), options, ok);
 }
 
 double StringImpl::ToDouble(bool* ok) {
   if (Is8Bit())
-    return CharactersToDouble(Characters8(), length_, ok);
-  return CharactersToDouble(Characters16(), length_, ok);
+    return CharactersToDouble(Span8(), ok);
+  return CharactersToDouble(Span16(), ok);
 }
 
 float StringImpl::ToFloat(bool* ok) {
   if (Is8Bit())
-    return CharactersToFloat(Characters8(), length_, ok);
-  return CharactersToFloat(Characters16(), length_, ok);
+    return CharactersToFloat(Span8(), ok);
+  return CharactersToFloat(Span16(), ok);
 }
 
 // Table is based on ftp://ftp.unicode.org/Public/UNIDATA/CaseFolding.txt
@@ -901,8 +939,9 @@ ALWAYS_INLINE static wtf_size_t FindInternal(
 }
 
 wtf_size_t StringImpl::Find(const StringView& match_string, wtf_size_t index) {
-  if (UNLIKELY(match_string.IsNull()))
+  if (match_string.IsNull()) [[unlikely]] {
     return kNotFound;
+  }
 
   wtf_size_t match_length = match_string.length();
 
@@ -913,8 +952,9 @@ wtf_size_t StringImpl::Find(const StringView& match_string, wtf_size_t index) {
     return WTF::Find(Characters16(), length(), match_string[0], index);
   }
 
-  if (UNLIKELY(!match_length))
+  if (!match_length) [[unlikely]] {
     return std::min(index, length());
+  }
 
   // Check index & matchLength are in range.
   if (index > length())
@@ -961,8 +1001,9 @@ ALWAYS_INLINE static wtf_size_t FindIgnoringCaseInternal(
 
 wtf_size_t StringImpl::FindIgnoringCase(const StringView& match_string,
                                         wtf_size_t index) {
-  if (UNLIKELY(match_string.IsNull()))
+  if (match_string.IsNull()) [[unlikely]] {
     return kNotFound;
+  }
 
   wtf_size_t match_length = match_string.length();
   if (!match_length)
@@ -1017,8 +1058,9 @@ ALWAYS_INLINE static wtf_size_t FindIgnoringASCIICaseInternal(
 
 wtf_size_t StringImpl::FindIgnoringASCIICase(const StringView& match_string,
                                              wtf_size_t index) {
-  if (UNLIKELY(match_string.IsNull()))
+  if (match_string.IsNull()) [[unlikely]] {
     return kNotFound;
+  }
 
   wtf_size_t match_length = match_string.length();
   if (!match_length)
@@ -1090,8 +1132,9 @@ ALWAYS_INLINE static wtf_size_t ReverseFindInternal(
 
 wtf_size_t StringImpl::ReverseFind(const StringView& match_string,
                                    wtf_size_t index) {
-  if (UNLIKELY(match_string.IsNull()))
+  if (match_string.IsNull()) [[unlikely]] {
     return kNotFound;
+  }
 
   wtf_size_t match_length = match_string.length();
   wtf_size_t our_length = length();
@@ -1820,10 +1863,10 @@ int CodeUnitCompareIgnoringASCIICase(const StringImpl* string1,
                                      const StringImpl* string2) {
   if (!string2)
     return string1 && string1->length() > 0 ? 1 : 0;
-  return VisitCharacters(
-      *string2, [string1](const auto* chars, wtf_size_t length) {
-        return CodeUnitCompareIgnoringASCIICase(string1, chars, length);
-      });
+  return VisitCharacters(*string2, [string1](auto chars) {
+    return CodeUnitCompareIgnoringASCIICase(string1, chars.data(),
+                                            chars.size());
+  });
 }
 
 }  // namespace WTF

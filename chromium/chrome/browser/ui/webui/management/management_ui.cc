@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/management/management_ui.h"
 
 #include <memory>
@@ -64,6 +69,8 @@ content::WebUIDataSource* CreateAndAddManagementUIHtmlSource(Profile* profile) {
       {"updateRequiredEolAdminMessageTitle",
        IDS_MANAGEMENT_UPDATE_REQUIRED_EOL_ADMIN_MESSAGE_TITLE},
       {kManagementLogUploadEnabled, IDS_MANAGEMENT_LOG_UPLOAD_ENABLED},
+      {kManagementLogUploadEnabledNoLink,
+       IDS_MANAGEMENT_LOG_UPLOAD_ENABLED_NO_LINK},
       {kManagementReportActivityTimes,
        IDS_MANAGEMENT_REPORT_DEVICE_ACTIVITY_TIMES},
       {kManagementReportNetworkData, IDS_MANAGEMENT_REPORT_DEVICE_NETWORK_DATA},
@@ -99,6 +106,7 @@ content::WebUIDataSource* CreateAndAddManagementUIHtmlSource(Profile* profile) {
       {kManagementOnFileTransferEvent, IDS_MANAGEMENT_FILE_TRANSFER_EVENT},
       {kManagementOnFileTransferVisibleData,
        IDS_MANAGEMENT_FILE_TRANSFER_VISIBLE_DATA},
+      {kManagementReportFileEvents, IDS_MANAGEMENT_REPORT_FILE_EVENTS},
 #endif  // BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
       {kManagementScreenCaptureEvent, IDS_MANAGEMENT_SCREEN_CAPTURE_EVENT},
@@ -164,6 +172,12 @@ content::WebUIDataSource* CreateAndAddManagementUIHtmlSource(Profile* profile) {
       {kManagementOnPageVisitedVisibleData,
        IDS_MANAGEMENT_PAGE_VISITED_VISIBLE_DATA},
       {kManagementLegacyTechReport, IDS_MANAGEMENT_LEGACY_TECH_REPORT},
+      {kManagementLegacyTechReportNoLink,
+       IDS_MANAGEMENT_LEGACY_TECH_REPORT_NO_LINK},
+      {kManagementOnExtensionTelemetryEvent,
+       IDS_MANAGEMENT_EXTENSION_TELEMETRY_EVENT},
+      {kManagementOnExtensionTelemetryVisibleData,
+       IDS_MANAGEMENT_EXTENSION_TELEMETRY_VISIBLE_DATA},
       // Profile reporting messages
       {kProfileReportingExplanation,
        IDS_MANAGEMENT_PROFILE_REPORTING_EXPLANATION},

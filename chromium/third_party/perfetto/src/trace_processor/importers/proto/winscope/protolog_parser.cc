@@ -35,7 +35,6 @@
 #include "src/trace_processor/containers/string_pool.h"
 #include "src/trace_processor/importers/proto/packet_sequence_state_generation.h"
 #include "src/trace_processor/importers/proto/winscope/protolog_message_decoder.h"
-#include "src/trace_processor/importers/proto/winscope/protolog_messages_tracker.h"
 #include "src/trace_processor/importers/proto/winscope/winscope.descriptor.h"
 #include "src/trace_processor/storage/stats.h"
 #include "src/trace_processor/storage/trace_storage.h"
@@ -66,7 +65,7 @@ void ProtoLogParser::ParseProtoLogMessage(
 
   std::vector<int64_t> sint64_params;
   for (auto it = protolog_message.sint64_params(); it; ++it) {
-    sint64_params.emplace_back(*it);
+    sint64_params.emplace_back(it->as_sint64());
   }
 
   std::vector<double> double_params;
@@ -129,37 +128,24 @@ void ProtoLogParser::ParseProtoLogMessage(
       boolean_params, string_params);
   if (decoded_message_opt.has_value()) {
     auto decoded_message = decoded_message_opt.value();
-    PopulateReservedRowWithMessage(row_id, decoded_message.log_level,
-                                   decoded_message.group_tag,
-                                   decoded_message.message, stacktrace);
+    std::optional<std::string> location = decoded_message.location;
+    PopulateReservedRowWithMessage(
+        row_id, decoded_message.log_level, decoded_message.group_tag,
+        decoded_message.message, stacktrace, location);
   } else {
-    // Viewer config used to decode messages not yet processed for this message.
-    // Delaying decoding...
-    auto* protolog_message_tracker =
-        ProtoLogMessagesTracker::GetOrCreate(context_);
-
-    protolog_message_tracker->TrackMessage(
-        ProtoLogMessagesTracker::TrackedProtoLogMessage{
-            protolog_message.message_id(), std::move(sint64_params),
-            std::move(double_params), std::move(boolean_params),
-            std::move(string_params), stacktrace, row_id, timestamp});
+    // Failed to fully decode the message.
+    // This shouldn't happen since we should have processed all viewer config
+    // messages in the tokenization state, and process the protolog messages
+    // only in the parsing state.
+    context_->storage->IncrementStats(
+        stats::winscope_protolog_message_decoding_failed);
   }
 }
 
-void ProtoLogParser::ParseProtoLogViewerConfig(protozero::ConstBytes blob) {
+void ProtoLogParser::ParseAndAddViewerConfigToMessageDecoder(
+    protozero::ConstBytes blob) {
   protos::pbzero::ProtoLogViewerConfig::Decoder protolog_viewer_config(blob);
 
-  AddViewerConfigToMessageDecoder(protolog_viewer_config);
-
-  for (auto it = protolog_viewer_config.messages(); it; ++it) {
-    protos::pbzero::ProtoLogViewerConfig::MessageData::Decoder message_data(
-        *it);
-    ProcessPendingMessagesWithId(message_data.message_id());
-  }
-}
-
-void ProtoLogParser::AddViewerConfigToMessageDecoder(
-    protos::pbzero::ProtoLogViewerConfig::Decoder& protolog_viewer_config) {
   auto* protolog_message_decoder =
       ProtoLogMessageDecoder::GetOrCreate(context_);
 
@@ -172,41 +158,16 @@ void ProtoLogParser::AddViewerConfigToMessageDecoder(
     protos::pbzero::ProtoLogViewerConfig::MessageData::Decoder message_data(
         *it);
 
+    std::optional<std::string> location = std::nullopt;
+    if (message_data.has_location()) {
+      location = message_data.location().ToStdString();
+    }
+
     protolog_message_decoder->TrackMessage(
         message_data.message_id(),
         static_cast<ProtoLogLevel>(message_data.level()),
-        message_data.group_id(), message_data.message().ToStdString());
-  }
-}
-
-void ProtoLogParser::ProcessPendingMessagesWithId(uint64_t message_id) {
-  auto* protolog_message_decoder =
-      ProtoLogMessageDecoder::GetOrCreate(context_);
-  auto* protolog_message_tracker =
-      ProtoLogMessagesTracker::GetOrCreate(context_);
-
-  auto tracked_messages_opt =
-      protolog_message_tracker->GetTrackedMessagesByMessageId(message_id);
-
-  if (tracked_messages_opt.has_value()) {
-    // There are undecoded messages that can now be docoded to populate the
-    // table.
-    for (const auto& tracked_message : *tracked_messages_opt.value()) {
-      auto message = protolog_message_decoder
-                         ->Decode(tracked_message.message_id,
-                                  tracked_message.sint64_params,
-                                  tracked_message.double_params,
-                                  tracked_message.boolean_params,
-                                  tracked_message.string_params)
-                         .value();
-
-      PopulateReservedRowWithMessage(
-          tracked_message.table_row_id, message.log_level, message.group_tag,
-          message.message, tracked_message.stacktrace);
-    }
-
-    // Clear to avoid decoding again
-    protolog_message_tracker->ClearTrackedMessagesForMessageId(message_id);
+        message_data.group_id(), message_data.message().ToStdString(),
+        location);
   }
 }
 
@@ -215,7 +176,8 @@ void ProtoLogParser::PopulateReservedRowWithMessage(
     ProtoLogLevel log_level,
     std::string& group_tag,
     std::string& message,
-    std::optional<StringId> stacktrace) {
+    std::optional<StringId> stacktrace,
+    std::optional<std::string>& location) {
   auto* protolog_table = context_->storage->mutable_protolog_table();
   auto row = protolog_table->FindById(table_row_id).value();
 
@@ -251,6 +213,12 @@ void ProtoLogParser::PopulateReservedRowWithMessage(
 
   if (stacktrace.has_value()) {
     row.set_stacktrace(stacktrace.value());
+  }
+
+  if (location.has_value()) {
+    auto location_string_id =
+        context_->storage->InternString(base::StringView(location.value()));
+    row.set_location(location_string_id);
   }
 }
 

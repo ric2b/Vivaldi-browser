@@ -109,6 +109,7 @@
 #include "services/network/throttling/scoped_throttling_token.h"
 #include "services/network/trust_tokens/trust_token_request_helper.h"
 #include "services/network/url_loader_factory.h"
+#include "third_party/abseil-cpp/absl/container/inlined_vector.h"
 #include "url/origin.h"
 
 namespace network {
@@ -128,8 +129,7 @@ class BytesElementReader : public net::UploadBytesElementReader {
  public:
   BytesElementReader(ResourceRequestBody* resource_request_body,
                      const DataElementBytes& element)
-      : net::UploadBytesElementReader(element.AsStringPiece().data(),
-                                      element.AsStringPiece().size()),
+      : net::UploadBytesElementReader(element.bytes()),
         resource_request_body_(resource_request_body) {}
 
   BytesElementReader(const BytesElementReader&) = delete;
@@ -379,12 +379,12 @@ T* PtrOrFallback(const mojo::Remote<T>& remote, T* fallback) {
 std::string GetCookiesFromHeaders(
     const net::HttpRequestHeaders& headers,
     const net::HttpRequestHeaders& cors_exempt_headers) {
-  std::string cookies;
-  if (!cors_exempt_headers.GetHeader(net::HttpRequestHeaders::kCookie,
-                                     &cookies)) {
-    headers.GetHeader(net::HttpRequestHeaders::kCookie, &cookies);
+  std::optional<std::string> cookies =
+      cors_exempt_headers.GetHeader(net::HttpRequestHeaders::kCookie);
+  if (!cookies) {
+    cookies = headers.GetHeader(net::HttpRequestHeaders::kCookie);
   }
-  return cookies;
+  return std::move(cookies).value_or(std::string());
 }
 
 net::HttpRequestHeaders AttachCookies(const net::HttpRequestHeaders& headers,
@@ -392,8 +392,8 @@ net::HttpRequestHeaders AttachCookies(const net::HttpRequestHeaders& headers,
   DCHECK(!cookies_from_browser.empty());
 
   // Parse the existing cookie line.
-  std::string old_cookies;
-  headers.GetHeader(net::HttpRequestHeaders::kCookie, &old_cookies);
+  std::string old_cookies = headers.GetHeader(net::HttpRequestHeaders::kCookie)
+                                .value_or(std::string());
   net::cookie_util::ParsedRequestCookies parsed_cookies;
 
   net::cookie_util::ParseRequestCookieLine(old_cookies, &parsed_cookies);
@@ -479,6 +479,18 @@ ResponseHeaderToRawHeaderPairs(
     header_array.emplace_back(std::in_place, std::move(name), std::move(value));
   }
   return header_array;
+}
+
+bool IsMultiplexedConnection(const net::HttpResponseInfo& response_info) {
+  switch (net::HttpConnectionInfoToCoarse(response_info.connection_info)) {
+    case net::HttpConnectionInfoCoarse::kHTTP1:
+      return false;
+    case net::HttpConnectionInfoCoarse::kHTTP2:
+    case net::HttpConnectionInfoCoarse::kQUIC:
+      return true;
+    case net::HttpConnectionInfoCoarse::kOTHER:
+      return false;
+  }
 }
 
 }  // namespace
@@ -599,9 +611,6 @@ URLLoader::URLLoader(
               shared_storage_writable_eligible,
               url_loader_network_observer_)),
       has_fetch_streaming_upload_body_(HasFetchStreamingUploadBody(&request)),
-      allow_http1_for_streaming_upload_(
-          request.request_body &&
-          request.request_body->AllowHTTP1ForStreamingUpload()),
       accept_ch_frame_observer_(std::move(accept_ch_frame_observer)),
       provide_data_use_updates_(context.DataUseUpdatesEnabled()) {
   DCHECK(delete_callback_);
@@ -778,12 +787,6 @@ URLLoader::URLLoader(
       network::cors::IsCorsEnabledRequestMode(request_mode_)) {
     url_request_->cookie_setting_overrides().Put(
         net::CookieSettingOverride::kTopLevelStorageAccessGrantEligible);
-  }
-  if (network::cors::IsCorsEnabledRequestMode(request_mode_) &&
-      url_request_->site_for_cookies().IsNull() &&
-      url_request_->allow_credentials()) {
-    url_request_->cookie_setting_overrides().Put(
-        net::CookieSettingOverride::kCrossSiteCredentialedWithCORS);
   }
 
   AddAdsHeuristicCookieSettingOverrides(
@@ -1027,6 +1030,8 @@ void URLLoader::ProcessOutboundTrustTokenInterceptor(
 void URLLoader::OnDoneConstructingTrustTokenHelper(
     mojom::TrustTokenOperationType operation,
     TrustTokenStatusOrRequestHelper status_or_helper) {
+  trust_token_operation_ = operation;
+
   if (trust_token_observer_) {
     const net::IsolationInfo& isolation_info = url_request_->isolation_info();
     url::Origin top_frame_origin;
@@ -1093,6 +1098,14 @@ void URLLoader::OnDoneBeginningTrustTokenOperation(
     std::optional<net::HttpRequestHeaders> headers,
     mojom::TrustTokenOperationStatus status) {
   trust_token_status_ = status;
+
+  if (trust_token_operation_) {
+    base::UmaHistogramEnumeration(
+        base::StrCat({"Net.TrustTokens.OperationOutcome.",
+                      internal::TrustTokenOperationTypeToString(
+                          *trust_token_operation_)}),
+        status);
+  }
 
   // In case the operation failed or it succeeded in a manner where the request
   // does not need to be sent onwards, the DevTools event is emitted from here.
@@ -2143,8 +2156,9 @@ int URLLoader::OnBeforeStartTransaction(
 
   if (include_request_cookies_with_response_) {
     request_cookies_.clear();
-    std::string cookie_header;
-    used_headers->GetHeader(net::HttpRequestHeaders::kCookie, &cookie_header);
+    std::string cookie_header =
+        used_headers->GetHeader(net::HttpRequestHeaders::kCookie)
+            .value_or(std::string());
     net::cookie_util::ParseRequestCookieLine(cookie_header, &request_cookies_);
   }
 
@@ -2488,6 +2502,14 @@ void URLLoader::SetRawRequestHeadersAndNotify(
     DispatchOnRawRequest(std::move(header_array));
   }
 
+  raw_request_line_size_ = headers.request_line().size();
+  // Each header's format is "{key}: {value}\r\n" so add 4 bytes for each
+  // header.
+  raw_request_headers_size_ = headers.headers().size() * 4;
+  for (const auto& [key, value] : headers.headers()) {
+    raw_request_headers_size_ += key.size() + value.size();
+  }
+
   if (cookie_observer_) {
     std::vector<mojom::CookieOrLineWithAccessResultPtr> reported_cookies;
     for (const auto& cookie_with_access_result :
@@ -2506,7 +2528,7 @@ void URLLoader::SetRawRequestHeadersAndNotify(
           url_request_->isolation_info().top_frame_origin().value_or(
               url::Origin()),
           url_request_->site_for_cookies(), std::move(reported_cookies),
-          devtools_request_id(), /*count=*/1, url_request_->ad_tagged(),
+          devtools_request_id(), url_request_->ad_tagged(),
           url_request_->cookie_setting_overrides()));
     }
   }
@@ -2561,6 +2583,12 @@ void URLLoader::DispatchOnRawRequest(
 }
 
 bool URLLoader::DispatchOnRawResponse() {
+  if (url_request_->response_headers() && !seen_raw_request_headers_) {
+    // Record request metrics here instead of in NotifyCompleted to account for
+    // redirects.
+    RecordRequestMetrics();
+  }
+
   if (!devtools_observer_ || !devtools_request_id() ||
       !url_request_->response_headers()) {
     return false;
@@ -2659,8 +2687,9 @@ void URLLoader::OnBeforeSendHeadersComplete(
     const std::optional<net::HttpRequestHeaders>& headers) {
   if (include_request_cookies_with_response_ && headers) {
     request_cookies_.clear();
-    std::string cookie_header;
-    headers->GetHeader(net::HttpRequestHeaders::kCookie, &cookie_header);
+    std::string cookie_header =
+        headers->GetHeader(net::HttpRequestHeaders::kCookie)
+            .value_or(std::string());
     net::cookie_util::ParseRequestCookieLine(cookie_header, &request_cookies_);
   }
   std::move(callback).Run(result, headers);
@@ -2834,7 +2863,7 @@ void URLLoader::ReportFlaggedResponseCookies(bool call_cookie_observer) {
         url_request_->isolation_info().top_frame_origin().value_or(
             url::Origin()),
         url_request_->site_for_cookies(), std::move(reported_cookies),
-        devtools_request_id(), /*count=*/1, url_request_->ad_tagged(),
+        devtools_request_id(), url_request_->ad_tagged(),
         url_request_->cookie_setting_overrides()));
     if (call_cookie_observer) {
       cookie_observer_->OnCookiesAccessed(std::move(cookie_access_details_));
@@ -2988,6 +3017,83 @@ bool URLLoader::CoepAllowCredentials(const GURL& url) {
 bool URLLoader::ShouldSendTransferSizeUpdated() const {
   return devtools_request_id() || url_request_->ad_tagged() ||
          !base::FeatureList::IsEnabled(features::kReduceTransferSizeUpdatedIPC);
+}
+
+void URLLoader::RecordRequestMetrics() {
+  // All histograms recorded here are of the form:
+  // "NetworkService.Requests.{Multiplexed}.{RequestType}.{Method}.{Result}.{Metric}".
+  // For example:
+  // "NetworkService.Requests.Simple.MainFrame.Get.Success.TotalRequestSize".
+  absl::InlinedVector<std::string_view, 10> histogram_prefix_pieces = {
+      "NetworkService", "Requests"};
+
+  const net::HttpResponseInfo& response_info = url_request_->response_info();
+  if (IsMultiplexedConnection(response_info)) {
+    histogram_prefix_pieces.push_back("Multiplexed");
+  } else {
+    histogram_prefix_pieces.push_back("Simple");
+  }
+
+  switch (url_request_->isolation_info().request_type()) {
+    case net::IsolationInfo::RequestType::kMainFrame:
+      histogram_prefix_pieces.push_back("MainFrame");
+      break;
+    case net::IsolationInfo::RequestType::kSubFrame:
+    case net::IsolationInfo::RequestType::kOther:
+      // TODO(crbug.com/362787712): Add metrics for other types of requests.
+      return;
+  }
+
+  if (url_request_->method() == "GET") {
+    histogram_prefix_pieces.push_back("Get");
+  } else {
+    // Other types of requests need to be handled differently e.g. the total
+    // request size of a POST request needs to include the body.
+    // TODO(crbug.com/362787712): Add metrics for other types of requests.
+    return;
+  }
+
+  const int response_code = response_info.headers->response_code();
+  if (response_code < 199) {
+    // Ignore information responses because they are not complete requests.
+    return;
+  } else if (response_code < 299 || response_code < 399) {
+    // We consider redirects a success.
+    histogram_prefix_pieces.push_back("Success");
+  } else if (response_code < 499) {
+    histogram_prefix_pieces.push_back("ClientError");
+  } else if (response_code < 599) {
+    histogram_prefix_pieces.push_back("ServerError");
+  } else {
+    // Ignore unexpected server response codes.
+    return;
+  }
+
+  auto make_histogram_name =
+      [&histogram_prefix_pieces](std::string_view metric) {
+        histogram_prefix_pieces.push_back(metric);
+        std::string name = base::JoinString(histogram_prefix_pieces, ".");
+        histogram_prefix_pieces.pop_back();
+        return name;
+      };
+
+  base::UmaHistogramCounts100000(make_histogram_name("TotalUrlSize"),
+                                 url_request_->url().spec().size());
+
+  // HTTP/2 and HTTP/3 requests don't separate request line from headers so no
+  // need to record header metrics separately.
+  if (!IsMultiplexedConnection(response_info)) {
+    base::UmaHistogramCounts100000(make_histogram_name("TotalHeadersSize"),
+                                   raw_request_headers_size_);
+  }
+
+  // For HTTP/2 and HTTP/3 the request line is included in the headers, but
+  // `raw_request_line_size_` is 0 for these requests, so we can add it
+  // unconditionally for all requests.
+  size_t total_request_size =
+      raw_request_headers_size_ + raw_request_line_size_;
+  base::UmaHistogramCounts100000(make_histogram_name("TotalRequestSize"),
+                                 total_request_size);
 }
 
 }  // namespace network

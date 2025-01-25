@@ -23,6 +23,7 @@
 #include "ui/android/resources/resource_manager.h"
 #include "ui/base/l10n/l10n_util_android.h"
 
+
 #include "app/vivaldi_apptools.h"
 
 namespace android {
@@ -58,24 +59,14 @@ void TabHandleLayer::SetProperties(
     bool is_end_divider_visible,
     bool is_loading,
     float spinner_rotation,
-    float brightness,
     float opacity,
 
     float tab_alpha, // Vivaldi
     bool is_shown_as_favicon, // Vivaldi
     float title_offset) { // Vivaldi
-  if (brightness != brightness_ || foreground != foreground_ ||
-      opacity != opacity_) {
-    brightness_ = brightness;
+  if (foreground != foreground_ || opacity != opacity_) {
     foreground_ = foreground;
     opacity_ = opacity;
-
-    // With the Tab Strip Redesign (TSR), inactive tabs no longer have a visible
-    // container. To achieve the same dimming effect, we need to set the opacity
-    // rather than adding a brightness filter. We can't swap to simply setting
-    // the opacity when TSR is disabled, because then, the tab containers can
-    // be seen overlapping. (See https://crbug.com/1373632).
-    tab_->SetOpacity(brightness_);
   }
 
   y += top_margin;

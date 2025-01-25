@@ -34,7 +34,7 @@ const setUpEnvironmentWithUISourceCode =
 
       workspace.addProject(project);
 
-      return {workspace, project: project, uiSourceCode, networkPersistenceManager};
+      return {workspace, project, uiSourceCode, networkPersistenceManager};
     };
 
 describeWithMockConnection('NetworkPersistenceManager', () => {
@@ -668,7 +668,7 @@ describeWithMockConnection('NetworkPersistenceManager', () => {
 
     const eventURLs: string[] = [];
     networkPersistenceManager.addEventListener(
-        Persistence.NetworkPersistenceManager.Events.RequestsForHeaderOverridesFileChanged, event => {
+        Persistence.NetworkPersistenceManager.Events.REQUEST_FOR_HEADER_OVERRIDES_FILE_CHANGED, event => {
           eventURLs.push(event.data.url());
         });
 
@@ -785,8 +785,8 @@ describe('NetworkPersistenceManager', () => {
       value: '0',
     }];
     const overrideHeaders = [{
-      'name': 'accept-ranges',
-      'value': 'bytes',
+      name: 'accept-ranges',
+      value: 'bytes',
     }];
     const merged = [
       {name: 'accept-ranges', value: 'bytes'},

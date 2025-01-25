@@ -9,7 +9,7 @@ import("//extensions/buildflags/buildflags.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
-assert(enable_extensions)
+assert(enable_extensions_core)
 
 group("common_constants") {
   if (is_component_build) {
@@ -81,7 +81,6 @@ mojom("mojom") {
     "mojom/extra_response_data.mojom",
     "mojom/feature_session_type.mojom",
     "mojom/frame.mojom",
-    "mojom/guest_view.mojom",
     "mojom/host_id.mojom",
     "mojom/injection_type.mojom",
     "mojom/keep_alive.mojom",
@@ -107,6 +106,10 @@ mojom("mojom") {
     "//ui/gfx/geometry/mojom",
     "//url/mojom:url_mojom_gurl",
   ]
+
+  if (enable_guest_view) {
+    sources += [ "mojom/guest_view.mojom" ]
+  }
 
   cpp_typemaps = [
     {
@@ -503,6 +506,7 @@ static_library("common") {
 
   deps = [
     "//base",
+    "//build:android_buildflags",
     "//build:branding_buildflags",
     "//build:chromeos_buildflags",
     "//components/crash/core/common",
@@ -516,8 +520,6 @@ static_library("common") {
     "//crypto",
     "//device/bluetooth",
     "//device/bluetooth/public/cpp",
-    "//extensions:extensions_resources",
-    "//extensions/common:mojom",
     "//extensions/common/api",
     "//extensions/strings",
     "//net",
@@ -536,6 +538,10 @@ static_library("common") {
     "//ui/gfx/ipc/skia",
     "//url",
   ]
+
+  if (enable_extensions) {
+    deps += [ "//extensions:extensions_resources" ]
+  }
 
   if (enable_nacl) {
     sources += [
@@ -677,6 +683,7 @@ source_set("unit_tests") {
     "//base",
     "//base:i18n",
     "//base/test:test_support",
+    "//build:android_buildflags",
     "//components/crx_file",
     "//components/version_info:version_info",
     "//content/test:test_support",
@@ -714,57 +721,61 @@ source_set("unit_tests") {
   ]
 }
 
-fuzzer_test("extension_fuzzer") {
-  sources = [ "extension_fuzzer.cc" ]
-  deps = [
-    ":common",
-    "//base",
-  ]
-}
+# TODO(https://crbug.com/356905053): Gradually include more of these sources
+# in the desktop-android build.
+if (enable_extensions) {
+  fuzzer_test("extension_fuzzer") {
+    sources = [ "extension_fuzzer.cc" ]
+    deps = [
+      ":common",
+      "//base",
+    ]
+  }
 
-fuzzer_test("extension_manifest_fuzzer") {
-  sources = [ "manifest_fuzzer.cc" ]
-  deps = [
-    ":common",
-    "//base",
-    "//extensions:test_support",
-  ]
+  fuzzer_test("extension_manifest_fuzzer") {
+    sources = [ "manifest_fuzzer.cc" ]
+    deps = [
+      ":common",
+      "//base",
+      "//extensions:test_support",
+    ]
 
-  # The fuzzed code needs more RAM that the default limit.
-  libfuzzer_options = [ "rss_limit_mb=4096" ]
-}
+    # The fuzzed code needs more RAM that the default limit.
+    libfuzzer_options = [ "rss_limit_mb=4096" ]
+  }
 
-fuzzer_test("extension_url_pattern_fuzzer") {
-  sources = [ "url_pattern_fuzzer.cc" ]
-  deps = [
-    ":common",
-    "//base",
-  ]
-}
+  fuzzer_test("extension_url_pattern_fuzzer") {
+    sources = [ "url_pattern_fuzzer.cc" ]
+    deps = [
+      ":common",
+      "//base",
+    ]
+  }
 
-fuzzer_test("extension_csp_validator_fuzzer") {
-  sources = [ "csp_validator_fuzzer.cc" ]
-  deps = [
-    ":common",
-    "//base",
-    "//third_party/icu/fuzzers:fuzzer_support",
-  ]
+  fuzzer_test("extension_csp_validator_fuzzer") {
+    sources = [ "csp_validator_fuzzer.cc" ]
+    deps = [
+      ":common",
+      "//base",
+      "//third_party/icu/fuzzers:fuzzer_support",
+    ]
 
-  # The fuzzed code needs more RAM that the default limit.
-  libfuzzer_options = [ "rss_limit_mb=4096" ]
-}
+    # The fuzzed code needs more RAM that the default limit.
+    libfuzzer_options = [ "rss_limit_mb=4096" ]
+  }
 
-fuzzer_test("extension_api_scripts_internal_serialization_fuzzer") {
-  sources = [ "api/scripts_internal/script_serialization_fuzzer.cc" ]
-  deps = [
-    ":common",
-    "//base",
-    "//extensions:test_support",
-    "//extensions/common/api",
-    "//third_party/abseil-cpp:absl",
-    "//third_party/icu/fuzzers:fuzzer_support",
-  ]
+  fuzzer_test("extension_api_scripts_internal_serialization_fuzzer") {
+    sources = [ "api/scripts_internal/script_serialization_fuzzer.cc" ]
+    deps = [
+      ":common",
+      "//base",
+      "//extensions:test_support",
+      "//extensions/common/api",
+      "//third_party/abseil-cpp:absl",
+      "//third_party/icu/fuzzers:fuzzer_support",
+    ]
 
-  # The fuzzed code needs more RAM that the default limit.
-  libfuzzer_options = [ "rss_limit_mb=4096" ]
+    # The fuzzed code needs more RAM that the default limit.
+    libfuzzer_options = [ "rss_limit_mb=4096" ]
+  }
 }

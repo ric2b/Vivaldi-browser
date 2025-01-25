@@ -41,7 +41,7 @@
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
@@ -739,7 +739,7 @@ BOOL UIIsBlocking(Browser* browser) {
 
 // An identity manager
 - (signin::IdentityManager*)identityManager {
-  return IdentityManagerFactory::GetForBrowserState(self.browserState);
+  return IdentityManagerFactory::GetForProfile(self.browserState);
 }
 
 // Whether user is currently logged-in.
@@ -812,7 +812,8 @@ BOOL UIIsBlocking(Browser* browser) {
 
 - (void)enhancedSafeBrowsingInlinePromoTriggerCriteriaMet {
   if (!base::FeatureList::IsEnabled(
-          feature_engagement::kIPHiOSInlineEnhancedSafeBrowsingPromoFeature)) {
+          feature_engagement::kIPHiOSInlineEnhancedSafeBrowsingPromoFeature) ||
+      !self.browserState) {
     return;
   }
   feature_engagement::Tracker* tracker =

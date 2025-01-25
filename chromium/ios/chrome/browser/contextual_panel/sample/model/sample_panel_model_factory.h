@@ -5,19 +5,20 @@
 #ifndef IOS_CHROME_BROWSER_CONTEXTUAL_PANEL_SAMPLE_MODEL_SAMPLE_PANEL_MODEL_FACTORY_H_
 #define IOS_CHROME_BROWSER_CONTEXTUAL_PANEL_SAMPLE_MODEL_SAMPLE_PANEL_MODEL_FACTORY_H_
 
-#include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "base/no_destructor.h"
+#import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
 class SamplePanelModel;
 
 // Singleton that owns all SamplePanelModels and associates them with
-// BrowserStates.
+// profiles.
 class SamplePanelModelFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static SamplePanelModel* GetForBrowserState(
-      ChromeBrowserState* browser_state);
+  // TODO(crbug.com/358301380): remove this method.
+  static SamplePanelModel* GetForBrowserState(ProfileIOS* profile);
 
+  static SamplePanelModel* GetForProfile(ProfileIOS* profile);
   static SamplePanelModelFactory* GetInstance();
 
   SamplePanelModelFactory(const SamplePanelModelFactory&) = delete;

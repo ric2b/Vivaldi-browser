@@ -66,7 +66,6 @@ class NullImageResourceInfo final
   void DidRemoveClientOrObserver() override {}
   void EmulateLoadStartedForInspector(
       ResourceFetcher*,
-      const KURL&,
       const AtomicString& initiator_name) override {}
 
   void LoadDeferredImage(ResourceFetcher* fetcher) override {}
@@ -110,10 +109,7 @@ ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
   ImageResource* resource = ImageResource::Fetch(params, fetcher);
   if (!resource)
     return nullptr;
-  resource->GetContent()->SetIsLoadedFromMemoryCache(
-      resource->IsLoadedFromMemoryCache());
-  resource->GetContent()->SetIsPreloadedWithEarlyHints(
-      resource->IsPreloadedByEarlyHints());
+
   return resource->GetContent();
 }
 
@@ -341,10 +337,6 @@ scoped_refptr<Image> ImageResourceContent::CreateImage(bool is_multipart) {
 void ImageResourceContent::ClearImage() {
   if (!image_)
     return;
-  int64_t length = image_->HasData() ? image_->DataSize() : 0;
-  if (allocated_external_memory_) {
-    v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(-length);
-  }
 
   // If our Image has an observer, it's always us so we need to clear the back
   // pointer before dropping our reference.
@@ -600,9 +592,8 @@ bool ImageResourceContent::IsAccessAllowed() const {
 
 void ImageResourceContent::EmulateLoadStartedForInspector(
     ResourceFetcher* fetcher,
-    const KURL& url,
     const AtomicString& initiator_name) {
-  info_->EmulateLoadStartedForInspector(fetcher, url, initiator_name);
+  info_->EmulateLoadStartedForInspector(fetcher, initiator_name);
 }
 
 void ImageResourceContent::SetIsSufficientContentLoadedForPaint() {

@@ -7,6 +7,8 @@
 #include <string_view>
 
 #include "base/check.h"
+#include "base/containers/fixed_flat_set.h"
+#include "base/containers/flat_map.h"
 #include "base/i18n/case_conversion.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -14,6 +16,8 @@
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/uuid.h"
 #include "base/values.h"
+#include "components/search_engines/prepopulated_engines.h"
+#include "components/search_engines/regulatory_extension_type.h"
 
 namespace {
 
@@ -85,7 +89,9 @@ TemplateURLData::TemplateURLData(
     const base::Value::List& alternate_urls_list,
     bool preconnect_to_search_url,
     bool prefetch_likely_navigations,
-    int prepopulate_id)
+    int prepopulate_id,
+    const base::span<const TemplateURLData::RegulatoryExtension>&
+        reg_extensions)
     : suggestions_url(suggest_url),
       image_url(image_url),
       image_translate_url(image_translate_url),
@@ -126,6 +132,15 @@ TemplateURLData::TemplateURLData(
       alternate_urls.push_back(*alternate_url);
     }
   }
+
+  regulatory_extensions =
+      base::MakeFlatMap<RegulatoryExtensionType,
+                        const TemplateURLData::RegulatoryExtension*>(
+          reg_extensions, {},
+          [](const TemplateURLData::RegulatoryExtension& a) {
+            return std::make_pair(a.variant, &a);
+          });
+  DCHECK_EQ(regulatory_extensions.size(), reg_extensions.size());
 }
 
 TemplateURLData::~TemplateURLData() = default;
@@ -143,7 +158,8 @@ void TemplateURLData::SetKeyword(std::u16string_view keyword) {
   // keywords to be lower case.
   keyword_ = base::i18n::ToLower(keyword);
 
-  base::TrimWhitespace(keyword_, base::TRIM_ALL, &keyword_);
+  // The omnibox doesn't properly handle search keywords with whitespace.
+  base::RemoveChars(keyword_, base::kWhitespaceUTF16, &keyword_);
 }
 
 void TemplateURLData::SetURL(const std::string& url) {

@@ -67,9 +67,17 @@ using ::operations_research::MPVariable;
 // solver cannot guarantee exact numerical precision.
 constexpr double kMaxCostEpsilon = 1.0001;
 
+// Memory contributions in the Mixed ILP are converted to units in this range;
+// beware that significantly larger / smaller values can cause numerical issues.
+constexpr double kMemoryMultiplier = 1e6;
+
+// Maximum costs above this threshold can lead to Invalid MIPs.
+// TODO(moffitt): Handle hints properly for problems with high overbudget costs.
+constexpr double kMaxCostValue = 1e18;
+
 bool AutoShardingSolverOutput::operator==(
     const AutoShardingSolverOutput& other) const {
-  return s_val == other.s_val && e_val == other.e_val && cost == other.cost &&
+  return s_val == other.s_val && cost == other.cost &&
          peak_times == other.peak_times;
 }
 
@@ -133,17 +141,6 @@ void PrintLargestInstructions(
             << " memory usage: "
             << instruction_mem.at(i).second / (1024 * 1024 * 1024) << "GB";
   }
-}
-
-// Applies deterministic noise to the coefficient using `name` and `saltiplier`
-// so that ties between equal terms can be broken in the solver's objective
-// function. We include both a multiplicative term (in case the coefficient is
-// large) and an additive term (in case the coefficient is zero).
-void AddSalt(const std::string& name, const double saltiplier, double* coeff) {
-  if (saltiplier <= 0.0) return;
-  const tsl::uint64 hash = tsl::Hash64(name);  // stable across runs & platforms
-  double salt = saltiplier * hash / std::numeric_limits<tsl::uint64>::max();
-  *coeff = *coeff * (1.0 + salt) + salt;
 }
 
 AutoShardingSolverResult SolveAndExtractSolution(
@@ -233,6 +230,7 @@ std::optional<std::pair<int64_t, int64_t>> ReduceMemoryTerms(
     std::vector<std::pair<int64_t, int64_t>>& reduced_intervals,
     std::vector<MPVariable*>& group_vars,
     absl::flat_hash_set<int64_t>& reduced_times) {
+  const absl::Time term_reduction_start_time = absl::Now();
   std::optional<std::pair<int64_t, int64_t>> num_terms = std::nullopt;
   std::vector<absl::btree_set<int64_t>> reduced_groups;
   if (groups.empty()) {
@@ -261,7 +259,7 @@ std::optional<std::pair<int64_t, int64_t>> ReduceMemoryTerms(
       reduced_groups.push_back({group.prims().begin(), group.prims().end()});
     }
   }
-  solver.MakeIntVarArray(reduced_groups.size(), 0.0, MPSolver::infinity(),
+  solver.MakeNumVarArray(reduced_groups.size(), 0.0, MPSolver::infinity(),
                          absl::StrCat("group_", prim_type), &group_vars);
   for (int64_t group_idx = 0; group_idx < group_vars.size(); ++group_idx) {
     MPConstraint* constraint = solver.MakeRowConstraint(
@@ -271,7 +269,7 @@ std::optional<std::pair<int64_t, int64_t>> ReduceMemoryTerms(
     for (const int64_t prim_idx : reduced_groups[group_idx]) {
       for (int64_t j = 0; j < prim_vars[prim_idx].size(); ++j) {
         double memory_cost = memory_costs.at(prim_idx).costs(j);
-        memory_cost /= request.memory_budget() / 100.0;
+        memory_cost /= request.memory_budget() / kMemoryMultiplier;
         const double accumulated_coefficient =
             constraint->GetCoefficient(prim_vars[prim_idx][j]);
         constraint->SetCoefficient(prim_vars[prim_idx][j],
@@ -282,6 +280,15 @@ std::optional<std::pair<int64_t, int64_t>> ReduceMemoryTerms(
   const absl::flat_hash_set<int64_t> times = MemoryTermReducer::GetReducedTimes(
       num_primitives, reduced_intervals, reduced_groups);
   reduced_times.insert(times.begin(), times.end());
+  const absl::Time term_reduction_end_time = absl::Now();
+  if (num_terms) {
+    const auto term_reduction_duration =
+        term_reduction_end_time - term_reduction_start_time;
+    LOG(INFO) << "Memory Term Reducer for " << prim_type << "s took "
+              << absl::ToInt64Milliseconds(term_reduction_duration)
+              << " ms and reduced the number of terms from " << num_terms->first
+              << " to " << num_terms->second;
+  }
   return num_terms;
 }
 
@@ -302,9 +309,12 @@ void AddMemoryTerms(
          time_idx <= intervals[prim_idx].second; ++time_idx) {
       if (!reduced_times.contains(time_idx)) continue;
       if (!constraints.contains(time_idx)) {
-        MPConstraint* constraint = solver.MakeRowConstraint(
-            -MPSolver::infinity(), 100.0, absl::StrCat("mem[", time_idx, "]"));
-        if (overbudget_var) constraint->SetCoefficient(overbudget_var, -100.0);
+        MPConstraint* constraint =
+            solver.MakeRowConstraint(-MPSolver::infinity(), kMemoryMultiplier,
+                                     absl::StrCat("mem[", time_idx, "]"));
+        if (overbudget_var) {
+          constraint->SetCoefficient(overbudget_var, -kMemoryMultiplier);
+        }
         constraints[time_idx] = constraint;
       }
       MPConstraint* constraint = constraints[time_idx];
@@ -314,7 +324,7 @@ void AddMemoryTerms(
       }
       for (int64_t j = 0; j < prim_vars[prim_idx].size(); ++j) {
         double memory_cost = memory_costs.at(prim_idx).costs(j);
-        memory_cost /= request.memory_budget() / 100.0;
+        memory_cost /= request.memory_budget() / kMemoryMultiplier;
         const double accumulated_coefficient =
             constraint->GetCoefficient(prim_vars[prim_idx][j]);
         constraint->SetCoefficient(prim_vars[prim_idx][j],
@@ -368,11 +378,7 @@ void AddMemoryTerms(
 //     d. For all (i, j) in E, e[i, j] in {0, 1} ^ dim(e[i, j])
 //     e. For all (i, j) in E, e[i, j]^T * 1 == 1
 //       Make sure s[i] and s[j] align with e[i, j]:
-//     f. For all (i, j) in E, 0 <= p < dim(s[i]),
-//        sum_{0 <= q < dim(s[j])} e[i, j](p * dim(s[j]) + q) <= s[i](p)
-//     g. For all (i, j) in E, 0 <= q < dim(s[j]),
-//        sum_{0 <= p < dim(s[i])} e[i, j](p * dim(s[j]) + q) <= s[j](q)
-//     h. For all (i, j) in A and all (p, q),
+//     f. For all (i, j) in A and all (p, q),
 //        s[i][p] + s[j][q] <= 1 if v[p, q] == 1.0
 // Serialize parameters of the ILP problem as numpy arrays and call the python
 // solver.
@@ -400,7 +406,12 @@ AutoShardingSolverResult CallORToolsSolver(
   const size_t num_edges = request.edges_size();
   const int num_workers = 32;
   // SAT or SCIP
-  std::unique_ptr<MPSolver> solver(std::make_unique<MPSolver>("", MPSolver::SAT_INTEGER_PROGRAMMING));
+#ifdef PLATFORM_GOOGLE
+  std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver("SAT"));
+#else
+  std::unique_ptr<MPSolver> solver(
+      std::make_unique<MPSolver>("", MPSolver::SAT_INTEGER_PROGRAMMING));
+#endif
   CHECK(solver);
   solver->MutableObjective()->SetMinimization();
   std::string solver_parameter_str;
@@ -479,16 +490,15 @@ AutoShardingSolverResult CallORToolsSolver(
   absl::flat_hash_set<MPVariable*> infinity_vars;
   for (NodeIdx node_idx = 0; node_idx < request.num_nodes(); ++node_idx) {
     for (NodeStrategyIdx j = 0; j < s[node_idx].size(); ++j) {
-      double accumulated_coefficient =
-          solver->MutableObjective()->GetCoefficient(s[node_idx][j]);
       double coefficient = request.computation_costs(node_idx).costs(j) +
                            request.communication_costs(node_idx).costs(j);
       if (coefficient >= kInfinityCost) {
         infinity_vars.insert(s[node_idx][j]);
         continue;
       }
-      AddSalt(absl::StrCat(node_idx, "S", j), request.saltiplier(),
-              &coefficient);
+      if (request.minimize_departures()) continue;
+      double accumulated_coefficient =
+          solver->MutableObjective()->GetCoefficient(s[node_idx][j]);
       solver->MutableObjective()->SetCoefficient(
           s[node_idx][j], accumulated_coefficient + coefficient);
     }
@@ -496,15 +506,14 @@ AutoShardingSolverResult CallORToolsSolver(
   // Edge costs
   for (EdgeIdx edge_idx = 0; edge_idx < num_edges; ++edge_idx) {
     for (EdgeStrategyIdx j = 0; j < e[edge_idx].size(); ++j) {
-      double accumulated_coefficient =
-          solver->MutableObjective()->GetCoefficient(e[edge_idx][j]);
       double coefficient = request.resharding_costs(edge_idx).costs(j);
       if (coefficient >= kInfinityCost) {
         infinity_vars.insert(e[edge_idx][j]);
         continue;
       }
-      AddSalt(absl::StrCat(edge_idx, "E", j), request.saltiplier(),
-              &coefficient);
+      if (request.minimize_departures()) continue;
+      double accumulated_coefficient =
+          solver->MutableObjective()->GetCoefficient(e[edge_idx][j]);
       solver->MutableObjective()->SetCoefficient(
           e[edge_idx][j], accumulated_coefficient + coefficient);
     }
@@ -587,26 +596,18 @@ AutoShardingSolverResult CallORToolsSolver(
         reduced_intervals_edges;
     absl::flat_hash_set<int64_t> reduced_times;
     std::vector<MPVariable*> group_node_vars, group_edge_vars;
-    const absl::Time term_reduction_start_time = absl::Now();
-    auto num_node_terms = ReduceMemoryTerms(
+    std::optional<std::pair<int64_t, int64_t>> num_node_terms, num_edge_terms;
+    num_node_terms = ReduceMemoryTerms(
         request, *solver, request.live_size(), request.num_nodes(),
         std::move(LiveNodes), request.node_intervals(), request.node_groups(),
         request.memory_costs(), "node", s, reduced_intervals_nodes,
         group_node_vars, reduced_times);
-    auto num_edge_terms = ReduceMemoryTerms(
-        request, *solver, request.live_edges_size(), request.edges_size(),
-        std::move(LiveEdges), request.edge_intervals(), request.edge_groups(),
-        request.memory_edge_costs(), "edge", e, reduced_intervals_edges,
-        group_edge_vars, reduced_times);
-    const absl::Time term_reduction_end_time = absl::Now();
-    if (num_node_terms && num_edge_terms) {
-      const auto term_reduction_duration =
-          term_reduction_end_time - term_reduction_start_time;
-      LOG(INFO) << "Memory Term Reducer took "
-                << absl::ToInt64Milliseconds(term_reduction_duration)
-                << " ms and reduced the number of terms from "
-                << num_node_terms->first + num_edge_terms->first << " to "
-                << num_node_terms->second + num_edge_terms->second;
+    if (request.enable_memory_edge_costs()) {
+      num_edge_terms = ReduceMemoryTerms(
+          request, *solver, request.live_edges_size(), request.edges_size(),
+          std::move(LiveEdges), request.edge_intervals(), request.edge_groups(),
+          request.memory_edge_costs(), "edge", e, reduced_intervals_edges,
+          group_edge_vars, reduced_times);
     }
     absl::flat_hash_map<LivenessIdx, MPConstraint*> constraints;
     AddMemoryTerms(request, *solver, request.num_nodes(),
@@ -619,7 +620,7 @@ AutoShardingSolverResult CallORToolsSolver(
                      overbudget_var, reduced_times, e, group_edge_vars,
                      constraints);
     }
-    if (overbudget_var) {
+    if (overbudget_var && !request.minimize_departures()) {
       solver->MutableObjective()->SetCoefficient(
           overbudget_var,
           request.overbudget_coeff().coeff() * request.memory_budget());
@@ -635,44 +636,23 @@ AutoShardingSolverResult CallORToolsSolver(
   for (EdgeIdx edge_idx = 0; edge_idx < num_edges; ++edge_idx) {
     if (e_follow[edge_idx] >= 0) continue;
     const auto& edge = request.edges(edge_idx);
-    MPConstraint* constraint = solver->MakeRowConstraint(
-        1.0, 1.0,
-        absl::StrCat("sum(e[", edge.first(), "][", edge.second(), "][*]) = 1"));
-    for (EdgeStrategyIdx j = 0; j < e[edge_idx].size(); ++j) {
-      constraint->SetCoefficient(e[edge_idx][j], 1.0);
+    for (NodeStrategyIdx p = 0; p < s[edge.first()].size(); ++p) {
+      for (NodeStrategyIdx q = 0; q < s[edge.second()].size(); ++q) {
+        const EdgeStrategyIdx j = p * s[edge.second()].size() + q;
+        MPConstraint* constraint = solver->MakeRowConstraint(
+            -1.0, MPSolver::infinity(),
+            absl::StrCat("edge[", edge_idx, "][", j, "]"));
+        // In the special case where the source and destination are both
+        // represented by the same node variable, its coefficient in this
+        // constraint must be doubled.
+        double coeff = (s[edge.first()][p] == s[edge.second()][q]) ? 2.0 : 1.0;
+        constraint->SetCoefficient(s[edge.first()][p], -coeff);
+        constraint->SetCoefficient(s[edge.second()][q], -coeff);
+        constraint->SetCoefficient(e[edge_idx][j], 1.0);
+      }
     }
   }
   // f.
-  for (EdgeIdx edge_idx = 0; edge_idx < num_edges; ++edge_idx) {
-    if (e_follow[edge_idx] >= 0) continue;
-    const auto& edge = request.edges(edge_idx);
-    for (NodeStrategyIdx p = 0; p < s[edge.first()].size(); ++p) {
-      MPConstraint* constraint = solver->MakeRowConstraint(
-          -MPSolver::infinity(), 0,
-          absl::StrCat("f for i = ", edge_idx, ", p = ", p));
-      constraint->SetCoefficient(s[edge.first()][p], -1.0);
-      for (NodeStrategyIdx q = 0; q < s[edge.second()].size(); ++q) {
-        const EdgeStrategyIdx j = p * s[edge.second()].size() + q;
-        constraint->SetCoefficient(e[edge_idx][j], 1.0);
-      }
-    }
-  }
-  // g.
-  for (EdgeIdx edge_idx = 0; edge_idx < num_edges; ++edge_idx) {
-    if (e_follow[edge_idx] >= 0) continue;
-    const auto& edge = request.edges(edge_idx);
-    for (NodeStrategyIdx q = 0; q < s[edge.second()].size(); ++q) {
-      MPConstraint* constraint = solver->MakeRowConstraint(
-          -MPSolver::infinity(), 0,
-          absl::StrCat("g for i = ", edge_idx, ", q = ", q));
-      constraint->SetCoefficient(s[edge.second()][q], -1.0);
-      for (NodeStrategyIdx p = 0; p < s[edge.first()].size(); ++p) {
-        const EdgeStrategyIdx j = p * s[edge.second()].size() + q;
-        constraint->SetCoefficient(e[edge_idx][j], 1.0);
-      }
-    }
-  }
-  // h.
   absl::flat_hash_set<std::pair<NodeIdx, NodeIdx>> alias_set;
   for (auto alias_idx = 0; alias_idx < request.aliases_size(); ++alias_idx) {
     const auto& raw_alias = request.aliases(alias_idx);
@@ -709,7 +689,18 @@ AutoShardingSolverResult CallORToolsSolver(
       }
     }
   }
-  if (request.has_max_cost()) {
+  if (request.minimize_departures()) {
+    for (NodeIdx node_idx = 0; node_idx < request.num_nodes(); ++node_idx) {
+      for (NodeStrategyIdx j = 0; j < s[node_idx].size(); ++j) {
+        double accumulated_coefficient =
+            solver->MutableObjective()->GetCoefficient(s[node_idx][j]);
+        double departure_cost = request.departure_costs(node_idx).costs(j);
+        solver->MutableObjective()->SetCoefficient(
+            s[node_idx][j], accumulated_coefficient + departure_cost);
+      }
+    }
+  }
+  if (request.has_max_cost() && request.max_cost().coeff() < kMaxCostValue) {
     double max_cost = kMaxCostEpsilon * request.max_cost().coeff();
     max_cost -= solver->Objective().offset();
     MPConstraint* cost_constraint = solver->MakeRowConstraint(
@@ -719,7 +710,8 @@ AutoShardingSolverResult CallORToolsSolver(
     }
   }
 
-  if (!request.s_hint().empty() && !request.deterministic_mode()) {
+  if (!request.s_hint().empty() && !request.deterministic_mode() &&
+      (!request.has_max_cost() || request.max_cost().coeff() < kMaxCostValue)) {
     std::vector<std::pair<const MPVariable*, double>> hint;
     for (NodeIdx node_idx = 0; node_idx < request.num_nodes(); ++node_idx) {
       if (request.s_follow(node_idx) >= 0) continue;
@@ -839,23 +831,6 @@ std::vector<NodeStrategyIdx> GetChosenNodeStrategy(
   return chosen_node_strategy;
 }
 
-std::vector<EdgeStrategyIdx> GetChosenEdgeStrategy(
-    const AutoShardingSolverRequest& request,
-    const std::vector<std::vector<MPVariable*>>& e) {
-  size_t num_edges = request.edges_size();
-  std::vector<NodeStrategyIdx> chosen_edge_strategy(num_edges, -1);
-  for (EdgeIdx edge_idx = 0; edge_idx < num_edges; ++edge_idx) {
-    for (EdgeStrategyIdx j = 0; j < e[edge_idx].size(); ++j) {
-      // if lhs == 1
-      if (e[edge_idx][j]->solution_value() > 0.5) {
-        chosen_edge_strategy[edge_idx] = j;
-        break;
-      }
-    }
-  }
-  return chosen_edge_strategy;
-}
-
 AutoShardingSolverResult SolveAndExtractSolution(
     const AutoShardingSolverRequest& request,
     const std::vector<std::vector<MPVariable*>>& s,
@@ -939,15 +914,18 @@ AutoShardingSolverResult SolveAndExtractSolution(
   double unsalted_objective = 0.0;
   const std::vector<NodeStrategyIdx> chosen_node_strategy =
       GetChosenNodeStrategy(request, s);
-  const std::vector<EdgeStrategyIdx> chosen_edge_strategy =
-      GetChosenEdgeStrategy(request, e);
   for (NodeIdx node_idx = 0; node_idx < request.num_nodes(); ++node_idx) {
     const NodeStrategyIdx j = chosen_node_strategy[node_idx];
     unsalted_objective += request.computation_costs(node_idx).costs(j) +
                           request.communication_costs(node_idx).costs(j);
   }
+  const auto chosen_edge_strategy = [&](EdgeIdx edge_idx) {
+    const auto& edge = request.edges(edge_idx);
+    return chosen_node_strategy[edge.first()] * request.s_len(edge.second()) +
+           chosen_node_strategy[edge.second()];
+  };
   for (EdgeIdx edge_idx = 0; edge_idx < num_edges; ++edge_idx) {
-    const EdgeStrategyIdx j = chosen_edge_strategy[edge_idx];
+    const EdgeStrategyIdx j = chosen_edge_strategy(edge_idx);
     unsalted_objective += request.resharding_costs(edge_idx).costs(j);
   }
   if (overbudget_var) {
@@ -970,8 +948,7 @@ AutoShardingSolverResult SolveAndExtractSolution(
   }
   PrintLargestInstructions(chosen_node_strategy, request);
   const AutoShardingSolverOutput output = {std::move(chosen_node_strategy),
-                                           std::move(chosen_edge_strategy),
-                                           unsalted_objective};
+                                           solver.Objective().Value()};
   return AutoShardingSolverResult(output, false);
 }
 
@@ -1003,7 +980,11 @@ AutoShardingEvaluation Evaluate(const AutoShardingSolverRequest& request,
   const auto& v = request.value_costs();
   const auto& p = request.departure_costs();
   const std::vector<NodeStrategyIdx>& s_val = result.status->s_val;
-  const std::vector<EdgeStrategyIdx>& e_val = result.status->e_val;
+  const auto e_val = [&](EdgeIdx edge_idx) {
+    const auto& edge = request.edges(edge_idx);
+    return s_val[edge.first()] * request.s_len(edge.second()) +
+           s_val[edge.second()];
+  };
   AutoShardingEvaluation evaluation;
   // Compute violations.
   for (NodeIdx node_idx = 0; node_idx < request.num_nodes(); ++node_idx) {
@@ -1028,7 +1009,7 @@ AutoShardingEvaluation Evaluate(const AutoShardingSolverRequest& request,
     }
   }
   for (EdgeIdx edge_idx = 0; edge_idx < request.edges_size(); ++edge_idx) {
-    if (r.at(edge_idx).costs(e_val[edge_idx]) >= kInfinityCost) {
+    if (r.at(edge_idx).costs(e_val(edge_idx)) >= kInfinityCost) {
       evaluation.violation_codes.insert(kInfiniteCostViolationCode);
     }
   }
@@ -1058,7 +1039,7 @@ AutoShardingEvaluation Evaluate(const AutoShardingSolverRequest& request,
             request.enable_memory_edge_costs()) {
           for (EdgeIdx edge_idx : request.live_edges(time_idx).edges()) {
             const auto& m = request.memory_edge_costs(edge_idx).costs();
-            total_memory_costs[time_idx] += m[e_val[edge_idx]];
+            total_memory_costs[time_idx] += m[e_val(edge_idx)];
             lower_bound_memory_costs[time_idx] +=
                 *std::min_element(m.begin(), m.end());
           }
@@ -1083,7 +1064,7 @@ AutoShardingEvaluation Evaluate(const AutoShardingSolverRequest& request,
         double lower_bound_group_cost = 0.0;
         for (const EdgeIdx edge_idx : group.prims()) {
           const auto& m = request.memory_edge_costs(edge_idx).costs();
-          total_group_cost += m[e_val[edge_idx]];
+          total_group_cost += m[e_val(edge_idx)];
           lower_bound_group_cost += *std::min_element(m.begin(), m.end());
         }
         total_edge_group_costs.push_back(total_group_cost);
@@ -1127,7 +1108,7 @@ AutoShardingEvaluation Evaluate(const AutoShardingSolverRequest& request,
           double total_memory_cost = 0.0, lower_bound_memory_cost = 0.0;
           if (edge_idx < request.edges_size()) {
             const auto& m = request.memory_edge_costs(edge_idx).costs();
-            total_memory_cost = m[e_val[edge_idx]];
+            total_memory_cost = m[e_val(edge_idx)];
             lower_bound_memory_cost = *std::min_element(m.begin(), m.end());
           } else {
             int64_t group_idx = edge_idx - request.edges_size();
@@ -1173,60 +1154,12 @@ AutoShardingEvaluation Evaluate(const AutoShardingSolverRequest& request,
         c.at(node_idx).costs().begin(), c.at(node_idx).costs().end());
   }
   for (EdgeIdx edge_idx = 0; edge_idx < request.edges_size(); ++edge_idx) {
-    evaluation.total.resharding_cost += r.at(edge_idx).costs(e_val[edge_idx]);
+    evaluation.total.resharding_cost += r.at(edge_idx).costs(e_val(edge_idx));
     evaluation.lower_bound.resharding_cost += *std::min_element(
         r.at(edge_idx).costs().begin(), r.at(edge_idx).costs().end());
   }
   evaluation.total_makespan = EvaluateMakespan(request, result, evaluation);
   return evaluation;
-}
-
-std::vector<std::string> Rationalize(const AutoShardingSolverRequest& request,
-                                     const AutoShardingSolverResult& result,
-                                     const AutoShardingSolverResult& subopt) {
-  std::vector<std::string> rationales;
-  const auto& names = request.instruction_names();
-
-  const std::vector<NodeStrategyIdx>& s_result = result.status->s_val;
-  const std::vector<NodeStrategyIdx>& s_subopt = subopt.status->s_val;
-  for (NodeIdx node_idx = 0; node_idx < request.num_nodes(); ++node_idx) {
-    const NodeStrategyIdx j = s_result[node_idx], k = s_subopt[node_idx];
-    if (j != k) {
-      rationales.push_back(absl::StrCat(
-          "strategy changes for ", names[node_idx], " (", j, " -> ", k, ")"));
-    }
-    const double dj = request.communication_costs(node_idx).costs(j);
-    const double dk = request.communication_costs(node_idx).costs(k);
-    if (dj < dk) {
-      rationales.push_back(absl::StrCat("communication cost increases for ",
-                                        names[node_idx], " (", dj, " -> ", dk,
-                                        ")"));
-    }
-    const double cj = request.computation_costs(node_idx).costs(j);
-    const double ck = request.computation_costs(node_idx).costs(k);
-    if (cj < ck) {
-      rationales.push_back(absl::StrCat("computation cost increases for ",
-                                        names[node_idx], " (", cj, " -> ", ck,
-                                        ")"));
-    }
-  }
-
-  const std::vector<EdgeStrategyIdx>& e_result = result.status->e_val;
-  const std::vector<EdgeStrategyIdx>& e_subopt = subopt.status->e_val;
-  for (EdgeIdx edge_idx = 0; edge_idx < request.edges_size(); ++edge_idx) {
-    const auto& edge = request.edges(edge_idx);
-    const EdgeStrategyIdx j = e_result[edge_idx], k = e_subopt[edge_idx];
-    const double rj = request.resharding_costs(edge_idx).costs(j);
-    const double rk = request.resharding_costs(edge_idx).costs(k);
-    if (rj < rk) {
-      const std::string edge_name =
-          absl::StrCat(names[edge.first()], " and ", names[edge.second()]);
-      rationales.push_back(absl::StrCat("resharding cost increases for ",
-                                        edge_name, " (", rj, " -> ", rk, ")"));
-    }
-  }
-
-  return rationales;
 }
 
 absl::Status ValidateRequest(const AutoShardingSolverRequest& request) {

@@ -10,13 +10,16 @@
 #include <vector>
 
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/password_manager/password_store_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/chrome_signin_pref_names.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_promo_util.h"
+#include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
-#include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
@@ -28,10 +31,15 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/prefs/pref_service.h"
+#include "components/signin/public/base/signin_metrics.h"
+#include "components/signin/public/base/signin_prefs.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_combobox_model.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/editable_combobox/editable_combobox.h"
@@ -40,6 +48,22 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/view_class_properties.h"
+
+namespace {
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+// Initiates a `MovePasswordToAccountStoreHelper`, which takes care of moving
+// the `form` from profile to account store.
+void MovePasswordToAccount(
+    const password_manager::PasswordForm& form,
+    password_manager::metrics_util::MoveToAccountStoreTrigger trigger,
+    content::WebContents* web_contents) {
+  PasswordsModelDelegateFromWebContents(web_contents)
+      ->MovePendingPasswordToAccountStoreUsingHelper(form, trigger);
+}
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+}  // namespace
 
 PasswordSaveUpdateView::PasswordSaveUpdateView(
     content::WebContents* web_contents,
@@ -193,7 +217,7 @@ bool PasswordSaveUpdateView::CloseOrReplaceWithPromo() {
   // Close the bubble if the sign in promo should not be shown.
   if (!signin::ShouldShowSignInPromo(
           *controller_.GetProfile(),
-          signin::SignInAutofillBubblePromoType::Passwords)) {
+          signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE)) {
     return true;
   }
 
@@ -204,7 +228,7 @@ bool PasswordSaveUpdateView::CloseOrReplaceWithPromo() {
   RemoveAllChildViews();
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetShowIcon(false);
-  SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   GetBubbleFrameView()->SetFootnoteView(nullptr);
   SetTitle(IDS_AUTOFILL_SIGNIN_PROMO_TITLE_PASSWORD);
 
@@ -214,12 +238,32 @@ bool PasswordSaveUpdateView::CloseOrReplaceWithPromo() {
   accessibility_view->SetVisible(false);
   accessibility_alert_ = AddChildView(std::move(accessibility_view));
 
+  auto move_callback =
+      base::BindOnce(&MovePasswordToAccount, controller_.pending_password(),
+                     password_manager::metrics_util::MoveToAccountStoreTrigger::
+                         kUserOptedInAfterSavingLocally);
+
   // Show the sign in promo.
   auto sign_in_promo = std::make_unique<AutofillBubbleSignInPromoView>(
       controller_.GetWebContents(),
-      signin::SignInAutofillBubblePromoType::Passwords,
-      controller_.pending_password());
+      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE,
+      std::move(move_callback));
   AddChildView(std::move(sign_in_promo));
+
+  // Record that the sign in promo was shown.
+  Profile* profile = controller_.GetProfile();
+  AccountInfo account = signin_ui_util::GetSingleAccountForPromos(
+      IdentityManagerFactory::GetForProfile(profile));
+
+  if (account.gaia.empty()) {
+    int show_count = profile->GetPrefs()->GetInteger(
+        prefs::kPasswordSignInPromoShownCountPerProfile);
+    profile->GetPrefs()->SetInteger(
+        prefs::kPasswordSignInPromoShownCountPerProfile, show_count + 1);
+  } else {
+    SigninPrefs(*profile->GetPrefs())
+        .IncrementPasswordSigninPromoImpressionCount(account.gaia);
+  }
 
   // Notify the screen reader that the bubble changed.
   AnnounceBubbleChange();
@@ -248,8 +292,8 @@ views::View* PasswordSaveUpdateView::GetInitiallyFocusedView() {
 }
 
 bool PasswordSaveUpdateView::IsDialogButtonEnabled(
-    ui::DialogButton button) const {
-  return button != ui::DIALOG_BUTTON_OK ||
+    ui::mojom::DialogButton button) const {
+  return button != ui::mojom::DialogButton::kOk ||
          controller_.pending_password().IsFederatedCredential() ||
          !controller_.pending_password().password_value.empty();
 }
@@ -283,7 +327,8 @@ void PasswordSaveUpdateView::UpdateUsernameAndPasswordInModel() {
 }
 
 void PasswordSaveUpdateView::UpdateBubbleUIElements() {
-  SetButtons((ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL));
+  SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |
+             static_cast<int>(ui::mojom::DialogButton::kCancel));
   std::u16string ok_button_text;
   if (controller_.IsAccountStorageOptInRequiredBeforeSave()) {
     ok_button_text = l10n_util::GetStringUTF16(
@@ -293,9 +338,9 @@ void PasswordSaveUpdateView::UpdateBubbleUIElements() {
         controller_.IsCurrentStateUpdate() ? IDS_PASSWORD_MANAGER_UPDATE_BUTTON
                                            : IDS_PASSWORD_MANAGER_SAVE_BUTTON);
   }
-  SetButtonLabel(ui::DIALOG_BUTTON_OK, ok_button_text);
+  SetButtonLabel(ui::mojom::DialogButton::kOk, ok_button_text);
   SetButtonLabel(
-      ui::DIALOG_BUTTON_CANCEL,
+      ui::mojom::DialogButton::kCancel,
       l10n_util::GetStringUTF16(
           is_update_bubble_ ? IDS_PASSWORD_MANAGER_CANCEL_BUTTON
                             : IDS_PASSWORD_MANAGER_BUBBLE_BLOCKLIST_BUTTON));
@@ -358,14 +403,14 @@ void PasswordSaveUpdateView::AnnounceBubbleChange() {
 void PasswordSaveUpdateView::OnContentChanged() {
   bool is_update_state_before = controller_.IsCurrentStateUpdate();
   bool is_ok_button_enabled_before =
-      IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK);
+      IsDialogButtonEnabled(ui::mojom::DialogButton::kOk);
   bool changes_synced_to_account_before =
       controller_.IsCurrentStateAffectingPasswordsStoredInTheGoogleAccount();
   UpdateUsernameAndPasswordInModel();
   // Maybe the buttons should be updated.
   if (is_update_state_before != controller_.IsCurrentStateUpdate() ||
       is_ok_button_enabled_before !=
-          IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK)) {
+          IsDialogButtonEnabled(ui::mojom::DialogButton::kOk)) {
     UpdateBubbleUIElements();
     DialogModelChanged();
   } else if (changes_synced_to_account_before !=

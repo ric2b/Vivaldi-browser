@@ -5,6 +5,7 @@
 #include "ash/display/refresh_rate_controller.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "ash/constants/ash_switches.h"
@@ -31,6 +32,7 @@
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/native_display_delegate.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace ash {
 namespace {
@@ -86,12 +88,14 @@ class MockNativeDisplayDelegate : public TestNativeDisplayDelegate {
               (override));
 };
 
-std::unique_ptr<DisplayMode> MakeDisplayMode(int width,
-                                             int height,
-                                             bool is_interlaced,
-                                             float refresh_rate) {
-  return display::CreateDisplayModePtrForTest({width, height}, is_interlaced,
-                                              refresh_rate);
+std::unique_ptr<DisplayMode> MakeDisplayMode(
+    int width,
+    int height,
+    bool is_interlaced,
+    float refresh_rate,
+    const std::optional<float>& vsync_rate_min = std::nullopt) {
+  return std::make_unique<DisplayMode>(gfx::Size{width, height}, is_interlaced,
+                                       refresh_rate, vsync_rate_min);
 }
 
 std::unique_ptr<DisplaySnapshot> BuildDualRefreshPanelSnapshot(
@@ -113,10 +117,10 @@ std::unique_ptr<DisplaySnapshot> BuildVrrPanelSnapshot(
   return FakeDisplaySnapshot::Builder()
       .SetId(id)
       .SetType(type)
-      .SetNativeMode(MakeDisplayMode(1920, 1200, false, 120.f))
-      .SetCurrentMode(MakeDisplayMode(1920, 1200, false, 120.f))
-      .SetVariableRefreshRateState(display::kVrrDisabled)
-      .SetVsyncRateMin(vsync_rate_min)
+      .SetNativeMode(MakeDisplayMode(1920, 1200, false, 120.f, vsync_rate_min))
+      .SetCurrentMode(MakeDisplayMode(1920, 1200, false, 120.f, vsync_rate_min))
+      .SetVariableRefreshRateState(
+          display::VariableRefreshRateState::kVrrDisabled)
       .Build();
 }
 
@@ -646,17 +650,21 @@ TEST_F(RefreshRateControllerTest, ShouldEnableVrrForBorealis) {
     ASSERT_NE(internal_snapshot, nullptr);
     ASSERT_TRUE(internal_snapshot->IsVrrCapable());
     EXPECT_FALSE(internal_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(internal_id)
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kDefaultVsyncRateMin),
+              GetCompositorForDisplayId(internal_id)
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrDisabled,
+              GetCompositorForDisplayId(internal_id)->vrr_state_for_testing());
 
     const DisplaySnapshot* external_snapshot = GetDisplaySnapshot(external_id);
     ASSERT_NE(external_snapshot, nullptr);
     ASSERT_TRUE(external_snapshot->IsVrrCapable());
     EXPECT_FALSE(external_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(external_id)
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kDefaultVsyncRateMin),
+              GetCompositorForDisplayId(internal_id)
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrDisabled,
+              GetCompositorForDisplayId(external_id)->vrr_state_for_testing());
   }
 
   // Set the game mode to indicate the user is gaming.
@@ -668,16 +676,20 @@ TEST_F(RefreshRateControllerTest, ShouldEnableVrrForBorealis) {
     const DisplaySnapshot* internal_snapshot = GetDisplaySnapshot(internal_id);
     ASSERT_NE(internal_snapshot, nullptr);
     EXPECT_TRUE(internal_snapshot->IsVrrEnabled());
-    EXPECT_EQ(
-        base::Hertz(kDefaultVsyncRateMin),
-        GetCompositorForDisplayId(internal_id)->max_vrr_interval_for_testing());
+    EXPECT_EQ(base::Hertz(kDefaultVsyncRateMin),
+              GetCompositorForDisplayId(internal_id)
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrEnabled,
+              GetCompositorForDisplayId(internal_id)->vrr_state_for_testing());
 
     const DisplaySnapshot* external_snapshot = GetDisplaySnapshot(external_id);
     ASSERT_NE(external_snapshot, nullptr);
     EXPECT_FALSE(external_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(external_id)
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kDefaultVsyncRateMin),
+              GetCompositorForDisplayId(internal_id)
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrDisabled,
+              GetCompositorForDisplayId(external_id)->vrr_state_for_testing());
   }
 
   // Reset the game mode.
@@ -689,16 +701,20 @@ TEST_F(RefreshRateControllerTest, ShouldEnableVrrForBorealis) {
     const DisplaySnapshot* internal_snapshot = GetDisplaySnapshot(internal_id);
     ASSERT_NE(internal_snapshot, nullptr);
     EXPECT_FALSE(internal_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(internal_id)
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kDefaultVsyncRateMin),
+              GetCompositorForDisplayId(internal_id)
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrDisabled,
+              GetCompositorForDisplayId(internal_id)->vrr_state_for_testing());
 
     const DisplaySnapshot* external_snapshot = GetDisplaySnapshot(external_id);
     ASSERT_NE(external_snapshot, nullptr);
     EXPECT_FALSE(external_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(external_id)
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kDefaultVsyncRateMin),
+              GetCompositorForDisplayId(internal_id)
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrDisabled,
+              GetCompositorForDisplayId(external_id)->vrr_state_for_testing());
   }
 
   game_mode_controller_->NotifySetGameMode(GameMode::OFF,
@@ -724,9 +740,11 @@ TEST_F(RefreshRateControllerTest, ShouldDisableVrrWithBatterySaverMode) {
     ASSERT_NE(snapshot, nullptr);
     ASSERT_TRUE(snapshot->IsVrrCapable());
     EXPECT_TRUE(snapshot->IsVrrEnabled());
-    EXPECT_EQ(
-        base::Hertz(kDefaultVsyncRateMin),
-        GetCompositorForDisplayId(display_id)->max_vrr_interval_for_testing());
+    EXPECT_EQ(base::Hertz(kDefaultVsyncRateMin),
+              GetCompositorForDisplayId(display_id)
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrEnabled,
+              GetCompositorForDisplayId(display_id)->vrr_state_for_testing());
   }
 
   // Set power state to indicate the device is on AC, and
@@ -741,9 +759,11 @@ TEST_F(RefreshRateControllerTest, ShouldDisableVrrWithBatterySaverMode) {
     const DisplaySnapshot* snapshot = GetDisplaySnapshot(display_id);
     ASSERT_NE(snapshot, nullptr);
     EXPECT_FALSE(snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(display_id)
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kDefaultVsyncRateMin),
+              GetCompositorForDisplayId(display_id)
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrDisabled,
+              GetCompositorForDisplayId(display_id)->vrr_state_for_testing());
   }
 
   game_mode_controller_->NotifySetGameMode(GameMode::OFF,
@@ -778,18 +798,24 @@ TEST_F(RefreshRateControllerTest, VrrUpdatesWhenBorealisWindowMoves) {
     ASSERT_NE(internal_snapshot, nullptr);
     ASSERT_TRUE(internal_snapshot->IsVrrCapable());
     EXPECT_FALSE(internal_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(internal.id())
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kVsyncRateMinInternal),
+              GetCompositorForDisplayId(internal.id())
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(
+        display::VariableRefreshRateState::kVrrDisabled,
+        GetCompositorForDisplayId(internal.id())->vrr_state_for_testing());
 
     const DisplaySnapshot* external_snapshot =
         GetDisplaySnapshot(external.id());
     ASSERT_NE(external_snapshot, nullptr);
     ASSERT_TRUE(external_snapshot->IsVrrCapable());
     EXPECT_FALSE(external_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(external.id())
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kVsyncRateMinExternal),
+              GetCompositorForDisplayId(external.id())
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(
+        display::VariableRefreshRateState::kVrrDisabled,
+        GetCompositorForDisplayId(external.id())->vrr_state_for_testing());
   }
 
   // Set the game mode to indicate the user is gaming on the internal display.
@@ -804,15 +830,21 @@ TEST_F(RefreshRateControllerTest, VrrUpdatesWhenBorealisWindowMoves) {
     EXPECT_TRUE(internal_snapshot->IsVrrEnabled());
     EXPECT_EQ(base::Hertz(kVsyncRateMinInternal),
               GetCompositorForDisplayId(internal.id())
-                  ->max_vrr_interval_for_testing());
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(
+        display::VariableRefreshRateState::kVrrEnabled,
+        GetCompositorForDisplayId(internal.id())->vrr_state_for_testing());
 
     const DisplaySnapshot* external_snapshot =
         GetDisplaySnapshot(external.id());
     ASSERT_NE(external_snapshot, nullptr);
     EXPECT_FALSE(external_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(external.id())
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kVsyncRateMinExternal),
+              GetCompositorForDisplayId(external.id())
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(
+        display::VariableRefreshRateState::kVrrDisabled,
+        GetCompositorForDisplayId(external.id())->vrr_state_for_testing());
   }
 
   // Move borealis window to the external display.
@@ -827,9 +859,12 @@ TEST_F(RefreshRateControllerTest, VrrUpdatesWhenBorealisWindowMoves) {
         GetDisplaySnapshot(internal.id());
     ASSERT_NE(internal_snapshot, nullptr);
     EXPECT_FALSE(internal_snapshot->IsVrrEnabled());
-    EXPECT_FALSE(GetCompositorForDisplayId(internal.id())
-                     ->max_vrr_interval_for_testing()
-                     .has_value());
+    EXPECT_EQ(base::Hertz(kVsyncRateMinInternal),
+              GetCompositorForDisplayId(internal.id())
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(
+        display::VariableRefreshRateState::kVrrDisabled,
+        GetCompositorForDisplayId(internal.id())->vrr_state_for_testing());
 
     const DisplaySnapshot* external_snapshot =
         GetDisplaySnapshot(external.id());
@@ -837,7 +872,10 @@ TEST_F(RefreshRateControllerTest, VrrUpdatesWhenBorealisWindowMoves) {
     EXPECT_TRUE(external_snapshot->IsVrrEnabled());
     EXPECT_EQ(base::Hertz(kVsyncRateMinExternal),
               GetCompositorForDisplayId(external.id())
-                  ->max_vrr_interval_for_testing());
+                  ->max_vsync_interval_for_testing());
+    EXPECT_EQ(
+        display::VariableRefreshRateState::kVrrEnabled,
+        GetCompositorForDisplayId(external.id())->vrr_state_for_testing());
   }
 
   game_mode_controller_->NotifySetGameMode(GameMode::OFF,
@@ -1045,11 +1083,15 @@ TEST_F(RefreshRateControllerTest, CompositorsGetVrrIntervalsOnSwap) {
   {
     EXPECT_EQ(primary, GetCompositorForDisplayId(internal_id));
     EXPECT_EQ(base::Hertz(kVsyncRateMinInternal),
-              primary->max_vrr_interval_for_testing());
+              primary->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrEnabled,
+              primary->vrr_state_for_testing());
 
     EXPECT_EQ(secondary, GetCompositorForDisplayId(external_id));
     EXPECT_EQ(base::Hertz(kVsyncRateMinExternal),
-              secondary->max_vrr_interval_for_testing());
+              secondary->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrEnabled,
+              secondary->vrr_state_for_testing());
   }
 
   SwapPrimaryDisplay();
@@ -1059,11 +1101,15 @@ TEST_F(RefreshRateControllerTest, CompositorsGetVrrIntervalsOnSwap) {
   {
     EXPECT_EQ(primary, GetCompositorForDisplayId(external_id));
     EXPECT_EQ(base::Hertz(kVsyncRateMinExternal),
-              primary->max_vrr_interval_for_testing());
+              primary->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrEnabled,
+              primary->vrr_state_for_testing());
 
     EXPECT_EQ(secondary, GetCompositorForDisplayId(internal_id));
     EXPECT_EQ(base::Hertz(kVsyncRateMinInternal),
-              secondary->max_vrr_interval_for_testing());
+              secondary->max_vsync_interval_for_testing());
+    EXPECT_EQ(display::VariableRefreshRateState::kVrrEnabled,
+              secondary->vrr_state_for_testing());
   }
 }
 

@@ -18,6 +18,7 @@
 #include "ash/glanceables/tasks/glanceables_tasks_view.h"
 #include "ash/public/cpp/session/user_info.h"
 #include "ash/public/cpp/style/color_provider.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/time/calendar_view.h"
@@ -30,6 +31,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/session_manager_types.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -230,7 +232,9 @@ void GlanceableTrayBubbleView::InitializeContents() {
           base::BindOnce(&GlanceableTrayBubbleView::AddTaskBubbleViewIfNeeded,
                          weak_ptr_factory_.GetWeakPtr()));
     } else {
-      AddTaskBubbleViewIfNeeded(/*fetch_success=*/true, cached_list);
+      AddTaskBubbleViewIfNeeded(/*fetch_success=*/true,
+                                google_apis::ApiErrorCode::HTTP_SUCCESS,
+                                cached_list);
       tasks_client->GetTaskLists(
           /*force_fetch=*/true,
           base::BindOnce(&GlanceableTrayBubbleView::UpdateTaskLists,
@@ -262,12 +266,16 @@ void GlanceableTrayBubbleView::InitializeContents() {
   initialized_ = true;
 }
 
-int GlanceableTrayBubbleView::GetHeightForWidth(int width) const {
+gfx::Size GlanceableTrayBubbleView::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
+  int width = TrayBubbleView::CalculatePreferredSize(available_size).width();
   // Let the layout manager calculate the preferred height instead of using the
   // one from TrayBubbleView, which doesn't take the layout manager and margin
   // settings into consider.
-  return std::min(GetLayoutManager()->GetPreferredHeightForWidth(this, width),
-                  CalculateMaxTrayBubbleHeight(shelf_->GetWindow()));
+  return gfx::Size(
+      width,
+      std::min(GetLayoutManager()->GetPreferredHeightForWidth(this, width),
+               CalculateMaxTrayBubbleHeight(shelf_->GetWindow())));
 }
 
 views::SizeBounds GlanceableTrayBubbleView::GetAvailableSize(
@@ -357,6 +365,7 @@ void GlanceableTrayBubbleView::AddClassroomBubbleStudentViewIfNeeded(
 
 void GlanceableTrayBubbleView::AddTaskBubbleViewIfNeeded(
     bool fetch_success,
+    std::optional<google_apis::ApiErrorCode> http_error,
     const ui::ListModel<api::TaskList>* task_lists) {
   if (!fetch_success || task_lists->item_count() == 0) {
     return;
@@ -386,14 +395,16 @@ void GlanceableTrayBubbleView::UpdateChildBubblesInitialExpandState() {
   // one child bubble as `OnExpandStateChanged()` will automatically updates the
   // others.
   if (GetLastExpandedGlanceables() == GlanceablesContext::kTasks) {
-    classroom_bubble_student_view_->SetExpandState(false);
+    classroom_bubble_student_view_->SetExpandState(
+        false, /*expand_by_overscroll=*/false);
   } else {
-    tasks_bubble_view_->SetExpandState(false);
+    tasks_bubble_view_->SetExpandState(false, /*expand_by_overscroll=*/false);
   }
 }
 
 void GlanceableTrayBubbleView::UpdateTaskLists(
     bool fetch_success,
+    std::optional<google_apis::ApiErrorCode> http_error,
     const ui::ListModel<api::TaskList>* task_lists) {
   if (fetch_success &&
       features::IsGlanceablesTimeManagementTasksViewEnabled()) {

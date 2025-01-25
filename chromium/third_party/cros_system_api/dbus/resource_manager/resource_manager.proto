@@ -32,3 +32,15 @@ message ReportBrowserProcesses {
   }
   repeated Process processes = 2;
 }
+
+message MemoryMargins {
+  // 1 basis point (bps) is equivalent to 0.01 % of total memory.
+
+  // Moderate margin.
+  uint32 moderate_bps = 1;
+  // Critical margin. The non-protected pages can be discarded.
+  uint32 critical_bps = 2;
+  // Critical protected margin. Both the non-protected and protected pages can
+  // be discarded.
+  uint32 critical_protected_bps = 3;
+}

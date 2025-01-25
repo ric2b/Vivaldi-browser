@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Samostalna instalacija</translation>
 <translation id="1682285232070778125">Postavi Vivaldi kao podrazumevani pregledač</translation>
 <translation id="1974060860693918893">Napredno</translation>
+<translation id="2053560788696003312">Vivaldi zahteva Windows 10 ili noviji.</translation>
 <translation id="2134216661302048561">Instalacioni program Vivaldi nije završio instaliranje Vivaldi pregledača. Da li ste sigurni da želite sada da izađete?</translation>
 <translation id="2286454467119466181">Jednostavno</translation>
 <translation id="237789874664518125">Autorsko pravo <ph name="YEAR" /> Vivaldi Technologies AS. Sva prava zadržana. &lt;a&gt;Politika privatnosti&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Prihvati i ažuriraj</translation>
 <translation id="5302048478445481009">Jezik</translation>
 <translation id="694714344624446243">Instalacioni program Vivaldi</translation>
+<translation id="7467493612551448880">Verzija Vivaldi pregledača koju instalirate nije optimizovana za verziju Windows-a koju koristite.
+
+Posetite vivaldi.com/download da biste preuzeli verziju Windows on Arm.</translation>
 <translation id="7658239707568436148">Otkaži</translation>
 <translation id="8773751185824654197">Napomena: Ako ažurirate pokrenuti Vivaldi pregledač, ta instanca će se zatvoriti i ponovo pokrenuti</translation>
 <translation id="933060950687965486">Tip instalacije</translation>

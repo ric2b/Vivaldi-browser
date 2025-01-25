@@ -4801,66 +4801,6 @@ void safe_VkPresentFrameTokenGGP::initialize(const safe_VkPresentFrameTokenGGP* 
 }
 #endif  // VK_USE_PLATFORM_GGP
 
-safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV::safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV(
-    const VkPhysicalDeviceComputeShaderDerivativesFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state,
-    bool copy_pnext)
-    : sType(in_struct->sType),
-      computeDerivativeGroupQuads(in_struct->computeDerivativeGroupQuads),
-      computeDerivativeGroupLinear(in_struct->computeDerivativeGroupLinear) {
-    if (copy_pnext) {
-        pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    }
-}
-
-safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV::safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV()
-    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_NV),
-      pNext(nullptr),
-      computeDerivativeGroupQuads(),
-      computeDerivativeGroupLinear() {}
-
-safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV::safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV(
-    const safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV& copy_src) {
-    sType = copy_src.sType;
-    computeDerivativeGroupQuads = copy_src.computeDerivativeGroupQuads;
-    computeDerivativeGroupLinear = copy_src.computeDerivativeGroupLinear;
-    pNext = SafePnextCopy(copy_src.pNext);
-}
-
-safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV& safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV::operator=(
-    const safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV& copy_src) {
-    if (&copy_src == this) return *this;
-
-    FreePnextChain(pNext);
-
-    sType = copy_src.sType;
-    computeDerivativeGroupQuads = copy_src.computeDerivativeGroupQuads;
-    computeDerivativeGroupLinear = copy_src.computeDerivativeGroupLinear;
-    pNext = SafePnextCopy(copy_src.pNext);
-
-    return *this;
-}
-
-safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV::~safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV() {
-    FreePnextChain(pNext);
-}
-
-void safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV::initialize(
-    const VkPhysicalDeviceComputeShaderDerivativesFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
-    FreePnextChain(pNext);
-    sType = in_struct->sType;
-    computeDerivativeGroupQuads = in_struct->computeDerivativeGroupQuads;
-    computeDerivativeGroupLinear = in_struct->computeDerivativeGroupLinear;
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-}
-
-void safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV::initialize(
-    const safe_VkPhysicalDeviceComputeShaderDerivativesFeaturesNV* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
-    sType = copy_src->sType;
-    computeDerivativeGroupQuads = copy_src->computeDerivativeGroupQuads;
-    computeDerivativeGroupLinear = copy_src->computeDerivativeGroupLinear;
-    pNext = SafePnextCopy(copy_src->pNext);
-}
-
 safe_VkPhysicalDeviceMeshShaderFeaturesNV::safe_VkPhysicalDeviceMeshShaderFeaturesNV(
     const VkPhysicalDeviceMeshShaderFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
     : sType(in_struct->sType), taskShader(in_struct->taskShader), meshShader(in_struct->meshShader) {
@@ -15172,6 +15112,57 @@ void safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::initialize(const safe_VkPhy
                                                                 [[maybe_unused]] PNextCopyState* copy_state) {
     sType = copy_src->sType;
     shaderRawAccessChains = copy_src->shaderRawAccessChains;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV::safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV(
+    const VkPhysicalDeviceCommandBufferInheritanceFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state,
+    bool copy_pnext)
+    : sType(in_struct->sType), commandBufferInheritance(in_struct->commandBufferInheritance) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV::safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMMAND_BUFFER_INHERITANCE_FEATURES_NV), pNext(nullptr), commandBufferInheritance() {}
+
+safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV::safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV(
+    const safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV& copy_src) {
+    sType = copy_src.sType;
+    commandBufferInheritance = copy_src.commandBufferInheritance;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV& safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV::operator=(
+    const safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    commandBufferInheritance = copy_src.commandBufferInheritance;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV::~safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV() {
+    FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV::initialize(
+    const VkPhysicalDeviceCommandBufferInheritanceFeaturesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    commandBufferInheritance = in_struct->commandBufferInheritance;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV::initialize(
+    const safe_VkPhysicalDeviceCommandBufferInheritanceFeaturesNV* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    commandBufferInheritance = copy_src->commandBufferInheritance;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 

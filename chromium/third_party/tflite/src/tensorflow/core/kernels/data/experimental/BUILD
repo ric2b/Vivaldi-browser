@@ -43,8 +43,10 @@ tf_kernel_library(
         "//tensorflow/core:experimental_dataset_ops_op_lib",
         "//tensorflow/core:framework",
         "//tensorflow/core/data:name_utils",
+        "//tensorflow/core/platform:errors",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@local_tsl//tsl/platform:errors",
     ],
 )
 
@@ -157,6 +159,15 @@ tf_kernel_library(
         "//tensorflow/core/data:captured_function",
         "//tensorflow/core/data:dataset_utils",
         "//tensorflow/core/kernels/data:take_dataset_op",
+    ],
+)
+
+tf_kernel_library(
+    name = "check_pinned_op",
+    srcs = ["check_pinned_op.cc"],
+    deps = [
+        "//tensorflow/core:framework",
+        "@com_google_absl//absl/status",
     ],
 )
 
@@ -1002,6 +1013,7 @@ tf_kernel_library(
         ":assert_cardinality_dataset_op",
         ":assert_next_dataset_op",
         ":assert_prev_dataset_op",
+        ":check_pinned_op",
         ":choose_fastest_branch_dataset_op",
         ":choose_fastest_dataset_op",
         ":compression_ops",

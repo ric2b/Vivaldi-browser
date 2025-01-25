@@ -13,6 +13,7 @@
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "third_party/skia/include/gpu/graphite/BackendTexture.h"
 #include "third_party/skia/include/gpu/graphite/Surface.h"
+#include "third_party/skia/include/gpu/graphite/dawn/DawnTypes.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/vsync_provider.h"
 #include "ui/gl/vsync_provider_win.h"
@@ -107,7 +108,7 @@ bool SkiaOutputDeviceDawn::Initialize(gpu::SurfaceHandle surface_handle) {
       std::make_unique<gl::VSyncProviderWin>(window_handle_to_draw_to);
 
   // Create the wgpu::Surface from our HWND.
-  wgpu::SurfaceDescriptorFromWindowsHWND hwnd_desc;
+  wgpu::SurfaceSourceWindowsHWND hwnd_desc;
   hwnd_desc.hwnd = window_handle_to_draw_to;
   hwnd_desc.hinstance = GetModuleHandle(nullptr);
 
@@ -125,7 +126,7 @@ bool SkiaOutputDeviceDawn::Initialize(gpu::SurfaceHandle surface_handle) {
   auto& scoped_java_surface = absl::get<gl::ScopedJavaSurface>(surface_variant);
   android_native_window_ = gl::ScopedANativeWindow(scoped_java_surface);
 
-  wgpu::SurfaceDescriptorFromAndroidNativeWindow android_native_window_desc;
+  wgpu::SurfaceSourceAndroidNativeWindow android_native_window_desc;
   android_native_window_desc.window = android_native_window_.a_native_window();
   surface_desc.nextInChain = &android_native_window_desc;
 #endif
@@ -161,8 +162,8 @@ bool SkiaOutputDeviceDawn::Reshape(const ReshapeParams& params) {
   sample_count_ = params.sample_count;
 
 #if BUILDFLAG(IS_WIN)
-  if (child_window_.window() && !child_window_.Resize(size_)) {
-    return false;
+  if (child_window_.window()) {
+    child_window_.Resize(size_);
   }
 #endif
 
@@ -212,7 +213,8 @@ SkSurface* SkiaOutputDeviceDawn::BeginPaint(
     std::vector<GrBackendSemaphore>* end_semaphores) {
   wgpu::SurfaceTexture texture;
   surface_.GetCurrentTexture(&texture);
-  skgpu::graphite::BackendTexture backend_texture(texture.texture.Get());
+  auto backend_texture =
+      skgpu::graphite::BackendTextures::MakeDawn(texture.texture.Get());
 
   SkSurfaceProps surface_props;
   sk_surface_ = SkSurfaces::WrapBackendTexture(

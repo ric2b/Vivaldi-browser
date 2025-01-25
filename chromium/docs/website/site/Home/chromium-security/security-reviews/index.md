@@ -16,7 +16,7 @@ This page aims to provide guidance for those seeking a review.
 
 ## Am I in the right place?
 
-Depending on the nature of your change, you might need to go through up to three security
+Depending on the nature of your change, you might need to go through up to three(*) security
 review processes, run by different teams.
 
 These reviews consider different things so don't usually overlap. But nevertheless,
@@ -24,16 +24,22 @@ for maximal review speed, please cross-link the reviews so each reviewer can con
 each other (which will also ensure you get consistent and cohesive answers.)
 
 - For changes to web APIs, you'll likely want the
-[Blink intents process](https://www.chromium.org/blink/launching-features/)
-- For changes to backend Google services, you'll likely want Google's internal security review
-process.
+[Blink intents process](https://www.chromium.org/blink/launching-features/) (Note, as of
+August 2024, there are plans to better synchronize this with the Chrome Browser review
+in the coming months!)
 - For changes to Chrome application features, or any other
 [non-trivial](http://go/chrome-launch#criteria) (Google-internal, sorry) changes to Chrome,
 you're in the right place! Read on for more info.
+- For changes to backend Google services, you'll likely want Google's internal security review
+process. But this process will be kicked off from the same process as above! (*)
 
 ## How does the Chrome security review process work?
 
-#### Informal pre-review (optional):
+The whole process is detailed here:
+[go/chrome-security-reviews-process](https://go/chrome-security-reviews-process)
+(Google-internal, sorry).
+
+#### Informal pre-review consultation (optional):
 
 If your project is especially tricky or large, please reach out to security@chromium.org
 (for public stuff; preferable) or chrome-security@google.com (for Google internal stuff)
@@ -43,15 +49,24 @@ This doesn't mean you will be assigned a reviewer/POC but reviewers will drive b
 feedback. If we provide no feedback via this channel (likely by unfortunate email physics),
 please reach out and we will give the doc the attention it deserves!
 
+There are plans to track this better to synchronize it with the formal launch review!
+
+#### Informal PRD review (optional):
+
+PRDs that get sent to the Chrome PRD queue will often get attention from a Chrome Security
+reviewer, though this is not formally tracked at the moment.
+
+There are plans to track this better to synchronize it with the formal launch review!
+
 #### Formal review:
 
 The full story is here:
-[go/chrome-security-review-plan](http://go/chrome-security-review-plan)
+[go/chrome-security-review-plan](http://go/chrome-security-launch-process)
 (Google-internal, sorry).
 
-TL;DR: File a launch entry, with a design document in the launch entry and provide comment
-access. The security reviewer(s) (automatically assigned) will look at the design doc first,
-and will probably comment and ask questions in the document.
+TL;DR: File a launch entry with a design document in the launch entry and provide comment
+access. Fill out the questionnaire to request a review.
+A IssueTracker bug will be created for you with a security reviewer automatically assigned.
 
 ## FAQ
 

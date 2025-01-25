@@ -36,8 +36,6 @@ class NoteNode;
 - (void)noteEditorWillCommitContentChange:
     (NoteAddEditViewController*)controller;
 
-- (void)didCreateNewFolder:(const vivaldi::NoteNode*)folder;
-
 @end
 
 // View controller for editing notes. Allows editing of the content.

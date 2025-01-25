@@ -58,7 +58,7 @@ void av1_iadst16_sse4_1(const __m128i *input, __m128i *output,
 void av1_idtx32_sse4_1(__m128i *input, __m128i *output, int cos_bit,
                        const int col_num);
 
-static INLINE void transpose_32_4x4(int stride, const __m128i *input,
+static inline void transpose_32_4x4(int stride, const __m128i *input,
                                     __m128i *output) {
   __m128i temp0 = _mm_unpacklo_epi32(input[0 * stride], input[2 * stride]);
   __m128i temp1 = _mm_unpackhi_epi32(input[0 * stride], input[2 * stride]);
@@ -75,7 +75,7 @@ static INLINE void transpose_32_4x4(int stride, const __m128i *input,
 // each 4x4 blocks can be represent by 4 vertical __m128i
 // we first transpose each 4x4 block internally
 // then transpose the grid
-static INLINE void transpose_32(int txfm_size, const __m128i *input,
+static inline void transpose_32(int txfm_size, const __m128i *input,
                                 __m128i *output) {
   const int num_per_128 = 4;
   const int row_size = txfm_size;

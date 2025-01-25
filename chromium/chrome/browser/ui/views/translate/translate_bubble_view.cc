@@ -29,9 +29,10 @@
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/translate/translate_bubble_model_impl.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/controls/md_text_button_with_down_arrow.h"
 #include "chrome/browser/ui/views/translate/translate_icon_view.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -52,6 +53,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/base/models/simple_combobox_model.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -64,6 +66,7 @@
 #include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
+#include "ui/views/controls/button/md_text_button_with_down_arrow.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/highlight_path_generator.h"
@@ -111,6 +114,26 @@ std::unique_ptr<views::View> CreateWordmarkView() {
 #endif
 }
 
+void OpenLanguageSettings(TranslateBubbleModel* model_,
+                          content::WebContents* web_contents_) {
+  model_->ReportUIInteraction(translate::UIInteraction::kOpenLanguageSettings);
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+  if (!profile) {
+    return;
+  }
+
+  chrome::ScopedTabbedBrowserDisplayer displayer(profile);
+  Browser* browser = displayer.browser();
+  if (!browser) {
+    return;
+  }
+
+  chrome::ShowSettingsSubPage(browser, chrome::kLanguageOptionsSubPage);
+  return;
+}
+
 }  // namespace
 
 TranslateBubbleView::~TranslateBubbleView() {
@@ -119,7 +142,7 @@ TranslateBubbleView::~TranslateBubbleView() {
   // is referred by Combobox's destructor. Before destroying the models,
   // removing the child views is needed.
   RemoveAllChildViews();
-  if (translate_action_item_) {
+  if (features::IsToolbarPinningEnabled() && translate_action_item_) {
     translate_action_item_->SetIsShowingBubble(false);
   }
 }
@@ -142,6 +165,8 @@ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TranslateBubbleView,
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TranslateBubbleView,
                                       kSourceLanguageDoneButton);
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TranslateBubbleView, kErrorMessage);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(TranslateBubbleView,
+                                      kOpenLanguageSettings);
 
 void TranslateBubbleView::CloseBubble() {
   mouse_handler_.reset();
@@ -177,11 +202,14 @@ void TranslateBubbleView::Init() {
     model_->ShowError(error_type_);
   }
 
-  Browser* browser = chrome::FindLastActive();
-  if (browser) {
-    translate_action_item_ = actions::ActionManager::Get().FindAction(
-        kActionShowTranslate, browser->browser_actions()->root_action_item());
-    translate_action_item_->SetIsShowingBubble(true);
+  if (features::IsToolbarPinningEnabled()) {
+    Browser* browser = chrome::FindLastActive();
+    if (browser) {
+      translate_action_item_ = actions::ActionManager::Get().FindAction(
+          kActionShowTranslate, browser->browser_actions()->root_action_item());
+      CHECK(translate_action_item_);
+      translate_action_item_->SetIsShowingBubble(true);
+    }
   }
 }
 
@@ -325,6 +353,15 @@ void TranslateBubbleView::ShowOptionsMenu(views::Button* source) {
   options_menu_model_->SetElementIdentifierAt(
       options_menu_model_->GetItemCount() - 1, kChangeSourceLanguage);
 
+  if (!is_in_incognito_window_ &&
+      base::FeatureList::IsEnabled(language::kTranslateOpenSettings)) {
+    options_menu_model_->AddItem(
+        OptionsMenuItem::OPEN_LANGUAGE_SETTINGS,
+        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_OPEN_LANGUAGE_SETTINGS));
+    options_menu_model_->SetElementIdentifierAt(
+        options_menu_model_->GetItemCount() - 1, kOpenLanguageSettings);
+  }
+
   options_menu_runner_ = std::make_unique<views::MenuRunner>(
       options_menu_model_.get(), views::MenuRunner::COMBOBOX);
   gfx::Rect screen_bounds = source->GetAnchorBoundsInScreen();
@@ -342,7 +379,7 @@ bool TranslateBubbleView::IsCommandIdChecked(int command_id) const {
     case OptionsMenuItem::ALWAYS_TRANSLATE_LANGUAGE:
       return should_always_translate_;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -397,8 +434,12 @@ void TranslateBubbleView::ExecuteCommand(int command_id, int event_flags) {
       SwitchView(TranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE);
       break;
 
+    case OptionsMenuItem::OPEN_LANGUAGE_SETTINGS:
+      OpenLanguageSettings(model(), web_contents());
+      break;
+
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -447,7 +488,7 @@ TranslateBubbleView::TranslateBubbleView(
     mouse_handler_ =
         std::make_unique<WebContentMouseHandler>(this, web_contents);
   }
-  SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   SetFootnoteView(CreateWordmarkView());
   SetProperty(views::kElementIdentifierKey, kIdentifier);
 }
@@ -467,7 +508,7 @@ views::View* TranslateBubbleView::GetCurrentView() const {
     case TranslateBubbleModel::VIEW_STATE_TARGET_LANGUAGE:
       return advanced_view_target_;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void TranslateBubbleView::Translate() {
@@ -624,7 +665,8 @@ std::unique_ptr<views::View> TranslateBubbleView::CreateView() {
                                views::MaximumFlexSizeRule::kPreferred));
   padding_view->SetProperty(
       views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded)
           .WithOrder(2));
   options_menu->SetProperty(views::kElementIdentifierKey, kOptionsMenuButton);

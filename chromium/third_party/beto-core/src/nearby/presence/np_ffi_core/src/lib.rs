@@ -15,9 +15,6 @@
 //! Core functionality common to all NP Rust FFI layers
 
 #[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
 pub mod utils;
 pub mod common;
 pub mod credentials;

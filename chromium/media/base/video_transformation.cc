@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/base/video_transformation.h"
 
 #include <math.h>
@@ -33,7 +38,7 @@ std::string VideoRotationToString(VideoRotation rotation) {
     case VIDEO_ROTATION_270:
       return "270°";
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 bool operator==(const struct VideoTransformation& first,

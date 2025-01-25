@@ -33,7 +33,7 @@ PREFS_NAMES_H_TEMPLATE = """\
 #ifndef %(header_guard)s
 #define %(header_guard)s
 
-#include "base/strings/string_piece.h"
+#include <string_view>
 
 namespace vivaldiprefs {
 

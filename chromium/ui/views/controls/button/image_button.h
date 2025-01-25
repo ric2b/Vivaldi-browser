@@ -149,6 +149,7 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   // Change the toggled state.
   bool GetToggled() const;
   void SetToggled(bool toggled);
+  void UpdateAccessibleCheckedState();
 
   // Like ImageButton::SetImage(), but to set the graphics used for the
   // "has been toggled" state.  Must be called for each button state
@@ -177,12 +178,12 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
 
   // Overridden from View:
   std::u16string GetTooltipText(const gfx::Point& p) const override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnPaintBackground(gfx::Canvas* canvas) override;
 
   void UpdateAccessibleRoleIfNeeded();
 
  private:
+  void UpdateAccessibleName();
   // The parent class's images_ member is used for the current images,
   // and this array is used to hold the alternative images.
   // We swap between the two when toggling.

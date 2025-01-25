@@ -79,12 +79,12 @@ IOSOverflowMenuAction HistogramActionFromActionType(
       return IOSOverflowMenuAction::kShareChrome;
     case overflow_menu::ActionType::EditActions:
       return IOSOverflowMenuAction::kEditActions;
+    case overflow_menu::ActionType::LensOverlay:
+      return IOSOverflowMenuAction::kLensOverlay;
 
       // Vivaldi
-      // Note:(@prio@vivaldi.com) - This is not necessary for us. Reload is
-      // returning for the sake of compilation.
     default:
-      return IOSOverflowMenuAction::kReload;
+      return IOSOverflowMenuAction::kEditActions;
       // End Vivaldi
   }
 }

@@ -32,14 +32,6 @@ class GURL;
 // Shows the Reading List UI.
 - (void)showReadingList;
 
-// Shows an IPH pointing to where the Follow entry point is, if
-// applicable.
-- (void)showFollowWhileBrowsingIPH;
-
-// Shows an IPH to explain to the user how to change the default site view, if
-// applicable.
-- (void)showDefaultSiteViewIPH;
-
 // Shows bookmarks manager.
 - (void)showBookmarksManager;
 
@@ -50,6 +42,7 @@ class GURL;
 - (void)showPanel;
 - (void)dismissPanel;
 - (void)setToolbarHidden:(BOOL)hidden;
+- (void)showHomePage;
 
 // Show In App Default Rating Prompt
 - (void)showDefaultReviewPrompt;
@@ -95,15 +88,6 @@ class GURL;
 // via the WebStateList.
 - (void)closeCurrentTab;
 
-// Shows what's new.
-- (void)showWhatsNew;
-
-// Dismisses what's new.
-- (void)dismissWhatsNew;
-
-// Shows what's new IPH.
-- (void)showWhatsNewIPH;
-
 // Shows the spotlight debugger.
 - (void)showSpotlightDebugger;
 
@@ -130,6 +114,14 @@ class GURL;
 
 // Dismisses the omnibox position choice screen.
 - (void)dismissOmniboxPositionChoice;
+
+// Shows and dismisses the Lens Promo.
+- (void)showLensPromo;
+- (void)dismissLensPromo;
+
+// Shows and dismisses the Enhanced Safe Browsing Promo.
+- (void)showEnhancedSafeBrowsingPromo;
+- (void)dismissEnhancedSafeBrowsingPromo;
 
 @end
 

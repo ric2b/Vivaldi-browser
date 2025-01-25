@@ -25,20 +25,26 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/chromeos/magic_boost/magic_boost_constants.h"
 #include "chrome/browser/ui/chromeos/magic_boost/magic_boost_opt_in_card.h"
+#include "chrome/browser/ui/views/mahi/mahi_menu_view.h"
+#include "chrome/browser/ui/webui/ash/mako/mako_bubble_coordinator.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/components/magic_boost/public/cpp/magic_boost_state.h"
 #include "chromeos/components/mahi/public/cpp/mahi_switches.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/display/manager/display_manager.h"
+#include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/view.h"
+#include "ui/views/widget/widget_utils.h"
 
 namespace ash {
 
@@ -88,10 +94,17 @@ class MagicBoostBrowserTest
     feature_list_.InitWithFeatures(
         /*enabled_features=*/{chromeos::features::kMahi,
                               chromeos::features::kOrca,
+                              chromeos::features::kFeatureManagementMahi,
                               chromeos::features::kFeatureManagementOrca},
         /*disabled_features=*/{});
 
     InProcessBrowserTest::SetUp();
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(chromeos::switches::kMahiRestrictionsOverride);
+
+    InProcessBrowserTest::SetUpCommandLine(command_line);
   }
 
  protected:
@@ -99,17 +112,22 @@ class MagicBoostBrowserTest
 
   // Navigates to the read only content test website and right click on it.
   void NavigateAndRightClickReadOnlyWeb() {
+    NavigateToReadOnlyWeb();
+
+    event_generator().MoveMouseTo(chrome_test_utils::GetActiveWebContents(this)
+                                      ->GetViewBounds()
+                                      .CenterPoint());
+    event_generator().ClickRightButton();
+  }
+
+  // Navigates to the read only content test website.
+  void NavigateToReadOnlyWeb() {
     // Waits until the page is ready.
     content::RenderFrameHost* render_frame_host = ui_test_utils::NavigateToURL(
         browser(), https_server_.GetURL("/mahi/test_article.html"));
     ASSERT_TRUE(render_frame_host);
     content::MainThreadFrameObserver(render_frame_host->GetRenderWidgetHost())
         .Wait();
-
-    event_generator().MoveMouseTo(chrome_test_utils::GetActiveWebContents(this)
-                                      ->GetViewBounds()
-                                      .CenterPoint());
-    event_generator().ClickRightButton();
   }
 
   // Navigates to the input view test website, selects the input text and right
@@ -194,6 +212,14 @@ class MagicBoostBrowserTest
         magic_boost::ViewId::DisclaimerViewDeclineButton);
   }
 
+  // Showing "chrome-untrusted://mako/" help me write bubble.
+  bool IsShowingMakoBubble() const {
+    return ash::input_method::EditorMediatorFactory::GetForProfile(
+               browser()->profile())
+        ->mako_bubble_coordinator_for_testing()
+        .IsShowingUI();
+  }
+
   bool ShouldIncludeOrca() const {
     // See `GetConsentStatusFromInteger` method in `editor_consent_enums.cc`,
     // `kInvalid` is treated as `kUnset`.
@@ -206,6 +232,15 @@ class MagicBoostBrowserTest
 
   bool ShouldOptInHmr() const {
     return GetInitHmrConsentStatus() == chromeos::HMRConsentStatus::kUnset;
+  }
+
+  bool ShouldShowEditorMenu() const {
+    // In production, when the editor is not soft/hard blocked, it checks the
+    // Orca consent status to find the current editor mode. It will get
+    // `kRewrite` when the selected length is greater than 0, and get `kWrite`
+    // when the selected length is 0.
+    return GetEditorMode() == input_method::EditorMode::kRewrite ||
+           GetEditorMode() == input_method::EditorMode::kWrite;
   }
 
   input_method::EditorMode GetEditorMode() const {
@@ -273,7 +308,7 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(chromeos::HMRConsentStatus::kUnset,
                         chromeos::HMRConsentStatus::kApproved,
                         chromeos::HMRConsentStatus::kDeclined,
-                        chromeos::HMRConsentStatus::kPending)));
+                        chromeos::HMRConsentStatus::kPendingDisclaimer)));
 
 IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest, AcceptOptInFromReadOnlyContent) {
   EXPECT_FALSE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
@@ -338,6 +373,9 @@ IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest, AcceptOptInFromReadOnlyContent) {
     EXPECT_EQ(prefs->GetInteger(prefs::kOrcaConsentStatus),
               base::to_underlying(GetInitEditorConsentStatus()));
   }
+
+  // Not showing the Editor Menu when opt in from read only content.
+  EXPECT_FALSE(IsShowingMakoBubble());
 
   // Right click on the web content again.
   NavigateAndRightClickReadOnlyWeb();
@@ -404,6 +442,9 @@ IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest,
     EXPECT_EQ(prefs->GetInteger(prefs::kOrcaConsentStatus),
               base::to_underlying(GetInitEditorConsentStatus()));
   }
+
+  // Not showing the Editor Menu when opt in from read only content.
+  EXPECT_FALSE(IsShowingMakoBubble());
 
   // Right click on the web content again.
   NavigateAndRightClickReadOnlyWeb();
@@ -478,6 +519,9 @@ IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest,
     EXPECT_EQ(prefs->GetInteger(prefs::kOrcaConsentStatus),
               base::to_underlying(GetInitEditorConsentStatus()));
   }
+
+  // Not showing the Editor Menu when opt in from read only content.
+  EXPECT_FALSE(IsShowingMakoBubble());
 
   // Right click on the web content again.
   NavigateAndRightClickReadOnlyWeb();
@@ -566,6 +610,13 @@ IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest, AcceptOptInFromInputFieldWeb) {
   EXPECT_EQ(prefs->GetInteger(prefs::kOrcaConsentStatus),
             base::to_underlying(input_method::ConsentStatus::kApproved));
 
+  // Shows the Editor Menu if the editor mode is not (soft/hard) blocked.
+  if (ShouldShowEditorMenu()) {
+    EXPECT_TRUE(IsShowingMakoBubble());
+  } else {
+    EXPECT_FALSE(IsShowingMakoBubble());
+  }
+
   // Right click on the input again.
   NavigateAndRightClickInputTextWeb();
 
@@ -629,6 +680,9 @@ IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest,
   EXPECT_FALSE(prefs->GetBoolean(prefs::kOrcaEnabled));
   EXPECT_EQ(prefs->GetInteger(prefs::kOrcaConsentStatus),
             base::to_underlying(input_method::ConsentStatus::kDeclined));
+
+  // Not showing the Editor Menu after declined.
+  EXPECT_FALSE(IsShowingMakoBubble());
 
   // Right click on the input again.
   NavigateAndRightClickInputTextWeb();
@@ -701,6 +755,9 @@ IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest,
   EXPECT_EQ(prefs->GetInteger(prefs::kOrcaConsentStatus),
             base::to_underlying(input_method::ConsentStatus::kDeclined));
 
+  // Not showing the Editor Menu after declined.
+  EXPECT_FALSE(IsShowingMakoBubble());
+
   // Right click on the input again.
   NavigateAndRightClickInputTextWeb();
 
@@ -708,6 +765,120 @@ IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest,
   EXPECT_FALSE(FindWidgetWithName(
       chromeos::MagicBoostOptInCard::GetWidgetNameForTest()));
   EXPECT_FALSE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
+}
+
+IN_PROC_BROWSER_TEST_P(MagicBoostBrowserTest, ShowDisclaimerViewOnMultiScreen) {
+  // Cache the init hmr status, which will be used to reset the status for
+  // testing showing the disclaimer view on different screens. Without resetting
+  // the status, it will not show the disclaimer view again and show the mahi
+  // menu instead.
+  auto init_hmr_status = GetInitHmrConsentStatus();
+
+  // Creates 3 displays.
+  display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
+      .UpdateDisplay("1000x700,1100x800,1200x700");
+  auto root_windows = ash::Shell::GetAllRootWindows();
+  ASSERT_EQ(3u, root_windows.size());
+  ASSERT_EQ(ash::Shell::GetPrimaryRootWindow(), root_windows[0]);
+
+  // Can not find any widget.
+  EXPECT_FALSE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
+  EXPECT_FALSE(FindWidgetWithName(
+      chromeos::MagicBoostOptInCard::GetWidgetNameForTest()));
+
+  display::Displays displays =
+      Shell::Get()->display_manager()->active_display_list();
+
+  // Sets the second display to be the window screen. Right click on the web
+  // content to show the opt in card.
+  browser()->window()->SetBounds(displays[1].work_area());
+  event_generator().SetTargetWindow(root_windows[1]);
+  NavigateToReadOnlyWeb();
+  event_generator().MoveMouseTo(displays[1].work_area().CenterPoint());
+  event_generator().ClickRightButton();
+
+  // Not showing the opt in flow if should not opt in hmr.
+  if (!ShouldOptInHmr()) {
+    EXPECT_FALSE(FindWidgetWithName(
+        chromeos::MagicBoostOptInCard::GetWidgetNameForTest()));
+    EXPECT_FALSE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
+    return;
+  }
+
+  // Finds the opt in card and still cannot find the disclaimer view.
+  views::Widget* opt_in_card_widget = GetOptInCardWidget();
+  EXPECT_FALSE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
+  ASSERT_TRUE(opt_in_card_widget);
+
+  // Left click on the accept button in the opt in card.
+  LeftClickOnView(GetOptInCardAcceptButton());
+
+  // Closes the opt in card and shows the disclaimer view on the second screen.
+  WaitUntilViewClosed(opt_in_card_widget);
+  EXPECT_TRUE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
+  EXPECT_FALSE(FindWidgetWithName(
+      chromeos::MagicBoostOptInCard::GetWidgetNameForTest()));
+  ASSERT_EQ(root_windows[1], views::GetRootWindow(GetDisclaimerViewWidget()));
+
+  // Resets the Hmr consent status to continue testing showing disclaimer view
+  // on the first screen.
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kHMRConsentStatus, base::to_underlying(init_hmr_status));
+  browser()->window()->SetBounds(displays[0].work_area());
+  event_generator().SetTargetWindow(root_windows[0]);
+  NavigateToReadOnlyWeb();
+  event_generator().MoveMouseTo(displays[0].work_area().CenterPoint());
+  event_generator().ClickRightButton();
+
+  // Left click on the accept button in the opt in card.
+  ASSERT_TRUE(GetOptInCardWidget());
+  LeftClickOnView(GetOptInCardAcceptButton());
+
+  // Closes the opt in card and shows the disclaimer view on the first screen.
+  WaitUntilViewClosed(GetOptInCardWidget());
+  EXPECT_TRUE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
+  EXPECT_FALSE(FindWidgetWithName(
+      chromeos::MagicBoostOptInCard::GetWidgetNameForTest()));
+  ASSERT_EQ(root_windows[0], views::GetRootWindow(GetDisclaimerViewWidget()));
+
+  // Resets the Hmr consent status to continue testing showing disclaimer view
+  // on the third screen.
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kHMRConsentStatus, base::to_underlying(init_hmr_status));
+  browser()->window()->SetBounds(displays[2].work_area());
+  event_generator().SetTargetWindow(root_windows[2]);
+  NavigateToReadOnlyWeb();
+  event_generator().MoveMouseTo(displays[2].work_area().CenterPoint());
+  event_generator().ClickRightButton();
+
+  // Left click on the accept button in the opt in card.
+  ASSERT_TRUE(GetOptInCardWidget());
+  LeftClickOnView(GetOptInCardAcceptButton());
+
+  // Closes the opt in card and shows the disclaimer view on the third screen.
+  WaitUntilViewClosed(GetOptInCardWidget());
+  EXPECT_TRUE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
+  EXPECT_FALSE(FindWidgetWithName(
+      chromeos::MagicBoostOptInCard::GetWidgetNameForTest()));
+  ASSERT_EQ(root_windows[2], views::GetRootWindow(GetDisclaimerViewWidget()));
+
+  // Without resetting the hmr consent status, it should show mahi menu and
+  // close the dicaimer view after right clicking on the read only web content
+  // again on the first screen.
+  browser()->window()->SetBounds(displays[0].work_area());
+  event_generator().SetTargetWindow(root_windows[0]);
+  NavigateToReadOnlyWeb();
+  event_generator().MoveMouseTo(displays[0].work_area().CenterPoint());
+  event_generator().ClickRightButton();
+
+  // Finds the mahi menu. Can not find the opt in card or disclaimer view any
+  // more.
+  views::Widget* mahi_widget = FindWidgetWithNameAndWaitIfNeeded(
+      chromeos::mahi::MahiMenuView::GetWidgetName());
+  ASSERT_TRUE(mahi_widget);
+  EXPECT_FALSE(FindWidgetWithName(MagicBoostDisclaimerView::GetWidgetName()));
+  EXPECT_FALSE(FindWidgetWithName(
+      chromeos::MagicBoostOptInCard::GetWidgetNameForTest()));
 }
 
 // MahiUiWithOptInViewBrowserTest ----------------------------------------------
@@ -722,6 +893,7 @@ class MahiUiWithOptInCardBrowserTest
     // is required to show the opt-in card.
     feature_list_.InitWithFeatures(
         /*enabled_features=*/{chromeos::features::kFeatureManagementOrca,
+                              chromeos::features::kFeatureManagementMahi,
                               chromeos::features::kMahi,
                               chromeos::features::kOrca},
         /*disabled_features=*/{});

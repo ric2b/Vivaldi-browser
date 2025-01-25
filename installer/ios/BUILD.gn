@@ -1,5 +1,6 @@
 # Sign the Vialdi IOS App
 
+import("//ios/build/chrome_build.gni")
 import("//vivaldi/gn/config/signer_features.gni")
 
 vivaldi_app = "$root_out_dir/Vivaldi.app"
@@ -7,7 +8,7 @@ vivaldi_profiles = "${vivaldi_app}/PlugIns"
 
 template("sign_bundle") {
   action(target_name) {
-    script = "//build/config/ios/codesign.py"
+    script = "//build/config/apple/codesign.py"
     args = [
       "code-sign-bundle",
       "-t=iphoneos",
@@ -108,30 +109,34 @@ sign_bundle("sign_widget_kit_extension") {
   ]
 }
 
-sign_bundle("sign_content_widget_extension") {
-  bindir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/obj/ios/chrome/content_widget_extension/appex"
-  gendir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/gen/ios/chrome/content_widget_extension/appex"
+if (ios_enable_content_widget_extension) {
+  sign_bundle("sign_content_widget_extension") {
+    bindir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/obj/ios/chrome/content_widget_extension/appex"
+    gendir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/gen/ios/chrome/content_widget_extension/appex"
 
-  binary = "$bindir/content_widget_extension"
-  entitlements = "$gendir/content_widget_extension.appex.entitlements"
-  app = "${vivaldi_profiles}/content_widget_extension.appex"
-  plists =[
-    "$gendir/appex_generate_info_plist.plist",
-    "$gendir/appex_partial_info.plist",
-  ]
+    binary = "$bindir/content_widget_extension"
+    entitlements = "$gendir/content_widget_extension.appex.entitlements"
+    app = "${vivaldi_profiles}/content_widget_extension.appex"
+    plists =[
+      "$gendir/appex_generate_info_plist.plist",
+      "$gendir/appex_partial_info.plist",
+    ]
+  }
 }
 
-sign_bundle("sign_search_widget_extension") {
-  bindir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/obj/ios/chrome/search_widget_extension/appex"
-  gendir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/gen/ios/chrome/search_widget_extension/appex"
+if (ios_enable_search_widget_extension) {
+  sign_bundle("sign_search_widget_extension") {
+    bindir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/obj/ios/chrome/search_widget_extension/appex"
+    gendir = "$root_out_dir/ios_clang_arm64_app_ext_13_4/gen/ios/chrome/search_widget_extension/appex"
 
-  binary = "$bindir/search_widget_extension"
-  entitlements = "$gendir/search_widget_extension.appex.entitlements"
-  app = "${vivaldi_profiles}/search_widget_extension.appex"
-  plists =[
-    "$gendir/appex_generate_info_plist.plist",
-    "$gendir/appex_partial_info.plist",
-  ]
+    binary = "$bindir/search_widget_extension"
+    entitlements = "$gendir/search_widget_extension.appex.entitlements"
+    app = "${vivaldi_profiles}/search_widget_extension.appex"
+    plists =[
+      "$gendir/appex_generate_info_plist.plist",
+      "$gendir/appex_partial_info.plist",
+    ]
+  }
 }
 
 sign_bundle("sign_push_notification_service_extension") {
@@ -156,7 +161,7 @@ sign_bundle("sign_MaterialComponents") {
 }
 
 action("sign_Lottie") {
-  script = "//build/config/ios/codesign.py"
+  script = "//build/config/apple/codesign.py"
 
   bindir = "$root_out_dir/Vivaldi.app/Frameworks/Lottie.framework"
   binary = "$bindir/Lottie"
@@ -193,11 +198,21 @@ sign_bundle("sign_ios") {
     ":sign_MaterialComponents",
     ":sign_open_extension",
     ":sign_credential_provider_extension",
-    ":sign_search_widget_extension",
-    ":sign_content_widget_extension",
     ":sign_widget_kit_extension",
     ":sign_intents_extension",
     ":sign_share_extension",
     ":sign_push_notification_service_extension",
   ]
+
+  if (ios_enable_content_widget_extension) {
+    deps += [
+      ":sign_content_widget_extension",
+    ]
+  }
+
+  if (ios_enable_search_widget_extension) {
+    deps += [
+      ":sign_search_widget_extension",
+    ]
+  }
 }

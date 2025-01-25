@@ -20,6 +20,9 @@ import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.night_mode.PowerSavingModeMonitor;
 import org.chromium.chrome.browser.night_mode.SystemNightModeMonitor;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Maintains and provides the night mode state for {@link CustomTabActivity}. */
 public class CustomTabNightModeStateController implements DestroyObserver, NightModeStateProvider {
     private final ObserverList<Observer> mObservers = new ObserverList<>();
@@ -62,11 +65,7 @@ public class CustomTabNightModeStateController implements DestroyObserver, Night
             return;
         }
 
-        mRequestedColorScheme =
-                IntentUtils.safeGetIntExtra(
-                        intent,
-                        CustomTabsIntent.EXTRA_COLOR_SCHEME,
-                        CustomTabsIntent.COLOR_SCHEME_SYSTEM);
+        mRequestedColorScheme = getRequestedColorScheme(intent);
         mAppCompatDelegate = delegate;
 
         updateNightMode();
@@ -76,6 +75,15 @@ public class CustomTabNightModeStateController implements DestroyObserver, Night
             mSystemNightModeMonitor.addObserver(mSystemNightModeObserver);
             mPowerSavingModeMonitor.addObserver(mPowerSaveModeObserver);
         }
+    }
+
+    private int getRequestedColorScheme(Intent intent) {
+        if (AuthTabIntentDataProvider.isAuthTabIntent(intent)) {
+            return CustomTabsIntent.COLOR_SCHEME_SYSTEM;
+        }
+
+        return IntentUtils.safeGetIntExtra(
+                intent, CustomTabsIntent.EXTRA_COLOR_SCHEME, CustomTabsIntent.COLOR_SCHEME_SYSTEM);
     }
 
     // DestroyObserver implementation.
@@ -123,6 +131,11 @@ public class CustomTabNightModeStateController implements DestroyObserver, Night
     }
 
     private boolean shouldBeInNightMode() {
+        // Vivaldi: To avoid recreation of the custom tab activity when going in and out of night
+        // mode (which can happen often in a car when driving in/out of tunnels). Ref. AUTO-196.
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            return true;
+        }
         return switch (mRequestedColorScheme) {
             case CustomTabsIntent.COLOR_SCHEME_LIGHT -> false;
             case CustomTabsIntent.COLOR_SCHEME_DARK -> true;

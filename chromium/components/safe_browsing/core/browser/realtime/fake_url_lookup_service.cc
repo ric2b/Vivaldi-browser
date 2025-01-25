@@ -4,6 +4,7 @@
 
 #include "components/safe_browsing/core/browser/realtime/fake_url_lookup_service.h"
 
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace safe_browsing::testing {
@@ -43,6 +44,19 @@ bool FakeRealTimeUrlLookupService::CanSendRTSampleRequest() const {
 
 std::string FakeRealTimeUrlLookupService::GetUserEmail() const {
   return "test@user.com";
+}
+
+std::string FakeRealTimeUrlLookupService::GetBrowserDMTokenString() const {
+  return "browser_dm_token";
+}
+
+std::string FakeRealTimeUrlLookupService::GetProfileDMTokenString() const {
+  return "profile_dm_token";
+}
+
+std::unique_ptr<enterprise_connectors::ClientMetadata>
+FakeRealTimeUrlLookupService::GetClientMetadata() const {
+  return nullptr;
 }
 
 std::string FakeRealTimeUrlLookupService::GetMetricSuffix() const {

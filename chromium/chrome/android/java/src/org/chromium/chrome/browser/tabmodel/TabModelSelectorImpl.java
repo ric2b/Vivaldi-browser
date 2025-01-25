@@ -86,8 +86,8 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
 
     @Override
     public void markTabStateInitialized() {
-        super.markTabStateInitialized();
         if (!mSessionRestoreInProgress.getAndSet(false)) return;
+        super.markTabStateInitialized();
 
         // This is the first time we set |mSessionRestoreInProgress|, so we need to broadcast.
         TabModelImpl model = (TabModelImpl) getModel(false);
@@ -129,7 +129,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
                         mAsyncTabParamsManager,
                         this,
                         mIsUndoSupported,
-                        /* trackInNativeModelList= */ true);
+                        /* isArchivedTabModel= */ false);
         regularTabCreator.setTabModel(normalModel, mOrderController);
 
         IncognitoTabModel incognitoModel =

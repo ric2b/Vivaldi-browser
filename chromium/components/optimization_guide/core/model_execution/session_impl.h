@@ -65,6 +65,7 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session,
     proto::OnDeviceModelVersions model_versions;
     scoped_refptr<const OnDeviceModelFeatureAdapter> adapter;
     SafetyConfig safety_cfg;
+    TokenLimits token_limits;
 
     // Returns true if the on-device model may be used.
     bool ShouldUse() const;
@@ -142,6 +143,8 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session,
   ~SessionImpl() override;
 
   // optimization_guide::OptimizationGuideModelExecutor::Session:
+  const TokenLimits& GetTokenLimits() const override;
+  const proto::Any& GetOnDeviceFeatureMetadata() const override;
   void AddContext(
       const google::protobuf::MessageLite& request_metadata) override;
   void Score(const std::string& text,
@@ -152,6 +155,10 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session,
   void GetSizeInTokens(
       const std::string& text,
       OptimizationGuideModelSizeInTokenCallback callback) override;
+  void GetContextSizeInTokens(
+      const google::protobuf::MessageLite& request_metadata,
+      OptimizationGuideModelSizeInTokenCallback callback) override;
+  const SamplingParams GetSamplingParams() const override;
 
   // on_device_model::mojom::StreamingResponder:
   void OnResponse(on_device_model::mojom::ResponseChunkPtr chunk) override;

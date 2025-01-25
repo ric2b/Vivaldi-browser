@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/apps/app_shim/app_shim_manager_mac.h"
 
 #include <unistd.h>
@@ -142,7 +147,7 @@ class TestingAppShimManager : public AppShimManager {
   void SetAcceptablyCodeSigned(bool is_acceptable_code_signed) {
     is_acceptably_code_signed_ = is_acceptable_code_signed;
   }
-  bool IsAcceptablyCodeSigned(pid_t pid) const override {
+  bool IsAcceptablyCodeSigned(audit_token_t audit_token) const override {
     return is_acceptably_code_signed_;
   }
 
@@ -199,7 +204,7 @@ class TestingAppShimHostBootstrap : public AppShimHostBootstrap {
       const std::string& app_id,
       bool is_from_bookmark,
       std::optional<chrome::mojom::AppShimLaunchResult>* launch_result)
-      : AppShimHostBootstrap(getpid()),
+      : AppShimHostBootstrap(AuditTokenForCurrentProcess()),
         profile_path_(profile_path),
         app_id_(app_id),
         is_from_bookmark_(is_from_bookmark),
@@ -259,6 +264,15 @@ class TestingAppShimHostBootstrap : public AppShimHostBootstrap {
   raw_ptr<std::optional<chrome::mojom::AppShimLaunchResult>> launch_result_ =
       nullptr;
   base::WeakPtrFactory<TestingAppShimHostBootstrap> weak_factory_;
+
+  static audit_token_t AuditTokenForCurrentProcess() {
+    audit_token_t token;
+    mach_msg_type_number_t size = TASK_AUDIT_TOKEN_COUNT;
+    int kr = task_info(mach_task_self(), TASK_AUDIT_TOKEN, (task_info_t)&token,
+                       &size);
+    CHECK(kr == KERN_SUCCESS) << " Error getting audit token.";
+    return token;
+  }
 };
 
 const char kTestAppIdA[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

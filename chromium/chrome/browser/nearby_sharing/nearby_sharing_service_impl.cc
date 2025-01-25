@@ -24,6 +24,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/nearby_sharing/certificates/common.h"
 #include "chrome/browser/nearby_sharing/certificates/nearby_share_certificate_manager_impl.h"
@@ -113,6 +114,10 @@ constexpr base::TimeDelta kClearNearbyProcessUnexpectedShutdownCountDelay =
 // by (180 - kNearbySharingVisibilityReminderLastShownTimePrefName set in
 // nearby_share_prefs).
 constexpr base::TimeDelta kNearbyVisibilityReminderTimerDelay = base::Days(180);
+
+// Whether or not WifiLan is supported for advertising (mDNS). Support as
+// a bandwidth upgrade medium is behind a feature flag. Currently unsupported.
+constexpr bool kIsWifiLanAdvertisingSupported = false;
 
 std::string ReceiveSurfaceStateToString(
     NearbySharingService::ReceiveSurfaceState state) {
@@ -508,7 +513,7 @@ NearbySharingService::StatusCodes NearbySharingServiceImpl::RegisterSendSurface(
 
   if (state == SendSurfaceState::kForeground) {
     // Only check this error case for foreground senders
-    if (!HasAvailableConnectionMediums()) {
+    if (!HasAvailableDiscoveryMediums()) {
       RecordNearbyShareError(
           NearbyShareError::kRegisterSendSurfaceNoAvailableConnectionMedium);
       CD_LOG(VERBOSE, Feature::NS)
@@ -643,7 +648,7 @@ NearbySharingServiceImpl::RegisterReceiveSurface(
       return StatusCodes::kTransferAlreadyInProgress;
     }
 
-    if (!HasAvailableConnectionMediums()) {
+    if (!HasAvailableAdvertisingMediums()) {
       RecordNearbyShareError(
           NearbyShareError::kRegisterReceiveSurfaceNoAvailableConnectionMedium);
       CD_LOG(VERBOSE, Feature::NS)
@@ -766,7 +771,11 @@ NearbySharingServiceImpl::ClearForegroundReceiveSurfaces() {
 }
 
 bool NearbySharingServiceImpl::IsInHighVisibility() const {
-  return in_high_visibility;
+  if (chromeos::features::IsQuickShareV2Enabled()) {
+    return prefs_->GetBoolean(prefs::kNearbySharingInHighVisibilityPrefName);
+  }
+
+  return in_high_visibility_;
 }
 
 bool NearbySharingServiceImpl::IsTransferring() const {
@@ -1917,10 +1926,25 @@ bool NearbySharingServiceImpl::IsBluetoothPowered() const {
   return IsBluetoothPresent() && bluetooth_adapter_->IsPowered();
 }
 
-bool NearbySharingServiceImpl::HasAvailableConnectionMediums() {
-  // Check if Wifi or Ethernet LAN is off.  Advertisements won't work, so
-  // disable them, unless bluetooth is known to be enabled. Not all platforms
-  // have bluetooth, so wifi LAN is a platform-agnostic check.
+bool NearbySharingServiceImpl::HasAvailableAdvertisingMediums() {
+  // Advertising is currently unsupported unless bluetooth is known to be
+  // enabled. When Wifi LAN advertising (mDNS) is supported, we also need
+  // to check network conditions.
+  net::NetworkChangeNotifier::ConnectionType connection_type =
+      net::NetworkChangeNotifier::GetConnectionType();
+  bool hasNetworkConnection =
+      connection_type ==
+          net::NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI ||
+      connection_type ==
+          net::NetworkChangeNotifier::ConnectionType::CONNECTION_ETHERNET;
+  return IsBluetoothPowered() ||
+         (hasNetworkConnection && kIsWifiLanAdvertisingSupported);
+}
+
+bool NearbySharingServiceImpl::HasAvailableDiscoveryMediums() {
+  // Discovery is supported over both Bluetooth and Wifi LAN (mDNS),
+  // so either of those mediums must be enabled. mDNS discovery
+  // additionally needs a network connection.
   net::NetworkChangeNotifier::ConnectionType connection_type =
       net::NetworkChangeNotifier::GetConnectionType();
   bool hasNetworkConnection =
@@ -2030,7 +2054,7 @@ void NearbySharingServiceImpl::InvalidateScanningState() {
     return;
   }
 
-  if (!HasAvailableConnectionMediums()) {
+  if (!HasAvailableDiscoveryMediums()) {
     StopScanning();
     CD_LOG(VERBOSE, Feature::NS)
         << __func__
@@ -2153,7 +2177,7 @@ void NearbySharingServiceImpl::InvalidateAdvertisingState() {
     return;
   }
 
-  if (!HasAvailableConnectionMediums()) {
+  if (!HasAvailableAdvertisingMediums()) {
     StopAdvertising();
     CD_LOG(VERBOSE, Feature::NS)
         << __func__
@@ -2321,7 +2345,7 @@ void NearbySharingServiceImpl::StartScanning() {
   DCHECK(!power_client_->IsSuspended());
   DCHECK(settings_.GetEnabled());
   DCHECK(!is_screen_locked_);
-  DCHECK(HasAvailableConnectionMediums());
+  DCHECK(HasAvailableDiscoveryMediums());
   DCHECK(!foreground_send_transfer_callbacks_.empty());
 
   if (is_scanning_) {
@@ -4864,13 +4888,19 @@ void NearbySharingServiceImpl::OnStartDiscoveryResult(
 
 void NearbySharingServiceImpl::SetInHighVisibility(
     bool new_in_high_visibility) {
-  if (in_high_visibility == new_in_high_visibility) {
+  if (IsInHighVisibility() == new_in_high_visibility) {
     return;
   }
 
-  in_high_visibility = new_in_high_visibility;
+  if (chromeos::features::IsQuickShareV2Enabled()) {
+    prefs_->SetBoolean(prefs::kNearbySharingInHighVisibilityPrefName,
+                       /*value=*/new_in_high_visibility);
+  } else {
+    in_high_visibility_ = new_in_high_visibility;
+  }
+
   for (auto& observer : observers_) {
-    observer.OnHighVisibilityChanged(in_high_visibility);
+    observer.OnHighVisibilityChanged(new_in_high_visibility);
   }
 }
 

@@ -59,10 +59,6 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
     receivers_.Add(this, std::move(receiver));
   }
 
-  bool did_unfocus_form() const { return did_unfocus_form_; }
-
-  bool had_interacted_form() const { return had_interacted_form_; }
-
   const FormData* form_submitted() const { return form_submitted_.get(); }
 
   bool known_success() const { return known_success_; }
@@ -115,10 +111,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
   void HidePopup() override {}
 
-  void FocusOnNonFormField(bool had_interacted_form) override {
-    did_unfocus_form_ = true;
-    had_interacted_form_ = had_interacted_form;
-  }
+  void FocusOnNonFormField() override {}
 
   void FocusOnFormField(const FormData& form,
                         FieldRendererId field_id) override {}
@@ -130,13 +123,6 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
   void SelectOrSelectListFieldOptionsDidChange(
       const autofill::FormData& form) override {}
-
-  // Records whether FocusOnNonFormField() got called.
-  bool did_unfocus_form_{false};
-
-  // Records value of `had_interacted_form` on last call to
-  // FocusOnNonFormField(). Meaningless if `did_unfocus_form_` is false.
-  bool had_interacted_form_{false};
 
   // Records the form data received via FormSubmitted() call.
   std::unique_ptr<FormData> form_submitted_;
@@ -277,14 +263,6 @@ class FormAutocompleteTest : public ChromeRenderViewTest {
     SimulatePointClick(element.BoundsInWidget().CenterPoint());
   }
 
-  void SimulateUserInput(const blink::WebString& id, const std::string& value) {
-    WebDocument document = GetMainFrame()->GetDocument();
-    WebElement element = document.GetElementById(id);
-    ASSERT_TRUE(element);
-    WebInputElement fname_element = element.To<WebInputElement>();
-    SimulateUserInputChangeForElement(&fname_element, value);
-  }
-
   // Simulates receiving a message from the browser to fill a form.
   void SimulateFillForm() {
     FormData data = CreateAutofillFormData(GetMainFrame());
@@ -305,59 +283,6 @@ class FormAutocompleteTest : public ChromeRenderViewTest {
     autofill_agent_->ApplyFieldsAction(mojom::FormActionType::kFill,
                                        mojom::ActionPersistence::kFill,
                                        GetFieldsForFilling({form_data}));
-  }
-
-  // Simulates receiving a message from the browser to fill a form with an
-  // additional non-autofillable field.
-  void SimulateFillFormWithNonFillableFields() {
-    WebDocument document = GetMainFrame()->GetDocument();
-    WebFormControlElement fname_element =
-        document.GetElementById(WebString::FromUTF8("fname"))
-            .To<WebFormControlElement>();
-    ASSERT_TRUE(fname_element);
-    WebFormControlElement mname_element =
-        document.GetElementById(WebString::FromUTF8("mname"))
-            .To<WebFormControlElement>();
-    ASSERT_TRUE(mname_element);
-    WebFormControlElement lname_element =
-        document.GetElementById(WebString::FromUTF8("lname"))
-            .To<WebFormControlElement>();
-    ASSERT_TRUE(lname_element);
-
-    // TODO(crbug.com/41495779): Update.
-    FormData form;
-    form.set_name(u"name");
-    form.set_url(GURL("http://example.com/"));
-    form.set_action(GURL("http://example.com/blade.php"));
-    form.set_renderer_id(test::MakeFormRendererId());  // Default value.
-
-    FormFieldData field;
-    field.set_name(u"fname");
-    field.set_value(u"John");
-    field.set_is_autofilled(true);
-    field.set_renderer_id(form_util::GetFieldRendererId(fname_element));
-    test_api(form).Append(field);
-
-    field.set_name(u"lname");
-    field.set_value(u"Smith");
-    field.set_is_autofilled(true);
-    field.set_renderer_id(form_util::GetFieldRendererId(lname_element));
-    test_api(form).Append(field);
-
-    // Additional non-autofillable field.
-    field.set_name(u"mname");
-    field.set_value(u"James");
-    field.set_is_autofilled(false);
-    field.set_renderer_id(form_util::GetFieldRendererId(mname_element));
-    test_api(form).Append(field);
-
-    // This call is necessary to setup the autofill agent appropriate for the
-    // user selection; simulates the menu actually popping up.
-    SimulateElementClick(fname_element);
-
-    autofill_agent_->ApplyFieldsAction(mojom::FormActionType::kFill,
-                                       mojom::ActionPersistence::kFill,
-                                       GetFieldsForFilling({form}));
   }
 
   // This triggers a layout update to apply JS changes like display = 'none'.
@@ -391,7 +316,7 @@ TEST_F(FormAutocompleteTest, VerifyFocusAndBlurEventsAfterAutofill) {
   focus_test_utils_->FocusElement("fname");
 
   // Simulate filling the form using Autofill.
-  SimulateFillFormWithNonFillableFields();
+  SimulateFillForm();
   base::RunLoop().RunUntilIdle();
 
   // Expected Result in order:
@@ -564,147 +489,6 @@ TEST_F(FormAutocompleteTest, AcceptDataListSuggestion) {
   }
 }
 
-// TODO(crbug.com/337690061): Remove the test suite when the new focus events
-// are launched. The new tests are `AutofillAgentTestFocus` in
-// `autofill_agent_browsertest.cc`.
-class FormAutocompleteTestFocus : public FormAutocompleteTest {
- public:
-  FormAutocompleteTestFocus() {
-    scoped_feature_list_.InitAndDisableFeature(
-        autofill::features::kAutofillNewFocusEvents);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-// Test that a FocusOnNonFormField message is sent if focus goes from a
-// focused but uninteracted form to a null element.
-TEST_F(FormAutocompleteTestFocus,
-       UninteractedFormFocusChangesToNull_FocusOnNonFormField) {
-  // Load a form.
-  LoadHTML(
-      "<html><input type='text' id='different'/>"
-      "<form id='myForm' action='http://example.com/blade.php'>"
-      "<input name='fname' id='fname' value='Bob'/>"
-      "<input name='lname' value='Deckard'/><input type=submit></form></html>");
-
-  // Change focus to the form.
-  WebDocument document = GetMainFrame()->GetDocument();
-  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
-  SetFocused(element);
-
-  ASSERT_FALSE(fake_driver_.did_unfocus_form());
-
-  // Change focus to a null element.
-  ChangeFocusToNull(document);
-
-  base::RunLoop run_loop;
-  run_loop.RunUntilIdle();
-
-  EXPECT_TRUE(fake_driver_.did_unfocus_form());
-  EXPECT_FALSE(fake_driver_.had_interacted_form());
-}
-
-// Test that a FocusOnNonFormField message is sent if focus goes from an
-// interacted form to a null element.
-TEST_F(FormAutocompleteTestFocus,
-       InteractedFormFocusChangesToNull_FocusOnNonFormField) {
-  // Load a form.
-  LoadHTML(
-      "<html><input type='text' id='different'/>"
-      "<form id='myForm' action='http://example.com/blade.php'>"
-      "<input name='fname' id='fname' value='Bob'/>"
-      "<input name='lname' value='Deckard'/><input type=submit></form></html>");
-
-  // Simulate user input so that the form is "remembered".
-  WebDocument document = GetMainFrame()->GetDocument();
-  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
-  ASSERT_TRUE(element);
-  WebInputElement fname_element = element.To<WebInputElement>();
-  SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
-
-  ASSERT_FALSE(fake_driver_.did_unfocus_form());
-
-  // Change focus to a null element.
-  ChangeFocusToNull(document);
-
-  base::RunLoop run_loop;
-  run_loop.RunUntilIdle();
-
-  EXPECT_TRUE(fake_driver_.did_unfocus_form());
-  EXPECT_TRUE(fake_driver_.had_interacted_form());
-}
-
-// Test that a FocusOnNonFormField message is sent if focus goes from an
-// interacted form to an element outside the form.
-TEST_F(FormAutocompleteTestFocus,
-       InteractedFormFocusChangesToExternalElement_FocusOnNonFormField) {
-  // Load a form.
-  LoadHTML(
-      "<html><input type='text' id='different'/>"
-      "<form id='myForm' action='http://example.com/blade.php'>"
-      "<input name='fname' id='fname' value='Bob'/>"
-      "<input name='lname' value='Deckard'/><input type=submit></form></html>");
-
-  // Simulate user input so that the form is "remembered".
-  WebDocument document = GetMainFrame()->GetDocument();
-  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
-  ASSERT_TRUE(element);
-  WebInputElement fname_element = element.To<WebInputElement>();
-  SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
-
-  ASSERT_FALSE(fake_driver_.did_unfocus_form());
-
-  // Change focus to a different node outside the form.
-  WebElement different =
-      document.GetElementById(WebString::FromUTF8("different"));
-  SetFocused(different);
-
-  base::RunLoop run_loop;
-  run_loop.RunUntilIdle();
-
-  EXPECT_TRUE(fake_driver_.did_unfocus_form());
-  EXPECT_TRUE(fake_driver_.had_interacted_form());
-}
-
-// Test that a FocusOnNonFormField message is sent if focus goes from one
-// interacted form to another.
-TEST_F(FormAutocompleteTestFocus,
-       InteractingInDifferentForms_FocusOnNonFormField) {
-  // Load a form.
-  LoadHTML(
-      "<html><form id='myForm' action='http://example.com/blade.php'>"
-      "<input name='fname' id='fname' value='Bob'/>"
-      "<input name='lname' value='Deckard'/><input type=submit></form>"
-      "<form id='myForm2' action='http://example.com/runner.php'>"
-      "<input name='fname' id='fname2' value='Bob'/>"
-      "<input name='lname' value='Deckard'/><input type=submit></form></html>");
-
-  // Simulate user input in the first form so that the form is "remembered".
-  WebDocument document = GetMainFrame()->GetDocument();
-  WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
-  ASSERT_TRUE(element);
-  WebInputElement fname_element = element.To<WebInputElement>();
-  SimulateUserInputChangeForElement(&fname_element, std::string("Rick"));
-
-  ASSERT_FALSE(fake_driver_.did_unfocus_form());
-
-  // Simulate user input in the second form so that a "no longer focused"
-  // message is sent for the first form.
-  document = GetMainFrame()->GetDocument();
-  element = document.GetElementById(WebString::FromUTF8("fname2"));
-  ASSERT_TRUE(element);
-  fname_element = element.To<WebInputElement>();
-  SimulateUserInputChangeForElement(&fname_element, std::string("John"));
-
-  base::RunLoop run_loop;
-  run_loop.RunUntilIdle();
-
-  EXPECT_TRUE(fake_driver_.did_unfocus_form());
-  EXPECT_TRUE(fake_driver_.had_interacted_form());
-}
-
 TEST_F(FormAutocompleteTest, SelectControlChanged) {
   LoadHTML(
       "<html>"
@@ -768,7 +552,7 @@ TEST_P(FormAutocompleteSubmissionTest, NormalFormSubmit) {
       "<html><form id='myForm' action='about:blank'>"
       "<input name='fname' id='fname'/>"
       "<input name='lname' value='Deckard'/></form></html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Submit the form.
   ExecuteJavaScriptForTests("document.getElementById('myForm').submit();");
@@ -787,7 +571,7 @@ TEST_P(FormAutocompleteSubmissionTest, SubmitEventPrevented) {
       "<html><form id='myForm'><input name='fname' id='fname'/>"
       "<input name='lname' value='Deckard'/><input type=submit></form>"
       "</html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Submit the form.
   ExecuteJavaScriptForTests(
@@ -801,6 +585,32 @@ TEST_P(FormAutocompleteSubmissionTest, SubmitEventPrevented) {
                                  SubmissionSource::FORM_SUBMISSION);
 }
 
+// Tests that having the form disappear after autofilling triggers submission
+// from Autofill's point of view.
+TEST_P(FormAutocompleteSubmissionTest, DomMutationAfterAutofill) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      /*enabled_features=*/
+      {features::kAutofillUnifyAndFixFormTracking,
+       features::kAutofillAcceptDomMutationAfterAutofillSubmission},
+      /*disabled_features=*/{});
+  LoadHTML(
+      "<html><form id='myForm' action='http://example.com/blade.php'>"
+      "<input name='fname' id='fname'/>"
+      "<input name='lname'/></form></html>");
+
+  // Simulate removing the form after autofilling.
+  SimulateFillForm();
+  ExecuteJavaScriptForTests(
+      "var element = document.getElementById('myForm');"
+      "element.parentNode.removeChild(element);");
+  base::RunLoop().RunUntilIdle();
+
+  VerifyReceivedRendererMessages(fake_driver_, "John", "Smith",
+                                 /*expect_known_success=*/true,
+                                 SubmissionSource::DOM_MUTATION_AFTER_AUTOFILL);
+}
+
 // Tests that completing an Ajax request and having the form disappear will
 // trigger submission from Autofill's point of view.
 TEST_P(FormAutocompleteSubmissionTest, AjaxSucceeded_NoLongerVisible) {
@@ -809,7 +619,7 @@ TEST_P(FormAutocompleteSubmissionTest, AjaxSucceeded_NoLongerVisible) {
       "<html><form id='myForm' action='http://example.com/blade.php'>"
       "<input name='fname' id='fname' value='Bob'/>"
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Simulate removing the form just before the ajax request completes.
   ExecuteJavaScriptForTests(
@@ -838,7 +648,7 @@ TEST_P(FormAutocompleteSubmissionTest,
       "<form id='myForm2' action='http://example.com/runner.php'>"
       "<input name='fname' id='fname2' value='Bob'/>"
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Simulate removing the form just before the ajax request completes.
   ExecuteJavaScriptForTests(
@@ -874,7 +684,7 @@ TEST_P(FormAutocompleteSubmissionTest, MAYBE_NoLongerVisibleBothNoActions) {
       "<form id='myForm2'>"
       "<input name='fname' id='fname2' value='John'/>"
       "<input name='lname' value='Doe'/><input type=submit></form></html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Simulate removing the form just before the ajax request completes.
   ExecuteJavaScriptForTests(
@@ -898,7 +708,7 @@ TEST_P(FormAutocompleteSubmissionTest, AjaxSucceeded_NoLongerVisible_NoAction) {
       "<html><form id='myForm'>"
       "<input name='fname' id='fname' value='Bob'/>"
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Simulate removing the form just before the ajax request completes.
   ExecuteJavaScriptForTests(
@@ -924,7 +734,7 @@ TEST_P(FormAutocompleteSubmissionTest, AjaxSucceeded_StillVisible) {
       "<input name='lname' value='Deckard'/><input type=submit></form></html>");
 
   // Simulate user input so that the form is "remembered".
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Simulate an Ajax request completing.
   static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
@@ -972,7 +782,7 @@ TEST_P(FormAutocompleteSubmissionTest, AjaxSucceeded_FilledFormIsInvisible) {
 
   // Simulate user input since ajax request doesn't fire submission message
   // if there is no user input.
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Simulate removing the form just before the ajax request completes.
   ExecuteJavaScriptForTests(
@@ -1019,7 +829,7 @@ TEST_P(FormAutocompleteSubmissionTest, AjaxSucceeded_FormlessElements) {
       "<input type='text' name='fname' id='fname'/>"
       "<input type='text' name='lname' value='Puckett'/>"
       "<input type='number' name='number' value='34'/>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Kirby"));
+  SimulateUserInputChangeForElementById("fname", "Kirby");
 
   // Remove element from view.
   ExecuteJavaScriptForTests(
@@ -1045,7 +855,7 @@ TEST_P(FormAutocompleteSubmissionTest, AutoCompleteOffFormSubmit) {
       "<input name='fname' id='fname'/>"
       "<input name='lname' value='Deckard'/>"
       "</form></html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Submit the form.
   ExecuteJavaScriptForTests("document.getElementById('myForm').submit();");
@@ -1064,7 +874,7 @@ TEST_P(FormAutocompleteSubmissionTest, AutoCompleteOffInputSubmit) {
       "<input name='fname' id='fname'/>"
       "<input name='lname' value='Deckard' autocomplete='off'/>"
       "</form></html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   // Submit the form.
   ExecuteJavaScriptForTests("document.getElementById('myForm').submit();");
@@ -1083,7 +893,7 @@ TEST_P(FormAutocompleteSubmissionTest, DynamicAutoCompleteOffFormSubmit) {
       "<html><form id='myForm' action='about:blank'>"
       "<input name='fname' id='fname'/>"
       "<input name='lname' value='Deckard'/></form></html>");
-  SimulateUserInput(WebString::FromUTF8("fname"), std::string("Rick"));
+  SimulateUserInputChangeForElementById("fname", "Rick");
 
   WebElement element =
       GetMainFrame()->GetDocument().GetElementById(blink::WebString("myForm"));
@@ -1112,7 +922,7 @@ TEST_P(FormAutocompleteSubmissionTest, FormSubmittedByDOMMutationAfterXHR) {
       "<html>"
       "<input type='text' id='address_field' name='address' autocomplete='on'>"
       "</html>");
-  SimulateUserInput(WebString::FromUTF8("address_field"), std::string("City"));
+  SimulateUserInputChangeForElementById("address_field", "City");
   static_cast<blink::WebAutofillClient*>(autofill_agent_)->AjaxSucceeded();
 
   // Hide elements to simulate successful form submission.
@@ -1133,7 +943,7 @@ TEST_P(FormAutocompleteSubmissionTest, FormSubmittedBySameDocumentNavigation) {
       "<html>"
       "<input type='text' id='address_field' name='address' autocomplete='on'>"
       "</html>");
-  SimulateUserInput(WebString::FromUTF8("address_field"), std::string("City"));
+  SimulateUserInputChangeForElementById("address_field", "City");
 
   // Hide elements to simulate successful form submission.
   std::string hide_elements =
@@ -1157,7 +967,7 @@ TEST_P(FormAutocompleteSubmissionTest, FormSubmittedByProbablyFormSubmitted) {
       "<html>"
       "<input type='text' id='address_field' name='address' autocomplete='on'>"
       "</html>");
-  SimulateUserInput(WebString::FromUTF8("address_field"), std::string("City"));
+  SimulateUserInputChangeForElementById("address_field", "City");
 
   // Hide elements to simulate successful form submission.
   std::string hide_elements =

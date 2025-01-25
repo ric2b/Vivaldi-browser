@@ -41,16 +41,16 @@ using CreateSurfaceLayerBridgeCB =
         WebSurfaceLayerBridgeObserver*,
         cc::UpdateSubmissionStateCB)>;
 
+class MediaStreamAudioRenderer;
 class MediaStreamInternalFrameWrapper;
+class MediaStreamRendererFactory;
+class MediaStreamVideoRenderer;
 template <typename TimerFiredClass>
 class TaskRunnerTimer;
 class TimerBase;
 class WebLocalFrame;
 class WebMediaPlayerClient;
-class WebMediaStreamAudioRenderer;
 class WebMediaPlayerMSCompositor;
-class MediaStreamRendererFactory;
-class WebMediaStreamVideoRenderer;
 class WebString;
 class WebVideoFrameSubmitter;
 
@@ -62,7 +62,7 @@ class WebVideoFrameSubmitter;
 //
 // WebMediaPlayerMS works with multiple objects, the most important ones are:
 //
-// WebMediaStreamVideoRenderer
+// MediaStreamVideoRenderer
 //   provides video frames for rendering.
 //
 // WebMediaPlayerClient
@@ -74,7 +74,7 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
       public WebSurfaceLayerBridgeObserver {
  public:
   // Construct a WebMediaPlayerMS with reference to the client, and
-  // a MediaStreamClient which provides WebMediaStreamVideoRenderer.
+  // a MediaStreamClient which provides MediaStreamVideoRenderer.
   // |delegate| must not be null.
   WebMediaPlayerMS(
       WebLocalFrame* frame,
@@ -116,8 +116,8 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   void SetVolume(double volume) override;
   void SetLatencyHint(double seconds) override;
   void SetPreservesPitch(bool preserves_pitch) override;
-  void SetWasPlayedWithUserActivation(
-      bool was_played_with_user_activation) override;
+  void SetWasPlayedWithUserActivationAndHighMediaEngagement(
+      bool was_played_with_user_activation_and_high_media_engagement) override;
   void OnRequestPictureInPicture() override;
   bool SetSinkId(const WebString& sink_id,
                  WebSetSinkIdCompleteCallback completion_callback) override;
@@ -179,7 +179,15 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   void SetVolumeMultiplier(double multiplier) override;
   void SuspendForFrameClosed() override;
 
+  void SetShouldPauseWhenFrameIsHidden(
+      bool should_pause_when_frame_is_hidden) override;
+  bool GetShouldPauseWhenFrameIsHidden() override;
+
+  bool ShouldPausePlaybackWhenHidden() const;
+
   // WebMediaPlayerDelegate::Observer implementation.
+  void OnFrameHidden() override;
+  void OnFrameShown() override;
   void OnPageHidden() override;
   void OnPageShown() override;
   void OnIdleTimeout() override;
@@ -292,11 +300,11 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   class FrameDeliverer;
   std::unique_ptr<FrameDeliverer> frame_deliverer_;
 
-  scoped_refptr<WebMediaStreamVideoRenderer> video_frame_provider_;  // Weak
+  scoped_refptr<MediaStreamVideoRenderer> video_frame_provider_;  // Weak
 
   scoped_refptr<cc::VideoLayer> video_layer_;
 
-  scoped_refptr<WebMediaStreamAudioRenderer> audio_renderer_;  // Weak
+  scoped_refptr<MediaStreamAudioRenderer> audio_renderer_;  // Weak
   media::PaintCanvasVideoRenderer video_renderer_;
 
   // Indicated whether an outstanding VideoFrameCallback request needs to be
@@ -336,6 +344,9 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   // True if playback should be started upon the next call to OnShown(). Only
   // used on Android.
   bool should_play_upon_shown_;
+
+  bool should_pause_when_frame_is_hidden_ = false;
+
   WebMediaStream web_stream_;
   // IDs of the tracks currently played.
   WebString current_video_track_id_;

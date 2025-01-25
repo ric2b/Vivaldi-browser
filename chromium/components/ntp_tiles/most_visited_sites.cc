@@ -37,7 +37,7 @@
 #include "third_party/re2/src/re2/re2.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "components/supervised_user/core/browser/supervised_user_preferences.h"
+#include "components/supervised_user/core/browser/supervised_user_capabilities.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #endif
 
@@ -165,6 +165,7 @@ std::u16string GenerateShortTitle(const std::u16string& title) {
 
 MostVisitedSites::MostVisitedSites(
     PrefService* prefs,
+    signin::IdentityManager* identity_manager,
     supervised_user::SupervisedUserService* supervised_user_service,
     scoped_refptr<history::TopSites> top_sites,
     std::unique_ptr<PopularSites> popular_sites,
@@ -172,6 +173,7 @@ MostVisitedSites::MostVisitedSites(
     std::unique_ptr<IconCacher> icon_cacher,
     bool is_default_chrome_app_migrated)
     : prefs_(prefs),
+      identity_manager_(identity_manager),
       supervised_user_service_(supervised_user_service),
       top_sites_(top_sites),
       popular_sites_(std::move(popular_sites)),
@@ -539,6 +541,7 @@ void MostVisitedSites::OnMostVisitedURLsAvailable(
     tile.title_source = TileTitleSource::TITLE_TAG;
     tile.visit_count = visited.visit_count;
     tile.last_visit_time = visited.last_visit_time;
+    tile.score = visited.score;
     // TODO(crbug.com/41349031): Populate |data_generation_time| here in order
     // to log UMA metrics of age.
     tiles.push_back(std::move(tile));
@@ -566,7 +569,9 @@ MostVisitedSites::CreatePopularSitesSections(
       std::make_pair(SectionType::PERSONALIZED, NTPTilesVector())};
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   // For child accounts popular sites tiles will not be added.
-  if (supervised_user::IsSubjectToParentalControls(*prefs_)) {
+  if (identity_manager_ &&
+      supervised_user::IsPrimaryAccountSubjectToParentalControls(
+          identity_manager_) == signin::Tribool::kTrue) {
     return sections;
   }
 #endif

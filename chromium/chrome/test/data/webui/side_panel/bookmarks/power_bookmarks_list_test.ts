@@ -8,6 +8,7 @@ import {SortOrder, ViewType} from 'chrome://bookmarks-side-panel.top-chrome/book
 import {BookmarksApiProxyImpl} from 'chrome://bookmarks-side-panel.top-chrome/bookmarks_api_proxy.js';
 import type {PowerBookmarkRowElement} from 'chrome://bookmarks-side-panel.top-chrome/power_bookmark_row.js';
 import type {PowerBookmarksListElement} from 'chrome://bookmarks-side-panel.top-chrome/power_bookmarks_list.js';
+import {NESTED_BOOKMARKS_BASE_MARGIN, NESTED_BOOKMARKS_MARGIN_PER_DEPTH} from 'chrome://bookmarks-side-panel.top-chrome/power_bookmark_row.js';
 import {BrowserProxyImpl} from 'chrome://resources/cr_components/commerce/browser_proxy.js';
 import {PageImageServiceBrowserProxy} from 'chrome://resources/cr_components/page_image_service/browser_proxy.js';
 import {PageImageServiceHandlerRemote} from 'chrome://resources/cr_components/page_image_service/page_image_service.mojom-webui.js';
@@ -17,6 +18,8 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import type {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import type {MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import {fakeMetricsPrivate} from 'chrome://webui-test/metrics_test_support.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
@@ -30,6 +33,7 @@ suite('SidePanelPowerBookmarksListTest', () => {
   let shoppingServiceApi: TestBrowserProxy;
   let imageServiceHandler: TestMock<PageImageServiceHandlerRemote>&
       PageImageServiceHandlerRemote;
+  let metrics: MetricsTracker;
 
   const folders: chrome.bookmarks.BookmarkTreeNode[] = [
     {
@@ -126,6 +130,7 @@ suite('SidePanelPowerBookmarksListTest', () => {
 
     await searchChanged;
     await flushTasks();
+    await waitAfterNextRender(powerBookmarksList);
   }
 
   async function openBookmark(id: string) {
@@ -134,6 +139,7 @@ suite('SidePanelPowerBookmarksListTest', () => {
     powerBookmarksList.clickBookmarkRowForTests(bookmark);
 
     await flushTasks();
+    await waitAfterNextRender(powerBookmarksList);
   }
 
   async function selectBookmark(id: string) {
@@ -167,6 +173,8 @@ suite('SidePanelPowerBookmarksListTest', () => {
 
   setup(async () => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
+
+    metrics = fakeMetricsPrivate();
 
     bookmarksApi = new TestBookmarksApiProxy();
     bookmarksApi.setFolders(structuredClone(folders));
@@ -222,16 +230,28 @@ suite('SidePanelPowerBookmarksListTest', () => {
     assertEquals(1, getBookmarksInList(0).length);
     // Three bookmarks match the query but are not in the active folder.
     assertEquals(3, getBookmarksInList(1).length);
+    assertEquals(
+        1,
+        metrics.count(
+            'PowerBookmarks.SidePanel.SearchOrFilter.BookmarksShown', 4));
 
     await performSearch('nested');
 
     assertEquals(1, getBookmarksInList(0).length);
     assertEquals(0, getBookmarksInList(1).length);
+    assertEquals(
+        1,
+        metrics.count(
+            'PowerBookmarks.SidePanel.SearchOrFilter.BookmarksShown', 1));
 
     await performSearch('child');
 
     assertEquals(0, getBookmarksInList(0).length);
     assertEquals(2, getBookmarksInList(1).length);
+    assertEquals(
+        1,
+        metrics.count(
+            'PowerBookmarks.SidePanel.SearchOrFilter.BookmarksShown', 2));
   });
 
   test('UpdatesChangedBookmarks', async () => {
@@ -471,7 +491,9 @@ suite('SidePanelPowerBookmarksListTest', () => {
     assertTrue(!!folder);
 
     assertEquals(
-        '(1)', powerBookmarksList.getBookmarkDescriptionForTests(folder));
+        '(1)',
+        getPowerBookmarksRowElement('5')?.getBookmarkDescriptionForTests(
+            folder));
   });
 
   test('SetsExpandedDescription', () => {
@@ -483,7 +505,9 @@ suite('SidePanelPowerBookmarksListTest', () => {
     assertTrue(!!folder);
 
     assertEquals(
-        'child', powerBookmarksList.getBookmarkDescriptionForTests(folder));
+        'child',
+        getPowerBookmarksRowElement('4')?.getBookmarkDescriptionForTests(
+            folder));
   });
 
   test('SetsExpandedSearchResultDescription', async () => {
@@ -499,7 +523,8 @@ suite('SidePanelPowerBookmarksListTest', () => {
 
     assertEquals(
         'child - All Bookmarks',
-        powerBookmarksList.getBookmarkDescriptionForTests(folder));
+        getPowerBookmarksRowElement('4')?.getBookmarkDescriptionForTests(
+            folder));
   });
 
   test('RenamesBookmark', async () => {
@@ -598,6 +623,18 @@ suite('SidePanelPowerBookmarksListTest', () => {
     assertEquals('5', bookmarksApi.getArgs('deleteBookmarks')[0][1]);
   });
 
+  test('LogsBookmarkCountMetric', async () => {
+    // Initially should have 4 bookmarks shown.
+    assertEquals(
+        1, metrics.count('PowerBookmarks.SidePanel.BookmarksShown', 4));
+
+    await openBookmark('5');
+
+    // Folder with id 5 only has 1 bookmark shown.
+    assertEquals(
+        1, metrics.count('PowerBookmarks.SidePanel.BookmarksShown', 1));
+  });
+
   test('TogglesSectionVisibilityAndEmptyStates', async () => {
     const search = powerBookmarksList.$.searchField;
     const labels = powerBookmarksList.$.labels;
@@ -689,5 +726,52 @@ suite('SidePanelPowerBookmarksListTest', () => {
                        .querySelector<PowerBookmarkRowElement>('#expandButton');
     // Assert that the expand button is not present for single bookmarks
     assertFalse(!!expandButton);
+  });
+
+  test('ExpandAndCollapseNestedBookmarks', async () => {
+    // Enabling the feature flag for expanding/collapsing nested bookmarks test.
+    loadTimeData.overrideValues({bookmarksTreeViewEnabled: true});
+    await initializeUI();
+
+    const folderElement = getPowerBookmarksRowElement('5');
+    assertTrue(!!folderElement);
+
+    const expandButton =
+        folderElement.shadowRoot!.querySelector<PowerBookmarkRowElement>('#expandButton');
+    assertTrue(!!expandButton);
+
+    expandButton.click();
+    await expandButton.updateComplete;
+    await folderElement.updateComplete;
+
+    // Verify nested bookmarks are now visible
+    const nestedBookmarkElement =
+        folderElement.shadowRoot!.querySelector<PowerBookmarkRowElement>(
+            '#bookmark-6');
+    assertTrue(!!nestedBookmarkElement);
+    // Verify that the nested bookmark has the correct depth
+    assertEquals(1, nestedBookmarkElement.depth);
+
+    const bookmarkDiv =
+        nestedBookmarkElement.shadowRoot!.querySelector<HTMLDivElement>(
+            '#bookmark');
+    assertTrue(!!bookmarkDiv);
+
+    // Check if the depth is correctly applied to the style
+    const computedStyle = getComputedStyle(bookmarkDiv);
+    const expectedMargin =
+        nestedBookmarkElement.depth * NESTED_BOOKMARKS_MARGIN_PER_DEPTH +
+        NESTED_BOOKMARKS_BASE_MARGIN;
+    assertEquals(`${expectedMargin}px`, computedStyle.marginLeft);
+
+    expandButton.click();
+    await expandButton.updateComplete;
+    await folderElement.updateComplete;
+
+    // Verify nested bookmarks are no longer visible
+    const collapsedNestedBookmarkElement =
+        folderElement.shadowRoot!.querySelector<PowerBookmarkRowElement>(
+            '#bookmark-6');
+    assertFalse(!!collapsedNestedBookmarkElement);
   });
 });

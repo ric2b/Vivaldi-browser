@@ -9,6 +9,8 @@ import("//tools/typescript/ts_library.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
 
 _cros_components_ts_files = [
+  "accordion/accordion.ts",
+  "accordion/accordion_item.ts",
   "async_helpers/async_helpers.ts",
   "badge/badge.ts",
   "button/button.ts",
@@ -19,6 +21,8 @@ _cros_components_ts_files = [
   "dropdown/dropdown_option.ts",
   "helpers/helpers.ts",
   "icon_button/icon-button.ts",
+  "icon_dropdown/icon-dropdown.ts",
+  "icon_dropdown/icon-dropdown-option.ts",
   "lottie_renderer/event_binders.ts",
   "lottie_renderer/lottie-renderer.ts",
   "lottie_renderer/worker.ts",

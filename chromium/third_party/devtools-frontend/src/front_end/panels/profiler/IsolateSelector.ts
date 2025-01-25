@@ -90,32 +90,34 @@ export class IsolateSelector extends UI.Widget.VBox implements UI.ListControl.Li
 
     SDK.IsolateManager.IsolateManager.instance().observeIsolates(this);
     SDK.TargetManager.TargetManager.instance().addEventListener(
-        SDK.TargetManager.Events.NameChanged, this.targetChanged, this);
+        SDK.TargetManager.Events.NAME_CHANGED, this.targetChanged, this);
     SDK.TargetManager.TargetManager.instance().addEventListener(
-        SDK.TargetManager.Events.InspectedURLChanged, this.targetChanged, this);
+        SDK.TargetManager.Events.INSPECTED_URL_CHANGED, this.targetChanged, this);
   }
 
   override wasShown(): void {
     super.wasShown();
     SDK.IsolateManager.IsolateManager.instance().addEventListener(
-        SDK.IsolateManager.Events.MemoryChanged, this.heapStatsChanged, this);
+        SDK.IsolateManager.Events.MEMORY_CHANGED, this.heapStatsChanged, this);
   }
 
   override willHide(): void {
     SDK.IsolateManager.IsolateManager.instance().removeEventListener(
-        SDK.IsolateManager.Events.MemoryChanged, this.heapStatsChanged, this);
+        SDK.IsolateManager.Events.MEMORY_CHANGED, this.heapStatsChanged, this);
   }
 
   isolateAdded(isolate: SDK.IsolateManager.Isolate): void {
     this.list.element.tabIndex = 0;
     const item = new ListItem(isolate);
+    // Insert the primary page target at the top of the list.
     const index = (item.model() as SDK.RuntimeModel.RuntimeModel).target() ===
-            SDK.TargetManager.TargetManager.instance().rootTarget() ?
+            SDK.TargetManager.TargetManager.instance().primaryPageTarget() ?
         0 :
         this.items.length;
     this.items.insert(index, item);
     this.itemByIsolate.set(isolate, item);
-    if (this.items.length === 1 || isolate.isMainThread()) {
+    // Select the first item by default.
+    if (index === 0) {
       this.list.selectItem(item);
     }
     this.update();
@@ -273,7 +275,7 @@ export class ListItem {
     const modelCountByName = new Map<string, number>();
     for (const model of this.isolate.models()) {
       const target = model.target();
-      const name = SDK.TargetManager.TargetManager.instance().rootTarget() !== target ? target.name() : '';
+      const name = SDK.TargetManager.TargetManager.instance().primaryPageTarget() !== target ? target.name() : '';
       const parsedURL = new Common.ParsedURL.ParsedURL(target.inspectedURL());
       const domain = parsedURL.isValid ? parsedURL.domain() : '';
       const title =

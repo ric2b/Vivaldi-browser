@@ -31,8 +31,8 @@
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider.h"
 #import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/commands/country_code_picker_commands.h"
 #import "ios/chrome/browser/shared/public/commands/unit_conversion_commands.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -59,20 +59,18 @@
 @end
 
 namespace {
-// Returns the original ChromeBrowserState if `incognito` is false. If
-// `incognito` is true, returns an off-the-record ChromeBrowserState.
-ChromeBrowserState* GetBrowserState(bool incognito) {
-  std::vector<ChromeBrowserState*> browser_states =
-      GetApplicationContext()
-          ->GetChromeBrowserStateManager()
-          ->GetLoadedBrowserStates();
-  DCHECK(!browser_states.empty());
 
-  ChromeBrowserState* browser_state = browser_states.front();
-  DCHECK(!browser_state->IsOffTheRecord());
+// Returns the original ProfileIOS if `incognito` is false. If
+// `incognito` is true, returns an off-the-record ProfileIOS.
+ProfileIOS* GetProfile(bool incognito) {
+  const std::vector<ProfileIOS*> loaded_profiles =
+      GetApplicationContext()->GetProfileManager()->GetLoadedProfiles();
+  DCHECK(!loaded_profiles.empty());
 
-  return incognito ? browser_state->GetOffTheRecordChromeBrowserState()
-                   : browser_state;
+  ProfileIOS* profile = loaded_profiles.front();
+  DCHECK(!profile->IsOffTheRecord());
+
+  return incognito ? profile->GetOffTheRecordProfile() : profile;
 }
 
 }  // namespace
@@ -94,17 +92,25 @@ SceneController* GetForegroundActiveSceneController() {
 
 NSUInteger RegularBrowserCount() {
   return static_cast<NSUInteger>(
-      BrowserListFactory::GetForBrowserState(GetOriginalBrowserState())
+      BrowserListFactory::GetForBrowserState(GetOriginalProfile())
           ->BrowsersOfType(BrowserList::BrowserType::kRegularAndInactive)
           .size());
 }
 
 ChromeBrowserState* GetOriginalBrowserState() {
-  return GetBrowserState(false);
+  return GetOriginalProfile();
 }
 
 ChromeBrowserState* GetCurrentIncognitoBrowserState() {
-  return GetBrowserState(true);
+  return GetCurrentIncognitoProfile();
+}
+
+ProfileIOS* GetOriginalProfile() {
+  return GetProfile(false);
+}
+
+ProfileIOS* GetCurrentIncognitoProfile() {
+  return GetProfile(true);
 }
 
 Browser* GetMainBrowser() {
@@ -181,23 +187,21 @@ void SetBooleanLocalStatePref(const char* pref_name, bool value) {
   pref.SetValue(value);
 }
 
-void SetBooleanUserPref(ChromeBrowserState* browser_state,
+void SetBooleanUserPref(ProfileIOS* profile,
                         const char* pref_name,
                         bool value) {
-  DCHECK(browser_state);
-  DCHECK(browser_state->GetPrefs());
+  DCHECK(profile);
+  DCHECK(profile->GetPrefs());
   BooleanPrefMember pref;
-  pref.Init(pref_name, browser_state->GetPrefs());
+  pref.Init(pref_name, profile->GetPrefs());
   pref.SetValue(value);
 }
 
-void SetIntegerUserPref(ChromeBrowserState* browser_state,
-                        const char* pref_name,
-                        int value) {
-  DCHECK(browser_state);
-  DCHECK(browser_state->GetPrefs());
+void SetIntegerUserPref(ProfileIOS* profile, const char* pref_name, int value) {
+  DCHECK(profile);
+  DCHECK(profile->GetPrefs());
   IntegerPrefMember pref;
-  pref.Init(pref_name, browser_state->GetPrefs());
+  pref.Init(pref_name, profile->GetPrefs());
   pref.SetValue(value);
 }
 

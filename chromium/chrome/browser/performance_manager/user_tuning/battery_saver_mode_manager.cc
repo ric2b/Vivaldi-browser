@@ -212,7 +212,9 @@ class DesktopBatterySaverProvider
             base::Unretained(this)));
 
     on_battery_power_ =
-        base::PowerMonitor::AddPowerStateObserverAndReturnOnBatteryState(this);
+        base::PowerMonitor::GetInstance()
+            ->AddPowerStateObserverAndReturnBatteryPowerStatus(this) ==
+        base::PowerStateObserver::BatteryPowerStatus::kBatteryPower;
 
     base::BatteryStateSampler* battery_state_sampler =
         base::BatteryStateSampler::Get();
@@ -226,7 +228,7 @@ class DesktopBatterySaverProvider
   }
 
   ~DesktopBatterySaverProvider() override {
-    base::PowerMonitor::RemovePowerStateObserver(this);
+    base::PowerMonitor::GetInstance()->RemovePowerStateObserver(this);
   }
 
   // BatterySaverProvider:
@@ -310,15 +312,17 @@ class DesktopBatterySaverProvider
   }
 
   // base::PowerStateObserver:
-  void OnPowerStateChange(bool on_battery_power) override {
-    on_battery_power_ = on_battery_power;
+  void OnBatteryPowerStatusChange(base::PowerStateObserver::BatteryPowerStatus
+                                      battery_power_status) override {
+    on_battery_power_ = (battery_power_status ==
+                         PowerStateObserver::BatteryPowerStatus::kBatteryPower);
 
     // Plugging in the device unsets the temporary disable BSM flag
-    if (!on_battery_power) {
+    if (!on_battery_power_) {
       battery_saver_mode_disabled_for_session_ = false;
     }
 
-    manager_->NotifyOnExternalPowerConnectedChanged(on_battery_power);
+    manager_->NotifyOnExternalPowerConnectedChanged(on_battery_power_);
 
     UpdateBatterySaverModeState();
   }
@@ -629,11 +633,8 @@ void BatterySaverModeManager::NotifyOnBatterySaverActiveChanged(
     }
   }
 
-  if (base::FeatureList::IsEnabled(::features::kBatterySaverModeAlignWakeUps) ||
-      base::FeatureList::IsEnabled(::features::kBatterySaverModeRenderTuning)) {
-    child_process_tuning_delegate_->SetBatterySaverModeForAllChildProcessHosts(
-        battery_saver_mode_active);
-  }
+  child_process_tuning_delegate_->SetBatterySaverModeForAllChildProcessHosts(
+      battery_saver_mode_active);
 
   freezing_delegate_->ToggleFreezingOnBatterySaverMode(
       battery_saver_mode_active);

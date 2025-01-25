@@ -13,6 +13,7 @@
 
 
 import './certificate_entry_v2.js';
+import './certificate_manager_style_v2.css.js';
 import '//resources/cr_elements/cr_expand_button/cr_expand_button.js';
 import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_collapse/cr_collapse.js';
@@ -34,7 +35,10 @@ export interface CertificateListV2Element {
     certs: CrCollapseElement,
     exportCerts: HTMLElement,
     importCert: HTMLElement,
+    importAndBindCert: HTMLElement,
     noCertsRow: HTMLElement,
+    listHeader: HTMLElement,
+    expandButton: HTMLElement,
   };
 }
 
@@ -52,12 +56,31 @@ export class CertificateListV2Element extends CertificateListV2ElementBase {
       certSource: Number,
       headerText: String,
       showImport: Boolean,
+      showImportAndBind: Boolean,
+
+      // True if the list should not be collapsible.
+      // Empty lists will always not be collapsible.
+      noCollapse: Boolean,
+
       // True if the export button should be hidden.
       // Export button may also be hidden if there are no certs in the list.
       hideExport: Boolean,
+
+      // True if the entire list (including the header) should be hidden if the
+      // list is empty.
+      hideIfEmpty: Boolean,
+
+      // True if the header should be hidden. This will make the list
+      // non-collapsible.
+      hideHeader: Boolean,
+
       inSubpage: Boolean,
       expanded_: Boolean,
       certificates_: Array,
+      hideEverything_: {
+        type: Boolean,
+        computed: 'computeHideEverything_(certificates_)',
+      },
       hasCerts_: {
         type: Boolean,
         computed: 'computeHasCerts_(certificates_)',
@@ -68,23 +91,35 @@ export class CertificateListV2Element extends CertificateListV2ElementBase {
   certSource: CertificateSource;
   headerText: string;
   showImport: boolean = false;
+  showImportAndBind: boolean = false;
   hideExport: boolean = false;
+  hideHeader: boolean = false;
   inSubpage: boolean = false;
+  noCollapse: boolean = false;
+  hideIfEmpty: boolean = false;
   private expanded_: boolean = true;
   private certificates_: SummaryCertInfo[] = [];
   private hasCerts_: boolean;
 
   override ready() {
     super.ready();
+
+    this.refreshCertificates();
+
+    if (!this.inSubpage) {
+      this.$.certs.classList.add('card');
+    }
+    if (this.inSubpage) {
+      this.$.listHeader.classList.add('subpage-padding');
+    }
+  }
+
+  private refreshCertificates() {
     CertificatesV2BrowserProxy.getInstance()
         .handler.getCertificates(this.certSource)
         .then((results: {certs: SummaryCertInfo[]}) => {
           this.certificates_ = results.certs;
         });
-
-    if (!this.inSubpage) {
-      this.$.certs.classList.add('card');
-    }
   }
 
   private onExportCertsClick_(e: Event) {
@@ -99,17 +134,37 @@ export class CertificateListV2Element extends CertificateListV2ElementBase {
     e.stopPropagation();
     CertificatesV2BrowserProxy.getInstance()
         .handler.importCertificate(this.certSource)
-        .then((value: {result: ImportResult|null}) => {
-          // TODO(crbug.com/40928765): on successful import, refresh the
-          // certificate list.
-          this.dispatchEvent(new CustomEvent(
-              'import-result',
-              {composed: true, bubbles: true, detail: value.result}));
-        });
+        .then(this.handleImportResult.bind(this));
+  }
+
+  private onImportAndBindCertClick_(e: Event) {
+    // Import button click shouldn't collapse the list as well.
+    e.stopPropagation();
+    CertificatesV2BrowserProxy.getInstance()
+        .handler.importAndBindCertificate(this.certSource)
+        .then(this.handleImportResult.bind(this));
+  }
+
+  private handleImportResult(value: {result: ImportResult|null}) {
+    if (value.result !== null && value.result.success !== undefined) {
+      // On successful import, refresh the certificate list.
+      this.refreshCertificates();
+    }
+    this.dispatchEvent(new CustomEvent(
+        'import-result',
+        {composed: true, bubbles: true, detail: value.result}));
   }
 
   private computeHasCerts_(): boolean {
     return this.certificates_.length > 0;
+  }
+
+  private computeHideEverything_(): boolean {
+    return this.hideIfEmpty && this.certificates_.length === 0;
+  }
+
+  private hideCollapseButton_(): boolean {
+    return this.noCollapse || !this.hasCerts_;
   }
 
   private hideExportButton_(): boolean {

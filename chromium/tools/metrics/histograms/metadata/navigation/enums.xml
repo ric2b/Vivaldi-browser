@@ -26,6 +26,27 @@ chromium-metrics-reviews@google.com.
 
 <enums>
 
+<enum name="AnimationAbortReason">
+  <int value="0" label="Render Widget Host Destroyed"/>
+  <int value="1" label="Main Commit On Subframe Transition"/>
+  <int value="2" label="New Commit In Primary Main Frame"/>
+  <int value="3" label="Cross Origin Redirect"/>
+  <int value="4" label="New Commit While Displaying Invoke Animation"/>
+  <int value="5" label="New Commit While Displaying Canceled Animation"/>
+  <int value="6" label="New Commit While Waiting For New Renderer To Draw"/>
+  <int value="7"
+      label="New Commit While Waiting For Content For Navigation Entry Shown"/>
+  <int value="8" label="New Commit While Displaying Cross Fade Animation"/>
+  <int value="9" label="New Commit While Waiting For Before Unload Response"/>
+  <int value="10" label="Multiple Navigation Requests Created"/>
+  <int value="11" label="Navigation Entry Deleted Before Commit"/>
+  <int value="12" label="Post Navigation First Frame Timeout"/>
+  <int value="13" label="Chained Back"/>
+  <int value="14" label="Detached From Window"/>
+  <int value="15" label="Root Window Visibility Changed"/>
+  <int value="16" label="Compositor Detached"/>
+</enum>
+
 <enum name="AutomaticBeaconOutcome">
   <int value="0" label="Success"/>
   <int value="1" label="No transient user activation"/>
@@ -241,6 +262,16 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Commit"/>
 </enum>
 
+<!-- LINT.IfChange(HistoryNavigationDirection) -->
+
+<enum name="HistoryNavigationDirection">
+  <int value="0" label="Back"/>
+  <int value="1" label="Forward"/>
+  <int value="2" label="Same entry (e.g. session restore)"/>
+</enum>
+
+<!-- LINT.ThenChange(//content/browser/renderer_host/back_forward_cache_metrics.h:HistoryNavigationDirection) -->
+
 <enum name="HistoryNavType">
   <int value="0" label="kMainFrame"/>
   <int value="1" label="kMainFrameAndSubframe"/>
@@ -381,6 +412,24 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//content/browser/renderer_host/navigation_throttle_runner.h:Event)-->
+
+<enum name="NavigationTransitionCacheHitOrMissReason">
+  <int value="0" label="Cache Hit"/>
+  <int value="1" label="Sent Screenshot Request"/>
+  <int value="2" label="Captured Empty Bitmap"/>
+  <int value="3" label="Cache Miss Subframe"/>
+  <int value="4" label="Cache Miss Evicted"/>
+  <int value="5" label="Cache Miss Purged Memory Pressure"/>
+  <int value="6" label="Cache Miss Cold Start"/>
+  <int value="7" label="Cache Miss Cloned Navigation Entry"/>
+  <int value="8" label="Cache Miss Embedded Pages"/>
+  <int value="9" label="Cache Miss CCNS"/>
+  <int value="10" label="Cache Miss Invisible"/>
+  <int value="11" label="Cache Miss Prefers Reduced Motion"/>
+  <int value="12" label="Cache Miss Screenshot Orientation"/>
+  <int value="13" label="Navigate away from a crashed page"/>
+  <int value="14" label="Navigate away from a crashed page (no early swap)"/>
+</enum>
 
 <enum name="NavigationWasServedFromCache">
   <int value="0" label="Navigation wasn't served from cache"/>
@@ -1558,6 +1607,8 @@ chromium-metrics-reviews@google.com.
   <int value="2145736075" label="pragma: value mismatch"/>
 </enum>
 
+<!-- LINT.IfChange(PrerenderActivationNavigationParamsMatch) -->
+
 <enum name="PrerenderActivationNavigationParamsMatch">
   <int value="0" label="kOk"/>
   <int value="1" label="kInitiatorFrameToken"/>
@@ -1585,6 +1636,8 @@ chromium-metrics-reviews@google.com.
   <int value="23" label="kReferrerPolicy (Obsolete)"/>
   <int value="24" label="kRequestDestination"/>
 </enum>
+
+<!-- LINT.ThenChange(//content/browser/preloading/prerender/prerender_host.h:ActivationNavigationParamsMatch) -->
 
 <enum name="PrerenderActivationTransitionMismatchType">
   <int value="0" label="Link"/>
@@ -1740,6 +1793,22 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Prerender unused"/>
   <int value="3" label="Prerender hit finished"/>
 </enum>
+
+<!-- LINT.IfChange(PrerenderWaitingForHeadersFinishedReason) -->
+
+<enum name="PrerenderWaitingForHeadersFinishedReason">
+  <int value="0" label="NoVarySearchHeaderReceived (deprecated)"/>
+  <int value="1" label="NoVarySearchHeaderNotReceived"/>
+  <int value="2" label="NoVarySearchHeaderParseFailed"/>
+  <int value="3" label="HostDestroyed"/>
+  <int value="4" label="TimeoutElapsed"/>
+  <int value="5" label="MaybeNavigationCancelled"/>
+  <int value="6" label="NoVarySearchHeaderReceivedAndMatched"/>
+  <int value="7" label="NoVarySearchHeaderReceivedButNotMatched"/>
+  <int value="8" label="NoVarySearchHeaderReceivedButDefaultValue"/>
+</enum>
+
+<!-- LINT.ThenChange(//content/browser/preloading/prerender/prerender_host.h:WaitingForHeadersFinishedReason) -->
 
 <enum name="RelatedActiveContentsSyncAccessInfo">
   <int value="0" label="kNoSyncAccess"/>

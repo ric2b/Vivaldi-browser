@@ -210,7 +210,6 @@ FrameTree::FrameTree(
                  navigator_delegate,
                  navigation_controller_delegate),
       type_(type),
-      focused_frame_tree_node_id_(FrameTreeNode::kFrameTreeNodeInvalidId),
       load_progress_(0.0),
       root_(*this,
             nullptr,
@@ -258,7 +257,7 @@ void FrameTree::MakeSpeculativeRVHCurrent() {
   speculative_render_view_host_.reset();
 }
 
-FrameTreeNode* FrameTree::FindByID(int frame_tree_node_id) {
+FrameTreeNode* FrameTree::FindByID(FrameTreeNodeId frame_tree_node_id) {
   for (FrameTreeNode* node : Nodes()) {
     if (node->frame_tree_node_id() == frame_tree_node_id)
       return node;
@@ -697,8 +696,7 @@ scoped_refptr<RenderViewHostImpl> FrameTree::CreateRenderViewHost(
           renderer_initiated_creation, std::move(main_browsing_context_state),
           create_case, frame_sink_id));
 
-  if (ShouldCreateNewHostForAllFrames() &&
-      create_case == CreateRenderViewHostCase::kSpeculative) {
+  if (create_case == CreateRenderViewHostCase::kSpeculative) {
     set_speculative_render_view_host(rvh->GetWeakPtr());
   } else {
     // Register non-speculative RenderViewHosts. If they are speculative, they
@@ -735,7 +733,31 @@ void FrameTree::RegisterRenderViewHost(RenderViewHostMapId id,
   TRACE_EVENT_INSTANT("navigation", "FrameTree::RegisterRenderViewHost",
                       ChromeTrackEvent::kRenderViewHost, *rvh);
   CHECK(!rvh->is_speculative());
-  CHECK(!base::Contains(render_view_host_map_, id));
+  if (base::Contains(render_view_host_map_, id)) {
+    // TODO(https://crbug.com/354382462): Remove crash keys once investigation
+    // is done.
+    SCOPED_CRASH_KEY_BOOL("rvh-double", "renderer_view_created",
+                          rvh->renderer_view_created());
+    SCOPED_CRASH_KEY_NUMBER("rvh-double", "mapped_rvh_main_id",
+                            render_view_host_map_[id]->main_frame_routing_id());
+    SCOPED_CRASH_KEY_NUMBER("rvh-double", "passed_rvh_main_id",
+                            rvh->main_frame_routing_id());
+    SCOPED_CRASH_KEY_NUMBER("rvh-double", "root_routing_id",
+                            root()->current_frame_host()->GetRoutingID());
+    SCOPED_CRASH_KEY_NUMBER(
+        "rvh-double", "map_rvh_ptr",
+        reinterpret_cast<size_t>(render_view_host_map_[id]));
+    SCOPED_CRASH_KEY_NUMBER(
+        "rvh-double", "map_rvh_bfcache",
+        render_view_host_map_[id]->is_in_back_forward_cache());
+    SCOPED_CRASH_KEY_NUMBER("rvh-double", "passed_rvh_ptr",
+                            reinterpret_cast<size_t>(rvh));
+    SCOPED_CRASH_KEY_NUMBER("rvh-double", "passed_rvh_bfcache",
+                            rvh->is_in_back_forward_cache());
+    SCOPED_CRASH_KEY_NUMBER("rvh-double", "frame_tree_primary", is_primary());
+    CHECK_EQ(rvh, render_view_host_map_[id]);
+    base::debug::DumpWithoutCrashing();
+  }
   render_view_host_map_[id] = rvh;
   rvh->set_is_registered_with_frame_tree(true);
 }
@@ -754,7 +776,7 @@ void FrameTree::UnregisterRenderViewHost(RenderViewHostMapId id,
 
 void FrameTree::FrameUnloading(FrameTreeNode* frame) {
   if (frame->frame_tree_node_id() == focused_frame_tree_node_id_)
-    focused_frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
+    focused_frame_tree_node_id_ = FrameTreeNodeId();
 
   // Ensure frames that are about to be deleted aren't visible from the other
   // processes anymore.
@@ -763,7 +785,7 @@ void FrameTree::FrameUnloading(FrameTreeNode* frame) {
 
 void FrameTree::FrameRemoved(FrameTreeNode* frame) {
   if (frame->frame_tree_node_id() == focused_frame_tree_node_id_)
-    focused_frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
+    focused_frame_tree_node_id_ = FrameTreeNodeId();
 }
 
 double FrameTree::GetLoadProgress() {
@@ -1031,6 +1053,23 @@ void FrameTree::FocusOuterFrameTrees() {
     }
     frame_tree_to_focus = &outer_node->frame_tree();
   }
+}
+
+void FrameTree::Discard() {
+  // A speculative pending-commit rfh should not be cancelled or deleted. In
+  // this case ignore the discard request and allow the navigation to complete
+  // as normal.
+  if (const auto* speculative_rfh =
+          root()->render_manager()->speculative_frame_host();
+      speculative_rfh && speculative_rfh->HasPendingCommitNavigation()) {
+    return;
+  }
+
+  root()->set_was_discarded();
+  root()->current_frame_host()->DiscardFrame();
+  NavigationControllerImpl& navigation_controller = controller();
+  navigation_controller.SetNeedsReload();
+  navigation_controller.GetBackForwardCache().Flush();
 }
 
 }  // namespace content

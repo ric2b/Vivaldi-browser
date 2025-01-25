@@ -12,7 +12,6 @@ class Browser;
 @protocol DisabledGridViewControllerDelegate;
 @class GridContainerViewController;
 @protocol GridToolbarsMutator;
-@protocol TabGridToolbarsMainTabGridDelegate;
 @class TabGroupsPanelMediator;
 @class TabGroupsPanelViewController;
 
@@ -28,8 +27,6 @@ class Browser;
         initWithBaseViewController:(UIViewController*)baseViewController
                     regularBrowser:(Browser*)regularBrowser
                    toolbarsMutator:(id<GridToolbarsMutator>)toolbarsMutator
-            toolbarTabGridDelegate:
-                (id<TabGridToolbarsMainTabGridDelegate>)toolbarTabGridDelegate
     disabledViewControllerDelegate:
         (id<DisabledGridViewControllerDelegate>)disabledViewControllerDelegate
     NS_DESIGNATED_INITIALIZER;
@@ -51,6 +48,13 @@ class Browser;
 // `gridViewController` or `disabledViewController`.
 @property(nonatomic, readonly, strong)
     GridContainerViewController* gridContainerViewController;
+
+// Updates the visible cells to make sure that the interval since creation is
+// updated.
+- (void)prepareForAppearance;
+
+// Stops all child coordinators.
+- (void)stopChildCoordinators;
 
 @end
 

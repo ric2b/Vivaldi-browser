@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Galat</translation>
 <translation id="1175364870820465910">&amp;Cetak...</translation>
 <translation id="1181037720776840403">Hapus</translation>
+<translation id="1184037892196730210">Tidak dapat menyiarkan layar</translation>
 <translation id="1187722533808055681">Bangun saat nganggur</translation>
 <translation id="122082903575839559">Algoritma Tanda Tangan Sertifikat</translation>
 <translation id="1221825588892235038">Khusus yang terpilih</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Nilai Bidang</translation>
 <translation id="2662876636500006917">Toko Web Chrome</translation>
 <translation id="2678063897982469759">Aktifkan ulang</translation>
-<translation id="2678100101831051676">Tidak dapat menyiarkan.</translation>
 <translation id="2719936478972253983">Kuki berikut diblokir</translation>
 <translation id="2721037002783622288">&amp;Telusuri <ph name="SEARCH_ENGINE" /> untuk gambar</translation>
 <translation id="2738771556149464852">Tidak Setelah</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Ekstensi ini mungkin sudah rusak.</translation>
 <translation id="3387614642886316601">Gunakan fitur periksa ejaan yang ditingkatkan</translation>
 <translation id="3390013585654699824">Detail aplikasi</translation>
-<translation id="3393582007140394275">Tidak dapat menyiarkan layar.</translation>
 <translation id="345693547134384690">Buka &amp;gambar di tab baru</translation>
 <translation id="3493881266323043047">Validitas</translation>
 <translation id="3511307672085573050">Salin Ala&amp;mat Tautan</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Simpan semua perubahan</translation>
 <translation id="6824564591481349393">Salin Alamat &amp;Email</translation>
 <translation id="6840155290835956714">Tanyakan sebelum mengirim</translation>
+<translation id="6878862640969460273">Lanskap</translation>
 <translation id="6886871292305414135">Buka tautan di &amp;tab baru</translation>
 <translation id="6892812721183419409">Buka Tautan sebagai <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikasi Latar Belakang: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Akses ditolak.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Periksa Ejaan Saat Mengetik</translation>
+<translation id="7359680654975233185">Tidak dapat menyiarkan tab</translation>
 <translation id="7385854874724088939">Ada yang salah saat mencetak. Periksa printer anda dan coba kembali.</translation>
 <translation id="7412226954991670867">Memori GPU</translation>
 <translation id="7421925624202799674">&amp;Lihat Sumber Halaman</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Izinkan situs menyimpan dan membaca data kuki</translation>
 <translation id="7663719505383602579">Penerima: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Dipasang oleh Administrator Anda</translation>
+<translation id="7685038817958445325">Tidak dapat menyiarkan</translation>
 <translation id="7685049629764448582">Memori JavaScript</translation>
 <translation id="7701869757853594372">Penangan PENGGUNA</translation>
 <translation id="7704305437604973648">Tugas</translation>
@@ -410,7 +412,6 @@ Berkas Kunci: <ph name="KEY_FILE" />
 Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk membuat versi baru ekstensi anda.</translation>
 <translation id="8004582292198964060">Peramban</translation>
 <translation id="8018313076035239964">Kontrol informasi apa yang dapat digunakan situs dan konten yang dapat ditampilkan kepada Anda</translation>
-<translation id="8032244173881942855">Tidak dapat menyiarkan tab.</translation>
 <translation id="8071432093239591881">Cetak sebagai gambar</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +467,6 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="9218430445555521422">Atur sebagai standar</translation>
 <translation id="93766956588638423">Perbaiki ekstensi</translation>
 <translation id="961012016278832836">Legasi Microsoft Edge</translation>
-<translation id="98515147261107953">Lanskap</translation>
 <translation id="994289308992179865">&amp;Ulang</translation>
 <translation id="998747458861718449">I&amp;nspeksi</translation>
 </translationbundle>

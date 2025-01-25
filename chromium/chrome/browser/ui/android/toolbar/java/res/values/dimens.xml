@@ -13,10 +13,6 @@ found in the LICENSE file.
     <dimen name="tab_strip_height">0dp</dimen>
     <dimen name="tab_strip_reserved_top_padding">0dp</dimen>
 
-    <!-- Negative vertical inset added to the search box bounds when modern is enabled. 4dp is added
-         to both the top and bottom bounds to bring the 48dp modern_toolbar_background_size to 56dp
-         (matches toolbar_height_no_shadow). -->
-    <dimen name="ntp_search_box_bounds_vertical_inset_modern">-4dp</dimen>
     <dimen name="ntp_search_box_height">64dp</dimen>
 
     <!-- Toolbar Phone - Optional toolbar button dimensions -->
@@ -28,6 +24,9 @@ found in the LICENSE file.
     <dimen name="toolbar_phone_optional_button_foreground_vertical_padding">16dp</dimen>
     <!-- Maximum width of optional button when expanded into an action chip. -->
     <dimen name="toolbar_phone_optional_button_action_chip_max_width">175dp</dimen>
+    <!-- Width of optional toolbar button when not expanded into an action chip -->
+    <dimen name="toolbar_phone_optional_button_collapsed_state_width">52dp</dimen>
+    <dimen name="toolbar_phone_optional_button_expanded_state_extra_width">12dp</dimen>
 
     <!-- Home Button Menu dimensions-->
     <dimen name="home_button_list_menu_width">222dp</dimen>

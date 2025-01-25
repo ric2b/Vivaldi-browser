@@ -4,9 +4,14 @@
 
 #include "chrome/browser/ui/tabs/tab_model.h"
 
+#include "base/check.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tabs/features.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -43,12 +48,15 @@ WEB_CONTENTS_USER_DATA_KEY_IMPL(TabLookupFromWebContents);
 }  // namespace
 
 TabModel::TabModel(std::unique_ptr<content::WebContents> contents,
-                   bool is_in_normal_window)
+                   TabStripModel* soon_to_be_owning_model)
     : contents_owned_(std::move(contents)),
       contents_(contents_owned_.get()),
-      is_in_normal_window_(is_in_normal_window) {
+      soon_to_be_owning_model_(soon_to_be_owning_model) {
   TabLookupFromWebContents::CreateForWebContents(contents_, this);
 
+  // TODO(https://crbug.com/362038317): Tab-helpers should be created in exactly
+  // one place, which is here.
+  TabHelpers::AttachTabHelpers(contents_);
   tab_features_ = TabFeatures::CreateTabFeatures();
 
   // Once tabs are pulled into a standalone module, TabFeatures and its
@@ -62,6 +70,7 @@ TabModel::~TabModel() {
 }
 
 void TabModel::OnAddedToModel(TabStripModel* owning_model) {
+  soon_to_be_owning_model_ = nullptr;
   CHECK(!owning_model_);
   CHECK(owning_model);
   owning_model_ = owning_model;
@@ -125,7 +134,7 @@ base::CallbackListSubscription TabModel::RegisterWillDiscardContents(
 }
 
 bool TabModel::IsInForeground() const {
-  return owning_model() && owning_model()->GetActiveTab() == this;
+  return GetModelForTabInterface()->GetActiveTab() == this;
 }
 
 base::CallbackListSubscription TabModel::RegisterDidEnterForeground(
@@ -152,15 +161,28 @@ std::unique_ptr<ScopedTabModalUI> TabModel::ShowModalUI() {
 }
 
 bool TabModel::IsInNormalWindow() const {
-  return is_in_normal_window_;
+  return GetModelForTabInterface()->delegate()->IsNormalWindow();
 }
 
 BrowserWindowInterface* TabModel::GetBrowserWindowInterface() {
-  return owning_model_->delegate()->GetBrowserWindowInterface();
+  return GetModelForTabInterface()->delegate()->GetBrowserWindowInterface();
 }
 
 tabs::TabFeatures* TabModel::GetTabFeatures() {
   return tab_features_.get();
+}
+
+uint32_t TabModel::GetTabHandle() {
+  return GetHandle().raw_value();
+}
+
+void TabModel::Close() {
+  auto* window_interface = GetBrowserWindowInterface();
+  auto* tab_strip = window_interface->GetTabStripModel();
+  CHECK(tab_strip);
+  int tab_idx = tab_strip->GetIndexOfTab(GetHandle());
+  CHECK(tab_idx != TabStripModel::kNoTab);
+  tab_strip->CloseWebContentsAt(tab_idx, TabCloseTypes::CLOSE_NONE);
 }
 
 void TabModel::OnTabStripModelChanged(
@@ -175,6 +197,11 @@ void TabModel::OnTabStripModelChanged(
     did_enter_foreground_callback_list_.Notify(this);
     return;
   }
+}
+
+TabStripModel* TabModel::GetModelForTabInterface() const {
+  CHECK(soon_to_be_owning_model_ || owning_model_);
+  return soon_to_be_owning_model_ ? soon_to_be_owning_model_ : owning_model_;
 }
 
 TabModel::ScopedTabModalUIImpl::ScopedTabModalUIImpl(TabModel* tab)
@@ -214,10 +241,31 @@ std::unique_ptr<content::WebContents> TabModel::DestroyAndTakeWebContents(
   return contents;
 }
 
+void TabModel::DestroyTabFeatures() {
+  tab_features_.reset();
+}
+
 // static
 TabInterface* TabInterface::GetFromContents(
     content::WebContents* web_contents) {
   return TabLookupFromWebContents::FromWebContents(web_contents)->model();
+}
+
+// static
+TabInterface* TabInterface::MaybeGetFromContents(
+    content::WebContents* web_contents) {
+  TabLookupFromWebContents* lookup =
+      TabLookupFromWebContents::FromWebContents(web_contents);
+  if (!lookup) {
+    return nullptr;
+  }
+  return lookup->model();
+}
+
+// static
+TabInterface* TabInterface::MaybeGetFromHandle(uint32_t handle_id) {
+  auto& helper = internal::HandleHelper<TabModel, int>::GetInstance();
+  return helper.LookupObject(handle_id);
 }
 
 }  // namespace tabs

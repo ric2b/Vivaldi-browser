@@ -23,7 +23,7 @@ pub struct DeType {
 
 impl DeType {
     /// A `const` equivalent to `From<u32>` since trait methods can't yet be const.
-    pub(crate) const fn const_from(value: u32) -> Self {
+    pub const fn const_from(value: u32) -> Self {
         Self { code: value }
     }
 

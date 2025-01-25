@@ -103,6 +103,26 @@ struct functor_traits<scalar_abs2_op<Scalar>> {
   enum { Cost = NumTraits<Scalar>::MulCost, PacketAccess = packet_traits<Scalar>::HasAbs2 };
 };
 
+template <typename Scalar, bool IsComplex = NumTraits<Scalar>::IsComplex>
+struct squared_norm_functor {
+  typedef Scalar result_type;
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Scalar operator()(const Scalar& a) const {
+    return Scalar(numext::real(a) * numext::real(a), numext::imag(a) * numext::imag(a));
+  }
+  template <typename Packet>
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE const Packet packetOp(const Packet& a) const {
+    return Packet(pmul(a.v, a.v));
+  }
+};
+template <typename Scalar>
+struct squared_norm_functor<Scalar, false> : scalar_abs2_op<Scalar> {};
+
+template <typename Scalar>
+struct functor_traits<squared_norm_functor<Scalar>> {
+  using Real = typename NumTraits<Scalar>::Real;
+  enum { Cost = NumTraits<Real>::MulCost, PacketAccess = packet_traits<Real>::HasMul };
+};
+
 /** \internal
  * \brief Template functor to compute the conjugate of a complex value
  *

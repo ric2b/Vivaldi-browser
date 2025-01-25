@@ -30,6 +30,7 @@ import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
+import org.jni_zero.CalledByNativeForTesting;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
@@ -43,8 +44,6 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.UnownedUserDataHost;
-import org.chromium.base.compat.ApiHelperForO;
-import org.chromium.base.compat.ApiHelperForOMR1;
 import org.chromium.ui.InsetObserver;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.display.DisplayAndroid;
@@ -181,6 +180,8 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     private final ObserverList<OnCloseContextMenuListener> mContextMenuCloseListeners =
             new ObserverList<>();
 
+    private ModalDialogManager mModalDialogManagerForTesting;
+
     /**
      * @param context The application {@link Context}.
      */
@@ -223,7 +224,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
                 && !Build.VERSION.RELEASE.equals("8.0.0")
                 && ContextUtils.activityFromContext(context) != null) {
             Configuration configuration = context.getResources().getConfiguration();
-            boolean isScreenWideColorGamut = ApiHelperForO.isScreenWideColorGamut(configuration);
+            boolean isScreenWideColorGamut = configuration.isScreenWideColorGamut();
             display.updateIsDisplayServerWideColorGamut(isScreenWideColorGamut);
         }
 
@@ -239,7 +240,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
                 && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
     }
 
-    @CalledByNative
+    @CalledByNativeForTesting
     private static long createForTesting() {
         WindowAndroid windowAndroid = new WindowAndroid(ContextUtils.getApplicationContext());
         // |windowAndroid.getNativePointer()| creates native WindowAndroid object
@@ -648,10 +649,27 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
 
     /**
      * Returns the ModalDialogManager to be used with this window.
+     *
      * @return a {@link ModalDialogManager} for this window, or null if there is none.
      */
     public @Nullable ModalDialogManager getModalDialogManager() {
-        return null;
+        // Will always be null except for some tests.
+        return mModalDialogManagerForTesting;
+    }
+
+    /** Set the ModalDialogManager for testing. */
+    @CalledByNativeForTesting
+    private void setModalDialogManagerForTesting(ModalDialogManager modalDialogManager) {
+        mModalDialogManagerForTesting = modalDialogManager;
+    }
+
+    @CalledByNative
+    private long getNativeModalDialogManagerBridge() {
+        ModalDialogManager manager = getModalDialogManager();
+        if (manager == null) {
+            return 0;
+        }
+        return manager.getOrCreateNativeBridge();
     }
 
     /**
@@ -737,13 +755,13 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false;
         Window window = getWindow();
         if (window == null) return false;
-        return ApiHelperForOMR1.isWideColorGamut(window);
+        return window.isWideColorGamut();
     }
 
     /**
      * Set the animation placeholder view, which we set to 'draw' during animations, such that
-     * animations aren't clipped by the SurfaceView 'hole'. This can be the SurfaceView itself
-     * or a view directly on top of it. This could be extended to many views if we ever need it.
+     * animations aren't clipped by the SurfaceView 'hole'. This can be the SurfaceView itself or a
+     * view directly on top of it. This could be extended to many views if we ever need it.
      */
     public void setAnimationPlaceholderView(View view) {
         mAnimationPlaceholderView = view;
@@ -934,7 +952,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
                 enabled
                         ? ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
                         : ActivityInfo.COLOR_MODE_DEFAULT;
-        ApiHelperForO.setColorMode(window, colorMode);
+        window.setColorMode(colorMode);
     }
 
     private void recomputeSupportedRefreshRates() {

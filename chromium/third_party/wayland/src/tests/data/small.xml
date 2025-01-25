@@ -49,10 +49,14 @@
 
     <event name="hey"/>
 
+    <event name="yo" since="2" deprecated-since="3"/>
+
     <enum name="foo">
 	<entry name="first" value="0" summary="this is the first"/>
 	<entry name="second" value="1" summary="this is the second"/>
 	<entry name="third" value="2" since="2" summary="this is the third"/>
+	<entry name="negative" value="-1" since="2" summary="this is a negative value"/>
+	<entry name="deprecated" value="3" since="2" deprecated-since="3" summary="this is a deprecated value"/>
     </enum>
   </interface>
 </protocol>

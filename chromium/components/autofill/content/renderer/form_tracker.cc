@@ -236,7 +236,6 @@ void FormTracker::ElementDisappeared(const blink::WebElement& element) {
 
 void FormTracker::TrackAutofilledElement(const WebFormControlElement& element) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
-  DCHECK(element.IsAutofilled());
   if (!form_util::GetFormControlByRendererId(
           form_util::GetFieldRendererId(element))) {
     return;
@@ -295,7 +294,9 @@ void FormTracker::FormControlDidChangeImpl(
 
 void FormTracker::DidCommitProvisionalLoad(ui::PageTransition transition) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(form_tracker_sequence_checker_);
-  ResetLastInteractedElements();
+  if (!base::FeatureList::IsEnabled(features::kAutofillFixFormTracking)) {
+    ResetLastInteractedElements();
+  }
 }
 
 void FormTracker::DidFinishSameDocumentNavigation() {
@@ -342,7 +343,8 @@ void FormTracker::WillDetach(blink::DetachReason detach_reason) {
     FireInferredFormSubmission(SubmissionSource::FRAME_DETACHED);
   }
   if (base::FeatureList::IsEnabled(
-          features::kAutofillUnifyAndFixFormTracking)) {
+          features::kAutofillUnifyAndFixFormTracking) &&
+      !base::FeatureList::IsEnabled(features::kAutofillFixFormTracking)) {
     // TODO(crbug.com/40281981): Figure out if this is still needed, and
     // document the reason, otherwise remove.
     ResetLastInteractedElements();
@@ -396,7 +398,9 @@ void FormTracker::FireFormSubmitted(const blink::WebFormElement& form) {
                                 SubmissionSource::FORM_SUBMISSION);
   for (auto& observer : observers_)
     observer.OnFormSubmitted(form);
-  ResetLastInteractedElements();
+  if (!base::FeatureList::IsEnabled(features::kAutofillFixFormTracking)) {
+    ResetLastInteractedElements();
+  }
 }
 
 void FormTracker::FireProbablyFormSubmitted() {
@@ -404,7 +408,9 @@ void FormTracker::FireProbablyFormSubmitted() {
                                 SubmissionSource::PROBABLY_FORM_SUBMITTED);
   for (auto& observer : observers_)
     observer.OnProbablyFormSubmitted();
-  ResetLastInteractedElements();
+  if (!base::FeatureList::IsEnabled(features::kAutofillFixFormTracking)) {
+    ResetLastInteractedElements();
+  }
 }
 
 void FormTracker::FireInferredFormSubmission(SubmissionSource source) {
@@ -412,7 +418,12 @@ void FormTracker::FireInferredFormSubmission(SubmissionSource source) {
   base::UmaHistogramEnumeration(kSubmissionSourceHistogram, source);
   for (auto& observer : observers_)
     observer.OnInferredFormSubmission(source);
-  ResetLastInteractedElements();
+  if (!base::FeatureList::IsEnabled(features::kAutofillFixFormTracking) &&
+      (source != SubmissionSource::DOM_MUTATION_AFTER_AUTOFILL ||
+       !base::FeatureList::IsEnabled(
+           features::kAutofillAcceptDomMutationAfterAutofillSubmission))) {
+    ResetLastInteractedElements();
+  }
 }
 
 void FormTracker::FireSubmissionIfFormDisappear(SubmissionSource source) {
@@ -431,8 +442,9 @@ bool FormTracker::CanInferFormSubmitted() {
     WebFormElement last_interacted_form = last_interacted_.form.GetForm();
     // Infer submission if the form was removed or all its elements are hidden.
     return !last_interacted_form ||
-           base::ranges::none_of(last_interacted_form.GetFormControlElements(),
-                                 &form_util::IsWebElementFocusableForAutofill);
+           std::ranges::none_of(
+               last_interacted_form.GetFormControlElements(),  // nocheck
+               &form_util::IsWebElementFocusableForAutofill);
   }
   if (last_interacted_.formless_element.GetId()) {
     WebFormControlElement last_interacted_formless_element =

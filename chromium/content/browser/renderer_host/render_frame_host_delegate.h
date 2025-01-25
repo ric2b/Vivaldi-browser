@@ -512,6 +512,17 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void OnFrameAudioStateChanged(RenderFrameHostImpl* host,
                                         bool is_audible) {}
 
+  // Notifies observers if a remote subframe's intersection with the viewport
+  // has changed.
+  //
+  // Note: This is only called for remote frames. If you only care about if the
+  // frame intersects or not with the viewport, use OnFrameVisibilityChanged()
+  // below, as it is called for all frames.
+  virtual void OnRemoteSubframeViewportIntersectionStateChanged(
+      RenderFrameHostImpl* host,
+      const blink::mojom::ViewportIntersectionState&
+          viewport_intersection_state) {}
+
   // Notifies observers that the frame's visibility has changed.
   virtual void OnFrameVisibilityChanged(
       RenderFrameHostImpl* host,
@@ -723,8 +734,23 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void DraggableRegionsChanged(
       const std::vector<blink::mojom::DraggableRegionPtr>& regions) {}
 
-  // Whether this window was initially opened as a new popup.
+  // Whether the containing window was initially opened as a new popup.
   virtual bool IsPopup() const;
+
+  // If the containing window was opened as a new partitioned popin.
+  // See https://explainers-by-googlers.github.io/partitioned-popins/
+  virtual bool IsPartitionedPopin() const;
+
+  // If this window was opened as a new partitioned popin this will be the
+  // frame of the opener. This will only have a value if `is_popup_` is true.
+  // See https://explainers-by-googlers.github.io/partitioned-popins/
+  virtual RenderFrameHostImpl* PartitionedPopinOpener() const;
+
+  // Each window can have at most one open partitioned popin, and this will be a
+  // pointer to it. If this is set `PartitionedPopinOpener` must return null as
+  // no popin can open a popin.
+  // See https://explainers-by-googlers.github.io/partitioned-popins/
+  virtual WebContents* OpenedPartitionedPopin() const;
 
  protected:
   virtual ~RenderFrameHostDelegate() = default;

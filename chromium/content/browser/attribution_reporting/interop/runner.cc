@@ -44,6 +44,7 @@
 #include "base/types/expected_macros.h"
 #include "base/values.h"
 #include "components/aggregation_service/aggregation_coordinator_utils.h"
+#include "components/attribution_reporting/attribution_scopes_data.h"
 #include "components/attribution_reporting/eligibility.h"
 #include "components/attribution_reporting/event_level_epsilon.h"
 #include "components/attribution_reporting/features.h"
@@ -280,12 +281,14 @@ class ControllableStorageDelegate : public AttributionResolverDelegateImpl {
   GetRandomizedResponseResult GetRandomizedResponse(
       const attribution_reporting::mojom::SourceType source_type,
       const attribution_reporting::TriggerSpecs& trigger_specs,
-      const attribution_reporting::EventLevelEpsilon epsilon) override {
+      const attribution_reporting::EventLevelEpsilon epsilon,
+      const std::optional<attribution_reporting::AttributionScopesData>&
+          scopes_data) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     ASSIGN_OR_RETURN(auto response_data,
                      AttributionResolverDelegateImpl::GetRandomizedResponse(
-                         source_type, trigger_specs, epsilon));
+                         source_type, trigger_specs, epsilon, scopes_data));
 
     auto it = randomized_responses_.find(base::Time::Now());
     if (it == randomized_responses_.end()) {
@@ -323,8 +326,9 @@ class ControllableStorageDelegate : public AttributionResolverDelegateImpl {
 
   base::flat_map<base::Time, RandomizedResponse> randomized_responses_
       GUARDED_BY_CONTEXT(sequence_checker_);
+
   base::flat_map<base::Time, base::flat_set<int>>
-      null_aggregatable_reports_days_;
+      null_aggregatable_reports_days_ GUARDED_BY_CONTEXT(sequence_checker_);
 };
 
 void Handle(const AttributionSimulationEvent::StartRequest& event,
@@ -437,6 +441,11 @@ RunAttributionInteropSimulation(
             kAttributionReportingAggregatableFilteringIds);
     enabled_features.emplace_back(
         kPrivacySandboxAggregationServiceFilteringIds);
+  }
+
+  if (run.config.needs_attribution_scopes) {
+    enabled_features.emplace_back(
+        attribution_reporting::features::kAttributionScopes);
   }
 
   base::test::ScopedFeatureList scoped_feature_list;

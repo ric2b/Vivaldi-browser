@@ -35,6 +35,7 @@ const CGFloat vStickyToolbarCollapsedAlpha = 0.0;
 
 NSString* vToolbarPanelButtonIcon = @"toolbar_panel";
 NSString* vToolbarSearchButtonIcon = @"toolbar_search";
+NSString* vToolbarHomeButtonIcon = @"toolbar_home";
 NSString* vToolbarForwardButtonIcon = @"toolbar_forward";
 NSString* vToolbarBackButtonIcon = @"toolbar_back";
 NSString* vToolbarTabSwitcherButtonIcon = @"toolbar_switcher";

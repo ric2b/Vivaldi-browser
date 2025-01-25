@@ -1,38 +1,66 @@
 # Copyright 2024 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-group("imagesets") {
-  deps = [
-    ":supporter",
-    ":patron",
-    ":advocate",
-  ]
-}
-
-imageset("supporter") {
+bundle_data_xcassets("sync_settings_assets") {
+  catalog = "SyncSettingsAssets.xcassets"
   sources = [
-    "supporter.imageset/Contents.json",
-    "supporter.imageset/supporter.png",
-    "supporter.imageset/supporter@2x.png",
-    "supporter.imageset/supporter@3x.png"
-  ]
-}
+    # supporter
+    "SyncSettingsAssets.xcassets/supporter.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/supporter.imageset/supporter.png",
+    "SyncSettingsAssets.xcassets/supporter.imageset/supporter@2x.png",
+    "SyncSettingsAssets.xcassets/supporter.imageset/supporter@3x.png",
 
-imageset("patron") {
-  sources = [
-    "patron.imageset/Contents.json",
-    "patron.imageset/patron.png",
-    "patron.imageset/patron@2x.png",
-    "patron.imageset/patron@3x.png"
-  ]
-}
+    # patron
+    "SyncSettingsAssets.xcassets/patron.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/patron.imageset/patron.png",
+    "SyncSettingsAssets.xcassets/patron.imageset/patron@2x.png",
+    "SyncSettingsAssets.xcassets/patron.imageset/patron@3x.png",
 
-imageset("advocate") {
-  sources = [
-    "advocate.imageset/Contents.json",
-    "advocate.imageset/advocate.png",
-    "advocate.imageset/advocate@2x.png",
-    "advocate.imageset/advocate@3x.png"
+    # advocate
+    "SyncSettingsAssets.xcassets/advocate.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/advocate.imageset/advocate.png",
+    "SyncSettingsAssets.xcassets/advocate.imageset/advocate@2x.png",
+    "SyncSettingsAssets.xcassets/advocate.imageset/advocate@3x.png",
+
+    # blue_vivaldi_icon
+    "SyncSettingsAssets.xcassets/blue_vivaldi_icon.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/blue_vivaldi_icon.imageset/blue_vivaldi_icon.pdf",
+
+    # sync_autofill
+    "SyncSettingsAssets.xcassets/sync_autofill.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_autofill.imageset/sync_autofill.pdf",
+
+    # sync_bookmarks
+    "SyncSettingsAssets.xcassets/sync_bookmarks.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_bookmarks.imageset/sync_bookmarks.pdf",
+
+    # sync_extensions
+    "SyncSettingsAssets.xcassets/sync_extensions.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_extensions.imageset/sync_extensions.pdf",
+
+    # sync_history
+    "SyncSettingsAssets.xcassets/sync_history.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_history.imageset/sync_history.pdf",
+
+    # sync_notes
+    "SyncSettingsAssets.xcassets/sync_notes.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_notes.imageset/sync_notes.pdf",
+
+    # sync_passwords
+    "SyncSettingsAssets.xcassets/sync_passwords.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_passwords.imageset/sync_passwords.pdf",
+
+    # sync_readinglist
+    "SyncSettingsAssets.xcassets/sync_readinglist.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_readinglist.imageset/sync_readinglist.pdf",
+
+    # sync_settings
+    "SyncSettingsAssets.xcassets/sync_settings.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_settings.imageset/sync_settings.pdf",
+
+    # sync_tabs
+    "SyncSettingsAssets.xcassets/sync_tabs.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_tabs.imageset/sync_tabs.pdf",
   ]
 }

@@ -72,7 +72,7 @@ export class BlockedURLsPane extends UI.Widget.VBox implements
 
     this.manager = SDK.NetworkManager.MultitargetNetworkManager.instance();
     this.manager.addEventListener(
-        SDK.NetworkManager.MultitargetNetworkManager.Events.BlockedPatternsChanged, this.update, this);
+        SDK.NetworkManager.MultitargetNetworkManager.Events.BLOCKED_PATTERNS_CHANGED, this.update, this);
 
     this.toolbar = new UI.Toolbar.Toolbar('', this.contentElement);
     this.enabledCheckbox = new UI.Toolbar.ToolbarCheckbox(
@@ -174,9 +174,9 @@ export class BlockedURLsPane extends UI.Widget.VBox implements
     const url = editor.control('url').value as Platform.DevToolsPath.UrlString;
     const patterns = this.manager.blockedPatterns();
     if (isNew) {
-      patterns.push({enabled: true, url: url});
+      patterns.push({enabled: true, url});
     } else {
-      patterns.splice(patterns.indexOf(item), 1, {enabled: true, url: url});
+      patterns.splice(patterns.indexOf(item), 1, {enabled: true, url});
     }
 
     this.manager.setBlockedPatterns(patterns);

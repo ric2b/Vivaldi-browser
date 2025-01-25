@@ -193,6 +193,9 @@ public class PageInfoHistoryController
     @Override
     public void onItemClicked(HistoryItem item) {
         mMainController.recordAction(PageInfoAction.PAGE_INFO_HISTORY_ENTRY_CLICKED);
+        // Vivaldi
+        if (ChromePageInfo.getPopupInstance() != null)
+            ChromePageInfo.getPopupInstance().dismiss();
         return;
     }
 

@@ -14,15 +14,18 @@ namespace {
 MATCHER_P(IsOkAndEquals, config, "") {
   const absl::StatusOr<Configuration>& other = arg;
   return other.ok() && config.corpus_database == other->corpus_database &&
+         config.stats_root == other->stats_root &&
          config.binary_identifier == other->binary_identifier &&
          config.fuzz_tests == other->fuzz_tests &&
+         config.fuzz_tests_in_current_shard ==
+             other->fuzz_tests_in_current_shard &&
          config.reproduce_findings_as_separate_tests ==
              other->reproduce_findings_as_separate_tests &&
-         config.replay_coverage_inputs == other->replay_coverage_inputs &&
          config.stack_limit == other->stack_limit &&
          config.rss_limit == other->rss_limit &&
          config.time_limit_per_input == other->time_limit_per_input &&
-         config.time_limit_per_test == other->time_limit_per_test &&
+         config.time_limit == other->time_limit &&
+         config.time_budget_type == other->time_budget_type &&
          config.crashing_input_to_reproduce ==
              other->crashing_input_to_reproduce &&
          config.reproduction_command_template ==
@@ -32,14 +35,16 @@ MATCHER_P(IsOkAndEquals, config, "") {
 TEST(ConfigurationTest,
      DeserializeYieldsSerializedConfigurationWithoutOptionalValues) {
   Configuration configuration{"corpus_database",
+                              "stats_root",
                               "binary_identifier",
                               /*fuzz_tests=*/{},
+                              /*fuzz_tests_in_current_shard=*/{},
                               /*reproduce_findings_as_separate_tests=*/true,
-                              /*replay_coverage_inputs=*/false,
                               /*stack_limit=*/100,
                               /*rss_limit=*/200,
                               /*time_limit_per_input=*/absl::Seconds(42),
-                              /*time_limit_per_test=*/absl::Minutes(42),
+                              /*time_limit=*/absl::Minutes(42),
+                              /*time_budget_type=*/TimeBudgetType::kPerTest,
                               /*crashing_input_to_reproduce=*/std::nullopt,
                               /*reproduction_command_template=*/std::nullopt};
 
@@ -50,14 +55,16 @@ TEST(ConfigurationTest,
 TEST(ConfigurationTest,
      DeserializeYieldsSerializedConfigurationWithOptionalValues) {
   Configuration configuration{"corpus_database",
+                              "stats_root",
                               "binary_identifier",
                               {"FuzzTest1", "FuzzTest2"},
+                              {"FuzzTest1"},
                               /*reproduce_findings_as_separate_tests=*/true,
-                              /*replay_coverage_inputs=*/false,
                               /*stack_limit=*/100,
                               /*rss_limit=*/200,
                               /*time_limit_per_input=*/absl::Seconds(42),
-                              /*time_limit_per_test=*/absl::Minutes(42),
+                              /*time_limit=*/absl::Minutes(42),
+                              /*time_budget_type=*/TimeBudgetType::kPerTest,
                               "crashing_input_to_reproduce",
                               "reproduction_command_template"};
 

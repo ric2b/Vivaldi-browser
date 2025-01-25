@@ -17,7 +17,6 @@ source_set("native_message_host_origins") {
 source_set("drivefs") {
   deps = [
     "//base",
-    "//chrome/browser/extensions",
     "//chrome/browser/profiles:profile",
     "//chromeos/components/drivefs/mojom",
     "//components/drive",
@@ -28,20 +27,15 @@ source_set("drivefs") {
     "//mojo/public/cpp/bindings",
   ]
 
-  public_deps = [ ":native_message_host_origins" ]
+  public_deps = [
+    ":native_message_host_origins",
+    "//chrome/browser:browser_public_dependencies",
+  ]
+
   sources = [
     "drivefs_native_message_host.cc",
     "drivefs_native_message_host.h",
   ]
-
-  if (is_chromeos_ash) {
-    # TODO(crbug.com/40251081): Remove these deps. Needed only to allow circular includes.
-    deps += [ "//chrome/browser/ash/extensions/file_manager" ]
-
-    # TODO(crbug.com/40251079): Remove circular dependencies.
-    allow_circular_includes_from =
-        [ "//chrome/browser/ash/extensions/file_manager" ]
-  }
 }
 
 source_set("unit_tests") {

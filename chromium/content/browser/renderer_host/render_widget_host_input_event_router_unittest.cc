@@ -85,7 +85,8 @@ class StubHitTestQuery : public viz::HitTestQuery {
  public:
   StubHitTestQuery(RenderWidgetHostViewBase* hittest_result,
                    bool query_renderer)
-      : hittest_result_(hittest_result->GetWeakPtr()),
+      : HitTestQuery(std::nullopt),
+        hittest_result_(hittest_result->GetWeakPtr()),
         query_renderer_(query_renderer) {}
   ~StubHitTestQuery() override = default;
 
@@ -1632,12 +1633,7 @@ TEST_P(DelegatedInkPointTest, IgnoreEnterAndExitEvents) {
 
 // This test confirms that points can be forwarded when using delegated ink in
 // a child frame, such as an OOPIF.
-#if BUILDFLAG(IS_LINUX)
-#define MAYBE_ForwardPointsToChildFrame DISABLED_ForwardPointsToChildFrame
-#else
-#define MAYBE_ForwardPointsToChildFrame ForwardPointsToChildFrame
-#endif
-TEST_P(DelegatedInkPointTest, MAYBE_ForwardPointsToChildFrame) {
+TEST_P(DelegatedInkPointTest, ForwardPointsToChildFrame) {
   // Make the child frame, set the delegated ink flag on it, give it a
   // compositor, and set it as the hit test result so that the input router
   // sends points to it.

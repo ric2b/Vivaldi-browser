@@ -633,11 +633,13 @@ class PinSetupScreenTester extends ScreenElementApi {
 class EnrollmentSignInStep extends PolymerElementApi {
   private signInFrame: PolymerElementApi;
   private nextButton: PolymerElementApi;
+  private backButton: PolymerElementApi;
 
   constructor(parent: ScreenElementApi) {
     super(parent, '#step-signin');
     this.signInFrame = new PolymerElementApi(this, '#signin-frame');
     this.nextButton = new PolymerElementApi(this, '#primary-action-button');
+    this.backButton = new PolymerElementApi(this, '#signin-back-button');
   }
 
   /**
@@ -1440,6 +1442,21 @@ class PersonalizedRecommendAppsScreenTester extends ScreenElementApi {
   }
 }
 
+class SplitModifierKeyboardInfoScreenTester extends ScreenElementApi {
+  constructor() {
+    super('split-modifier-keyboard-info');
+  }
+
+  override shouldSkip(): boolean {
+    return loadTimeData.getBoolean(
+        'testapi_shouldSkipSplitModifierKeyboardInfo');
+  }
+
+  isReadyForTesting(): boolean {
+    return this.isVisible();
+  }
+}
+
 export class OobeApiProvider {
   private screens: Record<string, ScreenElementApi>;
   private metricsClientID: string;
@@ -1504,6 +1521,8 @@ export class OobeApiProvider {
       DeviceUseCaseScreen: new DeviceUseCaseScreenTester(),
       PersonalizedRecommendAppsScreen:
           new PersonalizedRecommendAppsScreenTester(),
+      SplitModifierKeyboardInfoScreen:
+          new SplitModifierKeyboardInfoScreenTester(),
     };
 
     this.loginWithPin = function(username: string, pin: string): void {

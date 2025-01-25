@@ -8,10 +8,8 @@
 -org.chromium.chrome.browser.searchwidget.SearchActivityTest.*
 
 # crbug.com/350394860
--org.chromium.chrome.browser.customtabs.CustomTabActivityIncognitoTest.ensureAddCustomTopMenuItemHasNoEffect_ForIncognitoCCT__EphemeralTab
--org.chromium.chrome.browser.customtabs.CustomTabActivityIncognitoTest.ensureAddCustomTopMenuItemHasNoEffect_ForIncognitoCCT__IncognitoTab
--org.chromium.chrome.browser.customtabs.CustomTabActivityIncognitoTest.ensureAddRemoteViewsHasNoEffect__EphemeralTab
--org.chromium.chrome.browser.customtabs.CustomTabActivityIncognitoTest.ensureAddRemoteViewsHasNoEffect__IncognitoTab
+-org.chromium.chrome.browser.customtabs.CustomTabActivityIncognitoTest.ensureAddCustomTopMenuItemHasNoEffect
+-org.chromium.chrome.browser.customtabs.CustomTabActivityIncognitoTest.ensureAddRemoteViewsHasNoEffect
 -org.chromium.chrome.browser.customtabs.CustomTabActivityRenderTest.testCCTToolbarWithCustomCloseButtonAndMaxTopActionItems__HTTP
 -org.chromium.chrome.browser.customtabs.CustomTabActivityRenderTest.testCCTToolbarWithCustomCloseButtonAndMaxTopActionItems__HTTPS
 -org.chromium.chrome.browser.customtabs.CustomTabActivityRenderTest.testCCTToolbarWithDefaultCloseButtonAndMaxTopActionItems__HTTP
@@ -30,11 +28,6 @@
 -org.chromium.chrome.browser.TabsOpenedFromExternalAppTest.testNoNewTabForSameApp
 -org.chromium.chrome.browser.TabsOpenedFromExternalAppTest.testNoNewTabForSameAppOnStart
 
-# crbug.com/351019207
--org.chromium.chrome.browser.omnibox.UrlBarTest.testAutocompletionChangesTriggerCorrectSuggestions
--org.chromium.chrome.browser.omnibox.UrlBarTest.testAutocorrectionChangesTriggerCorrectSuggestions
--org.chromium.chrome.browser.omnibox.UrlBarTest.testDelayedCompositionCorrectedWithAutocomplete
-
 # crbug.com/351025215
 -org.chromium.chrome.browser.share.share_sheet.ShareSheetTest.nothingFromDefaultRankingAvailable
 
@@ -44,8 +37,10 @@
 # crbug.com/351026514
 -org.chromium.chrome.browser.gsa.GSAAccountChangeListenerTest.testReceivesBroadcastIntents
 
-# crbug.com/343800065
--org.chromium.chrome.browser.signin.SigninFirstRunFragmentTest.testContinueButtonWithChildAccountWithNonDisplayableAccountEmail_replaceSyncWithSigninPromosEnabled
--org.chromium.chrome.browser.signin.SigninFirstRunFragmentTest.testContinueButtonWithChildAccount_replaceSyncWithSigninPromosEnabled
--org.chromium.chrome.browser.signin.SigninFirstRunFragmentTest.testFragmentSigninWhenAddedAccountIsNotYetAvailable
--org.chromium.chrome.browser.signin.SigninFirstRunFragmentTest.testSigninWithDefaultAccount
+# crbug.com/326040498
+-org.chromium.chrome.browser.sync.ManageSyncSettingsTest.testSigninSettingsBatchUploadEntryDescriptionOther
+-org.chromium.chrome.browser.sync.ManageSyncSettingsTest.testSigninSettingsBatchUploadEntryDescriptionPassword
+-org.chromium.chrome.browser.sync.ManageSyncSettingsTest.testSigninSettingsBatchUploadEntryDescriptionPasswordAndOther
+
+# crbug.com/362792693
+-org.chromium.chrome.browser.permissions.GeolocationTest.testGeolocationWatchDialog

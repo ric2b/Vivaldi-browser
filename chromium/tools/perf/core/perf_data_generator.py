@@ -54,6 +54,9 @@ from telemetry import decorators
 #           # Arguments to pass to the test suite as a list of strings.
 #           'extra_args': ['--arg1', '--arg2', ...],
 #
+#           # Arguments to be removed from the test suite (as a list of strings).
+#           'remove_args': ['--arg1', '--arg2', ...],
+#
 #           # Name of the isolate to run as a string.
 #           'isolate': 'isolate_name',
 #
@@ -98,8 +101,6 @@ class TEST_TYPES(object):
 # The perf data will be handled on a separated 'processor' VM.
 # This list will be removed or replace by an opt-out list.
 LIGHTWEIGHT_TESTERS = [
-    'android-pixel2-perf',
-    'android-pixel2_webview-perf',
     'linux-perf',
     'win-10-perf',
     'win-10_laptop_low_end-perf',
@@ -109,10 +110,7 @@ LIGHTWEIGHT_TESTERS = [
 ]
 
 # This is an opt-in list for builders which uses dynamic sharding.
-DYNAMIC_SHARDING_TESTERS = [
-    'android-pixel2-perf', 'android-pixel2-perf-fyi',
-    'android-pixel2-perf-calibration', 'linux-perf-calibration'
-]
+DYNAMIC_SHARDING_TESTERS = ['linux-perf-calibration']
 
 CALIBRATION_BUILDERS = {
     'linux-perf-calibration': {
@@ -133,21 +131,6 @@ CALIBRATION_BUILDERS = {
             'synthetic_product_name': 'PowerEdge R230 (Dell Inc.)'
         },
     },
-    'android-pixel2-perf-calibration': {
-        'tests': [{
-            'isolate':
-            'performance_test_suite_android_clank_monochrome_64_32_bundle',
-        }],
-        'platform':
-        'android-chrome-64-bundle',
-        'dimension': {
-            'pool': 'chrome.tests.perf',
-            'os': 'Android',
-            'device_type': 'walleye',
-            'device_os': 'OPM1.171019.021',
-            'device_os_flavor': 'google',
-        },
-    },
 }
 
 FYI_BUILDERS = {
@@ -160,21 +143,6 @@ FYI_BUILDERS = {
             'system_webview_apk',
             'system_webview_shell_apk',
         ],
-    },
-    'android-pixel2-perf-fyi': {
-        'tests': [{
-            'isolate':
-            'performance_test_suite_android_clank_monochrome_64_32_bundle',
-        }],
-        'platform':
-        'android-chrome-64-bundle',
-        'dimension': {
-            'pool': 'chrome.tests.perf-fyi',
-            'os': 'Android',
-            'device_type': 'walleye',
-            'device_os': 'OPM1.171019.021',
-            'device_os_flavor': 'google',
-        },
     },
     'android_arm64-cfi-builder-perf-fyi': {
         'additional_compile_targets': [
@@ -422,6 +390,10 @@ BUILDERS = {
         },
         'perf_trigger': False,
     },
+    'android_arm64_high_end-builder-perf': {
+        'additional_compile_targets': ['trichrome_google_64_32_minimal_apks'],
+        'pinpoint_additional_compile_targets': [],
+    },
     'linux-builder-perf': {
         'additional_compile_targets': [
             'chromedriver_group',
@@ -534,62 +506,6 @@ BUILDERS = {
         },
         'perf_trigger': False,
     },
-    'android-pixel2_webview-perf': {
-        'tests': [{
-            'isolate': 'performance_webview_test_suite',
-        }],
-        'platform': 'android-webview-google',
-        'dimension': {
-            'pool': 'chrome.tests.perf-webview',
-            'os': 'Android',
-            'device_type': 'walleye',
-            'device_os': 'OPM1.171019.021',
-            'device_os_flavor': 'google',
-        },
-    },
-    'android-pixel2_webview-perf-pgo': {
-        'tests': [{
-            'isolate': 'performance_webview_test_suite',
-        }],
-        'platform': 'android-webview-google',
-        'dimension': {
-            'pool': 'chrome.tests.perf-webview',
-            'os': 'Android',
-            'device_type': 'walleye',
-            'device_os': 'OPM1.171019.021',
-            'device_os_flavor': 'google',
-        },
-    },
-    'android-pixel2-perf': {
-        'tests': [{
-            'isolate':
-            'performance_test_suite_android_clank_monochrome_64_32_bundle',
-        }],
-        'platform':
-        'android-chrome-64-bundle',
-        'dimension': {
-            'pool': 'chrome.tests.perf',
-            'os': 'Android',
-            'device_type': 'walleye',
-            'device_os': 'OPM1.171019.021',
-            'device_os_flavor': 'google',
-        },
-    },
-    'android-pixel2-perf-pgo': {
-        'tests': [{
-            'isolate':
-            'performance_test_suite_android_clank_monochrome_64_32_bundle',
-        }],
-        'platform':
-        'android-chrome-64-bundle',
-        'dimension': {
-            'pool': 'chrome.tests.perf',
-            'os': 'Android',
-            'device_type': 'walleye',
-            'device_os': 'OPM1.171019.021',
-            'device_os_flavor': 'google',
-        },
-    },
     'android-pixel4_webview-perf': {
         'tests': [{
             'isolate': 'performance_webview_test_suite',
@@ -652,6 +568,8 @@ BUILDERS = {
         'tests': [{
             'isolate':
             'performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle',
+            'extra_args': ['--benchmark-max-runs=3'],
+            'remove_args': ['--ignore-benchmark-exit-code'],
         }],
         'platform':
         'android-trichrome-chrome-google-64-32-bundle',
@@ -805,9 +723,9 @@ BUILDERS = {
             # version ever changes or becomes inconsistent. It is important
             # that bots are homogeneous. See crbug.com/988045 for history.
             'os':
-            'Windows-10',
+            'Windows-10-19045',
             'gpu':
-            '8086:1616',
+            '8086:1616-20.19.15.5171',
             'synthetic_product_name':
             'HP Laptop 15-bs1xx [Type1ProductConfigId] (HP)'
         },
@@ -1085,24 +1003,6 @@ BUILDERS = {
             'pool': 'chrome.tests.perf',
         },
     },
-    'mac-14-m1-pro-perf': {
-        'tests': [
-            {
-                'isolate': 'performance_test_suite',
-                'extra_args': [
-                    '--assert-gpu-compositing',
-                ],
-            },
-        ],
-        'platform':
-        'mac',
-        'dimension': {
-            'cpu': 'arm',
-            'mac_model': 'MacBookPro18,3',
-            'os': 'Mac-14',
-            'pool': 'chrome.tests.perf',
-        },
-    },
     'mac-m2-pro-perf': {
         'tests': [
             {
@@ -1248,14 +1148,6 @@ BUILDERS = {
         'platform': 'linux',
         'perf_processor': True,
     },
-    'android-pixel2-processor-perf': {
-        'platform': 'linux',
-        'perf_processor': True,
-    },
-    'android-pixel2_webview-processor-perf': {
-        'platform': 'linux',
-        'perf_processor': True,
-    },
     'win-10-processor-perf': {
         'platform': 'linux',
         'perf_processor': True,
@@ -1275,148 +1167,7 @@ BUILDERS = {
     'mac-laptop_high_end-processor-perf': {
         'platform': 'linux',
         'perf_processor': True,
-    },
-    'chromecast-linux-builder-perf': {
-        'additional_compile_targets': ['cast_shell'],
-        'tests': [
-            {
-                'name': 'resource_sizes_chromecast',
-                'isolate': 'resource_sizes_chromecast',
-                'type': TEST_TYPES.GENERIC,
-                'resultdb': {
-                    'has_native_resultdb_integration': True,
-                },
-            },
-        ],
-        'dimension': {
-            'cpu': 'x86-64',
-            'os': 'Ubuntu-22.04',
-            'pool': 'chrome.tests',
-        },
-        'perf_trigger':
-        False,
-    },
-    'chromeos-amd64-generic-lacros-builder-perf': {
-        'additional_compile_targets': ['chrome'],
-        'tests': [
-            {
-                'name': 'resource_sizes_lacros_chrome',
-                'isolate': 'resource_sizes_lacros_chrome',
-                'type': TEST_TYPES.GENERIC,
-                'resultdb': {
-                    'has_native_resultdb_integration': True,
-                },
-                'extra_args': [
-                    '--arch=amd64',
-                ],
-            },
-        ],
-        'dimension': {
-            'cpu': 'x86-64',
-            'os': 'Ubuntu-22.04',
-            'pool': 'chrome.tests',
-        },
-        'perf_trigger':
-        False,
-    },
-    'chromeos-arm-generic-lacros-builder-perf': {
-        'additional_compile_targets': ['chrome'],
-        'tests': [
-            {
-                'name': 'resource_sizes_lacros_chrome',
-                'isolate': 'resource_sizes_lacros_chrome',
-                'type': TEST_TYPES.GENERIC,
-                'resultdb': {
-                    'has_native_resultdb_integration': True,
-                },
-                'extra_args': [
-                    '--arch=arm32',
-                ],
-            },
-        ],
-        'dimension': {
-            'cpu': 'x86-64',
-            'os': 'Ubuntu-22.04',
-            'pool': 'chrome.tests',
-        },
-        'perf_trigger':
-        False,
-    },
-    'chromeos-arm64-generic-lacros-builder-perf': {
-        'additional_compile_targets': ['chrome'],
-        'tests': [
-            {
-                'name': 'resource_sizes_lacros_chrome',
-                'isolate': 'resource_sizes_lacros_chrome',
-                'type': TEST_TYPES.GENERIC,
-                'resultdb': {
-                    'has_native_resultdb_integration': True,
-                },
-                'extra_args': [
-                    '--arch=arm64',
-                ],
-            },
-        ],
-        'dimension': {
-            'cpu': 'x86-64',
-            'os': 'Ubuntu-22.04',
-            'pool': 'chrome.tests',
-        },
-        'perf_trigger':
-        False,
-    },
-    'lacros-eve-perf': {
-        'tests': [
-            {
-                'isolate':
-                'performance_test_suite_eve',
-                'extra_args': [
-                    # The magic hostname that resolves to a CrOS device in the test lab
-                    '--remote=variable_chromeos_device_hostname',
-                ],
-                'timeout':
-                12 * 60 * 60,  # 12 hours, due to small number of devices
-            },
-        ],
-        'platform':
-        'lacros',
-        'target_bits':
-        64,
-        'dimension': {
-            'pool': 'chrome.tests.perf',
-            # TODO(crbug.com/41463380): Explicitly set the gpu to None to make
-            # chromium_swarming recipe_module ignore this dimension.
-            'gpu': None,
-            'os': 'ChromeOS',
-            'device_status': 'available',
-            'device_type': 'eve',
-        },
-    },
-    'lacros-x86-perf': {
-        'tests': [
-            {
-                'isolate':
-                'performance_test_suite_octopus',
-                'extra_args': [
-                    # The magic hostname that resolves to a CrOS device in the test lab
-                    '--remote=variable_chromeos_device_hostname',
-                ],
-            },
-        ],
-        'platform':
-        'lacros',
-        'target_bits':
-        64,
-        'dimension': {
-            'pool': 'chrome.tests.perf',
-            # TODO(crbug.com/41463380): Explicitly set the gpu to None to make
-            # chromium_swarming recipe_module ignore this dimension.
-            'gpu': None,
-            'os': 'ChromeOS',
-            'device_status': 'available',
-            'device_type': 'octopus',
-        },
-    },
+    }
 }
 
 # pylint: enable=line-too-long
@@ -1545,6 +1296,10 @@ GTEST_BENCHMARKS = {
         'enga@chromium.org', 'Dawn',
         'https://dawn.googlesource.com/dawn/+/HEAD/src/tests/perf_tests/README.md'
     ),
+    'tint_benchmark':
+    BenchmarkMetadata(
+        'jrprice@google.com, dsinclair@chromium.org', 'Dawn>Tint',
+        'https://dawn.googlesource.com/dawn/+/HEAD/docs/tint/benchmark.md'),
 }
 
 RESOURCE_SIZES_METADATA = BenchmarkMetadata(
@@ -1563,28 +1318,6 @@ OTHER_BENCHMARKS.update({
     BenchmarkMetadata(
         emails='chonggu@chromium.org',
         component='Build',
-        documentation_url=(
-            'https://chromium.googlesource.com/chromium/'
-            'src/+/HEAD/tools/binary_size/README.md#resource_sizes_py'),
-    ),
-})
-
-OTHER_BENCHMARKS.update({
-    'resource_sizes_chromecast':
-    BenchmarkMetadata(
-        emails='vigeni@chromium.org',
-        component='Chromecast',
-        documentation_url=(
-            'https://chromium.googlesource.com/chromium/'
-            'src/+/HEAD/tools/binary_size/README.md#resource_sizes_py'),
-    ),
-})
-
-OTHER_BENCHMARKS.update({
-    'resource_sizes_lacros_chrome':
-    BenchmarkMetadata(
-        emails='skuhne@chromium.org, huangs@chromium.org',
-        component='OS>LaCrOS',
         documentation_url=(
             'https://chromium.googlesource.com/chromium/'
             'src/+/HEAD/tools/binary_size/README.md#resource_sizes_py'),
@@ -1940,6 +1673,9 @@ def generate_performance_test(tester_config, test, builder_name):
     assert shards
   # Append any additional args specific to an isolate
   test_args += test.get('extra_args', [])
+  test_args = [
+      arg for arg in test_args if arg not in test.get('remove_args', [])
+  ]
 
   result = {
       'args': test_args,

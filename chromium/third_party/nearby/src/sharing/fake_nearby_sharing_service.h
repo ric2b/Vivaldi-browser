@@ -20,8 +20,10 @@
 #include <memory>
 #include <string>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
 #include "internal/base/observer_list.h"
+#include "sharing/advertisement.h"
 #include "sharing/attachment_container.h"
 #include "sharing/internal/api/sharing_rpc_notifier.h"
 #include "sharing/local_device_data/nearby_share_local_device_data_manager.h"
@@ -75,21 +77,8 @@ class FakeNearbySharingService : public NearbySharingService {
   void ClearForegroundReceiveSurfaces(
       std::function<void(StatusCodes)> status_codes_callback) override;
 
-  // Returns true if a foreground receive surface is registered.
-  bool IsInHighVisibility() const override;
-
   // Returns true if there is an ongoing file transfer.
   bool IsTransferring() const override;
-
-  // Returns true if we're currently receiving a file.
-  bool IsReceivingFile() const override;
-
-  // Returns true if we're currently sending a file.
-  bool IsSendingFile() const override;
-
-  // Returns true if we're currently attempting to connect to a
-  // remote device.
-  bool IsConnecting() const override;
 
   // Returns true if we are currently scanning for remote devices.
   bool IsScanning() const override;
@@ -118,18 +107,6 @@ class FakeNearbySharingService : public NearbySharingService {
   // Returns true if the local user cancelled the transfer to remote
   // |share_target|.
   bool DidLocalUserCancelTransfer(int64_t share_target_id) override;
-
-  // Opens attachments from the remote |share_target|.
-  void Open(ShareTarget share_target,
-            std::unique_ptr<AttachmentContainer> attachment_container,
-            std::function<void(StatusCodes status_codes)> status_codes_callback)
-      override;
-
-  // Opens an url target on a browser instance.
-  void OpenUrl(const ::nearby::network::Url& url) override;
-
-  // Copies text to cache/clipboard.
-  void CopyText(absl::string_view text) override;
 
   std::string Dump() const override;
 

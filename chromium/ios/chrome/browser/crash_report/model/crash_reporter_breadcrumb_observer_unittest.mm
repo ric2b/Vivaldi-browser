@@ -15,7 +15,7 @@
 #import "components/breadcrumbs/core/crash_reporter_breadcrumb_constants.h"
 #import "ios/chrome/browser/crash_report/model/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
 #import "ios/chrome/browser/crash_report/model/crash_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/common/crash_report/crash_helper.h"
 #import "ios/testing/scoped_block_swizzler.h"
 #import "testing/gtest/include/gtest/gtest.h"
@@ -34,10 +34,8 @@ class CrashReporterBreadcrumbObserverTest : public PlatformTest {
     // and registered.
     breadcrumbs::CrashReporterBreadcrumbObserver::GetInstance();
 
-    TestChromeBrowserState::Builder test_cbs_builder;
-    chrome_browser_state_ = test_cbs_builder.Build();
-    TestChromeBrowserState::Builder test_cbs_builder_2;
-    chrome_browser_state_2_ = test_cbs_builder_2.Build();
+    chrome_browser_state_ = TestChromeBrowserState::Builder().Build();
+    chrome_browser_state_2_ = TestChromeBrowserState::Builder().Build();
   }
 
   void TearDown() override {

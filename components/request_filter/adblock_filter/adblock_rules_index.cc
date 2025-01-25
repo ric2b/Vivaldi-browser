@@ -47,7 +47,7 @@ using FlatRulesByModifierList =
 using FlatRuleIdList = flatbuffers::Vector<flatbuffers::Offset<flat::RuleId>>;
 
 using FlatStringOffset = flatbuffers::Offset<flatbuffers::String>;
-using FlatDomains = flatbuffers::Vector<FlatStringOffset>;
+using FlatStringList = flatbuffers::Vector<FlatStringOffset>;
 
 const size_t kMaxActivationCacheSize = 10;
 
@@ -147,8 +147,7 @@ bool DoesRuleFlagsMatch(const flat::RequestFilterRule& rule,
 bool DoesUrlMatchRulePattern(const flat::RequestFilterRule& rule,
                              const RulePatternMatcher::UrlInfo& url) {
   if (rule.host() && rule.host()->size()) {
-    std::string_view host =
-        url.spec().substr(url.host().begin, url.host().len);
+    std::string_view host = url.spec().substr(url.host().begin, url.host().len);
     if (!base::EndsWith(host, rule.host()->str()))
       return false;
     host.remove_suffix(rule.host()->size());
@@ -176,7 +175,7 @@ bool DoesUrlMatchRulePattern(const flat::RequestFilterRule& rule,
 // The `domains` should be sorted in descending order of their length, and
 // ascending alphabetical order within the groups of same-length domains.
 size_t GetLongestMatchingSubdomain(const url::Origin& origin,
-                                   const FlatDomains& domains) {
+                                   const FlatStringList& domains) {
   // If the `domains` list is short, then the simple strategy is usually faster.
   if (domains.size() <= 5) {
     for (auto* domain : domains) {
@@ -208,7 +207,8 @@ size_t GetLongestMatchingSubdomain(const url::Origin& origin,
     while (left + 1 < right) {
       auto middle = left + (right - left) / 2;
       DCHECK_LT(middle, domains.size());
-      if (CompareDomains(ToStringPiece(domains[middle]), subdomain) <= 0)
+      if (SizePrioritizedStringCompare(ToStringPiece(domains[middle]),
+                                       subdomain) <= 0)
         left = middle;
       else
         right = middle;
@@ -363,6 +363,7 @@ const flat::RequestFilterRule* FindMatchAmongCandidates(
     flat::ResourceType resource_type,
     bool is_third_party,
     bool disable_generic_rules,
+    RulesIndex::AdAttributionMatches ad_attribution_matches,
     int current_rule_priority) {
   // This is used for request blocking. All rules are expected to be grouped
   // together, regardless of modifier.
@@ -397,6 +398,22 @@ const flat::RequestFilterRule* FindMatchAmongCandidates(
 
     if (!DoesUrlMatchRulePattern(*rule, url)) {
       continue;
+    }
+
+    if (rule->ad_domains_and_query_triggers()) {
+      bool query_and_trigger_match = false;
+      for (const auto* ad_domain_and_query_trigger :
+           *rule->ad_domains_and_query_triggers()) {
+        query_and_trigger_match = ad_attribution_matches.Run(
+            url.fold_case_spec(), ad_domain_and_query_trigger->string_view());
+        if (query_and_trigger_match) {
+          break;
+        }
+      }
+
+      if (!query_and_trigger_match) {
+        continue;
+      }
     }
 
     return rule;
@@ -448,11 +465,12 @@ void FindModifierRulesMatchesCandidates(
       }
 
       if (!IsFullModifierPassRule(*rule)) {
-        auto existing =
-            found.value_with_decision.find(rule->modifier_value()->str());
-        if (existing != found.value_with_decision.end() &&
-            GetRulePriority(*existing->second) > GetRulePriority(*rule)) {
-          continue;
+        for (const auto* modifer_value : *rule->modifier_values()) {
+          auto existing = found.value_with_decision.find(modifer_value->str());
+          if (existing != found.value_with_decision.end() &&
+              GetRulePriority(*existing->second) > GetRulePriority(*rule)) {
+            continue;
+          }
         }
       }
 
@@ -477,7 +495,9 @@ void FindModifierRulesMatchesCandidates(
                                flat::Decision_MODIFY_IMPORTANT;
                       });
       } else {
-        found.value_with_decision[rule->modifier_value()->str()] = rule;
+        for (const auto* modifier_value : *rule->modifier_values()) {
+          found.value_with_decision[modifier_value->str()] = rule;
+        }
       }
     }
   }
@@ -603,33 +623,6 @@ void GetSelectorsForDomain(
                         tree->Get(subdomain_node_index.value()));
   return;
 }
-
-RulesIndex::FoundModifiersByType FindMatchingModifierRules(
-    const flat::RulesMap* const rule_map,
-    const RulesIndex::RulesBufferMap& rules_buffers,
-    const GURL& url,
-    const url::Origin& document_origin,
-    flat::ResourceType resource_type,
-    bool is_third_party,
-    bool disable_generic_rules) {
-  RulesIndex::FoundModifiersByType result;
-  RulePatternMatcher::UrlInfo url_info(url);
-
-  auto handle_matches = [rules_buffers, &result, &url_info, document_origin,
-                         resource_type, is_third_party, disable_generic_rules](
-                            const FlatRulesByModifierList* rule_list) {
-    FindModifierRulesMatchesCandidates(
-        rule_list, rules_buffers, url_info, document_origin, resource_type,
-        is_third_party, disable_generic_rules, result);
-
-    return false;
-  };
-
-  FindMatchingRuleInMap(url_info.fold_case_spec(), rule_map, handle_matches);
-
-  return result;
-}
-
 }  // namespace
 
 // static
@@ -683,6 +676,10 @@ RulesIndex::ActivationResults RulesIndex::GetActivationsForFrame(
   // Populate url and document origin if they were not provided.
   if (!url) {
     url = frame->GetLastCommittedURL();
+  }
+
+  if (url && !url->is_valid()) {// Nothing to add here if the url isn't valid.
+    return RulesIndex::ActivationResults{};
   }
 
   if (!document_origin) {
@@ -771,7 +768,8 @@ const flat::RequestFilterRule* RulesIndex::FindMatchingBeforeRequestRule(
     const url::Origin& document_origin,
     flat::ResourceType resource_type,
     bool is_third_party,
-    bool disable_generic_rules) {
+    bool disable_generic_rules,
+    AdAttributionMatches ad_attribution_matches) {
   const flat::RequestFilterRule* result = nullptr;
 
   // Ignore URLs that are greater than the max URL length. Since those will be
@@ -787,10 +785,11 @@ const flat::RequestFilterRule* RulesIndex::FindMatchingBeforeRequestRule(
 
   auto handle_matches =
       [this, &result, &url_info, document_origin, resource_type, is_third_party,
-       disable_generic_rules](const FlatRulesByModifierList* rule_list) {
+       disable_generic_rules,
+       ad_attribution_matches](const FlatRulesByModifierList* rule_list) {
         const flat::RequestFilterRule* rule = FindMatchAmongCandidates(
             rule_list, rules_buffers_, url_info, document_origin, resource_type,
-            is_third_party, disable_generic_rules,
+            is_third_party, disable_generic_rules, ad_attribution_matches,
             result ? GetRulePriority(*result) : -1);
         if (!rule)
           return false;
@@ -808,26 +807,40 @@ const flat::RequestFilterRule* RulesIndex::FindMatchingBeforeRequestRule(
   return result;
 }
 
-RulesIndex::FoundModifiersByType RulesIndex::FindMatchingRequestModifierRules(
+RulesIndex::FoundModifiersByType RulesIndex::FindMatchingModifierRules(
+    ModifierCategory category,
     const GURL& url,
     const url::Origin& document_origin,
     flat::ResourceType resource_type,
     bool is_third_party,
     bool disable_generic_rules) {
-  return FindMatchingModifierRules(
-      rules_index_->request_modifier(), rules_buffers_, url, document_origin,
-      resource_type, is_third_party, disable_generic_rules);
-}
+  const flat::RulesMap* rule_map = [this, category]() {
+    switch (category) {
+      case kBlockedRequest:
+        return rules_index_->blocked_request_modifiers();
+      case kAllowedRequest:
+        return rules_index_->allowed_request_modifiers();
+      case kHeadersReceived:
+        return rules_index_->headers_received_map();
+    }
+  }();
 
-RulesIndex::FoundModifiersByType RulesIndex::FindMatchingHeadersReceivedRules(
-    const GURL& url,
-    const url::Origin& document_origin,
-    flat::ResourceType resource_type,
-    bool is_third_party,
-    bool disable_generic_rules) {
-  return FindMatchingModifierRules(
-      rules_index_->headers_received_map(), rules_buffers_, url,
-      document_origin, resource_type, is_third_party, disable_generic_rules);
+  RulesIndex::FoundModifiersByType result;
+  RulePatternMatcher::UrlInfo url_info(url);
+
+  auto handle_matches =
+      [this, &result, &url_info, document_origin, resource_type, is_third_party,
+       disable_generic_rules](const FlatRulesByModifierList* rule_list) {
+        FindModifierRulesMatchesCandidates(
+            rule_list, rules_buffers_, url_info, document_origin, resource_type,
+            is_third_party, disable_generic_rules, result);
+
+        return false;
+      };
+
+  FindMatchingRuleInMap(url_info.fold_case_spec(), rule_map, handle_matches);
+
+  return result;
 }
 
 std::string RulesIndex::GetDefaultStylesheet() {

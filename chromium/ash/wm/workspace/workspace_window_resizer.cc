@@ -20,6 +20,7 @@
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/float/tablet_mode_float_window_resizer.h"
 #include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/pip/pip_controller.h"
 #include "ash/wm/pip/pip_window_resizer.h"
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/tile_group/window_splitter.h"
@@ -160,8 +161,7 @@ int CoordinateAlongSecondaryAxis(SecondaryMagnetismEdge edge,
     case SECONDARY_MAGNETISM_EDGE_NONE:
       return none;
   }
-  NOTREACHED_IN_MIGRATION();
-  return none;
+  NOTREACHED();
 }
 
 // Returns the origin for |src| when magnetically attaching to |attach_to| along
@@ -515,9 +515,14 @@ std::unique_ptr<WindowResizer> CreateWindowResizer(
   }
 
   if (window_state->IsPip()) {
-    window_state->CreateDragDetails(point_in_parent, window_component, source);
-    MaybeRecordResizeHandleUsage(window, point_in_parent);
-    return std::make_unique<PipWindowResizer>(window_state);
+    if (Shell::Get()->pip_controller()->CanResizePip()) {
+      window_state->CreateDragDetails(point_in_parent, window_component,
+                                      source);
+      MaybeRecordResizeHandleUsage(window, point_in_parent);
+      return std::make_unique<PipWindowResizer>(window_state);
+    } else {
+      return nullptr;
+    }
   }
 
   if (display::Screen::GetScreen()->InTabletMode()) {
@@ -910,9 +915,7 @@ void WorkspaceWindowResizer::CompleteDrag() {
         window_state()->TrackDragToMaximizeBehavior();
         break;
       default:
-        NOTREACHED_IN_MIGRATION();
-        type = WM_EVENT_MAXIMIZE;
-        break;
+        NOTREACHED();
     }
 
     const WMEvent event(type);
@@ -1526,9 +1529,8 @@ int WorkspaceWindowResizer::PrimaryAxisCoordinate(int x, int y) const {
     case HTBOTTOM:
       return y;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
-  return 0;
 }
 
 bool WorkspaceWindowResizer::IsSnapTopOrMaximize(
@@ -1604,8 +1606,7 @@ void WorkspaceWindowResizer::UpdateSnapPhantomWindow(
       phantom_bounds = display.work_area();
       break;
     case SnapType::kNone:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   const bool need_haptic_feedback =
@@ -1753,7 +1754,7 @@ void WorkspaceWindowResizer::SetWindowStateTypeFromGesture(
       }
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 

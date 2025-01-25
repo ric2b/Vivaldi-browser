@@ -4,6 +4,8 @@
 
 import * as Types from '../types/types.js';
 
+import {eventIsInBounds} from './Timing.js';
+
 let nodeIdCount = 0;
 export const makeTraceEntryNodeId = (): TraceEntryNodeId => (++nodeIdCount) as TraceEntryNodeId;
 
@@ -13,7 +15,7 @@ export const makeEmptyTraceEntryTree = (): TraceEntryTree => ({
 });
 
 export const makeEmptyTraceEntryNode =
-    (entry: Types.TraceEvents.SyntheticTraceEntry, id: TraceEntryNodeId): TraceEntryNode => ({
+    (entry: Types.TraceEvents.TraceEventData, id: TraceEntryNodeId): TraceEntryNode => ({
       entry,
       id,
       parent: null,
@@ -27,8 +29,9 @@ export interface TraceEntryTree {
 }
 
 export interface TraceEntryNode {
-  entry: Types.TraceEvents.SyntheticTraceEntry;
+  entry: Types.TraceEvents.TraceEventData;
   depth: number;
+  selfTime?: Types.Timing.MicroSeconds;
   id: TraceEntryNodeId;
   parent: TraceEntryNode|null;
   children: TraceEntryNode[];
@@ -56,13 +59,13 @@ export type TraceEntryNodeId = number&TraceEntryNodeIdTag;
  *
  * Complexity: O(n), where n = number of events
  */
-export function treify(entries: Types.TraceEvents.SyntheticTraceEntry[], options?: {
+export function treify(entries: Types.TraceEvents.TraceEventData[], options?: {
   filter: {has: (name: Types.TraceEvents.KnownEventName) => boolean},
-}): {tree: TraceEntryTree, entryToNode: Map<Types.TraceEvents.SyntheticTraceEntry, TraceEntryNode>} {
+}): {tree: TraceEntryTree, entryToNode: Map<Types.TraceEvents.TraceEventData, TraceEntryNode>} {
   // As we construct the tree, store a map of each entry to its node. This
   // means if you are iterating over a list of RendererEntry events you can
   // easily look up that node in the tree.
-  const entryToNode = new Map<Types.TraceEvents.SyntheticTraceEntry, TraceEntryNode>();
+  const entryToNode = new Map<Types.TraceEvents.TraceEventData, TraceEntryNode>();
 
   const stack = [];
   // Reset the node id counter for every new renderer.
@@ -85,7 +88,7 @@ export function treify(entries: Types.TraceEvents.SyntheticTraceEntry[], options
     // node for it, mark it as a root, then proceed with the next event.
     if (stack.length === 0) {
       tree.roots.add(node);
-      event.selfTime = Types.Timing.MicroSeconds(duration);
+      node.selfTime = Types.Timing.MicroSeconds(duration);
       stack.push(node);
       tree.maxDepth = Math.max(tree.maxDepth, stack.length);
       entryToNode.set(event, node);
@@ -145,9 +148,9 @@ export function treify(entries: Types.TraceEvents.SyntheticTraceEntry[], options
     node.depth = stack.length;
     node.parent = parentNode;
     parentNode.children.push(node);
-    event.selfTime = Types.Timing.MicroSeconds(duration);
-    if (parentEvent.selfTime !== undefined) {
-      parentEvent.selfTime = Types.Timing.MicroSeconds(parentEvent.selfTime - (event.dur || 0));
+    node.selfTime = Types.Timing.MicroSeconds(duration);
+    if (parentNode.selfTime !== undefined) {
+      parentNode.selfTime = Types.Timing.MicroSeconds(parentNode.selfTime - (event.dur || 0));
     }
     stack.push(node);
     tree.maxDepth = Math.max(tree.maxDepth, stack.length);
@@ -178,10 +181,10 @@ export function treify(entries: Types.TraceEvents.SyntheticTraceEntry[], options
  *
  */
 export function walkTreeFromEntry(
-    entryToNode: Map<Types.TraceEvents.SyntheticTraceEntry, TraceEntryNode>,
-    rootEntry: Types.TraceEvents.SyntheticTraceEntry,
-    onEntryStart: (entry: Types.TraceEvents.SyntheticTraceEntry) => void,
-    onEntryEnd: (entry: Types.TraceEvents.SyntheticTraceEntry) => void,
+    entryToNode: Map<Types.TraceEvents.TraceEventData, TraceEntryNode>,
+    rootEntry: Types.TraceEvents.TraceEventData,
+    onEntryStart: (entry: Types.TraceEvents.TraceEventData) => void,
+    onEntryEnd: (entry: Types.TraceEvents.TraceEventData) => void,
     ): void {
   const startNode = entryToNode.get(rootEntry);
   if (!startNode) {
@@ -215,10 +218,10 @@ export function walkTreeFromEntry(
  */
 
 export function walkEntireTree(
-    entryToNode: Map<Types.TraceEvents.SyntheticTraceEntry, TraceEntryNode>,
+    entryToNode: Map<Types.TraceEvents.TraceEventData, TraceEntryNode>,
     tree: TraceEntryTree,
-    onEntryStart: (entry: Types.TraceEvents.SyntheticTraceEntry) => void,
-    onEntryEnd: (entry: Types.TraceEvents.SyntheticTraceEntry) => void,
+    onEntryStart: (entry: Types.TraceEvents.TraceEventData) => void,
+    onEntryEnd: (entry: Types.TraceEvents.TraceEventData) => void,
     traceWindowToInclude?: Types.Timing.TraceWindowMicroSeconds,
     minDuration?: Types.Timing.MicroSeconds,
     ): void {
@@ -228,10 +231,10 @@ export function walkEntireTree(
 }
 
 function walkTreeByNode(
-    entryToNode: Map<Types.TraceEvents.SyntheticTraceEntry, TraceEntryNode>,
+    entryToNode: Map<Types.TraceEvents.TraceEventData, TraceEntryNode>,
     rootNode: TraceEntryNode,
-    onEntryStart: (entry: Types.TraceEvents.SyntheticTraceEntry) => void,
-    onEntryEnd: (entry: Types.TraceEvents.SyntheticTraceEntry) => void,
+    onEntryStart: (entry: Types.TraceEvents.TraceEventData) => void,
+    onEntryEnd: (entry: Types.TraceEvents.TraceEventData) => void,
     traceWindowToInclude?: Types.Timing.TraceWindowMicroSeconds,
     minDuration?: Types.Timing.MicroSeconds,
     ): void {
@@ -244,7 +247,7 @@ function walkTreeByNode(
 
   if (typeof minDuration !== 'undefined') {
     const duration = Types.Timing.MicroSeconds(
-        rootNode.entry.ts + Types.Timing.MicroSeconds(rootNode.entry.dur || 0),
+        rootNode.entry.ts + Types.Timing.MicroSeconds(rootNode.entry.dur ?? 0),
     );
     if (duration < minDuration) {
       return;
@@ -264,25 +267,7 @@ function walkTreeByNode(
  * have to partially intersect it.
  */
 function treeNodeIsInWindow(node: TraceEntryNode, traceWindow: Types.Timing.TraceWindowMicroSeconds): boolean {
-  const startTime = node.entry.ts;
-  const endTime = node.entry.ts + (node.entry.dur || 0);
-
-  // Min ======= startTime ========= Max => node is within window
-  if (startTime >= traceWindow.min && startTime < traceWindow.max) {
-    return true;
-  }
-
-  // Min ======= endTime ========= Max => node is within window
-  if (endTime > traceWindow.min && endTime <= traceWindow.max) {
-    return true;
-  }
-
-  // startTime ==== Min ======== Max === endTime => node spans greater than the window so is in it.
-  if (startTime <= traceWindow.min && endTime >= traceWindow.max) {
-    return true;
-  }
-
-  return false;
+  return eventIsInBounds(node.entry, traceWindow);
 }
 
 /**
@@ -308,13 +293,13 @@ export function canBuildTreesFromEvents(events: readonly Types.TraceEvents.Trace
   const stack: Types.TraceEvents.TraceEventData[] = [];
   for (const event of events) {
     const startTime = event.ts;
-    const endTime = event.ts + (event.dur || 0);
+    const endTime = event.ts + (event.dur ?? 0);
     let parent = stack.at(-1);
     if (parent === undefined) {
       stack.push(event);
       continue;
     }
-    let parentEndTime = parent.ts + (parent.dur || 0);
+    let parentEndTime = parent.ts + (parent.dur ?? 0);
     // Discard events that are not parents for this event. The parent
     // is one whose end time is after this event start time.
     while (stack.length && startTime >= parentEndTime) {
@@ -324,7 +309,7 @@ export function canBuildTreesFromEvents(events: readonly Types.TraceEvents.Trace
       if (parent === undefined) {
         break;
       }
-      parentEndTime = parent.ts + (parent.dur || 0);
+      parentEndTime = parent.ts + (parent.dur ?? 0);
     }
     if (stack.length && endTime > parentEndTime) {
       // If such an event exists but its end time is before this

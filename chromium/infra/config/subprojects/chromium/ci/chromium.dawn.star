@@ -7,7 +7,7 @@ load("//lib/args.star", "args")
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builder_health_indicators.star", "health_spec")
-load("//lib/builders.star", "gardener_rotations", "siso")
+load("//lib/builders.star", "cpu", "gardener_rotations", "siso")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
@@ -47,6 +47,50 @@ consoles.console_view(
         "DEPS|Windows|Intel": "*cpu*",
         "DEPS|Windows|Nvidia": "*cpu*",
     },
+)
+
+ci.gpu.linux_builder(
+    name = "Dawn Chromium Presubmit",
+    branch_selector = [
+        branches.selector.ANDROID_BRANCHES,
+        branches.selector.DESKTOP_BRANCHES,
+    ],
+    description_html = "Runs Chromium presubmit tests on Dawn CLs",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "dawn_top_of_tree",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.LINUX,
+        ),
+    ),
+    # This builder shouldn't be actually compiling anything, but it does need
+    # GN args set in order to generate and isolate targets.
+    gn_args = gn_args.config(
+        configs = [
+            "dawn_enable_opengles",
+            "release_try_builder",
+            "minimal_symbols",
+            "remoteexec",
+            "gpu_tests",
+            "linux",
+            "x64",
+        ],
+    ),
+    console_view_entry = consoles.console_view_entry(
+        category = "ToT|Linux|Presubmit",
+        short_name = "psm",
+    ),
+    execution_timeout = 30 * time.minute,
 )
 
 ci.gpu.linux_builder(
@@ -685,6 +729,35 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
+    name = "Dawn Linux x64 Experimental Release (NVIDIA GTX 1660)",
+    description_html = "Runs ToT Dawn tests on experimental Linux/GTX 1660 configs",
+    triggered_by = ["Dawn Linux x64 Builder"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.LINUX,
+        ),
+        build_gs_bucket = "chromium-dawn-archive",
+        run_tests_serially = True,
+    ),
+    # Uncomment this entry when this experimental tester is actually in use.
+    console_view_entry = consoles.console_view_entry(
+        category = "ToT|Linux|Nvidia",
+        short_name = "exp",
+    ),
+    list_view = "chromium.gpu.experimental",
+)
+
+ci.thin_tester(
     name = "Dawn Linux x64 Release (Intel UHD 630)",
     triggered_by = ["Dawn Linux x64 Builder"],
     builder_spec = builder_config.builder_spec(
@@ -833,6 +906,8 @@ ci.gpu.mac_builder(
             "mac",
         ],
     ),
+    cores = None,
+    cpu = cpu.ARM64,
     console_view_entry = consoles.console_view_entry(
         category = "DEPS|Mac|Builder",
         short_name = "arm64",
@@ -1091,10 +1166,10 @@ ci.thin_tester(
         run_tests_serially = True,
     ),
     # Uncomment this entry when this experimental tester is actually in use.
-    # console_view_entry = consoles.console_view_entry(
-    #     category = "ToT|Mac|AMD",
-    #     short_name = "exp",
-    # ),
+    console_view_entry = consoles.console_view_entry(
+        category = "ToT|Mac|AMD",
+        short_name = "exp",
+    ),
     list_view = "chromium.gpu.experimental",
 )
 
@@ -1120,10 +1195,10 @@ ci.thin_tester(
         run_tests_serially = True,
     ),
     # Uncomment this entry when this experimental tester is actually in use.
-    # console_view_entry = consoles.console_view_entry(
-    #     category = "ToT|Mac|Intel",
-    #     short_name = "exp",
-    # ),
+    console_view_entry = consoles.console_view_entry(
+        category = "ToT|Mac|Intel",
+        short_name = "exp",
+    ),
     list_view = "chromium.gpu.experimental",
 )
 

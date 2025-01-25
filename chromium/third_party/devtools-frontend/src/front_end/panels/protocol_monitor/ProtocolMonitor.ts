@@ -194,17 +194,16 @@ export class ProtocolMonitorDataGrid extends Common.ObjectWrapper.eventMixin<Eve
     this.contentElement.classList.add('protocol-monitor');
     const recordButton = new UI.Toolbar.ToolbarToggle(
         i18nString(UIStrings.record), 'record-start', 'record-stop', 'protocol-monitor.toggle-recording');
-    recordButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, () => {
-      recordButton.setToggled(!recordButton.toggled());
-      this.setRecording(recordButton.toggled());
+    recordButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, () => {
+      this.setRecording(recordButton.isToggled());
     });
-    recordButton.setToggleWithRedColor(true);
+    recordButton.enableToggleWithRedColor();
     topToolbar.appendToolbarItem(recordButton);
     recordButton.setToggled(true);
 
     const clearButton =
         new UI.Toolbar.ToolbarButton(i18nString(UIStrings.clearAll), 'clear', undefined, 'protocol-monitor.clear-all');
-    clearButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, () => {
+    clearButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, () => {
       this.dataGridIntegrator.update({...this.dataGridIntegrator.data(), rows: []});
       this.infoWidget.render(null);
     });
@@ -212,7 +211,7 @@ export class ProtocolMonitorDataGrid extends Common.ObjectWrapper.eventMixin<Eve
 
     const saveButton =
         new UI.Toolbar.ToolbarButton(i18nString(UIStrings.save), 'download', undefined, 'protocol-monitor.save');
-    saveButton.addEventListener(UI.Toolbar.ToolbarButton.Events.Click, () => {
+    saveButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, () => {
       void this.saveAsFile();
     });
     topToolbar.appendToolbarItem(saveButton);
@@ -308,10 +307,10 @@ export class ProtocolMonitorDataGrid extends Common.ObjectWrapper.eventMixin<Eve
                 const parameters = this.infoWidget.request;
                 const targetId = this.infoWidget.targetId;
                 const command = String(methodColumn.value);
-                if (splitWidget.showMode() === UI.SplitWidget.ShowMode.OnlyMain) {
+                if (splitWidget.showMode() === UI.SplitWidget.ShowMode.ONLY_MAIN) {
                   splitWidget.toggleSidebar();
                 }
-                this.dispatchEventToListeners(Events.CommandChange, {command, parameters, targetId});
+                this.dispatchEventToListeners(Events.COMMAND_CHANGE, {command, parameters, targetId});
               }, {jslogContext: 'edit-and-resend', disabled: typeColumn.title !== 'sent'});
 
               /**
@@ -372,8 +371,8 @@ export class ProtocolMonitorDataGrid extends Common.ObjectWrapper.eventMixin<Eve
     this.suggestionBuilder = new UI.FilterSuggestionBuilder.FilterSuggestionBuilder(keys);
 
     this.textFilterUI = new UI.Toolbar.ToolbarFilter(
-        undefined, 1, .2, '', this.suggestionBuilder.completions.bind(this.suggestionBuilder), true, 'filter');
-    this.textFilterUI.addEventListener(UI.Toolbar.ToolbarInput.Event.TextChanged, event => {
+        undefined, 1, .2, '', this.suggestionBuilder.completions.bind(this.suggestionBuilder), true);
+    this.textFilterUI.addEventListener(UI.Toolbar.ToolbarInput.Event.TEXT_CHANGED, event => {
       const query = event.data as string;
       const filters = this.filterParser.parse(query);
       this.dataGridIntegrator.update({...this.dataGridIntegrator.data(), filters});
@@ -410,7 +409,7 @@ export class ProtocolMonitorDataGrid extends Common.ObjectWrapper.eventMixin<Eve
       }
     };
 
-    splitWidget.addEventListener(UI.SplitWidget.Events.ShowModeChanged, (event => {
+    splitWidget.addEventListener(UI.SplitWidget.Events.SHOW_MODE_CHANGED, (event => {
                                    if (event.data === 'OnlyMain') {
                                      populateToolbarInput();
 
@@ -419,7 +418,8 @@ export class ProtocolMonitorDataGrid extends Common.ObjectWrapper.eventMixin<Eve
                                    } else {
                                      const {command, parameters} = parseCommandInput(this.#commandInput.value());
                                      this.dispatchEventToListeners(
-                                         Events.CommandChange, {command, parameters, targetId: this.#selectedTargetId});
+                                         Events.COMMAND_CHANGE,
+                                         {command, parameters, targetId: this.#selectedTargetId});
                                      inputBar?.setAttribute('style', 'display:none');
                                      tabSelector?.setAttribute('style', 'display:none');
                                    }
@@ -443,7 +443,7 @@ export class ProtocolMonitorDataGrid extends Common.ObjectWrapper.eventMixin<Eve
         false,
         'command-input',
     );
-    input.addEventListener(UI.Toolbar.ToolbarInput.Event.EnterPressed, () => {
+    input.addEventListener(UI.Toolbar.ToolbarInput.Event.ENTER_PRESSED, () => {
       this.#commandAutocompleteSuggestionProvider.addEntry(input.value());
       const {command, parameters} = parseCommandInput(input.value());
       this.onCommandSend(command, parameters, this.#selectedTargetId);
@@ -463,7 +463,7 @@ export class ProtocolMonitorDataGrid extends Common.ObjectWrapper.eventMixin<Eve
         selector.createOption(`${target.name()} (${target.inspectedURL()})`, target.id());
       }
     };
-    targetManager.addEventListener(SDK.TargetManager.Events.AvailableTargetsChanged, syncTargets);
+    targetManager.addEventListener(SDK.TargetManager.Events.AVAILABLE_TARGETS_CHANGED, syncTargets);
     syncTargets();
     return selector;
   }
@@ -671,7 +671,7 @@ export class ProtocolMonitorImpl extends UI.Widget.VBox {
         new UI.SplitWidget.SplitWidget(true, false, 'protocol-monitor-split-container', this.#sideBarMinWidth);
     this.#split.show(this.contentElement);
     this.#protocolMonitorDataGrid = new ProtocolMonitorDataGrid(this.#split);
-    this.#protocolMonitorDataGrid.addEventListener(Events.CommandChange, event => {
+    this.#protocolMonitorDataGrid.addEventListener(Events.COMMAND_CHANGE, event => {
       this.#editorWidget.jsonEditor.displayCommand(event.data.command, event.data.parameters, event.data.targetId);
     });
 
@@ -679,7 +679,7 @@ export class ProtocolMonitorImpl extends UI.Widget.VBox {
     this.#split.setMainWidget(this.#protocolMonitorDataGrid);
     this.#split.setSidebarWidget(this.#editorWidget);
     this.#split.hideSidebar(true);
-    this.#editorWidget.addEventListener(Events.CommandSent, event => {
+    this.#editorWidget.addEventListener(Events.COMMAND_SENT, event => {
       this.#protocolMonitorDataGrid.onCommandSend(event.data.command, event.data.parameters, event.data.targetId);
     });
   }
@@ -769,13 +769,13 @@ export class InfoWidget extends UI.Widget.VBox {
 }
 
 export const enum Events {
-  CommandSent = 'CommandSent',
-  CommandChange = 'CommandChange',
+  COMMAND_SENT = 'CommandSent',
+  COMMAND_CHANGE = 'CommandChange',
 }
 
 export type EventTypes = {
-  [Events.CommandSent]: Components.JSONEditor.Command,
-  [Events.CommandChange]: Components.JSONEditor.Command,
+  [Events.COMMAND_SENT]: Components.JSONEditor.Command,
+  [Events.COMMAND_CHANGE]: Components.JSONEditor.Command,
 };
 
 export class EditorWidget extends Common.ObjectWrapper.eventMixin<EventTypes, typeof UI.Widget.VBox>(UI.Widget.VBox) {
@@ -789,7 +789,7 @@ export class EditorWidget extends Common.ObjectWrapper.eventMixin<EventTypes, ty
     this.jsonEditor.enumsByName = enumsByName;
     this.element.append(this.jsonEditor);
     this.jsonEditor.addEventListener(Components.JSONEditor.SubmitEditorEvent.eventName, (event: Event) => {
-      this.dispatchEventToListeners(Events.CommandSent, (event as Components.JSONEditor.SubmitEditorEvent).data);
+      this.dispatchEventToListeners(Events.COMMAND_SENT, (event as Components.JSONEditor.SubmitEditorEvent).data);
     });
   }
 }

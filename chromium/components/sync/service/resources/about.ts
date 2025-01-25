@@ -8,7 +8,7 @@ import {assert} from 'chrome://resources/js/assert.js';
 import type {WebUiListener} from 'chrome://resources/js/cr.js';
 import {addWebUiListener, removeWebUiListener} from 'chrome://resources/js/cr.js';
 
-import {requestDataAndRegisterForUpdates, requestStart, requestStopClearData, setIncludeSpecifics, triggerRefresh} from './chrome_sync.js';
+import {requestDataAndRegisterForUpdates, requestStart, setIncludeSpecifics, triggerRefresh} from './chrome_sync.js';
 import type {ProtocolEvent} from './traffic_log.js';
 
 // Contains the latest snapshot of sync about info.
@@ -66,7 +66,7 @@ function refreshAboutInfo(newAboutInfo: AboutInfo) {
 }
 
 interface EntityCount {
-  modelType: string;
+  dataType: string;
   entities: number;
   nonTombstoneEntities: number;
 }
@@ -87,7 +87,7 @@ function onEntityCountsUpdatedEvent(response: {entityCounts: EntityCount}) {
   }
 
   const typeStatusRow = aboutInfo.type_status.find(
-      row => row.name === response.entityCounts.modelType);
+      row => row.name === response.entityCounts.dataType);
   if (typeStatusRow) {
     typeStatusRow.num_entries = response.entityCounts.entities;
     typeStatusRow.num_live = response.entityCounts.nonTombstoneEntities;
@@ -298,10 +298,6 @@ function onLoad() {
   const requestStartEl = document.querySelector<HTMLElement>('#request-start');
   assert(requestStartEl);
   requestStartEl.addEventListener('click', requestStart);
-  const requestStopClearDataEl =
-      document.querySelector<HTMLElement>('#request-stop-clear-data');
-  assert(requestStopClearDataEl);
-  requestStopClearDataEl.addEventListener('click', requestStopClearData);
 
   // Request initial data for the page and listen to updates.
   requestDataAndRegisterForUpdates();

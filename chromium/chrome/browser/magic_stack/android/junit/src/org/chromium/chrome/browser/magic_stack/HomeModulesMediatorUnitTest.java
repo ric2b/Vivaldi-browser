@@ -37,7 +37,6 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
@@ -65,7 +64,7 @@ public class HomeModulesMediatorUnitTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     private static final int MODULE_TYPES = 3;
-    @Mock private Callback<Boolean> mSetVisibilityCallback;
+    @Mock private Runnable mOnHomeModulesChangedCallback;
     @Mock private ModuleDelegate mModuleDelegate;
     @Mock private ModuleRegistry mModuleRegistry;
     @Mock private ModuleDelegateHost mModuleDelegateHost;
@@ -132,7 +131,7 @@ public class HomeModulesMediatorUnitTest {
         }
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
 
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         // Verifies that don't wait for module loading if there isn't any modules can be built.
         assertFalse(mMediator.getIsFetchingModulesForTesting());
     }
@@ -149,7 +148,7 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
 
         // Calls buildModulesAndShow() to initialize ranking index map.
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         // The magic stack is waiting for modules to be load.
         assertTrue(mMediator.getIsFetchingModulesForTesting());
         Boolean[] moduleFetchResultsIndicator =
@@ -176,7 +175,7 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
 
         // Calls buildModulesAndShow() to initialize ranking index map.
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         Boolean[] moduleFetchResultsIndicator =
                 mMediator.getModuleFetchResultsIndicatorForTesting();
         SimpleRecyclerViewAdapter.ListItem[] moduleFetchResultsCache =
@@ -198,7 +197,7 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(propertyModel0, moduleFetchResultsCache[1].model);
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
         verify(mModel, never()).add(any());
-        verify(mSetVisibilityCallback, never()).onResult(true);
+        verify(mOnHomeModulesChangedCallback, never()).run();
 
         // Verifies that cached results will be added to the magic stack once the response of the
         // highest ranking modules arrive.
@@ -221,7 +220,7 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
 
         // Calls buildModulesAndShow() to initialize ranking index map.
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         Boolean[] moduleFetchResultsIndicator =
                 mMediator.getModuleFetchResultsIndicatorForTesting();
         SimpleRecyclerViewAdapter.ListItem[] moduleFetchResultsCache =
@@ -240,22 +239,22 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(propertyModel0, moduleFetchResultsCache[1].model);
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
         verify(mModel, never()).add(any());
-        verify(mSetVisibilityCallback, never()).onResult(true);
+        verify(mOnHomeModulesChangedCallback, never()).run();
 
         mMediator.addToRecyclerViewOrCache(mModuleTypeList[2], null);
         // Verifies that the RecyclerView becomes visible as soon as no-data response of the
         // highest ranking modules arrive.
         verify(mModel, times(1)).add(any());
-        verify(mSetVisibilityCallback).onResult(true);
+        verify(mOnHomeModulesChangedCallback).run();
         verify(mModuleProviders[2]).hideModule();
         assertEquals(2, mMediator.getModuleResultsWaitingIndexForTesting());
 
-        // Verifies that the callback to change the visibility isn't called again.
+        // Verifies that the callback to notify a module being added is called again.
         PropertyModel propertyModel1 = Mockito.mock(PropertyModel.class);
         mMediator.addToRecyclerViewOrCache(mModuleTypeList[1], propertyModel1);
         verify(mModel, times(2)).add(any());
         assertEquals(3, mMediator.getModuleResultsWaitingIndexForTesting());
-        verify(mSetVisibilityCallback).onResult(true);
+        verify(mOnHomeModulesChangedCallback, times(2)).run();
     }
 
     @Test
@@ -270,7 +269,7 @@ public class HomeModulesMediatorUnitTest {
         }
 
         // Calls buildModulesAndShow() to show the magic stack.
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         verify(mModuleRegistry).build(eq(mModuleTypeList[0]), eq(mModuleDelegate), any());
         verify(mModuleRegistry).build(eq(mModuleTypeList[1]), eq(mModuleDelegate), any());
         verify(mModuleRegistry).build(eq(mModuleTypeList[2]), eq(mModuleDelegate), any());
@@ -285,10 +284,10 @@ public class HomeModulesMediatorUnitTest {
         mMediator.addToRecyclerViewOrCache(mModuleTypeList[0], propertyModel0);
         mMediator.addToRecyclerViewOrCache(mModuleTypeList[1], null);
         mMediator.addToRecyclerViewOrCache(mModuleTypeList[2], propertyModel2);
-        verify(mSetVisibilityCallback).onResult(true);
+        verify(mOnHomeModulesChangedCallback, times(2)).run();
 
         // Calls buildModulesAndShow() again when the magic stack is still visible.
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
 
         // Verifies that magic stack asks each modules being shown to update their data.
         verify(mModuleProviders[0]).updateModule();
@@ -312,7 +311,7 @@ public class HomeModulesMediatorUnitTest {
             when(mModuleRegistry.build(eq(mModuleTypeList[i]), eq(mModuleDelegate), any()))
                     .thenReturn(true);
         }
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
 
         ModuleProvider[] moduleProviders = new ModuleProvider[MODULE_TYPES];
         for (int i = 0; i < MODULE_TYPES; i++) {
@@ -324,6 +323,7 @@ public class HomeModulesMediatorUnitTest {
             mMediator.addToRecyclerViewOrCache(
                     mModuleTypeList[i], Mockito.mock(PropertyModel.class));
         }
+        verify(mOnHomeModulesChangedCallback, times(3)).run();
 
         mMediator.hide();
 
@@ -341,7 +341,7 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(0, mMediator.getModuleTypeToRankingIndexMapForTesting().size());
 
         assertEquals(0, mModel.size());
-        verify(mSetVisibilityCallback).onResult(false);
+        verify(mOnHomeModulesChangedCallback, times(4)).run();
     }
 
     @Test
@@ -363,7 +363,7 @@ public class HomeModulesMediatorUnitTest {
             mMediator.onModuleBuilt(mModuleTypeList[i], moduleProviders[i]);
         }
 
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         assertTrue(mMediator.getIsFetchingModulesForTesting());
         assertTrue(mMediator.getIsShownForTesting());
 
@@ -379,7 +379,7 @@ public class HomeModulesMediatorUnitTest {
         List<Integer> moduleList =
                 List.of(mModuleTypeList[0], mModuleTypeList[1], mModuleTypeList[2]);
 
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         assertFalse(mMediator.getIsFetchingModulesForTesting());
         assertFalse(mMediator.getIsShownForTesting());
         verify(mModel).clear();
@@ -410,7 +410,7 @@ public class HomeModulesMediatorUnitTest {
             when(mModuleRegistry.build(eq(mModuleTypeList[i]), eq(mModuleDelegate), any()))
                     .thenReturn(true);
         }
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         ModuleProvider[] moduleProviders = new ModuleProvider[2];
         for (int i = 0; i < size; i++) {
             moduleProviders[i] = Mockito.mock(ModuleProvider.class);
@@ -421,13 +421,12 @@ public class HomeModulesMediatorUnitTest {
         // Verifies that the RecyclerView is changed to be visible when the first item is added.
         mMediator.append(mListItems[0]);
         verify(mModel, times(1)).add(eq(mListItems[0]));
-        verify(mSetVisibilityCallback).onResult(true);
+        verify(mOnHomeModulesChangedCallback).run();
 
-        // Verifies that the callback to change visibility isn't called again when more items are
-        // added.
+        // Verifies that the callback to notify a module being added is called again.
         mMediator.append(mListItems[1]);
         verify(mModel, times(1)).add(eq(mListItems[1]));
-        verify(mSetVisibilityCallback).onResult(true);
+        verify(mOnHomeModulesChangedCallback, times(2)).run();
     }
 
     @Test
@@ -436,7 +435,7 @@ public class HomeModulesMediatorUnitTest {
         List<Integer> moduleList = List.of(mModuleTypeList[0]);
         when(mModuleRegistry.build(eq(mModuleTypeList[0]), eq(mModuleDelegate), any()))
                 .thenReturn(true);
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
 
         ModuleProvider moduleProvider = Mockito.mock(ModuleProvider.class);
         mMediator.onModuleBuilt(mModuleTypeList[0], moduleProvider);
@@ -465,7 +464,7 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
 
         // Calls buildModulesAndShow() to initialize ranking index map.
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         // Calls onModuleBuilt() to add ModuleProviders to the map.
         for (int i = 0; i < 3; i++) {
             mMediator.onModuleBuilt(i, mModuleProviders[i]);
@@ -482,7 +481,7 @@ public class HomeModulesMediatorUnitTest {
         mMediator.addToRecyclerViewOrCache(mModuleTypeList[1], null);
         assertFalse(moduleFetchResultsIndicator[1]);
         verify(mModel, never()).add(any());
-        verify(mSetVisibilityCallback, never()).onResult(true);
+        verify(mOnHomeModulesChangedCallback, never()).run();
         verify(mModuleProviders[1]).hideModule();
 
         // The third ranking module returns a successful result.
@@ -492,13 +491,13 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(propertyModel0, moduleFetchResultsCache[2].model);
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
         verify(mModel, never()).add(any());
-        verify(mSetVisibilityCallback, never()).onResult(true);
+        verify(mOnHomeModulesChangedCallback, never()).run();
         verify(mModuleProviders[0], never()).hideModule();
 
         mMediator.onModuleFetchTimeOut();
         verify(mModel, times(1)).add(any());
         assertEquals(3, mMediator.getModuleResultsWaitingIndexForTesting());
-        verify(mSetVisibilityCallback).onResult(true);
+        verify(mOnHomeModulesChangedCallback, times(1)).run();
         // The magic stack is no longer waiting for modules to be load.
         assertFalse(mMediator.getIsFetchingModulesForTesting());
         verify(mModuleProviders[0], never()).hideModule();
@@ -538,7 +537,7 @@ public class HomeModulesMediatorUnitTest {
         assertEquals(0, mMediator.getModuleResultsWaitingIndexForTesting());
 
         // Calls buildModulesAndShow() to initialize ranking index map.
-        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mSetVisibilityCallback);
+        mMediator.buildModulesAndShow(moduleList, mModuleDelegate, mOnHomeModulesChangedCallback);
         assertNotNull(mMediator.getModuleFetchResultsIndicatorForTesting());
 
         mMediator.hide();
@@ -573,14 +572,19 @@ public class HomeModulesMediatorUnitTest {
                         ModuleType.PRICE_CHANGE,
                         ModuleType.SINGLE_TAB,
                         ModuleType.TAB_RESUMPTION,
-                        ModuleType.SAFETY_HUB);
+                        ModuleType.SAFETY_HUB,
+                        ModuleType.EDUCATIONAL_TIP);
         assertEquals(expectedModuleSet, mMediator.getFilteredEnabledModuleSet());
 
         // Verifies that the single tab module isn't shown if it isn't the home surface even with
         // "show all modules" parameter is enabled.
         when(mModuleDelegateHost.isHomeSurface()).thenReturn(false);
         expectedModuleSet =
-                Set.of(ModuleType.PRICE_CHANGE, ModuleType.TAB_RESUMPTION, ModuleType.SAFETY_HUB);
+                Set.of(
+                        ModuleType.PRICE_CHANGE,
+                        ModuleType.TAB_RESUMPTION,
+                        ModuleType.SAFETY_HUB,
+                        ModuleType.EDUCATIONAL_TIP);
         assertEquals(expectedModuleSet, mMediator.getFilteredEnabledModuleSet());
     }
 
@@ -597,7 +601,11 @@ public class HomeModulesMediatorUnitTest {
         // Verifies that the tab resumption module will be added to the list without the single tab
         // module.
         Set<Integer> expectedModuleSet =
-                Set.of(ModuleType.PRICE_CHANGE, ModuleType.TAB_RESUMPTION, ModuleType.SAFETY_HUB);
+                Set.of(
+                        ModuleType.PRICE_CHANGE,
+                        ModuleType.TAB_RESUMPTION,
+                        ModuleType.SAFETY_HUB,
+                        ModuleType.EDUCATIONAL_TIP);
         assertEquals(expectedModuleSet, mMediator.getFilteredEnabledModuleSet());
     }
 
@@ -743,28 +751,74 @@ public class HomeModulesMediatorUnitTest {
         filteredEnabledModuleSet.add(ModuleType.SINGLE_TAB);
         filteredEnabledModuleSet.add(ModuleType.PRICE_CHANGE);
         filteredEnabledModuleSet.add(ModuleType.TAB_RESUMPTION);
+        filteredEnabledModuleSet.add(ModuleType.SAFETY_HUB);
+        filteredEnabledModuleSet.add(ModuleType.EDUCATIONAL_TIP);
 
         // Verifies the orders of modules match the heuristic logic when all modules are present.
         List<Integer> expectedModuleList =
-                List.of(ModuleType.PRICE_CHANGE, ModuleType.SINGLE_TAB, ModuleType.TAB_RESUMPTION);
+                List.of(
+                        ModuleType.PRICE_CHANGE,
+                        ModuleType.SINGLE_TAB,
+                        ModuleType.EDUCATIONAL_TIP,
+                        ModuleType.TAB_RESUMPTION,
+                        ModuleType.SAFETY_HUB);
         assertEquals(expectedModuleList, mMediator.getFixedModuleList(filteredEnabledModuleSet));
 
         // Verifies that Price change module is always placed as the first module.
         filteredEnabledModuleSet.remove(ModuleType.SINGLE_TAB);
-        expectedModuleList = List.of(ModuleType.PRICE_CHANGE, ModuleType.TAB_RESUMPTION);
+        expectedModuleList =
+                List.of(
+                        ModuleType.PRICE_CHANGE,
+                        ModuleType.EDUCATIONAL_TIP,
+                        ModuleType.TAB_RESUMPTION,
+                        ModuleType.SAFETY_HUB);
         assertEquals(expectedModuleList, mMediator.getFixedModuleList(filteredEnabledModuleSet));
 
-        // Verifies that single tab module is placed before the tab resumption module.
+        // Verifies that single tab module is placed before the educational tip module and tab
+        // resumption module.
         filteredEnabledModuleSet.add(ModuleType.SINGLE_TAB);
         filteredEnabledModuleSet.remove(ModuleType.PRICE_CHANGE);
-        expectedModuleList = List.of(ModuleType.SINGLE_TAB, ModuleType.TAB_RESUMPTION);
+        expectedModuleList =
+                List.of(
+                        ModuleType.SINGLE_TAB,
+                        ModuleType.EDUCATIONAL_TIP,
+                        ModuleType.TAB_RESUMPTION,
+                        ModuleType.SAFETY_HUB);
         assertEquals(expectedModuleList, mMediator.getFixedModuleList(filteredEnabledModuleSet));
 
-        // Verifies that the tab resumption module becomes the first module when the first two
-        // modules
+        // Verifies that the safety hub module becomes the first module when the first two modules
         // are disabled.
         filteredEnabledModuleSet.remove(ModuleType.SINGLE_TAB);
-        expectedModuleList = List.of(ModuleType.TAB_RESUMPTION);
+        expectedModuleList =
+                List.of(
+                        ModuleType.EDUCATIONAL_TIP,
+                        ModuleType.TAB_RESUMPTION,
+                        ModuleType.SAFETY_HUB);
+        assertEquals(expectedModuleList, mMediator.getFixedModuleList(filteredEnabledModuleSet));
+
+        // Verifies that the educational tip module becomes the last module when the tab resumption
+        // module is disabled.
+        filteredEnabledModuleSet.add(ModuleType.SINGLE_TAB);
+        filteredEnabledModuleSet.add(ModuleType.PRICE_CHANGE);
+        filteredEnabledModuleSet.remove(ModuleType.TAB_RESUMPTION);
+        expectedModuleList =
+                List.of(
+                        ModuleType.PRICE_CHANGE,
+                        ModuleType.SINGLE_TAB,
+                        ModuleType.SAFETY_HUB,
+                        ModuleType.EDUCATIONAL_TIP);
+        assertEquals(expectedModuleList, mMediator.getFixedModuleList(filteredEnabledModuleSet));
+
+        // Verifies that the tab resumption module stays as the last module when the educational tip
+        // module is disabled.
+        filteredEnabledModuleSet.add(ModuleType.TAB_RESUMPTION);
+        filteredEnabledModuleSet.remove(ModuleType.EDUCATIONAL_TIP);
+        expectedModuleList =
+                List.of(
+                        ModuleType.PRICE_CHANGE,
+                        ModuleType.SINGLE_TAB,
+                        ModuleType.TAB_RESUMPTION,
+                        ModuleType.SAFETY_HUB);
         assertEquals(expectedModuleList, mMediator.getFixedModuleList(filteredEnabledModuleSet));
     }
 
@@ -813,11 +867,16 @@ public class HomeModulesMediatorUnitTest {
         filteredEnabledModuleSet.add(ModuleType.SINGLE_TAB);
         filteredEnabledModuleSet.add(ModuleType.PRICE_CHANGE);
         filteredEnabledModuleSet.add(ModuleType.TAB_RESUMPTION);
+        filteredEnabledModuleSet.add(ModuleType.EDUCATIONAL_TIP);
 
         // Verifies that result of #filterEnabledModuleList() is used if the segmentation
         // service returns a valid result.
         List<Integer> expectedModuleList =
-                List.of(ModuleType.TAB_RESUMPTION, ModuleType.SINGLE_TAB, ModuleType.PRICE_CHANGE);
+                List.of(
+                        ModuleType.EDUCATIONAL_TIP,
+                        ModuleType.TAB_RESUMPTION,
+                        ModuleType.SINGLE_TAB,
+                        ModuleType.PRICE_CHANGE);
         assertEquals(
                 expectedModuleList,
                 mMediator.filterEnabledModuleList(
@@ -830,7 +889,8 @@ public class HomeModulesMediatorUnitTest {
         // Verifies that the disabled module will be removed from the result of the segmentation
         // service.
         filteredEnabledModuleSet.remove(ModuleType.TAB_RESUMPTION);
-        expectedModuleList = List.of(ModuleType.SINGLE_TAB, ModuleType.PRICE_CHANGE);
+        expectedModuleList =
+                List.of(ModuleType.SINGLE_TAB, ModuleType.PRICE_CHANGE, ModuleType.EDUCATIONAL_TIP);
         assertEquals(
                 expectedModuleList,
                 mMediator.filterEnabledModuleList(
@@ -852,20 +912,31 @@ public class HomeModulesMediatorUnitTest {
     }
 
     private void verifyInputContext(InputContext inputContext, int[] scores) {
-        assertEquals(ModuleType.NUM_ENTRIES, inputContext.getSizeForTesting());
+        assertEquals(ModuleType.NUM_ENTRIES - 1, inputContext.getSizeForTesting());
+
+        int j = 0;
         for (int i = 0; i < ModuleType.NUM_ENTRIES; i++) {
+            if (i == ModuleType.EDUCATIONAL_TIP) {
+                continue;
+            }
+
             assertEquals(
-                    scores[i],
+                    scores[j],
                     inputContext.getEntryForTesting(
                                     HomeModulesMetricsUtils.getFreshnessInputContextString(i))
                             .floatValue,
                     0.01);
+            j = j + 1;
         }
     }
 
     private void verifyEmptyInputContext(InputContext inputContext) {
-        assertEquals(ModuleType.NUM_ENTRIES, inputContext.getSizeForTesting());
+        assertEquals(ModuleType.NUM_ENTRIES - 1, inputContext.getSizeForTesting());
         for (int i = 0; i < ModuleType.NUM_ENTRIES; i++) {
+            if (i == ModuleType.EDUCATIONAL_TIP) {
+                continue;
+            }
+
             assertEquals(
                     INVALID_FRESHNESS_SCORE,
                     inputContext.getEntryForTesting(

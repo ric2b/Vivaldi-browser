@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/autofill/ui_bundled/bottom_sheet/payments_suggestion_bottom_sheet_view_controller.h"
 
 #import "base/metrics/histogram_functions.h"
+#import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "build/branding_buildflags.h"
 #import "components/autofill/core/browser/data_model/credit_card.h"
@@ -12,12 +13,12 @@
 #import "components/grit/components_scaled_resources.h"
 #import "components/url_formatter/elide_url.h"
 #import "ios/chrome/browser/autofill/model/credit_card/credit_card_data.h"
+#import "ios/chrome/browser/autofill/ui_bundled/bottom_sheet/payments_suggestion_bottom_sheet_delegate.h"
+#import "ios/chrome/browser/autofill/ui_bundled/bottom_sheet/payments_suggestion_bottom_sheet_handler.h"
 #import "ios/chrome/browser/shared/ui/bottom_sheet/table_view_bottom_sheet_view_controller+subclassing.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/autofill/ui_bundled/bottom_sheet/payments_suggestion_bottom_sheet_delegate.h"
-#import "ios/chrome/browser/autofill/ui_bundled/bottom_sheet/payments_suggestion_bottom_sheet_handler.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
@@ -115,6 +116,12 @@ CGFloat const kTitleLogoHeight = 32;
   [super viewDidLoad];
 
   [self adjustTransactionsPrimaryActionButtonHorizontalConstraints];
+
+  if (@available(iOS 17, *)) {
+    [self registerForTraitChanges:TraitCollectionSetForTraits(
+                                      @[ UITraitUserInterfaceStyle.self ])
+                       withAction:@selector(resizeLogoOnTraitChange)];
+  }
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -123,15 +130,19 @@ CGFloat const kTitleLogoHeight = 32;
                                   self.imageViewAccessibilityLabel);
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
+  if (@available(iOS 17, *)) {
+    return;
+  }
 
   if (self.traitCollection.userInterfaceStyle !=
       previousTraitCollection.userInterfaceStyle) {
-    // Make sure the GPay logo matches the new trait collection.
-    self.image = [self titleImage];
+    [self resizeLogoOnTraitChange];
   }
 }
+#endif
 
 - (void)viewDidDisappear:(BOOL)animated {
   [super viewDidDisappear:animated];
@@ -223,8 +234,13 @@ CGFloat const kTitleLogoHeight = 32;
 - (void)confirmationAlertPrimaryAction {
   self.disableBottomSheetOnExit = NO;
 
+  base::RecordAction(
+      base::UserMetricsAction("BottomSheet_CreditCard_SuggestionAccepted"));
   NSInteger index = [self selectedRow];
-  [self.handler primaryButtonTapped:_creditCardData[index]];
+  base::UmaHistogramSparse(
+      "Autofill.UserAcceptedSuggestionAtIndex.CreditCard.BottomSheet", index);
+  [self.handler primaryButtonTappedForCard:_creditCardData[index]
+                                   atIndex:index];
 
   if ([self rowCount] > 1) {
     base::UmaHistogramCounts100("Autofill.TouchToFill.CreditCard.SelectedIndex",
@@ -371,6 +387,7 @@ CGFloat const kTitleLogoHeight = 32;
             tintColor:nil
       backgroundColor:cell.backgroundColor
          cornerRadius:kCreditCardIconCornerRadius];
+  [cell updateIconBackgroundWidthToFitContent:YES];
   [cell setTextLayoutConstraintAxis:UILayoutConstraintAxisVertical];
 
   cell.textLabel.text = [self suggestionAtRow:indexPath.row];
@@ -392,6 +409,11 @@ CGFloat const kTitleLogoHeight = 32;
                                                   atIndexPath:indexPath];
   cell.accessoryType = [self accessoryType:indexPath];
   return cell;
+}
+
+// Resizes the GPay logo to match the new trait collection.
+- (void)resizeLogoOnTraitChange {
+  self.image = [self titleImage];
 }
 
 #pragma mark - ConfirmationAlertViewController

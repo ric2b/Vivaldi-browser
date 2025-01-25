@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/notreached.h"
 #include "pdf/ink/ink_brush.h"
 #include "pdf/ink/ink_brush_family.h"
 #include "pdf/ink/ink_brush_paint.h"
@@ -25,13 +26,26 @@ std::string CreateBrushUri() {
   return "ink://ink/texture:test-texture";
 }
 
-float GetOpacity(PdfInkBrush::Type type) {
+float GetCornerRounding(PdfInkBrush::Type type) {
   switch (type) {
     case PdfInkBrush::Type::kHighlighter:
-      return 0.4f;
+      return 0.0f;
     case PdfInkBrush::Type::kPen:
       return 1.0f;
   }
+  NOTREACHED();
+}
+
+float GetOpacity(PdfInkBrush::Type type) {
+  switch (type) {
+    case PdfInkBrush::Type::kHighlighter:
+      // LINT.IfChange(HighlighterOpacity)
+      return 0.4f;
+      // LINT.ThenChange(//chrome/browser/resources/pdf/elements/viewer_side_panel.ts:HighlighterOpacity)
+    case PdfInkBrush::Type::kPen:
+      return 1.0f;
+  }
+  NOTREACHED();
 }
 
 std::unique_ptr<InkBrush> CreateInkBrush(PdfInkBrush::Type type,
@@ -40,7 +54,7 @@ std::unique_ptr<InkBrush> CreateInkBrush(PdfInkBrush::Type type,
 
   // TODO(crbug.com/353942923): Use real values here.
   InkBrushTip tip;
-  tip.corner_rounding = 0;
+  tip.corner_rounding = GetCornerRounding(type);
   tip.opacity_multiplier = GetOpacity(type);
 
   InkBrushPaint::TextureLayer layer;
@@ -89,6 +103,12 @@ std::optional<PdfInkBrush::Type> PdfInkBrush::StringToType(
     return Type::kPen;
   }
   return std::nullopt;
+}
+
+// static
+void PdfInkBrush::CheckToolSizeIsInRange(float size) {
+  CHECK_GE(size, 1);
+  CHECK_LE(size, 16);
 }
 
 PdfInkBrush::PdfInkBrush(Type brush_type, Params brush_params)

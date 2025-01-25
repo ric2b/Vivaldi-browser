@@ -4,6 +4,7 @@
 """Definitions of builders in the tryserver.chromium.swangle builder group."""
 
 load("//lib/branches.star", "branches")
+load("//lib/builder_config.star", "builder_config")
 load("//lib/builders.star", "cpu", "os", "siso")
 load("//lib/consoles.star", "consoles")
 load("//lib/try.star", "try_")
@@ -30,6 +31,28 @@ consoles.list_view(
         branches.selector.ANDROID_BRANCHES,
         branches.selector.DESKTOP_BRANCHES,
     ],
+)
+
+try_.builder(
+    name = "dawn-chromium-presubmit",
+    branch_selector = [
+        branches.selector.ANDROID_BRANCHES,
+        branches.selector.DESKTOP_BRANCHES,
+    ],
+    description_html = "Runs Chromium presubmit tests on Dawn CLs",
+    mirrors = [
+        "ci/Dawn Chromium Presubmit",
+    ],
+    builder_config_settings = builder_config.try_settings(
+        analyze_names = [
+            "dawn_chromium_presubmit",
+        ],
+        retry_failed_shards = False,
+        retry_without_patch = False,
+    ),
+    gn_args = "ci/Dawn Chromium Presubmit",
+    execution_timeout = 30 * time.minute,
+    main_list_view = "try",
 )
 
 try_.builder(
@@ -346,6 +369,22 @@ try_.builder(
     ],
     gn_args = "ci/Dawn Linux x64 Builder",
     pool = "luci.chromium.gpu.linux.intel.try",
+    builderless = True,
+    os = os.LINUX_DEFAULT,
+    test_presentation = resultdb.test_presentation(
+        grouping_keys = ["status", "v.test_suite", "v.gpu"],
+    ),
+)
+
+try_.builder(
+    name = "linux-dawn-nvidia-1660-exp-rel",
+    description_html = "Runs ToT Dawn tests on experimental Linux/GTX 1660 configs",
+    mirrors = [
+        "ci/Dawn Linux x64 Builder",
+        "ci/Dawn Linux x64 Experimental Release (NVIDIA GTX 1660)",
+    ],
+    gn_args = "ci/Dawn Linux x64 Builder",
+    pool = "luci.chromium.gpu.linux.nvidia.try",
     builderless = True,
     os = os.LINUX_DEFAULT,
     test_presentation = resultdb.test_presentation(

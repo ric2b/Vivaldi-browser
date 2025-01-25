@@ -11,7 +11,9 @@ import {
   getBrowserAndPages,
   goToResource,
   setCheckBox,
+  typeText,
   waitFor,
+  waitForAria,
   waitForFunction,
 } from '../../shared/helper.js';
 
@@ -110,6 +112,10 @@ export async function setCacheDisabled(disabled: boolean): Promise<void> {
   await setCheckBox('[title^="Disable cache"]', disabled);
 }
 
+export async function setInvert(invert: boolean) {
+  await setCheckBox('[title="Invert"]', invert);
+}
+
 export async function setTimeWindow(): Promise<void> {
   const overviewGridCursorArea = await waitFor('.overview-grid-cursor-area');
   await overviewGridCursorArea.click({offset: {x: 0, y: 10}});
@@ -118,6 +124,13 @@ export async function setTimeWindow(): Promise<void> {
 export async function clearTimeWindow(): Promise<void> {
   const overviewGridCursorArea = await waitFor('.overview-grid-cursor-area');
   await overviewGridCursorArea.click({count: 2});
+}
+
+export async function setTextFilter(text: string): Promise<void> {
+  const toolbarHandle = await waitFor('.text-filter');
+  const input = await waitForAria('Filter', toolbarHandle);
+  await input.focus();
+  await typeText(text);
 }
 
 export async function getTextFilterContent(): Promise<string> {
@@ -166,13 +179,10 @@ export function veImpressionForNetworkPanel(options?: {newFilterBar?: boolean}) 
         veImpression('DropDown', 'request-types'),
         veImpression('DropDown', 'more-filters'),
         veImpression('Toggle', 'invert-filter'),
-        veImpression('TextField'),
+        veImpression('TextField', 'filter'),
       ] :
       [
-        veImpression('TextField'),
-        veImpression('Toggle', 'invert-filter'),
-        veImpression('Toggle', 'hide-data-urls'),
-        veImpression('Toggle', 'hide-extension-urls'),
+        veImpression('DropDown', 'more-filters'),
         veImpression(
             'Section', 'filter-bitset',
             [
@@ -189,9 +199,8 @@ export function veImpressionForNetworkPanel(options?: {newFilterBar?: boolean}) 
               veImpression('Item', 'WebAssembly'),
               veImpression('Item', 'Other'),
             ]),
-        veImpression('Toggle', 'only-show-blocked-cookies'),
-        veImpression('Toggle', 'only-show-blocked-requests'),
-        veImpression('Toggle', 'only-show-third-party'),
+        veImpression('TextField', 'filter'),
+        veImpression('Toggle', 'invert-filter'),
       ];
   return veImpression('Panel', 'network', [
     veImpression('Toolbar', 'filter-bar', filterBar),
@@ -209,7 +218,7 @@ export function veImpressionForNetworkPanel(options?: {newFilterBar?: boolean}) 
           veImpression('Toggle', 'cache-disabled'),
           veImpression('DropDown', 'preferred-network-condition'),
         ]),
-    veImpression('Pane', 'network-overview'),
+    veImpression('Timeline', 'network-overview'),
     veImpression('Toggle', 'network-settings'),
     veImpression('Link', 'learn-more'),
     veImpression('TableHeader', 'name'),

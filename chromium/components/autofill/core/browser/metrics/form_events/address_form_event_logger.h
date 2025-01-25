@@ -49,7 +49,6 @@ class AddressFormEventLogger : public FormEventLoggerBase {
       const AutofillProfile& profile,
       const FormStructure& form,
       const AutofillField& field,
-      AutofillMetrics::PaymentsSigninState signin_state_for_metrics,
       const AutofillTriggerSource trigger_source);
 
   void OnDidUndoAutofill();
@@ -77,10 +76,10 @@ class AddressFormEventLogger : public FormEventLoggerBase {
 
  private:
   // All profile categories for which the user has at least one profile stored.
-  DenseSet<AutofillProfileSourceCategory> profile_categories_available_;
+  DenseSet<AutofillProfileRecordTypeCategory> profile_categories_available_;
   // All profile categories for which the user has accepted at least one
   // suggestion.
-  DenseSet<AutofillProfileSourceCategory> profile_categories_filled_;
+  DenseSet<AutofillProfileRecordTypeCategory> profile_categories_filled_;
 
   size_t record_type_count_ = 0;
 };

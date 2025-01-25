@@ -17,15 +17,19 @@
 // - Bits-per-pixel: value & 0xFF
 // - Is mask: value & 0x100
 // - Has alpha: value & 0x200
+// - Is premultiplied-alpha: value & 0x400
 enum class FXDIB_Format : uint16_t {
   kInvalid = 0,
   k1bppRgb = 0x001,
   k8bppRgb = 0x008,
-  kRgb = 0x018,
-  kRgb32 = 0x020,
+  kBgr = 0x018,
+  kBgrx = 0x020,
   k1bppMask = 0x101,
   k8bppMask = 0x108,
-  kArgb = 0x220,
+  kBgra = 0x220,
+#if defined(PDF_USE_SKIA)
+  kBgraPremul = 0x620,
+#endif
 };
 
 // Endian-dependent (in theory).
@@ -166,13 +170,17 @@ inline bool GetIsMaskFromFormat(FXDIB_Format format) {
   return !!(static_cast<uint16_t>(format) & 0x100);
 }
 
+inline bool GetIsAlphaFromFormat(FXDIB_Format format) {
+  return !!(static_cast<uint16_t>(format) & 0x200);
+}
+
 FX_BGRA_STRUCT<uint8_t> ArgbToBGRAStruct(FX_ARGB argb);
 
 // Ignores alpha.
 FX_BGR_STRUCT<uint8_t> ArgbToBGRStruct(FX_ARGB argb);
 
 // Returns (a, FX_COLORREF)
-std::pair<int, FX_COLORREF> ArgbToAlphaAndColorRef(FX_ARGB argb);
+std::pair<uint8_t, FX_COLORREF> ArgbToAlphaAndColorRef(FX_ARGB argb);
 
 FX_COLORREF ArgbToColorRef(FX_ARGB argb);
 FX_ARGB AlphaAndColorRefToArgb(int a, FX_COLORREF colorref);
@@ -233,5 +241,41 @@ UNSAFE_BUFFER_USAGE inline void ReverseCopy3Bytes(uint8_t* dest,
   UNSAFE_BUFFERS(dest[1] = src[1]);
   UNSAFE_BUFFERS(dest[0] = src[2]);
 }
+
+#if defined(PDF_USE_SKIA)
+template <typename T>
+T PreMultiplyColor(const T& input) {
+  if (input.alpha == 255) {
+    return input;
+  }
+
+  T output;
+  output.alpha = input.alpha;
+  output.blue = static_cast<float>(input.blue) * input.alpha / 255.0f;
+  output.green = static_cast<float>(input.green) * input.alpha / 255.0f;
+  output.red = static_cast<float>(input.red) * input.alpha / 255.0f;
+  return output;
+}
+
+template <typename T>
+T UnPreMultiplyColor(const T& input) {
+  if (input.alpha == 255) {
+    return input;
+  }
+
+  T output;
+  output.alpha = input.alpha;
+  if (input.alpha == 0) {
+    output.blue = 0;
+    output.green = 0;
+    output.red = 0;
+  } else {
+    output.blue = static_cast<float>(input.blue) * 255.0f / input.alpha;
+    output.green = static_cast<float>(input.green) * 255.0f / input.alpha;
+    output.red = static_cast<float>(input.red) * 255.0f / input.alpha;
+  }
+  return output;
+}
+#endif  // defined(PDF_USE_SKIA)
 
 #endif  // CORE_FXGE_DIB_FX_DIB_H_

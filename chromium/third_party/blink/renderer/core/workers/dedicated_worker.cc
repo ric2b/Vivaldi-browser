@@ -25,6 +25,7 @@
 #include "third_party/blink/public/platform/web_fetch_client_settings_object.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_post_message_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_structured_serialize_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
@@ -46,6 +47,7 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/script/script.h"
 #include "third_party/blink/renderer/core/script_type_names.h"
+#include "third_party/blink/renderer/core/workers/custom_event_message.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_messaging_proxy.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/worker_classic_script_loader.h"
@@ -195,6 +197,63 @@ void DedicatedWorker::postMessage(ScriptState* script_state,
       perfetto::Flow::Global(trace_id));  // SchedulePostMessage
 }
 
+void DedicatedWorker::PostCustomEvent(
+    TaskType task_type,
+    ScriptState* script_state,
+    CrossThreadFunction<Event*(ScriptState*, CustomEventMessage)>
+        event_factory_callback,
+    CrossThreadFunction<Event*(ScriptState*)> event_factory_error_callback,
+    const ScriptValue& message,
+    HeapVector<ScriptValue>& transfer,
+    ExceptionState& exception_state) {
+  CHECK(!GetExecutionContext() || GetExecutionContext()->IsContextThread());
+  if (!GetExecutionContext()) {
+    return;
+  }
+
+  StructuredSerializeOptions* options = StructuredSerializeOptions::Create();
+  if (!transfer.empty()) {
+    options->setTransfer(transfer);
+  }
+  CustomEventMessage transferable_message;
+  Transferables transferables;
+
+  if (!message.IsEmpty()) {
+    scoped_refptr<SerializedScriptValue> serialized_message =
+        PostMessageHelper::SerializeMessageByMove(
+            script_state->GetIsolate(), message, options, transferables,
+            exception_state);
+    if (exception_state.HadException()) {
+      return;
+    }
+    CHECK(serialized_message);
+    transferable_message.message = serialized_message;
+  }
+  // Disentangle the port in preparation for sending it to the remote context.
+  transferable_message.ports = MessagePort::DisentanglePorts(
+      ExecutionContext::From(script_state), transferables.message_ports,
+      exception_state);
+  if (exception_state.HadException()) {
+    return;
+  }
+
+  transferable_message.sender_stack_trace_id =
+      ThreadDebugger::From(script_state->GetIsolate())
+          ->StoreCurrentStackTrace("Worker.PostCustomEvent");
+  uint64_t trace_id = base::trace_event::GetNextGlobalTraceId();
+  transferable_message.trace_id = trace_id;
+  context_proxy_->PostCustomEventToWorkerGlobalScope(
+      task_type, std::move(event_factory_callback),
+      std::move(event_factory_error_callback), std::move(transferable_message));
+  TRACE_EVENT_INSTANT(
+      "devtools.timeline", "SchedulePostCustomEvent", "data",
+      [&](perfetto::TracedValue context) {
+        inspector_schedule_post_message_event::Data(
+            std::move(context), GetExecutionContext(), trace_id);
+      },
+      perfetto::Flow::Global(trace_id));  // SchedulePostCustomEvent
+}
+
 // https://html.spec.whatwg.org/C/#worker-processing-model
 void DedicatedWorker::Start() {
   TRACE_EVENT("blink.worker", "DedicatedWorker::Start");
@@ -248,12 +307,24 @@ void DedicatedWorker::Start() {
         blob_url_loader_factory.InitWithNewPipeAndPassReceiver());
   }
 
+  // Calculate the origin on the renderer side when PlzDedicatedWorker is not
+  // enabled, as the starting of the worker will not wait for the browser side
+  // host creation and origin calculation. This follows the existing logic at
+  // worker_global_scope.cc, so see the comments there for details.
+  if (script_request_url_.ProtocolIsData()) {
+    origin_ =
+        GetExecutionContext()->GetSecurityOrigin()->DeriveNewOpaqueOrigin();
+  } else {
+    origin_ = GetExecutionContext()->GetSecurityOrigin()->IsolatedCopy();
+  }
+
   if (GetExecutionContext()->GetSecurityOrigin()->IsLocal()) {
     // Local resources always have empty COEP, and Worker creation
     // from a blob URL in a local resource cannot work with
     // asynchronous OnHostCreated call, so we call it directly here.
     // See https://crbug.com/1101603#c8.
     factory_client_->CreateWorkerHostDeprecated(token_, script_request_url_,
+                                                WebSecurityOrigin(origin_),
                                                 base::DoNothing());
     OnHostCreated(std::move(blob_url_loader_factory),
                   network::CrossOriginEmbedderPolicy(), mojo::NullRemote());
@@ -261,7 +332,7 @@ void DedicatedWorker::Start() {
   }
 
   factory_client_->CreateWorkerHostDeprecated(
-      token_, script_request_url_,
+      token_, script_request_url_, WebSecurityOrigin(origin_),
       WTF::BindOnce(&DedicatedWorker::OnHostCreated, WrapWeakPersistent(this),
                     std::move(blob_url_loader_factory)));
 }
@@ -333,11 +404,13 @@ void DedicatedWorker::OnWorkerHostCreated(
     CrossVariantMojoRemote<mojom::blink::BrowserInterfaceBrokerInterfaceBase>
         browser_interface_broker,
     CrossVariantMojoRemote<mojom::blink::DedicatedWorkerHostInterfaceBase>
-        dedicated_worker_host) {
+        dedicated_worker_host,
+    const WebSecurityOrigin& origin) {
   TRACE_EVENT("blink.worker", "DedicatedWorker::OnWorkerHostCreated");
   DCHECK(!browser_interface_broker_);
   browser_interface_broker_ = std::move(browser_interface_broker);
   pending_dedicated_worker_host_ = std::move(dedicated_worker_host);
+  origin_ = blink::SecurityOrigin::CreateFromUrlOrigin(url::Origin(origin));
 }
 
 void DedicatedWorker::OnScriptLoadStarted(
@@ -598,7 +671,9 @@ DedicatedWorker::CreateGlobalScopeCreationParams(
       /*interface_registry=*/nullptr,
       std::move(agent_group_scheduler_compositor_task_runner),
       top_level_frame_security_origin,
-      execution_context->GetStorageAccessApiStatus());
+      execution_context->GetStorageAccessApiStatus(),
+      /*require_cross_site_request_for_cookies=*/false,
+      origin_ ? origin_->IsolatedCopy() : nullptr);
   params->dedicated_worker_start_time = start_time_;
   return params;
 }

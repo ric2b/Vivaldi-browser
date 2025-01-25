@@ -294,8 +294,9 @@ String HTMLFormControlElement::ResultForDialogSubmit() {
   return FastGetAttribute(html_names::kValueAttr);
 }
 
-bool HTMLFormControlElement::SupportsFocus(UpdateBehavior) const {
-  return !IsDisabledFormControl();
+FocusableState HTMLFormControlElement::SupportsFocus(UpdateBehavior) const {
+  return IsDisabledFormControl() ? FocusableState::kNotFocusable
+                                 : FocusableState::kFocusable;
 }
 
 bool HTMLFormControlElement::IsKeyboardFocusable(
@@ -345,7 +346,8 @@ HTMLFormControlElement::popoverTargetElement() {
   }
 
   Element* target_element;
-  target_element = GetElementAttribute(html_names::kPopovertargetAttr);
+  target_element = GetElementAttributeResolvingReferenceTarget(
+      html_names::kPopovertargetAttr);
 
   // The selectlist element's button which opens its listbox forms an implicit
   // popover trigger for the listbox in order to function properly with light
@@ -358,14 +360,16 @@ HTMLFormControlElement::popoverTargetElement() {
       }
     }
   }
-  // The select element's author provided <button> which opens its author
-  // provided <datalist> forms an implicit popover trigger for the <datalist> in
-  // order to function properly with light dismiss.
+  // The select element's author provided <button> which opens its UA popover
+  // forms an implicit popover trigger for the UA popover in order to function
+  // properly with light dismiss.
   if (!target_element && RuntimeEnabledFeatures::StylableSelectEnabled()) {
     if (auto* button = DynamicTo<HTMLButtonElement>(this)) {
       if (auto* select = button->OwnerSelect()) {
-        if (HTMLDataListElement* datalist = select->DisplayedDatalist()) {
-          target_element = datalist;
+        if (select->IsAppearanceBasePicker()) {
+          if (HTMLElement* popover = select->PopoverForAppearanceBase()) {
+            target_element = popover;
+          }
         }
       }
     }

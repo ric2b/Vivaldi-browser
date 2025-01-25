@@ -18,7 +18,7 @@
 #include "av1/encoder/arm/pickrst_neon.h"
 #include "av1/encoder/pickrst.h"
 
-static INLINE void highbd_calc_proj_params_r0_r1_neon(
+static inline void highbd_calc_proj_params_r0_r1_neon(
     const uint8_t *src8, int width, int height, int src_stride,
     const uint8_t *dat8, int dat_stride, int32_t *flt0, int flt0_stride,
     int32_t *flt1, int flt1_stride, int64_t H[2][2], int64_t C[2]) {
@@ -115,7 +115,7 @@ static INLINE void highbd_calc_proj_params_r0_r1_neon(
   C[1] = horizontal_add_s64x2(vaddq_s64(c1_lo, c1_hi)) / size;
 }
 
-static INLINE void highbd_calc_proj_params_r0_neon(
+static inline void highbd_calc_proj_params_r0_neon(
     const uint8_t *src8, int width, int height, int src_stride,
     const uint8_t *dat8, int dat_stride, int32_t *flt0, int flt0_stride,
     int64_t H[2][2], int64_t C[2]) {
@@ -180,7 +180,7 @@ static INLINE void highbd_calc_proj_params_r0_neon(
   C[0] = horizontal_add_s64x2(vaddq_s64(c0_lo, c0_hi)) / size;
 }
 
-static INLINE void highbd_calc_proj_params_r1_neon(
+static inline void highbd_calc_proj_params_r1_neon(
     const uint8_t *src8, int width, int height, int src_stride,
     const uint8_t *dat8, int dat_stride, int32_t *flt1, int flt1_stride,
     int64_t H[2][2], int64_t C[2]) {
@@ -272,7 +272,7 @@ void av1_calc_proj_params_high_bd_neon(const uint8_t *src8, int width,
   }
 }
 
-static INLINE int16x8_t tbl2q(int16x8_t a, int16x8_t b, uint8x16_t idx) {
+static inline int16x8_t tbl2q(int16x8_t a, int16x8_t b, uint8x16_t idx) {
 #if AOM_ARCH_AARCH64
   uint8x16x2_t table = { { vreinterpretq_u8_s16(a), vreinterpretq_u8_s16(b) } };
   return vreinterpretq_s16_u8(vqtbl2q_u8(table, idx));
@@ -286,7 +286,7 @@ static INLINE int16x8_t tbl2q(int16x8_t a, int16x8_t b, uint8x16_t idx) {
 #endif
 }
 
-static INLINE int16x8_t tbl3q(int16x8_t a, int16x8_t b, int16x8_t c,
+static inline int16x8_t tbl3q(int16x8_t a, int16x8_t b, int16x8_t c,
                               uint8x16_t idx) {
 #if AOM_ARCH_AARCH64
   uint8x16x3_t table = { { vreinterpretq_u8_s16(a), vreinterpretq_u8_s16(b),
@@ -307,7 +307,7 @@ static INLINE int16x8_t tbl3q(int16x8_t a, int16x8_t b, int16x8_t c,
 #endif
 }
 
-static INLINE int64_t div_shift_s64(int64_t x, int power) {
+static inline int64_t div_shift_s64(int64_t x, int power) {
   return (x < 0 ? x + (1ll << power) - 1 : x) >> power;
 }
 
@@ -315,7 +315,7 @@ static INLINE int64_t div_shift_s64(int64_t x, int power) {
 // speed up the computation. This function computes the final M from the
 // accumulated (src_s64) and the residual parts (src_s32). It also transposes
 // the result as the output needs to be column-major.
-static INLINE void acc_transpose_M(int64_t *dst, const int64_t *src_s64,
+static inline void acc_transpose_M(int64_t *dst, const int64_t *src_s64,
                                    const int32_t *src_s32, const int wiener_win,
                                    int shift) {
   for (int i = 0; i < wiener_win; ++i) {
@@ -335,7 +335,7 @@ static INLINE void acc_transpose_M(int64_t *dst, const int64_t *src_s64,
 // the accumulated (src_s64) and the residual parts (src_s32). The computed H is
 // only an upper triangle matrix, this function also fills the lower triangle of
 // the resulting matrix.
-static INLINE void update_H(int64_t *dst, const int64_t *src_s64,
+static inline void update_H(int64_t *dst, const int64_t *src_s64,
                             const int32_t *src_s32, const int wiener_win,
                             int stride, int shift) {
   // For a simplified theoretical 3x3 case where `wiener_win` is 3 and
@@ -388,7 +388,7 @@ static INLINE void update_H(int64_t *dst, const int64_t *src_s64,
 
 // Load 7x7 matrix into 7 128-bit vectors from consecutive rows, the last load
 // address is offset to prevent out-of-bounds access.
-static INLINE void load_and_pack_s16_8x7(int16x8_t dst[7], const int16_t *src,
+static inline void load_and_pack_s16_8x7(int16x8_t dst[7], const int16_t *src,
                                          ptrdiff_t stride) {
   dst[0] = vld1q_s16(src);
   src += stride;
@@ -405,7 +405,7 @@ static INLINE void load_and_pack_s16_8x7(int16x8_t dst[7], const int16_t *src,
   dst[6] = vld1q_s16(src - 1);
 }
 
-static INLINE void highbd_compute_stats_win7_neon(
+static inline void highbd_compute_stats_win7_neon(
     const uint16_t *dgd, const uint16_t *src, int avg, int width, int height,
     int dgd_stride, int src_stride, int64_t *M, int64_t *H,
     aom_bit_depth_t bit_depth) {
@@ -454,10 +454,10 @@ static INLINE void highbd_compute_stats_win7_neon(
   const uint8x16_t lut10 = vld1q_u8(shuffle_stats7_highbd + 160);
   const uint8x16_t lut11 = vld1q_u8(shuffle_stats7_highbd + 176);
 
-  // We can accumulate up to 65536/4096/256 8/10/12-bit multiplication results
-  // in 32-bit. We are processing 2 pixels at a time, so the accumulator max can
-  // be as high as 32768/2048/128 for the compute stats.
-  const int acc_cnt_max = (1 << (32 - 2 * bit_depth)) >> 1;
+  // We can accumulate up to 32768/2048/128 8/10/12-bit multiplication results
+  // in a signed 32-bit integer. We are processing 2 pixels at a time, so the
+  // accumulator max can be as high as 16384/1024/64 for the compute stats.
+  const int acc_cnt_max = (1 << (31 - 2 * bit_depth)) >> 1;
   int acc_cnt = acc_cnt_max;
   const int src_next = src_stride - width;
   const int dgd_next = dgd_stride - width;
@@ -684,7 +684,7 @@ static INLINE void highbd_compute_stats_win7_neon(
 
 // Load 5x5 matrix into 5 128-bit vectors from consecutive rows, the last load
 // address is offset to prevent out-of-bounds access.
-static INLINE void load_and_pack_s16_6x5(int16x8_t dst[5], const int16_t *src,
+static inline void load_and_pack_s16_6x5(int16x8_t dst[5], const int16_t *src,
                                          ptrdiff_t stride) {
   dst[0] = vld1q_s16(src);
   src += stride;
@@ -736,10 +736,10 @@ static void highbd_compute_stats_win5_neon(const uint16_t *dgd,
   const uint8x16_t lut4 = vld1q_u8(shuffle_stats5_highbd + 64);
   const uint8x16_t lut5 = vld1q_u8(shuffle_stats5_highbd + 80);
 
-  // We can accumulate up to 65536/4096/256 8/10/12-bit multiplication results
-  // in 32-bit. We are processing 2 pixels at a time, so the accumulator max can
-  // be as high as 32768/2048/128 for the compute stats.
-  const int acc_cnt_max = (1 << (32 - 2 * bit_depth)) >> 1;
+  // We can accumulate up to 32768/2048/128 8/10/12-bit multiplication results
+  // in a signed 32-bit integer. We are processing 2 pixels at a time, so the
+  // accumulator max can be as high as 16384/1024/64 for the compute stats.
+  const int acc_cnt_max = (1 << (31 - 2 * bit_depth)) >> 1;
   int acc_cnt = acc_cnt_max;
   const int src_next = src_stride - width;
   const int dgd_next = dgd_stride - width;

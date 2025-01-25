@@ -1,49 +1,37 @@
 # Copyright 2022 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
 
-imageset("panel_notes") {
+bundle_data_xcassets("notes_assets") {
+  catalog = "NotesAssets.xcassets"
   sources = [
-    "panel_notes.imageset/Contents.json",
-    "panel_notes.imageset/panel_notes@2x.png",
-    "panel_notes.imageset/panel_notes@3x.png",
-    ]
-}
+    # panel_notes
+    "NotesAssets.xcassets/panel_notes.imageset/Contents.json",
+    "NotesAssets.xcassets/panel_notes.imageset/panel_notes.png",
+    "NotesAssets.xcassets/panel_notes.imageset/panel_notes@2x.png",
+    "NotesAssets.xcassets/panel_notes.imageset/panel_notes@3x.png",
 
-imageset("single_note_icon") {
-  sources = [
-    "single_note_icon.imageset/Contents.json",
-    "single_note_icon.imageset/single_note_icon.pdf",
-    "single_note_icon.imageset/single_note_icon_dark.pdf",
-    ]
-}
+    # single_note_icon
+    "NotesAssets.xcassets/single_note_icon.imageset/Contents.json",
+    "NotesAssets.xcassets/single_note_icon.imageset/single_note_icon.pdf",
+    "NotesAssets.xcassets/single_note_icon.imageset/single_note_icon_dark.pdf",
 
-imageset("context_menu_icon") {
-  sources = [
-    "context_menu_icon.imageset/Contents.json",
-    "context_menu_icon.imageset/context_menu_icon.pdf",
-    "context_menu_icon.imageset/context_menu_icon_dark.pdf",
-    ]
-}
+    # context_menu_icon
+    "NotesAssets.xcassets/context_menu_icon.imageset/Contents.json",
+    "NotesAssets.xcassets/context_menu_icon.imageset/context_menu_icon.pdf",
+    "NotesAssets.xcassets/context_menu_icon.imageset/context_menu_icon_dark.pdf",
 
-imageset("sort_order_icon") {
-  sources = [
-    "sort_order_icon.imageset/Contents.json",
-    "sort_order_icon.imageset/sort_order_icon.pdf",
-    "sort_order_icon.imageset/sort_order_icon_dark.pdf",
-    ]
-}
+    # sort_order_icon
+    "NotesAssets.xcassets/sort_order_icon.imageset/Contents.json",
+    "NotesAssets.xcassets/sort_order_icon.imageset/sort_order_icon.pdf",
+    "NotesAssets.xcassets/sort_order_icon.imageset/sort_order_icon_dark.pdf",
 
-imageset("markdown_toggle_on") {
-  sources = [
-    "markdown_toggle_on.imageset/Contents.json",
-    "markdown_toggle_on.imageset/markdown_toggle_on.pdf"
-    ]
-}
+    # markdown_toggle_on
+    "NotesAssets.xcassets/markdown_toggle_on.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_toggle_on.imageset/markdown_toggle_on.pdf",
 
-imageset("markdown_toggle_off") {
-  sources = [
-    "markdown_toggle_off.imageset/Contents.json",
-    "markdown_toggle_off.imageset/markdown_toggle_off.pdf"
-    ]
+    # markdown_toggle_off
+    "NotesAssets.xcassets/markdown_toggle_off.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_toggle_off.imageset/markdown_toggle_off.pdf",
+  ]
 }

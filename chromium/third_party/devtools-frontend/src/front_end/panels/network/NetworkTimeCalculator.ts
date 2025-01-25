@@ -190,7 +190,7 @@ export class NetworkTimeCalculator extends Common.ObjectWrapper.ObjectWrapper<Ev
       start = 0;
     }
 
-    return {start: start, middle: middle, end: end};
+    return {start, middle, end};
   }
 
   computePercentageFromEventTime(eventTime: number): number {
@@ -210,7 +210,7 @@ export class NetworkTimeCalculator extends Common.ObjectWrapper.ObjectWrapper<Ev
 
   boundaryChanged(): void {
     void this.boundryChangedEventThrottler.schedule(async () => {
-      this.dispatchEventToListeners(Events.BoundariesChanged);
+      this.dispatchEventToListeners(Events.BOUNDARIES_CHANGED);
     });
   }
 
@@ -253,7 +253,7 @@ export class NetworkTimeCalculator extends Common.ObjectWrapper.ObjectWrapper<Ev
     } else if (request.cached()) {
       tooltip = i18nString(UIStrings.sFromCache, {PH1: String(tooltip)});
     }
-    return {left: leftLabel, right: rightLabel, tooltip: tooltip};
+    return {left: leftLabel, right: rightLabel, tooltip};
   }
 
   updateBoundaries(request: SDK.NetworkRequest.NetworkRequest): void {
@@ -299,11 +299,11 @@ export class NetworkTimeCalculator extends Common.ObjectWrapper.ObjectWrapper<Ev
 const MINIMUM_SPREAD = 0.1;
 
 export const enum Events {
-  BoundariesChanged = 'BoundariesChanged',
+  BOUNDARIES_CHANGED = 'BoundariesChanged',
 }
 
 export type EventTypes = {
-  [Events.BoundariesChanged]: void,
+  [Events.BOUNDARIES_CHANGED]: void,
 };
 
 export class NetworkTransferTimeCalculator extends NetworkTimeCalculator {

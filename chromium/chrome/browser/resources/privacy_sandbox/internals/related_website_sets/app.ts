@@ -5,7 +5,7 @@
 import '//resources/cr_elements/cr_drawer/cr_drawer.js';
 import './sidebar.js';
 import './toolbar.js';
-import './related_website_sets_list_container.js';
+import './list_container.js';
 
 import type {CrDrawerElement} from '//resources/cr_elements/cr_drawer/cr_drawer.js';
 import {CrLitElement} from '//resources/lit/v3_0/lit.rollup.js';
@@ -70,9 +70,9 @@ export class RelatedWebsiteSetsAppElement extends CrLitElement {
 
     this.apiProxy_.handler.getRelatedWebsiteSets().then(
         ({relatedWebsiteSetsInfo}) => {
-          if (relatedWebsiteSetsInfo.errorMessage !== undefined) {
+          if (relatedWebsiteSetsInfo.errorMessage) {
             this.errorMessage_ = relatedWebsiteSetsInfo.errorMessage;
-          } else if (relatedWebsiteSetsInfo.relatedWebsiteSets !== undefined) {
+          } else if (relatedWebsiteSetsInfo.relatedWebsiteSets) {
             this.relatedWebsiteSets_ =
                 relatedWebsiteSetsInfo.relatedWebsiteSets;
           }

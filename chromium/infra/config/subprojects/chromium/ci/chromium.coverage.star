@@ -10,7 +10,7 @@ load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
 load("//lib/xcode.star", "xcode")
 load("//project.star", "settings")
-load("//lib/builder_health_indicators.star", "blank_low_value_thresholds", "health_spec", "modified_default")
+load("//lib/builder_health_indicators.star", "health_spec")
 
 # crbug/1408581 - The code coverage CI builders are expected to be triggered
 # off the same ref every 24 hours. This poller is configured with a schedule
@@ -320,6 +320,55 @@ ci.builder(
     coverage_test_types = ["overall", "unit"],
     siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
     use_clang_coverage = True,
+)
+
+coverage_builder(
+    name = "android-cronet-code-coverage-java",
+    description_html = "Builder for Cronet java code coverage",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "android",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "android",
+            apply_configs = [
+                "cronet_builder",
+                "mb",
+            ],
+            build_config = builder_config.build_config.DEBUG,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.ANDROID,
+        ),
+        android_config = builder_config.android_config(config = "x64_builder"),
+        build_gs_bucket = "chromium-fyi-archive",
+    ),
+    # No symbols to prevent linker file too large error on
+    # android_webview_unittests target.
+    gn_args = gn_args.config(
+        configs = [
+            "android_builder_without_codecs",
+            "cronet_android",
+            "debug_static_builder",
+            "remoteexec",
+            "x64",
+            "use_java_coverage",
+        ],
+    ),
+    os = os.LINUX_DEFAULT,
+    console_view_entry = [
+        consoles.console_view_entry(
+            category = "cronet",
+            short_name = "x64",
+        ),
+    ],
+    contact_team_email = "woa-engprod@google.com",
+    coverage_test_types = ["overall", "unit"],
+    export_coverage_to_zoss = True,
+    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
+    use_java_coverage = True,
 )
 
 coverage_builder(
@@ -636,6 +685,7 @@ coverage_builder(
             short_name = "lnx-fuzz",
         ),
     ],
+    notifies = ["chrome-fuzzing-core"],
     properties = {
         "collect_fuzz_coverage": True,
     },
@@ -683,52 +733,6 @@ coverage_builder(
     ],
     coverage_test_types = ["overall", "unit"],
     export_coverage_to_zoss = True,
-    use_clang_coverage = True,
-)
-
-coverage_builder(
-    name = "linux-lacros-code-coverage",
-    builder_spec = builder_config.builder_spec(
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-            apply_configs = [
-                "chromeos",
-                "use_clang_coverage",
-            ],
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "chromium",
-            apply_configs = ["mb"],
-            build_config = builder_config.build_config.RELEASE,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.CHROMEOS,
-        ),
-        build_gs_bucket = "chromium-fyi-archive",
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "lacros_on_linux",
-            "release_builder",
-            "remoteexec",
-            "also_build_ash_chrome",
-            "clang",
-            "use_clang_coverage",
-            "no_symbols",
-            "x64",
-        ],
-    ),
-    os = os.LINUX_DEFAULT,
-    console_view_entry = [
-        consoles.console_view_entry(
-            category = "lacros",
-            short_name = "lnx",
-        ),
-    ],
-    coverage_test_types = ["overall", "unit"],
-    health_spec = modified_default({
-        "Low Value": blank_low_value_thresholds,
-    }),
-    siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CI,
     use_clang_coverage = True,
 )
 

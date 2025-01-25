@@ -62,9 +62,9 @@ enum class ManagePasswordsReferrer {
   // Deprecated as part of APC removal.
   // kAutomatedPasswordChangeSuccessLink = 14,
 
-  // On Mac and Win after enabling Biometric authentication before filling
-  // a confirmation dialog is shown with an instructions on how to control the
-  // feature from settings.
+  // On Mac, Win and ChromeOS after enabling Biometric authentication before
+  // filling a confirmation dialog is shown with an instructions on how to
+  // control the feature from settings.
   kBiometricAuthenticationBeforeFillingDialog = 15,
 
   // The Password Manager item was clicked in the Chrome menu.
@@ -96,10 +96,24 @@ enum class ManagePasswordsReferrer {
   // On Desktop, the bubble that notifies the user that a passkey was saved.
   kPasskeySavedConfirmationBubble = 23,
 
+  // On Desktop, the bubble that notifies the user that a passkey was deleted.
+  kPasskeyDeletedConfirmationBubble = 24,
+
+  // On Desktop, the bubble that notifies the user that a passkey was updated.
+  kPasskeyUpdatedConfirmationBubble = 25,
+
+  // On the desktop, the bubble notifies the user that a passkey was deleted
+  // because it was not accepted.
+  kPasskeyNotAcceptedBubble = 26,
+
+  // The warning (Android only) informs the user that they may loose access to
+  // their passwords because the transition to UPM has not happened.
+  kAccessLossWarning = 27,
+
   // NOTE: When adding a new value to this enum that applies or could apply to
   // Android, make sure it is correctly handled by the internal credential
   // manager launcher java implementation.
-  kMaxValue = kPasskeySavedConfirmationBubble,
+  kMaxValue = kAccessLossWarning,
 };
 
 }  // namespace password_manager

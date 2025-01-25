@@ -45,8 +45,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
-#include "chrome/browser/ui/browser_navigator.h"
-#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
 #include "chromeos/ash/components/phonehub/feature_status_provider.h"
@@ -233,7 +231,7 @@ int GetResourceId(BubbleIcon icon) {
     case BubbleIcon::kGooglePhotosIcon:
       return IDR_SCALABLE_IPH_GOOGLE_PHOTOS_ICON_120_PNG;
     case BubbleIcon::kNoIcon:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 #else
   return IDR_PRODUCT_LOGO_128;
@@ -534,6 +532,11 @@ bool ScalableIphDelegateImpl::ShowNotification(
 
 void ScalableIphDelegateImpl::AddObserver(DelegateObserver* observer) {
   observers_.AddObserver(observer);
+
+  auto* session_controller = Shell::Get()->session_controller();
+  CHECK(session_controller);
+  NotifySessionStateChanged(
+      GetDelegateSessionState(session_controller->GetSessionState()));
 }
 
 void ScalableIphDelegateImpl::RemoveObserver(DelegateObserver* observer) {

@@ -69,6 +69,7 @@ export type PointingStick = InputDeviceSettingsTypes.PointingStick;
 export type GraphicsTablet = InputDeviceSettingsTypes.GraphicsTablet;
 
 export type BatteryInfo = InputDeviceSettingsTypes.BatteryInfo;
+export type CompanionAppInfo = InputDeviceSettingsTypes.CompanionAppInfo;
 
 export interface Stylus {
   // Unique per device based on this VID/PID pair as follows: "<vid>:<pid>"
@@ -198,6 +199,11 @@ export interface KeyboardAmbientLightSensorObserverInterface {
   // Fired when the keyboard ambient light sensor is changed.
   onKeyboardAmbientLightSensorEnabledChanged(keyboardAmbientLightSensorEnabled:
                                                  boolean): void;
+}
+
+export interface LidStateObserverInterface {
+  // Fired when the lid state is changed.
+  onLidStateChanged(isLidOpen: boolean): void;
 }
 
 export type ButtonPressObserverInterface =

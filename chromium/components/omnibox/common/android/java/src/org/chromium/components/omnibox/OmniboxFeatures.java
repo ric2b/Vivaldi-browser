@@ -4,6 +4,8 @@
 
 package org.chromium.components.omnibox;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ResettersForTesting;
@@ -12,6 +14,8 @@ import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
 import org.chromium.base.cached_flags.CachedFieldTrialParameter;
 import org.chromium.base.cached_flags.CachedFlag;
 import org.chromium.base.cached_flags.IntCachedFieldTrialParameter;
+import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.base.DeviceInput;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +31,9 @@ public class OmniboxFeatures {
     // Maximum number of attempts to retrieve page behind the default match per Omnibox input
     // session.
     public static final int DEFAULT_MAX_PREFETCHES_PER_OMNIBOX_SESSION = 5;
+
+    // Timeout requests after 30 minutes if we somehow fail to remove our listener.
+    private static final int DEFAULT_GEOLOCATION_REQUEST_TIMEOUT_MIN = 30;
 
     // Auto-populated list of Omnibox cached feature flags.
     // Each flag created via newFlag() will be automatically added to this list.
@@ -45,11 +52,11 @@ public class OmniboxFeatures {
     public static final CachedFlag sTouchDownTriggerForPrefetch =
             newFlag(OmniboxFeatureList.OMNIBOX_TOUCH_DOWN_TRIGGER_FOR_PREFETCH, false);
 
-    public static final CachedFlag sQueryTilesInZPSOnNTP =
-            newFlag(OmniboxFeatureList.QUERY_TILES_IN_ZPS_ON_NTP, false);
-
     public static final CachedFlag sRichInlineAutocomplete =
             newFlag(OmniboxFeatureList.RICH_AUTOCOMPLETION, false);
+
+    public static final CachedFlag sAblateVisibleNetworks =
+            newFlag(OmniboxFeatureList.OMNIBOX_ABLATE_VISIBLE_NETWORKS, false);
 
     /**
      * Whether GeolocationHeader should use {@link
@@ -65,8 +72,10 @@ public class OmniboxFeatures {
     public static final CachedFlag sElegantTextHeight =
             newFlag(OmniboxFeatureList.OMNIBOX_ELEGANT_TEXT_HEIGHT, false);
 
-    public static final BooleanCachedFieldTrialParameter QUERY_TILES_SHOW_AS_CAROUSEL =
-            newBooleanParam(sQueryTilesInZPSOnNTP, "QueryTilesShowAsCarousel", false);
+    /** See {@link #shouldRetainOmniboxOnFocus()}. */
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public static final CachedFlag sRetainOmniboxOnFocus =
+            newFlag(OmniboxFeatureList.RETAIN_OMNIBOX_ON_FOCUS, true); // Vivaldi VAB-10175
 
     public static final BooleanCachedFieldTrialParameter sAnswerActionsShowAboveKeyboard =
             newBooleanParam(sOmniboxAnswerActions, "AnswerActionsShowAboveKeyboard", false);
@@ -76,6 +85,12 @@ public class OmniboxFeatures {
 
     public static final BooleanCachedFieldTrialParameter sAnswerActionsShowRichCard =
             newBooleanParam(sOmniboxAnswerActions, "ShowRichCard", false);
+
+    public static final IntCachedFieldTrialParameter sGeolocationRequestTimeoutMinutes =
+            newIntParam(
+                    sUseFusedLocationProvider,
+                    "geolocation_request_timeout_minutes",
+                    DEFAULT_GEOLOCATION_REQUEST_TIMEOUT_MIN);
 
     public static final IntCachedFieldTrialParameter sTouchDownTriggerMaxPrefetchesPerSession =
             newIntParam(
@@ -91,6 +106,9 @@ public class OmniboxFeatures {
                     sRichInlineAutocomplete,
                     "rich_autocomplete_minimum_characters",
                     Integer.MAX_VALUE);
+
+    /** See {@link #setShouldRetainOmniboxOnFocusForTesting(boolean)}. */
+    private static Boolean sShouldRetainOmniboxOnFocusForTesting;
 
     /**
      * Create an instance of a CachedFeatureFlag.
@@ -233,5 +251,28 @@ public class OmniboxFeatures {
         return sRichInlineAutocomplete.isEnabled()
                 && sRichInlineShowFullUrl.getValue()
                 && inputCount >= sRichInlineMinimumInputChars.getValue();
+    }
+
+    /** Modifies the output of {@link #shouldRetainOmniboxOnFocus()} for testing. */
+    public static void setShouldRetainOmniboxOnFocusForTesting(Boolean shouldRetainOmniboxOnFocus) {
+        sShouldRetainOmniboxOnFocusForTesting = shouldRetainOmniboxOnFocus;
+        ResettersForTesting.register(() -> sShouldRetainOmniboxOnFocusForTesting = null);
+    }
+
+    /**
+     * @return Whether the contents of the omnibox should be retained on focus as opposed to being
+     *     cleared. When {@code true} and the omnibox contents are retained, focus events will also
+     *     result in the omnibox contents being fully selected so as to allow for easy replacement
+     *     by the user. Note that only large screen devices with an attached keyboard and precision
+     *     pointer will exhibit a change in behavior when the feature flag is enabled.
+     */
+    public static boolean shouldRetainOmniboxOnFocus() {
+        if (sShouldRetainOmniboxOnFocusForTesting != null) {
+            return sShouldRetainOmniboxOnFocusForTesting;
+        }
+        return sRetainOmniboxOnFocus.isEnabled()
+                || (DeviceFormFactor.isTablet() // Vivaldi VAB-10175
+                && DeviceInput.supportsAlphabeticKeyboard()
+                && DeviceInput.supportsPrecisionPointer()); // Vivaldi VAB-10175
     }
 }

@@ -229,24 +229,39 @@ drm_public int amdgpu_va_range_alloc(amdgpu_device_handle dev,
 				     amdgpu_va_handle *va_range_handle,
 				     uint64_t flags)
 {
+	return amdgpu_va_range_alloc2(&dev->va_mgr, va_range_type, size,
+				      va_base_alignment, va_base_required,
+				      va_base_allocated, va_range_handle,
+				      flags);
+}
+
+drm_public int amdgpu_va_range_alloc2(amdgpu_va_manager_handle va_mgr,
+				      enum amdgpu_gpu_va_range va_range_type,
+				      uint64_t size,
+				      uint64_t va_base_alignment,
+				      uint64_t va_base_required,
+				      uint64_t *va_base_allocated,
+				      amdgpu_va_handle *va_range_handle,
+				      uint64_t flags)
+{
 	struct amdgpu_bo_va_mgr *vamgr;
 	bool search_from_top = !!(flags & AMDGPU_VA_RANGE_REPLAYABLE);
 	int ret;
 
 	/* Clear the flag when the high VA manager is not initialized */
-	if (flags & AMDGPU_VA_RANGE_HIGH && !dev->vamgr_high_32.va_max)
+	if (flags & AMDGPU_VA_RANGE_HIGH && !va_mgr->vamgr_high_32.va_max)
 		flags &= ~AMDGPU_VA_RANGE_HIGH;
 
 	if (flags & AMDGPU_VA_RANGE_HIGH) {
 		if (flags & AMDGPU_VA_RANGE_32_BIT)
-			vamgr = &dev->vamgr_high_32;
+			vamgr = &va_mgr->vamgr_high_32;
 		else
-			vamgr = &dev->vamgr_high;
+			vamgr = &va_mgr->vamgr_high;
 	} else {
 		if (flags & AMDGPU_VA_RANGE_32_BIT)
-			vamgr = &dev->vamgr_32;
+			vamgr = &va_mgr->vamgr_32;
 		else
-			vamgr = &dev->vamgr;
+			vamgr = &va_mgr->vamgr_low;
 	}
 
 	va_base_alignment = MAX2(va_base_alignment, vamgr->va_alignment);
@@ -259,9 +274,9 @@ drm_public int amdgpu_va_range_alloc(amdgpu_device_handle dev,
 	if (!(flags & AMDGPU_VA_RANGE_32_BIT) && ret) {
 		/* fallback to 32bit address */
 		if (flags & AMDGPU_VA_RANGE_HIGH)
-			vamgr = &dev->vamgr_high_32;
+			vamgr = &va_mgr->vamgr_high_32;
 		else
-			vamgr = &dev->vamgr_32;
+			vamgr = &va_mgr->vamgr_32;
 		ret = amdgpu_vamgr_find_va(vamgr, size,
 					   va_base_alignment, va_base_required,
 					   search_from_top, va_base_allocated);
@@ -294,4 +309,51 @@ drm_public int amdgpu_va_range_free(amdgpu_va_handle va_range_handle)
 			va_range_handle->size);
 	free(va_range_handle);
 	return 0;
+}
+
+drm_public uint64_t amdgpu_va_get_start_addr(amdgpu_va_handle va_handle)
+{
+   return va_handle->address;
+}
+
+drm_public amdgpu_va_manager_handle amdgpu_va_manager_alloc(void)
+{
+	amdgpu_va_manager_handle r = calloc(1, sizeof(struct amdgpu_va_manager));
+	return r;
+}
+
+drm_public void amdgpu_va_manager_init(struct amdgpu_va_manager *va_mgr,
+					uint64_t low_va_offset, uint64_t low_va_max,
+					uint64_t high_va_offset, uint64_t high_va_max,
+					uint32_t virtual_address_alignment)
+{
+	uint64_t start, max;
+
+	start = low_va_offset;
+	max = MIN2(low_va_max, 0x100000000ULL);
+	amdgpu_vamgr_init(&va_mgr->vamgr_32, start, max,
+			  virtual_address_alignment);
+
+	start = max;
+	max = MAX2(low_va_max, 0x100000000ULL);
+	amdgpu_vamgr_init(&va_mgr->vamgr_low, start, max,
+			  virtual_address_alignment);
+
+	start = high_va_offset;
+	max = MIN2(high_va_max, (start & ~0xffffffffULL) + 0x100000000ULL);
+	amdgpu_vamgr_init(&va_mgr->vamgr_high_32, start, max,
+			  virtual_address_alignment);
+
+	start = max;
+	max = MAX2(high_va_max, (start & ~0xffffffffULL) + 0x100000000ULL);
+	amdgpu_vamgr_init(&va_mgr->vamgr_high, start, max,
+			  virtual_address_alignment);
+}
+
+drm_public void amdgpu_va_manager_deinit(struct amdgpu_va_manager *va_mgr)
+{
+	amdgpu_vamgr_deinit(&va_mgr->vamgr_32);
+	amdgpu_vamgr_deinit(&va_mgr->vamgr_low);
+	amdgpu_vamgr_deinit(&va_mgr->vamgr_high_32);
+	amdgpu_vamgr_deinit(&va_mgr->vamgr_high);
 }

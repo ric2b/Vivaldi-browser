@@ -51,6 +51,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.autofill.FieldType;
+import org.chromium.components.autofill.ImageSize;
 import org.chromium.components.autofill.payments.LegalMessageLine;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
@@ -101,18 +102,6 @@ public class AutofillUiUtils {
         int NONE = 7;
     }
 
-    /**
-     * Different sizes in which we show the credit card art images. Update the {@code NUM_SIZES}
-     * entry when adding/removing entries.
-     */
-    @IntDef({CardIconSize.SMALL, CardIconSize.LARGE, CardIconSize.NUM_SIZES})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface CardIconSize {
-        int SMALL = 0;
-        int LARGE = 1;
-        int NUM_SIZES = 2;
-    }
-
     /** Contains dimensional specs for credit card icons. */
     public static class CardIconSpecs {
         private final Context mContext;
@@ -138,27 +127,38 @@ public class AutofillUiUtils {
         }
 
         /**
-         * Create the {@link CardIconSpecs} for the icon based on the size (small or large) of the
-         * icon to be rendered.
+         * Create the {@link CardIconSpecs} for the icon based on the size (small or large or
+         * square) of the icon to be rendered.
+         *
          * @param context to get the resources.
-         * @param cardIconSize Enum that specifies the icon's size (small or large).
+         * @param cardIconSize Enum that specifies the icon's size (small or large or square).
          * @return {@link CardIconSpecs} instance containing the specs for the card icon.
          */
-        public static CardIconSpecs create(Context context, @CardIconSize int cardIconSize) {
-            int borderWidthId = R.dimen.card_icon_border_width;
-            int widthId = R.dimen.small_card_icon_width;
-            int heightId = R.dimen.small_card_icon_height;
-            int cornerRadiusId = R.dimen.small_card_icon_corner_radius;
-
-            if (cardIconSize == CardIconSize.LARGE
+        public static CardIconSpecs create(Context context, @ImageSize int cardIconSize) {
+            if (cardIconSize == ImageSize.LARGE
                     && ChromeFeatureList.isEnabled(
                             ChromeFeatureList.AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES)) {
-                widthId = R.dimen.large_card_icon_width;
-                heightId = R.dimen.large_card_icon_height;
-                cornerRadiusId = R.dimen.large_card_icon_corner_radius;
+                return new CardIconSpecs(
+                        context,
+                        R.dimen.large_card_icon_width,
+                        R.dimen.large_card_icon_height,
+                        R.dimen.large_card_icon_corner_radius,
+                        R.dimen.card_icon_border_width);
             }
-
-            return new CardIconSpecs(context, widthId, heightId, cornerRadiusId, borderWidthId);
+            if (cardIconSize == ImageSize.SQUARE) {
+                return new CardIconSpecs(
+                        context,
+                        R.dimen.square_card_icon_side_length,
+                        R.dimen.square_card_icon_side_length,
+                        R.dimen.square_card_icon_corner_radius,
+                        R.dimen.card_icon_border_width_zero);
+            }
+            return new CardIconSpecs(
+                    context,
+                    R.dimen.small_card_icon_width,
+                    R.dimen.small_card_icon_height,
+                    R.dimen.small_card_icon_corner_radius,
+                    R.dimen.card_icon_border_width);
         }
 
         public @Px int getWidth() {
@@ -632,7 +632,7 @@ public class AutofillUiUtils {
             PersonalDataManager personalDataManager,
             @Nullable GURL cardArtUrl,
             int defaultIconId,
-            @CardIconSize int cardIconSize,
+            @ImageSize int cardIconSize,
             boolean showCustomIcon) {
         Drawable defaultIcon =
                 defaultIconId == 0 ? null : AppCompatResources.getDrawable(context, defaultIconId);
@@ -739,7 +739,7 @@ public class AutofillUiUtils {
             String cardLabel,
             GURL cardArtUrl,
             int defaultIconId,
-            @CardIconSize int cardIconSize,
+            @ImageSize int cardIconSize,
             int iconEndMarginId,
             int cardNameAndNumberTextAppearance,
             int cardLabelTextAppearance,

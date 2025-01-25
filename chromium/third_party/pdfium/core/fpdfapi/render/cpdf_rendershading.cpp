@@ -98,7 +98,7 @@ void DrawAxialShading(const RetainPtr<CFX_DIBitmap>& pBitmap,
                       const std::vector<std::unique_ptr<CPDF_Function>>& funcs,
                       const RetainPtr<CPDF_ColorSpace>& pCS,
                       int alpha) {
-  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kArgb);
+  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kBgra);
 
   const uint32_t total_results = GetValidatedOutputsCount(funcs, pCS);
   if (total_results == 0)
@@ -166,7 +166,7 @@ void DrawRadialShading(const RetainPtr<CFX_DIBitmap>& pBitmap,
                        const std::vector<std::unique_ptr<CPDF_Function>>& funcs,
                        const RetainPtr<CPDF_ColorSpace>& pCS,
                        int alpha) {
-  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kArgb);
+  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kBgra);
 
   const uint32_t total_results = GetValidatedOutputsCount(funcs, pCS);
   if (total_results == 0)
@@ -204,7 +204,7 @@ void DrawRadialShading(const RetainPtr<CFX_DIBitmap>& pBitmap,
 
   int width = pBitmap->GetWidth();
   int height = pBitmap->GetHeight();
-  bool bDecreasing = dr < 0 && static_cast<int>(FXSYS_sqrt2(dx, dy)) < -dr;
+  bool bDecreasing = dr < 0 && static_cast<int>(hypotf(dx, dy)) < -dr;
 
   CFX_Matrix matrix = mtObject2Bitmap.GetInverse();
   for (int row = 0; row < height; row++) {
@@ -265,7 +265,7 @@ void DrawFuncShading(const RetainPtr<CFX_DIBitmap>& pBitmap,
                      const std::vector<std::unique_ptr<CPDF_Function>>& funcs,
                      const RetainPtr<CPDF_ColorSpace>& pCS,
                      int alpha) {
-  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kArgb);
+  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kBgra);
 
   const uint32_t total_results = GetValidatedOutputsCount(funcs, pCS);
   if (total_results == 0)
@@ -427,7 +427,7 @@ void DrawFreeGouraudShading(
     const std::vector<std::unique_ptr<CPDF_Function>>& funcs,
     RetainPtr<CPDF_ColorSpace> pCS,
     int alpha) {
-  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kArgb);
+  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kBgra);
 
   CPDF_MeshStream stream(kFreeFormGouraudTriangleMeshShading, funcs,
                          std::move(pShadingStream), std::move(pCS));
@@ -466,7 +466,7 @@ void DrawLatticeGouraudShading(
     const std::vector<std::unique_ptr<CPDF_Function>>& funcs,
     RetainPtr<CPDF_ColorSpace> pCS,
     int alpha) {
-  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kArgb);
+  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kBgra);
 
   int row_verts = pShadingStream->GetDict()->GetIntegerFor("VerticesPerRow");
   if (row_verts < 2)
@@ -793,7 +793,7 @@ void DrawCoonPatchMeshes(
     RetainPtr<CPDF_ColorSpace> pCS,
     bool bNoPathSmooth,
     int alpha) {
-  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kArgb);
+  DCHECK_EQ(pBitmap->GetFormat(), FXDIB_Format::kBgra);
   DCHECK(type == kCoonsPatchMeshShading ||
          type == kTensorProductPatchMeshShading);
 
@@ -912,12 +912,12 @@ void CPDF_RenderShading::Draw(CFX_RenderDevice* pDevice,
     clip_rect_bbox.Intersect(
         mtMatrix.TransformRect(pDict->GetRectFor("BBox")).GetOuterRect());
   }
-  bool bAlphaMode = options.ColorModeIs(CPDF_RenderOptions::kAlpha);
-  if (pDevice->GetDeviceCaps(FXDC_RENDER_CAPS) & FXRC_SHADING &&
-      pDevice->DrawShading(pPattern, &mtMatrix, clip_rect_bbox, alpha,
-                           bAlphaMode)) {
+#if defined(PDF_USE_SKIA)
+  if ((pDevice->GetDeviceCaps(FXDC_RENDER_CAPS) & FXRC_SHADING) &&
+      pDevice->DrawShading(*pPattern, mtMatrix, clip_rect_bbox, alpha)) {
     return;
   }
+#endif  // defined(PDF_USE_SKIA)
   CPDF_DeviceBuffer buffer(pContext, pDevice, clip_rect_bbox, pCurObj, 150);
   RetainPtr<CFX_DIBitmap> pBitmap = buffer.Initialize();
   if (!pBitmap) {
@@ -981,12 +981,12 @@ void CPDF_RenderShading::Draw(CFX_RenderDevice* pDevice,
       break;
     }
   }
-  if (bAlphaMode) {
-    pBitmap->SetRedFromAlpha();
-  }
 
-  if (options.ColorModeIs(CPDF_RenderOptions::kGray))
+  if (options.ColorModeIs(CPDF_RenderOptions::kAlpha)) {
+    pBitmap->SetRedFromAlpha();
+  } else if (options.ColorModeIs(CPDF_RenderOptions::kGray)) {
     pBitmap->ConvertColorScale(0, 0xffffff);
+  }
 
   buffer.OutputToDevice();
 }

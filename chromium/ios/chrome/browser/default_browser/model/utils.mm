@@ -537,10 +537,6 @@ bool IsNonModalDefaultBrowserPromoCooldownRefactorEnabled() {
       kNonModalDefaultBrowserPromoCooldownRefactor);
 }
 
-bool IsDefaultBrowserVideoInSettingsEnabled() {
-  return base::FeatureList::IsEnabled(kDefaultBrowserVideoInSettings);
-}
-
 bool HasUserInteractedWithFullscreenPromoBefore() {
   if (base::FeatureList::IsEnabled(
           feature_engagement::kDefaultBrowserEligibilitySlidingWindow)) {
@@ -800,7 +796,7 @@ DefaultPromoTypeForUMA GetDefaultPromoTypeForUMA(DefaultPromoType type) {
     case DefaultPromoTypeAllTabs:
       return DefaultPromoTypeForUMA::kAllTabs;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -825,7 +821,7 @@ void LogDefaultBrowserPromoHistogramForAction(
           "IOS.DefaultBrowserFullscreenTailoredPromoStaySafe", action);
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -840,7 +836,7 @@ const std::string IOSDefaultBrowserPromoActionToString(
       return "Dismiss";
     case IOSDefaultBrowserPromoAction::kRemindMeLater:
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

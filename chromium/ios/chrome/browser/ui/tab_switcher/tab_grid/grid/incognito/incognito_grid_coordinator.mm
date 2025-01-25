@@ -4,14 +4,14 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/incognito/incognito_grid_coordinator.h"
 
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_mediator.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/tab_grid_toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_mediator.h"
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/disabled_grid_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_container_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_coordinator_audience.h"
@@ -60,10 +60,10 @@
   CHECK(browser);
   CHECK(toolbarsMutator);
   CHECK(delegate);
-  if (self = [super initWithBaseViewController:baseViewController
-                                       browser:browser
-                               toolbarsMutator:toolbarsMutator
-                          gridMediatorDelegate:delegate]) {
+  if ((self = [super initWithBaseViewController:baseViewController
+                                        browser:browser
+                                toolbarsMutator:toolbarsMutator
+                           gridMediatorDelegate:delegate])) {
     _browser = browser->AsWeakPtr();
     _incognitoEnabled =
         !IsIncognitoModeDisabled(self.browser->GetBrowserState()
@@ -117,7 +117,8 @@
   _reauthAgent =
       [IncognitoReauthSceneAgent agentFromScene:self.browser->GetSceneState()];
 
-  _mediator = [[IncognitoGridMediator alloc] init];
+  _mediator =
+      [[IncognitoGridMediator alloc] initWithModeHolder:self.modeHolder];
   _mediator.incognitoDelegate = self;
   _mediator.reauthSceneAgent = _reauthAgent;
 

@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/commerce/model/session_proto_db_factory.h"
 
 #import "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
 
@@ -15,9 +15,9 @@ class SessionProtoDBFactoryTest : public PlatformTest {
 
   void SetUp() override {
     TestChromeBrowserState::Builder builder_a;
-    browser_state_a_ = builder_a.Build();
+    browser_state_a_ = std::move(builder_a).Build();
     TestChromeBrowserState::Builder builder_b;
-    browser_state_b_ = builder_b.Build();
+    browser_state_b_ = std::move(builder_b).Build();
   }
 
  protected:

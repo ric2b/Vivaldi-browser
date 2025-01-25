@@ -1,8 +1,10 @@
 include_rules = [
   "+ios/chrome/browser/first_run/model/first_run.h",
+  "+ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h",
   "+ios/chrome/browser/memory/model/memory_debugger_manager.h",
   "+ios/chrome/browser/metrics/model/ios_chrome_metrics_service_client.h",
   "+ios/chrome/browser/ntp/model/set_up_list_prefs.h",
+  "+ios/chrome/browser/ntp/shared/metrics/feed_metrics_constants.h",
   "+ios/chrome/browser/ntp_tiles/model/tab_resumption/tab_resumption_prefs.h",
   "+ios/chrome/browser/parcel_tracking/parcel_tracking_prefs.h",
   "+ios/chrome/browser/policy/model/policy_util.h",
@@ -18,6 +20,7 @@ include_rules = [
   "+ios/chrome/browser/parcel_tracking",
   "+components/saved_tab_groups/pref_names.h",
   "+components/lens/lens_overlay_permission_utils.h",
+  "+components/sharing_message/sharing_sync_preference.h",
 ]
 
 specific_include_rules = {

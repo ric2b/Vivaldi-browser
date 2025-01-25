@@ -38,11 +38,10 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BackupSigninProcessor;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
-import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.backup.BackupSigninProcessor;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.CustomTabsUiType;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.customtabs.dependency_injection.BaseCustomTabActivityComponent;
@@ -69,6 +68,9 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.util.ColorUtils;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /** The activity for custom tabs. It will be launched on top of a client's task. */
 public class CustomTabActivity extends BaseCustomTabActivity {
@@ -121,7 +123,9 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     }
 
     private void maybeCreateHistoryTabHelper(Tab tab) {
-        if (!HistoryManager.isAppSpecificHistoryEnabled()) return;
+        if (!HistoryManager.isAppSpecificHistoryEnabled() || mIntentDataProvider.isAuthTab()) {
+            return;
+        }
         String appId = mIntentDataProvider.getClientPackageNameIdentitySharing();
         if (appId != null) HistoryTabHelper.from(tab).setAppId(appId, tab.getWebContents());
     }
@@ -203,6 +207,25 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         }
 
         getComponent().resolveBottomBarDelegate().showBottomBarIfNecessary();
+
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            if (mIntentDataProvider.isCinemaMode()) {
+                View decorView = getWindow().getDecorView();
+                decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                        View.SYSTEM_UI_FLAG_FULLSCREEN |
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+
+                ViewGroup coordinator = findViewById(R.id.coordinator);
+                if (coordinator != null) {
+                    View toolbar = coordinator.findViewById(R.id.toolbar);
+                    if (toolbar != null)
+                        toolbar.setVisibility(View.GONE);
+                }
+            }
+        }
     }
 
     @Override
@@ -374,22 +397,10 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         }
     }
 
-    @Override
-    protected BrowserServicesIntentDataProvider buildIntentDataProvider(
-            Intent intent, @CustomTabsIntent.ColorScheme int colorScheme) {
-        boolean isValidIncognitoIntent =
-                IncognitoCustomTabIntentDataProvider.isValidIncognitoIntent(intent);
-        if (isValidIncognitoIntent
-                || IncognitoCustomTabIntentDataProvider.isValidEphemeralTabIntent(intent)) {
-            return new IncognitoCustomTabIntentDataProvider(
-                    intent, this, colorScheme, isValidIncognitoIntent);
-        }
-        return new CustomTabIntentDataProvider(intent, this, colorScheme);
-    }
-
     /**
-     * Show the web page with CustomTabActivity, without any navigation control.
-     * Used in showing the terms of services page or help pages for Chrome.
+     * Show the web page with CustomTabActivity, without any navigation control. Used in showing the
+     * terms of services page or help pages for Chrome.
+     *
      * @param context The current activity context.
      * @param url The url of the web page.
      */

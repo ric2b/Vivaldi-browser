@@ -164,11 +164,6 @@
             "optional": true,
             "description": "Visibility of the action button, defaults to true."
           },
-          "actionIsHidden": {
-            "type": "boolean",
-            "optional": true,
-            "description": "Set to true if the action is user-set to hidden. Defaults to false."
-          },
           "allowInIncognito": {
             "type": "boolean",
             "optional": true,
@@ -279,18 +274,6 @@
             }
           ]
         }
-      },
-      {
-        "name": "toggleBrowserActionVisibility",
-        "type": "function",
-        "description": "This will toggle the visibility of an extension browser- or page-action button. The regular vivaldi://extensions page will have a 'show' button.",
-        "parameters": [
-          {
-            "name": "extensionId",
-            "type": "string",
-            "description": "The id for the extension we want to toggle visibility on."
-          }
-        ]
       },
       {
         "name": "removeExtension",
@@ -452,6 +435,21 @@
         ]
       },
       {
+        "name": "onClearAllValuesForTab",
+        "type": "function",
+        "description": "Fired on ExtensionAction::ClearAllValuesForTab().",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "extensionId"
+          },
+          {
+            "type": "number",
+            "name": "tabId"
+          }
+        ]
+      },
+      {
         "name": "onCommandAdded",
         "type": "function",
         "description": "Fired when a keyboard shortcut is added to an extension.",
@@ -478,17 +476,6 @@
           {
             "type": "string",
             "name": "shortcut"
-          }
-        ]
-      },
-      {
-        "name": "onIconLoaded",
-        "type": "function",
-        "description": "Fired when an extension-icon is fully loaded. Note that only ExtensionInfo.id and ExtensionInfo.badgeIcon is filled!",
-        "parameters": [
-          {
-            "$ref": "ExtensionInfo",
-            "name": "extension"
           }
         ]
       },

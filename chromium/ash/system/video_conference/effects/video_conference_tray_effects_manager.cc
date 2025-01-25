@@ -4,11 +4,13 @@
 
 #include "ash/system/video_conference/effects/video_conference_tray_effects_manager.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/video_conference/bubble/vc_tile_ui_controller.h"
 #include "ash/system/video_conference/effects/video_conference_tray_effects_delegate.h"
@@ -121,7 +123,8 @@ VideoConferenceTrayEffectsManager::GetSetValueEffects() {
   EffectDataVector effects;
 
   for (ash::VcEffectsDelegate* delegate : effect_delegates_) {
-    for (auto* effect : delegate->GetEffects(VcEffectType::kSetValue)) {
+    for (auto* effect :
+         delegate->GetAvailableEffects(VcEffectType::kSetValue)) {
       effects.push_back(effect);
     }
   }
@@ -134,7 +137,7 @@ VideoConferenceTrayEffectsManager::GetToggleEffects() {
   EffectDataVector effects;
 
   for (ash::VcEffectsDelegate* delegate : effect_delegates_) {
-    for (auto* effect : delegate->GetEffects(VcEffectType::kToggle)) {
+    for (auto* effect : delegate->GetAvailableEffects(VcEffectType::kToggle)) {
       effects.push_back(effect);
     }
   }
@@ -147,6 +150,20 @@ void VideoConferenceTrayEffectsManager::NotifyEffectSupportStateChanged(
     bool is_supported) {
   for (auto& observer : observers_) {
     observer.OnEffectSupportStateChanged(effect_id, is_supported);
+  }
+}
+
+void VideoConferenceTrayEffectsManager::NotifyEffectChanged(
+    VcEffectId effect_id,
+    bool is_on) {
+  for (auto& observer : observers_) {
+    observer.OnEffectChanged(effect_id, is_on);
+  }
+}
+
+void VideoConferenceTrayEffectsManager::NotifyVideoConferenceBubbleOpened() {
+  for (auto& observer : observers_) {
+    observer.OnVideoConferenceBubbleOpened();
   }
 }
 
@@ -192,9 +209,12 @@ VideoConferenceTrayEffectsManager::GetDlcIdsForEffectId(VcEffectId effect_id) {
       // language model (e.g. "libsoda-model-en-us") to operate.
       return {"libsoda", dlc_name};
     }
-    case VcEffectId::kTestEffect:
     case VcEffectId::kBackgroundBlur:
+    case VcEffectId::kFaceRetouch:
     case VcEffectId::kPortraitRelighting:
+    case VcEffectId::kStudioLook:
+      return {"ml-core-internal"};
+    case VcEffectId::kTestEffect:
     case VcEffectId::kNoiseCancellation:
     case VcEffectId::kStyleTransfer:
     case VcEffectId::kCameraFraming:
@@ -207,11 +227,15 @@ VideoConferenceTrayEffectsManager::GetTotalToggleEffectButtons() {
   EffectDataVector effects;
 
   for (ash::VcEffectsDelegate* delegate : effect_delegates_) {
-    for (auto* effect : delegate->GetEffects(VcEffectType::kToggle)) {
+    for (auto* effect : delegate->GetAvailableEffects(VcEffectType::kToggle)) {
       effects.push_back(effect);
     }
   }
 
+  std::sort(effects.begin(), effects.end(),
+            [](const VcHostedEffect* lhs, const VcHostedEffect* rhs) {
+              return lhs->id() < rhs->id();
+            });
   return effects;
 }
 
@@ -220,7 +244,7 @@ void VideoConferenceTrayEffectsManager::RemoveTileControllers(
   if (!features::IsVcDlcUiEnabled()) {
     return;
   }
-  for (auto* effect : delegate->GetEffects(VcEffectType::kToggle)) {
+  for (auto* effect : delegate->GetAllEffects(VcEffectType::kToggle)) {
     const VcEffectId id = effect->id();
     if (base::Contains(controller_for_effect_id_, id)) {
       controller_for_effect_id_.erase(id);

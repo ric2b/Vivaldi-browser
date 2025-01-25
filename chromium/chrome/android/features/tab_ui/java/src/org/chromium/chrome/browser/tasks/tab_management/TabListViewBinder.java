@@ -19,7 +19,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.ColorInt;
+import androidx.annotation.DrawableRes;
 import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.view.ViewCompat;
@@ -30,9 +32,12 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider;
 import org.chromium.chrome.browser.tab_ui.TabUiThemeUtils;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupColorUtils;
-import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabGroupInfo;
+import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionButtonData;
+import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionButtonData.TabActionButtonType;
+import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionListener;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.widget.ViewLookupCachingFrameLayout;
@@ -88,30 +93,51 @@ class TabListViewBinder {
                         setFavicon(view, tabFavicon.getDefaultDrawable());
                     });
         } else if (TabProperties.IS_SELECTED == propertyKey) {
+            boolean isSelected = model.get(TabProperties.IS_SELECTED);
+            boolean isIncognito = model.get(TabProperties.IS_INCOGNITO);
+            updateColors(view, isIncognito, isSelected);
+
+            @DrawableRes
             int selectedTabBackground =
-                    model.get(TabProperties.SELECTED_TAB_BACKGROUND_DRAWABLE_ID);
+                    isIncognito
+                            ? R.drawable.selected_tab_background_incognito
+                            : R.drawable.selected_tab_background;
             Resources res = view.getResources();
             Resources.Theme theme = view.getContext().getTheme();
             Drawable drawable =
                     new InsetDrawable(
                             ResourcesCompat.getDrawable(res, selectedTabBackground, theme),
                             (int) res.getDimension(R.dimen.tab_list_selected_inset_low_end));
-            view.setForeground(model.get(TabProperties.IS_SELECTED) ? drawable : null);
-        } else if (TabProperties.IS_INCOGNITO == propertyKey) {
-            updateColors(
-                    view,
-                    model.get(TabProperties.IS_INCOGNITO),
-                    model.get(TabProperties.IS_SELECTED));
+            view.setForeground(isSelected ? drawable : null);
         } else if (TabProperties.URL_DOMAIN == propertyKey) {
             String domain = model.get(TabProperties.URL_DOMAIN);
             ((TextView) view.findViewById(R.id.description)).setText(domain);
         } else if (TabProperties.TAB_GROUP_COLOR_ID == propertyKey) {
             setTabGroupColorIcon(view, model);
-        } else if (TabProperties.TAB_ACTION_BUTTON_LISTENER == propertyKey) {
-            TabGridViewBinder.setNullableClickListener(
-                    model.get(TabProperties.TAB_ACTION_BUTTON_LISTENER),
-                    view.findViewById(R.id.end_button),
-                    model);
+        } else if (TabProperties.TAB_ACTION_BUTTON_DATA == propertyKey) {
+            @Nullable TabActionButtonData data = model.get(TabProperties.TAB_ACTION_BUTTON_DATA);
+            @Nullable
+            TabActionListener tabActionListener = data == null ? null : data.tabActionListener;
+            ImageView actionButton = view.findViewById(R.id.end_button);
+            TabGridViewBinder.setNullableClickListener(tabActionListener, actionButton, model);
+
+            if (data == null) return;
+
+            Resources res = view.getResources();
+            if (data.type == TabActionButtonType.OVERFLOW) {
+                actionButton.setImageDrawable(
+                        ResourcesCompat.getDrawable(
+                                res, R.drawable.ic_more_vert_24dp, view.getContext().getTheme()));
+            } else if (data.type == TabActionButtonType.CLOSE) {
+                int closeButtonSize = (int) res.getDimension(R.dimen.tab_grid_close_button_size);
+                Bitmap bitmap = BitmapFactory.decodeResource(res, R.drawable.btn_close);
+                Bitmap.createScaledBitmap(bitmap, closeButtonSize, closeButtonSize, true);
+                actionButton.setImageBitmap(bitmap);
+            } else if (data.type == TabActionButtonType.SELECT) {
+                // Intentional no-op. Handled as part of setTabActionState.
+            } else {
+                assert false : "Not reached";
+            }
         } else if (TabProperties.TAB_CLICK_LISTENER == propertyKey) {
             TabGridViewBinder.setNullableClickListener(
                     model.get(TabProperties.TAB_CLICK_LISTENER), view, model);
@@ -132,7 +158,8 @@ class TabListViewBinder {
             PropertyModel model, ViewGroup view, @Nullable PropertyKey propertyKey) {
         bindListTab(model, view, propertyKey);
 
-        if (TabProperties.IS_INCOGNITO == propertyKey) {
+        if (TabProperties.IS_SELECTED == propertyKey
+                || TabProperties.TAB_ACTION_BUTTON_DATA == propertyKey) {
             ImageView closeButton = view.findViewById(R.id.end_button);
             ImageViewCompat.setImageTintList(
                     closeButton,
@@ -144,28 +171,6 @@ class TabListViewBinder {
             view.findViewById(R.id.end_button)
                     .setContentDescription(
                             model.get(TabProperties.ACTION_BUTTON_DESCRIPTION_STRING));
-        } else if (TabProperties.TAB_GROUP_INFO == propertyKey
-                || TabProperties.TAB_ID == propertyKey) {
-            @Nullable TabGroupInfo tabGroupInfo = model.get(TabProperties.TAB_GROUP_INFO);
-            ImageView actionButton = view.findViewById(R.id.end_button);
-            Resources res = view.getResources();
-
-            // Only change the drawable if the property key in question is for tab groups.
-            if (TabProperties.TAB_GROUP_INFO == propertyKey) {
-                if (tabGroupInfo.getIsTabGroup()) {
-                    actionButton.setImageDrawable(
-                            ResourcesCompat.getDrawable(
-                                    res,
-                                    R.drawable.ic_more_vert_24dp,
-                                    view.getContext().getTheme()));
-                } else {
-                    int closeButtonSize =
-                            (int) res.getDimension(R.dimen.tab_grid_close_button_size);
-                    Bitmap bitmap = BitmapFactory.decodeResource(res, R.drawable.btn_close);
-                    Bitmap.createScaledBitmap(bitmap, closeButtonSize, closeButtonSize, true);
-                    actionButton.setImageBitmap(bitmap);
-                }
-            }
         }
     }
 
@@ -220,30 +225,31 @@ class TabListViewBinder {
         bindListTab(model, view, propertyKey);
 
         final int tabId = model.get(TabProperties.TAB_ID);
-        final int defaultLevel = view.getResources().getInteger(R.integer.list_item_level_default);
-        final int selectedLevel =
-                view.getResources().getInteger(R.integer.list_item_level_selected);
         TabListView tabListView = (TabListView) view;
-
         if (TabProperties.TAB_SELECTION_DELEGATE == propertyKey) {
             tabListView.setSelectionDelegate(model.get(TabProperties.TAB_SELECTION_DELEGATE));
             tabListView.setItem(tabId);
-        } else if (TabProperties.IS_SELECTED == propertyKey) {
+        } else if (TabProperties.IS_SELECTED == propertyKey
+                || TabProperties.TAB_ACTION_BUTTON_DATA == propertyKey) {
             boolean isSelected = model.get(TabProperties.IS_SELECTED);
+            boolean isIncognito = model.get(TabProperties.IS_INCOGNITO);
             ImageView actionButton = view.findViewById(R.id.end_button);
-            actionButton.getBackground().setLevel(isSelected ? selectedLevel : defaultLevel);
-            DrawableCompat.setTintList(
-                    actionButton.getBackground().mutate(),
-                    isSelected
-                            ? model.get(
-                                    TabProperties.SELECTABLE_TAB_ACTION_BUTTON_SELECTED_BACKGROUND)
-                            : model.get(TabProperties.SELECTABLE_TAB_ACTION_BUTTON_BACKGROUND));
+
+            Context context = view.getContext();
+            Resources res = view.getResources();
+            int level = getCheckmarkLevel(res, isSelected);
+            ColorStateList backgroundColorStateList =
+                    getBackgroundColorStateList(context, isSelected, isIncognito);
+
+            var background = actionButton.getBackground();
+            background.setLevel(level);
+            DrawableCompat.setTintList(background.mutate(), backgroundColorStateList);
 
             // The check should be invisible if not selected.
             actionButton.getDrawable().setAlpha(isSelected ? 255 : 0);
             ImageViewCompat.setImageTintList(
                     actionButton,
-                    isSelected ? model.get(TabProperties.CHECKED_DRAWABLE_STATE_LIST) : null);
+                    isSelected ? getCheckedDrawableColorStateList(context, isIncognito) : null);
             if (isSelected) ((AnimatedVectorDrawableCompat) actionButton.getDrawable()).start();
         }
     }
@@ -294,6 +300,36 @@ class TabListViewBinder {
 
         } else {
             colorIconView.setVisibility(View.GONE);
+        }
+    }
+
+    private static int getCheckmarkLevel(Resources res, boolean isSelected) {
+        return isSelected
+                ? res.getInteger(R.integer.list_item_level_selected)
+                : res.getInteger(R.integer.list_item_level_default);
+    }
+
+    private static ColorStateList getCheckedDrawableColorStateList(
+            Context context, boolean isIncognito) {
+        return ColorStateList.valueOf(
+                isIncognito
+                        ? context.getColor(R.color.default_icon_color_dark)
+                        : SemanticColorUtils.getDefaultIconColorInverse(context));
+    }
+
+    private static ColorStateList getBackgroundColorStateList(
+            Context context, boolean isSelected, boolean isIncognito) {
+        if (isSelected) {
+            return ColorStateList.valueOf(
+                    isIncognito
+                            ? context.getColor(R.color.baseline_primary_80)
+                            : SemanticColorUtils.getDefaultControlColorActive(context));
+        } else {
+            return AppCompatResources.getColorStateList(
+                    context,
+                    isIncognito
+                            ? R.color.default_icon_color_light
+                            : R.color.default_icon_color_tint_list);
         }
     }
 }

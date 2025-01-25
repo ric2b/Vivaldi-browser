@@ -11,6 +11,8 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chromeos/ash/components/growth/campaigns_manager.h"
@@ -26,6 +28,7 @@ struct Illustration {
 
 struct Content {
   Content();
+  Content(const Content& content);
   ~Content();
   std::optional<Illustration> illustration;
 };
@@ -40,6 +43,7 @@ struct SinglePerkDiscoveryPayload {
   std::string id;
   std::string title;
   std::string subtitle;
+  std::optional<std::string> additional_text;
   std::string icon_url;
   Content content;
 
@@ -52,7 +56,22 @@ class PerksDiscoveryScreen : public BaseScreen {
  public:
   using TView = PerksDiscoveryScreenView;
 
-  enum class Result { kNext, kError, kNotApplicable };
+  enum class Result { kNext, kError, kTimeout, kNotApplicable };
+
+  // This enum is tied directly to a UMA enum defined in
+  // //tools/metrics/histograms/enums.xml, and should always reflect it (do not
+  // change one without changing the other).  Entries should be never modified
+  // or deleted. Only additions are possible.
+  enum class PerksDiscoveryErrorReason {
+    kNoCampaignManager = 0,
+    kNoCampaign = 1,
+    kNoCampaignID = 2,
+    kNoPayload = 3,
+    kMalformedPayload = 4,
+    kNoUserProfile = 5,
+    kNoActionFound = 6,
+    kMaxValue = kNoActionFound
+  };
 
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
 
@@ -64,6 +83,18 @@ class PerksDiscoveryScreen : public BaseScreen {
 
   ~PerksDiscoveryScreen() override;
 
+  void set_exit_callback_for_testing(const ScreenExitCallback& callback) {
+    exit_callback_ = callback;
+  }
+
+  const ScreenExitCallback& get_exit_callback_for_testing() {
+    return exit_callback_;
+  }
+
+  void set_delay_for_overview_step_for_testing(base::TimeDelta delay) {
+    delay_overview_step_ = delay;
+  }
+
   static std::string GetResultString(Result result);
 
  private:
@@ -73,8 +104,24 @@ class PerksDiscoveryScreen : public BaseScreen {
   void HideImpl() override;
   void OnUserAction(const base::Value::List& args) override;
   void GetOobePerksPayloadAndShow();
+  void ShowOverviewStep();
+  void ExitScreenTimeout();
+
+  base::OneShotTimer delay_overview_timer_;
+  base::TimeDelta delay_overview_step_ = base::Seconds(2);
+
+  base::OneShotTimer timeout_overview_timer_;
+  base::TimeDelta delay_exit_timeout_ = base::Minutes(1);
+
+  // Called when the user finish all perks on the screen.
+  void OnPerksSelectionFinished(const base::Value::List& selected_perks);
+
+  // Forward the action to the campaign manager.
+  void PerformButtonAction(const base::Value::Dict& button_data);
 
   std::vector<SinglePerkDiscoveryPayload> perks_data_;
+  int campaign_id_;
+  std::optional<int> group_id_;
   base::WeakPtr<PerksDiscoveryScreenView> view_;
   ScreenExitCallback exit_callback_;
 

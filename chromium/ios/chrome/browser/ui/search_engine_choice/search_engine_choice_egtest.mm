@@ -48,9 +48,6 @@
   config.additional_args.push_back(
       "--" + std::string(switches::kSearchEngineChoiceCountry) + "=" +
       switches::kEeaListCountryOverride);
-  // Force the dialog to trigger also for existing users.
-  config.additional_args.push_back(std::string("--enable-features=") +
-                                   switches::kSearchEngineChoiceTrigger.name);
   config.additional_args.push_back(
       "--" + std::string(switches::kForceSearchEngineChoiceScreen));
   // Relaunches the app at each test to re-display the choice screen.
@@ -62,7 +59,7 @@
 // Tests that the search engine choice dialog is always visible when the app
 // goes to background and foreground.
 // TODO(crbug.com/356534232): Re-enable after fixing flakiness.
-- (void)DISABLED_testMoveToBackgroundAndToForeground {
+- (void)FLAKY_testMoveToBackgroundAndToForeground {
   [SearchEngineChoiceEarlGreyUI verifySearchEngineChoiceScreenIsDisplayed];
   [[AppLaunchManager sharedManager] backgroundAndForegroundApp];
   [SearchEngineChoiceEarlGreyUI verifySearchEngineChoiceScreenIsDisplayed];
@@ -204,10 +201,9 @@
   [[[EarlGrey selectElementWithMatcher:learnMoreLinkMatcher]
       assertWithMatcher:grey_notNil()] performAction:grey_tap()];
   // Verify the Learn More view was presented.
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityID(
-                     kSearchEngineChoiceLearnMoreAccessibilityIdentifier)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForUIElementToAppearWithMatcher:
+                      grey_accessibilityID(
+                          kSearchEngineChoiceLearnMoreAccessibilityIdentifier)];
   GREYAssertNil([MetricsAppInterface expectTotalCount:1
                                          forHistogram:eventHistogram],
                 @"Failed to record event histogram");

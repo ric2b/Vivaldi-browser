@@ -339,7 +339,8 @@ class AccessibilityServiceClientTest : public InProcessBrowserTest {
                 &AccessibilityServiceClientTest::CreateTestAccessibilityService,
                 base::Unretained(this)));
     sr_test_helper_ = std::make_unique<SpeechRecognitionTestHelper>(
-        speech::SpeechRecognitionType::kNetwork);
+        speech::SpeechRecognitionType::kNetwork,
+        media::mojom::RecognizerClientType::kDictation);
     sr_test_helper_->SetUp(browser()->profile());
   }
 
@@ -1412,7 +1413,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityServiceClientTest,
   TurnOnAccessibilityService(AssistiveTechnologyType::kChromeVox);
   base::RunLoop loop;
   fake_service_->RequestLoadFile(
-      base::FilePath("chromevox/chromeVoxChromeBackgroundScript.js"),
+      base::FilePath("chromevox/common/closure_loader.js"),
       base::BindLambdaForTesting([&loop](base::File file) mutable {
         // Note: we post a task to the thread pool here because dealing with the
         // file causes blocking operations. Since this is a single process

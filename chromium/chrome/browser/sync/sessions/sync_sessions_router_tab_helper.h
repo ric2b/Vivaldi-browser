@@ -69,6 +69,7 @@ class SyncSessionsRouterTabHelper
       bool icon_url_changed,
       const gfx::Image& image) override;
 
+  void VivExtDataSet(content::WebContents* contents) override;
  private:
   friend class content::WebContentsUserData<SyncSessionsRouterTabHelper>;
 

@@ -18,7 +18,6 @@
 #import "ios/web/js_messaging/scoped_wk_script_message_handler.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
-#import "ios/web/web_state/ui/wk_web_view_configuration_provider_observer.h"
 
 namespace adblock_filter {
 
@@ -68,8 +67,8 @@ std::string SourceToTemplatedHexString(std::string_view source) {
 
 class ContentInjectionHandlerImpl
     : public ContentInjectionHandler,
-      public Resources::Observer,
-      public web::WKWebViewConfigurationProviderObserver {
+      public Resources::Observer {
+
  public:
   explicit ContentInjectionHandlerImpl(web::BrowserState* browser_state,
                                        Resources* resources);
@@ -87,11 +86,9 @@ class ContentInjectionHandlerImpl
   void OnResourcesLoaded() override;
 
  private:
-  // Implementing WKWebViewConfigurationProviderObserver
-  void DidCreateNewConfiguration(
+  void OnNewConfigurationCreated(
       web::WKWebViewConfigurationProvider* config_provider,
-      WKWebViewConfiguration* new_config) override;
-
+      WKWebViewConfiguration* new_config);
   void InjectUserScripts();
   void InjectUserScriptsForController(
       __weak WKUserContentController* user_content_controller);
@@ -107,6 +104,10 @@ class ContentInjectionHandlerImpl
 
   __weak WKUserContentController* user_content_controller_;
   __weak WKUserContentController* incognito_user_content_controller_;
+
+  // CallbackListSubscription members
+  base::CallbackListSubscription main_config_subscription_;
+  base::CallbackListSubscription incognito_config_subscription_;
 
   // NOTE(julien): Unclear why, but I am not managing to use a straight vector
   // of ScopedWKScriptMessageHandler and insert with emplace_back.
@@ -124,9 +125,18 @@ ContentInjectionHandlerImpl::ContentInjectionHandlerImpl(
           web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
               .AsWeakPtr()),
       resources_(resources) {
-  DidCreateNewConfiguration(config_provider_.get(),
-                            config_provider_->GetWebViewConfiguration());
-  config_provider_->AddObserver(this);
+
+  // Register callback for configuration changes in the main profile
+  if (config_provider_) {
+    main_config_subscription_ =
+        config_provider_->RegisterConfigurationCreatedCallback(
+            base::BindRepeating(
+               &ContentInjectionHandlerImpl::OnNewConfigurationCreated,
+                   weak_ptr_factory_.GetWeakPtr(), config_provider_.get()));
+    // Apply for the existing configuration
+    OnNewConfigurationCreated(
+         config_provider_.get(), config_provider_->GetWebViewConfiguration());
+  }
 
   if (resources_->loaded())
     InjectUserScripts();
@@ -137,29 +147,34 @@ ContentInjectionHandlerImpl::ContentInjectionHandlerImpl(
 void ContentInjectionHandlerImpl::SetIncognitoBrowserState(
     web::BrowserState* browser_state) {
   if (incognito_config_provider_) {
-    incognito_config_provider_->RemoveObserver(this);
+    incognito_config_subscription_ = base::CallbackListSubscription();
     incognito_config_provider_.reset();
   }
 
   if (!browser_state) {
     return;
   }
+
   incognito_config_provider_ =
       web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
           .AsWeakPtr();
-  DidCreateNewConfiguration(
-      incognito_config_provider_.get(),
-      incognito_config_provider_->GetWebViewConfiguration());
-  incognito_config_provider_->AddObserver(this);
+  if (incognito_config_provider_) {
+    incognito_config_subscription_ =
+        incognito_config_provider_->RegisterConfigurationCreatedCallback(
+            base::BindRepeating(
+               &ContentInjectionHandlerImpl::OnNewConfigurationCreated,
+                   weak_ptr_factory_.GetWeakPtr(),
+                   incognito_config_provider_.get()));
+    // Apply for the existing configuration
+    OnNewConfigurationCreated(
+        incognito_config_provider_.get(),
+        incognito_config_provider_->GetWebViewConfiguration());
+  }
 }
 
 ContentInjectionHandlerImpl::~ContentInjectionHandlerImpl() {
-  if (config_provider_) {
-    config_provider_->RemoveObserver(this);
-  }
-  if (incognito_config_provider_) {
-    incognito_config_provider_->RemoveObserver(this);
-  }
+  // No need to manually remove observers as
+  // subscriptions are handled by CallbackListSubscription.
 }
 
 void ContentInjectionHandlerImpl::OnResourcesLoaded() {
@@ -167,7 +182,7 @@ void ContentInjectionHandlerImpl::OnResourcesLoaded() {
   InjectUserScripts();
 }
 
-void ContentInjectionHandlerImpl::DidCreateNewConfiguration(
+void ContentInjectionHandlerImpl::OnNewConfigurationCreated(
     web::WKWebViewConfigurationProvider* config_provider,
     WKWebViewConfiguration* new_config) {
   if (config_provider == config_provider_.get()) {

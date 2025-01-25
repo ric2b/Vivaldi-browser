@@ -119,7 +119,9 @@ function update_git_repo {
 }
 
 # Update git checkouts.
-if [ "X$DEPOT_TOOLS_UPDATE" != "X0" ]; then
+if [ "X$DEPOT_TOOLS_UPDATE" = "X0" ]; then
+  echo "DEPOT_TOOLS_UPDATE environment variable is 0, skipping update. Set DEPOT_TOOLS_UPDATE to 1 to force update." >&2
+else
   if [ -e "$base_dir/.git" ]; then
     cd "$base_dir"
     update_git_repo
@@ -135,7 +137,7 @@ if [ "X$DEPOT_TOOLS_UPDATE" != "X0" ]; then
 
   # Sync CIPD-boostrapped packages.
   source "$base_dir/cipd_bin_setup.sh"
-  cipd_bin_setup
+  cipd_bin_setup &> /dev/null
 
   # Don't bootstrap Python 3 on windows, since it is already done by
   # bootstrap/win_tools.bat.

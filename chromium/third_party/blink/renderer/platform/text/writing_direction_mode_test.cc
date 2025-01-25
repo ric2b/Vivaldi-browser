@@ -36,4 +36,28 @@ TEST(WritingDirectionModeTest, LineUnder) {
   EXPECT_EQ(PhysicalDirection::kRight, LineUnder(WritingMode::kSidewaysLr));
 }
 
+TEST(WritingDirectionModeTest, IsFlippedXY) {
+  struct TestData {
+    WritingDirectionMode writing_direction;
+    bool is_flipped_x;
+    bool is_flipped_y;
+  } test_data_list[] = {
+      {{WritingMode::kHorizontalTb, TextDirection::kLtr}, false, false},
+      {{WritingMode::kHorizontalTb, TextDirection::kRtl}, true, false},
+      {{WritingMode::kVerticalRl, TextDirection::kLtr}, true, false},
+      {{WritingMode::kVerticalRl, TextDirection::kRtl}, true, true},
+      {{WritingMode::kVerticalLr, TextDirection::kLtr}, false, false},
+      {{WritingMode::kVerticalLr, TextDirection::kRtl}, false, true},
+      {{WritingMode::kSidewaysRl, TextDirection::kLtr}, true, false},
+      {{WritingMode::kSidewaysRl, TextDirection::kRtl}, true, true},
+      {{WritingMode::kSidewaysLr, TextDirection::kLtr}, false, true},
+      {{WritingMode::kSidewaysLr, TextDirection::kRtl}, false, false},
+  };
+  for (const TestData& data : test_data_list) {
+    SCOPED_TRACE(data.writing_direction);
+    EXPECT_EQ(data.writing_direction.IsFlippedX(), data.is_flipped_x);
+    EXPECT_EQ(data.writing_direction.IsFlippedY(), data.is_flipped_y);
+  }
+}
+
 }  // namespace blink

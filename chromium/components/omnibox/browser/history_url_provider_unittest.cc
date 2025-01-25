@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/omnibox/browser/history_url_provider.h"
 
 #include <stddef.h>
@@ -33,7 +38,6 @@
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/default_search_manager.h"
-#include "components/search_engines/search_engines_test_environment.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
@@ -267,8 +271,6 @@ class HistoryURLProviderTest : public testing::Test,
   base::ScopedTempDir history_dir_;
   base::test::TaskEnvironment task_environment_;
   ACMatches matches_;
-  std::unique_ptr<search_engines::SearchEnginesTestEnvironment>
-      search_engines_test_environment_;
   std::unique_ptr<FakeAutocompleteProviderClient> client_;
   scoped_refptr<HistoryURLProviderPublic> provider_;
   // Should the matches be sorted and duplicates removed?
@@ -308,12 +310,6 @@ bool HistoryURLProviderTest::SetUpImpl(bool create_history_db) {
   client_->set_history_service(
       history::CreateHistoryService(history_dir_.GetPath(), create_history_db));
   client_->set_bookmark_model(bookmarks::TestBookmarkClient::CreateModel());
-  // `SearchEnginesTestEnvironment` should be initialized after
-  // `FakeAutocompleteProviderClient`.
-  search_engines_test_environment_ =
-      std::make_unique<search_engines::SearchEnginesTestEnvironment>();
-  client_->set_template_url_service(
-      search_engines_test_environment_->ReleaseTemplateURLService());
   if (!client_->GetHistoryService())
     return false;
   provider_ =

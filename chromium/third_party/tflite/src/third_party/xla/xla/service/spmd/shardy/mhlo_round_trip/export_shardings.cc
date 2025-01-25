@@ -33,29 +33,30 @@ limitations under the License.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/IR/AffineMap.h"  // from @llvm-project
-#include "mlir/IR/Attributes.h"  // from @llvm-project
-#include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "mlir/IR/Diagnostics.h"  // from @llvm-project
-#include "mlir/IR/DialectRegistry.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/IR/SymbolTable.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/Pass/Pass.h"  // from @llvm-project
-#include "mlir/Pass/PassManager.h"  // from @llvm-project
-#include "mlir/Pass/PassRegistry.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
-#include "mlir/Support/TypeID.h"  // from @llvm-project
-#include "mlir/Transforms/DialectConversion.h"  // from @llvm-project
-#include "shardy/dialect/sdy/ir/constants.h"  // from @shardy
-#include "shardy/dialect/sdy/ir/dialect.h"  // from @shardy
-#include "shardy/dialect/sdy/ir/utils.h"  // from @shardy
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/AffineMap.h"
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/DialectRegistry.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/Operation.h"
+#include "mlir/IR/SymbolTable.h"
+#include "mlir/IR/Value.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassRegistry.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
+#include "mlir/Support/TypeID.h"
+#include "mlir/Transforms/DialectConversion.h"
+#include "shardy/dialect/sdy/ir/constants.h"
+#include "shardy/dialect/sdy/ir/dialect.h"
+#include "shardy/dialect/sdy/ir/utils.h"
+#include "xla/array.h"
 #include "xla/hlo/ir/hlo_sharding.h"
 #include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "xla/service/spmd/shardy/constants.h"
@@ -235,9 +236,13 @@ HloSharding convertToHloSharding(
     ArrayRef<AxisRefAttr> manualAxes) {
   MeshAttr mesh = getMeshAttr(sdySharding);
 
-  // Convert to maximal sharding if the mesh only contains the device id.
-  if (std::optional<int64_t> deviceId = mesh.getDeviceId(); deviceId) {
-    return HloSharding::AssignDevice(*deviceId);
+  // If there are no axes, convert to:
+  // - maximal sharding if the mesh has a device id
+  // - else replicated sharding
+  if (mesh.getAxes().empty()) {
+    return mesh.getDeviceIds().empty()
+               ? HloSharding::Replicate()
+               : HloSharding::AssignDevice(mesh.getDeviceIds().front());
   }
 
   SmallVector<int64_t> tileAssignmentDims(sdySharding.getRank(), 1);
@@ -290,6 +295,19 @@ HloSharding convertToHloSharding(
     tileAssignmentDims.push_back(totalReplicatedSize);
     types.push_back(OpSharding::REPLICATED);
   }
+
+  // Handle arbitrary device ID list.
+  if (!mesh.getDeviceIds().empty()) {
+    Array<int64_t> deviceIdsArray(reshapeDims);
+    deviceIdsArray.SetValues(mesh.getDeviceIds());
+    deviceIdsArray.TransposeDimensions(transposePerm);
+    deviceIdsArray.Reshape(tileAssignmentDims);
+    return HloSharding::Subgroup(
+        TileAssignment(
+            std::make_shared<const Array<int64_t>>(std::move(deviceIdsArray))),
+        types);
+  }
+
   return HloSharding::Subgroup(
       xla::TileAssignment(tileAssignmentDims, reshapeDims, transposePerm),
       types);

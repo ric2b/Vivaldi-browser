@@ -34,10 +34,9 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+#include "ui/lazy_load_service.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -171,7 +170,8 @@ SessionOptions::SessionOptions() {}
 
 SessionOptions::~SessionOptions() {}
 
-VivaldiSessionService::~VivaldiSessionService() {}
+VivaldiSessionService::~VivaldiSessionService() {
+}
 
 VivaldiSessionService::VivaldiSessionService()
     : errored_(false),
@@ -563,8 +563,8 @@ int VivaldiSessionService::Load(const base::FilePath& path,
         }
 
         scoped_refptr<base::RefCountedMemory> image_data =
-          base::MakeRefCounted<base::RefCountedBytes>(
-              reinterpret_cast<const unsigned char*>(data), len);
+            base::MakeRefCounted<base::RefCountedBytes>(
+                base::span(reinterpret_cast<const unsigned char*>(data), len));
 
         VivaldiImageStore::ImagePlace place;
         VivaldiImageStore::StoreImage(profile_.get(), std::move(place),
@@ -754,7 +754,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
   content::WebContents* web_contents = chrome::AddRestoredTab(
       browser, tab.navigations, tab_index, selected_index, tab.extension_app_id,
       group, false,  // select
-      tab.pinned, base::TimeTicks(), session_storage_namespace.get(),
+      tab.pinned, base::TimeTicks(), base::Time(), session_storage_namespace.get(),
       tab.user_agent_override, tab.extra_data, true /* from_session_restore */,
       true /* is_active_browser */,
       tab.viv_page_action_overrides, tab.viv_ext_data);
@@ -776,9 +776,11 @@ void VivaldiSessionService::NotifySessionServiceOfRestoredTabs(
   if (!session_service)
     return;
   TabStripModel* tab_strip = browser->tab_strip_model();
-  for (int i = initial_count; i < tab_strip->count(); ++i)
+  for (int i = initial_count; i < tab_strip->count(); ++i) {
+
     session_service->TabRestored(tab_strip->GetWebContentsAt(i),
                                  tab_strip->IsTabPinned(i));
+  }
 }
 
 // Based on ProcessSessionWindows in session_restore.cc

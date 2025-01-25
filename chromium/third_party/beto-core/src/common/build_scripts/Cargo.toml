@@ -3,6 +3,7 @@ name = "build_scripts"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 rust-version = "1.71.0"
 
 [dependencies]

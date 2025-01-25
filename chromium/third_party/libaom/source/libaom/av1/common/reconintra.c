@@ -1622,7 +1622,7 @@ static void highbd_build_non_directional_intra_predictors(
 }
 #endif  // CONFIG_AV1_HIGHBITDEPTH
 
-static INLINE BLOCK_SIZE scale_chroma_bsize(BLOCK_SIZE bsize, int subsampling_x,
+static inline BLOCK_SIZE scale_chroma_bsize(BLOCK_SIZE bsize, int subsampling_x,
                                             int subsampling_y) {
   assert(subsampling_x >= 0 && subsampling_x < 2);
   assert(subsampling_y >= 0 && subsampling_y < 2);

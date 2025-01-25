@@ -40,6 +40,7 @@
 #include "build/chromeos_buildflags.h"
 #include "components/attribution_reporting/features.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
+#include "components/services/storage/privileged/cpp/bucket_client_info.h"
 #include "components/services/storage/privileged/mojom/indexed_db_control.mojom.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "components/services/storage/public/cpp/constants.h"
@@ -78,6 +79,7 @@
 #include "content/browser/indexed_db/indexed_db_control_wrapper.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
 #include "content/browser/loader/keep_alive_url_loader_service.h"
+#include "content/browser/loader/reconnectable_url_loader_factory.h"
 #include "content/browser/loader/subresource_proxying_url_loader_service.h"
 #include "content/browser/loader/url_loader_factory_utils.h"
 #include "content/browser/locks/lock_manager.h"
@@ -1154,10 +1156,6 @@ StoragePartitionImpl::~StoragePartitionImpl() {
     GetServiceWorkerContext()->Shutdown();
   }
 
-  if (GetPlatformNotificationContext()) {
-    GetPlatformNotificationContext()->Shutdown();
-  }
-
   if (GetBackgroundSyncContext()) {
     GetBackgroundSyncContext()->Shutdown();
   }
@@ -1192,6 +1190,10 @@ void StoragePartitionImpl::OnBrowserContextWillBeDestroyed() {
     GetContentIndexContext()->Shutdown();
   }
 
+  if (GetPlatformNotificationContext()) {
+    GetPlatformNotificationContext()->Shutdown();
+  }
+
   if (keep_alive_url_loader_service_) {
     keep_alive_url_loader_service_->Shutdown();
   }
@@ -1217,6 +1219,27 @@ void StoragePartitionImpl::RevokeNetworkForNoncesInNetworkContext(
   // `NetworkService`, the network revocation nonces of `NetworkContext` will be
   // restored using this.
   network_revocation_nonces_.insert(std::begin(nonces), std::end(nonces));
+}
+
+void StoragePartitionImpl::ClearNoncesInNetworkContextAfterDelay(
+    const std::vector<base::UnguessableToken>& nonces) {
+  GetUIThreadTaskRunner({})->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(
+          &StoragePartitionImpl::ClearNoncesInNetworkContextAfterDelayCallback,
+          weak_factory_.GetWeakPtr(), nonces),
+      clear_nonces_in_network_context_delay_);
+}
+
+void StoragePartitionImpl::ClearNoncesInNetworkContextAfterDelayCallback(
+    const std::vector<base::UnguessableToken>& nonces) {
+  GetNetworkContext()->ClearNonces(nonces);
+
+  for (const auto& nonce : nonces) {
+    network_revocation_nonces_.erase(nonce);
+  }
+
+  clear_nonces_in_network_context_callback_for_testing_.Run();
 }
 
 void StoragePartitionImpl::RemoveKeepAliveHandleFromMap(
@@ -1327,11 +1350,12 @@ void StoragePartitionImpl::Initialize(
   file_system_access_manager_->BindInternalsReceiver(
       file_system_access_context.InitWithNewPipeAndPassReceiver());
   base::FilePath path = is_in_memory() ? base::FilePath() : partition_path_;
-  indexed_db_control_wrapper_ = std::make_unique<IndexedDBControlWrapper>(
-      path, browser_context_->GetSpecialStoragePolicy(), quota_manager_proxy,
-      ChromeBlobStorageContext::GetRemoteFor(browser_context_),
-      std::move(file_system_access_context), GetIOThreadTaskRunner({}),
-      /*task_runner=*/nullptr);
+  indexed_db_control_wrapper_ =
+      std::make_unique<indexed_db::IndexedDBControlWrapper>(
+          path, browser_context_->GetSpecialStoragePolicy(),
+          quota_manager_proxy,
+          ChromeBlobStorageContext::GetRemoteFor(browser_context_),
+          std::move(file_system_access_context), GetIOThreadTaskRunner({}));
 
   cache_storage_control_wrapper_ = std::make_unique<CacheStorageControlWrapper>(
       GetIOThreadTaskRunner({}), path,
@@ -1379,9 +1403,10 @@ void StoragePartitionImpl::Initialize(
   bluetooth_allowed_devices_map_ =
       std::make_unique<BluetoothAllowedDevicesMap>();
 
-  // Must be initialized before the `url_loader_factory_getter_`.
-  // Cookie deprecation traffic labels should not be sent for off-the-record
-  // profiles, unless the "enable_otr_profiles" feature parameter is true.
+  // Must be initialized before the
+  // `shared_url_loader_factory_for_browser_process_`. Cookie deprecation
+  // traffic labels should not be sent for off-the-record profiles, unless the
+  // "enable_otr_profiles" feature parameter is true.
   if (base::FeatureList::IsEnabled(
           features::kCookieDeprecationFacilitatedTesting) &&
       (!is_in_memory() ||
@@ -1390,16 +1415,12 @@ void StoragePartitionImpl::Initialize(
         std::make_unique<CookieDeprecationLabelManagerImpl>(browser_context_);
   }
 
-  shared_url_loader_factory_for_browser_process_ = base::MakeRefCounted<
-      ReconnectableURLLoaderFactory>(base::BindRepeating(
+  shared_url_loader_factory_for_browser_process_ = std::make_unique<
+      ReconnectableURLLoaderFactoryForIOThreadWrapper>(base::BindRepeating(
       &StoragePartitionImpl::CreateURLLoaderFactoryForBrowserProcessInternal,
       GetWeakPtr()));
-
-  url_loader_factory_getter_ = base::MakeRefCounted<
-      ReconnectableURLLoaderFactoryForIOThread>(base::BindRepeating(
-      &StoragePartitionImpl::CreateURLLoaderFactoryForBrowserProcessInternal,
-      GetWeakPtr()));
-  url_loader_factory_getter_->Initialize();
+  shared_url_loader_factory_for_browser_process_->factory_for_io_thread()
+      ->Initialize();
 
   service_worker_context_->Init(path, quota_manager_proxy.get(),
                                 browser_context_->GetSpecialStoragePolicy(),
@@ -1612,13 +1633,14 @@ StoragePartitionImpl::GetCertVerifierServiceUpdater() {
 scoped_refptr<network::SharedURLLoaderFactory>
 StoragePartitionImpl::GetURLLoaderFactoryForBrowserProcess() {
   CHECK(shared_url_loader_factory_for_browser_process_);
-  return shared_url_loader_factory_for_browser_process_;
+  return shared_url_loader_factory_for_browser_process_->factory();
 }
 
 std::unique_ptr<network::PendingSharedURLLoaderFactory>
 StoragePartitionImpl::GetURLLoaderFactoryForBrowserProcessIOThread() {
-  DCHECK(initialized_);
-  return url_loader_factory_getter_->CloneForIOThread();
+  CHECK(shared_url_loader_factory_for_browser_process_);
+  return shared_url_loader_factory_for_browser_process_->factory_for_io_thread()
+      ->CloneForIOThread();
 }
 
 network::mojom::CookieManager*
@@ -3120,8 +3142,9 @@ void StoragePartitionImpl::Flush() {
 void StoragePartitionImpl::ResetURLLoaderFactories() {
   CHECK(initialized_);
   GetNetworkContext()->ResetURLLoaderFactories();
-  shared_url_loader_factory_for_browser_process_->Reset();
-  url_loader_factory_getter_->Initialize();
+  shared_url_loader_factory_for_browser_process_->factory()->Reset();
+  shared_url_loader_factory_for_browser_process_->factory_for_io_thread()
+      ->Reset();
 }
 
 void StoragePartitionImpl::ClearBluetoothAllowedDevicesMapForTesting() {
@@ -3141,7 +3164,8 @@ void StoragePartitionImpl::FlushNetworkInterfaceForTesting() {
   CHECK(initialized_);
   DCHECK(network_context_owner_->network_context);
   network_context_owner_->network_context.FlushForTesting();  // IN-TEST
-  shared_url_loader_factory_for_browser_process_->FlushForTesting();  // IN-TEST
+  shared_url_loader_factory_for_browser_process_->factory()
+      ->FlushForTesting();  // IN-TEST
   if (cookie_manager_for_browser_process_) {
     cookie_manager_for_browser_process_.FlushForTesting();  // IN-TEST
   }
@@ -3149,8 +3173,9 @@ void StoragePartitionImpl::FlushNetworkInterfaceForTesting() {
 
 void StoragePartitionImpl::FlushNetworkInterfaceOnIOThreadForTesting() {
   CHECK(initialized_);
-  CHECK(url_loader_factory_getter_);
-  url_loader_factory_getter_->FlushForTesting();  // IN-TEST
+  CHECK(shared_url_loader_factory_for_browser_process_);
+  shared_url_loader_factory_for_browser_process_->factory_for_io_thread()
+      ->FlushForTesting();  // IN-TEST
 }
 
 void StoragePartitionImpl::FlushCertVerifierInterfaceForTesting() {
@@ -3205,6 +3230,13 @@ void StoragePartitionImpl::OverrideDeleteStaleSessionOnlyCookiesDelayForTesting(
   delete_stale_session_only_cookies_delay_ = delay;
 }
 
+void StoragePartitionImpl::SetClearNoncesInNetworkContextParamsForTesting(
+    const base::TimeDelta& delay,
+    base::RepeatingClosure callback) {
+  clear_nonces_in_network_context_delay_ = delay;
+  clear_nonces_in_network_context_callback_for_testing_ = callback;
+}
+
 base::WeakPtr<StoragePartitionImpl> StoragePartitionImpl::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
@@ -3237,12 +3269,12 @@ StoragePartitionImpl::GetStorageServiceForTesting() {
 
 void StoragePartitionImpl::BindIndexedDB(
     const storage::BucketLocator& bucket_locator,
+    const storage::BucketClientInfo& client_info,
     mojo::PendingRemote<storage::mojom::IndexedDBClientStateChecker>
         client_state_checker_remote,
-    const base::UnguessableToken& client_token,
     mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) {
   indexed_db_control_wrapper_->BindIndexedDB(
-      bucket_locator, std::move(client_state_checker_remote), client_token,
+      bucket_locator, client_info, std::move(client_state_checker_remote),
       std::move(receiver));
 }
 

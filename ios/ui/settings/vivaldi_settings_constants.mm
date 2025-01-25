@@ -5,7 +5,8 @@
 #pragma mark - ICONS
 // Image name for sync setting
 NSString* vSyncSetting = @"vivaldi_setting_sync";
-
+// Image name for sync setting
+NSString* vGeneralSetting = @"vivaldi_setting_general";
 // Image name for default browser setting
 NSString* vDefaultBrowserSetting = @"vivaldi_setting_default_browser";
 // Image name for search engine setting

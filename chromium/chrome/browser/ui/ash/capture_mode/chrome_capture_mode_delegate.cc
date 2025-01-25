@@ -25,18 +25,20 @@
 #include "chrome/browser/ash/policy/dlp/dlp_content_manager_ash.h"
 #include "chrome/browser/ash/policy/skyvault/file_location_utils.h"
 #include "chrome/browser/ash/policy/skyvault/odfs_skyvault_uploader.h"
+#include "chrome/browser/ash/policy/skyvault/skyvault_capture_upload_notification.h"
 #include "chrome/browser/ash/video_conference/video_conference_manager_ash.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/policy/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/ash/screenshot_area.h"
+#include "chrome/browser/ui/ash/capture_mode/search_results_view.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
+#include "chromeos/ash/experiences/screenshot_area/screenshot_area.h"
 #include "chromeos/ash/services/recording/public/mojom/recording_service.mojom.h"
 #include "components/drive/file_errors.h"
 #include "components/prefs/pref_service.h"
@@ -70,6 +72,8 @@ bool IsScreenCaptureDisabledByPolicy() {
 void CaptureFileFinalized(
     const base::FilePath& original_path,
     base::OnceCallback<void(bool, const base::FilePath&)> callback,
+    std::unique_ptr<policy::skyvault::SkyvaultCaptureUploadNotification>
+        upload_notification,
     bool success,
     storage::FileSystemURL file_url) {
   std::move(callback).Run(success, file_url.path());
@@ -279,9 +283,7 @@ base::FilePath ChromeCaptureModeDelegate::GetLinuxFilesPath() const {
 }
 
 base::FilePath ChromeCaptureModeDelegate::GetOneDriveMountPointPath() const {
-  Profile* profile = ProfileManager::GetPrimaryUserProfile();
-  return profile ? ash::cloud_upload::GetODFSFuseboxMount(profile)
-                 : base::FilePath();
+  return policy::local_user_files::GetODFSVirtualPath();
 }
 
 ChromeCaptureModeDelegate::PolicyCapturePath
@@ -380,16 +382,29 @@ void ChromeCaptureModeDelegate::NotifyDeviceUsedWhileDisabled(
 
 void ChromeCaptureModeDelegate::FinalizeSavedFile(
     base::OnceCallback<void(bool, const base::FilePath&)> callback,
-    const base::FilePath& path) {
+    const base::FilePath& path,
+    const gfx::Image& thumbnail) {
   auto* profile = ProfileManager::GetActiveUserProfile();
   if (!odfs_temp_dir_.GetPath().empty() &&
       odfs_temp_dir_.GetPath().IsParent(path) && profile) {
-    // TODO(b/348177318): Show notification with progress during upload.
-    ash::cloud_upload::OdfsSkyvaultUploader::Upload(
+    // Passing the notification to the callback so that it's destructed once
+    // file upload finishes.
+    auto notification =
+        std::make_unique<policy::skyvault::SkyvaultCaptureUploadNotification>(
+            path);
+    auto notification_ptr = notification.get();
+    auto uploader = ash::cloud_upload::OdfsSkyvaultUploader::Upload(
         profile, path,
         ash::cloud_upload::OdfsSkyvaultUploader::FileType::kScreenCapture,
-        /*progress_callback=*/base::DoNothing(),
-        base::BindOnce(&CaptureFileFinalized, path, std::move(callback)));
+        base::BindRepeating(
+            &policy::skyvault::SkyvaultCaptureUploadNotification::
+                UpdateProgress,
+            notification->GetWeakPtr()),
+        base::BindOnce(&CaptureFileFinalized, path, std::move(callback),
+                       std::move(notification)),
+        thumbnail);
+    notification_ptr->SetCancelClosure(base::BindOnce(
+        &ash::cloud_upload::OdfsSkyvaultUploader::Cancel, uploader));
     return;
   }
   std::move(callback).Run(/*success=*/true, path);
@@ -411,6 +426,11 @@ base::FilePath ChromeCaptureModeDelegate::RedirectFilePath(
     }
   }
   return path;
+}
+
+std::unique_ptr<ash::AshWebView>
+ChromeCaptureModeDelegate::CreateSearchResultsView() const {
+  return std::make_unique<ash::SearchResultsView>();
 }
 
 void ChromeCaptureModeDelegate::OnGetDriveQuotaUsage(

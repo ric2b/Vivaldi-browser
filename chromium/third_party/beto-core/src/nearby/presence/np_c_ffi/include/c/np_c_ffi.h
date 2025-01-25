@@ -689,7 +689,7 @@ typedef struct {
  * A representation of a MatchedCredential which is passable across the FFI boundary
  */
 typedef struct {
-  uint32_t cred_id;
+  int64_t cred_id;
   const uint8_t *encrypted_metadata_bytes_buffer;
   uintptr_t encrypted_metadata_bytes_len;
 } np_ffi_FfiMatchedCredential;
@@ -972,7 +972,7 @@ typedef struct {
    * The ID of the credential which
    * matched the deserialized adv
    */
-  uint32_t cred_id;
+  int64_t cred_id;
   /**
    * The 14-byte legacy identity token
    */
@@ -1123,7 +1123,7 @@ typedef struct {
    * The ID of the credential which
    * matched the deserialized section.
    */
-  uint32_t cred_id;
+  int64_t cred_id;
   /**
    * The 16-byte metadata key.
    */
@@ -1229,18 +1229,10 @@ typedef struct {
 } np_ffi_FixedSizeArray_2;
 
 /**
- * A `#[repr(C)]` handle to a value of type `V1AdvertisementBuilderInternals`
- */
-typedef struct {
-  uint64_t handle_id;
-} np_ffi_V1AdvertisementBuilderHandle;
-
-/**
  * A handle to a builder for V1 advertisements.
  */
 typedef struct {
-  np_ffi_AdvertisementBuilderKind kind;
-  np_ffi_V1AdvertisementBuilderHandle handle;
+  uint64_t handle_id;
 } np_ffi_V1AdvertisementBuilder;
 
 /**
@@ -1248,7 +1240,13 @@ typedef struct {
  * the advertisement builder the section builder was originated from.
  */
 typedef struct {
+  /**
+   * The parent advertisement builder for this section
+   */
   np_ffi_V1AdvertisementBuilder adv_builder;
+  /**
+   * This section's index in the parent advertisement
+   */
   uint8_t section_index;
 } np_ffi_V1SectionBuilder;
 

@@ -16,12 +16,12 @@ const path_1 = __importDefault(require("path"));
 const browsers_1 = require("@puppeteer/browsers");
 const util_js_1 = require("../common/util.js");
 const assert_js_1 = require("../util/assert.js");
-const ProductLauncher_js_1 = require("./ProductLauncher.js");
+const BrowserLauncher_js_1 = require("./BrowserLauncher.js");
 const fs_js_1 = require("./util/fs.js");
 /**
  * @internal
  */
-class FirefoxLauncher extends ProductLauncher_js_1.ProductLauncher {
+class FirefoxLauncher extends BrowserLauncher_js_1.BrowserLauncher {
     constructor(puppeteer) {
         super(puppeteer, 'firefox');
     }
@@ -87,7 +87,7 @@ class FirefoxLauncher extends ProductLauncher_js_1.ProductLauncher {
         if (profileArgIndex !== -1) {
             userDataDir = firefoxArguments[profileArgIndex + 1];
             if (!userDataDir) {
-                throw new Error(`Firefox profile not found at '${userDataDir}'`);
+                throw new Error(`Missing value for profile command line argument`);
             }
             // When using a custom Firefox profile it needs to be populated
             // with required preferences.
@@ -132,14 +132,20 @@ class FirefoxLauncher extends ProductLauncher_js_1.ProductLauncher {
         }
         else {
             try {
-                // When an existing user profile has been used remove the user
-                // preferences file and restore possibly backuped preferences.
-                await (0, promises_1.unlink)(path_1.default.join(userDataDir, 'user.js'));
-                const prefsBackupPath = path_1.default.join(userDataDir, 'prefs.js.puppeteer');
-                if (fs_1.default.existsSync(prefsBackupPath)) {
-                    const prefsPath = path_1.default.join(userDataDir, 'prefs.js');
-                    await (0, promises_1.unlink)(prefsPath);
-                    await (0, promises_1.rename)(prefsBackupPath, prefsPath);
+                const backupSuffix = '.puppeteer';
+                const backupFiles = ['prefs.js', 'user.js'];
+                const results = await Promise.allSettled(backupFiles.map(async (file) => {
+                    const prefsBackupPath = path_1.default.join(userDataDir, file + backupSuffix);
+                    if (fs_1.default.existsSync(prefsBackupPath)) {
+                        const prefsPath = path_1.default.join(userDataDir, file);
+                        await (0, promises_1.unlink)(prefsPath);
+                        await (0, promises_1.rename)(prefsBackupPath, prefsPath);
+                    }
+                }));
+                for (const result of results) {
+                    if (result.status === 'rejected') {
+                        throw result.reason;
+                    }
                 }
             }
             catch (error) {
@@ -148,22 +154,11 @@ class FirefoxLauncher extends ProductLauncher_js_1.ProductLauncher {
         }
     }
     executablePath() {
-        // replace 'latest' placeholder with actual downloaded revision
-        if (this.puppeteer.browserRevision === 'latest') {
-            const cache = new browsers_1.Cache(this.puppeteer.defaultDownloadPath);
-            const installedFirefox = cache.getInstalledBrowsers().find(browser => {
-                return (browser.platform === (0, browsers_1.detectBrowserPlatform)() &&
-                    browser.browser === browsers_1.Browser.FIREFOX);
-            });
-            if (installedFirefox) {
-                this.actualBrowserRevision = installedFirefox.buildId;
-            }
-        }
         return this.resolveExecutablePath();
     }
     defaultArgs(options = {}) {
         const { devtools = false, headless = !devtools, args = [], userDataDir = null, } = options;
-        const firefoxArguments = ['--no-remote'];
+        const firefoxArguments = [];
         switch (os_1.default.platform()) {
             case 'darwin':
                 firefoxArguments.push('--foreground');

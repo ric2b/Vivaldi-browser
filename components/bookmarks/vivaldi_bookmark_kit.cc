@@ -432,6 +432,82 @@ void RemovePartnerId(BookmarkModel* model, const BookmarkNode* node) {
   model->DeleteNodeMetaInfo(node, GetMetaNames().partner);
 }
 
+// Android and iOS specific functions
+const BookmarkNode* GetStartPageNode(BookmarkModel* model) {
+  if (!model)
+    return nullptr;
+
+  // Prepare root nodes, including mobile and other nodes only if they
+  // have children.
+  std::vector<const BookmarkNode*> root_nodes;
+
+  const BookmarkNode* bookmark_bar_node = model->bookmark_bar_node();
+  if (bookmark_bar_node && !bookmark_bar_node->children().empty())
+    root_nodes.push_back(bookmark_bar_node);
+
+  const BookmarkNode* mobile_node = model->mobile_node();
+  if (mobile_node && !mobile_node->children().empty())
+    root_nodes.push_back(mobile_node);
+
+  const BookmarkNode* other_node = model->other_node();
+  if (other_node && !other_node->children().empty())
+    root_nodes.push_back(other_node);
+
+  // Return early if there are no root nodes to process.
+  if (root_nodes.empty())
+    return nullptr;
+
+  // Search through root nodes.
+  for (const BookmarkNode* root_node : root_nodes) {
+    if (!root_node || root_node->children().empty())
+      continue;
+
+    const BookmarkNode* result = FindStartPageNode(root_node);
+    if (result)
+      return result;
+  }
+
+  return nullptr;
+}
+
+bool IsURLAddedToStartPage(BookmarkModel* model, const GURL& url) {
+  // Return early if there's no start page node.
+  const BookmarkNode* start_page_node = GetStartPageNode(model);
+  if (!start_page_node)
+    return false;
+
+  // Get all nodes where the URL is added.
+  std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes =
+      model->GetNodesByURL(url);
+
+  // Check if any of the found nodes have the start page node as their parent.
+  for (const auto& node_ptr : nodes) {
+    const BookmarkNode* node = node_ptr.get();
+    if (node && node->parent() == start_page_node &&
+        !model->client()->IsNodeManaged(node)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+const BookmarkNode* FindStartPageNode(const BookmarkNode* node) {
+  if (!node || IsTrash(node))
+    return nullptr;
+
+  if (GetSpeeddial(node) && !IsSeparator(node)) {
+    return node;
+  }
+
+  for (const auto& child : node->children()) {
+    const BookmarkNode* result = FindStartPageNode(child.get());
+    if (result)
+      return result;
+  }
+  return nullptr;
+}
+
 void SetNodeNickname(BookmarkModel* model,
                      const BookmarkNode* node,
                      const std::string& nickname) {

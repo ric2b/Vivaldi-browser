@@ -51,6 +51,7 @@ if (!is_win) {
 
   if (!build_with_chromium) {
     openscreen_executable("osp_demo") {
+      testonly = true
       visibility += [ "../*" ]
       sources = [ "demo/osp_demo.cc" ]
       deps = [

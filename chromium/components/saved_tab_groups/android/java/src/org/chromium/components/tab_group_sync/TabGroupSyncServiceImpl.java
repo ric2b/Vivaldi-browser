@@ -4,6 +4,8 @@
 
 package org.chromium.components.tab_group_sync;
 
+import androidx.annotation.Nullable;
+
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
@@ -74,6 +76,14 @@ public class TabGroupSyncServiceImpl implements TabGroupSyncService {
         if (mNativePtr == 0) return;
         assert groupId != null;
         TabGroupSyncServiceImplJni.get().updateVisualData(mNativePtr, this, groupId, title, color);
+    }
+
+    @Override
+    public void makeTabGroupShared(LocalTabGroupId tabGroupId, String collaborationId) {
+        if (mNativePtr == 0) return;
+        assert tabGroupId != null;
+        TabGroupSyncServiceImplJni.get()
+                .makeTabGroupShared(mNativePtr, this, tabGroupId, collaborationId);
     }
 
     @Override
@@ -233,6 +243,13 @@ public class TabGroupSyncServiceImpl implements TabGroupSyncService {
         }
     }
 
+    @CalledByNative
+    private void onTabGroupLocalIdChanged(String syncId, @Nullable LocalTabGroupId localId) {
+        for (Observer observer : mObservers) {
+            observer.onTabGroupLocalIdChanged(syncId, localId);
+        }
+    }
+
     @NativeMethods
     interface Natives {
         String createGroup(
@@ -256,6 +273,12 @@ public class TabGroupSyncServiceImpl implements TabGroupSyncService {
                 LocalTabGroupId tabGroupId,
                 String title,
                 int color);
+
+        void makeTabGroupShared(
+                long nativeTabGroupSyncServiceAndroid,
+                TabGroupSyncServiceImpl caller,
+                LocalTabGroupId tabGroupId,
+                String collaborationId);
 
         void addTab(
                 long nativeTabGroupSyncServiceAndroid,

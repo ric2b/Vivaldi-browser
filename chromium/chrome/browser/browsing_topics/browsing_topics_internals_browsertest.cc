@@ -432,8 +432,7 @@ class BrowsingTopicsInternalsBrowserTest
          {features::kPrivacySandboxAdsAPIsOverride, {}},
          {privacy_sandbox::kPrivacySandboxSettings4,
           {{"consent-required", "true"}}}},
-        /*disabled_features=*/{
-            privacy_sandbox::kPrivacySandboxLocalNoticeConfirmation});
+        /*disabled_features=*/{});
   }
 
   // BrowserTestBase::SetUpInProcessBrowserTestFixture
@@ -819,7 +818,8 @@ IN_PROC_BROWSER_TEST_F(BrowsingTopicsInternalsBrowserTest,
       PrivacySandboxServiceFactory::GetForProfile(browser()->profile());
 
   privacy_sandbox_service->PromptActionOccurred(
-      PrivacySandboxService::PromptAction::kConsentAccepted);
+      PrivacySandboxService::PromptAction::kConsentAccepted,
+      PrivacySandboxService::SurfaceType::kDesktop);
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), GURL(kBrowsingTopicsInternalsConsentInfoUrl)));

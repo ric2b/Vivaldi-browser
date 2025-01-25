@@ -37,6 +37,7 @@ class FileChooserParams;
 
 namespace content {
 class FileSelectListener;
+class JavaScriptDialogManager;
 class NavigationEntry;
 class NavigationHandle;
 class RenderFrameHost;
@@ -54,7 +55,8 @@ class ContentWebState : public WebState,
 
   // Constructor for ContentWebState created for deserialized sessions.
   ContentWebState(const CreateParams& params,
-                  CRWSessionStorage* session_storage);
+                  CRWSessionStorage* session_storage,
+                  NativeSessionFetcher session_fetcher);
 
   // Constructor for ContentWebState created for deserialized sessions.
   ContentWebState(BrowserState* browser_state,
@@ -196,13 +198,14 @@ class ContentWebState : public WebState,
       base::TerminationStatus status) override;
 
   // WebContentsDelegate
-  void AddNewContents(content::WebContents* source,
-                      std::unique_ptr<content::WebContents> new_contents,
-                      const GURL& target_url,
-                      WindowOpenDisposition disposition,
-                      const blink::mojom::WindowFeatures& window_features,
-                      bool user_gesture,
-                      bool* was_blocked) override;
+  content::WebContents* AddNewContents(
+      content::WebContents* source,
+      std::unique_ptr<content::WebContents> new_contents,
+      const GURL& target_url,
+      WindowOpenDisposition disposition,
+      const blink::mojom::WindowFeatures& window_features,
+      bool user_gesture,
+      bool* was_blocked) override;
   int GetTopControlsHeight() override;
   int GetTopControlsMinHeight() override;
   int GetBottomControlsHeight() override;
@@ -221,6 +224,9 @@ class ContentWebState : public WebState,
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
+
+  content::JavaScriptDialogManager* GetJavaScriptDialogManager(
+      content::WebContents* source) override;
 
  private:
   // Helper method to register notification observers.

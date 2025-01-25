@@ -1,4 +1,4 @@
-SKIP: FAILED
+SKIP: INVALID
 
 cbuffer cbuffer_m : register(b0) {
   uint4 m[1];
@@ -26,10 +26,15 @@ matrix<float16_t, 2, 3> m_load(uint offset) {
 
 [numthreads(1, 1, 1)]
 void f() {
-  const matrix<float16_t, 2, 3> l_m = m_load(0u);
+  matrix<float16_t, 2, 3> l_m = m_load(0u);
   uint2 ubo_load_4 = m[0].zw;
   vector<float16_t, 2> ubo_load_4_xz = vector<float16_t, 2>(f16tof32(ubo_load_4 & 0xFFFF));
   float16_t ubo_load_4_y = f16tof32(ubo_load_4[0] >> 16);
-  const vector<float16_t, 3> l_m_1 = vector<float16_t, 3>(ubo_load_4_xz[0], ubo_load_4_y, ubo_load_4_xz[1]);
+  vector<float16_t, 3> l_m_1 = vector<float16_t, 3>(ubo_load_4_xz[0], ubo_load_4_y, ubo_load_4_xz[1]);
   return;
 }
+FXC validation failure:
+<scrubbed_path>(11,8-16): error X3000: syntax error: unexpected token 'float16_t'
+
+
+tint executable returned error: exit status 1

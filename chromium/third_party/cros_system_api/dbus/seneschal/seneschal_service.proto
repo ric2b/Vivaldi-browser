@@ -163,6 +163,8 @@ message SharePathRequest {
     // The user's PlayFiles/ directory under virtio-blk
     // /media/fuse/android_files.
     PLAY_FILES_GUEST_OS = 14;
+    // Fusebox mount directory /media/fuse/fusebox.
+    FUSEBOX = 15;
   }
   StorageLocation storage_location = 3;
 

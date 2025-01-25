@@ -377,13 +377,14 @@ v8::Local<v8::Value> XMLHttpRequest::ResponseJSON(
   DCHECK_EQ(response_type_code_, kResponseTypeJSON);
   DCHECK(!error_);
   DCHECK_EQ(state_, kDone);
+  TryRethrowScope rethrow_scope(isolate, exception_state);
   // Catch syntax error. Swallows an exception (when thrown) as the
   // spec says. https://xhr.spec.whatwg.org/#response-body
   v8::Local<v8::Value> json =
       FromJSONString(isolate, isolate->GetCurrentContext(),
-                     response_text_.ToString(), exception_state);
-  if (exception_state.HadException()) {
-    exception_state.ClearException();
+                     response_text_.ToString(), rethrow_scope);
+  if (rethrow_scope.HasCaught()) {
+    rethrow_scope.SwallowException();
     return v8::Null(isolate);
   }
   return json;
@@ -437,7 +438,7 @@ DOMArrayBuffer* XMLHttpRequest::ResponseArrayBuffer() {
       //
       response_array_buffer_failure_ = !buffer;
     } else {
-      response_array_buffer_ = DOMArrayBuffer::Create(nullptr, 0);
+      response_array_buffer_ = DOMArrayBuffer::Create(base::span<uint8_t>());
     }
   }
 
@@ -516,6 +517,16 @@ void XMLHttpRequest::setTimeout(unsigned timeout,
 
 void XMLHttpRequest::setResponseType(const String& response_type,
                                      ExceptionState& exception_state) {
+  const bool is_window =
+      GetExecutionContext() && GetExecutionContext()->IsWindow();
+  // 1. If the current global object is not a Window object and the given value
+  // is "document", then return.
+  if (!is_window && response_type == "document") {
+    return;
+  }
+
+  // 2. If this’s state is loading or done, then throw an "InvalidStateError"
+  // DOMException.
   if (state_ >= kLoading) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "The response type cannot be set if the "
@@ -526,7 +537,7 @@ void XMLHttpRequest::setResponseType(const String& response_type,
   // Newer functionality is not available to synchronous requests in window
   // contexts, as a spec-mandated attempt to discourage synchronous XHR use.
   // responseType is one such piece of functionality.
-  if (GetExecutionContext() && GetExecutionContext()->IsWindow() && !async_) {
+  if (is_window && !async_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidAccessError,
                                       "The response type cannot be changed for "
                                       "synchronous requests made from a "
@@ -1871,7 +1882,7 @@ void XMLHttpRequest::DidReceiveResponse(uint64_t identifier,
   response_ = response;
 }
 
-void XMLHttpRequest::ParseDocumentChunk(const char* data, unsigned len) {
+void XMLHttpRequest::ParseDocumentChunk(base::span<const uint8_t> data) {
   if (!response_document_parser_) {
     DCHECK(!response_document_);
     InitResponseDocument();
@@ -1887,7 +1898,7 @@ void XMLHttpRequest::ParseDocumentChunk(const char* data, unsigned len) {
   if (response_document_parser_->NeedsDecoder())
     response_document_parser_->SetDecoder(CreateDecoder());
 
-  response_document_parser_->AppendBytes(data, len);
+  response_document_parser_->AppendBytes(data);
 }
 
 std::unique_ptr<TextResourceDecoder> XMLHttpRequest::CreateDecoder() const {
@@ -1954,9 +1965,8 @@ void XMLHttpRequest::DidReceiveData(base::span<const char> data) {
     return;
   }
 
-  unsigned len = base::checked_cast<unsigned>(data.size());
   if (response_type_code_ == kResponseTypeDocument && ResponseIsHTML()) {
-    ParseDocumentChunk(data.data(), len);
+    ParseDocumentChunk(base::as_bytes(data));
   } else if (response_type_code_ == kResponseTypeDefault ||
              response_type_code_ == kResponseTypeText ||
              response_type_code_ == kResponseTypeJSON ||
@@ -1965,11 +1975,12 @@ void XMLHttpRequest::DidReceiveData(base::span<const char> data) {
       decoder_ = CreateDecoder();
 
     if (!response_text_overflow_) {
-      if (response_text_.DoesAppendCauseOverflow(len)) {
+      if (response_text_.DoesAppendCauseOverflow(
+              base::checked_cast<unsigned>(data.size()))) {
         response_text_overflow_ = true;
         response_text_.Clear();
       } else {
-        response_text_.Append(decoder_->Decode(data.data(), len));
+        response_text_.Append(decoder_->Decode(data));
       }
       ReportMemoryUsageToV8();
     }
@@ -1978,7 +1989,7 @@ void XMLHttpRequest::DidReceiveData(base::span<const char> data) {
     // Buffer binary data.
     if (!binary_response_builder_)
       binary_response_builder_ = SharedBuffer::Create();
-    binary_response_builder_->Append(data.data(), len);
+    binary_response_builder_->Append(data);
     ReportMemoryUsageToV8();
   }
 
@@ -1987,7 +1998,7 @@ void XMLHttpRequest::DidReceiveData(base::span<const char> data) {
     // events are already fired, we should return here.
     return;
   }
-  TrackProgress(len);
+  TrackProgress(data.size());
 }
 
 void XMLHttpRequest::DidDownloadData(uint64_t data_length) {

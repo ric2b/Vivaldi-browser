@@ -57,7 +57,7 @@ ResultOrError<UnpackedPtr<BufferDescriptor>> ValidateBufferDescriptor(
 static constexpr wgpu::BufferUsage kReadOnlyBufferUsages =
     wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::Index |
     wgpu::BufferUsage::Vertex | wgpu::BufferUsage::Uniform | kReadOnlyStorageBuffer |
-    wgpu::BufferUsage::Indirect;
+    kIndirectBufferForFrontendValidation | kIndirectBufferForBackendResourceTracking;
 
 static constexpr wgpu::BufferUsage kMappableBufferUsages =
     wgpu::BufferUsage::MapRead | wgpu::BufferUsage::MapWrite;
@@ -88,11 +88,11 @@ class BufferBase : public SharedResource {
     uint64_t GetAllocatedSize() const;
     ExecutionSerial GetLastUsageSerial() const;
 
-    // |GetUsageExternalOnly| returns the usage with which the buffer was created using the
-    // base WebGPU API. Additional usages may be added for internal state tracking. |GetUsage|
-    // returns the union of base usage and the usages added internally.
+    // |GetUsage| returns the usage with which the buffer was created using the base WebGPU API.
+    // Additional usages may be added for internal state tracking. |GetInternalUsage| returns the
+    // union of base usage and the usages added internally.
+    wgpu::BufferUsage GetInternalUsage() const;
     wgpu::BufferUsage GetUsage() const;
-    wgpu::BufferUsage GetUsageExternalOnly() const;
 
     MaybeError MapAtCreation();
     void CallbackOnMapRequestCompleted(MapRequestID mapID, WGPUBufferMapAsyncStatus status);
@@ -175,6 +175,7 @@ class BufferBase : public SharedResource {
 
     const uint64_t mSize = 0;
     const wgpu::BufferUsage mUsage = wgpu::BufferUsage::None;
+    const wgpu::BufferUsage mInternalUsage = wgpu::BufferUsage::None;
     BufferState mState;
     bool mIsDataInitialized = false;
 

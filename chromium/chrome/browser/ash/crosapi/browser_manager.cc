@@ -57,9 +57,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/crosapi/browser_action.h"
-#include "chrome/browser/ash/crosapi/browser_data_back_migrator.h"
-#include "chrome/browser/ash/crosapi/browser_data_migrator.h"
-#include "chrome/browser/ash/crosapi/browser_data_migrator_util.h"
 #include "chrome/browser/ash/crosapi/browser_launcher.h"
 #include "chrome/browser/ash/crosapi/browser_loader.h"
 #include "chrome/browser/ash/crosapi/browser_service_host_ash.h"
@@ -79,7 +76,6 @@
 #include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
-#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/web_applications/user_uninstalled_preinstalled_web_app_prefs.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
@@ -650,14 +646,6 @@ void BrowserManager::InitializeAndStartIfNeeded() {
     browser_loader_->Unload();
     ClearLacrosData();
   }
-
-  // Post `DryRunToCollectUMA()` to send UMA stats about sizes of files/dirs
-  // inside the profile data directory.
-  base::ThreadPool::PostTask(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&ash::browser_data_migrator_util::DryRunToCollectUMA,
-                     ProfileManager::GetPrimaryUserProfile()->GetPath()));
 }
 
 void BrowserManager::PrelaunchAtLoginScreen() {
@@ -888,12 +876,6 @@ void BrowserManager::ClearLacrosData() {
   // user data when Lacros is disabled only temporarily.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           ash::switches::kSafeMode)) {
-    return;
-  }
-
-  if (ash::BrowserDataBackMigrator::IsBackMigrationEnabled(
-          ash::standalone_browser::migrator_util::PolicyInitState::
-              kAfterInit)) {
     return;
   }
 
@@ -1327,14 +1309,6 @@ void BrowserManager::OnResumeLaunchComplete(
   RecordLacrosLaunchModeAndMigrationStatus();
 
   crosapi::lacros_startup_state::SetLacrosStartupState(true);
-
-  // Post `DryRunToCollectUMA()` to send UMA stats about sizes of files/dirs
-  // inside the profile data directory.
-  base::ThreadPool::PostTask(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&ash::browser_data_migrator_util::DryRunToCollectUMA,
-                     ProfileManager::GetPrimaryUserProfile()->GetPath()));
 }
 
 void BrowserManager::HandleGoToFiles() {

@@ -2,7 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/browsing_topics/browsing_topics_calculator.h"
+
 #include <memory>
 
 #include "base/files/scoped_temp_dir.h"
@@ -58,7 +64,7 @@ Topic ExpectedRandomTopic(size_t index) {
     return kExpectedRandomTopicsForTaxonomyV2[index];
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 class TestHistoryService : public history::HistoryService {
@@ -111,7 +117,7 @@ class BrowsingTopicsCalculatorTest : public testing::Test {
     tracking_protection_settings_ =
         std::make_unique<privacy_sandbox::TrackingProtectionSettings>(
             &prefs_, host_content_settings_map_.get(),
-            /*onboarding_service=*/nullptr, /*is_incognito=*/false);
+            /*is_incognito=*/false);
     cookie_settings_ = base::MakeRefCounted<content_settings::CookieSettings>(
         host_content_settings_map_.get(), &prefs_,
         tracking_protection_settings_.get(), false,

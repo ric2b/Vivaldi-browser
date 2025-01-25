@@ -76,7 +76,7 @@ void ArcChromeFeatureFlagsBridge::NotifyFeatureFlags() {
     return;
   }
   mojom::FeatureFlagsPtr flags = mojom::FeatureFlags::New();
-  flags->jelly_colors = chromeos::features::IsJellyEnabled();
+  flags->jelly_colors = true;
   flags->touchscreen_emulation =
       base::FeatureList::IsEnabled(kTouchscreenEmulation);
   flags->rounded_window_compat_strategy =
@@ -88,7 +88,6 @@ void ArcChromeFeatureFlagsBridge::NotifyFeatureFlags() {
                                          kLeftRightBottomGesture)))
           : mojom::RoundedWindowCompatStrategy::kDisabled;
   flags->rounded_window_radius = chromeos::features::RoundedWindowsRadius();
-  flags->xdg_mode = base::FeatureList::IsEnabled(kXdgMode);
   flags->enable_pip_double_tap = ash::features::IsPipDoubleTapToResizeEnabled();
   flags->render_arc_notifications_by_chrome =
       ash::features::IsRenderArcNotificationsByChromeEnabled();

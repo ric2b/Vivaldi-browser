@@ -6,7 +6,7 @@ source_set("vivaldi_colors") {
     "vivaldi_colors_constants.mm",
   ]
 
-  deps = [ "resources" ]
+  deps = [ "resources:vivaldi_colors" ]
 
   frameworks = [
     "Foundation.framework",

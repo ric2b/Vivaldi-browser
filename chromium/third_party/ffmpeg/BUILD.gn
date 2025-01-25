@@ -43,10 +43,17 @@ if (has_nasm_deps) {
     }
 
     inputs = [
+      "$platform_config_root/config.asm",
+
       # Sets visibility hidden for cglobal functions. Explicitly included
       # to avoid overlooking changes to this file in incremental builds.
       "libavutil/x86/x86inc.asm",
+      "libavutil/x86/x86util.asm",
     ]
+
+    if (ffmpeg_branding == "Chrome") {
+      inputs += [ "libavcodec/x86/videodsp.asm" ]
+    }
 
     defines = [ "PIC" ]
     include_dirs = [

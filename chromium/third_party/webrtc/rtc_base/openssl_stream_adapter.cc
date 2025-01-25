@@ -11,29 +11,42 @@
 #include "rtc_base/openssl_stream_adapter.h"
 
 #include <openssl/bio.h>
-#include <openssl/crypto.h>
 #include <openssl/err.h>
-#include <openssl/rand.h>
+#include <openssl/ssl.h>
+#include <openssl/stack.h>
 #include <openssl/tls1.h>
-#include <openssl/x509v3.h>
 
-#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
 #include "api/array_view.h"
+#include "api/sequence_checker.h"
+#include "api/task_queue/pending_task_safety_flag.h"
+#include "api/units/time_delta.h"
+#include "rtc_base/buffer.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/numerics/safe_conversions.h"
-#include "rtc_base/openssl.h"
 #include "rtc_base/openssl_adapter.h"
 #include "rtc_base/openssl_digest.h"
+#include "rtc_base/ssl_identity.h"
+#include "rtc_base/ssl_stream_adapter.h"
+#include "rtc_base/task_utils/repeating_task.h"
 #ifdef OPENSSL_IS_BORINGSSL
+#include <openssl/base.h>
+#include <openssl/digest.h>
 #include <openssl/dtls1.h>
+#include <openssl/pool.h>
 #include <openssl/ssl.h>
 
+#include "rtc_base/boringssl_certificate.h"
 #include "rtc_base/boringssl_identity.h"
 #else
 #include "rtc_base/openssl_identity.h"
@@ -290,9 +303,9 @@ OpenSSLStreamAdapter::OpenSSLStreamAdapter(
       ssl_ctx_(nullptr),
 #ifdef OPENSSL_IS_BORINGSSL
       permute_extension_(
-          webrtc::field_trial::IsEnabled("WebRTC-PermuteTlsClientHello")),
+          !webrtc::field_trial::IsDisabled("WebRTC-PermuteTlsClientHello")),
 #endif
-      ssl_mode_(SSL_MODE_TLS),
+      ssl_mode_(SSL_MODE_DTLS),
       ssl_max_version_(SSL_PROTOCOL_TLS_12) {
   stream_->SetEventCallback(
       [this](int events, int err) { OnEvent(events, err); });
@@ -861,15 +874,11 @@ int OpenSSLStreamAdapter::BeginSSL() {
   SSL_set_app_data(ssl_, this);
 
   SSL_set_bio(ssl_, bio, bio);  // the SSL object owns the bio now.
-  if (ssl_mode_ == SSL_MODE_DTLS) {
 #ifdef OPENSSL_IS_BORINGSSL
+  if (ssl_mode_ == SSL_MODE_DTLS) {
     DTLSv1_set_initial_timeout_duration(ssl_, dtls_handshake_timeout_ms_);
-#else
-    // Enable read-ahead for DTLS so whole packets are read from internal BIO
-    // before parsing. This is done internally by BoringSSL for DTLS.
-    SSL_set_read_ahead(ssl_, 1);
-#endif
   }
+#endif
 
   SSL_set_mode(ssl_, SSL_MODE_ENABLE_PARTIAL_WRITE |
                          SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
@@ -1029,6 +1038,7 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
     return nullptr;
   }
 
+  // TODO(bugs.webrtc.org/339300437): Remove dependency.
   SSL_CTX_set_info_callback(ctx, OpenSSLAdapter::SSLInfoCallback);
 
   int mode = SSL_VERIFY_PEER;

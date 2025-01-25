@@ -30,6 +30,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "components/ownership/owner_settings_service.h"
 #include "crypto/nss_key_util.h"
 #include "crypto/signature_verifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -185,7 +186,30 @@ class OwnerSettingsServiceAshTest : public DeviceSettingsTestBase {
   base::HistogramTester histogram_tester_;
 };
 
-TEST_F(OwnerSettingsServiceAshTest, SingleSetTest) {
+TEST_F(OwnerSettingsServiceAshTest, SingleSetTestSHA1) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      ownership::kOwnerSettingsWithSha256);
+
+  TestSingleSet(service_, kReleaseChannel, base::Value("dev-channel"));
+  TestSingleSet(service_, kReleaseChannel, base::Value("beta-channel"));
+  TestSingleSet(service_, kReleaseChannel, base::Value("stable-channel"));
+
+  EXPECT_LE(1, histogram_tester_.GetBucketCount(
+                   kOwnerKeyHistogramName,
+                   OwnerKeyUmaEvent::kStartSigningPolicySuccess));
+  EXPECT_LE(
+      1, histogram_tester_.GetBucketCount(
+             kOwnerKeyHistogramName, OwnerKeyUmaEvent::kSignedPolicySuccess));
+  EXPECT_LE(
+      1, histogram_tester_.GetBucketCount(
+             kOwnerKeyHistogramName, OwnerKeyUmaEvent::kStoredPolicySuccess));
+}
+
+TEST_F(OwnerSettingsServiceAshTest, SingleSetTestSHA256) {
+  base::test::ScopedFeatureList scoped_feature_list(
+      ownership::kOwnerSettingsWithSha256);
+
   TestSingleSet(service_, kReleaseChannel, base::Value("dev-channel"));
   TestSingleSet(service_, kReleaseChannel, base::Value("beta-channel"));
   TestSingleSet(service_, kReleaseChannel, base::Value("stable-channel"));
@@ -366,9 +390,13 @@ TEST_F(OwnerSettingsServiceAshTest,
       device_policy_->payload().deviceextendedautoupdateenabled().value());
 }
 
-// Test that OwnerSettingsServiceAsh can successfully sign a policy and that the
-// signature is correct.
-TEST_F(OwnerSettingsServiceAshTest, SignPolicySuccess) {
+// Test that OwnerSettingsServiceAsh can successfully sign a policy with SHA1
+// and that the signature is correct.
+TEST_F(OwnerSettingsServiceAshTest, SignPolicySuccessSHA1) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      ownership::kOwnerSettingsWithSha256);
+
   auto policy = std::make_unique<enterprise_management::PolicyData>();
   policy->set_username("username0");
 
@@ -386,10 +414,46 @@ TEST_F(OwnerSettingsServiceAshTest, SignPolicySuccess) {
   EXPECT_TRUE(signed_policy);
 
   crypto::SignatureVerifier signature_verifier;
-  EXPECT_TRUE(signature_verifier.VerifyInit(
+  ASSERT_TRUE(signature_verifier.VerifyInit(
       crypto::SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA1,
       base::as_bytes(base::make_span(signed_policy->policy_data_signature())),
       pub_key->data()));
+  signature_verifier.VerifyUpdate(
+      base::as_bytes(base::make_span(signed_policy->policy_data())));
+  EXPECT_TRUE(signature_verifier.VerifyFinal());
+}
+
+// Test that OwnerSettingsServiceAsh can successfully sign a policy with SHA256
+// and that the signature is correct.
+TEST_F(OwnerSettingsServiceAshTest, SignPolicySuccessSHA256) {
+  base::test::ScopedFeatureList scoped_feature_list(
+      ownership::kOwnerSettingsWithSha256);
+
+  auto policy = std::make_unique<enterprise_management::PolicyData>();
+  policy->set_username("username0");
+
+  base::test::TestFuture<
+      scoped_refptr<ownership::PublicKey>,
+      std::unique_ptr<enterprise_management::PolicyFetchResponse>>
+      result_waiter;
+  EXPECT_TRUE(service_->AssembleAndSignPolicyAsync(
+      base::SequencedTaskRunner::GetCurrentDefault().get(), std::move(policy),
+      result_waiter.GetCallback()));
+
+  auto pub_key = result_waiter.Get<scoped_refptr<ownership::PublicKey>>();
+  const auto& signed_policy =
+      result_waiter
+          .Get<std::unique_ptr<enterprise_management::PolicyFetchResponse>>();
+  ASSERT_TRUE(signed_policy);
+
+  crypto::SignatureVerifier signature_verifier;
+  ASSERT_TRUE(signature_verifier.VerifyInit(
+      crypto::SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA256,
+      base::as_bytes(base::make_span(signed_policy->policy_data_signature())),
+      pub_key->data()));
+  signature_verifier.VerifyUpdate(
+      base::as_bytes(base::make_span(signed_policy->policy_data())));
+  EXPECT_TRUE(signature_verifier.VerifyFinal());
 }
 
 // Test that OwnerSettingsServiceAsh correctly fails when it cannot sign

@@ -11,7 +11,6 @@
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/popup/content_providing.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -98,12 +97,6 @@ const CGFloat vPopupContainerCornerRadius = 8;
     _viewController = viewController;
     _layoutGuideCenter = layoutGuideCenter;
 
-    // Popup uses same colors as the toolbar, so the ToolbarConfiguration is
-    // used to get the style.
-    ToolbarConfiguration* configuration = [[ToolbarConfiguration alloc]
-        initWithStyle:incognito ? ToolbarStyle::kIncognito
-                                : ToolbarStyle::kNormal];
-
     UIView* containerView = [[UIView alloc] init];
     [containerView addSubview:viewController.view];
     _popupContainerView = containerView;
@@ -121,7 +114,8 @@ const CGFloat vPopupContainerCornerRadius = 8;
       _popupContainerView.backgroundColor =
           [UIColor colorNamed:kPrimaryBackgroundColor];
     } else {
-      _popupContainerView.backgroundColor = configuration.backgroundColor;
+      _popupContainerView.backgroundColor =
+          [self.delegate popupBackgroundColorForPresenter:self];
     }
 
     _popupContainerView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -302,10 +296,15 @@ const CGFloat vPopupContainerCornerRadius = 8;
   // Install in the superview the guide tracking the top omnibox.
   if (self.topOmniboxGuide) {
     [[popup superview] removeLayoutGuide:self.topOmniboxGuide];
+    self.topOmniboxGuide = nil;
   }
-  self.topOmniboxGuide =
-      [self.layoutGuideCenter makeLayoutGuideNamed:kTopOmniboxGuide];
-  [[popup superview] addLayoutGuide:self.topOmniboxGuide];
+  GuideName* omniboxGuideName =
+      [self.delegate omniboxGuideNameForPresenter:self];
+  if (omniboxGuideName) {
+    self.topOmniboxGuide =
+        [self.layoutGuideCenter makeLayoutGuideNamed:omniboxGuideName];
+    [[popup superview] addLayoutGuide:self.topOmniboxGuide];
+  }
 
   [self updatePopupLayer];
   [self updateConstraints];
@@ -340,16 +339,24 @@ const CGFloat vPopupContainerCornerRadius = 8;
 - (void)updateConstraints {
   UIView* popup = self.popupContainerView;
 
-  // Position the top anchor of the popup relatively to that layout guide.
-  NSLayoutConstraint* topConstraint =
-      [popup.topAnchor constraintEqualToAnchor:self.topOmniboxGuide.bottomAnchor
-                                      constant:kVerticalOffset];
+  NSLayoutConstraint* topConstraint;
+  if (self.topOmniboxGuide) {
+    // Position the top anchor of the popup relatively to that layout guide.
+    topConstraint = [popup.topAnchor
+        constraintEqualToAnchor:self.topOmniboxGuide.bottomAnchor
+                       constant:kVerticalOffset];
+  } else {
+    topConstraint = [popup.topAnchor
+        constraintEqualToAnchor:[self.delegate popupParentViewForPresenter:self]
+                                    .topAnchor];
+  }
 
   NSMutableArray<NSLayoutConstraint*>* constraintsToActivate =
       [NSMutableArray arrayWithObject:topConstraint];
 
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET &&
-      IsRegularXRegularSizeClass(self.popupContainerView.traitCollection)) {
+      IsRegularXRegularSizeClass(self.popupContainerView.traitCollection) &&
+      self.topOmniboxGuide) {
     NSLayoutConstraint* leadingConstraint = [popup.leadingAnchor
         constraintEqualToAnchor:self.topOmniboxGuide.leadingAnchor
                        constant:-16];
@@ -441,6 +448,14 @@ const CGFloat vPopupContainerCornerRadius = 8;
               vivaldiBottomOmniboxGuide : kTopOmniboxGuide];
   [[popup superview] addLayoutGuide:self.vivaldiOmniboxGuide];
 
+  // Install in the superview the guide tracking the top omnibox.
+  if (self.topOmniboxGuide) {
+    [[popup superview] removeLayoutGuide:self.topOmniboxGuide];
+  }
+  self.topOmniboxGuide =
+      [self.layoutGuideCenter makeLayoutGuideNamed:kTopOmniboxGuide];
+  [[popup superview] addLayoutGuide:self.topOmniboxGuide];
+
   // Position the top/bottom anchor of the popup relatively to omnibox layout
   // guide.
   self.popupBottomConstraintBottomOmnibox =
@@ -457,9 +472,9 @@ const CGFloat vPopupContainerCornerRadius = 8;
       IsRegularXRegularSizeClass(self.popupContainerView)) {
     [constraintsToActivate addObjectsFromArray:@[
       [popup.leadingAnchor
-          constraintEqualToAnchor:self.vivaldiOmniboxGuide.leadingAnchor],
+          constraintEqualToAnchor:self.topOmniboxGuide.leadingAnchor],
       [popup.trailingAnchor
-          constraintEqualToAnchor:self.vivaldiOmniboxGuide.trailingAnchor],
+          constraintEqualToAnchor:self.topOmniboxGuide.trailingAnchor],
     ]];
   } else {
     [constraintsToActivate addObjectsFromArray:@[

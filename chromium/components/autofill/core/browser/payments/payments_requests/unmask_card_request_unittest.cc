@@ -186,6 +186,19 @@ TEST_F(UnmaskCardRequestTest, ContextTokenAndPanNotReturned) {
   EXPECT_FALSE(GetRequest()->IsResponseComplete());
 }
 
+TEST_F(UnmaskCardRequestTest, DoesNotHaveTimeoutWithoutFlag) {
+  feature_list_.InitAndDisableFeature(
+      features::kAutofillUnmaskCardRequestTimeout);
+  EXPECT_FALSE(request_->GetTimeout().has_value());
+}
+
+TEST_F(UnmaskCardRequestTest, HasTimeoutWhenFlagSet) {
+  feature_list_.InitAndEnableFeature(
+      features::kAutofillUnmaskCardRequestTimeout);
+
+  EXPECT_EQ(request_->GetTimeout(), base::Seconds(30));
+}
+
 // Params of the VirtualCardUnmaskCardRequestTest:
 // -- autofill::CardUnmaskChallengeOptionType challenge_option_type
 // -- bool autofill_enable_3ds_for_vcn_yellow_path
@@ -265,6 +278,7 @@ TEST_P(VirtualCardUnmaskCardRequestTest, GetRequestContent) {
     EXPECT_TRUE(IsIncludedInRequestContent("encrypted_cvc"));
     EXPECT_TRUE(IsIncludedInRequestContent("&s7e_13_cvc=123"));
     EXPECT_TRUE(IsIncludedInRequestContent("cvc_challenge_option"));
+    EXPECT_TRUE(IsIncludedInRequestContent("selected_idv_challenge_option"));
     EXPECT_TRUE(IsIncludedInRequestContent("challenge_id"));
     EXPECT_TRUE(IsIncludedInRequestContent("cvc_length"));
     EXPECT_TRUE(IsIncludedInRequestContent("cvc_position"));

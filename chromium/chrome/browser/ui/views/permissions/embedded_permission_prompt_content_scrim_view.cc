@@ -30,13 +30,16 @@ EmbeddedPermissionPromptContentScrimView::CreateScrimWidget(
     base::WeakPtr<Delegate> delegate,
     SkColor color) {
   views::Widget::InitParams params(
-      views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   auto permission_prompt_delegate = delegate->GetPermissionPromptDelegate();
   CHECK(permission_prompt_delegate);
   auto* web_content = permission_prompt_delegate->GetAssociatedWebContents();
   auto* top_level_widget = views::Widget::GetTopLevelWidgetForNativeView(
       web_content->GetContentNativeView());
+  if (!top_level_widget) {
+    return nullptr;
+  }
   params.parent = top_level_widget->GetNativeView();
   params.bounds = web_content->GetContainerBounds();
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;

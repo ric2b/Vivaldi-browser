@@ -15,6 +15,9 @@
 #include "v8/include/cppgc/member.h"
 
 class CFGAS_GEFont;
+
+namespace pdfium {
+
 class CFWL_ThemeBackground;
 class CFWL_ThemePart;
 class CFWL_ThemeText;
@@ -62,5 +65,10 @@ class IFWL_ThemeProvider : public cppgc::GarbageCollectedMixin {
   cppgc::Member<CFWL_WidgetTP> m_pCaretTP;
   cppgc::Member<CFWL_WidgetTP> m_pBarcodeTP;
 };
+
+}  // namespace pdfium
+
+// TODO(crbug.com/42271761): Remove.
+using pdfium::IFWL_ThemeProvider;
 
 #endif  // XFA_FWL_IFWL_THEMEPROVIDER_H_

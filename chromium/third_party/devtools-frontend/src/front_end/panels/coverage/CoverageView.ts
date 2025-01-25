@@ -147,11 +147,11 @@ export class CoverageView extends UI.Widget.VBox {
     const coverageTypes = [
       {
         label: i18nString(UIStrings.perFunction),
-        value: CoverageType.JavaScript | CoverageType.JavaScriptPerFunction,
+        value: CoverageType.JAVA_SCRIPT | CoverageType.JAVA_SCRIPT_PER_FUNCTION,
       },
       {
         label: i18nString(UIStrings.perBlock),
-        value: CoverageType.JavaScript,
+        value: CoverageType.JAVA_SCRIPT,
       },
     ];
     for (const type of coverageTypes) {
@@ -188,7 +188,7 @@ export class CoverageView extends UI.Widget.VBox {
     toolbar.appendSeparator();
     this.filterInput = new UI.Toolbar.ToolbarFilter(i18nString(UIStrings.filterByUrl), 0.4, 1);
     this.filterInput.setEnabled(false);
-    this.filterInput.addEventListener(UI.Toolbar.ToolbarInput.Event.TextChanged, this.onFilterChanged, this);
+    this.filterInput.addEventListener(UI.Toolbar.ToolbarInput.Event.TEXT_CHANGED, this.onFilterChanged, this);
     toolbar.appendToolbarItem(this.filterInput);
 
     toolbar.appendSeparator();
@@ -208,7 +208,7 @@ export class CoverageView extends UI.Widget.VBox {
       },
       {
         label: i18nString(UIStrings.javascript),
-        value: CoverageType.JavaScript | CoverageType.JavaScriptPerFunction,
+        value: CoverageType.JAVA_SCRIPT | CoverageType.JAVA_SCRIPT_PER_FUNCTION,
       },
     ];
     for (const option of options) {
@@ -322,7 +322,7 @@ export class CoverageView extends UI.Widget.VBox {
     const option = this.coverageTypeComboBox.selectedOption();
     const coverageType = Number(option ? option.value : Number.NaN);
     // Check that Coverage.CoverageType.JavaScriptPerFunction is not present.
-    return coverageType === CoverageType.JavaScript;
+    return coverageType === CoverageType.JAVA_SCRIPT;
   }
 
   private selectCoverageType(jsCoveragePerBlock: boolean): void {
@@ -492,7 +492,7 @@ export class CoverageView extends UI.Widget.VBox {
       this.listView.detach();
       this.bfcacheReloadPromptPage.show(this.coverageResultsElement);
     }
-    if (event.data.type === SDK.ResourceTreeModel.PrimaryPageChangeType.Activation) {
+    if (event.data.type === SDK.ResourceTreeModel.PrimaryPageChangeType.ACTIVATION) {
       this.listView.detach();
       this.activationReloadPromptPage.show(this.coverageResultsElement);
     }

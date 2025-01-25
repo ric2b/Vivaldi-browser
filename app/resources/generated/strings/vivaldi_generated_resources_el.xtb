@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Σφάλμα</translation>
 <translation id="1175364870820465910">&amp;Εκτύπωση...</translation>
 <translation id="1181037720776840403">Κατάργηση</translation>
+<translation id="1184037892196730210">Δεν είναι δυνατή η μετάδοση της οθόνης</translation>
 <translation id="1187722533808055681">Έξοδος από την κατάσταση αδράνειας</translation>
 <translation id="122082903575839559">Αλγόριθμος Υπογραφής Πιστοποιητικού</translation>
 <translation id="1221825588892235038">Μόνο επιλογή</translation>
@@ -37,6 +38,7 @@
 <translation id="1601560923496285236">Εφαρμογή</translation>
 <translation id="1603914832182249871">(Ανώνυμη περιήγηση)</translation>
 <translation id="1627276047960621195">Περιγραφές αρχείων</translation>
+<translation id="1654713139320245449">Δεν βρέθηκαν προορισμοί μετάδοσης. Χρειάζεστε βοήθεια;</translation>
 <translation id="166278006618318542">Αλγόριθμος δημόσιου κλειδιού υποκειμένου</translation>
 <translation id="1682548588986054654">Νέο παράθυρο ανώνυμης περιήγησης</translation>
 <translation id="1708338024780164500">(Ανενεργή)</translation>
@@ -98,7 +100,6 @@
 <translation id="265390580714150011">Τιμή Πεδίου</translation>
 <translation id="2662876636500006917">Ηλεκτρονικό Κατάστημα Chrome</translation>
 <translation id="2678063897982469759">Εκ νέου ενεργοποίηση</translation>
-<translation id="2678100101831051676">Δεν είναι δυνατή η μετάδοση.</translation>
 <translation id="2719936478972253983">Τα ακόλουθα cookie αποκλείστηκαν</translation>
 <translation id="2721037002783622288">&amp;Αναζήτηση <ph name="SEARCH_ENGINE" /> για εικόνα</translation>
 <translation id="2738771556149464852">Όχι αργότερα από</translation>
@@ -148,7 +149,6 @@
 <translation id="3378572629723696641">Αυτή η επέκταση ενδεχομένως να είναι κατεστραμμένη.</translation>
 <translation id="3387614642886316601">Χρήση βελτιωμένου ορθογραφικού ελέγχου</translation>
 <translation id="3390013585654699824">Λεπτομέρειες εφαρμογής</translation>
-<translation id="3393582007140394275">Δεν είναι δυνατή η μετάδοση της οθόνης.</translation>
 <translation id="345693547134384690">Άνοιγμα ε&amp;ικόνας σε νέα καρτέλα</translation>
 <translation id="3493881266323043047">Εγκυρότητα</translation>
 <translation id="3511307672085573050">Αντιγραφή διεύθυνσης συν&amp;δέσμου</translation>
@@ -160,8 +160,10 @@
 <translation id="3683524264665795342">Αίτημα κοινής χρήσης οθόνης από την εφαρμογή <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">Να μην επιτρέπεται στους ιστοτόπους που έκλεισαν να ολοκληρώνουν την αποστολή ή τη λήψη δεδομένων</translation>
 <translation id="3711931198657368127">Επικόλληση και μετάβαση στη διεύθυνση <ph name="URL" /></translation>
+<translation id="3719826155360621982">Αρχική σελίδα</translation>
 <translation id="3727187387656390258">Έλεγχος αναδυόμενου παραθύρου</translation>
 <translation id="3760460896538743390">Έλεγχος &amp;σελίδας παρασκηνίου</translation>
+<translation id="3786224729726357296">Διαγραφή δεδομένων και αδειών ιστοτόπου για τον ιστότοπο <ph name="SITE" /></translation>
 <translation id="3797900183766075808">&amp;Αναζήτηση <ph name="SEARCH_ENGINE" /> για "<ph name="SEARCH_TERMS" />"</translation>
 <translation id="3798449238516105146">Έκδοση</translation>
 <translation id="3810973564298564668">Διαχείριση</translation>
@@ -344,6 +346,7 @@
 <translation id="6812841287760418429">Διατήρηση αλλαγών</translation>
 <translation id="6824564591481349393">Αντιγραφή Διεύθυνσης &amp;Ηλεκτρονικού Ταχυδρομείου</translation>
 <translation id="6840155290835956714">Ερώτηση πριν από την αποστολή</translation>
+<translation id="6878862640969460273">Οριζόντια</translation>
 <translation id="6886871292305414135">Άνοιγμα συνδέσμου σε νέα καρτέ&amp;λα</translation>
 <translation id="6892812721183419409">Άνοιγμα συνδέσμου ως <ph name="USER" /></translation>
 <translation id="6900284862687837908">Εφαρμογή παρασκηνίου: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -364,6 +367,7 @@
 <translation id="7287143125007575591">Δεν επιτρέπεται η πρόσβαση.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Ορθογραφικός Έλεγχος Κατά την Πληκτρολόγηση</translation>
+<translation id="7359680654975233185">Δεν είναι δυνατή η μετάδοση της καρτέλας</translation>
 <translation id="7385854874724088939">Παρουσιάστηκε σφάλμα κατά την προσπάθεια εκτύπωσης.  Ελέγξτε τον εκτυπωτή σας και προσπαθήστε ξανά.</translation>
 <translation id="7412226954991670867">Μνήμη GPU</translation>
 <translation id="7421925624202799674">&amp;Προβολή Πηγαίου Κώδικα Σελίδας</translation>
@@ -377,6 +381,7 @@
 <translation id="7661259717474717992">Να επιτρέπεται η αποθήκευση και ανάγνωση δεδομένων cookie από ιστότοπους</translation>
 <translation id="7663719505383602579">Δέκτης: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Εγκαταστάθηκε από το διαχειριστή σας</translation>
+<translation id="7685038817958445325">Δεν είναι δυνατή η μετάδοση</translation>
 <translation id="7685049629764448582">Μνήμη JavaScript</translation>
 <translation id="7701869757853594372">Χειρισμοί ΧΡΗΣΤΗ</translation>
 <translation id="7704305437604973648">Εργασία</translation>
@@ -407,7 +412,6 @@
 Διατηρείτε το αρχείο κλειδιού σε ασφαλές μέρος. Θα το χρειαστείτε για τη δημιουργία νέων εκδόσεων της επέκτασής σας.</translation>
 <translation id="8004582292198964060">Πρόγραμμα περιήγησης</translation>
 <translation id="8018313076035239964">Ελέγξτε τι πληροφορίες μπορούν να χρησιμοποιήσουν οι ιστότοποι και τι περιεχόμενο μπορούν να προβάλλουν σε εσάς</translation>
-<translation id="8032244173881942855">Δεν είναι δυνατή η μετάδοση της καρτέλας.</translation>
 <translation id="8071432093239591881">Εκτύπωση ως εικόνα</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -463,7 +467,6 @@
 <translation id="9218430445555521422">Ορισμός ως προεπιλογή</translation>
 <translation id="93766956588638423">Επισκευή επέκτασης</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Οριζόντια</translation>
 <translation id="994289308992179865">&amp;Επανάληψη</translation>
 <translation id="998747458861718449">Έ&amp;λεγχος</translation>
 </translationbundle>

@@ -17,11 +17,18 @@ limitations under the License.
 
 #include <vector>
 
-#include "tsl/lib/core/status_test_util.h"
+#include "absl/log/check.h"
+#include "absl/status/status.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
+#include "xla/tsl/lib/core/status_test_util.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/strcat.h"
 #include "tsl/platform/test.h"
 #include "tsl/platform/test_benchmark.h"
+#include "tsl/platform/types.h"
 
 namespace tsl {
 
@@ -298,7 +305,7 @@ TEST(DeviceNameUtilsTest, Basic) {
   }
 }
 
-static bool IsCSHelper(StringPiece pattern, StringPiece actual) {
+static bool IsCSHelper(absl::string_view pattern, absl::string_view actual) {
   DeviceNameUtils::ParsedName p, a;
   EXPECT_TRUE(DeviceNameUtils::ParseFullName(pattern, &p));
   EXPECT_TRUE(DeviceNameUtils::ParseFullName(actual, &a));
@@ -323,7 +330,7 @@ TEST(DeviceNameUtilsTest, IsCompleteSpecification) {
       IsCSHelper("/gpu:*", "/job:worker/replica:1/task:2/device:GPU:3"));
 }
 
-static bool IsSpecHelper(StringPiece pattern, StringPiece actual) {
+static bool IsSpecHelper(absl::string_view pattern, absl::string_view actual) {
   DeviceNameUtils::ParsedName p, a;
   EXPECT_TRUE(DeviceNameUtils::ParseFullName(pattern, &p));
   EXPECT_TRUE(DeviceNameUtils::ParseFullName(actual, &a));

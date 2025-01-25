@@ -4,7 +4,7 @@
 
 import * as Common from '../../../../core/common/common.js';
 import * as Root from '../../../../core/root/root.js';
-import type * as TextUtils from '../../../../models/text_utils/text_utils.js';
+import * as TextUtils from '../../../../models/text_utils/text_utils.js';
 import {
   dispatchInputEvent,
   dispatchPasteEvent,
@@ -20,13 +20,13 @@ describeWithEnvironment('SourceFrame', () => {
 
   beforeEach(() => {
     setting = Common.Settings.Settings.instance().createSetting(
-        'disable-self-xss-warning', false, Common.Settings.SettingStorageType.Synced);
+        'disable-self-xss-warning', false, Common.Settings.SettingStorageType.SYNCED);
     setting.set(false);
   });
 
   async function createSourceFrame(content: string): Promise<SourceFrame.SourceFrame.SourceFrameImpl> {
-    const deferredContentStub = {content: '', isEncoded: true} as TextUtils.ContentProvider.DeferredContent;
-    const sourceFrame = new SourceFrame.SourceFrame.SourceFrameImpl(async () => deferredContentStub);
+    const sourceFrame =
+        new SourceFrame.SourceFrame.SourceFrameImpl(async () => TextUtils.ContentData.EMPTY_TEXT_CONTENT_DATA);
     await sourceFrame.setContent(content);
     return sourceFrame;
   }

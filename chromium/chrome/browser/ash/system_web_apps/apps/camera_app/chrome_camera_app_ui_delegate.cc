@@ -33,6 +33,7 @@
 #include "chrome/browser/ash/system_web_apps/apps/camera_app/chrome_camera_app_ui_constants.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/feedback/show_feedback_page.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_device_salt_service_factory.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -41,9 +42,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/screen_ai/public/optical_character_recognizer.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
-#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/webui/ash/internet_config_dialog.h"
+#include "chrome/browser/ui/webui/ash/internet/internet_config_dialog.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_launch_queue.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
@@ -69,6 +69,7 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/chromeos/styles/cros_styles.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/geometry/size.h"
@@ -118,7 +119,7 @@ ChromeCameraAppUIDelegate::CameraAppDialog::CameraAppDialog(
   set_can_maximize(true);
   // For customizing the title bar.
   set_dialog_frame_kind(ui::WebDialogDelegate::FrameKind::kNonClient);
-  set_dialog_modal_type(ui::MODAL_TYPE_WINDOW);
+  set_dialog_modal_type(ui::mojom::ModalType::kWindow);
   set_dialog_size(
       gfx::Size(kChromeCameraAppDefaultWidth, kChromeCameraAppDefaultHeight));
 }
@@ -529,8 +530,6 @@ void ChromeCameraAppUIDelegate::PopulateLoadTimeData(
   source->AddString("board_name", base::SysInfo::GetLsbReleaseBoard());
   source->AddString("device_type",
                     DeviceTypeToString(chromeos::GetDeviceType()));
-  source->AddBoolean("auto_qr", base::FeatureList::IsEnabled(
-                                    ash::features::kCameraAppAutoQRDetection));
   source->AddBoolean("digital_zoom", base::FeatureList::IsEnabled(
                                          ash::features::kCameraAppDigitalZoom));
   source->AddBoolean("preview_ocr", base::FeatureList::IsEnabled(
@@ -558,6 +557,10 @@ void ChromeCameraAppUIDelegate::PopulateLoadTimeData(
   source->AddString("browser_version",
                     std::string(version_info::GetVersionNumber()));
   source->AddString("os_version", base::SysInfo::OperatingSystemVersion());
+
+  // BigBuffer doesn't work well on ARM devices. See b/360028048.
+  std::string arch = base::SysInfo::ProcessCPUArchitecture();
+  source->AddBoolean("can_use_big_buffer", !base::StartsWith(arch, "ARM"));
 }
 
 bool ChromeCameraAppUIDelegate::IsMetricsAndCrashReportingEnabled() {

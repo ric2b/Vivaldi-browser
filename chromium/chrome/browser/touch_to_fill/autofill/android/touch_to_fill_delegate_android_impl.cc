@@ -197,17 +197,23 @@ bool TouchToFillDelegateAndroidImpl::TryToShowTouchToFill(
   if (dry_run.outcome == TriggerOutcome::kShown) {
     if (std::vector<CreditCard>* cards_to_suggest =
             absl::get_if<std::vector<CreditCard>>(&dry_run.items_to_suggest);
-        cards_to_suggest && !manager_->client().ShowTouchToFillCreditCard(
-                                GetWeakPtr(), *cards_to_suggest,
-                                GetCardAcceptabilities(*cards_to_suggest))) {
+        cards_to_suggest &&
+        !manager_->client()
+             .GetPaymentsAutofillClient()
+             ->ShowTouchToFillCreditCard(
+                 GetWeakPtr(), *cards_to_suggest,
+                 GetCreditCardSuggestionsForTouchToFill(*cards_to_suggest,
+                                                        manager_->client()))) {
       dry_run.outcome = TriggerOutcome::kFailedToDisplayBottomSheet;
     } else if (std::vector<Iban>* ibans_to_suggest =
                    absl::get_if<std::vector<Iban>>(&dry_run.items_to_suggest);
                ibans_to_suggest &&
                (base::FeatureList::IsEnabled(
                     features::kAutofillSkipAndroidBottomSheetForIban) ||
-                !manager_->client().ShowTouchToFillIban(
-                    GetWeakPtr(), std::move(*ibans_to_suggest)))) {
+                !manager_->client()
+                     .GetPaymentsAutofillClient()
+                     ->ShowTouchToFillIban(GetWeakPtr(),
+                                           std::move(*ibans_to_suggest)))) {
       dry_run.outcome = TriggerOutcome::kFailedToDisplayBottomSheet;
     }
   }
@@ -236,12 +242,10 @@ bool TouchToFillDelegateAndroidImpl::TryToShowTouchToFill(
   manager_->client().HideAutofillSuggestions(
       SuggestionHidingReason::kOverlappingWithTouchToFillSurface);
   if (absl::get_if<std::vector<CreditCard>>(&dry_run.items_to_suggest)) {
-    manager_->DidShowSuggestions(
-        std::vector<SuggestionType>({SuggestionType::kCreditCardEntry}), form,
-        field);
+    manager_->DidShowSuggestions({SuggestionType::kCreditCardEntry}, form,
+                                 field);
   } else {
-    manager_->DidShowSuggestions(
-        std::vector<SuggestionType>({SuggestionType::kIbanEntry}), form, field);
+    manager_->DidShowSuggestions({SuggestionType::kIbanEntry}, form, field);
   }
   return true;
 }
@@ -253,7 +257,9 @@ bool TouchToFillDelegateAndroidImpl::IsShowingTouchToFill() {
 // TODO(crbug.com/40233391): Create a central point for TTF hiding decision.
 void TouchToFillDelegateAndroidImpl::HideTouchToFill() {
   if (IsShowingTouchToFill()) {
-    manager_->client().HideTouchToFillCreditCard();
+    manager_->client()
+        .GetPaymentsAutofillClient()
+        ->HideTouchToFillPaymentMethod();
   }
 }
 
@@ -377,26 +383,27 @@ void TouchToFillDelegateAndroidImpl::LogMetricsAfterSubmission(
 
 bool TouchToFillDelegateAndroidImpl::HasAnyAutofilledFields(
     const FormStructure& submitted_form) const {
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       submitted_form, [](const auto& field) { return field->is_autofilled(); });
 }
 
 bool TouchToFillDelegateAndroidImpl::IsFillingPerfect(
     const FormStructure& submitted_form) const {
-  return base::ranges::all_of(submitted_form, [](const auto& field) {
-    return field->value().empty() || field->is_autofilled();
+  return std::ranges::all_of(submitted_form, [](const auto& field) {
+    return field->value(ValueSemantics::kCurrent).empty() ||
+           field->is_autofilled();
   });
 }
 
 bool TouchToFillDelegateAndroidImpl::IsFillingCorrect(
     const FormStructure& submitted_form) const {
-  return !base::ranges::any_of(submitted_form, [](const auto& field) {
+  return !std::ranges::any_of(submitted_form, [](const auto& field) {
     return field->previously_autofilled();
   });
 }
 
 bool TouchToFillDelegateAndroidImpl::IsFormPrefilled(const FormData& form) {
-  return base::ranges::any_of(form.fields(), [&](const FormFieldData& field) {
+  return std::ranges::any_of(form.fields(), [&](const FormFieldData& field) {
     AutofillField* autofill_field = manager_->GetAutofillField(form, field);
     if (autofill_field && autofill_field->Type().GetStorableType() !=
                               FieldType::CREDIT_CARD_NUMBER) {
@@ -404,21 +411,6 @@ bool TouchToFillDelegateAndroidImpl::IsFormPrefilled(const FormData& form) {
     }
     return !SanitizedFieldIsEmpty(field.value());
   });
-}
-
-std::vector<bool> TouchToFillDelegateAndroidImpl::GetCardAcceptabilities(
-    base::span<const CreditCard> credit_cards) {
-  std::vector<bool> card_acceptabilities;
-  card_acceptabilities.reserve(credit_cards.size());
-
-  std::transform(credit_cards.begin(), credit_cards.end(),
-                 std::back_inserter(card_acceptabilities),
-                 [this](const CreditCard& credit_card) {
-                   return IsCardSuggestionAcceptable(
-                       credit_card, manager_->client(),
-                       /*is_manual_fallback=*/false);
-                 });
-  return card_acceptabilities;
 }
 
 base::WeakPtr<TouchToFillDelegateAndroidImpl>

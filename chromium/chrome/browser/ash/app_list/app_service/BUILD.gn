@@ -24,15 +24,9 @@ static_library("app_service") {
     "app_service_promise_app_item.h",
     "app_service_promise_app_model_builder.cc",
     "app_service_promise_app_model_builder.h",
-    "app_service_shortcut_context_menu.cc",
-    "app_service_shortcut_context_menu.h",
-    "app_service_shortcut_icon_loader.cc",
-    "app_service_shortcut_icon_loader.h",
-    "app_service_shortcut_item.cc",
-    "app_service_shortcut_item.h",
-    "app_service_shortcut_model_builder.cc",
-    "app_service_shortcut_model_builder.h",
   ]
+
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
 
   deps = [
     "//ash/constants",
@@ -40,20 +34,17 @@ static_library("app_service") {
     "//base",
     "//chrome/app:branded_strings",
     "//chrome/app:generated_resources",
-    "//chrome/browser/apps/app_service",
     "//chrome/browser/apps/app_service/app_icon:util",
-    "//chrome/browser/ash",
     "//chrome/browser/ash/app_list",
     "//chrome/browser/ash/app_list/arc",
-    "//chrome/browser/ash/app_list/search",
     "//chrome/browser/ash/app_restore",
     "//chrome/browser/ash/arc",
-    "//chrome/browser/ash/crosapi",
+    "//chrome/browser/ash/crostini",
     "//chrome/browser/ash/guest_os",
     "//chrome/browser/ash/plugin_vm",
     "//chrome/browser/ash/remote_apps",
-    "//chrome/browser/extensions",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/ui/webui/ash/settings/app_management",
     "//chromeos/constants",
     "//components/app_constants",
     "//components/services/app_service",
@@ -67,10 +58,7 @@ static_library("app_service") {
     "//ui/views",
   ]
 
-  allow_circular_includes_from = [
-    "//chrome/browser/ash/app_list",
-    "//chrome/browser/ash/app_list/search",
-  ]
+  allow_circular_includes_from = [ "//chrome/browser/ash/app_list" ]
 }
 
 source_set("unit_tests") {
@@ -79,7 +67,6 @@ source_set("unit_tests") {
   sources = [
     "app_service_app_model_builder_unittest.cc",
     "app_service_promise_app_model_builder_unittest.cc",
-    "app_service_shortcut_model_builder_unittest.cc",
   ]
 
   deps = [
@@ -91,12 +78,12 @@ source_set("unit_tests") {
     "//chrome/browser/apps:icon_standardizer",
     "//chrome/browser/apps/app_service",
     "//chrome/browser/apps/app_service:test_support",
-    "//chrome/browser/ash",
-    "//chrome/browser/ash:test_support",
+    "//chrome/browser/ash/app_list",
     "//chrome/browser/ash/app_list:test_support",
     "//chrome/browser/ash/app_list/app_service",
     "//chrome/browser/ash/app_list/internal_app",
     "//chrome/browser/ash/app_list/test:test_support",
+    "//chrome/browser/ash/borealis",
     "//chrome/browser/ash/borealis/testing:test_support",
     "//chrome/browser/ash/crostini:test_support",
     "//chrome/browser/ash/guest_os",
@@ -173,6 +160,7 @@ source_set("browser_tests") {
     "//chrome/browser/ash/system_web_apps",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui",
+    "//chrome/browser/ui/ash/shelf",
     "//chrome/browser/web_applications",
     "//chrome/browser/web_applications:web_applications_test_support",
     "//chrome/common:constants",

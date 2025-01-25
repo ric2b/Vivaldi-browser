@@ -1,27 +1,18 @@
 [workspace]
 members = [
+    "build_scripts",
     "ctap_protocol",
     "platform",
     "remote_auth_protocol",
 ]
+default-members = ["build_scripts"]
+resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 publish = false
+license = "Apache-2.0"
 
 [workspace.dependencies]
 anyhow = "1.0.72"
-
-[package]
-name = "build-scripts"
-version.workspace = true
-edition.workspace = true
-publish.workspace = true
-
-[dependencies]
-anyhow.workspace = true
-clap = { version = "4.0.25", features = ["derive"] }
-cmd_runner = { path = "../common/cmd_runner"  }
-env_logger = "0.10.0"
-log = "0.4.17"

@@ -10,6 +10,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/timer/timer.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
@@ -62,6 +63,13 @@ class NET_EXPORT_PRIVATE TlsStreamAttempt final : public StreamAttempt {
   LoadState GetLoadState() const override;
   scoped_refptr<SSLCertRequestInfo> GetCertRequestInfo() override;
 
+  // Set a callback that will be invoked after the TCP handshake completes.
+  // Note that the callback won't be called and discarded immediately when
+  // `this` has already completed the TCP handshake.
+  void SetTcpHandshakeCompletionCallback(CompletionOnceCallback callback);
+
+  bool IsTcpHandshakeCompleted() { return tcp_handshake_completed_; }
+
   bool IsTlsHandshakeStarted() { return tls_handshake_started_; }
 
  private:
@@ -73,7 +81,9 @@ class NET_EXPORT_PRIVATE TlsStreamAttempt final : public StreamAttempt {
     kTlsAttemptComplete,
   };
 
+  // StreamAttempt methods:
   int StartInternal() override;
+  base::Value::Dict GetNetLogStartParams() override;
 
   void OnIOComplete(int rv);
 
@@ -87,10 +97,12 @@ class NET_EXPORT_PRIVATE TlsStreamAttempt final : public StreamAttempt {
 
   State next_state_ = State::kNone;
   const HostPortPair host_port_pair_;
-  const raw_ptr<SSLConfigProvider> ssl_config_provider_;
+  raw_ptr<SSLConfigProvider> ssl_config_provider_;
 
   std::unique_ptr<TcpStreamAttempt> nested_attempt_;
+  CompletionOnceCallback tcp_handshake_completion_callback_;
 
+  bool tcp_handshake_completed_ = false;
   bool tls_handshake_started_ = false;
   base::OneShotTimer tls_handshake_timeout_timer_;
   std::unique_ptr<SSLClientSocket> ssl_socket_;

@@ -60,6 +60,11 @@ class ContentBlockingEventRouter
   void OnNewBlockedUrlsReported(
       adblock_filter::RuleGroup group,
       std::set<content::WebContents*> tabs_with_new_blocks) override;
+  virtual void OnAllowAttributionChanged(
+      content::WebContents* web_contents) override;
+  virtual void OnNewAttributionTrackerAllowed(
+      std::set<content::WebContents*> tabs_with_new_attribution_trackers)
+      override;
 
  private:
   const raw_ptr<content::BrowserContext> browser_context_;
@@ -414,6 +419,33 @@ class ContentBlockingIsExemptOfFilteringFunction : public AdBlockFunction {
       adblock_filter::RuleService* rules_service) override;
 };
 
+class ContentBlockingGetAdAttributionDomainFunction : public AdBlockFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contentBlocking.getAdAttributionDomain",
+                             CONTENT_BLOCKING_GET_AD_ATTRIBUTION_DOMAIN)
+  ContentBlockingGetAdAttributionDomainFunction() = default;
+
+ private:
+  ~ContentBlockingGetAdAttributionDomainFunction() override = default;
+  // AdBlockFunction:
+  ResponseValue RunWithService(
+      adblock_filter::RuleService* rules_service) override;
+};
+
+class ContentBlockingGetAdAttributionAllowedTrackersFunction
+    : public AdBlockFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION(
+      "contentBlocking.getAdAttributionAllowedTrackers",
+      CONTENT_BLOCKING_GET_AD_ATTRIBUTION_ALLOWED_TRACKERS)
+  ContentBlockingGetAdAttributionAllowedTrackersFunction() = default;
+
+ private:
+  ~ContentBlockingGetAdAttributionAllowedTrackersFunction() override = default;
+  // AdBlockFunction:
+  ResponseValue RunWithService(
+      adblock_filter::RuleService* rules_service) override;
+};
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_CONTENT_BLOCKING_CONTENT_BLOCKING_API_H_

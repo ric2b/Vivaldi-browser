@@ -206,6 +206,18 @@ struct OverflowMenuDestinationList: View {
               )
               .accessibilityElement(children: .combine)
               .accessibilityHint(editButtonAccessibilityHint(for: destination))
+
+            // Vivaldi
+              .disabled(
+                editMode?.wrappedValue.isEditing == true ? false :
+                  destination.disabled
+              )
+              .opacity(
+                editMode?.wrappedValue.isEditing == false &&
+                    destination.disabled ? 0.5 : 1.0
+              )
+            // End Vivaldi
+
           }
         }
         .fixedSize(horizontal: false, vertical: true)

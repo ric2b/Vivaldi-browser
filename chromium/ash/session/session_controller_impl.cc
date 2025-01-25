@@ -258,6 +258,14 @@ std::optional<int> SessionControllerImpl::GetExistingUsersCount() const {
                  : std::nullopt;
 }
 
+void SessionControllerImpl::NotifyFirstSessionReady() {
+  CHECK(IsActiveUserSessionStarted());
+
+  for (auto& observer : observers_) {
+    observer.OnFirstSessionReady();
+  }
+}
+
 bool SessionControllerImpl::ShouldDisplayManagedUI() const {
   if (!IsActiveUserSessionStarted())
     return false;
@@ -631,8 +639,7 @@ LoginStatus SessionControllerImpl::CalculateLoginStatus() const {
       // TODO(jamescook): There is no LoginStatus for this.
       return LoginStatus::USER;
   }
-  NOTREACHED_IN_MIGRATION();
-  return LoginStatus::NOT_LOGGED_IN;
+  NOTREACHED();
 }
 
 LoginStatus SessionControllerImpl::CalculateLoginStatusForActiveSession()
@@ -656,8 +663,7 @@ LoginStatus SessionControllerImpl::CalculateLoginStatusForActiveSession()
     case user_manager::UserType::kWebKioskApp:
       return LoginStatus::KIOSK_APP;
   }
-  NOTREACHED_IN_MIGRATION();
-  return LoginStatus::USER;
+  NOTREACHED();
 }
 
 void SessionControllerImpl::UpdateLoginStatus() {

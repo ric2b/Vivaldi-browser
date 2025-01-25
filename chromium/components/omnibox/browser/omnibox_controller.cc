@@ -73,8 +73,7 @@ void OmniboxController::StopAutocomplete(bool clear_result) const {
 void OmniboxController::StartZeroSuggestPrefetch() {
   TRACE_EVENT0("omnibox", "OmniboxController::StartZeroSuggestPrefetch");
   auto page_classification =
-      client_->GetPageClassification(OmniboxFocusSource::OMNIBOX,
-                                     /*is_prefetch=*/true);
+      client_->GetPageClassification(/*is_prefetch=*/true);
   if (!OmniboxFieldTrial::IsZeroSuggestPrefetchingEnabledInContext(
           page_classification)) {
     return;
@@ -113,10 +112,11 @@ void OmniboxController::OnResultChanged(AutocompleteController* controller,
       edit_model_->OnCurrentMatchChanged();
     } else {
       edit_model_->OnPopupResultChanged();
-      edit_model_->OnPopupDataChanged(
-          std::u16string(),
-          /*is_temporary_text=*/false, std::u16string(), std::u16string(),
-          std::u16string(), false, std::u16string(), AutocompleteMatch());
+      edit_model_->OnPopupDataChanged(std::u16string(),
+                                      /*is_temporary_text=*/false,
+                                      std::u16string(), std::u16string(),
+                                      std::u16string(), std::u16string(), false,
+                                      std::u16string(), AutocompleteMatch());
     }
   } else {
     edit_model_->OnPopupResultChanged();
@@ -124,7 +124,7 @@ void OmniboxController::OnResultChanged(AutocompleteController* controller,
 
   const bool popup_is_open = edit_model_->PopupIsOpen();
   if (popup_was_open != popup_is_open) {
-    client_->OnPopupVisibilityChanged();
+    client_->OnPopupVisibilityChanged(popup_is_open);
   }
 
   if (popup_was_open && !popup_is_open) {
@@ -175,7 +175,7 @@ bool OmniboxController::IsSuggestionHidden(
     TemplateURL* turl =
         match.GetTemplateURL(client_->GetTemplateURLService(), false);
     if (turl &&
-        turl->starter_pack_id() == TemplateURLStarterPackData::kAskGoogle) {
+        turl->starter_pack_id() == TemplateURLStarterPackData::kGemini) {
       return true;
     }
   }

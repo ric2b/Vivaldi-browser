@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       powerpc.c
@@ -6,16 +8,13 @@
 //  Authors:    Igor Pavlov
 //              Lasse Collin
 //
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
-//
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "simple_private.h"
 
 
 static size_t
-powerpc_code(lzma_simple *simple lzma_attribute((__unused__)),
+powerpc_code(void *simple lzma_attribute((__unused__)),
 		uint32_t now_pos, bool is_encoder,
 		uint8_t *buffer, size_t size)
 {
@@ -25,10 +24,11 @@ powerpc_code(lzma_simple *simple lzma_attribute((__unused__)),
 		if ((buffer[i] >> 2) == 0x12
 				&& ((buffer[i + 3] & 3) == 1)) {
 
-			const uint32_t src = ((buffer[i + 0] & 3) << 24)
-					| (buffer[i + 1] << 16)
-					| (buffer[i + 2] << 8)
-					| (buffer[i + 3] & (~3));
+			const uint32_t src
+				= (((uint32_t)(buffer[i + 0]) & 3) << 24)
+				| ((uint32_t)(buffer[i + 1]) << 16)
+				| ((uint32_t)(buffer[i + 2]) << 8)
+				| ((uint32_t)(buffer[i + 3]) & ~UINT32_C(3));
 
 			uint32_t dest;
 			if (is_encoder)
@@ -49,7 +49,7 @@ powerpc_code(lzma_simple *simple lzma_attribute((__unused__)),
 
 
 static lzma_ret
-powerpc_coder_init(lzma_next_coder *next, lzma_allocator *allocator,
+powerpc_coder_init(lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter_info *filters, bool is_encoder)
 {
 	return lzma_simple_coder_init(next, allocator, filters,
@@ -57,17 +57,23 @@ powerpc_coder_init(lzma_next_coder *next, lzma_allocator *allocator,
 }
 
 
+#ifdef HAVE_ENCODER_POWERPC
 extern lzma_ret
 lzma_simple_powerpc_encoder_init(lzma_next_coder *next,
-		lzma_allocator *allocator, const lzma_filter_info *filters)
+		const lzma_allocator *allocator,
+		const lzma_filter_info *filters)
 {
 	return powerpc_coder_init(next, allocator, filters, true);
 }
+#endif
 
 
+#ifdef HAVE_DECODER_POWERPC
 extern lzma_ret
 lzma_simple_powerpc_decoder_init(lzma_next_coder *next,
-		lzma_allocator *allocator, const lzma_filter_info *filters)
+		const lzma_allocator *allocator,
+		const lzma_filter_info *filters)
 {
 	return powerpc_coder_init(next, allocator, filters, false);
 }
+#endif

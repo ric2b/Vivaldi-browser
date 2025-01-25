@@ -22,6 +22,7 @@
 #include "base/observer_list_types.h"
 #include "components/account_id/account_id.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
@@ -117,6 +118,13 @@ ActiveSessionAuthView::ActiveSessionAuthView(const AccountId& account_id,
   // Set the background.
   SetBackground(views::CreateThemedRoundedRectBackground(
       cros_tokens::kCrosSysBaseElevated, kActiveSessionAuthViewCornerRadiusDp));
+
+  // Set the view as a dialog for a11y purposes.
+  GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
+  GetViewAccessibility().SetName(l10n_util::GetStringUTF16(
+      IDS_ASH_IN_SESSION_AUTH_DIALOG_ACCESSIBLE_NAME));
+  GetViewAccessibility().SetDescription(l10n_util::GetStringUTF16(
+      IDS_ASH_IN_SESSION_AUTH_DIALOG_ACCESSIBLE_DESCRIPTION));
 }
 
 ActiveSessionAuthView::~ActiveSessionAuthView() {
@@ -155,6 +163,7 @@ void ActiveSessionAuthView::AddHeaderAndCloseButton(
       std::move(auth_header_container_layout));
   auth_header_ = auth_header_container->AddChildView(
       std::make_unique<AuthHeaderView>(account_id_, title, description));
+  header_observation_.Observe(auth_header_);
 
   header->AddChildView(auth_header_container);
 
@@ -211,10 +220,6 @@ void ActiveSessionAuthView::ChildPreferredSizeChanged(views::View* child) {
   PreferredSizeChanged();
 }
 
-void ActiveSessionAuthView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->AddState(ax::mojom::State::kInvisible);
-}
-
 std::string ActiveSessionAuthView::GetObjectName() const {
   return "ActiveSessionAuthView";
 }
@@ -237,6 +242,22 @@ void ActiveSessionAuthView::SetHasPin(bool has_pin) {
 
 bool ActiveSessionAuthView::HasPin() const {
   return auth_container_->HasPin();
+}
+
+void ActiveSessionAuthView::SetPinStatus(
+    std::unique_ptr<cryptohome::PinStatus> pin_status) {
+  auth_container_->SetPinStatus(std::move(pin_status));
+}
+
+const std::u16string& ActiveSessionAuthView::GetPinStatusMessage() const {
+  return auth_container_->GetPinStatusMessage();
+}
+
+void ActiveSessionAuthView::SetInputEnabled(bool enabled) {
+  auth_container_->SetInputEnabled(enabled);
+  if (enabled) {
+    RequestFocus();
+  }
 }
 
 void ActiveSessionAuthView::OnPinSubmit(const std::u16string& pin) {
@@ -265,6 +286,14 @@ void ActiveSessionAuthView::Close() {
   }
 }
 
+void ActiveSessionAuthView::SetFingerprintState(FingerprintState state) {
+  auth_container_->SetFingerprintState(state);
+}
+
+void ActiveSessionAuthView::NotifyFingerprintAuthFailure() {
+  auth_container_->NotifyFingerprintAuthFailure();
+}
+
 void ActiveSessionAuthView::OnContentsChanged() {
   // If something changes on the UI e.g:
   // - user change the text of the input text
@@ -285,6 +314,10 @@ void ActiveSessionAuthView::AddObserver(Observer* observer) {
 
 void ActiveSessionAuthView::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
+}
+
+void ActiveSessionAuthView::OnTitleChanged(const std::u16string& error_str) {
+  GetViewAccessibility().SetName(error_str);
 }
 
 BEGIN_METADATA(ActiveSessionAuthView)

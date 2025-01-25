@@ -27,14 +27,14 @@ bool PingBlockerFilter::OnBeforeRequest(
     content::BrowserContext* browser_context,
     const vivaldi::FilteredRequestInfo* request,
     BeforeRequestCallback callback) {
-  bool cancel = false;
+  RequestFilter::CancelDecision cancel = RequestFilter::kAllow;
   if (request->request.resource_type ==
       static_cast<int>(blink::mojom::ResourceType::kPing)) {
     Profile* profile = Profile::FromBrowserContext(browser_context);
     PrefService* prefs = profile->GetPrefs();
     if (prefs->GetBoolean(vivaldiprefs::kPrivacyBlockPingsEnabled) &&
         !vivaldi_user_agent::IsUrlAllowed(request->request.url))
-      cancel = true;
+      cancel = RequestFilter::kCancel;
   }
 
   std::move(callback).Run(cancel, false, GURL());
@@ -46,7 +46,7 @@ bool PingBlockerFilter::OnBeforeSendHeaders(
     const vivaldi::FilteredRequestInfo* request,
     const net::HttpRequestHeaders* headers,
     BeforeSendHeadersCallback callback) {
-  std::move(callback).Run(false, RequestHeaderChanges());
+  std::move(callback).Run(RequestFilter::kAllow, RequestHeaderChanges());
   return true;
 }
 
@@ -60,7 +60,8 @@ bool PingBlockerFilter::OnHeadersReceived(
     const vivaldi::FilteredRequestInfo* request,
     const net::HttpResponseHeaders* headers,
     HeadersReceivedCallback callback) {
-  std::move(callback).Run(false, false, GURL(), ResponseHeaderChanges());
+  std::move(callback).Run(RequestFilter::kAllow, false, GURL(),
+                          ResponseHeaderChanges());
   return true;
 }
 

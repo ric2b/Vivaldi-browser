@@ -1,0 +1,188 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/rules.gni")
+
+bundle_data_xcassets("appicons_assets") {
+  catalog = "AppIcons.xcassets"
+  sources = [
+    # img_appicon_final
+    "AppIcons.xcassets/img_appicon_final.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_final.imageset/official.png",
+    "AppIcons.xcassets/img_appicon_final.imageset/official@2x.png",
+    "AppIcons.xcassets/img_appicon_final.imageset/official@3x.png",
+
+    # img_appicon_burgundy
+    "AppIcons.xcassets/img_appicon_burgundy.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_burgundy.imageset/burgundy.png",
+    "AppIcons.xcassets/img_appicon_burgundy.imageset/burgundy@2x.png",
+    "AppIcons.xcassets/img_appicon_burgundy.imageset/burgundy@3x.png",
+
+    # img_appicon_yellow
+    "AppIcons.xcassets/img_appicon_yellow.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_yellow.imageset/yellow.png",
+    "AppIcons.xcassets/img_appicon_yellow.imageset/yellow@2x.png",
+    "AppIcons.xcassets/img_appicon_yellow.imageset/yellow@3x.png",
+
+    # img_appicon_softpink
+    "AppIcons.xcassets/img_appicon_softpink.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_softpink.imageset/softpink.png",
+    "AppIcons.xcassets/img_appicon_softpink.imageset/softpink@2x.png",
+    "AppIcons.xcassets/img_appicon_softpink.imageset/softpink@3x.png",
+
+    # img_appicon_softpurple
+    "AppIcons.xcassets/img_appicon_softpurple.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_softpurple.imageset/softpurple.png",
+    "AppIcons.xcassets/img_appicon_softpurple.imageset/softpurple@2x.png",
+    "AppIcons.xcassets/img_appicon_softpurple.imageset/softpurple@3x.png",
+
+    # img_appicon_softred
+    "AppIcons.xcassets/img_appicon_softred.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_softred.imageset/softred.png",
+    "AppIcons.xcassets/img_appicon_softred.imageset/softred@2x.png",
+    "AppIcons.xcassets/img_appicon_softred.imageset/softred@3x.png",
+
+    # img_appicon_sand
+    "AppIcons.xcassets/img_appicon_sand.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_sand.imageset/sand.png",
+    "AppIcons.xcassets/img_appicon_sand.imageset/sand@2x.png",
+    "AppIcons.xcassets/img_appicon_sand.imageset/sand@3x.png",
+
+    # img_appicon_sagegreen
+    "AppIcons.xcassets/img_appicon_sagegreen.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_sagegreen.imageset/sagegreen.png",
+    "AppIcons.xcassets/img_appicon_sagegreen.imageset/sagegreen@2x.png",
+    "AppIcons.xcassets/img_appicon_sagegreen.imageset/sagegreen@3x.png",
+
+    # img_appicon_green
+    "AppIcons.xcassets/img_appicon_green.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_green.imageset/green.png",
+    "AppIcons.xcassets/img_appicon_green.imageset/green@2x.png",
+    "AppIcons.xcassets/img_appicon_green.imageset/green@3x.png",
+
+    # img_appicon_forest_green
+    "AppIcons.xcassets/img_appicon_forestgreen.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_forestgreen.imageset/forestgreen.png",
+    "AppIcons.xcassets/img_appicon_forestgreen.imageset/forestgreen@2x.png",
+    "AppIcons.xcassets/img_appicon_forestgreen.imageset/forestgreen@3x.png",
+
+    # img_appicon_coral
+    "AppIcons.xcassets/img_appicon_coral.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_coral.imageset/coral.png",
+    "AppIcons.xcassets/img_appicon_coral.imageset/coral@2x.png",
+    "AppIcons.xcassets/img_appicon_coral.imageset/coral@3x.png",
+
+    # img_appicon_camo
+    "AppIcons.xcassets/img_appicon_camo.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_camo.imageset/camo.png",
+    "AppIcons.xcassets/img_appicon_camo.imageset/camo@2x.png",
+    "AppIcons.xcassets/img_appicon_camo.imageset/camo@3x.png",
+
+    # img_appicon_aqua
+    "AppIcons.xcassets/img_appicon_aqua.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_aqua.imageset/aqua.png",
+    "AppIcons.xcassets/img_appicon_aqua.imageset/aqua@2x.png",
+    "AppIcons.xcassets/img_appicon_aqua.imageset/aqua@3x.png",
+
+    # img_appicon_blueprint
+    "AppIcons.xcassets/img_appicon_blueprint.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_blueprint.imageset/sketch.png",
+    "AppIcons.xcassets/img_appicon_blueprint.imageset/sketch@2x.png",
+    "AppIcons.xcassets/img_appicon_blueprint.imageset/sketch@3x.png",
+
+    # img_appicon_community
+    "AppIcons.xcassets/img_appicon_community.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_community.imageset/community.png",
+    "AppIcons.xcassets/img_appicon_community.imageset/community@2x.png",
+    "AppIcons.xcassets/img_appicon_community.imageset/community@3x.png",
+
+    # img_appicon_gradient
+    "AppIcons.xcassets/img_appicon_gradient.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_gradient.imageset/gradient.png",
+    "AppIcons.xcassets/img_appicon_gradient.imageset/gradient@2x.png",
+    "AppIcons.xcassets/img_appicon_gradient.imageset/gradient@3x.png",
+
+    # img_appicon_gradient1
+    "AppIcons.xcassets/img_appicon_gradient1.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_gradient1.imageset/gradient.png",
+    "AppIcons.xcassets/img_appicon_gradient1.imageset/gradient@2x.png",
+    "AppIcons.xcassets/img_appicon_gradient1.imageset/gradient@3x.png",
+
+    # img_appicon_gradient2
+    "AppIcons.xcassets/img_appicon_gradient2.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_gradient2.imageset/gradient.png",
+    "AppIcons.xcassets/img_appicon_gradient2.imageset/gradient@2x.png",
+    "AppIcons.xcassets/img_appicon_gradient2.imageset/gradient@3x.png",
+
+    # img_appicon_gradient3
+    "AppIcons.xcassets/img_appicon_gradient3.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_gradient3.imageset/gradient.png",
+    "AppIcons.xcassets/img_appicon_gradient3.imageset/gradient@2x.png",
+    "AppIcons.xcassets/img_appicon_gradient3.imageset/gradient@3x.png",
+
+    # img_appicon_internal
+    "AppIcons.xcassets/img_appicon_internal.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_internal.imageset/internal.png",
+    "AppIcons.xcassets/img_appicon_internal.imageset/internal@2x.png",
+    "AppIcons.xcassets/img_appicon_internal.imageset/internal@3x.png",
+
+    # img_appicon_japan
+    "AppIcons.xcassets/img_appicon_japan.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_japan.imageset/japan.png",
+    "AppIcons.xcassets/img_appicon_japan.imageset/japan@2x.png",
+    "AppIcons.xcassets/img_appicon_japan.imageset/japan@3x.png",
+
+    # img_appicon_lgbtplus
+    "AppIcons.xcassets/img_appicon_lgbtplus.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_lgbtplus.imageset/lgbtplus.png",
+    "AppIcons.xcassets/img_appicon_lgbtplus.imageset/lgbtplus@2x.png",
+    "AppIcons.xcassets/img_appicon_lgbtplus.imageset/lgbtplus@3x.png",
+
+    # img_appicon_matteblack
+    "AppIcons.xcassets/img_appicon_matteblack.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_matteblack.imageset/matteblack.png",
+    "AppIcons.xcassets/img_appicon_matteblack.imageset/matteblack@2x.png",
+    "AppIcons.xcassets/img_appicon_matteblack.imageset/matteblack@3x.png",
+
+    # img_appicon_oldopera
+    "AppIcons.xcassets/img_appicon_oldopera.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_oldopera.imageset/oldopera.png",
+    "AppIcons.xcassets/img_appicon_oldopera.imageset/oldopera@2x.png",
+    "AppIcons.xcassets/img_appicon_oldopera.imageset/oldopera@3x.png",
+
+    # img_appicon_pink
+    "AppIcons.xcassets/img_appicon_pink.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_pink.imageset/pink.png",
+    "AppIcons.xcassets/img_appicon_pink.imageset/pink@2x.png",
+    "AppIcons.xcassets/img_appicon_pink.imageset/pink@3x.png",
+
+    # img_appicon_pride
+    "AppIcons.xcassets/img_appicon_pride.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_pride.imageset/pride.png",
+    "AppIcons.xcassets/img_appicon_pride.imageset/pride@2x.png",
+    "AppIcons.xcassets/img_appicon_pride.imageset/pride@3x.png",
+
+    # img_appicon_snapshot
+    "AppIcons.xcassets/img_appicon_snapshot.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_snapshot.imageset/snapshot.png",
+    "AppIcons.xcassets/img_appicon_snapshot.imageset/snapshot@2x.png",
+    "AppIcons.xcassets/img_appicon_snapshot.imageset/snapshot@3x.png",
+
+    # img_appicon_white
+    "AppIcons.xcassets/img_appicon_white.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_white.imageset/white.png",
+    "AppIcons.xcassets/img_appicon_white.imageset/white@2x.png",
+    "AppIcons.xcassets/img_appicon_white.imageset/white@3x.png",
+
+    # img_appicon_wood
+    "AppIcons.xcassets/img_appicon_wood.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_wood.imageset/wood.png",
+    "AppIcons.xcassets/img_appicon_wood.imageset/wood@2x.png",
+    "AppIcons.xcassets/img_appicon_wood.imageset/wood@3x.png",
+
+    # img_appicon_woodsteel
+    "AppIcons.xcassets/img_appicon_woodsteel.imageset/Contents.json",
+    "AppIcons.xcassets/img_appicon_woodsteel.imageset/woodsteel.png",
+    "AppIcons.xcassets/img_appicon_woodsteel.imageset/woodsteel@2x.png",
+    "AppIcons.xcassets/img_appicon_woodsteel.imageset/woodsteel@3x.png",
+  ]
+}

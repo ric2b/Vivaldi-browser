@@ -51,6 +51,7 @@ InteractionSequence::StepBuilder InteractiveTestApi::PressButton(
 InteractionSequence::StepBuilder InteractiveTestApi::SelectMenuItem(
     ElementSpecifier menu_item,
     InputType input_type) {
+  RequireInteractiveTest();
   StepBuilder builder;
   builder.SetDescription("SelectMenuItem()");
   internal::SpecifyElement(builder, menu_item);
@@ -63,6 +64,15 @@ InteractionSequence::StepBuilder InteractiveTestApi::SelectMenuItem(
             test->test_util().SelectMenuItem(el, input_type));
       },
       input_type, base::Unretained(this)));
+
+  // TODO(https://crbug.com/359252812): On Linux, sometimes a SelectMenuItem is
+  // interrupted by a spurious focus change, even on tests designed to run
+  // single-thread, single-process. Once the culprit has been tracked down and
+  // eliminated, remove this #if.
+#if BUILDFLAG(IS_LINUX)
+  builder.SetStepStartMode(InteractionSequence::StepStartMode::kImmediate);
+#endif
+
   return builder;
 }
 
@@ -106,6 +116,13 @@ InteractionSequence::StepBuilder InteractiveTestApi::SelectDropdownItem(
     ElementSpecifier collection,
     size_t item,
     InputType input_type) {
+  // "Don't care" option directly sets the value; the other actually require
+  // popping out the dropdown menu and selecting an item which is not reliable
+  // in non-interactive tests.
+  if (input_type != InputType::kDontCare) {
+    RequireInteractiveTest();
+  }
+
   StepBuilder builder;
   builder.SetDescription(base::StringPrintf("SelectDropdownItem( %zu )", item));
   internal::SpecifyElement(builder, collection);
@@ -141,6 +158,7 @@ InteractionSequence::StepBuilder InteractiveTestApi::EnterText(
 
 InteractionSequence::StepBuilder InteractiveTestApi::ActivateSurface(
     ElementSpecifier element) {
+  RequireInteractiveTest();
   StepBuilder builder;
   builder.SetDescription("ActivateSurface()");
   internal::SpecifyElement(builder, element);
@@ -236,37 +254,36 @@ InteractionSequence::StepBuilder InteractiveTestApi::WaitForEvent(
 }
 
 // static
-InteractiveTestApi::MultiStep InteractiveTestApi::EnsureNotPresent(
+InteractiveTestApi::StepBuilder InteractiveTestApi::EnsureNotPresent(
     ElementIdentifier element_to_check) {
-  return internal::InteractiveTestPrivate::PostTask(
-      base::StringPrintf("EnsureNotPresent( %s )",
-                         element_to_check.GetName().c_str()),
-      base::BindOnce(
-          [](ElementIdentifier id, InteractionSequence* seq,
-             TrackedElement* reference) {
-            auto* const tracker = ElementTracker::GetElementTracker();
-            auto* const element = seq->IsCurrentStepInAnyContextForTesting()
-                                      ? tracker->GetElementInAnyContext(id)
-                                      : tracker->GetFirstMatchingElement(
-                                            id, reference->context());
-            if (element) {
-              LOG(ERROR) << "Expected element " << element->ToString()
-                         << " not to be present but it was present.";
-              seq->FailForTesting();
-            }
-          },
-          element_to_check));
+  return std::move(
+      WithElement(kInteractiveTestPivotElementId,
+                  [element_to_check](InteractionSequence* seq,
+                                     TrackedElement* reference) {
+                    auto* const tracker = ElementTracker::GetElementTracker();
+                    auto* const element =
+                        seq->IsCurrentStepInAnyContextForTesting()
+                            ? tracker->GetElementInAnyContext(element_to_check)
+                            : tracker->GetFirstMatchingElement(
+                                  element_to_check, reference->context());
+                    if (element) {
+                      LOG(ERROR) << "Expected element " << element->ToString()
+                                 << " not to be present but it was present.";
+                      seq->FailForTesting();
+                    }
+                  })
+          .SetDescription(base::StringPrintf(
+              "EnsureNotPresent( %s )", element_to_check.GetName().c_str())));
 }
 
 // static
-InteractiveTestApi::MultiStep InteractiveTestApi::EnsurePresent(
+InteractiveTestApi::StepBuilder InteractiveTestApi::EnsurePresent(
     ElementSpecifier element_to_check) {
-  return Steps(
-      FlushEvents(),
-      std::move(WithElement(element_to_check, base::DoNothing())
-                    .SetDescription(base::StringPrintf(
-                        "EnsurePresent( %s )",
-                        internal::DescribeElement(element_to_check).c_str()))));
+  return std::move(
+      WithElement(element_to_check, base::DoNothing())
+          .SetDescription(base::StringPrintf(
+              "EnsurePresent( %s )",
+              internal::DescribeElement(element_to_check).c_str())));
 }
 
 InteractionSequence::StepBuilder InteractiveTestApi::NameElement(
@@ -274,12 +291,6 @@ InteractionSequence::StepBuilder InteractiveTestApi::NameElement(
     AbsoluteElementSpecifier spec) {
   return NameElementRelative(kInteractiveTestPivotElementId, name,
                              GetFindElementCallback(std::move(spec)));
-}
-
-// static
-InteractiveTestApi::MultiStep InteractiveTestApi::FlushEvents() {
-  return internal::InteractiveTestPrivate::PostTask("FlushEvents()",
-                                                    base::DoNothing());
 }
 
 // static
@@ -317,6 +328,16 @@ InteractiveTestApi::MultiStep InteractiveTestApi::InContext(
   return steps;
 }
 
+// static
+InteractiveTestApi::MultiStep InteractiveTestApi::WithoutDelay(
+    MultiStep steps) {
+  for (auto& step : steps) {
+    step.SetStepStartMode(InteractionSequence::StepStartMode::kImmediate)
+        .FormatDescription("WithoutDelay( %s )");
+  }
+  return steps;
+}
+
 InteractiveTestApi::StepBuilder InteractiveTestApi::SetOnIncompatibleAction(
     OnIncompatibleAction action,
     const char* reason) {
@@ -328,6 +349,18 @@ InteractiveTestApi::StepBuilder InteractiveTestApi::SetOnIncompatibleAction(
         test->private_test_impl().on_incompatible_action_reason_ = reason;
       },
       base::Unretained(this), action, std::string(reason)));
+}
+
+void InteractiveTestApi::RequireInteractiveTest() {
+  CHECK(internal::InteractiveTestPrivate::allow_interactive_test_verbs_)
+      << "The test verb you are trying to use requires an interactive test."
+         " environment. This is one in which the test can safely control things"
+         " like mouse movement and window activation, without having to worry"
+         " about other processes making changes that can cause flakiness."
+         "\n"
+         "\nFor chromium browser tests, you can fix this issue by using "
+         "different verbs (e.g. PressButton() instead of MoveMouseTo(),"
+         " ClickMouse()), or you can move the test to interactive_ui_tests.";
 }
 
 bool InteractiveTestApi::RunTestSequenceImpl(

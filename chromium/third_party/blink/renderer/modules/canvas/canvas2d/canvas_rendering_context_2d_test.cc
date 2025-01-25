@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <unordered_set>
@@ -21,7 +22,6 @@
 #include "base/check_op.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_base.h"
@@ -35,6 +35,8 @@
 #include "cc/paint/paint_image.h"
 #include "cc/paint/paint_op.h"
 #include "cc/test/paint_op_matchers.h"
+#include "components/viz/common/resources/release_callback.h"
+#include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/test/test_context_provider.h"
 #include "components/viz/test/test_gles2_interface.h"
 #include "gpu/command_buffer/client/test_shared_image_interface.h"
@@ -71,6 +73,7 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_image_source.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
+#include "third_party/blink/renderer/core/html/canvas/recording_test_utils.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
@@ -84,7 +87,6 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_gradient.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_style_test_utils.h"
-#include "third_party/blink/renderer/modules/canvas/canvas2d/recording_test_utils.h"
 #include "third_party/blink/renderer/modules/webcodecs/video_frame.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -125,7 +127,6 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-#include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorType.h"
@@ -158,8 +159,9 @@ class ExecutionContext;
 }  // namespace blink
 
 using ::base::test::ScopedFeatureList;
+using ::blink_testing::ClearRectFlags;
+using ::blink_testing::FillFlags;
 using ::blink_testing::RecordedOpsAre;
-using ::blink_testing::RecordedOpsView;
 using ::cc::ClipRectOp;
 using ::cc::DrawColorOp;
 using ::cc::DrawImageRectOp;
@@ -184,6 +186,12 @@ using ::testing::SaveArg;
 namespace blink {
 
 enum BitmapOpacity { kOpaqueBitmap, kTransparentBitmap };
+
+class AcceleratedCompositingTestPlatform
+    : public blink::TestingPlatformSupport {
+ public:
+  bool IsGpuCompositingDisabled() const override { return false; }
+};
 
 class FakeImageSource : public CanvasImageSource {
  public:
@@ -246,6 +254,9 @@ class CanvasRenderingContext2DTest : public ::testing::Test,
   }
 
   HTMLCanvasElement& CanvasElement() const { return *canvas_element_; }
+  cc::PaintCanvas& Canvas() {
+    return CanvasElement().ResourceProvider()->Canvas();
+  }
   CanvasRenderingContext2D* Context2D() const {
     return static_cast<CanvasRenderingContext2D*>(
         CanvasElement().RenderingContext());
@@ -427,7 +438,7 @@ void CanvasRenderingContext2DTest::TearDown() {
 
   // Must be torn down after WebViewHelper since its destructor can create a
   // fresh context provider otherwise.
-  SharedGpuContext::ResetForTesting();
+  SharedGpuContext::Reset();
 
   // Prevent CanvasPerformanceMonitor state from leaking between tests.
   CanvasRenderingContext::GetCanvasPerformanceMonitor().ResetForTesting();
@@ -440,11 +451,11 @@ class FakeCanvasResourceProvider : public CanvasResourceProvider {
   FakeCanvasResourceProvider(const SkImageInfo& info,
                              RasterModeHint hint,
                              CanvasResourceHost* resource_host)
-      : CanvasResourceProvider(CanvasResourceProvider::kBitmap,
+      : CanvasResourceProvider(CanvasResourceProvider::kSharedImage,
                                info,
                                cc::PaintFlags::FilterQuality::kLow,
                                /*is_origin_top_left=*/false,
-                               /*context_provider_wrapper=*/nullptr,
+                               SharedGpuContext::ContextProviderWrapper(),
                                /*resource_dispatcher=*/nullptr,
                                resource_host),
         is_accelerated_(hint != RasterModeHint::kPreferCPU) {
@@ -457,9 +468,14 @@ class FakeCanvasResourceProvider : public CanvasResourceProvider {
   ~FakeCanvasResourceProvider() override = default;
   bool IsAccelerated() const override { return is_accelerated_; }
   scoped_refptr<CanvasResource> ProduceCanvasResource(FlushReason) override {
-    return scoped_refptr<CanvasResource>();
+    return scoped_refptr<CanvasResource>(CanvasResourceSharedImage::Create(
+        GetSkImageInfo(), SharedGpuContext::ContextProviderWrapper(),
+        CreateWeakPtr(), cc::PaintFlags::FilterQuality::kLow,
+        /*is_origin_top_left=*/true, IsAccelerated(),
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+            gpu::SHARED_IMAGE_USAGE_RASTER_WRITE));
   }
-  bool SupportsDirectCompositing() const override { return false; }
+  bool SupportsDirectCompositing() const override { return true; }
   bool IsValid() const override { return true; }
   sk_sp<SkSurface> CreateSkSurface() const override {
     return SkSurfaces::Raster(GetSkImageInfo());
@@ -504,17 +520,60 @@ testing::Matcher<base::HistogramTester> OverdrawOpAre(Args... args) {
       std::unordered_set<BaseRenderingContext2D::OverdrawOp>{args...});
 }
 
-cc::PaintFlags DrawRectFlags() {
-  cc::PaintFlags rect_flags;
-  rect_flags.setAntiAlias(true);
-  rect_flags.setFilterQuality(cc::PaintFlags::FilterQuality::kLow);
-  return rect_flags;
-}
+TEST_P(CanvasRenderingContext2DTest,
+       PrepareMailboxWhenContextIsLostWithFailedRestore) {
+  // Gpu compositing must be supported for this test to be able to create
+  // a CanvasResourceSharedBitmap instance.
+  ScopedTestingPlatformSupport<AcceleratedCompositingTestPlatform>
+      accelerated_compositing_scope;
 
-cc::PaintFlags ClearRectFlags() {
-  cc::PaintFlags clear_flags;
-  clear_flags.setBlendMode(SkBlendMode::kClear);
-  return clear_flags;
+  CreateContext(kNonOpaque);
+
+  // Do initial setup to ensure that CanvasResourceHost will check for the GPU
+  // context being lost as part of checking resource validity:
+
+  // * Install a CanvasResourceProvider that is accelerated and supports direct
+  //   compositing. The former is necessary to ensure that
+  //   CanvasResourceHost::IsResourceValid() checks for context loss, while the
+  //   latter is necessary for GetOrCreateCcLayerIfNeeded() to succeed.
+  gfx::Size size = CanvasElement().Size();
+  auto provider = std::make_unique<FakeCanvasResourceProvider>(
+      SkImageInfo::MakeN32Premul(size.width(), size.height()),
+      RasterModeHint::kPreferGPU, &CanvasElement());
+  CanvasElement().SetResourceProviderForTesting(
+      std::move(provider), std::make_unique<Canvas2DLayerBridge>(), size);
+
+  // * The host must also be in GPU compositing mode for IsResourceValid()
+  //   to check for context loss.
+  CanvasElement().SetPreferred2DRasterMode(RasterModeHint::kPreferGPU);
+
+  // * Finally, IsResourceValid() always returns true in the absence of a CC
+  //   layer.
+  EXPECT_TRUE(CanvasElement().GetOrCreateCcLayerIfNeeded());
+
+  // The resource should start off valid.
+  EXPECT_TRUE(CanvasElement().IsResourceValid());
+
+  viz::TransferableResource resource;
+  viz::ReleaseCallback release_callback;
+  EXPECT_TRUE(CanvasElement().PrepareTransferableResource(nullptr, &resource,
+                                                          &release_callback));
+
+  // Losing the context should result in the resource becoming invalid and the
+  // host being unable to produce a TransferableResource from it.
+  test_context_provider_->TestContextGL()->set_context_lost(true);
+  EXPECT_FALSE(CanvasElement().IsResourceValid());
+  EXPECT_FALSE(CanvasElement().PrepareTransferableResource(nullptr, &resource,
+                                                           &release_callback));
+
+  // Restoration of the context should fail because
+  // Platform::createSharedOffscreenGraphicsContext3DProvider() is stubbed in
+  // unit tests. This simulates what would happen when attempting to restore
+  // while the GPU process is down.
+  Context2D()->TryRestoreContextEvent(/*timer=*/nullptr);
+  EXPECT_FALSE(CanvasElement().IsResourceValid());
+  EXPECT_FALSE(CanvasElement().PrepareTransferableResource(nullptr, &resource,
+                                                           &release_callback));
 }
 
 TEST_P(CanvasRenderingContext2DTest, FillRect_FullCoverage) {
@@ -530,9 +589,9 @@ TEST_P(CanvasRenderingContext2DTest, FillRect_FullCoverage) {
   EXPECT_THAT(
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(
-          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), DrawRectFlags()),
+          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), FillFlags()),
           PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(-1, -1, 12, 12),
-                                DrawRectFlags()))));
+                                FillFlags()))));
   EXPECT_THAT(histogram_tester, OverdrawOpAre());
 }
 
@@ -549,7 +608,7 @@ TEST_P(CanvasRenderingContext2DTest, DisableOverdrawOptimization) {
   EXPECT_THAT(
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(
-          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), DrawRectFlags()),
+          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), FillFlags()),
           PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 10, 10),
                                 ClearRectFlags()))));
   EXPECT_THAT(histogram_tester, OverdrawOpAre());
@@ -582,7 +641,7 @@ TEST_P(CanvasRenderingContext2DTest, ClearRect_PartialCoverage) {
   EXPECT_THAT(
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(
-          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), DrawRectFlags()),
+          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), FillFlags()),
           PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 9, 9),
                                 ClearRectFlags()))));
   EXPECT_THAT(histogram_tester, OverdrawOpAre());
@@ -607,15 +666,14 @@ TEST_P(CanvasRenderingContext2DTest, ClearRect_InsideLayer) {
   EXPECT_THAT(
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(
-          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(1, 1, 1, 1), DrawRectFlags()),
-          DrawRecordOpEq(PaintOpEq<SaveLayerAlphaOp>(1.0f),
-                         PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(2, 2, 2, 2),
-                                               DrawRectFlags()),
-                         PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 10, 10),
-                                               ClearRectFlags()),
-                         PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 3, 3),
-                                               DrawRectFlags()),
-                         PaintOpEq<RestoreOp>()))));
+          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(1, 1, 1, 1), FillFlags()),
+          DrawRecordOpEq(
+              PaintOpEq<SaveLayerAlphaOp>(1.0f),
+              PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(2, 2, 2, 2), FillFlags()),
+              PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 10, 10),
+                                    ClearRectFlags()),
+              PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 3, 3), FillFlags()),
+              PaintOpEq<RestoreOp>()))));
   EXPECT_THAT(histogram_tester, OverdrawOpAre());
 }
 
@@ -642,18 +700,16 @@ TEST_P(CanvasRenderingContext2DTest, ClearRect_InsideNestedLayer) {
   EXPECT_THAT(
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(
-          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(1, 1, 1, 1), DrawRectFlags()),
-          DrawRecordOpEq(PaintOpEq<SaveLayerAlphaOp>(1.0f),
-                         PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(2, 2, 2, 2),
-                                               DrawRectFlags()),
-                         PaintOpEq<SaveLayerAlphaOp>(1.0f),
-                         PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 3, 3),
-                                               DrawRectFlags()),
-                         PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 10, 10),
-                                               ClearRectFlags()),
-                         PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(4, 4, 4, 4),
-                                               DrawRectFlags()),
-                         PaintOpEq<RestoreOp>(), PaintOpEq<RestoreOp>()))));
+          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(1, 1, 1, 1), FillFlags()),
+          DrawRecordOpEq(
+              PaintOpEq<SaveLayerAlphaOp>(1.0f),
+              PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(2, 2, 2, 2), FillFlags()),
+              PaintOpEq<SaveLayerAlphaOp>(1.0f),
+              PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 3, 3), FillFlags()),
+              PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 10, 10),
+                                    ClearRectFlags()),
+              PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(4, 4, 4, 4), FillFlags()),
+              PaintOpEq<RestoreOp>(), PaintOpEq<RestoreOp>()))));
   EXPECT_THAT(histogram_tester, OverdrawOpAre());
 }
 
@@ -726,7 +782,7 @@ TEST_P(CanvasRenderingContext2DTest, ClearRect_TransformPartialCoverage) {
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(
           PaintOpIs<TranslateOp>(),
-          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), DrawRectFlags()),
+          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), FillFlags()),
           PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 10, 10),
                                 ClearRectFlags()))));
   EXPECT_THAT(histogram_tester, OverdrawOpAre());
@@ -786,7 +842,7 @@ TEST_P(CanvasRenderingContext2DTest, ClearRect_Clipped) {
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(
           PaintOpIs<ClipRectOp>(),
-          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), DrawRectFlags()),
+          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(3, 3, 1, 1), FillFlags()),
           PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 10, 10),
                                 ClearRectFlags()))));
   EXPECT_THAT(histogram_tester, OverdrawOpAre());
@@ -1439,26 +1495,24 @@ void TestPutImageDataOnCanvasWithColorSpaceSettings(
                          0,   0,   0,   0,    // Transparent
                          255, 192, 128, 64,   // Decreasing values
                          93,  117, 205, 41};  // Random values
-  size_t data_length = 16;
+  constexpr size_t data_length = std::size(u8_pixels);
 
-  uint16_t* u16_pixels = new uint16_t[data_length];
+  std::array<uint16_t, data_length> u16_pixels;
   for (size_t i = 0; i < data_length; i++)
     u16_pixels[i] = u8_pixels[i] * 257;
 
-  float* f32_pixels = new float[data_length];
+  std::array<float, data_length> f32_pixels;
   for (size_t i = 0; i < data_length; i++)
     f32_pixels[i] = u8_pixels[i] / 255.0;
 
   NotShared<DOMUint8ClampedArray> data_u8(
-      DOMUint8ClampedArray::Create(u8_pixels, data_length));
+      DOMUint8ClampedArray::Create(u8_pixels));
   DCHECK(data_u8);
   EXPECT_EQ(data_length, data_u8->length());
-  NotShared<DOMUint16Array> data_u16(
-      DOMUint16Array::Create(u16_pixels, data_length));
+  NotShared<DOMUint16Array> data_u16(DOMUint16Array::Create(u16_pixels));
   DCHECK(data_u16);
   EXPECT_EQ(data_length, data_u16->length());
-  NotShared<DOMFloat32Array> data_f32(
-      DOMFloat32Array::Create(f32_pixels, data_length));
+  NotShared<DOMFloat32Array> data_f32(DOMFloat32Array::Create(f32_pixels));
   DCHECK(data_f32);
   EXPECT_EQ(data_length, data_f32->length());
 
@@ -1544,8 +1598,6 @@ void TestPutImageDataOnCanvasWithColorSpaceSettings(
           kAlphaUnmultiplied, kUnpremulRoundTripTolerance);
     }
   }
-  delete[] u16_pixels;
-  delete[] f32_pixels;
 }
 
 // Test disabled due to crbug.com/780925
@@ -1934,7 +1986,7 @@ TEST_P(CanvasRenderingContext2DTestAccelerated, HibernationWithUnclosedLayer) {
   // Hibernating should have rastered paint ops preceding `beginLayer`.
   EXPECT_THAT(hibernation_raster,
               RecordedOpsAre(PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(0, 0, 1, 1),
-                                                   DrawRectFlags())));
+                                                   FillFlags())));
 
   // Wake up from hibernation.
   GetDocument().GetPage()->SetVisibilityState(
@@ -1948,7 +2000,7 @@ TEST_P(CanvasRenderingContext2DTestAccelerated, HibernationWithUnclosedLayer) {
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(DrawRecordOpEq(
           PaintOpEq<SaveLayerAlphaOp>(1.0f),
-          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(1, 1, 1, 1), DrawRectFlags()),
+          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(1, 1, 1, 1), FillFlags()),
           DrawImageRectOpIs(
               CreateSkImage(/*width=*/1, /*height=*/1, SK_ColorRED)),
           PaintOpEq<RestoreOp>()))));
@@ -2037,6 +2089,45 @@ TEST_P(CanvasRenderingContext2DTestAccelerated, DrawImage_Video_Flush) {
       CanvasElement().ResourceProvider()->Recorder().HasRecordedDrawOps());
 }
 
+TEST_P(CanvasRenderingContext2DTest, FlushRestoresClipStack) {
+  CreateContext(kNonOpaque);
+
+  // Ensure that the ResourceProvider and canvas are created.
+  CanvasElement().GetOrCreateCanvasResourceProvider(RasterModeHint::kPreferCPU);
+
+  // Set a transform.
+  Context2D()->translate(5, 0);
+  EXPECT_EQ(Canvas().getLocalToDevice().rc(0, 3), 5);
+
+  // Draw something so that there is something to flush.
+  cc::PaintFlags flags;
+  Canvas().drawLine(0, 0, 2, 2, flags);
+
+  // Flush the canvas and verify that a new drawing canvas is created that has
+  // the transform restored.
+  EXPECT_TRUE(Context2D()->FlushCanvas(FlushReason::kTesting));
+  EXPECT_EQ(Canvas().getLocalToDevice().rc(0, 3), 5);
+}
+
+TEST_P(CanvasRenderingContext2DTest, PutImageDataRestoresClipStack) {
+  CreateContext(kNonOpaque);
+
+  // Ensure that the ResourceProvider and canvas are created.
+  CanvasElement().GetOrCreateCanvasResourceProvider(RasterModeHint::kPreferCPU);
+
+  // Set a transform.
+  Context2D()->translate(5, 0);
+  EXPECT_EQ(Canvas().getLocalToDevice().rc(0, 3), 5);
+
+  // Invoke putImageData(). This forces a flush, after which the transform
+  // should be restored.
+  NonThrowableExceptionState exception_state;
+  Context2D()->fillRect(3, 3, 1, 1);
+  Context2D()->putImageData(full_image_data_.Get(), 0, 0, exception_state);
+
+  EXPECT_EQ(Canvas().getLocalToDevice().rc(0, 3), 5);
+}
+
 TEST_P(CanvasRenderingContext2DTestAccelerated,
        DISABLED_DisableAcceleration_UpdateGPUMemoryUsage) {
   CreateContext(kNonOpaque);
@@ -2097,17 +2188,13 @@ TEST_P(CanvasRenderingContext2DTestAccelerated,
   Context2D()->endLayer(exception_state);
   Context2D()->restore(exception_state);
 
-  cc::PaintFlags rect_flags;
-  rect_flags.setAntiAlias(true);
-  rect_flags.setFilterQuality(cc::PaintFlags::FilterQuality::kLow);
-
   EXPECT_THAT(
       Context2D()->FlushCanvas(FlushReason::kTesting),
       Optional(RecordedOpsAre(
           PaintOpEq<SaveOp>(),
           DrawRecordOpEq(PaintOpEq<SaveLayerAlphaOp>(1.0f),
                          PaintOpEq<DrawRectOp>(SkRect::MakeXYWH(10, 20, 30, 40),
-                                               rect_flags),
+                                               FillFlags()),
                          PaintOpEq<RestoreOp>()),
           PaintOpEq<RestoreOp>())));
 }

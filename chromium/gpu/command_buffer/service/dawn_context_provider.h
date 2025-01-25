@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 
+#include "base/functional/function_ref.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/constants.h"
@@ -32,18 +33,26 @@ class Context;
 
 namespace gpu {
 
-class DawnSharedState;
+class DawnSharedContext;
 
 class GPU_GLES2_EXPORT DawnContextProvider {
  public:
+  using ValidateAdapterFn =
+      base::FunctionRef<bool(wgpu::BackendType, wgpu::Adapter)>;
+
+  // `validate_adapter_fn` will be called after the wgpu::Adapter is available
+  // to check if it should be used. If the function returns false creation will
+  // fail.
   static std::unique_ptr<DawnContextProvider> Create(
-      const GpuPreferences& gpu_preferences = GpuPreferences(),
+      const GpuPreferences& gpu_preferences,
+      ValidateAdapterFn validate_adapter_fn = DefaultValidateAdapterFn,
       const GpuDriverBugWorkarounds& gpu_driver_workarounds =
           GpuDriverBugWorkarounds());
   static std::unique_ptr<DawnContextProvider> CreateWithBackend(
       wgpu::BackendType backend_type,
-      bool force_fallback_adapter = false,
-      const GpuPreferences& gpu_preferences = GpuPreferences(),
+      bool force_fallback_adapter,
+      const GpuPreferences& gpu_preferences,
+      ValidateAdapterFn validate_adapter_fn = DefaultValidateAdapterFn,
       const GpuDriverBugWorkarounds& gpu_driver_workarounds =
           GpuDriverBugWorkarounds());
 
@@ -54,6 +63,9 @@ class GPU_GLES2_EXPORT DawnContextProvider {
 
   static wgpu::BackendType GetDefaultBackendType();
   static bool DefaultForceFallbackAdapter();
+
+  // Default function that will say adapter is supported.
+  static bool DefaultValidateAdapterFn(wgpu::BackendType, wgpu::Adapter);
 
   DawnContextProvider(const DawnContextProvider&) = delete;
   DawnContextProvider& operator=(const DawnContextProvider&) = delete;
@@ -71,7 +83,7 @@ class GPU_GLES2_EXPORT DawnContextProvider {
       std::unique_ptr<webgpu::DawnCachingInterface> caching_interface);
 
   bool InitializeGraphiteContext(
-      const GpuDriverBugWorkarounds& gpu_driver_workarounds);
+      const skgpu::graphite::ContextOptions& context_options);
 
   skgpu::graphite::Context* GetGraphiteContext() const {
     return graphite_context_.get();
@@ -87,9 +99,9 @@ class GPU_GLES2_EXPORT DawnContextProvider {
 
  private:
   explicit DawnContextProvider(
-      scoped_refptr<DawnSharedState> dawn_shared_state);
+      scoped_refptr<DawnSharedContext> dawn_shared_context);
 
-  scoped_refptr<DawnSharedState> dawn_shared_state_;
+  scoped_refptr<DawnSharedContext> dawn_shared_context_;
   std::unique_ptr<skgpu::graphite::Context> graphite_context_;
 };
 

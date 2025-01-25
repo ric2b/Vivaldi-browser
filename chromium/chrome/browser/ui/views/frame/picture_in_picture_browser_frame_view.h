@@ -104,7 +104,7 @@ class PictureInPictureBrowserFrameView
   void AddedToWidget() override;
   void RemovedFromWidget() override;
 #if BUILDFLAG(IS_LINUX)
-  gfx::Insets MirroredFrameBorderInsets() const override;
+  gfx::Insets RestoredMirroredFrameBorderInsets() const override;
   gfx::Insets GetInputInsets() const override;
   SkRRect GetRestoredClipRegion() const override;
 #endif
@@ -207,6 +207,9 @@ class PictureInPictureBrowserFrameView
 #if BUILDFLAG(IS_WIN)
   gfx::Insets GetClientAreaInsets(HMONITOR monitor) const;
 #endif
+
+  // Returns true if `content_setting_views_` has any visible views.
+  bool HasAnyVisibleContentSettingViews() const;
 
   // Helper functions for testing.
   std::vector<gfx::Animation*> GetRenderActiveAnimationsForTesting();
@@ -366,6 +369,8 @@ class PictureInPictureBrowserFrameView
   gfx::MultiAnimation hide_back_to_tab_button_animation_;
   gfx::MultiAnimation show_close_button_animation_;
   gfx::MultiAnimation hide_close_button_animation_;
+  gfx::LinearAnimation show_all_buttons_animation_;
+  gfx::LinearAnimation hide_all_buttons_animation_;
 
   // The foreground color given the current state of the
   // `top_bar_color_animation_`.

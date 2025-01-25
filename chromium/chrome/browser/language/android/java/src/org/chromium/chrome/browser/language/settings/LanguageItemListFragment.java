@@ -22,11 +22,13 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.browser.language.R;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ProfileDependentSetting;
-import org.chromium.components.browser_ui.settings.FragmentSettingsLauncher;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
+import org.chromium.components.browser_ui.settings.SettingsPage;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
@@ -43,7 +45,7 @@ import java.util.Collection;
  * to populate the LanguageItem list and provide callbacks for adding and removing items.
  */
 public abstract class LanguageItemListFragment extends Fragment
-        implements FragmentSettingsLauncher, ProfileDependentSetting {
+        implements SettingsPage, ProfileDependentSetting {
     // Request code for returning from Select Language Fragment
     private static final int REQUEST_CODE_SELECT_LANGUAGE = 1;
 
@@ -95,17 +97,22 @@ public abstract class LanguageItemListFragment extends Fragment
         }
     }
 
-    private SettingsLauncher mSettingsLauncher;
     private Profile mProfile;
     private ListAdapter mAdapter;
     private ListDelegate mListDelegate;
+    private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mListDelegate = makeFragmentListDelegate();
-        getActivity().setTitle(getLanguageListTitle(getContext()));
+        mPageTitle.set(getLanguageListTitle(getContext()));
         recordFragmentImpression();
+    }
+
+    @Override
+    public ObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
     }
 
     @Override
@@ -143,8 +150,9 @@ public abstract class LanguageItemListFragment extends Fragment
                 view -> { // Lambda for View.OnClickListener
                     recordAddLanguageImpression();
                     Intent intent =
-                            mSettingsLauncher.createSettingsActivityIntent(
-                                    getActivity(), SelectLanguageFragment.class);
+                            SettingsLauncherFactory.createSettingsLauncher()
+                                    .createSettingsActivityIntent(
+                                            getActivity(), SelectLanguageFragment.class);
                     intent.putExtra(
                             SelectLanguageFragment.INTENT_POTENTIAL_LANGUAGES,
                             getPotentialLanguageType());
@@ -163,11 +171,6 @@ public abstract class LanguageItemListFragment extends Fragment
             mAdapter.onDataUpdated();
             recordAddAction();
         }
-    }
-
-    @Override
-    public void setSettingsLauncher(SettingsLauncher settingsLauncher) {
-        mSettingsLauncher = settingsLauncher;
     }
 
     @Override

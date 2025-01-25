@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ash/app_list/search/files/file_result.h"
 
 #include <optional>
@@ -19,7 +24,7 @@
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/file_manager/volume_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/ash/thumbnail_loader.h"
+#include "chrome/browser/ui/ash/thumbnail_loader/thumbnail_loader.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/disks/fake_disk_mount_manager.h"
 #include "chromeos/ash/components/string_matching/tokenized_string.h"
@@ -114,8 +119,8 @@ class FileResultTest : public testing::Test {
 
   content::BrowserTaskEnvironment task_environment_;
   base::ScopedTempDir temp_dir_;
-  std::unique_ptr<Profile> profile_;
   ash::disks::FakeDiskMountManager disk_mount_manager_;
+  std::unique_ptr<Profile> profile_;
 };
 
 TEST_F(FileResultTest, CheckMetadata) {
@@ -261,8 +266,7 @@ TEST_F(FileResultTest, FileMetadataPopulatedForDisplay) {
   volume_manager->RegisterDownloadsDirectoryForTesting(local_directory);
 
   base::FilePath path(local_directory.Append("test.jpg"));
-  ASSERT_TRUE(base::WriteFile(path, reinterpret_cast<const char*>(kJpegData),
-                              kJpegDataSize));
+  ASSERT_TRUE(base::WriteFile(path, kJpegData));
   ASSERT_TRUE(base::TouchFile(path, base::Time::FromSecondsSinceUnixEpoch(1),
                               base::Time::FromSecondsSinceUnixEpoch(2)));
   FileResult result(
@@ -271,26 +275,23 @@ TEST_F(FileResultTest, FileMetadataPopulatedForDisplay) {
       ash::SearchResultDisplayType::kImage, 0.2f, std::u16string(),
       FileResult::Type::kFile, profile_.get(), nullptr);
 
-  ash::FileMetadata metadata;
-  base::RunLoop file_metadata_load_waiter;
-  result.file_metadata_loader()->RequestFileInfo(
-      base::BindLambdaForTesting([&metadata, &file_metadata_load_waiter](
-                                     ash::FileMetadata returned_metadata) {
-        metadata = returned_metadata;
-        file_metadata_load_waiter.Quit();
+  base::File::Info info;
+  base::RunLoop file_info_load_waiter;
+  result.file_metadata_loader()->RequestFileInfo(base::BindLambdaForTesting(
+      [&info, &file_info_load_waiter](base::File::Info returned_info) {
+        info = returned_info;
+        file_info_load_waiter.Quit();
       }));
 
-  // The file metadata, when requested, gets loaded on a worker thread.
-  // Wait for the file metadata request to get handled, and then run main
-  // loop to make sure load response posted on the main thread runs.
-  file_metadata_load_waiter.Run();
+  // The file info, when requested, gets loaded on a worker thread.
+  // Wait for the file info request to get handled, and then run main loop to
+  // make sure load response posted on the main thread runs.
+  file_info_load_waiter.Run();
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(metadata.file_info.size, kJpegDataSize);
-  EXPECT_EQ(metadata.file_info.last_modified,
-            base::Time::FromSecondsSinceUnixEpoch(2));
-  EXPECT_EQ(metadata.file_name.value(), "test.jpg");
-  EXPECT_EQ(metadata.displayable_folder_path.value(), "My files");
+  EXPECT_EQ(info.size, kJpegDataSize);
+  EXPECT_EQ(info.last_modified, base::Time::FromSecondsSinceUnixEpoch(2));
+  EXPECT_EQ(result.displayable_file_path().value(), "My files/test.jpg");
 
   storage::ExternalMountPoints::GetSystemInstance()->RevokeAllFileSystems();
 }

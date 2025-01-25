@@ -45,12 +45,7 @@ class IFX_RetainableWriteStream : virtual public Retainable,
 class IFX_SeekableWriteStream : virtual public IFX_StreamWithSize,
                                 public IFX_RetainableWriteStream {
  public:
-  // IFX_WriteStream:
-  bool WriteBlock(pdfium::span<const uint8_t> buffer) override;
-
   virtual bool Flush() = 0;
-  virtual bool WriteBlockAtOffset(pdfium::span<const uint8_t> data,
-                                  FX_FILESIZE offset) = 0;
 };
 
 class IFX_SeekableReadStream : virtual public Retainable,
@@ -61,16 +56,12 @@ class IFX_SeekableReadStream : virtual public Retainable,
 
   virtual bool IsEOF();
   virtual FX_FILESIZE GetPosition();
-  [[nodiscard]] virtual size_t ReadBlock(pdfium::span<uint8_t> buffer);
   [[nodiscard]] virtual bool ReadBlockAtOffset(pdfium::span<uint8_t> buffer,
                                                FX_FILESIZE offset) = 0;
 };
 
 class IFX_SeekableStream : public IFX_SeekableReadStream,
                            public IFX_SeekableWriteStream {
- public:
-  // IFX_SeekableWriteStream:
-  bool WriteBlock(pdfium::span<const uint8_t> buffer) override;
 };
 
 #endif  // CORE_FXCRT_FX_STREAM_H_

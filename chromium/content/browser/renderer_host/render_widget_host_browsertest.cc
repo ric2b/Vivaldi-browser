@@ -46,6 +46,7 @@
 #include "third_party/blink/public/common/switches.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/switches.h"
 #include "ui/latency/latency_info.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -1395,6 +1396,11 @@ class RenderWidgetHostSameDocNavUpdatesLocalSurfaceIdTest
     ASSERT_TRUE(embedded_test_server()->Start());
   }
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    RenderWidgetHostBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(switches::kForcePrefersNoReducedMotion);
+  }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
@@ -1589,9 +1595,15 @@ class RenderWidgetHostItemSequenceNumberInRenderFrameMetadataTest
 
 }  // namespace
 
+// TODO(crbug.com/362200328): Re-enable test.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_ItemSequenceNumberExpected DISABLED_ItemSequenceNumberExpected
+#else
+#define MAYBE_ItemSequenceNumberExpected ItemSequenceNumberExpected
+#endif
 IN_PROC_BROWSER_TEST_P(
     RenderWidgetHostItemSequenceNumberInRenderFrameMetadataTest,
-    ItemSequenceNumberExpected) {
+    MAYBE_ItemSequenceNumberExpected) {
   ASSERT_TRUE(NavigateToURL(shell(), FirstURL()));
   ASSERT_TRUE(NavigateToURL(shell(), SecondURL()));
 

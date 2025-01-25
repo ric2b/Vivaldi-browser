@@ -6,11 +6,11 @@
 #include "base/android/jni_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/android/chrome_jni_headers/VivaldiSyncService_jni.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/sync/service/sync_token_status.h"
-#include "sync/vivaldi_sync_service_factory.h"
 #include "sync/vivaldi_sync_service_impl.h"
-#include "sync/vivaldi_sync_ui_helper.h"
+#include "sync/vivaldi_sync_ui_helpers.h"
 
 static jlong JNI_VivaldiSyncService_Init(
     JNIEnv* env,
@@ -31,7 +31,7 @@ VivaldiSyncServiceAndroid::VivaldiSyncServiceAndroid(
   Profile* profile = ProfileManager::GetActiveUserProfile();
   DCHECK(profile);
   sync_service_ =
-      vivaldi::VivaldiSyncServiceFactory::GetForProfileVivaldi(profile);
+      SyncServiceFactory::GetForProfile(profile);
 
   SendCycleData();
 }
@@ -51,17 +51,13 @@ bool VivaldiSyncServiceAndroid::Init(JNIEnv* env) {
 jboolean VivaldiSyncServiceAndroid::SetEncryptionPassword(
     JNIEnv* env,
     const base::android::JavaParamRef<jstring>& password) {
-  return sync_service_->ui_helper()->SetEncryptionPassword(
+  return vivaldi::sync_ui_helpers::SetEncryptionPassword(sync_service_,
       base::android::ConvertJavaStringToUTF8(env, password));
 }
 
 void VivaldiSyncServiceAndroid::ClearServerData(JNIEnv* env) {
   if (vivaldi::IsVivaldiRunning())
     sync_service_->ClearSyncData();
-}
-
-void VivaldiSyncServiceAndroid::StopAndClear(JNIEnv* env) {
-  sync_service_->StopAndClear();
 }
 
 jboolean VivaldiSyncServiceAndroid::HasServerError(JNIEnv* env) {
@@ -76,13 +72,13 @@ jboolean VivaldiSyncServiceAndroid::IsSetupInProgress(JNIEnv* env) {
 base::android::ScopedJavaLocalRef<jstring>
 VivaldiSyncServiceAndroid::GetBackupEncryptionToken(JNIEnv* env) {
   return base::android::ConvertUTF8ToJavaString(
-      env, sync_service_->ui_helper()->GetBackupEncryptionToken());
+      env, vivaldi::sync_ui_helpers::GetBackupEncryptionToken(sync_service_));
 }
 
 jboolean VivaldiSyncServiceAndroid::RestoreEncryptionToken(
     JNIEnv* env,
     const base::android::JavaParamRef<jstring>& token) {
-  return sync_service_->ui_helper()->RestoreEncryptionToken(
+  return vivaldi::sync_ui_helpers::RestoreEncryptionToken(sync_service_,
       base::android::ConvertJavaStringToUTF8(env, token));
 }
 
@@ -94,8 +90,8 @@ void VivaldiSyncServiceAndroid::SendCycleData() {
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jobject> obj = weak_java_ref_.get(env);
 
-  vivaldi::VivaldiSyncUIHelper::CycleData cycle_data =
-      sync_service_->ui_helper()->GetCycleData();
+  vivaldi::sync_ui_helpers::CycleData cycle_data =
+      vivaldi::sync_ui_helpers::GetCycleData(sync_service_);
 
   Java_VivaldiSyncService_onCycleData(
       env, obj, cycle_data.download_updates_status, cycle_data.commit_status,

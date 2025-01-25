@@ -38,6 +38,7 @@
 #include "src/tint/lang/core/ir/transform/demote_to_helper.h"
 #include "src/tint/lang/core/ir/transform/multiplanar_external_texture.h"
 #include "src/tint/lang/core/ir/transform/preserve_padding.h"
+#include "src/tint/lang/core/ir/transform/remove_continue_in_switch.h"
 #include "src/tint/lang/core/ir/transform/remove_terminator_args.h"
 #include "src/tint/lang/core/ir/transform/rename_conflicts.h"
 #include "src/tint/lang/core/ir/transform/robustness.h"
@@ -48,7 +49,10 @@
 #include "src/tint/lang/msl/writer/raise/binary_polyfill.h"
 #include "src/tint/lang/msl/writer/raise/builtin_polyfill.h"
 #include "src/tint/lang/msl/writer/raise/module_scope_vars.h"
+#include "src/tint/lang/msl/writer/raise/packed_vec3.h"
 #include "src/tint/lang/msl/writer/raise/shader_io.h"
+#include "src/tint/lang/msl/writer/raise/simd_ballot.h"
+#include "src/tint/lang/msl/writer/raise/unary_polyfill.h"
 
 namespace tint::msl::writer {
 
@@ -81,10 +85,14 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
         core::ir::transform::BuiltinPolyfillConfig core_polyfills{};
         core_polyfills.clamp_int = true;
         core_polyfills.degrees = true;
+        core_polyfills.dot_4x8_packed = true;
         core_polyfills.extract_bits = core::ir::transform::BuiltinPolyfillLevel::kClampOrRangeCheck;
         core_polyfills.first_leading_bit = true;
         core_polyfills.first_trailing_bit = true;
+        core_polyfills.fwidth_fine = true;
         core_polyfills.insert_bits = core::ir::transform::BuiltinPolyfillLevel::kClampOrRangeCheck;
+        core_polyfills.pack_unpack_4x8 = true;
+        core_polyfills.pack_4xu8_clamp = true;
         core_polyfills.radians = true;
         core_polyfills.texture_sample_base_clamp_to_edge_2d_f32 = true;
         RUN_TRANSFORM(core::ir::transform::BuiltinPolyfill, module, core_polyfills);
@@ -118,12 +126,17 @@ Result<RaiseResult> Raise(core::ir::Module& module, const Options& options) {
 
     RUN_TRANSFORM(core::ir::transform::PreservePadding, module);
     RUN_TRANSFORM(core::ir::transform::VectorizeScalarMatrixConstructors, module);
+    RUN_TRANSFORM(core::ir::transform::RemoveContinueInSwitch, module);
 
     // DemoteToHelper must come before any transform that introduces non-core instructions.
     RUN_TRANSFORM(core::ir::transform::DemoteToHelper, module);
 
-    RUN_TRANSFORM(raise::ShaderIO, module, raise::ShaderIOConfig{options.emit_vertex_point_size});
+    RUN_TRANSFORM(raise::ShaderIO, module,
+                  raise::ShaderIOConfig{options.emit_vertex_point_size, options.fixed_sample_mask});
+    RUN_TRANSFORM(raise::PackedVec3, module);
+    RUN_TRANSFORM(raise::SimdBallot, module);
     RUN_TRANSFORM(raise::ModuleScopeVars, module);
+    RUN_TRANSFORM(raise::UnaryPolyfill, module);
     RUN_TRANSFORM(raise::BinaryPolyfill, module);
     RUN_TRANSFORM(raise::BuiltinPolyfill, module);
 

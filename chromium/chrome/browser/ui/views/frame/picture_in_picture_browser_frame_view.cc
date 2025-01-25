@@ -122,6 +122,9 @@ constexpr std::array<base::TimeDelta, 3> kCloseButtonAnimationDurations = {
     kAnimationDuration * 0.2, kAnimationDuration * 0.4,
     kAnimationDuration * 0.4};
 
+constexpr base::TimeDelta kShowHideAllButtonsAnimationDuration =
+    kAnimationDuration;
+
 class BackToTabButton : public OverlayWindowImageButton {
   METADATA_HEADER(BackToTabButton, OverlayWindowImageButton)
 
@@ -189,7 +192,8 @@ class WindowEventObserver : public ui::EventObserver {
     // Calculate input bounds for Linux. This is needed because the input bounds
     // is not necessary the same as the local bounds on Linux.
     if (pip_browser_frame_view_->ShouldDrawFrameShadow()) {
-      gfx::Insets insets = pip_browser_frame_view_->MirroredFrameBorderInsets();
+      gfx::Insets insets =
+          pip_browser_frame_view_->RestoredMirroredFrameBorderInsets();
       if (pip_browser_frame_view_->frame()->tiled()) {
         insets = gfx::Insets();
       }
@@ -430,7 +434,13 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
           gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[2],
                                     gfx::Tween::Type::ZERO,
                                     0.0,
-                                    0.0)}) {
+                                    0.0)}),
+      show_all_buttons_animation_(kShowHideAllButtonsAnimationDuration,
+                                  gfx::LinearAnimation::kDefaultFrameRate,
+                                  this),
+      hide_all_buttons_animation_(kShowHideAllButtonsAnimationDuration,
+                                  gfx::LinearAnimation::kDefaultFrameRate,
+                                  this) {
   // We create our own top container, so we hide the one created by default (and
   // its children) from the user and accessibility tools.
   browser_view->top_container()->SetVisible(false);
@@ -844,6 +854,8 @@ void PictureInPictureBrowserFrameView::AddedToWidget() {
   top_bar_color_animation_.SetContainer(animation_container);
   move_camera_button_to_left_animation_.SetContainer(animation_container);
   move_camera_button_to_right_animation_.SetContainer(animation_container);
+  show_all_buttons_animation_.SetContainer(animation_container);
+  hide_all_buttons_animation_.SetContainer(animation_container);
 
   if (back_to_tab_button_) {
     show_back_to_tab_button_animation_.SetContainer(animation_container);
@@ -886,8 +898,8 @@ void PictureInPictureBrowserFrameView::RemovedFromWidget() {
 }
 
 #if BUILDFLAG(IS_LINUX)
-gfx::Insets PictureInPictureBrowserFrameView::MirroredFrameBorderInsets()
-    const {
+gfx::Insets
+PictureInPictureBrowserFrameView::RestoredMirroredFrameBorderInsets() const {
   auto border = FrameBorderInsets();
   return base::i18n::IsRTL() ? gfx::Insets::TLBR(border.top(), border.right(),
                                                  border.bottom(), border.left())
@@ -901,7 +913,7 @@ gfx::Insets PictureInPictureBrowserFrameView::GetInputInsets() const {
 SkRRect PictureInPictureBrowserFrameView::GetRestoredClipRegion() const {
   gfx::RectF bounds_dip(GetLocalBounds());
   if (ShouldDrawFrameShadow()) {
-    gfx::InsetsF border(MirroredFrameBorderInsets());
+    gfx::InsetsF border(RestoredMirroredFrameBorderInsets());
     bounds_dip.Inset(border);
   }
 
@@ -990,7 +1002,8 @@ bool PictureInPictureBrowserFrameView::ShowPageInfoDialog() {
           location_icon_view_, gfx::Rect(), GetWidget()->GetNativeWindow(),
           contents, contents->GetLastCommittedURL(),
           /*initialized_callback=*/base::DoNothing(),
-          /*closing_callback=*/base::DoNothing());
+          /*closing_callback=*/base::DoNothing(),
+          /*allow_about_this_site=*/false);
   bubble->SetHighlightedButton(location_icon_view_);
   bubble->GetWidget()->Show();
 
@@ -1137,6 +1150,29 @@ void PictureInPictureBrowserFrameView::AnimationProgressed(
     return;
   }
 
+  if (animation == &show_all_buttons_animation_ ||
+      animation == &hide_all_buttons_animation_) {
+    double animation_current_value = animation->GetCurrentValue();
+
+    // Update the animation current value when running "hide" annimations. Since
+    // `hide_all_buttons_animation_` uses `gfx::LinearAnimation`, which goes
+    // from 0.0 to 1.0.
+    if (animation == &hide_all_buttons_animation_) {
+      animation_current_value = 1.0 - animation_current_value;
+    }
+    if (back_to_tab_button_) {
+      back_to_tab_button_->layer()->SetOpacity(animation_current_value);
+    }
+    close_image_button_->layer()->SetOpacity(animation_current_value);
+    return;
+  }
+
+  // If there are no visible content setting views, return, since show/hide all
+  // buttons animation has already taken care of animating all buttons.
+  if (!HasAnyVisibleContentSettingViews()) {
+    return;
+  }
+
   if (animation == &show_back_to_tab_button_animation_ ||
       animation == &hide_back_to_tab_button_animation_) {
     CHECK(back_to_tab_button_);
@@ -1175,7 +1211,8 @@ void PictureInPictureBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
     PaintRestoredFrameBorderLinux(
         *canvas, *this, frame_background_.get(), GetRestoredClipRegion(),
         ShouldDrawFrameShadow(), ShouldPaintAsActive(),
-        MirroredFrameBorderInsets(), GetShadowValues(), frame()->tiled());
+        RestoredMirroredFrameBorderInsets(), GetShadowValues(),
+        frame()->tiled());
   }
 #endif
   BrowserNonClientFrameView::OnPaint(canvas);
@@ -1251,14 +1288,21 @@ void PictureInPictureBrowserFrameView::UpdateTopBarView(bool render_active) {
 
   render_active_ = render_active;
 
+  bool has_any_visible_content_setting_views =
+      HasAnyVisibleContentSettingViews();
+
   // Stop the previous animations since if this function is called too soon,
   // previous animations may override the new animations.
   if (render_active_) {
     move_camera_button_to_right_animation_.Stop();
-    if (back_to_tab_button_) {
-      hide_back_to_tab_button_animation_.Stop();
+    if (has_any_visible_content_setting_views) {
+      if (back_to_tab_button_) {
+        hide_back_to_tab_button_animation_.Stop();
+      }
+      hide_close_button_animation_.Stop();
+    } else {
+      hide_all_buttons_animation_.Stop();
     }
-    hide_close_button_animation_.Stop();
 
     top_bar_color_animation_.Show();
 
@@ -1266,23 +1310,36 @@ void PictureInPictureBrowserFrameView::UpdateTopBarView(bool render_active) {
     move_camera_button_to_left_animation_.Reset(0.0);
     move_camera_button_to_left_animation_.Show();
 
-    if (back_to_tab_button_) {
-      show_back_to_tab_button_animation_.Start();
+    if (has_any_visible_content_setting_views) {
+      if (back_to_tab_button_) {
+        show_back_to_tab_button_animation_.Start();
+      }
+      show_close_button_animation_.Start();
+    } else {
+      show_all_buttons_animation_.Start();
     }
-    show_close_button_animation_.Start();
   } else {
     move_camera_button_to_left_animation_.Stop();
-    if (back_to_tab_button_) {
-      show_back_to_tab_button_animation_.Stop();
+
+    if (has_any_visible_content_setting_views) {
+      if (back_to_tab_button_) {
+        show_back_to_tab_button_animation_.Stop();
+      }
+      show_close_button_animation_.Stop();
+    } else {
+      show_all_buttons_animation_.Stop();
     }
-    show_close_button_animation_.Stop();
 
     top_bar_color_animation_.Hide();
     move_camera_button_to_right_animation_.Start();
-    if (back_to_tab_button_) {
-      hide_back_to_tab_button_animation_.Start();
+    if (has_any_visible_content_setting_views) {
+      if (back_to_tab_button_) {
+        hide_back_to_tab_button_animation_.Start();
+      }
+      hide_close_button_animation_.Start();
+    } else {
+      hide_all_buttons_animation_.Start();
     }
-    hide_close_button_animation_.Start();
   }
 }
 
@@ -1350,25 +1407,43 @@ gfx::Insets PictureInPictureBrowserFrameView::GetClientAreaInsets(
 }
 #endif
 
+bool PictureInPictureBrowserFrameView::HasAnyVisibleContentSettingViews()
+    const {
+  for (ContentSettingImageView* view : content_setting_views_) {
+    if (view->GetVisible()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Helper functions for testing.
 std::vector<gfx::Animation*>
 PictureInPictureBrowserFrameView::GetRenderActiveAnimationsForTesting() {
+  DCHECK(render_active_);
   std::vector<gfx::Animation*> animations(
       {&top_bar_color_animation_, &move_camera_button_to_left_animation_,
        &show_close_button_animation_});
   if (back_to_tab_button_) {
     animations.push_back(&show_back_to_tab_button_animation_);
   }
+  if (!HasAnyVisibleContentSettingViews()) {
+    animations.push_back(&show_all_buttons_animation_);
+  }
   return animations;
 }
 
 std::vector<gfx::Animation*>
 PictureInPictureBrowserFrameView::GetRenderInactiveAnimationsForTesting() {
+  DCHECK(!render_active_);
   std::vector<gfx::Animation*> animations(
       {&top_bar_color_animation_, &move_camera_button_to_right_animation_,
        &hide_close_button_animation_});
   if (back_to_tab_button_) {
     animations.push_back(&hide_back_to_tab_button_animation_);
+  }
+  if (!HasAnyVisibleContentSettingViews()) {
+    animations.push_back(&hide_all_buttons_animation_);
   }
   return animations;
 }

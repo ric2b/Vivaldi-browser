@@ -44,6 +44,7 @@ extern const CGFloat vStickyToolbarCollapsedAlpha;
 
 extern NSString* vToolbarPanelButtonIcon;
 extern NSString* vToolbarSearchButtonIcon;
+extern NSString* vToolbarHomeButtonIcon;
 extern NSString* vToolbarForwardButtonIcon;
 extern NSString* vToolbarBackButtonIcon;
 extern NSString* vToolbarTabSwitcherButtonIcon;

@@ -83,6 +83,26 @@ mod unencrypted {
     }
 
     #[test]
+    fn iterate_multiple_de_types_same_value() {
+        let input = &[0x15, 0x00, 0x15, 0x00];
+        let mut it = IntermediateAdvContents::deserialize::<CryptoProviderImpl>(
+            V0Encoding::Unencrypted,
+            input,
+        )
+        .unwrap()
+        .as_unencrypted()
+        .unwrap()
+        .data_elements();
+
+        // first element will be valid
+        let _ = it.next();
+        // second will be an error since it is the same type as the first
+        let err = it.next().unwrap().unwrap_err();
+
+        assert_eq!(err, DataElementDeserializeError::DuplicateDeTypes);
+    }
+
+    #[test]
     fn iterate_truncated_contents_error() {
         assert_deser_error(
             // length 3, but only 2 bytes provided

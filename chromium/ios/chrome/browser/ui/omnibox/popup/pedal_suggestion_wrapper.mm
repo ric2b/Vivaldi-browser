@@ -112,4 +112,14 @@
   return nil;
 }
 
+#pragma mark - Vivaldi
+- (NSString*)local_favicon_path {
+  return nil;
+}
+
+- (BOOL)isDirectMatch {
+  return NO;
+}
+// End Vivaldi
+
 @end

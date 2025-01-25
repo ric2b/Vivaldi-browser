@@ -51,7 +51,7 @@ static const uint32_t ps_const_shader_gfx9[] = {
 	0xC4001C0F, 0x00000100, 0xBF810000
 };
 
-static const uint32_t ps_const_shader_patchinfo_code_size_gfx9 = 6;
+#define ps_const_shader_patchinfo_code_size_gfx9 6
 
 static const uint32_t ps_const_shader_patchinfo_code_gfx9[][10][6] = {
     {{ 0xBF800000, 0xBF800000, 0xBF800000, 0xBF800000, 0xC4001890, 0x00000000 },
@@ -71,14 +71,14 @@ static const uint32_t ps_const_shader_patchinfo_offset_gfx9[] = {
 	0x00000004
 };
 
-static const uint32_t ps_const_num_sh_registers_gfx9 = 2;
+#define ps_const_num_sh_registers_gfx9 2
 
 static const struct reg_info ps_const_sh_registers_gfx9[] = {
 	{0x2C0A, 0x000C0040},//{ mmSPI_SHADER_PGM_RSRC1_PS, 0x000C0040 },
 	{0x2C0B, 0x00000008}, //{ mmSPI_SHADER_PGM_RSRC2_PS, 0x00000008 }
 };
 
-static const uint32_t ps_const_num_context_registers_gfx9 = 7;
+#define ps_const_num_context_registers_gfx9 7
 
 static const struct reg_info ps_const_context_registers_gfx9[] = {
     {0xA1B4, 0x00000002}, //{ mmSPI_PS_INPUT_ADDR,       0x00000002 },
@@ -102,7 +102,7 @@ static const uint32_t ps_tex_shader_patchinfo_offset_gfx9[] = {
     0x0000000B
 };
 
-static const uint32_t ps_tex_shader_patchinfo_code_size_gfx9 = 6;
+#define ps_tex_shader_patchinfo_code_size_gfx9 6
 
 static const uint32_t ps_tex_shader_patchinfo_code_gfx9[][10][6] = {
     {{ 0xBF800000, 0xBF800000, 0xBF800000, 0xBF800000, 0xC4001890, 0x00000000 },
@@ -118,13 +118,14 @@ static const uint32_t ps_tex_shader_patchinfo_code_gfx9[][10][6] = {
     }
 };
 
-static const uint32_t ps_tex_num_sh_registers_gfx9 = 2;
+#define ps_tex_num_sh_registers_gfx9 2
+
 static const struct reg_info ps_tex_sh_registers_gfx9[] = {
     {0x2C0A, 0x000C0081},//{ mmSPI_SHADER_PGM_RSRC1_PS, 0x000C0081 },
     {0x2C0B, 0x00000018}, //{ mmSPI_SHADER_PGM_RSRC2_PS, 0x00000018 }
 };
 
-static const uint32_t ps_tex_num_context_registers_gfx9 = 7;
+#define ps_tex_num_context_registers_gfx9 7
 
 static const struct reg_info ps_tex_context_registers_gfx9[] = {
     {0xA1B4, 0x00000002}, //{ mmSPI_PS_INPUT_ADDR,       0x00000002 },
@@ -153,7 +154,7 @@ static const struct reg_info vs_RectPosTexFast_sh_registers_gfx9[] =
     {0x2C4B, 0x00000018}, //{ mmSPI_SHADER_PGM_RSRC2_VS, 0x00000018 }
 };
 
-static const uint32_t vs_RectPosTexFast_num_sh_registers_gfx9 = 2;
+#define vs_RectPosTexFast_num_sh_registers_gfx9 2
 
 // Holds Context Register Information
 static const struct reg_info vs_RectPosTexFast_context_registers_gfx9[] =
@@ -162,7 +163,7 @@ static const struct reg_info vs_RectPosTexFast_context_registers_gfx9[] =
     {0xA1C3, 0x00000000}, //{ mmSPI_SHADER_POS_FORMAT, 0x00000000 /* Always 0 for now */}
 };
 
-static const uint32_t vs_RectPosTexFast_num_context_registers_gfx9 = 2;
+#define vs_RectPosTexFast_num_context_registers_gfx9 2
 
 static const uint32_t preamblecache_gfx9[] = {
 	0xc0026900, 0x81, 0x80000000, 0x40004000, 0xc0026900, 0x8c, 0xaa99aaaa, 0x0,
@@ -198,7 +199,7 @@ static const uint32_t cached_cmd_gfx9[] = {
 	0xc0026900, 0x2b0, 0x0, 0x0, 0xc0016900, 0x2f8, 0x0
 };
 
-static const uint32_t sh_reg_base_gfx9 = 0x2C00;
-static const uint32_t context_reg_base_gfx9 = 0xA000;
+#define sh_reg_base_gfx9 0x2C00
+#define context_reg_base_gfx9 0xA000
 
 #endif

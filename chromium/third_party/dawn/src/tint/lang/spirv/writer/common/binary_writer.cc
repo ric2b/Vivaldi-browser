@@ -59,6 +59,7 @@ void BinaryWriter::WriteHeader(uint32_t bound, uint32_t version) {
 }
 
 void BinaryWriter::process_instruction(const Instruction& inst) {
+    TINT_ASSERT(inst.word_length() < 65536);
     out_.push_back(inst.word_length() << 16 | static_cast<uint32_t>(inst.opcode()));
     for (const auto& op : inst.operands()) {
         process_op(op);

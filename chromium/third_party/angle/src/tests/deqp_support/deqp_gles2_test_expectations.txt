@@ -248,6 +248,8 @@
 40644666 VULKAN LINUX NVIDIA : dEQP-GLES2.functional.shaders.invariance.lowp.subexpression_precision_lowp = FAIL
 40644666 VULKAN LINUX NVIDIA : dEQP-GLES2.functional.shaders.invariance.lowp.subexpression_precision_mediump = FAIL
 40644666 VULKAN LINUX NVIDIA : dEQP-GLES2.functional.shaders.invariance.mediump.subexpression_precision_lowp = FAIL
+// New failures when upgrading to Ubuntu 22/newer driver 535.183.01.
+362486580 VULKAN LINUX NVIDIA : dEQP-GLES2.functional.texture.filtering.cube.linear_mipmap_linear_nearest_clamp_etc1 = FAIL
 // Fails on 431.02 NVIDIA driver
 40644697 VULKAN WIN NVIDIA : dEQP-GLES2.functional.fbo.render.repeated_clear.* = FAIL
 
@@ -313,9 +315,6 @@
 // loop bodies on Ventura. These tests always fail on Sonoma with or without __asm__. crbug.com/1513738
 1513738 MAC METAL AMD : dEQP-GLES2.functional.shaders.indexing.tmp_array.*_const_write_dynamic_read_* = FAIL
 
-// Test bug - fails in ASAN.
-42265173 ASAN : dEQP-GLES2.functional.negative_api.texture.compressedtexsubimage2d* = SKIP
-
 // Pixel 4 test expectations.
 42264522 PIXEL4ORXL VULKAN : dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.48 = SKIP
 42264522 PIXEL4ORXL VULKAN : dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.89 = SKIP
@@ -335,8 +334,6 @@
 42265203 LINUX NVIDIA GTX1660 VULKAN : dEQP-GLES2.functional.shaders.random.all_features.fragment.94 = FAIL
 
 42265173 UBSAN : dEQP-GLES2.functional.shaders.random.* = SKIP
-42265173 UBSAN : dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.* = SKIP
-42265173 UBSAN : dEQP-GLES2.functional.shaders.texture_functions.vertex.texture2dprojlod_vec3 = SKIP
 
 // Samsung Galaxy S23
 42266598 GALAXYS23 VULKAN : dEQP-GLES2.functional.fbo.render.color_clear.* = SKIP
@@ -379,3 +376,48 @@ b/328156792 PINEAPPLE VULKAN : dEQP-GLES2.functional.uniform_api.value.assigned.
 42267264 : dEQP-GLES2.functional.fbo.render.*_stencilbuffer*bgra* = FAIL
 42267264 : dEQP-GLES2.functional.fbo.render.resize*bgra* = FAIL
 42267264 : dEQP-GLES2.functional.fbo.render.stencil*bgra* = FAIL
+
+// WebGPU failures
+// These tests fail because the WGSL translator doesn't know what to do with matrix attributes yet.
+42267100 WGPU : dEQP-GLES2.functional.attribute_location.bind_relink_hole.mat* = FAIL
+42267100 WGPU : dEQP-GLES2.functional.attribute_location.bind_hole.mat* = FAIL
+42267100 WGPU : dEQP-GLES2.functional.attribute_location.bind.mat* = FAIL
+42267100 WGPU : dEQP-GLES2.functional.attribute_location.bind_max_attributes.mat* = FAIL
+// Tests that fail because uniforms aren't yet implemented in the WGSL translator
+42267100 WGPU : dEQP-GLES2.functional.negative_api.state.get_uniform* = FAIL
+42267100 WGPU : dEQP-GLES2.functional.negative_api.shader.uniform* = FAIL
+42267100 WGPU : dEQP-GLES2.functional.state_query.shader.program_active_uniform_* = FAIL
+42267100 WGPU : dEQP-GLES2.functional.attribute_location.bind_aliasing.* = FAIL
+42267100 WGPU : dEQP-GLES2.functional.light_amount.* = FAIL
+// These tests crash because redeclarations of gl_ variables as invariant are not yet supported in the WGSL translator.
+42267100 WGPU : dEQP-GLES2.functional.shaders.invariance.* = SKIP
+// Other WebGPU failures.
+356399840 WGPU : dEQP-GLES2.functional.buffer.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.clipping.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.color_clear.*complex* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.color_clear.*masked* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.color_clear.*scissored* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.default_vertex_attrib.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.depth_range.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.depth_stencil_clear.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.dither.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.draw.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.fbo.api.attachment_query_tex2d = FAIL
+356399840 WGPU : dEQP-GLES2.functional.fbo.api.delete_tex_2d_attached_to_bound_fbo = FAIL
+356399840 WGPU : dEQP-GLES2.functional.fbo.api.delete_tex_2d_attached_to_not_bound_fbo = FAIL
+356399840 WGPU : dEQP-GLES2.functional.fbo.api.texture_levels = FAIL
+356399840 WGPU : dEQP-GLES2.functional.fbo.completeness.renderable.texture.stencil.stencil_index8 = FAIL
+356399840 WGPU : dEQP-GLES2.functional.fbo.render.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.fragment_ops.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.lifetime.attach.deleted_input.renderbuffer_framebuffer = FAIL
+356399840 WGPU : dEQP-GLES2.functional.lifetime.attach.deleted_input.shader_program = FAIL
+356399840 WGPU : dEQP-GLES2.functional.lifetime.attach.deleted_output.renderbuffer_framebuffer = FAIL
+356399840 WGPU : dEQP-GLES2.functional.negative_api.texture.generatemipmap_npot_wdt_hgt = FAIL
+356399840 WGPU : dEQP-GLES2.functional.polygon_offset.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.rasterization.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.read_pixels.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.shaders.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.state_query.shader.uniform_value_* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.texture.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.uniform_api.* = FAIL
+356399840 WGPU : dEQP-GLES2.functional.vertex_arrays.* = FAIL

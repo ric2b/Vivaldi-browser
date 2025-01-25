@@ -13,9 +13,9 @@ import 'chrome://support-tool/url_generator.js';
 import type {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import type {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import type {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
+import type {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {track} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import type {BrowserProxy, DataCollectorItem, IssueDetails, PiiDataItem, SupportTokenGenerationResult} from 'chrome://support-tool/browser_proxy.js';
 import {BrowserProxyImpl} from 'chrome://support-tool/browser_proxy.js';
@@ -24,6 +24,7 @@ import type {DataExportResult, SupportToolElement} from 'chrome://support-tool/s
 import {SupportToolPageIndex} from 'chrome://support-tool/support_tool.js';
 import type {UrlGeneratorElement} from 'chrome://support-tool/url_generator.js';
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {track} from 'chrome://webui-test/mouse_mock_interactions.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
@@ -177,6 +178,37 @@ class TestSupportToolBrowserProxy extends TestBrowserProxy implements
   }
 }
 
+// Waits until `toast` is opened. Waits for 3 seconds and polls every second by
+// default. Resolves to `true` if toast is opened. Returns error otherwise.
+async function waitForToastOpened(
+    toast: CrToastElement, intervalMs: number = 100,
+    timeoutMs: number = 301): Promise<NonNullable<boolean>> {
+  let rejectTimer: number|null = null;
+  let pollTimer: number|null = null;
+
+  function cleanup() {
+    if (rejectTimer) {
+      window.clearTimeout(rejectTimer);
+    }
+    if (pollTimer) {
+      window.clearInterval(pollTimer);
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    rejectTimer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Toast element did not get opened on time'));
+    }, timeoutMs);
+
+    pollTimer = window.setInterval(() => {
+      if (toast.open) {
+        cleanup();
+        resolve(true);
+      }
+    }, intervalMs);
+  });
+}
 
 suite('SupportToolTest', function() {
   let supportTool: SupportToolElement;
@@ -327,8 +359,6 @@ suite('SupportToolTest', function() {
     const confirmButton = screenshot.shadowRoot!.getElementById('confirmEdit')!;
 
     // After clicking the confirm button, the image is changed.
-    hideInfoButton.click();
-    await waitAfterNextRender(screenshot);
     track(canvas, canvas.width / 4, canvas.height / 4, 1);
     confirmButton.click();
     await waitAfterNextRender(screenshot);
@@ -430,6 +460,8 @@ suite('UrlGeneratorTest', function() {
     // Click the button to generate URL and copy to clipboard.
     copyLinkButton.click();
     await browserProxy.whenCalled('generateCustomizedUrl');
+    // A toast message needs to be opened when the copy link button is clicked.
+    assertTrue(await waitForToastOpened(urlGenerator.$.copyToast));
     // Check the URL value copied to clipboard if it's as expected.
     const copiedToken = await navigator.clipboard.readText();
     assertEquals(copiedToken, expectedToken);
@@ -452,11 +484,10 @@ suite('UrlGeneratorTest', function() {
     copyLinkButton!.click();
     await browserProxy.whenCalled('generateCustomizedUrl');
     // Check that there's an error message shown to user.
-    assertTrue(urlGenerator.$.errorMessageToast.open);
+    assertTrue(await waitForToastOpened(urlGenerator.$.errorMessageToast));
   });
 
-  // TODO(crbug.com/349562679): Re-enable test.
-  test.skip('token generation success', async () => {
+  test('token generation success', async () => {
     // Ensure the button is disabled when we open the page.
     const copyTokenButton = urlGenerator.shadowRoot!.getElementById(
                                 'copyTokenButton')! as CrButtonElement;
@@ -480,6 +511,8 @@ suite('UrlGeneratorTest', function() {
     // Click the button to generate URL and copy to clipboard.
     copyTokenButton.click();
     await browserProxy.whenCalled('generateSupportToken');
+    // A toast message needs to be opened when the copy token button is clicked.
+    assertTrue(await waitForToastOpened(urlGenerator.$.copyToast));
     // Check the token value copied to clipboard if it's as expected.
     const copiedToken = await navigator.clipboard.readText();
     assertEquals(copiedToken, expectedToken);

@@ -15,6 +15,7 @@ import android.widget.TextView;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.device_reauth.DeviceAuthSource;
 import org.chromium.chrome.browser.device_reauth.ReauthenticatorBridge;
@@ -25,9 +26,10 @@ import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
+import org.chromium.components.sync.DataType;
 import org.chromium.components.sync.LocalDataDescription;
-import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.SyncService;
+import org.chromium.components.sync.TransportState;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
@@ -41,7 +43,7 @@ public class BatchUploadCardPreference extends Preference
     private SyncService mSyncService;
     private HashMap<Integer, LocalDataDescription> mLocalDataDescriptionsMap;
     private ModalDialogManager mDialogManager;
-    private SnackbarManager mSnackbarManager;
+    private OneshotSupplier<SnackbarManager> mSnackbarManagerSupplier;
     private ReauthenticatorBridge mReauthenticatorBridge;
 
     public BatchUploadCardPreference(Context context, AttributeSet attrs) {
@@ -73,8 +75,9 @@ public class BatchUploadCardPreference extends Preference
         update();
     }
 
-    public void setSnackbarManager(SnackbarManager snackbarManager) {
-        mSnackbarManager = snackbarManager;
+    public void setSnackbarManagerSupplier(
+            OneshotSupplier<SnackbarManager> snackbarManagerSupplier) {
+        mSnackbarManagerSupplier = snackbarManagerSupplier;
     }
 
     @Override
@@ -104,7 +107,7 @@ public class BatchUploadCardPreference extends Preference
 
     @Override
     public void onSaveInAccountDialogButtonClicked(Set<Integer> types, int itemsCount) {
-        if (!types.contains(ModelType.PASSWORDS)) {
+        if (!types.contains(DataType.PASSWORDS)) {
             uploadLocalDataAndShowSnackbar(types, itemsCount);
             return;
         }
@@ -129,21 +132,31 @@ public class BatchUploadCardPreference extends Preference
                                         .getIdentityManager(mProfile)
                                         .getPrimaryAccountInfo(ConsentLevel.SIGNIN)
                                         .getEmail());
-        mSnackbarManager.showSnackbar(
-                Snackbar.make(
-                                snackbarMessage,
-                                /* controller= */ null,
-                                Snackbar.TYPE_ACTION,
-                                Snackbar.UMA_SETTINGS_BATCH_UPLOAD)
-                        .setSingleLine(false));
+        mSnackbarManagerSupplier
+                .get()
+                .showSnackbar(
+                        Snackbar.make(
+                                        snackbarMessage,
+                                        /* controller= */ null,
+                                        Snackbar.TYPE_ACTION,
+                                        Snackbar.UMA_SETTINGS_BATCH_UPLOAD)
+                                .setSingleLine(false));
         hideBatchUploadCardAndUpdate();
     }
 
     private void update() {
+        // Calling getLocalDataDescriptions() API when sync is in configuring state should be
+        // avoided. Since it will return an empty map, which could be inconsistent with the actual
+        // local data. Also update() will be triggered again after the state changes from
+        // CONFIGURING to ACTIVE.
+        if (mSyncService.getTransportState() == TransportState.CONFIGURING) {
+            return;
+        }
+
         mSyncService.getLocalDataDescriptions(
                 mReauthenticatorBridge.canUseAuthenticationWithBiometricOrScreenLock()
-                        ? Set.of(ModelType.BOOKMARKS, ModelType.READING_LIST, ModelType.PASSWORDS)
-                        : Set.of(ModelType.BOOKMARKS, ModelType.READING_LIST),
+                        ? Set.of(DataType.BOOKMARKS, DataType.READING_LIST, DataType.PASSWORDS)
+                        : Set.of(DataType.BOOKMARKS, DataType.READING_LIST),
                 localDataDescriptionsMap -> {
                     mLocalDataDescriptionsMap = localDataDescriptionsMap;
                     int sum =
@@ -161,6 +174,17 @@ public class BatchUploadCardPreference extends Preference
 
     private void setupBatchUploadCardView(View card) {
         if (mLocalDataDescriptionsMap == null) {
+            return;
+        }
+
+        // TODO(b/354686035): Handle accounts with non-displayable email address.
+        CoreAccountInfo accountInfo =
+                IdentityServicesProvider.get()
+                        .getIdentityManager(mProfile)
+                        .getPrimaryAccountInfo(ConsentLevel.SIGNIN);
+        // setupBatchUploadCardView() is called asynchronously through onBindViewHolder(), so it
+        // could be called while there is no primary account.
+        if (accountInfo == null) {
             return;
         }
 
@@ -183,30 +207,25 @@ public class BatchUploadCardPreference extends Preference
 
         int localPasswordsCount = 0;
         LocalDataDescription passwordsLocalDataDescription =
-                mLocalDataDescriptionsMap.get(ModelType.PASSWORDS);
+                mLocalDataDescriptionsMap.get(DataType.PASSWORDS);
         if (passwordsLocalDataDescription != null) {
             localPasswordsCount = passwordsLocalDataDescription.itemCount();
         }
 
         int localItemsCountExcludingPasswords = 0;
         LocalDataDescription bookmarksLocalDataDescription =
-                mLocalDataDescriptionsMap.get(ModelType.BOOKMARKS);
+                mLocalDataDescriptionsMap.get(DataType.BOOKMARKS);
         if (bookmarksLocalDataDescription != null) {
             localItemsCountExcludingPasswords += bookmarksLocalDataDescription.itemCount();
         }
 
         LocalDataDescription readingListLocalDataDescription =
-                mLocalDataDescriptionsMap.get(ModelType.READING_LIST);
+                mLocalDataDescriptionsMap.get(DataType.READING_LIST);
         if (readingListLocalDataDescription != null) {
             localItemsCountExcludingPasswords += readingListLocalDataDescription.itemCount();
         }
 
         TextView text = (TextView) card.findViewById(R.id.signin_settings_card_description);
-        // TODO(b/354686035): Handle accounts with non-displayable email address.
-        CoreAccountInfo accountInfo =
-                IdentityServicesProvider.get()
-                        .getIdentityManager(mProfile)
-                        .getPrimaryAccountInfo(ConsentLevel.SIGNIN);
         if (localItemsCountExcludingPasswords == 0) {
             text.setText(
                     context.getResources()

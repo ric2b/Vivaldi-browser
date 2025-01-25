@@ -123,8 +123,6 @@ content::RenderFrameHost* NavigateAndCommitFrame(content::RenderFrameHost* rfh,
   return simulator->GetFinalRenderFrameHost();
 }
 
-}  // namespace
-
 using AutofillSuggestionControllerTest = AutofillSuggestionControllerTestBase<
     TestAutofillSuggestionControllerAutofillClient>;
 
@@ -139,7 +137,7 @@ TEST_F(AutofillSuggestionControllerTest, ShowTwice) {
 
 // Tests that the AED is informed when suggestions were shown.
 TEST_F(AutofillSuggestionControllerTest, ShowInformsDelegate) {
-  EXPECT_CALL(manager().external_delegate(), OnSuggestionsShown());
+  EXPECT_CALL(manager().external_delegate(), OnSuggestionsShown);
   ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
 }
 
@@ -323,6 +321,21 @@ TEST_F(AutofillSuggestionControllerTest, GetOrCreate) {
   client().popup_controller(manager()).DoHide();
 }
 
+// Tests that the controller does not have a UI session id if it has no view.
+TEST_F(AutofillSuggestionControllerTest, EmptyUiSessionIdAfterCreation) {
+  test_api(client().popup_controller(manager())).SetView(nullptr);
+  EXPECT_EQ(client().popup_controller(manager()).GetUiSessionId(),
+            std::nullopt);
+}
+
+// Tests that the controller has a UI session id after `Show` is called.
+TEST_F(AutofillSuggestionControllerTest, NonEmptyUiSessionIdAfterShow) {
+  ShowSuggestions(manager(), {SuggestionType::kAutocompleteEntry,
+                              SuggestionType::kAutocompleteEntry});
+  EXPECT_TRUE(
+      client().popup_controller(manager()).GetUiSessionId().has_value());
+}
+
 TEST_F(AutofillSuggestionControllerTest, ProperlyResetController) {
   ShowSuggestions(manager(), {SuggestionType::kAutocompleteEntry,
                               SuggestionType::kAutocompleteEntry});
@@ -501,8 +514,9 @@ TEST_F(AutofillSuggestionControllerTestHidingLogic,
        HideInMainFrameOnMainFrameNavigation) {
   ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
   test::GenerateTestAutofillPopup(&manager().external_delegate());
+  // The navigation generates a PrimaryMainFrameWasResized callback.
   EXPECT_CALL(client().popup_controller(manager()),
-              Hide(SuggestionHidingReason::kNavigation));
+              Hide(SuggestionHidingReason::kWidgetChanged));
   NavigateAndCommitFrame(main_frame(), GURL("https://bar.com/"));
   // Verify and clear before TearDown() closes the popup.
   Mock::VerifyAndClearExpectations(&client().popup_controller(manager()));
@@ -539,8 +553,9 @@ TEST_F(AutofillSuggestionControllerTestHidingLogic,
   ShowSuggestions(sub_manager(), {SuggestionType::kAddressEntry});
   test::GenerateTestAutofillPopup(&sub_manager().external_delegate());
   EXPECT_CALL(client().popup_controller(sub_manager()),
-              Hide(SuggestionHidingReason::kRendererEvent));
+              Hide(SuggestionHidingReason::kWidgetChanged));
   NavigateAndCommitFrame(main_frame(), GURL("https://bar.com/"));
 }
 
+}  // namespace
 }  // namespace autofill

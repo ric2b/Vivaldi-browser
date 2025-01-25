@@ -58,6 +58,8 @@ enum class ElementRole {
   CONFIRMATION_PASSWORD,
   // Used for fields tagged only for webauthn autocomplete.
   WEBAUTHN,
+  // Text fields with new password server prediction.
+  TYPE_TEXT_NEW_PASSWORD_FIELD,
 };
 
 // Expected FormFieldData are constructed based on these descriptions.
@@ -86,6 +88,7 @@ struct FieldDataDescription {
   // If not -1, indicates on which rank among predicted usernames this should
   // be. Unused ranks will be padded with unique IDs (not found in any fields).
   int predicted_username = -1;
+  uint64_t max_length_attr = FormFieldData::kDefaultMaxLength;
 };
 
 // Describes a test case for the parser.
@@ -121,6 +124,7 @@ struct ParseResultIds {
   autofill::FieldRendererId new_password_id;
   autofill::FieldRendererId confirmation_password_id;
   std::vector<autofill::FieldRendererId> webauthn_ids;
+  autofill::FieldRendererId manual_generation_enabled_id;
 
   bool IsEmpty() const {
     return username_id.is_null() && password_id.is_null() &&
@@ -156,6 +160,9 @@ void UpdateResultWithIdByRole(ParseResultIds* result,
     case ElementRole::CONFIRMATION_PASSWORD:
       DCHECK(result->confirmation_password_id.is_null());
       result->confirmation_password_id = id;
+      break;
+    case ElementRole::TYPE_TEXT_NEW_PASSWORD_FIELD:
+      result->manual_generation_enabled_id = id;
       break;
   }
 }
@@ -215,29 +222,32 @@ testing::Message DescribeFormData(const FormData& form_data) {
 
 // Check that the information distilled from |form_data| into |password_form| is
 // matching |expectations|.
-void CheckPasswordFormFields(const PasswordForm& password_form,
+void CheckPasswordFormFields(const FormParsingResult& parsing_result,
                              const FormData& form_data,
                              const ParseResultIds& expectations) {
   SCOPED_TRACE(DescribeFormData(form_data));
   CheckField(form_data.fields(), expectations.username_id,
-             password_form.username_element, &password_form.username_value,
-             "username");
+             parsing_result.password_form->username_element,
+             &parsing_result.password_form->username_value, "username");
   EXPECT_EQ(expectations.username_id,
-            password_form.username_element_renderer_id);
+            parsing_result.password_form->username_element_renderer_id);
 
   CheckField(form_data.fields(), expectations.password_id,
-             password_form.password_element, &password_form.password_value,
-             "password");
+             parsing_result.password_form->password_element,
+             &parsing_result.password_form->password_value, "password");
   EXPECT_EQ(expectations.password_id,
-            password_form.password_element_renderer_id);
+            parsing_result.password_form->password_element_renderer_id);
 
   CheckField(form_data.fields(), expectations.new_password_id,
-             password_form.new_password_element,
-             &password_form.new_password_value, "new_password");
+             parsing_result.password_form->new_password_element,
+             &parsing_result.password_form->new_password_value, "new_password");
 
   CheckField(form_data.fields(), expectations.confirmation_password_id,
-             password_form.confirmation_password_element, nullptr,
-             "confirmation_password");
+             parsing_result.password_form->confirmation_password_element,
+             nullptr, "confirmation_password");
+
+  EXPECT_EQ(expectations.manual_generation_enabled_id,
+            parsing_result.manual_generation_enabled_field);
 }
 
 // Checks that in a vector of pairs of string16s, all the first parts of the
@@ -314,6 +324,7 @@ class FormParserTest : public testing::Test {
       field.set_is_enabled(field_description.is_enabled);
       field.set_is_readonly(field_description.is_readonly);
       field.set_properties_mask(field_description.properties_mask);
+      field.set_max_length(field_description.max_length_attr);
       if (field_description.value == kNonimportantValue) {
         field.set_value(StampUniqueSuffix(u"value"));
       } else {
@@ -420,8 +431,7 @@ class FormParserTest : public testing::Test {
           EXPECT_EQ(test_case.form_has_autofilled_value,
                     parsing_result.password_form->form_has_autofilled_value);
 
-          CheckPasswordFormFields(*parsing_result.password_form, form_data,
-                                  expected_ids);
+          CheckPasswordFormFields(parsing_result, form_data, expected_ids);
           CheckAllValuesUnique(
               parsing_result.password_form->all_alternative_passwords);
           CheckAllValuesUnique(
@@ -1251,10 +1261,9 @@ TEST_F(FormParserTest, ServerPredictionsForClearTextPasswordFields) {
                                      "password and username field.",
           .fields =
               {
-                  {.role = ElementRole::USERNAME,
-                   .form_control_type = FormControlType::kInputText,
+                  {.form_control_type = FormControlType::kInputText,
                    .predicted_type = autofill::USERNAME_AND_EMAIL_ADDRESS},
-                  {.role = ElementRole::NEW_PASSWORD,
+                  {.role = ElementRole::TYPE_TEXT_NEW_PASSWORD_FIELD,
                    .form_control_type = FormControlType::kInputText,
                    .predicted_type = autofill::NEW_PASSWORD},
               },
@@ -1264,9 +1273,8 @@ TEST_F(FormParserTest, ServerPredictionsForClearTextPasswordFields) {
               "Server prediction for account change password field only.",
           .fields =
               {
-                  {.role = ElementRole::USERNAME,
-                   .form_control_type = FormControlType::kInputText},
-                  {.role = ElementRole::NEW_PASSWORD,
+                  {.form_control_type = FormControlType::kInputText},
+                  {.role = ElementRole::TYPE_TEXT_NEW_PASSWORD_FIELD,
                    .form_control_type = FormControlType::kInputText,
                    .predicted_type = autofill::NEW_PASSWORD},
               },
@@ -1297,10 +1305,9 @@ TEST_F(FormParserTest, ServerPredictionsForClearTextPasswordFields) {
                                      "password and username field.",
           .fields =
               {
-                  {.role = ElementRole::USERNAME,
-                   .form_control_type = FormControlType::kInputText,
+                  {.form_control_type = FormControlType::kInputText,
                    .predicted_type = autofill::USERNAME_AND_EMAIL_ADDRESS},
-                  {.role = ElementRole::NEW_PASSWORD,
+                  {.role = ElementRole::TYPE_TEXT_NEW_PASSWORD_FIELD,
                    .form_control_type = FormControlType::kInputText,
                    .predicted_type = autofill::ACCOUNT_CREATION_PASSWORD},
               },
@@ -1310,9 +1317,8 @@ TEST_F(FormParserTest, ServerPredictionsForClearTextPasswordFields) {
               "Server prediction for account creation password field only.",
           .fields =
               {
-                  {.role = ElementRole::USERNAME,
-                   .form_control_type = FormControlType::kInputText},
-                  {.role = ElementRole::NEW_PASSWORD,
+                  {.form_control_type = FormControlType::kInputText},
+                  {.role = ElementRole::TYPE_TEXT_NEW_PASSWORD_FIELD,
                    .form_control_type = FormControlType::kInputText,
                    .predicted_type = autofill::ACCOUNT_CREATION_PASSWORD},
               },
@@ -3317,7 +3323,8 @@ TEST_F(FormParserTest, UsernameFoundByServerPredictions) {
   FormDataParser parser;
   parser.set_predictions(std::move(predictions));
 
-  auto [result, username_detection_method, is_new_password_reliable] =
+  auto [result, username_detection_method, is_new_password_reliable,
+        suggestion_banned_fields, manual_generation_enabled_field] =
       parser.ParseAndReturnParsingResult(
           form_data, FormDataParser::Mode::kSaving, /*stored_usernames=*/{});
   EXPECT_EQ(username_detection_method,
@@ -3333,7 +3340,8 @@ TEST_F(FormParserTest, BaseHeuristicsFindUsernameFieldWithStoredUsername) {
                         CreateField(FormControlType::kInputPassword, u"")});
 
   FormDataParser parser;
-  auto [password_form, username_detection_method, is_new_password_reliable] =
+  auto [password_form, username_detection_method, is_new_password_reliable,
+        suggestion_banned_fields, manual_generation_enabled_field] =
       parser.ParseAndReturnParsingResult(
           form_data, FormDataParser::Mode::kFilling, {kUsername});
   ASSERT_TRUE(password_form);
@@ -3343,6 +3351,35 @@ TEST_F(FormParserTest, BaseHeuristicsFindUsernameFieldWithStoredUsername) {
   EXPECT_TRUE(password_form->HasUsernameElement());
   EXPECT_EQ(password_form->username_element_renderer_id,
             form_data.fields()[0].renderer_id());
+}
+
+TEST_F(FormParserTest, PasswordFieldsWithMaxLength) {
+  CheckTestData(
+      {{
+           .description_for_logging = "New password with maxlength attr "
+                                      "sufficient for password generation",
+           .fields =
+               {
+                   {.role = ElementRole::NEW_PASSWORD,
+                    .autocomplete_attribute = "new-password",
+                    .value = u"LoooongStrooongPassword",
+                    .form_control_type = FormControlType::kInputPassword,
+                    .max_length_attr = 13},
+               },
+           .is_new_password_reliable = true,
+       },
+       {
+           .description_for_logging = "New password with small maxlength attr",
+           .fields =
+               {
+                   {.role = ElementRole::NEW_PASSWORD,
+                    .autocomplete_attribute = "new-password",
+                    .value = u"Short",
+                    .form_control_type = FormControlType::kInputPassword,
+                    .max_length_attr = 5},
+               },
+           .is_new_password_reliable = false,
+       }});
 }
 
 }  // namespace

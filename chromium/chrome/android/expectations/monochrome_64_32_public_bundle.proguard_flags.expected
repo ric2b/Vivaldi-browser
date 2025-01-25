@@ -219,6 +219,12 @@
   static <fields>;
 }
 
+# Causes R8 to more agressively optimize ServiceLoader.load() calls, by
+# assuming no exceptions will be thrown.
+-assumenosideeffects class java.util.ServiceLoader {
+  static *** load(...);
+}
+
 # Keep the names of exception types, to make it easier to understand stack
 # traces in contexts where it's not trivial to deobfuscate them - for example
 # when reported to app developers who are using WebView.
@@ -264,17 +270,6 @@
 # Every fragment must have an empty constructor, so it can be instantiated when
 # restoring its activity's state.
 -keep public class org.chromium.** extends androidx.fragment.app.Fragment {
-  public <init>();
-}
-
-# These classes aren't themselves referenced, but __ProcessService[0,1,2...] are
-# referenced, and we look up these services by appending a number onto the name
-# of the base class. Thus, we need to keep the base class name around so that
-# the child classes can be looked up.
--keep class org.chromium.content.app.SandboxedProcessService {
-  public <init>();
-}
--keep class org.chromium.content.app.PrivilegedProcessService {
   public <init>();
 }
 
@@ -445,13 +440,13 @@
 
 # Keeps for method level annotations.
 -keepclasseswithmembers,allowaccessmodification class ** {
-  @org.jni_zero.AccessedByNative <fields>;
+  @**org.jni_zero.AccessedByNative <fields>;
 }
--keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
-  @org.jni_zero.CalledByNative <methods>;
+-keepclasseswithmembers,includedescriptorclasses,allowaccessmodification,allowoptimization class ** {
+  @**org.jni_zero.CalledByNative <methods>;
 }
--keepclasseswithmembers,includedescriptorclasses,allowaccessmodification class ** {
-  @org.jni_zero.CalledByNativeUnchecked <methods>;
+-keepclasseswithmembers,includedescriptorclasses,allowaccessmodification,allowoptimization class ** {
+  @**org.jni_zero.CalledByNativeUnchecked <methods>;
 }
 
 # Allow unused native methods to be removed, but prevent renaming on those that
@@ -459,6 +454,11 @@
 # TODO(crbug.com/315973491): Restrict the broad scope of this rule.
 -keepclasseswithmembernames,includedescriptorclasses,allowaccessmodification class ** {
   native <methods>;
+}
+
+# Used when multiplexing. We don't package our own @UsedByReflection, so using this instead.
+-keepclasseswithmembers class !cr_allowunused,**J.N {
+  public long *_HASH;
 }
 
 # File: obj/third_party/androidx/androidx_appcompat_appcompat_java/proguard.txt
@@ -577,6 +577,12 @@
 
 -keepclassmembers class ** {
     @androidx.lifecycle.OnLifecycleEvent *;
+}
+
+# The deprecated `android.app.Fragment` creates `Fragment` instances using reflection.
+# See: b/338958225, b/341537875
+-keepclasseswithmembers,allowobfuscation public class androidx.lifecycle.ReportFragment {
+    public <init>();
 }
 
 # this rule is need to work properly when app is compiled with api 28, see b/142778206
@@ -834,8 +840,9 @@
 -dontwarn sun.misc.Unsafe
 -dontwarn libcore.io.Memory
 
-# Internal Google annotations for generating Proguard keep rules.
+# Annotations used during internal SDK shrinking.
 -dontwarn com.google.android.apps.common.proguard.UsedBy*
+-dontwarn com.google.android.apps.common.proguard.SideEffectFree
 
 # Annotations referenced by the SDK but whose definitions are contained in
 # non-required dependencies.
@@ -843,6 +850,10 @@
 -dontwarn org.checkerframework.**
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn org.jspecify.nullness.NullMarked
+
+# Annotations no longer exist. Suppression prevents ProGuard failures in
+# SDKs which depend on earlier versions of play-services-basement.
+-dontwarn com.google.android.gms.common.util.VisibleForTesting
 
 # Proguard flags for consumers of the Google Play services SDK
 # https://developers.google.com/android/guides/setup#add_google_play_services_to_your_project
@@ -910,6 +921,11 @@
 -keepclassmembers class com.google.android.gms.gcm.GcmListenerService {
     public void handleIntent(android.content.Intent);
 }
+
+# File: obj/third_party/android_deps/google_play_services_identity_credentials_java/proguard.txt
+# Proguard cannot process META-INF/versions/9.
+# See https://discuss.gradle.org/t/meta-inf-version-duplicate-error-when-using-proguard/31380
+-dontwarn module-info
 
 # File: obj/third_party/android_deps/google_play_services_vision_common_java/proguard.txt
 # We keep all fields for every generated proto file as the runtime uses
@@ -1005,7 +1021,15 @@
   final org.chromium.base.ThreadUtils$ThreadChecker * return _NONNULL_;
 }
 
-# File: ../../third_party/android_deps/cipd/libs/org_jetbrains_kotlinx_kotlinx_coroutines_android/kotlinx-coroutines-android-1.6.4.jar:META-INF/com.android.tools/r8-from-1.6.0/coroutines.pro
+# File: ../../third_party/android_deps/cipd/libs/com_google_dagger_dagger/dagger-2.52.jar:META-INF/com.android.tools/r8/r8.pro
+-identifiernamestring @dagger.internal.IdentifierNameString class ** {
+    static java.lang.String *;
+}
+-keepclassmembers,includedescriptorclasses,allowobfuscation,allowshrinking class * {
+   @dagger.internal.KeepFieldType <fields>;
+}
+
+# File: ../../third_party/android_deps/cipd/libs/org_jetbrains_kotlinx_kotlinx_coroutines_android/kotlinx-coroutines-android-1.8.1.jar:META-INF/com.android.tools/r8-from-1.6.0/coroutines.pro
 # Allow R8 to optimize away the FastServiceLoader.
 # Together with ServiceLoader optimization in R8
 # this results in direct instantiation when loading Dispatchers.Main
@@ -1029,7 +1053,7 @@
     boolean getRECOVER_STACK_TRACES() return false;
 }
 
-# File: ../../third_party/android_deps/cipd/libs/org_jetbrains_kotlinx_kotlinx_coroutines_core_jvm/kotlinx-coroutines-core-jvm-1.6.4.jar:META-INF/com.android.tools/r8/coroutines.pro
+# File: ../../third_party/android_deps/cipd/libs/org_jetbrains_kotlinx_kotlinx_coroutines_core_jvm/kotlinx-coroutines-core-jvm-1.8.1.jar:META-INF/com.android.tools/r8/coroutines.pro
 # When editing this file, update the following files as well:
 # - META-INF/proguard/coroutines.pro
 # - META-INF/com.android.tools/proguard/coroutines.pro

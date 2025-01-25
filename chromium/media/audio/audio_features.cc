@@ -48,16 +48,20 @@ BASE_FEATURE(kAllowIAudioClient3,
 namespace media {
 
 bool IsSystemLoopbackCaptureSupported() {
-#if BUILDFLAG(IS_WIN) || defined(USE_CRAS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(USE_CRAS)
   return true;
 #elif BUILDFLAG(IS_MAC)
   // Only supported on macOS 13.0+.
-  return base::mac::MacOSVersion() >= 13'00'00;
+  // Not supported on macOS 15.0+ yet.
+  // TODO(crbug.com/365602111): Implement SCContentPicker compatible capture
+  // for MacOS 15.
+  return base::mac::MacOSVersion() >= 13'00'00 &&
+         base::mac::MacOSVersion() < 15'00'00;
 #elif BUILDFLAG(IS_LINUX) && defined(USE_PULSEAUDIO)
   return true;
 #else
   return false;
-#endif  // BUILDFLAG(IS_WIN) || defined(USE_CRAS)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(USE_CRAS)
 }
 
 }  // namespace media

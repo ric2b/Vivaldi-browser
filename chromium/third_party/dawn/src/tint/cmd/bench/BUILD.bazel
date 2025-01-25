@@ -55,7 +55,6 @@ cc_library(
     "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/program",
     "//src/tint/lang/wgsl/sem",
-    "//src/tint/lang/wgsl/writer/ir_to_program",
     "//src/tint/utils/containers",
     "//src/tint/utils/diagnostic",
     "//src/tint/utils/ice",
@@ -70,20 +69,10 @@ cc_library(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@benchmark",
+    "//src/utils",
   ] + select({
-    ":tint_build_spv_reader": [
-      "//src/tint/lang/spirv/reader",
-      "//src/tint/lang/spirv/reader/common",
-    ],
-    "//conditions:default": [],
-  }) + select({
     ":tint_build_wgsl_reader": [
       "//src/tint/lang/wgsl/reader",
-    ],
-    "//conditions:default": [],
-  }) + select({
-    ":tint_build_wgsl_writer": [
-      "//src/tint/lang/wgsl/writer",
     ],
     "//conditions:default": [],
   }),
@@ -96,7 +85,6 @@ cc_binary(
     "main_bench.cc",
   ],
   deps = [
-    "//src/tint/cmd/bench:bench",
     "//src/tint/lang/core",
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/type",
@@ -121,33 +109,36 @@ cc_binary(
     "//src/tint/utils/text",
     "//src/tint/utils/traits",
     "@benchmark",
+    "//src/utils",
   ] + select({
-    ":tint_build_glsl_writer": [
+    ":tint_build_glsl_writer_and_tint_build_wgsl_reader": [
       "//src/tint/lang/glsl/writer:bench",
     ],
     "//conditions:default": [],
   }) + select({
-    ":tint_build_hlsl_writer": [
+    ":tint_build_hlsl_writer_and_tint_build_wgsl_reader": [
       "//src/tint/lang/hlsl/writer:bench",
     ],
     "//conditions:default": [],
   }) + select({
-    ":tint_build_msl_writer": [
+    ":tint_build_msl_writer_and_tint_build_wgsl_reader": [
       "//src/tint/lang/msl/writer:bench",
     ],
     "//conditions:default": [],
   }) + select({
-    ":tint_build_spv_writer": [
+    ":tint_build_spv_writer_and_tint_build_wgsl_reader": [
       "//src/tint/lang/spirv/writer:bench",
     ],
     "//conditions:default": [],
   }) + select({
     ":tint_build_wgsl_reader": [
+      "//src/tint/cmd/bench:bench",
+      "//src/tint/lang/core/ir:bench",
       "//src/tint/lang/wgsl/reader:bench",
     ],
     "//conditions:default": [],
   }) + select({
-    ":tint_build_wgsl_writer": [
+    ":tint_build_wgsl_writer_and_tint_build_wgsl_reader": [
       "//src/tint/lang/wgsl/writer:bench",
     ],
     "//conditions:default": [],
@@ -172,11 +163,6 @@ alias(
 )
 
 alias(
-  name = "tint_build_spv_reader",
-  actual = "//src/tint:tint_build_spv_reader_true",
-)
-
-alias(
   name = "tint_build_spv_writer",
   actual = "//src/tint:tint_build_spv_writer_true",
 )
@@ -189,5 +175,41 @@ alias(
 alias(
   name = "tint_build_wgsl_writer",
   actual = "//src/tint:tint_build_wgsl_writer_true",
+)
+
+selects.config_setting_group(
+    name = "tint_build_glsl_writer_and_tint_build_wgsl_reader",
+    match_all = [
+        ":tint_build_glsl_writer",
+        ":tint_build_wgsl_reader",
+    ],
+)
+selects.config_setting_group(
+    name = "tint_build_hlsl_writer_and_tint_build_wgsl_reader",
+    match_all = [
+        ":tint_build_hlsl_writer",
+        ":tint_build_wgsl_reader",
+    ],
+)
+selects.config_setting_group(
+    name = "tint_build_msl_writer_and_tint_build_wgsl_reader",
+    match_all = [
+        ":tint_build_msl_writer",
+        ":tint_build_wgsl_reader",
+    ],
+)
+selects.config_setting_group(
+    name = "tint_build_spv_writer_and_tint_build_wgsl_reader",
+    match_all = [
+        ":tint_build_spv_writer",
+        ":tint_build_wgsl_reader",
+    ],
+)
+selects.config_setting_group(
+    name = "tint_build_wgsl_writer_and_tint_build_wgsl_reader",
+    match_all = [
+        ":tint_build_wgsl_writer",
+        ":tint_build_wgsl_reader",
+    ],
 )
 

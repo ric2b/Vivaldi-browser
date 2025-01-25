@@ -29,6 +29,11 @@ use crate::{
 use array_view::ArrayView;
 use sink::Sink;
 
+mod actions;
+pub use actions::ActionId;
+pub use actions::ActionsDataElement;
+pub use actions::DeserializedActionsDE;
+
 #[cfg(test)]
 mod tests;
 
@@ -100,44 +105,6 @@ impl WriteDataElement for TxPowerDataElement {
     fn write_de_contents<S: Sink<u8>>(&self, sink: &mut S) -> Option<()> {
         sink.try_push(self.tx_power.as_i8() as u8)
     }
-}
-
-/// List of actions
-pub struct ActionsDataElement {
-    actions: tinyvec::ArrayVec<[u8; MAX_DE_LEN]>,
-}
-
-impl ActionsDataElement {
-    /// Returns `Some` if the actions will fit in a DE, `None` otherwise
-    pub fn try_from_actions(actions: &[u8]) -> Result<Self, ActionsDataElementError> {
-        let mut de = Self { actions: tinyvec::ArrayVec::new() };
-
-        de.actions
-            .try_extend_from_slice(actions)
-            .map(|_| de)
-            .ok_or(ActionsDataElementError::ActionsTooLong)
-    }
-}
-
-impl SingleTypeDataElement for ActionsDataElement {
-    const DE_TYPE: DeType = DeType::const_from(0x06);
-}
-
-impl WriteDataElement for ActionsDataElement {
-    fn de_header(&self) -> DeHeader {
-        DeHeader::new(Self::DE_TYPE, self.actions.len().try_into().expect("always <= max length"))
-    }
-
-    fn write_de_contents<S: Sink<u8>>(&self, sink: &mut S) -> Option<()> {
-        sink.try_extend_from_slice(&self.actions)
-    }
-}
-
-/// Errors that can occur constructing an [ActionsDataElement].
-#[derive(Debug, PartialEq, Eq)]
-pub enum ActionsDataElementError {
-    /// Too many action bytes.
-    ActionsTooLong,
 }
 
 /// Context sync sequence number

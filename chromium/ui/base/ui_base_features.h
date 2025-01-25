@@ -136,6 +136,9 @@ BASE_DECLARE_FEATURE(kOzoneBubblesUsePlatformWidgets);
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kWaylandPerSurfaceScale);
+
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kWaylandTextInputV3);
 #endif  // BUILDFLAG(IS_OZONE)
 
 #if BUILDFLAG(IS_LINUX)
@@ -202,22 +205,15 @@ COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsRawDrawUsingMSAA();
 
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kStylusSpecificTapSlop);
 
-// This feature indicates that this device is approved for utilizing variable
-// refresh rates. This flag is added by cros-config and not exposed in the
-// chrome://flags UI.
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kVariableRefreshRateAvailable);
-// Enables the variable refresh rate feature for Borealis gaming only. If this
-// flag is set by Finch, it requires the availability flag to also be true. If
-// this flag is overridden by the user, then the availability flag is ignored.
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kEnableVariableRefreshRate);
 // This feature indicates that this device should have variable refresh rates
 // enabled by default if available. This overrides the default value of
-// |kEnableVariableRefreshRate|. This flag is added by USE and not exposed in
-// the chrome://flags UI.
+// |kEnableVariableRefreshRate|. This flag is added by cros-config and not
+// exposed in the chrome://flags UI.
 COMPONENT_EXPORT(UI_BASE_FEATURES)
-BASE_DECLARE_FEATURE(kVariableRefreshRateDefaultEnabled);
+BASE_DECLARE_FEATURE(kVariableRefreshRateAvailable);
+// Enables the variable refresh rate feature for Borealis gaming only.
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kEnableVariableRefreshRate);
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsVariableRefreshRateEnabled();
 // Enables the variable refresh rate feature at all times.
 COMPONENT_EXPORT(UI_BASE_FEATURES)
@@ -246,6 +242,11 @@ BASE_DECLARE_FEATURE(kCr2023MacFontSmoothing);
 // If not set, these values fall back to the pre-defined Skia defaults.
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kUseGammaContrastRegistrySettings);
+
+// Increases the contrast of text to align more closely with contemporary
+// applications.
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kIncreaseWindowsTextContrast);
 #endif  // BUILDFLAG(IS_WIN)
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)

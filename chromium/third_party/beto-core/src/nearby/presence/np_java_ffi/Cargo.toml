@@ -3,11 +3,16 @@ name = "np_java_ffi"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [lints]
 workspace = true
 
+[features]
+testing = ["np_ffi_core/testing"]
+
 [dependencies]
+array_view.workspace = true
 handle_map.workspace = true
 np_adv.workspace = true
 np_ffi_core.workspace = true

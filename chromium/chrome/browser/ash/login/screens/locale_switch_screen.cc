@@ -7,7 +7,6 @@
 #include <optional>
 #include <string>
 
-#include "ash/constants/ash_features.h"
 #include "base/check_is_test.h"
 #include "base/containers/contains.h"
 #include "base/functional/callback.h"
@@ -40,6 +39,7 @@
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_api_call_flow.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace ash {
@@ -217,11 +217,9 @@ bool LocaleSwitchScreen::MaybeSkip(WizardContext& wizard_context) {
 }
 
 void LocaleSwitchScreen::ShowImpl() {
-  if (ash::features::AreLocalPasswordsEnabledForConsumers()) {
-    if (context()->extra_factors_token) {
-      session_refresher_ = AuthSessionStorage::Get()->KeepAlive(
-          context()->extra_factors_token.value());
-    }
+  if (context()->extra_factors_token) {
+    session_refresher_ = AuthSessionStorage::Get()->KeepAlive(
+        context()->extra_factors_token.value());
   }
 
   user_manager::User* user = user_manager::UserManager::Get()->GetActiveUser();

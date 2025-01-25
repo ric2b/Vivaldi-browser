@@ -27,6 +27,7 @@ static_library("avatar") {
 
   public_deps = [
     "//base",
+    "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/image_decoder",
     "//components/session_manager/core",
     "//components/sync_preferences",
@@ -42,6 +43,7 @@ static_library("avatar") {
     "//ash/public/cpp",
     "//chrome/app:generated_resources",
     "//chrome/browser:browser_process",
+    "//chrome/browser/ash/image_downloader",
     "//chrome/browser/ash/login/users/default_user_image",
     "//chrome/browser/ash/profiles",
     "//chrome/browser/profiles:profile",
@@ -64,8 +66,6 @@ static_library("avatar") {
     "//ui/chromeos/strings",
     "//ui/gfx/codec",
   ]
-
-  allow_circular_includes_from = [ "//chrome/browser/ash/profiles" ]
 }
 
 static_library("test_support") {
@@ -108,8 +108,6 @@ source_set("browser_tests") {
     "//base",
     "//chrome/browser",
     "//chrome/browser:browser_process",
-    "//chrome/browser/ash",
-    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/login:test_support",
     "//chrome/browser/ash/login/test:test_support",
     "//chrome/browser/ash/login/users/default_user_image",

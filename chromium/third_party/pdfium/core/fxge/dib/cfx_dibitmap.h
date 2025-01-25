@@ -28,6 +28,22 @@ class CFX_DIBitmap final : public CFX_DIBBase {
     uint32_t size;
   };
 
+#if defined(PDF_USE_SKIA)
+  // Scoper that conditionally pre-multiplies a bitmap in the ctor and
+  // un-premultiplies in the dtor if pre-multiplication was required.
+  class ScopedPremultiplier {
+   public:
+    // `bitmap` must start out un-premultiplied.
+    // ScopedPremultiplier is a no-op if `do_premultiply` is false.
+    ScopedPremultiplier(RetainPtr<CFX_DIBitmap> bitmap, bool do_premultiply);
+    ~ScopedPremultiplier();
+
+   private:
+    RetainPtr<CFX_DIBitmap> const bitmap_;
+    const bool do_premultiply_;
+  };
+#endif  // defined(PDF_USE_SKIA)
+
   CONSTRUCT_VIA_MAKE_RETAIN;
 
   [[nodiscard]] bool Create(int width, int height, FXDIB_Format format);
@@ -54,6 +70,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
         pdfium::make_span(const_cast<uint8_t*>(src.data()), src.size()));
   }
 
+  // Note that the returned scanline includes unused space at the end, if any.
   pdfium::span<uint8_t> GetWritableScanline(int line) {
     pdfium::span<const uint8_t> src = GetScanline(line);
     // SAFETY: const_cast<>() doesn't change size.
@@ -61,9 +78,12 @@ class CFX_DIBitmap final : public CFX_DIBBase {
         pdfium::make_span(const_cast<uint8_t*>(src.data()), src.size()));
   }
 
+  // Note that the returned scanline does not include unused space at the end,
+  // if any.
   template <typename T>
   pdfium::span<T> GetWritableScanlineAs(int line) {
-    return fxcrt::reinterpret_span<T>(GetWritableScanline(line));
+    return fxcrt::reinterpret_span<T>(GetWritableScanline(line))
+        .first(GetWidth());
   }
 
   void TakeOver(RetainPtr<CFX_DIBitmap>&& pSrcBitmap);
@@ -74,19 +94,17 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   uint32_t GetPixelForTesting(int x, int y) const;
 #endif  // defined(PDF_USE_SKIA)
 
-  // Requires `this` to be of format `FXDIB_Format::kArgb`.
+  // Requires `this` to be of format `FXDIB_Format::kBgra`.
   void SetRedFromAlpha();
 
-  // Requires `this` to be of format `FXDIB_Format::kArgb`.
+  // Requires `this` to be of format `FXDIB_Format::kBgra`.
   void SetUniformOpaqueAlpha();
 
   // TODO(crbug.com/pdfium/2007): Migrate callers to `CFX_RenderDevice`.
   bool MultiplyAlpha(float alpha);
   bool MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask);
 
-  bool TransferBitmap(int dest_left,
-                      int dest_top,
-                      int width,
+  bool TransferBitmap(int width,
                       int height,
                       RetainPtr<const CFX_DIBBase> source,
                       int src_left,
@@ -100,19 +118,19 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                        int src_left,
                        int src_top,
                        BlendMode blend_type,
-                       const CFX_ClipRgn* pClipRgn,
+                       const CFX_AggClipRgn* pClipRgn,
                        bool bRgbByteOrder);
 
   bool CompositeMask(int dest_left,
                      int dest_top,
                      int width,
                      int height,
-                     const RetainPtr<const CFX_DIBBase>& pMask,
+                     RetainPtr<const CFX_DIBBase> pMask,
                      uint32_t color,
                      int src_left,
                      int src_top,
                      BlendMode blend_type,
-                     const CFX_ClipRgn* pClipRgn,
+                     const CFX_AggClipRgn* pClipRgn,
                      bool bRgbByteOrder);
 
   void CompositeOneBPPMask(int dest_left,
@@ -144,23 +162,13 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                                                            uint32_t pitch);
 
 #if defined(PDF_USE_SKIA)
-  // Converts to un-pre-multiplied alpha if necessary.
+  // Converts from/to un-pre-multiplied alpha if necessary.
+  void PreMultiply();
   void UnPreMultiply();
-
-  // Forces pre-multiplied alpha without conversion.
-  // TODO(crbug.com/42271020): Remove the need for this.
-  void ForcePreMultiply();
-
-  // CFX_DIBBase:
-  bool IsPremultiplied() const override;
 #endif  // defined(PDF_USE_SKIA)
 
  private:
   enum class Channel : uint8_t { kRed, kAlpha };
-
-#if defined(PDF_USE_SKIA)
-  enum class Format { kCleared, kPreMultiplied, kUnPreMultiplied };
-#endif
 
   CFX_DIBitmap();
   CFX_DIBitmap(const CFX_DIBitmap& src);
@@ -191,9 +199,6 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                                   int src_top);
 
   MaybeOwned<uint8_t, FxFreeDeleter> m_pBuffer;
-#if defined(PDF_USE_SKIA)
-  Format m_nFormat = Format::kCleared;
-#endif
 };
 
 #endif  // CORE_FXGE_DIB_CFX_DIBITMAP_H_

@@ -147,6 +147,10 @@ TimeView::TimeView(ClockLayout clock_layout, ClockModel* model, Type type)
       SetupDateviews(clock_layout);
       break;
   }
+  // Set role before updating text to ensure that AccessibilityPaintChecks don't
+  // fail.
+  GetViewAccessibility().SetRole(ax::mojom::Role::kTime);
+
   UpdateTextInternal(GetTimeToShow());
 }
 
@@ -274,11 +278,6 @@ base::HourClockType TimeView::GetHourTypeForTesting() const {
   return model_->hour_clock_type();
 }
 
-void TimeView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  views::View::GetAccessibleNodeData(node_data);
-  node_data->role = ax::mojom::Role::kTime;
-}
-
 void TimeView::ChildPreferredSizeChanged(views::View* child) {
   PreferredSizeChanged();
 }
@@ -304,6 +303,13 @@ void TimeView::UpdateTimeFormat() {
   UpdateText();
 }
 
+void TimeView::SetAmPmClockType(base::AmPmClockType am_pm_clock_type) {
+  if (am_pm_clock_type_ != am_pm_clock_type) {
+    am_pm_clock_type_ = am_pm_clock_type;
+    UpdateText();
+  }
+}
+
 void TimeView::UpdateTextInternal(const base::Time& now) {
   // Just in case |now| is null, do NOT update time; otherwise, it will
   // crash icu code by calling into base::TimeFormatTimeOfDayWithHourClockType,
@@ -323,7 +329,7 @@ void TimeView::UpdateTextInternal(const base::Time& now) {
       // Calculate horizontal clock layout label.
       const std::u16string current_time =
           base::TimeFormatTimeOfDayWithHourClockType(
-              now, model_->hour_clock_type(), base::kDropAmPm);
+              now, model_->hour_clock_type(), am_pm_clock_type_);
 
       const bool label_length_changed =
           horizontal_time_label_->GetText().length() != current_time.length();

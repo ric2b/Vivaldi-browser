@@ -369,7 +369,7 @@ export class DataGrid extends HTMLElement {
     }
 
     const nextFocusedCell = handleArrowKeyNavigation({
-      key: key,
+      key,
       currentFocusedCell: this.#cellUserHasFocused,
       columns: this.#columns,
       rows: this.#rows,
@@ -780,7 +780,7 @@ export class DataGrid extends HTMLElement {
     const containerClassMap = {
       'wrapping-container': true,
       'show-scrollbar': this.#showScrollbar === true,
-      'striped': this.#striped === true,
+      striped: this.#striped === true,
     };
 
     await coordinator.write(() => {

@@ -4,23 +4,14 @@ source_set("vivaldi_ad_tracker_blocker") {
   sources = [
     "vivaldi_atb_constants.h",
     "vivaldi_atb_constants.mm",
-    "vivaldi_atb_summery_view_controller.h",
-    "vivaldi_atb_summery_view_controller.mm",
-    "vivaldi_atb_summery_details_view_controller.h",
-    "vivaldi_atb_summery_details_view_controller.mm",
-    "vivaldi_atb_summery_header_view.h",
-    "vivaldi_atb_summery_header_view.mm",
-    "vivaldi_atb_blocked_count_view.h",
-    "vivaldi_atb_blocked_count_view.mm",
-    "vivaldi_atb_blocked_count_view_delegate.h",
-    "vivaldi_atb_setting_type.h",
+    "vivaldi_atb_consumer.h",
+    "vivaldi_atb_domain_source_mode.h",
     "vivaldi_atb_item.h",
     "vivaldi_atb_item.mm",
-    "vivaldi_atb_source_type.h",
-    "vivaldi_atb_domain_source_mode.h",
-    "vivaldi_atb_consumer.h",
+    "vivaldi_atb_setting_type.h",
     "vivaldi_atb_source_item.h",
     "vivaldi_atb_source_item.mm",
+    "vivaldi_atb_source_type.h",
   ]
 
   deps = [
@@ -28,16 +19,13 @@ source_set("vivaldi_ad_tracker_blocker") {
     "//base",
     "//base:i18n",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui/page_info",
     "//ios/chrome/common/ui/util",
     "//vivaldi/ios/ui/ad_tracker_blocker/cells",
     "//vivaldi/ios/ui/ad_tracker_blocker/settings",
     "//vivaldi/ios/ui/ad_tracker_blocker/manager",
-    "//ios/third_party/material_components_ios",
-    "resources:vivaldi_atb_shield",
-    "resources:vivaldi_atb_shield_notrack",
-    "resources:vivaldi_atb_shield_trackers",
-    "resources:vivaldi_atb_shield_trackers_and_ads",
-    "resources:vivaldi_atb_settings_selection_check",
+    "//vivaldi/ios/ui/site_tracker_prefs",
+    "resources:assets",
   ]
 
   frameworks = [

@@ -242,6 +242,15 @@ public class ShrinkExpandHubLayoutAnimatorProvider implements HubLayoutAnimatorP
                     }
                 });
 
+        // Note(david@vivaldi.com): In Vivaldi we need to fade the hub top toolbar as well as the
+        // hub pane host view.
+        ObjectAnimator fadeAnimator2 =
+                ObjectAnimator.ofFloat(mHubContainerView.findViewById(R.id.hub_top_toolbar),
+                        View.ALPHA, initialAlpha, finalAlpha);
+        ObjectAnimator fadeAnimator3 =
+                ObjectAnimator.ofFloat(mHubContainerView.findViewById(R.id.hub_pane_host),
+                        View.ALPHA, initialAlpha, finalAlpha);
+
         ShrinkExpandAnimationData animationData = mAnimationDataSupplier.get();
         mShrinkExpandAnimator =
                 new ShrinkExpandAnimator(
@@ -272,7 +281,8 @@ public class ShrinkExpandHubLayoutAnimatorProvider implements HubLayoutAnimatorP
         // * TabThumbnailView radii -> 0 for expand.
 
         AnimatorSet animatorSet = new AnimatorSet();
-        animatorSet.playTogether(shrinkExpandAnimator, fadeAnimator);
+        animatorSet.playTogether(
+                shrinkExpandAnimator, fadeAnimator, fadeAnimator2, fadeAnimator3); // Vivaldi
         animatorSet.setDuration(mDurationMs);
 
         HubLayoutAnimationListener listener =

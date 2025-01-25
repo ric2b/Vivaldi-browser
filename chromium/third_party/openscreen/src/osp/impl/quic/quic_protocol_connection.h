@@ -22,7 +22,7 @@ class QuicProtocolConnection final : public ProtocolConnection {
    public:
     virtual ~Owner() = default;
 
-    // Called right before |connection| is destroyed (destructor runs).
+    // Called right before `connection` is destroyed (destructor runs).
     virtual void OnConnectionDestroyed(QuicProtocolConnection& connection) = 0;
   };
 
@@ -34,8 +34,7 @@ class QuicProtocolConnection final : public ProtocolConnection {
 
   QuicProtocolConnection(Owner& owner,
                          QuicStream& stream,
-                         uint64_t instance_id,
-                         uint64_t connection_id);
+                         uint64_t instance_id);
   QuicProtocolConnection(const QuicProtocolConnection&) = delete;
   QuicProtocolConnection& operator=(const QuicProtocolConnection&) = delete;
   QuicProtocolConnection(QuicProtocolConnection&&) noexcept = delete;
@@ -43,15 +42,16 @@ class QuicProtocolConnection final : public ProtocolConnection {
   ~QuicProtocolConnection() override;
 
   // ProtocolConnection overrides.
+  uint64_t GetInstanceID() const override { return instance_id_; }
+  uint64_t GetID() const override;
   void Write(ByteView bytes) override;
   void CloseWriteEnd() override;
-
-  QuicStream* stream() { return stream_; }
 
   void OnClose();
 
  private:
   Owner& owner_;
+  uint64_t instance_id_ = 0u;
   QuicStream* stream_ = nullptr;
 };
 

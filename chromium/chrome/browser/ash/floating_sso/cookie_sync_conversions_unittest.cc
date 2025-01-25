@@ -63,7 +63,9 @@ TEST(CookieSyncConversionsTest, CookieToProtoAndBack) {
 // Verify that reading a cookie from Sync proto and then writing it back
 // without changes results in the same proto.
 TEST(CookieSyncConversionsTest, ProtoToCookieAndBack) {
-  sync_pb::CookieSpecifics sync_specifics = CookieSpecificsForTest();
+  sync_pb::CookieSpecifics sync_specifics =
+      CreatePredefinedCookieSpecificsForTest(
+          0, /*creation_time=*/base::Time::Now());
 
   std::unique_ptr<net::CanonicalCookie> cookie = FromSyncProto(sync_specifics);
   ASSERT_TRUE(cookie);
@@ -104,7 +106,9 @@ TEST(CookieSyncConversionsTest, PartitionKeyShouldBeSerializable) {
 // Verify that we don't build a CanonicalCookie object if the cookie
 // saved in Sync proto is not canonical.
 TEST(CookieSyncConversionsTest, NonCanonicalCookieInProto) {
-  sync_pb::CookieSpecifics sync_specifics = CookieSpecificsForTest();
+  sync_pb::CookieSpecifics sync_specifics =
+      CreatePredefinedCookieSpecificsForTest(
+          0, /*creation_time=*/base::Time::Now());
   // Overwrite creation time to be null while keeping last_access time a valid
   // value. This should result in a failure when trying to build a
   // CanonicalCookie object.

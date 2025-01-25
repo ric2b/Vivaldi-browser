@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/password_manager/password_manager_ui.h"
 
 #include "base/feature_list.h"
@@ -53,9 +58,12 @@
 #include "ui/base/webui/web_ui_util.h"
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#include "chrome/browser/ui/webui/settings/settings_security_key_handler.h"
+#endif
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/ui/webui/settings/settings_security_key_handler.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #endif
 
@@ -146,8 +154,6 @@ content::WebUIDataSource* CreateAndAddPasswordsUIHTMLSource(
        IDS_PASSWORD_MANAGER_UI_COMPROMISED_PASSWORDS_DESCRIPTION},
       {"compromisedPasswordsEmpty",
        IDS_PASSWORD_MANAGER_UI_NO_COMPROMISED_PASSWORDS},
-      {"compromisedPasswordsTitle",
-       IDS_PASSWORD_MANAGER_UI_HAS_COMPROMISED_PASSWORDS},
       {"compromisedRowWithError",
        IDS_PASSWORD_MANAGER_UI_CHECKUP_COMPROMISED_SECTION},
       {"confirm", IDS_PASSWORD_MANAGER_UI_CONFIRM},
@@ -447,15 +453,20 @@ content::WebUIDataSource* CreateAndAddPasswordsUIHTMLSource(
       {"weakPasswordsTitle", IDS_PASSWORD_MANAGER_UI_HAS_WEAK_PASSWORDS},
       {"websiteLabel", IDS_PASSWORD_MANAGER_UI_WEBSITE_LABEL},
 #if BUILDFLAG(IS_MAC)
-      {"biometricAuthenticaionForFillingLabel",
+      {"biometricAuthenticationForFillingLabel",
        IDS_PASSWORD_MANAGER_UI_BIOMETRIC_AUTHENTICATION_FOR_FILLING_TOGGLE_LABEL_MAC},
-      {"biometricAuthenticaionForFillingSublabel",
+      {"biometricAuthenticationForFillingSubLabel",
        IDS_PASSWORD_MANAGER_UI_BIOMETRIC_AUTHENTICATION_FOR_FILLING_TOGGLE_SUBLABEL_MAC},
 #elif BUILDFLAG(IS_WIN)
-      {"biometricAuthenticaionForFillingLabel",
+      {"biometricAuthenticationForFillingLabel",
        IDS_PASSWORD_MANAGER_UI_BIOMETRIC_AUTHENTICATION_FOR_FILLING_TOGGLE_LABEL_WIN},
-      {"biometricAuthenticaionForFillingSublabel",
+      {"biometricAuthenticationForFillingSubLabel",
        IDS_PASSWORD_MANAGER_UI_BIOMETRIC_AUTHENTICATION_FOR_FILLING_TOGGLE_SUBLABEL_WIN},
+#elif BUILDFLAG(IS_CHROMEOS)
+      {"biometricAuthenticationForFillingLabel",
+       IDS_PASSWORD_MANAGER_UI_BIOMETRIC_AUTHENTICATION_FOR_FILLING_TOGGLE_LABEL_CHROMEOS},
+      {"biometricAuthenticationForFillingSubLabel",
+       IDS_PASSWORD_MANAGER_UI_BIOMETRIC_AUTHENTICATION_FOR_FILLING_TOGGLE_SUBLABEL_CHROMEOS},
 #endif
   };
   for (const auto& str : kStrings) {
@@ -488,7 +499,7 @@ content::WebUIDataSource* CreateAndAddPasswordsUIHTMLSource(
               password_manager::PasswordCheckupReferrer::kPasswordCheck)
               .spec()));
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
   source->AddBoolean("biometricAuthenticationForFillingToggleVisible",
                      password_manager_util::
                          ShouldBiometricAuthenticationForFillingToggleBeVisible(
@@ -620,6 +631,9 @@ void AddPluralStrings(content::WebUI* web_ui) {
       "compromisedPasswords",
       IDS_PASSWORD_MANAGER_UI_COMPROMISED_PASSWORDS_COUNT);
   plural_string_handler->AddLocalizedString(
+      "compromisedPasswordsTitle",
+      IDS_PASSWORD_MANAGER_UI_HAS_COMPROMISED_PASSWORDS);
+  plural_string_handler->AddLocalizedString(
       "deviceOnlyPasswordsIconTooltip",
       IDS_PASSWORD_MANAGER_UI_DEVICE_ONLY_PASSWORDS_ICON_TOOLTIP);
   plural_string_handler->AddLocalizedString(
@@ -681,7 +695,7 @@ DEFINE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(PasswordManagerUI,
                                        kAddShortcutCustomEventId);
 
 PasswordManagerUI::PasswordManagerUI(content::WebUI* web_ui)
-    : TopChromeWebUIController(web_ui, /*enable_chrome_send=*/true) {
+    : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/true) {
   // Set up the chrome://password-manager/ source.
   Profile* profile = Profile::FromWebUI(web_ui);
   passwords_private_delegate_ =

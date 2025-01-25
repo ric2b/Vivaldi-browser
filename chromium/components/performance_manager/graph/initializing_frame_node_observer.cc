@@ -48,10 +48,11 @@ void InitializingFrameNodeObserverManager::OnBeforeFrameNodeRemoved(
   // frame nodes using `NotifyFrameNodeTearingDown()`.
 }
 
-void InitializingFrameNodeObserverManager::OnIsCurrentChanged(
-    const FrameNode* frame_node) {
+void InitializingFrameNodeObserverManager::OnCurrentFrameChanged(
+    const FrameNode* previous_frame_node,
+    const FrameNode* current_frame_node) {
   for (InitializingFrameNodeObserver& observer : observer_list_) {
-    observer.OnIsCurrentChanged(frame_node);
+    observer.OnCurrentFrameChanged(previous_frame_node, current_frame_node);
   }
 }
 
@@ -114,6 +115,13 @@ void InitializingFrameNodeObserverManager::OnPriorityAndReasonChanged(
   }
 }
 
+void InitializingFrameNodeObserverManager::OnHadUserActivationChanged(
+    const FrameNode* frame_node) {
+  for (InitializingFrameNodeObserver& observer : observer_list_) {
+    observer.OnHadUserActivationChanged(frame_node);
+  }
+}
+
 void InitializingFrameNodeObserverManager::OnHadFormInteractionChanged(
     const FrameNode* frame_node) {
   for (InitializingFrameNodeObserver& observer : observer_list_) {
@@ -125,6 +133,13 @@ void InitializingFrameNodeObserverManager::OnHadUserEditsChanged(
     const FrameNode* frame_node) {
   for (InitializingFrameNodeObserver& observer : observer_list_) {
     observer.OnHadUserEditsChanged(frame_node);
+  }
+}
+
+void InitializingFrameNodeObserverManager::OnFrameUsesWebRTCChanged(
+    const FrameNode* frame_node) {
+  for (InitializingFrameNodeObserver& observer : observer_list_) {
+    observer.OnFrameUsesWebRTCChanged(frame_node);
   }
 }
 
@@ -142,10 +157,10 @@ void InitializingFrameNodeObserverManager::OnIsCapturingMediaStreamChanged(
   }
 }
 
-void InitializingFrameNodeObserverManager::OnIntersectsViewportChanged(
+void InitializingFrameNodeObserverManager::OnViewportIntersectionStateChanged(
     const FrameNode* frame_node) {
   for (InitializingFrameNodeObserver& observer : observer_list_) {
-    observer.OnIntersectsViewportChanged(frame_node);
+    observer.OnViewportIntersectionStateChanged(frame_node);
   }
 }
 

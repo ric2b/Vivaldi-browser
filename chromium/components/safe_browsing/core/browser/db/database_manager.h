@@ -85,11 +85,6 @@ class SafeBrowsingDatabaseManager
     virtual void OnCheckExtensionsResult(const std::set<std::string>& threats) {
     }
 
-    // Called when the result of checking the resource blocklist is known.
-    virtual void OnCheckResourceUrlResult(const GURL& url,
-                                          SBThreatType threat_type,
-                                          const std::string& threat_hash) {}
-
     // Called when the result of checking a allowlist is known.
     // Currently only used for CSD allowlist.
     virtual void OnCheckAllowlistUrlResult(bool did_match_allowlist) {}
@@ -105,15 +100,15 @@ class SafeBrowsingDatabaseManager
   // Methods called by the client to cancel pending checks.
   //
 
-  // Called on the IO thread to cancel a pending API check if the result is no
-  // longer needed. Returns true if the client was found and the check
-  // successfully cancelled.
+  // Cancels a pending API check if the result is no longer needed. Returns true
+  // if the client was found and the check successfully cancelled. This should
+  // be called on the UI thread.
   virtual bool CancelApiCheck(Client* client);
 
-  // Called on the IO thread to cancel a pending check if the result is no
-  // longer needed.  Also called after the result has been handled. Api checks
-  // are handled separately. To cancel an API check use CancelApiCheck.
-  // If |client| doesn't exist anymore, ignore this call.
+  // Cancels a pending check if the result is no longer needed.  Also called
+  // after the result has been handled. Api checks are handled separately. To
+  // cancel an API check use CancelApiCheck. If |client| doesn't exist anymore,
+  // ignore this call. This should be called on the UI thread.
   virtual void CancelCheck(Client* client) = 0;
 
   //
@@ -130,14 +125,15 @@ class SafeBrowsingDatabaseManager
   // the resource is known.
   //
 
-  // Called on the IO thread to check if the given url has blocklisted APIs.
-  // |client| is called asynchronously with the result when it is ready. Callers
-  // should wait for results before calling this method a second time with the
-  // same client. This method has the same implementation for both the local and
-  // remote database managers since it pings Safe Browsing servers directly
-  // without accessing the database at all.  Returns true if we can
-  // synchronously determine that the url is safe. Otherwise it returns false,
-  // and |client| is called asynchronously with the result when it is ready.
+  // Checks if the given url has blocklisted APIs. |client| is called
+  // asynchronously with the result when it is ready. Callers should wait for
+  // results before calling this method a second time with the same client. This
+  // method has the same implementation for both the local and remote database
+  // managers since it pings Safe Browsing servers directly without accessing
+  // the database at all.  Returns true if we can synchronously determine that
+  // the url is safe. Otherwise it returns false, and |client| is called
+  // asynchronously with the result when it is ready. This should be called on
+  // the UI thread.
   virtual bool CheckApiBlocklistUrl(const GURL& url, Client* client);
 
   // Check if the |url| matches any of the full-length hashes from the client-
@@ -145,13 +141,13 @@ class SafeBrowsingDatabaseManager
   // the result or that |client| will get a callback later with the result.
   virtual AsyncMatch CheckCsdAllowlistUrl(const GURL& url, Client* client) = 0;
 
-  // Called on the IO thread to check if the given url is safe or not.  If we
-  // can synchronously determine that the url is safe, CheckUrl returns true.
-  // Otherwise it returns false, and |client| is called asynchronously with the
-  // result when it is ready. The URL will only be checked for the threat types
-  // in |threat_types|. |check_type| specifies the type of check the url will be
-  // checked against. See comments above CheckBrowseUrlType's definition for
-  // more details.
+  // Checks if the given url is safe or not.  If we can synchronously determine
+  // that the url is safe, CheckUrl returns true. Otherwise it returns false,
+  // and |client| is called asynchronously with the result when it is ready. The
+  // URL will only be checked for the threat types in |threat_types|.
+  // |check_type| specifies the type of check the url will be checked against.
+  // See comments above CheckBrowseUrlType's definition for more details. This
+  // should be called on the UI thread.
   virtual bool CheckBrowseUrl(
       const GURL& url,
       const SBThreatTypeSet& threat_types,
@@ -169,18 +165,11 @@ class SafeBrowsingDatabaseManager
   virtual bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
                                  Client* client) = 0;
 
-  // Check if |url| is in the resources blocklist. Returns true if not, false
-  // if further checks need to be made in which case the result will be passed
-  // to callback in |client|.
-  // TODO(crbug.com/40862355): This method is not used. Deprecate it and the
-  // underlying store.
-  virtual bool CheckResourceUrl(const GURL& url, Client* client) = 0;
-
-  // Called on the IO thread to check if the given url belongs to a list the
-  // subresource cares about. If the url doesn't belong to any such list and the
-  // check can happen synchronously, returns true. Otherwise it returns false,
-  // and |client| is called asynchronously with the result when it is ready.
-  // Returns true if the list is not yet available.
+  // Checks if the given url belongs to a list the subresource cares about. If
+  // the url doesn't belong to any such list and the check can happen
+  // synchronously, returns true. Otherwise it returns false, and |client| is
+  // called asynchronously with the result when it is ready. Returns true if the
+  // list is not yet available. This should be called on the UI thread.
   virtual bool CheckUrlForSubresourceFilter(const GURL& url,
                                             Client* client) = 0;
 
@@ -195,14 +184,14 @@ class SafeBrowsingDatabaseManager
     // Whether the allowlist store was too small when the check ran.
     bool was_allowlist_size_too_small;
   };
-  // Called on the IO thread to check whether |url| is safe by checking if it
-  // appears on a high-confidence allowlist. `callback` is run asynchronously
-  // with true if it matches the allowlist, and is false if it does not. The
-  // high confidence allowlist is a list of full hashes of URLs that are
-  // expected to be safe so in the case of a match on this list, the realtime
-  // full URL Safe Browsing lookup isn't performed. The returned value includes
-  // some details about the store state when the call was made. If used, it
-  // should be used for logging purposes only.
+  // Checks whether |url| is safe by checking if it appears on a high-confidence
+  // allowlist. `callback` is run asynchronously with true if it matches the
+  // allowlist, and is false if it does not. The high confidence allowlist is a
+  // list of full hashes of URLs that are expected to be safe so in the case of
+  // a match on this list, the realtime full URL Safe Browsing lookup isn't
+  // performed. The returned value includes some details about the store state
+  // when the call was made. If used, it should be used for logging purposes
+  // only. This should be called on the UI thread.
   virtual std::optional<HighConfidenceAllowlistCheckLoggingDetails>
   CheckUrlForHighConfidenceAllowlist(
       const GURL& url,
@@ -215,7 +204,7 @@ class SafeBrowsingDatabaseManager
   // Check if the |url| matches any of the full-length hashes from the download
   // allowlist. Runs `callback` asynchronously with true if there was a match
   // and false otherwise. To make sure we are conservative we will return true
-  // if an error occurs.  This method must be called on the IO thread.
+  // if an error occurs. This should be called on the UI thread.
   virtual void MatchDownloadAllowlistUrl(
       const GURL& url,
       base::OnceCallback<void(bool)> callback) = 0;
@@ -243,16 +232,14 @@ class SafeBrowsingDatabaseManager
 
   //
   // Methods to indicate when to start or suspend the SafeBrowsing operations.
-  // These functions are always called on the IO thread.
+  // These functions should be called on the UI thread.
   //
 
-  // Called to initialize objects that are used on the io_thread, such as the
-  // v4 protocol manager.  This may be called multiple times during the life of
-  // the DatabaseManager. Must be called on IO thread unless
-  // kSafeBrowsingOnUIThread is enabled in which case it'll be UI thread. All
-  // subclasses should override this method and call the base class method at
-  // the top of it.
-  virtual void StartOnSBThread(
+  // Called to initialize objects that are used on the thread, such as the v4
+  // protocol manager.  This may be called multiple times during the life of the
+  // DatabaseManager. All subclasses should override this method and call the
+  // base class method at the top of it. This should be called on the UI thread.
+  virtual void StartOnUIThread(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const V4ProtocolConfig& config);
 
@@ -267,11 +254,10 @@ class SafeBrowsingDatabaseManager
   base::CallbackListSubscription RegisterDatabaseUpdatedCallback(
       const OnDatabaseUpdated& cb);
 
-  // Called to stop or shutdown operations on the io_thread unless
-  // kSafeBrowsingOnUIThread is enabled in which case it'll be UI thread. All
-  // subclasses should override this method and call the base class method at
-  // the bottom of it.
-  virtual void StopOnSBThread(bool shutdown);
+  // Called to stop or shutdown operations. All subclasses should override this
+  // method and call the base class method at the bottom of it. This should be
+  // called on the UI thread.
+  virtual void StopOnUIThread(bool shutdown);
 
   // Called to check if database is ready or not.
   virtual bool IsDatabaseReady() const = 0;
@@ -297,9 +283,8 @@ class SafeBrowsingDatabaseManager
     raw_ptr<Client> client_;
   };
 
-  SafeBrowsingDatabaseManager(
-      scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
-      scoped_refptr<base::SequencedTaskRunner> io_task_runner);
+  explicit SafeBrowsingDatabaseManager(
+      scoped_refptr<base::SequencedTaskRunner> ui_task_runner);
 
   virtual ~SafeBrowsingDatabaseManager();
 
@@ -325,28 +310,21 @@ class SafeBrowsingDatabaseManager
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingDatabaseManagerTest,
                            CachedResultsAreEvicted);
 
-  // Called on the IO thread when the SafeBrowsingProtocolManager has received
-  // the full hash and api results for prefixes of the |url| argument in
-  // CheckApiBlocklistUrl.
+  // Called when the SafeBrowsingProtocolManager has received the full hash and
+  // api results for prefixes of the |url| argument in CheckApiBlocklistUrl.
+  // This should be called on the UI thread.
   void OnThreatMetadataResponse(std::unique_ptr<SafeBrowsingApiCheck> check,
                                 const ThreatMetadata& md);
 
-  scoped_refptr<base::SequencedTaskRunner> ui_task_runner() {
-    return ui_task_runner_;
-  }
-
-  // SafeBrowsingDatabaseManager passes its |io_task_runner| construction
+  // SafeBrowsingDatabaseManager passes its |ui_task_runner| construction
   // parameter to its RefCountedDeleteOnSequence base class, which exposes its
-  // passed-in task runner as owning_task_runner(). Expose that |io_task_runner|
-  // parameter internally as io_task_runner() for clarity.
-  // Note if kSafeBrowsingOnUIThread is enabled that'll be the UI thread.
-  scoped_refptr<base::SequencedTaskRunner> sb_task_runner() {
+  // passed-in task runner as owning_task_runner(). Expose that |ui_task_runner|
+  // parameter internally as ui_task_runner() for clarity.
+  scoped_refptr<base::SequencedTaskRunner> ui_task_runner() {
     return owning_task_runner();
   }
 
   typedef std::set<raw_ptr<SafeBrowsingApiCheck, SetExperimental>> ApiCheckSet;
-
-  scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
 
   // In-progress checks. This set owns the SafeBrowsingApiCheck pointers and is
   // responsible for deleting them when removing from the set.
@@ -357,7 +335,7 @@ class SafeBrowsingDatabaseManager
   // extensions that have been blocklisted since.
   void NotifyDatabaseUpdateFinished();
 
-  // Created and destroyed via StartOnSBThread/StopOnSBThread.
+  // Created and destroyed via StartOnUIThread/StopOnUIThread.
   std::unique_ptr<V4GetHashProtocolManager> v4_get_hash_protocol_manager_;
 
   // A list of parties to be notified about database updates.

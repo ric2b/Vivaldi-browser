@@ -711,7 +711,7 @@ nouveau_bo_wrap_locked(struct nouveau_device *dev, uint32_t handle,
 }
 
 static void
-nouveau_bo_make_global(struct nouveau_bo_priv *nvbo)
+nouveau_nvbo_make_global(struct nouveau_bo_priv *nvbo)
 {
 	if (!nvbo->head.next) {
 		struct nouveau_device_priv *nvdev = nouveau_device(nvbo->base.device);
@@ -720,6 +720,14 @@ nouveau_bo_make_global(struct nouveau_bo_priv *nvbo)
 			DRMLISTADD(&nvbo->head, &nvdev->bo_list);
 		pthread_mutex_unlock(&nvdev->lock);
 	}
+}
+
+drm_public void
+nouveau_bo_make_global(struct nouveau_bo *bo)
+{
+    struct nouveau_bo_priv *nvbo = nouveau_bo(bo);
+
+    nouveau_nvbo_make_global(nvbo);
 }
 
 drm_public int
@@ -780,7 +788,7 @@ nouveau_bo_name_get(struct nouveau_bo *bo, uint32_t *name)
 		}
 		nvbo->name = *name = req.name;
 
-		nouveau_bo_make_global(nvbo);
+		nouveau_nvbo_make_global(nvbo);
 	}
 	return 0;
 }
@@ -830,7 +838,7 @@ nouveau_bo_set_prime(struct nouveau_bo *bo, int *prime_fd)
 	if (ret)
 		return ret;
 
-	nouveau_bo_make_global(nvbo);
+	nouveau_nvbo_make_global(nvbo);
 	return 0;
 }
 

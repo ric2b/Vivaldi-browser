@@ -14,7 +14,7 @@
 #import "ios/chrome/browser/account_picker/ui_bundled/account_picker_coordinator_delegate.h"
 #import "ios/chrome/browser/photos/model/photos_service_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -60,7 +60,7 @@ class SaveToPhotosCoordinatorTest : public PlatformTest {
         IdentityManagerFactory::GetInstance(),
         base::BindRepeating(IdentityTestEnvironmentBrowserStateAdaptor::
                                 BuildIdentityManagerForTests));
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
     browser_ = std::make_unique<TestBrowser>(browser_state_.get());
     std::unique_ptr<web::FakeWebState> web_state =
         std::make_unique<web::FakeWebState>();
@@ -179,7 +179,7 @@ TEST_F(SaveToPhotosCoordinatorTest, StartsAndDisconnectsMediator) {
       ChromeAccountManagerServiceFactory::GetForBrowserState(
           browser_state_.get());
   signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForBrowserState(browser_state_.get());
+      IdentityManagerFactory::GetForProfile(browser_state_.get());
 
   OCMExpect([mock_save_to_photos_mediator_ alloc])
       .andReturn(mock_save_to_photos_mediator_);

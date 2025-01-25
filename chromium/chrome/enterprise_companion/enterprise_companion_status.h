@@ -30,10 +30,14 @@ enum class ApplicationError {
   kPolicyPersistenceFailed,
   // The global singleton lock could not be acquired.
   kCannotAcquireLock,
-  // The EnterpriseCompanion IPC service could not be reached.
-  kEnterpriseCompanionServiceConnectionFailed,
-  // Installation failed.
+  // An IPC connection could not be established.
+  kMojoConnectionFailed,
+  // Installation or uninstallation failed.
   kInstallationFailed,
+  // The IPC caller is not allowed to perform the requested action.
+  kIpcCallerNotAllowed,
+  // Failed to initialize COM on Windows.
+  kCOMInitializationFailed,
 };
 
 // Represents an error which was deserialized from an external source (e.g.
@@ -62,6 +66,7 @@ struct PersistedError {
 class EnterpriseCompanionStatus {
  public:
   using Ok = std::monostate;
+  using PosixErrno = int;
   // The indices of the underlying variant are used by this implementation and
   // are transmitted across RPC boundaries. Existing entries should not be
   // reordered.
@@ -69,7 +74,8 @@ class EnterpriseCompanionStatus {
                                      policy::DeviceManagementStatus,
                                      policy::CloudPolicyValidatorBase::Status,
                                      ApplicationError,
-                                     PersistedError>;
+                                     PersistedError,
+                                     PosixErrno>;
   EnterpriseCompanionStatus() = delete;
   EnterpriseCompanionStatus(const EnterpriseCompanionStatus&);
   ~EnterpriseCompanionStatus();
@@ -114,10 +120,18 @@ class EnterpriseCompanionStatus {
   }
 
   static EnterpriseCompanionStatus FromMojomStatus(mojom::StatusPtr status) {
-    return status->code == 0 || status->space == 0
+    return status->space == 0
                ? Success()
                : EnterpriseCompanionStatus(StatusVariant(PersistedError(
                      status->space, status->code, status->description)));
+  }
+
+  static EnterpriseCompanionStatus FromProtoStatus(
+      const proto::Status& status) {
+    return status.space() == 0
+               ? Success()
+               : EnterpriseCompanionStatus(StatusVariant(PersistedError(
+                     status.space(), status.code(), "<missing description>")));
   }
 
   bool operator==(const EnterpriseCompanionStatus& other) const {
@@ -152,10 +166,18 @@ class EnterpriseCompanionStatus {
     return operator==(From<3>(other));
   }
 
+  // PosixErrno:
+  static EnterpriseCompanionStatus FromPosixErrno(PosixErrno error) {
+    return From<5>(error);
+  }
+  bool EqualsPosixErrno(PosixErrno other) const {
+    return operator==(From<5>(other));
+  }
+
  private:
   StatusVariant status_variant_;
 
-  explicit EnterpriseCompanionStatus(StatusVariant&& status_variant);
+  explicit EnterpriseCompanionStatus(StatusVariant status_variant);
 
   template <size_t I, typename T>
   static EnterpriseCompanionStatus From(T&& status) {

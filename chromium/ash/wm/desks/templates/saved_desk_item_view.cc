@@ -25,7 +25,6 @@
 #include "ash/wm/desks/templates/saved_desk_presenter.h"
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/overview/overview_focus_cycler_old.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/overview/overview_utils.h"
@@ -284,14 +283,6 @@ SavedDeskItemView::SavedDeskItemView(std::unique_ptr<DeskTemplate> saved_desk)
 
   views::FocusRing* focus_ring =
       StyleUtil::SetUpFocusRingForView(this, kWindowMiniViewFocusRingHaloInset);
-  if (!features::IsOverviewNewFocusEnabled()) {
-    focus_ring->SetHasFocusPredicate(
-        base::BindRepeating([](const views::View* view) {
-          const auto* v = views::AsViewClass<SavedDeskItemView>(view);
-          CHECK(v);
-          return v->is_focused();
-        }));
-  }
   focus_ring->SetColorId(cros_tokens::kCrosSysFocusRing);
 
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
@@ -308,6 +299,8 @@ SavedDeskItemView::SavedDeskItemView(std::unique_ptr<DeskTemplate> saved_desk)
   AddAccelerator(ui::Accelerator(ui::VKEY_W, ui::EF_CONTROL_DOWN));
 
   GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  GetViewAccessibility().SetDescription(l10n_util::GetStringUTF8(
+      IDS_ASH_DESKS_TEMPLATES_LIBRARY_SAVED_DESK_GRID_ITEM_EXTRA_ACCESSIBLE_DESCRIPTION));
 }
 
 SavedDeskItemView::~SavedDeskItemView() {
@@ -411,11 +404,6 @@ void SavedDeskItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // TODO(crbug.com/325137417): Remove this once the accessible name is set in
   // the cache as soon as the name is updated.
   GetViewAccessibility().SetName(ComputeAccessibleName());
-
-  node_data->AddStringAttribute(
-      ax::mojom::StringAttribute::kDescription,
-      l10n_util::GetStringUTF8(
-          IDS_ASH_DESKS_TEMPLATES_LIBRARY_SAVED_DESK_GRID_ITEM_EXTRA_ACCESSIBLE_DESCRIPTION));
 }
 
 void SavedDeskItemView::Layout(PassKey) {
@@ -459,18 +447,6 @@ void SavedDeskItemView::OnViewFocused(views::View* observed_view) {
   // Hide the hover container when we are modifying the saved desk name.
   hover_container_->layer()->SetOpacity(0.0f);
   icon_container_view_->layer()->SetOpacity(1.0f);
-
-  // Move the overview focus ring to `name_view_`.
-  auto* focus_cycler = Shell::Get()
-                           ->overview_controller()
-                           ->overview_session()
-                           ->focus_cycler_old();
-  if (focus_cycler && focus_cycler->IsFocusVisible()) {
-    focus_cycler->MoveFocusToView(name_view_);
-
-    // Update a11y focus window.
-    focus_cycler->UpdateA11yFocusWindow(name_view_);
-  }
 
   if (!defer_select_all_)
     name_view_->SelectAll(false);
@@ -549,17 +525,6 @@ void SavedDeskItemView::OnViewBlurred(views::View* observed_view) {
   }
 
   UpdateSavedDeskName();
-}
-
-void SavedDeskItemView::OnFocus() {
-  MoveFocusToView(this);
-  OnFocusableViewFocused();
-  View::OnFocus();
-}
-
-void SavedDeskItemView::OnBlur() {
-  OnFocusableViewBlurred();
-  View::OnBlur();
 }
 
 views::Button::KeyClickAction SavedDeskItemView::GetKeyClickActionForEvent(
@@ -769,31 +734,6 @@ void SavedDeskItemView::OnSavedDeskNameChanged(const std::u16string& new_name) {
   // This will trigger `name_view_` to compute its new preferred bounds and
   // invalidate the layout for `this`.
   name_view_->OnContentsChanged();
-}
-
-views::View* SavedDeskItemView::GetView() {
-  return this;
-}
-
-void SavedDeskItemView::MaybeActivateFocusedView() {
-  MaybeLaunchSavedDesk();
-}
-
-void SavedDeskItemView::MaybeCloseFocusedView(bool primary_action) {
-  if (primary_action)
-    OnDeleteButtonPressed();
-}
-
-void SavedDeskItemView::MaybeSwapFocusedView(bool right) {}
-
-void SavedDeskItemView::OnFocusableViewFocused() {
-  views::FocusRing::Get(this)->SchedulePaint();
-
-  ScrollViewToVisible();
-}
-
-void SavedDeskItemView::OnFocusableViewBlurred() {
-  views::FocusRing::Get(this)->SchedulePaint();
 }
 
 BEGIN_METADATA(SavedDeskItemView)

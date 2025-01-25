@@ -163,7 +163,7 @@ public class PageInfoConnectionController
                         securityLevel,
                         /* isSmallDevice= */ false,
                         /* skipIconForNeutralState= */ false,
-                        /* useUpdatedConnectionSecurityIndicators= */ false);
+                        /* useUpdatedConnectionSecurityIndicators= */ false, null); // Vivaldi
         rowParams.iconTint = getSecurityIconColor(securityLevel);
         if (hasClickCallback) rowParams.clickCallback = this::launchSubpage;
         mRowView.setParams(rowParams);

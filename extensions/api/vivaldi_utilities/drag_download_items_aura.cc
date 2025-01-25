@@ -58,10 +58,11 @@ void DragDownloadItems(std::vector<DraggableDownloadItem> downloads,
 
   gfx::Point location = display::Screen::GetScreen()->GetCursorScreenPoint();
   aura::client::GetDragDropClient(root_window)
-      ->StartDragAndDrop(
-          std::move(data), root_window, view, location,
-          ui::DragDropTypes::DRAG_COPY | ui::DragDropTypes::DRAG_LINK,
-          ui::mojom::DragEventSource::kMouse);
+      ->StartDragAndDrop(std::move(data), root_window, view, location,
+                         ui::DragDropTypes::DRAG_MOVE |
+                             ui::DragDropTypes::DRAG_COPY |
+                             ui::DragDropTypes::DRAG_LINK,
+                         ui::mojom::DragEventSource::kMouse);
 }
 
 }  // namespace extensions

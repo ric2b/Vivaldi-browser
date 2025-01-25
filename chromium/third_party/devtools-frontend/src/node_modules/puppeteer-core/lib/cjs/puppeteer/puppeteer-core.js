@@ -18,19 +18,23 @@ var __createBinding = (this && this.__createBinding) || (Object.create ? (functi
 var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.launch = exports.executablePath = exports.defaultArgs = exports.connect = void 0;
-__exportStar(require("./api/api.js"), exports);
-__exportStar(require("./cdp/cdp.js"), exports);
-__exportStar(require("./common/common.js"), exports);
-__exportStar(require("./node/node.js"), exports);
-__exportStar(require("./revisions.js"), exports);
-__exportStar(require("./util/util.js"), exports);
-/**
- * @deprecated Use the query handler API defined on {@link Puppeteer}
- */
-__exportStar(require("./common/CustomQueryHandler.js"), exports);
+__exportStar(require("./index.js"), exports);
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
+const environment_js_1 = require("./environment.js");
 const PuppeteerNode_js_1 = require("./node/PuppeteerNode.js");
+const ScreenRecorder_js_1 = require("./node/ScreenRecorder.js");
+// Set up Node-specific environment dependencies.
+environment_js_1.environment.value = {
+    fs: fs_1.default,
+    path: path_1.default,
+    ScreenRecorder: ScreenRecorder_js_1.ScreenRecorder,
+};
 /**
  * @public
  */

@@ -50,14 +50,16 @@
 #import "ios/chrome/browser/drag_and_drop/model/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -78,8 +80,6 @@
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
-#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
-#import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
@@ -951,27 +951,6 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   [_folderChooserCoordinator start];
 }
 
-// Vivaldi
-- (void)moveNodesToTrash:(const bookmark_utils_ios::NodeSet&)nodes {
-  DCHECK_GE(nodes.size(), 1u);
-  const BookmarkNode* trashFolder = _bookmarkModel.get()->trash_node();
-  std::vector<const bookmarks::BookmarkNode*> movedNodesVector(
-      nodes.begin(), nodes.end());
-  [self.snackbarCommandsHandler
-      showSnackbarMessage:bookmark_utils_ios::MoveBookmarksWithUndoToast(
-                              movedNodesVector, _bookmarkModel.get(),
-                              trashFolder,
-                              self.browserState,
-                             AuthenticationServiceFactory::GetForBrowserState(
-                                 self.browserState)
-                                 ->GetWeakPtr(),
-                             SyncServiceFactory::GetForBrowserState(
-                                 self.browserState))];
-  [self refreshContents];
-  [self setTableViewEditing:NO];
-}
-// End Vivaldi
-
 // Deletes `nodeID` if it still exists and records `userAction`.
 - (void)deleteBookmarkNodeWithID:(int64_t)nodeID
                       userAction:(const char*)userAction {
@@ -1159,7 +1138,6 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 - (void)navigationBarCancel:(id)sender {
   base::RecordAction(base::UserMetricsAction("MobileBookmarkManagerClose"));
   [self navigateAway];
-
   [self dismissWithURL:GURL()];
 }
 
@@ -1568,7 +1546,6 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
                                     usingBookmarkNode:
                                         (const BookmarkNode*)node {
   viewController.navigationItem.leftBarButtonItem.action = @selector(back);
-
   // Disable large titles on every VC but the root controller.
   if (node != _bookmarkModel->root_node()) {
     viewController.navigationItem.largeTitleDisplayMode =
@@ -2008,7 +1985,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 // Shows empty bookmarks background view.
 - (void)showEmptyBackground {
   if (IsVivaldiRunning()) {
-    if (!self.emptyViewBackground) {
+    if (!self.emptyViewBackground && ![self isDisplayingBookmarkRoot]) {
       NSString* titleString = [self isDisplayingBookmarkRoot]
         ? GetNSString(IDS_VIVALDI_BOOKMARK_EMPTY_TITLE)
         : GetNSString(IDS_VIVALDI_FOLDER_NO_ITEMS);
@@ -3092,6 +3069,24 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 
 #pragma mark Vivaldi
 
+ - (void)moveNodesToTrash:(const bookmark_utils_ios::NodeSet&)nodes {
+  DCHECK_GE(nodes.size(), 1u);
+  const BookmarkNode* trashFolder = _bookmarkModel.get()->trash_node();
+  std::vector<const bookmarks::BookmarkNode*> movedNodesVector(
+      nodes.begin(), nodes.end());
+  [self.snackbarCommandsHandler
+      showSnackbarMessage:bookmark_utils_ios::MoveBookmarksWithUndoToast(
+                              movedNodesVector, _bookmarkModel.get(),
+                              trashFolder,
+                              self.browserState,
+                             AuthenticationServiceFactory::GetForBrowserState(
+                                 self.browserState)
+                                 ->GetWeakPtr(),
+                             SyncServiceFactory::GetForBrowserState(
+                                 self.browserState))];
+  [self refreshContents];
+  [self setTableViewEditing:NO];
+}
 - (void)setupHeaderWithSearch {
   UIView* tableHeaderView =
       [[UIView alloc] initWithFrame:

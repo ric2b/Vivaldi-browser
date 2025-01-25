@@ -45,10 +45,6 @@ BASE_FEATURE(kDisableVPBLTUpscale,
              "DisableVPBLTUpscale",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kApplyTransformToLetterboxing,
-             "ApplyTransformToLetterBoxing",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 gfx::ColorSpace GetOutputColorSpace(const gfx::ColorSpace& input_color_space,
                                     bool is_yuv_swapchain) {
   gfx::ColorSpace output_color_space =
@@ -503,11 +499,12 @@ SwapChainPresenter::SwapChainPresenter(
       d3d11_device_(d3d11_device),
       dcomp_device_(dcomp_device),
       is_on_battery_power_(
-          base::PowerMonitor::AddPowerStateObserverAndReturnOnBatteryState(
-              this)) {}
+          base::PowerMonitor::GetInstance()
+              ->AddPowerStateObserverAndReturnBatteryPowerStatus(this) ==
+          base::PowerStateObserver::BatteryPowerStatus::kBatteryPower) {}
 
 SwapChainPresenter::~SwapChainPresenter() {
-  base::PowerMonitor::RemovePowerStateObserver(this);
+  base::PowerMonitor::GetInstance()->RemovePowerStateObserver(this);
 }
 
 DXGI_FORMAT SwapChainPresenter::GetSwapChainFormat(
@@ -635,21 +632,34 @@ Microsoft::WRL::ComPtr<ID3D11Texture2D> SwapChainPresenter::UploadVideoImage(
 
   size_t dest_stride = mapped_resource.RowPitch;
   DCHECK_GE(dest_stride, static_cast<size_t>(texture_size.width()));
+  // y-plane size.
+  size_t src_size = pixmap_stride * texture_size.height();
+  size_t dest_size = dest_stride * texture_size.height();
+  if (texture_size.height() / 2 > 0) {
+    // uv-plane size. Note that the last row is actual texture width, not
+    // the stride.
+    src_size +=
+        pixmap_stride * (texture_size.height() / 2 - 1) + texture_size.width();
+    dest_size +=
+        dest_stride * (texture_size.height() / 2 - 1) + texture_size.width();
+  }
+  base::span<const uint8_t> src =
+      UNSAFE_TODO(base::span(nv12_pixmap, src_size));
+  // SAFETY: required from Map() call result.
+  base::span<uint8_t> dest = UNSAFE_BUFFERS(
+      base::span(reinterpret_cast<uint8_t*>(mapped_resource.pData), dest_size));
   for (int y = 0; y < texture_size.height(); y++) {
-    const uint8_t* src_row = nv12_pixmap + pixmap_stride * y;
-    uint8_t* dest_row =
-        reinterpret_cast<uint8_t*>(mapped_resource.pData) + dest_stride * y;
-    memcpy(dest_row, src_row, texture_size.width());
+    auto src_row = src.subspan(pixmap_stride * y, texture_size.width());
+    auto dest_row = dest.subspan(dest_stride * y, texture_size.width());
+    dest_row.copy_prefix_from(src_row);
   }
 
-  const uint8_t* uv_src_start =
-      nv12_pixmap + pixmap_stride * texture_size.height();
-  uint8_t* uv_dst_start = reinterpret_cast<uint8_t*>(mapped_resource.pData) +
-                          dest_stride * texture_size.height();
+  auto uv_src = src.subspan(pixmap_stride * texture_size.height());
+  auto uv_dest = dest.subspan(dest_stride * texture_size.height());
   for (int y = 0; y < texture_size.height() / 2; y++) {
-    const uint8_t* src_row = uv_src_start + pixmap_stride * y;
-    uint8_t* dest_row = uv_dst_start + dest_stride * y;
-    memcpy(dest_row, src_row, texture_size.width());
+    auto src_row = uv_src.subspan(pixmap_stride * y, texture_size.width());
+    auto dest_row = uv_dest.subspan(dest_stride * y, texture_size.width());
+    dest_row.copy_prefix_from(src_row);
   }
   context->Unmap(staging_texture_.Get(), 0);
 
@@ -701,7 +711,9 @@ void SwapChainPresenter::SetTargetToFullScreen(
     gfx::Transform* visual_transform,
     gfx::Rect* visual_clip_rect,
     const std::optional<gfx::Rect>& target_rect) {
-  if (base::FeatureList::IsEnabled(kApplyTransformToLetterboxing) &&
+  if (base::FeatureList::IsEnabled(kDisableVPBLTUpscale) &&
+      (std::abs(visual_transform->rc(0, 0)) > 1.0f) &&
+      (std::abs(visual_transform->rc(1, 1)) > 1.0f) &&
       target_rect.has_value()) {
     // Reset the horizontal/vertical shift according to the target_rect and
     // original transform, since DWM will do the positioning in case of overlay.
@@ -1086,8 +1098,23 @@ void SwapChainPresenter::AdjustTargetForFullScreenLetterboxing(
   // Here the destination surface size is set to the whole monitor, while the
   // target region is set to the visual clip rectangle on the screen.
   if (params.z_order > 0) {
-    *dest_size = monitor_size;
-    *target_rect = *visual_clip_rect;
+    if (base::FeatureList::IsEnabled(kDisableVPBLTUpscale) &&
+        (std::abs(visual_transform->rc(0, 0)) > 1.0f) &&
+        (std::abs(visual_transform->rc(1, 1)) > 1.0f)) {
+      // Since DWM will perform the transform scaling on dest_size/target_rect
+      // when display, so the inverse scaling ratio should be applied in the
+      // process of calculating dest_size/target_rect than directly using
+      // the monitor size.
+      float inverse_scale_x = 1.0f / std::abs(visual_transform->rc(0, 0));
+      float inverse_scale_y = 1.0f / std::abs(visual_transform->rc(1, 1));
+      *dest_size =
+          gfx::ScaleSize(monitor_size, inverse_scale_x, inverse_scale_y);
+      *target_rect =
+          gfx::ScaleRect(*visual_clip_rect, inverse_scale_x, inverse_scale_y);
+    } else {
+      *dest_size = monitor_size;
+      *target_rect = *visual_clip_rect;
+    }
   } else {
     // For underlay scenario, keep the destination surface size and target
     // region according to swap chain size.
@@ -1591,9 +1618,9 @@ bool SwapChainPresenter::PresentToSwapChain(DCLayerOverlayParams& params,
     staging_texture_.Reset();
     copy_texture_.Reset();
   } else {
-    input_texture = UploadVideoImage(params.overlay_image->size(),
-                                     params.overlay_image->nv12_pixmap(),
-                                     params.overlay_image->pixmap_stride());
+    input_texture = UNSAFE_TODO(UploadVideoImage(
+        params.overlay_image->size(), params.overlay_image->nv12_pixmap(),
+        params.overlay_image->pixmap_stride()));
     input_level = 0;
   }
 
@@ -1774,8 +1801,6 @@ void SwapChainPresenter::RecordPresentationStatistics() {
 bool SwapChainPresenter::PresentDCOMPSurface(DCLayerOverlayParams& params,
                                              gfx::Transform* visual_transform,
                                              gfx::Rect* visual_clip_rect) {
-  // TODO(crbug.com/40642952): Include an early out path in case the same dcomp
-  // surface is being presented.
   auto* dcomp_surface_proxy = params.overlay_image->dcomp_surface_proxy();
   last_overlay_image_ = std::move(params.overlay_image);
 
@@ -1940,10 +1965,15 @@ bool SwapChainPresenter::VideoProcessorBlt(
                               gfx::ColorSpace::CreateHDR10())
                         : output_dxgi_color_space;
 
-    if (SUCCEEDED(swap_chain3->SetColorSpace1(swap_dxgi_color_space))) {
-      context1->VideoProcessorSetOutputColorSpace1(video_processor.Get(),
-                                                   output_dxgi_color_space);
+    // Can fail with E_INVALIDARG if the swap chain does not support the
+    // DXGI color space. We should still set the output color space as
+    // best effort.
+    HRESULT hr = swap_chain3->SetColorSpace1(swap_dxgi_color_space);
+    if (FAILED(hr)) {
+      DLOG(ERROR) << " SetColorSpace1 failed with error: " << hr;
     }
+    context1->VideoProcessorSetOutputColorSpace1(video_processor.Get(),
+                                                 output_dxgi_color_space);
   } else {
     // This can't handle as many different types of color spaces, so use it
     // only if ID3D11VideoContext1 isn't available.
@@ -2320,8 +2350,11 @@ bool SwapChainPresenter::ReallocateSwapChain(
   return true;
 }
 
-void SwapChainPresenter::OnPowerStateChange(bool on_battery_power) {
-  is_on_battery_power_ = on_battery_power;
+void SwapChainPresenter::OnBatteryPowerStatusChange(
+    base::PowerStateObserver::BatteryPowerStatus battery_power_status) {
+  is_on_battery_power_ =
+      (battery_power_status ==
+       base::PowerStateObserver::BatteryPowerStatus::kBatteryPower);
 }
 
 bool SwapChainPresenter::ShouldUseVideoProcessorScaling() {

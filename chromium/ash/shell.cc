@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "ash/shell.h"
 
 #include <algorithm>
@@ -40,6 +45,7 @@
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/app_list_feature_usage_metrics.h"
 #include "ash/assistant/assistant_controller_impl.h"
+#include "ash/auth/active_session_auth_controller_impl.h"
 #include "ash/birch/birch_model.h"
 #include "ash/booting/booting_animation_controller.h"
 #include "ash/calendar/calendar_controller.h"
@@ -112,6 +118,7 @@
 #include "ash/projector/projector_controller_impl.h"
 #include "ash/public/cpp/accelerator_keycode_lookup_cache.h"
 #include "ash/public/cpp/ash_prefs.h"
+#include "ash/public/cpp/coral_delegate.h"
 #include "ash/public/cpp/holding_space/holding_space_controller.h"
 #include "ash/public/cpp/login/local_authentication_request_controller.h"
 #include "ash/public/cpp/nearby_share_delegate.h"
@@ -119,7 +126,6 @@
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/public/cpp/system_sounds_delegate.h"
 #include "ash/public/cpp/tab_cluster/tab_cluster_ui_controller.h"
 #include "ash/public/cpp/views_text_services_context_menu_ash.h"
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
@@ -252,6 +258,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
+#include "chromeos/ash/components/audio/system_sounds_delegate.h"
 #include "chromeos/ash/components/dbus/fwupd/fwupd_client.h"
 #include "chromeos/ash/components/dbus/typecd/typecd_client.h"
 #include "chromeos/ash/components/dbus/usb/usbguard_client.h"
@@ -275,6 +282,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 #include "ui/chromeos/user_activity_power_manager_notifier.h"
@@ -457,7 +465,7 @@ int Shell::GetOpenSystemModalWindowContainerId() {
       }
       for (const aura::Window* child : system_modal->children()) {
         if (child->GetProperty(aura::client::kModalKey) ==
-                ui::MODAL_TYPE_SYSTEM &&
+                ui::mojom::ModalType::kSystem &&
             child->layer()->GetTargetVisibility()) {
           return modal_window_id;
         }
@@ -693,6 +701,8 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
       parent_access_controller_(std::make_unique<ParentAccessControllerImpl>()),
       local_authentication_request_controller_(
           std::make_unique<LocalAuthenticationRequestControllerImpl>()),
+      active_session_auth_controller_(
+          std::make_unique<ActiveSessionAuthControllerImpl>()),
       session_controller_(std::make_unique<SessionControllerImpl>()),
       feature_discover_reporter_(
           std::make_unique<FeatureDiscoveryDurationReporterImpl>(
@@ -740,6 +750,8 @@ Shell::~Shell() {
   }
 
   ash_dbus_services_.reset();
+
+  coral_delegate_.reset();
 
   saved_desk_controller_.reset();
   saved_desk_delegate_.reset();
@@ -812,6 +824,7 @@ Shell::~Shell() {
   // accessing invalid memory (see b/315127220).
   AccessibilityController::Get()->SetAccessibilityEventRewriter(nullptr);
   AccessibilityController::Get()->SetDisableTrackpadEventRewriter(nullptr);
+  AccessibilityController::Get()->SetFilterKeysEventRewriter(nullptr);
   event_rewriter_controller_.reset();
   keyboard_modifier_metrics_recorder_.reset();
   touchscreen_metrics_recorder_.reset();
@@ -828,6 +841,7 @@ Shell::~Shell() {
   // since the latters destructor triggers events that the former is listening
   // to but no longer cares about.
   keyboard_controller_->DestroyVirtualKeyboard();
+  picker_controller_.reset();
 
   // Depends on |tablet_mode_controller_|.
   window_restore_controller_.reset();
@@ -1038,6 +1052,7 @@ Shell::~Shell() {
   accessibility_delegate_.reset();
   accessibility_focus_ring_controller_.reset();
   policy_recommendation_restorer_.reset();
+  active_session_auth_controller_.reset();
   ime_controller_.reset();
   back_gesture_event_handler_.reset();
 
@@ -1805,9 +1820,11 @@ void Shell::Init(
       CoralController::IsSecretKeyMatched()) {
     coral_controller_ = std::make_unique<CoralController>();
   }
+  if (features::IsBirchCoralEnabled()) {
+    coral_delegate_ = shell_delegate_->CreateCoralDelegate();
+  }
 
-  if (features::IsPickerUpdateEnabled() &&
-      PickerController::IsFeatureKeyMatched()) {
+  if (features::IsPickerUpdateEnabled()) {
     picker_controller_ = std::make_unique<PickerController>();
   }
 
@@ -1864,6 +1881,8 @@ void Shell::Init(
   // Initialize the D-Bus bus and services for ash.
   dbus_bus_ = dbus_bus;
   ash_dbus_services_ = std::make_unique<AshDBusServices>(dbus_bus.get());
+
+  tab_strip_delegate_ = shell_delegate_->CreateTabStripDelegate();
 }
 
 void Shell::InitializeDisplayManager() {
@@ -1985,8 +2004,7 @@ std::unique_ptr<ui::EventTargetIterator> Shell::GetChildIterator() const {
 }
 
 ui::EventTargeter* Shell::GetEventTargeter() {
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 void Shell::OnWindowActivated(
@@ -2019,22 +2037,13 @@ void Shell::OnFirstSessionStarted() {
       std::make_unique<AppListFeatureUsageMetrics>();
 }
 
-void Shell::OnSessionStateChanged(session_manager::SessionState state) {
-  const bool is_session_active = state == session_manager::SessionState::ACTIVE;
-  // Initialize the |shelf_window_watcher_| when a session becomes active.
-  // Shelf itself is initialized in RootWindowController.
-  if (is_session_active && !shelf_window_watcher_) {
-    shelf_window_watcher_ =
-        std::make_unique<ShelfWindowWatcher>(shelf_controller()->model());
-  }
-
+void Shell::OnFirstSessionReady() {
   // Initialize the fwupd (firmware updater) DBus client only when the user
   // session is active. Since the fwupd service is only relevant during an
   // active user session, this prevents a bug in which the service would start
   // up earlier than expected and causes a delay during boot.
   // See b/250002264 for more details.
-  if (is_session_active && !FwupdClient::Get() &&
-      !firmware_update_notification_controller_ &&
+  if (!FwupdClient::Get() && !firmware_update_notification_controller_ &&
       !features::IsBlockFwupdClientEnabled()) {
     chromeos::InitializeDBusClient<FwupdClient>(dbus_bus_.get());
     firmware_update_manager_ = std::make_unique<FirmwareUpdateManager>();
@@ -2046,6 +2055,16 @@ void Shell::OnSessionStateChanged(session_manager::SessionState state) {
             message_center::MessageCenter::Get());
     firmware_update_manager_->RequestAllUpdates(
         FirmwareUpdateManager::Source::kStartup);
+  }
+}
+
+void Shell::OnSessionStateChanged(session_manager::SessionState state) {
+  const bool is_session_active = state == session_manager::SessionState::ACTIVE;
+  // Initialize the |shelf_window_watcher_| when a session becomes active.
+  // Shelf itself is initialized in RootWindowController.
+  if (is_session_active && !shelf_window_watcher_) {
+    shelf_window_watcher_ =
+        std::make_unique<ShelfWindowWatcher>(shelf_controller()->model());
   }
 
   // Disable drag-and-drop during OOBE and GAIA login screens by only enabling

@@ -6,12 +6,16 @@
 #define IOS_CHROME_BROWSER_AUTOCOMPLETE_MODEL_AUTOCOMPLETE_PROVIDER_CLIENT_IMPL_H_
 
 #import "base/memory/raw_ptr.h"
-#include "components/omnibox/browser/actions/omnibox_pedal.h"
-#include "components/omnibox/browser/autocomplete_provider_client.h"
-#include "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
-#include "ios/chrome/browser/autocomplete/model/tab_matcher_impl.h"
+#import "components/omnibox/browser/actions/omnibox_pedal.h"
+#import "components/omnibox/browser/autocomplete_provider_client.h"
+#import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
+#import "ios/chrome/browser/autocomplete/model/tab_matcher_impl.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
-class ChromeBrowserState;
+// Vivaldi
+#include "components/direct_match/direct_match_service.h"
+// End Vivaldi
+
 class AutocompleteScoringModelService;
 class OnDeviceTailModelService;
 struct ProviderStateService;
@@ -28,7 +32,7 @@ class ComponentUpdateService;
 // AutocompleteProviderClient interface.
 class AutocompleteProviderClientImpl : public AutocompleteProviderClient {
  public:
-  explicit AutocompleteProviderClientImpl(ChromeBrowserState* browser_state);
+  explicit AutocompleteProviderClientImpl(ProfileIOS* profile);
 
   AutocompleteProviderClientImpl(const AutocompleteProviderClientImpl&) =
       delete;
@@ -60,7 +64,6 @@ class AutocompleteProviderClientImpl : public AutocompleteProviderClient {
   scoped_refptr<ShortcutsBackend> GetShortcutsBackendIfExists() override;
   std::unique_ptr<KeywordExtensionsDelegate> GetKeywordExtensionsDelegate(
       KeywordProvider* keyword_provider) override;
-  query_tiles::TileService* GetQueryTileService() const override;
   OmniboxTriggeredFeatureService* GetOmniboxTriggeredFeatureService()
       const override;
   AutocompleteScoringModelService* GetAutocompleteScoringModelService()
@@ -103,8 +106,12 @@ class AutocompleteProviderClientImpl : public AutocompleteProviderClient {
   void CloseIncognitoWindows() override {}
   void PromptPageTranslation() override {}
 
+  // Vivaldi
+  direct_match::DirectMatchService* GetDirectMatchService() override;
+  // End Vivaldi
+
  private:
-  raw_ptr<ChromeBrowserState> browser_state_;
+  raw_ptr<ProfileIOS> profile_;
   AutocompleteSchemeClassifierImpl scheme_classifier_;
   std::unique_ptr<unified_consent::UrlKeyedDataCollectionConsentHelper>
       url_consent_helper_;

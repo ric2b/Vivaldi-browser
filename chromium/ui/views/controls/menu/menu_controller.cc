@@ -1508,6 +1508,23 @@ void MenuController::SetSelection(MenuItemView* menu_item,
   if (pending_item_changed && pending_state_.item)
     SetHotTrackedButton(nullptr);
 
+  // Notify an accessibility focus event on all menu items except for the root.
+  bool ensure_focus_within_popup =
+      menu_item && pending_item_changed &&
+      (MenuDepth(menu_item) != 1 ||
+       menu_item->GetType() != MenuItemView::Type::kSubMenu ||
+       (menu_item->GetType() == MenuItemView::Type::kActionableSubMenu &&
+        (selection_types & SELECTION_OPEN_SUBMENU) == 0));
+  if (ensure_focus_within_popup) {
+    // The selection event is now fired when the selected state is set on the
+    // accessibility cache when the MenuItem is selected. Before firing the
+    // selection event, ensure that focus appears to be within the popup. This
+    // is helpful for ATs on some platforms, specifically on Windows, where
+    // selection events in a list are mapped to focus events. Without this call,
+    // the focus appears to be elsewhere.
+    menu_item->GetViewAccessibility().SetPopupFocusOverride();
+  }
+
   // Notify the old path it isn't selected.
   MenuDelegate* current_delegate =
       current_path.empty() ? nullptr : current_path.front()->GetDelegate();
@@ -1556,18 +1573,7 @@ void MenuController::SetSelection(MenuItemView* menu_item,
     StartShowTimer();
   }
 
-  // Notify an accessibility focus event on all menu items except for the root.
-  if (menu_item && pending_item_changed &&
-      (MenuDepth(menu_item) != 1 ||
-       menu_item->GetType() != MenuItemView::Type::kSubMenu ||
-       (menu_item->GetType() == MenuItemView::Type::kActionableSubMenu &&
-        (selection_types & SELECTION_OPEN_SUBMENU) == 0))) {
-    // Before firing the selection event, ensure that focus appears to be
-    // within the popup. This is helpful for ATs on some platforms,
-    // specifically on Windows, where selection events in a list are mapped
-    // to focus events. Without this call, the focus appears to be elsewhere.
-    menu_item->GetViewAccessibility().SetPopupFocusOverride();
-    menu_item->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+  if (ensure_focus_within_popup) {
     // Notify an accessibility selected children changed event on the parent
     // submenu.
     if (menu_item->GetParentMenuItem() &&
@@ -2685,20 +2691,21 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
     // First the size gets reduced to the possible space.
     const bool is_anchored_bubble = MenuItemView::IsBubble(state_.anchor);
     if (!monitor_bounds.IsEmpty()) {
-      int max_width = monitor_bounds.width();
-      int max_height = monitor_bounds.height();
+      int max_width = monitor_bounds.width() + border_insets.width();
+      int max_height = monitor_bounds.height() + border_insets.height();
       // In case of bubbles, the maximum width is limited by the space
       // between the display corner and the target area + the tip size.
       const bool is_bubble_menu =
           menu_config.use_bubble_border && corner_radius;
       if (is_anchored_bubble || is_bubble_menu ||
           item->actual_menu_position() == MenuPosition::kAboveBounds) {
-        // Don't consider `border_insets` because when the max size is enforced,
-        // the scroll view is shown and the md shadows are not applied.
+        // menu_size is expected to include not just the content size
+        // but also the (border and shadow) insets, which can go offscreen.
         max_height =
             std::max(anchor_bounds.y() - monitor_bounds.y(),
                      monitor_bounds.bottom() - anchor_bounds.bottom()) -
-            (is_bubble_menu ? 0 : menu_config.touchable_anchor_offset);
+            (is_bubble_menu ? 0 : menu_config.touchable_anchor_offset) +
+            border_insets.height();
       }
       // The menu should always have a non-empty available area.
       DCHECK_GE(max_width, kBubbleTipSizeLeftRight);
@@ -2760,14 +2767,16 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
       case MenuAnchorPosition::kBubbleBottomLeft:
       case MenuAnchorPosition::kTopRight:
       case MenuAnchorPosition::kBottomCenter:
-        x = x_menu_on_left >= monitor_bounds.x() ? x_menu_on_left
-                                                 : x_menu_on_right;
+        x = x_menu_on_left + border_insets.left() >= monitor_bounds.x()
+                ? x_menu_on_left
+                : x_menu_on_right;
         break;
       case MenuAnchorPosition::kBubbleTopRight:
       case MenuAnchorPosition::kBubbleRight:
       case MenuAnchorPosition::kBubbleBottomRight:
       case MenuAnchorPosition::kTopLeft:
-        x = x_menu_on_right + menu_size.width() <= monitor_bounds.right()
+        x = x_menu_on_right + menu_size.width() - border_insets.right() <=
+            monitor_bounds.right()
                 ? x_menu_on_right
                 : x_menu_on_left;
         break;
@@ -2775,8 +2784,10 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
 
     // Choose the most appropriate y coordinate.
     const bool able_to_show_menu_below =
-        y_menu_below + menu_size.height() <= monitor_bounds.bottom();
-    const bool able_to_show_menu_above = y_menu_above >= monitor_bounds.y();
+        y_menu_below + menu_size.height() - border_insets.bottom() <=
+        monitor_bounds.bottom();
+    const bool able_to_show_menu_above =
+        y_menu_above + border_insets.top() >= monitor_bounds.y();
     switch (state_.anchor) {
       case MenuAnchorPosition::kBubbleLeft:
       case MenuAnchorPosition::kBubbleRight:
@@ -2797,7 +2808,8 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
           item->set_actual_menu_position(MenuPosition::kAboveBounds);
         } else {
           // No room above or below. Show the menu as low as possible.
-          y = monitor_bounds.bottom() - menu_size.height();
+          y = monitor_bounds.bottom() + border_insets.bottom() -
+              menu_size.height();
           item->set_actual_menu_position(MenuPosition::kBestFit);
         }
         break;
@@ -2815,7 +2827,7 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
           item->set_actual_menu_position(MenuPosition::kBelowBounds);
         } else {
           // No room above or below. Show the menu as high as possible.
-          y = monitor_bounds.y();
+          y = monitor_bounds.y() - border_insets.top();
           item->set_actual_menu_position(MenuPosition::kBestFit);
         }
         break;
@@ -2844,6 +2856,7 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
 
     const int width_with_right_inset =
         menu_size.width() - border_insets.right();
+    const int x_min = monitor_bounds.x() - border_insets.left();
     const int x_max = monitor_bounds.right() - width_with_right_inset;
     const int x_left = anchor_bounds.x() - width_with_right_inset +
                        menu_config.submenu_horizontal_overlap;
@@ -2853,7 +2866,7 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
       if (monitor_bounds.width() == 0 || x_right <= x_max) {
         // Enough room on the right, show normally.
         x = x_right;
-      } else if (x_left >= monitor_bounds.x()) {
+      } else if (x_left >= x_min) {
         // Enough room on the left, show there.
         *resulting_direction = preferred_open_direction;
         x = x_left;
@@ -2862,7 +2875,7 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
         x = x_max;
       }
     } else {
-      if (monitor_bounds.width() == 0 || x_left >= monitor_bounds.x()) {
+      if (monitor_bounds.width() == 0 || x_left >= x_min) {
         // Enough room on the left, show normally.
         x = x_left;
       } else if (x_right <= x_max) {
@@ -2874,7 +2887,7 @@ gfx::Rect MenuController::CalculateBubbleMenuBounds(
         x = x_right;
       } else {
         // No room on either side. Flush the menu to the left edge.
-        x = monitor_bounds.x();
+        x = x_min;
       }
     }
 

@@ -13,6 +13,7 @@
 #include "base/feature_list.h"
 #include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -48,7 +49,7 @@ int AdSizeToPixels(double size, blink::AdSize::LengthUnit unit) {
       return static_cast<int>(size / 100.0 * screen_height);
     }
     case blink::AdSize::LengthUnit::kInvalid:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -78,11 +79,8 @@ GURL SubstituteSizeIntoURL(const blink::AdDescriptor& ad_descriptor) {
   // Set up the width and height macros, in two formats.
   substitutions.emplace_back("{%AD_WIDTH%}", width);
   substitutions.emplace_back("{%AD_HEIGHT%}", height);
-  if (base::FeatureList::IsEnabled(
-          blink::features::kFencedFramesM120FeaturesPart1)) {
-    substitutions.emplace_back("${AD_WIDTH}", width);
-    substitutions.emplace_back("${AD_HEIGHT}", height);
-  }
+  substitutions.emplace_back("${AD_WIDTH}", width);
+  substitutions.emplace_back("${AD_HEIGHT}", height);
 
   return GURL(SubstituteMappedStrings(ad_descriptor.url.spec(), substitutions));
 }
@@ -235,12 +233,9 @@ FencedFrameURLMapping::AssignFencedFrameURLAndInterestGroupInfo(
   config.deprecated_should_freeze_initial_size_.emplace(
       !ad_descriptor.size.has_value(), VisibilityToEmbedder::kTransparent,
       VisibilityToContent::kOpaque);
-  config.ad_auction_data_.emplace(
-      (base::FeatureList::IsEnabled(
-          blink::features::kFencedFramesM120FeaturesPart2))
-          ? ad_auction_data
-          : std::move(ad_auction_data),
-      VisibilityToEmbedder::kOpaque, VisibilityToContent::kOpaque);
+  config.ad_auction_data_.emplace(ad_auction_data,
+                                  VisibilityToEmbedder::kOpaque,
+                                  VisibilityToContent::kOpaque);
   config.on_navigate_callback_ = std::move(on_navigate_callback);
 
   config.effective_enabled_permissions_ =
@@ -274,14 +269,11 @@ FencedFrameURLMapping::AssignFencedFrameURLAndInterestGroupInfo(
           /*fenced_frame_reporter=*/fenced_frame_reporter,
           /*is_ad_component=*/true);
     }
-    if (base::FeatureList::IsEnabled(
-            blink::features::kFencedFramesM120FeaturesPart2)) {
-      // M120 and afterwards: The ad auction data is added to the nested configs
-      // in order to enable leaveAdInterestGroup() for ad components.
-      nested_configs.back().ad_auction_data_.emplace(
-          ad_auction_data, VisibilityToEmbedder::kOpaque,
-          VisibilityToContent::kOpaque);
-    }
+    // The ad auction data is added to the nested configs in order to enable
+    // leaveAdInterestGroup() for ad components.
+    nested_configs.back().ad_auction_data_.emplace(
+        ad_auction_data, VisibilityToEmbedder::kOpaque,
+        VisibilityToContent::kOpaque);
   }
   config.nested_configs_.emplace(std::move(nested_configs),
                                  VisibilityToEmbedder::kOpaque,
@@ -324,6 +316,11 @@ void FencedFrameURLMapping::ConvertFencedFrameURNToURL(
   auto it = urn_uuid_to_url_map_.find(urn_uuid);
   if (it != urn_uuid_to_url_map_.end()) {
     properties = FencedFrameProperties(it->second);
+  }
+
+  if (properties.has_value() && properties->ad_auction_data().has_value()) {
+    base::UmaHistogramBoolean("Ads.InterestGroup.Auction.AdNavigationStarted",
+                              true);
   }
 
   observer->OnFencedFrameURLMappingComplete(properties);

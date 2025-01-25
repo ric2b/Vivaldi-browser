@@ -15,7 +15,6 @@
 #include "build/chromecast_buildflags.h"
 #include "build/chromeos_buildflags.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
-#include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
@@ -47,8 +46,16 @@
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "gpu/command_buffer/service/shared_image/angle_vulkan_image_backing_factory.h"
-#include "gpu/command_buffer/service/shared_image/external_vk_image_backing_factory.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_WIN)
+#include "gpu/command_buffer/service/shared_image/external_vk_image_backing_factory.h"
+#endif
+
+#if BUILDFLAG(IS_ANDROID)
+#include <vulkan/vulkan_android.h>
+#endif
+
 #endif  // BUILDFLAG(ENABLE_VULKAN)
 
 #if BUILDFLAG(IS_OZONE)
@@ -85,24 +92,6 @@ namespace gpu {
 
 namespace {
 
-#if BUILDFLAG(IS_ANDROID)
-// Feature enabling ExternalVkImageBacking use on Android. Serves as reverse
-// killswitch while we roll out disabling of this backing on Android.
-// TODO(crbug.com/342096125): Remove post-safe rollout.
-BASE_FEATURE(kUseExternalVkImageBackingOnAndroid,
-             "UseExternalVkImageBackingOnAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS)
-// Feature enabling ExternalVkImageBacking use on ChromeOS. Serves as reverse
-// killswitch while we roll out disabling of this backing on ChromeOS.
-// TODO(crbug.com/336837285): Remove post-safe rollout.
-BASE_FEATURE(kUseExternalVkImageBackingOnChromeOS,
-             "UseExternalVkImageBackingOnChromeOS",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
 const char* GmbTypeToString(gfx::GpuMemoryBufferType type) {
   switch (type) {
     case gfx::EMPTY_BUFFER:
@@ -117,31 +106,6 @@ const char* GmbTypeToString(gfx::GpuMemoryBufferType type) {
   }
   NOTREACHED_IN_MIGRATION();
 }
-
-#if defined(USE_OZONE)
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum FormatPixmapSupport { kNone = 0, kNV12 = 1, kYV12 = 2, kMaxValue = kYV12 };
-
-// Return the supported multiplanar format in order of fallback support.
-FormatPixmapSupport GetFormatPixmapSupport(
-    std::vector<gfx::BufferFormat> supported_formats) {
-  FormatPixmapSupport val = FormatPixmapSupport::kNone;
-  for (auto format : supported_formats) {
-    if (format == gfx::BufferFormat::YUV_420_BIPLANAR) {
-      val = FormatPixmapSupport::kNV12;
-      break;
-    } else if (format == gfx::BufferFormat::YVU_420) {
-      val = FormatPixmapSupport::kYV12;
-    }
-  }
-  return val;
-}
-
-// Set bool only once as formats supported on platform don't change on factory
-// creation.
-bool set_format_supported_metric = false;
-#endif
 
 gfx::GpuMemoryBufferType GetNativeBufferType() {
 #if BUILDFLAG(IS_APPLE)
@@ -224,28 +188,6 @@ SharedImageFactory::SharedImageFactory(
       texture_target_for_io_surfaces_(GetTextureTargetForIOSurfaces()),
 #endif
       workarounds_(workarounds) {
-#if defined(USE_OZONE)
-  if (!set_format_supported_metric) {
-    bool is_pixmap_supported = ui::OzonePlatform::GetInstance()
-                                   ->GetPlatformRuntimeProperties()
-                                   .supports_native_pixmaps;
-    // Only log histogram for formats that are used with real GMBs containing
-    // native pixmap.
-    if (is_pixmap_supported) {
-      auto* factory =
-          ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
-      if (factory) {
-        // Get all formats that are supported by platform.
-        auto supported_formats = factory->GetSupportedFormatsForTexturing();
-        auto supported_format = GetFormatPixmapSupport(supported_formats);
-        base::UmaHistogramEnumeration("GPU.SharedImage.FormatPixmapSupport",
-                                      supported_format);
-      }
-    }
-    set_format_supported_metric = true;
-  }
-#endif
-
   auto shared_memory_backing_factory =
       std::make_unique<SharedMemoryImageBackingFactory>();
   factories_.push_back(std::move(shared_memory_backing_factory));
@@ -364,13 +306,6 @@ SharedImageFactory::SharedImageFactory(
         feature_info.get(), gpu_preferences_);
     factories_.push_back(std::move(ahb_factory));
   }
-  if (gr_context_type_ == GrContextType::kVulkan &&
-      !base::FeatureList::IsEnabled(features::kVulkanFromANGLE) &&
-      base::FeatureList::IsEnabled(kUseExternalVkImageBackingOnAndroid)) {
-    auto external_vk_image_factory =
-        std::make_unique<ExternalVkImageBackingFactory>(context_state_);
-    factories_.push_back(std::move(external_vk_image_factory));
-  }
 #elif BUILDFLAG(IS_OZONE)
   // For all Ozone platforms - Desktop Linux, ChromeOS, Fuchsia, CastOS.
   if (ui::OzonePlatform::GetInstance()
@@ -380,17 +315,14 @@ SharedImageFactory::SharedImageFactory(
         context_state_, workarounds_);
     factories_.push_back(std::move(ozone_factory));
   }
-#if BUILDFLAG(ENABLE_VULKAN)
-  if (gr_context_type_ == GrContextType::kVulkan
-#if BUILDFLAG(IS_CHROMEOS)
-      && base::FeatureList::IsEnabled(kUseExternalVkImageBackingOnChromeOS)
-#endif
-  ) {
+#if BUILDFLAG(ENABLE_VULKAN) && (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_FUCHSIA))
+  if (gr_context_type_ == GrContextType::kVulkan) {
     auto external_vk_image_factory =
         std::make_unique<ExternalVkImageBackingFactory>(context_state_);
     factories_.push_back(std::move(external_vk_image_factory));
   }
-#endif  // BUILDFLAG(ENABLE_VULKAN)
+#endif  // BUILDFLAG(ENABLE_VULKAN) && (BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_FUCHSIA))
 #endif  // BUILDFLAG(IS_OZONE)
 
 #if BUILDFLAG(IS_APPLE)
@@ -434,12 +366,11 @@ bool SharedImageFactory::CreateSharedImage(const Mailbox& mailbox,
       alpha_type, SharedImageUsageSet(usage), std::move(debug_label),
       IsSharedBetweenThreads(usage));
 
-  if (backing) {
-    DVLOG(1) << "CreateSharedImage[" << backing->GetName()
-             << "] size=" << size.ToString()
-             << " usage=" << CreateLabelForSharedImageUsage(usage)
-             << " format=" << format.ToString();
-  }
+  DVLOG_IF(1, !!backing) << "CreateSharedImage[" << backing->GetName()
+                         << "] size=" << size.ToString()
+                         << " usage=" << CreateLabelForSharedImageUsage(usage)
+                         << " format=" << format.ToString();
+
   return RegisterBacking(std::move(backing));
 }
 
@@ -618,14 +549,6 @@ bool SharedImageFactory::CreateSharedImage(
     SharedImageUsageSet usage,
     std::string debug_label,
     gfx::GpuMemoryBufferHandle buffer_handle) {
-  if (format.IsLegacyMultiplanar()) {
-    // Use this for multi-planar and real single-planar formats. All legacy
-    // multi-planar GMBs must go through CreateSharedImage() that takes
-    // BufferPlane parameter.
-    LOG(ERROR) << "Invalid format " << format.ToString();
-    return false;
-  }
-
   gfx::GpuMemoryBufferType gmb_type = buffer_handle.type;
 
   bool use_compound = false;
@@ -758,21 +681,21 @@ bool SharedImageFactory::PresentSwapChain(const Mailbox& mailbox) {
 void SharedImageFactory::RegisterSysmemBufferCollection(
     zx::eventpair service_handle,
     zx::channel sysmem_token,
-    gfx::BufferFormat format,
+    const viz::SharedImageFormat& format,
     gfx::BufferUsage usage,
     bool register_with_image_pipe) {
   auto* vulkan_context_provider = context_state_->vk_context_provider();
   VkDevice device =
       vulkan_context_provider->GetDeviceQueue()->GetVulkanDevice();
   DCHECK(device != VK_NULL_HANDLE);
+  auto buffer_format = ToBufferFormat(format);
   vulkan_context_provider->GetVulkanImplementation()
       ->RegisterSysmemBufferCollection(
-          device, std::move(service_handle), std::move(sysmem_token), format,
-          usage, gfx::Size(), 0, register_with_image_pipe);
+          device, std::move(service_handle), std::move(sysmem_token),
+          buffer_format, usage, gfx::Size(), 0, register_with_image_pipe);
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
-#if BUILDFLAG(IS_WIN)
 bool SharedImageFactory::CopyToGpuMemoryBuffer(const Mailbox& mailbox) {
   auto it = shared_images_.find(mailbox);
   if (it == shared_images_.end()) {
@@ -782,6 +705,7 @@ bool SharedImageFactory::CopyToGpuMemoryBuffer(const Mailbox& mailbox) {
   return (*it)->CopyToGpuMemoryBuffer();
 }
 
+#if BUILDFLAG(IS_WIN)
 bool SharedImageFactory::CopyToGpuMemoryBufferAsync(
     const Mailbox& mailbox,
     base::OnceCallback<void(bool)> callback) {
@@ -831,6 +755,9 @@ gpu::SharedImageCapabilities SharedImageFactory::MakeCapabilities() {
       !is_angle_metal && !is_skia_graphite;
   shared_image_caps.supports_r16_shared_images =
       is_angle_metal || is_skia_graphite;
+  shared_image_caps.supports_native_nv12_mappable_shared_images =
+      IsNativeBufferSupported(gfx::BufferFormat::YUV_420_BIPLANAR,
+                              gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
   shared_image_caps.disable_r8_shared_images =
       workarounds_.r8_egl_images_broken;
   shared_image_caps.disable_webgpu_shared_images =
@@ -1026,6 +953,15 @@ SharedImageRepresentationFactory::ProduceDawn(
     scoped_refptr<SharedContextState> context_state) {
   return manager_->ProduceDawn(mailbox, tracker_.get(), device, backend_type,
                                std::move(view_formats), context_state);
+}
+
+std::unique_ptr<DawnBufferRepresentation>
+SharedImageRepresentationFactory::ProduceDawnBuffer(
+    const Mailbox& mailbox,
+    const wgpu::Device& device,
+    wgpu::BackendType backend_type) {
+  return manager_->ProduceDawnBuffer(mailbox, tracker_.get(), device,
+                                     backend_type);
 }
 
 std::unique_ptr<OverlayImageRepresentation>

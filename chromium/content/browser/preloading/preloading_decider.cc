@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_split.h"
+#include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/preloading/prefetch/no_vary_search_helper.h"
 #include "content/browser/preloading/prefetch/prefetch_document_manager.h"
 #include "content/browser/preloading/prefetch/prefetch_params.h"
@@ -120,8 +121,8 @@ class PreloadingDecider::BehaviorConfig {
                preloading_predictor::kPreloadingHeuristicsMLModel) {
       return ml_model_eagerness_;
     } else {
-      NOTREACHED_NORETURN() << "unexpected predictor " << predictor.name()
-                            << "/" << predictor.ukm_value();
+      NOTREACHED() << "unexpected predictor " << predictor.name() << "/"
+                   << predictor.ukm_value();
     }
   }
 
@@ -142,8 +143,8 @@ class PreloadingDecider::BehaviorConfig {
           return ml_model_prerender_moderate_threshold_;
       }
     } else {
-      NOTREACHED_NORETURN() << "unexpected predictor " << predictor.name()
-                            << "/" << predictor.ukm_value();
+      NOTREACHED() << "unexpected predictor " << predictor.name() << "/"
+                   << predictor.ukm_value();
     }
   }
 
@@ -175,16 +176,12 @@ PreloadingDecider::PreloadingDecider(RenderFrameHost* rfh)
       preconnector_(render_frame_host()),
       prefetcher_(render_frame_host()),
       prerenderer_(std::make_unique<PrerendererImpl>(render_frame_host())) {
-  if (PrefetchNewLimitsEnabled()) {
-    PrefetchDocumentManager::GetOrCreateForCurrentDocument(rfh)
-        ->SetPrefetchDestructionCallback(base::BindRepeating(
-            &OnPrefetchDestroyed, rfh->GetWeakDocumentPtr()));
-  }
+  PrefetchDocumentManager::GetOrCreateForCurrentDocument(rfh)
+      ->SetPrefetchDestructionCallback(
+          base::BindRepeating(&OnPrefetchDestroyed, rfh->GetWeakDocumentPtr()));
 
-  if (base::FeatureList::IsEnabled(features::kPrerender2NewLimitAndScheduler)) {
-    prerenderer_->SetPrerenderCancellationCallback(
-        base::BindRepeating(&OnPrerenderCanceled, rfh->GetWeakDocumentPtr()));
-  }
+  prerenderer_->SetPrerenderCancellationCallback(
+      base::BindRepeating(&OnPrerenderCanceled, rfh->GetWeakDocumentPtr()));
 }
 
 PreloadingDecider::~PreloadingDecider() = default;
@@ -354,6 +351,8 @@ void PreloadingDecider::UpdateSpeculationCandidates(
   if (observer_for_testing_) {
     observer_for_testing_->UpdateSpeculationCandidates(candidates);
   }
+  devtools_instrumentation::DidUpdateSpeculationCandidates(render_frame_host(),
+                                                           candidates);
 
   WebContents* web_contents =
       WebContents::FromRenderFrameHost(&render_frame_host());
@@ -487,6 +486,7 @@ bool PreloadingDecider::MaybePrefetch(
       std::move(matched_candidate_pair.value().second), enacting_predictor);
 
   auto it = on_standby_candidates_.find(key);
+  CHECK(it != on_standby_candidates_.end());
   std::vector<blink::mojom::SpeculationCandidatePtr> candidates_for_key =
       std::move(it->second);
   RemoveStandbyCandidate(key);
@@ -616,6 +616,7 @@ std::pair<bool, bool> PreloadingDecider::MaybePrerender(
       result.first && PredictionOccursInOtherWebContents(*candidate);
 
   auto it = on_standby_candidates_.find(key);
+  CHECK(it != on_standby_candidates_.end());
   std::vector<blink::mojom::SpeculationCandidatePtr> processed =
       std::move(it->second);
   RemoveStandbyCandidate(it->first);

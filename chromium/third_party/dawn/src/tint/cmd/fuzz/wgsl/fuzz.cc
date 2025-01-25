@@ -149,6 +149,10 @@ void Run(std::string_view wgsl, const Options& options, Slice<const std::byte> d
     };
 #endif
 
+    if (options.dump) {
+        std::cout << "Dumping input WGSL:\n" << wgsl << std::endl;
+    }
+
     // Ensure that fuzzers are sorted. Without this, the fuzzers may be registered in any order,
     // leading to non-determinism, which we must avoid.
     TINT_STATIC_INIT(Fuzzers().Sort([](auto& a, auto& b) { return a.name < b.name; }));
@@ -171,6 +175,8 @@ void Run(std::string_view wgsl, const Options& options, Slice<const std::byte> d
     context.options = options;
     context.program_properties = ScanProgramProperties(program);
 
+    bool ran_atleast_once = false;
+
     // Run each of the program fuzzer functions
     if (options.run_concurrently) {
         size_t n = Fuzzers().Length();
@@ -181,6 +187,8 @@ void Run(std::string_view wgsl, const Options& options, Slice<const std::byte> d
                 Fuzzers()[i].name.find(options.filter) == std::string::npos) {
                 continue;
             }
+            ran_atleast_once = true;
+
             threads.Push(std::thread([i, &program, &data, &context] {
                 auto& fuzzer = Fuzzers()[i];
                 currently_running = fuzzer.name;
@@ -199,6 +207,7 @@ void Run(std::string_view wgsl, const Options& options, Slice<const std::byte> d
             if (!options.filter.empty() && fuzzer.name.find(options.filter) == std::string::npos) {
                 continue;
             }
+            ran_atleast_once = true;
 
             currently_running = fuzzer.name;
             if (options.verbose) {
@@ -206,6 +215,11 @@ void Run(std::string_view wgsl, const Options& options, Slice<const std::byte> d
             }
             fuzzer.fn(program, context, data);
         }
+    }
+
+    if (!options.filter.empty() && !ran_atleast_once) {
+        std::cerr << "ERROR: --filter=" << options.filter << " did not match any fuzzers\n";
+        exit(EXIT_FAILURE);
     }
 }
 

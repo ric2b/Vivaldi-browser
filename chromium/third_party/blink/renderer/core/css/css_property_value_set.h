@@ -200,7 +200,7 @@ class CSSLazyPropertyParser : public GarbageCollected<CSSLazyPropertyParser> {
   virtual void Trace(Visitor*) const;
 };
 
-class CORE_EXPORT ALIGNAS(std::max(alignof(Member<const CSSValue>),
+class CORE_EXPORT alignas(std::max(alignof(Member<const CSSValue>),
                                    alignof(CSSPropertyValueMetadata)))
     ImmutableCSSPropertyValueSet : public CSSPropertyValueSet {
  public:
@@ -339,7 +339,7 @@ class CORE_EXPORT MutableCSSPropertyValueSet : public CSSPropertyValueSet {
 
   template <typename T>  // CSSPropertyID or AtomicString
   bool RemoveProperty(const T& property, String* return_text = nullptr);
-  bool RemovePropertiesInSet(const CSSProperty* const set[], unsigned length);
+  bool RemovePropertiesInSet(base::span<const CSSProperty* const> set);
   void RemoveEquivalentProperties(const CSSPropertyValueSet*);
   void RemoveEquivalentProperties(const CSSStyleDeclaration*);
 

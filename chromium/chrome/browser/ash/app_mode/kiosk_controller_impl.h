@@ -13,15 +13,20 @@
 #include "ash/public/cpp/login_accelerators.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/sequence_checker.h"
+#include "base/thread_annotations.h"
+#include "chrome/browser/ash/app_mode/isolated_web_app/kiosk_iwa_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_app.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_controller.h"
+#include "chrome/browser/ash/app_mode/kiosk_system_session.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chromeos/ash/components/kiosk/vision/internals_page_processor.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/web_contents.h"
 
 namespace ash {
 
@@ -56,6 +61,8 @@ class KioskControllerImpl : public KioskController,
 
   bool HandleAccelerator(LoginAcceleratorAction action) override;
 
+  void OnGuestAdded(content::WebContents* guest_web_contents) override;
+
   KioskSystemSession* GetKioskSystemSession() override;
 
   kiosk_vision::TelemetryProcessor* GetKioskVisionTelemetryProcessor() override;
@@ -82,8 +89,13 @@ class KioskControllerImpl : public KioskController,
   void DeleteLaunchControllerAsync();
   void DeleteLaunchController();
 
+  void AppendWebApps(std::vector<KioskApp>& apps) const;
+  void AppendChromeApps(std::vector<KioskApp>& apps) const;
+  void AppendIsolatedWebApps(std::vector<KioskApp>& apps) const;
+
   SEQUENCE_CHECKER(sequence_checker_);
 
+  KioskIwaManager GUARDED_BY_CONTEXT(sequence_checker_) iwa_manager_;
   WebKioskAppManager GUARDED_BY_CONTEXT(sequence_checker_) web_app_manager_;
   KioskChromeAppManager GUARDED_BY_CONTEXT(sequence_checker_)
       chrome_app_manager_;

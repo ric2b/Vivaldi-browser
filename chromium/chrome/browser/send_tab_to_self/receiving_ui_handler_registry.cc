@@ -24,6 +24,11 @@
 #include "chrome/browser/android/send_tab_to_self/android_notification_handler.h"
 #endif
 
+// Vivaldi
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#include "ui/vivaldi_browser_window.h"
+#endif
+
 namespace send_tab_to_self {
 
 ReceivingUiHandlerRegistry::ReceivingUiHandlerRegistry() {}
@@ -40,6 +45,23 @@ void ReceivingUiHandlerRegistry::InstantiatePlatformSpecificHandlers(
 #if BUILDFLAG(IS_ANDROID)
   applicable_handlers_.push_back(
       std::make_unique<AndroidNotificationHandler>(profile));
+#endif
+}
+
+ReceivingUiHandler* ReceivingUiHandlerRegistry::GetVivaldiUIRelayForProfile(
+    Profile* profile) {
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  for (const std::unique_ptr<ReceivingUiHandler>& handler :
+       applicable_handlers_) {
+    if (handler.get()->profile() == profile) {
+      return handler.get();
+    }
+  }
+  applicable_handlers_.push_back(
+      std::make_unique<VivaldiUIRelay>(profile));
+  return applicable_handlers_.back().get();
+#else
+  return nullptr;
 #endif
 }
 

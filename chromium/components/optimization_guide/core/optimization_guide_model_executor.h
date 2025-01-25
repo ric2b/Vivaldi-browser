@@ -59,7 +59,6 @@ using OptimizationGuideModelExecutionResultCallback =
     base::OnceCallback<void(OptimizationGuideModelExecutionResult,
                             std::unique_ptr<ModelQualityLogEntry>)>;
 
-
 // A callback for receiving a score from the model, or nullopt if the model
 // is not running.
 using OptimizationGuideModelScoreCallback =
@@ -85,11 +84,17 @@ struct SamplingParams {
 struct SessionConfigParams {
   std::optional<SamplingParams> sampling_params;
 
-  // Whether to disable server fallback if on-device model is unavailable.
-  //
-  // This API will change but is done here quickly for simplicity while the
-  // capabilities API gets designed. Please ask owners before using this API.
-  bool disable_server_fallback = false;
+  enum class ExecutionMode {
+    // Allows for infrastructure to choose what is most appropriate.
+    kDefault,
+    // Only allows for on-device execution.
+    kOnDeviceOnly,
+    // Only allows for server execution.
+    kServerOnly,
+  };
+
+  // How the execution of this feature should be configured.
+  ExecutionMode execution_mode = ExecutionMode::kDefault;
 };
 
 // Reasons why the on-device model was not available for use.
@@ -149,9 +154,21 @@ class OnDeviceModelAvailabilityObserver : public base::CheckedObserver {
   // This is not called automatically when the observer is added initially.
   // Consumers should call `OnDeviceModelServiceController::CanCreateSession` to
   // check the initial (or current) model availability state.
-  virtual void OnDeviceModelAvailablityChanged(
+  virtual void OnDeviceModelAvailabilityChanged(
       ModelBasedCapabilityKey feature,
       OnDeviceModelEligibilityReason reason) = 0;
+};
+
+// The model's configured limits on tokens.
+struct TokenLimits {
+  // The full combined limit for input and output tokens.
+  uint32_t max_tokens = 0;
+  // The maximum number of tokens that can be used by AddContext.
+  uint32_t max_context_tokens = 0;
+  // The maximum number of tokens that can be used by ExecuteModel.
+  uint32_t max_execute_tokens = 0;
+  // The maximum number of tokens that can be generated as output.
+  uint32_t max_output_tokens = 0;
 };
 
 // Interface for model execution.
@@ -164,6 +181,8 @@ class OptimizationGuideModelExecutor {
    public:
     virtual ~Session() = default;
 
+    virtual const TokenLimits& GetTokenLimits() const = 0;
+
     // Adds context to this session. This will be saved for future Execute()
     // calls. Calling multiple times will replace previous calls to
     // AddContext(). Calling this while a ExecuteModel() call is still streaming
@@ -175,9 +194,8 @@ class OptimizationGuideModelExecutor {
     // Gets the probability score of the first token in `text` on top of the
     // current context. Returns nullopt if there is no on-device session (such
     // as due to a disconnect).
-    virtual void Score(
-        const std::string& text,
-        OptimizationGuideModelScoreCallback callback) = 0;
+    virtual void Score(const std::string& text,
+                       OptimizationGuideModelScoreCallback callback) = 0;
 
     // Execute the model with `request_metadata` and streams the result to
     // `callback`. The execute call will include context from the last
@@ -194,14 +212,28 @@ class OptimizationGuideModelExecutor {
     virtual void GetSizeInTokens(
         const std::string& text,
         OptimizationGuideModelSizeInTokenCallback callback) = 0;
+
+    // Gets the size in tokens used by request_metadata as it would be formatted
+    // by a call to `AddContext()`. The result will be passed back through the
+    // callback.
+    virtual void GetContextSizeInTokens(
+        const google::protobuf::MessageLite& request_metadata,
+        OptimizationGuideModelSizeInTokenCallback callback) = 0;
+
+    // Return the sampling params for the current session.
+    virtual const SamplingParams GetSamplingParams() const = 0;
+
+    // Returns the feature_metadata from the
+    // OnDeviceModelExecutionFeatureConfig.
+    virtual const proto::Any& GetOnDeviceFeatureMetadata() const = 0;
   };
 
   // Whether an on-device session can be created for `feature`. An optional
-  // `debug_reason` parameter can be provided for more detailed reasons for why
-  // an on-device session could not be created.
+  // `on_device_model_eligibility_reason` parameter can be provided for more
+  // detailed reasons for why an on-device session could not be created.
   virtual bool CanCreateOnDeviceSession(
       ModelBasedCapabilityKey feature,
-      raw_ptr<OnDeviceModelEligibilityReason> debug_reason) = 0;
+      OnDeviceModelEligibilityReason* on_device_model_eligibility_reason) = 0;
 
   // Starts a session which allows streaming input and output from the model.
   // May return nullptr if model execution is not supported. This session should

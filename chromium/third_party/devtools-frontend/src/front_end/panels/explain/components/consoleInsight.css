@@ -11,69 +11,49 @@
 }
 
 :host {
-  --max-height: 2000px;
-  --loading-max-height: 140px;
-
   font-family: var(--default-font-family);
   font-size: inherit;
   display: block;
-  overflow: hidden;
-  max-height: 0;
 }
 
-:host-context(.opening) {
-  animation: expand-to-loading var(--sys-motion-duration-medium2) var(--sys-motion-easing-emphasized);
-  animation-fill-mode: forwards;
+.wrapper {
+  padding: var(--sys-size-6) var(--sys-size-8);
+  background-color: var(--sys-color-cdt-base-container);
+  border-radius: 16px;
+  /* stylelint-disable-next-line property-no-unknown */
+  container-type: inline-size;
+  display: grid;
+  animation: expand var(--sys-motion-duration-medium2) var(--sys-motion-easing-emphasized) forwards;
 }
 
-:host-context(.loaded) {
-  animation: expand-to-full var(--sys-motion-duration-medium2) var(--sys-motion-easing-emphasized);
-  animation-fill-mode: forwards;
+:host-context(.closing) .wrapper {
+  animation: collapse var(--sys-motion-duration-medium2) var(--sys-motion-easing-emphasized) forwards;
 }
 
-:host-context(.closing) {
-  animation: collapse var(--sys-motion-duration-medium2) var(--sys-motion-easing-emphasized);
-  animation-fill-mode: forwards;
-}
-
-@keyframes expand-to-loading {
+@keyframes expand {
   from {
-    max-height: 0;
+    grid-template-rows: 0fr;
   }
 
   to {
-    max-height: var(--loading-max-height);
-  }
-}
-
-@keyframes expand-to-full {
-  from {
-    max-height: var(--actual-height, var(--loading-max-height));
-  }
-
-  to {
-    max-height: var(--max-height);
+    grid-template-rows: 1fr;
   }
 }
 
 @keyframes collapse {
   from {
-    max-height: var(--actual-height, var(--max-height));
+    grid-template-rows: 1fr;
   }
 
   to {
-    max-height: 0;
-    margin-top: 0;
-    margin-bottom: 0;
+    grid-template-rows: 0fr;
+    padding-top: 0;
+    padding-bottom: 0;
   }
 }
 
-.wrapper {
-  padding: 16px;
-  background-color: var(--sys-color-cdt-base-container);
-  border-radius: 16px;
-  /* stylelint-disable-next-line property-no-unknown */
-  container-type: inline-size;
+.animation-wrapper {
+  overflow: hidden;
 }
 
 .wrapper.top {
@@ -93,7 +73,8 @@ header {
   font-size: 13px;
   font-style: normal;
   font-weight: 500;
-  height: 14px;
+  margin-bottom: var(--sys-size-6);
+  align-items: center;
 }
 
 header:focus-visible {
@@ -101,13 +82,36 @@ header:focus-visible {
 }
 
 header > .filler {
+  display: flex;
+  flex-direction: row;
+  gap: var(--sys-size-5);
+  align-items: center;
   flex: 1;
+}
+
+.reminder-container {
+  border-radius: var(--sys-size-5);
+  background-color: var(--sys-color-surface4);
+  padding: var(--sys-size-8);
+  font-weight: var(--ref-typeface-weight-medium);
+
+  h3 {
+    font: inherit;
+  }
+}
+
+.reminder-items {
+  display: grid;
+  grid-template-columns: var(--sys-size-8) auto;
+  gap: var(--sys-size-5) var(--sys-size-6);
+  margin-top: var(--sys-size-6);
+  line-height: var(--sys-size-8);
+  font-weight: var(--ref-typeface-weight-regular);
 }
 
 main {
   --override-markdown-view-message-color: var(--sys-color-on-surface);
 
-  margin: 12px 0 0;
   color: var(--sys-color-on-surface);
   font-size: 12px;
   font-style: normal;
@@ -151,6 +155,11 @@ main {
       margin-top: 0.3em;
     }
   }
+}
+
+.opt-in-teaser {
+  display: flex;
+  gap: var(--sys-size-5);
 }
 
 devtools-markdown-view {
@@ -227,6 +236,13 @@ main .buttons {
   }
 }
 
+button.link {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+
 .loader {
   background:
     linear-gradient(
@@ -269,9 +285,10 @@ details[open] {
 
 h2 {
   display: block;
-  font-size: inherit;
+  font-size: var(--sys-size-7);
   margin: 0;
-  font-weight: inherit;
+  font-weight: var(--ref-typeface-weight-medium);
+  line-height: var(--sys-size-9);
 }
 
 h2:focus-visible {
@@ -290,4 +307,28 @@ devtools-icon[name="spark"] {
 devtools-icon[name="dog-paw"] {
   width: 16px;
   height: 16px;
+}
+
+.badge {
+  background: linear-gradient(135deg, var(--sys-color-gradient-primary), var(--sys-color-gradient-tertiary));
+  border-radius: var(--sys-size-3);
+  height: var(--sys-size-9);
+
+  devtools-icon {
+    margin: var(--sys-size-2);
+  }
+}
+
+.header-icon-container {
+  background: linear-gradient(135deg, var(--sys-color-gradient-primary), var(--sys-color-gradient-tertiary));
+  border-radius: var(--sys-size-4);
+  height: 36px;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-button {
+  align-self: flex-start;
 }

@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "fuchsia-x64-cast-receiver-rel",
-              "project": "chromium-m128"
+              "project": "chromium-m130"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-linux-archive",
@@ -39,7 +39,7 @@
         {
           "bucket": "ci",
           "builder": "fuchsia-x64-cast-receiver-rel",
-          "project": "chromium-m128"
+          "project": "chromium-m130"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -48,7 +48,8 @@
           "group": "tryserver.chromium.fuchsia"
         }
       ],
-      "retry_failed_shards": true
+      "retry_failed_shards": true,
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/fuchsia-x64-cast-receiver-rel/targets"
     }
   },
   "$build/reclient": {

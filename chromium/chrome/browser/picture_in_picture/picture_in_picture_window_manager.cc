@@ -127,10 +127,13 @@ void PictureInPictureWindowManager::EnterPictureInPictureWithController(
   pip_window_controller_->Show();
 
 #if !BUILDFLAG(IS_ANDROID)
-  RecordFileDialogOpenMetric(
-      number_of_open_file_dialogs_ > 0
-          ? FileDialogOpenState::kPictureInPictureOpenWithFileDialog
-          : FileDialogOpenState::kPictureInPictureOpenWithoutFileDialog);
+  if (number_of_existing_scoped_disallow_picture_in_pictures_ > 0) {
+    // Don't exit picture-in-picture synchronously since exiting in the middle
+    // of opening leaves us in a bad state.
+    ExitPictureInPictureSoon();
+    RecordPictureInPictureDisallowed(
+        PictureInPictureDisallowedType::kNewWindowClosed);
+  }
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
 
@@ -427,10 +430,13 @@ void PictureInPictureWindowManager::CreateWindowInternal(
   pip_window_controller_ = video_pip_window_controller;
 
 #if !BUILDFLAG(IS_ANDROID)
-  RecordFileDialogOpenMetric(
-      number_of_open_file_dialogs_ > 0
-          ? FileDialogOpenState::kPictureInPictureOpenWithFileDialog
-          : FileDialogOpenState::kPictureInPictureOpenWithoutFileDialog);
+  if (number_of_existing_scoped_disallow_picture_in_pictures_ > 0) {
+    // Don't exit picture-in-picture synchronously since exiting in the middle
+    // of opening leaves us in a bad state.
+    ExitPictureInPictureSoon();
+    RecordPictureInPictureDisallowed(
+        PictureInPictureDisallowedType::kNewWindowClosed);
+  }
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
 
@@ -525,17 +531,40 @@ void PictureInPictureWindowManager::CreateOcclusionTrackerIfNecessary() {
   }
 }
 
-void PictureInPictureWindowManager::OnFileDialogOpened() {
-  number_of_open_file_dialogs_++;
-  RecordFileDialogOpenMetric(
-      pip_window_controller_
-          ? FileDialogOpenState::kFileDialogOpenWithPictureInPicture
-          : FileDialogOpenState::kFileDialogOpenWithoutPictureInPicture);
+bool PictureInPictureWindowManager::ShouldFileDialogBlockPictureInPicture(
+    content::WebContents* owner_web_contents) {
+  if (!base::FeatureList::IsEnabled(media::kFileDialogsBlockPictureInPicture)) {
+    return false;
+  }
+
+  // File dialogs opened inside document picture-in-picture windows should not
+  // block picture-in-picture.
+  if (pip_window_controller_ &&
+      pip_window_controller_->GetChildWebContents() == owner_web_contents) {
+    return false;
+  }
+
+  return true;
 }
 
-void PictureInPictureWindowManager::OnFileDialogClosed() {
-  CHECK_NE(number_of_open_file_dialogs_, 0u);
-  number_of_open_file_dialogs_--;
+void PictureInPictureWindowManager::OnScopedDisallowPictureInPictureCreated(
+    base::PassKey<ScopedDisallowPictureInPicture>) {
+  number_of_existing_scoped_disallow_picture_in_pictures_++;
+  if (pip_window_controller_) {
+    ExitPictureInPicture();
+    RecordPictureInPictureDisallowed(
+        PictureInPictureDisallowedType::kExistingWindowClosed);
+  }
+}
+
+void PictureInPictureWindowManager::OnScopedDisallowPictureInPictureDestroyed(
+    base::PassKey<ScopedDisallowPictureInPicture>) {
+  CHECK_NE(number_of_existing_scoped_disallow_picture_in_pictures_, 0u);
+  number_of_existing_scoped_disallow_picture_in_pictures_--;
+}
+
+bool PictureInPictureWindowManager::IsPictureInPictureDisabled() const {
+  return number_of_existing_scoped_disallow_picture_in_pictures_ > 0;
 }
 
 void PictureInPictureWindowManager::
@@ -582,10 +611,9 @@ void PictureInPictureWindowManager::
   }
 }
 
-void PictureInPictureWindowManager::RecordFileDialogOpenMetric(
-    FileDialogOpenState state) {
-  base::UmaHistogramEnumeration("Media.PictureInPicture.FileDialogOpenState",
-                                state);
+void PictureInPictureWindowManager::RecordPictureInPictureDisallowed(
+    PictureInPictureDisallowedType type) {
+  base::UmaHistogramEnumeration("Media.PictureInPicture.Disallowed", type);
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID)

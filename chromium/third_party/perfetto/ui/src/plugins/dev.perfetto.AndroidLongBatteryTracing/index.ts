@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {Plugin, PluginContextTrace, PluginDescriptor} from '../../public';
+import {Trace} from '../../public/trace';
+import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
 import {Engine} from '../../trace_processor/engine';
 import {
   SimpleSliceTrack,
@@ -23,6 +24,8 @@ import {
   SimpleCounterTrack,
   SimpleCounterTrackConfig,
 } from '../../frontend/simple_counter_track';
+import {globals} from '../../frontend/globals';
+import {GroupNode, TrackNode} from '../../public/workspace';
 
 interface ContainedTrace {
   uuid: string;
@@ -1146,9 +1149,27 @@ const BT_ACTIVITY = `
   from step2
 `;
 
-class AndroidLongBatteryTracing implements Plugin {
+class AndroidLongBatteryTracing implements PerfettoPlugin {
+  private readonly groups = new Map<string, GroupNode>();
+
+  private addTrack(ctx: Trace, track: TrackNode, groupName?: string): void {
+    if (groupName) {
+      const existingGroup = this.groups.get(groupName);
+      if (existingGroup) {
+        existingGroup.insertChildInOrder(track);
+      } else {
+        const group = new GroupNode(groupName);
+        group.insertChildInOrder(track);
+        this.groups.set(groupName, group);
+        ctx.workspace.insertChildInOrder(group);
+      }
+    } else {
+      ctx.workspace.insertChildInOrder(track);
+    }
+  }
+
   addSliceTrack(
-    ctx: PluginContextTrace,
+    ctx: Trace,
     name: string,
     query: string,
     groupName?: string,
@@ -1163,24 +1184,18 @@ class AndroidLongBatteryTracing implements Plugin {
       argColumns: columns,
     };
 
-    let uri;
-    if (groupName) {
-      uri = `/${groupName}/long_battery_tracing_${name}`;
-    } else {
-      uri = `/long_battery_tracing_${name}`;
-    }
-    ctx.registerStaticTrack({
+    const uri = `/long_battery_tracing_${name}`;
+    ctx.tracks.registerTrack({
       uri,
       title: name,
-      trackFactory: (trackCtx) => {
-        return new SimpleSliceTrack(ctx.engine, trackCtx, config);
-      },
-      groupName,
+      track: new SimpleSliceTrack(ctx.engine, {trackUri: uri}, config),
     });
+    const track = new TrackNode(uri, name);
+    this.addTrack(ctx, track, groupName);
   }
 
   addCounterTrack(
-    ctx: PluginContextTrace,
+    ctx: Trace,
     name: string,
     query: string,
     groupName: string,
@@ -1195,25 +1210,18 @@ class AndroidLongBatteryTracing implements Plugin {
       options,
     };
 
-    let uri;
-    if (groupName) {
-      uri = `/${groupName}/long_battery_tracing_${name}`;
-    } else {
-      uri = `/long_battery_tracing_${name}`;
-    }
-
-    ctx.registerStaticTrack({
+    const uri = `/long_battery_tracing_${name}`;
+    ctx.tracks.registerTrack({
       uri,
       title: name,
-      trackFactory: (trackCtx) => {
-        return new SimpleCounterTrack(ctx.engine, trackCtx, config);
-      },
-      groupName,
+      track: new SimpleCounterTrack(ctx.engine, {trackUri: uri}, config),
     });
+    const track = new TrackNode(uri, name);
+    this.addTrack(ctx, track, groupName);
   }
 
   addBatteryStatsState(
-    ctx: PluginContextTrace,
+    ctx: Trace,
     name: string,
     track: string,
     groupName: string,
@@ -1233,7 +1241,7 @@ class AndroidLongBatteryTracing implements Plugin {
   }
 
   addBatteryStatsEvent(
-    ctx: PluginContextTrace,
+    ctx: Trace,
     name: string,
     track: string,
     groupName: string | undefined,
@@ -1253,10 +1261,7 @@ class AndroidLongBatteryTracing implements Plugin {
     );
   }
 
-  async addDeviceState(
-    ctx: PluginContextTrace,
-    features: Set<string>,
-  ): Promise<void> {
+  async addDeviceState(ctx: Trace, features: Set<string>): Promise<void> {
     if (!features.has('track.battery_stats.*')) {
       return;
     }
@@ -1306,10 +1311,7 @@ class AndroidLongBatteryTracing implements Plugin {
     }
   }
 
-  async addNetworkSummary(
-    ctx: PluginContextTrace,
-    features: Set<string>,
-  ): Promise<void> {
+  async addNetworkSummary(ctx: Trace, features: Set<string>): Promise<void> {
     if (!features.has('net.modem') && !features.has('net.wifi')) {
       return;
     }
@@ -1414,10 +1416,7 @@ class AndroidLongBatteryTracing implements Plugin {
     );
   }
 
-  async addModemDetail(
-    ctx: PluginContextTrace,
-    features: Set<string>,
-  ): Promise<void> {
+  async addModemDetail(ctx: Trace, features: Set<string>): Promise<void> {
     if (!features.has('atom.modem_activity_info')) {
       return;
     }
@@ -1428,10 +1427,7 @@ class AndroidLongBatteryTracing implements Plugin {
     }
   }
 
-  async addModemActivityInfo(
-    ctx: PluginContextTrace,
-    groupName: string,
-  ): Promise<void> {
+  async addModemActivityInfo(ctx: Trace, groupName: string): Promise<void> {
     const query = (name: string, col: string): void =>
       this.addCounterTrack(
         ctx,
@@ -1452,7 +1448,7 @@ class AndroidLongBatteryTracing implements Plugin {
     query('Modem TX time power 4', 'controller_tx_time_pl4');
   }
 
-  async addModemRil(ctx: PluginContextTrace, groupName: string): Promise<void> {
+  async addModemRil(ctx: Trace, groupName: string): Promise<void> {
     const rilStrength = (band: string, value: string): void =>
       this.addSliceTrack(
         ctx,
@@ -1462,6 +1458,41 @@ class AndroidLongBatteryTracing implements Plugin {
       );
 
     const e = ctx.engine;
+
+    if (
+      globals.extraSqlPackages.find((x) => x.name === 'google3') !== undefined
+    ) {
+      await e.query(
+        `INCLUDE PERFETTO MODULE
+            google3.wireless.android.telemetry.trace_extractor.modules.modem_tea_metrics`,
+      );
+      const counters = await e.query(
+        `select distinct name from pixel_modem_counters`,
+      );
+      const countersIt = counters.iter({name: 'str'});
+      for (; countersIt.valid(); countersIt.next()) {
+        this.addCounterTrack(
+          ctx,
+          countersIt.name,
+          `select ts, value from pixel_modem_counters where name = '${countersIt.name}'`,
+          groupName,
+        );
+      }
+      const slices = await e.query(
+        `select distinct track_name from pixel_modem_slices`,
+      );
+      const slicesIt = slices.iter({track_name: 'str'});
+      for (; slicesIt.valid(); slicesIt.next()) {
+        this.addSliceTrack(
+          ctx,
+          it.name,
+          `select ts dur, slice_name as name from pixel_modem_counters
+              where track_name = '${slicesIt.track_name}'`,
+          groupName,
+        );
+      }
+    }
+
     await e.query(MODEM_RIL_STRENGTH);
     await e.query(MODEM_RIL_CHANNELS_PREAMBLE);
 
@@ -1486,10 +1517,7 @@ class AndroidLongBatteryTracing implements Plugin {
     );
   }
 
-  async addKernelWakelocks(
-    ctx: PluginContextTrace,
-    features: Set<string>,
-  ): Promise<void> {
+  async addKernelWakelocks(ctx: Trace, features: Set<string>): Promise<void> {
     if (!features.has('atom.kernel_wakelock')) {
       return;
     }
@@ -1511,10 +1539,7 @@ class AndroidLongBatteryTracing implements Plugin {
     }
   }
 
-  async addWakeups(
-    ctx: PluginContextTrace,
-    features: Set<string>,
-  ): Promise<void> {
+  async addWakeups(ctx: Trace, features: Set<string>): Promise<void> {
     if (!features.has('track.suspend_backoff')) {
       return;
     }
@@ -1570,10 +1595,7 @@ class AndroidLongBatteryTracing implements Plugin {
     );
   }
 
-  async addHighCpu(
-    ctx: PluginContextTrace,
-    features: Set<string>,
-  ): Promise<void> {
+  async addHighCpu(ctx: Trace, features: Set<string>): Promise<void> {
     if (!features.has('atom.cpu_cycles_per_uid_cluster')) {
       return;
     }
@@ -1597,10 +1619,7 @@ class AndroidLongBatteryTracing implements Plugin {
     }
   }
 
-  async addBluetooth(
-    ctx: PluginContextTrace,
-    features: Set<string>,
-  ): Promise<void> {
+  async addBluetooth(ctx: Trace, features: Set<string>): Promise<void> {
     if (
       !Array.from(features.values()).some(
         (f) => f.startsWith('atom.bluetooth_') || f.startsWith('atom.ble_'),
@@ -1752,7 +1771,7 @@ class AndroidLongBatteryTracing implements Plugin {
   }
 
   async addContainedTraces(
-    ctx: PluginContextTrace,
+    ctx: Trace,
     containedTraces: ContainedTrace[],
   ): Promise<void> {
     const bySubscription = new Map<string, ContainedTrace[]>();
@@ -1819,7 +1838,7 @@ class AndroidLongBatteryTracing implements Plugin {
     return features;
   }
 
-  async addTracks(ctx: PluginContextTrace): Promise<void> {
+  async addTracks(ctx: Trace): Promise<void> {
     const features: Set<string> = await this.findFeatures(ctx.engine);
 
     const containedTraces = (ctx.openerPluginArgs?.containedTraces ??
@@ -1836,7 +1855,7 @@ class AndroidLongBatteryTracing implements Plugin {
     await this.addContainedTraces(ctx, containedTraces);
   }
 
-  async onTraceLoad(ctx: PluginContextTrace): Promise<void> {
+  async onTraceLoad(ctx: Trace): Promise<void> {
     await this.addTracks(ctx);
   }
 }

@@ -284,25 +284,6 @@ class BrowserFinderOptions(argparse.Namespace):
                        help='IP address of the Cast device.')
 
     group = parser.add_argument_group('Fuchsia platform options')
-    group.add_argument(
-        '--fuchsia-ssh-config',
-        default=os.path.join(util.GetChromiumSrcDir(), 'build', 'fuchsia',
-                             'test', 'sshconfig'),
-        help='Specify the ssh_config file used to connect to the Fuchsia OS.')
-    group.add_argument('--fuchsia-device-address',
-                       help='The IP of the target Fuchsia device. Optional.')
-    group.add_argument(
-        '--fuchsia-ssh-port',
-        type=int,
-        help=('The port on the host to which the ssh service running on the '
-              'Fuchsia device was forwarded.'))
-    group.add_argument(
-        '--fuchsia-system-log-file',
-        help='The file where Fuchsia system logs will be stored.')
-    group.add_argument(
-        '--fuchsia-repo',
-        default='fuchsia.com',
-        help='The name of the Fuchsia repo used to serve required packages.')
     group.add_argument('--fuchsia-target-id',
                        help='The Fuchsia target id used by the ffx tool.')
 
@@ -438,7 +419,16 @@ class BrowserFinderOptions(argparse.Namespace):
       self.browser_options.UpdateFromParseResults(self)
 
       return ret
+
+    # This ideally wouldn't need to exist, but the spaghetti code left over from
+    # the use of optparse means that code exists that relies on attributes
+    # being set before argument parsing is actually done.
+    def get_default_values():
+      defaults, _ = real_parse([])
+      return defaults
+
     parser.parse_args = ParseArgs
+    parser.get_default_values = get_default_values
     return parser
 
   def IsBrowserTypeRelevant(self, browser_type):
@@ -780,6 +770,9 @@ class BrowserOptions():
       self._extra_browser_args.update(args)
     else:
       self._extra_browser_args.add(args)
+
+  def RemoveExtraBrowserArg(self, arg):
+    self._extra_browser_args.remove(arg)
 
   def ConsolidateValuesForArg(self, flag):
     """Consolidates values from multiple instances of a browser arg.

@@ -1,9 +1,15 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "bool_setting")
+load("@local_tsl//tsl/platform:rules_cc.bzl", "cc_library")
 load("//xla/tsl:package_groups.bzl", "tsl_package_groups")
 load("//xla/tsl:tsl.bzl", "if_google", "if_oss")
-load("//xla/tsl:tsl.default.bzl", "tsl_google_bzl_deps")
+load(
+    "//xla/tsl:tsl.default.bzl",
+    "tsl_extra_config_settings",
+    "tsl_extra_config_settings_targets",
+    "tsl_google_bzl_deps",
+)
 
 # copybara:uncomment package(default_applicable_licenses = ["//tensorflow:license"])
 
@@ -432,6 +438,8 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
+tsl_extra_config_settings()
+
 selects.config_setting_group(
     name = "arm_any",
     match_any = [
@@ -441,7 +449,7 @@ selects.config_setting_group(
         ":arm64-v8a",
         ":linux_aarch64",
         ":linux_armhf",
-    ],
+    ] + tsl_extra_config_settings_targets(),
     visibility = ["//visibility:public"],
 )
 
@@ -511,7 +519,6 @@ bzl_library(
         "@local_config_cuda//cuda:build_defs_bzl",
         "@local_config_rocm//rocm:build_defs_bzl",
         "@local_config_tensorrt//:build_defs_bzl",
-        "@local_tsl//third_party/mkl_dnn:build_defs_bzl",
         "@local_tsl//tsl/platform:rules_cc_bzl",
     ],
 )
@@ -535,3 +542,15 @@ cc_library(
     }),
 )
 # copybara:comment_end
+
+cc_library(
+    name = "empty",
+    visibility = ["//visibility:public"],
+)
+
+# Needed to workaround https://github.com/bazelbuild/bazel/issues/21519
+alias(
+    name = "bazel_issue_21519",
+    actual = ":empty",
+    visibility = ["//visibility:public"],
+)

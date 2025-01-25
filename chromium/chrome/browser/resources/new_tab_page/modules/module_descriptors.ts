@@ -10,7 +10,6 @@ import {loadTimeData} from '../i18n_setup.js';
 import {NewTabPageProxy} from '../new_tab_page_proxy.js';
 
 import {driveDescriptor} from './drive/module.js';
-import {feedDescriptor} from './feed/module.js';
 import type {ModuleDescriptor} from './module_descriptor.js';
 import {ModuleRegistry} from './module_registry.js';
 import {googleCalendarDescriptor} from './v2/calendar/google_calendar_module.js';
@@ -20,20 +19,14 @@ import {dummyV2Descriptor} from './v2/dummy/module.js';
 // </if>
 import {fileSuggestionDescriptor} from './v2/file_suggestion/module.js';
 import {mostRelevantTabResumptionDescriptor} from './v2/most_relevant_tab_resumption/module.js';
-import {tabResumptionDescriptor} from './v2/tab_resumption/module.js';
 
 const modulesRedesignedEnabled: boolean =
     loadTimeData.getBoolean('modulesRedesignedEnabled');
 export const descriptors: ModuleDescriptor[] = [];
 descriptors.push(
     modulesRedesignedEnabled ? fileSuggestionDescriptor : driveDescriptor);
-descriptors.push(feedDescriptor);
 
-if (loadTimeData.getBoolean('mostRelevantTabResumptionEnabled')) {
-  descriptors.push(mostRelevantTabResumptionDescriptor);
-} else {
-  descriptors.push(tabResumptionDescriptor);
-}
+descriptors.push(mostRelevantTabResumptionDescriptor);
 descriptors.push(googleCalendarDescriptor);
 descriptors.push(outlookCalendarDescriptor);
 

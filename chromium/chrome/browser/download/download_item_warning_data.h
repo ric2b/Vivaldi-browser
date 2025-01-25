@@ -29,9 +29,9 @@ class DownloadItemWarningData : public base::SupportsUserData::Data {
     // Applicable actions: DISCARD, OPEN_SUBPAGE
     BUBBLE_MAINPAGE = 1,
     // Applicable actions: PROCEED, DISCARD, DISMISS, CLOSE, BACK,
-    // PROCEED_DEEP_SCAN, OPEN_LEARN_MORE_LINK
+    // PROCEED_DEEP_SCAN, ACCEPT_DEEP_SCAN, OPEN_LEARN_MORE_LINK
     BUBBLE_SUBPAGE = 2,
-    // Applicable actions: DISCARD, KEEP, PROCEED
+    // Applicable actions: DISCARD, KEEP, PROCEED, ACCEPT_DEEP_SCAN
     // PROCEED on the downloads page indicates saving a "suspicious" download
     // directly, without going through the prompt. In contrast, KEEP indicates
     // opening the prompt, for a "dangerous" download.
@@ -86,7 +86,9 @@ class DownloadItemWarningData : public base::SupportsUserData::Data {
     PROCEED_DEEP_SCAN = 9,
     // The user clicks the learn more link on the bubble subpage.
     OPEN_LEARN_MORE_LINK = 10,
-    kMaxValue = OPEN_LEARN_MORE_LINK
+    // The user accepts starting a deep scan.
+    ACCEPT_DEEP_SCAN = 11,
+    kMaxValue = ACCEPT_DEEP_SCAN
   };
 
   struct WarningActionEvent {
@@ -151,10 +153,13 @@ class DownloadItemWarningData : public base::SupportsUserData::Data {
                                     WarningSurface surface,
                                     WarningAction action);
 
-  // Returns whether the download was an encrypted archive.
-  static bool IsEncryptedArchive(const download::DownloadItem* download);
-  static void SetIsEncryptedArchive(download::DownloadItem* download,
-                                    bool is_encrypted_archive);
+  // Returns whether the download was an encrypted archive at the
+  // top-level (i.e. the encryption was not within a nested archive).
+  static bool IsTopLevelEncryptedArchive(
+      const download::DownloadItem* download);
+  static void SetIsTopLevelEncryptedArchive(
+      download::DownloadItem* download,
+      bool is_top_level_encrypted_archive);
 
   // Returns whether the user has entered an incorrect password for the
   // archive.
@@ -208,7 +213,7 @@ class DownloadItemWarningData : public base::SupportsUserData::Data {
   base::Time warning_first_shown_time_;
   std::optional<WarningSurface> warning_first_shown_surface_ = std::nullopt;
   std::vector<WarningActionEvent> action_events_;
-  bool is_encrypted_archive_ = false;
+  bool is_top_level_encrypted_archive_ = false;
   bool has_incorrect_password_ = false;
   bool has_shown_local_decryption_prompt_ = false;
   bool fully_extracted_archive_ = false;

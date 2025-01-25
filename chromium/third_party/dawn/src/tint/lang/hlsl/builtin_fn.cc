@@ -88,6 +88,12 @@ const char* str(BuiltinFn i) {
             return "unpack_s8s32";
         case BuiltinFn::kUnpackU8U32:
             return "unpack_u8u32";
+        case BuiltinFn::kWaveGetLaneIndex:
+            return "WaveGetLaneIndex";
+        case BuiltinFn::kWaveGetLaneCount:
+            return "WaveGetLaneCount";
+        case BuiltinFn::kWaveReadLaneAt:
+            return "WaveReadLaneAt";
         case BuiltinFn::kLoad:
             return "Load";
         case BuiltinFn::kLoad2:
@@ -120,8 +126,32 @@ const char* str(BuiltinFn i) {
             return "Store3F16";
         case BuiltinFn::kStore4F16:
             return "Store4F16";
+        case BuiltinFn::kGatherCmp:
+            return "GatherCmp";
+        case BuiltinFn::kGather:
+            return "Gather";
+        case BuiltinFn::kGatherAlpha:
+            return "GatherAlpha";
+        case BuiltinFn::kGatherBlue:
+            return "GatherBlue";
+        case BuiltinFn::kGatherGreen:
+            return "GatherGreen";
+        case BuiltinFn::kGatherRed:
+            return "GatherRed";
         case BuiltinFn::kGetDimensions:
             return "GetDimensions";
+        case BuiltinFn::kSample:
+            return "Sample";
+        case BuiltinFn::kSampleBias:
+            return "SampleBias";
+        case BuiltinFn::kSampleCmp:
+            return "SampleCmp";
+        case BuiltinFn::kSampleCmpLevelZero:
+            return "SampleCmpLevelZero";
+        case BuiltinFn::kSampleGrad:
+            return "SampleGrad";
+        case BuiltinFn::kSampleLevel:
+            return "SampleLevel";
     }
     return "<unknown>";
 }

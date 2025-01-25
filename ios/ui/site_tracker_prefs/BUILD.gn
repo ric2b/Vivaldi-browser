@@ -1,0 +1,52 @@
+# Copyright 2022-2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("site_tracker_prefs") {
+  sources = [
+    "vivaldi_site_tracker_prefs_consumer.h",
+    "vivaldi_site_tracker_prefs_coordinator.h",
+    "vivaldi_site_tracker_prefs_coordinator.mm",
+    "vivaldi_site_tracker_prefs_mediator.h",
+    "vivaldi_site_tracker_prefs_mediator.mm",
+    "vivaldi_site_tracker_prefs_view_delegate.h"
+  ]
+
+  deps = [
+    ":site_tracker_prefs_view_swift",
+    "//base:i18n",
+    "//base",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui/page_info",
+    "//ios/chrome/common/ui/util",
+    "//ui/base",
+    "//vivaldi/ios/ui/ad_tracker_blocker/manager",
+    "//vivaldi/ios/ui/ad_tracker_blocker/settings",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+  ]
+}
+
+swift_source_set("site_tracker_prefs_view_swift") {
+  bridge_header = "vivaldi_site_tracker_prefs_view_swift_bridge.h"
+  sources = [
+    "vivaldi_site_tracker_prefs_option_view.swift",
+    "vivaldi_site_tracker_prefs_pulsating_view.swift",
+    "vivaldi_site_tracker_prefs_view_constants.swift",
+    "vivaldi_site_tracker_prefs_view_provider.swift",
+    "vivaldi_site_tracker_prefs_view_state.swift",
+    "vivaldi_site_tracker_prefs_view.swift",
+  ]
+
+  deps = [
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+    "//vivaldi/ios/ui/ntp:vivaldi_ntp",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

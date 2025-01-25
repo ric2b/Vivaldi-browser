@@ -55,7 +55,8 @@ UIEdgeInsets rightChevronPadding = UIEdgeInsetsMake(0, 12, 0, 0);
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithTitle:(NSString*)title {
-  if (self = [super initWithFrame:CGRectZero]) {
+  self = [super initWithFrame:CGRectZero];
+  if (self) {
     self.backgroundColor = UIColor.clearColor;
     [self setUpUI];
     self.titleLabel.text = title;

@@ -124,7 +124,7 @@ class CORE_EXPORT CSSSelector {
     kClass,             // Example: .class
     kPseudoClass,       // Example: :nth-child(2)
     kPseudoElement,     // Example: ::first-line
-    kPagePseudoClass,   // ??
+    kPagePseudoClass,   // Example: @page :right
     kAttributeExact,    // Example: E[foo="bar"]
     kAttributeSet,      // Example: E[foo]
     kAttributeHyphen,   // Example: E[foo|="bar"]
@@ -156,6 +156,11 @@ class CORE_EXPORT CSSSelector {
   ~CSSSelector();
 
   String SelectorText() const;
+  // Like `SelectorText`, but replaces any '&' selectors
+  // with ':is(<parent rule selector list>)'. This is needed
+  // by the :has() cache, because it uses the serialization of
+  // the selector as a key.
+  String SelectorTextExpandingPseudoParent() const;
   String SimpleSelectorTextForDebug() const;
 
   CSSSelector& operator=(const CSSSelector&) = delete;
@@ -307,9 +312,8 @@ class CORE_EXPORT CSSSelector {
     kPseudoScrollbarTrackPiece,
     kPseudoSearchText,
     kPseudoSelectFallbackButton,
-    kPseudoSelectFallbackButtonIcon,
     kPseudoSelectFallbackButtonText,
-    kPseudoSelectFallbackDatalist,
+    kPseudoPicker,
     kPseudoSelection,
     kPseudoSelectorFragmentAnchor,
     kPseudoSingleButton,
@@ -352,6 +356,8 @@ class CORE_EXPORT CSSSelector {
     // Pseudo elements in UA ShadowRoots. Available only in UA stylesheets.
     kPseudoBlinkInternalElement,
     kPseudoClosed,
+    // Pseudo element for fragment styling
+    kPseudoColumn,
     kPseudoCue,
     kPseudoDefined,
     kPseudoDir,
@@ -362,7 +368,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoHighlight,
     kPseudoHost,
     kPseudoHostContext,
-    kPseudoHostHasAppearance,
+    kPseudoHostHasNonAutoAppearance,
     kPseudoIsHtml,
     kPseudoListBox,
     kPseudoMultiSelectFocus,
@@ -392,6 +398,9 @@ class CORE_EXPORT CSSSelector {
     // Scroll markers pseudos for Carousel
     kPseudoScrollMarker,
     kPseudoScrollMarkerGroup,
+    // Scroll button pseudos for Carousel
+    kPseudoScrollNextButton,
+    kPseudoScrollPrevButton,
   };
 
   enum class AttributeMatchType : int {
@@ -424,6 +433,8 @@ class CORE_EXPORT CSSSelector {
   //
   // Note that :true is always implicit (see IsImplicit).
   void SetTrue();
+  // Sets this CSSSelector to a :where() class with the specified argument.
+  void SetWhere(CSSSelectorList*);
   void UpdatePseudoPage(const AtomicString&, const Document*);
   static PseudoType NameToPseudoType(const AtomicString&,
                                      bool has_arguments,
@@ -594,64 +605,6 @@ class CORE_EXPORT CSSSelector {
   // position like :first-of-type and :nth-child().
   bool IsChildIndexedSelector() const;
 
-  // Signaling Rules
-  // ================
-  //
-  // Signaling rules are style rules whose declarations trigger
-  // a certain use-counter. The use-counter is triggered by StyleCascade
-  // when a signaling declaration satisfies all of the following:
-  //
-  //  - The declaration is added to the cascade map.
-  //  - Adding the declaration to the map actually changed the value,
-  //    i.e. the cascaded value before/after isn't the same.
-  //  - The declaration ultimately won the cascade, i.e. nothing else
-  //    overwrote it.
-  //
-  // Note: the final goal of signaling rules is to hopefully unblock
-  // the following CSSWG issues:
-  //
-  //  - https://github.com/w3c/csswg-drafts/issues/8738
-  //  - https://github.com/w3c/csswg-drafts/issues/9492
-  //
-  // TODO(crbug.com/1517290): Remove signaling rules when we're done
-  // use-counting.
-
-  enum class Signal {
-    kNone = 0,
-
-    // WebFeature::kCSSBareDeclarationShift
-    kBareDeclarationShift = 1,
-
-    // WebFeature::kCSSNestedGroupRuleSpecificity
-    kNestedGroupRuleSpecificity = 2,
-
-    kMax = kNestedGroupRuleSpecificity,
-  };
-
-  void SetSignal(Signal signal) {
-    bits_.set<SignalField>(static_cast<unsigned>(signal));
-  }
-  Signal GetSignal() const {
-    return static_cast<Signal>(bits_.get<SignalField>());
-  }
-
-  // Invisible Rules
-  // ===============
-  //
-  // Invisible rules are rules which exist internally for use-counting
-  // purposes, but don't have any author-visible effect on the cascade,
-  // and are not otherwise reachable through APIs.
-  //
-  // Invisible rules are useful when used in conjunction with signaling rules
-  // (above), because it makes it possible to check if a given rule has
-  // any impact in the presence of some alternative/hypothetical rule.
-  //
-  // TODO(crbug.com/1517290): Remove invisible rules when we're done
-  // use-counting.
-
-  void SetInvisible() { bits_.set<IsInvisibleField>(true); }
-  bool IsInvisible() const { return bits_.get<IsInvisibleField>(); }
-
   void Trace(Visitor* visitor) const;
 
   static String FormatPseudoTypeForDebugging(PseudoType);
@@ -695,10 +648,9 @@ class CORE_EXPORT CSSSelector {
   // RuleData (by calling MarkAsCoveredByBucketing()).
   using IsCoveredByBucketingField =
       IsImplicitlyAddedField::DefineNextValue<bool, 1>;
-  using SignalField = IsCoveredByBucketingField::DefineNextValue<unsigned, 2>;
-  using IsInvisibleField = SignalField::DefineNextValue<bool, 1>;
   // Used for attribute selector (with value). Real type is AttributeMatchType.
-  using AttributeMatchField = IsInvisibleField::DefineNextValue<unsigned, 2>;
+  using AttributeMatchField =
+      IsCoveredByBucketingField::DefineNextValue<unsigned, 2>;
   using IsCaseSensitiveAttributeField =
       AttributeMatchField::DefineNextValue<bool, 1>;
   // 4 free bits here.
@@ -712,8 +664,19 @@ class CORE_EXPORT CSSSelector {
 
   unsigned SpecificityForOneSelector() const;
   unsigned SpecificityForPage() const;
+
+  template <bool expand_pseudo_parent>
   bool SerializeSimpleSelector(WTF::StringBuilder& builder) const;
+
+  template <bool expand_pseudo_parent>
   const CSSSelector* SerializeCompound(WTF::StringBuilder&) const;
+
+  template <bool expand_pseudo_parent>
+  static void SerializeSelectorList(const CSSSelectorList* selector_list,
+                                    WTF::StringBuilder& builder);
+
+  template <bool expand_pseudo_parent>
+  String SelectorTextInternal() const;
 
   struct RareData : public GarbageCollected<RareData> {
     explicit RareData(const AtomicString& value);
@@ -863,8 +826,7 @@ inline CSSSelector::CSSSelector()
             HasRareDataField::encode(false) | IsForPageField::encode(false) |
             IsImplicitlyAddedField::encode(false) |
             IsCoveredByBucketingField::encode(false) |
-            SignalField::encode(static_cast<unsigned>(Signal::kNone)) |
-            IsInvisibleField::encode(false) | AttributeMatchField::encode(0) |
+            AttributeMatchField::encode(0) |
             IsCaseSensitiveAttributeField::encode(false)),
       data_(DataUnion::kConstructEmptyValue) {}
 
@@ -877,8 +839,7 @@ inline CSSSelector::CSSSelector(const QualifiedName& tag_q_name,
             HasRareDataField::encode(false) | IsForPageField::encode(false) |
             IsImplicitlyAddedField::encode(tag_is_implicit) |
             IsCoveredByBucketingField::encode(false) |
-            SignalField::encode(static_cast<unsigned>(Signal::kNone)) |
-            IsInvisibleField::encode(false) | AttributeMatchField::encode(0) |
+            AttributeMatchField::encode(0) |
             IsCaseSensitiveAttributeField::encode(false)),
       data_(tag_q_name) {}
 
@@ -891,8 +852,7 @@ inline CSSSelector::CSSSelector(const StyleRule* parent_rule, bool is_implicit)
             HasRareDataField::encode(false) | IsForPageField::encode(false) |
             IsImplicitlyAddedField::encode(is_implicit) |
             IsCoveredByBucketingField::encode(false) |
-            SignalField::encode(static_cast<unsigned>(Signal::kNone)) |
-            IsInvisibleField::encode(false) | AttributeMatchField::encode(0) |
+            AttributeMatchField::encode(0) |
             IsCaseSensitiveAttributeField::encode(false)),
       data_(parent_rule) {}
 
@@ -908,8 +868,7 @@ inline CSSSelector::CSSSelector(const AtomicString& pseudo_name,
             HasRareDataField::encode(false) | IsForPageField::encode(false) |
             IsImplicitlyAddedField::encode(is_implicit) |
             IsCoveredByBucketingField::encode(false) |
-            SignalField::encode(static_cast<unsigned>(Signal::kNone)) |
-            IsInvisibleField::encode(false) | AttributeMatchField::encode(0) |
+            AttributeMatchField::encode(0) |
             IsCaseSensitiveAttributeField::encode(false)),
       data_(pseudo_name) {}
 

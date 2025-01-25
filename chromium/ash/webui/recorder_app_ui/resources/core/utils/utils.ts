@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertExists} from './assert.js';
+import {assert, assertExists} from './assert.js';
 
 /**
  * Clamps `val` into the range `[low, high]`.
@@ -57,6 +57,17 @@ export function parseNumber(val: string|null|undefined): number|null {
 }
 
 /**
+ * Returns the number of space-delimited words in a given string.
+ *
+ * TODO(hsuanling): Apply different logic so that it can work for languages like
+ * Chinese or Japanese.
+ */
+export function getWordCount(s: string): number {
+  const words = s.match(/\S+/g);
+  return words?.length ?? 0;
+}
+
+/**
  * Shorten the given string to at most `maxWords` space-delimited words by
  * snipping the middle of string as "(...)".
  */
@@ -102,4 +113,82 @@ export function downloadFile(filename: string, blob: Blob): void {
   document.body.removeChild(a);
 
   URL.revokeObjectURL(url);
+}
+
+const UNINITIALIZED = Symbol('UNINITIALIZED');
+
+/**
+ * Cache function return value so the function would only be called once.
+ */
+export function lazyInit<T>(fn: () => T): () => T {
+  let output: T|typeof UNINITIALIZED = UNINITIALIZED;
+  return () => {
+    if (output === UNINITIALIZED) {
+      output = fn();
+    }
+    return output;
+  };
+}
+
+/**
+ * Cache async function return value so the function would only be called once.
+ */
+export function asyncLazyInit<T>(fn: () => Promise<T>): () => Promise<T> {
+  let val: T|typeof UNINITIALIZED = UNINITIALIZED;
+  return async () => {
+    if (val === UNINITIALIZED) {
+      val = await fn();
+    }
+    return val;
+  };
+}
+
+/**
+ * Cache function return value so the function would only be called when the
+ * input changes.
+ *
+ * This can be used when the input is expected to not change often.
+ */
+export function cacheLatest<T, U>(fn: (input: T) => U): (input: T) => U {
+  let output: U|typeof UNINITIALIZED = UNINITIALIZED;
+  let lastInput: T|typeof UNINITIALIZED = UNINITIALIZED;
+  return (input: T) => {
+    if (input !== lastInput) {
+      lastInput = input;
+      output = fn(input);
+    }
+    assert(output !== UNINITIALIZED);
+    return output;
+  };
+}
+
+/**
+ * Checks if an Object is empty.
+ */
+export function isObjectEmpty(obj: Record<string, unknown>): boolean {
+  // We're explicitly using for (... in ...) here to avoid the cost of having
+  // to initialize Object.keys() array. The usage is safe since we check
+  // Object.hasOwn afterwards.
+  // eslint-disable-next-line no-restricted-syntax
+  for (const k in obj) {
+    if (Object.hasOwn(obj, k)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Wrapper for the View Transition API for unsupported browser.
+ *
+ * @return Promise when the transition is finished.
+ */
+export function startViewTransition(fn: () => void): Promise<void> {
+  if (document.startViewTransition === undefined) {
+    fn();
+    return Promise.resolve();
+  } else {
+    const transition = document.startViewTransition(fn);
+    return transition.finished;
+  }
 }

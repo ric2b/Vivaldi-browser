@@ -962,7 +962,7 @@ fn f() {
 )";
     auto* expect = R"(
 fn tint_ftoi(v : f32) -> i32 {
-  return select(2147483647, select(i32(v), -2147483648, (v < -2147483648.0)), (v < 2147483520.0));
+  return select(2147483647, select(i32(v), -2147483648, (v < -2147483648.0)), (v <= 2147483520.0));
 }
 
 fn f() {
@@ -985,7 +985,7 @@ fn f() {
 )";
     auto* expect = R"(
 fn tint_ftou(v : f32) -> u32 {
-  return select(4294967295, select(u32(v), 0, (v < 0.0)), (v < 4294967040.0));
+  return select(4294967295, select(u32(v), 0, (v < 0.0)), (v <= 4294967040.0));
 }
 
 fn f() {
@@ -1008,7 +1008,7 @@ fn f() {
 )";
     auto* expect = R"(
 fn tint_ftoi(v : vec3<f32>) -> vec3<i32> {
-  return select(vec3(2147483647), select(vec3<i32>(v), vec3(-2147483648), (v < vec3(-2147483648.0))), (v < vec3(2147483520.0)));
+  return select(vec3(2147483647), select(vec3<i32>(v), vec3(-2147483648), (v < vec3(-2147483648.0))), (v <= vec3(2147483520.0)));
 }
 
 fn f() {
@@ -1031,7 +1031,7 @@ fn f() {
 )";
     auto* expect = R"(
 fn tint_ftou(v : vec3<f32>) -> vec3<u32> {
-  return select(vec3(4294967295), select(vec3<u32>(v), vec3(0), (v < vec3(0.0))), (v < vec3(4294967040.0)));
+  return select(vec3(4294967295), select(vec3<u32>(v), vec3(0), (v < vec3(0.0))), (v <= vec3(4294967040.0)));
 }
 
 fn f() {
@@ -4026,113 +4026,6 @@ fn f() {
 
     auto got = Run<BuiltinPolyfill, DirectVariableAccess>(
         src, polyfillWorkgroupUniformLoadWithDirectVariableAccess());
-
-    EXPECT_EQ(expect, str(got));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// quantizeToF16
-////////////////////////////////////////////////////////////////////////////////
-DataMap polyfillQuantizeToF16_2d_f32() {
-    BuiltinPolyfill::Builtins builtins;
-    builtins.quantize_to_vec_f16 = true;
-    DataMap data;
-    data.Add<BuiltinPolyfill::Config>(builtins);
-    return data;
-}
-
-TEST_F(BuiltinPolyfillTest, ShouldRunQuantizeToF16_Scalar) {
-    auto* src = R"(
-fn f() {
-  let v = 0.5;
-  _ = quantizeToF16(0.5);
-}
-)";
-
-    EXPECT_FALSE(ShouldRun<BuiltinPolyfill>(src));
-    EXPECT_FALSE(ShouldRun<BuiltinPolyfill>(src, polyfillQuantizeToF16_2d_f32()));
-}
-
-TEST_F(BuiltinPolyfillTest, ShouldRunQuantizeToF16_Vector) {
-    auto* src = R"(
-fn f() {
-  let v = 0.5;
-  _ = quantizeToF16(vec2(v));
-}
-)";
-
-    EXPECT_FALSE(ShouldRun<BuiltinPolyfill>(src));
-    EXPECT_TRUE(ShouldRun<BuiltinPolyfill>(src, polyfillQuantizeToF16_2d_f32()));
-}
-
-TEST_F(BuiltinPolyfillTest, QuantizeToF16_Vec2) {
-    auto* src = R"(
-fn f() {
-  let v = 0.5;
-  _ = quantizeToF16(vec2(v));
-}
-)";
-
-    auto* expect = R"(
-fn tint_quantizeToF16(v : vec2<f32>) -> vec2<f32> {
-  return vec2<f32>(quantizeToF16(v[0u]), quantizeToF16(v[1u]));
-}
-
-fn f() {
-  let v = 0.5;
-  _ = tint_quantizeToF16(vec2(v));
-}
-)";
-
-    auto got = Run<BuiltinPolyfill>(src, polyfillQuantizeToF16_2d_f32());
-
-    EXPECT_EQ(expect, str(got));
-}
-
-TEST_F(BuiltinPolyfillTest, QuantizeToF16_Vec3) {
-    auto* src = R"(
-fn f() {
-  let v = 0.5;
-  _ = quantizeToF16(vec3(v));
-}
-)";
-
-    auto* expect = R"(
-fn tint_quantizeToF16(v : vec3<f32>) -> vec3<f32> {
-  return vec3<f32>(quantizeToF16(v[0u]), quantizeToF16(v[1u]), quantizeToF16(v[2u]));
-}
-
-fn f() {
-  let v = 0.5;
-  _ = tint_quantizeToF16(vec3(v));
-}
-)";
-
-    auto got = Run<BuiltinPolyfill>(src, polyfillQuantizeToF16_2d_f32());
-
-    EXPECT_EQ(expect, str(got));
-}
-
-TEST_F(BuiltinPolyfillTest, QuantizeToF16_Vec4) {
-    auto* src = R"(
-fn f() {
-  let v = 0.5;
-  _ = quantizeToF16(vec4(v));
-}
-)";
-
-    auto* expect = R"(
-fn tint_quantizeToF16(v : vec4<f32>) -> vec4<f32> {
-  return vec4<f32>(quantizeToF16(v[0u]), quantizeToF16(v[1u]), quantizeToF16(v[2u]), quantizeToF16(v[3u]));
-}
-
-fn f() {
-  let v = 0.5;
-  _ = tint_quantizeToF16(vec4(v));
-}
-)";
-
-    auto got = Run<BuiltinPolyfill>(src, polyfillQuantizeToF16_2d_f32());
 
     EXPECT_EQ(expect, str(got));
 }

@@ -10,10 +10,7 @@ import android.app.PendingIntent;
 import android.content.ClipData;
 import android.content.ClipData.Item;
 import android.content.ClipDescription;
-import android.content.Context;
 import android.content.Intent;
-import android.os.Build.VERSION;
-import android.os.Build.VERSION_CODES;
 import android.view.DragAndDropPermissions;
 import android.view.DragEvent;
 import android.view.View;
@@ -23,9 +20,9 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
 import org.chromium.base.ResettersForTesting;
-import org.chromium.build.BuildConfig;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.tab.Tab;
@@ -40,11 +37,13 @@ import org.chromium.ui.dragdrop.DropDataProviderUtils;
 
 /** Delegate for browser related functions used by Drag and Drop. */
 public class ChromeDragAndDropBrowserDelegate implements DragAndDropBrowserDelegate {
+    private static final String TAG = "ChromeDnDDelegate";
     private static final String PARAM_CLEAR_CACHE_DELAYED_MS = "ClearCacheDelayedMs";
     @VisibleForTesting static final String PARAM_DROP_IN_CHROME = "DropInChrome";
 
     private static Item sItemWithPendingIntentForTesting;
     private static boolean sDefinedItemWithPendingIntentForTesting;
+    private static boolean sClipDataItemBuilderNotFound;
 
     private final String[] mSupportedMimeTypes =
             new String[] {
@@ -54,17 +53,15 @@ public class ChromeDragAndDropBrowserDelegate implements DragAndDropBrowserDeleg
                 MimeTypeUtils.CHROME_MIMETYPE_LINK
             };
 
-    private final Context mContext;
-    private final Activity mActivity;
+    private final Supplier<Activity> mActivitySupplier;
     private final boolean mSupportDropInChrome;
     private final boolean mSupportAnimatedImageDragShadow;
 
     /**
-     * @param context The current context this delegate is associated with.
+     * @param activitySupplier The supplier to get the Activity this delegate is associated with.
      */
-    public ChromeDragAndDropBrowserDelegate(Context context) {
-        mContext = context;
-        mActivity = ContextUtils.activityFromContext(mContext);
+    public ChromeDragAndDropBrowserDelegate(Supplier<Activity> activitySupplier) {
+        mActivitySupplier = activitySupplier;
         mSupportDropInChrome =
                 ContentFeatureMap.getInstance()
                         .getFieldTrialParamByFeatureAsBoolean(
@@ -97,21 +94,22 @@ public class ChromeDragAndDropBrowserDelegate implements DragAndDropBrowserDeleg
     public DragAndDropPermissions getDragAndDropPermissions(DragEvent dropEvent) {
         assert mSupportDropInChrome : "Should only be accessed when drop in Chrome.";
 
-        if (mActivity == null) {
+        if (mActivitySupplier.get() == null) {
             return null;
         }
-        return mActivity.requestDragAndDropPermissions(dropEvent);
+        return mActivitySupplier.get().requestDragAndDropPermissions(dropEvent);
     }
 
     @Override
     public Intent createUrlIntent(String urlString, @UrlIntentSource int intentSrc) {
         Intent intent = null;
-        if (MultiWindowUtils.isMultiInstanceApi31Enabled()) {
+        Activity activity = mActivitySupplier.get();
+        if (activity != null && MultiWindowUtils.isMultiInstanceApi31Enabled()) {
             intent =
                     DragAndDropLauncherActivity.getLinkLauncherIntent(
-                            mContext,
+                            activity,
                             urlString,
-                            MultiWindowUtils.getInstanceIdForLinkIntent(mActivity),
+                            MultiWindowUtils.getInstanceIdForLinkIntent(activity),
                             intentSrc);
         }
         return intent;
@@ -156,10 +154,6 @@ public class ChromeDragAndDropBrowserDelegate implements DragAndDropBrowserDeleg
 
     @Override
     public int buildFlags(int originalFlag, DropDataAndroid dropData) {
-        // TODO (crbug/351389242): Remove the test check once we support Android V testing.
-        if (!BuildConfig.IS_FOR_TEST && VERSION.SDK_INT < VERSION_CODES.VANILLA_ICE_CREAM) {
-            return originalFlag;
-        }
         assert dropData instanceof ChromeDropDataAndroid;
         ChromeDropDataAndroid chromeDropData = (ChromeDropDataAndroid) dropData;
         if (!chromeDropData.hasTab() || !chromeDropData.allowTabDragToCreateInstance) {
@@ -170,11 +164,22 @@ public class ChromeDragAndDropBrowserDelegate implements DragAndDropBrowserDeleg
                 | View.DRAG_FLAG_START_INTENT_SENDER_ON_UNHANDLED_DRAG;
     }
 
+    @SuppressWarnings("NewApi")
     private static ClipData.Item buildClipDataItemWithPendingIntent(PendingIntent pendingIntent) {
         if (sDefinedItemWithPendingIntentForTesting) return sItemWithPendingIntentForTesting;
-        if (VERSION.SDK_INT < VERSION_CODES.VANILLA_ICE_CREAM) return null;
-
-        return new ClipData.Item.Builder().setIntentSender(pendingIntent.getIntentSender()).build();
+        // This invocation is wrapped in a try-catch block to allow backporting of the
+        // ClipData.Item.Builder() class on pre-V devices. On pre-V devices not supporting this,
+        // state will be cached on the first failure to avoid subsequent invalid attempts.
+        if (sClipDataItemBuilderNotFound) return null;
+        try {
+            return new ClipData.Item.Builder()
+                    .setIntentSender(pendingIntent.getIntentSender())
+                    .build();
+        } catch (NoClassDefFoundError e) {
+            Log.w(TAG, e.toString());
+            sClipDataItemBuilderNotFound = true;
+        }
+        return null;
     }
 
     /** Sets the ClipData.Item with a PendingIntent for testing purposes. */

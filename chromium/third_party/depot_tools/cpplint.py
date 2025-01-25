@@ -273,59 +273,7 @@ _DEFAULT_KERNEL_SUPPRESSED_CATEGORIES = [
 
 # C++ headers
 _CPP_HEADERS = frozenset([
-    # Legacy
-    'algobase.h',
-    'algo.h',
-    'alloc.h',
-    'builtinbuf.h',
-    'bvector.h',
-    'complex.h',
-    'defalloc.h',
-    'deque.h',
-    'editbuf.h',
-    'fstream.h',
-    'function.h',
-    'hash_map',
-    'hash_map.h',
-    'hash_set',
-    'hash_set.h',
-    'hashtable.h',
-    'heap.h',
-    'indstream.h',
-    'iomanip.h',
-    'iostream.h',
-    'istream.h',
-    'iterator.h',
-    'list.h',
-    'map.h',
-    'multimap.h',
-    'multiset.h',
-    'ostream.h',
-    'pair.h',
-    'parsestream.h',
-    'pfstream.h',
-    'procbuf.h',
-    'pthread_alloc',
-    'pthread_alloc.h',
-    'rope',
-    'rope.h',
-    'ropeimpl.h',
-    'set.h',
-    'slist',
-    'slist.h',
-    'stack.h',
-    'stdiostream.h',
-    'stl_alloc.h',
-    'stl_relops.h',
-    'streambuf.h',
-    'stream.h',
-    'strfile.h',
-    'strstream.h',
-    'tempbuf.h',
-    'tree.h',
-    'type_traits.h',
-    'vector.h',
-    # C++ library headers [headers]
+    # C++ library headers [tab:headers.cpp]
     'algorithm',
     'any',
     'array',
@@ -335,20 +283,29 @@ _CPP_HEADERS = frozenset([
     'bitset',
     'charconv',
     'chrono',
-    'codecvt',
+    'codecvt',  # Note: removed in C++26
+    'compare',
     'complex',
     'concepts',
     'condition_variable',
+    'coroutine',
+    'debugging',
     'deque',
     'exception',
     'execution',
+    'expected',
     'filesystem',
+    'flat_map',
+    'flat_set',
     'format',
     'forward_list',
     'fstream',
     'functional',
     'future',
+    'generator',
+    'hazard_pointer',
     'initializer_list',
+    'inplace_vector',
     'iomanip',
     'ios',
     'iosfwd',
@@ -357,9 +314,11 @@ _CPP_HEADERS = frozenset([
     'iterator',
     'latch',
     'limits',
+    'linalg',
     'list',
     'locale',
     'map',
+    'mdspan',
     'memory',
     'memory_resource',
     'mutex',
@@ -368,10 +327,12 @@ _CPP_HEADERS = frozenset([
     'numeric',
     'optional',
     'ostream',
+    'print',
     'queue',
     'random',
     'ranges',
     'ratio',
+    'rcu',
     'regex',
     'scoped_allocator',
     'semaphore',
@@ -379,21 +340,25 @@ _CPP_HEADERS = frozenset([
     'shared_mutex',
     'source_location',
     'span',
+    'spanstream',
     'sstream',
     'stack',
+    'stacktrace',
     'stdexcept',
+    'stdfloat',
     'stop_token',
     'streambuf',
     'string',
     'string_view',
-    'strstream',
+    'strstream',  # Note: removed in C++26
     'syncstream',
     'system_error',
+    'text_encoding',
     'thread',
     'tuple',
+    'type_traits',
     'typeindex',
     'typeinfo',
-    'type_traits',
     'unordered_map',
     'unordered_set',
     'utility',
@@ -401,36 +366,31 @@ _CPP_HEADERS = frozenset([
     'variant',
     'vector',
     'version',
-    # C++ headers for C library facilities [headers]
+    # C++ headers for C library facilities [tab:headers.cpp.c]
     'cassert',
-    'ccomplex',
     'cctype',
     'cerrno',
     'cfenv',
     'cfloat',
     'cinttypes',
-    'ciso646',
     'climits',
     'clocale',
     'cmath',
     'csetjmp',
     'csignal',
-    'cstdalign',
     'cstdarg',
-    'cstdbool',
     'cstddef',
     'cstdint',
     'cstdio',
     'cstdlib',
     'cstring',
-    'ctgmath',
     'ctime',
     'cuchar',
     'cwchar',
     'cwctype',
 ])
 
-# List of functions from <type_traits>.  See [meta.type.synop]
+# <type_traits> [meta.type.synop]
 _TYPE_TRAITS = [
     # Helper class [meta.help]
     'integral_constant',
@@ -463,7 +423,7 @@ _TYPE_TRAITS = [
     'is_trivial',
     'is_trivially_copyable',
     'is_standard_layout',
-    'is_pod',
+    'is_pod',  # Note: deprecated in C++20
     'is_empty',
     'is_polymorphic',
     'is_abstract',
@@ -473,6 +433,7 @@ _TYPE_TRAITS = [
     'is_unsigned',
     'is_bounded_array',
     'is_unbounded_array',
+    'is_scoped_enum',
     'is_constructible',
     'is_default_constructible',
     'is_copy_constructible',
@@ -501,8 +462,11 @@ _TYPE_TRAITS = [
     'is_nothrow_swappable_with',
     'is_nothrow_swappable',
     'is_nothrow_destructible',
+    'is_implicit_lifetime',
     'has_virtual_destructor',
     'has_unique_object_representations',
+    'reference_constructs_from_temporary',
+    'reference_converts_from_temporary',
     # Type property queries [meta.unary.prop.query]
     'alignment_of',
     'rank',
@@ -510,6 +474,7 @@ _TYPE_TRAITS = [
     # Relationship between types [meta.rel]
     'is_same',
     'is_base_of',
+    'is_virtual_base_of',
     'is_convertible',
     'is_nothrow_convertible',
     'is_layout_compatible',
@@ -555,8 +520,8 @@ _TYPE_TRAITS = [
     'add_pointer_t',
     # Other transformations [meta.trans.other]
     'type_identity',
-    'aligned_storage',
-    'aligned_union',
+    'aligned_storage',  # Note: deprecated in C++23
+    'aligned_union',  # Note: deprecated in C++23
     'remove_cvref',
     'decay',
     'enable_if',
@@ -569,8 +534,8 @@ _TYPE_TRAITS = [
     'unwrap_reference',
     'unwrap_ref_decay',
     'type_identity_t',
-    'aligned_storage_t',
-    'aligned_union_t',
+    'aligned_storage_t',  # Note: deprecated in C++23
+    'aligned_union_t',  # Note: deprecated in C++23
     'remove_cvref_t',
     'decay_t',
     'enable_if_t',
@@ -615,7 +580,7 @@ _TYPE_TRAITS = [
     'is_trivial_v',
     'is_trivially_copyable_v',
     'is_standard_layout_v',
-    'is_pod_v',
+    'is_pod_v',  # Note: deprecated in C++20
     'is_empty_v',
     'is_polymorphic_v',
     'is_abstract_v',
@@ -625,6 +590,7 @@ _TYPE_TRAITS = [
     'is_unsigned_v',
     'is_bounded_array_v',
     'is_unbounded_array_v',
+    'is_scoped_enum_v',
     'is_constructible_v',
     'is_default_constructible_v',
     'is_copy_constructible_v',
@@ -653,14 +619,18 @@ _TYPE_TRAITS = [
     'is_nothrow_swappable_with_v',
     'is_nothrow_swappable_v',
     'is_nothrow_destructible_v',
+    'is_implicit_lifetime_v',
     'has_virtual_destructor_v',
     'has_unique_object_representations_v',
+    'reference_constructs_from_temporary_v',
+    'reference_converts_from_temporary_v',
     # Type property queries _v [meta.unary.prop.query]
     'alignment_of_v',
     'rank_v',
     'extent_v',
     'is_same_v',
     'is_base_of_v',
+    'is_virtual_base_of_v',
     'is_convertible_v',
     'is_nothrow_convertible_v',
     'is_layout_compatible_v',
@@ -678,16 +648,17 @@ _TYPE_TRAITS = [
     'is_corresponding_member',
     # Constant evaluation context [meta.const.eval]
     'is_constant_evaluated',
+    'is_within_lifetime',
 ]
 _TYPE_TRAITS_RE = re.compile(r'\b::(?:' + ('|'.join(_TYPE_TRAITS)) + ')<')
 
 # Type names
 _TYPES = re.compile(r'^(?:'
                     # [dcl.type.simple]
-                    r'(char(16_t|32_t)?)|wchar_t|'
-                    r'bool|short|int|long|signed|unsigned|float|double|'
+                    r'(char(8_t|16_t|32_t)?)|wchar_t|'
+                    r'bool|short|int|long|signed|unsigned|float|double|void|'
                     # [support.types]
-                    r'(ptrdiff_t|size_t|max_align_t|nullptr_t)|'
+                    r'ptrdiff_t|size_t|max_align_t|nullptr_t|byte|'
                     # [cstdint.syn]
                     r'(u?int(_fast|_least)?(8|16|32|64)_t)|'
                     r'(u?int(max|ptr)_t)|'
@@ -3608,8 +3579,9 @@ def CheckOperatorSpacing(filename, clean_lines, linenum, error):
     if ((Search(r'[\w.]=', line) or Search(r'=[\w.]', line))
             and not Search(r'\b(if|while|for) ', line)
             # Operators taken from [lex.operators] in C++11 standard.
-            and not Search(r'(>=|<=|==|!=|&=|\^=|\|=|\+=|\*=|\/=|\%=)', line)
-            and not Search(r'operator=', line)):
+            and not Search(
+                r'(\+=|\-=|\*=|\/=|\%=|\^=|&=|\|=|==|!=|<=|>=|<=>|<<=|>>=)',
+                line) and not Search(r'operator=', line)):
         error(filename, linenum, 'whitespace/operators', 4,
               'Missing spaces around =')
 
@@ -3622,13 +3594,15 @@ def CheckOperatorSpacing(filename, clean_lines, linenum, error):
     # Check <= and >= first to avoid false positives with < and >, then
     # check non-include lines for spacing around < and >.
     #
-    # If the operator is followed by a comma, assume it's be used in a
+    # If the operator is followed by a comma, assume it's being used in a
     # macro context and don't do any checks.  This avoids false
     # positives.
     #
     # Note that && is not included here.  This is because there are too
     # many false positives due to RValue references.
-    match = Search(r'[^<>=!\s](==|!=|<=|>=|\|\|)[^<>=!\s,;\)]', line)
+    match = Search(
+        r'[^<>=!\s](\+=|\-=|\*=|\/=|\%=|\^=|&=|\|=|'
+        r'==|!=|<=|>=|<=>|<<=|>>=|\|\|)[^<>=!\s,;\)]', line)
     if match:
         error(filename, linenum, 'whitespace/operators', 3,
               'Missing spaces around %s' % match.group(1))
@@ -4106,10 +4080,12 @@ def CheckBraces(filename, clean_lines, linenum, error):
              endpos) = CloseExpression(clean_lines, linenum, pos)
         # Check for an opening brace, either directly after the if or on the
         # next line. If found, this isn't a single-statement conditional.
-        if (not Match(r'\s*{', endline[endpos:])
-                and not (Match(r'\s*$', endline[endpos:]) and endlinenum <
-                         (len(clean_lines.elided) - 1) and Match(
-                             r'\s*{', clean_lines.elided[endlinenum + 1]))):
+        if (not Match(r'\s*(?:\[\[(?:un)?likely\]\]\s*)?{', endline[endpos:])
+                and not (Match(r'\s*(?:\[\[(?:un)?likely\]\]\s*)?$',
+                               endline[endpos:])
+                         and endlinenum < (len(clean_lines.elided) - 1)
+                         and Match(r'\s*(?:\[\[(?:un)?likely\]\]\s*)?{',
+                                   clean_lines.elided[endlinenum + 1]))):
             while (endlinenum < len(clean_lines.elided)
                    and ';' not in clean_lines.elided[endlinenum][endpos:]):
                 endlinenum += 1

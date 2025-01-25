@@ -32,6 +32,7 @@
 #include "components/history_embeddings/mock_answerer.h"
 #include "components/history_embeddings/mock_embedder.h"
 #include "components/history_embeddings/scheduling_embedder.h"
+#include "components/history_embeddings/search_strings_update_listener.h"
 #include "components/history_embeddings/sql_database.h"
 #include "components/history_embeddings/vector_database.h"
 #include "components/optimization_guide/core/model_quality/feature_type_map.h"
@@ -273,24 +274,9 @@ HistoryEmbeddingsService::HistoryEmbeddingsService(
       history_service_->history_dir());
   history_service_observation_.Observe(history_service_);
 
-  std::string filter_terms_param = kFilterTerms.Get();
-  for (std::string_view& term_or_phrase : base::SplitStringPiece(
-           filter_terms_param, ",", base::WhitespaceHandling::TRIM_WHITESPACE,
-           base::SplitResult::SPLIT_WANT_NONEMPTY)) {
-    if (term_or_phrase.find(' ') != std::string::npos) {
-      filter_phrases_.push_back(base::ToLowerASCII(term_or_phrase));
-    } else {
-      filter_terms_.insert(base::ToLowerASCII(term_or_phrase));
-    }
-  }
-  std::string filter_hashes_param = kFilterHashes.Get();
-  for (std::string_view& hash_string : base::SplitStringPiece(
-           filter_hashes_param, ",", base::WhitespaceHandling::TRIM_WHITESPACE,
-           base::SplitResult::SPLIT_WANT_NONEMPTY)) {
-    uint32_t hash;
-    if (base::StringToUint(hash_string, &hash)) {
-      filter_hashes_.insert(hash);
-    }
+  if (!kFilterHashes.Get().empty()) {
+    SearchStringsUpdateListener::GetInstance()->SetFilterWordsHashes(
+        kFilterHashes.Get());
   }
 
   // Notify page content annotations service that we will need the content
@@ -354,6 +340,13 @@ bool HistoryEmbeddingsService::IsEligible(const GURL& url) {
   return eligible;
 }
 
+void HistoryEmbeddingsService::OnEmbedderMetadataReady(
+    EmbedderMetadata metadata) {
+  subscription_ = os_crypt_async_->GetInstance(
+      base::BindOnce(&HistoryEmbeddingsService::OnOsCryptAsyncReady,
+                     weak_ptr_factory_.GetWeakPtr(), metadata));
+}
+
 void HistoryEmbeddingsService::OnOsCryptAsyncReady(
     EmbedderMetadata metadata,
     os_crypt_async::Encryptor encryptor,
@@ -367,13 +360,6 @@ void HistoryEmbeddingsService::OnOsCryptAsyncReady(
         .Then(base::BindOnce(&HistoryEmbeddingsService::RebuildAbsentEmbeddings,
                              weak_ptr_factory_.GetWeakPtr()));
   }
-}
-
-void HistoryEmbeddingsService::OnEmbedderMetadataReady(
-    EmbedderMetadata metadata) {
-  subscription_ = os_crypt_async_->GetInstance(
-      base::BindOnce(&HistoryEmbeddingsService::OnOsCryptAsyncReady,
-                     weak_ptr_factory_.GetWeakPtr(), metadata));
 }
 
 void HistoryEmbeddingsService::RetrievePassages(
@@ -413,20 +399,29 @@ void HistoryEmbeddingsService::Search(
   result.query = query;
   result.time_range_start = time_range_start;
   result.count = count;
-  if (QueryIsFiltered(query)) {
+
+  SearchParams search_params;
+  if (QueryIsFiltered(query, search_params)) {
     result.count = 0;
     callback.Run(std::move(result));
     return;
   }
+  search_params.word_match_minimum_embedding_score =
+      kWordMatchMinEmbeddingScore.Get();
+  search_params.word_match_score_boost_factor =
+      kWordMatchScoreBoostFactor.Get();
+  search_params.word_match_limit = kWordMatchLimit.Get();
+
   embedder_->ComputePassagesEmbeddings(
       PassageKind::QUERY, {std::move(query)},
       base::BindOnce(&HistoryEmbeddingsService::OnQueryEmbeddingComputed,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback),
-                     std::move(result)));
+                     std::move(search_params), std::move(result)));
 }
 
 void HistoryEmbeddingsService::OnQueryEmbeddingComputed(
     SearchResultCallback callback,
+    SearchParams search_params,
     SearchResult result,
     std::vector<std::string> query_passages,
     std::vector<Embedding> query_embeddings,
@@ -450,8 +445,8 @@ void HistoryEmbeddingsService::OnQueryEmbeddingComputed(
   query_id_++;
   storage_.AsyncCall(&Storage::Search)
       .WithArgs(query_id_weak_ptr_factory_.GetWeakPtr(), query_id_.load(),
-                std::move(query_embeddings.front()), result.time_range_start,
-                result.count)
+                std::move(search_params), std::move(query_embeddings.front()),
+                result.time_range_start, result.count)
       .Then(base::BindOnce(&HistoryEmbeddingsService::OnSearchCompleted,
                            weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                            std::move(result)));
@@ -619,12 +614,13 @@ void HistoryEmbeddingsService::Storage::ProcessAndStorePassages(
 std::vector<ScoredUrlRow> HistoryEmbeddingsService::Storage::Search(
     base::WeakPtr<std::atomic<size_t>> weak_latest_query_id,
     size_t query_id,
+    SearchParams search_params,
     Embedding query_embedding,
     std::optional<base::Time> time_range_start,
     size_t count) {
   base::ElapsedTimer timer;
   SearchInfo search_info = sql_database.FindNearest(
-      time_range_start, count, query_embedding,
+      time_range_start, count, search_params, query_embedding,
       base::BindRepeating(
           [](base::WeakPtr<std::atomic<size_t>> weak_latest_query_id,
              size_t query_id) {
@@ -645,6 +641,12 @@ std::vector<ScoredUrlRow> HistoryEmbeddingsService::Storage::Search(
       search_info.skipped_nonascii_passage_count);
   base::UmaHistogramBoolean("History.Embeddings.Search.Completed",
                             search_info.completed);
+  base::UmaHistogramTimes("History.Embeddings.Search.TotalSearchTime",
+                          search_info.total_search_time);
+  base::UmaHistogramTimes("History.Embeddings.Search.ScoringTime",
+                          search_info.scoring_time);
+  base::UmaHistogramTimes("History.Embeddings.Search.PassageScanningTime",
+                          search_info.passage_scanning_time);
 
   VLOG(1) << "History.Embeddings.Search.Duration (ms): "
           << elapsed.InMilliseconds()
@@ -672,8 +674,6 @@ std::vector<ScoredUrlRow> HistoryEmbeddingsService::Storage::Search(
     for (size_t i = 0; i < n; i++) {
       SearchInfo discard_recount;
       scored_url_row.scores.push_back(query_embedding.ScoreWith(
-          discard_recount,
-          scored_url_row.passages_embeddings.url_passages.passages.passages(i),
           scored_url_row.passages_embeddings.url_embeddings.embeddings[i]));
     }
   }
@@ -865,6 +865,8 @@ void HistoryEmbeddingsService::OnSearchCompleted(
                std::make_move_iterator(scored_url_rows.end()),
                std::back_inserter(filtered),
                [=](const ScoredUrlRow& scored_url_row) {
+                 // This score is the total for the URL, including the
+                 // best embedding score plus a holistic word match boost.
                  return scored_url_row.scored_url.score > threshold;
                });
   VLOG(3) << "Search found " << scored_url_rows.size() << " results and kept "
@@ -872,6 +874,17 @@ void HistoryEmbeddingsService::OnSearchCompleted(
 
   base::UmaHistogramCounts100("History.Embeddings.NumUrlsDiscardedForLowScore",
                               scored_url_rows.size() - filtered.size());
+
+  // The score used for filtering is the scored_url.score but this can exceed
+  // the maximum embedding score due to word match boosting across all passages.
+  // Detect and log cases that would have been filtered if not for text search.
+  for (const ScoredUrlRow& row : filtered) {
+    float best_embedding_score = std::ranges::max(row.scores);
+    bool sufficient = best_embedding_score > threshold;
+    base::UmaHistogramBoolean("History.Embeddings.EmbeddingScoreSufficient",
+                              sufficient);
+  }
+
   DeterminePassageVisibility(std::move(callback), std::move(result),
                              std::move(filtered));
 }
@@ -1052,18 +1065,13 @@ void HistoryEmbeddingsService::RetrievePassagesWithUrlData(
 }
 
 bool HistoryEmbeddingsService::QueryIsFiltered(
-    const std::string& raw_query) const {
+    const std::string& raw_query,
+    SearchParams& search_params) const {
   if (!base::IsStringASCII(raw_query)) {
     RecordQueryFiltered(QueryFiltered::FILTERED_NOT_ASCII);
     return true;
   }
   std::string query = base::ToLowerASCII(raw_query);
-  if (std::ranges::any_of(filter_phrases_, [&](const std::string& phrase) {
-        return query.find(phrase) != std::string::npos;
-      })) {
-    RecordQueryFiltered(QueryFiltered::FILTERED_PHRASE_MATCH);
-    return true;
-  }
   std::vector<std::string_view> query_terms = base::SplitStringPiece(
       query, " ", base::WhitespaceHandling::TRIM_WHITESPACE,
       base::SplitResult::SPLIT_WANT_NONEMPTY);
@@ -1075,29 +1083,34 @@ bool HistoryEmbeddingsService::QueryIsFiltered(
   // Erase any query terms that were trimmed to empty so they don't disrupt
   // the two term pairing logic below.
   std::erase(query_terms, "");
-  if (std::ranges::any_of(query_terms, [&](const std::string_view& query_term) {
+  const std::unordered_set<uint32_t>& filter_words_hashes =
+      SearchStringsUpdateListener::GetInstance()->filter_words_hashes();
+  if (std::ranges::any_of(query_terms, [&](std::string_view query_term) {
         uint32_t hash = HashString(query_term);
-        return filter_hashes_.contains(hash);
+        return filter_words_hashes.contains(hash);
       })) {
     RecordQueryFiltered(QueryFiltered::FILTERED_ONE_WORD_HASH_MATCH);
-    return true;
-  }
-  if (std::ranges::any_of(query_terms, [&](const std::string_view& query_term) {
-        return filter_terms_.contains(std::string(query_term));
-      })) {
-    RecordQueryFiltered(QueryFiltered::FILTERED_TERM_MATCH);
     return true;
   }
   for (size_t i = 1; i < query_terms.size(); i++) {
     std::string two_terms =
         base::StrCat({query_terms[i - 1], " ", query_terms[i]});
     uint32_t hash = HashString(two_terms);
-    if (filter_hashes_.contains(hash)) {
+    if (filter_words_hashes.contains(hash)) {
       RecordQueryFiltered(QueryFiltered::FILTERED_TWO_WORD_HASH_MATCH);
       return true;
     }
   }
   RecordQueryFiltered(QueryFiltered::NOT_FILTERED);
+  size_t min_term_length = kWordMatchMinTermLength.Get();
+  const std::unordered_set<uint32_t>& stop_words_hashes =
+      SearchStringsUpdateListener::GetInstance()->stop_words_hashes();
+  for (std::string_view term : query_terms) {
+    if (query_terms.size() >= min_term_length &&
+        !stop_words_hashes.contains(HashString(term))) {
+      search_params.query_terms.emplace_back(term);
+    }
+  }
   return false;
 }
 

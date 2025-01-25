@@ -15,7 +15,7 @@
 #include "aom/aomcx.h"
 #include "aom_dsp/aom_dsp_common.h"
 #include "av1/encoder/encoder.h"
-#include "third_party/googletest/src/googletest/include/gtest/gtest.h"
+#include "gtest/gtest.h"
 #include "test/codec_factory.h"
 #include "test/encode_test_driver.h"
 #include "test/i420_video_source.h"
@@ -752,6 +752,7 @@ TEST_P(ResizeRealtimeTest, TestInternalResizeDown) {
   cfg_.g_forced_max_frame_height = 1280;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
 
+#if CONFIG_AV1_DECODER
   unsigned int last_w = cfg_.g_w;
   unsigned int last_h = cfg_.g_h;
   int resize_down_count = 0;
@@ -767,7 +768,6 @@ TEST_P(ResizeRealtimeTest, TestInternalResizeDown) {
     }
   }
 
-#if CONFIG_AV1_DECODER
   // Verify that we get at lease 1 resize down event in this test.
   ASSERT_GE(resize_down_count, 1) << "Resizing should occur.";
   EXPECT_EQ(static_cast<unsigned int>(0), GetMismatchFrames());
@@ -803,6 +803,7 @@ TEST_P(ResizeRealtimeTest, TestInternalResizeDownUpChangeBitRate) {
   cfg_.g_forced_max_frame_height = 1280;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
 
+#if CONFIG_AV1_DECODER
   unsigned int last_w = cfg_.g_w;
   unsigned int last_h = cfg_.g_h;
   unsigned int frame_number = 0;
@@ -828,7 +829,6 @@ TEST_P(ResizeRealtimeTest, TestInternalResizeDownUpChangeBitRate) {
     frame_number++;
   }
 
-#if CONFIG_AV1_DECODER
   // Verify that we get at least 2 resize events in this test.
   ASSERT_GE(resize_up_count, 1) << "Resizing up should occur at lease once.";
   ASSERT_GE(resize_down_count, 1)
@@ -867,6 +867,7 @@ TEST_P(ResizeRealtimeTest, TestInternalResizeDownUpChangeBitRateScreen) {
   cfg_.g_forced_max_frame_height = 1280;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
 
+#if CONFIG_AV1_DECODER
   unsigned int last_w = cfg_.g_w;
   unsigned int last_h = cfg_.g_h;
   unsigned int frame_number = 0;
@@ -886,7 +887,6 @@ TEST_P(ResizeRealtimeTest, TestInternalResizeDownUpChangeBitRateScreen) {
     frame_number++;
   }
 
-#if CONFIG_AV1_DECODER
   // Verify that we get at least 1 resize event in this test.
   ASSERT_GE(resize_down_count, 1)
       << "Resizing down should occur at lease once.";

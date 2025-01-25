@@ -20,10 +20,8 @@
 
 PushNotificationService::PushNotificationService()
     : client_manager_(std::make_unique<PushNotificationClientManager>()) {
-  ios::ChromeBrowserStateManager* manager =
-      GetApplicationContext()->GetChromeBrowserStateManager();
   context_manager_ = [[PushNotificationAccountContextManager alloc]
-      initWithChromeBrowserStateManager:manager];
+      initWithProfileManager:GetApplicationContext()->GetProfileManager()];
 }
 
 PushNotificationService::~PushNotificationService() = default;
@@ -84,6 +82,8 @@ std::string PushNotificationService::GetRepresentativeTargetIdForGaiaId(
 void PushNotificationService::RegisterBrowserStatePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterDictionaryPref(prefs::kFeaturePushNotificationPermissions);
+  registry->RegisterBooleanPref(prefs::kSendTabNotificationsPreviouslyDisabled,
+                                false);
 }
 
 void PushNotificationService::RegisterLocalStatePrefs(

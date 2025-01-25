@@ -8,10 +8,14 @@
 #include <optional>
 
 #include "base/test/task_environment.h"
-#include "third_party/blink/public/web/blink.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/common/task_priority.h"
 #include "third_party/blink/renderer/platform/testing/main_thread_isolate.h"
 #include "third_party/blink/renderer/platform/testing/scoped_main_thread_overrider.h"
+#include "v8/include/v8-forward.h"
+
+namespace blink::scheduler {
+class MainThreadSchedulerImpl;
+}
 
 namespace blink::test {
 
@@ -24,6 +28,9 @@ namespace blink::test {
 // Only tests that need blink APIs should instantiate a
 // blink::test::TaskEnvironment. Use base::test::SingleThreadTaskEnvironment or
 // base::test::TaskEnvironment otherwise.
+//
+// Tests that render <video> may also need CSSDefaultStyleSheets::TestingScope
+// (see comments on that class).
 class TaskEnvironment : public base::test::TaskEnvironment {
  public:
   using ValidTraits = base::test::TaskEnvironment::ValidTraits;

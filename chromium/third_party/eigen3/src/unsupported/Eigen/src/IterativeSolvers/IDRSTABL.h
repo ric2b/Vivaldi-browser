@@ -150,7 +150,7 @@ bool idrstabl(const MatrixType &mat, const Rhs &rhs, Dest &x, const Precondition
         without any additional MV.
 
         Contrary to what one would suspect, the comparison with ==0.0 for
-        floating-point types is intended here. Any arbritary non-zero u is fine
+        floating-point types is intended here. Any arbitrary non-zero u is fine
         to continue, however if u contains either NaN or Inf the algorithm will
         break down.
         */

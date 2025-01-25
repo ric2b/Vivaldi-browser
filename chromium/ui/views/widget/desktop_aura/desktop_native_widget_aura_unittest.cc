@@ -23,6 +23,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_processor.h"
 #include "ui/events/event_utils.h"
@@ -749,15 +750,15 @@ void GenerateMouseEvents(Widget* widget, ui::EventType last_event_type) {
 void RunCloseWidgetDuringDispatchTest(WidgetTest* test,
                                       ui::EventType last_event_type) {
   // |widget| is deleted by CloseWidgetView.
-  Widget* widget = new Widget;
-  Widget::InitParams params =
-      test->CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
-                         Widget::InitParams::TYPE_POPUP);
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams params = test->CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
   params.bounds = gfx::Rect(0, 0, 50, 100);
   widget->Init(std::move(params));
   widget->SetContentsView(std::make_unique<CloseWidgetView>(last_event_type));
   widget->Show();
-  GenerateMouseEvents(widget, last_event_type);
+  GenerateMouseEvents(widget.get(), last_event_type);
+  EXPECT_TRUE(widget->IsClosed());
 }
 
 // Verifies deleting the widget from a mouse pressed event doesn't crash.
@@ -812,7 +813,7 @@ TEST_F(DesktopNativeWidgetAuraTest, MAYBE_WindowMouseModalityTest) {
 
   // This instance will be destroyed when the dialog is destroyed.
   auto dialog_delegate = std::make_unique<DialogDelegateView>();
-  dialog_delegate->SetModalType(ui::MODAL_TYPE_WINDOW);
+  dialog_delegate->SetModalType(ui::mojom::ModalType::kWindow);
 
   Widget* modal_dialog_widget = views::DialogDelegate::CreateDialogWidget(
       dialog_delegate.release(), nullptr, top_level_widget.GetNativeView());
@@ -852,9 +853,8 @@ TEST_F(DesktopNativeWidgetAuraTest, MAYBE_WindowMouseModalityTest) {
 // active.
 TEST_F(DesktopNativeWidgetAuraTest, WindowModalityActivationTest) {
   TestDesktopWidgetDelegate widget_delegate;
-  widget_delegate.InitWidget(
-      CreateParams(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET,
-                   Widget::InitParams::TYPE_WINDOW));
+  widget_delegate.InitWidget(CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_WINDOW));
 
   Widget* top_level_widget = widget_delegate.GetWidget();
   top_level_widget->Show();
@@ -868,7 +868,7 @@ TEST_F(DesktopNativeWidgetAuraTest, WindowModalityActivationTest) {
   widget_delegate.SetCanActivate(false);
 
   auto dialog_delegate = std::make_unique<DialogDelegateView>();
-  dialog_delegate->SetModalType(ui::MODAL_TYPE_WINDOW);
+  dialog_delegate->SetModalType(ui::mojom::ModalType::kWindow);
 
   Widget* modal_dialog_widget = views::DialogDelegate::CreateDialogWidget(
       dialog_delegate.release(), nullptr, top_level_widget->GetNativeView());

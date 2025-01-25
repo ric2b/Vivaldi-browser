@@ -46,6 +46,8 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_AddToHomescreenTextBubble"
       summary="(obsolete) educating users about adding website shortcuts to
                their home screen (using a text bubble)"/>
+  <variant name="IPH_AndroidTabDeclutter"
+      summary="Shows how to access tabs which have been archived."/>
   <variant name="IPH_AppSpecificHistory" summary="App Specific History action"/>
   <variant name="IPH_AutoDarkOptOut"
       summary="educating users about disabling auto dark feature globally"/>
@@ -58,6 +60,10 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_AutofillCreditCardBenefit"
       summary="message shown in the Autofill dropdown to educate users on the
                existence of credit card benefits."/>
+  <variant name="IPH_AutofillDisabledVirtualCardSuggestion"
+      summary="message shown along with a disabled and grayed-out virtual
+               card suggestion in the autofill suggestion list indicating
+               that the merchant has opted-out of accepting virtual cards."/>
   <variant name="IPH_AutofillExternalAccountProfileSuggestion"
       summary="message shown along with the externally created (e.g. in
                Google Pay) profile suggestion option in the Autofill dropdown"/>
@@ -131,6 +137,12 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_DataSaverMilestonePromo"
       summary="data saver milestone promo"/>
   <variant name="IPH_DataSaverPreview" summary="data saver preview"/>
+  <variant name="IPH_DefaultBrowserPromoMagicStack"
+      summary="Default browser promo in Magic Stack"/>
+  <variant name="IPH_DefaultBrowserPromoMessages"
+      summary="Default browser promo with messages on omnibox paste"/>
+  <variant name="IPH_DefaultBrowserPromoSettingCard"
+      summary="Default browser promo in Chrome settings"/>
   <variant name="IPH_DefaultSiteView" summary="default site view info on iOS"/>
   <variant name="IPH_DesktopCustomizeChrome"
       summary="customizing new tab page"/>
@@ -217,6 +229,8 @@ chromium-metrics-reviews@google.com.
       summary="encourages users to turn on high efficiency mode"/>
   <variant name="IPH_HistorySearch"
       summary="Prompting users to try history search powered by AI."/>
+  <variant name="IPH_HomeCustomizationMenu"
+      summary="Home customization menu entrypoint on the NTP"/>
   <variant name="IPH_IdentityDisc" summary="Identity Disc"/>
   <variant name="IPH_IncognitoWindow" summary="incognito window"/>
   <variant name="IPH_InstanceSwitcher" summary="instance switcher"/>
@@ -246,10 +260,10 @@ chromium-metrics-reviews@google.com.
       summary="history item on the overflow menu on iOS"/>
   <variant name="IPH_iOSInlineEnhancedSafeBrowsingPromoFeature"
       summary="Showing the Enhanced Safe Browsing Promo on iOS"/>
+  <variant name="IPH_iOSLensOverlayEntrypointTip"
+      summary="IOS Lens overlay toolbar entrypoint"/>
   <variant name="IPH_iOSNewTabToolbarItemFeature"
       summary="the new tab tool bar item (bottom on iPhone, top on iPad)"/>
-  <variant name="IPH_iOSOmniboxPositionFeature"
-      summary="showing the omnibox position choice screen on iOS"/>
   <variant name="IPH_iOSOverflowMenuCustomization"
       summary="overflow menu customization"/>
   <variant name="IPH_iOSPageInfoRevamp"
@@ -320,7 +334,6 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_LiveCaption" summary="Live Caption"/>
   <variant name="IPH_LongPressToolbarTip" summary="LongPress toolbar"/>
   <variant name="IPH_MicToolbar" summary="the mic button in the toolbar"/>
-  <variant name="IPH_NewIncognitoTabTip" summary="new incognito tab tip"/>
   <variant name="IPH_NewTab" summary="new tab"/>
   <variant name="IPH_NewTabPageHomeButton"
       summary="(obsolete) new tab page button"/>
@@ -502,8 +515,6 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_ShoppingListMenuItem"
       summary="A text bubble showing that a product can be tracked from the
                overflow menu"/>
-  <variant name="IPH_SidePanelGenericMenuFeature"
-      summary="side panel open from menu"/>
   <variant name="IPH_SidePanelGenericPinnableFeature"
       summary="side panel pinnable"/>
   <variant name="IPH_SidePanelLensOverlayPinnableFeature"
@@ -518,6 +529,9 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_SignoutWebIntercept"
       summary="A message shown after the user signs out of a Google service
                on the web explaining that it does not sign them out of Chrome"/>
+  <variant name="IPH_SupervisedUserProfileSignin"
+      summary="IPH mesagage shown on supervised user's signininforming them
+               about the applied parental controls."/>
   <variant name="IPH_TabAudioMuting" summary="muting tab audio"/>
   <variant name="IPH_TabGroupsDragAndDrop"
       summary="educating user to drop one tab on another tab to create group"/>
@@ -542,14 +556,16 @@ chromium-metrics-reviews@google.com.
       summary="tab organization success"/>
   <variant name="IPH_TabSearch" summary="tab search discovery"/>
   <variant name="IPH_TabSwitcherButton" summary="tab switcher button"/>
-  <variant name="IPH_TrackingProtectionFullOnboarding"
-      summary="tracking protection full onboarding notice"/>
+  <variant name="IPH_TabSwitcherButtonSwitchIncognito"
+      summary="Switch to incognito via tab switcher button"/>
+  <variant name="IPH_TabSwitcherFloatingActionButton"
+      summary="tab switcher floating action button"/>
+  <variant name="IPH_ToolbarManagementButton"
+      summary="toolbar management button"/>
   <variant name="IPH_TrackingProtectionOffboarding"
       summary="(obsolete) tracking protection offboarding notice"/>
   <variant name="IPH_TrackingProtectionOnboarding"
-      summary="tracking protection onboarding notice"/>
-  <variant name="IPH_TrackingProtectionReminder"
-      summary="tracking protection reminder"/>
+      summary="(obsolete) tracking protection onboarding notice"/>
   <variant name="IPH_TranslateMenuButton" summary="translate menu button"/>
   <variant name="IPH_UpdatedConnectionSecurityIndicators"
       summary="updated omnibox connection security indicators"/>
@@ -581,7 +597,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="InProductHelp.Config.ParsingEvent" enum="ConfigParsingEvent"
-    expires_after="2024-11-17">
+    expires_after="2025-01-19">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if in-product help configuration is parsed correctly, and the
@@ -610,7 +626,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.Db.TotalEvents" units="events"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records the total number of event records in the database for in-product
@@ -628,7 +644,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.DismissalReason.iOS"
-    enum="InProductHelpDismissalReason" expires_after="2024-12-08">
+    enum="InProductHelpDismissalReason" expires_after="2025-02-09">
   <owner>lpromero@google.com</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
@@ -637,7 +653,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.Gestural.DismissalReason.iOS"
-    enum="InProductHelpDismissalReason" expires_after="2024-12-08">
+    enum="InProductHelpDismissalReason" expires_after="2025-02-09">
   <owner>ginnyhuang@chromium.org</owner>
   <owner>adamta@google.com</owner>
   <summary>
@@ -647,7 +663,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.NotifyEventReadyState.{IPHFeature}"
-    enum="BooleanSuccess" expires_after="2025-01-05">
+    enum="BooleanSuccess" expires_after="2025-03-09">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if the model is ready when in-product help event happens for
@@ -657,7 +673,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.ShouldTriggerHelpUI.{IPHFeature}"
-    enum="TriggerHelpUIResult" expires_after="2025-01-05">
+    enum="TriggerHelpUIResult" expires_after="2025-03-09">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if in-product help for {IPHFeature} is shown to the user, and the
@@ -669,7 +685,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.ShownTime.{IPHFeature}" units="ms"
-    expires_after="2024-12-08">
+    expires_after="2025-02-09">
   <owner>lpromero@google.com</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
@@ -682,7 +698,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.SnoozeAction" enum="InProductHelpSnoozeAction"
-    expires_after="2024-12-08">
+    expires_after="2025-02-10">
   <owner>haileywang@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <summary>
@@ -691,7 +707,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.TextBubble.ShownTime" units="ms"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>haileywang@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <summary>
@@ -721,7 +737,7 @@ In the future, Desktop IPH may be completely moved to the user_education folder.
 -->
 
 <histogram name="UserEducation.MessageAction.{IPHFeature}" enum="MessageAction"
-    expires_after="2025-01-05">
+    expires_after="2025-03-09">
   <owner>mickeyburks@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>Records what action was taken to close the In-Product Help.</summary>
@@ -729,7 +745,7 @@ In the future, Desktop IPH may be completely moved to the user_education folder.
 </histogram>
 
 <histogram name="UserEducation.MessageNotShown.{IPHFeature}"
-    enum="PromoFailure" expires_after="2024-12-01">
+    enum="PromoFailure" expires_after="2025-02-02">
   <owner>mickeyburks@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>
@@ -742,7 +758,7 @@ In the future, Desktop IPH may be completely moved to the user_education folder.
 </histogram>
 
 <histogram name="UserEducation.RotatingPromoIndex.{IPHFeature}" units="Index"
-    expires_after="2025-01-01">
+    expires_after="2025-03-02">
   <owner>dfried@chromium.org</owner>
   <owner>frizzle-team@google.com</owner>
   <summary>

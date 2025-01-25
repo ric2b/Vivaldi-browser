@@ -12,68 +12,72 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {uuidv4} from '../../base/uuid';
-import {Actions} from '../../common/actions';
-import {SCROLLING_TRACK_GROUP} from '../../common/state';
-import {globals} from '../../frontend/globals';
-import {
-  Plugin,
-  PluginContextTrace,
-  PluginDescriptor,
-  PrimaryTrackSortKey,
-} from '../../public';
-
+import {addSqlTableTab} from '../../frontend/sql_table_tab_command';
+import {sqlTableRegistry} from '../../frontend/widgets/sql/table/sql_table_registry';
+import {TrackNode} from '../../public/workspace';
+import {Trace} from '../../public/trace';
+import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
 import {ActiveCPUCountTrack, CPUType} from './active_cpu_count';
 import {RunnableThreadCountTrack} from './runnable_thread_count';
+import {getSchedTable} from './table';
 
-class SchedPlugin implements Plugin {
-  async onTraceLoad(ctx: PluginContextTrace) {
+class SchedPlugin implements PerfettoPlugin {
+  async onTraceLoad(ctx: Trace) {
     const runnableThreadCountUri = `/runnable_thread_count`;
-    ctx.registerTrack({
+    ctx.tracks.registerTrack({
       uri: runnableThreadCountUri,
       title: 'Runnable thread count',
-      trackFactory: (trackCtx) =>
-        new RunnableThreadCountTrack({
-          engine: ctx.engine,
-          trackKey: trackCtx.trackKey,
-        }),
+      track: new RunnableThreadCountTrack({
+        engine: ctx.engine,
+        uri: runnableThreadCountUri,
+      }),
     });
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.Sched.AddRunnableThreadCountTrackCommand',
       name: 'Add track: runnable thread count',
       callback: () =>
-        addPinnedTrack(runnableThreadCountUri, 'Runnable thread count'),
+        addPinnedTrack(ctx, runnableThreadCountUri, 'Runnable thread count'),
     });
 
     const uri = uriForActiveCPUCountTrack();
     const title = 'Active CPU count';
-    ctx.registerTrack({
+    ctx.tracks.registerTrack({
       uri,
       title: title,
-      trackFactory: (trackCtx) => new ActiveCPUCountTrack(trackCtx, ctx.engine),
+      track: new ActiveCPUCountTrack({trackUri: uri}, ctx.engine),
     });
-    ctx.registerCommand({
+    ctx.commands.registerCommand({
       id: 'dev.perfetto.Sched.AddActiveCPUCountTrackCommand',
       name: 'Add track: active CPU count',
-      callback: () => addPinnedTrack(uri, title),
+      callback: () => addPinnedTrack(ctx, uri, title),
     });
 
     for (const cpuType of Object.values(CPUType)) {
       const uri = uriForActiveCPUCountTrack(cpuType);
       const title = `Active ${cpuType} CPU count`;
-      ctx.registerTrack({
+      ctx.tracks.registerTrack({
         uri,
         title: title,
-        trackFactory: (trackCtx) =>
-          new ActiveCPUCountTrack(trackCtx, ctx.engine, cpuType),
+        track: new ActiveCPUCountTrack({trackUri: uri}, ctx.engine, cpuType),
       });
 
-      ctx.registerCommand({
+      ctx.commands.registerCommand({
         id: `dev.perfetto.Sched.AddActiveCPUCountTrackCommand.${cpuType}`,
         name: `Add track: active ${cpuType} CPU count`,
-        callback: () => addPinnedTrack(uri, title),
+        callback: () => addPinnedTrack(ctx, uri, title),
       });
     }
+
+    sqlTableRegistry['sched'] = getSchedTable();
+    ctx.commands.registerCommand({
+      id: 'perfetto.ShowTable.sched',
+      name: 'Open table: sched',
+      callback: () => {
+        addSqlTableTab({
+          table: getSchedTable(),
+        });
+      },
+    });
   }
 }
 
@@ -86,18 +90,11 @@ function uriForActiveCPUCountTrack(cpuType?: CPUType): string {
   }
 }
 
-function addPinnedTrack(uri: string, title: string) {
-  const key = uuidv4();
-  globals.dispatchMultiple([
-    Actions.addTrack({
-      key,
-      uri,
-      name: title,
-      trackSortKey: PrimaryTrackSortKey.DEBUG_TRACK,
-      trackGroup: SCROLLING_TRACK_GROUP,
-    }),
-    Actions.toggleTrackPinned({trackKey: key}),
-  ]);
+function addPinnedTrack(ctx: Trace, uri: string, title: string) {
+  const track = new TrackNode(uri, title);
+  // Add track to the top of the stack
+  ctx.workspace.prependChild(track);
+  track.pin();
 }
 
 export const plugin: PluginDescriptor = {

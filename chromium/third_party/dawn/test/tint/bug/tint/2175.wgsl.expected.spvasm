@@ -1,32 +1,31 @@
 ; SPIR-V
 ; Version: 1.3
-; Generator: Google Tint Compiler; 0
-; Bound: 13
+; Generator: Google Tint Compiler; 1
+; Bound: 12
 ; Schema: 0
                OpCapability Shader
                OpMemoryModel Logical GLSL450
                OpEntryPoint GLCompute %tint_symbol_3 "tint_symbol_3"
                OpExecutionMode %tint_symbol_3 LocalSize 1 1 1
-               OpName %tint_symbol_2_block "tint_symbol_2_block"
-               OpMemberName %tint_symbol_2_block 0 "inner"
-               OpName %tint_symbol_2 "tint_symbol_2"
+               OpMemberName %tint_symbol_1 0 "tint_symbol"
+               OpName %tint_symbol_1 "tint_symbol_1"
                OpName %tint_symbol_3 "tint_symbol_3"
-               OpDecorate %tint_symbol_2_block Block
-               OpMemberDecorate %tint_symbol_2_block 0 Offset 0
-               OpDecorate %tint_symbol_2 DescriptorSet 0
-               OpDecorate %tint_symbol_2 Binding 0
+               OpMemberDecorate %tint_symbol_1 0 Offset 0
+               OpDecorate %tint_symbol_1 Block
+               OpDecorate %1 DescriptorSet 0
+               OpDecorate %1 Binding 0
+               OpDecorate %1 Coherent
        %uint = OpTypeInt 32 0
-%tint_symbol_2_block = OpTypeStruct %uint
-%_ptr_StorageBuffer_tint_symbol_2_block = OpTypePointer StorageBuffer %tint_symbol_2_block
-%tint_symbol_2 = OpVariable %_ptr_StorageBuffer_tint_symbol_2_block StorageBuffer
+%tint_symbol_1 = OpTypeStruct %uint
+%_ptr_StorageBuffer_tint_symbol_1 = OpTypePointer StorageBuffer %tint_symbol_1
+          %1 = OpVariable %_ptr_StorageBuffer_tint_symbol_1 StorageBuffer
        %void = OpTypeVoid
-          %5 = OpTypeFunction %void
-     %uint_0 = OpConstant %uint 0
+          %7 = OpTypeFunction %void
 %_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
-         %12 = OpConstantNull %uint
-%tint_symbol_3 = OpFunction %void None %5
+     %uint_0 = OpConstant %uint 0
+%tint_symbol_3 = OpFunction %void None %7
           %8 = OpLabel
-         %11 = OpAccessChain %_ptr_StorageBuffer_uint %tint_symbol_2 %uint_0
-               OpStore %11 %12
+          %9 = OpAccessChain %_ptr_StorageBuffer_uint %1 %uint_0
+               OpStore %9 %uint_0 None
                OpReturn
                OpFunctionEnd

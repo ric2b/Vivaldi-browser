@@ -9,8 +9,6 @@ import static androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_SIDE_SHEET_P
 import static androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_POSITION_NONE;
 import static androidx.browser.customtabs.CustomTabsIntent.CLOSE_BUTTON_POSITION_DEFAULT;
 
-import static org.chromium.chrome.browser.content.WebContentsFactory.DEFAULT_NETWORK_HANDLE;
-
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -31,6 +29,7 @@ import androidx.browser.trusted.sharing.ShareTarget;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.device.mojom.ScreenOrientationLockType;
+import org.chromium.net.NetId;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -47,7 +46,8 @@ public abstract class BrowserServicesIntentDataProvider {
         CustomTabsUiType.INFO_PAGE,
         CustomTabsUiType.READER_MODE,
         CustomTabsUiType.MINIMAL_UI_WEBAPP,
-        CustomTabsUiType.OFFLINE_PAGE
+        CustomTabsUiType.OFFLINE_PAGE,
+        CustomTabsUiType.AUTH_TAB
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CustomTabsUiType {
@@ -58,6 +58,7 @@ public abstract class BrowserServicesIntentDataProvider {
         int MINIMAL_UI_WEBAPP = 4;
         int OFFLINE_PAGE = 5;
         int READ_LATER = 6;
+        int AUTH_TAB = 7;
     }
 
     // The type of Disclosure for TWAs to use.
@@ -356,8 +357,15 @@ public abstract class BrowserServicesIntentDataProvider {
      * @return Whether the Activity uses an off-the-record profile.
      */
     public boolean isOffTheRecord() {
-        return getCustomTabMode() == CustomTabProfileType.EPHEMERAL
-                || getCustomTabMode() == CustomTabProfileType.INCOGNITO;
+        switch (getCustomTabMode()) {
+            case CustomTabProfileType.EPHEMERAL:
+            case CustomTabProfileType.INCOGNITO:
+                return true;
+            case CustomTabProfileType.REGULAR:
+                return false;
+        }
+        assert false; // NOTREACHED
+        return false;
     }
 
     /**
@@ -639,15 +647,28 @@ public abstract class BrowserServicesIntentDataProvider {
     }
 
     /**
-     * Return the network handle that should be used from this intent, the default value to be used
+     * Return the target network that should be used from this intent, the default value to be used
      * when a network has not been explicitly set via intent.
      */
-    public long getNetworkHandle() {
-        return DEFAULT_NETWORK_HANDLE;
+    public long getTargetNetwork() {
+        return NetId.INVALID;
     }
 
     /** Return {@code true} if the service was launched for authentication. */
-    public boolean isAuthView() {
+    public boolean isAuthTab() {
+        return false;
+    }
+
+    /** Return the redirect scheme for AuthTab. */
+    public String getAuthRedirectScheme() {
+        return null;
+    }
+
+    /**
+     * Vivaldi OEM
+     * Returns true if CCT can open in immersive fullscreen (cinema) mode.
+     */
+    public boolean isCinemaMode() {
         return false;
     }
 }

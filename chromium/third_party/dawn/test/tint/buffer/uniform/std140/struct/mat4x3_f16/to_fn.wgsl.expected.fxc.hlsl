@@ -1,4 +1,4 @@
-SKIP: FAILED
+SKIP: INVALID
 
 struct S {
   int before;
@@ -52,7 +52,7 @@ matrix<float16_t, 4, 3> u_load_3(uint offset) {
 S u_load_1(uint offset) {
   const uint scalar_offset_4 = ((offset + 0u)) / 4;
   const uint scalar_offset_5 = ((offset + 64u)) / 4;
-  const S tint_symbol = {asint(u[scalar_offset_4 / 4][scalar_offset_4 % 4]), u_load_3((offset + 8u)), asint(u[scalar_offset_5 / 4][scalar_offset_5 % 4])};
+  S tint_symbol = {asint(u[scalar_offset_4 / 4][scalar_offset_4 % 4]), u_load_3((offset + 8u)), asint(u[scalar_offset_5 / 4][scalar_offset_5 % 4])};
   return tint_symbol;
 }
 
@@ -82,3 +82,8 @@ void f() {
   e(vector<float16_t, 3>(ubo_load_9_xz[0], ubo_load_9_y, ubo_load_9_xz[1]).zxy.x);
   return;
 }
+FXC validation failure:
+<scrubbed_path>(3,10-18): error X3000: syntax error: unexpected token 'float16_t'
+
+
+tint executable returned error: exit status 1

@@ -74,11 +74,17 @@ interface NewRangeData {
  * When adding new commands, please put the logic in a more relevant spot.
  */
 export class CommandHandler implements CommandHandlerInterface {
+  private commandList_ = Object.values(Command);
+
   onCommand(command: Command): boolean {
     // Check for a command denied in incognito contexts and kiosk.
     if (!PermissionChecker.isAllowed(command)) {
       return true;
     }
+
+    chrome.metricsPrivate.recordEnumerationValue(
+        'Accessibility.ChromeVox.PerformCommand',
+        this.commandList_.indexOf(command), this.commandList_.length);
 
     ChromeVoxRange.maybeResetFromFocus();
 
@@ -739,7 +745,7 @@ export class CommandHandler implements CommandHandlerInterface {
         // check.
         // TODO(b/314203187): Not null asserted, check that this is correct.
         if (!node &&
-            !AutoScrollHandler.instance.scrollToFindNodes(
+            !AutoScrollHandler.instance!.scrollToFindNodes(
                 bound, command, currentRange!, dir, () => {
                   this.onCommand(command);
                   this.onFinishCommand();
@@ -811,8 +817,9 @@ export class CommandHandler implements CommandHandlerInterface {
     }
 
     // TODO(accessibility): extract into function.
+    // TODO(b/314203187): Not null asserted, check that this is correct.
     if (tryScrolling && currentRange &&
-        !AutoScrollHandler.instance.onCommandNavigation(
+        !AutoScrollHandler.instance!.onCommandNavigation(
             currentRange, dir, pred, unit, speechProps, rootPred, () => {
               this.onCommand(command);
               this.onFinishCommand();

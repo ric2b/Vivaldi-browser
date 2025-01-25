@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 
 #include "base/check.h"
@@ -144,7 +145,7 @@ std::u16string GetReauthPurpose(
       return l10n_util::GetStringUTF16(
           IDS_PASSWORDS_PAGE_EDIT_AUTHENTICATION_PROMPT_BIOMETRIC_SUFFIX);
     case extensions::api::passwords_private::PlaintextReason::kNone:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 #elif BUILDFLAG(IS_WIN)
   switch (reason) {
@@ -158,7 +159,7 @@ std::u16string GetReauthPurpose(
       return l10n_util::GetStringUTF16(
           IDS_PASSWORDS_PAGE_EDIT_AUTHENTICATION_PROMPT);
     case extensions::api::passwords_private::PlaintextReason::kNone:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 #else
   return std::u16string();
@@ -232,7 +233,7 @@ extensions::api::passwords_private::ImportResults ConvertImportResults(
   return private_results;
 }
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 
 using password_manager::prefs::kBiometricAuthenticationBeforeFilling;
 
@@ -251,17 +252,22 @@ void ChangeBiometricAuthenticationBeforeFillingSetting(
 
 std::u16string GetMessageForBiometricAuthenticationBeforeFillingSetting(
     PrefService* prefs) {
+  std::u16string message;
+#if BUILDFLAG(IS_MAC)
   const bool pref_enabled =
       prefs->GetBoolean(kBiometricAuthenticationBeforeFilling);
-#if BUILDFLAG(IS_MAC)
-  return l10n_util::GetStringUTF16(
+  message = l10n_util::GetStringUTF16(
       pref_enabled ? IDS_PASSWORD_MANAGER_TURN_OFF_FILLING_REAUTH_MAC
                    : IDS_PASSWORD_MANAGER_TURN_ON_FILLING_REAUTH_MAC);
 #elif BUILDFLAG(IS_WIN)
-  return l10n_util::GetStringUTF16(
+  const bool pref_enabled =
+      prefs->GetBoolean(kBiometricAuthenticationBeforeFilling);
+  message = l10n_util::GetStringUTF16(
       pref_enabled ? IDS_PASSWORD_MANAGER_TURN_OFF_FILLING_REAUTH_WIN
                    : IDS_PASSWORD_MANAGER_TURN_ON_FILLING_REAUTH_WIN);
 #endif
+  // TODO(lziest, b/366209336): Add ChromeOS Strings
+  return message;
 }
 
 #endif
@@ -911,9 +917,7 @@ void PasswordsPrivateDelegateImpl::SwitchBiometricAuthBeforeFillingState(
 
     content::WebContents* web_contents,
     AuthenticationCallback authentication_callback) {
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_WIN)
-  NOTIMPLEMENTED();
-#else
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
   AuthResultCallback callback =
       base::BindOnce(&ChangeBiometricAuthenticationBeforeFillingSetting,
                      profile_->GetPrefs(), std::move(authentication_callback));
@@ -922,6 +926,8 @@ void PasswordsPrivateDelegateImpl::SwitchBiometricAuthBeforeFillingState(
                    GetMessageForBiometricAuthenticationBeforeFillingSetting(
                        profile_->GetPrefs()),
                    std::move(callback));
+#else
+  NOTIMPLEMENTED();
 #endif
 }
 

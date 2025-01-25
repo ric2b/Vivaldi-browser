@@ -18,12 +18,18 @@ export class WebCamFaceLandmarker {
   private imageCapture_: ImageCapture|undefined;
   private onFaceLandmarkerResult_:
       (resultWithLatency: FaceLandmarkerResultWithLatency) => void;
+  declare private readyForTesting_: Promise<void>;
+  private setReadyForTesting_?: () => void;
 
   constructor(
       onFaceLandmarkerResult:
           (resultWithLatency: FaceLandmarkerResultWithLatency) => void) {
     this.onFaceLandmarkerResult_ = onFaceLandmarkerResult;
     this.intervalID_ = null;
+
+    this.readyForTesting_ = new Promise(resolve => {
+      this.setReadyForTesting_ = resolve;
+    });
   }
 
   /**
@@ -40,9 +46,19 @@ export class WebCamFaceLandmarker {
     let proceed: Function|undefined;
     chrome.accessibilityPrivate.installFaceGazeAssets(async assets => {
       if (!assets) {
-        throw new Error(
+        // FaceGaze will not work unless the FaceGaze assets are successfully
+        // installed. When the assets fail to install, AccessibilityManager
+        // shows a notification to the user informing them of the failure and to
+        // try installing again later. As a result, we should turn FaceGaze off
+        // here and allow them to toggle the feature back on to retry the
+        // download.
+        console.error(
             `Couldn't create FaceLandmarker because FaceGaze assets couldn't be
               installed.`);
+
+        chrome.settingsPrivate.setPref(
+            'settings.a11y.face_gaze.enabled', false);
+        return;
       }
 
       // Create a blob to hold the wasm contents.
@@ -66,6 +82,9 @@ export class WebCamFaceLandmarker {
         numFaces: 1,
       };
       this.faceLandmarker_!.setOptions(options);
+      if (this.setReadyForTesting_) {
+        this.setReadyForTesting_();
+      }
       proceed!();
     });
 
@@ -113,6 +132,18 @@ export class WebCamFaceLandmarker {
     const latency = performance.now() - startTime;
     // Use a callback to send the result to the main FaceGaze object.
     this.onFaceLandmarkerResult_({result, latency});
+  }
+
+  stop(): void {
+    if (this.imageCapture_) {
+      this.imageCapture_.track.stop();
+      this.imageCapture_ = undefined;
+    }
+    this.faceLandmarker_ = null;
+    if (this.intervalID_ !== null) {
+      clearInterval(this.intervalID_);
+      this.intervalID_ = null;
+    }
   }
 }
 

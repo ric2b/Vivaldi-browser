@@ -19,6 +19,7 @@ import org.jni_zero.NativeMethods;
 import org.chromium.android_webview.common.Lifetime;
 import org.chromium.android_webview.common.MediaIntegrityApiStatus;
 import org.chromium.android_webview.common.MediaIntegrityProvider;
+import org.chromium.base.BaseFeatures;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.memory.MemoryPressureMonitor;
@@ -42,7 +43,6 @@ import java.util.Set;
 @JNINamespace("android_webview")
 @Lifetime.Profile
 public class AwBrowserContext implements BrowserContextHandle {
-    private static final String TAG = "AwBrowserContext";
     private static final String BASE_PREFERENCES = "WebViewProfilePrefs";
 
     /**
@@ -177,7 +177,10 @@ public class AwBrowserContext implements BrowserContextHandle {
                         new AwContentsLifecycleNotifier.Observer() {
                             @Override
                             public void onFirstWebViewCreated() {
-                                MemoryPressureMonitor.INSTANCE.enablePolling();
+                                MemoryPressureMonitor.INSTANCE.enablePolling(
+                                        AwFeatureMap.isEnabled(
+                                                BaseFeatures
+                                                        .POST_GET_MY_MEMORY_STATE_TO_BACKGROUND));
                             }
 
                             @Override

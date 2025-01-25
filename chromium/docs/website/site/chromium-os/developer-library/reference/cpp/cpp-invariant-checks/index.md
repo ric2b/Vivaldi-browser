@@ -52,7 +52,7 @@ for more information on this topic. Below are commonly used assertions:
 -   NOTREACHED_NORETURN(): Use NOTREACHED_NORETURN() to enforce a particular
     branch of code should never be run. If run, it will cause a crash if
     `DCHECK_IS_ON` is enabled. Prefer to unconditionally CHECK() instead of
-    conditionally hitting a NOTREACHED_NORETURN(). Prefer NOTREACHED_NOTRETURN()
+    conditionally hitting a NOTREACHED_NORETURN(). Prefer NOTREACHED_NORETURN()
     instead of NOTREACHED(). For example, if you are writing a switch statement
     that requires all enums, but only a subset of the enums are ever expected to
     be reached, use a NOTREACHED_NORETURN() on the others to declare they should

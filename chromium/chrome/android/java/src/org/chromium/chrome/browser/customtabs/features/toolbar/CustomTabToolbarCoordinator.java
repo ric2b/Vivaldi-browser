@@ -46,6 +46,7 @@ import org.chromium.chrome.browser.share.ShareDelegateSupplier;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.components.browser_ui.share.ShareHelper;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.util.TokenHolder;
 import org.chromium.url.GURL;
@@ -165,19 +166,23 @@ public class CustomTabToolbarCoordinator {
         Tab tab = mTabProvider.getTab();
         if (tab == null) return;
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SHARE_CUSTOM_ACTIONS_IN_CCT)) {
-            // The share button from CCT should have custom actions, however if the
-            // ShareDelegateSupplier is null, we should fallback to the default share action without
-            // custom buttons.
-            Supplier<ShareDelegate> supplier = ShareDelegateSupplier.from(mWindowAndroid);
-            if (params.getType() == CustomButtonParams.ButtonType.CCT_SHARE_BUTTON
-                    && supplier != null
-                    && supplier.get() != null) {
-                supplier.get()
-                        .share(
-                                tab,
-                                /* shareDirectly= */ false,
-                                ShareDelegate.ShareOrigin.CUSTOM_TAB_SHARE_BUTTON);
+        // The share button from CCT should have custom actions, however if the
+        // ShareDelegateSupplier is null, we should fallback to the default share action without
+        // custom buttons.
+        Supplier<ShareDelegate> supplier = ShareDelegateSupplier.from(mWindowAndroid);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SHARE_CUSTOM_ACTIONS_IN_CCT)
+                && params.getType() == CustomButtonParams.ButtonType.CCT_SHARE_BUTTON
+                && supplier != null
+                && supplier.get() != null) {
+            supplier.get()
+                    .share(
+                            tab,
+                            /* shareDirectly= */ false,
+                            ShareDelegate.ShareOrigin.CUSTOM_TAB_SHARE_BUTTON);
+        } else if (params.getType() == CustomButtonParams.ButtonType.CCT_OPEN_IN_BROWSER_BUTTON) {
+            if (mNavigationController.openCurrentUrlInBrowser()) {
+                WebContents webContents = tab == null ? null : tab.getWebContents();
+                mConnection.notifyOpenInBrowser(mIntentDataProvider.getSession(), webContents);
             }
         } else {
             sendButtonPendingIntentWithUrlAndTitle(params, tab.getOriginalUrl(), tab.getTitle());
@@ -223,7 +228,12 @@ public class CustomTabToolbarCoordinator {
 
     private void onCompositorContentInitialized(LayoutManagerImpl layoutDriver) {
         mToolbarManager.initializeWithNative(
-                layoutDriver, null, null, null, v -> onCloseButtonClick());
+                layoutDriver,
+                /* stripLayoutHelperManager= */ null,
+                /* newTabClickHandler= */ null,
+                /* bookmarkClickHandler= */ null,
+                /* customTabsBackClickHandler= */ v -> onCloseButtonClick(),
+                /* archivedTabCountSupplier= */ null);
         mInitializedToolbarWithNative = true;
     }
 

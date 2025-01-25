@@ -22,10 +22,10 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "xla/hlo/ir/hlo_sharding.h"
 #include "xla/python/ifrt/client.h"
+#include "xla/python/ifrt/device_test_util.h"
 #include "xla/python/ifrt/memory.h"
 #include "xla/python/ifrt/serdes.h"
 #include "xla/python/ifrt/sharding.h"
-#include "xla/python/ifrt/sharding_test_util.h"
 #include "xla/python/pjrt_ifrt/xla_sharding.h"
 #include "tsl/platform/statusor.h"
 
@@ -35,7 +35,7 @@ namespace {
 
 using ::testing::ElementsAreArray;
 
-class XlaShardingSerDesTest : public test_util::ShardingTest {};
+class XlaShardingSerDesTest : public test_util::DeviceTest {};
 
 TEST_P(XlaShardingSerDesTest, HloShardingRoundTrip) {
   auto device_list = GetDevices({0, 1});
@@ -51,12 +51,13 @@ TEST_P(XlaShardingSerDesTest, HloShardingRoundTrip) {
           serialized, std::make_unique<DeserializeShardingOptions>(
                           absl::bind_front(&Client::LookupDevice, client()))));
 
-  EXPECT_THAT(out_sharding->devices(), ElementsAreArray(sharding->devices()));
+  EXPECT_THAT(out_sharding->devices()->devices(),
+              ElementsAreArray(sharding->devices()->devices()));
   EXPECT_EQ(out_sharding->xla_hlo_sharding(), sharding->xla_hlo_sharding());
 }
 
 INSTANTIATE_TEST_SUITE_P(NumDevices, XlaShardingSerDesTest,
-                         testing::Values(test_util::ShardingTestParam{
+                         testing::Values(test_util::DeviceTestParam{
                              .num_devices = 2, .num_addressable_devices = 2}));
 
 }  // namespace

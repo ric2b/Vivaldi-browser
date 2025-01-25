@@ -12,14 +12,14 @@
 #include <utility>
 
 #include "core/fxcrt/fx_system.h"
-#include "core/fxge/cfx_cliprgn.h"
+#include "core/fxge/agg/cfx_agg_cliprgn.h"
 #include "core/fxge/dib/cfx_dibitmap.h"
 #include "core/fxge/dib/cfx_imagestretcher.h"
 #include "core/fxge/dib/cfx_imagetransformer.h"
 
 CFX_AggImageRenderer::CFX_AggImageRenderer(
     const RetainPtr<CFX_DIBitmap>& pDevice,
-    const CFX_ClipRgn* pClipRgn,
+    const CFX_AggClipRgn* pClipRgn,
     RetainPtr<const CFX_DIBBase> source,
     float alpha,
     uint32_t mask_color,

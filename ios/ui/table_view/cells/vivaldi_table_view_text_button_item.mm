@@ -18,10 +18,7 @@ const CGFloat kDisabledButtonAlpha = 0.5;
 @implementation VivaldiTableViewTextButtonItem
 
 - (instancetype)initWithType:(NSInteger)type {
-  if (self = [super initWithType:type]) {
-   return self;
-  }
-  return nil;
+  return [super initWithType:type];
 }
 
 - (void)configureCell:(TableViewCell*)tableCell

@@ -191,12 +191,6 @@
         "parameters": [ ]
       },
       {
-        "name": "stop",
-        "type": "function",
-        "description": "Shuts sync down.",
-        "parameters": [ ]
-      },
-      {
         "name": "setEncryptionPassword",
         "type": "function",
         "description": "Sets the password to use for encryption/decryption of Sync data. If an empty password is supplied, the password supplied when logging in will be used.",
@@ -338,22 +332,6 @@
         "type": "function",
         "description": "Clear all the user's data on the server side and logs them out",
         "parameters": [ ]
-      },
-      {
-        "name": "setTabsExtData",
-        "type": "function",
-        "description": "Set ext-data to be synced together with tabs.",
-        "parameters": [
-            {
-              "name": "data",
-              "type": "string"
-            }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-          ]
-        }
       }
     ],
     "events": [

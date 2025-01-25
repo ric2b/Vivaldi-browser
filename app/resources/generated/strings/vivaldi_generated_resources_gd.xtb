@@ -240,6 +240,7 @@
 <translation id="6798954102094737107">Plugan: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Cùm na h-atharraichean</translation>
 <translation id="6840155290835956714">Faighnich mus dèanar a chur</translation>
+<translation id="6878862640969460273">Dreach-tìre</translation>
 <translation id="6886871292305414135">Fosgail an ceangal ann an &amp;taba ùr</translation>
 <translation id="6900284862687837908">Aplacaid sa chùlaibh: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6945221475159498467">Tagh</translation>
@@ -287,7 +288,6 @@ Faidhle iuchrach: <ph name="KEY_FILE" />
 
 Cum am faidhle iuchrach agad ann an àite sàbhailte. Bi agad ri tionndadh ùr an leudachain a chruthachadh.</translation>
 <translation id="8004582292198964060">Brabhsair</translation>
-<translation id="8032244173881942855">Cha ghabh an taba a thilgeil.</translation>
 <translation id="8071432093239591881">Clò-bhuail mar dhealbh</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -329,6 +329,5 @@ Cum am faidhle iuchrach agad ann an àite sàbhailte. Bi agad ri tionndadh ùr a
 <translation id="9215293857209265904">Chaidh “<ph name="EXTENSION_NAME" />” a chur ris</translation>
 <translation id="9218430445555521422">Suidhich mar a’ bhun-roghainn</translation>
 <translation id="93766956588638423">Càirich an leudachan</translation>
-<translation id="98515147261107953">Dreach-tìre</translation>
 <translation id="998747458861718449">Sgrù&amp;d</translation>
 </translationbundle>

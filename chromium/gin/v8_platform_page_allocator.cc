@@ -9,13 +9,13 @@
 
 #include "v8_platform_page_allocator.h"
 
-#include "base/allocator/partition_allocator/src/partition_alloc/address_space_randomization.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/page_allocator_constants.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/random.h"
 #include "base/check_op.h"
 #include "base/cpu.h"
 #include "base/memory/page_size.h"
 #include "build/build_config.h"
+#include "partition_alloc/address_space_randomization.h"
+#include "partition_alloc/page_allocator_constants.h"
+#include "partition_alloc/random.h"
 
 namespace {
 
@@ -160,6 +160,10 @@ bool PageAllocator::DecommitPages(void* address, size_t size) {
   // V8 expects the pages to be inaccessible and zero-initialized upon next
   // access.
   return partition_alloc::DecommitAndZeroSystemPages(address, size);
+}
+
+bool PageAllocator::SealPages(void* address, size_t size) {
+  return partition_alloc::SealSystemPages(address, size);
 }
 
 partition_alloc::PageAccessibilityConfiguration::Permissions

@@ -15,6 +15,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "third_party/omnibox_proto/answer_data.pb.h"
+#include "third_party/omnibox_proto/answer_type.pb.h"
 #include "third_party/omnibox_proto/rich_answer_template.pb.h"
 #include "url/gurl.h"
 
@@ -57,6 +58,9 @@ GURL GetFormattedURL(const std::string* url_string);
 bool ParseJsonToAnswerData(const base::Value::Dict& answer_json,
                            omnibox::RichAnswerTemplate* answer_template);
 
+// Logs which answer type was used (if any) at the time a user used the
+// omnibox to go somewhere.
+void LogAnswerUsed(omnibox::AnswerType answer_type);
 }  // namespace omnibox::answer_data_parser
 
 // Structured representation of the JSON payload of a suggestion with an answer.
@@ -213,17 +217,12 @@ class SuggestionAnswer {
   // contents. Returns true on success. If the supplied data is not well formed
   // or is missing required elements, returns false instead.
   static bool ParseAnswer(const base::Value::Dict& answer_json,
-                          const std::u16string& answer_type_str,
+                          omnibox::AnswerType answer_type,
                           SuggestionAnswer* answer);
 
   const GURL& image_url() const { return image_url_; }
   const ImageLine& first_line() const { return first_line_; }
   const ImageLine& second_line() const { return second_line_; }
-
-  // Answer type accessors.  Valid types are non-negative and defined at
-  // https://goto.google.com/visual_element_configuration.
-  int type() const { return type_; }
-  void set_type(int type) { type_ = type; }
 
   bool Equals(const SuggestionAnswer& answer) const;
 
@@ -232,18 +231,15 @@ class SuggestionAnswer {
   size_t EstimateMemoryUsage() const;
 
   // For new answers, replace old answer text types with appropriate new types.
-  void InterpretTextTypes();
+  void InterpretTextTypes(omnibox::AnswerType answer_type);
 
   // Some types of matches (answers for dictionary definitions, e.g.) do not
   // follow the common rules for reversing lines.
-  bool IsExceptedFromLineReversal() const;
-
-  // Logs which answer type was used (if any) at the time a user used the
-  // omnibox to go somewhere.
-  static void LogAnswerUsed(const std::optional<SuggestionAnswer>& answer);
+  bool IsExceptedFromLineReversal(omnibox::AnswerType answer_type) const;
 
 #if BUILDFLAG(IS_ANDROID)
-  base::android::ScopedJavaLocalRef<jobject> CreateJavaObject() const;
+  base::android::ScopedJavaLocalRef<jobject> CreateJavaObject(
+      omnibox::AnswerType answer_type) const;
 #endif
 
  private:
@@ -252,7 +248,6 @@ class SuggestionAnswer {
   GURL image_url_;
   ImageLine first_line_;
   ImageLine second_line_;
-  int type_ = -1;
 
   FRIEND_TEST_ALL_PREFIXES(SuggestionAnswerTest, DifferentValuesAreUnequal);
   FRIEND_TEST_ALL_PREFIXES(SuggestionAnswerTest, LogAnswerUsed);

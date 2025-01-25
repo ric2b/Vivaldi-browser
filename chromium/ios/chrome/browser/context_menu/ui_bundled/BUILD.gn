@@ -7,6 +7,7 @@ source_set("coordinator") {
     "context_menu_configuration_provider+Testing.h",
     "context_menu_configuration_provider.h",
     "context_menu_configuration_provider.mm",
+    "context_menu_configuration_provider_delegate.h",
   ]
   deps = [
     ":ui",
@@ -15,6 +16,8 @@ source_set("coordinator") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/context_menu/ui_bundled/link_preview",
     "//ios/chrome/browser/favicon/model",
+    "//ios/chrome/browser/incognito_reauth/ui_bundled:incognito_reauth_commands",
+    "//ios/chrome/browser/incognito_reauth/ui_bundled:incognito_reauth_scene_agent",
     "//ios/chrome/browser/net/model:crurl",
     "//ios/chrome/browser/photos/model:metrics",
     "//ios/chrome/browser/photos/model:photos_availability",
@@ -24,8 +27,8 @@ source_set("coordinator") {
     "//ios/chrome/browser/search_engines/model:search_engines_util",
     "//ios/chrome/browser/shared/coordinator/alert",
     "//ios/chrome/browser/shared/coordinator/scene:scene_state_header",
-    "//ios/chrome/browser/shared/model/browser_state",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/model/web_state_list:utils",
     "//ios/chrome/browser/shared/public/commands",
@@ -34,11 +37,10 @@ source_set("coordinator") {
     "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/browser/shared/ui/util:url_with_title",
     "//ios/chrome/browser/shared/ui/util/image:web",
-    "//ios/chrome/browser/ui/incognito_reauth:incognito_reauth_commands",
-    "//ios/chrome/browser/ui/incognito_reauth:incognito_reauth_scene_agent",
     "//ios/chrome/browser/ui/lens:lens_availability",
     "//ios/chrome/browser/ui/lens:lens_entrypoint",
     "//ios/chrome/browser/ui/menu",
+    "//ios/chrome/browser/ui/sharing",
     "//ios/chrome/browser/url_loading/model",
     "//ios/chrome/browser/web/model",
     "//ios/chrome/browser/web/model/image_fetch",
@@ -55,15 +57,30 @@ source_set("ui") {
   sources = [
     "context_menu_utils.h",
     "context_menu_utils.mm",
+    "image_preview_view_controller.h",
+    "image_preview_view_controller.mm",
   ]
   deps = [
+    ":constants",
     "//base",
     "//components/url_formatter",
+    "//ios/chrome/browser/shared/ui/symbols",
+    "//ios/chrome/browser/web/model/image_fetch",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/favicon",
+    "//ios/chrome/common/ui/util",
     "//ios/web/common:features",
+    "//ios/web/public",
     "//ios/web/public/ui",
+    "//net",
     "//url",
+  ]
+}
+
+source_set("constants") {
+  sources = [
+    "constants.h",
+    "constants.mm",
   ]
 }
 
@@ -81,7 +98,7 @@ source_set("unit_tests") {
     "//components/signin/public/identity_manager:test_support",
     "//components/url_formatter",
     "//ios/chrome/browser/shared/model/browser/test:test_support",
-    "//ios/chrome/browser/shared/model/browser_state:test_support",
+    "//ios/chrome/browser/shared/model/profile/test",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/public/features",
@@ -105,10 +122,13 @@ source_set("eg2_tests") {
   testonly = true
   sources = [ "context_menu_egtest.mm" ]
   deps = [
+    ":constants",
     "//base",
     "//base/test:test_support",
     "//components/strings",
+    "//components/url_formatter",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/metrics/model:eg_test_support+eg2",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/tabs/model/inactive_tabs:features",
     "//ios/chrome/browser/ui/fullscreen/test:eg_test_support+eg2",
@@ -118,6 +138,7 @@ source_set("eg2_tests") {
     "//ios/testing/earl_grey:launch_configuration",
     "//ios/web/common:features",
     "//ios/web/public/test:element_selector",
+    "//net",
     "//net:test_support",
     "//ui/base",
     "//url",

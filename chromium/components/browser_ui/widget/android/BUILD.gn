@@ -131,10 +131,10 @@ android_library("java") {
     "//components/embedder_support/android:util_java",
     "//third_party/android_deps:material_design_java",
     "//third_party/androidx:androidx_activity_activity_java",
-    "//third_party/androidx:androidx_annotation_annotation_experimental_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/androidx:androidx_appcompat_appcompat_java",
     "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
+    "//third_party/androidx:androidx_constraintlayout_constraintlayout_java",
     "//third_party/androidx:androidx_coordinatorlayout_coordinatorlayout_java",
     "//third_party/androidx:androidx_core_core_java",
     "//third_party/androidx:androidx_interpolator_interpolator_java",
@@ -208,6 +208,7 @@ android_resources("java_resources") {
     "java/res/drawable-xxxhdpi/ic_more_vert_24dp_on_light_bg.png",
     "java/res/drawable/async_image_view_unavailable.xml",
     "java/res/drawable/async_image_view_waiting.xml",
+    "java/res/drawable/bg_white_dialog.xml",
     "java/res/drawable/bottom_sheet_background.xml",
     "java/res/drawable/card_with_corners_background.xml",
     "java/res/drawable/gradient_paragraph_loading_animation.xml",
@@ -301,8 +302,8 @@ android_library("test_support_java") {
   ]
   deps = [
     ":java",
-    "//base:tasks_java",
     "//base:base_java_test_support",
+    "//base:tasks_java",
     "//content/public/test/android:content_java_test_support",
     "//third_party/androidx:androidx_recyclerview_recyclerview_java",
     "//third_party/hamcrest:hamcrest_core_java",
@@ -317,6 +318,7 @@ android_library("unit_device_javatests") {
   resources_package = "org.chromium.components.browser_ui.widget.test"
 
   sources = [
+    "java/src/org/chromium/components/browser_ui/widget/CheckBoxWithDescriptionRenderTest.java",
     "java/src/org/chromium/components/browser_ui/widget/CheckBoxWithDescriptionTest.java",
     "java/src/org/chromium/components/browser_ui/widget/DualControlLayoutTest.java",
     "java/src/org/chromium/components/browser_ui/widget/MoreProgressButtonTest.java",
@@ -383,6 +385,7 @@ android_resources("java_test_resources") {
     "test/java/res/drawable/test_ic_vintage_filter.xml",
     "test/java/res/drawable/test_illustration.xml",
     "test/java/res/drawable/test_logo_avatar_anonymous.xml",
+    "test/java/res/layout/checkbox_with_description_render_test.xml",
     "test/java/res/layout/dual_control_test_layout.xml",
     "test/java/res/layout/radio_button_render_test.xml",
     "test/java/res/layout/radio_button_with_description_and_aux_button_test.xml",
@@ -426,7 +429,6 @@ robolectric_library("junit") {
     "//third_party/junit",
     "//third_party/mockito:mockito_java",
     "//ui/accessibility:ax_base_java",
-    "//ui/accessibility:ui_accessibility_features_java",
     "//ui/android:ui_java_test_support",
     "//ui/android:ui_no_recycler_view_java",
   ]

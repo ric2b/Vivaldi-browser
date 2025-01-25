@@ -43,6 +43,8 @@ class VirtualCardEnrollUiModel;
 
 namespace payments {
 
+class MandatoryReauthManager;
+
 // Chrome iOS implementation of PaymentsAutofillClient. Owned by the
 // ChromeAutofillClientIOS. Created lazily in the ChromeAutofillClientIOS when
 // it is needed.
@@ -66,21 +68,22 @@ class IOSChromePaymentsAutofillClient : public PaymentsAutofillClient {
   // PaymentsAutofillClient:
   void ConfirmSaveCreditCardLocally(
       const CreditCard& card,
-      AutofillClient::SaveCreditCardOptions options,
+      SaveCreditCardOptions options,
       LocalSaveCardPromptCallback callback) override;
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       const LegalMessageLines& legal_message_lines,
-      AutofillClient::SaveCreditCardOptions options,
+      SaveCreditCardOptions options,
       UploadSaveCardPromptCallback callback) override;
-  void CreditCardUploadCompleted(bool card_saved,
-                                 std::optional<OnConfirmationClosedCallback>
-                                     on_confirmation_closed_callback) override;
+  void CreditCardUploadCompleted(
+      payments::PaymentsAutofillClient::PaymentsRpcResult result,
+      std::optional<OnConfirmationClosedCallback>
+          on_confirmation_closed_callback) override;
   void ShowVirtualCardEnrollDialog(
       const VirtualCardEnrollmentFields& virtual_card_enrollment_fields,
       base::OnceClosure accept_virtual_card_callback,
       base::OnceClosure decline_virtual_card_callback) override;
-  void VirtualCardEnrollCompleted(bool is_vcn_enrolled) override;
+  void VirtualCardEnrollCompleted(PaymentsRpcResult result) override;
   void ShowCardUnmaskOtpInputDialog(
       const CardUnmaskChallengeOption& challenge_option,
       base::WeakPtr<OtpUnmaskDelegate> delegate) override;
@@ -118,6 +121,8 @@ class IOSChromePaymentsAutofillClient : public PaymentsAutofillClient {
   CreditCardOtpAuthenticator* GetOtpAuthenticator() override;
   CreditCardRiskBasedAuthenticator* GetRiskBasedAuthenticator() override;
   void OpenPromoCodeOfferDetailsURL(const GURL& url) override;
+  payments::MandatoryReauthManager* GetOrCreatePaymentsMandatoryReauthManager()
+      override;
 
   std::unique_ptr<AutofillProgressDialogControllerImpl>
   GetProgressDialogModel() {
@@ -176,6 +181,8 @@ class IOSChromePaymentsAutofillClient : public PaymentsAutofillClient {
 
   CardExpirationDateFixFlowControllerImpl
       card_expiration_date_fix_flow_controller_;
+
+  std::unique_ptr<payments::MandatoryReauthManager> payments_reauth_manager_;
 };
 
 }  // namespace payments

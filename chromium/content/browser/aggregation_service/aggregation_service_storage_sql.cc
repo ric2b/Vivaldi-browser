@@ -23,8 +23,8 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/sequence_checker.h"
+#include "base/strings/cstring_view.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
@@ -77,7 +77,7 @@ constexpr base::FilePath::CharType kDatabasePath[] =
 // `reporting_origin` should match the corresponding proto field, but is
 // maintained separately for data deletion.
 // `request_proto` is a serialized AggregatableReportRequest proto.
-static constexpr char kReportRequestsCreateTableSql[] =
+static constexpr base::cstring_view kReportRequestsCreateTableSql =
     // clang-format off
     "CREATE TABLE IF NOT EXISTS report_requests("
         "request_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
@@ -88,18 +88,18 @@ static constexpr char kReportRequestsCreateTableSql[] =
 // clang-format on
 
 // Used to optimize report request lookup by report_time.
-static constexpr char kReportTimeIndexSql[] =
+static constexpr base::cstring_view kReportTimeIndexSql =
     "CREATE INDEX IF NOT EXISTS report_time_idx ON "
     "report_requests(report_time)";
 
 // Will be used to optimize report request lookup by creation_time for data
 // clearing, see crbug.com/1340053.
-static constexpr char kCreationTimeIndexSql[] =
+static constexpr base::cstring_view kCreationTimeIndexSql =
     "CREATE INDEX IF NOT EXISTS creation_time_idx ON "
     "report_requests(creation_time)";
 
 // Used to optimize checking whether there is capacity for the reporting origin.
-static constexpr char kReportingOriginIndexSql[] =
+static constexpr base::cstring_view kReportingOriginIndexSql =
     "CREATE INDEX IF NOT EXISTS reporting_origin_idx ON "
     "report_requests(reporting_origin)";
 
@@ -159,7 +159,7 @@ AggregationServiceStorageSql::AggregationServiceStorageSql(
           max_stored_requests_per_reporting_origin),
       db_(sql::DatabaseOptions{.page_size = 4096, .cache_size = 32}) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
-  CHECK(clock, base::NotFatalUntil::M128);
+  CHECK(clock);
 
   db_.set_histogram_tag("AggregationService");
 
@@ -177,7 +177,7 @@ AggregationServiceStorageSql::~AggregationServiceStorageSql() {
 std::vector<PublicKey> AggregationServiceStorageSql::GetPublicKeys(
     const GURL& url) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK(network::IsUrlPotentiallyTrustworthy(url), base::NotFatalUntil::M128);
+  CHECK(network::IsUrlPotentiallyTrustworthy(url));
 
   if (!EnsureDatabaseOpen(DbCreationPolicy::kFailIfAbsent))
     return {};
@@ -228,9 +228,8 @@ std::vector<PublicKey> AggregationServiceStorageSql::GetPublicKeys(
 void AggregationServiceStorageSql::SetPublicKeys(const GURL& url,
                                                  const PublicKeyset& keyset) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK(network::IsUrlPotentiallyTrustworthy(url), base::NotFatalUntil::M128);
-  CHECK_LE(keyset.keys.size(), PublicKeyset::kMaxNumberKeys,
-           base::NotFatalUntil::M128);
+  CHECK(network::IsUrlPotentiallyTrustworthy(url));
+  CHECK_LE(keyset.keys.size(), PublicKeyset::kMaxNumberKeys);
 
   // TODO(crbug.com/40190806): Add an allowlist for helper server urls and
   // validate the url.
@@ -257,7 +256,7 @@ void AggregationServiceStorageSql::SetPublicKeys(const GURL& url,
 
 void AggregationServiceStorageSql::ClearPublicKeys(const GURL& url) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK(network::IsUrlPotentiallyTrustworthy(url), base::NotFatalUntil::M128);
+  CHECK(network::IsUrlPotentiallyTrustworthy(url));
 
   if (!EnsureDatabaseOpen(DbCreationPolicy::kFailIfAbsent))
     return;
@@ -274,10 +273,9 @@ void AggregationServiceStorageSql::ClearPublicKeys(const GURL& url) {
 void AggregationServiceStorageSql::ClearPublicKeysFetchedBetween(
     base::Time delete_begin,
     base::Time delete_end) {
-  CHECK(!delete_begin.is_null(), base::NotFatalUntil::M128);
-  CHECK(!delete_end.is_null(), base::NotFatalUntil::M128);
-  CHECK(!delete_begin.is_min() || !delete_end.is_max(),
-        base::NotFatalUntil::M128);
+  CHECK(!delete_begin.is_null());
+  CHECK(!delete_end.is_null());
+  CHECK(!delete_begin.is_min() || !delete_end.is_max());
 
   sql::Transaction transaction(&db_);
   if (!transaction.Begin())
@@ -306,7 +304,7 @@ void AggregationServiceStorageSql::ClearPublicKeysFetchedBetween(
 void AggregationServiceStorageSql::ClearPublicKeysExpiredBy(
     base::Time delete_end) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK(!delete_end.is_null(), base::NotFatalUntil::M128);
+  CHECK(!delete_end.is_null());
 
   if (!EnsureDatabaseOpen(DbCreationPolicy::kFailIfAbsent))
     return;
@@ -338,9 +336,9 @@ void AggregationServiceStorageSql::ClearPublicKeysExpiredBy(
 bool AggregationServiceStorageSql::InsertPublicKeysImpl(
     const GURL& url,
     const PublicKeyset& keyset) {
-  CHECK(!keyset.fetch_time.is_null(), base::NotFatalUntil::M128);
-  CHECK(!keyset.expiry_time.is_null(), base::NotFatalUntil::M128);
-  CHECK(db_.HasActiveTransactions(), base::NotFatalUntil::M128);
+  CHECK(!keyset.fetch_time.is_null());
+  CHECK(!keyset.expiry_time.is_null());
+  CHECK(db_.HasActiveTransactions());
 
   static constexpr char kInsertUrlSql[] =
       "INSERT INTO urls(url, fetch_time, expiry_time) VALUES (?,?,?)";
@@ -362,9 +360,8 @@ bool AggregationServiceStorageSql::InsertPublicKeysImpl(
       db_.GetCachedStatement(SQL_FROM_HERE, kInsertKeySql));
 
   for (const PublicKey& key : keyset.keys) {
-    CHECK_LE(key.id.size(), PublicKey::kMaxIdSize, base::NotFatalUntil::M128);
-    CHECK_EQ(key.key.size(), PublicKey::kKeyByteLength,
-             base::NotFatalUntil::M128);
+    CHECK_LE(key.id.size(), PublicKey::kMaxIdSize);
+    CHECK_EQ(key.key.size(), PublicKey::kKeyByteLength);
 
     insert_key_statement.Reset(/*clear_bound_vars=*/true);
     insert_key_statement.BindInt64(0, url_id);
@@ -379,7 +376,7 @@ bool AggregationServiceStorageSql::InsertPublicKeysImpl(
 }
 
 bool AggregationServiceStorageSql::ClearPublicKeysImpl(const GURL& url) {
-  CHECK(db_.HasActiveTransactions(), base::NotFatalUntil::M128);
+  CHECK(db_.HasActiveTransactions());
 
   static constexpr char kDeleteUrlSql[] =
       "DELETE FROM urls WHERE url = ? "
@@ -401,7 +398,7 @@ bool AggregationServiceStorageSql::ClearPublicKeysImpl(const GURL& url) {
 }
 
 bool AggregationServiceStorageSql::ClearPublicKeysByUrlId(int64_t url_id) {
-  CHECK(db_.HasActiveTransactions(), base::NotFatalUntil::M128);
+  CHECK(db_.HasActiveTransactions());
 
   static constexpr char kDeleteKeysSql[] = "DELETE FROM keys WHERE url_id = ?";
   sql::Statement delete_keys_statement(
@@ -547,7 +544,7 @@ void AggregationServiceStorageSql::StoreRequest(
 
   // While an empty vector can be a valid proto serialization, report requests
   // should always be non-empty.
-  CHECK(!serialized_request.empty(), base::NotFatalUntil::M128);
+  CHECK(!serialized_request.empty());
   store_request_statement.BindBlob(3, serialized_request);
 
   if (!store_request_statement.Run())
@@ -610,7 +607,7 @@ AggregationServiceStorageSql::GetRequestsReportingOnOrBefore(
     base::Time not_after_time,
     std::optional<int> limit) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK(!limit.has_value() || limit.value() > 0, base::NotFatalUntil::M128);
+  CHECK(!limit.has_value() || limit.value() > 0);
 
   if (!EnsureDatabaseOpen(DbCreationPolicy::kFailIfAbsent))
     return {};
@@ -719,9 +716,9 @@ AggregationServiceStorageSql::AdjustOfflineReportTimes(
     base::TimeDelta max_delay) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  CHECK_GE(min_delay, base::TimeDelta(), base::NotFatalUntil::M128);
-  CHECK_GE(max_delay, base::TimeDelta(), base::NotFatalUntil::M128);
-  CHECK_LE(min_delay, max_delay, base::NotFatalUntil::M128);
+  CHECK_GE(min_delay, base::TimeDelta());
+  CHECK_GE(max_delay, base::TimeDelta());
+  CHECK_LE(min_delay, max_delay);
 
   if (!EnsureDatabaseOpen(DbCreationPolicy::kFailIfAbsent))
     return std::nullopt;
@@ -809,10 +806,9 @@ void AggregationServiceStorageSql::ClearRequestsStoredBetween(
     base::Time delete_begin,
     base::Time delete_end,
     StoragePartition::StorageKeyMatcherFunction filter) {
-  CHECK(!delete_begin.is_null(), base::NotFatalUntil::M128);
-  CHECK(!delete_end.is_null(), base::NotFatalUntil::M128);
-  CHECK(!delete_begin.is_min() || !delete_end.is_max() || !filter.is_null(),
-        base::NotFatalUntil::M128);
+  CHECK(!delete_begin.is_null());
+  CHECK(!delete_end.is_null());
+  CHECK(!delete_begin.is_min() || !delete_end.is_max() || !filter.is_null());
 
   sql::Transaction transaction(&db_);
   if (!transaction.Begin())

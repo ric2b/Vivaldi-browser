@@ -10,20 +10,19 @@
 #include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/data_model/autofill_profile_test_api.h"
 #include "components/autofill/ios/common/features.h"
 #include "components/strings/grit/components_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
-namespace autofill {
 
+namespace autofill {
 namespace {
 
 constexpr char16_t kTestEmail[] = u"test@email.com";
 using ::testing::Property;
 using profile_ref = base::optional_ref<const AutofillProfile>;
 constexpr int kNavEntryId = 10;
-
-}  // namespace
 
 class AutofillSaveUpdateAddressProfileDelegateIOSTest : public testing::Test {
  protected:
@@ -42,15 +41,12 @@ class AutofillSaveUpdateAddressProfileDelegateIOSTest : public testing::Test {
       bool is_account_profile = false) {
     profile_ = std::make_unique<AutofillProfile>(test::GetFullProfile());
     if (is_account_profile) {
-      profile_->set_source_for_testing(
-          autofill::AutofillProfile::Source::kAccount);
+      test_api(*profile_).set_record_type(
+          autofill::AutofillProfile::RecordType::kAccount);
     }
     return std::make_unique<AutofillSaveUpdateAddressProfileDelegateIOS>(
         *profile_, original_profile, email,
-        /*locale=*/"en-US",
-        AutofillClient::SaveAddressProfilePromptOptions{
-            .is_migration_to_account = is_migration_to_account},
-        callback_.Get());
+        /*locale=*/"en-US", is_migration_to_account, callback_.Get());
   }
 
   std::unique_ptr<AutofillProfile> profile_;
@@ -138,6 +134,9 @@ TEST_F(AutofillSaveUpdateAddressProfileDelegateIOSTest,
 // to false shouldn't change the returned value.
 TEST_F(AutofillSaveUpdateAddressProfileDelegateIOSTest,
        ShouldExpire_True_WhenNoStickyInfobarAndNoUserGesture) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(kAutofillStickyInfobarIos);
+
   nav_details_that_expire_.has_user_gesture = false;
 
   EXPECT_TRUE(delegate_->ShouldExpire(nav_details_that_expire_));
@@ -148,8 +147,6 @@ TEST_F(AutofillSaveUpdateAddressProfileDelegateIOSTest,
 // to true should return true.
 TEST_F(AutofillSaveUpdateAddressProfileDelegateIOSTest,
        ShouldExpire_True_WhenStickyInfobarAndUserGesture) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAutofillStickyInfobarIos);
   nav_details_that_expire_.has_user_gesture = true;
   EXPECT_TRUE(delegate_->ShouldExpire(nav_details_that_expire_));
 }
@@ -198,8 +195,6 @@ TEST_F(AutofillSaveUpdateAddressProfileDelegateIOSTest,
 // to false should return false.
 TEST_F(AutofillSaveUpdateAddressProfileDelegateIOSTest,
        ShouldExpire_False_WhenStickyInfobar) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kAutofillStickyInfobarIos);
   nav_details_that_expire_.has_user_gesture = false;
   EXPECT_FALSE(delegate_->ShouldExpire(nav_details_that_expire_));
 }
@@ -283,4 +278,5 @@ INSTANTIATE_TEST_SUITE_P(
             IDS_IOS_AUTOFILL_UPDATE_ADDRESS_MESSAGE_TITLE,
             u"John Doe, 666 Erebus St."}));
 
+}  // namespace
 }  // namespace autofill

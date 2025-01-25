@@ -47,11 +47,11 @@ UI.ActionRegistration.registerActionExtension({
   },
   bindings: [
     {
-      platform: UI.ActionRegistration.Platforms.WindowsLinux,
+      platform: UI.ActionRegistration.Platforms.WINDOWS_LINUX,
       shortcut: 'Ctrl+Shift+E',
     },
     {
-      platform: UI.ActionRegistration.Platforms.Mac,
+      platform: UI.ActionRegistration.Platforms.MAC,
       shortcut: 'Meta+Shift+E',
     },
   ],
@@ -69,6 +69,7 @@ UI.ActionRegistration.registerActionExtension({
 UI.ActionRegistration.registerActionExtension({
   actionId: 'components.collect-garbage',
   category: UI.ActionRegistration.ActionCategory.PERFORMANCE,
+  iconClass: UI.ActionRegistration.IconClass.MOP,
 });
 UI.ActionRegistration.registerActionExtension({
   actionId: 'timeline.toggle-recording',
@@ -81,18 +82,18 @@ UI.ActionRegistration.registerActionExtension({
   },
   bindings: [
     {
-      platform: UI.ActionRegistration.Platforms.WindowsLinux,
+      platform: UI.ActionRegistration.Platforms.WINDOWS_LINUX,
       shortcut: 'Ctrl+E',
     },
     {
-      platform: UI.ActionRegistration.Platforms.Mac,
+      platform: UI.ActionRegistration.Platforms.MAC,
       shortcut: 'Meta+E',
     },
   ],
 });
 
 const actionRegistry = UI.ActionRegistry.ActionRegistry.instance();
-UI.ShortcutRegistry.ShortcutRegistry.instance({forceNew: true, actionRegistry: actionRegistry});
+UI.ShortcutRegistry.ShortcutRegistry.instance({forceNew: true, actionRegistry});
 Common.Settings.settingForTest('flamechart-mouse-wheel-action').set('zoom');
 const params = new URLSearchParams(window.location.search);
 const traceFileName = params.get('trace');

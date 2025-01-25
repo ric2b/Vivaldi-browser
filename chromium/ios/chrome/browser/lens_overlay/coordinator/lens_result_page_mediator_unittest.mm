@@ -7,7 +7,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/test/scoped_feature_list.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_result_page_consumer.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -42,7 +42,7 @@ class LensResultPageMediatorTest : public PlatformTest {
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetDefaultFactory());
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
         browser_state_.get(),
         std::make_unique<FakeAuthenticationServiceDelegate>());
@@ -51,6 +51,7 @@ class LensResultPageMediatorTest : public PlatformTest {
     mediator_ = [[LensResultPageMediator alloc]
          initWithWebStateParams:params
         browserWebStateDelegate:&browser_web_state_delegate_
+                   webStateList:nil
                     isIncognito:NO];
 
     mock_consumer_ =
@@ -120,7 +121,7 @@ class LensResultPageMediatorTest : public PlatformTest {
 
  protected:
   web::WebTaskEnvironment task_environment_;
-  IOSChromeScopedTestingLocalState local_state_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
 
   LensResultPageMediator* mediator_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
@@ -135,10 +136,20 @@ class LensResultPageMediatorTest : public PlatformTest {
 // Tests that the mediator starts a navigation when loadResultsURL is called.
 TEST_F(LensResultPageMediatorTest, ShouldStartNavigationWhenLoadingResultsURL) {
   GURL result_url = GURL("https://www.google.com");
-  [mediator_ loadResultsURL:result_url];
 
+  // Expect that the light mode query param is added to the URL.
+  mediator_.isDarkMode = NO;
+  [mediator_ loadResultsURL:result_url];
+  GURL light_mode_url = GURL("https://www.google.com?cs=0");
   EXPECT_EQ(browser_web_state_delegate_.last_open_url_request()->params.url,
-            result_url);
+            light_mode_url);
+
+  // Expect that the dark mode query param is added to the URL.
+  mediator_.isDarkMode = YES;
+  [mediator_ loadResultsURL:result_url];
+  GURL dark_mode_url = GURL("https://www.google.com?cs=1");
+  EXPECT_EQ(browser_web_state_delegate_.last_open_url_request()->params.url,
+            dark_mode_url);
 }
 
 // Tests that web navigation to google is allowed.
@@ -161,31 +172,6 @@ TEST_F(LensResultPageMediatorTest, ShouldAllowAnyNavigationNotInMainFrame) {
                                      /*target_frame_is_main=*/false));
   EXPECT_TRUE(TestShouldAllowRequest(@"https://www.google.com",
                                      /*target_frame_is_main=*/false));
-}
-
-// Tests that updating the background color calls the consumer.
-TEST_F(LensResultPageMediatorTest, BackgroundColorUpdates) {
-  AttachFakeWebState();
-
-  // Make the consumer mock strict.
-  mock_consumer_ =
-      [OCMockObject mockForProtocol:@protocol(LensResultPageConsumer)];
-  OCMExpect([mock_consumer_ setWebView:[OCMArg any]]);
-  mediator_.consumer = mock_consumer_;
-
-  // Background color is not updated if nil.
-  fake_web_state_->SetUnderPageBackgroundColor(nil);
-
-  // Background color is updated when it changes.
-  OCMExpect([mock_consumer_ setBackgroundColor:UIColor.blackColor]);
-  fake_web_state_->SetUnderPageBackgroundColor(UIColor.blackColor);
-  EXPECT_OCMOCK_VERIFY(mock_consumer_);
-
-  // Background color is updated when the navigation finishes.
-  OCMExpect([mock_consumer_ setBackgroundColor:UIColor.blackColor]);
-  web::FakeNavigationContext context;
-  fake_web_state_->OnNavigationFinished(&context);
-  EXPECT_OCMOCK_VERIFY(mock_consumer_);
 }
 
 }  // namespace

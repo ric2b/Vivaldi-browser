@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       lzma2_encoder.h
@@ -5,9 +7,6 @@
 ///
 //  Authors:    Igor Pavlov
 //              Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -31,11 +30,13 @@
 
 
 extern lzma_ret lzma_lzma2_encoder_init(
-		lzma_next_coder *next, lzma_allocator *allocator,
+		lzma_next_coder *next, const lzma_allocator *allocator,
 		const lzma_filter_info *filters);
 
 extern uint64_t lzma_lzma2_encoder_memusage(const void *options);
 
 extern lzma_ret lzma_lzma2_props_encode(const void *options, uint8_t *out);
+
+extern uint64_t lzma_lzma2_block_size(const void *options);
 
 #endif

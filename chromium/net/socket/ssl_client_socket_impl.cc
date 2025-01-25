@@ -35,7 +35,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "components/miracle_parameter/common/public/miracle_parameter.h"
 #include "crypto/ec_private_key.h"
 #include "crypto/openssl_util.h"
 #include "net/base/features.h"
@@ -82,15 +81,8 @@ const int kSSLClientSocketNoPendingResult = 1;
 // overlap with any value of the net::Error range, including net::OK).
 const int kCertVerifyPending = 1;
 
-BASE_FEATURE(kDefaultOpenSSLBufferSizeFeature,
-             "DefaultOpenSSLBufferSizeFeature",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Default size of the internal BoringSSL buffers.
-MIRACLE_PARAMETER_FOR_INT(GetDefaultOpenSSLBufferSize,
-                          kDefaultOpenSSLBufferSizeFeature,
-                          "DefaultOpenSSLBufferSize",
-                          17 * 1024)
+const int kDefaultOpenSSLBufferSize = 17 * 1024;
 
 base::Value::Dict NetLogPrivateKeyOperationParams(uint16_t algorithm,
                                                   SSLPrivateKey* key) {
@@ -653,9 +645,13 @@ int SSLClientSocketImpl::Init() {
   }
 
   if (context_->config().PostQuantumKeyAgreementEnabled()) {
-    static const int kCurves[] = {NID_X25519Kyber768Draft00, NID_X25519,
-                                  NID_X9_62_prime256v1, NID_secp384r1};
-    if (!SSL_set1_curves(ssl_.get(), kCurves, std::size(kCurves))) {
+    const uint16_t postquantum_group =
+        base::FeatureList::IsEnabled(features::kUseMLKEM)
+            ? SSL_GROUP_X25519_MLKEM768
+            : SSL_GROUP_X25519_KYBER768_DRAFT00;
+    const uint16_t kGroups[] = {postquantum_group, SSL_GROUP_X25519,
+                                SSL_GROUP_SECP256R1, SSL_GROUP_SECP384R1};
+    if (!SSL_set1_group_ids(ssl_.get(), kGroups, std::size(kGroups))) {
       return ERR_UNEXPECTED;
     }
   }
@@ -678,9 +674,9 @@ int SSLClientSocketImpl::Init() {
       SSL_set_session(ssl_.get(), session.get());
   }
 
-  const int kBufferSize = GetDefaultOpenSSLBufferSize();
   transport_adapter_ = std::make_unique<SocketBIOAdapter>(
-      stream_socket_.get(), kBufferSize, kBufferSize, this);
+      stream_socket_.get(), kDefaultOpenSSLBufferSize,
+      kDefaultOpenSSLBufferSize, this);
   BIO* transport_bio = transport_adapter_->bio();
 
   BIO_up_ref(transport_bio);  // SSL_set0_rbio takes ownership.
@@ -964,12 +960,14 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
   }
   UMA_HISTOGRAM_ENUMERATION("Net.SSLHandshakeDetails", details);
 
-  // Measure TLS connections that implement the renegotiation_info extension.
-  // Note this records true for TLS 1.3. By removing renegotiation altogether,
-  // TLS 1.3 is implicitly patched against the bug. See
-  // https://crbug.com/850800.
+  // Measure TLS connections that implement the renegotiation_info and EMS
+  // extensions. TLS 1.3 is already patched for both bugs, so these functions
+  // record true in TLS 1.3 although the extensions are not actually negotiated.
+  // See https://crbug.com/850800.
   base::UmaHistogramBoolean("Net.SSLRenegotiationInfoSupported",
                             SSL_get_secure_renegotiation_support(ssl_.get()));
+  base::UmaHistogramBoolean("Net.SSLExtendedMainSecretSupported",
+                            SSL_get_extms_support(ssl_.get()));
 
   completed_connect_ = true;
   next_handshake_state_ = STATE_NONE;
@@ -1535,6 +1533,13 @@ int SSLClientSocketImpl::ClientCertRequestCallback(SSL* ssl) {
 
     std::vector<uint16_t> preferences =
         client_private_key_->GetAlgorithmPreferences();
+    // If the key supports rsa_pkcs1_sha256, automatically add support for
+    // rsa_pkcs1_sha256_legacy, for use with TLS 1.3. We convert here so that
+    // not every `SSLPrivateKey` needs to implement it explicitly.
+    if (base::FeatureList::IsEnabled(features::kLegacyPKCS1ForTLS13) &&
+        base::Contains(preferences, SSL_SIGN_RSA_PKCS1_SHA256)) {
+      preferences.push_back(SSL_SIGN_RSA_PKCS1_SHA256_LEGACY);
+    }
     SSL_set_signing_algorithm_prefs(ssl_.get(), preferences.data(),
                                     preferences.size());
 
@@ -1621,8 +1626,15 @@ ssl_private_key_result_t SSLClientSocketImpl::PrivateKeySignCallback(
         // provider name in the common case with logging disabled.
         client_private_key_.get());
   });
-
   base::UmaHistogramSparse("Net.SSLClientCertSignatureAlgorithm", algorithm);
+
+  // Map rsa_pkcs1_sha256_legacy back to rsa_pkcs1_sha256. We convert it here,
+  // so that not every `SSLPrivateKey` needs to implement it explicitly.
+  if (base::FeatureList::IsEnabled(features::kLegacyPKCS1ForTLS13) &&
+      algorithm == SSL_SIGN_RSA_PKCS1_SHA256_LEGACY) {
+    algorithm = SSL_SIGN_RSA_PKCS1_SHA256;
+  }
+
   signature_result_ = ERR_IO_PENDING;
   client_private_key_->Sign(
       algorithm, base::make_span(in, in_len),

@@ -23,6 +23,7 @@
 #define IDC_VIV_MAC_MINIMIZE                    54012
 #define IDC_VIV_MAC_ZOOM                        54013
 #define IDC_VIV_MAC_ALL_WINDOWS_TO_FRONT        54014
+#define IDC_VIV_SHOW_HELP                       54015
 // Menu ids
 #define IDC_VIVALDI_MENU                        54100
 #define IDC_VIV_VIEW_MENU                       54101

@@ -52,7 +52,7 @@ class CORE_EXPORT MouseEventManager final
       const PointerId& pointer_id = PointerEventFactory::kInvalidId,
       const String& pointer_type = g_empty_string);
 
-  WebInputEventResult SetMousePositionAndDispatchMouseEvent(
+  WebInputEventResult SetElementUnderMouseAndDispatchMouseEvent(
       Element* target_element,
       const AtomicString& event_type,
       const WebMouseEvent&);
@@ -129,9 +129,6 @@ class CORE_EXPORT MouseEventManager final
 
   bool MousePressed();
   void ReleaseMousePress();
-
-  bool CapturesDragging() const;
-  void SetCapturesDragging(bool);
 
   void SetMouseDownMayStartAutoscroll() {
     mouse_down_may_start_autoscroll_ = true;
@@ -217,7 +214,6 @@ class CORE_EXPORT MouseEventManager final
 
   unsigned mouse_down_may_start_autoscroll_ : 1;
   unsigned svg_pan_ : 1;
-  unsigned captures_dragging_ : 1;
   unsigned mouse_down_may_start_drag_ : 1;
 
   Member<Node> mouse_press_node_;

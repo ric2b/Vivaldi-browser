@@ -29,7 +29,7 @@ are doing.
    initialized to zero, as are new entries in matrices and arrays after resizing. Not defined by default.
    \warning The unary (resp. binary) constructor of \c 1x1 (resp. \c 2x1 or \c 1x2) fixed size matrices is
    always interpreted as an initialization constructor where the argument(s) are the coefficient values
-   and not the sizes. For instance, \code Vector2d v(2,1); \endcode will create a vector with coeficients [2,1],
+   and not the sizes. For instance, \code Vector2d v(2,1); \endcode will create a vector with coefficients [2,1],
    and \b not a \c 2x1 vector initialized with zeros (i.e., [0,0]). If such cases might occur, then it is
    recommended to use the default constructor with a explicit call to resize:
    \code

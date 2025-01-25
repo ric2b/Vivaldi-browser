@@ -10,6 +10,7 @@
 namespace sync_sessions {
 
 class SyncedTabDelegate;
+struct VivaldiSpecific;
 
 // An interface defining the ways in which local open tab events can interact
 // with session sync.  All local tab events flow to sync via this interface.
@@ -31,7 +32,7 @@ class LocalSessionEventHandler {
   // for this instance of Chrome.
   virtual void OnLocalTabModified(SyncedTabDelegate* modified_tab) = 0;
 
-  virtual void OnVivDataModified(const std::string &) {}
+  virtual void OnVivDataModified(const VivaldiSpecific &) {}
 
  protected:
   LocalSessionEventHandler() {}

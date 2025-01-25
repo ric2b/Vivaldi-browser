@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef XLA_PJRT_GPU_GPU_TOPOLOGY_H_
 #define XLA_PJRT_GPU_GPU_TOPOLOGY_H_
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 

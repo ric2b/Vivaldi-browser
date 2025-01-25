@@ -27,6 +27,7 @@
 #include "build/build_config.h"
 #include "cc/input/browser_controls_state.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/mhtml_generation_result.h"
 #include "content/public/browser/navigation_controller.h"
@@ -84,7 +85,7 @@ namespace device {
 namespace mojom {
 class WakeLockContext;
 }
-}
+}  // namespace device
 
 namespace net {
 struct LoadStateWithParam;
@@ -100,7 +101,7 @@ struct AXTreeUpdate;
 class AXNode;
 class ColorProvider;
 class ColorProviderSource;
-}
+}  // namespace ui
 
 namespace content {
 
@@ -142,8 +143,7 @@ class PreloadingAttempt;
 // `GetController()`, and is used to load URLs into the WebContents, navigate
 // it backwards/forwards, etc.
 // See navigation_controller.h for more details.
-class WebContents : public PageNavigator,
-                    public base::SupportsUserData {
+class WebContents : public PageNavigator, public base::SupportsUserData {
   // Do not remove this macro!
   // The macro is maintained by the memory safety team.
   ADVANCED_MEMORY_SAFETY_CHECKS();
@@ -264,10 +264,17 @@ class WebContents : public PageNavigator,
         network::mojom::WebSandboxFlags::kNone;
 
     // Value used to set the last time the WebContents was made active, this is
+    // the value that'll be returned by GetLastActiveTimeTicks(). If this is
+    // left default initialized then the value is not passed on to the
+    // WebContents and GetLastActiveTimeTicks() will return the WebContents'
+    // creation time.
+    base::TimeTicks last_active_time_ticks;
+
+    // Value used to set the last time the WebContents was made active, this is
     // the value that'll be returned by GetLastActiveTime(). If this is left
     // default initialized then the value is not passed on to the WebContents
     // and GetLastActiveTime() will return the WebContents' creation time.
-    base::TimeTicks last_active_time;
+    base::Time last_active_time;
 
     // Code location responsible for creating the CreateParams.  This is used
     // mostly for debugging (e.g. to help attribute specific scenarios or
@@ -375,7 +382,7 @@ class WebContents : public PageNavigator,
   // Returns the WebContents associated with the |frame_tree_node_id|. This may
   // return nullptr if the RenderFrameHost is shutting down.
   CONTENT_EXPORT static WebContents* FromFrameTreeNodeId(
-      int frame_tree_node_id);
+      FrameTreeNodeId frame_tree_node_id);
 
   // A callback that returns a pointer to a WebContents. The callback can
   // always be used, but it may return nullptr: if the info used to
@@ -479,22 +486,20 @@ class WebContents : public PageNavigator,
   virtual RenderFrameHost* GetFocusedFrame() = 0;
 
   // Returns true if |frame_tree_node_id| refers to a frame in a prerendered
-  // page.
-  // TODO(1196715, 1232528): This will be extended to also return true if it is
-  // in an inner page of a prerendered page.
-  virtual bool IsPrerenderedFrame(int frame_tree_node_id) = 0;
+  // page. TODO(https://crbug.com/40176578, https://crbug.com/40191159): This
+  // will be extended to also return true if it is in an inner page of a
+  // prerendered page.
+  virtual bool IsPrerenderedFrame(FrameTreeNodeId frame_tree_node_id) = 0;
 
   // NOTE: This is generally unsafe to use. A frame's RenderFrameHost may
   // change over its lifetime, such as during cross-process navigation (and
   // thus privilege change). Use RenderFrameHost::FromID instead wherever
   // possible.
   //
-  // Given a FrameTreeNode ID that belongs to this WebContents, returns the
+  // Given a FrameTreeNodeId that belongs to this WebContents, returns the
   // current RenderFrameHost regardless of which FrameTree it is in.
-  //
-  // See RenderFrameHost::GetFrameTreeNodeId for documentation on this ID.
   virtual RenderFrameHost* UnsafeFindFrameByFrameTreeNodeId(
-      int frame_tree_node_id) = 0;
+      FrameTreeNodeId frame_tree_node_id) = 0;
 
   // Calls |on_frame| for every RenderFrameHost in this WebContents. Note that
   // this includes RenderFrameHosts that are not descended from the primary main
@@ -539,8 +544,7 @@ class WebContents : public PageNavigator,
   // of |max_nodes| and |timeout|. |policy| is used directly in
   // WebContentsImpl::RequestAXTreeSnapshot; its meaning is explained in the
   // AXTreeSnapshotPolicy definition above.
-  using AXTreeSnapshotCallback =
-      base::OnceCallback<void(const ui::AXTreeUpdate&)>;
+  using AXTreeSnapshotCallback = base::OnceCallback<void(ui::AXTreeUpdate&)>;
   virtual void RequestAXTreeSnapshot(AXTreeSnapshotCallback callback,
                                      ui::AXMode ax_mode,
                                      size_t max_nodes,
@@ -685,7 +689,7 @@ class WebContents : public PageNavigator,
   // an alternative title text that can be used by app windows.
   // See
   // https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/main/DocumentSubtitle/explainer.md
-  virtual const std::u16string& GetAppTitle() = 0;
+  virtual const std::optional<std::u16string>& GetAppTitle() = 0;
 
   // Returns the SiteInstance associated with the current page.
   virtual SiteInstance* GetSiteInstance() = 0;
@@ -728,6 +732,9 @@ class WebContents : public PageNavigator,
   // Returns the character encoding of the page.
   virtual const std::string& GetEncoding() = 0;
 
+  // Discards the RenderFrame. Use is guarded by kWebContentsDiscard.
+  virtual void Discard() = 0;
+
   // Indicates that the tab was previously discarded.
   // wasDiscarded is exposed on Document after discard, see:
   // https://github.com/WICG/web-lifecycle
@@ -743,7 +750,14 @@ class WebContents : public PageNavigator,
   // Notifies observers that this WebContents is about to be discarded, and
   // replaced with `new_contents`. See the comment on
   // WebContentsObserver::AboutToBeDiscarded.
+  // TODO(crbug.com/347770670): Remove this once new WebContents are no
+  // longer created during discard operations. Move remaining clients to
+  // `WasDiscarded`.
   virtual void AboutToBeDiscarded(WebContents* new_contents) = 0;
+
+  // Notifies observers that this WebContents has completed its discard
+  // operation.
+  virtual void NotifyWasDiscarded() = 0;
 
   // Internal state ------------------------------------------------------------
 
@@ -859,9 +873,17 @@ class WebContents : public PageNavigator,
   // directly to determine its aggregate audio state.
   virtual void OnAudioStateChanged() = 0;
 
+  // Get/Set the last time ticks that the WebContents was made active (either
+  // when it was created or shown with WasShown()). Note: GetLastActiveTimeTicks
+  // and GetLastActiveTime can get desynced if the process is suspended or if
+  // the clock is adjusted.
+  virtual base::TimeTicks GetLastActiveTimeTicks() = 0;
+
   // Get/Set the last time that the WebContents was made active (either when it
   // was created or shown with WasShown()).
-  virtual base::TimeTicks GetLastActiveTime() = 0;
+  // Note: GetLastActiveTimeTicks and GetLastActiveTime can get desynced if the
+  // process is suspended or if the clock is adjusted.
+  virtual base::Time GetLastActiveTime() = 0;
 
   // Invoked when the WebContents becomes shown/hidden. A hidden WebContents
   // isn't painted on the screen.
@@ -913,9 +935,6 @@ class WebContents : public PageNavigator,
   virtual void AttachInnerWebContents(
       std::unique_ptr<WebContents> inner_web_contents,
       RenderFrameHost* render_frame_host,
-      mojo::PendingAssociatedRemote<blink::mojom::RemoteFrame> remote_frame,
-      mojo::PendingAssociatedReceiver<blink::mojom::RemoteFrameHost>
-          remote_frame_host_receiver,
       bool is_full_page) = 0;
 
   // Returns whether this WebContents is an inner WebContents for a guest.
@@ -1242,8 +1261,17 @@ class WebContents : public PageNavigator,
                             bool bypass_cache,
                             ImageDownloadCallback callback) = 0;
 
-  // Same as DownloadImage(), but uses the ImageDownloader from the specified
-  // frame instead of the main frame.
+  // Same as DownloadImage(), but uses an ax node id to retrieve the URL once
+  // the download call has reached the renderer.
+  virtual int DownloadImageFromAxNode(const ui::AXTreeID tree_id,
+                                      const ui::AXNodeID node_id,
+                                      const gfx::Size& preferred_size,
+                                      uint32_t max_bitmap_size,
+                                      bool bypass_cache,
+                                      ImageDownloadCallback callback) = 0;
+
+  // Same as DownloadImage(), but uses the ImageDownloader from the
+  // specified frame instead of the main frame.
   virtual int DownloadImageInFrame(
       const GlobalRenderFrameHostId& initiator_frame_routing_id,
       const GURL& url,
@@ -1548,7 +1576,9 @@ class WebContents : public PageNavigator,
       bool should_warm_up_compositor,
       PreloadingHoldbackStatus holdback_status_override,
       PreloadingAttempt* preloading_attempt,
-      base::RepeatingCallback<bool(const GURL&)> url_match_predicate,
+      base::RepeatingCallback<bool(const GURL&,
+                                   const std::optional<UrlMatchType>&)>
+          url_match_predicate,
       base::RepeatingCallback<void(NavigationHandle&)>
           prerender_navigation_handle_callback) = 0;
 

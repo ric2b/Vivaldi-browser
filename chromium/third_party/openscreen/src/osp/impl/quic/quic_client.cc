@@ -7,28 +7,27 @@
 #include <algorithm>
 #include <functional>
 
+#include "osp/public/connect_request.h"
 #include "util/osp_logging.h"
 
 namespace openscreen::osp {
 
 QuicClient::QuicClient(
     const ServiceConfig& config,
-    MessageDemuxer& demuxer,
     std::unique_ptr<QuicConnectionFactoryClient> connection_factory,
     ProtocolConnectionServiceObserver& observer,
     ClockNowFunctionPtr now_function,
-    TaskRunner& task_runner)
+    TaskRunner& task_runner,
+    size_t buffer_limit)
     : QuicServiceBase(config,
-                      demuxer,
+                      std::move(connection_factory),
                       observer,
                       InstanceRequestIds::Role::kClient,
                       now_function,
-                      task_runner),
-      connection_factory_(std::move(connection_factory)) {}
+                      task_runner,
+                      buffer_limit) {}
 
-QuicClient::~QuicClient() {
-  CloseAllConnections();
-}
+QuicClient::~QuicClient() = default;
 
 bool QuicClient::Start() {
   return StartImpl();
@@ -69,78 +68,35 @@ std::unique_ptr<ProtocolConnection> QuicClient::CreateProtocolConnection(
 
 bool QuicClient::Connect(std::string_view instance_name,
                          ConnectRequest& request,
-                         ConnectionRequestCallback* request_callback) {
+                         ConnectRequestCallback* request_callback) {
   if (state_ != State::kRunning) {
-    request_callback->OnConnectionFailed(0);
+    request_callback->OnConnectFailed(0);
     OSP_LOG_ERROR << "QuicClient connect failed: QuicClient is not running.";
     return false;
   }
 
   auto instance_entry = instance_map_.find(instance_name);
+  // If there is a `instance_entry` for `instance_name`, it means there is an
+  // available connection. Otherwise, it means there is no available connection
+  // or the connection is still in the process of QUIC handshake.
   if (instance_entry != instance_map_.end()) {
-    auto immediate_result = CreateProtocolConnection(instance_entry->second);
-    OSP_CHECK(immediate_result);
     uint64_t request_id = next_request_id_++;
     request = ConnectRequest(this, request_id);
-    request_callback->OnConnectionOpened(request_id,
-                                         std::move(immediate_result));
+    request_callback->OnConnectSucceed(request_id, instance_entry->second);
     return true;
+  } else {
+    auto pending_connection = pending_connections_.find(instance_name);
+    if (pending_connection != pending_connections_.end()) {
+      uint64_t request_id = next_request_id_++;
+      pending_connection->second.callbacks.emplace_back(request_id,
+                                                        request_callback);
+      request = ConnectRequest(this, request_id);
+      return true;
+    } else {
+      return StartConnectionRequest(instance_name, request, request_callback);
+    }
   }
-
-  return CreatePendingConnection(instance_name, request, request_callback);
 }
-
-uint64_t QuicClient::OnCryptoHandshakeComplete(std::string_view instance_name) {
-  OSP_CHECK_EQ(state_, ProtocolConnectionEndpoint::State::kRunning);
-
-  auto pending_entry = pending_connections_.find(instance_name);
-  if (pending_entry == pending_connections_.end()) {
-    return 0;
-  }
-
-  ServiceConnectionData connection_data = std::move(pending_entry->second.data);
-  auto* connection = connection_data.connection.get();
-  auto* stream_manager = connection_data.stream_manager.get();
-  uint64_t instance_id = next_instance_id_++;
-  instance_map_.emplace(instance_name, instance_id);
-  stream_manager->set_quic_connection(connection);
-  connections_.emplace(instance_id, std::move(connection_data));
-
-  for (auto& request : pending_entry->second.callbacks) {
-    std::unique_ptr<QuicProtocolConnection> pc =
-        QuicProtocolConnection::FromExisting(*this, *connection,
-                                             *stream_manager, instance_id);
-    request.second->OnConnectionOpened(request.first, std::move(pc));
-  }
-  pending_connections_.erase(pending_entry);
-  return instance_id;
-}
-
-void QuicClient::OnConnectionClosed(uint64_t instance_id) {
-  OSP_CHECK_EQ(state_, ProtocolConnectionEndpoint::State::kRunning);
-
-  auto connection_entry = connections_.find(instance_id);
-  if (connection_entry == connections_.end()) {
-    return;
-  }
-
-  connection_factory_->OnConnectionClosed(
-      connection_entry->second.connection.get());
-  delete_connections_.push_back(instance_id);
-  instance_request_ids_.ResetRequestId(instance_id);
-}
-
-QuicClient::PendingConnectionData::PendingConnectionData(
-    ServiceConnectionData&& data)
-    : data(std::move(data)) {}
-
-QuicClient::PendingConnectionData::PendingConnectionData(
-    PendingConnectionData&&) noexcept = default;
-
-QuicClient::PendingConnectionData& QuicClient::PendingConnectionData::operator=(
-    PendingConnectionData&&) noexcept = default;
-
-QuicClient::PendingConnectionData::~PendingConnectionData() = default;
 
 void QuicClient::OnStarted() {}
 void QuicClient::OnStopped() {}
@@ -149,13 +105,13 @@ void QuicClient::OnSearching() {}
 
 void QuicClient::OnReceiverAdded(const ServiceInfo& info) {
   instance_infos_.insert(std::make_pair(
-      info.instance_name,
-      InstanceInfo{info.fingerprint, info.v4_endpoint, info.v6_endpoint}));
+      info.instance_name, InstanceInfo{info.fingerprint, info.auth_token,
+                                       info.v4_endpoint, info.v6_endpoint}));
 }
 
 void QuicClient::OnReceiverChanged(const ServiceInfo& info) {
-  instance_infos_[info.instance_name] =
-      InstanceInfo{info.fingerprint, info.v4_endpoint, info.v6_endpoint};
+  instance_infos_[info.instance_name] = InstanceInfo{
+      info.fingerprint, info.auth_token, info.v4_endpoint, info.v6_endpoint};
 }
 
 void QuicClient::OnReceiverRemoved(const ServiceInfo& info) {
@@ -169,58 +125,16 @@ void QuicClient::OnAllReceiversRemoved() {
 void QuicClient::OnError(const Error&) {}
 void QuicClient::OnMetrics(ServiceListener::Metrics) {}
 
-void QuicClient::CloseAllConnections() {
-  for (auto& conn : pending_connections_) {
-    conn.second.data.connection->Close();
-    connection_factory_->OnConnectionClosed(conn.second.data.connection.get());
-    for (auto& item : conn.second.callbacks) {
-      item.second->OnConnectionFailed(item.first);
-    }
-  }
-  pending_connections_.clear();
-
-  for (auto& conn : connections_) {
-    conn.second.connection->Close();
-    connection_factory_->OnConnectionClosed(conn.second.connection.get());
-  }
-  connections_.clear();
-
-  instance_map_.clear();
-  next_instance_id_ = 1;
-  instance_request_ids_.Reset();
-}
-
-bool QuicClient::CreatePendingConnection(
+bool QuicClient::StartConnectionRequest(
     std::string_view instance_name,
     ConnectRequest& request,
-    ConnectionRequestCallback* request_callback) {
-  auto pending_entry = pending_connections_.find(instance_name);
-  if (pending_entry == pending_connections_.end()) {
-    uint64_t request_id =
-        StartConnectionRequest(instance_name, request_callback);
-    if (request_id) {
-      request = ConnectRequest(this, request_id);
-      return true;
-    } else {
-      return false;
-    }
-  } else {
-    uint64_t request_id = next_request_id_++;
-    pending_entry->second.callbacks.emplace_back(request_id, request_callback);
-    request = ConnectRequest(this, request_id);
-    return true;
-  }
-}
-
-uint64_t QuicClient::StartConnectionRequest(
-    std::string_view instance_name,
-    ConnectionRequestCallback* request_callback) {
+    ConnectRequestCallback* request_callback) {
   auto instance_entry = instance_infos_.find(instance_name);
   if (instance_entry == instance_infos_.end()) {
-    request_callback->OnConnectionFailed(0);
+    request_callback->OnConnectFailed(0);
     OSP_LOG_ERROR << "QuicClient connect failed: can't find information for "
                   << instance_name;
-    return 0;
+    return false;
   }
 
   IPEndpoint endpoint = instance_entry->second.v4_endpoint
@@ -230,12 +144,12 @@ uint64_t QuicClient::StartConnectionRequest(
       .instance_name = std::string(instance_name),
       .fingerprint = instance_entry->second.fingerprint};
   ErrorOr<std::unique_ptr<QuicConnection>> connection =
-      connection_factory_->Connect(connection_endpoints_[0], endpoint,
-                                   connect_data, this);
+      static_cast<QuicConnectionFactoryClient*>(connection_factory_.get())
+          ->Connect(connection_endpoints_[0], endpoint, connect_data, this);
   if (!connection) {
-    request_callback->OnConnectionFailed(0);
+    request_callback->OnConnectFailed(0);
     OSP_LOG_ERROR << "Factory connect failed: " << connection.error();
-    return 0;
+    return false;
   }
 
   auto pending_result = pending_connections_.emplace(
@@ -243,9 +157,10 @@ uint64_t QuicClient::StartConnectionRequest(
                          std::move(connection.value()),
                          std::make_unique<QuicStreamManager>(*this))));
   uint64_t request_id = next_request_id_++;
+  request = ConnectRequest(this, request_id);
   pending_result.first->second.callbacks.emplace_back(request_id,
                                                       request_callback);
-  return request_id;
+  return true;
 }
 
 void QuicClient::CancelConnectRequest(uint64_t request_id) {
@@ -256,8 +171,8 @@ void QuicClient::CancelConnectRequest(uint64_t request_id) {
     callbacks.erase(
         std::remove_if(
             callbacks.begin(), callbacks.end(),
-            [request_id](const std::pair<uint64_t, ConnectionRequestCallback*>&
-                             callback) {
+            [request_id](
+                const std::pair<uint64_t, ConnectRequestCallback*>& callback) {
               return request_id == callback.first;
             }),
         callbacks.end());

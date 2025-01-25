@@ -17,9 +17,10 @@
 use nom::combinator;
 
 use crypto_provider::{aes::ctr::AesCtrNonce, CryptoProvider, CryptoRng, FromCryptoRng};
-use np_hkdf::v1_salt::ExtendedV1Salt;
 
 use crate::helpers::parse_byte_array;
+
+pub use np_hkdf::v1_salt::ExtendedV1Salt;
 
 /// Common behavior for V1 section salts.
 pub trait V1Salt: Copy + Into<MultiSalt> {

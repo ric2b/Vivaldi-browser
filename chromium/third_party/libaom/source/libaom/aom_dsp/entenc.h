@@ -75,7 +75,7 @@ OD_WARN_UNUSED_RESULT uint32_t od_ec_enc_tell_frac(const od_ec_enc *enc)
     OD_ARG_NONNULL(1);
 
 // buf is the frame bitbuffer, offs is where carry to be added
-static AOM_INLINE void propagate_carry_bwd(unsigned char *buf, uint32_t offs) {
+static inline void propagate_carry_bwd(unsigned char *buf, uint32_t offs) {
   uint16_t sum, carry = 1;
   do {
     sum = (uint16_t)buf[offs] + 1;
@@ -86,11 +86,10 @@ static AOM_INLINE void propagate_carry_bwd(unsigned char *buf, uint32_t offs) {
 
 // Convert to big-endian byte order and write data to buffer adding the
 // carry-bit
-static AOM_INLINE void write_enc_data_to_out_buf(unsigned char *out,
-                                                 uint32_t offs, uint64_t output,
-                                                 uint64_t carry,
-                                                 uint32_t *enc_offs,
-                                                 uint8_t num_bytes_ready) {
+static inline void write_enc_data_to_out_buf(unsigned char *out, uint32_t offs,
+                                             uint64_t output, uint64_t carry,
+                                             uint32_t *enc_offs,
+                                             uint8_t num_bytes_ready) {
   const uint64_t reg = HToBE64(output << ((8 - num_bytes_ready) << 3));
   memcpy(&out[offs], &reg, 8);
   // Propagate carry backwards if exists

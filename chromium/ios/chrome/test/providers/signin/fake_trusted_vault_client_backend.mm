@@ -60,18 +60,6 @@ FakeTrustedVaultClientBackend::FakeTrustedVaultClientBackend() = default;
 
 FakeTrustedVaultClientBackend::~FakeTrustedVaultClientBackend() = default;
 
-void FakeTrustedVaultClientBackend::AddObserver(
-    Observer* observer,
-    const std::string& security_domain_path) {
-  // Do nothing.
-}
-
-void FakeTrustedVaultClientBackend::RemoveObserver(
-    Observer* observer,
-    const std::string& security_domain_path) {
-  // Do nothing.
-}
-
 void FakeTrustedVaultClientBackend::
     SetDeviceRegistrationPublicKeyVerifierForUMA(VerifierCallback verifier) {
   // Do nothing.
@@ -79,21 +67,21 @@ void FakeTrustedVaultClientBackend::
 
 void FakeTrustedVaultClientBackend::FetchKeys(
     id<SystemIdentity> identity,
-    const std::string& security_domain_path,
+    trusted_vault::SecurityDomainId security_domain_id,
     KeyFetchedCallback completion) {
   // Do nothing.
 }
 
 void FakeTrustedVaultClientBackend::MarkLocalKeysAsStale(
     id<SystemIdentity> identity,
-    const std::string& security_domain_path,
+    trusted_vault::SecurityDomainId security_domain_id,
     base::OnceClosure completion) {
   // Do nothing.
 }
 
 void FakeTrustedVaultClientBackend::GetDegradedRecoverabilityStatus(
     id<SystemIdentity> identity,
-    const std::string& security_domain_path,
+    trusted_vault::SecurityDomainId security_domain_id,
     base::OnceCallback<void(bool)> completion) {
   // Do nothing.
 }
@@ -101,7 +89,7 @@ void FakeTrustedVaultClientBackend::GetDegradedRecoverabilityStatus(
 FakeTrustedVaultClientBackend::CancelDialogCallback
 FakeTrustedVaultClientBackend::Reauthentication(
     id<SystemIdentity> identity,
-    const std::string& security_domain_path,
+    trusted_vault::SecurityDomainId security_domain_id,
     UIViewController* presenting_view_controller,
     CompletionBlock completion) {
   DCHECK(!view_controller_);
@@ -123,7 +111,7 @@ FakeTrustedVaultClientBackend::Reauthentication(
 FakeTrustedVaultClientBackend::CancelDialogCallback
 FakeTrustedVaultClientBackend::FixDegradedRecoverability(
     id<SystemIdentity> identity,
-    const std::string& security_domain_path,
+    trusted_vault::SecurityDomainId security_domain_id,
     UIViewController* presenting_view_controller,
     CompletionBlock completion) {
   // Do nothing.
@@ -143,7 +131,7 @@ void FakeTrustedVaultClientBackend::InternalCancelDialog(
 
 void FakeTrustedVaultClientBackend::ClearLocalData(
     id<SystemIdentity> identity,
-    const std::string& security_domain_path,
+    trusted_vault::SecurityDomainId security_domain_id,
     base::OnceCallback<void(bool)> completion) {
   // Do nothing.
 }

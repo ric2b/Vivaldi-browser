@@ -58,13 +58,14 @@ export class ProfileSidebarTreeElement extends UI.TreeOutline.TreeElement {
     this.menuElement.tabIndex = -1;
     this.menuElement.addEventListener('click', this.handleContextMenuEvent.bind(this));
     this.menuElement.setAttribute('jslog', `${VisualLogging.dropDown('profile-options').track({click: true})}`);
+    UI.Tooltip.Tooltip.install(this.menuElement, i18nString(UIStrings.profileOptions));
 
     this.titleElement.textContent = profile.title;
     this.className = className;
     this.small = false;
     this.dataDisplayDelegate = dataDisplayDelegate;
     this.profile = profile;
-    profile.addEventListener(ProfileHeaderEvents.UpdateStatus, this.updateStatus, this);
+    profile.addEventListener(ProfileHeaderEvents.UPDATE_STATUS, this.updateStatus, this);
   }
 
   updateStatus(event: Common.EventTarget.EventTargetEvent<StatusUpdate>): void {
@@ -106,7 +107,7 @@ export class ProfileSidebarTreeElement extends UI.TreeOutline.TreeElement {
   }
 
   dispose(): void {
-    this.profile.removeEventListener(ProfileHeaderEvents.UpdateStatus, this.updateStatus, this);
+    this.profile.removeEventListener(ProfileHeaderEvents.UPDATE_STATUS, this.updateStatus, this);
   }
 
   override onselect(): boolean {

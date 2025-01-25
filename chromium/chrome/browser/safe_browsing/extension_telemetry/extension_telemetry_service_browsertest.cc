@@ -20,7 +20,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/enterprise/connectors/reporting/constants.h"
+#include "components/enterprise/connectors/core/reporting_constants.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/features.h"
@@ -93,17 +93,17 @@ class ExtensionTelemetryServiceBrowserTest
     extensions::ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
 
-    // Enable enterprise policy. Verify that enterprise reporting is enabled.
+    // Helper to set up enterprise reporting and enable by default.
+    event_report_validator_helper_ = std::make_unique<
+        enterprise_connectors::test::EventReportValidatorHelper>(
+        browser()->profile(), /*browser_test=*/true);
+    // Enable enterprise policy.
     enterprise_connectors::test::SetOnSecurityEventReporting(
         /*prefs=*/prefs(),
         /*enabled=*/true,
         /*enabled_event_names=*/{},
         /*enabled_opt_in_events=*/
         {{enterprise_connectors::kExtensionTelemetryEvent, {"*"}}});
-    // Helper to set up enterprise reporting and enable by default.
-    event_report_validator_helper_ = std::make_unique<
-        enterprise_connectors::test::EventReportValidatorHelper>(
-        browser()->profile(), /*browser_test=*/true);
   }
 
   void TearDownOnMainThread() override {

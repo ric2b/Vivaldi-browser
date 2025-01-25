@@ -167,7 +167,7 @@ void AXRelationCache::CheckElementWasProcessed(Element& element) {
   }
 
   AXObject* obj = Get(ancestor);
-  NOTREACHED_NORETURN()
+  NOTREACHED()
       << "The following element was attached to the document, but "
          "UpdateCacheAfterNodeIsAttached() was never called with it, and it "
          "did not exist when the cache was first initialized:"
@@ -216,14 +216,15 @@ bool AXRelationCache::IsAriaOwned(const AXObject* child, bool check) const {
   AXObject* parent = child->ParentObjectIfPresent();
   if (parent && parent->GetElement() && child->GetElement() &&
       !child->GetElement()->IsPseudoElement()) {
-    AXObject* natural_parent =
-        AXObject::ComputeNonARIAParent(*object_cache_, child->GetElement());
-    if (parent != natural_parent) {
+    Node* natural_parent = AXObject::GetParentNodeForComputeParent(
+        *object_cache_, child->GetElement());
+    if (parent->GetNode() != natural_parent) {
       std::ostringstream msg;
       msg << "Unowned child should have natural parent:" << "\n* Child: "
           << child << "\n* Actual parent: " << parent
-          << "\n* Natural parent: " << natural_parent
-          << "\n* Owners to update:";
+          << "\n* Natural ax parent: " << object_cache_->Get(natural_parent)
+          << "\n* Natural dom parent: " << natural_parent << " #"
+          << natural_parent->GetDomNodeId() << "\n* Owners to update:";
       for (AXID id : owner_ids_to_update_) {
         msg << " " << id;
       }
@@ -682,7 +683,10 @@ void AXRelationCache::UpdateAriaOwnsWithCleanLayout(AXObject* owner,
   } else if (element && element->HasExplicitlySetAttrAssociatedElements(
                             html_names::kAriaOwnsAttr)) {
     UpdateAriaOwnsFromAttrAssociatedElementsWithCleanLayout(
-        owner, *element->GetAttrAssociatedElements(html_names::kAriaOwnsAttr),
+        owner,
+        // TODO (crbug.com/353750122): Set resolve_reference_target to false.
+        *element->GetAttrAssociatedElements(html_names::kAriaOwnsAttr,
+                                            /*resolve_reference_target*/ true),
         owned_children, force);
   } else {
     // Figure out the ids that actually correspond to children that exist
@@ -1066,7 +1070,12 @@ void AXRelationCache::RemoveOwnedRelation(AXID obj_id) {
     }
     if (AXObject* owner = ObjectFromAXID(owner_id)) {
       if (object_cache_->lifecycle().StateAllowsImmediateTreeUpdates()) {
-        object_cache_->ChildrenChangedWithCleanLayout(owner);
+        // Currently in CommitAXUpdates(). Changing the children of the owner
+        // here could interfere with the execution of RemoveSubtree().
+        // The next call AXRelationCache::ProcessUpdatesWithCleanLayout()
+        // will refresh this owner before the tree is frozen.
+        owner_ids_to_update_.insert(owner_id);
+        object_cache_->MarkAXObjectDirtyWithCleanLayout(owner);
       } else {
         object_cache_->ChildrenChanged(owner);
       }
@@ -1104,7 +1113,7 @@ Node* AXRelationCache::LabelChanged(HTMLLabelElement& label) {
   }
 
   all_previously_seen_label_target_ids_.insert(id);
-  return label.control();
+  return label.Control();
 }
 
 void AXRelationCache::MaybeRestoreParentOfOwnedChild(AXID removed_child_axid) {

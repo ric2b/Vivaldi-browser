@@ -31,6 +31,10 @@ void SevenZipAnalyzer::OnOpenError(seven_zip::Result result) {
   results()->analysis_result = ArchiveAnalysisResult::kFailedToOpen;
   results()->encryption_info.is_encrypted |=
       result == seven_zip::Result::kEncryptedHeaders;
+  if (IsTopLevelArchive()) {
+    results()->encryption_info.is_top_level_encrypted |=
+        result == seven_zip::Result::kEncryptedHeaders;
+  }
 }
 
 base::File SevenZipAnalyzer::OnTempFileRequest() {
@@ -61,7 +65,7 @@ bool SevenZipAnalyzer::OnEntry(const seven_zip::EntryInfo& entry,
     return false;
   }
 
-  output = base::span<uint8_t>(mapped_file_->data(), mapped_file_->length());
+  output = mapped_file_->mutable_bytes();
   return true;
 }
 

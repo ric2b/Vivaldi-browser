@@ -177,8 +177,8 @@ impl avifDiagnostics {
         }
     }
 
-    fn set_error_string(&mut self, error: &String) {
-        if let Ok(s) = std::ffi::CString::new(error.clone()) {
+    fn set_error_string(&mut self, error: &str) {
+        if let Ok(s) = std::ffi::CString::new(error.to_owned()) {
             let len = std::cmp::min(
                 s.as_bytes_with_nul().len(),
                 AVIF_DIAGNOSTICS_ERROR_BUFFER_SIZE,
@@ -248,7 +248,7 @@ pub unsafe extern "C" fn crabby_avifCropRectConvertCleanApertureBox(
 ) -> avifBool {
     let rust_clap: CleanAperture = unsafe { (&(*clap)).into() };
     let rect = unsafe { &mut (*cropRect) };
-    *rect = match CropRect::create_from(&rust_clap, imageW, imageH, yuvFormat.into()) {
+    *rect = match CropRect::create_from(&rust_clap, imageW, imageH, yuvFormat) {
         Ok(x) => x,
         Err(_) => return AVIF_FALSE,
     };

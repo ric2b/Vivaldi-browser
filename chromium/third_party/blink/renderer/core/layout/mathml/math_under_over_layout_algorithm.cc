@@ -240,7 +240,7 @@ const LayoutResult* MathUnderOverLayoutAlgorithm::Layout() {
     layout_remaining_items_with_zero_inline_stretch_size = false;
   }
 
-  if (UNLIKELY(layout_remaining_items_with_zero_inline_stretch_size)) {
+  if (layout_remaining_items_with_zero_inline_stretch_size) [[unlikely]] {
     // "If LNotToStretch is empty, perform layout with stretch size constraint 0
     // on all the items of LToStretch.
     for (LayoutInputNode child = Node().FirstChild(); child;
@@ -388,7 +388,7 @@ const LayoutResult* MathUnderOverLayoutAlgorithm::Layout() {
 
   LayoutUnit intrinsic_block_size = ascent + descent;
   LayoutUnit block_size = ComputeBlockSizeForFragment(
-      constraint_space, Style(), BorderPadding(), intrinsic_block_size,
+      constraint_space, Node(), BorderPadding(), intrinsic_block_size,
       border_box_size.inline_size);
 
   container_builder_.SetIntrinsicBlockSize(intrinsic_block_size);

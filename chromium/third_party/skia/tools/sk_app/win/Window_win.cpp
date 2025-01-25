@@ -16,10 +16,6 @@
 #include "tools/window/win/WindowContextFactory_win.h"
 #include "tools/skui/ModifierKey.h"
 
-#ifdef SK_VULKAN
-#include "tools/window/VulkanWindowContext.h"
-#endif
-
 namespace sk_app {
 
 static int gWindowX = CW_USEDEFAULT;
@@ -27,7 +23,7 @@ static int gWindowY = 0;
 static int gWindowWidth = CW_USEDEFAULT;
 static int gWindowHeight = 0;
 
-Window* Window::CreateNativeWindow(void* platformData) {
+Window* Windows::CreateNativeWindow(void* platformData) {
     HINSTANCE hInstance = (HINSTANCE)platformData;
 
     Window_win* window = new Window_win();
@@ -387,6 +383,8 @@ bool Window_win::attach(BackendType attachType) {
             fWindowContext = skwindow::MakeD3D12ForWin(fHWnd, fRequestedDisplayParams);
             break;
 #endif
+        default:
+            SK_ABORT("Unknown backend");
     }
     this->onBackendCreated();
 

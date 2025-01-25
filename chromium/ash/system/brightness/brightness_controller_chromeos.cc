@@ -69,6 +69,103 @@ void SaveBrightnessPercentToLocalState(PrefService* local_state,
                      std::make_optional<base::Value>(percent));
 }
 
+bool ShouldReenableAmbientLightSensor(const AccountId& account_id,
+                                      user_manager::KnownUser& known_user) {
+  // Retrieve the reason.
+  const int ambient_light_sensor_disabled_reason =
+      known_user
+          .FindIntPath(account_id, prefs::kAmbientLightSensorDisabledReason)
+          .value_or(static_cast<int>(
+              power_manager::
+                  AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP));
+
+  // Re-enable ambient light sensor if cause is not from settings app or
+  // restored from preference.
+  switch (ambient_light_sensor_disabled_reason) {
+    case power_manager::
+        AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP:
+    case power_manager::
+        AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST_SETTINGS_APP:
+    case power_manager::
+        AmbientLightSensorChange_Cause_RESTORED_FROM_USER_PREFERENCE:
+      return false;
+    default:
+      return true;
+  }
+}
+
+bool ShouldRestoreAmbientLightSensor(const AccountId& account_id,
+                                     user_manager::KnownUser& known_user) {
+  // Retrieve the reason.
+  const int ambient_light_sensor_disabled_reason =
+      known_user
+          .FindIntPath(account_id, prefs::kAmbientLightSensorDisabledReason)
+          .value_or(static_cast<int>(
+              power_manager::
+                  AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP));
+  // Only restore ALS when cause is from settings app.
+  switch (ambient_light_sensor_disabled_reason) {
+    case power_manager::
+        AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP:
+    case power_manager::
+        AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST_SETTINGS_APP:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool ShouldSaveAmbientLightSensorForNewDevice(
+    const power_manager::AmbientLightSensorChange& change) {
+  return change.cause() ==
+             power_manager::
+                 AmbientLightSensorChange_Cause_USER_REQUEST_SETTINGS_APP ||
+         change.cause() ==
+             power_manager::
+                 AmbientLightSensorChange_Cause_BRIGHTNESS_USER_REQUEST_SETTINGS_APP;
+}
+
+power_manager::SetAmbientLightSensorEnabledRequest_Cause
+AmbientLightSensorChangeSourceToCause(
+    BrightnessControlDelegate::AmbientLightSensorEnabledChangeSource source) {
+  switch (source) {
+    case BrightnessControlDelegate::AmbientLightSensorEnabledChangeSource::
+        kSettingsApp:
+      return power_manager::
+          SetAmbientLightSensorEnabledRequest_Cause_USER_REQUEST_FROM_SETTINGS_APP;
+    // TODO(longbowei): Add a new cause
+    // SetAmbientLightSensorEnabledRequest_Cause_SYSTEM_REENABLED to platform
+    // and update function.
+    default:
+      return power_manager::
+          SetAmbientLightSensorEnabledRequest_Cause_RESTORED_FROM_USER_PREFERENCE;
+  }
+}
+
+power_manager::SetBacklightBrightnessRequest_Cause
+BrightnessChangeSourceToCause(
+    BrightnessControlDelegate::BrightnessChangeSource source) {
+  switch (source) {
+    case BrightnessControlDelegate::BrightnessChangeSource::kSettingsApp:
+      return power_manager::
+          SetBacklightBrightnessRequest_Cause_USER_REQUEST_FROM_SETTINGS_APP;
+    case BrightnessControlDelegate::BrightnessChangeSource::
+        kRestoredFromUserPref:
+      return power_manager::
+          SetBacklightBrightnessRequest_Cause_RESTORED_FROM_USER_PREFERENCE;
+    default:
+      return power_manager::SetBacklightBrightnessRequest_Cause_USER_REQUEST;
+  }
+}
+
+PrefService* GetActivePrefService() {
+  if (!ash::Shell::HasInstance()) {
+    return nullptr;
+  }
+  DCHECK(ash::Shell::Get()->session_controller());
+  return ash::Shell::Get()->session_controller()->GetActivePrefService();
+}
+
 }  // namespace
 
 BrightnessControllerChromeos::BrightnessControllerChromeos(
@@ -144,14 +241,14 @@ void BrightnessControllerChromeos::SetBrightnessPercent(
       gradual
           ? power_manager::SetBacklightBrightnessRequest_Transition_FAST
           : power_manager::SetBacklightBrightnessRequest_Transition_INSTANT);
-  power_manager::SetBacklightBrightnessRequest_Cause brightness_change_cause =
-      source == BrightnessChangeSource::kSettingsApp
-          ? power_manager::
-                SetBacklightBrightnessRequest_Cause_USER_REQUEST_FROM_SETTINGS_APP
-          : power_manager::SetBacklightBrightnessRequest_Cause_USER_REQUEST;
-  request.set_cause(brightness_change_cause);
+  request.set_cause(BrightnessChangeSourceToCause(source));
   chromeos::PowerManagerClient::Get()->SetScreenBrightness(request);
-  RecordHistogramForBrightnessAction(BrightnessAction::kSetBrightness);
+
+  // Record the brightness action only if it was not initiated by the system's
+  // brightness restoration.
+  if (source != BrightnessChangeSource::kRestoredFromUserPref) {
+    RecordHistogramForBrightnessAction(BrightnessAction::kSetBrightness);
+  }
 }
 
 void BrightnessControllerChromeos::GetBrightnessPercent(
@@ -160,8 +257,13 @@ void BrightnessControllerChromeos::GetBrightnessPercent(
       std::move(callback));
 }
 
-void BrightnessControllerChromeos::SetAmbientLightSensorEnabled(bool enabled) {
-  chromeos::PowerManagerClient::Get()->SetAmbientLightSensorEnabled(enabled);
+void BrightnessControllerChromeos::SetAmbientLightSensorEnabled(
+    bool enabled,
+    AmbientLightSensorEnabledChangeSource source) {
+  power_manager::SetAmbientLightSensorEnabledRequest request;
+  request.set_sensor_enabled(enabled);
+  request.set_cause(AmbientLightSensorChangeSourceToCause(source));
+  chromeos::PowerManagerClient::Get()->SetAmbientLightSensorEnabled(request);
 }
 
 void BrightnessControllerChromeos::GetAmbientLightSensorEnabled(
@@ -185,48 +287,86 @@ void BrightnessControllerChromeos::OnSessionStateChanged(
 
 void BrightnessControllerChromeos::OnFocusPod(const AccountId& account_id) {
   active_account_id_ = account_id;
+  if (!features::IsBrightnessControlInSettingsEnabled() ||
+      IsInitialBrightnessSetByPolicy()) {
+    return;
+  }
 
-  if (features::IsBrightnessControlInSettingsEnabled()) {
-    RestoreBrightnessSettings(account_id);
+  session_manager::SessionState session_state =
+      Shell::Get()->session_controller()->GetSessionState();
+  if (session_state == session_manager::SessionState::LOGIN_PRIMARY ||
+      session_state == session_manager::SessionState::LOGIN_SECONDARY) {
+    // Restore brightness settings only when device reboots.
+    MaybeRestoreBrightnessSettings();
   }
 }
 
 void BrightnessControllerChromeos::RestoreBrightnessSettings(
     const AccountId& account_id) {
-  // Get the user's stored preference for whether the ambient light sensor
-  // should be enabled. If there is no saved preference for the ambient light
-  // sensor value, set the ambient light sensor to be enabled to match the
-  // default behavior.
+  // In tests, local_state_ may not be present.
+  if (!local_state_) {
+    return;
+  }
   user_manager::KnownUser known_user(local_state_);
-  const bool ambient_light_sensor_enabled_for_account =
-      known_user
-          .FindBoolPath(account_id, prefs::kDisplayAmbientLightSensorEnabled)
-          .value_or(true);
-
-  if (!ambient_light_sensor_enabled_for_account) {
-    // If the ambient light sensor is disabled, restore the user's preferred
-    // brightness level.
-    const std::optional<double> brightness_for_account =
-        known_user
-            .FindPath(account_id,
-                      prefs::kInternalDisplayScreenBrightnessPercent)
-            ->GetIfDouble();
+  const std::optional<double> brightness_for_account =
+      known_user.FindDoublePath(account_id,
+                                prefs::kInternalDisplayScreenBrightnessPercent);
+  if (!*has_sensor_) {
+    // Only restore brightness percent if device does not have sensor.
     if (brightness_for_account.has_value()) {
-      SetBrightnessPercent(brightness_for_account.value(), /*gradual=*/true,
+      SetBrightnessPercent(*brightness_for_account, /*gradual=*/true,
                            BrightnessControlDelegate::BrightnessChangeSource::
                                kRestoredFromUserPref);
     }
+    return;
+  }
+  // If device has a sensor, restore both ambient light sensor and brightness
+  // percent.
+  bool ambient_light_sensor_enabled_for_account = true;
+  if (ShouldReenableAmbientLightSensor(account_id, known_user)) {
+    SetAmbientLightSensorEnabled(
+        /*enabled=*/true,
+        AmbientLightSensorEnabledChangeSource::kSystemReenabled);
+  } else {
+    // Get the user's stored preference for whether the ambient light sensor
+    // should be enabled. If there is no saved preference for the ambient light
+    // sensor value, set the ambient light sensor to be enabled to match the
+    // default behavior.
+    ambient_light_sensor_enabled_for_account =
+        known_user
+            .FindBoolPath(account_id, prefs::kDisplayAmbientLightSensorEnabled)
+            .value_or(true);
+    if (ShouldRestoreAmbientLightSensor(account_id, known_user)) {
+      SetAmbientLightSensorEnabled(
+          ambient_light_sensor_enabled_for_account,
+          BrightnessControlDelegate::AmbientLightSensorEnabledChangeSource::
+              kRestoredFromUserPref);
+    }
+    if (!ambient_light_sensor_enabled_for_account) {
+      // If the ambient light sensor is disabled, restore the user's preferred
+      // brightness level.
+      if (brightness_for_account.has_value()) {
+        SetBrightnessPercent(*brightness_for_account, /*gradual=*/true,
+                             BrightnessControlDelegate::BrightnessChangeSource::
+                                 kRestoredFromUserPref);
+      }
+    }
   }
 
-  SetAmbientLightSensorEnabled(ambient_light_sensor_enabled_for_account);
-
   // Record the display ambient light sensor status at login.
-  if (has_sensor_ && !has_ambient_light_sensor_status_been_recorded_) {
+  if (*has_sensor_ && !has_ambient_light_sensor_status_been_recorded_) {
     base::UmaHistogramBoolean(
         "ChromeOS.Display.Startup.AmbientLightSensorEnabled",
         ambient_light_sensor_enabled_for_account);
     has_ambient_light_sensor_status_been_recorded_ = true;
   }
+}
+
+void BrightnessControllerChromeos::MaybeRestoreBrightnessSettings() {
+  if (!active_account_id_.has_value() || !has_sensor_.has_value()) {
+    return;
+  }
+  RestoreBrightnessSettings(*active_account_id_);
 }
 
 void BrightnessControllerChromeos::RestoreBrightnessSettingsOnFirstLogin() {
@@ -237,6 +377,10 @@ void BrightnessControllerChromeos::RestoreBrightnessSettingsOnFirstLogin() {
   }
 
   if (!active_pref_service_) {
+    return;
+  }
+
+  if (IsInitialBrightnessSetByPolicy()) {
     return;
   }
 
@@ -252,7 +396,9 @@ void BrightnessControllerChromeos::RestoreBrightnessSettingsOnFirstLogin() {
           prefs::kDisplayAmbientLightSensorLastEnabled);
 
   SetAmbientLightSensorEnabled(
-      ambient_light_sensor_previously_enabled_for_account);
+      ambient_light_sensor_previously_enabled_for_account,
+      BrightnessControlDelegate::AmbientLightSensorEnabledChangeSource::
+          kRestoredFromUserPref);
 
   has_ambient_light_sensor_been_restored_for_new_user_ = true;
 }
@@ -310,8 +456,8 @@ void BrightnessControllerChromeos::OnGetBrightnessAfterLogin(
     return;
   }
 
-  SaveBrightnessPercentToLocalState(local_state_, active_account_id_.value(),
-                                    brightness_percent.value());
+  SaveBrightnessPercentToLocalState(local_state_, *active_account_id_,
+                                    *brightness_percent);
 }
 
 void BrightnessControllerChromeos::OnGetHasAmbientLightSensor(
@@ -322,7 +468,8 @@ void BrightnessControllerChromeos::OnGetHasAmbientLightSensor(
            "sensor status";
     return;
   }
-  has_sensor_ = has_sensor.value();
+  has_sensor_ = has_sensor;
+  MaybeRestoreBrightnessSettings();
 }
 
 void BrightnessControllerChromeos::ScreenBrightnessChanged(
@@ -338,7 +485,7 @@ void BrightnessControllerChromeos::ScreenBrightnessChanged(
       change.cause() ==
           power_manager::
               BacklightBrightnessChange_Cause_USER_REQUEST_FROM_SETTINGS_APP) {
-    SaveBrightnessPercentToLocalState(local_state_, active_account_id_.value(),
+    SaveBrightnessPercentToLocalState(local_state_, *active_account_id_,
                                       change.percent());
   }
 }
@@ -357,24 +504,29 @@ void BrightnessControllerChromeos::AmbientLightSensorEnabledChanged(
   user_manager::KnownUser known_user(local_state_);
   if (!change.sensor_enabled()) {
     known_user.SetPath(
-        active_account_id_.value(), prefs::kAmbientLightSensorDisabledReason,
+        *active_account_id_, prefs::kAmbientLightSensorDisabledReason,
         std::make_optional<base::Value>(static_cast<int>(change.cause())));
   } else {
     // If the ambient light sensor was enabled, remove the existing "disabled
     // reason" pref.
-    known_user.RemovePref(active_account_id_.value(),
+    known_user.RemovePref(*active_account_id_,
                           prefs::kAmbientLightSensorDisabledReason);
   }
 
   // Save the current ambient light sensor enabled status into local state.
-  known_user.SetPath(active_account_id_.value(),
+  known_user.SetPath(*active_account_id_,
                      prefs::kDisplayAmbientLightSensorEnabled,
                      std::make_optional<base::Value>(change.sensor_enabled()));
 
-  PrefService* primary_user_prefs = session_controller_->GetActivePrefService();
-  if (primary_user_prefs) {
-    primary_user_prefs->SetBoolean(prefs::kDisplayAmbientLightSensorLastEnabled,
-                                   change.sensor_enabled());
+  if (ShouldSaveAmbientLightSensorForNewDevice(change)) {
+    // Save ALS settings for new device if change is from settings app.
+    PrefService* primary_user_prefs =
+        session_controller_->GetActivePrefService();
+    if (primary_user_prefs) {
+      primary_user_prefs->SetBoolean(
+          prefs::kDisplayAmbientLightSensorLastEnabled,
+          change.sensor_enabled());
+    }
   }
 }
 
@@ -417,6 +569,21 @@ void BrightnessControllerChromeos::RecordHistogramForBrightnessAction(
                     GetBrightnessActionName(brightness_action), "Brightness.",
                     IsChargerConnected() ? "Charger" : "Battery", "Power"}),
       time_since_last_session_change);
+}
+
+bool BrightnessControllerChromeos::IsInitialBrightnessSetByPolicy() {
+  PrefService* pref_service = GetActivePrefService();
+  if (!pref_service) {
+    return false;
+  }
+
+  if (IsChargerConnected()) {
+    return pref_service->IsManagedPreference(
+        prefs::kPowerAcScreenBrightnessPercent);
+  } else {
+    return pref_service->IsManagedPreference(
+        prefs::kPowerBatteryScreenBrightnessPercent);
+  }
 }
 
 }  // namespace ash::system

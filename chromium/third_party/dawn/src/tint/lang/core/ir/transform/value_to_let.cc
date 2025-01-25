@@ -51,6 +51,9 @@ Accesses AccessesFor(ir::Instruction* inst) {
         [&](const ir::Store*) { return Access::kStore; },               //
         [&](const ir::StoreVectorElement*) { return Access::kStore; },  //
         [&](const ir::Call*) {
+            if (inst->IsAnyOf<core::ir::Bitcast>()) {
+                return Accesses{};
+            }
             return Accesses{Access::kLoad, Access::kStore};
         },
         [&](Default) { return Accesses{}; });
@@ -90,11 +93,22 @@ struct State {
             pending_resolution.Clear();
         };
 
-        auto maybe_put_in_let = [&](auto* inst) {
+        auto maybe_put_in_let = [&](auto* inst, Accesses& accesses) {
             if (auto* result = inst->Result(0)) {
-                auto& usages = result->Usages();
-                switch (usages.Count()) {
+                auto& usages = result->UsagesUnsorted();
+                switch (result->NumUsages()) {
                     case 0:  // No usage
+                        if (accesses.Contains(Access::kStore)) {
+                            // This instruction needs to be emitted but has no uses, so we need to
+                            // make sure that it will be used in a statement. Function call
+                            // instructions with no uses will be emitted as call statements, so we
+                            // just need to put other instructions in `let`s to force them to be
+                            // emitted.
+                            if (!inst->template IsAnyOf<core::ir::Call>() ||
+                                inst->template IsAnyOf<core::ir::Construct, core::ir::Convert>()) {
+                                inst = PutInLet(result);
+                            }
+                        }
                         break;
                     case 1: {  // Single usage
                         auto usage = (*usages.begin())->instruction;
@@ -142,13 +156,13 @@ struct State {
             if (accesses.Contains(Access::kStore)) {  // Note: Also handles load + store
                 put_pending_in_lets();
                 pending_access = Access::kStore;
-                maybe_put_in_let(inst);
+                maybe_put_in_let(inst, accesses);
             } else if (accesses.Contains(Access::kLoad)) {
                 if (pending_access != Access::kLoad) {
                     put_pending_in_lets();
                     pending_access = Access::kLoad;
                 }
-                maybe_put_in_let(inst);
+                maybe_put_in_let(inst, accesses);
             }
         }
     }
@@ -176,6 +190,8 @@ struct State {
 Result<SuccessType> ValueToLet(Module& ir) {
     auto result = ValidateAndDumpIfNeeded(ir, "ValueToLet transform",
                                           core::ir::Capabilities{
+                                              core::ir::Capability::kAllow8BitIntegers,
+                                              core::ir::Capability::kAllowPointersInStructures,
                                               core::ir::Capability::kAllowVectorElementPointer,
                                           });
     if (result != Success) {

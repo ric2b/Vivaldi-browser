@@ -7,7 +7,6 @@ import type * as puppeteer from 'puppeteer-core';
 
 import {
   $$,
-  enableExperiment,
   getBrowserAndPages,
   getResourcesPath,
   goTo,
@@ -18,18 +17,16 @@ import {
   waitForNone,
   waitForVisible,
 } from '../../shared/helper.js';
-import {describe, it} from '../../shared/mocha-extensions.js';
-import {
-  navigateToPerformanceTab,
-} from '../helpers/performance-helpers.js';
 
-const READY_LOCAL_METRIC_SELECTOR = '[slot="local-value"] .metric-value:not(.waiting)';
-const READY_FIELD_METRIC_SELECTOR = '[slot="field-value"] .metric-value:not(.waiting)';
-const WAITING_LOCAL_METRIC_SELECTOR = '[slot="local-value"] .metric-value.waiting';
+import {reloadDevTools} from '../helpers/cross-tool-helper.js';
+
+const READY_LOCAL_METRIC_SELECTOR = '#local-value .metric-value:not(.waiting)';
+const READY_FIELD_METRIC_SELECTOR = '#field-value .metric-value:not(.waiting)';
+const WAITING_LOCAL_METRIC_SELECTOR = '#local-value .metric-value.waiting';
 const INTERACTION_SELECTOR = '.interaction';
-const HISTOGRAM_SELECTOR = '.field-data-histogram';
-const SETUP_FIELD_BUTTON_SELECTOR = 'devtools-button[jslogcontext="field-data-setup"]';
-const ENABLE_FIELD_BUTTON_SELECTOR = 'devtools-button[jslogcontext="field-data-enable"]';
+const HISTOGRAM_SELECTOR = '.bucket-summaries.histogram';
+const SETUP_FIELD_BUTTON_SELECTOR = 'devtools-button[data-field-data-setup]';
+const ENABLE_FIELD_BUTTON_SELECTOR = 'devtools-button[data-field-data-enable]';
 const ADVANCED_DETAILS_SELECTOR = '.content summary';
 const OVERRIDE_FIELD_CHECKBOX_SELECTOR = '.content input[type="checkbox"]';
 const OVERRIDE_FIELD_TEXT_SELECTOR = '.content input[type="text"]';
@@ -61,13 +58,11 @@ async function setCruxRawResponse(path: string) {
 
 describe('The Performance panel landing page', () => {
   beforeEach(async () => {
-    await enableExperiment('timeline-observations');
+    await reloadDevTools({selectedPanel: {name: 'timeline'}, enableExperiments: ['timeline-observations']});
   });
 
   it('displays live metrics', async () => {
     const {target, frontend} = await getBrowserAndPages();
-
-    await navigateToPerformanceTab();
 
     await target.bringToFront();
 
@@ -129,11 +124,10 @@ describe('The Performance panel landing page', () => {
       await executionContextPromise;
 
       await frontend.bringToFront();
-      await navigateToPerformanceTab();
 
       const [lcpValueElem, clsValueElem, inpValueElem] = await waitForMany(READY_LOCAL_METRIC_SELECTOR, 3);
       const interactions = await $$<HTMLElement>(INTERACTION_SELECTOR);
-      assert.lengthOf(interactions, 2);
+      assert.lengthOf(interactions, 0);
 
       const lcpValue = await lcpValueElem.evaluate(el => el.textContent) || '';
       assert.match(lcpValue, /[0-9\.]+ (s|ms)/);
@@ -143,11 +137,6 @@ describe('The Performance panel landing page', () => {
 
       const inpValue = await inpValueElem.evaluate(el => el.textContent) || '';
       assert.match(inpValue, /[0-9\.]+ (s|ms)/);
-
-      for (const interaction of interactions) {
-        const interactionText = await interaction.evaluate(el => el.innerText) || '';
-        assert.match(interactionText, /pointer\n[\d.]+ (s|ms)/);
-      }
     } finally {
       await targetSession.detach();
     }
@@ -155,8 +144,6 @@ describe('The Performance panel landing page', () => {
 
   it('treats bfcache restoration like a regular navigation', async () => {
     const {target, frontend} = await getBrowserAndPages();
-
-    await navigateToPerformanceTab();
 
     await target.bringToFront();
 
@@ -204,7 +191,9 @@ describe('The Performance panel landing page', () => {
       await waitForMany(READY_LOCAL_METRIC_SELECTOR, 2);
 
       // INP and interactions should be reset
-      await waitFor(`#inp ${WAITING_LOCAL_METRIC_SELECTOR}`);
+      const inpCard = await waitFor('#inp devtools-metric-card');
+      await waitFor(WAITING_LOCAL_METRIC_SELECTOR, inpCard);
+
       const interactions3 = await $$<HTMLElement>(INTERACTION_SELECTOR);
       assert.lengthOf(interactions3, 0);
     } finally {
@@ -212,9 +201,63 @@ describe('The Performance panel landing page', () => {
     }
   });
 
-  it('gets field data automatically', async () => {
-    await navigateToPerformanceTab();
+  it('ignores metrics from iframes', async () => {
+    const {target, frontend} = await getBrowserAndPages();
 
+    await target.bringToFront();
+
+    const targetSession = await target.createCDPSession();
+
+    try {
+      const framePromise = new Promise<puppeteer.Frame>(resolve => {
+        target.once('frameattached', resolve);
+      });
+
+      let executionContexts: puppeteer.Protocol.Runtime.ExecutionContextDescription[] = [];
+      targetSession.on('Runtime.executionContextCreated', event => {
+        executionContexts.push(event.context);
+      });
+      targetSession.on('Runtime.executionContextsCleared', () => {
+        executionContexts = [];
+      });
+
+      await targetSession.send('Runtime.enable');
+
+      const waitForLCP = await installLCPListener(targetSession);
+      await goToResource('performance/frame-metrics/index.html');
+      await waitForLCP();
+
+      const frame = await framePromise;
+
+      // Interactions from an iframe should be ignored
+      const h1El = await frame.waitForSelector('h1');
+      await h1El!.click();
+      await h1El!.click();
+      await frame.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+      await frame.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+
+      // This should be the only interaction that shows up
+      await target.click('h1');
+      await target.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+      await target.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+
+      await frontend.bringToFront();
+
+      await waitForMany(READY_LOCAL_METRIC_SELECTOR, 3);
+      const interactions = await $$<HTMLElement>(INTERACTION_SELECTOR);
+      assert.lengthOf(interactions, 1);
+
+      // b/40884049
+      // Extra execution contexts can be created sometimes when dealing with iframes.
+      // We try to avoid that if possible.
+      const liveMetricContexts = executionContexts.filter(e => e.name === 'DevTools Performance Metrics');
+      assert.lengthOf(liveMetricContexts, 2);
+    } finally {
+      await targetSession.detach();
+    }
+  });
+
+  it('gets field data automatically', async () => {
     await setCruxRawResponse('performance/crux-none.rawresponse');
     await goToResource('performance/fake-website.html');
 
@@ -269,8 +312,6 @@ describe('The Performance panel landing page', () => {
   });
 
   it('uses URL override for field data', async () => {
-    await navigateToPerformanceTab();
-
     await setCruxRawResponse('performance/crux-valid.rawresponse');
     await goToResource('performance/fake-website.html');
 

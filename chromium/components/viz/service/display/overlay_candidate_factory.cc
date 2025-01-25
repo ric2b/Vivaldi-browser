@@ -14,7 +14,6 @@
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/tile_draw_quad.h"
 #include "components/viz/common/quads/video_hole_draw_quad.h"
-#include "components/viz/common/quads/yuv_video_draw_quad.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/viz_utils.h"
 #include "components/viz/service/debugger/viz_debugger.h"
@@ -173,6 +172,16 @@ OverlayCandidate::CandidateStatus OverlayCandidateFactory::FromDrawQuad(
   candidate.requires_overlay = OverlayCandidate::RequiresOverlay(quad);
   candidate.overlay_damage_index =
       sqs->overlay_damage_index.value_or(OverlayCandidate::kInvalidDamageIndex);
+
+  if (sqs->layer_id != 0) {
+    static_assert(
+        std::is_same<decltype(SharedQuadState::layer_id), uint32_t>::value);
+    static_assert(std::is_same<decltype(SharedQuadState::layer_namespace_id),
+                               uint32_t>::value);
+    candidate.aggregated_layer_id =
+        static_cast<uint64_t>(sqs->layer_id) |
+        (static_cast<uint64_t>(sqs->layer_namespace_id) << 32);
+  }
 
   auto status = CandidateStatus::kFailQuadNotSupported;
   switch (quad->material) {
@@ -333,8 +342,7 @@ OverlayCandidate::CandidateStatus OverlayCandidateFactory::FromDrawQuadResource(
     ResourceId resource_id,
     bool y_flipped,
     OverlayCandidate& candidate) const {
-  if (!context_.allow_non_overlay_resources &&
-      resource_id != kInvalidResourceId &&
+  if (resource_id != kInvalidResourceId &&
       !resource_provider_->IsOverlayCandidate(resource_id)) {
     return CandidateStatus::kFailNotOverlay;
   }
@@ -396,7 +404,7 @@ OverlayCandidate::CandidateStatus OverlayCandidateFactory::FromDrawQuadResource(
       // Intentionally throwing away the high bits (assuming that hash entropy
       // is uniformly spread across all the bits).
       size_t original_hash =
-          base::FastHash(base::as_bytes(base::span_from_ref(track_data)));
+          base::FastHash(base::byte_span_from_ref(track_data));
       uint32_t narrow_hash = static_cast<uint32_t>(original_hash);
       candidate.tracking_id = narrow_hash;
     }

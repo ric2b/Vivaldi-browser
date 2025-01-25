@@ -174,9 +174,23 @@ union map_entry {
 	void *data;
 };
 
-#define map_entry_is_free(entry) ((entry).next & 0x1)
-#define map_entry_get_data(entry) ((void *)((entry).next & ~(uintptr_t)0x3))
-#define map_entry_get_flags(entry) (((entry).next >> 1) & 0x1)
+static inline bool
+map_entry_is_free(union map_entry entry)
+{
+	return entry.next & 0x1;
+}
+
+static inline void *
+map_entry_get_data(union map_entry entry)
+{
+	return (void *)(entry.next & ~(uintptr_t)0x3);
+}
+
+static inline uint32_t
+map_entry_get_flags(union map_entry entry)
+{
+	return (entry.next >> 1) & 0x1;
+}
 
 void
 wl_map_init(struct wl_map *map, uint32_t side)

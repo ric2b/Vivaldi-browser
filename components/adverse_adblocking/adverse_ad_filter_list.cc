@@ -2,6 +2,8 @@
 
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 
+#include <string_view>
+
 #include "app/vivaldi_apptools.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -12,7 +14,6 @@
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/strings/string_piece.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/values.h"
@@ -24,7 +25,6 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_source.h"
 #include "content/public/browser/storage_partition.h"
 #include "crypto/sha2.h"
 #include "net/base/load_flags.h"

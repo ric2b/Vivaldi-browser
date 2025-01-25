@@ -39,8 +39,8 @@ class PrivacySandboxServiceTestInterface {
   virtual base::Time TopicsConsentLastUpdateTime() const = 0;
   virtual std::string TopicsConsentLastUpdateText() const = 0;
   virtual void ForceChromeBuildForTests(bool force_chrome_build) const = 0;
-  virtual int GetRequiredPromptType() const = 0;
-  virtual void PromptActionOccurred(int action) const = 0;
+  virtual int GetRequiredPromptType(int surface_type) const = 0;
+  virtual void PromptActionOccurred(int action, int surface_type) const = 0;
 };
 
 class MockPrivacySandboxObserver
@@ -247,6 +247,8 @@ enum class OutputKey {
   kIsSharedStorageBlockSiteSettingSpecific = 50,
   kIsSharedStorageSelectURLBlockSiteSettingSpecific = 51,
   kIsPrivateAggregationBlockSiteSettingSpecific = 52,
+  kIsLocalUnpartitionedDataAccessAllowed = 53,
+  kIsLocalUnpartitionedDataAccessAllowedMetric = 54,
 };
 
 // To allow multiple input keys to map to the same value, without having to

@@ -141,4 +141,11 @@ public class HistoryItem extends TimedItem {
 
         mManager.getLargeIconBridge().getLargeIconForUrl(getUrl(), desiredSizePx, callback);
     }
+
+    // Vivaldi
+    void getLargeIconForUrl(int desiredSizePx, int minSizePx, final LargeIconCallback callback) {
+        if (mManager == null || mManager.getLargeIconBridge() == null) return;
+        mManager.getLargeIconBridge().getLargeIconForUrl(
+                getUrl(), minSizePx, desiredSizePx, callback);
+    }
 }

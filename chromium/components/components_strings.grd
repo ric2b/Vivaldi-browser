@@ -283,6 +283,7 @@
     <messages fallback_to_english="true">
       <part file="arc_strings.grdp" />
       <part file="autofill_payments_strings.grdp" />
+      <part file="autofill_prediction_improvements_strings.grdp" />
       <part file="autofill_strings.grdp" />
       <part file="bookmark_bar_strings.grdp" />
       <part file="bookmark_component_strings.grdp" />
@@ -334,6 +335,7 @@
       <part file="sync_ui_strings.grdp" />
       <part file="translate_strings.grdp" />
       <part file="tab_groups_strings.grdp" />
+      <part file="tab_resume_strings.grdp" />
       <part file="undo_strings.grdp" />
       <part file="user_education_strings.grdp" />
       <part file="version_ui_strings.grdp" />

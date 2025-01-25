@@ -64,6 +64,11 @@
 40644707 VULKAN NVIDIA : KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-vs-*-matR* = SKIP
 40644707 VULKAN NVIDIA : KHR-GLES31.core.shader_storage_buffer_object.advanced-unsizedArrayLength-fs-*-matR* = SKIP
 
+// New failures when upgrading to Ubuntu 22/newer driver.
+362486580 LINUX NVIDIA VULKAN : KHR-GLES31.core.draw_buffers_indexed.color_masks = FAIL
+362486580 LINUX NVIDIA VULKAN : KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.max_in_out_attributes = SKIP
+362486580 LINUX NVIDIA VULKAN : KHR-GLES31.core.texture_cube_map_array.image_op_fragment_sh = FAIL
+
 ////
 //// SwANGLE expectations
 ////
@@ -253,18 +258,11 @@
 42264814 SWIFTSHADER : KHR-GLES31.core.arrays_of_arrays.ConstructorsAndUnsizedDeclConstructors1 = TIMEOUT
 42264814 SWIFTSHADER : KHR-GLES31.core.arrays_of_arrays.ConstructorsAndUnsizedDeclConstructorSizing1 = TIMEOUT
 
-// ASAN Test bugs.
-42265173 ASAN : KHR-GLES31.core.draw_indirect.negative-noVAO-arrays = SKIP
-42265173 ASAN : KHR-GLES31.core.draw_indirect.negative-noVBO-arrays = SKIP
-42265173 ASAN : KHR-GLES31.core.framebuffer_no_attachments.render = SKIP
-
 42265203 NVIDIA GTX1660 VULKAN : KHR-GLES31.core.compute_shader.max = FAIL
 42265203 NVIDIA GTX1660 VULKAN : KHR-GLES31.core.shader_multisample_interpolation.render.interpolate_at_offset* = FAIL
 42265203 NVIDIA GTX1660 VULKAN LINUX : KHR-GLES31.core.shader_image_load_store.advanced-memory-order-vsfs = FAIL
 
-42265173 UBSAN : KHR-GLES31.core.internalformat.texture2d.r*half_float* = SKIP
 42265173 UBSAN : KHR-GLES31.core.shader_bitfield_operation.bitfield* = SKIP
-42265224 UBSAN : KHR-GLES31.core.compute_shader.shared-max = SKIP
 
 // Failure since VK-GL-CTS roll (2023-05-03)
 42266605 WIN SWIFTSHADER : KHR-GLES31.core.texture_buffer.texture_buffer_errors = FAIL

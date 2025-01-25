@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.facilitated_payments;
 
-import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties.DESCRIPTION_1_ID;
-import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties.DESCRIPTION_2_ID;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties.SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_DRAWABLE_ID;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties.BANK_ACCOUNT_ICON_BITMAP;
@@ -38,6 +36,7 @@ import android.widget.TextView;
 
 import androidx.appcompat.content.res.AppCompatResources;
 
+import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties;
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.FooterProperties;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -177,20 +176,18 @@ class FacilitatedPaymentsPaymentMethodsViewBinder {
      * @param key The {@link PropertyKey} which changed.
      */
     static void bindAdditionalInfoView(PropertyModel model, View view, PropertyKey propertyKey) {
-        if (propertyKey == DESCRIPTION_1_ID) {
-            TextView descriptionLine1 = view.findViewById(R.id.description_line_1);
-            descriptionLine1.setText(
-                    view.getContext().getResources().getString(model.get(DESCRIPTION_1_ID)));
-        } else if (propertyKey == DESCRIPTION_2_ID
+        if (propertyKey == AdditionalInfoProperties.DESCRIPTION_ID
                 || propertyKey == SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK) {
-            TextViewWithClickableSpans descriptionLine2 =
-                    (TextViewWithClickableSpans) view.findViewById(R.id.description_line_2);
-            descriptionLine2.setText(
+            TextViewWithClickableSpans descriptionLine1 =
+                    (TextViewWithClickableSpans) view.findViewById(R.id.description_line);
+            descriptionLine1.setText(
                     getSpannableStringWithClickableSpansToOpenLinks(
                             view.getContext(),
-                            model.get(DESCRIPTION_2_ID),
+                            model.get(AdditionalInfoProperties.DESCRIPTION_ID),
                             model.get(SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK)));
-            descriptionLine2.setMovementMethod(LinkMovementMethod.getInstance());
+            descriptionLine1.setMovementMethod(LinkMovementMethod.getInstance());
+        } else if (propertyKey == SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK) {
+            // Skip because the callback is already handled above.
         } else {
             assert false : "Unhandled update to property:" + propertyKey;
         }
@@ -199,14 +196,15 @@ class FacilitatedPaymentsPaymentMethodsViewBinder {
     static View createContinueButtonView(ViewGroup parent) {
         View buttonView =
                 LayoutInflater.from(parent.getContext())
-                        .inflate(R.layout.touch_to_fill_fill_button, parent, false);
+                        .inflate(R.layout.facilitated_payments_continue_button, parent, false);
         return buttonView;
     }
 
     static void bindContinueButtonView(PropertyModel model, View view, PropertyKey propertyKey) {
         if (propertyKey == ON_BANK_ACCOUNT_CLICK_ACTION) {
             view.setOnClickListener(unusedView -> model.get(ON_BANK_ACCOUNT_CLICK_ACTION).run());
-            TextView buttonTitleText = view.findViewById(R.id.touch_to_fill_button_title);
+            TextView buttonTitleText =
+                    view.findViewById(R.id.facilitated_payments_continue_button_title);
             buttonTitleText.setText(R.string.autofill_payment_method_continue_button);
         } else if (propertyKey == BANK_NAME
                 || propertyKey == BANK_ACCOUNT_SUMMARY

@@ -10,20 +10,20 @@
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "ios/chrome/browser/browsing_data/model/browsing_data_remover_impl.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 
 // static
 BrowsingDataRemover* BrowsingDataRemoverFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
   return static_cast<BrowsingDataRemover*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
-BrowsingDataRemover* BrowsingDataRemoverFactory::GetForBrowserStateIfExists(
-    ChromeBrowserState* browser_state) {
+BrowsingDataRemover* BrowsingDataRemoverFactory::GetForProfileIfExists(
+    ProfileIOS* profile) {
   return static_cast<BrowsingDataRemover*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, false));
+      GetInstance()->GetServiceForBrowserState(profile, false));
 }
 
 // static

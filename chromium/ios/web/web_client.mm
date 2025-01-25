@@ -94,10 +94,6 @@ bool WebClient::EnableWebInspector(BrowserState* browser_state) const {
   return false;
 }
 
-NSData* WebClient::FetchSessionFromCache(web::WebState* web_state) const {
-  return nil;
-}
-
 void WebClient::CleanupNativeRestoreURLs(web::WebState* web_state) const {}
 
 void WebClient::WillDisplayMediaCapturePermissionPrompt(
@@ -116,12 +112,11 @@ bool WebClient::IsPointingToSameDocument(const GURL& url1,
   return url1 == url2;
 }
 
-bool WebClient::IsBrowserLockdownModeEnabled(web::BrowserState* browser_state) {
+bool WebClient::IsBrowserLockdownModeEnabled() {
   return false;
 }
 
-void WebClient::SetOSLockdownModeEnabled(web::BrowserState* browser_state,
-                                         bool enabled) {}
+void WebClient::SetOSLockdownModeEnabled(bool enabled) {}
 
 bool WebClient::IsInsecureFormWarningEnabled(
     web::BrowserState* browser_state) const {

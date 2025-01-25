@@ -52,6 +52,7 @@ public abstract class V0DataElement {
       return txPower;
     }
 
+    @Override
     public void visit(Visitor v) {
       v.visitTxPower(this);
     }
@@ -68,7 +69,7 @@ public abstract class V0DataElement {
   })
   @Retention(SOURCE)
   public @interface V0ActionType {
-    // NOTE: Copied from `np_ffi_core::v0::BooleanActionType`.
+    // NOTE: Copied from `np_ffi_core::v0::ActionType`.
     public static final int CROSS_DEV_SDK = 1;
     public static final int CALL_TRANSFER = 4;
     public static final int ACTIVE_UNLOCK = 8;
@@ -83,7 +84,7 @@ public abstract class V0DataElement {
       System.loadLibrary(NpAdv.LIBRARY_NAME);
     }
 
-    private final @IdentityKind int identityKind;
+    @IdentityKind private final int identityKind;
     private final int actionBits;
 
     /**
@@ -99,8 +100,8 @@ public abstract class V0DataElement {
       this(identityKind, nativeMergeActions(identityKind, actions));
     }
 
-    /** Used by native code. */
-    V0Actions(@IdentityKind int identityKind, int actionBits) {
+    /** Used by native code. This must be private to avoid being confused with the above method. */
+    private V0Actions(@IdentityKind int identityKind, int actionBits) {
       this.identityKind = identityKind;
       this.actionBits = actionBits;
     }
@@ -119,6 +120,7 @@ public abstract class V0DataElement {
       return nativeHasAction(identityKind, actionBits, action);
     }
 
+    @Override
     public void visit(Visitor v) {
       v.visitV0Actions(this);
     }

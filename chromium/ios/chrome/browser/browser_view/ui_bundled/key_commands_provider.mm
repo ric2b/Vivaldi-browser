@@ -7,21 +7,24 @@
 #import <objc/runtime.h>
 
 #import "base/memory/weak_ptr.h"
+#import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "components/bookmarks/browser/bookmark_model.h"
+#import "components/browsing_data/core/browsing_data_utils.h"
 #import "components/prefs/pref_service.h"
 #import "components/sessions/core/tab_restore_service_helper.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/find_in_page/model/abstract_find_tab_helper.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -40,7 +43,6 @@
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/tabs/model/tab_title_util.h"
-#import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/features.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_util.h"
 #import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
@@ -170,7 +172,7 @@ using base::UserMetricsAction;
     return canPerformForward;
   }
   if (sel_isEqual(action, @selector(keyCommand_showHistory))) {
-    return !_browser->GetBrowserState()->IsOffTheRecord() && self.tabsCount > 0;
+    return !_browser->GetProfile()->IsOffTheRecord() && self.tabsCount > 0;
   }
   if (sel_isEqual(action, @selector(keyCommand_openLocation)) ||
       sel_isEqual(action, @selector(keyCommand_closeTab)) ||
@@ -206,8 +208,8 @@ using base::UserMetricsAction;
   }
   if (sel_isEqual(action, @selector(keyCommand_reopenLastClosedTab))) {
     sessions::TabRestoreService* const tabRestoreService =
-        IOSChromeTabRestoreServiceFactory::GetForBrowserState(
-            _browser->GetBrowserState());
+        IOSChromeTabRestoreServiceFactory::GetForProfile(
+            _browser->GetProfile());
     return tabRestoreService && !tabRestoreService->entries().empty();
   }
   if (sel_isEqual(action, @selector(keyCommand_reportAnIssue))) {
@@ -215,15 +217,15 @@ using base::UserMetricsAction;
   }
   if (sel_isEqual(action, @selector(keyCommand_openNewRegularTab))) {
     // Don't open regular tab if incognito is forced by policy.
-    return !IsIncognitoModeForced(_browser->GetBrowserState()->GetPrefs());
+    return !IsIncognitoModeForced(_browser->GetProfile()->GetPrefs());
   }
   if (sel_isEqual(action, @selector(keyCommand_openNewIncognitoTab))) {
     // Don't open incognito tab if incognito is disabled by policy.
-    return !IsIncognitoModeDisabled(_browser->GetBrowserState()->GetPrefs());
+    return !IsIncognitoModeDisabled(_browser->GetProfile()->GetPrefs());
   }
   if (sel_isEqual(action, @selector(keyCommand_clearBrowsingData))) {
     // Clear Browsing Data shouldn't be available in incognito mode.
-    return !_browser->GetBrowserState()->IsOffTheRecord();
+    return !_browser->GetProfile()->IsOffTheRecord();
   }
 
   return [super canPerformAction:action withSender:sender];
@@ -253,7 +255,7 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_openNewTab {
   RecordAction(UserMetricsAction("MobileKeyCommandOpenNewTab"));
-  if (_browser->GetBrowserState()->IsOffTheRecord()) {
+  if (_browser->GetProfile()->IsOffTheRecord()) {
     [self openNewIncognitoTab];
   } else {
     [self openNewRegularTab];
@@ -289,9 +291,9 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_reopenLastClosedTab {
   RecordAction(UserMetricsAction("MobileKeyCommandReopenLastClosedTab"));
-  ChromeBrowserState* browserState = _browser->GetBrowserState();
+  ProfileIOS* profile = _browser->GetProfile();
   sessions::TabRestoreService* const tabRestoreService =
-      IOSChromeTabRestoreServiceFactory::GetForBrowserState(browserState);
+      IOSChromeTabRestoreServiceFactory::GetForProfile(profile);
   if (!tabRestoreService || tabRestoreService->entries().empty()) {
     return;
   }
@@ -528,8 +530,13 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_clearBrowsingData {
   RecordAction(UserMetricsAction("MobileKeyCommandClearBrowsingData"));
+  base::UmaHistogramEnumeration(
+      browsing_data::kDeleteBrowsingDataDialogHistogram,
+      browsing_data::DeleteBrowsingDataDialogAction::
+          kKeyboardEntryPointSelected);
+
   if (IsIosQuickDeleteEnabled()) {
-    [_quickDeleteHandler showQuickDelete];
+    [_quickDeleteHandler showQuickDeleteAndCanPerformTabsClosureAnimation:YES];
   } else {
     [_settingsHandler showClearBrowsingDataSettings];
   }
@@ -614,8 +621,7 @@ using base::UserMetricsAction;
 
   const GURL& url = currentWebState->GetLastCommittedURL();
   bookmarks::BookmarkModel* bookmarkModel =
-      ios::BookmarkModelFactory::GetForBrowserState(
-          _browser->GetBrowserState());
+      ios::BookmarkModelFactory::GetForProfile(_browser->GetProfile());
   return bookmarkModel->IsBookmarked(url);
 }
 

@@ -4,6 +4,7 @@
 
 #include "chrome/updater/installer.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -174,18 +175,13 @@ Installer::Result Installer::InstallHelper(
   }
 
   // Assume the install params are ASCII for now.
-  const auto application_installer =
-      unpack_path.AppendASCII(install_params->run);
-  if (!base::PathExists(application_installer)) {
-    return Result(GOOPDATEINSTALL_E_FILENAME_INVALID, kErrorMissingRunableFile);
-  }
-
   // Upon success, when the control flow returns back to the |update_client|,
   // the prefs are updated asynchronously with the new |pv| and |fingerprint|.
   // The task sequencing guarantees that the prefs will be updated by the
   // time another CrxDataCallback is invoked, which needs updated values.
   return RunApplicationInstaller(
-      app_info_, application_installer, install_params->arguments,
+      app_info_, unpack_path.AppendASCII(install_params->run),
+      install_params->arguments,
       WriteInstallerDataToTempFile(unpack_path,
                                    client_install_data_.empty()
                                        ? install_params->server_install_data
@@ -202,7 +198,6 @@ void Installer::InstallWithSyncPrimitives(
                                                 base::BlockingType::WILL_BLOCK);
   const auto result = InstallHelper(unpack_path, std::move(install_params),
                                     std::move(progress_callback));
-  base::DeletePathRecursively(unpack_path);
   std::move(callback).Run(result);
 }
 
@@ -225,9 +220,9 @@ void Installer::Install(const base::FilePath& unpack_path,
                      std::move(callback)));
 }
 
-bool Installer::GetInstalledFile(const std::string& file,
-                                 base::FilePath* installed_file) {
-  return false;
+std::optional<base::FilePath> Installer::GetInstalledFile(
+    const std::string& file) {
+  return std::nullopt;
 }
 
 bool Installer::Uninstall() {

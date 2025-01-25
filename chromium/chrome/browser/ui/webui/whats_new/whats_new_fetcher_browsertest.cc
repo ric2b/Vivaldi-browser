@@ -7,7 +7,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/global_desktop_features.h"
+#include "chrome/browser/global_features.h"
+#include "chrome/browser/ui/webui/whats_new/whats_new_storage_service_impl.h"
 #include "chrome/common/chrome_version.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "components/user_education/common/user_education_features.h"
@@ -16,6 +17,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
+using BrowserCommand = browser_command::mojom::Command;
 
 // Enabled through feature list.
 BASE_FEATURE(kTestModuleEnabled,
@@ -37,41 +39,41 @@ BASE_FEATURE(kTestModuleEnabledByDefault,
 BASE_FEATURE(kTestModuleDisabledByDefault,
              "TestModuleDisabledByDefault",
              base::FEATURE_DISABLED_BY_DEFAULT);
+}  // namespace
 
-class GlobalDesktopFeaturesOverride : public GlobalDesktopFeatures {
+class GlobalFeaturesFake : public GlobalFeatures {
  public:
-  GlobalDesktopFeaturesOverride() = default;
+  GlobalFeaturesFake() = default;
 
  protected:
   std::unique_ptr<whats_new::WhatsNewRegistry> CreateWhatsNewRegistry()
       override {
-    return std::make_unique<whats_new::WhatsNewRegistry>();
+    auto registry = std::make_unique<whats_new::WhatsNewRegistry>(
+        std::make_unique<whats_new::WhatsNewStorageServiceImpl>());
+
+    return registry;
   }
 };
 
-}  // namespace
+std::unique_ptr<GlobalFeatures> CreateGlobalFeatures() {
+  return std::make_unique<GlobalFeaturesFake>();
+}
 
 class WhatsNewFetcherBrowserTest : public InteractiveBrowserTest {
  public:
   WhatsNewFetcherBrowserTest() {
+    GlobalFeatures::ReplaceGlobalFeaturesForTesting(
+        base::BindRepeating(&CreateGlobalFeatures));
     feature_list_.InitWithFeatures({user_education::features::kWhatsNewVersion2,
                                     kTestModuleEnabled, kTestModule2Enabled},
                                    {kTestModuleDisabled});
-    GlobalDesktopFeatures::ReplaceGlobalDesktopFeaturesForTesting(
-        base::BindRepeating(
-            &WhatsNewFetcherBrowserTest::CreateGlobalDesktopFeatures,
-            base::Unretained(this)));
   }
   ~WhatsNewFetcherBrowserTest() override {
-    GlobalDesktopFeatures::ReplaceGlobalDesktopFeaturesForTesting(
-        base::NullCallback());
-  }
-  std::unique_ptr<GlobalDesktopFeatures> CreateGlobalDesktopFeatures() {
-    return std::make_unique<GlobalDesktopFeaturesOverride>();
+    GlobalFeatures::ReplaceGlobalFeaturesForTesting(base::NullCallback());
   }
 
   whats_new::WhatsNewRegistry* GetRegistry() {
-    return g_browser_process->GetDesktopFeatures()->whats_new_registry();
+    return g_browser_process->GetFeatures()->whats_new_registry();
   }
 
  private:
@@ -97,9 +99,22 @@ IN_PROC_BROWSER_TEST_F(WhatsNewFetcherBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WhatsNewFetcherBrowserTest,
+                       GetV2ServerStagingURLForRenderNoFeatures) {
+  std::string expected = base::StringPrintf(
+      "https://chrome-staging.corp.google.com/chrome/v2/whats-new/"
+      "?version=%d&internal=true",
+      CHROME_VERSION_MAJOR);
+
+  EXPECT_EQ(expected,
+            whats_new::GetV2ServerURLForRender(true).possibly_invalid_spec());
+}
+
+IN_PROC_BROWSER_TEST_F(WhatsNewFetcherBrowserTest,
                        GetV2ServerURLForRenderWithOneEnabled) {
   whats_new::WhatsNewRegistry* registry = GetRegistry();
-  registry->RegisterModule(whats_new::WhatsNewModule(&kTestModuleEnabled, ""));
+  registry->RegisterModule(whats_new::WhatsNewModule(kTestModuleEnabled, ""));
+  registry->RegisterModule(
+      whats_new::WhatsNewModule("", "", BrowserCommand::kNoOpCommand));
 
   std::string expected = base::StringPrintf(
       "https://www.google.com/chrome/v2/whats-new/?version=%d",
@@ -117,8 +132,10 @@ IN_PROC_BROWSER_TEST_F(WhatsNewFetcherBrowserTest,
 IN_PROC_BROWSER_TEST_F(WhatsNewFetcherBrowserTest,
                        GetV2ServerURLForRenderWithMultipleEnabled) {
   whats_new::WhatsNewRegistry* registry = GetRegistry();
-  registry->RegisterModule(whats_new::WhatsNewModule(&kTestModuleEnabled, ""));
-  registry->RegisterModule(whats_new::WhatsNewModule(&kTestModule2Enabled, ""));
+  registry->RegisterModule(whats_new::WhatsNewModule(kTestModuleEnabled, ""));
+  registry->RegisterModule(whats_new::WhatsNewModule(kTestModule2Enabled, ""));
+  registry->RegisterModule(
+      whats_new::WhatsNewModule("", "", BrowserCommand::kNoOpCommand));
 
   std::string expected = base::StringPrintf(
       "https://www.google.com/chrome/v2/whats-new/?version=%d",
@@ -137,14 +154,17 @@ IN_PROC_BROWSER_TEST_F(WhatsNewFetcherBrowserTest,
 IN_PROC_BROWSER_TEST_F(WhatsNewFetcherBrowserTest,
                        GetV2ServerURLForRenderEnabledAndRolled) {
   whats_new::WhatsNewRegistry* registry = GetRegistry();
-  registry->RegisterModule(whats_new::WhatsNewModule(&kTestModuleEnabled, ""));
+  registry->RegisterModule(whats_new::WhatsNewModule(kTestModuleEnabled, ""));
   // Will be ignored - disabled by experiment
-  registry->RegisterModule(whats_new::WhatsNewModule(&kTestModuleDisabled, ""));
+  registry->RegisterModule(whats_new::WhatsNewModule(kTestModuleDisabled, ""));
   registry->RegisterModule(
-      whats_new::WhatsNewModule(&kTestModuleEnabledByDefault, ""));
+      whats_new::WhatsNewModule(kTestModuleEnabledByDefault, ""));
   // Will be ignored - disabled by default
   registry->RegisterModule(
-      whats_new::WhatsNewModule(&kTestModuleDisabledByDefault, ""));
+      whats_new::WhatsNewModule(kTestModuleDisabledByDefault, ""));
+  // Will be ignored - no feature.
+  registry->RegisterModule(
+      whats_new::WhatsNewModule("", "", BrowserCommand::kNoOpCommand));
 
   std::string expected = base::StringPrintf(
       "https://www.google.com/chrome/v2/whats-new/?version=%d",

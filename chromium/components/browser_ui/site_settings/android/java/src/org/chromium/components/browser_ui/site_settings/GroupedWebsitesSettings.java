@@ -17,14 +17,17 @@ import androidx.preference.PreferenceCategory;
 
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
+import org.chromium.components.browser_ui.settings.SettingsPage;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 import org.chromium.components.browsing_data.DeleteBrowsingDataAction;
 
 /** Shows the permissions and other settings for a group of websites. */
 public class GroupedWebsitesSettings extends BaseSiteSettingsFragment
-        implements Preference.OnPreferenceClickListener, CustomDividerFragment {
+        implements SettingsPage, Preference.OnPreferenceClickListener, CustomDividerFragment {
     public static final String EXTRA_GROUP = "org.chromium.chrome.preferences.site_group";
 
     // Preference keys, see grouped_websites_preferences.xml.
@@ -37,6 +40,8 @@ public class GroupedWebsitesSettings extends BaseSiteSettingsFragment
     private WebsiteGroup mSiteGroup;
 
     private Dialog mConfirmationDialog;
+
+    private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -70,7 +75,7 @@ public class GroupedWebsitesSettings extends BaseSiteSettingsFragment
 
         // Set title
         Activity activity = getActivity();
-        activity.setTitle(activity.getString(R.string.domain_settings_title, domainAndRegistry));
+        mPageTitle.set(activity.getString(R.string.domain_settings_title, domainAndRegistry));
 
         // Preferences screen
         SettingsUtils.addPreferencesFromResource(this, R.xml.grouped_websites_preferences);
@@ -83,6 +88,11 @@ public class GroupedWebsitesSettings extends BaseSiteSettingsFragment
         setUpResetGroupPreference();
         setUpRelatedSitesPreferences();
         updateSitesInGroup();
+    }
+
+    @Override
+    public ObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
     }
 
     @Override
@@ -220,22 +230,22 @@ public class GroupedWebsitesSettings extends BaseSiteSettingsFragment
         TextMessagePreference relatedSitesText = new TextMessagePreference(getContext(), null);
         boolean shouldRelatedSitesPrefBeVisible =
                 getSiteSettingsDelegate().isPrivacySandboxFirstPartySetsUIFeatureEnabled()
-                        && getSiteSettingsDelegate().isFirstPartySetsDataAccessEnabled()
-                        && mSiteGroup.getFPSInfo() != null;
+                        && getSiteSettingsDelegate().isRelatedWebsiteSetsDataAccessEnabled()
+                        && mSiteGroup.getRWSInfo() != null;
         relatedSitesText.setVisible(shouldRelatedSitesPrefBeVisible);
         relatedSitesHeader.setVisible(shouldRelatedSitesPrefBeVisible);
 
         if (shouldRelatedSitesPrefBeVisible) {
-            var fpsInfo = mSiteGroup.getFPSInfo();
+            var rwsInfo = mSiteGroup.getRWSInfo();
 
             relatedSitesText.setTitle(
                     getContext()
                             .getResources()
                             .getQuantityString(
-                                    R.plurals.allsites_fps_summary,
-                                    mSiteGroup.getFPSInfo().getMembersCount(),
-                                    Integer.toString(mSiteGroup.getFPSInfo().getMembersCount()),
-                                    fpsInfo.getOwner()));
+                                    R.plurals.allsites_rws_summary,
+                                    mSiteGroup.getRWSInfo().getMembersCount(),
+                                    Integer.toString(mSiteGroup.getRWSInfo().getMembersCount()),
+                                    rwsInfo.getOwner()));
             relatedSitesText.setManagedPreferenceDelegate(
                     new ForwardingManagedPreferenceDelegate(
                             getSiteSettingsDelegate().getManagedPreferenceDelegate()) {
@@ -243,7 +253,7 @@ public class GroupedWebsitesSettings extends BaseSiteSettingsFragment
                         public boolean isPreferenceControlledByPolicy(Preference preference) {
                             for (var site : mSiteGroup.getWebsites()) {
                                 if (getSiteSettingsDelegate()
-                                        .isPartOfManagedFirstPartySet(
+                                        .isPartOfManagedRelatedWebsiteSet(
                                                 site.getAddress().getOrigin())) {
                                     return true;
                                 }
@@ -256,7 +266,7 @@ public class GroupedWebsitesSettings extends BaseSiteSettingsFragment
             if (getSiteSettingsDelegate().shouldShowPrivacySandboxRwsUi()) {
                 relatedSitesHeader.removeAll();
                 relatedSitesHeader.addPreference(relatedSitesText);
-                for (Website site : mSiteGroup.getFPSInfo().getMembers()) {
+                for (Website site : mSiteGroup.getRWSInfo().getMembers()) {
                     WebsiteRowPreference preference =
                             new RwsRowPreference(
                                     relatedSitesHeader.getContext(),

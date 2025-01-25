@@ -14,6 +14,7 @@ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import '../controls/settings_toggle_button.js';
 import '../icons.html.js';
+import '../privacy_icons.html.js';
 import '../settings_shared.css.js';
 import '../site_settings/site_list.js';
 import './collapse_radio_button.js';
@@ -26,7 +27,6 @@ import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
-import {OpenWindowProxyImpl} from 'chrome://resources/js/open_window_proxy.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import type {SettingsRadioGroupElement} from '../controls/settings_radio_group.js';
@@ -95,11 +95,6 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
         value: ContentSettingsTypes.COOKIES,
       },
 
-      trackingProtectionContentSettingType_: {
-        type: String,
-        value: ContentSettingsTypes.TRACKING_PROTECTION,
-      },
-
       blockAllPref_: {
         type: Object,
         value() {
@@ -117,12 +112,6 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
         value: () => loadTimeData.getBoolean('firstPartySetsUIEnabled'),
       },
 
-      enableTrackingProtectionRolloutUx_: {
-        type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('enableTrackingProtectionRolloutUx'),
-      },
-
       is3pcdRedesignEnabled_: {
         type: Boolean,
         value: () =>
@@ -131,41 +120,25 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
 
       isIpProtectionAvailable_: {
         type: Boolean,
-        value: () => loadTimeData.getBoolean('isIpProtectionV1Enabled'),
+        value: () => loadTimeData.getBoolean('isIpProtectionUxEnabled'),
       },
 
       isFingerprintingProtectionAvailable_: {
         type: Boolean,
         value: () =>
-            loadTimeData.getBoolean('isFingerprintingProtectionEnabled'),
-      },
-
-      thirdPartyCookiesAndKnownTrackersUx_: {
-        type: Boolean,
-        // TODO(https://b/353548465): Read from feature.
-        value: () => false,
-      },
-
-      showTrackingProtectionExceptions_: {
-        type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('enableTrackingProtectionRolloutUx'),
+            loadTimeData.getBoolean('isFingerprintingProtectionUxEnabled'),
       },
     };
   }
 
   searchTerm: string;
   private cookiesContentSettingType_: ContentSettingsTypes;
-  private trackingProtectionContentSettingType_: ContentSettingsTypes;
   private blockAllPref_: chrome.settingsPrivate.PrefObject;
   focusConfig: FocusConfig;
   private enableFirstPartySetsUI_: boolean;
-  private enableTrackingProtectionRolloutUx_: boolean;
   private is3pcdRedesignEnabled_: boolean;
   private isIpProtectionAvailable_: boolean;
   private isFingerprintingProtectionAvailable_: boolean;
-  private thirdPartyCookiesAndKnownTrackersUx_: boolean;
-  private showTrackingProtectionExceptions_: boolean;
 
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
@@ -201,11 +174,6 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
 
   private onSiteDataClick_() {
     Router.getInstance().navigateTo(routes.SITE_SETTINGS_ALL);
-  }
-
-  private onIpProtectionLearnMoreClicked_() {
-    OpenWindowProxyImpl.getInstance().openUrl(
-        loadTimeData.getString('ipProtectionLearnMoreUrl'));
   }
 
   private onBlockAll3pcToggleChanged_(event: Event) {
@@ -287,70 +255,17 @@ export class SettingsCookiesPageElement extends SettingsCookiesPageElementBase {
                         '#privacySandboxLink')!.click();
   }
 
-  private firstPartySetsToggleDisabled_() {
+  private relatedWebsiteSetsToggleDisabled_() {
     return this.getPref('profile.cookie_controls_mode').value !==
         CookieControlsMode.BLOCK_THIRD_PARTY;
-  }
-
-  private getThirdPartyCookiesPageTitle_(): string {
-    return this.i18n(
-        this.thirdPartyCookiesAndKnownTrackersUx_ ?
-            'tpcAndKnownTrackersPageTitle' :
-            'thirdPartyCookiesAlignedPageDescription');
-  }
-
-  private getTrackingProtectionExceptionsTitle_(): string {
-    return this.i18n(
-        this.thirdPartyCookiesAndKnownTrackersUx_ ?
-            'tpcAndKnownTrackersExceptionsListTitle' :
-            'trackingProtectionExceptionsListTitle');
-  }
-
-  private getTrackingProtectionExceptionsDescription_(): string {
-    return this.i18n(
-        this.thirdPartyCookiesAndKnownTrackersUx_ ?
-            'tpcAndKnownTrackersExceptionsListDescription' :
-            'trackingProtectionExceptionsListDescription');
-  }
-
-  private getTrackingProtectionDefaultDescription_(): TrustedHTML {
-    if (this.enableTrackingProtectionRolloutUx_) {
-      return this.i18nAdvanced(
-          'trackingProtectionDefaultDescription',
-          {attrs: ['href', 'aria-label', 'aria-description']});
-    }
-    return this.i18nAdvanced('trackingProtectionPageDescription');
-  }
-
-  private getTrackingProtectionBulletTwo_(): TrustedHTML {
-    if (this.enableTrackingProtectionRolloutUx_) {
-      return this.i18nAdvanced('trackingProtectionTpcdBulletTwoDescription');
-    }
-    return this.i18nAdvanced(
-        'trackingProtectionBulletTwoDescription',
-        {attrs: ['href', 'aria-label', 'aria-description']});
-  }
-
-  private getTrackingProtectionAdditionalProtectionsHeader_(): string {
-    return this.i18n(
-        this.enableTrackingProtectionRolloutUx_ ?
-            'trackingProtectionAdditionalProtectionsHeader' :
-            'trackingProtectionAdvancedLabel');
   }
 
   private getThirdPartyCookiesPageBlockThirdPartyIncognitoBulTwoLabel_():
       string {
     return this.i18n(
         this.enableFirstPartySetsUI_ ?
-            'cookiePageBlockThirdIncognitoBulTwoFps' :
+            'cookiePageBlockThirdIncognitoBulTwoRws' :
             'thirdPartyCookiesPageBlockIncognitoBulTwo');
-  }
-
-  private getCookiesPageBlockThirdPartyIncognitoBulTwoLabel_(): string {
-    return this.i18n(
-        this.enableFirstPartySetsUI_ ?
-            'cookiePageBlockThirdIncognitoBulTwoFps' :
-            'cookiePageBlockThirdIncognitoBulTwo');
   }
 }
 

@@ -35,7 +35,7 @@ use np_adv::{
             AdvBuilder, AdvertisementType, SignedEncryptedSectionEncoder, SingleTypeDataElement,
             UnencryptedSectionEncoder,
         },
-        NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT,
+        NP_V1_ADV_MAX_SECTION_COUNT,
     },
     shared_data::TxPower,
     AdvDeserializationError, AdvDeserializationErrorDetailsHazmat,
@@ -260,7 +260,7 @@ fn v1_deser_no_section() {
 #[test]
 fn v1_deser_plaintext_over_max_sections() {
     let mut adv_builder = AdvBuilder::new(AdvertisementType::Plaintext);
-    for _ in 0..NP_V1_ADV_MAX_PUBLIC_SECTION_COUNT {
+    for _ in 0..NP_V1_ADV_MAX_SECTION_COUNT {
         let mut section_builder = adv_builder.section_builder(UnencryptedSectionEncoder).unwrap();
         section_builder
             .add_de(|_salt| TxPowerDataElement::from(TxPower::try_from(7).unwrap()))

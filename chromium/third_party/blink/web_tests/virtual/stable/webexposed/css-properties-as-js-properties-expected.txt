@@ -107,6 +107,7 @@ borderTopStyle
 borderTopWidth
 borderWidth
 bottom
+boxDecorationBreak
 boxShadow
 boxSizing
 breakAfter
@@ -239,6 +240,7 @@ insetBlockStart
 insetInline
 insetInlineEnd
 insetInlineStart
+interpolateSize
 isolation
 item
 justifyContent
@@ -351,6 +353,7 @@ placeSelf
 pointerEvents
 position
 positionAnchor
+positionArea
 positionTry
 positionTryFallbacks
 positionTryOrder
@@ -452,6 +455,8 @@ textTransform
 textUnderlineOffset
 textUnderlinePosition
 textWrap
+textWrapMode
+textWrapStyle
 timelineScope
 top
 touchAction

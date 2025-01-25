@@ -11,9 +11,7 @@
 #include "ash/picker/picker_test_util.h"
 #include "ash/picker/views/picker_emoji_bar_view_delegate.h"
 #include "ash/picker/views/picker_emoji_item_view.h"
-#include "ash/picker/views/picker_emoticon_item_view.h"
 #include "ash/picker/views/picker_pseudo_focus.h"
-#include "ash/picker/views/picker_symbol_item_view.h"
 #include "ash/public/cpp/picker/picker_search_result.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
@@ -38,6 +36,7 @@ using ::testing::Pointee;
 using ::testing::Property;
 using ::testing::SizeIs;
 using ::testing::Truly;
+using ::testing::VariantWith;
 
 constexpr int kPickerWidth = 320;
 
@@ -71,6 +70,26 @@ TEST_F(PickerEmojiBarViewTest, HasGridRole) {
   EXPECT_EQ(emoji_bar.GetAccessibleRole(), ax::mojom::Role::kGrid);
 }
 
+TEST_F(PickerEmojiBarViewTest, HasAccessibleNameWithGifsEnabled) {
+  MockEmojiBarViewDelegate mock_delegate;
+  PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth,
+                               /*is_gifs_enabled=*/true);
+
+  EXPECT_EQ(emoji_bar.GetAccessibleName(),
+            l10n_util::GetStringUTF16(
+                IDS_PICKER_EMOJI_BAR_WITH_GIFS_GRID_ACCESSIBLE_NAME));
+}
+
+TEST_F(PickerEmojiBarViewTest, HasAccessibleNameWithGifsDisabled) {
+  MockEmojiBarViewDelegate mock_delegate;
+  PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth,
+                               /*is_gifs_enabled=*/false);
+
+  EXPECT_EQ(
+      emoji_bar.GetAccessibleName(),
+      l10n_util::GetStringUTF16(IDS_PICKER_EMOJI_BAR_GRID_ACCESSIBLE_NAME));
+}
+
 TEST_F(PickerEmojiBarViewTest, HasSingleChildRowRole) {
   MockEmojiBarViewDelegate mock_delegate;
   PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth);
@@ -85,13 +104,13 @@ TEST_F(PickerEmojiBarViewTest, CreatesSearchResultItems) {
   PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth);
 
   emoji_bar.SetSearchResults(
-      {PickerSearchResult::Emoji(u"😊"), PickerSearchResult::Symbol(u"♬"),
-       PickerSearchResult::Emoticon(u"(°□°)", u"surprise")});
+      {PickerEmojiResult::Emoji(u"😊"), PickerEmojiResult::Symbol(u"♬"),
+       PickerEmojiResult::Emoticon(u"(°□°)", u"surprise")});
 
   EXPECT_THAT(emoji_bar.GetItemsForTesting(),
               ElementsAre(Truly(&views::IsViewClass<PickerEmojiItemView>),
-                          Truly(&views::IsViewClass<PickerSymbolItemView>),
-                          Truly(&views::IsViewClass<PickerEmoticonItemView>)));
+                          Truly(&views::IsViewClass<PickerEmojiItemView>),
+                          Truly(&views::IsViewClass<PickerEmojiItemView>)));
 }
 
 TEST_F(PickerEmojiBarViewTest, SearchResultsWithNamesHaveTooltips) {
@@ -99,9 +118,9 @@ TEST_F(PickerEmojiBarViewTest, SearchResultsWithNamesHaveTooltips) {
   PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth);
 
   emoji_bar.SetSearchResults(
-      {PickerSearchResult::Emoji(u"😊", u"happy"),
-       PickerSearchResult::Symbol(u"♬", u"music"),
-       PickerSearchResult::Emoticon(u"(°□°)", u"surprise")});
+      {PickerEmojiResult::Emoji(u"😊", u"happy"),
+       PickerEmojiResult::Symbol(u"♬", u"music"),
+       PickerEmojiResult::Emoticon(u"(°□°)", u"surprise")});
 
   EXPECT_THAT(
       emoji_bar.GetItemsForTesting(),
@@ -118,9 +137,9 @@ TEST_F(PickerEmojiBarViewTest, SearchResultsWithNamesHaveAccessibleNames) {
   PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth);
 
   emoji_bar.SetSearchResults(
-      {PickerSearchResult::Emoji(u"😊", u"happy"),
-       PickerSearchResult::Symbol(u"♬", u"music"),
-       PickerSearchResult::Emoticon(u"(°□°)", u"surprise")});
+      {PickerEmojiResult::Emoji(u"😊", u"happy"),
+       PickerEmojiResult::Symbol(u"♬", u"music"),
+       PickerEmojiResult::Emoticon(u"(°□°)", u"surprise")});
 
   EXPECT_THAT(
       emoji_bar.GetItemsForTesting(),
@@ -135,9 +154,9 @@ TEST_F(PickerEmojiBarViewTest, SearchResultsWithNoNameHaveNoTooltips) {
   MockEmojiBarViewDelegate mock_delegate;
   PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth);
 
-  emoji_bar.SetSearchResults({PickerSearchResult::Emoji(u"😊"),
-                              PickerSearchResult::Symbol(u"♬"),
-                              PickerSearchResult::Emoticon(u"(°□°)")});
+  emoji_bar.SetSearchResults({PickerEmojiResult::Emoji(u"😊"),
+                              PickerEmojiResult::Symbol(u"♬"),
+                              PickerEmojiResult::Emoticon(u"(°□°)")});
 
   EXPECT_THAT(
       emoji_bar.GetItemsForTesting(),
@@ -153,9 +172,9 @@ TEST_F(PickerEmojiBarViewTest,
   MockEmojiBarViewDelegate mock_delegate;
   PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth);
 
-  emoji_bar.SetSearchResults({PickerSearchResult::Emoji(u"😊"),
-                              PickerSearchResult::Symbol(u"♬"),
-                              PickerSearchResult::Emoticon(u"(°□°)")});
+  emoji_bar.SetSearchResults({PickerEmojiResult::Emoji(u"😊"),
+                              PickerEmojiResult::Symbol(u"♬"),
+                              PickerEmojiResult::Emoticon(u"(°□°)")});
 
   EXPECT_THAT(
       emoji_bar.GetItemsForTesting(),
@@ -169,7 +188,7 @@ TEST_F(PickerEmojiBarViewTest, ClearsSearchResults) {
   MockEmojiBarViewDelegate mock_delegate;
   PickerEmojiBarView emoji_bar(&mock_delegate, kPickerWidth);
   emoji_bar.SetSearchResults(
-      {PickerSearchResult::Emoji(u"😊"), PickerSearchResult::Symbol(u"♬")});
+      {PickerEmojiResult::Emoji(u"😊"), PickerEmojiResult::Symbol(u"♬")});
 
   emoji_bar.ClearSearchResults();
 
@@ -192,9 +211,20 @@ TEST_F(PickerEmojiBarViewTest, ClickingMoreEmojisButton) {
   LeftClickOn(*emoji_bar->more_emojis_button_for_testing());
 }
 
-TEST_F(PickerEmojiBarViewTest, MoreEmojisButtonHasTooltip) {
+TEST_F(PickerEmojiBarViewTest, MoreEmojisButtonHasTooltipWithGifsEnabled) {
   MockEmojiBarViewDelegate mock_delegate;
-  PickerEmojiBarView view(&mock_delegate, kPickerWidth);
+  PickerEmojiBarView view(&mock_delegate, kPickerWidth,
+                          /*is_gifs_enabled=*/true);
+
+  EXPECT_EQ(view.more_emojis_button_for_testing()->GetTooltipText(),
+            l10n_util::GetStringUTF16(
+                IDS_PICKER_MORE_EMOJIS_AND_GIFS_BUTTON_ACCESSIBLE_NAME));
+}
+
+TEST_F(PickerEmojiBarViewTest, MoreEmojisButtonHasTooltipWithGifsDisabled) {
+  MockEmojiBarViewDelegate mock_delegate;
+  PickerEmojiBarView view(&mock_delegate, kPickerWidth,
+                          /*is_gifs_enabled=*/false);
 
   EXPECT_EQ(
       view.more_emojis_button_for_testing()->GetTooltipText(),
@@ -248,10 +278,10 @@ TEST_F(PickerEmojiBarViewTest, GetsTopItem) {
       std::make_unique<PickerEmojiBarView>(&mock_delegate, kPickerWidth));
   widget->Show();
   emoji_bar->SetSearchResults(
-      {PickerSearchResult::Emoji(u"😊"), PickerSearchResult::Symbol(u"♬")});
+      {PickerEmojiResult::Emoji(u"😊"), PickerEmojiResult::Symbol(u"♬")});
 
-  EXPECT_CALL(mock_delegate,
-              SelectSearchResult(PickerSearchResult::Emoji(u"😊")));
+  EXPECT_CALL(mock_delegate, SelectSearchResult(VariantWith<PickerEmojiResult>(
+                                 PickerEmojiResult::Emoji(u"😊"))));
 
   EXPECT_TRUE(DoPickerPseudoFocusedActionOnView(emoji_bar->GetTopItem()));
 }
@@ -266,7 +296,7 @@ TEST_F(PickerEmojiBarViewTest, GetsItemLeftOf) {
           &mock_delegate, kPickerWidth, /*is_gifs_enabled=*/true));
   widget->Show();
   emoji_bar->SetSearchResults(
-      {PickerSearchResult::Emoji(u"😊"), PickerSearchResult::Symbol(u"♬")});
+      {PickerEmojiResult::Emoji(u"😊"), PickerEmojiResult::Symbol(u"♬")});
   const views::View::Views& emoji_bar_items = emoji_bar->GetItemsForTesting();
   ASSERT_THAT(emoji_bar_items, SizeIs(2));
 
@@ -288,7 +318,7 @@ TEST_F(PickerEmojiBarViewTest, GetsItemLeftOfSkipsGifsIfGifsDisabled) {
       widget->SetContentsView(std::make_unique<PickerEmojiBarView>(
           &mock_delegate, kPickerWidth, /*is_gifs_enabled=*/false));
   widget->Show();
-  emoji_bar->SetSearchResults({PickerSearchResult::Emoji(u"😊")});
+  emoji_bar->SetSearchResults({PickerEmojiResult::Emoji(u"😊")});
   const views::View::Views& emoji_bar_items = emoji_bar->GetItemsForTesting();
   ASSERT_THAT(emoji_bar_items, SizeIs(1));
 
@@ -307,7 +337,7 @@ TEST_F(PickerEmojiBarViewTest, GetsItemRightOf) {
           &mock_delegate, kPickerWidth, /*is_gifs_enabled=*/true));
   widget->Show();
   emoji_bar->SetSearchResults(
-      {PickerSearchResult::Emoji(u"😊"), PickerSearchResult::Symbol(u"♬")});
+      {PickerEmojiResult::Emoji(u"😊"), PickerEmojiResult::Symbol(u"♬")});
   const views::View::Views& emoji_bar_items = emoji_bar->GetItemsForTesting();
   ASSERT_THAT(emoji_bar_items, SizeIs(2));
 
@@ -330,12 +360,26 @@ TEST_F(PickerEmojiBarViewTest, GetsItemRightOfSkipsGifsIfGifsDisabled) {
       widget->SetContentsView(std::make_unique<PickerEmojiBarView>(
           &mock_delegate, kPickerWidth, /*is_gifs_enabled=*/false));
   widget->Show();
-  emoji_bar->SetSearchResults({PickerSearchResult::Emoji(u"😊")});
+  emoji_bar->SetSearchResults({PickerEmojiResult::Emoji(u"😊")});
   const views::View::Views& emoji_bar_items = emoji_bar->GetItemsForTesting();
   ASSERT_THAT(emoji_bar_items, SizeIs(1));
 
   EXPECT_EQ(emoji_bar->GetItemRightOf(emoji_bar_items[0]),
             emoji_bar->more_emojis_button_for_testing());
+}
+
+TEST_F(PickerEmojiBarViewTest, ItemsAreTruncatedToFit) {
+  MockEmojiBarViewDelegate mock_delegate;
+  PickerEmojiBarView emoji_bar(&mock_delegate, 200);
+
+  emoji_bar.SetSearchResults({PickerEmojiResult::Emoji(u"😊"),
+                              PickerEmojiResult::Emoji(u"😊"),
+                              PickerEmojiResult::Emoji(u"😊")});
+
+  EXPECT_EQ(emoji_bar.GetNumItems(), 2u);
+  EXPECT_THAT(emoji_bar.GetItemsForTesting(),
+              ElementsAre(Truly(&views::IsViewClass<PickerEmojiItemView>),
+                          Truly(&views::IsViewClass<PickerEmojiItemView>)));
 }
 
 }  // namespace

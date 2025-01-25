@@ -20,20 +20,19 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/sync/base/command_line_switches.h"
-#include "components/sync/base/model_type.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/service/sync_token_status.h"
 #include "components/sync_device_info/local_device_info_util.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/sync.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "sync/vivaldi_sync_service_factory.h"
 #include "sync/vivaldi_sync_service_impl.h"
-#include "sync/vivaldi_sync_ui_helper.h"
+#include "sync/vivaldi_sync_ui_helpers.h"
 
 using syncer::SyncService;
-using vivaldi::VivaldiSyncServiceFactory;
 using vivaldi::VivaldiSyncServiceImpl;
 
 namespace extensions {
@@ -45,23 +44,23 @@ bool WriteFileWrapper(const base::FilePath& filename,
 }
 
 vivaldi::sync::CycleStatus ToVivaldiCycleStatus(
-    ::vivaldi::VivaldiSyncUIHelper::CycleStatus cycle_status) {
+    ::vivaldi::sync_ui_helpers::CycleStatus cycle_status) {
   switch (cycle_status) {
-    case ::vivaldi::VivaldiSyncUIHelper::NOT_SYNCED:
+    case ::vivaldi::sync_ui_helpers::NOT_SYNCED:
       return vivaldi::sync::CycleStatus::kNotSynced;
-    case ::vivaldi::VivaldiSyncUIHelper::SUCCESS:
+    case ::vivaldi::sync_ui_helpers::SUCCESS:
       return vivaldi::sync::CycleStatus::kSuccess;
-    case ::vivaldi::VivaldiSyncUIHelper::AUTH_ERROR:
+    case ::vivaldi::sync_ui_helpers::AUTH_ERROR:
       return vivaldi::sync::CycleStatus::kAuthError;
-    case ::vivaldi::VivaldiSyncUIHelper::SERVER_ERROR:
+    case ::vivaldi::sync_ui_helpers::SERVER_ERROR:
       return vivaldi::sync::CycleStatus::kServerError;
-    case ::vivaldi::VivaldiSyncUIHelper::NETWORK_ERROR:
+    case ::vivaldi::sync_ui_helpers::NETWORK_ERROR:
       return vivaldi::sync::CycleStatus::kNetworkError;
-    case ::vivaldi::VivaldiSyncUIHelper::CONFLICT:
+    case ::vivaldi::sync_ui_helpers::CONFLICT:
       return vivaldi::sync::CycleStatus::kConflict;
-    case ::vivaldi::VivaldiSyncUIHelper::THROTTLED:
+    case ::vivaldi::sync_ui_helpers::THROTTLED:
       return vivaldi::sync::CycleStatus::kThrottled;
-    case ::vivaldi::VivaldiSyncUIHelper::OTHER_ERROR:
+    case ::vivaldi::sync_ui_helpers::OTHER_ERROR:
       return vivaldi::sync::CycleStatus::kOtherError;
   }
 }
@@ -77,8 +76,7 @@ ToVivaldiSyncDisableReasons(syncer::SyncService::DisableReasonSet reasons) {
             vivaldi::sync::DisableReason::kEnterprisePolicy);
         break;
       case syncer::SyncService::DISABLE_REASON_NOT_SIGNED_IN:
-        disable_reasons.push_back(
-            vivaldi::sync::DisableReason::kNotSignedIn);
+        disable_reasons.push_back(vivaldi::sync::DisableReason::kNotSignedIn);
         break;
       case syncer::SyncService::DISABLE_REASON_UNRECOVERABLE_ERROR:
         disable_reasons.push_back(
@@ -194,22 +192,19 @@ std::optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
 }
 
 vivaldi::sync::CycleData GetLastCycleData(Profile* profile) {
-  VivaldiSyncServiceImpl* sync_service =
-      VivaldiSyncServiceFactory::GetForProfileVivaldi(profile);
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(profile);
   vivaldi::sync::CycleData cycle_data;
   cycle_data.is_ready = true;
 
   if (!sync_service) {
     cycle_data.cycle_start_time = 0;
-    cycle_data.download_updates_status =
-        vivaldi::sync::CycleStatus::kNotSynced;
-    cycle_data.commit_status =
-        vivaldi::sync::CycleStatus::kNotSynced;
+    cycle_data.download_updates_status = vivaldi::sync::CycleStatus::kNotSynced;
+    cycle_data.commit_status = vivaldi::sync::CycleStatus::kNotSynced;
     return cycle_data;
   }
 
-  ::vivaldi::VivaldiSyncUIHelper::CycleData helper_cycle_data =
-      sync_service->ui_helper()->GetCycleData();
+  ::vivaldi::sync_ui_helpers::CycleData helper_cycle_data =
+      ::vivaldi::sync_ui_helpers::GetCycleData(sync_service);
 
   cycle_data.cycle_start_time =
       helper_cycle_data.cycle_start_time.InMillisecondsFSinceUnixEpoch();
@@ -224,8 +219,7 @@ vivaldi::sync::CycleData GetLastCycleData(Profile* profile) {
 }
 
 vivaldi::sync::EngineData GetEngineData(Profile* profile) {
-  VivaldiSyncServiceImpl* sync_service =
-      VivaldiSyncServiceFactory::GetForProfileVivaldi(profile);
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(profile);
 
   vivaldi::sync::EngineData engine_data;
   engine_data.is_ready = true;
@@ -233,8 +227,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   if (!sync_service) {
     engine_data.engine_state = vivaldi::sync::EngineState::kFailed;
     if (!syncer::IsSyncAllowedByFlag())
-      engine_data.disable_reasons = {
-          vivaldi::sync::DisableReason::kFlag};
+      engine_data.disable_reasons = {vivaldi::sync::DisableReason::kFlag};
     engine_data.protocol_error_type =
         vivaldi::sync::ProtocolErrorType::kUnknown;
     engine_data.protocol_error_client_action =
@@ -244,8 +237,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   }
 
   if (sync_service->is_clearing_sync_data()) {
-    engine_data.engine_state =
-        vivaldi::sync::EngineState::kClearingData;
+    engine_data.engine_state = vivaldi::sync::EngineState::kClearingData;
   } else if (!sync_service->HasSyncConsent() ||
              sync_service->GetTransportState() ==
                  syncer::SyncService::TransportState::START_DEFERRED) {
@@ -260,16 +252,13 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
       engine_data.engine_state =
           vivaldi::sync::EngineState::kConfigurationPending;
     } else {
-      engine_data.engine_state =
-          vivaldi::sync::EngineState::kStarted;
+      engine_data.engine_state = vivaldi::sync::EngineState::kStarted;
     }
   } else if (sync_service->GetSyncTokenStatusForDebugging().connection_status ==
              syncer::CONNECTION_SERVER_ERROR) {
-    engine_data.engine_state =
-        vivaldi::sync::EngineState::kStartingServerError;
+    engine_data.engine_state = vivaldi::sync::EngineState::kStartingServerError;
   } else {
-    engine_data.engine_state =
-        vivaldi::sync::EngineState::kStarting;
+    engine_data.engine_state = vivaldi::sync::EngineState::kStarting;
   }
 
   engine_data.disable_reasons =
@@ -333,7 +322,7 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
 }  // anonymous namespace
 
 SyncEventRouter::SyncEventRouter(Profile* profile) : profile_(profile) {
-  SyncService* sync_service = VivaldiSyncServiceFactory::GetForProfile(profile);
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(profile);
   if (sync_service)
     sync_service->AddObserver(this);
 }
@@ -398,7 +387,7 @@ void SyncAPI::SyncSetupComplete() {
 }
 
 ExtensionFunction::ResponseAction SyncStartFunction::Run() {
-  SyncService* sync_service = VivaldiSyncServiceFactory::GetForProfile(
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
 
   if (!sync_service)
@@ -409,34 +398,22 @@ ExtensionFunction::ResponseAction SyncStartFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-ExtensionFunction::ResponseAction SyncStopFunction::Run() {
-  SyncService* sync_service = VivaldiSyncServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(browser_context()));
-
-  if (!sync_service)
-    return RespondNow(NoArguments());
-
-  sync_service->StopAndClear();
-  return RespondNow(NoArguments());
-}
-
 ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
   std::optional<vivaldi::sync::SetEncryptionPassword::Params> params(
       vivaldi::sync::SetEncryptionPassword::Params::Create(args()));
 
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  VivaldiSyncServiceImpl* sync_service =
-      VivaldiSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(browser_context()));
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context()));
   if (!sync_service)
     return RespondNow(Error("Sync manager is unavailable"));
 
   if (!sync_service->IsEngineInitialized())
     return RespondNow(Error("Sync engine is not ready"));
 
-  bool success = sync_service->ui_helper()->SetEncryptionPassword(
-      params->password ? *params->password : std::string());
+  bool success = ::vivaldi::sync_ui_helpers::SetEncryptionPassword(
+      sync_service, params->password ? *params->password : std::string());
 
   return RespondNow(ArgumentList(
       vivaldi::sync::SetEncryptionPassword::Results::Create(success)));
@@ -448,9 +425,8 @@ ExtensionFunction::ResponseAction SyncBackupEncryptionTokenFunction::Run() {
 
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  VivaldiSyncServiceImpl* sync_service =
-      VivaldiSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(browser_context()));
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context()));
   if (!sync_service)
     return RespondNow(Error("Sync manager is unavailable"));
 
@@ -458,7 +434,7 @@ ExtensionFunction::ResponseAction SyncBackupEncryptionTokenFunction::Run() {
     return RespondNow(Error("Encryption not enabled"));
 
   auto key = std::make_unique<std::string>(
-      sync_service->ui_helper()->GetBackupEncryptionToken());
+      ::vivaldi::sync_ui_helpers::GetBackupEncryptionToken(sync_service));
 
   if (key->empty()) {
     return RespondNow(ArgumentList(
@@ -488,7 +464,7 @@ ExtensionFunction::ResponseAction SyncRestoreEncryptionTokenFunction::Run() {
 
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  SyncService* sync_service = VivaldiSyncServiceFactory::GetForProfile(
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
   if (!sync_service)
     return RespondNow(Error("Sync manager is unavailable"));
@@ -517,12 +493,12 @@ void SyncRestoreEncryptionTokenFunction::OnRestoreDone(
     std::unique_ptr<std::string> token,
     bool result) {
   if (result) {
-    VivaldiSyncServiceImpl* sync_service =
-        VivaldiSyncServiceFactory::GetForProfileVivaldi(
-            Profile::FromBrowserContext(browser_context()));
+    SyncService* sync_service = SyncServiceFactory::GetForProfile(
+        Profile::FromBrowserContext(browser_context()));
     if (!sync_service)
       return Respond(Error("Sync manager is unavailable"));
-    result = sync_service->ui_helper()->RestoreEncryptionToken(*token);
+    result = ::vivaldi::sync_ui_helpers::RestoreEncryptionToken(sync_service,
+                                                                *token);
   }
 
   Respond(ArgumentList(
@@ -557,7 +533,7 @@ ExtensionFunction::ResponseAction SyncSetTypesFunction::Run() {
 
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  SyncService* sync_service = VivaldiSyncServiceFactory::GetForProfile(
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
   if (!sync_service)
     return RespondNow(Error("Sync manager is unavailable"));
@@ -592,9 +568,8 @@ ExtensionFunction::ResponseAction SyncGetLastCycleStateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SyncClearDataFunction::Run() {
-  VivaldiSyncServiceImpl* sync_service =
-      VivaldiSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(browser_context()));
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context()));
   if (!sync_service)
     return RespondNow(Error("Sync manager is unavailable"));
 
@@ -604,7 +579,7 @@ ExtensionFunction::ResponseAction SyncClearDataFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SyncSetupCompleteFunction::Run() {
-  SyncService* sync_service = VivaldiSyncServiceFactory::GetForProfile(
+  SyncService* sync_service = SyncServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
   if (!sync_service)
     return RespondNow(Error("Sync manager is unavailable"));
@@ -618,21 +593,4 @@ ExtensionFunction::ResponseAction SyncSetupCompleteFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-ExtensionFunction::ResponseAction SyncSetTabsExtDataFunction::Run() {
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  DCHECK(profile);
-
-  auto params = vivaldi::sync::SetTabsExtData::Params::Create(args());
-
-  sync_sessions::SyncSessionsWebContentsRouter* router =
-      sync_sessions::SyncSessionsWebContentsRouterFactory::GetForProfile(
-          profile);
-
-  if (!router) {
-    return RespondNow(NoArguments());
-  }
-
-  router->UpdateVivExtData(params->data);
-  return RespondNow(NoArguments());
-}
 }  // namespace extensions

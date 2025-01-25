@@ -21,18 +21,19 @@
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/user_policy_mixin.h"
 #include "chrome/browser/ash/login/test/webview_content_extractor.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
-#include "chrome/browser/ash/login/ui/webui_login_view.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/consent_auditor/consent_auditor_test_utils.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
+#include "chrome/browser/ui/ash/login/webui_login_view.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/webui/ash/login/consolidated_consent_screen_handler.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/consent_auditor/fake_consent_auditor.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/policy/proto/cloud_policy.pb.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -629,6 +630,17 @@ class ConsolidatedConsentScreenArcEnabledParameterizedTest
     ConsolidatedConsentScreenArcEnabledTestBase::SetUp();
   }
 
+  void SetUpInProcessBrowserTestFixture() override {
+    ConsolidatedConsentScreenArcEnabledTestBase::
+        SetUpInProcessBrowserTestFixture();
+    subscription_ =
+        BrowserContextDependencyManager::GetInstance()
+            ->RegisterCreateServicesCallbackForTesting(base::BindRepeating(
+                &ConsolidatedConsentScreenArcEnabledParameterizedTest::
+                    OnWillCreateBrowserContextServices,
+                base::Unretained(this)));
+  }
+
   bool IsPhEnabled() { return is_ph_enabled_; }
 
   // Common routine that enables/disables toggles based on test parameters.
@@ -640,8 +652,7 @@ class ConsolidatedConsentScreenArcEnabledParameterizedTest
       ArcGoogleLocationServiceConsent location_service_consent) {
     Profile* profile = ProfileManager::GetActiveUserProfile();
     FakeConsentAuditor* auditor = static_cast<FakeConsentAuditor*>(
-        ConsentAuditorFactory::GetInstance()->SetTestingFactoryAndUse(
-            profile, base::BindRepeating(&BuildFakeConsentAuditor)));
+        ConsentAuditorFactory::GetForProfile(profile));
 
     if (!accept_backup_restore_)
       test::OobeJS().ClickOnPath(kBackupToggle);
@@ -671,11 +682,17 @@ class ConsolidatedConsentScreenArcEnabledParameterizedTest
   }
 
  protected:
+  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
+    ConsentAuditorFactory::GetInstance()->SetTestingFactory(
+        context, base::BindRepeating(&BuildFakeConsentAuditor));
+  }
+
   bool is_ph_enabled_;
   bool accept_backup_restore_;
   bool accept_location_service_;
 
   base::test::ScopedFeatureList feature_list_;
+  base::CallbackListSubscription subscription_;
 };
 
 // Tests that clicking on "Accept" button records the expected consents.

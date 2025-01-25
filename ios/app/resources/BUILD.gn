@@ -1,30 +1,17 @@
 # Copyright 2022 Vivaldi Technologies AS. All rights reserved.
 
-import("//build/config/ios/asset_catalog.gni")
 import("//build/config/ios/rules.gni")
 
-
-imageset("launchscreen_app_logo") {
+bundle_data_xcassets("launchscreen_assets") {
+  catalog = "Launchscreen.xcassets"
   sources = [
-    "launchscreen_app_logo.imageset/Contents.json",
-    "launchscreen_app_logo.imageset/launch_screen_icon_vivaldi.pdf",
-  ]
-}
-
-imageset("launchscreen_brand_name") {
-  sources = [
-    "launchscreen_brand_name.imageset/Contents.json",
-    "launchscreen_brand_name.imageset/launchscreen_brand_name_dark@2x.png",
-    "launchscreen_brand_name.imageset/launchscreen_brand_name_dark@3x.png",
-    "launchscreen_brand_name.imageset/launchscreen_brand_name_light@2x.png",
-    "launchscreen_brand_name.imageset/launchscreen_brand_name_light@3x.png",
-  ]
-}
-
-group("launchscreen_assets") {
-  public_deps = [
-    ":launchscreen_app_logo",
-    ":launchscreen_brand_name",
+    "Launchscreen.xcassets/launchscreen_app_logo.imageset/Contents.json",
+    "Launchscreen.xcassets/launchscreen_app_logo.imageset/launch_screen_icon_vivaldi.pdf",
+    "Launchscreen.xcassets/launchscreen_brand_name.imageset/Contents.json",
+    "Launchscreen.xcassets/launchscreen_brand_name.imageset/launchscreen_brand_name_dark@2x.png",
+    "Launchscreen.xcassets/launchscreen_brand_name.imageset/launchscreen_brand_name_dark@3x.png",
+    "Launchscreen.xcassets/launchscreen_brand_name.imageset/launchscreen_brand_name_light@2x.png",
+    "Launchscreen.xcassets/launchscreen_brand_name.imageset/launchscreen_brand_name_light@3x.png",
   ]
 }
 
@@ -49,5 +36,130 @@ bundle_data_xcassets("resources") {
     "Assets.xcassets/ExtensionIcon.appiconset/monochrome_logo_68_2x.png",
     "Assets.xcassets/ExtensionIcon.appiconset/monochrome_logo_76_2x.png",
     "Assets.xcassets/ExtensionIcon.appiconset/monochrome_logo_83.5_2x.png",
+  ]
+}
+
+bundle_data_xcassets("vivaldi_appicons") {
+  catalog = "VivaldiAppIcons.xcassets"
+  sources = [
+    # vivaldi_icons_final
+    "VivaldiAppIcons.xcassets/AppIcon-Final.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Final.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_aqua
+    "VivaldiAppIcons.xcassets/AppIcon-Aqua.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Aqua.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_softred
+    "VivaldiAppIcons.xcassets/AppIcon-SoftRed.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-SoftRed.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_softpurple
+    "VivaldiAppIcons.xcassets/AppIcon-SoftPurple.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-SoftPurple.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_softpink
+    "VivaldiAppIcons.xcassets/AppIcon-SoftPink.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-SoftPink.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_sand
+    "VivaldiAppIcons.xcassets/AppIcon-Sand.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Sand.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_sagegreen
+    "VivaldiAppIcons.xcassets/AppIcon-SageGreen.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-SageGreen.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_internal
+    "VivaldiAppIcons.xcassets/AppIcon-Internal.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Internal.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_green
+    "VivaldiAppIcons.xcassets/AppIcon-Green.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Green.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_forestgreen
+    "VivaldiAppIcons.xcassets/AppIcon-ForestGreen.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-ForestGreen.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_coral
+    "VivaldiAppIcons.xcassets/AppIcon-Coral.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Coral.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_burgundy
+    "VivaldiAppIcons.xcassets/AppIcon-Burgundy.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Burgundy.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_camo
+    "VivaldiAppIcons.xcassets/AppIcon-Camo.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Camo.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_yellow
+    "VivaldiAppIcons.xcassets/AppIcon-Yellow.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Yellow.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_blueprint
+    "VivaldiAppIcons.xcassets/AppIcon-Blueprint.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Blueprint.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_community
+    "VivaldiAppIcons.xcassets/AppIcon-Community.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Community.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_gradient
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_gradient1
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient1.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient1.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_gradient2
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient2.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient2.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_gradient3
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient3.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Gradient3.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_japan
+    "VivaldiAppIcons.xcassets/AppIcon-Japan.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Japan.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_lgbtplus
+    "VivaldiAppIcons.xcassets/AppIcon-LGBTPlus.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-LGBTPlus.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_mattblack
+    "VivaldiAppIcons.xcassets/AppIcon-MatteBlack.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-MatteBlack.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_oldopera
+    "VivaldiAppIcons.xcassets/AppIcon-OldOpera.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-OldOpera.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_pink
+    "VivaldiAppIcons.xcassets/AppIcon-Pink.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Pink.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_pride
+    "VivaldiAppIcons.xcassets/AppIcon-Pride.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Pride.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_snapshot
+    "VivaldiAppIcons.xcassets/AppIcon-Snapshot.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Snapshot.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_white
+    "VivaldiAppIcons.xcassets/AppIcon-White.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-White.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_wood
+    "VivaldiAppIcons.xcassets/AppIcon-Wood.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-Wood.appiconset/AppIcon-1024.png",
+
+    # vivaldi_icons_woodsteel
+    "VivaldiAppIcons.xcassets/AppIcon-WoodSteel.appiconset/Contents.json",
+    "VivaldiAppIcons.xcassets/AppIcon-WoodSteel.appiconset/AppIcon-1024.png"
   ]
 }

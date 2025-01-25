@@ -10,7 +10,7 @@
 #import "components/tab_groups/tab_group_color.h"
 #import "components/tab_groups/tab_group_id.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/shared/model/web_state_list/test/web_state_list_builder_from_description.h"
@@ -31,7 +31,7 @@ class GridUtilsTest : public PlatformTest {
  public:
   GridUtilsTest() {
     TestChromeBrowserState::Builder browser_state_builder;
-    browser_state_ = browser_state_builder.Build();
+    browser_state_ = std::move(browser_state_builder).Build();
     browser_ = std::make_unique<TestBrowser>(
         browser_state_.get(), std::make_unique<FakeWebStateListDelegate>());
     web_state_list_ = browser_->GetWebStateList();

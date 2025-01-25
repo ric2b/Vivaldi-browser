@@ -19,7 +19,8 @@ limitations under the License.
 #include <utility>
 
 #include "absl/status/statusor.h"
-#include "mlir/IR/Attributes.h"  // from @llvm-project
+#include "mlir/IR/Attributes.h"
+#include "xla/hlo/ir/hlo_input_output_alias_config.h"
 #include "xla/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/shape_util.h"
@@ -32,6 +33,10 @@ namespace xla {
 // Converts the conv dimensions attribute to XLA HLO.
 ConvolutionDimensionNumbers ConvertConvDimensionNumbers(
     mlir::mhlo::ConvDimensionNumbersAttr input);
+
+// Converts the dot algorithm attribute to XLA HLO.
+absl::StatusOr<xla::PrecisionConfig::Algorithm> ConvertDotAlgorithm(
+    mlir::mhlo::DotAlgorithmAttr attr);
 
 absl::StatusOr<std::vector<ReplicaGroup>> ConvertReplicaGroups(
     mlir::DenseIntElementsAttr input);
@@ -58,6 +63,9 @@ ConvertOutputOperandAliasing(mlir::ArrayAttr aliasArrayAttr);
 // first, as serialized protobuf, and then as prettyprinted representation.
 // Will fail if both attempts at parsing failed.
 std::optional<xla::OpSharding> ConvertSharding(mlir::StringRef sharding);
+
+std::optional<xla::HloInputOutputAliasProto> ConvertInputOutputAlias(
+    llvm::ArrayRef<mlir::Attribute> aliasing);
 
 }  // namespace xla
 #endif  // XLA_TRANSLATE_MHLO_TO_HLO_ATTRIBUTE_EXPORTER_H_

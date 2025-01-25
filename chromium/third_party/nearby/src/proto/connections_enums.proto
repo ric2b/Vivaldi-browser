@@ -987,6 +987,10 @@ enum OperationResultCode {
   CONNECTIVITY_LAN_MDNS_REGISTER_FAILURE = 3597;
   // Failed to change BT scan mode
   CONNECTIVITY_BLUETOOTH_CHANGE_SCAN_MODE_FAILURE = 3598;
+  // Auto resume failure
+  CONNECTIVITY_AUTO_RESUME_FAILURE = 3599;
+  // Timeout when listening instant connection
+  CONNECTIVITY_INSTANT_CONNECTION_LISTENING_TIMEOUT = 3600;
 
   // Section of CATEGORY_NEARBY_ERROR, from 4500
   // NO BLE MAC address associated to the GATT advertisement
@@ -1172,6 +1176,24 @@ enum OperationResultCode {
   NEARBY_WEB_RTC_INVALID_PCP_OPTIONS = 4584;
   // Bluetooth starts scanning without any client existed.
   NEARBY_BLUETOOTH_NO_CLIENT_REGISTER_FOR_SCAN = 4585;
+  // TX Advertisement on a wrong connectivity info.
+  NEARBY_INSTANT_CONNECTION_WRONG_CONNECTIVITY_INFO = 4586;
+}
+
+enum StopAdvertisingReason {
+  STOP_ADVERTISING_REASON_UNKNOWN = 0;
+  // Client call stopAdvertising() to stop advertising
+  CLIENT_STOP_ADVERTISING = 1;
+  // Session is finished and stop advertising
+  FINISH_SESSION_STOP_ADVERTISING = 2;
+}
+
+enum StopDiscoveringReason {
+  STOP_DISCOVERING_REASON_UNKNOWN = 0;
+  // Client call stopDiscovering() to stop discovering
+  CLIENT_STOP_DISCOVERING = 1;
+  // Session is finished and stop discovering
+  FINISH_SESSION_STOP_DISCOVERING = 2;
 }
 // LINT.ThenChange(
 //     //depot/google3/wireless/android/stats/platform/westworld/public/protos/enums/android/nearby/connections/enums.proto

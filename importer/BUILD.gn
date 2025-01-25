@@ -26,6 +26,7 @@ static_library("importer") {
       "//chrome/common:buildflags",
       "//components/autofill/core/common",
       "//components/bookmarks/browser:browser",
+      "//components/sync/protocol",
       "//ppapi/buildflags",
       "//printing/buildflags",
       "//sql",

@@ -70,7 +70,8 @@ if (vivaldi_build_tests) {
     if (!defined(sources)) {
       sources = []
     }
-    sources += [ "//vivaldi/components/adverse_adblocking/adverse_ad_filter_list_tests.cc" ]
+    sources += [ "//vivaldi/components/adverse_adblocking/adverse_ad_filter_list_tests.cc"
+    ]
     deps += [
       "//base/test:test_support",
       "//testing/gtest",
@@ -134,6 +135,8 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/components/datasource/local_image_data_source.h",
       "//vivaldi/components/datasource/vivaldi_web_source.cc",
       "//vivaldi/components/datasource/vivaldi_web_source.h",
+      "//vivaldi/permissions/vivaldi_permission_handler_impl.cc",
+      "//vivaldi/permissions/vivaldi_permission_handler_impl.h",
     ]
     if (is_win) {
       sources += [
@@ -204,6 +207,15 @@ if (!is_android) {
   update_target("//extensions/renderer:renderer") {
     sources += [
       "//vivaldi/components/extensions/vivaldi_mime_handler_view_container_manager.cc",
+    ]
+  }
+
+  update_target("//components/permissions:permissions") {
+    sources += [
+      "//vivaldi/components/permissions/vivaldi_permission_handler.cc",
+      "//vivaldi/components/permissions/vivaldi_permission_handler.h",
+      "//vivaldi/components/permissions/vivaldi_permission_handler_base.cc",
+      "//vivaldi/components/permissions/vivaldi_permission_handler_base.h",
     ]
   }
 }

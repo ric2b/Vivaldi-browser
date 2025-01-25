@@ -12,7 +12,7 @@
 #include <climits>
 #include <vector>
 #include "config/aom_config.h"
-#include "third_party/googletest/src/googletest/include/gtest/gtest.h"
+#include "gtest/gtest.h"
 #include "test/codec_factory.h"
 #include "test/datarate_test.h"
 #include "test/encode_test_driver.h"
@@ -86,6 +86,7 @@ class DatarateTestSVC
     comp_pred_ = 0;
     dynamic_enable_disable_mode_ = 0;
     intra_only_ = 0;
+    intra_only_single_layer_ = false;
     frame_to_start_decoding_ = 0;
     layer_to_decode_ = 0;
     frame_sync_ = 0;
@@ -675,9 +676,20 @@ class DatarateTestSVC
     // Always reference LAST.
     ref_frame_config->reference[0] = 1;
     if (number_temporal_layers_ == 1 && number_spatial_layers_ == 1) {
+      layer_id->temporal_layer_id = 0;
       ref_frame_config->refresh[0] = 1;
       if (rps_mode)
         ref_config_rps(ref_frame_config, frame_cnt, rps_recovery_frame);
+      if (intra_only_single_layer_) {
+        // This repros the crash in Bug: 363016123.
+        ref_frame_config->ref_idx[0] = 0;
+        ref_frame_config->ref_idx[3] = 1;
+        ref_frame_config->ref_idx[6] = 2;
+        if (frame_cnt == 1) {
+          for (int i = 0; i < INTER_REFS_PER_FRAME; i++)
+            ref_frame_config->reference[i] = 0;
+        }
+      }
     }
     if (number_temporal_layers_ == 2 && number_spatial_layers_ == 1) {
       // 2-temporal layer.
@@ -1367,6 +1379,32 @@ class DatarateTestSVC
       ASSERT_LE(effective_datarate_tl[i], target_layer_bitrate_[i] * 1.60)
           << " The datarate for the file is greater than target by too much!";
     }
+  }
+
+  virtual void BasicRateTargetingSVC1TL1SLIntraOnlyTest() {
+    cfg_.rc_buf_initial_sz = 500;
+    cfg_.rc_buf_optimal_sz = 500;
+    cfg_.rc_buf_sz = 1000;
+    cfg_.rc_dropframe_thresh = 0;
+    cfg_.rc_min_quantizer = 0;
+    cfg_.rc_max_quantizer = 63;
+    cfg_.rc_end_usage = AOM_CBR;
+    cfg_.g_lag_in_frames = 0;
+    cfg_.g_error_resilient = 0;
+
+    ::libaom_test::I420VideoSource video("hantro_collage_w352h288.yuv", 352,
+                                         288, 30, 1, 0, 300);
+    const int bitrate_array[2] = { 300, 600 };
+    cfg_.rc_target_bitrate = bitrate_array[GET_PARAM(4)];
+    ResetModel();
+    intra_only_single_layer_ = true;
+    number_temporal_layers_ = 1;
+    number_spatial_layers_ = 1;
+    ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
+    ASSERT_GE(effective_datarate_tl[0], cfg_.rc_target_bitrate * 0.80)
+        << " The datarate for the file is lower than target by too much!";
+    ASSERT_LE(effective_datarate_tl[0], cfg_.rc_target_bitrate * 1.60)
+        << " The datarate for the file is greater than target by too much!";
   }
 
   virtual void BasicRateTargetingSVC1TL3SLTest() {
@@ -2442,6 +2480,7 @@ class DatarateTestSVC
   int comp_pred_;
   int dynamic_enable_disable_mode_;
   int intra_only_;
+  int intra_only_single_layer_;
   unsigned int frame_to_start_decoding_;
   unsigned int layer_to_decode_;
   unsigned int frame_sync_;
@@ -2530,6 +2569,12 @@ TEST_P(DatarateTestSVC, BasicRateTargetingSVC3TL3SLSimulcast) {
 // with Intra-only frame inserted in the stream.
 TEST_P(DatarateTestSVC, BasicRateTargetingSVC1TL2SLIntraOnly) {
   BasicRateTargetingSVC1TL2SLIntraOnlyTest();
+}
+
+// Check basic rate targeting for CBR, for 1 spatial layers, 1 temporal,
+// with Intra-only frame (frame with no references) inserted in the stream.
+TEST_P(DatarateTestSVC, BasicRateTargetingSVC1TL1SLIntraOnly) {
+  BasicRateTargetingSVC1TL1SLIntraOnlyTest();
 }
 
 // Check basic rate targeting for CBR, for 3 spatial layers, 1 temporal.

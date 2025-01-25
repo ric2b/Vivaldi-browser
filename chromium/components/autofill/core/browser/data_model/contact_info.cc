@@ -162,11 +162,14 @@ void CompanyInfo::GetSupportedTypes(FieldTypeSet* supported_types) const {
   supported_types->insert(COMPANY_NAME);
 }
 
-void CompanyInfo::GetMatchingTypes(const std::u16string& text,
-                                   const std::string& app_locale,
-                                   FieldTypeSet* matching_types) const {
+void CompanyInfo::GetMatchingTypesWithProfileSources(
+    const std::u16string& text,
+    const std::string& app_locale,
+    FieldTypeSet* matching_types,
+    PossibleProfileValueSources* profile_value_sources) const {
   if (IsValid()) {
-    FormGroup::GetMatchingTypes(text, app_locale, matching_types);
+    FormGroup::GetMatchingTypesWithProfileSources(
+        text, app_locale, matching_types, profile_value_sources);
   } else if (text.empty()) {
     matching_types->insert(EMPTY_TYPE);
   }

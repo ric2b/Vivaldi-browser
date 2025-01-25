@@ -6,6 +6,7 @@
 #define COMPONENTS_PLUS_ADDRESSES_PLUS_ADDRESS_PARSING_UTILS_H_
 
 #include <optional>
+#include <vector>
 
 #include "base/values.h"
 #include "components/plus_addresses/plus_address_types.h"
@@ -31,22 +32,18 @@ namespace plus_addresses {
 std::optional<PlusProfile> ParsePlusProfileFromV1Create(
     data_decoder::DataDecoder::ValueOrError response);
 
-//   If `response` is present, it should fit this schema (in TS notation):
-//   {
-//     "plusProfiles":
-//       {
-//         "facet": string,
-//         "plusEmail": {
-//           "plusAddress": string,
-//           "plusMode": string,
-//         }
-//       }[]
-//   }
-//  This method returns nullopt otherwise or if `response` is an error.
+// Attempts to parse `response` into a vector of `PreallocatedPlusAddress`.
+// The following schema is expected:
+// {
+//    "emailAddresses":
+//    {
+//      "plus_address": string
+//      "lifetime": string of format [0-9]s.
+//    } []
+// }
 //
-// Note: `plusProfiles` may have 0 or many profiles. The "plusProfiles" key
-// must always be present though.
-std::optional<PlusAddressMap> ParsePlusAddressMapFromV1List(
+std::optional<std::vector<PreallocatedPlusAddress>>
+ParsePreallocatedPlusAddresses(
     data_decoder::DataDecoder::ValueOrError response);
 
 }  // namespace plus_addresses

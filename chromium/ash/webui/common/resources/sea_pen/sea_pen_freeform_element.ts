@@ -13,17 +13,13 @@ import 'chrome://resources/ash/common/personalization/wallpaper.css.js';
 
 import {assertNotReached} from 'chrome://resources/js/assert.js';
 
-import {SEA_PEN_SAMPLES, SeaPenSamplePrompt} from './constants.js';
-import {SeaPenQuery} from './sea_pen.mojom-webui.js';
+import {FreeformTab, SeaPenSamplePrompt} from './constants.js';
+import {MantaStatusCode, SeaPenQuery} from './sea_pen.mojom-webui.js';
 import {getTemplate} from './sea_pen_freeform_element.html.js';
+import {logSamplePromptShuffleClicked, logSeaPenFreeformTabClicked} from './sea_pen_metrics_logger.js';
 import {WithSeaPenStore} from './sea_pen_store.js';
+import {SEA_PEN_SAMPLES} from './sea_pen_untranslated_constants.js';
 import {isArrayEqual, shuffle} from './sea_pen_utils.js';
-
-/** Enumeration of supported tabs. */
-export enum FreeformTab {
-  SAMPLE_PROMPTS = 'sample_prompts',
-  RESULTS = 'results',
-}
 
 export class SeaPenFreeformElement extends WithSeaPenStore {
   static get is() {
@@ -48,7 +44,11 @@ export class SeaPenFreeformElement extends WithSeaPenStore {
 
       samples: {
         type: Array,
-        value: SEA_PEN_SAMPLES,
+      },
+
+      thumbnailResponseStatusCode_: {
+        type: Object,
+        observer: 'onThumbnailResponseStatusCodeChanged_',
       },
     };
   }
@@ -56,13 +56,17 @@ export class SeaPenFreeformElement extends WithSeaPenStore {
   samples: SeaPenSamplePrompt[];
   private freeformTab_: FreeformTab;
   private seaPenQuery_: SeaPenQuery|null;
+  private thumbnailResponseStatusCode_: MantaStatusCode|null;
 
   override connectedCallback() {
     super.connectedCallback();
     this.watch<SeaPenFreeformElement['seaPenQuery_']>(
         'seaPenQuery_', state => state.currentSeaPenQuery);
+    this.watch<SeaPenFreeformElement['thumbnailResponseStatusCode_']>(
+        'thumbnailResponseStatusCode_',
+        state => state.thumbnailResponseStatusCode);
     this.updateFromStore();
-    this.onShuffleClicked_();
+    this.shuffleSamplePrompts_();
   }
 
   /** Invoked on tab selected. */
@@ -78,6 +82,7 @@ export class SeaPenFreeformElement extends WithSeaPenStore {
       default:
         assertNotReached();
     }
+    logSeaPenFreeformTabClicked(this.freeformTab_);
   }
 
   private onSeaPenQueryChanged_(query: SeaPenQuery|null) {
@@ -87,8 +92,17 @@ export class SeaPenFreeformElement extends WithSeaPenStore {
         query?.textQuery ? FreeformTab.RESULTS : FreeformTab.SAMPLE_PROMPTS;
   }
 
-  private isTabContainerEnabled_(query: SeaPenQuery) {
-    return !!query?.textQuery;
+  private onThumbnailResponseStatusCodeChanged_(statusCode: MantaStatusCode|
+                                                null): void {
+    if (statusCode) {
+      this.freeformTab_ = FreeformTab.RESULTS;
+    }
+  }
+
+  private isTabContainerEnabled_(
+      query: SeaPenQuery,
+      thumbnailResponseStatusCode: MantaStatusCode|null): boolean {
+    return !!query?.textQuery || !!thumbnailResponseStatusCode;
   }
 
   private isSamplePromptsTabSelected_(tab: FreeformTab): boolean {
@@ -99,16 +113,17 @@ export class SeaPenFreeformElement extends WithSeaPenStore {
     return tab === FreeformTab.RESULTS;
   }
 
-  private onRecentFreeformImageDelete_() {
-    // TODO(b/347328001): add the function implementation.
+  private onShuffleClicked_(): void {
+    logSamplePromptShuffleClicked();
+    this.shuffleSamplePrompts_();
   }
 
-  private onShuffleClicked_(): void {
+  private shuffleSamplePrompts_(): void {
     // Run shuffle (5 times at most) until the shuffled samples are
     // different from current, which is highly likely to happen the first time.
     for (let i = 0; i < 5; i++) {
-      const newSamples = shuffle(this.samples);
-      if (!isArrayEqual(newSamples, this.samples)) {
+      const newSamples = shuffle(SEA_PEN_SAMPLES).slice(0, 6);
+      if (!this.samples || !isArrayEqual(newSamples, this.samples)) {
         this.samples = newSamples;
         break;
       }

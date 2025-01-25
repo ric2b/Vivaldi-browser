@@ -85,6 +85,8 @@ public final class EventConstants {
     public static final String INSTANCE_SWITCHER_IPH_USED = "instance_switcher_iph_used";
 
     public static final String TAB_SWITCHER_BUTTON_CLICKED = "tab_switcher_button_clicked";
+    public static final String TAB_SWITCHER_BUTTON_LONG_CLICKED =
+            "tab_switcher_button_long_clicked";
 
     public static final String FOREGROUND_SESSION_DESTROYED = "foreground_session_destroyed";
 
@@ -202,6 +204,12 @@ public final class EventConstants {
     public static final String RESTORE_TABS_PROMO_USED = "restore_tabs_promo_used";
 
     public static final String TAB_GROUP_SYNC_ON_STRIP_USED = "tab_group_sync_on_strip_used";
+
+    /** Description text for tab group sync functionality in the tab group creation dialog. */
+    public static final String TAB_GROUP_CREATION_DIALOG_SHOWN = "tab_group_creation_dialog_shown";
+
+    /** IPH dialog of RTL gesture navigation dialog is shown. */
+    public static final String RTL_GESTURE_NAVIGATION_DIALOG_SHOW = "rtl_gesture_iph_show";
 
     /** Do not instantiate. */
     private EventConstants() {}

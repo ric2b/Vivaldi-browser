@@ -23,29 +23,30 @@ limitations under the License.
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/Bytecode/BytecodeWriter.h"  // from @llvm-project
-#include "mlir/Dialect/Func/Extensions/AllExtensions.h"  // from @llvm-project
-#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypeInterfaces.h"  // from @llvm-project
-#include "mlir/IR/OwningOpRef.h"  // from @llvm-project
-#include "mlir/IR/Region.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/IR/ValueRange.h"  // from @llvm-project
-#include "mlir/IR/Verifier.h"  // from @llvm-project
-#include "mlir/Parser/Parser.h"  // from @llvm-project
-#include "mlir/Pass/Pass.h"  // from @llvm-project
-#include "mlir/Pass/PassManager.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
-#include "mlir/Support/TypeID.h"  // from @llvm-project
-#include "mlir/Transforms/Passes.h"  // from @llvm-project
-#include "stablehlo/dialect/Base.h"  // from @stablehlo
-#include "stablehlo/dialect/ChloOps.h"  // from @stablehlo
-#include "stablehlo/dialect/StablehloOps.h"  // from @stablehlo
+#include "mlir/Bytecode/BytecodeWriter.h"
+#include "mlir/Dialect/Func/Extensions/AllExtensions.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "mlir/IR/OwningOpRef.h"
+#include "mlir/IR/Region.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
+#include "mlir/IR/Verifier.h"
+#include "mlir/Parser/Parser.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
+#include "mlir/Support/TypeID.h"
+#include "mlir/Transforms/Passes.h"
+#include "stablehlo/dialect/Base.h"
+#include "stablehlo/dialect/ChloOps.h"
+#include "stablehlo/dialect/StablehloOps.h"
 #include "xla/mlir/utils/error_util.h"
 #include "xla/mlir_hlo/stablehlo_ext/transforms/passes.h"
 #include "tsl/platform/errors.h"
@@ -216,13 +217,13 @@ struct CheckShapeAssertionsPass
       return (idx < nrErrorMessageInputs ? errorMessageInputs[idx] : -1);
     };
     return llvm::formatv(
-        errorMessageFormat, errInput(0), errInput(1), errInput(2), errInput(3),
-        errInput(4), errInput(5), errInput(6), errInput(7), errInput(8),
-        errInput(9), errInput(10), errInput(11), errInput(12), errInput(13),
-        errInput(14), errInput(15), errInput(16), errInput(17), errInput(18),
-        errInput(19), errInput(20), errInput(21), errInput(22), errInput(23),
-        errInput(24), errInput(25), errInput(26), errInput(27), errInput(28),
-        errInput(29), errInput(30), errInput(31));
+        false, errorMessageFormat, errInput(0), errInput(1), errInput(2),
+        errInput(3), errInput(4), errInput(5), errInput(6), errInput(7),
+        errInput(8), errInput(9), errInput(10), errInput(11), errInput(12),
+        errInput(13), errInput(14), errInput(15), errInput(16), errInput(17),
+        errInput(18), errInput(19), errInput(20), errInput(21), errInput(22),
+        errInput(23), errInput(24), errInput(25), errInput(26), errInput(27),
+        errInput(28), errInput(29), errInput(30), errInput(31));
   }
 
   mlir::StringRef getArgument() const override {

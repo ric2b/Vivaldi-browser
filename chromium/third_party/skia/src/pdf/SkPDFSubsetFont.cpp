@@ -5,7 +5,6 @@
 
 #if defined(SK_PDF_USE_HARFBUZZ_SUBSET)
 
-#include "include/core/SkData.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkTypeface.h"
 #include "include/private/base/SkAssert.h"
@@ -99,6 +98,7 @@ sk_sp<SkData> subset_harfbuzz(const SkTypeface& typeface, const SkPDFGlyphUse& g
     if (!subset) {
         return nullptr;
     }
+
     HBBlob result(hb_face_reference_blob(subset.get()));
     return to_data(std::move(result));
 }

@@ -4,6 +4,7 @@
 
 import("//build/util/process_version.gni")
 import("//chrome/enterprise_companion/branding.gni")
+import("//chrome/updater/zip.gni")
 import("//testing/test.gni")
 
 process_version("version_header") {
@@ -32,7 +33,11 @@ process_version("branding_header") {
     "-e",
     "DEVICE_MANAGEMENT_SERVER_URL=\"$device_management_server_url\"",
     "-e",
+    "ENTERPRISE_COMPANION_APPID=\"$enterprise_companion_appid\"",
+    "-e",
     "ENTERPRISE_COMPANION_EVENT_LOGGING_URL=\"$enterprise_companion_event_logging_url\"",
+    "-e",
+    "KEYSTONE_NAME=\"$keystone_app_name\"",
     "-e",
     "MAC_BUNDLE_IDENTIFIER_STRING=\"$mac_enterprise_companion_bundle_identifier\"",
     "-e",
@@ -49,7 +54,10 @@ source_set("base") {
   sources = [
     "app/app.cc",
     "app/app.h",
-    "app/app_install.cc",
+    "app/app_client_base.cc",
+    "app/app_client_base.h",
+    "app/app_fetch_policies.cc",
+    "app/app_installer.cc",
     "app/app_server.cc",
     "app/app_shutdown.cc",
     "crash_client.cc",
@@ -66,7 +74,9 @@ source_set("base") {
     "enterprise_companion_status.h",
     "event_logger.cc",
     "event_logger.h",
+    "global_constants.h",
     "installer.h",
+    "ipc_security.h",
     "ipc_support.cc",
     "ipc_support.h",
     "lock.cc",
@@ -83,9 +93,11 @@ source_set("base") {
     "//base",
     "//chrome/enterprise_companion/device_management_storage",
     "//chrome/enterprise_companion/proto",
+    "//chrome/updater:public_sources",
     "//components/named_mojo_ipc_server",
     "//components/named_system_lock",
     "//components/policy/core/common",
+    "//components/policy/core/common:common_constants",
     "//mojo/core/embedder",
     "//mojo/public/cpp/platform",
     "//net",
@@ -96,12 +108,32 @@ source_set("base") {
     "//third_party/crashpad/crashpad/handler",
   ]
 
+  if (is_posix) {
+    sources += [
+      "installer_posix.cc",
+      "installer_posix.h",
+    ]
+  }
+
   if (is_linux) {
-    sources += [ "installer_linux.cc" ]
+    sources += [
+      "installer_linux.cc",
+      "ipc_security_linux.cc",
+    ]
   } else if (is_mac) {
-    sources += [ "installer_mac.mm" ]
+    sources += [
+      "app/app_net_worker.cc",
+      "installer_mac.mm",
+      "ipc_security_mac.cc",
+      "mac/mac_utils.h",
+      "mac/mac_utils.mm",
+    ]
   } else if (is_win) {
-    sources += [ "installer_win.cc" ]
+    sources += [
+      "installer_win.cc",
+      "ipc_security_win.cc",
+    ]
+    deps += [ "//chrome/installer/util:work_item" ]
   }
 }
 
@@ -111,6 +143,8 @@ executable("test_crashpad_embedder") {
   sources = [ "test/test_crashpad_embedder.cc" ]
   deps = [
     ":base",
+    ":client",
+    ":constants_test",
     "//base",
     "//chrome/updater:constants_test",
   ]
@@ -120,11 +154,42 @@ executable("test_crashpad_embedder") {
   }
 }
 
+source_set("test_utils") {
+  testonly = true
+
+  sources = [
+    "test/test_utils.cc",
+    "test/test_utils.h",
+  ]
+  deps = [
+    ":base",
+    ":branding_header",
+    ":installer_paths",
+    ":version_header",
+    "//base",
+    "//base/test:test_support",
+    "//chrome/enterprise_companion/device_management_storage:device_management_storage",
+    "//testing/gtest",
+  ]
+  visibility = [
+    ":enterprise_companion_integration_tests",
+    ":enterprise_companion_tests",
+  ]
+
+  if (is_linux) {
+    sources += [ "test/test_utils_linux.cc" ]
+  } else if (is_mac) {
+    sources += [ "test/test_utils_mac.cc" ]
+  } else if (is_win) {
+    sources += [ "test/test_utils_win.cc" ]
+  }
+}
+
 test("enterprise_companion_tests") {
   testonly = true
 
   sources = [
-    "app/app_install_unittest.cc",
+    "app/app_installer_unittest.cc",
     "app/app_shutdown_unittest.cc",
     "crash_client_unittest.cc",
     "dm_client_unittest.cc",
@@ -132,10 +197,14 @@ test("enterprise_companion_tests") {
     "enterprise_companion_status_unittest.cc",
     "event_logger_unittest.cc",
     "test/run_all_unittests.cc",
+    "url_loader_factory_provider_unittest.cc",
   ]
   deps = [
     ":base",
+    ":branding_header",
     ":client",
+    ":constants_test",
+    ":test_utils",
     "mojom/",
     "//base",
     "//base/test:test_support",
@@ -146,10 +215,73 @@ test("enterprise_companion_tests") {
     "//components/named_mojo_ipc_server",
     "//components/policy/core/common",
     "//components/policy/core/common:test_support",
+    "//net:test_support",
     "//services/network:test_support",
     "//testing/gtest",
   ]
   data_deps = [ ":test_crashpad_embedder" ]
+
+  if (is_mac) {
+    sources += [ "app/app_net_worker_unittest.cc" ]
+  }
+}
+
+copy("integration_test_service_files") {
+  testonly = true
+  sources =
+      [ "test/service/enterprise_companion_integration_tests_launcher.py" ]
+  outputs = [ "$root_build_dir/test_service/{{source_file_part}}" ]
+  visibility = [ ":enterprise_companion_integration_tests" ]
+}
+
+test("enterprise_companion_integration_tests") {
+  testonly = true
+
+  sources = [
+    "test/integration_tests.cc",
+    "test/run_all_integration_tests.cc",
+    "test/test_server.cc",
+    "test/test_server.h",
+  ]
+  deps = [
+    ":base",
+    ":branding_header",
+    ":client",
+    ":constants_test",
+    ":installer_paths",
+    ":test_utils",
+    ":version_header",
+    "//base",
+    "//base/test:test_support",
+    "//base/test:test_support",
+    "//chrome/enterprise_companion/device_management_storage",
+    "//chrome/enterprise_companion/proto",
+    "//chrome/updater:constants_test",
+    "//chrome/updater:public_sources",
+    "//components/named_mojo_ipc_server:named_mojo_ipc_server",
+    "//components/policy/core/common",
+    "//components/policy/core/common:common_constants",
+    "//components/policy/core/common:test_support",
+    "//components/policy/test_support",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+  data = [ "//testing/scripts/run_telemetry_as_googletest.py" ]
+  data_deps = [ ":enterprise_companion_test" ]
+
+  # The MacOS integration tests require the pkg installer to be built, which is
+  # only possible on MacOS hosts.
+  if (is_mac && host_os == "mac") {
+    sources += [ "test/integration_tests_mac.cc" ]
+    data_deps += [ "//chrome/enterprise_companion/mac:enterprise_companion_installer_unsigned" ]
+  }
+
+  if (is_win) {
+    sources += [ "test/integration_tests_win.cc" ]
+    data_deps += [ ":enterprise_companion_test" ]
+  }
+
+  data_deps += [ ":integration_test_service_files" ]
 }
 
 static_library("client") {
@@ -164,6 +296,10 @@ static_library("client") {
     "//mojo/public/cpp/platform",
   ]
   public_deps = [ "mojom/" ]
+  visibility = [
+    "//chrome/enterprise_companion:*",
+    "//chrome/updater:*",
+  ]
 }
 
 static_library("installer_paths") {
@@ -175,8 +311,8 @@ static_library("installer_paths") {
   ]
 
   visibility = [
-    ":base",
-    ":client",
+    ":*",
+    "//chrome/updater:*",
   ]
 
   if (is_linux) {
@@ -189,18 +325,69 @@ static_library("installer_paths") {
   }
 }
 
-if (!is_official_build) {
-  executable("enterprise_companion") {
-    sources = [ "main.cc" ]
-    deps = [
-      ":base",
-      "//chrome/updater:constants_prod",
-    ]
+static_library("constants_prod") {
+  public = [ "global_constants.h" ]
+  sources = [ "global_constants.cc" ]
+  deps = [
+    ":branding_header",
+    ":installer_paths",
+    "//base",
+    "//url",
+  ]
+  visibility = [
+    ":*",
+    "//chrome/enterprise_companion/mac:*",
+    "//chrome/updater:*",
+  ]
+}
 
-    if (is_win) {
-      configs += [ "//build/config/win:windowed" ]
-    }
+static_library("constants_test") {
+  testonly = true
+
+  public = [ "global_constants.h" ]
+  sources = [ "global_constants.cc" ]
+  deps = [
+    ":branding_header",
+    ":installer_paths",
+    "//base",
+    "//url",
+  ]
+  visibility = [
+    ":*",
+    "//chrome/updater:*",
+  ]
+  defines = [ "ENTERPRISE_COMPANION_TEST_ONLY" ]
+}
+
+executable("enterprise_companion") {
+  sources = [ "main.cc" ]
+  deps = [
+    ":base",
+    ":constants_prod",
+    "//chrome/updater:constants_prod",
+  ]
+
+  if (is_win) {
+    configs += [ "//build/config/win:windowed" ]
   }
+}
+
+# Enterprise Companion application used by integration tests. Constants can be
+# overridden via global_constants.h.
+executable("enterprise_companion_test") {
+  testonly = true
+  sources = [ "main.cc" ]
+  deps = [
+    ":base",
+    ":constants_test",
+    "//chrome/updater:constants_prod",
+  ]
+
+  if (is_win) {
+    configs += [ "//build/config/win:windowed" ]
+  }
+
+  defines = [ "ENTERPRISE_COMPANION_TEST_ONLY" ]
 }
 
 group("all") {
@@ -208,9 +395,34 @@ group("all") {
 
   deps = [
     ":client",
+    ":enterprise_companion_integration_tests",
     ":enterprise_companion_tests",
   ]
   if (!is_official_build) {
     deps += [ ":enterprise_companion" ]
+
+    if (is_mac) {
+      deps += [ "//chrome/enterprise_companion/mac" ]
+    }
+  }
+}
+
+# The contents of this zip are uploaded by archivers (//infra/archive_config).
+artifact_zip("enterprise_companion_zip") {
+  output = "$root_build_dir/enterprise_companion.zip"
+
+  if (is_linux) {
+    inputs = [ "$root_build_dir/enterprise_companion" ]
+    deps = [ ":enterprise_companion" ]
+  } else if (is_mac) {
+    inputs = [
+      "$root_build_dir/${enterprise_companion_product_full_name}.app/Contents/Info.plist",
+      "$root_build_dir/${enterprise_companion_product_full_name}.app/Contents/MacOS/${enterprise_companion_product_full_name}",
+      "$root_build_dir/${enterprise_companion_product_full_name}.app/Contents/PkgInfo",
+    ]
+    deps = [ "//chrome/enterprise_companion/mac:enterprise_companion_bundle" ]
+  } else if (is_win) {
+    inputs = [ "$root_build_dir/enterprise_companion.exe" ]
+    deps = [ ":enterprise_companion" ]
   }
 }

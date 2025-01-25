@@ -155,8 +155,8 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
  * collects usage metrics for the different sidebar tabs.
  */
 export const enum SidebarPaneTabId {
-  Computed = 'computed',
-  Styles = 'styles',
+  COMPUTED = 'computed',
+  STYLES = 'styles',
 }
 
 const createAccessibilityTreeToggleButton = (isActive: boolean): HTMLElement => {
@@ -168,6 +168,7 @@ const createAccessibilityTreeToggleButton = (isActive: boolean): HTMLElement => 
     variant: Buttons.Button.Variant.TOOLBAR,
     iconUrl: new URL('../../Images/person.svg', import.meta.url).toString(),
     title,
+    jslogContext: 'toggle-accessibility-tree',
   };
   button.tabIndex = 0;
   button.classList.add('axtree-button');
@@ -227,7 +228,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
 
     this.splitWidget = new UI.SplitWidget.SplitWidget(true, true, 'elements-panel-split-view-state', 325, 325);
     this.splitWidget.addEventListener(
-        UI.SplitWidget.Events.SidebarSizeChanged, this.updateTreeOutlineVisibleWidth.bind(this));
+        UI.SplitWidget.Events.SIDEBAR_SIZE_CHANGED, this.updateTreeOutlineVisibleWidth.bind(this));
     this.splitWidget.show(this.element);
 
     this.searchableViewInternal = new UI.SearchableView.SearchableView(this, null);
@@ -287,7 +288,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     this.cssStyleTrackerByCSSModel = new Map();
     SDK.TargetManager.TargetManager.instance().observeModels(SDK.DOMModel.DOMModel, this, {scoped: true});
     SDK.TargetManager.TargetManager.instance().addEventListener(
-        SDK.TargetManager.Events.NameChanged, event => this.targetNameChanged(event.data));
+        SDK.TargetManager.Events.NAME_CHANGED, event => this.targetNameChanged(event.data));
     Common.Settings.Settings.instance()
         .moduleSetting('show-ua-shadow-dom')
         .addChangeListener(this.showUAShadowDOMChanged.bind(this));
@@ -401,7 +402,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
       }
 
       const cssModel = node.domModel().cssModel();
-      const styleSheetHeader = await cssModel.requestViaInspectorStylesheet(node);
+      const styleSheetHeader = await cssModel.requestViaInspectorStylesheet(node.frameId());
       if (!styleSheetHeader) {
         return;
       }
@@ -1000,7 +1001,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
   }
 
   private initializeSidebarPanes(splitMode: SplitMode): void {
-    this.splitWidget.setVertical(splitMode === SplitMode.Vertical);
+    this.splitWidget.setVertical(splitMode === SplitMode.VERTICAL);
     this.showToolbarPane(null /* widget */, null /* toggle */);
 
     const matchedStylePanesWrapper = new UI.Widget.VBox();
@@ -1019,10 +1020,10 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     stylesSplitWidget.setMainWidget(matchedStylePanesWrapper);
     stylesSplitWidget.hideSidebar();
     stylesSplitWidget.enableShowModeSaving();
-    stylesSplitWidget.addEventListener(UI.SplitWidget.Events.ShowModeChanged, () => {
+    stylesSplitWidget.addEventListener(UI.SplitWidget.Events.SHOW_MODE_CHANGED, () => {
       showMetricsWidgetInStylesPane();
     });
-    this.stylesWidget.addEventListener(StylesSidebarPaneEvents.InitialUpdateCompleted, () => {
+    this.stylesWidget.addEventListener(StylesSidebarPaneEvents.INITIAL_UPDATE_COMPLETED, () => {
       this.stylesWidget.appendToolbarItem(stylesSplitWidget.createShowHideSidebarButton(
           i18nString(UIStrings.showComputedStylesSidebar), i18nString(UIStrings.hideComputedStylesSidebar),
           i18nString(UIStrings.computedStylesShown), i18nString(UIStrings.computedStylesHidden), 'computed-styles'));
@@ -1031,11 +1032,11 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     const showMetricsWidgetInComputedPane = (): void => {
       this.metricsWidget.show(computedStylePanesWrapper.element, this.computedStyleWidget.element);
       this.metricsWidget.toggleVisibility(true /* visible */);
-      this.stylesWidget.removeEventListener(StylesSidebarPaneEvents.StylesUpdateCompleted, toggleMetricsWidget);
+      this.stylesWidget.removeEventListener(StylesSidebarPaneEvents.STYLES_UPDATE_COMPLETED, toggleMetricsWidget);
     };
 
     const showMetricsWidgetInStylesPane = (): void => {
-      const showMergedComputedPane = stylesSplitWidget.showMode() === UI.SplitWidget.ShowMode.Both;
+      const showMergedComputedPane = stylesSplitWidget.showMode() === UI.SplitWidget.ShowMode.BOTH;
       if (showMergedComputedPane) {
         showMetricsWidgetInComputedPane();
       } else {
@@ -1043,7 +1044,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
         if (!this.stylesWidget.hasMatchedStyles) {
           this.metricsWidget.toggleVisibility(false /* invisible */);
         }
-        this.stylesWidget.addEventListener(StylesSidebarPaneEvents.StylesUpdateCompleted, toggleMetricsWidget);
+        this.stylesWidget.addEventListener(StylesSidebarPaneEvents.STYLES_UPDATE_COMPLETED, toggleMetricsWidget);
       }
     };
 
@@ -1053,10 +1054,10 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
 
     const tabSelected = (event: Common.EventTarget.EventTargetEvent<UI.TabbedPane.EventData>): void => {
       const {tabId} = event.data;
-      if (tabId === SidebarPaneTabId.Computed) {
+      if (tabId === SidebarPaneTabId.COMPUTED) {
         computedStylePanesWrapper.show(computedView.element);
         showMetricsWidgetInComputedPane();
-      } else if (tabId === SidebarPaneTabId.Styles) {
+      } else if (tabId === SidebarPaneTabId.STYLES) {
         stylesSplitWidget.setSidebarWidget(computedStylePanesWrapper);
         showMetricsWidgetInStylesPane();
       }
@@ -1068,7 +1069,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     tabbedPane.headerElement().setAttribute(
         'jslog',
         `${VisualLogging.toolbar('sidebar').track({keydown: 'ArrowUp|ArrowLeft|ArrowDown|ArrowRight|Enter|Space'})}`);
-    if (this.splitMode !== SplitMode.Vertical) {
+    if (this.splitMode !== SplitMode.VERTICAL) {
       this.splitWidget.installResizer(tabbedPane.headerElement());
     }
 
@@ -1081,13 +1082,13 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     UI.ARIAUtils.setLabel(contentElement, i18nString(UIStrings.sidePanelContent));
 
     const stylesView = new UI.View.SimpleView(
-        i18nString(UIStrings.styles), /* isWebComponent */ undefined, SidebarPaneTabId.Styles as Lowercase<string>);
+        i18nString(UIStrings.styles), /* isWebComponent */ undefined, SidebarPaneTabId.STYLES as Lowercase<string>);
     this.sidebarPaneView.appendView(stylesView);
     stylesView.element.classList.add('flex-auto');
     stylesSplitWidget.show(stylesView.element);
 
     const computedView = new UI.View.SimpleView(
-        i18nString(UIStrings.computed), /* isWebComponent */ undefined, SidebarPaneTabId.Computed as Lowercase<string>);
+        i18nString(UIStrings.computed), /* isWebComponent */ undefined, SidebarPaneTabId.COMPUTED as Lowercase<string>);
     computedView.element.classList.add('composite', 'fill');
 
     tabbedPane.addEventListener(UI.TabbedPane.Events.TabSelected, tabSelected, this);
@@ -1109,10 +1110,10 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     }  // We can't reparent extension iframes.
 
     const position = Common.Settings.Settings.instance().moduleSetting('sidebar-position').get();
-    let splitMode = SplitMode.Horizontal;
+    let splitMode = SplitMode.HORIZONTAL;
     if (position === 'right' ||
         (position === 'auto' && UI.InspectorView.InspectorView.instance().element.offsetWidth > 680)) {
-      splitMode = SplitMode.Vertical;
+      splitMode = SplitMode.VERTICAL;
     }
     if (!this.sidebarPaneView) {
       this.initializeSidebarPanes(splitMode);
@@ -1126,10 +1127,10 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     const tabbedPane = this.sidebarPaneView.tabbedPane();
     this.splitWidget.uninstallResizer(tabbedPane.headerElement());
 
-    this.splitWidget.setVertical(this.splitMode === SplitMode.Vertical);
+    this.splitWidget.setVertical(this.splitMode === SplitMode.VERTICAL);
     this.showToolbarPane(null /* widget */, null /* toggle */);
 
-    if (this.splitMode !== SplitMode.Vertical) {
+    if (this.splitMode !== SplitMode.VERTICAL) {
       this.splitWidget.installResizer(tabbedPane.headerElement());
     }
   }
@@ -1154,7 +1155,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     cssPropertyTracker.start();
     this.cssStyleTrackerByCSSModel.set(cssModel, cssPropertyTracker);
     cssPropertyTracker.addEventListener(
-        SDK.CSSModel.CSSPropertyTrackerEvents.TrackedCSSPropertiesUpdated, this.trackedCSSPropertiesUpdated, this);
+        SDK.CSSModel.CSSPropertyTrackerEvents.TRACKED_CSS_PROPERTIES_UPDATED, this.trackedCSSPropertiesUpdated, this);
   }
 
   private removeStyleTracking(cssModel: SDK.CSSModel.CSSModel): void {
@@ -1166,7 +1167,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     cssPropertyTracker.stop();
     this.cssStyleTrackerByCSSModel.delete(cssModel);
     cssPropertyTracker.removeEventListener(
-        SDK.CSSModel.CSSPropertyTrackerEvents.TrackedCSSPropertiesUpdated, this.trackedCSSPropertiesUpdated, this);
+        SDK.CSSModel.CSSPropertyTrackerEvents.TRACKED_CSS_PROPERTIES_UPDATED, this.trackedCSSPropertiesUpdated, this);
   }
 
   private trackedCSSPropertiesUpdated({data: domNodes}:
@@ -1244,8 +1245,8 @@ globalThis.Elements = globalThis.Elements || {};
 globalThis.Elements.ElementsPanel = ElementsPanel;
 
 const enum SplitMode {
-  Vertical = 'Vertical',
-  Horizontal = 'Horizontal',
+  VERTICAL = 'Vertical',
+  HORIZONTAL = 'Horizontal',
 }
 
 const TrackedCSSProperties = [
@@ -1422,10 +1423,10 @@ export class ElementsActionDelegate implements UI.ActionRegistration.ActionDeleg
         ElementsPanel.instance().stylesWidget.forceUpdate();
         return true;
       case 'elements.show-styles':
-        ElementsPanel.instance().selectAndShowSidebarTab(SidebarPaneTabId.Styles);
+        ElementsPanel.instance().selectAndShowSidebarTab(SidebarPaneTabId.STYLES);
         return true;
       case 'elements.show-computed':
-        ElementsPanel.instance().selectAndShowSidebarTab(SidebarPaneTabId.Computed);
+        ElementsPanel.instance().selectAndShowSidebarTab(SidebarPaneTabId.COMPUTED);
         return true;
       case 'elements.toggle-eye-dropper': {
         const colorSwatchPopoverIcon = UI.Context.Context.instance().flavor(ColorSwatchPopoverIcon);

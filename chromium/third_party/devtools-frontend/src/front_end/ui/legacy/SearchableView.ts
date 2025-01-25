@@ -131,7 +131,7 @@ function createClearButton(jslogContext: string): Buttons.Button.Button {
   button.data = {
     variant: Buttons.Button.Variant.ICON,
     size: Buttons.Button.Size.SMALL,
-    jslogContext: jslogContext,
+    jslogContext,
     title: i18nString(UIStrings.clearInput),
     iconName: 'cross-circle-filled',
   };
@@ -184,7 +184,7 @@ export class SearchableView extends VBox {
     this.replaceToggleButton =
         new ToolbarToggle(i18nString(UIStrings.enableFindAndReplace), 'replace', undefined, 'replace');
     ARIAUtils.setLabel(this.replaceToggleButton.element, i18nString(UIStrings.enableFindAndReplace));
-    this.replaceToggleButton.addEventListener(ToolbarButton.Events.Click, this.toggleReplace, this);
+    this.replaceToggleButton.addEventListener(ToolbarButton.Events.CLICK, this.toggleReplace, this);
     replaceToggleToolbar.appendToolbarItem(this.replaceToggleButton);
 
     // Elements within `searchInputElements` are added according to their expected tab order.
@@ -275,13 +275,13 @@ export class SearchableView extends VBox {
     const toolbar = new Toolbar('toolbar-search-options', firstRowButtons);
     this.searchNavigationPrevElement =
         new ToolbarButton(i18nString(UIStrings.searchPrevious), 'chevron-up', undefined, 'select-previous');
-    this.searchNavigationPrevElement.addEventListener(ToolbarButton.Events.Click, () => this.onPrevButtonSearch());
+    this.searchNavigationPrevElement.addEventListener(ToolbarButton.Events.CLICK, () => this.onPrevButtonSearch());
     toolbar.appendToolbarItem(this.searchNavigationPrevElement);
     ARIAUtils.setLabel(this.searchNavigationPrevElement.element, i18nString(UIStrings.searchPrevious));
 
     this.searchNavigationNextElement =
         new ToolbarButton(i18nString(UIStrings.searchNext), 'chevron-down', undefined, 'select-next');
-    this.searchNavigationNextElement.addEventListener(ToolbarButton.Events.Click, () => this.onNextButtonSearch());
+    this.searchNavigationNextElement.addEventListener(ToolbarButton.Events.CLICK, () => this.onNextButtonSearch());
     ARIAUtils.setLabel(this.searchNavigationNextElement.element, i18nString(UIStrings.searchNext));
     toolbar.appendToolbarItem(this.searchNavigationNextElement);
 
@@ -355,8 +355,7 @@ export class SearchableView extends VBox {
   }
 
   private toggleReplace(): void {
-    const replaceEnabled = !this.replaceToggleButton.toggled();
-    this.replaceToggleButton.setToggled(replaceEnabled);
+    const replaceEnabled = this.replaceToggleButton.isToggled();
     const label =
         replaceEnabled ? i18nString(UIStrings.disableFindAndReplace) : i18nString(UIStrings.enableFindAndReplace);
     ARIAUtils.setLabel(this.replaceToggleButton.element, label);
@@ -633,7 +632,7 @@ export class SearchableView extends VBox {
   }
 
   private updateSecondRowVisibility(): void {
-    const secondRowVisible = this.replaceToggleButton.toggled();
+    const secondRowVisible = this.replaceToggleButton.isToggled();
     this.footerElementContainer.classList.toggle('replaceable', secondRowVisible);
 
     if (secondRowVisible) {

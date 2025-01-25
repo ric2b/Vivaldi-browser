@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/values.h"
+#include "pdf/buildflags.h"
 #include "pdf/document_attachment_info.h"
 #include "pdf/document_metadata.h"
 #include "pdf/pdfium/pdfium_engine.h"
@@ -96,11 +97,19 @@ class TestPDFiumEngine : public PDFiumEngine {
 
   bool ReadLoadedBytes(uint32_t length, void* buffer) override;
 
+#if BUILDFLAG(ENABLE_PDF_INK2)
+  MOCK_METHOD(gfx::Size, GetThumbnailSize, (int, float), (override));
+#endif
+
   std::vector<uint8_t> GetSaveData() override;
 
   MOCK_METHOD(void, SetCaretPosition, (const gfx::Point&), (override));
 
   MOCK_METHOD(void, OnDocumentCanceled, (), (override));
+
+  MOCK_METHOD(void, SetFormHighlight, (bool), (override));
+
+  MOCK_METHOD(void, ClearTextSelection, (), (override));
 
  protected:
   std::vector<DocumentAttachmentInfo>& doc_attachment_info_list() {

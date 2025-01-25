@@ -636,10 +636,11 @@ class PDFExtensionAccessibilityTextExtractionTest
   }
 
  protected:
-  std::vector<base::test::FeatureRef> GetEnabledFeatures() const override {
-    std::vector<base::test::FeatureRef> enabled =
+  std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures()
+      const override {
+    std::vector<base::test::FeatureRefAndParams> enabled =
         PDFExtensionAccessibilityTestWithOopifOverride::GetEnabledFeatures();
-    enabled.push_back(chrome_pdf::features::kAccessiblePDFForm);
+    enabled.push_back({chrome_pdf::features::kAccessiblePDFForm, {}});
     return enabled;
   }
 
@@ -861,10 +862,11 @@ class PDFExtensionAccessibilityTreeDumpTest
 
   bool UseOopif() const override { return std::get<1>(GetParam()); }
 
-  std::vector<base::test::FeatureRef> GetEnabledFeatures() const override {
-    std::vector<base::test::FeatureRef> enabled =
+  std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures()
+      const override {
+    std::vector<base::test::FeatureRefAndParams> enabled =
         PDFExtensionAccessibilityTest::GetEnabledFeatures();
-    enabled.push_back(chrome_pdf::features::kAccessiblePDFForm);
+    enabled.push_back({chrome_pdf::features::kAccessiblePDFForm, {}});
     return enabled;
   }
 
@@ -1186,7 +1188,7 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityNavigationTest,
 
 // TODO(crbug.com/289010799): Revisit using `crosapi` in `PdfOcrUmaTest` for
 // Lacros.
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // This test suite contains simple tests for the PDF OCR feature.
 class PdfOcrUmaTest : public PDFExtensionAccessibilityTest,
                       public ::testing::WithParamInterface<bool> {
@@ -1198,12 +1200,13 @@ class PdfOcrUmaTest : public PDFExtensionAccessibilityTest,
   bool UseOopif() const override { return GetParam(); }
 
  protected:
-  std::vector<base::test::FeatureRef> GetEnabledFeatures() const override {
-    std::vector<base::test::FeatureRef> enabled =
+  std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures()
+      const override {
+    std::vector<base::test::FeatureRefAndParams> enabled =
         PDFExtensionAccessibilityTest::GetEnabledFeatures();
-    enabled.push_back(::features::kPdfOcr);
+    enabled.push_back({::features::kPdfOcr, {}});
     if (UseOopif()) {
-      enabled.push_back(chrome_pdf::features::kPdfOopif);
+      enabled.push_back({chrome_pdf::features::kPdfOopif, {}});
     }
     return enabled;
   }
@@ -1317,7 +1320,7 @@ INSTANTIATE_TEST_SUITE_P(All,
                            return base::StringPrintf(
                                "OOPIF_%s", info.param ? "Enabled" : "Disabled");
                          });
-#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // TODO(crbug.com/40268279): Stop testing both modes after OOPIF PDF viewer
 // launches.
@@ -1393,15 +1396,16 @@ class PdfOcrIntegrationTest
   }
 
  protected:
-  std::vector<base::test::FeatureRef> GetEnabledFeatures() const override {
+  std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures()
+      const override {
     auto enabled = PDFExtensionAccessibilityTest::GetEnabledFeatures();
-    enabled.push_back(::features::kPdfOcr);
-    enabled.push_back(::features::kScreenAITestMode);
+    enabled.push_back({::features::kPdfOcr, {}});
+    enabled.push_back({::features::kScreenAITestMode, {}});
     if (IsOcrServiceEnabled()) {
-      enabled.push_back(ax::mojom::features::kScreenAIOCREnabled);
+      enabled.push_back({ax::mojom::features::kScreenAIOCREnabled, {}});
     }
     if (UseOopif()) {
-      enabled.push_back(chrome_pdf::features::kPdfOopif);
+      enabled.push_back({chrome_pdf::features::kPdfOopif, {}});
     }
     return enabled;
   }

@@ -59,6 +59,9 @@ struct State {
     /// The IR module.
     core::ir::Module& ir;
 
+    /// If we should use the vulkan memory model
+    bool use_vulkan_memory_model = false;
+
     /// The IR builder.
     core::ir::Builder b{ir};
 
@@ -87,7 +90,10 @@ struct State {
                     case core::BuiltinFn::kDot:
                     case core::BuiltinFn::kDot4I8Packed:
                     case core::BuiltinFn::kDot4U8Packed:
+                    case core::BuiltinFn::kQuadBroadcast:
                     case core::BuiltinFn::kSelect:
+                    case core::BuiltinFn::kSubgroupBroadcast:
+                    case core::BuiltinFn::kSubgroupShuffle:
                     case core::BuiltinFn::kTextureDimensions:
                     case core::BuiltinFn::kTextureGather:
                     case core::BuiltinFn::kTextureGatherCompare:
@@ -140,8 +146,17 @@ struct State {
                 case core::BuiltinFn::kDot4U8Packed:
                     DotPacked4x8(builtin);
                     break;
+                case core::BuiltinFn::kQuadBroadcast:
+                    QuadBroadcast(builtin);
+                    break;
                 case core::BuiltinFn::kSelect:
                     Select(builtin);
+                    break;
+                case core::BuiltinFn::kSubgroupBroadcast:
+                    SubgroupBroadcast(builtin);
+                    break;
+                case core::BuiltinFn::kSubgroupShuffle:
+                    SubgroupShuffle(builtin);
                     break;
                 case core::BuiltinFn::kTextureDimensions:
                     TextureDimensions(builtin);
@@ -183,7 +198,7 @@ struct State {
     /// @param value the literal value
     /// @returns the literal operand
     spirv::ir::LiteralOperand* Literal(u32 value) {
-        return ir.allocators.values.Create<spirv::ir::LiteralOperand>(b.ConstantValue(value));
+        return ir.CreateValue<spirv::ir::LiteralOperand>(b.ConstantValue(value));
     }
 
     /// Handle an `arrayLength()` builtin.
@@ -279,7 +294,7 @@ struct State {
                 call->AppendArg(builtin->Args()[1]);
                 break;
             case core::BuiltinFn::kAtomicMax:
-                if (result_ty->is_signed_integer_scalar()) {
+                if (result_ty->IsSignedIntegerScalar()) {
                     call = build(spirv::BuiltinFn::kAtomicSmax);
                 } else {
                     call = build(spirv::BuiltinFn::kAtomicUmax);
@@ -287,7 +302,7 @@ struct State {
                 call->AppendArg(builtin->Args()[1]);
                 break;
             case core::BuiltinFn::kAtomicMin:
-                if (result_ty->is_signed_integer_scalar()) {
+                if (result_ty->IsSignedIntegerScalar()) {
                     call = build(spirv::BuiltinFn::kAtomicSmin);
                 } else {
                     call = build(spirv::BuiltinFn::kAtomicUmin);
@@ -319,13 +334,13 @@ struct State {
     void Dot(core::ir::CoreBuiltinCall* builtin) {
         // OpDot only supports floating point operands, so we need to polyfill the integer case.
         // TODO(crbug.com/tint/1267): If SPV_KHR_integer_dot_product is supported, use that instead.
-        if (builtin->Result(0)->Type()->is_integer_scalar()) {
+        if (builtin->Result(0)->Type()->IsIntegerScalar()) {
             core::ir::Instruction* sum = nullptr;
 
             auto* v1 = builtin->Args()[0];
             auto* v2 = builtin->Args()[1];
             auto* vec = v1->Type()->As<core::type::Vector>();
-            auto* elty = vec->type();
+            auto* elty = vec->Type();
             for (uint32_t i = 0; i < vec->Width(); i++) {
                 b.InsertBefore(builtin, [&] {
                     auto* e1 = b.Access(elty, v1, u32(i));
@@ -420,13 +435,26 @@ struct State {
     /// @param requires_float_lod true if the lod needs to be a floating point value
     void AppendImageOperands(ImageOperands& operands,
                              Vector<core::ir::Value*, 8>& args,
-                             core::ir::Instruction* insertion_point,
+                             core::ir::CoreBuiltinCall* insertion_point,
                              bool requires_float_lod) {
         // Add a placeholder argument for the image operand mask, which we will fill in when we have
         // processed the image operands.
         uint32_t image_operand_mask = 0u;
         size_t mask_idx = args.Length();
         args.Push(nullptr);
+
+        // Append the NonPrivateTexel flag to Read/Write storage textures when we load/store them.
+        if (use_vulkan_memory_model) {
+            if (insertion_point->Func() == core::BuiltinFn::kTextureLoad ||
+                insertion_point->Func() == core::BuiltinFn::kTextureStore) {
+                if (auto* st =
+                        insertion_point->Args()[0]->Type()->As<core::type::StorageTexture>()) {
+                    if (st->Access() == core::Access::kReadWrite) {
+                        image_operand_mask |= SpvImageOperandsNonPrivateTexelMask;
+                    }
+                }
+            }
+        }
 
         // Add each of the optional image operands if used, updating the image operand mask.
         if (operands.bias) {
@@ -435,7 +463,7 @@ struct State {
         }
         if (operands.lod) {
             image_operand_mask |= SpvImageOperandsLodMask;
-            if (requires_float_lod && operands.lod->Type()->is_integer_scalar()) {
+            if (requires_float_lod && operands.lod->Type()->IsIntegerScalar()) {
                 auto* convert = b.Convert(ty.f32(), operands.lod);
                 convert->InsertBefore(insertion_point);
                 operands.lod = convert->Result(0);
@@ -469,7 +497,7 @@ struct State {
                                       core::ir::Value* array_idx,
                                       core::ir::Instruction* insertion_point) {
         auto* vec = coords->Type()->As<core::type::Vector>();
-        auto* element_ty = vec->type();
+        auto* element_ty = vec->Type();
 
         // Convert the index to match the coordinate type if needed.
         if (array_idx->Type() != element_ty) {
@@ -507,7 +535,7 @@ struct State {
         sampled_image->InsertBefore(builtin);
 
         // Append the array index to the coordinates if provided.
-        auto* array_idx = IsTextureArray(texture_ty->dim()) ? next_arg() : nullptr;
+        auto* array_idx = IsTextureArray(texture_ty->Dim()) ? next_arg() : nullptr;
         if (array_idx) {
             coords = AppendArrayIndex(coords, array_idx, builtin);
         }
@@ -594,7 +622,7 @@ struct State {
         };
 
         auto* component = next_arg();
-        if (!component->Type()->is_integer_scalar()) {
+        if (!component->Type()->IsIntegerScalar()) {
             // The first argument wasn't the component, so it must be the texture instead.
             // Use constant zero for the component.
             component = b.Constant(0_u);
@@ -612,7 +640,7 @@ struct State {
         sampled_image->InsertBefore(builtin);
 
         // Append the array index to the coordinates if provided.
-        auto* array_idx = IsTextureArray(texture_ty->dim()) ? next_arg() : nullptr;
+        auto* array_idx = IsTextureArray(texture_ty->Dim()) ? next_arg() : nullptr;
         if (array_idx) {
             coords = AppendArrayIndex(coords, array_idx, builtin);
         }
@@ -671,7 +699,7 @@ struct State {
         auto* texture_ty = texture->Type()->As<core::type::Texture>();
 
         // Append the array index to the coordinates if provided.
-        auto* array_idx = IsTextureArray(texture_ty->dim()) ? next_arg() : nullptr;
+        auto* array_idx = IsTextureArray(texture_ty->Dim()) ? next_arg() : nullptr;
         if (array_idx) {
             coords = AppendArrayIndex(coords, array_idx, builtin);
         }
@@ -729,7 +757,7 @@ struct State {
         auto* texture_ty = texture->Type()->As<core::type::Texture>();
 
         // Append the array index to the coordinates if provided.
-        auto* array_idx = IsTextureArray(texture_ty->dim()) ? next_arg() : nullptr;
+        auto* array_idx = IsTextureArray(texture_ty->Dim()) ? next_arg() : nullptr;
         if (array_idx) {
             coords = AppendArrayIndex(coords, array_idx, builtin);
         }
@@ -786,9 +814,9 @@ struct State {
 
         // Add an extra component to the result vector for arrayed textures.
         auto* result_ty = builtin->Result(0)->Type();
-        if (core::type::IsTextureArray(texture_ty->dim())) {
+        if (core::type::IsTextureArray(texture_ty->Dim())) {
             auto* vec = result_ty->As<core::type::Vector>();
-            result_ty = ty.vec(vec->type(), vec->Width() + 1);
+            result_ty = ty.vec(vec->Type(), vec->Width() + 1);
         }
 
         // Call the function.
@@ -797,7 +825,7 @@ struct State {
         result->InsertBefore(builtin);
 
         // Swizzle the first two components from the result for arrayed textures.
-        if (core::type::IsTextureArray(texture_ty->dim())) {
+        if (core::type::IsTextureArray(texture_ty->Dim())) {
             result = b.Swizzle(builtin->Result(0)->Type(), result, {0, 1});
             result->InsertBefore(builtin);
         }
@@ -886,17 +914,57 @@ struct State {
         result->SetResults(Vector{builtin->DetachResult()});
         builtin->Destroy();
     }
+
+    /// Handle a SubgroupShuffle() builtin.
+    /// @param builtin the builtin call instruction
+    void SubgroupShuffle(core::ir::CoreBuiltinCall* builtin) {
+        TINT_ASSERT(builtin->Args().Length() == 2);
+        auto* id = builtin->Args()[1];
+
+        // Id must be an unsigned integer scalar, so bitcast if necessary.
+        if (id->Type()->IsSignedIntegerScalar()) {
+            auto* cast = b.Bitcast(ty.u32(), id);
+            cast->InsertBefore(builtin);
+            builtin->SetArg(1, cast->Result(0));
+        }
+    }
+
+    /// Handle a SubgroupBroadcast() builtin.
+    /// @param builtin the builtin call instruction
+    void SubgroupBroadcast(core::ir::CoreBuiltinCall* builtin) {
+        TINT_ASSERT(builtin->Args().Length() == 2);
+        auto* id = builtin->Args()[1];
+        TINT_ASSERT(id->Is<core::ir::Constant>());
+
+        // For const signed int IDs, compile-time convert to u32 to maintain constness.
+        if (id->Type()->IsSignedIntegerScalar()) {
+            builtin->SetArg(1, b.Constant(id->As<core::ir::Constant>()->Value()->ValueAs<u32>()));
+        }
+    }
+
+    /// Handle a QuadBroadcast() builtin.
+    /// @param builtin the builtin call instruction
+    void QuadBroadcast(core::ir::CoreBuiltinCall* builtin) {
+        TINT_ASSERT(builtin->Args().Length() == 2);
+        auto* id = builtin->Args()[1];
+        TINT_ASSERT(id->Is<core::ir::Constant>());
+
+        // For const signed int IDs, compile-time convert to u32 to maintain constness.
+        if (id->Type()->IsSignedIntegerScalar()) {
+            builtin->SetArg(1, b.Constant(id->As<core::ir::Constant>()->Value()->ValueAs<u32>()));
+        }
+    }
 };
 
 }  // namespace
 
-Result<SuccessType> BuiltinPolyfill(core::ir::Module& ir) {
+Result<SuccessType> BuiltinPolyfill(core::ir::Module& ir, bool use_vulkan_memory_model) {
     auto result = ValidateAndDumpIfNeeded(ir, "BuiltinPolyfill transform");
     if (result != Success) {
         return result.Failure();
     }
 
-    State{ir}.Process();
+    State{ir, use_vulkan_memory_model}.Process();
 
     return Success;
 }

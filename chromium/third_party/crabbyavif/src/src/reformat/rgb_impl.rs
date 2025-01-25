@@ -29,6 +29,8 @@ enum Mode {
     YuvCoefficients(f32, f32, f32),
     Identity,
     Ycgco,
+    YcgcoRe,
+    YcgcoRo,
 }
 
 impl From<&image::Image> for Mode {
@@ -36,6 +38,8 @@ impl From<&image::Image> for Mode {
         match image.matrix_coefficients {
             MatrixCoefficients::Identity => Mode::Identity,
             MatrixCoefficients::Ycgco => Mode::Ycgco,
+            MatrixCoefficients::YcgcoRe => Mode::YcgcoRe,
+            MatrixCoefficients::YcgcoRo => Mode::YcgcoRo,
             _ => {
                 let coeffs =
                     calculate_yuv_coefficients(image.color_primaries, image.matrix_coefficients);
@@ -432,7 +436,7 @@ pub fn yuv_to_rgb_fast(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult
                 (true, false, false) => yuv8_to_rgb16_monochrome(image, rgb, kr, kg, kb),
             }
         }
-        Mode::Ycgco => Err(AvifError::NotImplemented),
+        Mode::Ycgco | Mode::YcgcoRe | Mode::YcgcoRo => Err(AvifError::NotImplemented),
     }
 }
 
@@ -473,7 +477,18 @@ fn unorm_lookup_tables(
     }
 }
 
-fn compute_rgb(y: f32, cb: f32, cr: f32, has_color: bool, mode: Mode) -> (f32, f32, f32) {
+#[allow(clippy::too_many_arguments)]
+fn compute_rgb(
+    y: f32,
+    cb: f32,
+    cr: f32,
+    has_color: bool,
+    mode: Mode,
+    clamped_y: u16,
+    yuv_max_channel: u16,
+    rgb_max_channel: u16,
+    rgb_max_channel_f: f32,
+) -> (f32, f32, f32) {
     let r: f32;
     let g: f32;
     let b: f32;
@@ -489,6 +504,17 @@ fn compute_rgb(y: f32, cb: f32, cr: f32, has_color: bool, mode: Mode) -> (f32, f
                 g = y + cb;
                 b = t - cr;
                 r = t + cr;
+            }
+            Mode::YcgcoRe | Mode::YcgcoRo => {
+                // Equations (62) through (65) in https://www.itu.int/rec/T-REC-H.273
+                let cg = (0.5 + cb * yuv_max_channel as f32).floor() as i32;
+                let co = (0.5 + cr * yuv_max_channel as f32).floor() as i32;
+                let t = clamped_y as i32 - (cg >> 1);
+                let rgb_max_channel = rgb_max_channel as i32;
+                g = clamp_i32(t + cg, 0, rgb_max_channel) as f32 / rgb_max_channel_f;
+                let tmp_b = clamp_i32(t - (co >> 1), 0, rgb_max_channel) as f32;
+                b = tmp_b / rgb_max_channel_f;
+                r = clamp_i32(tmp_b as i32 + co, 0, rgb_max_channel) as f32 / rgb_max_channel_f;
             }
             Mode::YuvCoefficients(kr, kg, kb) => {
                 r = y + (2.0 * (1.0 - kr)) * cr;
@@ -540,6 +566,7 @@ pub fn yuv_to_rgb_any(
         && image.has_plane(Plane::V)
         && image.yuv_format != PixelFormat::Yuv400;
     let yuv_max_channel = image.max_channel();
+    let rgb_max_channel = rgb.max_channel();
     let rgb_max_channel_f = rgb.max_channel_f();
     for j in 0..image.height {
         let uv_j = j >> image.yuv_format.chroma_shift_y();
@@ -548,7 +575,8 @@ pub fn yuv_to_rgb_any(
         let v_row = image.row_generic(Plane::V, uv_j).ok();
         let a_row = image.row_generic(Plane::A, j).ok();
         for i in 0..image.width as usize {
-            let y = unorm_value(y_row, i, yuv_max_channel, &table_y);
+            let clamped_y = clamped_pixel(y_row, i, yuv_max_channel);
+            let y = table_y[clamped_y as usize];
             let mut cb = 0.5;
             let mut cr = 0.5;
             if has_color {
@@ -610,7 +638,17 @@ pub fn yuv_to_rgb_any(
                         + (unorm_v[1][1] * (1.0 / 16.0));
                 }
             }
-            let (mut rc, mut gc, mut bc) = compute_rgb(y, cb, cr, has_color, mode);
+            let (mut rc, mut gc, mut bc) = compute_rgb(
+                y,
+                cb,
+                cr,
+                has_color,
+                mode,
+                clamped_y,
+                yuv_max_channel,
+                rgb_max_channel,
+                rgb_max_channel_f,
+            );
             if alpha_multiply_mode != AlphaMultiplyMode::NoOp {
                 let unorm_a = clamped_pixel(a_row.unwrap(), i, yuv_max_channel);
                 let ac = clamp_f32((unorm_a as f32) / (yuv_max_channel as f32), 0.0, 1.0);

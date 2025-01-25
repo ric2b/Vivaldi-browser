@@ -15,7 +15,7 @@
 use crate::internal_utils::*;
 use crate::*;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CleanAperture {
     pub width: UFraction,
     pub height: UFraction,

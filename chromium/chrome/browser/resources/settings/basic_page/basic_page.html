@@ -8,6 +8,16 @@
       :host(:not([in-search-mode])) settings-section:not([active]) {
         display: none;
       }
+
+      settings-section[section="aiInfoCard"] {
+        --cr-card-shadow: none;
+      }
+
+      @media (forced-colors: active) {
+        settings-section[section="aiInfoCard"] {
+          --cr-border-hcm: none;
+        }
+      }
     </style>
     <template is="dom-if" if="[[showBasicPage_(currentRoute_, inSearchMode)]]"
         restamp>
@@ -22,6 +32,12 @@
             <settings-people-page prefs="{{prefs}}"
                 page-visibility="[[pageVisibility]]">
             </settings-people-page>
+          </settings-section>
+        </template>
+        <template is="dom-if" if="[[showAiInfoCard_(pageVisibility.ai)]]"
+            restamp>
+          <settings-section section="aiInfoCard" nest-under-section="ai">
+            <settings-ai-info-card></settings-ai-info-card>
           </settings-section>
         </template>
         <template is="dom-if"
@@ -238,16 +254,6 @@
                 <settings-reset-page prefs="{{prefs}}"></settings-reset-page>
               </settings-section>
             </template>
-<if expr="_google_chrome">
-            <template is="dom-if"
-                if="[[showGetMostChrome_(pageVisibility.getMostChrome)]]"
-                restamp>
-              <settings-section page-title="$i18n{getTheMostOutOfChrome}"
-                  section="getMostChrome" no-search>
-                <settings-get-most-chrome-page></settings-get-most-chrome-page>
-              </settings-section>
-            </template>
-</if>
           </div>
         </template>
       </settings-idle-load>

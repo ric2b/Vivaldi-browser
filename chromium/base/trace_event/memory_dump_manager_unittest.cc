@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -63,9 +64,9 @@ MATCHER(IsNotDeterministicDump, "") {
 
 namespace {
 
-const char* kMDPName = "TestDumpProvider";
-const char* kAllowlistedMDPName = "AllowlistedTestDumpProvider";
-const char* const kTestMDPAllowlist[] = {kAllowlistedMDPName, nullptr};
+constexpr char kMDPName[] = "TestDumpProvider";
+constexpr char kAllowlistedMDPName[] = "AllowlistedTestDumpProvider";
+constexpr std::string_view kTestMDPAllowlist[] = {kAllowlistedMDPName};
 
 void RegisterDumpProvider(
     MemoryDumpProvider* mdp,
@@ -140,8 +141,7 @@ class TestSequencedTaskRunner : public SequencedTaskRunner {
   bool PostNonNestableDelayedTask(const Location& from_here,
                                   OnceClosure task,
                                   TimeDelta delay) override {
-    NOTREACHED_IN_MIGRATION();
-    return false;
+    NOTREACHED();
   }
 
   bool PostDelayedTask(const Location& from_here,

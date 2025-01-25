@@ -206,18 +206,28 @@ ExtensionFunction::ResponseAction MailPrivateGetFilePathsFunction::Run() {
     return RespondNow(Error(base::StringPrintf(
         "Path must be absolute %s", file_path.AsUTF8Unsafe().c_str())));
   }
-
-  if (!base::DirectoryExists(file_path)) {
-    return RespondNow(Error(base::StringPrintf(
-        "Directory does not exist %s", file_path.AsUTF8Unsafe().c_str())));
-  }
+  file_path_ = file_path;
+  base::OnceCallback<void(bool)> check_directory_callback =
+      base::BindOnce(&MailPrivateGetFilePathsFunction::GetFilePaths, this);
 
   base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&FindMailFiles, file_path),
-      base::BindOnce(&MailPrivateGetFilePathsFunction::OnFinished, this));
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(&base::DirectoryExists, file_path),
+      std::move(check_directory_callback));
 
   return RespondLater();
+}
+
+void MailPrivateGetFilePathsFunction::GetFilePaths(bool directory_exists) {
+  if (!directory_exists) {
+    Respond(Error(base::StringPrintf("Directory does not exist %s",
+                                     file_path_.AsUTF8Unsafe().c_str())));
+    return;
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&FindMailFiles, file_path_),
+      base::BindOnce(&MailPrivateGetFilePathsFunction::OnFinished, this));
 }
 
 ExtensionFunction::ResponseAction MailPrivateGetFullPathFunction::Run() {
@@ -260,17 +270,30 @@ ExtensionFunction::ResponseAction MailPrivateGetMailFilePathsFunction::Run() {
         "Path must be absolute %s", file_path.AsUTF8Unsafe().c_str())));
   }
 
-  if (!base::DirectoryExists(file_path)) {
-    return RespondNow(Error(base::StringPrintf(
-        "Directory does not exist %s", file_path.AsUTF8Unsafe().c_str())));
+  file_path_ = file_path;
+  base::OnceCallback<void(bool)> check_directory_callback = base::BindOnce(
+      &MailPrivateGetMailFilePathsFunction::GetMailFilePaths, this);
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(&base::DirectoryExists, file_path),
+      std::move(check_directory_callback));
+
+  return RespondLater();
+}
+
+void MailPrivateGetMailFilePathsFunction::GetMailFilePaths(
+    bool directory_exists) {
+  if (!directory_exists) {
+    Respond(Error(base::StringPrintf("Directory does not exist %s",
+                                     file_path_.AsUTF8Unsafe().c_str())));
+    return;
   }
 
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&FindMailFiles, file_path),
+      base::BindOnce(&FindMailFiles, file_path_),
       base::BindOnce(&MailPrivateGetMailFilePathsFunction::OnFinished, this));
-
-  return RespondLater();
 }
 
 void MailPrivateGetMailFilePathsFunction::OnFinished(
@@ -318,9 +341,7 @@ bool Save(base::FilePath file_path,
   if (append) {
     return base::AppendToFile(file_path, data.data());
   } else {
-    int size = data.size();
-    int wrote = base::WriteFile(file_path, data.data(), size);
-    return size == wrote;
+    return base::WriteFile(file_path, data);
   }
 }
 

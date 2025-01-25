@@ -18,8 +18,10 @@
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "chrome/enterprise_companion/app/app.h"
 #include "chrome/enterprise_companion/crash_client.h"
+#include "chrome/enterprise_companion/enterprise_companion_status.h"
 #include "chrome/enterprise_companion/installer_paths.h"
 #include "chrome/enterprise_companion/ipc_support.h"
 
@@ -27,16 +29,20 @@ namespace enterprise_companion {
 
 // Command line arguments.
 const char kLoggingModuleSwitch[] = "vmodule";
+const char kLoggingModuleSwitchValue[] = "*/chrome/enterprise_companion/*=2";
 const char kCrashHandlerSwitch[] = "crash-handler";
 const char kCrashMeSwitch[] = "crash-me";
-const char kEnableUsageStatsSwitch[] = "enable-usage-stats";
 const char kShutdownSwitch[] = "shutdown";
+const char kFetchPoliciesSwitch[] = "fetch-policies";
 const char kInstallSwitch[] = "install";
+const char kUninstallSwitch[] = "uninstall";
+
+#if BUILDFLAG(IS_MAC)
+const char kNetWorkerSwitch[] = "net-worker";
+#endif
 
 namespace {
 
-constexpr char kLoggingModuleSwitchValue[] =
-    "*/chrome/enterprise_companion/*=2";
 constexpr int64_t kLogRotateAtSize = 1024 * 1024;  // 1 MiB.
 
 void InitLogging() {
@@ -82,6 +88,32 @@ void InitThreadPool() {
   base::ThreadPoolInstance::Get()->Start(init_params);
 }
 
+std::unique_ptr<App> CreateAppForCommandLine(base::CommandLine* command_line) {
+  if (command_line->HasSwitch(kShutdownSwitch)) {
+    return CreateAppShutdown();
+  }
+
+  if (command_line->HasSwitch(kFetchPoliciesSwitch)) {
+    return CreateAppFetchPolicies();
+  }
+
+  if (command_line->HasSwitch(kInstallSwitch)) {
+    return CreateAppInstall();
+  }
+
+  if (command_line->HasSwitch(kUninstallSwitch)) {
+    return CreateAppUninstall();
+  }
+
+#if BUILDFLAG(IS_MAC)
+  if (command_line->HasSwitch(kNetWorkerSwitch)) {
+    return CreateAppNetWorker();
+  }
+#endif
+
+  return CreateAppServer();
+}
+
 }  // namespace
 
 int EnterpriseCompanionMain(int argc, const char* const* argv) {
@@ -105,15 +137,8 @@ int EnterpriseCompanionMain(int argc, const char* const* argv) {
 
   ScopedIPCSupportWrapper ipc_support;
 
-  std::unique_ptr<App> app;
-  if (command_line->HasSwitch(kShutdownSwitch)) {
-    app = CreateAppShutdown();
-  } else if (command_line->HasSwitch(kInstallSwitch)) {
-    app = CreateAppInstall();
-  } else {
-    app = CreateAppServer();
-  }
-  EnterpriseCompanionStatus status = app->Run();
+  EnterpriseCompanionStatus status =
+      CreateAppForCommandLine(command_line)->Run();
   LOG_IF(ERROR, !status.ok())
       << "Application completed with error: " << status.description();
   return !status.ok();

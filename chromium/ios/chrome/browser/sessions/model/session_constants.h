@@ -30,9 +30,6 @@ extern const base::FilePath::CharType kWebStateStorageFilename[];
 // Name of the file storing the session data for a single WebState.
 extern const base::FilePath::CharType kWebStateSessionFilename[];
 
-// Name of the file storing the metadata for a single WebState.
-extern const base::FilePath::CharType kWebStateMetadataStorageFilename[];
-
 // Keys used to store information metadata about a WebState in a WebStateList.
 extern NSString* const kLegacyWebStateListPinnedStateKey;
 extern NSString* const kLegacyWebStateListOpenerIndexKey;
@@ -43,6 +40,9 @@ extern const char kSessionStorageFormatPref[];
 
 // Name of the preference storing the status of the session storage migration.
 extern const char kSessionStorageMigrationStatusPref[];
+
+// Name of the preference storing the date of the last migration attempt.
+extern const char kSessionStorageMigrationStartedTimePref[];
 
 // Possible values for the preference storing the format of the session
 // storage.

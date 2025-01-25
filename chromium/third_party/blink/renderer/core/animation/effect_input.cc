@@ -143,38 +143,37 @@ std::optional<ParsedOffset> ParseOffsetFromCssText(
     ExceptionState& exception_state) {
   const CSSParserContext* context =
       document.ElementSheet().Contents()->ParserContext();
-  CSSTokenizer tokenizer(css_text);
-  const auto tokens = tokenizer.TokenizeToEOF();
-  CSSParserTokenRange token_range(tokens);
-  token_range.ConsumeWhitespace();
+  CSSParserTokenStream stream(css_text);
+  stream.ConsumeWhitespace();
 
   // <number>
   {
-    CSSParserTokenRange range_copy = token_range;
+    CSSParserTokenStream::State savepoint = stream.Save();
     const CSSPrimitiveValue* primitive = css_parsing_utils::ConsumeNumber(
-        range_copy, *context, CSSPrimitiveValue::ValueRange::kAll);
-    if (primitive && range_copy.AtEnd()) {
+        stream, *context, CSSPrimitiveValue::ValueRange::kAll);
+    if (primitive && stream.AtEnd()) {
       return ParsedOffset(
           {TimelineOffset::NamedRange::kNone, primitive->GetValue<double>()});
     }
+    stream.Restore(savepoint);
   }
 
   // <percent>
   {
-    CSSParserTokenRange range_copy = token_range;
+    CSSParserTokenStream::State savepoint = stream.Save();
     const CSSPrimitiveValue* primitive = css_parsing_utils::ConsumePercent(
-        range_copy, *context, CSSPrimitiveValue::ValueRange::kAll);
-    if (primitive && range_copy.AtEnd()) {
+        stream, *context, CSSPrimitiveValue::ValueRange::kAll);
+    if (primitive && stream.AtEnd()) {
       return ParsedOffset({TimelineOffset::NamedRange::kNone,
                            primitive->GetValue<double>() / 100});
     }
+    stream.Restore(savepoint);
   }
 
   // <range-name> <percent>
-  auto* range_name_percent =
-      To<CSSValueList>(css_parsing_utils::ConsumeTimelineRangeNameAndPercent(
-          token_range, *context));
-  if (!range_name_percent || !token_range.AtEnd()) {
+  auto* range_name_percent = To<CSSValueList>(
+      css_parsing_utils::ConsumeTimelineRangeNameAndPercent(stream, *context));
+  if (!range_name_percent || !stream.AtEnd()) {
     exception_state.ThrowTypeError(
         "timeline offset must be of the form [timeline-range-name] "
         "<percentage>");
@@ -351,7 +350,7 @@ void AddPropertyValuePairsForKeyframe(
   std::sort(keyframe_properties.begin(), keyframe_properties.end(),
             WTF::CodeUnitCompareLessThan);
 
-  v8::TryCatch try_catch(isolate);
+  TryRethrowScope rethrow_scope(isolate, exception_state);
   for (const auto& property : keyframe_properties) {
     if (property == "offset" || property == "float" ||
         property == "composite" || property == "easing") {
@@ -369,7 +368,6 @@ void AddPropertyValuePairsForKeyframe(
     if (!keyframe_obj
              ->Get(isolate->GetCurrentContext(), V8String(isolate, property))
              .ToLocal(&v8_value)) {
-      exception_state.RethrowV8Exception(try_catch.Exception());
       return;
     }
 
@@ -540,11 +538,10 @@ bool GetPropertyIndexedKeyframeValues(const v8::Local<v8::Object>& keyframe,
   // By spec, we are only allowed to access a given (property, value) pair once.
   // This is observable by the web client, so we take care to adhere to that.
   v8::Local<v8::Value> v8_value;
-  v8::TryCatch try_catch(script_state->GetIsolate());
   v8::Local<v8::Context> context = script_state->GetContext();
   v8::Isolate* isolate = script_state->GetIsolate();
+  TryRethrowScope rethrow_scope(isolate, exception_state);
   if (!keyframe->Get(context, V8String(isolate, property)).ToLocal(&v8_value)) {
-    exception_state.RethrowV8Exception(try_catch.Exception());
     return {};
   }
 
@@ -813,8 +810,8 @@ StringKeyframeVector EffectInput::ParseKeyframesArgument(
 
   // 3. Let method be the result of GetMethod(object, @@iterator).
   v8::Isolate* isolate = script_state->GetIsolate();
-  auto script_iterator =
-      ScriptIterator::FromIterable(isolate, keyframes_obj, exception_state);
+  auto script_iterator = ScriptIterator::FromIterable(
+      isolate, keyframes_obj, exception_state, ScriptIterator::Kind::kSync);
   if (exception_state.HadException())
     return {};
 

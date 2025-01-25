@@ -60,7 +60,7 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
       url, format_types, base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
 
   // Display the nickname.
-  match.contents = nickname;
+  match.contents = formatted_url;
 
   // Bookmark classification diverges from relevance scoring. Specifically,
   // 1) All occurrences of the input contribute to relevance; e.g. for the input
@@ -79,7 +79,7 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
       ACMatchClassification::MATCH | ACMatchClassification::URL,
       ACMatchClassification::URL);
 
-  match.description = formatted_url;
+  match.description = nickname;
 
   base::TrimWhitespace(match.description, base::TRIM_LEADING,
                        &match.description);

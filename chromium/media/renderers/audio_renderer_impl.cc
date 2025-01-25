@@ -83,14 +83,16 @@ AudioRendererImpl::AudioRendererImpl(
   // won't remove the observer until we're destructed on |task_runner_| so we
   // must post it here if we're on the wrong thread.
   if (task_runner_->RunsTasksInCurrentSequence()) {
-    base::PowerMonitor::AddPowerSuspendObserver(this);
+    base::PowerMonitor::GetInstance()->GetInstance()->AddPowerSuspendObserver(
+        this);
   } else {
     // Safe to post this without a WeakPtr because this class must be destructed
     // on the same thread and construction has not completed yet.
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(
-            IgnoreResult(&base::PowerMonitor::AddPowerSuspendObserver), this));
+            base::IgnoreResult(&base::PowerMonitor::AddPowerSuspendObserver),
+            base::Unretained(base::PowerMonitor::GetInstance()), this));
   }
 
   // Do not add anything below this line since the above actions are only safe
@@ -100,7 +102,8 @@ AudioRendererImpl::AudioRendererImpl(
 AudioRendererImpl::~AudioRendererImpl() {
   DVLOG(1) << __func__;
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
-  base::PowerMonitor::RemovePowerSuspendObserver(this);
+  base::PowerMonitor::GetInstance()->GetInstance()->RemovePowerSuspendObserver(
+      this);
 
   // If Render() is in progress, this call will wait for Render() to finish.
   // After this call, the |sink_| will not call back into |this| anymore.
@@ -862,10 +865,11 @@ void AudioRendererImpl::SetPreservesPitch(bool preserves_pitch) {
     algorithm_->SetPreservesPitch(preserves_pitch);
 }
 
-void AudioRendererImpl::SetWasPlayedWithUserActivation(
-    bool was_played_with_user_activation) {
+void AudioRendererImpl::SetWasPlayedWithUserActivationAndHighMediaEngagement(
+    bool was_played_with_user_activation_and_high_media_engagement) {
   base::AutoLock auto_lock(lock_);
-  was_played_with_user_activation_ = was_played_with_user_activation;
+  was_played_with_user_activation_and_high_media_engagement_ =
+      was_played_with_user_activation_and_high_media_engagement;
 }
 
 void AudioRendererImpl::OnSuspend() {
@@ -1064,7 +1068,8 @@ bool AudioRendererImpl::HandleDecodedBuffer_Locked(
     // Do not transcribe muted streams initiated by autoplay if the stream was
     // never unmuted.
     if (transcribe_audio_callback_ &&
-        (was_played_with_user_activation_ || was_unmuted_)) {
+        (was_played_with_user_activation_and_high_media_engagement_ ||
+         was_unmuted_)) {
       transcribe_audio_callback_.Run(buffer);
     }
 #endif
@@ -1085,7 +1090,7 @@ bool AudioRendererImpl::HandleDecodedBuffer_Locked(
     case kUninitialized:
     case kInitializing:
     case kFlushing:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
 
     case kFlushed:
       DCHECK(!pending_read_);
@@ -1194,7 +1199,11 @@ int AudioRendererImpl::Render(base::TimeDelta delay,
                               base::TimeTicks delay_timestamp,
                               const AudioGlitchInfo& glitch_info,
                               AudioBus* audio_bus) {
-  TRACE_EVENT1("media", "AudioRendererImpl::Render", "id", player_id_);
+  TRACE_EVENT("media", "AudioRendererImpl::Render", "id", player_id_,
+              "playout_delay (ms)", delay.InMillisecondsF(),
+              "delay_timestamp (ms)",
+              (delay_timestamp - base::TimeTicks()).InMillisecondsF());
+
   int frames_requested = audio_bus->frames();
   DVLOG(4) << __func__ << " delay:" << delay << " glitch_info:["
            << glitch_info.ToString() << "]"
@@ -1419,7 +1428,7 @@ void AudioRendererImpl::HandleAbortedReadOrDecodeError(PipelineStatus status) {
   switch (state_) {
     case kUninitialized:
     case kInitializing:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case kFlushing:
       ChangeState_Locked(kFlushed);
       if (status == PIPELINE_OK) {

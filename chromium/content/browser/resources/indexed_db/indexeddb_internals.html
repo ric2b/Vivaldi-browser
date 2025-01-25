@@ -39,7 +39,7 @@
               <span>Storage key:</span>
               <span jscontent="serializedStorageKey"></span>
             </div>
-            <indexeddb-bucket class="metadata-list-item" jsselect="buckets" jsvars="idbBucketId:bucketLocator.id;" jsvalues=".idbBucketId:idbBucketId">
+            <indexeddb-bucket class="metadata-list-item" jsselect="buckets" jsvars="idbClients:clients;" jsvalues=".idbBucketId:bucketLocator.id;">
               <div>
                 <span>Bucket:</span>
                 <span jscontent="`'${name}'`"></span>
@@ -67,7 +67,6 @@
                 <span class="control download">Download</span>
                 <span class="control start-record">Start Recording</span>
                 <span class="control stop-record" hidden>Stop Recording</span>
-                <a class="control" href="https://crbug.com/829141" target="_blank">?</a>
                 <span class="download-status" style="display: none">Loading...</span>
               </div>
 
@@ -85,7 +84,7 @@
                 </div>
               </div>
               <div class="database-view">
-                <indexeddb-database class="metadata-list-item" jsselect="$this.databases" jsvalues=".idbBucketId:idbBucketId;.data:$this;">
+                <indexeddb-database class="metadata-list-item" jsselect="$this.databases" jsvalues=".clients:idbClients;.data:$this;">
                 </indexeddb-database>
               </div>
           </div>

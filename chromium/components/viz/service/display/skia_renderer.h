@@ -39,7 +39,6 @@ class SkiaOutputSurface;
 class SolidColorDrawQuad;
 class TextureDrawQuad;
 class TileDrawQuad;
-class YUVVideoDrawQuad;
 
 // TODO(crbug.com/40554816): SkColorSpace is only a subset comparing to
 // gfx::ColorSpace. Need to figure out support for color space that is not
@@ -122,7 +121,6 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   struct RenderPassOverlayParams;
   struct OverlayLock;
   class ScopedSkImageBuilder;
-  class ScopedYUVSkImageBuilder;
   class VizDebuggerLog;
 
   void ClearCanvas(SkColor4f color);
@@ -241,9 +239,6 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   void DrawTileDrawQuad(const TileDrawQuad* quad,
                         const DrawRPDQParams* rpdq_params,
                         DrawQuadParams* params);
-  void DrawYUVVideoQuad(const YUVVideoDrawQuad* quad,
-                        const DrawRPDQParams* rpdq_params,
-                        DrawQuadParams* params);
 
   void DrawUnsupportedQuad(const DrawQuad* quad,
                            const DrawRPDQParams* rpdq_params,
@@ -255,7 +250,8 @@ class VIZ_SERVICE_EXPORT SkiaRenderer : public DirectRenderer {
   // skia_renderer can draw most single-quad passes directly, regardless of
   // blend mode or image filtering.
   const DrawQuad* CanPassBeDrawnDirectly(
-      const AggregatedRenderPass* pass) override;
+      const AggregatedRenderPass* pass,
+      const RenderPassRequirements& requirements) override;
 
   void DrawDelegatedInkTrail() override;
 

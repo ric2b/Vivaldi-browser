@@ -18,12 +18,15 @@ package com.google.android.nearby.presence.rust;
 
 import com.google.android.nearby.presence.rust.SerializationException.InsufficientSpaceException;
 import com.google.android.nearby.presence.rust.SerializationException.InvalidDataElementException;
+import com.google.android.nearby.presence.rust.V0DataElement.TxPower;
+import com.google.android.nearby.presence.rust.V0DataElement.V0Actions;
 import com.google.android.nearby.presence.rust.credential.V0BroadcastCredential;
-import java.lang.ref.Cleaner;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 
 /**
- * A builder for V0 advertisements. Create a new instance with {@link #newPublic()} for a public
- * advertisement or {@link #newEncrypted()} for an encrypted advertisement.
+ * A builder for V0 advertisements. Create a new instance with {@link
+ * V0AdvertisementBuilder#newPublic()} for a public advertisement or {@link
+ * V0AdvertisementBuilder#newEncrypted()} for an encrypted advertisement.
  */
 public final class V0AdvertisementBuilder implements AutoCloseable {
 
@@ -32,19 +35,19 @@ public final class V0AdvertisementBuilder implements AutoCloseable {
     return newPublic(NpAdv.getCleaner());
   }
 
+  /** Create a builder for a public advertisement with a specific cleaner. */
+  private static V0AdvertisementBuilder newPublic(CooperativeCleaner cleaner) {
+    return new V0AdvertisementBuilder(new V0BuilderHandle(cleaner));
+  }
+
   /** Create a builder for an encrypted advertisement. */
   public static V0AdvertisementBuilder newEncrypted(V0BroadcastCredential credential, byte[] salt) {
     return newEncrypted(NpAdv.getCleaner(), credential, salt);
   }
 
-  /** Create a builder for a public advertisement with a specific Cleaner. */
-  public static V0AdvertisementBuilder newPublic(Cleaner cleaner) {
-    return new V0AdvertisementBuilder(new V0BuilderHandle(cleaner));
-  }
-
-  /** Create a builder for an encrypted advertisement with a specific Cleaner. */
-  public static V0AdvertisementBuilder newEncrypted(
-      Cleaner cleaner, V0BroadcastCredential credential, byte[] salt) {
+  /** Create a builder for an encrypted advertisement with a specific cleaner. */
+  private static V0AdvertisementBuilder newEncrypted(
+      CooperativeCleaner cleaner, V0BroadcastCredential credential, byte[] salt) {
     return new V0AdvertisementBuilder(new V0BuilderHandle(cleaner, credential, salt));
   }
 
@@ -62,8 +65,11 @@ public final class V0AdvertisementBuilder implements AutoCloseable {
    *     of range)
    * @throws InsufficientSpaceException when the data element will not fit in the remaining space.
    */
-  public void addDataElement(V0DataElement dataElement) throws InsufficientSpaceException {
+  @CanIgnoreReturnValue
+  public V0AdvertisementBuilder addDataElement(V0DataElement dataElement)
+      throws InsufficientSpaceException {
     builder.addDataElement(dataElement);
+    return this;
   }
 
   /**
@@ -89,26 +95,59 @@ public final class V0AdvertisementBuilder implements AutoCloseable {
       System.loadLibrary(NpAdv.LIBRARY_NAME);
     }
 
-    public V0BuilderHandle(Cleaner cleaner) {
+    /** Create a public builder. */
+    public V0BuilderHandle(CooperativeCleaner cleaner) {
       super(allocatePublic(), cleaner, V0BuilderHandle::deallocate);
     }
 
-    public V0BuilderHandle(Cleaner cleaner, V0BroadcastCredential credential, byte[] salt) {
+    /** Create an encrypted builder. */
+    public V0BuilderHandle(
+        CooperativeCleaner cleaner, V0BroadcastCredential credential, byte[] salt) {
       super(allocatePrivate(credential, salt), cleaner, V0BuilderHandle::deallocate);
     }
 
-    public void addDataElement(V0DataElement dataElement) {
-      // Call the appropriate native add call based on the data element type.
-      dataElement.visit(
-          new V0DataElement.Visitor() {
-            public void visitTxPower(V0DataElement.TxPower txPower) {
-              nativeAddTxPowerDataElement(txPower);
-            }
+    private class AddDataElementVisitor implements V0DataElement.Visitor {
+      @Override
+      public void visitTxPower(TxPower txPower) {
+        try {
+          nativeAddTxPowerDataElement(txPower);
+        } catch (InsufficientSpaceException ise) {
+          throw new SmuggledInsufficientSpaceException(ise);
+        }
+      }
 
-            public void visitV0Actions(V0DataElement.V0Actions v0Actions) {
-              nativeAddV0ActionsDataElement(v0Actions);
-            }
-          });
+      @Override
+      public void visitV0Actions(V0Actions actions) {
+        try {
+          nativeAddV0ActionsDataElement(actions);
+        } catch (InsufficientSpaceException ise) {
+          throw new SmuggledInsufficientSpaceException(ise);
+        }
+      }
+    }
+
+    /**
+     * Helper to smuggle {@link InsufficientSpaceException} (a checked exception) through APIs that
+     * don't support checked exceptions.
+     */
+    private static class SmuggledInsufficientSpaceException extends RuntimeException {
+      private final InsufficientSpaceException ise;
+
+      public SmuggledInsufficientSpaceException(InsufficientSpaceException ise) {
+        this.ise = ise;
+      }
+
+      public void throwChecked() throws InsufficientSpaceException {
+        throw ise;
+      }
+    }
+
+    public void addDataElement(V0DataElement dataElement) throws InsufficientSpaceException {
+      try {
+        dataElement.visit(new AddDataElementVisitor());
+      } catch (SmuggledInsufficientSpaceException ex) {
+        ex.throwChecked();
+      }
     }
 
     public byte[] build()
@@ -123,9 +162,11 @@ public final class V0AdvertisementBuilder implements AutoCloseable {
 
     private static native long allocatePrivate(V0BroadcastCredential credential, byte[] salt);
 
-    private native void nativeAddTxPowerDataElement(V0DataElement.TxPower txPower);
+    private native void nativeAddTxPowerDataElement(TxPower txPower)
+        throws InsufficientSpaceException;
 
-    private native void nativeAddV0ActionsDataElement(V0DataElement.V0Actions v0Actions);
+    private native void nativeAddV0ActionsDataElement(V0Actions v0Actions)
+        throws InsufficientSpaceException;
 
     private native byte[] nativeBuild()
         throws SerializationException.LdtEncryptionException,

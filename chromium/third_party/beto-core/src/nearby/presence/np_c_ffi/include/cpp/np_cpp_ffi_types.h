@@ -457,7 +457,7 @@ struct V0DiscoveryCredential {
 
 /// A representation of a MatchedCredential which is passable across the FFI boundary
 struct FfiMatchedCredential {
-  uint32_t cred_id;
+  int64_t cred_id;
   const uint8_t *encrypted_metadata_bytes_buffer;
   uintptr_t encrypted_metadata_bytes_len;
 };
@@ -704,7 +704,7 @@ struct GetV0DEResult {
 struct DeserializedV0IdentityDetails {
   /// The ID of the credential which
   /// matched the deserialized adv
-  uint32_t cred_id;
+  int64_t cred_id;
   /// The 14-byte legacy identity token
   uint8_t identity_token[14];
   /// The 2-byte advertisement salt
@@ -820,7 +820,7 @@ struct DeserializedV1IdentityDetails {
   V1VerificationMode verification_mode;
   /// The ID of the credential which
   /// matched the deserialized section.
-  uint32_t cred_id;
+  int64_t cred_id;
   /// The 16-byte metadata key.
   uint8_t identity_token[16];
 };
@@ -900,21 +900,17 @@ struct V0BroadcastCredential {
   uint8_t identity_token[14];
 };
 
-/// A `#[repr(C)]` handle to a value of type `V1AdvertisementBuilderInternals`
-struct V1AdvertisementBuilderHandle {
-  uint64_t handle_id;
-};
-
 /// A handle to a builder for V1 advertisements.
 struct V1AdvertisementBuilder {
-  AdvertisementBuilderKind kind;
-  V1AdvertisementBuilderHandle handle;
+  uint64_t handle_id;
 };
 
 /// A handle to a builder for V1 sections. This is not a unique handle; it is the same handle as
 /// the advertisement builder the section builder was originated from.
 struct V1SectionBuilder {
+  /// The parent advertisement builder for this section
   V1AdvertisementBuilder adv_builder;
+  /// This section's index in the parent advertisement
   uint8_t section_index;
 };
 

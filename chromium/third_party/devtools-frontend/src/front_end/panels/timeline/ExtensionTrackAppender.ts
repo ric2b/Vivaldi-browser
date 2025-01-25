@@ -24,7 +24,7 @@ const UIStrings = {
    * @description The name of a track, which is a horizontal division of the timeline, synonym with "swimlane".
    * @example {A track name} PH1
    */
-  customTrackName: '{PH1} — Custom Track',
+  customTrackName: '{PH1} — Custom track',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/ExtensionTrackAppender.ts', UIStrings);
@@ -101,9 +101,6 @@ export class ExtensionTrackAppender implements TrackAppender {
   }
 
   titleForEvent(event: TraceEngine.Types.TraceEvents.TraceEventData): string {
-    if (!TraceEngine.Types.Extensions.isSyntheticExtensionEntry(event)) {
-      return ThemeSupport.ThemeSupport.instance().getComputedValue('--app-color-rendering');
-    }
     return event.name;
   }
 

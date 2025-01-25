@@ -73,8 +73,6 @@ namespace page_load_metrics {
 
 namespace {
 
-using FrameTreeNodeId = int;
-
 struct ExpectedFrameBytes {
   ExpectedFrameBytes(size_t cached_kb, size_t uncached_kb)
       : cached_kb(cached_kb), uncached_kb(uncached_kb) {}
@@ -100,6 +98,12 @@ struct CreativeOriginTestWithThrottling {
   size_t creative_index;
   bool should_paint;
   OriginStatusWithThrottling expected_origin_status;
+};
+
+struct CompleteAuctionResult {
+  bool is_server_auction;
+  bool is_on_device_auction;
+  content::AuctionResult result;
 };
 
 enum class ResourceCached { kNotCached = 0, kCachedHttp, kCachedMemory };
@@ -750,6 +754,34 @@ class AdsPageLoadMetricsObserverTest
     histograms.ExpectUniqueSample(
         kCreativeOriginStatusWithThrottlingHistogramId,
         creative_origin_test.expected_origin_status, 1);
+  }
+
+  void SimulateFCPPostAuctions(
+      std::vector<CompleteAuctionResult> auction_results) {
+    base::TimeTicks start = base::TimeTicks::Now();
+    RenderFrameHost* main_frame =
+        NavigateFrame(kNonAdUrl, web_contents()->GetPrimaryMainFrame(), start);
+
+    auto* recorder =
+        page_load_metrics::MetricsWebContentsObserver::FromWebContents(
+            content::WebContents::FromRenderFrameHost(main_frame));
+    for (const CompleteAuctionResult& auction_result : auction_results) {
+      recorder->OnAdAuctionComplete(
+          main_frame, auction_result.is_server_auction,
+          auction_result.is_on_device_auction, auction_result.result);
+    }
+
+    RenderFrameHost* ad_frame = CreateAndNavigateSubFrame(
+        kAdUrl, main_frame, start + base::Milliseconds(100));
+
+    // Load some bytes so that the frame is recorded.
+    ResourceDataUpdate(ad_frame, ResourceCached::kNotCached, 100);
+
+    // Set FirstContentfulPaint.
+    SimulateFirstContentfulPaint(ad_frame, base::Milliseconds(100));
+
+    // Navigate away.
+    NavigateFrame(kNonAdUrl, main_frame);
   }
 
   PageLoadMetricsObserverTester* tester() { return tester_.get(); }
@@ -2931,6 +2963,41 @@ TEST_P(AdsPageLoadMetricsObserverTest, NoFirstContentfulPaint_NotRecorded) {
       SuffixedHistogram(
           "AdPaintTiming.TopFrameNavigationToFirstContentfulPaint"),
       0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      0);
 }
 
 TEST_P(AdsPageLoadMetricsObserverTest, FirstContentfulPaint_Recorded) {
@@ -2963,6 +3030,36 @@ TEST_P(AdsPageLoadMetricsObserverTest, FirstContentfulPaint_Recorded) {
       SuffixedHistogram(
           "AdPaintTiming.TopFrameNavigationToFirstContentfulPaint"),
       200, 1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      0);
 
   auto entries = test_ukm_recorder().GetEntriesByName(
       ukm::builders::AdFrameLoad::kEntryName);
@@ -2970,6 +3067,317 @@ TEST_P(AdsPageLoadMetricsObserverTest, FirstContentfulPaint_Recorded) {
   test_ukm_recorder().ExpectEntryMetric(
       entries.front(),
       ukm::builders::AdFrameLoad::kTiming_FirstContentfulPaintName, 100);
+}
+
+TEST_P(AdsPageLoadMetricsObserverTest,
+       FirstContentfulPaintPostDeviceAuctionNoWinner_Recorded) {
+  SimulateFCPPostAuctions(
+      {CompleteAuctionResult(/*is_server_auction=*/false,
+                             /*is_on_device_auction=*/true,
+                             content::AuctionResult::kNoInterestGroups)});
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      0);
+}
+
+TEST_P(AdsPageLoadMetricsObserverTest,
+       FirstContentfulPaintPostDeviceAuctionWinner_Recorded) {
+  SimulateFCPPostAuctions({CompleteAuctionResult(
+      /*is_server_auction=*/false,
+      /*is_on_device_auction=*/true, content::AuctionResult::kSuccess)});
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      0);
+}
+
+TEST_P(AdsPageLoadMetricsObserverTest,
+       FirstContentfulPaintPostServerAuctionNoWinner_Recorded) {
+  SimulateFCPPostAuctions({CompleteAuctionResult(
+      /*is_server_auction=*/true,
+      /*is_on_device_auction=*/false, content::AuctionResult::kNoBids)});
+
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      0);
+}
+
+TEST_P(AdsPageLoadMetricsObserverTest,
+       FirstContentfulPaintPostServerAuctionWinner_Recorded) {
+  SimulateFCPPostAuctions({CompleteAuctionResult(
+      /*is_server_auction=*/true,
+      /*is_on_device_auction=*/false, content::AuctionResult::kSuccess)});
+
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      0);
+}
+
+TEST_P(AdsPageLoadMetricsObserverTest,
+       FirstContentfulPaintPostServerAuctionsWithWinnerAndNoWinner_Recorded) {
+  SimulateFCPPostAuctions(
+      {CompleteAuctionResult(
+           /*is_server_auction=*/true,
+           /*is_on_device_auction=*/false, content::AuctionResult::kSuccess),
+       CompleteAuctionResult(
+           /*is_server_auction=*/true,
+           /*is_on_device_auction=*/false, content::AuctionResult::kNoBids)});
+
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      1);
+  // Only record
+  // TopFrameNavigationToFirstAdFirstContentfulPaintAfterWinningServerAuction
+  // if *only* winning auctions happened.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      0);
+}
+
+TEST_P(AdsPageLoadMetricsObserverTest,
+       FirstContentfulPaintPostAbortedOnDeviceAuction_NotRecorded) {
+  SimulateFCPPostAuctions({CompleteAuctionResult(
+      /*is_server_auction=*/false,
+      /*is_on_device_auction=*/true, content::AuctionResult::kAborted)});
+
+  histogram_tester().ExpectUniqueSample(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      200, 0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  // No auction *completed* so the following metric is still recorded.
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      1);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      0);
+}
+
+TEST_P(AdsPageLoadMetricsObserverTest,
+       FirstContentfulPaintPostServerAndDeviceAuction_Recorded) {
+  SimulateFCPPostAuctions(
+      {CompleteAuctionResult(/*is_server_auction=*/true,
+                             /*is_on_device_auction=*/true,
+                             content::AuctionResult::kNoInterestGroups)});
+
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      1);
+}
+
+TEST_P(AdsPageLoadMetricsObserverTest,
+       FirstContentfulPaintOneServerAuctionAndOneDeviceAuction_Recorded) {
+  SimulateFCPPostAuctions(
+      {CompleteAuctionResult(/*is_server_auction=*/true,
+                             /*is_on_device_auction=*/false,
+                             content::AuctionResult::kNoInterestGroups),
+       CompleteAuctionResult(/*is_server_auction=*/false,
+                             /*is_on_device_auction=*/true,
+                             content::AuctionResult::kSuccess)});
+
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningDeviceAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfterWi"
+                        "nningServerAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram(
+          "AdPaintTiming."
+          "TopFrameNavigationToFirstAdFirstContentfulPaintAfterNoAuction"),
+      0);
+  histogram_tester().ExpectTotalCount(
+      SuffixedHistogram("AdPaintTiming."
+                        "TopFrameNavigationToFirstAdFirstContentfulPaintAfter"
+                        "ServerAndDeviceAuctions"),
+      1);
 }
 
 TEST_P(AdsPageLoadMetricsObserverTest,

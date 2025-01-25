@@ -215,40 +215,32 @@ void TabsEventRouter::TabEntry::NavigationEntryCommitted(
     if (target_workspace_id > -1) {
       // Check if workspace is in another window and move the tab if needed.
       Browser *current_browser = ::vivaldi::FindBrowserWithTab(web_contents());
-      Browser *workspace_browser =
+      Browser *target_browser =
         extensions::GetWorkspaceBrowser(target_workspace_id);
-      auto current_workspace_id_ =
-        extensions::GetActiveWorkspaceId(current_browser);
-      double current_workspace_id = current_workspace_id_.has_value()
-        ? current_workspace_id_.value()
-        : -1;
 
-      if (current_workspace_id != target_workspace_id) {
-        if (
-          current_browser &&
-          workspace_browser &&
-          workspace_browser != current_browser
-        ) {
-          int index = current_browser->tab_strip_model()->
-            GetIndexOfWebContents(web_contents());
-          int new_index = extensions::CountTabsInWorkspace(
-            workspace_browser->tab_strip_model(),
-            target_workspace_id);
-          if (!::vivaldi::ui_tools::MoveTabToWindow(current_browser,
-                                                    workspace_browser,
-                                                    index, &new_index, 0,
-                                                    AddTabTypes::ADD_NONE)) {
-            NOTREACHED();
-          }
+      if (
+        current_browser &&
+        target_browser &&
+        target_browser != current_browser
+      ) {
+        int index = current_browser->tab_strip_model()->
+          GetIndexOfWebContents(web_contents());
+        int new_index = extensions::CountTabsInWorkspace(
+          target_browser->tab_strip_model(),
+          target_workspace_id);
+        if (!::vivaldi::ui_tools::MoveTabToWindow(current_browser,
+                                                  target_browser,
+                                                  index, &new_index, 0,
+                                                  AddTabTypes::ADD_NONE)) {
+          NOTREACHED();
         }
+      }
 
-        // Set the workspace ID and notify that it's been updated.
-        bool workspace_updated =
-          extensions::SetTabWorkspaceId(web_contents(), target_workspace_id);
-        if (workspace_updated) {
-          changed_property_names.insert("vivExtData");
-        }
-
+      // Set the workspace ID and notify that it's been updated.
+      bool workspace_updated =
+        extensions::SetTabWorkspaceId(web_contents(), target_workspace_id);
+      if (workspace_updated) {
+        changed_property_names.insert("vivExtData");
       }
     }
   }
@@ -370,11 +362,11 @@ void TabsEventRouter::TabPinnedStateChanged(TabStripModel* tab_strip_model,
 
 void TabsEventRouter::TabGroupedStateChanged(
     std::optional<tab_groups::TabGroupId> group,
-    content::WebContents* contents,
+    tabs::TabModel* tab,
     int index) {
   std::set<std::string> changed_property_names;
   changed_property_names.insert(tabs_constants::kGroupIdKey);
-  DispatchTabUpdatedEvent(contents, std::move(changed_property_names));
+  DispatchTabUpdatedEvent(tab->contents(), std::move(changed_property_names));
 }
 
 void TabsEventRouter::OnZoomControllerDestroyed(

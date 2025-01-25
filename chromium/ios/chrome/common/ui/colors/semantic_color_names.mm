@@ -28,7 +28,11 @@ NSString* const kTertiaryBackgroundColor = @"tertiary_background_color";
 NSString* const kUpdatedTertiaryBackgroundColor =
     @"updated_tertiary_background_color";
 NSString* const kTextPrimaryColor = @"text_primary_color";
+NSString* const kInvertedTextPrimaryColor = @"inverted_text_primary_color";
 NSString* const kTextSecondaryColor = @"text_secondary_color";
+NSString* const kTextLightTertiaryDarkPrimaryColor =
+    @"text_light_tertiary_dark_primary_color";
+NSString* const kInvertedTextSecondaryColor = @"inverted_text_secondary_color";
 NSString* const kTextTertiaryColor = @"text_tertiary_color";
 NSString* const kTextQuaternaryColor = @"text_quaternary_color";
 NSString* const kTextfieldBackgroundColor = @"textfield_background_color";
@@ -54,6 +58,9 @@ NSString* const kTabGroupCyanColor = @"tab_group_cyan_color";
 NSString* const kTabGroupPurpleColor = @"tab_group_purple_color";
 NSString* const kTabGroupGreenColor = @"tab_group_green_color";
 NSString* const kTabGroupGreyColor = @"tab_group_grey_color";
+NSString* const kWhiteBlackAlpha50Color = @"white_black_alpha_50_color";
+NSString* const kLensOverlayConsentDialogDescriptionColor =
+    @"lens_overlay_consent_dialog_description_color";
 
 #pragma mark - Standard Colors
 NSString* const kSolidBlackColor = @"solid_black_color";
@@ -66,6 +73,7 @@ NSString* const kBlue400Color = @"blue_400_color";
 NSString* const kBlue500Color = @"blue_500_color";
 NSString* const kBlue600Color = @"blue_600_color";
 NSString* const kBlue700Color = @"blue_700_color";
+NSString* const kStaticBlueColor = @"static_blue_color";
 NSString* const kStaticBlue400Color = @"static_blue_400_color";
 
 NSString* const kGreenColor = @"green_color";

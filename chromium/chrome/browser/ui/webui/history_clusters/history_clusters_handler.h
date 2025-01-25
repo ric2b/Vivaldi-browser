@@ -21,9 +21,15 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/webui/resources/cr_components/history_clusters/history_clusters.mojom.h"
 
+class BrowserWindowInterface;
 class Profile;
+
+namespace tabs {
+class TabInterface;
+}  // namespace tabs
 
 namespace content {
 class WebContents;
@@ -49,10 +55,28 @@ class HistoryClustersHandler : public mojom::PageHandler,
                                public HistoryClustersService::Observer,
                                public ProfileBasedBrowsingHistoryDriver {
  public:
+  // There are two UI surfaces that can show history clusters. While they are
+  // visually similar, they are conceptually different. The first is in a tab
+  // inside chrome://history. This is conceptually tied to a tab, and if the tab
+  // is dragged into a new window, the UI shows up in the new window. The second
+  // is in the window-scoped side panel. If the active tab is dragged into a new
+  // window, the side-panel continues to show in the previous window.
+
+  // if `browser_window_interface` is nullptr, then `SetTabInterface` must be
+  // called immediately after construction.
   HistoryClustersHandler(
       mojo::PendingReceiver<mojom::PageHandler> pending_page_handler,
       Profile* profile,
-      content::WebContents* web_contents);
+      content::WebContents* web_contents,
+      BrowserWindowInterface* browser_window_interface);
+
+  // Constructor for the tab-scoped history clusters UI.
+  HistoryClustersHandler(
+      mojo::PendingReceiver<mojom::PageHandler> pending_page_handler,
+      Profile* profile,
+      content::WebContents* web_contents,
+      tabs::TabInterface* tab_interface);
+
   HistoryClustersHandler(const HistoryClustersHandler&) = delete;
   HistoryClustersHandler& operator=(const HistoryClustersHandler&) = delete;
   ~HistoryClustersHandler() override;
@@ -61,6 +85,11 @@ class HistoryClustersHandler : public mojom::PageHandler,
 
   void SetSidePanelUIEmbedder(
       base::WeakPtr<TopChromeWebUIController::Embedder> side_panel_embedder);
+
+  using ContextInterface =
+      absl::variant<BrowserWindowInterface*, tabs::TabInterface*>;
+  void SetContextInterface(ContextInterface interface);
+
   // Used to set the in-page query from the browser.
   void SetQuery(const std::string& query);
 
@@ -105,6 +134,9 @@ class HistoryClustersHandler : public mojom::PageHandler,
   Profile* GetProfile() override;
 
  private:
+  // Common initialization code shared by constructors.
+  void CommonInit();
+
   // Called with the result of querying clusters.
   void SendClustersToPage(const std::string& query,
                           const std::vector<history::Cluster> clusters_batch,
@@ -118,6 +150,8 @@ class HistoryClustersHandler : public mojom::PageHandler,
 
   raw_ptr<Profile> profile_;
   raw_ptr<content::WebContents> web_contents_;
+
+  ContextInterface interface_;
 
   // Used to observe the service.
   base::ScopedObservation<HistoryClustersService,

@@ -9,54 +9,59 @@
  */
 
 import './certificate_list_v2.js';
+import './certificate_info_dialog.js';
+import './certificate_password_dialog.js';
 import './certificate_subpage_v2.js';
-import '//resources/cr_elements/cr_dialog/cr_dialog.js';
+import './certificate_manager_v2_icons.html.js';
+import './certificate_manager_style_v2.css.js';
+import './crs_section_v2.js';
+import './local_certs_section_v2.js';
 import '//resources/cr_elements/cr_icon/cr_icon.js';
-import '//resources/cr_elements/cr_tabs/cr_tabs.js';
 import '//resources/cr_elements/cr_toast/cr_toast.js';
 import '//resources/cr_elements/cr_toolbar/cr_toolbar.js';
 import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_link_row/cr_link_row.js';
 import '//resources/cr_elements/cr_shared_style.css.js';
 import '//resources/cr_elements/cr_shared_vars.css.js';
-import '//resources/cr_elements/cr_toggle/cr_toggle.js';
-import '//resources/polymer/v3_0/iron-pages/iron-pages.js';
+import '//resources/cr_elements/icons_lit.html.js';
+import '//resources/cr_elements/cr_page_selector/cr_page_selector.js';
 import '//resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
 import '//resources/cr_elements/cr_nav_menu_item_style.css.js';
 import '//resources/cr_elements/cr_page_host_style.css.js';
 
-import type {CrDialogElement} from '//resources/cr_elements/cr_dialog/cr_dialog.js';
+import {CrContainerShadowMixin} from '//resources/cr_elements/cr_container_shadow_mixin.js';
+import type {CrPageSelectorElement} from '//resources/cr_elements/cr_page_selector/cr_page_selector.js';
 import type {CrToastElement} from '//resources/cr_elements/cr_toast/cr_toast.js';
-import type {CrToggleElement} from '//resources/cr_elements/cr_toggle/cr_toggle.js';
 import {I18nMixin} from '//resources/cr_elements/i18n_mixin.js';
-import {assert} from '//resources/js/assert.js';
+import {assert, assertNotReached} from '//resources/js/assert.js';
 import {focusWithoutInk} from '//resources/js/focus_without_ink.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
-import {PluralStringProxyImpl} from '//resources/js/plural_string_proxy.js';
+import {PromiseResolver} from '//resources/js/promise_resolver.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import type {CertificateListV2Element} from './certificate_list_v2.js';
 import {getTemplate} from './certificate_manager_v2.html.js';
-import type {CertManagementMetadata, ImportResult} from './certificate_manager_v2.mojom-webui.js';
+import type {ImportResult} from './certificate_manager_v2.mojom-webui.js';
 import {CertificateSource} from './certificate_manager_v2.mojom-webui.js';
+import type {CertificatePasswordDialogElement} from './certificate_password_dialog.js';
 import type {CertificateSubpageV2Element, SubpageCertificateList} from './certificate_subpage_v2.js';
 import {CertificatesV2BrowserProxy} from './certificates_v2_browser_proxy.js';
+import type {CrsSectionV2Element} from './crs_section_v2.js';
+import type {LocalCertsSectionV2Element} from './local_certs_section_v2.js';
+import type {Route} from './navigation_v2.js';
+import {Page, RouteObserverMixin, Router} from './navigation_v2.js';
 
-export enum Page {
-  LOCAL_CERTS = 'localcerts',
-  CLIENT_CERTS = 'clientcerts',
-  CRS_CERTS = 'crscerts',
-  // Sub-pages
-  ADMIN_CERTS = 'admincerts',
-  PLATFORM_CERTS = 'platformcerts',
+interface PasswordResult {
+  password: string|null;
 }
 
-const CertificateManagerV2ElementBase = I18nMixin(PolymerElement);
+const CertificateManagerV2ElementBase =
+    RouteObserverMixin(CrContainerShadowMixin(I18nMixin(PolymerElement)));
 
 export interface CertificateManagerV2Element {
   $: {
-    crsCerts: CertificateListV2Element,
     toolbar: HTMLElement,
+    main: CrPageSelectorElement,
     platformClientCerts: CertificateListV2Element,
     // <if expr="is_win or is_macosx or is_linux">
     provisionedClientCerts: CertificateListV2Element,
@@ -65,12 +70,8 @@ export interface CertificateManagerV2Element {
     extensionsClientCerts: CertificateListV2Element,
     // </if>
     toast: CrToastElement,
-    dialog: CrDialogElement,
-    importOsCerts: CrToggleElement,
-    importOsCertsManagedIcon: HTMLElement,
-    viewOsImportedCerts: HTMLElement,
+    viewOsImportedClientCerts: HTMLElement,
     // <if expr="is_win or is_macosx">
-    manageOsImportedCerts: HTMLElement,
     manageOsImportedClientCerts: HTMLElement,
     // </if>
 
@@ -78,13 +79,12 @@ export interface CertificateManagerV2Element {
     clientMenuItem: HTMLElement,
     crsMenuItem: HTMLElement,
 
-    localCertSection: HTMLElement,
+    localCertSection: LocalCertsSectionV2Element,
     clientCertSection: HTMLElement,
-    crsCertSection: HTMLElement,
-    adminCertsInstalledLinkRow: HTMLElement,
+    crsCertSection: CrsSectionV2Element,
     adminCertsSection: CertificateSubpageV2Element,
     platformCertsSection: CertificateSubpageV2Element,
-    numSystemCerts: HTMLElement,
+    platformClientCertsSection: CertificateSubpageV2Element,
   };
 }
 
@@ -101,6 +101,8 @@ export class CertificateManagerV2Element extends
   static get properties() {
     return {
       selectedPage_: String,
+      // TODO(crbug.com/40928765): Try to clean this up so that default values
+      // don't need to be repeated for each subpage.
       enterpriseSubpageLists_: {
         type: Array,
         value: () => {
@@ -110,18 +112,30 @@ export class CertificateManagerV2Element extends
                   'certificateManagerV2TrustedCertsList'),
               certSource: CertificateSource.kEnterpriseTrustedCerts,
               hideExport: false,
+              showImport: false,
+              showImportAndBind: false,
+              hideIfEmpty: false,
+              hideHeader: false,
             },
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2IntermediateCertsList'),
               certSource: CertificateSource.kEnterpriseIntermediateCerts,
               hideExport: false,
+              showImport: false,
+              showImportAndBind: false,
+              hideIfEmpty: true,
+              hideHeader: false,
             },
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2DistrustedCertsList'),
               certSource: CertificateSource.kEnterpriseDistrustedCerts,
               hideExport: false,
+              showImport: false,
+              showImportAndBind: false,
+              hideIfEmpty: true,
+              hideHeader: false,
             },
           ];
         },
@@ -135,44 +149,50 @@ export class CertificateManagerV2Element extends
                   'certificateManagerV2TrustedCertsList'),
               certSource: CertificateSource.kPlatformUserTrustedCerts,
               hideExport: false,
+              showImport: false,
+              showImportAndBind: false,
+              hideIfEmpty: false,
+              hideHeader: false,
             },
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2IntermediateCertsList'),
               certSource: CertificateSource.kPlatformUserIntermediateCerts,
               hideExport: false,
+              showImport: false,
+              showImportAndBind: false,
+              hideIfEmpty: true,
+              hideHeader: false,
             },
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2DistrustedCertsList'),
               certSource: CertificateSource.kPlatformUserDistrustedCerts,
               hideExport: false,
+              showImport: false,
+              showImportAndBind: false,
+              hideIfEmpty: true,
+              hideHeader: false,
             },
           ];
         },
       },
 
-      toastMessage_: String,
-      numSystemCertsString_: String,
-      numPolicyCertsString_: String,
-      crsLearnMoreUrl_: String,
+      clientPlatformSubpageLists_: {
+        type: Array,
+        computed: 'computeClientPlatformSubpageLists_(showClientCertImport_)',
+      },
 
-      dialogTitle_: String,
-      dialogBody_: String,
+      toastMessage_: String,
+
+      showInfoDialog_: Boolean,
+      infoDialogTitle_: String,
+      infoDialogMessage_: String,
+      showPasswordDialog_: Boolean,
 
       showSearch_: {
         type: Boolean,
         value: false,
-      },
-
-      importOsCertsEnabled_: {
-        type: Boolean,
-        computed: 'computeImportOsCertsEnabled_(certManagementMetadata_)',
-      },
-
-      importOsCertsEnabledManaged_: {
-        type: Boolean,
-        computed: 'computeImportOsCertsManaged_(certManagementMetadata_)',
       },
 
       showClientCertImport_: Boolean,
@@ -181,60 +201,60 @@ export class CertificateManagerV2Element extends
         type: Object,
         value: CertificateSource,
       },
+
+      pageEnum_: {
+        type: Object,
+        value: Page,
+      },
     };
   }
 
-  private selectedPage_: Page = Page.LOCAL_CERTS;
+  private selectedPage_: Page;
   private toastMessage_: string;
-  private dialogTitle_: string;
-  private dialogBody_: string;
-  private numPolicyCertsString_: string;
-  private numSystemCertsString_: string;
-  private crsLearnMoreUrl_: string = loadTimeData.getString('crsLearnMoreUrl');
-  private certManagementMetadata_: CertManagementMetadata;
-  private importOsCertsEnabled_: boolean;
-  private importOsCertsEnabledManaged_: boolean;
+  private showInfoDialog_: boolean = false;
+  private infoDialogTitle_: string;
+  private infoDialogMessage_: string;
+  private showPasswordDialog_: boolean = false;
+  private passwordEntryResolver_: PromiseResolver<PasswordResult>|null = null;
   private enterpriseSubpageLists_: SubpageCertificateList[];
   private platformSubpageLists_: SubpageCertificateList[];
+  private clientPlatformSubpageLists_: SubpageCertificateList[];
   // <if expr="not chromeos_ash">
   private showClientCertImport_: boolean = false;
   // </if>
   // <if expr="chromeos_ash">
   // TODO(crbug.com/40928765): Import should also be disabled in kiosk mode or
   // when disabled by policy.
+  // TODO(crbug.com/40928765): This controls both "import" and "import and
+  // bind". If we implement client cert import on Linux too we should make a
+  // separate bool for each so that "import and bind" is only enabled on
+  // chromeos.
   private showClientCertImport_: boolean = true;
   // </if>
 
   override ready() {
     super.ready();
     const proxy = CertificatesV2BrowserProxy.getInstance();
-    proxy.handler.getCertManagementMetadata().then(
-        (results: {metadata: CertManagementMetadata}) => {
-          this.certManagementMetadata_ = results.metadata;
-          this.updateNumCertsStrings_();
-        });
+    proxy.callbackRouter.askForImportPassword.addListener(
+        this.onAskForImportPassword_.bind(this));
   }
 
-  private updateNumCertsStrings_() {
-    if (this.certManagementMetadata_ === undefined) {
-      this.numPolicyCertsString_ = '';
-      this.numSystemCertsString_ = '';
-    } else {
-      PluralStringProxyImpl.getInstance()
-          .getPluralString(
-              'certificateManagerV2NumCerts',
-              this.certManagementMetadata_.numPolicyCerts)
-          .then(label => {
-            this.numPolicyCertsString_ = label;
-          });
-      PluralStringProxyImpl.getInstance()
-          .getPluralString(
-              'certificateManagerV2NumCerts',
-              this.certManagementMetadata_.numUserAddedSystemCerts)
-          .then(label => {
-            this.numSystemCertsString_ = label;
-          });
-    }
+  private onAskForImportPassword_(): Promise<PasswordResult> {
+    this.showPasswordDialog_ = true;
+    assert(this.passwordEntryResolver_ === null);
+    this.passwordEntryResolver_ = new PromiseResolver<PasswordResult>();
+    return this.passwordEntryResolver_.promise;
+  }
+
+  private onPasswordDialogClose_() {
+    const passwordDialog =
+        this.shadowRoot!.querySelector<CertificatePasswordDialogElement>(
+            '#passwordDialog');
+    assert(passwordDialog);
+    assert(this.passwordEntryResolver_);
+    this.passwordEntryResolver_.resolve({password: passwordDialog.value()});
+    this.passwordEntryResolver_ = null;
+    this.showPasswordDialog_ = false;
   }
 
   private onHashCopied_() {
@@ -249,53 +269,89 @@ export class CertificateManagerV2Element extends
     e.preventDefault();
   }
 
-  private switchToPage_(page: Page) {
-    this.selectedPage_ = page;
-    switch (this.selectedPage_) {
-      case Page.ADMIN_CERTS:
-      case Page.PLATFORM_CERTS:
-        this.$.toolbar.classList.add('toolbar-shadow');
-        break;
-      default:
-        this.$.toolbar.classList.remove('toolbar-shadow');
+  override async currentRouteChanged(route: Route, oldRoute: Route) {
+    this.selectedPage_ = route.page;
+
+    if (route.isSubpage()) {
+      // Sub-pages always show the top shadow, regardless of scroll position.
+      this.enableScrollObservation(false);
+      this.setForceDropShadows(true);
+    } else {
+      // Main page uses scroll position to determine whether a shadow should
+      // be shown.
+      this.enableScrollObservation(true);
+      this.setForceDropShadows(false);
+    }
+
+    if (route.isSubpage()) {
+      await this.$.main.updateComplete;
+      switch (route.page) {
+        case Page.ADMIN_CERTS:
+          this.$.adminCertsSection.setInitialFocus();
+          break;
+        case Page.PLATFORM_CERTS:
+          this.$.platformCertsSection.setInitialFocus();
+          break;
+        case Page.PLATFORM_CLIENT_CERTS:
+          this.$.platformClientCertsSection.setInitialFocus();
+          break;
+        default:
+          assertNotReached();
+      }
+    } else if (oldRoute.isSubpage()) {
+      // If we're navigating back from a subpage, we may need to fiddle
+      // with the focus element if we're going back to its parent page.
+      switch (oldRoute.page) {
+        case Page.ADMIN_CERTS:
+          if (route.page === Page.LOCAL_CERTS) {
+            await this.$.main.updateComplete;
+            this.$.localCertSection.setFocusToLinkRow(oldRoute.page);
+          }
+          break;
+        case Page.PLATFORM_CERTS:
+          if (route.page === Page.LOCAL_CERTS) {
+            await this.$.main.updateComplete;
+            this.$.localCertSection.setFocusToLinkRow(oldRoute.page);
+          }
+          break;
+        case Page.PLATFORM_CLIENT_CERTS:
+          if (route.page === Page.CLIENT_CERTS) {
+            await this.$.main.updateComplete;
+            focusWithoutInk(this.$.viewOsImportedClientCerts);
+          }
+          break;
+        default:
+          assertNotReached();
+      }
     }
   }
 
-  private onMenuItemSelect_(e: CustomEvent<{item: HTMLElement}>) {
-    const page = e.detail.item.getAttribute('path');
+  private onMenuItemActivate_(e: CustomEvent<{item: HTMLElement}>) {
+    const page = e.detail.item.getAttribute('href');
     assert(page, 'Page is not available');
-    this.switchToPage_(page as Page);
+    Router.getInstance().navigateTo(page.substring(1) as Page);
   }
 
-  private getSelectedTopLevelPage_(): string {
+  private getSelectedTopLevelHref_(): string {
     switch (this.selectedPage_) {
       case Page.ADMIN_CERTS:
       case Page.PLATFORM_CERTS:
-        return Page.LOCAL_CERTS;
+        return this.generateHrefForPage_(Page.LOCAL_CERTS);
+      case Page.PLATFORM_CLIENT_CERTS:
+        return this.generateHrefForPage_(Page.CLIENT_CERTS);
       default:
-        return this.selectedPage_;
+        return this.generateHrefForPage_(this.selectedPage_);
     }
   }
 
-  private onPlatformCertsLinkRowClick_(e: Event) {
-    e.preventDefault();
-    this.switchToPage_(Page.PLATFORM_CERTS);
-    this.$.platformCertsSection.setInitialFocus();
+  private generateHrefForPage_(p: Page): string {
+    return '/' + p;
   }
 
-  private onAdminCertsInstalledLinkRowClick_(e: Event) {
-    e.preventDefault();
-    this.switchToPage_(Page.ADMIN_CERTS);
-    this.$.adminCertsSection.setInitialFocus();
-  }
 
-  // TODO(crbug.com/40928765): Make this work with multiple subpages, either by
-  // adding a page name to the event payload, or making multiple different
-  // navigateBack handlers (using the naming template
-  // on<OptionalContext><EventName>_).
-  private onNavigateBack_() {
-    this.switchToPage_(Page.LOCAL_CERTS);
-    focusWithoutInk(this.$.localMenuItem);
+  private async onClientPlatformCertsLinkRowClick_(e: Event) {
+    e.preventDefault();
+    Router.getInstance().navigateTo(Page.PLATFORM_CLIENT_CERTS);
   }
 
   private onImportResult_(e: CustomEvent<ImportResult|null>) {
@@ -305,32 +361,33 @@ export class CertificateManagerV2Element extends
     }
     if (result.error !== undefined) {
       // TODO(crbug.com/40928765): localize
-      this.showDialog_('import result', result.error);
+      this.infoDialogTitle_ = 'import result';
+      this.infoDialogMessage_ = result.error;
+      this.showInfoDialog_ = true;
     }
   }
 
-  private showDialog_(title: string, message: string) {
-    this.dialogTitle_ = title;
-    this.dialogBody_ = message;
-    this.$.dialog.showModal();
+  private onInfoDialogClose_() {
+    this.showInfoDialog_ = false;
   }
 
-  private onDialogClickOk_() {
-    this.$.dialog.close();
-  }
 
-  private computeImportOsCertsEnabled_(): boolean {
-    return this.certManagementMetadata_.includeSystemTrustStore;
-  }
-
-  private computeImportOsCertsManaged_(): boolean {
-    return this.certManagementMetadata_.isIncludeSystemTrustStoreManaged;
-  }
-
-  // If true, show the Custom Certs section.
-  private showCustomSection_(): boolean {
-    return this.certManagementMetadata_ !== undefined &&
-        this.certManagementMetadata_.numPolicyCerts > 0;
+  private computeClientPlatformSubpageLists_(): SubpageCertificateList[] {
+    return [
+      {
+        headerText: loadTimeData.getString(
+            'certificateManagerV2ClientCertsFromPlatform'),
+        certSource: CertificateSource.kPlatformClientCert,
+        hideExport: true,
+        showImport: this.showClientCertImport_,
+        showImportAndBind: this.showClientCertImport_,
+        hideIfEmpty: false,
+        // TODO(crbug.com/40928765): Figure out how we want to display the
+        // import buttons/etc on this subpage. For now just show the header
+        // when we need the import buttons to be visible.
+        hideHeader: !this.showClientCertImport_,
+      },
+    ];
   }
 
   // <if expr="is_win or is_macosx">

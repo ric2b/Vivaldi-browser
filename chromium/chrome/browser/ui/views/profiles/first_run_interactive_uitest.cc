@@ -8,6 +8,7 @@
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/first_run/first_run.h"
@@ -99,7 +100,6 @@ enum class SyncButtonsFeatureConfig : int {
 
 struct TestParam {
   std::string test_suffix;
-  bool with_search_engine_choice_step = false;
   bool with_privacy_sandbox_enabled = false;
   SyncButtonsFeatureConfig sync_buttons_feature_config =
       SyncButtonsFeatureConfig::kAsyncNotEqualButtons;
@@ -132,7 +132,7 @@ std::optional<::signin_metrics::SyncButtonsType> ExpectedButtonShownMetric(
     case SyncButtonsFeatureConfig::kDeadlined:
       return ::signin_metrics::SyncButtonClicked::kSyncOptInEqualWeighted;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -145,7 +145,7 @@ std::optional<::signin_metrics::SyncButtonsType> ExpectedButtonShownMetric(
     case SyncButtonsFeatureConfig::kDeadlined:
       return ::signin_metrics::SyncButtonClicked::kSyncCancelEqualWeighted;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -182,10 +182,7 @@ const TestParam kTestParams[] = {
     {.test_suffix = "AsyncCapabilitiesPending",
      .sync_buttons_feature_config =
          SyncButtonsFeatureConfig::kButtonsStillLoading},
-    {.test_suffix = "WithSearchEngineChoiceStep",
-     .with_search_engine_choice_step = true},
-    {.test_suffix = "WithSearchEngineChoiceAndPrivacySandboxEnabled",
-     .with_search_engine_choice_step = true,
+    {.test_suffix = "WithPrivacySandboxEnabled",
      .with_privacy_sandbox_enabled = true},
 };
 
@@ -243,7 +240,7 @@ class FirstRunInteractiveUiTestBase
 
         // Note: The widget/view is destroyed asynchronously, we need to flush
         // the message loops to be able to reliably check the global state.
-        FlushEvents(), CheckResult(&ProfilePicker::IsOpen, testing::IsFalse()));
+        CheckResult(&ProfilePicker::IsOpen, testing::IsFalse()));
   }
 
   auto PressJsButton(const ui::ElementIdentifier web_contents_id,
@@ -317,18 +314,10 @@ class FirstRunParameterizedInteractiveUiTest
   FirstRunParameterizedInteractiveUiTest() {
     std::vector<base::test::FeatureRefAndParams> enabled_features_and_params;
     std::vector<base::test::FeatureRef> disabled_features;
-
-    if (WithSearchEngineChoiceStep()) {
-      scoped_chrome_build_override_ = std::make_unique<base::AutoReset<bool>>(
-          SearchEngineChoiceDialogServiceFactory::
-              ScopedChromeBuildOverrideForTesting(
-                  /*force_chrome_build=*/true));
-
-      enabled_features_and_params.push_back(
-          {switches::kSearchEngineChoiceTrigger, {}});
-    } else {
-      disabled_features.push_back(switches::kSearchEngineChoiceTrigger);
-    }
+    scoped_chrome_build_override_ = std::make_unique<base::AutoReset<bool>>(
+        SearchEngineChoiceDialogServiceFactory::
+            ScopedChromeBuildOverrideForTesting(
+                /*force_chrome_build=*/true));
 
     if (WithUpdatedProfileCreationScreen()) {
       enabled_features_and_params.push_back(
@@ -358,6 +347,9 @@ class FirstRunParameterizedInteractiveUiTest
     // as intended.
     command_line->AppendSwitchASCII(switches::kSearchEngineChoiceCountry, "BE");
 
+    command_line->AppendSwitch(
+        switches::kIgnoreNoFirstRunForSearchEngineChoiceScreen);
+
     // The default browser step is normally only shown on Windows. If it's
     // forced, it should be shown on the other platforms for testing.
     command_line->AppendSwitch(switches::kForceFreDefaultBrowserStep);
@@ -385,15 +377,10 @@ class FirstRunParameterizedInteractiveUiTest
       embedded_test_server()->StartAcceptingConnections();
     }
 
-    if (WithSearchEngineChoiceStep()) {
-      SearchEngineChoiceDialogService::SetDialogDisabledForTests(
-          /*dialog_disabled=*/false);
-    }
+    SearchEngineChoiceDialogService::SetDialogDisabledForTests(
+        /*dialog_disabled=*/false);
   }
 
-  static bool WithSearchEngineChoiceStep() {
-    return GetParam().with_search_engine_choice_step;
-  }
   static bool WithUpdatedProfileCreationScreen() {
     return GetParam().with_updated_profile_creation_screen;
   }
@@ -576,11 +563,21 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest,
 }
 #endif
 
-IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, SignInAndSync) {
+// TODO(crbug.com/366082752): Re-enable this test
+IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest,
+                       DISABLED_SignInAndSync) {
   if (SyncButtonsFeatureConfig() ==
       SyncButtonsFeatureConfig::kButtonsStillLoading) {
     GTEST_SKIP() << "Sync not possible until buttons stop loading";
   }
+
+#if BUILDFLAG(IS_WIN) && defined(ARCH_CPU_64_BITS)
+  // TODO(crbug.com/363254870): Re-enable this test
+  if (SyncButtonsFeatureConfig() ==
+      SyncButtonsFeatureConfig::kAsyncEqualButtons) {
+    GTEST_SKIP() << "Test is flaky on win64";
+  }
+#endif  // WIN && ARCH_CPU_64_BITS
 
   base::test::TestFuture<bool> proceed_future;
 
@@ -654,10 +651,7 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, SignInAndSync) {
       PressJsButton(kWebContentsId, kOptInSyncButton)
           .SetMustRemainVisible(false),
 
-      If([&] { return WithSearchEngineChoiceStep(); },
-         CompleteSearchEngineChoiceStep()),
-
-      CompleteDefaultBrowserStep());
+      CompleteSearchEngineChoiceStep(), CompleteDefaultBrowserStep());
 
   WaitForPickerClosed();
 
@@ -681,11 +675,9 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, SignInAndSync) {
                                        DefaultBrowserChoice::kClickSetAsDefault,
                                        1);
 
-  if (WithSearchEngineChoiceStep()) {
-    histogram_tester().ExpectBucketCount(
-        search_engines::kSearchEngineChoiceScreenEventsHistogram,
-        search_engines::SearchEngineChoiceScreenEvents::kFreDefaultWasSet, 1);
-  }
+  histogram_tester().ExpectBucketCount(
+      search_engines::kSearchEngineChoiceScreenEventsHistogram,
+      search_engines::SearchEngineChoiceScreenEvents::kFreDefaultWasSet, 1);
 
   EXPECT_TRUE(proceed_future.Get());
 
@@ -722,7 +714,9 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, SignInAndSync) {
       ProfilePicker::FirstRunExitStatus::kCompleted, 1);
 }
 
-IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, DeclineSync) {
+// TODO(crbug.com/366082752): Re-enable this test
+IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest,
+                       DISABLED_DeclineSync) {
   if (SyncButtonsFeatureConfig() ==
       SyncButtonsFeatureConfig::kButtonsStillLoading) {
     GTEST_SKIP() << "Decline is not possible until buttons stop loading";
@@ -762,10 +756,7 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, DeclineSync) {
       EnsurePresent(kWebContentsId, kDontSyncButton),
       PressJsButton(kWebContentsId, kDontSyncButton),
 
-      If([&] { return WithSearchEngineChoiceStep(); },
-         CompleteSearchEngineChoiceStep()),
-
-      CompleteDefaultBrowserStep());
+      CompleteSearchEngineChoiceStep(), CompleteDefaultBrowserStep());
 
   // Wait for the picker to be closed and deleted.
   WaitForPickerClosed();
@@ -848,12 +839,10 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, GoToSettings) {
       browser()->tab_strip_model()->GetActiveWebContents()->GetVisibleURL(),
       GURL(chrome::kChromeUISettingsURL).Resolve(chrome::kSyncSetupSubPage));
 
-  if (WithSearchEngineChoiceStep()) {
-    SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
-        SearchEngineChoiceDialogServiceFactory::GetForProfile(profile());
-    EXPECT_FALSE(
-        search_engine_choice_dialog_service->IsShowingDialog(*browser()));
-  }
+  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(profile());
+  EXPECT_FALSE(
+      search_engine_choice_dialog_service->IsShowingDialog(*browser()));
 
   EXPECT_TRUE(proceed_future.Get());
   EXPECT_EQ(base::ASCIIToUTF16(kTestGivenName), GetProfileName());
@@ -886,8 +875,14 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest, GoToSettings) {
       ProfilePicker::FirstRunExitStatus::kCompleted, 1);
 }
 
+// TODO(crbug.com/366119368): Re-enable this test
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_PeekAndDeclineSignIn DISABLED_PeekAndDeclineSignIn
+#else
+#define MAYBE_PeekAndDeclineSignIn PeekAndDeclineSignIn
+#endif
 IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest,
-                       PeekAndDeclineSignIn) {
+                       MAYBE_PeekAndDeclineSignIn) {
   base::test::TestFuture<bool> proceed_future;
 
   ASSERT_TRUE(IsProfileNameDefault());
@@ -918,10 +913,7 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest,
       CheckJsResultAt(kWebContentsId, kDontSignInButton, "(e) => !e.disabled"),
       PressJsButton(kWebContentsId, kDontSignInButton),
 
-      If([&] { return WithSearchEngineChoiceStep(); },
-         CompleteSearchEngineChoiceStep()),
-
-      CompleteDefaultBrowserStep());
+      CompleteSearchEngineChoiceStep(), CompleteDefaultBrowserStep());
 
   WaitForPickerClosed();
   EXPECT_TRUE(proceed_future.Get());
@@ -990,10 +982,7 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest,
       EnsurePresent(kWebContentsId, decline_button),
       PressJsButton(kWebContentsId, decline_button),
 
-      If([&] { return WithSearchEngineChoiceStep(); },
-         CompleteSearchEngineChoiceStep()),
-
-      CompleteDefaultBrowserStep());
+      CompleteSearchEngineChoiceStep(), CompleteDefaultBrowserStep());
 
   // Wait for the picker to be closed and deleted.
   WaitForPickerClosed();
@@ -1002,8 +991,7 @@ IN_PROC_BROWSER_TEST_P(FirstRunParameterizedInteractiveUiTest,
 
   EXPECT_FALSE(
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin));
-  EXPECT_FALSE(
-      chrome::enterprise_util::UserAcceptedAccountManagement(profile()));
+  EXPECT_FALSE(enterprise_util::UserAcceptedAccountManagement(profile()));
   EXPECT_EQ(u"Person 1", GetProfileName());
   EXPECT_TRUE(IsUsingDefaultProfileName());
 

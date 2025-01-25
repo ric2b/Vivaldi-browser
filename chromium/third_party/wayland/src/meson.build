@@ -1,8 +1,8 @@
 project(
 	'wayland', 'c',
-	version: '1.21.0',
+	version: '1.23.0',
 	license: 'MIT',
-	meson_version: '>= 0.56.0',
+	meson_version: '>= 0.57.0',
 	default_options: [
 		'warning_level=2',
 		'buildtype=debugoptimized',
@@ -16,7 +16,7 @@ config_h.set_quoted('PACKAGE', meson.project_name())
 config_h.set_quoted('PACKAGE_VERSION', meson.project_version())
 
 cc_args = []
-if host_machine.system() != 'freebsd'
+if host_machine.system() not in ['freebsd', 'openbsd']
 	cc_args += ['-D_POSIX_C_SOURCE=200809L']
 endif
 add_project_arguments(cc_args, language: 'c')
@@ -69,7 +69,7 @@ endif
 config_h.set10('HAVE_BROKEN_MSG_CMSG_CLOEXEC', have_broken_msg_cmsg_cloexec)
 
 if get_option('libraries')
-	if host_machine.system() == 'freebsd'
+	if host_machine.system() in ['freebsd', 'openbsd']
 		# When building for FreeBSD, epoll(7) is provided by a userspace
 		# wrapper around kqueue(2).
 		epoll_dep = dependency('epoll-shim')

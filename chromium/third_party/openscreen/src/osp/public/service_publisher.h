@@ -74,6 +74,10 @@ class ServicePublisher {
     // records.
     std::string fingerprint;
 
+    // An alphanumeric and unguessable token used for authentication and it is
+    // included in DNS TXT records.
+    std::string auth_token;
+
     // The port where openscreen connections are accepted.
     // Normally this should not be set, and must be identical to the port
     // configured in the ProtocolConnectionServer.

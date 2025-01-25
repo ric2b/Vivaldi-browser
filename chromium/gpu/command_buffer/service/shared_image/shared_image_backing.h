@@ -27,7 +27,7 @@
 #include "gpu/vulkan/buildflags.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPixmap.h"
-#include "third_party/skia/include/gpu/GrTypes.h"
+#include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -66,16 +66,15 @@ class SkiaGaneshImageRepresentation;
 class SkiaGraphiteImageRepresentation;
 class SkiaImageRepresentation;
 class DawnImageRepresentation;
+class DawnBufferRepresentation;
 class LegacyOverlayImageRepresentation;
 class OverlayImageRepresentation;
 class MemoryImageRepresentation;
-class VaapiImageRepresentation;
 class RasterImageRepresentation;
 class MemoryTracker;
-class VideoDecodeImageRepresentation;
+class VideoImageRepresentation;
 class MemoryTypeTracker;
 class SharedImageFactory;
-class VaapiDependenciesFactory;
 
 #if BUILDFLAG(ENABLE_VULKAN)
 class VulkanImageRepresentation;
@@ -107,10 +106,10 @@ enum class SharedImageBackingType {
 };
 
 #if BUILDFLAG(IS_WIN)
-using VideoDecodeDevice = Microsoft::WRL::ComPtr<ID3D11Device>;
+using VideoDevice = Microsoft::WRL::ComPtr<ID3D11Device>;
 #else
 // This parameter is only used on Windows so null is expected.
-using VideoDecodeDevice = void*;
+using VideoDevice = void*;
 #endif  // BUILDFLAG(IS_WIN)
 
 // Represents the actual storage (GL texture, VkImage, GMB) for a SharedImage.
@@ -310,13 +309,14 @@ class GPU_GLES2_EXPORT SharedImageBacking {
       wgpu::BackendType backend_type,
       std::vector<wgpu::TextureFormat> view_formats,
       scoped_refptr<SharedContextState> context_state);
+  virtual std::unique_ptr<DawnBufferRepresentation> ProduceDawnBuffer(
+      SharedImageManager* manager,
+      MemoryTypeTracker* tracker,
+      const wgpu::Device& device,
+      wgpu::BackendType backend_type);
   virtual std::unique_ptr<OverlayImageRepresentation> ProduceOverlay(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker);
-  virtual std::unique_ptr<VaapiImageRepresentation> ProduceVASurface(
-      SharedImageManager* manager,
-      MemoryTypeTracker* tracker,
-      VaapiDependenciesFactory* dep_factory);
   virtual std::unique_ptr<MemoryImageRepresentation> ProduceMemory(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker);
@@ -325,10 +325,10 @@ class GPU_GLES2_EXPORT SharedImageBacking {
       MemoryTypeTracker* tracker);
   // Take void* device for resource generated from different devices. E.g  video
   // decoder starts using its own device on a separate thread.
-  virtual std::unique_ptr<VideoDecodeImageRepresentation> ProduceVideoDecode(
+  virtual std::unique_ptr<VideoImageRepresentation> ProduceVideo(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
-      VideoDecodeDevice device);
+      VideoDevice device);
 
 #if BUILDFLAG(ENABLE_VULKAN)
   virtual std::unique_ptr<VulkanImageRepresentation> ProduceVulkan(

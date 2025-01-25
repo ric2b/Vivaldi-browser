@@ -77,8 +77,9 @@ net::CookieInclusionStatus::ExemptionReason GetExemptionReason(
     case AllowMechanism::kAllowBy3PCDMetadataSourceGovEduTld:
       return ExemptionReason::k3PCDMetadata;
     case AllowMechanism::kAllowBy3PCD:
-    case AllowMechanism::kAllowByTopLevel3PCD:
       return ExemptionReason::k3PCDDeprecationTrial;
+    case AllowMechanism::kAllowByTopLevel3PCD:
+      return ExemptionReason::kTopLevel3PCDDeprecationTrial;
     case AllowMechanism::kAllowByGlobalSetting:
     case AllowMechanism::kAllowByEnterprisePolicyCookieAllowedForUrls:
       return ExemptionReason::kEnterprisePolicy;
@@ -86,8 +87,6 @@ net::CookieInclusionStatus::ExemptionReason GetExemptionReason(
       return ExemptionReason::kStorageAccess;
     case AllowMechanism::kAllowByTopLevelStorageAccess:
       return ExemptionReason::kTopLevelStorageAccess;
-    case AllowMechanism::kAllowByCORSException:
-      return ExemptionReason::kCorsOptIn;
     case AllowMechanism::kNone:
       return ExemptionReason::kNone;
     case AllowMechanism::kAllowByScheme:
@@ -378,8 +377,7 @@ bool CookieSettings::IsThirdPartyPhaseoutEnabled() const {
 }
 
 bool CookieSettings::MitigationsEnabledFor3pcd() const {
-  return net::cookie_util::IsForceThirdPartyCookieBlockingEnabled() ||
-         mitigations_enabled_for_3pcd_;
+  return mitigations_enabled_for_3pcd_;
 }
 
 void CookieSettings::AugmentInclusionStatus(
@@ -444,6 +442,15 @@ void CookieSettings::AugmentInclusionStatus(
   // The cookie is blocked, but not by 3PCD.
   out_status.AddExclusionReason(
       net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+}
+
+bool CookieSettings::IsStorageAccessHeaderOriginTrialEnabled(
+    const GURL& url,
+    const GURL& first_party_url) const {
+  return GetContentSetting(
+             url, first_party_url,
+             ContentSettingsType::STORAGE_ACCESS_HEADER_ORIGIN_TRIAL,
+             /*info=*/nullptr) == CONTENT_SETTING_ALLOW;
 }
 
 }  // namespace network

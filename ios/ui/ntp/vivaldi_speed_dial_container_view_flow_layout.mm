@@ -7,6 +7,7 @@
 namespace  {
 // Constants for layout configurations
 const CGFloat kSpacing = 16.0;
+const CGFloat kTopInsetForHiddenToolbar = 0;
 const CGFloat kMinimumSidePadding = 16.0;
 const CGFloat kListStyleItemHeight = 76.0;
 const CGFloat kMinimumItemWidthDecrease = 1.0;
@@ -93,7 +94,8 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 
   if (extraSpace < oneColumnWidth && adjustedNumberOfColumns >= 1) {
     self.sectionInset = UIEdgeInsetsMake(
-        kSpacing, [self horizontalSpacing], kSpacing, [self horizontalSpacing]);
+        [self kTopInset], [self horizontalSpacing],
+        kSpacing, [self horizontalSpacing]);
     CGFloat remainingWidth =
         availableWidth - ([self horizontalSpacing] * 2) -
             (kSpacing * (adjustedNumberOfColumns - 1));
@@ -101,7 +103,7 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
   } else {
     CGFloat edgeInsets = MAX((availableWidth - totalWidthNeeded) / 2, kSpacing);
     self.sectionInset = UIEdgeInsetsMake(
-        kSpacing, edgeInsets, kSpacing, edgeInsets);
+        [self kTopInset], edgeInsets, kSpacing, edgeInsets);
   }
 
   CGFloat itemHeight = self.layoutStyle == VivaldiStartPageLayoutStyleList ?
@@ -234,6 +236,11 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
       return [self isPreview] ?
           kListStyleWidthPhonePreview : kListStyleWidth;
   }
+}
+
+/// Returns top inset for the Collection View.
+- (CGFloat)kTopInset {
+  return self.topToolbarHidden ? kTopInsetForHiddenToolbar : kSpacing;
 }
 
 @end

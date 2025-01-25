@@ -215,26 +215,6 @@ void AutofillHandler::SetAddresses(
         continue;
       }
 
-      // Similar to the case above. However for these countries we are already
-      // using the new model.
-      if (test_address_country == u"United States" &&
-          !base::FeatureList::IsEnabled(
-              autofill::features::kAutofillUseI18nAddressModel)) {
-        continue;
-      }
-
-      if (test_address_country == u"Brazil" &&
-          !base::FeatureList::IsEnabled(
-              autofill::features::kAutofillUseBRAddressModel)) {
-        continue;
-      }
-
-      if (test_address_country == u"Mexico" &&
-          !base::FeatureList::IsEnabled(
-              autofill::features::kAutofillUseMXAddressModel)) {
-        continue;
-      }
-
       test_address_for_countries.push_back(profile);
     }
   }
@@ -411,9 +391,20 @@ void AutofillHandler::OnFillOrPreviewDataModelForm(
           .Build());
 }
 
-void AutofillHandler::OnAutofillManagerDestroyed(
-    autofill::AutofillManager& manager) {
-  autofill_manager_observation_.Reset();
+void AutofillHandler::OnAutofillManagerStateChanged(
+    autofill::AutofillManager& manager,
+    autofill::AutofillManager::LifecycleState old_state,
+    autofill::AutofillManager::LifecycleState new_state) {
+  using enum autofill::AutofillManager::LifecycleState;
+  switch (new_state) {
+    case kInactive:
+    case kActive:
+    case kPendingReset:
+      break;
+    case kPendingDeletion:
+      autofill_manager_observation_.Reset();
+      break;
+  }
 }
 
 void AutofillHandler::OnContentAutofillDriverFactoryDestroyed(

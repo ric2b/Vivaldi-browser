@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Utilties for JNI interactions.
+//! Utilities for JNI interactions.
 
 pub use pourover_macro::{call_constructor, call_method, call_static_method, jni_method};
 
 pub mod desc;
+pub mod exception;
 
 mod conversions;
 pub use conversions::{ToSigned, ToUnsigned};

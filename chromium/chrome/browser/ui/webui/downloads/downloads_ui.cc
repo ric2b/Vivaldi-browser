@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/downloads/downloads_ui.h"
 
 #include <memory>
@@ -132,12 +137,14 @@ content::WebUIDataSource* CreateAndAddDownloadsUIHTMLSource(Profile* profile) {
       {"toastDeletedFromHistoryStillOnDevice",
        IDS_DOWNLOADS_TOAST_DELETED_FROM_HISTORY_STILL_ON_DEVICE},
       {"toastDeletedFromHistory", IDS_DOWNLOADS_TOAST_DELETED_FROM_HISTORY},
+      {"toastCopiedDownloadLink", IDS_DOWNLOADS_TOAST_COPIED_DOWNLOAD_LINK},
       {"undo", IDS_DOWNLOAD_UNDO},
       {"controlKeepDangerous", IDS_DOWNLOAD_KEEP_DANGEROUS_FILE},
       {"controlKeepSuspicious", IDS_DOWNLOAD_KEEP_SUSPICIOUS_FILE},
       {"controlKeepUnverified", IDS_DOWNLOAD_KEEP_UNVERIFIED_FILE},
       {"controlKeepInsecure", IDS_DOWNLOAD_KEEP_INSECURE_FILE},
       {"controlDeleteFromHistory", IDS_DOWNLOAD_DELETE_FROM_HISTORY},
+      {"controlCopyDownloadLink", IDS_DOWNLOAD_COPY_DOWNLOAD_LINK},
 
       // Accessible labels for file icons.
       {"accessibleLabelDangerous",
@@ -165,6 +172,10 @@ content::WebUIDataSource* CreateAndAddDownloadsUIHTMLSource(Profile* profile) {
       {"warningBypassPromptDescription",
        IDS_DOWNLOAD_WARNING_BYPASS_PROMPT_DESCRIPTION},
 
+      // Warning bypass prompt accessibility text.
+      {"warningBypassPromptLearnMoreLinkAccessible",
+       IDS_DOWNLOAD_WARNING_BYPASS_PROMPT_LEARN_MORE_LINK_ACCESSIBLE},
+
       // Warning bypass dialog.
       {"warningBypassDialogTitle", IDS_DOWNLOAD_WARNING_BYPASS_DIALOG_TITLE},
       {"warningBypassDialogCancel", IDS_CANCEL},
@@ -190,6 +201,18 @@ content::WebUIDataSource* CreateAndAddDownloadsUIHTMLSource(Profile* profile) {
        IDS_DOWNLOAD_WARNING_BYPASS_INTERSTITIAL_SURVEY_TRUST_SITE_WITH_URL},
       {"warningBypassInterstitialSurveyAcceptRisk",
        IDS_DOWNLOAD_WARNING_BYPASS_INTERSTITIAL_SURVEY_ACCEPT_RISK},
+
+      // Warning bypass interstitial accessibility text.
+      {"warningBypassInterstitialSurveyTitleAccessible",
+       IDS_DOWNLOAD_WARNING_BYPASS_INTERSTITIAL_SURVEY_TITLE_ACCESSIBLE},
+      {"warningBypassInterstitialSurveyCreatedFileAccessible",
+       IDS_DOWNLOAD_WARNING_BYPASS_INTERSTITIAL_SURVEY_CREATED_FILE_ACCESSIBLE},
+      {"warningBypassInterstitialSurveyTrustSiteWithoutUrlAccessible",
+       IDS_DOWNLOAD_WARNING_BYPASS_INTERSTITIAL_SURVEY_TRUST_SITE_WITHOUT_URL_ACCESSIBLE},
+      {"warningBypassInterstitialSurveyTrustSiteWithUrlAccessible",
+       IDS_DOWNLOAD_WARNING_BYPASS_INTERSTITIAL_SURVEY_TRUST_SITE_WITH_URL_ACCESSIBLE},
+      {"warningBypassInterstitialSurveyAcceptRiskAccessible",
+       IDS_DOWNLOAD_WARNING_BYPASS_INTERSTITIAL_SURVEY_ACCEPT_RISK_ACCESSIBLE},
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
       // ESB Download Row Promo
@@ -275,15 +298,10 @@ content::WebUIDataSource* CreateAndAddDownloadsUIHTMLSource(Profile* profile) {
 ///////////////////////////////////////////////////////////////////////////////
 
 DownloadsUIConfig::DownloadsUIConfig()
-    : WebUIConfig(content::kChromeUIScheme, chrome::kChromeUIDownloadsHost) {}
+    : DefaultWebUIConfig(content::kChromeUIScheme,
+                         chrome::kChromeUIDownloadsHost) {}
 
 DownloadsUIConfig::~DownloadsUIConfig() = default;
-
-std::unique_ptr<content::WebUIController>
-DownloadsUIConfig::CreateWebUIController(content::WebUI* web_ui,
-                                         const GURL& url) {
-  return std::make_unique<DownloadsUI>(web_ui);
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 //

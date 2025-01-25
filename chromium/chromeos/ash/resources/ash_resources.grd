@@ -12,6 +12,7 @@
   </outputs>
   <release seq="1">
     <includes>
+      <part file="audio_resources.grdp" />
       <part file="multidevice_resources.grdp" />
       <if expr="enable_cros_libassistant">
         <part file="assistant_resources.grdp" />
@@ -23,5 +24,10 @@
         <part file="growth_framework_resources.grdp" />
       </if>
     </includes>
+    <structures>
+      <if expr="is_chrome_branded">
+        <part file="picker_resources.grdp" />
+      </if>
+    </structures>
   </release>
 </grit>

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/optimization_guide/optimization_guide_internals_ui.h"
 
 #include <cstdint>
@@ -117,13 +122,14 @@ void OptimizationGuideInternalsUI::RequestLoggedModelQualityClientIds(
     // feature.
     int64_t client_id_i_compose =
         optimization_guide::GetHashedModelQualityClientId(
-            optimization_guide::UserVisibleFeatureKey::kCompose, day_i,
-            client_id);
+            optimization_guide::proto::LogAiDataRequest::FeatureCase::kCompose,
+            day_i, client_id);
 
     int64_t client_id_i_tab_organization =
         optimization_guide::GetHashedModelQualityClientId(
-            optimization_guide::UserVisibleFeatureKey::kTabOrganization, day_i,
-            client_id);
+            optimization_guide::proto::LogAiDataRequest::FeatureCase::
+                kTabOrganization,
+            day_i, client_id);
 
     logged_client_ids.push_back(
         optimization_guide_internals::mojom::LoggedClientIds::New(

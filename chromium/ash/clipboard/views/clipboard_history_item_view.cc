@@ -66,7 +66,7 @@ const gfx::Insets GetDeleteButtonMargins(
 
   switch (display_format) {
     case crosapi::mojom::ClipboardHistoryDisplayFormat::kUnknown:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case crosapi::mojom::ClipboardHistoryDisplayFormat::kText:
     case crosapi::mojom::ClipboardHistoryDisplayFormat::kFile:
       return ClipboardHistoryViews::kTextItemDeleteButtonMargins;
@@ -237,7 +237,7 @@ ClipboardHistoryItemView::CreateFromClipboardHistoryItem(
   std::unique_ptr<ClipboardHistoryItemView> item_view;
   switch (display_format) {
     case crosapi::mojom::ClipboardHistoryDisplayFormat::kUnknown:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case crosapi::mojom::ClipboardHistoryDisplayFormat::kText:
     case crosapi::mojom::ClipboardHistoryDisplayFormat::kFile:
       item_view = std::make_unique<ClipboardHistoryTextItemView>(
@@ -263,6 +263,7 @@ ClipboardHistoryItemView::ClipboardHistoryItemView(
     : item_id_(item_id),
       clipboard_history_(clipboard_history),
       container_(container) {
+  GetViewAccessibility().SetRole(ax::mojom::Role::kMenuItem);
 }
 
 bool ClipboardHistoryItemView::AdvancePseudoFocus(bool reverse) {
@@ -318,6 +319,7 @@ void ClipboardHistoryItemView::HandleMainButtonPressEvent(
   // focus yet.
   if (event.type() == ui::EventType::kGestureTap) {
     pseudo_focus_ = PseudoFocus::kMainButton;
+    UpdateAccessiblitySelectionAttribute();
   }
 
   Activate(CalculateActionForMainButtonClick(), event.flags());
@@ -365,8 +367,7 @@ void ClipboardHistoryItemView::MaybeHandleGestureEventFromMainButton(
         DCHECK(delete_button_->GetVisible());
         break;
       case PseudoFocus::kMaxValue:
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
     }
     event->SetHandled();
   }
@@ -414,19 +415,6 @@ gfx::Size ClipboardHistoryItemView::CalculatePreferredSize(
   return gfx::Size(
       preferred_width,
       GetLayoutManager()->GetPreferredHeightForWidth(this, preferred_width));
-}
-
-void ClipboardHistoryItemView::GetAccessibleNodeData(ui::AXNodeData* data) {
-  // A valid role must be set in the AXNodeData prior to setting the name
-  // via AXNodeData::SetName.
-  View::GetAccessibleNodeData(data);
-  data->role = ax::mojom::Role::kMenuItem;
-
-  // In fitting with existing conventions for menu items, we treat clipboard
-  // history items as "selected" from an accessibility standpoint if pressing
-  // Enter will perform the item's default expected action: pasting.
-  data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
-                         IsMainButtonPseudoFocused());
 }
 
 void ClipboardHistoryItemView::Init() {
@@ -519,10 +507,7 @@ void ClipboardHistoryItemView::SetPseudoFocus(PseudoFocus new_pseudo_focus) {
                                    new_pseudo_focus == PseudoFocus::kMainButton;
 
   pseudo_focus_ = new_pseudo_focus;
-  if (IsMainButtonPseudoFocused()) {
-    NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
-                             /*send_native_event=*/true);
-  }
+  UpdateAccessiblitySelectionAttribute();
 
   delete_button_->SetVisible(ShouldShowDeleteButton());
   views::InkDrop::Get(delete_button_)
@@ -536,6 +521,13 @@ void ClipboardHistoryItemView::SetPseudoFocus(PseudoFocus new_pseudo_focus) {
   if (repaint_main_button) {
     main_button_->SchedulePaint();
   }
+}
+
+void ClipboardHistoryItemView::UpdateAccessiblitySelectionAttribute() {
+  // In fitting with existing conventions for menu items, we treat clipboard
+  // history items as "selected" from an accessibility standpoint if pressing
+  // Enter will perform the item's default expected action: pasting.
+  GetViewAccessibility().SetIsSelected(IsMainButtonPseudoFocused());
 }
 
 BEGIN_METADATA(ClipboardHistoryItemView, ContentsView)

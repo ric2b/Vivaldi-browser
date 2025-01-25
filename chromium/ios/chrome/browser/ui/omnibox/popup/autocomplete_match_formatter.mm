@@ -195,7 +195,7 @@ UIColor* DimColorIncognito() {
 
     return result;
   } else {
-    if (!_match.answer->IsExceptedFromLineReversal()) {
+    if (!_match.answer->IsExceptedFromLineReversal(_match.answer_type)) {
       NSAttributedString* detailBaseText = [self
           attributedStringWithString:base::SysUTF16ToNSString(_match.contents)
                      classifications:&_match.contents_class
@@ -221,6 +221,9 @@ UIColor* DimColorIncognito() {
 - (NSInteger)numberOfLines {
   if (omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled) {
     return _match.answer_type == omnibox::ANSWER_TYPE_DICTIONARY ? 3 : 1;
+  }
+  if (_match.answer->second_line().text_fields().empty()) {
+    return 1;
   }
   // Answers specify their own limit on the number of lines to show but are
   // additionally capped here at 3 to guard against unreasonable values.
@@ -358,7 +361,7 @@ UIColor* DimColorIncognito() {
 
     return result;
   } else {
-    if (!_match.answer->IsExceptedFromLineReversal()) {
+    if (!_match.answer->IsExceptedFromLineReversal(_match.answer_type)) {
       return [self attributedStringWithAnswerLine:_match.answer->second_line()
                            useDeemphasizedStyling:NO];
     } else {
@@ -553,16 +556,6 @@ UIColor* DimColorIncognito() {
   UIColor* defaultColor = useDeemphasizedStyling ? SuggestionDetailTextColor()
                                                  : SuggestionTextColor();
 
-  if (fragment.is_bolded()) {
-    UIFontDescriptor* boldFontDescriptor = [defaultFontDescriptor
-        fontDescriptorWithSymbolicTraits:UIFontDescriptorTraitBold];
-    return @{
-      NSFontAttributeName : [UIFont fontWithDescriptor:boldFontDescriptor
-                                                  size:0],
-      NSForegroundColorAttributeName : defaultColor,
-    };
-  }
-
   omnibox::FormattedString::ColorType color = fragment.color();
   switch (color) {
     case omnibox::FormattedString::COLOR_ON_SURFACE_POSITIVE:
@@ -751,5 +744,15 @@ UIColor* DimColorIncognito() {
   }
   return styledText;
 }
+
+#pragma mark - Vivaldi
+- (NSString*)local_favicon_path {
+  return base::SysUTF16ToNSString(_match.local_favicon_path);
+}
+
+- (BOOL)isDirectMatch {
+  return _match.type == AutocompleteMatchType::DIRECT_MATCH;
+}
+// End Vivaldi
 
 @end

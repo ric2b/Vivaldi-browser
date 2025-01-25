@@ -57,6 +57,9 @@ class EventCount {
     eigen_plain_assert(waiters.size() < (1 << kWaiterBits) - 1);
   }
 
+  EventCount(const EventCount&) = delete;
+  void operator=(const EventCount&) = delete;
+
   ~EventCount() {
     // Ensure there are no waiters.
     eigen_plain_assert(state_.load() == kStackMask);
@@ -155,22 +158,6 @@ class EventCount {
     }
   }
 
-  class Waiter {
-    friend class EventCount;
-    // Align to 128 byte boundary to prevent false sharing with other Waiter
-    // objects in the same vector.
-    EIGEN_ALIGN_TO_BOUNDARY(128) std::atomic<uint64_t> next;
-    EIGEN_MUTEX mu;
-    EIGEN_CONDVAR cv;
-    uint64_t epoch = 0;
-    unsigned state = kNotSignaled;
-    enum {
-      kNotSignaled,
-      kWaiting,
-      kSignaled,
-    };
-  };
-
  private:
   // State_ layout:
   // - low kWaiterBits is a stack of waiters committed wait
@@ -192,9 +179,25 @@ class EventCount {
   static const uint64_t kEpochBits = 64 - kEpochShift;
   static const uint64_t kEpochMask = ((1ull << kEpochBits) - 1) << kEpochShift;
   static const uint64_t kEpochInc = 1ull << kEpochShift;
-  std::atomic<uint64_t> state_;
-  MaxSizeVector<Waiter>& waiters_;
 
+ public:
+  class Waiter {
+    friend class EventCount;
+
+    enum State {
+      kNotSignaled,
+      kWaiting,
+      kSignaled,
+    };
+
+    EIGEN_ALIGN_TO_AVOID_FALSE_SHARING std::atomic<uint64_t> next{kStackMask};
+    EIGEN_MUTEX mu;
+    EIGEN_CONDVAR cv;
+    uint64_t epoch{0};
+    unsigned state{kNotSignaled};
+  };
+
+ private:
   static void CheckState(uint64_t state, bool waiter = false) {
     static_assert(kEpochBits >= 20, "not enough bits to prevent ABA problem");
     const uint64_t waiters = (state & kWaiterMask) >> kWaiterShift;
@@ -229,8 +232,8 @@ class EventCount {
     }
   }
 
-  EventCount(const EventCount&) = delete;
-  void operator=(const EventCount&) = delete;
+  std::atomic<uint64_t> state_;
+  MaxSizeVector<Waiter>& waiters_;
 };
 
 }  // namespace Eigen

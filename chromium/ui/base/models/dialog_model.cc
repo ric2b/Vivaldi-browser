@@ -13,6 +13,7 @@
 #include "base/ranges/algorithm.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/models/dialog_model_field.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/ui_base_types.h"
 
 namespace ui {
@@ -121,9 +122,8 @@ DialogModel::Builder& DialogModel::Builder::AddButtonInternal(
   model_callback = std::move(callback);
   // NOTREACHED() is used below to make sure this callback isn't used.
   // DialogModelHost should be using OnDialogCanceled() instead.
-  model_button.emplace(
-      base::BindRepeating([](const Event&) { NOTREACHED_IN_MIGRATION(); }),
-      params);
+  model_button.emplace(base::BindRepeating([](const Event&) { NOTREACHED(); }),
+                       params);
 
   return *this;
 }
@@ -149,17 +149,17 @@ DialogModel::Builder& DialogModel::Builder::AddExtraLink(
 }
 
 DialogModel::Builder& DialogModel::Builder::OverrideDefaultButton(
-    DialogButton button) {
+    mojom::DialogButton button) {
   // This can only be called once.
   CHECK(!model_->override_default_button_, base::NotFatalUntil::M123);
   // Confirm the button exists.
   switch (button) {
-    case DIALOG_BUTTON_NONE:
+    case mojom::DialogButton::kNone:
       break;
-    case DIALOG_BUTTON_OK:
+    case mojom::DialogButton::kOk:
       CHECK(model_->ok_button_, base::NotFatalUntil::M123);
       break;
-    case DIALOG_BUTTON_CANCEL:
+    case mojom::DialogButton::kCancel:
       CHECK(model_->cancel_button_, base::NotFatalUntil::M123);
       break;
   }

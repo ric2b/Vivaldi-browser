@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/webcrypto/webcrypto_impl.h"
 
 #include <limits.h>
@@ -116,15 +121,12 @@ void CompleteWithBufferOrError(const Status& status,
                                blink::WebCryptoResult* result) {
   if (status.IsError()) {
     CompleteWithError(status, result);
+  } else if (buffer.size() > UINT_MAX) {
+    // WebArrayBuffers have a smaller range than std::vector<>, so
+    // theoretically this could overflow.
+    CompleteWithError(Status::ErrorUnexpected(), result);
   } else {
-    if (buffer.size() > UINT_MAX) {
-      // WebArrayBuffers have a smaller range than std::vector<>, so
-      // theoretically this could overflow.
-      CompleteWithError(Status::ErrorUnexpected(), result);
-    } else {
-      result->CompleteWithBuffer(buffer.data(),
-                                 static_cast<unsigned int>(buffer.size()));
-    }
+    result->CompleteWithBuffer(buffer);
   }
 }
 
@@ -327,7 +329,7 @@ struct UnwrapKeyState : public BaseState {
 struct DeriveBitsState : public BaseState {
   DeriveBitsState(const blink::WebCryptoAlgorithm& algorithm,
                   const blink::WebCryptoKey& base_key,
-                  unsigned int length_bits,
+                  std::optional<unsigned int> length_bits,
                   const blink::WebCryptoResult& result,
                   scoped_refptr<base::SingleThreadTaskRunner> task_runner)
       : BaseState(result, std::move(task_runner)),
@@ -337,7 +339,7 @@ struct DeriveBitsState : public BaseState {
 
   const blink::WebCryptoAlgorithm algorithm;
   const blink::WebCryptoKey base_key;
-  const unsigned int length_bits;
+  const std::optional<unsigned int> length_bits;
 
   std::vector<uint8_t> derived_bytes;
 };
@@ -483,9 +485,7 @@ void DoExportKeyReply(std::unique_ptr<ExportKeyState> state) {
   if (state->status.IsError()) {
     CompleteWithError(state->status, &state->result);
   } else {
-    state->result.CompleteWithJson(
-        reinterpret_cast<const char*>(state->buffer.data()),
-        static_cast<unsigned int>(state->buffer.size()));
+    state->result.CompleteWithJson(base::as_string_view(state->buffer));
   }
 }
 
@@ -812,7 +812,7 @@ void WebCryptoImpl::UnwrapKey(
 void WebCryptoImpl::DeriveBits(
     const blink::WebCryptoAlgorithm& algorithm,
     const blink::WebCryptoKey& base_key,
-    unsigned int length_bits,
+    std::optional<unsigned int> length_bits,
     blink::WebCryptoResult result,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   if (result.Cancelled())

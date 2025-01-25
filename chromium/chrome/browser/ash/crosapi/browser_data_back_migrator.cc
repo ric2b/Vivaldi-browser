@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ash/crosapi/browser_data_back_migrator.h"
 
 #include <errno.h>
@@ -1416,18 +1421,6 @@ bool BrowserDataBackMigrator::RestartToMigrateBack(
 
   AttemptRestart();
   return true;
-}
-
-// static
-bool BrowserDataBackMigrator::MaybeRestartToMigrateBack(
-    const AccountId& account_id,
-    const std::string& user_id_hash,
-    ash::standalone_browser::migrator_util::PolicyInitState policy_init_state) {
-  if (!ShouldMigrateBack(account_id, user_id_hash, policy_init_state)) {
-    return false;
-  }
-
-  return RestartToMigrateBack(account_id);
 }
 
 // static

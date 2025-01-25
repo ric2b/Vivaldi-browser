@@ -21,6 +21,7 @@
 #include "components/optimization_guide/core/model_execution/model_execution_features.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/optimization_guide_prefs.h"
+#include "components/optimization_guide/proto/model_quality_service.pb.h"
 #include "components/search/ntp_features.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
@@ -125,18 +126,9 @@ IN_PROC_BROWSER_TEST_F(WallpaperSearchInteractiveTest,
   const DeepQuery kWallpaperSearchButton = {"ntp-app",
                                             "#wallpaperSearchButton"};
 
-  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kElementHiddenEvent);
-  StateChange wallpaper_search_button_hidden;
-  wallpaper_search_button_hidden.type =
-      StateChange::Type::kExistsAndConditionTrue;
-  wallpaper_search_button_hidden.where = kWallpaperSearchButton;
-  wallpaper_search_button_hidden.event = kElementHiddenEvent;
-  wallpaper_search_button_hidden.test_function =
-      "(el) => el.offsetParent === null";
-
   RunTestSequence(
       // 1. Open the NTP.
-      Steps(InstrumentTab(kNewTabPageElementId, 0), Do([=]() {
+      Steps(InstrumentTab(kNewTabPageElementId, 0), Do([=, this]() {
               browser()->profile()->GetPrefs()->SetInteger(
                   optimization_guide::prefs::GetSettingEnabledPrefName(
                       optimization_guide::UserVisibleFeatureKey::
@@ -151,25 +143,26 @@ IN_PROC_BROWSER_TEST_F(WallpaperSearchInteractiveTest,
       // 2. Ensure the wallpaper search button is visible.
       WaitForElementVisible(kNewTabPageElementId, kWallpaperSearchButton),
       // 3. Turn wallpaper search setting off.
-      Do([=]() {
+      Do([=, this]() {
         browser()->profile()->GetPrefs()->SetInteger(
             optimization_guide::prefs::GetSettingEnabledPrefName(
                 optimization_guide::UserVisibleFeatureKey::kWallpaperSearch),
             static_cast<int>(
                 optimization_guide::prefs::FeatureOptInState::kDisabled));
       }),
-      // 4. Ensure the wallpaper search button is hidden.
-      WaitForStateChange(kNewTabPageElementId, wallpaper_search_button_hidden),
+      // 4. Ensure the wallpaper search button is not in the DOM.
+      WaitForElementExists(kNewTabPageElementId, kWallpaperSearchButton, false),
       // 5. Turn wallpaper search setting on.
-      Do([=]() {
+      Do([=, this]() {
         browser()->profile()->GetPrefs()->SetInteger(
             optimization_guide::prefs::GetSettingEnabledPrefName(
                 optimization_guide::UserVisibleFeatureKey::kWallpaperSearch),
             static_cast<int>(
                 optimization_guide::prefs::FeatureOptInState::kEnabled));
       }),
-      // 6. Ensure the wallpaper search button is still hidden.
-      WaitForStateChange(kNewTabPageElementId, wallpaper_search_button_hidden));
+      // 6. Ensure the wallpaper search button is still not in the DOM.
+      WaitForElementExists(kNewTabPageElementId, kWallpaperSearchButton,
+                           false));
 }
 
 class WallpaperSearchOptimizationGuideInteractiveTest
@@ -506,7 +499,8 @@ IN_PROC_BROWSER_TEST_F(WallpaperSearchOptimizationGuideInteractiveTest,
                        FeedbackDialogShowsOnThumbsDown) {
   EXPECT_CALL(mock_optimization_guide_keyed_service(),
               ShouldFeatureBeCurrentlyAllowedForFeedback(
-                  optimization_guide::UserVisibleFeatureKey::kWallpaperSearch))
+                  optimization_guide::proto::LogAiDataRequest::FeatureCase::
+                      kWallpaperSearch))
       .WillOnce(testing::Return(true));
 
   // Intercept Wallpaper Search descriptor fetches, and respond with data.

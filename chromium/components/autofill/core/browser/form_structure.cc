@@ -42,12 +42,14 @@
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/form_parsing/autofill_parsing_utils.h"
 #include "components/autofill/core/browser/form_parsing/buildflags.h"
 #include "components/autofill/core/browser/form_parsing/form_field_parser.h"
 #include "components/autofill/core/browser/form_processing/label_processing_util.h"
 #include "components/autofill/core/browser/form_processing/name_processing_util.h"
 #include "components/autofill/core/browser/form_structure_rationalizer.h"
 #include "components/autofill/core/browser/form_structure_sectioning_util.h"
+#include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
@@ -193,15 +195,24 @@ void FormStructure::DetermineHeuristicTypes(
       base::FeatureList::IsEnabled(features::kAutofillPageLanguageDetection)
           ? current_page_language_
           : LanguageCode();
-  ParsingContext context(client_country_, page_language, PatternSource::kLegacy,
-                         log_manager);
+  // The `PatternFile` parameter is overwritten again immediately before
+  // parsing and doesn't matter here.
+  ParsingContext context(client_country_, page_language,
+#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
+                         PatternFile::kDefault,
+#else
+                         PatternFile::kLegacy,
+#endif
+                         GetActiveRegexFeatures(), log_manager);
 
   // The active heuristic source might not be a pattern source.
   std::optional<FieldCandidatesMap> active_predictions;
-  if (std::optional<PatternSource> pattern_source = GetActivePatternSource()) {
-    context.pattern_source = *pattern_source;
+  HeuristicSource active_heuristic_source = GetActiveHeuristicSource();
+  if (std::optional<PatternFile> pattern_file =
+          HeuristicSourceToPatternFile(active_heuristic_source)) {
+    context.pattern_file = *pattern_file;
     active_predictions = ParseFieldTypesWithPatterns(context);
-    AssignBestFieldTypes(*active_predictions, *pattern_source);
+    AssignBestFieldTypes(*active_predictions, active_heuristic_source);
   }
   DetermineNonActiveHeuristicTypes(std::move(active_predictions), context);
 
@@ -240,30 +251,25 @@ void FormStructure::DetermineHeuristicTypes(
 void FormStructure::DetermineNonActiveHeuristicTypes(
     std::optional<FieldCandidatesMap> active_predictions,
     ParsingContext& context) {
+#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
   if (base::FeatureList::IsEnabled(
-          features::kAutofillDisableShadowHeuristics)) {
+          features::kAutofillEnableImprovedPredictionParser)) {
+    // Run the parser for the prediction improvements.
+    context.pattern_file = PatternFile::kPredictionImprovements;
+    AssignBestFieldTypes(ParseFieldTypesWithPatterns(context),
+                         HeuristicSource::kPredictionImprovementRegexes);
+  }
+
+  if (GetActiveHeuristicSource() == HeuristicSource::kDefaultRegexes) {
     return;
   }
-  std::optional<PatternSource> active_pattern_source =
-      HeuristicSourceToPatternSource(GetActiveHeuristicSource());
-  for (HeuristicSource heuristic_source : GetNonActiveHeuristicSources()) {
-    std::optional<PatternSource> pattern_source =
-        HeuristicSourceToPatternSource(heuristic_source);
-    if (!pattern_source) {
-      continue;
-    }
-    if (active_pattern_source &&
-        AreMatchingPatternsEqual(*active_pattern_source, *pattern_source,
-                                 context.page_language)) {
-      // No need to recompute the predictions - just copy the results.
-      AssignBestFieldTypes(*active_predictions, *pattern_source);
-    } else {
-      // Run heuristics.
-      context.pattern_source = *pattern_source;
-      AssignBestFieldTypes(ParseFieldTypesWithPatterns(context),
-                           *pattern_source);
-    }
-  }
+  // When a non-default source is active, shadow predictions between this
+  // non-default source and default are emitted. Compute default predictions.
+  context.pattern_file = PatternFile::kDefault;
+  context.active_features.clear();
+  AssignBestFieldTypes(ParseFieldTypesWithPatterns(context),
+                       HeuristicSource::kDefaultRegexes);
+#endif
 }
 
 // static
@@ -405,7 +411,7 @@ bool FormStructure::ShouldBeParsed(ShouldBeParsedParams params,
     return false;
   }
 
-  bool has_text_field = base::ranges::any_of(*this, [](const auto& field) {
+  bool has_text_field = std::ranges::any_of(*this, [](const auto& field) {
     return !field->IsSelectOrSelectListElement();
   });
   if (!has_text_field) {
@@ -438,9 +444,12 @@ bool FormStructure::ShouldBeUploaded() const {
 void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
                                       RetrieveFromCacheReason reason) {
   // Build a table to lookup AutofillFields by their FieldGlobalId.
-  std::map<FieldGlobalId, const AutofillField*> cached_fields_by_id;
-  for (const std::unique_ptr<autofill::AutofillField>& field : cached_form)
-    cached_fields_by_id[field->global_id()] = field.get();
+  auto cached_fields_by_id =
+      base::MakeFlatMap<FieldGlobalId, const AutofillField*>(
+          cached_form.fields(), {},
+          [](const std::unique_ptr<AutofillField>& field) {
+            return std::make_pair(field->global_id(), field.get());
+          });
 
   // Lookup field by global_id in cached_fields_by_id.
   auto find_field_by_id = [&cached_fields_by_id](FieldGlobalId global_id) {
@@ -482,16 +491,36 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
     if (!cached_field)
       continue;
 
+    // TODO: crbug.com/40227496 - Simplify the `switch` statement once
+    // kAutofillFixValueSemantics is launched.
+    // TODO: crbug.com/40227496 - Remove the IsSelectOrSelectListElement()
+    // checks once kAutofillFixValueSemantics is launched.
+    // TODO: crbug.com/40227496 - Update the comments when the experiments are
+    // launched.
     switch (reason) {
-      case RetrieveFromCacheReason::kFormParsing:
-        // During form parsing (as in "assigning field types to fields")
-        // the `value` represents the initial value found at page load and needs
-        // to be preserved.
-        if (!field->IsSelectOrSelectListElement()) {
-          field->set_value(cached_field->value());
+      case RetrieveFromCacheReason::kFormCacheUpdateAfterParsing:
+      case RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing:
+        // If kAutofillFixValueSemantics is disabled: During form parsing (as in
+        // "assigning field types to fields") the `value` represents the initial
+        // value found at page load and needs to be preserved.
+        if (!field->IsSelectOrSelectListElement() ||
+            base::FeatureList::IsEnabled(
+                features::kAutofillFixInitialValueOfSelect)) {
+          field->set_initial_value(
+              cached_field->value(ValueSemantics::kInitial), /*pass_key=*/{});
         }
         break;
       case RetrieveFromCacheReason::kFormImport:
+        // TODO: crbug.com/40227496 - Group IsSelectOrSelectListElement()
+        // checks.
+        if ((!field->IsSelectOrSelectListElement() ||
+             base::FeatureList::IsEnabled(
+                 features::kAutofillFixInitialValueOfSelect)) &&
+            base::FeatureList::IsEnabled(
+                features::kAutofillFixValueSemantics)) {
+          field->set_initial_value(
+              cached_field->value(ValueSemantics::kInitial), /*pass_key=*/{});
+        }
         // From the perspective of learning user data, text fields containing
         // default values are equivalent to empty fields. So if the value of
         // a submitted form corresponds to the initial value of the field, we
@@ -499,18 +528,29 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         // Since a website can prefill country and state values based on
         // GeoIP, we want to hold on to these values.
         const bool same_value_as_on_page_load =
-            field->value() == cached_field->value();
+            field->value(ValueSemantics::kCurrent) ==
+            cached_field->value(ValueSemantics::kInitial);
         const bool had_type =
             cached_field->Type().GetStorableType() > FieldType::UNKNOWN_TYPE ||
             !cached_field->possible_types().empty();
-        if (!cached_field->value().empty() &&
-            !field->IsSelectOrSelectListElement() && had_type) {
+        if (!cached_field->value(ValueSemantics::kInitial).empty() &&
+            (!field->IsSelectOrSelectListElement() ||
+             base::FeatureList::IsEnabled(
+                 features::kAutofillFixInitialValueOfSelect)) &&
+            had_type) {
           field->set_initial_value_changed(!same_value_as_on_page_load);
         }
+        // TODO: crbug.com/40137859 - The server type hasn't been set yet (it is
+        // set a few lines further down below), so this is trivially true. Once
+        // kAutofillFixCurrentValueInImport is launched, consider adding this
+        // to AutofillField::value_for_import() and running an experiment for
+        // this.
         const bool field_is_neither_state_nor_country =
             field->server_type() != ADDRESS_HOME_COUNTRY &&
             field->server_type() != ADDRESS_HOME_STATE;
-        if (!field->IsSelectOrSelectListElement() &&
+        if ((!field->IsSelectOrSelectListElement() &&
+             !base::FeatureList::IsEnabled(
+                 features::kAutofillFixCurrentValueInImport)) &&
             same_value_as_on_page_load && field_is_neither_state_nor_country) {
           field->set_value(std::u16string());
         }
@@ -519,26 +559,11 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
 
     field->set_server_predictions(cached_field->server_predictions());
 
-    // TODO(crbug.com/40871691): The following is the statement which we want
-    // to have here once features::kAutofillDontPreserveAutofillState is
-    // launched:
-    // ---
-    // We don't preserve the `is_autofilled` state from the cache, because
-    // form parsing and form import both start in the renderer and the renderer
-    // shares it's most recent status of whether the fields are currently
-    // in autofilled state. Any modifications by JavaScript or the user
-    // may take a field out of the autofilled state and get propagated to the
-    // AutofillManager via OnTextFieldDidChangeImpl anyways.
-    // ---
-    // For now we gate this behavioral change by a feature flag to ensure that
-    // it does not cause a regression.
-    if (!base::FeatureList::IsEnabled(
-            features::kAutofillDontPreserveAutofillState)) {
-      // Preserve state whether the field was autofilled before.
-      if (reason == RetrieveFromCacheReason::kFormParsing)
-        field->set_is_autofilled(cached_field->is_autofilled());
+    // Preserve state whether the field was autofilled before.
+    if (reason == RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing ||
+        reason == RetrieveFromCacheReason::kFormCacheUpdateAfterParsing) {
+      field->set_is_autofilled(cached_field->is_autofilled());
     }
-
     field->set_autofill_source_profile_guid(
         cached_field->autofill_source_profile_guid());
     field->set_autofilled_type(cached_field->autofilled_type());
@@ -553,8 +578,10 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
     // and information derived from the autocomplete attribute as those are
     // either regenerated or copied from the form that the renderer sent.
     // During import, no parsing happens and we want to preserve the last field
-    // classification.
-    if (reason == RetrieveFromCacheReason::kFormImport) {
+    // classification. Similarly, if the renderer sends an update that does not
+    // trigger parsing, we want to preserve the last field classification
+    if (reason == RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing ||
+        reason == RetrieveFromCacheReason::kFormImport) {
       // Transfer attributes of the cached AutofillField to the newly created
       // AutofillField.
       for (int i = 0; i <= static_cast<int>(HeuristicSource::kMaxValue); ++i) {
@@ -664,12 +691,22 @@ FieldCandidatesMap FormStructure::ParseFieldTypesWithPatterns(
     FormFieldParser::ParseSingleFieldForms(context, fields_, field_type_map);
     FormFieldParser::ParseStandaloneCVCFields(context, fields_, field_type_map);
 
-    // For standalone email fields inside a form tag, allow heuristics even
-    // when the minimum number of fields is not met. See similar comments
-    // in `FormFieldParser::ClearCandidatesIfHeuristicsDidNotFindEnoughFields`.
-    if (is_form_element() &&
+    // For standalone email fields, allow heuristics even when the minimum
+    // number of fields is not met. See similar comments in
+    // `FormFieldParser::ClearCandidatesIfHeuristicsDidNotFindEnoughFields`.
+    // Note that `kAutofillEnableEmailHeuristicOnlyAddressForms` only supports
+    // email fields inside a form tag. Once
+    // `kAutofillEnableEmailHeuristicOnlyAddressForms` launches, dropping this
+    // requirement will be launched via
+    // `kAutofillEnableEmailHeuristicOutsideForms`.
+    const bool parse_standalone_email_fields =
+        (is_form_element() ||
+         base::FeatureList::IsEnabled(
+             features::kAutofillEnableEmailHeuristicOutsideForms)) &&
         base::FeatureList::IsEnabled(
-            features::kAutofillEnableEmailHeuristicOnlyAddressForms)) {
+            features::kAutofillEnableEmailHeuristicOnlyAddressForms);
+
+    if (parse_standalone_email_fields) {
       FormFieldParser::ParseStandaloneEmailFields(context, fields_,
                                                   field_type_map);
     }
@@ -679,7 +716,7 @@ FieldCandidatesMap FormStructure::ParseFieldTypesWithPatterns(
 
 void FormStructure::AssignBestFieldTypes(
     const FieldCandidatesMap& field_type_map,
-    PatternSource pattern_source) {
+    HeuristicSource heuristic_source) {
   if (field_type_map.empty()) {
     return;
   }
@@ -693,16 +730,15 @@ void FormStructure::AssignBestFieldTypes(
       continue;
 
     const FieldCandidates& candidates = iter->second;
-    field->set_heuristic_type(PatternSourceToHeuristicSource(pattern_source),
-                              candidates.BestHeuristicType());
+    field->set_heuristic_type(heuristic_source, candidates.BestHeuristicType());
 
     ++field_rank_map[field->GetFieldSignature()];
     // Log the field type predicted from local heuristics.
     field->AppendLogEventIfNotRepeated(HeuristicPredictionFieldLogEvent{
-        .field_type = field->heuristic_type(
-            PatternSourceToHeuristicSource(pattern_source)),
-        .pattern_source = pattern_source,
-        .is_active_pattern_source = GetActivePatternSource() == pattern_source,
+        .field_type = field->heuristic_type(heuristic_source),
+        .heuristic_source = heuristic_source,
+        .is_active_heuristic_source =
+            GetActiveHeuristicSource() == heuristic_source,
         .rank_in_field_signature_group =
             field_rank_map[field->GetFieldSignature()],
     });
@@ -936,7 +972,8 @@ std::ostream& operator<<(std::ostream& buffer, const FormStructure& form) {
         0, std::min(field->label().length(), kMaxLabelSize));
     buffer << "\n  Label: " << truncated_label;
 
-    buffer << "\n  Is empty: " << (field->IsEmpty() ? "Yes" : "No");
+    buffer << "\n  Is empty: "
+           << (field->value(ValueSemantics::kCurrent).empty() ? "Yes" : "No");
   }
   return buffer;
 }
@@ -1023,7 +1060,8 @@ LogBuffer& operator<<(LogBuffer& buffer, const FormStructure& form) {
         label.substr(0, std::min(label.length(), kMaxLabelSize));
     buffer << Tr{} << "Label:" << truncated_label;
 
-    buffer << Tr{} << "Is empty:" << (field->IsEmpty() ? "Yes" : "No");
+    buffer << Tr{} << "Is empty:"
+           << (field->value(ValueSemantics::kCurrent).empty() ? "Yes" : "No");
     buffer << Tr{} << "Is focusable:"
            << (field->IsFocusable() ? "Yes (focusable)" : "No (unfocusable)");
     buffer << Tr{} << "Is visible:"

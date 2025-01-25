@@ -42,7 +42,8 @@
 
 - (instancetype)initWithSupportedCodecs:
     (nonnull NSArray<RTC_OBJC_TYPE(RTCVideoCodecInfo) *> *)supportedCodecs {
-  if (self = [super init]) {
+  self = [super init];
+  if (self) {
     _supportedCodecs = supportedCodecs;
   }
   return self;
@@ -465,7 +466,10 @@
     }
     XCTAssertNotNil(targetCodec);
 
-    [tranceiver setCodecPreferences:@[ targetCodec ]];
+    NSError *error = nil;
+    BOOL result = [tranceiver setCodecPreferences:@[ targetCodec ] error:&error];
+    XCTAssertTrue(result);
+    XCTAssertNil(error);
 
     @autoreleasepool {
       dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);

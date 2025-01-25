@@ -7,10 +7,15 @@
 #include "base/metrics/field_trial_params.h"
 #include "services/network/public/cpp/features.h"
 
-namespace android_webview {
-namespace features {
+namespace android_webview::features {
 
 // Alphabetical:
+
+// Enable auto granting storage access API requests. This will be done
+// if a relationship is detected between the app and the website.
+BASE_FEATURE(kWebViewAutoSAA,
+             "WebViewAutoSAA",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable back/forward cache support in WebView. Note that this will only take
 // effect iff both this feature flag and the content/public kBackForwardCache
@@ -19,29 +24,20 @@ BASE_FEATURE(kWebViewBackForwardCache,
              "WebViewBackForwardCache",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enable brotli compression support in WebView.
-BASE_FEATURE(kWebViewBrotliSupport,
-             "WebViewBrotliSupport",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Whether to destroy the WebView rendering functor when after a WebView window
-// becomes invisible.
-//
-// From a stable experiment in October 2023, this saves tens of MiB of graphics
-// memory at high quantiles, at no performance cost.
-BASE_FEATURE(kWebViewClearFunctorInBackground,
-             "WebViewClearFunctorInBackground",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Kill switch for adding CHECKs to loading pak files.
 BASE_FEATURE(kWebViewCheckPakFileDescriptors,
              "WebViewCheckPakFileDescriptors",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enable loading include statements when checking digital asset links
+BASE_FEATURE(kWebViewDigitalAssetLinksLoadIncludes,
+             "WebViewDigitalAssetLinksLoadIncludes",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Allows JS DataTransfer Files from content URIs in drag-drop.
 BASE_FEATURE(kWebViewDragDropFiles,
              "WebViewDragDropFiles",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Cache origins which have camera/mic permissions approved to allow subsequent
 // calls to enumerate devices to return device labels.
@@ -209,7 +205,7 @@ BASE_FEATURE(kWebViewSeparateResourceContext,
 // startup.
 BASE_FEATURE(kWebViewUseInitialNetworkStateAtStartup,
              "WebViewUseInitialNetworkStateAtStartup",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // This enables zoom keyboard shortcuts for zoom-in, zoom-out and zoom reset.
 BASE_FEATURE(kWebViewZoomKeyboardShortcuts,
@@ -256,5 +252,16 @@ BASE_FEATURE(kCreateSpareRendererOnBrowserContextCreation,
              "CreateSpareRendererOnBrowserContextCreation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-}  // namespace features
-}  // namespace android_webview
+// Kill switch for WebAuthn usage in WebViews.
+BASE_FEATURE(kWebViewWebauthn,
+             "WebViewWebauthn",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// This enables RenderDocument in WebView. Note that this will only take effect
+// iff both this feature flag and the content/public kRenderDocument flag is
+// enabled.
+BASE_FEATURE(kWebViewRenderDocument,
+             "WebViewRenderDocument",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+}  // namespace android_webview::features

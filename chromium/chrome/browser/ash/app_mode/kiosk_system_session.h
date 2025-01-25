@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/app_mode/auto_sleep/device_weekly_scheduled_suspend_controller.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
+#include "chrome/browser/ash/app_mode/kiosk_network_state_observer.h"
 #include "chrome/browser/ash/app_mode/metrics/low_disk_metrics_service.h"
 #include "chrome/browser/ash/app_mode/metrics/periodic_metrics_service.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_browser_session.h"
@@ -36,12 +37,12 @@ class KioskSystemSession {
   KioskSystemSession& operator=(const KioskSystemSession&) = delete;
   ~KioskSystemSession();
 
-  static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
-
   // Destroys ash observers.
   void ShuttingDown();
 
   void OnGuestAdded(content::WebContents* guest_web_contents);
+
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   bool is_shutting_down() const;
 
@@ -56,6 +57,10 @@ class KioskSystemSession {
   }
 
   kiosk_vision::KioskVision& kiosk_vision() { return kiosk_vision_; }
+
+  KioskNetworkStateObserver& network_state_observer_for_testing() {
+    return network_state_observer_;
+  }
 
  private:
   class LacrosWatcher;
@@ -95,6 +100,9 @@ class KioskSystemSession {
 
   // Implements the Kiosk Vision ML feature.
   kiosk_vision::KioskVision kiosk_vision_;
+
+  // Observes network state and changes an active network scope..
+  KioskNetworkStateObserver network_state_observer_;
 };
 
 }  // namespace ash

@@ -12,7 +12,6 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "components/notes/deprecated_note_attachment.h"
-#include "content/public/browser/notification_observer.h"
 #include "ui/base/models/tree_node_model.h"
 #include "url/gurl.h"
 

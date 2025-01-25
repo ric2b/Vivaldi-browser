@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/keyboard/key_command_actions.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/key_command_actions.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/disabled_grid_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_consumer.h"
@@ -35,6 +35,7 @@ enum class IPHDismissalReasonType;
 @protocol TabCollectionConsumer;
 @protocol TabCollectionDragDropHandler;
 @protocol TabGridActivityObserver;
+@protocol TabGridCommands;
 @protocol TabGridConsumer;
 @protocol TabContextMenuProvider;
 @protocol TabGridMutator;
@@ -64,13 +65,6 @@ enum class TabGridPageConfiguration {
 
 // Opens a link when the user clicks on the in-text link.
 - (void)openLinkWithURL:(const GURL&)URL;
-
-// Asks the delegate to open history modal with results filtered by
-// `searchText`.
-- (void)showHistoryFilteredBySearchText:(NSString*)searchText;
-
-// Asks the delegate to open a new tab page with a web search for `searchText`.
-- (void)openSearchResultsPageForSearchText:(NSString*)searchText;
 
 // Asks the delegate to show the inactive tabs.
 - (void)showInactiveTabs;
@@ -103,12 +97,14 @@ enum class TabGridPageConfiguration {
                         KeyCommandActions,
                         TabGridConsumer,
                         TabGridIdleStatusHandler,
-                        TabGridPaging,
                         TabGridToolbarsMainTabGridDelegate,
                         TabGridTransitionLayoutProviding,
                         UISearchBarDelegate>
 
 @property(nonatomic, weak) id<ApplicationCommands> handler;
+
+// Handler for the TabGrid commands.
+@property(nonatomic, weak) id<TabGridCommands> tabGridHandler;
 
 // Delegate for this view controller to handle presenting tab UI.
 @property(nonatomic, weak) id<TabPresentationDelegate> tabPresentationDelegate;
@@ -130,7 +126,6 @@ enum class TabGridPageConfiguration {
 
 // Delegates send updates from the UI layer to the model layer.
 @property(nonatomic, weak) id<GridCommands> regularGridHandler;
-@property(nonatomic, weak) id<GridCommands> inactiveGridHandler;
 @property(nonatomic, weak) id<GridCommands> incognitoGridHandler;
 
 // Data source for acquiring data which power the PriceCardView
@@ -189,6 +184,9 @@ enum class TabGridPageConfiguration {
 @property(nonatomic, weak)
     GridContainerViewController* remoteGridContainerViewController;
 
+// Active page of the tab grid. The active page is the page that
+// contains the most recent active tab.
+@property(nonatomic, assign, readonly) TabGridPage activePage;
 // The currently visible page.
 @property(nonatomic, assign, readonly) TabGridPage currentPage;
 
@@ -219,6 +217,9 @@ enum class TabGridPageConfiguration {
 // Sets both the current page and page control's selected page to `page`.
 // Animation is used if `animated` is YES.
 - (void)setCurrentPageAndPageControl:(TabGridPage)page animated:(BOOL)animated;
+
+// Updates the active page to be the current page.
+- (void)updateActivePageToCurrent;
 
 @end
 

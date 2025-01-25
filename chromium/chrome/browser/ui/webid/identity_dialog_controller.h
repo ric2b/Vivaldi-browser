@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/webid/account_selection_view.h"
@@ -19,6 +20,9 @@ using AccountSelectionCallback =
     content::IdentityRequestDialogController::AccountSelectionCallback;
 using DismissCallback =
     content::IdentityRequestDialogController::DismissCallback;
+using IdentityProviderDataPtr = scoped_refptr<content::IdentityProviderData>;
+using IdentityRequestAccountPtr =
+    scoped_refptr<content::IdentityRequestAccount>;
 using TokenError = content::IdentityCredentialTokenError;
 
 // The IdentityDialogController controls the views that are used across
@@ -41,10 +45,11 @@ class IdentityDialogController
   // content::IdentityRequestDialogController
   bool ShowAccountsDialog(
       const std::string& rp_for_display,
-      const std::vector<content::IdentityProviderData>& identity_provider_data,
+      const std::vector<IdentityProviderDataPtr>& identity_provider_data,
+      const std::vector<IdentityRequestAccountPtr>& accounts,
       content::IdentityRequestAccount::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
-      const std::optional<content::IdentityProviderData>& new_account_idp,
+      const std::vector<IdentityRequestAccountPtr>& new_accounts,
       AccountSelectionCallback on_selected,
       LoginToIdPCallback on_add_account,
       DismissCallback dismiss_callback,
@@ -103,6 +108,10 @@ class IdentityDialogController
       std::unique_ptr<AccountSelectionView> account_view);
 
  private:
+  // Attempts to set `account_view_` if it is not already set -- directly on
+  // Android, via TabFeatures on desktop.
+  bool TrySetAccountView();
+
   std::unique_ptr<AccountSelectionView> account_view_{nullptr};
   AccountSelectionCallback on_account_selection_;
   DismissCallback on_dismiss_;

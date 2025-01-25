@@ -32,6 +32,19 @@ class TokenWebData;
 class TokenBindingHelper;
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 
+// This enum is used to know if an account is known by the client has a valid
+// refresh token or not.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class AccountStartupState {
+  kKnownValidToken = 0,
+  kKnownInvalidToken = 1,
+  kUnknownValidToken = 2,
+  kUnknownInvalidToken = 3,
+
+  kMaxValue = kUnknownInvalidToken,
+};
+
 enum class RevokeAllTokensOnLoad {
   kNo = 0,
   kDeleteSiteDataOnExit = 1,
@@ -74,6 +87,10 @@ class MutableProfileOAuth2TokenServiceDelegate
   std::string GetTokenForMultilogin(
       const CoreAccountId& account_id) const override;
   bool RefreshTokenIsAvailable(const CoreAccountId& account_id) const override;
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+  std::vector<uint8_t> GetWrappedBindingKey(
+      const CoreAccountId& account_id) const override;
+#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
   std::vector<CoreAccountId> GetAccounts() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory()
       const override;
@@ -122,6 +139,18 @@ class MutableProfileOAuth2TokenServiceDelegate
                            UpdateInvalidToken);
   FRIEND_TEST_ALL_PREFIXES(MutableProfileOAuth2TokenServiceDelegateTest,
                            LoadInvalidToken);
+  FRIEND_TEST_ALL_PREFIXES(
+      MutableProfileOAuth2TokenServiceDelegateTest,
+      LoadAllCredentialsIntoMemoryAccountAvailabilityPrimaryAvailable);
+  FRIEND_TEST_ALL_PREFIXES(
+      MutableProfileOAuth2TokenServiceDelegateTest,
+      LoadAllCredentialsIntoMemoryAccountAvailabilityPrimaryNotAvailable);
+  FRIEND_TEST_ALL_PREFIXES(
+      MutableProfileOAuth2TokenServiceDelegateTest,
+      LoadAllCredentialsIntoMemoryAccountAvailabilitySecondaryAvailable);
+  FRIEND_TEST_ALL_PREFIXES(
+      MutableProfileOAuth2TokenServiceDelegateTest,
+      LoadAllCredentialsIntoMemoryAccountAvailabilitySecondaryNotAvailable);
   FRIEND_TEST_ALL_PREFIXES(MutableProfileOAuth2TokenServiceDelegateTest,
                            GetAccounts);
   FRIEND_TEST_ALL_PREFIXES(MutableProfileOAuth2TokenServiceDelegateTest,
@@ -136,6 +165,8 @@ class MutableProfileOAuth2TokenServiceDelegate
                            InvalidateTokensForMultilogin);
   FRIEND_TEST_ALL_PREFIXES(MutableProfileOAuth2TokenServiceDelegateTest,
                            ExtractCredentials);
+  FRIEND_TEST_ALL_PREFIXES(MutableProfileOAuth2TokenServiceDelegateTest,
+                           TokenReencryption);
 #if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
   FRIEND_TEST_ALL_PREFIXES(
       MutableProfileOAuth2TokenServiceDelegateBoundTokensTest,
@@ -175,10 +206,13 @@ class MutableProfileOAuth2TokenServiceDelegate
   void ExtractCredentialsInternal(ProfileOAuth2TokenService* to_service,
                                   const CoreAccountId& account_id) override;
 
-  // Loads credentials into in memory structure.
+  // Loads credentials into in memory structure, and remove any invalid or
+  // revoked tokens. If `should_reencrypt` is true then any tokens successfully
+  // loaded will be written back to the database to rotate the encryption key.
   void LoadAllCredentialsIntoMemory(
       const std::map<std::string, TokenServiceTable::TokenWithBindingKey>&
-          db_tokens);
+          db_tokens,
+      bool should_reencrypt = false);
 
   // Updates the in-memory representation of the credentials.
   void UpdateCredentialsInMemory(const CoreAccountId& account_id,
@@ -215,11 +249,6 @@ class MutableProfileOAuth2TokenServiceDelegate
 
   std::string GetRefreshToken(const CoreAccountId& account_id) const;
 
-#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-  std::vector<uint8_t> GetWrappedBindingKey(
-      const CoreAccountId& account_id) const;
-#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
-
   // Creates a new AccountStatus and adds it to the AccountStatusMap.
   // The account must not be already in the map.
   void AddAccountStatus(const CoreAccountId& account_id,
@@ -238,6 +267,11 @@ class MutableProfileOAuth2TokenServiceDelegate
   // revoked on the server.
   void RevokeCredentialsImpl(const CoreAccountId& account_id,
                              bool revoke_on_server);
+
+  // Records whether the `account_id` is available in the account tracker
+  // service with a valid `refresh_token` or not. Called at startup.
+  void RecordAccountAvailabilityStartup(const CoreAccountId& account_id,
+                                        const std::string& refresh_token);
 
   // In memory refresh token store mapping account_id to refresh_token.
   std::map<CoreAccountId, std::string> refresh_tokens_;

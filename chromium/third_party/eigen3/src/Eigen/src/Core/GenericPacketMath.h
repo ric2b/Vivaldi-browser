@@ -207,7 +207,7 @@ struct type_casting_traits {
   };
 };
 
-// provides a succint template to define vectorized casting traits with respect to the largest accessible packet types
+// provides a succinct template to define vectorized casting traits with respect to the largest accessible packet types
 template <typename Src, typename Tgt>
 struct vectorized_type_casting_traits {
   enum : int {

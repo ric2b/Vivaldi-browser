@@ -40,6 +40,7 @@
 #include "ash/test/test_window_builder.h"
 #include "ash/test_shell_delegate.h"
 #include "ash/wm/overview/overview_controller.h"
+#include "ash/wm/overview/overview_test_util.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_positioner.h"
 #include "ash/wm/work_area_insets.h"
@@ -497,8 +498,7 @@ void AshTestBase::BlockUserSession(UserSessionBlockReason block_reason) {
       SetUserAddingScreenRunning(true);
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 }
 
@@ -585,8 +585,16 @@ void AshTestBase::GestureTapOn(const views::View* view) {
 }
 
 bool AshTestBase::EnterOverview(OverviewEnterExitType type) {
-  return OverviewController::Get()->StartOverview(OverviewStartAction::kTests,
-                                                  type);
+  if (OverviewController::Get()->StartOverview(OverviewStartAction::kTests,
+                                               type)) {
+    // After entering overview mode, the views created for the desk bar require
+    // an immediate layout. Layout is normally driven by the compositor, but
+    // this does not occur in unit tests. Therefore,
+    // `views::test::RunScheduledLayout()` must be called manually.
+    RunScheduledLayoutForAllOverviewDeskBars();
+    return true;
+  }
+  return false;
 }
 
 bool AshTestBase::ExitOverview(OverviewEnterExitType type) {
@@ -622,13 +630,6 @@ void AshTestBase::MaybeRunDragAndDropSequenceForAppList(
     }
     GetEventGenerator()->MoveMouseBy(10, 10);
   }));
-  if (!app_list_features::IsDragAndDropRefactorEnabled()) {
-    while (!tasks->empty()) {
-      std::move(tasks->front()).Run();
-      tasks->pop_front();
-    }
-    return;
-  }
 
   ShellTestApi().drag_drop_controller()->SetLoopClosureForTesting(
       base::BindLambdaForTesting([&]() {

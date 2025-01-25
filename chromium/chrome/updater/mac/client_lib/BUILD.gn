@@ -10,7 +10,15 @@ source_set("public_sources") {
     "CRURegistration.h",
     "CRURegistration.m",
   ]
-  assert_no_deps = [ "*" ]
+  deps = [ "//chrome/updater:branding_header" ]
+  assert_no_deps = [
+    "//base:*",
+    "//base/*",
+    "//net:*",
+    "//net/*",
+    "//third_party/*",
+  ]
+  frameworks = [ "Foundation.framework" ]
 }
 
 source_set("test_sources") {
@@ -24,4 +32,5 @@ source_set("test_sources") {
     "//url/",
   ]
   data_deps = [ "//chrome/updater/mac/client_lib/test_helpers" ]
+  frameworks = [ "Foundation.framework" ]
 }

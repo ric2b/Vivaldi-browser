@@ -39,6 +39,7 @@
 
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
+#include "base/containers/checked_iterators.h"
 #include "base/containers/span.h"
 #include "base/dcheck_is_on.h"
 #include "base/numerics/safe_conversions.h"
@@ -195,8 +196,9 @@ struct VectorTypeOperations {
                    T* const src_end,
                    T* const dst,
                    VectorOperationOrigin origin) {
-    if (!LIKELY(src && dst))
+    if (!src || !dst) [[unlikely]] {
       return;
+    }
     if constexpr (!VectorTraits<T>::kCanMoveWithMemcpy) {
       if (origin == VectorOperationOrigin::kConstruction) {
         for (T *s = src, *d = dst; s != src_end; ++s, ++d) {
@@ -216,7 +218,10 @@ struct VectorTypeOperations {
                         reinterpret_cast<const char*>(src_end) -
                             reinterpret_cast<const char*>(src));
       if (origin != VectorOperationOrigin::kConstruction) {
-        ConstructTraits::NotifyNewElements(dst, src_end - src);
+        // SAFETY: TODO(359904345): VectorTypeOperations should operate on spans.
+        base::span<T> UNSAFE_BUFFERS(
+            elements(dst, static_cast<size_t>(src_end - src)));
+        ConstructTraits::NotifyNewElements(elements);
       }
     } else {
       static_assert(VectorTraits<T>::kCanMoveWithMemcpy);
@@ -231,8 +236,9 @@ struct VectorTypeOperations {
                               T* const src_end,
                               T* const dst,
                               VectorOperationOrigin origin) {
-    if (!LIKELY(src && dst))
+    if (!src || !dst) [[unlikely]] {
       return;
+    }
     if constexpr (!VectorTraits<T>::kCanMoveWithMemcpy) {
       if (dst < src) {
         Move(src, src_end, dst, origin);
@@ -264,7 +270,10 @@ struct VectorTypeOperations {
           AtomicWriteMemcpy<sizeof(T), alignof(T)>(d, s);
       }
       if (origin != VectorOperationOrigin::kConstruction) {
-        ConstructTraits::NotifyNewElements(dst, src_end - src);
+        // SAFETY: TODO(359904345): VectorTypeOperations should operate on spans.
+        base::span<T> UNSAFE_BUFFERS(
+            elements(dst, static_cast<size_t>(src_end - src)));
+        ConstructTraits::NotifyNewElements(elements);
       }
     } else {
       static_assert(VectorTraits<T>::kCanMoveWithMemcpy);
@@ -294,9 +303,13 @@ struct VectorTypeOperations {
       }
       const size_t len = src_end - src;
       if (src_origin != VectorOperationOrigin::kConstruction) {
-        ConstructTraits::NotifyNewElements(src, len);
+        // SAFETY: TODO(359904345): VectorTypeOperations should operate on spans.
+        base::span<T> UNSAFE_BUFFERS(elements(src, len));
+        ConstructTraits::NotifyNewElements(elements);
       }
-      ConstructTraits::NotifyNewElements(dst, len);
+      // SAFETY: TODO(359904345): VectorTypeOperations should operate on spans.
+      base::span<T> UNSAFE_BUFFERS(elements(dst, len));
+      ConstructTraits::NotifyNewElements(elements);
     } else {
       static_assert(VectorTraits<T>::kCanMoveWithMemcpy);
       std::swap_ranges(reinterpret_cast<char*>(src),
@@ -318,7 +331,10 @@ struct VectorTypeOperations {
                         reinterpret_cast<const char*>(src_end) -
                             reinterpret_cast<const char*>(src));
       if (origin != VectorOperationOrigin::kConstruction) {
-        ConstructTraits::NotifyNewElements(dst, src_end - src);
+        // SAFETY: TODO(359904345): VectorTypeOperations should operate on spans.
+        base::span<T> UNSAFE_BUFFERS(
+            elements(dst, static_cast<size_t>(src_end - src)));
+        ConstructTraits::NotifyNewElements(elements);
       }
     } else {
       static_assert(VectorTraits<T>::kCanCopyWithMemcpy);
@@ -337,7 +353,7 @@ struct VectorTypeOperations {
                                 T* dst,
                                 VectorOperationOrigin origin,
                                 Proj proj = {}) {
-    if (!LIKELY(dst && src)) {
+    if (!dst || !src) [[unlikely]] {
       return;
     }
     if constexpr (std::is_same_v<T, U> && std::is_same_v<Proj, std::identity> &&
@@ -363,8 +379,9 @@ struct VectorTypeOperations {
                                 T* dst_end,
                                 const T& val,
                                 VectorOperationOrigin origin) {
-    if (!LIKELY(dst))
+    if (!dst) [[unlikely]] {
       return;
+    }
     if constexpr (VectorTraits<T>::kCanFillWithMemset) {
       static_assert(sizeof(T) == sizeof(char), "size of type should be one");
       static_assert(!Allocator::kIsGarbageCollected,
@@ -671,8 +688,9 @@ class VectorBuffer : protected VectorBufferBase<T, Allocator> {
   }
 
   void DeallocateBuffer(T* buffer_to_deallocate) {
-    if (UNLIKELY(buffer_to_deallocate != InlineBuffer()))
+    if (buffer_to_deallocate != InlineBuffer()) [[unlikely]] {
       ReallyDeallocateBuffer(buffer_to_deallocate);
+    }
   }
 
   bool ExpandBuffer(wtf_size_t new_capacity) {
@@ -954,6 +972,103 @@ class VectorBuffer : protected VectorBufferBase<T, Allocator> {
   friend class Deque;
 };
 
+// UncheckedIteraotr<T> is just a wrapper of a T pointer with no bounds
+// checking, and the default iterator implementation of WTF::Vector.
+template <typename T>
+class UncheckedIterator {
+ public:
+  using difference_type = std::ptrdiff_t;
+  using value_type = std::remove_cv_t<T>;
+  using pointer = T*;
+  using reference = T&;
+  using iterator_category = std::contiguous_iterator_tag;
+  using iterator_concept = std::contiguous_iterator_tag;
+
+  constexpr UncheckedIterator() = default;
+  explicit UncheckedIterator(T* cur) : current_(cur) {}
+  UncheckedIterator(const UncheckedIterator& other) = default;
+  // Allow implicit conversion from a base::CheckedContiguousIterator<T>.
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  UncheckedIterator(const base::CheckedContiguousIterator<T>& other)
+      : current_(base::to_address(other)) {}
+  ~UncheckedIterator() = default;
+
+  UncheckedIterator& operator=(const UncheckedIterator& other) = default;
+
+  friend constexpr bool operator==(const UncheckedIterator& lhs,
+                                   const UncheckedIterator& rhs) {
+    return lhs.current_ == rhs.current_;
+  }
+  friend auto operator<=>(const UncheckedIterator& lhs,
+                          const UncheckedIterator& rhs) {
+    return lhs.current_ <=> rhs.current_;
+  }
+
+  UNSAFE_BUFFER_USAGE UncheckedIterator& operator++() {
+    ++current_;
+    return *this;
+  }
+  UNSAFE_BUFFER_USAGE UncheckedIterator operator++(int) {
+    auto old = *this;
+    ++current_;
+    return old;
+  }
+  UNSAFE_BUFFER_USAGE UncheckedIterator& operator--() {
+    --current_;
+    return *this;
+  }
+  UNSAFE_BUFFER_USAGE UncheckedIterator operator--(int) {
+    auto old = *this;
+    --current_;
+    return old;
+  }
+  UNSAFE_BUFFER_USAGE UncheckedIterator& operator+=(difference_type rhs) {
+    current_ += rhs;
+    return *this;
+  }
+  UNSAFE_BUFFER_USAGE UncheckedIterator operator+(difference_type rhs) const {
+    auto it = *this;
+    it += rhs;
+    return it;
+  }
+  UNSAFE_BUFFER_USAGE friend UncheckedIterator operator+(
+      difference_type lhs,
+      const UncheckedIterator& rhs) {
+    return rhs + lhs;
+  }
+  UNSAFE_BUFFER_USAGE UncheckedIterator& operator-=(difference_type rhs) {
+    current_ -= rhs;
+    return *this;
+  }
+  UNSAFE_BUFFER_USAGE UncheckedIterator operator-(difference_type rhs) const {
+    auto it = *this;
+    it -= rhs;
+    return it;
+  }
+  friend difference_type operator-(const UncheckedIterator& lhs,
+                                   const UncheckedIterator& rhs) {
+    return lhs.current_ - rhs.current_;
+  }
+
+  T& operator*() const { return *current_; }
+  T* operator->() const { return current_; }
+  UNSAFE_BUFFER_USAGE T& operator[](difference_type rhs) const {
+    return current_[rhs];
+  }
+
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const UncheckedIterator& rhs) {
+    return out << "UncheckedIterator {current_:" << rhs.current_ << "}";
+  }
+
+ private:
+  // Allow current_ access from UncheckedIterator<U>.
+  template <typename>
+  friend class UncheckedIterator;
+
+  T* current_ = nullptr;
+};
+
 //
 // Vector
 //
@@ -1097,8 +1212,10 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
   using pointer = value_type*;
   using const_pointer = const value_type*;
 
-  using iterator = T*;
-  using const_iterator = const T*;
+  // TODO(crbug.com/355003172): We should try using
+  // base::CheckedContiguousIterator instead of UncheckedIterator.
+  using iterator = UncheckedIterator<T>;
+  using const_iterator = UncheckedIterator<const T>;
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
@@ -1133,11 +1250,12 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
       typename Proj,
       typename = std::enable_if<std::is_invocable_v<Proj, const_reference>>>
   Vector(const Vector&, Proj);
-  template <
-      typename U,
-      wtf_size_t otherCapacity,
-      typename Proj,
-      typename = std::enable_if<std::is_invocable_v<Proj, const_reference>>>
+  template <typename U,
+            wtf_size_t otherCapacity,
+            typename Proj,
+            typename = std::enable_if<std::is_invocable_v<
+                Proj,
+                typename Vector<U, otherCapacity, Allocator>::const_reference>>>
   explicit Vector(const Vector<U, otherCapacity, Allocator>&, Proj);
 
   // Creates a vector with items copied from a collection. |Collection| must
@@ -1202,10 +1320,15 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
   const T* data() const { return Base::Buffer(); }
 
   // Iterators and reverse iterators. They are invalidated on a reallocation.
-  iterator begin() { return data(); }
-  iterator end() { return begin() + size_; }
-  const_iterator begin() const { return data(); }
-  const_iterator end() const { return begin() + size_; }
+  //
+  // If you get a compiler warning about code adding or subtracting values
+  // from the iterators returned by these functions, you can either use the
+  // standard library or base::span::subspan to avoid the addition or
+  // subtraction, or use CheckedBegin() and CheckedEnd().
+  iterator begin() { return iterator(data()); }
+  iterator end() { return iterator(DataEnd()); }
+  const_iterator begin() const { return const_iterator(data()); }
+  const_iterator end() const { return const_iterator(DataEnd()); }
 
   reverse_iterator rbegin() { return reverse_iterator(end()); }
   reverse_iterator rend() { return reverse_iterator(begin()); }
@@ -1214,6 +1337,25 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
   }
   const_reverse_iterator rend() const {
     return const_reverse_iterator(begin());
+  }
+
+  // Checked iterators.
+  // These iterators have runtime CHECK()s for incorrect operations. So
+  // they are safer and slower than begin() and end().
+
+  base::CheckedContiguousIterator<T> CheckedBegin() {
+    return base::CheckedContiguousIterator<T>(data(), DataEnd());
+  }
+  base::CheckedContiguousIterator<T> CheckedEnd() {
+    auto* e = DataEnd();
+    return base::CheckedContiguousIterator<T>(data(), e, e);
+  }
+  base::CheckedContiguousIterator<const T> CheckedBegin() const {
+    return base::CheckedContiguousIterator<const T>(data(), DataEnd());
+  }
+  base::CheckedContiguousIterator<const T> CheckedEnd() const {
+    auto* e = DataEnd();
+    return base::CheckedContiguousIterator<const T>(data(), e, e);
   }
 
   // Quick access to the first and the last element. It is invalid to call
@@ -1294,9 +1436,11 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
   // Append(buffer, size)
   // AppendVector(vector)
   // AppendRange(begin, end)
+  // AppendSpan(span)
   //     Insert multiple elements represented by (1) |buffer| and |size|
-  //     (for append), (2) |vector| (for AppendVector), or (3) a pair of
-  //     iterators (for AppendRange) to the back. The elements will be copied.
+  //     (for append), (2) |vector| (for AppendVector), (3) a pair of
+  //     iterators (for AppendRange), or (4) |span| (for AppendSpan) to the
+  //     back. The elements will be copied.
   // UncheckedAppend(value)
   //     Insert a single element like push_back(), but this function assumes
   //     the vector has enough capacity such that it can store the new element
@@ -1316,6 +1460,8 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
   void AppendVector(const Vector<U, otherCapacity, V>&);
   template <typename Iterator>
   void AppendRange(Iterator begin, Iterator end);
+  template <typename U, size_t N>
+  void AppendSpan(base::span<U, N>);
   template <typename U>
   void UncheckedAppend(U&&);
 
@@ -1432,14 +1578,17 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
     static_assert(!Allocator::kIsGarbageCollected || INLINE_CAPACITY,
                   "GarbageCollected collections without inline capacity cannot "
                   "be finalized.");
-    if (!INLINE_CAPACITY && LIKELY(!Base::Buffer())) {
-      return;
+    if (!INLINE_CAPACITY) {
+      if (!Base::Buffer()) [[likely]] {
+        return;
+      }
     }
-    ANNOTATE_DELETE_BUFFER(begin(), capacity(), size_);
-    if (LIKELY(size_) &&
-        !(Allocator::kIsGarbageCollected && this->HasOutOfLineBuffer())) {
-      TypeOperations::Destruct(begin(), end());
-      size_ = 0;  // Partial protection against use-after-free.
+    ANNOTATE_DELETE_BUFFER(data(), capacity(), size_);
+    if (size_) [[likely]] {
+      if (!Allocator::kIsGarbageCollected || !this->HasOutOfLineBuffer()) {
+        TypeOperations::Destruct(data(), DataEnd());
+        size_ = 0;  // Partial protection against use-after-free.
+      }
     }
 
     // For garbage collected vector HeapAllocator::BackingFree() will bail out
@@ -1466,6 +1615,12 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
   const T* const* GetBufferSlot() const { return Base::BufferSlot(); }
 
  private:
+  template <typename, wtf_size_t, typename>
+  friend class Vector;
+  // Point the next of the last item. We must not dereference the return value.
+  T* DataEnd() { return data() + size(); }
+  const T* DataEnd() const { return data() + size(); }
+
   void ExpandCapacity(wtf_size_t new_min_capacity);
   T* ExpandCapacity(wtf_size_t new_min_capacity, T*);
   T* ExpandCapacity(wtf_size_t new_min_capacity, const T* data) {
@@ -1528,34 +1683,34 @@ class Vector : private VectorBuffer<T, INLINE_CAPACITY, Allocator> {
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 inline Vector<T, InlineCapacity, Allocator>::Vector() {
-  ANNOTATE_NEW_BUFFER(begin(), capacity(), 0);
+  ANNOTATE_NEW_BUFFER(data(), capacity(), 0);
   size_ = 0;
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 inline Vector<T, InlineCapacity, Allocator>::Vector(wtf_size_t size)
     : Base(size) {
-  ANNOTATE_NEW_BUFFER(begin(), capacity(), size);
+  ANNOTATE_NEW_BUFFER(data(), capacity(), size);
   size_ = size;
-  TypeOperations::Initialize(begin(), end());
+  TypeOperations::Initialize(data(), DataEnd());
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 inline Vector<T, InlineCapacity, Allocator>::Vector(wtf_size_t size,
                                                     const T& val)
     : Base(size) {
-  ANNOTATE_NEW_BUFFER(begin(), capacity(), size);
+  ANNOTATE_NEW_BUFFER(data(), capacity(), size);
   size_ = size;
-  TypeOperations::UninitializedFill(begin(), end(), val,
+  TypeOperations::UninitializedFill(data(), DataEnd(), val,
                                     VectorOperationOrigin::kConstruction);
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 Vector<T, InlineCapacity, Allocator>::Vector(const Vector& other)
     : Base(other.capacity()) {
-  ANNOTATE_NEW_BUFFER(begin(), capacity(), other.size());
+  ANNOTATE_NEW_BUFFER(data(), capacity(), other.size());
   size_ = other.size();
-  TypeOperations::UninitializedCopy(other.begin(), other.end(), begin(),
+  TypeOperations::UninitializedCopy(other.data(), other.DataEnd(), data(),
                                     VectorOperationOrigin::kConstruction);
 }
 
@@ -1563,9 +1718,9 @@ template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 template <typename Proj, typename>
 Vector<T, InlineCapacity, Allocator>::Vector(const Vector& other, Proj proj)
     : Base(other.capacity()) {
-  ANNOTATE_NEW_BUFFER(begin(), capacity(), other.size());
+  ANNOTATE_NEW_BUFFER(data(), capacity(), other.size());
   size_ = other.size();
-  TypeOperations::UninitializedCopy(other.begin(), other.end(), begin(),
+  TypeOperations::UninitializedCopy(other.data(), other.DataEnd(), data(),
                                     VectorOperationOrigin::kConstruction,
                                     std::move(proj));
 }
@@ -1575,9 +1730,9 @@ template <wtf_size_t otherCapacity>
 Vector<T, InlineCapacity, Allocator>::Vector(
     const Vector<T, otherCapacity, Allocator>& other)
     : Base(other.capacity()) {
-  ANNOTATE_NEW_BUFFER(begin(), capacity(), other.size());
+  ANNOTATE_NEW_BUFFER(data(), capacity(), other.size());
   size_ = other.size();
-  TypeOperations::UninitializedCopy(other.begin(), other.end(), begin(),
+  TypeOperations::UninitializedCopy(other.data(), other.DataEnd(), data(),
                                     VectorOperationOrigin::kConstruction);
 }
 
@@ -1587,9 +1742,9 @@ Vector<T, InlineCapacity, Allocator>::Vector(
     const Vector<U, otherCapacity, Allocator>& other,
     Proj proj)
     : Base(other.capacity()) {
-  ANNOTATE_NEW_BUFFER(begin(), capacity(), other.size());
+  ANNOTATE_NEW_BUFFER(data(), capacity(), other.size());
   size_ = other.size();
-  TypeOperations::UninitializedCopy(other.begin(), other.end(), begin(),
+  TypeOperations::UninitializedCopy(other.data(), other.DataEnd(), data(),
                                     VectorOperationOrigin::kConstruction,
                                     std::move(proj));
 }
@@ -1598,23 +1753,24 @@ template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 Vector<T, InlineCapacity, Allocator>&
 Vector<T, InlineCapacity, Allocator>::operator=(
     const Vector<T, InlineCapacity, Allocator>& other) {
-  if (UNLIKELY(&other == this))
+  if (&other == this) [[unlikely]] {
     return *this;
+  }
 
   if (size() > other.size()) {
     Shrink(other.size());
   } else if (other.size() > capacity()) {
     clear();
     reserve(other.size());
-    DCHECK(begin());
+    DCHECK(data());
   }
 
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      other.size());
-  TypeOperations::Copy(other.begin(), other.begin() + size(), begin(),
+  TypeOperations::Copy(other.data(), other.data() + size(), data(),
                        VectorOperationOrigin::kRegularModification);
   TypeOperations::UninitializedCopy(
-      other.begin() + size(), other.end(), end(),
+      other.data() + size(), other.DataEnd(), DataEnd(),
       VectorOperationOrigin::kRegularModification);
   size_ = other.size();
 
@@ -1640,15 +1796,15 @@ Vector<T, InlineCapacity, Allocator>::operator=(
   } else if (other.size() > capacity()) {
     clear();
     reserve(other.size());
-    DCHECK(begin());
+    DCHECK(data());
   }
 
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      other.size());
-  TypeOperations::Copy(other.begin(), other.begin() + size(), begin(),
+  TypeOperations::Copy(other.data(), other.data() + size(), data(),
                        VectorOperationOrigin::kRegularModification);
   TypeOperations::UninitializedCopy(
-      other.begin() + size(), other.end(), end(),
+      other.data() + size(), other.DataEnd(), DataEnd(),
       VectorOperationOrigin::kRegularModification);
   size_ = other.size();
 
@@ -1699,9 +1855,9 @@ Vector<T, InlineCapacity, Allocator>::operator=(
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 Vector<T, InlineCapacity, Allocator>::Vector(std::initializer_list<T> elements)
     : Base(base::checked_cast<wtf_size_t>(elements.size())) {
-  ANNOTATE_NEW_BUFFER(begin(), capacity(), elements.size());
+  ANNOTATE_NEW_BUFFER(data(), capacity(), elements.size());
   size_ = static_cast<wtf_size_t>(elements.size());
-  TypeOperations::UninitializedCopy(elements.begin(), elements.end(), begin(),
+  TypeOperations::UninitializedCopy(elements.begin(), elements.end(), data(),
                                     VectorOperationOrigin::kConstruction);
 }
 
@@ -1715,15 +1871,15 @@ Vector<T, InlineCapacity, Allocator>::operator=(
   } else if (input_size > capacity()) {
     clear();
     reserve(input_size);
-    DCHECK(begin());
+    DCHECK(data());
   }
 
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      input_size);
-  TypeOperations::Copy(elements.begin(), elements.begin() + size_, begin(),
+  TypeOperations::Copy(elements.begin(), elements.begin() + size_, data(),
                        VectorOperationOrigin::kRegularModification);
   TypeOperations::UninitializedCopy(
-      elements.begin() + size_, elements.end(), end(),
+      elements.begin() + size_, elements.end(), DataEnd(),
       VectorOperationOrigin::kRegularModification);
   size_ = input_size;
 
@@ -1737,8 +1893,8 @@ bool Vector<T, InlineCapacity, Allocator>::Contains(const U& value) const {
   // handle finding the kNotFound-th element in the array.  kNotFound is part
   // of wtf_size_t, but not used as an index due to runtime restrictions.  See
   // kNotFound.
-  const T* b = begin();
-  const T* e = end();
+  const T* b = data();
+  const T* e = DataEnd();
   for (const T* iter = b; iter < e; ++iter) {
     if (TypeOperations::CompareElement(*iter, value)) {
       return true;
@@ -1750,8 +1906,8 @@ bool Vector<T, InlineCapacity, Allocator>::Contains(const U& value) const {
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 template <typename U>
 wtf_size_t Vector<T, InlineCapacity, Allocator>::Find(const U& value) const {
-  const T* b = begin();
-  const T* e = end();
+  const T* b = data();
+  const T* e = DataEnd();
   for (const T* iter = b; iter < e; ++iter) {
     if (TypeOperations::CompareElement(*iter, value))
       return static_cast<wtf_size_t>(iter - b);
@@ -1763,8 +1919,8 @@ template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 template <typename U>
 wtf_size_t Vector<T, InlineCapacity, Allocator>::ReverseFind(
     const U& value) const {
-  const T* b = begin();
-  const T* iter = end();
+  const T* b = data();
+  const T* iter = DataEnd();
   while (iter > b) {
     --iter;
     if (TypeOperations::CompareElement(*iter, value))
@@ -1783,14 +1939,14 @@ void Vector<T, InlineCapacity, Allocator>::Fill(const T& val,
   } else if (new_size > capacity()) {
     clear();
     reserve(new_size);
-    DCHECK(begin());
+    DCHECK(data());
   }
 
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      new_size);
   std::fill(begin(), end(), val);
   TypeOperations::UninitializedFill(
-      end(), begin() + new_size, val,
+      DataEnd(), data() + new_size, val,
       VectorOperationOrigin::kRegularModification);
   size_ = new_size;
 }
@@ -1826,13 +1982,13 @@ template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 T* Vector<T, InlineCapacity, Allocator>::ExpandCapacity(
     wtf_size_t new_min_capacity,
     T* ptr) {
-  if (ptr < begin() || ptr >= end()) {
+  if (ptr < data() || ptr >= DataEnd()) {
     ExpandCapacity(new_min_capacity);
     return ptr;
   }
-  size_t index = ptr - begin();
+  size_t index = ptr - data();
   ExpandCapacity(new_min_capacity);
-  return begin() + index;
+  return data() + index;
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
@@ -1847,16 +2003,16 @@ inline U* Vector<T, InlineCapacity, Allocator>::ExpandCapacity(
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 inline void Vector<T, InlineCapacity, Allocator>::resize(wtf_size_t size) {
   if (size <= size_) {
-    TypeOperations::Destruct(begin() + size, end());
-    ClearUnusedSlots(begin() + size, end());
-    MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+    TypeOperations::Destruct(data() + size, DataEnd());
+    ClearUnusedSlots(data() + size, DataEnd());
+    MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                        size);
   } else {
     if (size > capacity())
       ExpandCapacity(size);
-    MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+    MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                        size);
-    TypeOperations::Initialize(end(), begin() + size);
+    TypeOperations::Initialize(DataEnd(), data() + size);
   }
 
   size_ = size;
@@ -1865,9 +2021,9 @@ inline void Vector<T, InlineCapacity, Allocator>::resize(wtf_size_t size) {
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 void Vector<T, InlineCapacity, Allocator>::Shrink(wtf_size_t size) {
   CHECK_LE(size, size_);
-  TypeOperations::Destruct(begin() + size, end());
-  ClearUnusedSlots(begin() + size, end());
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  TypeOperations::Destruct(data() + size, DataEnd());
+  ClearUnusedSlots(data() + size, DataEnd());
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      size);
   size_ = size;
 }
@@ -1877,16 +2033,17 @@ void Vector<T, InlineCapacity, Allocator>::Grow(wtf_size_t size) {
   DCHECK_GE(size, size_);
   if (size > capacity())
     ExpandCapacity(size);
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      size);
-  TypeOperations::Initialize(end(), begin() + size);
+  TypeOperations::Initialize(DataEnd(), data() + size);
   size_ = size;
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 void Vector<T, InlineCapacity, Allocator>::reserve(wtf_size_t new_capacity) {
-  if (UNLIKELY(new_capacity <= capacity()))
+  if (new_capacity <= capacity()) [[unlikely]] {
     return;
+  }
   if (!data()) {
     Base::AllocateBuffer(new_capacity,
                          VectorOperationOrigin::kRegularModification);
@@ -1902,16 +2059,16 @@ void Vector<T, InlineCapacity, Allocator>::reserve(wtf_size_t new_capacity) {
     //
     // Details see
     //   https://github.com/llvm-mirror/compiler-rt/blob/master/lib/asan/asan_poisoning.cpp#L354
-    MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), old_capacity, size_,
+    MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), old_capacity, size_,
                                        old_capacity);
     if (Base::ExpandBuffer(new_capacity)) {
       // The following transition clears out old ASAN shadow memory state in the
       // case mentioned above.
       new_capacity = capacity();
       DCHECK_LE(old_capacity, new_capacity);
-      ANNOTATE_CHANGE_SIZE(begin(), new_capacity, old_capacity, new_capacity);
+      ANNOTATE_CHANGE_SIZE(data(), new_capacity, old_capacity, new_capacity);
       // Finally, assuming new capacity, re-poison with the used size.
-      ANNOTATE_CHANGE_SIZE(begin(), new_capacity, new_capacity, size_);
+      ANNOTATE_CHANGE_SIZE(data(), new_capacity, new_capacity, size_);
       return;
     }
     // In case expansion failed, there's no need to adjust container
@@ -1930,13 +2087,13 @@ inline void Vector<T, InlineCapacity, Allocator>::ReserveInitialCapacity(
   DCHECK(!size_);
   DCHECK(capacity() == INLINE_CAPACITY);
   if (initial_capacity > INLINE_CAPACITY) {
-    ANNOTATE_DELETE_BUFFER(begin(), capacity(), size_);
+    ANNOTATE_DELETE_BUFFER(data(), capacity(), size_);
     // The following uses `kRegularModification` as it's not guaranteed that the
     // Vector has not been published to the object graph after finishing the
     // constructor.
     Base::AllocateBuffer(initial_capacity,
                          VectorOperationOrigin::kRegularModification);
-    MARKING_AWARE_ANNOTATE_NEW_BUFFER(Allocator, begin(), capacity(), size_);
+    MARKING_AWARE_ANNOTATE_NEW_BUFFER(Allocator, data(), capacity(), size_);
   }
 }
 
@@ -1949,7 +2106,7 @@ void Vector<T, InlineCapacity, Allocator>::ShrinkCapacity(
   if (new_capacity < size())
     Shrink(new_capacity);
 
-  T* old_buffer = begin();
+  T* old_buffer = data();
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
   wtf_size_t old_capacity = capacity();
 #endif
@@ -1966,8 +2123,8 @@ void Vector<T, InlineCapacity, Allocator>::ShrinkCapacity(
   }
   Base::ResetBufferPointer();
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
-  if (old_buffer != begin()) {
-    MARKING_AWARE_ANNOTATE_NEW_BUFFER(Allocator, begin(), capacity(), size_);
+  if (old_buffer != data()) {
+    MARKING_AWARE_ANNOTATE_NEW_BUFFER(Allocator, data(), capacity(), size_);
     ANNOTATE_DELETE_BUFFER(old_buffer, old_capacity, size_);
   }
 #endif
@@ -1980,11 +2137,11 @@ template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 template <typename U>
 ALWAYS_INLINE void Vector<T, InlineCapacity, Allocator>::push_back(U&& val) {
   DCHECK(Allocator::IsAllocationAllowed());
-  if (LIKELY(size() != capacity())) {
-    MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  if (size() != capacity()) [[likely]] {
+    MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                        size_ + 1);
     ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
-        end(), std::forward<U>(val));
+        DataEnd(), std::forward<U>(val));
     ++size_;
     return;
   }
@@ -1997,14 +2154,15 @@ template <typename... Args>
 ALWAYS_INLINE T& Vector<T, InlineCapacity, Allocator>::emplace_back(
     Args&&... args) {
   DCHECK(Allocator::IsAllocationAllowed());
-  if (UNLIKELY(size() == capacity()))
+  if (size() == capacity()) [[unlikely]] {
     ExpandCapacity(size() + 1);
+  }
 
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      size_ + 1);
   T* t =
       ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
-          end(), std::forward<Args>(args)...);
+          DataEnd(), std::forward<Args>(args)...);
   ++size_;
   return *t;
 }
@@ -2017,11 +2175,11 @@ void Vector<T, InlineCapacity, Allocator>::Append(const U* data,
   wtf_size_t new_size = size_ + data_size;
   if (new_size > capacity()) {
     data = ExpandCapacity(new_size, data);
-    DCHECK(begin());
+    DCHECK(this->data());
   }
   CHECK_GE(new_size, size_);
-  T* dest = end();
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  T* dest = DataEnd();
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, this->data(), capacity(), size_,
                                      new_size);
   TypeOperations::UninitializedCopy(
       data, &data[data_size], dest,
@@ -2037,12 +2195,12 @@ Vector<T, InlineCapacity, Allocator>::AppendSlowCase(U&& val) {
 
   typename std::remove_reference<U>::type* ptr = &val;
   ptr = ExpandCapacity(size() + 1, ptr);
-  DCHECK(begin());
+  DCHECK(data());
 
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      size_ + 1);
   ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
-      end(), std::forward<U>(*ptr));
+      DataEnd(), std::forward<U>(*ptr));
   ++size_;
 }
 
@@ -2050,7 +2208,7 @@ template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 template <typename U, wtf_size_t otherCapacity, typename OtherAllocator>
 inline void Vector<T, InlineCapacity, Allocator>::AppendVector(
     const Vector<U, otherCapacity, OtherAllocator>& val) {
-  Append(val.begin(), val.size());
+  Append(val.data(), val.size());
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
@@ -2059,6 +2217,12 @@ void Vector<T, InlineCapacity, Allocator>::AppendRange(Iterator begin,
                                                        Iterator end) {
   for (Iterator it = begin; it != end; ++it)
     push_back(*it);
+}
+
+template <typename T, wtf_size_t InlineCapacity, typename Allocator>
+template <typename U, size_t N>
+void Vector<T, InlineCapacity, Allocator>::AppendSpan(base::span<U, N> data) {
+  Append(data.data(), base::checked_cast<wtf_size_t>(data.size()));
 }
 
 // This version of append saves a branch in the case where you know that the
@@ -2073,7 +2237,7 @@ ALWAYS_INLINE void Vector<T, InlineCapacity, Allocator>::UncheckedAppend(
 #else
   DCHECK_LT(size(), capacity());
   ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
-      end(), std::forward<U>(val));
+      DataEnd(), std::forward<U>(val));
   ++size_;
 #endif
 }
@@ -2087,12 +2251,12 @@ inline void Vector<T, InlineCapacity, Allocator>::insert(wtf_size_t position,
   typename std::remove_reference<U>::type* data = &val;
   if (size() == capacity()) {
     data = ExpandCapacity(size() + 1, data);
-    DCHECK(begin());
+    DCHECK(this->data());
   }
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, this->data(), capacity(), size_,
                                      size_ + 1);
-  T* spot = begin() + position;
-  TypeOperations::MoveOverlapping(spot, end(), spot + 1,
+  T* spot = this->data() + position;
+  TypeOperations::MoveOverlapping(spot, DataEnd(), spot + 1,
                                   VectorOperationOrigin::kRegularModification);
   ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
       spot, std::forward<U>(*data));
@@ -2109,13 +2273,13 @@ void Vector<T, InlineCapacity, Allocator>::insert(wtf_size_t position,
   wtf_size_t new_size = size_ + data_size;
   if (new_size > capacity()) {
     data = ExpandCapacity(new_size, data);
-    DCHECK(begin());
+    DCHECK(this->data());
   }
   CHECK_GE(new_size, size_);
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, this->data(), capacity(), size_,
                                      new_size);
-  T* spot = begin() + position;
-  TypeOperations::MoveOverlapping(spot, end(), spot + data_size,
+  T* spot = this->data() + position;
+  TypeOperations::MoveOverlapping(spot, DataEnd(), spot + data_size,
                                   VectorOperationOrigin::kRegularModification);
   TypeOperations::UninitializedCopy(
       data, &data[data_size], spot,
@@ -2125,16 +2289,17 @@ void Vector<T, InlineCapacity, Allocator>::insert(wtf_size_t position,
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 template <typename U>
-void Vector<T, InlineCapacity, Allocator>::InsertAt(T* position, U&& val) {
-  insert(position - begin(), val);
+void Vector<T, InlineCapacity, Allocator>::InsertAt(Vector::iterator position,
+                                                    U&& val) {
+  insert(base::checked_cast<wtf_size_t>(position - begin()), val);
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 template <typename U>
-void Vector<T, InlineCapacity, Allocator>::InsertAt(T* position,
+void Vector<T, InlineCapacity, Allocator>::InsertAt(Vector::iterator position,
                                                     const U* data,
                                                     wtf_size_t data_size) {
-  insert(position - begin(), data, data_size);
+  insert(base::checked_cast<wtf_size_t>(position - begin()), data, data_size);
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
@@ -2142,7 +2307,7 @@ template <typename U, wtf_size_t otherCapacity, typename OtherAllocator>
 inline void Vector<T, InlineCapacity, Allocator>::InsertVector(
     wtf_size_t position,
     const Vector<U, otherCapacity, OtherAllocator>& val) {
-  insert(position, val.begin(), val.size());
+  insert(position, val.data(), val.size());
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
@@ -2162,18 +2327,18 @@ template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 template <typename U, wtf_size_t otherCapacity, typename OtherAllocator>
 inline void Vector<T, InlineCapacity, Allocator>::PrependVector(
     const Vector<U, otherCapacity, OtherAllocator>& val) {
-  insert(0, val.begin(), val.size());
+  insert(0, val.data(), val.size());
 }
 
 template <typename T, wtf_size_t InlineCapacity, typename Allocator>
 inline void Vector<T, InlineCapacity, Allocator>::EraseAt(wtf_size_t position) {
   CHECK_LT(position, size());
-  T* spot = begin() + position;
+  T* spot = data() + position;
   spot->~T();
-  TypeOperations::MoveOverlapping(spot + 1, end(), spot,
+  TypeOperations::MoveOverlapping(spot + 1, DataEnd(), spot,
                                   VectorOperationOrigin::kRegularModification);
-  ClearUnusedSlots(end() - 1, end());
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  ClearUnusedSlots(DataEnd() - 1, DataEnd());
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      size_ - 1);
   --size_;
 }
@@ -2204,13 +2369,13 @@ inline void Vector<T, InlineCapacity, Allocator>::EraseAt(wtf_size_t position,
   if (!length)
     return;
   CHECK_LE(position + length, size());
-  T* begin_spot = begin() + position;
+  T* begin_spot = data() + position;
   T* end_spot = begin_spot + length;
   TypeOperations::Destruct(begin_spot, end_spot);
-  TypeOperations::MoveOverlapping(end_spot, end(), begin_spot,
+  TypeOperations::MoveOverlapping(end_spot, DataEnd(), begin_spot,
                                   VectorOperationOrigin::kRegularModification);
-  ClearUnusedSlots(end() - length, end());
-  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, begin(), capacity(), size_,
+  ClearUnusedSlots(DataEnd() - length, DataEnd());
+  MARKING_AWARE_ANNOTATE_CHANGE_SIZE(Allocator, data(), capacity(), size_,
                                      size_ - length);
   size_ -= length;
 }
@@ -2327,12 +2492,12 @@ void Vector<T, InlineCapacity, Allocator>::ReallocateBuffer(
       return;
     }
     // Shrinking to inline buffer from out-of-line one.
-    T *old_begin = begin(), *old_end = end();
+    T *old_begin = data(), *old_end = DataEnd();
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
     const wtf_size_t old_capacity = capacity();
 #endif
     Base::ResetBufferPointer();
-    TypeOperations::Move(old_begin, old_end, begin(),
+    TypeOperations::Move(old_begin, old_end, data(),
                          VectorOperationOrigin::kRegularModification);
     ClearUnusedSlots(old_begin, old_end);
     ANNOTATE_DELETE_BUFFER(old_begin, old_capacity, size_);
@@ -2346,11 +2511,11 @@ void Vector<T, InlineCapacity, Allocator>::ReallocateBuffer(
   // If there was a new out-of-line buffer allocated, there is no need in
   // calling write barriers for entries in that backing store as it is still
   // white.
-  TypeOperations::Move(begin(), end(), temp_buffer.Buffer(),
+  TypeOperations::Move(data(), DataEnd(), temp_buffer.Buffer(),
                        VectorOperationOrigin::kConstruction);
-  ClearUnusedSlots(begin(), end());
-  ANNOTATE_DELETE_BUFFER(begin(), capacity(), size_);
-  Base::DeallocateBuffer(begin());
+  ClearUnusedSlots(data(), DataEnd());
+  ANNOTATE_DELETE_BUFFER(data(), capacity(), size_);
+  Base::DeallocateBuffer(data());
   Base::AcquireBuffer(std::move(temp_buffer));
 }
 

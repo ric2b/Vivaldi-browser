@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -10,6 +15,7 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/heap_array.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
@@ -84,9 +90,9 @@ GLuint LoadShader(const GLenum type, const char* const src) {
     GLint len = 0;
     glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
     if (len > 1) {
-      std::unique_ptr<char[]> error_log(new char[len]);
-      glGetShaderInfoLog(shader, len, nullptr, error_log.get());
-      LOG(ERROR) << "Error compiling shader: " << error_log.get();
+      auto error_log = base::HeapArray<char>::WithSize(len);
+      glGetShaderInfoLog(shader, len, nullptr, error_log.data());
+      LOG(ERROR) << "Error compiling shader: " << error_log.data();
     }
   }
   CHECK_NE(0, compiled);

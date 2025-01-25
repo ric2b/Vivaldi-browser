@@ -14,6 +14,8 @@ static_library("net") {
     "alwayson_vpn_pre_connect_url_allowlist_service_factory.h",
     "apn_migrator.cc",
     "apn_migrator.h",
+    "ash_dns_over_https_config_source.cc",
+    "ash_dns_over_https_config_source.h",
     "ash_proxy_monitor.cc",
     "ash_proxy_monitor.h",
     "bluetooth_pref_state_observer.cc",
@@ -40,15 +42,21 @@ static_library("net") {
     "secure_dns_manager.h",
     "system_proxy_manager.cc",
     "system_proxy_manager.h",
+    "vpn_list_forwarder.cc",
+    "vpn_list_forwarder.h",
     "xdr_manager.cc",
     "xdr_manager.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash/components/arc",
+    "//ash/components/kcer",
     "//ash/public/cpp",
     "//base",
     "//chrome/browser:browser_process",
+    "//chrome/browser/ash/app_list/arc",
     "//chrome/browser/ash/login/session",
     "//chrome/browser/ash/net/dns_over_https",
     "//chrome/browser/ash/notifications",
@@ -73,7 +81,6 @@ static_library("net") {
     "//chromeos/ash/components/sync_wifi",
     "//chromeos/ash/components/system",
     "//chromeos/ash/services/bluetooth_config:in_process_bluetooth_config",
-    "//chromeos/components/kcer",
     "//chromeos/services/network_config/public/cpp",
     "//components/captive_portal/core",
     "//components/country_codes",
@@ -91,6 +98,7 @@ static_library("net") {
     "//content/public/browser",
     "//crypto",
     "//dbus",
+    "//extensions/browser",
     "//mojo/public/cpp/bindings",
     "//services/network/public/mojom",
   ]
@@ -111,10 +119,7 @@ static_library("test_support") {
     "network_portal_detector_test_utils.h",
   ]
 
-  deps = [
-    ":net",
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("unit_tests") {
@@ -134,25 +139,28 @@ source_set("unit_tests") {
   deps = [
     ":net",
     ":test_support",
+    "//ash/components/kcer:test_support",
     "//ash/constants",
     "//base",
     "//base/test:test_support",
-    "//chrome/browser/ash:test_support",
+    "//chrome/browser/ash/login/users:test_support",
     "//chrome/browser/ash/net/dns_over_https",
     "//chrome/browser/ash/net/dns_over_https:unit_tests",
     "//chrome/browser/ash/net/network_diagnostics:unit_tests",
     "//chrome/browser/ash/net/rollback_network_config:unit_tests",
+    "//chrome/browser/ash/settings:test_support",
     "//chrome/test:test_support",
     "//chromeos/ash/components/dbus",
     "//chromeos/ash/components/dbus/shill",
     "//chromeos/ash/components/dbus/system_proxy",
+    "//chromeos/ash/components/dbus/system_proxy:system_proxy_proto",
     "//chromeos/ash/components/login/login_state",
     "//chromeos/ash/components/network",
     "//chromeos/ash/components/network:test_support",
     "//chromeos/ash/services/network_config",
     "//chromeos/ash/services/network_config:in_process_instance",
-    "//chromeos/components/kcer:test_support",
     "//chromeos/services/network_config/public/cpp:test_support",
+    "//components/captive_portal/core",
     "//components/onc",
     "//components/session_manager/core",
     "//components/user_manager",
@@ -186,17 +194,19 @@ source_set("browser_tests") {
     "//base/test:test_support",
     "//chrome/browser",
     "//chrome/browser:browser_process",
-    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/crosapi",
     "//chrome/browser/ash/login:test_support",
     "//chrome/browser/ash/notifications",
+    "//chrome/browser/ash/policy/affiliation:test_support",
     "//chrome/browser/ash/policy/core",
     "//chrome/browser/ash/policy/core:test_support",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui/ash/network",
     "//chrome/test:test_support",
+    "//chromeos/ash/components/browser_context_helper",
     "//chromeos/ash/components/dbus/shill",
     "//chromeos/ash/components/dbus/system_proxy",
+    "//chromeos/ash/components/dbus/system_proxy:system_proxy_proto",
     "//chromeos/ash/components/network",
     "//chromeos/crosapi/mojom",
     "//components/account_id",

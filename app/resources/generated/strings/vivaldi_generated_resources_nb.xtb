@@ -37,6 +37,7 @@
 <translation id="1601560923496285236">Bruk</translation>
 <translation id="1603914832182249871">(privatmodus)</translation>
 <translation id="1627276047960621195">Filbeskrivelser</translation>
+<translation id="1654713139320245449">Fant ingen enheter å caste til. Trenger du hjelp?</translation>
 <translation id="166278006618318542">Algoritme for subjektets offentlige nøkkel</translation>
 <translation id="1682548588986054654">Nytt privatvindu</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
@@ -98,7 +99,6 @@
 <translation id="265390580714150011">Feltverdi</translation>
 <translation id="2662876636500006917">Chrome Nettmarked</translation>
 <translation id="2678063897982469759">Reaktiver</translation>
-<translation id="2678100101831051676">Kan ikke caste.</translation>
 <translation id="2719936478972253983">Følgende infokapsler er blokkert</translation>
 <translation id="2721037002783622288">&amp;Søk etter bilder med <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2738771556149464852">Ikke etter</translation>
@@ -148,7 +148,6 @@
 <translation id="3378572629723696641">Denne utvidelsen kan være skadet.</translation>
 <translation id="3387614642886316601">Bruk forbedret stavekontroll</translation>
 <translation id="3390013585654699824">Appdetaljer</translation>
-<translation id="3393582007140394275">Kunne ikke caste skjermen.</translation>
 <translation id="345693547134384690">Åpne b&amp;ilde i ny fane</translation>
 <translation id="3493881266323043047">Gyldighet</translation>
 <translation id="3511307672085573050">Kopier lenkeadr&amp;esse</translation>
@@ -346,6 +345,7 @@
 <translation id="6812841287760418429">Behold endringene</translation>
 <translation id="6824564591481349393">Kopier &amp;e-postadresse</translation>
 <translation id="6840155290835956714">Spør før sending</translation>
+<translation id="6878862640969460273">Liggende</translation>
 <translation id="6886871292305414135">Åpne lenken i en ny &amp;fane</translation>
 <translation id="6892812721183419409">Åpne lenken som <ph name="USER" /></translation>
 <translation id="6900284862687837908">Bakgrunns-app: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -409,7 +409,6 @@ Nøkkelfil: <ph name="KEY_FILE" />
 Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av utvidelsen.</translation>
 <translation id="8004582292198964060">Nettleser</translation>
 <translation id="8018313076035239964">Kontroller hvilken informasjon nettsider kan bruke, og hvilket innhold de kan vise deg</translation>
-<translation id="8032244173881942855">Kunne ikke caste fane.</translation>
 <translation id="8071432093239591881">Skriv ut som bilde</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -465,7 +464,6 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="9218430445555521422">Sett som standard</translation>
 <translation id="93766956588638423">Reparer utvidelse</translation>
 <translation id="961012016278832836">Microsoft Edge (gammel)</translation>
-<translation id="98515147261107953">Liggende</translation>
 <translation id="994289308992179865">&amp;Gjenta</translation>
 <translation id="998747458861718449">I&amp;nspiser</translation>
 </translationbundle>

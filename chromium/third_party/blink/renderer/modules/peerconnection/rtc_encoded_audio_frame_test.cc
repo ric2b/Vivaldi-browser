@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_codec_specifics_vp_8.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_encoded_audio_frame_metadata.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_encoded_audio_frame_options.h"
+#include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_encoded_audio_frame_delegate.h"
 #include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/webrtc/api/test/mock_transformable_audio_frame.h"
@@ -60,10 +61,11 @@ TEST_F(RTCEncodedAudioFrameTest, GetMetadataReturnsCorrectMetadata) {
       std::make_unique<MockTransformableAudioFrame>();
   MockMetadata(frame.get());
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
 
   RTCEncodedAudioFrameMetadata* retrieved_metadata =
-      encoded_frame.getMetadata();
+      encoded_frame->getMetadata();
   EXPECT_EQ(7u, retrieved_metadata->synchronizationSource());
   ASSERT_EQ(2u, retrieved_metadata->contributingSources().size());
   EXPECT_EQ(6u, retrieved_metadata->contributingSources()[0]);
@@ -84,13 +86,15 @@ TEST_F(RTCEncodedAudioFrameTest, SetMetadataOnEmptyFrameFails) {
 
   EXPECT_CALL(*frame, SetRTPTimestamp(_)).Times(0);
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
-  encoded_frame.PassWebRtcFrame();
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
+  encoded_frame->PassWebRtcFrame(v8_scope.GetIsolate(),
+                                 /*detach_frame_data=*/false);
 
   RTCEncodedAudioFrameMetadata* new_metadata = CreateAudioMetadata();
 
   DummyExceptionStateForTesting exception_state;
-  encoded_frame.setMetadata(new_metadata, exception_state);
+  encoded_frame->setMetadata(new_metadata, exception_state);
   EXPECT_TRUE(exception_state.HadException());
   EXPECT_EQ(exception_state.Message(),
             "Cannot setMetadata: Invalid modification of "
@@ -106,13 +110,14 @@ TEST_F(RTCEncodedAudioFrameTest, SetMetadataModifiesRtpTimestamp) {
   MockMetadata(frame.get());
   EXPECT_CALL(*frame, SetRTPTimestamp(110)).Times(1);
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
 
-  EXPECT_EQ(encoded_frame.getMetadata()->rtpTimestamp(), 17u);
+  EXPECT_EQ(encoded_frame->getMetadata()->rtpTimestamp(), 17u);
   RTCEncodedAudioFrameMetadata* new_metadata = CreateAudioMetadata();
 
   DummyExceptionStateForTesting exception_state;
-  encoded_frame.setMetadata(new_metadata, exception_state);
+  encoded_frame->setMetadata(new_metadata, exception_state);
   EXPECT_FALSE(exception_state.HadException()) << exception_state.Message();
 }
 
@@ -137,12 +142,14 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorOnEmptyFrameHasEmptyMetadata) {
 
   EXPECT_CALL(*frame, SetRTPTimestamp(_)).Times(0);
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
-  encoded_frame.PassWebRtcFrame();
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
+  encoded_frame->PassWebRtcFrame(v8_scope.GetIsolate(),
+                                 /*detach_frame_data=*/false);
 
   DummyExceptionStateForTesting exception_state;
   RTCEncodedAudioFrame* new_frame =
-      RTCEncodedAudioFrame::Create(&encoded_frame, exception_state);
+      RTCEncodedAudioFrame::Create(encoded_frame, exception_state);
 
   EXPECT_FALSE(exception_state.HadException());
   EXPECT_FALSE(new_frame->getMetadata()->hasSynchronizationSource());
@@ -163,8 +170,10 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorWithMetadataOnEmptyFrameFails) {
 
   EXPECT_CALL(*frame, SetRTPTimestamp(_)).Times(0);
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
-  encoded_frame.PassWebRtcFrame();
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
+  encoded_frame->PassWebRtcFrame(v8_scope.GetIsolate(),
+                                 /*detach_frame_data=*/false);
 
   RTCEncodedAudioFrameOptions* frame_options =
       RTCEncodedAudioFrameOptions::Create();
@@ -172,7 +181,7 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorWithMetadataOnEmptyFrameFails) {
 
   DummyExceptionStateForTesting exception_state;
   RTCEncodedAudioFrame* new_frame = RTCEncodedAudioFrame::Create(
-      &encoded_frame, frame_options, exception_state);
+      encoded_frame, frame_options, exception_state);
 
   EXPECT_TRUE(exception_state.HadException());
   EXPECT_EQ(exception_state.Message(),
@@ -192,8 +201,10 @@ TEST_F(RTCEncodedAudioFrameTest,
 
   EXPECT_CALL(*frame, SetRTPTimestamp(_)).Times(0);
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
-  encoded_frame.PassWebRtcFrame();
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
+  encoded_frame->PassWebRtcFrame(v8_scope.GetIsolate(),
+                                 /*detach_frame_data=*/false);
 
   RTCEncodedAudioFrameMetadata* new_metadata =
       RTCEncodedAudioFrameMetadata::Create();
@@ -205,7 +216,7 @@ TEST_F(RTCEncodedAudioFrameTest,
 
   DummyExceptionStateForTesting exception_state;
   RTCEncodedAudioFrame* new_frame = RTCEncodedAudioFrame::Create(
-      &encoded_frame, frame_options, exception_state);
+      encoded_frame, frame_options, exception_state);
 
   EXPECT_TRUE(exception_state.HadException());
   EXPECT_EQ(
@@ -221,10 +232,11 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorWithMetadataModifiesRtpTimestamp) {
       std::make_unique<NiceMock<MockTransformableAudioFrame>>();
   MockMetadata(frame.get());
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
 
-  EXPECT_EQ(encoded_frame.getMetadata()->rtpTimestamp(), 17u);
-  RTCEncodedAudioFrameMetadata* new_metadata = encoded_frame.getMetadata();
+  EXPECT_EQ(encoded_frame->getMetadata()->rtpTimestamp(), 17u);
+  RTCEncodedAudioFrameMetadata* new_metadata = encoded_frame->getMetadata();
   new_metadata->setRtpTimestamp(new_timestamp);
   RTCEncodedAudioFrameOptions* frame_options =
       RTCEncodedAudioFrameOptions::Create();
@@ -232,10 +244,10 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorWithMetadataModifiesRtpTimestamp) {
 
   DummyExceptionStateForTesting exception_state;
   RTCEncodedAudioFrame* new_frame = RTCEncodedAudioFrame::Create(
-      &encoded_frame, frame_options, exception_state);
+      encoded_frame, frame_options, exception_state);
   EXPECT_FALSE(exception_state.HadException()) << exception_state.Message();
   EXPECT_EQ(new_frame->getMetadata()->rtpTimestamp(), new_timestamp);
-  EXPECT_NE(encoded_frame.getMetadata()->rtpTimestamp(), new_timestamp);
+  EXPECT_NE(encoded_frame->getMetadata()->rtpTimestamp(), new_timestamp);
 }
 
 TEST_F(RTCEncodedAudioFrameTest, ConstructorCopiesMetadata) {
@@ -245,10 +257,11 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorCopiesMetadata) {
       std::make_unique<NiceMock<MockTransformableAudioFrame>>();
   MockMetadata(frame.get());
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
   DummyExceptionStateForTesting exception_state;
   RTCEncodedAudioFrame* new_frame =
-      RTCEncodedAudioFrame::Create(&encoded_frame, exception_state);
+      RTCEncodedAudioFrame::Create(encoded_frame, exception_state);
 
   EXPECT_FALSE(exception_state.HadException()) << exception_state.Message();
   RTCEncodedAudioFrameMetadata* new_frame_metadata = new_frame->getMetadata();
@@ -271,7 +284,8 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorWithMetadataCopiesMetadata) {
       std::make_unique<NiceMock<MockTransformableAudioFrame>>();
   MockMetadata(frame.get());
 
-  RTCEncodedAudioFrame encoded_frame(std::move(frame));
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
   DummyExceptionStateForTesting exception_state;
   RTCEncodedAudioFrameMetadata* new_metadata = CreateAudioMetadata();
   RTCEncodedAudioFrameOptions* frame_options =
@@ -279,7 +293,7 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorWithMetadataCopiesMetadata) {
   frame_options->setMetadata(new_metadata);
 
   RTCEncodedAudioFrame* new_frame = RTCEncodedAudioFrame::Create(
-      &encoded_frame, frame_options, exception_state);
+      encoded_frame, frame_options, exception_state);
 
   EXPECT_FALSE(exception_state.HadException()) << exception_state.Message();
   RTCEncodedAudioFrameMetadata* new_frame_metadata = new_frame->getMetadata();
@@ -300,4 +314,42 @@ TEST_F(RTCEncodedAudioFrameTest, ConstructorWithMetadataCopiesMetadata) {
             new_frame_metadata->absCaptureTime());
   EXPECT_EQ(new_metadata->rtpTimestamp(), new_frame_metadata->rtpTimestamp());
 }
+
+TEST_F(RTCEncodedAudioFrameTest, ReadingDataOnEmptyFrameGivesDetachedFrame) {
+  V8TestingScope v8_scope;
+
+  std::unique_ptr<MockTransformableAudioFrame> frame =
+      std::make_unique<NiceMock<MockTransformableAudioFrame>>();
+  MockMetadata(frame.get());
+
+  EXPECT_CALL(*frame, SetRTPTimestamp(_)).Times(0);
+
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
+  encoded_frame->PassWebRtcFrame(v8_scope.GetIsolate(),
+                                 /*detach_frame_data=*/false);
+
+  DOMArrayBuffer* data = encoded_frame->data(v8_scope.GetExecutionContext());
+  EXPECT_NE(data, nullptr);
+  EXPECT_TRUE(data->IsDetached());
+}
+
+TEST_F(RTCEncodedAudioFrameTest, PassWebRTCDetachesFrameData) {
+  V8TestingScope v8_scope;
+
+  std::unique_ptr<MockTransformableAudioFrame> frame =
+      std::make_unique<NiceMock<MockTransformableAudioFrame>>();
+  MockMetadata(frame.get());
+
+  EXPECT_CALL(*frame, SetRTPTimestamp(_)).Times(0);
+
+  RTCEncodedAudioFrame* encoded_frame =
+      MakeGarbageCollected<RTCEncodedAudioFrame>(std::move(frame));
+  DOMArrayBuffer* data = encoded_frame->data(v8_scope.GetExecutionContext());
+  encoded_frame->PassWebRtcFrame(v8_scope.GetIsolate(),
+                                 /*detach_frame_data=*/true);
+  EXPECT_NE(data, nullptr);
+  EXPECT_TRUE(data->IsDetached());
+}
+
 }  // namespace blink

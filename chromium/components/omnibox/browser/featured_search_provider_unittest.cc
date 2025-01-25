@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "components/omnibox/browser/featured_search_provider.h"
 
 #include <stddef.h>
@@ -26,7 +31,6 @@
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/search_engines/search_engines_test_environment.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
@@ -42,7 +46,7 @@ namespace {
 constexpr char16_t kBookmarksKeyword[] = u"@bookmarks";
 constexpr char16_t kHistoryKeyword[] = u"@history";
 constexpr char16_t kTabsKeyword[] = u"@tabs";
-constexpr char16_t kAskGoogleKeyword[] = u"@gemini";
+constexpr char16_t kGeminiKeyword[] = u"@gemini";
 
 constexpr char16_t kFeaturedKeyword1[] = u"@featured1";
 constexpr char16_t kFeaturedKeyword2[] = u"@featured2";
@@ -53,8 +57,8 @@ const char* const kBookmarksUrl =
 const char* const kHistoryUrl =
     TemplateURLStarterPackData::history.destination_url;
 const char* const kTabsUrl = TemplateURLStarterPackData::tabs.destination_url;
-const char* const kAskGoogleUrl =
-    TemplateURLStarterPackData::AskGoogle.destination_url;
+const char* const kGeminiUrl =
+    TemplateURLStarterPackData::Gemini.destination_url;
 
 constexpr char kFeaturedUrl1[] = "https://featured1.com/q={searchTerms}";
 constexpr char kFeaturedUrl2[] = "https://featured2.com/q={searchTerms}";
@@ -84,8 +88,6 @@ class FeaturedSearchProviderTest : public testing::Test {
 
   void SetUp() override {
     client_ = std::make_unique<FakeAutocompleteProviderClient>();
-    client_->set_template_url_service(
-        search_engines_test_environment_.ReleaseTemplateURLService());
     provider_ = new FeaturedSearchProvider(client_.get());
     omnibox::RegisterProfilePrefs(
         static_cast<sync_preferences::TestingPrefServiceSyncable*>(
@@ -169,7 +171,6 @@ class FeaturedSearchProviderTest : public testing::Test {
         std::make_unique<TemplateURL>(template_url_data));
   }
 
-  search_engines::SearchEnginesTestEnvironment search_engines_test_environment_;
   std::unique_ptr<MockAutocompleteProviderClient> client_;
   scoped_refptr<FeaturedSearchProvider> provider_;
 };
@@ -259,7 +260,7 @@ TEST_F(FeaturedSearchProviderTest, StarterPackExpansion) {
       {u"gemi", {}},
 
       // Typing '@' should give all the starter pack suggestions.
-      {u"@", {kBookmarksUrl, kAskGoogleUrl, kHistoryUrl, kTabsUrl}},
+      {u"@", {kBookmarksUrl, kGeminiUrl, kHistoryUrl, kTabsUrl}},
 
       // Typing a portion of "@bookmarks" should give the bookmarks suggestion.
       {std::u16string(kBookmarksKeyword, 0, 3), {kBookmarksUrl}},
@@ -274,8 +275,8 @@ TEST_F(FeaturedSearchProviderTest, StarterPackExpansion) {
       {kTabsKeyword, {kTabsUrl}},
 
       // Typing a portion of "@gemini" should give the default urls.
-      {std::u16string(kAskGoogleKeyword, 0, 3), {kAskGoogleUrl}},
-      {kAskGoogleKeyword, {kAskGoogleUrl}},
+      {std::u16string(kGeminiKeyword, 0, 3), {kGeminiUrl}},
+      {kGeminiKeyword, {kGeminiUrl}},
   };
 
   RunTest(typing_scheme_cases, std::size(typing_scheme_cases));
@@ -302,8 +303,8 @@ TEST_F(FeaturedSearchProviderTest, StarterPackExpansionRelevance) {
     return x.relevance > y.relevance;
   });
 
-  std::string expected_match_order[] = {kAskGoogleUrl, kBookmarksUrl,
-                                        kHistoryUrl, kTabsUrl};
+  std::string expected_match_order[] = {kGeminiUrl, kBookmarksUrl, kHistoryUrl,
+                                        kTabsUrl};
   for (size_t i = 0; i < matches.size(); i++) {
     EXPECT_EQ(matches[i].destination_url, GURL(expected_match_order[i]));
   }
@@ -336,8 +337,8 @@ TEST_F(FeaturedSearchProviderTest, FeaturedEnterpriseSearch) {
       // alphabetical order). Re-ordering by relevance will be made
       // later on.
       {u"@",
-       {kBookmarksUrl, kFeaturedUrl1, kFeaturedUrl2, kFeaturedUrl3,
-        kAskGoogleUrl, kHistoryUrl, kTabsUrl}},
+       {kBookmarksUrl, kFeaturedUrl1, kFeaturedUrl2, kFeaturedUrl3, kGeminiUrl,
+        kHistoryUrl, kTabsUrl}},
 
       // Typing a portion of "@featured" should give the featured engine
       // suggestions.
@@ -375,7 +376,7 @@ TEST_F(FeaturedSearchProviderTest, ZeroSuggestStarterPackIPHSuggestion) {
   AddStarterPackEntriesToTemplateUrlService();
   TestData typing_scheme_cases[] = {
       // Typing '@' should give all the starter pack suggestions, and no IPH.
-      {u"@", {kBookmarksUrl, kAskGoogleUrl, kHistoryUrl, kTabsUrl}}};
+      {u"@", {kBookmarksUrl, kGeminiUrl, kHistoryUrl, kTabsUrl}}};
   RunTest(typing_scheme_cases, std::size(typing_scheme_cases));
 }
 
@@ -446,8 +447,8 @@ TEST_F(FeaturedSearchProviderTest, ZeroSuggestFeaturedSearchIPHSuggestion) {
   TestData typing_scheme_cases[] = {
       // Typing '@' should give all the starter pack suggestions, and no IPH.
       {u"@",
-       {kBookmarksUrl, kFeaturedUrl1, kFeaturedUrl2, kFeaturedUrl3,
-        kAskGoogleUrl, kHistoryUrl, kTabsUrl}}};
+       {kBookmarksUrl, kFeaturedUrl1, kFeaturedUrl2, kFeaturedUrl3, kGeminiUrl,
+        kHistoryUrl, kTabsUrl}}};
   RunTest(typing_scheme_cases, std::size(typing_scheme_cases));
 }
 

@@ -18,7 +18,7 @@
 
 #include <cstddef>
 #include <queue>
-#include <thread>  // NOLINT(build/c++11)
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -29,7 +29,7 @@
 
 namespace centipede {
 
-// A simple ThreadPool implementation.
+// A simple thread pool implementation based on `std::thread`.
 class ThreadPool {
  public:
   // Initializes this ThreadPool by starting the requested number of worker
@@ -72,8 +72,8 @@ class ThreadPool {
     return !queue_.empty();
   }
 
-  // The work loop that every worker thread iterates over, waiting and executing
-  // newly scheduled work.
+  // The work loop that every worker thread iterates over, waiting and
+  // executing newly scheduled work.
   void WorkLoop() {
     while (true) {
       absl::AnyInvocable<void()> func;

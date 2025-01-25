@@ -17,22 +17,22 @@
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/bubble/ui_bundled/bubble_presenter.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
+#import "ios/chrome/browser/location_bar/ui_bundled/location_bar_constants.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/help_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/qr_scanner_commands.h"
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_mediator.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_views.h"
@@ -53,6 +53,11 @@
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/web/public/navigation/navigation_manager.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
+// End Vivaldi
 
 @interface OmniboxCoordinator () <OmniboxViewControllerTextInputDelegate,
                                   OmniboxAssistiveKeyboardMediatorDelegate>
@@ -96,6 +101,13 @@
 
   // The handler for ToolbarCommands.
   id<ToolbarCommands> _toolbarHandler;
+
+  // Vivaldi
+  // | YES | when omnibox is focused without user actions, such as when
+  // | Focus Omnibox on NTP | is enabled and user opens a new tab.
+  BOOL _autofocusOmnibox;
+  // End Vivaldi
+
 }
 @synthesize viewController = _viewController;
 @synthesize mediator = _mediator;
@@ -125,6 +137,7 @@
   self.viewController.textInputDelegate = self;
   self.viewController.layoutGuideCenter =
       LayoutGuideCenterForBrowser(self.browser);
+  self.viewController.isSearchOnlyUI = self.isSearchOnlyUI;
 
   BOOL isIncognito = self.browser->GetBrowserState()->IsOffTheRecord();
   self.mediator = [[OmniboxMediator alloc]
@@ -157,8 +170,7 @@
       HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
   _editView = std::make_unique<OmniboxViewIOS>(
       self.textField, std::move(_client), self.browser->GetBrowserState(),
-      omniboxHandler, self.focusDelegate, _toolbarHandler,
-      self.viewController.additionalTextConsumer);
+      omniboxHandler, self.focusDelegate, _toolbarHandler, self.viewController);
   self.pasteDelegate = [[OmniboxTextFieldPasteDelegate alloc] init];
   [self.textField setPasteDelegate:self.pasteDelegate];
 
@@ -209,6 +221,7 @@
   self.keyboardAccessoryView = nil;
   self.mediator = nil;
   self.returnDelegate = nil;
+  [self.zeroSuggestPrefetchHelper disconnect];
   self.zeroSuggestPrefetchHelper = nil;
 
   [NSNotificationCenter.defaultCenter removeObserver:self];
@@ -223,13 +236,27 @@
 }
 
 - (void)focusOmnibox {
-  if (!self.keyboardAccessoryView) {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    // Post notification before making the Omnibox first responder so that
+    // we show the omnibox popup view based on the state. Autocomplete
+    // popup view is not visible if omnibox is focused from opening NTP.
+    NSDictionary *userInfo =
+        @{vNTPShowOmniboxPopupOnFocusBoolKey: @(_autofocusOmnibox)};
+    [[NSNotificationCenter defaultCenter]
+         postNotificationName:vNTPShowOmniboxPopupOnFocus
+                       object:nil
+                     userInfo:userInfo];
+    _autofocusOmnibox = NO;
+  } // End Vivaldi
+
+  if (!self.keyboardAccessoryView && !self.isSearchOnlyUI) {
     TemplateURLService* templateURLService =
         ios::TemplateURLServiceFactory::GetForBrowserState(
             self.browser->GetBrowserState());
     self.keyboardAccessoryView = ConfigureAssistiveKeyboardViews(
         self.textField, kDotComTLD, _keyboardMediator, templateURLService,
-        self.bubblePresenter);
+        HandlerForProtocol(self.browser->GetCommandDispatcher(), HelpCommands));
   }
 
   if (![self.textField isFirstResponder]) {
@@ -323,6 +350,12 @@
   return self.viewController.viewContainingTextField;
 }
 
+- (void)setThumbnailImage:(UIImage*)image {
+  if (_editView) {
+    _editView->SetThumbnailImage(image);
+  }
+}
+
 #pragma mark Scribble
 
 - (void)focusOmniboxForScribble {
@@ -359,6 +392,32 @@
   if (!self.mediator)
     return;
   [self.mediator searchEngineShortcutActivatedForURL:templateURL];
+}
+
+- (void)resetActivatedSearchEngineShortcut {
+  if (self.mediator)
+    [self.mediator resetActivatedSearchEngineShortcut];
+}
+
+- (void)insertKeywordToOmnibox:(NSString*)text {
+  [self insertTextToOmnibox:text];
+
+  // Reset the caret position after search engine is switched and keyword is
+  // set. Make sure it happens on the main thread.
+  __weak __typeof(self) weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    UITextPosition *endPosition = weakSelf.textField.endOfDocument;
+    weakSelf.textField.selectedTextRange =
+        [weakSelf.textField textRangeFromPosition:endPosition
+                                       toPosition:endPosition];
+    [weakSelf.textField layoutIfNeeded];
+  });
+}
+
+#pragma mark - Public Vivaldi Methods
+- (void)focusOmniboxWithoutAutocompletePopup {
+  _autofocusOmnibox = YES;
+  [self focusOmnibox];
 }
 
 @end

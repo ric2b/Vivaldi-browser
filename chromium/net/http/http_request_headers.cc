@@ -115,13 +115,12 @@ HttpRequestHeaders& HttpRequestHeaders::operator=(
 HttpRequestHeaders& HttpRequestHeaders::operator=(HttpRequestHeaders&& other) =
     default;
 
-bool HttpRequestHeaders::GetHeader(std::string_view key,
-                                   std::string* out) const {
+std::optional<std::string> HttpRequestHeaders::GetHeader(
+    std::string_view key) const {
   auto it = FindHeader(key);
   if (it == headers_.end())
-    return false;
-  out->assign(it->value);
-  return true;
+    return std::nullopt;
+  return it->value;
 }
 
 void HttpRequestHeaders::Clear() {

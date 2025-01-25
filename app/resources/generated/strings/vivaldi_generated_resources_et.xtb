@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Viga</translation>
 <translation id="1175364870820465910">&amp;Prindi...</translation>
 <translation id="1181037720776840403">Eemalda</translation>
+<translation id="1184037892196730210">Ekraani ei õnnestu üle kanda</translation>
 <translation id="1187722533808055681">Jõudeolekust ärkamised</translation>
 <translation id="122082903575839559">Sertifikaadi allkirja algoritm</translation>
 <translation id="1221825588892235038">Ainult valitud ala</translation>
@@ -37,7 +38,7 @@
 <translation id="1601560923496285236">Rakenda</translation>
 <translation id="1603914832182249871">(privaatne)</translation>
 <translation id="1627276047960621195">Failideskriptorid</translation>
-<translation id="1654713139320245449">Ühtegi ülekandmise sihtkohta ei leitud. Kas vajad abi?</translation>
+<translation id="1654713139320245449">Ühtegi ülekandekohta ei leitud. Kas vajad abi?</translation>
 <translation id="166278006618318542">Subjekti avaliku võtme algoritm</translation>
 <translation id="1682548588986054654">Uus privaatne aken</translation>
 <translation id="1708338024780164500">(mitteaktiivne)</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Välja väärtus</translation>
 <translation id="2662876636500006917">Chrome’i veebipood</translation>
 <translation id="2678063897982469759">Luba uuesti</translation>
-<translation id="2678100101831051676">Ülekandmine ei õnnestunud.</translation>
 <translation id="2719936478972253983">Blokeeriti järgmised küpsised</translation>
 <translation id="2721037002783622288">&amp;Otsi pilti <ph name="SEARCH_ENGINE" />’ist</translation>
 <translation id="2738771556149464852">Kuni</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">See laiendus võib olla rikutud.</translation>
 <translation id="3387614642886316601">&amp;Täiustatud õigekirjakontroll</translation>
 <translation id="3390013585654699824">Rakenduse üksikasjad</translation>
-<translation id="3393582007140394275">Ekraani ei õnnestu üle kanda.</translation>
 <translation id="345693547134384690">Ava &amp;pilt uuel kaardil</translation>
 <translation id="3493881266323043047">Kehtivus</translation>
 <translation id="3511307672085573050">Kopeeri lingi aadress</translation>
@@ -161,7 +160,7 @@
 <translation id="3683524264665795342"><ph name="APP_NAME" />: ekraanijagamistaotlus</translation>
 <translation id="3708684582558000260">Suletud saitidel andmete saatmise ja vastuvõtmise keelamine</translation>
 <translation id="3711931198657368127">Aseta ja ava <ph name="URL" /></translation>
-<translation id="3719826155360621982">Avaleht</translation>
+<translation id="3719826155360621982">Koduleht</translation>
 <translation id="3727187387656390258">Inspekteeri hüpikakent</translation>
 <translation id="3760460896538743390">Inspekteeri &amp;taustalehte</translation>
 <translation id="3786224729726357296">Kustuta saidi <ph name="SITE" /> andmed ja load</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Säilita muudatused</translation>
 <translation id="6824564591481349393">Kopeeri meiliaadress</translation>
 <translation id="6840155290835956714">Enne saatmist küsitakse</translation>
+<translation id="6878862640969460273">Rõhtpaigutus</translation>
 <translation id="6886871292305414135">Ava link uuel kaardil</translation>
 <translation id="6892812721183419409">Ava link kasutajana <ph name="USER" /></translation>
 <translation id="6900284862687837908">Taustarakendus: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Juurdepääs on keelatud.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Õigekirja kontrollimine kirjutamisel</translation>
+<translation id="7359680654975233185">Kaarti ei õnnestu üle kanda</translation>
 <translation id="7385854874724088939">Printida üritamisel läks midagi valesti. Kontrolli printerit ja proovi uuesti.</translation>
 <translation id="7412226954991670867">GPU mälu</translation>
 <translation id="7421925624202799674">&amp;Vaata lehe lähtekoodi</translation>
@@ -380,6 +381,7 @@
 <translation id="7661259717474717992">Saitidel lubatakse küpsiseandmeid salvestada ja lugeda</translation>
 <translation id="7663719505383602579">Saaja: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Administraatori poolt lisatud</translation>
+<translation id="7685038817958445325">Ülekandmine ei õnnestunud</translation>
 <translation id="7685049629764448582">JavaScripti mälu</translation>
 <translation id="7701869757853594372">Kasutajaliidese pidemed</translation>
 <translation id="7704305437604973648">Tegum</translation>
@@ -410,7 +412,6 @@ Võtmefail: <ph name="KEY_FILE" />
 Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide loomiseks.</translation>
 <translation id="8004582292198964060">Brauser</translation>
 <translation id="8018313076035239964">Määra, millist teavet veebisaidid kasutada tohivad ja millist sisu nad sulle näidata saavad</translation>
-<translation id="8032244173881942855">Kaarti ei õnnestu üle kanda.</translation>
 <translation id="8071432093239591881">Prinditakse pildina</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
@@ -466,7 +467,6 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="9218430445555521422">Määra vaikekäitlejaks</translation>
 <translation id="93766956588638423">Paranda laiendus</translation>
 <translation id="961012016278832836">Microsoft Edge’i pärandversioon</translation>
-<translation id="98515147261107953">Rõhtpaigutus</translation>
 <translation id="994289308992179865">&amp;Korratakse</translation>
 <translation id="998747458861718449">I&amp;nspekteeri</translation>
 </translationbundle>

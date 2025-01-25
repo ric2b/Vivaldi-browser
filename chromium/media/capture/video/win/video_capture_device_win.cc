@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/capture/video/win/video_capture_device_win.h"
 
 #include <objbase.h>
@@ -16,6 +21,7 @@
 #include "base/containers/heap_array.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr_exclusion.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -350,12 +356,7 @@ bool VideoCaptureDeviceWin::Init() {
   }
 
   // Create the sink filter used for receiving Captured frames.
-  sink_filter_ = new SinkFilter(this);
-  if (sink_filter_.get() == nullptr) {
-    DLOG(ERROR) << "Failed to create sink filter";
-    return false;
-  }
-
+  sink_filter_ = base::MakeRefCounted<SinkFilter>(this);
   input_sink_pin_ = sink_filter_->GetPin(0);
 
   HRESULT hr =

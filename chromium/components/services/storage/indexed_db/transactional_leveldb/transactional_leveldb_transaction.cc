@@ -20,7 +20,7 @@
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
 
-namespace content {
+namespace content::indexed_db {
 
 TransactionalLevelDBTransaction::TransactionalLevelDBTransaction(
     TransactionalLevelDBDatabase* db,
@@ -87,6 +87,7 @@ leveldb::Status TransactionalLevelDBTransaction::Commit(bool sync_on_commit) {
 
   finished_ = true;
   return db_->scopes()->Commit(std::move(scope_), sync_on_commit,
+                               /*on_commit_complete=*/base::OnceClosure(),
                                std::move(commit_cleanup_complete_callback_));
 }
 
@@ -198,4 +199,4 @@ leveldb::Status LevelDBDirectTransaction::Commit() {
   return s;
 }
 
-}  // namespace content
+}  // namespace content::indexed_db

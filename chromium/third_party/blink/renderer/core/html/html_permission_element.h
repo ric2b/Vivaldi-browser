@@ -18,7 +18,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
-#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver_set.h"
@@ -28,6 +27,8 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
+
+class Page;
 
 class CORE_EXPORT HTMLPermissionElement final
     : public HTMLElement,
@@ -55,7 +56,7 @@ class CORE_EXPORT HTMLPermissionElement final
   void AttachLayoutTree(AttachContext& context) override;
   void DetachLayoutTree(bool performing_reattach) override;
   void Focus(const FocusParams& params) override;
-  bool SupportsFocus(UpdateBehavior) const override;
+  FocusableState SupportsFocus(UpdateBehavior) const override;
   int DefaultTabIndex() const override;
   CascadeFilter GetCascadeFilter() const override;
   bool CanGeneratePseudoElement(PseudoId) const override;
@@ -94,6 +95,8 @@ class CORE_EXPORT HTMLPermissionElement final
                            ContainerDivOpacity);
   FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
                            ContainerDivClipPath);
+  FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementIntersectionTest,
+                           IntersectionVisibleOverlapsRecentAttachedInterval);
   FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementFencedFrameTest,
                            NotAllowedInFencedFrame);
   FRIEND_TEST_ALL_PREFIXES(HTMLPemissionElementSimTest,
@@ -404,6 +407,13 @@ class CORE_EXPORT HTMLPermissionElement final
   // Computes the intersection rect of the element with the viewport.
   gfx::Rect ComputeIntersectionRectWithViewport(const Page* page);
 
+  // When the element is first attached to layout and rendered on the page,
+  // there would be events causing an extra unresponsive delay that we don't
+  // want, for example: the IntersectionObserver will trigger a series of events
+  // from invisible to visible, with delays. We will throttle the cooldown
+  // time of the events to match the recently_attached cooldown time.
+  std::optional<base::TimeDelta> GetRecentlyAttachedTimeoutRemaining() const;
+
   IntersectionVisibility IntersectionVisibilityForTesting() const {
     return intersection_visibility_;
   }
@@ -460,7 +470,7 @@ class CORE_EXPORT HTMLPermissionElement final
 
   // The intersection rectangle between the layout box of this element and the
   // viewport.
-  gfx::Rect intersection_rect_;
+  std::optional<gfx::Rect> intersection_rect_;
 
   // The permission descriptors that correspond to a request made from this
   // permission element. Only computed once, when the `type` attribute is set.

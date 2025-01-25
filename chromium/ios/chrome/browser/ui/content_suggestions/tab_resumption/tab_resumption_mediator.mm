@@ -18,25 +18,29 @@
 #import "components/sync/service/sync_user_settings.h"
 #import "components/sync_sessions/open_tabs_ui_delegate.h"
 #import "components/sync_sessions/session_sync_service.h"
+#import "components/visited_url_ranking/public/url_visit_util.h"
 #import "components/visited_url_ranking/public/visited_url_ranking_service.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
 #import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_actions_delegate.h"
 #import "ios/chrome/browser/ntp_tiles/model/tab_resumption/tab_resumption_prefs.h"
 #import "ios/chrome/browser/page_image/model/page_image_service_factory.h"
 #import "ios/chrome/browser/sessions/model/session_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/start_surface/ui_bundled/start_surface_features.h"
 #import "ios/chrome/browser/start_surface/ui_bundled/start_surface_recent_tab_browser_agent.h"
@@ -56,7 +60,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_helper_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_item.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_metrics_delegate.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/visited_url_ranking/model/visited_url_ranking_service_factory.h"
@@ -73,7 +76,7 @@ NSString* kStartSurfaceSceneEnterIntoBackgroundTime =
 // Helper function to extract tab data from url aggregate.
 // Try first the session tab data, then the tab model tab data.
 const visited_url_ranking::URLVisitAggregate::TabData* ExtractTabData(
-    visited_url_ranking::URLVisitAggregate& url_aggregate) {
+    const visited_url_ranking::URLVisitAggregate& url_aggregate) {
   const auto& session_iterator = url_aggregate.fetcher_data_map.find(
       visited_url_ranking::Fetcher::kSession);
   if (session_iterator != url_aggregate.fetcher_data_map.end()) {
@@ -102,6 +105,24 @@ const visited_url_ranking::URLVisitAggregate::TabData* ExtractTabData(
   return nullptr;
 }
 
+// Helper function to extract history data from url aggregate.
+const visited_url_ranking::URLVisitAggregate::HistoryData* ExtractHistoryData(
+    const visited_url_ranking::URLVisitAggregate& url_aggregate) {
+  const auto& history_iterator = url_aggregate.fetcher_data_map.find(
+      visited_url_ranking::Fetcher::kHistory);
+  if (history_iterator != url_aggregate.fetcher_data_map.end()) {
+    const visited_url_ranking::URLVisitAggregate::URLVisitVariant&
+        url_visit_variant = history_iterator->second;
+    const visited_url_ranking::URLVisitAggregate::HistoryData* history_data =
+        std::get_if<visited_url_ranking::URLVisitAggregate::HistoryData>(
+            &url_visit_variant);
+    if (history_data) {
+      return history_data;
+    }
+  }
+  return nullptr;
+}
+
 // Whether the item should be displayed immediately (before fetching an image).
 bool ShouldShowItemImmediately() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -110,6 +131,38 @@ bool ShouldShowItemImmediately() {
 
 // Salient images should come from gstatic.com.
 const char kGStatic[] = ".gstatic.com";
+
+// Overrides the reason for testing purpose.
+NSString* GetOverridenReason(
+    const visited_url_ranking::URLVisitAggregate& url_aggregate) {
+  NSString* override_flag =
+      experimental_flags::GetTabResumptionDecorationOverride();
+  if (![override_flag length]) {
+    return nil;
+  }
+  if ([override_flag isEqualToString:@"MostRecent"]) {
+    return base::SysUTF16ToNSString(visited_url_ranking::GetStringForDecoration(
+        visited_url_ranking::DecorationType::kMostRecent));
+  }
+  if ([override_flag isEqualToString:@"FrequentlyVisited"]) {
+    return base::SysUTF16ToNSString(visited_url_ranking::GetStringForDecoration(
+        visited_url_ranking::DecorationType::kFrequentlyVisited));
+  }
+  if ([override_flag isEqualToString:@"FrequentlyVisitedAtTime"]) {
+    return base::SysUTF16ToNSString(visited_url_ranking::GetStringForDecoration(
+        visited_url_ranking::DecorationType::kFrequentlyVisitedAtTime));
+  }
+  if ([override_flag isEqualToString:@"VisitedSomeTimeAgoRecent"]) {
+    return base::SysUTF16ToNSString(visited_url_ranking::GetStringForDecoration(
+        visited_url_ranking::DecorationType::kVisitedXAgo, true));
+  }
+  if ([override_flag isEqualToString:@"VisitedSomeTimeAgoOld"]) {
+    return base::SysUTF16ToNSString(
+        visited_url_ranking::GetStringForRecencyDecorationWithTime(
+            url_aggregate.GetLastVisitTime()));
+  }
+  return nil;
+}
 
 }  // namespace
 
@@ -191,10 +244,19 @@ const char kGStatic[] = ".gstatic.com";
     _webStateList = _browser->GetWebStateList();
     _isOffTheRecord = _browser->GetBrowserState()->IsOffTheRecord();
 
-    _tabResumptionDisabled = [[PrefBackedBoolean alloc]
-        initWithPrefService:_localState
-                   prefName:tab_resumption_prefs::kTabResumptioDisabledPref];
-    [_tabResumptionDisabled setObserver:self];
+    if (IsHomeCustomizationEnabled()) {
+      _tabResumptionDisabled = [[PrefBackedBoolean alloc]
+          initWithPrefService:_browserStatePrefs
+                     prefName:
+                         prefs::
+                             kHomeCustomizationMagicStackTabResumptionEnabled];
+      [_tabResumptionDisabled setObserver:self];
+    } else {
+      _tabResumptionDisabled = [[PrefBackedBoolean alloc]
+          initWithPrefService:_localState
+                     prefName:tab_resumption_prefs::kTabResumptioDisabledPref];
+      [_tabResumptionDisabled setObserver:self];
+    }
 
     ChromeBrowserState* browserState = _browser->GetBrowserState();
     _sessionSyncService =
@@ -270,11 +332,11 @@ const char kGStatic[] = ".gstatic.com";
 
   switch (item.itemType) {
     case TabResumptionItemType::kLastSyncedTab:
-      [self.NTPMetricsDelegate distantTabResumptionOpenedAtIndex:index];
+      [self.NTPActionsDelegate distantTabResumptionOpenedAtIndex:index];
       [self openDistantTab:item];
       break;
     case TabResumptionItemType::kMostRecentTab: {
-      [self.NTPMetricsDelegate recentTabTileOpenedAtIndex:index];
+      [self.NTPActionsDelegate recentTabTileOpenedAtIndex:index];
       [IntentDonationHelper donateIntent:IntentType::kOpenLatestTab];
       web::NavigationManager::WebLoadParams webLoadParams =
           web::NavigationManager::WebLoadParams(item.tabURL);
@@ -317,7 +379,8 @@ const char kGStatic[] = ".gstatic.com";
 }
 
 - (void)disableModule {
-  tab_resumption_prefs::DisableTabResumption(_localState);
+  tab_resumption_prefs::DisableTabResumption(
+      IsHomeCustomizationEnabled() ? _browserStatePrefs : _localState);
 }
 
 - (void)setDelegate:(id<TabResumptionHelperDelegate>)delegate {
@@ -340,10 +403,10 @@ const char kGStatic[] = ".gstatic.com";
   }
   switch (self.itemConfig.itemType) {
     case TabResumptionItemType::kLastSyncedTab:
-      [self.NTPMetricsDelegate distantTabResumptionDisplayedAtIndex:index];
+      [self.NTPActionsDelegate distantTabResumptionDisplayedAtIndex:index];
       break;
     case TabResumptionItemType::kMostRecentTab:
-      [self.NTPMetricsDelegate recentTabTileDisplayedAtIndex:index];
+      [self.NTPActionsDelegate recentTabTileDisplayedAtIndex:index];
       break;
   }
 }
@@ -351,8 +414,11 @@ const char kGStatic[] = ".gstatic.com";
 #pragma mark - Boolean Observer
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
-  if (observableBoolean == _tabResumptionDisabled && observableBoolean.value) {
-    [self.delegate removeTabResumptionModule];
+  if (observableBoolean == _tabResumptionDisabled) {
+    if ((IsHomeCustomizationEnabled() && !observableBoolean.value) ||
+        (!IsHomeCustomizationEnabled() && observableBoolean.value)) {
+      [self.delegate removeTabResumptionModule];
+    }
   }
 }
 
@@ -410,7 +476,8 @@ const char kGStatic[] = ".gstatic.com";
 
 // Fetches the item to display from the model.
 - (void)fetchLastTabResumptionItem {
-  if (tab_resumption_prefs::IsTabResumptionDisabled(_localState)) {
+  if (tab_resumption_prefs::IsTabResumptionDisabled(
+          IsHomeCustomizationEnabled() ? _browserStatePrefs : _localState)) {
     return;
   }
   if (_visitedURLRankingService && IsTabResumption2_0Enabled()) {
@@ -420,6 +487,7 @@ const char kGStatic[] = ".gstatic.com";
             CreateDefaultFetchOptionsForTabResumption(),
         base::BindOnce(
             ^(visited_url_ranking::ResultStatus status,
+              visited_url_ranking::URLVisitsMetadata url_visits_metadata,
               std::vector<visited_url_ranking::URLVisitAggregate> urls) {
               [weakSelf onURLFetched:std::move(urls) withStatus:status];
             }));
@@ -506,7 +574,7 @@ const char kGStatic[] = ".gstatic.com";
 
 // Fetches the snapshot of the tab showing `item`.
 - (void)fetchSnapshotForItem:(TabResumptionItem*)item {
-  if (!IsTabResumption1_5SalientImageEnabled()) {
+  if (!IsTabResumption1_5ThumbnailsImageEnabled()) {
     return [self fetchSalientImageForItem:item];
   }
   BrowserList* browserList =
@@ -708,47 +776,108 @@ const char kGStatic[] = ".gstatic.com";
           }));
 }
 
-// Called when the URLs have been ranked. Pass the first one to MagicStack.
+// Called when the URLs have been ranked. Select the first one and decorate it.
 - (void)onURLRanked:(std::vector<visited_url_ranking::URLVisitAggregate>)URLs
          withStatus:(visited_url_ranking::ResultStatus)status {
   if (status != visited_url_ranking::ResultStatus::kSuccess ||
       URLs.size() == 0) {
     return;
   }
+  if (!IsTabResumption2BubbleEnabled()) {
+    return [self onURLDecorated:std::move(URLs) withStatus:status];
+  }
 
+  size_t index;
+  // Select the first URL with tab data.
+  for (index = 0; index < URLs.size(); index++) {
+    if (ExtractTabData(URLs[index]) || ExtractHistoryData(URLs[index])) {
+      break;
+    }
+  }
+  if (index == URLs.size()) {
+    return;
+  }
+
+  std::vector<visited_url_ranking::URLVisitAggregate> selectedURLs;
+  selectedURLs.push_back(std::move(URLs[index]));
+
+  __weak __typeof(self) weakSelf = self;
+  _visitedURLRankingService->DecorateURLVisitAggregates(
+      {}, std::move(selectedURLs),
+      base::BindOnce(
+          ^(visited_url_ranking::ResultStatus decorateStatus,
+            std::vector<visited_url_ranking::URLVisitAggregate> decoratedURLs) {
+            [weakSelf onURLDecorated:std::move(decoratedURLs)
+                          withStatus:decorateStatus];
+          }));
+}
+
+// Called when the URLs have been decorated.
+- (void)onURLDecorated:(std::vector<visited_url_ranking::URLVisitAggregate>)URLs
+            withStatus:(visited_url_ranking::ResultStatus)status {
+  if (status != visited_url_ranking::ResultStatus::kSuccess ||
+      URLs.size() == 0) {
+    return;
+  }
   const visited_url_ranking::URLVisitAggregate::TabData* tabData = nullptr;
+  const visited_url_ranking::URLVisitAggregate::HistoryData* historyData =
+      nullptr;
+  const visited_url_ranking::URLVisit* visit = nullptr;
+
   const visited_url_ranking::URLVisitAggregate* URLAggregate = nullptr;
   for (auto& aggregate : URLs) {
     tabData = ExtractTabData(aggregate);
     if (tabData) {
       URLAggregate = &aggregate;
+      visit = &tabData->last_active_tab.visit;
+      break;
+    }
+    historyData = ExtractHistoryData(aggregate);
+    if (historyData) {
+      URLAggregate = &aggregate;
+      visit = &historyData->visit;
       break;
     }
   }
-  if (!tabData || !URLAggregate) {
+  if (!URLAggregate || !visit) {
     return;
   }
-  const visited_url_ranking::URLVisitAggregate::Tab& tab =
-      tabData->last_active_tab;
 
   bool isLocal =
-      tab.visit.source == visited_url_ranking::URLVisit::Source::kLocal;
+      visit->source != visited_url_ranking::URLVisit::Source::kForeign;
   TabResumptionItemType type =
       (isLocal ? TabResumptionItemType::kMostRecentTab
                : TabResumptionItemType::kLastSyncedTab);
   TabResumptionItem* item = [[TabResumptionItem alloc] initWithItemType:type];
-  item.tabTitle = base::SysUTF16ToNSString(tab.visit.title);
-  item.syncedTime = tab.visit.last_modified;
-  item.tabURL = tab.visit.url;
+  item.tabTitle = base::SysUTF16ToNSString(visit->title);
+  item.syncedTime = visit->last_modified;
+  item.tabURL = visit->url;
   item.shouldShowSeeMore = IsTabResumption1_5SeeMoreEnabled();
   item.URLKey = URLAggregate->url_key;
   item.requestID = URLAggregate->request_id;
+  if (visit->client_name) {
+    item.sessionName = base::SysUTF8ToNSString(visit->client_name.value());
+  }
   item.commandHandler = self;
   item.delegate = self;
-  if (tab.id > 0 && tab.session_tag && !isLocal) {
-    item.sessionName = base::SysUTF8ToNSString(tab.session_name.value());
-    _sessionTag = tab.session_tag.value();
-    _tabId = SessionID::FromSerializedValue(tab.id);
+  if (IsTabResumption2BubbleEnabled()) {
+    NSString* overridenReason = GetOverridenReason(*URLAggregate);
+    if (overridenReason) {
+      item.reason = overridenReason;
+    } else if (URLAggregate->decorations.size()) {
+      item.reason = base::SysUTF16ToNSString(
+          visited_url_ranking::GetMostRelevantDecoration(*URLAggregate)
+              .GetDisplayString());
+    }
+  }
+  if (tabData) {
+    const visited_url_ranking::URLVisitAggregate::Tab& tab =
+        tabData->last_active_tab;
+    if (tab.id > 0 && tab.session_tag && !isLocal) {
+      item.sessionName = base::SysUTF8ToNSString(tab.session_name.value());
+      _sessionTag = tab.session_tag.value();
+      _tabId = SessionID::FromSerializedValue(tab.id);
+    }
   }
 
   // Fetch the favicon.

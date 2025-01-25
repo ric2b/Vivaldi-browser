@@ -324,8 +324,7 @@
         configure event to ensure that both the client and the compositor
         setting the state can be synchronized.
 
-        States set in this way are double-buffered. They will get applied on
-        the next commit.
+        States set in this way are double-buffered, see wl_surface.commit.
 
         Desktop environments may extend this enum by taking up a range of
         values and documenting the range they chose in this description.
@@ -433,8 +432,7 @@
         portions like drop-shadows which should be ignored for the
         purposes of aligning, placing and constraining windows.
 
-        The window geometry is double buffered, and will be applied at the
-        time wl_surface.commit of the corresponding wl_surface is called.
+        The window geometry is double-buffered state, see wl_surface.commit.
 
         Once the window geometry of the surface is set once, it is not
         possible to unset it, and it will remain the same until

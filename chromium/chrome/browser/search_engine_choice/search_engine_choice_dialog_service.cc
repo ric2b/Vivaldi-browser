@@ -133,8 +133,10 @@ SearchEngineChoiceDialogService::SearchEngineChoiceDialogService(
       search_engine_choice_service_(search_engine_choice_service),
       template_url_service_(template_url_service) {}
 
-void SearchEngineChoiceDialogService::NotifyChoiceMade(int prepopulate_id,
-                                                       EntryPoint entry_point) {
+void SearchEngineChoiceDialogService::NotifyChoiceMade(
+    int prepopulate_id,
+    bool save_guest_mode_selection,
+    EntryPoint entry_point) {
   int country_id = search_engine_choice_service_->GetCountryId();
   SCOPED_CRASH_KEY_STRING32(
       "ChoiceService", "choice_country",
@@ -194,6 +196,12 @@ void SearchEngineChoiceDialogService::NotifyChoiceMade(int prepopulate_id,
 
     NOTREACHED(base::NotFatalUntil::M127);
   } else {
+    if (base::FeatureList::IsEnabled(
+            switches::kSearchEngineChoiceGuestExperience) &&
+        profile_->IsGuestSession() && save_guest_mode_selection) {
+      g_browser_process->local_state()->SetInt64(
+          prefs::kDefaultSearchProviderGuestModePrepopulatedId, prepopulate_id);
+    }
     template_url_service_->SetUserSelectedDefaultSearchProvider(
         selected_engine, search_engines::ChoiceMadeLocation::kChoiceScreen);
   }
@@ -254,11 +262,6 @@ void SearchEngineChoiceDialogService::SetDialogDisabledForTests(
 // static
 search_engines::ChoiceData
 SearchEngineChoiceDialogService::GetChoiceDataFromProfile(Profile& profile) {
-  if (!search_engines::IsChoiceScreenFlagEnabled(
-          search_engines::ChoicePromo::kAny)) {
-    return {};
-  }
-
   PrefService* pref_service = profile.GetPrefs();
   TemplateURLService* template_url_service =
       TemplateURLServiceFactory::GetForProfile(&profile);
@@ -277,11 +280,6 @@ SearchEngineChoiceDialogService::GetChoiceDataFromProfile(Profile& profile) {
 void SearchEngineChoiceDialogService::UpdateProfileFromChoiceData(
     Profile& profile,
     const search_engines::ChoiceData& choice_data) {
-  if (!search_engines::IsChoiceScreenFlagEnabled(
-          search_engines::ChoicePromo::kAny)) {
-    return;
-  }
-
   PrefService* pref_service = profile.GetPrefs();
   if (choice_data.timestamp != 0) {
     pref_service->SetInt64(
@@ -337,12 +335,6 @@ SearchEngineChoiceDialogService::ComputeDialogConditions(
 
     return search_engines::SearchEngineChoiceScreenConditions::
         kAlreadyCompleted;
-  }
-
-  if (!search_engines::IsChoiceScreenFlagEnabled(
-          search_engines::ChoicePromo::kDialog)) {
-    return search_engines::SearchEngineChoiceScreenConditions::
-        kFeatureSuppressed;
   }
 
   if (web_app::AppBrowserController::IsWebApp(&browser)) {

@@ -13,12 +13,12 @@
 #include "ash/accessibility/accessibility_event_handler_manager.h"
 #include "ash/ash_export.h"
 #include "ash/constants/ash_features.h"
-#include "ash/in_session_auth/in_session_auth_dialog_controller_impl.h"
 #include "ash/metrics/login_unlock_throughput_recorder.h"
 #include "ash/metrics/unlock_throughput_recorder.h"
+#include "ash/public/cpp/auth/active_session_auth_controller.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "ash/public/cpp/system_sounds_delegate.h"
+#include "ash/public/cpp/tab_strip_delegate.h"
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
 #include "ash/system/input_device_settings/touchscreen_metrics_recorder.h"
 #include "ash/system/toast/system_nudge_pause_manager_impl.h"
@@ -58,6 +58,7 @@ class DisplayChangeObserver;
 class DisplayConfigurator;
 class DisplayManager;
 class DisplayPortObserver;
+class NativeDisplayDelegate;
 }  // namespace display
 
 namespace gfx {
@@ -134,6 +135,7 @@ class CaptureModeController;
 class ColorPaletteController;
 class ControlVHistogramRecorder;
 class CoralController;
+class CoralDelegate;
 class CrosDisplayConfig;
 class DarkLightModeControllerImpl;
 class DeskProfilesDelegate;
@@ -177,6 +179,7 @@ class InputDeviceKeyAliasManager;
 class InputDeviceSettingsControllerImpl;
 class InputDeviceSettingsDispatcher;
 class InputDeviceTracker;
+class InSessionAuthDialogControllerImpl;
 class WebAuthNDialogController;
 class WebAuthNDialogControllerImpl;
 class KeyAccessibilityEnabler;
@@ -233,6 +236,7 @@ class RootWindowController;
 class SavedDeskController;
 class SavedDeskDelegate;
 class TabClusterUIController;
+class TabStripDelegate;
 class UsbPeripheralNotificationController;
 class ScreenLayoutObserver;
 class ScreenOrientationController;
@@ -644,6 +648,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   local_authentication_request_controller() {
     return local_authentication_request_controller_.get();
   }
+  ActiveSessionAuthController* active_session_auth_controller() {
+    return active_session_auth_controller_.get();
+  }
   LoginScreenController* login_screen_controller() {
     return login_screen_controller_.get();
   }
@@ -793,6 +800,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   TabletModeController* tablet_mode_controller() const {
     return tablet_mode_controller_.get();
   }
+  TabStripDelegate* tab_strip_delegate() const {
+    return tab_strip_delegate_.get();
+  }
   ToastManagerImpl* toast_manager() { return toast_manager_.get(); }
   views::corewm::TooltipController* tooltip_controller() {
     return tooltip_controller_.get();
@@ -867,6 +877,11 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
 
   CoralController* coral_controller() { return coral_controller_.get(); }
+  CoralDelegate* coral_delegate() { return coral_delegate_.get(); }
+
+  DragDropController* drag_drop_controller() {
+    return drag_drop_controller_.get();
+  }
 
   // Does the primary display have status area?
   bool HasPrimaryStatusArea();
@@ -985,6 +1000,7 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // SessionObserver:
   void OnFirstSessionStarted() override;
+  void OnFirstSessionReady() override;
   void OnSessionStateChanged(session_manager::SessionState state) override;
   void OnLoginStatusChanged(LoginStatus login_status) override;
   void OnLockStateChanged(bool locked) override;
@@ -1104,6 +1120,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ParentAccessController> parent_access_controller_;
   std::unique_ptr<LocalAuthenticationRequestController>
       local_authentication_request_controller_;
+  std::unique_ptr<ActiveSessionAuthController> active_session_auth_controller_;
   std::unique_ptr<PciePeripheralNotificationController>
       pcie_peripheral_notification_controller_;
   std::unique_ptr<PickerController> picker_controller_;
@@ -1142,6 +1159,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<TouchDevicesController> touch_devices_controller_;
   std::unique_ptr<TrayAction> tray_action_;
   std::unique_ptr<UserEducationController> user_education_controller_;
+  std::unique_ptr<TabStripDelegate> tab_strip_delegate_;
   std::unique_ptr<WallpaperControllerImpl> wallpaper_controller_;
   std::unique_ptr<WindowCycleController> window_cycle_controller_;
   std::unique_ptr<WindowRestoreController> window_restore_controller_;
@@ -1290,6 +1308,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<display::NativeDisplayDelegate> native_display_delegate_;
 
   std::unique_ptr<CoralController> coral_controller_;
+  std::unique_ptr<CoralDelegate> coral_delegate_;
 
   base::WeakPtrFactory<Shell> weak_factory_{this};
 };

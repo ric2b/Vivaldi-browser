@@ -9,12 +9,12 @@
 
 #import "components/autofill/core/browser/data_model/credit_card.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_constants.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
 namespace autofill {
 class CreditCard;
 }  // namespace autofill
 
-class ChromeBrowserState;
 class WebStateList;
 
 @protocol FullCardRequestResultDelegateObserving;
@@ -25,7 +25,7 @@ class WebStateList;
 
 // Inits the requests with required parameters and the `delegate` to receive the
 // success/failure state of the request.
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
+- (instancetype)initWithBrowserState:(ProfileIOS*)profile
                         webStateList:(WebStateList*)webStateList
                       resultDelegate:
                           (id<FullCardRequestResultDelegateObserving>)delegate;

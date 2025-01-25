@@ -48,6 +48,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/display/scoped_display_for_new_windows.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/events_test_utils.h"
@@ -140,7 +141,7 @@ void ExpectAllContainers() {
 std::unique_ptr<views::WidgetDelegateView> CreateModalWidgetDelegate() {
   auto delegate = std::make_unique<views::WidgetDelegateView>();
   delegate->SetCanResize(true);
-  delegate->SetModalType(ui::MODAL_TYPE_SYSTEM);
+  delegate->SetModalType(ui::mojom::ModalType::kSystem);
   delegate->SetOwnedByWidget(true);
   delegate->SetTitle(u"Modal Window");
   return delegate;
@@ -593,39 +594,6 @@ TEST_F(ShellTest, NoWindowTabFocus) {
   // Hit shift tab and expect that focus is on status widget.
   PressAndReleaseKey(ui::VKEY_TAB, ui::EF_SHIFT_DOWN);
   EXPECT_TRUE(status_area_widget->GetNativeView()->HasFocus());
-}
-
-class ShellPickerIncorrectKeyTest : public AshTestBase {
- public:
-  ShellPickerIncorrectKeyTest() {
-    feature_list_.InitWithFeatures({features::kPicker},
-                                   {features::kPickerDogfood});
-
-    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-    command_line->AppendSwitchASCII(switches::kPickerFeatureKey, "hello");
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-TEST_F(ShellPickerIncorrectKeyTest, NoPickerControllerIfFeatureKeyIsWrong) {
-  EXPECT_FALSE(Shell::Get()->picker_controller());
-}
-
-class ShellPickerDogfoodTest : public AshTestBase {
- public:
-  ShellPickerDogfoodTest() {
-    feature_list_.InitWithFeatures(
-        {features::kPicker, features::kPickerDogfood}, {});
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-TEST_F(ShellPickerDogfoodTest, PickerControllerExistsIfDogfooding) {
-  EXPECT_TRUE(Shell::Get()->picker_controller());
 }
 
 // This verifies WindowObservers are removed when a window is destroyed after

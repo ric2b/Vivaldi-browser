@@ -8,6 +8,8 @@ NSString* const kCreateTabGroupViewIdentifier =
     @"kCreateTabGroupViewIdentifier";
 NSString* const kCreateTabGroupTextFieldIdentifier =
     @"kCreateTabGroupTextFieldIdentifier";
+NSString* const kCreateTabGroupTextFieldClearButtonIdentifier =
+    @"kCreateTabGroupTextFieldClearButtonIdentifier";
 NSString* const kCreateTabGroupCreateButtonIdentifier =
     @"kCreateTabGroupCreateButtonIdentifier";
 NSString* const kCreateTabGroupCancelButtonIdentifier =
@@ -21,3 +23,6 @@ NSString* const kTabGroupOverflowMenuButtonIdentifier =
     @"kTabGroupOverflowMenuButtonIdentifier";
 
 NSString* const kTabGroupsPanelIdentifier = @"kTabGroupsPanelIdentifier";
+
+NSString* const kTabGroupsPanelCellIdentifierPrefix =
+    @"kTabGroupsPanelCellIdentifier";

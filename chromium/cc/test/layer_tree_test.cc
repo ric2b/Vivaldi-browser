@@ -238,7 +238,8 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     test_hooks_->ReadyToCommitOnThread(this);
   }
 
-  void BeginCommit(int source_frame_number, uint64_t trace_id) override {
+  void BeginCommit(int source_frame_number,
+                   BeginMainFrameTraceId trace_id) override {
     LayerTreeHostImpl::BeginCommit(source_frame_number, trace_id);
     test_hooks_->BeginCommitOnThread(this);
   }
@@ -437,9 +438,6 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
                                ActiveFrameSequenceTrackers) override {}
   std::unique_ptr<BeginMainFrameMetrics> GetBeginMainFrameMetrics() override {
     return test_hooks_->GetBeginMainFrameMetrics();
-  }
-  std::unique_ptr<WebVitalMetrics> GetWebVitalMetrics() override {
-    return nullptr;
   }
   void NotifyThroughputTrackerResults(CustomTrackerResults results) override {
     test_hooks_->NotifyThroughputTrackerResults(std::move(results));

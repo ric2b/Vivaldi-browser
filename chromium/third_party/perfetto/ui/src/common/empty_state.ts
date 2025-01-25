@@ -20,8 +20,6 @@ import {
   autosaveConfigStore,
   recordTargetStore,
 } from '../frontend/record_config';
-import {SqlTables} from '../frontend/well_known_sql_tables';
-
 import {NonSerializableState, State, STATE_VERSION} from './state';
 
 const AUTOLOAD_STARTED_CONFIG_FLAG = featureFlags.register({
@@ -58,19 +56,27 @@ export function createEmptyNonSerializableState(): NonSerializableState {
     pivotTable: {
       queryResult: null,
       selectedPivots: [
-        {kind: 'regular', table: SqlTables.slice.name, column: 'name'},
+        {
+          kind: 'regular',
+          table: '_slice_with_thread_and_process_info',
+          column: 'name',
+        },
       ],
       selectedAggregations: [
         {
           aggregationFunction: 'SUM',
-          column: {kind: 'regular', table: SqlTables.slice.name, column: 'dur'},
+          column: {
+            kind: 'regular',
+            table: '_slice_with_thread_and_process_info',
+            column: 'dur',
+          },
           sortDirection: 'DESC',
         },
         {
           aggregationFunction: 'SUM',
           column: {
             kind: 'regular',
-            table: SqlTables.slice.name,
+            table: '_slice_with_thread_and_process_info',
             column: 'thread_dur',
           },
         },
@@ -87,14 +93,8 @@ export function createEmptyState(): State {
     version: STATE_VERSION,
     nextId: '-1',
     newEngineMode: 'USE_HTTP_RPC_IF_AVAILABLE',
-    tracks: {},
-    utidToThreadSortKey: {},
     aggregatePreferences: {},
-    trackGroups: {},
-    pinnedTracks: [],
-    scrollingTracks: [],
     queries: {},
-    notes: {},
 
     recordConfig: AUTOLOAD_STARTED_CONFIG_FLAG.get()
       ? autosaveConfigStore.get()
@@ -102,15 +102,7 @@ export function createEmptyState(): State {
     displayConfigAsPbtxt: false,
     lastLoadedConfig: {type: 'NONE'},
 
-    omniboxState: {
-      omnibox: '',
-      mode: 'SEARCH',
-    },
-
     status: {msg: '', timestamp: 0},
-    selection: {
-      kind: 'empty',
-    },
     traceConversionInProgress: false,
 
     perfDebug: false,
@@ -122,12 +114,6 @@ export function createEmptyState(): State {
     highlightedSliceId: -1,
     focusedFlowIdLeft: -1,
     focusedFlowIdRight: -1,
-    searchIndex: -1,
-
-    tabs: {
-      currentTab: 'current_selection',
-      openTabs: [],
-    },
 
     recordingInProgress: false,
     recordingCancelled: false,
@@ -142,5 +128,8 @@ export function createEmptyState(): State {
 
     // Somewhere to store plugins' persistent state.
     plugins: {},
+
+    trackFilterTerm: undefined,
+    forceRunControllers: 0,
   };
 }

@@ -82,15 +82,23 @@ void PrivacySandboxHandler::RegisterMessages() {
           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "privacySandboxPrivacyGuideShouldShowAdTopicsCard",
-      base::BindRepeating(&PrivacySandboxHandler::HandleShouldShowAdTopicsCard,
-                          base::Unretained(this)));
+      base::BindRepeating(
+          &PrivacySandboxHandler::
+              HandlePrivacySandboxPrivacyGuideShouldShowAdTopicsCard,
+          base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "privacySandboxPrivacyGuideShouldShowCompletionCardAdTopicsSubLabel",
+      base::BindRepeating(
+          &PrivacySandboxHandler::
+              HandlePrivacySandboxPrivacyGuideShouldShowCompletionCardAdTopicsSubLabel,
+          base::Unretained(this)));
 }
 
 void PrivacySandboxHandler::HandleSetFledgeJoiningAllowed(
     const base::Value::List& args) {
   const std::string& site = args[0].GetString();
   const bool enabled = args[1].GetBool();
-  if (GetPrivacySandboxService())
+  if (GetPrivacySandboxService()) // Vivaldi
   GetPrivacySandboxService()->SetFledgeJoiningAllowed(site, enabled);
 }
 
@@ -98,7 +106,7 @@ void PrivacySandboxHandler::HandleGetFledgeState(
     const base::Value::List& args) {
   AllowJavascript();
   const std::string& callback_id = args[0].GetString();
-  if (GetPrivacySandboxService())
+  if (GetPrivacySandboxService()) // Vivaldi
   GetPrivacySandboxService()->GetFledgeJoiningEtldPlusOneForDisplay(
       base::BindOnce(&PrivacySandboxHandler::OnFledgeJoiningSitesRecieved,
                      weak_ptr_factory_.GetWeakPtr(), callback_id));
@@ -109,7 +117,7 @@ void PrivacySandboxHandler::HandleSetTopicAllowed(
   const int topic_id = args[0].GetInt();
   const int taxonomy_version = args[1].GetInt();
   const bool allowed = args[2].GetBool();
-  if (GetPrivacySandboxService())
+  if (GetPrivacySandboxService()) // Vivaldi
   GetPrivacySandboxService()->SetTopicAllowed(
       privacy_sandbox::CanonicalTopic(browsing_topics::Topic(topic_id),
                                       taxonomy_version),
@@ -120,12 +128,12 @@ void PrivacySandboxHandler::HandleGetTopicsState(
     const base::Value::List& args) {
   AllowJavascript();
   base::Value::List top_topics_list;
-  if (GetPrivacySandboxService())
+  if (GetPrivacySandboxService()) // Vivaldi
   for (const auto& topic : GetPrivacySandboxService()->GetCurrentTopTopics())
     top_topics_list.Append(ConvertTopicToValue(topic));
 
   base::Value::List blocked_topics_list;
-  if (GetPrivacySandboxService())
+  if (GetPrivacySandboxService()) // Vivaldi
   for (const auto& topic : GetPrivacySandboxService()->GetBlockedTopics())
     blocked_topics_list.Append(ConvertTopicToValue(topic));
 
@@ -140,7 +148,7 @@ void PrivacySandboxHandler::HandleTopicsToggleChanged(
   AllowJavascript();
   const int toggle_value = args[0].GetBool();
 
-  if (GetPrivacySandboxService())
+  if (GetPrivacySandboxService())  // Vivaldi
   GetPrivacySandboxService()->TopicsToggleChanged(toggle_value);
 }
 
@@ -153,14 +161,14 @@ void PrivacySandboxHandler::OnFledgeJoiningSitesRecieved(
   for (const auto& site : joining_sites)
     joining_sites_list.Append(site);
 
-  base::Value::List blocked_sites_list;
-  if (GetPrivacySandboxService()) {
+  base::Value::List blocked_sites_list;  // Vivaldi
+  if (GetPrivacySandboxService()) {  // Vivaldi
   const auto blocked_sites =
       GetPrivacySandboxService()->GetBlockedFledgeJoiningTopFramesForDisplay();
-  //base::Value::List blocked_sites_list;
+  //base::Value::List blocked_sites_list;  // Vivaldi
   for (const auto& site : blocked_sites)
     blocked_sites_list.Append(site);
-  }
+  } // End Vivaldi
 
   base::Value::Dict fledge_state;
   fledge_state.Set(kJoiningSites, std::move(joining_sites_list));
@@ -205,14 +213,24 @@ void PrivacySandboxHandler::HandleGetChildTopicsCurrentlyAssigned(
                             std::move(child_topics_currently_assigned_list));
 }
 
-void PrivacySandboxHandler::HandleShouldShowAdTopicsCard(
-    const base::Value::List& args) {
+void PrivacySandboxHandler::
+    HandlePrivacySandboxPrivacyGuideShouldShowAdTopicsCard(
+        const base::Value::List& args) {
   AllowJavascript();
   bool should_show_ad_topics_card =
       GetPrivacySandboxCountries()->IsConsentCountry() &&
       base::FeatureList::IsEnabled(
           privacy_sandbox::kPrivacySandboxPrivacyGuideAdTopics);
   ResolveJavascriptCallback(args[0], should_show_ad_topics_card);
+}
+
+void PrivacySandboxHandler::
+    HandlePrivacySandboxPrivacyGuideShouldShowCompletionCardAdTopicsSubLabel(
+        const base::Value::List& args) {
+  AllowJavascript();
+  ResolveJavascriptCallback(
+      args[0], base::FeatureList::IsEnabled(
+                   privacy_sandbox::kPrivacySandboxPrivacyGuideAdTopics));
 }
 
 PrivacySandboxCountries* PrivacySandboxHandler::GetPrivacySandboxCountries() {

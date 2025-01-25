@@ -83,11 +83,54 @@ enum intf_A_foo {
 	 * @since 2
 	 */
 	INTF_A_FOO_THIRD = 2,
+	/**
+	 * this is a negative value
+	 * @since 2
+	 */
+	INTF_A_FOO_NEGATIVE = -1,
+	/**
+	 * this is a deprecated value
+	 * @since 2
+	 * @deprecated Deprecated since version 3
+	 */
+	INTF_A_FOO_DEPRECATED = 3,
 };
 /**
  * @ingroup iface_intf_A
  */
 #define INTF_A_FOO_THIRD_SINCE_VERSION 2
+/**
+ * @ingroup iface_intf_A
+ */
+#define INTF_A_FOO_NEGATIVE_SINCE_VERSION 2
+/**
+ * @ingroup iface_intf_A
+ */
+#define INTF_A_FOO_DEPRECATED_SINCE_VERSION 2
+/**
+ * @ingroup iface_intf_A
+ * Validate a intf_A foo value.
+ *
+ * @return true on success, false on error.
+ * @ref intf_A_foo
+ */
+static inline bool
+intf_A_foo_is_valid(uint32_t value, uint32_t version) {
+	switch (value) {
+	case INTF_A_FOO_FIRST:
+		return version >= 1;
+	case INTF_A_FOO_SECOND:
+		return version >= 1;
+	case INTF_A_FOO_THIRD:
+		return version >= 2;
+	case (uint32_t)INTF_A_FOO_NEGATIVE:
+		return version >= 2;
+	case INTF_A_FOO_DEPRECATED:
+		return version >= 2;
+	default:
+		return false;
+	}
+}
 #endif /* INTF_A_FOO_ENUM */
 
 /**
@@ -120,11 +163,16 @@ struct intf_A_interface {
 };
 
 #define INTF_A_HEY 0
+#define INTF_A_YO 1
 
 /**
  * @ingroup iface_intf_A
  */
 #define INTF_A_HEY_SINCE_VERSION 1
+/**
+ * @ingroup iface_intf_A
+ */
+#define INTF_A_YO_SINCE_VERSION 2
 
 /**
  * @ingroup iface_intf_A
@@ -148,6 +196,17 @@ static inline void
 intf_A_send_hey(struct wl_resource *resource_)
 {
 	wl_resource_post_event(resource_, INTF_A_HEY);
+}
+
+/**
+ * @ingroup iface_intf_A
+ * Sends an yo event to the client owning the resource.
+ * @param resource_ The client's resource
+ */
+static inline void
+intf_A_send_yo(struct wl_resource *resource_)
+{
+	wl_resource_post_event(resource_, INTF_A_YO);
 }
 
 #ifdef  __cplusplus

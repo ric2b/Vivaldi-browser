@@ -17,7 +17,7 @@
 #import "components/autofill/core/browser/payments_data_manager.h"
 #import "components/autofill/core/browser/personal_data_manager.h"
 #import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/testing/nserror_util.h"
@@ -131,17 +131,16 @@ NSError* PrepareAutofillProfileWithValues(
 
   // Clear all existing local data and save the profile and credit card
   // generated to the personal data manager.
-  ChromeBrowserState* browser_state =
-      chrome_test_util::GetOriginalBrowserState();
+  ProfileIOS* profileIOS = chrome_test_util::GetOriginalProfile();
   PersonalDataManager* personal_data_manager =
-      PersonalDataManagerFactory::GetForBrowserState(browser_state);
+      PersonalDataManagerFactory::GetForProfile(profileIOS);
   for (const autofill::CreditCard* local_card :
        personal_data_manager->payments_data_manager().GetLocalCreditCards()) {
     personal_data_manager->RemoveByGUID(local_card->guid());
   }
   for (const autofill::AutofillProfile* local_profile :
-       personal_data_manager->address_data_manager().GetProfilesFromSource(
-           autofill::AutofillProfile::Source::kLocalOrSyncable)) {
+       personal_data_manager->address_data_manager().GetProfilesByRecordType(
+           autofill::AutofillProfile::RecordType::kLocalOrSyncable)) {
     personal_data_manager->RemoveByGUID(local_profile->guid());
   }
   personal_data_manager->payments_data_manager().AddCreditCard(credit_card);

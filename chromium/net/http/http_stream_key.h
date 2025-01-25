@@ -5,11 +5,16 @@
 #ifndef NET_HTTP_HTTP_STREAM_KEY_H_
 #define NET_HTTP_HTTP_STREAM_KEY_H_
 
+#include <string>
+
+#include "base/values.h"
 #include "net/base/net_export.h"
 #include "net/base/network_anonymization_key.h"
 #include "net/base/privacy_mode.h"
 #include "net/dns/public/secure_dns_policy.h"
+#include "net/quic/quic_session_key.h"
 #include "net/socket/socket_tag.h"
+#include "net/spdy/spdy_session_key.h"
 #include "url/scheme_host_port.h"
 
 namespace net {
@@ -50,6 +55,18 @@ class NET_EXPORT_PRIVATE HttpStreamKey {
   bool disable_cert_network_fetches() const {
     return disable_cert_network_fetches_;
   }
+
+  std::string ToString() const;
+
+  base::Value::Dict ToValue() const;
+
+  // Creates a SpdySessionKey from `this`. Returns a key with an empty host
+  // when the scheme is not cryptgraphic.
+  SpdySessionKey ToSpdySessionKey() const;
+
+  // Creates a QuicSessionKey from `this`. Returns a key with an empty host
+  // when the scheme is not cryptgraphic.
+  QuicSessionKey ToQuicSessionKey() const;
 
  private:
   url::SchemeHostPort destination_;

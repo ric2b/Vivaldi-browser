@@ -11,6 +11,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "components/viz/common/features.h"
 #include "components/viz/service/display/shared_bitmap_manager.h"
+#include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "third_party/skia/include/core/SkImage.h"
 
@@ -19,18 +20,18 @@ namespace viz {
 DisplayResourceProviderSoftware::DisplayResourceProviderSoftware(
     SharedBitmapManager* shared_bitmap_manager,
     gpu::SharedImageManager* shared_image_manager,
-    gpu::SyncPointManager* sync_point_manager)
+    gpu::SyncPointManager* sync_point_manager,
+    gpu::Scheduler* scheduler)
     : DisplayResourceProvider(DisplayResourceProvider::kSoftware),
       shared_bitmap_manager_(shared_bitmap_manager),
       shared_image_manager_(shared_image_manager),
       sync_point_manager_(sync_point_manager),
+      gpu_scheduler_(scheduler),
       sync_point_order_data_(
           (sync_point_manager_ &&
            base::FeatureList::IsEnabled(features::kSharedBitmapToSharedImage))
               ? sync_point_manager_->CreateSyncPointOrderData()
               : nullptr) {
-  DCHECK(shared_bitmap_manager);
-
   memory_tracker_ = std::make_unique<gpu::MemoryTypeTracker>(nullptr);
 }
 
@@ -219,8 +220,18 @@ void DisplayResourceProviderSoftware::WaitSyncToken(gpu::SyncToken sync_token) {
           sync_token, sync_point_order_data_->sequence_id(), order_num,
           base::BindOnce(&base::WaitableEvent::Signal,
                          base::Unretained(&completion)))) {
+    gpu::SequenceId release_sequence_id =
+        sync_point_manager_->GetSyncTokenReleaseSequenceId(sync_token);
+    gpu::Scheduler::ScopedSetSequencePriority waiting(
+        gpu_scheduler_, release_sequence_id, gpu::SchedulingPriority::kHigh);
+
     completion.Wait();
   }
+
+  // We don't have any tasks to run here, but we need to mark order number as
+  // complete.
+  sync_point_order_data_->BeginProcessingOrderNumber(order_num);
+  sync_point_order_data_->FinishProcessingOrderNumber(order_num);
 }
 
 DisplayResourceProviderSoftware::ScopedReadLockSkImage::

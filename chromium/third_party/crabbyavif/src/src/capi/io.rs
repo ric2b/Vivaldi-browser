@@ -177,7 +177,7 @@ impl crate::decoder::IO for avifIOWrapper {
         }
         if self.data.size == 0 {
             Ok(&[])
-        } else if self.data.data == std::ptr::null() {
+        } else if self.data.data.is_null() {
             Err(AvifError::UnknownError(
                 "data pointer was null but size was not zero".into(),
             ))
@@ -247,7 +247,7 @@ pub unsafe extern "C" fn crabby_avifIOCreateMemoryReader(
     size: usize,
 ) -> *mut avifIO {
     let cio = Box::new(avifCIOWrapper {
-        io: Box::new(DecoderRawIO::create(data, size)),
+        io: Box::new(unsafe { DecoderRawIO::create(data, size) }),
         buf: Vec::new(),
     });
     let io = Box::new(avifIO {

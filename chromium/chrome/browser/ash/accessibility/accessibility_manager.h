@@ -25,6 +25,7 @@
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
+#include "chrome/common/extensions/api/accessibility_private.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/session_manager/core/session_manager.h"
@@ -35,6 +36,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/extension_system.h"
+#include "facegaze_settings_event_handler.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/public/mojom/audio_focus.mojom.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
@@ -101,6 +103,11 @@ struct AccessibilityStatusEventDetails {
 
   AccessibilityNotificationType notification_type;
   bool enabled;
+};
+
+struct FaceGazeGestureInfo {
+  std::string gesture;
+  int confidence;
 };
 
 using AccessibilityStatusCallbackList =
@@ -210,6 +217,20 @@ class AccessibilityManager
 
   // Returns true if FaceGaze is enabled.
   bool IsFaceGazeEnabled() const;
+
+  // Adds the FaceGazeSettingsEventHandler to process events from FaceGaze.
+  void AddFaceGazeSettingsEventHandler(FaceGazeSettingsEventHandler* handler);
+
+  // Removes the FaceGazeSettingsEventHandler.
+  void RemoveFaceGazeSettingsEventHandler();
+
+  // Toggles whether FaceGaze is sending gesture detection information to
+  // settings.
+  void ToggleGestureInfoForSettings(bool enabled) const;
+
+  // Sends information about detected facial gestures from FaceGaze to settings.
+  void SendGestureInfoToSettings(
+      const std::vector<FaceGazeGestureInfo>& gesture_info) const;
 
   // Requests the Autoclick extension find the bounds of the nearest scrollable
   // ancestor to the point in the screen, as given in screen coordinates.
@@ -401,6 +422,10 @@ class AccessibilityManager
   // Sets the startup sound user preference.
   void SetStartupSoundEnabled(bool value) const;
 
+  // Requests that the system display a preview of the flash notifications
+  // feature.
+  void PreviewFlashNotification() const;
+
   // Gets the bluetooth braille display device address for the current user.
   const std::string GetBluetoothBrailleDisplayAddress() const;
 
@@ -523,6 +548,7 @@ class AccessibilityManager
   void PostLoadEnhancedNetworkTts();
 
   void UpdateAlwaysShowMenuFromPref();
+  void OnFaceGazeChanged();
   void OnLargeCursorChanged();
   void OnLiveCaptionChanged();
   void OnStickyKeysChanged();
@@ -621,6 +647,7 @@ class AccessibilityManager
 
   // Methods for managing the FaceGaze assets DLC.
   void OnFaceGazeAssetsInstalled(bool success, const std::string& root_path);
+  void OnFaceGazeAssetsFailed(std::string_view error);
   void OnFaceGazeAssetsCreated(
       std::optional<::extensions::api::accessibility_private::FaceGazeAssets>
           assets);
@@ -673,6 +700,8 @@ class AccessibilityManager
       soda_observation_{this};
 
   bool braille_ime_current_ = false;
+
+  raw_ptr<FaceGazeSettingsEventHandler> facegaze_settings_event_handler_;
 
   raw_ptr<ChromeVoxPanel> chromevox_panel_ = nullptr;
   std::unique_ptr<AccessibilityPanelWidgetObserver>

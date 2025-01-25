@@ -778,6 +778,10 @@ void DownloadManagerImpl::CreateNewDownloadItemToStart(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   download::DownloadItemImpl* download = CreateActiveItem(id, *info);
+  if (delegate_ && info->save_info) {
+    info->save_info->needs_obfuscation =
+        delegate_->ShouldObfuscateDownload(download);
+  }
   content::devtools_instrumentation::WillBeginDownload(info.get(), download);
   std::move(callback).Run(
       std::move(info), download,
@@ -1000,7 +1004,7 @@ void DownloadManagerImpl::InterceptNavigation(
     mojo::ScopedDataPipeConsumerHandle response_body,
     network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
     net::CertStatus cert_status,
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     bool from_download_cross_origin_redirect) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (!delegate_) {
@@ -1416,7 +1420,7 @@ void DownloadManagerImpl::DropDownload() {
 }
 
 void DownloadManagerImpl::InterceptNavigationOnChecksComplete(
-    int frame_tree_node_id,
+    FrameTreeNodeId frame_tree_node_id,
     std::unique_ptr<network::ResourceRequest> resource_request,
     std::vector<GURL> url_chain,
     net::CertStatus cert_status,
@@ -1586,6 +1590,17 @@ void DownloadManagerImpl::BeginDownloadInternal(
 
   auto* rfh = RenderFrameHost::FromID(params->render_process_host_id(),
                                       params->render_frame_host_routing_id());
+
+  // Untrusted network access is revoked, download request is interrupted.
+  if (rfh && rfh->IsUntrustedNetworkDisabled()) {
+    // TODO(crbug.com/365033308): Create a new download interrupt reason for
+    // fenced frame network revocation.
+    CreateInterruptedDownload(
+        std::move(params), download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED,
+        weak_factory_.GetWeakPtr());
+    return;
+  }
+
   StoragePartitionConfig storage_partition_config;
   if (rfh && serialized_embedder_download_data.empty()) {
     storage_partition_config =

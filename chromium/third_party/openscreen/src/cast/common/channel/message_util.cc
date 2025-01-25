@@ -9,6 +9,7 @@
 
 #include "build/build_config.h"
 #include "cast/common/channel/virtual_connection.h"
+#include "util/enum_name_table.h"
 #include "util/json/json_serialization.h"
 #include "util/json/json_value.h"
 #include "util/osp_logging.h"

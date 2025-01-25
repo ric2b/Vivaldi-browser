@@ -98,6 +98,7 @@
 #include "third_party/blink/renderer/platform/mojo/mojo_binding_context.h"
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/known_ports.h"
@@ -208,20 +209,7 @@ bool ShouldResourceBeKeptStrongReferenceByType(
     const SecurityOrigin* settings_object_origin) {
   // Image, fonts, stylesheets and scripts are the most commonly reused scripts.
 
-  if (base::FeatureList::IsEnabled(
-          features::kMemoryCacheStrongReferenceFilterCrossOriginScripts) &&
-      resource->GetType() == ResourceType::kScript &&
-      !SecurityOrigin::Create(resource->Url())
-           ->IsSameOriginWith(settings_object_origin)) {
-    return false;
-  }
-
-  return (resource->GetType() == ResourceType::kImage &&
-          !base::FeatureList::IsEnabled(
-              features::kMemoryCacheStrongReferenceFilterImages)) ||
-         (resource->GetType() == ResourceType::kScript &&
-          !base::FeatureList::IsEnabled(
-              features::kMemoryCacheStrongReferenceFilterScripts)) ||
+  return resource->GetType() == ResourceType::kScript ||
          resource->GetType() == ResourceType::kFont ||
          resource->GetType() == ResourceType::kCSSStyleSheet ||
          resource->GetType() == ResourceType::kMock;  // For tests.
@@ -372,6 +360,43 @@ void RecordDeferUnusedPreloadHistograms(const Resource* resource) {
   }
 }
 }  // namespace
+
+// Used to ensure a ResourceRequest is correctly configured. Specifically
+// PrepareRequestForCacheAccess() is called first. If the resource can not be
+// served from the cache, UpgradeForLoaderIfNecessary() is called to complete
+// the necessary steps before loading.
+class ResourceFetcher::ResourcePrepareHelper final
+    : public ResourceRequestContext {
+  STACK_ALLOCATED();
+
+ public:
+  ResourcePrepareHelper(ResourceFetcher& fetcher,
+                        FetchParameters& params,
+                        const ResourceFactory& factory);
+
+  std::optional<ResourceRequestBlockedReason> PrepareRequestForCacheAccess(
+      WebScopedVirtualTimePauser& pauser);
+  void UpgradeForLoaderIfNecessary(WebScopedVirtualTimePauser& pauser);
+  bool WasUpgradeForLoaderCalled() const {
+    return was_upgrade_for_loader_called_;
+  }
+
+  // ResourceRequestContext:
+  ResourceLoadPriority ComputeLoadPriority(
+      const FetchParameters& params) override;
+  void RecordTrace() override;
+
+ private:
+  ResourceFetcher& fetcher_;
+  FetchParameters& params_;
+  KURL bundle_url_for_uuid_resources_;
+  const ResourceFactory& factory_;
+  const bool has_transparent_placeholder_image_;
+  bool was_upgrade_for_loader_called_ = true;
+#if DCHECK_IS_ON()
+  bool determined_initial_blocked_reason_ = false;
+#endif
+};
 
 ResourceFetcherInit::ResourceFetcherInit(
     DetachableResourceFetcherProperties& properties,
@@ -660,18 +685,6 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
   return priority;
 }
 
-ResourceLoadPriority ResourceFetcher::ComputeLoadPriorityHelper(
-    ResourceType resource_type,
-    ResourcePriority::VisibilityStatus visibility,
-    const FetchParameters& params) {
-  return ComputeLoadPriority(
-      resource_type, params.GetResourceRequest(), visibility, params.Defer(),
-      params.GetSpeculativePreloadType(), params.GetRenderBlockingBehavior(),
-      params.GetScriptType(), params.IsLinkPreload(), params.GetResourceWidth(),
-      params.GetResourceHeight(), params.IsPotentiallyLCPElement(),
-      params.IsPotentiallyLCPInfluencer());
-}
-
 // Boost the priority for the first N not-small images from the preload scanner
 ResourceLoadPriority ResourceFetcher::AdjustImagePriority(
     const ResourceLoadPriority priority_so_far,
@@ -901,12 +914,13 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
                                   resource->GetResponse());
   }
 
-  // Skip ResourceLoadObserver callbacks for placeholder images to get maximum
-  // performance.
-  // TODO(crbug.com/41496436): Explore skipping this in general for
+  // Only call ResourceLoadObserver callbacks for placeholder images when
+  // devtools is opened to get maximum performance.
+  // TODO(crbug.com/41496436): Explore optimizing this in general for
   // `is_static_data`.
   if (!IsSimplifyLoadingTransparentPlaceholderImageEnabled() ||
-      (request.GetKnownTransparentPlaceholderImageIndex() == kNotFound)) {
+      (request.GetKnownTransparentPlaceholderImageIndex() == kNotFound) ||
+      (resource_load_observer_->InterestedInAllRequests())) {
     resource_load_observer_->WillSendRequest(
         request, ResourceResponse() /* redirects */, resource->GetType(),
         resource->Options(), render_blocking_behavior, resource);
@@ -955,13 +969,18 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
     AtomicString initiator_type = resource->IsPreloadedByEarlyHints()
                                       ? AtomicString(kEarlyHintsInitiatorType)
                                       : resource->Options().initiator_info.name;
-    scheduled_resource_timing_reports_.push_back(
-        ScheduledResourceTimingInfo{std::move(info), initiator_type});
+    // If the fetch originated from user agent CSS we do not emit a resource
+    // timing entry.
+    if (initiator_type != fetch_initiator_type_names::kUacss) {
+      scheduled_resource_timing_reports_.push_back(
+          ScheduledResourceTimingInfo{std::move(info), initiator_type});
 
-    if (!resource_timing_report_timer_.IsActive())
-      resource_timing_report_timer_.StartOneShot(base::TimeDelta(), FROM_HERE);
+      if (!resource_timing_report_timer_.IsActive()) {
+        resource_timing_report_timer_.StartOneShot(base::TimeDelta(),
+                                                   FROM_HERE);
+      }
+    }
   }
-  resource->SetIsLoadedFromMemoryCache();
 }
 
 Resource* ResourceFetcher::CreateResourceForStaticData(
@@ -1188,91 +1207,62 @@ void ResourceFetcher::RemovePreload(Resource* resource) {
     preloads_.erase(it);
 }
 
-std::optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
-    FetchParameters& params,
-    const ResourceFactory& factory,
-    WebScopedVirtualTimePauser& virtual_time_pauser) {
+std::optional<ResourceRequestBlockedReason>
+ResourceFetcher::UpdateRequestForTransparentPlaceholderImage(
+    FetchParameters& params) {
   ResourceRequest& resource_request = params.MutableResourceRequest();
+  // Should only be called if request has transparent-placholder-image.
+  DCHECK(IsSimplifyLoadingTransparentPlaceholderImageEnabled() &&
+         (resource_request.GetKnownTransparentPlaceholderImageIndex() !=
+          kNotFound));
+  // Since we are not actually sending the request to the server,
+  // we skip construction of the full ResourceRequest for performance,
+  // and only set the properties needed for observer callbacks.
+  // TODO(crbug.com/41496436): We need additional work to expand to
+  // generic data urls.
+  resource_request.SetPriority(ResourceLoadPriority::kLow);
+  SetReferrer(resource_request, properties_->GetFetchClientSettingsObject());
 
-  if (IsSimplifyLoadingTransparentPlaceholderImageEnabled() &&
-      (resource_request.GetKnownTransparentPlaceholderImageIndex() !=
-       kNotFound)) {
-    // Since we are not actually sending the request to the server,
-    // we skip construction of the ResourceRequest for performance.
-    // TODO(crbug.com/41496436): This breaks all observers which were notified
-    // of the request previously, so we need additional work to expand to
-    // generic data urls.
-
-    // We check the report-only and enforced headers here to ensure we report
-    // and block things we ought to block.
-    if (Context().CheckAndEnforceCSPForRequest(
-            resource_request.GetRequestContext(),
-            resource_request.GetRequestDestination(), params.Url(),
-            params.Options(), ReportingDisposition::kReport, params.Url(),
-            ResourceRequestHead::RedirectStatus::kNoRedirect) ==
-        ResourceRequestBlockedReason::kCSP) {
-      return ResourceRequestBlockedReason::kCSP;
-    }
-
-    return std::nullopt;
+  // We check the report-only and enforced headers here to ensure we report
+  // and block things we ought to block.
+  if (Context().CheckAndEnforceCSPForRequest(
+          resource_request.GetRequestContext(),
+          resource_request.GetRequestDestination(), params.Url(),
+          params.Options(), ReportingDisposition::kReport, params.Url(),
+          ResourceRequestHead::RedirectStatus::kNoRedirect) ==
+      ResourceRequestBlockedReason::kCSP) {
+    return ResourceRequestBlockedReason::kCSP;
   }
 
-  ResourceType resource_type = factory.GetType();
-  const ResourceLoaderOptions& options = params.Options();
+  return std::nullopt;
+}
 
-  DCHECK(options.synchronous_policy == kRequestAsynchronously ||
-         resource_type == ResourceType::kRaw ||
-         resource_type == ResourceType::kXSLStyleSheet);
-
-  KURL bundle_url_for_uuid_resources;
+KURL ResourceFetcher::PrepareRequestForWebBundle(
+    ResourceRequest& resource_request) const {
   if (resource_request.GetWebBundleTokenParams()) {
     DCHECK_EQ(resource_request.GetRequestDestination(),
               network::mojom::RequestDestination::kWebBundle);
-  } else {
-    AttachWebBundleTokenIfNeeded(resource_request);
-    if (resource_request.Url().Protocol() == "uuid-in-package" &&
-        resource_request.GetWebBundleTokenParams()) {
-      // We use the bundle URL for uuid-in-package: resources for security
-      // checks.
-      bundle_url_for_uuid_resources =
-          MemoryCache::RemoveFragmentIdentifierIfNeeded(
-              resource_request.GetWebBundleTokenParams()->bundle_url);
-    }
+    return KURL();
   }
+  if (SubresourceWebBundle* bundle =
+          GetMatchingBundle(resource_request.Url())) {
+    resource_request.SetWebBundleTokenParams(
+        ResourceRequestHead::WebBundleTokenParams(bundle->GetBundleUrl(),
+                                                  bundle->WebBundleToken(),
+                                                  mojo::NullRemote()));
 
-  params.OverrideContentType(factory.ContentType());
-
-  return PrepareResourceRequest(
-      resource_type, properties_->GetFetchClientSettingsObject(), params,
-      Context(), virtual_time_pauser,
-      WTF::BindOnce(
-          &ResourceFetcher::ComputeLoadPriorityHelper,
-          // This callback will be run synchronously, so no cyclic dependency.
-          WrapPersistent(this), resource_type, ResourcePriority::kNotVisible),
-      WTF::BindOnce([](const ResourceRequest& r) {
-        TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(
-            TRACE_DISABLED_BY_DEFAULT("network"), "ResourcePrioritySet",
-            TRACE_ID_WITH_SCOPE("BlinkResourceID",
-                                TRACE_ID_LOCAL(r.InspectorId())),
-            "priority", r.Priority());
-      }),
-      bundle_url_for_uuid_resources);
-}
-
-void ResourceFetcher::AttachWebBundleTokenIfNeeded(
-    ResourceRequest& resource_request) const {
-  SubresourceWebBundle* bundle = GetMatchingBundle(resource_request.Url());
-  if (!bundle)
-    return;
-  resource_request.SetWebBundleTokenParams(
-      ResourceRequestHead::WebBundleTokenParams(bundle->GetBundleUrl(),
-                                                bundle->WebBundleToken(),
-                                                mojo::NullRemote()));
-
-  // Skip the service worker for a short term solution.
-  // TODO(crbug.com/1240424): Figure out the ideal design of the service
-  // worker integration.
-  resource_request.SetSkipServiceWorker(true);
+    // Skip the service worker for a short term solution.
+    // TODO(crbug.com/1240424): Figure out the ideal design of the service
+    // worker integration.
+    resource_request.SetSkipServiceWorker(true);
+  }
+  if (resource_request.Url().Protocol() == "uuid-in-package" &&
+      resource_request.GetWebBundleTokenParams()) {
+    // We use the bundle URL for uuid-in-package: resources for security
+    // checks.
+    return resource_request.GetWebBundleTokenParams()->bundle_url;
+  }
+  return KURL();
 }
 
 SubresourceWebBundleList*
@@ -1356,8 +1346,9 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
 
   WebScopedVirtualTimePauser pauser;
 
+  ResourcePrepareHelper prepare_helper(*this, params, factory);
   std::optional<ResourceRequestBlockedReason> blocked_reason =
-      PrepareRequest(params, factory, pauser);
+      prepare_helper.PrepareRequestForCacheAccess(pauser);
   if (blocked_reason) {
     auto* resource = ResourceForBlockedRequest(params, factory,
                                                blocked_reason.value(), client);
@@ -1383,6 +1374,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   // deferred.
   if (!is_stale_revalidation &&
       (archive_ || (is_data_url && defer_policy != DeferPolicy::kDefer))) {
+    prepare_helper.UpgradeForLoaderIfNecessary(pauser);
     resource = CreateResourceForStaticData(params, factory);
     if (resource) {
       policy =
@@ -1402,20 +1394,21 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
       MemoryCache::RemoveFragmentIdentifierIfNeeded(params.Url()));
 
   if (!is_stale_revalidation && !resource) {
+    if (!prepare_helper.WasUpgradeForLoaderCalled() &&
+        preloads_.find(PreloadKey(params.Url(), resource_type)) !=
+            preloads_.end()) {
+      prepare_helper.UpgradeForLoaderIfNecessary(pauser);
+    }
     resource = MatchPreload(params, resource_type);
     if (resource) {
       policy = RevalidationPolicy::kUse;
+      prepare_helper.UpgradeForLoaderIfNecessary(pauser);
       // If |params| is for a blocking resource and a preloaded resource is
       // found, we may need to make it block the onload event.
       MakePreloadedResourceBlockOnloadIfNeeded(resource, params);
     } else if (IsMainThread()) {
-      if (base::FeatureList::IsEnabled(features::kScopeMemoryCachePerContext) &&
-          !in_cached_resources_map) {
-        resource = nullptr;
-      } else {
-        resource = MemoryCache::Get()->ResourceForURL(
-            params.Url(), GetCacheIdentifier(params.Url()));
-      }
+      resource = MemoryCache::Get()->ResourceForURL(
+          params.Url(), GetCacheIdentifier(params.Url()));
       if (resource) {
         policy = DetermineRevalidationPolicy(resource_type, params, *resource,
                                              is_static_data);
@@ -1427,6 +1420,10 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
         }
       }
     }
+  }
+  if (!prepare_helper.WasUpgradeForLoaderCalled() &&
+      policy != RevalidationPolicy::kUse) {
+    prepare_helper.UpgradeForLoaderIfNecessary(pauser);
   }
 
   UpdateMemoryCacheStats(
@@ -1476,10 +1473,6 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     resource->DidChangePriority(resource_request.Priority(), 0);
   }
 
-  // The resource width can change after the request was initially created.
-  resource->UpdateResourceWidth(
-      resource_request.HttpHeaderField(AtomicString("sec-ch-width")));
-
   // If only the fragment identifiers differ, it is the same resource.
   DCHECK(EqualIgnoringFragmentIdentifier(resource->Url(), params.Url()));
   if (policy == RevalidationPolicy::kUse &&
@@ -1521,7 +1514,21 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   // loading immediately. If revalidation policy was determined as |Revalidate|,
   // the resource was already initialized for the revalidation here, but won't
   // start loading.
-  if (ResourceNeedsLoad(resource, policy, defer_policy)) {
+  const bool needs_load = ResourceNeedsLoad(resource, policy, defer_policy);
+  if (needs_load) {
+    // If a load is necessary, force upgrade so that the resource width is
+    // updated. This is a bit heavyweight, and could be optimized by adding
+    // a new function specifically to add the width.
+    prepare_helper.UpgradeForLoaderIfNecessary(pauser);
+  }
+
+  // The resource width can change after the request was initially created.
+  if (prepare_helper.WasUpgradeForLoaderCalled()) {
+    resource->UpdateResourceWidth(
+        resource_request.HttpHeaderField(AtomicString("sec-ch-width")));
+  }
+
+  if (needs_load) {
     if (!StartLoad(resource,
                    std::move(params.MutableResourceRequest().MutableBody()),
                    load_blocking_policy, params.GetRenderBlockingBehavior())) {
@@ -1713,12 +1720,9 @@ Resource* ResourceFetcher::CreateResourceForLoading(
     const ResourceFactory& factory) {
   const String cache_identifier =
       GetCacheIdentifier(params.GetResourceRequest().Url());
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kScopeMemoryCachePerContext)) {
-    DCHECK(!IsMainThread() || params.IsStaleRevalidation() ||
-           !MemoryCache::Get()->ResourceForURL(
-               params.GetResourceRequest().Url(), cache_identifier));
-  }
+  DCHECK(!IsMainThread() || params.IsStaleRevalidation() ||
+         !MemoryCache::Get()->ResourceForURL(params.GetResourceRequest().Url(),
+                                             cache_identifier));
 
   RESOURCE_LOADING_DVLOG(1) << "Loading Resource for "
                             << params.GetResourceRequest().Url().ElidedString();
@@ -2821,11 +2825,12 @@ std::optional<KURL> ResourceFetcher::GetSubresourceBundleSourceUrl(
 
 void ResourceFetcher::EmulateLoadStartedForInspector(
     Resource* resource,
-    const KURL& url,
     mojom::blink::RequestContextType request_context,
     network::mojom::RequestDestination request_destination,
     const AtomicString& initiator_name) {
   base::AutoReset<bool> r(&is_in_request_resource_, true);
+
+  const KURL& url = resource->Url();
   if (CachedResource(url)) {
     return;
   }
@@ -3032,9 +3037,9 @@ void ResourceFetcher::MaybeSaveResourceToStrongReference(Resource* resource) {
     return;
   }
 
-  static const size_t total_size_threshold = static_cast<size_t>(
+  const size_t total_size_threshold = static_cast<size_t>(
       features::kMemoryCacheStrongReferenceTotalSizeThresholdParam.Get());
-  static const size_t resource_size_threshold = static_cast<size_t>(
+  const size_t resource_size_threshold = static_cast<size_t>(
       features::kMemoryCacheStrongReferenceResourceSizeThresholdParam.Get());
   const size_t resource_size =
       static_cast<size_t>(resource->GetResponse().DecodedBodyLength());
@@ -3372,6 +3377,97 @@ void ResourceFetcher::UpdateServiceWorkerSubresourceMetrics(
       metrics.matched_race_network_and_fetch_router_source_count++;
       break;
   }
+}
+
+ResourceFetcher::ResourcePrepareHelper::ResourcePrepareHelper(
+    ResourceFetcher& fetcher,
+    FetchParameters& params,
+    const ResourceFactory& factory)
+    : fetcher_(fetcher),
+      params_(params),
+      factory_(factory),
+      has_transparent_placeholder_image_(
+          fetcher.IsSimplifyLoadingTransparentPlaceholderImageEnabled() &&
+          (params.GetResourceRequest()
+               .GetKnownTransparentPlaceholderImageIndex() != kNotFound)) {}
+
+std::optional<ResourceRequestBlockedReason>
+ResourceFetcher::ResourcePrepareHelper::PrepareRequestForCacheAccess(
+    WebScopedVirtualTimePauser& pauser) {
+#if DCHECK_IS_ON()
+  DCHECK(!determined_initial_blocked_reason_);
+  determined_initial_blocked_reason_ = true;
+#endif
+  if (has_transparent_placeholder_image_) {
+    return fetcher_.UpdateRequestForTransparentPlaceholderImage(params_);
+  }
+  ResourceRequest& resource_request = params_.MutableResourceRequest();
+  bundle_url_for_uuid_resources_ =
+      fetcher_.PrepareRequestForWebBundle(resource_request);
+
+  ResourceType resource_type = factory_.GetType();
+  const ResourceLoaderOptions& options = params_.Options();
+
+  DCHECK(options.synchronous_policy == kRequestAsynchronously ||
+         resource_type == ResourceType::kRaw ||
+         resource_type == ResourceType::kXSLStyleSheet);
+
+  if (!RuntimeEnabledFeatures::
+          MinimimalResourceRequestPrepBeforeCacheLookupEnabled()) {
+    params_.OverrideContentType(factory_.ContentType());
+    return PrepareResourceRequest(
+        resource_type, fetcher_.properties_->GetFetchClientSettingsObject(),
+        params_, fetcher_.Context(), pauser, *this,
+        bundle_url_for_uuid_resources_);
+  }
+
+  std::optional<ResourceRequestBlockedReason> blocked_reason =
+      PrepareResourceRequestForCacheAccess(
+          resource_type, fetcher_.properties_->GetFetchClientSettingsObject(),
+          bundle_url_for_uuid_resources_, *this, fetcher_.Context(), params_);
+  if (blocked_reason) {
+    return blocked_reason;
+  }
+  was_upgrade_for_loader_called_ = false;
+  if (params_.GetResourceRequest().RequiresUpgradeForLoader()) {
+    UpgradeForLoaderIfNecessary(pauser);
+  }
+  return std::nullopt;
+}
+
+void ResourceFetcher::ResourcePrepareHelper::UpgradeForLoaderIfNecessary(
+    WebScopedVirtualTimePauser& pauser) {
+#if DCHECK_IS_ON()
+  DCHECK(determined_initial_blocked_reason_);
+#endif
+  if (was_upgrade_for_loader_called_) {
+    return;
+  }
+  was_upgrade_for_loader_called_ = true;
+  params_.OverrideContentType(factory_.ContentType());
+  UpgradeResourceRequestForLoaderNew(factory_.GetType(), params_,
+                                     fetcher_.Context(), *this, pauser);
+}
+
+ResourceLoadPriority
+ResourceFetcher::ResourcePrepareHelper::ComputeLoadPriority(
+    const FetchParameters& params) {
+  return fetcher_.ComputeLoadPriority(
+      factory_.GetType(), params.GetResourceRequest(),
+      ResourcePriority::kNotVisible, params.Defer(),
+      params.GetSpeculativePreloadType(), params.GetRenderBlockingBehavior(),
+      params.GetScriptType(), params.IsLinkPreload(), params.GetResourceWidth(),
+      params.GetResourceHeight(), params.IsPotentiallyLCPElement(),
+      params.IsPotentiallyLCPInfluencer());
+}
+
+void ResourceFetcher::ResourcePrepareHelper::RecordTrace() {
+  const ResourceRequest& resource_request = params_.GetResourceRequest();
+  TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(
+      TRACE_DISABLED_BY_DEFAULT("network"), "ResourcePrioritySet",
+      TRACE_ID_WITH_SCOPE("BlinkResourceID",
+                          TRACE_ID_LOCAL(resource_request.InspectorId())),
+      "priority", resource_request.Priority());
 }
 
 }  // namespace blink

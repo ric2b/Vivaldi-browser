@@ -11,7 +11,8 @@
 @implementation VivaldiTableViewTextSpinnerButtonItem
 
 - (instancetype)initWithType:(NSInteger)type {
-  if (self = [super initWithType:type]) {
+  self = [super initWithType:type];
+  if (self) {
     self.cellClass = [VivaldiTableViewTextSpinnerButtonCell class];
     return self;
   }

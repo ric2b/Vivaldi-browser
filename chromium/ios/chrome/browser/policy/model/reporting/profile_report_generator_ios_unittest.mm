@@ -19,8 +19,8 @@
 #import "ios/chrome/browser/policy/model/browser_state_policy_connector_mock.h"
 #import "ios/chrome/browser/policy/model/reporting/reporting_delegate_factory_ios.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
@@ -28,9 +28,7 @@
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
-#import "ios/chrome/test/ios_chrome_scoped_testing_chrome_browser_state_manager.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
-#import "ios/chrome/test/testing_application_context.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/platform_test.h"
@@ -39,39 +37,28 @@ namespace em = enterprise_management;
 
 namespace enterprise_reporting {
 
-namespace {
-
-const base::FilePath kProfilePath = base::FilePath("/fake/profile/default");
-
-}  // namespace
-
 class ProfileReportGeneratorIOSTest : public PlatformTest {
  public:
   ProfileReportGeneratorIOSTest() : generator_(&delegate_factory_) {
+    InitPolicyMap();
+
     TestChromeBrowserState::Builder builder;
-    builder.SetPath(kProfilePath);
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetDefaultFactory());
-    InitMockPolicyService();
     builder.SetPolicyConnector(
         std::make_unique<BrowserStatePolicyConnectorMock>(
-            std::move(policy_service_), &schema_registry_));
-
-    InitPolicyMap();
-
-    scoped_browser_state_manager_ =
-        std::make_unique<IOSChromeScopedTestingChromeBrowserStateManager>(
-            std::make_unique<TestChromeBrowserStateManager>(builder.Build()));
+            CreateMockPolicyService(), &schema_registry_));
+    browser_state_ = profile_manager_.AddProfileWithBuilder(std::move(builder));
 
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
-        GetBrowserState(),
+        browser_state_.get(),
         std::make_unique<FakeAuthenticationServiceDelegate>());
     authentication_service_ =
-        AuthenticationServiceFactory::GetForBrowserState(GetBrowserState());
+        AuthenticationServiceFactory::GetForBrowserState(browser_state_.get());
     account_manager_service_ =
         ChromeAccountManagerServiceFactory::GetForBrowserState(
-            GetBrowserState());
+            browser_state_.get());
   }
 
   ProfileReportGeneratorIOSTest(const ProfileReportGeneratorIOSTest&) = delete;
@@ -79,13 +66,15 @@ class ProfileReportGeneratorIOSTest : public PlatformTest {
       const ProfileReportGeneratorIOSTest&) = delete;
   ~ProfileReportGeneratorIOSTest() override = default;
 
-  void InitMockPolicyService() {
-    policy_service_ = std::make_unique<policy::MockPolicyService>();
+  std::unique_ptr<policy::MockPolicyService> CreateMockPolicyService() {
+    auto policy_service = std::make_unique<policy::MockPolicyService>();
 
-    ON_CALL(*policy_service_.get(),
+    ON_CALL(*policy_service.get(),
             GetPolicies(::testing::Eq(policy::PolicyNamespace(
                 policy::POLICY_DOMAIN_CHROME, std::string()))))
         .WillByDefault(::testing::ReturnRef(policy_map_));
+
+    return policy_service;
   }
 
   void InitPolicyMap() {
@@ -109,33 +98,27 @@ class ProfileReportGeneratorIOSTest : public PlatformTest {
   }
 
   std::unique_ptr<em::ChromeUserProfileInfo> GenerateReport() {
+    const base::FilePath path = GetBrowserStatePath();
+    const std::string& name = GetProfileName();
     std::unique_ptr<em::ChromeUserProfileInfo> report =
-        generator_.MaybeGenerate(kProfilePath,
-                                 kProfilePath.BaseName().AsUTF8Unsafe(),
-                                 ReportType::kFull);
+        generator_.MaybeGenerate(path, name, ReportType::kFull);
 
     if (!report)
       return nullptr;
 
-    EXPECT_EQ(kProfilePath.BaseName().AsUTF8Unsafe(), report->name());
-    EXPECT_EQ(kProfilePath.AsUTF8Unsafe(), report->id());
+    EXPECT_EQ(name, report->name());
+    EXPECT_EQ(path.AsUTF8Unsafe(), report->id());
     EXPECT_TRUE(report->is_detail_available());
 
     return report;
   }
 
-  ChromeBrowserState* GetBrowserState() {
-    return GetTestChromeBrowserStateManager()
-        ->GetLastUsedBrowserStateForTesting();
+  base::FilePath GetBrowserStatePath() const {
+    return browser_state_->GetStatePath();
   }
 
-  TestChromeBrowserStateManager* GetTestChromeBrowserStateManager() {
-    // A TestChromeBrowserStateManager is installed in the constructor
-    // via `scoped_browser_state_manager_`, so it is safe to downcast
-    // the ChromeBrowserStateManager.
-    DCHECK(scoped_browser_state_manager_);
-    return static_cast<TestChromeBrowserStateManager*>(
-        GetApplicationContext()->GetChromeBrowserStateManager());
+  const std::string& GetProfileName() const {
+    return browser_state_->GetProfileName();
   }
 
   ReportingDelegateFactoryIOS delegate_factory_;
@@ -143,12 +126,12 @@ class ProfileReportGeneratorIOSTest : public PlatformTest {
 
  private:
   web::WebTaskEnvironment task_environment_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
+  TestProfileManagerIOS profile_manager_;
+  raw_ptr<ChromeBrowserState> browser_state_;
 
-  std::unique_ptr<policy::MockPolicyService> policy_service_;
   policy::SchemaRegistry schema_registry_;
   policy::PolicyMap policy_map_;
-  std::unique_ptr<IOSChromeScopedTestingChromeBrowserStateManager>
-      scoped_browser_state_manager_;
   raw_ptr<AuthenticationService> authentication_service_;
   raw_ptr<ChromeAccountManagerService> account_manager_service_;
 };

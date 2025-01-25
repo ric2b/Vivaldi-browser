@@ -81,6 +81,11 @@ source_set("unit_tests") {
     "history_notice_utils_unittest.cc",
   ]
 
+  if (is_ios) {
+    # pref_names_unittest.cc tests a method only available in iOS.
+    sources += [ "pref_names_unittest.cc" ]
+  }
+
   deps = [
     ":core",
     "//base/test:test_support",
@@ -92,6 +97,7 @@ source_set("unit_tests") {
     "//components/sync:test_support",
     "//components/sync_preferences:test_support",
     "//components/version_info:version_info",
+    "//components/webdata/common",
     "//net:test_support",
     "//testing/gtest",
   ]

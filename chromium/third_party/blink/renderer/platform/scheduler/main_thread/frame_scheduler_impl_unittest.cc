@@ -175,7 +175,7 @@ constexpr TaskType kAllFrameTaskTypes[] = {
     TaskType::kInternalNavigationCancellation};
 
 static_assert(
-    static_cast<int>(TaskType::kMaxValue) == 86,
+    static_cast<int>(TaskType::kMaxValue) == 87,
     "When adding a TaskType, make sure that kAllFrameTaskTypes is updated.");
 
 void AppendToVectorTestTask(Vector<String>* vector, String value) {
@@ -202,6 +202,10 @@ class FrameSchedulerDelegateForTesting : public FrameScheduler::Delegate {
     return base::UnguessableToken::Null();
   }
   MOCK_METHOD(void, UpdateBackForwardCacheDisablingFeatures, (BlockingDetails));
+
+  DocumentResourceCoordinator* GetDocumentResourceCoordinator() override {
+    return nullptr;
+  }
 
   int update_unreported_task_time_calls_ = 0;
 };
@@ -1651,7 +1655,7 @@ class FrameSchedulerImplLowPriorityAsyncScriptExecutionTest
     } else if (specified_priority() == "best_effort") {
       return TaskPriority::kBestEffortPriority;
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 };
 

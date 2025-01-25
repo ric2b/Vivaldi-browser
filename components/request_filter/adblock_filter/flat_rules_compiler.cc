@@ -36,40 +36,40 @@ struct OffsetVectorCompare {
                                         compare);
   }
 };
-using FlatDomainMap = std::map<std::vector<FlatStringOffset>,
-                               FlatStringListOffset,
-                               OffsetVectorCompare>;
+using FlatStringOffsetMap = std::map<std::vector<FlatStringOffset>,
+                                     FlatStringListOffset,
+                                     OffsetVectorCompare>;
 
 template <typename T>
-FlatStringListOffset SerializeDomainList(
+FlatStringListOffset SerializeStringList(
     flatbuffers::FlatBufferBuilder* builder,
     const T& container,
-    FlatDomainMap* domain_map) {
+    FlatStringOffsetMap* string_offset_map) {
   if (container.empty())
     return FlatStringListOffset();
 
-  std::vector<FlatStringOffset> domains;
-  domains.reserve(container.size());
+  std::vector<FlatStringOffset> strings;
+  strings.reserve(container.size());
   for (const std::string& str : container)
-    domains.push_back(builder->CreateSharedString(str));
+    strings.push_back(builder->CreateSharedString(str));
 
   auto precedes = [&builder](FlatStringOffset lhs, FlatStringOffset rhs) {
-    return CompareDomains(
+    return SizePrioritizedStringCompare(
                ToStringPiece(flatbuffers::GetTemporaryPointer(*builder, lhs)),
                ToStringPiece(flatbuffers::GetTemporaryPointer(*builder, rhs))) <
            0;
   };
-  if (domains.empty())
+  if (strings.empty())
     return FlatStringListOffset();
-  std::sort(domains.begin(), domains.end(), precedes);
+  std::sort(strings.begin(), strings.end(), precedes);
 
-  // Share domain lists if we've already serialized an exact duplicate. Note
-  // that this can share excluded and included domain lists.
-  DCHECK(domain_map);
-  auto it = domain_map->find(domains);
-  if (it == domain_map->end()) {
-    auto offset = builder->CreateVector(domains);
-    (*domain_map)[domains] = offset;
+  // Share string lists if we've already serialized an exact duplicate. Note
+  // that this can share excluded and included domain lists, and modifier lists.
+  DCHECK(string_offset_map);
+  auto it = string_offset_map->find(strings);
+  if (it == string_offset_map->end()) {
+    auto offset = builder->CreateVector(strings);
+    (*string_offset_map)[strings] = offset;
     return offset;
   }
   return it->second;
@@ -116,6 +116,10 @@ uint16_t ResourceTypesFromRequestFilterRule(const RequestFilterRule& rule) {
     resource_types |= flat::ResourceType_WEBTRANSPORT;
   if (rule.resource_types.test(RequestFilterRule::kOther))
     resource_types |= flat::ResourceType_OTHER;
+  if (rule.explicit_types.test(RequestFilterRule::kDocument))
+    resource_types |= flat::ResourceType_DOCUMENT;
+  if (rule.explicit_types.test(RequestFilterRule::kPopup))
+    resource_types |= flat::ResourceType_POPUP;
   return resource_types;
 }
 
@@ -139,14 +143,14 @@ flat::Modifier ModifierFromRequestFilterModifier(
       return flat::Modifier_REDIRECT;
     case RequestFilterRule::kCsp:
       return flat::Modifier_CSP;
+    case RequestFilterRule::kAdQueryTrigger:
+      return flat::Modifier_AD_QUERY_TRIGGER;
   }
 }
 
 uint8_t ActivationTypesFromRequestFilterRule(const RequestFilterRule& rule) {
   uint8_t activation_types = 0;
-  if (rule.activation_types.test(RequestFilterRule::kPopup))
-    activation_types |= flat::ActivationType_POPUP;
-  if (rule.activation_types.test(RequestFilterRule::kDocument))
+  if (rule.activation_types.test(RequestFilterRule::kWholeDocument))
     activation_types |= flat::ActivationType_DOCUMENT;
   if (rule.activation_types.test(RequestFilterRule::kElementHide))
     activation_types |= flat::ActivationType_ELEMENT_HIDE;
@@ -154,6 +158,8 @@ uint8_t ActivationTypesFromRequestFilterRule(const RequestFilterRule& rule) {
     activation_types |= flat::ActivationType_GENERIC_HIDE;
   if (rule.activation_types.test(RequestFilterRule::kGenericBlock))
     activation_types |= flat::ActivationType_GENERIC_BLOCK;
+  if (rule.activation_types.test(RequestFilterRule::kAttributeAds))
+    activation_types |= flat::ActivationType_ATTRIBUTE_ADS;
   return activation_types;
 }
 
@@ -193,21 +199,24 @@ void AddRuleToBuffer(
     flatbuffers::FlatBufferBuilder* builder,
     const RequestFilterRule& rule,
     std::vector<FlatOffset<flat::RequestFilterRule>>* rules_offsets,
-    FlatDomainMap* domain_map) {
+    FlatStringOffsetMap* string_offset_map) {
   FlatStringListOffset domains_included_offset =
-      SerializeDomainList(builder, rule.included_domains, domain_map);
+      SerializeStringList(builder, rule.included_domains, string_offset_map);
   FlatStringListOffset domains_excluded_offset =
-      SerializeDomainList(builder, rule.excluded_domains, domain_map);
+      SerializeStringList(builder, rule.excluded_domains, string_offset_map);
 
   FlatStringOffset pattern_offset = builder->CreateSharedString(rule.pattern);
 
   FlatStringOffset ngram_search_string_offset =
       StringOffsetFromOptionalString(builder, rule.ngram_search_string);
 
+  FlatStringListOffset ad_domains_and_query_triggers = SerializeStringList(
+      builder, rule.ad_domains_and_query_triggers, string_offset_map);
+
   FlatStringOffset host_offset =
       StringOffsetFromOptionalString(builder, rule.host);
-  FlatStringOffset modifier_value_offset =
-      StringOffsetFromOptionalString(builder, rule.modifier_value);
+  FlatStringListOffset modifier_value_offset =
+      SerializeStringList(builder, rule.modifier_values, string_offset_map);
 
   rules_offsets->push_back(flat::CreateRequestFilterRule(
       *builder, DecisionFromRequestFilterRule(rule),
@@ -216,19 +225,19 @@ void AddRuleToBuffer(
       ActivationTypesFromRequestFilterRule(rule),
       PatternTypeFromRequestFilterRule(rule),
       AnchorTypeFromRequestFilterRule(rule), host_offset,
-      domains_included_offset, domains_excluded_offset,
-      ModifierFromRequestFilterModifier(rule), modifier_value_offset,
-      pattern_offset, ngram_search_string_offset));
+      ad_domains_and_query_triggers, domains_included_offset,
+      domains_excluded_offset, ModifierFromRequestFilterModifier(rule),
+      modifier_value_offset, pattern_offset, ngram_search_string_offset));
 }
 
 FlatOffset<flat::ContentInjectionRuleCore> AddContentInjectionRuleCoreToBuffer(
     flatbuffers::FlatBufferBuilder* builder,
     const ContentInjectionRuleCore& core,
-    FlatDomainMap* domain_map) {
+    FlatStringOffsetMap* string_offser_map) {
   FlatStringListOffset domains_included_offset =
-      SerializeDomainList(builder, core.included_domains, domain_map);
+      SerializeStringList(builder, core.included_domains, string_offser_map);
   FlatStringListOffset domains_excluded_offset =
-      SerializeDomainList(builder, core.excluded_domains, domain_map);
+      SerializeStringList(builder, core.excluded_domains, string_offser_map);
   return flat::CreateContentInjectionRuleCore(*builder, core.is_allow_rule,
                                               domains_included_offset,
                                               domains_excluded_offset);
@@ -237,10 +246,11 @@ FlatOffset<flat::ContentInjectionRuleCore> AddContentInjectionRuleCoreToBuffer(
 void AddRuleToBuffer(flatbuffers::FlatBufferBuilder* builder,
                      const CosmeticRule& rule,
                      std::vector<FlatOffset<flat::CosmeticRule>>* rules_offsets,
-                     FlatDomainMap* domain_map) {
+                     FlatStringOffsetMap* string_offset_map) {
   FlatStringOffset selector_offset = builder->CreateSharedString(rule.selector);
   FlatOffset<flat::ContentInjectionRuleCore> rule_core_offset =
-      AddContentInjectionRuleCoreToBuffer(builder, rule.core, domain_map);
+      AddContentInjectionRuleCoreToBuffer(builder, rule.core,
+                                          string_offset_map);
   rules_offsets->push_back(
       flat::CreateCosmeticRule(*builder, rule_core_offset, selector_offset));
 }
@@ -249,7 +259,7 @@ void AddRuleToBuffer(
     flatbuffers::FlatBufferBuilder* builder,
     const ScriptletInjectionRule& rule,
     std::vector<FlatOffset<flat::ScriptletInjectionRule>>* rules_offsets,
-    FlatDomainMap* domain_map) {
+    FlatStringOffsetMap* string_offset_map) {
   FlatStringOffset scriptlet_name_offset =
       builder->CreateSharedString(rule.scriptlet_name);
   std::vector<FlatStringOffset> argument_offsets;
@@ -257,7 +267,8 @@ void AddRuleToBuffer(
     argument_offsets.push_back(builder->CreateSharedString(argument));
   }
   FlatOffset<flat::ContentInjectionRuleCore> rule_core_offset =
-      AddContentInjectionRuleCoreToBuffer(builder, rule.core, domain_map);
+      AddContentInjectionRuleCoreToBuffer(builder, rule.core,
+                                          string_offset_map);
   rules_offsets->push_back(flat::CreateScriptletInjectionRule(
       *builder, rule_core_offset, scriptlet_name_offset,
       builder->CreateVector(argument_offsets)));
@@ -302,15 +313,15 @@ bool CompileFlatRules(const ParseResult& parse_result,
                       std::string& checksum) {
   flatbuffers::FlatBufferBuilder builder;
   std::vector<FlatOffset<flat::RequestFilterRule>> request_filter_rules_offsets;
-  FlatDomainMap domain_map;
+  FlatStringOffsetMap string_offset_map;
   for (const auto& request_filter_rule : parse_result.request_filter_rules) {
     AddRuleToBuffer(&builder, request_filter_rule,
-                    &request_filter_rules_offsets, &domain_map);
+                    &request_filter_rules_offsets, &string_offset_map);
   }
   std::vector<FlatOffset<flat::CosmeticRule>> cosmetic_rules_offsets;
   for (const auto& cosmetic_rule : parse_result.cosmetic_rules) {
     AddRuleToBuffer(&builder, cosmetic_rule, &cosmetic_rules_offsets,
-                    &domain_map);
+                    &string_offset_map);
   }
 
   std::vector<FlatOffset<flat::ScriptletInjectionRule>>
@@ -318,7 +329,7 @@ bool CompileFlatRules(const ParseResult& parse_result,
   for (const auto& scriptlet_injection_rule :
        parse_result.scriptlet_injection_rules) {
     AddRuleToBuffer(&builder, scriptlet_injection_rule,
-                    &scriptlet_injection_rules_offsets, &domain_map);
+                    &scriptlet_injection_rules_offsets, &string_offset_map);
   }
 
   FlatOffset<flat::RulesList> root_offset = flat::CreateRulesList(

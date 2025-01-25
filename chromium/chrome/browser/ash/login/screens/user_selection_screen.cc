@@ -37,14 +37,14 @@
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/login/reauth_stats.h"
 #include "chrome/browser/ash/login/smart_lock/smart_lock_service.h"
-#include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/users/default_user_image/default_user_images.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/system/system_clock.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/ui/ash/login_screen_client_impl.h"
+#include "chrome/browser/ui/ash/login/login_display_host.h"
+#include "chrome/browser/ui/ash/login/login_screen_client_impl.h"
 #include "chrome/browser/ui/webui/ash/login/l10n_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -289,9 +289,8 @@ class UserSelectionScreen::DircryptoMigrationChecker {
     // If the user may be enterprise-managed, don't display the banner, because
     // migration may be blocked by user policy (and user policy is not available
     // at this time yet).
-    if (signin::AccountManagedStatusFinder::IsEnterpriseUserBasedOnEmail(
-            account_id.GetUserEmail()) ==
-        signin::AccountManagedStatusFinder::EmailEnterpriseStatus::kUnknown) {
+    if (signin::AccountManagedStatusFinder::MayBeEnterpriseUserBasedOnEmail(
+            account_id.GetUserEmail())) {
       UpdateUI(account_id, false);
       return;
     }

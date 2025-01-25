@@ -16,6 +16,12 @@ import org.chromium.ui.ElidedUrlTextView;
 import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.widget.ChromeImageButton;
 
+// Vivaldi
+import android.util.DisplayMetrics;
+import org.chromium.build.BuildConfig;
+import org.chromium.ui.base.ViewUtils;
+import org.chromium.ui.widget.ChromeImageView;
+
 /** Represents the url, a sub page header and container for page info content. */
 public class PageInfoContainer extends FrameLayout {
     public static final float sScale = 0.92f;
@@ -49,6 +55,9 @@ public class PageInfoContainer extends FrameLayout {
     private final View mSubpageHeader;
     private final TextView mSubpageTitle;
 
+    // Vivaldi
+    private ChromeImageView mFavIcon;
+
     public PageInfoContainer(Context context) {
         super(context);
         LayoutInflater.from(context).inflate(R.layout.page_info_container, this, true);
@@ -75,9 +84,21 @@ public class PageInfoContainer extends FrameLayout {
         ChromeImageButton closeButton = findViewById(R.id.page_info_close);
         closeButton.setVisibility(params.showCloseButton ? VISIBLE : GONE);
         closeButton.setOnClickListener(v -> params.closeButtonClickCallback.run());
+        View closeButtonLeftPadding = findViewById(R.id.page_info_close_left_padding);
+        if (closeButtonLeftPadding != null) // Vivaldi
+        closeButtonLeftPadding.setVisibility(params.showCloseButton ? VISIBLE : GONE);
 
         ChromeImageButton backButton = findViewById(R.id.subpage_back_button);
         backButton.setOnClickListener(v -> params.backButtonClickCallback.run());
+
+        // Vivaldi
+        mFavIcon = findViewById(R.id.fav_icon);
+        // Note(Nagamani@vivaldi.com): We need this to make site prefs icons look the same size
+        // and align to center
+        assert getContext() != null;
+        DisplayMetrics displayMetrics = getContext().getResources().getDisplayMetrics();
+        int padding = ViewUtils.dpToPx(displayMetrics, 2);
+        mFavIcon.setPadding(padding, padding, padding, padding);
     }
 
     private void initializeUrlView(View view, Params params) {
@@ -103,9 +124,17 @@ public class PageInfoContainer extends FrameLayout {
                                 showExpanded
                                         ? R.string.page_info_url_expanded
                                         : R.string.page_info_url_truncated));
+
+        // Vivaldi
+        mFavIcon.setVisibility(showExpanded ? GONE : VISIBLE);
     }
 
     public void setFavicon(Drawable favicon) {
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI && mFavIcon != null) {
+            mFavIcon.setImageDrawable(favicon);
+            return;
+        }
         mTruncatedUrlTitle.setCompoundDrawablesRelative(favicon, null, null, null);
     }
 

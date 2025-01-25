@@ -21,7 +21,7 @@ SidePanelCoordinator::~SidePanelCoordinator() {
   }
 }
 
-SidePanelCoordinator::SidePanelCoordinator(Browser* browser)
+SidePanelCoordinator::SidePanelCoordinator(BrowserWindowInterface* browser)
     : browser_(browser) {
   Profile* p = GetProfile();
   DCHECK(p);
@@ -35,7 +35,7 @@ SidePanelCoordinator::SidePanelCoordinator(Browser* browser)
 }
 
 Profile * SidePanelCoordinator::GetProfile() {
-  return browser_->profile();
+  return browser_->GetProfile();
 }
 
 void SidePanelCoordinator::Close() {}

@@ -290,7 +290,8 @@ void CheckPasswordGenerationUKM(const ukm::TestAutoSetUkmRecorder& recorder,
 // Create predictions for |form| using field predictions |field_predictions|.
 std::map<FormSignature, FormPredictions> CreatePredictions(
     const FormData& form,
-    std::vector<std::pair<int, FieldType>> field_predictions) {
+    std::vector<std::pair<int, FieldType>> field_predictions,
+    bool is_override = false) {
   FormPredictions predictions;
   for (const auto& index_prediction : field_predictions) {
     autofill::FieldRendererId renderer_id =
@@ -300,7 +301,7 @@ std::map<FormSignature, FormPredictions> CreatePredictions(
     FieldType server_type = index_prediction.second;
     predictions.fields.emplace_back(renderer_id, field_signature, server_type,
                                     /*may_use_prefilled_placeholder=*/false,
-                                    /*is_override=*/false);
+                                    is_override);
   }
   FormSignature form_signature = CalculateFormSignature(form);
   return {{form_signature, predictions}};
@@ -386,7 +387,7 @@ class PasswordFormManagerTest : public testing::Test,
         password_manager::prefs::kUnenrolledFromGoogleMobileServicesDueToErrors,
         false);
 #endif
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
     pref_service_.registry()->RegisterBooleanPref(
         password_manager::prefs::kBiometricAuthenticationBeforeFilling, true);
 #endif
@@ -395,7 +396,7 @@ class PasswordFormManagerTest : public testing::Test,
     pref_service_.registry()->RegisterIntegerPref(
         password_manager::prefs::kRelaunchChromeBubbleDismissedCounter, 0);
 #endif
-    form_manager_->set_wait_for_server_predictions_for_filling(true);
+    PasswordFormManager::set_wait_for_server_predictions_for_filling(true);
 
     GURL origin = GURL("https://accounts.google.com/a/ServiceLoginAuth");
     GURL action = GURL("https://accounts.google.com/a/ServiceLogin");
@@ -759,18 +760,18 @@ TEST_P(PasswordFormManagerTest, AutofillSignUpForm) {
 #endif
 }
 
-// Check that generation signal is sent the the renderer when new password
+// Checks that generation signal is sent to the renderer when new password
 // fields are marked with autocomplete attribute.
 TEST_P(PasswordFormManagerTest, GenerationOnNewAndConfirmPasswordFields) {
   // Make |observed_form_| to be sign-up form.
   test_api(observed_form_).field(-1).set_autocomplete_attribute("new-password");
-  const autofill::FieldRendererId new_password_render_id =
+  const autofill::FieldRendererId new_password_renderer_id =
       observed_form_.fields().back().renderer_id();
   // Add a confirmation field.
   FormFieldData field;
-  const autofill::FieldRendererId confirm_password_render_id(
-      new_password_render_id.value() + 1);
-  field.set_renderer_id(confirm_password_render_id);
+  const autofill::FieldRendererId confirm_password_renderer_id(
+      new_password_renderer_id.value() + 1);
+  field.set_renderer_id(confirm_password_renderer_id);
   field.set_form_control_type(autofill::FormControlType::kInputPassword);
   field.set_autocomplete_attribute("new-password");
   test_api(observed_form_).Append(field);
@@ -786,9 +787,36 @@ TEST_P(PasswordFormManagerTest, GenerationOnNewAndConfirmPasswordFields) {
 #if BUILDFLAG(IS_IOS)
   EXPECT_EQ(observed_form_.renderer_id(), generation_data.form_renderer_id);
 #else
-  EXPECT_EQ(new_password_render_id, generation_data.new_password_renderer_id);
-  EXPECT_EQ(confirm_password_render_id,
+  EXPECT_EQ(new_password_renderer_id, generation_data.new_password_renderer_id);
+  EXPECT_EQ(confirm_password_renderer_id,
             generation_data.confirmation_password_renderer_id);
+#endif
+}
+
+// Checks that `FormDataParser` classifies text field with `NEW_PASSWORD`
+// override as a new password field.
+TEST_P(PasswordFormManagerTest, GenerationOnTextFieldsDueToOverride) {
+  test_api(observed_form_)
+      .field(kPasswordFieldIndex)
+      .set_form_control_type(autofill::FormControlType::kInputText);
+  auto predictions = CreatePredictions(
+      observed_form_, {{kPasswordFieldIndex, FieldType::NEW_PASSWORD}},
+      /*is_override=*/true);
+
+  PasswordFormGenerationData generation_data;
+  EXPECT_CALL(driver_, FormEligibleForGenerationFound(_))
+      .WillOnce(SaveArg<0>(&generation_data));
+
+  CreateFormManager(observed_form_);
+  form_manager_->ProcessServerPredictions(predictions);
+  fetcher_->NotifyFetchCompleted();
+
+  task_environment_.FastForwardUntilNoTasksRemain();
+#if BUILDFLAG(IS_IOS)
+  EXPECT_EQ(observed_form_.renderer_id(), generation_data.form_renderer_id);
+#else
+  EXPECT_EQ(generation_data.new_password_renderer_id,
+            observed_form_.fields()[kPasswordFieldIndex].renderer_id());
 #endif
 }
 
@@ -934,7 +962,7 @@ TEST_P(PasswordFormManagerTest, CreatePendingCredentialsEmptyStore) {
 
 // Tests creating pending credentials when fetch completed
 TEST_P(PasswordFormManagerTest, CreatePendingCredentialsWhenFetchCompleted) {
-  form_manager_->set_wait_for_server_predictions_for_filling(false);
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
   form_manager_->ProvisionallySave(submitted_form_, &driver_,
                                    possible_usernames_);
   SetNonFederatedAndNotifyFetchCompleted({parsed_submitted_form_});
@@ -2016,6 +2044,152 @@ TEST_P(PasswordFormManagerTest, PresaveGeneratedPasswordExistingCredential) {
   EXPECT_TRUE(saved_form.username_value.empty());
   EXPECT_EQ(form_with_generated_password.password_value,
             saved_form.password_value);
+}
+
+TEST_P(PasswordFormManagerTest, RecordsExactMatch) {
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
+  base::HistogramTester histogram_tester;
+  CreateFormManager(observed_form_);
+  SetNonFederatedAndNotifyFetchCompleted({saved_match_});
+
+  fetcher_->set_preferred_or_potential_matched_form_type(
+      PasswordFormMetricsRecorder::MatchedFormType::kExactMatch);
+
+  form_manager_->Fill();
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.MatchedFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kExactMatch, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.PotentialBestMatchFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kExactMatch, 1);
+}
+
+TEST_P(PasswordFormManagerTest, RecordsPSLMatch) {
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
+  base::HistogramTester histogram_tester;
+  CreateFormManager(observed_form_);
+  SetNonFederatedAndNotifyFetchCompleted({psl_saved_match_});
+
+  fetcher_->set_preferred_or_potential_matched_form_type(
+      PasswordFormMetricsRecorder::MatchedFormType::kPublicSuffixMatch);
+
+  form_manager_->Fill();
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.MatchedFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kPublicSuffixMatch, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.PotentialBestMatchFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kPublicSuffixMatch, 1);
+}
+
+TEST_P(PasswordFormManagerTest, RecordsAffiliatedWebsiteMatch) {
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
+  base::HistogramTester histogram_tester;
+  CreateFormManager(observed_form_);
+
+  PasswordForm affiliated_website_form = saved_match_;
+  affiliated_website_form.url =
+      GURL("https://affiliated.domain.com/a/ServiceLoginAuth");
+  affiliated_website_form.action =
+      GURL("https://affiliated.domain.com/a/ServiceLogin");
+  affiliated_website_form.signon_realm = "https://affiliated.domain.com/";
+  affiliated_website_form.match_type = PasswordForm::MatchType::kAffiliated;
+  fetcher_->set_preferred_or_potential_matched_form_type(
+      PasswordFormMetricsRecorder::MatchedFormType::kAffiliatedWebsites);
+  SetNonFederatedAndNotifyFetchCompleted({affiliated_website_form});
+
+  form_manager_->Fill();
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.MatchedFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kAffiliatedWebsites, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.PotentialBestMatchFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kAffiliatedWebsites, 1);
+}
+
+TEST_P(PasswordFormManagerTest, RecordsAffiliatedAndroidAppMatch) {
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
+  base::HistogramTester histogram_tester;
+  CreateFormManager(observed_form_);
+
+  PasswordForm affiliated_app_form = saved_match_;
+  affiliated_app_form.url = GURL("android://hash@com.example.android/");
+  affiliated_app_form.action = GURL("android://hash@com.example.android/");
+  affiliated_app_form.signon_realm = "android://hash@com.example.android/";
+  affiliated_app_form.match_type = PasswordForm::MatchType::kAffiliated;
+  fetcher_->set_preferred_or_potential_matched_form_type(
+      PasswordFormMetricsRecorder::MatchedFormType::kAffiliatedApp);
+  SetNonFederatedAndNotifyFetchCompleted({affiliated_app_form});
+
+  form_manager_->Fill();
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.MatchedFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kAffiliatedApp, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.PotentialBestMatchFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kAffiliatedApp, 1);
+}
+
+TEST_P(PasswordFormManagerTest, RecordsGroupedWebsiteMatch) {
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
+  base::HistogramTester histogram_tester;
+  CreateFormManager(observed_form_);
+
+  // Grouped credentials are ignored by the form fetched and are not returned to
+  // the consumers. The only way to detect them is via the
+  // `FormFetched::GetPreferredOrPotentialMatchedFormType()` API.
+  fetcher_->set_preferred_or_potential_matched_form_type(
+      PasswordFormMetricsRecorder::MatchedFormType::kGroupedWebsites);
+  SetNonFederatedAndNotifyFetchCompleted({});
+
+  form_manager_->Fill();
+
+  // `PasswordManager.MatchedFormType` metric is not recorded for the grouped
+  // credentials. It is only recorded when the best match is available.
+  histogram_tester.ExpectTotalCount("PasswordManager.MatchedFormType", 0);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.PotentialBestMatchFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kGroupedWebsites, 1);
+}
+
+TEST_P(PasswordFormManagerTest, RecordsGroupedAppMatch) {
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
+  base::HistogramTester histogram_tester;
+  CreateFormManager(observed_form_);
+
+  // Grouped credentials are ignored by the form fetched and are not returned to
+  // the consumers. The only way to detect them is via the
+  // `FormFetched::GetPreferredOrPotentialMatchedFormType()` API.
+  fetcher_->set_preferred_or_potential_matched_form_type(
+      PasswordFormMetricsRecorder::MatchedFormType::kGroupedApp);
+  SetNonFederatedAndNotifyFetchCompleted({});
+
+  form_manager_->Fill();
+
+  // `PasswordManager.MatchedFormType` metric is not recorded for the grouped
+  // credentials. It is only recorded when the best match is available.
+  histogram_tester.ExpectTotalCount("PasswordManager.MatchedFormType", 0);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.PotentialBestMatchFormType",
+      PasswordFormMetricsRecorder::MatchedFormType::kGroupedApp, 1);
+}
+
+TEST_P(PasswordFormManagerTest, RecordsNoMatchesWhenNoCredentialsFetched) {
+  PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
+  base::HistogramTester histogram_tester;
+  CreateFormManager(observed_form_);
+
+  SetNonFederatedAndNotifyFetchCompleted({});
+
+  form_manager_->Fill();
+
+  histogram_tester.ExpectTotalCount("PasswordManager.MatchedFormType", 0);
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.PotentialBestMatchFormType", 0);
 }
 
 TEST_P(PasswordFormManagerTest, UserEventsForGeneration) {
@@ -3393,11 +3567,6 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlowSendVotesOnRecentFields) {
 
 // Test that the username field in a single username form can be filled.
 TEST_P(PasswordFormManagerTest, UsernameFirstFlowFillSingleUsernameForm) {
-#if BUILDFLAG(IS_IOS)
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(features::kIOSPasswordSignInUff);
-#endif  // BUILDFLAG(IS_IOS)
-
   // Create the form manager for a form with only a username in it.
   CreateFormManager(non_password_form_);
 
@@ -3423,32 +3592,6 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlowFillSingleUsernameForm) {
   EXPECT_EQ(saved_match_.password_value,
             fill_data.preferred_login.password_value);
 }
-
-#if BUILDFLAG(IS_IOS)
-// TODO(b/305833151): Remove this test once sign-in uff on iOS is launched.
-// Test that the username field in a single username form isn't filled if the
-// feature isn't enabled.
-TEST_P(PasswordFormManagerTest,
-       UsernameFirstFlowFillSingleUsernameForm_SingleUsernameNotEnabledOnIos) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(features::kIOSPasswordSignInUff);
-
-  // Create the form manager for a form with only a username in it.
-  CreateFormManager(non_password_form_);
-
-  SetNonFederatedAndNotifyFetchCompleted({saved_match_});
-
-  PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
-
-  // Provide server predictions for the single username form, which will trigger
-  // FillNow().
-  std::map<FormSignature, FormPredictions> predictions =
-      CreatePredictions(non_password_form_,
-                        {std::make_pair(kUsernameFieldIndex, SINGLE_USERNAME)});
-  form_manager_->ProcessServerPredictions(predictions);
-}
-#endif
 
 // Tests that a negative vote is sent when a single username candidate is
 // populated in a prompt, but then is removed by the user in the prompt.
@@ -4209,11 +4352,6 @@ TEST_P(PasswordFormManagerTest,
 // Tests that no vote is sent for the OTP field, unless there is a server
 // prediction confirming it's a single username field.
 TEST_P(PasswordFormManagerTest, ForgotPasswordFormVotesOnLikelyOTPField) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{features::kForgotPasswordFormSupport},
-      /*disabled_features=*/{});
-
   CreateFormManager(observed_form_only_password_fields_);
   fetcher_->NotifyFetchCompleted();
 
@@ -4270,11 +4408,6 @@ TEST_P(PasswordFormManagerTest, ForgotPasswordFormVotesOnLikelyOTPField) {
 // build pending credentials if it is predicted to be a single username field
 // by the server.
 TEST_P(PasswordFormManagerTest, ForgotPasswordFormUsernamePopulatedInPrompt) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{features::kForgotPasswordFormSupport},
-      /*disabled_features=*/{});
-
   CreateFormManager(observed_form_only_password_fields_);
   fetcher_->NotifyFetchCompleted();
 
@@ -4301,11 +4434,6 @@ TEST_P(PasswordFormManagerTest, ForgotPasswordFormUsernamePopulatedInPrompt) {
 // field by the server.
 TEST_P(PasswordFormManagerTest,
        ForgotPasswordFormUsernameNotPopulatedInPrompt) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{features::kForgotPasswordFormSupport},
-      /*disabled_features=*/{});
-
   CreateFormManager(observed_form_only_password_fields_);
   fetcher_->NotifyFetchCompleted();
 
@@ -4390,8 +4518,7 @@ TEST_P(PasswordFormManagerTest, NoVotesUploaderForHTTPAuth) {
 TEST_P(PasswordFormManagerTest,
        ClientShouldShowErrorMessageForAuthErrorResolvable) {
   fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kAuthErrorResolvable,
-      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+      PasswordStoreBackendErrorType::kAuthErrorResolvable));
 
   EXPECT_CALL(client_,
               ShowPasswordManagerErrorMessage(
@@ -4403,8 +4530,7 @@ TEST_P(PasswordFormManagerTest,
 TEST_P(PasswordFormManagerTest,
        ClientShouldShowErrorMessageForAuthErrorForAccountStore) {
   fetcher_->SetAccountStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kAuthErrorResolvable,
-      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+      PasswordStoreBackendErrorType::kAuthErrorResolvable));
 
   EXPECT_CALL(client_,
               ShowPasswordManagerErrorMessage(
@@ -4416,8 +4542,7 @@ TEST_P(PasswordFormManagerTest,
 TEST_P(PasswordFormManagerTest,
        ClientShouldShowErrorMessageForKeyRetrivalError) {
   fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kKeyRetrievalRequired,
-      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+      PasswordStoreBackendErrorType::kKeyRetrievalRequired));
 
   EXPECT_CALL(client_,
               ShowPasswordManagerErrorMessage(
@@ -4433,11 +4558,9 @@ TEST_P(PasswordFormManagerTest,
 TEST_P(PasswordFormManagerTest,
        ClientShouldShowErrorMessageWhenBothStoresHaveDifferentErrors) {
   fetcher_->SetAccountStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kAuthErrorResolvable,
-      PasswordStoreBackendErrorRecoveryType::kRecoverable));
-  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kUncategorized,
-      PasswordStoreBackendErrorRecoveryType::kUnrecoverable));
+      PasswordStoreBackendErrorType::kAuthErrorResolvable));
+  fetcher_->SetProfileStoreBackendError(
+      PasswordStoreBackendError(PasswordStoreBackendErrorType::kUncategorized));
 
   EXPECT_CALL(client_,
               ShowPasswordManagerErrorMessage(
@@ -4449,8 +4572,7 @@ TEST_P(PasswordFormManagerTest,
 TEST_P(PasswordFormManagerTest,
        ClientShouldShowErrorMessageForAuthErrorUnresolvable) {
   fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kAuthErrorUnresolvable,
-      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+      PasswordStoreBackendErrorType::kAuthErrorUnresolvable));
 
   EXPECT_CALL(client_,
               ShowPasswordManagerErrorMessage(
@@ -4469,9 +4591,8 @@ TEST_P(PasswordFormManagerTest,
 
 TEST_P(PasswordFormManagerTest,
        ClientShouldNotShowErrorMessageWhenErrorIsNotAuthError) {
-  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kUncategorized,
-      PasswordStoreBackendErrorRecoveryType::kUnrecoverable));
+  fetcher_->SetProfileStoreBackendError(
+      PasswordStoreBackendError(PasswordStoreBackendErrorType::kUncategorized));
 
   EXPECT_CALL(client_, ShowPasswordManagerErrorMessage).Times(0);
   fetcher_->NotifyFetchCompleted();
@@ -4482,8 +4603,7 @@ TEST_P(PasswordFormManagerTest, ClientShouldNotShowErrorMessageWhenUnenrolled) {
       password_manager::prefs::kUnenrolledFromGoogleMobileServicesDueToErrors,
       true);
   fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kAuthErrorResolvable,
-      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+      PasswordStoreBackendErrorType::kAuthErrorResolvable));
 
   EXPECT_CALL(client_, ShowPasswordManagerErrorMessage).Times(0);
   fetcher_->NotifyFetchCompleted();
@@ -4496,9 +4616,8 @@ TEST_P(PasswordFormManagerTest, ClientShouldShowKeychainErrorMessage) {
   feature_list.InitAndEnableFeature(
       password_manager::features::kRestartToGainAccessToKeychain);
 
-  fetcher_->SetProfileStoreBackendError(PasswordStoreBackendError(
-      PasswordStoreBackendErrorType::kKeychainError,
-      PasswordStoreBackendErrorRecoveryType::kRecoverable));
+  fetcher_->SetProfileStoreBackendError(
+      PasswordStoreBackendError(PasswordStoreBackendErrorType::kKeychainError));
 
   EXPECT_CALL(client_, NotifyKeychainError);
   fetcher_->NotifyFetchCompleted();
@@ -4519,6 +4638,35 @@ TEST_P(PasswordFormManagerTest, ClientShouldNotShowKeychainErrorMessage) {
                 password_manager::prefs::kRelaunchChromeBubbleDismissedCounter),
             0);
 }
+
+// Expects banned field to be sent to the `PasswordManagerDriver` if server
+// finds credit card field.
+TEST_P(PasswordFormManagerTest, SetCreditCardFieldsAsBanned) {
+  FormFieldData field;
+  field.set_name(u"credit_card_field");
+  field.set_id_attribute(field.name());
+  field.set_name_attribute(field.name());
+  field.set_form_control_type(autofill::FormControlType::kInputPassword);
+  field.set_renderer_id(autofill::FieldRendererId(6));
+  test_api(observed_form_).fields().push_back(field);
+
+  CreateFormManager(observed_form_);
+  SetNonFederatedAndNotifyFetchCompleted({saved_match_});
+
+  // Server prediction marks element on index three as a credit card field.
+  std::map<FormSignature, FormPredictions> predictions = CreatePredictions(
+      observed_form_, {std::make_pair(3, autofill::CREDIT_CARD_NAME_FULL)});
+
+  PasswordFormFillData fill_data;
+  EXPECT_CALL(driver_, SetPasswordFillData).WillOnce(SaveArg<0>(&fill_data));
+  form_manager_->ProcessServerPredictions(predictions);
+
+  // Expect credit card field to be sent to the `PasswordManagerDriver` as a
+  // filling suggestion banned field.
+  EXPECT_THAT(fill_data.suggestion_banned_fields,
+              ElementsAre(field.renderer_id()));
+}
+
 #endif
 
 INSTANTIATE_TEST_SUITE_P(All,

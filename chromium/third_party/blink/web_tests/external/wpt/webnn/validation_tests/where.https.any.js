@@ -1,5 +1,8 @@
 // META: title=validation tests for WebNN API where operation
 // META: global=window,dedicatedworker
+// META: variant=?cpu
+// META: variant=?gpu
+// META: variant=?npu
 // META: script=../resources/utils_validation.js
 
 'use strict';
@@ -76,6 +79,7 @@ const tests = [
 
 tests.forEach(
     test => promise_test(async t => {
+      const builder = new MLGraphBuilder(context);
       for (let operand of [test.condition, test.trueValue, test.falseValue]) {
         if (!context.opSupportLimits().input.dataTypes.includes(
                 operand.dataType)) {
@@ -110,8 +114,12 @@ tests.forEach(
         assert_equals(output.dataType(), test.output.dataType);
         assert_array_equals(output.shape(), test.output.dimensions);
       } else {
-        assert_throws_js(
-            TypeError, () => builder.where(condition, trueValue, falseValue));
+        const label = 'where_123';
+        const options = {label};
+        const regrexp = new RegExp('\\[' + label + '\\]');
+        assert_throws_with_label(
+            () => builder.where(condition, trueValue, falseValue, options),
+            regrexp);
       }
     }, test.name));
 

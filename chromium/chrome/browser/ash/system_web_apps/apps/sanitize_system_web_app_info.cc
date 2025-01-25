@@ -19,7 +19,7 @@
 #include "url/gurl.h"
 
 const int kSanitizeWindowWidth = 680;
-const int kSanitizeWindowHeight = 672;
+const int kSanitizeWindowHeight = 680;
 
 std::unique_ptr<web_app::WebAppInstallInfo>
 CreateWebAppInfoForSanitizeSystemWebApp() {
@@ -32,7 +32,7 @@ CreateWebAppInfoForSanitizeSystemWebApp() {
       {{"app_icon_192.png", 192, IDR_ASH_SANITIZE_APP_APP_ICON_192_PNG}},
       *info);
 
-  info->title = l10n_util::GetStringUTF16(IDS_OS_SANITIZE_APP_NAME);
+  info->title = l10n_util::GetStringUTF16(IDS_SANITIZE);
   info->theme_color =
       web_app::GetDefaultBackgroundColor(/*use_dark_mode=*/false);
   info->dark_mode_theme_color =

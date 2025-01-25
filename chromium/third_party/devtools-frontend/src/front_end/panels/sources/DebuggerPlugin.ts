@@ -265,7 +265,7 @@ export class DebuggerPlugin extends Plugin {
 
     this.loader = SDK.PageResourceLoader.PageResourceLoader.instance();
     this.loader.addEventListener(
-        SDK.PageResourceLoader.Events.Update, this.showSourceMapInfobarIfNeeded.bind(this), this);
+        SDK.PageResourceLoader.Events.UPDATE, this.showSourceMapInfobarIfNeeded.bind(this), this);
 
     this.ignoreListCallback = this.showIgnoreListInfobarIfNeeded.bind(this);
     Bindings.IgnoreListManager.IgnoreListManager.instance().addChangeListener(this.ignoreListCallback);
@@ -426,7 +426,7 @@ export class DebuggerPlugin extends Plugin {
     }
 
     const infobar = new UI.Infobar.Infobar(
-        UI.Infobar.Type.Warning, i18nString(UIStrings.thisScriptIsOnTheDebuggersIgnore),
+        UI.Infobar.Type.WARNING, i18nString(UIStrings.thisScriptIsOnTheDebuggersIgnore),
         [
           {
             text: i18nString(UIStrings.removeFromIgnoreList),
@@ -1422,9 +1422,9 @@ export class DebuggerPlugin extends Plugin {
     this.scriptFileForDebuggerModel.delete(debuggerModel);
     if (oldScriptFile) {
       oldScriptFile.removeEventListener(
-          Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DidMergeToVM, this.didMergeToVM, this);
+          Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DID_MERGE_TO_VM, this.didMergeToVM, this);
       oldScriptFile.removeEventListener(
-          Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DidDivergeFromVM, this.didDivergeFromVM, this);
+          Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DID_DIVERGE_FROM_VM, this.didDivergeFromVM, this);
       if (this.muted && !this.uiSourceCode.isDirty() && this.consistentScripts()) {
         this.setMuted(false);
       }
@@ -1434,9 +1434,9 @@ export class DebuggerPlugin extends Plugin {
     }
     this.scriptFileForDebuggerModel.set(debuggerModel, newScriptFile);
     newScriptFile.addEventListener(
-        Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DidMergeToVM, this.didMergeToVM, this);
+        Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DID_MERGE_TO_VM, this.didMergeToVM, this);
     newScriptFile.addEventListener(
-        Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DidDivergeFromVM, this.didDivergeFromVM, this);
+        Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DID_DIVERGE_FROM_VM, this.didDivergeFromVM, this);
     newScriptFile.checkMapping();
 
     void newScriptFile.missingSymbolFiles().then(resources => {
@@ -1459,7 +1459,7 @@ export class DebuggerPlugin extends Plugin {
       return;
     }
     this.missingDebugInfoBar =
-        UI.Infobar.Infobar.create(UI.Infobar.Type.Error, warning.details, [], undefined, 'missing-debug-info');
+        UI.Infobar.Infobar.create(UI.Infobar.Type.ERROR, warning.details, [], undefined, 'missing-debug-info');
     if (!this.missingDebugInfoBar) {
       return;
     }
@@ -1537,7 +1537,7 @@ export class DebuggerPlugin extends Plugin {
 
     if (!resource) {
       this.sourceMapInfobar = UI.Infobar.Infobar.create(
-          UI.Infobar.Type.Info, i18nString(UIStrings.sourceMapSkipped), [],
+          UI.Infobar.Type.INFO, i18nString(UIStrings.sourceMapSkipped), [],
           Common.Settings.Settings.instance().createSetting('source-map-skipped-infobar-disabled', false),
           'source-map-skipped');
       if (!this.sourceMapInfobar) {
@@ -1547,7 +1547,7 @@ export class DebuggerPlugin extends Plugin {
       this.sourceMapInfobar.createDetailsRowMessage(i18nString(UIStrings.reloadForSourceMap));
     } else if (resource.success) {
       this.sourceMapInfobar = UI.Infobar.Infobar.create(
-          UI.Infobar.Type.Info, i18nString(UIStrings.sourceMapLoaded), [],
+          UI.Infobar.Type.INFO, i18nString(UIStrings.sourceMapLoaded), [],
           Common.Settings.Settings.instance().createSetting('source-map-infobar-disabled', false), 'source-map-loaded');
       if (!this.sourceMapInfobar) {
         return;
@@ -1558,7 +1558,7 @@ export class DebuggerPlugin extends Plugin {
       }));
     } else {
       this.sourceMapInfobar = UI.Infobar.Infobar.create(
-          UI.Infobar.Type.Warning, i18nString(UIStrings.sourceMapFailed), [], undefined, 'source-map-failed');
+          UI.Infobar.Type.WARNING, i18nString(UIStrings.sourceMapFailed), [], undefined, 'source-map-failed');
       if (!this.sourceMapInfobar) {
         return;
       }
@@ -1719,9 +1719,9 @@ export class DebuggerPlugin extends Plugin {
     }
     for (const script of this.scriptFileForDebuggerModel.values()) {
       script.removeEventListener(
-          Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DidMergeToVM, this.didMergeToVM, this);
+          Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DID_MERGE_TO_VM, this.didMergeToVM, this);
       script.removeEventListener(
-          Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DidDivergeFromVM, this.didDivergeFromVM, this);
+          Bindings.ResourceScriptMapping.ResourceScriptFile.Events.DID_DIVERGE_FROM_VM, this.didDivergeFromVM, this);
     }
     this.scriptFileForDebuggerModel.clear();
 
@@ -1765,7 +1765,8 @@ export class DebuggerPlugin extends Plugin {
     const mimeType = Common.ResourceType.ResourceType.mimeFromURL(this.uiSourceCode.url());
     const mediaType = Common.ResourceType.ResourceType.mediaTypeForMetrics(
         mimeType ?? '', this.uiSourceCode.contentType().isFromSourceMap(),
-        TextUtils.TextUtils.isMinified(this.uiSourceCode.content()));
+        TextUtils.TextUtils.isMinified(this.uiSourceCode.content()), this.uiSourceCode.url().startsWith('snippet://'),
+        this.uiSourceCode.url().startsWith('debugger://'));
     Host.userMetrics.sourcesPanelFileDebugged(mediaType);
   }
 }

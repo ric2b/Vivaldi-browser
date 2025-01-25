@@ -979,7 +979,7 @@ void foo() {
   uint x = 1u;
   vector<float16_t, 4> a = tint_bitcast_to_f16(v[0u]);
   float16_t b = float16_t(f16tof32(v[0u].x));
-  uint v_4 = (min(x, 3u) * 2u);
+  uint v_4 = (uint(min(x, 3u)) * 2u);
   uint v_5 = v[(v_4 / 16u)][((v_4 % 16u) / 4u)];
   float16_t c = float16_t(f16tof32((v_5 >> ((((v_4 % 4u) == 0u)) ? (0u) : (16u)))));
   float16_t d = float16_t(f16tof32(v[0u].y));
@@ -2164,6 +2164,66 @@ void foo() {
   SB v_11 = (SB)0;
   SB s = v_11;
   v_9(0u, s);
+}
+
+)");
+}
+
+TEST_F(HlslWriterTest, AccessChainReused) {
+    auto* sb = ty.Struct(mod.symbols.New("SB"), {
+                                                    {mod.symbols.New("a"), ty.i32()},
+                                                    {mod.symbols.New("b"), ty.vec3<f32>()},
+                                                });
+
+    auto* var = b.Var("v", storage, sb, core::Access::kReadWrite);
+    var->SetBindingPoint(0, 0);
+    b.ir.root_block->Append(var);
+
+    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+    b.Append(func->Block(), [&] {
+        auto* x = b.Access(ty.ptr(storage, ty.vec3<f32>(), core::Access::kReadWrite), var, 1_u);
+        b.Let("b", b.LoadVectorElement(x, 1_u));
+        b.Let("c", b.LoadVectorElement(x, 2_u));
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_.hlsl;
+    EXPECT_EQ(output_.hlsl, R"(
+RWByteAddressBuffer v : register(u0);
+void foo() {
+  float b = asfloat(v.Load(20u));
+  float c = asfloat(v.Load(24u));
+}
+
+)");
+}
+
+TEST_F(HlslWriterTest, UniformAccessChainReused) {
+    auto* sb = ty.Struct(mod.symbols.New("SB"), {
+                                                    {mod.symbols.New("c"), ty.f32()},
+                                                    {mod.symbols.New("d"), ty.vec3<f32>()},
+                                                });
+
+    auto* var = b.Var("v", uniform, sb, core::Access::kRead);
+    var->SetBindingPoint(0, 0);
+    b.ir.root_block->Append(var);
+
+    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+    b.Append(func->Block(), [&] {
+        auto* x = b.Access(ty.ptr(uniform, ty.vec3<f32>(), core::Access::kRead), var, 1_u);
+        b.Let("b", b.LoadVectorElement(x, 1_u));
+        b.Let("c", b.LoadVectorElement(x, 2_u));
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_.hlsl;
+    EXPECT_EQ(output_.hlsl, R"(
+cbuffer cbuffer_v : register(b0) {
+  uint4 v[2];
+};
+void foo() {
+  float b = asfloat(v[1u].y);
+  float c = asfloat(v[1u].z);
 }
 
 )");

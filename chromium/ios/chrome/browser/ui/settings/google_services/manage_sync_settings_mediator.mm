@@ -4,6 +4,9 @@
 
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_mediator.h"
 
+#import <optional>
+#import <string>
+
 #import "base/apple/foundation_util.h"
 #import "base/auto_reset.h"
 #import "base/check_op.h"
@@ -20,12 +23,13 @@
 #import "components/signin/public/identity_manager/account_info.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/strings/grit/components_strings.h"
-#import "components/sync/base/model_type.h"
+#import "components/sync/base/data_type.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/local_data_description.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/browser/net/model/crurl.h"
+#import "ios/chrome/browser/policy/ui_bundled/management_util.h"
 #import "ios/chrome/browser/settings/model/sync/utils/account_error_ui_info.h"
 #import "ios/chrome/browser/settings/model/sync/utils/identity_error_util.h"
 #import "ios/chrome/browser/settings/model/sync/utils/sync_util.h"
@@ -127,6 +131,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   BOOL _ignoreSyncStateChanges;
   // Sync service.
   raw_ptr<syncer::SyncService> _syncService;
+  // Identity manager.
+  raw_ptr<signin::IdentityManager> _identityManager;
   // Observer for `IdentityManager`.
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityManagerObserver;
@@ -156,6 +162,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     CHECK(authenticationService);
     _syncService = syncService;
     _syncObserver = std::make_unique<SyncObserverBridge>(self, syncService);
+    _identityManager = identityManager;
     _identityManagerObserver =
         std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
                                                                 self);
@@ -181,6 +188,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 - (void)disconnect {
   _syncObserver.reset();
   _syncService = nullptr;
+  _identityManager = nullptr;
   _identityManagerObserver.reset();
   _authenticationService = nullptr;
   _chromeAccountManagerService = nullptr;
@@ -229,7 +237,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
       break;
     case SyncSettingsAccountState::kSignedIn:
       BOOL would_clear_data_on_signout =
-          _authenticationService->ShouldClearDataOnSignOut();
+          _authenticationService->ShouldClearDataForSignedInPeriodOnSignOut();
       [model addSectionWithIdentifier:SyncDataTypeSectionIdentifier];
       TableViewTextHeaderFooterItem* headerItem =
           [[TableViewTextHeaderFooterItem alloc]
@@ -313,6 +321,12 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   }
 }
 
+// Returns the management state for this browser and profile.
+- (ManagementState)managementState {
+  return GetManagementState(_identityManager, _authenticationService,
+                            _prefService);
+}
+
 // Updates the consumer when the primary account is updated.
 - (void)updatePrimaryAccountDetails {
   switch (self.syncAccountState) {
@@ -325,7 +339,8 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
               _chromeAccountManagerService->GetIdentityAvatarWithIdentity(
                   _signedInIdentity, IdentityAvatarSize::Large)
                                          name:_signedInIdentity.userFullName
-                                        email:_signedInIdentity.userEmail];
+                                        email:_signedInIdentity.userEmail
+                              managementState:self.managementState];
       break;
   }
 }
@@ -739,18 +754,18 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   }
 
   // Types that are disabled by policy will be ignored.
-  syncer::ModelTypeSet requestedTypes;
+  syncer::DataTypeSet requestedTypes;
   for (syncer::UserSelectableType userSelectableType : kAccountSwitchItems) {
     if (![self isManagedSyncSettingsDataType:userSelectableType]) {
       requestedTypes.Put(
-          syncer::UserSelectableTypeToCanonicalModelType(userSelectableType));
+          syncer::UserSelectableTypeToCanonicalDataType(userSelectableType));
     }
   }
 
   __weak __typeof__(self) weakSelf = self;
   _syncService->GetLocalDataDescriptions(
       requestedTypes,
-      base::BindOnce(^(std::map<syncer::ModelType, syncer::LocalDataDescription>
+      base::BindOnce(^(std::map<syncer::DataType, syncer::LocalDataDescription>
                            description) {
         [weakSelf localDataDescriptionsFetchedWithDescription:description
                                                     firstLoad:firstLoad];
@@ -759,7 +774,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 
 // Saves the local data description, and update the batch upload section.
 - (void)localDataDescriptionsFetchedWithDescription:
-            (std::map<syncer::ModelType, syncer::LocalDataDescription>)
+            (std::map<syncer::DataType, syncer::LocalDataDescription>)
                 description
                                           firstLoad:(BOOL)firstLoad {
   self.localPasswordsToUpload = 0;

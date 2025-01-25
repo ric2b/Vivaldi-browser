@@ -26,9 +26,9 @@ std::optional<StyleColor> ColorFromKeyword(CSSValueID css_value_id) {
     return std::nullopt;
   }
 
-  Color color = StyleColor::ColorFromKeyword(css_value_id,
-                                             mojom::blink::ColorScheme::kLight,
-                                             /*color_provider=*/nullptr);
+  Color color = StyleColor::ColorFromKeyword(
+      css_value_id, mojom::blink::ColorScheme::kLight,
+      /*color_provider=*/nullptr, /*is_in_web_app_scope=*/false);
   return (StyleColor(color));
 }
 
@@ -173,11 +173,13 @@ InterpolationValue CSSScrollbarColorInterpolationType::MaybeConvertValue(
     return nullptr;
   }
 
-  StyleScrollbarColor scrollbar_color(thumb_color.value(), track_color.value());
+  StyleScrollbarColor* scrollbar_color =
+      MakeGarbageCollected<StyleScrollbarColor>(thumb_color.value(),
+                                                track_color.value());
 
   return InterpolationValue(
-      InterpolableScrollbarColor::Create(scrollbar_color),
-      CSSScrollbarColorNonInterpolableValue::Create(&scrollbar_color));
+      InterpolableScrollbarColor::Create(*scrollbar_color),
+      CSSScrollbarColorNonInterpolableValue::Create(scrollbar_color));
 }
 
 PairwiseInterpolationValue

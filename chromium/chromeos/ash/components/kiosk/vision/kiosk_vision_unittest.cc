@@ -64,7 +64,7 @@ DlcserviceClient::InstallResult InstallKioskVisionDlc(
     FakeDlcserviceClient& service) {
   base::test::TestFuture<const DlcserviceClient::InstallResult&> future;
   dlcservice::InstallRequest request;
-  request.set_id(std::string(kKioskVisionDlcId));
+  request.set_id(kKioskVisionDlcId);
   service.Install(request, future.GetCallback(), base::DoNothing());
   return future.Take();
 }
@@ -181,7 +181,10 @@ class KioskVisionTest : public testing::Test {
         .WillByDefault(
             testing::Invoke([this](video_capture::mojom::VideoSourceProvider::
                                        GetSourceInfosCallback& callback) {
-              std::move(callback).Run(device_infos_);
+              std::move(callback).Run(
+                  video_capture::mojom::VideoSourceProvider::
+                      GetSourceInfosResult::kSuccess,
+                  device_infos_);
             }));
 
     ON_CALL(mock_source_provider_, DoGetVideoSource(testing::_, testing::_))

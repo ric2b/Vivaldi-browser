@@ -1145,7 +1145,7 @@ BookmarkModel::DetermineTypeForUuidLookupForExistingNode(
     }
   }
 
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void BookmarkModel::NotifyNodeAddedForAllDescendants(const BookmarkNode* node,

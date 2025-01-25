@@ -150,11 +150,13 @@ ResultOrError<Ref<Texture>> Texture::Create(Device* device,
 }
 
 // static
-ResultOrError<Ref<Texture>> Texture::Create(Device* device,
-                                            const UnpackedPtr<TextureDescriptor>& descriptor,
-                                            ComPtr<ID3D12Resource> d3d12Texture) {
+ResultOrError<Ref<Texture>> Texture::CreateForSwapChain(
+    Device* device,
+    const UnpackedPtr<TextureDescriptor>& descriptor,
+    ComPtr<ID3D12Resource> d3d12Texture,
+    D3D12_RESOURCE_STATES state) {
     Ref<Texture> dawnTexture = AcquireRef(new Texture(device, descriptor));
-    DAWN_TRY(dawnTexture->InitializeAsSwapChainTexture(std::move(d3d12Texture)));
+    DAWN_TRY(dawnTexture->InitializeAsSwapChainTexture(std::move(d3d12Texture), state));
     return std::move(dawnTexture);
 }
 
@@ -271,12 +273,16 @@ MaybeError Texture::InitializeAsInternalTexture() {
     return {};
 }
 
-MaybeError Texture::InitializeAsSwapChainTexture(ComPtr<ID3D12Resource> d3d12Texture) {
+MaybeError Texture::InitializeAsSwapChainTexture(ComPtr<ID3D12Resource> d3d12Texture,
+                                                 D3D12_RESOURCE_STATES state) {
     AllocationInfo info;
     info.mMethod = AllocationMethod::kExternal;
 
     D3D12_RESOURCE_DESC desc = d3d12Texture->GetDesc();
     mD3D12ResourceFlags = desc.Flags;
+
+    // Replace the default state of COMMON with what's passed in this constructor.
+    mSubresourceStateAndDecay.Fill({state, kMaxExecutionSerial, false});
 
     // When creating the ResourceHeapAllocation, the resource heap is set to nullptr because the
     // texture is owned externally. The texture's owning entity must remain responsible for
@@ -460,11 +466,22 @@ void Texture::TransitionSubresourceRange(std::vector<D3D12_RESOURCE_BARRIER>* ba
         return;
     }
 
-    // Reuse the subresource(s) directly and avoid transition when it isn't needed, and
-    // return false.
+    // Expand resource state transition to include COPY_SOURCE if the toggle is enabled. Needed to
+    // workaround issues on Nvidia where transition to ALL_SHADER_RESOURCE doesn't seem to include
+    // all the necessary cache flushes or layout transitions and causes rendering corruption.
+    if (GetDevice()->IsToggleEnabled(
+            Toggle::D3D12ExpandShaderResourceStateTransitionsToCopySource) &&
+        (newState & D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE)) {
+        newState |= D3D12_RESOURCE_STATE_COPY_SOURCE;
+    }
+
+    // Reuse the subresource(s) directly and avoid transition when it isn't needed.
     if (lastState == newState) {
         return;
     }
+
+    // Update the tracked state.
+    state->lastState = newState;
 
     // The COMMON state represents a state where no write operations can be pending, and
     // where all pixels are uncompressed. This makes it possible to transition to and
@@ -484,9 +501,6 @@ void Texture::TransitionSubresourceRange(std::vector<D3D12_RESOURCE_BARRIER>* ba
     if (state->isValidToDecay && pendingCommandSerial > state->lastDecaySerial) {
         lastState = D3D12_RESOURCE_STATE_COMMON;
     }
-
-    // Update the tracked state.
-    state->lastState = newState;
 
     // All simultaneous-access textures are qualified for an implicit promotion.
     // Destination states that qualify for an implicit promotion for a
@@ -615,6 +629,11 @@ void Texture::TrackUsageAndGetResourceBarrierForPass(
             D3D12_RESOURCE_STATES newState = D3D12TextureUsage(syncInfo.usage, GetFormat());
             TransitionSubresourceRange(barriers, mergeRange, state, newState, pendingCommandSerial);
         });
+}
+
+D3D12_RESOURCE_STATES Texture::GetCurrentStateForSwapChain() const {
+    DAWN_ASSERT(GetFormat().aspects == Aspect::Color);
+    return mSubresourceStateAndDecay.Get(Aspect::Color, 0, 0).lastState;
 }
 
 SubresourceStorage<Texture::StateAndDecay> Texture::InitialSubresourceStateAndDecay() const {

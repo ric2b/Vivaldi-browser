@@ -93,7 +93,8 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
                               std::string* flow_direction);
 
   // PowerObserver implementation
-  void OnPowerStateChange(bool on_battery_power) override;
+  void OnBatteryPowerStatusChange(base::PowerStateObserver::BatteryPowerStatus
+                              battery_power_status) override;
   void OnSuspend() override;
   void OnResume() override;
 
@@ -1129,6 +1130,18 @@ class UtilitiesDownloadsDragFunction : public ExtensionFunction {
   ~UtilitiesDownloadsDragFunction() override = default;
   ResponseAction Run() override;
 };
+
+class UtilitiesHasCommandLineSwitchFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.hasCommandLineSwitch",
+                             UTILITIES_HAS_COMMAND_LINE_SWITCH)
+  UtilitiesHasCommandLineSwitchFunction() = default;
+
+ private:
+  ~UtilitiesHasCommandLineSwitchFunction() override = default;
+  ResponseAction Run() override;
+};
+
 
 }  // namespace extensions
 

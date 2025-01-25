@@ -21,7 +21,7 @@
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
-#include "third_party/skia/include/gpu/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSemaphore.h"
 #include "ui/gfx/swap_result.h"
 
 class GrDirectContext;
@@ -148,20 +148,8 @@ class VIZ_SERVICE_EXPORT SkiaOutputDevice {
   virtual void Present(const std::optional<gfx::Rect>& update_rect,
                        BufferPresentedCallback feedback,
                        OutputSurfaceFrame frame) = 0;
-  virtual bool EnsureMinNumberOfBuffers(size_t n);
 
   virtual void SetVSyncDisplayID(int64_t display_id) {}
-
-  // Whether the output device's primary plane is an overlay. This returns true
-  // is the SchedulePrimaryPlane function is implemented.
-  virtual bool IsPrimaryPlaneOverlay() const;
-
-  // Schedule the output device's back buffer as an overlay plane. The scheduled
-  // primary plane will be on screen when SwapBuffers() or PostSubBuffer() is
-  // called.
-  virtual void SchedulePrimaryPlane(
-      const std::optional<OverlayProcessorInterface::OutputSurfaceOverlayPlane>&
-          plane);
 
   // Schedule overlays which will be on screen when SwapBuffers() or
   // PostSubBuffer() is called.
@@ -190,6 +178,11 @@ class VIZ_SERVICE_EXPORT SkiaOutputDevice {
 
   void SetDependencyTimings(base::TimeTicks task_ready);
 
+  // Copy and return the contents of the surface owned by this device. If this
+  // output device is surfaceless, then reads back from the OS compositor tree,
+  // including non-protected overlays.
+  virtual void ReadbackForTesting(base::OnceCallback<void(SkBitmap)> callback);
+
  protected:
   // Only valid between StartSwapBuffers and FinishSwapBuffers.
   class SwapInfo {
@@ -206,7 +199,6 @@ class VIZ_SERVICE_EXPORT SkiaOutputDevice {
         gfx::SwapCompletionResult result,
         const std::optional<gfx::Rect>& damage_area,
         std::vector<gpu::Mailbox> released_overlays,
-        const gpu::Mailbox& primary_plane_mailbox,
         int64_t swap_trace_id);
     void CallFeedback();
 
@@ -251,8 +243,7 @@ class VIZ_SERVICE_EXPORT SkiaOutputDevice {
       const gfx::Size& size,
       OutputSurfaceFrame frame,
       const std::optional<gfx::Rect>& damage_area = std::nullopt,
-      std::vector<gpu::Mailbox> released_overlays = {},
-      const gpu::Mailbox& primary_plane_mailbox = gpu::Mailbox());
+      std::vector<gpu::Mailbox> released_overlays = {});
 
   // TODO(crbug.com/40266876): Reset device on context loss to fix dangling ptr.
   const raw_ptr<GrDirectContext, DanglingUntriaged> gr_context_;

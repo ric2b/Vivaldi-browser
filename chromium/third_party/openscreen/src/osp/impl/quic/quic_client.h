@@ -40,11 +40,11 @@ class QuicClient final : public ProtocolConnectionClient,
                          public QuicServiceBase {
  public:
   QuicClient(const ServiceConfig& config,
-             MessageDemuxer& demuxer,
              std::unique_ptr<QuicConnectionFactoryClient> connection_factory,
              ProtocolConnectionServiceObserver& observer,
              ClockNowFunctionPtr now_function,
-             TaskRunner& task_runner);
+             TaskRunner& task_runner,
+             size_t buffer_limit);
   QuicClient(const QuicClient&) = delete;
   QuicClient& operator=(const QuicClient&) = delete;
   QuicClient(QuicClient&&) noexcept = delete;
@@ -63,36 +63,22 @@ class QuicClient final : public ProtocolConnectionClient,
       uint64_t instance_id) override;
   bool Connect(std::string_view instance_name,
                ConnectRequest& request,
-               ConnectionRequestCallback* request_callback) override;
-
-  // QuicServiceBase overrides.
-  uint64_t OnCryptoHandshakeComplete(std::string_view instance_name) override;
-  void OnConnectionClosed(uint64_t instance_id) override;
+               ConnectRequestCallback* request_callback) override;
 
  private:
   // FakeQuicBridge needs to access `instance_infos_` and struct InstanceInfo
   // for tests.
   friend class FakeQuicBridge;
 
-  struct PendingConnectionData {
-    explicit PendingConnectionData(ServiceConnectionData&& data);
-    PendingConnectionData(const PendingConnectionData&) = delete;
-    PendingConnectionData& operator=(const PendingConnectionData&) = delete;
-    PendingConnectionData(PendingConnectionData&&) noexcept;
-    PendingConnectionData& operator=(PendingConnectionData&&) noexcept;
-    ~PendingConnectionData();
-
-    ServiceConnectionData data;
-
-    // Pairs of request IDs and the associated connection callback.
-    std::vector<std::pair<uint64_t, ConnectionRequestCallback*>> callbacks;
-  };
-
-  // This struct holds necessary information of an instance used to build
-  // connection.
+  // This struct holds necessary information of an instance found through
+  // discovery for building connection and authentication.
   struct InstanceInfo {
     // Agent fingerprint.
     std::string fingerprint;
+
+    // Token published by the other agent that allows this agent to initiate
+    // authentication with that agent.
+    std::string auth_token;
 
     // The network endpoints to create a new connection to the Open Screen
     // service. At least one of them is valid and use |v4_endpoint| first if it
@@ -113,25 +99,13 @@ class QuicClient final : public ProtocolConnectionClient,
   void OnError(const Error& error) override;
   void OnMetrics(ServiceListener::Metrics) override;
 
-  // QuicServiceBase overrides.
-  void CloseAllConnections() override;
-
-  bool CreatePendingConnection(std::string_view instance_name,
-                               ConnectRequest& request,
-                               ConnectionRequestCallback* request_callback);
-  uint64_t StartConnectionRequest(std::string_view instance_name,
-                                  ConnectionRequestCallback* request_callback);
+  bool StartConnectionRequest(std::string_view instance_name,
+                              ConnectRequest& request,
+                              ConnectRequestCallback* request_callback);
   void CancelConnectRequest(uint64_t request_id) override;
-
-  std::unique_ptr<QuicConnectionFactoryClient> connection_factory_;
 
   // Value that will be used for the next new connection request.
   uint64_t next_request_id_ = 1u;
-
-  // Maps an instance name to data about connections that haven't successfully
-  // completed the QUIC handshake.
-  std::map<std::string, PendingConnectionData, std::less<>>
-      pending_connections_;
 
   // Maps an instance name to necessary information of the instance used to
   // build connection.

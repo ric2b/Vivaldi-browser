@@ -117,17 +117,19 @@ PageInfoViewFactory::PageInfoViewFactory(
     PageInfo* presenter,
     ChromePageInfoUiDelegate* ui_delegate,
     PageInfoNavigationHandler* navigation_handler,
-    PageInfoHistoryController* history_controller)
+    PageInfoHistoryController* history_controller,
+    bool allow_about_this_site)
     : presenter_(presenter),
       ui_delegate_(ui_delegate),
       navigation_handler_(navigation_handler),
-      history_controller_(history_controller) {}
+      history_controller_(history_controller),
+      allow_about_this_site_(allow_about_this_site) {}
 
 std::unique_ptr<views::View> PageInfoViewFactory::CreateMainPageView(
     base::OnceClosure initialized_callback) {
   return std::make_unique<PageInfoMainView>(
       presenter_, ui_delegate_, navigation_handler_, history_controller_,
-      std::move(initialized_callback));
+      std::move(initialized_callback), allow_about_this_site_);
 }
 
 std::unique_ptr<views::View> PageInfoViewFactory::CreateSecurityPageView() {
@@ -173,70 +175,83 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateCookiesPageView() {
 std::unique_ptr<views::View> PageInfoViewFactory::CreateSubpageHeader(
     std::u16string title,
     std::u16string subtitle) {
-  ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
-  views::FlexSpecification stretch_specification =
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                               views::MaximumFlexSizeRule::kUnbounded,
-                               /*adjust_height_for_width =*/true)
-          .WithWeight(1);
-  auto wrapper = std::make_unique<views::View>();
-  wrapper->SetLayoutManager(std::make_unique<views::FlexLayout>())
-      ->SetOrientation(views::LayoutOrientation::kVertical);
+  views::Builder<views::FlexLayoutView> label_wrapper;
+  label_wrapper.AddChild(views::Builder<views::Label>(
+                             std::make_unique<views::Label>(
+                                 title, views::style::CONTEXT_DIALOG_TITLE,
+                                 views::style::STYLE_SECONDARY))
+                             .SetTextStyle(views::style::STYLE_HEADLINE_4)
+                             .SetHorizontalAlignment(gfx::ALIGN_LEFT)
+                             .SetID(VIEW_ID_PAGE_INFO_SUBPAGE_TITLE));
 
+  if (!subtitle.empty()) {
+    label_wrapper.AddChild(
+        views::Builder<views::Label>(
+            std::make_unique<views::Label>(
+                subtitle, views::style::CONTEXT_LABEL,
+                views::style::STYLE_SECONDARY,
+                gfx::DirectionalityMode::DIRECTIONALITY_AS_URL))
+            .SetHorizontalAlignment(gfx::ALIGN_LEFT)
+            .SetAllowCharacterBreak(true)
+            .SetMultiLine(true));
+  }
+
+  ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
+  const int icon_label_spacing = layout_provider->GetDistanceMetric(
+      views::DISTANCE_RELATED_LABEL_HORIZONTAL);
   const int side_margin =
       layout_provider->GetInsetsMetric(views::INSETS_DIALOG).left();
   const int bottom_margin =
       layout_provider->GetDistanceMetric(DISTANCE_CONTENT_LIST_VERTICAL_MULTI);
 
-  auto* header = wrapper->AddChildView(std::make_unique<views::View>());
-  header->SetLayoutManager(std::make_unique<views::FlexLayout>())
-      ->SetCrossAxisAlignment(views::LayoutAlignment::kStart)
-      .SetInteriorMargin(
-          gfx::Insets::TLBR(0, side_margin, bottom_margin, side_margin));
-  header->SetProperty(views::kFlexBehaviorKey, stretch_specification);
-  wrapper->AddChildView(CreateSeparator());
-
-  auto back_button = views::CreateVectorImageButtonWithNativeTheme(
-      base::BindRepeating(&PageInfoNavigationHandler::OpenMainPage,
-                          base::Unretained(navigation_handler_),
-                          base::DoNothing()),
-      vector_icons::kArrowBackChromeRefreshIcon, GetIconSize());
-  views::InstallCircleHighlightPathGenerator(back_button.get());
-  back_button->SetID(VIEW_ID_PAGE_INFO_BACK_BUTTON);
-  back_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_ACCNAME_BACK));
-  back_button->SetProperty(views::kInternalPaddingKey,
-                           back_button->GetInsets());
-  header->AddChildView(std::move(back_button));
-  auto* label_wrapper = header->AddChildView(CreateLabelWrapper());
-  auto* title_label = label_wrapper->AddChildView(
-      std::make_unique<views::Label>(title, views::style::CONTEXT_DIALOG_TITLE,
-                                     views::style::STYLE_SECONDARY));
-  title_label->SetTextStyle(views::style::STYLE_HEADLINE_4);
-  title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  title_label->SetID(VIEW_ID_PAGE_INFO_SUBPAGE_TITLE);
-
-  if (!subtitle.empty()) {
-    auto* subtitle_label =
-        label_wrapper->AddChildView(std::make_unique<views::Label>(
-            subtitle, views::style::CONTEXT_LABEL,
-            views::style::STYLE_SECONDARY,
-            gfx::DirectionalityMode::DIRECTIONALITY_AS_URL));
-    subtitle_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    subtitle_label->SetAllowCharacterBreak(true);
-    subtitle_label->SetMultiLine(true);
-    subtitle_label->SetProperty(views::kFlexBehaviorKey, stretch_specification);
-  }
-
-  auto close_button = views::BubbleFrameView::CreateCloseButton(
-      base::BindRepeating(&PageInfoNavigationHandler::CloseBubble,
-                          base::Unretained(navigation_handler_)));
-  close_button->SetID(VIEW_ID_PAGE_INFO_CLOSE_BUTTON);
-  close_button->SetVisible(true);
-  close_button->SetProperty(views::kInternalPaddingKey,
-                            close_button->GetInsets());
-  header->AddChildView(std::move(close_button));
-
-  return wrapper;
+  return views::Builder<views::FlexLayoutView>()
+      .SetOrientation(views::LayoutOrientation::kVertical)
+      .AddChildren(
+          views::Builder<views::FlexLayoutView>()
+              .SetCrossAxisAlignment(views::LayoutAlignment::kStart)
+              .SetInteriorMargin(
+                  gfx::Insets::TLBR(0, side_margin, bottom_margin, side_margin))
+              .AddChildren(
+                  views::Builder<views::ImageButton>(
+                      views::CreateVectorImageButtonWithNativeTheme(
+                          base::BindRepeating(
+                              &PageInfoNavigationHandler::OpenMainPage,
+                              base::Unretained(navigation_handler_),
+                              base::DoNothing()),
+                          vector_icons::kArrowBackChromeRefreshIcon,
+                          GetIconSize()))
+                      .SetID(VIEW_ID_PAGE_INFO_BACK_BUTTON)
+                      .SetTooltipText(
+                          l10n_util::GetStringUTF16(IDS_ACCNAME_BACK))
+                      .CustomConfigure(
+                          base::BindOnce([](views::ImageButton* button) {
+                            views::InstallCircleHighlightPathGenerator(button);
+                            button->SetProperty(views::kInternalPaddingKey,
+                                                button->GetInsets());
+                          })),
+                  std::move(label_wrapper)
+                      .SetOrientation(views::LayoutOrientation::kVertical)
+                      .SetProperty(views::kMarginsKey,
+                                   gfx::Insets::VH(0, icon_label_spacing))
+                      .SetProperty(views::kFlexBehaviorKey,
+                                   views::FlexSpecification(
+                                       views::LayoutOrientation::kHorizontal,
+                                       views::MinimumFlexSizeRule::kScaleToZero,
+                                       views::MaximumFlexSizeRule::kUnbounded)
+                                       .WithWeight(1)),
+                  views::Builder<views::View>(
+                      views::BubbleFrameView::CreateCloseButton(
+                          base::BindRepeating(
+                              &PageInfoNavigationHandler::CloseBubble,
+                              base::Unretained(navigation_handler_))))
+                      .SetID(VIEW_ID_PAGE_INFO_CLOSE_BUTTON)
+                      .SetVisible(true)
+                      .CustomConfigure(base::BindOnce([](views::View* view) {
+                        view->SetProperty(views::kInternalPaddingKey,
+                                          view->GetInsets());
+                      }))),
+          views::Builder<views::View>(CreateSeparator()))
+      .Build();
 }
 
 // static
@@ -310,9 +325,8 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
       break;
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
     case ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER:
-      icon = show_blocked_badge
-                 ? &vector_icons::kCertificateOffChromeRefreshIcon
-                 : &vector_icons::kCertificateChromeRefreshIcon;
+      icon = show_blocked_badge ? &vector_icons::kCertificateOffIcon
+                                : &vector_icons::kCertificateIcon;
       break;
 #endif
     case ContentSettingsType::MIDI_SYSEX:
@@ -332,9 +346,8 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
                                 : &vector_icons::kVolumeUpChromeRefreshIcon;
       break;
     case ContentSettingsType::CLIPBOARD_READ_WRITE:
-      icon = show_blocked_badge
-                 ? &vector_icons::kContentPasteOffChromeRefreshIcon
-                 : &vector_icons::kContentPasteChromeRefreshIcon;
+      icon = show_blocked_badge ? &vector_icons::kContentPasteOffIcon
+                                : &vector_icons::kContentPasteIcon;
       break;
     case ContentSettingsType::SENSORS:
       icon = show_blocked_badge ? &vector_icons::kSensorsOffChromeRefreshIcon
@@ -365,6 +378,10 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
       icon = show_blocked_badge ? &vector_icons::kVrHeadsetOffChromeRefreshIcon
                                 : &vector_icons::kVrHeadsetChromeRefreshIcon;
       break;
+    case ContentSettingsType::HAND_TRACKING:
+      icon = show_blocked_badge ? &vector_icons::kHandGestureOffIcon
+                                : &vector_icons::kHandGestureIcon;
+      break;
     case ContentSettingsType::AR:
       icon = show_blocked_badge ? &vector_icons::kViewInArOffChromeRefreshIcon
                                 : &vector_icons::kViewInArChromeRefreshIcon;
@@ -385,7 +402,7 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
                  : &vector_icons::kVideogameAssetChromeRefreshIcon;
       break;
     case ContentSettingsType::IDLE_DETECTION:
-      icon = show_blocked_badge ? &vector_icons::kDevicesOffChromeRefreshIcon
+      icon = show_blocked_badge ? &vector_icons::kDevicesOffIcon
                                 : &vector_icons::kDevicesIcon;
       break;
     case ContentSettingsType::STORAGE_ACCESS:
@@ -403,6 +420,11 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
     case ContentSettingsType::CAPTURED_SURFACE_CONTROL:
       icon = show_blocked_badge ? &vector_icons::kTouchpadMouseOffIcon
                                 : &vector_icons::kTouchpadMouseIcon;
+      break;
+    case ContentSettingsType::WEB_APP_INSTALLATION:
+      // TODO(crbug.com/333795265): provide dedicated icons.
+      icon = show_blocked_badge ? &vector_icons::kInstallDesktopOffIcon
+                                : &vector_icons::kInstallDesktopIcon;
       break;
     default:
       break;
@@ -499,6 +521,9 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
     case ContentSettingsType::AR:
       icon = &vector_icons::kVrHeadsetIcon;
       break;
+    case ContentSettingsType::HAND_TRACKING:
+      icon = &vector_icons::kHandGestureIcon;
+      break;
     case ContentSettingsType::WINDOW_MANAGEMENT:
       icon = &vector_icons::kSelectWindowIcon;
       break;
@@ -538,7 +563,7 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
     default:
       // All other |ContentSettingsType|s do not have icons on desktop or are
       // not shown in the Page Info bubble.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 
   return ui::ImageModel::FromVectorIcon(
@@ -571,7 +596,7 @@ const ui::ImageModel PageInfoViewFactory::GetChosenObjectIcon(
     default:
       // All other content settings types do not represent chosen object
       // permissions.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 
   return ui::ImageModel::FromVectorIcon(
@@ -581,14 +606,13 @@ const ui::ImageModel PageInfoViewFactory::GetChosenObjectIcon(
 
 // static
 const ui::ImageModel PageInfoViewFactory::GetValidCertificateIcon() {
-  return GetImageModel(vector_icons::kCertificateChromeRefreshIcon);
+  return GetImageModel(vector_icons::kCertificateIcon);
 }
 
 // static
 const ui::ImageModel PageInfoViewFactory::GetInvalidCertificateIcon() {
-  return ui::ImageModel::FromVectorIcon(
-      vector_icons::kCertificateOffChromeRefreshIcon, ui::kColorIcon,
-      GetIconSize());
+  return ui::ImageModel::FromVectorIcon(vector_icons::kCertificateOffIcon,
+                                        ui::kColorIcon, GetIconSize());
 }
 
 // static
@@ -623,7 +647,7 @@ const ui::ImageModel PageInfoViewFactory::GetConnectionDangerousIcon() {
 
 // static
 const ui::ImageModel PageInfoViewFactory::GetConnectionSecureIcon() {
-  return GetImageModel(vector_icons::kHttpsValidChromeRefreshIcon);
+  return GetImageModel(vector_icons::kHttpsValidIcon);
 }
 
 // static
@@ -703,7 +727,7 @@ const ui::ImageModel PageInfoViewFactory::GetCookiesAndSiteDataIcon() {
 }
 
 // static
-const ui::ImageModel PageInfoViewFactory::GetFpsIcon() {
+const ui::ImageModel PageInfoViewFactory::GetRwsIcon() {
   return GetImageModel(vector_icons::kTenancyIcon);
 }
 

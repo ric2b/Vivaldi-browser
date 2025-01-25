@@ -20,7 +20,7 @@
 #include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/notreached.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
-#include "core/fxge/agg/fx_agg_driver.h"
+#include "core/fxge/agg/cfx_agg_devicedriver.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
 #include "core/fxge/cfx_graphstatedata.h"
@@ -355,7 +355,7 @@ CGdiDeviceDriver::CGdiDeviceDriver(HDC hDC, DeviceType device_type)
     HBITMAP hBitmap = CreateBitmap(1, 1, 1, 1, nullptr);
     hBitmap = (HBITMAP)SelectObject(m_hDC, hBitmap);
     BITMAP bitmap;
-    GetObject(hBitmap, sizeof bitmap, &bitmap);
+    GetObject(hBitmap, sizeof(bitmap), &bitmap);
     m_nBitsPerPixel = bitmap.bmBitsPixel;
     m_Width = bitmap.bmWidth;
     m_Height = abs(bitmap.bmHeight);
@@ -366,10 +366,10 @@ CGdiDeviceDriver::CGdiDeviceDriver(HDC hDC, DeviceType device_type)
     m_Width = ::GetDeviceCaps(m_hDC, HORZRES);
     m_Height = ::GetDeviceCaps(m_hDC, VERTRES);
   }
-  if (m_DeviceType != DeviceType::kDisplay) {
-    m_RenderCaps = FXRC_BIT_MASK;
+  if (m_DeviceType == DeviceType::kDisplay) {
+    m_RenderCaps = FXRC_GET_BITS;
   } else {
-    m_RenderCaps = FXRC_GET_BITS | FXRC_BIT_MASK;
+    m_RenderCaps = 0;
   }
 }
 
@@ -609,11 +609,7 @@ bool CGdiDeviceDriver::DrawPath(const CFX_Path& path,
                                 const CFX_GraphStateData* pGraphState,
                                 uint32_t fill_color,
                                 uint32_t stroke_color,
-                                const CFX_FillRenderOptions& fill_options,
-                                BlendMode blend_type) {
-  if (blend_type != BlendMode::kNormal)
-    return false;
-
+                                const CFX_FillRenderOptions& fill_options) {
   auto* pPlatform =
       static_cast<CWin32Platform*>(CFX_GEModule::Get()->GetPlatform());
   if (!(pGraphState || stroke_color == 0) &&
@@ -626,12 +622,11 @@ bool CGdiDeviceDriver::DrawPath(const CFX_Path& path,
     if (bbox.Width() <= 0) {
       return DrawCosmeticLine(CFX_PointF(bbox.left, bbox.top),
                               CFX_PointF(bbox.left, bbox.bottom + 1),
-                              fill_color, BlendMode::kNormal);
+                              fill_color);
     }
     if (bbox.Height() <= 0) {
       return DrawCosmeticLine(CFX_PointF(bbox.left, bbox.top),
-                              CFX_PointF(bbox.right + 1, bbox.top), fill_color,
-                              BlendMode::kNormal);
+                              CFX_PointF(bbox.right + 1, bbox.top), fill_color);
     }
   }
   int fill_alpha = FXARGB_A(fill_color);
@@ -707,20 +702,15 @@ bool CGdiDeviceDriver::DrawPath(const CFX_Path& path,
   return true;
 }
 
-bool CGdiDeviceDriver::FillRectWithBlend(const FX_RECT& rect,
-                                         uint32_t fill_color,
-                                         BlendMode blend_type) {
-  if (blend_type != BlendMode::kNormal)
-    return false;
-
-  int alpha;
-  FX_COLORREF colorref;
-  std::tie(alpha, colorref) = ArgbToAlphaAndColorRef(fill_color);
-  if (alpha == 0)
+bool CGdiDeviceDriver::FillRect(const FX_RECT& rect, uint32_t fill_color) {
+  auto [alpha, colorref] = ArgbToAlphaAndColorRef(fill_color);
+  if (alpha == 0) {
     return true;
+  }
 
-  if (alpha < 255)
+  if (alpha < 255) {
     return false;
+  }
 
   HBRUSH hBrush = CreateSolidBrush(colorref);
   const RECT* pRect = reinterpret_cast<const RECT*>(&rect);
@@ -770,16 +760,11 @@ bool CGdiDeviceDriver::SetClip_PathStroke(
 
 bool CGdiDeviceDriver::DrawCosmeticLine(const CFX_PointF& ptMoveTo,
                                         const CFX_PointF& ptLineTo,
-                                        uint32_t color,
-                                        BlendMode blend_type) {
-  if (blend_type != BlendMode::kNormal)
-    return false;
-
-  int alpha;
-  FX_COLORREF colorref;
-  std::tie(alpha, colorref) = ArgbToAlphaAndColorRef(color);
-  if (alpha == 0)
+                                        uint32_t color) {
+  auto [alpha, colorref] = ArgbToAlphaAndColorRef(color);
+  if (alpha == 0) {
     return true;
+  }
 
   HPEN hPen = CreatePen(PS_SOLID, 1, colorref);
   hPen = (HPEN)SelectObject(m_hDC, hPen);

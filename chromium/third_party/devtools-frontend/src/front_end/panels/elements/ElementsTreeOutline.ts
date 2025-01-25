@@ -47,7 +47,7 @@ import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as ElementsComponents from './components/components.js';
 import {ElementsPanel} from './ElementsPanel.js';
-import {ElementsTreeElement, InitialChildrenLimit} from './ElementsTreeElement.js';
+import {ElementsTreeElement, InitialChildrenLimit, isOpeningTag} from './ElementsTreeElement.js';
 import elementsTreeOutlineStyles from './elementsTreeOutline.css.js';
 import {ImagePreviewPopover} from './ImagePreviewPopover.js';
 import {type MarkerDecoratorRegistration} from './MarkerDecorator.js';
@@ -119,7 +119,7 @@ export class ElementsTreeOutline extends
     if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL)) {
       this.#issuesManager = IssuesManager.IssuesManager.IssuesManager.instance();
       this.#issuesManager.addEventListener(
-          IssuesManager.IssuesManager.Events.IssueAdded, this.#onIssueEventReceived, this);
+          IssuesManager.IssuesManager.Events.ISSUE_ADDED, this.#onIssueEventReceived, this);
       for (const issue of this.#issuesManager.issues()) {
         if (issue instanceof IssuesManager.GenericIssue.GenericIssue) {
           this.#onIssueAdded(issue);
@@ -422,7 +422,7 @@ export class ElementsTreeOutline extends
     }
 
     void node.copyNode();
-    this.setClipboardData({node: node, isCut: isCut});
+    this.setClipboardData({node, isCut});
   }
 
   canPaste(targetNode: SDK.DOMModel.DOMNode): boolean {
@@ -605,7 +605,7 @@ export class ElementsTreeOutline extends
 
   selectedNodeChanged(focus: boolean): void {
     this.dispatchEventToListeners(
-        ElementsTreeOutline.Events.SelectedNodeChanged, {node: this.selectedDOMNodeInternal, focus: focus});
+        ElementsTreeOutline.Events.SelectedNodeChanged, {node: this.selectedDOMNodeInternal, focus});
   }
 
   private fireElementsTreeUpdated(nodes: SDK.DOMModel.DOMNode[]): void {
@@ -1147,6 +1147,7 @@ export class ElementsTreeOutline extends
     domModel.addEventListener(SDK.DOMModel.Events.ChildNodeCountUpdated, this.childNodeCountUpdated, this);
     domModel.addEventListener(SDK.DOMModel.Events.DistributedNodesChanged, this.distributedNodesChanged, this);
     domModel.addEventListener(SDK.DOMModel.Events.TopLayerElementsChanged, this.topLayerElementsChanged, this);
+    domModel.addEventListener(SDK.DOMModel.Events.ScrollableFlagUpdated, this.scrollableFlagUpdated, this);
   }
 
   unwireFromDOMModel(domModel: SDK.DOMModel.DOMModel): void {
@@ -1160,6 +1161,7 @@ export class ElementsTreeOutline extends
     domModel.removeEventListener(SDK.DOMModel.Events.ChildNodeCountUpdated, this.childNodeCountUpdated, this);
     domModel.removeEventListener(SDK.DOMModel.Events.DistributedNodesChanged, this.distributedNodesChanged, this);
     domModel.removeEventListener(SDK.DOMModel.Events.TopLayerElementsChanged, this.topLayerElementsChanged, this);
+    domModel.removeEventListener(SDK.DOMModel.Events.ScrollableFlagUpdated, this.scrollableFlagUpdated, this);
     elementsTreeOutlineByDOMModel.delete(domModel);
   }
 
@@ -1604,13 +1606,30 @@ export class ElementsTreeOutline extends
     }
   }
 
+  private scrollableFlagUpdated(event: Common.EventTarget.EventTargetEvent<{node: SDK.DOMModel.DOMNode}>): void {
+    let {node} = event.data;
+    if (node.nodeName() === '#document') {
+      // We show the scroll badge of the document on the <html> element.
+      if (!node.ownerDocument?.documentElement) {
+        return;
+      }
+      node = node.ownerDocument.documentElement;
+    }
+    const treeElement = this.treeElementByNode.get(node);
+    if (treeElement && isOpeningTag(treeElement.tagTypeContext)) {
+      void treeElement.tagTypeContext.adornersThrottler.schedule(async () => treeElement.updateScrollAdorner());
+    }
+  }
+
   private static treeOutlineSymbol = Symbol('treeOutline');
 }
 
 export namespace ElementsTreeOutline {
   export enum Events {
+    /* eslint-disable @typescript-eslint/naming-convention -- Used by web_tests. */
     SelectedNodeChanged = 'SelectedNodeChanged',
     ElementsTreeUpdated = 'ElementsTreeUpdated',
+    /* eslint-enable @typescript-eslint/naming-convention */
   }
 
   export type EventTypes = {

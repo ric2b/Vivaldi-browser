@@ -7,7 +7,7 @@
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "ios/chrome/browser/device_reauth/ios_device_authenticator.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 
 // static
 DeviceAuthenticatorProxyFactory*
@@ -18,9 +18,15 @@ DeviceAuthenticatorProxyFactory::GetInstance() {
 
 // static
 DeviceAuthenticatorProxy* DeviceAuthenticatorProxyFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
+  return GetForProfile(profile);
+}
+
+// static
+DeviceAuthenticatorProxy* DeviceAuthenticatorProxyFactory::GetForProfile(
+    ProfileIOS* profile) {
   return static_cast<DeviceAuthenticatorProxy*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 DeviceAuthenticatorProxyFactory::DeviceAuthenticatorProxyFactory()

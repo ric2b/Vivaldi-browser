@@ -51,13 +51,6 @@ const char* const kWebViewCrashKeyAllowList[] = {
     "oop_read_failure",
     "gpu-gl-error-message",
 
-    // components/android_autofill
-    "crbug1523259-pw_form.username_id",
-    "crbug1523259-pw_form.password_id",
-    "crbug1523259-fs.fields.size",
-    "crbug1523259-fs.fields.global_ids",
-    "crbug1523259-fs.fields.global_ids",
-
     // components/viz
     "viz_deserialization",
 
@@ -184,6 +177,26 @@ const char* const kWebViewCrashKeyAllowList[] = {
     "commandline-disabled-feature-*",
     "switch-*",
     "num-switches",
+
+    // NavigationListener investigation
+    "NoTrackedNav-message",
+    "NoTrackedNav-nav_id",
+    "NoTrackedNav-url_type",
+    "NoTrackedNav-prev_url_type",
+
+    "NoTrackedNav-discard_reason",
+    "NoTrackedNav-tracked_navs_size",
+    "NoTrackedNav-all_navs_size",
+    "NoTrackedNav-net_error_code",
+
+    "NoTrackedNav-has_committed",
+    "NoTrackedNav-was_redirect",
+    "NoTrackedNav-is_activation",
+    "NoTrackedNav-is_same_doc",
+    "NoTrackedNav-is_renderer",
+    "NoTrackedNav-is_reload",
+    "NoTrackedNav-is_history",
+    "NoTrackedNav-is_restore",
 
     nullptr};
 // clang-format on

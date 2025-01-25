@@ -39,6 +39,7 @@ import org.chromium.android_webview.metrics.MetricsFilteringDecorator;
 import org.chromium.android_webview.policy.AwPolicyProvider;
 import org.chromium.android_webview.proto.MetricsBridgeRecords.HistogramRecord;
 import org.chromium.android_webview.safe_browsing.AwSafeBrowsingConfigHelper;
+import org.chromium.android_webview.supervised_user.AwSupervisedUserUrlClassifier;
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
@@ -65,6 +66,7 @@ import org.chromium.components.policy.CombinedPolicyProvider;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.ChildProcessCreationParams;
 import org.chromium.content_public.browser.ChildProcessLauncherHelper;
+import org.chromium.ui.display.DisplayAndroidManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -108,16 +110,16 @@ public final class AwBrowserProcess {
     }
 
     /**
-     * Loads the native library, and performs basic static construction of objects needed
-     * to run webview in this process. Does not create threads; safe to call from zygote.
-     * Note: it is up to the caller to ensure this is only called once.
+     * Loads the native library, and performs basic static construction of objects needed to run
+     * webview in this process. Does not create threads; safe to call from zygote. Note: it is up to
+     * the caller to ensure this is only called once.
      *
      * @param processDataDirBasePath The base path to use when setting the data directory for this
-     *                             process; null to use default base path.
+     *     process; null to use default base path.
      * @param processCacheDirBasePath The base path to use when setting the cache directory for this
-     *                             process; null to use default base path.
+     *     process; null to use default base path.
      * @param processDataDirSuffix The suffix to use when setting the data directory for this
-     *                             process; null to use no suffix.
+     *     process; null to use no suffix.
      */
     public static void loadLibrary(
             String processDataDirBasePath,
@@ -217,6 +219,7 @@ public final class AwBrowserProcess {
                                                 appContext, true);
                                     });
                         }
+                        configureDisplayAndroidManager();
                         // The policies are used by browser startup, so we need to register the
                         // policy providers before starting the browser process. This only registers
                         // java objects and doesn't need the native library.
@@ -245,6 +248,11 @@ public final class AwBrowserProcess {
                             AwContentsLifecycleNotifier.initialize();
                         }
                     });
+
+            AwSupervisedUserUrlClassifier classifier = AwSupervisedUserUrlClassifier.getInstance();
+            if (classifier != null) {
+                classifier.checkIfNeedRestrictedContentBlocking();
+            }
         }
 
         PostTask.postTask(
@@ -625,6 +633,10 @@ public final class AwBrowserProcess {
                     };
             AndroidMetricsLogUploader.setConsumer(new MetricsFilteringDecorator(directUploader));
         }
+    }
+
+    private static void configureDisplayAndroidManager() {
+        DisplayAndroidManager.disableHdrSdrRatioCallback();
     }
 
     // Do not instantiate this class.

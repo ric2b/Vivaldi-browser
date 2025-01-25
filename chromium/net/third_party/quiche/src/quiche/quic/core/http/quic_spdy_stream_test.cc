@@ -24,6 +24,7 @@
 #include "quiche/quic/core/http/quic_spdy_session.h"
 #include "quiche/quic/core/http/spdy_utils.h"
 #include "quiche/quic/core/http/web_transport_http3.h"
+#include "quiche/quic/core/qpack/value_splitting_header_list.h"
 #include "quiche/quic/core/quic_connection.h"
 #include "quiche/quic/core/quic_stream_sequencer_buffer.h"
 #include "quiche/quic/core/quic_utils.h"
@@ -398,7 +399,7 @@ class QuicSpdyStreamTest : public QuicTestWithParam<ParsedQuicVersion> {
   std::string EncodeQpackHeaders(const HttpHeaderBlock& header) {
     NoopQpackStreamSenderDelegate encoder_stream_sender_delegate;
     auto qpack_encoder = std::make_unique<QpackEncoder>(
-        session_.get(), HuffmanEncoding::kEnabled);
+        session_.get(), HuffmanEncoding::kEnabled, CookieCrumbling::kEnabled);
     qpack_encoder->set_qpack_stream_sender_delegate(
         &encoder_stream_sender_delegate);
     // QpackEncoder does not use the dynamic table by default,
@@ -2737,14 +2738,14 @@ TEST_P(QuicSpdyStreamIncrementalConsumptionTest,
   quiche::HttpHeaderBlock headers;
   headers.AppendValueOrAddHeader("key1", "val1");
   headers.AppendValueOrAddHeader("key2", "val2");
-  quic::NoopDecoderStreamErrorDelegate delegate;
-  QpackEncoder qpack_encoder(&delegate, quic::HuffmanEncoding::kDisabled);
+  NoopDecoderStreamErrorDelegate delegate;
+  QpackEncoder qpack_encoder(&delegate, HuffmanEncoding::kDisabled,
+                             CookieCrumbling::kEnabled);
   std::string metadata_frame_payload = qpack_encoder.EncodeHeaderList(
       stream_->id(), headers,
       /* encoder_stream_sent_byte_count = */ nullptr);
   std::string metadata_frame_header =
-      quic::HttpEncoder::SerializeMetadataFrameHeader(
-          metadata_frame_payload.size());
+      HttpEncoder::SerializeMetadataFrameHeader(metadata_frame_payload.size());
   std::string metadata_frame = metadata_frame_header + metadata_frame_payload;
 
   EXPECT_CALL(debug_visitor,
@@ -2775,14 +2776,14 @@ TEST_P(QuicSpdyStreamIncrementalConsumptionTest, ReceiveMetadataFrame) {
   quiche::HttpHeaderBlock headers;
   headers.AppendValueOrAddHeader("key1", "val1");
   headers.AppendValueOrAddHeader("key2", "val2");
-  quic::NoopDecoderStreamErrorDelegate delegate;
-  QpackEncoder qpack_encoder(&delegate, quic::HuffmanEncoding::kDisabled);
+  NoopDecoderStreamErrorDelegate delegate;
+  QpackEncoder qpack_encoder(&delegate, HuffmanEncoding::kDisabled,
+                             CookieCrumbling::kEnabled);
   std::string metadata_frame_payload = qpack_encoder.EncodeHeaderList(
       stream_->id(), headers,
       /* encoder_stream_sent_byte_count = */ nullptr);
   std::string metadata_frame_header =
-      quic::HttpEncoder::SerializeMetadataFrameHeader(
-          metadata_frame_payload.size());
+      HttpEncoder::SerializeMetadataFrameHeader(metadata_frame_payload.size());
   std::string metadata_frame = metadata_frame_header + metadata_frame_payload;
 
   EXPECT_CALL(metadata_visitor, OnMetadataComplete(metadata_frame.size(), _))
@@ -2812,14 +2813,14 @@ TEST_P(QuicSpdyStreamIncrementalConsumptionTest,
   quiche::HttpHeaderBlock headers;
   headers.AppendValueOrAddHeader("key1", "val1");
   headers.AppendValueOrAddHeader("key2", "val2");
-  quic::NoopDecoderStreamErrorDelegate delegate;
-  QpackEncoder qpack_encoder(&delegate, quic::HuffmanEncoding::kDisabled);
+  NoopDecoderStreamErrorDelegate delegate;
+  QpackEncoder qpack_encoder(&delegate, HuffmanEncoding::kDisabled,
+                             CookieCrumbling::kEnabled);
   std::string metadata_frame_payload = qpack_encoder.EncodeHeaderList(
       stream_->id(), headers,
       /* encoder_stream_sent_byte_count = */ nullptr);
   std::string metadata_frame_header =
-      quic::HttpEncoder::SerializeMetadataFrameHeader(
-          metadata_frame_payload.size());
+      HttpEncoder::SerializeMetadataFrameHeader(metadata_frame_payload.size());
   std::string metadata_frame = metadata_frame_header + metadata_frame_payload;
 
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _)).Times(AnyNumber());
@@ -3376,6 +3377,44 @@ TEST_P(QuicSpdyStreamTest, SendHttpDatagram) {
             MESSAGE_STATUS_SUCCESS);
 }
 
+TEST_P(QuicSpdyStreamTest, SendHttpDatagramWithoutLocalSupport) {
+  if (!UsesHttp3()) {
+    return;
+  }
+  Initialize(kShouldProcessData);
+  session_->set_local_http_datagram_support(HttpDatagramSupport::kNone);
+  std::string http_datagram_payload = {1, 2, 3, 4, 5, 6};
+  EXPECT_QUIC_BUG(stream_->SendHttp3Datagram(http_datagram_payload),
+                  "Cannot send HTTP Datagram when disabled locally");
+}
+
+TEST_P(QuicSpdyStreamTest, SendHttpDatagramBeforeReceivingSettings) {
+  if (!UsesHttp3()) {
+    return;
+  }
+  Initialize(kShouldProcessData);
+  session_->set_local_http_datagram_support(HttpDatagramSupport::kRfc);
+  std::string http_datagram_payload = {1, 2, 3, 4, 5, 6};
+  EXPECT_EQ(stream_->SendHttp3Datagram(http_datagram_payload),
+            MESSAGE_STATUS_SETTINGS_NOT_RECEIVED);
+}
+
+TEST_P(QuicSpdyStreamTest, SendHttpDatagramWithoutPeerSupport) {
+  if (!UsesHttp3()) {
+    return;
+  }
+  Initialize(kShouldProcessData);
+  // Support HTTP Datagrams locally, but not by the peer.
+  session_->set_local_http_datagram_support(HttpDatagramSupport::kRfc);
+  SettingsFrame settings;
+  settings.values[SETTINGS_H3_DATAGRAM] = 0;
+  session_->OnSettingsFrame(settings);
+
+  std::string http_datagram_payload = {1, 2, 3, 4, 5, 6};
+  EXPECT_EQ(stream_->SendHttp3Datagram(http_datagram_payload),
+            MESSAGE_STATUS_UNSUPPORTED);
+}
+
 TEST_P(QuicSpdyStreamTest, GetMaxDatagramSize) {
   if (!UsesHttp3()) {
     return;
@@ -3517,6 +3556,22 @@ TEST_P(QuicSpdyStreamTest, ColonDisallowedInHeaderName) {
   EXPECT_FALSE(stream_->ValidateReceivedHeaders(AsHeaderList(headers_)));
   EXPECT_EQ("Invalid character in header name foo:bar",
             stream_->invalid_request_details());
+}
+
+TEST_P(QuicSpdyStreamTest, HostHeaderInRequest) {
+  if (!UsesHttp3()) {
+    return;
+  }
+
+  Initialize(kShouldProcessData);
+
+  headers_["host"] = "foo";
+  if (GetQuicReloadableFlag(quic_allow_host_in_request2)) {
+    EXPECT_TRUE(stream_->ValidateReceivedHeaders(AsHeaderList(headers_)));
+  } else {
+    EXPECT_FALSE(stream_->ValidateReceivedHeaders(AsHeaderList(headers_)));
+    EXPECT_EQ("host header is not allowed", stream_->invalid_request_details());
+  }
 }
 
 }  // namespace

@@ -15,9 +15,9 @@
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
+#import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_item+Controller.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_item.h"
@@ -29,7 +29,6 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_delegate.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
-#import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_constants.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_data_sink.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_data_source.h"
@@ -309,7 +308,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
         self.selectedReadItemCount++;
         break;
       case kSectionIdentifierSignInPromo:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
   } else {
     // Open the URL.
@@ -339,7 +338,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
         self.selectedReadItemCount--;
         break;
       case kSectionIdentifierSignInPromo:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
   }
 }

@@ -42,8 +42,8 @@ TEST(GainMapTest, DecodeGainMapGrid) {
   EXPECT_EQ(decoded->gainMap->image->width, 64u * 2u);
   EXPECT_EQ(decoded->gainMap->image->height, 80u * 2u);
   EXPECT_EQ(decoded->gainMap->image->depth, 8u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomN, 6u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomD, 2u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomN, 6u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomD, 2u);
 
   // Decode the image.
   result = avifDecoderNextImage(decoder.get());
@@ -51,7 +51,26 @@ TEST(GainMapTest, DecodeGainMapGrid) {
       << avifResultToString(result) << " " << decoder->diag.error;
 }
 
-// The following two functions use avifDecoderReadFile which is not supported in CAPI yet.
+TEST(GainMapTest, DecodeOriented) {
+  const std::string path = std::string(data_path) + "gainmap_oriented.avif";
+  DecoderPtr decoder(avifDecoderCreate());
+  ASSERT_NE(decoder, nullptr);
+  decoder->enableDecodingGainMap = AVIF_TRUE;
+  decoder->enableParsingGainMapMetadata = AVIF_TRUE;
+  ASSERT_EQ(avifDecoderSetIOFile(decoder.get(), path.c_str()), AVIF_RESULT_OK);
+  ASSERT_EQ(avifDecoderParse(decoder.get()), AVIF_RESULT_OK);
+
+  // Verify that the transformative properties were kept.
+  EXPECT_EQ(decoder->image->transformFlags,
+            AVIF_TRANSFORM_IROT | AVIF_TRANSFORM_IMIR);
+  EXPECT_EQ(decoder->image->irot.angle, 1);
+  EXPECT_EQ(decoder->image->imir.axis, 0);
+  EXPECT_EQ(decoder->image->gainMap->image->transformFlags,
+            AVIF_TRANSFORM_NONE);
+}
+
+// The following two functions use avifDecoderReadFile which is not supported in
+// CAPI yet.
 
 /*
 TEST(GainMapTest, DecodeColorGridGainMapNoGrid) {
@@ -74,8 +93,8 @@ TEST(GainMapTest, DecodeColorGridGainMapNoGrid) {
   // Gain map: single image of size 64x80.
   EXPECT_EQ(decoded->gainMap->image->width, 64u);
   EXPECT_EQ(decoded->gainMap->image->height, 80u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomN, 6u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomD, 2u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomN, 6u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomD, 2u);
 }
 
 TEST(GainMapTest, DecodeColorNoGridGainMapGrid) {
@@ -98,8 +117,8 @@ TEST(GainMapTest, DecodeColorNoGridGainMapGrid) {
   // Gain map: 2x2 grid of 64x80 tiles.
   EXPECT_EQ(decoded->gainMap->image->width, 64u * 2u);
   EXPECT_EQ(decoded->gainMap->image->height, 80u * 2u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomN, 6u);
-  EXPECT_EQ(decoded->gainMap->metadata.alternateHdrHeadroomD, 2u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomN, 6u);
+  EXPECT_EQ(decoded->gainMap->metadata.baseHdrHeadroomD, 2u);
 }
 */
 

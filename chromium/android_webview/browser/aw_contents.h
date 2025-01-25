@@ -25,6 +25,9 @@
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
+#include "components/content_relationship_verification/digital_asset_links_handler.h"
 #include "components/js_injection/browser/js_communication_host.h"
 #include "content/public/browser/web_contents_observer.h"
 
@@ -101,6 +104,7 @@ class AwContents : public FindHelper::Listener,
       const base::android::JavaParamRef<jobject>&
           intercept_navigation_delegate);
   void InitializeAndroidAutofill(JNIEnv* env);
+  void InitSensitiveContentClient(JNIEnv* env);
   base::android::ScopedJavaLocalRef<jobject> GetWebContents(JNIEnv* env);
   base::android::ScopedJavaLocalRef<jobject> GetBrowserContext(JNIEnv* env);
   void SetCompositorFrameConsumer(JNIEnv* env, jlong compositor_frame_consumer);
@@ -151,6 +155,7 @@ class AwContents : public FindHelper::Listener,
               jint visible_right,
               jint visible_bottom,
               jboolean force_auxiliary_bitmap_rendering);
+  jfloat GetVelocityInPixelsPerSecond(JNIEnv* env);
   bool NeedToDrawBackgroundColor(JNIEnv* env);
   jlong CapturePicture(JNIEnv* env, int width, int height);
   void EnableOnNewPicture(JNIEnv* env, jboolean enabled);
@@ -228,6 +233,8 @@ class AwContents : public FindHelper::Listener,
   void RequestMIDISysexPermission(const GURL& origin,
                                   PermissionCallback callback) override;
   void CancelMIDISysexPermissionRequests(const GURL& origin) override;
+  void RequestStorageAccess(const url::Origin& top_level_origin,
+                            PermissionCallback callback) override;
 
   // Find-in-page API and related methods.
   void FindAllAsync(JNIEnv* env,
@@ -262,6 +269,8 @@ class AwContents : public FindHelper::Listener,
   gfx::Point GetLocationOnScreen() override;
   void OnViewTreeForceDarkStateChanged(
       bool view_tree_force_dark_state) override;
+  void SetPreferredFrameInterval(
+      base::TimeDelta preferred_frame_interval) override;
 
   // |new_value| is in physical pixel scale.
   void ScrollContainerViewTo(const gfx::Point& new_value) override;
@@ -334,6 +343,14 @@ class AwContents : public FindHelper::Listener,
 
   void SetDipScaleInternal(float dip_scale);
 
+  // Callback for RequestStorageAccess to continue once the app_domain_list has
+  // been loaded.
+  void GrantRequestStorageAccessIfOriginIsAppDefined(
+      const url::Origin top_level_origin,
+      base::TimeTicks time_requested,
+      PermissionCallback callback,
+      bool is_app_defined);
+
   JavaObjectWeakGlobalRef java_ref_;
   BrowserViewRenderer browser_view_renderer_;  // Must outlive |web_contents_|.
   std::unique_ptr<content::WebContents> web_contents_;
@@ -348,6 +365,10 @@ class AwContents : public FindHelper::Listener,
   std::unique_ptr<AwPdfExporter> pdf_exporter_;
   std::unique_ptr<PermissionRequestHandler> permission_request_handler_;
   std::unique_ptr<js_injection::JsCommunicationHost> js_communication_host_;
+  scoped_refptr<network::SharedURLLoaderFactory>
+      storage_access_url_loader_factory_;
+  std::unique_ptr<content_relationship_verification::DigitalAssetLinksHandler>
+      asset_link_handler_;
 
   bool view_tree_force_dark_state_ = false;
   std::string scheme_;
@@ -358,6 +379,10 @@ class AwContents : public FindHelper::Listener,
   typedef std::pair<const GURL, PermissionCallback> OriginCallback;
   // The first element in the list is always the currently pending request.
   std::list<OriginCallback> pending_geolocation_prompts_;
+
+  base::TimeDelta preferred_frame_interval_;
+
+  base::WeakPtrFactory<AwContents> weak_ptr_factory_{this};
 };
 
 }  // namespace android_webview

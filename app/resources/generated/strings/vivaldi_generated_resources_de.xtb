@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Fehler</translation>
 <translation id="1175364870820465910">&amp;Drucken...</translation>
 <translation id="1181037720776840403">Entfernen</translation>
+<translation id="1184037892196730210">Bildschirmübertragung nicht möglich</translation>
 <translation id="1187722533808055681">Aktivierungen im Leerlauf</translation>
 <translation id="122082903575839559">Algorithmus für Zertifikatsignatur</translation>
 <translation id="1221825588892235038">Nur Auswahl</translation>
@@ -37,7 +38,7 @@
 <translation id="1601560923496285236">Übernehmen</translation>
 <translation id="1603914832182249871">(Privat)</translation>
 <translation id="1627276047960621195">Dateideskriptoren</translation>
-<translation id="1654713139320245449">Keine Cast bzw. Streaming Ziele gefunden. Benötigen Sie Hilfe?</translation>
+<translation id="1654713139320245449">Keine Übertragungs- bzw. Streaming Ziele gefunden. Benötigen Sie Hilfe?</translation>
 <translation id="166278006618318542">Algorithmus für öffentlichen Schlüssel des Antragstellers</translation>
 <translation id="1682548588986054654">Neues privates Fenster</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
@@ -64,7 +65,7 @@
 <translation id="2114326799768592691">&amp;Frame neu laden</translation>
 <translation id="2142328300403846845">Link öffnen als</translation>
 <translation id="2144536955299248197">Zertifikats-Viewer: <ph name="CERTIFICATE_NAME" /></translation>
-<translation id="2148892889047469596">Tab streamen</translation>
+<translation id="2148892889047469596">Tab übertragen</translation>
 <translation id="2150139952286079145">Ziele suchen</translation>
 <translation id="215753907730220065">Vollbildmodus aus</translation>
 <translation id="2158475082070321257">Link zum markierten Text kopieren</translation>
@@ -99,7 +100,6 @@
 <translation id="265390580714150011">Feldwert</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Wieder aktivieren</translation>
-<translation id="2678100101831051676">Streamen nicht möglich.</translation>
 <translation id="2719936478972253983">Die folgenden Cookies wurden blockiert</translation>
 <translation id="2721037002783622288">Mit <ph name="SEARCH_ENGINE" /> nach Bild &amp;suchen</translation>
 <translation id="2738771556149464852">Nicht nach</translation>
@@ -149,7 +149,6 @@
 <translation id="3378572629723696641">Diese Erweiterung ist möglicherweise beschädigt.</translation>
 <translation id="3387614642886316601">Vorschläge von Google</translation>
 <translation id="3390013585654699824">App–Details</translation>
-<translation id="3393582007140394275">Bildschirm kann nicht gestreamt werden.</translation>
 <translation id="345693547134384690">Bil&amp;d in neuem Tab öffnen</translation>
 <translation id="3493881266323043047">Gültigkeit</translation>
 <translation id="3511307672085573050">Adr&amp;esse des Links kopieren</translation>
@@ -235,7 +234,7 @@
 <translation id="49265687513387605">Bildschirm kann nicht übertragen werden.  Prüfen Sie, ob Sie die Aufforderung zur Freigabe Ihres Bildschirms bestätigt haben.</translation>
 <translation id="4927753642311223124">Nichts zu sehen, alles OK.</translation>
 <translation id="4930714375720679147">Aktivieren</translation>
-<translation id="4961318399572185831">Bildschirm streamen</translation>
+<translation id="4961318399572185831">Bildschirm übertragen</translation>
 <translation id="4988526792673242964">Seiten</translation>
 <translation id="49896407730300355">&amp;Gegen den Uhrzeigersinn drehen</translation>
 <translation id="4989966318180235467">&amp;Hintergrundseite prüfen</translation>
@@ -347,6 +346,7 @@
 <translation id="6812841287760418429">Änderungen beibehalten</translation>
 <translation id="6824564591481349393">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="6840155290835956714">Vor dem Senden nachfragen</translation>
+<translation id="6878862640969460273">Querformat</translation>
 <translation id="6886871292305414135">Link in neuem &amp;Tab öffnen</translation>
 <translation id="6892812721183419409">Link als <ph name="USER" /> öffnen</translation>
 <translation id="6900284862687837908">Hintergrund-App: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -367,6 +367,7 @@
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Rechtschreibung während der Eingabe prüfen</translation>
+<translation id="7359680654975233185">Tab kann nicht übertragen werden</translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="7412226954991670867">GPU-Speicher</translation>
 <translation id="7421925624202799674">&amp;Seitenquelltext anzeigen</translation>
@@ -380,10 +381,11 @@
 <translation id="7661259717474717992">Speichern und Lesen von Cookiedaten zulassen</translation>
 <translation id="7663719505383602579">Empfänger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Von Ihrem Administrator installiert</translation>
+<translation id="7685038817958445325">Übertragung nicht möglich</translation>
 <translation id="7685049629764448582">JavaScript-Speicher</translation>
 <translation id="7701869757853594372">NUTZER-Handles</translation>
 <translation id="7704305437604973648">Aufgabe</translation>
-<translation id="7710568461918838723">&amp;Streamen…</translation>
+<translation id="7710568461918838723">&amp;Übertragen…</translation>
 <translation id="7714464543167945231">Zertifikat</translation>
 <translation id="7750228210027921155">Bild-in-Bild</translation>
 <translation id="7771452384635174008">Layout</translation>
@@ -410,7 +412,6 @@ Schlüsseldatei: <ph name="KEY_FILE" />
 Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Datei, um neue Versionen Ihrer Erweiterung zu erstellen.</translation>
 <translation id="8004582292198964060">Browser</translation>
 <translation id="8018313076035239964">Festlegen, welche Informationen von Websites genutzt und welche Inhalte von Websites anzeigen werden dürfen</translation>
-<translation id="8032244173881942855">Tab kann nicht gestreamt werden.</translation>
 <translation id="8071432093239591881">Als Bild drucken</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
@@ -466,7 +467,6 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="9218430445555521422">Als Standard festlegen</translation>
 <translation id="93766956588638423">Erweiterung reparieren</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
-<translation id="98515147261107953">Querformat</translation>
 <translation id="994289308992179865">&amp;Schleife</translation>
 <translation id="998747458861718449">Untersuchen</translation>
 </translationbundle>

@@ -18,6 +18,8 @@ import androidx.preference.Preference;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -35,13 +37,12 @@ import org.chromium.chrome.browser.safe_browsing.metrics.SettingsAccessPoint;
 import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
+import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.settings.GoogleServicesSettings;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.usage_stats.UsageStatsConsentDialog;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
-import org.chromium.components.browser_ui.settings.FragmentSettingsLauncher;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.ContentSettingsResources;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
@@ -60,7 +61,7 @@ import org.chromium.build.BuildConfig;
 
 /** Fragment to keep track of the all the privacy related preferences. */
 public class PrivacySettings extends ChromeBaseSettingsFragment
-        implements Preference.OnPreferenceChangeListener, FragmentSettingsLauncher {
+        implements Preference.OnPreferenceChangeListener {
     private static final String PREF_CAN_MAKE_PAYMENT = "can_make_payment";
     private static final String PREF_PRELOAD_PAGES = "preload_pages";
     private static final String PREF_HTTPS_FIRST_MODE = "https_first_mode";
@@ -88,7 +89,7 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
     private static final String PREF_PHONE_AS_A_SECURITY_KEY = "phone_as_a_security_key";
 
     private IncognitoLockSettings mIncognitoLockSettings;
-    private SettingsLauncher mSettingsLauncher;
+    private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     /**
      * Vivaldi
@@ -102,7 +103,7 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-        getActivity().setTitle(R.string.prefs_privacy_security);
+        mPageTitle.set(getString(R.string.prefs_privacy_security));
 
         SettingsUtils.addPreferencesFromResource(this, R.xml.privacy_preferences);
         // Vivaldi
@@ -123,9 +124,7 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
         sandboxPreference.setOnPreferenceClickListener(
                 preference -> {
                     PrivacySandboxSettingsBaseFragment.launchPrivacySandboxSettings(
-                            getContext(),
-                            mSettingsLauncher,
-                            PrivacySandboxReferrer.PRIVACY_SETTINGS);
+                            getContext(), PrivacySandboxReferrer.PRIVACY_SETTINGS);
                     return true;
                 });
 
@@ -291,8 +290,8 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
     }
 
     @Override
-    public void setSettingsLauncher(SettingsLauncher settingsLauncher) {
-        mSettingsLauncher = settingsLauncher;
+    public ObservableSupplier<String> getPageTitle() {
+        return mPageTitle;
     }
 
     private SpannableString buildFooterString() {
@@ -300,17 +299,19 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
                 new NoUnderlineClickableSpan(
                         getContext(),
                         v -> {
-                            mSettingsLauncher.launchSettingsActivity(
-                                    getActivity(), GoogleServicesSettings.class);
+                            SettingsLauncherFactory.createSettingsLauncher()
+                                    .launchSettingsActivity(
+                                            getActivity(), GoogleServicesSettings.class);
                         });
         NoUnderlineClickableSpan accountSettingsLink =
                 new NoUnderlineClickableSpan(
                         getContext(),
                         v -> {
-                            mSettingsLauncher.launchSettingsActivity(
-                                    getActivity(),
-                                    ManageSyncSettings.class,
-                                    ManageSyncSettings.createArguments(false));
+                            SettingsLauncherFactory.createSettingsLauncher()
+                                    .launchSettingsActivity(
+                                            getActivity(),
+                                            ManageSyncSettings.class,
+                                            ManageSyncSettings.createArguments(false));
                         });
         if (ChromeFeatureList.isEnabled(
                 ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)) {
@@ -477,19 +478,17 @@ public class PrivacySettings extends ChromeBaseSettingsFragment
 
     private boolean showTrackingProtectionUI() {
         return UserPrefs.get(getProfile()).getBoolean(Pref.TRACKING_PROTECTION3PCD_ENABLED)
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD)
-                || ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.TRACKING_PROTECTION_SETTINGS_LAUNCH);
+                || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD);
     }
 
     private boolean shouldShowIpProtectionUI() {
         return !showTrackingProtectionUI()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_V1);
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_UX);
     }
 
     private boolean shouldShowFpProtectionUI() {
         return !showTrackingProtectionUI()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.FINGERPRINTING_PROTECTION_SETTING);
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.FINGERPRINTING_PROTECTION_UX);
     }
 
     @Override

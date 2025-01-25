@@ -12,11 +12,12 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
-#include "base/strings/strcat.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/invalidation/invalidation_factory.h"
 #include "components/invalidation/invalidation_listener.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/invalidation/public/invalidation_util.h"
@@ -30,6 +31,12 @@
 namespace policy {
 
 namespace {
+
+constexpr char kDevicePolicyInvalidatorTypeName[] = "DEVICE_POLICY_FETCH";
+constexpr char kBrowserPolicyInvalidatorTypeName[] = "BROWSER_POLICY_FETCH";
+constexpr char kUserPolicyInvalidatorTypeName[] = "USER_POLICY_FETCH";
+constexpr char kDeviceLocalAccountPolicyInvalidatorTypeNameTemplate[] =
+    "PUBLIC_ACCOUNT_POLICY_FETCH-%s";
 
 MetricPolicyRefresh GetPolicyRefreshMetric(bool invalidations_enabled,
                                            bool policy_changed,
@@ -101,14 +108,6 @@ auto CalculatePolicyHash(const enterprise_management::PolicyData* policy) {
   }
 
   return base::Hash(policy->policy_value());
-}
-
-template <typename T, typename U, typename D>
-auto StoreInPointerVariant(
-    const std::variant<T, U>& invalidation_service_or_listener,
-    D& dest) {
-  return std::visit([&dest](auto&& arg) { dest = arg; },
-                    invalidation_service_or_listener);
 }
 
 }  // namespace
@@ -230,8 +229,8 @@ void CloudPolicyInvalidator::Initialize(
         std::get<invalidation::InvalidationListener*>(
             invalidation_service_or_listener))
       << "InvalidationListener is used but is null";
-  StoreInPointerVariant(invalidation_service_or_listener,
-                        invalidation_service_or_listener_);
+  invalidation_service_or_listener_ = invalidation::PointerVariantToRawPointer(
+      invalidation_service_or_listener);
   state_ = State::STOPPED;
   core_observation_.Observe(core_);
   if (core_->refresh_scheduler())
@@ -388,12 +387,15 @@ void CloudPolicyInvalidator::OnInvalidationReceived(
 std::string CloudPolicyInvalidator::GetType() const {
   switch (scope_) {
     case PolicyInvalidationScope::kUser:
+      return kUserPolicyInvalidatorTypeName;
     case PolicyInvalidationScope::kDevice:
+      return kDevicePolicyInvalidatorTypeName;
     case PolicyInvalidationScope::kCBCM:
-      return "policy";
+      return kBrowserPolicyInvalidatorTypeName;
     case PolicyInvalidationScope::kDeviceLocalAccount:
-      return base::StrCat(
-          {"device_local_account_policy-", device_local_account_id_});
+      return base::StringPrintf(
+          kDeviceLocalAccountPolicyInvalidatorTypeNameTemplate,
+          device_local_account_id_.c_str());
   }
 }
 

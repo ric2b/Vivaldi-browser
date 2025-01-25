@@ -21,10 +21,10 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
 #include "third_party/blink/renderer/modules/ml/ml_context.h"
-#include "third_party/blink/renderer/modules/ml/webnn/ml_buffer.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_error.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_utils.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_operand.h"
+#include "third_party/blink/renderer/modules/ml/webnn/ml_tensor.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -86,40 +86,40 @@ base::expected<void, String> ValidateNamedArrayBufferViews(
   return base::ok();
 }
 
-base::expected<void, String> ValidateNamedMLBuffers(
+base::expected<void, String> ValidateNamedMLTensors(
     const MLContext* context,
-    const MLNamedBuffers& named_buffers,
+    const MLNamedTensors& named_tensors,
     const MLGraph::NamedOperandDescriptors& expected_named_descriptors) {
-  if (named_buffers.size() !=
+  if (named_tensors.size() !=
       base::checked_cast<wtf_size_t>(expected_named_descriptors.size())) {
     return base::unexpected(String::Format(
-        "The number (%u) of MLBuffer(s) doesn't match the "
+        "The number (%u) of MLTensor(s) doesn't match the "
         "expectation (%u).",
-        named_buffers.size(), expected_named_descriptors.size()));
+        named_tensors.size(), expected_named_descriptors.size()));
   }
-  for (const auto& [name, buffer] : named_buffers) {
+  for (const auto& [name, tensor] : named_tensors) {
     if (!expected_named_descriptors.Contains(name)) {
       return base::unexpected(String::Format(
           "The name \"%s\" isn't part of the graph.", name.Utf8().c_str()));
     }
     const auto& info = expected_named_descriptors.at(name);
-    if (buffer->DataType() != info->data_type()) {
+    if (tensor->DataType() != info->data_type()) {
       return base::unexpected(String::Format(
           "The data type \"%s\""
-          ", of the MLBuffer with name \"%s\" "
+          ", of the MLTensor with name \"%s\" "
           "doesn't match the expected data type (%s).",
-          buffer->dataType().AsCStr(), name.Utf8().c_str(),
+          tensor->dataType().AsCStr(), name.Utf8().c_str(),
           V8MLOperandDataType(ToBlinkDataType(info->data_type())).AsCStr()));
     }
-    if (buffer->Shape() != info->shape()) {
+    if (tensor->Shape() != info->shape()) {
       return base::unexpected(
-          String::Format("The shape of the MLBuffer with name \"%s\" "
+          String::Format("The shape of the MLTensor with name \"%s\" "
                          "doesn't match the expected shape.",
                          name.Utf8().c_str()));
     }
-    if (buffer->context() != context) {
+    if (tensor->context() != context) {
       return base::unexpected(String::Format(
-          "The context of MLGraph doesn't match the context of the MLBuffer "
+          "The context of MLGraph doesn't match the context of the MLTensor "
           "with name \"%s\".",
           name.Utf8().c_str()));
     }
@@ -127,25 +127,25 @@ base::expected<void, String> ValidateNamedMLBuffers(
   return base::ok();
 }
 
-base::expected<void, String> ValidateMLBufferUsage(
-    const MLNamedBuffers& named_inputs,
-    const MLNamedBuffers& named_outputs) {
-  // Validate that output buffers are unique.
-  HeapHashSet<Member<MLBuffer>> output_buffers;
+base::expected<void, String> ValidateMLTensorUsage(
+    const MLNamedTensors& named_inputs,
+    const MLNamedTensors& named_outputs) {
+  // Validate that output tensors are unique.
+  HeapHashSet<Member<MLTensor>> output_tensors;
   for (const auto& named_output : named_outputs) {
-    output_buffers.insert(named_output.second);
+    output_tensors.insert(named_output.second);
   }
 
-  if (output_buffers.size() != named_outputs.size()) {
+  if (output_tensors.size() != named_outputs.size()) {
     return base::unexpected(
-        "The same MLBuffer cannot be used more than once as output.");
+        "The same MLTensor cannot be used more than once as output.");
   }
 
-  // Validate buffers used for input and output are unique.
+  // Validate tensors used for input and output are unique.
   for (const auto& named_input : named_inputs) {
-    if (output_buffers.Contains(named_input.second)) {
+    if (output_tensors.Contains(named_input.second)) {
       return base::unexpected(
-          "The same MLBuffer cannot be used as input and output.");
+          "The same MLTensor cannot be used as input and output.");
     }
   }
   return base::ok();
@@ -181,6 +181,12 @@ void MLGraph::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
 }
 
+void MLGraph::destroy() {
+  if (remote_graph_.is_bound()) {
+    OnConnectionError();
+  }
+}
+
 const MLGraph::NamedOperandDescriptors& MLGraph::GetInputConstraints() const {
   return input_constraints_;
 }
@@ -206,8 +212,9 @@ ScriptPromise<MLComputeResult> MLGraph::Compute(
   // Remote graph gets automatically unbound when the execution context
   // destructs.
   if (!remote_graph_.is_bound()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "Invalid graph state");
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Graph has been destroyed or context is lost.");
     return EmptyPromise();
   }
 
@@ -241,53 +248,53 @@ ScriptPromise<MLComputeResult> MLGraph::Compute(
                     std::move(inputs_info), std::move(outputs_info)));
 
   return resolver->Promise();
-  ;
 }
 
 void MLGraph::Dispatch(ScopedMLTrace scoped_trace,
-                       const MLNamedBuffers& inputs,
-                       const MLNamedBuffers& outputs,
+                       const MLNamedTensors& inputs,
+                       const MLNamedTensors& outputs,
                        ExceptionState& exception_state) {
-  // Validate the MLNamedBuffers.
+  // Validate the MLNamedTensors.
   THROW_AND_RETURN_IF_ERROR(
-      ValidateNamedMLBuffers(Context(), inputs, input_constraints_),
+      ValidateNamedMLTensors(Context(), inputs, input_constraints_),
       "Invalid inputs: ");
   THROW_AND_RETURN_IF_ERROR(
-      ValidateNamedMLBuffers(Context(), outputs, output_constraints_),
+      ValidateNamedMLTensors(Context(), outputs, output_constraints_),
       "Invalid outputs: ");
-  THROW_AND_RETURN_IF_ERROR(ValidateMLBufferUsage(inputs, outputs),
+  THROW_AND_RETURN_IF_ERROR(ValidateMLTensorUsage(inputs, outputs),
                             "Invalid dispatch: ");
 
   // Remote graph gets automatically unbound when the execution context
   // destructs.
   if (!remote_graph_.is_bound()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "Invalid graph state");
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Graph has been destroyed or context is lost.");
     return;
   }
 
   // The inputs and outputs were already verified in the base class so we can
-  // pass the buffer directly with the input and output tensors.
-  HashMap<String, base::UnguessableToken> mojo_inputs;
-  for (const auto& [name, input_buffer] : inputs) {
-    if (!input_buffer->IsValid()) {
+  // pass the tensor directly with the input and output tensors.
+  HashMap<String, blink::WebNNTensorToken> mojo_inputs;
+  for (const auto& [name, input_tensor] : inputs) {
+    if (!input_tensor->IsValid()) {
       exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                        "Invalid input buffer state");
+                                        "Invalid input tensor state");
       return;
     }
 
-    mojo_inputs.insert(name, input_buffer->handle());
+    mojo_inputs.insert(name, input_tensor->handle());
   }
 
-  HashMap<String, base::UnguessableToken> mojo_outputs;
-  for (const auto& [name, output_buffer] : outputs) {
-    if (!output_buffer->IsValid()) {
+  HashMap<String, blink::WebNNTensorToken> mojo_outputs;
+  for (const auto& [name, output_tensor] : outputs) {
+    if (!output_tensor->IsValid()) {
       exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                        "Invalid output buffer state");
+                                        "Invalid output tensor state");
       return;
     }
 
-    mojo_outputs.insert(name, output_buffer->handle());
+    mojo_outputs.insert(name, output_tensor->handle());
   }
 
   remote_graph_->Dispatch(std::move(mojo_inputs), std::move(mojo_outputs));
@@ -353,8 +360,9 @@ void MLGraph::OnConnectionError() {
   remote_graph_.reset();
 
   for (const auto& resolver : pending_resolvers_) {
-    resolver->RejectWithDOMException(DOMExceptionCode::kUnknownError,
-                                     "Context is lost.");
+    resolver->RejectWithDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Graph has been destroyed or context is lost.");
   }
   pending_resolvers_.clear();
 }

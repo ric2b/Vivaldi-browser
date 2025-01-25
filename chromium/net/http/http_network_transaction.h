@@ -35,6 +35,7 @@
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/socket/connection_attempts.h"
 #include "net/ssl/ssl_config.h"
+#include "net/third_party/quiche/src/quiche/quic/core/quic_versions.h"
 #include "net/websockets/websocket_handshake_stream_base.h"
 
 namespace net {
@@ -116,14 +117,17 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
                       const NetErrorDetails& net_error_details,
                       const ProxyInfo& used_proxy_info,
                       ResolveErrorInfo resolve_error_info) override;
-  void OnCertificateError(int status,
-                          const SSLInfo& ssl_info) override;
+  void OnCertificateError(int status, const SSLInfo& ssl_info) override;
   void OnNeedsProxyAuth(const HttpResponseInfo& response_info,
                         const ProxyInfo& used_proxy_info,
                         HttpAuthController* auth_controller) override;
   void OnNeedsClientAuth(SSLCertRequestInfo* cert_info) override;
 
   void OnQuicBroken() override;
+
+  void OnSwitchesToHttpStreamPool(
+      HttpStreamPoolSwitchingInfo switching_info) override;
+
   ConnectionAttempts GetConnectionAttempts() const override;
 
  private:
@@ -439,6 +443,9 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // transaction.
   int64_t total_sent_bytes_ = 0;
 
+  // When the transaction started creating a stream.
+  base::TimeTicks create_stream_start_time_;
+
   // When the transaction started / finished sending the request, including
   // the body, if present. |send_start_time_| is set to |base::TimeTicks()|
   // until |SendRequest()| is called on |stream_|, and reset for auth restarts.
@@ -504,6 +511,10 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   // using DNS times coming from the established stream.
   base::TimeTicks dns_resolution_start_time_override_;
   base::TimeTicks dns_resolution_end_time_override_;
+
+  base::TimeTicks blocked_initialize_stream_start_time_;
+  base::TimeTicks blocked_generate_proxy_auth_token_start_time_;
+  base::TimeTicks blocked_generate_server_auth_token_start_time_;
 
   // The number of bytes of the body received from network.
   int64_t received_body_bytes_ = 0;

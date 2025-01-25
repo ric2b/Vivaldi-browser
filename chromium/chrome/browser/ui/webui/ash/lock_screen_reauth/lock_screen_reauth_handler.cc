@@ -16,13 +16,13 @@
 #include "chrome/browser/ash/login/lock/online_reauth/lock_screen_reauth_manager_factory.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/signin_partition_manager.h"
-#include "chrome/browser/ash/login/ui/login_display_host_webui.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/ash/login/login_display_host_webui.h"
 #include "chrome/browser/ui/webui/ash/lock_screen_reauth/lock_screen_reauth_dialogs.h"
 #include "chrome/browser/ui/webui/ash/login/check_passwords_against_cryptohome_helper.h"
 #include "chrome/browser/ui/webui/ash/login/online_login_utils.h"
@@ -49,12 +49,15 @@
 namespace ash {
 namespace {
 
-bool ShouldDoSamlRedirect(const std::string& email,
-                          const bool auto_start_reauth) {
+bool ShouldDoSamlRedirect(const std::string& email) {
   // TODO(b/335388700): If automatic re-authentication start is configured we
   // have to skip any user verification notice page. For SAML this is currently
   // only possible with redirect endpoint. Once reauth endpoint enables this,
   // remove auto_start_reauth from this function.
+  const PrefService* prefs =
+      user_manager::UserManager::Get()->GetPrimaryUser()->GetProfilePrefs();
+  bool auto_start_reauth =
+      prefs && prefs->GetBoolean(::prefs::kLockScreenAutoStartOnlineReauth);
   if (!auto_start_reauth) {
     return false;
   }
@@ -205,17 +208,8 @@ void LockScreenReauthHandler::OnSetCookieForLoadGaiaWithPartition(
   params.Set("gaiaUrl", gaia_urls.gaia_url().spec());
   params.Set("clientId", gaia_urls.oauth2_chrome_client_id());
 
-  const PrefService* prefs =
-      user_manager::UserManager::Get()->GetPrimaryUser()->GetProfilePrefs();
-  bool auto_start_reauth =
-      prefs && prefs->GetBoolean(::prefs::kLockScreenAutoStartOnlineReauth);
-  bool do_saml_redirect =
-      ShouldDoSamlRedirect(context.email, auto_start_reauth);
+  bool do_saml_redirect = ShouldDoSamlRedirect(context.email);
   params.Set("doSamlRedirect", do_saml_redirect);
-  // TODO(b/341898144): native verification notice can be deprecated.
-  // If automatic re-authentication start is enabled, user verification notice
-  // page shouldn't be shown to ensure faster user flow.
-  params.Set("showVerificationNotice", do_saml_redirect && !auto_start_reauth);
 
   // Path without the leading slash, as expected by authenticator.js.
   const std::string default_gaia_path =
@@ -231,8 +225,7 @@ void LockScreenReauthHandler::OnSetCookieForLoadGaiaWithPartition(
     params.Set("gaiaPath", default_gaia_path);
   }
 
-  const std::string domain =
-      chrome::enterprise_util::GetDomainFromEmail(context.email);
+  const std::string domain = enterprise_util::GetDomainFromEmail(context.email);
   if (!domain.empty()) {
     params.Set("enterpriseEnrollmentDomain", domain);
   } else {

@@ -23,6 +23,7 @@
 #include "base/android/library_loader/anchor_functions.h"
 #include "base/android/orderfile/orderfile_buildflags.h"
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/files/file.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
@@ -133,7 +134,7 @@ __attribute__((always_inline, no_instrument_function)) void RecordAddress(
       for_testing ? kStartOfTextForTesting : base::android::kStartOfText;
   const size_t end =
       for_testing ? kEndOfTextForTesting : base::android::kEndOfText;
-  if (UNLIKELY(address < start || address > end)) {
+  if (address < start || address > end) [[unlikely]] {
     if (!AreAnchorsSane()) {
       // Something is really wrong with the anchors, and this is likely to be
       // triggered from within a static constructor, where logging is likely to
@@ -185,7 +186,7 @@ __attribute__((always_inline, no_instrument_function)) void RecordAddress(
   auto& ordered_offsets_index = g_data[index].index;
   size_t insertion_index =
       ordered_offsets_index.fetch_add(1, std::memory_order_relaxed);
-  if (UNLIKELY(insertion_index >= kMaxElements)) {
+  if (insertion_index >= kMaxElements) [[unlikely]] {
     Disable();
     LOG(FATAL) << "Too many reached offsets";
   }
@@ -216,8 +217,7 @@ NO_INSTRUMENT_FUNCTION bool DumpToFile(const base::FilePath& path,
     if (!offset)
       continue;
     auto offset_str = base::StringPrintf("%" PRIuS "\n", offset);
-    if (file.WriteAtCurrentPos(offset_str.c_str(),
-                               static_cast<int>(offset_str.size())) < 0) {
+    if (!file.WriteAtCurrentPosAndCheck(base::as_byte_span(offset_str))) {
       // If the file could be opened, but writing has failed, it's likely that
       // data was partially written. Producing incomplete profiling data would
       // lead to a poorly performing orderfile, but might not be otherwised

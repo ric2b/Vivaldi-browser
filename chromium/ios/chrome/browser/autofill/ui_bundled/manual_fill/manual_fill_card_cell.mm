@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_card_cell.h"
 
+#import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
@@ -15,17 +16,18 @@
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "components/grit/components_scaled_resources.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/net/model/crurl.h"
-#import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
-#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
-#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/card_list_delegate.h"
+#import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_card_cell+Testing.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_cell_utils.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_constants.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_content_injector.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_credit_card.h"
 #import "ios/chrome/browser/autofill/ui_bundled/manual_fill/manual_fill_labeled_chip.h"
+#import "ios/chrome/browser/net/model/crurl.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/text_view_util.h"
@@ -52,9 +54,13 @@ using base::SysNSStringToUTF8;
 // The UIActions that should be available from the cell's overflow menu button.
 @property(nonatomic, strong) NSArray<UIAction*>* menuActions;
 
-// The part of the cell's accessibility label that is used to indicate the index
-// at which the payment method represented by this item is positioned in the
-// list of payment methods to show.
+// The 0-based index at which the payment method is in the list of payment
+// methods to show.
+@property(nonatomic, assign) NSInteger cellIndex;
+
+// The part of the cell's accessibility label that is used to indicate the
+// 1-based index at which the payment method represented by this item is
+// positioned in the list of payment methods to show.
 @property(nonatomic, strong) NSString* cellIndexAccessibilityLabel;
 
 @end
@@ -69,6 +75,7 @@ using base::SysNSStringToUTF8;
                        (id<ManualFillContentInjector>)contentInjector
                 navigationDelegate:(id<CardListDelegate>)navigationDelegate
                        menuActions:(NSArray<UIAction*>*)menuActions
+                         cellIndex:(NSInteger)cellIndex
        cellIndexAccessibilityLabel:(NSString*)cellIndexAccessibilityLabel
             showAutofillFormButton:(BOOL)showAutofillFormButton {
   self = [super initWithType:kItemTypeEnumZero];
@@ -77,6 +84,7 @@ using base::SysNSStringToUTF8;
     _navigationDelegate = navigationDelegate;
     _card = card;
     _menuActions = menuActions;
+    _cellIndex = cellIndex;
     _cellIndexAccessibilityLabel = cellIndexAccessibilityLabel;
     _showAutofillFormButton = showAutofillFormButton;
     self.cellClass = [ManualFillCardCell class];
@@ -91,10 +99,10 @@ using base::SysNSStringToUTF8;
                   contentInjector:self.contentInjector
                navigationDelegate:self.navigationDelegate
                       menuActions:self.menuActions
+                        cellIndex:_cellIndex
       cellIndexAccessibilityLabel:self.cellIndexAccessibilityLabel
            showAutofillFormButton:_showAutofillFormButton];
 }
-
 @end
 
 namespace {
@@ -131,9 +139,12 @@ bool ShouldShowGPayIcon(autofill::CreditCard::RecordType card_record_type) {
     case autofill::CreditCard::RecordType::kLocalCard:
       return false;
     case autofill::CreditCard::RecordType::kMaskedServerCard:
-    case autofill::CreditCard::RecordType::kFullServerCard:
     case autofill::CreditCard::RecordType::kVirtualCard:
       return IsKeyboardAccessoryUpgradeEnabled();
+    case autofill::CreditCard::RecordType::kFullServerCard:
+      // Full server cards are a temporary cached state and are not given as
+      // suggestions for manual fill.
+      NOTREACHED();
   }
 }
 
@@ -224,6 +235,10 @@ CGFloat GPayIconTopAnchorOffset() {
 @end
 
 @implementation ManualFillCardCell {
+  // The 0-based index at which the payment method is in the list of payment
+  // methods to show.
+  NSInteger _cellIndex;
+
   // If `YES`, autofill button is shown for the cell.
   BOOL _showAutofillFormButton;
 }
@@ -270,12 +285,14 @@ CGFloat GPayIconTopAnchorOffset() {
                 contentInjector:(id<ManualFillContentInjector>)contentInjector
              navigationDelegate:(id<CardListDelegate>)navigationDelegate
                     menuActions:(NSArray<UIAction*>*)menuActions
+                      cellIndex:(NSInteger)cellIndex
     cellIndexAccessibilityLabel:(NSString*)cellIndexAccessibilityLabel
          showAutofillFormButton:(BOOL)showAutofillFormButton {
   if (!self.dynamicConstraints) {
     self.dynamicConstraints = [[NSMutableArray alloc] init];
   }
 
+  _cellIndex = cellIndex;
   _showAutofillFormButton = showAutofillFormButton;
 
   if (self.contentView.subviews.count == 0) {
@@ -290,9 +307,20 @@ CGFloat GPayIconTopAnchorOffset() {
   [self verticallyArrangeViews:card];
 
   if (IsKeyboardAccessoryUpgradeEnabled()) {
-    self.accessibilityLabel =
+    NSString* accessibilityLabel =
         [NSString stringWithFormat:@"%@, %@", cellIndexAccessibilityLabel,
                                    self.cardLabel.attributedText.string];
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+    if (ShouldShowGPayIcon(self.card.recordType)) {
+      accessibilityLabel =
+          [NSString stringWithFormat:@"%@, %@", accessibilityLabel,
+                                     l10n_util::GetNSString(
+                                         IDS_IOS_AUTOFILL_WALLET_SERVER_NAME)];
+    }
+#endif
+    GiveAccessibilityContextToCellAndButton(
+        self.contentView, self.overflowMenuButton, self.autofillFormButton,
+        accessibilityLabel);
   }
 }
 
@@ -300,6 +328,14 @@ CGFloat GPayIconTopAnchorOffset() {
 
 // Creates and sets up the view hierarchy.
 - (void)createViewHierarchy {
+  // Holds the views that should be accessible. The ordering in which views are
+  // added to this array will reflect the order followed by VoiceOver. When the
+  // Keyboard Accessory Upgrade feature is enabled, subviews that need to be
+  // read by VoiceOver must be added to this array. Otherwise, they will be
+  // ignored.
+  NSMutableArray<UIView*>* accessibilityElements =
+      [[NSMutableArray alloc] initWithObjects:self.contentView, nil];
+
   self.layoutGuide =
       AddLayoutGuideToContentView(self.contentView, /*cell_has_header=*/YES);
 
@@ -312,6 +348,7 @@ CGFloat GPayIconTopAnchorOffset() {
   self.headerView =
       CreateHeaderView(self.cardIcon, self.cardLabel, self.overflowMenuButton);
   [self.contentView addSubview:self.headerView];
+  [accessibilityElements addObject:self.overflowMenuButton];
 
   if (IsKeyboardAccessoryUpgradeEnabled()) {
     self.headerSeparator = CreateGraySeparatorForContainer(self.contentView);
@@ -331,6 +368,8 @@ CGFloat GPayIconTopAnchorOffset() {
     self.virtualCardInstructionTextView =
         [self createVirtualCardInstructionTextView];
     [self.contentView addSubview:self.virtualCardInstructionTextView];
+    [accessibilityElements addObject:self.virtualCardInstructionTextView];
+
     self.virtualCardInstructionsSeparator =
         CreateGraySeparatorForContainer(self.contentView);
 
@@ -338,50 +377,66 @@ CGFloat GPayIconTopAnchorOffset() {
         initSingleChipWithTarget:self
                         selector:@selector(userDidTapCardNumber:)];
     [self.contentView addSubview:self.cardNumberLabeledChip];
+    [accessibilityElements addObject:self.cardNumberLabeledChip.singleButton];
 
     self.expirationDateLabeledChip = [[ManualFillLabeledChip alloc]
         initExpirationDateChipWithTarget:self
                            monthSelector:@selector(userDidTapExpirationMonth:)
                             yearSelector:@selector(userDidTapExpirationYear:)];
     [self.contentView addSubview:self.expirationDateLabeledChip];
+    [accessibilityElements
+        addObject:self.expirationDateLabeledChip.expirationMonthButton];
+    [accessibilityElements
+        addObject:self.expirationDateLabeledChip.expirationYearButton];
 
     self.cardholderLabeledChip = [[ManualFillLabeledChip alloc]
         initSingleChipWithTarget:self
                         selector:@selector(userDidTapCardholderName:)];
     [self.contentView addSubview:self.cardholderLabeledChip];
+    [accessibilityElements addObject:self.cardholderLabeledChip.singleButton];
 
     self.CVCLabeledChip = [[ManualFillLabeledChip alloc]
         initSingleChipWithTarget:self
                         selector:@selector(userDidTapCVC:)];
     [self.contentView addSubview:self.CVCLabeledChip];
+    [accessibilityElements addObject:self.CVCLabeledChip.singleButton];
   } else {
     // TODO(crbug.com/330329960): Deprecate button use once
     // kAutofillEnableVirtualCards is enabled.
     self.cardNumberButton =
         CreateChipWithSelectorAndTarget(@selector(userDidTapCardNumber:), self);
     [self.contentView addSubview:self.cardNumberButton];
+    [accessibilityElements addObject:self.cardNumberButton];
+
     self.expirationMonthButton =
         CreateChipWithSelectorAndTarget(@selector(userDidTapCardInfo:), self);
     [self.contentView addSubview:self.expirationMonthButton];
+    [accessibilityElements addObject:self.expirationMonthButton];
+
     expirationDateSeparatorLabel = [self createExpirationSeparatorLabel];
     [self.contentView addSubview:expirationDateSeparatorLabel];
+
     self.expirationYearButton =
         CreateChipWithSelectorAndTarget(@selector(userDidTapCardInfo:), self);
     [self.contentView addSubview:self.expirationYearButton];
+    [accessibilityElements addObject:self.expirationYearButton];
+
     self.cardholderButton =
         CreateChipWithSelectorAndTarget(@selector(userDidTapCardInfo:), self);
     [self.contentView addSubview:self.cardholderButton];
+    [accessibilityElements addObject:self.cardholderButton];
   }
 
-  if (ShouldCreateAutofillFormButton(_showAutofillFormButton)) {
-    self.autofillFormButton = CreateAutofillFormButton();
-    [self.contentView addSubview:self.autofillFormButton];
-    [self.autofillFormButton addTarget:self
-                                action:@selector(onAutofillFormButtonTapped)
-                      forControlEvents:UIControlEventTouchUpInside];
-  }
+  self.autofillFormButton = CreateAutofillFormButton();
+  [self.contentView addSubview:self.autofillFormButton];
+  [accessibilityElements addObject:self.autofillFormButton];
+  [self.autofillFormButton addTarget:self
+                              action:@selector(onAutofillFormButtonTapped)
+                    forControlEvents:UIControlEventTouchUpInside];
 
   [self horizontallyArrangeViews:expirationDateSeparatorLabel];
+
+  SetUpCellAccessibilityElements(self, accessibilityElements);
 }
 
 // Horizontally positions the UIViews.
@@ -447,14 +502,14 @@ CGFloat GPayIconTopAnchorOffset() {
                                      constant:GPayIconTopAnchorOffset()]];
   }
 
-  if (ShouldCreateAutofillFormButton(_showAutofillFormButton)) {
-    AppendHorizontalConstraintsForViews(
-        staticConstraints, @[ self.autofillFormButton ], self.layoutGuide);
-  }
+  AppendHorizontalConstraintsForViews(
+      staticConstraints, @[ self.autofillFormButton ], self.layoutGuide);
 
-  // Without this set, Voice Over will read the content vertically instead of
-  // horizontally.
-  self.contentView.shouldGroupAccessibilityChildren = YES;
+  if (!IsKeyboardAccessoryUpgradeEnabled()) {
+    // Without this set, Voice Over will read the content vertically instead of
+    // horizontally.
+    self.contentView.shouldGroupAccessibilityChildren = YES;
+  }
 
   [NSLayoutConstraint activateConstraints:staticConstraints];
 }
@@ -658,10 +713,14 @@ CGFloat GPayIconTopAnchorOffset() {
   AddChipGroupsToVerticalLeadViews(@[ cardInfoGroupVerticalLeadChips ],
                                    verticalLeadViews);
 
-  if (ShouldCreateAutofillFormButton(_showAutofillFormButton)) {
+  if (_showAutofillFormButton) {
+    CHECK(IsKeyboardAccessoryUpgradeEnabled());
     AddViewToVerticalLeadViews(self.autofillFormButton,
                                ManualFillCellView::ElementType::kOther,
                                verticalLeadViews);
+    self.autofillFormButton.hidden = NO;
+  } else {
+    self.autofillFormButton.hidden = YES;
   }
 
   // Set and activate constraints.
@@ -764,6 +823,12 @@ CGFloat GPayIconTopAnchorOffset() {
 // Called when the "Autofill Form" button is tapped. Fills the current form with
 // the card's data.
 - (void)onAutofillFormButtonTapped {
+  base::UmaHistogramSparse(
+      "Autofill.UserAcceptedSuggestionAtIndex.CreditCard.ManualFallback",
+      _cellIndex);
+  base::RecordAction(
+      base::UserMetricsAction("ManualFallback_CreditCard_SuggestionAccepted"));
+
   autofill::SuggestionType type =
       autofill::VirtualCardFeatureEnabled() &&
               [self.card recordType] == kVirtualCard
@@ -781,7 +846,8 @@ CGFloat GPayIconTopAnchorOffset() {
                    base::SysUTF16ToNSString(l10n_util::GetStringUTF16(
                        IDS_AUTOFILL_A11Y_ANNOUNCE_FILLED_FORM))];
 
-  [self.contentInjector autofillFormWithSuggestion:suggestion];
+  [self.contentInjector autofillFormWithSuggestion:suggestion
+                                           atIndex:_cellIndex];
 }
 
 - (const char*)createMetricsAction:(NSString*)selectedChip {

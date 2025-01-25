@@ -22,6 +22,8 @@ static_library("accessibility") {
     "geometry_util.h",
   ]
 
+  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+
   deps = [
     "//ash",
     "//ash/components/arc",
@@ -61,6 +63,7 @@ source_set("unit_tests") {
     "//ash:test_support",
     "//ash/components/arc",
     "//ash/public/cpp",
+    "//ash/public/cpp/external_arc",
     "//ash/public/cpp/external_arc:test_support",
     "//base",
     "//chrome/common",
@@ -69,6 +72,7 @@ source_set("unit_tests") {
     "//components/exo:test_support",
     "//components/prefs",
     "//components/prefs:test_support",
+    "//services/accessibility/android:android_lib",
     "//services/accessibility/android:test_support",
     "//testing/gtest",
     "//ui/aura",
@@ -94,12 +98,13 @@ source_set("browser_tests") {
     "//base",
     "//base/test:test_support",
     "//chrome/browser/profiles:profile",
-    "//chrome/browser/ui",
+    "//chrome/browser/ui/ash/shelf/app_service",
     "//chrome/test:test_support",
     "//components/exo",
     "//components/exo:test_support",
     "//content/test:test_support",
     "//extensions/browser",
+    "//services/accessibility/android:android_lib",
     "//services/accessibility/android:test_support",
     "//ui/accessibility",
     "//ui/compositor",

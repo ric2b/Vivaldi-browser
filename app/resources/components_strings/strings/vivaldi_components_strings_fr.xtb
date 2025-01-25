@@ -7,11 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a mis fin à la connexion de manière inattendue.</translation>
 <translation id="1161325031994447685">Se reconnecter au réseau Wi-Fi</translation>
 <translation id="1175364870820465910">Im&amp;primer...</translation>
+<translation id="132390688737681464">Enregistrer et renseigner les adresses</translation>
 <translation id="1375198122581997741">À propos de la version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> n’a envoyé aucune donnée.</translation>
 <translation id="1559528461873125649">Fichier ou répertoire inexistant</translation>
 <translation id="1640244768702815859">Essayez de <ph name="BEGIN_LINK" />consulter la page d’accueil du site<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocole non supporté</translation>
+<translation id="1662550410081243962">Enregistrer et saisir les modes de paiement</translation>
 <translation id="1710259589646384581">Système d’exploitation</translation>
 <translation id="1728677426644403582">Vous consultez actuellement le code source d’une page Web</translation>
 <translation id="1734878702283171397">Essayer de contacter l’administrateur système.</translation>
@@ -22,6 +24,7 @@
 <translation id="2166378884831602661">Ce site ne peut pas fournir de connexion sécurisée</translation>
 <translation id="2187317261103489799">Détecter (par défaut)</translation>
 <translation id="2224337661447660594">Aucun accès à Internet</translation>
+<translation id="2283340219607151381">Enregistrer et renseigner les adresses</translation>
 <translation id="2292556288342944218">Votre accès à Internet est bloqué</translation>
 <translation id="2317259163369394535">Le <ph name="DOMAIN" /> nécessite un nom d’utilisateur et un mot de passe.</translation>
 <translation id="2337852623177822836">Paramètre contrôlé par votre administrateur</translation>
@@ -43,6 +46,7 @@
 <translation id="2826760142808435982">La connexion est chiffrée et authentifiée avec la clé <ph name="CIPHER" />. La méthode d’échange de clés utilisée est <ph name="KX" />.</translation>
 <translation id="2909946352844186028">Un changement de réseau a été détecté.</translation>
 <translation id="2948083400971632585">Vous pouvez désactiver le proxy configuré pour une connexion depuis les Réglages &gt; Réseau.</translation>
+<translation id="2954624054936281172">Tableau des modes de paiement enregistrés</translation>
 <translation id="2991571918955627853">Le site <ph name="SITE" /> est actuellement inaccessible, car il utilise la technologie HSTS. Les erreurs réseau et les attaques sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page plus tard.</translation>
 <translation id="3005723025932146533">Afficher la copie enregistrée</translation>
 <translation id="301521992641321250">Bloquée automatiquement</translation>
@@ -58,6 +62,7 @@
 <translation id="3234666976984236645">Toujours détecter du contenu important sur ce site</translation>
 <translation id="3308738399950580893">publicités</translation>
 <translation id="3384522979010096022">Votre organisation ne vous autorise pas à consulter ce site</translation>
+<translation id="3387261909427947069">Modes de paiement</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> est actuellement inaccessible.</translation>
 <translation id="3427092606871434483">Autoriser (par défaut)</translation>
 <translation id="3447661539832366887">Le propriétaire de cet appareil a désactivé le jeu avec Antonio, la boule de lave.</translation>
@@ -115,6 +120,7 @@
 <translation id="5386426401304769735">La chaîne de certificats de ce site contient un certificat signé avec SHA-1.</translation>
 <translation id="5452270690849572955">Cette page du site <ph name="HOST_NAME" /> est introuvable</translation>
 <translation id="5457113250005438886">Non valide</translation>
+<translation id="5490432419156082418">Adresses et autres</translation>
 <translation id="5492298309214877701">Ce site situé sur l’intranet de l’entreprise, de l’organisation ou de l’établissement scolaire possède la même URL qu’un site Web externe.
     <ph name="LINE_BREAK" />
     Essayez de contacter votre administrateur système.</translation>
@@ -159,6 +165,7 @@
 <translation id="7108819624672055576">Autorisé par une extension</translation>
 <translation id="7111012039238467737">(Valide)</translation>
 <translation id="7113310725918019676">Autoriser <ph name="BLOCKED_TYPE" /> depuis <ph name="DOMAIN" /></translation>
+<translation id="7179323680825933600">Enregistrer et saisir les modes de paiement</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ne respecte pas les normes de sécurité.</translation>
 <translation id="7219179957768738017">La connexion utilise <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Afficher les notifications</translation>
@@ -197,6 +204,7 @@
 <translation id="8289355894181816810">Contactez votre administrateur réseau si vous ne savez pas de quoi il s’agit.</translation>
 <translation id="8332188693563227489">L’accès à <ph name="HOST_NAME" /> a été refusé</translation>
 <translation id="8422228580902424274">Des pirates informatiques qui se trouvent sur le site que vous essayez de consulter peuvent vous inciter à installer un logiciel ou à divulguer des éléments tels que votre mot de passe, votre numéro de téléphone ou votre numéro de carte de crédit.</translation>
+<translation id="8473863474539038330">Adresses et autres</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> a mis trop de temps à répondre.</translation>
 <translation id="8503813439785031346">Nom d’utilisateur</translation>
 <translation id="8703575177326907206">Votre connexion à <ph name="DOMAIN" /> n’est pas chiffrée.</translation>
@@ -204,6 +212,7 @@
 <translation id="8820817407110198400">Signets</translation>
 <translation id="8940028675168378100">Bloqué par <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Accéder aux paramètres du site</translation>
+<translation id="8975012916872825179">Y compris les numéros de téléphone, les adresses e-mail et les adresses de livraison</translation>
 <translation id="9001074447101275817">Le proxy <ph name="DOMAIN" /> nécessite un nom d’utilisateur et un mot de passe.</translation>
 <translation id="9008201768610948239">Ignorer</translation>
 <translation id="9025348182339809926">(Non valide)</translation>
@@ -216,5 +225,6 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utilise un protocole incompatible.</translation>
 <translation id="936602727769022409">Vous pourriez perdre l’accès à votre compte Vivaldi. L’équipe Vivaldi vous recommande de modifier votre mot de passe maintenant. Vous devrez vous connecter.</translation>
 <translation id="969892804517981540">Version officielle</translation>
+<translation id="984275831282074731">Modes de paiement</translation>
 <translation id="988159990683914416">Version de développement</translation>
 </translationbundle>

@@ -12,7 +12,7 @@
 #include "media/base/media_export.h"
 #include "media/base/video_types.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
-#include "third_party/skia/include/gpu/GrTypes.h"
+#include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 #include "ui/gfx/buffer_types.h"
 
 namespace gfx {
@@ -77,7 +77,8 @@ class MEDIA_EXPORT RenderableGpuMemoryBufferVideoFramePool {
     // Destroy a SharedImage created by this interface.
     virtual void DestroySharedImage(
         const gpu::SyncToken& sync_token,
-        scoped_refptr<gpu::ClientSharedImage> shared_image) = 0;
+        scoped_refptr<gpu::ClientSharedImage> shared_image,
+        const bool is_mappable_si_enabled) = 0;
 
     virtual ~Context() = default;
   };
@@ -95,6 +96,10 @@ class MEDIA_EXPORT RenderableGpuMemoryBufferVideoFramePool {
   virtual scoped_refptr<VideoFrame> MaybeCreateVideoFrame(
       const gfx::Size& coded_size,
       const gfx::ColorSpace& color_space) = 0;
+
+  // Returns whether MappableSI is enabled for
+  // RenderableGpuMemoryBufferVideoFramePool. This method is only used by tests.
+  virtual bool IsMappableSIEnabledForTesting() const = 0;
 
   virtual ~RenderableGpuMemoryBufferVideoFramePool() = default;
 };

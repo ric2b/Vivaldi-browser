@@ -22,12 +22,11 @@ import static org.mockito.Mockito.when;
 
 import static org.chromium.chrome.browser.multiwindow.MultiWindowTestUtils.enableMultiInstance;
 
-import android.content.Context;
+import android.app.Activity;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
-import android.view.ContextThemeWrapper;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewStub;
@@ -35,7 +34,6 @@ import android.view.ViewStub;
 import androidx.annotation.ColorInt;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.graphics.ColorUtils;
-import androidx.test.core.app.ApplicationProvider;
 
 import org.junit.After;
 import org.junit.Before;
@@ -48,6 +46,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -94,12 +93,14 @@ import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
 /** Tests for {@link StripLayoutHelperManager}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, qualifiers = "sw600dp")
+@DisableFeatures(ChromeFeatureList.TAB_STRIP_INCOGNITO_MIGRATION)
 public class StripLayoutHelperManagerTest {
     @Rule public JniMocker mJniMocker = new JniMocker();
     @Mock private TabStripSceneLayer.Natives mTabStripSceneMock;
@@ -113,6 +114,7 @@ public class StripLayoutHelperManagerTest {
     @Mock private View mToolbarContainerView;
     @Mock private DragAndDropDelegate mDragDropDelegate;
     @Mock private TabModelSelector mTabModelSelector;
+    @Mock private ObservableSupplierImpl<TabModel> mTabModelSupplier;
     @Mock private TabCreatorManager mTabCreatorManager;
     @Mock private TabGroupModelFilter mTabGroupModelFilter;
     @Mock private TabModelFilterProvider mTabModelFilterProvider;
@@ -130,7 +132,7 @@ public class StripLayoutHelperManagerTest {
     @Captor private ArgumentCaptor<List<Rect>> mSystemExclusionRectCaptor;
 
     private StripLayoutHelperManager mStripLayoutHelperManager;
-    private Context mContext;
+    private Activity mActivity;
     private ObservableSupplierImpl<TabModelStartupInfo> mTabModelStartupInfoSupplier;
     private ObservableSupplierImpl<Integer> mTabStripHeightSupplier;
     private int mToolbarPrimaryColor;
@@ -146,16 +148,15 @@ public class StripLayoutHelperManagerTest {
     public void beforeTest() {
         MockitoAnnotations.initMocks(this);
         mJniMocker.mock(TabStripSceneLayerJni.TEST_HOOKS, mTabStripSceneMock);
-        mContext =
-                new ContextThemeWrapper(
-                        ApplicationProvider.getApplicationContext(),
-                        R.style.Theme_BrowserUI_DayNight);
-        when(mToolbarContainerView.getContext()).thenReturn(mContext);
+        mActivity = Robolectric.buildActivity(Activity.class).setup().get();
+        mActivity.setTheme(R.style.Theme_BrowserUI_DayNight);
+        when(mToolbarContainerView.getContext()).thenReturn(mActivity);
         when(mToolbarManager.getStatusBarColorController()).thenReturn(mStatusBarColorController);
 
         TabStripSceneLayer.setTestFlag(true);
 
         when(mDesktopWindowStateProvider.isInUnfocusedDesktopWindow()).thenReturn(false);
+        when(mWindowAndroid.getActivity()).thenReturn(new WeakReference<>(mActivity));
         initializeTest();
     }
 
@@ -169,18 +170,19 @@ public class StripLayoutHelperManagerTest {
                 .thenReturn(mTabGroupModelFilter);
         when(mTabModelSelector.getTabModelFilterProvider()).thenReturn(mTabModelFilterProvider);
         when(mTabModelSelector.getCurrentModel()).thenReturn(mStandardTabModel);
+        when(mTabModelSelector.getCurrentTabModelSupplier()).thenReturn(mTabModelSupplier);
 
         mTabModelStartupInfoSupplier = new ObservableSupplierImpl<>();
 
         mTabStripHeightSupplier = new ObservableSupplierImpl<>();
         mTabStripHeightSupplier.set(TAB_STRIP_HEIGHT_PX);
-        mToolbarPrimaryColor = SemanticColorUtils.getToolbarBackgroundPrimary(mContext);
+        mToolbarPrimaryColor = SemanticColorUtils.getToolbarBackgroundPrimary(mActivity);
         when(mToolbarManager.getTabStripHeightSupplier()).thenReturn(mTabStripHeightSupplier);
         when(mToolbarManager.getPrimaryColor()).thenReturn(mToolbarPrimaryColor);
 
         mStripLayoutHelperManager =
                 new StripLayoutHelperManager(
-                        mContext,
+                        mActivity,
                         mManagerHost,
                         mUpdateHost,
                         mRenderHost,
@@ -206,13 +208,13 @@ public class StripLayoutHelperManagerTest {
         ToolbarFeatures.setIsTabStripLayoutOptimizationEnabledForTesting(false);
         assertEquals(
                 "Initial strip background color is incorrect.",
-                ChromeColors.getSurfaceColor(mContext, R.dimen.default_elevation_3),
+                ChromeColors.getSurfaceColor(mActivity, R.dimen.default_elevation_3),
                 mStripLayoutHelperManager.getBackgroundColor());
         // Assume the current activity lost focus.
         mStripLayoutHelperManager.onTopResumedActivityChanged(false);
         assertEquals(
                 "Strip background color should not be updated when activity focus state changes.",
-                ChromeColors.getSurfaceColor(mContext, R.dimen.default_elevation_3),
+                ChromeColors.getSurfaceColor(mActivity, R.dimen.default_elevation_3),
                 mStripLayoutHelperManager.getBackgroundColor());
     }
 
@@ -222,14 +224,14 @@ public class StripLayoutHelperManagerTest {
         when(mDesktopWindowStateProvider.getAppHeaderState()).thenReturn(new AppHeaderState());
         assertEquals(
                 "Initial strip background color is incorrect.",
-                ChromeColors.getSurfaceColor(mContext, R.dimen.default_elevation_3),
+                ChromeColors.getSurfaceColor(mActivity, R.dimen.default_elevation_3),
                 mStripLayoutHelperManager.getBackgroundColor());
         // Assume the current activity lost focus.
         mStripLayoutHelperManager.onTopResumedActivityChanged(false);
         assertEquals(
                 "Strip background color should not be updated when activity focus state changes"
                         + " while not in desktop window.",
-                ChromeColors.getSurfaceColor(mContext, R.dimen.default_elevation_3),
+                ChromeColors.getSurfaceColor(mActivity, R.dimen.default_elevation_3),
                 mStripLayoutHelperManager.getBackgroundColor());
     }
 
@@ -267,17 +269,17 @@ public class StripLayoutHelperManagerTest {
         @ColorInt
         int focusedColor =
                 ChromeColors.getSurfaceColor(
-                        mContext,
+                        mActivity,
                         isNightMode ? R.dimen.default_elevation_2 : R.dimen.default_elevation_3);
         @ColorInt
         int unfocusedColor =
                 ChromeColors.getSurfaceColor(
-                        mContext,
+                        mActivity,
                         isNightMode ? R.dimen.default_elevation_1 : R.dimen.default_elevation_2);
 
         if (isIncognito) {
-            focusedColor = mContext.getColor(R.color.default_bg_color_dark_elev_2_baseline);
-            unfocusedColor = mContext.getColor(R.color.default_bg_color_dark_elev_1_baseline);
+            focusedColor = mActivity.getColor(R.color.default_bg_color_dark_elev_2_baseline);
+            unfocusedColor = mActivity.getColor(R.color.default_bg_color_dark_elev_1_baseline);
         }
 
         // Initially use the default tab strip background.
@@ -312,7 +314,7 @@ public class StripLayoutHelperManagerTest {
 
         @ColorInt
         int unfocusedLightThemeColor =
-                ChromeColors.getSurfaceColor(mContext, R.dimen.default_elevation_2);
+                ChromeColors.getSurfaceColor(mActivity, R.dimen.default_elevation_2);
         assertEquals(
                 "Strip background color is incorrect.",
                 unfocusedLightThemeColor,
@@ -325,14 +327,14 @@ public class StripLayoutHelperManagerTest {
 
         mStripLayoutHelperManager.onAppHeaderStateChanged(new AppHeaderState());
 
-        int normalColor = TabUiThemeUtil.getTabStripBackgroundColor(mContext, false);
+        int normalColor = TabUiThemeUtil.getTabStripBackgroundColor(mActivity, false);
         verify(mDesktopWindowStateProvider).updateForegroundColor(normalColor);
 
         Mockito.reset(mDesktopWindowStateProvider);
         mStripLayoutHelperManager.setIsIncognitoForTesting(true);
         mStripLayoutHelperManager.onAppHeaderStateChanged(new AppHeaderState());
 
-        int incognitoColor = TabUiThemeUtil.getTabStripBackgroundColor(mContext, true);
+        int incognitoColor = TabUiThemeUtil.getTabStripBackgroundColor(mActivity, true);
         verify(mDesktopWindowStateProvider).updateForegroundColor(incognitoColor);
     }
 
@@ -407,7 +409,7 @@ public class StripLayoutHelperManagerTest {
         @ColorInt
         int hoverBackgroundDefaultColor =
                 ColorUtils.setAlphaComponent(
-                        SemanticColorUtils.getDefaultTextColor(mContext), (int) (0.08 * 255));
+                        SemanticColorUtils.getDefaultTextColor(mActivity), (int) (0.08 * 255));
         assertEquals(
                 "Model selector button hover highlight default tint is not as expected",
                 hoverBackgroundDefaultColor,
@@ -420,7 +422,7 @@ public class StripLayoutHelperManagerTest {
         @ColorInt
         int hoverBackgroundPressedColor =
                 ColorUtils.setAlphaComponent(
-                        SemanticColorUtils.getDefaultTextColor(mContext), (int) (0.12 * 255));
+                        SemanticColorUtils.getDefaultTextColor(mActivity), (int) (0.12 * 255));
         assertEquals(
                 "Model selector button hover highlight pressed tint is not as expected",
                 hoverBackgroundPressedColor,
@@ -433,7 +435,7 @@ public class StripLayoutHelperManagerTest {
         @ColorInt
         int hoverBackgroundDefaultIncognitoColor =
                 ColorUtils.setAlphaComponent(
-                        mContext.getColor(R.color.tab_strip_button_hover_bg_color),
+                        mActivity.getColor(R.color.tab_strip_button_hover_bg_color),
                         (int) (0.08 * 255));
         assertEquals(
                 "Model selector button hover highlight pressed tint is not as expected",
@@ -447,7 +449,7 @@ public class StripLayoutHelperManagerTest {
         @ColorInt
         int hoverBackgroundPressedIncognitoColor =
                 ColorUtils.setAlphaComponent(
-                        mContext.getColor(R.color.tab_strip_button_hover_bg_color),
+                        mActivity.getColor(R.color.tab_strip_button_hover_bg_color),
                         (int) (0.12 * 255));
         assertEquals(
                 "Model selector button hover highlight pressed tint is not as expected",
@@ -573,7 +575,8 @@ public class StripLayoutHelperManagerTest {
         // Verify button icon color after disabling button style.
         assertEquals(
                 "Unexpected incognito button color.",
-                AppCompatResources.getColorStateList(mContext, R.color.default_icon_color_tint_list)
+                AppCompatResources.getColorStateList(
+                                mActivity, R.color.default_icon_color_tint_list)
                         .getDefaultColor(),
                 ((TintedCompositorButton) mStripLayoutHelperManager.getModelSelectorButton())
                         .getTint());
@@ -643,7 +646,7 @@ public class StripLayoutHelperManagerTest {
         when(mStandardTabModel.getTabAt(selectedTabId)).thenReturn(mSelectedTab);
         when(mSelectedTab.getId()).thenReturn(selectedTabId);
 
-        when(mHoveredStripTab.getId()).thenReturn(hoveredTabId);
+        when(mHoveredStripTab.getTabId()).thenReturn(hoveredTabId);
         var activeLayoutHelper = mStripLayoutHelperManager.getActiveStripLayoutHelper();
         activeLayoutHelper.setLastHoveredTabForTesting(mHoveredStripTab);
 
@@ -1194,6 +1197,15 @@ public class StripLayoutHelperManagerTest {
         assertTrue(
                 "Strip motion event should be handled.",
                 motionEventHandled(SCREEN_WIDTH / 2, TAB_STRIP_HEIGHT_PX / 2f));
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.TAB_STRIP_INCOGNITO_MIGRATION)
+    public void testIncognitoSwitcherDisabled() {
+        initializeTest();
+        assertNull(
+                "Incognto switcher button should not be created.",
+                mStripLayoutHelperManager.getModelSelectorButton());
     }
 
     private void resizeDesktopWindowAndTriggerFadeTransition(boolean showStrip) {

@@ -163,9 +163,10 @@ void DesktopWindowTreeHostLinux::OnNativeWidgetCreated(
   DesktopWindowTreeHostPlatform::OnNativeWidgetCreated(params);
 }
 
-void DesktopWindowTreeHostLinux::InitModalType(ui::ModalType modal_type) {
+void DesktopWindowTreeHostLinux::InitModalType(
+    ui::mojom::ModalType modal_type) {
   switch (modal_type) {
-    case ui::MODAL_TYPE_NONE:
+    case ui::mojom::ModalType::kNone:
       break;
     default:
       // TODO(erg): Figure out under what situations |modal_type| isn't
@@ -239,7 +240,7 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
     if (vivaldi::IsVivaldiRunning()) {
       // NOTE(espen@vivaldi.com): Support for page history navigation with
       // mouse. Ensure to release capture if present (VB-47254).
-      if (event->type() == ui::kMouseReleased) {
+      if (event->type() == ui::EventType::kMouseReleased) {
         bool back_button_pressed =
             (located_event->AsMouseEvent()->changed_button_flags() ==
              ui::EF_BACK_MOUSE_BUTTON);

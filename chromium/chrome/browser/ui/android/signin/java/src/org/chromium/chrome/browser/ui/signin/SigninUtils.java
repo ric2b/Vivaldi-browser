@@ -7,60 +7,24 @@ package org.chromium.chrome.browser.ui.signin;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Build;
-import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.view.View;
 
-import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
-
+import org.chromium.base.BuildInfo;
 import org.chromium.base.IntentUtils;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.signin.services.DisplayableProfileData;
-import org.chromium.chrome.browser.signin.services.SigninManager;
-import org.chromium.chrome.browser.signin.services.SigninManager.SignInCallback;
 import org.chromium.components.signin.AccountUtils;
-import org.chromium.components.signin.SigninFeatureMap;
-import org.chromium.components.signin.SigninFeatures;
-import org.chromium.components.signin.base.CoreAccountInfo;
-import org.chromium.components.signin.metrics.SigninAccessPoint;
-import org.chromium.ui.modaldialog.ModalDialogManager;
-
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
+import org.chromium.ui.base.DeviceFormFactor;
 
 /** Helper functions for sign-in and accounts. */
 public final class SigninUtils {
     private static final String ACCOUNT_SETTINGS_ACTION = "android.settings.ACCOUNT_SYNC_SETTINGS";
     private static final String ACCOUNT_SETTINGS_ACCOUNT_KEY = "account";
-    private static final String UNMANAGED_SIGNIN_DURATION_NAME =
-            "Signin.Android.FREUnmanagedAccountSigninDuration";
-    private static final String FRE_SIGNIN_EVENTS_NAME = "Signin.Android.FRESigninEvents";
-
-    @IntDef({
-        FRESigninEvents.CHECKING_MANAGED_STATUS,
-        FRESigninEvents.SIGNING_IN_UNMANAGED,
-        FRESigninEvents.SIGNIN_COMPLETE_UNMANAGED,
-        FRESigninEvents.ACCEPTING_MANAGEMENT,
-        FRESigninEvents.SIGNING_IN_MANAGED,
-        FRESigninEvents.SIGNIN_COMPLETE_MANAGED,
-        FRESigninEvents.SIGNIN_ABORTED_UNMANAGED,
-        FRESigninEvents.SIGNIN_ABORTED_MANAGED,
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    private @interface FRESigninEvents {
-        int CHECKING_MANAGED_STATUS = 0;
-        int SIGNING_IN_UNMANAGED = 1;
-        int SIGNIN_COMPLETE_UNMANAGED = 2;
-        int ACCEPTING_MANAGEMENT = 3;
-        int SIGNING_IN_MANAGED = 4;
-        int SIGNIN_COMPLETE_MANAGED = 5;
-        int SIGNIN_ABORTED_UNMANAGED = 6;
-        int SIGNIN_ABORTED_MANAGED = 7;
-        int NUM_ENTRIES = 8;
-    }
+    private static final int DUAL_PANES_HORIZONTAL_LAYOUT_MIN_WIDTH = 600;
 
     private SigninUtils() {}
 
@@ -157,154 +121,6 @@ public final class SigninUtils {
                 profileData.getAccountEmail());
     }
 
-    private static class WrappedSigninCallback implements SigninManager.SignInCallback {
-        private SigninManager.SignInCallback mWrappedCallback;
-
-        public WrappedSigninCallback(SigninManager.SignInCallback callback) {
-            mWrappedCallback = callback;
-        }
-
-        @Override
-        public void onSignInComplete() {
-            if (mWrappedCallback != null) mWrappedCallback.onSignInComplete();
-        }
-
-        @Override
-        public void onPrefsCommitted() {
-            if (mWrappedCallback != null) mWrappedCallback.onPrefsCommitted();
-        }
-
-        @Override
-        public void onSignInAborted() {
-            if (mWrappedCallback != null) mWrappedCallback.onSignInAborted();
-        }
-    }
-
-    /** Performs signin after confirming account management with the user, if necessary. */
-    public static void checkAccountManagementAndSignIn(
-            CoreAccountInfo coreAccountInfo,
-            SigninManager signinManager,
-            @SigninAccessPoint int accessPoint,
-            @Nullable SignInCallback callback,
-            Context context,
-            ModalDialogManager modalDialogManager) {
-        long startTimeMillis = SystemClock.uptimeMillis();
-        if (!SigninFeatureMap.isEnabled(SigninFeatures.ENTERPRISE_POLICY_ON_SIGNIN)
-                || signinManager.getUserAcceptedAccountManagement()) {
-            SignInCallback wrappedCallback =
-                    new WrappedSigninCallback(callback) {
-                        @Override
-                        public void onSignInComplete() {
-                            RecordHistogram.recordMediumTimesHistogram(
-                                    UNMANAGED_SIGNIN_DURATION_NAME,
-                                    SystemClock.uptimeMillis() - startTimeMillis);
-                            recordFREEvent(FRESigninEvents.SIGNIN_COMPLETE_UNMANAGED);
-                            super.onSignInComplete();
-                        }
-
-                        @Override
-                        public void onSignInAborted() {
-                            recordFREEvent(FRESigninEvents.SIGNIN_ABORTED_UNMANAGED);
-                            super.onSignInAborted();
-                        }
-                    };
-            recordFREEvent(FRESigninEvents.SIGNING_IN_UNMANAGED);
-            signinManager.signin(coreAccountInfo, accessPoint, wrappedCallback);
-            return;
-        }
-        recordFREEvent(FRESigninEvents.CHECKING_MANAGED_STATUS);
-        signinManager.isAccountManaged(
-                coreAccountInfo,
-                (Boolean isAccountManaged) -> {
-                    onIsAccountManaged(
-                            isAccountManaged,
-                            coreAccountInfo,
-                            signinManager,
-                            accessPoint,
-                            callback,
-                            context,
-                            modalDialogManager,
-                            startTimeMillis);
-                });
-    }
-
-    private static void onIsAccountManaged(
-            Boolean isAccountManaged,
-            CoreAccountInfo coreAccountInfo,
-            SigninManager signinManager,
-            @SigninAccessPoint int accessPoint,
-            @Nullable SignInCallback callback,
-            Context context,
-            ModalDialogManager modalDialogManager,
-            long startTimeMillis) {
-        if (!isAccountManaged) {
-            SignInCallback wrappedCallback =
-                    new WrappedSigninCallback(callback) {
-                        @Override
-                        public void onSignInComplete() {
-                            RecordHistogram.recordMediumTimesHistogram(
-                                    UNMANAGED_SIGNIN_DURATION_NAME,
-                                    SystemClock.uptimeMillis() - startTimeMillis);
-                            recordFREEvent(FRESigninEvents.SIGNIN_COMPLETE_UNMANAGED);
-                            super.onSignInComplete();
-                        }
-
-                        @Override
-                        public void onSignInAborted() {
-                            recordFREEvent(FRESigninEvents.SIGNIN_ABORTED_UNMANAGED);
-                            super.onSignInAborted();
-                        }
-                    };
-            recordFREEvent(FRESigninEvents.SIGNING_IN_UNMANAGED);
-            signinManager.signin(coreAccountInfo, accessPoint, wrappedCallback);
-            return;
-        }
-
-        SignInCallback wrappedCallback =
-                new WrappedSigninCallback(callback) {
-                    @Override
-                    public void onSignInAborted() {
-                        recordFREEvent(FRESigninEvents.SIGNIN_ABORTED_MANAGED);
-                        // If signin is aborted, we need to clear the account management acceptance.
-                        signinManager.setUserAcceptedAccountManagement(false);
-                        super.onSignInAborted();
-                    }
-
-                    @Override
-                    public void onSignInComplete() {
-                        recordFREEvent(FRESigninEvents.SIGNIN_COMPLETE_MANAGED);
-                        super.onSignInComplete();
-                    }
-                };
-
-        ConfirmManagedSyncDataDialogCoordinator.Listener listener =
-                new ConfirmManagedSyncDataDialogCoordinator.Listener() {
-                    @Override
-                    public void onConfirm() {
-                        signinManager.setUserAcceptedAccountManagement(true);
-                        recordFREEvent(FRESigninEvents.SIGNING_IN_MANAGED);
-                        signinManager.signin(coreAccountInfo, accessPoint, wrappedCallback);
-                    }
-
-                    @Override
-                    public void onCancel() {
-                        if (callback != null) callback.onSignInAborted();
-                    }
-                };
-
-        recordFREEvent(FRESigninEvents.ACCEPTING_MANAGEMENT);
-        new ConfirmManagedSyncDataDialogCoordinator(
-                context,
-                modalDialogManager,
-                listener,
-                signinManager.extractDomainName(coreAccountInfo.getEmail()));
-    }
-
-    private static void recordFREEvent(@FRESigninEvents int event) {
-        RecordHistogram.recordEnumeratedHistogram(
-                FRE_SIGNIN_EVENTS_NAME, event, FRESigninEvents.NUM_ENTRIES);
-    }
-
     /**
      * Returns whether the new sign-in flow should be shown instead of the usual one (sign-in and
      * enable sync for instance) for an sign-in access point eligible to the new flow.
@@ -312,5 +128,32 @@ public final class SigninUtils {
     public static boolean shouldShowNewSigninFlow() {
         return ChromeFeatureList.isEnabled(
                 ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS);
+    }
+
+    public static View wrapInDialogWhenLargeLayout(View promoContentView) {
+        return DialogWhenLargeContentLayout.wrapInDialogWhenLargeLayout(promoContentView);
+    }
+
+    /** Returns whether the activity shows on tablet or automotive. */
+    public static boolean isTabletOrAuto(Activity activity) {
+        return BuildInfo.getInstance().isAutomotive
+                || DeviceFormFactor.isNonMultiDisplayContextOnTablet(activity);
+    }
+
+    /**
+     * Returns whether dual panes horizontal layout can be used on full screen views (e.g. FRE or
+     * Upgrade promo sub-views) given the configuration.
+     */
+    public static boolean shouldShowDualPanesHorizontalLayout(Activity activity) {
+        Configuration configuration = activity.getResources().getConfiguration();
+
+        // Since the landscape view has two panes the minimum screenWidth to show it is set to
+        // 600dp for phones.
+        // Also, the landscape layout is disabled on tablet/auto or large phones since the
+        // fullscreen promo is mostly shown as dialog.
+        return configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                && configuration.screenWidthDp >= DUAL_PANES_HORIZONTAL_LAYOUT_MIN_WIDTH
+                && !isTabletOrAuto(activity)
+                && !DialogWhenLargeContentLayout.shouldShowAsDialog(activity);
     }
 }

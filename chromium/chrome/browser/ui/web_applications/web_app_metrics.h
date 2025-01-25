@@ -64,11 +64,12 @@ class WebAppMetrics : public KeyedService,
   ~WebAppMetrics() override;
 
   // SiteEngagementObserver:
-  void OnEngagementEvent(
-      content::WebContents* web_contents,
-      const GURL& url,
-      double score,
-      site_engagement::EngagementType engagement_type) override;
+  void OnEngagementEvent(content::WebContents* web_contents,
+                         const GURL& url,
+                         double score,
+                         double old_score,
+                         site_engagement::EngagementType engagement_type,
+                         const std::optional<webapps::AppId>& app_id) override;
 
   // BrowserListObserver:
   void OnBrowserNoLongerActive(Browser* browser) override;

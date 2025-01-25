@@ -33,8 +33,8 @@ describe('TreeHelpers', () => {
 
       const rootsEvents = [...tree.roots].map(n => n ? n.entry : null);
       assert.deepEqual(rootsEvents.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-        {'name': 'A', 'ts': 0, 'dur': 10},
-        {'name': 'E', 'ts': 11, 'dur': 3},
+        {name: 'A', ts: 0, dur: 10},
+        {name: 'E', ts: 11, dur: 3},
       ]);
 
       const nodeA = [...tree.roots].at(0);
@@ -46,8 +46,8 @@ describe('TreeHelpers', () => {
 
       const childrenOfA = getEventsIn(nodeA.children.values());
       assert.deepEqual(childrenOfA.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-        {'name': 'B', 'ts': 1, 'dur': 3},
-        {'name': 'D', 'ts': 5, 'dur': 3},
+        {name: 'B', ts: 1, dur: 3},
+        {name: 'D', ts: 5, dur: 3},
       ]);
 
       const childrenOfE = getEventsIn(nodeE.children.values());
@@ -62,7 +62,7 @@ describe('TreeHelpers', () => {
 
       const childrenOfB = getEventsIn(nodeB.children.values());
       assert.deepEqual(childrenOfB.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-        {'name': 'C', 'ts': 2, 'dur': 1},
+        {name: 'C', ts: 2, dur: 1},
       ]);
 
       const childrenOfD = getEventsIn(nodeD.children.values());
@@ -100,7 +100,7 @@ describe('TreeHelpers', () => {
 
       const rootsEvents = [...tree.roots].map(n => n.entry);
       assert.deepEqual(rootsEvents.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-        {'name': 'A', 'ts': 0, 'dur': 10},
+        {name: 'A', ts: 0, dur: 10},
       ]);
 
       const nodeA = [...tree.roots].at(0);
@@ -111,7 +111,7 @@ describe('TreeHelpers', () => {
 
       const childrenOfA = getEventsIn(nodeA.children.values());
       assert.deepEqual(childrenOfA.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-        {'name': 'D', 'ts': 5, 'dur': 3},
+        {name: 'D', ts: 5, dur: 3},
       ]);
 
       const nodeD = [...nodeA.children].at(0);
@@ -145,8 +145,8 @@ describe('TreeHelpers', () => {
 
       const rootsEvents = [...tree.roots].map(n => n.entry);
       assert.deepEqual(rootsEvents.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-        {'name': 'A', 'ts': 0, 'dur': 10},
-        {'name': 'E', 'ts': 10, 'dur': 3},
+        {name: 'A', ts: 0, dur: 10},
+        {name: 'E', ts: 10, dur: 3},
       ]);
 
       const nodeA = [...tree.roots].at(0);
@@ -158,8 +158,8 @@ describe('TreeHelpers', () => {
 
       const childrenOfA = getEventsIn(nodeA.children.values());
       assert.deepEqual(childrenOfA.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-        {'name': 'B', 'ts': 0, 'dur': 3},
-        {'name': 'D', 'ts': 3, 'dur': 3},
+        {name: 'B', ts: 0, dur: 3},
+        {name: 'D', ts: 3, dur: 3},
       ]);
 
       const childrenOfE = getEventsIn(nodeE.children.values());
@@ -174,7 +174,7 @@ describe('TreeHelpers', () => {
 
       const childrenOfB = getEventsIn(nodeB.children.values());
       assert.deepEqual(childrenOfB.map(e => e ? {name: e.name, ts: e.ts, dur: e.dur} : null) as unknown[], [
-        {'name': 'C', 'ts': 2, 'dur': 1},
+        {name: 'C', ts: 2, dur: 1},
       ]);
 
       const childrenOfD = getEventsIn(nodeD.children.values());
@@ -202,7 +202,7 @@ describe('TreeHelpers', () => {
         makeCompleteEvent('D', 3, 3),   // 3..6 (starts when B finishes)
         makeCompleteEvent('C', 2, 1),   // 2..3 (finishes when B finishes)
         makeCompleteEvent('E', 10, 3),  // 10..13 (starts when A finishes)
-      ] as TraceModel.Types.TraceEvents.SyntheticTraceEntry[];
+      ] as TraceModel.Types.TraceEvents.TraceEventData[];
 
       TraceModel.Helpers.Trace.sortTraceEventsInPlace(data);
       const {tree} = TraceModel.Helpers.TreeHelpers.treify(data, {filter: {has: () => true}});
@@ -238,7 +238,7 @@ describe('TreeHelpers', () => {
         return;
       }
       assert.strictEqual(taskCTotalTime, TraceModel.Types.Timing.MicroSeconds(1));
-      assert.strictEqual(taskC.selfTime, taskCTotalTime);
+      assert.strictEqual(nodeC.selfTime, taskCTotalTime);
 
       const taskBTotalTime = taskB.dur;
       if (taskBTotalTime === undefined) {
@@ -246,7 +246,7 @@ describe('TreeHelpers', () => {
         return;
       }
       assert.strictEqual(taskBTotalTime, TraceModel.Types.Timing.MicroSeconds(3));
-      assert.strictEqual(taskB.selfTime, TraceModel.Types.Timing.MicroSeconds(taskBTotalTime - taskCTotalTime));
+      assert.strictEqual(nodeB.selfTime, TraceModel.Types.Timing.MicroSeconds(taskBTotalTime - taskCTotalTime));
 
       const taskDTotalTime = taskD.dur;
       if (taskDTotalTime === undefined) {
@@ -254,7 +254,7 @@ describe('TreeHelpers', () => {
         return;
       }
       assert.strictEqual(taskDTotalTime, TraceModel.Types.Timing.MicroSeconds(3));
-      assert.strictEqual(taskD.selfTime, taskDTotalTime);
+      assert.strictEqual(nodeD.selfTime, taskDTotalTime);
 
       const taskATotalTime = taskA.dur;
       if (taskATotalTime === undefined) {
@@ -263,7 +263,7 @@ describe('TreeHelpers', () => {
       }
       assert.strictEqual(taskATotalTime, TraceModel.Types.Timing.MicroSeconds(10));
       assert.strictEqual(
-          taskA.selfTime, TraceModel.Types.Timing.MicroSeconds(taskATotalTime - taskBTotalTime - taskDTotalTime));
+          nodeA.selfTime, TraceModel.Types.Timing.MicroSeconds(taskATotalTime - taskBTotalTime - taskDTotalTime));
 
       const taskETotalTime = taskE.dur;
       if (taskETotalTime === undefined) {
@@ -271,15 +271,15 @@ describe('TreeHelpers', () => {
         return;
       }
       assert.strictEqual(taskETotalTime, TraceModel.Types.Timing.MicroSeconds(3));
-      assert.strictEqual(taskD.selfTime, taskETotalTime);
+      assert.strictEqual(nodeD.selfTime, taskETotalTime);
     });
     describe('building hierarchies trace events and profile calls', () => {
       it('builds a hierarchy from trace events and profile calls', async () => {
-        const evaluateScript = makeCompleteEvent(TraceModel.Types.TraceEvents.KnownEventName.EvaluateScript, 0, 500);
+        const evaluateScript = makeCompleteEvent(TraceModel.Types.TraceEvents.KnownEventName.EVALUATE_SCRIPT, 0, 500);
         const v8Run = makeCompleteEvent('v8.run', 10, 490);
         const parseFunction = makeCompleteEvent('V8.ParseFunction', 12, 1);
 
-        const traceEvents: TraceModel.Types.TraceEvents.SyntheticTraceEntry[] = [evaluateScript, v8Run, parseFunction];
+        const traceEvents: TraceModel.Types.TraceEvents.TraceEventData[] = [evaluateScript, v8Run, parseFunction];
 
         const profileCalls = [makeProfileCall('a', 100, 200), makeProfileCall('b', 300, 200)];
         const allEntries = TraceModel.Helpers.Trace.mergeEventsInOrder(traceEvents, profileCalls);
@@ -326,10 +326,10 @@ describe('TreeHelpers', () => {
       const {tree, entryToNode} = TraceModel.Helpers.TreeHelpers.treify(data, {filter: {has: () => true}});
 
       const callOrder: Array<{type: 'START' | 'END', entryName: string}> = [];
-      function onEntryStart(entry: TraceModel.Types.TraceEvents.SyntheticTraceEntry): void {
+      function onEntryStart(entry: TraceModel.Types.TraceEvents.TraceEventData): void {
         callOrder.push({type: 'START', entryName: entry.name});
       }
-      function onEntryEnd(entry: TraceModel.Types.TraceEvents.SyntheticTraceEntry): void {
+      function onEntryEnd(entry: TraceModel.Types.TraceEvents.TraceEventData): void {
         callOrder.push({type: 'END', entryName: entry.name});
       }
       TraceModel.Helpers.TreeHelpers.walkEntireTree(entryToNode, tree, onEntryStart, onEntryEnd);
@@ -365,10 +365,10 @@ describe('TreeHelpers', () => {
       const {tree, entryToNode} = TraceModel.Helpers.TreeHelpers.treify(data, {filter: {has: () => true}});
 
       const callOrder: Array<{type: 'START' | 'END', entryName: string}> = [];
-      function onEntryStart(entry: TraceModel.Types.TraceEvents.SyntheticTraceEntry): void {
+      function onEntryStart(entry: TraceModel.Types.TraceEvents.TraceEventData): void {
         callOrder.push({type: 'START', entryName: entry.name});
       }
-      function onEntryEnd(entry: TraceModel.Types.TraceEvents.SyntheticTraceEntry): void {
+      function onEntryEnd(entry: TraceModel.Types.TraceEvents.TraceEventData): void {
         callOrder.push({type: 'END', entryName: entry.name});
       }
       TraceModel.Helpers.TreeHelpers.walkEntireTree(entryToNode, tree, onEntryStart, onEntryEnd, {
@@ -402,10 +402,10 @@ describe('TreeHelpers', () => {
       const {tree, entryToNode} = TraceModel.Helpers.TreeHelpers.treify(data, {filter: {has: () => true}});
 
       const callOrder: Array<{type: 'START' | 'END', entryName: string}> = [];
-      function onEntryStart(entry: TraceModel.Types.TraceEvents.SyntheticTraceEntry): void {
+      function onEntryStart(entry: TraceModel.Types.TraceEvents.TraceEventData): void {
         callOrder.push({type: 'START', entryName: entry.name});
       }
-      function onEntryEnd(entry: TraceModel.Types.TraceEvents.SyntheticTraceEntry): void {
+      function onEntryEnd(entry: TraceModel.Types.TraceEvents.TraceEventData): void {
         callOrder.push({type: 'END', entryName: entry.name});
       }
       const rootNode = Array.from(tree.roots).at(0);

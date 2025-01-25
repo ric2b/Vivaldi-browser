@@ -8,7 +8,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -34,6 +33,7 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabClosureParams;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.ConfirmationResult;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.ActionDelegate;
@@ -140,9 +140,7 @@ public class TabListEditorCloseActionUnitTest {
                 .getValue()
                 .onResult(ConfirmationResult.IMMEDIATE_CONTINUE);
 
-        verify(mGroupFilter)
-                .closeMultipleTabs(
-                        List.of(tabs.get(1)), /* canUndo= */ true, /* hideTabGroups= */ false);
+        verify(mGroupFilter).closeTabs(TabClosureParams.closeTabs(List.of(tabs.get(1))).build());
         verify(mDelegate).hideByAction();
     }
 
@@ -171,8 +169,7 @@ public class TabListEditorCloseActionUnitTest {
                 .getValue()
                 .onResult(ConfirmationResult.IMMEDIATE_CONTINUE);
 
-        verify(mGroupFilter)
-                .closeMultipleTabs(tabs, /* canUndo= */ true, /* hideTabGroups= */ false);
+        verify(mGroupFilter).closeTabs(TabClosureParams.closeTabs(tabs).build());
         verify(mDelegate).hideByAction();
 
         helper.waitForOnly();
@@ -186,8 +183,7 @@ public class TabListEditorCloseActionUnitTest {
                 .get(1)
                 .onResult(ConfirmationResult.IMMEDIATE_CONTINUE);
 
-        verify(mGroupFilter, times(2))
-                .closeMultipleTabs(tabs, /* canUndo= */ true, /* hideTabGroups= */ false);
+        verify(mGroupFilter, times(2)).closeTabs(TabClosureParams.closeTabs(tabs).build());
         verify(mDelegate, times(2)).hideByAction();
         assertEquals(1, helper.getCallCount());
     }
@@ -198,14 +194,44 @@ public class TabListEditorCloseActionUnitTest {
         final boolean actionOnRelatedTabs = true;
         configure(actionOnRelatedTabs);
         List<TabIdGroup> tabIdGroups = new ArrayList<>();
-        tabIdGroups.add(new TabIdGroup(new int[] {0}, false));
-        tabIdGroups.add(new TabIdGroup(new int[] {5, 3}, true));
-        tabIdGroups.add(new TabIdGroup(new int[] {4}, false));
-        tabIdGroups.add(new TabIdGroup(new int[] {8, 7, 6}, true));
-        tabIdGroups.add(new TabIdGroup(new int[] {1}, true));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {0},
+                        /* isGroup= */ false,
+                        /* selected= */ false,
+                        /* isCollaboration= */ false));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {5, 3},
+                        /* isGroup= */ true,
+                        /* selected= */ true,
+                        /* isCollaboration= */ false));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {4},
+                        /* isGroup= */ false,
+                        /* selected= */ false,
+                        /* isCollaboration= */ false));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {8, 7, 6},
+                        /* isGroup= */ true,
+                        /* selected= */ true,
+                        /* isCollaboration= */ false));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {1},
+                        /* isGroup= */ false,
+                        /* selected= */ true,
+                        /* isCollaboration= */ false));
         TabListHolder holder =
                 TabListEditorActionUnitTestHelper.configureTabs(
-                        mTabModel, mGroupFilter, mSelectionDelegate, tabIdGroups, true);
+                        mTabModel,
+                        mGroupFilter,
+                        /* tabGroupSyncService= */ null,
+                        mSelectionDelegate,
+                        tabIdGroups,
+                        true);
 
         assertEquals(3, holder.getSelectedTabs().size());
         assertEquals(5, holder.getSelectedTabs().get(0).getId());
@@ -231,10 +257,10 @@ public class TabListEditorCloseActionUnitTest {
                 .onResult(ConfirmationResult.IMMEDIATE_CONTINUE);
 
         verify(mGroupFilter)
-                .closeMultipleTabs(
-                        holder.getSelectedAndRelatedTabs(),
-                        /* canUndo= */ true,
-                        /* hideTabGroups= */ true);
+                .closeTabs(
+                        TabClosureParams.closeTabs(holder.getSelectedAndRelatedTabs())
+                                .hideTabGroups(true)
+                                .build());
         verify(mDelegate).hideByAction();
     }
 
@@ -244,14 +270,44 @@ public class TabListEditorCloseActionUnitTest {
         final boolean actionOnRelatedTabs = false;
         configure(actionOnRelatedTabs);
         List<TabIdGroup> tabIdGroups = new ArrayList<>();
-        tabIdGroups.add(new TabIdGroup(new int[] {0}, false));
-        tabIdGroups.add(new TabIdGroup(new int[] {5, 3}, true));
-        tabIdGroups.add(new TabIdGroup(new int[] {4}, false));
-        tabIdGroups.add(new TabIdGroup(new int[] {8, 7, 6}, true));
-        tabIdGroups.add(new TabIdGroup(new int[] {1}, true));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {0},
+                        /* isGroup= */ false,
+                        /* selected= */ false,
+                        /* isCollaboration= */ false));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {5, 3},
+                        /* isGroup= */ true,
+                        /* selected= */ true,
+                        /* isCollaboration= */ false));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {4},
+                        /* isGroup= */ false,
+                        /* selected= */ false,
+                        /* isCollaboration= */ false));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {8, 7, 6},
+                        /* isGroup= */ true,
+                        /* selected= */ true,
+                        /* isCollaboration= */ false));
+        tabIdGroups.add(
+                new TabIdGroup(
+                        new int[] {1},
+                        /* isGroup= */ false,
+                        /* selected= */ true,
+                        /* isCollaboration= */ false));
         TabListHolder holder =
                 TabListEditorActionUnitTestHelper.configureTabs(
-                        mTabModel, mGroupFilter, mSelectionDelegate, tabIdGroups, true);
+                        mTabModel,
+                        mGroupFilter,
+                        /* tabGroupSyncService= */ null,
+                        mSelectionDelegate,
+                        tabIdGroups,
+                        true);
 
         assertEquals(3, holder.getSelectedTabs().size());
         assertEquals(5, holder.getSelectedTabs().get(0).getId());
@@ -269,8 +325,7 @@ public class TabListEditorCloseActionUnitTest {
                 .onResult(ConfirmationResult.IMMEDIATE_CONTINUE);
 
         verify(mGroupFilter)
-                .closeMultipleTabs(
-                        holder.getSelectedTabs(), /* canUndo= */ true, /* hideTabGroups= */ false);
+                .closeTabs(TabClosureParams.closeTabs(holder.getSelectedTabs()).build());
         verify(mDelegate).hideByAction();
     }
 
@@ -291,8 +346,7 @@ public class TabListEditorCloseActionUnitTest {
                 .getValue()
                 .onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
 
-        verify(mGroupFilter)
-                .closeMultipleTabs(tabs, /* canUndo= */ false, /* hideTabGroups= */ false);
+        verify(mGroupFilter).closeTabs(TabClosureParams.closeTabs(tabs).allowUndo(false).build());
         verify(mDelegate).hideByAction();
     }
 
@@ -312,7 +366,7 @@ public class TabListEditorCloseActionUnitTest {
                 .getValue()
                 .onResult(ConfirmationResult.CONFIRMATION_NEGATIVE);
 
-        verify(mGroupFilter, never()).closeMultipleTabs(any(), anyBoolean(), anyBoolean());
+        verify(mGroupFilter, never()).closeTabs(any());
         verify(mDelegate).hideByAction();
     }
 }

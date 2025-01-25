@@ -43,6 +43,7 @@ struct DecodedMessage {
   ProtoLogLevel log_level;
   std::string group_tag;
   std::string message;
+  std::optional<std::string> location;
 };
 
 struct TrackedGroup {
@@ -53,16 +54,17 @@ struct TrackedMessage {
   ProtoLogLevel level;
   uint32_t group_id;
   std::string message;
+  std::optional<std::string> location;
 };
 
 class ProtoLogMessageDecoder : public Destructible {
  public:
-  explicit ProtoLogMessageDecoder();
+  explicit ProtoLogMessageDecoder(TraceProcessorContext* context);
   virtual ~ProtoLogMessageDecoder() override;
 
   static ProtoLogMessageDecoder* GetOrCreate(TraceProcessorContext* context) {
     if (!context->protolog_message_decoder) {
-      context->protolog_message_decoder.reset(new ProtoLogMessageDecoder());
+      context->protolog_message_decoder.reset(new ProtoLogMessageDecoder(context));
     }
     return static_cast<ProtoLogMessageDecoder*>(
         context->protolog_message_decoder.get());
@@ -80,9 +82,11 @@ class ProtoLogMessageDecoder : public Destructible {
   void TrackMessage(uint64_t message_id,
                     ProtoLogLevel level,
                     uint32_t group_id,
-                    const std::string& message);
+                    const std::string& message,
+                    const std::optional<std::string>& location);
 
  private:
+  TraceProcessorContext* const context_;
   base::FlatHashMap<uint64_t, TrackedGroup> tracked_groups_;
   base::FlatHashMap<uint64_t, TrackedMessage> tracked_messages_;
 };

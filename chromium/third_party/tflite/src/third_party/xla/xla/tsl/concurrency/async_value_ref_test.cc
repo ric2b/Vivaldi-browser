@@ -16,6 +16,7 @@ limitations under the License.
 #include "xla/tsl/concurrency/async_value_ref.h"
 
 #include <any>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -30,6 +31,7 @@ limitations under the License.
 #include "xla/tsl/concurrency/async_value.h"
 #include "xla/tsl/concurrency/ref_count.h"
 #include "tsl/platform/test.h"
+#include "tsl/platform/test_benchmark.h"
 
 namespace tsl {
 
@@ -354,7 +356,7 @@ TEST(AsyncValueRefTest, FlatMapAvailable) {
   AsyncValueRef<int32_t> ref = MakeAvailableAsyncValueRef<int32_t>(42);
 
   AsyncValueRef<float> fmapped_to_float = ref.FlatMap([](int32_t value) {
-    return MakeAvailableAsyncValueRef<float>(1.0f * value);
+    return MakeAvailableAsyncValueRef<float>(static_cast<float>(value));
   });
 
   EXPECT_TRUE(fmapped_to_float.IsAvailable());
@@ -365,7 +367,7 @@ TEST(AsyncValueRefTest, FlatMapUnavailable) {
   AsyncValueRef<int32_t> ref = MakeConstructedAsyncValueRef<int32_t>(42);
 
   AsyncValueRef<float> fmapped_to_float = ref.FlatMap([](int32_t value) {
-    return MakeAvailableAsyncValueRef<float>(1.0f * value);
+    return MakeAvailableAsyncValueRef<float>(static_cast<float>(value));
   });
 
   EXPECT_FALSE(fmapped_to_float.IsAvailable());
@@ -373,6 +375,32 @@ TEST(AsyncValueRefTest, FlatMapUnavailable) {
 
   EXPECT_TRUE(fmapped_to_float.IsAvailable());
   EXPECT_EQ(fmapped_to_float.get(), 42.0f);
+}
+
+TEST(AsyncValueRefTest, FlatMapAvailableError) {
+  AsyncValueRef<int32_t> ref =
+      MakeErrorAsyncValueRef(absl::InternalError("error"));
+
+  AsyncValueRef<float> fmapped_to_float = ref.FlatMap([](int32_t value) {
+    return MakeAvailableAsyncValueRef<float>(static_cast<float>(value));
+  });
+
+  EXPECT_TRUE(fmapped_to_float.IsError());
+  EXPECT_EQ(fmapped_to_float.GetError(), absl::InternalError("error"));
+}
+
+TEST(AsyncValueRefTest, FlatMapUnavailableError) {
+  AsyncValueRef<int32_t> ref = MakeConstructedAsyncValueRef<int32_t>(42);
+
+  AsyncValueRef<float> fmapped_to_float = ref.FlatMap([](int32_t value) {
+    return MakeAvailableAsyncValueRef<float>(static_cast<float>(value));
+  });
+
+  EXPECT_FALSE(fmapped_to_float.IsAvailable());
+  ref.SetError(absl::InternalError("error"));
+
+  EXPECT_TRUE(fmapped_to_float.IsError());
+  EXPECT_EQ(fmapped_to_float.GetError(), absl::InternalError("error"));
 }
 
 struct DeferredExecutor : public AsyncValue::Executor {
@@ -391,6 +419,80 @@ struct DeferredExecutor : public AsyncValue::Executor {
 
   std::vector<Task> tasks;
 };
+
+TEST(AsyncValueRefTest, MakeAsyncValueRef) {
+  DeferredExecutor executor;
+
+  {  // Make AsyncValueRef from a function that returns a value.
+    AsyncValueRef<float> ref =
+        MakeAsyncValueRef<float>(executor, []() -> float { return 42.0f; });
+
+    EXPECT_FALSE(ref.IsAvailable());
+    EXPECT_EQ(executor.Quiesce(), 1);
+
+    EXPECT_TRUE(ref.IsAvailable());
+    EXPECT_EQ(ref.get(), 42.0f);
+  }
+
+  {  // Make AsyncValueRef with automatic type inference.
+    AsyncValueRef<float> ref =
+        MakeAsyncValueRef(executor, []() -> float { return 42.0f; });
+
+    EXPECT_FALSE(ref.IsAvailable());
+    EXPECT_EQ(executor.Quiesce(), 1);
+
+    EXPECT_TRUE(ref.IsAvailable());
+    EXPECT_EQ(ref.get(), 42.0f);
+  }
+
+  {  // Make AsyncValueRef from a function that returns a StatusOr value.
+    AsyncValueRef<float> ref = TryMakeAsyncValueRef<float>(
+        executor, []() -> absl::StatusOr<float> { return 42.0f; });
+
+    EXPECT_FALSE(ref.IsAvailable());
+    EXPECT_EQ(executor.Quiesce(), 1);
+
+    EXPECT_TRUE(ref.IsAvailable());
+    EXPECT_EQ(ref.get(), 42.0f);
+  }
+
+  {  // Make AsyncValueRef from a function that returns a StatusOr value with
+     // automatic type inference.
+    AsyncValueRef<float> ref = TryMakeAsyncValueRef(
+        executor, []() -> absl::StatusOr<float> { return 42.0f; });
+
+    EXPECT_FALSE(ref.IsAvailable());
+    EXPECT_EQ(executor.Quiesce(), 1);
+
+    EXPECT_TRUE(ref.IsAvailable());
+    EXPECT_EQ(ref.get(), 42.0f);
+  }
+
+  {  // Make AsyncValueRef from a function that returns a StatusOr error.
+    AsyncValueRef<float> ref = TryMakeAsyncValueRef<float>(
+        executor,
+        []() -> absl::StatusOr<float> { return absl::InternalError("test"); });
+
+    EXPECT_FALSE(ref.IsAvailable());
+    EXPECT_EQ(executor.Quiesce(), 1);
+
+    EXPECT_TRUE(ref.IsError());
+    EXPECT_EQ(ref.GetError(), absl::InternalError("test"));
+  }
+
+  {  // Make AsyncValueRef from a function that returns a StatusOr error with
+     // automatic type inference.
+    AsyncValueRef<float> ref = TryMakeAsyncValueRef(
+        executor,
+        []() -> absl::StatusOr<float> { return absl::InternalError("test"); });
+
+    EXPECT_FALSE(ref.IsAvailable());
+    EXPECT_EQ(executor.Quiesce(), 1);
+
+    EXPECT_TRUE(ref.IsError());
+    EXPECT_EQ(ref.GetError(), absl::InternalError("test"));
+  }
+}
 
 TEST(AsyncValueRefTest, MapAvailableOnExecutor) {
   AsyncValueRef<int32_t> ref = MakeAvailableAsyncValueRef<int32_t>(42);
@@ -480,7 +582,7 @@ TEST(AsyncValueRefTest, FlatMapAvailableOnExecutor) {
   DeferredExecutor executor;
   AsyncValueRef<float> fmapped_to_float =
       ref.FlatMap(executor, [](int32_t value) {
-        return MakeAvailableAsyncValueRef<float>(1.0f * value);
+        return MakeAvailableAsyncValueRef<float>(static_cast<float>(value));
       });
 
   ref.SetStateConcrete();
@@ -491,6 +593,52 @@ TEST(AsyncValueRefTest, FlatMapAvailableOnExecutor) {
 
   EXPECT_TRUE(fmapped_to_float.IsAvailable());
   EXPECT_EQ(fmapped_to_float.get(), 42.0f);
+}
+
+TEST(AsyncValueRefTest, FlatMapDeferredAsyncValueOnExecutor) {
+  DeferredExecutor executor0;
+  DeferredExecutor executor1;
+
+  // Use non-copyable std::unique_ptr<int32_t> to make sure that we don't
+  // accidentally copy the value into the FlatMap functor.
+
+  {  // Use a regular FlatMap.
+    AsyncValueRef<float> fmapped_to_float =
+        MakeAsyncValueRef<std::unique_ptr<int32_t>>(executor0, [] {
+          return std::make_unique<int32_t>(42);
+        }).FlatMap([&](AsyncValuePtr<std::unique_ptr<int32_t>> ptr) {
+          return MakeAsyncValueRef<float>(
+              executor1, [ref = ptr.CopyRef()] { return **ref; });
+        });
+
+    EXPECT_FALSE(fmapped_to_float.IsAvailable());
+    EXPECT_EQ(executor0.Quiesce(), 1);
+
+    EXPECT_FALSE(fmapped_to_float.IsAvailable());
+    EXPECT_EQ(executor1.Quiesce(), 1);
+
+    EXPECT_TRUE(fmapped_to_float.IsAvailable());
+    EXPECT_EQ(fmapped_to_float.get(), 42.0f);
+  }
+
+  {  // Use a FlatMap that itself executed on given executor.
+    AsyncValueRef<float> fmapped_to_float =
+        MakeAsyncValueRef<std::unique_ptr<int32_t>>(executor0, [] {
+          return std::make_unique<int32_t>(42);
+        }).FlatMap(executor1, [&](AsyncValuePtr<std::unique_ptr<int32_t>> ptr) {
+          return MakeAsyncValueRef<float>(
+              executor1, [ref = ptr.CopyRef()] { return **ref; });
+        });
+
+    EXPECT_FALSE(fmapped_to_float.IsAvailable());
+    EXPECT_EQ(executor0.Quiesce(), 1);
+
+    EXPECT_FALSE(fmapped_to_float.IsAvailable());
+    EXPECT_EQ(executor1.Quiesce(), 2);
+
+    EXPECT_TRUE(fmapped_to_float.IsAvailable());
+    EXPECT_EQ(fmapped_to_float.get(), 42.0f);
+  }
 }
 
 TEST(AsyncValueRefTest, BlockUntilReady) {
@@ -760,5 +908,26 @@ TEST(AsyncValueRefTest, RecursiveOwnership) {
   state_ptr->value.SetStateConcrete();
   EXPECT_EQ(counter, 1 + 2 + 3);
 }
+
+//===----------------------------------------------------------------------===//
+// Performance benchmarks below
+//===----------------------------------------------------------------------===//
+
+template <size_t size>
+static void BM_MakeConstructed(benchmark::State& state) {
+  for (auto _ : state) {
+    auto ref = MakeConstructedAsyncValueRef<std::array<char, size>>();
+    benchmark::DoNotOptimize(ref);
+  }
+}
+
+BENCHMARK(BM_MakeConstructed<1>);
+BENCHMARK(BM_MakeConstructed<4>);
+BENCHMARK(BM_MakeConstructed<8>);
+BENCHMARK(BM_MakeConstructed<16>);
+BENCHMARK(BM_MakeConstructed<32>);
+BENCHMARK(BM_MakeConstructed<64>);
+BENCHMARK(BM_MakeConstructed<128>);
+BENCHMARK(BM_MakeConstructed<256>);
 
 }  // namespace tsl

@@ -79,18 +79,21 @@ struct wl_client {
 	struct wl_list link;
 	struct wl_map objects;
 	struct wl_priv_signal destroy_signal;
+	struct wl_priv_signal destroy_late_signal;
 	pid_t pid;
 	uid_t uid;
 	gid_t gid;
-	int error;
+	bool error;
 	struct wl_priv_signal resource_created_signal;
+	void *data;
+	wl_user_data_destroy_func_t data_dtor;
 };
 
 struct wl_display {
 	struct wl_event_loop *loop;
-	int run;
+	bool run;
 
-	uint32_t id;
+	uint32_t next_global_name;
 	uint32_t serial;
 
 	struct wl_list registry_resource_list;
@@ -158,7 +161,7 @@ log_closure(struct wl_resource *resource,
 	struct wl_protocol_logger_message message;
 
 	if (debug_server)
-		wl_closure_print(closure, object, send, false, NULL);
+		wl_closure_print(closure, object, send, false, NULL, NULL);
 
 	if (!wl_list_empty(&display->protocol_loggers)) {
 		message.resource = resource;
@@ -190,8 +193,8 @@ verify_objects(struct wl_resource *resource, uint32_t opcode,
 	for (i = 0; i < count; i++) {
 		signature = get_next_argument(signature, &arg);
 		switch (arg.type) {
-		case 'n':
-		case 'o':
+		case WL_ARG_NEW_ID:
+		case WL_ARG_OBJECT:
 			res = (struct wl_resource *) (args[i].o);
 			if (res && res->client != resource->client) {
 				wl_log("compositor bug: The compositor "
@@ -201,6 +204,8 @@ verify_objects(struct wl_resource *resource, uint32_t opcode,
 				       object->interface->events[opcode].name);
 				return false;
 			}
+		default:
+			break;
 		}
 	}
 	return true;
@@ -218,7 +223,7 @@ handle_array(struct wl_resource *resource, uint32_t opcode,
 		return;
 
 	if (!verify_objects(resource, opcode, args)) {
-		resource->client->error = 1;
+		resource->client->error = true;
 		return;
 	}
 
@@ -226,14 +231,14 @@ handle_array(struct wl_resource *resource, uint32_t opcode,
 				     &object->interface->events[opcode]);
 
 	if (closure == NULL) {
-		resource->client->error = 1;
+		resource->client->error = true;
 		return;
 	}
 
 	log_closure(resource, closure, true);
 
 	if (send_func(closure, resource->client->connection))
-		resource->client->error = 1;
+		resource->client->error = true;
 
 	wl_closure_destroy(closure);
 }
@@ -304,7 +309,7 @@ wl_resource_post_error_vargs(struct wl_resource *resource,
 
 	wl_resource_post_event(client->display_resource,
 			       WL_DISPLAY_ERROR, resource, code, buffer);
-	client->error = 1;
+	client->error = true;
 
 }
 
@@ -392,7 +397,7 @@ wl_client_connection_data(int fd, uint32_t mask, void *data)
 		if (opcode >= object->interface->method_count) {
 			wl_resource_post_error(client->display_resource,
 					       WL_DISPLAY_ERROR_INVALID_METHOD,
-					       "invalid method %d, object %s@%u",
+					       "invalid method %d, object %s#%u",
 					       opcode,
 					       object->interface->name,
 					       object->id);
@@ -406,7 +411,7 @@ wl_client_connection_data(int fd, uint32_t mask, void *data)
 			wl_resource_post_error(client->display_resource,
 					       WL_DISPLAY_ERROR_INVALID_METHOD,
 					       "invalid method %d (since %d < %d)"
-					       ", object %s@%u",
+					       ", object %s#%u",
 					       opcode, resource->version, since,
 					       object->interface->name,
 					       object->id);
@@ -424,7 +429,7 @@ wl_client_connection_data(int fd, uint32_t mask, void *data)
 			   wl_closure_lookup_objects(closure, &client->objects) < 0) {
 			wl_resource_post_error(client->display_resource,
 					       WL_DISPLAY_ERROR_INVALID_METHOD,
-					       "invalid arguments for %s@%u.%s",
+					       "invalid arguments for %s#%u.%s",
 					       object->interface->name,
 					       object->id,
 					       message->name);
@@ -515,6 +520,11 @@ bind_display(struct wl_client *client, struct wl_display *display);
  *
  * On failure this function sets errno accordingly and returns NULL.
  *
+ * On success, the new client object takes the ownership of the file
+ * descriptor. On failure, the ownership of the socket endpoint file
+ * descriptor is unchanged, it is the responsibility of the caller to
+ * perform cleanup, e.g. call close().
+ *
  * \memberof wl_display
  */
 WL_EXPORT struct wl_client *
@@ -550,6 +560,7 @@ wl_client_create(struct wl_display *display, int fd)
 		goto err_map;
 
 	wl_priv_signal_init(&client->destroy_signal);
+	wl_priv_signal_init(&client->destroy_late_signal);
 	if (bind_display(client, display) < 0)
 		goto err_map;
 
@@ -718,10 +729,23 @@ resource_is_deprecated(struct wl_resource *resource)
 	return false;
 }
 
+/** Removes the wl_resource from the client's object map and deletes it.
+ *
+ * Triggers the destroy signal and destructor for the resource before
+ * removing it from the client's object map and releasing the resource's
+ * memory.
+ *
+ * This order is important to ensure listeners and destruction code can
+ * find the resource before it has been destroyed whilst ensuring the
+ * resource is not accessible via the object map after memory has been
+ * freed.
+ */
 static enum wl_iterator_result
-destroy_resource(void *element, void *data, uint32_t flags)
+remove_and_destroy_resource(void *element, void *data, uint32_t flags)
 {
 	struct wl_resource *resource = element;
+	struct wl_client *client = resource->client;
+	uint32_t id = resource->object.id;;
 
 	wl_signal_emit(&resource->deprecated_destroy_signal, resource);
 	/* Don't emit the new signal for deprecated resources, as that would
@@ -731,6 +755,17 @@ destroy_resource(void *element, void *data, uint32_t flags)
 
 	if (resource->destroy)
 		resource->destroy(resource);
+
+	/* The resource should be cleared from the map before memory is freed. */
+	if (id < WL_SERVER_ID_START) {
+		if (client->display_resource) {
+			wl_resource_queue_event(client->display_resource,
+						WL_DISPLAY_DELETE_ID, id);
+		}
+		wl_map_insert_at(&client->objects, 0, id, NULL);
+	} else {
+		wl_map_remove(&client->objects, id);
+	}
 
 	if (!(flags & WL_MAP_ENTRY_LEGACY))
 		free(resource);
@@ -742,22 +777,9 @@ WL_EXPORT void
 wl_resource_destroy(struct wl_resource *resource)
 {
 	struct wl_client *client = resource->client;
-	uint32_t id;
-	uint32_t flags;
+	uint32_t flags = wl_map_lookup_flags(&client->objects, resource->object.id);
 
-	id = resource->object.id;
-	flags = wl_map_lookup_flags(&client->objects, id);
-	destroy_resource(resource, NULL, flags);
-
-	if (id < WL_SERVER_ID_START) {
-		if (client->display_resource) {
-			wl_resource_queue_event(client->display_resource,
-						WL_DISPLAY_DELETE_ID, id);
-		}
-		wl_map_insert_at(&client->objects, 0, id, NULL);
-	} else {
-		wl_map_remove(&client->objects, id);
-	}
+	remove_and_destroy_resource(resource, NULL, flags);
 }
 
 WL_EXPORT uint32_t
@@ -867,6 +889,17 @@ wl_resource_get_class(struct wl_resource *resource)
 	return resource->object.interface->name;
 }
 
+/**
+ * Add a listener to be called at the beginning of wl_client destruction
+ *
+ * The listener provided will be called when wl_client destroy has begun,
+ * before any of that client's resources have been destroyed.
+ *
+ * There is no requirement to remove the link of the wl_listener when the
+ * signal is emitted.
+ *
+ * \memberof wl_client
+ */
 WL_EXPORT void
 wl_client_add_destroy_listener(struct wl_client *client,
 			       struct wl_listener *listener)
@@ -881,20 +914,62 @@ wl_client_get_destroy_listener(struct wl_client *client,
 	return wl_priv_signal_get(&client->destroy_signal, notify);
 }
 
+/**
+ * Add a listener to be called at the end of wl_client destruction
+ *
+ * The listener provided will be called when wl_client destroy is nearly
+ * complete, after all of that client's resources have been destroyed.
+ *
+ * There is no requirement to remove the link of the wl_listener when the
+ * signal is emitted.
+ *
+ * \memberof wl_client
+ * \since 1.22.0
+ */
+WL_EXPORT void
+wl_client_add_destroy_late_listener(struct wl_client *client,
+				    struct wl_listener *listener)
+{
+	wl_priv_signal_add(&client->destroy_late_signal, listener);
+}
+
+WL_EXPORT struct wl_listener *
+wl_client_get_destroy_late_listener(struct wl_client *client,
+				    wl_notify_func_t notify)
+{
+	return wl_priv_signal_get(&client->destroy_late_signal, notify);
+}
+
 WL_EXPORT void
 wl_client_destroy(struct wl_client *client)
 {
-	uint32_t serial = 0;
+
+	/* wl_client_destroy() should not be called twice for the same client. */
+	if (wl_list_empty(&client->link)) {
+		client->error = 1;
+		wl_log("wl_client_destroy: encountered re-entrant client destruction.\n");
+		return;
+	}
+
+	wl_list_remove(&client->link);
+	/* Keep the client link safe to inspect. */
+	wl_list_init(&client->link);
 
 	wl_priv_signal_final_emit(&client->destroy_signal, client);
 
 	wl_client_flush(client);
-	wl_map_for_each(&client->objects, destroy_resource, &serial);
+	wl_map_for_each(&client->objects, remove_and_destroy_resource, NULL);
 	wl_map_release(&client->objects);
 	wl_event_source_remove(client->source);
 	close(wl_connection_destroy(client->connection));
-	wl_list_remove(&client->link);
+
+	wl_priv_signal_final_emit(&client->destroy_late_signal, client);
+
 	wl_list_remove(&client->resource_created_signal.listener_list);
+
+	if (client->data_dtor)
+		client->data_dtor(client->data);
+
 	free(client);
 }
 
@@ -1100,7 +1175,7 @@ wl_display_create(void)
 	wl_priv_signal_init(&display->destroy_signal);
 	wl_priv_signal_init(&display->create_client_signal);
 
-	display->id = 1;
+	display->next_global_name = 1;
 	display->serial = 0;
 
 	display->global_filter = NULL;
@@ -1154,7 +1229,6 @@ wl_socket_alloc(void)
 /** Destroy Wayland display object.
  *
  * \param display The Wayland display object which should be destroyed.
- * \return None.
  *
  * This function emits the wl_display destroy signal, releases
  * all the sockets added to this display, free's all the globals associated
@@ -1197,7 +1271,6 @@ wl_display_destroy(struct wl_display *display)
  * \param display The Wayland display object.
  * \param filter  The global filter function.
  * \param data User data to be associated with the global filter.
- * \return None.
  *
  * Set a filter for the wl_display to advertise or hide global objects
  * to clients.
@@ -1249,12 +1322,17 @@ wl_global_create(struct wl_display *display,
 		return NULL;
 	}
 
+	if (display->next_global_name >= UINT32_MAX) {
+		wl_log("wl_global_create: ran out of global names\n");
+		return NULL;
+	}
+
 	global = zalloc(sizeof *global);
 	if (global == NULL)
 		return NULL;
 
 	global->display = display;
-	global->name = display->id++;
+	global->name = display->next_global_name++;
 	global->interface = interface;
 	global->version = version;
 	global->data = data;
@@ -1302,7 +1380,7 @@ wl_global_remove(struct wl_global *global)
 
 	if (global->removed)
 		wl_abort("wl_global_remove: called twice on the same "
-			 "global '%s@%"PRIu32"'", global->interface->name,
+			 "global '%s#%"PRIu32"'", global->interface->name,
 			 global->name);
 
 	wl_list_for_each(resource, &display->registry_resource_list, link)
@@ -1436,7 +1514,7 @@ wl_display_terminate(struct wl_display *display)
 	int ret;
 	uint64_t terminate = 1;
 
-	display->run = 0;
+	display->run = false;
 
 	ret = write(display->terminate_efd, &terminate, sizeof(terminate));
 	assert (ret >= 0 || errno == EAGAIN);
@@ -1445,11 +1523,13 @@ wl_display_terminate(struct wl_display *display)
 WL_EXPORT void
 wl_display_run(struct wl_display *display)
 {
-	display->run = 1;
+	display->run = true;
 
 	while (display->run) {
 		wl_display_flush_clients(display);
-		wl_event_loop_dispatch(display->loop, -1);
+		if (wl_event_loop_dispatch(display->loop, -1) < 0) {
+			break;
+		}
 	}
 }
 
@@ -1515,9 +1595,9 @@ wl_display_destroy_clients(struct wl_display *display)
  * \param max_buffer_size The default maximum size of the connection buffers
  *
  * This function sets the default size of the internal connection buffers for
- * new clients, it doesn't change the buffer size for existing wl_client.
+ * new clients. It doesn't change the buffer size for existing wl_client.
  *
- * The connection buffer size of each existing wl_client can be adjusted using
+ * The connection buffer size of an existing wl_client can be adjusted using
  * wl_client_set_max_buffer_size().
  *
  * The actual size of the connection buffers is a power of two, the requested
@@ -1528,6 +1608,7 @@ wl_display_destroy_clients(struct wl_display *display)
  * \sa wl_client_set_max_buffer_size
  *
  * \memberof wl_display
+ * \since 1.22.90
  */
 WL_EXPORT void
 wl_display_set_default_max_buffer_size(struct wl_display *display,
@@ -1686,7 +1767,7 @@ wl_display_add_socket_auto(struct wl_display *display)
 {
 	struct wl_socket *s;
 	int displayno = 0;
-	char display_name[16] = "";
+	char display_name[20] = "";
 
 	/* A reasonable number of maximum default sockets. If
 	 * you need more than this, use the explicit add_socket API. */
@@ -1729,6 +1810,9 @@ wl_display_add_socket_auto(struct wl_display *display)
  * The existing socket fd must already be created, opened, and locked.
  * The fd must be properly set to CLOEXEC and bound to a socket file
  * with both bind() and listen() already called.
+ *
+ * On success, the socket fd ownership is transferred to libwayland:
+ * libwayland will close the socket when the display is destroyed.
  *
  * \memberof wl_display
  */
@@ -2246,11 +2330,12 @@ wl_signal_emit_mutable(struct wl_signal *signal, void *data)
  * of the buffer does not fit within the new size limit.
  *
  * The minimum buffer size is 4096. The default buffers size can be set using
- * wl_display_set_default_max_buffer_size()
+ * wl_display_set_default_max_buffer_size().
  *
  * \sa wl_display_set_default_max_buffer_size()
  *
  * \memberof wl_client
+ * \since 1.22.90
  */
 WL_EXPORT void
 wl_client_set_max_buffer_size(struct wl_client *client, size_t max_buffer_size)
@@ -2472,6 +2557,46 @@ wl_client_new_object(struct wl_client *client,
 					       implementation, data, NULL);
 
 	return resource;
+}
+
+/** Set the client's user data
+ *
+ * User data is whatever the caller wants to store. Use dtor if
+ * the user data needs freeing as the very last step of destroying
+ * the client.
+ *
+ * \param client The client object
+ * \param data The user data pointer
+ * \param dtor Destroy function to be called after all resources have been
+ * destroyed and all destroy listeners have been called. Can be NULL.
+ *
+ * The argument to the destroy function is the user data pointer. If the
+ * destroy function is not NULL, it will be called even if user data is NULL.
+ *
+ * \since 1.22.90
+ * \sa wl_client_get_user_data
+ */
+WL_EXPORT void
+wl_client_set_user_data(struct wl_client *client,
+			void *data,
+			wl_user_data_destroy_func_t dtor)
+{
+	client->data = data;
+	client->data_dtor = dtor;
+}
+
+/** Get the client's user data
+ *
+ * \param client The client object
+ * \return The user data pointer
+ *
+ * \since 1.22.90
+ * \sa wl_client_set_user_data
+ */
+WL_EXPORT void *
+wl_client_get_user_data(struct wl_client *client)
+{
+	return client->data;
 }
 
 struct wl_global *

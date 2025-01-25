@@ -14,7 +14,7 @@
 
 #include "av1/common/idct.h"
 
-static INLINE void update_coeff_general(
+static inline void update_coeff_general(
     int *accu_rate, int64_t *accu_dist, int si, int eob, TX_SIZE tx_size,
     TX_CLASS tx_class, int bhl, int width, int64_t rdmult, int shift,
     int dc_sign_ctx, const int16_t *dequant, const int16_t *scan,
@@ -239,7 +239,7 @@ static AOM_FORCE_INLINE void update_coeff_eob(
   }
 }
 
-static INLINE void update_skip(int *accu_rate, int64_t accu_dist, int *eob,
+static inline void update_skip(int *accu_rate, int64_t accu_dist, int *eob,
                                int nz_num, int *nz_ci, int64_t rdmult,
                                int skip_cost, int non_skip_cost,
                                tran_low_t *qcoeff, tran_low_t *dqcoeff) {

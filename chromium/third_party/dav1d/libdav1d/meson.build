@@ -209,6 +209,10 @@ if host_machine.cpu_family().startswith('wasm')
     stdatomic_dependencies += thread_dependency.partial_dependency(compile_args: true)
 endif
 
+if cc.check_header('sys/types.h')
+    cdata.set('HAVE_SYS_TYPES_H', 1)
+endif
+
 if cc.check_header('unistd.h')
     cdata.set('HAVE_UNISTD_H', 1)
 endif
@@ -258,6 +262,12 @@ if cc.has_function('pthread_getaffinity_np', prefix : pthread_np_prefix, args : 
 endif
 if cc.has_function('pthread_setaffinity_np', prefix : pthread_np_prefix, args : test_args, dependencies : thread_dependency)
     cdata.set('HAVE_PTHREAD_SETAFFINITY_NP', 1)
+endif
+if cc.has_function('pthread_setname_np', prefix : pthread_np_prefix, args : test_args, dependencies : thread_dependency)
+    cdata.set('HAVE_PTHREAD_SETNAME_NP', 1)
+endif
+if cc.has_function('pthread_set_name_np', prefix : pthread_np_prefix, args : test_args, dependencies : thread_dependency)
+    cdata.set('HAVE_PTHREAD_SET_NAME_NP', 1)
 endif
 
 if cc.compiles('int x = _Generic(0, default: 0);', name: '_Generic', args: test_args)

@@ -23,14 +23,20 @@ namespace internal {
 
 EIGEN_INSTANTIATE_GENERIC_MATH_FUNCS_FLOAT(Packet8f)
 
-EIGEN_DOUBLE_PACKET_FUNCTION(atan, Packet4d)
+EIGEN_DOUBLE_PACKET_FUNCTION(atanh, Packet4d)
 EIGEN_DOUBLE_PACKET_FUNCTION(log, Packet4d)
 EIGEN_DOUBLE_PACKET_FUNCTION(log2, Packet4d)
 EIGEN_DOUBLE_PACKET_FUNCTION(exp, Packet4d)
+EIGEN_DOUBLE_PACKET_FUNCTION(tanh, Packet4d)
 #ifdef EIGEN_VECTORIZE_AVX2
 EIGEN_DOUBLE_PACKET_FUNCTION(sin, Packet4d)
 EIGEN_DOUBLE_PACKET_FUNCTION(cos, Packet4d)
 #endif
+
+template <>
+EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED Packet4d patan<Packet4d>(const Packet4d& _x) {
+  return generic_patan(_x);
+}
 
 // Notice that for newer processors, it is counterproductive to use Newton
 // iteration for square root. In particular, Skylake and Zen2 processors

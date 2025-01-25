@@ -133,6 +133,8 @@ fn main() {
         "I444AlphaToARGBMatrix",
         "I444ToARGBMatrix",
         "I444ToRGB24Matrix",
+        "P010ToAR30Matrix",
+        "AR30ToAB30",
         "kYuv2020Constants",
         "kYuvF709Constants",
         "kYuvH709Constants",

@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/dom/visited_link_state.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -39,6 +40,7 @@
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/policy_container.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
@@ -107,7 +109,10 @@ static inline LinkHash LinkHashForElement(
     const AtomicString& attribute = AtomicString()) {
   DCHECK(attribute.IsNull() || LinkAttribute(element) == attribute);
   return base::FeatureList::IsEnabled(
-             blink::features::kPartitionVisitedLinkDatabase)
+             blink::features::kPartitionVisitedLinkDatabase) ||
+                 base::FeatureList::IsEnabled(
+                     blink::features::
+                         kPartitionVisitedLinkDatabaseWithSelfLinks)
              ? PartitionedLinkHashForElement(element, attribute)
              : UnpartitionedLinkHashForElement(element, attribute);
 }
@@ -179,6 +184,36 @@ EInsideLink VisitedLinkState::DetermineLinkStateSlowCase(
 
   if (attribute.IsNull())
     return EInsideLink::kNotInsideLink;  // This can happen for <img usemap>
+
+  // Cache the feature status to avoid frequent calculation.
+  static const bool are_partitioned_visited_links_enabled =
+      base::FeatureList::IsEnabled(
+          blink::features::kPartitionVisitedLinkDatabase) ||
+      base::FeatureList::IsEnabled(
+          blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks);
+
+  if (are_partitioned_visited_links_enabled) {
+    // In a partitioned :visited model, we don't want to display :visited-ness
+    // inside credentialless iframes.
+    if (GetDocument()
+            .GetExecutionContext()
+            ->GetPolicyContainer()
+            ->GetPolicies()
+            .is_credentialless) {
+      return EInsideLink::kNotInsideLink;
+    }
+    // In a partitioned :visited model, we don't want to display :visited-ness
+    // inside Fenced Frames or any frame which has a Fenced Frame in its
+    // FrameTree.
+    if (GetDocument().GetFrame()->IsInFencedFrameTree()) {
+      UMA_HISTOGRAM_BOOLEAN("Blink.History.VisitedLinks.InFencedFrameTree",
+                            true);
+      return EInsideLink::kNotInsideLink;
+    }
+    // Record in our histogram that we are not in or a child of a Fenced Frame.
+    UMA_HISTOGRAM_BOOLEAN("Blink.History.VisitedLinks.InFencedFrameTree",
+                          false);
+  }
 
   // An empty attribute refers to the document itself which is always
   // visited. It is useful to check this explicitly so that visited

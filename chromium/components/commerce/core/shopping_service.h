@@ -26,6 +26,7 @@
 #include "components/commerce/core/commerce_info_cache.h"
 #include "components/commerce/core/commerce_types.h"
 #include "components/commerce/core/compare/cluster_manager.h"
+#include "components/commerce/core/product_specifications/product_specifications_cache.h"
 #include "components/commerce/core/product_specifications/product_specifications_service.h"
 #include "components/commerce/core/product_specifications/product_specifications_set.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
@@ -34,6 +35,7 @@
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/commerce/core/web_extractor.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/unified_consent/consent_throttle.h"
@@ -67,6 +69,10 @@ class OptimizationMetadata;
 namespace power_bookmarks {
 class PowerBookmarkService;
 }  // namespace power_bookmarks
+
+namespace sessions {
+class TabRestoreService;
+}  // namespace sessions
 
 namespace signin {
 class IdentityManager;
@@ -192,7 +198,10 @@ using UrlProductIdentifierTupleCallback =
 //         browser()->profile()));
 // clang-format on
 
-class ShoppingService : public KeyedService, public base::SupportsUserData {
+class ShoppingService : public KeyedService,
+                        public base::SupportsUserData,
+                        public history::HistoryServiceObserver,
+                        public ProductSpecificationsSet::Observer {
  public:
   ShoppingService(
       const std::string& country_on_startup,
@@ -213,7 +222,8 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
       SessionProtoStorage<parcel_tracking_db::ParcelTrackingContent>*
           parcel_tracking_proto_db,
       history::HistoryService* history_service,
-      std::unique_ptr<commerce::WebExtractor> web_extractor);
+      std::unique_ptr<commerce::WebExtractor> web_extractor,
+      sessions::TabRestoreService* tab_restore_service);
   ~ShoppingService() override;
 
   ShoppingService(const ShoppingService&) = delete;
@@ -263,11 +273,11 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   virtual void GetPriceInsightsInfoForUrl(const GURL& url,
                                           PriceInsightsInfoCallback callback);
 
-  // This API fetches valid discounts information on the provided |urls| and
+  // This API fetches valid discounts information on the provided |url| and
   // passes the payload back to the caller via |callback|. Call will run after
   // the fetch is completed.
-  virtual void GetDiscountInfoForUrls(const std::vector<GURL>& urls,
-                                      DiscountInfoCallback callback);
+  virtual void GetDiscountInfoForUrl(const GURL& url,
+                                     DiscountInfoCallback callback);
 
   virtual void GetProductSpecificationsForUrls(
       const std::vector<GURL>& urls,
@@ -426,10 +436,14 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
 
   virtual ClusterManager* GetClusterManager();
 
-  // Return whether the |discount_id| has been shown before.
-  virtual bool HasDiscountShownBefore(uint64_t discount_id);
-  // Called after showing the DiscountInfo with the |discount_id|.
-  void ShownDiscount(uint64_t discount_id);
+  // history::HistoryServiceObserver:
+  void OnHistoryDeletions(history::HistoryService* history_service,
+                          const history::DeletionInfo& deletion_info) override;
+
+  // ProductSpecificationsSet::Observer:
+  void OnProductSpecificationsSetRemoved(
+      const ProductSpecificationsSet& set) override;
+
   // Get a weak pointer for this service instance.
   base::WeakPtr<ShoppingService> AsWeakPtr();
 
@@ -442,6 +456,9 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // Test classes are also friends.
   friend class ShoppingServiceTestBase;
   friend class ShoppingServiceTest;
+  // TODO(b/362316113): Pass HistoryService through handler constructor instead
+  // of having the handler as a friend.
+  friend class ShoppingServiceHandler;
 
   // A notification that a WebWrapper has been created. This typically
   // corresponds to a user creating a tab.
@@ -475,6 +492,10 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // analogous to switching tabs.
   void OnWebWrapperSwitched(WebWrapper* web);
 
+  // Called to signal that a WebWrapper is viewed. This happens when a new
+  // navigation is committed in a focused tab.
+  void OnWebWrapperViewed(WebWrapper* web);
+
   // Schedule (or reschedule) the on-page local extraction execution. Calling
   // this sequentially for the same web wrapper with the same URL will cancel
   // the pending task and schedule a new one. The script will, at most, run once
@@ -491,14 +512,6 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
       base::WeakPtr<WebWrapper> web,
       const GURL& url,
       std::optional<bool> is_shopping_page);
-
-  // Whether APIs like |GetProductInfoForURL| are enabled and allowed to be
-  // used.
-  bool IsProductInfoApiEnabled();
-
-  // Whether the PDP (product details page) state of a page is allowed to be
-  // recorded.
-  bool IsPDPMetricsRecordingEnabled();
 
   // A callback for recording metrics after page navigation and having
   // determined the page is shopping related.
@@ -604,11 +617,11 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   bool IsDiscountInfoApiEnabled();
 
   void GetDiscountInfoFromOptGuide(const GURL& url,
-                                   DiscountsOptGuideCallback callback);
+                                   DiscountInfoCallback callback);
 
   void HandleOptGuideDiscountInfoResponse(
       const GURL& url,
-      DiscountsOptGuideCallback callback,
+      DiscountInfoCallback callback,
       optimization_guide::OptimizationGuideDecision decision,
       const optimization_guide::OptimizationMetadata& metadata);
 
@@ -624,9 +637,20 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   void GetProductIdentifierForUrl(const GURL& url,
                                   UrlProductIdentifierTupleCallback callback);
 
+  void UpdateRecentlyViewedURL(WebWrapper* web);
+
   // Return all ProductSpecificationsSets from ProductSpecificationsService.
   virtual const std::vector<ProductSpecificationsSet>
   GetAllProductSpecificationSets();
+
+  void OnGetOnDemandProductInfo(const GURL& url,
+                                const std::optional<const ProductInfo>& info);
+
+  // TODO(b/362316113): Remove once history service is passed through handler
+  // constructor.
+  virtual void QueryHistoryForUrl(
+      const GURL& url,
+      history::HistoryService::QueryURLCallback callback);
 
   // The two-letter country code as detected on startup.
   std::string country_on_startup_;
@@ -665,6 +689,8 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // instance of the URL is open in a tab or mainteined by some other subsystem.
   CommerceInfoCache commerce_info_cache_;
 
+  ProductSpecificationsCache product_specifications_cache_;
+
   std::unique_ptr<ProductSpecificationsServerProxy> product_specs_server_proxy_;
 
   std::unique_ptr<BookmarkUpdateManager> bookmark_update_manager_;
@@ -675,10 +701,6 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
 
   // The object handling discounts storage.
   std::unique_ptr<DiscountsStorage> discounts_storage_;
-
-  // This set includes the unique id of shown discounts in the current browser
-  // context. It serves as a cross-tab status tracker for the discounts UI.
-  base::flat_set<uint64_t> shown_discount_ids_;
 
   // Object for tracking parcel status.
   std::unique_ptr<ParcelsManager> parcels_manager_;
@@ -704,6 +726,25 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // the commerce info cache up to date.
   std::unique_ptr<ProductSpecificationsSet::Observer>
       prod_spec_url_ref_observer_;
+
+  // Map between URL and a list of callbacks that are waiting for product info.
+  // This is used to avoid repeated calls to get product info for the same URL.
+  std::map<GURL, std::vector<ProductInfoCallback>>
+      on_demand_product_info_callbacks_;
+
+  base::ScopedObservation<history::HistoryService,
+                          history::HistoryServiceObserver>
+      history_service_observation_{this};
+
+  const raw_ptr<history::HistoryService> history_service_;
+
+  const raw_ptr<sessions::TabRestoreService> tab_restore_service_{nullptr};
+
+  base::ScopedObservation<ProductSpecificationsService,
+                          ProductSpecificationsSet::Observer>
+      product_specifications_observation_{this};
+
+  base::CancelableTaskTracker cancelable_task_tracker_;
 
   // Ensure certain functions are being executed on the same thread.
   SEQUENCE_CHECKER(sequence_checker_);

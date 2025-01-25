@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors
+// Copyright 2024 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,8 +14,7 @@
 #import "google_apis/gaia/core_account_id.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/table_view/legacy_chrome_table_view_controller_test.h"
@@ -56,7 +55,7 @@ class AccountsTableViewControllerTest
         AuthenticationServiceFactory::GetDefaultFactory());
     builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
                               base::BindRepeating(&CreateTestSyncService));
-    browser_state_ = builder.Build();
+    browser_state_ = std::move(builder).Build();
     browser_ = std::make_unique<TestBrowser>(browser_state_.get());
 
     AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
@@ -65,12 +64,6 @@ class AccountsTableViewControllerTest
   }
 
   LegacyChromeTableViewController* InstantiateController() override {
-    // Set up ApplicationCommands mock.
-    id mock_application_handler =
-        OCMProtocolMock(@protocol(ApplicationCommands));
-    CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
-    [dispatcher startDispatchingToTarget:mock_application_handler
-                             forProtocol:@protocol(ApplicationCommands)];
 
     AccountsMediator* mediator =
         [[AccountsMediator alloc] initWithSyncService:test_sync_service()
@@ -80,10 +73,7 @@ class AccountsTableViewControllerTest
 
     AccountsTableViewController* controller =
         [[AccountsTableViewController alloc]
-                                initWithBrowser:browser_.get()
-                      closeSettingsOnAddAccount:NO
-                     applicationCommandsHandler:mock_application_handler
-            signoutDismissalByParentCoordinator:NO];
+            initWithOfferSignout:show_signout_button_];
 
     mediator.consumer = controller;
     controller.modelIdentityDataSource = mediator;
@@ -94,14 +84,13 @@ class AccountsTableViewControllerTest
 
   void TearDown() override {
     mediator_ = nil;
-    [base::apple::ObjCCast<AccountsTableViewController>(controller())
-        settingsWillBeDismissed];
+    show_signout_button_ = NO;
     LegacyChromeTableViewControllerTest::TearDown();
   }
 
   // Identity Services
   signin::IdentityManager* identity_manager() {
-    return IdentityManagerFactory::GetForBrowserState(browser_state_.get());
+    return IdentityManagerFactory::GetForProfile(browser_state_.get());
   }
 
   AuthenticationService* authentication_service() {
@@ -124,19 +113,23 @@ class AccountsTableViewControllerTest
         browser_state_.get());
   }
 
+  void showSignoutButton() { show_signout_button_ = YES; }
+
  private:
   web::WebTaskEnvironment task_environment_{
       web::WebTaskEnvironment::MainThreadType::IO};
-  IOSChromeScopedTestingLocalState local_state_;
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   std::unique_ptr<Browser> browser_;
   variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
       variations::VariationsIdsProvider::Mode::kUseSignedInState};
   AccountsMediator* mediator_;
+  BOOL show_signout_button_ = NO;
 };
 
-// Tests that a valid identity is added to the model.
-TEST_F(AccountsTableViewControllerTest, AddChromeIdentity) {
+// Tests that a sign out button is added.
+TEST_F(AccountsTableViewControllerTest, OfferSignOut) {
+  showSignoutButton();
   FakeSystemIdentity* fake_identity = [FakeSystemIdentity fakeIdentity1];
   fake_system_identity_manager()->AddIdentity(fake_identity);
 
@@ -144,97 +137,25 @@ TEST_F(AccountsTableViewControllerTest, AddChromeIdentity) {
   authentication_service()->SignIn(
       fake_identity, signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
   fake_system_identity_manager()->FireSystemIdentityReloaded();
-  base::RunLoop().RunUntilIdle();
 
   CreateController();
   CheckController();
 
-  EXPECT_EQ(2, NumberOfSections());
-  EXPECT_EQ(2, NumberOfItemsInSection(0));
+  EXPECT_EQ(3, NumberOfSections());
 }
 
-// Tests that an invalid identity is not added to the model.
-TEST_F(AccountsTableViewControllerTest, IgnoreMismatchWithAccountInfo) {
-  FakeSystemIdentity* fake_identity1 = [FakeSystemIdentity fakeIdentity1];
-  fake_system_identity_manager()->AddIdentity(fake_identity1);
-  FakeSystemIdentity* fake_identity2 = [FakeSystemIdentity fakeIdentity2];
-  fake_system_identity_manager()->AddIdentity(fake_identity2);
+// Tests that a sign out button is not added.
+TEST_F(AccountsTableViewControllerTest, ShouldNotOfferSignOut) {
+  FakeSystemIdentity* fake_identity = [FakeSystemIdentity fakeIdentity1];
+  fake_system_identity_manager()->AddIdentity(fake_identity);
 
   // Simulates a credential reload.
   authentication_service()->SignIn(
-      fake_identity1, signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
-  fake_system_identity_manager()->FireSystemIdentityReloaded();
-  base::RunLoop().RunUntilIdle();
-
-  CreateController();
-  CheckController();
-
-  EXPECT_EQ(2, NumberOfSections());
-  EXPECT_EQ(3, NumberOfItemsInSection(0));
-
-  // Removes identity2 from identity service but not account info storage. This
-  // is an asynchronous call, so wait for completion.
-  {
-    base::RunLoop run_loop;
-    fake_system_identity_manager()->ForgetIdentity(
-        fake_identity2, base::IgnoreArgs<NSError*>(run_loop.QuitClosure()));
-    run_loop.Run();
-  }
-
-  [controller() loadModel];
-
-  EXPECT_EQ(2, NumberOfSections());
-  EXPECT_EQ(2, NumberOfItemsInSection(0));
-}
-
-// Tests that no passphrase error is exposed in the account table view (since
-// it's exposed one level up).
-TEST_F(AccountsTableViewControllerTest, DontHoldPassphraseError) {
-  FakeSystemIdentity* fake_identity = [FakeSystemIdentity fakeIdentity1];
-  fake_system_identity_manager()->AddIdentity(fake_identity);
-
-  // Simulate a credential reload.
-  authentication_service()->SignIn(
       fake_identity, signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
   fake_system_identity_manager()->FireSystemIdentityReloaded();
-  base::RunLoop().RunUntilIdle();
-
-  CoreAccountInfo account;
-  account.email = base::SysNSStringToUTF8(fake_identity.userEmail);
-  account.gaia = base::SysNSStringToUTF8(fake_identity.gaiaID);
-  account.account_id = CoreAccountId::FromGaiaId(account.gaia);
-  test_sync_service()->SetSignedIn(signin::ConsentLevel::kSignin, account);
-  test_sync_service()->GetUserSettings()->SetPassphraseRequired();
 
   CreateController();
   CheckController();
 
-  EXPECT_EQ(2, NumberOfSections());
-}
-
-// Tests that when eligible account bookmarks don't have the Account Storage
-// error when there is no error.
-TEST_F(AccountsTableViewControllerTest,
-       DontHoldPassphraseErrorWhenEligibleNoError) {
-  FakeSystemIdentity* fake_identity = [FakeSystemIdentity fakeIdentity1];
-  fake_system_identity_manager()->AddIdentity(fake_identity);
-
-  // Simulate a credential reload.
-  authentication_service()->SignIn(
-      fake_identity, signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
-  fake_system_identity_manager()->FireSystemIdentityReloaded();
-  base::RunLoop().RunUntilIdle();
-
-  CoreAccountInfo account;
-  account.email = base::SysNSStringToUTF8(fake_identity.userEmail);
-  account.gaia = base::SysNSStringToUTF8(fake_identity.gaiaID);
-  account.account_id = CoreAccountId::FromGaiaId(account.gaia);
-  test_sync_service()->SetSignedIn(signin::ConsentLevel::kSync, account);
-  ASSERT_FALSE(test_sync_service()->GetUserSettings()->IsPassphraseRequired());
-
-  CreateController();
-  CheckController();
-
-  // Verify that there are only 2 sections, exluding the error section.
   EXPECT_EQ(2, NumberOfSections());
 }

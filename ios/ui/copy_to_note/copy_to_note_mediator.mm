@@ -8,7 +8,7 @@
 #import "components/notes/note_node.h"
 #import "components/notes/notes_model.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -35,7 +35,8 @@ typedef void (^ProceduralBlockWithBlockWithItemArray)(
 @implementation CopyToNoteMediator
 
 - (instancetype)initWithBrowser:(Browser*)browser {
-  if (self = [super init]) {
+  self = [super init];
+  if (self) {
     DCHECK(browser);
     self.browser = browser;
     ChromeBrowserState* browserState = browser->GetBrowserState();

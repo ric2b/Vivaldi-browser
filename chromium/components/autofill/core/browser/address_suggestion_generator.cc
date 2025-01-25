@@ -568,7 +568,7 @@ std::u16string GetGranularFillingLabels(SuggestionType suggestion_type) {
     case SuggestionType::kFillFullPhoneNumber:
     case SuggestionType::kFillFullEmail:
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -578,10 +578,10 @@ std::u16string GetGranularFillingLabels(SuggestionType suggestion_type) {
 // NAME_FULL or PHONE_HOME_NUMBER) that usually does not allow users to easily
 // identify their address.
 bool ShouldAddAddressLine1ToSuggestionLabels(FieldType trigger_field_type) {
-  static constexpr std::array kAddressRecognizingFields = {
+  static constexpr DenseSet kAddressRecognizingFields = {
       ADDRESS_HOME_LINE1, ADDRESS_HOME_LINE2, ADDRESS_HOME_STREET_ADDRESS};
   return GroupTypeOfFieldType(trigger_field_type) == FieldTypeGroup::kAddress &&
-         !base::Contains(kAddressRecognizingFields, trigger_field_type);
+         !kAddressRecognizingFields.contains(trigger_field_type);
 }
 
 // Returns the minimum number of fields that should be returned by
@@ -768,11 +768,17 @@ std::optional<Suggestion> GetSuggestionForTestAddresses(
   if (test_addresses.empty()) {
     return std::nullopt;
   }
-  Suggestion suggestion(u"Devtools", SuggestionType::kDevtoolsTestAddresses);
-  suggestion.labels = {{Suggestion::Text(
-      l10n_util::GetStringUTF16(IDS_AUTOFILL_ADDRESS_TEST_DATA))}};
+  Suggestion suggestion(l10n_util::GetStringUTF16(IDS_AUTOFILL_DEVELOPER_TOOLS),
+                        SuggestionType::kDevtoolsTestAddresses);
+  suggestion.main_text.is_primary = Suggestion::Text::IsPrimary(false);
   suggestion.icon = Suggestion::Icon::kCode;
   suggestion.is_acceptable = false;
+  suggestion.children.emplace_back(
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_TEST_ADDRESS_BY_COUNTRY),
+      SuggestionType::kDevtoolsTestAddressByCountry);
+  suggestion.children.back().is_acceptable = false;
+  suggestion.children.back().apply_deactivated_style = true;
+  suggestion.children.emplace_back(SuggestionType::kSeparator);
   for (const AutofillProfile& test_address : test_addresses) {
     const std::u16string test_address_country =
         test_address.GetInfo(ADDRESS_HOME_COUNTRY, locale);
@@ -832,13 +838,13 @@ DeduplicatedProfilesForSuggestions(
         break;
       }
       // The profiles are identical and only one should be included.
-      // Prefer `kAccount` profiles over `kLocalOrSyncable` ones. In case the
-      // profiles have the same source, prefer the earlier one (since the
-      // profiles are pre-sorted by their relevance).
+      // Prefer account profiles over local ones. In case the profiles are of
+      // the same type, prefer the earlier one (since the profiles are
+      // pre-sorted by their relevance).
       const bool prefer_a_over_b =
-          profile_a->source() == profile_b->source()
+          profile_a->IsAccountProfile() == profile_b->IsAccountProfile()
               ? a < b
-              : profile_a->source() == AutofillProfile::Source::kAccount;
+              : profile_a->IsAccountProfile();
       if (!prefer_a_over_b) {
         include = false;
         break;
@@ -1180,7 +1186,10 @@ std::vector<Suggestion> CreateSuggestionsFromProfiles(
         suggestions.back().icon = Suggestion::Icon::kAccount;
       }
     }
-    if (profile && profile->source() == AutofillProfile::Source::kAccount &&
+    // This is intentionally not using `profile->IsAccountProfile()` because the
+    // IPH should only be shown for non-H/W profiles.
+    if (profile &&
+        profile->record_type() == AutofillProfile::RecordType::kAccount &&
         profile->initial_creator_id() !=
             AutofillProfile::kInitialCreatorOrModifierChrome) {
       suggestions.back().feature_for_iph =
@@ -1253,8 +1262,7 @@ std::vector<Suggestion> GetSuggestionsForProfiles(
                                           client.GetPersonalDataManager()
                                               ->address_data_manager()
                                               .app_locale())) {
-      suggestions.insert(suggestions.begin(),
-                         std::move(*test_addresses_suggestion));
+      suggestions.push_back(std::move(*test_addresses_suggestion));
     }
   }
   if (suggestions.empty()) {

@@ -90,10 +90,6 @@ bool IsSupportedHdrMetadata(const VideoType& type) {
 
 bool IsColorSpaceSupported(const VideoColorSpace& color_space) {
   switch (color_space.primaries) {
-    case VideoColorSpace::PrimaryID::EBU_3213_E:
-    case VideoColorSpace::PrimaryID::INVALID:
-      return false;
-
     // Transfers supported before color management.
     case VideoColorSpace::PrimaryID::BT709:
     case VideoColorSpace::PrimaryID::UNSPECIFIED:
@@ -109,7 +105,12 @@ bool IsColorSpaceSupported(const VideoColorSpace& color_space) {
     case VideoColorSpace::PrimaryID::SMPTEST428_1:
     case VideoColorSpace::PrimaryID::SMPTEST431_2:
     case VideoColorSpace::PrimaryID::SMPTEST432_1:
+    case VideoColorSpace::PrimaryID::EBU_3213_E:
       break;
+
+    // Never supported.
+    case VideoColorSpace::PrimaryID::INVALID:
+      return false;
   }
 
   switch (color_space.transfer) {
@@ -441,7 +442,8 @@ bool IsDefaultSupportedAudioType(const AudioType& type) {
 
 bool IsBuiltInVideoCodec(VideoCodec codec) {
 #if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS) && BUILDFLAG(USE_PROPRIETARY_CODECS)
-  if (codec == VideoCodec::kH264) {
+  if (codec == VideoCodec::kH264 &&
+      base::FeatureList::IsEnabled(kBuiltInH264Decoder)) {
     return true;
   }
 #endif  // BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS) &&

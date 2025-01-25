@@ -33,6 +33,7 @@ class PaintCanvas;
 }
 
 namespace gfx {
+class Insets;
 class Rect;
 class Size;
 }
@@ -147,6 +148,10 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kMaxValue = kCustom,
   };
 
+  // IMPORTANT!
+  // This enum is reported in metrics. Do not reorder; add additional values at
+  // the end.
+  //
   // This represents the OS-level high contrast theme. kNone unless the default
   // system color scheme is kPlatformHighContrast.
   enum class PlatformHighContrastColorScheme {
@@ -383,6 +388,14 @@ class NATIVE_THEME_EXPORT NativeTheme {
                                 State state,
                                 const ExtraParams& extra) const = 0;
   virtual int GetPaintedScrollbarTrackInset() const;
+
+  virtual gfx::Insets GetScrollbarSolidColorThumbInsets(Part part) const;
+
+  // Called if the theme uses solid color for scrollbar thumb.
+  virtual SkColor4f GetScrollbarThumbColor(
+      const ui::ColorProvider& color_provider,
+      State state,
+      const ScrollbarThumbExtraParams& extra_params) const;
 
   virtual float GetBorderRadiusForPart(Part part,
                                        float width,

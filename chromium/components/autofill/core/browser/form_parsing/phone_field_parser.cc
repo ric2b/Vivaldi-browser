@@ -319,22 +319,15 @@ void PhoneFieldParser::AddClassifications(
     AddClassification(parsed_phone_fields_[FIELD_PHONE], field_number_type,
                       kBasePhoneParserScore, field_candidates);
   } else {
-    if (base::FeatureList::IsEnabled(
-            features::kAutofillDefaultToCityAndNumber)) {
-      const AutofillField* field = parsed_phone_fields_[FIELD_PHONE];
-      if (field->label().find(u"+") != std::u16string::npos ||
-          field->placeholder().find(u"+") != std::u16string::npos ||
-          field->aria_description().find(u"+") != std::u16string::npos) {
-        AddClassification(field, PHONE_HOME_WHOLE_NUMBER, kBasePhoneParserScore,
-                          field_candidates);
-      } else {
-        AddClassification(field, PHONE_HOME_CITY_AND_NUMBER,
-                          kBasePhoneParserScore, field_candidates);
-      }
-    } else {
-      AddClassification(parsed_phone_fields_[FIELD_PHONE],
-                        PHONE_HOME_WHOLE_NUMBER, kBasePhoneParserScore,
+    const AutofillField* field = parsed_phone_fields_[FIELD_PHONE];
+    if (field->label().find(u"+") != std::u16string::npos ||
+        field->placeholder().find(u"+") != std::u16string::npos ||
+        field->aria_description().find(u"+") != std::u16string::npos) {
+      AddClassification(field, PHONE_HOME_WHOLE_NUMBER, kBasePhoneParserScore,
                         field_candidates);
+    } else {
+      AddClassification(field, PHONE_HOME_CITY_AND_NUMBER,
+                        kBasePhoneParserScore, field_candidates);
     }
   }
 
@@ -384,7 +377,7 @@ bool PhoneFieldParser::ParsePhoneField(ParsingContext& context,
                                        const bool is_country_code_field,
                                        const std::string& json_field_type) {
   base::span<const MatchPatternRef> patterns = GetMatchPatterns(
-      json_field_type, context.page_language, context.pattern_source);
+      json_field_type, context.page_language, context.pattern_file);
 
   // Phone country code fields can be discovered via the generic "PHONE" regex
   // (see e.g. the "Phone: <cc> <ac>:3 - <phone>:3 - <suffix>:4" grammar rule).

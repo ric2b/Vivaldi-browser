@@ -51,11 +51,10 @@ message ArcVmStartupRequest {
 
 // Represents an IPv4 subnet given a base address and prefix length.
 message IPv4Subnet {
+  reserved 1;
+
   // The base address of the subnet, represented as 4 bytes in network order.
   bytes addr = 3;
-
-  // Deprecated, use addr instead. The base address in network order.
-  uint32 base_addr = 1 [deprecated = true];
 
   // The prefix length of the subnet.
   uint32 prefix_len = 2;

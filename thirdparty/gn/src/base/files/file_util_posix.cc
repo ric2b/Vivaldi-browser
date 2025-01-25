@@ -59,30 +59,12 @@ namespace base {
 
 namespace {
 
-#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
-    defined(OS_HAIKU) || defined(OS_MSYS) || defined(OS_ZOS) ||  \
-    defined(OS_ANDROID) && __ANDROID_API__ < 21 || defined(OS_SERENITY)
-int CallStat(const char* path, stat_wrapper_t* sb) {
-  return stat(path, sb);
-}
-int CallLstat(const char* path, stat_wrapper_t* sb) {
-  return lstat(path, sb);
-}
-#else
-int CallStat(const char* path, stat_wrapper_t* sb) {
-  return stat64(path, sb);
-}
-int CallLstat(const char* path, stat_wrapper_t* sb) {
-  return lstat64(path, sb);
-}
-#endif
-
 // Helper for VerifyPathControlledByUser.
 bool VerifySpecificPathControlledByUser(const FilePath& path,
                                         uid_t owner_uid,
                                         const std::set<gid_t>& group_gids) {
-  stat_wrapper_t stat_info;
-  if (CallLstat(path.value().c_str(), &stat_info) != 0) {
+  struct stat stat_info;
+  if (lstat(path.value().c_str(), &stat_info) != 0) {
     DPLOG(ERROR) << "Failed to get information on path " << path.value();
     return false;
   }
@@ -172,8 +154,8 @@ FilePath MakeAbsoluteFilePath(const FilePath& input) {
 // here.
 bool DeleteFile(const FilePath& path, bool recursive) {
   const char* path_str = path.value().c_str();
-  stat_wrapper_t file_info;
-  if (CallLstat(path_str, &file_info) != 0) {
+  struct stat file_info;
+  if (lstat(path_str, &file_info) != 0) {
     // The Windows version defines this condition as success.
     return (errno == ENOENT || errno == ENOTDIR);
   }
@@ -268,8 +250,8 @@ bool PathIsWritable(const FilePath& path) {
 }
 
 bool DirectoryExists(const FilePath& path) {
-  stat_wrapper_t file_info;
-  if (CallStat(path.value().c_str(), &file_info) != 0)
+  struct stat file_info;
+  if (stat(path.value().c_str(), &file_info) != 0)
     return false;
   return S_ISDIR(file_info.st_mode);
 }
@@ -311,10 +293,10 @@ bool ReadSymbolicLink(const FilePath& symlink_path, FilePath* target_path) {
 bool GetPosixFilePermissions(const FilePath& path, int* mode) {
   DCHECK(mode);
 
-  stat_wrapper_t file_info;
+  struct stat file_info;
   // Uses stat(), because on symbolic link, lstat() does not return valid
   // permission bits in st_mode
-  if (CallStat(path.value().c_str(), &file_info) != 0)
+  if (stat(path.value().c_str(), &file_info) != 0)
     return false;
 
   *mode = file_info.st_mode & FILE_PERMISSION_MASK;
@@ -325,8 +307,8 @@ bool SetPosixFilePermissions(const FilePath& path, int mode) {
   DCHECK_EQ(mode & ~FILE_PERMISSION_MASK, 0);
 
   // Calls stat() so that we can preserve the higher bits like S_ISGID.
-  stat_wrapper_t stat_buf;
-  if (CallStat(path.value().c_str(), &stat_buf) != 0)
+  struct stat stat_buf;
+  if (stat(path.value().c_str(), &stat_buf) != 0)
     return false;
 
   // Clears the existing permission bits, and adds the new ones.
@@ -492,17 +474,17 @@ bool NormalizeFilePath(const FilePath& path, FilePath* normalized_path) {
 // TODO(rkc): Refactor GetFileInfo and FileEnumerator to handle symlinks
 // correctly. http://code.google.com/p/chromium-os/issues/detail?id=15948
 bool IsLink(const FilePath& file_path) {
-  stat_wrapper_t st;
+  struct stat st;
   // If we can't lstat the file, it's safe to assume that the file won't at
   // least be a 'followable' link.
-  if (CallLstat(file_path.value().c_str(), &st) != 0)
+  if (lstat(file_path.value().c_str(), &st) != 0)
     return false;
   return S_ISLNK(st.st_mode);
 }
 
 bool GetFileInfo(const FilePath& file_path, File::Info* results) {
-  stat_wrapper_t file_info;
-  if (CallStat(file_path.value().c_str(), &file_info) != 0)
+  struct stat file_info;
+  if (stat(file_path.value().c_str(), &file_info) != 0)
     return false;
 
   results->FromStat(file_info);

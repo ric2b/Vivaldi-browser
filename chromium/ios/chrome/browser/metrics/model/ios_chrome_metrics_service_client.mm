@@ -78,16 +78,16 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state_manager.h"
+#import "ios/chrome/browser/shared/model/browser_state/incognito_session_tracker.h"
 #import "ios/chrome/browser/shared/model/paths/paths.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/device_info_sync_service_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/tabs/model/tab_parenting_global_observer.h"
 #import "ios/chrome/browser/translate/model/translate_ranker_metrics_provider.h"
-#import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/public/provider/chrome/browser/app_distribution/app_distribution_api.h"
 #import "ios/web/public/thread/web_thread.h"
@@ -135,15 +135,26 @@ const char kUKMFieldTrialSuffix[] = "UKM";
 IOSChromeMetricsServiceClient::IOSChromeMetricsServiceClient(
     metrics::MetricsStateManager* state_manager,
     variations::SyntheticTrialRegistry* synthetic_trial_registry)
-    : metrics_state_manager_(state_manager),
+    : UkmConsentStateObserver(ukm::NoInitialUkmConsentState),
+      metrics_state_manager_(state_manager),
       synthetic_trial_registry_(synthetic_trial_registry),
       stability_metrics_provider_(nullptr) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  notification_listeners_active_ = RegisterForNotifications();
+  RegisterForNotifications();
+
+  // The IncognitoSessionTracker may be null during unit tests.
+  if (IncognitoSessionTracker* tracker =
+          GetApplicationContext()->GetIncognitoSessionTracker()) {
+    // Using base::Unretained(this) is safe since destroying the subscription
+    // will invalidate the callback and the subscription is owned by this.
+    incognito_session_tracker_subscription_ =
+        tracker->RegisterCallback(base::IgnoreArgs<bool>(base::BindRepeating(
+            &IOSChromeMetricsServiceClient::UpdateRunningServices,
+            base::Unretained(this))));
+  }
 }
 
 IOSChromeMetricsServiceClient::~IOSChromeMetricsServiceClient() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 // static
@@ -223,7 +234,7 @@ std::string IOSChromeMetricsServiceClient::GetVersionString() {
 
 void IOSChromeMetricsServiceClient::CollectFinalMetricsForLog(
     base::OnceClosure done_callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   collect_final_metrics_done_callback_ = std::move(done_callback);
   CollectFinalHistograms();
@@ -271,9 +282,7 @@ void IOSChromeMetricsServiceClient::Initialize() {
         std::make_unique<metrics::DemographicMetricsProvider>(
             std::make_unique<metrics::DemographicsClient>(),
             metrics::MetricsLogUploader::MetricServiceType::UKM));
-    // As this is startup, there the UKM previous state is the same as the
-    // present state.
-    OnUkmAllowedStateChanged(/* must_purge */ false, GetUkmConsentState());
+
     RegisterUKMProviders();
   }
 }
@@ -341,26 +350,17 @@ void IOSChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
           std::make_unique<metrics::DemographicsClient>(),
           metrics::MetricsLogUploader::MetricServiceType::UMA));
 
-  std::vector<ChromeBrowserState*> loaded_browser_states =
-      GetApplicationContext()
-          ->GetChromeBrowserStateManager()
-          ->GetLoadedBrowserStates();
-  for (ChromeBrowserState* browser_state : loaded_browser_states) {
-    metrics_service_->RegisterMetricsProvider(
-        std::make_unique<IOSFeedActivityMetricsProvider>(
-            browser_state->GetPrefs()));
+  metrics_service_->RegisterMetricsProvider(
+      CreateIOSProfileSessionMetricsProvider());
 
-    metrics_service_->RegisterMetricsProvider(
-        CreateIOSProfileSessionMetricsProvider());
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<IOSFeedActivityMetricsProvider>());
 
-    metrics_service_->RegisterMetricsProvider(
-        std::make_unique<IOSFeedEnabledMetricsProvider>(
-            browser_state->GetPrefs()));
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<IOSFeedEnabledMetricsProvider>());
 
-    metrics_service_->RegisterMetricsProvider(
-        std::make_unique<IOSPushNotificationsMetricsProvider>(
-            IdentityManagerFactory::GetForBrowserState(browser_state)));
-  }
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<IOSPushNotificationsMetricsProvider>());
 }
 
 void IOSChromeMetricsServiceClient::RegisterUKMProviders() {
@@ -383,7 +383,7 @@ void IOSChromeMetricsServiceClient::RegisterUKMProviders() {
 }
 
 void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   task_vm_info task_info_data;
   mach_msg_type_number_t count = sizeof(task_vm_info) / sizeof(natural_t);
@@ -434,13 +434,9 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
     base::debug::DumpWithoutCrashing();
   }
 
-  std::vector<ChromeBrowserState*> loaded_browser_states =
-      GetApplicationContext()
-          ->GetChromeBrowserStateManager()
-          ->GetLoadedBrowserStates();
-
   int open_tabs_count = 0;
-  for (ChromeBrowserState* browser_state : loaded_browser_states) {
+  for (ChromeBrowserState* browser_state :
+       GetApplicationContext()->GetProfileManager()->GetLoadedProfiles()) {
     // Iterate through regular Browser and OTR Browser to find the corresponding
     // tab.
     BrowserList* browser_list =
@@ -458,7 +454,7 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
   std::move(collect_final_metrics_done_callback_).Run();
 }
 
-bool IOSChromeMetricsServiceClient::RegisterForNotifications() {
+void IOSChromeMetricsServiceClient::RegisterForNotifications() {
   tab_parented_subscription_ =
       TabParentingGlobalObserver::GetInstance()->RegisterCallback(
           base::BindRepeating(&IOSChromeMetricsServiceClient::OnTabParented,
@@ -469,32 +465,21 @@ bool IOSChromeMetricsServiceClient::RegisterForNotifications() {
               &IOSChromeMetricsServiceClient::OnURLOpenedFromOmnibox,
               base::Unretained(this)));
 
-  std::vector<ChromeBrowserState*> loaded_browser_states =
-      GetApplicationContext()
-          ->GetChromeBrowserStateManager()
-          ->GetLoadedBrowserStates();
-  bool all_profiles_succeeded = true;
-
-  // If this function is called too early (before browser_state is fully
-  // initialized), the event listener will not be registered correctly.
-  DCHECK_GT(loaded_browser_states.size(), 0u);
-  for (ChromeBrowserState* browser_state : loaded_browser_states) {
-    if (!RegisterForBrowserStateEvents(browser_state)) {
-      all_profiles_succeeded = false;
-    }
-  }
-  return all_profiles_succeeded;
+  // ProfileManagerIOS invoke OnProfileLoaded(...) for all Profiles already
+  // loaded, so there is no need to manually iterate over them.
+  profile_manager_observation_.Observe(
+      GetApplicationContext()->GetProfileManager());
 }
 
-bool IOSChromeMetricsServiceClient::RegisterForBrowserStateEvents(
-    ChromeBrowserState* browser_state) {
+bool IOSChromeMetricsServiceClient::RegisterForProfileEvents(
+    ChromeBrowserState* profile) {
   history::HistoryService* history_service =
       ios::HistoryServiceFactory::GetForBrowserState(
-          browser_state, ServiceAccessType::IMPLICIT_ACCESS);
+          profile, ServiceAccessType::IMPLICIT_ACCESS);
   ObserveServiceForDeletions(history_service);
   syncer::SyncService* sync =
-      SyncServiceFactory::GetInstance()->GetForBrowserState(browser_state);
-  StartObserving(sync, browser_state->GetPrefs());
+      SyncServiceFactory::GetInstance()->GetForBrowserState(profile);
+  StartObserving(sync, profile->GetPrefs());
   return (history_service != nullptr && sync != nullptr);
 }
 
@@ -562,14 +547,24 @@ void IOSChromeMetricsServiceClient::OnUkmAllowedStateChanged(
   UpdateRunningServices();
 }
 
-void IOSChromeMetricsServiceClient::OnIncognitoWebStateAdded() {
-  // Signal service manager to enable/disable UKM based on new state.
-  UpdateRunningServices();
+void IOSChromeMetricsServiceClient::OnProfileManagerDestroyed(
+    ProfileManagerIOS* manager) {
+  profile_manager_observation_.Reset();
 }
 
-void IOSChromeMetricsServiceClient::OnIncognitoWebStateRemoved() {
-  // Signal service manager to enable/disable UKM based on new state.
-  UpdateRunningServices();
+void IOSChromeMetricsServiceClient::OnProfileCreated(
+    ProfileManagerIOS* manager,
+    ChromeBrowserState* profile) {
+  // Nothing to do, the Profile is not fully loaded, and it is not possible to
+  // access the KeyedService yet.
+}
+
+void IOSChromeMetricsServiceClient::OnProfileLoaded(
+    ProfileManagerIOS* manager,
+    ChromeBrowserState* profile) {
+  if (!RegisterForProfileEvents(profile)) {
+    notification_listeners_active_ = false;
+  }
 }
 
 bool IOSChromeMetricsServiceClient::IsUkmAllowedForAllProfiles() {

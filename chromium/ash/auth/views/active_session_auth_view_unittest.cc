@@ -15,6 +15,8 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_util.h"
 #include "base/containers/enum_set.h"
+#include "base/time/time.h"
+#include "chromeos/ash/components/cryptohome/auth_factor.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -78,6 +80,8 @@ class ActiveSessionAuthViewUnitTest : public AshTestBase {
 
     test_api_password_ = std::make_unique<AuthInputRowView::TestApi>(
         test_api_auth_container_->GetPasswordView());
+    test_pin_status_ = std::make_unique<PinStatusView::TestApi>(
+        test_api_auth_container_->GetPinStatusView());
 
     mock_observer_ = std::make_unique<MockActiveSessionAuthViewObserver>();
     container_view_->AddObserver(mock_observer_.get());
@@ -94,6 +98,7 @@ class ActiveSessionAuthViewUnitTest : public AshTestBase {
     test_api_password_.reset();
     test_api_auth_container_.reset();
     test_api_header_.reset();
+    test_pin_status_.reset();
     close_button_ = nullptr;
     test_api_.reset();
     container_view_->RemoveObserver(mock_observer_.get());
@@ -112,6 +117,7 @@ class ActiveSessionAuthViewUnitTest : public AshTestBase {
   std::unique_ptr<AuthInputRowView::TestApi> test_api_password_;
   std::unique_ptr<AuthHeaderView::TestApi> test_api_header_;
   std::unique_ptr<AuthContainerView::TestApi> test_api_auth_container_;
+  std::unique_ptr<PinStatusView::TestApi> test_pin_status_;
   std::unique_ptr<ActiveSessionAuthView::TestApi> test_api_;
   raw_ptr<views::Button> close_button_;
   raw_ptr<ActiveSessionAuthView> container_view_ = nullptr;
@@ -122,6 +128,14 @@ class ActiveSessionAuthViewUnitTest : public AshTestBase {
 TEST_F(ActiveSessionAuthViewUnitTest, CloseButtonTest) {
   EXPECT_CALL(*mock_observer_, OnClose()).Times(1);
 
+  // Click on close button.
+  LeftClickOn(close_button_);
+}
+
+// Verify close observer with disabled input area.
+TEST_F(ActiveSessionAuthViewUnitTest, CloseButtonWithDisabledInputTest) {
+  EXPECT_CALL(*mock_observer_, OnClose()).Times(1);
+  container_view_->SetInputEnabled(false);
   // Click on close button.
   LeftClickOn(close_button_);
 }
@@ -140,6 +154,26 @@ TEST_F(ActiveSessionAuthViewUnitTest, PasswordSubmitTest) {
   }
   EXPECT_EQ(test_api_pin_input_->GetTextfield()->GetText(), std::u16string());
   EXPECT_EQ(test_api_password_->GetTextfield()->GetText(), kPassword);
+
+  // Click on Submit.
+  LeftClickOn(test_api_password_->GetSubmitButton());
+}
+
+// Verify the password input is no op with disabled input area.
+TEST_F(ActiveSessionAuthViewUnitTest, PasswordSubmitWithDisabledInputTest) {
+  const std::u16string kPassword(u"password");
+  EXPECT_CALL(*mock_observer_, OnPasswordSubmit(kPassword)).Times(0);
+
+  container_view_->GetFocusManager()->SetFocusedView(
+      test_api_password_->GetTextfield());
+
+  container_view_->SetInputEnabled(false);
+  for (const char16_t c : kPassword) {
+    PressAndReleaseKey(ui::DomCodeToUsLayoutNonLocatedKeyboardCode(
+        ui::UsLayoutDomKeyToDomCode(ui::DomKey::FromCharacter(c))));
+  }
+  EXPECT_EQ(test_api_pin_input_->GetTextfield()->GetText(), std::u16string());
+  EXPECT_EQ(test_api_password_->GetTextfield()->GetText(), std::u16string());
 
   // Click on Submit.
   LeftClickOn(test_api_password_->GetSubmitButton());
@@ -208,6 +242,17 @@ TEST_F(ActiveSessionAuthViewUnitTest, ResetInputfieldsTest) {
 
   EXPECT_EQ(test_api_password_->GetTextfield()->GetText(), std::u16string());
   EXPECT_EQ(test_api_pin_input_->GetTextfield()->GetText(), std::u16string());
+}
+
+TEST_F(ActiveSessionAuthViewUnitTest, SetPinStatusTest) {
+  const std::u16string status_message = u"Too many PIN attempts";
+
+  cryptohome::PinStatus pin_status(base::TimeDelta::Max());
+
+  test_api_->GetView()->SetPinStatus(
+      std::make_unique<cryptohome::PinStatus>(base::TimeDelta::Max()));
+
+  EXPECT_EQ(test_pin_status_->GetCurrentText(), status_message);
 }
 
 }  // namespace

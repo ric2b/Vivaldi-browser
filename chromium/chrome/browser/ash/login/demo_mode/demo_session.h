@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ASH_LOGIN_DEMO_MODE_DEMO_SESSION_H_
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,6 @@
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
-#include "chrome/browser/ash/login/demo_mode/demo_extensions_external_loader.h"
 #include "chrome/browser/ash/login/demo_mode/demo_mode_window_closer.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/component_updater/ash/component_manager_ash.h"
@@ -80,9 +80,13 @@ class DemoSession : public session_manager::SessionManagerObserver,
     // Logged when apps are launched from the demo mode app.
     kDemoModeApp = 3,
 
+    // Logged when apps are launched from the search result in the App List in
+    // Demo Mode.
+    kAppListQuery = 4,
+
     // Add future entries above this comment, in sync with enums.xml.
     // Update kMaxValue to the last value.
-    kMaxValue = kDemoModeApp
+    kMaxValue = kAppListQuery
   };
 
   // The list of countries that Demo Mode supports, ie the countries we have
@@ -148,21 +152,16 @@ class DemoSession : public session_manager::SessionManagerObserver,
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
   // Records the launch of an app in Demo mode from the specified source.
-  static void RecordAppLaunchSourceIfInDemoMode(AppLaunchSource source);
+  static void RecordAppLaunchSource(AppLaunchSource source);
 
   // Ensures that the load of demo session resources is requested.
   // `load_callback` will be run once the resource load finishes.
   void EnsureResourcesLoaded(base::OnceClosure load_callback);
 
-  // Returns false if the Chrome app or ARC++ package, which is normally pinned
-  // by policy, should actually not be force-pinned because the device is
-  // in Demo Mode and offline.
-  bool ShouldShowAndroidOrChromeAppInShelf(
-      const std::string& app_id_or_package);
-
-  // Sets `extensions_external_loader_` and starts installing the screensaver.
-  void SetExtensionsExternalLoader(
-      scoped_refptr<DemoExtensionsExternalLoader> extensions_external_loader);
+  // Returns false if the app, which is normally pinned by policy, should
+  // actually not be force-pinned because the device is in Demo Mode and
+  // offline.
+  bool ShouldShowAppInShelf(const std::string& app_id_or_package);
 
   // Sets app IDs and package names that shouldn't be pinned by policy when the
   // device is offline in Demo Mode.
@@ -236,8 +235,6 @@ class DemoSession : public session_manager::SessionManagerObserver,
                           session_manager::SessionManagerObserver>
       session_manager_observation_{this};
 
-  scoped_refptr<DemoExtensionsExternalLoader> extensions_external_loader_;
-
   // The fallback timer that ensures the splash screen is removed in case the
   // screensaver app takes an extra long time to be shown.
   std::unique_ptr<base::OneShotTimer> remove_splash_screen_fallback_timer_;
@@ -246,6 +243,9 @@ class DemoSession : public session_manager::SessionManagerObserver,
   std::unique_ptr<DemoModeWindowCloser> window_closer_;
 
   bool splash_screen_activated_ = false;
+
+  // Keep track of which app has been installed in demo mode.
+  std::set<std::string> installed_app_;
 
   base::WeakPtrFactory<DemoSession> weak_ptr_factory_{this};
 };

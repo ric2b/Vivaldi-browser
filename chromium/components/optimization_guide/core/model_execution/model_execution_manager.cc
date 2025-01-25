@@ -121,8 +121,7 @@ GetRequiredModelAdaptationLoaders(
     base::WeakPtr<OnDeviceModelServiceController>
         on_device_model_service_controller) {
   std::map<ModelBasedCapabilityKey, OnDeviceModelAdaptationLoader> loaders;
-  for (const auto user_visible_feature : kAllUserVisibleFeatureKeys) {
-    const auto feature = ToModelBasedCapabilityKey(user_visible_feature);
+  for (const auto feature : kAllModelBasedCapabilityKeys) {
     if (!features::internal::IsOnDeviceModelEnabled(feature) ||
         !features::internal::IsOnDeviceModelAdaptationEnabled(feature)) {
       continue;
@@ -282,18 +281,19 @@ void ModelExecutionManager::ExecuteModel(
 
 bool ModelExecutionManager::CanCreateOnDeviceSession(
     ModelBasedCapabilityKey feature,
-    raw_ptr<OnDeviceModelEligibilityReason> debug_reason) {
+    OnDeviceModelEligibilityReason* on_device_model_eligibility_reason) {
   if (!on_device_model_service_controller_) {
-    if (debug_reason) {
-      *debug_reason = OnDeviceModelEligibilityReason::kFeatureNotEnabled;
+    if (on_device_model_eligibility_reason) {
+      *on_device_model_eligibility_reason =
+          OnDeviceModelEligibilityReason::kFeatureNotEnabled;
     }
     return false;
   }
 
   OnDeviceModelEligibilityReason reason =
       on_device_model_service_controller_->CanCreateSession(feature);
-  if (debug_reason) {
-    *debug_reason = reason;
+  if (on_device_model_eligibility_reason) {
+    *on_device_model_eligibility_reason = reason;
   }
   return reason == OnDeviceModelEligibilityReason::kSuccess;
 }
@@ -302,14 +302,16 @@ std::unique_ptr<OptimizationGuideModelExecutor::Session>
 ModelExecutionManager::StartSession(
     ModelBasedCapabilityKey feature,
     const std::optional<SessionConfigParams>& config_params) {
-  bool disable_server_fallback =
-      config_params && config_params->disable_server_fallback;
+  SessionConfigParams::ExecutionMode execution_mode =
+      config_params ? config_params->execution_mode
+                    : SessionConfigParams::ExecutionMode::kDefault;
   ExecuteRemoteFn execute_fn =
-      disable_server_fallback
+      execution_mode == SessionConfigParams::ExecutionMode::kOnDeviceOnly
           ? base::BindRepeating(&NoOpExecuteRemoteFn)
           : base::BindRepeating(&ModelExecutionManager::ExecuteModel,
                                 weak_ptr_factory_.GetWeakPtr());
-  if (on_device_model_service_controller_) {
+  if (on_device_model_service_controller_ &&
+      execution_mode != SessionConfigParams::ExecutionMode::kServerOnly) {
     auto session = on_device_model_service_controller_->CreateSession(
         feature, execute_fn, optimization_guide_logger_->GetWeakPtr(),
         model_quality_uploader_service_, config_params);
@@ -319,7 +321,7 @@ ModelExecutionManager::StartSession(
     }
   }
 
-  if (disable_server_fallback) {
+  if (execution_mode == SessionConfigParams::ExecutionMode::kOnDeviceOnly) {
     return nullptr;
   }
 

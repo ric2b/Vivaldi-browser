@@ -136,7 +136,6 @@ class StructuredLogAdapter(logging.Handler):
 class WPTAdapter:
     PORT_NAME_BY_PRODUCT = {
         'android_webview': 'webview',
-        'chrome': 'chrome',
         'chrome_android': 'android',
     }
 
@@ -166,18 +165,18 @@ class WPTAdapter:
         cls._ensure_value(options, 'wpt_only', True)
         # only run virtual tests for headless shell
         cls._ensure_value(options, 'no_virtual_tests', options.product
-                          != 'headless_shell')
+                          not in ['headless_shell', 'chrome'])
+
+        env_shard_index = host.environ.get('GTEST_SHARD_INDEX')
+        if env_shard_index is not None:
+            cls._ensure_value(options, 'shard_index', int(env_shard_index))
+        env_total_shards = host.environ.get('GTEST_TOTAL_SHARDS')
+        if env_total_shards is not None:
+            cls._ensure_value(options, 'total_shards', int(env_total_shards))
 
         if options.product in cls.PORT_NAME_BY_PRODUCT:
-            port = host.port_factory.get(
-                cls.PORT_NAME_BY_PRODUCT[options.product], options)
-        else:
-            port = host.port_factory.get(port_name, options)
-
-        if options.product == 'headless_shell':
-            port.set_option_default('driver_name', port.HEADLESS_SHELL_NAME)
-        elif options.product == 'chrome':
-            port.set_option_default('driver_name', port.CHROME_NAME)
+            port_name = cls.PORT_NAME_BY_PRODUCT[options.product]
+        port = host.port_factory.get(port_name, options)
         product = make_product(port, options)
         return WPTAdapter(product, port, options, tests)
 
@@ -187,11 +186,11 @@ class WPTAdapter:
                 and not self.using_upstream_wpt):
             self.options.smoke = self.port.default_smoke_test_only()
         if self.options.smoke:
-            if not self.paths and not self.options.test_list and self.options.num_retries is None:
-                # Retry failures 1 times if we're running a smoke test without
+            if not explicit_tests and self.options.num_retries is None:
+                # Retry failures 3 times if we're running a smoke test without
                 # additional tests. SmokeTests is an explicit list of tests, so we
                 # wouldn't retry by default without this special case.
-                self.options.num_retries = 1
+                self.options.num_retries = 3
 
             if not self.options.test_list:
                 self.options.test_list = []
@@ -199,13 +198,6 @@ class WPTAdapter:
 
         if self.options.gtest_filter:
             self.paths.extend(self.options.gtest_filter.split(':'))
-
-        if not self.options.total_shards and 'GTEST_TOTAL_SHARDS' in self.host.environ:
-            self.options.total_shards = int(
-                self.port.host.environ['GTEST_TOTAL_SHARDS'])
-        if not self.options.shard_index and 'GTEST_SHARD_INDEX' in self.port.host.environ:
-            self.options.shard_index = int(
-                self.port.host.environ['GTEST_SHARD_INDEX'])
 
     def log_config(self):
         logger.info(f'Running tests for {self.product.name}')
@@ -330,8 +322,13 @@ class WPTAdapter:
             *self.port.additional_driver_flags(),
         ])
 
-        # Implicitly pass `--enable-blink-features=MojoJS,MojoJSTest` to Chrome.
+        # Implicitly pass `--enable-blink-features=MojoJS,MojoJSTest` and
+        # `--enable-experimental-web-platform-features` to the browser binary.
+        # The latter is needed in addition to `--enable-blink-test-features`
+        # because it enables some Chromium-side `base::Feature()`s:
+        # https://chromium.googlesource.com/chromium/src/+/main/content/public/common/content_switch_dependent_feature_overrides.cc
         runner_options.mojojs_path = self.port.generated_sources_directory()
+        runner_options.enable_experimental = True
 
         # TODO: RWT has subtle control on how tests are retried. For example
         # there won't be automatic retry of failed tests when they are specified
@@ -339,6 +336,7 @@ class WPTAdapter:
         # work correctly.
         runner_options.repeat = self.options.iterations
         runner_options.fully_parallel = self.options.fully_parallel
+        runner_options.leak_check = self.options.enable_leak_detection
 
         if self.options.run_wpt_internal:
             runner_options.config = self.finder.path_from_web_tests(
@@ -407,6 +405,8 @@ class WPTAdapter:
                 self.paths,
                 test_lists=self.options.test_list,
                 filter_files=self.options.isolated_script_test_filter_file,
+                inverted_filter_files=self.options.
+                inverted_test_launcher_filter_file,
                 fastest_percentile=None,
                 filters=self.options.isolated_script_test_filter)
         except IOError:
@@ -414,7 +414,7 @@ class WPTAdapter:
 
         if self.options.num_retries is None:
             # If --test-list is passed, or if no test narrowing is specified,
-            # default to 1 retries. Otherwise [e.g. if tests are being passed by
+            # default to 3 retries. Otherwise [e.g. if tests are being passed by
             # name], default to 0 retries.
             if self.options.test_list or len(self.paths) < len(all_test_names):
                 self.options.num_retries = 3
@@ -553,8 +553,16 @@ class WPTAdapter:
                 self.process_and_upload_results(runner_options))
             self.port.setup_test_run()  # Start Xvfb, if necessary.
             stack.callback(self.port.clean_up_test_run)
+            # Restore the original CWD as soon as the call into `wpt run` is
+            # over. This ensures relative paths for `--json-test-results` and
+            # other options work correctly.
+            stack.callback(self.fs.chdir, self.fs.getcwd())
             # Changing the CWD is not ideal, but necessary for `wptserve` to
             # resolve relative paths in `external/wpt/config.json` correctly.
+            #
+            # TODO(crbug.com/362344569): Replace this workaround. One option is
+            # to add a `wpt run` parameter to point to a wptserve config with
+            # absolutized paths.
             self.fs.chdir(self.port.web_tests_dir())
             yield runner_options
 
@@ -784,12 +792,6 @@ def main(argv) -> int:
     exit_code = exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
     try:
         adapter = WPTAdapter.from_args(host, argv)
-        if adapter.product.name == 'chrome' and not host.platform.is_linux():
-            logger.error(
-                '`run_wpt_tests.py --product=chrome` does not yet support '
-                'non-Linux platforms; follow https://crbug.com/1512219 for '
-                'status.')
-            return exit_code
         if (adapter.product.name == 'chrome_ios'
                 and adapter.options.xcode_build_version):
             _install_xcode(adapter.options.xcode_build_version)

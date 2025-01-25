@@ -406,30 +406,31 @@ $B1: {  # root
     %10:f32 = hlsl.f16tof32 %9
     %11:f16 = convert %10
     %b:f16 = let %11
-    %13:u32 = mul %x, 2u
-    %14:u32 = div %13, 16u
-    %15:ptr<uniform, vec4<u32>, read> = access %v, %14
-    %16:u32 = mod %13, 16u
-    %17:u32 = div %16, 4u
-    %18:u32 = load_vector_element %15, %17
-    %19:u32 = mod %13, 4u
-    %20:bool = eq %19, 0u
-    %21:u32 = hlsl.ternary 16u, 0u, %20
-    %22:u32 = shr %18, %21
-    %23:f32 = hlsl.f16tof32 %22
-    %24:f16 = convert %23
-    %c:f16 = let %24
-    %26:ptr<uniform, vec4<u32>, read> = access %v, 0u
-    %27:u32 = load_vector_element %26, 1u
-    %28:f32 = hlsl.f16tof32 %27
-    %29:f16 = convert %28
-    %d:f16 = let %29
-    %31:ptr<uniform, vec4<u32>, read> = access %v, 0u
-    %32:u32 = load_vector_element %31, 1u
-    %33:u32 = shr %32, 16u
-    %34:f32 = hlsl.f16tof32 %33
-    %35:f16 = convert %34
-    %e:f16 = let %35
+    %13:u32 = convert %x
+    %14:u32 = mul %13, 2u
+    %15:u32 = div %14, 16u
+    %16:ptr<uniform, vec4<u32>, read> = access %v, %15
+    %17:u32 = mod %14, 16u
+    %18:u32 = div %17, 4u
+    %19:u32 = load_vector_element %16, %18
+    %20:u32 = mod %14, 4u
+    %21:bool = eq %20, 0u
+    %22:u32 = hlsl.ternary 16u, 0u, %21
+    %23:u32 = shr %19, %22
+    %24:f32 = hlsl.f16tof32 %23
+    %25:f16 = convert %24
+    %c:f16 = let %25
+    %27:ptr<uniform, vec4<u32>, read> = access %v, 0u
+    %28:u32 = load_vector_element %27, 1u
+    %29:f32 = hlsl.f16tof32 %28
+    %30:f16 = convert %29
+    %d:f16 = let %30
+    %32:ptr<uniform, vec4<u32>, read> = access %v, 0u
+    %33:u32 = load_vector_element %32, 1u
+    %34:u32 = shr %33, 16u
+    %35:f32 = hlsl.f16tof32 %34
+    %36:f16 = convert %35
+    %e:f16 = let %36
     ret
   }
 }
@@ -1046,6 +1047,76 @@ $B1: {  # root
   }
 }
 )";
+    Run(DecomposeUniformAccess);
+    EXPECT_EQ(expect, str());
+}
+
+TEST_F(HlslWriterDecomposeUniformAccessTest, UniformAccessChainReused) {
+    auto* sb = ty.Struct(mod.symbols.New("SB"), {
+                                                    {mod.symbols.New("c"), ty.f32()},
+                                                    {mod.symbols.New("d"), ty.vec3<f32>()},
+                                                });
+
+    auto* var = b.Var("v", uniform, sb, core::Access::kRead);
+    var->SetBindingPoint(0, 0);
+    b.ir.root_block->Append(var);
+
+    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kFragment);
+    b.Append(func->Block(), [&] {
+        auto* x = b.Access(ty.ptr(uniform, ty.vec3<f32>(), core::Access::kRead), var, 1_u);
+        b.Let("b", b.LoadVectorElement(x, 1_u));
+        b.Let("c", b.LoadVectorElement(x, 2_u));
+        b.Return(func);
+    });
+
+    auto* src = R"(
+SB = struct @align(16) {
+  c:f32 @offset(0)
+  d:vec3<f32> @offset(16)
+}
+
+$B1: {  # root
+  %v:ptr<uniform, SB, read> = var @binding_point(0, 0)
+}
+
+%foo = @fragment func():void {
+  $B2: {
+    %3:ptr<uniform, vec3<f32>, read> = access %v, 1u
+    %4:f32 = load_vector_element %3, 1u
+    %b:f32 = let %4
+    %6:f32 = load_vector_element %3, 2u
+    %c:f32 = let %6
+    ret
+  }
+}
+)";
+    ASSERT_EQ(src, str());
+
+    auto* expect = R"(
+SB = struct @align(16) {
+  c:f32 @offset(0)
+  d:vec3<f32> @offset(16)
+}
+
+$B1: {  # root
+  %v:ptr<uniform, array<vec4<u32>, 2>, read> = var @binding_point(0, 0)
+}
+
+%foo = @fragment func():void {
+  $B2: {
+    %3:ptr<uniform, vec4<u32>, read> = access %v, 1u
+    %4:u32 = load_vector_element %3, 1u
+    %5:f32 = bitcast %4
+    %b:f32 = let %5
+    %7:ptr<uniform, vec4<u32>, read> = access %v, 1u
+    %8:u32 = load_vector_element %7, 2u
+    %9:f32 = bitcast %8
+    %c:f32 = let %9
+    ret
+  }
+}
+)";
+
     Run(DecomposeUniformAccess);
     EXPECT_EQ(expect, str());
 }

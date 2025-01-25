@@ -8,6 +8,7 @@
 # Copyright (c) 2021-2024 Sebastian Pipping <sebastian@pipping.org>
 # Copyright (c) 2023      Joyce Brum <joycebrum@google.com>
 # Copyright (c) 2023      Hanno Böck <hanno@gentoo.org>
+# Copyright (c) 2024      Dag-Erling Smørgrav <des@des.dev>
 # Licensed under the MIT license:
 #
 # Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -47,8 +48,6 @@ jobs:
     strategy:
       matrix:
         include:
-          # NOTE: This is a quick port from .travis.yml in reaction to
-          #       stability issues at Travis CI.
           - MODE: cmake-oos
           - MODE: distcheck
           - MODE: qa-sh
@@ -89,7 +88,7 @@ jobs:
     env:
       CFLAGS: -g3 -pipe
     steps:
-    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11  # v4.1.1
+    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
     - name: Install build dependencies (MinGW)
       if: "${{ contains(matrix.FLAT_ENV, 'mingw') }}"
       run: |-
@@ -132,7 +131,6 @@ jobs:
         sudo apt-get install --yes --no-install-recommends -V \
             cmake \
             docbook2x \
-            dos2unix \
             gcc-multilib \
             g++-multilib \
             lcov \

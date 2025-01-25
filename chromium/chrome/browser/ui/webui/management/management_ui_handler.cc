@@ -277,7 +277,7 @@ void ManagementUIHandler::AddReportingInfo(base::Value::List* report_sources,
       enterprise_connectors::ConnectorsServiceFactory::GetForBrowserContext(
           Profile::FromWebUI(web_ui()))
           ->GetAppliedRealTimeUrlCheck() !=
-      safe_browsing::REAL_TIME_CHECK_DISABLED;
+      enterprise_connectors::REAL_TIME_CHECK_DISABLED;
 
   if (cloud_legacy_tech_report_enabled) {
     Profile::FromWebUI(web_ui())->GetPrefs()->GetList(
@@ -454,9 +454,23 @@ base::Value::Dict ManagementUIHandler::GetThreatProtectionInfo(
   }
 
   if (connectors_service->GetAppliedRealTimeUrlCheck() !=
-      safe_browsing::REAL_TIME_CHECK_DISABLED) {
+      enterprise_connectors::REAL_TIME_CHECK_DISABLED) {
     AddThreatProtectionPermission(kManagementOnPageVisitedEvent,
                                   kManagementOnPageVisitedVisibleData, &info);
+  }
+
+  if (connectors_service
+          ->GetReportingSettings(
+              enterprise_connectors::ReportingConnector::SECURITY_EVENT)
+          .has_value() &&
+      connectors_service
+              ->GetReportingSettings(
+                  enterprise_connectors::ReportingConnector::SECURITY_EVENT)
+              ->enabled_opt_in_events.count(
+                  enterprise_connectors::kExtensionTelemetryEvent) > 0) {
+    AddThreatProtectionPermission(kManagementOnExtensionTelemetryEvent,
+                                  kManagementOnExtensionTelemetryVisibleData,
+                                  &info);
   }
 
 #if BUILDFLAG(IS_CHROMEOS)

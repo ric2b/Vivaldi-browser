@@ -2028,7 +2028,9 @@ TEST_F(PeopleHandlerSignoutTest, SignoutWithSyncOff) {
   SimulateSignout(args);
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   EXPECT_EQ(web_contents()->GetVisibleURL(),
-            GaiaUrls::GetInstance()->service_logout_url());
+            switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
+                ? GaiaUrls::GetInstance()->LogOutURLWithContinueURL(GURL())
+                : GaiaUrls::GetInstance()->service_logout_url());
 #else
   EXPECT_FALSE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSignin));
   EXPECT_TRUE(identity_manager()->GetAccountsWithRefreshTokens().empty());
@@ -2055,7 +2057,9 @@ TEST_F(PeopleHandlerSignoutTest, SignoutWithSyncOn) {
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   EXPECT_EQ(web_contents()->GetVisibleURL(),
-            GaiaUrls::GetInstance()->service_logout_url());
+            switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
+                ? GaiaUrls::GetInstance()->LogOutURLWithContinueURL(GURL())
+                : GaiaUrls::GetInstance()->service_logout_url());
 #else
   EXPECT_FALSE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSignin));
   EXPECT_TRUE(identity_manager()->GetAccountsWithRefreshTokens().empty());

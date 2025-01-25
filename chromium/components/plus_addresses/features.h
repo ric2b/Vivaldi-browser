@@ -11,8 +11,19 @@
 
 namespace plus_addresses::features {
 
+#if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
-BASE_DECLARE_FEATURE(kPlusAddressAffiliations);
+BASE_DECLARE_FEATURE(kPlusAddressAndroidErrorStatesEnabled);
+
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+BASE_DECLARE_FEATURE(kPlusAddressAndroidManualFallbackEnabled);
+#endif  // BUILDFLAG(IS_ANDROID)
+
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+BASE_DECLARE_FEATURE(kPlusAddressAndSingleFieldFormFill);
+
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+BASE_DECLARE_FEATURE(kPlusAddressBlocklistEnabled);
 
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
 BASE_DECLARE_FEATURE(kPlusAddressesEnabled);
@@ -25,17 +36,6 @@ extern const base::FeatureParam<std::string> kEnterprisePlusAddressOAuthScope;
 // GURL, such as `https://foo.example/`.
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
 extern const base::FeatureParam<std::string> kEnterprisePlusAddressServerUrl;
-
-// Used to control whether the PlusAddressService periodically retrieves all
-// plus addresses from an enterprise's remote server.
-COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
-extern const base::FeatureParam<bool> kSyncWithEnterprisePlusAddressServer;
-
-// Used to control the cadence at which the PlusAddressService retrieves all
-// plus addresses from an enterprise's remote server.
-COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
-extern const base::FeatureParam<base::TimeDelta>
-    kEnterprisePlusAddressTimerDelay;
 
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
 extern const base::FeatureParam<std::string> kPlusAddressManagementUrl;
@@ -64,30 +64,44 @@ BASE_DECLARE_FEATURE(kPlusAddressFallbackFromContextMenu);
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
 BASE_DECLARE_FEATURE(kPlusAddressGlobalToggle);
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+BASE_DECLARE_FEATURE(kPlusAddressInlineCreation);
+#endif
+
+#if BUILDFLAG(IS_IOS)
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+BASE_DECLARE_FEATURE(kPlusAddressIOSManualFallbackEnabled);
+#endif  // BUILDFLAG(IS_IOS)
+
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+BASE_DECLARE_FEATURE(kPlusAddressOfferCreationOnAllNonUsernameFields);
+
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
 BASE_DECLARE_FEATURE(kPlusAddressOfferCreationOnSingleUsernameForms);
+
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+BASE_DECLARE_FEATURE(kPlusAddressPreallocation);
+
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+extern const base::FeatureParam<int> kPlusAddressPreallocationMinimumSize;
 
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
 BASE_DECLARE_FEATURE(kPlusAddressProfileAwareFeatureCheck);
 
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
-BASE_DECLARE_FEATURE(kPlusAddressRefresh);
+BASE_DECLARE_FEATURE(kPlusAddressSuggestionRedesign);
+
+COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
+extern const base::FeatureParam<bool> kShowForwardingEmailInSuggestion;
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
-BASE_DECLARE_FEATURE(kPlusAddressSettingsRefreshDesktop);
+BASE_DECLARE_FEATURE(kPlusAddressUpdatedErrorStatesInOnboardingModal);
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
 BASE_DECLARE_FEATURE(kPlusAddressUserOnboardingEnabled);
-
-COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
-BASE_DECLARE_FEATURE(kPlusAddressAndSingleFieldFormFill);
-
-#if BUILDFLAG(IS_ANDROID)
-COMPONENT_EXPORT(PLUS_ADDRESSES_FEATURES)
-BASE_DECLARE_FEATURE(kPlusAddressAndroidManualFallbackEnabled);
-#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace plus_addresses::features
 

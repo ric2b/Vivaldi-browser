@@ -12,6 +12,7 @@ import androidx.core.view.WindowInsetsCompat;
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelStateProvider;
@@ -19,6 +20,7 @@ import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.keyboard_accessory.AccessorySheetVisualStateProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsVisualState;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarStateProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -73,7 +75,9 @@ public class BottomAttachedUiObserver
     private final BrowserControlsStateProvider mBrowserControlsStateProvider;
     private int mBottomControlsHeight;
     private @Nullable @ColorInt Integer mBottomControlsColor;
-    private boolean mBottomControlsAreVisible;
+    private boolean mUseBottomControlsColor;
+
+    private final BottomControlsStacker mBottomControlsStacker;
 
     private final SnackbarStateProvider mSnackbarStateProvider;
     private @Nullable @ColorInt Integer mSnackbarColor;
@@ -100,6 +104,8 @@ public class BottomAttachedUiObserver
     /**
      * Build the observer that listens to changes in the UI bordering the bottom.
      *
+     * @param bottomControlsStacker The {@link BottomControlsStacker} for interacting with and
+     *     checking the state of the bottom browser controls.
      * @param browserControlsStateProvider Supplies a {@link BrowserControlsStateProvider} for the
      *     browser controls.
      * @param snackbarStateProvider Supplies a {@link SnackbarStateProvider} to watch for snackbars
@@ -116,6 +122,7 @@ public class BottomAttachedUiObserver
      * @param insetObserver An {@link InsetObserver} to listen for changes to the window insets.
      */
     public BottomAttachedUiObserver(
+            @NonNull BottomControlsStacker bottomControlsStacker,
             @NonNull BrowserControlsStateProvider browserControlsStateProvider,
             @NonNull SnackbarStateProvider snackbarStateProvider,
             @NonNull ObservableSupplier<ContextualSearchManager> contextualSearchManagerSupplier,
@@ -129,6 +136,7 @@ public class BottomAttachedUiObserver
 
         mBrowserControlsStateProvider = browserControlsStateProvider;
         mBrowserControlsStateProvider.addObserver(this);
+        mBottomControlsStacker = bottomControlsStacker;
 
         mSnackbarStateProvider = snackbarStateProvider;
         mSnackbarStateProvider.addObserver(this);
@@ -253,7 +261,12 @@ public class BottomAttachedUiObserver
         if (mOmniboxSuggestionsVisible && mOmniboxSuggestionsColor != null) {
             return mOmniboxSuggestionsColor;
         }
-        if (mBottomSheetVisible) {
+        // If drawing edge-to-edge only match the bottom sheet color if the bottom sheet extends
+        // across the full width. Since the bottom sheet shows in the front, if it doesn't extend
+        // across the entire width, it looks nicer to match the color of other components behind /
+        // to the side of the bottom sheet.
+        if (mBottomSheetVisible
+                && (mBottomSheetController.isFullWidth() || !EdgeToEdgeUtils.isEnabled())) {
             // This can cause a null return intentionally to indicate that a bottom sheet is showing
             // a page preview / web content.
             return mBottomSheetColor;
@@ -263,7 +276,7 @@ public class BottomAttachedUiObserver
             // content will be "bottom attached".
             return mOverlayPanelPeeked ? mOverlayPanelColor : null;
         }
-        if (mBottomControlsAreVisible) {
+        if (mUseBottomControlsColor) {
             return mBottomControlsColor;
         }
         if (mSnackbarVisible) {
@@ -275,7 +288,7 @@ public class BottomAttachedUiObserver
     /** The divider should be visible for partial width bottom-attached UI. */
     private boolean shouldShowDivider() {
         if (mBottomSheetVisible) {
-            return !mBottomSheetController.isFullWidth();
+            return !mBottomSheetController.isFullWidth() && !EdgeToEdgeUtils.isEnabled();
         }
         if (mOverlayPanelVisible) {
             return !mOverlayPanelStateProvider.isFullWidthSizePanel();
@@ -307,17 +320,24 @@ public class BottomAttachedUiObserver
                 // MiniPlayerMediator#shrinkBottomControls() sets the height to 1 and minHeight to 0
                 // when hiding, instead of setting the height to 0.
                 // TODO(b/320750931): Clean up once the MiniPlayerMediator has been improved.
-                mBottomControlsHeight > 1 && bottomOffset < mBottomControlsHeight);
+                mBottomControlsHeight > 1
+                        && bottomOffset < mBottomControlsHeight
+                        && mBottomControlsStacker.hasVisibleLayersOtherThan(
+                                BottomControlsStacker.LayerType.BOTTOM_CHIN));
     }
 
     @Override
     public void onBottomControlsHeightChanged(
             int bottomControlsHeight, int bottomControlsMinHeight) {
         mBottomControlsHeight = bottomControlsHeight;
+
         // MiniPlayerMediator#shrinkBottomControls() sets the height to 1 and minHeight to 0 when
         // hiding, instead of setting the height to 0.
         // TODO(b/320750931): Clean up once the MiniPlayerMediator has been improved.
-        updateBrowserControlsVisibility(bottomControlsHeight > 1);
+        updateBrowserControlsVisibility(
+                mBottomControlsHeight > 1
+                        && mBottomControlsStacker.hasVisibleLayersOtherThan(
+                                BottomControlsStacker.LayerType.BOTTOM_CHIN));
     }
 
     @Override
@@ -326,11 +346,11 @@ public class BottomAttachedUiObserver
         updateBottomAttachedColor();
     }
 
-    private void updateBrowserControlsVisibility(boolean bottomControlsAreVisible) {
-        if (bottomControlsAreVisible == mBottomControlsAreVisible) {
+    private void updateBrowserControlsVisibility(boolean useBottomControlsColor) {
+        if (useBottomControlsColor == mUseBottomControlsColor) {
             return;
         }
-        mBottomControlsAreVisible = bottomControlsAreVisible;
+        mUseBottomControlsColor = useBottomControlsColor;
         updateBottomAttachedColor();
     }
 

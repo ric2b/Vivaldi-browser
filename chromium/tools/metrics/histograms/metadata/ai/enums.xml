@@ -35,13 +35,25 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="ai.promptStreaming"/>
   <int value="4" label="ai.defaultTestSessionOptions"/>
   <int value="5" label="ai.sessionDestroy"/>
+  <int value="6" label="ai.sessionClone"/>
+  <int value="7" label="ai.textModelInfo"/>
+  <int value="8" label="ai.sessionSummarize"/>
+  <int value="9" label="ai.sessionSummarizeStreaming"/>
+  <int value="10" label="AIWriter.write"/>
+  <int value="11" label="AIWriter.writeStreaming"/>
+  <int value="12" label="AIRewriter.rewrite"/>
+  <int value="13" label="AIRewriter.rewriteStreaming"/>
+  <int value="14" label="ai.summarizer.summarize"/>
+  <int value="15" label="ai.summarizer.summarizeStreaming"/>
+  <int value="16" label="ai.summarizer.create"/>
+  <int value="17" label="ai.summarizer.destroy"/>
 </enum>
 
 <!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai_metrics.h:AIAPI) -->
 
-<!-- LINT.IfChange(AIModelAvailability) -->
+<!-- LINT.IfChange(AICapabilityAvailability) -->
 
-<enum name="AIModelAvailability">
+<enum name="AICapabilityAvailability">
   <int value="0" label="Readily">
     The model is available on-device and so creating will happen quickly.
   </int>
@@ -52,7 +64,7 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="No">The model is not available for this device.</int>
 </enum>
 
-<!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai.h:AIModelAvailability) -->
+<!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai_capability_availability.h:AICapabilityAvailability) -->
 
 <!-- LINT.IfChange(AIModelStreamingResponseStatus) -->
 
@@ -87,7 +99,23 @@ chromium-metrics-reviews@google.com.
   <int value="13" label="ErrorSessionDestroyed">The session was destroyed.</int>
 </enum>
 
-<!-- LINT.ThenChange(//third_party/blink/public/mojom/ai/ai_text_session.mojom:ModelStreamingResponseStatus) -->
+<!-- LINT.ThenChange(//third_party/blink/public/mojom/ai/model_streaming_responder.mojom:ModelStreamingResponseStatus) -->
+
+<!-- LINT.IfChange(LoadTranslateKitResult) -->
+
+<enum name="LoadTranslateKitResult">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Success">Success to load TranslateKit binary.</int>
+  <int value="2" label="InvalidBinary">
+    Fails due to invalid TranslateKit binary.
+  </int>
+  <int value="3" label="InvalidFunctionPointer">
+    Success to load TranslateKit binary but one or more function pointers are
+    null.
+  </int>
+</enum>
+
+<!-- LINT.ThenChange(//components/services/on_device_translation/translate_kit_client.h:LoadTranslateKitResult) -->
 
 </enums>
 

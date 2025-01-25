@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import argparse
 import base64
+import concurrent.futures
 import os
 import platform
 import sys
-import concurrent.futures
 
 import gclient_utils
 from gerrit_util import (CreateHttpConn, ReadHttpResponse,
@@ -24,10 +24,10 @@ DEV_NULL = "/dev/null"
 HEADER_DELIMITER = "@@"
 
 
-def fetch_content(host: str, repo: str, ref: str, file: str) -> str:
+def fetch_content(host: str, repo: str, ref: str, file: str) -> bytes:
     """Fetches the content of a file from Gitiles.
 
-    If the file does not exist at the commit, it returns an empty string.
+    If the file does not exist at the commit, returns an empty bytes object.
 
     Args:
       host: Gerrit host.
@@ -36,13 +36,13 @@ def fetch_content(host: str, repo: str, ref: str, file: str) -> str:
       file: Path of file to fetch.
 
     Returns:
-        A string containing the content of the file at the commit, or an empty
-        string if the file does not exist at the commit.
+        Bytes of the file at the commit or an empty bytes object if the file
+        does not exist at the commit.
     """
     conn = CreateHttpConn(f"{host}.googlesource.com",
                           f"{repo}/+show/{ref}/{file}?format=text")
     response = ReadHttpResponse(conn, accept_statuses=[200, 404])
-    return base64.b64decode(response.read()).decode("utf-8")
+    return base64.b64decode(response.read())
 
 
 def git_diff(src: str | None, dest: str | None) -> str:
@@ -110,7 +110,7 @@ def _create_diff(host: str, repo: str, ref: str, root: str, file: str) -> str:
         if old_content:
             old_file = os.path.join(tmp_root, file)
             os.makedirs(os.path.dirname(old_file), exist_ok=True)
-            with open(old_file, "w") as f:
+            with open(old_file, "wb") as f:
                 f.write(old_content)
 
         if not old_file and not new_file:

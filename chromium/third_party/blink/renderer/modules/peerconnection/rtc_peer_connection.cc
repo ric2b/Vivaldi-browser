@@ -45,6 +45,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -137,6 +138,7 @@
 #include "third_party/webrtc/api/dtls_transport_interface.h"
 #include "third_party/webrtc/api/jsep.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
+#include "third_party/webrtc/api/priority.h"
 #include "third_party/webrtc/rtc_base/ssl_identity.h"
 
 namespace blink {
@@ -488,6 +490,50 @@ bool ContainsOpusStereo(String sdp) {
   return sdp.Find("stereo=1") != kNotFound;
 }
 
+// Keep in sync with tools/metrics/histograms/metadata/web_rtc/enums.xml
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class GenerateCertificateAlgorithms {
+  kEcDsaP256 = 0,
+  kRsa1024,
+  kRsa2048,
+  kRsa4096,
+  kRsa8192,
+  kRsaOther,
+  kMaxValue = kRsaOther,
+};
+
+void MeasureGenerateCertificateKeyType(
+    const std::optional<rtc::KeyParams>& key_params) {
+  if (!key_params.has_value()) {
+    return;
+  }
+  GenerateCertificateAlgorithms bucket =
+      GenerateCertificateAlgorithms::kEcDsaP256;
+  if (key_params->type() == rtc::KT_RSA) {
+    switch (key_params->rsa_params().mod_size) {
+      case 1024:
+        bucket = GenerateCertificateAlgorithms::kRsa1024;
+        break;
+      case 2048:
+        bucket = GenerateCertificateAlgorithms::kRsa2048;
+        break;
+      case 4096:
+        bucket = GenerateCertificateAlgorithms::kRsa4096;
+        break;
+      case 8192:
+        bucket = GenerateCertificateAlgorithms::kRsa8192;
+        break;
+      default:
+        bucket = GenerateCertificateAlgorithms::kRsaOther;
+        break;
+    }
+  }
+  UMA_HISTOGRAM_ENUMERATION(
+      "WebRTC.PeerConnection.GenerateCertificate.Algorithms", bucket,
+      GenerateCertificateAlgorithms::kMaxValue);
+}
+
 }  // namespace
 
 RTCPeerConnection::EventWrapper::EventWrapper(Event* event,
@@ -639,7 +685,7 @@ RTCPeerConnection::RTCPeerConnection(
   auto* web_frame =
       static_cast<WebLocalFrame*>(WebFrame::FromCoreFrame(window->GetFrame()));
   if (!peer_handler_->Initialize(context, configuration, web_frame,
-                                 exception_state)) {
+                                 exception_state, rtp_transport_)) {
     DCHECK(exception_state.HadException());
     return;
   }
@@ -701,8 +747,7 @@ ScriptPromise<RTCSessionDescriptionInit> RTCPeerConnection::createOffer(
           script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
   RTCSessionDescriptionRequest* request =
-      RTCSessionDescriptionRequestPromiseImpl::Create(
-          this, resolver, "RTCPeerConnection", "createOffer");
+      RTCSessionDescriptionRequestPromiseImpl::Create(this, resolver);
 
   ExecutionContext* context = ExecutionContext::From(script_state);
   UseCounter::Count(context, WebFeature::kRTCPeerConnectionCreateOffer);
@@ -771,8 +816,7 @@ ScriptPromise<RTCSessionDescriptionInit> RTCPeerConnection::createAnswer(
           script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
   RTCSessionDescriptionRequest* request =
-      RTCSessionDescriptionRequestPromiseImpl::Create(
-          this, resolver, "RTCPeerConnection", "createAnswer");
+      RTCSessionDescriptionRequestPromiseImpl::Create(this, resolver);
   peer_handler_->CreateAnswer(request,
                               ConvertToRTCAnswerOptionsPlatform(options));
   return promise;
@@ -912,13 +956,14 @@ void RTCPeerConnection::UpdateIceConnectionState() {
 }
 
 ScriptPromise<IDLUndefined> RTCPeerConnection::setLocalDescription(
-    ScriptState* script_state) {
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
   DCHECK(script_state->ContextIsValid());
-  auto* resolver =
-      MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
-  auto* request = MakeGarbageCollected<RTCVoidRequestPromiseImpl>(
-      this, resolver, "RTCPeerConnection", "setLocalDescription");
+  auto* request =
+      MakeGarbageCollected<RTCVoidRequestPromiseImpl>(this, resolver);
   peer_handler_->SetLocalDescription(request);
   return promise;
 }
@@ -935,7 +980,7 @@ ScriptPromise<IDLUndefined> RTCPeerConnection::setLocalDescription(
 
   DCHECK(script_state->ContextIsValid());
   if (!session_description_init->hasType()) {
-    return setLocalDescription(script_state);
+    return setLocalDescription(script_state, exception_state);
   }
   String sdp = session_description_init->sdp();
   // https://w3c.github.io/webrtc-pc/#dom-peerconnection-setlocaldescription
@@ -973,8 +1018,8 @@ ScriptPromise<IDLUndefined> RTCPeerConnection::setLocalDescription(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
       script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
-  auto* request = MakeGarbageCollected<RTCVoidRequestPromiseImpl>(
-      this, resolver, "RTCPeerConnection", "setLocalDescription");
+  auto* request =
+      MakeGarbageCollected<RTCVoidRequestPromiseImpl>(this, resolver);
   peer_handler_->SetLocalDescription(request, std::move(parsed_sdp));
   return promise;
 }
@@ -1094,8 +1139,8 @@ ScriptPromise<IDLUndefined> RTCPeerConnection::setRemoteDescription(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
       script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
-  auto* request = MakeGarbageCollected<RTCVoidRequestPromiseImpl>(
-      this, resolver, "RTCPeerConnection", "setRemoteDescription");
+  auto* request =
+      MakeGarbageCollected<RTCVoidRequestPromiseImpl>(this, resolver);
   peer_handler_->SetRemoteDescription(request, std::move(parsed_sdp));
   return promise;
 }
@@ -1339,7 +1384,14 @@ ScriptPromise<RTCCertificate> RTCPeerConnection::generateCertificate(
                 ->Value();
         if (expires_double >= 0) {
           expires = static_cast<DOMTimeStamp>(expires_double);
+        } else {
+          exception_state.ThrowTypeError(
+              "Negative value for expires attribute.");
+          return EmptyPromise();
         }
+      } else {
+        exception_state.ThrowTypeError("Invalid type for expires attribute.");
+        return EmptyPromise();
       }
     }
   }
@@ -1359,6 +1411,7 @@ ScriptPromise<RTCCertificate> RTCPeerConnection::generateCertificate(
           crypto_algorithm.RsaHashedKeyGenParams()->ModulusLengthBits();
       // Parameters must fit in int to be passed to rtc::KeyParams::RSA. The
       // only recognized "hash" is "SHA-256".
+      // TODO(bugs.webrtc.org/364338811): deprecate 1024 bit keys.
       if (public_exponent &&
           base::IsValueInRangeForNumericType<int>(*public_exponent) &&
           base::IsValueInRangeForNumericType<int>(modulus_length) &&
@@ -1394,6 +1447,7 @@ ScriptPromise<RTCCertificate> RTCPeerConnection::generateCertificate(
       return EmptyPromise();
   }
   DCHECK(key_params.has_value());
+  MeasureGenerateCertificateKeyType(key_params);
 
   auto certificate_generator = std::make_unique<RTCCertificateGenerator>();
 
@@ -1468,8 +1522,8 @@ ScriptPromise<IDLUndefined> RTCPeerConnection::addIceCandidate(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
       script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
-  auto* request = MakeGarbageCollected<RTCVoidRequestPromiseImpl>(
-      this, resolver, "RTCPeerConnection", "addIceCandidate");
+  auto* request =
+      MakeGarbageCollected<RTCVoidRequestPromiseImpl>(this, resolver);
   peer_handler_->AddIceCandidate(request, std::move(platform_candidate));
   return promise;
 }
@@ -1837,7 +1891,7 @@ void RTCPeerConnection::removeTrack(RTCRtpSender* sender,
   DCHECK(sender);
   if (ThrowExceptionIfSignalingStateClosed(signaling_state_, &exception_state))
     return;
-  auto* it = FindSender(*sender->web_sender());
+  auto it = FindSender(*sender->web_sender());
   if (it == rtp_senders_.end()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidAccessError,
@@ -1891,6 +1945,23 @@ RTCDataChannel* RTCPeerConnection::createDataChannel(
   init.negotiated = data_channel_dict->negotiated();
   if (data_channel_dict->hasId())
     init.id = data_channel_dict->id();
+  if (data_channel_dict->hasPriority()) {
+    init.priority = [&] {
+      if (data_channel_dict->priority() == "very-low") {
+        return webrtc::PriorityValue(webrtc::Priority::kVeryLow);
+      }
+      if (data_channel_dict->priority() == "low") {
+        return webrtc::PriorityValue(webrtc::Priority::kLow);
+      }
+      if (data_channel_dict->priority() == "medium") {
+        return webrtc::PriorityValue(webrtc::Priority::kMedium);
+      }
+      if (data_channel_dict->priority() == "high") {
+        return webrtc::PriorityValue(webrtc::Priority::kHigh);
+      }
+      NOTREACHED();
+    }();
+  }
   // Checks from WebRTC specification section 6.1
   // If [[DataChannelLabel]] is longer than 65535 bytes, throw a
   // TypeError.
@@ -1934,7 +2005,7 @@ RTCDataChannel* RTCPeerConnection::createDataChannel(
     return nullptr;
   }
   auto* channel = MakeGarbageCollected<RTCDataChannel>(
-      GetExecutionContext(), std::move(webrtc_channel), peer_handler_.get());
+      GetExecutionContext(), std::move(webrtc_channel));
 
   return channel;
 }
@@ -1964,30 +2035,25 @@ RTCRtpSender* RTCPeerConnection::FindSenderForTrackAndStream(
 
 HeapVector<Member<RTCRtpSender>>::iterator RTCPeerConnection::FindSender(
     const RTCRtpSenderPlatform& web_sender) {
-  for (auto* it = rtp_senders_.begin(); it != rtp_senders_.end(); ++it) {
-    if ((*it)->web_sender()->Id() == web_sender.Id())
-      return it;
-  }
-  return rtp_senders_.end();
+  return base::ranges::find_if(rtp_senders_, [&](const auto& sender) {
+    return sender->web_sender()->Id() == web_sender.Id();
+  });
 }
 
 HeapVector<Member<RTCRtpReceiver>>::iterator RTCPeerConnection::FindReceiver(
     const RTCRtpReceiverPlatform& platform_receiver) {
-  for (auto* it = rtp_receivers_.begin(); it != rtp_receivers_.end(); ++it) {
-    if ((*it)->platform_receiver()->Id() == platform_receiver.Id())
-      return it;
-  }
-  return rtp_receivers_.end();
+  return base::ranges::find_if(rtp_receivers_, [&](const auto& receiver) {
+    return receiver->platform_receiver()->Id() == platform_receiver.Id();
+  });
 }
 
 HeapVector<Member<RTCRtpTransceiver>>::iterator
 RTCPeerConnection::FindTransceiver(
     const RTCRtpTransceiverPlatform& platform_transceiver) {
-  for (auto* it = transceivers_.begin(); it != transceivers_.end(); ++it) {
-    if ((*it)->platform_transceiver()->Id() == platform_transceiver.Id())
-      return it;
-  }
-  return transceivers_.end();
+  return base::ranges::find_if(transceivers_, [&](const auto& transceiver) {
+    return transceiver->platform_transceiver()->Id() ==
+           platform_transceiver.Id();
+  });
 }
 
 RTCRtpSender* RTCPeerConnection::CreateOrUpdateSender(
@@ -2004,7 +2070,7 @@ RTCRtpSender* RTCPeerConnection::CreateOrUpdateSender(
 
   // Create or update sender. If the web sender has stream IDs the sender's
   // streams need to be set separately outside of this method.
-  auto* sender_it = FindSender(*rtp_sender_platform);
+  auto sender_it = FindSender(*rtp_sender_platform);
   RTCRtpSender* sender;
   if (sender_it == rtp_senders_.end()) {
     // Create new sender (with empty stream set).
@@ -2027,7 +2093,7 @@ RTCRtpSender* RTCPeerConnection::CreateOrUpdateSender(
 
 RTCRtpReceiver* RTCPeerConnection::CreateOrUpdateReceiver(
     std::unique_ptr<RTCRtpReceiverPlatform> platform_receiver) {
-  auto* receiver_it = FindReceiver(*platform_receiver);
+  auto receiver_it = FindReceiver(*platform_receiver);
   // Create track.
   MediaStreamTrack* track;
   if (receiver_it == rtp_receivers_.end()) {
@@ -2079,7 +2145,7 @@ RTCRtpTransceiver* RTCPeerConnection::CreateOrUpdateTransceiver(
       CreateOrUpdateReceiver(platform_transceiver->Receiver());
 
   RTCRtpTransceiver* transceiver;
-  auto* transceiver_it = FindTransceiver(*platform_transceiver);
+  auto transceiver_it = FindTransceiver(*platform_transceiver);
   if (transceiver_it == transceivers_.end()) {
     // Create new tranceiver.
     transceiver = MakeGarbageCollected<RTCRtpTransceiver>(
@@ -2301,7 +2367,7 @@ void RTCPeerConnection::DidModifyTransceivers(
   // Remove transceivers and update their states to reflect that they are
   // necessarily stopped.
   for (auto id : removed_transceiver_ids) {
-    for (auto* it = transceivers_.begin(); it != transceivers_.end(); ++it) {
+    for (auto it = transceivers_.begin(); it != transceivers_.end(); ++it) {
       if ((*it)->platform_transceiver()->Id() == id) {
         // All streams are removed on stop, update `remove_list` if necessary.
         auto* track = (*it)->receiver()->track();
@@ -2317,7 +2383,7 @@ void RTCPeerConnection::DidModifyTransceivers(
     }
   }
   for (auto& platform_transceiver : platform_transceivers) {
-    auto* it = FindTransceiver(*platform_transceiver);
+    auto it = FindTransceiver(*platform_transceiver);
     bool previously_had_recv =
         (it != transceivers_.end()) ? (*it)->FiredDirectionHasRecv() : false;
     RTCRtpTransceiver* transceiver =
@@ -2486,7 +2552,7 @@ void RTCPeerConnection::DidAddRemoteDataChannel(
     return;
 
   auto* blink_channel = MakeGarbageCollected<RTCDataChannel>(
-      GetExecutionContext(), std::move(channel), peer_handler_.get());
+      GetExecutionContext(), std::move(channel));
   blink_channel->SetStateToOpenWithoutEvent();
   MaybeDispatchEvent(MakeGarbageCollected<RTCDataChannelEvent>(
       event_type_names::kDatachannel, blink_channel));

@@ -9,10 +9,10 @@
  * things tests need.
  */
 
-export {RealboxElement} from 'chrome://resources/cr_components/searchbox/realbox.js';
-export {RealboxBrowserProxy} from 'chrome://resources/cr_components/searchbox/realbox_browser_proxy.js';
-export {RealboxIconElement} from 'chrome://resources/cr_components/searchbox/realbox_icon.js';
-export {RealboxMatchElement} from 'chrome://resources/cr_components/searchbox/realbox_match.js';
+export {SearchboxElement} from 'chrome://resources/cr_components/searchbox/searchbox.js';
+export {SearchboxBrowserProxy} from 'chrome://resources/cr_components/searchbox/searchbox_browser_proxy.js';
+export {SearchboxIconElement} from 'chrome://resources/cr_components/searchbox/searchbox_icon.js';
+export {SearchboxMatchElement} from 'chrome://resources/cr_components/searchbox/searchbox_match.js';
 export {CrAutoImgElement} from 'chrome://resources/cr_elements/cr_auto_img/cr_auto_img.js';
 export {BrowserCommandProxy} from 'chrome://resources/js/browser_command/browser_command_proxy.js';
 export {BrowserProxyImpl} from 'chrome://resources/js/metrics_reporter/browser_proxy.js';
@@ -29,6 +29,6 @@ export {LogoElement} from './logo.js';
 export {recordDuration, recordLoadDuration, recordOccurence, recordPerdecage} from './metrics_utils.js';
 export {NewTabPageProxy} from './new_tab_page_proxy.js';
 export {checkTransparency, isBMP, isPNG, isWebP} from './transparency.js';
-export {$$, createScrollBorders, decodeString16, mojoString16} from './utils.js';
+export {$$} from './utils.js';
 export {Action as VoiceAction, Error as VoiceError} from './voice_search_overlay.js';
 export {WindowProxy} from './window_proxy.js';

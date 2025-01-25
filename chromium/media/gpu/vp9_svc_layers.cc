@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/gpu/vp9_svc_layers.h"
 
 #include "base/logging.h"
@@ -106,7 +111,7 @@ FrameConfig GetFrameConfig(size_t num_temporal_layers, size_t frame_num) {
       return TL3Pattern[frame_num % std::size(TL3Pattern)];
     }
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 }  // namespace

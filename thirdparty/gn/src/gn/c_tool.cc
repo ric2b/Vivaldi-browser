@@ -220,8 +220,7 @@ bool CTool::InitTool(Scope* scope, Toolchain* toolchain, Err* err) {
   if (!ValidateLinkAndDependOutput(depend_output(), "depend_output", err)) {
     return false;
   }
-  if ((!link_output().empty() && depend_output().empty()) ||
-      (link_output().empty() && !depend_output().empty())) {
+  if (link_output().empty() != depend_output().empty()) {
     *err = Err(defined_from(),
                "Both link_output and depend_output should either "
                "be specified or they should both be empty.");

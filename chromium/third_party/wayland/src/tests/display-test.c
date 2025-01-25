@@ -1492,6 +1492,10 @@ send_overflow_client(void *data)
 	char tmp = '\0';
 	int sock, optval = 16384;
 
+	/* By default, client buffers are now unbounded, set a limit to cause
+	 * an overflow, otherwise the client buffers will grow indefinitely. */
+	wl_display_set_max_buffer_size(c->wl_display, 4096);
+
 	/* Limit the send buffer size for the display socket to guarantee
 	 * that the test will cause an overflow. */
 	sock = wl_display_get_fd(c->wl_display);
@@ -1505,6 +1509,7 @@ send_overflow_client(void *data)
 	 * within <=4096 iterations. */
 	for (i = 0; i < 1000000; i++) {
 		noop_request(c);
+		fprintf(stderr, "Send loop %i\n", i);
 		err = wl_display_get_error(c->wl_display);
 		if (err)
 			break;
@@ -1513,7 +1518,10 @@ send_overflow_client(void *data)
 	/* Do not close the pipe file descriptors afterwards, because the leak
 	 * check verifies that the initial/final FD counts are the same */
 	assert(write(pipes[1], &tmp, sizeof(tmp)) == (ssize_t)sizeof(tmp));
-	assert(err == 0);
+
+	/* Expect an error - ring_buffer_ensure_space() returns E2BIG */
+	fprintf(stderr, "Send loop failed on try %d, err = %d, %s\n", i, err, strerror(err));
+	assert(err == EAGAIN || err == E2BIG);
 
 	client_disconnect_nocheck(c);
 }

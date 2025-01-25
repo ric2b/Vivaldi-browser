@@ -1280,8 +1280,7 @@ enum aome_enc_control_id {
    */
   AV1E_SET_SVC_PARAMS = 132,
 
-  /*!\brief Codec control function to set reference frame config:
-   * the ref_idx and the refresh flags for each buffer slot.
+  /*!\brief Codec control function to set the reference frame config,
    * aom_svc_ref_frame_config_t* parameter
    */
   AV1E_SET_SVC_REF_FRAME_CONFIG = 133,
@@ -1527,9 +1526,10 @@ enum aome_enc_control_id {
    */
   AV1E_SET_BITRATE_ONE_PASS_CBR = 163,
 
-  /*!\brief Codec control to set the maximum number of consecutive frame drops
-   * allowed for the frame dropper in 1 pass CBR mode, int parameter. Value of
-   * zero has no effect.
+  /*!\brief Codec control to set the maximum number of consecutive frame drops,
+   * in units of frames, allowed for the frame dropper in 1 pass
+   * CBR mode, int parameter. Value of zero has no effect.
+   * \deprecated Use the new control AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR.
    */
   AV1E_SET_MAX_CONSEC_FRAME_DROP_CBR = 164,
 
@@ -1554,12 +1554,20 @@ enum aome_enc_control_id {
    */
   AV1E_GET_HIGH_MOTION_CONTENT_SCREEN_RTC = 167,
 
-  /*!\brief Codec control to enable postencode frame drop for RTC encoding,
-   * int parameter. Value of 1 means encoder will enable postencode
-   * drop, Default is 0 (not enabled). Postencode drop is only allowed
-   * when frame dropping is enabled (rc_dropframe_thresh > 0).
+  /*!\brief Codec control to enable post encode frame drop for RTC encoding,
+   * int parameter.
+   *
+   * Value of 1 means encoder will enable post encode drop. Default is 0 (not
+   * enabled). Post encode drop is only allowed when frame dropping is enabled
+   * (aom_codec_enc_cfg::rc_dropframe_thresh > 0).
    */
   AV1E_SET_POSTENCODE_DROP_RTC = 168,
+
+  /*!\brief Codec control to set the maximum number of consecutive frame drops,
+   * in units of time (milliseconds), allowed for the frame dropper in 1 pass
+   * CBR mode, int parameter. Value of zero has no effect.
+   */
+  AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR = 169,
 
   // Any new encoder control IDs should be added above.
   // Maximum allowed encoder control ID is 229.
@@ -1712,12 +1720,20 @@ typedef struct aom_svc_params {
 
 /*!brief Parameters for setting ref frame config */
 typedef struct aom_svc_ref_frame_config {
-  // 7 references: The index 0 - 6 refers to the references:
+  // Three arrays need to be set: reference[], ref_id[], refresh[].
+  // reference[i]: is a boolean flag to indicate which of the 7 possible
+  // references are used for prediction. Values are 0 (not used as reference)
+  // or 1 (use as reference). The index 0 - 6 refers to the references:
   // last(0), last2(1), last3(2), golden(3), bwdref(4), altref2(5), altref(6).
+  // ref_idx[i]: maps a reference to one of the 8 buffers slots, values are
+  // 0 - 7.
+  // refresh[i] is a boolean flag to indicate if a buffer is updated/refreshed
+  // with the current encoded frame. Values are 0 (no refresh) or 1 (refresh).
+  // Examples for usage (for RTC encoding) are in: examples/svc_encoder_rtc.c.
   int reference[7]; /**< Reference flag for each of the 7 references. */
-  /*! Buffer slot index for each of 7 references indexed above. */
+  /*! Buffer slot index (0..7) for each of 7 references indexed above. */
   int ref_idx[7];
-  int refresh[8]; /**< Refresh flag for each of the 8 slots. */
+  int refresh[8]; /**< Refresh flag for each of the 8 buffer slots. */
 } aom_svc_ref_frame_config_t;
 
 /*!brief Parameters for setting ref frame compound prediction */
@@ -2226,6 +2242,9 @@ AOM_CTRL_USE_TYPE(AV1E_GET_HIGH_MOTION_CONTENT_SCREEN_RTC, int *)
 
 AOM_CTRL_USE_TYPE(AV1E_SET_POSTENCODE_DROP_RTC, int)
 #define AOM_CTRL_AV1E_SET_POSTENCODE_DROP_RTC
+
+AOM_CTRL_USE_TYPE(AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR, int)
+#define AOM_CTRL_AV1E_SET_MAX_CONSEC_FRAME_DROP_MS_CBR
 
 /*!\endcond */
 /*! @} - end defgroup aom_encoder */

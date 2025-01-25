@@ -7,6 +7,7 @@
 #include "base/notreached.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -29,7 +30,10 @@
 #include "chrome/browser/ui/views/passwords/shared_passwords_notification_view.h"
 #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/browser/ui/views/webauthn/passkey_deleted_confirmation_view.h"
+#include "chrome/browser/ui/views/webauthn/passkey_not_accepted_bubble_view.h"
 #include "chrome/browser/ui/views/webauthn/passkey_saved_confirmation_view.h"
+#include "chrome/browser/ui/views/webauthn/passkey_updated_confirmation_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -145,6 +149,17 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
   views::BubbleDialogDelegateView::CreateBubble(g_manage_passwords_bubble_);
 
   g_manage_passwords_bubble_->ShowForReason(reason);
+
+  if (features::IsToolbarPinningEnabled()) {
+    auto* passwords_action_item = actions::ActionManager::Get().FindAction(
+        kActionShowPasswordsBubbleOrPage,
+        browser->browser_actions()->root_action_item());
+    CHECK(passwords_action_item);
+    bool should_suppress_next_button_trigger =
+        g_manage_passwords_bubble_->ShouldCloseOnDeactivate();
+    passwords_action_item->SetIsShowingBubble(
+        should_suppress_next_button_trigger);
+  }
 }
 
 // static
@@ -211,8 +226,18 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
   } else if (model_state ==
              password_manager::ui::PASSKEY_SAVED_CONFIRMATION_STATE) {
     view = new PasskeySavedConfirmationView(web_contents, anchor_view);
+  } else if (model_state ==
+             password_manager::ui::PASSKEY_DELETED_CONFIRMATION_STATE) {
+    view =
+        new PasskeyDeletedConfirmationView(web_contents, anchor_view, reason);
+  } else if (model_state ==
+             password_manager::ui::PASSKEY_UPDATED_CONFIRMATION_STATE) {
+    view =
+        new PasskeyUpdatedConfirmationView(web_contents, anchor_view, reason);
+  } else if (model_state == password_manager::ui::PASSKEY_NOT_ACCEPTED_STATE) {
+    view = new PasskeyNotAcceptedBubbleView(web_contents, anchor_view, reason);
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   g_manage_passwords_bubble_ = view;
@@ -262,11 +287,21 @@ PasswordBubbleViewBase::PasswordBubbleViewBase(
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   set_close_on_deactivate(easily_dismissable);
+
+  browser_ = chrome::FindBrowserWithTab(web_contents);
 }
 
 PasswordBubbleViewBase::~PasswordBubbleViewBase() {
   if (g_manage_passwords_bubble_ == this) {
     g_manage_passwords_bubble_ = nullptr;
+  }
+  // It is possible in tests for |browser_| not to exist.
+  if (features::IsToolbarPinningEnabled() && browser_) {
+    auto* passwords_action_item = actions::ActionManager::Get().FindAction(
+        kActionShowPasswordsBubbleOrPage,
+        browser_->browser_actions()->root_action_item());
+    CHECK(passwords_action_item);
+    passwords_action_item->SetIsShowingBubble(false);
   }
 }
 

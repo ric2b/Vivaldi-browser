@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "chrome/browser/ui/webui/settings/settings_ui.h"
 
 #include <stddef.h>
@@ -32,6 +37,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ssl/https_upgrades_util.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
@@ -108,6 +114,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_features.h"
 #include "crypto/crypto_buildflags.h"
+#include "device/vr/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
@@ -176,15 +183,12 @@
 #include "chrome/browser/ui/webui/settings/native_certificates_handler.h"
 #endif  // BUILDFLAG(USE_NSS_CERTS)
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
-#include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/password_manager/core/common/password_manager_pref_names.h"
-#endif
-
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/ui/webui/settings/mac_system_settings_handler.h"
+#endif
+
+#if BUILDFLAG(ENABLE_VR)
+#include "device/vr/public/cpp/features.h"
 #endif
 
 namespace settings {
@@ -324,12 +328,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
         ->FetchPriceEmailPref();
   }
 
-  const bool is_search_engine_choice_settings_ui =
-      search_engines::IsChoiceScreenFlagEnabled(
-          search_engines::ChoicePromo::kAny);
-  html_source->AddBoolean("searchEngineChoiceSettingsUi",
-                          is_search_engine_choice_settings_ui);
-
   search_engines::SearchEngineChoiceService*
       search_engine_choice_dialog_service =
           search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
@@ -367,21 +365,19 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       "enableCbdTimeframeRequired",
       base::FeatureList::IsEnabled(features::kCbdTimeframeRequired));
 
-  html_source->AddBoolean(
-      "enableFriendlierSafeBrowsingSettings",
-      base::FeatureList::IsEnabled(
-          safe_browsing::kFriendlierSafeBrowsingSettingsEnhancedProtection) &&
-          base::FeatureList::IsEnabled(
-              safe_browsing::
-                  kFriendlierSafeBrowsingSettingsStandardProtection));
+  html_source->AddBoolean("enableHandTrackingContentSetting",
+#if BUILDFLAG(ENABLE_VR)
+                          device::features::IsHandTrackingEnabled());
+#else
+                          false);
+#endif
 
   html_source->AddBoolean("enableHashPrefixRealTimeLookups",
                           safe_browsing::hash_realtime_utils::
                               IsHashRealTimeLookupEligibleInSession());
 
   html_source->AddBoolean("enableHttpsFirstModeNewSettings",
-                          base::FeatureList::IsEnabled(
-                              features::kHttpsFirstModeIncognitoNewSettings));
+                          IsBalancedModeAvailable());
 
   html_source->AddBoolean(
       "enableKeyboardAndPointerLockPrompt",
@@ -406,24 +402,15 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       download::IsDownloadBubbleEnabled() &&
           download::IsDownloadBubblePartialViewControlledByPref());
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  html_source->AddBoolean(
-      "biometricAuthenticationForFilling",
-      password_manager_util::
-          ShouldBiometricAuthenticationForFillingToggleBeVisible(
-              g_browser_process->local_state()));
-#endif
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  html_source->AddBoolean(
-      "showGetTheMostOutOfChromeSection",
-      base::FeatureList::IsEnabled(features::kGetTheMostOutOfChrome));
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-
   html_source->AddBoolean(
       "extendedReportingRemovePrefDependency",
       base::FeatureList::IsEnabled(
           safe_browsing::kExtendedReportingRemovePrefDependency));
+
+  html_source->AddBoolean(
+      "hashPrefixRealTimeLookupsSamplePing",
+      base::FeatureList::IsEnabled(
+          safe_browsing::kHashPrefixRealTimeLookupsSamplePing));
 
   AddSettingsPageUIHandler(std::make_unique<AboutHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ResetSettingsHandler>(profile));
@@ -493,9 +480,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   // Privacy Sandbox
   PrivacySandboxService* privacy_sandbox_service =
       PrivacySandboxServiceFactory::GetForProfile(profile);
-  bool is_privacy_sandbox_restricted = (false) &&
+  bool is_privacy_sandbox_restricted = (false) &&  // Vivaldi
       privacy_sandbox_service->IsPrivacySandboxRestricted();
-  bool is_restricted_notice_enabled = (false) &&
+  bool is_restricted_notice_enabled = (false) &&  // Vivaldi
       privacy_sandbox_service->IsRestrictedNoticeEnabled();
   html_source->AddBoolean("isPrivacySandboxRestricted",
                           is_privacy_sandbox_restricted);
@@ -526,21 +513,17 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean("enableSafetyHub",
                           base::FeatureList::IsEnabled(features::kSafetyHub));
 
-  // Tracking Protection
+  // Mode B UX
   html_source->AddBoolean(
       "is3pcdCookieSettingsRedesignEnabled",
       TrackingProtectionSettingsFactory::GetForProfile(profile)
           ->IsTrackingProtection3pcdEnabled());
+
+  // ACT UX
   html_source->AddBoolean(
-      "enableTrackingProtectionRolloutUx",
-      TrackingProtectionSettingsFactory::GetForProfile(profile)
-              ->IsTrackingProtection3pcdEnabled() &&
-          base::FeatureList::IsEnabled(
-              privacy_sandbox::kTrackingProtectionSettingsLaunch));
-  html_source->AddBoolean(
-      "isIpProtectionV1Enabled",
+      "isIpProtectionUxEnabled",
       base::FeatureList::IsEnabled(privacy_sandbox::kIpProtectionUx));
-  html_source->AddBoolean("isFingerprintingProtectionEnabled",
+  html_source->AddBoolean("isFingerprintingProtectionUxEnabled",
                           base::FeatureList::IsEnabled(
                               privacy_sandbox::kFingerprintingProtectionUx));
 
@@ -549,34 +532,12 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       base::FeatureList::IsEnabled(
           privacy_sandbox::kPrivacySandboxProactiveTopicsBlocking));
 
-  html_source->AddBoolean(
-      "proactiveTopicsBlockingIncludesModeB",
-      privacy_sandbox::kPrivacySandboxProactiveTopicsBlockingIncludeModeB
-          .Get());
-
-  html_source->AddBoolean("isInCookieDeprecationFacilitatedTesting",
-                          base::FeatureList::IsEnabled(
-                              features::kCookieDeprecationFacilitatedTesting));
-
-  html_source->AddBoolean(
-      "isPrivacySandboxPrivacyGuideAdTopicsEnabled",
-      base::FeatureList::IsEnabled(
-          privacy_sandbox::kPrivacySandboxPrivacyGuideAdTopics));
-
   // Performance
   AddSettingsPageUIHandler(std::make_unique<PerformanceHandler>());
-  html_source->AddBoolean(
-      "isDiscardRingImprovementsEnabled",
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kDiscardRingImprovements));
   html_source->AddBoolean(
       "isPerformanceInterventionUiEnabled",
       base::FeatureList::IsEnabled(
           performance_manager::features::kPerformanceInterventionUI));
-  html_source->AddBoolean(
-      "isMemorySaverModeAggressivenessEnabled",
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kMemorySaverModeAggressiveness));
   html_source->AddBoolean(
       "isBatterySaverModeManagedByOS",
       performance_manager::user_tuning::IsBatterySaverModeManagedByOS());
@@ -597,12 +558,20 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           base::FeatureList::IsEnabled(
                               features::kAutomaticFullscreenContentSetting));
 
+  html_source->AddBoolean(
+      "enableSmartCardReadersContentSetting",
+      base::FeatureList::IsEnabled(blink::features::kSmartCard));
+
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // System
   html_source->AddBoolean(
       "showFeatureNotificationsSetting",
       base::FeatureList::IsEnabled(features::kRegisterOsUpdateHandlerWin));
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
+  html_source->AddBoolean(
+      "enableWebAppInstallation",
+      base::FeatureList::IsEnabled(blink::features::kWebAppInstallation));
 
   // AI
   optimization_guide::UserVisibleFeatureKey optimization_guide_features[4] = {
@@ -638,6 +607,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           optimization_guide_feature_visible[3]);
   html_source->AddBoolean("showHistorySearchControl",
                           optimization_guide_feature_visible[4]);
+
+  html_source->AddBoolean(
+      "enableAiSettingsPageRefresh",
+      base::FeatureList::IsEnabled(features::kAiSettingsPageRefresh));
 
   TryShowHatsSurveyWithTimeout();
 }

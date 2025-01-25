@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "osp/impl/quic/open_screen_client_session.h"
+#include "osp/impl/quic/quic_client.h"
 #include "osp/impl/quic/quic_connection_impl.h"
 #include "osp/impl/quic/quic_packet_writer_impl.h"
 #include "osp/impl/quic/quic_utils.h"
@@ -70,6 +71,11 @@ ErrorOr<std::unique_ptr<QuicConnection>> QuicConnectionFactoryClient::Connect(
       quic::Perspective::IS_CLIENT, supported_versions_,
       connection_id_generator_);
 
+  // NOTE: Use instance name + domain temporarily to prevent blocking the
+  // project. There is an ongoing discussion about this, see below link：
+  // https://github.com/w3c/openscreenprotocol/issues/275
+  std::string host_name = connect_data.instance_name + ".local";
+
   if (!crypto_client_config_) {
     auto proof_verifier =
         std::make_unique<quic::WebTransportFingerprintProofVerifier>(
@@ -85,17 +91,17 @@ ErrorOr<std::unique_ptr<QuicConnection>> QuicConnectionFactoryClient::Connect(
     }
     crypto_client_config_ = std::make_unique<quic::QuicCryptoClientConfig>(
         std::move(proof_verifier), nullptr);
+    crypto_client_config_->set_proof_source(
+        QuicServiceBase::GetAgentCertificate().CreateClientProofSource(
+            host_name));
   }
 
   auto connection_impl = std::make_unique<QuicConnectionImpl>(
       connect_data.instance_name, *connection_delegate, *helper_->GetClock());
-  // NOTE: Use instance name + domain temporarily to prevent blocking the
-  // project. There is an ongoing discussion about this, see blow link：
-  // https://github.com/w3c/openscreenprotocol/issues/275
-  std::string host = connect_data.instance_name + ".local";
+
   OpenScreenSessionBase* session = new OpenScreenClientSession(
       std::move(connection), *crypto_client_config_, *connection_impl, config_,
-      quic::QuicServerId(std::move(host), remote_endpoint.port),
+      quic::QuicServerId(std::move(host_name), remote_endpoint.port),
       supported_versions_);
   connection_impl->set_session(session, /*owns_session=*/true);
 

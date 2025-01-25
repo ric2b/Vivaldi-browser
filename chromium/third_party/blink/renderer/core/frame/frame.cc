@@ -32,6 +32,7 @@
 
 #include <memory>
 
+#include "base/metrics/histogram_functions.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
@@ -112,6 +113,10 @@ void Frame::Trace(Visitor* visitor) const {
 
 bool Frame::Detach(FrameDetachType type) {
   TRACE_EVENT0("blink", "Frame::Detach");
+  const std::string_view histogram_suffix =
+      (type == FrameDetachType::kRemove) ? "Remove" : "Swap";
+  base::ScopedUmaHistogramTimer histogram_timer(
+      base::StrCat({"Navigation.Frame.Detach.", histogram_suffix}));
   DCHECK(client_);
   // Detach() can be re-entered, so this can't simply DCHECK(IsAttached()).
   DCHECK(!IsDetached());
@@ -515,10 +520,10 @@ void Frame::UpdateVisibleToHitTesting() {
     DidChangeVisibleToHitTesting();
 }
 
-const std::string& Frame::GetFrameIdForTracing() {
+const String& Frame::GetFrameIdForTracing() {
   // token's ToString() is latin1.
   if (!trace_value_)
-    trace_value_ = devtools_frame_token_.ToString();
+    trace_value_ = String(devtools_frame_token_.ToString());
   return trace_value_.value();
 }
 
@@ -600,6 +605,7 @@ void Frame::ApplyFrameOwnerProperties(
   owner->SetAllowPaymentRequest(properties->allow_payment_request);
   owner->SetIsDisplayNone(properties->is_display_none);
   owner->SetColorScheme(properties->color_scheme);
+  owner->SetPreferredColorScheme(properties->preferred_color_scheme);
 }
 
 void Frame::InsertAfter(Frame* new_child, Frame* previous_sibling) {
@@ -758,6 +764,11 @@ bool Frame::SwapImpl(
         remote_frame_host,
     mojo::PendingAssociatedReceiver<mojom::blink::RemoteFrame>
         remote_frame_receiver) {
+  TRACE_EVENT0("navigation", "Frame::SwapImpl");
+  std::string_view histogram_suffix =
+      (new_web_frame->IsWebLocalFrame() ? "Local" : "Remote");
+  base::ScopedUmaHistogramTimer histogram_timer(
+      base::StrCat({"Navigation.Frame.SwapImpl.", histogram_suffix}));
   DCHECK(IsAttached());
 
   using std::swap;
@@ -870,6 +881,9 @@ bool Frame::SwapImpl(
 
   // Clone the state of the current Frame into the one being swapped in.
   if (auto* new_local_frame = DynamicTo<LocalFrame>(new_frame)) {
+    TRACE_EVENT0("navigation", "Frame::SwapImpl.CloneState");
+    base::ScopedUmaHistogramTimer clone_state_timer(
+        "Navigation.Frame.SwapImpl.CloneState");
     // A `LocalFrame` being swapped in is created provisionally, so
     // `Page::MainFrame()` or `FrameOwner::ContentFrame()` needs to be updated
     // to point to the newly swapped-in frame.

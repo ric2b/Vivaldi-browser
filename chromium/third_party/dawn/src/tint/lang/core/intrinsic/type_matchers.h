@@ -43,6 +43,7 @@
 #include "src/tint/lang/core/type/f16.h"
 #include "src/tint/lang/core/type/f32.h"
 #include "src/tint/lang/core/type/i32.h"
+#include "src/tint/lang/core/type/i8.h"
 #include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/manager.h"
 #include "src/tint/lang/core/type/matrix.h"
@@ -53,6 +54,7 @@
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/core/type/texture_dimension.h"
 #include "src/tint/lang/core/type/u32.h"
+#include "src/tint/lang/core/type/u8.h"
 #include "src/tint/lang/core/type/vector.h"
 
 //! @cond Doxygen_Suppress
@@ -91,12 +93,28 @@ inline bool MatchI32(intrinsic::MatchState&, const type::Type* ty) {
     return ty->IsAnyOf<intrinsic::Any, type::I32, type::AbstractInt>();
 }
 
+inline const type::I8* BuildI8(intrinsic::MatchState& state, const type::Type*) {
+    return state.types.i8();
+}
+
+inline bool MatchI8(intrinsic::MatchState&, const type::Type* ty) {
+    return ty->IsAnyOf<intrinsic::Any, type::I8, type::AbstractInt>();
+}
+
 inline const type::U32* BuildU32(intrinsic::MatchState& state, const type::Type*) {
     return state.types.u32();
 }
 
 inline bool MatchU32(intrinsic::MatchState&, const type::Type* ty) {
     return ty->IsAnyOf<intrinsic::Any, type::U32, type::AbstractInt>();
+}
+
+inline const type::U8* BuildU8(intrinsic::MatchState& state, const type::Type*) {
+    return state.types.u8();
+}
+
+inline bool MatchU8(intrinsic::MatchState&, const type::Type* ty) {
+    return ty->IsAnyOf<intrinsic::Any, type::U8, type::AbstractInt>();
 }
 
 inline bool MatchVec(intrinsic::MatchState&,
@@ -111,7 +129,7 @@ inline bool MatchVec(intrinsic::MatchState&,
 
     if (auto* v = ty->As<type::Vector>()) {
         N = v->Width();
-        T = v->type();
+        T = v->Type();
         return true;
     }
     return false;
@@ -126,7 +144,7 @@ inline bool MatchVec(intrinsic::MatchState&, const type::Type* ty, const type::T
 
     if (auto* v = ty->As<type::Vector>()) {
         if (v->Width() == N) {
-            T = v->type();
+            T = v->Type();
             return true;
         }
     }
@@ -163,7 +181,7 @@ inline bool MatchPackedVec3(intrinsic::MatchState&, const type::Type* ty, const 
 
     if (auto* v = ty->As<type::Vector>()) {
         if (v->Packed()) {
-            T = v->type();
+            T = v->Type();
             return true;
         }
     }
@@ -188,9 +206,9 @@ inline bool MatchMat(intrinsic::MatchState&,
         return true;
     }
     if (auto* m = ty->As<type::Matrix>()) {
-        M = m->columns();
+        M = m->Columns();
         N = m->ColumnType()->Width();
-        T = m->type();
+        T = m->Type();
         return true;
     }
     return false;
@@ -203,8 +221,8 @@ inline bool MatchMat(intrinsic::MatchState&, const type::Type* ty, const type::T
         return true;
     }
     if (auto* m = ty->As<type::Matrix>()) {
-        if (m->columns() == C && m->rows() == R) {
-            T = m->type();
+        if (m->Columns() == C && m->Rows() == R) {
+            T = m->Type();
             return true;
         }
     }
@@ -247,6 +265,39 @@ constexpr auto MatchMat3X4 = MatchMat<3, 4>;
 constexpr auto MatchMat4X2 = MatchMat<4, 2>;
 constexpr auto MatchMat4X3 = MatchMat<4, 3>;
 constexpr auto MatchMat4X4 = MatchMat<4, 4>;
+
+inline bool MatchSubgroupMatrix(intrinsic::MatchState&,
+                                const type::Type* ty,
+                                intrinsic::Number& S,
+                                const type::Type*& T,
+                                intrinsic::Number& A,
+                                intrinsic::Number& B) {
+    if (ty->Is<intrinsic::Any>()) {
+        A = intrinsic::Number::any;
+        B = intrinsic::Number::any;
+        S = intrinsic::Number::any;
+        T = ty;
+        return true;
+    }
+    if (auto* sm = ty->As<type::SubgroupMatrix>()) {
+        A = sm->Rows();
+        B = sm->Columns();
+        S = intrinsic::Number(static_cast<uint32_t>(sm->Kind()));
+        T = sm->Type();
+        return true;
+    }
+    return false;
+}
+
+inline const type::SubgroupMatrix* BuildSubgroupMatrix(intrinsic::MatchState& state,
+                                                       const type::Type*,
+                                                       intrinsic::Number S,
+                                                       const type::Type* T,
+                                                       intrinsic::Number A,
+                                                       intrinsic::Number B) {
+    return state.types.subgroup_matrix(static_cast<core::SubgroupMatrixKind>(S.Value()), T,
+                                       A.Value(), B.Value());
+}
 
 inline bool MatchArray(intrinsic::MatchState&, const type::Type* ty, const type::Type*& T) {
     if (ty->Is<intrinsic::Any>()) {
@@ -357,7 +408,7 @@ inline bool MatchSampler(intrinsic::MatchState&, const type::Type* ty) {
     if (ty->Is<intrinsic::Any>()) {
         return true;
     }
-    return ty->Is([](const type::Sampler* s) { return s->kind() == type::SamplerKind::kSampler; });
+    return ty->Is([](const type::Sampler* s) { return s->Kind() == type::SamplerKind::kSampler; });
 }
 
 inline const type::Sampler* BuildSampler(intrinsic::MatchState& state, const type::Type*) {
@@ -369,7 +420,7 @@ inline bool MatchSamplerComparison(intrinsic::MatchState&, const type::Type* ty)
         return true;
     }
     return ty->Is(
-        [](const type::Sampler* s) { return s->kind() == type::SamplerKind::kComparisonSampler; });
+        [](const type::Sampler* s) { return s->Kind() == type::SamplerKind::kComparisonSampler; });
 }
 
 inline const type::Sampler* BuildSamplerComparison(intrinsic::MatchState& state,
@@ -386,8 +437,8 @@ inline bool MatchTexture(intrinsic::MatchState&,
         return true;
     }
     if (auto* v = ty->As<type::SampledTexture>()) {
-        if (v->dim() == dim) {
-            T = v->type();
+        if (v->Dim() == dim) {
+            T = v->Type();
             return true;
         }
     }
@@ -423,8 +474,8 @@ inline bool MatchTextureMultisampled(intrinsic::MatchState&,
         return true;
     }
     if (auto* v = ty->As<type::MultisampledTexture>()) {
-        if (v->dim() == dim) {
-            T = v->type();
+        if (v->Dim() == dim) {
+            T = v->Type();
             return true;
         }
     }
@@ -450,7 +501,7 @@ inline bool MatchTextureDepth(intrinsic::MatchState&,
     if (ty->Is<intrinsic::Any>()) {
         return true;
     }
-    return ty->Is([&](const type::DepthTexture* t) { return t->dim() == dim; });
+    return ty->Is([&](const type::DepthTexture* t) { return t->Dim() == dim; });
 }
 
 #define DECLARE_DEPTH_TEXTURE(suffix, dim)                                     \
@@ -474,7 +525,7 @@ inline bool MatchTextureDepthMultisampled2D(intrinsic::MatchState&, const type::
         return true;
     }
     return ty->Is([&](const type::DepthMultisampledTexture* t) {
-        return t->dim() == type::TextureDimension::k2d;
+        return t->Dim() == type::TextureDimension::k2d;
     });
 }
 
@@ -494,9 +545,9 @@ inline bool MatchTextureStorage(intrinsic::MatchState&,
         return true;
     }
     if (auto* v = ty->As<type::StorageTexture>()) {
-        if (v->dim() == dim) {
-            F = intrinsic::Number(static_cast<uint32_t>(v->texel_format()));
-            A = intrinsic::Number(static_cast<uint32_t>(v->access()));
+        if (v->Dim() == dim) {
+            F = intrinsic::Number(static_cast<uint32_t>(v->TexelFormat()));
+            A = intrinsic::Number(static_cast<uint32_t>(v->Access()));
             return true;
         }
     }
@@ -541,7 +592,7 @@ inline bool MatchInputAttachment(intrinsic::MatchState&,
         return true;
     }
     if (auto* v = ty->As<type::InputAttachment>()) {
-        T = v->type();
+        T = v->Type();
         return true;
     }
     return false;

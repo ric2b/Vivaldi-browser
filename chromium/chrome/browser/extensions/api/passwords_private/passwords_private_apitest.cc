@@ -410,6 +410,7 @@ IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest, ExtendAuthValidity) {
   EXPECT_TRUE(get_authenticator_interaction_status());
 }
 
+// TODO(crbug.com/367217970): Test is failing on Lacros, re-enable once fixed.
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 IN_PROC_BROWSER_TEST_F(PasswordsPrivateApiTest,
                        SwitchBiometricAuthBeforeFillingState) {

@@ -21,6 +21,7 @@
 
 #include <array>
 #include <cinttypes>
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <random>
@@ -157,6 +158,10 @@ class ClockTracker {
     return (static_cast<int64_t>(seq_id) << 32) | clock_id;
   }
 
+  void set_timezone_offset(int64_t offset) { timezone_offset_ = offset; }
+
+  std::optional<int64_t> timezone_offset() const { return timezone_offset_; }
+
   // Appends a new snapshot for the given clock domains.
   // This is typically called by the code that reads the ClockSnapshot packet.
   // Returns the internal snapshot id of this set of clocks.
@@ -171,7 +176,7 @@ class ClockTracker {
   }
 
   // Apply the clock offset to convert remote trace times to host trace time.
-  int64_t ToHostTraceTime(int64_t timestamp) {
+  PERFETTO_ALWAYS_INLINE int64_t ToHostTraceTime(int64_t timestamp) {
     if (PERFETTO_LIKELY(!context_->machine_id())) {
       // No need to convert host timestamps.
       return timestamp;
@@ -183,7 +188,9 @@ class ClockTracker {
     return timestamp - clock_offset;
   }
 
-  base::StatusOr<int64_t> ToTraceTime(ClockId clock_id, int64_t timestamp) {
+  PERFETTO_ALWAYS_INLINE base::StatusOr<int64_t> ToTraceTime(
+      ClockId clock_id,
+      int64_t timestamp) {
     if (PERFETTO_UNLIKELY(!trace_time_clock_id_used_for_conversion_)) {
       context_->metadata_tracker->SetMetadata(
           metadata::trace_time_clock_id,
@@ -192,8 +199,9 @@ class ClockTracker {
     }
     trace_time_clock_id_used_for_conversion_ = true;
 
-    if (clock_id == trace_time_clock_id_)
+    if (clock_id == trace_time_clock_id_) {
       return ToHostTraceTime(timestamp);
+    }
 
     ASSIGN_OR_RETURN(int64_t ts,
                      Convert(clock_id, timestamp, trace_time_clock_id_));
@@ -372,6 +380,7 @@ class ClockTracker {
   uint32_t cur_snapshot_id_ = 0;
   bool trace_time_clock_id_used_for_conversion_ = false;
   base::FlatHashMap<ClockId, int64_t> clock_offsets_;
+  std::optional<int64_t> timezone_offset_;
 };
 
 }  // namespace trace_processor

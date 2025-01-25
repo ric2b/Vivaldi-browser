@@ -13,6 +13,8 @@ import androidx.appcompat.content.res.AppCompatResources;
 import org.chromium.base.BuildInfo;
 import org.chromium.chrome.browser.omaha.UpdateStatusProvider;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
+import org.chromium.chrome.browser.safety_hub.SafetyHubModuleProperties.ModuleOption;
+import org.chromium.chrome.browser.safety_hub.SafetyHubModuleProperties.ModuleState;
 import org.chromium.components.browser_ui.settings.CardPreference;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -31,6 +33,8 @@ public class SafetyHubModuleViewBinder {
             PropertyKey propertyKey) {
         if (SafetyHubModuleProperties.IS_VISIBLE == propertyKey) {
             preference.setVisible(model.get(SafetyHubModuleProperties.IS_VISIBLE));
+        } else if (SafetyHubModuleProperties.IS_EXPANDED == propertyKey) {
+            preference.setExpanded(model.get(SafetyHubModuleProperties.IS_EXPANDED));
         }
     }
 
@@ -106,18 +110,21 @@ public class SafetyHubModuleViewBinder {
 
     private static void updateSafeBrowsingModule(
             SafetyHubExpandablePreference preference, PropertyModel model) {
-        @SafetyHubModuleProperties.ModuleOption
-        int option = SafetyHubModuleProperties.ModuleOption.SAFE_BROWSING;
+        @ModuleOption int option = ModuleOption.SAFE_BROWSING;
         @SafeBrowsingState
         int safeBrowsingState = model.get(SafetyHubModuleProperties.SAFE_BROWSING_STATE);
         boolean managed = model.get(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY);
-        @SafetyHubModuleProperties.ModuleState int state = getModuleState(model, option);
+        @ModuleState int state = getModuleState(model, option);
         String title;
         String summary;
         String primaryButtonText = null;
-        String secondaryButtonText = null;
+        String secondaryButtonText =
+                preference
+                        .getContext()
+                        .getString(R.string.safety_hub_go_to_security_settings_button);
         View.OnClickListener primaryButtonListener = null;
-        View.OnClickListener secondaryButtonListener = null;
+        View.OnClickListener secondaryButtonListener =
+                model.get(SafetyHubModuleProperties.SAFE_STATE_BUTTON_LISTENER);
 
         switch (safeBrowsingState) {
             case SafeBrowsingState.STANDARD_PROTECTION:
@@ -125,51 +132,29 @@ public class SafetyHubModuleViewBinder {
                         preference
                                 .getContext()
                                 .getString(R.string.safety_hub_safe_browsing_on_title);
-
-                if (managed) {
-                    summary =
-                            preference
-                                    .getContext()
-                                    .getString(
-                                            R.string.safety_hub_safe_browsing_on_summary_managed);
-                } else {
-                    summary =
-                            preference
-                                    .getContext()
-                                    .getString(R.string.safety_hub_safe_browsing_on_summary);
-                    secondaryButtonText =
-                            preference
-                                    .getContext()
-                                    .getString(R.string.safety_hub_go_to_security_settings_button);
-                    secondaryButtonListener =
-                            model.get(SafetyHubModuleProperties.SAFE_STATE_BUTTON_LISTENER);
-                }
+                summary =
+                        preference
+                                .getContext()
+                                .getString(
+                                        managed
+                                                ? R.string
+                                                        .safety_hub_safe_browsing_on_summary_managed
+                                                : R.string.safety_hub_safe_browsing_on_summary);
                 break;
             case SafeBrowsingState.ENHANCED_PROTECTION:
                 title =
                         preference
                                 .getContext()
                                 .getString(R.string.safety_hub_safe_browsing_enhanced_title);
-
-                if (managed) {
-                    summary =
-                            preference
-                                    .getContext()
-                                    .getString(
-                                            R.string
-                                                    .safety_hub_safe_browsing_enhanced_summary_managed);
-                } else {
-                    summary =
-                            preference
-                                    .getContext()
-                                    .getString(R.string.safety_hub_safe_browsing_enhanced_summary);
-                    secondaryButtonText =
-                            preference
-                                    .getContext()
-                                    .getString(R.string.safety_hub_go_to_security_settings_button);
-                    secondaryButtonListener =
-                            model.get(SafetyHubModuleProperties.SAFE_STATE_BUTTON_LISTENER);
-                }
+                summary =
+                        preference
+                                .getContext()
+                                .getString(
+                                        managed
+                                                ? R.string
+                                                        .safety_hub_safe_browsing_enhanced_summary_managed
+                                                : R.string
+                                                        .safety_hub_safe_browsing_enhanced_summary);
                 break;
             default:
                 title =
@@ -177,17 +162,18 @@ public class SafetyHubModuleViewBinder {
                                 .getContext()
                                 .getString(R.string.prefs_safe_browsing_no_protection_summary);
 
-                if (managed) {
-                    summary =
-                            preference
-                                    .getContext()
-                                    .getString(
-                                            R.string.safety_hub_safe_browsing_off_summary_managed);
-                } else {
-                    summary =
-                            preference
-                                    .getContext()
-                                    .getString(R.string.safety_hub_safe_browsing_off_summary);
+                summary =
+                        preference
+                                .getContext()
+                                .getString(
+                                        managed
+                                                ? R.string
+                                                        .safety_hub_safe_browsing_off_summary_managed
+                                                : R.string.safety_hub_safe_browsing_off_summary);
+
+                if (!managed) {
+                    secondaryButtonText = null;
+                    secondaryButtonListener = null;
                     primaryButtonText =
                             preference.getContext().getString(R.string.safety_hub_turn_on_button);
                     primaryButtonListener =
@@ -202,21 +188,19 @@ public class SafetyHubModuleViewBinder {
         preference.setPrimaryButtonClickListener(primaryButtonListener);
         preference.setSecondaryButtonClickListener(secondaryButtonListener);
 
-        preference.setExpanded(shouldExpandModule(state, managed));
         preference.setIcon(getIconForModuleState(preference.getContext(), state, managed));
         preference.setOrder(getOrderForModuleState(option, state, managed));
     }
 
     private static void updatePasswordCheckModule(
             SafetyHubExpandablePreference preference, PropertyModel model) {
-        @SafetyHubModuleProperties.ModuleOption
-        int option = SafetyHubModuleProperties.ModuleOption.ACCOUNT_PASSWORDS;
+        @ModuleOption int option = ModuleOption.ACCOUNT_PASSWORDS;
         int compromisedPasswordsCount =
                 model.get(SafetyHubModuleProperties.COMPROMISED_PASSWORDS_COUNT);
         int totalPasswordsCount = model.get(SafetyHubModuleProperties.TOTAL_PASSWORDS_COUNT);
         boolean managed = model.get(SafetyHubModuleProperties.IS_CONTROLLED_BY_POLICY);
         boolean isSignedIn = model.get(SafetyHubModuleProperties.IS_SIGNED_IN);
-        @SafetyHubModuleProperties.ModuleState int state = getModuleState(model, option);
+        @ModuleState int state = getModuleState(model, option);
         String account = model.get(SafetyHubModuleProperties.ACCOUNT_EMAIL);
         String title;
         String summary;
@@ -272,12 +256,21 @@ public class SafetyHubModuleViewBinder {
                                     R.plurals.safety_hub_compromised_passwords_summary,
                                     compromisedPasswordsCount,
                                     compromisedPasswordsCount);
-
-            primaryButtonText =
-                    preference
-                            .getContext()
-                            .getString(R.string.safety_hub_passwords_navigation_button);
-            primaryButtonListener = model.get(SafetyHubModuleProperties.PRIMARY_BUTTON_LISTENER);
+            if (managed) {
+                secondaryButtonText =
+                        preference
+                                .getContext()
+                                .getString(R.string.safety_hub_passwords_navigation_button);
+                secondaryButtonListener =
+                        model.get(SafetyHubModuleProperties.PRIMARY_BUTTON_LISTENER);
+            } else {
+                primaryButtonText =
+                        preference
+                                .getContext()
+                                .getString(R.string.safety_hub_passwords_navigation_button);
+                primaryButtonListener =
+                        model.get(SafetyHubModuleProperties.PRIMARY_BUTTON_LISTENER);
+            }
         } else {
             title =
                     preference
@@ -305,10 +298,6 @@ public class SafetyHubModuleViewBinder {
                     preference
                             .getContext()
                             .getString(R.string.safety_hub_no_passwords_summary_managed);
-
-            // Only show the primary button if applicable in the managed state.
-            secondaryButtonText = null;
-            secondaryButtonListener = null;
         }
 
         preference.setTitle(title);
@@ -318,18 +307,16 @@ public class SafetyHubModuleViewBinder {
         preference.setPrimaryButtonClickListener(primaryButtonListener);
         preference.setSecondaryButtonClickListener(secondaryButtonListener);
 
-        preference.setExpanded(shouldExpandModule(state, managed));
         preference.setIcon(getIconForModuleState(preference.getContext(), state, managed));
         preference.setOrder(getOrderForModuleState(option, state, managed));
     }
 
     private static void updateUpdateCheckModule(
             SafetyHubExpandablePreference preference, PropertyModel model) {
-        @SafetyHubModuleProperties.ModuleOption
-        int option = SafetyHubModuleProperties.ModuleOption.UPDATE_CHECK;
+        @ModuleOption int option = ModuleOption.UPDATE_CHECK;
         UpdateStatusProvider.UpdateStatus updateStatus =
                 model.get(SafetyHubModuleProperties.UPDATE_STATUS);
-        @SafetyHubModuleProperties.ModuleState int state = getModuleState(model, option);
+        @ModuleState int state = getModuleState(model, option);
         String title;
         String summary = null;
         String primaryButtonText = null;
@@ -396,18 +383,16 @@ public class SafetyHubModuleViewBinder {
         preference.setPrimaryButtonClickListener(primaryButtonListener);
         preference.setSecondaryButtonClickListener(secondaryButtonListener);
 
-        preference.setExpanded(shouldExpandModule(state, false));
         preference.setIcon(getIconForModuleState(preference.getContext(), state, false));
         preference.setOrder(getOrderForModuleState(option, state, false));
     }
 
     private static void updatePermissionsModule(
             SafetyHubExpandablePreference preference, PropertyModel model) {
-        @SafetyHubModuleProperties.ModuleOption
-        int option = SafetyHubModuleProperties.ModuleOption.UNUSED_PERMISSIONS;
+        @ModuleOption int option = ModuleOption.UNUSED_PERMISSIONS;
         int sitesWithUnusedPermissionsCount =
                 model.get(SafetyHubModuleProperties.SITES_WITH_UNUSED_PERMISSIONS_COUNT);
-        @SafetyHubModuleProperties.ModuleState int state = getModuleState(model, option);
+        @ModuleState int state = getModuleState(model, option);
         String title;
         String summary;
         String primaryButtonText = null;
@@ -452,18 +437,16 @@ public class SafetyHubModuleViewBinder {
         preference.setPrimaryButtonClickListener(primaryButtonListener);
         preference.setSecondaryButtonClickListener(secondaryButtonListener);
 
-        preference.setExpanded(shouldExpandModule(state, false));
         preference.setIcon(getIconForModuleState(preference.getContext(), state, false));
         preference.setOrder(getOrderForModuleState(option, state, false));
     }
 
     private static void updateNotificationsReviewModule(
             SafetyHubExpandablePreference preference, PropertyModel model) {
-        @SafetyHubModuleProperties.ModuleOption
-        int option = SafetyHubModuleProperties.ModuleOption.NOTIFICATION_REVIEW;
+        @ModuleOption int option = ModuleOption.NOTIFICATION_REVIEW;
         int notificationPermissionsForReviewCount =
                 model.get(SafetyHubModuleProperties.NOTIFICATION_PERMISSIONS_FOR_REVIEW_COUNT);
-        @SafetyHubModuleProperties.ModuleState int state = getModuleState(model, option);
+        @ModuleState int state = getModuleState(model, option);
         String title;
         String summary;
         String primaryButtonText = null;
@@ -517,7 +500,6 @@ public class SafetyHubModuleViewBinder {
         preference.setPrimaryButtonClickListener(primaryButtonListener);
         preference.setSecondaryButtonClickListener(secondaryButtonListener);
 
-        preference.setExpanded(shouldExpandModule(state, false));
         preference.setIcon(getIconForModuleState(preference.getContext(), state, false));
         preference.setOrder(getOrderForModuleState(option, state, false));
     }
@@ -540,28 +522,22 @@ public class SafetyHubModuleViewBinder {
     }
 
     private static Drawable getIconForModuleState(
-            Context context, @SafetyHubModuleProperties.ModuleState int state, boolean managed) {
+            Context context, @ModuleState int state, boolean managed) {
         switch (state) {
-            case SafetyHubModuleProperties.ModuleState.SAFE:
+            case ModuleState.SAFE:
                 return SettingsUtils.getTintedIcon(
                         context, R.drawable.material_ic_check_24dp, R.color.default_green);
-            case SafetyHubModuleProperties.ModuleState.INFO:
-            case SafetyHubModuleProperties.ModuleState.UNAVAILABLE:
+            case ModuleState.INFO:
+            case ModuleState.UNAVAILABLE:
                 return managed
-                        ? SettingsUtils.getTintedIcon(
-                                context,
-                                R.drawable.ic_business_small,
-                                R.color.default_icon_color_secondary_tint_list)
+                        ? getManagedIcon(context)
                         : SettingsUtils.getTintedIcon(
                                 context,
                                 R.drawable.btn_info,
                                 R.color.default_icon_color_secondary_tint_list);
-            case SafetyHubModuleProperties.ModuleState.WARNING:
+            case ModuleState.WARNING:
                 return managed
-                        ? SettingsUtils.getTintedIcon(
-                                context,
-                                R.drawable.ic_business_small,
-                                R.color.default_icon_color_secondary_tint_list)
+                        ? getManagedIcon(context)
                         : SettingsUtils.getTintedIcon(
                                 context, R.drawable.ic_error, R.color.default_red);
             default:
@@ -569,24 +545,13 @@ public class SafetyHubModuleViewBinder {
         }
     }
 
-    private static boolean shouldExpandModule(
-            @SafetyHubModuleProperties.ModuleState int state, boolean managed) {
-        switch (state) {
-            case SafetyHubModuleProperties.ModuleState.SAFE:
-            case SafetyHubModuleProperties.ModuleState.INFO:
-            case SafetyHubModuleProperties.ModuleState.UNAVAILABLE:
-                return false;
-            case SafetyHubModuleProperties.ModuleState.WARNING:
-                return !managed;
-            default:
-                throw new IllegalArgumentException();
-        }
+    private static Drawable getManagedIcon(Context context) {
+        return SettingsUtils.getTintedIcon(
+                context, R.drawable.ic_business, R.color.default_icon_color_secondary_tint_list);
     }
 
     private static int getOrderForModuleState(
-            @SafetyHubModuleProperties.ModuleOption int option,
-            @SafetyHubModuleProperties.ModuleState int state,
-            boolean managed) {
+            @ModuleOption int option, @ModuleState int state, boolean managed) {
         // Modules are ordered based on the severity of their {@link
         // SafetyHubModuleProperties.ModuleState}. Modules in warning state that are not controlled
         // by policy should appear first in the list. Followed by unavailable, info then safe
@@ -594,82 +559,71 @@ public class SafetyHubModuleViewBinder {
         // If multiple modules have the same state, fallback to the order in {@link
         // SafetyHubModuleProperties.ModuleOption}.
         switch (state) {
-            case SafetyHubModuleProperties.ModuleState.SAFE:
-            case SafetyHubModuleProperties.ModuleState.INFO:
-            case SafetyHubModuleProperties.ModuleState.UNAVAILABLE:
-                return option + (state * SafetyHubModuleProperties.ModuleOption.NUM_ENTRIES);
-            case SafetyHubModuleProperties.ModuleState.WARNING:
+            case ModuleState.SAFE:
+            case ModuleState.INFO:
+            case ModuleState.UNAVAILABLE:
+                return option + (state * ModuleOption.NUM_ENTRIES);
+            case ModuleState.WARNING:
                 return option
                         + (managed
-                                ? (SafetyHubModuleProperties.ModuleState.INFO
-                                        * SafetyHubModuleProperties.ModuleOption.NUM_ENTRIES)
-                                : (state * SafetyHubModuleProperties.ModuleOption.NUM_ENTRIES));
+                                ? (ModuleState.INFO * ModuleOption.NUM_ENTRIES)
+                                : (ModuleState.WARNING * ModuleOption.NUM_ENTRIES));
             default:
                 throw new IllegalArgumentException();
         }
     }
 
     static boolean isBrowserStateSafe(PropertyModel model) {
-        for (@SafetyHubModuleProperties.ModuleOption
-                int i = SafetyHubModuleProperties.ModuleOption.OPTION_FIRST;
-                i < SafetyHubModuleProperties.ModuleOption.NUM_ENTRIES;
-                i++) {
-            if (getModuleState(model, i) < SafetyHubModuleProperties.ModuleState.INFO) {
+        for (@ModuleOption int i = ModuleOption.OPTION_FIRST; i < ModuleOption.NUM_ENTRIES; i++) {
+            if (getModuleState(model, i) < ModuleState.INFO) {
                 return false;
             }
         }
         return true;
     }
 
-    static @SafetyHubModuleProperties.ModuleState int getModuleState(
-            PropertyModel model, @SafetyHubModuleProperties.ModuleOption int option) {
+    static @ModuleState int getModuleState(PropertyModel model, @ModuleOption int option) {
         switch (option) {
-            case SafetyHubModuleProperties.ModuleOption.ACCOUNT_PASSWORDS:
+            case ModuleOption.ACCOUNT_PASSWORDS:
                 int compromisedPasswordsCount =
                         model.get(SafetyHubModuleProperties.COMPROMISED_PASSWORDS_COUNT);
                 int totalPasswordsCount =
                         model.get(SafetyHubModuleProperties.TOTAL_PASSWORDS_COUNT);
                 if (totalPasswordsCount == 0) {
-                    return SafetyHubModuleProperties.ModuleState.INFO;
+                    return ModuleState.INFO;
                 }
                 if (compromisedPasswordsCount == INVALID_BREACHED_CREDENTIALS_COUNT) {
-                    return SafetyHubModuleProperties.ModuleState.UNAVAILABLE;
+                    return ModuleState.UNAVAILABLE;
                 }
-                return compromisedPasswordsCount > 0
-                        ? SafetyHubModuleProperties.ModuleState.WARNING
-                        : SafetyHubModuleProperties.ModuleState.SAFE;
-            case SafetyHubModuleProperties.ModuleOption.UPDATE_CHECK:
+                return compromisedPasswordsCount > 0 ? ModuleState.WARNING : ModuleState.SAFE;
+            case ModuleOption.UPDATE_CHECK:
                 UpdateStatusProvider.UpdateStatus updateStatus =
                         model.get(SafetyHubModuleProperties.UPDATE_STATUS);
                 if (updateStatus == null
                         || updateStatus.updateState
                                 == UpdateStatusProvider.UpdateState.UNSUPPORTED_OS_VERSION) {
-                    return SafetyHubModuleProperties.ModuleState.UNAVAILABLE;
+                    return ModuleState.UNAVAILABLE;
                 }
                 if (updateStatus.updateState == UpdateStatusProvider.UpdateState.UPDATE_AVAILABLE) {
-                    return SafetyHubModuleProperties.ModuleState.WARNING;
+                    return ModuleState.WARNING;
                 }
-                return SafetyHubModuleProperties.ModuleState.SAFE;
-            case SafetyHubModuleProperties.ModuleOption.UNUSED_PERMISSIONS:
+                return ModuleState.SAFE;
+            case ModuleOption.UNUSED_PERMISSIONS:
                 int permissionsCount =
                         model.get(SafetyHubModuleProperties.SITES_WITH_UNUSED_PERMISSIONS_COUNT);
-                return permissionsCount > 0
-                        ? SafetyHubModuleProperties.ModuleState.INFO
-                        : SafetyHubModuleProperties.ModuleState.SAFE;
-            case SafetyHubModuleProperties.ModuleOption.NOTIFICATION_REVIEW:
+                return permissionsCount > 0 ? ModuleState.INFO : ModuleState.SAFE;
+            case ModuleOption.NOTIFICATION_REVIEW:
                 int notificationsCount =
                         model.get(
                                 SafetyHubModuleProperties
                                         .NOTIFICATION_PERMISSIONS_FOR_REVIEW_COUNT);
-                return notificationsCount > 0
-                        ? SafetyHubModuleProperties.ModuleState.INFO
-                        : SafetyHubModuleProperties.ModuleState.SAFE;
-            case SafetyHubModuleProperties.ModuleOption.SAFE_BROWSING:
+                return notificationsCount > 0 ? ModuleState.INFO : ModuleState.SAFE;
+            case ModuleOption.SAFE_BROWSING:
                 @SafeBrowsingState
                 int safeBrowsingState = model.get(SafetyHubModuleProperties.SAFE_BROWSING_STATE);
                 return safeBrowsingState == SafeBrowsingState.NO_SAFE_BROWSING
-                        ? SafetyHubModuleProperties.ModuleState.WARNING
-                        : SafetyHubModuleProperties.ModuleState.SAFE;
+                        ? ModuleState.WARNING
+                        : ModuleState.SAFE;
             default:
                 throw new IllegalArgumentException();
         }

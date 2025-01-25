@@ -82,8 +82,8 @@ class Tracker;
 - (void)panelAction;
 // Action when search is tapped.
 - (void)vivaldiSearchAction;
-// Action when the shield button within omnibox is tapped.
-- (void)showTrackerBlockerManager;
+// Action when home is tapped.
+- (void)vivaldiHomeAction;
 // End Vivaldi
 
 @end

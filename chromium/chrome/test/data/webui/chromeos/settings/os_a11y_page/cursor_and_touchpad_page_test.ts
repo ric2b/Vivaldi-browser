@@ -5,8 +5,7 @@
 import 'chrome://os-settings/lazy_load.js';
 
 import {SettingsCursorAndTouchpadPageElement} from 'chrome://os-settings/lazy_load.js';
-import {createRouterForTesting, CrSettingsPrefs, DevicePageBrowserProxyImpl, Router, routes, settingMojom, SettingsDropdownMenuElement, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
-import {CrToggleElement} from 'chrome://resources/ash/common/cr_elements/cr_toggle/cr_toggle.js';
+import {createRouterForTesting, CrLinkRowElement, CrSettingsPrefs, DevicePageBrowserProxyImpl, Router, routes, settingMojom, SettingsDropdownMenuElement, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -19,6 +18,9 @@ import {clearBody} from '../utils.js';
 
 const DEFAULT_BLACK_CURSOR_COLOR = 0;
 const RED_CURSOR_COLOR = 0xd93025;
+const INTERNAL_TRACKPAD_NEVER_DISABLED = 0;
+const INTERNAL_TRACKPAD_ALWAYS_DISABLED = 1;
+const INTERNAL_TRACKPAD_MOUSE_CONNECTED_DISABLED = 2;
 
 /**
  * Possible control types for settings.
@@ -34,6 +36,8 @@ suite('<settings-cursor-and-touchpad-page>', () => {
   let prefElement: SettingsPrefsElement;
   const overscrollFeatureEnabled =
       loadTimeData.getBoolean('isAccessibilityOverscrollSettingFeatureEnabled');
+  const disableInternalTrackpadFeatureEnabled =
+      loadTimeData.getBoolean('isAccessibilityDisableTrackpadEnabled');
 
   async function initPage() {
     prefElement = document.createElement('settings-prefs');
@@ -80,6 +84,23 @@ suite('<settings-cursor-and-touchpad-page>', () => {
     Router.resetInstanceForTesting(testRouter);
     await initPage();
     setUpDeviceBrowserProxy(hasMouse, hasTouchpad, hasPointingStick);
+  }
+
+  function getFaceGazePageRow(): CrLinkRowElement|null {
+    return page.shadowRoot!.querySelector<CrLinkRowElement>('#faceGazePageRow');
+  }
+
+  async function getDisableInternalTrackpadSelectElement() {
+    await initPage();
+    const disableInternalTrackpadDropdown =
+        page.shadowRoot!.querySelector<SettingsDropdownMenuElement>(
+            '#disableInternalTrackpad');
+    assert(disableInternalTrackpadDropdown);
+    await waitAfterNextRender(disableInternalTrackpadDropdown);
+    const disableInternalTrackpadSelectElement =
+        disableInternalTrackpadDropdown.shadowRoot!.querySelector('select');
+    assert(disableInternalTrackpadSelectElement);
+    return disableInternalTrackpadSelectElement;
   }
 
   test('cursor color prefs and dropdown synced', async () => {
@@ -597,9 +618,8 @@ suite('<settings-cursor-and-touchpad-page>', () => {
         });
 
         await initPage();
-        const faceGazeToggle =
-            page.shadowRoot!.querySelector<CrToggleElement>('#faceGazeToggle');
-        assertEquals(null, faceGazeToggle);
+        const faceGazePageRow = getFaceGazePageRow();
+        assertEquals(null, faceGazePageRow);
       });
 
   test(
@@ -609,68 +629,29 @@ suite('<settings-cursor-and-touchpad-page>', () => {
         });
 
         await initPage();
-        const faceGazeToggle =
-            page.shadowRoot!.querySelector<CrToggleElement>('#faceGazeToggle');
-        assert(faceGazeToggle);
-        assertTrue(isVisible(faceGazeToggle));
+        const faceGazePageRow = getFaceGazePageRow();
+        assertTrue(!!faceGazePageRow);
+        assertTrue(isVisible(faceGazePageRow));
 
-        assertFalse(faceGazeToggle.checked);
-        assertFalse(faceGazeToggle.hasAttribute('checked'));
         assertFalse(page.prefs.settings.a11y.face_gaze.enabled.value);
-
-        // FaceGaze settings subpage button is missing until the feature is
-        // enabled.
-        let faceGazeSubpageButton = page.shadowRoot!.querySelector<HTMLElement>(
-            '#faceGazeSubpageButton');
-        assertEquals(null, faceGazeSubpageButton);
-
-        faceGazeToggle.click();
-        await waitBeforeNextRender(page);
-        flush();
-
-        assertTrue(faceGazeToggle.checked);
-        assertTrue(faceGazeToggle.hasAttribute('checked'));
-        assertTrue(page.prefs.settings.a11y.face_gaze.enabled.value);
-
-        // Subpage button now present.
-        faceGazeSubpageButton = page.shadowRoot!.querySelector<HTMLElement>(
-            '#faceGazeSubpageButton');
-        assert(faceGazeSubpageButton);
-        assertTrue(isVisible(faceGazeSubpageButton));
-
-        // Clicking on it should update the route.
-        faceGazeSubpageButton.click();
-        assertEquals(
-            routes.MANAGE_FACEGAZE_SETTINGS, Router.getInstance().currentRoute);
       });
 
   test(
-      'can reach face control settings from description when enabled',
+      'can reach face control settings from row when feature flag is enabled',
       async () => {
         loadTimeData.overrideValues({
           isAccessibilityFaceGazeEnabled: true,
         });
+
         await initPage();
+        const faceGazePageRow = getFaceGazePageRow();
+        assertTrue(!!faceGazePageRow);
+        assertTrue(isVisible(faceGazePageRow));
 
-        const row =
-            page.shadowRoot!.querySelector<HTMLElement>('#faceGazeDescription');
-        assert(row);
-        assertTrue(isVisible(row));
+        assertFalse(page.prefs.settings.a11y.face_gaze.enabled.value);
 
-        // Nothing happens if face control is not enabled.
-        row.click();
-        assertEquals(
-            routes.A11Y_CURSOR_AND_TOUCHPAD, Router.getInstance().currentRoute);
-
-        const faceGazeToggle =
-            page.shadowRoot!.querySelector<CrToggleElement>('#faceGazeToggle');
-        assert(faceGazeToggle);
-        faceGazeToggle.click();
-        await waitBeforeNextRender(page);
-        flush();
-
-        // Clicking on it now should update the route.
-        row.click();
+        // Clicking on it should update the route.
+        faceGazePageRow.click();
         assertEquals(
             routes.MANAGE_FACEGAZE_SETTINGS, Router.getInstance().currentRoute);
       });
@@ -754,4 +735,97 @@ suite('<settings-cursor-and-touchpad-page>', () => {
 
     assertFalse(isVisible(dominantHandControl));
   });
+
+  if (disableInternalTrackpadFeatureEnabled) {
+    test(
+        'disable internal trackpad prefs and dropdown synced when in default state',
+        async () => {
+          await initPage();
+          const disableInternalTrackpadSelectElement =
+              await getDisableInternalTrackpadSelectElement();
+
+          // Make sure disable trackpad dropdown is set to never disabled,
+          // matching default pref state.
+          assertEquals(
+              String(INTERNAL_TRACKPAD_NEVER_DISABLED),
+              disableInternalTrackpadSelectElement.value);
+        });
+
+    test(
+        'disable internal trackpad prefs and dropdown synced when set to always disabled',
+        async () => {
+          await initPage();
+          const disableInternalTrackpadSelectElement =
+              await getDisableInternalTrackpadSelectElement();
+          assert(disableInternalTrackpadSelectElement);
+
+          // Turn disable internal trackpad to always disabled, and verify pref
+          // is also set to always disabled.
+          disableInternalTrackpadSelectElement.value =
+              String(INTERNAL_TRACKPAD_ALWAYS_DISABLED);
+          disableInternalTrackpadSelectElement.dispatchEvent(
+              new CustomEvent('change'));
+          const disableInternalTrackpadModePref =
+              page.getPref('settings.a11y.disable_trackpad_mode');
+          assertEquals(
+              INTERNAL_TRACKPAD_ALWAYS_DISABLED,
+              disableInternalTrackpadModePref.value);
+        });
+
+    test(
+        'disable internal trackpad prefs and dropdown synced when set to when mouse connected',
+        async () => {
+          await initPage();
+          const disableInternalTrackpadSelectElement =
+              await getDisableInternalTrackpadSelectElement();
+
+          // Turn disable internal trackpad to disable when mouse is connected,
+          // and verify pref is also set to disable when mouse is connected.
+          disableInternalTrackpadSelectElement.value =
+              String(INTERNAL_TRACKPAD_MOUSE_CONNECTED_DISABLED);
+          disableInternalTrackpadSelectElement.dispatchEvent(
+              new CustomEvent('change'));
+          const disableInternalTrackpadModePref =
+              page.getPref('settings.a11y.disable_trackpad_mode');
+          assertEquals(
+              INTERNAL_TRACKPAD_MOUSE_CONNECTED_DISABLED,
+              disableInternalTrackpadModePref.value);
+        });
+
+    test(
+        'disable internal trackpad prefs and dropdown synced when set to never disabled',
+        async () => {
+          await initPage();
+          const disableInternalTrackpadSelectElement =
+              await getDisableInternalTrackpadSelectElement();
+
+          // Turn disable internal trackpad value back to default, and verify
+          // pref is also default.
+          disableInternalTrackpadSelectElement.value =
+              String(INTERNAL_TRACKPAD_NEVER_DISABLED);
+          disableInternalTrackpadSelectElement.dispatchEvent(
+              new CustomEvent('change'));
+          const disableInternalTrackpadModePref =
+              page.getPref('settings.a11y.disable_trackpad_mode');
+          assertEquals(
+              INTERNAL_TRACKPAD_NEVER_DISABLED,
+              disableInternalTrackpadModePref.value);
+        });
+  } else {
+    test('disable internal trackpad feature disabled', async () => {
+      await initPage();
+      const disableInternalTrackpadDropdown =
+          page.shadowRoot!.querySelector<SettingsDropdownMenuElement>(
+              '#disableInternalTrackpad');
+
+      // No setting visible.
+      assertNull(disableInternalTrackpadDropdown);
+
+      // Pref has default value.
+      assertEquals(
+          page.prefs.settings.a11y.disable_trackpad_mode.value,
+          INTERNAL_TRACKPAD_NEVER_DISABLED);
+      assertFalse(page.prefs.settings.a11y.disable_trackpad_enabled.value);
+    });
+  }
 });

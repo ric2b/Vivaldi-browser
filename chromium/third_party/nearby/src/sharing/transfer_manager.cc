@@ -16,7 +16,6 @@
 
 #include <functional>
 #include <memory>
-#include <ostream>
 #include <string>
 #include <vector>
 
@@ -26,6 +25,7 @@
 #include "sharing/internal/public/context.h"
 #include "sharing/internal/public/logging.h"
 #include "sharing/nearby_connections_types.h"
+#include "sharing/thread_timer.h"
 
 namespace nearby {
 namespace sharing {
@@ -46,6 +46,12 @@ bool IsHighQualityMedium(Medium medium) {
 TransferManager::TransferManager(Context* context,
                                  absl::string_view endpoint_id)
     : context_(context), endpoint_id_(endpoint_id) {}
+
+TransferManager::~TransferManager() {
+  absl::MutexLock lock(&mutex_);
+  timeout_timer_.reset();
+  pending_tasks_.clear();
+}
 
 void TransferManager::Send(std::function<void()> task) {
   absl::MutexLock lock(&mutex_);
@@ -89,19 +95,18 @@ bool TransferManager::StartTransfer() {
     return false;
   }
 
-  if (timeout_timer_ != nullptr && timeout_timer_->IsRunning()) {
+  if (timeout_timer_ != nullptr) {
     NL_LOG(WARNING) << "transfer already started.";
     return false;
   }
 
-  timeout_timer_ = context_->CreateTimer();
-  timeout_timer_->Start(
-      kMediumUpgradeTimeout / absl::Milliseconds(1), 0, [&]() {
+  timeout_timer_ = std::make_unique<ThreadTimer>(
+      *context_->GetTaskRunner(), "transfer_manager_timeout_timer",
+      kMediumUpgradeTimeout, [this]() {
         absl::MutexLock lock(&mutex_);
 
         NL_LOG(INFO) << "Timed out for endpoint " << endpoint_id_ << " after "
-                     << (kMediumUpgradeTimeout / absl::Milliseconds(1))
-                     << "ms.";
+                     << kMediumUpgradeTimeout;
         StopWaitingForHighQualityMedium();
       });
 
@@ -116,12 +121,12 @@ bool TransferManager::StartTransfer() {
 bool TransferManager::CancelTransfer() {
   absl::MutexLock lock(&mutex_);
 
-  if (timeout_timer_ == nullptr || !timeout_timer_->IsRunning()) {
+  if (timeout_timer_ == nullptr) {
     NL_LOG(WARNING) << "No running transfer.";
     return false;
   }
 
-  timeout_timer_->Stop();
+  timeout_timer_.reset();
   NL_LOG(INFO) << __func__ << "Transfer is canceled";
   return true;
 }
@@ -133,11 +138,9 @@ void TransferManager::StopWaitingForHighQualityMedium() {
     NL_LOG(INFO) << "Sending delayed payload to endpoint " << endpoint_id_;
     task();
   }
-  pending_tasks_.clear();
 
-  if (timeout_timer_ != nullptr) {
-    timeout_timer_->Stop();
-  }
+  pending_tasks_.clear();
+  timeout_timer_.reset();
 }
 
 }  // namespace sharing

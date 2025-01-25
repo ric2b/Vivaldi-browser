@@ -35,7 +35,6 @@
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
-#include "chrome/browser/query_tiles/tile_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
@@ -77,6 +76,10 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/origin.h"
+
+// Vivaldi
+#include "components/direct_match/direct_match_service.h"
+#include "components/direct_match/direct_match_service_factory.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/app_list/search/essential_search/essential_search_manager.h"
@@ -213,6 +216,13 @@ bookmarks::BookmarkModel* ChromeAutocompleteProviderClient::GetBookmarkModel() {
   return BookmarkModelFactory::GetForBrowserContext(profile_);
 }
 
+// Vivaldi
+direct_match::DirectMatchService*
+ChromeAutocompleteProviderClient::GetDirectMatchService() {
+  return direct_match::DirectMatchServiceFactory::GetForBrowserContext(
+      profile_);
+}
+
 history::URLDatabase* ChromeAutocompleteProviderClient::GetInMemoryDatabase() {
   history::HistoryService* history_service = GetHistoryService();
 
@@ -331,12 +341,6 @@ ChromeAutocompleteProviderClient::GetComponentUpdateService() {
   return g_browser_process->component_updater();
 }
 
-query_tiles::TileService*
-ChromeAutocompleteProviderClient::GetQueryTileService() const {
-  ProfileKey* profile_key = profile_->GetProfileKey();
-  return query_tiles::TileServiceFactory::GetForKey(profile_key);
-}
-
 OmniboxTriggeredFeatureService*
 ChromeAutocompleteProviderClient::GetOmniboxTriggeredFeatureService() const {
   return omnibox_triggered_feature_service_.get();
@@ -395,7 +399,8 @@ bool ChromeAutocompleteProviderClient::SearchSuggestEnabled() const {
 #if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
   if (vivaldi::IsVivaldiRunning()) {
     const PrefService* prefs = profile_->GetPrefs();
-    return prefs->GetBoolean(vivaldiprefs::kAddressBarInlineSearchSuggestEnabled);
+    return prefs->GetBoolean(
+        vivaldiprefs::kAddressBarInlineSearchSuggestEnabled);
   }
 #endif
 

@@ -446,6 +446,9 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @SkipMutations(
+        reason = "This test uses DOMUtils.clickNode() which is known to be flaky"
+        + " under modified scaling factor, see crbug.com/40840940")
     public void testTouchingFormWithAdjustResize() throws Throwable {
         PostTask.runOrPostTask(
                 TaskTraits.UI_DEFAULT,
@@ -459,7 +462,11 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
+    @SkipMutations(
+        reason = "This test uses DOMUtils.clickNode() which is known to be flaky"
+        + " under modified scaling factor, see crbug.com/40840940")
     public void testTouchingFormWithAdjustPan() throws Throwable {
         PostTask.runOrPostTask(
                 TaskTraits.UI_DEFAULT,
@@ -494,6 +501,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testBasicAutofill() throws Throwable {
         final String url =
@@ -502,7 +510,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                             <form action='a.html' name='formname'>
                                 <label>User Name:</label>
                                     <input type='text' id='text1' name='name' maxlength='30'
-                                        placeholder='placeholder@placeholder.com'
+                                        placeholder='Your name'
                                         autocomplete='name given-name'>
                                     <input type='checkbox' id='checkbox1' name='showpassword'>
                                     <select id='select1' name='month'>
@@ -551,7 +559,7 @@ public class AwAutofillTest extends AwParameterizedTest {
         // Verify input text control filled correctly in ViewStructure.
         TestViewStructure child0 = viewStructure.getChild(0);
         assertEquals(View.AUTOFILL_TYPE_TEXT, child0.getAutofillType());
-        assertEquals("placeholder@placeholder.com", child0.getHint());
+        assertEquals("Your name", child0.getHint());
         assertEquals("name", child0.getAutofillHints()[0]);
         assertEquals("given-name", child0.getAutofillHints()[1]);
         assertFalse(child0.getDimensRect().isEmpty());
@@ -613,7 +621,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
         // Autofill form and verify filled values.
         SparseArray<AutofillValue> values = new SparseArray<AutofillValue>();
-        values.append(child0.getId(), AutofillValue.forText("example@example.com"));
+        values.append(child0.getId(), AutofillValue.forText("Juan"));
         values.append(child1.getId(), AutofillValue.forToggle(true));
         values.append(child2.getId(), AutofillValue.forList(1));
         values.append(child3.getId(), AutofillValue.forText("aaa"));
@@ -639,7 +647,7 @@ public class AwAutofillTest extends AwParameterizedTest {
         // Verify form filled by Javascript
         String value0 =
                 executeJavaScriptAndWaitForResult("document.getElementById('text1').value;");
-        assertEquals("\"example@example.com\"", value0);
+        assertEquals("\"Juan\"", value0);
         String value1 =
                 executeJavaScriptAndWaitForResult("document.getElementById('checkbox1').value;");
         assertEquals("\"on\"", value1);
@@ -650,7 +658,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                 executeJavaScriptAndWaitForResult("document.getElementById('textarea1').value;");
         assertEquals("\"aaa\"", value3);
         ArrayList<Pair<Integer, AutofillValue>> changedValues = getChangedValues();
-        assertEquals("example@example.com", changedValues.get(0).second.getTextValue());
+        assertEquals("Juan", changedValues.get(0).second.getTextValue());
         assertTrue(changedValues.get(1).second.getToggleValue());
         assertEquals(1, changedValues.get(2).second.getListValue());
     }
@@ -659,7 +667,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AutofillAcrossIframes"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AutofillAcrossIframes"
+    })
     @DisabledTest(message = "https://crbug.com/1401726")
     public void testCrossFrameAutofill() throws Throwable {
         loadHTML(
@@ -732,7 +743,13 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AndroidAutofillCancelSessionOnNavigation"
+    })
+    @SkipMutations(
+        reason = "This test uses DOMUtils.clickNode() which is known to be flaky"
+        + " under modified scaling factor, see crbug.com/40840940")
     public void testAutofillTriggersAfterReload() throws Throwable {
         int cnt = 0;
 
@@ -768,6 +785,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testNotifyVirtualValueChanged() throws Throwable {
         final String url = getAbsoluteTestPageUrl("form_username.html");
@@ -804,6 +822,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testJavascriptNotTriggerNotifyVirtualValueChanged() throws Throwable {
         final String url = getAbsoluteTestPageUrl("form_username.html");
@@ -846,7 +865,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AndroidAutofillCancelSessionOnNavigation"
+    })
     public void testCommit() throws Throwable {
         loadHTML(
                 """
@@ -854,7 +876,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                         <input type='text' id='text1' name='username'
                             placeholder='placeholder@placeholder.com'
                             autocomplete='username name'>
-                        <input type='password' id='passwordid' name='passwordname'
+                        <input type='password' id='passwordid' name='passwordname'>
                         <input type='submit'>
                     </form>""");
         int cnt = 0;
@@ -901,8 +923,9 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
         "enable-features=AndroidAutofillFormSubmissionCheckById,"
-            + " AndroidAutofillCancelSessionOnNavigation"
+                + " AndroidAutofillCancelSessionOnNavigation"
     })
     public void testCommitWithChangedFormProperties() throws Throwable {
         loadHTML(
@@ -911,7 +934,7 @@ public class AwAutofillTest extends AwParameterizedTest {
                         <input type='text' id='text1' name='username'
                             placeholder='placeholder@placeholder.com'
                             autocomplete='username name'>
-                        <input type='password' id='passwordid' name='passwordname'
+                        <input type='password' id='passwordid' name='passwordname'>
                         <input type='submit'>
                     </form>""");
         int cnt = 0;
@@ -964,6 +987,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
         "enable-features=AutofillAcrossIframes, AndroidAutofillCancelSessionOnNavigation"
     })
     @RequiresRestart("crbug.com/344662605")
@@ -1054,6 +1078,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testLoadFileURL() throws Throwable {
         int cnt = 0;
@@ -1073,6 +1098,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testMovingToOtherForm() throws Throwable {
         loadHTML(
@@ -1119,6 +1145,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @DisabledTest(message = "https://crbug.com/340928697")
     public void testSwitchFromIFrame() throws Throwable {
         // we intentionally load main frame and iframe from the same URL and make both have the
@@ -1219,14 +1246,18 @@ public class AwAutofillTest extends AwParameterizedTest {
     /** This test is verifying new session starts if frame change. */
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
+    @SkipMutations(
+        reason = "This test uses DOMUtils.clickNode() which is known to be flaky"
+        + " under modified scaling factor, see crbug.com/40840940")
     public void testTouchingPasswordFieldTriggerQuery() throws Throwable {
         int cnt = 0;
         loadHTML(
                 """
                     <form action='a.html' name='formname' id='formid'>
                         <input type='password' id='passwordid'
-                            name='passwordname' <input type='submit'>
+                            name='passwordname'> <input type='submit'>
                     </form>""");
         DOMUtils.waitForNonZeroNodeBounds(mAwContents.getWebContents(), "passwordid");
         // Note that we currently depend on keyboard app's behavior.
@@ -1241,12 +1272,16 @@ public class AwAutofillTest extends AwParameterizedTest {
     }
 
     /**
-     * This test is verifying that AutofillProvider correctly processes the removal and restoring
-     * of focus on a form element.
+     * This test is verifying that AutofillProvider correctly processes the removal and restoring of
+     * focus on a form element.
      */
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
+    @SkipMutations(
+        reason = "This test uses DOMUtils.clickNode() which is known to be flaky"
+        + " under modified scaling factor, see crbug.com/40840940")
     public void testFocusRemovedAndRestored() throws Throwable {
         int cnt = 0;
         loadHTML(
@@ -1295,7 +1330,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     // TODO: Run the test with BFCache after relanding crrev.com/c/5434056
     @CommandLineFlags.Add({
         "enable-features=AndroidAutofillCancelSessionOnNavigation,AndroidAutofillDirectFormSubmission",
-        "disable-features=WebViewBackForwardCache"
+        "disable-features=WebViewBackForwardCache,AutofillServerCommunication"
     })
     public void testNavigationAfterProbableSubmitResultsInSessionCommit() throws Throwable {
         int cnt = 0;
@@ -1337,6 +1372,7 @@ public class AwAutofillTest extends AwParameterizedTest {
      */
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testNoSubmissionWithoutFillingForm() throws Throwable {
         loadHTML(
@@ -1357,6 +1393,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @DisableIf.Build(
             sdk_is_less_than = Build.VERSION_CODES.P,
             message = "This test is disabled on Android O because of https://crbug.com/997362")
@@ -1408,6 +1445,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @DisableIf.Build(
             sdk_is_less_than = Build.VERSION_CODES.P,
             message = "This test is disabled on Android O because of https://crbug.com/997362")
@@ -1457,6 +1495,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testUserInitiatedJavascriptSelectControlChangeNotification() throws Throwable {
         int cnt = 0;
@@ -1493,6 +1532,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testJavascriptNotTriggerSelectControlChangeNotification() throws Throwable {
         int cnt = 0;
@@ -1536,6 +1576,7 @@ public class AwAutofillTest extends AwParameterizedTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @Feature({"AndroidWebView"})
     public void testUaAutofillHints() throws Throwable {
         loadHTML(
@@ -2164,6 +2205,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
         "enable-features=AndroidAutofillCancelSessionOnNavigation,AndroidAutofillDirectFormSubmission"
     })
     public void testUMAFormSubmissionProbablyFormSubmitted() throws Throwable {
@@ -2192,7 +2234,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AndroidAutofillCancelSessionOnNavigation"
+    })
     public void testUMAFormSubmissionFrameDetached() throws Throwable {
         var histograms =
                 ThreadUtils.runOnUiThreadBlocking(
@@ -2252,7 +2297,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AndroidAutofillCancelSessionOnNavigation"
+    })
     public void testUMAFormSubmissionSameDocumentNavigation() throws Throwable {
         var histograms =
                 ThreadUtils.runOnUiThreadBlocking(
@@ -2311,7 +2359,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AndroidAutofillCancelSessionOnNavigation"
+    })
     public void testUMAFormSubmissionXHRSucceeded() throws Throwable {
         var histograms =
                 ThreadUtils.runOnUiThreadBlocking(
@@ -2368,7 +2419,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @RequiresRestart("https://crbug.com/1422936")
     // TODO: Run the test with BFCache after relanding crrev.com/c/5434056
-    @CommandLineFlags.Add({"disable-features=WebViewBackForwardCache"})
+    @CommandLineFlags.Add({"disable-features=WebViewBackForwardCache,AutofillServerCommunication"})
     public void testUmaFunnelMetrics() throws Throwable {
         HistogramWatcher.Builder histogramWatcherBuilder = HistogramWatcher.newBuilder();
 
@@ -2427,6 +2478,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @SmallTest
     @Feature({"AndroidWebView"})
     @RequiresRestart("crbug.com/344662605")
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @DisabledTest(message = "crbug.com/353502929")
     public void testPageScrollTriggerViewExitAndEnter() throws Throwable {
         loadHTML(
@@ -2473,6 +2525,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testMismatchedAutofillValueWontCauseCrash() throws Throwable {
         final String url = getAbsoluteTestPageUrl("form_username.html");
         loadUrlSync(url);
@@ -2506,6 +2559,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testDatalistSentToAutofillService() throws Throwable {
         final String url = getAbsoluteTestPageUrl("form_with_datalist.html");
         loadUrlSync(url);
@@ -2548,6 +2602,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testNoEventSentToAutofillServiceForFocusedDatalist() throws Throwable {
         final String url = getAbsoluteTestPageUrl("form_with_datalist.html");
         loadUrlSync(url);
@@ -2576,6 +2631,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testDatalistPopup() throws Throwable {
         final String url = getAbsoluteTestPageUrl("form_with_datalist.html");
         loadUrlSync(url);
@@ -2591,6 +2647,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     @RequiresRestart("crbug.com/344662605")
     public void testHideDatalistPopup() throws Throwable {
         final String url = getAbsoluteTestPageUrl("form_with_datalist.html");
@@ -2640,6 +2697,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testServerPredictionArrivesBeforeAutofillStart() throws Throwable {
         loadHTML(
                 """
@@ -2715,7 +2773,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AutofillAcrossIframes"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AutofillAcrossIframes"
+    })
     public void testCrossFrameServerPredictionArrivesBeforeAutofillStart() throws Throwable {
         loadHTML(
                 """
@@ -2832,6 +2893,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testServerPredictionPrimaryTypeArrivesBeforeAutofillStart() throws Throwable {
         loadHTML(
                 """
@@ -2903,6 +2965,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({
+        "enable-features=AutofillFixValueSemantics",
+        "disable-features=AutofillServerCommunication"
+    })
     public void testServerPredictionArrivesAfterAutofillStart() throws Throwable {
         loadHTML(
                 """
@@ -2937,7 +3003,8 @@ public class AwAutofillTest extends AwParameterizedTest {
         assertEquals(
                 "UNKNOWN_TYPE",
                 viewStructure.getChild(0).getHtmlInfo().getAttribute("computed-autofill-hints"));
-        assertNull(
+        assertEquals(
+                "NO_SERVER_DATA",
                 viewStructure
                         .getChild(0)
                         .getHtmlInfo()
@@ -2951,7 +3018,8 @@ public class AwAutofillTest extends AwParameterizedTest {
         assertEquals(
                 "HTML_TYPE_EMAIL",
                 viewStructure.getChild(1).getHtmlInfo().getAttribute("computed-autofill-hints"));
-        assertNull(
+        assertEquals(
+                "NO_SERVER_DATA",
                 viewStructure
                         .getChild(1)
                         .getHtmlInfo()
@@ -2994,6 +3062,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({
+        "enable-features=AutofillFixValueSemantics",
+        "disable-features=AutofillServerCommunication"
+    })
     public void testServerPredictionPrimaryTypeArrivesAfterAutofillStart() throws Throwable {
         loadHTML(
                 """
@@ -3028,7 +3100,8 @@ public class AwAutofillTest extends AwParameterizedTest {
         assertEquals(
                 "UNKNOWN_TYPE",
                 viewStructure.getChild(0).getHtmlInfo().getAttribute("computed-autofill-hints"));
-        assertNull(
+        assertEquals(
+                "NO_SERVER_DATA",
                 viewStructure
                         .getChild(0)
                         .getHtmlInfo()
@@ -3042,7 +3115,8 @@ public class AwAutofillTest extends AwParameterizedTest {
         assertEquals(
                 "HTML_TYPE_EMAIL",
                 viewStructure.getChild(1).getHtmlInfo().getAttribute("computed-autofill-hints"));
-        assertNull(
+        assertEquals(
+                "NO_SERVER_DATA",
                 viewStructure
                         .getChild(1)
                         .getHtmlInfo()
@@ -3080,6 +3154,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({
+        "enable-features=AutofillFixValueSemantics",
+        "disable-features=AutofillServerCommunication"
+    })
     public void testServerPredictionArrivesBeforeCallbackRegistered() throws Throwable {
         loadHTML(
                 """
@@ -3114,7 +3192,8 @@ public class AwAutofillTest extends AwParameterizedTest {
         assertEquals(
                 "UNKNOWN_TYPE",
                 viewStructure.getChild(0).getHtmlInfo().getAttribute("computed-autofill-hints"));
-        assertNull(
+        assertEquals(
+                "NO_SERVER_DATA",
                 viewStructure
                         .getChild(0)
                         .getHtmlInfo()
@@ -3128,7 +3207,8 @@ public class AwAutofillTest extends AwParameterizedTest {
         assertEquals(
                 "HTML_TYPE_EMAIL",
                 viewStructure.getChild(1).getHtmlInfo().getAttribute("computed-autofill-hints"));
-        assertNull(
+        assertEquals(
+                "NO_SERVER_DATA",
                 viewStructure
                         .getChild(1)
                         .getHtmlInfo()
@@ -3171,6 +3251,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testFieldAddedBeforeSuggestionSelected() throws Throwable {
         // This test verifies that form filling works even in the case that the form has been
         // modified (field was added) in the DOM between the decision to fill and executing the
@@ -3231,6 +3312,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testFirstFieldRemovedBeforeSuggestionSelected() throws Throwable {
         // This test verifies that form filling works even if an element of the form that was
         // supposed to be filled has been deleted between the time of decision to fill the form and
@@ -3284,7 +3366,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AndroidAutofillCancelSessionOnNavigation"
+    })
     public void testFrameDetachedOnFormSubmission() throws Throwable {
         final String subFrame =
                 """
@@ -3352,7 +3437,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({"enable-features=AndroidAutofillCancelSessionOnNavigation"})
+    @CommandLineFlags.Add({
+        "disable-features=AutofillServerCommunication",
+        "enable-features=AndroidAutofillCancelSessionOnNavigation"
+    })
     public void testFrameDetachedOnFormlessSubmission() throws Throwable {
         final String subFrame =
                 """
@@ -3678,7 +3766,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     }
 
     /**
-     * Loads an HTML snippet which will be used by the test to execute JS commands on. This snipped
+     * Loads an HTML snippet which will be used by the test to execute JS commands on. This snippet
      * is loaded on the test web server.
      *
      * @param htmlBody The body of the HTML snippet to be loaded.

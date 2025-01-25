@@ -66,7 +66,6 @@ import org.chromium.components.autofill.payments.PaymentRail;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.payments.InputProtector;
 import org.chromium.components.payments.test_support.FakeClock;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
@@ -119,7 +118,6 @@ public class FacilitatedPaymentsPaymentMethodsControllerRobolectricTest {
     @Mock private BottomSheetController mBottomSheetController;
     @Mock private FacilitatedPaymentsPaymentMethodsComponent.Delegate mDelegateMock;
     @Mock private Profile mProfile;
-    @Mock private SettingsLauncher mMockLauncher;
 
     public FacilitatedPaymentsPaymentMethodsControllerRobolectricTest() {
         mCoordinator = new FacilitatedPaymentsPaymentMethodsCoordinator();
@@ -255,7 +253,7 @@ public class FacilitatedPaymentsPaymentMethodsControllerRobolectricTest {
     }
 
     @Test
-    public void testShowFinancialAccountsManagementSettingsOnFooter() {
+    public void testShowManagePaymentMethodsSettingsOnFooter() {
         mCoordinator.showSheet(List.of(BANK_ACCOUNT_1));
 
         int lastItemPos =
@@ -273,7 +271,7 @@ public class FacilitatedPaymentsPaymentMethodsControllerRobolectricTest {
                 .get(FooterProperties.SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK)
                 .run();
 
-        verify(mDelegateMock).showFinancialAccountsManagementSettings(mContext);
+        verify(mDelegateMock).showManagePaymentMethodsSettings(mContext);
     }
 
     @Test

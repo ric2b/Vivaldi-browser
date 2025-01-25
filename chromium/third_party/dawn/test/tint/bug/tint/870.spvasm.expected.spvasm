@@ -1,36 +1,36 @@
 ; SPIR-V
 ; Version: 1.3
-; Generator: Google Tint Compiler; 0
-; Bound: 51
+; Generator: Google Tint Compiler; 1
+; Bound: 46
 ; Schema: 0
                OpCapability Shader
                OpMemoryModel Logical GLSL450
                OpEntryPoint Fragment %main "main"
                OpExecutionMode %main OriginUpperLeft
-               OpName %sspp962805860buildInformation_block "sspp962805860buildInformation_block"
-               OpMemberName %sspp962805860buildInformation_block 0 "inner"
-               OpName %x_B4_BuildInformation "x_B4_BuildInformation"
-               OpMemberName %x_B4_BuildInformation 0 "passthru"
-               OpName %sspp962805860buildInformationS "sspp962805860buildInformationS"
                OpMemberName %sspp962805860buildInformationS 0 "footprint"
                OpMemberName %sspp962805860buildInformationS 1 "offset"
                OpMemberName %sspp962805860buildInformationS 2 "essence"
                OpMemberName %sspp962805860buildInformationS 3 "orientation"
-               OpName %sspp962805860buildInformation "sspp962805860buildInformation"
+               OpName %sspp962805860buildInformationS "sspp962805860buildInformationS"
+               OpMemberName %x_B4_BuildInformation 0 "passthru"
+               OpName %x_B4_BuildInformation "x_B4_BuildInformation"
+               OpMemberName %tint_symbol_1 0 "tint_symbol"
+               OpName %tint_symbol_1 "tint_symbol_1"
                OpName %main_1 "main_1"
                OpName %orientation "orientation"
+               OpName %x_23 "x_23"
                OpName %main "main"
-               OpDecorate %sspp962805860buildInformation_block Block
-               OpMemberDecorate %sspp962805860buildInformation_block 0 Offset 0
-               OpMemberDecorate %x_B4_BuildInformation 0 Offset 0
                OpMemberDecorate %sspp962805860buildInformationS 0 Offset 0
                OpMemberDecorate %sspp962805860buildInformationS 1 Offset 16
                OpMemberDecorate %sspp962805860buildInformationS 2 Offset 32
-               OpMemberDecorate %sspp962805860buildInformationS 3 Offset 36
                OpDecorate %_arr_int_uint_6 ArrayStride 4
-               OpDecorate %sspp962805860buildInformation NonWritable
-               OpDecorate %sspp962805860buildInformation DescriptorSet 0
-               OpDecorate %sspp962805860buildInformation Binding 2
+               OpMemberDecorate %sspp962805860buildInformationS 3 Offset 36
+               OpMemberDecorate %x_B4_BuildInformation 0 Offset 0
+               OpMemberDecorate %tint_symbol_1 0 Offset 0
+               OpDecorate %tint_symbol_1 Block
+               OpDecorate %1 DescriptorSet 0
+               OpDecorate %1 Binding 2
+               OpDecorate %1 NonWritable
       %float = OpTypeFloat 32
     %v4float = OpTypeVector %float 4
         %int = OpTypeInt 32 1
@@ -39,55 +39,50 @@
 %_arr_int_uint_6 = OpTypeArray %int %uint_6
 %sspp962805860buildInformationS = OpTypeStruct %v4float %v4float %int %_arr_int_uint_6
 %x_B4_BuildInformation = OpTypeStruct %sspp962805860buildInformationS
-%sspp962805860buildInformation_block = OpTypeStruct %x_B4_BuildInformation
-%_ptr_StorageBuffer_sspp962805860buildInformation_block = OpTypePointer StorageBuffer %sspp962805860buildInformation_block
-%sspp962805860buildInformation = OpVariable %_ptr_StorageBuffer_sspp962805860buildInformation_block StorageBuffer
+%tint_symbol_1 = OpTypeStruct %x_B4_BuildInformation
+%_ptr_StorageBuffer_tint_symbol_1 = OpTypePointer StorageBuffer %tint_symbol_1
+          %1 = OpVariable %_ptr_StorageBuffer_tint_symbol_1 StorageBuffer
        %void = OpTypeVoid
-         %12 = OpTypeFunction %void
+         %14 = OpTypeFunction %void
 %_ptr_Function__arr_int_uint_6 = OpTypePointer Function %_arr_int_uint_6
          %18 = OpConstantNull %_arr_int_uint_6
+%_ptr_StorageBuffer__arr_int_uint_6 = OpTypePointer StorageBuffer %_arr_int_uint_6
      %uint_0 = OpConstant %uint 0
      %uint_3 = OpConstant %uint 3
-%_ptr_StorageBuffer__arr_int_uint_6 = OpTypePointer StorageBuffer %_arr_int_uint_6
-         %24 = OpConstantNull %int
 %_ptr_Function_int = OpTypePointer Function %int
-         %27 = OpConstantNull %uint
+      %int_0 = OpConstant %int 0
       %int_1 = OpConstant %int 1
-     %uint_1 = OpConstant %uint 1
       %int_2 = OpConstant %int 2
-     %uint_2 = OpConstant %uint 2
       %int_3 = OpConstant %int 3
       %int_4 = OpConstant %int 4
-     %uint_4 = OpConstant %uint 4
       %int_5 = OpConstant %int 5
-     %uint_5 = OpConstant %uint 5
-     %main_1 = OpFunction %void None %12
+     %main_1 = OpFunction %void None %14
          %15 = OpLabel
 %orientation = OpVariable %_ptr_Function__arr_int_uint_6 Function %18
-         %22 = OpAccessChain %_ptr_StorageBuffer__arr_int_uint_6 %sspp962805860buildInformation %uint_0 %uint_0 %uint_3
-         %23 = OpLoad %_arr_int_uint_6 %22
-         %26 = OpAccessChain %_ptr_Function_int %orientation %24
-         %28 = OpCompositeExtract %int %23 0
-               OpStore %26 %28
-         %30 = OpAccessChain %_ptr_Function_int %orientation %int_1
-         %32 = OpCompositeExtract %int %23 1
-               OpStore %30 %32
-         %34 = OpAccessChain %_ptr_Function_int %orientation %int_2
-         %36 = OpCompositeExtract %int %23 2
-               OpStore %34 %36
-         %38 = OpAccessChain %_ptr_Function_int %orientation %int_3
-         %39 = OpCompositeExtract %int %23 3
-               OpStore %38 %39
-         %41 = OpAccessChain %_ptr_Function_int %orientation %int_4
-         %43 = OpCompositeExtract %int %23 4
-               OpStore %41 %43
-         %45 = OpAccessChain %_ptr_Function_int %orientation %int_5
-         %47 = OpCompositeExtract %int %23 5
-               OpStore %45 %47
+         %19 = OpAccessChain %_ptr_StorageBuffer__arr_int_uint_6 %1 %uint_0 %uint_0 %uint_3
+       %x_23 = OpLoad %_arr_int_uint_6 %19 None
+         %24 = OpAccessChain %_ptr_Function_int %orientation %int_0
+         %27 = OpCompositeExtract %int %x_23 0
+               OpStore %24 %27 None
+         %28 = OpAccessChain %_ptr_Function_int %orientation %int_1
+         %30 = OpCompositeExtract %int %x_23 1
+               OpStore %28 %30 None
+         %31 = OpAccessChain %_ptr_Function_int %orientation %int_2
+         %33 = OpCompositeExtract %int %x_23 2
+               OpStore %31 %33 None
+         %34 = OpAccessChain %_ptr_Function_int %orientation %int_3
+         %36 = OpCompositeExtract %int %x_23 3
+               OpStore %34 %36 None
+         %37 = OpAccessChain %_ptr_Function_int %orientation %int_4
+         %39 = OpCompositeExtract %int %x_23 4
+               OpStore %37 %39 None
+         %40 = OpAccessChain %_ptr_Function_int %orientation %int_5
+         %42 = OpCompositeExtract %int %x_23 5
+               OpStore %40 %42 None
                OpReturn
                OpFunctionEnd
-       %main = OpFunction %void None %12
-         %49 = OpLabel
-         %50 = OpFunctionCall %void %main_1
+       %main = OpFunction %void None %14
+         %44 = OpLabel
+         %45 = OpFunctionCall %void %main_1
                OpReturn
                OpFunctionEnd

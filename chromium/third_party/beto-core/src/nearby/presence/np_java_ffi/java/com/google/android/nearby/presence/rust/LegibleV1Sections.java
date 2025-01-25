@@ -16,11 +16,8 @@
 
 package com.google.android.nearby.presence.rust;
 
-import static com.google.android.nearby.presence.rust.DeserializedV1Section.VerificationMode;
-
 import androidx.annotation.Nullable;
 import com.google.android.nearby.presence.rust.credential.CredentialBook;
-import java.lang.ref.Cleaner;
 import java.util.Arrays;
 
 /** Internal handle for a V1 deserialized advertisement. */
@@ -71,7 +68,7 @@ public final class LegibleV1Sections extends OwnedHandle {
   }
 
   /** Create a LegibleV1Sections handle from the raw handle id. */
-  /* package-visible */ LegibleV1Sections(long handleId, Cleaner cleaner) {
+  private LegibleV1Sections(long handleId, CooperativeCleaner cleaner) {
     super(handleId, cleaner, LegibleV1Sections::deallocate);
   }
 
@@ -84,11 +81,11 @@ public final class LegibleV1Sections extends OwnedHandle {
    */
   public <M extends CredentialBook.MatchedMetadata> DeserializedV1Section<M> getSection(
       int index, CredentialBook<M> credentialBook) {
-    DeserializedV1Section section = nativeGetSection(index, credentialBook);
+    DeserializedV1Section<M> section = nativeGetSection(index, credentialBook);
     if (section == null) {
       throw new IndexOutOfBoundsException();
     }
-    return (DeserializedV1Section<M>) section;
+    return section;
   }
 
   /**
@@ -118,7 +115,8 @@ public final class LegibleV1Sections extends OwnedHandle {
   }
 
   @Nullable
-  private native DeserializedV1Section nativeGetSection(int index, CredentialBook credentialBook);
+  private native <M extends CredentialBook.MatchedMetadata>
+      DeserializedV1Section<M> nativeGetSection(int index, CredentialBook<M> credentialBook);
 
   @Nullable
   private native V1DataElement nativeGetSectionDataElement(int sectionIndex, int deIndex);

@@ -29,7 +29,6 @@
 
 #include "src/tint/api/tint.h"
 #include "src/tint/cmd/common/helper.h"
-#include "src/tint/lang/core/ir/module.h"
 
 #if TINT_BUILD_GLSL_WRITER
 #include "src/tint/lang/glsl/writer/helpers/generate_bindings.h"
@@ -51,7 +50,7 @@
 #endif  // TINT_BUILD_SPV_READER
 
 #if TINT_BUILD_SPV_WRITER
-#include "src/tint/lang/spirv/writer/helpers/ast_generate_bindings.h"
+#include "src/tint/lang/spirv/writer/helpers/generate_bindings.h"
 #include "src/tint/lang/spirv/writer/writer.h"
 #endif  // TINT_BUILD_SPV_WRITER
 
@@ -207,14 +206,24 @@ bool ParseArgs(const std::vector<std::string>& args, Options* opts) {
 /// @returns true on success
 bool GenerateSpirv(const tint::Program& program) {
 #if TINT_BUILD_SPV_WRITER
-    tint::spirv::writer::Options gen_options;
-    gen_options.bindings = tint::spirv::writer::GenerateBindings(program);
-    auto result = tint::spirv::writer::Generate(program, gen_options);
-    if (result != tint::Success) {
-        tint::cmd::PrintWGSL(std::cerr, program);
-        std::cerr << "Failed to generate: " << result.Failure() << "\n";
+    // Convert the AST program to an IR module.
+    auto ir = tint::wgsl::reader::ProgramToLoweredIR(program);
+    if (ir != tint::Success) {
+        std::cerr << "Failed to generate IR: " << ir << "\n";
         return false;
     }
+
+    tint::spirv::writer::Options gen_options;
+    gen_options.bindings = tint::spirv::writer::GenerateBindings(ir.Get());
+
+    // Generate SPIR-V from Tint IR.
+    auto result = tint::spirv::writer::Generate(ir.Get(), gen_options);
+    if (result != tint::Success) {
+        tint::cmd::PrintWGSL(std::cerr, program);
+        std::cerr << "Failed to generate SPIR-V: " << result.Failure() << "\n";
+        return false;
+    }
+
     return true;
 #else
     (void)program;

@@ -38,11 +38,11 @@ const str_ = i18n.i18n.registerUIStrings('panels/issues/AffectedResourcesView.ts
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export const enum AffectedItem {
-  Cookie = 'Cookie',
-  Directive = 'Directive',
-  Element = 'Element',
-  Request = 'Request',
-  Source = 'Source',
+  COOKIE = 'Cookie',
+  DIRECTIVE = 'Directive',
+  ELEMENT = 'Element',
+  REQUEST = 'Request',
+  SOURCE = 'Source',
 }
 
 export const extractShortPath = (path: Platform.DevToolsPath.UrlString): string => {
@@ -146,9 +146,9 @@ export abstract class AffectedResourcesView extends UI.TreeOutline.TreeElement {
       this.#unresolvedFrameIds.add(frameId);
       if (!this.#frameListeners.length) {
         const addListener = SDK.FrameManager.FrameManager.instance().addEventListener(
-            SDK.FrameManager.Events.FrameAddedToTarget, this.#onFrameChanged, this);
+            SDK.FrameManager.Events.FRAME_ADDED_TO_TARGET, this.#onFrameChanged, this);
         const navigateListener = SDK.FrameManager.FrameManager.instance().addEventListener(
-            SDK.FrameManager.Events.FrameNavigated, this.#onFrameChanged, this);
+            SDK.FrameManager.Events.FRAME_NAVIGATED, this.#onFrameChanged, this);
         this.#frameListeners = [addListener, navigateListener];
       }
     }
@@ -183,7 +183,7 @@ export abstract class AffectedResourcesView extends UI.TreeOutline.TreeElement {
       icon.data = {iconName: 'code-circle', color: 'var(--icon-link)', width: '16px', height: '16px'};
       icon.classList.add('link', 'elements-panel');
       icon.onclick = async () => {
-        Host.userMetrics.issuesPanelResourceOpened(issueCategory, AffectedItem.Element);
+        Host.userMetrics.issuesPanelResourceOpened(issueCategory, AffectedItem.ELEMENT);
         const frame = SDK.FrameManager.FrameManager.instance().getFrame(frameId);
         if (frame) {
           const ownerNode = await frame.getOwnerDOMNodeOrDocument();
@@ -226,7 +226,7 @@ export abstract class AffectedResourcesView extends UI.TreeOutline.TreeElement {
     }
 
     function sendTelemetry(): void {
-      Host.userMetrics.issuesPanelResourceOpened(issueCategory, AffectedItem.Element);
+      Host.userMetrics.issuesPanelResourceOpened(issueCategory, AffectedItem.ELEMENT);
     }
 
     const deferredDOMNode = new SDK.DOMModel.DeferredDOMNode(target, backendNodeId);

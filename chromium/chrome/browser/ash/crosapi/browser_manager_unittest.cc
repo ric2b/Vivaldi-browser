@@ -191,6 +191,8 @@ class BrowserManagerTest : public testing::Test {
   void SetUp() override {
     feature_list_.InitWithFeatures(ash::standalone_browser::GetFeatureRefs(),
                                    {});
+    scoped_command_line_.GetProcessCommandLine()->AppendSwitch(
+        ash::switches::kEnableLacrosForTesting);
 
     fake_user_manager_.Reset(std::make_unique<ash::FakeChromeUserManager>());
 
@@ -340,6 +342,7 @@ class BrowserManagerTest : public testing::Test {
 
  private:
   base::test::ScopedFeatureList feature_list_;
+  base::test::ScopedCommandLine scoped_command_line_;
 };
 
 TEST_F(BrowserManagerTest, LacrosKeepAlive) {
@@ -657,9 +660,9 @@ TEST_F(BrowserManagerWithForceSwitchWithoutLacrosUserTest,
       session_manager::SessionState::LOGIN_PRIMARY);
   // Trigger the pre-launch logic as the log in screen is ready.
   fake_browser_manager_->TriggerLoginPromptVisible();
-  // Expect the prelaunch logic was called as the force switch was passed,
-  // even if no Lacros users were present in the system.
-  EXPECT_EQ(fake_browser_manager_->prelaunch_count(), 1);
+  // Now prelaunch logic is removed due to lacros sunset. Prelaunch should not
+  // happen.
+  EXPECT_EQ(fake_browser_manager_->prelaunch_count(), 0);
 }
 
 class BrowserManagerWithLacrosUserTest : public BrowserManagerTest {
@@ -676,8 +679,9 @@ TEST_F(BrowserManagerWithLacrosUserTest, AllowUseOfLacrosOnNormalCPUs) {
       session_manager::SessionState::LOGIN_PRIMARY);
   // Trigger the pre-launch logic as the log in screen is ready.
   fake_browser_manager_->TriggerLoginPromptVisible();
-  // Expect that the prelaunch logic was called.
-  EXPECT_EQ(fake_browser_manager_->prelaunch_count(), 1);
+  // Now prelaunch logic is removed due to lacros sunset. Prelaunch should not
+  // happen in any case
+  EXPECT_EQ(fake_browser_manager_->prelaunch_count(), 0);
 }
 
 class BrowserManagerWithOldCPUTest : public BrowserManagerWithLacrosUserTest {

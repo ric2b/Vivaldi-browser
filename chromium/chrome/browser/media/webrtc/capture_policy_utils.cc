@@ -28,6 +28,7 @@
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
 #include "third_party/blink/public/common/features_generated.h"
+#include "ui/base/mojom/dialog_button.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -404,7 +405,7 @@ void FilterMediaList(std::vector<DesktopMediaList::Type>& media_types,
       media_types, [capture_level](const DesktopMediaList::Type& type) {
         switch (type) {
           case DesktopMediaList::Type::kNone:
-            NOTREACHED_NORETURN();
+            NOTREACHED();
           // SameOrigin is more restrictive than just Tabs, so as long as
           // at least SameOrigin is allowed, these entries should stay.
           // They should be filtered later by the caller.
@@ -434,7 +435,9 @@ class CaptureTerminatedDialogDelegate : public TabModalConfirmDialogDelegate {
     return l10n_util::GetStringUTF16(IDS_TAB_CAPTURE_TERMINATED_BY_POLICY_TEXT);
   }
 
-  int GetDialogButtons() const override { return ui::DIALOG_BUTTON_OK; }
+  int GetDialogButtons() const override {
+    return static_cast<int>(ui::mojom::DialogButton::kOk);
+  }
 };
 #endif
 

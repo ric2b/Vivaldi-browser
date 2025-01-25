@@ -50,15 +50,12 @@ bool IsSupervisedUserSkipParentApprovalToInstallExtensionsEnabled();
 // 2. Supervised user signs in as secondary account in existing signed in
 //    Profile
 //
-// Only affects Desktop platforms. This is split into two flags, one controlling
-// the infrastructure and one controlling the UI changes.
-
-// Waits for the async signal that a user is supervised.
-BASE_DECLARE_FEATURE(kCustomWebSignInInterceptForSupervisedUsers);
-
-// Displays custom UI based on the async signal above. Only used if
-// kCustomWebSignInInterceptForSupervisedUsers is enabled.
+// Only affects Linux/Mac/Windows platforms.
 BASE_DECLARE_FEATURE(kCustomWebSignInInterceptForSupervisedUsersUi);
+
+// Displays the supervised user signin-in IPH when the child signs
+// in to a new or existing local profile.
+BASE_DECLARE_FEATURE(kSupervisedUserProfileSigninIPH);
 
 // Displays a Family Link kite badge on the supervised user avatar in various
 // surfaces.
@@ -82,6 +79,20 @@ BASE_DECLARE_FEATURE(kForceSafeSearchForUnauthenticatedSupervisedUsers);
 // Force re-authentication when an unauthenticated supervised user tries to
 // access YouTube, so that content restrictions can be applied.
 BASE_DECLARE_FEATURE(kForceSupervisedUserReauthenticationForYouTube);
+
+// Force re-authentication when an unauthenticated supervised user tries to
+// access a blocked site, allowing the user to ask for parent's approval.
+BASE_DECLARE_FEATURE(kForceSupervisedUserReauthenticationForBlockedSites);
+
+// Specifies if we should close the sign-in tabs that can be opened from
+// the re-authentication interstitial.
+BASE_DECLARE_FEATURE(kCloseSignTabsFromReauthenticationInterstitial);
+
+// Shows the subframe re-authentication interstitial for unauthenticated
+// supervised users when they try to access:
+// * Embedded YouTube videos if re-auth is forced for YouTube.
+// * Blocked sites in subframes if re-auth is forced for blocked sites.
+BASE_DECLARE_FEATURE(kAllowSupervisedUserReauthenticationForSubframes);
 #endif
 
 // Fallback to sending un-credentialed filtering requests for supervised users
@@ -99,12 +110,6 @@ BASE_DECLARE_FEATURE(kReplaceSupervisionPrefsWithAccountCapabilitiesOnIOS);
 // Replaces usages of system capabilities with AccountInfo capabilities on iOS.
 BASE_DECLARE_FEATURE(
     kReplaceSupervisionSystemCapabilitiesWithAccountCapabilitiesOnIOS);
-#endif
-
-#if BUILDFLAG(IS_ANDROID)
-// Updates usages of Profile.isChild() in Profile.java to use the account
-// capability to determine if account is supervised.
-BASE_DECLARE_FEATURE(kReplaceProfileIsChildWithAccountCapabilitiesOnAndroid);
 #endif
 
 // Updates the ListFamilyMembers service to fetch family account info for

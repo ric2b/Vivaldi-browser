@@ -29,6 +29,10 @@
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image.h"
 
+#include "app/vivaldi_apptools.h"
+#include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_base.h"
+
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
 using blink::WebKeyboardEvent;
@@ -184,6 +188,20 @@ ui::Cursor TouchEmulatorImpl::InitCursorFromResource(int resource_id) {
 bool TouchEmulatorImpl::HandleMouseEvent(
     const WebMouseEvent& mouse_event,
     input::RenderWidgetHostViewInput* target_view) {
+
+  // NOTE (andre@vivaldi.com) : Check if the target view has device emulation
+  // activated before handling the mouse event here, if the target is not we
+  // need to pass the mouse-event to
+  // RenderInputRouter::DispatchInputEventWithLatencyInfo. This is to support
+  // embedded content in device emulation mode. See VB-109012 and friends.
+  if (vivaldi::IsVivaldiRunning() &&
+      !static_cast<content::RenderWidgetHostViewBase*>(target_view)
+           ->host()
+           ->IsDeviceEmulationActive()) {
+    return false;
+  }
+
+
   if (!IsEnabled() || mode_ != Mode::kEmulatingTouchFromMouse)
     return false;
 

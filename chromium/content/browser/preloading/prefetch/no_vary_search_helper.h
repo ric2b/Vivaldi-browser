@@ -52,7 +52,7 @@ template <>
 class PrefetchKeyTraits<PrefetchContainer::Key> {
  public:
   static const GURL& GetURL(const PrefetchContainer::Key& key) {
-    return key.prefetch_url();
+    return key.url();
   }
   static PrefetchContainer::Key KeyWithNewURL(
       const PrefetchContainer::Key& old_key,
@@ -156,9 +156,7 @@ void IterateCandidates(
       continue;
     }
 
-    const auto match_type = (it->second->GetNoVarySearchData() &&
-                             it->second->GetNoVarySearchData()->AreEquivalent(
-                                 key_url, prefetch_container_url))
+    const auto match_type = it->second->IsNoVarySearchHeaderMatch(key_url)
                                 ? MatchType::kNoVarySearch
                                 : MatchType::kOther;
     if (callback.Run(it->second, match_type) ==

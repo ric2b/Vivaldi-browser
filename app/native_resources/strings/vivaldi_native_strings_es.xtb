@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Paisaje 12</translation>
 <translation id="1158503667684816647">No volver a preguntar</translation>
 <translation id="1222195720020481779">Iniciando el instalador...</translation>
+<translation id="1224683873953469764">Descarga Vivaldi para tu móvil</translation>
 <translation id="1270785070369717623">Desafortunadamente, no se puede acceder a los ajustes de Opera GX mientras el navegador esté abierto. Para importar estos ajustes a Vivaldi, guarda lo que estés haciendo, cierra todas las ventanas de Opera GX y haz clic en Continuar.</translation>
 <translation id="1276145862619442150">Accesos rápidos</translation>
 <translation id="1281950884873973195">Animal 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">No volver a preguntar</translation>
 <translation id="1462666970065907900">¿Estás seguro de que quieres cerrar esta ventana?</translation>
 <translation id="1480046233931937785">Créditos</translation>
+<translation id="1521774566618522728">Activo hoy</translation>
 <translation id="1526344461589023948">Se ha producido un error al intentar guardar una actualización descargada. Por favor, comprueba que tu equipo tenga suficiente espacio en disco e inténtalo de nuevo más tarde.</translation>
 <translation id="1635542496948266458">Cambiar de perfil</translation>
 <translation id="1657174850639146440">Monstruo 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Volumen</translation>
 <translation id="443008484043213881">Herramientas</translation>
 <translation id="4456211719108566931">Monstruo 6</translation>
+<translation id="4459169140545916303">Activo hace <ph name="DEVICE_LAST_ACTIVATED_TIME" /> días</translation>
 <translation id="4512900838580567989">Abrir enlace en una pestaña en segundo plano</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Abrir imagen en una pestaña en segundo plano</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Actualización para el almacenado seguro de claves</translation>
 <translation id="7111492742514999492">Paisaje 9</translation>
 <translation id="7208252576848052204">Desafortunadamente, no se puede acceder a los ajustes de Arc mientras el navegador esté abierto. Para importar estos ajustes a Vivaldi, guarda lo que estés haciendo, cierra todas las ventanas de Arc y haz clic en Continuar.</translation>
+<translation id="7321500017121629018">Activo ayer</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Error al iniciar el instalador de actualizaciones. Por favor, revisa que el equipo tenga suficiente memoria o espacio en disco y reinténtalo más tarde.</translation>
 <translation id="7658239707568436148">Cancelar</translation>
@@ -163,7 +167,7 @@
 <translation id="8099620695029051217">Copiar dirección de la página</translation>
 <translation id="8197810018650377191">Añadir a marcadores</translation>
 <translation id="8261506727792406068">Eliminar</translation>
-<translation id="8263047843452521549">Inspeccionar en segundo plano al trabajador del servicio</translation>
+<translation id="8263047843452521549">Inspeccionar el servicio de trabajo de fondo</translation>
 <translation id="8331671104904436324">Abrir en pestaña en segundo plano</translation>
 <translation id="8373293945112511707">Paisaje 1</translation>
 <translation id="8388552048012645975">Descargando actualización...</translation>

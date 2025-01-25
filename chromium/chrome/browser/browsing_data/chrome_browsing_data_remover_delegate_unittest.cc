@@ -14,7 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
@@ -46,6 +45,7 @@
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -85,12 +85,12 @@
 #include "chrome/browser/tpcd/metadata/manager_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/trusted_vault/trusted_vault_service_factory.h"
+#include "chrome/browser/user_annotations/user_annotations_service_factory.h"
 #include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "chrome/browser/webid/federated_identity_permission_context.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/fake_profile_manager.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
@@ -137,7 +137,6 @@
 #include "components/omnibox/browser/zero_suggest_cache_service.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/os_crypt/sync/os_crypt_mocker.h"
-#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store/mock_password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/mock_smart_bubble_stats_store.h"
@@ -169,6 +168,7 @@
 #include "components/tpcd/metadata/browser/prefs.h"
 #include "components/tpcd/metadata/browser/test_support.h"
 #include "components/ukm/test_ukm_recorder.h"
+#include "components/user_annotations/test_user_annotations_service.h"
 #include "content/public/browser/background_tracing_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -211,12 +211,13 @@
 #include "url/scheme_host_port.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "base/android/build_info.h"
 #include "chrome/browser/android/customtabs/chrome_origin_verifier.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_test_helper.h"
-#include "components/feed/buildflags.h"
+#include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #else
 #include "chrome/browser/user_education/browser_feature_promo_storage_service.h"
@@ -962,16 +963,10 @@ class RemoveAutofillTester {
   explicit RemoveAutofillTester(TestingProfile* profile)
       : personal_data_manager_(
             autofill::PersonalDataManagerFactory::GetForBrowserContext(
-                profile)) {
-    autofill::test::DisableSystemServices(profile->GetPrefs());
-  }
+                profile)) {}
 
   RemoveAutofillTester(const RemoveAutofillTester&) = delete;
   RemoveAutofillTester& operator=(const RemoveAutofillTester&) = delete;
-
-  ~RemoveAutofillTester() {
-    autofill::test::ReenableSystemServices();
-  }
 
   // Returns true if there is at least one address and one card.
   bool HasProfileAndCard() const {
@@ -1024,6 +1019,11 @@ class MockReportingService : public net::ReportingService {
       const net::IsolationInfo& isolation_info,
       const base::flat_map<std::string, std::string>& endpoints) override {
     NOTREACHED_IN_MIGRATION();
+  }
+
+  void SetEnterpriseReportingEndpoints(
+      const base::flat_map<std::string, GURL>& endpoints) override {
+    NOTREACHED();
   }
 
   void SendReportsAndRemoveSource(
@@ -2354,6 +2354,31 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, DeleteTabs) {
 
   EXPECT_EQ(chrome_browsing_data_remover::DATA_TYPE_TABS, GetRemovalMask());
 }
+
+TEST_F(ChromeBrowsingDataRemoverDelegateTest,
+       DeleteTabs_WithArchivedTabModelPresent) {
+  ::testing::NiceMock<MockTabModel> tab_model(GetProfile());
+  TabModelList::AddTabModel(&tab_model);
+  ::testing::NiceMock<MockTabModel> archived_tab_model(GetProfile());
+  TabModelList::SetArchivedTabModel(&archived_tab_model);
+
+  ASSERT_EQ(1u, TabModelList::models().size());
+
+  base::Time two_hours_ago = base::Time::Now() - base::Hours(2);
+
+  EXPECT_CALL(tab_model,
+              CloseTabsNavigatedInTimeWindow(two_hours_ago, base::Time::Max()))
+      .Times(1);
+  EXPECT_CALL(archived_tab_model,
+              CloseTabsNavigatedInTimeWindow(two_hours_ago, base::Time::Max()))
+      .Times(1);
+
+  BlockUntilBrowsingDataRemoved(two_hours_ago, base::Time::Max(),
+                                chrome_browsing_data_remover::DATA_TYPE_TABS,
+                                false);
+
+  EXPECT_EQ(chrome_browsing_data_remover::DATA_TYPE_TABS, GetRemovalMask());
+}
 #endif  // BUILDFLAG(IS_ANDROID)
 
 class ChromeBrowsingDataRemoverDelegateEnabledUkmDatabaseTest
@@ -2511,6 +2536,49 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   ASSERT_FALSE(tester.HasProfileAndCard());
+}
+
+class ChromeBrowsingDataRemoverDelegateUserAnnotationsTest
+    : public ChromeBrowsingDataRemoverDelegateTest {
+ public:
+  static std::unique_ptr<KeyedService> CreateUserAnnotationsServiceFactory(
+      content::BrowserContext* context) {
+    return std::make_unique<user_annotations::TestUserAnnotationsService>();
+  }
+
+  void SetUp() override { ChromeBrowsingDataRemoverDelegateTest::SetUp(); }
+
+  TestingProfile::TestingFactories GetTestingFactories() override {
+    TestingProfile::TestingFactories factories =
+        ChromeBrowsingDataRemoverDelegateTest::GetTestingFactories();
+    factories.emplace_back(
+        UserAnnotationsServiceFactory::GetInstance(),
+        base::BindRepeating(&CreateUserAnnotationsServiceFactory));
+    return factories;
+  }
+
+  user_annotations::TestUserAnnotationsService* service() {
+    // Overridden in GetTestingFactories().
+    return static_cast<user_annotations::TestUserAnnotationsService*>(
+        UserAnnotationsServiceFactory::GetForProfile(GetProfile()));
+  }
+};
+
+TEST_F(ChromeBrowsingDataRemoverDelegateUserAnnotationsTest,
+       UserAnnotationsOnAutofillRemoveRange) {
+  auto time_now = base::Time::Now();
+  BlockUntilBrowsingDataRemoved(time_now, time_now + base::Hours(1),
+                                constants::DATA_TYPE_FORM_DATA, false);
+
+  // UserAnnotations should be empty when DATA_TYPE_FORM_DATA browsing data
+  // gets deleted.
+  EXPECT_EQ(constants::DATA_TYPE_FORM_DATA, GetRemovalMask());
+  EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
+            GetOriginTypeMask());
+
+  EXPECT_THAT(service()->last_received_remove_annotations_in_range(),
+              testing::Pair(testing::Eq(time_now),
+                            testing::Eq(time_now + base::Hours(1))));
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, ZeroSuggestPrefsBasedCacheClear) {
@@ -4170,14 +4238,10 @@ class ChromeBrowsingDataRemoverDelegateWithAccountPasswordsTest
  public:
   ChromeBrowsingDataRemoverDelegateWithAccountPasswordsTest() {
 #if BUILDFLAG(IS_ANDROID)
-    // Using the account store on Android requires enabling the flag for UPM
-    // support of local passwords. Skip the Gms version check, otherwise the
-    // flag won't do anything in bots that have outdated GmsCore.
-    feature_list_.InitAndEnableFeature(
-        password_manager::features::
-            kUnifiedPasswordManagerLocalPasswordsAndroidNoMigration);
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kSkipLocalUpmGmsCoreVersionCheckForTesting);
+    // Override the GMS version to be big enough for local UPM support, so these
+    // tests still pass in bots with an outdated version.
+    base::android::BuildInfo::GetInstance()->set_gms_version_code_for_test(
+        base::NumberToString(password_manager::GetLocalUpmMinGmsVersion()));
 #endif
   }
 
@@ -4836,22 +4900,25 @@ const ContentSettingPatternSource kExpectedSettingDefault(
 class ChromeBrowsingDataRemoverDelegateRelatedWebsiteSetsTest
     : public ChromeBrowsingDataRemoverDelegateTest,
       public testing::WithParamInterface<
-          std::tuple<bool,  // IsRelatedWebsiteSetsGrant.
+          std::tuple<bool,  // IsDecidedByRelatedWebsiteSets.
                      ContentSettingsType,
-                     FilterOrigins>> {
+                     FilterOrigins,
+                     content_settings::mojom::SessionModel>> {
  public:
-  bool IsRelatedWebsiteSetsGrant() const { return std::get<0>(GetParam()); }
+  bool IsDecidedByRelatedWebsiteSets() const { return std::get<0>(GetParam()); }
   ContentSettingsType GetContentSettingsType() const {
     return std::get<1>(GetParam());
   }
   FilterOrigins GetFilterOrigin() const { return std::get<2>(GetParam()); }
+  content_settings::mojom::SessionModel GetSessionModel() const {
+    return std::get<3>(GetParam());
+  }
 
   content_settings::ContentSettingConstraints GetConstraints() {
     content_settings::ContentSettingConstraints constraints;
-    constraints.set_session_model(
-        IsRelatedWebsiteSetsGrant()
-            ? content_settings::mojom::SessionModel::NON_RESTORABLE_USER_SESSION
-            : content_settings::mojom::SessionModel::DURABLE);
+    constraints.set_session_model(GetSessionModel());
+    constraints.set_decided_by_related_website_sets(
+        IsDecidedByRelatedWebsiteSets());
     return constraints;
   }
 
@@ -4918,7 +4985,7 @@ class ChromeBrowsingDataRemoverDelegateRelatedWebsiteSetsTest
             content_settings::ProviderType::kPrefProvider, /*incognito=*/false,
             GetMetadata());
       default:
-        NOTREACHED_NORETURN();
+        NOTREACHED();
     }
   }
 };
@@ -4951,7 +5018,14 @@ TEST_P(ChromeBrowsingDataRemoverDelegateRelatedWebsiteSetsTest,
 
   RemoveRelatedWebsiteSetsPermissionsData();
 
-  if (IsRelatedWebsiteSetsGrant()) {
+  if (IsDecidedByRelatedWebsiteSets() ||
+      // `content_settings::IsGrantedByRelatedWebsiteSets()` returned true for
+      // `NON_RESTORABLE_USER_SESSION` before crrev.com/c/5588890 so this
+      // part of the condition is testing backward compatibility.
+      // TODO(b/344678400): Delete this part of the condition after
+      // NON_RESTORABLE_USER_SESSION is removed.
+      GetSessionModel() ==
+          content_settings::mojom::SessionModel::NON_RESTORABLE_USER_SESSION) {
     // Check that there's only the default and unrelated grants left.
     EXPECT_THAT(settings_map->GetSettingsForOneType(GetContentSettingsType()),
                 UnorderedElementsAre(kExpectedSettingDefault,
@@ -4969,9 +5043,17 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     ChromeBrowsingDataRemoverDelegateRelatedWebsiteSetsTest,
     testing::Combine(
-        testing::Bool(),  // IsRelatedWebsiteSetsGrant.
+        testing::Bool(),  // IsDecidedByRelatedWebsiteSets.
         testing::Values(ContentSettingsType::STORAGE_ACCESS,
                         ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS),
         testing::Values(FilterOrigins::kByPrimaryUrl,
                         FilterOrigins::kBySecondaryUrl,
-                        FilterOrigins::kByBothUrls)));
+                        FilterOrigins::kByBothUrls),
+        testing::Values(
+            // `content_settings::IsGrantedByRelatedWebsiteSets()` returned
+            // true for `NON_RESTORABLE_USER_SESSION` before crrev.com/c/5588890
+            // so this parameter is testing backward compatibility.
+            // TODO(b/344678400): Delete the entire *test parameter* after
+            // NON_RESTORABLE_USER_SESSION is removed to simplify the tests.
+            content_settings::mojom::SessionModel::NON_RESTORABLE_USER_SESSION,
+            content_settings::mojom::SessionModel::DURABLE)));

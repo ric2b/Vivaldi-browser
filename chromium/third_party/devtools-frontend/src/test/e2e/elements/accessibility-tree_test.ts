@@ -13,7 +13,7 @@ import {
   waitForElementWithTextContent,
   waitForNoElementsWithTextContent,
 } from '../../shared/helper.js';
-import {describe, it} from '../../shared/mocha-extensions.js';
+
 import {toggleAccessibilityTree} from '../helpers/elements-helpers.js';
 
 describe('Accessibility Tree in the Elements Tab', function() {
@@ -50,7 +50,7 @@ describe('Accessibility Tree in the Elements Tab', function() {
     await toggleAccessibilityTree();
     await waitForElementWithTextContent(`link\xa0"cats" focusable:\xa0true url:\xa0${getResourcesPath()}/elements/x`);
     await target.bringToFront();
-    const link = await target.waitForSelector('aria/cats [role="link"]');
+    const link = await target.waitForSelector('aria/cats[role="link"]');
     await link!.evaluate(node => {
       (node as HTMLElement).innerText = 'dogs';
     });
@@ -70,7 +70,7 @@ describe('Accessibility Tree in the Elements Tab', function() {
     await frontend.bringToFront();
     await toggleAccessibilityTree();
     await target.bringToFront();
-    const link = await target.waitForSelector('aria/cats [role="link"]');
+    const link = await target.waitForSelector('aria/cats[role="link"]');
     assertNotNullOrUndefined(link);
     await frontend.bringToFront();
     await waitForElementWithTextContent(`link\xa0"cats" focusable:\xa0true url:\xa0${getResourcesPath()}/elements/x`);
@@ -92,7 +92,7 @@ describe('Accessibility Tree in the Elements Tab', function() {
     await frontend.bringToFront();
     await toggleAccessibilityTree();
     await target.bringToFront();
-    const link = await target.waitForSelector('aria/cats [role="link"]');
+    const link = await target.waitForSelector('aria/cats[role="link"]');
     await frontend.bringToFront();
     await waitForElementWithTextContent(`link\xa0"cats" focusable:\xa0true url:\xa0${getResourcesPath()}/elements/x`);
     await target.bringToFront();

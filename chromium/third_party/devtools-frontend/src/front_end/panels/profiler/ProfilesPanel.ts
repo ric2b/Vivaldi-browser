@@ -151,7 +151,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
 
     this.profileGroups = {};
     this.launcherView = new ProfileLauncherView(this);
-    this.launcherView.addEventListener(ProfileLauncherEvents.ProfileTypeSelected, this.onProfileTypeSelected, this);
+    this.launcherView.addEventListener(ProfileLauncherEvents.PROFILE_TYPE_SELECTED, this.onProfileTypeSelected, this);
 
     this.profileToView = [];
 
@@ -167,7 +167,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
     this.createFileSelectorElement();
 
     SDK.TargetManager.TargetManager.instance().addEventListener(
-        SDK.TargetManager.Events.SuspendStateChanged, this.onSuspendStateChanged, this);
+        SDK.TargetManager.Events.SUSPEND_STATE_CHANGED, this.onSuspendStateChanged, this);
     UI.Context.Context.instance().addFlavorChangeListener(
         SDK.CPUProfilerModel.CPUProfilerModel, this.updateProfileTypeSpecificUI, this);
     UI.Context.Context.instance().addFlavorChangeListener(
@@ -338,10 +338,10 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
       this.showProfile(event.data);
     }
 
-    profileType.addEventListener(ProfileTypeEvents.ViewUpdated, this.updateProfileTypeSpecificUI, this);
-    profileType.addEventListener(ProfileTypeEvents.AddProfileHeader, onAddProfileHeader, this);
-    profileType.addEventListener(ProfileTypeEvents.RemoveProfileHeader, onRemoveProfileHeader, this);
-    profileType.addEventListener(ProfileTypeEvents.ProfileComplete, profileComplete, this);
+    profileType.addEventListener(ProfileTypeEvents.VIEW_UPDATED, this.updateProfileTypeSpecificUI, this);
+    profileType.addEventListener(ProfileTypeEvents.ADD_PROFILE_HEADER, onAddProfileHeader, this);
+    profileType.addEventListener(ProfileTypeEvents.REMOVE_PROFILE_HEADER, onRemoveProfileHeader, this);
+    profileType.addEventListener(ProfileTypeEvents.PROFILE_COMPLETE, profileComplete, this);
 
     const profiles = profileType.getProfiles();
     for (let i = 0; i < profiles.length; i++) {
@@ -431,7 +431,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
     }
     const view = profile.createView(this);
     view.element.classList.add('profile-view');
-    this.profileToView.push({profile: profile, view: view});
+    this.profileToView.push({profile, view});
     return view;
   }
 
@@ -664,7 +664,7 @@ export class ProfilesSidebarTreeElement extends UI.TreeOutline.TreeElement {
         .createChild('span', 'title-container')
         .createChild('span', 'title')
         .textContent = i18nString(UIStrings.profiles);
-    this.setLeadingIcons([IconButton.Icon.create('document')]);
+    this.setLeadingIcons([IconButton.Icon.create('tune')]);
   }
 }
 

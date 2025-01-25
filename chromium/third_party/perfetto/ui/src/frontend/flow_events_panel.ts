@@ -13,12 +13,9 @@
 // limitations under the License.
 
 import m from 'mithril';
-
 import {Icons} from '../base/semantic_icons';
 import {Actions} from '../common/actions';
-import {getLegacySelection} from '../common/state';
 import {raf} from '../core/raf_scheduler';
-
 import {Flow, globals} from './globals';
 import {DurationWidget} from './widgets/duration';
 import {EmptyState} from '../widgets/empty_state';
@@ -40,7 +37,7 @@ export function getFlowCategories(flow: Flow): string[] {
 
 export class FlowEventsPanel implements m.ClassComponent {
   view() {
-    const selection = getLegacySelection(globals.state);
+    const selection = globals.selectionManager.legacySelection;
     if (!selection) {
       return m(
         EmptyState,
@@ -65,18 +62,18 @@ export class FlowEventsPanel implements m.ClassComponent {
     }
 
     const flowClickHandler = (sliceId: number, trackId: number) => {
-      const trackKey = globals.trackManager.trackKeyByTrackId.get(trackId);
-      if (trackKey) {
-        globals.setLegacySelection(
+      const track = globals.trackManager.findTrack((td) =>
+        td.tags?.trackIds?.includes(trackId),
+      );
+      if (track) {
+        globals.selectionManager.setLegacy(
           {
             kind: 'SLICE',
             id: sliceId,
-            trackKey,
+            trackUri: track.uri,
             table: 'slice',
           },
           {
-            clearSearch: true,
-            pendingScrollId: undefined,
             switchToCurrentSelectionTab: false,
           },
         );
@@ -155,7 +152,7 @@ export class FlowEventsPanel implements m.ClassComponent {
 
 export class FlowEventsAreaSelectedPanel implements m.ClassComponent {
   view() {
-    const selection = globals.state.selection;
+    const selection = globals.selectionManager.selection;
     if (selection.kind !== 'area') {
       return;
     }

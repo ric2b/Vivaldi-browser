@@ -22,10 +22,14 @@ const component = new Freestyler.FreestylerChatUi({
   onFixThisIssueClick: noop,
   inspectElementToggled: false,
   state: Freestyler.State.CHAT_VIEW,
-  aidaAvailability: Host.AidaClient.AidaAvailability.AVAILABLE,
+  aidaAvailability: Host.AidaClient.AidaAccessPreconditions.AVAILABLE,
   messages: [],
-  selectedNode: {} as unknown as SDK.DOMModel.DOMNode,
+  selectedElement: {} as unknown as SDK.DOMModel.DOMNode,
+  selectedNetworkRequest: {} as unknown as SDK.NetworkRequest.NetworkRequest,
+  agentType: Freestyler.AgentType.FREESTYLER,
   isLoading: false,
+  canShowFeedbackForm: false,
+  userInfo: {},
 });
 
 document.getElementById('container')?.appendChild(component);

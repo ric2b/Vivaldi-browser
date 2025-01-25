@@ -40,8 +40,7 @@ ClientTraceReport GetReportFromStatement(sql::Statement& statement) {
   client_report.upload_time = statement.ColumnTime(5);
   client_report.skip_reason =
       static_cast<SkipUploadReason>(statement.ColumnInt(6));
-  client_report.has_trace_content =
-      static_cast<uint64_t>(statement.ColumnBool(7));
+  client_report.has_trace_content = statement.ColumnBool(7);
   client_report.total_size = static_cast<uint64_t>(statement.ColumnInt64(8));
 
   return client_report;
@@ -174,7 +173,11 @@ bool TraceReportDatabase::AddTrace(const NewTraceReport& new_report) {
              : static_cast<int>(ReportUploadState::kNotUploaded));
   create_local_trace.BindNull(5);
   create_local_trace.BindInt(6, static_cast<int>(new_report.skip_reason));
-  create_local_trace.BindBlob(7, new_report.trace_content);
+  if (!new_report.trace_content.empty()) {
+    create_local_trace.BindBlob(7, new_report.trace_content);
+  } else {
+    create_local_trace.BindNull(7);
+  }
   create_local_trace.BindInt64(8, new_report.total_size);
   create_local_trace.BindBlob(9, new_report.system_profile);
 
@@ -376,26 +379,31 @@ bool TraceReportDatabase::DeleteTraceReportsOlderThan(base::TimeDelta age) {
   return delete_reports_older_than.Run();
 }
 
-bool TraceReportDatabase::DeleteTraceContentOlderThan(base::TimeDelta age) {
+bool TraceReportDatabase::DeleteOldTraceContent(size_t max_traces) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!is_initialized()) {
     return false;
   }
 
-  sql::Statement delete_content_older_than(
+  sql::Statement delete_old_trace_content(
       database_.GetCachedStatement(SQL_FROM_HERE, R"sql(
         UPDATE local_traces
         SET trace_content = null
-        WHERE creation_time < ?
-        AND state=?)sql"));
+        WHERE state=? and uuid not in (
+          SELECT uuid
+          FROM local_traces
+          WHERE trace_content IS NOT NULL
+          ORDER BY creation_time DESC
+          LIMIT ?)
+        )sql"));
 
-  delete_content_older_than.BindTime(0, base::Time(base::Time::Now() - age));
-  delete_content_older_than.BindInt(
-      1, static_cast<int>(ReportUploadState::kNotUploaded));
+  delete_old_trace_content.BindInt(
+      0, static_cast<int>(ReportUploadState::kNotUploaded));
+  delete_old_trace_content.BindInt(1, static_cast<int>(max_traces));
 
-  CHECK(delete_content_older_than.is_valid());
+  CHECK(delete_old_trace_content.is_valid());
 
-  return delete_content_older_than.Run();
+  return delete_old_trace_content.Run();
 }
 
 bool TraceReportDatabase::AllPendingUploadSkipped(
@@ -468,7 +476,7 @@ std::vector<ClientTraceReport> TraceReportDatabase::GetAllReports() {
   sql::Statement statement(database_.GetCachedStatement(SQL_FROM_HERE, R"sql(
       SELECT uuid, creation_time, scenario_name, upload_rule_name,
         state, upload_time, skip_reason,
-        trace_content != null as has_trace_content, file_size
+        trace_content IS NOT NULL as has_trace_content, file_size
       FROM local_traces
       ORDER BY creation_time DESC
     )sql"));
@@ -490,7 +498,7 @@ TraceReportDatabase::GetNextReportPendingUpload() {
   sql::Statement statement(database_.GetCachedStatement(SQL_FROM_HERE, R"sql(
       SELECT uuid, creation_time, scenario_name, upload_rule_name,
         state, upload_time, skip_reason,
-        trace_content != null as has_trace_content, file_size
+        trace_content IS NOT NULL as has_trace_content, file_size
       FROM local_traces WHERE state in (1,2)
       ORDER BY creation_time DESC
     )sql"));

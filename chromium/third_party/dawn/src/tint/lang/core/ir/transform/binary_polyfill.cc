@@ -71,7 +71,7 @@ struct State {
                     case BinaryOp::kDivide:
                     case BinaryOp::kModulo:
                         if (config.int_div_mod &&
-                            binary->Result(0)->Type()->is_integer_scalar_or_vector()) {
+                            binary->Result(0)->Type()->IsIntegerScalarOrVector()) {
                             worklist.Push(binary);
                         }
                         break;
@@ -110,7 +110,7 @@ struct State {
     void IntDivMod(ir::CoreBinary* binary) {
         auto* result_ty = binary->Result(0)->Type();
         bool is_div = binary->Op() == BinaryOp::kDivide;
-        bool is_signed = result_ty->is_signed_integer_scalar_or_vector();
+        bool is_signed = result_ty->IsSignedIntegerScalarOrVector();
 
         auto& helpers = is_div ? int_div_helpers : int_mod_helpers;
         auto* helper = helpers.GetOrAdd(result_ty, [&] {
@@ -118,7 +118,7 @@ struct State {
             StringStream name;
             name << "tint_" << (is_div ? "div_" : "mod_");
             if (auto* vec = result_ty->As<type::Vector>()) {
-                name << "v" << vec->Width() << vec->type()->FriendlyName();
+                name << "v" << vec->Width() << vec->Type()->FriendlyName();
             } else {
                 name << result_ty->FriendlyName();
             }

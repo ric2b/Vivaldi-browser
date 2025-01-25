@@ -142,15 +142,6 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
       },
 
       /**
-       * Whether the authenticator is or has been in the |SAML| AuthFlow during
-       * the current authentication attempt.
-       */
-      usedSaml: {
-        type: Boolean,
-        value: false,
-      },
-
-      /**
        * Contains the security token PIN dialog parameters object when the
        * dialog is shown. Is null when no PIN dialog is shown.
        */
@@ -225,15 +216,9 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
       },
 
       /**
-       * Whether the default SAML 3rd-party page is configured for the device.
-       */
-      isDefaultSsoProviderConfigured: {
-        type: Boolean,
-        value: false,
-      },
-
-      /**
-       * Whether the default SAML 3rd-party page is visible.
+       * Whether the default SAML 3rd-party page is visible. We need to track
+       * this in addition to `isSamlSsoVisible` because it has some UI
+       * implications (e.g. user needs to be able to switch to non-default IdP).
        */
       isDefaultSsoProvider: {
         type: Boolean,
@@ -261,7 +246,6 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
   private isLoadingUiShown: boolean;
   private navigationEnabled: boolean;
   private isSaml: boolean;
-  private usedSaml: boolean;
   private pinDialogParameters: OobeTypes.SecurityTokenPinDialogParameters|null;
   private isSamlSsoVisible: boolean;
   private videoEnabled: boolean;
@@ -271,7 +255,6 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
   private canGaiaGoBack: boolean;
   private firstSigninStep: boolean;
   private isShown: boolean;
-  private isDefaultSsoProviderConfigured: boolean;
   private isDefaultSsoProvider: boolean;
   private isClosable: boolean;
   private emailDomain: string;
@@ -283,7 +266,6 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
   private showViewProcessed: boolean;
   private authCompleted: boolean;
   private pinDialogResultReported: boolean;
-  private fallbackGaiaPath: string;
 
   constructor() {
     super();
@@ -329,15 +311,6 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
      * dialog.
      */
     this.pinDialogResultReported = false;
-
-    /**
-     * Gaia path which can serve as a fallback in reloading scenarios. Expected
-     * to correspond to editable Gaia username page.
-     * TODO(b/259181755): this should no longer be needed once we change the
-     * implementation of the "Enter Google Account info" button to fully reload
-     * the flow through cpp code.
-     */
-    this.fallbackGaiaPath = '';
   }
 
   override get EXTERNAL_API(): string[] {
@@ -580,11 +553,6 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
 
     this.authCompleted = false;
     this.navigationButtonsHidden = false;
-    this.fallbackGaiaPath = data.fallbackGaiaPath;
-
-    // Reset SAML
-    this.isSaml = false;
-    this.usedSaml = false;
 
     // Reset the PIN dialog, in case it's shown.
     this.closePinDialog();
@@ -596,8 +564,6 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
       }
     });
 
-    this.isDefaultSsoProviderConfigured =
-        data.screenMode === ScreenAuthMode.SAML_REDIRECT;
     params.doSamlRedirect = data.screenMode === ScreenAuthMode.SAML_REDIRECT;
     params.menuEnterpriseEnrollment =
         !(data.enterpriseManagedDevice || data.hasDeviceOwner);
@@ -660,10 +626,6 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
    * Observer that is called when the |isSaml| property gets changed.
    */
   private onSamlChanged(): void {
-    if (this.isSaml) {
-      this.usedSaml = true;
-    }
-
     chrome.send('samlStateChanged', [this.isSaml]);
 
     this.classList.toggle('saml', this.isSaml);
@@ -848,11 +810,10 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
       return;
     }
 
-    // If user goes back from the derived SAML page or GAIA page that is shown
-    // to change SSO provider we need to reload default authenticator.
-    if ((this.isSamlSsoVisible || this.isDefaultSsoProviderConfigured) &&
-        !this.isDefaultSsoProvider) {
-      this.userActed('reloadDefault');
+    // If user goes back from the derived SAML page we need to reload the
+    // default authenticator.
+    if (this.isSamlSsoVisible && !this.isDefaultSsoProvider) {
+      this.userActed(['reloadGaia', /*force_default_gaia_page*/ false]);
       return;
     }
     this.userActed(isBackClicked ? 'back' : 'cancel');
@@ -1017,16 +978,9 @@ export class GaiaSigninElement extends GaiaSigninElementBase {
    * Invoked when "Enter Google Account info" button is pressed on SAML screen.
    */
   private onSamlPageChangeAccount() {
-    // The user requests to change the account. We must clear the email
-    // field of the auth params.
-    this.videoEnabled = false;
-    this.authenticatorParams.email = '';
-    // Replace Gaia path with a fallback path to land on Gaia username page.
-    assert(
-        this.fallbackGaiaPath,
-        'fallback Gaia path needed when trying to switch from SAML to Gaia');
-    this.authenticatorParams.gaiaPath = this.fallbackGaiaPath;
-    this.loadAuthenticator_(false /* doSamlRedirect */);
+    // The user requests to change the account so the default gaia
+    // page must be shown.
+    this.userActed(['reloadGaia', /*force_default_gaia_page*/ true]);
   }
 
   /**

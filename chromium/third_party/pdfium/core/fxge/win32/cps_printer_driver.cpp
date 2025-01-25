@@ -107,7 +107,7 @@ int CPSPrinterDriver::GetDeviceCaps(int caps_id) const {
     case FXDC_BITS_PIXEL:
       return m_nBitsPerPixel;
     case FXDC_RENDER_CAPS:
-      return FXRC_BIT_MASK;
+      return 0;
     case FXDC_HORZ_SIZE:
       return m_HorzSize;
     case FXDC_VERT_SIZE:
@@ -146,10 +146,7 @@ bool CPSPrinterDriver::DrawPath(const CFX_Path& path,
                                 const CFX_GraphStateData* pGraphState,
                                 FX_ARGB fill_color,
                                 FX_ARGB stroke_color,
-                                const CFX_FillRenderOptions& fill_options,
-                                BlendMode blend_type) {
-  if (blend_type != BlendMode::kNormal)
-    return false;
+                                const CFX_FillRenderOptions& fill_options) {
   return m_PSRenderer.DrawPath(path, pObject2Device, pGraphState, fill_color,
                                stroke_color, fill_options);
 }
@@ -191,11 +188,12 @@ RenderDeviceDriverIface::StartResult CPSPrinterDriver::StartDIBits(
     const FXDIB_ResampleOptions& options,
     BlendMode blend_type) {
   if (blend_type != BlendMode::kNormal || alpha != 1.0f) {
-    return {false, nullptr};
+    return {Result::kNotSupported, nullptr};
   }
 
-  return {m_PSRenderer.DrawDIBits(std::move(bitmap), color, matrix, options),
-          nullptr};
+  bool success =
+      m_PSRenderer.DrawDIBits(std::move(bitmap), color, matrix, options);
+  return {success ? Result::kSuccess : Result::kFailure, nullptr};
 }
 
 bool CPSPrinterDriver::DrawDeviceText(

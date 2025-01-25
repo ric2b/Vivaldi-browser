@@ -658,7 +658,9 @@ void ContainerNode::WillRemoveChild(Node& child) {
     // above.
     //
     // CHECK_EQ(GetDocument(), child.GetDocument());
-    ChildFrameDisconnector(child).Disconnect();
+    ChildFrameDisconnector(
+        child, ChildFrameDisconnector::DisconnectReason::kDisconnectSelf)
+        .Disconnect();
   }
 
   if (GetDocument() != child.GetDocument()) {
@@ -694,8 +696,9 @@ void ContainerNode::WillRemoveChildren() {
   }
 
   CHECK(!GetDocument().StatePreservingAtomicMoveInProgress());
-  ChildFrameDisconnector(*this).Disconnect(
-      ChildFrameDisconnector::kDescendantsOnly);
+  ChildFrameDisconnector(
+      *this, ChildFrameDisconnector::DisconnectReason::kDisconnectSelf)
+      .Disconnect(ChildFrameDisconnector::kDescendantsOnly);
 }
 
 LayoutBox* ContainerNode::GetLayoutBoxForScrolling() const {
@@ -727,8 +730,8 @@ static bool ShouldMergeCombinedTextAfterRemoval(const Node& old_child) {
   auto* const next_sibling = layout_object->NextSibling();
   if (!next_sibling)
     return false;
-  if (UNLIKELY(IsA<LayoutTextCombine>(previous_sibling)) &&
-      UNLIKELY(IsA<LayoutTextCombine>(next_sibling))) {
+  if (IsA<LayoutTextCombine>(previous_sibling) &&
+      IsA<LayoutTextCombine>(next_sibling)) [[unlikely]] {
     return true;
   }
 
@@ -738,8 +741,11 @@ static bool ShouldMergeCombinedTextAfterRemoval(const Node& old_child) {
       !next_sibling->IsAnonymousBlock())
     return false;
 
-  return UNLIKELY(IsA<LayoutTextCombine>(previous_sibling->SlowLastChild())) &&
-         UNLIKELY(IsA<LayoutTextCombine>(next_sibling->SlowFirstChild()));
+  if (IsA<LayoutTextCombine>(previous_sibling->SlowLastChild()) &&
+      IsA<LayoutTextCombine>(next_sibling->SlowFirstChild())) [[unlikely]] {
+    return true;
+  }
+  return false;
 }
 
 Node* ContainerNode::RemoveChild(Node* old_child,
@@ -790,8 +796,9 @@ Node* ContainerNode::RemoveChild(Node* old_child,
   }
 
   if (!GetForceReattachLayoutTree() &&
-      UNLIKELY(ShouldMergeCombinedTextAfterRemoval(*child)))
+      ShouldMergeCombinedTextAfterRemoval(*child)) [[unlikely]] {
     SetForceReattachLayoutTree();
+  }
 
   {
     HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
@@ -851,9 +858,11 @@ void ContainerNode::ParserRemoveChild(Node& old_child) {
 
   // This may cause arbitrary Javascript execution via onunload handlers.
   CHECK(!GetDocument().StatePreservingAtomicMoveInProgress());
-  if (old_child.ConnectedSubframeCount())
-    ChildFrameDisconnector(old_child).Disconnect();
-
+  if (old_child.ConnectedSubframeCount()) {
+    ChildFrameDisconnector(
+        old_child, ChildFrameDisconnector::DisconnectReason::kDisconnectSelf)
+        .Disconnect();
+  }
   if (old_child.parentNode() != this)
     return;
 
@@ -1213,6 +1222,10 @@ void ContainerNode::ChildrenChanged(const ChildrenChange& change) {
   if (!InActiveDocument())
     return;
   if (Element* element = DynamicTo<Element>(this)) {
+    if (GetDocument().StatePreservingAtomicMoveInProgress()) {
+      CHECK(inserted_node->IsElementNode());
+      inserted_node->FlatTreeParentChanged();
+    }
     if (!element->GetComputedStyle()) {
       // There is no need to mark for style recalc if the parent element does
       // not already have a ComputedStyle. For instance if we insert nodes into
@@ -1691,7 +1704,7 @@ Element* ContainerNode::GetAutofocusDelegate() const {
     // focusable_area is not click-focusable and the call was initiated by the
     // user clicking. I don't believe this is currently possible, so DCHECK
     // instead.
-    DCHECK(focusable_area->IsFocusable());
+    DCHECK(focusable_area->IsMouseFocusable());
 
     return focusable_area;
   }

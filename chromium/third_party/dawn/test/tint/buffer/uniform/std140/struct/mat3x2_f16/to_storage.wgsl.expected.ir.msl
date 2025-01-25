@@ -1,12 +1,6 @@
 #include <metal_stdlib>
 using namespace metal;
 
-struct S {
-  int before;
-  half3x2 m;
-  int after;
-};
-
 template<typename T, size_t N>
 struct tint_array {
   const constant T& operator[](size_t i) const constant { return elements[i]; }
@@ -18,6 +12,18 @@ struct tint_array {
   const threadgroup T& operator[](size_t i) const threadgroup { return elements[i]; }
   T elements[N];
 };
+
+struct S {
+  /* 0x0000 */ int before;
+  /* 0x0004 */ half3x2 m;
+  /* 0x0010 */ tint_array<int8_t, 48> tint_pad;
+  /* 0x0040 */ int after;
+  /* 0x0044 */ tint_array<int8_t, 60> tint_pad_1;
+};
+
+#define TINT_ISOLATE_UB(VOLATILE_NAME) \
+  volatile bool VOLATILE_NAME = true; \
+  if (VOLATILE_NAME)
 
 struct tint_module_vars_struct {
   const constant tint_array<S, 4>* u;
@@ -34,7 +40,7 @@ void tint_store_and_preserve_padding(device tint_array<S, 4>* const target, tint
   {
     uint v = 0u;
     v = 0u;
-    while(true) {
+    TINT_ISOLATE_UB(tint_volatile_true) while(true) {
       uint const v_1 = v;
       if ((v_1 >= 4u)) {
         break;

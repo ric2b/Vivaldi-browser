@@ -31,7 +31,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
@@ -101,7 +101,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (instancetype)initWithWebStateList:(WebStateList*)webStateList
                          isIncognito:(BOOL)isIncognito {
-  if (self = [super init]) {
+  if ((self = [super init])) {
     _webStateList = webStateList;
     _isIncognito = isIncognito;
 

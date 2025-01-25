@@ -215,6 +215,12 @@ class VIEWS_EXPORT MenuDelegate {
   // within the screen.
   virtual bool ShouldTryPositioningBesideAnchor() const;
 
+  // Returns true if the delegate has started tearing down its internal state in
+  // preparation for destruction. The delegate should no longer be used once
+  // this occurs. Remove once crash root cause has been addressed
+  // (crbug.com/1283454).
+  virtual bool IsTearingDown() const;
+
   // Vivaldi
   // Notification that the user has highlighted the specified item.
   virtual void VivaldiSelectionChanged(MenuItemView* menu) {}
@@ -242,6 +248,7 @@ class VIEWS_EXPORT MenuDelegate {
   virtual void VivaldiExecutePersistent(MenuItemView* menu,
                                         int event_flags,
                                         bool* success) {}
+  // End Vivaldi
 };
 
 }  // namespace views

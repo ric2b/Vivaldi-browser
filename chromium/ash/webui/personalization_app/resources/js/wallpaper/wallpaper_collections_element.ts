@@ -14,7 +14,7 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 
 import {WallpaperGridItemSelectedEvent} from 'chrome://resources/ash/common/personalization/wallpaper_grid_item_element.js';
-import {isSeaPenEnabled, isSeaPenTextInputEnabled} from 'chrome://resources/ash/common/sea_pen/load_time_booleans.js';
+import {isManagedSeaPenEnabled, isSeaPenEnabled, isSeaPenTextInputEnabled} from 'chrome://resources/ash/common/sea_pen/load_time_booleans.js';
 import {cleanUpSeaPenQueryStates} from 'chrome://resources/ash/common/sea_pen/sea_pen_controller.js';
 import {getSeaPenStore} from 'chrome://resources/ash/common/sea_pen/sea_pen_store.js';
 import {isImageDataUrl, isNonEmptyArray} from 'chrome://resources/ash/common/sea_pen/sea_pen_utils.js';
@@ -26,7 +26,7 @@ import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-li
 import {afterNextRender} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {GooglePhotosEnablementState, WallpaperCollection, WallpaperImage} from '../../personalization_app.mojom-webui.js';
-import {isGooglePhotosIntegrationEnabled, isManagedSeaPenEnabled, isTimeOfDayWallpaperEnabled} from '../load_time_booleans.js';
+import {isGooglePhotosIntegrationEnabled, isTimeOfDayWallpaperEnabled} from '../load_time_booleans.js';
 import {Paths, PersonalizationRouterElement} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {getCountText, isSelectionEvent} from '../utils.js';
@@ -240,7 +240,7 @@ function getSeaPenPromptingTile(): SeaPenPromptingTile {
     type: TileType.SEA_PEN_PROMPTING,
     preview: [{
       url:
-          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_tile.jpg',
+          'chrome://resources/ash/common/sea_pen/sea_pen_images/sea_pen_freeform.jpg',
     }],
   };
 }
@@ -810,18 +810,6 @@ export class WallpaperCollectionsElement extends WithPersonalizationStore {
 
   private getAriaIndex_(index: number): number {
     return index + 1;
-  }
-
-  private getSeaPenTileTagLabel_(item: Tile|null): string {
-    return this.isSelectableTile_(item) ? this.i18n('seaPenExperimentLabel') :
-                                          this.i18n('seaPenUnavailableLabel');
-  }
-
-  private getSeaPenTileAriaDescription_(item: Tile|null): string|null {
-    // Do not set the aria-description for Sea Pen tile if the tile is
-    // unavailable.
-    return this.isSelectableTile_(item) ? this.getSeaPenTileTagLabel_(item) :
-                                          null;
   }
 
   private getSeaPenTemplatesTileLabel_(): string {

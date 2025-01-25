@@ -26,6 +26,21 @@ static_assert(
     std::is_trivially_destructible<CStretchEngine::PixelWeight>::value,
     "PixelWeight storage may be re-used without invoking its destructor");
 
+namespace {
+
+size_t TotalBytesForWeightCount(size_t weight_count) {
+  // Always room for one weight even for empty ranges due to declaration
+  // of m_Weights[1] in the header. Don't shrink below this since
+  // CalculateWeights() relies on this later.
+  const size_t extra_weights = weight_count > 0 ? weight_count - 1 : 0;
+  FX_SAFE_SIZE_T total_bytes = extra_weights;
+  total_bytes *= sizeof(CStretchEngine::PixelWeight::m_Weights[0]);
+  total_bytes += sizeof(CStretchEngine::PixelWeight);
+  return total_bytes.ValueOrDie();
+}
+
+}  // namespace
+
 // static
 bool CStretchEngine::UseInterpolateBilinear(
     const FXDIB_ResampleOptions& options,
@@ -37,19 +52,6 @@ bool CStretchEngine::UseInterpolateBilinear(
          abs(dest_width) != 0 &&
          abs(dest_height) / 8 <
              static_cast<long long>(src_width) * src_height / abs(dest_width);
-}
-
-// static
-size_t CStretchEngine::PixelWeight::TotalBytesForWeightCount(
-    size_t weight_count) {
-  // Always room for one weight even for empty ranges due to declaration
-  // of m_Weights[1] in the header. Don't shrink below this since
-  // CalculateWeights() relies on this later.
-  const size_t extra_weights = weight_count > 0 ? weight_count - 1 : 0;
-  FX_SAFE_SIZE_T total_bytes = extra_weights;
-  total_bytes *= sizeof(m_Weights[0]);
-  total_bytes += sizeof(PixelWeight);
-  return total_bytes.ValueOrDie();
 }
 
 CStretchEngine::WeightTable::WeightTable() = default;
@@ -85,7 +87,7 @@ bool CStretchEngine::WeightTable::CalculateWeights(
   const double scale = static_cast<double>(src_len) / dest_len;
   const double base = dest_len < 0 ? src_len : 0;
   const size_t weight_count = static_cast<size_t>(ceil(fabs(scale))) + 1;
-  m_ItemSizeBytes = PixelWeight::TotalBytesForWeightCount(weight_count);
+  m_ItemSizeBytes = TotalBytesForWeightCount(weight_count);
 
   const size_t dest_range = static_cast<size_t>(dest_max - dest_min);
   const size_t kMaxTableItemsAllowed = kMaxTableBytesAllowed / m_ItemSizeBytes;
@@ -202,10 +204,12 @@ CStretchEngine::CStretchEngine(ScanlineComposerIface* pDestBitmap,
       m_DestHeight(dest_height),
       m_DestClip(clip_rect) {
   if (m_bHasAlpha) {
-    DCHECK_EQ(m_DestFormat, FXDIB_Format::kArgb);
-    DCHECK_EQ(m_DestBpp, GetBppFromFormat(FXDIB_Format::kArgb));
-    DCHECK_EQ(m_pSource->GetFormat(), FXDIB_Format::kArgb);
-    DCHECK_EQ(m_SrcBpp, GetBppFromFormat(FXDIB_Format::kArgb));
+    // TODO(crbug.com/42271020): Consider adding support for
+    // `FXDIB_Format::kBgraPremul`
+    DCHECK_EQ(m_DestFormat, FXDIB_Format::kBgra);
+    DCHECK_EQ(m_DestBpp, GetBppFromFormat(FXDIB_Format::kBgra));
+    DCHECK_EQ(m_pSource->GetFormat(), FXDIB_Format::kBgra);
+    DCHECK_EQ(m_SrcBpp, GetBppFromFormat(FXDIB_Format::kBgra));
   }
 
   std::optional<uint32_t> maybe_size =
@@ -214,8 +218,9 @@ CStretchEngine::CStretchEngine(ScanlineComposerIface* pDestBitmap,
     return;
 
   m_DestScanline.resize(maybe_size.value());
-  if (dest_format == FXDIB_Format::kRgb32)
+  if (dest_format == FXDIB_Format::kBgrx) {
     std::fill(m_DestScanline.begin(), m_DestScanline.end(), 255);
+  }
   m_InterPitch = fxge::CalculatePitch32OrDie(m_DestBpp, m_DestClip.Width());
   m_ExtraMaskPitch = fxge::CalculatePitch32OrDie(8, m_DestClip.Width());
   if (options.bNoSmoothing) {
@@ -359,8 +364,8 @@ bool CStretchEngine::ContinueStretchHorz(PauseIndicatorIface* pPause) {
             uint32_t dest_b = 0;
             for (int j = pWeights->m_SrcStart; j <= pWeights->m_SrcEnd; ++j) {
               uint32_t pixel_weight = pWeights->GetWeightForPosition(j);
-              unsigned long argb = m_pSrcPalette[src_scan[j]];
-              if (m_DestFormat == FXDIB_Format::kRgb) {
+              FX_ARGB argb = m_pSrcPalette[src_scan[j]];
+              if (m_DestFormat == FXDIB_Format::kBgr) {
                 dest_r += pixel_weight * static_cast<uint8_t>(argb >> 16);
                 dest_g += pixel_weight * static_cast<uint8_t>(argb >> 8);
                 dest_b += pixel_weight * static_cast<uint8_t>(argb);

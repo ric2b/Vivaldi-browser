@@ -23,10 +23,13 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -61,6 +64,12 @@ namespace xla::cpu {
 // WARNING: This is under construction and will eventually replace IrEmitter.
 class IrEmitter2 {
  public:
+  friend class IrEmitter2Test;
+
+ private:
+  struct KernelPrototype;
+
+ public:
   IrEmitter2(const HloModule& hlo_module, llvm::Module* module,
              IrEmitter* nested_ir_emitter);
 
@@ -86,35 +95,34 @@ class IrEmitter2 {
     llvm::Value* z;
   };
 
-  // A kernel function prototype with all the LLVM values that might be needed
-  // to emit the actual kernel body.
-  struct KernelPrototype {
-    llvm::Function* function;
-
-    // LLVM values identifying kernel invocation thread coordinates.
-    KernelThreadDims thread_dims;
-    KernelThread thread;
-
-    // LLVM values corresponding to the kernel arguments and results arrays. All
-    // tuples are flattened as we do not have any tuples at run time and only
-    // read and write data from/to leaf arrays.
-    std::vector<llvm_ir::IrArray> arguments;
-    std::vector<llvm_ir::IrArray> results;
-  };
-
   // Emitted kernel information that defines how to launch it at run time.
   struct KernelInfo {
+    explicit KernelInfo(KernelPrototype prototype,
+                        const se::BlockDim& block_dims,
+                        const se::ThreadDim& thread_dims);
+
     std::string name;
     se::BlockDim block_dims;
     se::ThreadDim thread_dims;
+    absl::flat_hash_set<int64_t> invariant_arguments;
+  };
+
+  // Emitted comparator function information (for sort operation).
+  struct ComparatorInfo {
+    std::string name;
   };
 
   // Returns all the kernels emitted so far via this emitter.
   absl::Span<const KernelInfo> kernels() const { return kernels_; }
 
+  absl::Span<const ComparatorInfo> comparators() const { return comparators_; }
+
   // Emits an elemental host kernel for the given HLO instruction.
   absl::StatusOr<KernelInfo> EmitElementalHostKernel(
       const HloInstruction* instr);
+
+  // Emits a host kernel for the pad instruction.
+  absl::StatusOr<KernelInfo> EmitPadHostKernel(const HloInstruction* pad);
 
   // Emits a host kernel for the given fusion instruction.
   absl::StatusOr<KernelInfo> EmitFusionHostKernel(
@@ -137,6 +145,10 @@ class IrEmitter2 {
   absl::StatusOr<KernelInfo> EmitDotFusionHostKernel(
       const HloFusionInstruction* fusion);
 
+  // Emits a host kernel for the given slice-to-dynamic instruction.
+  absl::StatusOr<KernelInfo> EmitSliceToDynamicHostKernel(
+      const HloInstruction* instr);
+
   // Emits a host kernel for the given select-and-scatter instruction.
   absl::StatusOr<KernelInfo> EmitSelectAndScatterHostKernel(
       const HloInstruction* instr);
@@ -144,6 +156,34 @@ class IrEmitter2 {
   // Emits a host kernel for the given dynamic-update-slice instruction.
   absl::StatusOr<KernelInfo> EmitDynamicUpdateSliceHostKernel(
       const HloInstruction* instr);
+
+  // Emits a comparator function for the given sort instruction.
+  absl::StatusOr<ComparatorInfo> EmitSortComparator(
+      const HloInstruction* instr);
+
+ private:
+  class ElementalIrEmitter;
+
+  // A kernel function prototype with all the LLVM values that might be needed
+  // to emit the actual kernel body.
+  struct KernelPrototype {
+    llvm::Function* function;
+    llvm::BasicBlock* return_block;
+
+    // LLVM values identifying kernel invocation thread coordinates.
+    KernelThreadDims thread_dims;
+    KernelThread thread;
+
+    // LLVM values corresponding to the kernel arguments and results arrays. All
+    // tuples are flattened as we do not have any tuples at run time and only
+    // read and write data from/to leaf arrays.
+    std::vector<llvm_ir::IrArray> arguments;
+    std::vector<llvm_ir::IrArray> results;
+
+    // Set containing all invariant (read-only) buffers indices. A buffer is
+    // read-only if it is not aliased with any result.
+    absl::flat_hash_set<int64_t> invariant_arguments;
+  };
 
   // Emits a host kernel prototype and prepares function for emitting kernel
   // body into it.
@@ -154,9 +194,6 @@ class IrEmitter2 {
   // Emits a host kernel prototype for the given HLO instruction.
   absl::StatusOr<KernelPrototype> EmitKernelPrototype(
       const HloInstruction* instr);
-
- private:
-  class ElementalIrEmitter;
 
   // Parallel partition bounds for parallelized outer dimensions:
   //   vector<[i64 lower_bound, i64 upper_bound]>
@@ -220,6 +257,13 @@ class IrEmitter2 {
 
   bool fast_min_max() const;
 
+  // Returns the number of bytes within the shape.
+  int64_t ByteSizeOf(const Shape& shape) const;
+
+  // Given a load instruction, annotate the load's result with the invariant
+  // load metadata.
+  void AttachInvariantLoadMetadataForLoad(llvm::LoadInst* instr) const;
+
   const HloModule& hlo_module_;
   llvm::Module* module_;
 
@@ -233,8 +277,9 @@ class IrEmitter2 {
   llvm::StructType* thread_ty_;
   llvm::StructType* arg_ty_;
 
-  // Keeps track of all the kernels emitted so far.
+  // Keeps track of all the functions emitted so far.
   std::vector<KernelInfo> kernels_;
+  std::vector<ComparatorInfo> comparators_;
 };
 
 }  // namespace xla::cpu

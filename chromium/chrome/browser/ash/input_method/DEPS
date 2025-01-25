@@ -31,10 +31,12 @@ include_rules = [
   "+chrome/browser/policy",
   "+chrome/browser/profiles",
   "+chrome/browser/signin",
+  "+chrome/browser/ui/ash/input_method",
   "+chrome/browser/ui/ash/keyboard",
   "+chrome/browser/ui/aura/accessibility",
   "+chrome/browser/ui/browser_finder.h",
   "+chrome/browser/ui/browser_window.h",
+  "+chrome/browser/ui/browser.h",
   "+chrome/browser/ui/settings_window_manager_chromeos.h",
   "+chrome/browser/ui/webui/ash/mako",
   "+chrome/browser/ui/webui/ash/settings/search",
@@ -58,15 +60,6 @@ specific_include_rules = {
     "+chrome/browser",
     "+chrome/test",
     "+content/public",
-  ],
-
-  # TODO(erikwright): Bring this list to zero.
-  # Do not add to the list of temporarily-allowed dependencies below,
-  # and please do not introduce more #includes of these files.
-  "input_method_manager_impl\.cc": [
-    # TODO(erikwright): Much/all of language_preferences can/should be decoupled
-    # from chrome/browser.
-    "!chrome/browser/ash/language_preferences.h",
   ],
 
   # For testing.

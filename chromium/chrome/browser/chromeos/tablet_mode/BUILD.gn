@@ -17,10 +17,17 @@ static_library("tablet_mode") {
     "tablet_mode_page_behavior.h",
   ]
 
+  public_deps = [
+    "//chrome/browser:browser_public_dependencies",
+    "//chrome/browser/ui/tabs:tab_strip_model_observer",
+  ]
+
   deps = [
     "//base",
     "//chrome/browser/chromeos/arc",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/search",
+    "//chrome/browser/ui:browser_list",
     "//chrome/common",
     "//content/public/browser",
     "//content/public/common",
@@ -29,6 +36,10 @@ static_library("tablet_mode") {
     "//ui/base",
     "//ui/display",
   ]
+
+  if (is_chromeos_ash) {
+    deps += [ "//chrome/browser/ui/webui/ash/system_web_dialog" ]
+  }
 }
 
 if (is_chromeos_ash) {
@@ -61,6 +72,8 @@ if (is_chromeos_ash) {
       "//chrome/browser/profiles:profile",
       "//chrome/browser/ui",
       "//chrome/browser/ui/ash/system_web_apps",
+      "//chrome/browser/ui/chromeos",
+      "//chrome/browser/ui/chromeos:test_support",
       "//chrome/common",
       "//chrome/common:constants",
       "//chrome/test:test_support",
@@ -84,6 +97,7 @@ if (is_chromeos_lacros) {
     deps = [
       "//chrome/browser",
       "//chrome/browser/ui",
+      "//chrome/browser/ui/chromeos:test_support",
       "//chrome/common",
       "//chrome/test:test_support",
       "//content/public/browser",

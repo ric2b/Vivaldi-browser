@@ -7,6 +7,7 @@
 #include <limits>
 #include <utility>
 
+#include "base/check.h"
 #include "base/containers/heap_array.h"
 #include "base/functional/bind.h"
 #include "ipc/ipc_message.h"
@@ -77,7 +78,8 @@ FileIOResource::ReadOp::~ReadOp() {
 int32_t FileIOResource::ReadOp::DoWork() {
   DCHECK(buffer_.empty());
   buffer_ = base::HeapArray<char>::Uninit(bytes_to_read_);
-  return file_holder_->file()->Read(offset_, buffer_.data(), bytes_to_read_);
+  return UNSAFE_TODO(
+      file_holder_->file()->Read(offset_, buffer_.data(), bytes_to_read_));
 }
 
 FileIOResource::WriteOp::WriteOp(scoped_refptr<FileHolder> file_holder,
@@ -96,10 +98,11 @@ int32_t FileIOResource::WriteOp::DoWork() {
   // In append mode, we can't call Write, since NaCl doesn't implement fcntl,
   // causing the function to call pwrite, which is incorrect.
   if (append_) {
-    return file_holder_->file()->WriteAtCurrentPos(buffer_.data(),
-                                                   buffer_.size());
+    return UNSAFE_TODO(file_holder_->file()->WriteAtCurrentPos(buffer_.data(),
+                                                               buffer_.size()));
   } else {
-    return file_holder_->file()->Write(offset_, buffer_.data(), buffer_.size());
+    return UNSAFE_TODO(
+        file_holder_->file()->Write(offset_, buffer_.data(), buffer_.size()));
   }
 }
 
@@ -131,10 +134,7 @@ int32_t FileIOResource::Open(PP_Resource file_ref,
 
   PPB_FileRef_API* file_ref_api = enter_file_ref.object();
   const FileRefCreateInfo& create_info = file_ref_api->GetCreateInfo();
-  if (!FileSystemTypeIsValid(create_info.file_system_type)) {
-    NOTREACHED_IN_MIGRATION();
-    return PP_ERROR_FAILED;
-  }
+  CHECK(FileSystemTypeIsValid(create_info.file_system_type));
   int32_t rv = state_manager_.CheckOperationState(
       FileIOStateManager::OPERATION_EXCLUSIVE, false);
   if (rv != PP_OK)
@@ -455,7 +455,8 @@ int32_t FileIOResource::ReadValidated(int64_t offset,
     if (buffer) {
       // Release the proxy lock while making a potentially slow file call.
       ProxyAutoUnlock unlock;
-      result = file_holder_->file()->Read(offset, buffer, bytes_to_read);
+      result = UNSAFE_TODO(
+          file_holder_->file()->Read(offset, buffer, bytes_to_read));
       if (result < 0)
         result = PP_ERROR_FAILED;
     }
@@ -487,10 +488,11 @@ int32_t FileIOResource::WriteValidated(
       // Release the proxy lock while making a potentially slow file call.
       ProxyAutoUnlock unlock;
       if (append) {
-        result = file_holder_->file()->WriteAtCurrentPos(buffer,
-                                                         bytes_to_write);
+        result = UNSAFE_TODO(
+            file_holder_->file()->WriteAtCurrentPos(buffer, bytes_to_write));
       } else {
-        result = file_holder_->file()->Write(offset, buffer, bytes_to_write);
+        result = UNSAFE_TODO(
+            file_holder_->file()->Write(offset, buffer, bytes_to_write));
       }
     }
     if (result < 0)

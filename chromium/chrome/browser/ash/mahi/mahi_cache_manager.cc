@@ -56,13 +56,15 @@ MahiCacheManager::~MahiCacheManager() = default;
 void MahiCacheManager::AddCacheForUrl(const std::string& url,
                                       const MahiData& data) {
   const auto gurl = GURL(url).GetWithoutRef();
-  page_cache_[gurl] = data;
+  if (gurl.SchemeIsHTTPOrHTTPS()) {
+    page_cache_[gurl] = data;
+  }
 }
 
 void MahiCacheManager::TryToUpdateSummaryForUrl(const std::string& url,
                                                 const std::u16string& summary) {
   const auto gurl = GURL(url).GetWithoutRef();
-  if (!page_cache_.contains(gurl)) {
+  if (!page_cache_.contains(gurl) || !gurl.SchemeIsHTTPOrHTTPS()) {
     return;
   }
   page_cache_[gurl].summary = summary;
@@ -91,6 +93,13 @@ std::vector<MahiCacheManager::MahiQA> MahiCacheManager::GetQAForUrl(
 
 void MahiCacheManager::ClearCache() {
   page_cache_.clear();
+}
+
+void MahiCacheManager::DeleteCacheForUrl(const std::string& url) {
+  const auto it = page_cache_.find(GURL(url).GetWithoutRef());
+  if (it != page_cache_.end()) {
+    page_cache_.erase(it);
+  }
 }
 
 void MahiCacheManager::OnTimerFired() {
